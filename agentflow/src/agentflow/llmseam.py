@@ -284,6 +284,38 @@ class LlmSeam:
             return self.usd_budget
         return self.usd_budget if got is None else got
 
+    def spent_usd(self) -> tuple[float, str]:
+        """**全局**已花多少钱，以及这个数是从哪儿读来的（`(usd, source)`）。
+
+        ## 为什么必须是全局口径（2026-10-15 业主裁定 B2）
+
+        `budget_limit()` 给的是**这一趟的总预算**（盘上寄存器 / `--budget-usd`），
+        而这里此前比的是 `self.spend.usd` —— **这一条缝自己的**累计。
+        一个角色一条缝（`for_role`），于是每个角色都以为"我最多能花整笔"：
+        十个角色就能把总预算花成十倍，而每一处闸门看起来都在"正常工作"。
+        业主那句「只卡**总花销**的钱」说的正是这个数，不是某条缝的数。
+
+        权威账只有一处：`usage_ledger`（`tokenmeter.TokenMeter.spent()`）。
+        `meter is None`（没有账本的裸缝：单测与旧调用点）⇒ 退回 `self.spend.usd`，
+        并把 `source` 明写成 `per_seam` —— 读数里不许把"两条缝各算一遍"
+        与"读的是同一本总账"混成同一个数（那正是 B2 这个缺陷的形态）。
+
+        `source` 的三态（读的人据此判这个数有多可信）：
+        - `ledger`   —— 从 `usage_ledger` 现读（权威，包含**所有**角色的花销）；
+        - `per_seam` —— 没有账本，只有这条缝自己的内存累计（口径更窄，如实标注）；
+        - `ledger_unreadable` —— 有账本但读不出来（盘坏了）。回退到 `per_seam`
+          并把问题记在 source 里：少算只意味着"这一处早停得晚一点"，
+          而**真正会拦住失控的那一处**（`conductor._meter_guard`）读的是同一本账，
+          它读不出来时会走它自己的失败路径，不会静默放行。
+        """
+        if self.meter is None:
+            return float(self.spend.usd), "per_seam"
+        try:
+            got = self.meter.spent()
+            return float(got.get("usd") or 0.0), "ledger"
+        except Exception as exc:  # noqa: BLE001 —— 见 docstring 的三态
+            return float(self.spend.usd), f"ledger_unreadable:{type(exc).__name__}"
+
     # -------------------------------------------------------------- 构造
     @classmethod
     def for_role(cls, role: str, *, session_root: Path | str, gateway: Any | None = None,
@@ -346,13 +378,13 @@ class LlmSeam:
 
     # -------------------------------------------------------------- 调用
     def ask(self, prompt: str, *, system: str = "", task_id: str = "",
-            note: str = "", max_tokens: int | None = None,
+            note: str = "",
             face: "ToolFace | None" = None) -> SeamCall:
         """发一次调用，落一条审计记录，返回结局（不抛业务异常）。
 
-        `max_tokens` 不给时用网关缺省（4,096）。给它的那一处是循环步
-        （`agent_loop.AgentLoop.max_output_tokens`）：写稿步的回复要比"一个工具调用"
-        长得多，而网关缺省会把"写一段 LaTeX + JSON 信封"截断成半句话（`draft/37` §16 P0）。
+        ⚠️ **`max_tokens` 这一栏已删**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
+        它此前由循环步（`agent_loop`）传 32,768；删掉之后请求体里不再有这一栏，
+        额度交回上游（真调用对照：不带比带 32768 还宽）。
         """
         t0 = time.monotonic()
         base = dict(
@@ -378,10 +410,12 @@ class LlmSeam:
             return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
                               charged=False)
         budget = self.budget_limit()
-        if budget is not None and self.spend.usd >= budget:
+        spent, spent_source = self.spent_usd()
+        if budget is not None and spent >= budget:
             call = SeamCall(ok=False, problem="judge_over_budget",
-                            detail=f"花销预算已耗尽（已用 {self.spend.usd:.6f} / 上限 "
-                                   f"{budget:.6f}）—— 这一次没有发起请求",
+                            detail=(f"花销预算已耗尽（**全局**已用 {spent:.6f} / 上限 "
+                                    f"{budget:.6f}；已花读数来自 {spent_source}）"
+                                    "—— 这一次没有发起请求"),
                             elapsed_sec=time.monotonic() - t0, **base)
             return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
                               charged=False)
@@ -389,7 +423,6 @@ class LlmSeam:
         try:
             reply = self.gateway.complete(prompt, scope=self.scope,
                                           system=(system or None),
-                                          max_tokens=max_tokens,
                                           tools=(face.functions if face is not None else None))
         except J.BudgetExhausted as exc:
             return self._finish_failure("judge_over_budget", str(exc), base, t0,
@@ -602,9 +635,9 @@ class LlmSeam:
         return call
 
     def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
-                 note: str = "", max_tokens: int | None = None) -> tuple[dict[str, Any] | None, SeamCall]:
+                 note: str = "") -> tuple[dict[str, Any] | None, SeamCall]:
         """要一份 JSON：返回 `(判定, 结局)`。坏 JSON 归成 `judge_bad_json`，不静默当空。"""
-        call = self.ask(prompt, system=system, task_id=task_id, note=note, max_tokens=max_tokens)
+        call = self.ask(prompt, system=system, task_id=task_id, note=note)
         if not call.ok:
             return None, call
         from .llm import parse_llm_json
@@ -628,7 +661,7 @@ class LlmSeam:
         return dict(data), call
 
     def ask_step(self, prompt: str, *, system: str = "", task_id: str = "",
-                 note: str = "", max_tokens: int | None = None,
+                 note: str = "",
                  face: ToolFace | None = None) -> tuple[dict[str, Any] | None, SeamCall]:
         """循环的一步：优先用原生工具调用，拿不到就回落去解析文本 JSON。
 
@@ -639,8 +672,7 @@ class LlmSeam:
         传输层（离线缝 / mock / replay / 没接线的判定）照旧走 `ask_json` 的那一套，
         既有判据因此一条都不用改。
         """
-        call = self.ask(prompt, system=system, task_id=task_id, note=note,
-                        max_tokens=max_tokens, face=face)
+        call = self.ask(prompt, system=system, task_id=task_id, note=note, face=face)
         if not call.ok:
             return None, call
         if face is not None and call.tool_call_list:
@@ -750,7 +782,14 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "type": "object",
         "properties": {
             "role": {"type": "string", "enum": list("ABCDEFGHV")},
-            "action": {"type": "string"},
+            # ⚠️ **2026-10-16（业主口径 S2 最终形态）**：`action` **整个摘掉** ——
+            # 原话逐字：「**一致改成 task 必填，action 不填**」「**action 完全不用父代理填**」。
+            # ⇒ 派活只有一种形状：**`role` + `task`**。点哪个动作是被派者自己的事
+            # （它那一趟跑自己的循环、从自己的工具面与手册里选）。
+            # 内部调用方（`pipeline` / `scheduler` / `deliver`）直接调
+            # `Conductor.summon(role, action, params)`，**不受这一格影响**。
+            "task": {"type": "string", "description":
+                     "**必填**：这一趟派给它的是什么活（写清做什么；可带起手建议，怎么做由它定）"},
             "params": {"type": "object"},
             "why": {"type": "string"},
             # S1k-4（名册口径）：造一个新子代理给一句简介；复用已有子代理写它的名册名；
@@ -762,7 +801,9 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
             # 主控派活时的留痕（CS-18）：与 `_dispatch_notify` 同源，`to` 可省略。
             "notify": DISPATCH_NOTIFY_JSON_SCHEMA,
         },
-        "required": ["role", "action"],
+        # 2026-10-16（业主口径 S2）：**`task` 进必填，`action` 保持可选**。
+        # 口径是"派活" —— 那件活是必说的；点不点动作由派活方决定（点了就是老行为）。
+        "required": ["role", "task"],
     }),
     ("framework_summon_many", "summon_many", {
         "type": "object",
@@ -771,7 +812,10 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
                 "type": "object",
                 "properties": {
                     "role": {"type": "string", "enum": list("ABCDEFGHV")},
-                    "action": {"type": "string"},
+                    # 2026-10-16（口径 S2 最终形态）：`action` 同样摘掉 —— 派活只有
+                    # `role` + `task` 两格（与 `summon` 一致）。
+                    "task": {"type": "string", "description":
+                             "**必填**：这件活是什么（写清做什么；可带起手建议，怎么做由它定）"},
                     "params": {"type": "object"},
                     "instance": {"type": "string"},
                     "input_key": {"type": "string"},
@@ -780,7 +824,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
                     "name": {"type": "string"},
                     "reuse": {"type": "string"},
                 },
-                "required": ["role", "action"],
+                "required": ["role", "task"],
             }},
             "why": {"type": "string"},
             # 一批派活同样带留痕（`agent_prompts` 第 2b) 段的例子逐字有这一格，CS-18）。
@@ -960,7 +1004,7 @@ class ToolFace:
                 f"{sorted(self.names)[:6]}…）")
         raw_args = call.get("arguments")
         text = raw_args if isinstance(raw_args, str) else json.dumps(raw_args or {},
-                                                                    ensure_ascii=False)
+                                                                    ensure_ascii=False, default=str)
         try:
             args = json.loads(text) if text.strip() else {}
         except json.JSONDecodeError as exc:
@@ -1042,7 +1086,7 @@ def build_tool_face(role: str, registry: Any) -> ToolFace:
             "description": f"循环形状 {target}（不是工具：它由框架执行）",
             "parameters": schema,
         }})
-    digest = _sha(json.dumps(functions, ensure_ascii=False, sort_keys=True))
+    digest = _sha(json.dumps(functions, ensure_ascii=False, sort_keys=True, default=str))
     return ToolFace(functions=tuple(functions), names=dict(names), sha256=digest)
 
 

@@ -574,26 +574,35 @@ def test_reprocess_need_context_only_records_the_passage(store):
 
 
 def test_reprocess_over_limit_is_rejected_and_changes_nothing(store):
-    """I4 硬约束 ③：同一关系被受理超过 `max_reprocess_per_relation`(=2) 后拒绝。
+    """I4 硬约束 ③：同一关系被受理超过 `max_reprocess_per_relation` 后拒绝。
 
     并且要断言"拒绝"与"做过"在配额上是分开的：`reprocess_counts` 不计 rejected。
+
+    ⚠️ **2026-10-15 改（承 `draft/123` 裁定 C9）**：上限从 2 抬到 8，
+    而这条判据此前**把 2 写死在夹具里**（三条请求 + 断言第三条被拒）⇒ 它红了。
+    改法**不是**把断言翻成 `handled is True` —— 那会把判据的方向倒过来，
+    而它要证的正是"超限必须被拒"；改法是**按真身现算上限、把请求开到 `limit + 1`**，
+    于是下次抬阈值这条判据自己跟着走（同族教训见 `test_refusal_family_numbers`）。
     """
+    limit = int(I.DEFAULTS["max_reprocess_per_relation"])
     _i4_store(store)
-    _reprocess(store, "p-0001", ["0000"], status="done", result="not_found", note="第一次：没找到")
-    _reprocess(store, "p-0002", ["0000"], status="done", result="unchanged", note="第二次：没变化")
-    _reprocess(store, "p-0003", ["0000"])
+    for i in range(1, limit + 1):
+        _reprocess(store, f"p-{i:04d}", ["0000"], status="done",
+                   result="unchanged", note=f"第 {i} 次：受理")
+    over = f"p-{limit + 1:04d}"
+    _reprocess(store, over, ["0000"])
     before_rows = {r["relation_id"]: _row_bytes(r) for r in store.rows("relations")}
 
     out = _agent_b(store, StubExtractor()).reprocess_once()
 
     assert out["handled"] is False
-    assert [x["reprocess_id"] for x in out["rejected"]] == ["p-0003"]
-    row = _request(store, "p-0003")
+    assert [x["reprocess_id"] for x in out["rejected"]] == [over]
+    row = _request(store, over)
     assert row["status"] == "rejected", "超限是**拒绝**，不是 done"
     assert row["result"] == "rejected_target"
     assert "上限" in row["result_note"]
     assert {r["relation_id"]: _row_bytes(r) for r in store.rows("relations")} == before_rows
-    assert I.reprocess_counts(store.rows("reprocess_requests")) == {"0000": 2}, (
+    assert I.reprocess_counts(store.rows("reprocess_requests")) == {"0000": limit}, (
         "被拒的不计入配额 —— 否则'我拒绝过'会被当成'我做过了'"
     )
 

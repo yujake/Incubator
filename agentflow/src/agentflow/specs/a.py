@@ -130,6 +130,54 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
+    # ---- `walk_citations`（2026-10-15 加；**本文件是 FC-27 禁改区 [auth-audit]**，
+    #      业主裁定逐字：「引文图是用新动作的方式落」；按业主同日口径
+    #      「如果你认为有道理，就允许改，事后签字即可」登记，待 2 名人审。）
+    #
+    # 为什么必须有它（施工记录在 `draft/124` §10.6）：到这一轮之前，我们向 OpenAlex
+    # **只取被引计数**（`cited_by_count` / `referenced_works_count`，用来排序），
+    # **没取** `referenced_works`（这一篇**引了谁**）与 `cited_by_api_url`（**谁引了它**）
+    # ⇒ "顺着引文往下/往上走"这件事**结构上做不了**。而业主点名的那个任务
+    # （"更短证明路径"）恰恰是**引文图上的**问题：更短的路线通常在奠基论文的参考文献里，
+    # 或者在后续引用里（谁后来简化了某一步）。纯关键词检索拿不到这个结构。
+    # 实测（`temp/_probe_citation_walk.py`，$0）：源论文 `10.1098/rsos.181055`
+    # 自己引了 **123** 篇，`cites:W2883591297` 前推 **29** 条，
+    # 而且前推那 5 条**全是 `is_oa=True` 且带 `best_oa_location`** ——
+    # 引文图这一侧"顺手把全文也拿到"的比例比关键词检索高得多。
+    #
+    # 两根轴逐条读出（不是照抄工具层）：
+    #   - 效果轴 `read`：实现只**读**（取一次源记录 + 一次 works 查询），一行都不落。
+    #     要不要登记由调用方走既有的 `search.dedup_check` / `search.register` ——
+    #     **刻意不给它写集**：登记是判断，判断要留痕，而本动作不做那个判断
+    #     （判重在本模块只有一处实现，见 `tools/search_tools.py` 里那条注释）。
+    #   - 外部轴 `egress`：两个方向各发一次 OpenAlex 请求。
+    ActionSpec(
+        "A", "walk_citations",
+        "由一篇已登记的文献出发走一步引文图：回溯=它引了谁，前推=谁引了它",
+        _obj(
+            {
+                "lit_id": {**_S, "minLength": 1, "maxLength": 40},
+                # 只声明**形状**、不抄**词表**（与同文件 `search_literature` 的
+                # `providers` 那一条同一个理由）：可用取值是 `backward` / `forward`，
+                # 真身在实现与工具面（`tools/search_tools.py` 的 `ToolSpec`）——
+                # 在这里再抄一份就是造出第二个要同步的地方，而它漂了不会报错。
+                "direction": _S,
+                "limit": {**_I, "minimum": 1, "maximum": 50},
+            },
+            required=("lit_id",),
+        ),
+        (
+            "dict（逐键：lit_id / doi / openalex_id / direction / count / candidates / note；"
+            "`candidates[]` 每项是 title / year / doi / type_code / authors / venue / language / "
+            "summary / pdf_url / landing_url / provider / is_oa / oa_source / openalex_id）；"
+            "失败档走工具层的 `fail(...)`：`ok=False` ＋ 一句 `error`，`kind` 是 "
+            "no_store / table_unreadable / unknown_lit_id / no_source_key / "
+            "provider_cannot_walk / walk_failed 之一"
+        ),
+        side_effect="read", handler_name="walk_citations",
+        external="egress",
+    ),
+
     # ---- `ingest_local`（2026-10-02 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
     #
     # 为什么必须有它（`draft/37` §44.4 的真机读数，不是设计洁癖）：主控只能

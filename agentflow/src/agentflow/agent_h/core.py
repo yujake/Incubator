@@ -268,8 +268,11 @@ def _selftest() -> int:
     if r0["error_count"] or r0["verdict"] != "accepted" or r0["status"] != "accepted":
         print("    ❌ 干净稿件被误伤（或没有被接受）")
         return 1
-    if not same or changed != [("0000", ["status"])]:
-        print("    ❌ 运行期只读被破坏（或变化点不止 status）")
+    # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：审校现在同一次事务里还会写
+    # 审核轴三字段 —— 这仍是"只改这一行、不碰知识表"，只是多记了"谁在何时判了什么"。
+    _axis = ["review_verdict", "reviewed_at", "reviewed_by"]
+    if not same or changed != [("0000", sorted(_axis + ["status"]))]:
+        print("    ❌ 运行期只读被破坏（或变化点不止 status＋审核轴）")
         return 1
     _ = max_round
 

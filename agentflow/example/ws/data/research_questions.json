@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "question_id": "000000",
+      "question": "示例：交换性在有限群里的最小反例是什么？",
+      "origin": "agent-D",
+      "related_concept_ids": [],
+      "related_relation_ids": [],
+      "status": "open",
+      "priority": "medium",
+      "evidence_lit_ids": [],
+      "waiting_request_ids": [],
+      "gap_reason": "示例用：留一行可追溯的研究问题（本趟不花任何模型调用）。",
+      "notes": "",
+      "created_at": "2026-10-15T17:05:34+08:00",
+      "updated_at": "2026-10-15T17:05:34+08:00",
+      "kind": "gap",
+      "contradiction_relation_ids": [],
+      "contradiction_rounds": 0,
+      "contradiction_verdict": null,
+      "contradiction_request_ids": [],
+      "relation_chain": []
+    }
+  ]
+}

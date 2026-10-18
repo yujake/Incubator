@@ -572,28 +572,30 @@ def test_admit_unregistered_submitter_falls_to_low(store):
     assert "未登记" in adm["priority_why"], adm["priority_why"]
 
 
-def test_admit_limit_defaults_to_20_and_is_overridable(store):
-    """`DEFAULTS["max_inflight_requests"]` 是 20，但 `max_inflight` 可覆盖（含 0）。"""
-    assert X.DEFAULTS["max_inflight_requests"] == 20
+def test_admit_limit_default_is_high_and_is_overridable(store):
+    """`DEFAULTS["max_inflight_requests"]` 现在是 **200**（业主 2026-10-15 裁定 C9：
+    20 → 200，「凡是可能阻止智能体完成大项目的……抬到几乎不可能触发」），
+    但 `max_inflight` 仍可覆盖（含 0）。"""
+    assert X.DEFAULTS["max_inflight_requests"] == 200
 
     # 空队列 + 上限 0 ⇒ 仍然拒绝：上限是"允许在途多少条"，0 就是一条都不许
     zero = X.admit_search_request(store.rows("search_requests"), submitted_by="human", max_inflight=0)
     assert zero["admitted"] is False and zero["inflight"] == 0 and zero["limit"] == 0
     assert zero["reason"], "拒绝了就必须说清为什么"
 
-    for i in range(19):
+    for i in range(199):
         _add_req(store, f"r-{i + 1:04d}")
     rows = store.rows("search_requests")
     under = X.admit_search_request(rows, submitted_by="human")
-    assert under["admitted"] is True and under["inflight"] == 19 and under["limit"] == 20
+    assert under["admitted"] is True and under["inflight"] == 199 and under["limit"] == 200
 
-    _add_req(store, "r-0020")
+    _add_req(store, "r-0200")
     rows = store.rows("search_requests")
     at = X.admit_search_request(rows, submitted_by="human")
-    assert at["admitted"] is False and at["inflight"] == 20 and at["limit"] == 20
+    assert at["admitted"] is False and at["inflight"] == 200 and at["limit"] == 200
 
     # 覆盖成小值同样生效
-    _add_req(store, "r-0021")
+    _add_req(store, "r-0201")
     rows = store.rows("search_requests")
     assert X.admit_search_request(rows, submitted_by="human", max_inflight=1)["admitted"] is False
 

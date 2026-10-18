@@ -31,7 +31,7 @@ from agentflow.agent_h import AgentH, ReviewError, filter_readonly_h_surface, in
 from agentflow.store import Store
 from agentflow.tools import review_tools as RV
 from agentflow.tools.base import ToolRegistry, ToolSpec
-from agentflow.tools.doc_tools import CROSS_CHECK_DISCLAIMER
+from agentflow.tools.doc_tools import CROSS_CHECK_DISCLAIMER, PROOF_REVIEW_DISCLAIMER
 
 from conftest import add_concept, add_literature, add_relation
 
@@ -262,6 +262,37 @@ def test_review_reports_a_cross_check_claim_without_disclaimer(h: AgentH, h_stor
     assert res["verdict"] == "rejected"
 
 
+def test_review_reports_a_disclaimer_that_is_not_the_controlled_one(h: AgentH, h_store: Store):
+    """跨层：声明写了、但不是受控那一句 ⇒ `uncontrolled_disclaimer`，kind 必须语义正确。
+
+    为什么这条要单独钉（2026-10-15）：`uncontrolled_disclaimer`（2026-10-13 加）
+    漏登记进了 `review_tools._H_FINDING_KIND_OF_CA_CODE`，而那张表的兜底是
+    `garbled` ⇒ "声明不是受控那句"被**静默**读成"表述无法解析"，
+    而 `kind` 是审校分档的判据。与 G 侧同族、故障形态相反（G 侧当场抛 `KeyError`）。
+    这里断言的是 `kind` 本身，所以兜底那条路一旦复辟，这条就红。
+    """
+    bad = clean_claim()
+    # 串档：拿 `proof_review` 的受控声明去配 `cross_check`
+    # （`clean_claim` 其余各栏都合规，所以这一条发现是唯一变量）。
+    bad["disclaimer"] = PROOF_REVIEW_DISCLAIMER
+    seed_document(h_store, "0000", [bad])
+
+    res = h.review("0000", dependencies=[])
+    rows = [
+        f for f in findings_of(h_store, "0000")
+        if "code=uncontrolled_disclaimer" in str(f.get("message") or "")
+    ]
+    assert len(rows) == 1, rows
+    f = rows[0]
+    assert f["kind"] == "unsupported_claim", f      # 旧形态在这里是 `garbled`
+    assert f["level"] == "error"
+    assert f["target"] == "claim-1"
+    assert "disclaimer" in f["evidence"]
+    assert res["verdict"] == "rejected"
+    # 兜底路（garbled）没被走到 —— 声明不对不是"读不懂"。
+    assert findings_of(h_store, "0000", kind="garbled") == []
+
+
 def test_review_reports_overclaim_wording_in_a_cross_check_claim(h: AgentH, h_store: Store):
     """负控：`cross_check` 正文写「已证明」⇒ overclaim + error（这份稿件 schema 合法！）。"""
     seed_document(h_store, "0000", [overclaim_claim()])
@@ -336,7 +367,10 @@ def test_dependency_check_is_three_state(h: AgentH, h_store: Store):
     assert unchecked["dep_check"]["checked"] is False
     assert "没查" in unchecked["dep_check"]["reason"]
     assert unchecked["dep_check"]["open"] == [], "空列表是「没查」的结果，不是「都闭合」的证据"
-    checked = RV.scan_document(doc, dependencies=[])
+    # 2026-10-17（业主「通过标准和 V 一样」）：**通过**要求语义层也判过 —— 只查依赖闭合
+    # 还不够（工具面与这条纯函数入口同口径）。这里接一个"判过且一致"的替身。
+    _judge = lambda claim, document: {"verdict": "consistent"}
+    checked = RV.scan_document(doc, dependencies=[], semantic_judge=_judge)
     assert checked["dep_check"]["checked"] is True
     assert checked["findings"] == [] and checked["verdict"] == "accepted"
 
@@ -431,7 +465,11 @@ def test_review_does_not_touch_knowledge_tables_and_only_changes_status(h: Agent
         diff = sorted({k for k in set(rb) | set(ra) if rb.get(k) != ra.get(k)})
         if diff:
             changed.append((str(rb.get("doc_id")), diff))
-    assert changed == [("0000", ["status"])], f"变化点不止 status：{changed}"
+    # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：审校现在**同一次事务**里
+    # 多写审核轴三字段（`review_verdict`/`reviewed_at`/`reviewed_by`）——
+    # 这仍然是"只改这一行、不碰知识表、不碰 claims"，只是多记了"谁在什么时候判了什么"。
+    _AXIS = ["review_verdict", "reviewed_at", "reviewed_by"]
+    assert changed == [("0000", sorted(_AXIS + ["status"]))], f"变化点不止 status＋审核轴：{changed}"
     assert docs_after["rows"][0]["claims"] == docs_before["rows"][0]["claims"], "H 不许改 claims"
 
 

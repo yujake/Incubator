@@ -193,6 +193,7 @@ class AgentV:
         del kw  # 声明层没有别的参数；多给的键在这里不静默生效
         out: dict[str, Any] = {
             "checked": False,
+        "kind": "",          # 三条返回路径键集合一致（没查成时空串）
             "statement_id": str(statement_id or "").strip(),
             "verification_id": "",
             "verdict": "",
@@ -222,10 +223,24 @@ class AgentV:
                             if str(r.get("stmt_id") or "") == sid), None)
             except (StoreError, AttributeError, TypeError):
                 hit = None
-            if hit is not None:
-                statement_full = str(hit.get("statement_full") or hit.get("statement_text") or "")
-                if not text:
-                    text = str(hit.get("proof_text") or "")
+            if hit is None:
+                # ⚠️ **2026-10-17 补**（业主 2026-10-17 授权动禁改区；亲测抓到的缺口）：
+                # 命题**不在册**时不许给 verdict。原实现接着用"（命题 … 的正文没读到）"
+                # 当占位把证明审下去 ⇒ 返回 `checked=True` ＋ 一个 verdict，调用方读起来
+                # 像"**命题与证明都审过了**"，而"这个命题在不在册"没有任何一处说过。
+                # 按本模块**既有纪律**（`checked=False` ⇒ **不落台账行**，见上面
+                # `no_proof_text` / `problem` 两处）在这一格**拒判**并给出路。
+                out["kind"] = "statement_missing"
+                out["reason"] = "statement_missing"
+                out["detail"] = (f"命题 {sid} 不在 statements 里 ⇒ **没审**"
+                                 "（不是「审了、有毛病」）；台账里**不留行** —— "
+                                 "留一行会把「没查成」冒充成「审过了」。"
+                                 "先把这条命题登记了（B 的 register_statement）再来审。")
+                self._emit(f"verify_proof({sid})：命题不在册 ⇒ 没审，不落台账行")
+                return out
+            statement_full = str(hit.get("statement_full") or hit.get("statement_text") or "")
+            if not text:
+                text = str(hit.get("proof_text") or "")
         if not text.strip():
             out["reason"] = "no_proof_text"
             out["detail"] = ("没有可审的证明全文（参数里没给，statements 里也没有）"

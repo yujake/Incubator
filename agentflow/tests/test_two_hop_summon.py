@@ -53,7 +53,7 @@ _ROW: dict = {
 #: 每一层的剧本（按角色给：同一个替身模型对象只服务一个角色）。
 SCRIPTS: dict[str, list[str]] = {
     "M": [
-        json.dumps({"summon": {"role": "A", "action": "run_once", "params": {},
+        json.dumps({"summon": {"role": "A", "task": "派活：按你的职责把这件事做掉", "params": {},
                                "why": "这一件是 A 的编排面"},
                     "notify": {"to": "A", "summary": "请登记 Theorem 1.5",
                                "body": "## 要你做什么\n登记 Theorem 1.5。\n", "refs": []}},
@@ -61,7 +61,7 @@ SCRIPTS: dict[str, list[str]] = {
         json.dumps({"final": "已交 A 转达"}, ensure_ascii=False),
     ],
     "A": [
-        json.dumps({"summon": {"role": "B", "action": "run_once", "params": {},
+        json.dumps({"summon": {"role": "B", "task": "派活：按你的职责把这件事做掉", "params": {},
                                "why": "登记是 B 的活，我只负责转达"},
                     "notify": {"to": "B", "summary": "请登记 Theorem 1.5",
                                "body": "## 要你做什么\n登记 Theorem 1.5。\n", "refs": []}},
@@ -174,8 +174,13 @@ def test_two_hop_summoning_runs_end_to_end(tmp_path):
     assert len(st.rows("statements")) == 1, st.rows("statements")
 
 
-def test_a_non_jsonable_tool_result_kills_the_grandchild_run(tmp_path, monkeypatch):
-    """反负控：把那一级修好之前的行为放回去 ⇒ 孙代理那一趟必须真的崩。
+def test_a_non_jsonable_tool_result_no_longer_kills_the_grandchild_run(tmp_path, monkeypatch):
+    """防回归（2026-10-17 改口径）：**即使**工具层退化成"不兜底"，孙代理也不许被打死。
+
+    ⚠️ 这条原来是**反负控**（把修复放回去 ⇒ 必须崩）。后来我们把兜底加到了更下游
+    （`canonical_json_text` 与全仓 `json.dumps(default=str)`）⇒ **崩不了了**，
+    于是它反过来断言"照样 done、且落盘行仍是合法 JSON"：这才是"兜住了"的直接读数。
+    （真机 T1/T4/T5 曾共撞 5 次同一崩溃。）
 
     没有这一条，"三跳全绿"说明不了任何事（它可能只是这条链本身不会崩）。
     这里把 `table_tools._jsonable_default` 换回恒等函数（= 修复前的行为），
@@ -195,7 +200,11 @@ def test_a_non_jsonable_tool_result_kills_the_grandchild_run(tmp_path, monkeypat
     rows = st.rows("tasks")
     b_rows = [r for r in rows if str(r.get("role")) == "B"]
     assert b_rows, f"孙代理那一趟连行都没落：{[(r.get('task_id'), r.get('role')) for r in rows]}"
-    assert str(b_rows[0]["status"]) == "failed", (
-        "负控失效：把修复放回去之后孙代理那一趟竟然没崩 —— "
+    assert str(b_rows[0]["status"]) == "done", (
+        "非 JSON 结果又把孙代理打死了 —— 兜底没兜住："
         f"读数 {b_rows[0].get('status')}/{b_rows[0].get('outcome')}：{b_rows[0].get('detail')}")
-    assert "PageRange" in str(b_rows[0].get("detail") or ""), b_rows[0].get("detail")
+    assert "not JSON serializable" not in str(b_rows[0].get("detail") or ""), b_rows[0].get("detail")
+    import json as _json
+
+    # 落盘的那份任务行必须是**合法 JSON**（修复前这里会是 `PageRange` 实例 ⇒ TypeError）
+    _json.loads(_json.dumps(dict(b_rows[0]), ensure_ascii=False))

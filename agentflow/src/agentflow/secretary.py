@@ -159,7 +159,14 @@ def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
         target.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return False, f"{type(exc).__name__}: {exc}"
-    line = json.dumps(dict(rec), ensure_ascii=False, sort_keys=True) + "\n"
+    # ⚠️ 2026-10-17（真机 T2r/T5e 两趟同一个崩溃）：这里原本 `json.dumps(dict(rec))` **没有**
+    # `default=`、且**在 try 之外** ⇒ 交接行里一旦带 `TopicalityReport` 这类冻结 dataclass，
+    # 就**直接冒泡**成「A 执行中异常 TypeError: … is not JSON serializable」。
+    # 序列化边界上把未知对象折成字符串（读数照旧、语义不变），绝不让"写一行台账"炸掉整步执行。
+    try:
+        line = json.dumps(dict(rec), ensure_ascii=False, sort_keys=True, default=str) + "\n"
+    except Exception as exc:  # noqa: BLE001 —— 与本函数契约一致：写不成要如实报
+        return False, f"{type(exc).__name__}: {exc}"
     with _append_lock(target):
         try:
             with FileLock(str(target) + ".lock", timeout=30.0):
@@ -178,7 +185,7 @@ def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
                             seq = max(seq, int(row.get("seq") or 0) + 1)
                 out = dict(rec)
                 out["seq"] = seq
-                line = json.dumps(out, ensure_ascii=False, sort_keys=True) + "\n"
+                line = json.dumps(out, ensure_ascii=False, sort_keys=True, default=str) + "\n"
                 with target.open("a", encoding="utf-8", newline="\n") as fh:
                     fh.write(line)
         except Exception as exc:  # noqa: BLE001 —— 写不成要如实报（调用方留痕）
@@ -739,7 +746,7 @@ class Secretary:
             alive = self.alive_path()
             alive.write_text(json.dumps({"role": self.role, "task_id": self.task_id,
                                          "pid": __import__("os").getpid(),
-                                         "at": _now_iso()}, ensure_ascii=False) + "\n",
+                                         "at": _now_iso()}, ensure_ascii=False, default=str) + "\n",
                              encoding="utf-8", newline="\n")
         except OSError as exc:  # 留痕失败不许带走这一趟（但也不静默）
             self._log(f"秘书存活标记没写成：{type(exc).__name__}: {exc}")
@@ -1067,7 +1074,14 @@ class Secretary:
             alarms.append(f"读不到 {want_role} 的角色定位 ⇒ 『收件方真做得到吗』这一格判不了"
                           "（没读成不是没问题）")
         table = self._action_table()
-        if table and want_role in table and str(action) not in table.get(want_role, []):
+        # ⚠️ **2026-10-16（业主口径 S2「M 只派活」）**：`action` 为空时**跳过**这一条。
+        # 空动作 = 派一件活、由被派者自己选动作 ⇒ **没有动作可核**；照旧核就会报警
+        # "{角色} 的动作表里没有 ''"，于是那条派活被吞掉。真机读数（T5 第 12 趟 `p8l`）：
+        # M **六次**发出 `{"role":"A","action":"","task":…}`，而 `tasks` 表里空动作的行
+        # **= 0** —— 六次全死在这一行；M 于是退回"点名动作+自己写参数"，那一趟 12 条被拒。
+        # 其他地方同一套改法见 `policy.check` 第 [1] 步与 `LlmBackend.call`。
+        if (str(action) and table and want_role in table
+                and str(action) not in table.get(want_role, [])):
             close = declarations_candidates(str(action), table.get(want_role, []))
             alarms.append(f"{want_role} 的动作表里没有 {action!r}"
                           + (f"；并列候选：{close}" if close else ""))
@@ -1091,7 +1105,13 @@ class Secretary:
         try:
             from . import capabilities as C
 
-            spec = C.find_action(role, action)
+            # ⚠️ **2026-10-16（业主口径 S2）**：`action` 为空时**这一格不适用**、不算报警 ——
+            # 没有动作就没有"参数声明"可读，报警会让"只派活"那一路整条被判成"判不了"。
+            # 真机/判据现场：`test_the_secretary_washes_the_format_face` 的读数逐字是
+            # `读不到 E. 的参数声明（能力表里没有这个动作）⇒ 必填这一格判不了`。
+            spec = C.find_action(role, action) if str(action) else None
+            if not str(action):
+                return []
         except Exception as exc:  # noqa: BLE001 - 读不到声明 ⇒ 这一格判不了
             spec, problem = None, f"{type(exc).__name__}: {exc}"
         else:
@@ -1249,11 +1269,20 @@ class Secretary:
             return {"checked": False, "decision": "", "basis": [],
                     "reason": f"这一问只属于 B 的秘书（本条秘书属于 {self.role!r}）⇒ 这一格没查成",
                     "cost": {"ledger": "", "reason": "没发调用（不是 B 的秘书）"}}
+        # ⚠️ 2026-10-15 业主裁定 D4：这几格此前是 `[:2000] / [:500] / [:300] / [:500]`
+        # —— 一条**静默截断**，而且截的恰好是判据的输入：秘书要判的是"这条命题
+        # 平不平凡"，而命题的长尾（限定条件、量词顺序）正是决定平凡与否的部分。
+        # 截到 2000 字符意味着它可能在对**半条命题**下结论，而那个结论会变成
+        # "这条别收"（`agent_loop._statement_filing_refusal`）。
+        # 裁定标准：「限制输入…删或把触发水平抬高到几乎不可能触发」⇒ 抬 10 倍以上。
+        # 注意 `statement_full` 同时是**缓存键**的输入（见下面的 sha256）：键必须
+        # 跟着一起变 —— 它变了是好事，"同一命题问第二遍不重复花钱"仍然成立，
+        # 而两条前 2000 字符相同、之后不同的命题不再被误认成同一条。
         context = {
-            "statement_full": str(statement_full or "")[:2000],
-            "statement": str(statement or "")[:500],
-            "source": str(source or "")[:300],
-            "why_this_is_not_trivial": str(basis_hint or "")[:500],
+            "statement_full": str(statement_full or "")[:20_000],
+            "statement": str(statement or "")[:20_000],
+            "source": str(source or "")[:4_000],
+            "why_this_is_not_trivial": str(basis_hint or "")[:8_000],
         }
         key = hashlib.sha256(
             (context["statement_full"] + "\x00" + context["why_this_is_not_trivial"])
@@ -1266,7 +1295,7 @@ class Secretary:
                 target="statement_aesthetic",
                 before=json.dumps({"statement_full": context["statement_full"],
                                    "why_this_is_not_trivial": context["why_this_is_not_trivial"]},
-                                  ensure_ascii=False)[:2000],
+                                  ensure_ascii=False, default=str)[:2000],
                 after=str(prior.get("reason") or ""),
                 reason="沿用本趟第一次的判断（同一个命题不重复花钱；结论与第一次逐字相同）",
                 basis=[f"reused_sha256={key[:12]}"],
@@ -1401,7 +1430,7 @@ class Secretary:
                     reason="；".join([str(wash.get("reason") or ""), *alarms]).strip("；"),
                     basis=["specs/<role>.py 的参数表", "tools.build_registry() 的真名"],
                     target={"to": r_to, "action": str(original.get("action") or "")},
-                    before=json.dumps(original, ensure_ascii=False, sort_keys=True)[:2000],
+                    before=json.dumps(original, ensure_ascii=False, sort_keys=True, default=str)[:2000],
                     changes=list(wash.get("changes") or ()), fail_open=False)
                 return {"problem": "；".join([str(wash.get("reason") or ""), *alarms]).strip("；"),
                         "payload": original, "after": original, "wash": wash, "changes": [],
@@ -1443,10 +1472,10 @@ class Secretary:
                 reason="；".join(alarms) or "没有触发预筛报警（原样放行）",
                 basis=["specs/<role>.py 的参数表", "tools.build_registry() 的真名"],
                 target={"to": to, "action": action}, judge=judged,
-                before=json.dumps(original, ensure_ascii=False, sort_keys=True)[:2000],
+                before=json.dumps(original, ensure_ascii=False, sort_keys=True, default=str)[:2000],
                 # S1g：洗过的那一份与原稿并列落账（`before`/`after` + 逐格 `changes`）。
                 # 只有一份摆在那里时，"模型说错了"与"秘书替它补对了"在纸上分不开。
-                after=json.dumps(washed, ensure_ascii=False, sort_keys=True)[:2000],
+                after=json.dumps(washed, ensure_ascii=False, sort_keys=True, default=str)[:2000],
                 changes=changes,
                 fail_open=False,
             )
@@ -1460,7 +1489,7 @@ class Secretary:
             self.note_decision(duty=1, kind=KIND_OPTIMIZED, decision="已优化",
                                reason="秘书没跑成 ⇒ 原样放行", fail_open=True,
                                error=f"{type(exc).__name__}: {exc}",
-                               before=json.dumps(original, ensure_ascii=False, sort_keys=True)[:2000])
+                               before=json.dumps(original, ensure_ascii=False, sort_keys=True, default=str)[:2000])
             self._log(f"秘书优化没跑成（原样放行）：{type(exc).__name__}: {exc}")
             return {"problem": f"{type(exc).__name__}: {exc}", "payload": original,
                     "after": original, "wash": {"checked": False, "washed": False,
@@ -1569,8 +1598,19 @@ class Secretary:
         else:
             role = role.strip()
         action = after.get("action") if isinstance(after.get("action"), str) else ""
-        if not role or not action:
-            missing = "角色（派给谁）" if not role else "动作（做什么）"
+        # ⚠️ **2026-10-16（业主口径 S2「M 只派活」）**：硬拒那一格从"没有角色**或**没有动作"
+        # 收窄成"没有角色 **或** 既没有动作**也没有活**"。
+        # 原话逐字：「一致改成 task 必填，action 不填」「**action 完全不用父代理填**」。
+        # 真机读数（T5 第 12/13 趟）：M 六次/两次发出 `{"role":"A","task":…}`，而 `tasks`
+        # 表里空动作的行 **= 0** —— 全死在这一行（它**不落行**，所以连证据都没留下）。
+        # ⚠️ 2026-10-16：**活的写法有两处** —— 顶层的 `task`（形状/工具那一面），
+        # 以及 `params["task"]`（派活那条路为了给被派者那一趟循环取用而并进去的那一份）。
+        # 真机/判据现场：批量派活被拒的理由码是 `unknown_action`，而它其实**写了活**
+        # （只是写在 `params` 里）⇒ 这一格必须两处都认，否则"派活"永远过不去。
+        work = str(after.get("task") or (after.get("params") or {}).get("task") or "").strip()
+        if not role or not (action or work):
+            missing = ("角色（派给谁）" if not role
+                       else ("动作（做什么）" if action else "活（做什么）"))
             # 理由码与闸门那一侧同名（`schema.REFUSAL_REASONS`）：空动作名字在
             # 闸门那里就是 `unknown_action`（红前读数见 S1g 的提交信息），这一档只是
             # "不落行"、码不改 —— 换一个码会让读了半年日志的人以为另出了一类拒绝。
@@ -1586,7 +1626,11 @@ class Secretary:
         spec = self._action_spec(role, action)
         table = self._action_table().get(role, [])
         note = ""
-        if spec is None:
+        # ⚠️ **2026-10-16（业主口径 S2）**：`action` 为空时**没有可映的动作** ⇒ 这一步跳过，
+        # 不记 `note`。原先空动作会走到下面那个 `elif`，记成
+        # "动作表里没有 ''（没有候选 ⇒ 不猜，留给闸门拒）" ⇒ "只派活"那一路被挂上一条
+        # 无意义的格式说明（判据现场：`test_the_secretary_washes_the_format_face` 读到它）。
+        if spec is None and str(action):
             close = declarations_candidates(action, table) if table else []
             if len(close) == 1:
                 after["action"] = close[0]
@@ -1796,7 +1840,7 @@ class Secretary:
             self.note_decision(duty=4, kind=KIND_OPTIMIZED, decision="已优化",
                                reason=problem or "按本角色定位补上下文（不加码不减码）",
                                basis=["agent_prompts.ROLE_BRIEFS"],
-                               before=json.dumps(original, ensure_ascii=False, sort_keys=True)[:2000],
+                               before=json.dumps(original, ensure_ascii=False, sort_keys=True, default=str)[:2000],
                                after=note[:2000])
             return {"item": original, "addendum": note, "problem": problem, "fail_open": False}
         except Exception as exc:  # noqa: BLE001 - fail-open

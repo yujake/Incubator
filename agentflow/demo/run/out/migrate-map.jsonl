@@ -1,0 +1,5 @@
+{"op": "migrate_map", "kind": "concept→statement", "old_id": "0000", "new_id": "0000", "name": "group", "had_definition": true, "marker": ""}
+{"op": "migrate_map", "kind": "concept→statement", "old_id": "0001", "new_id": "0001", "name": "abelian group", "had_definition": true, "marker": ""}
+{"op": "migrate_map", "kind": "concept→statement", "old_id": "0002", "new_id": "0002", "name": "ring", "had_definition": true, "marker": ""}
+{"op": "migrate_map", "kind": "concept→statement", "old_id": "0003", "new_id": "0003", "name": "field", "had_definition": true, "marker": ""}
+{"op": "migrate_map", "kind": "summary", "concepts": 4, "relations": 2, "renumbered": 0, "collisions_with_existing_statements": 0, "relations_changed": 0, "dangling_concept_ids": 0, "pending_search": 0, "duplicate_names": 0}

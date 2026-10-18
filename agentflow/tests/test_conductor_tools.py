@@ -239,7 +239,15 @@ def test_role_spec_carries_the_brief_not_only_the_actions(tmp_path: Path):
     assert res.data["duty"] == brief.duty, res.data
     assert list(res.data["boundary"]) == list(brief.boundary), res.data
     assert res.data["signature_error"] == brief.signature_error, res.data
-    assert res.data["actions"], "动作那几格不能被这次加厚挤掉"
+    # ⚠️ **2026-10-16 翻面**（业主口径）：这一格此前断言"`actions` 不能被挤掉"。
+    # 原话逐字：「M 只是个派活的……**不指定能力**。M 能看到的只是各角色描述，
+    # **看不到具体的工具箱与动作**，但可在角色描述中暗示它各角色能干什么。」
+    # ⇒ 判据从"动作必须在"翻成"**动作与工具都不许在**"。
+    assert "actions" not in res.data and "tools" not in res.data, (
+        "`conductor.role_spec` 又把动作面/工具面露出来了 —— 那样 M 只要逐个角色查一遍，"
+        "就能重新拿到每个角色的动作与必填参数，刚在伙伴表上关掉的门等于白关"
+    )
+    assert res.data["duty"] and res.data["deliverable"], "描述那几格必须还在"
 
 
 def test_the_closing_tool_advertises_every_gate_cell(tmp_path: Path):
@@ -321,9 +329,12 @@ def test_summon_runs_the_role_and_lands_a_ledger_row(tmp_path: Path):
     """正控：主控派活 → 角色真的被调用 → 台账里有一行 `by=agent-M` 的终态行。"""
     fake = _FakeE()
     store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", fake)})
-    res = reg.call("conductor.summon", role="M", target_role="E", action="list_experiments", input_key="E.list_experiments")
-    assert res.ok, res.error
-    assert res.data["status"] == "done" and res.data["outcome"] == "ok"
+    # 2026-10-16（口径 S2）迁到**内部 API**：工具层那条路现在一律走角色自己的循环
+    # （测的是"被派者自己选动作"），而这条用例考的是"确定性实现真的被执行" ——
+    # 那是 `Conductor.summon(role, action, params)` 这一层的事。
+    res = _c.summon("E", "list_experiments", {}, by="M", input_key="E.list_experiments")
+    assert res.ok, res.detail
+    assert res.status == "done" and res.outcome == "ok"
     assert fake.calls == [{}], "派活必须真的到角色手里"
     rows = store.rows("tasks")
     assert len(rows) == 1
@@ -359,7 +370,7 @@ def test_summon_many_fans_out_the_same_role_in_parallel(tmp_path: Path):
     store, _c, reg = _wired(tmp_path, role_registry={
         "E": ("factory", lambda *, store=None, instance="": _SlowE())})
     res = reg.call("conductor.summon_many", role="M", why="探针：三个实例同波",
-                   targets=[{"target_role": "E", "action": "list_experiments", "instance": str(i)}
+                   targets=[{"target_role": "E", "task": "派活：list_experiments", "instance": str(i)}
                             for i in (1, 2, 3)])
     assert res.ok, res.error
     data = res.data
@@ -367,7 +378,11 @@ def test_summon_many_fans_out_the_same_role_in_parallel(tmp_path: Path):
     assert data["waves"] == [3], data["waves"]
     assert data["concurrent_peak"] == 3, data["concurrent_peak"]
     assert [r["instance"] for r in data["results"]] == ["1", "2", "3"]
-    assert all(r["status"] == "done" and r["outcome"] == "ok" for r in data["results"])
+    # ④ 的期望按 2026-10-16 的新契约改了：工具层派活**走被派角色自己的循环**
+    # （口径："动作由它自己选"），而 `_SlowE` 是这个夹具里的**确定性替身** ——
+    # 在循环那条路上它不会被直接调用 ⇒ 这一趟不承诺 `outcome == "ok"`。
+    # `count` 恒等于输入长度那一条仍然守着"不许静默丢项"（上面已断言）。
+    assert all(r["status"] in ("done", "refused", "failed") for r in data["results"]), data["results"]
     assert len({r["task_id"] for r in data["results"]}) == 3
     assert len(store.rows("tasks")) == 3
 
@@ -382,7 +397,7 @@ def test_summon_many_auto_assigns_instances_for_a_repeated_role(tmp_path: Path):
     """
     store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
     res = reg.call("conductor.summon_many", role="M",
-                   targets=[{"target_role": "E", "action": "list_experiments"} for _ in range(3)])
+                   targets=[{"target_role": "E", "task": "派活：list_experiments"} for _ in range(3)])
     assert res.ok, res.error
     assert res.data["waves"] == [3], res.data["waves"]
     assert res.data["concurrent_peak"] == 3, res.data["concurrent_peak"]
@@ -410,8 +425,8 @@ def test_summon_many_does_not_relax_cross_role_conflicts(tmp_path: Path):
     store, _c, reg = _wired(tmp_path, role_registry={"A": ("object", _A()),
                                                      "B": ("object", _B())})
     res = reg.call("conductor.summon_many", role="M",
-                   targets=[{"target_role": "A", "action": "run_once"},
-                            {"target_role": "B", "action": "run_once"}])
+                   targets=[{"target_role": "A", "task": "派活：run_once"},
+                            {"target_role": "B", "task": "派活：run_once"}])
     assert res.ok, res.error
     assert res.data["waves"] == [1, 1], res.data["waves"]
     assert res.data["concurrent_peak"] == 1, res.data["concurrent_peak"]
@@ -425,7 +440,10 @@ def test_summon_many_refuses_a_bad_target_shape(tmp_path: Path):
     并且要确认一条任务都没落（"拒绝了"与"跳过那一项、其余照跑"是两回事）。
     """
     store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
-    res = reg.call("conductor.summon_many", role="M", targets=["E.list_experiments"])
+    # ⚠️ 夹具必须是**真的坏形状**。2026-10-16 迁新契约时我用正则批量把这里的 `"action"`
+    # 改成了 `"task"`，顺手把这条"坏形状"改成了**合法的一条** ⇒ 用例失真（它当场红了）。
+    # 按它自己的 docstring 恢复：塞一个**非对象**（字符串）进去。
+    res = reg.call("conductor.summon_many", role="M", targets=["E"])
     assert res.ok is False and res.error, res
     assert "targets" in str(res.error) and "对象" in str(res.error), res.error
     assert store.rows("tasks") == []
@@ -478,7 +496,7 @@ def test_ledger_relays_view_reports_pending_and_fulfilled(tmp_path: Path):
 def test_summon_without_wiring_refuses_and_still_writes_the_row(tmp_path: Path):
     """负控：角色没接线 ⇒ refused/not_wired，而且拒绝也落台账（不许静默）。"""
     store, _c, reg = _wired(tmp_path)
-    res = reg.call("conductor.summon", role="M", target_role="E", action="list_experiments", input_key="E.list_experiments")
+    res = reg.call("conductor.summon", role="M", target_role="E", task="派活：list_experiments", input_key="E.list_experiments")
     assert res.ok, res.error
     assert res.data["outcome"] == "refused" and res.data["refusal_reason"]
     rows = store.rows("tasks")
@@ -487,19 +505,25 @@ def test_summon_without_wiring_refuses_and_still_writes_the_row(tmp_path: Path):
 
 
 def test_summon_refuses_illegal_targets(tmp_path: Path):
-    """负控：派给不可召唤的角色（主控自己）与不存在的动作 ⇒ 都被拒。"""
+    """负控：派给不可召唤的角色（主控自己）与不存在的动作 ⇒ 都被拒。
+
+    2026-10-16（口径 S2）：**工具层已不接受 `action`**（"完全不要有填 action 的位置"）
+    ⇒ "不存在的动作被拒"这条命题**搬到内部 API** 去考（`Conductor.summon(role, action, …)`
+    仍然收动作，`pipeline`/`scheduler`/`deliver` 都在用它）。
+    """
     _store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
-    to_m = reg.call("conductor.summon", role="M", target_role="M", action="list_experiments", input_key="E.list_experiments")
+    to_m = reg.call("conductor.summon", role="M", target_role="M", task="派活：list_experiments", input_key="E.list_experiments")
     assert to_m.data["outcome"] == "refused", to_m.data
-    bad_action = reg.call("conductor.summon", role="M", target_role="E", action="没有这个动作", input_key="x")
-    assert bad_action.data["outcome"] == "refused"
-    assert "unknown_action" in str(bad_action.data["refusal_reason"])
+    bad_action = _c.summon("E", "没有这个动作", {}, by="M")
+    assert bad_action.outcome == "refused", bad_action
+    assert "unknown_action" in str(bad_action.refusal_reason), bad_action.refusal_reason
 
 
 def test_stop_is_graceful_and_idempotent(tmp_path: Path):
     """优雅停止：停后再派活不产生新任务、无僵尸行、有续跑简报、第二次不改理由。"""
     _store, c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
-    reg.call("conductor.summon", role="M", target_role="E", action="list_experiments", input_key="E.list_experiments")
+    # 同上：走内部 API（工具层那条路现在走循环，见上一条的说明）。
+    c.summon("E", "list_experiments", {}, by="M", input_key="E.list_experiments")
 
     first = reg.call("conductor.stop", role="M", reason="user")
     assert first.ok, first.error
@@ -509,7 +533,7 @@ def test_stop_is_graceful_and_idempotent(tmp_path: Path):
 
     # ① 停后不再新开任务：再派一次，台账不许多一行
     before = len(c.tree())
-    again = reg.call("conductor.summon", role="M", target_role="E", action="list_experiments", input_key="E.list_experiments")
+    again = reg.call("conductor.summon", role="M", target_role="E", task="派活：list_experiments", input_key="E.list_experiments")
     assert again.data["outcome"] in ("cancelled", "refused")
     assert len(c.tree()) == before, "停止之后不许再产生新任务"
 
@@ -522,7 +546,9 @@ def test_stop_is_graceful_and_idempotent(tmp_path: Path):
 def test_resume_brief_reads_back_what_stop_wrote(tmp_path: Path):
     """续跑简报读得回来，且带"做了什么"的事实（不是建议）。"""
     _store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
-    reg.call("conductor.summon", role="M", target_role="E", action="list_experiments", input_key="E.list_experiments")
+    # 2026-10-16（口径 S2）：这条考"续跑简报读得回来"，而那一行得先有 —— 走**内部 API**
+    # 落一行（工具层那条路现在走角色自己的循环，见 `test_summon_runs_…` 的说明）。
+    _c.summon("E", "list_experiments", {}, by="M", input_key="E.list_experiments")
     reg.call("conductor.stop", role="M", reason="user")
     got = reg.call("conductor.resume_brief", role="M")
     assert got.ok and got.data["present"] is True
@@ -695,8 +721,11 @@ def test_state_and_role_spec_are_read_only_views(tmp_path: Path):
     st = reg.call("conductor.state", role="M")
     assert st.ok and st.data["tables"].get("tasks") == 0
     spec = reg.call("conductor.role_spec", role="M", role_name="C")
-    actions = {a["action"] for a in spec.data["actions"]}
-    assert "hottest" in actions, "角色规格必须来自 capabilities"
+    # 2026-10-16（业主口径）：这儿原先读 `spec.data["actions"]` 验"来自 capabilities"。
+    # 现在读的是**描述**那一面 —— 动作面不再外露（见上一条判据的同一段口径）。
+    assert spec.data["role"] == "C"
+    assert spec.data["duty"] and spec.data["deliverable"], "角色描述必须来自声明层"
+    assert "actions" not in spec.data and "tools" not in spec.data
     assert spec.data["summonable"] is True
     assert reg.call("conductor.role_spec", role="M", role_name="M").data["summonable"] is False
     assert len(store.rows("tasks")) == 0, "只读视图不许写台账"
@@ -857,7 +886,7 @@ def test_state_shows_the_implicit_thresholds_of_the_two_coupled_legs(tmp_path: P
 def test_ledger_views(tmp_path: Path):
     """台账四个视图都能出读数（tree/stats/issues/verify）。"""
     _store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
-    reg.call("conductor.summon", role="M", target_role="E", action="list_experiments", input_key="E.list_experiments")
+    reg.call("conductor.summon", role="M", target_role="E", task="派活：list_experiments", input_key="E.list_experiments")
     for view in ("tree", "stats", "issues", "verify"):
         got = reg.call("conductor.ledger", role="M", view=view)
         assert got.ok, (view, got.error)

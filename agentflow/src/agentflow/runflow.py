@@ -276,7 +276,7 @@ class CallRecord:
 def _write_json(path: Path, doc: Any) -> None:
     """写一件 JSON 产物（utf-8、不转义中文、末尾换行便于 diff）。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -1740,7 +1740,7 @@ def _phase_6(claims, cost, evidence_doc, manifest, out, report, transcript):
     # 数字全部来自前面几件，任何一件写失败时都不会留下一份引用不存在数字的报告。
     _write_json(out / "run-manifest.json", manifest)
     _write_text(out / "model-transcript.jsonl",
-                "".join(json.dumps(t, ensure_ascii=False) + "\n" for t in transcript))
+                "".join(json.dumps(t, ensure_ascii=False, default=str) + "\n" for t in transcript))
     _write_json(out / "evidence.json", evidence_doc)
     _write_json(out / "claims.json", claims)
     _write_json(out / "cost.json", cost)
@@ -1887,7 +1887,7 @@ def _reply_body(text: str = "4", tokens_in: int = 11, tokens_out: int = 3) -> st
     return json.dumps({
         "choices": [{"message": {"role": "assistant", "content": text}}],
         "usage": {"prompt_tokens": tokens_in, "completion_tokens": tokens_out},
-    }, ensure_ascii=False)
+    }, ensure_ascii=False, default=str)
 
 
 def selftest() -> int:

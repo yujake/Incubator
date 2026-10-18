@@ -721,7 +721,7 @@ def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> str:
     "原子"在这里是可验证的：临时文件与目标同目录（同一次 `os.replace` 才
     谈得上原子），先写完再替换 ⇒ 崩在中间时盘上那份逐字节不变。
     """
-    text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+    text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False, default=str) + "\n"
     tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

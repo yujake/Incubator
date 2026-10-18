@@ -729,7 +729,12 @@ def test_agent_h_review_changes_only_status_and_never_the_claims(tmp_path):
     for rb, ra in zip(before_docs["rows"], after_docs["rows"]):
         assert ra.get("claims") == rb.get("claims"), "H 改了 documents.claims —— 那是 G 的活"
         changed = {k for k in set(rb) | set(ra) if rb.get(k) != ra.get(k)}
-        assert changed <= {"status", "review_rounds"}, f"H 改动了不该动的字段：{sorted(changed)}"
+        # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：同一次事务里还会写审核轴
+        # 三字段（`review_verdict`/`reviewed_at`/`reviewed_by`）—— 仍然不许碰 claims
+        # 与任何知识表（上面两条已分别断言），这只是"多记了谁在何时判了什么"。
+        assert changed <= {"status", "review_rounds",
+                           "review_verdict", "reviewed_at", "reviewed_by"}, (
+            f"H 改动了不该动的字段：{sorted(changed)}")
 
 
 # ============================================================ 6. pipeline.py：I1（D 必须拿到 C 实例）

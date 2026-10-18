@@ -111,6 +111,25 @@ _SETTLED_MARK = "tokenmeter:settled"
 #: 也不需要动 `schema.py`（禁改区）。老行（这一版之前落盘的）没有这个元素，
 #: `_occupies_fanout_slot` 对它们退回读 `_SETTLED_MARK` —— 历史读数因此不变
 #: （见那个函数）。
+#: 派活**不点动作**时，任务行 `detail` 那一格写什么（2026-10-16，业主口径 S2）。
+#: 为什么要有它：`detail` 原先逐字取 `spec.summary`，而空动作没有 spec ——
+#: 不留这一格，读台账的人会把"派活"与"没写清"混起来。
+_DISPATCH_ONLY_SUMMARY = "派活（不点动作）：由该角色按自己的能力范围自己选动作"
+
+#: ⚠️ **2026-10-17（真机 t5e 实测）**：派 **H** 空动作时，它只会在只读工具面上打转，审出的发现**落不了台账**（`review_findings` 一行都没有）。原因不是它不干，而是"写"只发生在
+#: `action=review` 那一次固定流程里。所以派 H 不点动作时，把这件事**直接送回给派活的人**，而不是让它自己去猜。
+_DISPATCH_ONLY_NUDGE = {
+    "H": ("**要 H 落库，就再派一次并点名动作 `review`（带 `doc_id`）** —— "
+          "派空动作时它只能读，审出来的发现只会留在回复里，不会进 `review_findings`。"),
+}
+
+
+def _dispatch_only_detail(role: str) -> str:
+    """空动作派活那一行 detail：基础说明 ＋ 该角色的可行动提示（没有就只给基础说明）。"""
+    nudge = _DISPATCH_ONLY_NUDGE.get(str(role or "").upper())
+    return f"{_DISPATCH_ONLY_SUMMARY}。{nudge}" if nudge else _DISPATCH_ONLY_SUMMARY
+
+
 _ADMITTED_MARK = "conductor:admitted"
 
 #: 消边标记的前缀（S1h）。形态：`edge-released:<子代号>#<第几次>`。
@@ -410,6 +429,11 @@ class NotWiredError(RuntimeError):
 _BUSINESS_ERROR_NAMES = frozenset({
     "ExperimentError", "DocumentError", "PlanError", "ReviewError",
     "EvidenceError", "ConjectureError", "ToolError",
+    #: 2026-10-17（子代理 agents #10）：`ParamError` 是 `ToolError` 的子类，可这张表按
+    #: **类名字符串**比对 ⇒ 参数类拒信（"我不认这些参数"）落成 `failed/执行中异常`，
+    #: 模型拿不到 kind/reason 自救。补进来；`_business_refusal_code` 同时按 MRO 判，
+    #: 于是**任何** `ToolError` 子类都自动算业务拒信。
+    "ParamError",
 })
 
 
@@ -664,12 +688,10 @@ class Conductor:
         #: 而不是"两处各算一遍但愿它们相等"。
         #:
         #: 预算上限取自 `Policy`：策略是判据的单一来源，这里只是把它交给守卫
-        #: （不另写第二份上限）。`Policy.token_budget=None` ⇒ 守卫返回
-        #: `limited=False, allowed=True`，即"没设预算 ⇒ 不限制"（这与其
-        #: 语义"够用"是两件事，见 `MeterReading` 的 docstring）。
+        #: （不另写第二份上限）。**只有钱这一轴**（2026-10-15 业主裁定
+        #: 「我们不卡 token，只卡总花销的钱」）；token 那一轴连字段一起删了。
         self.meter = TokenMeter(
             store,
-            budget_tokens=self.policy.token_budget,
             budget_usd=self.policy.usd_budget,
             log=log,
         )
@@ -1868,10 +1890,87 @@ class Conductor:
             return {"checked": False, "reason": f"{type(exc).__name__}: {exc}",
                     "open_items": [], "open_count": 0}
         open_items = [r for r in rows if str(r.get("item_state") or "") != "done"]
+        # ⚠️ **2026-10-17（T5 第 2 趟真机读数驱动）**：把**"登记了但没人立项"的猜想**
+        # 变成板上的待办。为什么放在这里：D 的手册**已经逐字**写了"登记完猜想请接着把
+        # 这一腿开出去"（且自己记着"第 10 趟 T5 这一环整环为 0"），可**第 2 趟 T5 又是 0**
+        # —— 说明"再补一句说明"这条路无效。改成：**让它在主控看得见的地方挂着**，
+        # 由**派活的那一层**决定要不要开（这里只亮出来、**不点名动作**，守"主控只派活"）。
+        pending = self._pending_attack_items()
+        # ⚠️ **2026-10-17（T5 第 2 趟）**：文献**缺口**也亮出来（#3 的同一机制）。
+        # 那趟的答案自己写着"Frey 曲线：未核到"，而它**没有任何后续动作** —— 因为
+        # "缺一篇"这件事当时只存在于模型的文字里，**台账上看不见**。现在变成板项：
+        # `path` 空（只有元数据）或 `download.status` 不是 ok ⇒ 一条 `pending_search`。
+        gaps = self._pending_search_items()
+        open_items = open_items + pending + gaps
         open_items.sort(key=lambda r: (str(r.get("started_at") or ""),
                                        str(r.get("task_id") or "")))
-        return {"checked": True, "open_items": open_items[:max(1, int(limit))],
-                "open_count": len(open_items), "readings": self.board_readings()}
+        out = {"checked": True, "open_items": open_items[:max(1, int(limit))],
+               "open_count": len(open_items), "readings": self.board_readings()}
+        if pending:
+            out["pending_attack_count"] = len(pending)
+            out["pending_attack_note"] = ("这些是**已登记的猜想但还没有立项**"
+                                          "（谁去立项由你派，别自己动手）")
+        if gaps:
+            out["pending_search_count"] = len(gaps)
+            out["pending_search_note"] = ("这些文献**只有元数据、没有全文**（或下载没成）"
+                                          "—— 要补全文就派检索的那一位，别自己去找")
+        return out
+
+    def _pending_search_items(self) -> list[dict[str, Any]]:
+        """文献缺口：在册但**没有全文**（`path` 空或 `download.status` 不是 ok）⇒ 板项。
+
+        读不成 ⇒ 空（宁可少一条待办，也不编造）。
+        """
+        try:
+            lits = [dict(r) for r in self.store.rows("literature")]
+        except Exception:  # noqa: BLE001
+            return []
+        items: list[dict[str, Any]] = []
+        for r in lits:
+            lid = str(r.get("lit_id") or "")
+            if not lid:
+                continue
+            path = str(r.get("path") or "").strip()
+            dl = r.get("download") if isinstance(r.get("download"), dict) else {}
+            status = str((dl or {}).get("status") or "")
+            if path and status in ("", "ok"):
+                continue
+            why = ("只有元数据（没有 path）" if not path
+                   else f"下载未成（status={status or '空'}）")
+            items.append({"task_id": f"pending-search-{lid}", "kind": "pending_search",
+                          "item_state": "todo", "item_close": "", "lit_id": lid,
+                          "detail": f"文献 {lid} {why} ⇒ 要补全文就派检索的那一位去取"})
+            if len(items) >= 20:
+                break
+        return items
+
+    def _pending_attack_items(self) -> list[dict[str, Any]]:
+        """猜想已登记、但还没有对应的攻坚计划 ⇒ 一条板项（读不成 ⇒ 空，不假装）。"""
+        try:
+            cons = [dict(r) for r in self.store.rows("conjectures")]
+            plans = [dict(r) for r in self.store.rows("attack_plans")]
+        except Exception:  # noqa: BLE001 —— 读不成时**不编造待办**（宁可少一条）
+            return []
+        planned = {str(p.get("problem_key") or "") for p in plans} | \
+                  {str(p.get("conjecture_id") or "") for p in plans}
+        items: list[dict[str, Any]] = []
+        for c in cons:
+            cid = str(c.get("conjecture_id") or "")
+            # ⚠️ 2026-10-17（T2b 真机读数）：状态机是
+            # `proposed → testing → (supported_not_proved | refuted | proved) → promoted`。
+            # 原先只认 `proposed`，而 T2b 里那条猜想停在 **`testing` 且没有任何计划** ——
+            # 那同样是"该有人攻它却没有计划"，看板却一声不响。所以改成：
+            # **未终态**（没被证伪/证成/升格）且无计划 ⇒ 亮出来。
+            if not cid or str(c.get("status") or "") in ("refuted", "proved", "promoted"):
+                continue
+            if cid in planned:
+                continue
+            items.append({"task_id": f"pending-attack-{cid}", "kind": "pending_attack",
+                          "item_state": "todo", "item_close": "",
+                          "conjecture_id": cid,
+                          "detail": (f"猜想 {cid} 已登记（status=proposed）但**还没有攻坚计划**"
+                                     f"—— 决定要不要开一条（该找的角色：能建计划的那一位）")})
+        return items
 
     def item_readings(self, item_ids: Sequence[str]) -> dict[str, Any]:
         """这一批板项"开了几条 / seen 几条 / acked 几条"（三态；开了 ≠ 读到了）。
@@ -1985,9 +2084,44 @@ class Conductor:
             "started_at": started, "ended_at": None, "tokens": 0, "usd": 0.0,
             "artifacts": [], "inputs": [],
         }
+        # 2026-10-18（缺陷 ⑫）：上一趟若被 kill/崩溃，它的 `running` 行会**永远**停在
+        # running ⇒「谁还没收工」「running 有几个」这类读数全部说谎。
+        # 真机 `projects/t2s`：`t-000001`（03:01）与 `t-000005`（03:19）是我 kill 掉的两趟
+        # 留下的僵尸，而 `t-000006` 才是真正在跑的那一趟 —— 三行同角色同时 running。
+        # 同一工作区里同一角色的**顶趟**是互斥的（一个进程一趟），所以开新行前把同角色
+        # 遗留的 running 顶趟标成 `failed`（带原因）是安全的：它们的进程已经不在。
+        self._sweep_stale_top_running(role)
         tid = self._write_new_row(row, note=f"top:{role}")
         self._log(f"顶趟开行 {role} → {tid}", task_id=tid)
         return tid
+
+    def _sweep_stale_top_running(self, role: str) -> int:
+        """把**同一角色**遗留的 `running` 顶趟行标成 `failed`（缺陷 ⑫）。
+
+        返回清掉的行数（读数用）。只碰 `called_by == 主控` 的顶趟行：子代理的行由
+        它们自己的收尾逻辑负责，这里不动，免得把"同时在跑的子任务"误判成僵尸。
+        """
+        n = 0
+        with self.store.tx("tasks", actor=S.CONDUCTOR_ROLE, note="sweep-stale-top-running") as tx:
+            for r in tx.rows("tasks"):
+                # 2026-10-18（⑫ 的补丁，真机 `projects/t3a` 抓到）：顶趟行的 `called_by`
+                # 是 **用户**（`by=user`），不是我原先筛的「主控」⇒ 旧条件永远匹配不到，
+                # 于是 `running` 里能同时躺着三个 M（两次 kill + 一次 resume）。
+                # 改成按**拓扑**判顶趟：没有 parent 的那一行就是顶趟（子代理行都不动）。
+                if (str(r.get("role")) != role
+                        or str(r.get("status")) != "running"
+                        or r.get("parent_task_id")):
+                    continue
+                r["status"] = "failed"
+                r["outcome"] = "failed"   # schema：status=failed ⇒ outcome 必须是 failed
+                r["ended_at"] = S.now_iso()
+                r["error"] = ("上一个进程已不在（被 kill 或崩溃），开新顶趟时清理 —— "
+                              "这不是这一次的失败")
+                tx.upsert("tasks", r)
+                n += 1
+        if n:
+            self._log(f"清理僵尸顶趟 {role} × {n}")
+        return n
 
     #: `consume_pending_search_requests` 的两处消费计数（"派活时 N 条 / 收尾时 M 条"）。
     #: 它是读数：让 (乙) 形态对"即"字的折扣可度量（主控批 (乙) 的条件之一）。
@@ -2214,8 +2348,7 @@ class Conductor:
         state["checked"] = True
         state["scope"] = str(scope)
         state["over_budget"] = bool(
-            (state.get("tokens_left") is not None and state["tokens_left"] <= 0)
-            or (state.get("usd_left") is not None and state["usd_left"] <= 0)
+            (state.get("usd_left") is not None and state["usd_left"] <= 0)
         )
         return state
 
@@ -2234,7 +2367,7 @@ class Conductor:
                 )
             note = self.budget_note()
             self._log("预算读数（只记录，不阻断）", **{k: note.get(k) for k in
-                                                    ("tokens_left", "usd_left", "over_budget")})
+                                                    ("usd_left", "over_budget", "spent_tokens")})
         except Exception as exc:  # noqa: BLE001 - 留痕/读数坏了不许带走派活
             self._log(f"派活前的质量读数没取到（照常派活）：{type(exc).__name__}: {exc}")
             self._last_duplicates = []
@@ -2333,36 +2466,50 @@ class Conductor:
     def _meter_guard(self, role: str, budget: Mapping[str, Any] | None) -> Any:
         """开工前的预算守卫。返回 `tokenmeter.MeterReading`。
 
-        双重预算（两条上限都要过）：
+        ## 判据只有一处：**全局已花 vs 全局预算**（2026-10-15 业主裁定 B2/B4）
 
-        1. 全局预算 —— `self.meter` 的 `budget_tokens/usd`，取自 `Policy`；
-        2. 本次调用的预算 —— 调用方给的 `budget={"max_tokens": …}`。
+        ⚠️ 这里此前是"双重预算"，而且第二重是**坏的**：
 
-        为什么两条都要：`summon(..., budget=...)` 的语义是"这一单最多准花多少"，
-        它不是把全局预算换掉。若只判后者，一个调用方就能用 `budget={"max_tokens": 109}`
-        绕过全局上限 —— 那正是"只有一类上限时另几类都可被绕过"（FC-18）的同族形态。
+        - token 那一半（`budget={"max_tokens": …}`）已随裁定 A1/A2/A3 整条删掉
+          （连同 `Policy.token_budget` 与 `Decision.tokens_left` 两格）；
+        - 钱那一半此前写成"给**这一单**限额"，实现却是 `TokenMeter(store,
+          budget_usd=X).guard()` —— 而那个 meter 读的是**同一本全局账**
+          （`usage_ledger`），于是 `X` 是拿去和**全局已花**比的。
+          也就是说：`max_usd` 从来不是每单限额，它只是"全局阈值的第二个落点"。
+          同一件事两处各判一次，还都不是调用方以为的那个意思 —— 这正是 B2 的形态。
 
-        实现方式：只有当本次调用给了预算时才派生一个 meter（读同一张
-        `usage_ledger`，所以它看到的"已花"与权威账一致），否则直接用共享的那一个。
-        每次现建是刻意的：`TokenMeter` 是无状态的（`spent()` 每次都读表），
-        所以派生不带成本、也不会让"哪一份预算在生效"变得含糊。
+        现在收成一处：判的是 `self.meter`（全局账）对 `self.meter.budget_usd`
+        （全局预算，取自 `Policy.usd_budget`），也就是业主那句「只卡**总花销**的钱」。
+
+        `budget={"max_usd": X}` 这个参数**仍然受理**，但语义改成了它在字面上
+        该有的意思：**"这一单预计最多花 X"** ⇒ 判"剩下的钱够不够 X"
+        （`X > 剩余` ⇒ 开工前拒）。它不再能绕过全局（剩余就是全局剩余），
+        也不再被误当成阈值。
         """
-        est_tokens = 0
-        if budget and budget.get("max_tokens") is not None:
-            est_tokens = max(0, int(budget["max_tokens"]))
-        if budget and (budget.get("max_tokens") is not None or budget.get("max_usd") is not None):
-            per_call = TokenMeter(
-                self.store,
-                budget_tokens=(None if budget.get("max_tokens") is None
-                               else int(budget["max_tokens"])),
-                budget_usd=(None if budget.get("max_usd") is None else float(budget["max_usd"])),
+        grant = self.meter.guard(0, role=role, scope="summon")
+        want: float | None = None
+        if budget and budget.get("max_usd") is not None:
+            try:
+                want = float(budget["max_usd"])
+            except (TypeError, ValueError):
+                want = None
+        if (want is not None and grant.allowed and grant.remaining_usd is not None
+                and want > grant.remaining_usd):
+            # 预计吃掉的钱比剩下的还多 ⇒ 开工前拒（这正是"预计值"该有的判据：
+            # 此前那一版判的是 `已花 >= X`，与"这一单要花多少"毫无关系）。
+            from .tokenmeter import MeterReading as _MR
+
+            return _MR(
+                limited=True, allowed=False,
+                spent_tokens=grant.spent_tokens, spent_usd=grant.spent_usd,
+                budget_usd=grant.budget_usd, remaining_usd=grant.remaining_usd,
+                estimate_tokens=0,
+                reason=(f"这一单预计最多花 {want:.6f} 美元，而全局只剩 "
+                        f"{grant.remaining_usd:.6f}（已花 {grant.spent_usd:.6f} / 上限 "
+                        f"{grant.budget_usd:.6f}）⇒ **在开工前拒绝**"
+                        "（而不是做到一半再停）"),
             )
-            reading = per_call.guard(est_tokens, role=role, scope="summon")
-            if not reading.allowed:
-                return reading
-            # 本次预算过了，还要看全局（"这一单允许"不等于"全局还有钱"）
-            return self.meter.guard(0, role=role, scope="summon")
-        return self.meter.guard(0, role=role, scope="summon")
+        return grant
 
     def _charge_and_settle(self, res: SummonResult, *, role: str) -> SummonResult:
         """把这次召唤的花销记进权威账，再把账上的累计值写回 `tasks`。
@@ -2563,27 +2710,39 @@ class Conductor:
                 by=by, parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
                 instance=instance,
             )
-        edge = P.check_action(role, action, registry=self.specs)
-        if edge is not None:
-            return self._refuse(
-                role, action, reason=edge.reason, detail=edge.detail, by=by,
-                parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
-                instance=instance,
-            )
+        # ⚠️ **2026-10-16（业主口径 S2「M 只派活」）**：`action` 为空时**跳过这一格** ——
+        # 「一致改成 task 必填，action 不填」「**action 完全不用父代理填**」⇒ 没有动作名可核。
+        # **这一处是那条链上最后一个漏网的闸门**：`policy.check` 的第 [1] 步我早改了，
+        # 而这里**直接调** `P.check_action` ⇒ 空动作被判 `unknown_action`
+        # （"{{role}} 没有动作 ''"），于是"派活"在**落行之前**就被拒。
+        # 真机/判据现场：批量派活两项的理由码正是 `unknown_action`（不是边的 `forbidden_edge`），
+        # 所以连"越权 ⇒ 代唤"那条路都走不到。角色存在性与边由下面的 `P.check` 照旧把关。
+        if str(action):
+            edge = P.check_action(role, action, registry=self.specs)
+            if edge is not None:
+                return self._refuse(
+                    role, action, reason=edge.reason, detail=edge.detail, by=by,
+                    parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
+                    instance=instance,
+                )
 
         # ---- [2] 参数（结构问题在写 running 行之前判掉：跑一个注定炸的
         #          参数会让台账里多一条 failed，而它其实从来没被执行过）
-        spec = C.find_action(role, action, registry=self.specs)
-        assert spec is not None  # check_action 已经保证过（`specs=` 那份注册表）
-        bad = self._check_params(spec, params)
-        if bad is not None:
-            # 理由码是 `invalid_params` 而不是 `unknown_action`（R-46）：
-            # "参数不合法"与"角色没这个动作"是两件事，前者要改参数，后者要查能力表。
-            return self._refuse(
-                role, action, reason="invalid_params", detail=bad, by=by,
-                parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
-                instance=instance,
-            )
+        #
+        # 2026-10-16（S2「M 只派活」）：`action` 为空 = **派活而不点动作** ——
+        # 没有动作的 schema 可核（`find_action("", …)` 当然是 None），所以这一格跳过；
+        # 交给接活的那个角色自己的循环按它自己的工具面校验。
+        spec = C.find_action(role, action, registry=self.specs) if str(action) else None
+        if spec is not None:
+            bad = self._check_params(spec, params)
+            if bad is not None:
+                # 理由码是 `invalid_params` 而不是 `unknown_action`（R-46）：
+                # "参数不合法"与"角色没这个动作"是两件事，前者要改参数，后者要查能力表。
+                return self._refuse(
+                    role, action, reason="invalid_params", detail=bad, by=by,
+                    parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
+                    instance=instance,
+                )
 
         # ---- [2b] 委托质量（A 线）：同 key 既有终态行摆到派活前 + 秘书的委派评估
         #
@@ -2655,13 +2814,9 @@ class Conductor:
                     self._running.discard(reserve)
                     self._started_total = max(0, self._started_total - 1)
 
-        want_tokens = None
         want_usd = None
-        if budget:
-            if budget.get("max_tokens") is not None:
-                want_tokens = int(budget["max_tokens"])
-            if budget.get("max_usd") is not None:
-                want_usd = float(budget["max_usd"])
+        if budget and budget.get("max_usd") is not None:
+            want_usd = float(budget["max_usd"])
         # ---- [4a] FC-19 预算守卫：在开工之前问一句"还允不允许"。
         #
         # 顺序是判据的一部分：`guard()` 必须在写 `running` 行之前跑。
@@ -2727,7 +2882,8 @@ class Conductor:
             # 与 `Task` 的字段顺序一致（`refusal_reason` 之后、`detail` 之前）——
             # 顺序不一致会让 `tasks.json` 在 `rebuild()` 之后逐字节不同（I-9）。
             "instance": instance,
-            "detail": spec.summary, "error": None, "started_at": started, "ended_at": None,
+            "detail": (spec.summary if spec is not None else _dispatch_only_detail(str(role or ""))),
+            "error": None, "started_at": started, "ended_at": None,
             "tokens": 0, "usd": 0.0,
             "artifacts": [],
             # `inputs` 的初值同时打上受理标记（题 21 选 B，2026-10-07 所有者裁定）：
@@ -2810,8 +2966,11 @@ class Conductor:
         # 现在的写法让相等由构造保证。
         res = self._charge_and_settle(res, role=role)
         if res.tokens:
-            # 共享取消信号也吃 token 预算：预算耗尽与取消走同一个信号，
-            # 因为处置完全一样（停止派新任务 + 协作式取消在跑的）。
+            # ⚠️ 这里只是**记读数**（2026-10-15 业主裁定 A1/A2/A3：「我们不卡 token，
+            # 只卡总花销的钱」）。此前它写着"共享取消信号也吃 token 预算"——
+            # 那条路（`CancelToken(budget_tokens=…)` ⇒ `cancelled` 变 True ⇒
+            # 在跑的 handler 被掀掉）连同那一格一起删了。
+            # 会拒绝的地方现在只有一处：`_meter_guard`（钱）。
             self.token.consume_tokens(res.tokens)
         # 展示面：`children` 列的是全部子行（含被闸门拒掉的尝试，谁试过什么要看得见），
         # 与扇出判据（`_in_flight_children_of`，只看还没返回的）刻意两个口径
@@ -3024,7 +3183,7 @@ class Conductor:
             }
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n",
+            target.write_text(json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1, default=str) + "\n",
                               encoding="utf-8")
         except (OSError, TypeError, ValueError) as e:  # noqa: BLE001 - 见 docstring
             self._log(f"任务产出摘要没写成：{type(e).__name__}: {e}", task_id=task_id)
@@ -3071,7 +3230,7 @@ class Conductor:
             params = dict(row.get("params") or {})
             if params:
                 lines += ["", "## 参数摘要",
-                          f"```json\n{json.dumps(params, ensure_ascii=False)[:600]}\n```"]
+                          f"```json\n{json.dumps(params, ensure_ascii=False, default=str)[:600]}\n```"]
             if payload is not None:
                 lines += ["", "## 返回值摘要",
                           f"```json\n{json.dumps(payload, ensure_ascii=False, default=str)[:600]}\n```"]

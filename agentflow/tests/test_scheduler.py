@@ -699,26 +699,34 @@ def test_cycle_negative_control_different_key_passes(tmp_path):
     assert d2.depth == 3
 
 
-def test_token_budget_exhaustion_refuses_later_summons(tmp_path):
-    """预算：token 预算用尽 ⇒ 后续 `refused/budget_exceeded`，
-    且在跑的那个不被砍。"""
+def test_budget_exhaustion_refuses_later_summons(tmp_path):
+    """预算：钱用尽 ⇒ 后续 `refused/budget_exceeded`，且在跑的那个不被砍。
+
+    ⚠️ 2026-10-15 业主裁定 A1/A2/A3/A7 + B2/B4：这里的"预算"**只剩钱**，
+    而且判据只有一处（全局已花 vs 全局预算）。
+    此前它走的是 `token_budget=100` + `budget={"max_tokens": 10}`。
+    """
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
-                   wall_clock_sec=60, token_budget=100)
+                   wall_clock_sec=60, usd_budget=1.0)
     c = _conductor(store, policy=pol, registry={"E": ("object", Spendy(100))})
     first = c.summon("E", "run_experiment",
                      {"claim": "c1", "claim_key": "k1", "script_path": "s.py"})
     assert first.outcome == "ok" and first.tokens == 100
-    assert c.budget.state(pol)["tokens_left"] == 0
+    assert c.budget.state(pol)["spent_tokens"] == 100, "花销照记（读数）"
+    # 把全局账推过上限（模拟别的角色花的钱），再派新的 ⇒ 拒
+    from agentflow.tokenmeter import Charge
+
+    c.meter.charge(Charge(role="A", scope="search", usd=2.0, task_id="t-9999",
+                          note="别的角色花的钱"))
     second = c.summon("E", "run_experiment",
-                      {"claim": "c2", "claim_key": "k2", "script_path": "s.py"},
-                      budget={"max_tokens": 10})
+                      {"claim": "c2", "claim_key": "k2", "script_path": "s.py"})
     assert second.status == "done" and second.outcome == "refused"
     assert second.refusal_reason == "budget_exceeded"
     assert first.status == "done", "在跑的那个不许被预算砍掉"
 
 
-def test_token_budget_negative_control_no_task_is_mutated(tmp_path):
+def test_budget_negative_control_no_task_is_mutated(tmp_path):
     """负控（预算）：预算耗尽不许改写已经完成的行。
 
     这条防的是"预算检查跑到 finish 的路径上，把一条 ok 改成 refused"
@@ -726,17 +734,20 @@ def test_token_budget_negative_control_no_task_is_mutated(tmp_path):
     """
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
-                   wall_clock_sec=60, token_budget=50)
+                   wall_clock_sec=60, usd_budget=1.0)
     c = _conductor(store, policy=pol, registry={"E": ("object", Spendy(50))})
     r = c.summon("E", "run_experiment",
                  {"claim": "c", "claim_key": "k", "script_path": "s.py"})
     row = next(x for x in store.rows("tasks") if x["task_id"] == r.task_id)
     assert row["status"] == "done" and row["outcome"] == "ok"
     assert row["ended_at"] and row["refusal_reason"] is None
-    # 再来一次会直接被拒（预算已尽），且不改前面那一行
+    # 推过上限之后再派一次：会被拒，且不改前面那一行
+    from agentflow.tokenmeter import Charge
+
+    c.meter.charge(Charge(role="A", scope="search", usd=2.0, task_id="t-9999",
+                          note="别的角色花的钱"))
     r2 = c.summon("E", "run_experiment",
-                  {"claim": "c2", "claim_key": "k2", "script_path": "s.py"},
-                  budget={"max_tokens": 1})
+                  {"claim": "c2", "claim_key": "k2", "script_path": "s.py"})
     assert r2.outcome == "refused"
     row_again = next(x for x in store.rows("tasks") if x["task_id"] == r.task_id)
     assert row_again == row, "被拒的新召唤不许改动已完成的旧行"

@@ -413,8 +413,12 @@ def test_policy_defaults_have_all_four_limits():
     assert P.assert_policy_complete(p) is None
     # 资源类上限允许 None（不限），且保持 None，不许折叠成 0
     d = p.to_dict()
-    assert d["token_budget"] is None and d["usd_budget"] is None
-    assert d["wall_clock_sec"] == 900
+    assert d["usd_budget"] is None
+    # 2026-10-15 业主裁定 A7（「我们不卡 token，只卡总花销的钱」）：
+    # 预算里不许再有 token 这一格 —— 留一格就有人会把它打开。
+    assert "token_budget" not in d
+    # 2026-10-15 业主裁定 C4：墙钟从 900s 抬到 4 小时（防止"能干完的项目被中途掐死"）
+    assert d["wall_clock_sec"] == 14_400
 
 
 def test_policy_is_frozen_value_object():
@@ -425,8 +429,10 @@ def test_policy_is_frozen_value_object():
 
 
 def test_negative_budget_is_rejected():
-    with pytest.raises(ValueError, match="token_budget"):
-        P.Policy(token_budget=-1)
+    """负数是编程错误（"我还能再花 -0.5 元"没有意义），必须当场拒。
+
+    token 那一格已删（裁定 A7），所以这里只剩钱。
+    """
     with pytest.raises(ValueError, match="usd_budget"):
         P.Policy(usd_budget=-0.5)
 
@@ -571,18 +577,22 @@ def test_depth_boundary_is_allowed():
     assert P.check(P.Policy(max_depth=3), _d(depth=3)) is None
 
 
-def test_the_default_depth_is_five_after_the_2026_10_08_ruling():
-    """默认深度 3 → 5（所有者 2026-10-08：「我们限制递归调用深度为5，毕竟
-    20*(5*5*5*5) 也非常可观了」）。
+def test_the_default_depth_is_twelve_after_the_2026_10_15_ruling():
+    """默认深度 5 → 12（业主 2026-10-15 裁定 C5）。
 
-    两件事：①默认值就是 5（链 `M(1) → A(2) → B(3) → C(4) → D(5)` 到底）；
-    ②边界精确 —— 第 5 层放行、第 6 层拒。为什么把默认值也钉住：它是"并行规模的
-    上界"里那一根轴（名额逐实例 ⇒ 沿链相乘 20×5⁴），改它要跟着改所有者那句话。
+    前情：默认深度 3 → 5 是所有者 2026-10-08 的裁定（「我们限制递归调用深度为5，
+    毕竟 20*(5*5*5*5) 也非常可观了」）。2026-10-15 的裁定标准逐字是
+    「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），删或把
+    触发水平**抬高到几乎不可能触发**的程度」，依据是 T5 第 8 趟的真实链长：
+    正常研究里一次"D 的追问"会再走一遍 `D → A → B`，链长立刻 6 ——
+    也就是说 5 不是"上限"，它是**正常工作会撞到的一堵墙**。
+
+    两件事：①默认值就是 12；②边界精确 —— 第 12 层放行、第 13 层拒。
     """
     p = P.Policy()
-    assert p.max_depth == 5, p.to_dict()
-    assert P.check(p, _d(depth=5)) is None, "第 5 层必须放行"
-    r = P.check(p, _d(depth=6))
+    assert p.max_depth == 12, p.to_dict()
+    assert P.check(p, _d(depth=12)) is None, "第 12 层必须放行"
+    r = P.check(p, _d(depth=13))
     assert r is not None and r.reason == "depth_exceeded", r
 
 
@@ -622,26 +632,27 @@ def test_fanout_exceeded():
 
 
 def test_fanout_limit_is_per_initiator_role():
-    """扇出上限按发起方角色取：主控一档 = 20，默认档 = `Policy.max_fanout`。
+    """扇出上限按发起方角色取：主控一档 = 100，默认档 = `Policy.max_fanout`（25）。
 
-    20 这个数钉在判据里是刻意的：它是一条人裁的编排余量（题15 选B，2026-10-07），
+    那两个数钉在判据里是刻意的：它们是**人裁的编排余量**（题15 选B，2026-10-07
+    定的双档；数字由业主 2026-10-15 裁定 C5 抬到 100 / 25），
     改它应当先改那一处裁定，而不是顺手调一个常量。口径在 2026-10-08 被所有者
     改成"单时刻在飞"（`fanout` = 此刻还没返回的子代理数；见 `policy` 的模块 docstring），
     这里的 `_d(fanout=…)` 直接给的就是那个数。
     """
     p = P.Policy()
-    assert P.fanout_limit_for(p, S.CONDUCTOR_ROLE) == 20
-    assert P.fanout_limit_for(p, "A") == p.max_fanout == 5
+    assert P.fanout_limit_for(p, S.CONDUCTOR_ROLE) == 100
+    assert P.fanout_limit_for(p, "A") == p.max_fanout == 25
     # 反真空：两档都真的会拒，报文里能读出"此刻在飞几个"与"上限是多少"。
-    worker = P.check(p, _d(frm="A", to="B", action="run_once", fanout=5))
+    worker = P.check(p, _d(frm="A", to="B", action="run_once", fanout=25))
     assert worker is not None and worker.reason == "fanout_exceeded"
-    assert "在飞 5" in worker.detail and "上限 5" in worker.detail, worker.detail
-    assert P.check(p, _d(frm="M", to="A", action="run_once", fanout=6)) is None
-    boss = P.check(p, _d(frm="M", to="A", action="run_once", fanout=20))
+    assert "在飞 25" in worker.detail and "上限 25" in worker.detail, worker.detail
+    assert P.check(p, _d(frm="M", to="A", action="run_once", fanout=26)) is None
+    boss = P.check(p, _d(frm="M", to="A", action="run_once", fanout=100))
     assert boss is not None and boss.reason == "fanout_exceeded"
-    assert "在飞 20" in boss.detail and "上限 20" in boss.detail, boss.detail
-    # 报文要说清那个 20 是从哪来的（否则读的人会以为上限就是 policy.max_fanout）
-    assert "FANOUT_LIMIT_BY_ROLE" in boss.detail and "policy.max_fanout=5" in boss.detail
+    assert "在飞 100" in boss.detail and "上限 100" in boss.detail, boss.detail
+    # 报文要说清那个 100 是从哪来的（否则读的人会以为上限就是 policy.max_fanout）
+    assert "FANOUT_LIMIT_BY_ROLE" in boss.detail and "policy.max_fanout=25" in boss.detail
 
 
 def test_concurrency_exceeded():
@@ -656,16 +667,24 @@ def test_total_tasks_budget_exceeded():
     assert r.limit == "max_tasks_per_run"
 
 
-def test_token_budget_exhausted_and_estimate():
-    """预算判定有两档：已耗尽（确定性）与这一单就已超（预计值）。"""
-    r1 = P.check(P.Policy(token_budget=100), _d(tokens_left=0))
-    assert r1 is not None and r1.reason == "budget_exceeded"
-    r2 = P.check(P.Policy(token_budget=100), _d(tokens_left=10, tokens_wanted=50))
-    assert r2 is not None and r2.reason == "budget_exceeded"
-    # 预计值放得下 ⇒ 放行（预算不是"一有消耗就拒绝"）
-    assert P.check(P.Policy(token_budget=100), _d(tokens_left=10, tokens_wanted=5)) is None
-    # 不限预算 ⇒ 永远不因此被拒
-    assert P.check(P.Policy(), _d(tokens_left=None, tokens_wanted=10**9)) is None
+def test_token_spend_never_becomes_a_refusal():
+    """2026-10-15 业主裁定 A1/A2/A3/A7：**不卡 token，只卡总花销的钱**。
+
+    这一条是那一轮裁定的**钉子**：token 位必须从判据的两个入口上彻底消失，
+    "花爆了 token"必须无法表达成一次拒绝。理由不是宽容，是**必需**——
+    T5 实测（`draft/121`）：6 份有全文的文献全部 `output_exhausted`，
+    reasoning 吃掉 26,995–39,076 字符，而同一批文献里 2,720 字符的两份超时、
+    ≤10,396 字符的两份成功 —— 卡 token 卡的正是"它想清楚"那一段。
+    """
+    # ① 判据的两个入口上都不许再有 token 位：没有格子就没有这个判据。
+    assert "token_budget" not in P.Policy.__dataclass_fields__
+    assert "tokens_left" not in P.Decision.__dataclass_fields__
+    assert "tokens_wanted" not in P.Decision.__dataclass_fields__
+    # ② 负控：钱还有余额时，`check` 里没有任何一条会因为"花了很多 token"而拒绝。
+    assert P.check(P.Policy(usd_budget=1.0), _d(usd_left=0.5)) is None
+    # ③ 正控：钱是唯一还在的闸 —— 它仍然必须能拒（不然这一轮就把闸全拆了）。
+    r = P.check(P.Policy(usd_budget=1.0), _d(usd_left=0.0))
+    assert r is not None and r.reason == "budget_exceeded" and r.limit == "usd_budget"
 
 
 def test_usd_budget():
@@ -703,7 +722,7 @@ def test_check_edge_does_not_raise_on_any_reason():
     for kw in (
         dict(to="Z"), dict(action="?"), dict(frm="C", to="B", action="run_once"),
         dict(depth=99), dict(fanout=99), dict(running=99), dict(total=999),
-        dict(deadline_hit=True), dict(tokens_left=0),
+        dict(deadline_hit=True), dict(usd_left=0.0),
     ):
         out = P.check_edge(P.Policy(), kw.pop("frm", "M"), kw.pop("to", "C"),
                            action=kw.pop("action", "hottest"), **kw)
@@ -783,13 +802,19 @@ def test_waves_of_respects_limit():
 
 
 def test_budget_state_keeps_none_semantics():
-    """`None`（不限）与 `0`（已耗尽）不许折叠。"""
-    p = P.Policy(token_budget=None)
+    """`None`（不限）与 `0`（已耗尽）不许折叠 —— 但这条现在只对**钱**成立。
+
+    2026-10-15 业主裁定 A7：`tokens_left` 这一格已删；`spent_tokens` 留着当读数
+    （"这一趟花了多少 token"要看得见），但它不再是任何闸门的输入。
+    """
+    p = P.Policy(usd_budget=None)
     st = P.budget_state(p, spent_tokens=10, spent_usd=1.0)
-    assert st["tokens_left"] is None and st["usd_left"] is None
-    p2 = P.Policy(token_budget=5)
-    st2 = P.budget_state(p2, spent_tokens=10, spent_usd=0.0)
-    assert st2["tokens_left"] == 0, "花超了也不能是负数（负数会被读成'还能再花'）"
+    assert st["usd_left"] is None
+    assert st["spent_tokens"] == 10, "token 只剩读数（裁定 A7）"
+    assert "tokens_left" not in st and "token_budget" not in st, "token 不许再以判据的形状出现"
+    p2 = P.Policy(usd_budget=0.5)
+    st2 = P.budget_state(p2, spent_tokens=10, spent_usd=1.0)
+    assert st2["usd_left"] == 0, "花超了也不能是负数（负数会被读成'还能再花'）"
 
 
 def test_iter_edges_is_flat_and_complete():

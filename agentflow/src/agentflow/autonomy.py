@@ -18,13 +18,14 @@
 ## 停止判据与三态
 
 每一轮开跑前按固定顺序判一次，命中就停，并把命中哪一条如实写进
-`AutonomyRun.stop_reason`（`rounds` / `budget` / `stop_file` / `user_stop`）
+`AutonomyRun.stop_reason`（`rounds` / `budget` / `stop_file`；`user_stop` 已按业主口径删除）
 —— 顺序写死是为了"多条同时成立"时也有一个确定的答案，而不是看谁先被读到：
 
 - `rounds`：轮次用尽（这是唯一的正常终点，"跑完了"就是它）；
 - `budget`：花销预算已到（有共享的模型缝就问缝，没有就把各轮的用量加起来）；
 - `stop_file`：磁盘上出现了那个开关文件（人不用等着发指令就能叫停）；
-- `user_stop`：用户最新一条回答里有 `STOP` 这个字（"我看到了，停"）。
+- `user_stop`：**已删除**（业主口径 2026-10-17「删掉旁路」：停意由主控**理解意思**后调
+  `conductor.stop` 完成，**不靠单词匹配**）。
 
 `not_wired` 是第五种停法，它在第一轮跑完之后判：没有接线时循环不发起任何请求，
 这时继续排下一轮只会连排 N 次空转 —— 所以停，并说明"后续轮次不再发起"。
@@ -60,8 +61,11 @@ from . import sessions as SS
 from .agent_loop import PUBLIC, LoopRun, run_role, send_message
 from .llmseam import LlmSeam
 
-#: 用户在回答里写这个字 = 让这一程停下（它不是"我看看"，是停止信号）。
-STOP_TOKEN = "STOP"
+#: **（已删除）** 原本这里是 `STOP_TOKEN = "STOP"` 的**字面匹配**旁路。
+#: 业主口径 2026-10-17「删掉旁路」：优雅停是**主控的工具/动作** —— 用户**表达出意思**，
+#: 主控就会启动 `conductor.stop`，**不靠单词匹配**（字面匹配必然漏：中文「停」「收工」都不认）。
+#: 旧常量删掉之后，任何还引用 `autonomy.STOP_TOKEN` 的代码都会立刻 `NameError`（这是有意的：
+#: 静默返回"没叫停"比报错更坏）。
 
 #: 检查点目录与文件名：`<项目根>/runs/autonomy-<角色>.json`。
 #: 为什么要检查点：`run_autonomous` 的一次调用可能跑几十分钟（每轮都要调好几次模型），
@@ -112,7 +116,7 @@ def save_checkpoint(session_root: Path | str, role: str, *, fingerprint: str,
                    "last_final": str(last_final)[:FINAL_CHARS],
                    "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
         with path.open("w", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            fh.write(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n")
     except OSError as exc:
         return f"{type(exc).__name__}: {exc}"
     return ""
@@ -271,7 +275,7 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
                        wake_pending: int = 0, woke: int = 0) -> str:
     """下一轮开跑前的停止判据；返回停止原因（空串 = 继续跑）。
 
-    顺序是 `waiting_for_user` → `rounds` → `budget` → `stop_file` → `user_stop`：
+    顺序是 `waiting_for_user` → `rounds` → `budget` → `stop_file`：
     先看"上一轮停在等用户回答、而「那个回答到现在还没来」"（唯一一条不能靠继续跑绕过去的），
     再耗尽轮次，再看钱，再看磁盘上那个人工开关，最后看用户最新那句话。
     多条同时成立时按这个顺序给一个确定的答案 —— 否则"为什么停"这件事会取决于读取顺序，
@@ -301,7 +305,7 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
         # （判据：预算用尽 + 有留言 ⇒ 停，理由仍是下面那一道给出的那个）；
         # ③ 报出来的理由顺序一个字不改（`rounds` 在 `budget` 之前是文档化的口径）。
         hard = (usd_budget is not None and spent_usd >= usd_budget) or \
-            (stop_path is not None and stop_path.exists()) or (STOP_TOKEN in user_answer)
+            (stop_path is not None and stop_path.exists())
         if not hard and wake_pending > 0 and woke < WAKE_ALLOWANCE:
             return ""
         return "rounds"
@@ -309,8 +313,6 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
         return "budget"
     if stop_path is not None and stop_path.exists():
         return "stop_file"
-    if STOP_TOKEN in user_answer:
-        return "user_stop"
     return ""
 
 
@@ -467,7 +469,12 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                                       "拿一个任务的进度去续另一个任务会把两件事混成一条"],
                                checkpoint=str(cp_path))
         else:
-            resumed_from = int(cp.get("completed_rounds") or 0)
+            # 2026-10-17（IO #8）：`load_checkpoint` 只校验"能解析成 dict"，字段级不校验；
+            # `completed_rounds: "abc"` 的脏检查点会把一次**续跑**变成 traceback。
+            try:
+                resumed_from = int(cp.get("completed_rounds") or 0)
+            except (TypeError, ValueError):
+                resumed_from = 0
             # 上一段的花销要并进预算口径：否则每一段都从 0 开始算，总额会超
             prev = _spend_of(cp.get("spend") if isinstance(cp.get("spend"), Mapping) else None)
             for key in _COUNTER_KEYS:
@@ -545,8 +552,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         for line in answer_notes:
             if line not in notes:
                 notes.append(line)
-        if reason == "user_stop":
-            notes.append(f"用户最新一条回答里有 {STOP_TOKEN}：按用户的意思停在第 {index} 轮之前")
+        # （已删除）`user_stop` 那条"回答里含 STOP 就停"的分支随旁路一起删掉了：
+        # 它会让一个已经不存在的常量参与 f-string（`STOP_TOKEN`）⇒ 一旦执行就 NameError。
         if reason:
             stop_reason = reason
             break
@@ -702,7 +709,7 @@ def selftest() -> int:
         registry = StubRegistry()
 
         # 正控：三轮跑完，每轮一条汇报（含事件），第 2 轮的任务里有第 1 轮的结论。
-        gw = Scripted([json.dumps({"final": f"第 {i} 轮结论：还差一步"}, ensure_ascii=False)
+        gw = Scripted([json.dumps({"final": f"第 {i} 轮结论：还差一步"}, ensure_ascii=False, default=str)
                        for i in (1, 2, 3)])
         run = run_autonomous("D", "把这件事做完", store=store, registry=registry, gateway=gw,
                              rounds=3, max_steps=3, sid="self")
@@ -733,11 +740,11 @@ def selftest() -> int:
 
         SS.append(root, {"kind": "user_question", "qid": "q0001", "role": "D",
                          "text": "还要继续吗？"}, sid="self3")
-        userio.answer_question(root, qid="q0001", answer=f"{STOP_TOKEN} 先停", sid="self3")
+        userio.answer_question(root, qid="q0001", answer="先停一停吧", sid="self3")
         idle2 = Idle()
         stopped = run_autonomous("D", "接着做", store=store, registry=registry, gateway=idle2,
                                  rounds=3, sid="self3")
-        check(stopped.rounds_done == 0 and stopped.stop_reason == "user_stop",
+        check(stopped.rounds_done == 0 and stopped.stop_reason in ("", "rounds", "budget", "stop_file"),
               f"用户说停却还在跑：{stopped.to_dict()}")
         check(idle2.calls == 0, "用户说停却发起了模型调用")
 

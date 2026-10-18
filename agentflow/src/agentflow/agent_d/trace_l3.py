@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ._support import Sequence
 
 class _TraceL3:
@@ -17,7 +19,9 @@ class _TraceL3:
         """
         want = list(lit_ids or [])
         if not want:
-            want = [str(c.get("lit_id")) for c in evidence.get("claims") or [] if c.get("lit_id")]
+            # 2026-10-17（agents #6）：只收 Mapping 元素（str 上 `.get` 会抛 AttributeError）。
+            want = [str(c.get("lit_id")) for c in evidence.get("claims") or []
+                    if isinstance(c, Mapping) and c.get("lit_id")]
         want = sorted(set(want))[: self.max_l3_lits]
         out: list[dict] = []
         for lid in want:

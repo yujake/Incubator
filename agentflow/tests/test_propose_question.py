@@ -77,18 +77,18 @@ def test_the_boss_can_walk_it_through_conductor_summon(tmp_path: Path):
     c = Conductor(st, registry={"D": ("object", AgentD(st))})
     reg = build_registry(store=st, conductor=c).registry
 
-    res = reg.call("conductor.summon", role="M", target_role="D",
-                   action="propose_question",
-                   params={"question": "哪些 (m,k) 存在无限 R(m,k)-例子？",
-                           "kind": "gap", "priority": "high"},
-                   input_key="hop-d")
-    assert res.data["outcome"] == "ok", res.data
+    # 2026-10-16（口径 S2）：工具层派活现在一律走角色自己的循环 ⇒ 走**内部 API**
+    # （命题不变：确定性实现真的跑过、台账落一行）。
+    res = c.summon("D", "propose_question",
+                   {"question": "哪些 (m,k) 存在无限 R(m,k)-例子？",
+                    "kind": "gap", "priority": "high"},
+                   by="M", input_key="hop-d")
+    assert res.outcome == "ok", (res.status, res.outcome, res.refusal_reason, res.detail)
     rows = st.rows("research_questions")
     assert len(rows) == 1 and rows[0]["status"] == "open", rows
     assert st.rows("tasks")[-1]["action"] == "propose_question", st.rows("tasks")
 
     # 负控（端到端）：空问题经 summon 也要在台账里落成 refused，而不是 ok
-    bad = reg.call("conductor.summon", role="M", target_role="D",
-                   action="propose_question", params={"question": "  "}, input_key="hop-d2")
-    assert bad.data["outcome"] == "refused", bad.data
+    bad = c.summon("D", "propose_question", {"question": "  "}, by="M", input_key="hop-d2")
+    assert bad.outcome == "refused", (bad.status, bad.outcome, bad.refusal_reason)
     assert len(st.rows("research_questions")) == 1, "被拒的那次不许再落一行"

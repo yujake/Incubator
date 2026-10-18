@@ -111,6 +111,19 @@ _H_FINDING_KIND_OF_CA_CODE: dict[str, str] = {
     # 一个查生命周期闭合）⇒ 它们要按语义落 kind，不能落 `garbled`。
     "incomplete_numeric_evidence": "unsupported_claim",
     "lifecycle_incomplete": "inconsistent_number",
+    # ⚠️ **2026-10-15 补登记**：`uncontrolled_disclaimer`（2026-10-13 加）同样漏了这里。
+    # 本表的兜底是 `garbled`（见上面那句"不在表里的 code 落到 `garbled`"），
+    # 所以它不像 `doc_tools` 那张表那样当场炸 —— 它**静默地**把
+    # "声明不是受控那一句"读成"表述无法解析"，而 kind 是审校分档的判据。
+    # 两条漏登记是同一个根因（新 code 只登记进了 `claimanatomy` 的表，
+    # 没往两张落据表同步），但**故障形态相反**：G 侧炸、H 侧错。
+    #
+    # 为什么落 `unsupported_claim`：与 `missing_disclaimer`（H 自己那条
+    # "disclaimer 为空"的检查，在 `_H_OWN_CODES` 里）同族同义 ——
+    # 区别只在"没写"与"写错了"，该改的栏是同一个。
+    # 这里刻意不把它加进 `_H_OWN_CODES`：H 的循环只判"空不空"，
+    # 判"是不是受控那一句"是 `claimanatomy` 的新判据，交给它判。
+    "uncontrolled_disclaimer": "unsupported_claim",
 }
 
 
@@ -747,6 +760,12 @@ def scan_document(
         verdict = "rejected"
     elif not dep_checked:
         verdict = "unverified"
+    elif not bool(semantic_check.get("checked")):
+        # 2026-10-17（业主：「通过标准和 V 一样」）：**语义层没查 ⇒ 不许判通过**。
+        # 真机 t5e（`t5e-5`）现场：`semantic_check.checked=false`（没接线）却落了
+        # `verdict=accepted`，于是审核轴被写成「成立」—— 把"没查"说成了"通过"。
+        # 这一档与"依赖闭合没查"是同族，统一记 `unverified`（三态里的"看不出来"）。
+        verdict = "unverified"
     elif warnings:
         verdict = "accepted_with_warnings"
     else:
@@ -873,6 +892,22 @@ def _set_doc_status(store: Any, doc_id: str, target: str, *, actor: str) -> tupl
             if row is None:
                 return False, f"稿件 {doc_id} 在事务内不存在", cur
             row["status"] = target
+            # 2026-10-17（业主：「**H 审过和通过是完全不同的状态**」）：状态被审校推到某一档时，
+            # 同一次事务里把**审核轴**写上 —— 于是两件事分得开：
+            #   审过 = `review_verdict != ""`；通过 = `review_verdict == "成立"`（与 V 的裁决同形）。
+            # 这一笔是 `closing.accepted_documents` 唯一的数据来源。
+            from datetime import datetime as _dt
+
+            # 三态映射（与 V 同形）：通过 ⇒ 成立；判成有毛病 ⇒ 有毛病；
+            # **没查成/没结论** ⇒ 看不出来 —— 不许把"没查"折成"有毛病"或"成立"。
+            if target in ("accepted", "accepted_with_warnings"):
+                row["review_verdict"] = "成立"
+            elif target in ("rejected", "in_review"):
+                row["review_verdict"] = "有毛病"
+            else:
+                row["review_verdict"] = "看不出来"
+            row["reviewed_at"] = _dt.now().astimezone().isoformat(timespec="seconds")
+            row["reviewed_by"] = str(actor or "agent-H")
             tx.upsert("documents", row)
     except Exception as e:  # noqa: BLE001 - 见 docstring：失败必须被记录，不能被吞掉或上抛
         return False, f"{type(e).__name__}: {e}", cur
@@ -1609,6 +1644,7 @@ def review_report(
     # 与 `review_document` 同一份判据源（`scan_document`），所以两处不会给出两个数。
     coverage = scan_document(doc, dependencies=deps if deps_checked else None,
                              semantic_judge=semantic_judge)["coverage"]
+
     return {
         "doc_id": str(doc_id),
         "round": int(round_no),
@@ -1651,7 +1687,7 @@ def review_report(
     roles=_ROLES,
     returns=(
             "{'checked','doc_id','findings','error_count','warning_count','info_count',"
-            "'dep_check','verdict','reason'}；verdict ∈ {rejected, unverified, "
+            "'dep_check','verdict','reason','coverage','semantic_check'}；verdict ∈ {rejected, unverified, "
             "accepted_with_warnings, accepted}，dep_check.checked=False 时**必为** unverified"
             ),
     tags=("review", "gate"),
@@ -1715,7 +1751,7 @@ def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, leve
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
-    returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage'}",
+    returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated'}",
     tags=("review", "write"),
 )
 def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw):
@@ -1750,7 +1786,7 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
-    returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked'}",
+    returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count'}",
     tags=("review", "write"),
 )
 def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **kw):

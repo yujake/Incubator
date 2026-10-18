@@ -149,14 +149,26 @@ __all__ = [
 #: 为什么每个循环都必须有上限：I2 的矛盾闭环是"发现→提问→检索→消化→复核"，
 #: 若裁决可以是"仍未解决"，那它天然是一个**不会自己停的循环**。
 #: 没有上限的自治循环不是"更自主"，而是"会烧完预算且不给结论"。
+#:
+#: ⚠️ **2026-10-15 业主裁定 C9 把这些数字整体抬高**。裁定标准逐字是
+#: 「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、**步数**等），删或把
+#: 触发水平**抬高到几乎不可能触发**的程度（即使触发也是提醒而非强杀）」。
+#: 抬高的方向与依据：
+#:
+#: - 这些数字是 2026-09 的**离线单机**读数下定的（那时候一次检索几毫秒），
+#:   而现在一次上游检索是秒级、一次抽取是分钟级 —— 同样的"20 个在途"含义完全不同；
+#: - 它们此前会在正常研究里真的触发（T5 第 8 趟的 `D` 只问了 2 个问题就撞上
+#:   `max_rounds_per_contradiction`），而**撞上之后没有任何读数说"这是配额挡的"**；
+#: - 真正该管住"烧钱不给结论"的是**钱**（`usd_budget` + 总账），不是配额。
+#:   配额剩下的职责是"防一次编程错误把请求数炸成 O(n²)"，那是 100 与 10 都能胜任的事。
 DEFAULTS: dict[str, int] = {
-    "max_inflight_requests": 20,  # I7 全局在途检索请求上限
-    "max_rounds_per_contradiction": 2,  # I2 单条矛盾的追问轮数上限
-    "max_contradiction_requests": 10,  # I2 全局矛盾检索请求上限
-    "max_gap_requests_per_run": 3,  # I3 单次 gaps 最多直连多少条检索请求
-    "max_reprocess_per_relation": 2,  # I4 同一关系最多被重抽取几次
+    "max_inflight_requests": 200,  # I7 全局在途检索请求上限（20 → 200，裁定 C9）
+    "max_rounds_per_contradiction": 12,  # I2 单条矛盾的追问轮数上限（2 → 12，裁定 C9）
+    "max_contradiction_requests": 100,  # I2 全局矛盾检索请求上限（10 → 100，裁定 C9）
+    "max_gap_requests_per_run": 30,  # I3 单次 gaps 最多直连多少条检索请求（3 → 30，裁定 C9）
+    "max_reprocess_per_relation": 8,  # I4 同一关系最多被重抽取几次（2 → 8，裁定 C9）
     "question_jaccard_threshold": 0.6,  # §3.1 问题等价类的概念集 Jaccard 阈值
-    "structural_duplicate_max_pairs": 200,  # I5 结构重复枚举上限（防 O(n^2) 爆炸）
+    "structural_duplicate_max_pairs": 1_000,  # I5 结构重复枚举上限（防 O(n^2) 爆炸；200 → 1000）
 }
 
 

@@ -408,10 +408,12 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
     reg = build_registry(store=st, conductor=c).registry
 
     hops: list[dict] = []
-    lit = reg.call("conductor.summon", role="M", target_role="A", action="ingest_local",
-                   params={"books_dir": "source", "pattern": "*.md"}, input_key="hop-a")
-    hops.append(lit.data)
-    assert lit.data["outcome"] == "ok", lit.data
+    # 2026-10-16（口径 S2）：工具层的派活现在一律走角色自己的循环 ⇒ 这条"链走得通"
+    # 的判据走**内部 API**（与本文件下面 A→B 那一跳同一写法）。
+    lit = c.summon("A", "ingest_local", {"books_dir": "source", "pattern": "*.md"},
+                   by="M", input_key="hop-a")
+    hops.append({"action": "ingest_local", "status": lit.status, "outcome": lit.outcome})
+    assert lit.outcome == "ok", (lit.status, lit.outcome, lit.refusal_reason, lit.detail)
     lit_id = st.rows("literature")[0]["lit_id"]
 
     # 第二跳的召唤方是 A（业主 2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V，
@@ -422,27 +424,27 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
     # 而 A→B 在生产里是 A 自己的循环发出 `summon` 形状时由 `agent_loop` 代调的。
     # 工具的返回结构（`data["payload"]`）在这里用不上，直接读 `SummonResult.payload` 即可。
     stmt = c.summon("B", "register_statement", {"source_lit_id": lit_id, **STATEMENT},
-                    by="A", parent_task_id=lit.data["task_id"], input_key="hop-b")
+                    by="A", parent_task_id=lit.task_id, input_key="hop-b")
     hops.append({"action": "register_statement", "status": stmt.status, "outcome": stmt.outcome})
     assert stmt.outcome == "ok", (stmt.status, stmt.outcome, stmt.refusal_reason, stmt.detail)
     assert len(st.rows("statements")) == 1
 
-    doc = reg.call("conductor.summon", role="M", target_role="G", action="build_document",
-                   params={"kind": "paper", "title": "我方修订稿",
-                           "claims": [{"claim_id": "c1", "section": "主定理",
-                                       "text": "数值抽样与该结论一致（引自外部论文）。",
-                                       "evidence_kind": "cross_check",
-                                       "citations": [f"lit:{lit_id}"],
-                                       "disclaimer": "数值交叉验证，不构成证明"}]},
-                   input_key="hop-g")
-    hops.append(doc.data)
-    assert doc.data["outcome"] == "ok", doc.data
+    doc = c.summon("G", "build_document",
+                   {"kind": "paper", "title": "我方修订稿",
+                    "claims": [{"claim_id": "c1", "section": "主定理",
+                                "text": "数值抽样与该结论一致（引自外部论文）。",
+                                "evidence_kind": "cross_check",
+                                "citations": [f"lit:{lit_id}"],
+                                "disclaimer": "数值交叉验证，不构成证明"}]},
+                   by="M", input_key="hop-g")
+    hops.append({"action": "build_document", "status": doc.status, "outcome": doc.outcome})
+    assert doc.outcome == "ok", (doc.status, doc.outcome, doc.refusal_reason, doc.detail)
     doc_id = st.rows("documents")[0]["doc_id"]
 
-    review = reg.call("conductor.summon", role="M", target_role="H", action="review",
-                      params={"doc_id": doc_id}, input_key="hop-h")
-    hops.append(review.data)
-    assert review.data["outcome"] == "ok", review.data
+    review = c.summon("H", "review", {"doc_id": doc_id}, by="M", input_key="hop-h")
+    hops.append({"action": "review", "status": review.status, "outcome": review.outcome})
+    assert review.outcome == "ok", (review.status, review.outcome,
+                                    review.refusal_reason, review.detail)
     assert st.rows("documents")[0]["status"] == "accepted"
 
     # 四跳都在台账里留了行（"走通"要能在台账上复核，不只看返回值）

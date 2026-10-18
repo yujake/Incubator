@@ -219,14 +219,15 @@ def record(
         "producer": str(producer),
         "kind": str(kind or "file"),
         "task_id": str(task_id or ""),
-        "exit_code": exit_code if exit_code is None else int(exit_code),
+        # 2026-10-17（store #16）：本模块其余坏输入走 `ArtifactError`，只有这一格是裸 int()。
+        "exit_code": exit_code if exit_code is None else _exit_code_of(exit_code),
         "note": str(note or ""),
     }
     p = ledger_path(root)
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+            fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True, default=str) + "\n")
     except OSError as e:
         raise ArtifactError(f"台账写不进去（{type(e).__name__}: {e}）") from e
     return entry
@@ -411,3 +412,11 @@ def selftest() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(selftest())
+
+
+def _exit_code_of(value: Any) -> int:
+    """`exit_code` 收成 int；坏值抛 `ArtifactError`（与模块其余入口同一口径）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ArtifactError(f"exit_code 必须是整数，收到 {value!r}") from exc

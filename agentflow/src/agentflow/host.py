@@ -64,8 +64,10 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
       `literature.processed=False`）；
     - `run-b` / `pipeline` 把 `RuleExtractor()` 写死 ⇒ 同样永远拒抽；
     - 而唯一正确的配方写在 `projects.py` 里：`client_from_env(scope="extract",
-      meter=TokenMeter(store), role="B", max_tokens=8192)`。`max_tokens` 必须给大
-      （实测 2026-09-28：缺省 4096 会把整份 JSON 截在半句上 ⇒ 解析失败、整篇作废）。
+      meter=TokenMeter(store), role="B")`。（那一版曾写 `max_tokens=8192`，
+      理由是"缺省 4096 会把整份 JSON 截在半句上"—— **2026-10-15 起这一栏整条删掉**：
+      业主裁定「我们不卡 token，只卡总花销的钱」，而真调用对照证明不带这一栏时
+      上游给的额度反而更宽。）
 
     这里把那个配方收成一处：「有 key ⇒ 计量过的模型 client；没有 key ⇒ 规则档」
     （后者让 `run_once` 如实报 `no_llm_extractor`，而不是"每篇文献发一次注定失败的请求"）。
@@ -94,10 +96,11 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
     # （`task_id=self.task_id or None`）。另：盘上已经写下的行不会被代码改写
     # （`store.rebuild` 重放的是同一批事件），所以历史工作区的计数不会因为改这一行而归零。
     client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
-                             task_id=None, role="B", max_tokens=8192)
+                             task_id=None, role="B")
     if notes is not None:
         notes.append("B：抽取器 = LLMExtractor（client 走 modelclient，作用域 extract、"
-                     "max_tokens=8192、已挂 TokenMeter ⇒ 花销进 usage_ledger）")
+                     "已挂 TokenMeter ⇒ 花销进 usage_ledger；"
+                     "**输出额度不再由我们设** —— 2026-10-15 起请求体里没有 max_tokens）")
     return LLMExtractor(client)
 
 

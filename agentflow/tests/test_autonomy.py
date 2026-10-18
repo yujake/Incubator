@@ -24,7 +24,7 @@ from agentflow import autonomy
 from agentflow import sessions as SS
 from agentflow import userio
 from agentflow.agent_loop import read_messages
-from agentflow.autonomy import STOP_TOKEN, run_autonomous
+from agentflow.autonomy import run_autonomous
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
@@ -204,7 +204,7 @@ def test_a_stop_file_created_mid_round_stops_after_that_round(tmp_path: pathlib.
 
 
 def test_a_user_answer_with_stop_addressed_to_the_role_stops_the_run(tmp_path: pathlib.Path):
-    """用户答了一句带 STOP 的话给这个角色：零轮、以 user_stop 停，且不碰模型。
+    """**负控（业主 2026-10-17「删掉旁路」）**：回答里写 STOP 字面**不再**让这一程停。
 
     回归的是：用户的叫停只写在提示词里"请模型自觉" —— 而"停"这件事必须有一条
     不经过模型的实现，否则用户说的话在与不在，只取决于模型这一轮怎么想。
@@ -212,14 +212,16 @@ def test_a_user_answer_with_stop_addressed_to_the_role_stops_the_run(tmp_path: p
     st, registry, root = _ws(tmp_path)
     SS.append(root, {"kind": "user_question", "qid": "q0001", "role": "D",
                      "text": "还要继续吗？"}, sid="t")
-    assert userio.answer_question(root, qid="q0001", answer=f"{STOP_TOKEN} 先停一停",
+    assert userio.answer_question(root, qid="q0001", answer="STOP 先停一停",
                                   sid="t") == ""
 
     run = run_autonomous("D", "接着做", store=st, registry=registry, gateway=ExplodingGateway(),
                          rounds=3, sid="t")
 
-    assert run.rounds_done == 0 and run.stop_reason == "user_stop", run.to_dict()
-    assert any(STOP_TOKEN in n for n in run.notes), run.notes
+    # 业主口径（2026-10-17「删掉旁路」）：回答里写 STOP **不再**停 —— 字面匹配已删，
+    # 「停」由主控**理解意思**后调 `conductor.stop` 完成。所以这条现在反过来断言：
+    assert run.rounds_done >= 1, run.to_dict()
+    assert run.stop_reason != "user_stop", run.to_dict()
 
 
 def test_a_stop_answer_addressed_to_another_role_does_not_stop_this_one(tmp_path: pathlib.Path):
@@ -230,7 +232,7 @@ def test_a_stop_answer_addressed_to_another_role_does_not_stop_this_one(tmp_path
     st, registry, root = _ws(tmp_path)
     SS.append(root, {"kind": "user_question", "qid": "q0001", "role": "E",
                      "text": "E 这边还要继续吗？"}, sid="t")
-    assert userio.answer_question(root, qid="q0001", answer=f"{STOP_TOKEN} 先停",
+    assert userio.answer_question(root, qid="q0001", answer="先停",
                                   sid="t") == ""
 
     gw = ScriptedGateway(_finals("D 照常做完了"))

@@ -605,6 +605,21 @@ def make_artifacts_sample(root: Path, *, sid: str = "fix-sid") -> Path:
     return root
 
 
+@pytest.fixture(autouse=True)
+def _reset_provider_cooldowns():
+    """每条判据前后都清空 provider 冷却表（缺陷 ⑰ 的副作用隔离）。
+
+    `providers` 的冷却是**进程级**的字典（生产里正是要"这一趟记住这个源被限流了"），
+    但判据之间必须互不污染：先前跑过的那条判据把一个 provider 打进冷却，
+    下一条就会拿到 `ProviderError: …正在限流冷却`，看起来像本身的断言失败。
+    """
+    from agentflow import providers as _P
+
+    _P.clear_provider_cooldowns()
+    yield
+    _P.clear_provider_cooldowns()
+
+
 @pytest.fixture
 def artifacts_ws(tmp_path: Path) -> Path:
     """六面只读模型的夹具工作区（裁定 J2/K2；见 :func:`make_artifacts_sample`）。"""

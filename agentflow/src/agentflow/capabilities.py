@@ -389,9 +389,14 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（2026-10-14 现算）：60 个动作 = 21 compared + 39 unmatched + 0 ambiguous
-    （退场前是 60 = 21 + 39 + 0：`paper_package` 那一条本来也进 `unmatched`）。
+    实测（2026-10-15 现算）：61 个动作 = 22 compared + 39 unmatched + 0 ambiguous
+    （`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 它的工具名最后一段正是
+    `walk_citations`，与 `handler_name` 逐字相同 ⇒ 落进 `compared`；
+    对照：`search_literature` 那条落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，
+    所以"两层形状一致"这件事对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
     此前各次（数字逐次可复算，每次只增不改）：
+    （2026-10-14）60 个动作 = 21 compared + 39 unmatched + 0 ambiguous
+    （退场前是 60 = 21 + 39 + 0：`paper_package` 那一条本来也进 `unmatched`）。
     `C.proof_chain` 与 C 的其余八条同族：`handler_name` 在 `_TOOL_GROUPS_BY_ROLE["C"]`
     里对不上工具组 ⇒ 进 `unmatched`，并逐条登记在 `_KNOWN_UNMATCHED_ACTIONS`。
     此前各次（数字逐次可复算，每次只增不改）：
@@ -773,10 +778,14 @@ def param_type_coverage() -> dict:
 #: 末尾那句处置口径一致）。
 _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
     ("B", "run"): (
-        frozenset({"backend", "dpi", "languages", "max_pages", "pages", "path"}),
+        frozenset({"backend", "dpi", "languages", "max_pages", "pages", "path", "lit_id"}),
         "`B.run` 的实现是 `ocr.run`（⑫ 的接线）：工具面那六个 OCR 参数是接线时加的，"
         "动作面当时没同步。改它是动 `specs/b.py` 的声明面（禁改区），而"
-        "「B 的动作面该不该暴露 OCR 的后端/页数/语言」是设计判断，先让它可见。",
+        "「B 的动作面该不该暴露 OCR 的后端/页数/语言」是设计判断，先让它可见。"
+        "2026-10-16 再加 `lit_id`（亲测 B 时：这一件原本只认 `path`，而 B 整个域都按"
+        "文献编号说话 ⇒ 给编号要能work；编号→路径的解析在 `ocr_tools._target_path`，"
+        "三态齐全：两者都不给 ⇒ `no_target`、编号不认得 ⇒ `unknown_lit_id` 并列出盘上有的编号）。"
+        "**这一条落在禁改区（本文件），已登记待 2 名 reviewer 批准**。",
     ),
     ("C", "neighbors"): (
         frozenset({"max_neighbors"}),

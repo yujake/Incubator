@@ -214,6 +214,7 @@ _MODULES: tuple[str, ...] = (
     "fs_tools",
     "search_tools",
     "ocr_tools",
+    "text_tools",
     "graph_tools",
     "trace_tools",
     "research_tools",
@@ -352,6 +353,12 @@ def _call_register(mod: Any, registry: ToolRegistry, deps: dict[str, Any]) -> in
             elif p.default is inspect.Parameter.empty:
                 # 模块要求一个我们没提供的依赖 —— 明确报出来，而不是传 None 让它后面炸
                 raise ToolError(f"{mod.__name__}.{fn.__name__}() 需要依赖 {pname!r}，但装配时未提供")
+        # 2026-10-17（业主裁定「方案 1」）：H 的写入口长在它自己身上。
+        # review_tools 的写件自带 roles=("H",)，装进主表只对 H 可见；
+        # 不装则 H 永远够不到自己的落库口（真机 t5e：M 派 8 次、H 跑 4 趟，review_findings 恒 0）。
+        if (str(getattr(mod, "__name__", "")).endswith("review_tools")
+                and "include_writers" not in kwargs):
+            kwargs["include_writers"] = True
         fn(registry, **kwargs)
         return len(registry) - before
 

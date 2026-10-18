@@ -118,11 +118,11 @@ class CancelReason:
 
 
 #: 受控的取消原因。与 `schema.REFUSAL_REASONS` 分开：拒绝是策略的决定，
-#: 取消是外部的决定（人按了停止、时间到了、预算没了）。
+#: 取消是外部的决定（人按了停止、时间到了、钱花光了）。
 CANCEL_CODES: tuple[str, ...] = (
     "user",              # 人/调用方显式取消
     "deadline",          # 墙钟截止
-    "budget",            # 预算耗尽
+    "budget",            # 钱花光了（`budget` 注册表 / M 主动喊停）—— ⚠️ 不是 token
     "dispose",           # Conductor 被销毁
     "cancelled",         # 未分类（不要用它：它等于没写原因）
 )
@@ -144,7 +144,8 @@ CANCEL_CODES: tuple[str, ...] = (
 #:   unknown            —— `CancelReason.by` 的默认值（没记谁喊的）
 #:   user               —— `Conductor.cancel` 的默认 `by="user"`
 #:   deadline           —— `CancelToken.reason` 的惰性路径 + `Conductor` 的 `_signal_stop("deadline", ...)`
-#:   budget             —— `CancelToken.reason` 的惰性路径
+#:   budget             —— `agent_loop` 的美元预算停止点（`by="budget"`；⚠️ 2026-10-15 裁定
+#:                         A1/A2/A3 之后**不再**由 `CancelToken` 的 token 预算产出）
 #:   conductor.dispose  —— `Conductor.dispose` 合成终态时
 CANCEL_BY_VALUES: tuple[str, ...] = (
     "unknown",
@@ -172,18 +173,24 @@ class CancelToken:
       不需要任何人来按按钮。为什么用 `time.monotonic` 而不是墙钟：
       系统时间被 NTP 往回拨时，墙钟会让"到点"变成"还没到"（或反之），
       而这种抖动在测试里表现为偶发失败。
-    - `token_budget`：预算耗尽与取消走同一个信号 —— 因为处置完全一样
-      （停止派新任务 + 协作式取消在跑的），分成两套信号会让"停止"出现两条路径。
+
+    ⚠️ **`token_budget` 这一格已删**（2026-10-15 业主裁定 A1/A2/A3：
+    **「我们不卡 token，只卡总花销的钱」**）。它此前是一条真实的**强杀**路径
+    （`_tokens_used >= _token_budget` ⇒ `cancelled` 变 True ⇒ 在跑的 handler
+    在下一个 `raise_if_cancelled` 点被掀掉）。为什么必须删而不是留着不用：
+    它把"想得多"变成了一种过错 —— 而 T5 实测（`draft/121`）里
+   卡住智能体的正是它。`tokens_used` 仍然记（`consume_tokens`），
+    它只是**读数**，不再有任何一处在它上面说"停"。
+    钱的闸门在 `tokenmeter.TokenMeter.guard()`（那才是现在唯一会拒绝的地方）。
     """
 
-    __slots__ = ("_lock", "_reason", "_deadline", "_token_budget", "_tokens_used",
+    __slots__ = ("_lock", "_reason", "_deadline", "_tokens_used",
                  "_cancelled_flag", "_spawned")
 
-    def __init__(self, *, deadline: float | None = None, token_budget: int | None = None) -> None:
+    def __init__(self, *, deadline: float | None = None) -> None:
         self._lock = threading.Lock()
         self._reason: CancelReason | None = None
         self._deadline = deadline
-        self._token_budget = token_budget
         self._tokens_used = 0
         self._cancelled_flag = False
         #: 本 token 名下正在跑的子进程（`G-1`）。`cancel()` 会主动杀掉它们 ——
@@ -203,17 +210,15 @@ class CancelToken:
             return True
         if self._deadline is not None and time.monotonic() >= self._deadline:
             return True
-        return bool(self._token_budget is not None
-                    and self._tokens_used >= self._token_budget)
+        return False
 
     def _register_spawned(self, proc: Any) -> None:
         with self._lock:
             # `R5-F2`（重审实测）：守卫旧版只判 `_cancelled_flag` —— 那个标志
-            # 只由显式 `cancel()` 置位，于是 `deadline` 到点与 `token_budget`
-            # 耗尽这两条惰性取消路径下，新起的子进程照样被登记进表、
-            # 没有人会去杀它（端到端实测：`deadline=0.20s` 的 token 起
-            # `sleep(30)` ⇒ 阻塞 30.06 秒才返回，子进程活到最后）。
-            # 判据必须与 `cancelled` 逐条一致：三条路都算"已取消"。
+            # 只由显式 `cancel()` 置位，于是 `deadline` 到点这条惰性取消路径下，
+            # 新起的子进程照样被登记进表、没有人会去杀它（端到端实测：
+            # `deadline=0.20s` 的 token 起 `sleep(30)` ⇒ 阻塞 30.06 秒才返回，
+            # 子进程活到最后）。判据必须与 `cancelled` 逐条一致：两条路都算"已取消"。
             if self._is_cancelled_locked():
                 # 取消与起进程的竞态：已经取消了就别留下一个没人管的进程。
                 _kill(proc)
@@ -262,8 +267,6 @@ class CancelToken:
                 return True
             if self._deadline is not None and time.monotonic() >= self._deadline:
                 return True
-            if self._token_budget is not None and self._tokens_used >= self._token_budget:
-                return True
             return False
 
     @property
@@ -283,23 +286,13 @@ class CancelToken:
                     outcome_known=False,
                     by="deadline",
                 )
-            if self._token_budget is not None and self._tokens_used >= self._token_budget:
-                return CancelReason(
-                    "budget",
-                    f"token 预算已耗尽（{self._tokens_used}/{self._token_budget}）",
-                    outcome_known=False,
-                    by="budget",
-                )
             return None
 
     @property
     def tokens_used(self) -> int:
+        """这一趟花了多少 token —— **读数**（2026-10-15 裁定 A1 之后不再是判据）。"""
         with self._lock:
             return self._tokens_used
-
-    @property
-    def token_budget(self) -> int | None:
-        return self._token_budget
 
     # ---------------------------------------------------------------- 动作
     def cancel(self, reason: str = "user", *, detail: str = "", by: str = "unknown") -> CancelReason:
@@ -350,18 +343,21 @@ class CancelToken:
             _kill(p)
         return reason_obj
 
-    def consume_tokens(self, n: int) -> bool:
-        """记一笔 token 消耗。返回这次消耗之后是否仍然没超预算。
+    def consume_tokens(self, n: int) -> int:
+        """记一笔 token 消耗，返回**累计值**（读数，不是判据）。
 
-        为什么返回 bool 而不是抛：预算耗尽的处置与取消完全一样，
-        而"抛异常"会让调用方以为这是一次失败（`failed`），
-        把"预算到了"写成"代码崩了"——正是本项目最忌讳的那类折叠。
+        ⚠️ 2026-10-15 业主裁定 A1/A2/A3 之后这个方法的语义变了：它此前返回
+        "这次消耗之后是否仍然没超预算"（一个 bool），并在超预算时把
+        `cancelled` 置起来 —— 那是一条**强杀**路径。现在它只记账：
+        "这一趟花了多少"必须看得见，但花多少都**不会**让这一趟停。
+
+        为什么仍然返回一个数而不是 `None`：调用方就地能拿到累计值
+        （写成 `None` 的话，想看这个数的人得再抢一次锁读属性），
+        而且"返回一个数"本身就把"这里不再说停"写在了签名上。
         """
         with self._lock:
             self._tokens_used += max(0, int(n))
-            if self._token_budget is None:
-                return True
-            return self._tokens_used < self._token_budget
+            return self._tokens_used
 
     def raise_if_cancelled(self) -> None:
         """在 handler 的关键点调用它 —— 协作式取消的全部实现。
@@ -390,13 +386,15 @@ class CancelToken:
         return self._kill_spawned()
 
     def to_dict(self) -> dict:
-        """台账/日志形态。`reason` 为 None 时原样是 None（不折叠成默认理由）。"""
+        """台账/日志形态。`reason` 为 None 时原样是 None（不折叠成默认理由）。
+
+        `token_budget` 那一格已删（2026-10-15 裁定 A1）；`tokens_used` 留着当读数。
+        """
         r = self.reason
         return {
             "cancelled": self.cancelled,
             "reason": r.to_dict() if r is not None else None,
             "tokens_used": self.tokens_used,
-            "token_budget": self.token_budget,
         }
 
 

@@ -88,7 +88,7 @@ def _run_b(st, cond, reg, gw, *, task: str = "请 E 给这条证明做背书"):
 def test_a_forbidden_summon_becomes_a_relay_request_to_the_conductor(tmp_path):
     """第 5 跳：B 够不着 E ⇒ 框架自动转成给 M 的"请代唤"（不是静默丢掉）。"""
     gw_replies = [
-        json.dumps({"summon": {"role": "E", "action": "run_experiment",
+        json.dumps({"summon": {"role": "E", "task": "派活：跑一次实验",
                                "params": {"claim": "定理 1.5 的形式化", "claim_key": "thm:1.5",
                                           "script_path": "code/lean/thm.lean"},
                                "why": "要一条 proof 级背书"}}, ensure_ascii=False),
@@ -106,16 +106,20 @@ def test_a_forbidden_summon_becomes_a_relay_request_to_the_conductor(tmp_path):
     assert str(e_rows[0]["called_by"]) == "B", e_rows[0]
     relayed = [s for s in run.steps if "代唤" in json.dumps(s.to_dict(), ensure_ascii=False)]
     assert relayed, [s.to_dict() for s in run.steps]
-    # M 的收件箱里必须有那条申请，而且它点名了要谁做什么
+    # M 的收件箱里必须有那条申请，而且它点名了要谁
     heard, ids, _sent = AL.inbox_digest(st.root, "M", sid="t")
     assert ids, heard
-    assert "E" in heard and "run_experiment" in heard, heard
+    # 2026-10-16（口径 S2 最终形态）：代唤申请现在**只点名角色、不点名动作** ——
+    # 「action 完全不用父代理填」⇒ 申请里那一格恒为空（`wants_action == ""`）。
+    # 原来还断 `"run_experiment" in heard`，那一档已不存在。
+    assert "E" in heard, heard
+    assert "代唤" in heard, heard
 
 
 def test_the_conductor_can_then_actually_send_e(tmp_path):
     """第 6 跳：拿到那条留言之后，M 真的派得动 E（`M → E` 在边表里）。"""
     gw_replies = [
-        json.dumps({"summon": {"role": "E", "action": "list_experiments", "params": {},
+        json.dumps({"summon": {"role": "E", "task": "派活：列一遍实验", "params": {},
                                "why": "先看一眼实验台账"}}, ensure_ascii=False),
         json.dumps({"final": "已请主控代唤", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
@@ -138,7 +142,7 @@ def test_the_conductor_can_then_actually_send_e(tmp_path):
 def test_an_allowed_summon_does_not_create_a_relay_request(tmp_path):
     """反真空：允许的召唤（`B → C`）不许产生"请代唤" —— 否则代唤会变成噪音。"""
     gw_replies = [
-        json.dumps({"summon": {"role": "C", "action": "hottest",
+        json.dumps({"summon": {"role": "C", "task": "派活：报最热的几条",
                                "params": {"top_n": 1}, "why": "问一下图里的枢纽"}},
                    ensure_ascii=False),
         json.dumps({"final": "问过 C 了", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),

@@ -121,6 +121,11 @@ def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
     except TypeError as e:
         # 缺必填字段时 dataclass 抛的是 TypeError，不是 ValueError
         raise ToolError(f"{table} 缺少必填字段（{e}）") from e
+    except ValueError as e:
+        # 2026-10-17（子代理 tools 根因 B）：`schema.PageRange.__post_init__` 抛的是
+        # **ValueError**（"页码必须 >= 1" / "start 不能大于 end"），原来只捕 TypeError
+        # ⇒ 本该是 `validation` 的可读拒绝，被 `call` 兜成 "库内部出错"（`kind=unexpected`）。
+        raise ToolError(f"{table} 行校验失败：{e}") from e
     try:
         obj.validate()
     except ValueError as e:
@@ -865,7 +870,7 @@ def table_count(ctx: TableContext, *, table: str, filter: Mapping[str, Any] | No
     # 看着那句话（改前实测：`grep "返回 6 张表"` 在 tests/scripts/tools 里零命中）。
     # 现算的判据在 `tests/test_tool_summary_readings.py`（含"写死 6 必红"的负控）。
     f"返回 {len(ALL_TABLES)} 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。",
-    _obj({}),
+    _obj({"table": {"type": "string", "maxLength": 60}}),
     side_effect="read",
     roles=TOOL_ROLES,
     # 键名从实现读出（`table_schema` 的 ok(...)）：tables 里每个表名 → {fields,
@@ -873,7 +878,7 @@ def table_count(ctx: TableContext, *, table: str, filter: Mapping[str, Any] | No
     returns="{'tables','vocabularies'}；tables 的键是表名，值是 {'fields','primary_key','vocabularies'}。",
     tags=("table", "meta"),
 )
-def table_schema(ctx: TableContext) -> ToolResult:  # noqa: ARG001 —— 纯反射，不需要 store
+def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # noqa: ARG001
     """表结构自描述。
 
     为什么必须反射而不是手写：手写的 schema 说明是文档，文档会过期；
@@ -882,7 +887,13 @@ def table_schema(ctx: TableContext) -> ToolResult:  # noqa: ARG001 —— 纯反
     """
     vocabs = _vocabularies()
     tables: dict[str, Any] = {}
-    for table, spec in S.TABLES.items():
+    # 2026-10-18（缺陷 ⑤）：`table="statements"` 只回一张表。真机（T4/T5）里模型要的是
+    # **一张表**的字段，而无参调用返回全部 17 张（47KB）⇒ 被上下文预算截断，于是它们改用
+    # 「故意写错换字段名」那种笨办法（33 次失败调用里 15 次是 table.create）。
+    _only = str(table or "").strip()
+    for tname, spec in S.TABLES.items():
+        if _only and tname != _only:
+            continue
         cls = spec["row"]
         hints = _type_hints(cls)
         fields: list[dict] = []
@@ -902,19 +913,34 @@ def table_schema(ctx: TableContext) -> ToolResult:  # noqa: ARG001 —— 纯反
                 "type": _type_name(tp),
                 "required": required,
                 "default": default,
+                # ⚠️ **这三格每个元素都要在**，哪怕它不适用（2026-10-15 修）。
+                #
+                # 改前它们只在适用时才 `item[...] = …`，于是同一个 `fields[]` 里
+                # **一部分元素有、另一部分没有** —— 而本工具的用途恰恰是"让智能体
+                # 读受控词表"：调用方按自己在别的字段上看到的形状去读 `field["enum"]`，
+                # 在不带这三格的那些字段上会拿到 **KeyError**，而不是"这个字段没有词表"。
+                # 实测（`test_tools_returns_declaration.py` 的逐元素判据）：
+                # 全 79 个工具里只有这一件有这个形态，而它有 **132 处**。
+                #
+                # 为什么给"如实空值"而不是干脆不声明：三态纪律 ——
+                # **空集是有效读数**（"这个字段确实没有候选值"），
+                # `None` 是"没有词表这件事本身"；两者都不等于"我没读到"。
+                "literal_values": [],
+                "vocabulary": None,
+                "enum": [],
             }
             if typing.get_origin(tp) is typing.Literal:
                 item["literal_values"] = list(typing.get_args(tp))
-            vocab_name = _VOCAB_BY_FIELD.get((table, f.name))
+            vocab_name = _VOCAB_BY_FIELD.get((tname, f.name))
             if vocab_name:
                 item["vocabulary"] = vocab_name
                 item["enum"] = list(getattr(S, vocab_name))
                 table_vocabs[f.name] = {"vocabulary": vocab_name, "values": item["enum"]}
             fields.append(item)
         for v_table, v_path, v_name in _NESTED_VOCAB:
-            if v_table == table:
+            if v_table == tname:
                 table_vocabs[v_path] = {"vocabulary": v_name, "values": list(getattr(S, v_name))}
-        tables[table] = {
+        tables[tname] = {
             "file": spec["file"],
             "primary_key": spec["id_field"],
             "id_kind": spec["id_kind"],
@@ -923,6 +949,11 @@ def table_schema(ctx: TableContext) -> ToolResult:  # noqa: ARG001 —— 纯反
             "required": [f["name"] for f in fields if f["required"]],
             "vocabularies": table_vocabs,
         }
+    if _only and not tables:
+        # 未知表 ⇒ **可读拒信**（带在册表名），别让调用方读成"这张表没有字段"。
+        return fail(
+            f"没有名为 {_only!r} 的表；在册的是 {sorted(S.TABLES)}",
+            kind="unknown_table", table=_only)
     return ok({"tables": tables, "vocabularies": vocabs}, table_count=len(tables), vocabulary_count=len(vocabs))
 
 

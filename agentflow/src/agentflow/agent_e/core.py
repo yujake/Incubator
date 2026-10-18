@@ -424,6 +424,13 @@ class _Core:
                 # （"检查器判了不通过"与"没查成"从此在行上分得开）。
                 "tri_state": tri_state,
                 "missing_imports": [str(x) for x in (data.get("missing_imports") or [])],
+                # 2026-10-18（缺陷 ③）：回执要能回答"**哪个 Lean 版本核的哪一版源码**"。
+                # 走 `observations` 而不是 `check_formal` 的 `returns=` —— 后者有多条 fail()
+                # 路径，每一条都得补格才满足"声明了的键任何分支都要有"，成本高且易漏。
+                "lean_version": str((data.get("meta") or {}).get("backend_version")
+                                    or data.get("backend_version") or ""),
+                "source_sha256": str((data.get("meta") or {}).get("source_sha256")
+                                     or data.get("source_sha256") or ""),
             },
             "counterexample": None,
             "notes": notes,

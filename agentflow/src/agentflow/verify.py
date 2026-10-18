@@ -175,7 +175,7 @@ def _check_1(rep, store):
         rep.checked[table] = len(doc.get("rows") or [])
         try:
             S.validate_table(table, doc)
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             rep.issues.append(Issue("error", table, None, "schema_invalid", str(e)))
 
     requests = store.rows("search_requests")
@@ -208,9 +208,9 @@ def _check_1(rep, store):
         rep.checked["concept_view"] = len(concepts)
     relations = store.rows("relations")
 
-    lit_by_id = {r["lit_id"]: r for r in literature}
-    con_by_id = {r["concept_id"]: r for r in concepts}
-    rel_by_id = {r["relation_id"]: r for r in relations}
+    lit_by_id = {r.get("lit_id"): r for r in literature}
+    con_by_id = {r.get("concept_id"): r for r in concepts}   # 2026-10-17（store #14 连带）：坏行没有这个键
+    rel_by_id = {r.get("relation_id"): r for r in relations}  # 同上
 
     # ---- ID 唯一性与连续性
     #
@@ -284,7 +284,7 @@ def _check_1(rep, store):
         used = [int(r[field]) for r in store.rows(table)
                 if field in r and str(r[field]).isdigit()]
         want = (max(used) + 1) if used else 0
-        got = int(counters.get(kind, 0))
+        got = _safe_int(counters.get(kind, 0))
         if got < want:
             rep.issues.append(
                 Issue(
@@ -656,6 +656,7 @@ def _check_5(rep, lit_by_id, questions, store):
     # "这个 lit_id 真的存在吗"这种问题只有在这里才可能被发现 —— 而它正是
     # "依赖集不闭合"的技术形态。
     experiments = store.rows("experiments")
+
     plans = store.rows("attack_plans")
     documents = store.rows("documents")
     dependencies = store.rows("dependencies")
@@ -1317,7 +1318,7 @@ def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
     eval_key: dict[tuple, list[dict]] = {}
     for e in evals:
         k = (str(e.get("claim_key")), str(e.get("benchmark")), str(e.get("benchmark_version")),
-             str(e.get("split")), int(e.get("k") or 0))
+             str(e.get("split")), _safe_int(e.get("k") or 0))
         eval_key.setdefault(k, []).append(e)
     for k, rows in sorted(eval_key.items()):
         vals = {float(r.get("value") or 0.0) for r in rows}
@@ -1738,6 +1739,25 @@ def _check_13(rep, store) -> None:
 
     usable = 0
     bit_gaps = 0
+    # 2026-10-18（业主：「完美跑通 T1」/ 缺陷 ④）：`evidence_kind="proof"` 的命题必须有
+    # **formal 实验**背书 —— 否则命题可以自称 proof 而绕过检查器。`Statement` 没有引用
+    # 实验的字段，所以只能在审计侧跨表对账（拿 verifier_subject_key/claim_key 撞 label）。
+    # 级别 warning：不阻断写库，但报告里必须看得见。
+    _formal_keys = [str(e.get("verifier_subject_key") or e.get("claim_key") or "").lower()
+                    for e in experiments
+                    if str(e.get("method")) == "formal"
+                    and str(e.get("evidence_kind")) == "proof"]
+    _formal_keys = [k for k in _formal_keys if k]
+    for _s in statements:
+        if str(_s.get("evidence_kind") or "") != "proof":
+            continue
+        _sid = str(_s.get("stmt_id") or "")
+        _hay = (str(_s.get("label") or "") + " " + str(_s.get("proof_text") or "")).lower()
+        if not any(k in _hay for k in _formal_keys):
+            rep.issues.append(Issue(
+                "warning", "statements", _sid, "proof_stmt_without_formal_backing",
+                f"命题自称 proof，但台账里没有与它对应的 formal 实验（已有键 {_formal_keys[:4]}）"
+                "；要么补 run_experiment(method=formal)，要么把 evidence_kind 降档"))
     for s in statements:
         sid = str(s.get("stmt_id") or "")
         lid = str(s.get("source_lit_id") or "")
@@ -1933,3 +1953,15 @@ def verify_all(
     _check_13(rep, store)
     _check_14(rep, store)
     return rep
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    """会计数/校验用的安全 int（子代理 store #6/#15）。
+
+    `verify_all` 会对**已经被判 schema_invalid 的行**继续取数；那些字段可能是 `"abc"`、
+    `"one"`，裸 `int()` 就把"审计发现坏行"变成"审计自己崩了"。
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default

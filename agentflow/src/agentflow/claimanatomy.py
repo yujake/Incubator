@@ -1845,7 +1845,7 @@ def revision_hash(doc: Mapping[str, Any]) -> str:
         "title": str(doc.get("title") or ""),
         "claims": [claim_content_hash(c) for c in claims if isinstance(c, Mapping)],
     }
-    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 

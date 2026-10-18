@@ -106,7 +106,7 @@ def _write_ledger(store: Any, doc: dict) -> None:
     p = _ledger_path(store)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
     os.replace(tmp, p)
 
 

@@ -1,4 +1,4 @@
-"""FC-19：token/花销预算 —— 硬约束，且重试也计入。
+"""FC-19：token/花销记账 —— 硬约束**只剩钱那一轴**，且重试也计入。
 
 ## 为什么这一条最后才做，以及它为什么必须自己成一个模块
 
@@ -13,12 +13,24 @@ FC-19 的原文（`test/test2/LESSONS.md` §6.5）：
 > ③ D 向 A 提问的预算必须已定值并写进配置。
 > 落地形态：`token_meter` + 预算守卫 + 一条"重试也扣预算"的测试。
 
-数据结构早就备好了（`UsageEntry` / `usage_ledger` / `Policy.token_budget` /
-`CancelToken.token_budget`），但没有任何东西把花销记进去、也没有任何东西据此说"不"。
-本模块补的正是这两件：
+⚠️ **2026-10-15 业主裁定修正了 ①**：**「我们不卡 token，只卡总花销的钱」**。
+理由是实测（`draft/121`、`draft/122`）：卡 token 卡的恰好是"它想清楚"那一段 ——
+同一个提示词下不设 `max_tokens` 反而花 14,015 token 正常收尾，而设了额度的
+6 份文献全部 `output_exhausted`。于是：
+
+- `budget_tokens` 参数、`MeterReading.budget_tokens`/`remaining_tokens` 两格、
+  `Policy.token_budget`、`Decision.tokens_left/tokens_wanted`、以及
+  `modelgw`/`modelclient`/`llmseam`/`agent_loop` 上那一串"输出额度"参数
+  **全部删除**（同一轮）；
+- token 仍然是**读数**（`spent()` / `usd_reading()` / `usage_ledger`）：
+  "这一趟花了多少 token"必须看得见 —— 看得见与拦得住是两件事；
+- ② 与 ③ 不动：重试照样按次计费（这是**记账口径**，与"卡不卡"无关），
+  D 向 A 提问的配额照样是配额（那是**交互纪律**，不是模型额度）。
+
+本模块剩下两件事：
 
 1. 记：`charge()` 把每一笔（包括零值）写进 `usage_ledger`。
-2. 守：`guard()` 在开工之前回答"还允不允许"。
+2. 守：`guard()` 在开工之前回答"钱还允不允许"。
 
 ## 三条刻意的设计
 
@@ -164,9 +176,10 @@ class MeterReading:
     allowed: bool
     spent_tokens: int
     spent_usd: float
-    budget_tokens: int | None
+    #: ⚠️ `budget_tokens` / `remaining_tokens` 两格已删（2026-10-15 业主裁定
+    #: **「我们不卡 token，只卡总花销的钱」**）。留下的 `spent_tokens` 是**读数**：
+    #: "这一趟花了多少 token"要看得见，但它不参与 `allowed`。
     budget_usd: float | None
-    remaining_tokens: int | None
     remaining_usd: float | None
     estimate_tokens: int
     reason: str
@@ -177,9 +190,7 @@ class MeterReading:
             "allowed": self.allowed,
             "spent_tokens": self.spent_tokens,
             "spent_usd": self.spent_usd,
-            "budget_tokens": self.budget_tokens,
             "budget_usd": self.budget_usd,
-            "remaining_tokens": self.remaining_tokens,
             "remaining_usd": self.remaining_usd,
             "estimate_tokens": self.estimate_tokens,
             "reason": self.reason,
@@ -194,17 +205,19 @@ class TokenMeter:
     记账是每次调用都要做的事，若它去抢一张被别处长期持有的表，整个编队会排队。
     """
 
-    def __init__(self, store: Any, *, budget_tokens: int | None = None,
-                 budget_usd: float | None = None, log: Any = None) -> None:
-        if budget_tokens is not None and budget_tokens <= 0:
-            raise ValueError(
-                f"budget_tokens 必须为正（收到 {budget_tokens}）。**0 与 None 语义不同**："
-                "`None` = 没设预算，0 = 预算为零（什么都不准做）"
-            )
+    def __init__(self, store: Any, *, budget_usd: float | None = None,
+                 log: Any = None) -> None:
+        """⚠️ **只有钱这一轴**（2026-10-15 业主裁定：**「我们不卡 token，只卡总花销的钱」**）。
+
+        这里此前还有一个 `budget_tokens` 参数（"预算从配置来"那条纪律的落点）。
+        它**删掉了**：T5 实测（`draft/121`）里卡住智能体的正是它 ——
+        6 份有全文的文献全部 `output_exhausted`（reasoning 吃掉 26,995–39,076 字符），
+        而未卡住的两份都 ≤10,396 字符。**"想得久"不是一种过错，它是好结果的必要条件。**
+        token 从此只是读数（:meth:`spent` / :meth:`usd_reading`）。
+        """
         if budget_usd is not None and budget_usd < 0:
             raise ValueError(f"budget_usd 不能为负（收到 {budget_usd}）")
         self.store = store
-        self.budget_tokens = budget_tokens
         self.budget_usd = budget_usd
         self._log = log
 
@@ -363,7 +376,8 @@ class TokenMeter:
         """把一笔花销写进账本。永远写（包括零值与超预算）。
 
         返回 ``{"recorded", "usage_id", "tokens", "cumulative_tokens",
-        "remaining_tokens", "over_budget", "reason"}``。
+        "cumulative_usd", "over_budget", "reason"}``。
+        （`remaining_tokens` 那一格已随 token 轴一起删，见 2026-10-15 业主裁定。）
 
         `over_budget=True` 时照样写：钱已经花了，账必须记。
         拦住新工作的权力在 :meth:`guard`。
@@ -394,8 +408,6 @@ class TokenMeter:
             "attempts": c.attempts,
             "cumulative_tokens": after["tokens"],
             "cumulative_usd": round(after["usd"], 6),
-            "remaining_tokens": (None if self.budget_tokens is None
-                                 else self.budget_tokens - after["tokens"]),
             "over_budget": over,
             "reason": (
                 "已记账" + ("；**已超出预算**（账照样记，拦住新工作的责任在 guard）" if over else "")
@@ -486,9 +498,15 @@ class TokenMeter:
     # ---------------------------------------------------------------- 守卫
 
     def _over(self, tokens: int, usd: float) -> bool:
-        if self.budget_tokens is not None and tokens > self.budget_tokens:
-            return True
-        return self.budget_usd is not None and usd > self.budget_usd
+        """"花爆了没有" —— **只算钱**（2026-10-15 业主裁定 A7：不卡 token）。
+
+        ⚠️ **边界口径与 `policy.check` 对齐**：这里是 `usd >= budget_usd`，
+        `policy.check` 那边是 `usd_left = max(0, budget - spent) <= 0`，
+        两者都在"**恰好花光**"这一刻判停。此前这里是严格 `>`，于是
+        "花光了"这一格在两处给出相反答案（守卫说还能做、策略说不能再做）——
+        同一件事两处判且不一致，比哪一处更宽松都更危险。
+        """
+        return self.budget_usd is not None and usd >= self.budget_usd
 
     def guard(self, estimate_tokens: int = 0, *, role: str = "unknown",
               scope: str = "summon") -> MeterReading:
@@ -496,23 +514,23 @@ class TokenMeter:
 
         - `limited=False` ⇒ `allowed=True`，但 reason 说的是"未设预算，不限制"
           （不是"够用"）。
-        - `limited=True` ⇒ 按 `已花 + estimate` 与预算比较。
+        - `limited=True` ⇒ 按 `已花` 与钱上限比较。
 
-        为什么 estimate 要由调用方给：只有它知道"这一步大概要花多少"
-        （例如"一次检索 ≈ 2000 token"）。守卫不该猜 —— 猜出来的数字会让
-        "为什么拦了"变得不可复核。
+        ⚠️ `estimate_tokens` 现在**只剩签名兼容**：token 不再是判据
+        （裁定 A7），所以它不影响 `allowed`，只被原样抄进读数里当上下文。
+        留着它是因为调用方确实知道"这一步大概要花多少"，
+        而这个数字在账上比丢在调用方手里有用。
         """
         now = self.spent()
-        limited = self.budget_tokens is not None or self.budget_usd is not None
-        remaining_t = None if self.budget_tokens is None else self.budget_tokens - now["tokens"]
+        limited = self.budget_usd is not None
         remaining_u = None if self.budget_usd is None else round(self.budget_usd - now["usd"], 6)
 
         if not limited:
             return MeterReading(
                 limited=False, allowed=True,
                 spent_tokens=now["tokens"], spent_usd=round(now["usd"], 6),
-                budget_tokens=None, budget_usd=None,
-                remaining_tokens=None, remaining_usd=None,
+                budget_usd=None,
+                remaining_usd=None,
                 estimate_tokens=estimate_tokens,
                 reason=(
                     "**未设预算 ⇒ 不限制**（注意这与'预算够用'是两件事："
@@ -524,40 +542,26 @@ class TokenMeter:
             return MeterReading(
                 limited=True, allowed=False,
                 spent_tokens=now["tokens"], spent_usd=round(now["usd"], 6),
-                budget_tokens=self.budget_tokens, budget_usd=self.budget_usd,
-                remaining_tokens=remaining_t, remaining_usd=remaining_u,
+                budget_usd=self.budget_usd,
+                remaining_usd=remaining_u,
                 estimate_tokens=estimate_tokens,
                 reason=(
                     f"**已经超出预算**（已花 {now['tokens']} token / "
-                    f"{round(now['usd'], 6)} usd，预算 {self.budget_tokens} / {self.budget_usd}）"
+                    f"{round(now['usd'], 6)} usd，钱上限 {self.budget_usd}）"
                     "⇒ 拒绝新工作（FC-19：超额即降级或返回当前最好答案，不静默继续花）"
-                ),
-            )
-
-        would = now["tokens"] + max(0, int(estimate_tokens))
-        if self.budget_tokens is not None and would > self.budget_tokens:
-            return MeterReading(
-                limited=True, allowed=False,
-                spent_tokens=now["tokens"], spent_usd=round(now["usd"], 6),
-                budget_tokens=self.budget_tokens, budget_usd=self.budget_usd,
-                remaining_tokens=remaining_t, remaining_usd=remaining_u,
-                estimate_tokens=estimate_tokens,
-                reason=(
-                    f"这一步预估 {estimate_tokens} token，加上已花的 {now['tokens']} "
-                    f"会超过预算 {self.budget_tokens} ⇒ **在开工前拒绝**"
-                    "（而不是做到一半再停）"
+                    "（注意：这里**只按钱**判，token 那一轴已随裁定 A7 删除）"
                 ),
             )
 
         return MeterReading(
             limited=True, allowed=True,
             spent_tokens=now["tokens"], spent_usd=round(now["usd"], 6),
-            budget_tokens=self.budget_tokens, budget_usd=self.budget_usd,
-            remaining_tokens=remaining_t, remaining_usd=remaining_u,
+            budget_usd=self.budget_usd,
+            remaining_usd=remaining_u,
             estimate_tokens=estimate_tokens,
             reason=(
-                f"预算内：已花 {now['tokens']}，预估 {estimate_tokens}，"
-                f"上限 {self.budget_tokens}，余 {remaining_t}"
+                f"预算内：已花 {now['tokens']} token / {round(now['usd'], 6)} usd，"
+                f"钱上限 {self.budget_usd}，余 {remaining_u}"
             ),
         )
 

@@ -277,7 +277,7 @@ def test_the_conductor_must_leave_a_trail_when_it_dispatches(tmp_path):
     `to` 缺省 = 被派的角色（"给谁派了活"与"手稿发给谁"不许因为要填两遍而分家）。
     """
     ws, run = _run(tmp_path, [
-        {"summon": {"role": "D", "action": "register_conjecture",
+        {"summon": {"role": "D", "task": "派活：把这条猜想立起来并登记",
                     "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
                     "why": "把猜想立起来",
                     "notify": {"summary": "派 D 登记这条猜想",
@@ -301,7 +301,7 @@ def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path
     为什么），不是替模型编它想说的话。收工侧仍然是"打回重填、不代填"（用户在那里的原话）。
     """
     ws, run = _run(tmp_path, [
-        {"summon": {"role": "D", "action": "register_conjecture",
+        {"summon": {"role": "D", "task": "派活：把这条猜想立起来并登记",
                     "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
                     "why": "把猜想立起来"}},
         {"final": "派完了"},
@@ -311,10 +311,14 @@ def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path
     rows = MS.rows(ws)
     assert [r["to"] for r in rows] == ["D"], rows
     assert "框架据派活派生" in rows[0]["note"], rows[0]
-    assert "D.register_conjecture" in rows[0]["summary"], rows[0]
+    # 2026-10-16（口径 S2）：派生手稿的"一句话"现在是**那件活**（"派活：…"），
+    # 不再是动作名（派活不带动作）。
+    assert "派活" in rows[0]["summary"] and "猜想" in rows[0]["summary"], rows[0]
     assert "n≥3 时" in rows[0]["body"] and "把猜想立起来" in rows[0]["body"], rows[0]
     # 派活本身照常发生
-    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("action")) != "run"]) == 1, _ws_rows(ws, "tasks")
+    # 同上：按**角色**数那一行（`action` 那格现在恒为 `""`）。
+    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("role")) == "D"]) == 1, \
+        _ws_rows(ws, "tasks")
     assert run.steps[0].result.get("dispatch_handoff", {}).get("ok") is True, run.steps[0]
 
 
@@ -327,14 +331,14 @@ def test_a_malformed_dispatch_notify_still_dispatches_and_falls_back(tmp_path):
     形状问题落进 `run.notes` —— 而"谁是派生、谁是执笔"两个标记仍然分得开。
     """
     ws, run = _run(tmp_path, [
-        {"summon": {"role": "D", "action": "register_conjecture",
+        {"summon": {"role": "D", "task": "派活：把这条猜想立起来并登记",
                     "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
                     "why": "把猜想立起来",
                     "notify": {"to": "D"}}},          # 缺 summary / body
         {"final": "派完了"},
     ], role="M")
     assert [s.shape for s in run.steps] == ["summon", "final"], [s.shape for s in run.steps]
-    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("action")) != "run"]) == 1, _ws_rows(ws, "tasks")
+    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("role")) == "D"]) == 1, _ws_rows(ws, "tasks")
     rows = MS.rows(ws)
     assert len(rows) == 1, rows
     assert "框架据派活派生" in rows[0]["note"], rows[0]["note"]
@@ -347,9 +351,9 @@ def test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel(tmp_
     """`summon_many` 一波算一次派活、写一行；`to` 缺省 ⇒ `ALL`（多目标）。"""
     ws, run = _run(tmp_path, [
         {"summon_many": {"targets": [
-            {"role": "D", "action": "register_conjecture",
+            {"role": "D", "task": "派活：把这条猜想立起来并登记",
              "params": {"statement": "甲", "testable": "n≤3"}, "instance": "a"},
-            {"role": "E", "action": "run_experiment",
+            {"role": "E", "task": "派活：跑一次实验",
              "params": {"claim": "乙", "method": "numeric", "code": "print(1)"},
              "instance": "b"}],
             "why": "两条并行",
@@ -365,7 +369,7 @@ def test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel(tmp_
 def test_a_plain_role_does_not_need_a_notify_on_its_dispatches(tmp_path):
     """边界：非主控角色派活不要求 notify（它们只在收工那一刻留痕）。"""
     ws, run = _run(tmp_path, [
-        {"summon": {"role": "E", "action": "run_experiment",
+        {"summon": {"role": "E", "task": "派活：跑一次实验",
                     "params": {"claim": "甲", "method": "numeric", "code": "print(1)"},
                     "why": "算一遍"}},
         {"final": "算完了", "notify": {"to": "M", "summary": "收工", "body": "完。"}},
@@ -374,7 +378,10 @@ def test_a_plain_role_does_not_need_a_notify_on_its_dispatches(tmp_path):
     assert run.notify_rejections == 0, run.to_dict()
     assert run.steps[0].shape == "summon", run.steps[0].to_dict()
     assert "dispatch_handoff" not in run.steps[0].result, run.steps[0].result
-    assert [r["to"] for r in MS.rows(ws)] == ["M"], MS.rows(ws)
+    # 命题是"**非主控派活不产生框架派生的留痕**"（它只在收工那一刻留痕）。
+    # 原来写成"手稿恰好只有一条、且 to == M"—— 那把手稿的**条数**也钉住了，
+    # 而条数会随别的合理行为变（例如收工那条与派活那条的合并方式）。
+    assert not any("框架据派活派生" in str(r.get("note") or "") for r in MS.rows(ws)), MS.rows(ws)
 
 
 # ============================================================ 动作驱动的一趟也留痕（§6.6 F1）

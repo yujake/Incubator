@@ -427,7 +427,7 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
             if ref_problems:
                 # 同一条纪律：只有真的有问题时才多这一个键。
                 rec["ref_problems"] = dict(ref_problems)
-            line = json.dumps(rec, ensure_ascii=False, sort_keys=True)
+            line = json.dumps(rec, ensure_ascii=False, sort_keys=True, default=str)
             with handoffs_path(root).open("a", encoding="utf-8", newline="\n") as fh:
                 fh.write(line + "\n")
             return rec

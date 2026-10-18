@@ -19,10 +19,14 @@
 不存在 —— 要放宽就把数字调大，而不是把它变成 None。这是一条刻意的
 不可配置：`None` 会让"我忘了设"与"我决定不限"长得一模一样。
 
-`wall_clock_sec` / `token_budget` / `usd_budget` 则允许是 None
+`wall_clock_sec` / `usd_budget` 则允许是 None
 （`None` = 不限），因为它们不是"防爆炸"的结构性上限，而是资源上限；
 但 `None` 在台账里必须能被读出来（`Policy.to_dict()` 里它原样是 None，
 不会被折叠成 0）。
+
+> ⚠️ **2026-10-15 业主裁定**：这一层本来还有第三格 `token_budget`，
+> 它**删掉了**（**「我们不卡 token，只卡总花销的钱」**）。
+> 资源上限只剩两格：墙钟与钱。
 
 ## 扇出的口径：同时在飞的子代理数（所有者 2026-10-08 裁定）
 
@@ -85,23 +89,53 @@ class Policy:
     #: 主控 20 × 每层 5，四层就是 20×5⁴ = 12500。实际能跑多少仍由
     #: `max_concurrency`（全局瞬时）与 `max_tasks_per_run`（生命周期总量）卡住，
     #: 深度这一根轴管的是"链能有多长"，不是"能同时跑多少"。
-    max_depth: int = 5
+    #:
+    #: ⚠️ **2026-10-15 业主裁定 C5：5 → 12**。裁定标准逐字是「凡是可能阻止智能体
+    #: 完成大项目的（限制输入、思考、产出、**步数**等），删或把触发水平抬高到
+    #: **几乎不可能触发**的程度（即使触发也是提醒而非强杀）」。T5 第 8 趟的真实
+    #: 链长只有 4 层（`M → A → B → C/D`），5 之所以危险是因为"研究得越深、
+    #: 委托链越长"恰好是这一行的**正常**形态：一个 D 的追问会再走一遍
+    #: `D → A → B`，链长立刻 6。12 层留出两轮完整的再委托余量，
+    #: 而它仍然是一个上界（深度判据本身留着一一它防的是真无限递归）。
+    max_depth: int = 12
     #: 单个任务同时在飞的子代理数上限（默认档；主控那一档见
     #: `FANOUT_LIMIT_BY_ROLE`）。口径见模块 docstring 的"扇出的口径"一节。
-    max_fanout: int = 5
+    #:
+    #: ⚠️ **2026-10-15 业主裁定 C5：5 → 25**。这一根轴管的是"一个代理能同时
+    #: 派出去几个"，而研究工作的真实形态是**并行**的（同时读三篇文献、同时验两条
+    #: 引文、同时跑两个实验）。5 会把"同时"变成"排队"，而排队不会报错 ——
+    #: 它只是让每一趟都更慢、更容易撞上墙钟。25 是"几乎不可能由正常研究触发"的量级。
+    max_fanout: int = 25
     #: 全局同时运行的任务数（瞬时上限）。
-    max_concurrency: int = 4
+    #:
+    #: ⚠️ **2026-10-15 业主裁定 C5：4 → 16**。4 是本框架早期"离线单机"时代的数 ——
+    #: 那时候每个任务几乎都是纯计算；现在每个任务几乎都是**等一次上游回复**
+    #: （实测一次 20–180 秒），并发度直接决定一趟研究的墙钟。真正的刹车是钱
+    #: （`usd_budget`）：并发 16 只会让钱花得更快，而不会让钱花得更多。
+    max_concurrency: int = 16
     #: 一次 run 的召唤总数（生命周期总量）。
-    max_tasks_per_run: int = 200
+    #:
+    #: ⚠️ **2026-10-15 业主裁定 C5：200 → 5000**。T5 第 8 趟 52 分钟只用了 24 条，
+    #: 但一个**真正的大项目**（几十篇文献 × 每篇一次抽取 + 交叉验证 + 成稿 + 复核）
+    #: 上千条是正常量级。200 会在项目做到一半时把它判成"预算超了" ——
+    #: 而那条读数看起来像"钱花完了"，其实一分钱都没多花。
+    max_tasks_per_run: int = 5_000
     #: 全局墙钟截止（秒，从 run 开始算）。None = 不限。
     #:
     #: 到点之后新召唤一律被拒，已在跑的走协作式取消 —— 不是强杀。
     #: 强杀会让"取消"与"完成"在同一瞬间争夺同一个 `ended_at`，而
     #: `Task.validate` 的"终态先到先得"只保证先写的赢，不保证被杀的那次
     #: 没写过半张表（§4 第 4 条："结果未知"是必须如实记下的状态）。
-    wall_clock_sec: float | None = 900
-    #: 全局 token 预算（None = 不限）。
-    token_budget: int | None = None
+    #:
+    #: 2026-10-15 业主裁定：「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、
+    #: 步数等），删或将触发水平抬高到几乎不可能触发的程度」⇒ 缺省从 **900 秒**（15 分钟）
+    #: 抬到 **4 小时**：T5 第 8 趟那种"开 thinking 的整趟研究"实测就跑了 52 分钟，
+    #: 900 秒会把它从中间掐断；4 小时几乎不可能碰到，留着只为挡住失控的一趟。
+    wall_clock_sec: float | None = 14_400
+    #: ⚠️ **`token_budget` 这一格已删**（2026-10-15 业主裁定：
+    #: **「我们不卡 token，只卡总花销的钱」**）。它缺省是 `None`（不限）而且生产路径
+    #: 从来没人设过 —— 但留着就意味着"谁都能把它打开，然后智能体干到一半被按 token 拒"。
+    #: token 从此只是**读数**（`usage_ledger`），闸门只有下面这一格（钱）。
     #: 全局花销预算（None = 不限）。
     usd_budget: float | None = None
 
@@ -127,8 +161,6 @@ class Policy:
                 )
         if self.wall_clock_sec is not None and not (self.wall_clock_sec > 0):
             raise ValueError(f"Policy.wall_clock_sec 必须是正数或 None，收到 {self.wall_clock_sec!r}")
-        if self.token_budget is not None and self.token_budget < 0:
-            raise ValueError(f"Policy.token_budget 不能为负（0 表示一开始就耗尽），收到 {self.token_budget}")
         if self.usd_budget is not None and self.usd_budget < 0:
             raise ValueError(f"Policy.usd_budget 不能为负，收到 {self.usd_budget}")
 
@@ -160,7 +192,14 @@ class Policy:
 #: - 口径（所有者 2026-10-08 逐字）：「派活上限不是累计的，是单时刻的……智能体返回后
 #:   腾出空间」⇒ 这里的 20 是"同时派出在后台运行的子代理数"，不是"一趟总共能派几次"。
 #:   累计口径的真机代价：T1 第 18/19 趟在第 51–88 步用完 20 个名额，后半趟再也派不出活。
-FANOUT_LIMIT_BY_ROLE: dict[str, int] = {S.CONDUCTOR_ROLE: 20}
+#:
+#: ⚠️ **2026-10-15 业主裁定 C5：主控一档 20 → 100**。裁定标准是「抬到**几乎不可能
+#: 触发**」：主控在正常编队下的同时在飞数是"这一趟要并发几件活"（检索 / 立题 /
+#: 实验 / 审阅各一到两件），10 都算多；100 是纯粹的失控兜底。这里之所以不再保守，
+#: 是因为**真正该管住失控的是钱**（`usd_budget` + `budget.limit_usd(root)` 的总账）：
+#: 扇出上限的职责只剩"别让一次编程错误无限递归"，那是 100 与 20 都能胜任的事，
+#: 而 20 在真机上已经被证明会误伤正常编队（见上面那两段读数）。
+FANOUT_LIMIT_BY_ROLE: dict[str, int] = {S.CONDUCTOR_ROLE: 100}
 
 
 def fanout_limit_for(policy: Policy, frm: str) -> int:
@@ -237,10 +276,8 @@ class Decision:
     ancestry: Sequence[tuple[str, str, str]] = field(default_factory=tuple)
     #: 本次召唤的 `(role, action, input_key)`。
     key: tuple[str, str, str] = ("", "", "")
-    #: 全局剩余 token 预算（None = 不限）。
-    tokens_left: int | None = None
-    #: 本次召唤预计消耗的 token（None = 未知 ⇒ 不做单次预检）。
-    tokens_wanted: int | None = None
+    #: ⚠️ `tokens_left` / `tokens_wanted` 两格已删（2026-10-15 业主裁定
+    #: 「我们不卡 token，只卡总花销的钱」）：token 不再是判据，它只是读数。
     #: 全局剩余花销预算（None = 不限）。
     usd_left: float | None = None
     #: 本次召唤预计花销。
@@ -333,7 +370,12 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     # `check_action('M','summon')`（那一条有它自己的用例与语义）。
 
     # ---- [1] 角色/动作
-    if d.to != S.CONDUCTOR_ROLE:
+    #
+    # 2026-10-16（业主口径 S2「M 只派活」）：`action == ""` 是**合法的派活形态** ——
+    # "把这件活派给这个角色，动作由它自己选"。此时**没有动作名可核**，所以跳过这一步；
+    # 角色存在性由下面第 [2] 步照核（`d.to not in known`），**边也照拦** ——
+    # M 拿着空动作去派 F，仍然要吃到 `forbidden_edge`（那才是这条口径要守的东西）。
+    if d.to != S.CONDUCTOR_ROLE and str(d.action):
         r = check_action(d.to, d.action, registry=registry)
         if r is not None:
             return r
@@ -440,21 +482,13 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
 
     # ---- [8] 预算
     #
-    # 单次预算只能是"预计值"（我们不可能在跑之前知道一次 LLM 调用花多少）。
-    # 所以这里的判据是：已经耗尽 ⇒ 拒（确定性），或者这一单的最小预计值
-    # 就已经超过剩余（`tokens_wanted > tokens_left`）⇒ 拒。真正的扣减发生在
-    # handler 返回之后（`Conductor` 记账），因此"跑到一半把预算花超"是可能的
-    # —— 那是如实记录的事（台账里 tokens 会超过预算），不是被掩盖的事。
-    # 设计 §3.2 的"预算耗尽后不再新开任务"约束的正是新开。
-    if d.tokens_left is not None:
-        if d.tokens_left <= 0:
-            return Refusal("budget_exceeded", f"token 预算已耗尽（剩余 {d.tokens_left}）", "token_budget")
-        if d.tokens_wanted is not None and d.tokens_wanted > d.tokens_left:
-            return Refusal(
-                "budget_exceeded",
-                f"本次预计需要 {d.tokens_wanted} token，剩余 {d.tokens_left}",
-                "token_budget",
-            )
+    # ⚠️ **只判钱**（2026-10-15 业主裁定：**「我们不卡 token，只卡总花销的钱」**）。
+    # 这里此前还有一段按 token 卡的判据（`d.tokens_left <= 0` 或
+    # `tokens_wanted > tokens_left` ⇒ `Refusal("budget_exceeded", …, "token_budget")`）——
+    # 它**删掉了**：token 是"模型怎么花它的输出与思考"的事，不是我们该设的闸；
+    # 我们只对**钱**设闸（下面这一段），并把 token 留成读数（`usage_ledger`）。
+    # 那一轴的另两个落点（`Policy.token_budget` 字段、`conductor` 的
+    # `budget={"max_tokens": …}` 通道）在同一轮一起删。
     if d.usd_left is not None:
         if d.usd_left <= 0:
             return Refusal("budget_exceeded", f"花销预算已耗尽（剩余 {d.usd_left}）", "usd_budget")
@@ -603,11 +637,13 @@ def budget_state(policy: Policy, *, spent_tokens: int, spent_usd: float) -> dict
 
     为什么返回 dict 而不是一个数：调用方需要同时回答"还剩多少"与
     "有没有上限"。一个数做不到，而"没有上限"被写成 0 会被读成"已耗尽"。
+
+    ⚠️ **只剩钱这一轴**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
+    `tokens_left` / `token_budget` 两格已删；`spent_tokens` 留着当**读数**
+    （"这一趟花了多少 token"要看得见，但它不再是闸门）。
     """
     return {
-        "tokens_left": None if policy.token_budget is None else max(0, policy.token_budget - spent_tokens),
         "usd_left": None if policy.usd_budget is None else max(0.0, policy.usd_budget - spent_usd),
-        "token_budget": policy.token_budget,
         "usd_budget": policy.usd_budget,
         "spent_tokens": spent_tokens,
         "spent_usd": spent_usd,

@@ -68,8 +68,10 @@ def test_inflight_task_caught_by_stop_is_recorded_as_unknown_and_not_retried(tmp
     holder: dict = {}
 
     def worker() -> None:
-        holder["res"] = reg.call("conductor.summon", role="M", target_role="E",
-                                 action="list_experiments", input_key="P11:inflight")
+        # 2026-10-16（口径 S2）：这条判据考"确定性实现被 stop 抓到" ⇒ 走**内部 API**
+        # （工具层那条路现在一律走角色自己的循环，不进确定性实现）。
+        holder["res"] = c.summon("E", "list_experiments", {}, by="M",
+                                 input_key="P11:inflight")
 
     th = threading.Thread(target=worker)
     th.start()
@@ -124,9 +126,8 @@ def test_stop_then_warm_start_then_continue_from_the_brief(tmp_path: Path,
 
     cold = reg.call("conductor.ensure_project", role="M", project_name="p1", start="cold")
     assert cold.ok and cold.data["mode"] == "cold", cold.data
-    first = reg.call("conductor.summon", role="M", target_role="E", action="list_experiments",
-                     input_key="P11:first")
-    assert first.data["outcome"] == "ok", first.data
+    first = c.summon("E", "list_experiments", {}, by="M", input_key="P11:first")
+    assert first.outcome == "ok", first
 
     stop = reg.call("conductor.stop", role="M", reason="user")
     assert stop.ok and stop.data["verify"] == []
@@ -150,9 +151,8 @@ def test_stop_then_warm_start_then_continue_from_the_brief(tmp_path: Path,
     tree = fresh.tree()
     assert [str(r["task_id"]) for r in tree] == [str(r["task_id"]) for r in c.tree()], \
         "新会话应当能重建出同一条台账（两次运行的台账拼成一条链）"
-    again = fresh_reg.call("conductor.summon", role="M", target_role="E",
-                           action="list_experiments", input_key="P11:second")
-    assert again.data["outcome"] == "ok", again.data
+    again = fresh.summon("E", "list_experiments", {}, by="M", input_key="P11:second")
+    assert again.outcome == "ok", again
     assert len(fresh.tree()) == len(tree) + 1, "续跑应当能再落一行（不是被上一次的 stop 锁死）"
     assert fresh.verify_tasks() == []
 
@@ -169,7 +169,7 @@ def test_reset_cache_does_not_erase_the_ledger(tmp_path: Path):
     monkeypatch_projects = tmp_path / "projects"
     store, c, reg = _wired(tmp_path / "ws", registry={"E": ("object", _BlockingE(
         threading.Event(), threading.Event()))})
-    reg.call("conductor.summon", role="M", target_role="E", action="list_experiments",
+    reg.call("conductor.summon", role="M", target_role="E", task="派活：列一遍实验",
              input_key="P11:only")
     reg.call("conductor.stop", role="M", reason="user")
     CT.reset_cache()

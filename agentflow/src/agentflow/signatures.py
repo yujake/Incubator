@@ -315,7 +315,7 @@ def evidence_dir(root: str | Path) -> Path:
 def line_hash(record: Mapping[str, Any]) -> str:
     """一行的规范哈希（不含 `prev_hash` 自己）—— 链式台账的链节。"""
     payload = {k: v for k, v in record.items() if k != "prev_hash"}
-    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -429,7 +429,7 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
         problems.append((code, f"稿件 {doc_row.get('doc_id')} 的签名不成立（{code}）："
                                f"name={r.get('name')!r} verdict={r.get('verdict')!r} "
                                f"inputs.doc_sha256="
-                               f"{str((r.get('inputs') or {}).get('doc_sha256'))[:16]!r} "
+                               f"{str((r.get('inputs') if isinstance(r.get('inputs'), dict) else {}).get('doc_sha256'))[:16]!r} "
                                f"evidence={r.get('evidence_path')!r}"))
     return problems[:1]
 
@@ -510,13 +510,13 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
                 "findings": [dict(f) for f in findings]}
     snap_path = snap_dir / name
     snap_path.write_text(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
-                                    separators=(",", ":")) + "\n", encoding="utf-8")
+                                    separators=(",", ":"), default=str) + "\n", encoding="utf-8")
 
     row = dict(record)
     row["evidence_path"] = rel
     row["evidence_sha256"] = hashlib.sha256(snap_path.read_bytes()).hexdigest()
     row["prev_hash"] = line_hash(records[-1]) if records else ""
-    line = json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    line = json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
     with ledger_path(base).open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(line + "\n")
     return row

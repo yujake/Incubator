@@ -145,7 +145,9 @@ def _parse_iso(ts: str | None) -> datetime | None:
         return None
     try:
         dt = datetime.fromisoformat(ts)
-    except ValueError:
+    except (ValueError, TypeError):
+        # 2026-10-17（store #12）：`lease_until` 是自由列（`Literature.validate` 不校验它），
+        # 真机里可能是 int ⇒ `fromisoformat` 抛 **TypeError**，原来只接 ValueError。
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
@@ -230,6 +232,14 @@ class Tx:
         key = row.get(id_field)
         if key is None:
             raise StoreError(f"{table} 的行缺少主键 {id_field}")
+        # 2026-10-18（业主：「完美跑通 T1」/ 缺陷 ⑩）：`created_by` 缺省时用**本次写入的 actor**
+        # 填，而不是让 `schema` 的 per-table 默认值（`agent-F` 等）冒充作者。
+        # 真机 T5：`conjectures.created_by` 全是 `agent-F`，而它其实是 **D** 写的。
+        # 显式给了 `created_by` 就**保留**（不覆盖调用方的声明）。
+        _row_cls = (S.TABLES.get(table) or {}).get("row")
+        if _row_cls is not None and "created_by" in getattr(_row_cls, "__dataclass_fields__", {}):
+            if not str(row.get("created_by") or "").strip():
+                row["created_by"] = str(self.actor)
         rows = self.rows(table)
         for i, r in enumerate(rows):
             if r.get(id_field) == key:
@@ -404,7 +414,13 @@ class Tx:
             c = self._store._load("counters")
             self._store._dirty_counters = c
         counters = c.setdefault("counters", {})
-        nxt = int(counters.get(kind, 0))
+        # 2026-10-17（store #4）：counters 是**可被手改**的 JSON；`"lit": "abc"` 会让裸
+        # `int()` 抛 ValueError，把一次取号变成 traceback。坏值当 0（并在下面照常报冲突）。
+        _raw_next = counters.get(kind, 0)
+        try:
+            nxt = int(_raw_next)
+        except (TypeError, ValueError):
+            nxt = 0
         # `R7-AN-1`：记下"本事务读到的那一版"。提交时用它（而不是缓存值 c+1）去判断
         # "窗口里有没有别的写者"：`cache - base` 正是本事务自己的那次推进，
         # 拿缓存值当基准会把每一次普通取号都读成"盘上被别的写者拨低了"。
@@ -609,6 +625,10 @@ class Store:
         **本框架自己在工作区根上会放什么**来列，而不是按"看起来像不像我们的东西"。
         """
         # `R-32`：先判态、后动手（与那次事故的顺序**正好相反**）。
+        if self.root.exists() and not self.root.is_dir():
+            # 2026-10-17（store #11）：root 是个**文件**时 `iterdir()` 抛
+            # `NotADirectoryError`（WinError 267）；init 承诺的失败类型是 `StoreError`。
+            raise StoreError(f"拒绝 init：{self.root} 存在但不是目录（是个文件）")
         if not force and self._foreign_dir_guard_should_refuse():
             foreign = sorted(p.name for p in self.root.iterdir()
                              if p.name not in _WORKSPACE_ROOT_ENTRIES)
@@ -655,6 +675,10 @@ class Store:
         """
         if not self.root.exists():
             return False                      # 新目录：init 会连它一起建
+        if not self.root.is_dir():
+            # 2026-10-17（store #11）：root 是个**文件**时 `iterdir()` 抛
+            # `NotADirectoryError`（WinError 267）；init 承诺的失败类型是 `StoreError`。
+            return True
         if self.data.exists():
             return False                      # 有 data/ ⇒ 当工作区（补缺失的表是正当用法）
         if (self.root / ".agentflow-workspace").exists():
@@ -664,7 +688,7 @@ class Store:
     # ---------------------------------------------------------------- 低级 IO
     @staticmethod
     def _dump(doc: dict) -> str:
-        return json.dumps(doc, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+        return json.dumps(doc, ensure_ascii=False, indent=2, sort_keys=False, default=str) + "\n"
 
     def set_counters(self, values: Mapping[str, int], *, actor: str, note: str = "") -> dict:
         """公开地写 `counters.json`（`c-7`；`R7-AN-1` 把"窗口里会怎样"写准）。
@@ -798,8 +822,16 @@ class Store:
         """
         disk = self._load("counters")
         cache = self._dirty_counters or disk
-        disk_c = {k: int(v) for k, v in (disk.get("counters") or {}).items()}
-        cache_c = {k: int(v) for k, v in (cache.get("counters") or {}).items()}
+        # 2026-10-17（store #4 的真身）：counters 是可被手改的 JSON；`int("abc")` 会把
+        # **一次正常提交**打成 traceback。坏值按 0 计（它本就不是一个有效计数）。
+        def _as_int(v: Any) -> int:
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return 0
+
+        disk_c = {k: _as_int(v) for k, v in (disk.get("counters") or {}).items()}
+        cache_c = {k: _as_int(v) for k, v in (cache.get("counters") or {}).items()}
         out = dict(disk_c)
         changed: dict[str, dict[str, Any]] = {}
         for kind in sorted(t._alloc_kinds):
@@ -930,6 +962,12 @@ class Store:
         - 缺 `schema_version` 字段 = 与"旧版本"同档（拒读），但不许崩成 `KeyError`；
         - 版本相同才放行（**不是** `>=`，也不是"读不出来就放过"）。
         """
+        # 2026-10-17（store #2）：表文件被写成**顶层数组**（`[]`）时 `doc.get` 抛
+        # `AttributeError`；这里按"版本读不出来"处理，与"缺字段"同档（fail-closed）。
+        if not isinstance(doc, dict):
+            raise StoreError(
+                f"{where} 的顶层不是对象（收到 {type(doc).__name__}）⇒ **拒读**："
+                "这一份文件坏了，不是\"没有版本问题\"；处置见 `agentflow verify` 的同一张表")
         got = doc.get("schema_version")
         if got == S.SCHEMA_VERSION:
             return
@@ -946,7 +984,15 @@ class Store:
             p = self.data / "counters.json"
             if not p.exists():
                 return {"schema_version": S.SCHEMA_VERSION, "counters": {}}
-            doc = json.loads(p.read_text(encoding="utf-8"))
+            try:
+                doc = json.loads(p.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                # 2026-10-17（store #1/#5）：counters 分支此前**没有** try —— 而表分支有。
+                # 坏 JSON / 非 UTF-8 都按"这份文件坏了"报 StoreError，不冒系统异常。
+                raise StoreError(
+                    f"counters.json 读不出来（{type(e).__name__}: {e}）⇒ **拒读**；"
+                    "处置：修好它，或跑 `agentflow rebuild` 从 events.jsonl 重建计数"
+                ) from e
             self._check_version(doc, "counters.json")
             return doc
         spec = S.TABLES.get(table)
@@ -968,7 +1014,8 @@ class Store:
             return S.empty_table()
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            # 2026-10-17（store #5）：非 UTF-8 字节此前在更早一层抛，这一支接不到。
             raise StoreError(
                 f"{spec['file']} 不是合法 JSON（{e}）。可用 `agentflow rebuild` 从 events.jsonl 重建。"
             ) from e
@@ -980,7 +1027,15 @@ class Store:
         return self._load(table)
 
     def rows(self, table: str) -> list[dict]:
-        return self.read(table)["rows"]
+        doc = self.read(table)
+        rows = doc.get("rows") if isinstance(doc, dict) else None
+        if not isinstance(rows, list):
+            # 2026-10-17（store #3）：表文件可能只剩 `{"schema_version": …}`（半途写坏/手改）
+            # ⇒ 原来 `["rows"]` 直接 KeyError，读账的人看到的是 traceback 而不是"这表坏了"。
+            raise StoreError(
+                f"{table} 的表文件没有 rows 数组（收到 {type(rows).__name__}）⇒ **拒读**；"
+                "处置：跑 `agentflow verify` 定位，必要时 `agentflow rebuild` 重建")
+        return rows
 
     # ---------------------------------------------------------------- 事务
     @contextmanager
@@ -1130,11 +1185,11 @@ class Store:
         with open(self.events_path, "a", encoding="utf-8", newline="\n") as f:
             for e in events:
                 e = {"seq": self._next_seq(), "ts": _now(), "batch": batch, **e}
-                f.write(json.dumps(e, ensure_ascii=False) + "\n")
+                f.write(json.dumps(e, ensure_ascii=False, default=str) + "\n")
             f.write(json.dumps(
                 {"seq": self._next_seq(), "ts": _now(), "op": "commit",
                  "batch": batch, "rows": len(events)},
-                ensure_ascii=False) + "\n")
+                ensure_ascii=False, default=str) + "\n")
             f.flush()
             os.fsync(f.fileno())
 
@@ -1309,7 +1364,7 @@ class Store:
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "a", encoding="utf-8") as f:
             for rec in lines:
-                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
 
     def _fold_moved_tables(self, *, state: dict, order: dict, counters: dict,
                            moved_rows: Mapping[str, dict], moved_order: list[str]) -> dict:
@@ -1623,7 +1678,12 @@ class Store:
                 kind = row.get("kind")
                 alloc = row.get("allocated")
                 if kind and alloc is not None:
-                    counters[kind] = max(counters.get(kind, 0), int(alloc) + 1)
+                    # 2026-10-17（store #13）：重放别的坏行有 `_skip()` 兜着，这一支裸 `int()`。
+                    try:
+                        _n = int(alloc) + 1
+                    except (TypeError, ValueError):
+                        _n = counters.get(kind, 0)
+                    counters[kind] = max(counters.get(kind, 0), _n)
                 applied += 1
                 continue
             if table in _MOVED_TABLES:

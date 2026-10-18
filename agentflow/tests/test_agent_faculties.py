@@ -240,7 +240,7 @@ def test_a_child_run_leaves_its_full_output_on_disk_for_the_parent_to_read(tmp_p
     backend.conductor = cond
     registry = build_registry(store=st, conductor=cond, workspace_root=str(root)).registry
     backend.registry = registry
-    m_gw = ScriptedGateway([json.dumps({"summon": {"role": "D", "action": "consider",
+    m_gw = ScriptedGateway([json.dumps({"summon": {"role": "D", "task": "派活：把这件事办掉",
                                                     "params": {"qid": "q-1"}}},
                                        ensure_ascii=False),
                             json.dumps({"final": "读到了", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False)])

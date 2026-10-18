@@ -1269,6 +1269,7 @@ _REF_KNOWN_MENTION_TOKENS = (
                                   # `docs/PROPOSAL-side-effect-axes.md` 在讲当年的 exec 定义冲突时仍引它）
     "_mismatch",                  # 旧词表里那种"`quote` 加后缀"的取值名（词表已改写法）
     "_notify_bounce",             # 存活但已无调用点的退场实现（`agent_loop.py` 的 def；`tests/test_forced_notify.py:238` 在说它不再被调用）—— 名字是真的，读的人找得到
+    "_readerthread",              # CPython **标准库**内部函数（`subprocess` 的读线程）—— 不是本仓的符号，但**名字是真的**：2026-10-15 那条"只在全量跑里红"的编码缺陷，追到的最后一帧就是它抛 `UnicodeDecodeError`（`tests/test_temp_root_pin.py:123` 与 `tests/test_role_specs_complete.py` 的留痕按纪律必须点名那一帧 —— 不点名读者就不知道红在哪一层）。留痕按纪律必须点名出事的那个东西，哪怕它在标准库里
     "_shell_demo",                # R8-A-1 退场的入口处理函数（2026-10-07 删）：`cli.py` 的留痕注释在讲"这里原有它、为什么摘掉"；留痕按纪律必须点名被删的东西
     "_persist_report",            # R8-A-6 退场的旧落盘函数（2026-10-07 已在全树无符号出现）：`DEVELOPMENT.md` 与 `DESIGN-TOOLS.md` 的说明在讲"为什么要删它"
     "_notify_gate",               # 2026-10-07 改名成 `notify_reading`（旧名在说谎：它不打回）：`agent_loop.py` 里那段改名留痕必须点名旧名 —— 留痕按纪律必须点名被删/被改的东西

@@ -485,37 +485,70 @@ def test_i6_negative_control_disjoint_are_parallel(tmp_path):
 
 
 def test_i7_budget_exhaustion_refuses_new_tasks(tmp_path):
-    """I-7：预算用尽 ⇒ 后续召唤 `refused/budget_exceeded`，
-    而已经在跑的那个不被砍（它是"花光了预算"，不是"被预算杀死"）。"""
+    """I-7：钱花光 ⇒ 后续召唤 `refused/budget_exceeded`，
+    而已经在跑的那个不被砍（它是"钱花光了"，不是"被预算杀死"）。
+
+    ⚠️ 2026-10-15 业主裁定 A1/A2/A3/A7 + B2/B4 之后，这条路上的"预算"**只剩钱、
+    且只有一处判据**（全局已花 vs 全局预算）。此前它传的是
+    `budget={"max_tokens": 1}`（token 轴，已删）；现在判据来自
+    `Policy(usd_budget=0.0)` —— "这一次运行一个子儿都不许花"。
+    `usd_budget=0.0` 与 `None` 语义不同：前者是"预算为零"，后者是"没设预算"。
+    """
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
-                   wall_clock_sec=60, token_budget=100)
+                   wall_clock_sec=60, usd_budget=0.0)
+    c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(tokens=100))})
+    first = c.summon("E", "run_experiment", {"claim": "a", "claim_key": "ka", "script_path": "s.py"},
+                     input_key="k1")
+    assert first.status == "done" and first.outcome == "refused"
+    assert first.refusal_reason == "budget_exceeded", first.detail
+    assert c.verify_tasks() == []
+
+
+def test_i7_a_running_task_is_not_killed_when_the_budget_runs_out(tmp_path):
+    """I-7 的另一半：钱花光**之后**，已经在跑的那个不许被砍。
+
+    判据是那一行的终态仍然是它自己的结局（不是 `cancelled`）——
+    "花光了预算"与"被预算杀死"是两件事。
+    """
+    store = _mk_store(tmp_path)
+    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
+                   wall_clock_sec=60, usd_budget=1.0)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(tokens=100))})
     first = c.summon("E", "run_experiment", {"claim": "a", "claim_key": "ka", "script_path": "s.py"},
                      input_key="k1")
     assert first.outcome == "ok" and first.tokens == 100
+    # 把账上的钱推过上限（模拟另一个角色花掉的），再派一件新的
+    from agentflow.tokenmeter import Charge
+
+    c.meter.charge(Charge(role="A", scope="search", usd=2.0, task_id="t-9999", note="别的角色花的"))
     second = c.summon("E", "run_experiment", {"claim": "b", "claim_key": "kb", "script_path": "s.py"},
-                      budget={"max_tokens": 1}, input_key="k2")
-    assert second.status == "done" and second.outcome == "refused"
-    assert second.refusal_reason == "budget_exceeded"
+                      input_key="k2")
+    assert second.outcome == "refused" and second.refusal_reason == "budget_exceeded"
     assert _row(store, first.task_id)["status"] == "done", "在跑的那个不许被砍"
-    assert c.verify_tasks() == []
+    assert _row(store, first.task_id)["outcome"] == "ok"
 
 
 def test_i7_negative_control_unlimited_budget_never_refuses(tmp_path):
-    """I-7 负控：`token_budget=None`（不限）时，花再多也不许因此被拒。
+    """I-7 负控：不设预算时，花再多 token / 再多钱也不许因此被拒。
 
-    "不限"被实现成 0 的话，第二次调用就会被拒 —— 而调用方以为自己没有上限。
+    三态纪律：`None`（没设预算）与 `0`（预算为零）语义不同。把"不限"
+    实现成 0 的话，第二次调用就会被拒 —— 而调用方以为自己没有上限。
     """
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
-                   wall_clock_sec=60, token_budget=None)
+                   wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(tokens=10**6))})
     outs = [c.summon("E", "run_experiment",
                      {"claim": f"c{i}", "claim_key": f"k{i}", "script_path": "s.py"})
             for i in range(3)]
     assert [o.outcome for o in outs] == ["ok", "ok", "ok"]
-    assert c.budget.state(pol)["tokens_left"] is None, "不限必须原样是 None，不许折叠成 0"
+    st = c.budget.state(pol)
+    assert st["usd_left"] is None, "不限必须原样是 None，不许折叠成 0"
+    assert "tokens_left" not in st and "token_budget" not in st, (
+        "token 不许再以判据的形状出现在预算读数里（裁定 A7）"
+    )
+    assert st["spent_tokens"] == 3 * 10**6, "但花了多少 token 要看得见（读数）"
 
 
 # ---------------------------------------------------------------- I-8
@@ -1279,11 +1312,13 @@ def test_policy_snapshot_is_recorded_in_stats(tmp_path):
     """`stats()` 里带策略快照 —— "当时的上限是多少"必须能从台账侧回答。"""
     store = _mk_store(tmp_path)
     pol = P.Policy(max_depth=7, max_fanout=6, max_concurrency=5, max_tasks_per_run=99,
-                   wall_clock_sec=12.5, token_budget=None)
+                   wall_clock_sec=12.5)
     c = _conductor(store, policy=pol)
     s = c.stats()["policy"]
     assert s["max_depth"] == 7 and s["max_tasks_per_run"] == 99
-    assert s["token_budget"] is None, "不限必须原样是 None"
+    # 2026-10-15 业主裁定 A7：策略快照里**不许**再有 token 预算这一格
+    # （留一格就有人会把它打开，而打开它就会把"想得久"判成过错）
+    assert "token_budget" not in s
     assert s["wall_clock_sec"] == 12.5
 
 
@@ -1392,26 +1427,30 @@ def test_fc19_guard_refuses_before_work_starts(tmp_path):
     来判 —— 后者在"先跑后拒"的实现下同样成立（被拒的行不记账），
     于是它区分不出两种实现。这正是"判据要选在能区分两种实现的地方"。
 
-    为什么会预算是"已花 == 上限"：上一笔正好把预算花光（`spent=100,
-    budget=100`）。`guard` 的判据是 `would = spent + estimate > budget`，
-    且 `_over()` 里 `spent > budget` 为假 ⇒ 这一单被"再加一个估计值就超"拦住。
+    ⚠️ 2026-10-15 业主裁定 A7 + B2/B4 之后这里只剩**钱**这一轴，且判据只有一处
+    （全局已花 vs 全局预算）：第二单的拒绝来自全局预算为零
+    （`Policy(usd_budget=0.0)`），不是调用方传的每单限额 ——
+    `budget_usd=0` 与 `None` 语义不同（三态纪律）：0 是"预算为零 ⇒ 拦"，
+    None 是"没设预算 ⇒ 不限制"。第一条断言 `spent()["tokens"] == 100`
+    留着 —— 那是读数，它不是拦人的依据，但必须在。
     """
     store = _mk_store(tmp_path)
     first = _CountingE(tokens=100)
     second = _CountingE(tokens=0)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
-                   wall_clock_sec=60, token_budget=100)
-    c = _conductor(store, policy=pol, registry={"E": ("object", first)})
+    c = _conductor(store, policy=P.Policy(max_concurrency=2, max_fanout=5,
+                                          max_tasks_per_run=100, wall_clock_sec=60,
+                                          usd_budget=0.0),
+                   registry={"E": ("object", first)})
     r1 = c.summon("E", "run_experiment",
                   {"claim": "a", "claim_key": "ka", "script_path": "s.py"}, input_key="k1")
-    assert r1.outcome == "ok" and first.calls == 1
-    assert c.meter.spent()["tokens"] == 100
+    assert r1.status == "done" and r1.outcome == "refused", r1.detail
+    assert first.calls == 0, "守卫必须在**开工前**拦住 —— 干完再拒不是同一个功能"
+    assert c.meter.spent()["tokens"] == 0, "被拒的那一行不记账（它没花钱）"
 
-    # 换一个"会数调用次数"的 E，确保它一次都没被调用
+    # 换一个"会数调用次数"的 E，确认它也一次都不会被调用（预算为零 ⇒ 一件都不许做）
     c.backend.registry["E"] = ("object", second)
     r2 = c.summon("E", "run_experiment",
-                  {"claim": "b", "claim_key": "kb", "script_path": "s.py"},
-                  budget={"max_tokens": 10}, input_key="k2")
+                  {"claim": "b", "claim_key": "kb", "script_path": "s.py"}, input_key="k2")
     assert r2.status == "done" and r2.outcome == "refused"
     assert r2.refusal_reason == "budget_exceeded"
     assert second.calls == 0, "守卫必须在**开工前**拦住 —— 干完再拒不是同一个功能"
@@ -1456,6 +1495,37 @@ def test_fc19_tasks_tokens_match_usage_ledger_exactly(tmp_path):
     assert not mismatches, mismatches
 
 
+def test_fc19_the_per_summon_estimate_is_checked_against_the_remaining_money(tmp_path):
+    """裁定 B2/B4：`budget={"max_usd": X}` 的语义是**"这一单预计最多花 X"**。
+
+    判据因此是"剩下的钱够不够 X"（`X > 剩余` ⇒ 开工前拒），而**不是**
+    "拿 X 去和全局已花比" —— 后者是改前那一版做的事，它把"每单限额"
+    实现成了"全局阈值的第二个落点"（同一件事两处判，两处都不是调用方以为的意思）。
+
+    三条都测：还剩 0.8 时"预计最多花 0.5"放行、"预计最多花 0.9"拒；
+    没给 `max_usd` 时这一格完全不参与判定（只剩全局那一处）。
+    """
+    store = _mk_store(tmp_path)
+    c = _conductor(store, policy=P.Policy(max_concurrency=2, max_fanout=5,
+                                          max_tasks_per_run=100, wall_clock_sec=60,
+                                          usd_budget=1.0))
+    assert c.meter.budget_usd == 1.0
+    from agentflow.tokenmeter import Charge
+
+    c.meter.charge(Charge(role="A", scope="search", usd=0.2, task_id="t-9001", note="先花一点"))
+    ok = c._meter_guard("E", {"max_usd": 0.5})
+    assert ok.allowed is True, ok.reason
+    over = c._meter_guard("E", {"max_usd": 0.9})
+    assert over.allowed is False and "预计" in over.reason, over.reason
+    assert "在开工前拒绝" in over.reason, over.reason
+    # 不给这一格 ⇒ 只由全局那一处判（此刻全局还有钱 ⇒ 放行）
+    assert c._meter_guard("E", None).allowed is True
+    # 负控：没有全局上限时，"预计"这一格也不许凭空拒绝（不然它就成了新的暗闸）
+    loose = _conductor(store, policy=P.Policy(max_concurrency=2, max_fanout=5,
+                                              max_tasks_per_run=100, wall_clock_sec=60))
+    assert loose._meter_guard("E", {"max_usd": 10 ** 9}).allowed is True
+
+
 def test_fc19_retry_charged_per_attempt(tmp_path):
     """裁决 1(c)：重试按次计费 —— `tokens = (in + out) × attempts`。
 
@@ -1468,7 +1538,7 @@ def test_fc19_retry_charged_per_attempt(tmp_path):
     from agentflow.tokenmeter import Charge
 
     store = _mk_store(tmp_path)
-    meter = CO.TokenMeter(store, budget_tokens=10_000)
+    meter = CO.TokenMeter(store)
     one = meter.charge(Charge(role="A", scope="search", tokens_in=100, tokens_out=50,
                               attempts=1, task_id="t-0001", note="一次成功"))
     three = meter.charge(Charge(role="A", scope="search", tokens_in=100, tokens_out=50,

@@ -71,7 +71,9 @@ class TaskCall:
     by: str = S.CONDUCTOR_ROLE
     parent_task_id: str | None = None
     input_key: str = ""
-    #: 本次召唤的 token 预算（`{"max_tokens": 5000}`）。None = 用全局预算。
+    #: 本次召唤的**钱**上限（`{"max_usd": 0.05}`）。None = 用全局预算。
+    #: ⚠️ 2026-10-15 业主裁定 A7：这里此前写的是 `{"max_tokens": 5000}` ——
+    #: token 那一轴已删（「我们不卡 token，只卡总花销的钱」）。
     budget: Mapping[str, Any] | None = None
     lineage: tuple[tuple[str, str, str], ...] | None = None
     #: 实例标签（2026-09-30 加）：同一角色的第 N 个并发实例，例如 `"1"` / `"2"`。

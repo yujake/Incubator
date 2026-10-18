@@ -291,7 +291,7 @@ class AnalysisReport:
         if not self.summary.strip():
             raise ValueError("summary 不能为空（D 的第一入口就是它）。")
         try:
-            json.dumps(self.payload, ensure_ascii=False)
+            json.dumps(self.payload, ensure_ascii=False, default=str)
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"payload 必须可 JSON 序列化，否则落盘时会写坏表：{exc}"

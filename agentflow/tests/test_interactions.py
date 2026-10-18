@@ -594,6 +594,25 @@ def test_defaults_are_complete_and_positive():
     assert set(S.CONTRADICTION_VERDICTS) >= {"resolved", "unresolved", "new_contradiction", "persistent"}
 
 
+def test_the_quota_numbers_are_the_2026_10_15_ruling_values():
+    """六道交互配额的**数字**逐个钉住（业主 2026-10-15 裁定 C9）。
+
+    为什么值得单立一条：这些数字此前是 2026-09 的离线单机读数下定的
+    （那时候一次检索几毫秒），而裁定把它们整体抬高到了"几乎不可能由正常研究触发"——
+    逐个写出来，是为了让"它们被改过"这件事在判据面上有一条可查的记录，
+    而不是散在六个不同测试里各写一半。
+
+    抬高的方向与理由见 `draft/123` §二：这些配额剩下的职责是"防一次编程错误
+    把请求数炸成 O(n²)"，而真正该管住"烧钱不给结论"的是**钱**（`usd_budget` + 总账）。
+    """
+    assert I.DEFAULTS["max_inflight_requests"] == 200, "I7：20 → 200"
+    assert I.DEFAULTS["max_rounds_per_contradiction"] == 12, "I2 单条：2 → 12"
+    assert I.DEFAULTS["max_contradiction_requests"] == 100, "I2 全局：10 → 100"
+    assert I.DEFAULTS["max_gap_requests_per_run"] == 30, "I3：3 → 30"
+    assert I.DEFAULTS["max_reprocess_per_relation"] == 8, "I4：2 → 8"
+    assert I.DEFAULTS["structural_duplicate_max_pairs"] == 1_000, "I5：200 → 1000"
+
+
 # ============================================================ P-4：取号的编号上限
 
 

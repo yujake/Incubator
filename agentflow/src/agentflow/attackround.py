@@ -328,7 +328,7 @@ def dead_end_row(*, strategy: str, reason: str, evidence: str,
                                 or "这一步走不下去：没有可调用的推理入口或没有可推进的子目标"),
                "reason": reason, "evidence": evidence,
                "best_partial": [dict(x) for x in best_partial]}
-    return parse_round(json.dumps(payload, ensure_ascii=False))
+    return parse_round(json.dumps(payload, ensure_ascii=False, default=str))
 
 
 def selftest() -> int:
@@ -336,7 +336,7 @@ def selftest() -> int:
     checks: list[tuple[str, bool]] = []
     red = parse_round(json.dumps({"product": "reduction", "strategy": "归约",
                                   "why_strategy": "先缩小范围",
-                                  "new_subgoals": [{"goal": "证 n=3", "testable": "枚举"}]}))
+                                  "new_subgoals": [{"goal": "证 n=3", "testable": "枚举"}]}, default=str))
     checks.append(("reduction 成形", red["product"] == "reduction"))
     try:
         parse_round('{"product": "no_change", "strategy": "归约", "why_strategy": "x"}')
@@ -344,14 +344,14 @@ def selftest() -> int:
     except RoundError:
         checks.append(("no_change 被打回", True))
     bad = json.dumps({"product": "proof", "strategy": "反证", "why_strategy": "反设",
-                      "steps": [{"text": "显然成立"}]})
+                      "steps": [{"text": "显然成立"}]}, default=str)
     try:
         parse_round(bad)
         checks.append(("#5 缝被打回", False))
     except RoundError as exc:
         checks.append(("#5 缝被打回（并给两条出口）", "合法出口" in str(exc)))
     ok = parse_round(json.dumps({"product": "proof", "strategy": "反证", "why_strategy": "反设",
-                                 "steps": [{"text": "显然成立", "assumption": True}]}))
+                                 "steps": [{"text": "显然成立", "assumption": True}]}, default=str))
     checks.append(("声明成前提即合法", ok["steps"][0]["assumption"] is True))
     gate = pre_spend_gate(goal="证 n=3", testable="枚举", deps_refuted=["stmt:0007"])
     checks.append(("作废依赖 ⇒ 不花钱", gate["spend"] is False and gate["reasons"]))

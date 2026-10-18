@@ -36,6 +36,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import logging
 from dataclasses import dataclass
 
@@ -176,6 +178,13 @@ def check_quote(
     #
     # 守卫必须带 `pr.known`：页码未知（`start=end=None`）走的是另一档
     # （`not_found_page_unknown`）—— 没有这个守卫会把它一起吃掉。
+    # 2026-10-17（IO #10）：调用方可能把台账里的 **dict** 直接传进来（`page_range` 是
+    # `{"start":…,"end":…}`）。原来直接 `pr.known` ⇒ AttributeError；这里改成**可读拒信**
+    # （类型契约是 `schema.PageRange`，静默接受 dict 会让 `known` 的语义在半路丢）。
+    if isinstance(pr, Mapping):
+        raise ValueError(
+            "check_quote 的 page_range 必须是 `schema.PageRange`（收到 dict）—— "
+            "调用方请先 `S.PageRange.from_dict(row[\"page_range\"])` 再传")
     if pr.known and int(pr.start) > int(pr.end):
         return QuoteCheck(None, reason="empty_page_range",
                           tried=(f"empty:{pr.start}-{pr.end}",))

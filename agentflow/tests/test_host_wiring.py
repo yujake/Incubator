@@ -636,7 +636,7 @@ def test_b_extractor_uses_a_metered_model_client_when_a_key_is_configured(
     assert type(b.extractor).__name__ == "LLMExtractor", type(b.extractor).__name__
     assert b.extractor_is_fallback is False
     assert type(b.extractor.client).__name__ == "ModelClient", type(b.extractor.client).__name__
-    assert any("max_tokens=8192" in n for n in notes), notes
+    assert any("输出额度不再由我们设" in n for n in notes), notes
 
 
 def test_a_seam_is_not_mistaken_for_an_extractor_client(tmp_path: Path, monkeypatch):

@@ -31,6 +31,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import http.client as _http_client
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -76,6 +77,31 @@ DEFAULT_RETRIES = 3
 #: 需要重试的 HTTP 状态码。
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
+#: **本机 TLS 栈**那一类失败的识别串（2026-10-16，我亲自下一轮文献后加的）。
+#:
+#: 判据来自现场读数：同一个 UTexas URL，默认走 **122 秒**才判死
+#: （Schannel `CRYPT_E_REVOCATION_OFFLINE`；Python/OpenSSL 侧报
+#: `CERTIFICATE_VERIFY_FAILED`），而加客户端开关（`curl --ssl-no-revoke`）后
+#: **0.55 秒**就拿到状态码 ⇒ 这是**本机去够吊销/中间证书够不到**，**重试修不好**。
+_TLS_CERT_MARKERS = (
+    "certificate verify failed",
+    "cert_verify",
+    "unable to get local issuer",
+    "self-signed certificate",
+    "self signed certificate",
+    "certificate has expired",
+    "hostname mismatch",
+    "revocation",
+)
+
+#: **TLS 握手超时**那一类（与普通超时分开）：多半是对方挡脚本，重试至多一次。
+#: 现场读数：MDPI 那个 PDF 连续三次都是 `_ssl.c:985: The handshake operation timed out`。
+_TLS_TIMEOUT_MARKERS = (
+    "handshake operation timed out",
+    "handshake timeout",
+    "ssl connection timeout",
+)
+
 #: `FetchResult.kind` 的受控词表（`F-6`）。
 #:
 #: 为什么需要它：改前失败原因是自由字符串（`dir(F)` 里只有 `DownloadError` /
@@ -102,6 +128,11 @@ ERROR_KINDS = (
     "empty_body",
     "network_error",
     "timeout",
+    #: 2026-10-16（我亲自下过一轮之后）新分的两档：它们此前都折进 `network_error`
+    #: ⇒ 读账的人分不出"网络抖动（该重试）"与"本机证书/对方挡脚本（重试无益）"，
+    #: 于是每个 URL 都被无差别重试三次。现场读数见 `_TLS_CERT_MARKERS` 的注释。
+    "tls_cert",
+    "tls_timeout",
     "io_error",
     "all_sources_failed",
     "not_attempted",
@@ -580,7 +611,13 @@ class HttpDownloader:
                 error=f"dest_dir_unusable: {exc}",
             )
 
-        rejected = self._validate_url(url)
+        try:
+            rejected = self._validate_url(url)
+        except ValueError as exc:
+            # 2026-10-17（真机探针 _crash_probe_io_1）：畸形 IPv6 主机串让 `urlsplit` 抛
+            # `ValueError: Invalid IPv6 URL`，绕过"失败也返回 FetchResult"的契约。
+            return FetchResult(ok=False, kind="network_error",
+                               error=f"invalid_url: {exc}")
         if rejected is not None:
             kind, detail = rejected
             return FetchResult(ok=False, kind=kind, error=detail)
@@ -690,6 +727,13 @@ class HttpDownloader:
                             url, status, f"HTTP {status}", response.headers, None
                         )
                     return self._consume(response, status, url, dest, filename_hint)
+            except _http_client.HTTPException as exc:
+                # 2026-10-17（真机探针 _crash_probe_io_2）：URL 里的空格/控制字符让 urllib 在
+                # `putrequest` 抛 `http.client.InvalidURL`（`HTTPException` 子类）——它不在
+                # `HTTPError / URLError / OSError` 三支里，于是整趟 `download` 抛 traceback。
+                last_kind = "network_error"
+                last_error = f"invalid_url: {exc}"
+                break
             except urllib.error.HTTPError as exc:
                 last_status = int(getattr(exc, "code", 0) or 0)
                 last_kind = f"http_{last_status}"
@@ -700,12 +744,47 @@ class HttpDownloader:
                 logger.warning("下载 %s 得到 HTTP %s，%.1fs 后重试（%d/%d）", url, last_status, delay, attempt + 1, self.retries)
                 self._sleep(delay)
             except urllib.error.URLError as exc:
+                # ⚠️ **2026-10-16（我亲自下过一轮文献之后的归因）**：这一支此前**无差别重试** ——
+                # 而它罩着两类**重试永远修不好**的故障，实测代价极大（`projects/p8o` 那一趟
+                # 72 分钟只走了 15 次模型调用，全耗在这上面）：
+                #
+                #   * **证书/吊销类**（`CERTIFICATE_VERIFY_FAILED`、Schannel 的
+                #     `CRYPT_E_REVOCATION_OFFLINE`）：同一个 URL 重试只会再等一次同样的
+                #     超时。实测：UTexas 那个 URL 每次要 **122 秒**才判死；加客户端开关
+                #     （`curl --ssl-no-revoke`）后 **0.55 秒**就拿到状态码 ⇒ 这是**本机
+                #     TLS 栈**的事，不是网络抖动 ⇒ **不重试**，如实记成 `tls_cert`。
+                #   * **TLS 握手超时**（`handshake operation timed out`）：与普通超时不同，
+                #     它多半是对方把我们挡在门外；实测 MDPI 连续三次都是它 ⇒ 至多再试
+                #     **一次**，记成 `tls_timeout`。
+                #
+                # 其余（连接重置/断流/普通超时）照旧重试 —— 那些换一跳或换镜像真的能过。
+                reason_text = str(getattr(exc, "reason", exc))
+                low = reason_text.lower()
+                if any(m in low for m in _TLS_CERT_MARKERS):
+                    last_kind, last_error = "tls_cert", f"tls_cert: {reason_text}"
+                    logger.warning(
+                        "下载 %s 卡在本机证书/吊销检查（%s）⇒ **不重试**：换源，或按客户端"
+                        "开关处理（`curl --ssl-no-revoke` 这类）；实测同一 URL 从 122s 判死"
+                        "降到 0.55s 拿到状态码",
+                        url, reason_text,
+                    )
+                    break
+                if any(m in low for m in _TLS_TIMEOUT_MARKERS):
+                    last_kind, last_error = "tls_timeout", f"tls_timeout: {reason_text}"
+                    if attempt >= min(self.retries, 1):
+                        break
+                    delay = _backoff_delay(attempt)
+                    logger.warning("下载 %s TLS 握手超时（%s），%.1fs 后重试（%d/%d）——"
+                                   "只再试一次（多数是对方挡脚本，重试无益）",
+                                   url, reason_text, delay, attempt + 1, self.retries)
+                    self._sleep(delay)
+                    continue
                 last_kind = "network_error"
-                last_error = f"network_error: {exc.reason}"
+                last_error = f"network_error: {reason_text}"
                 if attempt >= self.retries:
                     break
                 delay = _backoff_delay(attempt)
-                logger.warning("下载 %s 网络异常（%s），%.1fs 后重试（%d/%d）", url, exc.reason, delay, attempt + 1, self.retries)
+                logger.warning("下载 %s 网络异常（%s），%.1fs 后重试（%d/%d）", url, reason_text, delay, attempt + 1, self.retries)
                 self._sleep(delay)
             except OSError as exc:
                 # TimeoutError 是 OSError 的子类（socket.timeout 自 3.10 起即其别名）。
@@ -1122,8 +1201,7 @@ def _selftest() -> int:
                 "path": result.path,
             },
             ensure_ascii=False,
-            indent=2,
-        ))
+            indent=2,default=str))
         if result.path and Path(result.path).exists():
             print(f"落盘复核：{Path(result.path).stat().st_size} 字节")
         print(f"stats={downloader.stats}")

@@ -107,7 +107,16 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "D", "run_round",
         "把 ingest ->…-> research 串成一轮（有界：limit）",
-        _obj({"report": _OBJ, "submit": _B, "limit": _I}, ("report",)),
+        # ⚠️ 2026-10-16 补说明（第 10 趟 T5 实测：`report` 传字符串 ⇒ `invalid_params`）。
+        # 与下面 `propose_question` 那条注记**同一个坑**（`draft/37` §130 的真机读数：
+        # **声明不写、handler 拒收 ⇒ 主控只能猜**）：`_OBJ` 只说"是个对象"，没说里面是什么。
+        # 这里要的是**一份 C 的分析报告**（`analysis_reports` 那行的形状 ——
+        # `agent_d/propose_question.py` 里记的 `pipeline` C→D 路就是这么传的）。
+        _obj({"report": {"type": "object",
+                         "description": "一份 **C 的分析报告**（`analysis_reports` 那行的对象；"
+                                        "C→D 那条路就是这么传的）。**不是**一句话、不是字符串 —— "
+                                        "第 10 趟 T5 实测传字符串被 `invalid_params` 拒"},
+              "submit": _B, "limit": _I}, ("report",)),
         "本轮汇总 dict", side_effect="write_local", handler_name="run_round",
     ),
 
@@ -195,7 +204,7 @@ SPEC = AgentSpec(
             "对 B 的文字版证明做初步数学审阅（§16 P2）：逐条读出「这条证明用了哪些假设、哪一步是它真正承重的那一步」，给三态结论（成立 / 有毛病 / 看不出来）并写明依据（引哪一行、缺哪一步）。",
             "报「有毛病」时必须附可挽救性评估：差什么（缺一个引理 / 少一个条件 / 换一个定义）、要多少预算（大概几步、要不要形式化）、救不回来的话会连累哪些结论。只报「有问题」而不说「要什么才能修」，等于把问题原样丢回去。",
             "**从数据里找模式，把模式写成可检验的猜想**（`draft/37` §133 的核心纪律）：小情形算出来之后先做成表（按参数分列：计数、比值、边界），再看有没有规律，然后把它写成 `conjectures` 的一行 —— `statement` 一句话说清，`testable` 给出**怎么判它有假**（参数、界、判据），`negation_statement` 写它的否定。**没有猜想就只有一堆读数**。猜想登记之后用实验去支持或反驳它（`experiment_ids` / `counterexample_experiment_id`），并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。",
-            "**猜想写出来之后要交给 F 攻坚**（`draft/37` §138）：D→F 的边是通的 —— `conductor.summon` 唤起 F 的 `create_plan`，`problem_key` 就用猜想的 `conjecture_id`（计划与猜想在台账上因此对得上），`subgoals` 给一到三个可判定的子目标。被实验反驳的猜想同样是成果：登记那条反例（`result=refutes` + 非空 `counterexample`）、把 `status` 推成 `refuted`，并**立刻**告诉 F 那条路封了（否则它会替一条已死的猜想烧预算）。",
+            "**猜想写出来之后要交给 F 攻坚**（`draft/37` §138）：D→F 的边是通的 —— **用循环的 `summon` 形状**唤起 F 的 `create_plan`（⚠️ 2026-10-16 更正：此处原文点名的是**主控手上的那件召唤工具**，它不在你的工具面上；你走的是循环协议的 `summon` 形状。这条更正与提示词里已记的另外两处**同类先例**一样：口径里点名了本角色手上没有的工具，而正确写法是**形状名**），`problem_key` 就用猜想的 `conjecture_id`（计划与猜想在台账上因此对得上），`subgoals` 给一到三个可判定的子目标。被实验反驳的猜想同样是成果：登记那条反例（`result=refutes` + 非空 `counterexample`）、把 `status` 推成 `refuted`，并**立刻**告诉 F 那条路封了（否则它会替一条已死的猜想烧预算）。",
             "**登记猜想之前先判重**（`draft/37` §133 的登记口径）：不给 `conjecture_id` 时框架按规范化后的 `statement` 查重 —— 命中就**更新既有那一行**并回 `duplicate=true`（不是新建）；要真的另起一条必须显式 `force_new=true`。所以改写一条猜想之前先想清楚：这是「同一条改个说法」还是「另一条」—— 前者会更新原行（历史留在同一行上），后者才是新行。",
             # 业主 2026-10-14 逐条裁决第 1 / 6 / 9 / 10 条（原话见 `draft/120` §五）：
             # 「第一条科研记忆就是 D 负责的研究手稿」「第六条也让 D 落研究手稿」

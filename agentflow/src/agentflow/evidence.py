@@ -778,6 +778,10 @@ def _retrieve_one(name: str, fn: SearchFn, *, row_name: str = "", query: str, li
         detail = _source_detail(row_name, status="failed", count=0, rejected=0, reason=failure)
         return name, [], [], failure, detail, "failed"
 
+    # 2026-10-17（IO #6）：注入的 `search_fn` 可能返回非可迭代值（int/None）——
+    # `list(5)` 会抛 TypeError，而 `retrieve` 的 docstring 明写"本函数从不抛异常"。
+    if not isinstance(items, (list, tuple)):
+        items = []
     sources, rejected = _sources_from_items(
         list(items)[: max(1, int(limit))], source_name=name,
         query=query, retrieved_at=retrieved_at,
@@ -1603,6 +1607,9 @@ def verify_claims(claims: Sequence[Any], sources: Sequence[Mapping[str, Any]], *
     把它标成全文级，就是让读者以为正文里有这句话。
     """
     ordered = [_normalize_claim(c) for c in claims]
+    # 2026-10-17（IO #7）：`evidence.json` 可能被写坏（`sources: [null, {...}]`）——
+    # 原来假定每条都是 Mapping，一条 null 就让整次回验抛 AttributeError。
+    sources = [s for s in sources if isinstance(s, Mapping)]
     index = {_text_of(s.get("source_id")): s for s in sources if _text_of(s.get("source_id"))}
     # 一次回验内的局部缓存（键 = `text_ref.path`）：同一份 store 文件不该被解析七遍。
     # 刻意不做模块级缓存 —— 那会跨调用掩盖"文件被改"（`draft/30` §T0-3）。

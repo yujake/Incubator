@@ -1017,16 +1017,21 @@ def test_wrong_tool_name_lists_parallel_candidates_and_never_rewrites():
 
 
 def test_budget_is_recorded_and_does_not_block(tmp_path: pathlib.Path):
-    """判据（F2 / E-02）：预算字段的记录（不阻断）——记录得到、判决不因此改变。"""
+    """判据（F2 / E-02）：预算字段的记录（不阻断）——记录得到、判决不因此改变。
+
+    ⚠️ 2026-10-15 业主裁定 A7：读数里**只剩钱**（`usd_budget` / `usd_left`），
+    `token_budget` / `tokens_left` 两格已删；`spent_tokens` 留着当读数。
+    """
     from agentflow import policy as P
 
     st = _mk_store(tmp_path)
-    cond = _cond(st, policy=P.Policy(token_budget=10 ** 6, usd_budget=1.0))
+    cond = _cond(st, policy=P.Policy(usd_budget=1.0))
     r = cond.summon("C", "hottest", {"top_n": 5}, by="M", input_key="k1")
     assert r.outcome == "refused" and r.refusal_reason == "not_wired", r
     note = cond.budget_note()
-    assert note["token_budget"] == 10 ** 6 and note["usd_budget"] == 1.0, note
-    assert note["tokens_left"] is not None and note["usd_left"] is not None, note
+    assert note["usd_budget"] == 1.0, note
+    assert note["usd_left"] is not None and note["spent_tokens"] == 0, note
+    assert "token_budget" not in note and "tokens_left" not in note, note
     assert note["recorded_only"] is True, note
 
 

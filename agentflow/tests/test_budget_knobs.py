@@ -101,29 +101,35 @@ def test_the_step_budget_is_enough_to_finish_a_task() -> None:
         f"同一个旋钮的落点分家了（{seen}）—— 这正是「看起来一样、跑起来不一样」的形态")
 
 
-def test_the_writing_step_passes_a_larger_output_allowance(tmp_path: pathlib.Path) -> None:
-    """写稿步必须显式把输出额度递到网关；不给旋钮的调用仍走网关缺省（负控）。"""
+def test_no_step_passes_a_token_allowance_to_the_gateway(tmp_path: pathlib.Path) -> None:
+    """**循环步与任何调用都不许再给网关传 `max_tokens`**（业主 2026-10-15 裁定）。
+
+    裁定逐字：**「我们不卡 token，只卡总花销的钱」**，且「凡是可能阻止智能体完成大项目的
+    （限制输入、思考、产出、步数等），删或将触发水平抬高到几乎不可能触发的程度」。
+
+    这一格此前叫 `test_the_writing_step_passes_a_larger_output_allowance`，
+    钉的是"写稿步必须显式给一个**更大**的额度（32,768 > 缺省 4,096）"——
+    **那个处方是错的**：真调用对照（2026-10-15，同一段 prompt）证明，请求体里
+    **不带** `max_tokens` 时上游回 `finish_reason=stop`、`tokens_out=14,015`；
+    带上 32,768 反而只有 12,987。⇒ 这一栏整条路删掉（`modelgw._payload` 里不再出现），
+    本判据改成**反向钉死**：谁要是再把 token 闸加回来，这里当场红。
+    """
     st, cond, registry, root = _wired(tmp_path)
     gw = _Recorder(['{"final": "写完了", "evidence": []}'])
     seam = LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0), sid="t")
     run = AL.run_role("M", "写一段", store=st, registry=registry, conductor=cond, seam=seam,
                       workspace_root=str(root), sid="t", from_env=False, max_steps=1)
     assert run.stop_reason == "final", run.to_dict()
-    want = AL.AgentLoop.__dataclass_fields__["max_output_tokens"].default
-    assert gw.max_tokens_seen == [want], (
-        f"循环步应当把 max_output_tokens={want} 显式传给网关，实测收到 {gw.max_tokens_seen}")
-    assert want >= WRITING_OUTPUT_TOKENS > MG.ModelSpec().max_tokens, (
-        f"写稿步的输出额度 {want} 必须大于网关缺省 {MG.ModelSpec().max_tokens} —— "
-        "否则「写一段 LaTeX + JSON 信封」会被静默截断")
+    assert gw.max_tokens_seen == [None], (
+        "循环步不许再传 max_tokens（业主裁定：不卡 token）"
+        f"，实测收到 {gw.max_tokens_seen}")
 
-    # 负控：不传旋钮的调用不许被这次改动顺手改掉（`None` ⇒ 网关按 spec 缺省兜底）
+    # 同一条纪律在缝那一层也要成立：`ask_json` 不带旋钮
     gw2 = _Recorder(['{"ok": true}'])
     seam2 = LlmSeam(role="M", session_root=root, gateway=gw2, price=(0.0, 0.0), sid="t")
     data, call = seam2.ask_json("只要一份 JSON")
     assert data == {"ok": True} and call.ok, (data, call.problem)
-    assert gw2.max_tokens_seen == [None], (
-        "没有显式传 max_tokens 的调用必须把 None 交给网关（由 spec 缺省兜底），"
-        f"实测收到 {gw2.max_tokens_seen}")
+    assert gw2.max_tokens_seen == [None], gw2.max_tokens_seen
 
 
 def test_the_request_timeout_covers_a_high_effort_step() -> None:
@@ -175,12 +181,21 @@ def test_the_observation_window_fits_one_statement_slice() -> None:
 def test_the_wall_clock_is_configurable_and_live(tmp_path: pathlib.Path) -> None:
     """墙钟可配：CLI 显式给值 ⇒ 一路进到主控的 policy；不给 ⇒ 用 policy 缺省（负控）。"""
     parser = cli.build_parser()
-    assert parser.parse_args(["run-agent", "M", "--task", "x"]).wall_clock_sec == 3600.0
+    # 2026-10-18（业主口径「不传就是无限制」）：不传 ⇒ None（不设上限），不再默认 3600 秒。
+    assert parser.parse_args(["run-agent", "M", "--task", "x"]).wall_clock_sec is None
+    # 给了多少就是多少
+    assert parser.parse_args(["run-agent", "M", "--task", "x",
+                              "--wall-clock-sec", "7200"]).wall_clock_sec == 7200.0
     assert parser.parse_args(["run-agent", "M", "--task", "x",
                               "--wall-clock-sec", "5"]).wall_clock_sec == 5.0
-    assert P.Policy().wall_clock_sec == 900, (
-        "policy 的缺省不该被这次改动顺手改掉：`run-agent` 的 CLI 缺省是 3600 秒，"
-        "而框架缺省仍是 900 秒 —— 两者不同是刻意的，但都必须说得出出处")
+    # ⚠️ 2026-10-15 业主裁定 C4：框架缺省从 900 s（15 分钟）抬到 14,400 s（4 小时）——
+    # T5 第 8 趟那种"开 thinking 的整趟研究"实测跑了 52 分钟，900 秒会从中间掐断它。
+    # 这条断言同时钉住"CLI 的 3600 与框架缺省是两个数"这件事：抬缺省之后
+    # 框架缺省（14,400）反而比 `run-agent` 的 CLI 缺省（3600）宽 —— 这是刻意的：
+    # CLI 那一档是"用户显式跑一趟"的常用值，policy 那一档是"谁都没给时的兜底"。
+    assert P.Policy().wall_clock_sec == 14_400, (
+        "policy 的缺省见业主 2026-10-15 裁定 C4；`run-agent` 的 CLI 缺省仍是 3600 秒，"
+        "两者不同是刻意的，但都必须说得出出处")
 
     st, cond, registry, root = _wired(tmp_path)
     reset_cache()
@@ -190,7 +205,7 @@ def test_the_wall_clock_is_configurable_and_live(tmp_path: pathlib.Path) -> None
     assert wiring["conductor"].policy.wall_clock_sec == 7.0, (
         "显式传进去的 policy 必须被主控真的用上（不是收下就扔）—— "
         "这一读数是反真空的：主控的 policy 是它在内部新建的，7.0 只可能来自这次的实参"
-        "（缺省是 900，见下一条断言）")
+        "（缺省是 14,400，见上一条断言）")
     # 负控：非法值当场抛 —— 证明这个旋钮是活的，不是装饰
     with pytest.raises(ValueError):
         P.Policy(wall_clock_sec=0)

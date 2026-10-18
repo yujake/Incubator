@@ -50,7 +50,7 @@ TOOLS = Path(__file__).resolve().parents[1] / "src" / "agentflow" / "tools"
 INVISIBLE_OK_SITES: dict[str, int] = {
     "attack_tools.py": 1,
     "doc_tools.py": 2,
-    "fs_tools.py": 6,
+    "fs_tools.py": 7,
     "ocr_tools.py": 1,
     "review_tools.py": 1,
     "search_tools.py": 3,

@@ -246,11 +246,31 @@ class _RegisterStatement:
             return _refuse("bad_evidence_kind",
                            f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
                            "（它是证据**强度**，不是来源；来源走 source_lit_id）")
+        # ---- 2026-10-16（亲测 B 时加的）：**把缺的出处字段一次说齐** --------------
+        # 这一格原本是"一次只点名一条"（实测要走 bad_origin → missing_quote_reason →
+        # missing_page_range **三轮**才凑齐）。业主口径："真实智能体也会在这里困惑并
+        # 浪费 token" ⇒ 保留每条的 kind 与原文案不动，只在拒信里补一行**整份清单**。
+        _page_now = dict(page_norm)
+        _missing: list[str] = []
+        if str(origin) == "external_lit" and not str(source_lit_id or "").strip():
+            _missing.append("source_lit_id")
+        if quote_verified is not True and not str(quote_reason or "").strip():
+            _missing.append("quote_reason")
+        if str(origin) == "external_lit" and not (
+                _page_now.get("start") or str(_page_now.get("label") or "").strip()):
+            _missing.append("page_range")
+        if str(origin) == "own_result" and not (
+                str(doc_id or "").strip()
+                or dict(line_norm).get("start")
+                or str(dict(line_norm).get("label") or "").strip()):
+            _missing.append("doc_id/line_range")
+        _all_missing = (" **这一笔还缺**：" + "、".join(_missing)
+                        + " —— 一次给齐就不用再来回问。") if _missing else ""
         lit_id = str(source_lit_id or "").strip()
         if origin == "external_lit" and not lit_id:
             return _refuse("missing_source",
                            "origin='external_lit' 时必须给 source_lit_id —— "
-                           "从文献摘的命题必须有出处（没有出处的摘录就是二手结论）")
+                           "从文献摘的命题必须有出处（没有出处的摘录就是二手结论）" + _all_missing)
         if quote_verified is not True and not str(quote_reason or "").strip():
             # 这一条不按 origin 放宽（本轮试过：被 `test_action_surface_matches_acceptance`
             # 那条"每一级缺失都被拒"的梯子当场判红）：三态纪律管的是"盘上那一格不许留白"，
@@ -259,7 +279,7 @@ class _RegisterStatement:
             # （定理内容 + 证明过程），不是把三态纪律免掉。
             return _refuse("missing_quote_reason",
                            "quote_verified 不是 True 时必须给 quote_reason —— "
-                           "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）")
+                           "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）" + _all_missing)
         # 出处：「填了形状不算填了内容」（`draft/37` §68 的第十二/十三趟真机读数），
         # 而"出处是哪一栏"按来源分档（§68 人裁的甲档，与审稿判据逐条对齐）。
         #
@@ -277,7 +297,7 @@ class _RegisterStatement:
                                "`page_range` 要么给 start（可带 end），要么给 label"
                                "（例如「全文未分页」「附录 A」）—— 只传 "
                                "`{\"start\": null, \"end\": null}` 等于没给，"
-                               "审稿判据会判这一行缺出处页码")
+                               "审稿判据会判这一行缺出处页码" + _all_missing)
         #: 这一笔是不是"自产命题但证明还没做完"（F-05 的待办那一档）。
         #: 必须在两个分支之外先给默认值：它下面要在返回值里用到，而
         #: `external_lit` 那一支不会走到 `own_result` 那一支里 —— 第一版把赋值写在
@@ -292,7 +312,7 @@ class _RegisterStatement:
                                "`page_range` 要么给 start（可带 end），要么给 label"
                                "（例如「全文未分页」「附录 A」）—— 只传 "
                                "`{\"start\": null, \"end\": null}` 等于没给，"
-                               "审稿判据会判这一行缺出处页码")
+                               "审稿判据会判这一行缺出处页码" + _all_missing)
         elif str(origin) == "own_result":
             line = dict(line_norm)
             if not (str(doc_id or "").strip()
@@ -301,7 +321,7 @@ class _RegisterStatement:
                                "origin='own_result' 时必须给我们自己的出处："
                                "`doc_id`（我方稿件那一行的 id）或 `line_range`"
                                "（start / label 至少一个）—— 自有结果的出处不是"
-                               "「文献第几页」，那一栏要它等于让它编一个数字")
+                               "「文献第几页」，那一栏要它等于让它编一个数字" + _all_missing)
             # 第五级（§87）：自产命题的证明。
             #
             # F-05（主控裁定，2026-10-06）改的这一格：以前这里 `_refuse`，于是

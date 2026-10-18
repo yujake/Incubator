@@ -1,23 +1,26 @@
-"""FC-19（token 预算是硬约束、重试也计入）的测试。
+"""FC-19（花销是硬约束、重试也计入）的测试。
 
 ## 判据逐条对应
 
 FC-19 的三条判据（`test/test2/LESSONS.md` §6.5）：
 
-1. 每个子任务有 token 上限与最长轮次，超额即降级或返回当前最好答案
+1. 每个子任务有**上限**，超额即降级或返回当前最好答案
    → `TokenMeter.guard()`：`allowed=False` 时在开工前拒绝；
    调用方（F 的攻坚 / 编排层）据此降级并交出 `best_partial`。
+   ⚠️ **2026-10-15 业主裁定 A1/A2/A3/A7 把这条的上限从 token 改成钱**
+   （「我们不卡 token，只卡总花销的钱」）：`budget_tokens` 那一格已删，
+   判据只剩 `budget_usd`。理由见 `draft/121`（卡 token 卡的正是"它想清楚"那一段）。
 2. 重试计入预算（可判定：注入 N 次失败重试后，消耗 ≥ N × 单次成本）
    → `Charge.attempts` 参与 `tokens`；`test_retries_are_charged_individually` 就是那条判据。
 3. D 向 A 提问的预算必须已定值并写进配置
-   → 这一条落在"预算从配置来"，本文件由 `TokenMeter(budget_tokens=...)` 的形状体现；
-   实际的配置接线在 `Policy.token_budget` 与 `run_*` 的装配处（尚未接线，见文末注释）。
+   → 这一条落在"预算从配置来"，本文件由 `TokenMeter(budget_usd=...)` 的形状体现；
+   实际的配置接线在 `Policy.usd_budget` 与 `budget.limit_usd(root)`（总账）两处。
 
 ## 为什么这一条最后才做
 
-数据结构（`UsageEntry` / `usage_ledger` / `Policy.token_budget` / `CancelToken.token_budget`）
-早就备好了，但没有任何东西把花销记进去、也没有任何东西据此说"不"。
-"有表、有字段、有测试"与"真的会拦"是两件事 —— 本文件测的是后者。
+数据结构（`UsageEntry` / `usage_ledger`）早就备好了，但没有任何东西把花销记进去、
+也没有任何东西据此说"不"。"有表、有字段、有测试"与"真的会拦"是两件事 ——
+本文件测的是后者。**token 只测"记得住"，不测"拦得住"** —— 它不拦。
 """
 
 from __future__ import annotations
@@ -176,25 +179,32 @@ def test_guard_is_not_limited_when_no_budget_is_configured(store):
     assert "未设预算" in r.reason and "没有生效" in r.reason
 
 
-def test_guard_refuses_before_work_when_the_estimate_would_overshoot(store):
-    """判据①：超额要在开工前拒绝，而不是做到一半再停。"""
-    m = _meter(store, budget_tokens=1000)
-    m.charge(Charge(role="A", scope="search", tokens_in=900, note="先花掉 900"))
-    r = m.guard(estimate_tokens=200)
-    assert r.limited is True and r.allowed is False
-    assert "在开工前拒绝" in r.reason and r.remaining_tokens == 100
+def test_guard_refuses_before_work_when_the_budget_is_spent(store):
+    """判据①：拒绝要在开工前发生，而不是做到一半再停。
 
-    ok = m.guard(estimate_tokens=50)
-    assert ok.allowed is True and ok.remaining_tokens == 100
+    ⚠️ 2026-10-15 业主裁定 A1/A2/A3/A7 之后，这一轴**只剩钱**：
+    此前这里是 `budget_tokens=1000` + "预估 200 会超"（一条按 token 的**预计值**闸）。
+    那条闸删掉了 —— 它拦的正是"这一步想得多一点"。现在的判据是钱：
+    已经花光（`spent >= budget`）⇒ 拒绝新工作。
+    """
+    m = _meter(store, budget_usd=0.01)
+    m.charge(Charge(role="A", scope="search", tokens_in=900, usd=0.004, note="先花掉一点"))
+    assert m.guard().allowed is True, "还没花光 ⇒ 放行"
+    m.charge(Charge(role="A", scope="search", tokens_in=900, usd=0.006, note="花光了"))
+    r = m.guard()
+    assert r.limited is True and r.allowed is False
+    assert "已经超出预算" in r.reason and r.remaining_usd == 0.0
 
 
 def test_guard_refuses_when_already_over_budget(store):
     """已经超了 ⇒ 拒绝（且 reason 给出实际数字，可复核）。"""
-    m = _meter(store, budget_tokens=100)
-    m.charge(Charge(role="A", scope="search", tokens_in=150, note="超了"))
+    m = _meter(store, budget_usd=0.01)
+    m.charge(Charge(role="A", scope="search", tokens_in=150, usd=0.02, note="超了"))
     r = m.guard()
     assert r.allowed is False and "已经超出预算" in r.reason
-    assert r.spent_tokens == 150 and r.budget_tokens == 100
+    assert r.spent_usd == 0.02 and r.budget_usd == 0.01
+    # 负控：token 花得再多也不进这个判据（裁定 A7）
+    assert r.spent_tokens == 150 and not hasattr(r, "budget_tokens")
 
 
 def test_charge_still_records_when_over_budget(store):
@@ -203,21 +213,27 @@ def test_charge_still_records_when_over_budget(store):
     拦住新工作的权力在 `guard()`（开工之前），不在 `charge()`（做完之后）。
     把两者混起来会得到一个既不准又拦不住的账本。
     """
-    m = _meter(store, budget_tokens=100)
-    got = m.charge(Charge(role="A", scope="search", tokens_in=500, note="已经花了"))
+    m = _meter(store, budget_usd=0.01)
+    got = m.charge(Charge(role="A", scope="search", tokens_in=500, usd=0.02, note="已经花了"))
     assert got["recorded"] is True and got["over_budget"] is True
     assert len(store.rows("usage_ledger")) == 1
     assert "账照样记" in got["reason"]
 
 
 def test_zero_budget_is_not_the_same_as_no_budget(store):
-    """负控（三态）：`budget_tokens=0` 与 `None` 语义不同。
+    """负控（三态）：`budget_usd=0` 与 `None` 语义不同。
 
     `None` = 没设预算（不限制）；`0` = 预算为零（什么都不准做）。
     合并这两者会让"忘了配"看起来像"配成了零"。
     """
-    with pytest.raises(ValueError, match="必须为正"):
-        _meter(store, budget_tokens=0)
+    zero = _meter(store, budget_usd=0.0)
+    r = zero.guard()
+    assert r.limited is True and r.allowed is False, "预算为零 ⇒ 什么都不准做"
+    assert "已经超出预算" in r.reason
+    none = _meter(store)
+    assert none.guard().limited is False and none.guard().allowed is True, "没设预算 ⇒ 不限制"
+    with pytest.raises(ValueError, match="不能为负"):
+        _meter(store, budget_usd=-1.0)
 
 
 def test_by_role_attributes_the_spend(store):
@@ -232,13 +248,10 @@ def test_by_role_attributes_the_spend(store):
 
 # ============================================================ 与预算守卫的接缝
 #
-# 接线状态（如实登记）：`TokenMeter` 现在是一个可用的记账+守卫，
-# 但 `src/agentflow/` 里还没有调用方（`Policy.token_budget` 与
-# `CancelToken.token_budget` 是配置位，`conductor` 尚未调 `guard`）。
-# 这条与 FC-17 当时的情形一样（"有骨架、没接线"）——
-# 接线点已定位：`conductor.summon()` 在过策略时调 `guard(estimate)`，
-# 各 agent 的 `_call` 在调用后 `charge(...)`。
-# 在那之前，本文件测的是机制，不是"框架已经在限流"。
+# 接线状态（2026-10-15 更新）：`TokenMeter` 已经是**接线过的**——
+# `conductor._meter_guard()` 在每次召唤开工前调 `guard()`（唯一的拒绝点），
+# `conductor._charge_and_settle()` 在收尾时记一笔。
+# 仍然成立的那条纪律：token 只被记，不被判；判的只有钱。
 
 
 def test_meter_does_not_touch_other_tables(store):

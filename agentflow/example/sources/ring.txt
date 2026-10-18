@@ -1,0 +1,1 @@
+A ring is a set with two operations; a field is a ring in which every nonzero element has a multiplicative inverse.

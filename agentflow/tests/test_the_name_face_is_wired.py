@@ -112,7 +112,7 @@ def test_a_summon_with_a_brief_registers_the_roster(tmp_path: pathlib.Path):
 
     st, cond, reg, gateways, root = _wired(
         tmp_path,
-        {"M": [json.dumps({"summon": {"role": "D", "action": "write_report", "params": {},
+        {"M": [json.dumps({"summon": {"role": "D", "task": "派活：写一份报告", "params": {},
                                       "brief": "把 X 的族构造证据补齐", "why": "试一试"}},
                           ensure_ascii=False),
                json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)],

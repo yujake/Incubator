@@ -153,7 +153,7 @@ def build_fixtures(root: Path) -> Path:
         ),
     ]
     cpath = fixtures / "candidates.json"
-    cpath.write_text(json.dumps({"candidates": candidates}, ensure_ascii=False, indent=2), encoding="utf-8")
+    cpath.write_text(json.dumps({"candidates": candidates}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     return cpath
 
 
@@ -269,7 +269,7 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
                 "max_downloads_per_request": 25},
     )
     out_a = agent_a.run()
-    log(f"\n[2] A 智能体跑完：{json.dumps(out_a, ensure_ascii=False)}")
+    log(f"\n[2] A 智能体跑完：{json.dumps(out_a, ensure_ascii=False, default=str)}")
 
     # ---------------- 3. B 智能体：整理 ----------------
     agent_b = AgentB(
@@ -280,11 +280,11 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
                 "quote_widen_pages": 1, "allow_fulltext_quote_fallback": False},
     )
     out_b = agent_b.run()
-    log(f"\n[3] B 智能体跑完：{json.dumps(out_b, ensure_ascii=False)}")
+    log(f"\n[3] B 智能体跑完：{json.dumps(out_b, ensure_ascii=False, default=str)}")
 
     # ---------------- 4. 幂等重跑：A 再来一次 ----------------
     out_a2 = agent_a.run()
-    log(f"\n[4] A 智能体重跑（应无待办）：{json.dumps(out_a2, ensure_ascii=False)}")
+    log(f"\n[4] A 智能体重跑（应无待办）：{json.dumps(out_a2, ensure_ascii=False, default=str)}")
 
     # ---------------- 5. 统计与校验 ----------------
     log("\n[5] 各表统计")

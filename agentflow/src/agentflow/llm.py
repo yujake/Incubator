@@ -361,7 +361,11 @@ class RuleExtractor:
 
     #: 无文本层时，本抽取器不做任何猜测（返回空），使 §6.3 的
     #: "因无文本层未能校验"成为一句可核查的事实，而不是靠报告口径。
-    def __init__(self, *, max_relations: int = 500) -> None:
+    def __init__(self, *, max_relations: int = 10_000) -> None:
+        # ⚠️ 2026-10-15 业主裁定 D2：500 → 10,000。500 是一条**静默截断**
+        # （多出来的关系直接 `[:500]` 丢掉，台账上不留一个字），而"限制产出"
+        # 正是裁定要求删掉或抬高的那一类：一本 468 页的书里真关系上千条是正常的。
+        # 10,000 是"几乎不可能由正常文献触发"的量级，留着只为挡住解析失控。
         self.max_relations = max_relations
 
     # -- 内部工具 ---------------------------------------------------------- #
@@ -831,18 +835,57 @@ class LLMExtractor:
         client: Any,
         prompt_template: str = DEFAULT_PROMPT_TEMPLATE,
         *,
-        max_chars: int = 60_000,
-        max_relations: int = 500,
+        max_chars: int | None = None,
+        max_relations: int = 10_000,
+        chunk_chars: int = 10_000,
     ) -> None:
         if not hasattr(client, "complete"):
             raise TypeError("client 必须提供 complete(prompt: str) -> str 方法")
         self.client = client
         self.prompt_template = prompt_template
-        # 字符上限：LLM 有上下文窗口，超长输入必须显式截断或拒绝。这里
-        # 选择"截断到 max_chars"并记录在 report 里，因为对 LLM 抽取而言
-        # 少读几页只是召回下降，不会产生假事实；而抛异常会让整篇文献卡住。
+        # 字符上限：`None`（缺省）= **不截断**。
+        #
+        # ⚠️ 2026-10-15 业主裁定 D1：缺省从 `60_000` 改成 `None`。那一格此前是一条
+        # **静默截断**：一本 468 页、131 万字符的书只喂了前 60,000 字符（4.5%），
+        # 而台账上没有任何一行说"这篇只读了 4.5%" —— 抽取结果看起来是"这本书
+        # 只有前几页有概念"。裁定标准是「凡是可能阻止智能体完成大项目的
+        # （限制输入…），删或把触发水平抬高到几乎不可能触发」。
+        #
+        # 生产路径现在根本走不到这里：真正发出去的是 `_chunk_bodies` 切出来的每一块
+        # （见 `chunk_chars`），整篇渲染只剩两个用途 —— `build_prompt` 的读数与
+        # 既有判据。留着这个参数是为了让"想量一整篇有多大"的调用方能显式限量。
         self.max_chars = max_chars
         self.max_relations = max_relations
+        #: 一次调用最多让模型读多少**正文字符**（`build_prompt` 的 body 口径）。
+        #:
+        #: ## 为什么必须有这一格（2026-10-15，T5 第 8 趟 `t5h` 的实测阈值）
+        #:
+        #: 抽取此前是"**一整篇一次调用**、吐一个大 JSON"，而输出额度
+        #: （当时是 `ModelSpec.max_tokens`；抽取那条路显式给 8192）是**推理与正文共用**的。
+        #: ⚠️ 那一格已在 2026-10-15 按业主裁定删掉（「我们不卡 token，只卡总花销的钱」，
+        #: 见 `modelgw.ModelSpec` 的注释），所以"额度被推理吃光"这一条不再由我们设；
+        #: 但**切块的判据不依赖那一格**：它依赖的是下面这批实测读数（当时的口径下取得），
+        #: 以及"一整篇喂进去时召回与稳定性都随长度崩掉"这个现象本身。输入一大，
+        #: 推理就长到把预算吃光（`finish_reason=length`、正文 0 字、思维链两三万字）
+        #: ⇒ `output_exhausted` ⇒ **产出一个字都没回来**。那一趟逐篇实测
+        #: （同一模型、同一批文件）：
+        #:
+        #:   正文字符     结局
+        #:     10,396    ✓ 抽出来了
+        #:      1,399    ✓
+        #:         55    ✓
+        #:         94    ✓
+        #:      2,720    ✗ 上游 900 秒超时（另一档）
+        #:     22,874    ✗ output_exhausted（思维链 28,080 字）
+        #:     35,213    ✗（33,349 字）
+        #:     54,837    ✗（39,076 字）
+        #:     81,903    ✗（26,995 字；已被 `max_chars` 截到 60,000 再喂）
+        #:  1,319,328    ✗（32,039 字；468 页的书，同样只喂了前 60,000 字符）
+        #:
+        #: 一万那一档稳定成功、两万二那一档稳定失败 —— 那条线就是"这一篇一次做得完吗"。
+        #: 取**保守侧**（一万字符）切块：既让大文献真的做得完，也让它不再被
+        #: `max_chars` 砍成"只有前几页"。
+        self.chunk_chars = max(1_000, int(chunk_chars))
         # 剔除计数在 __init__ 里先置零：_ground_relations 之外若有人读
         # last_report（例如无文本层提前返回的路径），不会 AttributeError。
         self._dropped_count: int = 0
@@ -861,6 +904,17 @@ class LLMExtractor:
         模型必须知道"第几页"，否则 ``page_range`` 只能靠猜，§6.3 的
         "±1 页扩大窗口"就永远命中不了。标记行独占一行，因此任一页内的文字
         仍是 ``doc.text`` 的连续子串——引文回验不受影响。
+
+        这是**整篇**那一版的渲染（保留给"看整篇要喂多少"的读数与既有判据）；
+        真正发出去的是 :meth:`_chunk_bodies` 切出来的每一块。
+        """
+        body, truncated = self._body_of(doc)
+        return self._render(body, lit_id), truncated
+
+    def _body_of(self, doc: "DocumentText") -> tuple[str, bool]:
+        """整篇正文（带页码标记）+ 有没有因为 ``max_chars`` 被截断。
+
+        ``max_chars=None``（缺省）⇒ 不截断、`truncated` 恒为 False（裁定 D1）。
         """
         if doc.pages:
             body = "\n".join(
@@ -870,16 +924,61 @@ class LLMExtractor:
             body = doc.text
 
         truncated = False
-        if len(body) > self.max_chars:
+        if self.max_chars is not None and len(body) > self.max_chars:
             body = body[: self.max_chars]
             truncated = True
+        return body, truncated
 
-        # 用 replace 而非 format：模板含大量 JSON 花括号，理由见模板注释。
-        prompt = (
-            self.prompt_template.replace("{LIT_ID}", str(lit_id))
-            .replace("{DOCUMENT_TEXT}", body)
-        )
-        return prompt, truncated
+    def _render(self, body: str, lit_id: str) -> str:
+        """把一段正文渲染成提示词（用 replace 而非 format：模板含大量 JSON 花括号）。"""
+        return (self.prompt_template.replace("{LIT_ID}", str(lit_id))
+                .replace("{DOCUMENT_TEXT}", body))
+
+    def _chunk_bodies(self, doc: "DocumentText") -> list[tuple[str, bool]]:
+        """把正文切成"一次做得完"的若干块，返回 ``[(body, truncated), …]``。
+
+        ## 切法（`chunk_chars` 那一格的理由见 `__init__`）
+
+        **按页切，不切碎页**：一页要么整页进某一块，要么（单页就超过 `chunk_chars` 时）
+        自己单独成一块并截到 `chunk_chars`。为什么不切碎页：`<<<PAGE n>>>` 标记是
+        `page_range` 的唯一来源，把一页切成两半会让"这一段在第几页"说不清 ——
+        而 page_range 是引文回验的输入之一。
+
+        块数上界 = `ceil(总字符 / chunk_chars)`，所以这一格同时是**成本上界**：
+        一篇 131 万字符的书最多切出 132 块（每块一次调用），不会被一次调用噎死。
+        """
+        if not doc.pages:
+            text = doc.text or ""
+            out: list[tuple[str, bool]] = []
+            for i in range(0, max(1, len(text)), self.chunk_chars):
+                seg = text[i:i + self.chunk_chars]
+                out.append((seg, len(seg) < len(text) and i + self.chunk_chars < len(text)))
+            return out or [("", False)]
+
+        chunks: list[tuple[str, bool]] = []
+        cur: list[str] = []
+        cur_len = 0
+
+        def _flush() -> None:
+            nonlocal cur, cur_len
+            if cur:
+                chunks.append(("\n".join(cur), False))
+                cur, cur_len = [], 0
+
+        for i, page in enumerate(doc.pages):
+            marker = f"<<<PAGE {i + 1}>>>\n"
+            one = marker + page
+            if len(one) > self.chunk_chars:
+                # 单页就超限：它自己一块，截断（并在 report 里记一笔"截断过"）。
+                _flush()
+                chunks.append((one[: self.chunk_chars], True))
+                continue
+            if cur_len + len(one) + 1 > self.chunk_chars:
+                _flush()
+            cur.append(one)
+            cur_len += len(one) + 1
+        _flush()
+        return chunks or [("", False)]
 
     # -- extract ----------------------------------------------------------- #
 
@@ -894,6 +993,14 @@ class LLMExtractor:
           没有正文可引用，模型只能靠标题/元数据编故事；而 §6.3 明确要求
           这种情况记 "未能校验" 而不是硬凑结果。
         - ``quote`` 回验失败 ⇒ 剔除该条关系并计数（``_ground_relations``）。
+        - **分块抽**（2026-10-15，T5 第 8 趟的实测阈值；理由见 ``chunk_chars``）：
+          一次调用只喂一块。此前是"整篇一次调用"，输入一过两万字符，推理就把
+          输出预算吃光（`output_exhausted`）、**产出一个字都回不来** ——
+          那一趟 5 篇大文献（2.2 万 ~ 131 万字符）全部卡死在这上面。
+        - **一块失败不拖垮整篇**：某一块的调用失败（或那一块的回包解析不出来）
+          只记一笔、继续下一块 —— 已经拿到的产出不再被丢掉。**全部**块都失败
+          才抛 ``ExtractionError``（调用方那条失败路径与读数不变：抽取失败 ⇒
+          不置 `processed` ⇒ 留给租约重试）。
         """
         if not doc.pages or not doc.text.strip():
             self._dropped_count = 0
@@ -902,6 +1009,8 @@ class LLMExtractor:
                 "lit_id": lit_id,
                 "skipped": "no_text_layer",
                 "truncated": False,
+                "chunks": 0,
+                "chunks_failed": 0,
                 "concepts": 0,
                 "relations_kept": 0,
                 "relations_dropped": 0,
@@ -910,23 +1019,108 @@ class LLMExtractor:
             logger.info("LLMExtractor: 文献 %s 无文本层，跳过抽取（§6.3）", lit_id)
             return [], []
 
-        prompt, truncated = self.build_prompt(doc, lit_id)
-        raw = self.client.complete(prompt)
-        payload = parse_llm_json(raw)
+        bodies = self._chunk_bodies(doc)
+        concepts: list[ConceptDraft] = []
+        relations: list[RelationDraft] = []
+        dropped = 0
+        reasons: list[str] = []
+        truncated = False
+        failures: list[dict[str, Any]] = []
+        # 读数先清空：`_ground_relations` 是**就地覆写**这两个字段的，
+        # 不清的话"这一篇的剔除数"会带上上一篇的尾巴（同一个 extractor
+        # 实例连续抽多篇是正常用法：B 的 run_once 就是这么循环的）。
+        self._dropped_count = 0
+        self._drop_reasons = []
+        for idx, (body, cut) in enumerate(bodies):
+            truncated = truncated or cut
+            try:
+                raw = self.client.complete(self._render(body, lit_id))
+                payload = parse_llm_json(raw)
+            except Exception as exc:  # noqa: BLE001 —— 一块失败不拖垮整篇（见 docstring）
+                failures.append({"chunk": idx, "error": f"{type(exc).__name__}: {exc}"})
+                logger.warning("LLMExtractor: 文献 %s 第 %d/%d 块抽取失败：%s",
+                               lit_id, idx + 1, len(bodies), exc)
+                continue
+            concepts.extend(self._build_concepts(payload, lit_id))
+            relations.extend(self._ground_relations(payload, doc))
+            dropped += self._dropped_count
+            reasons.extend(self._drop_reasons)
 
-        concepts = self._build_concepts(payload, lit_id)
-        relations = self._ground_relations(payload, doc)
+        if failures and not concepts and not relations:
+            # 全灭：照旧抛（"这一篇没抽成"必须能被调用方看见并如实处置）。
+            raise ExtractionError(
+                f"文献 {lit_id} 的 {len(failures)}/{len(bodies)} 块全部抽取失败："
+                + "；".join(f"[块 {f['chunk'] + 1}] {f['error']}" for f in failures[:3]))
 
+        merged_concepts = self._merge_concepts(concepts)
+        merged_relations = self._merge_relations(relations)[: self.max_relations]
+        self._dropped_count = dropped
+        self._drop_reasons = reasons
         self.last_report = {
             "lit_id": lit_id,
             "truncated": truncated,
-            "concepts": len(concepts),
-            "relations_kept": len(relations),
-            "relations_dropped": self._dropped_count,
-            "drop_reasons": list(self._drop_reasons),
+            "chunks": len(bodies),
+            "chunks_failed": len(failures),
+            "chunk_failures": failures[:5],
+            "concepts": len(merged_concepts),
+            "relations_kept": len(merged_relations),
+            "relations_dropped": dropped,
+            "drop_reasons": list(reasons),
         }
-        return concepts, relations
+        return merged_concepts, merged_relations
 
+    @staticmethod
+    def _merge_concepts(drafts: list[ConceptDraft]) -> list[ConceptDraft]:
+        """跨块合并概念：**同名只留一条**（定义并起来、别名取并集）。
+
+        为什么必须合并：分块之后同一本书的概念会在多块里各出现一次，直接交给
+        agent_b 会让"跨块"变成"两套 ID"——而 agent_b 的解析是按名字做的，
+        重复名字会走到它的复用分支，白跑一次锁内的判重。
+        """
+        out: dict[str, ConceptDraft] = {}
+        for d in drafts:
+            key = (d.name or "").strip()
+            if not key:
+                continue
+            prev = out.get(key)
+            if prev is None:
+                out[key] = d
+                continue
+            # 定义并起来：只在"新的一段确实带来了新信息"时追加，
+            # 并且**空定义不许留下一个孤零零的分号**（那条 bug 会在正文里
+            # 读成"；balabal"—— 而它看起来像排版问题，不像数据问题）。
+            merged = prev.definition or ""
+            extra = (d.definition or "").strip()
+            if extra and extra not in merged:
+                merged = f"{merged}；{extra}" if merged else extra
+            aliases = list(dict.fromkeys(list(prev.aliases) + list(d.aliases)))
+            out[key] = ConceptDraft(
+                name=prev.name,
+                definition=merged,
+                aliases=aliases,
+                source_lit_id=prev.source_lit_id or d.source_lit_id,
+            )
+        return list(out.values())
+
+    @staticmethod
+    def _merge_relations(drafts: list[RelationDraft]) -> list[RelationDraft]:
+        """跨块合并关系：**同一对概念 + 同一句原话**只留一条。
+
+        判重的键取 `(concept_names 排序后, quote)` 而不是整条 description：
+        description 是模型的话（同一件事换个说法很常见），而**原话**是它必须
+        逐字给出的东西 —— 拿原话当键，重复的会被合掉，而"同一对概念、两段不同
+        原话"是两条真关系，不该被合。
+        """
+        out: list[RelationDraft] = []
+        seen: set[tuple[tuple[str, ...], str]] = set()
+        for d in drafts:
+            key = (tuple(sorted(str(x).strip() for x in (d.concept_names or []))),
+                   str(d.quote or "").strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(d)
+        return out
     # -- 内部：构建与回验 --------------------------------------------------- #
 
     def _build_concepts(
@@ -1267,8 +1461,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
                             },
                         ],
                     },
-                    ensure_ascii=False,
-                )
+                    ensure_ascii=False,default=str)
                 + "\n```\n希望有帮助！"
             )
 

@@ -138,6 +138,65 @@ def test_overclaim_markers_and_disclaimer_are_not_a_second_copy():
     assert CA._cross_check_disclaimer() == DT.CROSS_CHECK_DISCLAIMER
 
 
+def test_every_claimanatomy_code_lands_on_a_registered_finding_kind():
+    """FC-03 跨层：`claimanatomy` 的每个 code 都必须登记进落据表（2026-10-15 补）。
+
+    两层词表：`claimanatomy` 的 `code` 是**判据层**的词，`schema.FINDING_KINDS`
+    是**落库层**的词，中间那张 `doc_tools._FINDING_KIND_OF_CODE` 是唯一的桥。
+    桥缺一条 ⇒ :func:`doc_tools._finding_kind_of` 抛 `KeyError`。
+
+    真机现场（2026-10-15，`example/LANDING.md`）：`uncontrolled_disclaimer`
+    （2026-10-13 新加，登记进了 `CLAIM_FAMILY_BY_CODE` 与 `test_lean_switch`）
+    **漏了这张表** ⇒ `G.build_document` 整条失败、稿件渲染不出来，
+    而全量判据全绿 —— 因为 `test_lean_switch` 只走到 `validate_claim`，
+    没有任何一条跨过这座桥。这条路就是这座桥的看门人。
+
+    方向是单向的：`claimanatomy` 产的 code 必须**全**在表里；
+    表里可以多出 `checker_error`（那是 `doc_tools` 自己的 code，不由 `claimanatomy` 产）。
+    """
+    produced = set(CA.CLAIM_FAMILY_BY_CODE)
+    registered = set(DT._FINDING_KIND_OF_CODE)
+    missing = sorted(produced - registered)
+    assert not missing, (
+        "这些 claimanatomy code 没有登记到落据表 —— `_finding_kind_of` 会抛 "
+        f"KeyError，于是 G 渲染不出稿件：{missing}"
+    )
+    for code in sorted(produced):
+        kind = DT._FINDING_KIND_OF_CODE[code]
+        assert kind in S.FINDING_KINDS, (code, kind)
+
+    # 负控：这张表是**承重的** —— 未登记的 code 真的会炸，
+    # 所以上面的集合差不是一条恒真的空断言。
+    class _Unregistered:
+        code = "__not_a_real_code__"
+
+    with pytest.raises(KeyError):
+        DT._finding_kind_of(_Unregistered())
+
+
+def test_a_self_written_disclaimer_reaches_scan_claim_without_crashing():
+    """跨层正控：真把 `uncontrolled_disclaimer` 走一遍 `scan_claim`（当年炸的就是这一跳）。
+
+    同题判据（`test_lean_switch.py::test_a_self_written_disclaimer_does_not_pass`）
+    止步于 `claimanatomy.validate_claim`，而真机炸在
+    `doc_tools.scan_claim` → `_finding_kind_of`。这条从判据层一路走到落据层，
+    两头都钉：**不抛**，且 kind 是语义对的 `unsupported_claim`（不是兜底的 `garbled`）。
+    """
+    claim = {
+        "claim_id": "claim-1", "section": "§1", "text": "谱落在区间内。",
+        "evidence_kind": "cross_check", "citations": ["exp:0000"],
+        # 拿错那一档的受控声明：这句本身是受控字符串，只是属于 `proof_review`
+        # 而不是 `cross_check` ⇒ 恰好触发 `uncontrolled_disclaimer`（不是 missing）。
+        "disclaimer": DT.PROOF_REVIEW_DISCLAIMER, "is_negative": False,
+    }
+    res = DT.scan_claim(claim)          # 2026-10-15 之前这里抛 KeyError
+    hit = [f for f in res["findings"] if f["code"] == "uncontrolled_disclaimer"]
+    assert len(hit) == 1, res["findings"]
+    assert hit[0]["kind"] == "unsupported_claim", hit[0]
+    assert all(f["kind"] in S.FINDING_KINDS for f in res["findings"])
+    assert res["checked"] is True
+
+
 # ============================================================ 2. 存储往返（前置事实）
 
 

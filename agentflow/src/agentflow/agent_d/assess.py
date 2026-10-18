@@ -4,6 +4,9 @@
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from ._support import analyze_gaps, question_keywords
 
 class _Assess:
@@ -26,16 +29,30 @@ class _Assess:
         if ev.get("c_queries") is None:
             ev["c_queries"] = self.probe_c(qid)
         qrow = next((r for r in self.store.rows("research_questions") if r.get("question_id") == qid), None) or {}
-        concepts = ev.get("l2") or []
-        degree = max((int(c.get("degree") or 0) for c in concepts), default=0)
+        # 2026-10-17（agents #4 同族）：`l2` / `c_queries` 也是自由形状 —— 只留 Mapping 元素，
+        # 否则 `c.get("name")` 会在 str 上抛 `AttributeError`。
+        _l2 = ev.get("l2")
+        concepts = [c for c in _l2 if isinstance(c, Mapping)] if isinstance(_l2, (list, tuple)) else []
+        # 2026-10-17（agents #5）：`evidence.l2` 的元素没做类型校验，`int("abc")` 会抛。
+        def _degree_of(item: Any) -> int:
+            if not isinstance(item, Mapping):
+                return 0
+            try:
+                return int(item.get("degree") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        degree = max((_degree_of(c) for c in concepts), default=0)
 
         keywords = question_keywords(
             qrow.get("question") or ev.get("question") or "",
             extra=[c.get("name") or "" for c in concepts],
         )
         verdict = analyze_gaps(
-            [c["relation_id"] for c in ev.get("claims") or []],
-            ev.get("claims") or [],
+            # 2026-10-17（agents #4）：`claims` 可能是 str 或 `{代号: 行}` 字典 ——
+            # 只收 Mapping 元素（字典按值迭代，`c["relation_id"]` 就不会撞到 str）。
+            [c["relation_id"] for c in _claim_rows(ev.get("claims"))],
+            _claim_rows(ev.get("claims")),
             keywords=keywords,
             degree=degree,
             degree_threshold=self.degree_threshold,
@@ -50,9 +67,24 @@ class _Assess:
                 "sufficient": not verdict["insufficient"],
                 "l3_needed": self._l3_needed(verdict, ev),
                 "c_queries": list(ev.get("c_queries") or []),
-                "c_evidence": self._c_summary(ev.get("c_queries") or []),
+                "c_evidence": self._c_summary(
+                [c for c in (ev.get("c_queries") or [])
+                 if isinstance(c, Mapping)] if isinstance(ev.get("c_queries"), (list, tuple)) else []),
                 "c_wiring": dict(self.c_wiring),
             }
         )
         self.last_assessment = verdict
         return verdict
+
+
+def _claim_rows(value: Any) -> list:
+    """把 `evidence["claims"]` 收成"元素都是 Mapping 的列表"（子代理 agents #4）。
+
+    它可能是 `None`、一个 str、或 `{代号: 行}` 的字典 —— 字典迭代出来是键（str），
+    对这一类输入，原来的 `c["relation_id"]` 会抛 `TypeError: string indices must be integers`。
+    """
+    if isinstance(value, Mapping):
+        value = list(value.values())
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [dict(c) for c in value if isinstance(c, Mapping)]

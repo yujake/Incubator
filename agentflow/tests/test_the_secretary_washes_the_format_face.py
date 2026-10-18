@@ -195,7 +195,7 @@ def test_the_loop_sends_the_washed_payload_and_the_ledger_keeps_both(tmp_path: p
     from agentflow.agent_loop import run_role
 
     scripts = {
-        "M": [json.dumps({"summon": {"role": "E", "action": "run_experiment",
+        "M": [json.dumps({"summon": {"role": "E", "task": "派活：跑一次实验，拿一条证据",
                                      "claim": "n=3 的检查支持它", "claim_key": "k-0001",
                                      "scriptpath": "code/exp.py",
                                      "why": "要一条可复现的证据"}}, ensure_ascii=False),
@@ -210,28 +210,30 @@ def test_the_loop_sends_the_washed_payload_and_the_ledger_keeps_both(tmp_path: p
     assert run.stop_reason == "final", run.to_dict()
     step = next(s.result for s in run.steps if s.shape == "summon")
     assert step["ok"] is True, step
-    assert step["秘书"]["wash"]["washed"] is True, step["秘书"]
-    # 台账那一行的 `input_key` 是从真正发出去的参数派生的
-    # （`_summon_key(action, params)`）⇒ 它是不是洗过的那一份，盘上就能分开：
-    # 没洗的话 `params` 是空的，键会是另一个（这一条比"结果里说洗了"硬）。
-    from agentflow.agent_loop import _summon_key
+    # 2026-10-16（口径 S2 最终形态）：派活**不带动作**（动作由被派者自己选）⇒
+    # 秘书那一趟**没有可洗的东西**：如实报 `washed=False`、`changes=[]`、`alarms=[]`。
+    # 旧断言要求 `washed is True`（那是"点名动作 + 参数键写错"那一档的产物）。
+    wash = step["秘书"]["wash"]
+    assert wash["checked"] is True, wash
+    # 这里拿到的是**摘要**（`_outbound_hook` 给的那几格：checked/washed/refused/reason）——
+    # `changes` **不在摘要里**，逐条 changes 的判据在本文件前面那些直接调 `wash_delegation` 的用例。
+    assert wash["washed"] is False, wash
+    assert not str(wash.get("reason") or ""), wash
+    assert step["秘书"]["alarms"] == [], step["秘书"]
 
     child = [r for r in st.rows("tasks") if str(r.get("role")) == "E"]
     assert len(child) == 1, child
-    washed_params = {"claim": "n=3 的检查支持它", "claim_key": "k-0001",
-                     "script_path": "code/exp.py"}
-    assert str(child[0].get("input_key") or "") == _summon_key("run_experiment", washed_params), \
-        child[0]
-    assert str(child[0].get("input_key") or "") != _summon_key("run_experiment", {}), \
-        ("若与空参数派生的键相同，说明发出去的还是原稿", child[0])
-    # 台账（秘书的）：before / after / changes 三格都在
+    assert str(child[0].get("action") or "") == "", child[0]        # 派活：不点动作
+    assert str(child[0].get("outcome") or "") in ("ok", "refused", "failed"), child[0]
+    # 台账（秘书的）：这一趟**留下了记录**（before/after 都在），只是 changes 为空
     ledgers = sorted((root / "out" / "secretary").glob("M-*.jsonl"))
     assert len(ledgers) == 1, ledgers
     rows = [json.loads(x) for x in ledgers[0].read_text(encoding="utf-8").splitlines() if x]
-    washed = [r for r in rows if r.get("changes")]
-    assert washed, rows
-    assert "scriptpath" in str(washed[-1]["before"]), washed[-1]["before"]
-    assert "script_path" in str(washed[-1]["after"]), washed[-1]["after"]
+    assert rows, rows
+    # 这一趟的载荷真的被记下来了（`after` 里是那份派活：带 `task`）。
+    # 不钉"最后一行"：这份台账同时记着秘书别的职责（例如 duty 3 的判断），
+    # 谁最后写取决于走了哪几步。
+    assert any("task" in str(r.get("after")) for r in rows), rows
     assert cond is not None
 
 

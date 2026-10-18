@@ -455,6 +455,20 @@ def _type_name(v: Any) -> str:
     )
 
 
+def _schema_allows_null(sub: Any) -> bool:
+    """这个参数**显式传 null** 是否合法（2026-10-17）。
+
+    两档放行：子 schema 自己写了 `"nullable": True`；或 `type` 是列表且含 `"null"`。
+    其余一律不放行 —— `null` 不是"没提供"，见 `validate_params` 里那段理由。
+    """
+    if not isinstance(sub, Mapping):
+        return False
+    if sub.get("nullable") is True:
+        return True
+    t = sub.get("type")
+    return isinstance(t, (list, tuple)) and "null" in t
+
+
 def validate_params(schema: Mapping[str, Any], params: Any, *, path: str = "") -> None:
     """按 schema 校验参数。不合法抛 `ParamError`（不是返回布尔）。
 
@@ -481,7 +495,7 @@ def validate_params(schema: Mapping[str, Any], params: Any, *, path: str = "") -
         if schema.get("additionalProperties") is False:
             extra = set(params) - set(props)
             if extra:
-                raise ParamError(f"出现未声明的参数：{sorted(extra)}（schema 只允许 {sorted(props)}）")
+                raise ParamError(f"出现未声明的参数：{sorted(extra, key=str)}（schema 只允许 {sorted(props)}）")
         for name, sub in props.items():
             if name in params and params[name] is not None:
                 validate_params(sub, params[name], path=f"{path}{name}.")
@@ -941,7 +955,10 @@ class ToolRegistry:
         """
         try:
             return self._specs[name]
-        except KeyError:
+        except (KeyError, TypeError):
+            # 2026-10-17（子代理 tools 甲类 #2）：`name` 不可哈希（如传了个 list）时
+            # `self._specs[name]` 抛 **TypeError**，原来只捕 KeyError ⇒ 冒泡出 `call`。
+            # 现在并进"查不到"这一条路：下面照旧给候选名与提示，不冒泡。
             close = candidate_tool_names(name, self._specs)
             hint = ""
             if close:
@@ -1173,13 +1190,21 @@ class ToolRegistry:
         out: list[ToolSpec] = []
         refused: list[str] = []
         allowed_by_sandbox: list[str] = []
+        allowed_by_exception: list[str] = []
         for s in self._specs.values():
             if role not in s.roles:
                 continue
             if filter_readonly and role in READ_ONLY_ROLES:
+                # 2026-10-17（业主裁定「方案 1」）：**该角色自己的落库代理放行**。
+                # 写面钉死在 `READONLY_CALL_EXCEPTIONS[role]` 那张逐条登记的表里
+                # —— 它不是"放宽只读"，而是"只读角色的写只允许这几个落点"。
+                _exempt = {_n for _n, _w in READONLY_CALL_EXCEPTIONS.get(role, ())}
                 if s.side_effect in SIDE_EFFECTS_WRITE:
-                    refused.append(s.name)
-                    continue
+                    if s.name in _exempt:
+                        allowed_by_exception.append(s.name)
+                    else:
+                        refused.append(s.name)
+                        continue
                 if s.external == "exec":
                     if SANDBOX_AVAILABLE is True:
                         # 放行也要留痕：否则"为什么 H 拿到了一个 exec 工具"在报告里不可见
@@ -1201,6 +1226,11 @@ class ToolRegistry:
                 f"沙箱已声明可用（SANDBOX_AVAILABLE=True），因此放行了 {len(allowed_by_sandbox)} 个 "
                 f"external=exec 的工具：{sorted(allowed_by_sandbox)}"
                 "（承接执行的是沙箱，不是'这个工具变安全了'）"
+            )
+        if allowed_by_exception:
+            notes.setdefault(role, []).append(
+                f"按业主裁定「方案 1」放行了 {len(allowed_by_exception)} 个**该角色自己的落库代理**："
+                f"{sorted(allowed_by_exception)}（写面钉死在 READONLY_CALL_EXCEPTIONS[{role!r}] 里）"
             )
         if call_surface:
             # `call` 的判据与 `for_role` 的唯一差别：可调用面还包含逐条登记的落库代理。
@@ -1464,6 +1494,13 @@ class ToolRegistry:
             spill_root = None
 
         try:
+            # 2026-10-17（真机 T1/T4/T5 共 8 次以上）：模型习惯在参数里带 `why`（"我为什么这么调"）。
+            # 参数集是封闭的 ⇒ 整份调用被拒，一次真实的写入/检索就白费了。它**不是**工具参数，
+            # 但它是审计线索 —— 从参数面剥掉、记进留痕（下面 `entry` 里），不当参数也不丢。
+            _why = None
+            _props = (spec.params or {}).get("properties") or {}
+            if "why" in merged and "why" not in _props:
+                _why = merged.pop("why")
             validate_params(spec.params, merged)
         except ParamError as e:
             return fail(f"参数错误：{e}", tool=name, kind="param_error")
@@ -1491,6 +1528,21 @@ class ToolRegistry:
             out = spec.handler(**merged)
         except ToolError as e:
             out = fail(str(e), tool=name, kind="tool_error", detail=e.detail)
+        except (TypeError, AttributeError) as e:
+            # 2026-10-17（子代理 tools 根因 A，17 个站点）：可选参数**显式传 null** 时校验器
+            # 把它当"没提供"放行，而 handler 按"一定有值"写 ⇒ 崩成 `kind="unexpected"`
+            # （读账的人只看到"库内部出错"）。这里把"有 null 且崩了"翻成**可行动的拒信**，
+            # 而**不改**校验语义 —— 于是 `attack.list_plans` / `review.scan_document`
+            # 这类"null 本身有意义"的参数不受影响（它们不崩）。
+            _nulls = sorted(k for k, v in (merged or {}).items() if v is None)
+            if _nulls:
+                out = fail(
+                    f"参数错误：{_nulls} 收到了 null，而这个工具不接受空值 —— "
+                    f"要么给它一个值，要么干脆别传这些键"
+                    f"（原始异常：{type(e).__name__}: {e}）",
+                    tool=name, kind="param_error")
+            else:
+                out = fail(f"{type(e).__name__}: {e}", tool=name, kind="unexpected")
         except Exception as e:  # noqa: BLE001
             out = fail(f"{type(e).__name__}: {e}", tool=name, kind="unexpected")
         res = out if isinstance(out, ToolResult) else ok(out)
@@ -1512,6 +1564,14 @@ class ToolRegistry:
             # `roles-3` 要求"身份声明被让给工具"这件事**留痕**：否则只读拒因无法自证
             # （调用方看到"你没有声明角色"，而它其实声明了，只是被工具的参数收下了）。
             entry = {"tool": name, "params": _safe(merged), "ok": res.ok, "error": res.error}
+            # 2026-10-18（缺陷 ⑬，根因）：这一段原来**掉在 `if self.log_calls:` 外面** ——
+            # `entry` 只在上面那一支里赋值，于是**生产默认 `log_calls=False` 时，
+            # 任何带 `why` 的调用都会 UnboundLocalError**。真机三处报错全是它：
+            # `table.create`（D 写 research_questions，idx 5/6/8）、`review.verify_fixes`
+            # （H 复审）、以及 M 在验收表里误记成 `search.download` 的那一条。
+            # 现在 `entry` 的**全部**使用都在同一支里，`log_calls=False` 时什么都不碰。
+            if _why:
+                entry["why"] = str(_why)[:400]
             if role_consumed_as_param:
                 entry["role_consumed_as_param"] = True
                 entry["identity_role"] = self.bound_role
@@ -1531,7 +1591,7 @@ class ToolRegistry:
 def _safe(value: Any) -> Any:
     """把参数里不可 JSON 化的部分替换掉，保证调用日志能落盘。"""
     try:
-        json.dumps(value, ensure_ascii=False)
+        json.dumps(value, ensure_ascii=False, default=str)
         return value
     except (TypeError, ValueError):
         if isinstance(value, Mapping):

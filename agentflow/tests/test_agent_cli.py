@@ -139,7 +139,7 @@ def test_run_agent_drives_a_child_action_through_the_llm_loop(tmp_path: pathlib.
     reset_cache()
     SCRIPTS.clear()
     SCRIPTS.update({
-        "M": [json.dumps({"summon": {"role": "D", "action": "consider",
+        "M": [json.dumps({"summon": {"role": "D", "task": "派活：把这件事办掉",
                                      "params": {"qid": "q-1"}}}, ensure_ascii=False),
               json.dumps({"final": "交付：D 已跑过", "evidence": []}, ensure_ascii=False)],
         "D": [json.dumps({"note": "我先记一句", "evidence": []}, ensure_ascii=False),

@@ -228,39 +228,33 @@ def test_manual_cancel_beats_deadline():
     assert t.reason is not None and t.reason.code == "user"
 
 
-# ---------------------------------------------------------------- token 预算
+# ---------------------------------------------------------------- token 读数（不再是预算）
 
 
-def test_token_budget_exhaustion_turns_into_cancellation():
-    """预算耗尽与取消走同一个信号：处置完全一样（停止派新 + 取消在跑）。
+def test_token_spend_is_only_a_reading_and_never_cancels():
+    """2026-10-15 业主裁定 A1/A2/A3：**「我们不卡 token，只卡总花销的钱」**。
 
-    分成两套信号会让"停止"出现两条路径，而其中一条一定会被漏掉。
+    这一条是那一轮裁定的钉子：`CancelToken` 上必须**没有**任何按 token 停的路径。
+    它此前有一条（`token_budget=10` ⇒ 花到 12 ⇒ `cancelled` 变 True ⇒
+    在跑的 handler 在下一个 `raise_if_cancelled` 点被掀掉），
+    那是一条**强杀**——正是裁定要删的东西。
     """
-    t = CancelToken(token_budget=10)
-    assert t.consume_tokens(4) is True
-    assert t.consume_tokens(4) is True
-    assert t.cancelled is False
-    assert t.consume_tokens(4) is False, "花到 12 >= 10 ⇒ 返回 False（还没超时返回 True）"
-    assert t.cancelled is True
-    assert t.reason is not None and t.reason.code == "budget"
-
-
-def test_token_budget_none_means_unlimited():
-    """负控：`None`（不限）不许被当成 0（已耗尽）。"""
-    t = CancelToken(token_budget=None)
-    for _ in range(100):
-        assert t.consume_tokens(106) is True
-    assert t.cancelled is False
+    t = CancelToken()          # ⚠️ 连这个参数都不该再存在
+    assert "token_budget" not in CancelToken.__init__.__code__.co_varnames
+    for _ in range(1000):
+        assert t.consume_tokens(10 ** 6) == t.tokens_used
+    assert t.cancelled is False, "花多少 token 都不许把这一趟停掉"
     assert t.reason is None
+    assert t.tokens_used == 10 ** 9, "但花销必须记得住（读数）"
+    assert "token_budget" not in t.to_dict(), "读数里也不许再出现预算这一格"
 
 
 def test_consume_tokens_ignores_negative():
-    """负数消耗不许把预算"充回来" —— 那会让超支被静默抹平。"""
-    t = CancelToken(token_budget=10)
-    t.consume_tokens(10)
-    assert t.cancelled is True
-    t.consume_tokens(-100)
-    assert t.tokens_used == 10
+    """负数消耗不许把读数抹掉 —— 那会让超支被静默抹平。"""
+    t = CancelToken()
+    assert t.consume_tokens(10) == 10
+    assert t.consume_tokens(-100) == 10
+    assert t.cancelled is False
 
 
 # ---------------------------------------------------------------- 线程安全

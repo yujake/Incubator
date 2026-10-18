@@ -260,6 +260,65 @@ def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
     )
 
 
+def test_no_test_module_pollutes_the_parent_env_with_a_stdio_encoding() -> None:
+    """`X-91.5-2` 的**根因**判据（2026-10-15 加）：父进程的编码变量不许被会话级改写。
+
+    为什么上面那条不够：它扫的是 `Path(__file__)` —— **只管得住本文件**。
+    实测就漏了 `tests/test_temp_root_pin.py`：全量跑里它是**唯一**那条"只在全量跑里红、
+    单独跑是绿的"用例。机制（已复现到字节，3.25 秒）：
+    本文件此前在三处用 `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`
+    **改了父进程的环境** ⇒ 按目录字母序跑在 `test_temp_root_pin.py` 之前 ⇒ 那个文件起子进程时
+    把变量继承下去 ⇒ 子进程吐 UTF-8、父进程按 GBK 解 ⇒ `_readerthread` 抛
+    `UnicodeDecodeError: 'gbk' codec can't decode byte 0xa2 in position 584`。
+
+    为什么判"根因"而不是去把 `tests/` 里那 15 处没钉编码的 `subprocess.run` 逐个改掉：
+    编码的**唯一**正确钉法是"在起子进程那一处钉"（`subprocess.run(..., env=)` 或 `encoding=`）。
+    在会话级改 `os.environ` 是**跨测试的隐式耦合** —— 它让"哪个文件先跑"变成另一个文件红绿的条件，
+    而那正是这条缺陷的形态。所以这里禁掉的是**那种写法本身**：
+    要传编码就**拼一份 env 传下去**（`{**os.environ, "PYTHONIOENCODING": ...}`），
+    不要改进程自己的环境。
+
+    ⚠️ 判据用 **AST** 而不是文本扫描：第一版按行找那几个字面量，结果是它把
+    **本文件里解释这件事的注释**也当成了违规（注释里逐字引用了被禁的写法）——
+    文本扫描分不清"代码"与"在讨论这段代码的话"。AST 只认真正会执行的那两种形态：
+    `os.environ.setdefault(...)` / `os.environ[...] = ...`。
+    """
+    banned_vars = ("PYTHONIOENCODING", "PYTHONUTF8")
+    mutating_attrs = {"setdefault", "update", "pop"}
+    bad: list[str] = []
+    saw_correct_pattern = False
+    for p in sorted((REPO / "tests").rglob("*.py")):
+        src = p.read_text(encoding="utf-8")
+        if "{**os.environ" in src and any(v in src for v in banned_vars):
+            saw_correct_pattern = True
+        for node in ast.walk(ast.parse(src)):
+            target = None
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                    and node.func.attr in mutating_attrs:
+                base = node.func.value
+                if isinstance(base, ast.Attribute) and base.attr == "environ":
+                    target = node
+            elif isinstance(node, (ast.Assign, ast.AugAssign)):
+                subs = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for t in subs:
+                    if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Attribute) \
+                            and t.value.attr == "environ":
+                        target = node
+            if target is None:
+                continue
+            seg = ast.get_source_segment(src, target) or ""
+            if any(v in seg for v in banned_vars):
+                bad.append(f"{p.name}:{target.lineno}  {' '.join(seg.split())[:90]}")
+    assert saw_correct_pattern, (
+        "扫不到任何「`{**os.environ, \"PYTHONIOENCODING\": …}`」的正确写法 —— "
+        "判据疑似失去对象（`tests/` 里应当有多处这样的子进程环境）")
+    assert not bad, (
+        "这些地方在**会话级**改父进程的 stdio 编码变量 —— 它会跨测试泄漏，"
+        "让后跑的文件起子进程时编码对不上（改成拼一份 env 传下去，"
+        "或在起子进程那一处传 `encoding=`）：\n" + "\n".join(bad)
+    )
+
+
 # ============================================================ 负控：三态都必须可达
 
 
@@ -639,7 +698,6 @@ def _registered_tool_names() -> list[str]:
     要拿 55 个名字得逐个角色跑一次并解析。直接调 `build_registry` 更直接，
     而且它与 `cli.cmd_tools:335` 是同一个调用（含 `roles=tuple(ROLES)`）。
     """
-    import os
     import tempfile
     sys.path.insert(0, str(REPO / "src"))
     from agentflow import store as _store  # noqa: PLC0415
@@ -648,7 +706,16 @@ def _registered_tool_names() -> list[str]:
     with tempfile.TemporaryDirectory(prefix="role_specs_reg_") as td:
         st = _store.Store(Path(td))
         st.init()
-        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+        # ⚠️ 这里与下面两处此前各有一句 `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`
+        # （2026-10-15 删）。它做了两件事，两件都不该做：
+        #   ① 对本进程**已经打开**的 stdout 编码没有任何作用（那时它已经定了）；
+        #   ② **污染父进程的 `os.environ`**，于是同一趟 pytest 里**后跑**的测试起子进程时
+        #      会继承它 —— 子进程吐 UTF-8、父进程仍按 GBK 解。
+        # 真机后果（全量跑里唯一那条"只在全量跑里红"的用例）：`tests/test_temp_root_pin.py`
+        # 的端到端负控 `_readerthread` 抛 `UnicodeDecodeError: 'gbk' codec can't decode
+        # byte 0xa2 in position 584` ⇒ `proc.stdout` 变成 `None` ⇒ 断言里 `+` 抛 TypeError。
+        # 编码的**唯一**正确钉法是"在起子进程那一处钉"（`subprocess.run(..., env=)` 或
+        # `encoding=`）；会话级改环境变量是把"谁先跑"变成别人红绿的条件。
         build = build_registry(store=st, workspace_root=Path(td), roles=tuple(ROLES))
         return sorted(build.registry.names())
 
@@ -741,7 +808,6 @@ def test_r0_side_effect_column_matches_the_registry():
     """
     import tempfile as _tf
 
-    import os
     sys.path.insert(0, str(REPO / "src"))
     from agentflow import store as _store  # noqa: PLC0415
     from agentflow.tools import ROLES, build_registry  # noqa: PLC0415
@@ -749,7 +815,8 @@ def test_r0_side_effect_column_matches_the_registry():
     with _tf.TemporaryDirectory(prefix="r0_table_") as td:
         st = _store.Store(Path(td))
         st.init()
-        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+        # （此处此前有 `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`；2026-10-15 删，
+        # 理由见 `_registered_tool_names` 里那一段 —— 会话级改环境变量会跨测试泄漏。）
         reg = build_registry(store=st, workspace_root=Path(td), roles=tuple(ROLES)).registry
         bad: dict[str, str] = {}
         for r in _r0_rows():
@@ -765,7 +832,6 @@ def test_r0_approval_and_roles_columns_match_the_registry():
     - 审批列是 `是` / `否` 的自由写法，只判"是否提到需要审批"这一个布尔；
     - roles 列是 `A B C` 这种以空格分隔的角色字母。
     """
-    import os
     import tempfile as _tf
 
     sys.path.insert(0, str(REPO / "src"))
@@ -775,7 +841,7 @@ def test_r0_approval_and_roles_columns_match_the_registry():
     with _tf.TemporaryDirectory(prefix="r0_roles_") as td:
         st = _store.Store(Path(td))
         st.init()
-        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+        # （同上：会话级改 `os.environ` 的那一句 2026-10-15 删。）
         reg = build_registry(store=st, workspace_root=Path(td), roles=tuple(ROLES)).registry
         bad: dict[str, str] = {}
         for r in rows_to_check(reg, _r0_rows()):

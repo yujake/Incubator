@@ -498,3 +498,69 @@ def test_the_manuscript_sections_are_enumerated_once_and_identically():
     assert "七节" in policy or "七节" in skill.body, "没有一处写明是七节 ⇒ 数不出来"
     # 反真空：声明里不许再出现"六个分节"这种旧枚举（那正是分岔的来源）
     assert "六个分节" not in policy, "声明里还留着旧的「六个分节」枚举"
+
+
+def test_the_skills_tool_surface_equals_the_surface_the_prompt_renders() -> None:
+    """**两个工具面必须是同一个**（2026-10-16 复查十个协作面时发现的一处不一致）。
+
+    ## 发现（为什么值得单独一条判据）
+
+    `_role_tool_surface()` 是 `validate()` 第三条硬约束的基准面（"一条 skill 正文里点名的工具
+    必须在本角色的工具面上"）。它原先建注册表时给了 `workspace_root` 却**没给 `store`** ——
+    而它自己的 docstring 第 1 点**正引着** `secretary.py` 那条读数（"**不带 `store`** 出 68 件、
+    `fs.read` 不在里面；带上出 81 件、在里面"）。也就是说：**文档知道 store 要紧，实现漏了它。**
+
+    实测差异（同一台机、同一份代码，逐角色比对）：
+
+    | 角色 | 技能模块的面 | 提示词渲染的面 |
+    |---|---|---|
+    | 其余九格 | 相同 | 相同 |
+    | **D** | **36** | **41** |
+
+    差的 5 件逐字是 `research.list_gaps` / `research.poll_waiting` / `research.set_status` /
+    `research.submit_gap` / `research.write_note`（全是只有 D 用的那些）。
+
+    ## 为什么这是缺陷而不是"更严一点"
+
+    模型看到的是**带 store 的那一面**（`tools_lines(role, registry)` 读宿主的注册器）。
+    判据查另一个面 ⇒ 一条 D 的手册只要正经点名 `research.set_status`，就会被报成
+    "不在你的工具面上" —— **假阳性**，而假阳性会让人开始不信这份判据（与 docstring 第 1 点
+    的论证同型）。今天没有手册提到 `research.*`，所以它是**潜伏**的；这条判据让它不再潜伏。
+
+    ## 反真空
+
+    两侧都必须非空且**件数 ≥ 10**：两个空表也会"相等"，而那是"没查成"。
+    """
+    from agentflow.store import Store
+    from agentflow.tools import build_registry
+
+    problems: list[str] = []
+    skills_surface = AS._role_tool_surface(problems)
+    assert not problems, f"技能模块的工具面这一格没查成：{problems}"
+
+    root = tmp_path_root()
+    store = Store(root)
+    store.init()
+    registry = build_registry(store=store, workspace_root=root).registry
+
+    checked = 0
+    for role, names in sorted(skills_surface.items()):
+        rendered = {spec.name for spec in registry.for_role(role)}
+        assert len(names) >= 10 and len(rendered) >= 10, (
+            f"{role} 的工具面太小（技能面 {len(names)} / 渲染面 {len(rendered)}）⇒ "
+            "先解释清楚是不是装配坏了，再改这条下限"
+        )
+        assert names == rendered, (
+            f"{role} 的两个工具面不是同一个：只有技能面有 {sorted(names - rendered)}；"
+            f"只有渲染面有 {sorted(rendered - names)} —— 判据查的面必须与模型看到的面相同"
+        )
+        checked += 1
+    assert checked >= 10, f"只比了 {checked} 个角色（下限 10）"
+
+
+def tmp_path_root():
+    """给上面那条判据造一个干净的工作区根（`Store` 要一个能写的目录）。"""
+    import tempfile
+    from pathlib import Path
+
+    return Path(tempfile.mkdtemp(prefix="agentflow-skills-surface-test-"))

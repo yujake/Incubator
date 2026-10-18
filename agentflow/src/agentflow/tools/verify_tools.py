@@ -122,7 +122,25 @@ def detect_verifier() -> dict:
     """
     from .. import toolchain as TC
 
-    return TC.probe_checkers()
+    out = dict(TC.probe_checkers())
+    # 2026-10-17（Lean 审计 #4）：本函数原来**完全不看开关** ⇒ 关掉 Lean 的机器上它仍报
+    # `available=[...]`，读者会把"装了"读成"能用"。这里**不改环境探测语义**，只把许可
+    # 一起报出来（新增键，不动老键），并把"能不能做形式化"按 `装了 且 开关开着` 给一个。
+    try:
+        from ..settings import lean_enabled as _le
+
+        _on, _src = _le()
+    except Exception:  # noqa: BLE001 —— 读不懂按关算（与 settings 的 fail-closed 同向）
+        _on, _src = False, "unreadable"
+    out["lean_enabled"] = bool(_on)
+    out["lean_enabled_source"] = str(_src)
+    out["can_do_formal"] = bool(_on) and bool(out.get("available"))
+    # 两种模式都带 `note`（开着时为空串）：声明了 `returns` 就**恒有那一格**，
+    # 否则"声明一套、返回另一套"的判据会红（真机 r61 的教训）。
+    out["note"] = ("" if _on else
+                   "开关关着 ⇒ 即使 `available` 非空，这一趟也不走形式化"
+                   "（那是**许可**问题，不是环境问题）")
+    return out
 
 
 def check_formal(
@@ -735,7 +753,11 @@ def _verify_code_hash(_hash_of, path):
     # 什么都不做" —— 而"不起进程"与"起了进程但只读"是两件不同的事。
     side_effect="read",
     roles=_ROLES,
-    returns="{'checked','available','available_names','reason','probe_errors'}",
+    # ⚠️ **2026-10-15 补齐**（`draft/124` §17，**本文件是 FC-27 禁改区 [prover-bridge]**，
+    # 按业主"先改后签"口径登记，待 2 名人审）：`looked_in` 是"我**去哪几处找过**"、
+    # `sources` 是逐处结果 —— 它们承载三态（没找到 / 没查）里"查过哪几处"那一半，
+    # 而 `returns` 会拼进 function-calling 的 `description`（模型看得到）。
+    returns="{'checked','available','available_names','reason','probe_errors','looked_in','sources','lean_enabled','lean_enabled_source','can_do_formal','note'}",
     tags=("experiment", "formal"),
 )
 def _verify_detect_verifier():
@@ -929,9 +951,13 @@ def _verify_check_formal(base, claim, script_path=None, source=None, checker_nam
     # experiment_id/recorded/result/evidence_kind/negation_kind/exit_code/
     # reason/code_hash/runtime_sec/notes；后三个是**可选键**（取决于脚本与计时），
     # 所以键集合只写前 7 个。
+    # ⚠️ **2026-10-15 补齐**（同上，**禁改区**）：那三个"可选键"此前只写在**散文**里，
+    # 而可机读的键集合里没有 ⇒ 探针核不到它们、模型也只在散文里瞥见。
+    # 现在把它们并进键集合：`code_hash`（跑的是哪一版代码）/ `runtime_sec`
+    # / `notes` —— 三个都是**来源读数**（可复现性的凭据）。
     returns=(
-            "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason'}"
-            "（另有可选键 code_hash / runtime_sec / notes）"
+            "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason',"
+            "'code_hash','runtime_sec','notes'}"
             "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
             "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
             "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
@@ -1067,9 +1093,9 @@ _ROLES_V = ("V",)
     # `checked=False` 是"没查成"（没接线 / 结论不合法）而**不是**工具失败 ——
     # 与 verify.check_formal 的 no_backend 同一档。少给键会让下游把"没有读数"读成"是零"。
     returns=(
-            "{'checked','statement_id','verification_id','verdict','defect_step','findings',"
+            "{'checked','kind','statement_id','verification_id','verdict','defect_step','findings',"
             "'unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits',"
-            "'ledger','reason','detail'}（三条返回路径键集合相同；checked=False = 没查成："
+            "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— "
             "此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）"
             ),

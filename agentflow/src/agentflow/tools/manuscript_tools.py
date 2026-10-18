@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from .. import manuscripts as M
 from .. import schema as S
-from . import ToolError, ToolResult, ok, tool
+from . import ToolError, ToolResult, fail, ok, tool
 
 #: 读/列交接手稿：「八个角色」（读自己的交接链是本职）。
 #: 写不在这里 —— 见下面 `_TOOL_FUNCTIONS` 的理由：写走循环形状 `handoff`。
@@ -50,7 +50,11 @@ _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
      "required": ["id"], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
-    returns="{'id','path','sender','to','summary','text','sha256','bytes'}",
+    # ⚠️ 2026-10-15 补齐（`draft/124` §17）：实跑返回的是整份手稿行（含正文 `body`），
+    # 而声明里只列了 `text` 那一格 ⇒ 模型看不到 `body`/`refs`/`format`/`sid`/`created_at`/`task_id`。
+    # `returns` 会拼进 function-calling 的 `description`（`tools/base.py:721`）⇒ 模型看得到。
+    returns="{'id','path','sender','to','summary','text','sha256','bytes',"
+            "'body','created_at','format','note','refs','sid','task_id'}",
 )
 def manuscripts_read(store, id: str) -> ToolResult:
     """工具体：按编号读全文。"""
@@ -59,8 +63,17 @@ def manuscripts_read(store, id: str) -> ToolResult:
         raise ToolError("manuscripts.read 需要一个带 root 的 store")
     got = M.read(root, id)
     if got is None:
-        raise ToolError(f"没有编号 {id!r} 的手稿（`manuscripts.list` 看现有的编号）",
-                        kind="manuscript_not_found")
+        # ⚠️ **2026-10-16（亲测 A 的工具面时当场撞出来的真 bug）**：这里原写成
+        # `raise ToolError(msg, kind="manuscript_not_found")` —— 而 `ToolError.__init__`
+        # **不收 `kind`**（只有 `message/tool/detail`）⇒ 本该是"没有这份手稿，去看
+        # `manuscripts.list`"的可读拒绝，**变成了 `TypeError: ToolError.__init__() got an
+        # unexpected keyword argument 'kind'`**。第一次凭感觉调 `manuscripts.read` 的智能体
+        # 会拿到一个 Python 异常，既看不懂也学不到下一步 —— 正是业主说的"会困惑并浪费 token"。
+        # 类别要交给工具层的统一出口 `fail(...)`，不要塞给 `ToolError`。
+        return fail(
+            f"没有编号 {id!r} 的手稿（`manuscripts.list` 看现有的编号）",
+            kind="manuscript_not_found", id=id,
+        )
     rec = dict(got["record"])
     data = {**rec, "text": got["text"], "path": got["path"]}
     return ok(data, **data)

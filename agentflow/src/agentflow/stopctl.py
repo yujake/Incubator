@@ -149,7 +149,7 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
             upgraded = dict(existing)
             upgraded.update({"force": True, "escalated_at": _now_iso(),
                              "escalated_by": str(by or "user")})
-            path.write_text(json.dumps(upgraded, ensure_ascii=False, indent=2) + "\n",
+            path.write_text(json.dumps(upgraded, ensure_ascii=False, indent=2, default=str) + "\n",
                             encoding="utf-8", newline="\n")
             _notify_stop(root, "upgraded", upgraded)
             return upgraded, "upgraded"
@@ -160,7 +160,7 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
     if str(root_task_id or ""):
         payload["root_task_id"] = str(root_task_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n",
                     encoding="utf-8", newline="\n")
     _notify_stop(root, "created", payload)
     return payload, "created"
@@ -227,7 +227,7 @@ def request_interrupt(root: str | Path, task_id: str, *,
                "by_task_id": str(by_task_id or ""), "target_task_id": str(task_id or ""),
                "at": _now_iso(), "path": str(path)}
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n",
                     encoding="utf-8", newline="\n")
     return payload
 
@@ -283,7 +283,7 @@ def consume_interrupt(root: str | Path, task_id: str, *, sid: str | None = None,
         hist = interrupt_dir(root) / INTERRUPT_HISTORY_NAME
         hist.parent.mkdir(parents=True, exist_ok=True)
         with hist.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            fh.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
     except OSError:
         pass        # 审计写不成不改变"信号已撤走"这件事（返回到调用方去读 `removed`）
     try:
@@ -403,7 +403,7 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
         hist = history_path(root)
         hist.parent.mkdir(parents=True, exist_ok=True)
         with hist.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+            fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     except OSError:
         pass                      # 历史写不下去也不许让"停下"这件事失效
     if remove:
@@ -472,7 +472,7 @@ def register_pid(root: str | Path, role: str, sid: str | None = None,
     path.write_text(json.dumps({"pid": me, "role": str(role), "sid": str(sid or ""),
                                 "started_at": _now_iso(),
                                 "ppid": int(os.getppid())},
-                               ensure_ascii=False, indent=2) + "\n",
+                               ensure_ascii=False, indent=2, default=str) + "\n",
                     encoding="utf-8", newline="\n")
     return path
 

@@ -302,12 +302,21 @@ class _Core:
         sid = str(raw.get("sid") or "").strip()
         text = str(raw.get("text") or "").strip()
         owner = str(raw.get("owner") or "").strip()
-        if not sid:
-            raise PlanError(f"subgoals[{index}] 缺少 sid")
-        if not text:
-            raise PlanError(f"subgoals[{index}] 缺少 text（子目标必须说清要做什么）")
-        if not owner:
-            raise PlanError(f"subgoals[{index}] 缺少 owner（owner 是权限面的一部分，不能默认）")
+        # ---- 2026-10-16（亲测 F 的 `attack.create_plan` 时改的）：**一次把缺的说齐** ----
+        # 这里原本是三条顺序抛（`sid` → `text` → `owner`）⇒ 实测要走**三轮**才凑齐一个子目标的
+        # 字段。业主口径："真实智能体也会在这里困惑并浪费 token" ⇒ 只有一条缺时**原文案一字不动**，
+        # 多于一条时补一行整份清单（与 B 的 `register_statement` 同一套写法）。
+        _why = {"sid": "", "text": "（子目标必须说清要做什么）",
+                "owner": "（owner 是权限面的一部分，不能默认）"}
+        _missing = [name for name, value in (("sid", sid), ("text", text), ("owner", owner))
+                    if not value]
+        if _missing:
+            _head = f"subgoals[{index}] 缺少 {_missing[0]}{_why[_missing[0]]}"
+            raise PlanError(
+                _head
+                + (f" **这一个子目标还缺**：{'、'.join(_missing)} —— 一次给齐就不用再来回问。"
+                   if len(_missing) > 1 else "")
+            )
         return _subgoal(
             sid,
             text,

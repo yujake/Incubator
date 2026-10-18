@@ -153,7 +153,7 @@ def append_work_item(session_root: Path | str, item: WorkItem) -> str:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(item.to_dict(), ensure_ascii=False) + "\n")
+            fh.write(json.dumps(item.to_dict(), ensure_ascii=False, default=str) + "\n")
     except OSError as exc:
         return f"{type(exc).__name__}: {exc}"
     return ""
@@ -252,7 +252,7 @@ def gate(name: str, artifact: str, *, session_root: Path | str, seam: Any = None
         gates_dir.mkdir(parents=True, exist_ok=True)
         path = gates_dir / f"{name}.json"
         with path.open("w", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+            fh.write(json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n")
         result.report_path = str(path)
     except OSError as exc:
         result.notes.append(f"闸门报告没写成：{type(exc).__name__}: {exc}")

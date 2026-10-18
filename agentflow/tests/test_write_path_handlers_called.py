@@ -66,8 +66,8 @@ def test_conductor_summon_many_reports_one_outcome_per_target(tmp_path):
     st = _store(tmp_path)
     c = _conductor(st)
     res = CT.conductor_summon_many(lambda: c, targets=[
-        {"target_role": "B", "action": "run_once"},
-        {"target_role": "B", "action": "run_once"},
+        {"target_role": "B", "task": "派活：按你的职责把这件事做掉"},
+        {"target_role": "B", "task": "派活：按你的职责把这件事做掉"},
     ], why="裁决 8 的调用面测试")
     assert res.ok is True, res
     assert len(res.data["results"]) == 2, res.data

@@ -389,9 +389,9 @@ def _selftest() -> int:
         line(f"    复审后 finding 状态={after['status']}（G 的 fixed 被作废：checks 仍然复现 ⇒ 重新打开），"
              f"resolution_note={after['resolution_note'][:60]!r}")
     line(f"    文档状态：{v['status']}；原因：{v['reason'][:150]}")
-    line(f"[8] 最终统计：{json.dumps(st.stats()['documents'], ensure_ascii=False)} "
-         f"{json.dumps(st.stats()['dependencies'], ensure_ascii=False)} "
-         f"{json.dumps(st.stats()['review_findings'], ensure_ascii=False)}")
+    line(f"[8] 最终统计：{json.dumps(st.stats()['documents'], ensure_ascii=False, default=str)} "
+         f"{json.dumps(st.stats()['dependencies'], ensure_ascii=False, default=str)} "
+         f"{json.dumps(st.stats()['review_findings'], ensure_ascii=False, default=str)}")
 
     line("=" * 72)
     line("SELF-CHECK DONE（agent_g）")

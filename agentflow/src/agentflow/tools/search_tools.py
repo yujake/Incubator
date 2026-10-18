@@ -244,8 +244,8 @@ def _shelf_row(ctx: _Ctx, row: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "") -> Any:
-    """``search.shelf``：不联网，列出库里「全文在盘上」的文献。"""
+def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str = "") -> Any:
+    """``search.shelf``：不联网，列出库里「全文在盘上」的文献（可按 `query` 过滤题名/路径）。"""
     if ctx.store is None:
         return fail(
             "未配置 store：读不到文献表，也就说不出书架上有什么"
@@ -260,6 +260,13 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "") -> Any:
 
     books: list[dict] = []
     missing = 0
+    # ⚠️ **2026-10-16（亲测 A 的工具面时加的）**：这一件叫 `search.shelf`，可它的参数里
+    # **没有 `query`** —— 我第一次凭感觉敲的就是 `query=`，吃了一个"未声明的参数"。
+    # 按业主口径（"第一次凭感觉敲红的，真实智能体也会在这里困惑"）⇒ 让**第一猜能 work**：
+    # 可选 `query`，按**题名/路径**做子串过滤（大小写不敏感）。它不读全文
+    # （全文按主题取片段是 `search.local` 的事，两者的分工在说明里写清）。
+    needle = str(query or "").strip().lower()
+    matched = 0
     for row in rows:
         if lit_id and str(row.get("lit_id") or "") != lit_id:
             continue
@@ -268,6 +275,11 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "") -> Any:
             if row.get("path"):
                 missing += 1
             continue
+        if needle:
+            hay = f"{item.get('title') or ''} {item.get('path') or ''}".lower()
+            if needle not in hay:
+                continue
+            matched += 1
         books.append(item)
     books.sort(key=lambda b: b["lit_id"])
     truncated = False
@@ -277,6 +289,11 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "") -> Any:
     return ok(
         {
             "count": len(books),
+            "query": str(query or ""),
+            "filtered_out": (len(books) + sum(
+                1 for r in rows if needle and needle not in
+                f"{r.get('title') or ''} {r.get('path') or ''}".lower()))
+                - len(books) if needle else 0,
             "rows_total": len(rows),
             "have_path": sum(1 for r in rows if r.get("path")),
             "missing_files": missing,
@@ -904,9 +921,17 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         return fail(f"下载异常：{type(exc).__name__}: {exc}", kind="download_error", url=url)
 
     if not res.ok:
+        # ⚠️ **2026-10-16（把 A 做成会应变的智能体）**：这里要把**下载层那一档**
+        # 原样带出去（`fetch_kind`）。改前只给一个笼统的 `download_failed`，
+        # 细分类（`tls_cert` / `tls_timeout` / `http_403` / `network_error` …）只剩在
+        # 自由文本里 ⇒ **A 读不到"为什么没下到"，也就没法决定"换源还是重试"**。
+        # 现场读数（我亲自下的那一轮）：`tls_cert` 类同一个 URL 每次要 122 秒才判死
+        # （本机证书/吊销检查），而 `http_403` 是明确不给脚本 ⇒ 两者的正确处置相反
+        # （前者换源/改客户端开关，后者直接换源），不看类别就只能在原地耗时间。
         return fail(
             f"下载失败：{res.error}",
             kind="download_failed",
+            fetch_kind=res.kind,
             url=url,
             http_status=res.http_status,
             bytes=res.bytes,
@@ -1379,10 +1404,16 @@ def _search_providers(ctx):
 @tool(
     "search.shelf",
     "**不联网**：列出工作区里**全文在盘上**的文献（本地书架）。"
-            "给 A 一条离线来源：有它才知道不用网也能引用哪些书。",
+            "给 A 一条离线来源：有它才知道不用网也能引用哪些书。"
+            # ⚠️ 2026-10-16：这一段**不许枚举可选键**（本仓规矩：可用键交给"被拒时那张表"，
+            # `test_prompt_param_hints` 守着它）。所以只描述**能力**，不点名键名。
+            "也可以只按**题名/路径**筛一部分（子串、大小写不敏感，不读全文）；"
+            "要按主题取逐字摘录用 `search.local`。",
     {
            "type": "object",
            "properties": {
+            "query": {"type": "string", "maxLength": 200,
+                      "description": "可选：按题名/路径子串过滤（大小写不敏感）"},
             "limit": {"type": "integer", "minimum": 1, "maximum": 500},
             "lit_id": {"type": "string", "maxLength": 40},
            },
@@ -1393,7 +1424,7 @@ def _search_providers(ctx):
     roles=("A", "C", "H"),
     returns=(
             "{'count','rows_total','have_path','missing_files','local_ingest','downloaded',"
-            "'truncated','books','note'}；"
+            "'truncated','books','note','query','filtered_out'}；"
             "books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages',"
             "'has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；"
             "失败：ok=False + kind(no_store/table_unreadable) + counted=False"
@@ -1401,13 +1432,13 @@ def _search_providers(ctx):
             ),
     tags=("search", "offline", "shelf"),
 )
-def _search_shelf(ctx, limit=None, lit_id=""):
+def _search_shelf(ctx, limit=None, lit_id="", query=""):
     """search.shelf 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（ctx）由装配期用 `partial` 绑定，
     所以模型看到的签名与搬移前逐字相同。
     """
-    return _h_shelf(ctx, limit, lit_id)
+    return _h_shelf(ctx, limit, lit_id, query)
 
 @tool(
     "search.local",
@@ -1452,7 +1483,13 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 @tool(
     "search.download",
     "把候选的 pdf_url 下到工作区 downloads/（不覆盖同名文件）；"
-            "filename 由 fetch 层 slug 化。返回 ok/bytes/sha256/path 与内容类型警告。",
+            "filename 由 fetch 层 slug 化。返回 ok/bytes/sha256/path 与内容类型警告；"
+            "**失败时带 `fetch_kind`**（下载层那一档：`tls_cert`＝本机证书/吊销检查够不到 ⇒ "
+            "换源、别重试；`tls_timeout`＝TLS 握手超时、多半是对方挡脚本 ⇒ 至多再试一次；"
+            "`http_403`/`http_401`＝明确不给脚本 ⇒ 直接换源；`network_error`/`timeout`＝网络抖动 ⇒ "
+            "可以重试；`all_sources_failed`＝候选与镜像都试完了 ⇒ 这一条路走完了）。"
+            "**成功也读一眼**：`ok=True` 时 `content_warning=content_type_mismatch` 表示"
+            "落盘的是落地页/登录墙（**别当全文**）。**先读它，再决定下一步**。",
     {
            "type": "object",
            "properties": {
@@ -1470,7 +1507,10 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
     returns=(
             "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256',"
             "'http_status','max_bytes_requested','max_bytes_effective','elapsed_s',"
-            "'content_warning','warnings'}"
+            "'content_warning','warnings'}；"
+            "失败：ok=False + kind(download_failed/download_error) + "
+            "fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/"
+            "network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）"
             ),
     tags=("search", "download"),
     external="egress",
@@ -1618,6 +1658,106 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
 )
 
 
+def _h_walk_citations(
+    ctx: _Ctx, lit_id: str, direction: str = "backward", limit: int = 20
+) -> Any:
+    """``search.walk_citations``：由一篇**已登记的**文献出发，在引文图上走一步。
+
+    业主 2026-10-15 裁定：引文图**用新动作的方式落** —— 本函数是那件动作的工具面。
+
+    - ``backward``（**回溯**）：这一篇**引了谁** —— 读它的 ``referenced_works`` 再批量解析；
+    - ``forward``（**前推**）：**谁引了这一篇** —— ``filter=cites:<W…>``。
+
+    ## 为什么这里**不**替判重（与 ``search.literature`` 的差别是刻意的）
+
+    ``search.literature`` 会给每条候选标 ``is_new``，好让 A 少跑一次判重工具。
+    本工具**不做这件事**：判重（``dedup_key`` / ``existing`` / ``is_new``）在本模块里
+    只有 ``_h_literature`` 那一处内联实现，在这里再写一份就是"同一件事两处实现" ——
+    而"同一篇文献只留一个键"正是本仓划进禁改区的那条纪律（``dedup.py``）。
+    所以这里只交**书目字段**；要不要登记、怎么登记，走既有的
+    ``search.dedup_check`` → ``search.register`` 那条路。
+
+    ## 为什么源必须是**盘上已登记**的那一篇
+
+    引文走查要从"我们手上的这一篇"出发（拿它的 DOI / OpenAlex id）。
+    不接受任意 DOI：那样它就成了第二个检索入口，而"检索"这件事的账
+    （``search_requests`` 的终局、I7 准入闸门）只在 ``search.literature`` 那一处记。
+    ``lit_id`` 不在 ``literature`` 表里 ⇒ ``ok=False`` 并说明（不是空列表）。
+    """
+    fail_meta = {"lit_id": lit_id, "direction": direction, "count": 0}
+    if ctx.store is None:
+        return fail("未配置 store：读不到 literature 表，于是不知道这一篇是哪一篇",
+                    kind="no_store", **fail_meta)
+    rows, read_error = _literature_rows(ctx)
+    if read_error:
+        # 三态：表坏了**不是**"这一篇不在表里"（后者是有效结论）
+        return fail(f"{read_error} ⇒ 引文走查**没做成**（不是「它没有引文邻居」）",
+                    kind="table_unreadable", **fail_meta)
+    row = next((r for r in rows if str(r.get("lit_id")) == str(lit_id)), None)
+    if row is None:
+        return fail(f"literature 表里没有 {lit_id!r}（引文走查从盘上这一篇出发）",
+                    kind="unknown_lit_id", known=len(rows), **fail_meta)
+
+    doi = row.get("doi")
+    oa_id = row.get("openalex_id") or ((row.get("raw") or {}).get("openalex_id")
+                                       if isinstance(row.get("raw"), dict) else None)
+    if not doi and not oa_id:
+        return fail("这一行既没有 doi 也没有 openalex_id ⇒ 没法在引文图上定位它",
+                    kind="no_source_key", **fail_meta)
+
+    prov = _resolve_provider(ctx, "openalex")
+    if not hasattr(prov, "walk_citations"):
+        return fail(f"provider {getattr(prov, 'name', prov)!r} 不支持引文走查",
+                    kind="provider_cannot_walk", **fail_meta)
+    try:
+        cands = prov.walk_citations(doi=doi, openalex_id=oa_id,
+                                    direction=direction, limit=limit)
+    except Exception as exc:  # noqa: BLE001 - 走查失败要如实回报，不该让工具层崩
+        return fail(f"引文走查失败：{type(exc).__name__}: {exc}",
+                    kind="walk_failed", **fail_meta)
+
+    items = [
+        {
+            "title": c.title,
+            "year": c.year,
+            "doi": c.doi,
+            "type_code": c.type_code,
+            "authors": list(c.authors or []),
+            "venue": c.venue,
+            "language": c.language,
+            "summary": T.clip(c.summary, P.SUMMARY_MAX_CHARS),
+            "pdf_url": c.pdf_url,
+            "landing_url": c.landing_url,
+            "provider": c.provider,
+            # 这一条是怎么被找到的：引文图上的**方向**与它的 OA 位置来源。
+            # `oa_source` 直接决定"这篇的全文取不取得到"（`_pdf_url_rank` 用同一格）。
+            "is_oa": (c.raw or {}).get("is_oa"),
+            "oa_source": (c.raw or {}).get("pdf_url_source"),
+            "openalex_id": (c.raw or {}).get("openalex_id"),
+        }
+        for c in cands
+    ]
+    # ⚠️ 成功也要走 `ok(...)`，**不许直接 return 一个普通 dict**。
+    #
+    # 为什么（这是实测踩出来的）：注册表两种都收（普通 dict 会被它包成 `ToolResult`），
+    # 所以"直接 return dict"在**工具调用**那一侧看不出问题。但**动作层**是直接调
+    # 这个处理器的（`agent_a/walk_citations.py` 走 `_h_walk_citations`），它按
+    # `ToolResult` 读 `ok` / `data` —— 于是普通 dict 会让它把一次**成功**读成
+    # `ok=False`、`kind=''`（"没做成"却没有理由），而那正是本仓最忌讳的形状：
+    # **读数与事实不符**。本文件其余处理器一律 `ok(...)` / `fail(...)`，照它办。
+    return ok({
+        "lit_id": lit_id,
+        "doi": doi,
+        "openalex_id": oa_id,
+        "direction": direction,
+        "count": len(items),
+        "candidates": items,
+        # 一句留给下游的话：这份候选没做过判重标注（本工具不复制判重实现）
+        "note": ("候选**没有**判重标注（本工具不复制判重实现）：登记前先 search.dedup_check，"
+                 "登记走 search.register。"),
+    })
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -1717,6 +1857,44 @@ def register(
             ),
             tags=("search", "literature"),
         ),
+        ToolSpec(
+            name="search.walk_citations",
+            summary="由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、"
+            "forward = 谁引了它。**刻意不按热度排序** —— 找冷门/更短的那条路时，"
+            "热度排序方向是反的。候选不带判重标注，登记走 search.dedup_check/register。",
+            params={
+                "type": "object",
+                "properties": {
+                    "lit_id": {
+                        "type": "string", "minLength": 1, "maxLength": 40,
+                        "description": "盘上 literature 表的行号；引文走查从这一篇出发",
+                    },
+                    "direction": {
+                        "type": "string", "enum": ["backward", "forward"],
+                        "description": "backward=这一篇引了谁；forward=谁引了这一篇",
+                    },
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                },
+                "required": ["lit_id"],
+                "additionalProperties": False,
+            },
+            handler=lambda lit_id, direction="backward", limit=20: _h_walk_citations(
+                ctx, lit_id, direction, limit
+            ),
+            side_effect="read",
+            declared_external="egress",
+            roles=("A",),
+            returns=(
+                "{'lit_id','doi','openalex_id','direction','count','candidates','note'}；"
+                "失败时按本模块的统一口径走 `fail(...)`（`ok=False` ＋ `error` 一句，"
+                "`kind` 分四档：no_store / table_unreadable / unknown_lit_id / "
+                "no_source_key / provider_cannot_walk / walk_failed）；"
+                "candidates[] 每项是 {'title','year','doi','type_code','authors','venue',"
+                "'language','summary','pdf_url','landing_url','provider','is_oa',"
+                "'oa_source','openalex_id'}"
+            ),
+            tags=("search", "citation"),
+        ),
     ]
     _bound: dict[str, Any] = {}
     _bound['ctx'] = ctx
@@ -1787,7 +1965,7 @@ def _selftest() -> int:
     if not res.ok:
         search_ok = False
         print(f"    [失败·如实报告] {res.error}")
-        print(f"    meta={json.dumps(res.meta, ensure_ascii=False)}")
+        print(f"    meta={json.dumps(res.meta, ensure_ascii=False, default=str)}")
     else:
         data = res.unwrap()
         print(
@@ -1795,7 +1973,7 @@ def _selftest() -> int:
             f"existing={data['existing_count']} unknown={data['unknown_count']} "
             f"elapsed={data['elapsed_s']}s"
         )
-        print(f"    diagnostics={json.dumps(data['diagnostics'], ensure_ascii=False)[:300]}")
+        print(f"    diagnostics={json.dumps(data['diagnostics'], ensure_ascii=False, default=str)[:300]}")
         for i, c in enumerate(data["candidates"], 1):
             print(
                 f"    [{i}] {c['title'][:70]}\n"
@@ -1834,7 +2012,7 @@ def _selftest() -> int:
         d = res.unwrap()
         print(
             f"        would_be_duplicate={d['would_be_duplicate']} matched_key={d['matched_key']} "
-            f"existing={json.dumps(d['existing'], ensure_ascii=False)}"
+            f"existing={json.dumps(d['existing'], ensure_ascii=False, default=str)}"
         )
         if not d["would_be_duplicate"]:
             print("        [失败] 同 DOI 未被判重")
@@ -1849,7 +2027,7 @@ def _selftest() -> int:
         d = res.unwrap()
         print(
             f"        would_be_duplicate={d['would_be_duplicate']} keys={d['keys']} "
-            f"near_misses={json.dumps(d.get('near_misses'), ensure_ascii=False)}"
+            f"near_misses={json.dumps(d.get('near_misses'), ensure_ascii=False, default=str)}"
         )
         if d["would_be_duplicate"]:
             print("        [失败] 全新标题被判成重复")

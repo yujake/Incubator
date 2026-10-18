@@ -123,3 +123,33 @@ def test_shelf_search_shape_matches_the_action_contract(tmp_path: pathlib.Path):
     assert "shelf_search" not in {a.action for a in []}, "占位：动作名由 B 声明"
     assert json.dumps(out, ensure_ascii=False, default=str)
     assert S.ROLES  # 名单来自 schema（这一条只为让 import 有落点）
+
+# ============================================================ 2026-10-16：第一猜 `query` 要能用
+
+def test_shelf_accepts_a_query_and_filters_by_title_or_path(tmp_path: pathlib.Path):
+    """业主口径：「第一次凭感觉敲红的，真实智能体也会在这里困惑。」
+
+    `search.shelf` 的名字里带 search，而它的参数原本**只有** `limit` / `lit_id`
+    —— 我第一次凭感觉敲的就是 `query=`，吃了一个「未声明的参数」。
+    这一条钉住修好之后的行为：**`query` 收下了，而且是按题名/路径过滤**（不读全文）。
+    """
+    st = _store(tmp_path)
+    _add_book(st, lit_id="0001", path="a.txt", text="alpha")
+    _add_book(st, lit_id="0002", path="b.txt", text="beta")
+    out = _a(st).shelf_search(limit=10, query="b.txt")
+    assert out["ok"] is True, out
+    assert out["count"] == 1, out
+    assert out["lit_ids"] == ["0002"], out
+    assert out["shelf"]["data"]["filtered_out"] == 1, out["shelf"]["data"]
+    assert out["shelf"]["data"]["query"] == "b.txt", out["shelf"]["data"]
+
+
+def test_a_query_that_matches_nothing_is_not_an_empty_shelf(tmp_path: pathlib.Path):
+    """负控（三态）：**没匹配**与**书架是空的**必须是两件事（读数上分得开）。"""
+    st = _store(tmp_path)
+    _add_book(st, lit_id="0001", path="a.txt", text="alpha")
+    out = _a(st).shelf_search(limit=10, query="zzz")
+    data = out["shelf"]["data"]
+    assert out["count"] == 0, out
+    assert data["rows_total"] == 1, data          # 书架里明明有一本
+    assert data["filtered_out"] == 1, data        # 它只是被 query 滤掉了

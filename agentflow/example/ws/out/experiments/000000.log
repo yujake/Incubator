@@ -1,0 +1,7 @@
+# example_even_parity
+# 脚本 code/example_parity.py  sha256=22422d0c39ad0b95
+# exit_code=0  runtime=0.172s
+# claim: 前五个偶数都是偶数
+----- stdout -----
+REPRO_RESULT: {"result": "supports", "observations": {"n_checked": 5}, "counterexample": null, "negation_kind": "not_proved"}
+----- stderr -----

@@ -27,6 +27,7 @@ from agentflow import stopctl as SC
 from agentflow import autonomy as AU
 from agentflow.llmseam import LlmSeam, SeamSpend
 from agentflow.store import Store
+from agentflow.tokenmeter import Charge, TokenMeter
 
 
 @pytest.fixture()
@@ -165,6 +166,57 @@ def test_the_resolver_falling_over_falls_back_to_the_static_cap(ws: pathlib.Path
     # 没有静态上限且现读炸了 ⇒ 不限（这是"两个都没有"那一档，与上面那条不同）
     loose = _seam(ws, static=None, resolver=_boom)
     assert loose.budget_limit() is None
+
+
+# ============================================================ 2b. 口径必须是全局的（裁定 B2）
+#
+# 2026-10-15 业主裁定 B2：钱那一格此前比的是 `self.spend.usd`（**这一条缝自己的**
+# 累计），而 `budget_limit()` 是**全局**额度 ⇒ 每个角色都以为"我最多能花整笔"。
+# 一组十个角色就能把总预算花成十倍，而每一处闸门看起来都在"正常工作"。
+
+
+def test_the_money_gate_reads_the_shared_ledger_not_this_seams_pocket(
+        ws: pathlib.Path) -> None:
+    """**B2 的钉子**：别的角色花掉的钱，这一条缝必须看得见。
+
+    构造：全局预算 1.0；账上已经有一笔**别的角色**花的 2.0；
+    这一条缝自己的 `spend.usd` 是 **0**。
+    改前它读到 0 < 1.0 ⇒ 放行（钱会被花成两倍）；改后它读到全局 2.0 ⇒ 拒。
+    """
+    st = Store(ws)
+    st.init()
+    meter = TokenMeter(st, budget_usd=1.0)
+    meter.charge(Charge(role="A", scope="search", usd=2.0, task_id="t-0001",
+                        note="别的角色花的钱"))
+    seam = LlmSeam(role="M", session_root=ws, gateway=_Gateway(), price=(0.0, 0.0),
+                   usd_budget=1.0, meter=meter)
+    assert seam.spend.usd == 0.0, "前提：这一条缝自己一分钱没花"
+    assert seam.spent_usd() == (2.0, "ledger"), seam.spent_usd()
+    got = seam.ask("问一句")
+    assert got.problem == "judge_over_budget", (
+        f"全局已经超了，这一处必须拒（拿到 {got.problem}/{got.ok}）")
+    assert "全局" in got.detail and "ledger" in got.detail, got.detail
+
+
+def test_a_seam_without_a_ledger_says_its_reading_is_only_its_own(
+        ws: pathlib.Path) -> None:
+    """三态：没有账本 ⇒ 读数只能报这条缝自己的，而且**必须写明**是哪个口径。
+
+    为什么这条要单独立：把 `per_seam` 与 `ledger` 折叠成同一个数，正是 B2 那个缺陷
+    的形态 —— 两个口径给出同一个数字时，没有人能看出它们本该不同。
+    """
+    bare = _seam(ws, static=1.0, resolver=lambda: 1.0)
+    assert bare.spent_usd() == (1.0, "per_seam"), bare.spent_usd()
+    # 有账本但读不出来 ⇒ 第三态（不许折成"花了 0"）
+    class _BrokenMeter:
+        def spent(self):
+            raise OSError("账读不出来")
+
+    broken = LlmSeam(role="M", session_root=ws, gateway=_Gateway(), price=(0.0, 0.0),
+                     usd_budget=1.0, meter=_BrokenMeter(),
+                     spend=SeamSpend(usd=0.75, calls=1))
+    usd, src = broken.spent_usd()
+    assert usd == 0.75 and src.startswith("ledger_unreadable:"), (usd, src)
 
 
 # ============================================================ 3. 扣完优雅停

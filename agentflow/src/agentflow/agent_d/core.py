@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ._support import Any, C_API_MISSING_REASON, C_NO_EVIDENCE, IX, KIND_CLIENT, KIND_NONE, Mapping, Path, RT, S, STATE_FAILED, STATE_NOT_WIRED, Sequence, Store, StoreError, ToolRegistry, _C_AUTO, _digest, _json_object, _rank, _rank_min, current_summon_task_id, install_d_tools, invented_facts, json, load_trace_tools, model_json_call, model_kind, re, spend_reading
 from .. import conceptrows as _CR   # 并表过渡期：概念行读合成视图（老表 + 新标准同号去重）
 from .probe_c import _ProbeC
@@ -901,6 +903,9 @@ class _Core:
         if verdict.get("contradictions"):
             return True  # 矛盾要靠原文语境判定谁对
         claims = evidence.get("claims") or []
+        # 2026-10-17（agents #4 同族，真身在这里）：`claims` 可能是 str / 字典 ——
+        # 只对 Mapping 元素取 `.get`，否则 `c.get` 在字符上抛 AttributeError。
+        claims = [c for c in claims if isinstance(c, Mapping)] if isinstance(claims, (list, tuple)) else []
         if claims and not any(c.get("quote_verified") is True for c in claims):
             return True  # 要写结论却一条可核验的引文都没有
         return False
@@ -1374,8 +1379,7 @@ class _Core:
                     "confidence": "high|medium|low",
                 },
             },
-            ensure_ascii=False,
-        )
+            ensure_ascii=False,default=str)
         payload, text, reading = model_json_call(self.llm, prompt, task_id=self._summon_task_id(),
                                                  note="D.research 的初步分析")
         reading["task_id"] = self._summon_task_id()
@@ -1677,7 +1681,7 @@ def _selftest() -> int:
         assert len(st.rows("search_requests")) == after, "查重失败：重复提交了查询请求"
 
     print("[7] poll：A/B 都还没跑")
-    print(f"    {json.dumps(d.poll(), ensure_ascii=False)}")
+    print(f"    {json.dumps(d.poll(), ensure_ascii=False, default=str)}")
 
     print("[8] 模拟 A 跑完 + B 消化，再次 poll")
     open_reqs = [r for r in st.rows("search_requests") if not r.get("done")]
@@ -1722,8 +1726,7 @@ def _selftest() -> int:
             return json.dumps(
                 {"analysis": "（LLM 写的分析）", "conclusion": "（LLM 写的结论）",
                  "suggestions": ["（LLM 建议）"], "confidence": "high"},
-                ensure_ascii=False,
-            )
+                ensure_ascii=False,default=str)
 
     d2 = AgentD(st, config={"max_questions": 5}, actor="agent-D", tools=reg, llm=FakeLLM())
     d2.trace_question(new_ids[0])

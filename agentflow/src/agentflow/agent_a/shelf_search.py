@@ -88,7 +88,12 @@ class _ShelfSearch:
         text = "" if query is None else str(query).strip()
 
         ctx = _tool_ctx(self.store, self.actor)
-        shelf = _h_shelf(ctx, limit=cap, lit_id=str(lit_id or ""))
+        # ⚠️ **2026-10-16（亲测时由判据当场抓出来的）**：`query` 此前**只**给了
+        # `search.local`，**没给 `search.shelf`** ⇒ 于是"带条件问书架"会**静默地**
+        # 返回一份未过滤的清单（不报错、只是忽略条件）—— 那正是"让人困惑并浪费 token"
+        # 的一类。现在两件工具都收到同一个 `query`：书架负责**按题名/路径过滤清单**，
+        # `search.local` 负责**按主题取逐字摘录**（分工写进两边的说明）。
+        shelf = _h_shelf(ctx, limit=cap, lit_id=str(lit_id or ""), query=text)
         shelf_ok = bool(getattr(shelf, "ok", False))
         shelf_data = dict(getattr(shelf, "data", None) or {})
         books = list(shelf_data.get("books") or [])

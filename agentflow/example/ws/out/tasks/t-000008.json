@@ -1,0 +1,19 @@
+{
+ "action": "register_statement",
+ "at": "2026-10-15T17:05:35+08:00",
+ "detail": "[handler_ok=False kind=missing_source] origin='external_lit' 时必须给 source_lit_id —— 从文献摘的命题必须有出处（没有出处的摘录就是二手结论）",
+ "outcome": "refused",
+ "payload_bytes": 225,
+ "payload_keys": [
+  "error",
+  "kind",
+  "ok",
+  "refusal_reason"
+ ],
+ "payload_preview": "{\"error\": \"origin='external_lit' 时必须给 source_lit_id —— 从文献摘的命题必须有出处（没有出处的摘录就是二手结论）\", \"kind\": \"missing_source\", \"ok\": false, \"refusal_reason\": \"invalid_params\"}",
+ "payload_sha256": "e36a9f2a0c10fe48db5a44be34f33ea662ffccd57e768f14bbb49b730de3a809",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000008"
+}

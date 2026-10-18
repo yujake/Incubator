@@ -797,6 +797,13 @@ _R010_NETWORK_MARKERS: tuple[tuple[str, str], ...] = (
     ("http_post", "provider 层的 HTTP 入口"),
     ("download", "下载器入口（`search.download` 走 `downloader.download`）"),
     ("search", "provider 对象的检索入口（`search.literature` 走 `prov.search`）"),
+    ("walk_citations",
+     "provider 对象的**引文走查**入口（`search.walk_citations` 走 `prov.walk_citations`）——"
+     "2026-10-15 加。它与上面那条同族：出网发生在 provider 对象的方法里，"
+     "从 handler 出发的名字解析到不了 `http_get_json`。"
+     "补进标记表而**不是**登记成 `_R010_EGRESS_BLIND_SPOTS` 的豁免："
+     "豁免只把「声明 egress 却看不到网络」那一个方向降成 info，"
+     "而 R010-c（声明 none 却链里联网）照样会漏掉这一类入口 —— 补标记表两个方向都盖住"),
 )
 
 #: R010-a 的例外清单：声明 `external != "exec"` 而 handler 链里起子进程的工具。

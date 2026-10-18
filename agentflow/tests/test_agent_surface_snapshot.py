@@ -186,8 +186,17 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
         assert got["tools"], f"{role} 一个工具都没有"
         assert len(got["prompt"]) > 5000, f"{role} 的提示词只有 {len(got['prompt'])} 字符"
         if role in READ_ONLY_ROLES:
-            assert not got["write_tools"], (
-                f"只读角色 {role} 的工具面里有写工具：{got['write_tools']}")
+            # 2026-10-17（业主裁定「方案 1」）：不变量从「全只读」改成「写面钉死」——
+            # 允许的写工具只有 READONLY_CALL_EXCEPTIONS[role] 里逐条登记的**自己的落库代理**
+            # （H：review 的三件）。不许出现的是「**未登记**的写工具」——那才是放宽只读。
+            from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
+
+            _allowed = {n for n, _w in _EXC.get(role, ())}
+            _stray = [n for n in got['write_tools'] if n not in _allowed]
+            assert not _stray, (
+                f"只读角色 {role} 的工具面里出现了**未登记**的写工具：{_stray}"
+                f"（允许的落库代理：{sorted(_allowed)}）")
+
         if role in C.CAPABILITIES:
             missing = [a for a, sig in got["handler_signatures"].items()
                        if sig == "（类上没有这个方法）"]

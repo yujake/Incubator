@@ -88,17 +88,25 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-13 随 `paper_package` 退场（`draft/117`）从 83 改成 79：
 #: 四条旧工具（`paper_render` / `paper_build` / `paper_anchor` / `paper_state`）
 #: 一起下线，编译那一格由既有的 `doc.paper_compile` 接手。
-TOOL_COUNT = 79
+TOOL_COUNT = 84
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
 
 #: 判据的范围（写在常量里，免得它被当成比实际更强的东西）：
 SUBSET_CHECK_SCOPE = (
-    "本判据只抓『声明了却没给』（declared - actual 非空，键在**任意嵌套层**取并集）；"
-    "它抓不到『给了却没声明』—— 那种漂移不会让调用方读错字段，只会让它少看到字段。"
+    "**这一条**只抓『声明了却没给』（declared - actual 非空，键在**任意嵌套层**取并集）；"
+    "它抓不到『给了却没声明』—— 那一条由**同文件的另一条判据**盖住，见下。"
     "它也不检查数组里逐元素的一致性：同一个数组的多个元素被并成一份键集合，"
-    "所以『元素 A 有、元素 B 没有』这种漂移抓不到（那是更强的一条判据，本文件不做）。"
+    "所以『元素 A 有、元素 B 没有』这种漂移**这一条**抓不到。"
+    "⚠️ 2026-10-15 起，那两个盲区**各有一条判据**了（三条各管一件事，别把强度混起来）：\n"
+    "  ① 『给了却没声明』：`test_no_tool_returns_a_top_level_key_it_does_not_declare`"
+    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 80 个工具**零缺键**）。"
+    "为什么它值得单独一条：`tools/base.py:721` 把 `returns` 拼进 function-calling 的 "
+    "`description` ⇒ **模型看得到**，于是「声明里没有」= 「模型不知道这个字段存在」"
+    "（`doc.scan_claim` 的 `status_axis`/`undecided_reason` 就是这一类 —— 那两格**正是三态**）；\n"
+    "  ② 『数组里逐元素不一致』：`test_every_element_of_an_array_carries_the_same_top_level_keys`"
+    "（实测全 79 个工具里只有 `table.schema` 犯过，132 处，已修）。"
 )
 
 # ---------------------------------------------------------------- 豁免清单
@@ -215,15 +223,16 @@ def tool_params() -> dict[str, dict]:
         # ---- 主控的编排面工具（T0-9）：探针参数一律用"不会真的派活出去"的形态 ——
         # 主控的 Conductor 默认没有角色接线，派活会以 refused/not_wired 如实落台账，
         # 而 `ok(...)` 照样返回（拒绝 ≠ 工具失败）。`ensure_project` 的落点由夹具注入临时目录。
-        "conductor.summon": {"target_role": "E", "action": "list_experiments",
+        # 2026-10-16（口径 S2）：派活只要 `task`（`action` 那一格已从 schema 摘掉）。
+        "conductor.summon": {"target_role": "E", "task": "列一遍实验",
                              "input_key": "probe"},
         # 批量派活：夹具里的 Conductor 没有角色接线 ⇒ 每一项都以 `refused/not_wired`
         # 落台账，而工具照样返回 ok 载荷（拒绝 ≠ 工具失败）。两个 target 用不同
         # `instance`，正是"同角色并发多实例"那条路（分波与峰值会出现在返回里）。
         "conductor.summon_many": {
             "targets": [
-                {"target_role": "E", "action": "list_experiments", "instance": "1"},
-                {"target_role": "E", "action": "list_experiments", "instance": "2"},
+                {"target_role": "E", "task": "列一遍实验", "instance": "1"},
+                {"target_role": "E", "task": "列一遍实验", "instance": "2"},
             ],
             "why": "探针：只验键集，不真的派活",
         },
@@ -289,7 +298,17 @@ def tool_params() -> dict[str, dict]:
         # `draft/37` §134：交接手稿的读面。编号 `0000` 由 `_seed` 真写一份手稿
         # （编号由脚本从 0000 起分配 —— 夹具不自己编文件名，走的是同一条实现）。
         "manuscripts.list": {},
+        # 2026-10-17（方案 1）：这三件原先只在 H 的落库代理里，现在它对 H 可见。
+        # 夹具没有 `documents` 行 ⇒ 探针跑不成 ok 分支 ⇒ 键名读自 `_WRITE_TOOL_FUNCTIONS` 的实现。
+        "review.review_document": {"doc_id": "0000"},
+        "review.verify_fixes": {"doc_id": "0000", "round_no": 1},
+        "review.report": {"doc_id": "0000", "round_no": 1, "own_errors": []},
         "manuscripts.read": {"id": MS_ROW_ID},
+        # 2026-10-17 新增：文字层抽取（T5 那趟"PDF 正文不可达"的正面补法）。
+        # 真抽一次：`library/0000/source.txt` 是夹具里带文字层的那份。
+        # 2026-10-17 新增：A 的"PDF → 纯文字稿入库"。夹具那份是纯文本 ⇒ 工具直通入库，
+        # 探针真跑得成（所以键由实跑观测，不登记进"键名读自源码"那一档）。
+        "text.extract": {"path": SOURCE_REL},
         "ocr.backends": {},
         "ocr.detect_text_layer": {"path": SOURCE_REL},
         "ocr.run": {"path": OCR_IMAGE_REL, "backend": "auto"},
@@ -311,6 +330,9 @@ def tool_params() -> dict[str, dict]:
     "search.literature": {"topic": "群", "mode": "topical",
                           "providers": ["fixture", "openalex"]},
         "search.local": {"query": "群"},
+        # 引文走查（2026-10-15 加）：源必须是**盘上已登记**的那一篇 ——
+        # 夹具里 `_seed()` 铺的正是 `0000`；provider 由 `_StubProvider.walk_citations` 接住。
+        "search.walk_citations": {"lit_id": "0000"},
         "search.shelf": {},
         "search.providers": {},
         "search.register": {"title": "新文献", "type_code": "J", "summary": "s"},
@@ -368,7 +390,9 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "review.list_findings", "review.scan_document",
         "search.dedup_check", "search.ingest_local", "search.literature", "search.local",
         "search.providers",
-        "search.register", "search.shelf",
+        "search.register",
+        "search.shelf",
+        "search.walk_citations",
         "table.count", "table.create", "table.delete", "table.get", "table.list", "table.schema",
         "table.search", "table.update",
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
@@ -383,13 +407,22 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 广播（S6-b）：探针走"读成了、没有收件人"那一支（工作区里没有子代理），
         # 键集合与有收件人那一支逐字相同 ⇒ 这条探针验得了"声明 ⊆ 实现"。
         "conductor.broadcast",
+        # 文字层抽取：探针真跑（`tool_params()` 给了 `SOURCE_REL`）⇒ 键名读自实现。
     }
 )
 
 #: 键名只能从代码读出来的那些工具（见 `EXECUTED_KEY_SOURCE` 的判据）。
 CODE_ONLY_KEY_SOURCE: dict[str, str] = {
+    # 三件审校写工具：探针拿不到 ok 分支（夹具没有 documents 行）⇒ 键名读自实现。
+    "review.review_document": "写 `review_findings` 行并改 `documents.status`；"
+                             "返回值由 `_review_review_document_tool` 的 ok/fail 决定。",
+    "review.verify_fixes": "复审：返回 fixed/open 计数与仍开着的 finding 列表。",
+    "review.report": "落 markdown 报告；返回 path/chars/findings 计数。",
     "search.download": "需要一次成功的真实下载才能观测 ok 分支（`_h_download` 的 data 字典）；"
     "本机没有可用的下载目标，实测得到的是 fail 分支 ⇒ 键名逐字读自源码。",
+    "text.extract": "它要一份**有文字层**的原件才能观测 ok 分支，而声明判据的夹具里"
+    "没有带文字层的 PDF（`SOURCE_REL` 是 `.txt`；写盘还要 workspace）⇒ 探针只会得到 "
+    "no_text_layer/其他失败档，键名逐字读自 `_h_extract` 的 `ok({...})`。",
     "ocr.run": "需要真的 OCR 后端（easyocr/pytesseract）。本机 torchvision↔numpy ABI 冲突会先炸；"
     "即使注入桩后端也只验证到「编排层」。data 字典的键名逐字读自 `_h_run`。",
 }
@@ -467,6 +500,31 @@ class _StubProvider:
                 type_code="J",
                 provider="openalex",
                 summary="stub",
+            )
+        ]
+
+    def walk_citations(self, *, doi: str | None = None, openalex_id: str | None = None,
+                       direction: str = "backward", limit: int = 20) -> list:
+        """引文走查那一支的桩（`search.walk_citations` 的探针要走到成功分支）。
+
+        为什么桩也必须覆盖它：`_h_walk_citations` 在 provider 没有这个方法时
+        走的是 `fail(kind="provider_cannot_walk")` —— 那是"没查成"，
+        而本文件的 `MAX_SKIPPED = 0` 不许把"没查成"读成"一致"。
+        `raw` 里带上 `is_oa` / `pdf_url_source` / `openalex_id` 三格：它们是
+        该工具返回的逐条读数（声明里承诺了这三格）。
+        """
+        from agentflow import providers as P
+
+        return [
+            P.Candidate(
+                title=f"Stub cited by {doi or openalex_id or 'unknown'}（{direction}）",
+                year=1999,
+                doi="10.1000/stub.cited",
+                type_code="J",
+                provider="openalex",
+                summary="stub",
+                raw={"is_oa": True, "pdf_url_source": "best_oa_location.pdf_url",
+                     "openalex_id": "W0000000001"},
             )
         ]
 
@@ -1189,3 +1247,205 @@ def test_search_register_declares_keys_that_the_duplicate_branch_also_returns(
     # 如实给空值：这两个是"新建成功"那一支才有的东西，本支没发生过
     assert second.data["path"] is None and second.data["download"] is None, second.data
     assert first.data["reason"] is None and first.data["existing"] is None, first.data
+
+
+# ------------------------------------------------ 诊断（临时）：数组里逐元素的一致性
+#
+# 这一格是 `SUBSET_CHECK_SCOPE` 自己点名的**第二个盲区**：
+# "它也不检查数组里逐元素的一致性：同一个数组的多个元素被并成一份键集合，
+#  所以『元素 A 有、元素 B 没有』这种漂移抓不到。"
+#
+# 先只**打印**、不断言 —— 看清规模再决定改法（改声明的措辞、还是改实现的元素构造）。
+
+
+def _array_element_missing(value: object, path: str = "", out: list[str] | None = None) -> list[str]:
+    """递归找"同一个数组里，某些元素缺了别的元素顶层有的键"。
+
+    ⚠️ 这里比的是元素的**顶层键**，不是递归取并集之后的键集合。
+    我第一版用了 `_collect_keys`（递归），结果是**假阳性**：
+    某个元素的 `default` 里嵌套着 `{"start","end","label"}`，而另一个元素的 `default`
+    是 `0` ——递归取键会把前者那三个键算进**那个元素**，于是"两个元素的 `default`
+    形状不同"被报成了"键不一致"。而调用方读的是 `field["enum"]` 这种**顶层**键，
+    嵌套值的形状本来就允许不同（默认值本来就各不相同）。
+    """
+    out = [] if out is None else out
+    if isinstance(value, dict):
+        for k, v in value.items():
+            _array_element_missing(v, f"{path}.{k}", out)
+    elif isinstance(value, list):
+        dicts = [x for x in value if isinstance(x, dict)]
+        if len(dicts) > 1:
+            per: list[tuple[int, set[str]]] = [(i, set(x.keys())) for i, x in enumerate(dicts)]
+            union: set[str] = set()
+            for _, ks in per:
+                union |= ks
+            for i, ks in per:
+                miss = union - ks
+                if miss:
+                    out.append(f"{path}[{i}] 缺 {sorted(miss)}（同数组其它元素顶层有）")
+        for i, x in enumerate(value):
+            _array_element_missing(x, f"{path}[{i}]", out)
+    return out
+
+
+#: 本判据今天在多少"可比数组"上被评过（数组含 ≥2 个 dict 元素才算可比）。
+#: 写死是刻意的（与 `TOOL_COUNT` 同一种做法）：它掉下去就说明判据**能评的东西变少了**
+#: ——"少测了几个"与"都测过了"必须能分开。
+#:
+#: 2026-10-16：**38 → 37**，原因是口径 S1（M 只派活）：`conductor.role_spec` 不再返回
+#: `actions`（那是一个"数组里全是同形对象"的可比数组）。这是**正当的减少**——
+#: 少的不是判据的覆盖面，而是那一格数据本身被撤掉了；其余 37 个一个没丢。
+#: （判据自己的话：「先解释清楚再改这个数」——这段就是那句解释。）
+COMPARABLE_ARRAYS_MIN = 37
+
+
+def _count_comparable_arrays(value: object) -> int:
+    """数"这一份 data 里有多少个数组含 ≥2 个 dict 元素"（反真空用：判据要有东西可判）。"""
+    n = 0
+    if isinstance(value, dict):
+        for v in value.values():
+            n += _count_comparable_arrays(v)
+    elif isinstance(value, list):
+        if len([x for x in value if isinstance(x, dict)]) > 1:
+            n += 1
+        for x in value:
+            n += _count_comparable_arrays(x)
+    return n
+
+
+def test_every_element_of_an_array_carries_the_same_top_level_keys(
+    registry: ToolRegistry, observations: dict[str, Observation]
+) -> None:
+    """补上 `SUBSET_CHECK_SCOPE` 自己点名的**第二个盲区**：数组里逐元素的一致性。
+
+    ## 为什么这一条有独立的价值（不是"更强一点的同一件事"）
+
+    上一条（`declared - actual`）把**同一个数组的多个元素并成一份键集合**，
+    所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对**调用方**不是：
+    它按自己在别的元素上看到的形状去读 `field["enum"]`，在不带那一格的那些元素上
+    会拿到 **KeyError** —— 那不是"这个字段没有词表"，是**读数与事实不符**。
+
+    ## 实测（2026-10-15）
+
+    全 79 个工具里只有 **`table.schema`** 有这个形态，而它有 **132 处**
+    （`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
+    那件工具的用途恰恰是"让智能体读受控词表"，所以这一格坏得最不是地方。
+    修法是**每个元素都给这三格、不适用时给如实空值**（`[]` / `None`）。
+
+    ## 一条**不许**混进来的东西（我第一版判据就栽在这）
+
+    比的是元素的**顶层键**，不是递归取并集之后的键集合。递归取键会把元素
+    `default` 里嵌套的 `{"start","end","label"}` 算进**那个元素**，于是
+    "两个元素的 `default` 形状不同"（**合法**：默认值本来就各不相同）
+    被报成"键不一致" —— 实测那会造出 37 处假阳性。负控
+    `test_negative_control_nested_value_shape_differences_are_not_reported` 钉住这一条。
+    """
+    bad: list[str] = []
+    comparable = 0
+    for name in registry.names():
+        obs = observations[name]
+        if not obs.ok or not isinstance(obs.data, dict):
+            # 三态：没跑成的工具这一格"没评过"，不是"评过没问题"。
+            # 但它跑不跑得成由上一条（`MAX_SKIPPED = 0`）盯着，这里不重复判。
+            continue
+        comparable += _count_comparable_arrays(obs.data)
+        found = _array_element_missing(obs.data, name)
+        if found:
+            bad.append(f"  {name}（{len(found)} 处）\n      " + "\n      ".join(found[:4]))
+    assert not bad, (
+        "同一个数组里的元素**顶层键**不一致 ⇒ 按声明读那些键的调用方会拿到 KeyError；"
+        "要么让每个元素都带上那些键（不适用时给如实空值），要么别在声明里承诺它：\n"
+        + "\n".join(bad)
+    )
+    assert comparable >= COMPARABLE_ARRAYS_MIN, (
+        f"可比的数组只剩 {comparable} 个（下限 {COMPARABLE_ARRAYS_MIN}）⇒ "
+        "这一条正在越来越少的东西上被评，先解释清楚再改这个数"
+    )
+
+
+def test_negative_control_the_element_check_turns_red_on_a_non_uniform_array() -> None:
+    """负控：喂一个"元素 A 有、元素 B 没有"的结构，判据必须报出来。"""
+    dirty = {"candidates": [{"title": "a", "enum": [1]}, {"title": "b"}]}
+    found = _array_element_missing(dirty, "t")
+    assert found, "非一致的数组没被报出来 ⇒ 这条判据是橡皮图章"
+    assert any("enum" in line for line in found), found
+
+
+def test_negative_control_nested_value_shape_differences_are_not_reported() -> None:
+    """负控（钉住我第一版的假阳性）：**嵌套值的形状不同是合法的**，不许报。"""
+    clean = {"fields": [{"name": "a", "default": [{"start": 1, "end": 2}]},
+                        {"name": "b", "default": 0}]}
+    assert _array_element_missing(clean, "t") == [], (
+        "把「两个元素的 default 形状不同」报成了「键不一致」—— 那是假阳性"
+    )
+
+
+# ---------------------------------------------------------------- 2b) 反方向（2026-10-15 加）
+
+
+def _undeclared_top_level(returns: str, obs: Observation) -> list[str]:
+    """`actual − declared`，**只看顶层键**。
+
+    为什么只看顶层：深层键（`graph.build` 里 `'true'`/`'false'` 那种**查表的键**）
+    不是"字段"，全枚举既不必要也没用；而调用方按 `data["x"]` 读的是顶层。
+    """
+    declared = shared_declaration.declared_keys(returns)
+    return sorted(k for k in obs.data if k not in declared)
+
+
+def test_no_tool_returns_a_top_level_key_it_does_not_declare(
+    registry: ToolRegistry, observations: dict[str, Observation]
+) -> None:
+    """补上 `SUBSET_CHECK_SCOPE` 的**第一个盲区**：实跑给了、而声明没提的键。
+
+    ## 为什么这一条值得存在（2026-10-15 更正了一条我自己的错判）
+
+    我此前判它"按比例不动"，依据是"声明不全只会让调用方**少看到**字段"。**那句的后果算轻了**：
+    `tools/base.py:721` 逐字 `description = summary + "\\n返回：" + returns`
+    ⇒ **`returns` 会拼进 function-calling 的 `description`，也就是模型看得到**。
+    模型读到的就是这一串键；声明里没有的字段，**它不知道存在，于是不会用**。
+
+    实测的代价（当时那 16 件里最重的一件）：`doc.scan_claim` 的声明只列
+    `{checked,claim_id,ok,findings,error_count,warning_count}`，而它实跑还给
+    `status_axis` / `undecided_reason` —— **那两格正是三态**（"这条没查成"与
+    "这条查过没问题"靠它们分开）。模型看不到它们，三态纪律在**模型这一侧**又折回去了。
+
+    ## 今天的读数
+
+    全 80 个工具、**零个**顶层键未声明（2026-10-15 一次清完：先补 6 件最重的，
+    再补剩下 10 件）。下面的反真空与负控保证这条判据不是"扫了个寂寞"。
+    """
+    bad: list[str] = []
+    checked = 0
+    for name in registry.names():
+        obs = observations[name]
+        spec = registry.get(name)
+        if name in NO_KEY_SET_EXEMPTIONS:
+            continue
+        if not obs.ok or not isinstance(obs.data, dict):
+            # 三态：没跑成的工具这一格"没评过"，不是"评过没问题"。
+            # 它跑不跑得成由上面那条子集判据的 `MAX_SKIPPED = 0` 盯着。
+            continue
+        checked += 1
+        extra = _undeclared_top_level(spec.returns, obs)
+        if extra:
+            bad.append(f"  {name}：声明里没有 {extra}\n      returns={spec.returns!r}")
+    assert not bad, (
+        "这些工具**实跑返回了、而 `returns=` 里没提**的顶层键 ⇒ "
+        "模型（它读的就是 `returns`，见 `tools/base.py:721`）不知道这些字段存在：\n"
+        + "\n".join(bad)
+    )
+    assert checked >= DECLARED_COVERAGE_MIN, (
+        f"这一条只在 {checked} 个工具上评过（下限 {DECLARED_COVERAGE_MIN}）⇒ "
+        "它正在越来越少的东西上被评，先解释清楚再改这个数"
+    )
+
+
+#: 本判据今天在多少个工具上被评过。写死是刻意的（与 `TOOL_COUNT` 同一种做法）。
+DECLARED_COVERAGE_MIN = 70
+
+
+def test_negative_control_the_undeclared_check_turns_red_on_a_missing_key() -> None:
+    """负控：声明少了一个键时必须报出来（否则这条判据是橡皮图章）。"""
+    obs = Observation("probe", True, None, None, {"a": 1, "b": 2}, {})
+    assert _undeclared_top_level("{'a'}", obs) == ["b"]

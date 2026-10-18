@@ -80,6 +80,22 @@ _ENCODING_CHAIN: Final[tuple[str, ...]] = ("utf-8", "utf-8-sig", "gb18030", "lat
 _TEXT_SUFFIXES: Final[frozenset[str]] = frozenset({".txt", ".md"})
 _HTML_SUFFIXES: Final[frozenset[str]] = frozenset({".html", ".htm", ".xhtml"})
 
+#: 真正的 XML（不是 XHTML）也算"标记语言"，**按扩展名显式**走剥标签那一条路。
+#:
+#: ⚠️ **2026-10-15 加（真机读数驱动，业主授权动禁改区）**：此前 `.xml` 落到最后的
+#: `UnsupportedFormat` —— 而 Europe PMC **唯一取得到全文的那条路**
+#: （EBI 的 `/rest/{PMCID}/fullTextXML`，对真 OA 文章返 200）返回的正是 **JATS XML**。
+#: ⇒ 只修 provider 的端点、不修这里，等于把 `403` 换成另一种"读不到"
+#: （12 条里能救回来的 5 条会以"格式不认识"再失败一次）。
+#:
+#: 实测（$0 探针，`PMC6502358`）：`.xml` ⇒ 今天抛 `UnsupportedFormat`；
+#: 同一份内容**剥完标签是 218,954 字符**干净正文（原始 XML 547,355 字符）。
+#:
+#: 为什么**只按扩展名**认、不把 `<?xml` 加进 `_sniff`：嗅探那条路救的是
+#: "内容与文件名不符"（HTML 被存成 `.bin`）。而 `<?xml` 单独一个声明太弱 ——
+#: SVG / RSS / 配置文件都以它开头，误判会让下游拿到空正文（理由见 `_sniff`）。
+_XML_SUFFIXES: Final[frozenset[str]] = frozenset({".xml"})
+
 #: 魔数/头部嗅探只读文件开头这么多字节。为什么几十字节就够：`%PDF-` 是 5 字节，
 #: HTML/XML 的判据是"开头有没有声明或根元素"，两者都不需要读全文。
 _SNIFF_BYTES: Final[int] = 512
@@ -95,7 +111,7 @@ class ExtractError(RuntimeError):
 
 
 class UnsupportedFormat(ExtractError):
-    """扩展名不在支持范围内（§4.1 只承诺 pdf/txt/md/html）。"""
+    """扩展名不在支持范围内（§4.1 承诺 pdf/txt/md/html，2026-10-15 起加 `.xml`）。"""
 
 
 class ExtractTooLarge(ExtractError):
@@ -130,7 +146,7 @@ class DocumentText:
     - ``pages``：逐页文本，1-based，``pages[i]`` 是第 ``i + 1`` 页。
       ``pages == []`` 表示无文本层（扫描件）或文件确实没有正文，
       调用方必须把它当作"无法校验引文"处理（§6.3）。
-    - ``source_kind``：``pdf | txt | md | html``，记录走了哪条抽取路径，
+    - ``source_kind``：``pdf | txt | md | html | xml``，记录走了哪条抽取路径，
       便于事后审计"这条引文来自 PDF 还是 HTML 快照"。
     - ``encoding``：纯文本类文件实际生效的编码名（PDF/HTML 走字节解析
       时为 ``None``）。记录它是为了可复现：gb18030 与 latin-1 都能"成功"
@@ -346,20 +362,35 @@ class _HTMLTextExtractor(HTMLParser):
         }
     )
 
-    def __init__(self) -> None:
+    def __init__(self, *, inline_sep: str = "") -> None:
         # convert_charrefs=True：让解析器直接把 &amp;/&#x4e2d; 还原成字符，
         # 否则正文里会残留实体，导致引文与原文对不上。
         super().__init__(convert_charrefs=True)
         self._parts: list[str] = []
         self._skip_stack: list[str] = []
+        #: 非块级标签两侧插什么（缺省空串 = HTML 的老行为）。
+        #:
+        #: 为什么 XML 需要它（2026-10-15，实测驱动）：JATS 的字段大多是**行内**元素
+        #: （`journal-title` / `article-id` / `surname` …），而这里只对块级标签断开
+        #: ⇒ 相邻字段会被**粘在一起**。实测 `PMC6502358` 剥出来是
+        #: `'2753rsosRoyal Society Open ScienceR Soc Open SciThe Royal SocietyPMC6502358…'`
+        #: —— `SocietyR` 这种粘连会污染引文回验（逐字子串匹配）与模型的阅读。
+        #: 插一个**空格**（而不是全部换行）是刻意的：换行会把
+        #: `<p>We <italic>show</italic> that</p>` 拆成三行、切断句子；
+        #: 空格既分开字段、又保住句子的连续性。
+        self._inline_sep = inline_sep
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         if tag in self._SKIP_TAGS:
             self._skip_stack.append(tag)
             return
-        if tag in self._BLOCK_TAGS and not self._skip_stack:
+        if self._skip_stack:
+            return
+        if tag in self._BLOCK_TAGS:
             self._parts.append("\n")
+        elif self._inline_sep:
+            self._parts.append(self._inline_sep)
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
@@ -368,8 +399,12 @@ class _HTMLTextExtractor(HTMLParser):
         if self._skip_stack and tag == self._skip_stack[-1]:
             self._skip_stack.pop()
             return
-        if tag in self._BLOCK_TAGS and not self._skip_stack:
+        if self._skip_stack:
+            return
+        if tag in self._BLOCK_TAGS:
             self._parts.append("\n")
+        elif self._inline_sep:
+            self._parts.append(self._inline_sep)
 
     def handle_data(self, data: str) -> None:
         if not self._skip_stack:
@@ -385,8 +420,8 @@ class _HTMLTextExtractor(HTMLParser):
         return text.strip()
 
 
-def _strip_html(raw: str) -> str:
-    parser = _HTMLTextExtractor()
+def _strip_html(raw: str, *, inline_sep: str = "") -> str:
+    parser = _HTMLTextExtractor(inline_sep=inline_sep)
     try:
         parser.feed(raw)
         parser.close()
@@ -489,9 +524,13 @@ def _sniff(raw: bytes) -> str:
     - ``b"%PDF"`` ⇒ 走既有 PDF 回退链。放在最前：PDF 的魔数在文件第 0 字节，
       而后面两条判据要看开头，顺序反过来会让一份以声明开头的 PDF 走错路。
     - 开头（跳过 UTF-8 BOM 与空白）是 ``<!DOCTYPE`` / ``<html``，或 ``<?xml``
-      且同一次读取里出现 ``<html`` ⇒ HTML。`<?xml` 单独不算：XHTML 是 HTML，
-      而真正的 XML（如 JATS 全文）不是本模块承诺的格式，误判会让下游拿到
+      且同一次读取里出现 ``<html`` ⇒ HTML。`<?xml` 单独**仍然不算**：XHTML 是 HTML，
+      而 `<?xml` 一个声明太弱（SVG / RSS / 配置文件都以它开头），误判会让下游拿到
       "剥完标签什么都没有"的空正文。
+      ⚠️ **2026-10-15 补一句边界**：真 XML（JATS 全文那一类）现在**按扩展名 `.xml` 支持**
+      （见 `_XML_SUFFIXES` 与分派里那一条），**走的是扩展名那条路，不是嗅探这条**。
+      也就是说：`foo.xml` 会被剥标签读；而一个**存成 `.bin` 的 JATS 文件仍会被拒**
+      —— 那一条是刻意的（"内容与文件名不符"只救 HTML 那一种形态，原因见上）。
     - 其余一律返回空串 ⇒ 调用方保持原有行为（按扩展名分派），所以本函数
       只可能把"原本会失败的分派"救回来，不会改变任何原本成功的路径。
     """
@@ -719,6 +758,24 @@ def extract_text(
     suffix = p.suffix.lower()
     _check_size(p, max_bytes)
 
+    # ⚠️ **显式 `.xml` 必须先于魔数嗅探**（2026-10-15，实测驱动）：
+    # JATS 全文常常以 ``<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96)…"`` 开头，
+    # 而 `_sniff` 把 ``<!DOCTYPE`` 判成 HTML ⇒ 走到下面那一条 `HtmlNotSupported`
+    # ⇒ **一个我们明确按扩展名支持的文件被拒**。实测那 5 条 OA 里就有 1 条
+    # （`PMC13322628`）是这个形态：修好端点、也认了 `.xml`，却仍读不到。
+    # 顺序在这里就是判据：扩展名是调用方明说的，嗅探是猜的 —— 明说优先。
+    if suffix in _XML_SUFFIXES:
+        # 真 XML（JATS 那一类）：与 HTML 走同一条"剥标签取正文"的路
+        # （复用 `_strip_html`，不另写第二份剥法），但 `source_kind` 如实写 `xml` ——
+        # 读报告的人要能分清"这是从网页剥的"还是"从 XML 全文剥的"。
+        text, _kind, encoding = _extract_plain_text(p, max_bytes=max_bytes)
+        # `inline_sep=" "`：JATS 的字段多是行内元素，不插分隔符会被粘在一起
+        # （实测 `'…SocietyR Soc Open Sci…'`）—— 理由见 `_HTMLTextExtractor.__init__`。
+        body = _strip_html(text, inline_sep=" ")
+        if not body.strip():
+            return DocumentText(text="", pages=[], source_kind="xml", encoding=encoding)
+        return DocumentText(text=body, pages=[body], source_kind="xml", encoding=encoding)
+
     # ---- 内容嗅探（扩展名不是内容的证据，见 `_sniff`）
     with open(p, "rb") as fh:
         head = fh.read(_SNIFF_BYTES)
@@ -912,8 +969,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
                             },
                         ],
                     },
-                    ensure_ascii=False,
-                )
+                    ensure_ascii=False,default=str)
                 + "\n```\n希望有帮助！"
             )
 

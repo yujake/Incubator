@@ -137,11 +137,13 @@ def test_external_paper_intake_chain_is_walkable_with_existing_tools(wired):
     # 这正是 §37 那次混得起来的原因，也是为什么拒信里那句"稿件 0000 不存在"必须点名
     # 是哪张表（判据在下面那条负控里）。
 
-    res = reg.call("conductor.summon", role="M", target_role="H", action="review",
-                   params={"doc_id": doc_id}, input_key="intake-chain")
-    assert res.ok, res.error
-    assert res.data["status"] == "done" and res.data["outcome"] == "ok", res.data
-    assert res.data["checked"] is True, res.data
+    # 2026-10-16（口径 S2）：这条考"确定性实现真的跑了"（稿件状态要变）⇒ 走**内部 API**；
+    # 工具层那条路现在一律走角色自己的循环，不进确定性实现。
+    res = _conductor.summon("H", "review", {"doc_id": doc_id}, by="M",
+                            input_key="intake-chain")
+    assert res.outcome == "ok", res
+    assert res.status == "done", res
+    assert res.checked is True, res
 
     doc = next(r for r in store.rows("documents") if str(r["doc_id"]) == doc_id)
     assert doc["status"] == "accepted", (
@@ -167,15 +169,15 @@ def test_using_an_external_source_id_as_a_document_id_is_refused(wired):
     store, _conductor, reg = wired
     lit_id = _register_external_paper(reg)
 
-    g = reg.call("conductor.summon", role="M", target_role="G", action="revise",
-                 params={"doc_id": lit_id}, input_key="wrong-id-revise")
-    assert g.data["outcome"] == "refused", g.data
-    assert "不存在" in str(g.data["detail"]), g.data
+    g = _conductor.summon("G", "revise", {"doc_id": lit_id}, by="M",
+                          input_key="wrong-id-revise")
+    assert g.outcome == "refused", g
+    assert "不存在" in str(g.detail), g
 
-    h = reg.call("conductor.summon", role="M", target_role="H", action="review_report",
-                 params={"doc_id": lit_id}, input_key="wrong-id-review")
-    assert h.data["outcome"] == "refused", h.data
-    assert "不存在" in str(h.data["detail"]), h.data
+    h = _conductor.summon("H", "review_report", {"doc_id": lit_id}, by="M",
+                          input_key="wrong-id-review")
+    assert h.outcome == "refused", h
+    assert "不存在" in str(h.detail), h
 
     assert not [r for r in store.rows("documents")], "拒了却写出了稿件行"
     assert not [r for r in store.rows("review_findings")], "拒了却落下了发现"

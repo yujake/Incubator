@@ -141,9 +141,15 @@ def write_initial(root: str | Path, total_usd: float, *, by: str = "user",
        换成一份读得懂的，代价是那份读不懂的原样没了；这件事必须留痕，
        于是它不是"静默覆盖"。
     """
+    # 2026-10-17（store #10）：`add_usd` 有类型闸、`write_initial` 没有。`_coerce_usd`
+    # 读不出时返回 `None` —— 直接用它会让"总额度"静默写成 null，所以这里**明确拒绝**。
+    _usd = _coerce_usd(total_usd)
+    if _usd is None:
+        raise ValueError(f"总额度必须是**非负数字**，收到 {total_usd!r}；拒写（不写 null）")
     reg = read_register(root)
     got = _write(root, total_usd=total_usd,
-                 entry={"kind": "set", "usd": float(total_usd), "by": str(by), "at": _now(),
+                 # 2026-10-17（store #10）：`add_usd` 有类型闸、`write_initial` 没有 ⇒ 同一入口两种形态。
+                 entry={"kind": "set", "usd": _usd, "by": str(by), "at": _now(),
                         "note": str(note or "")},
                  added_before=reg["added"])
     if got.get("ok") and reg["exists"] and reg["problem"]:
@@ -185,7 +191,7 @@ def _write(root: str | Path, *, total_usd: float, entry: Mapping[str, Any],
     tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n",
                        encoding="utf-8", newline="\n")
         os.replace(tmp, path)
     except OSError as exc:

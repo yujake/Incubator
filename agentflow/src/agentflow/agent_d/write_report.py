@@ -253,9 +253,9 @@ class _WriteReport:
                     )
                 for q in cq:
                     lines.append(
-                        f"- `{q.get('api')}`(params={json.dumps(q.get('params') or {}, ensure_ascii=False)}) "
+                        f"- `{q.get('api')}`(params={json.dumps(q.get('params') or {}, ensure_ascii=False, default=str)}) "
                         f"checked={q.get('checked')} truncated={q.get('truncated')} "
-                        f"digest={json.dumps(q.get('digest'), ensure_ascii=False)}"
+                        f"digest={json.dumps(q.get('digest'), ensure_ascii=False, default=str)}"
                         + (f"；reason={_digest(q.get('reason'), 200)}" if q.get("reason") else "")
                     )
             lines.append("")

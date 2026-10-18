@@ -75,7 +75,16 @@ READ_DEFAULT_BYTES = 200_000
 #: 单次读/写的硬上限。超过它的请求会被夹到这个值并如实标注，而不是拒绝服务 ——
 #: "少读一点并说清楚"比"什么都不给"对调用方更有用。
 MAX_READ_BYTES = 5 * 1024 * 1024
-MAX_WRITE_BYTES = 5 * 1024 * 1024
+#: 单次写的硬上限（字节）。
+#:
+#: ⚠️ 2026-10-15 业主裁定 D5：5 MB → 32 MB。理由不是"5 MB 太小"（模型的单次回复
+#: 根本到不了 5 MB），而是**这一格曾经是错的工具用在错的场合时的挡箭牌**：
+#: 第八趟主控想改 `main.tex` 里三处，却试图整文件重写 26 KB —— 真正卡住它的是
+#: **输出额度**（8192 token 截在字符串中间 ⇒ 三次坏 JSON ⇒ 整趟作废），不是这一格。
+#: 把这一格抬高到 32 MB，"内容过大"就回到它该有的语义：**挡住一次编程事故**
+#: （比如把一个数组序列化成几千万字符塞进来），而不是挡住正常写作。
+#: 大文件的正确改法仍然是 `fs.edit`（改动量与输出量成正比），下面那条拒绝报文里写清了。
+MAX_WRITE_BYTES = 32 * 1024 * 1024
 
 #: 二进制嗅探的采样长度。8 KB 足够覆盖任何有意义的文本头部。
 SNIFF_BYTES = 8192
@@ -472,6 +481,7 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
     # data 是标量文本，声明不出键集合。meta 里还有 path/encoding/bytes_read/
     # total_bytes/truncated/had_errors/sha256 —— 那是审计附注，不是 data 的形状。
     returns="data=文本（**标量，无键集合**）；meta 里给 encoding / bytes_read / total_bytes / truncated / "
+            "start_line / lines_read / total_lines / next_line / had_errors / sha256 / routed_from。"
             "start_line / lines_read / total_lines / next_line / had_errors / sha256。",
     tags=("fs", "read"),
 )
@@ -511,9 +521,47 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
     if not is_bin and suffix in _BINARY_SUFFIXES:
         is_bin, why = True, f"扩展名 {suffix} 属于二进制格式"
     if is_bin:
+        # ⚠️ **2026-10-17 业主口径**：*"把其它智能体要消费论文的请求**自动路由到同名纯文字稿**，
+        # 其它智能体不必再做 OCR 等操作。"* ⇒ 这里不再一律拒：若这一份旁边有
+        # **同名纯文字稿**（A 用 `text.extract` 转好的那份，落在同一层），**直接把稿子给它**，
+        # 并在读数里**说清"你要的是 PDF、我改读的是同名稿"**（不许静默替换来源）。
+        sibling = target.with_suffix(".txt")
+        if target.suffix.casefold() == ".pdf" and sibling.is_file():
+            try:
+                routed_text = sibling.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                return fail(
+                    f"同名纯文字稿读不出来（{type(exc).__name__}）：{_rel(ctx, sibling)} ⇒ "
+                    "这一格没读成，不是「没有纯文字稿」；可让 **A** 重跑 `text.extract`。",
+                    path=_rel(ctx, sibling), kind="route_unreadable", size=size,
+                )
+            # 形状与正常读取**逐字同形**：`data` 是标量文本，其余进 `meta`
+            # （`fs.read` 在声明判据里是"data 无键集合"的豁免成员 —— 自造 data 键会破那条豁免）。
+            routed_lines = routed_text.splitlines(keepends=True)
+            return ok(
+                routed_text,
+                path=_rel(ctx, sibling),
+                encoding="utf-8",
+                bytes_read=len(routed_text.encode("utf-8")),
+                total_bytes=len(routed_text.encode("utf-8")),
+                truncated=False,
+                start_line=1,
+                lines_read=len(routed_lines),
+                total_lines=len(routed_lines),
+                next_line=None,
+                windowed=False,
+                had_errors=False,
+                sha256=None,
+                routed_from=_rel(ctx, target),
+                note=("你要读的是二进制 PDF；按业主口径**自动路由到同名纯文字稿**"
+                      f"（`routed_from={_rel(ctx, target)}` 是你原本要读的那一份）"
+                      "—— 其它角色不必自己做 OCR/抽取。"),
+            )
         return fail(
             f"拒绝按文本读取 {_rel(ctx, target)}：判定为二进制（{why}）。"
-            "需要它的内容请走抽取链（extract/OCR），不要当文本读 —— 乱码会被下游当成内容。",
+            "需要它的内容请走抽取链（extract/OCR），不要当文本读 —— 乱码会被下游当成内容。"
+            "**出路**：让 **A** 跑 `text.extract`（它会把同名纯文字稿写进 library/，"
+            "于是这一件**自动路由**给你，你不必自己做 OCR/抽取）。",
             path=_rel(ctx, target),
             kind="binary",
             size=size,
@@ -638,8 +686,11 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     if len(payload) > MAX_WRITE_BYTES:
         return fail(
             f"内容过大：{len(payload)} 字节 > 单次上限 {MAX_WRITE_BYTES} 字节。"
-            "（工具层是给 LLM 用的，一次写这么大几乎总是误用；"
-            "确实需要请分块写，或改用脚本模式直接落盘。）",
+            "（工具层是给 LLM 用的，一次写这么大几乎总是误用。"
+            "要改**已有**的大文件请用 `fs.edit`：一次一处锚定替换，"
+            "输出量与改动量成正比而不是与文件大小成正比 —— 这条路上真机踩过的坑是"
+            "「整文件重写 26 KB ⇒ 回复被截在字符串中间 ⇒ 连续三次坏 JSON ⇒ 整趟作废」。"
+            "要**新建**大文件请分块写，或改用脚本模式直接落盘。）",
             path=_rel(ctx, target),
             kind="too_large",
             bytes=len(payload),
@@ -1255,7 +1306,10 @@ def _selftest() -> int:
         res = reg.call("fs.write", path="dup.txt", content="2", overwrite=True)
         check("fs.write overwrite=true 覆盖成功", res.ok and res.data["created"] is False)
         res = reg.call("fs.write", path="huge.txt", content="a" * (MAX_WRITE_BYTES + 1))
-        check("fs.write 超 5MB 上限被拒", not res.ok and res.meta.get("kind") == "too_large", f"error={(res.error or '')[:70]}")
+        check(f"fs.write 超 {MAX_WRITE_BYTES} 字节上限被拒",
+              not res.ok and res.meta.get("kind") == "too_large", f"error={(res.error or '')[:70]}")
+        check("超限写入的报文指向 fs.edit（改大文件的正确工具）",
+              "fs.edit" in str(res.error or ""), f"error={(res.error or '')[:70]}")
         check("超限写入没有留下文件", not (sandbox / "huge.txt").exists())
         (sandbox / "raw.bin").write_bytes(b"\x00\x01\x02\xff\xfe" * 100)
         res = reg.call("fs.read", path="raw.bin")

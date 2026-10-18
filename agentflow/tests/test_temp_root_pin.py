@@ -113,13 +113,29 @@ def test_negative_control_end_to_end_the_hatch_turns_the_positive_control_red() 
     """
     probe = f"agentflow-residual-probe-e2e-{os.getpid()}"
     target = _PROJ / probe
+    # ⚠️ 2026-10-15：**两侧都显式钉编码**，不依赖继承来的环境。
+    #
+    # 真机形态（全量跑里唯一那条"只在全量跑里红"的用例）：
+    # `tests/test_role_specs_complete.py` 此前在会话级
+    # `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`，于是**它之后**跑到的本用例
+    # 把这个变量继承给了子进程 ⇒ 子进程吐 UTF-8，而 `subprocess.run(text=True)`
+    # 没给 `encoding=` ⇒ 父进程按 `locale.getpreferredencoding(False)`（本机 GBK）解 ⇒
+    # `_readerthread` 抛 `UnicodeDecodeError: 'gbk' codec can't decode byte 0xa2
+    # in position 584` ⇒ `proc.stdout` 是 `None` ⇒ `out = proc.stdout + proc.stderr`
+    # 抛 TypeError。**字节位置与全量跑里那一条逐字相同。**
+    #
+    # 为什么两侧都钉而不是只加 `encoding=`：只钉解码仍依赖"父进程环境恰好没被污染"；
+    # 子进程那一侧也钉成 utf-8，这个调用就与自己跑在什么环境里**无关**了 ——
+    # 这正是"编码只在起子进程那一处钉"的意思。
     env = {**os.environ, "AGENTFLOW_NO_TEMPROOT_PIN": "1",
-           "PYTEST_DEBUG_TEMPROOT": probe, "PYTHONDONTWRITEBYTECODE": "1"}
+           "PYTEST_DEBUG_TEMPROOT": probe, "PYTHONDONTWRITEBYTECODE": "1",
+           "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
              "tests/test_temp_root_pin.py::test_positive_temp_root_is_pinned_outside_the_repo"],
             cwd=str(_PROJ), capture_output=True, text=True, env=env,
+            encoding="utf-8", errors="replace",
         )
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0, (

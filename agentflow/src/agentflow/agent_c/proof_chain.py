@@ -21,6 +21,9 @@
 - 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。
 """
 from __future__ import annotations
+from pathlib import Path
+
+import json
 
 from ._support import Any, Mapping, S, Sequence, _cfg_int, tool  # noqa: F401
 
@@ -67,7 +70,8 @@ class _ProofChain:
                          "matched_by": ""},
                 ok_=False, error="target_not_found")
 
-        graph = _DepGraph(stmts=stmts, deps=deps, exps=exps, lits=lits)
+        graph = _DepGraph(stmts=stmts, deps=deps, exps=exps, lits=lits,
+                          root=getattr(getattr(self, "store", None), "root", None))
         groups_out: list[dict[str, Any]] = []
         for group, edges in sorted(graph.groups_of(node["stmt_id"]).items()):
             got = graph.walk(node["stmt_id"], group=group, edges=edges,
@@ -84,6 +88,34 @@ class _ProofChain:
             warnings.append("有 " + str(sum(1 for g in groups_out if not g["reached"]))
                             + " 组没走到根（悬空边 / 超深度 / 依赖没写，逐组见 payload）")
         truncated = any(g.get("truncated") for g in groups_out)
+        # ⚠️ **2026-10-17**：**无依赖的 target 自己也要判一次根** ——
+        # 原实现只 walk 依赖组 ⇒ 一条"无前提自证定理/原始概念"被读成
+        # "0 组可选路径，没有一组走到根"，而按本仓口径它**本来就是根**（链闭合）。
+        target_is_root, target_why = graph.is_root(f"stmt:{node['stmt_id']}")
+        if not groups_out:
+            if target_is_root:
+                summary = (f"{node.get('label') or node['stmt_id']}：**已经是根**"
+                           "（无依赖；按口径：文献／原始概念／有 proof 证据／**经审核的自证定理**）"
+                           "⇒ 这一条链**闭合**")
+                return self._report(
+                    "proof_chain", str(target), {"max_depth": max_depth, "k": k},
+                    summary=summary,
+                    payload={"checked": True, "target": str(target), "matched_by": matched_by,
+                             "groups": [], "best_group": None, "groups_total": 0,
+                             "closed": True, "roots": [node["stmt_id"]],
+                             "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
+                                      "label": node.get("label")}},
+                )
+            return self._report(
+                "proof_chain", str(target), {"max_depth": max_depth, "k": k},
+                summary=(f"{node.get('label') or node['stmt_id']}：没有任何依赖边，而且它"
+                         f"**不满足根的条件**（{target_why}）⇒ 依赖没写，不是『到根了』"),
+                payload={"checked": True, "target": str(target), "matched_by": matched_by,
+                         "groups": [], "best_group": None, "groups_total": 0,
+                         "closed": False, "roots": [], "unwritten": [node["stmt_id"]],
+                         "why": target_why},
+                ok_=False, error="unwritten_dependencies",
+            )
         summary = (f"{node.get('label') or node['stmt_id']}："
                    f"{len(groups_out)} 组可选路径，"
                    + (f"最短是第 {best['group']} 组（{best['length']} 跳）" if best
@@ -129,7 +161,8 @@ class _ProofChain:
 class _DepGraph:
     """依赖图（只读快照）：按 `path_group` 分组、递归走到根。"""
 
-    def __init__(self, *, stmts, deps, exps, lits) -> None:
+    def __init__(self, *, stmts, deps, exps, lits, root: Any = None) -> None:
+        self.root = root
         self.stmts = {str(r.get("stmt_id") or ""): dict(r) for r in stmts}
         self.exps = {str(r.get("exp_id") or ""): dict(r) for r in exps}
         self.lits = {str(r.get("lit_id") or ""): dict(r) for r in lits}
@@ -175,6 +208,31 @@ class _DepGraph:
             return f"doc:{dep['source_doc_id']}", "doc"
         return "", ""
 
+    def _verified_ok(self, stmt_id: str) -> bool:
+        """这条命题的**审核台账**里有没有"成立"。
+
+        台账是 `verifications/<命题号>.jsonl`（V 每次审核追加一行，见
+        `agentflow/verifications.py`）。读不到 ⇒ **False**（"没读到"不等于"审过了"）；
+        解析不动 ⇒ 也在 False 这一侧 —— 三态纪律：宁可说"没审核"，也不许放一条
+        没审过的命题进定理库当根。
+        """
+        root = getattr(self, "root", None) or getattr(getattr(self, "store", None), "root", None)
+        if not root:
+            return False
+        path = Path(root) / "verifications" / f"{stmt_id}.jsonl"
+        if not path.is_file():
+            return False
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if "成立" in str(row.get("verdict") or ""):
+                    return True
+        except Exception:  # noqa: BLE001 - 读/解析不动 ⇒ 不当成"审过了"
+            return False
+        return False
+
     def is_root(self, node: str) -> tuple[bool, str]:
         """是不是根（三种之一）；`(False, why)` 里的 `why` 是没到根的原因。"""
         kind, _, bare = node.partition(":")
@@ -192,7 +250,13 @@ class _DepGraph:
                 return False, "概念的良定义性证明没写（不是原始概念）"
             if str(row.get("evidence_kind") or "") in _PROOF_KINDS:
                 return True, ""
-            return False, "依赖没写（没有边，也没有 proof 证据）"
+            # ⚠️ **2026-10-17 业主口径**：*"自证定理在审核后要能进定理证明库"* ⇒
+            # 一条 `own_result` 的命题，只要**审核台账里记着"成立"**，它就已经是
+            # 本库里的**已证定理** ⇒ 它**可以当根**（后面的定理能引它）。
+            # 没审核过的同形命题**不许**当根（三态不许折平）。
+            if str(row.get("origin") or "") == "own_result" and self._verified_ok(bare):
+                return True, ""
+            return False, "依赖没写（没有边，也没有 proof 证据；也不是经审核的自证定理）"
         return False, ""
 
     def walk(self, start: str, *, group: int, edges, max_depth: int) -> dict[str, Any]:

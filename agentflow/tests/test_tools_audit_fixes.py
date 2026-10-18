@@ -222,12 +222,16 @@ def test_scan_document_without_dependencies_is_unverified_not_accepted():
 def test_scan_document_with_checked_dependencies_may_be_accepted():
     """负控：查了、确实没有未闭合依赖 ⇒ 才可以判 accepted（闸门不能永远关着）。"""
     doc = doc_row()
-    checked = RV.scan_document(doc, dependencies=[])
+    # 2026-10-17（业主「通过标准和 V 一样」）：**通过**要求语义层也判过 —— 这里接一个
+    # "判过且一致"的替身，于是这条正控仍然是"闸门能开"，而不是把断言降级成 unverified。
+    _judge = lambda claim, document: {"verdict": "consistent"}
+    checked = RV.scan_document(doc, dependencies=[], semantic_judge=_judge)
     assert checked["dep_check"]["checked"] is True
     assert checked["verdict"] == "accepted"
 
     warned = RV.scan_document(
         doc,
+        semantic_judge=_judge,
         dependencies=[
             {
                 "dep_id": "0000",
@@ -264,7 +268,11 @@ def test_scan_document_tool_path_omitted_dependencies_is_unverified(store: Store
     assert res.data["verdict"] == "unverified"
     # 显式给空清单是"查了" ⇒ 才可能通过
     res2 = reg.call("review.scan_document", doc=doc_row(), dependencies=[])
-    assert res2.data["verdict"] == "accepted"
+    # 2026-10-17（业主「通过标准和 V 一样」）：依赖闭合查过还不够 —— **语义层没接线**
+    # （工具面接不了 `semantic_judge`）⇒ 这一档只能到 `unverified`，**不许**判通过。
+    # 想看到"通过"，得走 `scan_document(..., semantic_judge=…)` 那条入口（见上一条正控）。
+    assert res2.data["dep_check"]["checked"] is True
+    assert res2.data["verdict"] == "unverified"
 
 
 def test_scan_document_and_review_document_agree_on_verdict(store: Store):
@@ -553,6 +561,10 @@ def test_side_effect_declarations_do_not_leak_write_tools_to_read_only_roles(sto
     assert build.registry.role_filter_notes == {}, "声明错了才会留痕；这里应当为空"
     for role in READ_ONLY_ROLES:
         leaks = [s.name for s in build.registry.for_role(role) if s.needs_approval]
+        # 2026-10-17（业主裁定「方案 1」）：例外表里登记的落库代理不算漏
+        from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
+        _ex = {n for _ns in _EXC.values() for n, _w in _ns}
+        leaks = [n for n in leaks if n not in _ex]
         assert leaks == [], f"{role} 拿到了需要审批的工具：{leaks}"
 
 

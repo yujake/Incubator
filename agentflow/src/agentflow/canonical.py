@@ -53,9 +53,15 @@ CANONICAL_SEPARATORS: tuple[str, str] = (",", ":")
 
 
 def canonical_json_text(obj: Any) -> str:
-    """规范 JSON 文本（键排序、无多余空白、非 ASCII 原样）。"""
+    """规范 JSON 文本（键排序、无多余空白、非 ASCII 原样）。
+
+    ⚠️ 2026-10-17（真机 `t1r`：`TypeError: Object of type TopicalityReport is not
+    JSON serializable`）：**加 `default=str` 当最后的兜底**。它**不改变任何已有哈希** ——
+    带非 JSON 值的载荷此前**根本算不出哈希**（直接抛），所以盘上不存在"用别的字节算出来的"历史。
+    这一档正是 `conductor._structured_payload` 的 docstring 里承诺过的那条兜底。
+    """
     return json.dumps(obj, sort_keys=True, ensure_ascii=False,
-                      separators=CANONICAL_SEPARATORS)
+                      separators=CANONICAL_SEPARATORS, default=str)
 
 
 def canonical_json_bytes(obj: Any) -> bytes:

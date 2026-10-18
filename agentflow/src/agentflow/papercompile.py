@@ -277,7 +277,7 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
     }
     receipt_path = out / RECEIPT_NAME
     try:
-        receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n",
+        receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2, default=str) + "\n",
                                 encoding="utf-8", newline="\n")
     except OSError as exc:
         problems.append(f"回执没写成：{type(exc).__name__}: {exc}")

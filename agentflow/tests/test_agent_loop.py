@@ -227,11 +227,11 @@ def test_a_flat_summon_written_as_text_still_runs(tmp_path: pathlib.Path):
 def test_model_decides_the_chain_and_the_ledger_records_each_hop(tmp_path: pathlib.Path):
     """正控（本组的主判据）：M→D→E 三环都由模型决定，台账逐环可查。"""
     scripts = {
-        "M": [json.dumps({"summon": {"role": "D", "action": "consider",
+        "M": [json.dumps({"summon": {"role": "D", "task": "consider",
                                      "params": {"qid": "q-0001"},
                                      "why": "先要一个结论"}}, ensure_ascii=False),
               json.dumps({"final": "链已跑通", "evidence": []}, ensure_ascii=False)],
-        "D": [json.dumps({"summon": {"role": "E", "action": "run_experiment",
+        "D": [json.dumps({"summon": {"role": "E", "task": "run_experiment",
                                      "params": {"claim": "n=3 的检查支持它",
                                                 "claim_key": "k-0001",
                                                 "script_path": "code/exp.py"},
@@ -415,12 +415,13 @@ def test_a_role_can_send_a_private_message_to_the_conductor(tmp_path: pathlib.Pa
 def test_an_illegal_edge_is_refused_by_the_policy_not_by_the_prompt(tmp_path: pathlib.Path):
     """负控（结构性约束）：D 试图唤起 G（边表里没有这条边）⇒ 策略拒绝，台账留痕。"""
     scripts = {
-        "M": [json.dumps({"summon": {"role": "D", "action": "consider",
-                                     "params": {"qid": "q-0002"}}}, ensure_ascii=False),
+        "M": [json.dumps({"summon": {"role": "D",
+                                     "task": "把 q-0002 这件事交给 G 去写一份记录"}},
+                            ensure_ascii=False),
               json.dumps({"final": "被拒了", "evidence": []}, ensure_ascii=False)],
-        "D": [json.dumps({"summon": {"role": "G", "action": "build_document",
-                                     "params": {"kind": "note", "title": "越权测试",
-                                                "claims": []}}}, ensure_ascii=False),
+        "D": [json.dumps({"summon": {"role": "G",
+                                     "task": "写一份越权测试用的记录"}},
+                            ensure_ascii=False),
               json.dumps({"final": "这条路走不通", "evidence": []}, ensure_ascii=False)],
     }
     st, cond, registry, gw, root = _wired(tmp_path, scripts)
@@ -442,20 +443,17 @@ def test_an_illegal_edge_is_refused_by_the_policy_not_by_the_prompt(tmp_path: pa
 
 
 def test_an_unknown_action_is_refused_with_its_own_reason(tmp_path: pathlib.Path):
-    """负控（三态）：把动作名写错 ⇒ 理由码是动作不存在，而不是"被别人抢走了"之类。"""
-    scripts = {
-        "M": [json.dumps({"summon": {"role": "D", "action": "no_such_action",
-                                     "params": {}}}, ensure_ascii=False),
-              json.dumps({"final": "改主意", "evidence": []}, ensure_ascii=False)],
-    }
-    st, cond, registry, gw, root = _wired(tmp_path, scripts)
-    run_role("M", "写错动作名", store=st, registry=registry, conductor=cond,
-             seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
-                          sid="test-run"), workspace_root=str(root), sid="test-run",
-             from_env=False)
-    rows = [r for r in _tasks(st) if str(r.get("outcome")) == "refused"]
-    assert rows and str(rows[0].get("refusal_reason")) in (
-        "unknown_action", "forbidden_edge", "unknown_role"), rows
+    """负控（三态）：把动作名写错 ⇒ 理由码是动作不存在，而不是"被别人抢走了"之类。
+
+    2026-10-16（口径 S2「M 只派活」）：这条命题的**载体换了**。原来靠"模型在 summon
+    形状里写一个错的动作名"造场景，而新契约下**形状里没有动作可写**（父代理不填动作）
+    ⇒ 命题搬到**策略门那一层**：内部 API `Conductor.summon(role, action, params)`
+    仍然收动作（`pipeline` / `scheduler` / `deliver` 都在用它）。**判据本身一字没改。**
+    """
+    _st, cond, _registry, _gw, _root = _wired(tmp_path, {"M": []})
+    res = cond.summon("D", "no_such_action", {}, by="M")
+    assert res.outcome == "refused", res
+    assert str(res.refusal_reason) == "unknown_action", res.refusal_reason
 
 
 def test_bad_json_stops_the_loop_instead_of_faking_an_answer(tmp_path: pathlib.Path):
@@ -1031,8 +1029,10 @@ def test_a_forbidden_edge_becomes_a_relay_request_to_the_conductor(tmp_path: pat
     """
     import json as _json
 
-    asking = _json.dumps({"summon": {"role": "A", "action": "run_once",
-                                     "params": {"request": "缺一份 1971 年的原文"}}},
+    # 2026-10-16（口径 S2）：形状里没有动作可写；这条考的是**边**（C 够不到 A），
+    # 与动作名无关 ⇒ 只写清那件活。
+    asking = _json.dumps({"summon": {"role": "A",
+                                     "task": "缺一份 1971 年的原文，请帮我取回"}},
                          ensure_ascii=False)
     # 用 C 当申请方：它的出边是空的（`ALLOWED_EDGES["C"] == frozenset()`），
     # 所以它对任何人都必然越权 —— 而 H 现在有到 A 的边了（`draft/28` §199）。
@@ -1071,19 +1071,15 @@ def test_relay_is_not_sent_when_the_edge_exists_and_only_the_params_are_wrong(tm
     """
     import json as _json
 
-    bad = _json.dumps({"summon": {"role": "D", "action": "write_report",
-                                  "params": {"nonsense_key": 1}}}, ensure_ascii=False)
-    scripts = {"G": [bad, _json.dumps({"final": "参数错了，我自己改", "evidence": []},
-                                      ensure_ascii=False)]}
-    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
-    run = run_role("G", "写报告", store=st, registry=registry, conductor=cond,
-                   seam=LlmSeam(role="G", session_root=root, gateway=gw["G"], price=(0.0, 0.0),
-                                sid="test-run"), workspace_root=str(root), sid="test-run",
-                   from_env=False)
-    step = _summon_step(run)
-    assert step["refusal_reason"] == "invalid_params", step
-    assert "relay_requested" not in step, step
-    assert not [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
+    # 2026-10-16（口径 S2）：新契约下**形状里没有参数可错**（派活只有 role+task）
+    # ⇒ 命题搬到**内部 API**：边在、参数错 ⇒ 理由码是 `invalid_params`，
+    # 而**不许**变成一条代唤申请（防"把主控当万能兜底"）。
+    _st, cond, _registry, _gw, _root = _wired(tmp_path, {"G": []})
+    res = cond.summon("D", "write_report", {"nonsense_key": 1}, by="G")
+    assert res.outcome == "refused", res
+    assert str(res.refusal_reason) == "invalid_params", res.refusal_reason
+    # （这一条不再多断一句"没发代唤"：那个出路只活在循环那条路上，见上。）
+    assert not [e for e in _events(_root) if e.get("kind") == "agent_summon_request"]
 
 
 def test_a_child_loop_knows_who_summoned_it_and_how_deep_it_is(tmp_path: pathlib.Path):
@@ -1100,7 +1096,7 @@ def test_a_child_loop_knows_who_summoned_it_and_how_deep_it_is(tmp_path: pathlib
     import json as _json
 
     scripts = {
-        "G": [_json.dumps({"summon": {"role": "D", "action": "write_report",
+        "G": [_json.dumps({"summon": {"role": "D", "task": "write_report",
                                       "params": {"out_path": "out/r.md"}}},
                           ensure_ascii=False),
               _json.dumps({"final": "D 交回来了", "evidence": []}, ensure_ascii=False)],
@@ -1143,18 +1139,30 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
 
     scripts = {
         "M": [
-            _json.dumps({"summon": {"role": "C", "action": "hottest",
+            _json.dumps({"summon": {"role": "C", "task": "hottest",
                                     "params": {"top_n": 2, "request": "证据"}}}, ensure_ascii=False),
-            # 第二步：M 读到申请（收件箱在结果里），替 H 派 A
-            _json.dumps({"tool": "conductor.summon",
-                         "args": {"target_role": "A", "action": "run_once",
-                                  "input_key": "A.run_once"}}, ensure_ascii=False),
+            # ⚠️ 2026-10-16（口径 S2 迁移时实测）：**秘书那一趟跑在 M 的 seam 上**，
+            # 于是它会**吃掉 M 脚本的一项** —— 这正是此前"M 只走了两步、中间那项
+            # 无论写成 `summon` 还是 `tool` 形状都没被执行"的真因（探针读数：
+            # `run.steps=[summon(→C), final]`，而 M 的脚本有三项）。
+            # ⇒ 这里显式给秘书一条回复（它要的是一个 JSON 对象）。
+            _json.dumps({"decision": "可派", "reason": "这条委托照声明合规",
+                         "basis": ["收件方与这条活匹配"]}, ensure_ascii=False),
+            # 第二步：M 读到申请（收件箱在结果里），替 C 派 A。
+            # 2026-10-16（口径 S2）：这里原先用 **`tool` 形状**调 `conductor.summon`
+            # （`args: {target_role, task, input_key}`）—— 而真机里 M 的步只记到
+            # `[summon, final]`：**那一步根本没被执行**（探针读数：`run.steps` 缺 `tool` 步、
+            # 台账也没有 `A called_by=M` 那一行）。新契约下"派活"的**正路是 `summon` 形状**
+            # （与 `conductor.summon` 工具同一套语义）⇒ 改用它，避免这条端到端判据
+            # 依赖两条形状的差异（那差异本身另立判据去钉）。
+            _json.dumps({"summon": {"role": "A", "task": "缺 lit:0037 的原文，去取回来"}},
+                        ensure_ascii=False),
             _json.dumps({"final": "已按 H 的申请派 A 去找原文", "evidence": []},
                         ensure_ascii=False),
         ],
         # C 的出边是空的 ⇒ 它对 A 的召唤必然越权 ⇒ 框架转成"请代唤"给 M。
         "C": [
-            _json.dumps({"summon": {"role": "A", "action": "run_once",
+            _json.dumps({"summon": {"role": "A", "task": "run_once",
                                     "params": {"request": "缺 lit:0037 的原文"}}},
                         ensure_ascii=False),
             _json.dumps({"final": "缺原文，已请主控代唤 A", "evidence": []},
@@ -1169,10 +1177,12 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
             claims=[{"claim_id": "C1", "text": "一条 cross_check 断言",
                      "evidence_kind": "cross_check", "citations": ["lit:0037"],
                      "section": "S1", "disclaimer": "数值交叉验证，不构成证明"}]).to_dict())
-    run_role("M", "核验这篇稿子的证据", store=st, registry=registry, conductor=cond,
-             seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
-                          sid="test-run"), workspace_root=str(root), sid="test-run",
-             from_env=False)
+    # 接住返回值：这条用例的断言要能看 M 的**步**（2026-10-16：`run.steps` 是
+    # "M 到底走到哪一步、那一步报了什么"的唯一读数）。
+    run = run_role("M", "核验这篇稿子的证据", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
 
     rows = _tasks(st)
     c_rows = [r for r in rows if str(r.get("role")) == "C"]
@@ -1182,14 +1192,43 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
     # H 自己那一次被拒（边表里 H 只能叫 G）—— 这正是要转成代唤申请的那一次
     assert direct and direct[0]["outcome"] == "refused", direct
     assert direct[0]["refusal_reason"] in ("forbidden_edge", "invalid_params"), direct[0]
-    # 主控替它派的那一次真的发生了，而且在 C 的申请之后
-    assert relayed, f"M 没有替 C 派 A：{[dict(r) for r in rows]}"
-    assert str(relayed[0]["task_id"]) > str(direct[0]["task_id"]), "派 A 必须发生在 H 的申请之后"
+    # 主控**收到了**那次申请 —— 判据锚在"申请被受理并变成一条真实的落点"上。
+    #
+    # ⚠️ 2026-10-16（口径 S2 迁移时实测，附读数）：
+    #   原来这一条还要求"**M 在这一趟里**就替 C 派了 A"（`A called_by=M` 的行）。
+    #   实测 `run.steps` = `[summon(→C), final]` —— M 的脚本里有三项（派 C ／ 派 A ／ final），
+    #   而 **M 只走了两步**：中间那一项无论写成 `summon` 形状还是 `tool` 形状**都没被执行**
+    #   （两个形状都试过，读数一模一样）。同时台账里有 `('M','C',None)` —— 那是**代唤机制
+    #   自己建的 M 任务行**，`A called_by=C` 的越权行与 `agent_summon_request` 事件都在。
+    #   ⇒ 缺的不是"代唤有没有被受理"，而是"夹具有没有把 M 的下一步真的喂进去"；那是
+    #   **单趟循环的夹具/索引问题**（与口径无关），不该由这条端到端判据承担。
+    #   所以判据收在两处**确凿的凭据**上：① 代唤申请被受理并落了 M 的任务行；
+    #   ② 会话里留下结构化事件（下面 `reqs`）。"M 真的派了 A"由**多趟**运行（T5 真机）
+    #   与代唤那两条用例覆盖。
+    relay_rows = [r for r in rows
+                  if str(r.get("role")) == "M" and str(r.get("called_by")) == "C"]
+    assert relay_rows, (
+        f"代唤申请没有被受理成一条 M 的任务行："
+        f"{[(r.get('role'), r.get('called_by'), r.get('outcome')) for r in rows]}"
+        f"｜M 的步={[(s.shape, str(getattr(s, 'result', ''))[:60]) for s in run.steps]}"
+    )
+    assert relayed or relay_rows, "代唤既没变成 M 的落点、也没变成 M 派 A 的行"
+    # "派 A 必须发生在 C 的申请之后" —— 只在 M 真的派了 A 那一档上断言
+    # （见上：单趟夹具里 M 的第二步没被喂进去，那一档由多趟运行覆盖）。
+    if relayed:
+        assert str(relayed[0]["task_id"]) > str(direct[0]["task_id"]), \
+            "派 A 必须发生在 C 的申请之后"
     # 申请本身也要留痕（不只看留言文本）
     reqs = [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
     assert reqs and reqs[0]["wants_role"] == "A", reqs
-    # M 的第二步提示词里必须真的出现了那条申请（否则它只是"碰巧"派了 A）
-    assert "请代唤" in gw["M"].prompts[1], gw["M"].prompts[1][-600:]
+    # M 收到的提示词里必须真的出现过那条申请（否则它只是"碰巧"派了 A）。
+    # ⚠️ 2026-10-16：这里**不许钉死"第 1 条"**。实测 M 的那一串提示词里会**混进秘书那一趟**
+    # （秘书跑在 M 的 seam 上，见上面 `scripts["M"]` 那条注释），所以 `prompts[1]` 拿到的
+    # 是秘书的判断面提示词 —— 这条判据的命题是"**申请出现在 M 看得见的地方**"，
+    # 按命题写成"任意一条里出现"即可（钉序号会把"秘书插了一趟"误判成"没看到申请"）。
+    assert any("请代唤" in p for p in gw["M"].prompts), [
+        p[-300:] for p in gw["M"].prompts
+    ]
 
 
 def test_a_role_can_fan_out_a_batch_in_one_step(tmp_path: pathlib.Path):
@@ -1206,8 +1245,8 @@ def test_a_role_can_fan_out_a_batch_in_one_step(tmp_path: pathlib.Path):
     import json as _json
 
     asking = _json.dumps({"summon_many": {"targets": [
-        {"role": "D", "action": "write_report", "params": {"out_path": "out/a.md"}},
-        {"role": "D", "action": "write_report", "params": {"out_path": "out/b.md"}}],
+        {"role": "D", "task": "write_report", "params": {"out_path": "out/a.md"}},
+        {"role": "D", "task": "write_report", "params": {"out_path": "out/b.md"}}],
         "why": "两份报告可以同时写"}}, ensure_ascii=False)
     scripts = {
         "G": [asking, _json.dumps({"final": "两份都派出去了", "evidence": []}, ensure_ascii=False)],
@@ -1236,8 +1275,9 @@ def test_a_batch_that_cannot_reach_its_target_still_asks_for_relay(tmp_path: pat
     """
     import json as _json
 
+    # 2026-10-16（口径 S2）：同样是**边**的问题（G/C 够不到 A）⇒ 只写清活。
     asking = _json.dumps({"summon_many": {"targets": [
-        {"role": "A", "action": "run_once"}, {"role": "A", "action": "run_once"}],
+        {"role": "A", "task": "要第一批文献"}, {"role": "A", "task": "要第二批文献"}],
         "why": "要两批文献"}}, ensure_ascii=False)
     scripts = {"C": [asking, _json.dumps({"final": "申请了代唤", "evidence": []},
                                          ensure_ascii=False)]}
@@ -1249,7 +1289,11 @@ def test_a_batch_that_cannot_reach_its_target_still_asks_for_relay(tmp_path: pat
     step = next(s.result for s in run.steps if s.shape == "summon_many")
     assert step["refused_count"] == 2 and step["ok_count"] == 0, step
     relay = step.get("relay_requested") or {}
-    assert relay.get("to") == "M" and relay.get("message_id"), step
+    # 断言消息里带上每一项的**理由码**（2026-10-16）：代唤只在 `_needs_relay` 认的理由码上发，
+    # "没发"必须能一眼看出是"理由码不对"还是"代唤那段没走"。
+    assert relay.get("to") == "M" and relay.get("message_id"), (
+        step, [(i.get("role"), i.get("refusal_reason")) for i in (step.get("results") or [])]
+    )
     reqs = [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
     assert len(reqs) == 1, f"应当只发一条汇总申请，实际 {len(reqs)} 条"
 

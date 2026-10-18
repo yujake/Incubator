@@ -78,7 +78,14 @@ class _Revise:
             # 合规闸门：修订后的整份稿子要重过一遍机械检查。
             # 只查"新加的那几条"是不够的 —— 替换语义下，旧的错话可能被换掉，
             # 也可能被换坏，只有全量重查才说得清现在的稿子是否合规。
-            normalized = DT.normalize_claims(merged)
+            try:
+                normalized = DT.normalize_claims(merged)
+            except ValueError as exc:
+                # 2026-10-17（子代理 agents #11）：`normalize_claims` 是**纯函数校验**，抛裸
+                # `ValueError` ⇒ 绕过工具层的包装穿出动作，被记成 `failed/执行中异常`，
+                # 模型拿不到"哪一条断言、缺什么字段"。翻成 `DocumentError`（在
+                # `_BUSINESS_ERROR_NAMES` 里）⇒ 落 `refused/invalid_params`，可自救。
+                raise DocumentError(f"修订未通过机械检查：{exc}") from exc
 
             # 第二道闸：引用存在性。与 `doc.build_document` 复用同一个判据，
             # 理由见本方法 docstring —— 少了它，"修订"就是绕过引用检查的后门。

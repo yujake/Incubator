@@ -476,7 +476,7 @@ agentflow/
 │   │                         离线演示 / 用户频道（提问与"没答"三态）/ 输出编码 / 终端呈现原语
 │   ├── cli.py / __main__.py  命令行入口（25 个子命令，`python -m agentflow.cli --help`）
 │   ├── agent_a..h/ · agent_v/  九个角色（每个都能 `python -m agentflow.agent_x` 自检；V 是证明级验证，只读）
-│   └── tools/                工具层（**14** 个 `*_tools.py`：table / fs / search / ocr / graph /
+│   └── tools/                工具层（**15** 个 `*_tools.py`：table / fs / search / ocr / graph /
 │                             trace / research / verify / attack / doc / review / conjecture /
 │                             conductor / manuscript，外加 `base.py` 与装配点 `__init__.py`；
 │                             组装结果与逐角色条数以 `python -m agentflow.cli tools` 为准）

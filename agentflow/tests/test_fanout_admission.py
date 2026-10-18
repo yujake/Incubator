@@ -603,27 +603,28 @@ def test_the_previous_minimal_fix_would_miss_this_row(tmp_path, monkeypatch):
 
 
 def test_conductor_tier_dispatches_more_than_five_while_worker_refuses_at_five(tmp_path):
-    """同一棵树：主控档同时在飞 20，工人档同时在飞 5；各自到点被拒、返回即腾位。
+    """同一棵树：主控档同时在飞 100（裁定 C5 后的数），工人档按自己的上限；各自到点被拒、返回即腾位。
 
-    两件事：①主控档的上限是 20（`FANOUT_LIMIT_BY_ROLE`），在飞 19 时第 20 件受理、
-    在飞 20 时下一件被拒且报文里两个数都读得出来；②工人档在 5 处被拒（反真空），
+    两件事：①主控档的上限取自 `FANOUT_LIMIT_BY_ROLE`（2026-10-15 业主裁定 C5：20 → 100），
+    在飞 99 时第 100 件受理、在飞 100 时下一件被拒且报文里两个数都读得出来；
+    ②工人档在 5 处被拒（反真空；本用例显式给 `max_fanout=5`，所以这条与默认值无关），
     并把一行标成返回之后名额立刻还回来（所有者那句话的机器化）。
     """
     store = _mk_store(tmp_path)
     c = _mk_conductor(store, max_fanout=5)
 
     m_parent = _parent(c)
-    _seed_in_flight(store, m_parent, 19, called_by="M")
-    last = _revise(c, m_parent, "m19", by="M")
+    _seed_in_flight(store, m_parent, 99, called_by="M")
+    last = _revise(c, m_parent, "m99", by="M")
     assert last.outcome == "ok", (
-        "主控那一档的同时在飞上限是 20，在飞 19 时这件必须派得进去；"
+        "主控那一档的同时在飞上限是 100，在飞 99 时这件必须派得进去；"
         f"拿到 {last.outcome}/{last.refusal_reason}")
-    # `m19` 是同步返回的 ⇒ 它不留在在飞里；补一行 seed 把主控档填到恰好 20。
-    _seed_in_flight(store, m_parent, 1, base=19, called_by="M")
-    assert len(c._in_flight_children_of(m_parent)) == 20, "此刻在飞恰好 20"
-    over = _revise(c, m_parent, "m20", by="M")
+    # `m99` 是同步返回的 ⇒ 它不留在在飞里；补一行 seed 把主控档填到恰好 100。
+    _seed_in_flight(store, m_parent, 1, base=99, called_by="M")
+    assert len(c._in_flight_children_of(m_parent)) == 100, "此刻在飞恰好 100"
+    over = _revise(c, m_parent, "m100", by="M")
     assert over.refusal_reason == "fanout_exceeded", "工人档之外也要有反真空（主控也会触顶）"
-    assert "在飞 20" in over.detail and "上限 20" in over.detail, over.detail
+    assert "在飞 100" in over.detail and "上限 100" in over.detail, over.detail
 
     worker_parent = _parent(c, doc_id="0002")
     _seed_in_flight(store, worker_parent, 5, called_by="H")
@@ -639,29 +640,29 @@ def test_conductor_tier_dispatches_more_than_five_while_worker_refuses_at_five(t
         f"拿到 {freed.outcome}/{freed.refusal_reason}：{freed.detail}")
 
 
-def test_conductor_tier_is_exactly_twenty(tmp_path):
-    """主控那一档恰好是 20（同时在飞）：在飞 20 被拒、有一行返回后立刻受理。"""
+def test_conductor_tier_is_exactly_one_hundred(tmp_path):
+    """主控那一档恰好是 100（同时在飞，裁定 C5）：在飞 100 被拒、有一行返回后立刻受理。"""
     store = _mk_store(tmp_path)
     c = _mk_conductor(store, max_fanout=5)
 
     full = _parent(c)
-    _seed_in_flight(store, full, 20, called_by="M")
-    over = _revise(c, full, "m20", by="M")
+    _seed_in_flight(store, full, 100, called_by="M")
+    over = _revise(c, full, "m100", by="M")
     assert over.refusal_reason == "fanout_exceeded"
-    assert "在飞 20" in over.detail and "上限 20" in over.detail, over.detail
+    assert "在飞 100" in over.detail and "上限 100" in over.detail, over.detail
 
     _mark_returned(store, c._in_flight_children_of(full)[0])
-    assert len(c._in_flight_children_of(full)) == 20 - 1
-    freed = _revise(c, full, "m20b", by="M")
+    assert len(c._in_flight_children_of(full)) == 100 - 1
+    freed = _revise(c, full, "m100b", by="M")
     assert freed.outcome == "ok", (
         f"返回一行就该腾出一格（{freed.outcome}/{freed.refusal_reason}：{freed.detail}）")
 
-    # 另一棵树：在飞 19 时第 20 件受理（边界另一侧）
+    # 另一棵树：在飞 99 时第 100 件受理（边界另一侧）
     edge = _parent(c, doc_id="0002")
-    _seed_in_flight(store, edge, 19, called_by="M")
-    twentieth = _revise(c, edge, "e19", by="M")
-    assert twentieth.outcome == "ok", (
-        f"第 20 件必须受理，拿到 {twentieth.outcome}/{twentieth.refusal_reason}")
+    _seed_in_flight(store, edge, 99, called_by="M")
+    hundredth = _revise(c, edge, "e99", by="M")
+    assert hundredth.outcome == "ok", (
+        f"第 100 件必须受理，拿到 {hundredth.outcome}/{hundredth.refusal_reason}")
 
 
 # ------------------------------------------- 读数三：触顶之后"只可等待"（所有者 2026-10-08 追加）

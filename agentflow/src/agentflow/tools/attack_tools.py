@@ -95,6 +95,9 @@ _REQUIRED_BUDGET_KEYS = ("max_rounds", "max_parallel_subgoals", "max_persist_att
 #: 而 `agent_f` 会真的写它。后果是一个已达终态的计划被当成活计划重新拾起。
 #: 两处名单的存在本身就是缺陷（FC-03）：同一个"终态"概念不可能有两个定义。
 from ..schema import ATTACK_TERMINAL_STATUSES as TERMINAL_STATUSES  # noqa: E402
+#: 子目标状态的**词表**（`pick_next_subgoal` 要在给结论之前拿它校验：
+#: 状态写错时若直接回"没有可推进的子目标"，就把输入写错读成了"确实没有待办"）。
+from ..schema import SUBGOAL_STATUSES as SUBGOAL_STATUSES  # noqa: E402
 
 
 def check_budget(budget: dict | None) -> dict:
@@ -263,6 +266,22 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
         order = {"in_progress": 0, "todo": 1, "blocked": 2}
         return (order.get(st, 9), str(sg.get("sid") or ""))
 
+    # ⚠️ **2026-10-16（亲测 D 的 `attack.*` 时抓到的）**：这里原本直接过滤，
+    # 于是**状态写错**（我用 `pending`/`done`，而词表是
+    # `("todo","in_progress","supported_not_proved","closed","blocked","dropped")`）
+    # 会掉进下面那条"没有可推进的子目标" ⇒ 把"**输入写错了**"读成"**确实没有待办**"，
+    # 正是本仓最在意的"没查成写成查了没有"。先校验词表，如实说清是输入的问题。
+    unknown = sorted({str(s.get("status") or "") for s in subgoals
+                      if str(s.get("status") or "")} - set(SUBGOAL_STATUSES))
+    if unknown:
+        return {
+            "picked": False,
+            "subgoal": None,
+            "kind": "unknown_subgoal_status",
+            "reason": (f"这些状态不在词表里：{unknown}；合法状态是 {list(SUBGOAL_STATUSES)}。"
+                       "这一条**没说成**『没有可推进的子目标』—— 把输入写错读成『确实没有待办』，"
+                       "会让上层以为攻坚已经无事可做。"),
+        }
     pool = [s for s in subgoals if str(s.get("status") or "") in ("in_progress", "todo", "blocked")]
     if not pool:
         return {
@@ -373,7 +392,9 @@ def _guard(fn: Callable[[], Any]) -> ToolResult:
     """
     try:
         return ok(fn())
-    except ValueError as e:
+    except (ValueError, TypeError) as e:
+        # 2026-10-17（子代理 tools 根因 C）：`budget` 在 schema 里是 `{"type":"object"}`
+        # 无 properties ⇒ 内层值从没被校验；`int(None)` / `int([])` 抛 TypeError 穿过守卫。
         # `PlanError` 是 `ToolError` 子类、不是 `ValueError`，所以这一支抓不到它。
         # （不依赖这个事实：下面那一支排在 ToolError 之前，改基类也不会静默漂移。）
         return fail(
@@ -424,7 +445,10 @@ def _plan_error_type() -> type:
            },
     side_effect="none",
     roles=_READ_ROLES,
-    returns="{'checked','complete','missing','allowed','reason'}",
+    # ⚠️ 2026-10-15 补齐（`draft/124` §17）：`returns` 会拼进 function-calling 的
+    # `description`（`tools/base.py:721`）⇒ **模型看得到**；缺的键模型就不知道它存在。
+    # `blocked_by` 是"被谁挡住的"（预算不完整 / 已终结 / 该换下一层）。
+    returns="{'checked','complete','missing','allowed','reason','blocked_by'}",
     tags=("attack", "budget"),
 )
 def _attack_check_budget(budget, rounds_done=0, depth=0):
@@ -557,7 +581,7 @@ def _attack_step(_need_store, store, plan_id):
     # 键名逐个从实现读出（`agent_f.AgentF.status`）：计划不存在时只有
     # `checked`/`plan_id`/`reason` 三个键（`checked=False` ⇒ 没查），存在时
     # 有全部 19 个键；这里写的是"计划存在"那一支的键集合。
-    returns="{'checked','plan_id','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason'}",
+    returns="{'checked','plan_id','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason','stale_blocked'}",
     tags=("attack",),
 )
 def _attack_status(_need_store, store, plan_id):

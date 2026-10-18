@@ -1,0 +1,19 @@
+{
+ "action": "propose_question",
+ "at": "2026-10-15T17:05:34+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 810,
+ "payload_keys": [
+  "note",
+  "ok",
+  "question_id",
+  "row"
+ ],
+ "payload_preview": "{\"note\": \"立起来 ≠ 有进展：status=open 是「要研究」这一档，后续的 assess / consider / adjudicate 才推进它\", \"ok\": true, \"question_id\": \"000000\", \"row\": {\"contradiction_relation_ids\": [], \"contradiction_request_ids\": [], \"contradiction_rounds\": 0, \"contradiction_verdict\": null, \"created_at\": \"2026-10-15T17:05:34+08:00\", \"evidence_lit_ids\": [], \"gap_reason\": \"示例用：留一行可追溯的研究问题（本趟不花任何模型调用）。\", \"kind\": \"gap\", \"notes\": \"\", \"origin\": \"agent-D\", \"priority\": \"medium\", \"question\": \"示例：交换性在有限群里的最小反例是什么？\", \"question_id\": \"000000\", \"related_concept_ids\": [], \"related_relation_ids\": [], \"relation_chain\": [], \"status\": \"open\", \"updated_at\": \"2026-10-15T17:05:34+08:00\", \"waiting_request_ids\": []}}",
+ "payload_sha256": "c83775e09374612406da2e4937ce7ca275d7ef67667bcf2d0b5db234704bf177",
+ "readings": {},
+ "role": "D",
+ "status": "done",
+ "task_id": "t-000004"
+}

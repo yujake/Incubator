@@ -103,16 +103,17 @@ class ModelClient:
     #: 那是三态被折平：把"没有台账号"伪装成"有一个叫 (未接线) 的台账号"。
     task_id: str | None = None
     role: str = "B"
-    max_tokens: int | None = None
+    #: ⚠️ **`max_tokens` 这一格已删**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
+    #: 它此前是"抽取那条路显式给 8192"的落点，而真调用对照证明：**不带这一栏时上游给得更宽**
+    #: （`finish_reason=stop`、`tokens_out=14,015`）。请求体里从此不出现 `max_tokens`。
     #: 逐笔记账结局（`modelcost.charge_reply` 的原样返回值）。
     charges: list[dict] = field(default_factory=list)
     #: 已经发出去的调用次数（含失败的那几次）。
     calls: int = 0
 
-    def complete(self, prompt: str, *, system: str | None = None,
-                 max_tokens: int | None = None) -> str:
+    def complete(self, prompt: str, *, system: str | None = None) -> str:
         """调一次模型；成功返回文本，没查成抛 `ModelUnavailable`，查了失败抛 `ModelFailed`。"""
-        reply = self.call(prompt, system=system, max_tokens=max_tokens)
+        reply = self.call(prompt, system=system)
         if reply.ok:
             return reply.text
         detail = f"{reply.error_kind}: {reply.error_detail}"
@@ -123,15 +124,13 @@ class ModelClient:
             )
         raise ModelFailed(f"模型调用失败（{detail}）", reply=reply)
 
-    def call(self, prompt: str, *, system: str | None = None,
-             max_tokens: int | None = None) -> ModelReply:
+    def call(self, prompt: str, *, system: str | None = None) -> ModelReply:
         """发一次调用并记账，返回网关的三态结局（不抛，供需要自己看 `error_kind` 的调用方用）。"""
         try:
             reply = self.gateway.complete(
                 prompt,
                 scope=self.scope,
                 system=self.system if system is None else system,
-                max_tokens=self.max_tokens if max_tokens is None else max_tokens,
             )
         except Exception as exc:  # noqa: BLE001 —— 见 `runflow._complete_or_not_checked`：
             # `ModelGateway.complete` 承诺"从不抛异常"，但传输层实现抛出的意外异常
@@ -186,6 +185,11 @@ class ModelClient:
             "tokens_in": tin,
             "tokens_out": tout,
             "scope": self.scope,
+            # ⚠️ **2026-10-17（长跑 goal）**：**采样钉死**。审核类调用（V 的 `verify_proof` 等）
+            # 原先用默认采样 ⇒ **同一份证明会一次判「成立」、一次判「有毛病」**（实测），
+            # 于是"经审核才进定理库/才作根"这扇门**天生不可复现** ⇒ 长跑里证明链反复开合。
+            # 默认 0；要改由配置面显式覆盖（这一栏同时进读数，见 `SeamCall`）。
+            "temperature": 0,
             "model": getattr(self.gateway.spec, "model", ""),
             "base_url": getattr(self.gateway.spec, "base_url", ""),
         }
@@ -194,8 +198,7 @@ class ModelClient:
 def client_from_env(*, scope: str = SCOPE_EXTRACT, meter: Any = None,
                     task_id: str | None = None, role: str = "B",
                     env: Mapping[str, str] | None = None,
-                    transport: Any = None,
-                    max_tokens: int | None = None) -> ModelClient:
+                    transport: Any = None) -> ModelClient:
     """按环境变量建一个客户端。没配 key 也照样返回（`complete` 时才如实报"没查成"）。
 
     为什么不在建的时候就把"没 key"当异常抛掉：调用方通常要把"没查成"这件事
@@ -206,16 +209,15 @@ def client_from_env(*, scope: str = SCOPE_EXTRACT, meter: Any = None,
     由 `verify.dangling_usage_task` 按"未接线"容忍；给了号就必须是 `tasks` 里
     真有的那一行（否则审计会如实地报它挂不上 —— 那正是我们要它报的）。
 
-    `max_tokens=None` 时用网关的缺省（4096）。抽取那条路必须显式给大一点：
-    实测（2026-09-28）两本书的抽取失败在
-    `ExtractionError: 无法把 LLM 返回解析为 JSON 对象: Expecting ',' delimiter` ——
-    概念表一长，输出的 JSON 就被 4096 截在半句上，解析必然失败。
-    那不是"模型不行"，是上限给的太小。
+    ⚠️ **`max_tokens` 这一栏已删**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
+    它此前是"抽取那条路必须显式给 8192"的落点，理由是"概念表一长，输出的 JSON 就被
+    4096 截在半句上"—— 那个诊断对，处方错了：**不该由我们再设一个更大的上限，而该不设**。
+    真调用对照（2026-10-15）：同一段 prompt **不带** `max_tokens` 时上游回
+    `finish_reason=stop`、`tokens_out=14,015`；带上 `32768` 时 `12,987` ⇒ 缺省比我们给的更宽。
     """
     spec = spec_from_env(env)
     gateway = ModelGateway(spec, transport=transport)
-    return ModelClient(gateway=gateway, scope=scope, meter=meter, task_id=task_id,
-                       role=role, max_tokens=max_tokens)
+    return ModelClient(gateway=gateway, scope=scope, meter=meter, task_id=task_id, role=role)
 
 
 # --------------------------------------------------------------------------- #
@@ -239,8 +241,7 @@ def _fake_body(text: str = "抽出结果") -> str:
                          "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
         },
-        ensure_ascii=False,
-    )
+        ensure_ascii=False,default=str)
 
 
 def selftest() -> int:

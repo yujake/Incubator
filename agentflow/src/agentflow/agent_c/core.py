@@ -740,7 +740,7 @@ class _Core:
                 prompt = (
                     "下面是同一对概念之间的若干条路径。请只输出一个 JSON 数组，"
                     "按'关系链最合理'从高到低给出路径的 index，不要输出任何解释。\n"
-                    + json.dumps(compact, ensure_ascii=False)
+                    + json.dumps(compact, ensure_ascii=False, default=str)
                 )
                 out = json.loads(str(self.llm.complete(prompt)).strip())
             else:
@@ -775,8 +775,7 @@ class _Core:
                 prompt = (
                     "下面是从关系图里找出的候选研究缺口。请只输出一个 JSON 对象，"
                     "形如 {\"<key>\": {\"worth\": true/false, \"confidence\": \"high|medium|low\", \"reason\": \"...\"}}，"
-                    "不要输出任何解释文字。\n" + json.dumps(compact, ensure_ascii=False)
-                )
+                    "不要输出任何解释文字。\n" + json.dumps(compact, ensure_ascii=False, default=str))
                 out = json.loads(str(self.llm.complete(prompt)).strip())
             else:
                 return None
@@ -785,10 +784,15 @@ class _Core:
             return None
         except Exception:  # noqa: BLE001
             return None
-    _PATH_HINTS = ("之间", "关系链", "的关系", "路径", "联系", "关联")
-    _HOT_HINTS = ("最热门", "热门", "统计", "频次", "排行", "排名")
-    _COLD_HINTS = ("冷门", "孤立", "被忽视", "没人研究")
-    _GAP_HINTS = ("完善", "缺口", "结构洞", "补全", "缺失", "遗漏")
+    _PATH_HINTS = ("之间", "关系链", "的关系", "路径", "联系", "关联", "怎么连", "连通", "connection")
+    # ⚠️ 2026-10-16（亲测 C 的 `handle` 时补的）：原来只有"最热门"，而**"最热"**（更短、更自然）
+    # 与"热度/中心性/hottest/核心概念"都不命中 ⇒ 一句最普通的"什么最热"会被判成「关键词未命中」。
+    # 业主口径："第一次凭感觉敲红的，真实智能体也会在这里困惑" —— 这里是**智能体的第一句话**就会撞上。
+    _HOT_HINTS = ("最热门", "最热", "热门", "热度", "统计", "频次", "排行", "排名",
+                  "中心性", "核心概念", "最重要的概念", "hottest", "top",
+                  "度数", "degree")
+    _COLD_HINTS = ("冷门", "孤立", "被忽视", "没人研究", "边缘", "无人问津", "cold")
+    _GAP_HINTS = ("完善", "缺口", "结构洞", "补全", "缺失", "遗漏", "缺口表")
     @staticmethod
     def _parse_int(text: str, default: int, low: int, high: int) -> int:
         """从需求文本里取一个数字参数（如"最热门的 5 个"），取不到就用默认值。

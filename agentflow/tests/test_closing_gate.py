@@ -282,6 +282,10 @@ def test_the_acceptance_cell_passes_once_each_leg_has_a_ledger_row(tmp_path: pat
         with s.tx("documents", actor="test") as tx:
             row = dict(tx.rows("documents")[0])
             row["review_rounds"] = 1
+            # 2026-10-17（业主：「审过和通过是不同的状态」）：审过由**审核轴**决定
+            row["review_verdict"] = "成立"
+            row["reviewed_at"] = TS
+            row["reviewed_by"] = "agent-H"
             tx.upsert("documents", row)
         with s.tx("statements", actor="test") as tx:
             tx.upsert("statements", {
@@ -335,33 +339,51 @@ def test_the_acceptance_cell_only_excuses_the_row_that_is_really_met(tmp_path: p
 
 def test_the_reviewed_documents_leg_counts_hs_verdict_not_only_revision_rounds(
         tmp_path: pathlib.Path):
-    """判据（`draft/37` §95 的真机读数）：`status=accepted` 而 `review_rounds=0` 必须算"审过"。
+    """判据（业主 2026-10-17：「**H 审过和通过是完全不同的状态**，通过标准和 V 一样」）。
 
-    第 9 趟实测：`documents/0000` 是 `status=accepted`、`review_rounds=0`（H 审过并给了裁决，
-    而"轮次"只在真的改过稿时才加）。按 `review_rounds >= 1` 判会把它读成"没审过" ——
-    判据恒红，于是没人再信它（这比没有判据更坏）。所以这一档要认 H 的裁决本身。
+    旧版把 `status='accepted'` 当"审过"——那正是被折平的地方。现在判三件事：
+    ① `review_verdict='成立'` ⇒ **审过** ≥1 且 **通过** ≥1；
+    ② `review_verdict='有毛病'` ⇒ **审过** ≥1 而 **通过** = 0（审过 ≠ 通过）；
+    ③ **负控**：`status='accepted'` 但 `review_verdict=''`（没审过）⇒ 两条都**不算**。
     """
-    def seed(s: Store) -> None:
-        _paper_with_claim(s, doc_id="0009")
-        with s.tx("documents", actor="test") as tx:
-            row = dict(tx.rows("documents")[0])
-            row["status"] = "accepted"          # H 的裁决
-            row["review_rounds"] = 0            # 没有改过稿 ⇒ 轮次是 0
-            # 审批必须钉住"审的是哪一版"（`schema.Document.validate` 的结构强制）
-            from agentflow import signatures as SIG
+    def _seed_with(verdict: str):
+        def seed(s: Store) -> None:
+            _paper_with_claim(s, doc_id="0009")
+            with s.tx("documents", actor="test") as tx:
+                row = dict(tx.rows("documents")[0])
+                row["status"] = "accepted"
+                row["review_verdict"] = verdict
+                row["review_rounds"] = 0
+                if verdict:
+                    row["reviewed_at"] = TS
+                    row["reviewed_by"] = "agent-H"
+                # 审批必须钉住"审的是哪一版"（`schema.Document.validate` 的结构强制）
+                from agentflow import signatures as SIG
 
-            row["content_sha256"] = SIG.content_sha256_of(row)
-            tx.upsert("documents", row)
+                row["content_sha256"] = SIG.content_sha256_of(row)
+                tx.upsert("documents", row)
+        return seed
 
-    st = _project(tmp_path, seed=seed)
-    report = _write_report(tmp_path)
-    _acceptance_checks(tmp_path, [
-        {"id": "P9", "name": "我方稿件被审过", "kind": "reviewed_documents", "min": 1},
-    ], st=st)
-    rep = _gate(st, report)
-    assert rep.status["acceptance"] == "pass", rep.to_dict()
-    detail = rep.readings["acceptance"]["rows"][0]["detail"]
-    assert detail["documents"][0]["status"] == "accepted", detail
+    def _count(verdict: str, kind: str, tag: str) -> int:
+        home = tmp_path / tag
+        home.mkdir(parents=True, exist_ok=True)
+        st = _project(home, seed=_seed_with(verdict))
+        _acceptance_checks(home, [
+            {"id": "P9", "name": "这一档", "kind": kind, "min": 1},
+        ], st=st)
+        rep = _gate(st, _write_report(home))
+        row = rep.readings["acceptance"]["rows"][0]
+        return len((row.get("detail") or {}).get("documents") or [])
+
+    # ① 成立 ⇒ 审过 ≥1、通过 ≥1
+    assert _count("成立", "reviewed_documents", "ok1") >= 1
+    assert _count("成立", "accepted_documents", "ok2") >= 1
+    # ② 有毛病 ⇒ 审过 ≥1、通过 = 0
+    assert _count("有毛病", "reviewed_documents", "bad1") >= 1
+    assert _count("有毛病", "accepted_documents", "bad2") == 0
+    # ③ 负控：status=accepted 但没审过 ⇒ 都不算
+    assert _count("", "reviewed_documents", "none1") == 0
+    assert _count("", "accepted_documents", "none2") == 0
 
 
 def test_the_manuscript_edited_leg_compares_the_draft_with_the_read_only_baseline(
@@ -2351,6 +2373,11 @@ def _accepted_doc(st: Store) -> dict:
     with st.tx("documents", actor="test") as tx:
         row = dict(tx.rows("documents")[0])
         row["status"] = "accepted"
+        # 2026-10-17（业主：「审过和通过是不同的状态」）：**审过**由审核轴记，
+        # `status` 只表生命周期。夹具要同时给两样，才代表"H 审过且通过"。
+        row["review_verdict"] = "成立"
+        row["reviewed_at"] = TS
+        row["reviewed_by"] = "agent-H"
         row["content_sha256"] = SIG.content_sha256_of(row)
         tx.upsert("documents", row)
     _sign_doc(st, row)

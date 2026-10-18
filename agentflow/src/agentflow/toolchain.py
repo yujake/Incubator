@@ -457,5 +457,7 @@ def toolchain_report(env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "lean_path": (lean or {}).get("path", ""),
         "lean_version": (lean or {}).get("version", ""),
         "mathlib": mathlib_state(env),
-        "can_do_formal": bool(lean),
+        # 2026-10-17（Lean 审计 #1）：原来这里还有一行 `"can_do_formal": bool(lean)`
+        # **重复键覆盖**了上面那行 —— 于是关掉 Lean 的机器上 `doctor` 仍说"能做形式化核验"。
+        # 已删：能不能做 = 装了 **且** 开关开着（上面 456 行那一条是唯一口径）。
     }

@@ -545,13 +545,22 @@ def test_i3_default_is_off_and_writes_nothing(kn):
         assert key in rep.payload
 
 
-def test_i3_submits_at_most_three_well_formed_requests(kn):
-    """正向：新增 ≤3 条，每条 submitted_by/priority/mode 合规，且 topic 能对应到某个候选。"""
+def test_i3_submits_at_most_the_configured_number_of_requests(kn, monkeypatch):
+    """正向：新增 ≤ 本次配额，每条 submitted_by/priority/mode 合规，topic 能对到某个候选。
+
+    ⚠️ 2026-10-15 裁定 C9 把 I3 的"单次 gaps 最多直连几条"从 3 抬到 30
+    （「凡是可能阻止智能体完成大项目的……抬到几乎不可能触发」）。
+    这一条钉的是**行为**（到配额就拒、且拒得有理有据），所以把配额 monkeypatch
+    成 3 来造场景 —— 数字本身由 `test_interactions.py` 的默认值判据钉住。
+    """
+    from agentflow import interactions as IX
+
+    monkeypatch.setitem(IX.DEFAULTS, "max_gap_requests_per_run", 3)
     c = AgentC(kn)
     rep = c.gaps(submit_requests=True)
 
     rows = kn.rows("search_requests")
-    assert 0 < len(rows) <= 3, "单次 gaps 最多直连 3 条（无闸门会把 A 的队列淹没）"
+    assert 0 < len(rows) <= 3, "单次 gaps 最多直连 3 条（本次配额的机器形态）"
     assert len(rows) == len(rep.payload["submitted_request_ids"]) == 3
     cand_topics = {"、".join(x["concept_names"]) for x in rep.payload["candidate_gaps"]}
     for row in rows:
@@ -570,9 +579,19 @@ def test_i3_submits_at_most_three_well_formed_requests(kn):
     assert any("每轮上限" in r["reason"] for r in rep.payload["rejected_requests"])
 
 
-def test_i3_negative_control_inflight_limit_rejects_instead_of_queueing(kn):
-    """负控 2：在途请求已到上限 ⇒ 一条都不新增，且 rejected_requests 里留下理由。"""
-    for i in range(20):  # max_inflight_requests 的默认值
+def test_i3_negative_control_inflight_limit_rejects_instead_of_queueing(kn, monkeypatch):
+    """负控 2：在途请求已到上限 ⇒ 一条都不新增，且 rejected_requests 里留下理由。
+
+    ⚠️ 2026-10-15 裁定 C9 把默认在途上限从 20 抬到 200（`test_agent_a_priority.py`
+    那一条钉的是**数字**）。这一条钉的是**行为**：到上限时不排队、只拒、且留理由。
+    为了让这条与那个数字解耦，这里把默认值 monkeypatch 成 2 再造场景 ——
+    否则"造 200 条在途"会让这条判据的代价随那个数字一起涨（那正是抬阈值之后
+    旧判据的典型坏法：判据本身没错，但它变成了一个越来越贵的测试）。
+    """
+    from agentflow import interactions as IX
+
+    monkeypatch.setitem(IX.DEFAULTS, "max_inflight_requests", 2)
+    for i in range(2):
         add_request(kn, f"r-{i + 1:04d}", topic=f"占位主题{i}", done=False)
     c = AgentC(kn)
     before = read_data_bytes(kn)
@@ -608,8 +627,16 @@ def test_i3_negative_control_duplicate_topic_is_skipped(kn):
     assert len(kn.rows("search_requests")) == 4
 
 
-def test_i3_skips_topics_already_in_flight_on_a_second_run(kn):
-    """跨轮次也不重复排：第二次调用时前三名的主题都已在途 ⇒ 只剩第 4 名可提交。"""
+def test_i3_skips_topics_already_in_flight_on_a_second_run(kn, monkeypatch):
+    """跨轮次也不重复排：第二次调用时前三名的主题都已在途 ⇒ 只剩第 4 名可提交。
+
+    ⚠️ 2026-10-15 裁定 C9：配额从 3 抬到 30（见上一条）。这条判据要的形态
+    （"第一轮占了 3 个名额、第二轮只剩第 4 名"）因此在配额 30 下不成立，
+    所以显式把配额设回 3 —— 判据说的是"名额被占了就不再占"，与那个数字无关。
+    """
+    from agentflow import interactions as IX
+
+    monkeypatch.setitem(IX.DEFAULTS, "max_gap_requests_per_run", 3)
     c = AgentC(kn)
     first = c.gaps(submit_requests=True).payload
     assert len(first["submitted_request_ids"]) == 3

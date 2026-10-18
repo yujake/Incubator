@@ -642,7 +642,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     # 在后台跑了很久，输出里一个字都没有（URL 就卡在缓冲区里）。
     # 而 `--json` 这个开关存在的唯一目的就是"让调用方立刻拿到确切 URL"。
     if args.json:
-        print(json.dumps({"url": url, "root": str(root)}, ensure_ascii=False), flush=True)
+        print(json.dumps({"url": url, "root": str(root)}, ensure_ascii=False, default=str), flush=True)
     else:
         print(f"agentflow 用户端：{url}", flush=True)
         print(f"工作区根：{root}", flush=True)

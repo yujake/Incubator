@@ -206,7 +206,7 @@ def cmd_run_a(args) -> int:
     downloader = F.default_downloader(cfg.get("download") or {}) if (cfg.get("agent_a") or {}).get("download", True) else None
     agent = AgentA(st, providers=providers, downloader=downloader, config=dict(cfg.get("agent_a") or {}))
     out = agent.run(max_requests=args.max if args.once else None)
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
     return 1 if _run_a_failed(out) else 0
 
 
@@ -264,7 +264,7 @@ def cmd_run_b(args) -> int:
     for _n in _notes:
         print(f"[run-b] {_n}", file=sys.stderr)
     out = agent.run(max_docs=args.max if args.once else None)
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
     if out.get("failed"):
         print(f"[run-b] 有 {out['failed']} 篇文献抽取失败（未置 processed，等租约到期重试）", file=sys.stderr)
         return 1
@@ -276,7 +276,7 @@ def cmd_status(args) -> int:
     st.init()
     s = st.stats()
     if args.json:
-        print(json.dumps(s, ensure_ascii=False, indent=2))
+        print(json.dumps(s, ensure_ascii=False, indent=2, default=str))
         return 0
     print(tty.paint(f"工作区 {s['root']}", "bold"))
     print("")
@@ -319,7 +319,7 @@ def cmd_verify(args) -> int:
         allow_fulltext_quote_fallback=bool(bcfg.get("allow_fulltext_quote_fallback", False)),
     )
     if args.json:
-        print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2))
+        print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2, default=str))
     else:
         print(f"{tty.badge('ok' if rep.ok else 'failed')}  校验完成  "
               f"错误 {len(rep.errors)} / 警告 {len(rep.warnings)}")
@@ -433,7 +433,7 @@ def cmd_tools(args) -> int:
     # 这个问题的答案，不能被漏掉。
     build = build_registry(store=st, workspace_root=root, roles=tuple(ROLES))
     if args.json:
-        print(json.dumps(build.summary(), ensure_ascii=False, indent=2))
+        print(json.dumps(build.summary(), ensure_ascii=False, indent=2, default=str))
         return 0
     print(f"工具总数：{len(build.registry)}（已装模块 {len(build.loaded)}：{', '.join(build.loaded) or '无'}）")
     if build.skipped:
@@ -594,7 +594,7 @@ def cmd_pipeline(args) -> int:
         agent_a=agent_a,
         agent_b=agent_b,
     )
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
     return 0
 
 
@@ -749,7 +749,10 @@ def _verify_quotes(run_dir: Path, ev: Mapping, rows: list[tuple[str, str, str]])
     if not claims_path.is_file():
         return rows
     try:
-        claims = json.loads(claims_path.read_text(encoding="utf-8")).get("claims") or []
+        # 2026-10-17（IO #9）：`claims.json` 顶层可能是**数组**（手写/半途写坏）——
+        # `.get` 会抛 AttributeError，而这一支只接 OSError/ValueError。
+        _doc = json.loads(claims_path.read_text(encoding="utf-8"))
+        claims = (_doc.get("claims") if isinstance(_doc, dict) else None) or []
     except (OSError, ValueError):
         return rows
     pages_by_sid: dict[str, list[str]] = {}
@@ -843,7 +846,7 @@ def _evidence_migrate(project_dir: Path, *, apply: bool) -> int:
             pages = [str(p) for p in (full.get("text_pages") or [])]
             if pages and not full.get("text_ref"):
                 n += 1
-                saved += len(json.dumps(pages, ensure_ascii=False).encode("utf-8"))
+                saved += len(json.dumps(pages, ensure_ascii=False, default=str).encode("utf-8"))
         if n:
             todo.append((ev_path, n, saved))
 
@@ -880,7 +883,7 @@ def _evidence_migrate(project_dir: Path, *, apply: bool) -> int:
             full["text_ref"] = ref
             full["chars"] = int(ref.get("chars") or 0)
             full["text_store"] = "ref"
-        ev_path.write_text(json.dumps(ev, ensure_ascii=False, indent=1) + "\n",
+        ev_path.write_text(json.dumps(ev, ensure_ascii=False, indent=1, default=str) + "\n",
                            encoding="utf-8", newline="\n")
         done += 1
     print(tty.bullet(f"已迁移 {done} 份产物；备份在 {backup_dir}"))
@@ -1185,7 +1188,7 @@ def cmd_project(args) -> int:
                 if why:
                     emit(tty.bullet("剔除原因：" + tty.paint(why, "yellow")))
             for err in (ex.get("errors") or [])[:5]:
-                emit(tty.bullet(tty.paint(json.dumps(err, ensure_ascii=False)[:150], "yellow")))
+                emit(tty.bullet(tty.paint(json.dumps(err, ensure_ascii=False, default=str)[:150], "yellow")))
             mdl = ex.get("model") or {}
             if mdl:
                 # 这一步的花销不在 `--budget-usd` 的口径里（那个额度是主题作答那一跑的），
@@ -1621,6 +1624,15 @@ def cmd_run_agent(args) -> int:
     from .policy import Policy
 
     wall = getattr(args, "wall_clock_sec", None)
+    # 2026-10-18（缺陷 ⑳，业主口径「墙钟可以干脆不设」）：`--wall-clock-sec 0` ⇒ **不设上限**。
+    # 真机证据（`projects/t2y`，T2）：我**没有**传这个参数，于是用了 `default=3600.0`，
+    # 1 小时整被切断 —— 而切断的那一刻 M 正要派 B 去登记命题：
+    #   t-000009 E ← refused「墙钟截止已过（wall_clock_sec=3600.0）」
+    #   t-000010 **B** ← refused 同上
+    # 结果就是 `conjectures 3 / statements 0`：研究工作做完了，**收尾那一步被墙钟砍掉**。
+    # 0（或负数）显式表示"不设上限"，与"我没传"区分开（后者仍走缺省 3600）。
+    if wall is not None and float(wall) <= 0:
+        wall = None
     # `Policy.usd_budget` 必须拿到同一个数（业主 2026-10-12 的预算轴；只读调查发现
     # 这一格此前从来没被灌过 —— 改前 `Policy(wall_clock_sec=wall)`，
     # 于是 `conductor` 那个全局 meter 的 `budget_usd=None`、
@@ -1682,7 +1694,7 @@ def cmd_run_agent(args) -> int:
                 f"用 `agentflow --root {root} inbox{_sid_suffix(args.sid)}` 看，"
                 f"答完再用 `--resume` 接着跑。", "bold"))
             return 3
-        return 0 if auto.stop_reason in ("rounds", "stop_file", "user_stop", "resumed_done") else 1
+        return 0 if auto.stop_reason in ("rounds", "stop_file", "resumed_done") else 1
 
     run = AL.run_role(args.role, args.task, store=st, registry=wiring["registry"],
                       conductor=wiring["conductor"], seam=seam, session_root=root,
@@ -1697,7 +1709,7 @@ def cmd_run_agent(args) -> int:
                       resume=bool(getattr(args, "resume", False)))
     code = _run_agent_exit_code(run)
     if args.json:
-        print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2))
+        print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2, default=str))
         if code == 3:
             # JSON 那一份必须保持可解析 ⇒ 那行醒目提示走 stderr
             print(_waiting_notice(run, root=root, sid=args.sid), file=sys.stderr)
@@ -1705,7 +1717,7 @@ def cmd_run_agent(args) -> int:
     print(tty.paint(f"角色 {args.role} 的循环：{run.stop_reason}", "bold"))
     for step in run.steps:
         print(f"  [{step.index}] {step.shape}"
-              + (f"：{json.dumps(step.payload, ensure_ascii=False)[:160]}" if step.payload else "")
+              + (f"：{json.dumps(step.payload, ensure_ascii=False, default=str)[:160]}" if step.payload else "")
               + (f"  ⇒ {step.problem}" if step.problem else ""))
     if run.final:
         # 停在等用户那一档不截断：这条结论里带的是「下一步该敲什么」，
@@ -1804,7 +1816,7 @@ def cmd_inbox(args) -> int:
     rows = [(s, q) for s in sids for q in U.pending_questions(root, sid=s)]
     if args.json:
         print(json.dumps([{**q.to_dict(), "sid": s} for s, q in rows],
-                         ensure_ascii=False, indent=2))
+                         ensure_ascii=False, indent=2, default=str))
         return 0
     if not rows:
         print(tty.bullet("没有待回答的问题。"))
@@ -1901,7 +1913,7 @@ def cmd_doctor(args) -> int:
 
     rep = TC.toolchain_report()
     if args.json:
-        print(json.dumps(rep, ensure_ascii=False, indent=2))
+        print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
     else:
         prov = rep["provers"]
         print(tty.paint("这台机器的体检", "bold"))
@@ -1999,20 +2011,20 @@ def cmd_budget(args) -> int:
     if getattr(args, "set_usd", None) is not None:
         got = B.write_initial(root, float(args.set_usd), by=str(getattr(args, "by", "user") or "user"),
                               note=str(getattr(args, "note", "") or ""))
-        print(f"[budget] 设总额度：{json.dumps(got, ensure_ascii=False)}")
+        print(f"[budget] 设总额度：{json.dumps(got, ensure_ascii=False, default=str)}")
         wrote = True
         if not got.get("ok"):
             return 2
     if getattr(args, "add_usd", None) is not None:
         got = B.add_usd(root, float(args.add_usd), by=str(getattr(args, "by", "user") or "user"),
                         note=str(getattr(args, "note", "") or ""))
-        print(f"[budget] 追加：{json.dumps(got, ensure_ascii=False)}")
+        print(f"[budget] 追加：{json.dumps(got, ensure_ascii=False, default=str)}")
         wrote = True
         if not got.get("ok"):
             return 2
     snap = B.reading(root, spent_usd=spent, fallback=getattr(args, "fallback_usd", None))
     if args.json:
-        print(json.dumps(snap, ensure_ascii=False, indent=2))
+        print(json.dumps(snap, ensure_ascii=False, indent=2, default=str))
     else:
         total = "不限量" if snap["total_usd"] is None else f"${snap['total_usd']:.6f}"
         used = "没查成" if snap["spent_usd"] is None else f"${snap['spent_usd']:.6f}"
@@ -2072,7 +2084,7 @@ def cmd_stop(args) -> int:
         print(f"[stop] 开关：{stopctl.stop_path(root)}"
               f"（{'在' if state is not None else '不在'}）")
         if state is not None:
-            print(f"[stop] 开关内容：{json.dumps(state, ensure_ascii=False)}")
+            print(f"[stop] 开关内容：{json.dumps(state, ensure_ascii=False, default=str)}")
         history = stopctl.stop_history(root, limit=5)
         if history:
             print(f"[stop] 已被消费的叫停（最近 {len(history)} 次）：")
@@ -2523,8 +2535,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="每满几步向父代理报一次步数账（不设步数闸：超了不强制收工）")
     #: 墙钟（`policy.wall_clock_sec`）默认 900 秒：真机里第 8 次派活就是被它挡下的（`deadline_exceeded`）。
     #: 放成可配而不是写死：长任务（审一篇论文）该给一小时量级，短任务仍可以压到几分钟。
-    sp.add_argument("--wall-clock-sec", type=float, default=3600.0,
-                    help="这次运行的墙钟上限（秒）；到点后新召唤一律被拒（已在跑的走协作式取消）")
+    # 2026-10-18（业主口径，逐字）：「**不传就是无限制，传多少时间就是多少**」。
+    # 所以 default 从 3600.0 改成 None（不设上限）。真机代价（`projects/t2y`）：
+    # 我没传这个参数 ⇒ 用了缺省 3600 ⇒ 1 小时整切断，而那一刻 M 正要派 B 登记命题
+    # （`t-000010 B refused：墙钟截止已过（wall_clock_sec=3600.0）`）⇒ `conjectures 3 / statements 0`。
+    sp.add_argument("--wall-clock-sec", type=float, default=None,
+                    help="这次运行的墙钟上限（秒）。**不给 = 不设上限**；给了多少就是多少"
+                         "（到点后新召唤一律被拒，已在跑的走协作式取消；<=0 同样视为不设）")
     sp.add_argument("--rounds", type=_non_negative_int, default=1,
                     help="跑几轮（>1 走自主轮：按 --report-every 向公共频道汇报）")
     sp.add_argument("--report-every", type=_non_negative_int, default=1, help="每几轮汇报一次")

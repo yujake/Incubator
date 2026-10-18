@@ -160,7 +160,7 @@ def _write_resume_brief(conductor: Conductor) -> dict:
     try:
         root = Path(getattr(conductor.store, "root", "."))
         (root / "resume-brief.json").write_text(
-            json.dumps(brief, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+            json.dumps(brief, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
         brief["path"] = str(root / "resume-brief.json")
     except OSError as exc:  # 简报写不进去必须如实说，不许当"停好了"
         brief["path"] = ""
@@ -219,17 +219,23 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
 
 @tool(
     "conductor.summon",
-    "派活：召唤某个角色做某个动作。闸门在主控内部（允许的边 / 动作表 / 参数接缝 /"
-    "四类上限 / 预算），被拒也落台账并返回 refusal_reason。",
+    "派活：把这件活交给某个角色（写清**是什么活**即可 —— 怎么做由它自己定）；"
+    "闸门在主控内部（允许的边 / 动作表 / 参数接缝 / 四类上限 / 预算），"
+    "被拒也落台账并返回 refusal_reason。",
     {
         "type": "object",
         "properties": {
             "target_role": {"type": "string", "description": "被召唤的角色（A–H）"},
-            "action": {"type": "string", "description": "该角色登记过的动作名"},
+            # ⚠️ **2026-10-16（业主口径 S2 最终形态）**：`action` **整个摘掉** ——
+            # 「一致改成 task 必填，action 不填」「action 完全不用父代理填」。
+            # 派活只有 `target_role` + `task`；点哪个动作是被派者自己的事。
+            "task": {"type": "string", "description":
+                     "**必填**：这一趟派给它的是什么活（写清做什么；可带起手建议，怎么做由它定）"},
             "params": {"type": "object", "description": "动作参数（按参数的 schema 校验）"},
             "input_key": {"type": "string", "description": "同一祖先链上去重用的键（防活锁）"},
         },
-        "required": ["target_role", "action"],
+        # 2026-10-16（口径 S2）：**`task` 进必填、`action` 可选**（与形状面／广告面一致）。
+        "required": ["target_role", "task"],
         "additionalProperties": False,
     },
     side_effect="write_local",
@@ -238,9 +244,14 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
              "'error','tokens','usd','depth','elapsed_sec','children','checked',"
              "'payload_preview','payload_bytes','payload_keys','payload_truncated','artifacts'}"),
 )
-def conductor_summon(_conductor, target_role: str, action: str, params: dict | None = None,
+def conductor_summon(_conductor, target_role: str, task: str, params: dict | None = None,
                      input_key: str = "") -> ToolResult:
-    """工具体：一次派活。闸门全在 `Conductor.summon` 内部；被拒也落台账。"""
+    """工具体：一次派活。闸门全在 `Conductor.summon` 内部；被拒也落台账。
+
+    2026-10-16（口径 S2「M 只派活」）：`action` 可以为空 —— 那就是**只派活**，
+    由被召唤的角色跑自己的循环、按自己的能力范围选动作；此时 `task` 必填
+    （"接活的人得知道自己该干什么"）。与 `_do_summon` 同一套，不另立规矩。
+    """
     # 形参刻意不叫 `role`：`ToolRegistry.call(..., role=...)` 的 `role` 是
     # 调用方角色（`P-14` 的调用期权限判据，`None` 一律拒）。撞名会让模型传的
     # `role` 被读成"调用者是谁" —— 既拿不到目标角色，又会改变权限判据的输入。
@@ -252,7 +263,15 @@ def conductor_summon(_conductor, target_role: str, action: str, params: dict | N
     #
     # `input_key` 是循环检测的键（同一 `(role, action, input_key)` 出现在祖先链上
     # 才算循环）：不给会被 `verify_tasks` 报 `task_without_input_key`。
-    res = _conductor().summon(target_role, action, params or {}, by=S.CONDUCTOR_ROLE,
+    if not str(task or "").strip():
+        raise ToolError("派活必须写清是什么活：`task` 必填"
+                        "（否则接活的人不知道自己该干什么）")
+    # 2026-10-16（口径 S2 最终形态）：「**不是忽略 action，是完全不要有填 action 的位置**」
+    # ⇒ 形参里没有 `action`、条目里不读它；这一行那个 `""` 是**内部 API 的实参**
+    # （`Conductor.summon(role, action, params)` 是 `pipeline`/`scheduler`/`deliver`
+    # 也在用的内部接口，它保留动作那一格），**不是留给模型填的位置**。
+    params = {**dict(params or {}), "task": str(task)}
+    res = _conductor().summon(target_role, "", params or {}, by=S.CONDUCTOR_ROLE,
                               input_key=input_key)
     data = _summon_dict(res)
     return ok(data, **data)
@@ -279,13 +298,15 @@ def conductor_summon(_conductor, target_role: str, action: str, params: dict | N
                     "type": "object",
                     "properties": {
                         "target_role": {"type": "string", "description": "被召唤的角色（A–H）"},
-                        "action": {"type": "string", "description": "该角色登记过的动作名"},
+                        # 2026-10-16（口径 S2 最终形态）：`action` 同样摘掉（与 `summon` 一致）。
+                        "task": {"type": "string", "description":
+                                 "**必填**：这件活是什么（可带起手建议）"},
                         "params": {"type": "object", "description": "动作参数"},
                         "instance": {"type": "string",
                                      "description": "实例标签；同角色不同标签 ⇒ 允许同波并发"},
                         "input_key": {"type": "string", "description": "去重/防活锁的键"},
                     },
-                    "required": ["target_role", "action"],
+                    "required": ["target_role", "task"],
                     "additionalProperties": False,
                 },
             },
@@ -339,15 +360,21 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
         if not isinstance(item, Mapping):
             raise ToolError(f"targets[{i}] 必须是对象（收到 {type(item).__name__}）")
         target_role = str(item.get("target_role") or "")
-        action = str(item.get("action") or "")
-        if not target_role or not action:
-            raise ToolError(f"targets[{i}] 缺 target_role 或 action")
+        # 2026-10-16（口径 S2 最终形态）：条目里**不读 `action`**（模型没有那个位置可填）。
+        if not target_role:
+            raise ToolError(f"targets[{i}] 缺 target_role")
+        work = str(item.get("task") or "").strip()
+        if not work:
+            raise ToolError(f"targets[{i}] 的 `task` 必填（这一件活是什么）")
+        item = {**dict(item), "params": {**dict(item.get("params") or {}), "task": work}}
         instance = str(item.get("instance") or "")
         if not instance and target_role in auto:
             used[target_role] = used.get(target_role, 0) + 1
             instance = auto[target_role][used[target_role] - 1]
         calls.append(SC.TaskCall(
-            role=target_role, action=action,
+            # 2026-10-16（口径 S2 最终形态）：这里那个 `""` 是**内部 API 的实参**，
+            # 不是留给模型填的位置（条目里没有 `action` 可读）。
+            role=target_role, action="",
             params=dict(item.get("params") or {}),
             by=S.CONDUCTOR_ROLE,
             input_key=str(item.get("input_key") or ""),
@@ -482,7 +509,8 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
     side_effect="write_local",
     roles=("M",),
     returns=("{'reason','reason_mapped_from','detail','inflight_at_stop','drained_sec',"
-             "'disposed','resume_brief','verify','stop_switch','notified','killed_children'}"),
+             "'disposed','resume_brief','verify','stop_switch','notified','killed_children',"
+             "'blocked_remaining'}"),
 )
 def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
                    force: bool = False, notify: bool = True,
@@ -879,22 +907,25 @@ def conductor_state(_conductor, ) -> ToolResult:
     },
     side_effect="read",
     roles=("M",),
-    returns="{'role','actions','tools','summonable'}",
+    # ⚠️ 2026-10-15 补齐：这把工具体返回的是那个角色的整份 brief（六个字段），
+    # 而声明里只列了 `{role, actions, tools, summonable}` ⇒ 模型看不到
+    # `duty` / `boundary` / `policy` / `stance` / `signature_error` / `deliverable` ——
+    # 而这件的用途**恰恰是**"让一个角色读到另一个角色的口径"。
+    # `returns` 会拼进 function-calling 的 `description`（模型看得到）。
+    # ⚠️ **2026-10-16（业主口径）**：这里**不再返回 `actions` / `tools`**。
+    # 原话逐字：「M 只是个派活的……**不指定能力**。M 能看到的只是各角色描述，
+    # **看不到具体的工具箱与动作**，但可在角色描述中暗示它各角色能干什么。」
+    # 所以这一格从"查它的动作面与工具面"改成"读它的描述"（`role` + `summonable`
+    # + brief 六格）。留着 `actions`/`tools` 等于把刚在伙伴表上关掉的门又开半扇 ——
+    # M 只要逐个角色查一遍，就能重新拿到每个角色的动作与必填参数。
+    returns="{'role','summonable',"
+            "'duty','boundary','policy','signature_error','deliverable','stance'}",
 )
 def conductor_role_spec(store, role_name: str) -> ToolResult:
-    """工具体：某角色的动作与工具面（与 `capabilities` 同源）。"""
+    """工具体：某角色的**描述**（职责/交付物/边界/立场；不再给动作面与工具面）。"""
     from .. import capabilities as C
 
-    actions = [{"action": s.action, "params": list(getattr(s, "params", ()) or ()),
-                "why": getattr(s, "why", "")} for s in C.actions_for(role_name)]
-    tools_now: list[str] = []
-    try:
-        from . import build_registry
-
-        tools_now = sorted(s.name for s in build_registry(store=store).registry.for_role(role_name))
-    except Exception:  # 工具面读不到就说读不到，不编空表
-        tools_now = []
-    data = {"role": role_name, "actions": actions, "tools": tools_now,
+    data = {"role": role_name,
             "summonable": role_name in C.ALLOWED_EDGES.get(S.CONDUCTOR_ROLE, frozenset()),
             # `draft/37` §108（用户口径"先加强描述"）：这一格此前只给"它有哪些动作"，
             # 而派活错的形态恰恰是"不知道它交付什么、不许做什么"。声明层
@@ -959,7 +990,7 @@ def _brief_of(role: str) -> dict[str, Any] | None:
     side_effect="read",
     roles=("M",),
     returns=("{'found','path','title','conclusion','rows','row_count','ok_count','not_ok_count',"
-             "'readings_truncated','row_ids','problems'}；"
+             "'readings_truncated','row_ids','problems','documents'}；"
              "rows[] 每项是 {'id','name','ok','reading','reading_chars'}；"
              "给了 ids 时多 {'requested','unknown_ids'}"),
 )
@@ -1290,7 +1321,7 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     side_effect="read",
     roles=("M",),
     returns=("{'ok','md','json','tables','manuscripts','in_flight','attack_rounds',"
-             "'interjections','next_steps'}"),
+             "'interjections','next_steps','note'}"),
 )
 def conductor_status_report(_conductor, since: str = "", out_dir: str = "") -> ToolResult:
     """工具体：只读收集 + 落盘，并把四类读数回给主控（实现只有一份：`statusreport`）。"""

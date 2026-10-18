@@ -105,11 +105,27 @@ def test_prover_path_directory_is_found(tmp_path: pathlib.Path, monkeypatch):
     assert got["source"] == "prover_path" and got["path"], got
 
 
-def test_a_stub_outside_path_is_invisible_without_configuration(tmp_path: pathlib.Path):
+def test_a_stub_outside_path_is_invisible_without_configuration(
+        tmp_path: pathlib.Path, monkeypatch):
     """负控（反真空）：不配置时，一个「不在 PATH 上」的检查器是看不见的。
 
     没有这一条，"配置能让它可见"就不构成判据 —— 那可能只是碰巧找得到。
+
+    ⚠️ 2026-10-17（修）：这条原来假定"机器上一定没有 Lean"。真机上
+    `settings.json` 一旦配了 `toolchain.lean_bin`（本机就是
+    `<_env>/lean470/lean-4.7.0-windows/bin`（本机的相对仓库根写法）），
+    `lean` **本来就该解析得到** ⇒ 那条断言在"真有 Lean"的机器上必红（审计早已预告）。
+    现在把**配置面隔离掉**再判：清空环境变量 ＋ 指向一个空的设置文件。
     """
+    empty = tmp_path / "settings.json"
+    empty.write_text('{"toolchain": {"lean_bin": ""}}', encoding="utf-8")
+    monkeypatch.setenv("AGENTFLOW_SETTINGS", str(empty))
+    for var in ("AGENTFLOW_LEAN_BIN", "AGENTFLOW_PROVER_PATH"):
+        monkeypatch.delenv(var, raising=False)
+    if hasattr(TC, "resolve_checker"):
+        import importlib
+
+        importlib.reload(TC)
     exe = _stub(tmp_path / "unconfigured" / "bin")
     assert TC.resolve_checker("lean")["path"] == "", "没配置却找到了不在 PATH 上的桩"
     assert str(exe.parent) not in (os.environ.get("PATH") or "")

@@ -1,0 +1,29 @@
+{
+ "action": "hottest",
+ "at": "2026-10-15T17:05:34+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 789,
+ "payload_keys": [
+  "created_at",
+  "created_by",
+  "error",
+  "kind",
+  "markdown",
+  "markdown_path",
+  "ok",
+  "params",
+  "payload",
+  "report_id",
+  "request",
+  "summary",
+  "truncated",
+  "warnings"
+ ],
+ "payload_preview": "{\"created_at\": \"\", \"created_by\": \"agent-C\", \"error\": \"关系表为空：数据还没进来，无法给出结论\", \"kind\": \"hottest\", \"markdown\": \"# C 分析报告：hottest\\n\\n- 生成者：`agent-C`\\n- 标题摘要：关系表为空，无法统计热度。\\n- 警告：\\n    - 关系表 rows 为 0\\n\\n## 结论\\n\\n关系表为空，没有可统计的对象。请先让 B 抽取关系。\", \"markdown_path\": null, \"ok\": false, \"params\": {\"top_n\": 5}, \"payload\": {\"concept_total\": 0, \"entries\": [], \"hot_ids\": [], \"relation_total\": 0}, \"report_id\": null, \"request\": \"示例：最热的五个概念\", \"summary\": \"关系表为空：还没有任何关系数据可供统计（这不是'没有热门概念'，而是'数据还没进来'）。\", \"truncated\": false, \"warnings\": [\"关系表为空\"]}",
+ "payload_sha256": "a440716e36339fead94e422ddfe181331e2b12a849c87809663f667bebcf5505",
+ "readings": {},
+ "role": "C",
+ "status": "done",
+ "task_id": "t-000003"
+}

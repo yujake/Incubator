@@ -522,7 +522,7 @@ def write_status_report(store: Any, root: str | Path, *, out_dir: str | Path | N
     md_path, json_path = status_report_paths(root, out_dir=out_dir, stamp=stamp)
     md_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.write_text(render_status_markdown(report), encoding="utf-8", newline="\n")
-    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
                          encoding="utf-8", newline="\n")
     return report, md_path, json_path
 

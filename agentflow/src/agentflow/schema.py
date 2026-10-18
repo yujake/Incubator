@@ -955,48 +955,54 @@ class Conjecture:
         "检验过没结论"与"检验过有支持"与"检验过被否证"分开，不许折叠。
         """
         require_id(self.conjecture_id, "conjecture_id")
+        # ---- 2026-10-17：**一次把问题说齐**（业主当日授权动禁改区；亲测口径） ----------
+        # 这里原本是十条**顺序抛** ⇒ 实测（`draft/132` 第十节）要走四轮才凑齐一条猜想的字段：
+        #   form 词表 → status/proposed 要 testable → testable 要对象 → needs_evidence 要 notes。
+        # 业主口径："真实智能体也会在这里困惑并浪费 token" ⇒ 先**收集**，再**一次抛**。
+        # 与 B（`register_statement`）/ F（`create_plan`）两处**逐字同形**：
+        # 只有一条问题时**原文案一字不动**；多于一条时补一行整份清单。
+        _probs: list[tuple[str, str]] = []          # (短标签, 原文案)
         if not self.statement.strip():
-            raise ValueError("statement 不能为空：猜想必须是一条可判真假的陈述句")
+            _probs.append(("statement", "statement 不能为空：猜想必须是一条可判真假的陈述句"))
         bad = looks_like_a_question(self.statement)
         if bad:
-            raise ValueError(
+            _probs.append(("statement(疑问句形态)", (
                 f"statement 读起来是个问题（命中形态 {bad}）⇒ 它是问题而不是猜想。"
                 "猜想必须是可判真假的陈述句（问题走 research_questions）：把疑问句改写成断言 —— "
                 "例如「哪些 (m,k) 有无穷多例子？」改写为「对每个 m ≥ 5，k = 3 都有无穷多个 …」。"
                 "注意：普通陈述里的 which / what 不算问题（从句里出现它们是正常的），"
-                "判据看的是句首疑问词与问号"
-            )
+                "判据看的是句首疑问词与问号")))
         if self.form not in CONJECTURE_FORMS:
-            raise ValueError(f"form 必须是 {CONJECTURE_FORMS} 之一，收到 {self.form!r}")
+            _probs.append(("form", f"form 必须是 {CONJECTURE_FORMS} 之一，收到 {self.form!r}"))
         if self.status not in CONJECTURE_STATUSES:
-            raise ValueError(f"status 必须是 {CONJECTURE_STATUSES} 之一，收到 {self.status!r}")
+            _probs.append(("status", f"status 必须是 {CONJECTURE_STATUSES} 之一，收到 {self.status!r}"))
         if not self.origin.strip():
-            raise ValueError(
-                "origin 必填：猜想的来源必须可追（report_id / rel:NNNN / gap / lit:NNNN）"
-            )
+            _probs.append(("origin", "origin 必填：猜想的来源必须可追"
+                                     "（report_id / rel:NNNN / gap / lit:NNNN）"))
         if self.status == "proposed" and not self.testable:
-            raise ValueError(
-                "status=proposed 时必须给 testable（可检验形式）；给不出就落 needs_evidence"
-            )
+            _probs.append(("testable", "status=proposed 时必须给 testable（可检验形式）；"
+                                       "给不出就落 needs_evidence"))
         if self.status == "needs_evidence" and not (self.notes.strip() or self.withdraw_reason.strip()):
-            raise ValueError(
-                "status=needs_evidence 时必须写清为什么提不出可检验形式（notes 或 withdraw_reason）"
-            )
+            _probs.append(("notes", "status=needs_evidence 时必须写清为什么提不出可检验形式"
+                                    "（notes 或 withdraw_reason）"))
         if self.status == "supported_not_proved" and not self.experiment_ids:
-            raise ValueError("status=supported_not_proved 时必须记至少一条检验过它的实验")
+            _probs.append(("experiment_ids", "status=supported_not_proved 时必须记至少一条检验过它的实验"))
         if self.status == "refuted" and not self.counterexample_experiment_id:
-            raise ValueError(
+            _probs.append(("counterexample_experiment_id", (
                 "status=refuted 时必须给 counterexample_experiment_id（反例来自一次实验；"
-                "inconclusive 不得转 refuted）"
-            )
+                "inconclusive 不得转 refuted）")))
         if self.status == "proved" and not self.proof_experiment_id:
-            raise ValueError("status=proved 时必须给 proof_experiment_id")
+            _probs.append(("proof_experiment_id", "status=proved 时必须给 proof_experiment_id"))
         if self.status == "promoted" and not (self.proof_experiment_id
                                               and str(self.promoted_to.get("id") or "").strip()):
-            raise ValueError(
-                "status=promoted 时必须同时有 proof_experiment_id 与 promoted_to.id"
-                "（升格要有证据与落点）"
-            )
+            _probs.append(("promoted_to.id", "status=promoted 时必须同时有 proof_experiment_id 与 promoted_to.id"
+                                     "（升格要有证据与落点）"))
+        if _probs:
+            _head = _probs[0][1]
+            if len(_probs) > 1:
+                _head += ("　**这一条还差**：" + "、".join(label for label, _ in _probs)
+                          + " —— 一次给齐就不用再来回问。")
+            raise ValueError(_head)
         if self.status == "known_in_literature" and not self.known_lit_id.strip():
             raise ValueError(
                 "status=known_in_literature 时必须给 known_lit_id：别人证过与我们证过是两件事"
@@ -1130,6 +1136,11 @@ SUBGOAL_OWNERS = ("F", "A", "B", "C", "D", "E", "G")
 #: G 的文档类型与状态。
 DOC_KINDS = ("reproduction_report", "survey", "paper", "note")
 DOC_STATUSES = ("draft", "in_review", "revised", "accepted", "rejected", "unresolved_review")
+
+#: **一次审核的裁决**（与 V 的 `verify_proof` 同形）。空串 = **还没审过**。
+#: 为什么单列一根轴：`status` 兼表"通过"，而"审过"与"通过"是完全不同的状态
+#: （业主 2026-10-17）。`reviewed_documents` 读这根轴；`accepted_documents` 读 `成立`。
+REVIEW_VERDICTS = ("", "成立", "有毛病", "看不出来")
 
 #: 依赖类型（FC-23）。`external_unavailable` 是必须存在的一档：
 #: 引用了但拿不到的来源（例如论文里"companion book [6, Thm 6.5]"）
@@ -1658,6 +1669,12 @@ class Document:
     open_problems: list[str] = field(default_factory=list)
     status: str = "draft"
     review_rounds: int = 0
+    #: 一次审核的**裁决**：`""`（未审）/ `成立` / `有毛病` / `看不出来`（与 V 同形）。
+    #: 与 `status` **分开**：审过 ≠ 通过（`status` 只表生命周期与历史上的通过/驳回）。
+    review_verdict: str = ""
+    #: 裁决写下时的时间与主（谁审的）。空串 = 没审过。
+    reviewed_at: str = ""
+    reviewed_by: str = ""
     created_at: str = ""
     updated_at: str = ""
     #: 内容第几版（G 每次改内容 +1；`draft/30` §T4-A）。新建稿件是 1。
@@ -1677,6 +1694,10 @@ class Document:
             raise ValueError("title 不能为空")
         if self.status not in DOC_STATUSES:
             raise ValueError(f"status 必须是 {DOC_STATUSES} 之一，收到 {self.status!r}")
+        if self.review_verdict not in REVIEW_VERDICTS:
+            raise ValueError(
+                f"review_verdict 必须是 {REVIEW_VERDICTS} 之一，收到 {self.review_verdict!r}"
+                "（空串 = 还没审过；`成立`/`有毛病`/`看不出来` 与 V 的裁决同形）")
         if self.revision < 0:
             raise ValueError(f"revision 不能为负，收到 {self.revision!r}")
         if self.content_sha256:
@@ -2455,8 +2476,21 @@ class Task:
         require_process_id(self.task_id, "task")
         if self.role not in (*ROLES, CONDUCTOR_ROLE):
             raise ValueError(f"role 必须是 {(*ROLES, CONDUCTOR_ROLE)} 之一，收到 {self.role!r}")
-        if not str(self.action or "").strip():
-            raise ValueError("action 不能为空（没有动作的召唤是一句空话）")
+        # ⚠️ **2026-10-16（业主口径 S2「M 只派活」；本文件在 FC-27 禁改区，按"先改后签"
+        # 登记待 2 名人审）**：这一格**放开空动作**。
+        #
+        # 原话逐字：「M 只是个派活的……**不指定能力**」「一致改成 task 必填，action 不填」
+        # 「**不是忽略 action，完全不要有填 action 的位置**」。
+        # ⇒ 一次派活完全可以**没有动作**（动作由被派者自己选），此时那句"空话"是
+        # **`task`（活）**，而 `task` 必填由**派活那四个入口**逐处守：
+        #   `agent_loop._do_summon` / `_do_summon_many`、`tools/conductor_tools.py` 的
+        #   `conductor.summon` / `conductor.summon_many`（`required` 里都有 `task`，
+        #   且处理器在不点时当场拒）。
+        #
+        # 为什么这一格**必须**放开（真机读数）：T5 第 12/13 趟 M 六次/两次发出
+        # `{"role":"A","task":…}`，而 `tasks` 表里空动作的行 **= 0** —— 那几次全部
+        # **死在写行这一刻**（本行），所以连"派活被拒"的证据都没留下。
+        # 放开之后，判据改成"**由派活入口保证带活**"，而不是由台账这一格兜着。
         if self.status not in TASK_STATUSES:
             raise ValueError(f"status 必须是 {TASK_STATUSES} 之一，收到 {self.status!r}")
         if self.outcome is not None and self.outcome not in TASK_OUTCOMES:
@@ -2720,8 +2754,11 @@ class UsageEntry:
         if self.tokens_in < 0 or self.tokens_out < 0 or self.tokens_total < 0:
             raise ValueError("token 数不能为负")
         if self.usd < 0:
-            raise ValueError("usd 不能为负")
-        if self.attempts < 1:
+                raise ValueError("usd 不能为负")
+        if self.attempts is not None:
+            if isinstance(self.attempts, bool) or not isinstance(self.attempts, int):
+                raise ValueError(f"attempts 必须是整数，收到 {self.attempts!r}")
+        if (self.attempts or 0) < 1:
             raise ValueError(
                 f"attempts 从 1 开始（收到 {self.attempts}）—— 0 次尝试却记了一笔花销是不自洽的"
             )

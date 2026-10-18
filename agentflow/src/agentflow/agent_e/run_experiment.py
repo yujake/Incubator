@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ._support import Any, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
 
 class _RunExperiment:
@@ -278,11 +280,11 @@ class _RunExperiment:
             return ""
         prev = rows[-1]
         prev_code = str(prev.get("code_path") or "")
-        prev_obs = dict(prev.get("observations") or {})
+        prev_obs = _as_obs_dict(prev.get("observations"))
         now_obs = dict(derived.get("observations") or {})
         prev_bound = dict(prev.get("search_bound") or prev_obs.get("bound") or {})
         now_bound = dict(now_obs.get("bound") or {})
-        prev_rt = float(prev.get("runtime_sec") or 0.0)
+        prev_rt = _as_float(prev.get("runtime_sec"))
         prev_strategy = str(prev_obs.get("strategy") or "")
         now_strategy = str(now_obs.get("strategy") or "")
         bits = [f"同 claim 历史 {len(rows)} 条（最近一条 {prev.get('experiment_id')}："
@@ -344,3 +346,23 @@ class _RunExperiment:
                         f"（把参数写进 `params`、把核的对象写进 `data` 的键里），"
                         f"否则这不是第二份独立证据，是同一份读数被算了两次")
         return ""
+
+
+def _as_float(value: Any) -> float:
+    """`runtime_sec` 之类"期望是数"的自由字段（子代理 agents #8）。
+
+    脏值（`"abc"`、`None`、list）⇒ 0.0，**不抛**：这些值来自别的角色写进台账的行，
+    `Experiment.validate()` 不校验该字段类型，于是 `float("abc")` 会在**脚本已经跑完之后**
+    把整趟打死 —— 副作用发生了、记录却丢了。
+    """
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _as_obs_dict(value: Any) -> dict:
+    """`observations` 之类"期望是对象"的自由字段（子代理 agents #9）。"""
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}

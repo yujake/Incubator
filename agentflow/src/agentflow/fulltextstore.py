@@ -113,7 +113,7 @@ def put(pages: Sequence[str], *, store_dir: str | Path, pdf_sha256: str = "",
         "text_sha256": text_hash,
         "text_pages": text,
     }
-    blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=1)
+    blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=1, default=str)
     tmp = target.with_name(target.name + f".tmp{os.getpid()}")
     tmp.write_text(blob, encoding="utf-8", newline="\n")
     os.replace(tmp, target)
@@ -308,7 +308,7 @@ def selftest() -> int:
         # 负控 3：引用指向 store 之外
         outside = Path(tmp) / "elsewhere.json"
         outside.write_text(json.dumps({"store_version": STORE_VERSION, "text_pages": ["x"],
-                                       "text_sha256": pages_text_sha256(["x"])}),
+                                       "text_sha256": pages_text_sha256(["x"])}, default=str),
                            encoding="utf-8")
         _pages, why = load({"path": str(outside), "text_sha256": pages_text_sha256(["x"])})
         if "store_out_of_store" not in why:

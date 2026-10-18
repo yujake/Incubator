@@ -2726,7 +2726,7 @@ def _json_safe(obj: Any) -> Any:
 
 def report_as_json(report: Mapping[str, Any]) -> str:
     """报告的 JSON 形态（落盘/机读用；与 markdown 报告是同一份数据）。"""
-    return json.dumps(_json_safe(report), ensure_ascii=False, indent=2, sort_keys=True)
+    return json.dumps(_json_safe(report), ensure_ascii=False, indent=2, sort_keys=True, default=str)
 
 
 # 门实现函数与声明表的一致性：声明表里写的 checker 必须真的是本模块的顶层函数。

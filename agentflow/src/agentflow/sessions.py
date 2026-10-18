@@ -404,7 +404,7 @@ def rebuild_run_index(root: Any) -> dict:
     path = run_index_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    body = json.dumps(index, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    body = json.dumps(index, ensure_ascii=False, sort_keys=True, indent=2, default=str) + "\n"
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(body)
     tmp.replace(path)
@@ -437,7 +437,9 @@ def reconcile_run_index(root: Any) -> dict:
     stored = index.get("sessions") or {}
     drift: list[str] = []
     for sid in sorted(set(stored) - set(live)):
-        drift.append(f"会话 {sid}：索引里有它（{len((stored.get(sid) or {}).get('runs') or [])} 趟），"
+        _rec = stored.get(sid)
+        _rec = _rec if isinstance(_rec, dict) else {}
+        drift.append(f"会话 {sid}：索引里有它（{len(_rec.get('runs') or [])} 趟），"
                      "而盘上已经没有这场会话了")
     for sid in sorted(set(live) - set(stored)):
         drift.append(f"会话 {sid}：盘上有它，索引里没有（索引落后或没建全）")
@@ -538,7 +540,7 @@ def selftest() -> int:
     check("坏行逐条报出（不是静默跳过）", len(ev2) == 2 and len(probs2) == 1, str(probs2))
     s = summarize(ev2)
     check("汇总按角色/结局计数", s["roles"] == {"E": 1, "H": 1} and s["outcomes"] == {"ok": 1, "refused": 1},
-          json.dumps(s, ensure_ascii=False))
+          json.dumps(s, ensure_ascii=False, default=str))
     return 0 if ok else 1
 
 

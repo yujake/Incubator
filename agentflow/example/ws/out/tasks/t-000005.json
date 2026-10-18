@@ -1,0 +1,14 @@
+{
+ "action": "write_report",
+ "at": "2026-10-15T17:05:34+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 68,
+ "payload_keys": [],
+ "payload_preview": "\"D:\\\\Incubator\\\\agentflow\\\\example\\\\ws\\\\reports\\\\000000-research.md\"",
+ "payload_sha256": "528ea40a4cb99c19389343da00d7204ddb93933031fb72de67e8458d01157f17",
+ "readings": {},
+ "role": "D",
+ "status": "done",
+ "task_id": "t-000005"
+}

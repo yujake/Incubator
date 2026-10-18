@@ -506,8 +506,69 @@ def _h_backends(ctx: _Ctx, refresh: bool = False) -> Any:
     )
 
 
-def _h_detect_text_layer(ctx: _Ctx, path: str) -> Any:
+def _target_path(ctx: "_Ctx", path: str, lit_id: str) -> tuple[str, dict | None]:
+    """把"给路径"或"给**文献编号**"归一成一个路径。返回 `(path, fail_payload)`。
+
+    ⚠️ **2026-10-16（亲测 B 时加的）**：这两件工具的必填键是 `path`，而 B 整个域都按
+    `lit_id` 说话（`literature` 行）—— 我第一次凭感觉敲的就是编号，吃了一个"缺少必填参数"。
+    按业主口径（"第一次凭感觉敲红的，真实智能体也会困惑"）⇒ 让**第一猜能 work**：
+    给编号时去 `literature` 行里找回它那一份全文（`store.library_path` 优先，退回工作区相对路径）。
+
+    三态：**两者都没给** ⇒ 可读拒绝（"这一格判不了"，不是"文件没问题"）；
+    编号不认得 ⇒ 拒绝并列出**盘上有哪些编号**（照 `search.walk_citations` 那件好样板）。
+    """
+    if str(path or "").strip():
+        return str(path), None
+    want = str(lit_id or "").strip()
+    if not want:
+        return "", {
+            "kind": "no_target",
+            "error": ("要给一个文件的路径，或者给一个**已登记的文献编号** —— "
+                      "两者都没给，这一格判不了（不是「文件没问题」）"),
+        }
+    short = want.split(":")[-1]
+    store = getattr(ctx, "store", None)
+    rows = []
+    if store is not None:
+        try:
+            rows = list(store.rows("literature"))
+        except Exception:  # noqa: BLE001 - 读不到就当"没这一篇"，下面统一拒
+            rows = []
+    known = [str(r.get("lit_id") or "") for r in rows]
+    row = next((r for r in rows
+                if str(r.get("lit_id") or "") in (want, short)), None)
+    if row is None:
+        return "", {
+            "kind": "unknown_lit_id",
+            "error": (f"文献表里没有编号 {lit_id!r}（这一篇没登记过）⇒ 先用 "
+                      f"`A.ingest_local`/`search.register` 登记，或直接给这个文件的路径；"
+                      f"盘上的编号有：{known[:8]}"),
+            "lit_id": str(lit_id),
+            "known": known[:8],
+        }
+    rel = str(row.get("path") or "").strip()
+    if not rel:
+        return "", {
+            "kind": "lit_without_path",
+            "error": (f"编号 {lit_id!r} 那一行没有全文路径（`path` 为空）⇒ 这一篇在盘上找不到，"
+                      "先把它收编（`A.ingest_local`）或直接给路径"),
+            "lit_id": str(lit_id),
+        }
+    if store is not None:
+        try:
+            abs_path = store.library_path(rel)
+            if abs_path.exists():
+                return str(abs_path), None
+        except Exception:  # noqa: BLE001 - 落回工作区相对路径
+            pass
+    return rel, None
+
+
+def _h_detect_text_layer(ctx: _Ctx, path: str = "", lit_id: str = "") -> Any:
     """``ocr.detect_text_layer``：判断 PDF 有没有文本层（复用 ``extract.extract_text``）。"""
+    path, bad = _target_path(ctx, path, lit_id)
+    if bad is not None:
+        return fail(bad["error"], **{k: v for k, v in bad.items() if k != "error"})
     p = _resolve(ctx, path)
     if not p.exists():
         return fail(f"文件不存在：{p}", kind="file_missing", path=str(p))
@@ -707,14 +768,18 @@ def _select_backend(ctx: _Ctx, requested: str) -> tuple[Any, str]:
 
 def _h_run(
     ctx: _Ctx,
-    path: str,
+    path: str = "",
     pages: Sequence[int] | None = None,
     backend: str = "auto",
     languages: Sequence[str] | None = None,
     dpi: int = 200,
     max_pages: int = 20,
+    lit_id: str = "",
 ) -> Any:
     """``ocr.run``：对指定页（或缺省全部页）做 OCR。"""
+    path, bad = _target_path(ctx, path, lit_id)
+    if bad is not None:
+        return fail(bad["error"], **{k: v for k, v in bad.items() if k != "error"})
     p = _resolve(ctx, path)
     if not p.exists():
         return fail(f"文件不存在：{p}", kind="file_missing", path=str(p))
@@ -978,35 +1043,47 @@ def _ocr_backends(ctx, refresh=False):
 @tool(
     "ocr.detect_text_layer",
     "判断 PDF 有没有文本层（复用 extract.extract_text，pages==[] 即无文本层）；"
-            "无文本层时说明这是「无法校验」而不是「校验失败」。",
+            "无文本层时说明这是「无法校验」而不是「校验失败」。"
+            "也可以直接给**已登记的文献编号**，不必自己拼路径。",
     {
            "type": "object",
-           "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}},
-           "required": ["path"],
+           "properties": {
+            "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "lit_id": {"type": "string", "maxLength": 40},
+           },
+           "required": [],
            "additionalProperties": False,
            },
     side_effect="read",
     roles=("B",),
     # 键名从一个真实调用读出（`_h_detect_text_layer`）。
-    returns="{'path','source_kind','has_text_layer','pages','page_count','pages_with_text','chars','encoding','reason','suggested_next','rule'}",
+    # ⚠️ 2026-10-15 补齐：`page_count_known` / `page_count_source` 是"这个页数是怎么来的"
+    # （三态：数出来的 / 猜的 / 数不了），`failed_pages` 是"哪几页没做成"。
+    # `returns` 会拼进 function-calling 的 `description`（模型看得到）⇒ 缺这三格
+    # 等于模型不知道"页数可能是未知的"，于是会把 `page_count=0` 读成"真的没有页"。
+    returns="{'path','source_kind','has_text_layer','pages','page_count','pages_with_text','chars','encoding','reason','suggested_next','rule','page_count_known','page_count_source','failed_pages'}；"
+            "失败：ok=False + kind(no_target/unknown_lit_id/lit_without_path/file_missing/not_a_file/extract_error)"
+            "（unknown_lit_id 会把盘上有的编号一起给出来）",
     tags=("ocr", "detect"),
 )
-def _ocr_detect_text_layer(ctx, path):
+def _ocr_detect_text_layer(ctx, path="", lit_id=""):
     """ocr.detect_text_layer 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（ctx）由装配期用 `partial` 绑定，
     所以模型看到的签名与搬移前逐字相同。
     """
-    return _h_detect_text_layer(ctx, path)
+    return _h_detect_text_layer(ctx, path, lit_id)
 
 @tool(
     "ocr.run",
     "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，"
-            "都不可用时 fail 并给出安装建议（绝不返回空文本假装成功）。",
+            "都不可用时 fail 并给出安装建议（绝不返回空文本假装成功）。"
+            "也可以直接给**已登记的文献编号**，不必自己拼路径。",
     {
            "type": "object",
            "properties": {
             "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "lit_id": {"type": "string", "maxLength": 40},
             "pages": {
                 "type": "array",
                 "items": {"type": "integer", "minimum": 1},
@@ -1022,7 +1099,7 @@ def _ocr_detect_text_layer(ctx, path):
             "dpi": {"type": "integer", "minimum": 72, "maximum": 600},
             "max_pages": {"type": "integer", "minimum": 1, "maximum": 200},
            },
-           "required": ["path"],
+           "required": [],
            "additionalProperties": False,
            },
     # external=egress：easyocr 首次构造 Reader 会下载约 100MB 模型（`_reader` :252）。
@@ -1041,14 +1118,15 @@ def _ocr_detect_text_layer(ctx, path):
     tags=("ocr", "run"),
     external="egress",
 )
-def _ocr_run(ctx, path, pages=None, backend="auto", languages=None, dpi=200, max_pages=20):
+def _ocr_run(ctx, path="", pages=None, backend="auto", languages=None, dpi=200, max_pages=20,
+             lit_id=""):
     """ocr.run 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（ctx）由装配期用 `partial` 绑定，
     所以模型看到的签名与搬移前逐字相同。
     """
     return _h_run(
-                ctx, path, pages, backend, languages, dpi, max_pages
+                ctx, path, pages, backend, languages, dpi, max_pages, lit_id
             )
 
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。

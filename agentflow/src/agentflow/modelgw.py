@@ -302,10 +302,27 @@ class ModelSpec:
     #: 300 秒是"覆盖实测最坏情况（260 s）再留一点余量"；它仍是一个上限，
     #: 真正的熔断另有其人（预算闸门 / 墙钟 / 步循环），所以放大它不会让失控的运行跑更久。
     #: 要按机器改就设 `AGENTFLOW_MODEL_TIMEOUT_SEC`（或设置文件里那一档，见 `spec_from_env`）。
-    timeout_sec: float = 300.0
+    #:
+    #: 2026-10-15 业主裁定「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），
+    #: 删或将触发水平抬高到几乎不可能触发的程度」⇒ 从 300 抬到 **1800 秒**：
+    #: 实测最坏的一次单请求是 260 秒（T2 步 0），1800 是它的七倍 ——
+    #: 正常调用几乎不可能碰到；它留着只为挡住"永远不回来的请求"（那条会挂死整趟）。
+    timeout_sec: float = 1800.0
     max_retries: int = 2
     temperature: float = 0.2
-    max_tokens: int = 4096
+    #: ⚠️ **这一格已删**（2026-10-15 业主裁定：**「我们不卡 token，只卡总花销的钱」**）。
+    #:
+    #: `ModelSpec.max_tokens` 与 `agent_loop.max_output_tokens`、抽取那条路的
+    #: `client_from_env(max_tokens=8192)`、`LlmSeam.ask(max_tokens=…)` 四处一起删掉，
+    #: 请求体里**不再出现 `max_tokens`** —— 额度交回上游（它们的缺省比我们给的更宽）。
+    #:
+    #: 为什么这是对的（AI 代理 2026-10-15 的两发真调用对照，合计 ≈ $0.017）：
+    #: 同一段 prompt，**不带 `max_tokens`** 时上游回 `finish_reason=stop`、
+    #: `tokens_out=14,015`；带 `max_tokens=32768` 时 `tokens_out=12,987` ——
+    #: 缺省**不是** 4096，我们原本那一栏反而是在**压低**它的额度。
+    #: 而此前那些"产出丢了"的真机读数（`output_exhausted`：推理把输出预算吃光、正文 0 字）
+    #: 正是被这一栏咬的：推理与本应写正文的额度共用同一份上限。
+    #:
     #: 推理强度（词表 `REASONING_EFFORTS`，缺省 `DEFAULT_REASONING_EFFORT`）。
     #:
     #: 它取代改前那种"请求体里根本没有这一栏"的形态：真机读数（2026-10-10）
@@ -378,7 +395,6 @@ class ModelSpec:
             "timeout_sec": self.timeout_sec,
             "max_retries": self.max_retries,
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
             "reasoning_effort": self.reasoning_effort,
         }
 
@@ -721,17 +737,19 @@ class ModelGateway:
     # ---------------------------------------------------------------- 请求组装
 
     def _payload(self, prompt: str, system: str | None, temperature: float | None,
-                 max_tokens: int | None, tools: Sequence[Mapping[str, Any]] | None = None,
+                 tools: Sequence[Mapping[str, Any]] | None = None,
                  tool_choice: str = "auto") -> bytes:
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
+        # **请求体里没有 `max_tokens`**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
+        # 额度交回上游 —— 真调用对照过，上游缺省比我们原先给的那一栏更宽
+        # （见 `ModelSpec` 那一格上面的读数）。我们这一侧只留"钱"和"墙钟"两道闸。
         body: dict[str, Any] = {
             "model": self.spec.model,
             "messages": messages,
             "temperature": self.spec.temperature if temperature is None else temperature,
-            "max_tokens": self.spec.max_tokens if max_tokens is None else max_tokens,
             "stream": False,
             # 推理强度：唯一实现在 `reasoning_body_fields`（`off` 发 thinking.type=disabled，
             # 其余三档发 reasoning_effort）。改前这里没有这一栏 ——
@@ -743,7 +761,7 @@ class ModelGateway:
             # `tools` 原样放进 chat-completions 的 body）。
             body["tools"] = list(tools)
             body["tool_choice"] = tool_choice
-        return json.dumps(body, ensure_ascii=False).encode("utf-8")
+        return json.dumps(body, ensure_ascii=False, default=str).encode("utf-8")
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -755,7 +773,7 @@ class ModelGateway:
     # ---------------------------------------------------------------- 单次调用
 
     def _once(self, prompt: str, system: str | None, temperature: float | None,
-              max_tokens: int | None, attempt: int, scope: str,
+              attempt: int, scope: str,
               tools: Sequence[Mapping[str, Any]] | None = None,
               tool_choice: str = "auto") -> ModelReply:
         url = f"{self.spec.base_url}/chat/completions"
@@ -763,7 +781,7 @@ class ModelGateway:
         try:
             status, raw = self._transport(
                 url, self._headers(),
-                self._payload(prompt, system, temperature, max_tokens, tools, tool_choice),
+                self._payload(prompt, system, temperature, tools, tool_choice),
                 self.spec.timeout_sec)
         except TimeoutError:
             return _reply_failure("timeout", f"超过 {self.spec.timeout_sec}s 未返回",
@@ -825,7 +843,7 @@ class ModelGateway:
                                   # `arguments` 保持文本（上游就是这样给的）：
                                   # 解析与校验交给工具层，坏 JSON 不许在这里被"洗白"。
                                   "arguments": argv if isinstance(argv, str)
-                                  else json.dumps(argv, ensure_ascii=False)})
+                                  else json.dumps(argv, ensure_ascii=False, default=str)})
         if not content.strip() and not calls:
             # 空内容绝不许当成成功：下游会把"没答"读成"答了"。
             # 但有原生工具调用时 content 本来就可以是空的（DSH 那条路上就是这样），
@@ -876,7 +894,6 @@ class ModelGateway:
 
     def complete(self, prompt: str, *, scope: str, system: str | None = None,
                  temperature: float | None = None,
-                 max_tokens: int | None = None,
                  tools: Sequence[Mapping[str, Any]] | None = None,
                  tool_choice: str = "auto") -> ModelReply:
         """调一次模型。返回三态结局，从不抛异常（异常会让上游编排层的三态判定失效）。
@@ -932,7 +949,7 @@ class ModelGateway:
         while attempt <= self.spec.max_retries:
             attempt += 1
             try:
-                reply = self._once(prompt, system, temperature, max_tokens, attempt, scope,
+                reply = self._once(prompt, system, temperature, attempt, scope,
                                    tools, tool_choice)
             except Exception as exc:  # noqa: BLE001 —— 见 docstring：兜底成"没查成"
                 # `G-7` 口径一：`_once` 只翻译 `TimeoutError` / `ConnectionError`，
@@ -985,7 +1002,7 @@ def _ok_body(text: str = "4", tokens_in: int = 11, tokens_out: int = 3,
     return json.dumps({
         "choices": [{"message": message}],
         "usage": {"prompt_tokens": tokens_in, "completion_tokens": tokens_out},
-    }, ensure_ascii=False)
+    }, ensure_ascii=False, default=str)
 
 
 def _grab_transport(seen: list[dict[str, Any]], body: str) -> Transport:

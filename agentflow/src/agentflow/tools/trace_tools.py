@@ -292,7 +292,8 @@ def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResul
     roles=("C", "D"),
     returns=(
         "{'level','literature','requested_pages','max_chars','pages_returned','truncated','status',"
-        "'file_exists','has_text_layer','text','note'}"
+        "'file_exists','has_text_layer','text','note',"
+        "'source_kind','abs_path','chars_returned','encoding','page_count'}"
         "（不含 status/text/pages_returned/truncated 的早期分支**不存在了**："
         "这四项在每一条 ok 分支上都必须给，否则调用方区分不了'没有正文'与'工具忘了填'）"
     ),

@@ -100,8 +100,8 @@ src/agentflow/store.py           [category: schema-migration] `LOCK_ORDER` / `re
 # `EVAL_REQUIRED_FIELDS` 的注释有逐字论证）。口径不是数字的补充说明，
 # 口径**就是**那个数字的一部分。
 src/agentflow/schema.py          [category: eval-criteria] `EVAL_REQUIRED_FIELDS` 与 `EvalResult`：必填口径字段与比率口径（0..1）—— 改它等于追溯性地改写历史报告里每个数字的含义
-tests/golden/agent_surface_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：「面」的基线（10 角色 / 60 动作）—— 快照被随手重冻，"声明与行为没变"这句话就失去了唯一的可比对象；diff 是"这一改到底动了哪一格"的唯一机器读数，重冻必须由人逐格看过。2026-10-12 按业主裁定 ① **从 glob 拆成逐文件**：glob 条目只能存一个 sha256，四份快照里必有三份永远判 stale
-tests/golden/tool_surface_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：同上（83 个工具 / 10 个角色 / 11 条 CLI 输出）—— 2026-10-12 从 glob 拆出来（理由同上）
+tests/golden/agent_surface_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：「面」的基线（10 角色 / 61 动作，**2026-10-15 实测**）—— 快照被随手重冻，"声明与行为没变"这句话就失去了唯一的可比对象；diff 是"这一改到底动了哪一格"的唯一机器读数，重冻必须由人逐格看过。2026-10-12 按业主裁定 ① **从 glob 拆成逐文件**：glob 条目只能存一个 sha256，四份快照里必有三份永远判 stale。2026-10-15 补：那两个数字是**读数不是规格** —— 它带日期，加动作/加工具后**不必**回头改这里（重冻快照时顺手更新即可）；此前它没带日期，于是"83 个工具"这种过期描述会一直挂着没人知道（判据 `test_..._python_manifest_referenced_symbols_exist` 与 `check_manifest_consistency()` 都不校验理由串里的数字）
+tests/golden/tool_surface_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：同上（80 个工具 / 10 个角色 / 11 条 CLI 输出，**2026-10-15 实测**；同上：数字是读数不是规格）—— 2026-10-12 从 glob 拆出来（理由同上）
 tests/golden/run_topic_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：同上（6 件产物 × 2 条路径）—— 2026-10-12 从 glob 拆出来（理由同上）
 tests/golden/verify_all_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：同上（8 个工作区 / 8 条 issue）—— 2026-10-12 从 glob 拆出来（理由同上）
 

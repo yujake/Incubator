@@ -97,6 +97,13 @@ def cold_start_prompt(statement_full: str, proof_text: str,
     从只读查询面取好传进来）—— 传字符串而不是传 store，是为了让"它能碰什么"在接口上
     就固定下来。
     """
+    # 开关读数（读不懂按"关"算：与 settings 的 fail-closed 同向）
+    try:
+        from .settings import lean_enabled as _le
+
+        _lean_on = bool(_le()[0])
+    except Exception:  # noqa: BLE001
+        _lean_on = False
     return (
         "你是验证者（V）。你这一次只做一件事：把下面这份证明**按写成后的样子**整体重读一遍，"
         "判断它站不站得住。\n\n"
@@ -120,6 +127,14 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- `defect_step`：有毛病时**必须**给出那一步的编号（从 1 起数，按证明里的步骤顺序）；\n"
         "- `看不出来`：信息不足、无法判断时的诚实结论 —— 它不是 `成立`；\n"
         "- 没有毛病才写 `成立`（空 findings 或只有 info/warning）。\n"
+        # 2026-10-17（Lean 审计 S3）：**这是 V 的真实入口**（`agent_v/core.py` 用它，
+        # 而 `system_prompt("V")` 全仓没有生产路径渲染）⇒ 开关与"成立≠proof"必须写在这里，
+        # 否则 V 在 Lean 开着/关着时行为完全一样，而 H 会把它签的第 3 位当凭据。
+        "\n## 你这个「成立」是什么强度\n"
+        f"- 本会话 Lean 形式化：{'**已开启**' if _lean_on else '**已关闭**'}；\n"
+        "- 你签的「成立」是**逐行读出来的结论**，它**永远不构成 `proof` 级证据** —— "
+        "`evidence_kind=\"proof\"` 只由 `verify.check_formal` 的检查器输出产生；\n"
+        "- 所以别在理由里写「已形式化验证」；要 proof 级证据，得请 M 派 E 走 `method=\"formal\"` 那条路。\n"
     )
 
 
@@ -199,7 +214,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
                                         "quote": verdict.get("quote", ""),
                                         "why": verdict.get("why", ""),
                                         "findings": list(verdict.get("findings") or [])},
-                                       ensure_ascii=False))
+                                       ensure_ascii=False, default=str))
     path = verification_ledger_path(root, statement_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     rows, problems = JF.read_jsonl(path)
@@ -220,7 +235,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "at": _now_iso(),
     }
     with path.open("a", encoding="utf-8", newline="\n") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
     return row
 
 

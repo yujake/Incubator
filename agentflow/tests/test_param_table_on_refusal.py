@@ -49,21 +49,29 @@ def test_a_tool_refused_for_params_gets_its_declared_table_back(tmp_path: pathli
     assert "必填" in table and "string" in table, table
 
 
-def test_a_summon_refused_for_params_gets_the_action_table_back(tmp_path: pathlib.Path):
-    """正控（派活那条路）：唤起的动作缺必填参数 ⇒ 那一步带的是那个动作的参数表。"""
-    bad = {"summon": {"role": "F", "action": "create_plan",
-                      "params": {"problem": "只给了 problem，没给 problem_key"},
-                      "why": "试试看"}}
-    run = _run(tmp_path, [_reply(bad), _reply({"final": "照表重写"})])
+def test_a_dispatch_without_an_action_carries_no_param_table(tmp_path: pathlib.Path):
+    """负控（新口径，2026-10-16）：**派活那一步不带任何参数表**。
+
+    为什么改了：原命题是"唤起的动作缺必填参数 ⇒ 那一步带那个动作的参数表"，而业主口径的
+    最终形态是「**action 完全不用父代理填**」⇒ 派活**不带动作** ⇒ 没有动作的参数声明可查
+    ⇒ `invalid_params` 这一档在**派活路径上不可达**（它现在只可能来自**工具路径**，
+    由本文件上面那条正控覆盖）。这一条改成钉住新事实：那一步**不出现 `参数表`** ——
+    出现了就说明框架又替它选了一个动作。
+    """
+    payload = {"summon": {"role": "F", "task": "给这个问题立一份攻坚计划",
+                          "params": {"problem": "只给了 problem，没给 problem_key"},
+                          "why": "试试看"}}
+    run = _run(tmp_path, [_reply(payload), _reply({"final": "照办"})])
 
     first = run.steps[0]
     assert first.shape == "summon", first.to_dict()
-    table = str(first.result.get("参数表") or "")
-    assert table, f"派活被参数拒了却没给动作参数表：{json.dumps(first.result, ensure_ascii=False)[:400]}"
-    assert "F.create_plan" in table, table
-    assert "problem_key" in table and "budget" in table, table
-    # 四类预算键的子键说明也要在（`draft/37` §140 的 ①：声明补过子键）
-    assert "max_parallel_subgoals" in table, table
+    # 真命题两条：① 这一档**不是**"参数不合法"（派活没有动作 ⇒ 没有参数声明可违）；
+    # ② 那一步**不带参数表**（带了就说明框架又替被派者选了一个动作）。
+    assert str(first.result.get("refusal_reason") or "") != "invalid_params", first.result
+    assert not first.result.get("参数表"), (
+        "派活那一步带了参数表 ⇒ 说明这一趟又替被派者选了一个动作", first.result
+    )
+    assert json.dumps(first.result, ensure_ascii=False)   # 载荷可序列化（契约）
 
 
 def test_a_successful_step_carries_no_param_table(tmp_path: pathlib.Path):

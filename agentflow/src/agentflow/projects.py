@@ -309,7 +309,7 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
     runs = card.setdefault("runs", [])
     card["cold_runs"] = sum(1 for r in runs if r.get("mode") == "cold")
     (ref.path / "project.json").write_text(
-        json.dumps(card, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+        json.dumps(card, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
     return card
 
 
@@ -611,11 +611,11 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         # 透传 `None` 的语义与 `charged=False` 完全无关：前者是"这笔花销挂不上召唤"，
         # 后者是"这笔没有真的入账"（`uncharged()` 数的是后者）—— 两件事不许合并成一个标签。
         client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
-                                task_id=task_id or None, role="B",
-                                # 输出上限必须显式给大：抽取要吐一整个 JSON（概念表 +
-                                # 关系表），缺省 4096 会把长输出截在半句上 ⇒ 解析失败。
-                                # 实测（2026-09-28）：两轮抽取就这么失败的。
-                                max_tokens=8192)
+                                task_id=task_id or None, role="B")
+        # 输出额度**不再由我们设**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
+        # 这里曾写 `max_tokens=8192`，理由是"缺省 4096 会把长输出截在半句上"。
+        # 真调用对照（2026-10-15）：请求体里不带 `max_tokens` 时上游回
+        # `finish_reason=stop`、`tokens_out=14,015`（带上 32,768 反而只有 12,987）。
         extractor = LLMExtractor(client)
     else:
         client = None
@@ -835,7 +835,7 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     card["last_mode"] = ref.mode
     card["name"] = card.get("name") or ref.name
     (ref.path / "project.json").write_text(
-        json.dumps(card, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+        json.dumps(card, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
 
     return {"project": ref.to_dict(), "run": record.to_dict(), "result": result}
 

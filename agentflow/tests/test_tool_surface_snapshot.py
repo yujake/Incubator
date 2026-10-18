@@ -134,6 +134,10 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
                     f"{role} / {spec.name} 的声明缺字段 ⇒ 快照钉不住东西")
         for role in READ_ONLY_ROLES:
             leaks = [s.name for s in reg.for_role(role) if s.side_effect in SIDE_EFFECTS_WRITE]
+            # 2026-10-17（业主裁定「方案 1」）：只读角色**自己的落库代理**是允许的
+            from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
+            _ex = {n for n, _w in _EXC.get(role, ())}
+            leaks = [n for n in leaks if n not in _ex]
             assert not leaks, f"只读角色 {role} 拿到写工具：{leaks}"
         # 注入式那一层还活着：`roles=TOOL_ROLES` 时主控多拿到的正是 `fs.*` / `table.*`
         # （`fs_tools._effective_roles` 把装配时的角色集合注进声明）。

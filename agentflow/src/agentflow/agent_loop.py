@@ -60,13 +60,6 @@ from . import userio as U
 from . import llmseam as LL
 from .llmseam import LlmSeam
 
-#: 循环允许的形状（与 `LOOP_PROTOCOL` 逐字对应；多一个少一个都要改两处）。
-#:
-#: `summon_many`（2026-09-30 加）是并发派活：一次说一批目标，框架按写集分波、
-#: 同波并发跑（`Conductor.run_plan` → `scheduler.run_waves`），结果按输入顺序回来。
-#: 为什么让它进协议而不是只做一个 M 的工具：真机实测里模型自己就试过
-#: `{"summon_many": …}`（被判"认不出的形状"，白扔两步），而且"像主控的 subagent"
-#: 这句话对角色同样成立 —— 一批文献分给几个自己去读，是每个角色都会遇到的事。
 SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final",
           "retire", "roster", "interrupt")
 #: 出站门：哪些形状由秘书接管（所有者的裁定逐字"如果有些形状涉及到结构化交互，
@@ -922,6 +915,8 @@ class LoopStep:
 
 
 @dataclass
+
+
 class LoopRun:
     """一次角色运行的完整记录（含每一步与提示词审计读数）。"""
 
@@ -1614,7 +1609,11 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # 这里原先返回的是写死的键集，于是提示词教了这三格、解码器却把它们丢了
         # （S1k-3 的判据当场抓出来：`roster_problem` 永远是"没给一句任务简介"）。
         # 只在给了的时候带上，老载荷的键集因此一个字节不变。
-        extra: dict[str, Any] = {k: str(value.get(k)) for k in ("brief", "name", "reuse")
+        # 2026-10-16（S2「M 只派活」）：`task` 也要带过去 —— 广告面（`llmseam.META_FUNCTIONS`）
+        # 它是"不点动作时必填的那件活"，解码器丢它 ⇒ 模型写了活、框架说"你没写活"。
+        # 判据 `tests/test_native_tool_calls.py::test_every_advertised_key_survives_the_decoder`
+        # 当场抓出这一条（它就是为这种"广告一份、解码另一份"设的）。
+        extra: dict[str, Any] = {k: str(value.get(k)) for k in ("brief", "name", "reuse", "task")
                                  if str(value.get(k) or "").strip()}
         # S1g：动作声明里的参数被摆在了顶层（不在 `params` 里）时，别再静默丢掉它们
         # —— 今天这条路把它们丢在校验之前，于是模型看到的是「缺必填参数」，而那个值
@@ -1647,7 +1646,7 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
             item_extra: dict[str, Any] = {
                 # S1k-4：一批派活的目标也各带自己的名册三格（只在给了的时候带，
                 # 老载荷的键集因此不变）—— 与 `summon` 那一支同一口径。
-                k: str(item.get(k)) for k in ("brief", "name", "reuse")
+                k: str(item.get(k)) for k in ("brief", "name", "reuse", "task")
                 if str(item.get(k) or "").strip()}
             # S1g：与 `summon` 那一支同一口径（声明里的参数被摆在目标顶层 ⇒ 别静默丢）。
             item_extra.update(_carried_top_level_params(role, action, item, params))
@@ -2003,6 +2002,21 @@ def _notify_help(problem: str, *, attempt: int,
     return "\n".join(lines)
 
 
+def _dispatch_label(item: Mapping[str, Any]) -> str:
+    """派活的那一行怎么称呼它（派生手稿的清单与"一句话"都用它）。
+
+    2026-10-16（业主口径 S2 最终形态）：「**action 完全不用父代理填**」⇒ 派活**不带动作**，
+    于是原来那句 `f"{role}.{action}"` 会拼出 `D.` 这种没有信息的一行。
+    空动作时改用**那件活**（`task`／`params.task`），读的人才知道派了什么。
+    """
+    role = str(item.get("role") or "")
+    action = str(item.get("action") or "").strip()
+    if action:
+        return f"{role}.{action}"
+    task = str(item.get("task") or (item.get("params") or {}).get("task") or "").strip()
+    return f"{role}（派活：{task or '（没写活）'}）"
+
+
 def _summon_key(action: str, params: Mapping[str, Any]) -> str:
     """角色没给 `input_key` 时派生一个确定性键。
 
@@ -2086,33 +2100,18 @@ class AgentLoop:
     #: 它要买的是"看得见 + 提醒"，收敛与否由模型自己决定（提示词里给了试错预算）。
     stall_nudge: int = 3
     stall_alert: int = 6
-    #: 单次回复的输出上限。网关缺省 4,096 token，而"写完一段 LaTeX + JSON 信封"
-    #: 动辄几千 token ⇒ 写稿步会被静默截断（表现是 `judge_bad_json` 或半句话）。
+    #: ⚠️ **`max_output_tokens` 这一格已删**（2026-10-15 业主裁定：
+    #: 「**我们不卡 token，只卡总花销的钱**」）。
     #:
-    #: ## 为什么从 8,192 抬到 32,768（2026-10-12 真机读数）
+    #: 它此前是 32,768（上一版从 8,192 抬上来的），而那一格治的正是"写稿步被截断"
+    #: —— 但**处方错了**：我们不设这一栏之后，上游给的额度**比 32,768 还宽**
+    #: （两发真调用对照：不带 `max_tokens` ⇒ `tokens_out=14,015` 且 `finish_reason=stop`；
+    #: 带 32,768 ⇒ 12,987）。所以正确的动作是**把这一栏整条路删掉**（网关的请求体里
+    #: 从此不出现 `max_tokens`，见 `modelgw._payload`），而不是继续调这个数。
     #:
-    #: 8,192 是 `deepseek-chat` 一档的输出上限（历史读数那一档）—— 这一格
-    #: 在 `deepseek-flash` + `reasoning_effort=high` 下已经被打穿过两次：
-    #:
-    #: 1. 2026-10-03 第八趟真机（`tools/fs_tools.py` 的 `fs.edit` 那一段逐字记着）：
-    #:    模型想用 `fs.write` 整份重写 26 KB 的 `main.tex`，回复被截断在字符串中间
-    #:    （步 27/30 的 `text_len` 是 26110 / 26134，`tokens_out` 都是 8192）；
-    #: 2. 2026-10-12 严格口径 T1：第 12 步起连续 5 次 `judge_failed:ModelReplyNotOk`，
-    #:    读数是"上游返回空内容（……没有 tool_calls；思维链 26215 / 26814 字）"——
-    #:    思维链把 8,192 吃满，正文一个字都没轮到。
-    #:
-    #: 探针读数（`temp/_probe_chain.py`，2026-10-12，同一道难题跑三档上限）：
-    #: `max_tokens=256` ⇒ `finish_reason=length`、正文 0 字、256 token 全记在
-    #: `reasoning_tokens` 上；`1024` ⇒ 同样（思维链 2299 字）；`32768` ⇒ 同样
-    #: （思维链 86296 字、耗时 181 秒）。另一次探针（`temp/_probe_outcap.py`）：
-    #: 76,617 字的 prompt 配 `max_tokens=32768` 回 200、`prompt_tokens=47906`
-    #: ⇒ 端点认这个数。也就是说"想很久"本身没有内在上限 ——
-    #: 这一格只能把天花板抬高（让正常步有地方写正文），保证不了模型肯收手；
-    #: 真要治"想了不答"，得在下游按 `finish_reason=length` 判一次
-    #: （网关已经把这一格写进失败读数了，见 `modelgw._once`）。
-    #:
-    #: 要改就改这里，别在各处传不同的数。
-    max_output_tokens: int = 32768
+    #: 历史读数留在这里，因为它们解释"为什么曾经需要它"：8,192 那一档被打穿过两次
+    #: （2026-10-03 第八趟：整份重写 26 KB 的 `main.tex`，`tokens_out` 都是 8192、
+    #: 回复截在字符串中间；2026-10-12 T1：思维链 26,215 字把 8,192 吃满、正文 0 字）。
     workspace_root: str = ""
     sid: str | None = None
     token: Any = None
@@ -2708,10 +2707,29 @@ class AgentLoop:
                 + ("（注：这个读数是重算过的 —— 读数期间台账又变了）" if got.get("retried") else ""))
 
     def _budget_text(self) -> str:
+        """给模型看的那一句"还剩多少钱"。
+
+        ⚠️ 2026-10-15 业主裁定 B2：这里此前报的是 `self.seam.spend.usd`
+        （**这一条缝自己的**累计），而 `usd_budget` 是**这一趟的总预算** ——
+        模型据以决策的那个数因此是偏大的（别的角色花的钱它看不见）。
+        现在读的是全局口径（`seam.spent_usd()`），并把口径来源写在括号里：
+        "还剩 0.4 美元"这句话必须能回答"这是谁的账"。
+        """
+        spent, src = self._global_spend()
         if self.seam.usd_budget is None:
-            return f"未设置上限（已用 {self.seam.spend.usd:.6f} 美元）"
-        left = max(0.0, self.seam.usd_budget - self.seam.spend.usd)
-        return f"{left:.6f} 美元（上限 {self.seam.usd_budget:.6f}）"
+            return f"未设置上限（全局已用 {spent:.6f} 美元，读数来自 {src}）"
+        left = max(0.0, self.seam.usd_budget - spent)
+        return f"{left:.6f} 美元（上限 {self.seam.usd_budget:.6f}，已用 {spent:.6f}，读数来自 {src}）"
+
+    def _global_spend(self) -> tuple[float, str]:
+        """全局已花 + 口径来源。缝上有 `spent_usd()` 就用它（权威账）；
+        没有（替身缝 / 老调用点）就退回缝自己的累计，并如实标注 `per_seam`。"""
+        fn = getattr(self.seam, "spent_usd", None)
+        if callable(fn):
+            got = fn()
+            if isinstance(got, tuple) and len(got) == 2:
+                return float(got[0]), str(got[1])
+        return float(getattr(self.seam.spend, "usd", 0.0) or 0.0), "per_seam"
 
     def _refresh_system(self, facts: Mapping[str, Any], system: str, *, step: int) -> str:
         """步边界上重算"会变的那两格"，变了才换 system（业主裁定 J=乙）。
@@ -3000,10 +3018,12 @@ class AgentLoop:
                 break
             budget = getattr(self.seam, "budget_limit", None)
             limit = self.seam.usd_budget if budget is None else budget()
-            if limit is not None and self.seam.spend.usd >= limit:
+            spent, spent_src = self._global_spend()
+            if limit is not None and spent >= limit:
                 run.stop_reason = "budget"
                 run.final = run.final or (
-                    f"预算已耗尽，停止（已用 {self.seam.spend.usd:.6f} / 上限 {limit:.6f}；"
+                    f"预算已耗尽，停止（**全局**已用 {spent:.6f} / 上限 {limit:.6f}；"
+                    f"已花读数来自 {spent_src}；"
                     "没有继续调用模型）。追加预算（`agentflow budget --add` 或网页上的预算窗口）"
                     "之后用 `--resume` 可以接着跑。")
                 # 业主 2026-10-12：「扣完时自动发送优雅停止请求（这时预算可能会继续扣成
@@ -3066,7 +3086,6 @@ class AgentLoop:
             data, call = self.seam.ask_step(self._prompt(messages, step=step),
                                             system=system, task_id=my_task_id,
                                             note=f"{self.role}.step{step}",
-                                            max_tokens=self.max_output_tokens,
                                             face=face)
             # 第一次成功的模型调用之后才登记投递（推迟标记的落点，见上面那段注释）：
             # "模型真的被问过一次"= 这一批消息确实进了上下文 ⇒ 承认它送达。
@@ -3221,7 +3240,7 @@ class AgentLoop:
                     run.bad_json += 1
                     run.bad_json_streak += 1
                 bad_result = {"problem": problem, "shape_recognized": recognized,
-                              "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)}
+                              "raw_reply": _clip(json.dumps(data, ensure_ascii=False, default=str), 600)}
                 run.steps.append(LoopStep(step, "invalid", payload, bad_result,
                                           problem=problem))
                 SS.append(self.session_root, {
@@ -3844,7 +3863,8 @@ class AgentLoop:
         两处来源，与 `autonomy._stop_before_round` 用的是「同一套词」：
 
         - `stop_file`：`--stop-file`（或这里给的路径）指向的那个文件存在于盘上；
-        - `user_stop`：本次运行「开始之后」收到的那条回答里含 `autonomy.STOP_TOKEN`。
+        - `user_stop`：**已删除**（业主口径 2026-10-17「删掉旁路」：停意由主控**理解意思**后
+          调 `conductor.stop` 完成，**不靠单词匹配** —— 字面匹配漏中文「停」「收工」）。
 
         为什么两处都要在「步循环里」查：`autonomy` 那套判据只在「每轮之间」跑，
         而单趟 `run-agent`（不 `--rounds`）根本不走那条路 —— 真机实测（2026-10-04）：
@@ -3943,16 +3963,13 @@ class AgentLoop:
         for reply in reversed(list(replies or [])):
             if str(reply.get("ts") or "") < started:
                 continue
-            if AU.STOP_TOKEN in str(reply.get("answer") or ""):
-                return "user_stop"
             break                      # 只看"开始之后最近的那一条"
         return ""
 
     def _stop_note(self, stop_reason: str, step: int) -> str:
         """人叫停时写进 `final` 的那句话（要能直接告诉人"停在哪儿、怎么接着跑"）。"""
         what = {"stop_file": f"用户叫停（开关文件 {self.stop_file or '.agentflow-stop'}）",
-                "user_stop": "用户叫停（回答里有 STOP）",
-                "force_stop": "用户强制停止（直接停，不等待收尾）"}.get(
+                        "force_stop": "用户强制停止（直接停，不等待收尾）"}.get(
                     stop_reason, f"用户叫停（{stop_reason}）")
         sid_arg = f" --sid {self.sid}" if self.sid else ""
         return (f"{what}：第 {step} 步之后收工。已经做过的事都留在台账与盘上；"
@@ -3976,7 +3993,7 @@ class AgentLoop:
                                        else f"派活那一句（{shape}）"))
         bad_result = {"problem": help_text, "shape_recognized": shape,
                       "notify_rejections": run.notify_rejections,
-                      "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)}
+                      "raw_reply": _clip(json.dumps(data, ensure_ascii=False, default=str), 600)}
         run.steps.append(LoopStep(step, "invalid", payload, bad_result, problem=help_text))
         SS.append(self.session_root, {
             "kind": "agent_step", "role": self.role, "index": step,
@@ -4033,8 +4050,8 @@ class AgentLoop:
         for t in (payload.get("targets") or [payload]) if "targets" in payload else [payload]:
             if not isinstance(t, Mapping):
                 continue
-            lines.append(f"- {t.get('role')}.{t.get('action')}：参数 "
-                         f"`{json.dumps(dict(t.get('params') or {}), ensure_ascii=False)}`"
+            lines.append(f"- {_dispatch_label(t)}：参数 "
+                         f"`{json.dumps(dict(t.get('params') or {}), ensure_ascii=False, default=str)}`"
                          + (f"（instance={t.get('instance')}）" if t.get("instance") else ""))
         why = str(payload.get("why") or "").strip()
         if why:
@@ -4043,7 +4060,7 @@ class AgentLoop:
                   "模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（"
                   "谁派了谁做什么、参数、为什么），内容全部取自这一句派活；"
                   "执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。"]
-        what = ", ".join(f"{t.get('role')}.{t.get('action')}"
+        what = ", ".join(_dispatch_label(t)
                          for t in ((payload.get("targets") or []) if "targets" in payload
                                    else [payload]) if isinstance(t, Mapping))
         return {"to": targets[0] if len(targets) == 1 else "ALL",
@@ -4277,18 +4294,35 @@ class AgentLoop:
                 auto[role] = [f"{role}#{k}" for k in range(1, n + 1)]
         used: dict[str, int] = {}
         calls = []
+        blank: list[str] = []
         for t in targets:
             instance = str(t.get("instance") or "")
             if not instance and str(t.get("role")) in auto:
                 used[str(t["role"])] = used.get(str(t["role"]), 0) + 1
                 instance = auto[str(t["role"])][used[str(t["role"])] - 1]
-            calls.append(SC.TaskCall(role=str(t.get("role")), action=str(t.get("action")),
-                                     params=dict(t.get("params") or {}), by=self.role,
+            # 2026-10-16（S2「M 只派活」）：每个 target 与 `summon` 同一套语义 ——
+            # **不点动作**（`action` 空）= 派一件活给它，由它自己选动作；
+            # 此时 `task` 必填（否则接活的人不知道自己该干什么）。与 `_do_summon` 同款。
+            # 2026-10-16（口径 S2 最终形态）：每个 target 的动作一律当空（父代理不填动作）。
+            t_action = ""
+            t_params = dict(t.get("params") or {})
+            t_task = str(t.get("task") or "")
+            # 2026-10-16（口径 S2）：`task` 一律必填（与 `_do_summon` 同款）。
+            if not t_task.strip():
+                blank.append(str(t.get("role")))
+                continue
+            if not t_action:
+                t_params["task"] = t_task
+            calls.append(SC.TaskCall(role=str(t.get("role")), action=t_action,
+                                     params=t_params, by=self.role,
                                      parent_task_id=self.my_task_id or None,
                                      input_key=(str(t.get("input_key") or "")
-                                                or _summon_key(str(t.get("action")),
-                                                               dict(t.get("params") or {}))),
+                                                or _summon_key(t_action, t_params)),
                                      instance=instance))
+        if blank:
+            return {"summoned": [], "ok": False, "count": 0,
+                    "error": ("这批里有 target 没写清活（role="
+                              + "、".join(blank) + "）：`task` 必填")}
         results = c.run_plan(calls, token=self.token)
         probe = getattr(c, "_last_probe", None)
         waves = [len(w) for w in P.waves_of(calls,
@@ -4599,32 +4633,48 @@ class AgentLoop:
 
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
-        action = str(payload.get("action"))
+        # 2026-10-16（口径 S2 最终形态）：「**完全不要有填 action 的位置**」——
+        # 形状里没有 `action` 这一格，这里也就不读它、不持有它；派活只有 `role` + `task`。
+        # 下面调 `conductor.summon` 时那个 `""` 是**内部 API 的实参**，不是留给模型的位置。
         # 名册那三格要在这一步的载荷被结果覆盖之前取下来（S1k-3 的判据当场抓出来的坑：
         # 下面 `payload = res.payload` 之后 `payload.get("brief")` 读的是结果，
         # 于是每一次名册登记都变成"没给简介"）。
         brief_arg = str(payload.get("brief") or "")
         name_arg = str(payload.get("name") or "")
         reuse_arg = str(payload.get("reuse") or "")
-        out: dict[str, Any] = {"summoned": role, "action": action}
+        out: dict[str, Any] = {"summoned": role, "action": ""}   # 派活不点动作（S2 最终形态）
         if self.conductor is None:
             out.update(ok=False, error="本次运行没有接线主控（summon 不可用）")
             return out
         if self.token is not None and getattr(self.token, "cancelled", False):
             out.update(ok=False, error="取消信号已置位：不再发起新的召唤")
             return out
-        budget: Mapping[str, Any] | None = None
-        if self.seam.usd_budget is not None:
-            budget = {"usd": max(0.0, self.seam.usd_budget - self.seam.spend.usd)}
+        # ⚠️ 这里此前构造 `budget = {"usd": 剩余}` 传给 `conductor.summon` ——
+        # 那是一个**哑闸**（2026-10-15 裁定 B2 的同一族）：
+        # `_meter_guard` 读的键是 `max_usd`，`"usd"` 这个键从来没被任何判据读过；
+        # 而且就算键对了，它当时的意思是"拿这个数去和全局已花比"，
+        # 与"这一单最多花多少"毫无关系。**钱的判据只有一处**（`_meter_guard` →
+        # 全局账 vs 全局预算），循环这一层不再自己造一个假的每单限额。
         params = dict(payload.get("params") or {})
+        # 2026-10-16（S2「M 只派活」）：不点动作时，**那件活就是参数** —— 把它转给
+        # 后端（`LlmBackend` 要用它当这一趟循环的任务文本，见 `_task_text`）。
+        # 为什么不塞进 `params` 的语义里而是单独取一格：`params` 是"动作的参数"，
+        # 而这里根本没有动作；混在一起会让记录里出现"一个不存在的动作的参数"。
+        task_arg = str(payload.get("task") or "")
+        # 2026-10-16（口径 S2）：**`task` 一律必填**（业主："一致改成 task 必填，action 不填"）。
+        if not task_arg.strip():
+            out.update(ok=False, error="派活必须写清是什么活：`task` 必填"
+                                       "（否则接活的人不知道自己该干什么）")
+            return out
+        params["task"] = task_arg
         # `input_key` 由形状给不出（形状里没有这个字段）⇒ 按同一件事派生一个确定性键，
         # 否则这一行落库时键为空、`verify_tasks` 会报 `task_without_input_key`
         # （真机实测：场景 G 的 t-0252）。模型若显式给了就用它给的。
-        key = str(payload.get("input_key") or "") or _summon_key(action, params)
+        key = str(payload.get("input_key") or "") or _summon_key("", params)
         try:
-            res = self.conductor.summon(role, action, params,
+            res = self.conductor.summon(role, "", params,
                                         by=self.role, parent_task_id=self.my_task_id or None,
-                                        budget=budget, token=self.token, input_key=key)
+                                        token=self.token, input_key=key)
         except Exception as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             return out
@@ -4646,7 +4696,7 @@ class AgentLoop:
             # 落一条 `agent_summon_request` 事件 + 给 M 发一条 `subject=请代唤` 的留言。
             # 注意它不是假装成功：`ok` 仍是 False，`relay_requested` 才是这次
             # 实际发生的事；申请有没有被受理由主控在它自己那一步决定。
-            out["relay_requested"] = self._request_relay(role, action, payload,
+            out["relay_requested"] = self._request_relay(role, "", payload,
                                                          str(res.refusal_reason or ""),
                                                          str(res.detail or ""))
         if path:
@@ -5470,8 +5520,22 @@ class LlmBackend:
 
     def call(self, role: str, action: str, params: Mapping[str, Any], *, token: Any,
              instance: str = "", task_id: str = "") -> Any:
-        """登记过的 `(角色, 动作)` 走 LLM 循环；其余交给内层后端（确定性实现）。"""
-        cfg = self.loops.get((role, action))
+        """登记过的 `(角色, 动作)` 走 LLM 循环；**空动作也走循环**；其余交给内层后端。
+
+        ## 空动作为什么走循环（2026-10-16，业主口径 S2「M 只派活」）
+
+        原话逐字：「M 只是个派活的，对所有角色都一样，只根据它们的能力范围派活，
+        **不指定能力**。」⇒ 召唤时不点动作，意思是**把这件活交给这个角色**，
+        由它按自己的手册、工具面与政策选动作。它当然要**跑自己的循环**才选得了 ——
+        交给内层处理器反而是"替它选了那个不存在的动作"。
+        给了动作的那条路逐字不变（向后兼容：`pipeline` / `scheduler` / `deliver` 照旧）。
+        """
+        if not str(action):
+            # 角色级那一格（`--drive D` 这种写法）留了口子；没登记就用默认档。
+            cfg: Mapping[str, Any] | None = dict(self.loops.get((role, "")) or {})
+            cfg.setdefault("max_steps", self.max_steps)
+        else:
+            cfg = self.loops.get((role, action))
         if cfg is None:
             return self.inner.call(role, action, params, token=token, instance=instance,
                                    task_id=task_id)
@@ -5513,9 +5577,13 @@ class LlmBackend:
         # 修法：把这一趟被派的那个动作**原样包成一件工具**交给它，handler 走内层
         # 确定性实现（闸门一个不少），名字就是动作名（模型第一反应也是那么叫的）。
         # 只在这一趟的循环里存在，不进任何角色的常规工具面。
-        child_registry = self._registry_with_own_action(
-            child_registry, role=role, action=action, token=token, instance=instance,
-            task_id=str(row.get("task_id") or params.get("_task_id") or ""))
+        if str(action):
+            # 只有"被派了某个具体动作"才需要把它包成工具交过去。
+            # 空动作（S2「只派活」）**没有那个动作** —— 这一趟由角色自己从它的
+            # 常规工具面里挑，硬塞一个"自己的动作"反而是替它选了。
+            child_registry = self._registry_with_own_action(
+                child_registry, role=role, action=action, token=token, instance=instance,
+                task_id=str(row.get("task_id") or params.get("_task_id") or ""))
         loop = AgentLoop(role=role, session_root=self.session_root,
                          registry=child_registry,
                          seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
@@ -5659,7 +5727,7 @@ class LlmBackend:
         try:
             d = self.session_root / RUNS_DIR_NAME
             d.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps(run.to_dict(), ensure_ascii=False, indent=2) + "\n"
+            payload = json.dumps(run.to_dict(), ensure_ascii=False, indent=2, default=str) + "\n"
             stamp = time.strftime("%Y%m%d-%H%M%S")
             n = len(list(d.glob(f"{role}-{stamp}-*.json"))) + 1
             while n <= _RUN_ARTIFACT_MAX_SEQ:
@@ -5721,8 +5789,18 @@ class LlmBackend:
 
 
 def _task_text(params: Mapping[str, Any], role: str, action: str) -> str:
-    """把召唤参数渲染成给孩子看的任务描述（没有参数时如实说明）。"""
+    """把召唤参数渲染成给孩子看的任务描述（没有参数时如实说明）。
+
+    2026-10-16（S2「M 只派活」）：`action` 为空时，任务就是**那件活本身** ——
+    取 `params["task"]` / `params["brief"]`（派活方写的那句话）。两者都没有 ⇒
+    如实说"没有带活"，**不许编一个动作出来**。
+    """
     given = {k: v for k, v in (params or {}).items() if not str(k).startswith("_")}
+    if not str(action):
+        work = str(given.get("task") or given.get("brief") or "").strip()
+        if work:
+            return f"{role}：这一趟派给你的活是 —— {work}"
+        return f"{role}：这一趟**没有点动作、也没写清是什么活**（调用方要你按职责自己判断）。"
     if not given:
         return f"{role}.{action}：这次没有带参数（调用方只要求你按职责做这件事）。"
     return (f"{role}.{action}：调用方给了这些参数：\n"
@@ -5775,7 +5853,7 @@ def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            fh.write(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n")
     except OSError as exc:
         return f"{type(exc).__name__}: {exc}"
     return ""
@@ -6122,11 +6200,24 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     if resume:
         cp = load_run_checkpoint(root, role, sid)
         if cp is None:
-            _note_resume_refusal(root, role, task, sid, "no_checkpoint")
-            return LoopRun(role=role, task=task, stop_reason="no_checkpoint",
-                           final=(f"要求续跑，但读不到这一趟的检查点"
-                                  f"（{run_checkpoint_path(root, role, sid)}）⇒ 没查成。"
-                                  "不许当成'从第 1 步重跑'：重跑会把已经做过的活再做一遍。"))
+            # 2026-10-18（缺陷 ㉑，真机 `projects/t3a` 抓到）：检查点**只在 `loop.run()`
+            # 返回之后**才写（本文件 6326 行），于是**被 kill/崩溃的运行永远没有检查点** ——
+            # 而"被 kill"恰恰是 `--resume` 存在的唯一理由。真机读数：t3a 跑了 97 次调用、
+            # 40 条实验、$1.05，`--resume` 却回 `no_checkpoint`，一条活都接不上。
+            # 但**会话记录里有每一步**（`agent_step` 事件）⇒ 用 `resume_messages` 重建：
+            # 重建得出步数就接着跑（这不是"从第 1 步重跑"）；重建不出就仍然如实拒。
+            _rebuilt, _step0 = resume_messages(root, role, sid, task=task)
+            if _step0 > 0:
+                cp = {"step": int(_step0), "task": str(task),
+                      "fingerprint": _task_fingerprint(role, task),
+                      "waiting_for": "", "stop_reason": ""}
+            else:
+                _note_resume_refusal(root, role, task, sid, "no_checkpoint")
+                return LoopRun(role=role, task=task, stop_reason="no_checkpoint",
+                               final=(f"要求续跑，但既读不到检查点"
+                                      f"（{run_checkpoint_path(root, role, sid)}），"
+                                      "也重建不出会话记录里的任何一步 ⇒ 没查成。"
+                                      "不许当成'从第 1 步重跑'：重跑会把已经做过的活再做一遍。"))
         if str(cp.get("fingerprint")) != _task_fingerprint(role, task):
             # 指纹不符时「不给」 `attempted_from`：那份检查点是另一个任务的，
             # 它的 `step` 数不是"这件事做到第几步"。

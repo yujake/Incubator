@@ -97,6 +97,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
                            "五元位派生出 `预备定理级` / `正式定理` 的行，且 `origin != external_lit`）"
                            "—— 引用命题不算：它的第 2 位凭据是文献代号，不是我们造的东西"
                            "（`draft/39` §3.17 A5：非数值方向的项目靠这一档满足「算或造」）",
+    "accepted_documents": "**通过**了我方稿件行数：`documents` 里 `review_verdict == '成立'` 的行（「通过」与 V 的裁决同形；与「审过」是两件事）",
     "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里状态被推成 "
                           "accepted/revised 的行，或 `review_rounds >= 1` 的行）",
     "reviewed_current_rows": "现行版本被审校记录钉住的稿件份数（`doc-signatures` 里该 `doc_id` 有一条"
@@ -290,6 +291,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                "登记之后又被正常改写），所以 `DEFAULT_CHECKS` 的第八格只把 "
                                "`missing`/`unreadable` 判 `fail`，`changed` 记 `unknown`"
                                "（把正常产物读成坏正是这一格要防的假读数）",
+
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -490,9 +492,9 @@ def claim_evidence_fit(
                 continue
             ev_nums = (_numbers_in(exp.get("claim")) | _numbers_in(exp.get("claim_key"))
                        | _numbers_in(json.dumps(exp.get("search_bound") or {},
-                                                ensure_ascii=False))
+                                                ensure_ascii=False, default=str))
                        | _numbers_in(json.dumps(exp.get("params") or {},
-                                                ensure_ascii=False)))
+                                                ensure_ascii=False, default=str)))
             if not claim_nums or not ev_nums:
                 why.append(f"{cid}：一侧没有数字特征 ⇒ 不可判")
                 continue
@@ -1005,10 +1007,15 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 if str(r.get("method") or "") == "formal"
                 and str(r.get("evidence_kind") or "") == "proof"]
         return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
-    if kind == "reviewed_documents":
+    if kind in ("reviewed_documents", "accepted_documents"):
+        # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：
+        # **审过**读 `review_verdict != ""`；**通过**才读 `review_verdict == "成立"`
+        # （与 V 的「成立」同形）。不再用 `status ∈ accepted/revised` 冒充"审过" ——
+        # 那是把"通过"折成"审过"，而 T5 第 9 趟正是靠这个折平才七格全绿。
+        want = "成立" if kind == "accepted_documents" else None
         rows = [r for r in store.rows("documents")
-                if str(r.get("status") or "") in REVIEWED_DOC_STATUSES
-                or int(r.get("review_rounds") or 0) >= 1]
+                if (str(r.get("review_verdict") or "") == want if want is not None
+                    else str(r.get("review_verdict") or "") != "")]
         return len(rows), {"documents": [
             {"doc_id": str(r.get("doc_id") or ""), "status": str(r.get("status") or ""),
              "review_rounds": int(r.get("review_rounds") or 0)} for r in rows[:8]]}

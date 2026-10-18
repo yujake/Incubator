@@ -321,6 +321,11 @@ def scan_claim(claim: Mapping[str, Any]) -> dict:
 #: `undeclared_field`            `scope_drift`               未声明字段无法被任何门读到
 #: `duplicate_claim_id`          `inconsistent_number`       同一标识对应两处不同内容
 #: `checker_error`               `garbled`                   检查器自己没跑成
+#: `overclaim`                   `overclaim`                 措辞超出证据等级（族 6）
+#: `incomplete_numeric_evidence` `unsupported_claim`         数值证据四元组不齐（族 7）
+#: `missing_disclaimer`          `unsupported_claim`         受控声明整个没写（族 5）
+#: `uncontrolled_disclaimer`     `unsupported_claim`         声明写了、但不是受控那一句（族 5）
+#: `lifecycle_incomplete`        `inconsistent_number`       生命周期没闭合（族 4）
 #: ==========================  ==========================  ================================
 _FINDING_KIND_OF_CODE: dict[str, str] = {
     "missing_field": "unsupported_claim",
@@ -339,6 +344,24 @@ _FINDING_KIND_OF_CODE: dict[str, str] = {
     "incomplete_numeric_evidence": "unsupported_claim",
     "missing_disclaimer": "unsupported_claim",
     "lifecycle_incomplete": "inconsistent_number",
+    # ⚠️ **2026-10-15 补登记**：`uncontrolled_disclaimer` 是 `claimanatomy` 在
+    # 2026-10-13（无 Lean T2 的真机）新加的 code，它登记进了 `CLAIM_FAMILY_BY_CODE`
+    # （族 5）与 `test_lean_switch`，却**漏了这里** ⇒ 落据那一步抛 `KeyError`，
+    # 于是 `build_document` 整条失败（G 渲染不出稿件），而它在盘上看起来
+    # 只是"G 拒绝了这次调用"。
+    #
+    # 为什么是 `unsupported_claim` 而不是 `garbled`：它判的是"
+    # 这条断言声称的那一档凭什么"没被那受控的一句承诺住 —— 与 `missing_disclaimer`
+    # 同族同义（族 5），区别只在"没写"与"写错了"，而两者该改的栏是同一个
+    # （把 disclaimer 改回受控那句）。落 `garbled`（"表述无法解析"）会把
+    # "声明不对"读成"读不懂"，而下游按 kind 分档 ⇒ 分错档。
+    #
+    # 为什么这条注释要写这么长：这张表的设计是"未登记就当场炸"，
+    # 所以它的每一次漏登记都是一次**可观测的故障**；而这次的教训是
+    # "炸在谁身上"—— 它炸在 G 的渲染上，不在判据自己身上。
+    # 现在的防线是 `tests/test_claimanatomy.py` 里那条按 `CLAIM_FAMILY_BY_CODE`
+    # 逐 code 对账的判据（不再靠人记得同步两张表）。
+    "uncontrolled_disclaimer": "unsupported_claim",
 }
 
 
@@ -2104,7 +2127,14 @@ def guard_result(fn: Any) -> Any:
            },
     side_effect="none",
     roles=_ROLES,
-    returns="{'checked','claim_id','ok','findings','error_count','warning_count'}",
+    # ⚠️ 2026-10-15 补齐：这五格实跑都在返回里，而声明里没有。
+    # 为什么这件事要紧（`draft/124` §15.2 的更正）：`returns` 会拼进
+    # function-calling 的 `description`（`tools/base.py:721`：`summary + "\n返回：" + returns`）
+    # ⇒ **模型看得到**。而它此前看不到 `status_axis` / `undecided_reason` ——
+    # 那两格**正是三态**（"这条没查成"与"这条查过没问题"靠它们分开）。
+    # 模型不知道存在的字段，它不会用；那样三态纪律在**模型这一侧**又折回去了。
+    returns="{'checked','claim_id','ok','findings','error_count','warning_count',"
+            "'checked_fields','decided','revision_hash','status_axis','undecided_reason'}",
     tags=("document", "gate"),
 )
 def _doc_scan_claim(claim):
@@ -2157,7 +2187,8 @@ def _doc_scan_claim(claim):
     # 给了才写 —— 所以它们不进这份键集合（否则就成了"承诺了却不保证给"）。
     returns=(
             "{'claim_id','section','text','evidence_kind','citations','is_negative',"
-            "'negation_kind','disclaimer'}（合规的 claim dict）；带 §8.3 字段时原样透出。"
+            "'negation_kind','disclaimer','revision_hash','scope_caveat'}"
+            "（合规的 claim dict）；带 §8.3 字段时原样透出。"
             "失败：ok=False + kind=validation_error + message（含 issue code）"
             ),
     tags=("document", "compose"),
@@ -2240,7 +2271,27 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
                     },
                 },
             },
-            "sections": {"type": "array", "items": {"type": "object"}},
+            # ⚠️ **2026-10-15 补**：这一格此前是光秃秃的 `{"type":"array","items":{"type":"object"}}`
+    # —— 没有说明、没有 `properties`。后果是**形状不可达**：
+    #   · 模型照它填，只能猜每个元素是什么；
+    #   · 被拒之后框架会给"完整参数表"（`agent_loop._param_table`），
+    #     而那张表**也是照 schema 打的** ⇒ 它同样只会说 "sections: array"。
+    # 真机读数（九趟 T5 的 `events.jsonl`）：因它的形状被拒 **11 次**
+    # （"`sections.[N]` 必须是对象，收到 string" 6 次 ＋ "`sections[N]` 必须是含 `heading` 的对象" 5 次）。
+    # 紧邻的 `claims` 那一格**有**详尽说明（还记着"T1 实测在这里连拒 7 次"）⇒ 这里当年是**漏了**。
+    "sections": {
+        "type": "array",
+        "description": ("正文分节：**每个元素是一个对象** `{heading, body}`"
+                        "（写成字符串会被拒 —— 实测被拒过 11 次）。"
+                        "`heading` 必填且非空（那一节的标题），`body` 可缺省（markdown 正文）。"),
+        "items": {
+            "type": "object",
+            "properties": {
+                "heading": {"type": "string", "description": "这一节的标题（必填、非空）"},
+                "body": {"type": "string", "description": "这一节的 markdown 正文（可缺省）"},
+            },
+        },
+    },
             "open_problems": {"type": "array", "items": {"type": "string"}},
             "out_path": {"type": "string", "description":
                          "生成 markdown 的落点（工作区内相对路径；缺省 "
@@ -2258,7 +2309,8 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
     # （`S.Document` 全字段，12 个）。
     returns=(
             "{'doc_id','kind','title','markdown_path','claims','sections','open_problems',"
-            "'status','review_rounds','created_at','updated_at','created_by'}（落库后的 documents 行）；"
+            "'status','review_rounds','created_at','updated_at','created_by',"
+            "'content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；"
             "**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:` "
             "+ 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；"
             "失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + "
@@ -2339,8 +2391,10 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
     side_effect="write_local",
     roles=_WRITER_ROLES,
     # 键名从一个真实调用读出（`register_dependency`）：落库后的 dependencies 行
-    # （`S.Dependency` 全字段，2026-10-09 加 `source_stmt_id` 与 `path_group` 后 14 个）。
-    returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','source_stmt_id','path_group','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
+    # （`S.Dependency` 全字段，2026-10-09 加 `source_stmt_id` 与 `path_group` 后 14 个；
+    # 2026-10-15 补 `source_claim_id` / `source_doc_id` —— 它们是"这条依赖的**来源**"
+    # 那一族的两格，此前只写在声明之外，而 `returns` 会进模型看得到的 `description`）。
+    returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','source_stmt_id','source_claim_id','source_doc_id','path_group','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
     tags=("document", "dependency", "write"),
 )
 def _doc_register_dependency(_not_wired, store, actor, **kw):
@@ -2428,6 +2482,11 @@ def _resolve_project_root(workspace: Path | None, project: str) -> tuple[Path | 
     if workspace is None:
         return None, "没接线：装配时既没给 workspace_root 也没给 store ⇒ 不知道该相对谁解析 project"
     root = workspace.resolve()
+    # 2026-10-17（复跑 T1 暴露的缺陷 61）：**工作区本身就是项目根**时，角色只知道项目叫
+    # `t1s`，会传 `project="t1s"`；原来拼成 `projects/t1s/t1s` ⇒ "项目目录不在盘上"。
+    # 接受三种写法：`.`、工作区自己的名字、以及相对 `projects/` 的路径。
+    if raw in (".", root.name):
+        return root, ""
     target = (root / cand).resolve()
     try:
         target.relative_to(root)

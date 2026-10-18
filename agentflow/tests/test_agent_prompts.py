@@ -80,10 +80,15 @@ def _partner_bullets(text: str) -> set[str]:
 
 
 def _partner_bullet_line(lines: list[str], role: str) -> str:
-    """某个伙伴的条目行（带可调用动作那一行），不是接线态那一栏。"""
+    """某个伙伴的条目行（**描述那一行**），不是接线态那一栏。
+
+    2026-10-16：原先靠行里含 `可调用动作` 辨认 —— 那条口径撤掉之后，伙伴行只剩
+    `- <角色>：<职责>；它交付：…`。而接线态那一栏也是 `- <角色>：<状态>`（同样以
+    `- 角色：` 开头）⇒ 用"**；它交付**"这个只在描述行里出现的分段来区分。
+    """
     hits = [
         line for line in lines
-        if line.startswith(f"- {role}：") and "可调用动作" in line
+        if line.startswith(f"- {role}：") and "；它交付" in line
     ]
     assert len(hits) == 1, f"伙伴 {role} 的条目应当恰好一条，实际 {len(hits)} 条"
     return hits[0]
@@ -282,12 +287,20 @@ def test_the_parent_limits_are_computed_from_the_policy():
     """数字必须从 `Policy` 现算，一个都不许写死（业主口径 C：从代码现算）。
 
     正控：换一个把四类上限都改掉的 `Policy` ⇒ 渲染出来的那一句跟着换；
-    负控：默认值（5 / 4 / 200 / 900）一个字都不该出现在改过的那一段里 ——
+    负控：**缺省值一个字都不该出现在改过的那一段里** ——
     写死的数字在"被覆盖过的 run"里就是一句谎话（`cli.py` 就传过 `wall_clock_sec`）。
-    另外钉住两处口径：主控那一档来自 `FANOUT_LIMIT_BY_ROLE`（20，同时把工人档
-    5 写出来做对照），而 `wall_clock_sec=None` 那一支必须写成"这一次不限"
+    另外钉住两处口径：主控那一档来自 `FANOUT_LIMIT_BY_ROLE`（**100**，同时把工人档
+    **25** 写出来做对照），而 `wall_clock_sec=None` 那一支必须写成"这一次不限"
     （不是"限 0"，也不是不写 —— 业主裁定 B 的另一面：墙钟不缩短，
     但"没设"与"设为 0"必须分得开）。
+
+    ⚠️ **2026-10-15 改（承 `draft/123` 裁定 C4/C5）**：缺省值整体抬高了
+    （`max_depth` 5→12、`max_fanout` 5→25、`max_concurrency` 4→16、
+    `max_tasks_per_run` 200→5000、`wall_clock_sec` 900→14400、M 档 20→100），
+    而这条判据里的**字面量没有跟着改** ⇒ 它红了。改法刻意**把新旧两套缺省值都放进负控**：
+    这条判据的职责是"默认值不许被写死在渲染里"，所以**凡是当期缺省值都不许出现在
+    被覆盖过的那一段里** —— 只列旧值会让它在下一次抬阈值时再一次变成谎言。
+    （同族教训：`test_refusal_family_numbers` 那份手写 code 清单做"反真空"是自相矛盾的。）
     """
     from agentflow import policy as POL
 
@@ -296,17 +309,20 @@ def test_the_parent_limits_are_computed_from_the_policy():
     text = AP.parent_limits_text(odd, "E")
     for want in ("7 个", "9", "3 个", "11 个", "这一次**不限**"):
         assert want in text, f"改过 Policy 之后这一段里没有 {want!r}：{text}"
-    for stale in ("最多 5 个", "全局同时运行 4 个", "总数 200 个", "墙钟：900 秒"):
-        assert stale not in text, f"这一段里还留着写死的旧数字 {stale!r}：{text}"
+    # 负控：旧缺省值（2026-10-15 之前）与**当期**缺省值都不许出现。
+    stale_defaults = ("最多 5 个", "全局同时运行 4 个", "总数 200 个", "墙钟：900 秒",
+                      "最多 25 个", "全局同时运行 16 个", "总数 5000 个", "墙钟：14400 秒")
+    for stale in stale_defaults:
+        assert stale not in text, f"这一段里还留着写死的缺省值数字 {stale!r}：{text}"
 
     # 主控那一档来自 FANOUT_LIMIT_BY_ROLE；工人档来自 Policy.max_fanout（两处都现算）
     m_text = AP.parent_limits_text(odd, "M")
-    assert "最多 20 个" in m_text and "工人档是 7 个" in m_text, m_text
+    assert "最多 100 个" in m_text and "工人档是 7 个" in m_text, m_text
     assert "最多 7 个（" not in m_text, m_text
 
     # 默认 Policy 的那一支：工人档等于 Policy.max_fanout ⇒ 不再补"工人档是…"那半句
     plain = AP.parent_limits_text(POL.Policy(), "E")
-    assert "最多 5 个。" in plain and "工人档" not in plain, plain
+    assert "最多 25 个。" in plain and "工人档" not in plain, plain
 
 
 def test_the_role_that_writes_the_acceptance_table_knows_every_controlled_kind():
@@ -500,23 +516,32 @@ def test_e_is_told_to_write_the_lean_source_into_the_workspace(registry: ToolReg
 
 def test_every_action_in_the_partner_table_says_what_it_does(
         registry: ToolRegistry):
-    """判据（`draft/39` §6.45 的 D56）：伙伴表里每个动作都要带一句"它是干什么的"。
+    """判据（**2026-10-16 翻面**，业主口径）：伙伴表里**不许出现动作名与参数提示**。
 
-    改前那一行只有 `动作名（参数提示）` —— 无参动作于是等于只有一个名字。
-    真机代价（T5 第 5 趟 `p8e-fermat-shorter-proof`）：F 的攻坚子目标用
-    `submit_search_request` 把请求 `r-0004` 放进检索队列，而队列的消费者是 A 的
-    `run_once`（无参）—— M 从头到尾没派过它，请求整趟没人做、计划停在
-    「等 A 完成检索请求」，七格全绿。摘要来自 `capabilities` 的动作表（唯一来源）。
+    原话逐字：「M 只是个派活的，对所有角色都一样，只根据它们的能力范围派活，
+    **不指定能力**。M 能看到的只是各角色描述，**看不到具体的工具箱与动作**，
+    但可在角色描述中暗示它各角色能干什么。」
+
+    ## 它取代了什么（`draft/39` §6.45 的 D56，2026-10-16 退场）
+
+    D56 当年加的是"每个动作带一句摘要"，理由是"无参动作只有一个名字 ⇒ M 从没派过
+    `A.run_once`，F 的请求 `r-0004` 整趟没人做"。那条判据的**前提是"M 要点名动作"**；
+    2026-10-16 的口径把那个前提整个撤掉了（M 只派活、动作由被派者自己选）⇒
+    "让 M 看懂每个动作"不再需要，**需要的是让 M 别去碰动作**。
+    ⇒ 判据方向翻转：**动作名、参数提示、`可调用动作` 字样，一条都不许有。**
     """
-    from agentflow import agent_prompts as AP
-    from agentflow import capabilities as C
+    import re
 
+    from agentflow import agent_prompts as AP
+
+    ACTIONISH = re.compile(r"可调用动作|（必填")
     for role in ALL_ROLES:
-        for other in AP.partners_out(role):
+        for other in AP.visible_partners(role):
             line = next((ln for ln in AP.partners_lines(role) if ln.startswith(f"- {other}：")), "")
-            for a in C.actions_for(other):
-                assert str(a.summary) in line, \
-                    f"{role} 看到的 {other}.{a.action} 没有摘要（无参动作只有一个名字）：{line[:300]}"
+            assert line, f"{role} 的伙伴表里没有 {other} 的条目"
+            assert not ACTIONISH.search(line), (
+                f"{role} 看到的 {other} 那一行又印了动作与参数：{line[:200]}"
+            )
 
 
 def test_the_partner_table_says_what_each_partner_delivers_and_must_not_do(
@@ -703,8 +728,7 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
                            "口径的两个读数见 `draft/108` §四 CS-9：无 store 70/28 件、"
                            "带 store 83/41 件",
     "main.pdf": "文件名（编译产物），不是工具",
-    "appendix.tex": "文件名（附录落点），不是工具 —— 2026-10-13 之后它只作为"
-                    "「旧路里那份机械产物」出现在退场说明里，正文由智能体自己写",
+    "appendix.tex": "文件名（附录落点），不是工具 —— 它只用来把一件事说清：正文与附录都写在 `out/paper/main.tex` 这一份里",
     "documents.claims": "台账字段（documents 表的 claims 列），不是工具",
     "documents.status": "台账字段（documents 表的 status 列），不是工具 —— H 的裁决正落在它上面"
                         "（`accepted` / `in_review` / `unresolved_review`，见 `draft/103` §4.1b-25）",
@@ -1746,8 +1770,8 @@ _BLOCK_B = '''\
 _BLOCK_C = '''\
 2b) **一次唤起一批**（并发，用于"一批活分给几个人/几个实例同时干"）：
    {"summon_many": {"targets": [
-       {"role": "<伙伴>", "action": "<动作>", "params": {…}, "instance": "<可选，同一角色要多开几个实例时各给一个不同标签>"},
-       {"role": "<伙伴>", "action": "<动作>", "params": {…}}],
+       {"role": "<伙伴>", "task": "<要它干什么>", "params": {…}, "instance": "<可选，同一角色要多开几个实例时各给一个不同标签>"},
+       {"role": "<伙伴>", "task": "<要它干什么>", "params": {…}}],
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
@@ -2364,18 +2388,41 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: p116 → p117（2026-10-15，**同上那一趟按"错误行为"重读**）：共享段 `2b)` 补上
 #: 「召回的 `outcome` 该怎么读」（`no_result` 不许当 `ok` 读、也不许原样重派）。
 #: 作用域读数：**九格换值、C 不换** —— C 没有协作边，那一段对它是残桩。
-_FROZEN_PROMPT_VERSION = "p117"
+#: p117 → p118（2026-10-15，**A 的技能增强**）：A 多一条 skill
+#: `找文献-换招法而不是换说法`，它进的是 `index_block("A")` 那段索引 ⇒ **只有 A 那一格换值**
+#: （实测：其余九格摘要逐字未动）。补的是 `literature-survey` 的**方法面**，见 `draft/120` §五 #9。
+#: p118 → p119（2026-10-15）：新工具 `search.walk_citations`（引文图，新动作的第 ① 步）——
+#: **工具面也在前置提示词里**，所以加一件工具与加一条技能是同一条纪律：抬版本 + 逐格走查。
+#: p127 → p128（2026-10-16，口径 S1）：伙伴表不再印「可调用动作（必填…）」⇒ 十格全换。
+#: p126 → p127（2026-10-16，第 10 趟 T5 真机）：`specs/d.py` policy 的两处更正
+#: （点名主控工具 → 改成 `summon` 形状；补「建计划在 F 手上」）⇒ **只有 D 那一格**换值。
+#: p125 → p126（同日）：同一条 shared 技能的 `when` 改措辞（名字移进正文，见 agent_prompts）⇒ 十格全换。
+#: p124 → p125（2026-10-15）：新增一条 **shared** 技能 `取数-编号一律从台账读` ⇒ 它是
+#: `shared`，进每一个角色的索引 ⇒ **十格全换**（与 p118 那次"只有 A 换"对照）。
+#: p123 → p124（2026-10-15，**D 的技能增强**）：D 多两条技能（问题生命周期 / 溯源与 I2 闭环），
+#: 走查 **D 两行**、其余九格逐字相同。
+#: p122 → p123（2026-10-15，**B 的技能增强**）：B 多一条技能 `合并-I5结构重复的两路证据`
+#: （I5 那两个动作此前没有任何手册）。只有 B 那一格换值。
+#: p121 → p122（2026-10-15，**C 的技能增强**）：C 多一条技能 `溯源-三档下钻与孤立概念`
+#: （它自己的四个图/溯源工具与 `C.cold` 此前在任何手册里都没出现过）。只有 C 那一格换值。
+#: p120 → p121（2026-10-15，**引文图第 ④ 步**）：A 那条技能的 title/summary/when 换了
+#: （**正文改了不进提示词** —— 只有索引进，所以正文那一次没抬版本；这次动的是索引那三格）。
+#: 只有 A 那一格换值。
+#: p119 → p120（2026-10-15，**引文图第 ③ 步：动作面**）：`A.walk_citations` 进能力表 ⇒
+#: ① A 自己的段多一条动作；② **伙伴表里那一行**也跟着变 ⇒ 以 A 为伙伴的角色（D/F/G/H/M）
+#: **一起**换值。实测 **6 格换值、4 格不动**（B/C/E/V —— V 没有以 A 为伙伴）。
+_FROZEN_PROMPT_VERSION = "p156"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "7c7f07aeecc532e674b505a40ba7daf5f45b0019c7c4d5262a07f52b0a38842f",
-    "B": "17d58183aeda1debdb5dd76095303767ecabfb50af491b007e8f0c1e3aef8e03",
-    "C": "55315bd83d58bebc4d71753bc94aa1375bd9bf210edde0b0fe5334656208559d",
-    "D": "9d197682d8f96ddd897ab692bb28fb4b1e5db090e8e3b2ada3f805c6bf5996bc",
-    "E": "d19af4dad90adceff6f6b17885429a91afef0ca86adc69bd012b573c73895c8d",
-    "F": "2d38e03fe2b2751d59ca7045f55a3f830f0c4ac5524d678369d530ac31ade89a",
-    "G": "76062e403ce8d25e3b397354b65c9812e82571091b8711ae14a6f813cd72c042",
-    "H": "6b454f8dc89b81bbb42fc5963d40f701638c00fc090b2fb54db2fccb4b8a627a",
-    "M": "ffbc9a2499c3f301f1e24e91f5ca34c12234fa31c10b4a203e5e07ccbac113e0",
-    "V": "683f03881c942bd8fa35303fc88fabb9debb7ea439de1485e3428be21ced8479",
+    "A": "5756cb544e2fcb349f7f898fc819a176bb93284d9ae4bca7d215d390cc658e9a",
+    "B": "124cd85e1e4bf0c361cb29ce54892afebca758eefb14cb0ad3ea9ff9815811f3",
+    "C": "f4e0d6eb0641db4f135b1bb622eea75c0b343c667a5e7e6ef09e12c7fa248d94",
+    "D": "5443f6d77180bf8cd3edec98a0f33e3909dc4b11bf163c6a3d296f57db5d2896",
+    "E": "a3efeda58c58b95acd2e14364aee71ea5bd5921287b69542eca48163584cdb0d",
+    "F": "99fdbb7cffabb262d82447caa2887dfad6d4323a0200286c6117a304819eeca5",
+    "G": "23497a3085f84ecb889707af6aac192ca0d4d863626f65ca26a42851aa40808c",
+    "H": "8a6209daf07953a83c5c35645161d59ca01e18ffcc362c07734f013a00156fbb",
+    "M": "3334884671ec48970a059249883486055f771bde6e3b69e4987c3b6a944501aa",
+    "V": "fe25e37204679e1e3d32a107a98628d00ef1b1271e5eebed2336d3f221991fd3",
 }
 
 

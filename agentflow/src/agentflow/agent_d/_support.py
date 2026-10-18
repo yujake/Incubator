@@ -92,6 +92,8 @@ D 的核心不是"生成文本"，而是管理一个循环（§4.1）：
 没有任何报错的静默分裂 —— 那比崩溃更难发现。
 """
 from __future__ import annotations
+
+from collections.abc import Mapping
 import json
 import re
 from pathlib import Path
@@ -146,16 +148,37 @@ def _report_field(report: Any, name: str, default: Any = None) -> Any:
     if isinstance(report, Mapping):
         return report.get(name, default)
     return getattr(report, name, default)
+def _as_mapping(value: Any) -> dict:
+    """把"期望是对象"的自由形状值收成 dict（脏值 ⇒ `{}`，不抛）。
+
+    2026-10-17（agents #1/#2）：`dict(...)` 对 str/list-of-1 会抛 `ValueError`、
+    对 int 抛 `TypeError`；这些值来自别的角色的报告载荷，声明面管不到内层。
+    """
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
+
+
+def _as_list(value: Any) -> list:
+    """把"期望是数组"的自由形状值收成 list（脏值 ⇒ `[]`，不抛）。agents #3。"""
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
 def _as_report_dict(report: Any) -> dict:
     """把报告对象/字典规整成 dict（只取 D 用得到的字段）。"""
     return {
         "report_id": _report_field(report, "report_id"),
         "kind": _report_field(report, "kind", ""),
         "request": _report_field(report, "request", "") or "",
-        "params": dict(_report_field(report, "params", {}) or {}),
+        # 2026-10-17（子代理 agents #1）：`report` 的声明只有 `{"type":"object"}`，
+        # 所以内层可能是 list/str/int —— `dict("abc")` / `dict(["a"])` 都会抛。
+        # 脏值按"没有这一格"处理：**不崩，也不假装读到了**。
+        "params": _as_mapping(_report_field(report, "params", {})),
         "summary": _report_field(report, "summary", "") or "",
-        "payload": dict(_report_field(report, "payload", {}) or {}),
-        "warnings": list(_report_field(report, "warnings", []) or []),
+        "payload": _as_mapping(_report_field(report, "payload", {})),
+        "warnings": _as_list(_report_field(report, "warnings", [])),
         "truncated": bool(_report_field(report, "truncated", False)),
         "markdown_path": _report_field(report, "markdown_path"),
     }
@@ -827,8 +850,7 @@ def _json_object(text: str) -> dict[str, Any] | None:
     return obj if isinstance(obj, dict) else None
 
 
-def model_json_call(llm: Any, prompt: str, *, task_id: str = "", note: str = "",
-                    max_tokens: int | None = None
+def model_json_call(llm: Any, prompt: str, *, task_id: str = "", note: str = ""
                     ) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
     """要一份 JSON，并同时给出三态读数。返回 `(payload, text, reading)`。
 
@@ -857,7 +879,7 @@ def model_json_call(llm: Any, prompt: str, *, task_id: str = "", note: str = "",
         return None, "", reading
     if kind == KIND_SEAM:
         reading["model"] = str(getattr(llm, "model_name", "") or "")
-        data, call = llm.ask_json(prompt, task_id=task_id, note=note, max_tokens=max_tokens)
+        data, call = llm.ask_json(prompt, task_id=task_id, note=note)
         reading["calls"] = 1
         text = str(getattr(call, "text", "") or "")
         problem = str(getattr(call, "problem", "") or "")
