@@ -206,7 +206,7 @@ python -m pytest -q tests/test_release_check_items.py
 ⇒ 25 passed in 33.46s
 ```
 
-> 注：任务里写的 `tests/test_agent_v.py` 在本仓**不存在**；V 的判据实际住在
+> 注：任务里给的那个 V 的测试文件名在本仓**不存在**（不要照抄成路径）；V 的判据实际住在
 > `tests/test_verifier_role.py`（按"文件名不对就按实际存在的那几个跑"执行），
 > 另加 `tests/test_id_width.py` / `tests/test_agent_split_is_one_action_one_file.py`
 > 守着编号宽度与 `python -m` 契约。
