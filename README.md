@@ -1,10 +1,10 @@
-# agentflow
+# Incubator
 
-**agentflow is an autonomous multi-agent framework for mathematical research: a conductor plans, specialist agents retrieve, compute, formalize, write, and review, and every claim lands on a ledger you can re-derive.**
+**Incubator is a research project; its working system is `agentflow`, an autonomous multi-agent framework for mathematical research:** a conductor plans, specialist agents retrieve, compute, formalize, write, and review, and every claim lands on a ledger you can re-derive.**
 
-Its central capability is to turn one sentence of research intent into a traceable research record. Rather than letting a single model answer in one pass, agentflow assigns the work to fixed roles with disjoint authority — retrieval, statement registration, relation analysis, conjecture generation, experiments, attack steps, manuscripts, review, verification, and a conductor that dispatches — and makes each step land on an append-only ledger with evidence, cost, and an audit trail.
+`agentflow` (this repository's `agentflow/` package, run as `python -m agentflow.cli`) turns one sentence of research intent into a traceable research record. Rather than letting a single model answer in one pass, agentflow assigns the work to fixed roles with disjoint authority — retrieval, statement registration, relation analysis, conjecture generation, experiments, attack steps, manuscripts, review, verification, and a conductor that dispatches — and makes each step land on an append-only ledger with evidence, cost, and an audit trail.
 
-agentflow can also drive a single role as a chat-like loop, but its main strength is research mode: a persistent workspace where many roles work across many turns and sessions while keeping a record of what was claimed, what was checked, what was refused, and what it cost.
+It can also drive a single role as a chat-like loop, but its main strength is research mode: a persistent workspace where many roles work across many turns and sessions while keeping a record of what was claimed, what was checked, what was refused, and what it cost.
 
 ## Highlights
 
