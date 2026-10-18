@@ -1,17 +1,35 @@
-# agentflow 运行时依赖
-# 版本要求：Python >= 3.11（使用 `X | None` 内联类型语法与 dataclass slots 兼容写法）。
-# 说明：providers.py / fetch.py 本身只用标准库（urllib），以下为全项目共用依赖，
-# 均为本机实测已安装版本可满足的最低/实际版本，请勿引入未安装的包。
+# agentflow —— 运行时依赖
 #
-# 网络与校验
-requests>=2.31      # provider 备选 HTTP 客户端（当前实现用 urllib，保留以便后续切换）
-httpx>=0.27         # 异步/HTTP2 备选客户端
-jsonschema>=4.20    # data/*.json 快照写入前的 schema 校验（DESIGN.md §2.3）
+# 版本要求：Python >= 3.11（代码使用 `X | None` 内联类型语法与 dataclass 特性）。
+#
+# 设计取向：**标准库优先**。核心路径（检索编排 / 文本抽取 / 台账 / 证明检查器桥接 /
+# 角色循环）只用标准库；下面这些是"标准库做不了、或不该自己写"的那几件事：
+#
+#   * 跨进程文件锁 —— 多个角色并发写同一张表，必须靠一把真锁；
+#   * YAML 预设  —— 预设层沿用 DSH 的 `preset.yml` 格式（缩进即语义，自己实现最难查）；
+#   * PDF 文本层 —— PDF 是二进制容器，标准库读不出文字；
+#   * JSON Schema —— 数据面快照写入前按 schema 校验。
+#
+# 安装：python -m pip install -r requirements.txt
+# 再装包本身：python -m pip install -e .
 
-# 并发与文件锁
-filelock>=3.12      # data/.locks/<table>.lock 跨进程排他锁（DESIGN.md §2.2）
+# ---- 并发与文件锁（data/.locks/<table>.lock 的跨进程排他锁）
+filelock>=3.12
 
-# 文献解析（agent_b 的 extract.py 使用）
-PyPDF2>=3.0         # PDF 文本层提取（纯 Python 兜底）
-pdfminer.six>=20231228   # PDF 文本层提取（版面感知，扫描版无文本层时返回空）
-PyMuPDF>=1.24       # 导入名 fitz，PDF 逐页文本主通道（速度最快）
+# ---- 预设层（`preset.yml` / `agent.cordis.yml` 的解析）
+PyYAML>=6.0
+
+# ---- 数据面校验（data/*.json 快照写入前）
+jsonschema>=4.20
+
+# ---- PDF 文本层提取（正文 → 可回验文本；扫描版无文本层时如实返回空）
+PyMuPDF>=1.24            # 导入名 fitz；逐页文本主通道（最快）
+pdfminer.six>=20231228   # 版面感知兜底
+PyPDF2>=3.0              # 纯 Python 兜底（上游已 deprecated，仅最后一档）
+
+# ---- HTTP 备选客户端（当前实现走标准库 urllib；保留以便需要 TLS/重试策略时切换）
+requests>=2.31
+httpx>=0.27
+
+# ---- 测试（开发用；生产运行不需要）
+# pytest>=8.0
