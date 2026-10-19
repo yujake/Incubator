@@ -188,6 +188,62 @@ _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
 )
 
 
+def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any]) -> None:
+    """写入期闸（2026-10-19）：`evidence_kind="proof_review"` 的命题必须有 V 那一签。
+
+    ## 这一条在堵什么（活证据，2026-10-19 现算的读数）
+
+    `projects/mp1/data/statements.json` 里有 **10 条** `evidence_kind="proof_review"`，
+    它们的 `verification_id` / `reviewed_by` 全是 `null`、`bits` 是 `{}`；而盘上
+    `projects/mp1/verifications/` 有 10 个文件（各 1 行）—— 其中 **7 条**最近一签是
+    「成立」（且 `proof_sha256` 与现行 `proof_text` 相符），**3 条**（`000031` /
+    `000032` / `000036`）最近一签是「有毛病」（`unresolved_errors` 1/2/1）。
+    也就是说：这 3 条**自称"证明经逐行审阅"却没有任何「成立」那一签**，而写入时
+    没有任何东西核过它。`schema.EVIDENCE_KINDS` 上面那段定义逐字要求「`proof_text`
+    非空 ＋ V 的 `verifications` 里那一条签「成立」」，但 2026-10-19 之前**没有任何
+    代码强制**它（唯一的强制是 `disclaimer`，而那句话作者自己就能写）。
+
+    ## 为什么是拒收（而不是"降档 + 待办"）
+
+    `own_result` 缺 `proof_text` 那一档刻意**不拒**（P-06：拒收只挡住了"如实登记"，
+    见 `schema.Statement.validate` 的那段注释）—— 因为那一条的缺省读数是"猜想级"，
+    数据本身没有说谎。`proof_review` 不是这一类：它是**一句话**（"V 审过了"），
+    而这句话的真假只有 `verifications` 能回答。一条查不到凭据的 `proof_review`
+    在报告里会让一条猜想级命题以"审阅过的证明"出现在交付面上 —— 这正是那句
+    "测试全绿、上线即越权"的形态。所以这一档的选择是**当场拒收**（与
+    `experiment.evidence_kind=proof` 靠检查器输出背书同一档强度）。
+
+    判据本体在 `verifications.proof_review_gap`（一处口径：写入期、审计期、
+    收工门都读它），这里只把它的读数翻成一次拒收。
+    """
+    if table != "statements":
+        return
+    # 惰性 import：`verifications` 依赖 `schema` 与 `jsonlfile`，与 `store` 无环，
+    # 但只有真写 `statements` 时才需要它（`tx` 是热路径上最常走的一段）。
+    from . import verifications as VR
+
+    rows = doc.get("rows") if isinstance(doc, Mapping) else None
+    gaps = VR.proof_review_gaps(root, rows or [])
+    if not gaps:
+        return
+    first = gaps[0]
+    # 拒收消息要能让写的人**当场知道怎么改**（业主 2026-10-19：「拒收消息要能让人看懂」）：
+    # `first["why"]` 里已经逐字写着"最近一签是 `v-…`：verdict=…、unresolved_errors=…"、
+    # 或"`verifications/<号>.jsonl` 不在盘上"；这里再补上两条出口（重派 V 再签 / 降档）。
+    raise ValueError(
+        f"{VR.CODE_WRITE}：{len(gaps)} 条命题声称 evidence_kind='proof_review'，"
+        f"而 `verifications` 里查不到能签住它的那一条。"
+        f"第一条（stmt:{first.get('statement_id') or '?'}）：{first['why']}。"
+        "这一档的定义逐字是「`proof_text` 非空 ＋ V 的 `verifications` 里那一条签"
+        "『成立』」（`schema.EVIDENCE_KINDS`），写入期现在强制它。"
+        "两条出口：① **重派 V 再签**（`verify.verify_proof`，产物就是 "
+        "`verifications/<命题号>.jsonl` 的那一行），签完再写这一行；"
+        "② 这一行**如实降档**成 `heuristic` 或 `cross_check`（F 的 `_proof_outlet` "
+        "就是这么写的：V 没签过就只到 heuristic）。"
+        "整笔事务**一行都没写**（与其余校验失败同一处置）。"
+    )
+
+
 class Tx:
     """一次事务。通过 `tx.rows(t)` 拿行、`tx.mark_dirty(t)` 声明要写回。"""
 
@@ -1097,6 +1153,22 @@ class Store:
                 spec = S.TABLES[table]
                 doc = {"schema_version": S.SCHEMA_VERSION, "rows": t.rows(table)}
                 S.validate_table(table, doc)
+                # ---- 写入期闸：`evidence_kind="proof_review"` 必须有 V 那一签。
+                #
+                # 为什么落在**这一层**（`tx` 的提交块）而不是 `schema.Statement.validate`：
+                # 那条判据要读的是 `verifications/<命题号>.jsonl`（盘上的账本，不是表），
+                # 而 `Statement.validate` 是字段级、手上没有工作区根。`Store` 有 `self.root`
+                # ⇒ 只有这一层既拿得到根、又是**所有写者**的必经之路
+                # （`agent_b.register_statement` / F 的 `_proof_outlet` / 通用的
+                # `table.create`·`table.update` 全都落在这里）。
+                # 落在某一条动作里就只能管住那一条动作：`table.create(table="statements")`
+                # 一样能写 —— 而"绕开那一条动作"正是本仓已经踩过的形态。
+                #
+                # `rebuild` 刻意**不**走这里（它读事件重放历史，见下面的 `rebuild()`）：
+                # 存量里已有的假 `proof_review` 由审计期那一档点名
+                # （`verify._check_13` 的 `proof_review_without_verification`），
+                # 而不是让重建在历史数据上当场炸掉（那会把"读历史"变成"改历史"）。
+                _refuse_fake_proof_review(self.root, table, doc)
                 to_write.append((self.data / spec["file"], doc))
 
             wlock = self._writer_lock(timeout=timeout)

@@ -2027,7 +2027,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   ③ F 的 `write_set` 加了 `statements`（`proof` 的产物出口）—— 写集不进提示词正文，
 #:      但 `agent_surface_snapshot.json` 会跟着换一格。
 #:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
-PROMPT_VERSION = "p161"
+#: p161 → p162（2026-10-19，**堵「假 proof_review」+ 接 V 回路 + 「攻」只认真推进**那一批）：
+#:   ① M 的 policy 加一条明确路径：`attack.status`（派 `F.status` 拿回来的那份读数）的
+#:      `history_tail` 里看到某份计划的 `statement_id` ⇒ **同一轮**里派 `V.verify_proof`
+#:      去走查那一条，产物必须落 `verifications/<命题号>.jsonl`；并写清"不许让 F/B 自己
+#:      把等级写成 `proof_review`（写入期会当场拒收 `proof_review_without_evidence`）"；
+#:   ② M 的 policy 里「攻（攻坚推进）」那一环**只认 `plan_progress_rows`** ——
+#:      `attack_plan_rows` 降为**立项计数（informational）**（两处逐字：第⑥环那一句、
+#:      以及「猜想要交给 F 攻坚」那一句），与 `closing.RESEARCH_CHAIN_GROUPS` 同一口径。
+#:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
+#: p162 → p163（2026-10-19，**只改措辞、不改口径**：G 的「导言区是配方」那条去掉具体工作区路径）：
+#:   G 的 policy 原文写着「照 mp3 那一篇写（`projects/mp3/out/paper/main.tex`，业主看着最
+#:   舒服的一份）」。那个字面量把两条判据一起撞红了 —— `agent_skills._path_problems`
+#:   扫声明（`tests/test_agent_skills.py` 的三条）时，`projects/` 不在
+#:   `WORKSPACE_PATH_ROOTS`/`REPO_PATH_ROOTS` 里 ⇒ 它被读成"点了没人写的落点"，
+#:   而 `test_the_registered_roots_cover_the_paths_we_actually_name` 又要求"点名的落点
+#:   都在根表里" ⇒ 两条判据只能二选一地红。事实是：那只是"照这一份的样子写"的指路，
+#:   **不是**要谁往 `projects/` 下写东西。所以改成「照本仓 mp3 那一篇论文的导言区写
+#:   （六位编号、三层定理风格）」：推荐的配方（`ctexart` + 那九个 `\newtheorem`）一个字没删，
+#:   删掉的只是那个不该出现在提示词里的绝对落点；roots 表**不动**（把只读的参考位置
+#:   塞进写落点表，等于让判据以为那儿有人写东西 —— 那是改事实，不是更新判据）。
+#:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
+PROMPT_VERSION = "p163"
 
 
 

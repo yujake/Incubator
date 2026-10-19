@@ -316,6 +316,225 @@ def banned_markers_in(proof_text: str) -> list[str]:
     return [m for m in HARD_BAN_MARKERS if m in text]
 
 
+#: `proof_review` 这一档的**凭据判据码**（2026-10-19，堵「假 proof_review」）。
+#:
+#: 两个码各有落点，不许合成一个（一个是写入期拒收，一个是审计期点名 ——
+#: 同一句话在两个出口上的读者不同：写者要"改哪里"，审计要"存量有多少"）：
+#:
+#: - `CODE_WRITE`：写入期闸（`store.tx` 提交时）—— **当场拒收**，一行都不写；
+#: - `CODE_AUDIT`：审计期档（`verify._check_13`）—— **error 级点名**，存量照读。
+CODE_WRITE = "proof_review_without_evidence"
+CODE_AUDIT = "proof_review_without_verification"
+
+#: `proof_review` 这一档在 `statements.evidence_kind` 里的取值（口径见 `schema.EVIDENCE_KINDS`）。
+PROOF_REVIEW_KIND = "proof_review"
+
+
+def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]:
+    """一条 `evidence_kind="proof_review"` 的命题**有没有凭据** —— 纯读，不写任何东西。
+
+    判据逐字来自 `schema.EVIDENCE_KINDS` 上面那段定义（2026-10-19 之前它只是注释，
+    没有任何代码强制）：
+
+        `proof_review` —— **证明经逐行审阅**（`statements` 表的 `proof_text` 非空
+        ＋ V 的 `verifications` 里那一条签「成立」）。
+
+    三条都要成立（缺哪一条就报哪一条，`why` 里逐字说清）：
+
+    1. `proof_text` 非空 —— 没有被审的那份证明，"审过"无从谈起；
+    2. `verifications/<命题号>.jsonl` 里有一行，且**最后那一行**签得住第 3 位
+       （`signs_bit3`：`verdict="成立"` 且 `unresolved_errors == 0`）——
+       取最后一行而不是"任意一行"：台账是追加式的，后面若有一条「有毛病」，
+       那一版就已经不是"成立"了；
+    3. 那一行记的 `proof_sha256` 就是**现在这一版** `proof_text` 的 sha256 ——
+       台账记 sha 的唯一用途就是这个。不查它，"V 审过"就退化成"V 审过某个东西"，
+       而这句话没法被任何读数证伪（改完证明不再送审，签名照样成立）。
+
+    三态：读不到台账 / 台账有坏行 ⇒ `ok=False` 且 `checked=False`（那是**没查成**，
+    不是"通过"也不是"有毛病"）；两者在调用方那里都**不许**放行（写入期拒收、
+    审计期点名）——"查不到凭据"与"凭据不合格"对这条命题是同一件事。
+
+    返回 `{"ok", "checked", "why", "statement_id", "verification_id", "verdict",
+    "resolved_errors"…}` 的确切键：`{"ok", "checked", "why", "statement_id",
+    "verification_id", "verdict", "round", "unresolved_errors", "sha_matches",
+    "ledger", "rows", "problems"}`。
+    """
+    sid = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
+    out: dict[str, Any] = {
+        "ok": False, "checked": False, "why": "", "statement_id": sid,
+        "verification_id": "", "verdict": "", "round": None,
+        "sha_matches": None, "ledger": "", "rows": 0, "problems": [],
+    }
+    text = str(row.get("proof_text") or "")
+    if not text.strip():
+        out["checked"] = True
+        out["why"] = (f"命题 {sid or '（没有编号）'} 的 evidence_kind="
+                      f"{PROOF_REVIEW_KIND!r}，而 `proof_text` 是空的 ⇒ "
+                      "没有被审的那份证明，「逐行审阅过」这句话就没有对象。"
+                      "要么把证明过程写进 proof_text，要么把这一档降成 heuristic")
+        return out
+    if not S.is_valid_id(sid):
+        out["why"] = (f"命题号 {sid!r} 不是编号形态（{S.ID_DIGITS} 位，旧四位仍可读）⇒ "
+                      f"`verifications/` 里查不到它，凭据无从核起")
+        return out
+    path = verification_ledger_path(root, sid)
+    out["ledger"] = f"{VERIFICATIONS_DIR}/{sid}.jsonl"
+    if not path.is_file():
+        out["checked"] = True
+        out["why"] = (f"命题 {sid} 声称 evidence_kind={PROOF_REVIEW_KIND!r}，而 "
+                      f"`{out['ledger']}` 不在盘上 ⇒ **一次审校都没有**。"
+                      "这一档要求 V 的 `verifications` 里那一条签「成立」（且审的是现在"
+                      "这一版）—— 没有它，这一行就只是「自称被审过」。"
+                      f"两条出口：① 派 V 去 `verify_proof(stmt:{sid})`；"
+                      "② 把 evidence_kind 降成 heuristic")
+        return out
+    rows, problems = JF.read_jsonl(path)
+    out["rows"] = len(rows)
+    out["problems"] = list(problems)
+    if problems:
+        out["why"] = (f"`{out['ledger']}` 有读不出来的行（{problems[:3]}）⇒ "
+                      "凭据**没查成**（不是「查过、没问题」）")
+        return out
+    if not rows:
+        out["checked"] = True
+        out["why"] = (f"`{out['ledger']}` 是空文件 ⇒ 一次审校都没落过"
+                      "（「有这个文件」不等于「审过」）")
+        return out
+
+    def _key(r: Mapping[str, Any]) -> tuple[int, str]:
+        try:
+            return (int(r.get("round") or 0), str(r.get("verification_id") or ""))
+        except (TypeError, ValueError):
+            return (0, str(r.get("verification_id") or ""))
+
+    latest = dict(max(rows, key=_key))
+    out.update({
+        "checked": True,
+        "verification_id": str(latest.get("verification_id") or ""),
+        "verdict": str(latest.get("verdict") or ""),
+        "round": _key(latest)[0],
+        # 给拒收消息用（"最近一签是 verdict=X、unresolved_errors=N"）：**读数**，
+        # 不参与判据 —— 判据只看 `signs_bit3`（一处口径）。
+        "unresolved_errors": int(latest.get("unresolved_errors") or 0),
+    })
+    if not signs_bit3(latest):
+        out["why"] = (f"命题 {sid} 的 evidence_kind={PROOF_REVIEW_KIND!r}，而 "
+                      f"`{out['ledger']}` 里**最近一签**是 "
+                      f"{out['verification_id']}：verdict={out['verdict']!r}、"
+                      f"unresolved_errors={int(latest.get('unresolved_errors') or 0)}"
+                      f"（why：{str(latest.get('why') or '')[:120]}）⇒ "
+                      "**没有「成立」那一签**。这一档要的正是那一签"
+                      "（「成立」且没有未解决的 error）")
+        return out
+    want = proof_sha(text)
+    got = str(latest.get("proof_sha256") or "")
+    out["sha_matches"] = (got == want)
+    if got != want:
+        out["why"] = (f"命题 {sid} 的凭据 {out['verification_id']} 签的是**另一版**证明"
+                      f"（台账 sha256={got[:12]}…，现在这一版={want[:12]}…）⇒ "
+                      "审过的那份与现在这一份不是同一份，签名不覆盖现在这一版。"
+                      f"改过证明就要重新派 V 走一遍（`verify_proof(stmt:{sid})`）")
+        return out
+    out["ok"] = True
+    return out
+
+
+def proof_review_gaps(root: str | Path, rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """一组 `statements` 行里**凭据不够**的那些 `proof_review`（空列表 = 都够）。
+
+    只挑 `evidence_kind == "proof_review"` 的行去核（其它档不归这条判据管：
+    `proof` 由 `evidencebits.bit_evidence_gaps` 核，`cross_check`/`heuristic` 只需声明）。
+    """
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("evidence_kind") or "") != PROOF_REVIEW_KIND:
+            continue
+        gap = proof_review_gap(root, row)
+        if not gap["ok"]:
+            out.append(gap)
+    return out
+
+
+def unverified_statement_refs(root: str | Path,
+                              plans: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """攻坚计划的 `history` 里点名了哪些 `statement_id`、而 `verifications` 里没有对应行。
+
+    ## 为什么这一条落在「攻」那一格（2026-10-19，接 V 的回路的收工侧）
+
+    F 把那一轮的论证落成 `statements` 的一行之后，`statement_id` 会进
+    `attack_plans.history`（`agent_f/step.py` 的 P3-6 落点），**M 在 `attack.status`
+    里看得见它**。看得见不等于有人去审：真机里那一栏可以一直是"F 交了、没人签"，
+    而收工门那一格照样绿 —— 因为「攻」此前只问"计划推进了没有"，不问"交出来的那一条
+    后来有没有人看"。
+
+    这一条把两件事接上：**history 里有 `statement_id` ⇒ `verifications` 里必须有它的一行**
+    （`verify_proof` 的产物）。没有 ⇒ 调用方（`closing._check_acceptance`）把那一格记
+    `unknown`（不是 `pass`）—— "没签"与"签了"在读数上必须分得开。
+
+    三态：`checked=False` ⇒ 这一格没查成（读不到 `verifications/` 目录或坏行），
+    **不是**"一条都没缺"。`missing` 里逐条给出 `plan_id` / `round` / `statement_id` /
+    `why`（0 行 / 读不到 / 编号形态不对）。
+
+    `signed` 是"那一行签住了第 3 位"（`signs_bit3`）—— 它**不**决定这一条的红绿
+    （`有毛病` 也是一条"有对应行"），红绿由 `missing` 决定；这个读数留着是因为
+    "有行但没签"与"有行且签了"是给人看的两种不同状态。
+    """
+    refs: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for plan in plans:
+        if not isinstance(plan, Mapping):
+            continue
+        for entry in (plan.get("history") or []):
+            if not isinstance(entry, Mapping):
+                continue
+            sid = str(entry.get("statement_id") or "").strip()
+            if not sid:
+                continue
+            ref: dict[str, Any] = {
+                "plan_id": str(plan.get("plan_id") or ""),
+                "round": entry.get("round"),
+                "statement_id": sid, "rows": None, "signed": None, "why": "",
+            }
+            try:
+                path = verification_ledger_path(root, sid)
+            except VerificationError as exc:
+                ref["why"] = f"命题号 {sid!r} 不是编号形态（{exc}）⇒ 查不到它那一份台账"
+                refs.append(ref)
+                continue
+            if not path.is_file():
+                ref["rows"] = 0
+                ref["signed"] = False
+                ref["why"] = (f"`{VERIFICATIONS_DIR}/{sid}.jsonl` 不在盘上 ⇒ "
+                              "这一条命题**一次审校都没落过**")
+                refs.append(ref)
+                continue
+            rows, bad = JF.read_jsonl(path)
+            if bad:
+                problems.extend(f"{VERIFICATIONS_DIR}/{sid}.jsonl: {b}" for b in bad)
+                ref["why"] = f"`{VERIFICATIONS_DIR}/{sid}.jsonl` 有读不出来的行：{bad[:3]}"
+                refs.append(ref)
+                continue
+            ref["rows"] = len(rows)
+            ref["signed"] = any(signs_bit3(r) for r in rows)
+            if not rows:
+                ref["why"] = f"`{VERIFICATIONS_DIR}/{sid}.jsonl` 是空文件 ⇒ 一次审校都没落过"
+            refs.append(ref)
+    missing = [r for r in refs if not r.get("rows")]
+    return {
+        "checked": not problems,
+        "problems": problems,
+        "refs": refs,
+        "missing": missing,
+        "total": len(refs),
+        "note": ("plan 的 `history` 里有 `statement_id` ⇒ `verifications/<命题号>.jsonl` 里"
+                 "必须有它的一行（派 V 的 `verify.verify_proof` 就会落）。`missing` 非空 ⇒ "
+                 "「攻（攻坚推进）」那一格记 `unknown`（不是 `pass`）；`signed` 只是读数："
+                 "「有行但没签」由审计期那一档（`proof_review_without_verification`）点名"),
+    }
+
+
 def selftest() -> int:
     """最小自检：冷启动提示词只有对象、三态可判、签位条件、追加式编号。"""
     import tempfile

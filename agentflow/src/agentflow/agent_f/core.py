@@ -965,7 +965,9 @@ class _Core:
         （业主 2026-10-14 裁定）要求**阶段性中间成果落一处一条**，而 `step` 这一层
         此前只把产物写进 `history` 的一个字段 —— 盘上**一个字节都没有**
         （`product_detail` 只写不读：`step.py` 里那一行是全仓唯一出现点）。
-        写失败不许静默：返回 `{"ok": False, "why": …}`，由调用方写进 `detail`。
+        写失败不许静默：返回 `{"ok": False, "kind": "report_write_failed", "why": …}`，
+        由调用方写进 `detail`。`kind` 那一格是给 `tests/test_refusals.py` 的登记表用的
+        （那一族"手写 `ok=False`"必须逐条登记；这一处**不是拒绝**，见那张表里的理由）。
         """
         rel = self.report_path(plan)
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
@@ -978,7 +980,8 @@ class _Core:
                     fh.write(self._report_header(plan))
                 fh.write(line.rstrip() + "\n")
         except Exception as exc:  # noqa: BLE001 - 台账写不成不该让整轮崩掉，但必须如实说
-            return {"ok": False, "path": rel, "why": f"{type(exc).__name__}: {exc}"}
+            return {"ok": False, "kind": "report_write_failed",
+                    "path": rel, "why": f"{type(exc).__name__}: {exc}"}
         return {"ok": True, "path": rel, "why": ""}
 
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
@@ -1057,7 +1060,8 @@ class _Core:
                 row.validate()
                 tx.upsert("statements", row.to_dict(), note=f"f.step:proof:{sid}")
         except Exception as exc:  # noqa: BLE001 - 写不进 statements 要说出来，不许当成写过了
-            return {"ok": False, "statement_id": "", "reused": False,
+            return {"ok": False, "kind": "statement_write_failed", "statement_id": "",
+                    "reused": False,
                     "why": f"{type(exc).__name__}: {exc}", "cites": cites}
         return {"ok": True, "statement_id": stmt_id, "reused": False, "why": "",
                 "cites": cites}

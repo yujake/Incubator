@@ -221,7 +221,26 @@ LEG_CHECK_KINDS: dict[str, str] = {
                     "子目录（`agent_d.reports_subdir`，缺省 `reports`）—— 写者读配置，"
                     "读数就得读同一份配置（2026-10-04 T2 第 1 趟：报告真的写出来了，"
                     "而读数只看一个写死的目录 ⇒ 读到 0 条）",
-    "attack_plan_rows": "攻坚计划行数（`attack_plans`）—— F 的交付物：子目标进展与终止原因",
+    # ---- 立项计数（**informational**：这一档只报数，不判 pass/fail）
+    #
+    # 2026-10-19 改口径（根因在 `closing.py` 的 `RESEARCH_CHAIN_GROUPS`）：这一档此前与
+    # `plan_progress_rows` **同属**「攻（攻坚推进）」那一格的成员，于是验收表写一行
+    # `attack_plan_rows: min 1` 就能让那一格变绿 —— 只要**立过项**就算「攻」有推进，
+    # 而实测里"立了项、`history` 一步没长"的计划比比皆是（mp1 的 `000000`：1 轮
+    # `no_change`、`statement_id` 为 null）。「立项」与「推进」是两件事，把它们放进同一格
+    # 的成员表里，"哪一个读数是这一格的结论"就说不清了。
+    #
+    # 现在：这一档是**立项计数（informational）**——读数照样现算并写进 `rows`（人要看
+    # "立过几项"），但**非 `na` 行不参与** pass/fail，也不参与研究链覆盖面；「攻」那一格的
+    # 通过只由 `plan_progress_rows` 决定（`INFORMATIONAL_KINDS` / `_check_acceptance`）。
+    # 写成 `{"na": true, "note": "…"}` 仍然算「这一环被如实标注过」（D49 的第三态出口；
+    # 存量里调查型项目正是这么写"这一趟没有攻坚计划"的）。
+    "attack_plan_rows": "**立项计数（informational）**：`attack_plans` 里有几行 —— "
+                        "「立过项」的读数，**不判推进**。非 `na` 时它只报数："
+                        "`state=informational`、既不进 `unmet` 也不让「攻（攻坚推进）」"
+                        "那一格变绿（那一格的通过只由 `plan_progress_rows` 决定）。"
+                        "要声明「这一趟没有攻坚计划」就在这一行写 `na` + 理由"
+                        "（`na` ≠ 通过 ≠ 失败）",
     "c_analysis_runs": "关系分析真的跑过几次（`tasks` 里 role=C 且跑过的任务行）—— C 的产物"
                        "是返回值本身、不落台账，所以「这一趟用没用 C」只有任务行能回答；"
                        "0 表示一次都没用过（`draft/39` §6.41 的 D52：T5 第 1 趟用户点名"
@@ -312,6 +331,20 @@ LEG_CHECK_KINDS: dict[str, str] = {
 
 }
 
+#: **只报数、不判 pass/fail** 的受控档（informational）。
+#:
+#: 为什么需要这一档（2026-10-19，根因在 `RESEARCH_CHAIN_GROUPS` 的「攻」那一格）：
+#: `attack_plan_rows` 数的是**立过几项**（立项计数），而「攻（攻坚推进）」那一格问的是
+#: **推进了没有**。两者此前同列 ⇒ 验收表写 `attack_plan_rows: min 1` 就能那一格变绿，
+#: 而盘上的计划可以一步没动（`history` 全 `no_change`、`statement_id` 为 null）。
+#:
+#: 处置：把"立项"这一档从阈值判定里摘出来 —— 它照旧现算、照旧写进 `rows`
+#: （`state="informational"`，`got` 就是立项数，人要看的就是这个数），但它
+#: ① 不进 `unmet`（写多少都不判红）、② 不进 `computed_kinds`（关不掉任何自动分支）、
+#: ③ **不进研究链覆盖面**（只写它 ⇒ 那一环算「一行都没有」⇒ 整格红）。
+#: 第三条是关键：它让"只凭立过项过关"在结构上不可能，而不是靠阈值调大。
+INFORMATIONAL_KINDS: frozenset[str] = frozenset({"attack_plan_rows"})
+
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
 #:
 #: 为什么不能只看 `review_rounds`（`draft/37` §95 的真机读数）：T1 第 9 趟里
@@ -363,12 +396,23 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # （T5 第 1/2 趟：`tasks` 里 role=C 的行是 0，七格全绿）。把它做成覆盖面的一环之后，
     # 「用没用 C」与其它几环一样要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
     ("看（关系分析）", ("c_analysis_runs",)),
-    # 「攻（攻坚推进）」（`draft/39` §6.47 的 D59）：从原来的「交（文献进稿、计划推进）」
-    # 里分出来。动机是真机读数（T5 第 6 趟 `p8f`）：那一趟任务原文是"交付进展手稿与说明"，
-    # 而盘上 `documents` 0 行——一次稿子都没写；M 把 `plan_progress_rows`（F 的计划推进）
-    # 填进了"交"那一环，于是收工门七格全绿、`can_close=true`，而 M 自己在报告的
-    # "未决问题"第 5 条里逐字写着「`documents` 0 行：没有稿件」。
-    # 根因是那一环的成员里混进了与交付物无关的档：F 的推进是"攻"，不是"交"。
+    # 「攻（攻坚推进）」那一环（D59；2026-10-19 收窄成员）：从原来的
+    # 「交（文献进稿、计划推进）」里分出来。动机是真机读数（T5 第 6 趟 `p8f`）：那一趟
+    # 任务原文是"交付进展手稿与说明"，而盘上 `documents` 0 行——一次稿子都没写；M 把
+    # `plan_progress_rows`（F 的计划推进）填进了"交"那一环，于是收工门七格全绿、
+    # `can_close=true`，而 M 自己在报告的"未决问题"第 5 条里逐字写着「`documents` 0 行：
+    # 没有稿件」。根因是那一环的成员里混进了与交付物无关的档：F 的推进是"攻"，不是"交"。
+    #
+    # 2026-10-19 再收一次（同一族错，方向相反）：`attack_plan_rows`（**立项计数**）
+    # 此前与 `plan_progress_rows`（**真推进计数**）同列，于是「只凭立过项」就能让这一格
+    # pass（验收表写 `attack_plan_rows: min 1`）。现在这一格的**通过只由
+    # `plan_progress_rows` 决定**：
+    #   - `attack_plan_rows` 的**非 `na`** 行一律记 `informational`（只报数）⇒
+    #     它不进阈值判定、也不进研究链覆盖面 ⇒ 只写立项那一行等于这一环「一行都没有」⇒ 整格红；
+    #   - `attack_plan_rows` 的 **`na` 行**（`{"na": true, "note": "…为什么没有攻坚计划"}`）
+    #     仍按 D49 的第三态算「这一环被如实标注过」—— `na` 从来不是"通过"，它是
+    #     "这一档对这个项目不适用"的出口，换一档写（`plan_progress_rows: na`）也成立。
+    #     存量里 12 份调查型项目的表就是这种写法，这一档不许把它们读成"缺一行"。
     ("攻（攻坚推进）", ("attack_plan_rows", "plan_progress_rows")),
     # 「交（手稿落盘）」（D59）：这一环现在只认"盘上真的有一份交付物"的读数 ——
     # `document_rows`（documents 行数）或那些必须在稿件里才成立的档
@@ -1942,13 +1986,20 @@ def _acceptance_unknown(rep: ClosingReport, code: str, detail: str, *,
 #: - `unreadable` —— 这一行读不懂（不是对象 / 词表外 `kind` / `na` 无理由 /
 #:   `na` 非布尔 / `min`·`max` 非整数 / 台账读不到 / `id` 缺失或重复）；
 #: - `unknown` —— 这一行**算得出来、但按口径不许判 pass**（业主 2026-10-18：
-#:   `literature.unprocessed > 0` 时「请求闭环」那一行记 `unknown` 而不是 `pass`）。
+#:   `literature.unprocessed > 0` 时「请求闭环」那一行记 `unknown` 而不是 `pass`；
+#:   2026-10-19 起同一档也接「攻」那一格：计划 `history` 里有 `statement_id` 而
+#:   `verifications` 里没有对应的那一行）。
 #:   它与 `computed` 的区别是"读数有了、结论却判不了"：那一行照样带 `got` 与 `detail`，
 #:   但它不进 `rows_read`（"算过"≠"通过了"），整格也由它落 `unknown`。
+#: - `informational` —— 这一档**只报数、不判 pass/fail**（`INFORMATIONAL_KINDS`：
+#:   `attack_plan_rows` 的立项计数）。它带 `got` 与 `detail`（读数照给人看），
+#:   但不进 `unmet`、不进 `computed_kinds`、**不进研究链覆盖面** ——
+#:   所以"只写立项那一行"不会让「攻」那一格变绿（那一环算「一行都没有」）。
 #:
 #: 三态纪律：`unreadable` 既不是通过、也不进 `unmet`，整格由调用方落 `unknown`
 #: （绝不 `pass`）—— "没查成"不许读成"没问题"，同时不再因为一行坏就把好行的读数一起丢掉。
-ROW_STATES: tuple[str, ...] = ("computed", "na", "not_applicable", "unreadable", "unknown")
+ROW_STATES: tuple[str, ...] = ("computed", "na", "not_applicable", "unreadable", "unknown",
+                               "informational")
 
 
 def acceptance_row_state(row: Mapping[str, Any]) -> str:
@@ -2008,6 +2059,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
       `min`·`max` 非整数/台账读不到/id 缺失或重复）⇒ 该行 `unreadable`，
       其余行照常判；整格 = 有好行不达标 ⇒ `fail`，否则有任何 `unreadable` ⇒ `unknown`
       （绝不 `pass`）；
+    - `informational` 那些档（`INFORMATIONAL_KINDS`：`attack_plan_rows` 立项计数）⇒
+      照样现算读数，但**不参与**阈值判定，也不进研究链覆盖面；
     - 逐行都满足 ⇒ `pass`。
     """
     if not str(project_dir or "").strip():
@@ -2071,9 +2124,14 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     #: 整格由它们落 `unknown`（绝不 `pass`），而其余行的读数照常留下。
     unreadable_rows: list[dict[str, str]] = []
     #: 落在 `unknown`（业主 2026-10-18 口径）上的行：读数算得出来、但按口径不许判 pass。
-    #: 今天只有一条路子进这里 —— `literature.unprocessed > 0` 而「请求闭环」那一行
-    #: 已经算出 pass（且写清了 `unprocessed_reason`）。整格由它们落 `unknown`。
+    #: 两条路子进这里 —— ①`literature.unprocessed > 0` 而「请求闭环」那一行已经算出
+    #: pass（且写清了 `unprocessed_reason`）；②`attack_plans` 的 `history` 里有
+    #: `statement_id`、而 `verifications` 里没有对应的那一行（2026-10-19，假 proof_review
+    #: 那一批）。整格由它们落 `unknown`。
     unknown_rows: list[dict[str, Any]] = []
+    #: 落在 `informational`（`INFORMATIONAL_KINDS`）上的行：只报数、不判 pass/fail。
+    #: 今天只有一档 —— `attack_plan_rows`（立项计数）。
+    informational_rows: list[dict[str, Any]] = []
     #: `literature.unprocessed` 的现算读数（三态：整数 / `None` = 读不到 + 理由）。
     #: 惰性算一次，行循环里那一格用；算不出来时**不许**读成"没有未消化"（那正是
     #: 这一条要防的形态：`mp2` 记 32 而被当成 pass）。
@@ -2091,6 +2149,27 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 _unprocessed_cache.update(
                     {"count": None, "reason": f"{type(exc).__name__}: {exc}"})
         return _unprocessed_cache
+
+    #: 攻坚计划 `history` 里的 `statement_id` 有没有对应的 `verifications` 行（2026-10-19）。
+    #:
+    #: 惰性算一次（只有真出现 `plan_progress_rows` 那一行时才需要它）—— 判据本体在
+    #: `verifications.unverified_statement_refs`（与写入期闸、审计期档读同一处"什么叫一签"）。
+    #: 三态：`checked=False` ⇒ 这一格**没查成**（读不到 `attack_plans` 或账本坏行），
+    #: 那时最多记 `unknown`，**绝不**记 `pass`。
+    _vref_cache: dict[str, Any] = {}
+
+    def _proof_review_backlog() -> dict[str, Any]:
+        if not _vref_cache:
+            try:
+                from . import verifications as VR
+
+                _vref_cache.update(VR.unverified_statement_refs(
+                    Path(resolve_under_workspace(store, project_dir)),
+                    list(store.rows("attack_plans"))))
+            except Exception as exc:  # noqa: BLE001 —— 读不到 ⇒ 没查成（不是"一条都不缺"）
+                _vref_cache.update({"checked": False, "missing": [], "refs": [], "total": 0,
+                                    "problems": [], "why": f"{type(exc).__name__}: {exc}"})
+        return _vref_cache
 
     def _mark_unreadable(idx: int, raw: Any, code: str, why: str) -> None:
         """把第 `idx` 行记成 `unreadable`（并留一条 warning）。"""
@@ -2191,6 +2270,30 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                              f"而「缺只读基线 `source/`」不是这一档 —— 那是 "
                              f"`not_applicable`（CC-05）")
             continue
+        # ---- informational（2026-10-19）：只报数、不判 pass/fail。
+        #
+        # 为什么这一支必须在阈值判定**之前**：`attack_plan_rows` 数的是**立项数**，
+        # 而「攻（攻坚推进）」那一格问的是**推进了没有**。让立项那一行照样按阈值判，
+        # 写 `min: 1` 就能让整格 pass（这正是要堵的那条路：立过项、零推进）。
+        # 所以它只留读数（`got` = 立项数，人要看的就是这个数），
+        # ① 不进 `unmet`、② 不进 `computed_kinds`、③ 不进研究链覆盖面
+        # （第三条是结构性守卫：只写立项那一行 ⇒ 「攻」那一环算「一行都没有」⇒ 整格红）。
+        if kind in INFORMATIONAL_KINDS:
+            detail = dict(detail) if isinstance(detail, Mapping) else {}
+            detail.update({
+                "informational": True,
+                "declared_min_ignored": int(row.get("min") or 0),
+                "note": (f"这一档是**立项计数**（informational）：读数 "
+                         f"{got} 条只报给你看，**不判推进**、也不参与研究链覆盖面。"
+                         "它既不会让「攻（攻坚推进）」那一格变绿，也不会让它变红 ——"
+                         "那一格只由 `plan_progress_rows`（至少有一轮真推进的计划数）决定。"
+                         "要声明「这一趟没有攻坚计划」就在这一行写 `na` + 理由"),
+            })
+            out.append({"id": cid, "name": name, "kind": kind, "min": None, "max": None,
+                        "got": got, "ok": None, "state": "informational",
+                        "informational": True, "detail": detail})
+            informational_rows.append({"id": cid, "kind": kind, "got": got})
+            continue
         # ---- E-05 ①：阈值取大（`min` 从此只能把阈值提高）。
         #
         # 旧口径是"显式优先"：表里写 `min: 1` 而这一档自己算出来是 3 时，
@@ -2262,6 +2365,50 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                                          "reason": why, "unprocessed_reason": reason})
                     rep.findings.append(Finding("acceptance", "acceptance_unprocessed_carried",
                                                 "warning", f"验收行 {cid}：{why}"))
+        # ---- 接 V 的回路的收工侧（2026-10-19）：计划 `history` 里的 `statement_id`
+        # 必须在 `verifications` 里有一行，否则「攻」这一行记 `unknown`（不是 `pass`）。
+        #
+        # 为什么必须在这里说，而不是只靠 M 的提示词：`F.step` 把论证落成 `statements`
+        # 的一行之后，`statement_id` 进了 `attack_plans.history`（P3-6），而"后来有没有
+        # 人审它"在收工门上没有任何读数 —— 于是"F 交了、没人签"与"F 交了、V 签了"
+        # 在这一格里长得一模一样。`unknown` 是刻意的：这不是 fail（那一轮推进是真的），
+        # 但它**绝不能**读成 pass（那会把"没人签"说成"审过了"）。
+        if kind == "plan_progress_rows" and ok_row:
+            b = _proof_review_backlog()
+            if isinstance(detail, dict):
+                detail["verifications_backlog"] = {
+                    "checked": b.get("checked"),
+                    "total": b.get("total", 0),
+                    "missing": [m.get("statement_id") for m in (b.get("missing") or [])][:8],
+                }
+            if not b.get("checked"):
+                why = (f"攻坚计划的 `statement_id` 有没有人签 —— 这一格**没查成**"
+                       f"（{b.get('why') or '；'.join(b.get('problems') or [])[:200]}）⇒ "
+                       f"这一行记 `unknown`，不记 `pass`"
+                       "（「读不到」不是「一条都不缺」）")
+                row_out.update({"state": "unknown", "ok": False, "unknown": True, "reason": why})
+                unknown_rows.append({"id": cid, "kind": kind,
+                                     "unverified_statements": None, "reason": why})
+                rep.findings.append(Finding("acceptance", "acceptance_verifications_unreadable",
+                                            "warning", f"验收行 {cid}：{why}"))
+            elif b.get("missing"):
+                names = "、".join(
+                    f"plan {m.get('plan_id')} 第 {m.get('round')} 轮 ⇒ stmt:{m.get('statement_id')}"
+                    for m in (b.get("missing") or [])[:6])
+                why = (f"攻坚计划的 `history` 里点名了 {len(b['missing'])} 条命题"
+                       f"（{names}），而 `verifications` 里**没有它们对应的行** ⇒ "
+                       f"这一行记 `unknown`、不记 `pass`。"
+                       "「攻」问的是「这一跳真的往前走了吗」：F 交了论证"
+                       "（`statement_id` 有了）而没有人签，等于那一条还停在「自称被审过」。"
+                       f"处置：派 V 走查那几条（`V.verify_proof`，产物就是 "
+                       f"`verifications/<命题号>.jsonl` 的那一行），回来再收工")
+                row_out.update({"state": "unknown", "ok": False, "unknown": True, "reason": why})
+                unknown_rows.append({"id": cid, "kind": kind,
+                                     "unverified_statements":
+                                         [m.get("statement_id") for m in b["missing"]],
+                                     "reason": why})
+                rep.findings.append(Finding("acceptance", "acceptance_unverified_statements",
+                                            "warning", f"验收行 {cid}：{why}"))
         if not ok_row:
             if got < want_min:
                 why = f"{got} 条，要求 ≥ {want_min} 条"
@@ -2315,6 +2462,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         # 业主 2026-10-18：按口径判不了 pass 的行（`literature.unprocessed > 0` 那一档）
         "rows_unknown": len(unknown_rows),
         "unknown_rows": list(unknown_rows),
+        # 2026-10-19：只报数、不判 pass/fail 的行（`attack_plan_rows` 的立项计数）。
+        # 它的 `got` 就是立项数 —— 读数照给人看，但研究链覆盖面与阈值判定都不读它。
+        "rows_informational": len(informational_rows),
+        "informational_rows": list(informational_rows),
         "literature_unprocessed": _unprocessed_cache,
         "duplicate_ids": list(duplicate_ids),
         # E-04a/E-04b 的读数：哪几个"自动分支档"只被 `na` 行顶着
@@ -2322,27 +2473,33 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         "na_only_branch_kinds": na_only_branch_kinds,
         "note": ("`reading_version` 变了 ⇒ 与历史读数**不可直接比**（口径变了）。"
                  "`rows_read` 只数真的按台账现算过的行（`state == computed`）；"
-                 "`na` / `not_applicable` / `unreadable` / `unknown` 四种都不是「算过」："
+                 "`na` / `not_applicable` / `unreadable` / `unknown` / `informational` "
+                 "五种都不是「算过」："
                  "`na` 是写表的人对**这一行**的判断，`not_applicable` 是缺只读基线，"
                  "`unreadable` 是这一行读不懂（有它 ⇒ 整格 `unknown`，**绝不 `pass`**），"
                  "`unknown` 是「读数有了、按口径却判不了 pass」（`literature.unprocessed > 0` "
-                 "那一档；有它整格也记 `unknown`）。"
+                 "那一档；有它整格也记 `unknown`），"
+                 "`informational` 是「只报数、不判」（`attack_plan_rows` 的立项计数："
+                 "它不进阈值判定、也不进研究链覆盖面 ⇒ 只写立项那一行不会让「攻」变绿）。"
                  "`na` 不再能关掉门的自动分支（E-04a）"),
     }
-    if out and len(na_rows) == len(out):
+    if out and len(na_rows) + len(informational_rows) == len(out):
         rep.status["acceptance"] = "fail"
         rep.findings.append(Finding(
             "acceptance", "acceptance_all_na", "blocker",
-            "验收表里**每一行都标了 `na`** ⇒ 这一趟没有任何可复算的口径。"
-            "`na` 是给「这一档对这个项目天然不适用」用的，不是给「这一趟什么都没做」用的 —— "
+            "验收表里**每一行都标了 `na`**（或只有 `informational` 的立项计数行）⇒ "
+            "这一趟没有任何可复算的口径。"
+            "`na` 是给「这一档对这个项目天然不适用」用的，不是给「这一趟什么都没做」用的；"
+            "`attack_plan_rows` 只报立项数、不判推进 —— 它一个读数撑不起一张验收表。"
             "至少要有几行是真的按台账现算的"))
         return
     # ---- 覆盖面（`draft/37` §137）：研究型项目的验收表要覆盖研究链四个环节。
     # 「0 也是读数」：所以缺的是那一行，不是那个数（写 0 与删掉一行都会红，
     # 但前者留下读数、后者留下一个空环节 —— 两者分开报）。
-    # 参与覆盖面的行 = 除 `unreadable` 以外的所有行（读不懂的行连 `kind` 都不可信）。
+    # 参与覆盖面的行 = 除 `unreadable`（连 `kind` 都不可信）与 `informational`
+    # （只报数、不判：2026-10-19，「攻」那一格只认 `plan_progress_rows`）以外的所有行。
     coverage_kinds = [str(r.get("kind") or "") for r in out
-                      if acceptance_row_state(r) != "unreadable"]
+                      if acceptance_row_state(r) not in ("unreadable", "informational")]
     try:
         chain = research_chain_gaps(store, coverage_kinds,
                                     na_kinds=sorted(na_kinds_in_table))
@@ -2558,7 +2715,13 @@ ATTACHMENT_FIELDS: tuple[str, ...] = ("origin=own_result", "依据", "sha")
 #:   ⑤只读基线有 `\bibitem` 而台账里一条 `quote_verified=True` 都没有 ⇒ 门报（T1 口径）；
 #:   ⑥有论文主稿时：`\bibitem` < 2、或本轮 `stmt:`/`exp:`/`rel:` 引用只出现在
 #:   核查章节里 ⇒ 门报（T3 口径）。读数新增 `readings["acceptance"]["content_branches"]`。
-ACCEPTANCE_READING_VERSION = "2026-10-18-C4"
+#: - `"2026-10-19-C5"`（业主 2026-10-19：「只凭立过项」不许让「攻」变绿）：
+#:   `attack_plan_rows` 从「攻（攻坚推进）」那一格的成员降为**立项计数（informational）**
+#:   （`INFORMATIONAL_KINDS`）—— 读数照出（`rows_informational` / 那一行的 `got` 就是
+#:   立项数），但不参与阈值判定、不进 `computed_kinds`、**不进研究链覆盖面**；
+#:   那一格的通过只由 `plan_progress_rows` 决定 ⇒ 只写立项那一行 ⇒
+#:   「攻」那一环算「一行都没有」⇒ 整格 `fail`。行状态词表新增 `informational`。
+ACCEPTANCE_READING_VERSION = "2026-10-19-C5"
 
 
 class LegNotApplicable(Exception):
@@ -3552,6 +3715,10 @@ def _alternatives_note(store: Any, kind: str, project_root: Path) -> str:
         alts: list[str] = []
         for m in members:
             if m == kind:
+                continue
+            # informational 的档**不是出路**（2026-10-19）：`attack_plan_rows` 只报立项数，
+            # 把它当成"同一环换一档就达标"来提，等于把刚堵上的那条路又指给人走。
+            if m in INFORMATIONAL_KINDS:
                 continue
             try:
                 got, detail = _leg_reading(store, m, project_root)

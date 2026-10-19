@@ -1075,6 +1075,22 @@ EXPERIMENT_METHODS = ("numeric", "symbolic", "exhaustive_search", "formal")
 #:                   「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，
 #:                   但也要能写」）—— 用词上限（「定理/证明」）在 Lean 关掉时从 `proof`
 #:                   换成它；Lean 开着时它仍然低于 `proof`（老套路一个字不变）。
+#:
+#:                   **这一档的凭据由谁强制**（2026-10-19 补：在此之前上面那句话
+#:                   只是一句注释，没有任何代码核过它 —— `projects/mp1` 因此留下 10 条
+#:                   `evidence_kind="proof_review"` 而 `verification_id`/`reviewed_by`
+#:                   全空、`bits={}` 的行）：
+#:                     - 判据本体：`verifications.proof_review_gap`
+#:                       （`proof_text` 非空 ＋ 最后那一签是「成立」且 `proof_sha256`
+#:                       等于现在这一版）；
+#:                     - 写入期：`store.tx` 提交时 `_refuse_fake_proof_review` **当场拒收**
+#:                       （错误码 `proof_review_without_evidence`；落在 store 层而不是
+#:                       这里，因为这一档要读盘上的 `verifications/`，而
+#:                       `Statement.validate` 是字段级、手上没有工作区根，且它被
+#:                       `rebuild` 重放与 `verify` 读侧共用 —— 把这条判据塞进去会让
+#:                       "读历史"变成"改历史"）；
+#:                     - 审计期：`verify._check_13` 报
+#:                       `proof_review_without_verification`（**error** 级，逐条点名存量）。
 #:   cross_check  —— 数值/穷举的交叉验证。它不是证明，且在任何报告里都必须
 #:                   自动附加"不构成证明"的字样。
 #:   heuristic    —— 启发式观察（例如"看起来像"），证据力最弱。

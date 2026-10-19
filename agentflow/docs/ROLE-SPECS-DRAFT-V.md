@@ -71,7 +71,11 @@
 
 ### V.8 不变式
 
-1. 台账只追加、编号由脚本发（`v-0001…`）；文件是 `verifications/<命题号>.jsonl`（六位编号）；
+1. 台账只追加、编号由脚本发（`v-{S.format_id(1)}` ⇒ 六位，如 `v-000001`；发号点是
+   `verifications.next_verification_id` 的 `f"v-{S.format_id(len(rows) + 1)}"`，
+   宽度只有 `schema.ID_DIGITS` 一处可改）；文件是 `verifications/<命题号>.jsonl`（六位编号）。
+   **2026-10-18：编号规格是六位，四位号仅读侧兼容** —— 盘上已有的 `v-0001` 这类旧四位号
+   照样读得进来（`schema.is_valid_id` 两种形态都认），但**新写的号一律六位**；
 2. 第 3 位只在 `成立` 且无 error 时被签；
 3. 冷启动：提示词里没有 F 的叙述、没有 store 句柄（由函数签名保证）；
 4. **V 不写任何表**：`capabilities.WRITE_SETS["V"] == frozenset()`，`schema.TABLES` 17 张不变；

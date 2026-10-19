@@ -581,6 +581,14 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
     从零做一轮研究要看的四件事各有落点：立起问题（`research_questions`）、
     检索取回（`search_requests`）、算一遍（`experiments` 的 numeric 行）、
     分析报告与攻坚计划（D 与 F 的交付物）。四档要是混着数，一门绿就会掩盖另一门空。
+
+    2026-10-19 改口径（根因在 `closing.RESEARCH_CHAIN_GROUPS` 的「攻」那一格）：
+    `attack_plan_rows` 从"那一格的成员"降为**立项计数（informational）** ——
+    它照旧数 `attack_plans` 的行数（读数 `got=1`），但 `ok` 是 `None`：
+    立过项不判推进，也不再让「攻（攻坚推进）」那一环算覆盖（那一环只认
+    `plan_progress_rows`）。改前这一行断言的是 `(1, True)` —— 那正是"只凭立过项
+    就能让「攻」变绿"的读数，事实变了，断言跟着变（不是放宽：见下面那条
+    `test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell`）。
     """
     st, report = _good(tmp_path)
     fake = {
@@ -597,16 +605,22 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
     _acceptance_checks(tmp_path, [
         {"id": "R1", "name": "立起研究问题", "kind": "research_question_rows", "min": 1},
         {"id": "R5", "name": "分析报告", "kind": "analysis_report_rows", "min": 1},
-        {"id": "R6", "name": "攻坚计划", "kind": "attack_plan_rows", "min": 1},
+        {"id": "R6", "name": "攻坚计划（立项数）", "kind": "attack_plan_rows", "min": 1},
         {"id": "R3", "name": "数值实验", "kind": "numeric_experiment_rows", "min": 1},
     ], st=st)
     rep = _gate(st, report)
     rows_read = rep.readings["acceptance"]["rows"]
     got = {r["id"]: (r["got"], r["ok"]) for r in rows_read}
-    assert got["R1"] == (1, True) and got["R5"] == (1, True) and got["R6"] == (1, True), got
+    assert got["R1"] == (1, True) and got["R5"] == (1, True), got
+    # 立项计数照样数得出来（读数照给人看），但它**不判**（`ok=None`）。
+    assert got["R6"] == (1, None), got
+    assert {r["id"]: r["state"] for r in rows_read}["R6"] == "informational", rows_read
     # 夹具里的那条 T3 实验是 formal ⇒ numeric 那一档必须是 0（各数各的表）
     assert got["R3"] == (0, False), got
     assert rep.status["acceptance"] == "fail", rep.to_dict()
+    # 「攻」那一环没有被这一行覆盖（informational 不进覆盖面）—— 这是整格红的一部分。
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert any("攻（攻坚推进）" in m for m in chain["missing"]), chain
 
 
 def test_supported_claims_needs_an_experiment_that_actually_supports(tmp_path: pathlib.Path):
@@ -2234,6 +2248,99 @@ def test_a_stage_cannot_be_covered_by_a_reading_about_something_else(
     assert "交（手稿落盘）" in detail, detail
 
 
+# ==================================================== 「攻」只认真推进（2026-10-19）
+def test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell(
+        tmp_path: pathlib.Path):
+    """负控（2026-10-19）：**「立过项」不许让「攻（攻坚推进）」那一格变绿**。
+
+    ## 改前的缺陷（根因在 `closing.RESEARCH_CHAIN_GROUPS`）
+
+    `attack_plan_rows`（立项计数）与 `plan_progress_rows`（真推进计数）此前**同属**
+    「攻」那一格的成员 ⇒ 验收表写一行 `attack_plan_rows: min 1` 就够了：
+    只要**立过项**，那一格就 pass —— 而盘上的计划可以一步没动（`history` 空 /
+    全 `no_change`；真机 `projects/mp1` 的 `000000` 就是 1 轮 `no_change`）。
+
+    ## 现在
+
+    ① `attack_plan_rows` 是 **informational**：读数照出（`got` = 立项数），
+       `ok=None`、`state="informational"`，**不进研究链覆盖面**；
+    ② 「攻」那一环只认 `plan_progress_rows` ⇒ 只写立项那一行 ⇒ 那一环算
+       「一行都没有」⇒ 整格 `fail`（不是 `unknown`，也不是 `pass`）；
+    ③ 两侧都测：同一张表把那一行换成 `plan_progress_rows`（底座里那份计划真的推进过
+       一轮）⇒ `pass` —— 判据不是"恒红"。
+    """
+    from agentflow import closing as CL
+
+    st, report, root = _research_ready(tmp_path)
+    # 0) 底座本来是通过的（这一条是"改一行就红"的负控，不是"什么都过不了"）
+    base = _gate(st, report)
+    assert base.status["acceptance"] == "pass", _acc_detail(base)
+
+    # 1) 把「攻」那一行换成**立项计数**（改前那一条绕过法）⇒ 那一格不再能 pass
+    cover = [dict(r) for r in _RESEARCH_COVER]
+    for r in cover:
+        if r["id"] == "R6":
+            r.update({"kind": "attack_plan_rows", "min": 1,
+                      "name": "攻（攻坚推进）· 立项数"})
+    _acceptance_checks(root, cover, st=st)
+    bad = _gate(st, report)
+    assert bad.status["acceptance"] == "fail", bad.to_dict()
+    chain = bad.readings["acceptance"]["research_chain"]
+    assert any("攻（攻坚推进）" in m for m in chain["missing"]), chain
+    r6 = _acc_row(bad, "R6")
+    # 立项数照样读得出来（1 份计划），但它**不判** —— 这正是"读数留下、结论不给"。
+    assert r6["got"] == 1 and r6["ok"] is None and r6["state"] == "informational", r6
+    assert "informational" in CL.ROW_STATES
+    # 读数里也如实列出这一档
+    assert bad.readings["acceptance"]["rows_informational"] == 1, \
+        bad.readings["acceptance"]["informational_rows"]
+
+    # 2) 换回「真推进」那一档 ⇒ 才 pass（同一份工作区、同一份计划）
+    _acceptance_checks(root, [dict(r) for r in _RESEARCH_COVER], st=st)
+    good = _gate(st, report)
+    assert good.status["acceptance"] == "pass", _acc_detail(good)
+    assert _acc_row(good, "R6")["got"] == 1, _acc_row(good, "R6")
+
+
+def test_saying_na_on_the_plan_count_still_marks_the_attack_stage(
+        tmp_path: pathlib.Path):
+    """兼容面（2026-10-19）：`attack_plan_rows` 写成 **`na` + 理由** 仍算「这一环标注过」。
+
+    为什么不许把它一并读成"缺一行"：存量里有 12 份调查型项目的表就是这么写的
+    （`{"kind": "attack_plan_rows", "na": true, "note": "调查型任务无攻坚计划，F 未派"}`）——
+    D49 的第三态出口对任何档都成立，`na` ≠ 通过 ≠ 失败。这一档降为 informational
+    只针对**非 `na` 的行**（那种行"立过项就算覆盖"才是要堵的洞）。
+
+    两侧：
+    - `na: true` + 理由 ⇒ 「攻」那一环被如实标注（`missing` 里没有它），整格 `pass`；
+    - 同一行去掉 `na`（只留 `min: 1`）⇒ informational ⇒ 「攻」那一环算「一行都没有」⇒ `fail`。
+    """
+    st, report, root = _research_ready(tmp_path)
+
+    na_cover = [dict(r) for r in _RESEARCH_COVER]
+    for r in na_cover:
+        if r["id"] == "R6":
+            r.update({"kind": "attack_plan_rows", "min": 0, "na": True,
+                      "note": "这一趟没有攻坚计划（调查型任务）"})
+    _acceptance_checks(root, na_cover, st=st)
+    marked = _gate(st, report)
+    assert marked.status["acceptance"] == "pass", _acc_detail(marked)
+    chain = marked.readings["acceptance"]["research_chain"]
+    assert not any("攻（攻坚推进）" in m for m in chain["missing"]), chain
+    assert chain["na_groups"]["攻（攻坚推进）"] == ["attack_plan_rows"], chain
+    assert _acc_row(marked, "R6")["state"] == "na", _acc_row(marked, "R6")
+
+    plain_cover = [dict(r) for r in _RESEARCH_COVER]
+    for r in plain_cover:
+        if r["id"] == "R6":
+            r.update({"kind": "attack_plan_rows", "min": 1, "name": "立项数"})
+    _acceptance_checks(root, plain_cover, st=st)
+    unmarked = _gate(st, report)
+    assert unmarked.status["acceptance"] == "fail", _acc_detail(unmarked)
+    chain2 = unmarked.readings["acceptance"]["research_chain"]
+    assert any("攻（攻坚推进）" in m for m in chain2["missing"]), chain2
+
+
 # ============================================================ 「闭（请求闭环）」那一档（D56）
 def test_the_unfinished_request_kind_counts_queued_but_undone_requests(
         tmp_path: pathlib.Path, monkeypatch):
@@ -2798,8 +2905,12 @@ _RESEARCH_COVER: list[dict] = [
      "note": "登记了一条可检验的猜想"},
     {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
      "note": "派过 C 的关系分析"},
-    {"id": "R6", "name": "攻（攻坚推进）", "kind": "attack_plan_rows", "min": 1,
-     "note": "立了一份攻坚计划"},
+    # 「攻（攻坚推进）」那一环（2026-10-19 收窄）：**只认 `plan_progress_rows`**（真推进）。
+    # 底座里那份计划因此必须真的推进过一轮（见 `seed` 的 `attack_plans` 注释）。
+    # 改前这一行写的是 `attack_plan_rows`（立项计数）—— 它现在只是 informational，
+    # 写它不会让这一环变绿（那一格只由 `plan_progress_rows` 决定）。
+    {"id": "R6", "name": "攻（攻坚推进）", "kind": "plan_progress_rows", "min": 1,
+     "note": "攻坚计划真的推进过一轮（有 cites 的 progress 轮）"},
     {"id": "R7", "name": "交（手稿落盘）", "kind": "document_rows", "min": 1,
      "note": "交付了一份稿件"},
     {"id": "R8", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
@@ -2845,12 +2956,26 @@ def _research_ready(root: pathlib.Path, *, cover: list[dict] | None = None,
                 "status": "proposed", "origin": "gap",
                 "created_at": TS, "created_by": "test"})
         with s.tx("attack_plans", actor="test") as tx:
+            # 「攻（攻坚推进）」那一环只认 `plan_progress_rows`（2026-10-19），
+            # 所以这份计划必须**真的推进过一轮**：一轮 `outcome=progress`、且那一轮的
+            # 产物里 `cites` 指到在册的 id（口径见 `closing._round_advanced`）。
+            # 写成"立过项、`history` 空"的形态 ⇒ 那一环读 0 ⇒ 整张表红。
             tx.upsert("attack_plans", {
                 "plan_id": "0000", "problem": "把界推到 n ≤ 20 需要新的构造",
                 "problem_key": "bound-n20", "status": "open",
                 "budget": {"max_rounds": 2, "max_parallel_subgoals": 2,
                            "max_persist_attempts": 2, "max_depth": 1},
-                "subgoals": [], "history": [], "created_at": TS, "created_by": "test"})
+                "subgoals": [], "created_at": TS, "created_by": "test",
+                "rounds": 1,
+                "history": [{
+                    "round": 1, "sid": "s1", "action": "step", "outcome": "progress",
+                    "at": TS, "detail": "把界从 n ≤ 12 推到 n ≤ 20（引用已有命题）",
+                    "evidence": [], "product": "proof",
+                    "statement_id": "",   # 没有具体命题 ⇒ 收工门不查 `verifications`
+                    "product_detail": {"product": "proof", "strategy": "reuse",
+                                       "steps": [{"n": 1, "text": "由已登记的引理直接得到",
+                                                  "cites": ["stmt:0000"]}]},
+                }]})
         # ---- ③ 看（关系分析）：C 跑过一次（`tasks` 里 role=C 且跑过的行）。
         # 这一行同时会让 D67 那条判据生效 ⇒ 底座默认把产物也送进交付面。
         with s.tx("tasks", actor="test") as tx:
@@ -3116,4 +3241,92 @@ def test_the_paper_must_carry_this_rounds_results(tmp_path: pathlib.Path):
     assert "参考文献只有" not in detail2 and "核查章节" not in detail2, detail2
     paper2 = green.readings["acceptance"]["content_branches"]["paper_leg"]
     assert paper2["bibitems"] == 2 and paper2["result_citations"] == ["exp:0001"], paper2
+
+
+# ============================== 接 V 的回路的收工侧（计划 history 里的 statement_id）
+def test_a_statement_named_by_a_plan_must_be_signed_before_the_attack_cell_passes(
+        tmp_path: pathlib.Path, monkeypatch):
+    """判据（2026-10-19，接 V 的回路的收工侧）：`history` 里的 `statement_id` 要有那一签。
+
+    ## 这一条补什么
+
+    `F.step` 把那一轮的论证落成 `statements` 的一行之后，`statement_id` 会进
+    `attack_plans.history`（`agent_f/step.py` 的 P3-6）——**M 在 `attack.status` 里看得见它**。
+    但"看得见"与"有人审过"是两件事：收工门此前只问"计划推进了没有"，不问"交出来的
+    那一条后来有没有人签"，于是「F 交了、没人签」与「F 交了、V 签了」在那一格里同形。
+
+    ## 判据
+
+    `plan_progress_rows` 那一行算出来是 `pass` 的前提下，若 `history` 里有 `statement_id`
+    而 `verifications/<命题号>.jsonl` **没有对应行** ⇒ 这一行记 **`unknown`**（不是 `pass`），
+    整格跟着 `unknown`。三态留在读数里：`checked=False`（读不到账本）也只是 `unknown`。
+
+    两侧 + 两个负控：
+    - 红：history 里点名 `stmt:0000` 而没有 `verifications/000000.jsonl` ⇒ `unknown`；
+    - 负控①（证明红的是这一条闸）：把闸本身拿掉（`unverified_statement_refs` 返回空）
+      ⇒ 同一份工作区回到 `pass`；
+    - 绿：按 M 的路子派 V 走查（`verifications.record_verification` 落那一行）⇒ `pass`；
+    - 负控②：V 的结论是「有毛病」也**算有对应行**（这一条只管"有没有人看"，
+      "看完了过没过"归审计期那一档 `proof_review_without_verification`）。
+    """
+    from agentflow import closing as CL
+    from agentflow import verifications as VR
+
+    st, report, ws = _research_ready(tmp_path)
+    base = _gate(st, report)
+    assert base.status["acceptance"] == "pass", _acc_detail(base)
+
+    # 把 `statement_id` 写进那份计划第 1 轮的 history（真机形态：F 交了论证）
+    plan = dict(st.rows("attack_plans")[0])
+    plan["history"] = [dict(h) for h in plan["history"]]
+    plan["history"][0]["statement_id"] = "0000"
+    with st.tx("attack_plans", actor="test", note="closing:statement_id") as tx:
+        tx.upsert("attack_plans", plan)
+    _seal(ws, st)
+
+    red = _gate(st, report)
+    assert red.status["acceptance"] == "unknown", red.to_dict()
+    r6 = _acc_row(red, "R6")
+    assert r6["state"] == "unknown" and r6["ok"] is False, r6
+    assert "verifications" in r6["reason"], r6["reason"]
+    backlog = r6["detail"]["verifications_backlog"]
+    assert backlog["missing"] == ["0000"], backlog
+    assert red.readings["acceptance"]["rows_unknown"] == 1, \
+        red.readings["acceptance"]["unknown_rows"]
+
+    # ---- 负控①：把这条闸拿掉 ⇒ 同一份工作区必须回到 pass（证明红的是这一条）
+    monkeypatch.setattr(VR, "unverified_statement_refs",
+                        lambda root, plans: {"checked": True, "problems": [], "refs": [],
+                                             "missing": [], "total": 0, "note": ""})
+    off = _gate(st, report)
+    assert off.status["acceptance"] == "pass", _acc_detail(off)
+    monkeypatch.undo()
+
+    # ---- 绿：派 V 走查那一趟该做的事（`verify_proof` 的产物就是这一行）
+    stmt = next(r for r in st.rows("statements") if str(r.get("stmt_id")) == "0000")
+    VR.record_verification(ws, statement_id="0000",
+                           proof_text=str(stmt.get("proof_text") or ""),
+                           verdict={"verdict": "成立"}, verifier="agent-V")
+    _seal(ws, st)
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", _acc_detail(green)
+    assert _acc_row(green, "R6")["detail"]["verifications_backlog"]["missing"] == [], \
+        _acc_row(green, "R6")["detail"]["verifications_backlog"]
+
+    # ---- 负控②：签的是「有毛病」也算"有对应行"（这一档只问有没有人看）
+    VR.record_verification(ws, statement_id="0000",
+                           proof_text=str(stmt.get("proof_text") or ""),
+                           verdict={"verdict": "有毛病", "defect_step": 1,
+                                    "why": "第 1 步没有依据"}, verifier="agent-V")
+    _seal(ws, st)
+    again = _gate(st, report)
+    assert again.status["acceptance"] == "pass", _acc_detail(again)
+    r6b = _acc_row(again, "R6")
+    assert r6b["state"] == "computed", r6b
+    # 但"有行 ≠ 签住了"这件事必须在审计期看得见（这一条只管有没有人看）
+    from agentflow import verify as VY
+
+    rep_v = VY.verify_all(st)
+    # 这条命题是 `heuristic` ⇒ 不归 `proof_review` 那条审计判据管（反真空）
+    assert [i for i in rep_v.issues if i.code == VR.CODE_AUDIT] == [], rep_v.issues
 

@@ -32,6 +32,9 @@ from . import interactions as IX
 from . import schema as S
 from . import signatures as SIG
 from . import textutil as T
+# 假 `proof_review` 那一格（2026-10-19）：判据本体在 `verifications`（写入期闸、
+# 收工门、审计期三处读同一处口径 —— 这里不抄第二份"什么叫一签"）。
+from . import verifications as VR
 from .agent_b import QUOTE_OUT_OF_DECLARED_RANGE as OUT_OF_DECLARED_RANGE
 from .agent_e import declared_name_of_notes
 from .formalgw import concluded_names
@@ -1730,6 +1733,15 @@ def _check_13(rep, store) -> None:
        是哪张表在维护，要做好映射（如果五元状态里说有证明，证明应该在 B 维护的表里
        可查）」）：判据本体是 `evidencebits.bit_evidence_gaps`（位 ⇒ 表的映射也住那里，
        本处只把它的读数翻成 `Issue`，不抄第二份口径）。
+    6. `evidence_kind="proof_review"` 的命题必须真有 V 那一签
+       （`proof_review_without_verification`，**error**）—— 这一条补的是"定义写了、
+       没人执行"的那个洞（见下）。
+
+       **本判据只按 `schema.EVIDENCE_KINDS` 那句定义判**：`statements.proof_text` 非空
+       ＋ `verifications` 里**最近那一签**是「成立」且它的 `proof_sha256` 等于现行
+       `proof_text`。**不要求**在命题行里回填 `verification_id`（存在更严的可选口径 B：
+       "要求 `statements.verification_id` 回填"——**本批未采用**，理由是它需要 V 签完之后
+       回写 `statements`，那是一道新的写路径与新的权限面；归人裁，不顺手加）。
     """
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
@@ -1814,6 +1826,44 @@ def _check_13(rep, store) -> None:
             usable += 1
     rep.checked["statements_usable"] = usable
     rep.checked["bit_ledger_gaps"] = bit_gaps
+    # ---- 假 `proof_review`（2026-10-19）：definition 早就写了，**没有任何代码核过它**。
+    #
+    # 活证据（`projects/mp1` 现算）：10 条 `evidence_kind="proof_review"` 的命题，
+    # `verification_id` / `reviewed_by` 全是 null、`bits` 是 `{}`；盘上 10 个
+    # `verifications/<命题号>.jsonl`（各 1 行）里 **7 条**签「成立」、**3 条**
+    # （`000031`/`000032`/`000036`）签「有毛病」—— 那 3 条就是这一格点名的那 3 条。
+    # `schema.EVIDENCE_KINDS` 上面那段定义逐字要求「`proof_text` 非空 ＋ V 的
+    # `verifications` 里那一条签「成立」」，2026-10-19 之前没有任何代码问过它。
+    #
+    # 为什么是 **error** 级（与同一段里 `proof_stmt_without_formal_backing` 的 warning
+    # 不同）：那一条说的是"来路可疑"（可能真跑过、只是没记），这一条说的是"这句话
+    # 本身没有对象"—— 一条查不到签的 `proof_review` 在交付面上会被读成
+    # "这一条已被逐行审阅"，而它连"谁审的"都指不出来。写入期现在当场拒收
+    # （`store._refuse_fake_proof_review`），这一格管的是**存量**（改前写进去的那些）。
+    #
+    # 判据本体在 `verifications.proof_review_gap`（写入期 / 收工门读同一处）。
+    #
+    # 为什么**不**往 `rep.checked` 里加一个计数键（`proof_review_unbacked`）：那张
+    # 冻结快照（`tests/golden/verify_all_snapshot.json`）逐键对拍 —— 加一个键就是
+    # 改一次口径读数，须由人重冻；本批按"判据立项、读数不改面"处置：够不够的证据是
+    # 逐条的 `error` Issue（下面这一档），"没查成"是 `proof_review_unchecked` 那条
+    # warning。这样审计的**强度**变了、`checked` 的**形状**没变（快照仍逐字可比）。
+    try:
+        gaps = VR.proof_review_gaps(getattr(store, "root", "."), statements)
+    except Exception as exc:  # noqa: BLE001 —— 读不到账本 = 这一格没查成（不是"一条都没有"）
+        rep.issues.append(Issue(
+            "warning", "statements", None, "proof_review_unchecked",
+            f"`verifications/` 这一格**没查成**（{type(exc).__name__}: {exc}）⇒ "
+            "「有多少条 proof_review 没有凭据」今天没有读数（不是「一条都没有」）",
+        ))
+    else:
+        for gap in gaps:
+            rep.issues.append(Issue(
+                "error", "statements", gap.get("statement_id") or None,
+                VR.CODE_AUDIT,
+                f"{gap['why']}（存量行：审计只能点名，改不了它 —— "
+                "要么补一次 V 的走查，要么把这一行的 evidence_kind 降成 heuristic）",
+            ))
 
 
 #: 报告面：工作区里 `reports/` 下那一层 markdown。D 的跨趟研究手稿（`reports/RESEARCH.md`）

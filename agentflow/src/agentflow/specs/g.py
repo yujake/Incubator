@@ -146,7 +146,15 @@ SPEC = AgentSpec(
             # 一份，但它不是唯一的活法（宏包与定理环境名按论文需要调整是正常的）；
             # 而"正文里混进中文"是可机械判的缺陷（判据见 `tests/test_paper_language_english.py`，
             # 它扫 `projects/*/out/paper/main.tex` 的全文并指到行号），所以只把这一条写成硬线。
-            "**导言区是配方，语言是硬线**（业主 2026-10-18 修正口径）：导言区**推荐**照 mp3 那一篇写（`projects/mp3/out/paper/main.tex`，业主看着最舒服的一份）—— `\\documentclass[11pt]{ctexart}`、`amsmath,amssymb,amsthm`、`geometry`（`margin=2.5cm`）、`booktabs`，三个 `\\theoremstyle` 段与九个 `\\newtheorem`（`theorem` / `lemma` / `proposition` / `corollary` / `conjecture` / `definition` / `example` / `openproblem` / `remark`），`\\title` 写你自己的题目、`\\author{G}`、`\\date{}`，本文专用记号接在后面（`\\newcommand` / `\\DeclareMathOperator`）。**这只是推荐**：宏包可以增删、定理环境可以改名、边距可以改，按论文需要调整，只要写出来读着顺。**硬线只有一条：语言必须是英文** —— 标题、摘要、正文、定理与证明、图表标题、参考文献一律英文，全文 CJK 字符数为 0，连 `%` 注释里也不留中文（要写中文解释就写进 `documents` 手稿或回报里，别写进论文）。",
+            # 2026-10-19（只改措辞，不改口径）：这一句原先带一个具体工作区路径
+            # `projects/mp3/out/paper/main.tex`。那个字面量把两条判据一起撞红了
+            # （`agent_skills._path_problems` 扫声明的 policy：`projects/` 不在
+            # `WORKSPACE_PATH_ROOTS`/`REPO_PATH_ROOTS` 里 ⇒ "点了没人写的落点"）；
+            # 而它其实只是"照这一份的样子写"的指路，不是要谁去往那儿写东西。
+            # 所以这里改成不含 `projects/` 的措辞 —— **不**扩 roots 表：
+            # 那张表管的是"文本里点名的落点有没有人写"，把一个只读的参考位置
+            # 塞进写落点表，等于让判据以为 `projects/` 下有人往那儿写东西。
+            "**导言区是配方，语言是硬线**（业主 2026-10-18 修正口径）：导言区**推荐**照本仓 mp3 那一篇论文的导言区写（六位编号、三层定理风格；业主看着最舒服的一份）—— `\\documentclass[11pt]{ctexart}`、`amsmath,amssymb,amsthm`、`geometry`（`margin=2.5cm`）、`booktabs`，三个 `\\theoremstyle` 段与九个 `\\newtheorem`（`theorem` / `lemma` / `proposition` / `corollary` / `conjecture` / `definition` / `example` / `openproblem` / `remark`），`\\title` 写你自己的题目、`\\author{G}`、`\\date{}`，本文专用记号接在后面（`\\newcommand` / `\\DeclareMathOperator`）。**这只是推荐**：宏包可以增删、定理环境可以改名、边距可以改，按论文需要调整，只要写出来读着顺。**硬线只有一条：语言必须是英文** —— 标题、摘要、正文、定理与证明、图表标题、参考文献一律英文，全文 CJK 字符数为 0，连 `%` 注释里也不留中文（要写中文解释就写进 `documents` 手稿或回报里，别写进论文）。",
             "**断言只能声称它所引实验的 `result` 支持的东西**（`draft/37` §122）：引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）的实验时，这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），或者先去让 E 跑出一个真给出 `REPRO_RESULT:` 的实验。**引用一个与断言相反的证据行，比没有引用更坏**：读者会以为它被核过。",
             "**研究型手稿要引它据以立论的那几篇文献（`lit:`）**（`draft/39` §6.27 的 D37）：只引自家 `exp:` 的稿子在台账上叫「零文献引用」（收工门有一档 `document_literature_citations` 专门数它）。写稿前先让 A 把对口文献的题名与结论给你，把「我们的构造与哪篇文献的哪条结论是什么关系」逐条写进断言（是复现、是特例、还是新的）。**2026-10-18 起**这一条只管台账与附录 A：正式论文正文引文献一律走 `\\cite` 与 `\\bibitem`，**不许出现 `lit:` 编号**（体例见上面那四条）。",
             # 所有者授权、主控代改（`draft/68` 题 16 选 A，2026-10-07）：下面这一条是

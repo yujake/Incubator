@@ -56,13 +56,23 @@ def test_c_cannot_borrow_hs_write_entry(tmp_path: pathlib.Path) -> None:
 
 
 def test_hs_visible_write_set_is_pinned(tmp_path: pathlib.Path) -> None:
-    """**负控（写面钉死）**：H 能看见的**写工具**只允许是那几件，不许扩张。"""
+    """**负控（写面钉死）**：H 能看见的**写工具**只允许是那几件，不许扩张。
+
+    **事实变了（业主 2026-10-18 裁定）：3 件 → 4 件。** 多出来的是
+    `review.record_finding` —— H 自己读出来的那一条发现的登记通道
+    （`review_document` 只落机械扫描算得出来的那批）。它不是"写面放宽"：
+    只写 `review_findings`（`capabilities.TOOL_WRITE_SETS` 与实现 AST 逐格比对，
+    不碰 `documents`、不碰任何知识表），逐字理由在
+    `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]` 那一行。
+    判据本身没改：仍然是"只许这几件，多一件就红"（子集断言的方向没动）。
+    """
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
     reg = build_registry(store=st, workspace_root=ws).registry
-    # 与 `READONLY_CALL_EXCEPTIONS["H"]` 逐条一致（三件，都是 H 自己的落库代理）
-    allowed = {"review.review_document", "review.verify_fixes", "review.report"}
+    # 与 `READONLY_CALL_EXCEPTIONS["H"]` 逐条一致（四件，都是 H 自己的落库代理）
+    allowed = {"review.review_document", "review.verify_fixes", "review.report",
+               "review.record_finding"}
     specs = {str(getattr(s, "name", s)): s for s in reg.for_role("H")}
     writes = [n for n, s in specs.items()
               if str(getattr(s, "side_effect", "")) not in ("none", "read")]

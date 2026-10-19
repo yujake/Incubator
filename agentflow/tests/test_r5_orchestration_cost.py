@@ -1264,7 +1264,13 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_mark_dirty",                # 已删 helper 的残骸讨论（`draft/28` §176 删除；`table_tools.py` 的注释在解释它为什么没了）
     "_target_text",               # 负控叙述里被删掉的字段名
     "_diag",                      # 举例用的"谁都不认识的键"
-    "_plan",                      # 早期散文写法（今天真名是 `_plan_mode`）
+    # —— 2026-10-19：`_plan` 从本表退出（同一条等额纪律，登记过期）——
+    # 它原登记为"早期散文写法（今天真名是 `_plan_mode`）"，唯一的文本提及是
+    # `providers.py` 里那句 ``_plan``。这一批新增的 `tests/test_closing_attack_progress.py`
+    # 里有一个**真函数** `_plan`（一个 def + 六处调用 = 7 个 NAME 记号），
+    # 按判据自己的口径（真符号出现 > 1 次 ⇒ 不再是"只有文本提及"）它已经不需要豁免。
+    # 这不是放宽判据：口径仍是"真符号出现 ≤ 1 次的提及要逐条登记"，变的是那个 token 的
+    # 真符号读数；留着它反而会被第二条断言的反向等额规则判成"登记过期"。
     "_VERIFIER_CANDIDATES",       # 已删的候选表（`draft/37` §82：探测搬到 `agentflow.toolchain`；
                                   # `docs/PROPOSAL-side-effect-axes.md` 在讲当年的 exec 定义冲突时仍引它）
     "_mismatch",                  # 旧词表里那种"`quote` 加后缀"的取值名（词表已改写法）

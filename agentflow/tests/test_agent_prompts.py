@@ -2457,7 +2457,30 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 原因对得上：这一轮只动 D 与 M 的 `policy`（伙伴表印的是 `duty` / `boundary`，不含 policy）；
 #: F 的 `write_set` 加了 `statements`，但写集不进提示词正文 —— 它换的是
 #: `tests/golden/agent_surface_snapshot.json` 里 F 那一格。
-_FROZEN_PROMPT_VERSION = "p161"
+#: p161 → p162（2026-10-19，**堵「假 proof_review」+ 接 V 回路 + 「攻」只认真推进**）：
+#:   只动 M 的 `policy`，三处：
+#:   ① 新增一条明确路径 —— `attack.status`（派 `F.status` 拿回来的那份读数）的
+#:      `history_tail` 里看到某份计划的 `statement_id` ⇒ **同一轮**里派
+#:      `V.verify_proof` 走查那一条（参数 `statement_id` + 那一行的 `proof_text` 原文），
+#:      产物必须落 `verifications/<命题号>.jsonl`；并写明"不许 F/B 自己写 `proof_review`
+#:      （写入期当场拒收 `proof_review_without_evidence`）"与"收工门会核这一格"；
+#:   ② 第⑥环（攻）那一句改成**只认 `plan_progress_rows`**，`attack_plan_rows` 说明为
+#:      **立项计数（informational）**；
+#:   ③ 「猜想要交给 F 攻坚」那一句里"或 `attack_plan_rows`"删掉（同上口径）。
+#:
+#: **实测 1 格换值、9 格不动**（现场现算）：换值 = M；不动 = A / B / C / D / E / F / G / H / V。
+#: 原因对得上：这一轮只动 M 的 `policy`（伙伴表印的是 `duty` / `boundary`，不含 policy）。
+#: p162 → p163（2026-10-19，**只改措辞**：G 的「导言区是配方」那条去掉具体工作区路径）：
+#:   G 的 policy 原文写着「照 mp3 那一篇写（`projects/mp3/out/paper/main.tex`…）」。那个
+#:   字面量让 `agent_skills._path_problems` 把声明的 policy 读成"点了没人写的落点"
+#:   （`projects/` 不在两张 roots 表里）⇒ skills 那三条判据红。改成「照本仓 mp3 那一篇
+#:   论文的导言区写（六位编号、三层定理风格）」：推荐配方（`ctexart` + 九个 `\newtheorem`）
+#:   一个字没删，删掉的只是那个不该出现在提示词里的绝对落点；roots 表**不动**
+#:   （那是事实，不是判据的宽松度）。
+#:
+#: **实测 1 格换值、9 格不动**（pytest 环境里现算）：换值 = G；不动 = A / B / C / D / E / F / H / V / M。
+#: 原因对得上：这一轮只动 G 的 `policy`（伙伴表印的是 `duty` / `boundary`，不含 policy）。
+_FROZEN_PROMPT_VERSION = "p163"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "5756cb544e2fcb349f7f898fc819a176bb93284d9ae4bca7d215d390cc658e9a",
     "B": "54ee5606b547ae5d770059e93101be66ebe105b42e12206d682f4343a07a234a",
@@ -2465,10 +2488,10 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "ffec2e5b33df4e66e67e271c4d4f6b3f2d26d30b4f29f07bb0d30d2ef23d595d",
     "E": "a3efeda58c58b95acd2e14364aee71ea5bd5921287b69542eca48163584cdb0d",
     "F": "47196fc6305bb2e91c0d174f2de228d92ac41d81ad308b5e46aa772967071457",
-    "G": "d07ab0f82d450a082fc35ae06ffda4fa49dd17288b7b5debd6e61e26e8a558fb",
+    "G": "1dc6464c76a7bf42168fa9f696d0aef3feae14195fc3aa79368e7e6754818e18",
     "H": "fea26e2492999641eb2dceebde13647311fd93debd0abb450f710b00e36fe608",
     "V": "8b6a92a7101060876b4c147e210f79354924456098f19f8584e18bcc7be33cc3",
-    "M": "8fb40ff519d9cb1e0c7b17c24648a21a8fddc793879260372f70ec54e5c6659d",
+    "M": "bd20ac43af2afcde66a87e95a4f95d12a7b422c6c40b5c20b18a26d6c7b18dec",
 }
 
 

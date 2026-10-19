@@ -69,10 +69,26 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "写盘失败（含落点越界）：读盘/写盘失败是「执行了、没成功」，不等于这次调用"
         "不成立 ⇒ 执行失败（同族的还有工具层的 `paper_compile_failed`：编不出来只是"
         "没编成，不是调用方参数写错了）",
+    # `agent_f/core.py` 的两处（P3-6 / F 闭环那批新增的两个产物出口的内部返回值）：
+    # 都是**子结果**，不是动作的终态 payload —— `_apply_round` 只把 `ok` / `why` / `path`
+    # 折进 `detail` 与 `history`，`ok=False` 从不冒充一次"拒绝"（判据守的那个坑
+    # 是"拒绝被台账记成 ok"，这里根本没有拒绝可记）。所以按登记走，不改道
+    # `refusals.refuse`：走它会给这两笔盖上 `refusal_reason=invalid_params`，
+    # 而那正是 `author_script` 那三条登记在防的错贴标签（"磁盘满了"被记成"你参数写错了"）。
+    # `kind` 这一格是为此加的：两处失败各有一个名字，登记表才能逐条点名、计数也对得上。
+    ("agent_f/core.py", "report_write_failed"):
+        "攻坚台账 `reports/attack-<plan_id>.md` 写盘失败（`_report_append`）："
+        "执行了、没写成 ⇒ 执行失败；而且它**不许**让整轮崩掉，返回值只说"
+        "「这一行没落盘」，由调用方在 `detail` 里如实写出来",
+    ("agent_f/core.py", "statement_write_failed"):
+        "论证落 `statements` 失败（`_proof_outlet` 的事务里抛了，含 store 写入期那道"
+        "「假 proof_review 拒收」）：这是「写不进表」，不是「这次调用不成立」——"
+        "同一条纪律：F 的论证没有出口要如实说，而不是把参数问题推给调用方",
     # 注：同一方法里 `bad_spec` / `no_seam` 两档不在这里 —— 它们是"这次调用本身
     # 不成立"（判据不全 / 没接缝），走 `refusals.refuse`（先例：`A.search_literature`
-    # 的 `no_provider` 与 `A.ingest_local` 的 `bad_books_dir`）。所以本表只登记
-    # 上面这三档；扫出来多一条或少一条都会红。
+    # 的 `no_provider` 与 `A.ingest_local` 的 `bad_books_dir`）。所以 `author_script`
+    # 那一族只登记 `judge_failed` / `bad_source` / `write_failed` 这三档；
+    # 扫出来多一条或少一条都会红。
 }
 
 

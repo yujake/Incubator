@@ -627,19 +627,30 @@ def test_agent_h_source_never_assigns_documents_claims():
     assert hits == [], f"agent_h 里这些地方改动了 documents.claims（那是 G 的活）：{hits}"
 
 def test_agent_h_writers_registry_exposes_exactly_the_declared_write_tools(tmp_path):
-    """职责边界（H）的运行期形式：H 的落库代理里能写的只有这三个工具。
+    """职责边界（H）的运行期形式：H 的落库代理里能写的只有这四个工具。
 
     本轮从 2 个变成 3 个：新增 `review.report`（G1–G15 审校报告，
     markdown 落盘）。它不是对"H 只读"的放宽 —— 它的落点仍被钉死在一个报告
     文件上，不碰任何数据表、不碰 `claims`（`tests/test_gates.py` 有一条
     逐字节断言）。这条用例的判据因此从"数量"改成"逐个点名"：
     数量会随着正当的新增而漂移，而"落点清单"必须是人逐条写下来的。
+
+    **事实变了（业主 2026-10-18 裁定）：3 件 → 4 件。** 多出来的那一件是
+    `review.record_finding`（H 自己读出来的那一条发现的登记通道 —— `review_document`
+    只落机械扫描算得出来的那批）。它不是写面放宽：只写 `review_findings`，
+    不改 `documents.status`、不碰任何知识表；登记处是
+    `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]`（同一笔裁定，逐字理由在那）、
+    `capabilities.TOOL_WRITE_SETS["review.record_finding"] == {"review_findings"}`
+    （逐工具写集，与实现 AST 逐格比对）与 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]`
+    （表级例外，`{review_findings, documents}` 那一条 —— 它没变）。
+    所以这里把期望集合更新到新事实，判据本身（"逐个点名、多一件就红"）一个字没改。
     """
     st = Store(tmp_path / "ws")
     st.init()
     h = AgentH(st)
     writers = [t["name"] for t in h.writers.describe() if t["side_effect"] in ("write_local",)]
     assert sorted(writers) == [
+        "review.record_finding",
         "review.report",
         "review.review_document",
         "review.verify_fixes",
