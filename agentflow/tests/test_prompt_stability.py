@@ -439,3 +439,226 @@ def test_the_run_record_carries_a_cache_field_even_with_no_calls(tmp_path: pathl
     ends = [e for e in events if e.get("kind") == "agent_run_end"]
     assert ends and "prompt_cache" in ends[-1], ends
     assert "没有模型调用" in " ".join(ends[-1].get("notes") or []), ends[-1].get("notes")
+    # 同一趟的检查点：`calls == 0` 的汇总也必须落下去（不是"没人发请求就不写这一格"）。
+    ck = _checkpoint_of(root, "t-none")
+    assert PS.checkpoint_prompt_cache_problem(ck) == "", PS.checkpoint_prompt_cache_problem(ck)
+    assert ck["prompt_cache"]["calls"] == 0 and ck["prompt_cache"]["no_request_calls"] >= 1, ck
+
+
+# ------------------------------------------------ 5. 两处落点：记录文件与 step 事件
+#
+# 2026-10-19 真机（`projects/t5-empty`，`sid=t5-1`）那两处读数的落点，逐处一条判据：
+#
+#   ① `runs/agent-<角色>-<sid>.json`（**顶趟在 `runs/` 下唯一那份"跑了什么"的记录**）
+#      —— 改前它 9 格、只有 `spend`，`prompt_cache` 一格都没有；
+#   ② 会话里的 `agent_step` 事件 —— 每一步的两格（`prompt_cache_hit_tokens` /
+#      `prompt_cache_miss_tokens`，上游字段名照抄）在 `prompt_cache` 之下。
+#
+# 为什么 ① 是这份文件而不是产出文件：产出文件 `runs/<角色>-<时间戳>-<序号>.json`
+# 只在**被召唤**那条路上写（`AgentLoop._write_run_artifact` 的调用点在 `_summon` 里），
+# `run_role` 收工**只**写检查点。改前那一趟 M（顶趟）在 `runs/` 下就只有 9 格那一份。
+def _checkpoint_of(root: pathlib.Path, sid: str) -> dict[str, Any]:
+    """读这一趟的检查点文件（不在盘上就当场红：那是"没写成"，不是"少了某一格"）。"""
+    path = AL.run_checkpoint_path(root, "M", sid)
+    assert path.is_file(), f"这一趟没有落检查点：{path}"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_the_step_checkpoint_carries_the_cache_summary(tmp_path: pathlib.Path) -> None:
+    """判据 ①（run 记录文件）：检查点里有 `prompt_cache`，且 `hit + miss == tokens_in`。
+
+    三条一起判，缺一条这条判据就不成立：
+    - 这一格**在**（改前不在：`j.get("prompt_cache") is None`）；
+    - `hit + miss == tokens_in`（上游给了读数时的自洽判据，与 `mismatched_calls` 同一口径）；
+    - `calls == len(run.steps)`（汇总覆盖了每一步，包括**不落事件**的收工那一步）。
+    """
+    sid = "t-ckpt-known"
+    run, _gateway, root, _events = _run(tmp_path, hit=600, miss=400, sid=sid)
+    assert run.stop_reason == "final", run.to_dict()
+    ck = _checkpoint_of(root, sid)
+
+    # ①-a 这一格在，且自洽（键集、三态、自洽三条都在这个判据函数里）。
+    assert PS.checkpoint_prompt_cache_problem(ck) == "", PS.checkpoint_prompt_cache_problem(ck)
+    cache = ck["prompt_cache"]
+    assert set(cache) == set(PS.CACHE_SUMMARY_KEYS), sorted(cache)
+    # ①-b 与 `spend` 是同一刻、同一趟的两面：逐格相等（不是"另算一份"）。
+    assert cache == run.prompt_cache, (cache, run.prompt_cache)
+    ends = [e for e in _events if e.get("kind") == "agent_run_end"]
+    assert ends and ends[-1]["prompt_cache"] == cache, ends[-1].get("prompt_cache")
+    # ①-c 自洽 + 覆盖面。
+    assert cache["calls"] == len(run.steps) == 2, (cache["calls"], len(run.steps))
+    assert cache["hit"] == 600 * len(run.steps) and cache["miss"] == 400 * len(run.steps), cache
+    assert cache["hit"] + cache["miss"] == cache["tokens_in"], cache
+    assert cache["unknown_calls"] == 0 and cache["mismatched_calls"] == 0, cache
+
+
+def test_a_silent_upstream_leaves_both_places_unknown(tmp_path: pathlib.Path) -> None:
+    """判据 ③（三态，两处都判）：上游不给读数 ⇒ 两处都是 unknown，**不许折成 0**。
+
+    折成 0 的后果与单次调用那一档同源（`test_a_silent_upstream_stays_unknown…`）：
+    "这家上游不报这一格"（改读数口径）与"这次真的零命中"（改提示词）会长得一模一样。
+    这里逐处点名：事件的 `hit`/`miss` 是 `None`；检查点汇总的 `hit_rate` /
+    `saved_usd` 是 `None`，`unknown_calls` 计数**不是 0**，`why` 说清原因。
+    """
+    sid = "t-ckpt-unknown"
+    run, _gateway, root, events = _run(tmp_path, hit=None, miss=None, sid=sid)
+    assert run.stop_reason == "final", run.to_dict()
+
+    # ① 记录文件那一处。
+    ck = _checkpoint_of(root, sid)
+    assert PS.checkpoint_prompt_cache_problem(ck) == "", PS.checkpoint_prompt_cache_problem(ck)
+    cache = ck["prompt_cache"]
+    assert cache["unknown_calls"] == len(run.steps) > 0, cache
+    assert cache["hit_rate"] is None, ("unknown 不许折成 0%", cache)
+    assert cache["saved_usd"] is None, ("算不出来就是算不出来", cache)
+    assert cache["mismatched_calls"] == 0, cache
+    assert "unknown" in cache["why"], cache
+
+    # ② 事件那一处：每一步的两格都是 `None`（不是 0）。
+    steps = [e for e in events if e.get("kind") == "agent_step"]
+    assert steps, events
+    assert PS.missing_prompt_cache_steps(events) == []
+    for event in steps:
+        step_cache = event["prompt_cache"]
+        assert step_cache["prompt_cache_hit_tokens"] is None, step_cache
+        assert step_cache["prompt_cache_miss_tokens"] is None, step_cache
+        assert step_cache["known"] is False and step_cache["cache_tri"] == "not_reported"
+
+
+def test_deleting_the_checkpoint_cache_write_makes_the_criterion_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """负控（① 的写入被删）：把收工那次 `save_run_checkpoint` 换回改前的 9 格写法 ⇒ 必红。
+
+    为什么这样造"删掉写入"：改前的形态**不是**"先写文件后算汇总"（顺序没错），
+    而是 `save_run_checkpoint` 自己拼了一份 9 格的 payload，`prompt_cache` 这条路
+    从头到尾没接上（调用点只传了 `spend`）。所以负控就是那一份 payload —— 用它写，
+    然后看判据红不红。红的位置也要对：检查点**在**（`spend` 有值），只少了那一格
+    —— 否则这条负控红在"没写成"上，什么也没证明。
+    """
+    from agentflow import autonomy as AU
+
+    def _legacy_save(session_root: Any, role: str, sid: str | None, *, task: str,
+                     step: int, stop_reason: str, waiting_for: str = "",
+                     spend: Any = None, prompt_cache: Any = None) -> str:
+        """改前那一版（`agent_loop.save_run_checkpoint` 的 9 格 payload，逐字照抄）。"""
+        path = AL.run_checkpoint_path(session_root, role, sid)
+        payload = {"role": role, "sid": str(sid or ""), "task": task,
+                   "fingerprint": AU.task_fingerprint(role, task),
+                   "step": int(step), "stop_reason": str(stop_reason),
+                   "waiting_for": str(waiting_for or ""),
+                   "spend": dict(spend or {}),
+                   "at": "2026-10-19T00:00:00"}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return ""
+
+    monkeypatch.setattr(AL, "save_run_checkpoint", _legacy_save)
+    sid = "t-ckpt-red"
+    run, _gateway, root, _events = _run(tmp_path, hit=600, miss=400, sid=sid)
+    assert run.stop_reason == "final", run.to_dict()
+    ck = _checkpoint_of(root, sid)
+    assert "prompt_cache" not in ck, sorted(ck)          # 写入真的被删了
+    assert ck["spend"], f"检查点本身要写成（否则红在'没写'上）：{ck}"
+    problem = PS.checkpoint_prompt_cache_problem(ck)
+    assert problem and "prompt_cache" in problem, problem
+    # 同一趟的汇总在内存里好好的 ⇒ 红的是"没落盘"，不是"没算出来"。
+    assert run.prompt_cache and run.prompt_cache["calls"] == 2, run.prompt_cache
+
+
+def test_every_step_event_carries_the_two_upstream_fields(tmp_path: pathlib.Path) -> None:
+    """判据 ②（step 事件）：每一个 `agent_step` 事件都带着那两个上游字段名。
+
+    计数口径（这一格最容易读错，所以逐条写出来）：
+    - **收工那一步不落 `agent_step`**（它在公共尾段之前 `break`，见
+      `LoopRun.final_payload` 那段说明与 `test_every_step_records_the_upstream…` 的
+      `len(run.steps) == 2 and len(steps) == 1`）⇒ 事件数 == 步数 − 1；
+    - 收工那一步的读数在 `run.steps[-1].to_dict()`（产出文件/检查点的来源）与
+      检查点的汇总里，两处都在 —— 判据逐处点名，不假装事件里有它。
+    """
+    sid = "t-each-step"
+    run, _gateway, root, events = _run(tmp_path, hit=600, miss=400, sid=sid)
+    assert run.stop_reason == "final", run.to_dict()
+    steps = [e for e in events if e.get("kind") == "agent_step"]
+    assert len(steps) == len(run.steps) - 1 == 1, (len(steps), len(run.steps))
+    # ②-a 判据本体：一个都不缺（键在、两个字段名也在）。
+    assert PS.missing_prompt_cache_steps(events) == [], PS.missing_prompt_cache_steps(events)
+    # ②-b "带读数"的事件数 == 事件数（不是"有一部分带了"）。
+    carrying = [e for e in steps
+                if (e.get("prompt_cache") or {}).get("prompt_cache_hit_tokens") is not None
+                and (e.get("prompt_cache") or {}).get("prompt_cache_miss_tokens") is not None]
+    assert len(carrying) == len(steps), (len(carrying), len(steps))
+    for event in steps:
+        cache = event["prompt_cache"]
+        assert cache["prompt_cache_hit_tokens"] == 600, cache
+        assert cache["prompt_cache_miss_tokens"] == 400, cache
+        assert (cache["prompt_cache_hit_tokens"]
+                + cache["prompt_cache_miss_tokens"] == cache["tokens_in"]), cache
+    # ②-c 收工那一步：事件面没有它（既有设计），记录面有 —— 位置一个字节都不挪。
+    closing = run.steps[-1].to_dict()
+    assert closing["shape"] == "final", closing
+    assert closing["prompt_cache"]["prompt_cache_hit_tokens"] == 600, closing
+    # 收工那一步也进了汇总（`calls == 2` = 两步都在），于是"省了多少"不漏最后一步。
+    assert _checkpoint_of(root, sid)["prompt_cache"]["calls"] == 2, _checkpoint_of(root, sid)
+
+
+def test_hollowing_the_two_fields_from_the_step_event_makes_it_red(
+        tmp_path: pathlib.Path) -> None:
+    """负控（② 的字段被删）：只留一个空 `prompt_cache: {}` ⇒ 判据必红。
+
+    这一刀比"把整个键删掉"细：`{}` 让 `event.get("prompt_cache") is not None` 仍然
+    成立（改前那条判据只看键在不在），而两格读数一个字都没落 ——
+    那正是"看起来写了、其实没写"的形态。所以判据收在**字段名**上（见
+    `missing_prompt_cache_steps` 的说明）。
+    """
+    _run_ok, _gateway, _root, events = _run(tmp_path / "ok", hit=600, miss=400, sid="t-hollow")
+    assert PS.missing_prompt_cache_steps(events) == []
+    hollowed: list[dict[str, Any]] = []
+    for event in events:
+        copy = dict(event)
+        if copy.get("kind") == "agent_step":
+            copy["prompt_cache"] = {}          # 键在、两格不在
+        hollowed.append(copy)
+    missing = PS.missing_prompt_cache_steps(hollowed)
+    assert missing == [int(e["index"]) for e in events if e.get("kind") == "agent_step"], missing
+    # 中间那一档也要分得清：unknown（两格是 None）**不算**缺。
+    unknown_but_present: list[dict[str, Any]] = []
+    for event in events:
+        copy = dict(event)
+        if copy.get("kind") == "agent_step":
+            copy["prompt_cache"] = {"prompt_cache_hit_tokens": None,
+                                    "prompt_cache_miss_tokens": None}
+        unknown_but_present.append(copy)
+    assert PS.missing_prompt_cache_steps(unknown_but_present) == []
+
+
+def test_a_summary_that_folds_unknown_into_zero_percent_is_red() -> None:
+    """负控（三态，汇总层）：把 unknown 折成 0% / 用 0 顶上去 ⇒ `cache_summary_problem` 必红。
+
+    单次调用那一档已有判据（`prompt_cache_record` 的 `None`）；这一条守的是**汇总**
+    这一层：`hit_rate=0.0` 与 `hit_rate=None` 在 JSON 里都"看起来是个数"，而前者会
+    让下一次读它的人得出"命中率 0%，提示词还得改"这个错误结论。
+    """
+    good = PS.summarize_prompt_cache([{"called": True, "tokens_in": 1000,
+                                       "prompt_cache_hit_tokens": 600,
+                                       "prompt_cache_miss_tokens": 400}])
+    assert PS.cache_summary_problem(good) == "", PS.cache_summary_problem(good)
+
+    silent = PS.summarize_prompt_cache([{"called": True, "tokens_in": 1000,
+                                         "prompt_cache_hit_tokens": None,
+                                         "prompt_cache_miss_tokens": None}])
+    assert PS.cache_summary_problem(silent) == "", PS.cache_summary_problem(silent)
+    assert silent["hit_rate"] is None and silent["unknown_calls"] == 1, silent
+
+    folded = dict(silent, hit_rate=0.0)
+    assert "unknown 不许折成 0%" in PS.cache_summary_problem(folded), folded
+    # 静默那一次被算进"零命中"（hit/miss 有值）同样红。
+    counted = dict(silent, hit=0, miss=1000)
+    assert PS.cache_summary_problem(counted), counted
+    # 不自洽：hit+miss ≠ tokens_in（上游读数口径可疑）。
+    broken = dict(good, tokens_in=1001)
+    assert "≠" in PS.cache_summary_problem(broken), broken
+    # 少一格（有人另拼了一份 dict，没走 `summarize_prompt_cache`）。
+    half = {k: v for k, v in good.items() if k != "saved_unknown_calls"}
+    assert "少了" in PS.cache_summary_problem(half), half
+    # 空 `{}`：没算过，与"算过但上游没给"必须分得开。
+    assert "没算过" in PS.cache_summary_problem({}), PS.cache_summary_problem({})

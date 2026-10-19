@@ -183,7 +183,23 @@ export interface CheckpointView {
   stop_reason: string;
   waiting_for: string;
   spend: CheckpointSpendView | Record<string, never>;
+  prompt_cache: CheckpointCacheView | Record<string, never>;
   at: string;
+}
+
+/** 出处：检查点的缓存汇总（`promptstability.summarize_prompt_cache` 的 11 格）。 */
+export interface CheckpointCacheView {
+  calls: number;
+  no_request_calls: number;
+  hit: number;
+  miss: number;
+  unknown_calls: number;
+  tokens_in: number;
+  hit_rate: number | null;
+  mismatched_calls: number;
+  saved_usd: number | null;
+  saved_unknown_calls: number;
+  why: string;
 }
 
 /** 出处：run_view() 的 `report` —— 交付说明 `out/review/REPORT.md` 的读数。 */

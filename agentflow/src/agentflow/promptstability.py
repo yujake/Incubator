@@ -64,7 +64,20 @@ __all__ = [
     "summarize_prompt_cache",
     "cache_sentence",
     "missing_prompt_cache_steps",
+    "cache_summary_problem",
+    "checkpoint_prompt_cache_problem",
 ]
+
+#: 一份缓存汇总（:func:`summarize_prompt_cache` 的产出）必须有的 11 个键。
+#:
+#: 为什么把键集也当判据：写这一格的落点有两个（`agent_run_end` 与
+#: `agent_loop.save_run_checkpoint`），它们的形状**都**来自 :func:`summarize_prompt_cache`。
+#: 有人另拼一份 dict 时（2026-10-19 的 `runs/agent-*.json` 就是那种形态：只有 `spend`），
+#: 少的不止是 `hit`/`miss` —— 是整格。键集判据让"少一格"当场可见。
+CACHE_SUMMARY_KEYS: tuple[str, ...] = (
+    "calls", "no_request_calls", "hit", "miss", "unknown_calls", "tokens_in",
+    "hit_rate", "mismatched_calls", "saved_usd", "saved_unknown_calls", "why",
+)
 
 #: 允许出现在 system 提示词里、**且允许每步变化**的段名（登记表）。
 #:
@@ -419,17 +432,118 @@ def cache_sentence(summary: Mapping[str, Any]) -> str:
 def missing_prompt_cache_steps(events: Sequence[Mapping[str, Any]]) -> list[int]:
     """`agent_step` 事件里**缺** `prompt_cache` 那几格的步号（判据用；空 = 都写了）。
 
-    三态纪律在这里也成立：`prompt_cache` 这个键**存在**、只是内容为 unknown，
-    与"这个键根本没有"是两件事 —— 后者是写入被删掉（本函数的猎物），
-    前者是上游没给读数（合法的第三态）。
+    三态纪律在这里也成立：`prompt_cache` 这个键**存在**、只是内容为 unknown
+    （`hit` / `miss` 都是 `None`），与"这个键根本没有"是两件事 —— 后者是写入被删掉
+    （本函数的猎物），前者是上游没给读数（合法的第三态）。
+
+    ## 判据收在"两个上游字段名在不在"上，而不是"整个 dict 非空"（2026-10-19）
+
+    为什么：`"prompt_cache": {}` 是"看起来写了、其实一格没落"的形态 —— 它在会话
+    记录里有一个键，`event.get("prompt_cache") is not None` 也过得去，而
+    `hit` / `miss` 两格根本不存在。unknown 那一档与它的区别恰恰是**字段名在、
+    值是 `None`**（见 :func:`prompt_cache_record`）。所以猎物有两个：
+    键不在（`{}` 也算），或者键在而两个字段名少一个。
     """
     missing: list[int] = []
     for event in events:
         if str(event.get("kind") or "") != "agent_step":
             continue
-        if "prompt_cache" not in event:
-            # `index` 用 `is None` 判而不是 `or`：**第 0 步**的索引是 `0`，
-            # 而 `0 or -1` 会把它写成 -1（真机里第 0 步恰恰最常见）。
-            raw = event.get("index")
-            missing.append(int(raw) if raw is not None else -1)
+        cache = event.get("prompt_cache")
+        ok = (isinstance(cache, Mapping)
+              and "prompt_cache_hit_tokens" in cache
+              and "prompt_cache_miss_tokens" in cache)
+        if ok:
+            continue
+        # `index` 用 `is None` 判而不是 `or`：**第 0 步**的索引是 `0`，
+        # 而 `0 or -1` 会把它写成 -1（真机里第 0 步恰恰最常见）。
+        raw = event.get("index")
+        missing.append(int(raw) if raw is not None else -1)
     return missing
+
+
+def cache_summary_problem(summary: Any) -> str:
+    """一份缓存汇总**自洽**吗？返回问题串（空 = 合格）。
+
+    ## 为什么汇总也要一条判据（而不只是"算的时候小心点"）
+
+    这一格的读者是"事后判断提示词改动值不值"的人。汇总若不自洽，那个判断就是假的，
+    而它看起来完全正常（一个 0.91 的命中率与一个 0.00 的命中率长得一样可信）。
+    所以判据要问的是三件事，逐条对应一种"看起来正常但是错"的形态：
+
+    1. **形状**：11 个键一个不少（键集见 :data:`CACHE_SUMMARY_KEYS`）——
+       少一格说明有人另拼了一份 dict，而不是走 :func:`summarize_prompt_cache`；
+    2. **自洽**：`unknown_calls == 0` 时 `hit + miss == tokens_in`
+       （上游的这两格与 `prompt_tokens` 理论上相等；不等 ⇒ 读数口径可疑）；
+    3. **三态**：上游一次都没给读数时，`hit_rate` 必须是 `None`（绝不折成 0%），
+       且 `why` 必须说明原因；`calls == 0` 同理（"没有调用"不是"零命中"）。
+
+    注意 `hit` / `miss` 本身是**只在给了读数的那几次调用上求和**（`summarize_prompt_cache`
+    的口径）：`unknown_calls > 0` 而 `hit + miss < tokens_in` 是合法的，
+    所以第 2 条只在 `unknown_calls == 0` 时成立 —— 把它推广到所有情况会把
+    "上游只报了一半"误判成"口径坏了"。
+    """
+    if not isinstance(summary, Mapping):
+        return f"汇总不是一份 dict（{type(summary).__name__}）：{summary!r}"
+    if not summary:
+        return ("这一格是空的（`{}`）：没算过汇总 —— 收工那一刻写的记录不该是空的，"
+                "而'没算过'与'算过但上游没给读数'必须分得开")
+    missing = [k for k in CACHE_SUMMARY_KEYS if k not in summary]
+    if missing:
+        return f"汇总少了 {missing} 这几格（键集见 `CACHE_SUMMARY_KEYS`，{len(CACHE_SUMMARY_KEYS)} 个）"
+    calls = int(summary.get("calls") or 0)
+    unknown = int(summary.get("unknown_calls") or 0)
+    hit, miss = summary.get("hit"), summary.get("miss")
+    tokens_in = int(summary.get("tokens_in") or 0)
+    rate = summary.get("hit_rate")
+    if calls < 0 or unknown < 0 or unknown > calls:
+        return f"calls={calls} / unknown_calls={unknown} 不成比例"
+    if calls == 0:
+        if rate is not None:
+            return f"没有一次模型调用，却给出了命中率 {rate!r}（该是 None）"
+        if not str(summary.get("why") or "").strip():
+            return "没有一次模型调用，却没写 `why` 说明为什么没有命中率"
+        return ""
+    if unknown == calls:
+        # 全部 unknown：命中的和必须是 0（没有一次给了读数），而"0 命中"不许变成 0%。
+        if int(hit or 0) or int(miss or 0):
+            return (f"全部 {calls} 次调用都是 unknown，`hit`/`miss` 却是 "
+                    f"{hit}/{miss}（这两个和只该含给了读数的那几次）")
+        if rate is not None:
+            return (f"全部 {calls} 次调用都是 unknown，命中率却是 {rate!r} —— "
+                    "unknown 不许折成 0%")
+        if not str(summary.get("why") or "").strip():
+            return f"全部 {calls} 次调用都是 unknown，却没写 `why` 说明"
+        return ""
+    if unknown == 0:
+        if int(hit) + int(miss) != tokens_in:
+            return (f"hit({hit}) + miss({miss}) = {int(hit) + int(miss)} ≠ tokens_in({tokens_in})："
+                    "这两格与 prompt_tokens 该相等，不等说明读数口径可疑")
+        if rate is None:
+            return f"有 {calls} 次调用都给了读数，命中率却是 None"
+        return ""
+    # 混合档：有读数的那些求和，unknown 单独计数 —— 但和不能超过 tokens_in。
+    if int(hit) + int(miss) > tokens_in:
+        return f"hit({hit}) + miss({miss}) > tokens_in({tokens_in})：读数不自洽"
+    if rate is None:
+        return f"有 {calls - unknown} 次调用给了读数，命中率却是 None"
+    return ""
+
+
+def checkpoint_prompt_cache_problem(checkpoint: Any) -> str:
+    """检查点（`runs/agent-<角色>-<sid>.json`）里的缓存读数合格吗？返回问题串（空 = 合格）。
+
+    三态在**这一层**的落点：
+    - 键**不在** ⇒ 写入被删掉（2026-10-19 之前的形态：这份文件只有 `spend`）；
+    - 键在、值 `{}` ⇒ 写的时候没有汇总可写（"没算过"，不是"零命中"）；
+    - 键在、值是汇总 ⇒ 交给 :func:`cache_summary_problem` 逐条核对自洽。
+
+    为什么这条判据必须在：`run_role` 收工时**只**写这份文件（产出文件
+    `runs/<角色>-<时间戳>-<序号>.json` 只在被召唤那条路上写），所以它是顶趟
+    "这一趟花了多少 / 省了多少"在盘上的唯一落点。
+    """
+    if not isinstance(checkpoint, Mapping):
+        return f"检查点不是一份 dict（{type(checkpoint).__name__}）：{checkpoint!r}"
+    if "prompt_cache" not in checkpoint:
+        return ("检查点里没有 `prompt_cache` 这一格 —— 这一趟的缓存读数只落在会话记录的 "
+                "`agent_run_end` 里，而顶趟的产出文件并不在 `runs/` 下")
+    return cache_summary_problem(checkpoint.get("prompt_cache"))

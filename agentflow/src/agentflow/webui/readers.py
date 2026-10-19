@@ -148,7 +148,8 @@ HANDLERS: dict[str, Any] = {}
 #:
 #: 这一份是 B1 落地后的实况（夹具见 `tests/conftest.py` 的 `make_artifacts_sample`）。
 CHECKED_TYPES: tuple[str, ...] = (
-    "RunProduct", "CheckpointView", "CheckpointSpendView", "ReportReadingView",
+    "RunProduct", "CheckpointView", "CheckpointSpendView", "CheckpointCacheView",
+    "ReportReadingView",
     "RunView", "EventRow", "RunEventsView",
     "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
@@ -1629,7 +1630,19 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("role", "string"), ("sid", "string"), ("task", "string"),
       ("fingerprint", "string"), ("step", "number"), ("stop_reason", "string"),
       ("waiting_for", "string"), ("spend", "CheckpointSpendView | Record<string, never>"),
+      ("prompt_cache", "CheckpointCacheView | Record<string, never>"),
       ("at", "string"))),
+    # 2026-10-19：顶趟的缓存汇总（`promptstability.summarize_prompt_cache` 的 11 格）。
+    # 为什么它必须是**声明出来的**而不是 `Record<string, unknown>`：这一格是
+    # "提示词改动到底省了多少"在盘上唯一的读数（顶趟不写产出文件），
+    # 顶层键含糊了，前端就只能把它当黑盒渲染 —— 而 C 条判据会把它与夹具上
+    # 真读出来的键集合逐条对齐（键多一个、少一个都红）。
+    ("CheckpointCacheView",
+     "检查点的缓存汇总（`promptstability.summarize_prompt_cache` 的 11 格）",
+     (("calls", "number"), ("no_request_calls", "number"), ("hit", "number"),
+      ("miss", "number"), ("unknown_calls", "number"), ("tokens_in", "number"),
+      ("hit_rate", "number | null"), ("mismatched_calls", "number"),
+      ("saved_usd", "number | null"), ("saved_unknown_calls", "number"), ("why", "string"))),
     ("ReportReadingView",
      "run_view() 的 `report` —— 交付说明 `out/review/REPORT.md` 的读数",
      (("status", "ReportTri"), ("text", "string"))),

@@ -92,8 +92,10 @@ def test_the_state_face_reports_unreadable_when_it_could_not_read(
 def test_run_view_reads_runs_report_and_checkpoint(artifacts_ws: pathlib.Path) -> None:
     """正控（一趟详情）：`runs` / `report` / `checkpoint` 三栏都有真读数。
 
-    检查点的 9 个键与 `spend` 的 5 个键逐字钉住（`agent_loop.save_run_checkpoint` +
-    `llmseam.SeamSpend.to_dict`）。
+    检查点的 10 个键与 `spend` 的 5 个键逐字钉住（`agent_loop.save_run_checkpoint` +
+    `llmseam.SeamSpend.to_dict`），缓存汇总那 11 格与
+    `promptstability.CACHE_SUMMARY_KEYS` 同一批（2026-10-19 补：顶趟只有这一份
+    "跑了什么"的文件，缓存的读数此前在它之外）。
     """
     got = R.run_view(artifacts_ws, SID)
     assert got["tri"] == R.TRI_COMPUTED, got
@@ -107,9 +109,15 @@ def test_run_view_reads_runs_report_and_checkpoint(artifacts_ws: pathlib.Path) -
     ck = got["checkpoint"]
     assert ck is not None, got["checkpoint_reason"]
     assert set(ck) == {"role", "sid", "task", "fingerprint", "step", "stop_reason",
-                       "waiting_for", "spend", "at"}, sorted(ck)
+                       "waiting_for", "spend", "prompt_cache", "at"}, sorted(ck)
     assert set(ck["spend"]) == {"calls", "tokens_in", "tokens_out", "usd",
                                 "unknown_usd_calls"}, sorted(ck["spend"])
+    # 缓存汇总的键集与 Python 侧那一份**同一个来源**（不在这里再抄一遍）。
+    from agentflow import promptstability as PS
+
+    assert set(ck["prompt_cache"]) == set(PS.CACHE_SUMMARY_KEYS), sorted(ck["prompt_cache"])
+    assert (ck["prompt_cache"]["hit"] + ck["prompt_cache"]["miss"]
+            == ck["prompt_cache"]["tokens_in"]), ck["prompt_cache"]
     assert ck["step"] == 3 and ck["stop_reason"] == "waiting_for_user"
     assert ck["spend"]["usd"] == 0.25
     assert SID in got["checkpoint_reason"]
@@ -705,6 +713,9 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     if run["checkpoint"]:
         got["CheckpointView"] = set(run["checkpoint"])
         got["CheckpointSpendView"] = set(run["checkpoint"]["spend"])
+        # 2026-10-19：缓存汇总那 11 格（与 `spend` 并列的同一件事的另一面）——
+        # 它必须在夹具上有真读数，否则 C 条会报"登记了一件读不出来的事"。
+        got["CheckpointCacheView"] = set(run["checkpoint"]["prompt_cache"])
     ev_rows = R.run_events(artifacts_ws, SID)
     got["RunEventsView"] = set(ev_rows)
     assert ev_rows["events"], "夹具没造出事件行"

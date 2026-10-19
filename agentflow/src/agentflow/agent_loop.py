@@ -6157,12 +6157,29 @@ def run_checkpoint_path(session_root: Path | str, role: str, sid: str | None = N
 
 def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
                         task: str, step: int, stop_reason: str,
-                        waiting_for: str = "", spend: Mapping[str, Any] | None = None) -> str:
+                        waiting_for: str = "", spend: Mapping[str, Any] | None = None,
+                        prompt_cache: Mapping[str, Any] | None = None) -> str:
     """写这一趟的步检查点，返回问题串（空 = 写成了）。写入失败不许静默。
 
     指纹用 `autonomy.task_fingerprint(role, task)`（同一条口径，不另立一份）：
     续跑之前必须比对它 —— 拿 A 任务的检查点去续 B 任务，会把两件事的进度混成一条，
     而那条记录看起来完全正常。
+
+    ## 为什么这里也要 `prompt_cache`（2026-10-19 的真机缺口）
+
+    这一份文件是**顶趟**唯一落在 `runs/` 下的"这一趟干了什么"的记录：产出文件
+    （`runs/<角色>-<时间戳>-<序号>.json`，`_write_run_artifact`）只在**被召唤**那条
+    路上写（`_summon` 收尾），`run_role` 收工时不写它。于是 `agent_run_end` 里的
+    `prompt_cache` 汇总在盘上只活在一处（会话记录），而"这一趟的检查点"这一格
+    此前只有 `spend` —— 同一笔钱的两面（花了多少 / 靠前缀缓存省了多少）只落了前一面，
+    读数的人得去翻会话才答得出"顶趟命中率是多少"。
+
+    三态（与 `LoopStep.to_dict()` 同一套）：
+    - 算过、上游给了读数 ⇒ 11 格汇总，`hit` / `miss` 是数；
+    - 算过、上游**一次都没给** ⇒ 汇总在，`unknown_calls > 0`、`hit_rate is None`
+      （绝不折成 0%），`why` 里写明原因；
+    - 没算过（调用方没传 / 这一份检查点不是收工那一刻写的）⇒ `{}` ——
+      "没有汇总"与"算过但上游没给"必须分得开，所以这一格**永远在**。
     """
     from . import autonomy as AU
 
@@ -6172,6 +6189,8 @@ def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
                "step": int(step), "stop_reason": str(stop_reason),
                "waiting_for": str(waiting_for or ""),
                "spend": dict(spend or {}),
+               # 与 `spend` 并列：键**永远在**（三态见 docstring）。
+               "prompt_cache": dict(prompt_cache or {}),
                "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -6611,7 +6630,13 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                              "台账上它会停在 running（这一趟的产出不受影响）")
     problem = save_run_checkpoint(root, role, sid, task=task, step=completed,
                                   stop_reason=run.stop_reason, waiting_for=run.waiting_for,
-                                  spend=run.spend)
+                                  spend=run.spend,
+                                  # 与 `spend` 同源、同一刻：`run()` 末尾（收工汇总那一节）
+                                  # 已经把它算好了，这里只是把它一起落盘 —— 此前只传了
+                                  # `spend`，于是顶趟的检查点里没有这一格（根因不是
+                                  # "先写文件后算汇总"，而是写文件这条路自己拼了一份
+                                  # 9 格的 dict，没拿到 `LoopRun` 的这一面）。
+                                  prompt_cache=run.prompt_cache)
     if problem:
         run.notes.append(f"这一趟的步检查点没写成（{problem}）：下一趟 `--resume` 会读到"
                          "更早的一份（或读不到），于是它要么多跑几步、要么如实报'没查成'")

@@ -566,6 +566,11 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
             out["CheckpointView"] = set(ck)
             if isinstance(ck.get("spend"), dict):
                 out["CheckpointSpendView"] = set(ck["spend"])
+            # 2026-10-19：缓存汇总那 11 格也走同一条口径（C 条判"TS 的键 == 后端
+            # 真读出来的键"）—— 否则 `CheckpointCacheView` 会"既不在受核对名单、
+            # 也不在欠账名单"，而它恰恰是"提示词省了多少"在顶趟盘上唯一的读数。
+            if isinstance(ck.get("prompt_cache"), dict):
+                out["CheckpointCacheView"] = set(ck["prompt_cache"])
         if isinstance(view.get("report"), dict):
             out["ReportReadingView"] = set(view["report"])
 

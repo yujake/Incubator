@@ -440,7 +440,8 @@ def add_relation(
 # - 秘书决策行的键：`secretary.Secretary.note_decision`；
 # - 验收表的行键 `id/kind/min/name/note`：`draft/75 §1.3` 的真机读数（8 行 C1–C8）；
 # - 体例的四节名字：`draft/74 §0.4` 的真机读数；
-# - 检查点的 9 个键：`agent_loop.save_run_checkpoint`；
+# - 检查点的 10 个键：`agent_loop.save_run_checkpoint`（第 10 个 `prompt_cache`
+#   是 2026-10-19 补的，形状 = `promptstability.summarize_prompt_cache` 的 11 格）；
 # - 验证行的键：`verifications.record_verification`。
 
 #: 六件产物的名字（`runflow.ARTIFACTS`；真机没有样本 ⇒ 裁定 J2 用夹具造）。
@@ -578,7 +579,15 @@ def make_artifacts_sample(root: Path, *, sid: str = "fix-sid") -> Path:
                            step=3, stop_reason="waiting_for_user",
                            waiting_for="q0001",
                            spend={"calls": 2, "tokens_in": 30, "tokens_out": 40,
-                                  "usd": 0.25, "unknown_usd_calls": 0})
+                                  "usd": 0.25, "unknown_usd_calls": 0},
+                           # 2026-10-19：缓存汇总与 `spend` 并列（11 格，
+                           # `promptstability.summarize_prompt_cache` 的形状）。
+                           # 夹具造的是"上游给了读数"那一档：hit+miss == tokens_in。
+                           prompt_cache={"calls": 2, "no_request_calls": 0,
+                                         "hit": 20, "miss": 10, "unknown_calls": 0,
+                                         "tokens_in": 30, "hit_rate": 0.6667,
+                                         "mismatched_calls": 0, "saved_usd": 0.000002,
+                                         "saved_unknown_calls": 0, "why": ""})
 
     # ---- 任务台账一行（走 schema + store.tx）
     with st.tx("tasks", actor="fixture") as tx:
