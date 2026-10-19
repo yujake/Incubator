@@ -468,7 +468,7 @@ def _plan_error_type() -> type:
 
 @tool(
     "attack.check_budget",
-    "检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）",
+    "检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。",
     {
            "type": "object",
            "properties": {
@@ -502,7 +502,7 @@ def _attack_check_budget(budget, rounds_done=0, depth=0):
 
 @tool(
     "attack.pick_next_subgoal",
-    "按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）",
+    "按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。",
     {
            "type": "object",
            "properties": {"subgoals": {"type": "array", "items": {"type": "object"}}},
@@ -525,8 +525,7 @@ def _attack_pick_next_subgoal(subgoals):
 @tool(
     "attack.create_plan",
     (
-            "为一个难题立项（预算四类键缺一不可，不完整就拒绝创建）。"
-            "同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id"
+            "为一个难题立项（预算四类键缺一不可，不完整就拒绝）。同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id。"
             ),
     {
            "type": "object",
@@ -578,8 +577,7 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
 @tool(
     "attack.step",
     (
-            "推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），"
-            "C/D/F 的推理未接线则如实记 no_change，绝不假装做了"
+            "推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实记 no_change。"
             ),
     {
            "type": "object",
@@ -606,7 +604,7 @@ def _attack_step(_need_store, store, plan_id):
 
 @tool(
     "attack.status",
-    "读一个攻坚计划的完整可读视图（子目标状态计数、预算余量、history 尾部）",
+    "读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。",
     {
            "type": "object",
            "properties": {"plan_id": {"type": "string"}},
@@ -631,7 +629,7 @@ def _attack_status(_need_store, store, plan_id):
 
 @tool(
     "attack.list_plans",
-    "列出全部攻坚计划（可按 problem_key 过滤）。没有它就无法回答'这个难题立过项没有'",
+    "列出全部攻坚计划（可按 problem_key 过滤）。",
     {
            "type": "object",
            "properties": {

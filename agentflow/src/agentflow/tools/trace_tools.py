@@ -172,7 +172,7 @@ def _chain_line(step_no: int, brief: dict) -> str:
 
 @tool(
     "trace.relation",
-    "L1 溯源：由关系代号取回引文/描述/陈述/页码/状态/引文校验三态，并把概念代号翻译成概念名、附文献元数据。",
+    "L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。",
     {
         "type": "object",
         "properties": {"relation_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS}},
@@ -209,7 +209,7 @@ def trace_relation(_g, relation_id: str) -> ToolResult:
 
 @tool(
     "trace.concept",
-    "L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（只给表述与代号，不下钻文献正文）。",
+    "L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。",
     {
         "type": "object",
         "properties": {
@@ -277,7 +277,7 @@ def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResul
 
 @tool(
     "trace.literature",
-    "L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层会如实报告而不是返回空串。",
+    "L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。",
     {
         "type": "object",
         "properties": {
@@ -479,7 +479,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
 
 @tool(
     "trace.chain",
-    "把一条关系代号链的每一步表述串起来（D 写报告可直接引用），缺号如实列出。",
+    "把一条关系代号链的每一步表述串起来，缺号如实列出。",
     {
         "type": "object",
         "properties": {

@@ -2562,6 +2562,7 @@ class Secretary:
         |---|---|
         | 写成了 | `{"checked": True, "created": True, "stmt_id": …, "deps_written": n, "path_groups": k}` |
         | 同内容已有一条 | `{"checked": True, "created": False, "duplicate": True, "stmt_id": <既有>}` |
+        | 同内容 + 更强的证据档（有凭据） | `{"checked": True, "created": False, "upgraded": True, "stmt_id": <既有>, "changes": [...]}` |
         | 受控拒绝（一行都不落） | `{"checked": False, "refused": "<理由码>", "reason": …}` |
 
         理由码：`secretary_unavailable`（没装 store —— B 那条"自己写"的后备路不存在）、
@@ -2587,6 +2588,7 @@ class Secretary:
         否则整笔不写（不许留一条挂空号的依赖 —— 那正是"依赖图静默少一环"的成因）。
         """
         out: dict[str, Any] = {"checked": False, "created": False, "duplicate": False,
+                               "upgraded": False,
                                "stmt_id": "", "deps_written": 0, "path_groups": 0,
                                "tables": [], "washed": False, "changes": [],
                                "refused": "", "reason": "", "pending": []}
@@ -2627,6 +2629,83 @@ class Secretary:
             out.update(checked=False, created=False, refused="write_failed",
                        reason=f"落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
             return out
+
+    def _upgrade_evidence_kind(self, existing: Mapping[str, Any],
+                               body: Mapping[str, Any]) -> dict[str, Any]:
+        """同一份内容再交一次、这一回来的 `evidence_kind` 更强 ⇒ 返回"改哪几格"。
+
+        ## 为什么必须有这一格（2026-10-19 晚，`projects/mp2` 的 `stmt:000003`）
+
+        `mp2` 那条真机读数：B 先把主命题落成 `heuristic`（那时 V 还没签，这是**如实**
+        的降档），随后 V 签了 `verifications/000003.jsonl#v-000001`（verdict=成立、
+        `proof_sha256` 与现行正文相符）—— 而那一行的档位**再也没升上去**，因为
+        "升档"当时只有一条路：`table.update("statements")`。那条路是野路（
+        `store.direct_write_refusal` 现在拒它），因为它同时能改 `bits` / `proof_text` /
+        `quote_verified`，而没有任何东西核过那些字段。
+
+        关掉野路就必须给正路一条同样的出口，否则 `evidence_kind` 在结构上永远到不了
+        `proof_review`（那条审计读数 `weaker_than_evidence` 会永远报 warning，
+        而它要的出口"把这一行升成 proof_review"没人走得到）。这一格就是那条出口：
+        **内容一个字不动、只把档位改强**，且判据用的是 `verifications.proof_review_gap`
+        （写入期闸、审计期、收工门读的是同一处口径）。
+
+        ## 三态（凭据不够就不升，而且把原因说出来）
+
+        | 结局 | 返回 |
+        |---|---|
+        | 升了 | `{"upgraded": True, "row": …, "changes": [...], "reason": …}` |
+        | 该升而凭据不够 | `{"upgraded": False, "reason": "（…；V 那一签还差…）"}` |
+        | 不该升（方向不对/同档） | `{"upgraded": False, "reason": ""}` |
+
+        "凭据不够"与"不该升"都**不**写库：前者留在重复读数那一支，并把
+        `proof_review_gap` 的原话附进 `reason`（调用方据此知道该补哪一项）。
+        只允许弱 → 强（`verifications.WEAKER_THAN_PROOF_REVIEW` → `proof_review`）：
+        反方向（把 `proof_review` 降成 `heuristic`）**不在这一格**——降档是另一个决定，
+        它需要的不是"同一份内容再交一次"这件事，而是写清为什么降（`quote_reason`）。
+
+        ## 只动档位与留痕，**不动 bits**（与 F 的 `_promote_if_understated` 同一口径）
+
+        `agent_f/core._promote_if_understated` 在攻坚那一侧做的是同一件事（复用既有行时
+        就地升到 `proof_review`），它也只改 `evidence_kind`。五元位的第 3 位（`reviewed`）
+        是 V 的签名面，由 `verifications.bit3_payload(那一行)` 现读，不在这一格里抄进来 ——
+        抄进来就有第二份"谁审过了"的账，而两份账迟早会分家。
+        """
+        from . import verifications as VR   # 惰性：只在重复读数这一支才需要
+
+        out: dict[str, Any] = {"upgraded": False, "row": {}, "changes": [], "reason": ""}
+        want = str(body.get("evidence_kind") or "")
+        have = str(existing.get("evidence_kind") or "")
+        if want != VR.PROOF_REVIEW_KIND or have == want:
+            return out
+        if have not in VR.WEAKER_THAN_PROOF_REVIEW:
+            return out
+        probe = dict(existing)
+        probe["evidence_kind"] = want
+        gap = VR.proof_review_gap(self.store.root, probe)
+        if not gap.get("ok"):
+            out["reason"] = (
+                "（这一行**没有**升到 proof_review：`verifications.proof_review_gap` 判"
+                f"凭据不够 —— {str(gap.get('why') or '查不到凭据')[:240]}）")
+            return out
+        row = dict(existing)
+        row["evidence_kind"] = want
+        # 留痕：这一格为什么从弱档变了 —— 不写下来，盘上就只能看到"档位不一样了"。
+        row["_evidence_kind_upgrade"] = {
+            "from": have, "to": want,
+            "verification_id": str(gap.get("verification_id") or ""),
+            "ledger": str(gap.get("ledger") or ""),
+            "proof_sha256_matched": bool(gap.get("sha_matches")),
+            "by": f"secretary-{self.role}", "at": S.now_iso(),
+        }
+        out.update(
+            upgraded=True, row=row,
+            changes=[f"evidence_kind: {have} → {want}"
+                     f"（凭据：{gap.get('ledger') or ''}#{gap.get('verification_id') or ''}）"],
+            reason=(f"同一份内容再交一次、且这一回带了 `proof_review` 的凭据 ⇒ 秘书"
+                    f"**改那一行**（不新建）：`{gap.get('ledger') or ''}` 里 "
+                    f"{gap.get('verification_id') or ''} 签「成立」、`proof_sha256` 与现行"
+                    "正文相符（判据与写入期那道闸同一处）。内容面一个字没动。"))
+        return out
 
     def _record_pending_concept(self, body: dict[str, Any], *,
                                 out: dict[str, Any]) -> dict[str, Any]:
@@ -2784,10 +2863,25 @@ class Secretary:
             existing = next((r for r in tx.rows("statements")
                              if T.normalize(str(r.get("statement_full") or "")) == key), None)
             if existing is not None and not force_new:
+                upgraded = self._upgrade_evidence_kind(existing, body)
+                if upgraded.get("upgraded"):
+                    # 同一份内容、这一回带来的证据档更强 ⇒ **改那一行**（不新建）。
+                    # 这是"改表"那一件活的正路，也是 `evidence_kind` 从弱档走到
+                    # `proof_review` 的**唯一**一条路（通用写口 `table.update` 已在
+                    # `store.direct_write_refusal` 那一层被拒）。
+                    tx.upsert("statements", upgraded["row"],
+                              note="record_statement:upgrade")
+                    out.update(checked=True, created=False, duplicate=False,
+                               upgraded=True, stmt_id=str(existing.get("stmt_id") or ""),
+                               row=dict(upgraded["row"]), tables=["statements"],
+                               changes=list(upgraded.get("changes") or []),
+                               reason=str(upgraded.get("reason") or ""))
+                    return out
                 out.update(checked=True, created=False, duplicate=True,
                            stmt_id=str(existing.get("stmt_id") or ""),
                            reason=("同一条 statement_full 已在册 ⇒ 重复读数，不新建行"
-                                   "（确实要另起一条，请给 force_new）"))
+                                   "（确实要另起一条，请给 force_new）"
+                                   + str(upgraded.get("reason") or "")))
                 return out
             steps, missing = _resolve_dep_steps(groups, tx)
             if missing and body.get("deps"):

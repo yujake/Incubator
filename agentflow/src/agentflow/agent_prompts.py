@@ -2048,7 +2048,77 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   删掉的只是那个不该出现在提示词里的绝对落点；roots 表**不动**（把只读的参考位置
 #:   塞进写落点表，等于让判据以为那儿有人写东西 —— 那是改事实，不是更新判据）。
 #:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
-PROMPT_VERSION = "p163"
+#: p163 → p164（2026-10-19，**十个角色各补一条「产出标准」**：不只强调工作纪律，也强调
+#:   "好的产出"长什么样）。**十条全部并进既有的某一条 policy（没有新开第 N 条）**，
+#:   条目数一格没变（A4 / B7 / C3 / D13 / E19 / F10 / G11 / H5 / M49 / V9），净增
+#:   88–113 字/角色（合计 +1008 字符；每角色提示词 2.1万–5.4万字符）。
+#:   **每条都带能力锚点**（靠这个角色手上真有的动作/工具才做得到，见括号）：
+#:   ① **A** 并进「继续搜还是收手」—— 检索的价值在找到能改变判断的那几篇：命中后要写清
+#:      它支撑/推翻了台账里的哪一条（`stmt:` / `rel:` 号，写进结论与 `note`）；只登记元数据
+#:      不说影响的不算有价值。（锚点：`search.register` + `table.*` 读册子 + `note` 形状）
+#:   ② **B** 并进「一次抽取的产出有上限」—— 关系的价值在信息量（要能回答"是什么关系、凭哪
+#:      一句原文 `quote`"，`kind` 要是说得出的关系名；「相关」这类空边不许产出）。（锚点：
+#:      `B.run_once` 写出的 `relations` 行的 `kind` / `quote` / `quote_verified`）
+#:   ③ **C** 并进「缺口不许只写在报告里」—— 读数要能改变判断：在 `analysis.register_report`
+#:      的 `summary` 里写清这个数让哪个缺口成立或不成立。（锚点：`C.gaps` +
+#:      `analysis.register_report`，都在 C 的工具面上）
+#:   ④ **D** 并进「从数据里找模式」—— 这一轮逐条点名新增的东西（**有模型缝时** ≥3 条：
+#:      新猜想 / 新问题或一步新归约 / 新读数）；缝没接时如实报 `not_wired`、不硬凑三条。
+#:      （锚点：`D.register_conjecture` / `D.propose_question` / `D.write_report`；「缝」由
+#:      运行期模型决定，读数在三态 `_llm_refine`）
+#:   ⑤ **E** 并进「脚本要会说结论」—— 实验的价值在于能判：每条落库时写清它支持/反驳了哪条
+#:      `claim`、读数是多少（`result` / `search_bound`）。（锚点：`E.run_experiment` 写的
+#:      `experiments` 行就是这几个字段）
+#:   ⑥ **F** 并进「每一轮先挑一个可判定的子目标」—— 每轮留下一批新事实（**有推理缝时** ≥3 条：
+#:      `reduction` / `proof` / `counterexample_request` 可组合）；缝没接时 `step` 只会落
+#:      `dead_end(缺工具)`，如实报、不硬凑。（锚点：`F.step` 的四种产物；缝的开关是
+#:      `--attack-reasoning`，未接时的读数逐字见 `host.py` 的 `notes_attack`）
+#:   ⑦ **G** 并进「论文体例」—— 没有新增结论的稿子不许投：要么不写，要么用 `build_document`
+#:      如实写成综述（`kind="survey"`）并在摘要首句标明。（锚点：`G.build_document` 的
+#:      `kind` 枚举里有 `survey`）
+#:   ⑧ **H** 并进「稿子落成研究报告时的裁决」—— 还要判「相对台账新增了什么」：把
+#:      `documents.claims` 与 `statements` 逐条对，每条断言都要能指到册子上有没有对应行。
+#:      （锚点：`doc.scan_claim` / `doc.list_documents` / `table.list` 读，`review.record_finding`
+#:      落 error 级 finding —— H 是只读角色，不比它读不到的东西）
+#:   ⑨ **M** 并进「先窄后宽」—— 每派一步，在 `conductor.summon` 的 task 里写明这一步要动哪条
+#:      结论（哪条猜想 / 断言 / 验收档）；收工前用 `conductor.ledger` 核它动没动。
+#:      （锚点：`conductor.summon` 的 task 文本 + `conductor.ledger`；**不要求预测结果**）
+#:   ⑩ **V** 并进「每条问题都要指到那一步」—— 先判哪一步承重，并在 `verify_proof` 的 findings
+#:      里写出它的**步号与原句**。（锚点：`V.verify_proof` 的 findings 带步号 + `read_proof`）
+#:   本批**只做加法**：130 条旧条目逐字一条没删；十格摘要全部换值。
+#:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
+#:
+#: `p165`（2026-10-19 晚，业主：「证明齐全、V 也签了，却只落 heuristic」）：
+#: 证据档那条口径从"拿不准就写弱一档"改成"凭据齐全就该到它该在的那一档"。
+#: 三格换值（现算，其余七格逐字未动）：
+#:   - **B** 的 policy 加一条「证据档按『有什么凭据』定，不按『怕不怕』定」：
+#:     `proof_text` 非空 ＋ V 最近一签「成立」＋ `proof_sha256` 与现行正文相符 ⇒
+#:     就是 `proof_review`；只有真没有那一签才退 `heuristic`/`cross_check`，
+#:     两条出口（请 V 走查 / 如实降档）写清。`register_statement` 的 `evidence_kind`
+#:     参数也补了同一句话（那一段不进提示词，走 `conductor.role_spec` 与拒信里的
+#:     参数表时才被读到）。
+#:   - **F** 的 policy 加一条「V 签过之后这一行的档位就该是 `proof_review`」：
+#:     档位按 `verifications/<命题号>.jsonl` 现算（`_proof_outlet` 的实测落点），
+#:     没签才落 `heuristic`；够格却写弱档会被 `verify` 的 `weaker_than_evidence`
+#:     点出来。（改前 `_proof_outlet` 把 `evidence_kind="heuristic"` 写死在代码里，
+#:     理由是"本批没有接 V 的回路"——那条理由随 `F→V` 的边与 `M` 的同轮派活失效了。）
+#:   - **M** 的第 ② 条纪律补了反方向：那一签**已经在盘上**却还写着弱档 ⇒
+#:     该升就升（`verify` 报 `weaker_than_evidence` warning）；原文只写了
+#:     "不许在没有那一签时写成 `proof_review`"，读起来像是"别写强档"。
+#:
+#: p165 这一版还并入了同一轮的另一件事（业主：「前置提示词稍微压一下，但必要的提示词不能删」）：
+#: **十格的前置提示词压缩**。只动 `specs/*.py` 的 `policy`（`ACTIONS` / `edges` / `write_set` /
+#: `emphasis` / `local_notes` / `boundary` / `duty` / `deliverable` / `stance` 一个字没动），
+#: 三把动作按优先级：① 合并同义重复（同一件事被写成两三条的合成一条）；② 压缩措辞
+#: （长句、重复的限定语、可删的客套与来历注）；③ 不改"该做什么 / 什么算好"这一层。
+#: 十格实测（`system_prompt`，`lean_enabled=1` ＋ 带 store/conductor 的全量注册表：
+#: A 26113 / B 25487 / C 21629 / D 31815 / E 28449 / F 27981 / G 37751 / H 36850 /
+#: M 54209 / V 22705 = 312,989）→ 压缩后合计见 `_FROZEN_PROMPT_DIGESTS` 那一轮现算；
+#: 每一格的降幅都远小于 20%（最大的 M 一格 -5.8%）。
+#: **保留了全部 needle**：`tests/` 里被断言的字面量 1008 条、十格提示词里的具体字面量
+#: （反引号 code span 与裸路径）2459 条、`specs/e.NO_LEAN_REPLACEMENTS` 的 13 个左边，
+#: 逐条核过"改后仍在"（探针不进仓库，读数写在 `NOAI-REVIEW-REGISTER.md` 的批注里）。
+PROMPT_VERSION = "p167"
 
 
 
@@ -2287,6 +2357,7 @@ LOOP_PROTOCOL = """\
   看到 `unreachable` 时的三条出路：① 改派给**有它的那一支**（别自己硬做）；② 把"要谁做"
   写给直接父（代唤申请那一条）；③ 如实记成「职责之外」。**`unknown` 不是"做得到"**：
   名字拼错就照它给的正确名字重写一次。
+- 派活先过秘书：`alarms` 预筛报警、`wash`/`changes` 洗过的格式、`assessment` 该不该派；`refused` 非空即被拒，`fail_open` 为真是没查成。
 - 收工那条 JSON 里的 `notify` 表是**交接留痕**（见上面的形状）：它同时决定"谁收到这份手稿"，
   所以 `to` 必须是角色名或 `ALL` —— 写错或留空，这张表就不算数、这一趟没有手稿
   （不会发给别人，但也没人收到）。拿不准就给 `ALL`（广播）。

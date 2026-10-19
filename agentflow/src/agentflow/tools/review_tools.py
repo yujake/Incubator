@@ -1755,7 +1755,7 @@ def review_report(
 
 @tool(
     "review.scan_document",
-    "对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现都带 evidence",
+    "对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。",
     {
            "type": "object",
            "properties": {
@@ -1792,7 +1792,7 @@ def _review_scan_document_tool(doc, dependencies=_UNSPECIFIED):
 
 @tool(
     "review.list_findings",
-    "只读列举审校发现（可按稿件/状态/级别过滤），含每条发现的 evidence",
+    "只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。",
     {
            "type": "object",
            "properties": {
@@ -1822,8 +1822,8 @@ def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, leve
 @tool(
     "review.review_document",
     (
-            "审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence），并更新文档状态；"
-            "只写 review_findings 与 documents.status，不改 claims"
+            "审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence）并更新文档状态；只写 review_findings 与 "
+            "documents.status，不改 claims。"
             ),
     {
            "type": "object",
@@ -1856,8 +1856,8 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
 @tool(
     "review.verify_fixes",
     (
-            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；"
-            "到 max_review_rounds 仍红则置 unresolved_review 并**列出**未解决项"
+            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 "
+            "unresolved_review 并**列出**未解决项。"
             ),
     {
            "type": "object",
@@ -1896,9 +1896,8 @@ def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **k
 @tool(
     "review.report",
     (
-            "产出 G1–G15 的完整审校报告（markdown 落盘）：报告头钉住被审版本 hash、"
-            "每道门都带零发现自证数字、并强制包含『我这一轮犯的错』一节；"
-            "只写一个报告文件，不碰任何数据表、不碰 claims"
+            "产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件，不碰 "
+            "claims。"
             ),
     {
            "type": "object",
@@ -1957,11 +1956,8 @@ def _review_report_tool(_not_wired, store, actor, semantic_judge, **kw):
 @tool(
     "review.record_finding",
     (
-            "把**你自己读出来的**一条发现落成 `review_findings` 行（业主 2026-10-18："
-            "只读角色的产出要能进台账）。机械扫描（`review_document`）覆盖不到的那一类"
-            "—— 「G8 回执没给退出码」「正文引用的材料盘上没有」「这条断言只有泛证」"
-            "—— 用这一件落库；只写 `review_findings`，不改稿件状态、不碰任何知识表。"
-            "`evidence` 必填：审校者的判断也要有依据"
+            "把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）"
+            "**覆盖不到**的那类用它；`evidence` 必填，只写这一张表。"
             ),
     {
            "type": "object",

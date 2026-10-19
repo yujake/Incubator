@@ -219,9 +219,8 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
 
 @tool(
     "conductor.summon",
-    "派活：把这件活交给某个角色（写清**是什么活**即可 —— 怎么做由它自己定）；"
-    "闸门在主控内部（允许的边 / 动作表 / 参数接缝 / 四类上限 / 预算），"
-    "被拒也落台账并返回 refusal_reason。",
+    "派活：把活交给某个角色（只写**是什么活**，怎么做由它定）。闸门在主控内部（边 / 动作表 / 参数接缝 / 上限 / 预算）；被拒也落台账并回 `"
+    "refusal_reason`。",
     {
         "type": "object",
         "properties": {
@@ -278,14 +277,9 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
 
 @tool(
     "conductor.summon_many",
-    "一次派**一批**活，真的并发：按写集分波（`policy.waves_of`），同波用线程池跑"
-    "（上限 `max_concurrency`）。"
-    "同一角色要开多个实例时，给每个 target 一个不同的 `instance` 标签 —— "
-    "**同角色不同实例允许同波并发**（例：一批文献分给 3 个 B 同时读）；"
-    "没给标签时：同一角色在一批里出现多次会自动补 `<角色>#N`（返回里标 "
-    "`auto_instance=true`），只出现一次则与从前一样串行。"
-    "返回里带 `waves` 与 `concurrent_peak`："
-    "'到底并发了没有'看这两个数，不要看墙钟。",
+    "一次派**一批**活，真并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色多实例给每个 target "
+    "不同 `instance` 标签 ⇒ 允许同波并发；没标签时出现多次自动补 `<角色>#N`（`auto_instance=true`）。并发看 `waves` 与 `"
+    "concurrent_peak`。",
     {
         "type": "object",
         "properties": {
@@ -416,12 +410,8 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
 
 @tool(
     "conductor.ledger",
-    "看台账：tree（每行的层级与结局）/ stats（总数与分类计数）/ issues（结构问题）/ "
-    "verify（不变式检查）/ relays（同伴发来的「请代唤」申请：哪些还没受理）。"
-    "给主控判断'下一步'用的事实，不含任何建议。"
-    "口径（`task_count` 与 tree 的行数）：数的是 `tasks` 台账**全量**，含**顶趟行**"
-    "（`role=M` / `action=run` / `called_by=user` —— 用户发起的那一趟，**不是召唤**；"
-    "召唤数看 `view=\"stats\"` 的 `started_total`）。",
+    "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（同伴的『请代唤』申请）。`task_count` "
+    "与 tree 行数数 `tasks` 全量（含顶趟行）；召唤数看 `started_total`。不含建议。",
     {
         "type": "object",
         "properties": {
@@ -483,13 +473,8 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
 
 @tool(
     "conductor.stop",
-    "停止（`draft/37` §128）：默认**优雅** —— 落停机开关 → 在公共频道广播叫停"
-    "（提醒每个同伴收工，并把它们自己起的子进程停掉）→ 不再接受新召唤 → 等在飞任务收尾"
-    "（有界）→ 给剩下的合成终态（不留僵尸、结果记未知、不自动重试）→ 落一份续跑简报。"
-    "`force=true` 是**直接停**：不等待收尾，并立刻按进程登记把子进程连子孙一起杀掉。"
-    "**只停一支**：给 `root_task_id`（一个实例号）就只对它和它的子孙生效 —— 不给才是"
-    "全工作区（老行为）。"
-    "幂等：第二次不改第一次的理由（终态先到先得）。",
+    "停止：默认**优雅** —— 落停机开关 → 广播叫停（同伴收工并停掉自己起的子进程）→ 拒新召唤 → 在飞任务有界收尾 → 剩下的合成终态（记未知、不重试）→ 落续跑简报。`"
+    "force=true` 直接停：立刻按进程登记连子孙一起杀。给 `root_task_id` 只停那一支，不给是全工作区。幂等。",
     {
         "type": "object",
         "properties": {
@@ -613,8 +598,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
 
 @tool(
     "conductor.resume_brief",
-    "读上一次优雅停止留下的续跑简报（做了什么 / 剩什么 / 从哪继续）。"
-    "没有简报时如实说'还没有停止过'；未终态行会逐条报出（不隐藏、不自动续跑）。",
+    "读上一次优雅停止留下的续跑简报（做了什么 / 剩什么 / 从哪继续）。没有简报时如实说『还没有停止过』；未终态行逐条报出。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
@@ -637,8 +621,7 @@ def conductor_resume_brief(_conductor, ) -> ToolResult:
 
 @tool(
     "conductor.cancel",
-    "硬取消（协作式）：立刻置共享停止信号，不等在飞收尾；在飞任务自己收终态。"
-    "与 conductor.stop 的区别是 stop 先尝试收尾。",
+    "硬取消（协作式）：立刻置共享停止信号，不等在飞收尾；在飞任务自己收终态。与 conductor.stop 的区别是 stop 先尝试收尾。",
     {
         "type": "object",
         "properties": {"reason": {"type": "string", "enum": list(CANCEL_CODES)},
@@ -664,11 +647,8 @@ def conductor_cancel(_conductor, reason: str = "user", detail: str = "") -> Tool
 
 @tool(
     "conductor.ensure_project",
-    "冷启动 / 热启动由你决定：给 start=auto|cold|warm，返回四态"
-    "（absent/empty/workspace/not_a_project）与最终 mode。cold 才建目录，"
-    "warm 必须已存在且是工作区 —— 绝不替你删、也绝不替你把别人的目录当工作区。"
-    "⚠️ 你已经在某个工作区里、又没有显式给 projects_dir 时，这一件会被拒"
-    "（kind=already_a_project）：待在项目里不要另建项目。",
+    "冷启动 / 热启动：`start=auto|cold|warm`，返回四态（absent/empty/workspace/not_a_project）与 mode。`cold`"
+    " 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。",
     {
         "type": "object",
         "properties": {
@@ -856,13 +836,9 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
 
 @tool(
     "conductor.state",
-    "只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模。"
-    "给主控判断用的眼睛，不带任何建议。"
-    "口径（`tasks` 这一格）：`tasks` 台账**全量**，含**顶趟行**"
-    "（`role=M` / `action=run` / `called_by=user` —— 用户发起的那一趟，**不是召唤**）；"
-    "串行口径的召唤数在 `conductor.ledger(view=\"stats\")` 的 `started_total`。"
-    "`queues.literature.unprocessed` 是「注册了、还没被消化的文献条数」"
-    "（消费它的是 B 的 `run_once` / `run`，**一次一篇**）。",
+    "只读状态视图：各表计数 + 猜想按状态 + 台账规模，不带建议。`tasks` 是全量（含顶趟行 `called_by=user`）；召唤数看 `"
+    "conductor.ledger(view=\"stats\")` 的 `started_total`；`queues.literature.unprocessed` = "
+    "已注册未消化的篇数（`run_once` 一篇一次）。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
@@ -897,8 +873,7 @@ def conductor_state(_conductor, ) -> ToolResult:
 
 @tool(
     "conductor.role_spec",
-    "某角色的规格：允许的动作与各自的参数名、以及它今天有哪些工具。"
-    "派活前用它确认'这个角色能不能做这件事'；与 capabilities 同源，不另写一份。",
+    "某角色的规格：允许的动作与各自的参数名、以及它今天有哪些工具。派活前用它确认『这个角色能不能做这件事』；与 capabilities 同源。",
     {
         "type": "object",
         "properties": {"role_name": {"type": "string", "description": "角色名（A–H）"}},
@@ -970,8 +945,7 @@ def _brief_of(role: str) -> dict[str, Any] | None:
 
 @tool(
     "conductor.acceptance",
-    "只读：读某个项目的验收表（默认 out/paper/ACCEPTANCE.md），逐行解析出 P1–P11 的"
-    "判据名 / 结论 / 读数。交付说明必须逐条与它对齐 —— 没有这张表就只能靠猜。",
+    "只读：读某项目的验收表（默认 out/paper/ACCEPTANCE.md），逐行解析出 P1–P11 的判据名 / 结论 / 读数。交付说明要逐条对齐。",
     {
         "type": "object",
         "properties": {
@@ -1087,21 +1061,11 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）—— 正文与 PDF 对得上（编译回执里的 tex 摘要 == 盘上这份 "
-    "`out/paper/main.tex`；盘上没有正文 ⇒ 不适用）/ 无未裁决矛盾 / "
-    "承重结论有 T3 或已降档 / 报告体例兑现（R9 之后门不自带节名清单，逐节核的是 M 自己声明的体例） / "
-    "没有还在等用户回答的问题 / "
-    "**实质产出**（`documents`/`relations`/`experiments`/`review_findings`/`statements` "
-    "至少一张非空）/ **验收表的机器可判行**（项目里若有一份 `out/paper/ACCEPTANCE-CHECKS.json`，"
-    "逐行从台账现算：任务点名的每一条腿都要有落台账的凭据）/ "
-    "**产物台账与盘上一致**（`ARTIFACTS.jsonl` 逐条重算：行里的 sha 与盘上那份对不对得上）。"
-    "每条各自一个三态读数，unknown 不是通过。"
-    "**`can_close` 不由这八格决定**：它是**你自己交的那份判据**（`goal` / `goal_met` / "
-    "`task_list`）—— 八格与它不一致时 `overrode` 逐格点名给你看，但判据归你；"
-    "你不交判据 ⇒ `can_close=false` + 『没人判过』的读数。"
-    "同一次调用还会回一栏 `review_acceptance`：内容级验收的五条判据各自三态 + 五种辅助读数"
-    "（辅助读数逐字不许当通过）；给可选参数 `cap_usd` 才能判「在成本上限内完成」，"
-    "不给那一格记 unknown。",
+    "只读：跑收工门（八格）—— 正文与 PDF 对得上（`out/paper/main.tex`）/ 无未裁决矛盾 / 承重结论有 T3 / 报告体例 / 无待答问题 / "
+    "**实质产出**（`statements` 等表至少一张非空）/ 验收表机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）/ "
+    "产物台账与盘上一致（`ARTIFACTS.jsonl`）。每格三态，unknown 不是通过。`can_close` 由你交的判据（`goal`/`goal_met`/`"
+    "task_list`）决定，不交 ⇒ `false` + 『没人判过』。还回 `review_acceptance`：内容级验收五条判据 + 五种辅助读数；给 `"
+    "cap_usd` 才判成本上限。",
     {
         "type": "object",
         "properties": {
@@ -1309,10 +1273,8 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
 @tool(
     "conductor.status_report",
-    "项目状态报告（`draft/39` §4）：**只读**收集当前情况（产出/交接/在飞卡点/被拒与插话），"
-    "落 `out/review/STATUS-<ts>.{md,json}` 并把四类读数回给你。"
-    "用户通过留言问「现在什么情况」时走它：**它不发 ask_user、不停任何人的循环**"
-    "（旁路观测）—— 这与「问 M 一句」是两条相反的路。",
+    "项目**状态报告**：只读收集当前情况（产出/交接/在飞卡点/被拒与插话）→ 落 `out/review/STATUS-<ts>.{md,json}`。"
+    "用户问「现在什么情况」走它：不发 ask_user、不停别人的循环（**旁路观测**）。",
     {"type": "object",
      "properties": {"since": {"type": "string",
                               "description": "只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）"},
@@ -1344,9 +1306,7 @@ def conductor_status_report(_conductor, since: str = "", out_dir: str = "") -> T
 
 @tool(
     "conductor.board",
-    "只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项"
-    "（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，"
-    "`expects=work` 的项要交付才算完。它不含建议，也不替你决定要不要重派。",
+    "只读：板上还挂着什么。一行 = 一个工作项（`tasks` 里 `kind` 非空）；`expects=ack` 确认读过算完，`expects=work` 要交付算完。",
     {"type": "object",
      "properties": {"limit": {"type": "number", "description": "最多列几项（默认 20）"}},
      "required": [], "additionalProperties": False},
@@ -1369,9 +1329,7 @@ def conductor_board(_conductor, limit: int = 20) -> ToolResult:
 
 @tool(
     "conductor.broadcast",
-    "给我名下的**直接子代理**广播一条通告（每个收件人一条 ack 板项）。它们各自决定要不要"
-    "再向下转（级联是收件人的动作，框架不代转）—— 要覆盖全树就逐层向下调用；"
-    "没有子代理时如实报『没有收件人』，不假装发出去了。",
+    "给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。",
     {"type": "object",
      "properties": {"subject": {"type": "string", "description": "一句话标题"},
                     "body": {"type": "string", "description": "正文（进板项的 detail）"}},

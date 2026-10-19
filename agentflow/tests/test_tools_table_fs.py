@@ -5,6 +5,18 @@
   点名引用者，主键不许改 —— 这三条都是"删除不可逆 / 引用静默悬空"的防线。
 - 文件：一切路径先过沙箱闸门（越界、盘符、UNC、保留设备名一律拒绝且不真的去读），
   sha256 必须与本地复算一致，删目录必须显式 recursive。
+
+## 2026-10-19 晚：样品的表换过一次（`projects/mp2` 的真机读数）
+
+CRUD 的样品原先是 `statements`。现在那两张表（`statements` / `dependencies`）**不由
+通用写口直写**：`store.direct_write_refusal` 会以 `direct_write_refused` 拒绝
+`table.create` / `table.update`，正路只有 `Secretary.record_statement`（B 交内容、
+秘书落盘）。真机形态见 `projects/mp2/sessions/mp2-7.jsonl` 第 94/97 行。
+
+于是本文件的 CRUD 样品换成 `literature`（同样的 `create→get→update→delete` 语义，
+同样的"未给字段必须保留"），而"删被引用的命题"那一档改用**正路**（秘书）铺数据 ——
+保护的两个意图（部分更新、外键保护）一个字没变。野路被拒本文件也顺带钉一条
+（`test_the_generic_write_tools_refuse_the_two_tables_the_secretary_owns`）。
 """
 
 from __future__ import annotations
@@ -14,6 +26,7 @@ import hashlib
 import pytest
 
 from agentflow import schema as S
+from agentflow.secretary import Secretary
 from agentflow.tools import fs_tools, table_tools
 from agentflow.tools.base import ToolRegistry
 
@@ -29,6 +42,19 @@ def tables(store):
     return reg
 
 
+def _concept(reg, store, label: str) -> str:
+    """铺一条概念行（`statements` 里 `kind="concept"`）—— 走**正路**：B 交、秘书落。
+
+    为什么不再用 `table.create`：`statements` 已不由通用写口直写
+    （`store.direct_write_refusal`），而那正是本文件要钉的新契约。
+    """
+    sec = Secretary("B", root=store.root, store=store)
+    out = sec.record_statement({"kind": "concept", "label": label, "origin": "own_result",
+                                "statement_full": f"{label}（夹具定义）"}, role="B")
+    assert out["checked"] and out["created"], out
+    return str(out["stmt_id"])
+
+
 @pytest.fixture
 def fs(store):
     """绑定了工作区根的沙箱文件工具注册表。"""
@@ -42,14 +68,18 @@ def fs(store):
 
 
 def test_table_crud_roundtrip_preserves_untouched_fields(tables):
-    """create→get→update→delete：未在 patch 里出现的字段（含 `_` 诊断字段）必须原样保留。"""
+    """create→get→update→delete：未在 patch 里出现的字段（含 `_` 诊断字段）必须原样保留。
+
+    样品是 `research_questions`（`statements` / `dependencies` 已不由通用写口直写，
+    见模块 docstring；而 `literature` 没有 `created_at`/`updated_at`，那条时间戳判据
+    就落不到它身上）：判据本身一个字没改 —— 部分更新只覆盖 patch 里给的字段。
+    """
     created = tables.call(
         "table.create",
-        table="statements",
+        table="research_questions",
         row={
-            "origin": "own_result", "kind": "theorem",
-            "statement_text": "环", "statement_full": "环的原始定义",
-            "aliases": ["ring"], "derived_from": [], "quote_reason": "尚未逐字校验",
+            "question": "群为什么可交换？", "origin": "fixture",
+            "priority": "high", "notes": "原始笔记", "gap_reason": "没查到",
             "_probe": "诊断字段",
         },
     )
@@ -57,26 +87,49 @@ def test_table_crud_roundtrip_preserves_untouched_fields(tables):
     cid = created.data
     assert cid == S.format_id(0)
 
-    got = tables.call("table.get", table="statements", id=cid)
+    got = tables.call("table.get", table="research_questions", id=cid)
     assert got.ok and got.meta["found"] is True
-    assert got.data["statement_text"] == "环"
+    assert got.data["notes"] == "原始笔记"
 
-    upd = tables.call("table.update", table="statements", id=cid, patch={"statement_text": "环（改）"})
+    upd = tables.call("table.update", table="research_questions", id=cid,
+                      patch={"notes": "改过的笔记"})
     assert upd.ok, upd.error
 
-    after = tables.call("table.get", table="statements", id=cid).data
-    assert after["statement_text"] == "环（改）"
-    assert after["statement_full"] == "环的原始定义", "未在 patch 里的 statement_full 被清掉了"
-    assert after["aliases"] == ["ring"], "未在 patch 里的 aliases 被清掉了"
-    assert after["derived_from"] == [], "未在 patch 里的 derived_from 被清掉了"
+    after = tables.call("table.get", table="research_questions", id=cid).data
+    assert after["notes"] == "改过的笔记"
+    assert after["question"] == "群为什么可交换？", "未在 patch 里的 question 被清掉了"
+    assert after["gap_reason"] == "没查到", "未在 patch 里的 gap_reason 被清掉了"
+    assert after["priority"] == "high", "未在 patch 里的 priority 被清掉了"
     assert after["_probe"] == "诊断字段", "`_` 开头的诊断字段被抹掉了"
-    # 时间戳：`statements` 的 schema 里只有 `created_at`（没有 `updated_at`）——
-    # 建行时它由 `_touch_timestamps` 自动补上（本行刻意没给这一格）⇒ 非空即证。
-    assert after["created_at"], "时间戳应当被自动补上"
+    # 时间戳：建行时由 `_touch_timestamps` 自动补（本行刻意没给这两格）⇒ 非空即证。
+    assert after["created_at"], "created_at 应当被自动补上"
+    assert after["updated_at"], "updated_at 应当被自动补上"
 
-    deleted = tables.call("table.delete", table="statements", id=cid)
+    deleted = tables.call("table.delete", table="research_questions", id=cid)
     assert deleted.ok and deleted.data is True
-    assert tables.call("table.get", table="statements", id=cid).meta["found"] is False
+    assert tables.call("table.get", table="research_questions", id=cid).meta["found"] is False
+
+
+def test_the_generic_write_tools_refuse_the_two_tables_the_secretary_owns(tables):
+    """野路受控拒绝：`statements` / `dependencies` 不许通用写口直写。
+
+    真机形态（`projects/mp2/sessions/mp2-7.jsonl` 第 97 行）：B 拿不到
+    `register_statement`，于是 `table.create(table="statements")` 手写
+    `bits={}` + `evidence_kind="heuristic"` —— 秘书那四件活与五元位一件没跑。
+    拒信必须逐字写出该走哪条路（模型据此能改），且**一行都不落**。
+    """
+    for table in ("statements", "dependencies"):
+        made = tables.call("table.create", table=table,
+                           row={"origin": "own_result", "kind": "theorem",
+                                "statement_full": "手写的", "quote_reason": "尚未逐字校验"})
+        assert made.ok is False, (table, made.ok)
+        assert made.meta.get("kind") == "direct_write_refused", made.meta
+        assert "Secretary.record_statement" in made.error, made.error
+        assert "table.delete" in made.error, made.error   # 逐字写着哪条不受限
+        upd = tables.call("table.update", table=table, id=S.format_id(0), patch={"label": "x"})
+        assert upd.ok is False and upd.meta.get("kind") == "direct_write_refused", upd.meta
+    assert tables.call("table.count", table="statements").data == 0
+    assert tables.call("table.count", table="dependencies").data == 0
 
 
 def test_table_create_autofills_request_id_and_derived_relation_fields(tables):
@@ -109,7 +162,7 @@ def test_table_create_autofills_request_id_and_derived_relation_fields(tables):
 
 def test_table_get_missing_row_is_ok_with_found_false(tables):
     """「没找到」是有效结论而不是错误：ok=True 且 meta.found=False。"""
-    res = tables.call("table.get", table="statements", id="9999")
+    res = tables.call("table.get", table="literature", id="9999")
     assert res.ok is True
     assert res.data is None
     assert res.meta["found"] is False
@@ -118,16 +171,16 @@ def test_table_get_missing_row_is_ok_with_found_false(tables):
 # ============================================================ 表：负面
 
 
-def test_delete_concept_referenced_by_relation_names_the_referrer(tables):
+def test_delete_concept_referenced_by_relation_names_the_referrer(tables, store):
     """删被关系引用的概念必须被拒，且错误里点名"是谁在引用"。
 
     概念行并表之后住在 `statements` 里（`kind="concept"`）—— 名字与这条判据的
     保护意图都不变（静默删掉被引用的行会让 verify 报 `dangling_*`，而那时
     "原来是谁引用的"已经查不出来了），变的只是行现在落在哪张表。
-    所以这里照旧用 `kind="concept"` 的行，`relations.concept_ids` 照旧指向它。
+    概念行**走正路**铺（B 交内容、秘书落盘）：`table.create("statements")` 已受控拒绝。
     """
-    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
-    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "阿贝尔群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
+    _concept(tables, store, "群")
+    _concept(tables, store, "阿贝尔群")
     tables.call("table.create", table="literature", row={"title": "T", "type": "J", "summary": "s", "path": None, "processed": True})
     rel = tables.call(
         "table.create",
@@ -166,28 +219,38 @@ def test_delete_literature_referenced_by_request_result_lit_ids_is_refused(table
 
 
 def test_table_update_refuses_primary_key_change(tables):
-    """主键是外键的锚点：update 不许改主键（否则一次调用就造出一片悬空引用）。"""
-    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "theorem", "statement_full": "d", "quote_reason": "尚未逐字校验"})
-    res = tables.call("table.update", table="statements", id=S.format_id(0), patch={"stmt_id": S.format_id(9)})
+    """主键是外键的锚点：update 不许改主键（否则一次调用就造出一片悬空引用）。
+
+    样品是 `literature`（`statements` 已不由通用写口直写，见模块 docstring）。
+    """
+    tables.call("table.create", table="literature",
+                row={"title": "T", "type": "J", "summary": "s", "path": None})
+    res = tables.call("table.update", table="literature", id=S.format_id(0),
+                      patch={"lit_id": S.format_id(9)})
     assert res.ok is False
     assert res.meta["kind"] == "primary_key_change"
     assert "不允许修改主键" in res.error
-    assert tables.call("table.get", table="statements", id=S.format_id(0)).meta["found"] is True
+    assert tables.call("table.get", table="literature", id=S.format_id(0)).meta["found"] is True
 
 
 def test_table_update_rejects_unknown_field_and_empty_patch(tables):
     """拼错的字段名必须报错而不是静默忽略；空 patch 也要拒（它只会改 updated_at）。"""
-    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "theorem", "statement_full": "d", "quote_reason": "尚未逐字校验"})
-    bad = tables.call("table.update", table="statements", id=S.format_id(0), patch={"nmae": "拼错"})
+    tables.call("table.create", table="literature",
+                row={"title": "T", "type": "J", "summary": "s", "path": None})
+    bad = tables.call("table.update", table="literature", id=S.format_id(0),
+                      patch={"nmae": "拼错"})
     assert bad.ok is False and bad.meta["kind"] == "validation"
-    empty = tables.call("table.update", table="statements", id=S.format_id(0), patch={})
+    empty = tables.call("table.update", table="literature", id=S.format_id(0), patch={})
     assert empty.ok is False and empty.meta["kind"] == "param_error"
 
 
-def test_table_delete_of_unreferenced_relation_is_allowed(tables):
-    """relations 不在硬拒绝名单里：删它放行（§1.1：危险等级可接受）。"""
-    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
-    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "阿贝尔群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
+def test_table_delete_of_unreferenced_relation_is_allowed(tables, store):
+    """relations 不在硬拒绝名单里：删它放行（§1.1：危险等级可接受）。
+
+    概念行走正路铺（`_concept`）：`table.create("statements")` 已受控拒绝。
+    """
+    _concept(tables, store, "群")
+    _concept(tables, store, "阿贝尔群")
     tables.call("table.create", table="literature", row={"title": "T", "type": "J", "summary": "s", "path": None, "processed": True})
     tables.call("table.create", table="relations", row={"concept_ids": [S.format_id(0), S.format_id(1)], "description": "d", "lit_id": S.format_id(0)})
     res = tables.call("table.delete", table="relations", id=S.format_id(0))

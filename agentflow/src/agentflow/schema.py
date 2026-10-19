@@ -1091,6 +1091,17 @@ EXPERIMENT_METHODS = ("numeric", "symbolic", "exhaustive_search", "formal")
 #:                       "读历史"变成"改历史"）；
 #:                     - 审计期：`verify._check_13` 报
 #:                       `proof_review_without_verification`（**error** 级，逐条点名存量）。
+#:
+#:                   **反方向也是缺陷**（2026-10-19 晚补）：凭据已经够这一档、却把
+#:                   `evidence_kind` 写得更弱（`heuristic` / `cross_check`）——
+#:                   降档是安全方向，所以它不是 error，但必须看得见：
+#:                   `verify._check_13` 报 `weaker_than_evidence`（**warning**），
+#:                   判据本体 `verifications.weaker_than_evidence_gaps`。真机形态是
+#:                   `projects/mp2` 的 `stmt:000003`（`proof_text` 1909 字 ＋ V 签
+#:                   「成立」 ＋ sha 相符，盘上落 `heuristic`）：一条够格的强结果被
+#:                   长期登记成弱档，论文的强度声明因此系统性偏低，而此前没有任何
+#:                   读数会指出它。**有 `proof_text` 且有那一签 ⇒ 就该落这一档；
+#:                   只有真没有签名时才退到 `heuristic`。**
 #:   cross_check  —— 数值/穷举的交叉验证。它不是证明，且在任何报告里都必须
 #:                   自动附加"不构成证明"的字样。
 #:   heuristic    —— 启发式观察（例如"看起来像"），证据力最弱。

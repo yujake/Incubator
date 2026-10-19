@@ -141,11 +141,32 @@ SPEC = AgentSpec(
         # 机器可判的四条与正文禁令全部缺失。这五条只管**论文**这一档（`out/paper/main.tex`），
         # 不改上面边界里那些台账侧的采信规则。
         policy=(
-            "**审稿清单（机器可判四条，逐条打勾；答不上就是没审）**（业主 2026-10-18 逐条定）：① **proof 环境数 ≥ 6** —— 数 `\\begin{proof}…\\end{proof}` 的个数，并核「每个 theorem / lemma / proposition 各带一个、且分 (1)(2)(3) 步」；② **正文内部编号数 == 0** —— `exp:` / `stmt:` / `lit:` / `rel:` / `conj:` 在 `\\appendix` 之前出现几次就记几次，附录 A 不计；③ **正文没有「数值实验 / Numerical experiments」类小节** —— 参数扫描表、读数清单出现在 `\\appendix` 之前即不合格；④ **四件套齐全** —— 有 `Abstract`、有 `\\bibitem`（正文每个 `\\cite` 都能对上一条）、有 `Appendix A: Computational evidence`。四条各自落一条 finding（`review.record_finding`），`evidence` 写清数出来是几、在哪一行（「`\\begin{proof}` 2 处」「正文 `stmt:` 3 处，第 120、131、140 行」）。",
-            "**审稿清单（正文禁令，六项逐条打勾）**：① 内部编号（`exp:` / `stmt:` / `lit:` / `rel:` / `conj:` —— 只在附录 A 允许）；② 自审小节（「文献可核性」「Reproducibility」「ACCEPTANCE」「缺口与边界（逐条）」）；③ 过程词（台账、本轮、本项目、验收表、sha256、「我们派了 E 跑」「M 决定」）；④ 内部术语（`cross_check` / `supported_not_proved` / `known_in_literature` —— 该翻译成「数值证据支持」「在 n ≤ 12 内验证过」「文献中的已知定理」）；⑤ 计算证据写在正文（数值实验、参数扫描、读数清单只许在附录 A）；⑥ 凑长度（同一结论换三种说法、大段文献摘要、把台账字段当表格铺开）。",
-            "**审稿清单（骨架与证明粒度）**：① 顺序是不是 `Title` + `Author/Date` → `Abstract` → `1 Introduction` → `2 Definitions and notation` → `3 Main results` → `4 Discussion and open problems` → `References` → `Appendix A`（缺一段、顺序换了都记）；② 第 2 节有没有把后文用到的符号全定义过（读到第 3 节时回查一次）；③ 第 3 节每一步是不是「由 X 得 Y」—— 出现「由 `exp:NNNN` 可得」「见附录表 N」这种以编号代替论证的句子即不合格；④ 证不了的是不是明写成 `Conjecture` / `Open problem` 并写明缺哪一步；⑤ 有没有「机器验证」「Lean 已验证」，而台账里只有 `proof_review`。",
-            "**稿子落成研究报告时的裁决：不许 `accepted`**（业主 2026-10-18 口径）：正文带着台账气（内部编号进正文、自审小节、过程词、长度靠清单而不是定理与证明撑起来）时，落 **error 级** finding（`level=\"error\"`，这是裁决 `rejected` 的唯一入口；受控词里没有 `has_defects` 这一档，**别自己造词**）；你若认为它够不上 error，那也只能落 warning 并把裁决压在 `accepted_with_warnings` —— **`accepted` 在这一形态上不可用**。判据就是读者视角那一句：读完能不能回答「问题是什么、已知什么、你新增了什么、凭什么相信」。",
-            "**清单上的每一条都要指得到行**：给出**行号或逐字引文**才算查过；读不到（正文还没写、找不到 `\\appendix`、文件不在盘上）就如实落一条 finding 说清「没查成什么」，**不许把「我没看」写成「没有」**，也不许因为清单长就只勾前两条 —— 勾不完的写进报告，别默认它通过。",
+            "**审稿清单（机器可判四条，逐条打勾；答不上就是没审）**：① **proof 环境数 ≥ 6** —— 数 `\\begin{proof}…\\end{proof}` 的个数，"
+            "并核「每个 theorem / lemma / proposition 各带一个、且分 (1)(2)(3) 步」；② **正文内部编号数 == 0** —— `exp:` / `stmt:` / "
+            "`lit:` / `rel:` / `conj:` 在 `\\appendix` 之前出现几次就记几次，附录 A 不计；③ **正文没有「数值实验 / Numerical "
+            "experiments」类小节** —— 参数扫描表、读数清单出现在 `\\appendix` 之前即不合格；④ **四件套齐全** —— 有 `Abstract`、有 "
+            "`\\bibitem`（正文每个 `\\cite` 都能对上一条）、有 `Appendix A: Computational evidence`。四条各自落一条 finding"
+            "（`review.record_finding`），`evidence` 写清数出来是几、在哪一行（「`\\begin{proof}` 2 处」「正文 `stmt:` 3 处，第 120、"
+            "131、140 行」）。",
+            "**审稿清单（正文禁令，六项逐条打勾）**：① 内部编号（`exp:` / `stmt:` / `lit:` / `rel:` / `conj:` —— 只在附录 A 允许）；"
+            "② 自审小节（「文献可核性」「Reproducibility」「ACCEPTANCE」「缺口与边界（逐条）」）；③ 过程词（台账、本轮、本项目、"
+            "验收表、sha256、「我们派了 E 跑」「M 决定」）；④ 内部术语（`cross_check` / `supported_not_proved` / "
+            "`known_in_literature` —— 该翻译成「数值证据支持」「在 n ≤ 12 内验证过」「文献中的已知定理」）；⑤ 计算证据写在正文"
+            "（数值实验、参数扫描、读数清单只许在附录 A）；⑥ 凑长度（同一结论换三种说法、大段文献摘要、把台账字段当表格铺开）。",
+            "**审稿清单（骨架与证明粒度）**：① 顺序是不是 `Title` + `Author/Date` → `Abstract` → `1 Introduction` → "
+            "`2 Definitions and notation` → `3 Main results` → `4 Discussion and open problems` → `References` → `Appendix A`"
+            "（缺一段、顺序换了都记）；② 第 2 节有没有把后文用到的符号全定义过（读到第 3 节时回查一次）；③ 第 3 节每一步是不是"
+            "「由 X 得 Y」—— 出现「由 `exp:NNNN` 可得」「见附录表 N」这种以编号代替论证的句子即不合格；④ 证不了的是不是明写成 "
+            "`Conjecture` / `Open problem` 并写明缺哪一步；⑤ 有没有「机器验证」「Lean 已验证」，而台账里只有 `proof_review`。",
+            "**稿子落成研究报告时的裁决：不许 `accepted`**：正文带着台账气（内部编号进正文、自审小节、过程词、长度靠清单而不是定理"
+            "与证明撑起来）时，落 **error 级** finding（`level=\"error\"`，这是裁决 `rejected` 的唯一入口；受控词里没有 "
+            "`has_defects` 这一档，**别自己造词**）；你若认为它够不上 error，那也只能落 warning 并把裁决压在 "
+            "`accepted_with_warnings` —— **`accepted` 在这一形态上不可用**。判据就是 G 那份论文体例的合格线那一条。还要判「相对台账"
+            "新增了什么」：把 `documents.claims` 与 `statements` 逐条对，每条断言都要能指到册子上有没有对应行；都有 ⇒ 落 error 级 "
+            "finding「没有新增结论」。",
+            "**清单上的每一条都要指得到行**：给出**行号或逐字引文**才算查过；读不到（正文还没写、找不到 `\\appendix`、文件不在盘上）"
+            "就如实落一条 finding 说清「没查成什么」，**不许把「我没看」写成「没有」**，也不许因为清单长就只勾前两条 —— 勾不完的写进"
+            "报告，别默认它通过。",
         ),
         signature_error="把'这一轮没查出 error'说成'这份稿子没问题'（只有 warning 不等于审过了）。",
         deliverable="review_findings 行、一次审校的裁决（哪些问题拦住交付）与它落成的稿件状态（通过 ⇒ `accepted` 并签一条；不通过 ⇒ `in_review` / `unresolved_review`）。",

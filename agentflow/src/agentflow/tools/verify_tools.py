@@ -719,7 +719,7 @@ def _agent_for(store: Any, root: str | Path | None):
 
 @tool(
     "verify.code_hash",
-    "计算工作区内一个脚本文件的 sha256（前 16 位），用于实验记录的可复现性绑定",
+    "计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。",
     {
            "type": "object",
            "properties": {"path": {"type": "string", "description": "工作区内的相对路径"}},
@@ -746,7 +746,7 @@ def _verify_code_hash(_hash_of, path):
 
 @tool(
     "verify.detect_verifier",
-    "探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回的是事实，不是猜测",
+    "探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。",
     {"type": "object", "properties": {}, "additionalProperties": False},
     # read（**不是 none**）：它要 `shutil.which` + `subprocess.run` 起外部二进制
     # （`detect_verifier` 里逐条 `--version`）。声明 `none` 等于说"这个工具
@@ -771,12 +771,10 @@ def _verify_detect_verifier():
 @tool(
     "verify.check_formal",
     (
-            "把一条命题（Lean 源码）交给检查器真跑一次：只有 verified 才给 proof 级证据；"
-            "compile_error/uses_sorry/extra_axioms/decl_mismatch 是'查了没通过'；"
-            "timeout/import_unavailable/no_backend/tool_crashed/source_unreadable 是'没查成'，"
-            "绝不被读成通过或证伪（import_unavailable = 库不可得，编译根本没开始，"
-            "missing_imports 里是检查器说找不到的包；source_unreadable = "
-            "script_path 给的源码文件读不到）"
+            "把一条命题（Lean 源码，给 `source` 或 `script_path`）交给检查器**真跑**一次。只有 `verified` 给 proof "
+            "级证据；查了没通过（compile_error/uses_sorry/extra_axioms/decl_mismatch）与没查成（timeout/"
+            "import_unavailable/no_backend/tool_crashed/source_unreadable，`missing_imports` "
+            "列找不到的包）都不是通过。"
             ),
     {
            "type": "object",
@@ -881,9 +879,8 @@ def _verify_check_formal(base, claim, script_path=None, source=None, checker_nam
 @tool(
     "verify.run_experiment",
     (
-            "在独立进程里跑一个工作区内的脚本并登记一条 Experiment 行（会写表 + 跑子进程）。"
-            "脚本自报 evidence_kind='proof' 会被降级为 cross_check；崩溃一律记 inconclusive；"
-            "method='formal' 时改走检查器（.lean 产物），只有检查器 verified 才登记 proof"
+            "在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；"
+            "崩溃记 `inconclusive`；`method='formal'` 走检查器，只有 `verified` 才登记 proof。"
             ),
     {
            "type": "object",
@@ -991,8 +988,8 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
 @tool(
     "verify.evidence_for",
     (
-            "查一条命题（claim_key）或一个研究问题（for_question_id）已有的实验证据。"
-            "两个参数都不给 ⇒ checked=False（**没查 ≠ 查了没有**）"
+            "查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ "
+            "查了没有**）。"
             ),
     {
            "type": "object",
@@ -1026,7 +1023,7 @@ def _verify_evidence_for(_need_store, _read_rows, store, claim_key=None, for_que
 
 @tool(
     "verify.list_experiments",
-    "按登记顺序列出实验记录（只读）：没有它就无法回答'这件事到底做过没有'",
+    "按登记顺序列出实验记录（只读）。",
     {
            "type": "object",
            "properties": {
@@ -1065,9 +1062,8 @@ _ROLES_V = ("V",)
 @tool(
     "verify.verify_proof",
     (
-            "把一份证明按写成后的样子整体重读一遍（V 的唯一主动作）：三态结论 + 每条问题指到步号，"
-            "并写一行 verifications/<命题号>.jsonl。side_effect=read 是刻意的："
-            "V 不写任何表，它唯一的产物是一个文件（自己的台账）"
+            "把一份证明按写成后的样子整体重读（V 的唯一主动作）：三态结论 + 问题指到步号，并写 verifications/<命题号>.jsonl。`"
+            "side_effect=read`：V 不写表。"
             ),
     {
            "type": "object",
@@ -1117,7 +1113,7 @@ def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, r
 
 @tool(
     "verify.list_verifications",
-    "列验证台账（只读，可按命题过滤）：没有它就无法回答『这份证明到底审过没有』",
+    "列验证台账（只读，可按命题过滤）。",
     {
            "type": "object",
            "properties": {
@@ -1141,7 +1137,7 @@ def _verify_list_verifications(_agent_v, statement_id=None, limit=None):
 
 @tool(
     "verify.read_proof",
-    "按命题号读回被审的那份证明全文 + 它的 sha256 + 最近一次结论（只读）",
+    "按命题号读回被审的证明全文 + sha256 + 最近一次结论（只读）。",
     {
            "type": "object",
            "properties": {

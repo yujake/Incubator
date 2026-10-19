@@ -114,6 +114,13 @@ class SeamCall:
     #: 原始的 `tool_calls`（`ask_step` 要把它们翻成循环的形状）。
     #: 刻意不进 `to_dict()`：审计面留条数与工具面摘要就够，逐条原文会随每次调用膨胀。
     tool_call_list: tuple[dict[str, Any], ...] = ()
+    #: 这一次**到底发没发请求**（`False` 只有两条早退路：没接线 / 预算已尽）。
+    #:
+    #: 为什么它必须与 `ok=False` 分开（2026-10-19）：缓存读数的三态之外还有"第零态"——
+    #: 根本没发请求的调用不可能有 `prompt_cache_*`，把它算进 `unknown_calls` 会让
+    #: "上游不报这一格"与"这一趟一个请求都没发"在 run 记录里长得一样。
+    #: 账本那边同一件事记的是 `ledger.reason == "no_request"`，两处口径一致。
+    requested: bool = True
 
     @property
     def not_checked(self) -> bool:
@@ -135,6 +142,14 @@ class SeamCall:
             "system_sha256": self.system_sha256,
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
+            # 缓存两格（2026-10-19 补）：它们从 2026-10-14 起就存在 `SeamCall` 上、
+            # 计价也按两档算了（`modelcost.usd_for`），但 `to_dict()` 此前**漏了这两格**
+            # ⇒ `llm_call` 事件里根本没有"这一次命中没命中"的读数，于是
+            # "提示词前缀稳不稳"在审计面上不可回答（上层再想汇总也无源可汇）。
+            # 三态照旧：`None` = 上游没给这一格，与 `0` = 明说零命中分得开。
+            "cache_hit_tokens": self.cache_hit_tokens,
+            "cache_miss_tokens": self.cache_miss_tokens,
+            "requested": self.requested,
             "usd": self.usd,
             "elapsed_sec": round(self.elapsed_sec, 3),
             "recorded": self.recorded,
@@ -404,6 +419,8 @@ class LlmSeam:
                             detail="没有配置模型（环境变量 AGENTFLOW_MODEL_API_KEY 与 "
                                    "agentflow/settings.json 的 model.api_key 都没有值）"
                                    "：这是没查成，不是没有问题",
+                            # 没有发请求 ⇒ 不可能有缓存读数（第零态，见 `SeamCall.requested`）。
+                            requested=False,
                             elapsed_sec=time.monotonic() - t0, **base)
             # `charged=False`：这一次「没有发请求」，所以没有钱要记。
             # 会话事件照旧留一条（"试过、没接线"是事实），账本不入账。
@@ -416,6 +433,7 @@ class LlmSeam:
                             detail=(f"花销预算已耗尽（**全局**已用 {spent:.6f} / 上限 "
                                     f"{budget:.6f}；已花读数来自 {spent_source}）"
                                     "—— 这一次没有发起请求"),
+                            requested=False,
                             elapsed_sec=time.monotonic() - t0, **base)
             return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
                               charged=False)

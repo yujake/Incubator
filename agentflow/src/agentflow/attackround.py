@@ -56,9 +56,156 @@ DEAD_END_REASONS: tuple[str, ...] = (
 #: 一轮里"每一条新子目标"必须带的东西（给不出可检验形式的就是没归约成功）。
 SUBGOAL_FIELDS: tuple[str, ...] = ("goal", "testable")
 
+#: 四种产物各自"必填字段"的那一句（提示词直接印它；判据那边 `parse_round` 与它是同一份口径）。
+#:
+#: 为什么把这几句搬到这里（2026-10-19，mp4-6 的真机读数）：提示词里那四段从前是
+#: `agent_f/core.py` 手写的一段字面量，而受控值本身在 `attackround` —— 两处漂了之后
+#: 的形态是"模型按提示词写、判据按常量拒"（本模块原来就在注释里写着这条风险）。
+#: 现在四档的名字与必填字段都只在这里定义，提示词与重问、拒收消息全部引用它。
+#:
+#: 顺序是给人的阅读顺序（`reduction` 在最前：它是"这一轮造出新东西"的主档），
+#: 与 `PRODUCTS` 的元组顺序不必相同 —— "成员完全一样"由 `selftest()` 与判据钉住。
+PRODUCT_SPECS: dict[str, str] = {
+    "reduction": (
+        "把难题归约成 1–3 条新的、可检验的子目标。要给 `new_subgoals`"
+        "（每条 {goal, testable}，两个都非空）与 `reason`。"),
+    "counterexample_request": (
+        "给一个能判决这条命题的实验请求。要给 `script_spec`"
+        "（{criterion, params, expected_bound} 三项都非空）与 `why_it_decides`。"),
+    "proof": (
+        "给出逐步论证。要给 `steps`（非空数组，每步 {text, cites, assumption}）—— "
+        "`text` 是这一步说了什么，`cites` 是它引到的**在册 id**（只许引这一轮列出的那些），"
+        "确实没有依据可引时必须把这一步显式声明成前提（`assumption: true`）："
+        "**缝是正确的事实变成错误证明的地方**，不许用措辞跳过去。"),
+    "dead_end": (
+        "这一轮走不下去。要给受控 `reason`（" + "、".join(DEAD_END_REASONS) + " 之一）、"
+        "`evidence`（哪一步不行）、`best_partial`（已证的引理／缩小的范围／排除的法，"
+        "逐条带 what/ids/why_partial）。"),
+}
+
+#: 四种产物在提示词 / 重问 / 拒收消息里的"四选一"写法。
+#:
+#: 一处定义：成员由 `PRODUCT_SPECS` 的键给出（不另抄一串字面量 —— 抄一遍就多一处会漂，
+#: 而这一处漂了的后果正是"提示词说四选一、判据按另外四个值拒"）。
+PRODUCT_MENU: str = " / ".join(f"`{name}`" for name in PRODUCT_SPECS)
+
+#: 提示词里的引用纪律（提示词与拒收消息共用这一处口径）。
+#:
+#: 真机读数（`projects/mp4` 的 `mp4-6` 那趟，计划 `000001` 第 1 轮）：
+#: 模型给 `proof` 的一步写了 `cites=["reports/attack-000000.md §A5"]` —— 台账里没有这条
+#: （`reports/…md` 是 F 自己写的产物文件，不是台账 id），判据当场拒收（R-03）。
+#: 拒收拦得住，但它为什么编没治：`_evidence_digest` 里那句"不在册"只是一条旁注，
+#: 而提示词从没把"能引的 id 就这些"摆到它眼前。所以纪律写在这里、id 列表紧挨着它。
+CITE_DISCIPLINE = (
+    "只许引用下面列出的 id（它们现算自台账）—— **没有可引的就不要引**；"
+    "要声明前提，就把这一步写成 `assumption: true`。"
+    "带前缀的写法：`exp:` / `lit:` / `stmt:` / `rel:` / `doc:` / `conj:` / `plan:` / `req:`。"
+    "**禁止**写 `reports/attack-<plan_id>.md §A5` 这类定位："
+    "`reports/…md` 是产物文件，不是台账 id，不许当 id 引（引了就算伪造引用，这一轮当场拒收）"
+)
+
+#: 重问提示词里"上一次原文"最多引多少字（超出截断并写明原长 —— 不许静默截断）。
+RETRY_QUOTE_CHARS = 400
+
+
+def citable_ids_line(ids: Sequence[str]) -> str:
+    """把"本轮可引用的 id"渲染成一句（提示词与拒收消息共用；空列表也要说清"没有"）。
+
+    一处实现的原因：提示词说"只许引这些"、拒收消息说"合法 id 有…" —— 两句话必须指
+    同一个列表。各渲染一遍就会漂，而漂的后果是模型照着拒收消息改、下一轮又被拒。
+    """
+    got = [str(x) for x in dict.fromkeys(str(x).strip() for x in ids) if x]
+    if not got:
+        return "（本轮一个可引的 id 都没有 —— 不要引；要声明前提就写 `assumption: true`）"
+    return "、".join(f"`{x}`" for x in got)
+
 
 class RoundError(ValueError):
-    """这一轮没成形（不是"推理失败"）：产物不在四种里、缺策略名、缺必填栏。"""
+    """这一轮没成形（不是"推理失败"）：产物不在四种里、缺策略名、缺必填栏。
+
+    `illegal` / `controlled` 两格是给调用方的（重问那一层要把"你给的是 X"与
+    "只能从这四个里选"逐字带回下一问）：只写在错误消息里的话，调用方拿到的是一段散文，
+    没法把它拼成一句"把 X 换成上述四个之一"。
+    """
+
+    def __init__(self, message: str, *, illegal: str = "",
+                 controlled: Sequence[str] = PRODUCTS) -> None:
+        super().__init__(message)
+        self.illegal = str(illegal or "")
+        self.controlled = tuple(controlled)
+
+
+def _product_error(shown: str) -> RoundError:
+    """`product` 不在四档里 ⇒ 一条可动作的错误：四个合法值 + "你给的是 X" + 唯一出口。
+
+    改前这一处只说 `product 必须是 (...) 之一，收到 'x'`（`no_change` 另有一支只说
+    "它正是 D15 要根除的形态"）—— 于是模型知道"错了"、不知道该写什么，重问三次仍然
+    交 `{"outcome": "no_change"}`（真机 mp4-6 计划 000002 第 1 轮）。现在四档逐字列出、
+    点名它给的是哪个值、并给出唯一出口（`dead_end`）。
+    """
+    got = str(shown or "").strip()
+    what = f"`{got}`" if got else "（空：`product` 字段缺失或为空）"
+    subject = f"`{got}`" if got else "那个取值"
+    return RoundError(
+        f"`product` 只能是四种产物之一：{PRODUCT_MENU} —— 你给的是 {what}。"
+        "`no_change` 不是产物、`ok` / `success` / `done` 也不是；"
+        "什么都做不了时也要落 `dead_end`（受控理由 + 证据 + `best_partial`）。"
+        f"把 {subject} 换成上述四个之一。",
+        illegal=got)
+
+
+#: `product` 缺字段时，从这些键里挑一个"它以为自己在填的产物名"念给调用方（只用于报错文案）。
+_PRODUCT_ALIAS_KEYS: tuple[str, ...] = ("outcome", "action", "result", "status")
+
+
+def _alias_of(got: Mapping[str, Any]) -> str:
+    """`product` 缺失时，模型把它写在哪个键上了（`{"outcome": "no_change"}` 就是真机那一份）。"""
+    for key in _PRODUCT_ALIAS_KEYS:
+        value = str(got.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def retry_note(previous: str, error: str, *, illegal: str = "",
+               limit: int = RETRY_QUOTE_CHARS) -> str:
+    """不成形之后重问时带给模型的那一段（P3-5 的加强版；真机 mp4-6 的读数）。
+
+    ## 为什么要三件事一起给（缺一件都还是"重问三次仍交 `no_change`"）
+
+    真机读数（`projects/mp4` 的 `mp4-6` 那趟，`--attack-reasoning` 开着）：
+    `attack_plans` 计划 `000002` 第 1 轮重问了 3 次，模型每次都交
+    `{"outcome": "no_change"}`。这不是"它没读到那句话"—— 判据原话确实在重问提示词里
+    （`retry_note = str(exc)`）。缺的是三件别的事：
+
+    1. 受控四档在提示词末尾（先上下文、后词表），重问那一段也不复述它们；
+    2. 它看不见自己写了什么（"你上一次不成形"没有指代对象，模型无从对照）；
+    3. 没人把"把 `no_change` 换成这四个之一"说成一句可执行的替换动作。
+
+    所以这一段三件事都在：复述四档、逐字引用上一次的原文（截断并写明原长）、
+    指名要把那个取值换成四者之一。`illegal` 由 :class:`RoundError` 从解析现场带出来
+    （不是回头再解析一遍散文 —— 那样只能是猜）。
+    """
+    picked = str(illegal or "").strip()
+    raw = " ".join(str(previous or "").split())
+    if len(raw) > int(limit):
+        raw = raw[: max(0, int(limit) - 1)] + f"…（已截断，原长 {len(raw)} 字）"
+    subject = f"`{picked}`" if picked else "那个不在四种里的取值"
+    return "\n".join([
+        f"复述受控词表：这一轮**只能**输出四种产物之一 —— {PRODUCT_MENU}"
+        "（`no_change` 不是产物、`ok` / `success` / `done` 也不是）。",
+        # 业主 2026-10-19：这一句与主提示词第 2 段同一口径，但同样只是嘱托（不是门）。
+        # 为什么要在这里再说一遍：真机上重问 3 次仍交旧形态 —— 只改主提示词那一处，
+        # 重问时模型拿到的仍是"换个措辞"的许可。
+        "复述推进口径：这一轮**必须产出一批新事实（至少 3 条）**（新的引理/命题、"
+        "新的反例族、新的数值界、或一步新的归约）；**只整理不算推进**"
+        "（复述已知 / 换措辞 / 重排章节 / 罗列「还需要什么」/ 同一脚本再跑一遍）；"
+        "产不出这一批就交 `dead_end` 并写清缺什么。",
+        f"你上一次交出来的原文（框架收到的就是这一份，逐字引用）：{raw or '（空）'}",
+        f"把 {subject} 换成上述四个之一（{PRODUCT_MENU}）—— 确实什么都做不了就交 "
+        "`dead_end`（受控理由 + `evidence` + `best_partial`）。",
+        f"上一次不成形的判据原话：{str(error or '').strip()}",
+    ])
 
 
 def parse_round(text: str) -> dict[str, Any]:
@@ -66,6 +213,12 @@ def parse_round(text: str) -> dict[str, Any]:
 
     三态在这里："这一轮什么都没做出来"必须是 `dead_end`（带理由）——
     旧形态的 `no_change` 会被当不成形打回（它正是 D15 要根除的那个返回值）。
+
+    非法 `product` 的那一档给的是可动作的纠正指引（四个合法值 + "你给的是 X" +
+    "把 X 换成上述四个之一"），并把那个值挂在 `RoundError.illegal` 上 ——
+    重问那一层要拿它拼"把 `<X>` 换成上述四个之一"（`retry_note`），
+    而"再解析一遍错误消息猜它是哪个值"只能是猜（真机 mp4-6：模型把 `no_change`
+    填在 `outcome` 里，`product` 整个缺失）。
     """
     raw = str(text or "").strip()
     if raw.startswith("```"):
@@ -78,14 +231,17 @@ def parse_round(text: str) -> dict[str, Any]:
         raise RoundError(f"这一轮的输出不是合法 JSON（{type(exc).__name__}: {exc}）") from exc
     if not isinstance(got, Mapping):
         raise RoundError("这一轮的输出必须是对象")
-    if str(got.get("product") or "").strip() == "no_change" or "no_change" in raw:
-        raise RoundError(
-            "`no_change` 不是四种产物之一（它正是 D15 要根除的形态）："
-            "什么都做不了时也要落成 `dead_end`（受控理由 + 证据 + best_partial）"
-        )
     product = str(got.get("product") or "").strip()
+    if product == "no_change":
+        raise _product_error("no_change")
     if product not in PRODUCTS:
-        raise RoundError(f"product 必须是 {PRODUCTS} 之一，收到 {product!r}")
+        # `product` 缺失/写错时，模型常把它填在 `outcome` / `action` 上（`{"outcome": "no_change"}`
+        # 就是真机那一份）；两种写法都归到同一档，并把"你给的是哪个值"念出来。
+        # 注意：只有在 `product` 本身不合法时才用 `"no_change" in raw` 这条兜底 ——
+        # 一份成形的产物里出现这个词（例如 evidence 里引述本提示词）不该被误杀。
+        if "no_change" in raw:
+            raise _product_error("no_change")
+        raise _product_error(product or _alias_of(got))
     strategy = str(got.get("strategy") or "").strip()
     if strategy not in STRATEGIES:
         raise RoundError(f"strategy 必须是通用工具箱里的一个 {STRATEGIES}，收到 {strategy!r}")
@@ -332,17 +488,34 @@ def dead_end_row(*, strategy: str, reason: str, evidence: str,
 
 
 def selftest() -> int:
-    """最小自检：四产物可解析、`no_change` 打回、#5 两条合法出口、闸门与预算阻塞。"""
+    """最小自检：四产物可解析、`no_change` 打回（含写在 `outcome` 里的那一份）、
+    #5 两条合法出口、闸门与预算阻塞、以及"提示词/重问/报错共用同一份四档口径"。"""
     checks: list[tuple[str, bool]] = []
     red = parse_round(json.dumps({"product": "reduction", "strategy": "归约",
                                   "why_strategy": "先缩小范围",
                                   "new_subgoals": [{"goal": "证 n=3", "testable": "枚举"}]}, default=str))
     checks.append(("reduction 成形", red["product"] == "reduction"))
+    checks.append(("四档口径一致（PRODUCT_SPECS 与 PRODUCTS 同一组成员）",
+                   set(PRODUCT_SPECS) == set(PRODUCTS)))
     try:
         parse_round('{"product": "no_change", "strategy": "归约", "why_strategy": "x"}')
         checks.append(("no_change 被打回", False))
     except RoundError:
         checks.append(("no_change 被打回", True))
+    try:
+        parse_round('{"outcome": "no_change"}')
+        checks.append(("no_change（写在 outcome 里）被打回并给出四档", False))
+    except RoundError as exc:
+        checks.append(("no_change（写在 outcome 里）被打回并给出四档",
+                       all(f"`{p}`" in str(exc) for p in PRODUCTS)
+                       and "你给的是" in str(exc) and exc.illegal == "no_change"))
+    note = retry_note('{"outcome": "no_change"}', str(RoundError("x")), illegal="no_change")
+    checks.append(("重问复述四档 + 引用上一次原文 + 指名替换",
+                   all(p in note for p in PRODUCTS)
+                   and '{"outcome": "no_change"}' in note
+                   and "换成上述四个之一" in note))
+    checks.append(("可引用 id 的空列表也有话说（反真空）",
+                   "不要引" in citable_ids_line([]) and "`exp:1`" in citable_ids_line(["exp:1"])))
     bad = json.dumps({"product": "proof", "strategy": "反证", "why_strategy": "反设",
                       "steps": [{"text": "显然成立"}]}, default=str)
     try:

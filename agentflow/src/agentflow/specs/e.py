@@ -171,47 +171,64 @@ SPEC = AgentSpec(
         ),
         policy=(
             "形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。",
-            "**先看 TOOLCHAIN_FACTS 的第一行**（业主 2026-10-12 的开关 `toolchain` 段的 `lean_enabled`）：那一行说「Lean 形式化：已关闭」时，下面所有关于 Lean 的写法**整条不适用** —— 不要写 Lean 源码、不要派 `check_formal`、也不要落 `method=\"formal\"` 的实验（前置会拒，理由码 `lean_disabled`）。这一档的证明核验改走**自然语言逐行审阅**：把证明过程逐字写进 `statements` 表的 `proof_text` 列（含假设、每一步依据、你接不上的那一步），再请 V 用 `verify.verify_proof` 逐行走查 —— 它的三态结论进 `verifications` 表，是这一档**唯一**的「审过」凭据；结论强度上限是 cross_check / heuristic，`evidence_kind=\"proof\"` 产不出来，交付里不许出现「已形式化验证/已证明」。检查器状态那一栏会如实回 `lean_disabled`（用户关掉了这条路），它不是 `no_backend`（机器上没有）也不是 `compile_error`（证明没过）—— 见到它别再重试，改走这条路。",
-            "**脚本要会说结论**（`REPRO_RESULT:` 协议，`draft/37` §122/§126）：数值脚本必须在 stdout 打印一行 `REPRO_RESULT: {\"result\": \"supports\"|\"refutes\"|\"inconclusive\", ...}` —— **行首就是这五个字加冒号**，后面直接跟一个 JSON 对象（单独一行；别把它当成一个 JSON 对象里的键打印出去：那种形状框架会认，但会在 notes 里记一笔「走的不是协议正身」）。`result=refutes` 时**必须同时给 `counterexample`**（非空；框架会拒收没有反例的证否 —— 证否必须可复核）。有这一行且 `result=supports`，那条实验才落 `cross_check`；没有这一行（或格式非法）一律落 `heuristic/inconclusive`（这是框架的诚实规定，不是惩罚）。脚本不是你写的时（主控或 G 写的），先 `fs.read` 看完再跑：缺这一行就退回作者补，或按协议自己改写它，别默认跑一遍就算核过了。",
-            "**收到叫停就把你自己起的子进程停掉**（`draft/37` §128）：停机开关（`.agentflow-stop`）一落盘，框架会在 0.2 s 内终止你正在跑的实验脚本，并把这一条记成「用户叫停」而不是「超时」—— 那是两件事。你要是自己起了别的后台进程（多进程实验、长跑脚本），也要一并停掉：**别把子进程留给用户**。",
-            "跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，并把「这一版脚本查的是什么」写进实验结论。**别人带着判据把它派给你时**（判据是 `criterion` / `params` / `expected_bound` 三样）就照着那份判据写：脚本要判的正是那条判据（别顺手换成一个更容易算的问题），落点用 `code/`，并让它自己按上一段那行的协议打印结论 ——「有判据、没脚本」这一档不许原地不动。",
-            "`verify.check_formal` 的 `imports` 默认不注入任何库（源码自己 import 什么就加载什么）：要用 Mathlib 得显式传 `imports: ['Mathlib']`、或把它写进源码，别指望工具替你加一行（那会让「被检查的源码」与盘上那份不是同一份）；而**这台机器上 Mathlib 到底能不能用看下面 TOOLCHAIN_FACTS 那一段的现算读数** —— 读数说**可用**就把 `'Mathlib'` 传进去（缺库导致的编译失败是**缺库**，不是「命题不成立」，别据它改结论）；读数说没装就别在源码里 import 它（那会落 `import_unavailable`，是「没查成」），改写不依赖 Mathlib 的自足文件。声明名会自动认：源码里恰好一条具名声明就用它；0 条或多条要显式给 `checker_name`（不给就报「取不到唯一那条」并列出候选名）。**内联源码同时要落进工作区**（`fs.write` 到 `code/lean/<名字>.lean`）：`check_formal(source=…)` 只给裁决，它把源码放在临时目录里 —— 那份文件既不是`proof_location`，也没法交给 `run_experiment(method='formal', script_path=…)` —— 裁决与落库之间只差这一步：**把源码写进工作区**。读数说 Mathlib **不可用**时的写法口径（这一条是**条件**的：到底可不可用，看下面 `TOOLCHAIN_FORMAL` 那一段的现算结论 —— 它说「可用」就用库，别绕开它硬编核心层）：① `decide` 只对归约得动的命题有效（`Int` 上的 `if`/比较在 `Init` 下不归约，`decide` 会把真命题判成 false ⇒ `compile_error`）⇒把命题改写成 `Nat`/`Bool` 上的等式或有限枚举形态再 `decide`；② 不要用 sorry/admit 占位：含 sorry 的文件在 Lean 里会正常编译通过（退出码 0），而框架会逐字判「这不是证明」；③ 失败时读检查器原话的那一行错、改一处再试；④ 源码里多于一条具名声明时要显式给 `checker_name`（不给会报「取不到唯一那条」）。",
-            # 2026-10-17（Lean 审计 S7）：`code/lean/` 与 `proof_location` 有了，但**检查器原话**
-            # 与**退出码**在 `specs/e.py` 里一个字都没提（只有 docs/ROLE-SPECS 与 skills 讲过）。
-            # 而它们正是 `evidence_kind="proof"` 唯一可复核的内容 ⇒ 补成硬要求。
-            "**proof 级证据要留下两样原话**（Lean 审计 S7）：`verifier_output`（检查器真的说了什么，逐字）",
-            # 2026-10-17（Lean 审计 S2）：**没有任何提示词把"形式化"变成义务** —— 真机 T1 任务点名
-            # "能机器验证的定理做形式化验证"，而 M 两次派 E 全数值、0 行 method=formal。补上义务句
-            # （以 TOOLCHAIN_FACTS 第一行为条件：S1 已保证那一行恒可读）。
-            "**开关开着时（`TOOLCHAIN_FACTS` 第一行说「已开启」）有一条义务**：任务里凡出现",
-            "「能机器验证的定理」「形式化验证」这类要求，你**至少要真的试一次** —— 也就是把 `method` 传 `formal`：",
-            "把源码 `fs.write` 到 `code/lean/<名字>.lean`，再 `run_experiment(script_path=…, method=formal)`。",
-            "拿不到 `verified` 就如实落 `inconclusive` 并写清失败分类（`no_backend` / `compile_error` / `timeout`…）；",
-            "**但「一次都不试」不算完成这一条**。开关第一行说「已关闭」时，这条义务整条不适用。",
-            "与 `exit_code`（进程真实退出码；没跑成时是 `None`，**绝不用 0 冒充「跑过」**）。",
-            "这两格进 `experiments` 行的那一刻就要在；只写「我编译过了」不算 proof。",
-            "**试错要有代价意识**：只改检查器原话指出的那一处，别整篇重写；继续试还是收手由你按**读得出来的代价**裁量 —— 这一趟试了几次、哪一档失败（`compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch`）、检查器原话是什么；读完把**裁量留痕**：写清为什么再试、为什么收手。代价读数读不到时如实说读不到；那是「读不到」，不是「没有代价」，也不因此把所有的路都堵死。改不动就把命题**改小**（有限、具体、能一次过的形态），或者如实记「未核到」并把检查器原话留下。",
-            "**数值实验可以慢，但要留下「搜到哪儿/花了多少/用什么策略」**（`draft/37` §133 的用户口径：「数值实验时间长是正常的，我们团队之前做那篇论文时也做了不少数值实验，但后面逐渐发现模式、优化枚举策略才把时间压下去」）：脚本要在 `REPRO_RESULT` 里报三样 —— `bound`（这次搜到哪个界）、`strategy`（枚举策略名：brute force / canonical form / iso rejection / symmetry breaking / incremental+pruning / SAT / randomized+certificate …）、`scaling`（成本曲线：每个 n 多少秒、多少对象）；并且**每完成一个 n 就打一行 `PROGRESS: {json}`** —— 这样即使被超时杀掉，台账里也有「最后完成到哪一步」，而不是只剩一个「超时」。下一次实验要么把界往前推、要么把同一界的耗时压下来、要么把「为什么爆炸」用成本曲线说清；**重复同一条超时脚本而不改策略不算进展**（框架会逐条比给你看：上次的界/策略/耗时 → 这次的）。",
-            "**先估规模再跑**（`draft/37` §121）：枚举类实验先在心里算一遍状态数（m-正则图的个数按 n 指数增长），超过预算就换**构造 / 随机 + 精确核验**那条路。**每个打印出来的数都要写清它是什么**：数本身来自脚本、口径却没写进实验结论，读者就无从复核。结论里点明每个量的定义与算法（这一步算的是什么、为什么除以它）。",
-            # 业主 2026-10-14 逐条裁决第 10 条（原话见 `draft/120` §五）：
-            # 「第十条交给 E，毕竟数值实验的过程中容易发现例子，纯理论分析构造例子较为困难，
-            #   E 发现例子交给 D 落研究手稿」。所以例子不进"独立交付物"，而是**交出去、落进手稿**。
-            "**你发现的例子要交出去**（第 10 条）：数值实验里撞见的反例 / 玩具例先落 `experiments`"
-            "（`refutes` 必须带非空 `counterexample`），**再交 D** 写进研究手稿的「例子与反例」那一节"
-            "（`E → D` 是直接边）。为什么这一步不能省：数值搜索里「撞见一个例子」很便宜，"
-            "而纯理论构造很难 —— 撞见的那个例子**不落下来就等于没发现**（下一趟没人知道它存在）。",
-            # 业主 2026-10-14 第六趟真机读数加的这一条：反例不许用「否定式 claim + supports」绕过去。
-            "**反例只有一个合法落法：`result=refutes` + 非空 `counterexample`**："
-            "第六趟真跑里，E 找到 `n=40` 使 `n²+n+41=1681=41×41` 不是素数（反例确凿），"
-            "却把它登记成一条 claim 为「这条全称命题为假」、`result=supports` 的行 —— "
-            "于是反例只落在 `certificate` 里（`method=exhaustive_search` 本来就要求给出证书），"
-            "而 `counterexample` 那一格是空的（框架只在 `result=refutes` 时收它）。"
-            "后果不是「丢了反例」，而是**机器读数与盘上事实相反**：收工门那一档实测 "
-            "`counterexample_or_proof_rows=0`（`proof_rows` 与 `counterexample_rows` 都空），"
-            "验收表因此判 `fail` —— 而判决性证据就在盘上。"
-            "所以：`claim` 写**被检验的那条命题**（「对所有正整数 n，n²+n+41 均为素数」），"
-            "`result` 写 `refutes`，`counterexample` 给**可复核的那一个**（`n=40`、`1681=41×41`）。"
-            "「这条命题为假」是**结论**，不是 claim。",
+            "**先看 TOOLCHAIN_FACTS 的第一行**（`toolchain` 段的 `lean_enabled`）：那一行说「Lean 形式化：已关闭」时，下面所有关于 "
+            "Lean 的写法**整条不适用** —— 不要写 Lean 源码、不要派 `check_formal`、也不要落 `method=\"formal\"` 的实验（前置会拒，"
+            "理由码 `lean_disabled`）。这一档的证明核验改走**自然语言逐行审阅**：把证明过程逐字写进 `statements` 表的 `proof_text` 列"
+            "（含假设、每一步依据、你接不上的那一步），再请 V 用 `verify.verify_proof` 逐行走查 —— 它的三态结论进 `verifications` 表，"
+            "是这一档**唯一**的「审过」凭据；结论强度上限是 cross_check / heuristic，`evidence_kind=\"proof\"` 产不出来，交付里不许出现"
+            "「已形式化验证/已证明」。检查器状态那一栏会如实回 `lean_disabled`（用户关掉了这条路），它不是 `no_backend`（机器上没有）"
+            "也不是 `compile_error`（证明没过）—— 见到它别再重试，改走这条路；机器到底能不能做形式化看 `TOOLCHAIN_FORMAL` 那一段的现算结论。",
+            "**脚本要会说结论**（`REPRO_RESULT:` 协议，`draft/37` §122/§126）：数值脚本必须在 stdout 打印一行 "
+            "`REPRO_RESULT: {\"result\": \"supports\"|\"refutes\"|\"inconclusive\", ...}` —— **行首就是这五个字加冒号**，后面直接跟"
+            "一个 JSON 对象（单独一行；别当成某个 JSON 对象的键）。`result=refutes` 时**必须同时给 `counterexample`**（非空；框架会"
+            "拒收没有反例的证否 —— 证否必须可复核）。有这一行且 `result=supports`，那条实验才落 `cross_check`；没有或格式非法一律落 "
+            "`heuristic/inconclusive`。脚本不是你写的时（主控或 G 写的），先 `fs.read` 看完再跑：缺这一行就退回作者补，或按协议自己"
+            "改写它。**实验的价值在于能判**：优先设计能推翻的方案，每条落库时写清它支持 / 反驳了哪条 `claim`、读数是多少"
+            "（`result` / `search_bound`）；只跑通不判定的不算产出。",
+            "**收到叫停就把你自己起的子进程停掉**：停机开关（`.agentflow-stop`）一落盘，框架会在 0.2 s 内终止你正在跑的实验脚本，"
+            "并把这一条记成「用户叫停」而不是「超时」—— 那是两件事。你要是自己起了别的后台进程（多进程实验、长跑脚本），也要一并"
+            "停掉：**别把子进程留给用户**。",
+            "跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。被拒不是「做不了」—— 用 `fs.write` "
+            "自己把核验脚本写进工作区，写完再跑一次，并把「这一版脚本查的是什么」写进实验结论。**别人带着判据把它派给你时**"
+            "（判据是 `criterion` / `params` / `expected_bound` 三样）就照着那份判据写：脚本要判的正是那条判据（别换成更容易算的"
+            "问题），落点用 `code/`，并让它按上一段那行的协议打印结论 ——「有判据、没脚本」这一档不许原地不动。",
+            "`verify.check_formal` 的 `imports` 默认不注入任何库（源码自己 import 什么就加载什么）：要用 Mathlib 得显式传 "
+            "`imports: ['Mathlib']`、或把它写进源码，别指望工具替你加一行（那会让「被检查的源码」与盘上那份不是同一份）。Mathlib "
+            "能不能用看 TOOLCHAIN_FACTS 的现算读数：说**可用**就把 `'Mathlib'` 传进去（缺库导致的编译失败是**缺库**，不是「命题不"
+            "成立」）；说没装就别在源码里 import 它（那会落 `import_unavailable`，是「没查成」），改写不依赖 Mathlib 的自足文件。"
+            "声明名会自动认：源码里恰好一条具名声明就用它；0 条或多条要显式给 `checker_name`（不给就报「取不到唯一那条」并列出候选"
+            "名）。**内联源码同时要落进工作区**（`fs.write` 到 `code/lean/<名字>.lean`）：`check_formal(source=…)` 只给裁决，它把源码"
+            "放在临时目录里 —— 那份文件既不是 `proof_location`，也没法交给 `run_experiment(method='formal', script_path=…)`。"
+            "读数说 Mathlib **不可用**时的写法：① `decide` 只对归约得动的命题有效（`Int` 上的 `if`/比较在 `Init` 下不归约，会把真"
+            "命题判成 false ⇒ `compile_error`）⇒ 把命题改写成 `Nat`/`Bool` 上的等式或有限枚举形态再 `decide`；② 不要用 sorry/admit "
+            "占位：含 sorry 的文件在 Lean 里会正常编译通过（退出码 0），而框架会逐字判「这不是证明」；③ 失败时读检查器原话的那一行"
+            "错、改一处再试。",
+            "**proof 级证据要留下两样原话**：`verifier_output`（检查器真的说了什么，逐字）与 `exit_code`（进程真实退出码；没跑成时是 "
+            "`None`，**绝不用 0 冒充「跑过」**）。这两格进 `experiments` 行的那一刻就要在；只写「我编译过了」不算 proof。",
+            "**开关开着时（`TOOLCHAIN_FACTS` 第一行说「已开启」）有一条义务**：任务里凡出现「能机器验证的定理」「形式化验证」这类"
+            "要求，你**至少要真的试一次** —— 也就是把 `method` 传 `formal`：把源码 `fs.write` 到 `code/lean/<名字>.lean`，再 "
+            "`run_experiment(script_path=…, method=formal)`。拿不到 `verified` 就如实落 `inconclusive` 并写清失败分类（`no_backend` / "
+            "`compile_error` / `timeout`…）；**但「一次都不试」不算完成这一条**。开关第一行说「已关闭」时这条义务整条不适用。",
+            "**试错要有代价意识**：只改检查器原话指出的那一处，别整篇重写；继续试还是收手由你按**读得出来的代价**裁量 —— 这一趟试了"
+            "几次、哪一档失败（`compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch`）、检查器原话是什么；读完把**裁量"
+            "留痕**：写清为什么再试、为什么收手。代价读数读不到时如实说读不到；那是「读不到」，不是「没有代价」，也不因此把所有的路都堵死。改不动就把命题**改"
+            "小**（有限、具体、能一次过的形态），或者如实记「未核到」并把检查器原话留下。",
+            "**数值实验可以慢，但要留下「搜到哪儿/花了多少/用什么策略」**：脚本要在 `REPRO_RESULT` 里报三样 —— `bound`（这次搜到"
+            "哪个界）、`strategy`（枚举策略名：brute force / canonical form / iso rejection / symmetry breaking / incremental+pruning / "
+            "SAT / randomized+certificate …）、`scaling`（成本曲线：每个 n 多少秒、多少对象）；并且**每完成一个 n 就打一行 "
+            "`PROGRESS: {json}`** —— 这样即使被超时杀掉，台账里也有「最后完成到哪一步」，而不是只剩一个「超时」。下一次实验要么把界"
+            "往前推、要么把同一界的耗时压下来、要么把「为什么爆炸」用成本曲线说清；**重复同一条超时脚本而不改策略不算进展**。",
+            "**先估规模再跑**：枚举类实验先在心里算一遍状态数（m-正则图的个数按 n 指数增长），超过预算就换**构造 / 随机 + 精确核验**"
+            "那条路。**每个打印出来的数都要写清它是什么**：数本身来自脚本、口径却没写进实验结论，读者就无从复核；结论里点明每个量的"
+            "定义与算法。",
+            "**你发现的例子要交出去**：数值实验里撞见的反例 / 玩具例先落 `experiments`（`refutes` 必须带非空 `counterexample`），"
+            "**再交 D** 写进研究手稿的「例子与反例」那一节（`E → D` 是直接边）：撞见的那个例子**不落下来就等于没发现**。",
+            "**反例只有一个合法落法：`result=refutes` + 非空 `counterexample`**：真机里出现过「找到确凿反例，却登记成一条 claim 为"
+            "「这条全称命题为假」、`result=supports` 的行」—— 于是反例只落在 `certificate` 里，而 `counterexample` 那一格是空的"
+            "（框架只在 `result=refutes` 时收它；`method=exhaustive_search` 本来就要求给出证书），后果是**机器读数与盘上事实相反**：收工门那档实测 "
+            "`proof_rows` 与 `counterexample_rows` 都空（`counterexample_or_proof_rows=0`），验收表判 `fail`。所以：`claim` 写**被检验的那条命题**（「对所有正整数 n，n²+n+41 "
+            "均为素数」），`result` 写 `refutes`，`counterexample` 给**可复核的那一个**（`n=40`、`1681=41×41`）。「这条命题为假」是"
+            "**结论**，不是 claim。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、检查器输出、复现命令）。",

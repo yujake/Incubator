@@ -379,6 +379,23 @@ class _RegisterStatement:
             "doc_id": str(doc_id or ""), "line_range": dict(line_norm), "bits": bits,
         }
         written = sec.record_statement(payload, role="B")
+        if written.get("upgraded") and not written.get("created"):
+            # 同一份内容再交一次、这一回带了 `proof_review` 的凭据 ⇒ 秘书**改那一行**
+            # （不新建）。这是 `evidence_kind` 从弱档走到 `proof_review` 的唯一一条正路：
+            # 通用写口 `table.update("statements")` 已被 `store.direct_write_refusal` 拒
+            # （它能同时改 bits / proof_text / quote_verified，而没有任何东西核过那些字段）。
+            # 对调用方来说这是"成功了"（那一行的档位变了），不是重复读数。
+            return {"ok": True, "stmt_id": str(written.get("stmt_id") or ""),
+                    "source_lit_id": lit_id or None,
+                    "quote_verified": quote_verified, "origin": origin,
+                    "quote_mode": str(quote_mode or ""),
+                    "evidence_kind": evidence_kind, "upgraded": True,
+                    "row": dict(written.get("row") or {}),
+                    "changes": list(written.get("changes") or []),
+                    "note": ("这一条**没有新建行**：同一条 statement_full 已在册，而这一笔"
+                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
+                             f"（{written.get('reason') or ''}）。"
+                             "内容面一个字没动；要改内容请另起一条（force_new）并写清为什么。")}
         if written.get("duplicate") and not written.get("created"):
             # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
             # 同一条 `statement_full`（按 `textutil.normalize` 比）已在册 ⇒ 不新建行。

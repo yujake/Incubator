@@ -1742,6 +1742,12 @@ def _check_13(rep, store) -> None:
        `proof_text`。**不要求**在命题行里回填 `verification_id`（存在更严的可选口径 B：
        "要求 `statements.verification_id` 回填"——**本批未采用**，理由是它需要 V 签完之后
        回写 `statements`，那是一道新的写路径与新的权限面；归人裁，不顺手加）。
+
+    7. 第 6 条的**反方向**（`weaker_than_evidence`，**warning**）：凭据已经够
+       `proof_review`，这一行却登记成 `heuristic` / `cross_check`。降档是安全方向，
+       所以不是 error；但"有 `proof_text` ＋ V 签「成立」＋ sha 相符却被写成弱档"
+       会让论文的强度声明长期虚低，而没有任何读数指出来 —— 这一格就是那个读数。
+       口径同样只一处（`verifications.weaker_than_evidence_gaps`）。
     """
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
@@ -1850,6 +1856,15 @@ def _check_13(rep, store) -> None:
     # warning。这样审计的**强度**变了、`checked` 的**形状**没变（快照仍逐字可比）。
     try:
         gaps = VR.proof_review_gaps(getattr(store, "root", "."), statements)
+        # ---- 反方向那一格（2026-10-19）：凭据够了却登记成更弱的档。
+        #
+        # 真机形态（`projects/mp2` 的 `stmt:000003`）：`proof_text` 1909 字、V 的
+        # `verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行
+        # 正文相符 —— 按定义这条**就是** `proof_review`，盘上却落 `heuristic`。
+        # 它不是虚报（降档是安全方向）⇒ **warning**，不是 error：这条读数要的是
+        # "让降档看得见"，不是把有意降档判成缺陷。口径与上面那道闸同一处
+        # （`verifications.weaker_than_evidence_gaps` 内部复用 `proof_review_gap`）。
+        weaker = VR.weaker_than_evidence_gaps(getattr(store, "root", "."), statements)
     except Exception as exc:  # noqa: BLE001 —— 读不到账本 = 这一格没查成（不是"一条都没有"）
         rep.issues.append(Issue(
             "warning", "statements", None, "proof_review_unchecked",
@@ -1863,6 +1878,12 @@ def _check_13(rep, store) -> None:
                 VR.CODE_AUDIT,
                 f"{gap['why']}（存量行：审计只能点名，改不了它 —— "
                 "要么补一次 V 的走查，要么把这一行的 evidence_kind 降成 heuristic）",
+            ))
+        for gap in weaker:
+            rep.issues.append(Issue(
+                "warning", "statements", gap.get("statement_id") or None,
+                "weaker_than_evidence",
+                f"{gap['why']}",
             ))
 
 

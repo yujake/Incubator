@@ -50,43 +50,66 @@ DUTIES: dict[str, dict[str, object]] = {
     "duty1_prescreen": {
         "code": "prescreen",
         "where": "secretary.py",
-        "call": ("secretary.py:617", "secretary.py:662"),
+        # 2026-10-19 现盘重测（原写 617/662 早已漂掉；判据只按符号断言，这三处是给人找的线索，
+        # 所以要跟着盘走 —— 治表腐烂时一并更新，判据本体一个字没改）。
+        "call": ("secretary.py:1426", "secretary.py:1457", "secretary.py:1753"),
         "visibility": "prompt",
-        "probe": ("会被拒", "名字必须是真的"),
-        "why": "派活前预筛：被拒时给出并列候选，角色必须知道有这一步，否则它只会瞎猜名字",
+        # 2026-10-19：探针补两词。职责 1 的真身是**整条**"格式与内容优化"：
+        # `optimize_outbound` = `wash_delegation`（洗格式）+ `prescreen`（预筛）。
+        # 原先那两个探针只够认领"名字必须是真的 / 会被拒"这一半，洗格式那一半
+        # （`wash` / `changes` / `refused` 三格读数）没有任何条目认领 ⇒ 角色看到
+        # `washed=true` 也不知道自己被改了哪几处。
+        "probe": ("会被拒", "名字必须是真的", "预筛报警", "洗过的格式"),
+        "why": "派活前预筛：被拒时给出并列候选，角色必须知道有这一步，否则它只会瞎猜名字。"
+               "⚠️ 本条目同时认领**洗格式**那一半（职责 1 的另一段）—— 角色看到的是两段"
+               "合并后的**一个**结果，所以它必须同时认得这两件事的读数",
     },
     "duty2_assess": {
         "code": "assess_delegation",
         "where": "secretary.py",
-        "call": ("agent_loop.py:2465", "conductor.py:907"),
+        "call": ("agent_loop.py:5354", "conductor.py:2378"),
         "visibility": "conditional",
-        # ⚠️ **2026-10-16 收窄：{D,E,F,G,M} → {D}**（业主口径 S1「M 只派活」）。
-        # 那四个角色此前**靠伙伴表里 D 的动作清单**看到 `assess` 这个词
-        # （`partners_lines` 当时逐条印"可调用动作：… assess（必填 qid）——…"）；
-        # 口径改了之后伙伴表只留描述 ⇒ 那四个提示词里不再出现这个词。
-        # 判据的话是"多一个/少一个都要人来裁，不许自动跟着变" —— 这就是那次裁定：
-        # **`assess` 是 D 自己的职责，别人不需要知道它的动作名**（这正是新口径要的）。
-        "roles": ("D",),
-        "probe": ("评估这次派活", "assess", "建议你换"),
-        "why": "派活评估只对'会派活的角色'有意义。⚠️ 这一批是**登记**的，不是推导的："
-               "实测 {D} ≠ '有出边的角色'（A/B/C/E/F/G/H/V 也有边）；"
-               "2026-10-16 之前是 {D,E,F,G,M}，那四个是靠伙伴表的动作清单看到的，"
-               "口径改成'只给描述'之后按裁定收窄。",
+        # ⚠️ **2026-10-16 收窄 {D,E,F,G,M} → {D}；2026-10-19 又放回十个**，两次都不是
+        # "跟着提示词变"，而是**两件不同的事被记成了一件事**：
+        #
+        # - 2026-10-16 那次收窄针对的是**动作名** `assess` 经伙伴表外泄（那四个角色此前
+        #   靠 `partners_lines` 逐条印"可调用动作：… assess（必填 qid）……"看到它）。
+        #   收窄本身成立：`assess` 是 **D 自己的动作**（判证据是否就绪），别人不需要知道。
+        # - 但 `assessment` 是**秘书的结果键**：`agent_loop.py` 的 `_outbound_hook` 对
+        #   **每一个会派活的角色**都无条件调 `assess_delegation`，把结论塞进那一步的结果。
+        #   角色不认识这个键，就只能猜"这一格是什么"。
+        #
+        # ⇒ 探针里那个裸 `assess` 一并删掉：它今天命中的是 `D.assess`（错的东西），
+        # 而它把"动作名"与"结果键"混成一条探针，正是上一版看不见缺口的原因。
+        "roles": ("A", "B", "C", "D", "E", "F", "G", "H", "M", "V"),
+        "probe": ("该不该派", "建议你换", "评估这次派活"),
+        "why": "委派评估：'该不该派这一件'（`DECISIONS` 那张词表）+ 同 key 是否重复。"
+               "可见性是**十角色**，理由见上面那两条 ⚠️：收窄针对动作名，"
+               "而这条认领的是**结果键**（谁派活谁就收到它）。"
+               "⚠️ 探针是**登记**的不是推导的：多一个/少一个都要人来裁",
     },
     "duty3_closure": {
         "code": "remind_closure",
         "where": "secretary.py",
-        "call": ("conductor.py:807",),
-        "visibility": "prompt",
-        "probe": ("收件箱", "待办"),
-        "why": "闭环提醒落在收件箱里；角色必须知道要去看，否则提醒等于没发",
+        "call": ("conductor.py:2279",),
+        # 2026-10-19：原写 `prompt`（= 十个角色都该知道）+ 探针 `收件箱`/`待办`。
+        # 两个错，各自都是**假命中**：`收件箱` 命中的是"留言会在收件箱里看到"（留言通道），
+        # `待办` 命中的是 A 的 `run_once` 领取待办。而真身只在**M 的秘书**上跑
+        # （`conductor.py:2279`，收尾扫描），读数落 `stats()["closure_reminders"]`。
+        "visibility": "conditional",
+        "roles": ("M",),
+        "probe": ("closure_reminders",),
+        "why": "闭环提醒：M 的秘书在收尾时列出**谁提交了没人接手 / 谁接了手没终态**，"
+               "落在 `conductor.stats()['closure_reminders']`。只有 M 读得到它 ⇒ "
+               "登记成 conditional + roles=('M',)；有名单不处置与'查过了没问题'"
+               "在报告里必须分得开",
     },
     # S1k-2（2026-10-08 深夜）：名册那一族。提示词里承诺了三件事，这里逐条认领
     # （`code` = 真身，`call` = 生产调用点）。
     "roster_add": {
         "code": "roster_add",
         "where": "secretary.py",
-        "call": ("agent_loop.py:2846",),
+        "call": ("agent_loop.py:4958",),
         "visibility": "prompt",
         "probe": ("父可以自己提名", "由秘书分配", "名字一经分配"),
         "why": "造一个子代理时登记名册（并分配/核对名字）：名字被占或已销号就受控拒绝，"
@@ -95,7 +118,7 @@ DUTIES: dict[str, dict[str, object]] = {
     "roster_retire": {
         "code": "retire",
         "where": "secretary.py",
-        "call": ("agent_loop.py:2688",),
+        "call": ("agent_loop.py:4470",),
         "visibility": "prompt",
         "probe": ("让一个子代理退役", "父决定"),
         "why": "退役由父说、秘书做（三分支）：角色必须知道有这件工具，否则它只能干等",
@@ -131,16 +154,16 @@ DUTIES: dict[str, dict[str, object]] = {
     "duty4_rework": {
         "code": "rework_inbound",
         "where": "secretary.py",
-        "call": ("agent_loop.py:2506",),
+        "call": ("agent_loop.py:5400",),
         "visibility": "internal",
         "why": "收件后重解读：重解读结果由**框架直接替换进交给角色的那批 item**"
-               "（`agent_loop.py:2506` 的 `reworked.append(...)`）⇒ 角色无需知情。"
+               "（`agent_loop.py:5400` 的 `reworked.append(...)`）⇒ 角色无需知情。"
                "⚠️ 这一条是**登记**：实测它在十角色提示词里 0/10 命中（探针见 `probe_internal`）",
     },
     "handoff": {
         "code": "handoff_add",
         "where": "secretary.py",
-        "call": ("agent_loop.py:2568",),
+        "call": ("agent_loop.py:5572",),
         "visibility": "prompt",
         # 探针要覆盖同一种承诺的不同措辞：判据首跑就抓到我只写了"秘书执笔"，
         # 而 M 那边还有"框架会把它交给秘书写成一份交接手稿"、"交给秘书写成手稿并发出去"
@@ -152,14 +175,21 @@ DUTIES: dict[str, dict[str, object]] = {
     # **太平凡**有没有资格入库」）：入库口那一道审美闸。提示词里承诺了一句
     # （"入库前你的秘书会替你把这一关……判太平凡就把这次入库当场拦下"）⇒ 这条探针认领它。
     #
-    # 为什么它必须是**可见**的那一档：拦下来会改变本体那一步的结果（`kind=statement_too_trivial`），
-    # 而"怎么改才能收进去"只有本体知道（写清后面哪一步会用到它）—— 所以角色必须知道这台机器存在。
+    # 为什么它必须是**可见**的那一档（对 B 而言）：拦下来会改变本体那一步的结果
+    # （`kind=statement_too_trivial`），而"怎么改才能收进去"只有本体知道
+    # （写清后面哪一步会用到它）—— 所以 B 必须知道这台机器存在。
+    #
+    # 2026-10-19：可见性从 `prompt` 改成 `conditional ("B",)`。原写法等于声明"十个角色都该
+    # 知道它"，而代码里只有 B 会撞上这道闸（`judge_statement` 对非 B 直接返回"这一问只属于 B"；
+    # `register_statement` 只在 B 的动作表里，其余九角色 0 个）。`prompt` 那一档的判据只要求
+    # "有人命中"，所以这个错误**永远不会红** —— 登记口径错了要人来裁，这就是那次裁定。
     "statement_aesthetic": {
         "code": "judge_statement",
         "where": "secretary.py",
         "call": ("agent_loop.py 的 _statement_filing_refusal",
                  "agent_loop.py 的 _do_tool（调 registry.call 之前）"),
-        "visibility": "prompt",
+        "visibility": "conditional",
+        "roles": ("B",),
         "probe": ("入库前你的秘书", "太平凡", "statement_too_trivial"),
         "why": "入库审美：B 调 `own.register_statement` 之前，它自己的秘书判一次「这条够不够格」"
                "（三态：合格 / 太平凡 / 判不了；词表 `STATEMENT_VERDICTS`，与派活轴的 `DECISIONS` 分开）；"
@@ -194,36 +224,82 @@ OTHER_CATCHERS: dict[str, dict[str, object]] = {
 
 #: 登记的"有产出方、今天没有生产调用点"的秘书方法（留读数，不许沉默）。
 #: 注意：这一档不是禁令，是登记制：登记了就必须写清"它今天由谁消费"。
+#:
+#: ⚠️ **2026-10-19 清过；过期的都删了，别拿它当"今天没有调用点"的证明。**
+#: 上一次清之前这里躺着 13 条，实测 8 条已经活过来了（各自都有真的生产调用点）：
+#: `roster_add`(agent_loop.py:4958) · `retire`(agent_loop.py:4470) ·
+#: `roster_view`(agent_loop.py:2327/4498/4503/5185) · `resolve_up`(agent_loop.py:5161) ·
+#: `alive_path`(secretary.py:746/762/783，由 `bind_task`/`close` 写存活标记) ·
+#: `secretary_alive`(secretary.py:3697-3700) · `decisions` · `decisions_path`
+#: —— 它们当初的登记理由写的是"随 S1k-2 落地"，S1k-2 早就落地了，而**这张表只往下查
+#: 不往上查**（判据只断言"死的都登记了"，不断言"登记的都还是死的"）⇒ 那 8 条腐烂了半年
+#: 也没人知道。要清就得人来清，这就是这次清。
 NO_CALL_POINT_TODAY = {
     "pending_inbox": "定义了、`inbox_todos` 之外没有生产调用点（2026-10-07 现算 0 处）—— "
                      "与 `draft/69 §5` 的 R5-㔔 同族：**有产出方没接**，登记为读数而不是删掉",
-    "decisions": "只读访问器（把决定台账读成 list）；生产面今天无调用点，"
-                 "由 `tests/test_secretary.py` 等与「看一眼台账」的人消费",
     "knowledge": "只读访问器（角色画像：briefs/账本/权限位）；生产面今天无调用点，"
                  "由测试与未来的「审校 / 状态报告」入口消费",
     "may_read_narrative": "只读判定（该角色能不能读叙事文本）；生产面今天无调用点，"
                           "由测试消费（权限面的读数，不是派发点）",
-    # ---- S1m（2026-10-08 深夜）：分片与存活读数的四个新入口。
-    # `bind_task` / `close` 有生产调用点（`AgentLoop.run` 的开头与收尾）⇒ 不在这里登记；
-    # 下面四个是只读访问器 —— 由 S1k（名册/对照表按实例分片）与 S1n（存活读数）来接，
-    # 今天只有测试在用（登记为读数，不许沉默）。
-    "alive_path": "只读路径访问器（存活标记在哪儿）；生产面今天无调用点 —— "
-                  "S1n 的「某个代理的秘书还活着吗」要读它",
-    "secretary_alive": "只读三态读数（这个秘书还活着吗）；生产面今天无调用点 —— "
-                       "同上，S1n 与状态报告要读它",
-    "decisions_path": "只读路径访问器（这一名秘书的台账路径，S1m 起按实例分片）；"
-                      "生产面由 `_read_ledger` / `note_decision` 内部消费，外部只有测试",
     "merged_decisions": "只读访问器（整角色视图：老文件 + 全部分片）；生产面今天无调用点 —— "
                         "WebUI 那一面直接 glob 目录，这一格留给「按角色审账」的入口",
-    # ---- S1k-1（2026-10-08 深夜）：名册那一族的入口。它们的生产调用点在 S1k-2
-    # （形状 `retire` / `roster` 的转发、派活时的名册登记、消息两个方向的译码）；
-    # 在那一批落地之前，生产面只有 `retire` 内部互调与测试在调 —— 按本纪律登记，不许沉默。
-    "roster_add": "名册登记入口；生产调用点随 S1k-2 的「派活时登记名册」落地（今天由测试消费）",
-    "roster_view": "名册视图入口；生产调用点随 S1k-2 的 `roster` 形状落地（今天由测试消费）",
-    "retire": "退役入口（三分支）；生产调用点随 S1k-2 的 `retire` 形状落地（今天由测试消费）",
     "roster_repair": "补登记入口；只在写路径被调用（I-15），"
-                     "生产调用点随 S1k-2 的派活登记那一步一起接（今天由测试消费）",
-    "resolve_up": "上行译码入口；生产调用点随 S1k-2 的「子给父发消息」那条路落地",
+                     "生产面今天无调用点（派活登记那一步走的是 `roster_add`，不经过它）",
+}
+
+
+#: `_outbound_hook` 往"这一步的结果"里放的每一格读数，按**角色是否应当知道它**分三档。
+#:
+#: ## 为什么要有这张表（它是第三条轴，不是前两条的重复）
+#:
+#: 上面两张表问的是"职责"：**代码做了、角色知道吗**。这一张问的是**读数**：
+#: 秘书在那个角色**正在派活的那一刻**往结果里塞的那些键（`alarms` / `wash` /
+#: `assessment` / …），角色到底认不认得。
+#:
+#: 两个方向都会静默出错：
+#:
+#: - 代码有、提示词没提 ⇒ 角色看到 `alarms: []` 只能读成"没事"，而"没事"与
+#:   "没算成"在这套接口里是两件不同的事（`fail_open` 说后者）—— 三态纪律在
+#:   提示词这一侧被折平，而**没有任何判据会红**；
+#: - 提示词提了、代码里没有 ⇒ 角色照着找那个键，找不到就会编一个出来。
+#:
+#: ## 三种处置（等额：`_outbound_reading_keys()` 必须正好等于三者的并集）
+#:
+#: - `READING_TELL`：角色应当知道，且提示词里必须真的有这个键名；
+#: - `READING_GAP`：角色应当知道、而**今天一个提示词都没提** ⇒ 登记为缺口。
+#:   这是**登记制不是豁免**：等额断言的另一半是"`READING_GAP` 里的键在提示词里必须 0 命中"，
+#:   所以补上提示词之后这一格必须被删掉（不删就红）—— 登记会自己过期，不会腐烂成豁免；
+#: - `READING_INTERNAL`：框架内部用的分格，角色无需知情（必须写 `why`，且提示词里不许出现）。
+READING_TELL: tuple[str, ...] = (
+    # 2026-10-19：前两个一直有；后五个是这一批补上的 —— `agent_prompts.py`「规则：」块里
+    # 新增的那一行（"派活先过秘书：`alarms` 预筛报警、`wash`/`changes` 洗过的格式、
+    # `assessment` 该不该派；`refused` 非空即被拒，`fail_open` 为真是没查成。"）
+    # 逐字点名了它们。它们从 `READING_GAP` 搬过来，**不是**被放宽掉的缺口。
+    "surface_fit", "reach_fit",
+    "alarms", "wash", "changes", "assessment", "fail_open",
+)
+
+#: 角色**应当**知道、今天却没有一个提示词提过的读数（登记为缺口，等主控抬版本时一并补）。
+#:
+#: 2026-10-19 清过一次：`alarms` / `wash` / `changes` / `assessment` / `fail_open`
+#: 五个已经随那一行进了十格提示词 ⇒ 搬进 `READING_TELL`。**剩两条**，如实留在缺口里
+#: （那一行 97 字装不下，装下了也要挤掉别的）：
+READING_GAP: dict[str, str] = {
+    "negotiation": "秘书⇄秘书协商这一格的结论（第几轮、收敛没有）。"
+                   "只在同 key 有重复候选、或结论含'重排 / 重复'时出现",
+    "escalate_to_body": "协商两轮仍未收敛 ⇒ 这一条**上报本体**。"
+                        "它出现就是'轮到你表态'；角色不认识这个键，就只能干等一个不会来的回音",
+}
+
+#: 框架内部用的分格：角色无需知情（提示词里出现就要红 —— 那会成为"承诺一件角色看不见的事"）。
+READING_INTERNAL: dict[str, str] = {
+    "problem": "`\"；\".join(alarms)` 的同一份内容再拼成一句 —— 认 `alarms` 就够，"
+               "它是给日志与回执读的",
+    "reach_bad_targets": "`summon_many` 那一支的汇总索引（哪几项 `unreachable`），"
+                         "是 `reach_fit` 的分格",
+    "reach_reason": "同一格的逐项理由串（`reach_fit` 的分格）",
+    "assessment_fail_open": "`fail_open` 那一族的分格：评估那一格炸了。认总的那一格就够",
+    "negotiation_fail_open": "同上：协商那一格炸了",
 }
 
 
@@ -462,3 +538,240 @@ def test_the_alignment_check_can_actually_go_red_both_ways() -> None:
     assert not seen4, (
         f"`duty4_rework` 登记为 internal（角色无需知情），可是 {list(seen4)} 的提示词里出现了它的出口词 ⇒ "
         "把它改成 prompt 就会红（这条负控证明了那一半有牙）")
+
+
+# --------------------------------------------------------------------------------------
+# 第三条轴：「秘书」这两个字出现在谁的提示词里，就得有一条**该角色知道**的职责认领它
+# --------------------------------------------------------------------------------------
+#
+# 前两条轴问的是"每条职责有没有人对得上话"。这一条反过来问：**每一句话**有没有出处。
+# 为什么要单独一条：一条职责可以登记成 `prompt`（= 十个角色都该知道），而实际只有
+# 一个角色知道 —— 前两条轴的 `assert seen` 只要求"有人命中"，于是那一格照样绿。
+# 反过来，一句谁也没登记的"秘书会替你 X"混进某一份提示词，前两条轴**也照样绿**
+# （它不被任何 duty 的 probe 认领 ⇒ 进不了 `claimed_by`）。这一条就是补这两个洞。
+
+def _sentences(text: str) -> list[str]:
+    """句级切分（与 `_secretary_claims` 同一口径：句号与换行）。"""
+    return [s.strip() for s in re.split(r"[。\n]", text) if s.strip()]
+
+
+def _admits(spec: dict, role: str) -> bool:
+    """这条职责的可见性**允许** `role` 知道它吗（`internal` 永远不允许）。"""
+    vis = spec["visibility"]
+    if vis == "prompt":
+        return True
+    if vis == "conditional":
+        return role in tuple(spec.get("roles", ()))  # type: ignore[arg-type]
+    return False
+
+
+def _claimants(sentence: str, role: str) -> list[str]:
+    """这一句"对秘书的承诺"能被表里哪几条职责认领（且那些职责允许 `role` 知道）。"""
+    return [k for k, spec in DUTIES.items()
+            if _admits(spec, role)
+            and any(p in sentence for p in tuple(spec.get("probe", ())))]  # type: ignore[arg-type]
+
+
+def _unclaimed_secretary_mentions(prompts: dict[str, str]) -> dict[str, list[str]]:
+    """每一份提示词里"提到秘书、却没有一条该角色可知道的职责认领"的句子。"""
+    bad: dict[str, list[str]] = {}
+    for role, text in prompts.items():
+        for s in _sentences(text):
+            if "秘书" not in s:
+                continue
+            if not _claimants(s, role):
+                bad.setdefault(role, []).append(s[:160])
+    return bad
+
+
+def test_every_secretary_mention_is_claimed_by_a_duty_that_role_may_know() -> None:
+    """每个角色的提示词里，凡出现「秘书」字样，必须命中一条 `visibility` 含该角色的职责。
+
+    这一条守的是"**每一句话都有出处**"：不是"表里某条职责有人命中"（那是方向一），
+    而是"**这一句**在那个角色那儿是登记过的"。两个反例都是真红过的形态：
+
+    - 一句谁也没登记的承诺（"秘书会替你 X"）塞进某一份提示词 ⇒ 角色按它行事会撞墙；
+    - 一句登记为 `conditional`（只该 D 知道）的承诺出现在 H 的提示词里
+      ⇒ 那正是 2026-10-16「M 只派活」那次收窄要挡的泄漏（见 `duty2_assess` 的 `why`）。
+    """
+    prompts = _roles_and_prompts()
+    unclaimed = _unclaimed_secretary_mentions(prompts)
+
+    # 反真空：一句"秘书"都抽不到 ⇒ 抽取面坏了，不是"没问题"。
+    mentions = {r: [s for s in _sentences(t) if "秘书" in s] for r, t in prompts.items()}
+    total = sum(len(v) for v in mentions.values())
+    assert total > 0, "十角色提示词里一句'秘书'都没抽到 ⇒ 抽取面坏了（不是没问题）"
+    assert len(prompts) == 10, f"只渲染到 {len(prompts)} 个角色 ⇒ 这一格没查成"
+
+    assert not unclaimed, (
+        "这些句子在提示词里对角色承诺'秘书会做某事'，而 `DUTIES` 里没有任何一条"
+        "**该角色可知道**的职责认领它（= 承诺了一个没人接住的接住方，"
+        "或把一个只该部分角色知道的职责泄漏了出去）：\n  - "
+        + "\n  - ".join(f"[{r}] {s}" for r, rows in unclaimed.items() for s in rows))
+
+
+def test_the_secretary_mention_rule_can_actually_go_red() -> None:
+    """负控：上面那条判据的两个牙都要能咬（用同一套 helper，不复制判据）。"""
+    prompts = _roles_and_prompts()
+
+    # 基线：真提示词本来就该是绿的（否则负控在替一条已经红的判据作证）。
+    assert not _unclaimed_secretary_mentions(prompts), "基线就不绿 ⇒ 下面的负控没有意义"
+
+    # 牙 ①（方向二）：一句 DUTIES 之外的秘书承诺。
+    fake = "框架会让秘书替你把结论写成章节。"
+    assert not _claimants(fake, "A"), "负控空转：编的这句承诺被表里某条职责认领了"
+    poisoned = dict(prompts)
+    poisoned["A"] = prompts["A"] + "\n- " + fake + "\n"
+    assert _unclaimed_secretary_mentions(poisoned).get("A"), (
+        "负控失败：塞进 A 的提示词之后仍然查不出来 ⇒ 这条判据对'没登记的承诺'没有牙")
+
+    # 牙 ②（可见性）：一句只该 M 知道的职责（`conditional`，`roles=('M',)`），塞给 H。
+    #
+    # 2026-10-19：这一格原先拿 `duty2_assess` 当例子（那时它 roles=('D',)）。同一天那次
+    # 登记把它放回十个角色了 ⇒ 那个例子不再"只该一部分角色知道"。改用 `duty3_closure`
+    # （闭环提醒只有 M 的秘书会跑，`conditional + roles=('M',)`）——
+    # **负控的举例也要跟着登记走，否则它会变成一句永远成立的自我安慰。**
+    leak = "你的秘书会在收尾时给你一格 `closure_reminders`（谁没接手、谁没终态）。"
+    assert _claimants(leak, "M"), "负控空转：这句本该被 `duty3_closure` 认领"
+    assert not _claimants(leak, "H"), "负控空转：这句对 H 也被认领了 ⇒ 可见性那一半没在起作用"
+    poisoned2 = dict(prompts)
+    poisoned2["H"] = prompts["H"] + "\n- " + leak + "\n"
+    assert _unclaimed_secretary_mentions(poisoned2).get("H"), (
+        "负控失败：把一条 `conditional` 职责泄漏给 H 之后仍然查不出来 ⇒ 可见性那一半没牙")
+
+
+# --------------------------------------------------------------------------------------
+# 第四条轴：`_outbound_hook` 交回来的那些**读数键**，角色认不认得
+# --------------------------------------------------------------------------------------
+#
+# 前三轴查的是"职责"与"承诺"。这一轴查"**键**"：秘书把哪些读数塞进了这一步的结果。
+# 键名是角色唯一能抓住的东西 —— 它没有别的途径知道"这一步多了一格叫 assessment"。
+
+def _function_body(src: str, name: str) -> str:
+    """从 `src` 里取出方法 `name` 的正文（到下一个同缩进的 `def` 为止）。
+
+    刻意不引 `ast`：本判据要的是"这个键有没有人放进去"这一档，
+    行级/正则扫描已经够，而且不依赖被扫文件此刻能否解析（与 `_called_in_production` 同一取舍）。
+    """
+    head = re.search(r"^    def " + re.escape(name) + r"\(", src, re.M)
+    assert head, f"`agent_loop.py` 里找不到方法 {name} ⇒ 这一格没查成（不是没问题）"
+    nxt = re.search(r"^    def ", src[head.end():], re.M)
+    end = head.end() + nxt.start() if nxt else len(src)
+    return src[head.start():end]
+
+
+def _outbound_reading_keys() -> list[str]:
+    """`_outbound_hook` 往结果里放的每一格（去掉 `_` 打头的模块内部承载键）。"""
+    body = _function_body(_src_text("agent_loop.py"), "_outbound_hook")
+    keys = {m.group(1) for m in re.finditer(r'out\["([A-Za-z_][A-Za-z0-9_]*)"\]\s*=', body)}
+    return sorted(k for k in keys if not k.startswith("_"))
+
+
+def _key_named(text: str, key: str) -> bool:
+    """这个键名在 `text` 里出现过吗（按**标识符边界**判，别把 `roster_problem` 当成 `problem`）。"""
+    return re.search(r"(?<![A-Za-z0-9_])" + re.escape(key) + r"(?![A-Za-z0-9_])", text) is not None
+
+
+def _secretary_sentence_names(text: str, key: str) -> bool:
+    """有没有**一句谈到秘书的话**点了这个键名。
+
+    为什么必须限定在"谈到秘书的那一句"：本文件问的是"角色有没有被告知**秘书**做这件事"。
+    裸键名会撞车 —— 现算读数：`problem` 在十份提示词里都出现过一次，出现在
+    「你不是主控 ⇒ 这一句会被受控拒绝（`problem` 是 `not_conductor`）」那一句里，
+    讲的是 `ask_user` 的拒绝理由码，与秘书没有关系。按裸键名判，这一格会红得毫无意义
+    （而"让假阳性把判据变成噪音"是本仓反复踩过的坑）。
+    """
+    return any("秘书" in s and _key_named(s, key) for s in _sentences(text))
+
+
+def _reading_registry_problems(prompts: dict[str, str], keys: list[str]) -> list[str]:
+    """登记表与实测的三方对账（TELL 必须有 · GAP/INTERNAL 必须没有 · 三者等额）。"""
+    problems: list[str] = []
+    tell = set(READING_TELL)
+    gap = set(READING_GAP)
+    internal = set(READING_INTERNAL)
+
+    for a, b, an, bn in ((tell, gap, "READING_TELL", "READING_GAP"),
+                         (tell, internal, "READING_TELL", "READING_INTERNAL"),
+                         (gap, internal, "READING_GAP", "READING_INTERNAL")):
+        if a & b:
+            problems.append(f"{an} 与 {bn} 重叠：{sorted(a & b)} —— 一格只能有一种处置")
+
+    scanned = set(keys)
+    registered = tell | gap | internal
+    if scanned - registered:
+        problems.append(
+            f"`_outbound_hook` 交回了这些键，而登记表里一个处置都没给：{sorted(scanned - registered)} "
+            "—— 角色认不认得它、要不要知道它，必须有人裁（这是登记制，不许沉默）")
+    if registered - scanned:
+        problems.append(
+            f"登记表里有这些键，而 `_outbound_hook` 今天根本不交回它：{sorted(registered - scanned)} "
+            "—— 提示词若照着它写，就是在承诺一件不会发生的事（或这一格已经改名，登记该跟着走）")
+
+    for key in sorted(tell):
+        hit = sorted(r for r, t in prompts.items() if _secretary_sentence_names(t, key))
+        if not hit:
+            problems.append(
+                f"{key}：登记为'角色应当知道'，可是十角色提示词里没有一句话在谈秘书的同时 "
+                "点了这个键名 ⇒ 这是'代码 → 提示词'那一向的缺口")
+    for key in sorted(gap):
+        if not str(READING_GAP[key]).strip():
+            problems.append(f"{key}：登记在 READING_GAP 里却没写清'不知道它会怎样'")
+        hit = sorted(r for r, t in prompts.items() if _secretary_sentence_names(t, key))
+        if hit:
+            problems.append(
+                f"{key}：已经有谈秘书的话在 {hit} 的提示词里点了它 ⇒ 把它从 `READING_GAP` 里删掉"
+                "（登记制的等额另一半：补了提示词就必须撤掉缺口登记，否则这张表会腐烂成豁免）")
+    for key in sorted(internal):
+        if not str(READING_INTERNAL[key]).strip():
+            problems.append(f"{key}：登记为 internal 却没写 why")
+        hit = sorted(r for r, t in prompts.items() if _secretary_sentence_names(t, key))
+        if hit:
+            problems.append(
+                f"{key}：登记为'框架内部、角色无需知情'，可是 {hit} 的提示词里有谈秘书的话点了它 "
+                "⇒ 提示词在承诺一件角色看不见的事")
+    return problems
+
+
+def test_every_outbound_reading_is_either_told_to_roles_or_registered() -> None:
+    """`_outbound_hook` 交回来的每一格读数：要么提示词里说了，要么有人签字说不用知道。
+
+    为什么这一格必须存在：秘书在一个角色**正在派活那一刻**交给它的东西，全部是键名。
+    键名不进提示词，角色就只有一个来源能认识它们 —— 猜。而这一族里有一格叫
+    `fail_open`，它和 `alarms: []` 在纸面上长得几乎一样而含义正好相反
+    （"查过了没问题" vs "没查成"）。本仓最贵的那一类错，就长在这个缝里。
+    """
+    prompts = _roles_and_prompts()
+    keys = _outbound_reading_keys()
+
+    # 反真空：扫不到键 ⇒ 扫描面坏了（不是"没有问题"）。
+    assert len(keys) >= 10, f"只从 `_outbound_hook` 扫到 {len(keys)} 个键 ⇒ 扫描面坏了：{keys}"
+    assert len(prompts) == 10, f"只渲染到 {len(prompts)} 个角色 ⇒ 这一格没查成"
+
+    problems = _reading_registry_problems(prompts, keys)
+    assert not problems, ("`_outbound_hook` 的读数与提示词没有对齐：\n  - " + "\n  - ".join(problems))
+
+
+def test_the_reading_registry_can_actually_go_red() -> None:
+    """负控：这张登记表的两个牙（多登记一个键 / 缺登记一个键）都要能咬。"""
+    prompts = _roles_and_prompts()
+    keys = _outbound_reading_keys()
+    assert not _reading_registry_problems(prompts, keys), "基线就不绿 ⇒ 下面的负控没有意义"
+
+    # 牙 ①：代码里多出一格没人处置的读数。
+    assert _reading_registry_problems(prompts, sorted(set(keys) | {"brand_new_reading"})), (
+        "负控失败：`_outbound_hook` 多交回一格、登记表没写，也查不出来")
+
+    # 牙 ②：登了一个代码里根本不交回的键（提示词若照着写就是空承诺）。
+    assert _reading_registry_problems(prompts, sorted(set(keys) - {"assessment"})), (
+        "负控失败：登记了 `assessment` 而代码里没有它，也查不出来")
+
+    # 牙 ③：一个登记在 `READING_GAP` 的键偷偷进了谈秘书的那一句（缺口登记会腐烂成豁免）。
+    #
+    # 2026-10-19：原先拿 `alarms` 当例子，同一天它已随提示词搬进 `READING_TELL` ⇒ 这里改用
+    # 仍在缺口里的 `negotiation`。**负控的举例必须跟着登记表走。**
+    assert "negotiation" in READING_GAP, "负控空转：`negotiation` 已经不在缺口表里了，换个例子"
+    leaked = dict(prompts)
+    leaked["A"] = prompts["A"] + "\n- 你的秘书会在协商不收敛时给你一格 `negotiation`。\n"
+    assert _reading_registry_problems(leaked, keys), (
+        "负控失败：`READING_GAP` 里的键进了提示词，却没人要求撤掉缺口登记")

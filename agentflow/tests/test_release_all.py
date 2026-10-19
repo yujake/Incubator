@@ -2474,6 +2474,12 @@ def test_the_design_tools_criterion_is_not_vacuous():
 #:   * 「新增模块要在这里登记」，连同"它为什么必须是一个顶层模块"的一行理由；
 #:     删模块要同时删掉它那一行理由（登记过期与漏登记同样危险：前者让人以为"有人看过了"）。
 _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
+    # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
+    # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
+    "promptstability.py": "系统提示的步间稳定性与 prompt 缓存读数：split_facts（把每步会变的事实键移出 system）、"
+                          "step_stability / first_difference（连续两步是否逐字节相同、从第几个字符起不同）、"
+                          "dynamic_sections / unregistered_dynamic_sections（动态段白名单）、"
+                          "prompt_cache_record / summarize_prompt_cache（每步与整趟的命中率、可省金额）",
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
     # `goal-7f5116c1` M6/M7：八个角色（除主控 M）都改成了包，一个动作一个文件

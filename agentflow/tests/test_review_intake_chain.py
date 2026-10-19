@@ -89,12 +89,19 @@ def _register_external_paper(reg) -> str:
     return str(res.data["lit_id"])
 
 
-def _register_statement(reg, lit_id: str) -> str:
-    """B 把论文里的定理登记成 `statements`，返回 stmt_id。"""
-    res = reg.call("table.create", role="B", table="statements",
-                   row={**EXTERNAL_STATEMENT, "source_lit_id": lit_id})
-    assert res.ok, res.error
-    return str(res.data)
+def _register_statement(store, lit_id: str) -> str:
+    """B 把论文里的定理登记成 `statements`，返回 stmt_id（正路：B 交内容、秘书落盘）。
+
+    这里不再用 `table.create(table="statements")`：那条约会被
+    `store.direct_write_refusal` 受控拒绝（真机读数 `projects/mp2/sessions/mp2-7.jsonl`
+    第 97 行 —— 手写 `bits={}` 的那一行），正路只有 `Secretary.record_statement`。
+    """
+    from agentflow.secretary import Secretary
+
+    sec = Secretary("B", root=store.root, store=store)
+    out = sec.record_statement({**EXTERNAL_STATEMENT, "source_lit_id": lit_id}, role="B")
+    assert out["checked"] and out["created"], out
+    return str(out["stmt_id"])
 
 
 def _build_our_manuscript(reg, lit_id: str, *, text: str, evidence_kind: str = "cross_check") -> str:
@@ -130,7 +137,7 @@ def test_external_paper_intake_chain_is_walkable_with_existing_tools(wired):
     """
     store, _conductor, reg = wired
     lit_id = _register_external_paper(reg)
-    stmt_id = _register_statement(reg, lit_id)
+    stmt_id = _register_statement(store, lit_id)
     doc_id = _build_our_manuscript(reg, lit_id, text="数值抽样与该结论一致（引自外部论文）。")
     # 这里刻意不断言 lit_id != doc_id：id 是按表分配的（`alloc_id` 的 id_kind），
     # 所以"第一篇文献"与"第一份稿件"都可能叫 `0000` —— 两个命名空间互不相干。

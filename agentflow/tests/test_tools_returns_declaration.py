@@ -356,13 +356,23 @@ def tool_params() -> dict[str, dict]:
         "search.providers": {},
         "search.register": {"title": "新文献", "type_code": "J", "summary": "s"},
         "table.count": {"table": "statements"},
-        "table.create": {"table": "statements", "row": {"origin": "own_result", "kind": "theorem", "statement_full": "c9", "quote_reason": "尚未逐字校验"}},
-        "table.delete": {"table": "statements", "id": "0002"},
+        # 2026-10-19 晚：`create` / `update` 的探针样品从 `statements` 换成
+        # `research_questions` —— `statements` / `dependencies` 已不由通用写口直写
+        # （`store.direct_write_refusal`；真机读数 `projects/mp2/sessions/mp2-7.jsonl`
+        # 第 97 行）。本判据问的是"`returns=` 与实现给不给同一套键"，与样品表无关：
+        # 键集合仍由**实跑**观测（这两件在 `NO_KEY_SET_EXEMPTIONS` 里，data 是标量）。
+        # `_seed()` 已经铺了 research_questions `0000`；create 新建的那一条是 `0001`
+        # （`MUTATING_LAST` 的顺序保证 create 先于 delete 跑）。
+        "table.create": {"table": "research_questions",
+                         "row": {"question": "探针问题", "origin": "probe",
+                                 "priority": "low", "notes": "探针"}},
+        "table.delete": {"table": "research_questions", "id": "0001"},
         "table.get": {"table": "statements", "id": "0000"},
         "table.list": {"table": "statements"},
         "table.schema": {},
         "table.search": {"table": "statements", "query": "group"},
-        "table.update": {"table": "statements", "id": "0000", "patch": {"statement_text": "d2"}},
+        "table.update": {"table": "research_questions", "id": "0000",
+                         "patch": {"notes": "探针改过的笔记"}},
         "trace.chain": {"relation_ids": ["0000"]},
         "trace.concept": {"concept_id": "0000"},
         "trace.literature": {"lit_id": "0000", "max_chars": 200},

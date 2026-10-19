@@ -2118,7 +2118,7 @@ def guard_result(fn: Any) -> Any:
 
 @tool(
     "doc.scan_claim",
-    "对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类",
+    "对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。",
     {
            "type": "object",
            "properties": {"claim": {"type": "object"}},
@@ -2148,10 +2148,8 @@ def _doc_scan_claim(claim):
 @tool(
     "doc.compose_claim",
     (
-            "构造一条合规断言：cross_check 自动补「不构成证明」声明；无引用/否定未分类/过度声称/"
-            "作废无原因在构造时就抛错（不等写库）。可带 §8.3 的生命周期字段"
-            "（kind/status/proof_location/numeric_evidence/counterexamples/frozen/"
-            "allowed_use/scope_caveat/revision_hash/errata_ids）"
+            "构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。"
+            "可带生命周期字段（kind/status/proof_location/scope_caveat/allowed_use/frozen）。"
             ),
     {
            "type": "object",
@@ -2203,7 +2201,7 @@ def _doc_compose_claim(**kw):
 
 @tool(
     "doc.list_documents",
-    "只读列举稿件（代号/类型/标题/状态/审校轮次/断言数与 markdown 路径）",
+    "只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。",
     {
            "type": "object",
            "properties": {
@@ -2228,8 +2226,8 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
 @tool(
     "doc.build_document",
     (
-            "写一行 documents 并渲染 markdown 到工作区内（逐条机械检查 + 核对每条 citation "
-            "指向的对象真的存在，两道闸都过才落库；out_path 越界即拒绝）"
+            "写一行 documents 并渲染 markdown 到工作区内（机械检查 + 核对每条 citation 指向的对象存在，两闸都过才落库；out_path "
+            "越界拒绝）。"
             ),
     {
            "type": "object",
@@ -2358,10 +2356,9 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
 @tool(
     "doc.register_dependency",
     (
-            "登记外部依赖（FC-23）：status='closed' 会先用真实数据核 "
-            "lit_id/experiment_id/stmt_id 是否已入库；dangling / external_unavailable "
-            "必须写 status_reason。`source_stmt_id` = 被依赖的是我们自己的一条命题；"
-            "`path_group` = 第几条证明路径（同一 used_by 下组内都要、组间任一）"
+            "登记外部依赖（FC-23）：`closed` 前用真实数据核 `lit_id`/`experiment_id`/`stmt_id` 已入库；`dangling`"
+            "/`external_unavailable` 必须写 `status_reason`。`source_stmt_id` = 依赖的是我们自己的一条命题；`"
+            "path_group` = 第几条证明路径（组内都要、组间任一）。"
             ),
     {
            "type": "object",
@@ -2555,10 +2552,8 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
     registry.register(
         ToolSpec(
             name="doc.paper_compile",
-            summary="把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf，并写一份编译回执。"
-            "正文由你自己写（fs.write 到那个落点，散文体、章节自排）—— 这一条只做编译，"
-            "不生成正文、不改你的稿子。本机 MiKTeX 会写完 PDF 却以 0xC0000409 退出 ⇒ "
-            "产物（页数、字节数）与引擎退出码分成两栏如实带回。",
+            summary="把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写编译回执。正文由你自己写（fs.write 到那个落点）"
+            "—— 这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
             params={
                 "type": "object",
                 "properties": {

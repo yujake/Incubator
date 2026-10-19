@@ -2480,18 +2480,55 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:
 #: **实测 1 格换值、9 格不动**（pytest 环境里现算）：换值 = G；不动 = A / B / C / D / E / F / H / V / M。
 #: 原因对得上：这一轮只动 G 的 `policy`（伙伴表印的是 `duty` / `boundary`，不含 policy）。
-_FROZEN_PROMPT_VERSION = "p163"
+#: p163 → p164（2026-10-19，**十岗各补一条「产出标准」**：不只讲工作纪律，也讲"好的产出"）：
+#:   十条**全部并进既有的某一条 policy**（没有新开第 N 条 ⇒ 条目数一格没变：A4 / B7 / C3 /
+#:   D13 / E19 / F10 / G11 / H5 / M49 / V9），每条净增 88–113 字。**每条都带能力锚点**
+#:   （靠该角色手上真有的动作/工具才做得到）：
+#:   A 并进「继续搜还是收手」（命中后写清它支撑/推翻了台账哪一条，`stmt:` / `rel:` 号；
+#:     锚点 `search.register` + 读册子 + `note`）；
+#:   B 并进「一次抽取的产出有上限」（关系的价值在信息量，空边不许产出；锚点 `relations`
+#:     行的 `kind` / `quote`）；
+#:   C 并进「缺口不许只写在报告里」（在 `analysis.register_report` 的 `summary` 里说清这个数
+#:     让哪个缺口成立或不成立）；
+#:   D 并进「从数据里找模式」（**有模型缝时**逐条点名 ≥3 条新增；缝没接时如实报 `not_wired`；
+#:     锚点 `register_conjecture` / `propose_question` / `write_report`）；
+#:   E 并进「脚本要会说结论」（每条落库时写清它支持/反驳了哪条 `claim`、读数多少；
+#:     锚点 `experiments` 行的 `result` / `search_bound`）；
+#:   F 并进「每一轮先挑一个可判定的子目标」（**有推理缝时** ≥3 条新事实；缝没接时 `step`
+#:     只会落 `dead_end(缺工具)`，如实报、不硬凑；锚点 `F.step` 的四种产物）；
+#:   G 并进「论文体例」（没有新增结论的稿子不许投，锚点 `build_document` 的 `kind="survey"`）；
+#:   H 并进「稿子落成研究报告时的裁决」（把 `documents.claims` 与 `statements` 逐条对；
+#:     锚点 `doc.scan_claim` / `table.list` 读 + `review.record_finding` 落 finding）；
+#:   M 并进「先窄后宽」（在 `conductor.summon` 的 task 里写明这一步要动哪条结论，收工前用
+#:     `conductor.ledger` 核 —— **不要求预测结果**）；
+#:   V 并进「每条问题都要指到那一步」（先判承重步，并在 `verify_proof` 的 findings 里写出
+#:     步号与原句）。
+#:   本批**只做加法**：130 条旧 policy 条目逐字一条没删（现算探针按 HEAD 的 AST 逐条比对）。
+#:
+#: **实测 10 格全换值、0 格不动**（pytest 环境里现算）：换值 = A / B / C / D / E / F / G / H / V / M。
+#: 原因对得上：这一轮十个角色**各自**的 `policy` 都被改到了（伙伴表只印 `duty` / `boundary`，
+#: 但每个角色自己的 policy 都在它自己的提示词里 ⇒ 没有一格能不动）。
+_FROZEN_PROMPT_VERSION = "p167"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "5756cb544e2fcb349f7f898fc819a176bb93284d9ae4bca7d215d390cc658e9a",
-    "B": "54ee5606b547ae5d770059e93101be66ebe105b42e12206d682f4343a07a234a",
-    "C": "8f0f373ec18a666c402567e7980948405c94d066f3ac49bc9e68bcba58a41f07",
-    "D": "ffec2e5b33df4e66e67e271c4d4f6b3f2d26d30b4f29f07bb0d30d2ef23d595d",
-    "E": "a3efeda58c58b95acd2e14364aee71ea5bd5921287b69542eca48163584cdb0d",
-    "F": "47196fc6305bb2e91c0d174f2de228d92ac41d81ad308b5e46aa772967071457",
-    "G": "1dc6464c76a7bf42168fa9f696d0aef3feae14195fc3aa79368e7e6754818e18",
-    "H": "fea26e2492999641eb2dceebde13647311fd93debd0abb450f710b00e36fe608",
-    "V": "8b6a92a7101060876b4c147e210f79354924456098f19f8584e18bcc7be33cc3",
-    "M": "bd20ac43af2afcde66a87e95a4f95d12a7b422c6c40b5c20b18a26d6c7b18dec",
+    # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
+    # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
+    #    才退 `heuristic`」那一条；
+    # ② 十格的前置提示词压缩（业主要求「稍微压一下，但必要的提示词不能删」）：只动
+    #    `specs/*.py` 的 `policy`，needle 1008 条 + 十格具体字面量 2459 条 + `NO_LEAN_REPLACEMENTS`
+    #    的 13 个左边逐条核过"改后仍在"（探针不进仓库）。
+    # ⚠️ 十格是**两批改动先后落地之后**现算的：上面那两批在同一时刻改同一批文件，
+    #    这张表按最后一版树重算（`pytest -k test_the_prompt_version_moves` 的同一环境）。
+    #    再改 `specs/*` 就必须连版本号一起动（这条判据两个方向都判）。
+    "A": "9b962dfb19e1dbdc7438d01bd2889ac9ea8885c1055ce6079457194f4e56e361",
+    "B": "731802033af6d0221e4d9882d43128df86e6f0e18d6b8042ef460661eb5ef347",
+    "C": "d8e2c58ff106c08e80de80f2c2fdac78f323ed1304e45a6051491120c6f60150",
+    "D": "ca31187b8039720be17ba771c20fa79a12624e3c7ed730d2e1877f54c4f66322",
+    "E": "2e1ceff7ee604077aca9848cf88b1ac8fd5ee3930854e20e41e8093ce361521b",
+    "F": "99b2512ac4b65c7c898724a61eb7e378484e1604c8eea03d55324f771aa5500a",
+    "G": "7b182a00c69e5041397d012ab40c6c89119d50c40091996fa73934d0ad2e444d",
+    "H": "9311a886be7ad7233e277c0cd8ceaeb57254b3584a2070c1a0f6ba5e383952d4",
+    "V": "1a9051a38c1ec749a78de9288ce1fcc44de7f524275181ec38a5619d6c6a221f",
+    "M": "4c77a3753f8b3c1eefe649f810e9f299bcc0d90a04c045f9a5073b3ff7c6d10e",
 }
 
 

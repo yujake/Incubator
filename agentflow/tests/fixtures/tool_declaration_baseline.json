@@ -1,0 +1,3768 @@
+{
+ "note": "工具说明压缩（业主批准的打法之一）的**改前基线**。declarations 是压缩前每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。baseline_summary_chars 是压缩前全部 summary 的字符总数，判据 ② 要求现值 ≤ 75%。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ③ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。",
+ "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 86 件工具（与 tests/test_tool_summary_readings.py 同一口径）",
+ "n_tools": 86,
+ "baseline_summary_chars": 8932,
+ "max_ratio": 0.75,
+ "declarations": {
+  "analysis.register_report": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "hottest",
+       "paths",
+       "cold",
+       "gaps"
+      ],
+      "description": "报告档位（受控词表 ['hottest', 'paths', 'cold', 'gaps']）：hottest=最热门概念、paths=两概念间的链条/图读数、cold=冷门概念、gaps=候选研究缺口"
+     },
+     "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "一句话结论（D 的第一入口就是它；不许写成「见正文」）"
+     },
+     "markdown": {
+      "type": "string",
+      "minLength": 1,
+      "description": "报告正文（markdown）：读数、判断、边界逐条写清"
+     },
+     "request": {
+      "type": "string",
+      "description": "这条分析是被什么要求做出来的（派活原文或你的复述）"
+     },
+     "payload": {
+      "type": "object",
+      "description": "机器可读部分（代号链 / 度数表 / 评分明细等），D 溯源用"
+     },
+     "params": {
+      "type": "object",
+      "description": "这次分析用的参数（top_n / limit 等）"
+     },
+     "warnings": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "这一份的已知边界（拿不到的行号、被截断的读数）"
+     }
+    },
+    "required": [
+     "kind",
+     "summary",
+     "markdown"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','report_id','markdown_path','kind','summary','created_by'}（`checked=False` = 没接线/参数非法 ⇒ 那一行没有登记）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "C"
+   ],
+   "tags": [
+    "analysis",
+    "write",
+    "register"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "attack.check_budget": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "budget": {
+      "type": "object",
+      "description": "三维预算，四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}"
+     },
+     "rounds_done": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "depth": {
+      "type": "integer",
+      "minimum": 0
+     }
+    },
+    "required": [
+     "budget"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','complete','missing','allowed','reason','blocked_by'}",
+   "side_effect": "none",
+   "external": "none",
+   "roles": [
+    "F",
+    "D",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "attack",
+    "budget"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "attack.create_plan": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "problem": {
+      "type": "string"
+     },
+     "problem_key": {
+      "type": "string"
+     },
+     "for_question_id": {
+      "type": "string"
+     },
+     "subgoals": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "budget": {
+      "type": "object",
+      "description": "三维预算，四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}"
+     },
+     "depth": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "parent_plan_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "problem",
+     "problem_key"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'ok','created','plan_id','duplicate','status','budget','subgoals','reason'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "F"
+   ],
+   "tags": [
+    "attack",
+    "plan"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "attack.list_plans": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "problem_key": {
+      "type": "string"
+     },
+     "include_terminal": {
+      "type": "boolean"
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'checked','total','plans','reason'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "F",
+    "D",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "attack"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "attack.pick_next_subgoal": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "subgoals": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     }
+    },
+    "required": [
+     "subgoals"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'picked', 'subgoal', 'reason'}",
+   "side_effect": "none",
+   "external": "none",
+   "roles": [
+    "F",
+    "D",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "attack"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "attack.status": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "plan_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "plan_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','plan_id','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason','stale_blocked'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "F",
+    "D",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "attack"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "attack.step": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "plan_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "plan_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "F"
+   ],
+   "tags": [
+    "attack",
+    "loop"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "conductor.acceptance": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "project_dir": {
+      "type": "string",
+      "description": "项目根（相对工作区；`.` 或空 = 工作区自己就是项目根）"
+     },
+     "rel_path": {
+      "type": "string",
+      "description": "验收表相对项目根的路径（缺省 out/paper/ACCEPTANCE.md）"
+     },
+     "max_chars": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4000,
+      "description": "每行读数最多留多少字（缺省 60；0 = 不截断）"
+     },
+     "ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "只要这几行（如 ['P5','P6']）；一次读不完时按批读"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'found','path','title','conclusion','rows','row_count','ok_count','not_ok_count','readings_truncated','row_ids','problems','documents'}；rows[] 每项是 {'id','name','ok','reading','reading_chars'}；给了 ids 时多 {'requested','unknown_ids'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.board": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "limit": {
+      "type": "number",
+      "description": "最多列几项（默认 20）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','open_items','open_count','readings'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.broadcast": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "subject": {
+      "type": "string",
+      "description": "一句话标题"
+     },
+     "body": {
+      "type": "string",
+      "description": "正文（进板项的 detail）"
+     }
+    },
+    "required": [
+     "subject"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','ok','broadcast','recipients','items','cascade','readings','note'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G",
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.cancel": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "reason": {
+      "type": "string",
+      "enum": [
+       "user",
+       "deadline",
+       "budget",
+       "dispose",
+       "cancelled"
+      ]
+     },
+     "detail": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'reason','reason_mapped_from','detail','inflight'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.closing": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "project_dir": {
+      "type": "string",
+      "description": "项目根（相对工作区；正文与编译回执在 <它>/out/paper/ —— 传 out/paper 目录会把 out/paper 拼两次；不给 ⇒ 论文那一格是 unknown）"
+     },
+     "report_path": {
+      "type": "string",
+      "description": "报告路径（不给 ⇒ 报告形状那一格是 unknown）"
+     },
+     "cap_usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "这一趟的成本上限（美元）—— 内容级验收的「在成本上限内」那一格用它判；不给 ⇒ 那一格是「没查成」而不是通过（负数会被参数校验拒成 param_error）"
+     },
+     "goal": {
+      "type": "string",
+      "description": "你这一趟的目标（一句话）。收工由你判 ⇒ 先说清目标是什么"
+     },
+     "goal_met": {
+      "type": "boolean",
+      "description": "**你的判断**：目标达成了没有（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。不给 ⇒ 这一趟没有收工判据（`can_close=false`）"
+     },
+     "basis": {
+      "type": "string",
+      "description": "你凭哪几条读数这么判（可写台账计数 / 交付物路径 / 与机器八格不一致时你为什么不认它）"
+     },
+     "task_list": {
+      "type": "array",
+      "description": "**你自己列的任务列表**（业主 2026-10-09：「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」）—— 每一项写清做什么、做完了没有",
+      "items": {
+       "type": "object",
+       "properties": {
+        "what": {
+         "type": "string",
+         "description": "这一项是什么活"
+        },
+        "state": {
+         "type": "string",
+         "enum": [
+          "done",
+          "not_done",
+          "cannot"
+         ],
+         "description": "done=做完了；not_done=还没做；cannot=做不了（must 写 why）"
+        },
+        "why": {
+         "type": "string",
+         "description": "not_done / cannot 的理由（做不了时必填）"
+        }
+       },
+       "required": [
+        "what",
+        "state"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'can_close','machine_pass','m_verdict','overrode','verdict_conflicts','verdict_note','verdict_written','status','failed','unknowns','findings','readings','summary','review_acceptance'}；**can_close 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，结论写在 `goal_met`），机器八格退成读数（`status`/`machine_pass`），两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` 逐项点名；M 没给判据 ⇒ `can_close=false` + 读数说明『没人判过』；M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；status 的键是八格检查（paper/contradictions/load_bearing/report_shape/user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、台账现算值、是否满足（不满足的那几行同时进 findings）；**读不懂的行**各自带 `state=\"unreadable\"` + `reason`（空 id / id 重复 / 词表外的 kind / `na` 无理由 / 阈值不是整数 / 台账读不到），读数里另有 `rows_unreadable`（条数）与 `unreadable_rows`（逐条 id/kind/code/reason）—— `unreadable` 既不是通过、也不进未满足，它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；findings[] 每项是 {'check','code','level','detail'}；review_acceptance 是那一栏内容级验收读数：{'passed','criteria','failed','auxiliary','auxiliary_note','readings','summary'}，criteria[] 每项是 {'key','name','state','detail'}（`key`/`name` 与顺序现取自 `reviewaccept.CRITERIA`，`state` 是三态之一），auxiliary[] 每项是 {'key','label','value'}（标签现取自 `reviewaccept.AUXILIARY_SIGNALS`，值只作辅助、一个都不参与 `passed`），auxiliary_note 就是那一句『辅助读数逐字禁止拿来当通过』的来源（`reviewaccept.ReviewAcceptance.to_dict` 的原话）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.ensure_project": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "project_name": {
+      "type": "string",
+      "description": "项目名（缺省取下一个 projectN）"
+     },
+     "start": {
+      "type": "string",
+      "enum": [
+       "auto",
+       "cold",
+       "warm"
+      ]
+     },
+     "books_dir": {
+      "type": "string",
+      "description": "本地书架目录（登记进项目库）"
+     },
+     "books_limit": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "projects_dir": {
+      "type": "string",
+      "description": "projects 落点（缺省取 AGENTFLOW_PROJECTS_DIR 或默认值）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'name','path','mode','requested','state','why','created','ingested'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.ledger": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string",
+      "enum": [
+       "tree",
+       "stats",
+       "issues",
+       "verify",
+       "relays"
+      ]
+     },
+     "root_task_id": {
+      "type": "string",
+      "description": "只看这一棵子树（可空）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'view','rows','stats','issues','verify','relays','relay_pending','relay_note','task_count'}；relays[] 每项含 role / wants_role / wants_action / refusal_reason / at / fulfilled / fulfilled_by_task（逐项键名见 `_relay_requests` 的字面量）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.resume_brief": {
+   "params": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'present','brief','unfinished_now','path'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.role_spec": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "role_name": {
+      "type": "string",
+      "description": "角色名（A–H）"
+     }
+    },
+    "required": [
+     "role_name"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'role','summonable','duty','boundary','policy','signature_error','deliverable','stance'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.state": {
+   "params": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'root','tables','conjectures','tasks','queues'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.status_report": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "since": {
+      "type": "string",
+      "description": "只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）"
+     },
+     "out_dir": {
+      "type": "string",
+      "description": "报告落哪个目录（缺省 out/review）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'ok','md','json','tables','manuscripts','in_flight','attack_rounds','interjections','next_steps','note'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.stop": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "reason": {
+      "type": "string",
+      "enum": [
+       "user",
+       "deadline",
+       "budget",
+       "dispose",
+       "cancelled"
+      ]
+     },
+     "drain_sec": {
+      "type": "number",
+      "description": "等收尾的上限秒数（force=true 时不等待）"
+     },
+     "force": {
+      "type": "boolean",
+      "description": "直接停：不等待收尾，并杀掉登记在盘的子进程（连子孙）"
+     },
+     "notify": {
+      "type": "boolean",
+      "description": "是否在公共频道广播叫停（默认 true）"
+     },
+     "root_task_id": {
+      "type": "string",
+      "description": "只停这一支（S4）：给一个实例号 ⇒ 开关只对它和它的子孙生效；不给 = 全工作区（老行为）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'reason','reason_mapped_from','detail','inflight_at_stop','drained_sec','disposed','resume_brief','verify','stop_switch','notified','killed_children','blocked_remaining'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.summon": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "target_role": {
+      "type": "string",
+      "description": "被召唤的角色（A–H）"
+     },
+     "task": {
+      "type": "string",
+      "description": "**必填**：这一趟派给它的是什么活（写清做什么；可带起手建议，怎么做由它定）"
+     },
+     "params": {
+      "type": "object",
+      "description": "动作参数（按参数的 schema 校验）"
+     },
+     "input_key": {
+      "type": "string",
+      "description": "同一祖先链上去重用的键（防活锁）"
+     }
+    },
+    "required": [
+     "target_role",
+     "task"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'task_id','role','action','status','outcome','refusal_reason','detail','error','tokens','usd','depth','elapsed_sec','children','checked','payload_preview','payload_bytes','payload_keys','payload_truncated','artifacts'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "conductor.summon_many": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "description": "一批派活（每项一条）",
+      "items": {
+       "type": "object",
+       "properties": {
+        "target_role": {
+         "type": "string",
+         "description": "被召唤的角色（A–H）"
+        },
+        "task": {
+         "type": "string",
+         "description": "**必填**：这件活是什么（可带起手建议）"
+        },
+        "params": {
+         "type": "object",
+         "description": "动作参数"
+        },
+        "instance": {
+         "type": "string",
+         "description": "实例标签；同角色不同标签 ⇒ 允许同波并发"
+        },
+        "input_key": {
+         "type": "string",
+         "description": "去重/防活锁的键"
+        }
+       },
+       "required": [
+        "target_role",
+        "task"
+       ],
+       "additionalProperties": false
+      }
+     },
+     "why": {
+      "type": "string",
+      "description": "这批活是为什么派的（写进日志，便于复盘）"
+     }
+    },
+    "required": [
+     "targets"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "doc.build_document": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "reproduction_report",
+       "survey",
+       "paper",
+       "note"
+      ]
+     },
+     "title": {
+      "type": "string"
+     },
+     "claims": {
+      "type": "array",
+      "minItems": 1,
+      "description": "每条断言是一个对象。字段各有其位（2026-10-03，`draft/37` §86）：`evidence_kind='cross_check'` 的免责声明必须写在独立的 `disclaimer` 栏，写进 `text` 里不算 —— T1 实测在这里连拒 7 次",
+      "items": {
+       "type": "object",
+       "properties": {
+        "text": {
+         "type": "string",
+         "description": "断言原文（读者看到的那句话）"
+        },
+        "citations": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "description": "必须非空（FC-02）：`rel:<id>` / `lit:<id>` / `exp:<id>` / `eval:<id>` / `doc:<id>` / `stmt:<id>` 这类可回查的引用（前缀的全部取值见 `schema.CITATION_PREFIXES`；`doc:` 那一档还要带 `#<断言>@<内容哈希前 16 位>`）。没有引用的断言不许进稿件"
+        },
+        "evidence_kind": {
+         "type": "string",
+         "enum": [
+          "proof",
+          "proof_review",
+          "cross_check",
+          "heuristic"
+         ],
+         "description": "证据等级：proof / cross_check / heuristic。注意没有 'own_result' 这个取值 —— 那是 `origin`（来源）的词表，不是这一栏的"
+        },
+        "disclaimer": {
+         "type": "string",
+         "description": "`evidence_kind='cross_check'` **必需**：逐字写「数值交叉验证，不构成证明」。它是这条断言的独立一栏，不写在 `text` 里"
+        },
+        "section": {
+         "type": "string",
+         "description": "这条断言落在稿件的哪一节"
+        },
+        "claim_id": {
+         "type": "string",
+         "description": "不给时按 text+citations 自动生成"
+        }
+       }
+      }
+     },
+     "sections": {
+      "type": "array",
+      "description": "正文分节：**每个元素是一个对象** `{heading, body}`（写成字符串会被拒 —— 实测被拒过 11 次）。`heading` 必填且非空（那一节的标题），`body` 可缺省（markdown 正文）。",
+      "items": {
+       "type": "object",
+       "properties": {
+        "heading": {
+         "type": "string",
+         "description": "这一节的标题（必填、非空）"
+        },
+        "body": {
+         "type": "string",
+         "description": "这一节的 markdown 正文（可缺省）"
+        }
+       }
+      }
+     },
+     "open_problems": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "out_path": {
+      "type": "string",
+      "description": "生成 markdown 的落点（工作区内相对路径；缺省 `<工作区>/<documents>/<doc_id>.md`）。它是这份稿件的渲染产物，不是论文本体：指到 `out/paper/main.tex` 会把论文正文换成台账稿（真机实测：26 KB → 4 KB，不可逆）⇒ 既有的、不属于任何 `documents` 行的文件一律拒绝覆盖；要改主稿请用 `fs.edit`"
+     }
+    },
+    "required": [
+     "kind",
+     "title",
+     "claims"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'doc_id','kind','title','markdown_path','claims','sections','open_problems','status','review_rounds','created_at','updated_at','created_by','content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:` + 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "G"
+   ],
+   "tags": [
+    "document",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "doc.compose_claim": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string"
+     },
+     "citations": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1
+     },
+     "evidence_kind": {
+      "type": "string",
+      "enum": [
+       "proof",
+       "proof_review",
+       "cross_check",
+       "heuristic"
+      ]
+     },
+     "section": {
+      "type": "string"
+     },
+     "is_negative": {
+      "type": "boolean"
+     },
+     "negation_kind": {
+      "type": "string",
+      "enum": [
+       "disproved",
+       "not_proved",
+       "not_searched_here",
+       "no_local_evidence"
+      ]
+     },
+     "claim_id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "定义",
+       "定理",
+       "命题",
+       "引理",
+       "推论",
+       "例",
+       "注",
+       "反例"
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "证",
+       "验",
+       "待精化",
+       "作废"
+      ]
+     },
+     "proof_location": {
+      "type": "string"
+     },
+     "numeric_evidence": {
+      "type": "object"
+     },
+     "counterexamples": {
+      "type": "array"
+     },
+     "frozen": {
+      "type": "boolean"
+     },
+     "freeze_reason": {
+      "type": "string"
+     },
+     "allowed_use": {
+      "type": "string",
+      "enum": [
+       "主结果",
+       "Remark only",
+       "移入 open"
+      ]
+     },
+     "scope_caveat": {
+      "type": "string"
+     },
+     "revision_hash": {
+      "type": "string"
+     },
+     "errata_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "text",
+     "citations",
+     "evidence_kind",
+     "section"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'claim_id','section','text','evidence_kind','citations','is_negative','negation_kind','disclaimer','revision_hash','scope_caveat'}（合规的 claim dict）；带 §8.3 字段时原样透出。失败：ok=False + kind=validation_error + message（含 issue code）",
+   "side_effect": "none",
+   "external": "none",
+   "roles": [
+    "G",
+    "H",
+    "F",
+    "D"
+   ],
+   "tags": [
+    "document",
+    "compose"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "doc.list_documents": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "draft",
+       "in_review",
+       "revised",
+       "accepted",
+       "rejected",
+       "unresolved_review"
+      ]
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "reproduction_report",
+       "survey",
+       "paper",
+       "note"
+      ]
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'count','documents':[{'doc_id','kind','title','status','review_rounds','claim_count','markdown_path'}]}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "G",
+    "H",
+    "F",
+    "D"
+   ],
+   "tags": [
+    "document",
+    "read"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "doc.paper_compile": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+     },
+     "timeout_sec": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 7200
+     }
+    },
+    "required": [
+     "project"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'tri','ok','reason','tex','pdf','engine','exit_codes','runs','pages','pdf_bytes','receipt_path','pdf_fresh','engine_stderr_tail','engine_stdout_tail','problems'}；tri ∈ not_applicable（还没有 main.tex，先写正文）/ unknown（没引擎、超时、这一次没编出 PDF —— `pdf_fresh=false` 就是「盘上那份是上一次编的」那一档）/ computed（**这一趟**拿到 PDF —— 页数与退出码如实带上，两栏不互相冒充）；`engine_stdout_tail` / `engine_stderr_tail` 是引擎自己说的话（截尾）—— 编不过时先读它，别只看退出码；失败：ok=False + kind=paper_no_source（还没写正文）/ paper_compile_failed（编译没成）",
+   "side_effect": "write_local",
+   "external": "exec",
+   "roles": [
+    "G"
+   ],
+   "tags": [
+    "document",
+    "paper",
+    "exec"
+   ],
+   "handler_name": "agentflow.tools.doc_tools._register_paper_tools.<locals>.<lambda>"
+  },
+  "doc.register_dependency": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "used_by": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "theorem",
+       "definition",
+       "lemma",
+       "proposition",
+       "dataset",
+       "experiment",
+       "prior_art"
+      ]
+     },
+     "label": {
+      "type": "string"
+     },
+     "source_lit_id": {
+      "type": "string"
+     },
+     "source_experiment_id": {
+      "type": "string"
+     },
+     "source_stmt_id": {
+      "type": "string"
+     },
+     "path_group": {
+      "type": "integer",
+      "description": "证明路径的组号（从 1 起）。同一 used_by + 同一组 = 一条路径（组内都要）；不同组 = 可选路径"
+     },
+     "page_range": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "minItems": 1,
+      "maxItems": 2
+     },
+     "quote": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "closed",
+       "dangling",
+       "external_unavailable",
+       "refuted",
+       "disputed"
+      ]
+     },
+     "status_reason": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "used_by",
+     "kind",
+     "label"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','source_stmt_id','source_claim_id','source_doc_id','path_group','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "G"
+   ],
+   "tags": [
+    "document",
+    "dependency",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "doc.scan_claim": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "claim": {
+      "type": "object"
+     }
+    },
+    "required": [
+     "claim"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','claim_id','ok','findings','error_count','warning_count','checked_fields','decided','revision_hash','status_axis','undecided_reason'}",
+   "side_effect": "none",
+   "external": "none",
+   "roles": [
+    "G",
+    "H",
+    "F",
+    "D"
+   ],
+   "tags": [
+    "document",
+    "gate"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.delete": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "相对工作区根的路径"
+     },
+     "recursive": {
+      "type": "boolean",
+      "default": false,
+      "description": "为 true 才允许删除目录（含非空目录）"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "data=是否真的删掉了（**布尔标量，无键集合**）；meta.found 区分本来就没有的情况。",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G"
+   ],
+   "tags": [
+    "fs",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.edit": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "相对工作区根的路径"
+     },
+     "old_string": {
+      "type": "string",
+      "description": "要被替换的那段原文（逐字，默认必须唯一）"
+     },
+     "new_string": {
+      "type": "string",
+      "description": "替换成什么（空串 = 删掉这一段）"
+     },
+     "sha256": {
+      "type": "string",
+      "description": "可选：调用方读到文件时的 sha256；不符即拒（防「我拿的是旧版」）"
+     },
+     "allow_multiple": {
+      "type": "boolean",
+      "default": false,
+      "description": "为 true 才允许 old_string 出现多次（全部替换）"
+     },
+     "note": {
+      "type": "string",
+      "description": "为什么改这一处（回在返回值里，供审计）"
+     }
+    },
+    "required": [
+     "path",
+     "old_string",
+     "new_string"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'path','sha256_before','sha256_after','replacements','bytes_before','bytes_after','note'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G",
+    "M"
+   ],
+   "tags": [
+    "fs",
+    "write",
+    "edit"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.list": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "default": ".",
+      "description": "相对工作区根的路径"
+     },
+     "recursive": {
+      "type": "boolean",
+      "default": false,
+      "description": "是否递归子目录"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000,
+      "default": 200
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'entries','path','total','returned','truncated'}；entries[] 每项是 {'name','path','is_dir','is_file','is_symlink','size','mtime'}。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "M"
+   ],
+   "tags": [
+    "fs",
+    "read"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.move": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "src": {
+      "type": "string"
+     },
+     "dst": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "src",
+     "dst"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'src','dst'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G"
+   ],
+   "tags": [
+    "fs",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.read": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "相对工作区根的路径"
+     },
+     "max_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5242880,
+      "default": 200000
+     },
+     "start_line": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "从第几行开始（1 起）；配合 max_lines 做分段读"
+     },
+     "max_lines": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "最多取多少行；0 = 不按行截（只受 max_bytes 限制）"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "data=文本（**标量，无键集合**）；meta 里给 encoding / bytes_read / total_bytes / truncated / start_line / lines_read / total_lines / next_line / had_errors / sha256 / routed_from。start_line / lines_read / total_lines / next_line / had_errors / sha256。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "M"
+   ],
+   "tags": [
+    "fs",
+    "read"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.search": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "pattern": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Python re 语法（与 ripgrep 的 Rust regex 基本兼容）"
+     },
+     "path": {
+      "type": "string",
+      "default": ".",
+      "description": "搜索起点"
+     },
+     "include": {
+      "type": "string",
+      "description": "文件名或相对路径 glob，如 *.py / reports/*.md"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2000,
+      "default": 100
+     }
+    },
+    "required": [
+     "pattern"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'matches','lines','path','pattern','total','truncated','scanned','skipped'}；matches[] 每项是 {'path','line','text'}，lines[] 每项是 '文件:行号: 行内容' 字符串。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "M"
+   ],
+   "tags": [
+    "fs",
+    "read",
+    "search"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.stat": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'path','exists','is_dir','is_file','is_symlink','size','mtime','mtime_epoch','sha256','link_target'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "M"
+   ],
+   "tags": [
+    "fs",
+    "read"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "fs.write": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "相对工作区根的路径"
+     },
+     "content": {
+      "type": "string",
+      "description": "文件内容（UTF-8）"
+     },
+     "overwrite": {
+      "type": "boolean",
+      "default": false,
+      "description": "为 true 才允许覆盖已有文件"
+     }
+    },
+    "required": [
+     "path",
+     "content"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'path','bytes','sha256','created'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G",
+    "M"
+   ],
+   "tags": [
+    "fs",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "graph.build": {
+   "params": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'built_from','concept_count','relation_count','literature_count','pair_count','group_count','isolated_concepts','isolated_count','degree_top','status_counts','quote_verified_counts','concepts_missing_from_table'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "graph.neighbors": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "concept_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     },
+     "max_neighbors": {
+      "type": "integer",
+      "minimum": 0
+     }
+    },
+    "required": [
+     "concept_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'concept_id','name','degree','total_neighbors','returned_neighbors','truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "graph.relations_between": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     },
+     "b": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     }
+    },
+    "required": [
+     "a",
+     "b"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'a','b','a_name','b_name','count','relations':[{'relation_id','concept_ids','description','statement','quote','status','quote_verified','lit_id','page_range'}]}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "graph.stats": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "top_n": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'top_n','hot','concept_count','relation_count','literature_count','pair_count','group_count','isolated_concepts','isolated_count','degree_top','status_counts','quote_verified_counts','concepts_missing_from_table'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "manuscripts.list": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "string",
+      "description": "只看发给谁（A–H/M/ALL）"
+     },
+     "sender": {
+      "type": "string",
+      "description": "只看谁写的"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'count','items':[{id,sender,to,summary,path,created_at}]}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "manuscripts.read": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "手稿编号（四位，如 0007）"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'id','path','sender','to','summary','text','sha256','bytes','body','created_at','format','note','refs','sid','task_id'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "ocr.backends": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "refresh": {
+      "type": "boolean"
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'backends','any_ocr_backend_available','available','selected_for_auto','auto_chain','verdict','install_hints','note'}；backends[] 每项是 {'name','available','reason','produces_text','checks','install_hint'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "B"
+   ],
+   "tags": [
+    "ocr",
+    "probe"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "ocr.detect_text_layer": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+     },
+     "lit_id": {
+      "type": "string",
+      "maxLength": 40
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'path','source_kind','has_text_layer','pages','page_count','pages_with_text','chars','encoding','reason','suggested_next','rule','page_count_known','page_count_source','failed_pages'}；失败：ok=False + kind(no_target/unknown_lit_id/lit_without_path/file_missing/not_a_file/extract_error)（unknown_lit_id 会把盘上有的编号一起给出来）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "B"
+   ],
+   "tags": [
+    "ocr",
+    "detect"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "ocr.run": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+     },
+     "lit_id": {
+      "type": "string",
+      "maxLength": 40
+     },
+     "pages": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "maxItems": 500
+     },
+     "backend": {
+      "type": "string",
+      "enum": [
+       "auto",
+       "easyocr",
+       "pytesseract"
+      ]
+     },
+     "languages": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "minLength": 1
+      },
+      "minItems": 1,
+      "maxItems": 8
+     },
+     "dpi": {
+      "type": "integer",
+      "minimum": 72,
+      "maximum": 600
+     },
+     "max_pages": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'path','kind','backend','backend_selection','languages','dpi','page_count','pages_requested','pages_attempted','pages_processed','pages_failed','truncated_pages','max_pages','total_chars','pages','text','elapsed_s','warnings','note'}；pages[] 每项是 {'page','text_layer_chars','ok','text','chars','empty','error','image_size','elapsed_s'}",
+   "side_effect": "write_local",
+   "external": "egress",
+   "roles": [
+    "B"
+   ],
+   "tags": [
+    "ocr",
+    "run"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "research.list_gaps": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "open",
+       "needs_evidence",
+       "researching",
+       "answered",
+       "dropped"
+      ]
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'questions','count','status_filter'}；每题带 waiting_request_ids 以便判断是否在等",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "D"
+   ],
+   "tags": [
+    "research",
+    "list"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "research.poll_waiting": {
+   "params": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+   },
+   "returns": "{'ready','waiting','counts'}；纯确定性判断，不调用 LLM、不写盘",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "D"
+   ],
+   "tags": [
+    "research",
+    "poll"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "research.set_status": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "question_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "open",
+       "needs_evidence",
+       "researching",
+       "answered",
+       "dropped"
+      ]
+     },
+     "notes": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "question_id",
+     "status"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'question_id','from','to','waiting_request_ids'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "D"
+   ],
+   "tags": [
+    "research",
+    "status"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "research.submit_gap": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "question_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     },
+     "topic": {
+      "type": "string",
+      "minLength": 1
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "broad",
+       "topical",
+       "precise"
+      ]
+     },
+     "description": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "question_id",
+     "topic",
+     "mode"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'request_id','question_id','duplicated','topic','mode','waiting_request_ids','reason','open_requests'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "D"
+   ],
+   "tags": [
+    "research",
+    "gap",
+    "ask-A"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "research.write_note": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "question_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     },
+     "note": {
+      "type": "string",
+      "minLength": 1
+     }
+    },
+    "required": [
+     "question_id",
+     "note"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'question_id','notes_length','appended'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "D"
+   ],
+   "tags": [
+    "research",
+    "note"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "review.list_findings": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "doc_id": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "open",
+       "fixed",
+       "wontfix",
+       "disputed"
+      ]
+     },
+     "level": {
+      "type": "string",
+      "enum": [
+       "error",
+       "warning",
+       "info"
+      ]
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'count','findings':[{'finding_id','doc_id','kind','level','target','message','evidence','status'}]}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "H",
+    "G",
+    "F",
+    "D"
+   ],
+   "tags": [
+    "review",
+    "read"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "review.record_finding": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "doc_id": {
+      "type": "string",
+      "description": "被审稿件号"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "unsupported_claim",
+       "dangling_dep",
+       "overclaim",
+       "missing_negation_kind",
+       "scope_drift",
+       "garbled",
+       "inconsistent_number"
+      ],
+      "description": "发现类别（受控词表 ['unsupported_claim', 'dangling_dep', 'overclaim', 'missing_negation_kind', 'scope_drift', 'garbled', 'inconsistent_number']）"
+     },
+     "target": {
+      "type": "string",
+      "description": "位置：claim-3 / section:2 / dep:0004 / rel:0007"
+     },
+     "message": {
+      "type": "string",
+      "description": "这条发现说什么（一句话）"
+     },
+     "evidence": {
+      "type": "string",
+      "description": "凭什么这么判（必填：读数、盘上路径、回执原样）"
+     },
+     "level": {
+      "type": "string",
+      "enum": [
+       "error",
+       "warning",
+       "info"
+      ],
+      "description": "严重度（缺省 warning）"
+     },
+     "axis": {
+      "type": "string",
+      "enum": [
+       "数学",
+       "体例",
+       "工程",
+       "证据"
+      ],
+      "description": "轴（数学 / 体例 / 工程 / 证据）"
+     },
+     "suggestion": {
+      "type": "string",
+      "description": "最小修法"
+     },
+     "round_no": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "审校轮次（不给时按该稿件已有发现的最大轮次 +1）"
+     },
+     "verbatim_quote": {
+      "type": "string",
+      "description": "≤20 词的逐字引文（G10 那一格）"
+     },
+     "line": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "行号（只在版本冻结后才有意义；拿不到就别给）"
+     },
+     "line_unavailable_reason": {
+      "type": "string",
+      "description": "拿不到行号的理由（`line` 省略时必填）"
+     }
+    },
+    "required": [
+     "doc_id",
+     "kind",
+     "target",
+     "message",
+     "evidence"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','created','duplicate_skipped','finding_id','doc_id','kind','level','round','status'}（`created=False` = 与已有发现去重命中，返回既有 `finding_id`，不制造重复行）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "H"
+   ],
+   "tags": [
+    "review",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "review.report": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "doc_id": {
+      "type": "string"
+     },
+     "own_errors": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "我这一轮犯的错（§8.4 G15）。必填：不写就是退回，空数组=显式声明零错误"
+     },
+     "out_path": {
+      "type": "string",
+      "description": "工作区内的相对路径；越界即拒绝"
+     },
+     "round_no": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "dependencies": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "banned_words": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "run_evidence": {
+      "type": "object",
+      "description": "本轮的实跑记录（G8 可复跑门）：{'checked':true,'commands':[{'claim_id','command','output_tail'}]}。**不传 ⇒ G8 判 unknown**（『本轮实跑过』无法判定），绝不判 pass —— 把『没报错』读成『没问题』正是参考体例记录的教训"
+     },
+     "claim_counts": {
+      "type": "object",
+      "description": "调用方声明的计数（G9 计数一致门）：declared_claim_count 等"
+     }
+    },
+    "required": [
+     "doc_id",
+     "own_errors"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'doc_id','round','report_path','revision_hash','verdict','gates_total','pass_count','fail_count','unknown_count','not_applicable_count','failed_gates','unknown_gates','own_error_count','coverage','markdown'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "H"
+   ],
+   "tags": [
+    "review",
+    "write",
+    "gate"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "review.review_document": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "doc_id": {
+      "type": "string"
+     },
+     "round_no": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "dependencies": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     }
+    },
+    "required": [
+     "doc_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "H"
+   ],
+   "tags": [
+    "review",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "review.scan_document": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "doc": {
+      "type": "object"
+     },
+     "dependencies": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     }
+    },
+    "required": [
+     "doc"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','doc_id','findings','error_count','warning_count','info_count','dep_check','verdict','reason','coverage','semantic_check'}；verdict ∈ {rejected, unverified, accepted_with_warnings, accepted}，dep_check.checked=False 时**必为** unverified",
+   "side_effect": "none",
+   "external": "none",
+   "roles": [
+    "H",
+    "G",
+    "F",
+    "D"
+   ],
+   "tags": [
+    "review",
+    "gate"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "review.verify_fixes": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "doc_id": {
+      "type": "string"
+     },
+     "round_no": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "dependencies": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "max_review_rounds": {
+      "type": "integer",
+      "minimum": 1
+     }
+    },
+    "required": [
+     "doc_id",
+     "round_no"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count'}",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "H"
+   ],
+   "tags": [
+    "review",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.dedup_check": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600
+     },
+     "year": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 2999
+     },
+     "doi": {
+      "type": "string",
+      "maxLength": 300
+     }
+    },
+    "required": [
+     "title"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','title','year','doi','would_be_duplicate','matched_key','keys','existing','near_misses','primary_key','rule','note','existing_table_size','store_read_error'}；失败：ok=False + kind(no_store/table_unreadable) + checked=False（**没有做成判重**，不是「没有重复」）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "search",
+    "dedup"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.download": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "url": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 2000
+     },
+     "hint": {
+      "type": "string",
+      "maxLength": 200
+     },
+     "max_bytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 2000000000
+     }
+    },
+    "required": [
+     "url"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256','http_status','max_bytes_requested','max_bytes_effective','elapsed_s','content_warning','warnings'}；失败：ok=False + kind(download_failed/download_error) + fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）",
+   "side_effect": "write_local",
+   "external": "egress",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "search",
+    "download"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.ingest_local": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "books_dir": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "本地目录（绝对路径或相对工作区）"
+     },
+     "pattern": {
+      "type": "string",
+      "maxLength": 40
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+     },
+     "max_bytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 2000000000
+     },
+     "dry_run": {
+      "type": "boolean",
+      "description": "只算 hash 与清单，不写盘、不进事务"
+     }
+    },
+    "required": [
+     "books_dir"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'root','dry_run','limit','books','count','ingested','already_present','skipped','unreadable','provenance'}；books[] 每项是 {'source','library_name','bytes','sha256','status','note','lit_id','request_id','pages','has_text_layer'}；失败：ok=False + kind(no_store/io_error) + recorded=False（**没登记成**，不是「目录里没有书」）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "search",
+    "offline",
+    "ingest"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.literature": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "topic": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "broad",
+       "topical",
+       "precise"
+      ]
+     },
+     "description": {
+      "type": "string",
+      "maxLength": 4000
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+     },
+     "provider": {
+      "type": "string",
+      "enum": [
+       "openalex",
+       "crossref",
+       "doaj",
+       "europepmc",
+       "fixture"
+      ]
+     },
+     "providers": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "openalex",
+        "crossref",
+        "doaj",
+        "europepmc",
+        "fixture"
+       ]
+      },
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "一次问多个源并合并（忽略 provider）：逐源三态见 sources[]、成本见 cost。"
+     }
+    },
+    "required": [
+     "topic"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'provider','mode','topic','description','limit','count','new_count','existing_count','unknown_count','batch_duplicate_count','store_checked','store_read_error','existing_table_size','candidates','elapsed_s','diagnostics','warnings','providers_requested','sources','source_count','source_failures','source_refusals','cost'}；candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language','summary','pdf_url','landing_url','provider','dedup_key','dedup_keys','existing','existing_lit_id','dedup_hit_key','batch_duplicate','is_new','sources','channel','cited_by_count'}；sources[] 每项是 {'name','status','count','error_kind','error','delivered','refused'}；cost 是 {'provider_calls','elapsed_s'}",
+   "side_effect": "read",
+   "external": "egress",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "search",
+    "literature"
+   ],
+   "handler_name": "agentflow.tools.search_tools.register.<locals>.<lambda>"
+  },
+  "search.local": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+     },
+     "max_chars": {
+      "type": "integer",
+      "minimum": 200,
+      "maximum": 8000
+     },
+     "lit_id": {
+      "type": "string",
+      "maxLength": 40
+     },
+     "max_books": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    },
+    "required": [
+     "query"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'query','searched','count','candidates','scanned','skipped_no_file','unreadable','no_text_layer','hits','elapsed_s','note'}；hits[] 每项是 {'lit_id','title','path','sha256_12','page','excerpt','pages','score'}（按 score 降序；score 是 locallib.page_scores 的同一份口径）；失败：ok=False + kind(no_store/table_unreadable) + searched=False（**没做成检索**，不是「没有命中」）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "C",
+    "H"
+   ],
+   "tags": [
+    "search",
+    "offline",
+    "local"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.providers": {
+   "params": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+   },
+   "returns": "{'skip_network','providers','available','unavailable','unverified','summary','default_provider'}；providers[] 每项是 {'name','available','status','reason','latency_s','evidence'}",
+   "side_effect": "read",
+   "external": "egress",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "search",
+    "provider"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.register": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600
+     },
+     "type_code": {
+      "type": "string",
+      "enum": [
+       "J",
+       "M",
+       "C",
+       "D",
+       "R",
+       "S",
+       "P",
+       "N",
+       "EB",
+       "Z"
+      ]
+     },
+     "summary": {
+      "type": "string",
+      "maxLength": 20000
+     },
+     "path": {
+      "type": "string",
+      "maxLength": 1000
+     },
+     "doi": {
+      "type": "string",
+      "maxLength": 300
+     },
+     "year": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 2999
+     },
+     "request_id": {
+      "type": "string",
+      "maxLength": 100
+     }
+    },
+    "required": [
+     "title",
+     "type_code",
+     "summary"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'created','reason','lit_id','matched_key','existing','keys','request_linked','path','dedup_key','type_code','processed','download','warnings'}（created=false 表示判重命中，复用了既有 lit_id；两支键集合相同）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "search",
+    "register"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.shelf": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "可选：按题名/路径子串过滤（大小写不敏感）"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     },
+     "lit_id": {
+      "type": "string",
+      "maxLength": 40
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'count','rows_total','have_path','missing_files','local_ingest','downloaded','truncated','books','note','query','filtered_out'}；books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages','has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；失败：ok=False + kind(no_store/table_unreadable) + counted=False（**没数成**，不是「书架是空的」）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "C",
+    "H"
+   ],
+   "tags": [
+    "search",
+    "offline",
+    "shelf"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "search.walk_citations": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "lit_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "盘上 literature 表的行号；引文走查从这一篇出发"
+     },
+     "direction": {
+      "type": "string",
+      "enum": [
+       "backward",
+       "forward"
+      ],
+      "description": "backward=这一篇引了谁；forward=谁引了这一篇"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+     }
+    },
+    "required": [
+     "lit_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'lit_id','doi','openalex_id','direction','count','candidates','note'}；失败时按本模块的统一口径走 `fail(...)`（`ok=False` ＋ `error` 一句，`kind` 分四档：no_store / table_unreadable / unknown_lit_id / no_source_key / provider_cannot_walk / walk_failed）；candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language','summary','pdf_url','landing_url','provider','is_oa','oa_source','openalex_id'}",
+   "side_effect": "read",
+   "external": "egress",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "search",
+    "citation"
+   ],
+   "handler_name": "agentflow.tools.search_tools.register.<locals>.<lambda>"
+  },
+  "table.count": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "enum": [
+       "search_requests",
+       "literature",
+       "relations",
+       "research_questions",
+       "conjectures",
+       "analysis_reports",
+       "reprocess_requests",
+       "experiments",
+       "attack_plans",
+       "documents",
+       "dependencies",
+       "statements",
+       "review_findings",
+       "tasks",
+       "usage_ledger",
+       "eval_results"
+      ],
+      "description": "16 张表之一"
+     },
+     "filter": {
+      "type": "object",
+      "description": "等值过滤：{字段: 期望值}；模糊匹配请用 table.search"
+     }
+    },
+    "required": [
+     "table"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "data=整数行数（**标量，无键集合**）。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V"
+   ],
+   "tags": [
+    "table",
+    "crud"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "table.create": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "enum": [
+       "search_requests",
+       "literature",
+       "relations",
+       "research_questions",
+       "conjectures",
+       "analysis_reports",
+       "reprocess_requests",
+       "experiments",
+       "attack_plans",
+       "documents",
+       "dependencies",
+       "statements",
+       "review_findings",
+       "tasks",
+       "usage_ledger",
+       "eval_results"
+      ],
+      "description": "16 张表之一"
+     },
+     "row": {
+      "type": "object",
+      "description": "行内容；主键可省略（省略则自动分配）"
+     }
+    },
+    "required": [
+     "table",
+     "row"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "data=新主键字符串（**标量，无键集合**）；meta.row 是实际落盘的整行。",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G"
+   ],
+   "tags": [
+    "table",
+    "crud",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "table.delete": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "enum": [
+       "search_requests",
+       "literature",
+       "relations",
+       "research_questions",
+       "conjectures",
+       "analysis_reports",
+       "reprocess_requests",
+       "experiments",
+       "attack_plans",
+       "documents",
+       "dependencies",
+       "statements",
+       "review_findings",
+       "tasks",
+       "usage_ledger",
+       "eval_results"
+      ],
+      "description": "16 张表之一"
+     },
+     "id": {
+      "type": "string",
+      "description": "要删的行主键"
+     }
+    },
+    "required": [
+     "table",
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "data=是否真的删掉了（**布尔标量，无键集合**）；meta.references 列出引用者（被拒时是原因，放行时是将会悬空的清单）。",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G"
+   ],
+   "tags": [
+    "table",
+    "crud",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "table.get": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "enum": [
+       "search_requests",
+       "literature",
+       "relations",
+       "research_questions",
+       "conjectures",
+       "analysis_reports",
+       "reprocess_requests",
+       "experiments",
+       "attack_plans",
+       "documents",
+       "dependencies",
+       "statements",
+       "review_findings",
+       "tasks",
+       "usage_ledger",
+       "eval_results"
+      ],
+      "description": "16 张表之一"
+     },
+     "id": {
+      "type": "string",
+      "description": "主键值（4 位字符串，或 r-NNNN）"
+     }
+    },
+    "required": [
+     "table",
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "data=行对象或 None（**形状由表 schema 决定，本工具不承诺固定键集合**）；meta.found 表达到底有没有。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V"
+   ],
+   "tags": [
+    "table",
+    "crud"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "table.list": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "enum": [
+       "search_requests",
+       "literature",
+       "relations",
+       "research_questions",
+       "conjectures",
+       "analysis_reports",
+       "reprocess_requests",
+       "experiments",
+       "attack_plans",
+       "documents",
+       "dependencies",
+       "statements",
+       "review_findings",
+       "tasks",
+       "usage_ledger",
+       "eval_results"
+      ],
+      "description": "16 张表之一"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500,
+      "default": 50,
+      "description": "返回条数上限（1-500）"
+     },
+     "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "跳过的行数"
+     },
+     "filter": {
+      "type": "object",
+      "description": "等值过滤：{字段: 期望值}；模糊匹配请用 table.search"
+     }
+    },
+    "required": [
+     "table"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'table','rows','total','returned','limit','offset'}；meta 里重复关键计数便于断言。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V"
+   ],
+   "tags": [
+    "table",
+    "crud"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "table.schema": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "maxLength": 60
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'tables','vocabularies'}；tables 的键是表名，值是 {'fields','primary_key','vocabularies'}。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V"
+   ],
+   "tags": [
+    "table",
+    "meta"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "table.search": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "enum": [
+       "search_requests",
+       "literature",
+       "relations",
+       "research_questions",
+       "conjectures",
+       "analysis_reports",
+       "reprocess_requests",
+       "experiments",
+       "attack_plans",
+       "documents",
+       "dependencies",
+       "statements",
+       "review_findings",
+       "tasks",
+       "usage_ledger",
+       "eval_results"
+      ],
+      "description": "16 张表之一"
+     },
+     "query": {
+      "type": "string",
+      "minLength": 1,
+      "description": "要查找的子串（不做正则解释）"
+     },
+     "fields": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "限定字段；省略=全部标量字符串字段"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500,
+      "default": 50
+     }
+    },
+    "required": [
+     "table",
+     "query"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'table','query','fields','rows','total','returned'}；meta.matched_fields 的键是主键、值是命中的字段名。",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V"
+   ],
+   "tags": [
+    "table",
+    "read"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "table.update": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "type": "string",
+      "enum": [
+       "search_requests",
+       "literature",
+       "relations",
+       "research_questions",
+       "conjectures",
+       "analysis_reports",
+       "reprocess_requests",
+       "experiments",
+       "attack_plans",
+       "documents",
+       "dependencies",
+       "statements",
+       "review_findings",
+       "tasks",
+       "usage_ledger",
+       "eval_results"
+      ],
+      "description": "16 张表之一"
+     },
+     "id": {
+      "type": "string",
+      "description": "要改的行主键"
+     },
+     "patch": {
+      "type": "object",
+      "description": "只写要改的字段"
+     }
+    },
+    "required": [
+     "table",
+     "id",
+     "patch"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "data=主键（**标量，无键集合**）；meta.row 是合并后实际落盘的整行。",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F",
+    "G"
+   ],
+   "tags": [
+    "table",
+    "crud",
+    "write"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "text.extract": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+     },
+     "lit_id": {
+      "type": "string",
+      "maxLength": 40
+     },
+     "out_dir": {
+      "type": "string",
+      "maxLength": 200
+     },
+     "pages": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "maxItems": 500
+     },
+     "max_pages": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2000
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'path','abs_path','lit_id','pages','chars','sha256','quality','max_pages','truncated','note'}；quality 是 {'chars','nul_bytes','replacement_chars','control_chars','control_ratio'}；失败：ok=False + kind(no_target/unknown_lit_id/lit_without_path/file_missing/not_a_file/extract_error/no_text_layer/garbled_text)",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "text",
+    "extract",
+    "offline"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "trace.chain": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "relation_ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "minLength": 4,
+       "maxLength": 6
+      },
+      "minItems": 1,
+      "maxItems": 50
+     }
+    },
+    "required": [
+     "relation_ids"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'level','relation_ids','steps','step_count','chain_text','missing','checked','contains_fulltext','note'}；**没有图可查**时 ok=False + kind=no_graph + checked=False（与'查了、链条确实断裂'的 ok=True+checked=True+missing 非空严格区分）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "trace.concept": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "concept_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     },
+     "with_relations": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "concept_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'level','concept','counts','neighbors','relations','relation_count','contains_fulltext','note'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "trace.literature": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "lit_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     },
+     "pages": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "maxItems": 50
+     },
+     "max_chars": {
+      "type": "integer",
+      "minimum": 200,
+      "maximum": 200000
+     }
+    },
+    "required": [
+     "lit_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'level','literature','requested_pages','max_chars','pages_returned','truncated','status','file_exists','has_text_layer','text','note','source_kind','abs_path','chars_returned','encoding','page_count'}（不含 status/text/pages_returned/truncated 的早期分支**不存在了**：这四项在每一条 ok 分支上都必须给，否则调用方区分不了'没有正文'与'工具忘了填'）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "trace.relation": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "relation_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6
+     }
+    },
+    "required": [
+     "relation_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'level','relation_id','concept_ids','concept_names','concepts','description','statement','quote','page_range','status','quote_verified','quote_verified_label','lit_id','literature','concept_group_key','duplicate_of','created_at','contains_fulltext'}（contains_fulltext 是**常量 False**：L1 永不读文件，它不是每次调用的检查结论）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "C",
+    "D"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial"
+  },
+  "verify.check_formal": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "claim": {
+      "type": "string"
+     },
+     "script_path": {
+      "type": "string",
+      "description": "工作区内待检查的 .lean 脚本；给了 source 时以 source 为准"
+     },
+     "source": {
+      "type": "string",
+      "description": "Lean 源码全文（与 script_path 二选一）"
+     },
+     "checker_name": {
+      "type": "string",
+      "description": "要核对的声明名（公理审计与声明名核对都要求它；不给时取文件名词干）"
+     },
+     "imports": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "timeout_sec": {
+      "type": "number",
+      "minimum": 1
+     }
+    },
+    "required": [
+     "claim"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}；失败（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）：ok=False + kind(param_error/check_failed) + data=None（一个键都不给 —— 失败分支不承诺上面那套键）",
+   "side_effect": "read",
+   "external": "exec",
+   "roles": [
+    "E",
+    "F",
+    "G"
+   ],
+   "tags": [
+    "experiment",
+    "formal"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.code_hash": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "工作区内的相对路径"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'path': str, 'code_hash': str}；失败：ok=False + kind(io_error/param_error) + data=None。param_error = 路径越界（工作区参数守卫拒绝）；io_error = 工作区内这个文件读不到（不存在 / 是目录 / 被占用 / ACL 拒绝）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "E",
+    "F",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "experiment",
+    "reproducibility"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.detect_verifier": {
+   "params": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+   },
+   "returns": "{'checked','available','available_names','reason','probe_errors','looked_in','sources','lean_enabled','lean_enabled_source','can_do_formal','note'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "E",
+    "F",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "experiment",
+    "formal"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.evidence_for": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "claim_key": {
+      "type": "string"
+     },
+     "for_question_id": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'checked','experiments','count','result_counts','negation_counts','best_evidence_kind','proved','reason'}（FC-10：必须分档计数，不许只给一个布尔；三条返回路径的键集合**完全相同**，由 tests/test_tools_audit_fixes.py 逐字核对）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "E",
+    "F",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "experiment",
+    "evidence"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.list_experiments": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "claim_key": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 0
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'checked','total','returned','truncated','experiments','reason'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "E",
+    "F",
+    "G",
+    "H"
+   ],
+   "tags": [
+    "experiment"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.list_verifications": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "statement_id": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer",
+      "minimum": 0
+     }
+    },
+    "additionalProperties": false
+   },
+   "returns": "{'checked','total','items','problems','truncated','reason'}（problems 是坏行说明 —— 照实列出，不静默跳过）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "V"
+   ],
+   "tags": [
+    "verification"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.read_proof": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "statement_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6,
+      "description": "命题号（6 位十进制）"
+     }
+    },
+    "required": [
+     "statement_id"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','statement_id','proof_text','source','sha256','proof_chars','verifications','last_verdict','last_verification_id','problems','reason'}（三条返回路径键集合相同；`source` 为空 = 台账里没有这个命题的证明全文）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "V"
+   ],
+   "tags": [
+    "verification"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.run_experiment": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "claim": {
+      "type": "string"
+     },
+     "claim_key": {
+      "type": "string"
+     },
+     "script_path": {
+      "type": "string",
+      "description": "工作区内的相对路径（formal 时必须是 .lean）"
+     },
+     "params": {
+      "type": "object"
+     },
+     "method": {
+      "type": "string",
+      "enum": [
+       "numeric",
+       "symbolic",
+       "exhaustive_search",
+       "formal"
+      ]
+     },
+     "for_question_id": {
+      "type": "string"
+     },
+     "timeout": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "run_name": {
+      "type": "string",
+      "description": "formal：要核对的声明名（不给时取 .lean 文件的名词干）"
+     },
+     "imports": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "formal：这次检查要加载的库（不给时用检查器的默认值）"
+     },
+     "certificate": {
+      "type": "object",
+      "description": "穷举/枚举类（method='exhaustive_search'）**必需**：结论的证书。必须含 kind（witness / unsat / enumeration_bound / counterexample）。「在 B 内没有反例」的说服力全部来自它"
+     },
+     "search_bound": {
+      "type": "object",
+      "description": "证书的适用范围（给了 certificate 就**必须**给）：说清 B 是什么、用什么算法搜的 —— 证书脱离边界没有意义"
+     }
+    },
+    "required": [
+     "claim",
+     "claim_key",
+     "script_path"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）",
+   "side_effect": "write_local",
+   "external": "exec",
+   "roles": [
+    "E",
+    "F",
+    "G"
+   ],
+   "tags": [
+    "experiment",
+    "evidence"
+   ],
+   "handler_name": "functools.partial"
+  },
+  "verify.verify_proof": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "statement_id": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 6,
+      "description": "命题号（6 位十进制，与 statements.stmt_id 同一套；旧数据里的 4 位号仍可读）"
+     },
+     "proof_text": {
+      "type": "string",
+      "description": "待审的证明全文；不给时从 statements 取"
+     },
+     "readonly_facts": {
+      "type": "string",
+      "description": "只读读数（命题现状 / 台账条数）"
+     }
+    },
+    "required": [
+     "statement_id",
+     "proof_text"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','kind','statement_id','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "V"
+   ],
+   "tags": [
+    "verification",
+    "proof"
+   ],
+   "handler_name": "functools.partial"
+  }
+ },
+ "summary_lens_before": {
+  "analysis.register_report": 192,
+  "attack.check_budget": 29,
+  "attack.create_plan": 68,
+  "attack.list_plans": 47,
+  "attack.pick_next_subgoal": 32,
+  "attack.status": 39,
+  "attack.step": 78,
+  "conductor.acceptance": 96,
+  "conductor.board": 136,
+  "conductor.broadcast": 108,
+  "conductor.cancel": 69,
+  "conductor.closing": 680,
+  "conductor.ensure_project": 218,
+  "conductor.ledger": 276,
+  "conductor.resume_brief": 73,
+  "conductor.role_spec": 76,
+  "conductor.state": 309,
+  "conductor.status_report": 171,
+  "conductor.stop": 266,
+  "conductor.summon": 104,
+  "conductor.summon_many": 282,
+  "doc.build_document": 90,
+  "doc.compose_claim": 201,
+  "doc.list_documents": 41,
+  "doc.paper_compile": 176,
+  "doc.register_dependency": 203,
+  "doc.scan_claim": 32,
+  "fs.delete": 39,
+  "fs.edit": 100,
+  "fs.list": 39,
+  "fs.move": 23,
+  "fs.read": 151,
+  "fs.search": 42,
+  "fs.stat": 28,
+  "fs.write": 22,
+  "graph.build": 55,
+  "graph.neighbors": 100,
+  "graph.relations_between": 50,
+  "graph.stats": 34,
+  "manuscripts.list": 78,
+  "manuscripts.read": 68,
+  "ocr.backends": 89,
+  "ocr.detect_text_layer": 107,
+  "ocr.run": 111,
+  "research.list_gaps": 62,
+  "research.poll_waiting": 59,
+  "research.set_status": 42,
+  "research.submit_gap": 65,
+  "research.write_note": 30,
+  "review.list_findings": 38,
+  "review.record_finding": 207,
+  "review.report": 102,
+  "review.review_document": 97,
+  "review.scan_document": 47,
+  "review.verify_fixes": 96,
+  "search.dedup_check": 62,
+  "search.download": 418,
+  "search.ingest_local": 89,
+  "search.literature": 91,
+  "search.local": 64,
+  "search.providers": 66,
+  "search.register": 103,
+  "search.shelf": 121,
+  "search.walk_citations": 132,
+  "table.count": 22,
+  "table.create": 54,
+  "table.delete": 41,
+  "table.get": 58,
+  "table.list": 29,
+  "table.schema": 59,
+  "table.search": 30,
+  "table.update": 47,
+  "text.extract": 304,
+  "trace.chain": 37,
+  "trace.concept": 47,
+  "trace.literature": 53,
+  "trace.relation": 55,
+  "verify.check_formal": 301,
+  "verify.code_hash": 42,
+  "verify.detect_verifier": 44,
+  "verify.evidence_for": 86,
+  "verify.list_experiments": 35,
+  "verify.list_verifications": 37,
+  "verify.read_proof": 40,
+  "verify.run_experiment": 168,
+  "verify.verify_proof": 124
+ },
+ "needles": {
+  "analysis.register_report": [
+   "analysis_reports"
+  ],
+  "conductor.acceptance": [
+   "out/paper/ACCEPTANCE.md"
+  ],
+  "conductor.cancel": [
+   "conductor.stop"
+  ],
+  "conductor.closing": [
+   "review_acceptance",
+   "statements",
+   "unknown"
+  ],
+  "conductor.state": [
+   "`run_once`",
+   "conductor"
+  ],
+  "conductor.stop": [
+   "force=true"
+  ],
+  "doc.register_dependency": [
+   "source",
+   "依赖（FC-23"
+  ],
+  "fs.edit": [
+   "sha256"
+  ],
+  "fs.stat": [
+   "sha256"
+  ],
+  "graph.build": [
+   "store"
+  ],
+  "search.download": [
+   "sha256",
+   "source"
+  ],
+  "search.ingest_local": [
+   "sha256",
+   "人直接提供"
+  ],
+  "table.delete": [
+   "concepts"
+  ],
+  "verify.check_formal": [
+   "imports",
+   "script_path",
+   "source"
+  ],
+  "verify.code_hash": [
+   "sha256"
+  ],
+  "verify.read_proof": [
+   "sha256"
+  ],
+  "verify.run_experiment": [
+   "formal"
+  ]
+ }
+}

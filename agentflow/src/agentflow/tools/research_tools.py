@@ -178,7 +178,7 @@ def _questions(store: Any) -> list[dict]:
 
 @tool(
     "research.list_gaps",
-    "列出研究问题台账（D 的工作台）。按 priority(high>medium>low)、question_id 稳定排序。",
+    "列出研究问题台账（D 的工作台），按 priority(high>medium>low)、question_id 稳定排序。",
     {
         "type": "object",
         "properties": {
@@ -217,7 +217,7 @@ def research_list_gaps(store: Any, status: str | None = None, limit: int = 50) -
 
 @tool(
     "research.submit_gap",
-    "把某研究问题的知识缺口提交给 A（在 search_requests 建一行，并把 request_id 追加进该问题的等待集）。",
+    "把某研究问题的知识缺口提交给 A（建 search_requests 行 + request_id 进该问题等待集）。",
     {
         "type": "object",
         "properties": {
@@ -404,7 +404,7 @@ def research_submit_gap(
 
 @tool(
     "research.write_note",
-    "向某研究问题追加一条研究笔记（追加而非覆盖，保留研究过程）。",
+    "向某研究问题追加一条研究笔记（追加而非覆盖）。",
     {
         "type": "object",
         "properties": {
@@ -451,7 +451,7 @@ def research_write_note(store: Any, question_id: str, note: str) -> ToolResult:
 
 @tool(
     "research.poll_waiting",
-    "复查等待中的查询请求：每条请求是否结束？其 result_lit_ids 是否都已被 B 消化？返回就绪/未就绪分组。",
+    "复查等待中的查询请求：请求是否结束、result_lit_ids 是否都被 B 消化；返回就绪/未就绪分组。",
     {"type": "object", "properties": {}, "additionalProperties": False},
     side_effect="read",
     roles=("D",),

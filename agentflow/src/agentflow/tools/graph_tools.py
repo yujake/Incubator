@@ -814,7 +814,7 @@ def _coerce_holder(graph: Any, store: Any) -> _GraphHolder:
 
 @tool(
     "graph.build",
-    "从 store 的三张表构建概念图索引，返回图规模摘要（节点/关系/两两边/孤立概念/度数前5/完整性体检）。",
+    "从 store 三张表构建概念图索引，返回图规模与完整性体检读数。",
     {
         "type": "object",
         "properties": {},
@@ -850,7 +850,7 @@ def graph_build(holder, ) -> ToolResult:
 
 @tool(
     "graph.stats",
-    "返回当前图的统计摘要与热度前列（不重建索引；未建图时按需构建一次）。",
+    "返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。",
     {
         "type": "object",
         "properties": {"top_n": {"type": "integer", "minimum": 1, "maximum": 100}},
@@ -944,7 +944,7 @@ def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -
 
 @tool(
     "graph.relations_between",
-    "返回同时包含两个概念的全部关系（按 quote_verified/status/信息量确定性排序）。",
+    "返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。",
     {
         "type": "object",
         "properties": {

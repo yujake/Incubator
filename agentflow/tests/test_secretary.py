@@ -1584,3 +1584,39 @@ def test_the_filing_refusal_says_the_same_statement_will_get_the_same_answer(tmp
     assert got is not None and got["kind"] == "statement_too_trivial", got
     assert "原样再交一次不会有别的结论" in got["error"], got["error"]
     assert got["secretary"]["reused"] is True, got
+
+
+# ---------------------------------------------------------------- 封野路（2026-10-19 晚）
+
+
+def test_the_two_tables_are_named_the_same_in_both_places():
+    """"这两张表只经秘书"这句声明有两处落点，**清单必须逐字一致**（反漂移）。
+
+    为什么这条判据必须存在：`secretary.STATEMENT_WRITE_TABLES` 是"秘书的写集声明"，
+    `store.STATEMENT_WRITE_TABLES` 是"通用写口的禁区"（`store.direct_write_refusal`
+    读它）。`store` 在依赖图最底层、不能 import `secretary` ⇒ 清单只能有两处；
+    而两处一旦漂了，会出现最坏的那种形态：**一张表被两边都认为不归自己管**
+    （秘书不写它、通用写口也不拒它）—— 于是野路重新打开，而没有任何一条测试变红。
+    """
+    from agentflow import secretary as SEC
+    from agentflow import store as store_mod
+
+    assert tuple(store_mod.STATEMENT_WRITE_TABLES) == tuple(SEC.STATEMENT_WRITE_TABLES), (
+        store_mod.STATEMENT_WRITE_TABLES, SEC.STATEMENT_WRITE_TABLES)
+    # 反真空：清单不能是空的（空集让上面那条恒真，也让"禁区"一个表都不禁）
+    assert len(store_mod.STATEMENT_WRITE_TABLES) == 2, store_mod.STATEMENT_WRITE_TABLES
+
+
+def test_the_direct_write_refusal_speaks_for_exactly_those_two_tables():
+    """`store.direct_write_refusal` 只拒那两张表，且拒信逐字指路（含"删除不受限"）。"""
+    from agentflow import store as store_mod
+
+    for table in ("statements", "dependencies"):
+        why = store_mod.direct_write_refusal(table)
+        assert why.startswith(store_mod.DIRECT_WRITE_REFUSED), why
+        assert "Secretary.record_statement" in why, why
+        assert "own.register_statement" in why, why
+        assert "table.delete" in why, why
+    for table in ("literature", "relations", "tasks", "counters", ""):
+        assert store_mod.direct_write_refusal(table) == "", table
+

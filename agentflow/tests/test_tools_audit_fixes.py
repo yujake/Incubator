@@ -1567,38 +1567,49 @@ def test_no_unexpected_escape_search_register_schema_failure(store: Store, monke
 
 
 def test_table_list_total_is_the_filtered_total_not_the_page_size(store: Store):
-    """4.1：`table.list` 的 `total` 是过滤后总数 —— 分页逻辑唯一的依据，此前零断言。"""
+    """4.1：`table.list` 的 `total` 是过滤后总数 —— 分页逻辑唯一的依据，此前零断言。
+
+    ## 样品表为什么是 `research_questions` 而不是 `statements`
+
+    `statements` / `dependencies` 已不由通用写口直写（`store.direct_write_refusal`：
+    正路只有 `Secretary.record_statement`，真机读数见
+    `projects/mp2/sessions/mp2-7.jsonl` 第 97 行）。而本条判据说的是**分页口径**
+    （`total` = 过滤后总数），与样品挂在哪张表上无关 —— 样品换成一张仍可由
+    `table.create` 写的表，断言一个字没动。
+    """
     reg = registry_for(TT, store)
     for i in range(5):
-        reg.call("table.create", table="statements",
-                 row={"origin": "own_result", "kind": "theorem", "label": f"c{i}",
-                      "statement_full": "d", "quote_reason": "尚未逐字校验"})
+        reg.call("table.create", table="research_questions",
+                 row={"question": f"q{i}", "origin": "fixture", "notes": f"c{i}"})
 
-    page1 = reg.call("table.list", table="statements", limit=2)
+    page1 = reg.call("table.list", table="research_questions", limit=2)
     assert page1.ok, page1.error
     assert page1.data["total"] == 5, "total 必须是过滤后的总数，不是本页条数"
     assert page1.data["returned"] == 2 and len(page1.data["rows"]) == 2
 
-    page3 = reg.call("table.list", table="statements", limit=2, offset=4)
+    page3 = reg.call("table.list", table="research_questions", limit=2, offset=4)
     assert page3.data["total"] == 5 and page3.data["returned"] == 1, "最后一页只有 1 条，但 total 仍是 5"
 
-    filtered = reg.call("table.list", table="statements", limit=10, filter={"label": "c1"})
+    filtered = reg.call("table.list", table="research_questions", limit=10, filter={"notes": "c1"})
     assert filtered.data["total"] == 1, "total 说的是**过滤后**的总数"
 
 
 def test_table_count_is_not_affected_by_limit(store: Store):
-    """4.1：`table.count` 的 docstring 明说"计数不该受 limit 影响" —— 这条不变量此前没被测。"""
+    """4.1：`table.count` 的 docstring 明说"计数不该受 limit 影响" —— 这条不变量此前没被测。
+
+    样品表同 `test_table_list_total_is_the_filtered_total_not_the_page_size`
+    （`statements` 已不由通用写口直写；判据说的是计数口径，与表无关）。
+    """
     reg = registry_for(TT, store)
     for i in range(4):
-        reg.call("table.create", table="statements",
-                 row={"origin": "own_result", "kind": "theorem", "label": f"c{i}",
-                      "statement_full": "d", "quote_reason": "尚未逐字校验"})
-    assert reg.call("table.count", table="statements").data == 4
+        reg.call("table.create", table="research_questions",
+                 row={"question": f"q{i}", "origin": "fixture", "notes": f"c{i}"})
+    assert reg.call("table.count", table="research_questions").data == 4
     # count 没有 limit 参数，但被列表的 limit 影响才是真正的缺陷：连开两次 list 后 count 不变
-    reg.call("table.list", table="statements", limit=1)
-    assert reg.call("table.count", table="statements").data == 4
+    reg.call("table.list", table="research_questions", limit=1)
+    assert reg.call("table.count", table="research_questions").data == 4
     # 负控：过滤时总数按过滤后的口径
-    assert reg.call("table.count", table="statements", filter={"label": "c2"}).data == 1
+    assert reg.call("table.count", table="research_questions", filter={"notes": "c2"}).data == 1
 
 
 # ---------------------------------------------------------------- 测试用 OCR 桩

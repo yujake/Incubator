@@ -460,10 +460,8 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
 
 @tool(
     "fs.read",
-    "读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注）。"
-    "**大文件分段读**：给 `start_line`（1 起）与 `max_lines` 只取那一段，"
-    "meta.next_line 是下一段的起点（EOF 时为 null）—— 一次读不完就按它接着读，"
-    "不要反复重读同一个开头。",
+    "读文本文件；二进制直接拒绝，超限返回截断内容并标注。**大文件分段读**：给 `start_line`（1 起）与 `max_lines` 取那一段，`"
+    "meta.next_line` 是下一段起点（EOF 为 null）。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -742,8 +740,7 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换文件里的一段文本（old_string → new_string）。整文件覆盖之外的唯一正路："
-    "默认要求 old_string 恰好出现一次，并可选要求 sha256 与调用方读到的那一版一致。",
+    "定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次，可选要求 sha256 与读到的那一版一致。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -860,7 +857,7 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
 
 @tool(
     "fs.delete",
-    "删除文件；删目录必须显式 recursive=true（且不允许删工作区根）。",
+    "删除文件；删目录必须显式 recursive=true（不许删工作区根）。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},

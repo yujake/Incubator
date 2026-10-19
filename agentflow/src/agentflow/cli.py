@@ -1482,6 +1482,10 @@ def _run_agent_exit_code(run) -> int:
     它既不是完成（0），也不是"跑过了但没给出 final"那种失败（1），
     更不是"没查成"（2）—— 它是一次「成功的中断」，人答完之后这条路会接着走。
     把它折进 1 会让 CI/脚本把它读成"这趟不行"，折进 0 会读成"做完了"。
+
+    第四档 `4 = 预算耗尽（优雅停、可 --resume）`：与 3 同族（都"成功的中断"），
+    区别是等的是钱而不是人。为什么必须独立：真机 `mp4-7` 那趟预算耗尽、已写出
+    完整收尾，却返回 1 —— 被读成"这趟坏了"（业主 2026-10-19 裁定）。
     """
     if run.stop_reason == "final":
         return 0
@@ -1490,6 +1494,11 @@ def _run_agent_exit_code(run) -> int:
     if run.stop_reason in ("checkpoint_mismatch", "no_checkpoint", "already_finished",
                            "resume_no_transcript"):
         return 2
+    #: 预算耗尽 = **优雅停**（已写出收尾说明、`--resume` 可续），不是"这趟坏了"。
+    #: 业主 2026-10-19 裁定：给它一个独立码，别折进 1 —— 折进 1 会让 CI/脚本把
+    #: 「钱花完了」读成「失败」，与「停是否成功由 M 决定」冲突。0/1/2/3 语义不动。
+    if run.stop_reason == "budget":
+        return 4
     return 1
 
 
@@ -2501,12 +2510,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "run-agent", help="真跑一次角色循环（模型驱动；退出码 0 收工 / 1 没给出 final / "
-                          "2 没查成 / 3 停在等待用户）",
-        description="真跑一次角色循环。退出码四档：0 = 跑完了（final）；"
+                          "2 没查成 / 3 停在等待用户 / 4 预算耗尽）",
+        description="真跑一次角色循环。退出码五档：0 = 跑完了（final）；"
                     "1 = 跑过了但没给出 final；2 = 没查成（没有 key / 用法错 / "
                     "检查点读不到 / 指纹不符 / 上一趟已收工）；"
                     "3 = 停在等待用户（问了人、还停在等回答 —— 既不是完成也不是失败，"
-                    "人答完用 --resume 接着跑那一步之后）。")
+                    "人答完用 --resume 接着跑那一步之后）；"
+                    "4 = 预算耗尽（优雅停：已写出收尾、加预算后用 --resume 接着跑 —— "
+                    "与 3 同族「成功的中断」，等的是钱不是人）。")
     sp.add_argument("role", choices=list(S.ROLES) + [S.CONDUCTOR_ROLE],
                     help="顶层角色（M = 主控，其余 = A–H）")
     sp.add_argument("--task", required=True, help="这次要做的事（给角色的任务描述）")

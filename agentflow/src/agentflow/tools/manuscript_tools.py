@@ -43,8 +43,7 @@ _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
 
 @tool(
     "manuscripts.read",
-    "按编号读一份交接手稿的全文（留言里给你的那个编号）。编号不存在时如实说没有，"
-    "而不是返回空文本（『没有这份』与『这份是空的』必须分得开）。",
+    "按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。",
     {"type": "object",
      "properties": {"id": {"type": "string", "description": "手稿编号（四位，如 0007）"}},
      "required": ["id"], "additionalProperties": False},
@@ -81,8 +80,7 @@ def manuscripts_read(store, id: str) -> ToolResult:
 
 @tool(
     "manuscripts.list",
-    "列交接手稿（默认最近 50 份）。`to` 给角色号可只看发给它的（`to=ALL` 表示广播给所有人的那份）——"
-    "交接前先看这里，别重复别人已经写下的结论。",
+    "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`to=ALL` 是广播给所有人的）；交接前先看这里，别重复别人的结论。",
     {"type": "object",
      "properties": {"to": {"type": "string", "description": "只看发给谁（A–H/M/ALL）"},
                     "sender": {"type": "string", "description": "只看谁写的"},

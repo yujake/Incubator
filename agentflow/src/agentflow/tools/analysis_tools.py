@@ -105,11 +105,8 @@ def _persist_analysis_report(
 @tool(
     "analysis.register_report",
     (
-        "把**你自己产出的**分析登记进 `analysis_reports`（产出即登记）。"
-        "你是只读角色，工具面里没有别的写入口：算完图读数 / 结构洞 / 候选缺口之后，"
-        "用这一件把结论落成台账行（kind 取 `hottest|paths|cold|gaps`），"
-        "否则它在台账上等于没发生 —— 主控手稿、收工门与别人接手时都读不到。"
-        "只写这一张表：不碰文献 / 概念 / 关系 / 断言。"
+        "把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）——你是只读角色，"
+        "这是唯一写入口，不登记等于没发生。"
     ),
     {
         "type": "object",

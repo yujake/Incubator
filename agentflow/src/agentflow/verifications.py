@@ -357,7 +357,12 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
     返回 `{"ok", "checked", "why", "statement_id", "verification_id", "verdict",
     "resolved_errors"…}` 的确切键：`{"ok", "checked", "why", "statement_id",
     "verification_id", "verdict", "round", "unresolved_errors", "sha_matches",
-    "ledger", "rows", "problems"}`。
+    "ledger", "rows", "problems", "checklist"}`。
+
+    `checklist` 是**逐项过关读数**（`[{"item", "ok", "detail"}]`，三条与上面一一对应）。
+    它只为拒信存在：业主 2026-10-19 的口径是"拒收消息要让人/模型一眼看出该补哪一项"——
+    只给一段 `why` 时，读的人得在散文里自己找缺的是哪一格。它**不参与判据**
+    （判据仍只看 `ok`），所以它写错不改判据、只改可读性。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
     out: dict[str, Any] = {
@@ -365,15 +370,30 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
         "verification_id": "", "verdict": "", "round": None,
         "sha_matches": None, "ledger": "", "rows": 0, "problems": [],
     }
+    #: 三条必填项的逐项读数（拒信读它；判据不看它，见 docstring）。
+    checks: list[dict[str, Any]] = [
+        {"item": "proof_text 非空（有被审的那份证明）", "ok": False, "detail": "还没判到"},
+        {"item": f"`verifications/<命题号>.jsonl` 里有签「成立」的那一行"
+                 f"（verdict=成立 且 unresolved_errors=0）", "ok": False, "detail": "还没判到"},
+        {"item": "那一行的 `proof_sha256` 等于现在这一版 `proof_text` 的 sha256",
+         "ok": False, "detail": "还没判到"},
+    ]
+    out["checklist"] = checks
     text = str(row.get("proof_text") or "")
     if not text.strip():
         out["checked"] = True
+        checks[0]["detail"] = "空"
+        checks[1]["detail"] = "没有被审的对象，不适用"
+        checks[2]["detail"] = "没有被审的对象，不适用"
         out["why"] = (f"命题 {sid or '（没有编号）'} 的 evidence_kind="
                       f"{PROOF_REVIEW_KIND!r}，而 `proof_text` 是空的 ⇒ "
                       "没有被审的那份证明，「逐行审阅过」这句话就没有对象。"
                       "要么把证明过程写进 proof_text，要么把这一档降成 heuristic")
         return out
+    checks[0].update(ok=True, detail=f"{len(text)} 字")
     if not S.is_valid_id(sid):
+        checks[1]["detail"] = "命题号不是编号形态，查不到台账"
+        checks[2]["detail"] = "同上"
         out["why"] = (f"命题号 {sid!r} 不是编号形态（{S.ID_DIGITS} 位，旧四位仍可读）⇒ "
                       f"`verifications/` 里查不到它，凭据无从核起")
         return out
@@ -381,6 +401,8 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
     out["ledger"] = f"{VERIFICATIONS_DIR}/{sid}.jsonl"
     if not path.is_file():
         out["checked"] = True
+        checks[1]["detail"] = f"`{out['ledger']}` 不在盘上（一次审校都没有）"
+        checks[2]["detail"] = "没有那一行，无从比"
         out["why"] = (f"命题 {sid} 声称 evidence_kind={PROOF_REVIEW_KIND!r}，而 "
                       f"`{out['ledger']}` 不在盘上 ⇒ **一次审校都没有**。"
                       "这一档要求 V 的 `verifications` 里那一条签「成立」（且审的是现在"
@@ -392,11 +414,15 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
     out["rows"] = len(rows)
     out["problems"] = list(problems)
     if problems:
+        checks[1]["detail"] = f"台账有读不出来的行：{problems[:3]}（没查成）"
+        checks[2]["detail"] = "同上"
         out["why"] = (f"`{out['ledger']}` 有读不出来的行（{problems[:3]}）⇒ "
                       "凭据**没查成**（不是「查过、没问题」）")
         return out
     if not rows:
         out["checked"] = True
+        checks[1]["detail"] = "台账是空文件"
+        checks[2]["detail"] = "同上"
         out["why"] = (f"`{out['ledger']}` 是空文件 ⇒ 一次审校都没落过"
                       "（「有这个文件」不等于「审过」）")
         return out
@@ -418,6 +444,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
         "unresolved_errors": int(latest.get("unresolved_errors") or 0),
     })
     if not signs_bit3(latest):
+        checks[1]["detail"] = (f"最近一签 {out['verification_id']}：verdict={out['verdict']!r}、"
+                               f"unresolved_errors={int(latest.get('unresolved_errors') or 0)}")
+        checks[2]["detail"] = "没有签住，无从比"
         out["why"] = (f"命题 {sid} 的 evidence_kind={PROOF_REVIEW_KIND!r}，而 "
                       f"`{out['ledger']}` 里**最近一签**是 "
                       f"{out['verification_id']}：verdict={out['verdict']!r}、"
@@ -426,16 +455,85 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
                       "**没有「成立」那一签**。这一档要的正是那一签"
                       "（「成立」且没有未解决的 error）")
         return out
+    checks[1].update(ok=True, detail=f"{out['verification_id']}：{out['verdict']}")
     want = proof_sha(text)
     got = str(latest.get("proof_sha256") or "")
     out["sha_matches"] = (got == want)
     if got != want:
+        checks[2]["detail"] = f"台账 {got[:12]}… ≠ 现行 {want[:12]}…（签的是另一版）"
         out["why"] = (f"命题 {sid} 的凭据 {out['verification_id']} 签的是**另一版**证明"
                       f"（台账 sha256={got[:12]}…，现在这一版={want[:12]}…）⇒ "
                       "审过的那份与现在这一份不是同一份，签名不覆盖现在这一版。"
                       f"改过证明就要重新派 V 走一遍（`verify_proof(stmt:{sid})`）")
         return out
+    checks[2].update(ok=True, detail=f"{want[:12]}…")
     out["ok"] = True
+    return out
+
+
+#: 比 `proof_review` 更弱的证据档（降档告警用；顺序 = 由弱到强里的两档）。
+WEAKER_THAN_PROOF_REVIEW: tuple[str, ...] = ("heuristic", "cross_check")
+
+
+def weaker_than_evidence_gaps(root: str | Path,
+                              rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """一组 `statements` 行里**够格 `proof_review` 却登记成更弱档**的那些 —— 纯读。
+
+    ## 这条读数在说什么（2026-10-19，接 `proof_review_gap` 的反方向）
+
+    `proof_review_gap` 管的是"自称审过、其实没签"（**虚报**，安全方向的反面）。
+    这里是它的镜像：**凭据齐全、档位却写低了**（`heuristic` / `cross_check`）。
+    真机形态（`projects/mp2` 的 `stmt:000003`）：`proof_text` 1909 字、V 的
+    `verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行
+    正文相符 —— 按 `schema.EVIDENCE_KINDS` 的定义这条**就是** `proof_review`，
+    而盘上落的是 `heuristic`。
+
+    它不是虚报，所以**不是 error**：降档是安全方向，可以是有意的选择（例如
+    "这份证明的范围比命题窄"）。但它必须是**看得见的选择**，不是默认值 ——
+    长期把强结果写成弱档，代价是论文的强度声明系统性地偏低，而没有任何读数
+    会指出这一点。
+
+    ## 判据（只三条，与 `proof_review_gap` 同一处口径）
+
+    1. `evidence_kind` 在 :data:`WEAKER_THAN_PROOF_REVIEW` 里；
+    2. `proof_text` 非空（没有证明就谈不上"这份证明被审过"）；
+    3. `proof_review_gap(...)` 判 `ok=True`（把那一行按 `proof_review` 重判一遍：
+       V 最近一签是「成立」且 `proof_sha256` 等于现行正文）。
+
+    概念行（`kind="concept"`）跳过：概念不参与等级链（见
+    `evidencebits.derive_grade` 的 `not_applicable`），把它的 `proof_text`
+    （"为什么这个概念良定义"）读成"一份被审过的证明"是另一种口径错误。
+    """
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        ek = str(row.get("evidence_kind") or "")
+        if ek not in WEAKER_THAN_PROOF_REVIEW:
+            continue
+        if str(row.get("kind") or "") == "concept":
+            continue
+        if not str(row.get("proof_text") or "").strip():
+            continue
+        probe = dict(row)
+        probe["evidence_kind"] = PROOF_REVIEW_KIND
+        gap = proof_review_gap(root, probe)
+        if not gap.get("ok"):
+            continue
+        sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+        out.append({
+            "statement_id": sid,
+            "evidence_kind": ek,
+            "verification_id": gap.get("verification_id") or "",
+            "ledger": gap.get("ledger") or "",
+            "why": (f"命题 {sid} 登记成 evidence_kind={ek!r}，而它的凭据已经够 "
+                    f"`proof_review`：`proof_text` 非空、`{gap.get('ledger') or ''}` 里 "
+                    f"{gap.get('verification_id')} 签「成立」、`proof_sha256` 与现行正文相符"
+                    "（判据与 `proof_review` 写入期那道闸同一处）。"
+                    "降档是安全方向，所以这是 warning、不是 error；但它必须是有意的："
+                    "要么把这一行升成 `proof_review`（判据已够格，写入不会被拒），"
+                    "要么在报告里写清为什么故意留弱档。"),
+        })
     return out
 
 

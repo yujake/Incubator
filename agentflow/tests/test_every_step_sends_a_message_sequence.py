@@ -201,44 +201,69 @@ def test_no_thinking_means_no_thinking_block(tmp_path: pathlib.Path) -> None:
     assert AL.render_messages(run.messages) == run.transcript
 
 
-def test_the_system_is_resent_only_when_the_changing_facts_change(tmp_path: pathlib.Path) -> None:
-    """裁定 J=乙（`draft/103` §4.5）：只有会变的那两格变了才重发 system。
+def _budget_line(prompt: str) -> str:
+    """user 提示词里那一行"剩余花销预算"（没有就空串）。"""
+    return next((ln for ln in prompt.splitlines() if ln.startswith("剩余花销预算：")), "")
 
-    三跳一起判（缺任一跳这条判据都有洞）：
 
-    1. 正控（变了就换）：给一个非零价 ⇒ 花销每步都涨 ⇒ 第 1 步的 system 与第 0 步
-       不同，且里面那个数字真的换了。这一跳守的是"模型据以决策的数是新的"——
-       改前它在 `run` 里只渲染一次 ⇒ 第 2 步起读到的是一个偏大的旧预算，
-       而循环协议里逐字写着"预算耗尽时你必须收工"。
-       （价的单位是每百万 token（`modelcost.usd_for`）：夹具每次报 10 in / 10 out，
-       所以价要 ≥ 0.1 才在六位小数上看得出来 —— 第一版给了 0.001/0.002，
-       算出来是 3e-8 ⇒ 渲染出来仍是 `0.000000`，判据当场红，而红的原因是夹具不是代码。）
-    2. 负控（没变就复用）：价为 0 ⇒ 花销不变 ⇒ 每一步的 system 逐字相同。
-       这一跳守的是"别每步都重发"：前缀一变 KV cache 就白扔，
-       而"每步都换"与"该换才换"在只看第 1 跳时长得一样。
-    3. 读数（变了才写）：会话记录里有一条带 `system_sha256` 的 `agent_note`
-       ⇒ "第 N 步的模型读的是哪一版 system"事后答得出来；而价为 0 那一趟一条都不该有
-       （有 = 读数在撒谎，或者 system 其实变了而没被察觉）。
+def test_the_changing_facts_go_to_the_user_message_not_the_system(tmp_path: pathlib.Path) -> None:
+    """静态/动态分离（2026-10-19）：会变的两格走 user 消息，system 逐字节稳定。
+
+    ## 它取代的是哪一条契约（以及为什么必须换）
+
+    改前这里是裁定 J=乙 的判据：**花销涨了 ⇒ system 必须换**（`systems[0] != systems[1]`）。
+    那一版的动机是对的（模型得看见最新余额），但它把 `budget_left` / `notebook` 留在了
+    **system** 里 ⇒ 几乎每一步整条前缀都变 ⇒ 上游的前缀缓存（`prompt_cache_hit_tokens`）
+    在结构上永不命中（实测 M 岗：54,902 字的 system 从第 35,035 个字符起就不同，
+    差异正是"已用 0.000000 → 0.001200"）。
+
+    现在这两格的**值**在每一步的 user 消息尾部现读，system 里留一段静态指路语。
+    于是这一条判据的两半都还在，只是载体换了：
+    「模型据以决策的数是新的」由 user 提示词守（②），
+    「前缀别每步都换」由 system 逐字节相同守（①）—— 后者是新的、也是更强的要求
+    （旧契约允许变，新契约要求不变）。
+
+    ## 三跳
+
+    1. 正控（前缀稳定）：非零价 ⇒ 花销每步都涨，而 system 必须**逐字节相同**；
+    2. 正控（真话没丢）：那个数字换到了这一步的 user 消息里，而且真的是**新的**
+       （第 0 步 `已用 0.000000`、第 1 步不是它）；"草稿本"也在这里现读；
+    3. 读数：两趟都不该出现"system 在步边界上变了"的红灯 ——
+       它只在有人把每步会变的东西塞回 system 时才该出现（负控在新判据文件里）。
     """
     run, gw, root = _two_step_run(tmp_path / "charged", sid="test-run", price=(1.0, 2.0))
     assert run.stop_reason == "final", run.to_dict()
-    assert len(gw["M"].systems) >= 2, gw["M"].systems
-    assert gw["M"].systems[0] != gw["M"].systems[1], (
-        "花销涨了而 system 一个字没变 ⇒ 模型读的还是开局那版预算")
-    assert "已用" in gw["M"].systems[1], gw["M"].systems[1][-300:]
-    notes = [e for e in _events(root)
-             if e.get("kind") == "agent_note" and "system 重发" in str(e.get("note"))]
-    assert notes, "重发了却没留读数 ⇒ 事后答不出'第 N 步读的是哪一版'"
-    assert len(str(notes[0].get("system_sha256") or "")) == 64, notes[0]
-    assert notes[0].get("step") == 1, notes[0]
+    systems = gw["M"].systems
+    prompts = gw["M"].prompts
+    assert len(systems) >= 2 and len(prompts) >= 2, (systems, prompts)
 
-    # 负控：花销不变 ⇒ 逐字复用（一条重发读数都不该有）
+    # ① 前缀稳定：花销涨了，system 却一个字节都不许变。
+    assert len(set(systems)) == 1, (
+        "花销涨了而 system 也变了 ⇒ 前缀每步都在变，上游前缀缓存永不命中："
+        f"{[s[-120:] for s in systems]}")
+    # 而且 system 里那两格不是"消失"，是换成了指路语（模型仍然知道去哪儿看）。
+    assert "见每步消息末尾的「剩余花销预算」" in systems[1], systems[1][-400:]
+
+    # ② 真话没丢：数字在 user 消息里，而且是新的。
+    first, second = _budget_line(prompts[0]), _budget_line(prompts[1])
+    assert first and second, (prompts[0][-400:], prompts[1][-400:])
+    assert "已用 0.000000" in first, first
+    assert first != second, (first, second)
+    assert "已用 0.000000" not in second, second
+    assert "你的草稿本（最近几条，每一步现读）：" in prompts[1], prompts[1][-400:]
+
+    # ③ 没有红灯读数。
+    red = [e for e in _events(root)
+           if e.get("kind") == "agent_note" and "system 在步边界上变了" in str(e.get("note"))]
+    assert not red, red
+
+    # 负控那一半（价为 0 ⇒ 也不该有任何红灯，也不该换串）
     _run2, gw2, root2 = _two_step_run(tmp_path / "free", sid="test-run", price=(0.0, 0.0))
     assert len(set(gw2["M"].systems)) == 1, (
-        "花销没变却重发了 ⇒ 前缀每步都在变，KV cache 全废："
+        "花销没变却换了 system ⇒ 前缀每步都在变，KV cache 全废："
         f"{[s[-80:] for s in gw2['M'].systems]}")
     stale = [e for e in _events(root2)
-             if e.get("kind") == "agent_note" and "system 重发" in str(e.get("note"))]
+             if e.get("kind") == "agent_note" and "system 在步边界上变了" in str(e.get("note"))]
     assert not stale, stale
 
 

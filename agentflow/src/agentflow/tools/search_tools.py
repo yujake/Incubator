@@ -1375,8 +1375,7 @@ def _pick_workspace(
 
 @tool(
     "search.providers",
-    "列出可用检索源，并**真实探测**各自是否可用（发一次极小请求；"
-            "ABFLOW_SKIP_NETWORK=1 时标为未探测而不是猜）。",
+    "列出可用检索源并**真实探测**各自是否可用（发一次极小请求；ABFLOW_SKIP_NETWORK=1 时标为未探测而不是猜）。",
     {"type": "object", "properties": {}, "additionalProperties": False},
     # external=egress：探测会给每个网络源发一次真实 HTTP 请求（见模块 docstring 第 3 条）。
     # 声明成 read + external=none 会让这个工具绕过审批，而它确实在对外发请求。
@@ -1403,12 +1402,7 @@ def _search_providers(ctx):
 
 @tool(
     "search.shelf",
-    "**不联网**：列出工作区里**全文在盘上**的文献（本地书架）。"
-            "给 A 一条离线来源：有它才知道不用网也能引用哪些书。"
-            # ⚠️ 2026-10-16：这一段**不许枚举可选键**（本仓规矩：可用键交给"被拒时那张表"，
-            # `test_prompt_param_hints` 守着它）。所以只描述**能力**，不点名键名。
-            "也可以只按**题名/路径**筛一部分（子串、大小写不敏感，不读全文）；"
-            "要按主题取逐字摘录用 `search.local`。",
+    "**不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。",
     {
            "type": "object",
            "properties": {
@@ -1442,8 +1436,7 @@ def _search_shelf(ctx, limit=None, lit_id="", query=""):
 
 @tool(
     "search.local",
-    "**不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**"
-            "（带 lit_id 与页码，引文回验比的就是这段原文）。",
+    "**不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。",
     {
            "type": "object",
            "properties": {
@@ -1482,14 +1475,9 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 
 @tool(
     "search.download",
-    "把候选的 pdf_url 下到工作区 downloads/（不覆盖同名文件）；"
-            "filename 由 fetch 层 slug 化。返回 ok/bytes/sha256/path 与内容类型警告；"
-            "**失败时带 `fetch_kind`**（下载层那一档：`tls_cert`＝本机证书/吊销检查够不到 ⇒ "
-            "换源、别重试；`tls_timeout`＝TLS 握手超时、多半是对方挡脚本 ⇒ 至多再试一次；"
-            "`http_403`/`http_401`＝明确不给脚本 ⇒ 直接换源；`network_error`/`timeout`＝网络抖动 ⇒ "
-            "可以重试；`all_sources_failed`＝候选与镜像都试完了 ⇒ 这一条路走完了）。"
-            "**成功也读一眼**：`ok=True` 时 `content_warning=content_type_mismatch` 表示"
-            "落盘的是落地页/登录墙（**别当全文**）。**先读它，再决定下一步**。",
+    "把候选的 `pdf_url` 下到工作区 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`"
+    "http_403` ⇒ 换源；`tls_timeout` ⇒ 至多再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ "
+    "这条路走完了。`ok=True` 但 `content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
     {
            "type": "object",
            "properties": {
@@ -1529,8 +1517,7 @@ def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTE
 
 @tool(
     "search.dedup_check",
-    "**不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明"
-            "'这条会不会被判成已有的某篇'，并给出会命中的键。",
+    "**不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『这条会不会被判成已有的某篇』，并给出会命中的键。",
     {
            "type": "object",
            "properties": {
@@ -1563,8 +1550,7 @@ def _search_dedup_check(ctx, title, year=None, doi=None):
 
 @tool(
     "search.ingest_local",
-    "**不联网**：把一个本地目录里的 PDF 登记进书架（按内容 sha256 幂等；"
-            "dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
+    "**不联网**：把本地目录里的 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
     {
            "type": "object",
            "properties": {
@@ -1603,8 +1589,8 @@ def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=
 
 @tool(
     "search.register",
-    "登记一条文献（literature 行，processed=false）：先判重，命中则复用既有 "
-            "lit_id；未命中则 alloc_id('lit') 并把文件收编进 library/<lit_id>/。",
+    "登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 alloc_id('lit') 并收编进 "
+    "library/<lit_id>/。",
     {
            "type": "object",
            "properties": {
@@ -1805,8 +1791,8 @@ def register(
     specs= [
         ToolSpec(
             name="search.literature",
-            summary="按 topic/mode 检索文献候选；每条候选都带 dedup_key 与 is_new，"
-            "A 不必为了判重再跑一次工具。mode=precise 时必须给 description。",
+            summary="按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（A 不必再跑一次判重）。mode=precise 时必须给 "
+            "description。",
             params={
                 "type": "object",
                 "properties": {
@@ -1859,9 +1845,8 @@ def register(
         ),
         ToolSpec(
             name="search.walk_citations",
-            summary="由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、"
-            "forward = 谁引了它。**刻意不按热度排序** —— 找冷门/更短的那条路时，"
-            "热度排序方向是反的。候选不带判重标注，登记走 search.dedup_check/register。",
+            summary="由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标注，登记走 `"
+            "search.dedup_check` / register。",
             params={
                 "type": "object",
                 "properties": {

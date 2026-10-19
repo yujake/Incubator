@@ -58,6 +58,7 @@ from . import schema as S
 from . import sessions as SS
 from . import userio as U
 from . import llmseam as LL
+from . import promptstability as PSTAB
 from .llmseam import LlmSeam
 
 SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final",
@@ -907,11 +908,23 @@ class LoopStep:
     payload: Mapping[str, Any]
     result: Mapping[str, Any]
     problem: str = ""
+    #: 这一步那次模型调用的**缓存读数**（`promptstability.prompt_cache_record`）。
+    #:
+    #: 为什么它必须挂在 `step` 上（2026-10-19）：上游的
+    #: `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 从 2026-10-14 起
+    #: 就已经被读进来了（`llmseam` 的 `SeamCall.cache_hit_tokens` 两格，计价也按两档算了），
+    #: 但它们**从没进过任何 run 记录** —— 于是"这一趟到底命中没命中"在事后
+    #: 一条都答不出来，而它正是"提示词前缀稳不稳定"这件事唯一的端到端读数。
+    #: 空 dict = 这一步没有模型调用（不是"零命中"——那是 `hit=0`）。
+    cache: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """落会话记录用的扁平结构（模型说了什么、框架做了什么、结果是什么）。"""
         return {"index": self.index, "shape": self.shape, "payload": dict(self.payload),
-                "result": dict(self.result), "problem": self.problem}
+                "result": dict(self.result), "problem": self.problem,
+                # 三态：`prompt_cache` 这个键**在**、内容是 unknown（上游没给读数），
+                # 与"这个键根本没有"（写入被删掉）必须分得开。
+                "prompt_cache": dict(self.cache)}
 
 
 @dataclass
@@ -932,6 +945,15 @@ class LoopRun:
     #: 它是"停的时候手上还剩什么"的唯一读数 —— 父在子结果里读它，M 再汇总进交付说明。
     blocked_remaining: dict[str, Any] = field(default_factory=dict)
     prompt_audit: dict[str, Any] = field(default_factory=dict)
+    #: 这一趟的**提示词缓存汇总**（`promptstability.summarize_prompt_cache`）：
+    #: `{calls, hit, miss, unknown_calls, hit_rate, mismatched_calls, saved_usd,
+    #:   saved_unknown_calls, why}`。
+    #:
+    #: 为什么它是 `LoopRun` 的一等字段而不是从 `steps` 现算：收工那一行要打印它，
+    #: 而"收工那一行"的读者（人、Web UI、下一次运行）手上没有 `LoopRun` 对象；
+    #: 同时它也是"前缀稳不稳"这条判据在**真机**上的唯一读数 —— 没有它，
+    #: 提示词改动的效果就只能在离线判据里看，真机花的钱买不到任何证据。
+    prompt_cache: dict[str, Any] = field(default_factory=dict)
     spend: dict[str, Any] = field(default_factory=dict)
     #: 坏 JSON 的「总数」（审计读数：这一趟一共说了几次不是 JSON 的话）。
     bad_json: int = 0
@@ -1083,6 +1105,9 @@ class LoopRun:
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons, "messages_sent": self.messages_sent,
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
+            # 提示词缓存的汇总（`LoopRun.prompt_cache` 的说明）：与 `spend` 并列，
+            # 因为它们是同一笔钱的两面（花了多少 / 省了多少）。
+            "prompt_cache": dict(self.prompt_cache),
             "elapsed_sec": round(self.elapsed_sec, 3), "notes": list(self.notes),
             # 收工那一步的原始载荷（`LoopRun.final_payload`）：与 `agent_run_end` 落盘的那
             # 一格同一份 —— "给调用方的返回"与"盘上的记录"不该各是一份。
@@ -2365,9 +2390,22 @@ class AgentLoop:
             face_note = ("（本岗同时开了原生工具调用：你可以直接走函数调用接口；"
                          "若仍回一行 JSON，`tool` 字段要写真名（工具清册里那个，"
                          "例如 `fs.read`），不是函数名里的下划线写法。两种都可以。）\n")
+        # ---- 每步会变的两格挪到 user 消息里（2026-10-19，前缀缓存那一轴）
+        #
+        # 改前它们在 **system** 里（改前那个每步重算 system 的实现，今为 `_system_at_step` 的前身），于是几乎每一步
+        # system 都变 ⇒ 上游的前缀缓存永不命中（实测：第 0 步 54,902 字 / 第 1 步
+        # 从第 35,035 个字符起就不同，差异正是"剩余预算 … 已用 0.000000 → 0.001200"）。
+        # 现在 system 里那两格是静态指路语（`promptstability.SYSTEM_PLACEHOLDERS`），
+        # 而**数字/内容**在这里现读 —— 模型照样每一步看得见最新的，但它落在
+        # 这条消息的尾部：追加在末尾只动最新那几个 token，前面的前缀逐字节不变。
+        #
+        # 为什么不是"就把 system 里那份冻在开局"：那会让 system 说一句假话
+        # （模型据以决策的余额是旧的），而循环协议里逐字写着"预算耗尽时必须收工"。
+        notebook = notebook_digest(self.session_root, self.role)
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（步数没有硬上限；"
                 f"每满 {self.max_steps} 步会向父代理报一次账，由它决定继续放行还是刹停）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
+                f"你的草稿本（最近几条，每一步现读）：\n{notebook}\n"
                 f"{face_note}"
                 f"{JSON_TAIL}")
 
@@ -2736,42 +2774,50 @@ class AgentLoop:
                 return float(got[0]), str(got[1])
         return float(getattr(self.seam.spend, "usd", 0.0) or 0.0), "per_seam"
 
-    def _refresh_system(self, facts: Mapping[str, Any], system: str, *, step: int) -> str:
-        """步边界上重算"会变的那两格"，变了才换 system（业主裁定 J=乙）。
+    def _system_at_step(self, facts: Mapping[str, Any], system: str, *, step: int) -> str:
+        """步边界上**确认** system 逐字节没变（静态/动态分离之后的守门读数）。
 
-        ## 为什么必须有这一步（`draft/103` §4.5 的真机口径）
+        ## 改前它是"重算会变的那两格、变了就换 system"（业主裁定 J=乙）
 
-        提示词在 `run` 里只渲染一次，而 `budget_left` 是模型据以决定"还能不能继续"的数
-        —— 花销每一步都在涨 ⇒ 从第 2 步起，模型读到的是一个偏大的旧数字，
-        而循环协议里又逐字写着"预算耗尽时你必须收工"。它据以决策的那个数，是开局那个。
-        `notebook` 同理：`note` 是追加写盘的（`notebook_digest` 现读），
-        而提示词里那份是开局那一版。
+        J=乙 的动机是对的：`budget_left` 是模型据以决定"还能不能继续"的数，花销每步在涨，
+        而提示词只渲染一次 ⇒ 从第 2 步起模型读的是一个偏大的旧数字。
+        代价是它把这两格留在了 **system** 里 —— 于是几乎每一步 system 都变，
+        而上游的前缀缓存要求**前缀逐字节相同** ⇒ 命中率结构性地是 0。
 
-        裁定（`draft/106` §5 的 J）：允许 system 重发。落成三档里的"甲"档
-        （`draft/103` §4.5.2）：只重算这两格，其余开局事实一趟之内不变 ——
-        把它们也每步重算只会制造无意义的差异，而前缀一变 KV cache 就白扔。
+        实测（2026-10-19 本机，M 岗，非零价）：
+        第 0 步 system 54,902 字，第 1 步 54,902 字，但从第 35,035 个字符起就不同，
+        差异是 `剩余预算：5.000000 美元（…已用 0.000000…）` → `…已用 0.001200…`。
 
-        ## 为什么先比再发
+        ## 现在这两格在**这一步的 user 消息**里（`_prompt` 的尾部，现读数字）
 
-        "没变却重发"与"变了不重发"是两种不同的坏：前者让每一步的前缀都变（cache 全废），
-        后者让模型继续按旧数字决策。所以这里是逐字比：相同就复用旧串（一个字节都不动），
-        不同才换，并落一条带 `system_sha256` 的读数 —— 于是"第 N 步的模型读的是哪一版
-        system"事后答得出来（今天只答得出"开局那一版"）。
+        于是 system 逐字节稳定，而模型每一步照样看得见最新余额与草稿本 ——
+        真话没有丢，只是换了载体（`promptstability.SYSTEM_PLACEHOLDERS` 在 system 里
+        那一格写的是"见每步消息末尾"的指路语，不是冻结的旧数字）。
 
-        渲染成本实测 11.5 ms（`AP.system_prompt` 一次），比一次模型调用便宜五个数量级；
-        `notebook_digest` 是一次小文件读。两者都不值得为省它而让模型按旧数决策。
+        ## 那为什么还要每步渲染一次
+
+        因为"逐字节稳定"必须是**结构上被检查的**，不是靠"我们记得别往 system 里加东西"。
+        这里每步用静态事实重算一次并逐字比：相同就复用旧串（一个字节都不动），
+        不同就**如实发新的**并落一条带 diff 读数的 `agent_note` ——
+        `promptstability.first_difference` 给出"从第几个字符起不同 + 前后各 80 字"。
+        那一条出现 = 有人往 system 里塞回了每步会变的东西（`DYNAMIC_SECTION_WHITELIST`
+        那一份登记表就是为这件事存在的），它就是这条判据在真机上的红灯。
+
+        渲染成本实测 11.5 ms（`AP.system_prompt` 一次），比一次模型调用便宜五个数量级。
         """
-        cand_facts = dict(facts)
-        cand_facts["budget_left"] = self._budget_text()
-        cand_facts["notebook"] = notebook_digest(self.session_root, self.role)
-        cand = AP.system_prompt(self.role, registry=self.registry, **cand_facts)
+        cand = AP.system_prompt(self.role, registry=self.registry, **dict(facts))
         if cand == system:
             return system
+        reading = PSTAB.step_stability(system, cand)
         SS.append(self.session_root, {
             "kind": "agent_note", "role": self.role,
-            "note": f"system 重发（会变的事实变了）：第 {step} 步",
+            # 措辞刻意改了：旧的那句"system 重发（会变的事实变了）"说的是 J=乙 的正常行为，
+            # 而这一步现在的正常行为是"不变"。仍然不同 ⇒ 这是一条违规读数，必须说出来。
+            "note": (f"system 在步边界上变了（这一步之后仍应是同一段前缀）：第 {step} 步；"
+                     f"{reading['reason']}"),
             "step": step,
             "system_sha256": hashlib.sha256(cand.encode("utf-8")).hexdigest(),
+            "system_stability": reading,
         }, sid=self.sid)
         return cand
 
@@ -2878,8 +2924,20 @@ class AgentLoop:
                      # 的派活本来也不会发生：没有 conductor 就没有 summon）。
                      parent_limits=AP.parent_limits_text(
                          getattr(self.conductor, "policy", None) or P.Policy(), self.role))
-        run.prompt_audit = AP.prompt_audit(self.role, registry=self.registry, **facts)
-        system = AP.system_prompt(self.role, registry=self.registry, **facts)
+        # ---- 静态/动态分离（2026-10-19）：system 只拿"一趟之内逐字不变"的事实。
+        #
+        # 根因：`budget_left` / `notebook` 是这一步现算的（改前由那个每步重算 system 的旧实现
+        # 每步重算并**换掉整条 system**），而上游前缀缓存要求前缀逐字节相同 ⇒ 命中率
+        # 结构性为 0。现在它们的**值**走这一步的 user 消息（`_prompt` 尾部现读），
+        # system 里留一段静态指路语（`promptstability.SYSTEM_PLACEHOLDERS`）。
+        #
+        # `moved`（被判定为"每步会变"的键）落进 `agent_run_start`：于是"这一趟哪些事实
+        # 被挪出了 system"在盘上是可复核的，而不是靠读这段代码才知道。
+        system_facts, moved_facts = PSTAB.split_facts(facts)
+        # `prompt_audit` 用同一份 system 事实：它的 `prompt_sha256` 从此**等于**
+        # 真正发出去的那版 system 的哈希（改前它等于"开局带实时预算那一版"）。
+        run.prompt_audit = AP.prompt_audit(self.role, registry=self.registry, **system_facts)
+        system = AP.system_prompt(self.role, registry=self.registry, **system_facts)
         if resumed is None:
             start_step = 0
             # ---- S-C（裁定 5甲）第 ① 步：历史载体从"一段字符串"换成消息序列。
@@ -2914,6 +2972,10 @@ class AgentLoop:
             # 被拒的续跑（指纹不符 / 还在等）写的是另一个字段 `resume_attempted_from`
             # —— 它们一步都没跑，写 0 会被读成"它从第 0 步续的"（见 `_note_resume_refusal`）。
             "resumed_from": run.resumed_from, "waiting_for": str(waiting_for or ""),
+            # 这一趟有哪些事实被判定为"每步会变"、因而从 system 挪进了 user 消息
+            # （`promptstability.STEP_VOLATILE_FACTS` 那份登记表）。前缀缓存能不能命中
+            # 全看这一格是不是空的（空 = system 里没有每步会变的东西）。
+            "system_dynamic_facts": sorted(moved_facts),
         }, sid=self.sid)
 
         # 原生工具面（`draft/37` §49/§50）：广告这一岗的工具 + 循环的非工具形状。
@@ -3085,13 +3147,17 @@ class AgentLoop:
             # 压缩必须在那之前生效；而插话（新用户消息）不该被刚压过的历史吃掉。
             # 判定本身在 `_maybe_compact`（它负责三态、事件三件套与"只压一次"的闸门）。
             messages = self._maybe_compact(messages, step=step, run=run)
-            # 裁定 J=乙（`draft/103` §4.5）：这一步的 system 里那两格"会变的事实"
-            # （预算 / 草稿本）先重算 —— 变了才换串，没变逐字复用（见 `_refresh_system`）。
-            system = self._refresh_system(facts, system, step=step)
+            # 静态/动态分离之后 system 本该一个字节都不变；这里每步**确认**一次
+            # （变了就如实发新的并落一条红灯读数，见 `_system_at_step`）。
+            system = self._system_at_step(system_facts, system, step=step)
             data, call = self.seam.ask_step(self._prompt(messages, step=step),
                                             system=system, task_id=my_task_id,
                                             note=f"{self.role}.step{step}",
                                             face=face)
+            # 这一步那次调用的缓存读数（三态：上游没给 ⇒ `hit`/`miss` 都是 `None`，
+            # 不许折成 0）。它随后挂进这一步的 `LoopStep` 与 `agent_step` 事件 ——
+            # 改前上游的读数只到 `SeamCall` 为止，一条 run 记录里都没有它。
+            step_cache = PSTAB.prompt_cache_record(call)
             # 第一次成功的模型调用之后才登记投递（推迟标记的落点，见上面那段注释）：
             # "模型真的被问过一次"= 这一批消息确实进了上下文 ⇒ 承认它送达。
             if pending_delivery and not delivered_marked and call.ok:
@@ -3157,10 +3223,11 @@ class AgentLoop:
                 if dump:
                     bad_result["raw_reply_path"] = dump
                 run.steps.append(LoopStep(step, "invalid", {}, bad_result,
-                                          problem=call.problem))
+                                          problem=call.problem, cache=step_cache))
                 SS.append(self.session_root, {
                     "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
                     "payload": {}, "result": dict(bad_result),
+                    "prompt_cache": dict(step_cache),
                 }, sid=self.sid)
                 if call.problem == "judge_not_wired":
                     run.stop_reason = "not_wired"
@@ -3247,10 +3314,11 @@ class AgentLoop:
                 bad_result = {"problem": problem, "shape_recognized": recognized,
                               "raw_reply": _clip(json.dumps(data, ensure_ascii=False, default=str), 600)}
                 run.steps.append(LoopStep(step, "invalid", payload, bad_result,
-                                          problem=problem))
+                                          problem=problem, cache=step_cache))
                 SS.append(self.session_root, {
                     "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
                     "payload": dict(payload), "result": dict(bad_result),
+                    "prompt_cache": dict(step_cache),
                 }, sid=self.sid)
                 if recognized and run.bad_args_streak > self.max_bad_args:
                     run.stop_reason = "bad_args_limit"
@@ -3329,7 +3397,8 @@ class AgentLoop:
                     note = self._retire_ready_note()
                     if note:
                         step_result = {**step_result, **note}
-                run.steps.append(LoopStep(step, shape, payload, step_result))
+                run.steps.append(LoopStep(step, shape, payload, step_result,
+                                          cache=step_cache))
                 run.stop_reason = "final"
                 break
             # ---- 主控派活时的留痕（`draft/39` §3.3；L-05e 之后同样是读数不是闸门）
@@ -3460,7 +3529,7 @@ class AgentLoop:
             # （它没有逐字段上限：5 个 3000 字的字段就是 15000）⇒ 跨块一条字符流才有意义，
             # 剪完再交给观测层渲染。触发时机照 DSH：只在压力门确认之后（低于压力绝不动）。
             result = self._prune_result(result, step=step, run=run, messages=messages)
-            step_obj = LoopStep(step, shape, payload, _for_record(result))
+            step_obj = LoopStep(step, shape, payload, _for_record(result), cache=step_cache)
             run.steps.append(step_obj)
             # 12-A=乙：思维链原样带回去。进消息与进事件的是同一份文本
             # （`_recorded_reasoning` 走的截断口径与落档一致）—— 于是"当时那份序列"
@@ -3474,6 +3543,10 @@ class AgentLoop:
                 # 于是"当时那一段历史值多少 token"事后可复核（不必重算，也不会因为
                 # 观测层的口径改了就与当时对不上）。
                 "heuristic_tokens": step_node_tokens(step, payload, result),
+                # 这一步那次调用的缓存读数（`promptstability.prompt_cache_record`）。
+                # 键**必须存在**（三态）：`hit`/`miss` 为 null = 上游没给读数，
+                # 与"这一步没有模型调用"（整格没有）是两件事。
+                "prompt_cache": dict(step_cache),
             }
             if thought:
                 event["reasoning"] = thought
@@ -3539,6 +3612,20 @@ class AgentLoop:
             run.stop_reason = "no_progress_limit"
 
         run.spend = self.seam.spend.to_dict()
+        # ---- 提示词缓存的收工汇总（2026-10-19）：上游的
+        # `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 从 2026-10-14 起就在
+        # `SeamCall` 上，但**从没汇总进任何 run 记录** ⇒ "提示词改完到底省了多少"
+        # 在真机上一条读数都没有。这里把它按调用汇总成 `LoopRun.prompt_cache`，
+        # 并落一句人话进 `notes`（它跟着 `agent_run_end` 一起落盘 = 收工那一行）。
+        #
+        # 三态纪律：上游没给读数 ⇒ `unknown_calls` 加一，命中率是 `None`（不是 0）;
+        # 可省金额按 `modelcost.usd_for` 的口径算（`promptstability._saved_usd_of`），
+        # 算不出来的那些单独计数 —— 不拿"0"顶上。
+        run.prompt_cache = PSTAB.summarize_prompt_cache(
+            [dict(s.cache) for s in run.steps if s.cache])
+        cache_note = PSTAB.cache_sentence(run.prompt_cache)
+        if cache_note:
+            run.notes.append(cache_note)
         run.elapsed_sec = time.monotonic() - t0
         run.messages = list(messages)
         run.transcript = render_messages(messages)
@@ -3598,6 +3685,9 @@ class AgentLoop:
             # 让"有没有被截断"一眼可见。
             "final": run.final, "final_sha256": _sha(run.final)[:16],
             "final_chars": len(run.final), "spend": dict(run.spend),
+            # 提示词缓存的收工读数（`LoopRun.prompt_cache`）：与 `spend` 并列 ——
+            # "花了多少"与"靠前缀缓存省了多少"是同一笔钱的两面，分开落才核得动。
+            "prompt_cache": dict(run.prompt_cache),
             "elapsed_sec": round(run.elapsed_sec, 3),
             # 交接留痕的两个读数（`draft/39` §6.6 F3）：设计里写的是"这一趟的
             # `agent_run_end` 里落 `handoff_id`"，而 E5 真机读数时发现这两个字段
@@ -4599,6 +4689,16 @@ class AgentLoop:
                 real = target.split(":", 1)[1]
                 if real in known:
                     name, aliased_from = real, raw
+        # ---- 自己的动作按短名叫我（2026-10-19 晚，`projects/mp2` 第 94 行）
+        #
+        # 真机形态：B 手册里的动作名就是 `register_statement`（`specs/b.py` 的动作表），
+        # 而工具面上那一件叫 `own.register_statement`（本仓工具名必须带点）。
+        # 于是模型照手册喊短名 ⇒ `unknown_tool`，改走 `table.create` 手写表。
+        # 这一格只把**短名**映到 `own.<短名>`，而那个名字必须**已经在这一趟的注册表里**
+        # （注入按角色/按面发生）⇒ 它不打开任何权限：能映到的工具本来就能调。
+        # 认账不静默：`aliased_from` 随结果回给模型，读数上看得见谁在用短名。
+        if name not in known and f"own.{raw}" in known:
+            name, aliased_from = f"own.{raw}", raw
         args = dict(payload.get("args") or {})
         # ---- B 的入库口：先过秘书那一关（业主 2026-10-14 裁决第 12 条前半）
         #
@@ -5726,13 +5826,19 @@ class LlmBackend:
         # 修法：把这一趟被派的那个动作**原样包成一件工具**交给它，handler 走内层
         # 确定性实现（闸门一个不少），名字就是动作名（模型第一反应也是那么叫的）。
         # 只在这一趟的循环里存在，不进任何角色的常规工具面。
-        if str(action):
-            # 只有"被派了某个具体动作"才需要把它包成工具交过去。
-            # 空动作（S2「只派活」）**没有那个动作** —— 这一趟由角色自己从它的
-            # 常规工具面里挑，硬塞一个"自己的动作"反而是替它选了。
-            child_registry = self._registry_with_own_action(
-                child_registry, role=role, action=action, token=token, instance=instance,
-                task_id=str(row.get("task_id") or params.get("_task_id") or ""))
+        #
+        # 2026-10-19 晚（`projects/mp2` 的 `mp2-7.jsonl`，本任务的真机读数）：这一格
+        # 原先只在**点了动作**时注入（`if str(action):`）。而真机的派活是 S2 口径的
+        # 「只派活、不指定能力」（`tasks.action=""`，M 只写一件活）⇒ 注入**一次都没发生**，
+        # 于是 B 拿到 32 件常规工具、没有 `register_statement`，第 94 行撞 `unknown_tool`、
+        # 第 97 行改走 `table.create` 手写 `bits={}`。也就是说：那段注释说的病因，在
+        # 「只派活」成为常态之后又回来了一次 —— 因为**中间层只在另一条路上装**。
+        # 现在两种派活都装（见 `_own_actions_to_expose`）：空动作时把本角色
+        # 「没有同名工具」的那些动作各包一件（`capabilities.unmapped_actions` 是那件事
+        # 的现成判据），点了动作时仍然只包那一个（老行为逐字不变）。
+        child_registry = self._registry_with_own_action(
+            child_registry, role=role, action=action, token=token, instance=instance,
+            task_id=str(row.get("task_id") or params.get("_task_id") or ""))
         loop = AgentLoop(role=role, session_root=self.session_root,
                          registry=child_registry,
                          seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
@@ -5763,24 +5869,65 @@ class LlmBackend:
             out["llm_run"] = run.to_dict()      # 落盘失败时退回内联，绝不静默丢产出
         return out
 
+    def _own_actions_to_expose(self, role: str, *, action: str) -> list[str]:
+        """这一趟该把**本角色的哪几个动作**包成工具交过去。
+
+        ## 两种派活，同一件事（2026-10-19 晚）
+
+        - **点了动作**（`--drive B.register_statement` / `conductor.summon(action=…)`）：
+          就那一个 —— 老行为逐字不变；
+        - **只派活、不点动作**（S2 业主口径；真机 `tasks.action=""`）：把本角色
+          「**声明了但没有同名工具**」的那些动作各包一件。判据用
+          `capabilities._KNOWN_UNMATCHED_ACTIONS`（导入期 `assert_capabilities()` 第 [7] 条
+          把它与现算的 `unmapped_actions()` 逐条对过 = 它**就是**那份名单的登记副本；
+          判据在 `tests/test_capabilities_two_layer.py`）—— 不另抄一份清单，
+          也不在每一次召唤上去现算一遍（`unmapped_actions()` 要装配一张完整工具面，
+          实测 270ms/次，而这是每条派活都会走的一格）。
+
+        为什么空动作也要装（真机读数，`projects/mp2/sessions/mp2-7.jsonl`）：
+        这一格此前是 `if str(action):`，于是「只派活」那一路上**一次都没装过** ⇒
+        B 的工具面里没有 `register_statement`，它第 94 行撞 `unknown_tool`、
+        第 97 行改走 `table.create(table="statements")` 手写 `bits={}`。
+        业主 S2 的"不指定能力"说的是**派活的人**不越俎代庖，不是让被派的人
+        够不着自己的动作：那一趟由角色"从自己的手册与工具面里挑"，而它的动作
+        若根本不在工具面上，它挑到的只能是通用写口。
+        """
+        if str(action):
+            return [str(action)]
+        try:
+            from . import capabilities as C
+
+            # 登记副本优先（导入期对账过）；没有它就退回现算（慢，但不会"没装"）。
+            unmatched = getattr(C, "_KNOWN_UNMATCHED_ACTIONS", None)
+            if unmatched is None:
+                unmatched = {f"{r}.{a}" for r, a in C.unmapped_actions()}
+        except Exception:  # noqa: BLE001 —— 读不到就不注入（不许猜）
+            return []
+        prefix = f"{role}."
+        found = [n[len(prefix):] for n in unmatched if str(n).startswith(prefix)]
+        return [a for a in sorted(found) if a]
+
     def _registry_with_own_action(self, base: Any, *, role: str, action: str,
                                   token: Any = None, instance: str = "",
                                   task_id: str = "") -> Any:
-        """把「我被派的那个动作」包成一件工具，挂到这一趟循环的注册表上。
+        """把「我这一趟能做的动作」包成工具，挂到这一趟循环的注册表上。
 
         ## 为什么必须有它（业主 2026-10-14 裁定 ③ 的收尾，真机 p9-t1-nolean）
 
         `--subagents` / `--drive 角色.动作` 会把 `(角色, 动作)` 交给 LLM 循环执行，
         于是那份**确定性实现**在这一趟里不会被调用。而角色的动作**不在工具面上**
-        （`capabilities._KNOWN_UNMATCHED_ACTIONS` 逐条登记的就是这一族）⇒ 被派的
+        （`capabilities.unmapped_actions()` 逐条报的就是这一族）⇒ 被派的
         子代理拿不到自己被派的活，只能改用 `table.create` / `table.update` 手写表：
         真机读数里 B 就是这么写 statements 的，绕过了出处、页码形状、引文证据、
         取号与查重五道预检，`quote_verified=true` 变成它**自报**的。
 
-        这里把那个动作按声明面（`capabilities.find_action` 的 `params` / `side_effect`）
+        这里把动作按声明面（`capabilities.find_action` 的 `params` / `side_effect`）
         原样包成一件工具，handler 走**内层后端**（`self.inner.call`）—— 也就是那套
-        带闸门的确定性实现，一个判据都不少。工具名就是动作名（模型的第一反应就是
-        那么叫的），只活在**这一趟循环的注册表**里，不进任何角色的常规工具面。
+        带闸门的确定性实现，一个判据都不少。工具名是 `own.<动作名>`（本仓的工具名
+        约定是 `组.动作`，不带点的名字 `ToolSpec.__post_init__` 当场拒），
+        只活在**这一趟循环的注册表**里，不进任何角色的常规工具面。
+        模型若按它手册里的短名（`register_statement`）来叫，`_do_tool` 的那一格别名
+        会把它映射到 `own.register_statement` 并留下 `aliased_from`。
 
         不注入的两种情况（都如实不注入，绝不给一件调不通的工具）：
         - 内层后端没有这个角色的实现（`role not in self.inner.known_roles()`，
@@ -5797,18 +5944,42 @@ class LlmBackend:
         from . import capabilities as C
         from .tools.base import ToolRegistry, ToolSpec
 
-        try:
-            spec = C.find_action(role, action)  # 声明面只有一处（`capabilities`，内置 specs）
-        except Exception:  # noqa: BLE001
-            spec = None
-        if spec is None:
+        specs: list[Any] = []
+        for one in self._own_actions_to_expose(role, action=action):
+            try:
+                spec = C.find_action(role, one)  # 声明面只有一处（`capabilities`，内置 specs）
+            except Exception:  # noqa: BLE001
+                spec = None
+            if spec is not None:
+                specs.append(spec)
+        if not specs:
             return base
+
+        scoped = base.scoped_to(role) if hasattr(base, "scoped_to") else ToolRegistry(name=f"{role}:own")
+        registered = 0
+        for spec in specs:
+            one = str(getattr(spec, "action", "") or "")
+            if not one:
+                continue
+            try:
+                scoped.register(self._own_action_tool(
+                    spec, one, role=role, token=token, instance=instance, task_id=task_id))
+            except Exception:  # noqa: BLE001 —— 注入失败不许带走这一趟（也不假装注过）
+                continue
+            registered += 1
+        return scoped if registered else base
+
+    def _own_action_tool(self, spec: Any, action: str, *, role: str, token: Any = None,
+                         instance: str = "", task_id: str = "") -> Any:
+        """把一个动作声明包成一件只活在这一次循环里的工具（`own.<动作名>`）。"""
+        from .tools.base import ToolSpec
+
         params_schema = dict(getattr(spec, "params", None) or {})
         if not params_schema:
             params_schema = {"type": "object", "properties": {}}
 
         def _handler(**given: Any) -> Any:
-            """跑这一趟被派的那个动作（走内层确定性实现，闸门照旧）。"""
+            """跑这件动作（走内层确定性实现，闸门照旧）。"""
             from . import cancellation as _CAN
 
             # `token=None` 时补一个真令牌：内层后端会调它的 `raise_if_cancelled`
@@ -5823,20 +5994,29 @@ class LlmBackend:
             if isinstance(got, Mapping) and got.get("ok") is False:
                 # 动作自己的受控拒绝（`_refuse` 的形态）照原样透出去：
                 # `kind` / `reason` 是模型据此改参数的唯一依据，不许被压成"成功"。
+                #
+                # `error` 那一格必须算进"理由"里（2026-10-19 晚修）：`refusals.refuse`
+                # 的返回是 `{"ok": False, "kind": …, "error": "<一句话说清怎么办>"}` ——
+                # **没有 `reason` 键**。旧写法只读 `reason`/`detail`，于是每一条动作级
+                # 拒绝到了模型眼前都变成两个字「被拒」（实测：`missing_own_source` 的
+                # 完整拒信被吞掉，模型只能猜）—— 那正是"拒信要能把模型指回正路"这条
+                # 要求的反面。`refusal_reason` 也一并带出去（终态映射读它）。
                 return {"ok": False,
                         "kind": str(got.get("kind") or "refused"),
-                        "reason": str(got.get("reason") or got.get("detail") or "被拒"),
+                        "reason": str(got.get("reason") or got.get("error")
+                                      or got.get("detail") or "被拒"),
+                        "refusal_reason": str(got.get("refusal_reason") or ""),
                         **{k: v for k, v in got.items()
                            if k in ("problems", "missing", "stmt_id", "available_lit_ids",
-                                    "literature_rows", "unresolved")}}
+                                    "literature_rows", "unresolved", "changes", "upgraded")}}
             return got
 
-        own = ToolSpec(
+        return ToolSpec(
             # 名字带组名（`own.`）：本仓的工具名约定是 `组.动作`（`ToolSpec.__post_init__`
             # 当场拒不带点的名字）。`own.` 这个组名本身也是一句说明 ——
-            # "这是你自己这一趟被派的那个动作"，与通用表工具 `table.*` 区分得开。
+            # "这是你自己的动作"，与通用表工具 `table.*` 区分得开。
             name=f"own.{action}",
-            summary=(f"做我这一趟被派的那个动作（{role}.{action}）："
+            summary=(f"做我自己的那个动作（{role}.{action}）："
                      f"{str(getattr(spec, 'summary', '') or '').strip()}"),
             params=params_schema,
             handler=_handler,
@@ -5846,12 +6026,6 @@ class LlmBackend:
                      "（照它改参数，别改用 `table.*` 手写表绕过预检）"),
             tags=("own_action", "drive"),
         )
-        scoped = base.scoped_to(role) if hasattr(base, "scoped_to") else ToolRegistry(name=f"{role}:own")
-        try:
-            scoped.register(own)
-        except Exception:  # noqa: BLE001 —— 注入失败不许带走这一趟（也不假装注过）
-            return base
-        return scoped
 
     def _seam(self, role: str) -> LlmSeam:
         if self.seam_factory is not None:

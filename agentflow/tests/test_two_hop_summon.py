@@ -72,9 +72,13 @@ SCRIPTS: dict[str, list[str]] = {
         # 真机里崩掉的那一步：不带 table ⇒ 反射全部表（含 page_range 的默认值）。
         json.dumps({"tool": "table.schema", "args": {}, "why": "先看台账字段再落行"},
                    ensure_ascii=False),
-        json.dumps({"tool": "table.create",
-                    "args": {"table": "statements", "row": dict(_ROW)},
-                    "why": "把这条命题登记进台账"}, ensure_ascii=False),
+        # 2026-10-19 晚：落行这一步换成**正路**（`own.register_statement` ⇒ 秘书落盘）。
+        # 原先这里写 `table.create(table="statements")` —— 那正是 `mp2-7.jsonl` 第 97 行
+        # 手写 `bits={}` 的形态，现在被 `store.direct_write_refusal` 受控拒绝。
+        # `created_at` 是**行**的字段、不是动作的参数（动作面的 schema 是封闭集合）⇒ 摘掉。
+        json.dumps({"tool": "own.register_statement",
+                    "args": {k: v for k, v in _ROW.items() if k != "created_at"},
+                    "why": "把这条命题登记进台账（交秘书落盘）"}, ensure_ascii=False),
         json.dumps({"final": "已登记 Theorem 1.5"}, ensure_ascii=False),
     ],
 }
@@ -104,7 +108,12 @@ def _world(tmp_path: pathlib.Path):
                                             summary="室图", path=None, added_at=TS).to_dict())
     sync_counters(st)
     gateways = {role: _Scripted(replies) for role, replies in SCRIPTS.items()}
-    inner = LocalBackend({})
+    # 内层后端里放 **B 的真实现**：孙代理那一趟要调 `own.register_statement`，
+    # 而那条路的 handler 是 `self.inner.call(role, action, …)`（确定性实现 + 闸门）。
+    # 不注册 B ⇒ 注入不发生（`role not in inner.known_roles()`）⇒ 那一步 `unknown_tool`。
+    from agentflow.agent_b import AgentB
+
+    inner = LocalBackend({"B": ("object", AgentB(st, extractor=None, extract_text=None))})
     backend = LlmBackend(
         inner=inner, loops=LOOPS, session_root=st.root,
         seam_factory=lambda role: LlmSeam(role=role, session_root=st.root,

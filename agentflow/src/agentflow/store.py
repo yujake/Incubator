@@ -43,7 +43,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
 from filelock import FileLock, Timeout
 
@@ -188,7 +188,8 @@ _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
 )
 
 
-def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any]) -> None:
+def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any], *,
+                              before_rows: Iterable[Mapping[str, Any]] = ()) -> None:
     """写入期闸（2026-10-19）：`evidence_kind="proof_review"` 的命题必须有 V 那一签。
 
     ## 这一条在堵什么（活证据，2026-10-19 现算的读数）
@@ -215,6 +216,24 @@ def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any]) ->
 
     判据本体在 `verifications.proof_review_gap`（一处口径：写入期、审计期、
     收工门都读它），这里只把它的读数翻成一次拒收。
+
+    ## 作用域（2026-10-19 晚，`projects/mp2` 那条读数带出来的一处**过宽**）
+
+    这道闸只核**这一笔事务改到的那些行**（`changed`：与盘上那一份逐字段比，
+    新行 / 改过的行都算）。改前它核整张表 —— 于是**别的行**的历史缺陷会挡住
+    这一笔写入，连"如实降档"这条出口本身都写不进去：
+
+    - `projects/mp1` 那 10 条存量里有 3 条查不到「成立」那一签 ⇒ 在那份工作区里
+      **任何** `statements` 写入（包括一条完全无关的新 `heuristic` 行）都会被拒，
+      而拒信说的是"你有 3 条 fake proof_review"—— 写的人改不了别人的行，只能放弃；
+    - 存量本来就该由**审计期**那一档点名（`verify._check_13` 的
+      `proof_review_without_verification`，error 级），这条分工在本函数上面那段
+      注释与 `tx` 提交块的注释里都写着 —— 写入期再去核一遍存量，是把"读历史"
+      变成"改历史"的同一种病，只是发生在另一个出口上。
+
+    收窄之后**强度不变**：任何一笔**新写或改写**的 `proof_review` 行都仍然要过
+    三条判据（`proof_text` / V 最近一签「成立」/ `proof_sha256` 相符）。唯一
+    变化的是：改 A 行时不再顺带核 B 行。
     """
     if table != "statements":
         return
@@ -223,24 +242,110 @@ def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any]) ->
     from . import verifications as VR
 
     rows = doc.get("rows") if isinstance(doc, Mapping) else None
-    gaps = VR.proof_review_gaps(root, rows or [])
+    if not isinstance(rows, list):
+        return
+    before = {str(r.get("stmt_id") or ""): r for r in (before_rows or ())
+              if isinstance(r, Mapping)}
+    changed = [r for r in rows
+               if isinstance(r, Mapping)
+               and before.get(str(r.get("stmt_id") or "")) != r]
+    gaps = VR.proof_review_gaps(root, changed)
     if not gaps:
         return
     first = gaps[0]
     # 拒收消息要能让写的人**当场知道怎么改**（业主 2026-10-19：「拒收消息要能让人看懂」）：
     # `first["why"]` 里已经逐字写着"最近一签是 `v-…`：verdict=…、unresolved_errors=…"、
-    # 或"`verifications/<号>.jsonl` 不在盘上"；这里再补上两条出口（重派 V 再签 / 降档）。
+    # 或"`verifications/<号>.jsonl` 不在盘上"；`checklist` 再给三条逐项的过关读数
+    # （缺哪一项一眼可见），最后补两条出口（重派 V 再签 / 如实降档）。
+    _checks = "；".join(
+        f"{'✓' if c.get('ok') else '✗'} {c.get('item')}（{c.get('detail')}）"
+        for c in (first.get("checklist") or []))
     raise ValueError(
         f"{VR.CODE_WRITE}：{len(gaps)} 条命题声称 evidence_kind='proof_review'，"
         f"而 `verifications` 里查不到能签住它的那一条。"
-        f"第一条（stmt:{first.get('statement_id') or '?'}）：{first['why']}。"
+        f"第一条（stmt:{first.get('statement_id') or '?'}）缺的就是下面打了 ✗ 的那几项："
+        f"{_checks or '（逐项读数读不到 —— 那是没查成，不是通过）'}。"
+        f"它的完整理由：{first['why']}。"
         "这一档的定义逐字是「`proof_text` 非空 ＋ V 的 `verifications` 里那一条签"
-        "『成立』」（`schema.EVIDENCE_KINDS`），写入期现在强制它。"
+        "『成立』且 `proof_sha256` 等于现行正文」（`schema.EVIDENCE_KINDS`），"
+        "写入期现在强制它 —— 它**不**要别的字段（`disclaimer` / `verification_id` / "
+        "`reviewed_by` 回填都不在这一档的判据里）。"
         "两条出口：① **重派 V 再签**（`verify.verify_proof`，产物就是 "
         "`verifications/<命题号>.jsonl` 的那一行），签完再写这一行；"
         "② 这一行**如实降档**成 `heuristic` 或 `cross_check`（F 的 `_proof_outlet` "
         "就是这么写的：V 没签过就只到 heuristic）。"
         "整笔事务**一行都没写**（与其余校验失败同一处置）。"
+    )
+
+
+#: 命题台账那两张表的写入口（2026-10-19 晚，`projects/mp2` 的 `stmt:000003` 带出来的）。
+#:
+#: 与 `secretary.STATEMENT_WRITE_TABLES` **同内容但不同用途**：那边是"秘书的写集声明"，
+#: 这里是"通用写入通道的禁区"。刻意不 import `secretary`（`store` 在依赖图最底层，
+#: `secretary` 反过来 import 它）⇒ 清单有两处，**由判据守着**：
+#: `tests/test_secretary.py::test_the_two_tables_are_named_the_same_in_both_places`。
+STATEMENT_WRITE_TABLES: tuple[str, str] = ("statements", "dependencies")
+
+#: 直写这两张表时的理由码（与 `Secretary.record_statement` 的拒绝码同一族：
+#: 一个词说清"这次调用不成立"，而不是折成"执行了、没成功"）。
+DIRECT_WRITE_REFUSED = "direct_write_refused"
+
+
+def direct_write_refusal(table: str) -> str:
+    """要直写 `table` 时返回拒信；空串 = 放行。**这条口径只有这一处**。
+
+    ## 这一条在堵什么（活证据，`projects/mp2/sessions/mp2-7.jsonl`）
+
+    第 94 行 B 调 `register_statement` ⇒ `unknown_tool`（那个名字不在它的工具面上）；
+    第 97 行它改走 `table.create(table="statements")`，**手写** `evidence_kind="heuristic"`
+    与 `bits={}` —— 于是秘书的四件活（洗格式 / 发编号 / 查重 / 改表）与五元位
+    **一件都没跑**，而盘上那一行看起来完全合法（`stmt:000003` 有 1909 字证明、
+    V 也签了「成立」，档位却停在 `heuristic`、`bits` 是空的）。
+
+    ## 为什么判据落在这里，而不是只落在工具层
+
+    工具层是模型的**手**（`table.create` / `table.update` 是 A–D 共用的通用写口），
+    而"这两张表不许由通用写口碰"是关于**表**的规矩，不是关于某一支工具的规矩：
+    明天谁再加一支 `table.upsert_many`，它不该因为没人记得这条而重新打开这条路。
+    所以：
+
+    - 工具层（`tools/table_tools.py`）在**进事务之前**就用本函数拒一次
+      （模型据此改参数，拒信是 `ToolResult.fail` 的可读形态）；
+    - `Store.tx` 的**提交块**对带 `tool:` 记号的事务再拒一次（那一层是所有写者的
+      必经之路，见 `tx()` 里 `_refuse_fake_proof_review` 的同一段注释）。
+
+    两处都调这一个函数 ⇒ 关掉它的负控对两层同时生效（判据见
+    `tests/test_statement_write_is_the_secretarys_only.py`）。
+
+    ## 为什么不是"凡直写就拒"
+
+    这两张表的合法写者不止秘书一个，而它们都是**人写过的代码路径**，不是模型的手：
+    `agent_b/resolve_structural_duplicate`（合并要标 `superseded`）、
+    `agent_f/core._proof_outlet`（证明结果与档位）、`conceptrows.write_concept`
+    （B 的抽取产出）、`doc_tools.register_dependency`（G 登记依赖）、
+    `paperledger`（论文台账映射）、`migrate_concepts`（迁移）。它们各有自己的判据
+    （`F.step` / `B` 的动作 / `Dependency.validate`），且都不叫 `tool:*`。
+    把闸口开在"所有写者"上等于让这些路径 fail-closed，而那是另一件事
+    （要不要让它们也走秘书，是权限面的改动，不是本条能决定的）。
+    """
+    name = str(table or "")
+    if name not in STATEMENT_WRITE_TABLES:
+        return ""
+    return (
+        f"{DIRECT_WRITE_REFUSED}：`{name}` 不由通用写口直写（`table.create` / `table.update` "
+        "以及任何带 `tool:` 记号的裸事务）—— 它只有一条正路：\n"
+        "  `Secretary.record_statement(payload, *, role=\"B\")` "
+        "（B 交内容 ⇒ 秘书洗格式 / 发编号 / 查重 / 改表，四件一次做完；"
+        "五元位 `bits`、出处核对、查重都在那一条上，只有它）\n"
+        "在循环里请调 **`own.register_statement`**（就是那条正路的工具面："
+        "参数与 `B.register_statement` 同形，闸门一个不少）。三条具体走法：\n"
+        "  ① 新的一条命题 ⇒ `own.register_statement`（`statement_full` 含完整假设、"
+        "`proof_text` 逐字、出处按 `origin` 给）；\n"
+        "  ② V 签完之后**把同一份内容再交一次**并把 `evidence_kind` 写强"
+        "（`heuristic` → `proof_review`）⇒ 秘书会把那一行**改上去**（不新建行）；\n"
+        "  ③ 改别的字段：合并/作废走 `B.resolve_structural_duplicate`，"
+        "证明结果与档位走 F 的证明落点（`F.step`），依赖走 `doc.register_dependency`。\n"
+        "`table.delete` 不受这条限制（删除不制造证据），但仍受引用保护。"
     )
 
 
@@ -1168,7 +1273,33 @@ class Store:
                 # 存量里已有的假 `proof_review` 由审计期那一档点名
                 # （`verify._check_13` 的 `proof_review_without_verification`），
                 # 而不是让重建在历史数据上当场炸掉（那会把"读历史"变成"改历史"）。
-                _refuse_fake_proof_review(self.root, table, doc)
+                #
+                # `before_rows` 是**盘上那一份**（不是本事务的缓存）：闸只核这一笔
+                # 真改到的行，别的行的历史缺陷由审计期点名 —— 否则在 `projects/mp1`
+                # 那种存量上，连"如实降档"都写不进去（见闸的 docstring）。
+                _refuse_fake_proof_review(
+                    self.root, table, doc,
+                    before_rows=(self._load(table).get("rows") or []))
+                # ---- 封野路（2026-10-19 晚）：`statements` / `dependencies` 不许由
+                # 通用写口的裸事务**建行/改行**。
+                #
+                # 判据只有一份（`direct_write_refusal`），工具层在进事务之前也调它一次
+                # ——那一层给模型可读的拒信，这一层是"结构性不可能"的兜底：
+                # `tool:` 记号是通用表工具（`tools/table_tools.py` 的三个写口）的
+                # 专属记号，秘书与其余合法写者（F 的证明落点 / B 的合并 / G 的依赖 /
+                # 迁移 / 夹具）都不用它 ⇒ 这里拒的正好是"模型的手"，一条合法写者都不误伤。
+                #
+                # **删除不算直写**：它不制造证据（`table.delete` 另有 `_REF_SPECS` 的引用
+                # 保护），而"建行/改行"才是绕过秘书的那件事。判据因此看这一笔事务对这张表
+                # 动了什么 `op`：只有 `delete` ⇒ 放行；有 `upsert`（或一条事件都没有 =
+                # 就地改 `tx.rows()` 再 `mark_dirty`）⇒ 拒。
+                if str(t.note or "").startswith("tool:"):
+                    ops = {str(e.get("op")) for e in t._events
+                           if str(e.get("table")) == table}
+                    if ops != {"delete"}:
+                        why = direct_write_refusal(table)
+                        if why:
+                            raise ValueError(why)
                 to_write.append((self.data / spec["file"], doc))
 
             wlock = self._writer_lock(timeout=timeout)

@@ -1011,8 +1011,7 @@ def _pick_workspace(
 
 @tool(
     "ocr.backends",
-    "**真实探测** OCR 后端（easyocr / pytesseract / none）各自是否可用，"
-            "并逐条给出理由与修复建议；探测阶段**不会**下载 easyocr 模型。",
+    "**真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；**不会**下载 easyocr 模型。",
     {
            "type": "object",
            "properties": {"refresh": {"type": "boolean"}},
@@ -1042,9 +1041,7 @@ def _ocr_backends(ctx, refresh=False):
 
 @tool(
     "ocr.detect_text_layer",
-    "判断 PDF 有没有文本层（复用 extract.extract_text，pages==[] 即无文本层）；"
-            "无文本层时说明这是「无法校验」而不是「校验失败」。"
-            "也可以直接给**已登记的文献编号**，不必自己拼路径。",
+    "判断 PDF 有没有**文本层**（复用 extract_text，pages==[] 即无）；无文本层是「**无法校验**」不是「**校验失败**」。",
     {
            "type": "object",
            "properties": {
@@ -1076,9 +1073,8 @@ def _ocr_detect_text_layer(ctx, path="", lit_id=""):
 
 @tool(
     "ocr.run",
-    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，"
-            "都不可用时 fail 并给出安装建议（绝不返回空文本假装成功）。"
-            "也可以直接给**已登记的文献编号**，不必自己拼路径。",
+    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（绝不返回空文本假装成功）。"
+    "可给已登记文献编号。",
     {
            "type": "object",
            "properties": {
