@@ -1631,8 +1631,648 @@ def _search_register(ctx, title, type_code, summary, path=None, doi=None, year=N
                )
     )
 
+# --------------------------------------------------------------------------- 待新增文献列表
+#
+# 业主 2026-10-20 口径（逐条落在这七件工具上）：
+#   ① 一次委托正式入库至多 10 篇（`lit.admit` / `lit.admit_all` 挡住；广搜本身可以超过 10 条）；
+#   ② 入库前要审内容 —— 即使只拿到 3 篇也要逐篇过（`lit.stage_list` 看得到每一条）；
+#   ③ 内容不好可以撤掉换一篇：撤 = 槽位置空 + 写理由（`lit.stage_withdraw`），
+#      序号不复用、记录不物理删除；拒收走 `lit.stage_reject`；
+#   ④ 与本地库重叠度高的：只有给了 `new_content` 才许入库（`lit.overlap_check` 的读数）；
+#   ⑤ 待新增列表支持增/删/查、可多次追加（第 2 批序号接着第 1 批）；
+#   ⑥ 列表按**委托**重置（默认视图只看当前委托）+ 一键迁移 `lit.admit_all`（迁移后清空、
+#      写委托报告 `reports/lit-<request_id>.md`：已入库一块 + 未入库（含受控理由）一块）。
+#
+# 判据的真身全在 `agentflow/litstage.py`（上限、阈值、状态机、报告结构只有那一处）；
+# 这七件只做两件事：把参数校验交给 schema、把结论翻成 `ToolResult`。
+
+
+def _stage_fail(exc: Exception) -> Any:
+    """把 `litstage` 的受控错翻成工具层的 `fail`（模型据此能改）。"""
+    from ..litstage import LitStageError
+
+    if isinstance(exc, LitStageError):
+        return fail(str(exc), kind=exc.kind, **dict(exc.detail or {}))
+    if isinstance(exc, StoreError):
+        return fail(f"待新增列表这次没读成/没写成：{type(exc).__name__}: {exc}",
+                    kind="store_error")
+    return fail(f"{type(exc).__name__}: {exc}", kind="unexpected")
+
+
+def _h_lit_overlap_check(ctx: _Ctx, title: str, doi: str | None = None) -> Any:
+    """``lit.overlap_check``：**不联网**，说明"这一条与本地库重叠多少、要不要 new_content"。
+
+    口径（与 `litstage.overlap_check` **同一份实现**，这里只补两句读数）：
+
+    - **DOI 完全相同 ⇒ 视为重复**（`duplicate=True`）：同一篇文献说不出"新内容"，
+      所以给不给 `new_content` 都不入库；
+    - 否则按**标题词集 Jaccard** 算重叠度，阈值 ``OVERLAP_HIGH_JACCARD = 0.60``
+      （取值依据见 `litstage.OVERLAP_HIGH_JACCARD` 的 docstring）：
+      ≥ 0.60 ⇒ `requires_new_content=True`，调用方必须给 `new_content`。
+
+    三态：未配置 store ⇒ `fail(kind="no_store")` + `checked=False`（**不是**"没有重叠"）；
+    表读不出来 ⇒ `fail(kind="store_error")`（同样不是"没有重叠"）。
+    """
+    from ..litstage import overlap_check
+
+    if ctx.store is None:
+        return fail(
+            "未配置 store：读不到本地库 ⇒ 重叠**没查**（不是「没有重叠」）。"
+            "请用 register(..., store=store) 构造工具。",
+            kind="no_store", checked=False,
+        )
+    try:
+        got = overlap_check(ctx.store, title, doi)
+    except StoreError as exc:
+        return fail(f"本地库读不出来 ⇒ 重叠**没查成**（不是「没有重叠」）：{exc}",
+                    kind="store_error", checked=False)
+    # 字面量键表（`tests/test_tools_branch_key_sets.py` 的"看不清的成功支"那一档）：
+    # 键集合必须静态可见，所以这里逐键搬，不用 `**got`。
+    return ok({
+        "title": title,
+        "doi": D.normalize_doi(doi),
+        "checked": got.get("checked"),
+        "duplicate": got.get("duplicate"),
+        "overlap_score": got.get("overlap_score"),
+        "overlap_kind": got.get("overlap_kind"),
+        "overlap_with": got.get("overlap_with"),
+        "requires_new_content": got.get("requires_new_content"),
+        "reason": got.get("reason"),
+    })
+
+
+def _h_lit_stage_add(
+    ctx: _Ctx,
+    request_id: str,
+    entries: Iterable[Mapping[str, Any]],
+    batch: int | None = None,
+) -> Any:
+    """``lit.stage_add``：把候选**追加**进本次委托的待新增列表（一次可追加任意条，>10 也允许）。
+
+    为什么暂存不设 10 的上限：上限管的是**入库**（业主口径 ①）；"广搜 30 条、精选 8 条入库"
+    是正路，把上限提前到暂存这一档会让它直接走不通。
+
+    槽位号由 `store.alloc_id("candidate")` 发：**只增不复用**。所以第 2 批的序号接着
+    第 1 批往下排（12 条 + 3 条 = 1..15；中间被撤掉的号空着，不会被再发一次）。
+
+    `request_id` **必须给**（业主 2026-10-20 第 1 条：列表按委托重置）—— 换一个
+    `request_id` 就是"从空列表开始下一次委托"，旧委托的行不删、也不参与本次筛选。
+    """
+    from ..litstage import stage_entries
+
+    try:
+        got = stage_entries(ctx.store, entries, request_id=request_id, batch=batch,
+                            actor=ctx.actor)
+    except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+        return _stage_fail(exc)
+    return ok({
+        "request_id": got["request_id"],
+        "batch": got["batch"],
+        "count": got["count"],
+        "staged": got["staged"],
+    })
+
+
+def _h_lit_stage_list(
+    ctx: _Ctx,
+    request_id: str | None = None,
+    batch: int | None = None,
+    status: str | None = None,
+) -> Any:
+    """``lit.stage_list``：按委托 / batch / status 查待新增列表（**空槽位照样在列表里**）。
+
+    **默认视图只看当前委托**（业主 2026-10-20 第 1 条）：`request_id` 不给 ⇒ 取
+    "最近一次暂存的那次委托"；要看旧委托请显式给号，`request_id="*"` 表示全查。
+
+    `status` 五选一：`pending` / `withdrawn` / `rejected` / `admitted` / `cleared`（不传 = 全查）。
+    `withdrawn` 的那些行就是"空槽位"：序号不复用、题名与 `withdrawn_reason` 都留着 ——
+    于是"第 3 号被撤了哪一篇、为什么"查得出来（这正是"撤掉 ≠ 删掉"的落点）。
+    """
+    from ..litstage import list_candidates
+
+    try:
+        got = list_candidates(ctx.store, request_id=request_id, batch=batch, status=status)
+    except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+        return _stage_fail(exc)
+    return ok({
+        "request_id": got["request_id"],
+        "current_request_id": got["current_request_id"],
+        "batch": got["batch"],
+        "status": got["status"],
+        "count": got["count"],
+        "counts": got["counts"],
+        "gaps": got["gaps"],
+        "rows": got["rows"],
+        "total_all_delegations": got["total_all_delegations"],
+        "note": got["note"],
+    })
+
+
+def _h_lit_stage_withdraw(ctx: _Ctx, slot: str, reason_code: str, note: str = "") -> Any:
+    """``lit.stage_withdraw``：撤掉某一槽 —— **不改序号、不物理删除**，写理由。
+
+    `reason_code` 必须是受控取值（`schema.CANDIDATE_REASON_CODES`：例如
+    `withdrawn_by_reviewer`）；`note` 是给人看的那一句（可空，空则用理由码的标签顶上）。
+    撤掉之后可以再 `lit.stage_add` 补位，但新条进的是**新序号**（旧号不复用）。
+    """
+    from ..litstage import withdraw
+
+    try:
+        got = withdraw(ctx.store, slot, reason_code, note, actor=ctx.actor)
+    except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+        return _stage_fail(exc)
+    return ok({
+        "slot": got["slot"],
+        "status": got["status"],
+        "reason_code": got["reason_code"],
+        "reason": got["reason"],
+        "title": got["title"],
+        "request_id": got["request_id"],
+        "batch": got["batch"],
+    })
+
+
+def _h_lit_stage_reject(ctx: _Ctx, slot: str, reason_code: str, note: str = "") -> Any:
+    """``lit.stage_reject``：审内容后拒收 —— 写 `reject_reason` + 受控 `reason_code`，保留行。
+
+    `reason_code` 用 `rejected_off_topic` / `rejected_low_quality` /
+    `overlap_without_new_content` / `duplicate_doi` 这几档（见 `schema.CANDIDATE_REASON_CODES`）。
+    """
+    from ..litstage import reject
+
+    try:
+        got = reject(ctx.store, slot, reason_code, note, actor=ctx.actor)
+    except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+        return _stage_fail(exc)
+    return ok({
+        "slot": got["slot"],
+        "status": got["status"],
+        "reason_code": got["reason_code"],
+        "reason": got["reason"],
+        "title": got["title"],
+        "request_id": got["request_id"],
+        "batch": got["batch"],
+    })
+
+
+def _h_lit_admit(
+    ctx: _Ctx,
+    slots: Iterable[str] | None = None,
+    items: Iterable[Mapping[str, Any]] | None = None,
+    request_id: str | None = None,
+    batch: int | None = None,
+    new_content: str = "",
+    overlap_ok: bool | None = None,
+) -> Any:
+    """``lit.admit``：正式入库（逐条）—— **条数上限 + 重叠检查**都过了才走现有登记路径。
+
+    ## 两个上限（业主口径 ①，超了**整笔拒绝**）
+
+    - 本次调用 ≤ ``MAX_ADMIT_PER_CALL = 10`` 条；
+    - 该委托累计已入库 + 本次 ≤ ``MAX_ADMIT_PER_DELEGATION = 10`` 条。
+
+    "整笔"是刻意的：如果前 10 条进了、第 11 条被挡，调用方会读成"第 11 条被审掉了"，
+    而真相是"这一次调用根本不成立"。拒信里给三个读数：本次 / 本委托已入 / 上限。
+
+    ## 逐条拒收（业主口径 ②④）
+
+    - `status != "pending"`（已撤 / 已拒 / 已入库 / 已清空）⇒ 拒；
+    - DOI 与本地库某一行**完全相同** ⇒ 视为重复，拒（这一档 `new_content` 救不了）；
+    - 标题词集 Jaccard ≥ 0.60 且**没有** `new_content` ⇒ 拒
+      （行上写的 `new_content` 优先，`items[].new_content` / 调用级 `new_content` 兜底）。
+
+    `overlap_ok=True` **不替代** `new_content`：它只如实记下"调用方表过态"，
+    真正的放行仍要有那句新内容。`overlap_ok=False` 则直接拒这一条。
+
+    ## 入库走的是现有路径
+
+    registrar 就是 `search.register` 的 handler（`_h_register`：判重 → `alloc_id("lit")`
+    → 落 `literature` 行 → 收编文件）。本工具里没有一处直接写 `literature` ——
+    "绕开登记路径"在结构上做不到（判据见 `tests/test_search_tools_stage_admit.py`）。
+
+    **它不清空列表**：清空是一次委托的收尾动作，属于 `lit.admit_all`。
+    """
+    from ..litstage import LitStageError, admit as _admit
+
+    if ctx.store is None:
+        return fail("未配置 store：入不了库（不是「都重复了」）", kind="no_store")
+
+    wanted: list[str] | None
+    payload: dict[str, dict] = {}
+    if items is not None:
+        wanted = []
+        for raw in items:
+            slot = str((raw or {}).get("slot") or "").strip()
+            if not slot:
+                return fail("items 里有一条没有 slot", kind="bad_item")
+            if slot not in wanted:
+                wanted.append(slot)
+            payload[slot] = {
+                "new_content": str((raw or {}).get("new_content") or "").strip(),
+                "overlap_ok": (raw or {}).get("overlap_ok"),
+            }
+    else:
+        wanted = [str(s).strip() for s in (slots or []) if str(s or "").strip()] or None
+        if wanted:
+            for slot in wanted:
+                payload[slot] = {"new_content": str(new_content or "").strip(),
+                                 "overlap_ok": overlap_ok}
+    if wanted is None and batch is None:
+        return fail("admit 要么给 slots / items，要么给 batch", kind="no_target")
+
+    # 每条自带的 `new_content` / `overlap_ok` 先落回候选行：这样它们在 `lit.stage_list`
+    # 里查得到（"这一篇凭什么被放行"要留在盘上，而不是只活在某一次工具调用的返回里）。
+    if payload:
+        try:
+            with ctx.store.tx("lit_candidates", actor=ctx.actor, note="lit.admit.prepare") as tx:
+                for row in tx.rows("lit_candidates"):
+                    got_payload = payload.get(str(row.get("slot") or ""))
+                    if not got_payload:
+                        continue
+                    if got_payload["new_content"]:
+                        row["new_content"] = got_payload["new_content"]
+                    if got_payload["overlap_ok"] is not None:
+                        row["overlap_ok"] = bool(got_payload["overlap_ok"])
+                    S.LitCandidate(**{k: row[k] for k in row
+                                      if k in S.LitCandidate.__dataclass_fields__}).validate()
+                    tx.upsert("lit_candidates", row, note="lit.admit.prepare")
+        except (StoreError, ValueError) as exc:
+            return _stage_fail(exc)
+
+    def _registrar(row: Mapping[str, Any]) -> dict:
+        res = _h_register(
+            ctx,
+            title=str(row.get("title") or ""),
+            type_code=str(row.get("type_code") or "Z"),
+            summary=str(row.get("summary") or ""),
+            path=None,
+            doi=row.get("doi"),
+            year=row.get("year"),
+            request_id=None,
+        )
+        if not res.ok:
+            return {"lit_id": None, "reason": res.error}
+        return dict(res.data or {})
+
+    try:
+        got = _admit(ctx.store, registrar=_registrar, request_id=request_id, slots=wanted,
+                     batch=batch, new_content=new_content, actor=ctx.actor)
+    except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+        return _stage_fail(exc)
+    if got.get("whole_call_refused"):
+        # 整笔拒绝也要让模型读到读数（`fail` 的 meta 就是给这个用的）。
+        return fail(got.get("reason") or "入库被拒", kind=got.get("kind") or "over_cap",
+                    request_id=got.get("request_id"), batch=got.get("batch"),
+                    call_size=got.get("call_size"), call_limit=got.get("call_limit"),
+                    delegation_admitted=got.get("delegation_admitted"),
+                    delegation_limit=got.get("delegation_limit"),
+                    refused=got.get("refused"))
+    return ok({
+        "ok": got["ok"],
+        "kind": got["kind"],
+        "whole_call_refused": got["whole_call_refused"],
+        "reason": got["reason"],
+        "request_id": got["request_id"],
+        "batch": got["batch"],
+        "call_size": got["call_size"],
+        "call_limit": got["call_limit"],
+        "delegation_admitted": got["delegation_admitted"],
+        "delegation_limit": got["delegation_limit"],
+        "admitted": got["admitted"],
+        "refused": got["refused"],
+        "cleared": got["cleared"],
+        "registered": got["registered"],
+        "report": got["report"],
+        "report_path": got["report_path"],
+    })
+
+
+def _h_lit_admit_all(
+    ctx: _Ctx,
+    request_id: str | None = None,
+    new_content: str = "",
+) -> Any:
+    """``lit.admit_all``：**一键迁移** —— 把本委托待审且过筛的行一次迁进 literature，然后清空。
+
+    业主 2026-10-20 第 2 条，四件事顺序固定（实现见 `litstage.admit_all`）：
+
+    1. 取本委托所有 `pending` 行，逐条过**重叠检查**（DOI 重复 / 高重叠无 `new_content`
+       ⇒ 拒收；超配额 ⇒ 这一条不入库）；
+    2. 通过的走**现有登记路径**（与 `search.register` 同一条）；
+    3. **结算清空本委托**：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
+       `cleared(over_cap / not_screened)` + `cleared_at` ⇒ 迁移后本委托没有 `pending` 残留，
+       下一次委托看不到本委托的行（`request_id` 已经换了）。**不物理删**；
+    4. 写**委托报告** `reports/lit-<request_id>.md`：已入库一块（含一句相关性）+
+       未入库一块（含受控理由）—— 这是交付物，不是可选（业主第 3 条）。
+
+    它仍守"一次委托至多入库 10 篇"与"重叠高需 `new_content`"两条。
+    """
+    from ..litstage import LitStageError, admit_all as _admit_all
+
+    if ctx.store is None:
+        return fail("未配置 store：入不了库（不是「都重复了」）", kind="no_store")
+
+    def _registrar(row: Mapping[str, Any]) -> dict:
+        res = _h_register(
+            ctx,
+            title=str(row.get("title") or ""),
+            type_code=str(row.get("type_code") or "Z"),
+            summary=str(row.get("summary") or ""),
+            path=None,
+            doi=row.get("doi"),
+            year=row.get("year"),
+            request_id=None,
+        )
+        if not res.ok:
+            return {"lit_id": None, "reason": res.error}
+        return dict(res.data or {})
+
+    try:
+        got = _admit_all(ctx.store, registrar=_registrar, request_id=request_id,
+                         new_content=new_content, actor=ctx.actor)
+    except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+        return _stage_fail(exc)
+    if not got.get("ok"):
+        return fail(got.get("reason") or "一键迁移被拒", kind=got.get("kind") or "over_cap",
+                    request_id=got.get("request_id"), refused=got.get("refused"))
+    return ok({
+        "ok": got["ok"],
+        "kind": got["kind"],
+        "whole_call_refused": got["whole_call_refused"],
+        "reason": got["reason"],
+        "request_id": got["request_id"],
+        "call_size": got["call_size"],
+        "call_limit": got["call_limit"],
+        "delegation_admitted": got["delegation_admitted"],
+        "delegation_limit": got["delegation_limit"],
+        "admitted": got["admitted"],
+        "refused": got["refused"],
+        "cleared": got["cleared"],
+        "registered": got["registered"],
+        "report": got["report"],
+        "report_path": got["report_path"],
+    })
+
+
+#: 待新增文献列表那七件的**声明**（`@tool` 写进 `fn.__tool_spec__`，`register` 时绑定 ctx）。
+#: 键名逐个从 `litstage` 的实现里读出（`ok(...)` 的数据字典 / `report_markdown` 的两块）。
+_LIT_PARAMS_ADMIT_ITEM = {
+    "type": "object",
+    "properties": {
+        "slot": {"type": "string", "minLength": 1, "maxLength": 40},
+        "new_content": {"type": "string", "maxLength": 2000,
+                        "description": "本次检索要的新内容（重叠度高时必须有）"},
+        "overlap_ok": {"type": "boolean",
+                       "description": "调用方对「重叠也可以收」的表态；不替代 new_content"},
+    },
+    "required": ["slot"],
+    "additionalProperties": False,
+}
+
+_LIT_PARAMS_ENTRY = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 600},
+        "doi": {"type": "string", "maxLength": 300},
+        "provider": {"type": "string", "maxLength": 80},
+        "year": {"type": "integer", "minimum": 1000, "maximum": 2999},
+        "type_code": {"type": "string", "enum": list(S.LIT_TYPES)},
+        "summary": {"type": "string", "maxLength": 4000},
+        "url": {"type": "string", "maxLength": 1000},
+        "relevance": {"type": "string", "maxLength": 400,
+                      "description": "一句「它为什么与本次检索相关」，委托报告要用"},
+    },
+    "required": ["title"],
+    "additionalProperties": False,
+}
+
+
+@tool(
+    "lit.overlap_check",
+    "**不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard"
+    "（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。",
+    {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "minLength": 1, "maxLength": 600},
+            "doi": {"type": "string", "maxLength": 300},
+        },
+        "required": ["title"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("A",),
+    returns=(
+        "{'title','doi','checked','duplicate','overlap_score','overlap_kind','overlap_with',"
+        "'requires_new_content','reason'}；"
+        "失败：ok=False + kind(no_store/store_error) + checked=False（**重叠没查**，不是「没有重叠」）"
+    ),
+    tags=("lit", "stage", "overlap"),
+)
+def _lit_overlap_check(ctx, title, doi=None):
+    """lit.overlap_check 的工具体。"""
+    return _h_lit_overlap_check(ctx, title, doi)
+
+
+@tool(
+    "lit.stage_add",
+    "把广搜结果**追加**进本次委托的待新增列表（一次任意条，超过 10 条也允许）："
+    "槽位号自动分配、只增不复用。入库是另一件事（lit.admit_all）。",
+    {
+        "type": "object",
+        "properties": {
+            "request_id": {"type": "string", "minLength": 1, "maxLength": 40,
+                           "description": "这一次查询委托（search_requests 的行号，如 r-000001）；"
+                                          "换一个号就是开始下一次委托"},
+            "entries": {"type": "array", "minItems": 1, "maxItems": 500,
+                        "items": _LIT_PARAMS_ENTRY},
+            "batch": {"type": "integer", "minimum": 1, "maximum": 100000,
+                      "description": "第几批（不给 = 本委托的下一批）"},
+        },
+        "required": ["request_id", "entries"],
+        "additionalProperties": False,
+    },
+    side_effect="write_local",
+    roles=("A",),
+    returns=(
+        "{'request_id','batch','count','staged'}；"
+        "staged[] 每项是 {'slot','batch','title'}；"
+        "失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/"
+        "bad_entry/store_error) 之一 + 明细"
+    ),
+    tags=("lit", "stage", "add"),
+)
+def _lit_stage_add(ctx, request_id, entries, batch=None):
+    """lit.stage_add 的工具体。"""
+    return _h_lit_stage_add(ctx, request_id, entries, batch)
+
+
+@tool(
+    "lit.stage_list",
+    "查待新增列表：默认**只看当前委托**（列表按委托重置）；status 五态"
+    "（pending/withdrawn/rejected/admitted/cleared），**撤掉的空槽位照样在列表里并带理由**。",
+    {
+        "type": "object",
+        "properties": {
+            "request_id": {"type": "string", "maxLength": 40,
+                           "description": "哪一次委托（不给 = 当前委托；*= 全部委托）"},
+            "batch": {"type": "integer", "minimum": 1, "maximum": 100000},
+            "status": {"type": "string", "enum": list(S.CANDIDATE_STATUSES)},
+        },
+        "required": [],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("A",),
+    returns=(
+        "{'request_id','current_request_id','batch','status','count','counts','gaps','rows',"
+        "'total_all_delegations','note'}；"
+        "counts 是 {'pending','withdrawn','rejected','admitted','cleared'} 五个计数；"
+        "rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year',"
+        "'type_code','summary','url','added_at','relevance','lit_id','admitted_at',"
+        "'reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason',"
+        "'new_content','overlap_score','overlap_kind','overlap_with','overlap_ok'}；"
+        "失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)"
+    ),
+    tags=("lit", "stage", "list"),
+)
+def _lit_stage_list(ctx, request_id=None, batch=None, status=None):
+    """lit.stage_list 的工具体。"""
+    return _h_lit_stage_list(ctx, request_id, batch, status)
+
+
+@tool(
+    "lit.stage_withdraw",
+    "撤掉某一槽：**序号不变、不物理删除**，写受控理由码（withdrawn_by_reviewer）+ 一句说明；"
+    "撤掉后可再 stage_add 补位（新条进新序号）。",
+    {
+        "type": "object",
+        "properties": {
+            "slot": {"type": "string", "minLength": 1, "maxLength": 40},
+            "reason_code": {"type": "string", "enum": list(S.CANDIDATE_REASON_CODES)},
+            "note": {"type": "string", "maxLength": 400, "description": "给人看的那一句（可空）"},
+        },
+        "required": ["slot", "reason_code"],
+        "additionalProperties": False,
+    },
+    side_effect="write_local",
+    roles=("A",),
+    returns=(
+        "{'slot','status','reason_code','reason','title','request_id','batch'}；"
+        "失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/store_error)"
+    ),
+    tags=("lit", "stage", "withdraw"),
+)
+def _lit_stage_withdraw(ctx, slot, reason_code, note=""):
+    """lit.stage_withdraw 的工具体。"""
+    return _h_lit_stage_withdraw(ctx, slot, reason_code, note)
+
+
+@tool(
+    "lit.stage_reject",
+    "审内容后**拒收**某一槽：写受控理由码（rejected_off_topic / rejected_low_quality / "
+    "overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。",
+    {
+        "type": "object",
+        "properties": {
+            "slot": {"type": "string", "minLength": 1, "maxLength": 40},
+            "reason_code": {"type": "string", "enum": list(S.CANDIDATE_REASON_CODES)},
+            "note": {"type": "string", "maxLength": 400},
+        },
+        "required": ["slot", "reason_code"],
+        "additionalProperties": False,
+    },
+    side_effect="write_local",
+    roles=("A",),
+    returns=(
+        "{'slot','status','reason_code','reason','title','request_id','batch'}；"
+        "失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/store_error)"
+    ),
+    tags=("lit", "stage", "reject"),
+)
+def _lit_stage_reject(ctx, slot, reason_code, note=""):
+    """lit.stage_reject 的工具体。"""
+    return _h_lit_stage_reject(ctx, slot, reason_code, note)
+
+
+@tool(
+    "lit.admit",
+    "正式入库（逐条）：条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查都过了才走现有登记路径；"
+    "超限整笔拒绝。**不清空列表**（清空属于 lit.admit_all）。",
+    {
+        "type": "object",
+        "properties": {
+            "slots": {"type": "array", "items": {"type": "string", "maxLength": 40},
+                      "minItems": 1, "maxItems": 200},
+            "items": {"type": "array", "minItems": 1, "maxItems": 200,
+                      "items": _LIT_PARAMS_ADMIT_ITEM,
+                      "description": "逐条带 new_content / overlap_ok（优先于调用级参数）"},
+            "request_id": {"type": "string", "maxLength": 40,
+                           "description": "哪一次委托（不给 = 当前委托）"},
+            "batch": {"type": "integer", "minimum": 1, "maximum": 100000},
+            "new_content": {"type": "string", "maxLength": 2000},
+            "overlap_ok": {"type": "boolean"},
+        },
+        "required": [],
+        "additionalProperties": False,
+    },
+    side_effect="write_local",
+    roles=("A",),
+    returns=(
+        "{'ok','kind','whole_call_refused','reason','request_id','batch','call_size',"
+        "'call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared',"
+        "'registered','report','report_path'}；"
+        "admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind',"
+        "'overlap_with','new_content'}；"
+        "refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；"
+        "report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；"
+        "失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/"
+        "no_target/mixed...) + 三个上限读数"
+    ),
+    tags=("lit", "admit"),
+)
+def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_content="",
+               overlap_ok=None):
+    """lit.admit 的工具体。"""
+    return _h_lit_admit(ctx, slots, items, request_id, batch, new_content, overlap_ok)
+
+
+@tool(
+    "lit.admit_all",
+    "**一键迁移**：本委托待审且过筛（重叠检查）的行一次性迁进 literature（≤10 条），"
+    "然后结算清空本委托的列表（全终态、不物理删），并写委托报告 reports/lit-<request_id>.md"
+    "（已入库 + 未入库含受控理由，两块都要有）。",
+    {
+        "type": "object",
+        "properties": {
+            "request_id": {"type": "string", "maxLength": 40,
+                           "description": "哪一次委托（不给 = 当前委托）"},
+            "new_content": {"type": "string", "maxLength": 2000,
+                            "description": "本委托统一的「要的新内容」（逐条优先）"},
+        },
+        "required": [],
+        "additionalProperties": False,
+    },
+    side_effect="write_local",
+    roles=("A",),
+    returns=(
+        "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit',"
+        "'delegation_admitted','delegation_limit','admitted','refused','cleared','registered',"
+        "'report','report_path'}；"
+        "admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind',"
+        "'overlap_with','new_content'}；"
+        "refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；"
+        "report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；"
+        "失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)"
+    ),
+    tags=("lit", "admit", "report"),
+)
+def _lit_admit_all(ctx, request_id=None, new_content=""):
+    """lit.admit_all 的工具体。"""
+    return _h_lit_admit_all(ctx, request_id, new_content)
+
+
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
-#: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_search_providers, ('ctx',)),
     (_search_shelf, ('ctx',)),
@@ -1641,6 +2281,14 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_search_dedup_check, ('ctx',)),
     (_search_ingest_local, ('ctx',)),
     (_search_register, ('ctx',)),
+    # ---- 待新增文献列表（业主 2026-10-20 口径）：按委托暂存 → 审 → 一键迁移 → 报告 ----
+    (_lit_overlap_check, ('ctx',)),
+    (_lit_stage_add, ('ctx',)),
+    (_lit_stage_list, ('ctx',)),
+    (_lit_stage_withdraw, ('ctx',)),
+    (_lit_stage_reject, ('ctx',)),
+    (_lit_admit, ('ctx',)),
+    (_lit_admit_all, ('ctx',)),
 )
 
 

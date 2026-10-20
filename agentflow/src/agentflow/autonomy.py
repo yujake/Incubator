@@ -18,9 +18,13 @@
 ## 停止判据与三态
 
 每一轮开跑前按固定顺序判一次，命中就停，并把命中哪一条如实写进
-`AutonomyRun.stop_reason`（`rounds` / `budget` / `stop_file`；`user_stop` 已按业主口径删除）
+`AutonomyRun.stop_reason`（`waiting_for_user` / `escalated` / `rounds` / `budget` /
+`stop_file`；`user_stop` 已按业主口径删除）
 —— 顺序写死是为了"多条同时成立"时也有一个确定的答案，而不是看谁先被读到：
 
+- `waiting_for_user`：上一轮停在等人答、而那个问题至今还挂着（唯一一条不能靠继续跑绕过去的）；
+- `escalated`：上一轮用 `conductor.escalate` 把卡住的那件事交给了召唤者（业主 2026-10-19
+  「父子天然双向」）—— 再开一轮就是替父把判断定了，所以停在这里等父；
 - `rounds`：轮次用尽（这是唯一的正常终点，"跑完了"就是它）；
 - `budget`：花销预算已到（有共享的模型缝就问缝，没有就把各轮的用量加起来）；
 - `stop_file`：磁盘上出现了那个开关文件（人不用等着发指令就能叫停）；
@@ -275,8 +279,9 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
                        wake_pending: int = 0, woke: int = 0) -> str:
     """下一轮开跑前的停止判据；返回停止原因（空串 = 继续跑）。
 
-    顺序是 `waiting_for_user` → `rounds` → `budget` → `stop_file`：
+    顺序是 `waiting_for_user` → `escalated` → `rounds` → `budget` → `stop_file`：
     先看"上一轮停在等用户回答、而「那个回答到现在还没来」"（唯一一条不能靠继续跑绕过去的），
+    再看"上一轮已经把卡住的那件事交给召唤者了"（同一族：等的是**别人**，不是钱也不是轮次），
     再耗尽轮次，再看钱，再看磁盘上那个人工开关，最后看用户最新那句话。
     多条同时成立时按这个顺序给一个确定的答案 —— 否则"为什么停"这件事会取决于读取顺序，
     而那是不可复现的。
@@ -295,6 +300,17 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
     """
     if last_stop_reason == "waiting_for_user" and tuple(pending_qids):
         return "waiting_for_user"
+    # ---- 已上报召唤者（`conductor.escalate`，业主 2026-10-19「父子天然双向」）
+    #
+    # 与 `waiting_for_user` 同一族、同一个理由：上一轮把孩子卡住的那件事已经交给
+    # 召唤者了，再开一轮就是**替父把判断定了**（还多烧一轮钱）。
+    # 为什么排在 `rounds` / `budget` / `stop_file` 之前：它不是"跑完了"也不是"钱没了"——
+    # 那三条都说"这一趟可以不跑了"，而这一条说"这一趟必须等别人"。
+    # 为什么 `escalated` 不是"用户叫停"：停意不是用户下的（`_user_stop_reason` 只会给
+    # `stop_file` / `force_stop` / `interrupted_by_parent`），这一档是**这一趟自己**
+    # 决定交出去 —— 判据 `tests/test_escalate_goes_up_and_stops.py` 两向都钉着。
+    if last_stop_reason == "escalated":
+        return "escalated"
     if index > rounds:
         # ---- S-G（裁定 15；DSH 的 `next-turn` + `wakeDriver`）：轮次用尽之后，
         # 收件箱里还有没投递过的留言 ⇒ 再开一轮（那是"有人在等我"这件事的机器可判形态）。

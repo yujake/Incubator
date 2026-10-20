@@ -43,10 +43,24 @@ M_TOOL_FACE = {
     # 广播（S6-b，业主 T20/T21）：一件能力、所有角色同一个做法；M 也一样
     # （「M 要广播全树就逐层向下调用即可」）。只读角色不在它的 `roles` 里。
     "conductor.broadcast",
+    # 上行（2026-10-19 业主裁定「父子天然双向」）：M 也拿得到这一件 —— 判据要的是
+    # 顶层调用会被**受控拒绝**（`not_caller`），而不是"顶层看不见这个工具"
+    # （"看不见"与"不许"是两件事：前者模型会以为能力不存在而绕路）。
+    "conductor.escalate",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
-#: 旧的别名（只守编排面那 11 件）；留给"编排面本身"的判据用。
-ORCHESTRATION_TOOLS = {n for n in M_TOOL_FACE if n.startswith("conductor.")}
+#: 旧的别名（只守编排面那 13 件）；留给"编排面本身"的判据用。
+#:
+#: ⚠️ **刻意从"只读角色一件都拿不到"的那张表里剔掉 `conductor.escalate`**：
+#: 那张表守的是**编排权**（派活 / 叫停 / 广播 / 看板 / 收工门 —— 谁能指挥谁、谁能停谁）。
+#: `escalate` 不是编排权，它是**上行汇报通道**（孩子跟召唤它的人说话），
+#: 与 `message` / `note` / `ask_user` 三个循环形态同一个平面 —— 那三个 C/H/V 本来就有。
+#: 业主 2026-10-19 裁定「父子天然双向」正是要求**所有角色**都有它，包括只读角色；
+#: 把它留在下面这张表里，等于用一条旧判据把新裁定挡掉（而 321 行那条断言会被读成
+#: "只读角色拿到了编排工具"——那是假读数）。判据强度不变：真正的编排面工具
+#: 仍然一件都不许出现在只读角色面上，另加一条正控钉住"只读角色**必须**拿到 escalate"。
+ORCHESTRATION_TOOLS = {n for n in M_TOOL_FACE if n.startswith("conductor.")} - {
+    "conductor.escalate"}
 
 
 class _FakeE:
@@ -319,6 +333,13 @@ def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
     # 只读角色拿不到编排面工具（原来守的就是这一条）
     for read_only in ("C", "H"):
         assert not ({s.name for s in reg.for_role(read_only)} & ORCHESTRATION_TOOLS)
+    # 而**上行**那一件只读角色必须有（2026-10-19 业主裁定「父子天然双向」：
+    # 上行不是编排权）。这一条与上面那条是同一个边界的两个方向，缺一不可：
+    # 只有上面那条时，"escalate 没装进只读角色的面"不会有任何东西变红。
+    for read_only in ("C", "H", "V"):
+        assert "conductor.escalate" in {s.name for s in reg.for_role(read_only)}, (
+            f"只读角色 {read_only} 拿不到 `conductor.escalate` —— 上行通道对所有角色都要开"
+            "（业主 2026-10-19「父子天然双向」）")
     # 反真空：只读角色也拿不到写类文件工具（它们是只读角色，结构性剥离）
     for read_only in ("C", "H"):
         got = {s.name for s in reg.for_role(read_only)}

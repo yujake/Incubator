@@ -136,6 +136,20 @@ _HASHED = re.compile(r"\.[A-Za-z0-9_-]{8,}\.")
 _STOP_BADGES = {
     "final": ("badge-pass", "跑完"),
     "budget": ("badge-unknown", "预算用尽"),
+    # 2026-10-19 补齐：`cli.EXIT_CODE_BY_STOP` 里每一档都要在这里解释得出来，
+    # 否则界面把它显示成一个空徽标，而"为什么这一趟没跑完"当场无人能读。
+    # 判据 `tests/test_loop_liveness.py::test_every_registered_stop_reason_has_a_badge`
+    # 是从那张表现取全部取值逐条核（新增一档忘了加徽标 ⇒ 红），所以下面这几格
+    # 不是"顺手多写"，是被判据逼出来的：`stop_file` / `force_stop` / `ask_cancelled`
+    # （用户叫停那一族，退出码 4）、研究启动失败那四格（退出码 2）、`no_notify`（旧读数）。
+    "stop_file": ("badge-unknown", "用户叫停（开关文件）"),
+    "force_stop": ("badge-unknown", "用户强停"),
+    "ask_cancelled": ("badge-unknown", "问用户的等待被取消"),
+    # 研究启动失败（退出码 2）：连跑都没开始。它不是"这一趟坏了"，但也不是跑完了。
+    "checkpoint_mismatch": ("badge-fail", "检查点指纹不符"),
+    "no_checkpoint": ("badge-fail", "检查点读不到"),
+    "resume_no_transcript": ("badge-fail", "续跑重建不出记录"),
+    "already_finished": ("badge-unknown", "上一趟已收工"),
     # 裁定 12-K 之后循环不再产生它（步数只上报、不收工），这一格留着是给历史读数
     # 用的：旧会话记录里真有 `max_steps` 的趟，徽标表要把它们解释得出来。
     # 与"读它去决定行为"是两件事 —— 决策点上那一格已经删了（`agent_loop._emit_settlement`）。
@@ -143,6 +157,8 @@ _STOP_BADGES = {
     "not_wired": ("badge-fail", "没接线"),
     "bad_json_limit": ("badge-fail", "坏 JSON 连击"),
     "bad_args_limit": ("badge-fail", "坏参数连击"),
+    # L-05e 之后循环不再产生它（收工没按格式填 notify 已降级成读数）；留给旧会话记录。
+    "no_notify": ("badge-fail", "收工没按格式留痕（旧读数）"),
     # 2026-10-12 T2 真机读数加的两格：它们与上面两格都是"停下了"，但归因不同 ——
     # "坏 JSON/坏参数"是模型说错了话，"模型超时/输出吃光"是我们没拿到能用的回答。
     "model_timeout": ("badge-fail", "模型没返回（超时）"),
@@ -159,6 +175,10 @@ _STOP_BADGES = {
     # S-H（裁定 14）：父叫停了这一个子代理当前那一轮。
     # 刻意不是 `badge-fail`：它不是出错，是"上级喊停"（与 `no_progress_limit` 同一档读数）。
     "interrupted_by_parent": ("badge-unknown", "被父叫停"),
+    # 上行（业主 2026-10-19「父子天然双向」）：`conductor.escalate` 把卡住的那件事
+    # 写进了父的收件箱，这一趟以 `stop_reason="escalated"` 收工（退出码 5）。
+    # 刻意不是 `badge-fail`：需求送到了、台账有留痕、父下一趟读得到 —— 这是成功的中断。
+    "escalated": ("badge-pending", "已上报召唤者"),
 }
 
 

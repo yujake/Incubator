@@ -278,9 +278,12 @@ def test_the_parent_limits_block_goes_to_whoever_can_summon(registry: ToolRegist
             f"而段表里{'有' if 'PARENT_LIMITS' in sections else '没有'}派活上限那一段")
         if can:
             holders.append(role)
-    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "M"], (
+    assert holders == ["A", "B", "C", "D", "E", "F", "G", "H", "V", "M"], (
         f"能派活（出边非空）的角色集合变了（现算：{holders}）⇒ 这一段的受众跟着变 —— "
-        "不是判据坏了，是能力表变了（唯一发不出 `summon` 的实测是 C）")
+        "不是判据坏了，是能力表变了")
+    # 2026-10-19 业主裁定：C→D 用于把候选路径交给 D 立猜想（C 从此有出边）
+    # ⇒ 上面这张表从 p169 那一版起多了 `"C"`（机械对齐 `capabilities.ALLOWED_EDGES`，
+    #   不是放宽；同一个改动的三个落点是本文件里那三条 `assert edgeless`-族读数）。
 
 
 def test_the_parent_limits_are_computed_from_the_policy():
@@ -654,7 +657,10 @@ def test_the_three_kinds_of_reference_are_told_apart(registry: ToolRegistry):
         holders.append(role)
         for want in ("台账号", "名册名", "实例标签", "对账", "绝对编码"):
             assert want in text, f"{role} 的指称判据里缺 {want!r}"
-    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "M"], holders
+    assert holders == ["A", "B", "C", "D", "E", "F", "G", "H", "V", "M"], holders
+    # 2026-10-19 业主裁定：C→D 用于把候选路径交给 D 立猜想（C 从此有出边）⇒ 这张表多了 `"C"`
+    # （机械对齐能力表；本条与 `test_the_parent_limits_block_goes_to_whoever_can_summon`
+    #   是同一个 `partners_out` 口径，两处必须同时改）。
 
 
 def test_blocked_is_not_a_substitute_for_reporting(registry: ToolRegistry):
@@ -1815,8 +1821,24 @@ def _summon_capable_roles() -> list[str]:
 
 
 def _edgeless_roles() -> list[str]:
-    """一个伙伴都唤不动的角色（出边为空）—— [c] 对它们无从填起（今天只有 C）。"""
+    """一个伙伴都唤不动的角色（出边为空）—— [c] 对它们无从填起。
+
+    2026-10-19 起真实角色里**一个都没有**（业主裁定 C→D：C 把候选路径交给 D 立猜想 ⇒
+    `ALLOWED_EDGES["C"] = {"D"}`）⇒ 残桩那一支的反真空改用合成角色
+    `_SYNTH_EDGELESS`（见下），不再靠"真实树下恰好有一个这种角色"。
+    """
     return [r for r in ALL_ROLES if not C.ALLOWED_EDGES.get(r, ())]
+
+
+#: 一条**只存在于测试里**的合成角色名（不在 `schema.ROLES` 里、也不在边表里）。
+#:
+#: 为什么需要它：C 拿到 `D` 边之后，真实十个角色里再没有"出边为空"的了
+#: ⇒ `test_the_summon_many_block_reaches_every_role_that_can_summon` 里那句
+#: `assert edgeless` 会变成"反真空失败"（而把断言删掉就是把判据放宽，业主 2026-10-20
+#: 明确不许）。`loop_protocol_for` 是按 `capabilities.ALLOWED_EDGES` 现算的 ⇒
+#: 边表里没有它，它天然就是"出边为空"那一档；负控把它临时塞进边表（`monkeypatch.setitem`）
+#: ⇒ 同一处必须翻成"给 2b 整段"。**判据强度不变：有边必给、无边必不给，两个方向都测。**
+_SYNTH_EDGELESS = "Z"
 
 
 def _excise(protocol: str, units: tuple[str, ...]) -> str:
@@ -1905,27 +1927,33 @@ def test_the_summon_many_block_reaches_every_role_that_can_summon(
     """[c] `2b)` 那一段：出边非空的角色拿到整段说明，出边为空的角色拿到残桩。
 
     作用域是主控 2026-10-07 更正过的那一条（见上面那段注释）：不是"所有非 M"，
-    而是"一个伙伴都唤不动的角色"——今天只有 C（`ALLOWED_EDGES["C"]` 是空的）。
+    而是"一个伙伴都唤不动的角色"。
     判据按真身现算（`capabilities.ALLOWED_EDGES`），不写死角色名。
+
+    ⚠️ **2026-10-19 C 获得 `D` 边之后，真实角色里不再有无出边者**（业主裁定：C→D 用于把
+    候选路径交给 D 立猜想）⇒ 残桩那一档改用**合成角色** `_SYNTH_EDGELESS` 来钉：
+    "无出边 ⇒ 不给整段、落到残桩"与"有出边 ⇒ 给整段"**两个方向仍然都被测**，
+    判据强度不变（删掉那一端才是放宽，业主 2026-10-20 明确不许）。
 
     这一档为什么留残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量
     自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）。
     整块删掉之后，这一档读到"八种"却只数得出 7 项 —— 描述与自身矛盾。残桩保住
     表头为真、枚举仍是 8 项，而 565 字的用法说明不再进这一档的提示词。
 
-    反真空：至少有一个角色拿到整段（今天八个非 M 都有），且出边为空的那个角色
-    确实拿到的是残桩（不是整段、也不是什么都没有）。
-    反负控（四端，都走真的渲染路径）：
+    反真空：至少有一个角色拿到整段，且"出边为空"的那一档**真的存在**（合成角色就是
+    为这件事存在的：它不在边表里 ⇒ 现算为出边为空）确实拿到的是残桩（不是整段、
+    也不是什么都没有）。
+    反负控（五端，都走真的渲染路径）：
       ① 恒真（谁拿的都是全量协议）⇒ "该没有的没有"那半必须红；
       ② 恒假（[c] 换残桩那版发给所有人）⇒ "主控含整段"那半必须红；
       ③ 旧作用域（把 [c] 当成 M 专段 —— 只有主控有）⇒ "该有的有"那半必须红；
-      ④ 整块删、不留残桩（作用域更正前那一版的形状）⇒ "出边为空的有残桩"那半必须红。
+      ④ 整块删、不留残桩（作用域更正前那一版的形状）⇒ "出边为空的有残桩"那半必须红；
+      ⑤ 给合成角色塞一条假边 ⇒ 残桩必须消失、2b 整段必须出现（"按边表现算"那半）。
     """
     m = _prompt(S.CONDUCTOR_ROLE, registry)
     assert _BLOCK_C in m, "反真空：主控那一版里没有 2b 整段 ⇒ 下面的断言证明不了任何事"
     capable, edgeless = _summon_capable_roles(), _edgeless_roles()
     assert capable, "反真空：没有任何角色有出边 ⇒ 这一条判据失去对象"
-    assert edgeless, "反真空：没有出边为空的角色 ⇒ 这一条判据失去对象"
     assert set(capable) | set(edgeless) == set(ALL_ROLES), (capable, edgeless)
     assert _roles_with_block(_BLOCK_C, registry) == capable, (
         f"2b 整段该给这些角色：{capable}；实际给的是：{_roles_with_block(_BLOCK_C, registry)}；"
@@ -1934,6 +1962,34 @@ def test_the_summon_many_block_reaches_every_role_that_can_summon(
         f"2b 残桩该给这些角色：{edgeless}；实际给的是：{_roles_with_block(_STUB, registry)}")
     for role in edgeless:
         assert _STUB in _prompt(role, registry), f"{role} 那一版里没有 2b 残桩"
+
+    # ---- 反真空（2026-10-19 换对象，**判据强度不变**）
+    #
+    # C 拿到 `D` 边之后，真实角色里**一个出边为空的都没有了** ⇒ "残桩那一支"在真实树上
+    # 失去了对象（`assert edgeless` 退化成空转）。所以这里改用一条**只存在于测试里的
+    # 合成角色**（`_SYNTH_EDGELESS`）：它不在 `capabilities.ALLOWED_EDGES` 里 ⇒ 真身现算
+    # 就是"出边为空"。判的仍然是同一件事：**无出边 ⇒ 不给 2b 整段、落到残桩那一支**。
+    assert _SYNTH_EDGELESS not in C.ALLOWED_EDGES, (
+        f"反真空：合成角色 {_SYNTH_EDGELESS!r} 出现在边表里了 ⇒ 换一个名字（它必须是个不存在的角色）")
+    synth = AP.loop_protocol_for(_SYNTH_EDGELESS)
+    assert _BLOCK_C not in synth, "合成角色（出边为空）居然拿到了 2b 整段"
+    assert _STUB in synth, "合成角色（出边为空）没落到残桩那一支"
+    assert synth == _WITH_STUB, (
+        "合成角色那一版协议与「减 [a][b]，再把 [c] 换成残桩」那一版逐字不同")
+    # 负控（同一方向的反面）：给合成角色**塞一条假边** ⇒ 残桩必须消失、2b 整段必须出现。
+    # 没有这一端，"无出边 ⇒ 残桩"就可以被"永远返回残桩"骗过。
+    monkeypatch.setitem(C.ALLOWED_EDGES, _SYNTH_EDGELESS, frozenset({"A"}))
+    assert AP.partners_out(_SYNTH_EDGELESS) == ("A",), "负控夹具没生效（假边没进边表）"
+    synth_with_edge = AP.loop_protocol_for(_SYNTH_EDGELESS)
+    assert _STUB not in synth_with_edge, (
+        "反负控失效：给合成角色塞了一条边，它却还拿到残桩 —— "
+        "「无出边 ⇒ 残桩」那半不是按边表现算的")
+    assert _BLOCK_C in synth_with_edge, (
+        "反负控失效：给合成角色塞了一条边，2b 整段却没出现 —— "
+        "「有出边 ⇒ 整段」那半不是按边表现算的")
+    assert synth_with_edge == _WITHOUT_CONDUCTOR_BLOCKS, (
+        "有边那一版协议与「减 [a][b]」那一版逐字不同")
+    monkeypatch.undo()
 
     # ① 恒真
     monkeypatch.setattr(AP, "loop_protocol_for", lambda role: AP.LOOP_PROTOCOL)
@@ -2006,6 +2062,11 @@ def test_each_rendered_protocol_is_exactly_the_constant_minus_its_own_blocks(
         assert want in _prompt(role, registry), f"{role} 的提示词里不是这一版协议"
     assert AP.loop_protocol_for(S.CONDUCTOR_ROLE) is AP.LOOP_PROTOCOL, \
         "主控那一版必须是常量对象本身（设计上不可能失败的那一条）"
+    # 残桩那一档的反真空（2026-10-19 换对象）：真实角色里已经没有出边为空的了 ⇒
+    # 用合成角色钉住"无出边 ⇒ 残桩那一版"（强度不变：上面那两版仍逐字节对拍）。
+    assert _SYNTH_EDGELESS not in C.ALLOWED_EDGES, "夹具前提：合成角色必须在边表里查不到"
+    assert AP.loop_protocol_for(_SYNTH_EDGELESS) == with_stub, \
+        "合成角色（出边为空）那一版协议与「[c] 换残桩」那一版逐字不同"
 
 
 # ------------------------------------------------- 版本随段前进（`R6` 结构性搬移这一刀新增）
@@ -2531,7 +2592,29 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: **实测 5 格换值、5 格不动**（pytest 环境里现算：`AGENTFLOW_LEAN_ENABLED=1` ＋ `build_registry()`）：
 #: 换值 = A / B / C / D / M；不动 = E / F / G / H / V。
 #: 原因对得上：这一轮只动这五格的 `policy`（伙伴表只印 `duty` / `boundary`，不含 policy）。
-_FROZEN_PROMPT_VERSION = "p168"
+#:
+#: `p169`（2026-10-20 14:20，**收口那一趟：三条并行线落在同一棵树上，只抬这一格**）：
+#: **实测 10 格全换值、0 格不动**。三个原因，缺一条都解释不了"为什么十格全换"：
+#:   ① **A 的 `boundary` 多了一条**（`一次检索至多入库10篇…`，97 字，`specs/a.py`）——
+#:      伙伴表**逐格**印每个伙伴的 `duty` / `boundary` ⇒ A 这一段换字之后**十格**的
+#:      伙伴表都换了（A 自己那一格也印它）。与 `p164`「十条产出标准」同形。
+#:   ② **`conductor.escalate` 进了每个角色的工具面**（`roles=` 是 A–H + V + M 全十个，
+#:      十格各 +1 件）＋ 那一句"卡住就往上抛、不借别人的边绕"进了共用段 ⇒ 十格再换一次。
+#:   ③ **M 的第 12 条 skill**（`研究攻坚链-文献到收录证明`，`agent_skills.CATALOG`）⇒
+#:      只有 M 那一格多 148 字（skill 索引行只在它自己的段里）。
+#:   ④ **C 的三句假话**（`specs/c.py` 的 `boundary` 与 `local_notes`、`agent_prompts._FACULTY_LOCAL`
+#:      里逐字同步的那一句）：C 拿到 `D` 边之后，"你的可召唤边是空的" / "你自己不发请求（边是空的）"
+#:      两句都成了假话 ⇒ 只删掉"边是空的"这个断言、其余一字不动。换值的格恰好是
+#:      **C 自己 + 它的"可见伙伴"那几格**：B / C / D / F / M（A / E / G / H / V 逐字未动）。
+#: 实测字符数（`system_prompt`，`lean_enabled=1` ＋ 不带 store 的 `build_registry()`）：
+#: A 26372 / B 25288 / C 23989 / D 30115 / E 27095 / F 27489 / G 36468 / H 36344 /
+#: V 22456 / M 50179（p168 那一版是 A 26017 / B 24920 / C 23777 / D 29757 / E 26741 /
+#: F 27141 / G 36132 / H 36132（H 与 G 同长是巧合）/ V 22231 / M 47231 ⇒ M +2948 = ① ② ③ 的合计，
+#: 其余九格 +212…+368 全是 ① ② 的合计；④ 只动 C 那一句，长度差在 ±20 字以内）。
+#: ⚠️ 这一格号钉的是**冻结那一刻的树**，不是日期：那一刻逐文件记了 sha256（见本次收口回报）；
+#:    哪一份文件在冻完之后又动了，`test_the_prompt_version_moves` 会当场红 —— 那时**先看
+#:    是不是别人的线又落了东西**，再决定是重算这张表（同版本号、新时刻）还是抬下一格。
+_FROZEN_PROMPT_VERSION = "p169"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2544,16 +2627,19 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     #    再改 `specs/*` 就必须连版本号一起动（这条判据两个方向都判）。
     # ⚠️ `p168` 这一版只动 A / B / C / D / M 五格 ⇒ 这五行的值换了，另五行**逐字未动**
     #    （E / F / G / H / V 与 `p167` 那一版相同 —— 这本身就是"改动作用域"的读数）。
-    "A": "0b1def0ea5526313139f11a4da32b53f8465be10702aea5309952c6870bf5d33",
-    "B": "75129624d12ec9bab8e19d552bb6b1035f47e6a41b1f653c858b7b0aed28d5a8",
-    "C": "966866cd0daf5891f3f77c38fa8f338483421feefe1d395a38c39a551f6c277e",
-    "D": "978e861c4f275792e72e9be50c92ccc692afd63c3104271377bd8c3e94a29e66",
-    "E": "2e1ceff7ee604077aca9848cf88b1ac8fd5ee3930854e20e41e8093ce361521b",
-    "F": "99b2512ac4b65c7c898724a61eb7e378484e1604c8eea03d55324f771aa5500a",
-    "G": "7b182a00c69e5041397d012ab40c6c89119d50c40091996fa73934d0ad2e444d",
-    "H": "9311a886be7ad7233e277c0cd8ceaeb57254b3584a2070c1a0f6ba5e383952d4",
-    "V": "1a9051a38c1ec749a78de9288ce1fcc44de7f524275181ec38a5619d6c6a221f",
-    "M": "e5cb8437dc2136d2258964ab1e4f3b90a8dfb5be0c1d83580a5e7b53914c39a3",
+    # ⚠️ `p169` 十格全换值（理由逐条见上面那一段：A 的 boundary → 十格的伙伴表；
+    #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
+    #    C 的两句假话 → B / C / D / F / M 这五格）。
+    "A": "7b4835138720e638005d9c12c589c719e86235217d3218a82080066a57a769ae",
+    "B": "390b067dfb3bd66f132ca67eb209f39b304dfa9c94c3d3604211fce4aec59f0e",
+    "C": "c07d60bf15beeffd274a0edff176139641bfaabd3e92c00d6064457039e57dd8",
+    "D": "5f06cb8f6b855c28effa4e2f80d76e5e078154fc50310d77dda1bf09709b92a8",
+    "E": "19e3118f92601f8e5277627d80c97a5e7de44c2469faa6d9d522bb2dbc59f4b9",
+    "F": "9bf7d26a78cdf89504e7f1f19d3f7f3caa87ff70712c1160dd19893eca80d758",
+    "G": "38b2a4b2187c2d6253a1ad175d4432649ec4e1be6effb8bd35baefd8ac31bff9",
+    "H": "e2f7ebc4a31df9445795e3bb136c4543cc20ffc398d51896167e81462c685595",
+    "V": "bb2580818c7a060ae57b38247f58a1dc71e0d8e8840c59405daacd22ecd707e2",
+    "M": "d18de35e0060f5e6beb155f360d9f89e4c5fb277c324a42920fdfac409ae64ba",
 }
 
 

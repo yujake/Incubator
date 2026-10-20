@@ -48,13 +48,46 @@ def test_the_closure_really_walks_more_than_one_hop() -> None:
     assert len(got["hops"]) - 1 >= 2, got
 
 
-def test_a_branch_without_that_action_is_unreachable() -> None:
+def test_a_branch_without_that_action_is_unreachable(monkeypatch) -> None:
     """被派人那一支闭包里没有谁有这一件 ⇒ `unreachable`（面内做不成，不许折成"做得到"）。
 
-    `C` 是只读角色、且它**没有出边**（`ALLOWED_EDGES["C"] == frozenset()`）——
-    于是它那一支只有它自己，闭包大小恒为 1。
+    ## 2026-10-19 业主裁定改了这一条的夹具（判据本身一个字没动）
+
+    裁定逐字：「C 要能把"候选的更短路径"交给 D」⇒ `ALLOWED_EDGES["C"] == {"D"}`
+    （注释全文见 `tests/test_policy.py::test_allowed_edges_match_design_table`）。
+
+    改前这一条拿 C 当夹具，理由写的是"C 是只读角色、且它**没有出边**，于是它那一支
+    只有它自己，闭包大小恒为 1"。那条边现在有了 ⇒ **实表上再没有一个
+    `(角色, 动作)` 对是 unreachable 的**（C 经 D 一跳就够到 A/B/E/F/V/H/G 的动作）。
+    所以：
+
+    1. 反真空那半跟着改：断言"实表上 0 个 unreachable"这个**读数**本身，
+       并正面钉住 C 的新闭包（`C → D → E` 拿到 `run_experiment`）—— 那是裁定的直接后果；
+    2. `unreachable` 这一档改由**注入的边表**来考（把 C 的出边抹掉 = 改前那张表），
+       于是"这一档还咬不咬人"仍然被一条真的 `reach_fit` 调用证明，
+       而不是因为实表恰好没有反例就静默变成没人守的代码。
     """
-    assert C.ALLOWED_EDGES["C"] == frozenset(), C.ALLOWED_EDGES["C"]
+    from agentflow import capabilities as C
+
+    # ---- 1. 实表读数：C 现在够得到 run_experiment（C→D→E 两跳）
+    assert C.ALLOWED_EDGES["C"] == frozenset({"D"}), C.ALLOWED_EDGES["C"]
+    got_c = S.reach_fit("C", "run_experiment")
+    assert got_c["verdict"] == "via_edges", got_c
+    assert got_c["hops"] == ["C", "D", "E"], got_c
+
+    # 反真空：实表上每一个 (角色, 动作) 对都够得到 ⇒ 下面是"0 个反例"这条读数
+    roles = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M")
+    acts = sorted({a.action for r in roles for a in C.CAPABILITIES.get(r, ())})
+    live = [(r, a) for r in roles for a in acts
+            if S.reach_fit(r, a)["verdict"] == "unreachable"]
+    assert live == [], (
+        f"实表上出现了 unreachable 的对：{live}（2026-10-19 之后 C→D 让每个角色都够得到"
+        "全部动作 —— 这个读数是裁定的后果，不是判据放宽）")
+
+    # ---- 2. 注入改前那张表（C 无出边）⇒ `unreachable` 这一档仍要咬人
+    original = C.ALLOWED_EDGES
+    weakened = {k: (frozenset() if k == "C" else v) for k, v in original.items()}
+    monkeypatch.setattr(C, "ALLOWED_EDGES", weakened)
     got = S.reach_fit("C", "run_experiment")
     assert got["verdict"] == "unreachable", got
     assert got["hops"] == ["C"], got

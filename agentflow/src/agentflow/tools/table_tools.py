@@ -560,7 +560,7 @@ def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
 
 
 def _direct_write_refusal(table: str) -> ToolResult | None:
-    """`statements` / `dependencies` 的**通用写口直写** ⇒ 受控拒绝（否则返回 `None`）。
+    """`statements` / `dependencies` / `lit_candidates` 的**通用写口直写** ⇒ 受控拒绝。
 
     ## 为什么这一格存在（2026-10-19 晚，`projects/mp2` 的真机读数）
 
@@ -574,15 +574,45 @@ def _direct_write_refusal(table: str) -> ToolResult | None:
     共用一个函数，所以关掉它的负控对两层同时生效）。这里只把它的读数翻成工具层的
     受控失败 —— 模型据此能改（拒信里逐字写着该走哪条路）。
 
-    `table.delete` 不在这条限制里：删除不制造证据，而且它另有引用保护
-    （`_REF_SPECS` / `_BLOCKING_TARGETS`）。
+    `table.delete` 不在这条限制里（删除不制造证据，它另有 `_REF_SPECS` 的引用保护）——
+    **唯一的例外是 `lit_candidates`**：那张表的"删掉"必须表现为 `withdrawn`（见
+    `_candidate_delete_refusal`），见 `table_delete` 里那一处。
     """
     why = _store_mod.direct_write_refusal(table)
     if not why:
         return None
+    if table == "lit_candidates":
+        return fail(why, table=table, kind=_store_mod.DIRECT_WRITE_REFUSED,
+                    route="lit.stage_add / lit.stage_withdraw / lit.stage_reject / lit.admit_all",
+                    route_tool="lit.admit_all")
     return fail(why, table=table, kind=_store_mod.DIRECT_WRITE_REFUSED,
                 route="Secretary.record_statement(payload, role=\"B\")",
                 route_tool="own.register_statement")
+
+
+def _candidate_delete_refusal(table: str, slot: str) -> ToolResult | None:
+    """`lit_candidates` 的行**不许物理删** ⇒ 受控拒绝（业主 2026-10-20 第 2 条）。
+
+    为什么删除也要挡：撤掉 = 槽位置空 + 写理由，而**序号不复用**这件事只有在
+    "那一行还在盘上"时才成立。`table.delete` 掉一行之后，"第 3 号被撤了哪一篇、为什么"
+    就永久消失了，而 `lit_candidates` 的序号计数器仍然停在那里 —— 于是列表上出现
+    一个谁也解释不了的缺口（`verify` 的 `id_gap` 会报，但报的是"某次事务分配了号却没建行"，
+    与"有人删掉了审计记录"完全是两件事）。
+
+    正常的撤掉走 `lit.stage_withdraw`（或审内容后 `lit.stage_reject`）。
+    """
+    if str(table) != "lit_candidates":
+        return None
+    return fail(
+        f"`lit_candidates` 的行不许物理删（请求删 {slot!r}）："
+        "撤掉 = 槽位置空 + 写理由，序号不复用。删掉之后「第 3 号被撤了哪一篇、为什么」"
+        "就查不出来了，而这正是这张表存在的理由。两条正路：\n"
+        "  ① 撤掉某一槽 ⇒ `lit.stage_withdraw(slot=…, reason_code=\"withdrawn_by_reviewer\", note=…)`；\n"
+        "  ② 审内容后拒收 ⇒ `lit.stage_reject(slot=…, reason_code=\"rejected_off_topic\")`。",
+        table=table, id=slot, kind=_store_mod.DIRECT_WRITE_REFUSED,
+        route="lit.stage_withdraw / lit.stage_reject",
+        route_tool="lit.stage_withdraw",
+    )
 
 
 # ---------------------------------------------------------------- 工具实现
@@ -828,6 +858,10 @@ def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
     idf: str = spec["id_field"]
+    # ---- 封野路（第二档）：`lit_candidates` 的行不许物理删（判据见 `_candidate_delete_refusal`）
+    no_delete = _candidate_delete_refusal(table, id)
+    if no_delete is not None:
+        return no_delete
     # 声明所有会被读到的表（引用扫描要逐张查）+ counters。
     # counters 这次并不写，但写操作一律显式带上它：让"这张表会不会被动到"这件事
     # 在代码里一眼可见，而不是靠"tx() 会偷偷加"这条隐式知识。

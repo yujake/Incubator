@@ -90,7 +90,12 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 一起下线，编译那一格由既有的 `doc.paper_compile` 接手。
 #: 2026-10-18：84 → **86**（业主裁定给只读角色开产出登记通道：
 #: `analysis.register_report`（C→`analysis_reports`）、`review.record_finding`（H→`review_findings`））。
-TOOL_COUNT = 86
+#: 2026-10-20：86 → **93**（业主口径：待新增文献列表 —— `lit.overlap_check` /
+#: `lit.stage_add` / `lit.stage_list` / `lit.stage_withdraw` / `lit.stage_reject` /
+#: `lit.admit` / `lit.admit_all` 七件）。
+#: 2026-10-19 业主裁定「父子天然双向」：93 → **94**
+#: （`conductor.escalate` —— 子代理把卡住的那件事写进父的收件箱）。
+TOOL_COUNT = 94
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -276,6 +281,12 @@ def tool_params() -> dict[str, dict]:
         # "读成了、没有收件人"那一支（`recipients=[]` + `note` 说清，不是失败）。
         # "我是谁"由 `observations` 夹具的 `calling_as` 提供（工具形状里没有这一格）。
         "conductor.broadcast": {"subject": "探针：广播一次", "body": "只验键集，不派活"},
+        # 上行（业主 2026-10-19「父子天然双向」）：探针必须走到**成功支**（`state="escalated"`），
+        # 因为受控拒绝那一档（`not_caller`）`data=None` ⇒ 键集合根本拿不到。
+        # "我是谁 / 我的召唤者是谁 / 哪个会话"三件事都由 `observations` 夹具的
+        # `calling_as` 提供（工具形状里没有这几格）—— 夹具因此给它挂了一个父。
+        "conductor.escalate": {"need": "探针：取回 lit:0000 的全文",
+                               "kind": "fetch_fulltext", "evidence": ["lit:0000"]},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -355,6 +366,22 @@ def tool_params() -> dict[str, dict]:
         "search.shelf": {},
         "search.providers": {},
         "search.register": {"title": "新文献", "type_code": "J", "summary": "s"},
+        # ---- 待新增文献列表（业主 2026-10-20）：七件各探一次 ----
+        # `_seed()` 在本委托 `r-000001` 下铺了 4 个槽：
+        #   000000（admit 探针用）/ 000001（withdraw）/ 000002（reject）/ 000003（admit_all 用）。
+        # 委托号一律**显式**给：默认视图是"当前委托"，而"当前"取决于探针的先后顺序 ——
+        # 靠顺序决定参数会让这条判据在改动执行次序时静默换一条分支（同一族的老坑）。
+        "lit.overlap_check": {"title": "An unrelated paper about nothing in the library"},
+        "lit.stage_add": {"request_id": "r-900001",
+                          "entries": [{"title": "探针新增候选", "doi": "10.9001/probe",
+                                       "provider": "stub", "relevance": "探针：只验键集"}]},
+        "lit.stage_list": {},
+        "lit.stage_withdraw": {"slot": "000001", "reason_code": "withdrawn_by_reviewer",
+                               "note": "探针：内容与本次检索无关"},
+        "lit.stage_reject": {"slot": "000002", "reason_code": "rejected_off_topic",
+                             "note": "探针：与本次检索无关"},
+        "lit.admit": {"slots": ["000000", "000004"], "request_id": "r-000001"},
+        "lit.admit_all": {"request_id": "r-000001"},
         "table.count": {"table": "statements"},
         # 2026-10-19 晚：`create` / `update` 的探针样品从 `statements` 换成
         # `research_questions` —— `statements` / `dependencies` 已不由通用写口直写
@@ -437,7 +464,14 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 广播（S6-b）：探针走"读成了、没有收件人"那一支（工作区里没有子代理），
         # 键集合与有收件人那一支逐字相同 ⇒ 这条探针验得了"声明 ⊆ 实现"。
         "conductor.broadcast",
+        # 上行（2026-10-19「父子天然双向」）：探针走**成功支**（`state="escalated"`，
+        # 父与会话身份由 `observations` 的 `calling_as` 挂上），键名读自实跑观测。
+        "conductor.escalate",
         # 文字层抽取：探针真跑（`tool_params()` 给了 `SOURCE_REL`）⇒ 键名读自实现。
+        # 待新增文献列表的七件（2026-10-20）：探针都真跑到了 ok 分支（`_seed` 铺了 4 个槽）
+        # ⇒ 键名读自实跑观测，而不是读源码。
+        "lit.overlap_check", "lit.stage_add", "lit.stage_list", "lit.stage_withdraw",
+        "lit.stage_reject", "lit.admit", "lit.admit_all",
     }
 )
 
@@ -478,6 +512,9 @@ MUTATING_LAST: frozenset[str] = frozenset(
         "conductor.cancel",
         "conductor.ensure_project",
         "conductor.broadcast",
+        # 上行（2026-10-19）：它往会话里追加一条留言 + 一条 `agent_escalation` ⇒
+        # 与别的破坏前置数据的工具同档，排在后面跑（它读的是"我是谁/父是谁"那套上下文）。
+        "conductor.escalate",
         "fs.move",
         "fs.delete",
         "fs.write",
@@ -494,6 +531,12 @@ MUTATING_LAST: frozenset[str] = frozenset(
         "attack.create_plan",
         "attack.step",
         "verify.run_experiment",
+        # 待新增文献列表里**会写 literature** 的两支（2026-10-20）：它们必须在别的探针
+        # 之后跑 —— `lit.admit` / `lit.admit_all` 会往 `literature` 加行，而
+        # `search.local` / `trace.literature` / `table.count` 那些探针读的是同一张表。
+        # 三支 stage_* 只写 `lit_candidates`，没有先后要求，留在字母序里。
+        "lit.admit",
+        "lit.admit_all",
     }
 )
 
@@ -765,6 +808,35 @@ def _seed(store: Store, root: Path) -> None:
     probes = root / "probes"
     probes.mkdir(parents=True, exist_ok=True)
     (probes / "honest.py").write_text(HONEST_PROBE, encoding="utf-8")
+    # 待新增文献列表（业主 2026-10-20）：`lit.*` 的七件探针要有东西可动。
+    # 六个槽，**每一支工具各吃一个**，多出来的两个是"必须被拒"的样本：
+    #   000000 → `lit.admit` 探针（会被准入）
+    #   000001 → `lit.stage_withdraw` 探针（会被撤）
+    #   000002 → `lit.stage_reject` 探针（会被拒）
+    #   000003 → `lit.admit_all` 探针（一键迁移会准入它）
+    #   000004 → `lit.admit` 探针里的 DOI 重复样本（必须落 refused，于是
+    #            `refused[]` 的嵌套键 `why`/`code`/`overlap` 才有观测对象）
+    #   000005 → `lit.admit_all` 探针里的 DOI 重复样本（同上，那一支单独一次调用）
+    # 题名刻意互不相同、也不与本地那篇（`Commutativity in abelian groups`）重叠到
+    # 阈值以上：否则"高重叠要 new_content"那条判据会在这里先开火，探针就落到另一条分支
+    # —— 而声明的键集合写的是成功支（同 `attack.create_plan` 那条注释的道理）。
+    with store.tx("lit_candidates", actor="test", note="fixture") as tx:
+        for slot, title, doi in (
+            ("000000", "Staged preprint on modular forms", "10.9000/staged.one"),
+            ("000001", "Staged survey on spectral gaps", "10.9000/staged.two"),
+            ("000002", "Staged note on K(m) spectra", "10.9000/staged.three"),
+            ("000003", "Staged essay on zeta regularisation", "10.9000/staged.four"),
+            ("000004", "Staged duplicate of the local paper", "10.1000/demo.abelian"),
+            ("000005", "Another staged duplicate of the local paper", "10.1000/demo.abelian"),
+        ):
+            row = S.LitCandidate(
+                slot=slot, request_id="r-000001", batch=1, status="pending", title=title,
+                doi=doi, provider="stub", year=2020, type_code="J",
+                summary="夹具里的待审候选", relevance="夹具：与本次检索相关",
+                added_at=TS,
+            )
+            row.validate()
+            tx.upsert("lit_candidates", row.to_dict(), note="fixture")
 
 
 class _RoleGateBypassedRegistry(ToolRegistry):
@@ -890,7 +962,14 @@ def observations(registry: ToolRegistry) -> dict[str, Observation]:
     # S6-b：工具调用也带"我是谁"（生产路径里是 `AgentLoop._do_tool` 的 `calling_as`）。
     # 探针这一层照做 —— 否则 `conductor.broadcast` 会走"不知道我是谁"那条受控拒绝，
     # 而它不是工具失败（判据会把"没查成"与"查过了"分开，这条探针必须打在成功支上）。
-    with calling_as("t-probe", "M"):
+    #
+    # 2026-10-19：`parent_task_id` / `session_root` / `sid` 三格也是同一条理由 ——
+    # `conductor.escalate` 要"我的召唤者是谁"与"留言落进哪个会话"，缺任何一格它都会
+    # 走受控拒绝（`not_caller` / `no_session`），而那条支的 data 是 None ⇒ 键集合拿不到。
+    # 只在这一处挂父：别的工具的声明与行为都不读这三格。
+    with calling_as("t-probe", "M", parent_task_id="t-probe-parent", parent_role="M",
+                    session_root=str(registry.default_spill_root or tmp_path),
+                    sid="probe"):
         for name in order:
             kw = dict(params.get(name, {}))
             if name == "conductor.ensure_project":

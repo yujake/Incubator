@@ -51,8 +51,8 @@ from typing import Any, Callable, Mapping
 from .. import policy as P
 from .. import schema as S
 from ..cancellation import CANCEL_CODES
-from ..conductor import (DEFAULT_FANOUT_WAIT_SEC, Conductor, NotWiredError, SummonResult,
-                         current_caller_role, current_task_id)
+from ..conductor import (DEFAULT_FANOUT_WAIT_SEC, ESCALATE_KINDS, Conductor, NotWiredError,
+                         SummonResult, current_caller_role, current_task_id)
 from . import READ_ONLY_ROLES, ToolError, ToolRegistry, ToolResult, fail, ok, tool
 
 #: 一个工作区一个主控（键 = store 根路径）。主控是会话状态：
@@ -1358,6 +1358,62 @@ def conductor_broadcast(_conductor: Any, subject: str, body: str = "") -> ToolRe
     return ok(got, **got)
 
 
+@tool(
+    "conductor.escalate",
+    "把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工"
+    "（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。"
+    "收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。"
+    "顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。",
+    {"type": "object",
+     "properties": {
+         "need": {"type": "string", "minLength": 1, "maxLength": 300,
+                  "description": "一句话说清要父代理做什么（≤300 字）"},
+         "kind": {"type": "string", "enum": list(ESCALATE_KINDS),
+                  "description": ("哪一类：" + " / ".join(ESCALATE_KINDS))},
+         "evidence": {"type": "array", "items": {"type": "string"}, "maxItems": 20,
+                      "description": "哪些台账 id 需要它（`lit:` / `stmt:` / `exp:` 等，可空）"},
+     },
+     "required": ["need", "kind"], "additionalProperties": False},
+    side_effect="read",
+    # 所有角色 + 主控（业主 2026-10-19：亲子天然双向，上行不是权限面的一条边）。
+    # 只读角色（C/H/V）**也**要拿到它 —— 这一点由 `side_effect="read"` 保证：
+    # `write_local` 会在 `for_role` 里被结构性剥掉。为什么"声明 read"是如实的而不是取巧：
+    # 它不写任何数据表、也不改工作区里任何产物，只把一条**通信记录**追加进会话
+    # （与 `message` / `note` / `ask_user` 三个循环形态同一个平面 —— 那三个 C/H/V 本来就有）。
+    # 同一口径的既有先例：`verify.verify_proof` 也写 `verifications/<命题号>.jsonl`
+    # 却声明 `read`，理由逐字是"V 不写表"。
+    roles=tuple(S.ROLES) + (S.CONDUCTOR_ROLE,),
+    returns=("{'checked','ok','state','to','to_task_id','need','kind','evidence',"
+             "'msg_id','reason','error','note'}"),
+)
+def conductor_escalate(_conductor: Any, need: str, kind: str,
+                       evidence: list | None = None) -> ToolResult:
+    """工具体：转发 `Conductor.escalate`（判据在 `conductor.py`，这里不另写一份）。
+
+    "我的召唤者是谁"与"这条留言该落进哪个会话"从调用上下文里读
+    （`current_parent()` / `current_session()`）—— 工具的形状里没有这两格，
+    而它们只有循环知道（`AgentLoop._do_tool` 用 `calling_as(...)` 挂上）。
+
+    成功 ⇒ `ok(state="escalated")`：循环见到 `data.state` 就把这一趟收成
+    `stop_reason="escalated"`（退出码 5）。受控拒绝 ⇒ `fail(kind=<理由码>)`：
+    `not_caller`（没有父）**不会**停掉这一趟 —— 顶层 M 调错一次不该把自己停掉。
+    """
+    got = _conductor().escalate(
+        need=need, kind=kind, evidence=list(evidence or ()),
+        my_task_id=current_task_id(), by=current_caller_role())
+    if not got.get("ok"):
+        # 受控拒绝这一档的**理由码**放在 `meta.kind`（工具层统一的读法），
+        # 而"哪一类需求"那一格改名成 `escalate_kind` 一并带回去。
+        # 为什么不直接把 `got` 整个塞进 `fail(**got)`：`got` 里已经有 `error` 这个键，
+        # `fail(error, **meta)` 会当场 TypeError（"got multiple values for argument"），
+        # 于是拒绝变成 `kind="unexpected"` 的框架级失败 —— 理由码就此消失。
+        meta = {k: v for k, v in got.items() if k not in ("error", "kind")}
+        meta["kind"] = str(got.get("reason") or "escalate_refused")
+        meta["escalate_kind"] = str(got.get("kind") or "")
+        return fail(str(got.get("error") or "上行没成"), **meta)
+    return ok(got, **got)
+
+
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (conductor_summon, ('_conductor',)),
     (conductor_summon_many, ('_conductor',)),
@@ -1384,6 +1440,9 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # 用 `calling_as` 挂上）—— 拿不到就不广播（受控拒绝，不猜父号）。
     # 只读角色（C/H/V）由 `write_local` 在 `for_role` 里结构性剥离。
     (conductor_broadcast, ('_conductor',)),
+    # 上行（业主 2026-10-19「父子天然双向」）：孩子的需求写进父的收件箱，本趟以
+    # `stop_reason="escalated"` 收工。收件人是运行期解析出的召唤者，**不**在 `edges` 里登记。
+    (conductor_escalate, ('_conductor',)),
 )
 
 
@@ -1598,7 +1657,14 @@ def selftest() -> int:
         if S.CONDUCTOR_ROLE not in tuple(getattr(spec, "roles", ())):
             problems.append(f"{spec.name} 的 roles 里没有主控")
     for spec in reg.for_role("C"):
+        # 2026-10-19（业主裁定「父子天然双向」）：`conductor.escalate` 不是主控工具，
+        # 它是**上行通道**（孩子跟召唤它的人说话），只读角色必须有 —— 见 `register`
+        # 那一行的 `roles=` 与 `side_effect="read"` 的理由。除了它，一件都不许漏过去。
+        if spec.name == "conductor.escalate":
+            continue
         problems.append(f"只读角色 C 拿到了主控工具 {spec.name}")
+    if "conductor.escalate" not in {s.name for s in reg.for_role("C")}:
+        problems.append("只读角色 C 没拿到 conductor.escalate（上行通道对所有角色都要开）")
     if problems:
         for p in problems:
             print(f"[conductor_tools] {p}")

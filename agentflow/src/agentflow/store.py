@@ -67,6 +67,10 @@ _REPLACE_BACKOFF_S = 0.02
 LOCK_ORDER: tuple[str, ...] = (
     "search_requests",
     "literature",
+    # 待新增文献列表（业主 2026-10-20 口径）：紧跟在 `literature` 之后 ——
+    # 一次检索的候选先落这里、筛完才写 `literature`，两把锁在同一条链路上相邻，
+    # "先锁候选、再锁文献"与 ingest 的顺序一致（反过来会在两笔并行 ingest 里互相等待）。
+    "lit_candidates",
     # `concepts` 那一格随并表退役（S1r / `SCHEMA_VERSION=2`）：概念行住 `statements`，
     # 于是它的锁就是 `statements` 的锁。留着一个"表已经不在 schema 里、锁还在"
     # 的格会让"老表"以半退役的形态活着（`tx("concepts")` 过了未知表这一关、
@@ -327,8 +331,39 @@ def direct_write_refusal(table: str) -> str:
     （`F.step` / `B` 的动作 / `Dependency.validate`），且都不叫 `tool:*`。
     把闸口开在"所有写者"上等于让这些路径 fail-closed，而那是另一件事
     （要不要让它们也走秘书，是权限面的改动，不是本条能决定的）。
+
+    ## 第二个用户：`lit_candidates`（业主 2026-10-20 的待新增文献列表）
+
+    它拒的是同一件事 —— **模型的通用写口直接改一张"每一格都带语义"的表**。
+    这张表的合法写者也全是人写过的代码路径（`agent_a/run_once` 的自动入库、
+    `tools/search_tools.py` 的四支 `lit.*` 工具），它们的 `tx` 记号都不是 `tool:*`。
+    与秘书那两张表唯一的差别是**拒信指向的路不同**（不是 `Secretary.record_statement`，
+    而是 `lit.stage_add` / `lit.stage_withdraw` / `lit.stage_reject` / `lit.admit`），
+    所以两支各写一句指路，而不是共用一句错的指路。
     """
     name = str(table or "")
+    if name == "lit_candidates":
+        # 待新增文献列表（业主 2026-10-20 口径）同样不许由通用写口直写。
+        #
+        # 为什么它与 `statements` 那一族同形：这张表上的**每一条改动都带语义**
+        # （槽位只增不复用 / 撤掉要留理由 / 入库要回填 lit_id / 条数上限 10）。
+        # `table.update(table="lit_candidates", patch={"status": "admitted"})` 能一把
+        # 把这些全绕过去，而盘上那一行看起来完全合法 —— 与 `mp2-7` 那一笔直写
+        # `statements` 的形态逐字相同（证据在那里，结论在这里通用）。
+        # 三条正路都在 `tools/search_tools.py`：`lit.stage_add` / `lit.stage_withdraw` /
+        # `lit.stage_reject` / `lit.admit`。
+        return (
+            f"{DIRECT_WRITE_REFUSED}：`{name}` 不由通用写口直写（`table.create` / `table.update` "
+            "以及任何带 `tool:` 记号的裸事务）—— 这张表的每一次改动都带语义"
+            "（槽位只增不复用、撤掉要留理由、入库要回填 lit_id、单次入库上限 10），"
+            "直写会让它们**同时**失效而盘上那一行看起来完全合法。三条正路：\n"
+            "  `lit.stage_add`（广搜结果进待新增列表；一次可追加任意条，超 10 条也允许，\n"
+            "     因为超出的部分只是「待审」，不是「入库」）；\n"
+            "  `lit.stage_withdraw` / `lit.stage_reject`（撤掉 / 审内容后拒收，都要写理由）；\n"
+            "  `lit.admit`（正式入库：条数上限 10、DOI 重复与高重叠无 new_content 一律拒收）。\n"
+            "`table.delete` 同样不适用于这张表：撤掉的槽位必须留在列表里"
+            "（「第 3 号被撤了哪一篇、为什么」要能查得出来），请用 `lit.stage_withdraw`。"
+        )
     if name not in STATEMENT_WRITE_TABLES:
         return ""
     return (

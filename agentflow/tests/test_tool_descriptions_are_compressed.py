@@ -8,36 +8,107 @@
 = 提示词的 70.4%）。声明里能压的只有一格：`summary`（工具说明）。参数 schema、
 `returns`、`side_effect`、`roles` 全都不许动 —— 它们是契约。
 
-所以本轮只做一件事：把每件工具的 `summary` 从「一段长文」压到「一两句」，
+所以那一批只做一件事：把每件工具的 `summary` 从「一段长文」压到「一两句」，
 保留 **做什么 / 什么时候用 / 关键约束**，删掉 **为什么这么设计 / 历史沿革 /
 长例子 / 与别的工具的比较论述 / 重复 `returns` 已逐字列过的返回键清单**。
 
-## 三条判据，各自只能证明一件事
+## 判据守的是什么：压缩批次的说明不得回涨（不是「库里永远只有 86 件」）
+
+压缩那一批是 **86 件**，名单冻结在基线里（`compression_cohort`）。比例判据
+**只在 cohort 上算**：
+
+    sum(cohort 现状 summary 长度) / sum(cohort 基线 summary 长度) <= 75%
+
+为什么不是「全库总量 / 8932」：工具面在长，2026-10-20 新增了 8 件
+（`lit.stage_add` / `lit.stage_list` / `lit.stage_withdraw` / `lit.stage_reject` /
+`lit.overlap_check` / `lit.admit` / `lit.admit_all` / `conductor.escalate`）。
+它们是**新写的说明、从来没被压过**，把它们算进分子分母等于要求「新工具自带
+压缩配额」，而老板的口径是「**压缩那一批的说明不得回涨**」。全库口径下
+7514 / 8932 = 84.1% 会红，而 cohort 口径下只有压缩过的那 86 件参与比较 ——
+新 8 件既不在分子也不在分母，比例只可能被「那 86 件回涨」推上去。
+
+这个口径**不是放宽**，因为它把「回涨」这件事钉得更紧：
+
+- 分母 `baseline_summary_chars` 必须逐件等于 `summary_lens_before` 之和
+  （`cohort_problems`）⇒ 想靠「把某件工具从 cohort 里踢出去」来减分母，
+  得同时改名单、逐件长度表、总量三处，且名单与 `added_after_compression`
+  的并集必须覆盖基线全部声明；
+- 少算一件就等于把它的字数从分子分母里一起抹掉 ⇒ `cohort_ratio` 直接抛
+  `ValueError`，不是静默跳过；
+- 新工具不许混进 cohort（否则会拿它的字数去稀释比例），
+  在 cohort 里也不许偷偷标 `added_after_compression`。
+
+## 四条判据，各自只能证明一件事
 
 1. `test_declaration_contracts_are_unchanged`（① 契约不变）
    —— 与 `tests/fixtures/tool_declaration_baseline.json` 里**压缩前**那份声明逐键比：
    `params` / `returns` / `side_effect` / `external` / `roles` / `tags` / `handler_name`
-   必须完全相同（工具集合也必须相同）。它**不能**证明说明压得好不好 —— 那是第 2 条。
+   必须完全相同；工具集合也必须相同（新增/删除工具必须在基线里登记，否则红）。
+   差异**只**在一种情况下允许通过：基线 `contract_amendments` 里有一条
+   `reason` + 与该差异**逐项对上**的编辑清单（见下「三种合法的契约演进」）。
+   它**不能**证明说明压得好不好 —— 那是第 2 条。
 
-2. `test_descriptions_shrank_by_at_least_a_quarter`（② 说明变短）
-   —— 全部 `summary` 的字符总数必须 ≤ 基线的 75%。它**不能**证明删掉的是废话 ——
-   那是第 3 条与人的 review。
+2. `test_cohort_descriptions_shrank_by_at_least_a_quarter`（② 说明没回涨）
+   —— 压缩批次 86 件的 `summary` 现总量必须 ≤ 基线的 75%。它**不能**证明删掉的
+   是废话 —— 那是第 4 条与人的 review。
 
-3. `test_every_asserted_literal_survives`（③ needle 全在）
+3. `test_every_new_tool_is_registered`（③ 新工具已登记）
+   —— 不在 `compression_cohort` 里的每一件现盘工具，都必须在基线 `declarations`
+   里有一行、且带 `added_after_compression: true`；那 8 件的名字必须在
+   `added_after_compression.tools` 名单里。它**不能**证明它们的说明写得好。
+
+4. `test_every_asserted_literal_survives`（④ needle 全在）
    —— needle = tests 里 `assert X in <声明面>`（summary / prompt / text / desc / spec）
    形态的字面量 X，且压缩前逐字出现在某件工具的 `summary` 里。每一条都必须还在。
    它**不能**证明没删掉别的重要字句 —— 那是「删什么」这件事本身要靠 review。
 
-## 为什么负控是这三条
+## 三种合法的契约演进（为什么要 `contract_amendments` 而不是「params 不许变」）
 
-没有负控的门就是橡皮图章。三条负控各自打在**同一条判据函数**上（不是另写一套）：
+「`params` 逐键相同」这条判据必须**继续抓**「名字/类型/枚举被偷偷改」。但契约
+本身会合法演进 —— 本轮实测的那一次是：表枚举新增 `lit_candidates`（16 → 17 张表），
+于是 `table.count` / `create` / `delete` / `get` / `list` / `search` / `update`
+这七件的 `params` 各变了两处（枚举多一项、`"N 张表之一"` 那句跟着改）。
 
-- 改一个参数名 / 删一个 `returns` 键 ⇒ ① 必须红；
-- 把某条说明加回长论述（回到压缩前那种长度）⇒ ② 必须红；
-- 删掉一条 needle ⇒ ③ 必须红。
+处理方式**不是**把判据删掉或放宽，而是：基线里那七件的 `params` 更新为当前值
+（重冻），并在 `contract_amendments` 里留一条记着 `reason` 与**逐项编辑清单**的
+记录。这条记录是**内容寻址**的，不是一张「table.* 的 params 随便动」的通行证：
 
-还有两条「反负控」：真没改的契约不许被误判成改动、压缩前的说明长度**必须**判红 ②
-（否则 ② 的门只是「比 0 大」的橡皮章）。
+- 判据①拿现值与基线逐键比，差异要变成编辑清单（`value_edits`）；
+- 只有与 `amendments` 里某条的 `tools` / `key` / `edits` **逐项相等**的差异才算
+  有 `reason`；枚举里改**另一个**值（`lit_candidates` → `lit_candidatez`）、
+  或者只动那句「N 张表之一」不带枚举，编辑清单都对不上 ⇒ 照样红。
+  没记 `reason` 的差异更是一律红。
+
+## 为什么负控是这几条
+
+没有负控的门就是橡皮图章。每条负控各自打在**同一条判据函数**上（不是另写一套）：
+
+- 改一个参数名 / 删一个 `returns` 键 ⇒ ① 必须红
+  （`test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red`）；
+- 把 `table.create` 的枚举偷偷改一个值、或只动那句「N 张表之一」 —— 基线里有
+  `reason` 但编辑清单对不上 ⇒ ① 必须红
+  （`test_negative_control_a_silent_table_enum_edit_goes_red`）；
+- 把 cohort 里某条说明塞回 200 字论述 / 整批退回压缩前 ⇒ ② 必须红
+  （`test_negative_control_putting_a_long_essay_back_goes_red`）；
+- 从基线里删掉 `lit.admit` 那一行（模拟「新工具不登记」）⇒ ③ 必须红
+  （`test_negative_control_an_unregistered_new_tool_goes_red`）；
+- 删掉一条 needle ⇒ ④ 必须红
+  （`test_negative_control_deleting_a_needle_goes_red`）。
+
+还有几条「反负控」：真没改的契约不许被误判成改动；压缩后的现值必须过 ②；
+基线 `reason` 里**真的记过**的那一次演进必须被放行（否则 `amendments` 是死代码，
+而「记了 reason 就放行」这句话没人验过 —— 这一条单独成判据：
+`test_the_recorded_amendments_are_the_only_thing_they_excuse`）；原样的 needle
+一份不许少。判据与业主口径 ①–⑥ 的对应：
+
+| 业主口径 | 本文件里的判据 |
+|---|---|
+| ① cohort 比例 ≤75%（正控） | `test_cohort_descriptions_shrank_by_at_least_a_quarter` |
+| ② 塞回 200 字论述（负控） | `test_negative_control_putting_a_long_essay_back_goes_red` |
+| ③ 新 8 件已登记（正控） | `test_every_new_tool_is_registered` |
+| ④ 删掉 `lit.admit` 那一行（负控） | `test_negative_control_an_unregistered_new_tool_goes_red` |
+| ⑤ 偷改表枚举一个值（负控） | `test_negative_control_a_silent_table_enum_edit_goes_red` |
+| ⑥ 删一条断言字面量（负控） | `test_negative_control_deleting_a_needle_goes_red` |
 
 ## 口径上的两个刻意选择（写在代码里，别猜）
 
@@ -47,17 +118,19 @@
 - **`table.schema` 的「N 张表」与 `conductor.closing` 的八格点名**不是字面量形态，
   它们由另外几条既有判据守着（`test_tool_summary_readings.py` /
   `test_conductor_tools.py::test_the_closing_tool_advertises_every_gate_cell`）。
-  本文件不重复它们，只在下面 `SEMANTIC_RULES` 里把**与措辞直接相关**的那两条
-  （`verify.check_formal` 的「真跑」、`search.download` 的失败类别集合）保留下来，
-  因为它们要证明的正是「压说明不许把关键约束压掉」。
+  本文件不重复它们，只在下面 `test_the_two_semantic_pins_hold` 里把**与措辞直接
+  相关**的那两条（`verify.check_formal` 的「真跑」、`search.download` 的失败类别
+  集合）保留下来，因为它们要证明的正是「压说明不许把关键约束压掉」。
 """
 
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import re
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -75,7 +148,15 @@ CONTRACT_KEYS: tuple[str, ...] = (
 )
 
 #: 说明总量最多留下基线的这个比例（业主批准的打法：降 ≥25%）。
+#: 分母 = 压缩批次（`compression_cohort`）压缩前的总量，**不是**全库 —— 理由见 docstring。
 MAX_RATIO = 0.75
+
+#: 新增名单里**必须**登记的那 8 件（2026-10-20 新增，不在压缩批次里）。
+#: 判据只要求「这 8 件都在」；将来再加新工具时只改基线，不必改这里。
+EXPECTED_NEW_TOOLS: frozenset[str] = frozenset({
+    "lit.stage_add", "lit.stage_list", "lit.stage_withdraw", "lit.stage_reject",
+    "lit.overlap_check", "lit.admit", "lit.admit_all", "conductor.escalate",
+})
 
 #: needle 的收集口径：断言右操作数（或整条 assert 源码）里出现这些词 ⇒ 它断言的是
 #: 「声明面」的文字。刻意不写成「任何测试字符串」—— 理由见文件 docstring。
@@ -87,6 +168,11 @@ SURFACE_HINTS: tuple[str, ...] = (
 
 #: needle 最短长度（字符）。更短的（`ok` / `id` / 单字）没有判别力。
 MIN_NEEDLE = 5
+
+#: 基线 `contract_amendments` 里的编辑词汇。改这里等于改「什么算记过账」。
+EDIT_OPS: tuple[str, ...] = (
+    "append_item", "remove_item", "replace_item", "add_key", "remove_key", "set_scalar",
+)
 
 
 # ---------------------------------------------------------------- 装配面
@@ -129,30 +215,304 @@ def baseline() -> dict:
     return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
 
-# ---------------------------------------------------------------- 三条判据的纯函数
+def summaries_of(current: dict[str, dict]) -> dict[str, str]:
+    return {name: row["summary"] for name, row in current.items()}
+
+
+# ---------------------------------------------------------------- 契约差异：结构化编辑
 #
-# 三条都抽成纯函数：负控若自己另写一套判断，它证明的只是"另写的那套会红"。
+# 契约判据与基线里的 `contract_amendments` 共用同一套编辑词汇：这样「记了 reason」
+# 不是一句嘴上的豁免，而是一份**必须逐项对上**的编辑清单（内容寻址）。
 
 
-def contract_diffs(before: dict[str, dict], after: dict[str, dict]) -> list[str]:
-    """逐键比对两份声明，返回差异描述（空列表 = 契约完全相同）。"""
+def _minus(items: list, other: list) -> list:
+    """多重集差：`items` 里有、`other` 里没有的（按出现次数扣减），保持原顺序。"""
+    budget = list(other)
+    out: list = []
+    for item in items:
+        if item in budget:
+            budget.remove(item)
+        else:
+            out.append(item)
+    return out
+
+
+def value_edits(before: object, after: object, path: str = "") -> list[dict]:
+    """两份 JSON 值之间的**结构化**差异（词汇见 `EDIT_OPS`；空列表 = 完全相同）。
+
+    粒度刻意选在「叶子」上：字典逐键递归、等长列表逐位比、不等长列表按多重集
+    增删、标量给 `from`/`to`。表枚举那种「列表里多一项」记成 `append_item`，
+    而在原位改掉一个值记成 `replace_item` —— 后者与前者对不上，这正是
+    「偷偷改一个枚举值」抓得住的原因。
+    """
+    out: list[dict] = []
+    if isinstance(before, dict) and isinstance(after, dict):
+        for key in sorted(set(before) | set(after), key=str):
+            sub = f"{path}/{key}" if path else str(key)
+            if key not in before:
+                out.append({"op": "add_key", "path": sub, "value": after[key]})
+            elif key not in after:
+                out.append({"op": "remove_key", "path": sub, "value": before[key]})
+            else:
+                out.extend(value_edits(before[key], after[key], sub))
+        return out
+    if isinstance(before, list) and isinstance(after, list):
+        if len(before) == len(after):
+            for index, (old, new) in enumerate(zip(before, after)):
+                if old != new:
+                    out.append({"op": "replace_item", "path": path,
+                                "index": index, "from": old, "to": new})
+            return out
+        for item in _minus(after, before):
+            out.append({"op": "append_item", "path": path, "item": item})
+        for item in _minus(before, after):
+            out.append({"op": "remove_item", "path": path, "item": item})
+        return out
+    if before != after or type(before) is not type(after):
+        out.append({"op": "set_scalar", "path": path, "from": before, "to": after})
+    return out
+
+
+def _resolve(root: object, path: str) -> object:
+    node = root
+    for part in path.split("/"):
+        if isinstance(node, dict):
+            node = node[part]
+        elif isinstance(node, list):
+            node = node[int(part)]
+        else:  # pragma: no cover - 基线里写了走不通的路径才会到这里
+            raise TypeError(f"路径 {path!r} 走到 {type(node).__name__} 上，走不下去")
+    return node
+
+
+def apply_edits(value: object, edits: list[dict], reverse: bool = False) -> object:
+    """把编辑清单应用到一个值上（`reverse=True` 则逐项退回）。
+
+    存在的理由：正控要证明「基线里记过的那一次演进**真的**被放行」—— 只有能
+    把现值退回改动前，才能拿出那份差异去撞判据。退不回去的编辑清单 = 记的账
+    与盘上的东西对不上，必须报错而不是悄悄跳过。
+    """
+    out = copy.deepcopy(value)
+    for edit in edits:
+        op = edit["op"]
+        if op not in EDIT_OPS:  # pragma: no cover - 词表外的 op 是基线写坏了
+            raise AssertionError(f"基线 contract_amendments 里出现了词表外的编辑 {op!r}")
+        if op in ("append_item", "remove_item", "replace_item"):
+            # 列表类编辑的 path 指的是**列表本身**（不是「列表/键」）
+            target = _resolve(out, str(edit["path"]))
+            if op == "append_item":
+                target.remove(edit["item"]) if reverse else target.append(copy.deepcopy(edit["item"]))
+            elif op == "remove_item":
+                target.append(copy.deepcopy(edit["item"])) if reverse else target.remove(edit["item"])
+            else:
+                target[edit["index"]] = copy.deepcopy(edit["from"] if reverse else edit["to"])
+            continue
+        # 键类编辑：path 的最后一段是键名，前面是它的容器
+        parent_path, _, leaf = str(edit["path"]).rpartition("/")
+        parent = _resolve(out, parent_path) if parent_path else out
+        if op == "add_key":
+            if reverse:
+                del parent[leaf]
+            else:
+                parent[leaf] = copy.deepcopy(edit["value"])
+        elif op == "remove_key":
+            if reverse:
+                parent[leaf] = copy.deepcopy(edit["value"])
+            else:
+                del parent[leaf]
+        else:  # set_scalar
+            parent[leaf] = copy.deepcopy(edit["from"] if reverse else edit["to"])
+    return out
+
+
+def apply_contract_edits(row: dict, key: str, edits: list[dict],
+                         reverse: bool = False) -> object:
+    """按记账把「一行声明里的那一格」推进/退回。
+
+    路径以**整行**为根（`params` / `returns` / … 是路径的第一段）——与
+    `contract_diffs` 里 `value_edits(..., path=key)` 的口径完全同一套，否则记的账
+    与撞判据用的差异会长得不一样。
+    """
+    return apply_edits({key: row[key]}, edits, reverse=reverse)[key]
+
+
+def describe_edit(edit: dict) -> str:
+    """一条编辑的人话描述（差异读数是给人看的，别让人去数括号）。"""
+    op, path = edit["op"], edit["path"]
+    if op == "append_item":
+        return f"{path}：追加 {edit['item']!r}"
+    if op == "remove_item":
+        return f"{path}：删掉 {edit['item']!r}"
+    if op == "replace_item":
+        return f"{path}[{edit['index']}]：{edit['from']!r} → {edit['to']!r}"
+    if op == "add_key":
+        return f"{path}：新增键（值 {edit['value']!r}）"
+    if op == "remove_key":
+        return f"{path}：删掉键（原值 {edit['value']!r}）"
+    return f"{path}：{edit['from']!r} → {edit['to']!r}"
+
+
+def canonical(edits: list[dict]) -> tuple[str, ...]:
+    """编辑清单的比较口径：逐项序列化后排序（顺序不影响「是不是同一件事」）。"""
+    return tuple(sorted(json.dumps(e, ensure_ascii=False, sort_keys=True) for e in edits))
+
+
+def amendment_for(amendments: Sequence[dict], name: str, key: str,
+                  edits: list[dict]) -> dict | None:
+    """找一条**逐项对上**的已记账演进；没有就返回 None（= 没记 `reason`）。"""
+    want = canonical(edits)
+    for amend in amendments or ():
+        if amend.get("key") != key:
+            continue
+        if name not in tuple(amend.get("tools") or ()):
+            continue
+        if not str(amend.get("reason") or "").strip():
+            # 记了账但没写理由 = 没记（「理由」是这条记录唯一可审的部分）
+            continue
+        if canonical(amend.get("edits") or []) == want:
+            return amend
+    return None
+
+
+def contract_diffs(before: dict[str, dict], after: dict[str, dict],
+                   amendments: Sequence[dict] = ()) -> list[str]:
+    """逐键比对两份声明，返回差异描述（空列表 = 契约完全相同或差异已逐项记账）。"""
     diffs: list[str] = []
     for name in sorted(set(before) - set(after)):
-        diffs.append(f"{name}：这件工具不见了")
+        diffs.append(f"{name}：这件工具不见了（基线里有、现盘上没有）—— 删工具也要在基线里登记")
     for name in sorted(set(after) - set(before)):
-        diffs.append(f"{name}：多出一件基线里没有的工具")
+        diffs.append(f"{name}：多出一件基线里没有的工具 —— 新增工具必须在基线里登记")
     for name in sorted(set(before) & set(after)):
         for key in CONTRACT_KEYS:
-            if before[name][key] != after[name][key]:
-                diffs.append(f"{name}：{key} 变了（{before[name][key]!r} → {after[name][key]!r}）")
+            old, new = before[name][key], after[name][key]
+            if old == new:
+                continue
+            edits = value_edits(old, new, path=key)
+            if amendment_for(amendments, name, key, edits) is not None:
+                continue
+            diffs.append(
+                f"{name}：{key} 变了，基线里没有逐项对上的 reason —— "
+                + "；".join(describe_edit(e) for e in edits)
+            )
     return diffs
 
 
-def description_ratio(baseline_total: int, current_total: int) -> float:
+# ---------------------------------------------------------------- 比例：只在压缩批次上算
+
+
+def ratio_of(baseline_total: int, current_total: int) -> float:
     """现值的比例（1.0 = 一个字没压；≤ MAX_RATIO 才算压到了）。"""
     if baseline_total <= 0:
         raise ValueError("基线总量不是正数 ⇒ 这条判据失去对象（反真空）")
     return current_total / baseline_total
+
+
+def cohort_ratio(frozen: dict, summaries: dict[str, str]) -> float:
+    """压缩批次的说明比例：分子分母都只取 `compression_cohort` 那批人。
+
+    少算一件就抛 `ValueError`：一件工具从现盘上消失，等于把它的字数从分子分母
+    里一起抹掉 —— 那不是「压得更狠」，那是判据失去对象。
+    """
+    cohort = tuple(frozen["compression_cohort"])
+    base = int(frozen["baseline_summary_chars"])
+    if not cohort:
+        raise ValueError("compression_cohort 是空的 ⇒ 比例判据失去对象（反真空）")
+    missing = [name for name in cohort if name not in summaries]
+    if missing:
+        raise ValueError(
+            f"压缩批次的工具在现盘上不见了：{missing} —— 少算一件就是把它的字数"
+            f"从分子分母里一起抹掉"
+        )
+    current_total = sum(len(summaries[name]) for name in cohort)
+    return ratio_of(base, current_total)
+
+
+def cohort_problems(frozen: dict) -> list[str]:
+    """基线内部一致性：名单 / 逐件长度 / 总量 / 新增标记四者必须互相对得上。
+
+    这是「比例判据」的锚：分母 8932 必须逐件等于 `summary_lens_before` 之和，
+    所以想靠「把某件工具从 cohort 里踢出去」来减分母，改一处就会在这里露出来。
+    """
+    problems: list[str] = []
+    cohort = list(frozen["compression_cohort"])
+    decl = frozen["declarations"]
+    added = list((frozen.get("added_after_compression") or {}).get("tools") or ())
+    lens = frozen["summary_lens_before"]
+
+    if len(set(cohort)) != len(cohort):
+        problems.append("compression_cohort 里有重名")
+    if len(cohort) != int(frozen.get("n_cohort", len(cohort))):
+        problems.append(f"compression_cohort 有 {len(cohort)} 件，n_cohort 写的是 {frozen.get('n_cohort')}")
+    unknown = sorted(name for name in cohort if name not in decl)
+    if unknown:
+        problems.append(f"compression_cohort 里的这些名字基线里没有声明：{unknown}")
+    if len(decl) != int(frozen["n_tools"]):
+        problems.append(f"基线声明 {len(decl)} 件，n_tools 写的是 {frozen['n_tools']}")
+    if set(lens) != set(cohort):
+        problems.append(
+            "summary_lens_before 的键与 compression_cohort 不是同一批："
+            f"多 {sorted(set(lens) - set(cohort))}，少 {sorted(set(cohort) - set(lens))}"
+        )
+    flagged = {name for name, row in decl.items()
+               if row.get("added_after_compression") is True}
+    if set(added) != flagged:
+        problems.append(
+            "added_after_compression.tools 与逐行标记的真值不是同一批："
+            f"名单多 {sorted(set(added) - flagged)}，标记多 {sorted(flagged - set(added))}"
+        )
+    both = sorted(set(cohort) & (set(added) | flagged))
+    if both:
+        problems.append(f"这些工具既在压缩批次里又标了 added_after_compression：{both}")
+    if set(cohort) | set(added) != set(decl):
+        problems.append(
+            "基线声明必须正好等于「压缩批次 ∪ 新增」："
+            f"没归类的 {sorted(set(decl) - set(cohort) - set(added))}"
+        )
+    lens_total = sum(int(lens[name]) for name in cohort if name in lens)
+    if lens_total != int(frozen["baseline_summary_chars"]):
+        problems.append(
+            f"baseline_summary_chars 写的是 {frozen['baseline_summary_chars']}，"
+            f"压缩批次逐件加出来是 {lens_total} —— 分母被改过（或漏加/多加了一件）"
+        )
+    return problems
+
+
+# ---------------------------------------------------------------- 新工具登记
+
+
+def registration_problems(frozen: dict, current: dict[str, dict]) -> list[str]:
+    """③ 新增工具必须在基线里登记（带 `added_after_compression: true`）。
+
+    双向都查：名单说有 ⇒ 基线里必须有行、有标记、现盘上必须有这件工具；
+    现盘上有而不在压缩批次里 ⇒ 必须登记、必须有标记、必须在名单里。
+    任一条不成立都返回描述（空列表 = 全部登记好了）。
+    """
+    problems: list[str] = []
+    cohort = set(frozen["compression_cohort"])
+    decl = frozen["declarations"]
+    added = list((frozen.get("added_after_compression") or {}).get("tools") or ())
+
+    for name in added:
+        row = decl.get(name)
+        if row is None:
+            problems.append(f"{name}：名单里说它是新增的，基线里却没有它的声明行（= 没登记）")
+        elif row.get("added_after_compression") is not True:
+            problems.append(f"{name}：基线里有它的声明行，但没带 added_after_compression: true")
+        if name not in current:
+            problems.append(f"{name}：基线标它是新增的，现盘上却没有这件工具")
+
+    for name in sorted(set(current) - cohort):
+        row = decl.get(name)
+        if row is None:
+            problems.append(f"{name}：现盘上有这件工具，基线里没登记它")
+        elif row.get("added_after_compression") is not True:
+            problems.append(f"{name}：基线里登记了，但没标 added_after_compression: true")
+        elif name not in added:
+            problems.append(f"{name}：标了 added_after_compression 但不在 added_after_compression.tools 名单里")
+    return problems
+
+
+# ---------------------------------------------------------------- needle
 
 
 def missing_needles(needles: dict[str, list[str]], summaries: dict[str, str]) -> list[str]:
@@ -269,43 +629,134 @@ def frozen() -> dict:
 
 def test_declaration_contracts_are_unchanged(current: dict[str, dict], frozen: dict) -> None:
     """① 契约不变：与压缩前的声明快照逐键相同（参数名/类型/required/枚举/默认值/returns…）。"""
-    diffs = contract_diffs(frozen["declarations"], current)
+    diffs = contract_diffs(frozen["declarations"], current,
+                           frozen.get("contract_amendments") or ())
     assert diffs == [], (
-        "工具的声明契约被改动了 —— 这一批只许改 summary：\n  " + "\n  ".join(diffs)
+        "工具的声明契约被改动了 —— 这一批只许改 summary；合法的演进要在基线 "
+        "`contract_amendments` 里留一条带 reason 的**逐项编辑清单**：\n  "
+        + "\n  ".join(diffs)
     )
     assert len(current) == frozen["n_tools"], (
         f"名册规模变了：基线 {frozen['n_tools']} 件，现在 {len(current)} 件"
     )
 
 
-# ---------------------------------------------------------------- 2) 说明变短
+def test_the_recorded_amendments_are_the_only_thing_they_excuse(
+        current: dict[str, dict], frozen: dict) -> None:
+    """正控：基线里记过账的那一次演进**真的**被放行，且只放行它自己那一次。
+
+    不做这条，"记了 reason 就放行"这句话没有任何人验过 —— 而一条从不生效的
+    豁免机制与一段死代码在读数上分不开。
+    """
+    declarations_baseline = frozen["declarations"]
+    amendments = frozen.get("contract_amendments") or ()
+    assert amendments, "基线里没有任何 contract_amendments ⇒ 这条正控失去对象"
+
+    for amend in amendments:
+        key = amend["key"]
+        assert amend["reason"].strip(), f"这条 amendment 没写 reason：{amend}"
+        first = amend["tools"][0]
+        # 记的账必须真能退回改动前（退不回去 = 账与盘上的东西对不上）
+        reverted_first = apply_contract_edits(current[first], key, amend["edits"], reverse=True)
+        assert canonical(amend["edits"]) == canonical(
+            value_edits(reverted_first, current[first][key], path=key)
+        ), f"基线里那条 amendment 的 edits 与它声明的 key 对不上：{amend}"
+
+        # 把「改动前的那一版」重建成一份声明，拿它当 before、现盘当 after：
+        # 这份差异就是基线记过账的那一次演进，逐项能对上。
+        preamended = {name: dict(row) for name, row in current.items()}
+        for name in amend["tools"]:
+            preamended[name] = dict(preamended[name])
+            preamended[name][key] = apply_contract_edits(current[name], key, amend["edits"],
+                                                         reverse=True)
+
+        # 没有记账 ⇒ 这份差异必须红（否则「记账」这件事没有对手方）
+        assert contract_diffs(preamended, current), (
+            f"{amend['tools']}：把记过账的那次改动退回去却没红 ⇒ 契约判据没在看 {key}"
+        )
+        # 有记账 ⇒ 同一份差异必须被放行
+        assert contract_diffs(preamended, current, amendments) == [], (
+            f"{amend['tools']}：基线里明明记过这次演进，契约判据却仍判红 —— "
+            f"记账机制失效了（那条 amendment 成了死代码）"
+        )
+        # 而现盘对基线（两边都是改动后）必须本来就干净
+        assert contract_diffs(declarations_baseline, current, amendments) == []
 
 
-def test_descriptions_shrank_by_at_least_a_quarter(current: dict[str, dict], frozen: dict) -> None:
-    """② 说明总量降 ≥25%（判据写死比例，写死的数字比『看起来短了』可审）。"""
-    total = sum(len(row["summary"]) for row in current.values())
+# ---------------------------------------------------------------- 2) 说明没回涨
+
+
+def test_cohort_descriptions_shrank_by_at_least_a_quarter(
+        current: dict[str, dict], frozen: dict) -> None:
+    """② 压缩批次（86 件）的说明总量降 ≥25%（比例写死，写死的数字比『看起来短了』可审）。"""
+    problems = cohort_problems(frozen)
+    assert problems == [], "基线的「压缩批次」口径自身对不上：\n  " + "\n  ".join(problems)
+    assert frozen["max_ratio"] == MAX_RATIO, (
+        f"基线 max_ratio={frozen['max_ratio']} 与判据 MAX_RATIO={MAX_RATIO} 不一致 —— "
+        f"改基线里的那个数就是在改门槛"
+    )
+
+    summaries = summaries_of(current)
+    ratio = cohort_ratio(frozen, summaries)
+    total = sum(len(summaries[name]) for name in frozen["compression_cohort"])
     base = frozen["baseline_summary_chars"]
-    ratio = description_ratio(base, total)
     assert ratio <= MAX_RATIO, (
-        f"工具说明总量 {total} 字符 = 基线的 {ratio:.1%}，要求 ≤ {MAX_RATIO:.0%}"
-        f"（基线 {base} 字符）。差值 {total - int(base * MAX_RATIO)} 字符。"
+        f"压缩批次（{len(frozen['compression_cohort'])} 件）的说明总量 {total} 字符 = "
+        f"基线的 {ratio:.2%}，要求 ≤ {MAX_RATIO:.0%}（基线 {base} 字符）。"
+        f"超了 {total - int(base * MAX_RATIO)} 字符。"
     )
     # 反真空：总量不能是 0 或退化成"所有工具一句极短的话" —— 那样 ② 会被白送。
     assert total > 0 and all(row["summary"].strip() for row in current.values()), (
         "有工具的说明变成空的了：说明是给人和模型看的唯一一句，删字不是删信息"
     )
+    # 新工具不进比例：它们从没被压过，既不在分子也不在分母。
+    assert not set(frozen["compression_cohort"]) & set(
+        (frozen.get("added_after_compression") or {}).get("tools") or ())
+    # 反真空：现盘上真的存在「不在压缩批次里」的工具，否则「只在 cohort 上算」
+    # 与「全库一起算」是同一个数，这条口径就是一句空话。
+    extra = sum(len(summaries[name]) for name in current
+                if name not in set(frozen["compression_cohort"]))
+    assert extra > 0, (
+        "现盘上没有任何不在压缩批次里的工具 ⇒ 「比例只在 cohort 上算」失去对象"
+    )
 
 
-# ---------------------------------------------------------------- 3) needle 全在
+# ---------------------------------------------------------------- 3) 新工具已登记
+
+
+def test_every_new_tool_is_registered(current: dict[str, dict], frozen: dict) -> None:
+    """③ 新 8 件都在基线里、且带 `added_after_compression: true`（不登记 ⇒ 红）。"""
+    problems = registration_problems(frozen, current)
+    assert problems == [], "新增工具没在基线里登记好：\n  " + "\n  ".join(problems)
+
+    added = set((frozen.get("added_after_compression") or {}).get("tools") or ())
+    missing = sorted(EXPECTED_NEW_TOOLS - added)
+    assert missing == [], f"基线新增名单里少了这几件（2026-10-20 的那一批）：{missing}"
+    for name in sorted(EXPECTED_NEW_TOOLS):
+        row = frozen["declarations"][name]
+        assert row.get("added_after_compression") is True, (
+            f"{name}：基线里登记了，但没写 added_after_compression: true —— "
+            f"没有这个标记，下一轮没人知道它不该进压缩比例"
+        )
+        assert name in current, f"{name}：基线说有这件工具，现盘上没有"
+    # 反真空：新增名单不能空，否则这条判据就是纸面通过。
+    assert len(added) >= len(EXPECTED_NEW_TOOLS)
+    note = str((frozen.get("added_after_compression") or {}).get("note") or "")
+    assert "2026-10-20" in note and "不计入压缩比例" in note, (
+        "基线新增名单旁边没写清「2026-10-20 新增、不计入压缩比例」—— 下一轮的人只能猜"
+    )
+
+
+# ---------------------------------------------------------------- 4) needle 全在
 
 
 def test_every_asserted_literal_survives(current: dict[str, dict], frozen: dict) -> None:
-    """③ 被测试断言过的字面量一条不少（含"新加的断言不许指向已删的字句"）。"""
-    summaries = {name: row["summary"] for name, row in current.items()}
+    """④ 被测试断言过的字面量一条不少（含"新加的断言不许指向已删的字句"）。"""
+    summaries = summaries_of(current)
     gone = missing_needles(frozen["needles"], summaries)
     assert gone == [], "压缩把测试断言过的字面量删掉了：\n  " + "\n  ".join(gone)
 
-    # 反真空：needle 清单不能是空的（空了 ③ 就是纸面通过）。
+    # 反真空：needle 清单不能是空的（空了 ④ 就是纸面通过）。
     assert sum(len(v) for v in frozen["needles"].values()) >= 20, (
         "基线里的 needle 太少 ⇒ 这条判据失去对象"
     )
@@ -337,69 +788,155 @@ def test_the_two_semantic_pins_hold(current: dict[str, dict]) -> None:
     )
 
 
-# ---------------------------------------------------------------- 负控（三条）
+# ---------------------------------------------------------------- 负控（五条）
 
 
 def test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red(
         current: dict[str, dict], frozen: dict) -> None:
     """负控①：改一个**参数名**、删一个 **returns 键** ⇒ ① 必须红。"""
+    amendments = frozen.get("contract_amendments") or ()
+
     renamed = {name: dict(row) for name, row in current.items()}
     params = json.loads(json.dumps(renamed["table.get"]["params"]))
     assert "id" in params.get("properties", {}), "夹具前提：table.get 的参数里真的有一个 `id`"
     params["properties"]["row_id"] = params["properties"].pop("id")
-    renamed["table.get"]["params"] = params
-    assert contract_diffs(frozen["declarations"], renamed), (
+    renamed["table.get"] = dict(renamed["table.get"], params=params)
+    assert contract_diffs(frozen["declarations"], renamed, amendments), (
         "改了一个参数名而 ① 没红 ⇒ 它钉的不是契约"
     )
 
     dropped = {name: dict(row) for name, row in current.items()}
-    dropped["table.get"]["returns"] = "去掉键之后的 returns"
-    assert contract_diffs(frozen["declarations"], dropped), (
+    dropped["table.get"] = dict(dropped["table.get"], returns="去掉键之后的 returns")
+    assert contract_diffs(frozen["declarations"], dropped, amendments), (
         "改了 returns 而 ① 没红 ⇒ 它钉的不是契约"
     )
 
     # 反负控：一个字都没改的那一份不许被误判（否则 ① 会变成"凡有差异都红"）
-    assert contract_diffs(frozen["declarations"], current) == []
+    assert contract_diffs(frozen["declarations"], current, amendments) == []
+
+
+def test_negative_control_a_silent_table_enum_edit_goes_red(
+        current: dict[str, dict], frozen: dict) -> None:
+    """负控⑤：偷改表枚举里的一个值（基线没记逐项对上的 reason）⇒ ① 必须红。
+
+    这是「`params` 不许变」这条判据有没有被放宽的试金石：本轮为了「表枚举新增
+    `lit_candidates`」重冻了七件 `table.*` 的 `params`，如果那条 amendment 被写成
+    「table.* 的 params 随便动」，下面第一条就会**绿** —— 那才是真正的放宽。
+    """
+    amendments = frozen.get("contract_amendments") or ()
+
+    tampered = copy.deepcopy(current)
+    enum = tampered["table.create"]["params"]["properties"]["table"]["enum"]
+    seat = enum.index("lit_candidates")
+    enum[seat] = "lit_candidatez"
+    assert contract_diffs(frozen["declarations"], tampered, amendments), (
+        "把 lit_candidates 偷偷改成 lit_candidatez 而契约判据没红 ⇒ amendment 变成了通行证"
+    )
+
+    # 只动「N 张表之一」那句、不带枚举：编辑清单同样对不上 ⇒ 也必须红
+    prose = copy.deepcopy(current)
+    prose["table.create"]["params"]["properties"]["table"]["description"] = "若干张表之一"
+    assert contract_diffs(frozen["declarations"], prose, amendments), (
+        "只改了表枚举那句描述而契约判据没红 ⇒ amendment 变成了一张空白支票"
+    )
+
+    # 记了账但没写理由 = 没记
+    unreasoned = [dict(amend, reason="") for amend in amendments]
+    if unreasoned:
+        reverted = {name: dict(row) for name, row in current.items()}
+        first = amendments[0]
+        name = first["tools"][0]
+        reverted[name] = dict(reverted[name])
+        reverted[name][first["key"]] = apply_contract_edits(
+            current[name], first["key"], first["edits"], reverse=True)
+        assert contract_diffs(frozen["declarations"], reverted, unreasoned), (
+            "reason 是空串的 amendment 居然也放行了 ⇒ 「记 reason」这句话没被检查"
+        )
 
 
 def test_negative_control_putting_a_long_essay_back_goes_red(
         current: dict[str, dict], frozen: dict) -> None:
-    """负控②：把某条说明加回长论述 ⇒ ② 必须红；而"没压够一半"也要红。"""
-    base = frozen["baseline_summary_chars"]
-    total = sum(len(row["summary"]) for row in current.values())
+    """负控②：把 cohort 里某条说明塞回 200 字论述 / 整批退回压缩前 ⇒ ② 必须红。"""
+    summaries = summaries_of(current)
+    base = int(frozen["baseline_summary_chars"])
+    cohort = tuple(frozen["compression_cohort"])
 
     # (a) 整批说明退回压缩前那种体量
-    assert description_ratio(base, base) > MAX_RATIO, "没压过的说明居然过了 ②"
-    # (b) 只把最长的三条说明退回压缩前（其余保持压缩后）
-    restored = dict(current)
-    for name in ("conductor.closing", "search.download", "conductor.state"):
-        before_len = frozen["summary_lens_before"][name]
-        restored[name] = dict(restored[name], summary="x" * before_len)
-    restored_total = total - sum(len(current[n]["summary"]) for n in
-                                 ("conductor.closing", "search.download", "conductor.state")) \
-        + sum(frozen["summary_lens_before"][n] for n in
-              ("conductor.closing", "search.download", "conductor.state"))
-    assert description_ratio(base, restored_total) > MAX_RATIO, (
-        f"把三条最长的说明退回压缩前的体量（{restored_total} 字符）而 ② 没红 ⇒ 它其实没在量"
+    assert ratio_of(base, base) > MAX_RATIO, "没压过的说明居然过了 ②"
+    restored_all = {name: "x" * int(frozen["summary_lens_before"][name]) for name in cohort}
+    assert cohort_ratio(frozen, restored_all) > MAX_RATIO, (
+        "整批退回压缩前的长度而 ② 没红 ⇒ 它其实没在量"
     )
-    # (c) 反负控：压缩后的现值必须过
-    assert description_ratio(base, total) <= MAX_RATIO
 
-    # (d) 基线总量不是正数 ⇒ 判据失去对象，必须抛错而不是判"通过"
+    # (b) 只把 cohort 里最短的那条塞回 200 字论述
+    victim = min(cohort, key=lambda name: len(summaries[name]))
+    essay = summaries[victim] + "论述" * 100
+    assert len(essay) - len(summaries[victim]) == 200, "夹具前提：塞进去的正好 200 字符"
+    with_essay = dict(summaries, **{victim: essay})
+    assert cohort_ratio(frozen, with_essay) > MAX_RATIO, (
+        f"把 {victim} 的说明塞回 200 字论述（{len(essay)} 字符）而 ② 没红 ⇒ 它没在量回涨"
+    )
+
+    # (b2) 只把压得最狠的**那一件**退回压缩前长度（业主口径里的「改回压缩前长度」）
+    worst = max(cohort,
+                key=lambda name: int(frozen["summary_lens_before"][name]) - len(summaries[name]))
+    only_one = dict(summaries, **{worst: "x" * int(frozen["summary_lens_before"][worst])})
+    assert cohort_ratio(frozen, only_one) > MAX_RATIO, (
+        f"只把 {worst} 一件退回压缩前长度（{frozen['summary_lens_before'][worst]} 字符）"
+        f"而 ② 没红 ⇒ 它只能抓「整批回涨」，抓不住「一件一件慢慢长回去」"
+    )
+
+    # (c) 反负控：压缩后的现值必须过
+    assert cohort_ratio(frozen, summaries) <= MAX_RATIO
+
+    # (d) 一件 cohort 工具从现盘上消失 ⇒ 抛错（不是静默把它从分子分母里抹掉）
+    dropped = {name: text for name, text in summaries.items() if name != victim}
     with pytest.raises(ValueError):
-        description_ratio(0, 0)
+        cohort_ratio(frozen, dropped)
+    # (e) 基线总量不是正数 / 名单是空的 ⇒ 判据失去对象，必须抛错而不是判"通过"
+    with pytest.raises(ValueError):
+        ratio_of(0, 0)
+    with pytest.raises(ValueError):
+        cohort_ratio(dict(frozen, compression_cohort=[]), summaries)
+
+
+def test_negative_control_an_unregistered_new_tool_goes_red(frozen: dict,
+                                                            current: dict[str, dict]) -> None:
+    """负控④：从基线里删掉 `lit.admit` 那一行（模拟「新工具不登记」）⇒ ③ 必须红。"""
+    amputed = copy.deepcopy(frozen)
+    assert "lit.admit" in amputed["declarations"], "夹具前提：基线里真的有 lit.admit 这一行"
+    del amputed["declarations"]["lit.admit"]
+    amputed["n_tools"] = len(amputed["declarations"])
+    problems = registration_problems(amputed, current)
+    assert problems, "删了一件新工具的登记行而 ③ 没红 ⇒ 它钉的不是「必须登记」"
+    assert any("lit.admit" in p for p in problems), f"报的不是 lit.admit：{problems}"
+
+    # (b) 行还在、但把 added_after_compression 标记摘掉 ⇒ 同样红
+    unflagged = copy.deepcopy(frozen)
+    unflagged["declarations"]["lit.admit"].pop("added_after_compression")
+    assert registration_problems(unflagged, current), (
+        "摘掉 added_after_compression 标记而 ③ 没红 ⇒ 那个标记没人看"
+    )
+    # (c) 名单里偷偷加一件 cohort 工具（拿老工具冒充新工具）⇒ 也必须红
+    smuggled = copy.deepcopy(frozen)
+    smuggled["added_after_compression"]["tools"].append("table.get")
+    assert registration_problems(smuggled, current), (
+        "把一件压缩批次里的老工具塞进新增名单而 ③ 没红 ⇒ 名单可以随便糊"
+    )
+    # (d) 反负控：原样那一份不许被误判
+    assert registration_problems(frozen, current) == []
 
 
 def test_negative_control_deleting_a_needle_goes_red(
         current: dict[str, dict], frozen: dict) -> None:
-    """负控③：删一条 needle（`review_acceptance`）⇒ ③ 必须红。"""
-    summaries = {name: row["summary"] for name, row in current.items()}
+    """负控⑥：删一条 needle（`review_acceptance`）⇒ ④ 必须红。"""
+    summaries = summaries_of(current)
     mutilated = dict(summaries)
     needle = "review_acceptance"
     assert needle in summaries["conductor.closing"], "夹具前提：这条 needle 现在真的在里面"
     mutilated["conductor.closing"] = summaries["conductor.closing"].replace(needle, "（删掉了）")
     gone = missing_needles(frozen["needles"], mutilated)
-    assert gone, "删了一条 needle 而 ③ 没红 ⇒ 它钉的不是「一条不少」"
+    assert gone, "删了一条 needle 而 ④ 没红 ⇒ 它钉的不是「一条不少」"
 
     # 反负控：一件工具整个不见了，同样必须被报出来（不是静默跳过）
     assert missing_needles({"conductor.closing": [needle]}, {}), "工具不见了却没人报"

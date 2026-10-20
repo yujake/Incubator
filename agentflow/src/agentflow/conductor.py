@@ -528,23 +528,85 @@ def current_caller_role() -> str:
     return _CURRENT_ROLE.get()
 
 
+#: 这一趟的**召唤者**（父）的编号与角色 —— 由 `AgentLoop._do_tool` 从
+#: `_resolve_parent(...)` 那一次的返回值挂上（业主 2026-10-19 裁定：
+#: 「父子天然双向」⇒ 上行不需要在 `edges` 里登记，它跟着"谁召唤了我"走）。
+#:
+#: 为什么另起两个 ContextVar 而不是让工具自己去读台账：父是**运行期**解析出来的
+#: 那一个（`_resolve_parent` 有三条分支：调用方给的 / 台账读的 / 顶层自己），
+#: 工具层拿不到前三者的差别。挂上来的就是那一次解析的结果，逐字一致。
+#: 空串 = 没挂点或这一趟没有父（顶层）—— 两者都由调用方分得清（`state` 不折平）。
+_CURRENT_PARENT_TASK_ID: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "agentflow_parent_task_id", default="")
+_CURRENT_PARENT_ROLE: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "agentflow_parent_role", default="")
+
+#: 这一趟的会话身份（`{"root", "sid"}` 两格，由同一个挂点带下来）。
+#: 为什么工具层需要它：上行的那一条留言必须落进**父读的那个会话文件**里 ——
+#: 按缺省会话写会让"上报了"与"父没读到"在盘上长得一样（`draft/37` §63 的假绿同族）。
+_CURRENT_SESSION_ROOT: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "agentflow_session_root", default="")
+_CURRENT_SID: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "agentflow_session_sid", default="")
+
+
+#: 上行（`conductor.escalate`）的受控取值：**要父代理做的那件事属于哪一类**。
+#:
+#: 为什么是受控词表而不是自由文本（业主 2026-10-19 裁定：父子天然双向）：
+#: 父下一轮读到的是一条**待办**，它得能按类分派 —— 五个取值正好对应父的五个动作面
+#: （去取原文 / 去审一遍 / 重新路由给别的角色 / 补一份缺失输入 / 其余）。
+#: 加取值等于放宽这一整根轴，所以它写在模块级常量里、由 `tool` 的 schema `enum`
+#: 与 `Conductor.escalate` 各读一次（同一个对象，不是两份字面量）。
+ESCALATE_KINDS: tuple[str, ...] = ("fetch_fulltext", "review", "reroute",
+                                   "missing_input", "other")
+
+#: 上行那一条留言的标题前缀（机器可识别的那一位：测试与审计按它捞）。
+ESCALATE_SUBJECT = "上报召唤者"
+
+
+def current_parent() -> tuple[str, str]:
+    """这一趟的召唤者 `(编号, 角色)`；`("", "")` = 没有挂点（不是"父是空串"）。"""
+    return _CURRENT_PARENT_TASK_ID.get(), _CURRENT_PARENT_ROLE.get()
+
+
+def current_session() -> tuple[str, str]:
+    """这一趟的会话身份 `(root, sid)`；空串 = 没挂点。"""
+    return _CURRENT_SESSION_ROOT.get(), _CURRENT_SID.get()
+
+
 @contextlib.contextmanager
-def calling_as(task_id: str, role: str = "") -> Iterator[None]:
+def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
+               parent_role: str = "", session_root: str = "",
+               sid: str = "") -> Iterator[None]:
     """这一小段代码以某个实例的身份跑（工具调用用）。
 
     为什么工具调用也要带身份（S6-b）：`conductor.broadcast` 的收件人是"我名下的直接
     子代理"，而工具的形状里没有"我是谁"这一格 —— 只有循环知道（`self.my_task_id`
     与 `self.role`）。挂点与 `summon` 那一处同一个（`ContextVar`，不是实例属性：
     同一角色的两个并发实例共享对象，挂在实例上会互相盖掉，见 `_CURRENT_TASK_ID` 的理由）。
+
+    `parent_task_id` / `parent_role` / `session_root` / `sid`（2026-10-19）：
+    `conductor.escalate` 要的三件事 —— 召唤者是谁（**运行期** `_resolve_parent` 的
+    返回值，不是工具自己猜的）与这条留言该落进哪个会话文件。四个都有默认值：
+    不传 = "这一层不知道"，与从前逐字节同义（旧调用点一个都不用改）。
+
     退出时复位（异常也复位）—— 于是这一小段之后谁都不知道上一个是谁。
     """
     reset = _CURRENT_TASK_ID.set(str(task_id or ""))
     reset_role = _CURRENT_ROLE.set(str(role or ""))
+    reset_pid = _CURRENT_PARENT_TASK_ID.set(str(parent_task_id or ""))
+    reset_prole = _CURRENT_PARENT_ROLE.set(str(parent_role or ""))
+    reset_root = _CURRENT_SESSION_ROOT.set(str(session_root or ""))
+    reset_sid = _CURRENT_SID.set(str(sid or ""))
     try:
         yield
     finally:
         _CURRENT_TASK_ID.reset(reset)
         _CURRENT_ROLE.reset(reset_role)
+        _CURRENT_PARENT_TASK_ID.reset(reset_pid)
+        _CURRENT_PARENT_ROLE.reset(reset_prole)
+        _CURRENT_SESSION_ROOT.reset(reset_root)
+        _CURRENT_SID.reset(reset_sid)
 
 
 def _business_refusal_code(exc: BaseException) -> str | None:
@@ -2049,6 +2111,149 @@ class Conductor:
                 "readings": self.item_readings(items),
                 "note": ("每人一条 ack 板项（它们下次进循环时会渲染到）；"
                          "级联由它们各自决定 —— 框架不代转，要全树就逐层向下")}
+
+    # ---------------------------------------------------------------- 上行（业主 2026-10-19）
+    def escalate(self, *, need: str, kind: str, evidence: Sequence[str] = (),
+                 by: str = "", my_task_id: str = "", parent_task_id: str = "",
+                 parent_role: str = "", session_root: str = "", sid: str = "",
+                 ) -> dict[str, Any]:
+        """把「我要召唤者做什么」写进**父的收件箱**（业主 2026-10-19 裁定：父子天然双向）。
+
+        ## 为什么这条通道不属于"边"
+
+        父子身份在运行期已经解析出来了（`AgentLoop._resolve_parent`：调用方给的 /
+        台账读的 / 顶层自己），而 `edges` 是**权限面**（谁能召唤谁）。上行不是召唤、
+        也不是新权限 —— 它就是"孩子跟召唤它的人说话"。于是这条入口**不要求在
+        `edges` 里登记**，收件人一律是 `_resolve_parent` 当次解析出的那一个。
+
+        真机代价（`t5-run2`）：B 想找 A 说话只能借 `B→H` 绕两跳，因为"向上"没有入口。
+        这一格补的就是那个入口。
+
+        ## 落点：父的收件箱（复用既有机制，不新造表）
+
+        `agent_message` 事件本来就是收件箱（`agent_loop.read_messages` /
+        `inbox_digest` / `mark_delivered` 三件套）：私聊按 `to == 角色` 进收件人面，
+        父下一趟进循环时会在开场提示词里看到它，读一次即由 `mark_delivered` 登记已读
+        （同一需求不会一轮又一轮地被重复处理）。所以这里**没有新表、没有新文件**：
+        一条 `agent_message`，外加在同一行上带一格结构化的 `escalation`（`need` /
+        `kind` / `evidence`）—— 键名写在同一条记录里，父与审计面都能机器读。
+
+        它同时落一条 `agent_escalation` 事件（可审计的"这一趟为什么停在这里"）；
+        停的那一半在循环里（`stop_reason="escalated"` ⇒ 退出码 5，见 `cli`）。
+
+        ## 三态（受控拒绝，不许静默成功）
+
+        | 情形 | `reason` | 写不写 |
+        |---|---|---|
+        | 没有父（顶层 M / 这一趟的父就是它自己） | `not_caller` | **一行都不写** |
+        | 父的编号有、角色读不出来 | `parent_unknown` | 一行都不写（不猜一个收件人） |
+        | 没有会话身份（root/sid 都没挂上） | `no_session` | 一行都不写（写进错的会话 = 没写） |
+        | `need` 空 / 超 300 字 / `kind` 不在词表里 | `invalid_params` | 一行都不写 |
+        | 留言写盘失败 | `inbox_write_failed` | 写没成，如实报（不是"已上报"） |
+
+        成功那一档返回 `state="escalated"`（循环据此收工），失败那一档 `state="refused"`。
+        """
+        from . import agent_loop as AL          # 局部导入：`agent_loop` 顶层 import 本模块
+        from . import schema as S
+
+        mine = str(my_task_id or "") or current_task_id()
+        pid = str(parent_task_id or "") or current_parent()[0]
+        prole = str(parent_role or "") or current_parent()[1]
+        who = str(by or "") or current_caller_role()
+        base: dict[str, Any] = {"checked": True, "ok": False, "state": "refused",
+                                "to": "", "to_task_id": "", "need": "", "kind": "",
+                                "evidence": [], "msg_id": "", "reason": "", "error": "",
+                                "note": ""}
+
+        def _refuse(reason: str, why: str) -> dict[str, Any]:
+            out = dict(base)
+            out.update({"reason": reason, "error": why})
+            self._log(f"上行被拒（{reason}）：{why}", task_id=mine)
+            return out
+
+        text = str(need or "").strip()
+        if not text:
+            return _refuse("invalid_params", "need 不能为空：一句话说清要父代理做什么")
+        if len(text) > 300:
+            return _refuse("invalid_params", f"need 有 {len(text)} 字，超过 300 字的上限："
+                                             "说不清就说明还没想清要父代理做什么")
+        kind_name = str(kind or "").strip()
+        if kind_name not in ESCALATE_KINDS:
+            return _refuse("invalid_params",
+                           f"kind={kind_name!r} 不在受控取值里（{list(ESCALATE_KINDS)}）")
+        ev = [str(x).strip() for x in (evidence or ()) if str(x).strip()][:20]
+
+        # ---- 父 = 运行期解析出的召唤者。没有父 / 父就是我自己 ⇒ 受控拒绝（顶层 M 走这一支）
+        if not pid or (mine and pid == mine):
+            return _refuse(
+                "not_caller",
+                "这一趟没有召唤者（顶层发起，或父那一行就是我自己）⇒ 没有可上报的对象。"
+                "顶层 M 该用 `ask_user` 问人、或直接把判断写进收尾，而不是「上报给父」")
+
+        # ---- 收件人的角色：台账那一行是权威（父可能不是 M），运行期解析出的角色是退路
+        role, row_note = "", ""
+        try:
+            row = self._task(pid) or {}
+            role = str(row.get("role") or row.get("called_by") or "")
+        except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，不许当成"没有父"
+            row_note = f"父那一行（{pid}）没读成（{type(exc).__name__}: {exc}）"
+        if not role:
+            role = prole
+            row_note = row_note or f"父那一行（{pid}）没有 role"
+        if not role:
+            return _refuse("parent_unknown",
+                           f"父的编号是 {pid!r}，但它的角色读不出来（{row_note}）⇒ 不猜一个收件人")
+
+        root = str(session_root or "") or current_session()[0]
+        csid = str(sid or "") or current_session()[1]
+        if not root:
+            return _refuse("no_session",
+                           "没有会话根（root）⇒ 收件箱落在哪个会话都不确定："
+                           "按缺省会话写等于把这条上报丢进一个父不会读的文件")
+
+        subject = f"{ESCALATE_SUBJECT}（{kind_name}）：{text[:40]}"
+        body_lines = [
+            f"来自：{who or '（未知角色）'}（台账号 {mine or '未拿到'}）",
+            f"要父代理做什么：{text}",
+            f"类别：{kind_name}",
+            f"相关台账：{'、'.join(ev) if ev else '（没有点名的台账 id）'}",
+            "这一趟已停在交出判断的那一步之后（stop_reason=escalated）——"
+            "它不会自己往下做，等你处理完再续。",
+            "读一次即视为已处理（收件箱的『已读』标记由 `mark_delivered` 登记）。",
+        ]
+        if row_note:
+            body_lines.append(f"读数：{row_note} ⇒ 收件人按运行期解析出的角色写（{role}）")
+        msg_id, problem = AL.send_message(
+            Path(root), sender=who or S.CONDUCTOR_ROLE, to=role, subject=subject,
+            body="\n".join(body_lines), sid=(csid or None), from_task_id=mine,
+            extra={"escalation": {"need": text, "kind": kind_name, "evidence": ev,
+                                  "from_task_id": mine, "to_task_id": pid}},
+        )
+        if problem or not msg_id:
+            return _refuse("inbox_write_failed",
+                           f"留言没写成（{problem or '没有 msg_id'}）⇒ 这不算已上报")
+        # 可审计的那一条（与 `definition_ask` 同族：`message_id` 指向真的那行留言）
+        try:
+            from . import sessions as _SS
+
+            _SS.append(Path(root), {"kind": "agent_escalation", "role": who or "",
+                                    "from_task_id": mine, "to_role": role,
+                                    "to_task_id": pid, "msg_id": msg_id,
+                                    "need": text, "escalate_kind": kind_name,
+                                    "evidence": ev, "stamp": hashlib.sha1(
+                                        f"{mine}:{msg_id}".encode()).hexdigest()[:8]},
+                       sid=(csid or None))
+        except Exception as exc:  # noqa: BLE001 —— 留痕失败不许把"已经写进收件箱"改口
+            problem = f"{type(exc).__name__}: {exc}"
+        out = dict(base)
+        out.update({"ok": True, "state": "escalated", "to": role, "to_task_id": pid,
+                    "need": text, "kind": kind_name, "evidence": ev, "msg_id": msg_id,
+                    "reason": "", "error": "",
+                    "note": (f"已写进 {role} 的收件箱（msg_id={msg_id}）⇒ 这一趟以 "
+                             "stop_reason=escalated 收工，等父处理"
+                             + (f"；留痕没写成（{problem}）" if problem else ""))})
+        self._log(f"上行：{who or '?'} → {role}（{kind_name}）：{text[:60]}", task_id=mine)
+        return out
 
     # ---------------------------------------------------------------- 顶趟（F1）
     def open_top_level_run(self, role: str, task: str, *, by: str = "user",

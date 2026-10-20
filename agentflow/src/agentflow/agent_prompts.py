@@ -2118,7 +2118,46 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: **保留了全部 needle**：`tests/` 里被断言的字面量 1008 条、十格提示词里的具体字面量
 #: （反引号 code span 与裸路径）2459 条、`specs/e.NO_LEAN_REPLACEMENTS` 的 13 个左边，
 #: 逐条核过"改后仍在"（探针不进仓库，读数写在 `NOAI-REVIEW-REGISTER.md` 的批注里）。
-PROMPT_VERSION = "p168"
+#:
+#: p168 → p169（2026-10-20 14:20，**三条并行线同一刻落在一棵树上 ⇒ 只抬这一格**）：
+#: 抬版本的动作由主控那一趟「收口」统一做（三条线各自都只拿到一次抬版本的机会，
+#: 合并时按 `p41` 那次「两条线各自抬到 p40 ⇒ 合并再抬一格」的同一条纪律记在**新的一格**上）。
+#:   ① **M 的第 12 条 skill**：`agent_skills.CATALOG` 给 M 新增
+#:      `研究攻坚链-文献到收录证明`（七跳定序 A→B→C→D→F→V→B(收录证明)）⇒
+#:      M 那格提示词**多 148 字**（skill 索引行是它自己的段，别处不印）。锚点都是 M 手上
+#:      真有的东西：`conductor.summon` / `conductor.ledger` / `fs.read` + 链上各角色的动作名。
+#:   ② **`lit.*` 七件工具那一批**：`litstage.py`（新建）＋ `tools/search_tools.py`
+#:      注册七件 `lit.*`（检索台账的候选面）＋ `schema.py` 新表 `lit_candidates` ＋
+#:      `store.py` 接线 ＋ `specs/a.py` 的 `boundary` 换 97 字 ⇒
+#:      **工具面 86 → 93**、**A 的工具面 29 → 36**。提示词这一侧变的是 A 的 `boundary`：
+#:      伙伴表逐格印每个伙伴的 `duty` / `boundary` ⇒ 那段 97 字换掉之后**十格**都跟着换
+#:      （A 自己那一格也印），所以这一批与 `p164`「十条产出标准」同形：**十格全换值**。
+#:   ③ **第三条线在冻结前也落了进来**（`tools/conductor_tools.py` 的 `conductor.escalate`，
+#:      14:14:46；它的 `roles=` 是 A–H + V + M 全十个）⇒ 十格的工具面各 +1 件、共用段多一句
+#:      "卡住就往上抛、不借别人的边绕"。同一条线的 `specs/c.py` 的 `edges=("D",)` 与
+#:      `cli.py` 的退出码 6 档**不进提示词正文**（伙伴表只印 `duty` / `boundary`，退出码与
+#:      提示词无关）⇒ 它们只换快照那两格（`agent_surface_snapshot.json` 的 `edges` /
+#:      `tool_surface_snapshot.json` 的 `cli`），不换这里的摘要。
+#:   ④ **C 的两句假话**（`specs/c.py` 的 `boundary` + `local_notes` / `agent_prompts._FACULTY_LOCAL`
+#:      逐字同步的那一句）：`edges=("D",)` 落地后"你的可召唤边是空的""你自己不发请求（边是空的）"
+#:      都成了假话 ⇒ 只删掉"边是空的"那个断言（"你只能把候选交给 D" / "要有人往下做就走 D
+#:      （你只发这一种请求）"），其余一字不动。换值的格是 **C 自己 + 它的可见伙伴那几格**
+#:      （B / C / D / F / M），A / E / G / H / V 逐字未动。
+#:      于是工具面在这一刻的读数是 **94**（86 + 7 件 `lit.*` + 1 件 `conductor.escalate`）、
+#:      A 的工具面 **37** —— 比这一批开工时的计划（93 / 36）多一格，因为那条线先落地了。
+#:      这一格号钉的是**冻结那一刻的树**：逐文件 sha256 记在本次收口回报里，事后要判
+#:      "这一版号说的是哪一份提示词"，以那组 sha256 为准，不以日期为准。
+#: 走查口径与 `p164` 那一格相同：**`_FROZEN_PROMPT_DIGESTS` 是逐格现算的，这里不预先猜**
+#: （本批的现算读数是十格全换值，见 `tests/test_agent_prompts.py` 那张表的批注）。
+#: ⏱ **冻结时刻（三跳，写清是因为树一直在动）**：十格摘要首冻 **2026-10-20 14:20**；
+#: 那之后第三条线在 14:36 又改了 `conductor.escalate` 的 `returns` 声明（只动快照那一格，
+#: 不动任何提示词正文）⇒ 两份 golden 在 **14:40 复冻一次**；再之后主控裁定补上 ④（C 的两句
+#: 假话，14:57）⇒ 十格表按新树重算、两份 golden 在 **15:00 第三跳复冻**。
+#: 所以这一格号对应的是 **2026-10-20 15:00 那一刻的树**：那一刻逐文件的 sha256 记在本次
+#: 收口回报里（`agent_prompts.py` / `agent_skills.py` / `litstage.py` / `search_tools.py` /
+#: `conductor_tools.py` / `conductor.py` / `agent_loop.py` / `schema.py` / `store.py` /
+#: `specs/a.py` / `specs/c.py` / `cli.py` 逐个）。
+PROMPT_VERSION = "p169"
 
 
 
@@ -3962,7 +4001,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-    ("C", "能讨论"): "把结构读数讲清楚给 D 与人听；你自己不发请求（边是空的）。",
+    ("C", "能讨论"): "把结构读数讲清楚给 D 与人听；要有人往下做就走 D（你只发这一种请求）。",
 
 
 

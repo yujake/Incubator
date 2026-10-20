@@ -93,6 +93,20 @@ class ARunResult:
     #: 成本读数（形态照工具面的 `cost`）：`provider_calls` 是这一轮向上游发了几次。
     cost: dict = field(default_factory=dict)
 
+    # ---- 委托报告（业主 2026-10-20 第 3 条：报告是交付物，不是可选）
+    #
+    # 为什么这三格在 `ARunResult` 上而不是只写文件：调用方（主控 / D / H）读的是动作的
+    # 返回，而不是去猜盘上有哪个文件。「报告在哪、里面两块各几条」必须随这次动作一起交回 ——
+    # 否则"报告没写"与"报告写了但没被看到"在读数上同形。
+    #: 报告落点（`reports/lit-<request_id>.md` 的绝对路径）；空串 = 没写（理由见 `report_error`）。
+    report_path: str = ""
+    #: 报告"已入库"那一块的条数。
+    report_admitted: int = 0
+    #: 报告"未入库"那一块的条数（含理由）。
+    report_not_admitted: int = 0
+    #: 报告写失败的原因（空串 = 没失败）。文献已经落库，报告失败不该把它判成失败。
+    report_error: str = ""
+
     def to_dict(self) -> dict:
         return {
             "processed": self.processed,
@@ -115,6 +129,10 @@ class ARunResult:
             "role_providers": list(self.role_providers),
             "sources": [dict(s) for s in self.sources],
             "cost": dict(self.cost),
+            "report_path": self.report_path,
+            "report_admitted": self.report_admitted,
+            "report_not_admitted": self.report_not_admitted,
+            "report_error": self.report_error,
         }
 @dataclass
 class ClaimOutcome:

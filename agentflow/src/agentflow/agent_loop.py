@@ -1356,7 +1356,8 @@ def message_source(record: Mapping[str, Any]) -> dict[str, str]:
 
 def send_message(session_root: Path, *, sender: str, to: str, subject: str, body: str,
                  reply_to: str = "", sid: str | None = None, from_task_id: str = "",
-                 by_framework: bool = False) -> tuple[str, str]:
+                 by_framework: bool = False,
+                 extra: Mapping[str, Any] | None = None) -> tuple[str, str]:
     """发一条消息（append-only）。`to=PUBLIC` 是公共频道。返回 `(msg_id, 问题)`。
 
     编号口径：取现有最大号 + 1（`draft/83` D79）。旧写法是"数一数有多少条
@@ -1367,6 +1368,12 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
     `from_task_id` / `by_framework`（S6-a）：公共频道的可见面靠这两格判（见
     :func:`public_visibility`）。只在给了的时候写这两个键 —— 恒为假的键会让
     "谁都没写"与"框架特意写了假"在记录上长得一样，而历史判据是按逐键比对钉的。
+
+    `extra`（2026-10-19）：附加的结构化键，并进同一条记录（不给 ⇒ 与从前逐字节相同）。
+    今天只有 `conductor.escalate` 用它带 `escalation{need,kind,evidence}` ——
+    为什么不是"另发一条事件"：收件箱是**按 `agent_message` 收的**
+    （:func:`read_messages` 只认这一种 kind），另发一条会让"父收到了"与
+    "父拿到细节"落在两条消息上，而它们必须是同一条。
     """
     events, _problems = SS.read_session(session_root, sid=sid)
     used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
@@ -1381,6 +1388,11 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
         rec["from_task_id"] = str(from_task_id)
     if by_framework:
         rec["by_framework"] = True
+    if extra:
+        for k, v in dict(extra).items():
+            # 核心那几格不许被附加键盖掉（撞键 = 一条消息的身份被改写）
+            if k not in rec:
+                rec[str(k)] = v
     _path, problem = SS.append(session_root, rec, sid=sid)
     return msg_id, problem
 
@@ -3606,6 +3618,34 @@ class AgentLoop:
                     run.final = (f"第 {step + 1} 步问用户时被取消（{qid}）：这一趟停在这里。"
                                  f"问题还在待答清单里 —— 取消不等于用户答过了")
                 break
+            # ---- 上报召唤者（`conductor.escalate`，业主 2026-10-19「父子天然双向」）
+            #
+            # 这一支与上面 `ask_user` 那一支同形、同理由：需求已经写进父的收件箱了，
+            # 这一趟就不该再替父往下做（那正是"上报"与"继续自己猜"的分界）。
+            # 为什么必须**优雅停**而不是抛错：它不是失败 —— 需求送到了、台账有留痕、
+            # `--resume` 能接着跑，所以它有自己的退出码 5（与 3/4 同族「成功的中断」）。
+            #
+            # 判据读 `data.state` 而不是"工具名对不对"：工具名会被别名改写
+            # （`_do_tool` 的 `aliased_from`），而 `state="escalated"` 只有真的走通了
+            # 那条上行通道才会有 —— 受控拒绝（`not_caller`）那一档 `ok=False`、`data=None`，
+            # 于是它继续跑（顶层 M 调它不该把 M 自己停掉）。
+            #
+            # ⚠️ `shape` 在工具调用这一档是 `"tool"`（`_decode_shape` 返回的是 SHAPES 的
+            # 键），工具真名在 `payload["name"]` —— 写成 `shape == "conductor.escalate"`
+            # 会永远不成立，于是模型每步都重发一次（每次一个新 msg_id、读数不同 ⇒
+            # 连"原地打转"都抓不住），跑成一条 O(n²) 的死循环。这一句是那一版的修法。
+            _esc = result.get("data") if isinstance(result.get("data"), dict) else {}
+            if (shape == "tool" and str(payload.get("name") or "") == "conductor.escalate"
+                    and _esc.get("state") == "escalated"):
+                run.stop_reason = "escalated"
+                run.final = (f"已上报召唤者 {_esc.get('to') or '（角色未记）'}"
+                             f"（{_esc.get('kind') or '?'}）：{_esc.get('need') or ''}；"
+                             f"留言 {_esc.get('msg_id') or '（没有编号）'} 已在它下一趟的收件箱里 —— "
+                             "这一趟停在交出判断的那一步之后，等它处理完再续。")
+                run.notes.append(
+                    f"以 escalated 收工：上报给 {_esc.get('to')}（台账号 "
+                    f"{_esc.get('to_task_id') or '?'}，msg_id={_esc.get('msg_id') or '?'}）")
+                break
         else:
             # 到不了这里（上面的 `for` 走的是无限计数器，裁定 12-K：不设步数硬闸）。
             # 留着这一支只为"万一有人把计数器换成有限 range"时不静默：见下面的判据。
@@ -4090,6 +4130,18 @@ class AgentLoop:
         - `stop_file`：`--stop-file`（或这里给的路径）指向的那个文件存在于盘上；
         - `user_stop`：**已删除**（业主口径 2026-10-17「删掉旁路」：停意由主控**理解意思**后
           调 `conductor.stop` 完成，**不靠单词匹配** —— 字面匹配漏中文「停」「收工」）。
+
+        ## `escalated` **不在这张表里**（业主 2026-10-19「父子天然双向」）
+
+        `conductor.escalate` 收工时那一趟的 `stop_reason` 是 `"escalated"`，而它
+        **不是**用户叫停：停意不是任何人从外面下的，是这一趟自己判定"这件事该交回召唤者"。
+        所以它不由本方法产生（本方法只会给 `stop_file` / `force_stop` /
+        `interrupted_by_parent` 三个取值），也不许被读成"用户停"——
+        `cli.EXIT_CODE_BY_STOP` 把它归 5（自行停止），归 4（中途被叫停）的是
+        `stop_file` / `force_stop` / `budget` / `interrupted_by_parent`。
+        判据：`tests/test_escalate_goes_up_and_stops.py` 里那条
+        `test_escalated_is_not_read_as_a_user_stop`（两向都钉：落盘上没有停机开关，
+        而 `_user_stop_reason` 从头到尾没给过这个值）。
 
         为什么两处都要在「步循环里」查：`autonomy` 那套判据只在「每轮之间」跑，
         而单趟 `run-agent`（不 `--rounds`）根本不走那条路 —— 真机实测（2026-10-04）：
@@ -4742,7 +4794,16 @@ class AgentLoop:
 
             tscope = TT.tool_deadline(name)
             with tscope:
-                with calling_as(str(self.my_task_id or ""), self.role):
+                # 2026-10-19（业主裁定「父子天然双向」）：除了"我是谁"，还把**这一趟的
+                # 召唤者**与**会话身份**挂上 —— `conductor.escalate` 要把需求写进父的收件箱，
+                # 而父是 `run()` 开头由 `_resolve_parent(...)` 解析出来的那一个
+                # （不是工具自己猜的、也**不要求**在 `edges` 里登记）。
+                # 会话身份同样必须现挂：按缺省会话写会把上报丢进一个父不会读的文件。
+                with calling_as(str(self.my_task_id or ""), self.role,
+                                parent_task_id=str(self.parent_task_id or ""),
+                                parent_role=str(self.parent_role or ""),
+                                session_root=str(self.session_root or ""),
+                                sid=str(self.sid or "")):
                     res = self.registry.call(name, role=self.role, **args)
         except Exception as exc:  # 工具层抛错也要变成"模型看得见的结果"
             self._note_tool_deadline(tscope)

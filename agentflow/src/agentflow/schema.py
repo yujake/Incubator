@@ -116,6 +116,73 @@ SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 #:   skipped           —— 未尝试下载（无 pdf_url / 关闭下载 / 达到单请求上限）
 DOWNLOAD_STATUSES = ("ok", "content_mismatch", "failed", "skipped")
 
+#: 「待新增文献列表」（`lit_candidates`）的槽位状态词表。
+#:
+#: 为什么它是**五态**而不是"在/不在"两态：业主口径（2026-10-20）要求"撤掉 = 该槽位置空、
+#: 并记录删掉了哪一篇、为什么"，"审内容后拒收"要写理由，"正式的入库"要能回填 `lit_id`，
+#: 且"一键迁移之后清空该委托的列表（可追、不许物理删）"。
+#: 把它们折成一个布尔（`deleted`）会让四种完全不同的处置在盘上同形 ——
+#: 「撤掉（等下一批补位）」/「拒收（审过了，内容不行）」/「入库（成了 literature 的一行）」/
+#: 「清空（迁移结算时按配额或未审完而收尾）」的下一步动作相反，折起来之后谁也读不出当初是哪一种。
+#:
+#:   pending    —— 在列表里等着被审（唯一可以被 stage_withdraw / stage_reject / admit 的态）
+#:   withdrawn  —— 被撤掉：槽位**仍然在列表里**（序号不复用），`withdrawn_reason` 必须非空
+#:   rejected   —— 审内容后拒收：`reject_reason` 必须非空（重叠检查没通过也走这一档）
+#:   admitted   —— 已正式入库：`lit_id` 必须非空（就是 literature 里那一行）
+#:   cleared    —— 迁移结算时被清空的残留（超配额 / 未审完）：`cleared_at` 与 `clear_reason`
+#:                 必须非空 —— 它让"本委托的列表已经清空"是一条可判定的事实，而不是"应该清了吧"
+CANDIDATE_STATUSES: tuple[str, ...] = ("pending", "withdrawn", "rejected", "admitted", "cleared")
+
+#: 「待新增文献列表」的**筛选理由**受控词表（业主 2026-10-20 第 3 条：
+#: "理由用登记表里的受控取值，不要自由发挥"）。
+#:
+#: 为什么要受控：这些理由会进**委托报告**的"未入库"那一块，而报告是交给下一次委托的
+#: D/H 读的交付物。自由文本的理由没法按类统计（"这一轮到底挡了几篇重复、几篇低质"），
+#: 也没法被机器判据检查 —— 而"报告里两块都在不在"正是这次的判据之一。
+#:
+#: 每一档都是**一个可判定的情形**，不是一句评价：
+#:   withdrawn_by_reviewer     —— 审的时候自己撤掉（内容与本次检索无关/不够好，转去找别的）
+#:   rejected_off_topic        —— 审内容后拒收：与本次检索无关
+#:   rejected_low_quality      —— 审内容后拒收：内容质量不足（无摘要/无正文/非学术）
+#:   duplicate_doi             —— DOI 与本地库某一行完全相同（同一篇，视为重复）
+#:   overlap_without_new_content —— 与本地库标题高度重叠且调用方没给 new_content
+#:   overlap_ok_false          —— 调用方显式标了 overlap_ok=False
+#:   registration_failed       —— 过了筛，但现有登记路径没给出 lit_id（入库失败，不是成功）
+#:   over_cap                  —— 本次委托的入库配额已满（≤10 篇）
+#:   not_screened              —— 一键迁移结算时仍未审完，随委托一并清空
+CANDIDATE_REASON_CODES: tuple[str, ...] = (
+    "withdrawn_by_reviewer",
+    "rejected_off_topic",
+    "rejected_low_quality",
+    "duplicate_doi",
+    "overlap_without_new_content",
+    "overlap_ok_false",
+    "registration_failed",
+    "over_cap",
+    "not_screened",
+)
+
+#: 理由码的中文标签（写进行上的那一栏、并进报告的括号里）。
+#:
+#: 与 `CANDIDATE_REASON_CODES` **同文件、同顺序的语义**：加一个码必须同时加一条标签，
+#: 否则报告里会出现一个只有码没有说法的条目（`assert` 在下面的导入期判据里守着）。
+CANDIDATE_REASON_LABELS: dict[str, str] = {
+    "withdrawn_by_reviewer": "已撤掉（审内容后自己撤的）",
+    "rejected_off_topic": "拒收（与本次检索无关）",
+    "rejected_low_quality": "拒收（内容质量不足）",
+    "duplicate_doi": "拒收（DOI 与本地库完全相同 ⇒ 视为重复）",
+    "overlap_without_new_content": "拒收（与本地库重叠度高且没给新内容）",
+    "overlap_ok_false": "拒收（调用方显式标了不可收）",
+    "registration_failed": "没入库（登记路径没给出 lit_id）",
+    "over_cap": "未入库（本次委托的入库配额已满，≤10 篇）",
+    "not_screened": "未入库（迁移结算时仍未审完）",
+}
+
+assert set(CANDIDATE_REASON_LABELS) == set(CANDIDATE_REASON_CODES), (
+    "CANDIDATE_REASON_LABELS 与 CANDIDATE_REASON_CODES 的取值不一致 —— "
+    "报告里会出现只有码没有说法的条目（加一个理由码必须同时加一条标签）"
+)
+
 #: `literature.matched` 的受控词表（`draft/37` §2 R1b）：检索回来的到底是不是这一篇。
 #:
 #:   exact     —— 题名/年份/DOI 都对得上派活时点名的那一篇
@@ -432,6 +499,153 @@ class Literature:
                 f"收到 {self.matched!r}。拼错的后果与 download.status 同族："
                 "下游靠这个字符串判断'要不要信这一篇'，而错拼只会静默放行。"
             )
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class LitCandidate:
+    """「待新增文献列表」的一行（业主 2026-10-20 口径）。
+
+    ## 它为什么必须是一张自己的表，而不是 `literature` 的一个 processed 值
+
+    业主给的那条规格里有两件**在 literature 上无处可写**的事实：
+
+    1. **槽位**：列表内序号自动分配、**不复用**，撤掉之后那一位**空着**
+       （"第 3 号被撤了哪一篇、为什么"必须还查得出来）；
+    2. **筛选过程本身**：撤掉的理由、拒收的理由、与本地库的重叠读数、以及
+       "本次检索要的新内容"是什么 —— 这些是"为什么这一篇最后没进来"的证据。
+
+    把它们塞进 literature 的 `download.error` 或自由文本里，等于把证据藏进一句散文：
+    谁都没法按状态查，也无法证明"12 条里只入了 9 条"是因为撤了 3 条而不是丢了 3 条。
+
+    ## 三处不变量（`validate()` 守的正是这几条）
+
+    - `status == "withdrawn"` ⇒ `withdrawn_reason` 非空（撤掉必须说清为什么）；
+    - `status == "rejected"` ⇒ `reject_reason` 非空（拒收同样）；
+    - `status == "admitted"` ⇒ `lit_id` 非空（入库就必须指得出 literature 里的那一行）；
+    - `status == "cleared"` ⇒ `cleared_at` 与 `clear_reason` 都非空（"清空"是一次有时间的
+      收尾动作，不是"这一行从来没被处理过"）。
+
+    这些不变量都写成"状态 ⇒ 证据非空"，而不是"有理由 ⇒ 改状态"：后者允许
+    "先撤、后补理由"的两段式，而两段式在崩溃点上会留下一行**撤了但说不出为什么**的记录。
+
+    ## 字段口径
+
+    - `slot`：主键。列表内序号，由 `store.alloc_id("candidate")` 发（六位、只增不复用）；
+      批次之间连续编号（第 2 批从第 1 批的下一个号起），所以"12 条 + 3 条"是 1..15。
+    - `request_id`：这一行属于**哪一次查询委托**（`r-NNNNNN` = `search_requests` 的一行）。
+      业主 2026-10-20 第 1 条：列表的生命周期 = 一次委托 ⇒ 默认视图按它过滤，
+      旧委托的行不参与本次筛选（但它们不删掉，审计时按 `request_id` 查得到）。
+    - `batch`：第几批（A 可以再找一批追加；批次是"这次广搜的结果"这个语义的单位）。
+    - `relevance`：一句"它为什么与本次检索相关"（委托报告的已入库块要用它）。
+    - `reason_code`：筛除理由的**受控取值**（`CANDIDATE_REASON_CODES`，进报告用）。
+    - `overlap_score` / `overlap_kind` / `overlap_with`：与本地库的重叠读数。
+      `overlap_kind` 的受控取值见 `litstage.OVERLAP_KINDS`（`doi_exact` / `title_jaccard`）。
+      拿不到读数时是 `None` / 空串 —— 三态：没查 ≠ 查了没重叠。
+    - `new_content`：重叠度高时**调用方必须给**的那句话（本次检索要的新内容是什么）。
+      "给了但没答到点上"机器判不了，所以这里只判非空（这是它作为证据的下限）。
+    """
+
+    slot: str
+    batch: int
+    status: str
+    title: str
+    #: 这一次查询委托（`search_requests.request_id`）：列表按委托重置，默认视图只按它过滤。
+    request_id: str = ""
+    doi: str | None = None
+    provider: str = ""
+    year: int | None = None
+    type_code: str = "J"
+    summary: str = ""
+    url: str = ""
+    added_at: str = ""
+    #: 一句"它为什么与本次检索相关"（委托报告的已入库块要用它）。
+    relevance: str = ""
+    #: 入库后回填的 literature 行号；未入库时是 `None`（不是空串 —— 空串是"说得出但为空"）。
+    lit_id: str | None = None
+    admitted_at: str = ""
+    #: 筛除理由的受控取值（`CANDIDATE_REASON_CODES` 之一，或空串 = 还没筛）。
+    reason_code: str = ""
+    #: 撤掉的理由（`status == "withdrawn"` 时必须非空）。
+    withdrawn_reason: str = ""
+    #: 审内容后拒收的理由（`status == "rejected"` 时必须非空）。
+    reject_reason: str = ""
+    #: 迁移结算清空该槽的时刻与理由（`status == "cleared"` 时两者都必须非空）。
+    cleared_at: str = ""
+    clear_reason: str = ""
+    #: 重叠度高时调用方给的"本次检索要的新内容"。
+    new_content: str = ""
+    overlap_score: float | None = None
+    overlap_kind: str = ""
+    overlap_with: str | None = None
+    #: 调用方对"重叠也可以收"的显式声明（`None` = 没表态）。它不替代 `new_content`：
+    #: 真正的放行判据在 `litstage.admit`，这里的值只如实记下"谁来电话说过可以收"。
+    overlap_ok: bool | None = None
+
+    def validate(self) -> None:
+        require_id(self.slot, "slot")
+        if not isinstance(self.batch, int) or isinstance(self.batch, bool) or self.batch < 1:
+            raise ValueError(f"batch 必须是 >= 1 的整数（第几批），收到 {self.batch!r}")
+        if not str(self.request_id or "").strip():
+            raise ValueError(
+                f"槽位 {self.slot} 没有 request_id —— 待新增列表按**委托**重置（业主 2026-10-20 "
+                "第 1 条）：没有委托号的行会与下一次委托串在一起，而「串了」没有任何东西会报错"
+            )
+        require_process_id(self.request_id, "request")
+        if self.status not in CANDIDATE_STATUSES:
+            raise ValueError(
+                f"status 必须是 {CANDIDATE_STATUSES} 之一，收到 {self.status!r}。"
+                "拼错的后果与 download.status 同族：下游按这个字符串决定「还能不能动这一槽」，"
+                "而错拼只会静默地把它当成一个不认识的态"
+            )
+        if not str(self.title or "").strip():
+            raise ValueError(
+                "title 不能为空 —— 撤掉的槽位**保留**题名，正是「记下删掉了哪一篇」的落点；"
+                "空题名的空槽位等于一条查不出内容的记录"
+            )
+        if self.type_code and self.type_code not in LIT_TYPES:
+            raise ValueError(f"type_code 必须是 {LIT_TYPES} 之一，收到 {self.type_code!r}")
+        if self.reason_code and self.reason_code not in CANDIDATE_REASON_CODES:
+            raise ValueError(
+                f"reason_code 必须是受控取值 {CANDIDATE_REASON_CODES} 之一或空串，"
+                f"收到 {self.reason_code!r} —— 报告里的理由只认受控取值（不许自由发挥）"
+            )
+        if self.status == "withdrawn" and not str(self.withdrawn_reason or "").strip():
+            raise ValueError(
+                f"槽位 {self.slot} 标了 status='withdrawn' 却没有 withdrawn_reason —— "
+                "撤掉必须写清为什么（否则「空槽位」与「从来没这一条」在盘上同形）"
+            )
+        if self.status == "rejected" and not str(self.reject_reason or "").strip():
+            raise ValueError(
+                f"槽位 {self.slot} 标了 status='rejected' 却没有 reject_reason —— "
+                "拒收必须写清为什么（业主口径：拒收要写理由）"
+            )
+        if self.status == "admitted" and not str(self.lit_id or "").strip():
+            raise ValueError(
+                f"槽位 {self.slot} 标了 status='admitted' 却没有 lit_id —— "
+                "入库必须指得出 literature 里的那一行（否则「入库了」是一句无法核对的话）"
+            )
+        if self.status == "cleared":
+            if not str(self.cleared_at or "").strip():
+                raise ValueError(
+                    f"槽位 {self.slot} 标了 status='cleared' 却没有 cleared_at —— "
+                    "「清空」是一次有时间的收尾动作，没有时刻的 cleared 与「没处理过」同形"
+                )
+            if not str(self.clear_reason or "").strip():
+                raise ValueError(
+                    f"槽位 {self.slot} 标了 status='cleared' 却没有 clear_reason —— "
+                    "清空也要说清为什么（配额满了 / 没审完），否则报告里那一行说不出理由"
+                )
+        if self.lit_id:
+            require_id(self.lit_id, "lit_id")
+        if self.overlap_score is not None:
+            s = float(self.overlap_score)
+            if not (0.0 <= s <= 1.0):
+                raise ValueError(f"overlap_score 是比率口径（0..1），收到 {self.overlap_score!r}")
+        if self.overlap_ok is not None and not isinstance(self.overlap_ok, bool):
+            raise ValueError("overlap_ok 必须是 bool 或 None")
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -3012,6 +3226,10 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     "tasks": {"artifacts": "set", "inputs": "set"},
     "usage_ledger": {},
     "eval_results": {},
+    # 待新增文献列表（业主 2026-10-20）：**没有任何数组字段** —— 空 dict 是"这张表没有
+    # 数组字段"这个事实本身，不是"忘了登记"。登记它是必须的：未登录的表会让
+    # `verify` 的 `undeclared_array_field` 在将来有人加一个 list 字段时失去对象。
+    "lit_candidates": {},
 }
 
 
@@ -3101,6 +3319,11 @@ TABLES: dict[str, dict] = {
     "tasks": {"file": "tasks.json", "row": Task, "id_field": "task_id", "id_kind": "task"},
     "usage_ledger": {"file": "usage_ledger.json", "row": UsageEntry, "id_field": "usage_id", "id_kind": "usage"},
     "eval_results": {"file": "eval_results.json", "row": EvalResult, "id_field": "eval_id", "id_kind": "eval"},
+    # 待新增文献列表（业主 2026-10-20 口径）：一次检索的候选先进这里，审完才入 literature。
+    # `slot` 吃的是 4 位编号空间（`ID_COUNTERS["candidate"]`）：它必须**只增不复用**
+    # （撤掉的槽位照样占着号），而"不复用"这件事只能由发号器保证 —— 手写序号迟早会重用。
+    "lit_candidates": {"file": "lit_candidates.json", "row": LitCandidate,
+                       "id_field": "slot", "id_kind": "candidate"},
 }
 
 #: 编号空间计数器覆盖的表（search_requests 用 r-NNNNNN，reprocess_requests 用 p-NNNNNN，
@@ -3126,6 +3349,9 @@ ID_COUNTERS = {
     "finding": "finding_id",
     "usage": "usage_id",
     "eval": "eval_id",
+    # 待新增文献列表的槽位号（业主 2026-10-20）：与其余知识实体同样吃 4 位编号空间 ——
+    # "序号不复用"必须由发号器保证（见 `TABLES["lit_candidates"]` 的注释）。
+    "candidate": "slot",
 }
 
 
@@ -3522,4 +3748,6 @@ def row_from_dict(table: str, raw: dict):
         return UsageEntry(**{k: raw[k] for k in raw if k in UsageEntry.__dataclass_fields__})
     if table == "eval_results":
         return EvalResult(**{k: raw[k] for k in raw if k in EvalResult.__dataclass_fields__})
+    if table == "lit_candidates":
+        return LitCandidate(**{k: raw[k] for k in raw if k in LitCandidate.__dataclass_fields__})
     raise ValueError(f"未知表名：{table}")

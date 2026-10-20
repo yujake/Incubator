@@ -1,9 +1,111 @@
 {
- "note": "工具说明压缩（业主批准的打法之一）的**改前基线**。declarations 是压缩前每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。baseline_summary_chars 是压缩前全部 summary 的字符总数，判据 ② 要求现值 ≤ 75%。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ③ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。",
- "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 86 件工具（与 tests/test_tool_summary_readings.py 同一口径）",
- "n_tools": 86,
+ "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 86 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。",
+ "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 94 件工具（与 tests/test_tool_summary_readings.py 同一口径）",
+ "n_tools": 94,
+ "n_cohort": 86,
  "baseline_summary_chars": 8932,
  "max_ratio": 0.75,
+ "compression_cohort": [
+  "analysis.register_report",
+  "attack.check_budget",
+  "attack.create_plan",
+  "attack.list_plans",
+  "attack.pick_next_subgoal",
+  "attack.status",
+  "attack.step",
+  "conductor.acceptance",
+  "conductor.board",
+  "conductor.broadcast",
+  "conductor.cancel",
+  "conductor.closing",
+  "conductor.ensure_project",
+  "conductor.ledger",
+  "conductor.resume_brief",
+  "conductor.role_spec",
+  "conductor.state",
+  "conductor.status_report",
+  "conductor.stop",
+  "conductor.summon",
+  "conductor.summon_many",
+  "doc.build_document",
+  "doc.compose_claim",
+  "doc.list_documents",
+  "doc.paper_compile",
+  "doc.register_dependency",
+  "doc.scan_claim",
+  "fs.delete",
+  "fs.edit",
+  "fs.list",
+  "fs.move",
+  "fs.read",
+  "fs.search",
+  "fs.stat",
+  "fs.write",
+  "graph.build",
+  "graph.neighbors",
+  "graph.relations_between",
+  "graph.stats",
+  "manuscripts.list",
+  "manuscripts.read",
+  "ocr.backends",
+  "ocr.detect_text_layer",
+  "ocr.run",
+  "research.list_gaps",
+  "research.poll_waiting",
+  "research.set_status",
+  "research.submit_gap",
+  "research.write_note",
+  "review.list_findings",
+  "review.record_finding",
+  "review.report",
+  "review.review_document",
+  "review.scan_document",
+  "review.verify_fixes",
+  "search.dedup_check",
+  "search.download",
+  "search.ingest_local",
+  "search.literature",
+  "search.local",
+  "search.providers",
+  "search.register",
+  "search.shelf",
+  "search.walk_citations",
+  "table.count",
+  "table.create",
+  "table.delete",
+  "table.get",
+  "table.list",
+  "table.schema",
+  "table.search",
+  "table.update",
+  "text.extract",
+  "trace.chain",
+  "trace.concept",
+  "trace.literature",
+  "trace.relation",
+  "verify.check_formal",
+  "verify.code_hash",
+  "verify.detect_verifier",
+  "verify.evidence_for",
+  "verify.list_experiments",
+  "verify.list_verifications",
+  "verify.read_proof",
+  "verify.run_experiment",
+  "verify.verify_proof"
+ ],
+ "added_after_compression": {
+  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`），不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们**必须**在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 8 件不该进比例。",
+  "tools": [
+   "conductor.escalate",
+   "lit.admit",
+   "lit.admit_all",
+   "lit.overlap_check",
+   "lit.stage_add",
+   "lit.stage_list",
+   "lit.stage_reject",
+   "lit.stage_withdraw"
+  ]
+ },
  "declarations": {
   "analysis.register_report": {
    "params": {
@@ -499,6 +601,61 @@
    ],
    "tags": [],
    "handler_name": "functools.partial"
+  },
+  "conductor.escalate": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "need": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "一句话说清要父代理做什么（≤300 字）"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "fetch_fulltext",
+       "review",
+       "reroute",
+       "missing_input",
+       "other"
+      ],
+      "description": "哪一类：fetch_fulltext / review / reroute / missing_input / other"
+     },
+     "evidence": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 20,
+      "description": "哪些台账 id 需要它（`lit:` / `stmt:` / `exp:` 等，可空）"
+     }
+    },
+    "required": [
+     "need",
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'checked','ok','state','to','to_task_id','need','kind','evidence','msg_id','reason','error','note'}",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "V",
+    "M"
+   ],
+   "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
   },
   "conductor.ledger": {
    "params": {
@@ -1612,6 +1769,383 @@
    "tags": [],
    "handler_name": "functools.partial"
   },
+  "lit.admit": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "slots": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "maxLength": 40
+      },
+      "minItems": 1,
+      "maxItems": 200
+     },
+     "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": {
+       "type": "object",
+       "properties": {
+        "slot": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 40
+        },
+        "new_content": {
+         "type": "string",
+         "maxLength": 2000,
+         "description": "本次检索要的新内容（重叠度高时必须有）"
+        },
+        "overlap_ok": {
+         "type": "boolean",
+         "description": "调用方对「重叠也可以收」的表态；不替代 new_content"
+        }
+       },
+       "required": [
+        "slot"
+       ],
+       "additionalProperties": false
+      },
+      "description": "逐条带 new_content / overlap_ok（优先于调用级参数）"
+     },
+     "request_id": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "哪一次委托（不给 = 当前委托）"
+     },
+     "batch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+     },
+     "new_content": {
+      "type": "string",
+      "maxLength": 2000
+     },
+     "overlap_ok": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'ok','kind','whole_call_refused','reason','request_id','batch','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/no_target/mixed...) + 三个上限读数",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "lit",
+    "admit"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "lit.admit_all": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "request_id": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "哪一次委托（不给 = 当前委托）"
+     },
+     "new_content": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "本委托统一的「要的新内容」（逐条优先）"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "lit",
+    "admit",
+    "report"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "lit.overlap_check": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600
+     },
+     "doi": {
+      "type": "string",
+      "maxLength": 300
+     }
+    },
+    "required": [
+     "title"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'title','doi','checked','duplicate','overlap_score','overlap_kind','overlap_with','requires_new_content','reason'}；失败：ok=False + kind(no_store/store_error) + checked=False（**重叠没查**，不是「没有重叠」）",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "lit",
+    "stage",
+    "overlap"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "lit.stage_add": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "这一次查询委托（search_requests 的行号，如 r-000001）；换一个号就是开始下一次委托"
+     },
+     "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+       "type": "object",
+       "properties": {
+        "title": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 600
+        },
+        "doi": {
+         "type": "string",
+         "maxLength": 300
+        },
+        "provider": {
+         "type": "string",
+         "maxLength": 80
+        },
+        "year": {
+         "type": "integer",
+         "minimum": 1000,
+         "maximum": 2999
+        },
+        "type_code": {
+         "type": "string",
+         "enum": [
+          "J",
+          "M",
+          "C",
+          "D",
+          "R",
+          "S",
+          "P",
+          "N",
+          "EB",
+          "Z"
+         ]
+        },
+        "summary": {
+         "type": "string",
+         "maxLength": 4000
+        },
+        "url": {
+         "type": "string",
+         "maxLength": 1000
+        },
+        "relevance": {
+         "type": "string",
+         "maxLength": 400,
+         "description": "一句「它为什么与本次检索相关」，委托报告要用"
+        }
+       },
+       "required": [
+        "title"
+       ],
+       "additionalProperties": false
+      }
+     },
+     "batch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000,
+      "description": "第几批（不给 = 本委托的下一批）"
+     }
+    },
+    "required": [
+     "request_id",
+     "entries"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'request_id','batch','count','staged'}；staged[] 每项是 {'slot','batch','title'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/bad_entry/store_error) 之一 + 明细",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "lit",
+    "stage",
+    "add"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "lit.stage_list": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "request_id": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "哪一次委托（不给 = 当前委托；*= 全部委托）"
+     },
+     "batch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "pending",
+       "withdrawn",
+       "rejected",
+       "admitted",
+       "cleared"
+      ]
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "returns": "{'request_id','current_request_id','batch','status','count','counts','gaps','rows','total_all_delegations','note'}；counts 是 {'pending','withdrawn','rejected','admitted','cleared'} 五个计数；rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year','type_code','summary','url','added_at','relevance','lit_id','admitted_at','reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason','new_content','overlap_score','overlap_kind','overlap_with','overlap_ok'}；失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)",
+   "side_effect": "read",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "lit",
+    "stage",
+    "list"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "lit.stage_reject": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "slot": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+     },
+     "reason_code": {
+      "type": "string",
+      "enum": [
+       "withdrawn_by_reviewer",
+       "rejected_off_topic",
+       "rejected_low_quality",
+       "duplicate_doi",
+       "overlap_without_new_content",
+       "overlap_ok_false",
+       "registration_failed",
+       "over_cap",
+       "not_screened"
+      ]
+     },
+     "note": {
+      "type": "string",
+      "maxLength": 400
+     }
+    },
+    "required": [
+     "slot",
+     "reason_code"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'slot','status','reason_code','reason','title','request_id','batch'}；失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/store_error)",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "lit",
+    "stage",
+    "reject"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "lit.stage_withdraw": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "slot": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+     },
+     "reason_code": {
+      "type": "string",
+      "enum": [
+       "withdrawn_by_reviewer",
+       "rejected_off_topic",
+       "rejected_low_quality",
+       "duplicate_doi",
+       "overlap_without_new_content",
+       "overlap_ok_false",
+       "registration_failed",
+       "over_cap",
+       "not_screened"
+      ]
+     },
+     "note": {
+      "type": "string",
+      "maxLength": 400,
+      "description": "给人看的那一句（可空）"
+     }
+    },
+    "required": [
+     "slot",
+     "reason_code"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'slot','status','reason_code','reason','title','request_id','batch'}；失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/store_error)",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "A"
+   ],
+   "tags": [
+    "lit",
+    "stage",
+    "withdraw"
+   ],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
   "manuscripts.list": {
    "params": {
     "type": "object",
@@ -2696,9 +3230,10 @@
        "review_findings",
        "tasks",
        "usage_ledger",
-       "eval_results"
+       "eval_results",
+       "lit_candidates"
       ],
-      "description": "16 张表之一"
+      "description": "17 张表之一"
      },
      "filter": {
       "type": "object",
@@ -2752,9 +3287,10 @@
        "review_findings",
        "tasks",
        "usage_ledger",
-       "eval_results"
+       "eval_results",
+       "lit_candidates"
       ],
-      "description": "16 张表之一"
+      "description": "17 张表之一"
      },
      "row": {
       "type": "object",
@@ -2807,9 +3343,10 @@
        "review_findings",
        "tasks",
        "usage_ledger",
-       "eval_results"
+       "eval_results",
+       "lit_candidates"
       ],
-      "description": "16 张表之一"
+      "description": "17 张表之一"
      },
      "id": {
       "type": "string",
@@ -2862,9 +3399,10 @@
        "review_findings",
        "tasks",
        "usage_ledger",
-       "eval_results"
+       "eval_results",
+       "lit_candidates"
       ],
-      "description": "16 张表之一"
+      "description": "17 张表之一"
      },
      "id": {
       "type": "string",
@@ -2919,9 +3457,10 @@
        "review_findings",
        "tasks",
        "usage_ledger",
-       "eval_results"
+       "eval_results",
+       "lit_candidates"
       ],
-      "description": "16 张表之一"
+      "description": "17 张表之一"
      },
      "limit": {
       "type": "integer",
@@ -3020,9 +3559,10 @@
        "review_findings",
        "tasks",
        "usage_ledger",
-       "eval_results"
+       "eval_results",
+       "lit_candidates"
       ],
-      "description": "16 张表之一"
+      "description": "17 张表之一"
      },
      "query": {
       "type": "string",
@@ -3091,9 +3631,10 @@
        "review_findings",
        "tasks",
        "usage_ledger",
-       "eval_results"
+       "eval_results",
+       "lit_candidates"
       ],
-      "description": "16 张表之一"
+      "description": "17 张表之一"
      },
      "id": {
       "type": "string",
@@ -3616,6 +4157,35 @@
    "handler_name": "functools.partial"
   }
  },
+ "contract_amendments": [
+  {
+   "tools": [
+    "table.count",
+    "table.create",
+    "table.delete",
+    "table.get",
+    "table.list",
+    "table.search",
+    "table.update"
+   ],
+   "key": "params",
+   "reason": "表枚举新增 lit_candidates（16→17）",
+   "date": "2026-10-20",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "params/properties/table/description",
+     "from": "16 张表之一",
+     "to": "17 张表之一"
+    },
+    {
+     "op": "append_item",
+     "path": "params/properties/table/enum",
+     "item": "lit_candidates"
+    }
+   ]
+  }
+ ],
  "summary_lens_before": {
   "analysis.register_report": 192,
   "attack.check_budget": 29,

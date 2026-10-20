@@ -573,3 +573,96 @@ def tmp_path_root():
     from pathlib import Path
 
     return Path(tempfile.mkdtemp(prefix="agentflow-skills-surface-test-"))
+
+
+# --------------------------------------------------------------------------------------
+# 研究攻坚链：七跳的**名字与顺序**
+# --------------------------------------------------------------------------------------
+#
+# 业主给的那条链是 `A → B → C → D → F → V → B(收录证明)`，并且逐字说「顺序即语义」。
+# 所以这一格不能只判"七个名字都在"——**顺序被调换时，七个名字一个不少**，
+# 而那条链的意思整个反了（先是"从图里看出更短路径再立猜想"，调换之后就成了
+# "先攻坚再分析"，而攻坚根本没有输入）。
+#
+# 判据因此按**出现位置**比（`str.find` 的位置严格递增），不按集合比。
+# 为什么锚在表格第一格而不是裸字母：`B` 在链上出现两次（概念与关系 / 收录证明），
+# 裸字母分不开这两件活 —— 只有"字母 + 那一跳的名字"才是唯一锚点。
+
+#: 七跳（逐字取自 `研究攻坚链-文献到收录证明` 那张表的跳名格）。
+CHAIN_HOPS: tuple[str, ...] = (
+    "| **A** 检索 |",
+    "| **B** 概念与关系 |",
+    "| **C** 关系分析 |",
+    "| **D** 立可判猜想 |",
+    "| **F** 攻坚 |",
+    "| **V** 走查 |",
+    "| **B** 收录证明 |",
+)
+
+
+def chain_order_problems(body: str) -> list[str]:
+    """七跳在正文里的**出现位置**必须严格递增（空列表 = 顺序对）。
+
+    纯函数（喂任意一段文本进来就能给负控做牙）：缺一跳、或两跳位置颠倒 ⇒ 都报。
+    """
+    marks = [hop.split("|")[1].strip() for hop in CHAIN_HOPS]
+    problems: list[str] = []
+    pos: dict[str, int] = {}
+    for hop, mark in zip(CHAIN_HOPS, marks):
+        at = body.find(hop)
+        if at < 0:
+            problems.append(f"正文里找不到这一跳：{mark}")
+            continue
+        pos[mark] = at
+    if len(pos) < len(CHAIN_HOPS):
+        return problems                      # 缺跳时顺序比不出来（别拿它冒充"顺序错"）
+    ordered = [pos[m] for m in marks]
+    for i in range(1, len(ordered)):
+        if ordered[i] <= ordered[i - 1]:
+            problems.append(
+                f"顺序错了：{marks[i]}（位置 {ordered[i]}）出现在 "
+                f"{marks[i - 1]}（位置 {ordered[i - 1]}）之前/同处 —— "
+                "而这条链是「顺序即语义」，调换之后整条链的意思就反了")
+    return problems
+
+
+def test_the_research_chain_skill_lists_the_seven_hops_in_order():
+    """正控：`M` 的「研究攻坚链」那一条，七跳的名字与**顺序**都在。
+
+    业主 2026-10-19 口径逐字：「顺序即语义，不许改」。这条判据守的就是那四个字：
+    ① 七跳的名字一个不缺；② 它们在正文里的**出现位置严格递增**；
+    ③ 正文里还有那一行链本身（`A → B → C → D → F → V → B`，人能一眼读出来）。
+    """
+    skill = next(s for s in AS.CATALOG["M"] if s.slug == "研究攻坚链-文献到收录证明")
+    assert chain_order_problems(skill.body) == [], chain_order_problems(skill.body)
+    # ③ 那一行链本身也在（与表格是两处写法，任一处被改坏都该有人看一眼）
+    assert "A → B → C → D → F → V → B" in skill.body, skill.body[:400]
+    # 反真空：这条判据扫的确实是**这一条** skill 的正文（不是一段空文本）
+    assert len(skill.body) > 800, len(skill.body)
+
+
+def test_the_negative_control_catches_the_chain_out_of_order(monkeypatch):
+    """负控：把 `F` 与 `V` 两行的位置调换 ⇒ 判据必须当场红。
+
+    为什么拿 F / V 这一对做负控：它们是这条链上**唯一的"先攻坚、后走查"**那一步 ——
+    调换之后七跳**一个不少、名字全对**（只判包含的判据会照绿），而意思变成了
+    "先走查一份还不存在的证明"。这正是业主那句「顺序即语义」要挡的形态。
+
+    第二颗牙：删掉一跳（`V` 那一行）⇒ 也必须红（"缺"与"顺序错"是两件事，都要报）。
+    """
+    base = next(s for s in AS.CATALOG["M"] if s.slug == "研究攻坚链-文献到收录证明").body
+    assert chain_order_problems(base) == [], "基线就不绿 ⇒ 下面的负控没有意义"
+
+    lines = base.splitlines()
+    f_row = next(i for i, ln in enumerate(lines) if ln.startswith(CHAIN_HOPS[4]))
+    v_row = next(i for i, ln in enumerate(lines) if ln.startswith(CHAIN_HOPS[5]))
+    swapped = list(lines)
+    swapped[f_row], swapped[v_row] = swapped[v_row], swapped[f_row]
+    swapped_body = "\n".join(swapped)
+    # 装置自控：调换之后七个名字**仍然都在**（所以"绿"不能靠"缺一跳"解释）
+    assert all(hop in swapped_body for hop in CHAIN_HOPS), "调换把行弄丢了 ⇒ 负控在测别的东西"
+    problems = chain_order_problems(swapped_body)
+    assert problems, "负控失效：把 F 与 V 调换位置，判据却放过了（它只判了包含）"
+
+    dropped = "\n".join(ln for ln in lines if not ln.startswith(CHAIN_HOPS[5]))
+    assert chain_order_problems(dropped), "负控失效：删掉「V 走查」那一行，判据却放过了"

@@ -127,7 +127,9 @@ def test_run_agent_without_a_key_is_not_checked_and_makes_no_request(tmp_path: p
                                  report_every=1))
     err = capsys.readouterr().err
     assert rc == 2, err
-    assert "没查成" in err, err
+    # 2026-10-19 口径：2 = 研究启动失败（连跑都没开始）。只换词，不放宽：
+    # 改前断言的是"没查成"这四个字，现在断言新标签同样精确地在 stderr 里出现。
+    assert "研究启动失败" in err, err
     events, _ = SS.read_session(tmp_path / "ws", sid="t")
     assert not [e for e in events if e.get("kind") == "llm_call"], "没查成却记了模型调用"
 

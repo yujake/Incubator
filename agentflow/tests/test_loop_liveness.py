@@ -169,13 +169,67 @@ def test_different_arguments_reset_the_streak(tmp_path: pathlib.Path):
     assert all("框架提醒" not in s.result for s in run.steps), run.to_dict()
 
 
-@pytest.mark.parametrize("reason", ["no_progress_limit"])
+@pytest.mark.parametrize("reason", ["no_progress_limit", "escalated"])
 def test_the_new_stop_reason_has_a_badge(reason: str):
-    """接口面：新停止理由必须在 Web 徽标表里（否则界面把它显示成一个空徽标）。"""
+    """接口面：新停止理由必须在 Web 徽标表里（否则界面把它显示成一个空徽标）。
+
+    2026-10-19 扩面：`escalated`（交给召唤者）与 `no_progress_limit` 同属"它自己
+    决定收工"那一族（退出码 5），两格都得有徽标，且都不是 `badge-fail` ——
+    它们不是出错，是"这一趟没有往前走 / 已交给召唤者"（一档读数）。
+    """
     from agentflow import webui as W
 
     assert reason in W._STOP_BADGES, sorted(W._STOP_BADGES)
     assert W._STOP_BADGES[reason][0] != "badge-fail", "它不是失败，是'这一趟没有往前走'"
+
+
+#: 徽标判据的"该有哪些格"只从一张表来：`cli.EXIT_CODE_BY_STOP`。
+#: 手抄一份名单会与那张表两处漂移，而"新加一档忘了登记徽标"正是这条要防的形态。
+def _badge_problems(badges: dict[str, tuple[str, str]]) -> list[str]:
+    """`EXIT_CODE_BY_STOP` 的每一档是否都在徽标表里、且形状像一条徽标。"""
+    from agentflow import cli as CLI
+
+    out: list[str] = []
+    for reason in sorted(CLI.EXIT_CODE_BY_STOP):
+        got = badges.get(reason)
+        if got is None:
+            out.append(f"`{reason}` 在退出码表里（{CLI.EXIT_CODE_BY_STOP[reason]}），"
+                       f"但徽标表里没有它 ⇒ 界面会显示一个空徽标")
+            continue
+        if not (isinstance(got, tuple) and len(got) == 2):
+            out.append(f"`{reason}` 的徽标不是 (class, 文案) 二元组：{got!r}")
+            continue
+        klass, text = got
+        if not str(klass).startswith("badge-") or not str(text).strip():
+            out.append(f"`{reason}` 的徽标形状不对：{got!r}")
+    return out
+
+
+def test_every_registered_stop_reason_has_a_badge() -> None:
+    """通用形态（2026-10-19 业主裁定）：退出码表的每一档都必须解释得出来。
+
+    改前这条判据只参数化了 `no_progress_limit` 一个值 —— 于是新增一档忘了加徽标时
+    它照样绿，而界面显示的是一个空徽标。现在"该有哪些格"从 `cli.EXIT_CODE_BY_STOP`
+    现取，口径只有一处。
+    """
+    from agentflow import cli as CLI
+    from agentflow import webui as W
+
+    problems = _badge_problems(W._STOP_BADGES)
+    assert not problems, "有停止理由没有徽标：\n" + "\n".join(problems)
+    # 反真空：表与徽标表都得有量（否则"都没扫到"会冒充"都对得上"）。
+    assert len(CLI.EXIT_CODE_BY_STOP) >= 20, sorted(CLI.EXIT_CODE_BY_STOP)
+    assert len(W._STOP_BADGES) >= len(CLI.EXIT_CODE_BY_STOP), sorted(W._STOP_BADGES)
+
+
+def test_negative_control_a_missing_badge_goes_red() -> None:
+    """负控：从徽标表里删掉一档 ⇒ 同一个判据必须看见（"忘了加徽标"真的会红）。"""
+    from agentflow import webui as W
+
+    badges = dict(W._STOP_BADGES)
+    del badges["escalated"]
+    problems = _badge_problems(badges)
+    assert any("escalated" in p for p in problems), problems
 
 
 def test_notes_differing_only_by_a_step_prefix_still_count_as_repeats(tmp_path: pathlib.Path):

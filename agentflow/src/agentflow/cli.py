@@ -1475,31 +1475,147 @@ def _parse_drive(items) -> tuple[dict, str]:
     return table, ""
 
 
+#: 单趟 `run-agent` 的退出码分类表（业主 2026-10-19 重排；`--help`、`cmd_run_agent`
+#: 的 docstring、`_run_agent_exit_code` 的 docstring 三处同口径，逐档都对得上这里）。
+#:
+#: ## 为什么是一张表而不是一串 `if`
+#:
+#: 这是一道防漏，不是风格：新增一个 `stop_reason` 时，若有人忘了来这张表登记，
+#: 它就落进 :data:`EXIT_CODE_WHEN_UNKNOWN`（= 1，行为异常）—— 一次当场可见的异常，
+#: 而不是"悄悄挤进某一档、看起来一切正常"。写成 `if` 链时新取值会静默落到最后的
+#: `return 1`，看着也像"正常"（1 曾经就是"其余"这一档）；写成表之后，
+#: 判据 `tests/test_run_agent_exit_code_table.py` 从源码里现扫 `stop_reason` 的
+#: 取值集合与这张表对拍，少一条就红。
+#:
+#: ## 六档（业主逐字口径）
+#:
+#: - `0` 正常完成（给了 `final`）；
+#: - `1` 行为异常（只留给"真出事"）；
+#: - `2` 研究启动失败（连跑都没开始）；
+#: - `3` 等待用户（人答完 `--resume` 接着跑）；
+#: - `4` 系统行为正常且中途停止 —— 用户叫停（强停与优雅停同档）＋ 预算耗尽；
+#: - `5` 系统行为正常且自行停止，但没有 final。
+EXIT_CODE_BY_STOP: dict[str, int] = {
+    # ---- 0 正常完成（给了 final）
+    "final": 0,
+    # ---- 3 等待用户（人答完 --resume 接着跑）
+    "waiting_for_user": 3,
+    # ---- 2 研究启动失败（连跑都没开始）：一步模型都没调就交回去了
+    "checkpoint_mismatch": 2,      # 拿 A 的进度续 B（两件事混成一条）
+    "no_checkpoint": 2,            # 检查点读不到、会话记录也重建不出任何一步
+    "already_finished": 2,         # 上一趟已 final ⇒ 续跑没有意义
+    "resume_no_transcript": 2,     # 会话记录里重建不出那一步 ⇒ 不许从第 1 步重跑
+    # ---- 4 系统行为正常且中途停止：有人（用户 / 父 / 钱）把它叫停，不是它自己想停
+    "budget": 4,                   # 预算耗尽（优雅停，可 --resume）
+    "stop_file": 4,                # 停机开关（优雅停：做完第 N 步再收工）
+    "force_stop": 4,               # 停机开关 + force（强停，同样不等待收尾地收工）
+    "ask_cancelled": 4,            # 问用户的等待被当前轮次的取消信号中止
+    # `interrupted_by_parent`：父角色对某一个孩子当前那一轮下的 `stopctl.request_interrupt`
+    #   默认理由码（`stopctl.INTERRUPT_REASON`）。归 4 而不是 5：停意是外面叫的
+    #   （父是受权的叫停者，与"用户叫停"同一族），不是这个循环自己判定该收工；
+    #   而且这一档也写了收尾说明、可 `--resume`。若归 5，读的人会以为是它自己决定
+    #   收工、于是去等召唤者的下一步，而其实是召唤者叫它停的。
+    "interrupted_by_parent": 4,
+    # ---- 5 系统行为正常且自行停止，但没有 final
+    "no_progress_limit": 5,        # 同调用 + 同读数连击到上限：这一趟没有新事实
+    # `escalated`：交给召唤者、本趟自行收工（语义由另一条线落地；这里先登记，
+    #   因为它属于"它自己决定停"这一族 —— 与 `no_progress_limit` 同档，不是异常）。
+    "escalated": 5,
+    # ---- 1 行为异常（只留给"真出事"）
+    "not_wired": 1,                # 没接线（没有 key / 没进登记表）
+    "model_auth_failed": 1,        # 模型没认这把 key
+    "model_timeout": 1,            # 模型没返回（超时）
+    "model_unreachable": 1,        # 没连上模型（网络 / DNS）
+    "model_output_limit": 1,       # 思考吃光输出预算
+    "bad_json_limit": 1,           # 坏 JSON 连击
+    "bad_args_limit": 1,           # 坏参数连击
+    # `no_notify`：收工不带 notify 表、连打回三次（L-05e 之后循环不再产生它 ——
+    #   它已降级成读数；这一格留给旧会话记录，取值本身仍是"协议不遵"⇒ 异常）。
+    "no_notify": 1,
+}
+
+#: 没登记的 `stop_reason` 一律归这里。不许改成 0：那会把"新增了一档而没人归类"
+#: 读成"做完了"—— 一次新故障变成绿灯，且没有任何地方会红。
+EXIT_CODE_WHEN_UNKNOWN: int = 1
+
+#: 已知 `stop_reason` 的清单（表里登记过的那些）。
+#:
+#: 刻意从表派生而不是手抄第二份：手抄一份会与表两处漂移，而"两处漂移"恰恰是这条
+#: 纪律想治的病。真正独立的那一腿在判据里 —— 它从 `agent_loop.py` 的源码现扫
+#: 生产点，与这里对拍（少一条就红）。
+KNOWN_STOP_REASONS: frozenset[str] = frozenset(EXIT_CODE_BY_STOP)
+
+
 def _run_agent_exit_code(run) -> int:
-    """单趟 `run-agent` 的退出码阶梯（四档；`--help` 与 `cmd_run_agent` 的 docstring 同口径）。
+    """单趟 `run-agent` 的退出码：查 :data:`EXIT_CODE_BY_STOP` 那张表，不做 `if` 链。
 
-    为什么"停在等待用户"必须是「第三个」码而不是挤进 0/1/2 里：
-    它既不是完成（0），也不是"跑过了但没给出 final"那种失败（1），
-    更不是"没查成"（2）—— 它是一次「成功的中断」，人答完之后这条路会接着走。
-    把它折进 1 会让 CI/脚本把它读成"这趟不行"，折进 0 会读成"做完了"。
+    业主 2026-10-19 重排后的六档（`--help` 与 `cmd_run_agent` 的 docstring 必须同口径）：
 
-    第四档 `4 = 预算耗尽（优雅停、可 --resume）`：与 3 同族（都"成功的中断"），
-    区别是等的是钱而不是人。为什么必须独立：真机 `mp4-7` 那趟预算耗尽、已写出
-    完整收尾，却返回 1 —— 被读成"这趟坏了"（业主 2026-10-19 裁定）。
+    - `0` 正常完成（给了 final）；
+    - `1` 行为异常（只留给"真出事"）；
+    - `2` 研究启动失败（连跑都没开始）；
+    - `3` 等待用户（人答完 --resume 接着跑）；
+    - `4` 系统行为正常且中途停止（用户叫停 —— 强停与优雅停 —— ＋ 预算耗尽）；
+    - `5` 系统行为正常且自行停止，但没有 final。
+
+    为什么 4 与 5 必须分成两档：两档都不是异常，但下一步该谁动不同 —— 4 是
+    "有人把它叫停的"（人 / 父 / 钱），加预算或人答完就能 `--resume` 接着跑；5 是
+    "它自己判定这一趟该收工"（原地打转 / `escalated` 交给召唤者），下一步的决策人
+    是召唤者而不是续跑者。折成一档会把这两种人机分工读成同一件事。
+
+    为什么未登记的 `stop_reason` 一律 1：安全侧。新增一档却忘了登记，落进 1 会当场
+    被人看见；落进 0 则会把一次新故障读成"做完了"，而没有任何东西会红。
     """
-    if run.stop_reason == "final":
-        return 0
-    if run.stop_reason == "waiting_for_user":
-        return 3
-    if run.stop_reason in ("checkpoint_mismatch", "no_checkpoint", "already_finished",
-                           "resume_no_transcript"):
-        return 2
-    #: 预算耗尽 = **优雅停**（已写出收尾说明、`--resume` 可续），不是"这趟坏了"。
-    #: 业主 2026-10-19 裁定：给它一个独立码，别折进 1 —— 折进 1 会让 CI/脚本把
-    #: 「钱花完了」读成「失败」，与「停是否成功由 M 决定」冲突。0/1/2/3 语义不动。
-    if run.stop_reason == "budget":
-        return 4
-    return 1
+    return EXIT_CODE_BY_STOP.get(str(getattr(run, "stop_reason", "") or ""),
+                                 EXIT_CODE_WHEN_UNKNOWN)
+
+
+#: 多轮驱动层（`--rounds N`）特有的结束形态 —— 它们刻意不进
+#: :data:`EXIT_CODE_BY_STOP`：那张表说的是"一趟循环为什么停"，而这两个说的是
+#: "多轮驱动为什么收"。混进去会让判据的生产点对拍（它扫的是 `agent_loop.py` 的
+#: `LoopRun`）多出两条永远对不上的档，于是那张表就不再是"循环的口径"。
+#:
+#: 只有 `resumed_done` 能直接映射；`rounds` 还要读"最后那一轮有没有 final"，
+#: 所以它由 :func:`_autonomy_exit_code` 单独判（见那里）。
+AUTONOMY_ONLY_EXIT_CODE: dict[str, int] = {
+    # 续跑完成：这一程要补的轮数在上一段已经跑完（`autonomy` 直接交回）
+    "resumed_done": 0,
+}
+
+
+def _rounds_has_final(auto) -> bool:
+    """轮数用完那一档要读的东西：最后那一轮到底有没有交出结论。"""
+    reports = list(getattr(auto, "reports", None) or [])
+    return bool(reports) and bool(str(getattr(reports[-1], "final", "") or "").strip())
+
+
+def _autonomy_exit_code(auto) -> int:
+    """多轮驱动层（`--rounds N`）的退出码：查同一张表，只多"轮数用完"这一档。
+
+    业主 2026-10-19 裁定（这条是根因，不是特例）：同一件事不许在两处有两套口径。
+    改前这一层自成一条 `if` 链（`rounds`/`stop_file`/`resumed_done ⇒ 0`、`其余 ⇒ 1`），
+    于是同一个 `budget` 在单趟是 4、在多轮是 1，`stop_file` 在单趟是 4、在多轮是 0 ——
+    两种口径都会漂，而且漂了没有任何东西会红。现在：所有 `stop_reason` 一律查
+    :data:`EXIT_CODE_BY_STOP`，未登记的落进 :data:`EXIT_CODE_WHEN_UNKNOWN`。
+
+    表里没有、只有这一层有的两种形态：
+
+    - `rounds`（轮数用完）：最后那一轮产出了 final ⇒ `0`（正常完成）；
+      没有 final ⇒ `5`（系统行为正常且自行停止、但没有 final）。
+      为什么不能一律给 0：轮数用完不等于这一趟做完了 —— 没有 final 就是"没交出结论"，
+      把它读成 0 会让"跑到轮数上限但一句话没说"看起来像成功。
+    - `resumed_done`（续跑发现这一程已经跑完）⇒ `0`（见 `AUTONOMY_ONLY_EXIT_CODE`）。
+
+    判据：`tests/test_run_agent_exit_code_table.py::test_the_two_layers_read_the_same_table`
+    把同一组 `stop_reason` 分别喂给两个入口、逐条断言退出码相等；负控把这一层改回
+    写死 `budget ⇒ 1` ⇒ 当场红。
+    """
+    reason = str(getattr(auto, "stop_reason", "") or "")
+    if reason == "rounds":
+        return 0 if _rounds_has_final(auto) else 5
+    if reason in AUTONOMY_ONLY_EXIT_CODE:
+        return AUTONOMY_ONLY_EXIT_CODE[reason]
+    return EXIT_CODE_BY_STOP.get(reason, EXIT_CODE_WHEN_UNKNOWN)
 
 
 def _sid_suffix(sid: str | None) -> str:
@@ -1543,13 +1659,24 @@ def _waiting_notice(run, *, root: Path, sid: str | None) -> str:
 def cmd_run_agent(args) -> int:
     """真跑一次角色循环（顶层角色走它自己的循环；`--drive` 决定被召唤的子角色）。
 
-    退出码是「四档」，不是两档（`draft/37` §16 的"停下来等用户"那一档在这里落地）：
+    退出码是「六档」，逐档由 :data:`EXIT_CODE_BY_STOP` 那张表定（`--help` 与
+    `_run_agent_exit_code` 的 docstring 与这里同口径；业主 2026-10-19 重排）：
 
-    - `0` 跑完了（`stop_reason="final"`）；
-    - `1` 跑过了但没给出 final（坏 JSON 超限 / 步数用尽 / 被取消）；
-    - `2` 没查成（没有 key / 用法错 / 检查点读不到 / 指纹不符 / 上一趟已收工）；
-    - `3` 「停在等待用户」：`ask_user` 问了人、还停在等回答。它既不是完成也不是失败 ——
-      人答完（`agentflow answer`）之后用 `--resume` 接着跑那一步之后。
+    - `0` 正常完成（`stop_reason="final"`，给了结论）；
+    - `1` 行为异常（只留给"真出事"：没接线 / 模型没认 key / 没返回 / 连不上 /
+      输出吃光 / 坏 JSON 超限 / 坏参数超限 / 没 notify，以及任何没登记的新
+      `stop_reason` —— 没登记一律归 1，这是安全侧）；
+    - `2` 研究启动失败（连跑都没开始：检查点读不到 / 任务指纹不符 / 上一趟已收工 /
+      会话记录里重建不出那一步）；
+    - `3` 等待用户（`ask_user` 问了人、还停在等回答：既不是完成也不是失败 ——
+      人答完（`agentflow answer`）之后用 `--resume` 接着跑那一步之后）；
+    - `4` 系统行为正常且中途停止（用户叫停 —— 强停与优雅停都一样 —— 与预算耗尽
+      统一这一档；加预算或人答完即可 `--resume`）；
+    - `5` 系统行为正常且自行停止，但没有 final（原地打转 / `escalated` 交给召唤者）。
+
+    `--rounds N` 那条多轮路径查的是同一张表（`_autonomy_exit_code`），只多两档
+    多轮特有的形态：轮数用完且最后那轮给了 final ⇒ 0、没给 final ⇒ 5；
+    续跑发现这一程已跑完（`resumed_done`）⇒ 0。
     """
     from . import agent_loop as AL
     from . import autonomy as AU
@@ -1605,9 +1732,11 @@ def cmd_run_agent(args) -> int:
 
     seam = seam_for(args.role)
     if not seam.wired:
-        print("[run-agent] 没查成：没有接模型（环境变量 AGENTFLOW_MODEL_API_KEY 与 "
+        # 2026-10-19 口径：2 = 研究启动失败（连跑都没开始）。这句里刻意不再出现"没查成"
+        # —— 同一句话里两种标签并存时，读的人会拿旧的那一种去解释 2。
+        print("[run-agent] 研究启动失败：没有接模型（环境变量 AGENTFLOW_MODEL_API_KEY 与 "
               "agentflow/settings.json 的 model.api_key 都没有值）—— "
-              "这是没查成（退出码 2），不是「跑过了没问题」", file=sys.stderr)
+              "这是研究启动失败（退出码 2），不是「跑过了没问题」", file=sys.stderr)
         return 2
 
     loops = {key: {"max_steps": args.max_steps} for key in table}
@@ -1688,9 +1817,12 @@ def cmd_run_agent(args) -> int:
         print(f"  停止原因：{auto.stop_reason}；用量：{auto.spend}")
         for note in auto.notes:
             print(f"  注：{note}")
-        if auto.stop_reason == "checkpoint_mismatch":
-            # 拿一个任务的检查点去续另一个任务是没查成（配置错），不是"跑过了有问题"
-            return 2
+        # 退出码：同一张表（业主 2026-10-19 裁定；改前这一层自成一条 if 链，
+        # 于是 `budget` 单趟 4 / 多轮 1、`stop_file` 单趟 4 / 多轮 0 —— 两套口径都会漂）。
+        # 只有"轮数用完"（`rounds`）要看最后那一轮有没有 final，见 `_autonomy_exit_code`。
+        # `checkpoint_mismatch`（拿 A 的进度续 B）同样查表 ⇒ 2 研究启动失败，
+        # 不是"跑过了有问题" —— 它不再需要一条自己的分支。
+        code = _autonomy_exit_code(auto)
         # 停在等用户（`draft/37` §72）：自主多轮那一层的停止判据现在有这一档了 ——
         # 上一轮停在等用户、而那个问题「还挂着」时，它不会开下一轮（`autonomy.py`
         # 的 `_stop_before_round`，判据在 `tests/test_resume_after_answer.py`）。
@@ -1702,8 +1834,18 @@ def cmd_run_agent(args) -> int:
                 "后续轮次**没有**再开（不许替人把取舍定了）。"
                 f"用 `agentflow --root {root} inbox{_sid_suffix(args.sid)}` 看，"
                 f"答完再用 `--resume` 接着跑。", "bold"))
-            return 3
-        return 0 if auto.stop_reason in ("rounds", "stop_file", "resumed_done") else 1
+            return code
+        # 已上报召唤者（`conductor.escalate`，业主 2026-10-19「父子天然双向」）：
+        # 多轮驱动这一层的停止理由是从最后一轮抄上来的（`autonomy._stop_before_round`），
+        # 所以它也会是 `escalated`。退出码从同一张表取（`EXIT_CODE_BY_STOP`），
+        # 不在这里另写一个 5 —— 两处各写一个数字正是本文件已经治过的那种漂移。
+        if auto.stop_reason == "escalated":
+            print(tty.paint(
+                "[run-agent] 已上报召唤者：最后一轮把孩子卡住的那件事写进了父的收件箱，"
+                "后续轮次**没有**再开（不许替父把判断定了）。"
+                "等父处理完再 `--resume` 接着跑。", "bold"))
+            return code
+        return code
 
     run = AL.run_role(args.role, args.task, store=st, registry=wiring["registry"],
                       conductor=wiring["conductor"], seam=seam, session_root=root,
@@ -2509,15 +2651,22 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_artifacts)
 
     sp = sub.add_parser(
-        "run-agent", help="真跑一次角色循环（模型驱动；退出码 0 收工 / 1 没给出 final / "
-                          "2 没查成 / 3 停在等待用户 / 4 预算耗尽）",
-        description="真跑一次角色循环。退出码五档：0 = 跑完了（final）；"
-                    "1 = 跑过了但没给出 final；2 = 没查成（没有 key / 用法错 / "
-                    "检查点读不到 / 指纹不符 / 上一趟已收工）；"
-                    "3 = 停在等待用户（问了人、还停在等回答 —— 既不是完成也不是失败，"
+        "run-agent", help="真跑一次角色循环（模型驱动；退出码六档：0 正常完成 / 1 行为异常 / "
+                          "2 研究启动失败 / 3 等待用户 / 4 正常且中途停止 / "
+                          "5 正常且自行停止但没有 final）",
+        description="真跑一次角色循环。退出码六档："
+                    "0 = 正常完成（这一趟给了 final）；"
+                    "1 = 行为异常（只留给「真出事」：没接线 / 模型没认 key / 没返回 / "
+                    "连不上 / 输出吃光 / 坏 JSON 超限 / 坏参数超限 / 没 notify，以及任何"
+                    "没登记的新 stop_reason —— 没登记一律归 1）；"
+                    "2 = 研究启动失败（连跑都没开始：检查点读不到 / 任务指纹不符 / "
+                    "上一趟已收工 / 会话记录里重建不出那一步）；"
+                    "3 = 等待用户（问了人、还停在等回答 —— 既不是完成也不是失败，"
                     "人答完用 --resume 接着跑那一步之后）；"
-                    "4 = 预算耗尽（优雅停：已写出收尾、加预算后用 --resume 接着跑 —— "
-                    "与 3 同族「成功的中断」，等的是钱不是人）。")
+                    "4 = 系统行为正常且中途停止（用户叫停 —— 强停与优雅停 —— 与预算耗尽"
+                    "统一这一档，可 --resume）；"
+                    "5 = 系统行为正常且自行停止，但没有 final（原地打转 / "
+                    "escalated 交给召唤者）。")
     sp.add_argument("role", choices=list(S.ROLES) + [S.CONDUCTOR_ROLE],
                     help="顶层角色（M = 主控，其余 = A–H）")
     sp.add_argument("--task", required=True, help="这次要做的事（给角色的任务描述）")

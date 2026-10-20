@@ -1,10 +1,17 @@
 """角色 A 的动作 `run_once`（`goal-7f5116c1` M6：从 `agent_a.py` 拆出来，逐字未改）。
 
 拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
+
+⚠️ 2026-10-20 业主口径（待新增文献列表）之后，上面那句"逐字未改"**不再成立**：
+本方法多了一段"先暂存、后入库"的接线（见 `_rehearse_stage` 的说明与
+`agentflow/litstage.py` 的模块 docstring）。原来那条判据是迁移期的临时锚点，
+它守的是"拆文件没有顺手改行为"；本轮是**业主明确要求的行为变更**，
+所以锚点让位给新判据（`tests/test_agent_a*.py` 与新判据文件）。
 """
 from __future__ import annotations
 
 from ._support import ARunResult, D, Path, S, T, X, make_lease, shutil, tempfile
+from .. import litstage as L
 
 class _RunOnce:
     def run_once(self) -> ARunResult:
@@ -14,6 +21,30 @@ class _RunOnce:
         而是把"没做"的原因原样带出来（`skipped_reason` 四选一，取值与优先级见 `_claim`）。
         `processed/registered/...` 全是计数（"做了多少"），`skipped_reason` 是
         "为什么没做" —— 两者正交，调用方必须分别看。
+
+        ## 2026-10-20 接线：登记文献这一步改成「先 stage 后 admit」
+
+        业主口径（逐字）：
+
+        > 把 A 的 `search_literature`（或它对应的动作）在"登记文献"那一步改为先 stage
+        > 后 admit：广搜结果先进待新增列表，A（或它的审内容步骤）筛完再入库。
+
+        落点就是这个方法的阶段 1/2 之间，具体三道：
+
+        1. **暂存**（`litstage.stage_entries`）：本轮的每个候选先落一行
+           `lit_candidates`（`request_id` = 这一次委托、`batch=1`、槽位号只增不复用）。
+           这一步**不设条数上限** —— 广搜可以超过 10 篇；
+        2. **入库判断**（`litstage.admission_plan`，`on_over_cap="truncate"`）：
+           本委托的入库配额（`MAX_ADMIT_PER_DELEGATION=10`）与重叠检查都在那一处判，
+           本文件不重写一份。通过的才下载、才登记；被重叠挡掉的落
+           `rejected(overlap_without_new_content)`；超配额的落 `cleared(over_cap)`；
+        3. **结算 + 报告**（`litstage.apply_settlement` / `write_report`）：
+           候选行回到终态，并写 `reports/lit-<request_id>.md`（已入库 + 未入库两块）。
+
+        为什么用 `duplicate_branch_ok=True`：本轮的"重叠"里有一档是**同一篇**（DOI 完全相同）。
+        那一档的正确处置不是"拒收"，而是走**现有的判重分支** —— 只把
+        `source_request_ids` 追加到既有行，不新建行（`dedup.literature_keys` 的口径）。
+        两件事（"同一篇只留一个 lit_id" 与 "内容重叠要不要新内容"）因此各归各的判据。
         """
         result = ARunResult()
         claim = self._claim()
@@ -46,15 +77,14 @@ class _RunOnce:
 
         staging = Path(tempfile.mkdtemp(prefix="agentflow-stage-", dir=str(self.store.library)))
         try:
-            # ---- 阶段 1（无锁）：先把候选规范化 + 下载到 staging。
-            # 这里不分配 ID、不写表，因此失败/崩溃都不会留下半成品。
+            # ---- 阶段 0（无锁、只写候选表）：候选先规范化，再**暂存进待新增列表**。
+            # 这里不分配 lit_id、不写 literature，因此失败/崩溃都不会留下半成品文献行。
             prepared: list[dict] = []
-            downloads = 0
             for cand in candidates:
                 title = getattr(cand, "title", "") or ""
                 if not title.strip():
                     continue
-                entry = {
+                prepared.append({
                     "title": title,
                     "type": getattr(cand, "type_code", "Z") or "Z",
                     "summary": T.clip(getattr(cand, "summary", ""), 1200),
@@ -65,21 +95,58 @@ class _RunOnce:
                     "language": getattr(cand, "language", None),
                     "provider": getattr(cand, "provider", "?"),
                     "raw": getattr(cand, "raw", {}) or {},
-                }
+                })
+
+            # ---- 阶段 1a：暂存（`lit_candidates`，按委托）+ 入库判断（上限 + 重叠）。
+            # `plan["admitted"]` 才是这一轮"可以进 literature"的那些；
+            # 它不是 `prepared` 的同义词：超配额的、被重叠挡掉的都在另外两栏里。
+            plan = None
+            slot_of_index: list[str] = []
+            entry_by_slot: dict[str, dict] = {}
+            if prepared:
+                staged = L.stage_entries(
+                    self.store,
+                    [{"title": e["title"], "doi": e["doi"], "provider": e["provider"],
+                      "year": e["year"], "type_code": e["type"], "summary": e["summary"],
+                      "url": str(getattr(e["raw"], "get", lambda *_: None)("pdf_url") or "")}
+                     for e in prepared],
+                    request_id=req["request_id"], actor=self.actor, note="a.run_once.stage",
+                )
+                slot_of_index = [s["slot"] for s in staged["staged"]]
+                entry_by_slot = {slot: prepared[i] for i, slot in enumerate(slot_of_index)}
+                plan = L.admission_plan(
+                    self.store, request_id=req["request_id"], slots=slot_of_index,
+                    on_over_cap="truncate", duplicate_branch_ok=True,
+                )
+            admit_slots = [str(it["slot"]) for it in (plan or {}).get("admitted") or []]
+
+            # ---- 阶段 1（无锁）：只给**要入库的那些**下载到 staging。
+            # 没通过入库判断的候选不下载：它们是"待审/已挡"的行，下载一份不会带来
+            # 任何新信息，只会让 staging 里多出一堆永远不会被引用的字节。
+            downloads = 0
+            for i, entry in enumerate(prepared):
+                slot = slot_of_index[i] if i < len(slot_of_index) else ""
+                if slot not in admit_slots:
+                    entry["download"] = {"status": "skipped", "error": "not_admitted",
+                                         "http_status": None, "bytes": 0, "sha256": None}
+                    continue
                 if downloads < self.max_downloads:
-                    dl = self._stage_download(cand, staging)
+                    dl = self._stage_download(candidates[i], staging)
                     downloads += 1 if dl.get("status") != "skipped" else 0
                     entry["download"] = dl
                 else:
                     entry["download"] = {"status": "skipped", "error": "max_downloads_reached",
                                          "http_status": None, "bytes": 0, "sha256": None}
-                prepared.append(entry)
 
-            # ---- 阶段 2（锁内，短）：重新判重 → 分配 ID → 落行 → 搬文件 → 标记请求完成。
-            with self.store.tx("search_requests", "literature", actor=self.actor, note="register") as tx:
+            # ---- 阶段 2（锁内，短）：重新判重 → 分配 ID → 落行 → 搬文件 → 结算候选 → 标记请求完成。
+            with self.store.tx("search_requests", "literature", "lit_candidates",
+                               actor=self.actor, note="register") as tx:
                 lit_rows = tx.rows("literature")
                 new_ids: list[str] = []
-                for entry in prepared:
+                lit_id_by_slot: dict[str, str] = {}
+                fail_by_slot: dict[str, str] = {}
+                for slot in admit_slots:
+                    entry = entry_by_slot[slot]
                     existing, hit_key = D.find_existing_literature(
                         lit_rows, entry["title"], entry["year"], entry["doi"]
                     )
@@ -125,6 +192,7 @@ class _RunOnce:
                         tx.upsert("literature", existing, note=note)
                         result.duplicated += 1
                         new_ids.append(existing["lit_id"])
+                        lit_id_by_slot[slot] = str(existing["lit_id"])
                         continue
 
                     lit_id = tx.alloc_id("lit")
@@ -172,7 +240,17 @@ class _RunOnce:
                     # 注意：`lit_rows` 就是 `tx.rows("literature")` 返回的那个列表本身，
                     # upsert 已经把行放进去了；这里不能再 append，否则会出现重复 ID。
                     new_ids.append(lit_id)
+                    lit_id_by_slot[slot] = str(lit_id)
                     result.registered += 1
+
+                # ---- 结算候选行：入库成功的落 admitted；被重叠/登记挡掉的落 rejected；
+                # 超配额的落 cleared(over_cap)。**绝不物理删**（可追）。
+                if plan is not None:
+                    for slot in admit_slots:
+                        if slot not in lit_id_by_slot:
+                            fail_by_slot[slot] = "登记路径没有给出 lit_id"
+                    L.apply_settlement(
+                        tx, L.decisions_from_plan(plan, lit_id_by_slot, fail_by_slot))
 
                 # 重新读取请求行（可能已被并发修改），再决定这一轮的终局
                 fresh = tx.find("search_requests", request_id=req["request_id"]) or dict(req)
@@ -242,6 +320,20 @@ class _RunOnce:
                 # `result.gave_up = 1 if fresh.get("outcome") == "gave_up" else 0`
                 # 因此恒为 0，把 `_claim()` 里真正数到的放弃条数覆盖成 0：
                 # 字段存在、名字合理、永远是 0 —— 典型的"看起来在统计、实际恒为假"。
+
+            # ---- 阶段 3（锁外）：写**委托报告**（业主 2026-10-20 第 3 条：这是交付物）。
+            # 放在事务之后：报告写的是"这一轮结束时盘上的样子"，而盘上的样子由事务定。
+            # 写失败不许吞掉整轮结果（文献已经落库了）—— 但它必须可见：
+            # `ARunResult.note` 里有它，`reports/lit-<request_id>.md` 不在盘上也能查出来。
+            if prepared:
+                try:
+                    rep = L.write_report(self.store, req["request_id"])
+                    result.report_path = str(rep.get("path") or "")
+                    result.report_admitted = int(rep.get("admitted") or 0)
+                    result.report_not_admitted = int(rep.get("not_admitted") or 0)
+                except Exception as exc:  # noqa: BLE001 —— 报告失败不该把已落库的文献判成失败
+                    result.report_path = ""
+                    result.report_error = f"{type(exc).__name__}: {exc}"
         finally:
             # staging 目录里的残留下载一并清掉（成功搬走的已经不在里面了）
             shutil.rmtree(staging, ignore_errors=True)

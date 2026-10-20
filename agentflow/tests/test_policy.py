@@ -142,7 +142,13 @@ def test_allowed_edges_match_design_table():
     不能去要证据。H 是只读角色这件事没变：新加的两条边只让它"请求"，
     `READ_ONLY_ROLES` 与它的写面一个字未动（下面那条断言仍然成立）。
     """
-    assert C.ALLOWED_EDGES["C"] == frozenset(), "C 一旦能发起动作就成了绕过 B 引文回验的写入路径"
+    # 2026-10-19 业主裁定：C→D 用于把候选路径交给 D 立猜想。
+    # 改前这里是 `== frozenset()`（"C 一旦能发起动作就成了绕过 B 引文回验的写入路径"）。
+    # 那条理由仍然对 C **自己**成立：C 的 `read_only` / `write_set` 一个字没动，
+    # 新边只让它**请求** D —— 写入仍由 D 落表，C 的产出仍然只有
+    # `analysis_reports` + 调用方开 `submit_requests` 时那一条 `search_requests`。
+    assert C.ALLOWED_EDGES["C"] == frozenset({"D"}), \
+        "2026-10-19 业主裁定：C→D 用于把候选路径交给 D 立猜想（只加这一条，不是放开 C 的出边）"
     assert C.ALLOWED_EDGES["H"] == frozenset({"A", "E", "G"}), \
         "审校者可以向 A/E 要证据、请 G 修订，但**不许自己改数据**（它的只读面在 tools 层）"
     assert C.ALLOWED_EDGES["A"] == frozenset({"B"})
@@ -836,7 +842,14 @@ def test_budget_state_keeps_none_semantics():
 
 
 def test_iter_edges_is_flat_and_complete():
-    """边表能被摊平，且C 不发起任何召唤（它是只读角色）。"""
+    """边表能被摊平，且 C 的出边只有 D（它是只读角色 —— 加的是一条"请求"边）。
+
+    2026-10-19 业主裁定：C→D 用于把候选路径交给 D 立猜想。改前这一条断言的是
+    "C 不发起任何召唤"；现在断言的是"C 只发起这一种"，并另加一条负控守住边界：
+    除 D 之外一个都不许有（C 仍然是只读角色，不许顺着这条边继续放开）。
+    """
     edges = set(P.iter_edges())
     assert ("M", "A") in edges and ("H", "G") in edges
-    assert not any(a == "C" for a, _ in edges), "C 不发起任何召唤（§3.1：C 的边刻意是空的）"
+    got = {to for frm, to in edges if frm == "C"}
+    assert got == {"D"}, (
+        f"C 的出边应当只有 D（2026-10-19 业主裁定：把候选路径交给 D 立猜想），实际 {sorted(got)}")

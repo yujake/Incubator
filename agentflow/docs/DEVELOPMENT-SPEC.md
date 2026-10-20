@@ -78,20 +78,20 @@ noai_paths_glob         = 43   # `(Select-String -Path .noai-paths -Pattern '^\S
 noai_paths_unique       = 40   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
 tools_star_tools_py     = 16   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
-schema_tables           = 16   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
+schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total         = 86   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
+cli_tools_total         = 94   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
 cli_tools_modules       = 15   # 同一行"已装模块 N"
-cli_tools_role_a        = 29   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
-cli_tools_role_b        = 22
-cli_tools_role_c        = 22
-cli_tools_role_d        = 41
-cli_tools_role_e        = 25
-cli_tools_role_f        = 36
-cli_tools_role_g        = 37
-cli_tools_role_h        = 30
-cli_tools_role_v        = 14
-cli_tools_role_m        = 20
+cli_tools_role_a        = 37   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
+cli_tools_role_b        = 23
+cli_tools_role_c        = 23
+cli_tools_role_d        = 42
+cli_tools_role_e        = 26
+cli_tools_role_f        = 37
+cli_tools_role_g        = 38
+cli_tools_role_h        = 31
+cli_tools_role_v        = 15
+cli_tools_role_m        = 21
 webui_modules           = 9    # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
 webui_routes            = 25   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
 webui_routes_get        = 18   # 同上，按 `x[0] == 'GET'` 计数

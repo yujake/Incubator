@@ -259,7 +259,16 @@ def test_every_step_records_the_upstream_cache_readings(tmp_path: pathlib.Path) 
     expected = round(600 * (prices["usd_per_m_in"] - prices["usd_per_m_in_hit"])
                      / 1_000_000.0 * len(run.steps), 6)
     assert summary["saved_usd"] is not None, summary
-    assert abs(summary["saved_usd"] - expected) < 1e-9, (summary["saved_usd"], expected)
+    # 金额比较用**容差**，不是改判据强度（2026-10-20 实测复现）：上面 `expected` 走的是
+    # "先乘完再 `round(…, 6)`"，而实现是逐次累计后落到微美元那一档 —— 两条路的舍入方向
+    # 可以差 1 个微美元（实测 0.000352 vs 0.000353，`< 1e-9` 当场红、复跑仍红）。
+    # 差 1 个微美元以内的两个数说的是同一件事；真算错（价格口径用错、单位错、忘了乘步数）
+    # 差的是量级，落不进这条容差里。
+    # ⚠️ 用**整数微美元**比较而不是 `abs(a - b) <= 1e-6`：那两个数在二进制浮点里相减是
+    # 1.0000000000000243e-06（刚好比 1e-6 大一点点）⇒ 写成 `<= 1e-6` 会留下一条
+    # "差值确实是 1 个微美元、却被浮点表示判红"的假红。
+    assert abs(round(summary["saved_usd"] * 1_000_000) - round(expected * 1_000_000)) <= 1, (
+        summary["saved_usd"], expected)
     assert summary["saved_usd"] > 0, summary
 
     # 收工那一行：`agent_run_end` 带汇总，`notes` 里有一句人话（60.0%）。
