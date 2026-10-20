@@ -129,8 +129,16 @@ def test_the_wash_only_touches_the_format_face(store):
     assert any("一维列表" in c for c in washed["changes"]), washed["changes"]
 
 
-def test_a_concept_row_carries_its_well_definedness_proof(store):
-    """概念也入库：`kind="concept"` + 良定义性证明那一格（原始概念写受控标记）。"""
+def test_a_concept_row_carries_no_proof_text(store):
+    """概念也入库：`kind="concept"`，而**证明那一格必须是空的**。
+
+    这一条在 2026-10-21 改过一次口径（本批缺陷一，业主的验收词）：此前断言
+    `proof_text == "concept:primitive"`（"良定义性证明"），而那个哨兵正是真机 mp3
+    那 1143 条污染行的来源 —— 概念不参与等级链（`draft/97` §14.5），任何“有没有
+    证明”的读数（`proof_review_gap`、收工门的 reviewed 档）都会被它顶高。
+    改的是**契约**，不是把判据放宽：断言从“必须等于哨兵”变成“必须为空”。
+    历史行一个字不动（读侧由 `verifications.proof_review_gap` 点名）。
+    """
     add_literature(store, S.format_id(0))
     sec = _sec(store)
     out = sec.record_statement(_payload(
@@ -140,9 +148,12 @@ def test_a_concept_row_carries_its_well_definedness_proof(store):
     assert out["checked"] and out["created"], out
     rows = {s["kind"]: s for s in _rows(store, "statements")}
     c = rows["concept"]
-    assert c["proof_text"] == "concept:primitive"
+    assert c["proof_text"] == "", (
+        f"概念行不该带证明文本（它不参与等级链）：{c['proof_text']!r}")
     assert c["statement_full"] == "边上权重的倒数" and c["aliases"] == ["conductance"]
     assert c["quote_reason"].strip(), "quote_verified 不是 True ⇒ 必须写理由"
+    # 出处按来源分档：这条概念带着文献出处 ⇒ external_lit（不是 own_result）
+    assert c["origin"] == "external_lit", c["origin"]
     assert "dependencies" in out["tables"] and "statements" in out["tables"]
 
 

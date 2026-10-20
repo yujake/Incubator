@@ -13,8 +13,10 @@
 - 组：同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：都要）；
   不同组 = 可选路径（组间 OR：任一） ⇒ 结果给每组一条链并挑最短那组（`best_group`）；
 - 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
-  `evidence_kind="proof"`）、原始概念（`kind="concept"` 且 `proof_text` 是
-  `concept:primitive`）。"没有边又没有证明证据" ⇒ 依赖没写（`unknown`），不是根；
+  `evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 2026-10-21 之前
+  要求 `proof_text == "concept:primitive"`，那个哨兵正是 mp3 那 1143 条污染行的来源，
+  现在按"定义在不在"判，历史行带哨兵照旧是根）。"没有边又没有证明证据" ⇒ 依赖没写
+  （`unknown`），不是根；
 - 边界：环 ⇒ 那一组报 `cycle` 并跳过（不牵连别的组）；`dangling` 边 ⇒ 那一组不完整；
   超 `max_depth` ⇒ `truncated=True`（给已走到的前缀）；跨组汇总按节点去重（多写一组
   路径不许把"牵动多少节点"吹大）；
@@ -26,6 +28,12 @@ from pathlib import Path
 import json
 
 from ._support import Any, Mapping, S, Sequence, _cfg_int, tool  # noqa: F401
+# 历史概念行上那个哨兵（唯一出处是 `migrate_concepts.PRIMITIVE_PROOF`）。
+# 读侧仍认它（不动历史）：迁移折出来的老概念、以及 2026-10-21 之前写进来的那些行，
+# `proof_text` 就是这一个值。而**写入侧**已经不再写它
+# （`conceptrows.concept_statement` 那一格永远是空的）—— 所以新概念"是不是根"
+# 改按"定义在不在"判。
+from ..migrate_concepts import PRIMITIVE_PROOF as CONCEPT_PRIMITIVE_MARKER  # noqa: E402
 
 #: 走到根就算完的两种 `kind`（第三种是 `lit:` 行本身，见 `_DepGraph.is_root`）。
 _PROOF_KINDS = ("proof",)
@@ -245,9 +253,17 @@ class _DepGraph:
             return False, "被依赖的那条命题不在册"
         if not self.groups_of(bare):
             if str(row.get("kind") or "") == "concept":
-                if str(row.get("proof_text") or "") == "concept:primitive":
+                # 概念是**定义性的根**（2026-10-21，本批缺陷一的读侧）：它的"证明"那一格
+                # 本来就不该有东西。此前这里要求 `proof_text == "concept:primitive"`
+                # 才算根 —— 那个哨兵正是 mp3 那 1143 条污染行的来源（写入侧现已不写它），
+                # 于是新写的概念会**不再是根**，经概念的依赖链一律读成"依赖没写"。
+                # 现在的口径与写入侧一致：概念行有定义 ⇒ 根；历史行带哨兵 ⇒ 照旧是根
+                # （不动历史）；定义还没到的待补行（`pending_definition`）⇒ 不是根，
+                # 理由说明"定义还没到"，而不是"缺证明"。
+                if (str(row.get("proof_text") or "") == CONCEPT_PRIMITIVE_MARKER
+                        or str(row.get("statement_full") or "").strip()):
                     return True, ""
-                return False, "概念的良定义性证明没写（不是原始概念）"
+                return False, "概念的定义还没到（pending_definition）⇒ 这一条还不是根"
             if str(row.get("evidence_kind") or "") in _PROOF_KINDS:
                 return True, ""
             # ⚠️ **2026-10-17 业主口径**：*"自证定理在审核后要能进定理证明库"* ⇒

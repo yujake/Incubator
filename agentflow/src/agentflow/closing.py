@@ -3635,8 +3635,14 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         # 两个"什么算一行审校"的答案。
         vrows, _problems = _VR.list_verifications(store.root, limit=None)
         signed = {str(r.get("statement_id") or "") for r in vrows if _VR.signs_bit3(r)}
+        # 概念行不算"我方走完「有证明过程 + 审过」的命题"（2026-10-21，本批缺陷一的读侧）：
+        # 真机 mp3 有 1143 条概念行，每一条都带 `proof_text`（哨兵 `concept:primitive`），
+        # 于是"`proof_text` 非空 且 V 签了成立"这条读数只要撞上一次签名就把概念算进去 ——
+        # 而概念不参与等级链（`draft/97` §14.5），它没有"证明过程"这一档。
+        # 这一格与 `verifications.proof_review_gap` 的概念行那一支同一口径。
         prose_reviewed = [s for s in stmts
-                          if str(s.get("proof_text") or "").strip()
+                          if str(s.get("kind") or "") != "concept"
+                          and str(s.get("proof_text") or "").strip()
                           and str(s.get("stmt_id")) in signed]
         #: 替代读数（这一档里"审过"的凭据）：有证明过程 且 V 逐行走查签了「成立」。
         rep.readings["load_bearing"] = {

@@ -167,8 +167,12 @@ def test_the_secretary_writes_the_concept_once(store):
     """秘书那条路（B 交内容）写在一处 —— 一次写入不许变成两行概念。"""
     sec = SEC.Secretary("B", root=store.root, store=store)
     out = sec.record_statement(
-        {"origin": "own_result", "kind": "concept", "label": "电导",
-         "statement_full": "边上权重的倒数", "proof_text": "concept:primitive",
+        # 2026-10-21（本批缺陷一）：概念行的 `origin` 不再默认 `own_result` ——
+        # 确实是自己定义的新概念要**显式**声明 `self_authored`；概念行也不再带
+        # `proof_text`（那个哨兵把"有没有证明"的读数全顶高了，见
+        # `conceptrows.concept_statement` 的 docstring）。
+        {"origin": "own_result", "self_authored": True, "kind": "concept",
+         "label": "电导", "statement_full": "边上权重的倒数",
          "quote_reason": "原始概念", "evidence_kind": "heuristic"}, role="B")
     assert out["checked"] and out["created"], out
     sid = out["stmt_id"]
@@ -185,8 +189,12 @@ def test_the_secretary_mirrors_when_the_legacy_table_is_present(store, monkeypat
     _pre_flip(monkeypatch)
     sec = SEC.Secretary("B", root=store.root, store=store)
     out = sec.record_statement(
-        {"origin": "own_result", "kind": "concept", "label": "电导",
-         "statement_full": "边上权重的倒数", "proof_text": "concept:primitive",
+        # 2026-10-21（本批缺陷一）：概念行的 `origin` 不再默认 `own_result` ——
+        # 确实是自己定义的新概念要**显式**声明 `self_authored`；概念行也不再带
+        # `proof_text`（那个哨兵把"有没有证明"的读数全顶高了，见
+        # `conceptrows.concept_statement` 的 docstring）。
+        {"origin": "own_result", "self_authored": True, "kind": "concept",
+         "label": "电导", "statement_full": "边上权重的倒数",
          "quote_reason": "原始概念", "evidence_kind": "heuristic"}, role="B")
     assert out["checked"] and out["created"], out
     sid = out["stmt_id"]

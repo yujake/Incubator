@@ -24,6 +24,57 @@ TOY_EXAMPLE_KEY = "toy_example"
 #: 后者的读数是"扫到哪儿"，前者要的是"这一个数对不对，人能手算出来"。
 TOY_EXAMPLE_MAX_N = 8
 
+#: 规模读数的键名（受控词表，唯一出处 = 这一处）：脚本自报的
+#: `observations` / `bound` / `data` / `scaling` 与调用方的 `params` 里，**只有**这些键
+#: 被当作"这一趟算到多大的 n"。
+#:
+#: 为什么是一张白名单而不是"看着像大小的数都算"：自动判定要在**没有调用方声明**时
+#: 替它下一个结论（`params["toy_example"]` 真机里常常没带下来）。收得太宽，一个
+#: 大扫描里随便一个计数（`D`、`rank`、`count`）就会被读成规模，于是"扫描清单"被标成
+#: 玩具例子 —— 那正是本批的负控要咬住的那一格。
+#: `n_values` 这类**列表**形态单独一张表（取最大值：脚本扫了 [1,2,3]，规模就是 3）。
+TOY_EXAMPLE_SCALE_KEYS: tuple[str, ...] = (
+    "n", "N", "max_n", "n_max", "n_vertices", "n_nodes", "dim",
+    "D_max", "M_max", "generator_width_M_max", "degree_max",
+)
+TOY_EXAMPLE_SCALE_LIST_KEYS: tuple[str, ...] = ("n_values", "ns")
+
+#: 「脚本声明的搜索空间」这一档的键名（穷举/枚举类脚本自报"一共枚举了多少个对象"）。
+TOY_EXAMPLE_SPACE_KEYS: tuple[str, ...] = (
+    "search_space", "space", "cases", "objects", "enumerated", "combinations",
+)
+
+#: 搜索空间的上限：`8! = 40320`。
+#:
+#: 为什么是这个数（可自证）：`TOY_EXAMPLE_MAX_N = 8` 说的是"n 不超过 8"，
+#: 而 n=8 的全排列空间恰好是 8! = 40320 个对象 —— 一个把 `n<=8` 的情形**枚举完**的
+#: 脚本，最多也就报出这个数。超过它就不是"枚举了一个小情形"，而是"扫了一大片"。
+TOY_EXAMPLE_MAX_SEARCH_SPACE = 40320
+
+#: 脚本**真的给出了结论行**的读数（`observations["conclusion_source"]` 的取值）——
+#: 「有结果行」的判据就用它，不另抄一份 `REPRO_RESULT` 解析。
+TOY_EXAMPLE_RESULT_SOURCES: tuple[str, ...] = ("line", "json_key", "multiple")
+
+
+def is_toy_example(reading: object) -> bool:
+    """这一格读数**算不算**一个玩具例子 —— 唯一口径（读侧一律调它，不各写一份）。
+
+    三条同时成立才算（少一条都只是"看起来像"）：
+
+    1. `checked is True`：规模真的判过了（`checked=False` 是"判不了"，不是合格）；
+    2. `within_limit is True`：规模确实小到能手工核对（超限 / 判不了都是 False）；
+    3. `executed is True`：脚本**真跑过**（有退出码，且有结构化结论行）。
+
+    为什么"标没标"要有一个函数而不是让每个读侧自己拼条件：真机里被读的正是
+    "有没有玩具例子"这个数字，两份口径一旦分家，同一份台账会被数出两个值，
+    而其中一份永远没人复算。
+    """
+    if not isinstance(reading, Mapping):
+        return False
+    return (reading.get("checked") is True
+            and reading.get("within_limit") is True
+            and reading.get("executed") is True)
+
 
 class _RunExperiment:
     def run_experiment(
@@ -217,11 +268,17 @@ class _RunExperiment:
         #
         # 业主口径（本批的验收词）：玩具例子 = "在一个小到能手工核对的情形上，把断言跑成
         # 可复现的读数" —— 一条最小脚本 ＋ 一次真实执行 ＋ 一个读得出的数。
-        # 落点、上限与三态见 `_toy_example_reading` 的 docstring；没声明就什么都不加
-        # （既有实验行逐字节不变）。
-        toy = _toy_example_reading(params=params, exit_code=run["exit_code"],
-                                   code_path=_relpath(path, self.workspace_root),
-                                   code_hash=chash)
+        # 落点、上限与三态见 `_toy_example_reading` 的 docstring。
+        #
+        # **不让 E 等调用方记得带声明**（本批缺陷二的真机读数）：`projects/mp3` 的两条
+        # 实验里，第二条的 claim 自己写着"玩具读数"、`bound` 是 `D<=6 / M<=8 / n<=3`，
+        # 而 `observations` 里 `toy_example` **一条都没有** —— 因为只有经 `F→E` 且父把
+        # `params["toy_example"]` 带下来才会标，而模型不一定会带。所以声明缺席时由 E
+        # **按规模与可手算性自己判**（见 `_auto_toy_example_reading` 的三态）。
+        toy = _toy_example_reading(
+            params=params, observations=derived.get("observations"),
+            exit_code=run["exit_code"],
+            code_path=_relpath(path, self.workspace_root), code_hash=chash)
         if toy is not None:
             derived["observations"][TOY_EXAMPLE_KEY] = toy
 
@@ -397,7 +454,9 @@ def _as_obs_dict(value: Any) -> dict:
     return {}
 
 
-def _toy_example_reading(*, params: Mapping[str, Any] | None, exit_code: Any,
+def _toy_example_reading(*, params: Mapping[str, Any] | None,
+                         observations: Mapping[str, Any] | None = None,
+                         exit_code: Any,
                          code_path: str, code_hash: str) -> dict | None:
     """把「这一次跑的是一个玩具例子」落成一格可查的读数（`observations["toy_example"]`）。
 
@@ -412,12 +471,15 @@ def _toy_example_reading(*, params: Mapping[str, Any] | None, exit_code: Any,
      "why": ""}
     ```
 
+    没声明时 `declared` 那一格由**自动判定**填（`{"auto": True, "source": …}`，
+    `why` 里写清"由规模自动判定"）—— 见 :func:`_auto_toy_example_reading`。
+
     ## 谁声明、谁算（两边都不许越界）
 
-    「这是一个玩具例子」是**调用方**的声明：`run_experiment(params=...)` 里的
-    `toy_example` 那一格（F 把子目标的 `params` 原样带下来，一个字不改）。
-    本函数只做三件**机械的**事 —— 不替调用方判断"这算不算玩具"，也不相信**脚本的**
-    自我陈述（脚本能自报的只有 `REPRO_RESULT`，它决定不了"这次实验的规模够不够小"）：
+    「这是一个玩具例子」的第一顺位仍是**调用方**的声明：`run_experiment(params=...)`
+    里的 `toy_example` 那一格（F 把子目标的 `params` 原样带下来，一个字不改）。
+    声明在时本函数只做三件**机械的**事 —— 不替调用方判断"这算不算玩具"，也不相信
+    **脚本的**自我陈述（脚本能自报的只有 `REPRO_RESULT`，它决定不了"这次实验的规模够不够小"）：
 
     ① 核对声明的规模 `n` 不超过 :data:`TOY_EXAMPLE_MAX_N`：超过 ⇒ `within_limit=False`
        并把上限写在同一格里（"标了玩具但其实是个扫描清单"是读得出来的，不是被吞掉）；
@@ -425,20 +487,30 @@ def _toy_example_reading(*, params: Mapping[str, Any] | None, exit_code: Any,
        `script_sha256` —— 于是"只写了脚本"与"真的跑过一次"在行上分得开（反真空）；
     ③ 把声明原样留在 `declared` 里（不改写、不解释、不替它补字段）。
 
+    ## 声明缺席：E 自己按规模判（本批缺陷二）
+
+    真机（`projects/mp3/data/experiments.json`）：两条实验，`params` 都是 `{}`，
+    而第二条的 claim 逐字写着"玩具读数"、`bound` 是 `D<=6 / M_max<=8 / n<=3`、
+    `exit_code=0` —— `observations` 里 `toy_example` **0 条**。根因是"只有经 `F→E`
+    且父把 `params["toy_example"]` 带下来才会标"，而模型不一定会带。
+    于是这一档改成：声明缺席时由 E 在**落库那一刻**按规模与可手算性自动判定
+    （:func:`_auto_toy_example_reading`），并且**不许**把大扫描标成玩具例子。
+
     ## 三态（`checked`）
 
-    - `checked=True, within_limit=True/False`：声明成形、判过了；
-    - `checked=False, within_limit=None`：声明不成形（不是对象 / 没有数值 `n`）——
-      **判不了 ≠ 合格**，`why` 里写清缺什么。这一档照旧落行（实验本身跑完了），
-      但读数不会假装它是个合格的玩具例子。
+    - `checked=True, within_limit=True/False`：声明/规模成形、判过了；
+    - `checked=False, within_limit=None`：判不了（声明不是对象 / 没有数值 `n` /
+      自动判定找不到任何规模读数）—— **判不了 ≠ 合格**，`why` 里写清缺什么。
+      这一档照旧落行（实验本身跑完了），但读数不会假装它是个合格的玩具例子。
 
-    没声明 `params["toy_example"]` ⇒ 返回 `None`：调用方不写这一格，台账就与从前
-    逐字节相同（既有实验行一个字都不动）。
+    "标没标"的唯一口径是 :func:`is_toy_example`（三条同时成立），不是单独看某一位。
     """
     params = dict(params) if isinstance(params, Mapping) else {}
     declared = params.get(TOY_EXAMPLE_KEY)
     if declared is None:
-        return None
+        return _auto_toy_example_reading(
+            params=params, observations=observations, exit_code=exit_code,
+            code_path=code_path, code_hash=code_hash)
     out: dict[str, Any] = {
         "declared": dict(declared) if isinstance(declared, Mapping) else declared,
         "checked": False,
@@ -469,3 +541,182 @@ def _toy_example_reading(*, params: Mapping[str, Any] | None, exit_code: Any,
                       "不是玩具例子（它是一份扫描清单：读数是'扫到哪儿'，不是"
                       "'这一个数人能手算出来对不上'）")
     return out
+
+
+def _scale_numbers(value: Any, *, max_depth: int = 3) -> tuple[float | None, float | None, str]:
+    """从一个自由形状的读数里挑出 `(最大 n, 最大搜索空间, 出处)`。
+
+    `observations` / `bound` / `data` / `scaling` 都是**自由格**（脚本自己写的键），
+    形状没有契约，所以这里按**白名单键名**递归找（:data:`TOY_EXAMPLE_SCALE_KEYS` 等），
+    并且只认"数值"（布尔、字符串、`None` 一律不认 —— `True` 会被 `float()` 读成 1，
+    悄悄造出一个规模）。
+
+    两件事刻意定死：
+
+    1. **取最大值**（不是第一个命中）：规模由"这一趟算到多大的那一格"决定 ——
+       一个脚本先算了 n=3 再扫到 n=14，它是扫描清单，不是玩具例子；
+    2. **递归到有限深度**（默认 3 层）：`bound` / `data` / `scaling[]` 都是嵌套形态
+       （真机：`bound={"A": {"D_max": 6}, "B": {"n_values": [1,2,3]}}`）。
+       再深就不是"规模声明"，而是数据本身了 —— 那里面任何数字都不该被读成规模。
+    """
+    best_n: float | None = None
+    best_space: float | None = None
+    src = ""
+
+    def _num(v: Any) -> float | None:
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return None
+        return float(v)
+
+    def _walk(node: Any, path: str, level: int) -> None:
+        nonlocal best_n, best_space, src
+        if level > max_depth or not isinstance(node, Mapping):
+            return
+        for key, val in node.items():
+            name = str(key)
+            where = f"{path}.{name}" if path else name
+            if name in TOY_EXAMPLE_SCALE_KEYS:
+                got = _num(val)
+                if got is not None and (best_n is None or got > best_n):
+                    best_n, src = got, where
+                continue
+            if name in TOY_EXAMPLE_SCALE_LIST_KEYS and isinstance(val, (list, tuple)):
+                nums = [x for x in (_num(v) for v in val) if x is not None]
+                if nums and (best_n is None or max(nums) > best_n):
+                    best_n, src = max(nums), f"{where}[]"
+                continue
+            if name in TOY_EXAMPLE_SPACE_KEYS:
+                got = _num(val)
+                if got is not None and (best_space is None or got > best_space):
+                    best_space = got
+                    if not src:
+                        src = where
+                continue
+            # 只往下走一层结构（不把 `str` / `bytes` 当结构）
+            if isinstance(val, Mapping):
+                _walk(val, where, level + 1)
+            elif isinstance(val, (list, tuple)):
+                for i, item in enumerate(val[:40]):
+                    if isinstance(item, Mapping):
+                        _walk(item, f"{where}[{i}]", level + 1)
+
+    _walk(value, "", 0)
+    return best_n, best_space, src
+
+
+def _toy_example_executed(*, exit_code: Any,
+                          observations: Mapping[str, Any] | None) -> bool:
+    """这一趟算不算"**真跑过**"（玩具例子的第 3 条，唯一判据）。
+
+    两个条件同时成立：
+
+    1. 有退出码（`exit_code is not None`）—— 超时 / 起不来都没有；
+    2. 有**结构化结论行**（`observations["conclusion_source"]` 是
+       :data:`TOY_EXAMPLE_RESULT_SOURCES` 之一）—— 脚本跑完却没按协议打出结论，
+       就只是"执行过"，不是"把断言跑成了一个读得出的数"。
+
+    为什么单独抽出来：读写两侧都必须问同一个问题（写侧决定标不标，读侧
+    `is_toy_example` 决定算不算），而"没真跑"这一档的负控要能单独注射 ——
+    判据自己的可注射性也是它的一部分（不然"这条判据能红"没法被检验）。
+    """
+    if exit_code is None:
+        return False
+    src = str((observations or {}).get("conclusion_source") or "")
+    return src in TOY_EXAMPLE_RESULT_SOURCES
+
+
+def _auto_toy_example_reading(*, params: Mapping[str, Any] | None,
+                              observations: Mapping[str, Any] | None,
+                              exit_code: Any, code_path: str,
+                              code_hash: str) -> dict | None:
+    """调用方没带 `toy_example` 声明时，由 E **按规模与可手算性**自己判（本批缺陷二）。
+
+    真机（`projects/mp3/data/experiments.json` 的第二条）：claim 逐字写着"玩具读数"、
+    `bound` 里是 `D_max=6 / generator_width_M_max=8 / n_values=[1,2,3]`、`exit_code=0`，
+    而 `observations` 里 `toy_example` **0 条** —— 因为只有父把声明带下来才会标。
+    这个函数就是那条断掉的接缝：**E 自己判，不依赖模型记得带参数**。
+
+    ## 判据（三条同时成立才算"标了"；唯一读法是 :func:`is_toy_example`）
+
+    1. **规模小**：从 `params` ＋ 脚本自报的 `observations`（含 `bound` / `data` /
+       `scaling`）里按白名单键名找规模读数 —— 有 `n` 类读数就要求
+       `n <= TOY_EXAMPLE_MAX_N`；有搜索空间读数就要求
+       `<= TOY_EXAMPLE_MAX_SEARCH_SPACE`（两者都有则都要满足）；
+    2. **可手算**：就是第 1 条的上限本身（超过上限的不是"一个能手算的数"，
+       是"扫到哪儿"）；
+    3. **真跑过**：`exit_code` 非空 **且** 有结构化结果行
+       （`observations["conclusion_source"]` ∈ :data:`TOY_EXAMPLE_RESULT_SOURCES`）。
+       只写了脚本、或跑了但没打出结论行 ⇒ `executed=False`，读数照落但**不算**玩具例子。
+
+    ## 三种结局（都不许静默）
+
+    | 结局 | 返回 |
+    |---|---|
+    | 找不到任何规模读数 | `None`（这一趟没东西可判，行与从前逐字节相同） |
+    | 找到规模读数 | 一格读数：`checked=True`，`within_limit` 按上面三条算，`why` 写清"由规模自动判定"+ 依据 |
+    | 有规模、但没真跑 | 同一格读数 + `executed=False` + `why` 点名"没真跑"（**不标**，但看得见） |
+
+    为什么"没真跑"也照落一格：`executed` 与"规模判没判成"是两件事（声明那一支也这么分）。
+    把没跑的整格吞掉，读的人就只能看到"没有玩具例子"，分不清是"规模太大"还是
+    "脚本没跑"—— 而这两种的处置完全不同。
+    """
+    params = dict(params) if isinstance(params, Mapping) else {}
+    obs = dict(observations) if isinstance(observations, Mapping) else {}
+    n_params, space_params, src_params = _scale_numbers(params)
+    n_obs, space_obs, src_obs = _scale_numbers(obs)
+    ns = [x for x in (n_params, n_obs) if x is not None]
+    spaces = [x for x in (space_params, space_obs) if x is not None]
+    if not ns and not spaces:
+        return None
+    n = max(ns) if ns else None
+    space = max(spaces) if spaces else None
+    source = src_obs or src_params
+    executed = _toy_example_executed(exit_code=exit_code, observations=obs)
+    within = True
+    why = ""
+    if n is not None and float(n) > TOY_EXAMPLE_MAX_N:
+        within = False
+        why = (f"由规模自动判定：n={_as_n(n)} 超过玩具例子的上限 {TOY_EXAMPLE_MAX_N}"
+               f"（出处 {source}）⇒ 这一条不是玩具例子（它是一份扫描清单：读数是"
+               "'扫到哪儿'，不是'这一个数人能手算出来对不上'）")
+    elif space is not None and float(space) > TOY_EXAMPLE_MAX_SEARCH_SPACE:
+        within = False
+        why = (f"由规模自动判定：脚本声明的搜索空间 {_as_n(space)} 超过上限 "
+               f"{TOY_EXAMPLE_MAX_SEARCH_SPACE}（出处 {source}）⇒ 这一条不是玩具例子")
+    if within and not executed:
+        why = ("由规模自动判定：规模够小（n={}），但脚本没有真的跑出结论行"
+               "（exit_code={}，结论行={!r}）⇒ 不标玩具例子（没真跑就不算"
+               "'把断言跑成可复现的读数'）".format(
+                   _as_n(n) if n is not None else "（没报 n）",
+                   exit_code, str(obs.get("conclusion_source") or "")))
+    elif within:
+        bits = [f"n={_as_n(n)}" if n is not None else "",
+                f"搜索空间={_as_n(space)}" if space is not None else ""]
+        why = ("由规模自动判定：{} 都在上限内（n ≤ {}，搜索空间 ≤ {}，出处 {}）⇒ 这一条"
+               "是玩具例子".format("、".join(b for b in bits if b),
+                                  TOY_EXAMPLE_MAX_N, TOY_EXAMPLE_MAX_SEARCH_SPACE, source))
+    return {
+        "declared": {"auto": True, "source": source,
+                     **({"n": _as_n(n)} if n is not None else {}),
+                     **({"search_space": _as_n(space)} if space is not None else {})},
+        "checked": True,
+        "within_limit": bool(within),
+        "n": _as_n(n),
+        "limit": TOY_EXAMPLE_MAX_N,
+        "executed": bool(executed),
+        "exit_code": exit_code,
+        "script_path": str(code_path or ""),
+        "script_sha256": str(code_hash or ""),
+        "why": why,
+    }
+
+
+def _as_n(value: float | int | None) -> Any:
+    """规模读数进台账时的形态：整数就给 `int`（`n=6.0` 与 `n=6` 在 JSON 里是两个值）。"""
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return value
+    return int(f) if f == int(f) else f

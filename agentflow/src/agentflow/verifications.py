@@ -370,7 +370,6 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
         "verification_id": "", "verdict": "", "round": None,
         "sha_matches": None, "ledger": "", "rows": 0, "problems": [],
     }
-    #: 三条必填项的逐项读数（拒信读它；判据不看它，见 docstring）。
     checks: list[dict[str, Any]] = [
         {"item": "proof_text 非空（有被审的那份证明）", "ok": False, "detail": "还没判到"},
         {"item": f"`verifications/<命题号>.jsonl` 里有签「成立」的那一行"
@@ -379,6 +378,41 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
          "ok": False, "detail": "还没判到"},
     ]
     out["checklist"] = checks
+    # ---- 概念行：永远不算"有证明"（2026-10-21，本批缺陷一的读侧）
+    #
+    # 真机读数（`projects/mp3/data/statements.json`）：1143 条概念行**每一条**
+    # 都带 `proof_text`（值是一个哨兵 `concept:primitive`）。于是"这一行有没有证明"
+    # 的读数被顶高：`prose_reviewed_statements` 数的是"`proof_text` 非空且 V 签了
+    # 成立"，一条概念行只要撞上一次签名就能进那一格；而 `proof_review_gap` 也只问
+    # `proof_text` 非空 —— 它会把概念行当成"有一条被审过的证明"的候选。
+    #
+    # 判据只有一句：**概念不参与等级链**（`draft/97` §14.5，
+    # `evidencebits.derive_grade` 对 `kind="concept"` 短路成 `not_applicable`），
+    # 所以它既没有"证明"这一档，也不可能"有证明"。两档要分开说：
+    # 带 `proof_text` 是**写入侧的污染**（要点名，让存量看得见），
+    # 不带是**正常**（这一格对它不适用 —— 不是"缺证明"）。
+    if str(row.get("kind") or "") == "concept":
+        out["checked"] = True
+        text_concept = str(row.get("proof_text") or "")
+        if text_concept.strip():
+            checks[0].update(ok=False, detail=f"{len(text_concept)} 字（概念行不该有）")
+            checks[1]["detail"] = "概念行没有'证明'这一档，不适用"
+            checks[2]["detail"] = "同上"
+            out["why"] = (f"概念行不该带证明文本：命题 {sid or '（没有编号）'} 是 "
+                          f"kind='concept'，而它的 `proof_text` 非空"
+                          f"（{text_concept[:40]!r}）⇒ 概念不参与等级链，"
+                          "`proof_text` 对它不是证明，而是一个哨兵；"
+                          "任何'有没有证明'的读数都会被它顶高。"
+                          "写入侧已经堵住（`conceptrows.concept_statement` 不写这一格），"
+                          "这一条是存量行的点名：把这一格清空（定义/待补标记都在别的字段里）")
+        else:
+            checks[0]["detail"] = "概念行没有 proof_text（正常：概念不参与等级链）"
+            checks[1]["detail"] = "概念行没有'证明'这一档，不适用"
+            checks[2]["detail"] = "同上"
+            out["why"] = (f"命题 {sid or '（没有编号）'} 是概念行（kind='concept'）："
+                          "概念没有'证明'这一档（不参与等级链）⇒ 这一格对它**不适用**，"
+                          "不许读成'有证明'，也不许读成'缺证明'")
+        return out
     text = str(row.get("proof_text") or "")
     if not text.strip():
         out["checked"] = True

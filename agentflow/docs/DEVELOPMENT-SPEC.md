@@ -1392,3 +1392,142 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 - `_check_13` 之外，`prompt_cache` 读数（hit / miss / unknown / hit_rate / saved_usd）落进每步记录与 `agent_run_end`，上游不给读数时记 **unknown 而非 0**。
 
 **结论**：往 system prompt 里塞"每步会变的东西"= 同时踩两条线（判据红 + 缓存失效）。这不是风格问题，是机器会算的账。
+
+## [规范] §14 ⭐ 提示词缓存（落定十个角色 + 秘书，2026-10-21 真机读数）
+
+**一句话**：本仓**没有**"写缓存"的开关 —— 上游（DeepSeek）的**服务端**前缀缓存是自动的，
+唯一能控的是"前缀逐字节相同"；所以这一节的全部内容是：**读数在哪、实测命中了多少、
+怎么再落一次**。
+
+### §14.1 写缓存：没有开关，只有一个前提
+
+全仓 grep `cache_control` 命中 **0 处**；六个模型档环境变量（真身
+`src/agentflow/modelgw.py:163-168` 的 `ENV_KEY` / `ENV_BASE` / `ENV_NAME` /
+`ENV_TIMEOUT` / `ENV_RETRIES` / `ENV_EFFORT`，值都是 `AGENTFLOW_MODEL_…`）
+里**没有一个是缓存开关**。
+
+请求体的唯一组装置是 `modelgw.ModelGateway._payload`（`src/agentflow/modelgw.py:739-764`）：
+`model` / `messages`（system 一条 + user 一条）/ `temperature` / `stream` / 推理强度 /
+`tools`。没有任何缓存注解可写 —— 上游自己为"没命中的那部分"建索引，下一次同前缀就命中。
+
+⇒ **"把提示词写进缓存"= 把同一份前缀发一次。** 于是本节的"开关"实际上是三条：
+① system 逐字节稳定（`promptstability.split_facts` + `DYNAMIC_SECTION_WHITELIST`，见 §13.4）；
+② 请求形状与生产一致（同一个 `system` + 同一份工具面）；
+③ 真的发过一次（这就是 `scripts/warm_prompt_cache.py` 干的事）。
+
+### §14.2 读缓存：读数从哪来（逐跳给文件:行）
+
+| 跳 | 落点 |
+|---|---|
+| 上游 `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` | `modelgw.py:878-888` 读进 `ModelReply.cache_hit_tokens` / `cache_miss_tokens`（三态：`None` = 上游没给） |
+| 一次调用的审计记录 | `llmseam.py:477-478` 转成 `SeamCall` 两格（`to_dict()` 也带，`llmseam.py:150-151`） |
+| 每一步 | `promptstability.prompt_cache_record`（`promptstability.py:254`）⇒ `agent_step.prompt_cache`（`agent_loop.py:3942` / `:4033` / `:4343`） |
+| 一趟的汇总 | `promptstability.summarize_prompt_cache`（`promptstability.py:332`）⇒ `LoopRun.prompt_cache`（`agent_loop.py:4450`） |
+| 收工两个落点 | `agent_run_end`（`agent_loop.py:4533`）与检查点第 10 个键（`agent_loop.py:7551`，判据 `promptstability.checkpoint_prompt_cache_problem`） |
+
+**`write` 这一格是推导量，不是上游字段**：上游没有"写"计数，本仓把它定义为
+`write = prompt_cache_miss_tokens`（`write_source="derived:miss"`）。它说的是
+"这部分**被送去建索引**了"，**不是**"下一次一定能命中"。实证只有 `hit` 那一格 ——
+秘书那一行就是两者分开的例子（见 §14.3 最后一行）。
+
+### §14.3 实测读数（十个角色 + 秘书，`2026-10-21 05:31–05:41 +08:00`）
+
+命令（`$env:PYTHONPATH='src'`，下同）：
+
+```powershell
+python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,secretary `
+  --hit-sample M,C --probe-no-tools C --probe-cross-run C --cap-usd 0.10
+```
+
+读数落在 `tests/fixtures/prompt_cache_warm.json`（**一个容器，保留最近 8 趟**：
+第一趟是"冷写"，后面每一趟都是"重落一次"；两趟都要留，因为
+"写进去了"与"下次能命中"是两件事）。
+
+| 角色 | system 字符 | 工具函数 | 冷写 `write`（第一趟 pass1，= miss） | 重落一次命中（最新趟 pass1） | 命中率 | 二调样本命中（pass2） | 跨 run 可复用前缀（字符） |
+|---|---|---|---|---|---|---|---|
+| A | 27,305 | 47 | 24,909 | 24,704 / 24,909 | 99.2% | — | 114 |
+| B | 26,429 | 33 | 21,268 | 21,120 / 21,268 | 99.3% | — | 117 |
+| C | 21,943 | 33 | 194（见下） | 18,432 / 18,626 | 99.0% | **18,432 / 18,626（99.0%）** | 117 |
+| D | 31,907 | 52 | 26,571 | 26,368 / 26,571 | 99.2% | — | 118 |
+| E | 27,291 | 36 | 22,164 | 22,016 / 22,164 | 99.3% | — | 139 |
+| F | 28,421 | 47 | 24,645 | 24,448 / 24,645 | 99.2% | — | 114 |
+| G | 36,759 | 48 | 30,177 | 29,952 / 30,177 | 99.2% | — | 119 |
+| H | 36,360 | 41 | 28,171 | 28,032 / 28,171 | 99.5% | — | 112 |
+| V | 23,068 | 25 | 18,190 | 18,048 / 18,190 | 99.2% | — | 145 |
+| M | 50,671 | 31 | 35,203 | 35,069 / 35,203 | 99.6% | **35,069 / 35,203（99.6%）** | 116 |
+| secretary | 0（没有 system） | 0 | 175 | **0 / 175** | **0.0%** | — | 307（稳定头） |
+
+三行读数各自的一句话（**别把它们读成同一件事**）：
+
+- **十个角色：前缀真的进了缓存。** 冷写那一趟每个都是"整份 prompt 全 miss"
+  （`write` = 那一整行 token 数），下一趟同样的请求就变成 99%+ 命中 ——
+  "命中"是这里唯一能证明"索引留下了它"的读数。
+- **C 那一行的 `write=194`** 不是异常：它是在调通链路时被一条探针先预热过的
+  （`--roles C --cap-usd 0.02`），所以主趟的第一发已经是命中。留痕，不回头改。
+- **秘书那一行：没有落地。** 同一份 175 token 的提示词**连发两趟都是
+  `hit=0 / miss=175`**（`python scripts/warm_prompt_cache.py --roles secretary
+  --hit-sample secretary` ⇒ 退出码 1，"第二次调用没命中的样本：`['secretary']`"）。
+  原因**不知道**（可能是太短、够不到上游的索引粒度；也可能是"只有 user 消息、
+  没有 system 的请求不建索引"）—— 这一格记 unknown，不编。要让秘书也吃上缓存，
+  得把它的调用形状改成"稳定头进 system、材料留 user"（`secretary.Secretary.judge`
+  今天把整条提示词塞在一条 user 消息里：`secretary.py:1325` 的 `ask_json(prompt)`
+  没有 system 参数），那是提示词/调用面的改动，不在本轮授权内。
+
+**另外两条诊断读数**（同一趟，`--probe-*` 打出来的）：
+
+| 问题 | 读数 | 那句话 |
+|---|---|---|
+| 工具面在不在缓存前缀里？ | 去掉工具面再发一次：`hit=11,904 / tokens_in=12,126`（98.2%） | **不在**。缓存按 `messages` 建索引，`tools` 不参与前缀 ⇒ 工具面省不进/废不掉缓存 |
+| 换一趟活（不同 task / task_id / depth）还能命中多少？ | 第一次见：`hit=0 / 18,635`；同一份第二次见：`hit=18,432 / 18,635`（98.9%） | **第一次 0**。可复用前缀只有 112–145 字符（AGENT_IDENTITY 里带 `task_id` / `depth`，第 ~95 个字符起就不同），够不到一个缓存块 |
+
+### §14.4 这条判据在哪、它怎么红
+
+判据本体 = `tests/test_prompt_cache_warm.py`（9 条，逐条带负控；**不发请求、不联网**，
+只读 §14.3 那份读数并重算十个角色的摘要）：
+
+| 判据 | 正控 | 负控（必须红） |
+|---|---|---|
+| ① 每个目标都有缓存写记录（`write>0` 或 `hit>0`），逐角色打一行 | 11/11 | 删掉某个角色的行 ⇒ 点名它 |
+| ①-b 十个角色的 prompt **被下一次命中过**（实证 `hit>0`） | 10/10；秘书 `landed=False` 但读数自洽 | 删掉一个已落地角色的行 ⇒ 不再判落地 |
+| ② 第二次调用命中（样本只有 2 个：`M` / `C`） | `hit>0` 且 `hit/(hit+miss)>0` | 把样本那一行的 `hit` 改成 0 ⇒ 红 |
+| ③ 同一角色两次调用的 `prompt_sha256` 相同 | 每一行都同摘要 + 两次独立渲染逐字节相同 | **把 `budget_left` 塞回 system**（改前那个形态）⇒ 红，并报出"从第几个字符起不同"与段名 `TASK_BUDGET` / `TASK_NOTEBOOK` |
+| ④ 读数不许烂 | 盘上记的 `prompt_sha256` = 今天重算的 | 提示词一改（`agent_prompts.py` / `specs/*` / 预设）⇒ 红，处置是"重跑 §14.5 那条命令"，**不是**改测试 |
+| ⑤ 两条诊断读数与本节一致 | 工具面不在前缀里 / 换一趟活第一次 0 命中 | 探针口径被改（例如 task_id 没变）⇒ 红 |
+
+`③` 的负控是这一节最要紧的一条：它证明这条判据守的是**"提示词不许抖"**，
+而不是"两边都不是空的"。§13.4 那条纪律（每步会变的东西不许进 system）就靠它咬人。
+
+### §14.5 再落一次（一条命令）
+
+```powershell
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='src'
+python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,secretary
+```
+
+- **幂等**：同一 scenario 再跑一遍，`prompt_sha256` 不变、`hit` 接近满、`write` 接近 0
+  （读数文件里多一趟，前一趟不动）。
+- **自带花费上限**：`--cap-usd`（缺省 **0.10** 美元）既是 `LlmSeam(usd_budget=…)` 的真闸，
+  也在每次发请求之前被预检一次 ⇒ 超了自停并说清"剩下的没预热"，不会跑超。
+- **不联网抓文献、不跑研究**：每个目标只发一条"只回两个字 OK"的最小请求
+  （推理强度缺省 `off` —— 它不进 `messages`，不改变缓存前缀，只省输出 token）。
+- **`--dry-run`**：只渲染、打印摘要与字符数，**一个请求都不发**（花费 0）——
+  改完提示词想先看"这一版有多大、摘要是什么"就用它。
+- 本次落定的实际花费：**两趟留在读数文件里** —— 第一趟（冷写）**$0.035138** +
+  重落一趟 **$0.004245** = **$0.039383**；另有调通链路与两条诊断的 5 次重跑
+  （$0.011674）。**合计 $0.051057**，低于 0.10 的上限。
+
+### §14.6 预热买到了什么、没买到什么（别把它读大）
+
+- **买到了**：同一份前缀的**第二次**调用命中 99%+。这覆盖两件事 ——
+  ① 同一趟的第 2..N 步（真机历史命中率 91–95% 就是它）；
+  ② `--resume` / 重跑同一任务（`task` / `task_id` / `depth` 不变 ⇒ 是同一段前缀）。
+- **没买到**：**下一趟不同的活**。实测第一次见那份 system 命中 **0** token
+  （可复用前缀 112–145 字符 ≈ 50–65 token，够不到一个缓存块）。
+  结构原因不是"预热没做对"，而是 `AGENT_IDENTITY` 段里带 `task_id` / `depth`，
+  它在 system 的开头（第 ~95 个字符）—— 这一段一变，后面整条前缀作废。
+- **要让它跨 run 也命中**，唯一的路是把这几格也从 system 挪进 user 消息
+  （`promptstability.STEP_VOLATILE_FACTS` 加 `task` / `task_id` / `depth` / `inbox` /
+  `board` / `children` / `user_replies`，各配一句静态指路语 —— 机制已经有了，
+  见 `split_facts`）。那会**改变提示词的字节**，属于提示词内容的改动 ⇒
+  **本轮不做**，登记为待批（这一条不改代码、只留提案）。
+

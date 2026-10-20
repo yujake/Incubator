@@ -47,9 +47,14 @@ def _concept(reg, store, label: str) -> str:
 
     为什么不再用 `table.create`：`statements` 已不由通用写口直写
     （`store.direct_write_refusal`），而那正是本文件要钉的新契约。
+
+    2026-10-21（本批缺陷一）：**不再显式写 `origin="own_result"`** —— 概念行的
+    `origin` 按来源分档（有出处 ⇒ external_lit；没有 ⇒ 自己定义的新概念，
+    `conceptrows.resolve_concept_origin` 推断）。显式写 own_result 必须带
+    `self_authored`，而这条夹具造的就是"没有出处的自撰概念"。
     """
     sec = Secretary("B", root=store.root, store=store)
-    out = sec.record_statement({"kind": "concept", "label": label, "origin": "own_result",
+    out = sec.record_statement({"kind": "concept", "label": label,
                                 "statement_full": f"{label}（夹具定义）"}, role="B")
     assert out["checked"] and out["created"], out
     return str(out["stmt_id"])

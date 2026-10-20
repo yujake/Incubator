@@ -130,6 +130,17 @@ class BRunResult:
     conflict_checks_run: int = 0  # checked=True（检查过，无论是否矛盾）
     conflicts_detected: int = 0  # conflict=True（写入并标 suspect）
     conflict_checks_skipped: int = 0  # checked=False（没检查）
+    # ---- 概念配额（2026-10-21，本批缺陷一的第三处：一轮灌进 1143 条）
+    #:
+    #: `concepts_refused`：这一趟因"配额用完"被**受控拒绝**的新概念条数；
+    #: `relations_deferred`：因为要用的概念被拒、这一趟写不了的关系条数。
+    #: 两个数都必须从外部可观察 —— 否则"少写了 N 条"与"本来就只有这么多"在台账上
+    #: 长得一样（静默丢弃那一档要堵的就是它）。
+    concepts_refused: int = 0
+    relations_deferred: int = 0
+    #: 配额的读数（`conceptrows.ConceptQuota.reading()`：`limit` / `written` /
+    #: `refused` / `refused_count` / `why`）。空 dict = 这一趟没走到建概念那一步。
+    concept_quota: dict = field(default_factory=dict)
     skipped_reason: str | None = None
     details: list[dict] = field(default_factory=list)
 

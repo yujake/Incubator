@@ -34,14 +34,161 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
 from . import schema as S
 from . import textutil as T
-from .migrate_concepts import PENDING_SEARCH, PRIMITIVE_PROOF, fold_concepts
+from .migrate_concepts import PENDING_SEARCH, fold_concepts
 
 #: 过渡期还在盘上的老表名（迁移那一笔之后它从 `TABLES` 里消失）。
 LEGACY_TABLE = "concepts"
+
+#: 概念行**允许**的 `origin`（受控集合，唯一出处 = 这一处）。
+#:
+#: 口径逐字来自业主 2026-10-21（mp3 那批的验收词）：
+#:
+#: > 来自文献的 ⇒ `external_lit`；自己造的 ⇒ `own_result`；
+#: > **概念行的 origin 不许是 `own_result`**（除非它确实是自己定义的新概念）
+#:
+#: 真机读数（`projects/mp3/data/statements.json`，2026-10-21 现算）：**1143 条概念行、
+#: 其中 1142 条带 `source_lit_id`**（术语确实出自文献），而 `origin` 一律是
+#: `own_result` —— 于是"文献里来的术语"在报告里被读成"我们自己的结果"。
+#: 根因在 `concept_statement` 把 `origin="own_result"` 写死（本批缺陷一）。
+CONCEPT_ORIGINS: tuple[str, ...] = ("external_lit", "own_result")
+
+#: 一轮之内**新建**概念的上限（业主 2026-10-21：「概念应按轮限量，一轮几十条以内」）。
+#:
+#: 为什么是 30（可自证）：
+#:
+#: - 真机读数：mp3 的一轮消化灌进 **1143 条**概念（19 篇文献 × 每篇几十个关系名），
+#:   于是"每轮产出新事实"这条读数被一次水漫金山顶平 —— 一轮 1143 与一轮 3 条
+#:   在多轮趋势上长得一样；
+#: - 业主给的口径是"一轮几十条以内"：30 落在"几十"的下半区，既容得下一篇文献的
+#:   显式概念草稿（真机里通常 < 30），又让配额确实咬得住；
+#: - 它是**每轮**（`B.run` 一次 / 一次 `run_once` / 秘书的一笔）的总量，不是"每篇"：
+#:   按篇限量挡不住"篇数多"那种水漫（19 篇 × 30 = 570 仍然过大）。
+CONCEPTS_PER_ROUND_MAX = 30
+
+
+def concept_origin_problem(*, origin: str, source_lit_id: str = "",
+                           self_authored: bool = False) -> str:
+    """概念行的 `origin` 口径 ⇒ 空串 = 放行，否则一句可读的拒信。**唯一实现**。
+
+    三条判据（每一条都对着 mp3 那个真形态）：
+
+    1. `origin` 必须在 :data:`CONCEPT_ORIGINS` 里（受控集合，不猜拼错的写法）；
+    2. `external_lit`（文献里来的）必须给 `source_lit_id` —— 没有出处的"文献术语"
+       与"我们自己造的"在数据面上就分不开了；
+    3. `own_result`（我们自己造的）必须**显式**声明 `self_authored=True`：
+       它不是默认值。默认值才是 mp3 那 1142 条错标的来源 ——
+       "没声明"与"确实是新概念"必须分得开，否则这条判据永远拦不住沉默的错标。
+
+    不判"定义有没有"：定义空着是 `pending_definition` 那一档（`D12` 甲允许），
+    与 origin 是两件事（把两件事折平会让待补的概念写不进去）。
+    """
+    o = str(origin or "").strip()
+    lit = str(source_lit_id or "").strip()
+    if o not in CONCEPT_ORIGINS:
+        return (f"概念行的 origin 必须是 {CONCEPT_ORIGINS} 之一，收到 {origin!r} ——"
+                "来自文献的写 external_lit（并给 source_lit_id），"
+                "自己定义的新概念写 own_result（并显式声明 self_authored=True）")
+    if o == "external_lit":
+        if not lit:
+            return ("概念行声明 origin='external_lit' 却没给 source_lit_id ——"
+                    "从文献来的术语必须说清是哪一篇（没有出处就无从回验，"
+                    "也与'我们自己造的'在数据面上分不开）")
+        return ""
+    if not self_authored:
+        return ("概念行的 origin 不许是 own_result：文献里来的术语是 external_lit"
+                "（给 source_lit_id）。确实是我们自己定义的新概念才允许 own_result，"
+                "且必须**显式**声明 self_authored=True —— 默认值不是证明"
+                "（真机 mp3：1142 条带文献出处的术语被标成了 own_result）")
+    if lit:
+        return (f"声明了 self_authored=True 却给了 source_lit_id={lit!r} —— 自相矛盾："
+                "定义来自文献就不是我们自己造的新概念（那种情况写 external_lit）")
+    return ""
+
+
+def resolve_concept_origin(*, origin: str = "", source_lit_id: str = "",
+                           self_authored: bool = False) -> str:
+    """没显式给 `origin` 时按数据推断（**只在没给的时候**，不覆盖调用方的声明）。
+
+    推断规则（两条，与 :func:`concept_origin_problem` 同一口径）：
+
+    - 有 `source_lit_id` ⇒ `external_lit`（这个术语是从那篇文献抽出来的）；
+    - 没有出处 ⇒ `own_result`（定义就在这一行上，是我们自己写的）。
+
+    推断出来的 `own_result` 视为"自己定义的新概念"（定义正文就在同一行），
+    所以调用方**不必**再传 `self_authored`；而**显式**写 `origin="own_result"`
+    就必须传它 —— 一句话：默认推断可以沉默，主动声明必须负责。
+    """
+    o = str(origin or "").strip()
+    if o:
+        return o
+    if str(source_lit_id or "").strip():
+        return "external_lit"
+    return "own_result"
+
+
+@dataclass
+class ConceptQuota:
+    """一轮之内"新建概念"的配额（业主 2026-10-21：「每轮几十条以内」）。
+
+    ## 为什么配额要是一个对象，而不是一个整数常量
+
+    "谁被拒了、拒了几条、剩下多少"必须跟着读数一起走。一个整数常量只能回答
+    "超了没有"，回答不了"这一轮到底写了多少、被挡的是哪几条"——而"被挡的是哪几条"
+    正是`不许静默丢弃`在数据面上的形态。
+
+    ## 三种结局（都不许静默）
+
+    | 结局 | `admit()` | 读数 |
+    |---|---|---|
+    | 还有余量 | `True`（`written += 1`） | — |
+    | 配额用完 | `False`（名字进 `refused`） | `reading()` 里 `limit` / `written` / `refused` / `why` |
+
+    `reading()["why"]` 就是业主点名的那个读数："这一轮概念配额用完，剩下的下一轮或
+    写进报告"。已经写进去的一条都不回滚（"已写的保留"：配额是**写入闸**，
+    不是事务回滚 —— 回滚会把这一轮的真产出一起抹掉）。
+    """
+
+    limit: int = CONCEPTS_PER_ROUND_MAX
+    written: int = 0
+    refused: list[str] = field(default_factory=list)
+
+    @property
+    def remaining(self) -> int:
+        return max(int(self.limit) - int(self.written), 0)
+
+    @property
+    def exhausted(self) -> bool:
+        return int(self.written) >= int(self.limit)
+
+    def admit(self, name: str = "") -> bool:
+        """放行一条新建概念；配额用完 ⇒ 记名字、返回 `False`（调用方必须留读数）。"""
+        if self.exhausted:
+            self.refused.append(str(name or ""))
+            return False
+        self.written += 1
+        return True
+
+    def reading(self) -> dict[str, Any]:
+        """这一轮配额的读数（没被拒时也照给，`refused` 为空）。"""
+        out: dict[str, Any] = {
+            "limit": int(self.limit),
+            "written": int(self.written),
+            "refused": list(self.refused),
+            "refused_count": len(self.refused),
+            "why": "",
+        }
+        if self.refused:
+            out["why"] = (
+                f"这一轮概念配额用完（上限 {int(self.limit)} 条，已写 {int(self.written)} 条）⇒"
+                f" 超出的 {len(self.refused)} 条被**受控拒绝**（{self.refused[:8]}），"
+                "已经写进去的一条都没有回滚；剩下的下一轮再写，或者写进报告 ——"
+                "不许静默丢弃（静默丢弃会让'每轮产出新事实'这条读数看起来一直正常）")
+        return out
 
 #: `_to_legacy` 给"墓碑"投影出的哨兵值：非空（读侧据此跳过它），且绝不是一个合法 id
 #: （`schema.is_valid_id` 为假 ⇒ 谁把它当号用都会当场看出不对，而不是去找一个不存在的概念）。
@@ -174,28 +321,67 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
 
 def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases: Iterable[str] = (),
                       source_lit_id: str = "", proof_text: str = "", doc_id: str = "",
-                      actor: str = "agent-B") -> Any:
+                      actor: str = "agent-B", origin: str = "",
+                      self_authored: bool = False) -> Any:
     """一条概念 ⇒ 一行 `Statement`（并表之后概念的落点，新标准的唯一构造口）。
 
     两档（`D12` 甲）：定义在 ⇒ `active`；定义还没抽到 ⇒ `pending_definition`
     + `quote_reason` 里的待补标记（`concept:pending_search`：等 A 检索回来，
     或基本概念由 B 自撰）。不许落成 `active` + 空定义，也不许干脆不落。
-    良定义性证明那一格照旧：`proof_text`（原始概念写 `concept:primitive`）。
+
+    ## 概念行**不带** `proof_text`（本批缺陷一的写入侧）
+
+    真机读数（`projects/mp3/data/statements.json`）：**1143 条概念行，每一条都带
+    `proof_text="concept:primitive"`** —— 于是任何"有没有证明"的读数（
+    `proof_review_gap` 的 `proof_text` 非空判据、收工门的 `reviewed` 档、
+    `prose_reviewed_statements`）都被虚高。那个值不是证明，是一个**哨兵**：
+    它当初是为了表达"这是一个原始概念、没有良定义性证明可写"，而表达式本该是
+    "`proof_text` 留空 + 这个概念不参与等级链"（`evidencebits.derive_grade` 对
+    `kind="concept"` 本来就短路成 `not_applicable`）。
+
+    所以这一格现在**永远写空**：调用方传了 `proof_text` 就是传错了词，当场拒绝
+    （`ValueError`，消息里写清原因），而不是悄悄丢掉 —— 静默丢会让调用方以为
+    "概念也能带证明"。历史行一个字不动（本批的边界：只堵写入侧）。
+
+    ## `origin` 按来源分档（本批缺陷一的第二处）
+
+    口径与判据在 :func:`concept_origin_problem` / :func:`resolve_concept_origin`：
+    有 `source_lit_id` ⇒ `external_lit`；没有 ⇒ `own_result`（定义就在这一行上）。
+    显式声明 `own_result` 必须带 `self_authored=True`。
     """
     definition = str(definition or "")
+    # 概念行不许带证明文本（唯一口径在这里，别的写口都经过本函数）。
+    if str(proof_text or "").strip():
+        raise ValueError(
+            "概念行不该带证明文本：`proof_text` 是“这段证明被逐行审阅过”的比对对象，"
+            "而概念不参与等级链（`evidencebits.derive_grade` 对 kind='concept' 短路）。"
+            f"收到的 proof_text={str(proof_text)[:60]!r} —— 概念行请留空；"
+            "要表达“这是原始概念”，落的是 `kind='concept'` + 空 proof_text，"
+            "而不是往里塞一个哨兵（真机 mp3：1143 条概念行全带 `concept:primitive`，"
+            "把“有没有证明”的读数全顶高了）")
+    explicit = bool(str(origin or "").strip())
+    resolved = resolve_concept_origin(origin=origin, source_lit_id=source_lit_id,
+                                      self_authored=self_authored)
+    # 推断出来的 own_result（没有出处 ⇒ 定义就在这一行上）视为"自己定义的概念"；
+    # 显式声明 own_result 则必须由调用方自己带 self_authored（见 resolve 的 docstring）。
+    effective_self_authored = bool(self_authored) or (resolved == "own_result" and not explicit)
+    problem = concept_origin_problem(origin=resolved, source_lit_id=source_lit_id,
+                                     self_authored=effective_self_authored)
+    if problem:
+        raise ValueError(problem)
     pending = not definition.strip()
     if pending:
         reason = (f"概念 {label!r} 的定义还没抽到（D12 甲）：{PENDING_SEARCH} —— "
                   "由直接父/A 检索回来，或基本概念由 B 自撰；定义到了就改回 active 并清掉"
-                  "这一标记。良定义性证明那一格照旧记 proof_text（原始概念写 "
-                  "concept:primitive）")
+                  "这一标记。概念没有'证明'这一档 ⇒ `proof_text` 留空")
     else:
-        reason = ("概念的良定义性证明记在 proof_text（原始概念写 concept:primitive）；定义来自 "
-                  + (str(source_lit_id) if source_lit_id else "B 的消化（没有外部来源）"))
+        reason = ("概念行没有'证明'这一档（不参与等级链）⇒ `proof_text` 留空；定义来自 "
+                  + (f"lit:{source_lit_id}" if source_lit_id else "B 的消化（没有外部来源，"
+                     "按自己定义的新概念记）"))
     return S.Statement(
-        stmt_id=stmt_id, origin="own_result", kind="concept", label=str(label or ""),
+        stmt_id=stmt_id, origin=resolved, kind="concept", label=str(label or ""),
         statement_text=definition, statement_full=definition,
-        proof_text=str(proof_text or PRIMITIVE_PROOF), source_lit_id=str(source_lit_id or "") or None,
+        proof_text="", source_lit_id=str(source_lit_id or "") or None,
         quote_verified=None, quote_reason=reason, evidence_kind="heuristic",
         aliases=[str(a) for a in (aliases or []) if str(a).strip()],
         status=("pending_definition" if pending else "active"),
@@ -490,13 +676,18 @@ def mirror_gaps(store: Any) -> dict[str, Any]:
 
 def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
                   aliases: Iterable[str] = (), source_lit_id: str = "", proof_text: str = "",
-                  doc_id: str = "", actor: str = "agent-B", mirror: bool = False) -> dict[str, Any]:
+                  doc_id: str = "", actor: str = "agent-B", mirror: bool = False,
+                  origin: str = "", self_authored: bool = False) -> dict[str, Any]:
     """在已开的事务里写一条概念行（新标准那一行 + 可选的老表镜像）。
 
     为什么要有"事务内"这一档：B 的写入是一笔事务（命题 + 概念 + 依赖一起落，
     `Secretary.record_statement`），而 `upsert` 自己开事务 —— 事务不能嵌套
     （文件锁不可重入）。所以把"写哪两张表、怎么写"抽成这一个函数，
     `upsert`（单独写一条概念）与秘书那一笔都调它，口径只有一处。
+
+    `origin` / `self_authored` 原样交给 :func:`concept_statement`（口径只在那里面，
+    这里不抄第二份）。`proof_text` 保留在签名里只为兼容既有调用点：
+    概念行**不许**带它，传了非空值 ⇒ `ValueError`（本批缺陷一）。
 
     `mirror=True` 只在老表还在 schema 里时才有意义（落刀之后那张表不存在，
     硬写会以"未知表"整笔失败）⇒ 这里自己判、把判断收进这一处，
@@ -506,7 +697,8 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
     """
     row = concept_statement(stmt_id=stmt_id, label=label, definition=definition,
                             aliases=aliases, source_lit_id=source_lit_id,
-                            proof_text=proof_text, doc_id=doc_id, actor=actor)
+                            proof_text=proof_text, doc_id=doc_id, actor=actor,
+                            origin=origin, self_authored=self_authored)
     row.validate()
     data = row.to_dict()
     tx.upsert("statements", data, note="concept_upsert")

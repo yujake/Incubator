@@ -572,6 +572,12 @@ STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
     # `quote_mode` 会被这一层的白名单静默丢掉（那一栏就白填了）。
     "quote_mode", "quote_span", "quote_call_sha256",
     "deps", "concepts",
+    # 2026-10-21（本批缺陷一）：概念行"确实是我们自己定义的新概念"的**显式**声明。
+    # 它必须能过这一层的白名单 —— 否则调用方在概念条目里写的那一句
+    # `self_authored=True` 会被静默丢掉，于是"声明了"与"没声明"落成同一件事，
+    # 而 `origin="own_result"` 的受控判据（`conceptrows.concept_origin_problem`）
+    # 就永远只能拒绝、无法放行。
+    "self_authored",
     # 多段可选证明：B 自己分的段（每段一组 `path_group`）。不给就把
     # "定理内容 + 证明过程"当一段 —— 秘书不按空行/字样猜 B 想分几段（`draft/97` §14.11）。
     "proof_paths",
@@ -3165,17 +3171,30 @@ class Secretary:
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else S.TABLES["statements"]["id_kind"])
             cid = tx.alloc_id(concept_kind)
+            # `origin` 按来源分档（本批缺陷一的第二处）：交来的概念有出处 ⇒ external_lit；
+            # 没有出处 ⇒ 我们自己定义的新概念（own_result，推断，不要求调用方另声明）。
+            src_lit = str(body.get("source_lit_id") or "")
+            concept_origin = CR.resolve_concept_origin(source_lit_id=src_lit)
+            problem = CR.concept_origin_problem(origin=concept_origin,
+                                                source_lit_id=src_lit,
+                                                self_authored=(concept_origin == "own_result"))
+            if problem:
+                out.update(refused="concept_origin_refused", reason=problem)
+                return out
             # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号
             data = CR.write_concept(tx, stmt_id=cid, label=name, definition="",
                                     aliases=body.get("aliases") or [],
-                                    source_lit_id=str(body.get("source_lit_id") or ""),
+                                    source_lit_id=src_lit,
                                     doc_id=str(body.get("doc_id") or ""),
                                     actor=f"secretary-{self.role}",
+                                    origin=concept_origin,
+                                    self_authored=(concept_origin == "own_result"),
                                     mirror=bool(legacy.get("present")))
         out.update(checked=True, created=True, stmt_id=cid, row=data,
                    tables=tables, mirrored=bool(legacy.get("present")), pending_concepts=1,
-                   reason=("概念行已落成 pending_definition（定义待补）—— 它不是依据，"
-                           "`proof_text` 那一格记的是良定义性证明"))
+                   reason=("概念行已落成 pending_definition（定义待补）—— 它不是依据；"
+                           "概念行不带 `proof_text`（概念不参与等级链，"
+                           "要补的是定义，不是证明）"))
         return out
 
     #: 扫出来的引用前缀 ⇒ `(STEP_SOURCE_KEYS` 里那一步的键名, `kind` 缺省)。
@@ -3274,6 +3293,30 @@ class Secretary:
         out["deps_unmappable"] = list(scan["unmappable"])
         out["deps_dangling"] = []
         concepts = [dict(c) for c in (body.get("concepts") or []) if isinstance(c, Mapping)]
+        # ---- 概念行（`kind="concept"` 那一条自身）：本批缺陷一的写入侧 -----------------
+        # 两件事在这个入口上也要做（它不经过 `conceptrows.write_concept`）：
+        # ① `proof_text` 不许写（概念不参与等级链；真机 mp3 的 1143 条概念行每一条都
+        #    带着哨兵 `concept:primitive`，把"有没有证明"的读数全顶高了）；
+        # ② `origin` 按来源分档：有出处 ⇒ external_lit；没有 ⇒ 自己的概念；
+        #    显式写 own_result 必须带 `self_authored`（判据在 `conceptrows`，不抄第二份）。
+        if kind == "concept":
+            if str(body.get("proof_text") or "").strip():
+                out["concept_proof_text_dropped"] = [str(body.get("label") or "")]
+                body = dict(body)
+                body["proof_text"] = ""
+            _src = str(body.get("source_lit_id") or "")
+            _want = str(body.get("origin") or "")
+            _self_auth = bool(body.get("self_authored"))
+            _resolved = CR.resolve_concept_origin(
+                origin=_want, source_lit_id=_src, self_authored=_self_auth)
+            _self_auth = _self_auth or (_resolved == "own_result" and not _want)
+            _problem = CR.concept_origin_problem(
+                origin=_resolved, source_lit_id=_src, self_authored=_self_auth)
+            if _problem:
+                out.update(refused="concept_origin_refused", reason=_problem)
+                return out
+            body = dict(body)
+            body["origin"] = _resolved
         legacy = CR.legacy_present(self.store)
         with self.store.tx(*STATEMENT_WRITE_TABLES, "literature", "experiments",
                            "documents",
@@ -3390,21 +3433,59 @@ class Secretary:
                 tx.upsert(CR.LEGACY_TABLE, mirror.to_dict(), note="record_statement:mirror")
             written = ["statements"]
             pending_concepts = 0
+            # ---- 概念的三道闸（2026-10-21，本批缺陷一） -------------------------
+            # ① 概念行**不带**证明文本（`proof_text` 是"这段证明被审过"的比对对象，
+            #    概念不参与等级链）⇒ 载荷里带了也不写，并且**留痕**（静默丢是另一种坏）；
+            # ② `origin` 口径：有出处 ⇒ external_lit；没有 ⇒ 自己定义的概念；
+            #    显式写 own_result 必须带 self_authored（判据在 conceptrows）；
+            # ③ 每轮上限（`conceptrows.CONCEPTS_PER_ROUND_MAX`）：超出的**受控拒绝**、
+            #    读数可见、已写的保留。
+            quota = CR.ConceptQuota()
+            dropped_proof: list[str] = []
+            refused_concepts: list[dict] = []
             for c in concepts:
+                name = str(c.get("name") or "")
+                if str(c.get("proof_text") or "").strip():
+                    dropped_proof.append(name)
+                src_lit = str(c.get("source_lit_id") or body.get("source_lit_id") or "")
+                origin = str(c.get("origin") or "")
+                self_authored = bool(c.get("self_authored"))
+                resolved_origin = CR.resolve_concept_origin(
+                    origin=origin, source_lit_id=src_lit, self_authored=self_authored)
+                problem = CR.concept_origin_problem(
+                    origin=resolved_origin, source_lit_id=src_lit,
+                    self_authored=(self_authored
+                                   or (resolved_origin == "own_result"
+                                       and not str(origin or "").strip())))
+                if problem:
+                    refused_concepts.append({"name": name, "why": problem})
+                    continue
+                if not quota.admit(name):
+                    refused_concepts.append({"name": name, "why": quota.reading()["why"]})
+                    continue
                 # 与上面同一口径：老表还在的时候号空间的权威是 `concept`（两张表要同号，
                 # 而各自发号会让两边的号不连续 —— `verify` 的 `id_gap` 会报出来）
                 cid = tx.alloc_id(concept_kind)
-                # 过渡期两处同号 + 老表镜像（`conceptrows` 的契约 1）：走同一处写口
+                # 过渡期两处同号 + 老表镜像（`conceptrows` 的契约 1）：走同一处写口。
+                # `proof_text` 刻意**不转发**：概念行不许带它（见上面①）。
                 crow_data = CR.write_concept(
-                    tx, stmt_id=cid, label=str(c.get("name") or ""),
+                    tx, stmt_id=cid, label=name,
                     definition=str(c.get("definition") or ""),
                     aliases=c.get("aliases") or (),
-                    source_lit_id=str(c.get("source_lit_id") or ""),
-                    proof_text=str(c.get("proof_text") or ""),
+                    source_lit_id=src_lit,
                     doc_id=str(body.get("doc_id") or ""), actor=f"secretary-{self.role}",
+                    origin=resolved_origin,
+                    self_authored=(self_authored
+                                   or (resolved_origin == "own_result"
+                                       and not str(origin or "").strip())),
                     mirror=bool(legacy.get("present")))
                 if str(crow_data.get("status") or "") == "pending_definition":
                     pending_concepts += 1
+            if dropped_proof:
+                out["concept_proof_text_dropped"] = dropped_proof[:20]
+            if refused_concepts:
+                out["concepts_refused"] = refused_concepts[:20]
+            out["concept_quota"] = quota.reading()
             for step in steps:
                 dep_id = tx.alloc_id(S.TABLES["dependencies"]["id_kind"])
                 dep = S.Dependency(

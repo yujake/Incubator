@@ -47,6 +47,18 @@ class _RunOnce:
     def run_once(self) -> BRunResult:
         """处理至多一篇未处理文献，返回本轮的完整审计结果。
 
+        ## 概念配额（2026-10-21，本批缺陷一第三处：一轮灌进 1143 条）
+
+        配额是**轮**预算，挂在实例上（`self._concept_quota`）：`B.run` 在轮首建一个、
+        逐篇共用；单独调 `run_once()` 时这一调用自己建一个
+        （上限 `conceptrows.CONCEPTS_PER_ROUND_MAX`）—— 于是"每轮几十条以内"这条口径
+        在两条入口上都成立，而不会因为"没人传"就变成无限。
+
+        为什么挂在实例上而不是加一个形参：`run_once` 的方法签名在
+        `tests/golden/agent_surface_snapshot.json` 里被冻结（禁改区），
+        改签名等于重冻那份快照 —— 而"这一轮建了多少概念"是**轮**状态，
+        本来也不该出现在动作的调用面上（模型不该能传一个配额进来）。
+
         三态纪律在这里有两个落点：
 
         1. 取不到文献不等于"队列空了"：`skipped_reason` 由 `_claim()` 的三态给出
@@ -59,6 +71,12 @@ class _RunOnce:
            在 2026-10-02 之前要求 `claimed_by` 非空，于是这条租约写了等于没写）。
         """
         res = BRunResult()
+        # 概念配额：`B.run` 在轮首放好的那个（`self._concept_quota`）优先；
+        # 单跑一篇时这里建一个（上限同源）—— 口径见方法 docstring。
+        quota = getattr(self, "_concept_quota", None)
+        if not isinstance(quota, _CR.ConceptQuota):
+            quota = _CR.ConceptQuota()
+            self._concept_quota = quota
         claim = self._claim()
         # 取文献侧的审计信息先落进结果，再决定要不要早退 —— 否则"有活但全被别人
         # 占着"这类信息会随着 skipped_reason 一起丢掉，外部只剩一个"什么都没做"。
@@ -210,6 +228,18 @@ class _RunOnce:
                                                  note="alias_merge")
                     res.concepts_reused += 1
                     return existing["concept_id"]
+                # ---- 概念配额（2026-10-21，本批缺陷一第三处）：超上限**受控拒绝**，
+                # 不静默丢。拒绝时返回空串，调用方（关系那一段）据此跳过这一条关系，
+                # 并把"因为配额被推迟"写进 details —— 于是"这一轮写了多少、还差多少"
+                # 在读数上看得见（`res.concepts_refused` / `quota.reading()`）。
+                if not quota.admit(name):
+                    res.concepts_refused += 1
+                    res.details.append({
+                        "lit_id": lit_id, "stage": "concept_quota", "refused": str(name),
+                        "limit": int(quota.limit), "written": int(quota.written),
+                        "why": quota.reading()["why"],
+                    })
+                    return ""
                 # 概念号与命题号是同一个号空间（业主 D2「同表同分配器不可能撞号」）
                 # ⇒ 这里从 `stmt` 发号；落刀之后 `concept` 这一档连计数器都没有了。
                 cid = tx.alloc_id("stmt")
@@ -220,13 +250,20 @@ class _RunOnce:
                     related_concepts=[],
                     normalized_name=T.normalize(name),
                     aliases=[a for a in S.sorted_unique(list(aliases or [])) if T.normalize(a) != T.normalize(name)],
-                    definition_source_lit_id=lit_id if definition else None,
+                    # 这一格记的是"这个术语是从哪一篇抽出来的"（概念行的出处），
+                    # 不是"定义逐字抄自那里"。所以**一律**给这一篇：即使定义还没抽到，
+                    # 术语的来路也是清楚的 —— 而 `origin` 的正确口径就靠它
+                    # （`conceptrows.resolve_concept_origin`：有出处 ⇒ external_lit）。
+                    definition_source_lit_id=lit_id,
                     created_at=S.now_iso(),
                     updated_at=S.now_iso(),
                 )
                 row.validate()
                 d = row.to_dict()
                 concept_rows.append(d)
+                # `sync_from_legacy` 把这一格带进新标准那一行 ⇒ 记成
+                # `origin="external_lit"`。真机 mp3 的 1142/1143 条概念行都有文献出处，
+                # 却因为写死 `own_result` 被读成"我们自己的结果"（本批缺陷一第二处）。
                 _CR.upsert_legacy_shaped(tx, d, actor=self.actor, note="created")
                 res.concepts_created += 1
                 return cid
@@ -246,7 +283,21 @@ class _RunOnce:
                         {"lit_id": lit_id, "stage": "relation", "skipped": "fewer_than_two_concepts", "names": names}
                     )
                     continue
-                cids = S.sorted_unique(resolve_concept(n) for n in names)
+                resolved = [resolve_concept(n) for n in names]
+                if any(not cid for cid in resolved):
+                    # 有概念被配额拒了 ⇒ 这条关系**这一轮**写不了（它要指着一个不存在的号）。
+                    # 不许静默丢：逐条点名 + 计数。剩下的按业主的口径"下一轮或写进报告"——
+                    # 这一轮的 literature 行照常标 processed（理由见下面那一格），
+                    # 所以它的可见形态是**这一趟的结果**，不是"下一轮自己会回来"。
+                    res.relations_deferred += 1
+                    res.details.append({
+                        "lit_id": lit_id, "stage": "relation", "skipped": "concept_quota",
+                        "names": names,
+                        "why": ("这条关系要用的概念这一轮被配额拒了（见 concept_quota 那一条）⇒"
+                                " 关系这一轮不写，读数里点名；剩下的下一轮或写进报告"),
+                    })
+                    continue
+                cids = S.sorted_unique(resolved)
                 if len(cids) < 2:
                     res.details.append(
                         {"lit_id": lit_id, "stage": "relation", "skipped": "concepts_collapsed", "names": names}
@@ -400,10 +451,23 @@ class _RunOnce:
             lit_row["processed"] = True
             lit_row["claimed_by"] = None
             lit_row["lease_until"] = None
+            # 配额拒过东西时**不动** `last_mine_error`：那一格是"这一篇为什么没抽成"
+            # （`no_local_file` / 抽取异常），不是"抽成了但概念配额满了"。
+            # 把配额写进去会让两种完全不同的处置读成同一件事。
+            #
+            # 为什么仍然标 `processed=True`（而不是"留到下一轮"）：这篇文献的概念是按
+            # 抽取顺序产出的，下一轮重领它还会按**同一个顺序**撞同一个配额（前 30 条照旧、
+            # 后面的照旧被拒）—— 要真"留到下一轮"就得新增一份持久游标，那是新的磁盘契约。
+            # 业主给的口径是"剩下的下一轮**或写进报告**"：所以这一点落在**本轮的结果**里
+            # （`res.concept_quota` / `res.concepts_refused` / `res.relations_deferred` /
+            # `res.details[*stage=concept_quota]`），它随这一趟的 task 结果进台账 ——
+            # "不许静默丢弃"要的是它出现在读数里，而不是它被塞进一个语义不符的字段。
             lit_row["last_mine_error"] = None
             # `R3-⑩`：真抽过了（抽取器返回了结果）⇒ 这一格 +1，与失败那一支同一个计数点。
             lit_row["mine_attempts"] = int(lit_row.get("mine_attempts") or 0) + 1
             tx.upsert("literature", lit_row, note="processed")
             res.processed = 1
 
+        # 配额的读数随结果一起出去（`B.run` 逐篇汇总 ⇒ 一轮的总读数）。
+        res.concept_quota = quota.reading()
         return res

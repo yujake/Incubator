@@ -232,6 +232,32 @@ class _RegisterStatement:
         if origin not in S.STATEMENT_ORIGINS:
             return _refuse("bad_origin",
                            f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，收到 {origin!r}")
+        # ---- 概念行的两处口径（2026-10-21，本批缺陷一的写入侧） --------------------
+        #
+        # 真机读数（`projects/mp3/data/statements.json`）：1143 条概念行、**1142 条带
+        # `source_lit_id`**（术语确实出自文献），而 `origin` 一律 `own_result` ——
+        # 文献里来的术语被记成了"我们自己的结果"；同时每一条都带着
+        # `proof_text="concept:primitive"`，把"有没有证明"的读数全顶高。
+        #
+        # 两件事各有一个出口，都不许静默：
+        # ② `origin`：概念行走**受控集合**，`own_result` 在这条动作上直接拒 ——
+        #    这条动作没有"声明自己造"的参数（`specs/b.py` 的声明面是冻结的），
+        #    所以"确实是自己定义的新概念"走秘书载荷的 `self_authored` 那一档，
+        #    而不是在这里把文献术语标成自己的结果；
+        # ① `proof_text`：概念行不许带它 ⇒ 不写，但把"丢了什么"写进返回值（留痕）。
+        proof_text_dropped = ""
+        if str(kind or "").strip() == "concept":
+            if origin == "own_result":
+                return _refuse(
+                    "concept_origin_refused",
+                    "概念行的 origin 不许是 own_result：文献里来的术语是 "
+                    "`external_lit`（给 `source_lit_id` + `page_range`）—— "
+                    "真机 mp3 有 1142 条带文献出处的术语被错标成了 own_result，"
+                    "于是报告把它们读成“我们自己的结果”。确实是我们自己定义的新概念"
+                    "走秘书载荷的 `self_authored` 那一档（那是显式声明，不是默认值）")
+            if str(proof_text or "").strip():
+                proof_text_dropped = str(proof_text)[:120]
+                proof_text = ""
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
         # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
         # `PageRange.__post_init__` 的比大小，`TypeError` 从动作里抛出去。
@@ -432,6 +458,10 @@ class _RegisterStatement:
                 "deps_dangling": list(written.get("deps_dangling") or []),
                 "deps_unmappable": list(written.get("deps_unmappable") or []),
                 "pending_definitions": pending_defs,
+                #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
+                #: 空串 = 没丢过。**留痕**是必须的 —— 静默丢会让调用方以为
+                #: "概念也能带证明"，下一次还这么交。
+                "proof_text_dropped": proof_text_dropped,
                 # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
                 # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
                 # 也能扫到它；这里再给一次是为了让调用方当场就知道）。
@@ -449,4 +479,7 @@ class _RegisterStatement:
                          f"表格 {written.get('tables')}、路径组 {written.get('path_groups')}。"
                          + ("这一行**缺 proof_text**（自产命题没有证明）：它进去了，"
                             "但等级现算是『猜想』，`pending` 里挂着待办。"
-                            if needs_proof else ""))}
+                            if needs_proof else "")
+                         + (f"概念行**不带** proof_text：交来的 {proof_text_dropped!r} "
+                            "没有写进库（概念不参与等级链，要补的是定义，不是证明）。"
+                            if proof_text_dropped else ""))}

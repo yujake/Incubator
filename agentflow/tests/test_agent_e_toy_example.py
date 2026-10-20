@@ -530,3 +530,209 @@ def test_the_toy_example_switch_is_not_a_new_declaration_surface():
     assert "observations" in fields, fields
     assert not [f for f in fields if "toy" in f.lower()], (
         f"`experiments` 多了玩具例子的列（那是改声明面）：{fields}")
+
+
+# ============================================================================
+# 缺陷二（2026-10-21 真机）：`experiments.observations.toy_example` 从未出现
+#
+# 真机读数（`projects/mp3/data/experiments.json`）：2 条实验、**`toy_example` 0 条**。
+# 根因写在 `_toy_example_reading` 的 docstring 里：此前只有经 `F→E` 且父把
+# `params["toy_example"]` 带下来才会标，而模型不一定会带 —— 于是 E 自己写出来的
+# "玩具读数"（mp3 第二条的 claim 逐字这么写的，`bound` 是 `D<=6 / M<=8 / n<=3`、
+# `exit_code=0`）在台账上一条标记都没有。
+#
+# 下面这一组判据钉的是"E 自己判"：① 小规模真跑 ⇒ 自动标；② 大规模 ⇒ 不标且 why
+# 写明超限；③ 负控：把自动判定关掉 ⇒ ① 红；④ 负控：让"没真跑"的也标 ⇒ 红。
+# ============================================================================
+
+#: 小规模脚本：n=4 的错排数，与手算表逐项对比（`n=4 <= 8`，人拿纸能核）。
+SMALL_AUTO_SCRIPT = (
+    "import itertools, json\n"
+    "EXPECT = {1: 0, 2: 1, 3: 2, 4: 9}\n"
+    "N = 4\n"
+    "def derangements(n):\n"
+    "    return sum(1 for p in itertools.permutations(range(n))\n"
+    "               if all(p[i] != i for i in range(n)))\n"
+    "got = {n: derangements(n) for n in range(1, N + 1)}\n"
+    "ok = all(got[n] == EXPECT[n] for n in got)\n"
+    "print('REPRO_RESULT: ' + json.dumps({\n"
+    "    'result': 'supports' if ok else 'refutes',\n"
+    "    'observations': {'n': N, 'D': got[N], 'matched': ok},\n"
+    "    'counterexample': None if ok else {'n': N, 'why': 'D(4) 与手算表不符'},\n"
+    "    'negation_kind': 'not_proved', 'bound': {'n': N},\n"
+    "    'strategy': 'brute force',\n"
+    "}))\n"
+)
+
+#: 大规模脚本：n=20 的全排列错排数（扫到 n=20 —— 这不是能手算的一个数）。
+BIG_AUTO_SCRIPT = (
+    "import json\n"
+    "N = 20\n"
+    "print('REPRO_RESULT: ' + json.dumps({\n"
+    "    'result': 'supports', 'evidence_kind': 'cross_check',\n"
+    "    'observations': {'n': N}, 'counterexample': None,\n"
+    "    'negation_kind': 'not_proved', 'bound': {'n': N},\n"
+    "}))\n"
+)
+
+#: 跑完了但**没按协议打结论行**的脚本（"执行过"≠"跑成了一个读得出的数"）。
+NO_RESULT_SCRIPT = "print('I ran, but I printed nothing usable')\n"
+
+
+def _auto_ws(tmp_path: Path) -> Store:
+    st = Store(tmp_path / "auto")
+    st.init()
+    return st
+
+
+def _write(st: Store, rel: str, text: str) -> None:
+    p = Path(st.root) / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def _run(st: Store, rel: str, *, params: dict | None = None, key: str = "auto") -> dict:
+    """用**生产的 `run_experiment`** 跑一遍（不带任何 `toy_example` 声明 —— 真机形态）。"""
+    from agentflow.agent_e import AgentE
+
+    e = AgentE(st, config={"lease_seconds": 60}, workspace_root=st.root)
+    e.run_experiment("一个能手算的小情形：错排数", key, rel, params=params or {})
+    return dict(st.rows("experiments")[-1])
+
+
+def _auto_reading(row: dict) -> dict:
+    obs = dict(row.get("observations") or {})
+    got = obs.get(TOY_EXAMPLE_KEY)
+    assert isinstance(got, dict), (
+        f"行上没有玩具例子读数（`observations[{TOY_EXAMPLE_KEY!r}]`）：{obs}")
+    return got
+
+
+def _assert_auto_toy(row: dict, *, expect_n) -> None:
+    """① 的尺子：小规模 + 真跑 ⇒ 自动标成玩具例子，且每一格都成形。
+
+    七格逐条判（少一格就只是"看起来像"）：`declared`（自动填的、带出处）、
+    `checked` / `within_limit` / `limit` / `n` / `executed` / `exit_code` /
+    `script_path` / `script_sha256` / `why`（"由规模自动判定"）。
+    """
+    from agentflow.agent_e.run_experiment import is_toy_example
+
+    toy = _auto_reading(row)
+    assert is_toy_example(toy) is True, f"小规模真跑的实验没有被自动标成玩具例子：{toy}"
+    declared = toy.get("declared")
+    assert isinstance(declared, dict) and declared.get("auto") is True, declared
+    assert declared.get("source"), f"自动判定没说读出处在哪个键上：{declared}"
+    assert toy.get("checked") is True and toy.get("within_limit") is True, toy
+    assert toy.get("limit") == TOY_EXAMPLE_MAX_N, toy
+    assert toy.get("n") is not None and int(toy["n"]) <= TOY_EXAMPLE_MAX_N, toy
+    if expect_n is not None:
+        assert _as_int(toy.get("n")) == expect_n, toy
+    assert toy.get("executed") is True and toy.get("exit_code") == 0, toy
+    assert toy.get("script_path") == row.get("code_path"), (toy, row.get("code_path"))
+    assert toy.get("script_sha256") == row.get("code_hash"), (toy, row.get("code_hash"))
+    why = str(toy.get("why") or "")
+    assert "由规模自动判定" in why, f"why 里没写“由规模自动判定”：{why!r}"
+    # 反真空：那个数真的在行上（玩具例子的读数是"一个数"，不是"扫到哪儿"）
+    assert _as_int(dict(row.get("observations") or {}).get("D")) == 9, row.get("observations")
+
+
+def _as_int(value) -> int | None:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _assert_not_a_toy(row: dict, *, want_in_why: str) -> None:
+    """② 的尺子：**不**标成玩具例子，且 `why` 里写明为什么（超限 / 没真跑）。"""
+    from agentflow.agent_e.run_experiment import is_toy_example
+
+    toy = _auto_reading(row)
+    assert is_toy_example(toy) is False, f"这一条被标成了玩具例子：{toy}"
+    why = str(toy.get("why") or "")
+    assert want_in_why in why, f"why 里没写 {want_in_why!r}：{why!r}"
+    return toy
+
+
+def test_auto_control_a_small_script_that_really_ran_is_marked_a_toy_example(tmp_path: Path):
+    """① 小规模真跑 ⇒ 自动标 `toy_example`（`executed=true`），不需要调用方声明。
+
+    真机对照：mp3 的第二条实验 `params={}`，claim 自己写着"玩具读数"，
+    而 `observations.toy_example` 一条都没有 —— 这一条就是补那条断掉的接缝。
+    """
+    st = _auto_ws(tmp_path)
+    _write(st, "code/small.py", SMALL_AUTO_SCRIPT)
+    row = _run(st, "code/small.py")
+    assert row["exit_code"] == 0 and row["result"] == "supports", row
+    _assert_auto_toy(row, expect_n=4)
+    # 声明面没动：这一格仍然落在 `observations` 里（不是新列）
+    assert TOY_EXAMPLE_KEY in dict(row.get("observations") or {}), row
+
+
+def test_a_big_scan_is_not_marked_a_toy_example_and_the_reason_names_the_limit(
+        tmp_path: Path):
+    """② 大规模（n=20 超上限）⇒ **不标**，`why` 写明超限（"大扫描不许当玩具例子"）。"""
+    st = _auto_ws(tmp_path)
+    _write(st, "code/big.py", BIG_AUTO_SCRIPT)
+    row = _run(st, "code/big.py", key="big")
+    toy = _assert_not_a_toy(row, want_in_why="超过玩具例子的上限")
+    assert toy.get("within_limit") is False, toy
+    assert toy.get("limit") == TOY_EXAMPLE_MAX_N, toy
+    assert _as_int(toy.get("n")) == 20, toy
+
+
+def test_no_result_line_is_not_marked_a_toy_example(tmp_path: Path):
+    """② 的第二半：跑完了但没打出结论行 ⇒ `executed=false`，不标（"执行过"≠"跑成读数"）。"""
+    st = _auto_ws(tmp_path)
+    _write(st, "code/silent.py", NO_RESULT_SCRIPT)
+    # 没有结论行 ⇒ 脚本自报的规模读不到；为了把"没真跑"这一档单独钉住，
+    # 由 `params` 给一个够小的 `n`（"规模看着够小、但没跑出结论"正是这一档的形态）。
+    row = _run(st, "code/silent.py", params={"n": 4}, key="silent")
+    toy = _assert_not_a_toy(row, want_in_why="没有真的跑出结论行")
+    assert toy.get("executed") is False, toy
+    assert toy.get("within_limit") is True, (
+        f"规模确实够小（params n=4），不标的原因必须落在“没真跑”上：{toy}")
+
+
+def test_negative_control_with_the_auto_judgement_off_the_first_criterion_turns_red(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """③ 负控：把自动判定关掉（声明缺席 ⇒ 什么都不写）⇒ ① 的尺子必须红。
+
+    这一格就是**改前**的行为（`params` 里没有声明就返回 `None`）：真机 mp3 的
+    `toy_example` 0 条正是它造成的。判据必须能咬住"回到改前"。
+    """
+    from agentflow.agent_e import run_experiment as RX
+
+    monkeypatch.setattr(RX, "_auto_toy_example_reading",
+                        lambda **_: None)
+    st = _auto_ws(tmp_path)
+    _write(st, "code/small.py", SMALL_AUTO_SCRIPT)
+    row = _run(st, "code/small.py")
+    assert TOY_EXAMPLE_KEY not in dict(row.get("observations") or {}), row
+    with pytest.raises(AssertionError):
+        _assert_auto_toy(row, expect_n=4)
+
+
+def test_negative_control_marking_a_run_that_never_produced_a_result_turns_red(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """④ 负控：让"没真跑"的也算真跑（`executed` 恒 True）⇒ 不标的尺子必须红。"""
+    from agentflow.agent_e import run_experiment as RX
+
+    monkeypatch.setattr(RX, "_toy_example_executed", lambda **_: True)
+    st = _auto_ws(tmp_path)
+    _write(st, "code/silent.py", NO_RESULT_SCRIPT)
+    row = _run(st, "code/silent.py", params={"n": 4}, key="silent")
+    with pytest.raises(AssertionError):
+        _assert_not_a_toy(row, want_in_why="没有真的跑出结论行")
+
+
+def test_the_auto_judgement_does_not_override_an_explicit_declaration(tmp_path: Path):
+    """声明优先：调用方给了 `toy_example` ⇒ 自动判定不许覆盖它（一个字都不改）。"""
+    st = _auto_ws(tmp_path)
+    _write(st, "code/small.py", SMALL_AUTO_SCRIPT)
+    declared = {"n": 4, "expect": 9, "quantity": "D(4)"}
+    row = _run(st, "code/small.py", params={TOY_EXAMPLE_KEY: dict(declared)}, key="decl")
+    toy = _auto_reading(row)
+    assert toy.get("declared") == declared, toy
+    assert "auto" not in (toy.get("declared") or {}), toy
+    assert toy.get("why") == "", f"声明那一档的 why 不许被自动判定改写：{toy}"
