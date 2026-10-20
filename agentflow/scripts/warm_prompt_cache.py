@@ -26,13 +26,15 @@
                                                         # 它在前缀之后 ⇒ 不影响命中
 
 `facts` 用 `promptstability.split_facts` 过一遍 —— 与生产同一个函数，于是 system 里
-`budget_left` / `notebook` 是那两段**静态指路语**（生产里正是这两段），不是会变的数字。
+**会变的事实全是静态指路语**（`budget_left` / `notebook` / `task` / `task_id` / `depth` /
+`parent_task_id` / `summoned_by` / `children` / `board` / `inbox` / `user_replies` /
+`workspace_root`，见 `promptstability.STEP_VOLATILE_FACTS`）。
 
-秘书那一档不同，而且这个不同是**实测出来的事实**，不是省略：
-`Secretary.judge`（`secretary.py:1325`）调的 `seam.ask_json(prompt)` **不带 system**
-（`ask` 的 `system` 缺省 `""`），整条提示词在 **user** 位置上，且它的"材料"每问一次都变。
-所以秘书那一行的预热对象是 `_judge_prompt(kind, {})` 的**稳定头**（到 `材料：` 为止），
-`system=""`、`tools=()` —— 生产请求长什么样，这里就长什么样。
+秘书那一档（2026-10-21 起与十个角色**同形**）：`Secretary.judge` 调
+`seam.ask_json(material, system=_judge_system(kind))` —— 稳定头进 system、
+材料留在 user。所以秘书那一行的预热对象是 `_judge_system(kind)` 那一段，
+user 消息是空材料的形状（`材料：` + 一份 JSON）。改前它整条都在 user 位
+（`system=""`），实测连发两趟 `hit=0 / miss=175`。
 
 ## 内置花费上限
 
@@ -139,6 +141,12 @@ USER_PROMPT = "这是前缀预热：不要做任何工作，不要调用工具�
 #: "另一趟"的事实 —— 只用来算"跨 run 还能命中多少前缀"（`cross_run_prefix_chars`）。
 #: 它模拟的是"同一个角色被派去做另一件活"：任务文本、台账号、深度、收件箱、板上、
 #: 名册、用户答、工作区根全换，其余不变。
+#:
+#: 2026-10-21 之后这份事实**改变不了 system 一个字节**（上面那些格子全在
+#: `promptstability.STEP_VOLATILE_FACTS` 里、全被换成静态指路语）⇒
+#: `cross_run_prefix_chars` 应当等于整条 system 的长度，而真机读数里"换一趟活"的
+#: 第一次调用就该命中（`cross_run_hit` 的两行）。这份事实因此变成了**判据的探针**：
+#: 它一变 system 就变，说明有人把跨 run 会变的东西塞回了 system。
 OTHER_RUN_FACTS: Mapping[str, Any] = {
     **dict(CANONICAL_FACTS),
     "task": "另一件完全不同的活：核一条引文。",
@@ -245,21 +253,34 @@ def _render_system(role: str, registry: Any, facts: Mapping[str, Any]) -> str:
 
 
 def _secretary_head() -> tuple[str, int]:
-    """秘书的稳定前缀与它的长度（到 `材料：` 为止）。
+    """秘书的**稳定头**（进 `system` 那一位的那一段）与它的长度。
 
-    生产的秘书调用（`Secretary.judge`）**没有 system**、也没有工具面：整条提示词在
-    一条 user 消息里，前面那段（`head` + 问题）稳定，`材料：` 之后每问一次都变。
-    所以可预热的就是这一段 —— 多的那一个字节都进不了下一次的公共前缀。
+    2026-10-21 之前：`Secretary.judge`（`secretary.py:1325`）调的是
+    `seam.ask_json(prompt)` —— **不带 system**，抬头 + 问题 + 材料全在一条 user 消息里，
+    而材料每问一次都变。真机读数（`2026-10-21`，本脚本 `--roles secretary
+    --hit-sample secretary`）：连发两趟都是 `hit=0 / miss=175`。
+
+    现在：`_judge_system(kind)` 走 `system=`，`_judge_material(context)` 留在 user。
+    于是可预热的那一段就是 **system 本身**（`prefix_chars = len(system)`），
+    而它与"这一趟问的是什么材料"无关 —— 换一份材料照样命中。
     """
-    from agentflow.secretary import _judge_prompt
+    from agentflow.secretary import _judge_system
 
-    text = _judge_prompt(SECRETARY_KIND, {})
-    marker = "材料："
-    cut = text.find(marker)
-    if cut < 0:                       # 提示词形状变了：如实报错，不猜一个长度
-        raise ValueError(f"秘书的提示词里找不到 {marker!r} —— 形状变了，预热长度不可判定")
-    head = text[: cut + len(marker)]
-    return text, len(head)
+    system = _judge_system(SECRETARY_KIND)
+    if not system.strip():                  # 提示词形状变了：如实报错，不猜一个长度
+        raise ValueError("秘书的稳定头是空的 —— 形状变了，预热对象不可判定")
+    return system, len(system)
+
+
+def _secretary_material() -> str:
+    """秘书那条 user 消息（可变部分）：空材料的形状（`材料：` + 一份 JSON）。
+
+    与 `_judge_system` 合起来逐字节等于 `secretary._judge_prompt(kind, {})`
+    （判据：`tests/test_secretary_system_carries_the_head.py`）。
+    """
+    from agentflow.secretary import _judge_material
+
+    return _judge_material({})
 
 
 def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
@@ -283,18 +304,18 @@ def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
         out: dict[str, dict[str, Any]] = {}
         for target in targets:
             if target == SECRETARY:
-                prompt, stable = _secretary_head()
-                system = ""
+                system, stable = _secretary_head()
+                prompt = _secretary_material()
                 face = None
-                # 秘书可复用的前缀就是那段稳定头（材料之后每问一次都变）。
+                # 秘书的可复用前缀就是它的 system（材料在 user 位，且每问一次都变）。
                 cross = stable
                 out[target] = {
-                    "kind": "judge_head",
+                    "kind": "judge_system",
                     "system": system,
                     "prompt": prompt,
-                    "system_sha256": "",
-                    "prompt_sha256": _sha(prompt),
-                    "system_chars": 0,
+                    "system_sha256": _sha(system),
+                    "prompt_sha256": _sha(system),
+                    "system_chars": len(system),
                     "prompt_chars": len(prompt),
                     "tools": (),
                     "tools_sha256": "",
@@ -353,7 +374,7 @@ def _record_of(target: str, item: Mapping[str, Any], call: Any, *, pass_no: int,
     """一次调用的读数行（含 `write` 的推导与三态）。
 
     `prompt_sha256` 在这一份读数里的口径：**这一行被预热的那段提示词**的 sha256 ——
-    十个角色是完整的 system（秘书没有 system），秘书是它那一条 judge 提示词。
+    2026-10-21 起十一个目标**同形**：都是真正发出去的那条 `system`（秘书也是）。
     `system_sha256` / `user_sha256` 两格分别给出真正发出去的两条消息的摘要，
     于是"预热的是哪一段"不必靠字段名猜。
     """

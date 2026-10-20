@@ -1322,7 +1322,22 @@ class Secretary:
                     "cost": {"ledger": "", "reason": "没发调用（开关关着）"}}
         t0 = time.monotonic()
         try:
-            data, call = self.seam.ask_json(_judge_prompt(kind, context),
+            # ---- 2026-10-21：稳定头进 **system**，材料留在 user（前缀缓存那一轴）
+            #
+            # 改前这里只有一条 user 消息（`ask_json(_judge_prompt(kind, context))`）：
+            # 抬头 + 问题 + 材料全在同一格里，而**材料每问一次都变** ⇒ 两趟之间的公共
+            # 前缀只剩"抬头 + 问题"之前的那点字节，而它又不在 system 位上。真机实测
+            # （2026-10-21，`scripts/warm_prompt_cache.py --roles secretary --hit-sample
+            # secretary`）：连发两趟都是 `hit=0 / miss=175` —— 那 175 token 的稳定头
+            # **一次都没进过索引**。
+            #
+            # 现在：`_judge_system(kind)` 是逐字稳定的那一半（抬头 + 这一类自己的问题），
+            # 走 `llmseam` 早就有的 `system=` 通道（`LlmSeam.ask` 的 `system` 参数，
+            # `modelgw.ModelGateway.complete` 把它放进 messages 的第一条 `system` 位）；
+            # `_judge_material(context)` 只装这一趟的材料。**没有新造通道** ——
+            # 十个角色的循环那条路（`agent_loop`）用的就是同一个参数。
+            data, call = self.seam.ask_json(_judge_material(context),
+                                            system=_judge_system(kind),
                                             task_id=task_id, note=f"secretary:{kind}")
         except Exception as exc:  # noqa: BLE001 - fail-open：超时/出错 ⇒ 没查成 + 留痕
             return self._record_judge(kind, context, {
@@ -4292,14 +4307,23 @@ class Secretary:
             pass
 
 
-def _judge_prompt(kind: str, context: Mapping[str, Any]) -> str:
-    """判断类的提示词（`draft/55` §2 的 B 类）。
+def _judge_system(kind: str) -> str:
+    """判断类的**稳定头**（进 `system` 那一位）：契约三句 + 这一类自己的问题。
 
     契约三句：① 只回一个 JSON 对象；② `decision` 必须取自**这一类自己那张**词表
     （`JUDGE_VERDICTS[kind]`；词表外的结论一律不采信，见 :meth:`Secretary.judge`）；
     ③ `basis` 写"你凭什么"。
     为什么把词表写进提示词：模型给的自由文本结论无法与台账的 `decision` 栏对齐，
     而"结论栏里出现第八种写法"正是同一件事两个名字的老毛病。
+
+    ## 为什么它与 :func:`_judge_material` 是两段（2026-10-21 的缓存轴）
+
+    这一段只取决于 `kind` —— **同一个类别，任何两趟、任何一份材料，它逐字节相同**。
+    材料的每一份都不同，所以材料必须留在 user 消息里（那是前缀之后的部分，
+    缓存照样能在"下一次调用"时命中 system 那一段）。
+    合成一份（改前的形态，见 :func:`_judge_prompt`）时，稳定头必须与材料挤在同一个
+    user 位里，而那个位的**内容**每问一次都变 ⇒ 前缀命中不了（真机：`hit=0/miss=175`
+    连发两趟）。分开放之后，稳定头第一次就把索引建起来，第二次起 `hit>0`。
 
     ## ⚠️ 这一行必须**按类别**取词表（2026-10-14 真机读数）
 
@@ -4315,7 +4339,6 @@ def _judge_prompt(kind: str, context: Mapping[str, Any]) -> str:
             f'decision（**必须逐字取自** {list(verdicts)} —— 这是这一类的词表，'
             "别的类别的词一律不采信）、reason（一句话）、basis（字符串数组，"
             "写清你凭什么，例如 `specs/d.py` 的哪一条或 `tasks` 里的哪一行）。")
-    body = json.dumps(dict(context), ensure_ascii=False, sort_keys=True, default=str)[:4000]
     if kind == "duplicate_retry":
         ask = ("问题：同一个 (role, action, input_key) 已经有下面这些终态行。这一次是"
                "正当的重试，还是重复委托？判『可派』= 这次该照派；判『建议不派』= 别重复派。")
@@ -4336,7 +4359,29 @@ def _judge_prompt(kind: str, context: Mapping[str, Any]) -> str:
         ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"
                "该重排成什么？判『建议重排』并在 reason 里给出重排后的说法；"
                "判『建议改派』= 换一个收件方更合适；判『建议不派』= 别派这条。")
-    return f"{head}\n\n{ask}\n\n材料：\n{body}\n"
+    return f"{head}\n\n{ask}\n\n"
+
+
+def _judge_material(context: Mapping[str, Any]) -> str:
+    """判断类的**可变部分**（留在 user 消息里）：这一趟的材料。
+
+    它每问一次都变（命题正文 / 候选表 / 重复行），所以**不许**进 system ——
+    上游前缀缓存要求前缀逐字节相同，把材料写进前缀等于每一问都换一段前缀。
+    与 :func:`_judge_system` 合起来逐字节等于改前那条整提示词（判据钉着这一点：
+    `tests/test_secretary_system_carries_the_head.py`）。
+    """
+    body = json.dumps(dict(context), ensure_ascii=False, sort_keys=True, default=str)[:4000]
+    return f"材料：\n{body}\n"
+
+
+def _judge_prompt(kind: str, context: Mapping[str, Any]) -> str:
+    """判断类的**整条**提示词（稳定头 + 材料，逐字节等于改前那一版）。
+
+    保留它是为了"把两条消息念成一条"的读者（判据、审计、以及 `_judge_prompt` 的
+    既有调用点）：`Secretary.judge` 自己发的是**两条**（system + user），
+    见 :func:`_judge_system` / :func:`_judge_material`。
+    """
+    return _judge_system(kind) + _judge_material(context)
 
 
 def for_role(role: str, *, root: str | Path, **kw: Any) -> Secretary:

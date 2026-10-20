@@ -227,3 +227,129 @@ def test_verify_reports_id_gap_as_warning_not_error(tmp_path: Path) -> None:
     rep = verify_all(st)
     assert _issue(rep, "id_gap").level == "warning"
     assert rep.ok is True
+
+
+# ------------------------------------------------ 存量概念行的 `proof_text` 进审计
+#
+# 2026-10-21（本批缺陷三）：概念行带 `proof_text` 这件事此前**只在读侧**被点名
+# （`verifications.proof_review_gap` 的 `why` 写着"概念行不该带证明文本"），
+# 而 `verify._check_13` 的 error 清单里没有它 —— 于是"审计通过"这句话在一个
+# 装满历史哨兵行的工作区面前是假的。下面三条把新增的那一条钉住：
+# ① 有哨兵行 ⇒ **1 条** error 且点名 `stmt_id`；② 干净库 ⇒ 0 条；
+# ③ 负控：把判据本体摘掉 / 把那条 issue 从报告里摘掉 ⇒ 判据红。
+# 选择这组口径的理由：`verify_all` 是交付面上唯一被读成"没有问题"的那一栏，
+# 它漏掉的类别不会在任何别处变成红。
+
+
+def _first_concept_stmt_id(store: Store) -> str:
+    """干净夹具里第一条概念行的 `stmt_id`（并表之后概念住在 `statements`）。"""
+    rows = [r for r in store.rows("statements") if str(r.get("kind") or "") == "concept"]
+    assert rows, "夹具里一条概念行都没有 ⇒ 这条判据没素材"
+    return str(rows[0].get("stmt_id") or "")
+
+
+def _concept_proof_issues(report) -> list:
+    """只挑 `concept_row_carries_proof_text` 那一条的 issue（判据的读法一处）。"""
+    from agentflow.verify import CONCEPT_PROOF_TEXT_CODE
+
+    return [i for i in report.issues if i.code == CONCEPT_PROOF_TEXT_CODE]
+
+
+def test_a_clean_library_has_no_concept_proof_text_error(clean_store: Store) -> None:
+    """② 正控（反真空）：干净库 ⇒ 这一条 **0 条**（不是"查不了"）。
+
+    只判"有哨兵行会红"而不判"干净库是绿的"，那条判据可以靠"永远报一条"通过 ——
+    那是本仓最忌的假绿方向（审计天天报警，人就开始忽略它）。
+    """
+    rep = verify_all(clean_store)
+    assert _concept_proof_issues(rep) == [], [i.to_dict() for i in _concept_proof_issues(rep)]
+    assert rep.ok is True, [i.to_dict() for i in rep.errors]
+
+
+def test_a_concept_row_carrying_proof_text_is_one_named_error(clean_store: Store) -> None:
+    """① 正控：造一条带哨兵 `concept:primitive` 的概念行 ⇒ **1 条** error、点名 `stmt_id`。
+
+    为什么把"恰好 1 条"也写进断言：`_check_13` 里已经有一条"假 proof_review"的点名
+    （`proof_review_without_verification`），两条判据若在同一行上各报一次，
+    读的人会以为"两处都坏了"，而其实是同一件事说两遍。
+    """
+    from agentflow.verify import CONCEPT_PROOF_TEXT_CODE
+
+    stmt_id = _first_concept_stmt_id(clean_store)
+    _mutate_table(clean_store, "statements",
+                  lambda rows: [r.__setitem__("proof_text", "concept:primitive")
+                                for r in rows if str(r.get("stmt_id") or "") == stmt_id])
+    rep = verify_all(clean_store)
+    hits = _concept_proof_issues(rep)
+    assert len(hits) == 1, [i.to_dict() for i in rep.issues]
+    issue = hits[0]
+    assert issue.level == "error", issue.to_dict()
+    assert issue.code == CONCEPT_PROOF_TEXT_CODE, issue.to_dict()
+    assert issue.table == "statements", issue.to_dict()
+    # 点名到行：`row_id` 就是那一条命题的号，`message` 里也逐字带着它。
+    assert issue.row_id == stmt_id, (issue.to_dict(), stmt_id)
+    assert stmt_id in issue.message, issue.message
+    # 来源也要点名（`created_by`）—— "谁写进来的"是这一条读数的一半。
+    assert "created_by" in issue.message, issue.message
+    # 全库的 error 就这一条：没有把别的判据连累成红（否则这条读数是混的）。
+    assert [i.code for i in rep.errors] == [CONCEPT_PROOF_TEXT_CODE], [
+        i.to_dict() for i in rep.errors]
+
+
+def test_removing_the_scan_makes_the_concept_proof_text_criterion_red(
+        clean_store: Store, monkeypatch) -> None:
+    """③ 负控（判据本体被摘）：把 `concept_rows_with_proof_text` 换成"永远没有" ⇒ 红。
+
+    摘的是**判据本体**（`verify.concept_rows_with_proof_text`），不是某条断言的字符串：
+    这样"红"才说明上面那条正控真的走这条扫描，而不是碰巧读了别处的数据。
+    """
+    from agentflow import verify as V
+
+    stmt_id = _first_concept_stmt_id(clean_store)
+    _mutate_table(clean_store, "statements",
+                  lambda rows: [r.__setitem__("proof_text", "concept:primitive")
+                                for r in rows if str(r.get("stmt_id") or "") == stmt_id])
+    assert len(_concept_proof_issues(verify_all(clean_store))) == 1
+
+    monkeypatch.setattr(V, "concept_rows_with_proof_text", lambda rows: [])
+    assert _concept_proof_issues(verify_all(clean_store)) == [], (
+        "把判据本体摘掉之后还报得出来 ⇒ 这一条不是那条扫描给的")
+
+
+def test_removing_the_issue_from_the_report_makes_the_criterion_red(clean_store: Store) -> None:
+    """③ 负控（issue 被摘）：从报告里删掉那一条 ⇒ 同一个读法必须红。
+
+    与上一条负控分工：那条摘的是**扫描**（实现面），这条摘的是**报告里的那一格**
+    （读数面）—— 两者都能让"审计说这一行有问题"这句话消失，而后者正是
+    "有人把这条 issue 从 audit 里删掉"的那种改动。
+    """
+    stmt_id = _first_concept_stmt_id(clean_store)
+    _mutate_table(clean_store, "statements",
+                  lambda rows: [r.__setitem__("proof_text", "concept:primitive")
+                                for r in rows if str(r.get("stmt_id") or "") == stmt_id])
+    rep = verify_all(clean_store)
+    assert len(_concept_proof_issues(rep)) == 1
+
+    # 把那条 issue 从报告里摘掉（模拟"这一格被删"）。
+    from agentflow.verify import CONCEPT_PROOF_TEXT_CODE
+
+    rep.issues = [i for i in rep.issues if i.code != CONCEPT_PROOF_TEXT_CODE]
+    assert _concept_proof_issues(rep) == [], (
+        "删掉之后还读得到那一条 ⇒ 这条负控没摘到东西")
+
+
+def test_a_concept_row_without_proof_text_is_not_flagged(clean_store: Store) -> None:
+    """反真空：把**别的**行（非概念行）塞上 `proof_text` 不许被这一条抓。
+
+    这一条守的是"扫描只挑 `kind == 'concept'`"：不限制的话，
+    "所有带 `proof_text` 的行"都会被报成概念行污染，而那正是真正需要 `proof_text` 的
+    那些命题 —— 判据一开就全是假红。
+    """
+    from agentflow.verify import concept_rows_with_proof_text
+
+    others = [r for r in clean_store.rows("statements")
+              if str(r.get("kind") or "") != "concept"]
+    for row in others:
+        row["proof_text"] = "一段真实的证明正文"
+    assert concept_rows_with_proof_text(others) == [], (
+        "非概念行被当成了'概念行带证明文本'")

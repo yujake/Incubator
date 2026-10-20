@@ -32,15 +32,15 @@
 读数里的 `write` = 这一次被 miss 掉的那部分 token（`write_source="derived:miss"`）——
 它说的是"这部分被送去建索引了"，**不是**"下一次一定能命中"。
 
-真机上这两者会分开：`secretary` 那一行连发两趟都是 `miss=175 / hit=0`
+真机上这两者会分开：改前 `secretary` 那一行连发两趟都是 `miss=175 / hit=0`
 （`2026-10-21` 实测，`--roles secretary --hit-sample secretary` ⇒ 退出码 1
-"第二次调用没命中的样本：['secretary']"）⇒ 它那条 175 token 的前缀**没有**进索引
-（原因未知：可能是太短，也可能是"只有 user 消息的请求不建索引"——这一格记 unknown，
-不编原因）。所以本文件除了①那条"字面判据"，还有一条**实证**判据：
-十个角色的同一份 prompt 必须**真的被下一次命中**（`hit > 0`）。
-秘书那一档无法通过实证，读数里如实写 `landed=False`，判据只要求"读数自洽"
-（`landed` 必须等于"有没有一行 hit>0"），不要求它绿 —— 修它要改秘书的调用形状
-（把稳定头挪进 system、材料留在 user），那是提示词/调用面的改动，不在本次授权内。
+"第二次调用没命中的样本：['secretary']"，) ⇒ 它那条 175 token 的前缀**没有**进索引
+（原因：整条提示词在 **user** 位、而材料每问一次都变 ⇒ 前缀从第一个字符起就不同）。
+所以本文件除了①那条"字面判据"，还有一条**实证**判据：
+十一个目标的同一份 `system` 必须**真的被下一次命中**（`hit > 0`）。
+
+2026-10-21 之后秘书与十个角色**同形**（稳定头进 `system`、材料留 user），
+所以它也要过实证那一档 —— 判据见 `tests/test_secretary_system_carries_the_head.py`。
 
 ## 反真空
 
@@ -339,11 +339,11 @@ def test_the_ten_role_prompts_are_proven_to_land_in_the_cache() -> None:
 
     为什么"有 write 记录"还不够：`write` 是从 `miss` **推导**出来的（上游没有写计数），
     它证明的是"这部分被送去建索引"，不是"索引留下了它"。真机上这两者会分开 ——
-    秘书那一行 `write=175` 而 `hit` 恒 0（连发两趟都不中），见模块 docstring。
+    改前秘书那一行 `write=175` 而 `hit` 恒 0（连发两趟都不中，见模块 docstring）。
 
-    秘书那一档因此**不要求绿**：它今天确实吃不到缓存（`server` 侧不建索引，原因未知）。
-    判据只要求读数**自洽**：`landed` 必须等于"有没有一行 hit>0"，
-    于是"没落地"这件事在读数里是可见的、不是被抹平的。
+    秘书那一档现在也要过同一条实证（它的稳定头进了 system），但它的读数在
+    `tests/test_secretary_system_carries_the_head.py` 里判 —— 这一条只判十个角色，
+    外加一条"`landed` 与读数一致"的自洽检查（防止有人把 `landed` 算宽）。
     """
     rows = [row for run in _runs() for row in (run.get("rows") or [])]
     landed = _targets_landed(TARGETS, rows)
@@ -529,10 +529,14 @@ def test_the_recorded_digests_still_match_the_rendered_prompts() -> None:
                             f"今天重算是 {want[:12]} ⇒ 提示词变了，读数作废（重跑预热）")
     assert not problems, "；".join(problems)
 
-    # 秘书那一档没有 system：它的摘要就是那条 judge 提示词的摘要（口径不许含糊）。
+    # 秘书那一档（2026-10-21 起与十个角色同形）：摘要就是它进 `system` 的**稳定头** ——
+    # 不是那条整提示词（材料在 user 位，每问一次都变）。口径不许含糊。
     prompt, _stable = W._secretary_head()
     assert rendered[W.SECRETARY]["prompt_sha256"] == _sha(prompt), (
-        "秘书那一行的 prompt_sha256 与它的 judge 提示词对不上")
+        "秘书那一行的 prompt_sha256 与它进 system 的稳定头对不上")
+    assert rendered[W.SECRETARY]["system"].strip(), (
+        "秘书的 system 是空的 ⇒ 稳定头没有进 system 位（改前那个形体）")
+    assert rendered[W.SECRETARY]["kind"] == "judge_system", rendered[W.SECRETARY]["kind"]
 
 
 def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
@@ -540,11 +544,14 @@ def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
 
     - **工具面不在缓存前缀里**：同一份 system，带工具面预热过之后**去掉工具面**
       再发一次仍然命中（`tools_in_prefix=False`，实测 hit 11,904 / 12,126）；
-    - **换一趟活命中 0**：另一份 system（不同 task / task_id / depth）**第一次**见
-      `hit=0`，同一份**第二次**见才命中（`cross_run_hit` 的两行）。
+    - **换一趟活也命中**（2026-10-21 之后的口径）：另一份 system（不同 `task` /
+      `task_id` / `depth` / `workspace_root`）在 system 里**逐字节等于**原来那一份
+      （跨 run 会变的十格已经挪进 user 消息）⇒ `cross_run_hit` 的两行**都该 ≥90%**。
+      改前那两行是 `0 / 满`，那正是"预热只买到同一份前缀的第二次"的读数。
 
-    这两条决定了"预热到底买到了什么"：买到的不是"下一趟活能省"，
-    而是"同一份前缀的第二次调用能省"（也就是同一趟的第 2..N 步，以及 resume / 重跑同一任务）。
+    这两条决定了"预热到底买到了什么"：改前买到的是"同一份前缀的第二次调用能省"；
+    现在还包括"另一趟活能用同一段前缀"。`cross_run_prefix_chars`（离线算的字符数）
+    因此必须等于整份 system 的长度 —— 这是同一条判据的另一半。
     """
     runs_with_probe = [run for run in _runs() if run.get("tools_in_prefix") is not None]
     assert runs_with_probe, (
@@ -561,10 +568,20 @@ def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
     assert cross and len(cross) == 2, cross
     first, second = cross[0], cross[1]
     assert first["pass"] == 4 and second["pass"] == 5, cross
-    assert first["hit"] == 0, (
-        f"第一次见那份 system 竟然命中了 {first['hit']} token ⇒ "
-        "要么探针的 task_id 没变（换一趟活没换成），要么上游改了缓存口径")
-    assert second["hit"] > 0, f"同一份 system 第二次见却没命中：{second}"
-    assert second["hit"] > 0.9 * second["tokens_in"], (
-        f"同一份 system 第二次见只命中 {second['hit']}/{second['tokens_in']} ⇒ "
-        "这个比例与文档里的 99% 对不上")
+    # 口径（2026-10-21）：两行都是"另一趟活"的 system，两行都该命中。
+    # 改前：第一行 `hit=0`（另一份 system 从第 95 个字符起就不同）。
+    for tag, got in (("第一次见", first), ("第二次见", second)):
+        assert got["hit"] > 0, (
+            f"另一趟活的 system {tag}没有命中（hit=0，tokens_in={got['tokens_in']}）⇒ "
+            "前缀里还有跨 run 会变的东西（登记表见 `promptstability.STEP_VOLATILE_FACTS`）")
+        rate = got["hit"] / got["tokens_in"]
+        assert rate >= 0.90, (
+            f"另一趟活的 system {tag}只命中 {rate * 100:.1f}%（hit {got['hit']} / "
+            f"{got['tokens_in']} token）⇒ 与'跨 run 同一份前缀'对不上：{got}")
+    # 离线那一格：跨 run 可复用的前缀 == 整份 system（一格都没断）。
+    rows = [r for r in (run.get("rows") or []) if int(r.get("pass") or 1) in (4, 5)]
+    assert rows, run.get("rows")
+    for row in rows:
+        assert int(row["cross_run_prefix_chars"]) == int(row["system_chars"]), (
+            f"跨 run 可复用前缀只有 {row['cross_run_prefix_chars']} / 整份 "
+            f"{row['system_chars']} 字符 ⇒ system 里还有跨 run 会变的东西")

@@ -49,6 +49,14 @@ _CHILDREN_ANCHOR = ("这一趟开始那一刻你名下的子代理（名册摘�
                     "**这是快照** —— 这一趟里新派的不会自己出现在这里，要看活的用 "
                     "`{\"roster\": {\"of\": \"self\"}}`）：")
 
+#: 2026-10-21 起父/子/板/名册这几格从 **system** 挪进了开场那条 **user** 消息
+#: （跨 run 会变的事实不许进前缀：`promptstability.STEP_VOLATILE_FACTS`）。
+#: 所以判据要读 `gate.prompts[-1]`，锚也随之换成 user 消息里那一句。
+_USER_CHILDREN_ANCHOR = ("你名下的子代理（名册摘要：名字 · 一句简介 · 状态；"
+                         "这是这一趟开始那一刻的快照）：")
+#: user 消息里"父代理台账号"那一格的锚（system 里那一格只剩指路语）。
+_USER_PARENT_ANCHOR = "父代理台账号："
+
 
 class _Gate:
     """照剧本回答的替身模型（只记 `system` 提示词，不联网）。"""
@@ -148,10 +156,13 @@ def test_the_prompt_tells_a_child_who_its_parent_is(tmp_path: pathlib.Path):
     run = _loop(cond, reg, ws, st, gate).run("把这一趟做完", summoned_by="M",
                                              my_task_id=me, depth=2)
     assert run.stop_reason == "final", run.to_dict()
-    system = gate.systems[-1]
-    assert f"你的父代理台账号：{parent}" in system, system[-800:]
-    assert me not in system.split("你的父代理台账号：")[1].split("\n")[0], (
-        "父那一格写的必须**不是**自己的编号（写自己的就是 D89 那个形态）：", system[-800:])
+    user = gate.prompts[-1]
+    assert f"{_USER_PARENT_ANCHOR}{parent}" in user, user[-900:]
+    assert me not in user.split(_USER_PARENT_ANCHOR)[1].split("；")[0], (
+        "父那一格写的必须**不是**自己的编号（写自己的就是 D89 那个形态）：", user[-900:])
+    # 反真空的另一半：system 里那一格只剩指路语 —— 编号不许还在前缀里
+    # （在的话，换一趟活 system 就从那一格起不同，前缀缓存永远命中不了）。
+    assert f"{_USER_PARENT_ANCHOR}{parent}" not in gate.systems[-1], gate.systems[-1][-400:]
 
 
 def test_the_prompt_tells_a_parent_which_children_it_has(tmp_path: pathlib.Path):
@@ -168,13 +179,20 @@ def test_the_prompt_tells_a_parent_which_children_it_has(tmp_path: pathlib.Path)
         got = loop.secretary.roster_add(owner=me, role="B", task_id=kid, brief=f"第 {n} 件活")
         assert got["problem"] == "", got
     loop.run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
-    system = gate.systems[-1]
-    line = system.split(_CHILDREN_ANCHOR)[1].split("\n")[0]
+    user = gate.prompts[-1]
+    line = user.split(_USER_CHILDREN_ANCHOR)[1].split("\n")[0]
     for kid, name in zip(kids, ("B1", "B2")):
         assert name in line, ("名册名要出现", line)
         assert kid not in line, ("E17：那一格是名册摘要，不许出现台账号", line, kid)
     assert "第 1 件活" in line and "第 2 件活" in line, ("一句简介也要出现", line)
     assert other not in line, ("兄弟（同一个父、但父不是我）不许进我这一格：", line)
+    # 名册摘要**不许**还在 system 里（那样换一趟活前缀就从那一格起不同）：
+    # system 里那一格只剩 `promptstability.SYSTEM_PLACEHOLDERS["children"]` 那段指路语。
+    from agentflow import promptstability as _PS
+
+    assert _PS.SYSTEM_PLACEHOLDERS["children"] in gate.systems[-1], gate.systems[-1][-400:]
+    assert "- B1" not in gate.systems[-1], ("名册条目还在 system 里 ⇒ 前缀跨不过 run：",
+                                           gate.systems[-1][-400:])
 
 
 def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
@@ -199,7 +217,7 @@ def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
     for n, kid in enumerate(kids, start=1):
         loop.secretary.roster_add(owner=me, role="B", task_id=kid, brief=f"第 {n} 件活")
     loop.run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
-    line = gate.systems[-1].split(_CHILDREN_ANCHOR)[1].split("\n")[0]
+    line = gate.prompts[-1].split(_USER_CHILDREN_ANCHOR)[1].split("\n")[0]
     assert notice not in line, ("工作项不是子代理（两轴分开）：", line, notice)
     for kid, name in zip(kids, ("B1", "B2")):
         assert name in line, (line, kids)
@@ -226,8 +244,8 @@ def test_no_children_is_rendered_as_a_sentence_not_an_empty_cell(tmp_path: pathl
     me = _item(cond, role="D", parent=parent, depth=2, key="me@1")
     gate = _Gate([json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)])
     _loop(cond, reg, ws, st, gate).run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
-    system = gate.systems[-1]
-    assert _CHILDREN_ANCHOR + "（此刻名下没有子代理）" in system, system[-800:]
+    user = gate.prompts[-1]
+    assert _USER_CHILDREN_ANCHOR + "（此刻名下没有子代理）" in user, user[-900:]
 
 
 # ============================================================ 负控：删掉那一格 ⇒ 红
@@ -265,13 +283,14 @@ def test_an_unreadable_ledger_is_not_folded_into_having_no_parent(tmp_path: path
                                              my_task_id="t-9999", depth=2)
     assert any("父代理没读成" in str(n) for n in run.notes), run.notes
     assert any("t-9999" in str(n) for n in run.notes), run.notes
-    system = gate.systems[-1]
-    assert "你的父代理台账号：（没读成：" in system, system[-800:]
-    assert "你的父代理台账号：t-9999" not in system, (
+    # 2026-10-21 起父那一格在**开场那条 user 消息**里（system 里只剩指路语）。
+    user = gate.prompts[-1]
+    assert f"{_USER_PARENT_ANCHOR}（没读成：" in user, user[-900:]
+    assert f"{_USER_PARENT_ANCHOR}t-9999" not in user, (
         "拿自己的编号冒充父的编号是最坏的一种'看起来成功'（模型会照它去沟通）：",
-        system[-800:])
-    assert "你的父代理台账号：（顶层发起" not in system, (
-        "读不成 ≠ 顶层发起（三态）：", system[-800:])
+        user[-900:])
+    assert f"{_USER_PARENT_ANCHOR}（顶层发起" not in user, (
+        "读不成 ≠ 顶层发起（三态）：", user[-900:])
 
 
 # ============================================================ D89：终态回报挂在父名下

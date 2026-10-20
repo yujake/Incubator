@@ -159,12 +159,19 @@ def test_every_role_renders_a_stable_system_across_steps(tmp_path: pathlib.Path)
         later["budget_left"] = "0.500000 美元（上限 1.000000，已用 0.500000，读数来自 per_seam）"
         later["notebook"] = "- [第 2 步] 记一笔"
         later_system_facts, moved = PS.split_facts(later)
-        assert moved == {"budget_left": later["budget_left"], "notebook": later["notebook"]}, moved
+        # 2026-10-21：登记表从"每步会变"扩到"跨 run 也会变"⇒ `moved` 是登记表的**全部**
+        # 键（`facts` 里给齐了）。这里判"一格不少、一格不多"，改动见
+        # `promptstability.STEP_VOLATILE_FACTS` 上面那张两轴的说明。
+        assert set(moved) == set(PS.STEP_VOLATILE_FACTS), sorted(moved)
+        # 值逐格是**原值**（进 user 消息那一份），不是替身句。
+        assert moved == {k: later[k] for k in PS.STEP_VOLATILE_FACTS}, moved
+        assert moved["budget_left"] == later["budget_left"]
+        assert moved["notebook"] == later["notebook"]
+        assert moved["task_id"] == later["task_id"]
         second = loop._system_at_step(later_system_facts, first, step=1)
         assert second == first, (
             f"{role} 的第二步 system 变了（第一步 {len(first)} 字 / 第二步 {len(second)} 字）："
             + PS.stability_problem(first, second))
-
 
 def test_a_timestamp_in_the_system_makes_the_criterion_red(tmp_path: pathlib.Path,
                                                            monkeypatch: pytest.MonkeyPatch) -> None:
@@ -397,16 +404,33 @@ def test_a_dynamic_section_that_is_not_registered_is_red(tmp_path: pathlib.Path)
 
 
 def test_the_dynamic_section_whitelist_is_registered_and_small() -> None:
-    """反真空：登记表是**显式的一份**，且初始为空（不是"什么都允许"）。
+    """反真空：登记表是**显式的一份**，且段白名单**初始为空**（不是"什么都允许"）。
 
-    "初始为空"是一条判据而不是一种风格：登记表一空，任何一段随步变化都会被点名；
+    "初始为空"是一条判据而不是一种风格：白名单一空，任何一段随步变化都会被点名；
     它一旦被随手填满，前缀缓存就又会悄悄失效，而没有一条测试会因此变红。
+
+    事实登记表（`STEP_VOLATILE_FACTS`）反过来必须是**写全的一份**：2026-10-21 起它
+    除了"每步会变"的两格，还收"跨 run 会变"的十格（否则换一趟活的第一次调用
+    永远命中不了）。这里钉住精确的键集 —— 少一格（有人把某格挪回 system）与
+    多一格（有人把静态事实也挪出去、于是模型读不到它）都会红。
     """
     assert isinstance(PS.DYNAMIC_SECTION_WHITELIST, frozenset), PS.DYNAMIC_SECTION_WHITELIST
     assert PS.DYNAMIC_SECTION_WHITELIST == frozenset(), PS.DYNAMIC_SECTION_WHITELIST
     # 每步会变的键也必须登记（登记表本身就是"为什么它不进 system"的出处）。
-    assert set(PS.STEP_VOLATILE_FACTS) == {"budget_left", "notebook"}, PS.STEP_VOLATILE_FACTS
+    assert set(PS.STEP_VOLATILE_FACTS) == {
+        # 每步会变（`_prompt` 尾部现读）
+        "budget_left", "notebook",
+        # 跨 run 会变（开场那条 user 消息里现读）
+        "task", "task_id", "depth", "parent_task_id", "summoned_by",
+        "children", "board", "inbox", "user_replies", "workspace_root",
+    }, sorted(PS.STEP_VOLATILE_FACTS)
+    # 每一格都必须有**静态替身**（空串会被 `promptkit` 的严格插值拒掉，
+    # 而那正是"挪出去但没留指路语"的形态）。
     assert set(PS.SYSTEM_PLACEHOLDERS) == set(PS.STEP_VOLATILE_FACTS), PS.SYSTEM_PLACEHOLDERS
+    for key, text in PS.SYSTEM_PLACEHOLDERS.items():
+        assert text.strip(), f"{key} 的替身是空的 ⇒ system 里那一格会渲染失败"
+        # 反真空：替身必须指得出真值在哪条消息里（"信息换了位置"而不是"被删了"）。
+        assert ("本次对话" in text) or ("每步消息" in text), (key, text)
 
 
 def test_first_difference_reports_the_exact_position() -> None:

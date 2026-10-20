@@ -176,11 +176,14 @@ def test_a_late_reply_still_reaches_the_next_run(tmp_path: pathlib.Path):
     # 用户迟到了：现在才答
     assert U.answer_question(root, qid=qid, answer="继续，但只做一轮", late=True, sid="t") == ""
     # 第二次运行：这段回答必须在 prompt 里
+    # （2026-10-21 起 `{{user_replies}}` 那一格从 system 挪进了开场那条 user 消息 ——
+    #  它是一趟的事实，进 system 就把整条前缀绑死在这一趟上。信息没丢，只是换了位置。）
     run2, gw2, _ = _run(tmp_path, "M", [json.dumps({"final": "照办", "evidence": []},
                                                     ensure_ascii=False)],
                         registry_bundle=(st, registry, cond, root))
-    assert "只做一轮" in gw2.systems[0], "迟到的回答没有进提示词"
-    assert "迟到送达" in gw2.systems[0], "迟到的标记没写出来"
+    assert "只做一轮" in gw2.prompts[0], "迟到的回答没有进提示词"
+    assert "迟到送达" in gw2.prompts[0], "迟到的标记没写出来"
+    assert "只做一轮" not in gw2.systems[0], "回答还在 system 里 ⇒ 前缀跨不过 run"
     assert run2.stop_reason == "final"
 
 

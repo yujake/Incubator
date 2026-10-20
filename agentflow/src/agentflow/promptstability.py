@@ -23,10 +23,26 @@
 
 ## 改法：静态/动态分离（本模块只给机制与判据，**不**做渲染缓存）
 
-- 每步会变的事实（:data:`STEP_VOLATILE_FACTS` 登记表）**不再进 system**：
+- 会变的事实（:data:`STEP_VOLATILE_FACTS` 登记表）**不再进 system**：
   :func:`split_facts` 把它们从 system 的事实里摘掉，换成一个**逐字节稳定**的静态替身
-  （:data:`SYSTEM_PLACEHOLDERS`），并交给调用方塞进**这一步的 user 消息**
-  （`agent_loop._prompt` 的尾部已经有了「剩余花销预算」，本次补上「草稿本」）。
+  （:data:`SYSTEM_PLACEHOLDERS`），并交给调用方塞进 **user 消息**
+  （`agent_loop._prompt` 的尾部已经有「剩余花销预算」，本次补上「草稿本」）。
+
+  ## 2026-10-21：登记的判据从「每步会变」扩成「**跨 run 会变**」
+
+  前缀缓存命中的是"同一份前缀的第二次"。原来的登记表只收"每步会变"的两格
+  （`budget_left` / `notebook`），于是**同一趟的第 2..N 步**能命中；而"另一趟活"
+  的第一步永远命中不了 —— 因为 `AGENT_IDENTITY`（段序 0，整条提示词的最前面）
+  逐字写着 `task_id` / `depth` / `children` / `parent_task_id` / `summoned_by`，
+  而 `TASK_FRAME`（段序 4200）写着 `task` 正文 / `inbox` / `board` / `user_replies`。
+  实测（`2026-10-21`，本机，M 岗）：两份"不同的活"的 system 从第 **95** 个字符起
+  就不同（改前读数，见 `tests/fixtures/prompt_cache_warm.json` 的
+  `cross_run_prefix_chars`）⇒ 换一趟活的第一次调用 `hit=0`。
+
+  所以登记表收的是**所有跨 run 会变的事实**：它们在 user 消息里现读（开场那一条
+  `agent_loop._opening_transcript` 逐格写着原值），system 里只留一段静态指路语。
+  信息一个字没删 —— 判据（`tests/test_cross_run_prefix_is_reused.py`）既断言
+  "system 里没有它"，也断言"user 消息里还有它"。
 - system 里允许每步变化的段必须有登记（:data:`DYNAMIC_SECTION_WHITELIST`，初始为空）：
   :func:`unregistered_dynamic_sections` 扫"两份装配里变了的段名"，与登记表对比。
   没有登记却变了 ⇒ 判据红。这条守的是"以后有人往 system 里再塞一个每步会变的东西"
@@ -87,13 +103,41 @@ CACHE_SUMMARY_KEYS: tuple[str, ...] = (
 #: 动态内容必须经过一次显式决定，而不是悄悄把前缀缓存废掉）。
 DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 
-#: 每步都会重算、因而**不许**进 system 的事实键（登记表：键 → 根因所在处）。
+#: 会变、因而**不许**进 system 的事实键（登记表：键 → 根因所在处）。
 #:
-#: 「每步会变」的判据不是猜的，是看**谁在步边界上被现算**：改前是
-#: 改前那个每步重算 system 的实现（今 `_system_at_step`）每一趟只重算这两格；改后它们由
-#: `_prompt`（`agent_loop.py:2408` 附近）每一步现读。其余 14 个键都在 `run()` 开头
-#: （`agent_loop.py:2908` 的 `facts = dict(...)`）算一次：
-#: 一趟之内逐字不变（跨趟当然会变 —— 那是"另一段前缀"，不是"同一步里在动"）。
+#: 「会变」这一句话有**两根轴**，两轴都收（2026-10-21 起，判据见模块开头那一段）：
+#:
+#: | 轴 | 判据 | 收进来的键 |
+#: |---|---|---|
+#: | 每步会变 | 谁在步边界上被现算 | `budget_left` / `notebook`（`_prompt` 每步现读） |
+#: | 跨 run 会变 | 谁在 `run()` 开头被**重新**算一次 | task 正文 / `task_id` / `depth` / `parent_task_id` / `summoned_by` / `children` / `board` / `inbox` / `user_replies` / `workspace_root` |
+#:
+#: 为什么第二轴也收：一趟之内逐字不变的东西，**换一趟就换一份**，而上游前缀缓存要的
+#: 是"另一趟也能用同一段前缀"。只挪第一轴，换一趟活的第一次调用永远 `hit=0`
+#: （改前实测：两份不同的活的 system 从第 95 个字符起不同）。
+#:
+#: 落点逐条（行号是 2026-10-21 的读数，会漂；**名字**不会）：
+#:
+#: - 模板那一侧全部在 `agent_prompts.role_prompt_registry` 里：`AGENT_IDENTITY`
+#:   （段序 0）:`agent_prompts.py:8666`（`{{summoned_by}}` / `{{task_id}}`）、
+#:   `:8670`（`{{depth}}`）、`:8674`（`{{parent_task_id}}`）、`:8686`（`{{children}}`）；
+#:   `TASK_FRAME`（段序 4200）:`agent_prompts.py:8894`（`{{task}}`）、`:8898`（`{{inbox}}`）、
+#:   `:8902`（`{{board}}`）、`:8906`（`{{user_replies}}`）、`:8910`（`{{notebook}}`）、
+#:   `:8914`（`{{budget_left}}`）；`WORKSPACE_FACTS`（段序 10000）:`agent_prompts.py:9206`
+#:   （`{{workspace_root}}`）。
+#: - 值那一侧在 `agent_loop.run` 的 `facts = dict(...)`（`agent_loop.py:3610`）算一次，
+#:   凡"这一次运行的事实"都在这张表里被重新算 ⇒ 它们都是"另一段前缀"。
+#: - 现在的载体：每步会变的两格仍在 `_prompt` 尾部现读（`agent_loop.py:3106-3112`）；
+#:   其余十格在开场那一条 user 消息里（`agent_loop._opening_transcript`，
+#:   `agent_loop.py:886`）—— 那是**消息**，不是前缀：换一趟活换的是消息，前缀照旧。
+#:
+#: ⚠️ 加一格之前先问：**换一趟活它会不会变？** 会 ⇒ 登记在这里（并在 user 消息里
+#: 真写出来，否则就是"信息被删"）；不会 ⇒ 留在 system，它是可复用的前缀。
+#: 刻意**没有**登记的几格（跨 run 会变但判据是"同一台机器/同一份配置"）：
+#: `availability`（`PARTNER_AVAILABILITY`，段序 4520：改配置才变）、
+#: `toolchain_facts` / `toolchain_formal`（段序 9000/9010：换机器才变）、
+#: `parent_limits`（段序 5210：改策略才变）。它们若哪天变成"每趟都不一样"，
+#: 判据（两条渲染逐字节比对 + 段白名单）会先红 —— 那时再决定挪不挪。
 STEP_VOLATILE_FACTS: Mapping[str, str] = {
     "budget_left": (
         "`agent_loop._budget_text()`（`agent_loop.py:2752`）：读 `seam.spent_usd()` 现算"
@@ -103,13 +147,62 @@ STEP_VOLATILE_FACTS: Mapping[str, str] = {
         "`agent_loop.notebook_digest()`（`agent_loop.py:1421`）：`note` 是追加写盘的，"
         "这一步刚写进去的笔记下一步就该读得到 ⇒ 每一步都可能不同。"
     ),
+    "task": (
+        "`AGENT_LOOP.run` 的入参 `task`（`agent_loop.py:3610` 的 `facts` 里那一格）⇒ "
+        "换一趟活就换一份正文；它在 system 里（`AGENT_IDENTITY`/`TASK_FRAME`）时，"
+        "两份不同的活的公共前缀从第一个字符起就是 0。"
+    ),
+    "task_id": (
+        "`AgentLoop.run(my_task_id=…)`（`agent_loop.py:3610`）：台账号每趟都新发一个 ⇒ "
+        "改前它在 `AGENT_IDENTITY` 里，实测第 95 个字符就分家。"
+    ),
+    "depth": (
+        "`AgentLoop.run(depth=…)`（`agent_loop.py:3610`）：同一个角色可能被顶层唤起"
+        "（1）也可能被父代理唤起（2..N）⇒ 跨趟会变。"
+    ),
+    "parent_task_id": (
+        "`AgentLoop._resolve_parent`（`agent_loop.py:3544`）：父的台账号每趟不同；"
+        "顶层发起时是空串（渲染成一句缺省）。"
+    ),
+    "summoned_by": (
+        "`AgentLoop.run(summoned_by=…)`（`agent_loop.py:3610`）：同一角色这次被用户唤起、"
+        "下次被 M 唤起 ⇒ 跨趟会变。"
+    ),
+    "children": (
+        "`AgentLoop._children_text()`（`agent_loop.py:3602`）：名册摘要按「这一趟开始那一刻」"
+        "现读 ⇒ 换一趟活、派过不同的子代理，这一格就不同。"
+    ),
+    "board": (
+        "`agent_loop.board_digest`（`agent_loop.py:3564`）：板项是活账 —— 换一趟活时"
+        "挂在我名下的项不同（消掉的、新派的都在动）。"
+    ),
+    "inbox": (
+        "`agent_loop.inbox_digest`（`agent_loop.py:3559`）：收件箱每趟都不同（新留言会到、"
+        "旧的会被窗口挤掉），且在 system 里时它把「这一趟听到什么」编进了前缀。"
+    ),
+    "user_replies": (
+        "`userio.read_replies`（`agent_loop.py:3566` 经 `AP.user_replies_digest`）："
+        "用户答过的问题是盘上的活账 ⇒ 换一趟活一般就多/少了回答。"
+    ),
+    "workspace_root": (
+        "`AgentLoop.run` 的 `workspace_root`（`agent_loop.py:3614`）：换个项目/工作区就换一个"
+        "根目录 ⇒ 它此前在 `WORKSPACE_FACTS`（段序 10000，system 的倒数第二段）里，"
+        "是 cross-run 前缀的最后一处断点。"
+    ),
 }
 
-#: 这两格进 system 时用的**静态替身**（同一个角色 / 任务 / registry 下逐字节相同）。
+#: 每一格进 system 时用的**静态替身**（同一个角色 / 任务 / registry 下逐字节相同）。
 #:
-#: 为什么是"指路"而不是"冻结一个旧数字"：冻结旧数字会让 system 说一句**假话**
+#: 为什么是"指路"而不是"冻结一个旧值"：冻结旧值会让 system 说一句**假话**
 #: （"还剩 5.0 美元"而实际 4.9），而模型会照它决策；指路则是真话 ——
-#: 那个数在每步的 user 消息里现读，模型照样看得见，只是**不在前缀里**。
+#: 那个值在 user 消息里现读，模型照样看得见，只是**不在前缀里**。
+#:
+#: 两条纪律（加一格时必须同时满足，判据会逐条读）：
+#:
+#: 1. **逐字节稳定**：同一个角色任何两趟渲染出来的这一段必须一字不差
+#:    （不写数字、不写台账号、不写时间）；
+#: 2. **指得出真值在哪**：每一个替身都要写清"原值在哪条消息的哪一栏"，
+#:    否则模型会以为这一格没有值（那是"信息被删"，不是"换了位置"）。
 SYSTEM_PLACEHOLDERS: Mapping[str, str] = {
     "budget_left": (
         "见每步消息末尾的「剩余花销预算」（那个数每一步现读 —— 花销一直在涨；"
@@ -119,18 +212,58 @@ SYSTEM_PLACEHOLDERS: Mapping[str, str] = {
         "见每步消息末尾的「草稿本」（每一步现读 —— 它是追加写的；"
         "这一格刻意不抄内容：同上，前缀逐字节稳定才命中得了缓存）"
     ),
+    "task": (
+        "见本次对话第一条消息的「你的任务」（这一格刻意不写正文：system 是**整趟运行**的"
+        "前缀，写进任务原文，换一趟活的第一条调用就一个 token 都命中不了）"
+    ),
+    "task_id": (
+        "见本次对话第一条消息的「台账号」（每趟运行由框架现发号；这一格刻意不写号："
+        "写进来就等于把整条前缀绑死在这一趟上）"
+    ),
+    "depth": (
+        "见本次对话第一条消息的「召唤链深度」（同一个角色可能被顶层唤起、也可能被父代理唤起；"
+        "这一格刻意不写数字）"
+    ),
+    "parent_task_id": (
+        "见本次对话第一条消息的「父代理台账号」（父是谁是这一趟的事实；这一格刻意不写号）"
+    ),
+    "summoned_by": (
+        "见本次对话第一条消息的「由谁发起」（这次可能被用户唤起、下次被 M 唤起；"
+        "这一格刻意不写名字）"
+    ),
+    "children": (
+        "见本次对话第一条消息的「名册摘要」（那是这一趟开始那一刻的快照，见下面的用法；"
+        "这一格刻意不抄名单：它是这一趟的事实，抄进 system 就废掉了跨趟的前缀复用）"
+    ),
+    "board": (
+        "见本次对话第一条消息的「挂在你名下的工作项」（板是活账；"
+        "这一格刻意不抄条目）"
+    ),
+    "inbox": (
+        "见本次对话第一条消息的「你的收件箱」（留言每趟不同；这一格刻意不抄内容）"
+    ),
+    "user_replies": (
+        "见本次对话第一条消息的「用户回答过的问题」（那是盘上的活账；这一格刻意不抄内容）"
+    ),
+    "workspace_root": (
+        "见本次对话第一条消息的「工作区根目录」（换项目就换一个根；这一格刻意不写路径 —— "
+        "路径一换，它后面那几段就再也不是同一段前缀）"
+    ),
 }
 
 
 # ---------------------------------------------------------------- 静态/动态分离
 def split_facts(facts: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """把事实拆成 `(进 system 的, 进这一步 user 消息的)`。
+    """把事实拆成 `(进 system 的, 进 user 消息的)`。
 
-    进 system 的那一份里，每步会变的两格被换成 :data:`SYSTEM_PLACEHOLDERS` 里那一段
-    **静态**文本 —— 于是同一个角色 / 同一 task / 同一 registry 下，连续两步的
-    system 逐字节相同（:func:`step_stability` 钉的就是这条）。
+    进 system 的那一份里，:data:`STEP_VOLATILE_FACTS` 登记的每一格被换成
+    :data:`SYSTEM_PLACEHOLDERS` 里那一段**静态**文本 —— 于是同一个角色 / 同一 registry 下，
+    无论是"连续两步"还是"另外一趟活"，system 都**逐字节相同**
+    （:func:`step_stability` 钉前一条，`tests/test_cross_run_prefix_is_reused.py` 钉后一条）。
 
-    进 user 的那一份逐字保留原值（调用方负责把它念进这一步的消息里）。
+    进 user 的那一份逐字保留原值（调用方负责把它念进 user 消息里：
+    每步会变的两格在 `agent_loop._prompt` 尾部，其余十格在开场的
+    `agent_loop._opening_transcript`）。
     用 `dict(...)` 复制而不是原地改：调用方手上的那份 `facts` 还要给别处用
     （`prompt_audit` 之类），改它会制造"两个读者看到两份事实"。
     """

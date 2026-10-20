@@ -8328,6 +8328,50 @@ def write_profiles(root: str | Path, *, registry: Any = None,
 
 
 
+#: 「这一次运行的事实」那十二格的值与缺省句（**唯一来源**）。
+#:
+#: 为什么抽成函数（2026-10-21）：这些事实从 system 挪进了 user 消息，于是它们的值有
+#: **两个**读者 —— `role_prompt_registry`（system 模板里的变量，经
+#: `promptstability.split_facts` 换成 `SYSTEM_PLACEHOLDERS` 那段指路语）与
+#: `agent_loop._opening_transcript`（user 消息里**真正**念出来的原值）。
+#: 两处各写一份缺省句，"留空时说什么"迟早会漂，而漂了没有任何判据会红 ——
+#: 模型会在同一个问题上读到两种说法。
+#:
+#: 缺省**必须是一句人话**（不是空串）：`promptkit` 的严格插值把空值当失败，
+#: 而"留空"与"没有"在模型眼里长得一样（业主 T21 附逐字要求过这一点）。
+def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
+                 depth: int = 1, parent_task_id: str = "", children: str = "",
+                 board: str = "", budget_left: str = "", inbox: str = "",
+                 notebook: str = "", user_replies: str = "",
+                 workspace_root: str = "") -> dict[str, str]:
+    """这十二格事实的字符串值（**缺省句也在这里**，一处定义、两个读者）。
+
+    键序与改前那张字面量逐格一致（`prompt_audit["variables"]` 是排序过的，
+    但"顺序只在能读出来的地方才有意义"）：
+    `task` / `summoned_by` / `task_id` / `parent_task_id` / `children` / `depth` /
+    `budget_left` / `inbox` / `board` / `notebook` / `user_replies` / `workspace_root`。
+    """
+    return {
+        "task": task or "（这一次没有给出任务描述）",
+        "summoned_by": summoned_by or "（顶层发起）",
+        "task_id": task_id or "（尚未落台账）",
+        #: 业主 T21（2026-10-08 深夜）：父与子的编号必须渲染给模型看。
+        #: 两格的缺省都写满一句话 —— 留空与"没有"在模型眼里长得一样（T21 附逐字）。
+        #: 2026-10-21 起它们在 user 消息（开场那一条）里念，system 里只是指路语。
+        "parent_task_id": parent_task_id or "（顶层发起：这一趟没有父代理的台账号）",
+        "children": children or "（此刻名下没有子代理）",
+        "depth": str(depth),
+        "budget_left": budget_left or "（没有设置预算上限）",
+        "inbox": inbox or "（没有收到留言）",
+        #: 板（业主 A3=甲 "渲染即 seen"）：渲染进来的项由 `agent_loop.board_digest` 现算，
+        #: 这一格只负责把它摆进提示词；缺省写满一句话（留空与"板上没事"长得一样）。
+        "board": board or "（板上没有要你处理的事）",
+        "notebook": notebook or "（草稿本还是空的）",
+        "user_replies": user_replies or "（用户还没有回答过你的问题）",
+        "workspace_root": workspace_root or "（未指定）",
+    }
+
+
 def role_prompt_registry(role: str, *, registry: Any = None,
 
 
@@ -8528,7 +8572,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
+
         "role": role,
+
 
 
 
@@ -8536,71 +8582,26 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-        "task": task or "（这一次没有给出任务描述）",
+
+        #: 这十二格是「这一趟的事实」—— 值与缺省句由 `prompt_facts` 一处给（2026-10-21）：
+        #: 它们从 system 挪进了 user 消息，于是有**两个**读者 —— 这里的 system 模板
+        #: （经 `promptstability.split_facts` 换成静态指路语），与
+        #: `agent_loop._opening_transcript`（user 消息里念出来的原值）。
+        #: 两处各写一份缺省句，"留空时说什么"就会漂，而漂了没有任何判据会红。
 
 
 
-        "summoned_by": summoned_by or "（顶层发起）",
 
+        **prompt_facts(task=task, summoned_by=summoned_by, task_id=task_id, depth=depth,
+                       parent_task_id=parent_task_id, children=children, board=board,
+                       budget_left=budget_left, inbox=inbox, notebook=notebook,
+                       user_replies=user_replies, workspace_root=workspace_root),
 
-
-        "task_id": task_id or "（尚未落台账）",
-
-
-
-        #: 业主 T21（2026-10-08 深夜）：父与子的编号必须渲染给模型看。
-
-
-
-        #: 两格的缺省都写满一句话 —— 留空与"没有"在模型眼里长得一样（T21 附逐字）。
-
-
-
-        "parent_task_id": parent_task_id or "（顶层发起：这一趟没有父代理的台账号）",
-
-
-
-        "children": children or "（此刻名下没有子代理）",
-
-
-
-        "depth": str(depth),
-
-
-
-        "budget_left": budget_left or "（没有设置预算上限）",
-
-
-
-        "inbox": inbox or "（没有收到留言）",
-
-
-
-        #: 板（业主 A3=甲 "渲染即 seen"）：渲染进来的项由 `agent_loop.board_digest` 现算，
-
-
-
-        #: 这一格只负责把它摆进提示词；缺省写满一句话（留空与"板上没事"长得一样）。
-
-
-
-        "board": board or "（板上没有要你处理的事）",
-
-
-
-        "notebook": notebook or "（草稿本还是空的）",
-
-
-
-        "user_replies": user_replies or "（用户还没有回答过你的问题）",
-
-
-
-        "workspace_root": workspace_root or "（未指定）",
 
 
 
         "prompt_version": PROMPT_VERSION,
+
 
 
 

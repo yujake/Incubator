@@ -278,10 +278,16 @@ def test_the_custom_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, capsy
     second, gw2 = _run(st, registry, cond, root, [FINISH], resume=True)
     assert second.stop_reason == "final", second.to_dict()
     assert second.resumed_from == 1, second.to_dict()   # 从第 2 步接着跑，不重做第 1 步
-    assert second.transcript.startswith(first.transcript), "续跑那一段没有接着上次那份对话"
-    # 用户那句话进的是「系统提示」（`agent_prompts.user_replies_digest` 那一格）——
-    # 它不在 transcript 里，这是既有接线（`test_interaction` 里那条迟到回答的判据同源）。
-    assert "审这篇论文" in gw2.systems[0], "用户那句话没有进续跑那一段看到的上下文"
+    # 续跑那一段接着上次那份对话：**开场之后**那几条消息逐条相同。
+    # 开场那一条会变是**对的**（2026-10-21）：`user_replies` / `inbox` 都现读 ——
+    # 用户刚答的那一句必须在续跑那一趟听得到（下一条断言），而它此前住在 system 里、
+    # 所以在 transcript 里看不见；现在它进了开场那条 user 消息。
+    assert second.messages[:len(first.messages)][1:] == first.messages[1:], (
+        "续跑那一段没有接着上次那份对话", second.messages[:2], first.messages[:2])
+    # 用户那句话进的是**开场那条 user 消息**里的「用户回答过的问题」那一栏
+    # （2026-10-21 起它从 system 挪了出来；信息没丢，只是换了位置）。
+    assert "审这篇论文" in gw2.prompts[0], "用户那句话没有进续跑那一段看到的上下文"
+    assert "审这篇论文" not in gw2.systems[0], "回答还在 system 里 ⇒ 前缀跨不过 run"
     assert len(gw2.prompts) == 1, "续跑只需要问一次（接着那一步之后）"
 
 
@@ -297,8 +303,9 @@ def test_the_selected_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, cap
     assert replies and replies[-1]["selected"] == ("n<=5",), replies
     second, gw2 = _run(st, registry, cond, root, [FINISH], resume=True)
     assert second.stop_reason == "final", second.to_dict()
-    assert "n<=5" in gw2.systems[0], "选中的 label 没有进续跑那一段看到的上下文"
-    assert second.transcript.startswith(first.transcript), second.transcript[:80]
+    assert "n<=5" in gw2.prompts[0], "选中的 label 没有进续跑那一段看到的上下文"
+    assert second.messages[:len(first.messages)][1:] == first.messages[1:], (
+        second.messages[:2], first.messages[:2])
     # 负控（别名那条路的反面）：`--custom` 覆盖 selected 时读出来的就是 custom
     other = tmp_path / "ws2"
     other.mkdir()
@@ -522,7 +529,7 @@ def test_a_refused_resume_does_not_swallow_the_transcript(tmp_path: pathlib.Path
     final_run, gw_d = _run(st, registry, cond, root, [FINISH], resume=True)
     assert final_run.stop_reason == "final", final_run.to_dict()
     assert final_run.resumed_from == 1, final_run.to_dict()
-    assert "全留" in gw_d.systems[0], "用户那句话没有进续跑那一段看到的上下文"
+    assert "全留" in gw_d.prompts[0], "用户那句话没有进续跑那一段看到的上下文"
     assert len(gw_d.prompts) == 1
 
 
@@ -648,7 +655,7 @@ def test_the_whole_human_loop_runs_through_the_cli_argv(tmp_path: pathlib.Path,
     starts = [e for e in _events(ws, "u1") if e.get("kind") == "agent_run_start"]
     assert any("resumed_from" in e for e in starts), starts
     assert len(made) == 2, "续跑那一段没有另造一个替身？"
-    assert "三处都保留" in made[1].systems[0], "人答的那句话没进续跑那一段的上下文"
+    assert "三处都保留" in made[1].prompts[0], "人答的那句话没进续跑那一段的上下文"
     assert len(made[1].prompts) == 1, "续跑应当只问一次（接着那一步之后）"
 
 

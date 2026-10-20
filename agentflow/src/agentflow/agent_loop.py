@@ -883,18 +883,74 @@ def _dump_invalid_reply(root: str, sid: str | None, step: int, text: str) -> str
     return rel
 
 
+#: 开场那条 user 消息要念的事实（`_opening_transcript` 的入参键）——**一处列名**。
+#:
+#: 它与 `promptstability.STEP_VOLATILE_FACTS` 里"跨 run 会变"的那十格**同源**：
+#: 那些格从 system 挪出来之后，真值就住在这条消息里（判据
+#: `tests/test_cross_run_prefix_is_reused.py` 逐个名字对账两处，少了谁就红）。
+OPENING_FACT_KEYS: tuple[str, ...] = (
+    "task", "inbox", "board", "children", "user_replies",
+    "summoned_by", "task_id", "depth", "parent_task_id", "workspace_root",
+)
+
+
+def opening_facts(facts: Mapping[str, Any]) -> dict[str, Any]:
+    """开场那条消息里**真的念出来的**那十格（缺省句已代入）—— 落事件用这一份。
+
+    为什么要代入缺省（而不是落原始值）：`agent_run_start.opening_facts` 的读者是
+    "这一趟的模型到底读到了什么"。原始值里的空串在消息里会被 `prompt_facts` 换成
+    一句人话（"（此刻名下没有子代理）"），落原始值就答不出那个问题 ——
+    而"读到了什么"正是判据要断言的那件事（`tests/test_cross_run_prefix_is_reused.py`：
+    逐格断言"在 user 消息里、不在 system 里"）。
+
+    代入是**幂等**的：把这些值再喂回 `_opening_transcript`（续跑重建走那条路）
+    得到同一句话，所以"重建 == 当时那一份"不受这一层影响。
+    """
+    defaulted = AP.prompt_facts(**{k: facts[k] for k in OPENING_FACT_KEYS})
+    return {k: defaulted[k] for k in OPENING_FACT_KEYS}
+
+
 def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str,
-                        depth: int) -> str:
-    """一趟循环开头的简报（任务 / 收件箱 / 处境）。
+                        depth: int, parent_task_id: str = "", children: str = "",
+                        board: str = "", user_replies: str = "",
+                        workspace_root: str = "") -> str:
+    """一趟循环开头的简报（任务 / 收件箱 / 板 / 父与子 / 用户回答 / 处境）。
 
     单独抽出来是为了让 `resume_transcript` 能重建同一段开头：当时那句话里的
     事实（谁发起的、深度多少、台账号）都在 `agent_run_start` 事件里，收件箱那一段
     则按当前盘上的状态现读（续跑本来就该听到新到的留言 —— 见 `resume_transcript` 的说明）。
+
+    ## 2026-10-21：这十格从 **system** 搬到了这里（跨 run 也命中缓存）
+
+    `AGENT_IDENTITY`（段序 0，整条提示词的最前面）此前逐字写着 `task_id` / `depth` /
+    `children` / `parent_task_id` / `summoned_by`，`TASK_FRAME`（段序 4200）写着
+    `task` / `inbox` / `board` / `user_replies`，`WORKSPACE_FACTS`（段序 10000）写着
+    `workspace_root` —— 都是「这一趟的事实」，换一趟活就换一份。实测：两份不同的活的
+    system 从第 **95** 个字符起就不同 ⇒ 换一趟活的第一次调用 `hit=0`，
+    预热买到的只是"同一份前缀的第二次"。
+
+    现在它们**只在这里**（这一条消息）念一遍：消息不是前缀，换一趟活换的是消息，
+    而 system（前缀）逐字节不变。信息一个字没删 —— 每一格都还是原来那句缺省句
+    （缺省句的唯一来源是 `agent_prompts.prompt_facts`，与 system 模板那一侧同一个）。
+
+    为什么放在**开场那一条**而不是每步的尾部：它们一趟之内不变（`board` / `inbox` /
+    `user_replies` 的**增量**另有通道 —— 新留言与新板项会作为新的 user 消息进来，
+    `AgentLoop._hear`）。每步重念一遍只会把同一段字重复付 N 次钱。
     """
-    return (f"你的任务：{task}\n\n"
-            f"你的收件箱：{inbox}\n\n"
-            f"你的处境：由 {summoned_by or '（顶层发起）'} 发起，"
-            f"召唤链深度 {depth}，台账号 {task_id or '（本次运行未拿到台账号）'}。")
+    defaulted = AP.prompt_facts(task=task, summoned_by=summoned_by, task_id=task_id,
+                               depth=depth, parent_task_id=parent_task_id,
+                               children=children, board=board, inbox=inbox,
+                               user_replies=user_replies, workspace_root=workspace_root)
+    return (f"你的任务：{defaulted['task']}\n\n"
+            f"你的收件箱：{defaulted['inbox']}\n\n"
+            f"挂在你名下的工作项（板；可能为空）：{defaulted['board']}\n\n"
+            f"你名下的子代理（名册摘要：名字 · 一句简介 · 状态；"
+            f"这是这一趟开始那一刻的快照）：{defaulted['children']}\n\n"
+            f"用户回答过的问题（含迟到送达的回答）：{defaulted['user_replies']}\n\n"
+            f"你的处境：由 {defaulted['summoned_by']} 发起，"
+            f"召唤链深度 {defaulted['depth']}，台账号 {defaulted['task_id']}；"
+            f"父代理台账号：{defaulted['parent_task_id']}；"
+            f"工作区根目录：{defaulted['workspace_root']}。")
 
 
 def _is_role_name(value: str) -> bool:
@@ -3101,6 +3157,10 @@ class AgentLoop:
         # 而**数字/内容**在这里现读 —— 模型照样每一步看得见最新的，但它落在
         # 这条消息的尾部：追加在末尾只动最新那几个 token，前面的前缀逐字节不变。
         #
+        # 2026-10-21 补的另一半（"跨 run 也会变"那十格）**不在**这条尾部：它们一趟之内
+        # 不变，念在开场那一条 user 消息里就够了（`_opening_transcript`）—— 每步重念
+        # 一遍只会把同一段字重复付 N 次钱。
+        #
         # 为什么不是"就把 system 里那份冻在开局"：那会让 system 说一句假话
         # （模型据以决策的余额是旧的），而循环协议里逐字写着"预算耗尽时必须收工"。
         notebook = notebook_digest(self.session_root, self.role)
@@ -3626,14 +3686,20 @@ class AgentLoop:
                      # 的派活本来也不会发生：没有 conductor 就没有 summon）。
                      parent_limits=AP.parent_limits_text(
                          getattr(self.conductor, "policy", None) or P.Policy(), self.role))
-        # ---- 静态/动态分离（2026-10-19）：system 只拿"一趟之内逐字不变"的事实。
+        # ---- 静态/动态分离（2026-10-19；2026-10-21 扩到"跨 run 也会变"的十格）：
+        # system 只拿"任何两趟都逐字不变"的事实。
         #
-        # 根因：`budget_left` / `notebook` 是这一步现算的（改前由那个每步重算 system 的旧实现
-        # 每步重算并**换掉整条 system**），而上游前缀缓存要求前缀逐字节相同 ⇒ 命中率
-        # 结构性为 0。现在它们的**值**走这一步的 user 消息（`_prompt` 尾部现读），
-        # system 里留一段静态指路语（`promptstability.SYSTEM_PLACEHOLDERS`）。
+        # 根因（先是每步会变，再是跨趟会变）：`budget_left` / `notebook` 是这一步现算的，
+        # `task` / `task_id` / `depth` / `parent_task_id` / `summoned_by` / `children` /
+        # `board` / `inbox` / `user_replies` / `workspace_root` 是**这一趟**的事实 ——
+        # 它们在 system 里时，前者让"同一趟的第 2 步"命中不了、后者让"另一趟的第一步"
+        # 命中不了（实测：两份不同的活的 system 从第 95 个字符起就不同）。
+        # 上游前缀缓存要求前缀逐字节相同 ⇒ 命中率结构性为 0。
+        # 现在它们的**值**走 user 消息（每步会变的两格在 `_prompt` 尾部现读；
+        # 其余十格在开场那一条 `_opening_transcript` 里），system 里留一段静态指路语
+        # （`promptstability.SYSTEM_PLACEHOLDERS`）。
         #
-        # `moved`（被判定为"每步会变"的键）落进 `agent_run_start`：于是"这一趟哪些事实
+        # `moved`（被判定为"会变"的键）落进 `agent_run_start`：于是"这一趟哪些事实
         # 被挪出了 system"在盘上是可复核的，而不是靠读这段代码才知道。
         system_facts, moved_facts = PSTAB.split_facts(facts)
         # `prompt_audit` 用同一份 system 事实：它的 `prompt_sha256` 从此**等于**
@@ -3648,8 +3714,7 @@ class AgentLoop:
             # `transcript` 从此是 `render_messages(messages)` 的渲染（逐字不变），
             # 所以它的所有读者（Web UI 回放、续跑、`--resume`）这一步之后照旧。
             messages: list[dict[str, Any]] = [user_message(
-                _opening_transcript(task, inbox=inbox, summoned_by=summoned_by,
-                                    task_id=my_task_id, depth=depth))]
+                _opening_transcript(**opening_facts(facts)))]
         else:
             rebuilt, start_step = resumed
             run.resumed_from = start_step
@@ -3674,9 +3739,23 @@ class AgentLoop:
             # 被拒的续跑（指纹不符 / 还在等）写的是另一个字段 `resume_attempted_from`
             # —— 它们一步都没跑，写 0 会被读成"它从第 0 步续的"（见 `_note_resume_refusal`）。
             "resumed_from": run.resumed_from, "waiting_for": str(waiting_for or ""),
-            # 这一趟有哪些事实被判定为"每步会变"、因而从 system 挪进了 user 消息
+            # ---- 2026-10-21：开场那条 user 消息要念的十格事实，**原文落在这里**。
+            #
+            # 为什么必须落事件（而不是续跑时现读）：`resume_messages` 要把这一趟的
+            # 第一条消息**逐字节**重建出来（判据：`rebuilt == run.messages`），而那十格
+            # 里有四格（`children` / `board` / `user_replies` / `parent_task_id`）在续跑那一刻
+            # 已经可能变了（又有子代理收工、板上又多一项、用户又答了一句）。现读会让
+            # "重建的那一段"与"当时那一段"不是同一段 —— 而两边都自称是同一趟。
+            # 它们是**这一趟开始那一刻**的快照，与 `children` 那一格的口径逐字一致。
+            #
+            # 为什么整包一格（而不是十格平铺在后面）：上面已经平铺了 `task` /
+            # `summoned_by` / `task_id` / `depth` 四格（它们本来就在事件里），平铺会撞键。
+            # 键名就是 `_opening_transcript` 的入参名（`OPENING_FACT_KEYS` 是那份列名的
+            # 唯一来源）：改名会让重建悄悄少一格，而少一格只表现为"开场那句话短了点"。
+            "opening_facts": opening_facts(facts),
+            # 这一趟有哪些事实被判定为"会变"、因而从 system 挪进了 user 消息
             # （`promptstability.STEP_VOLATILE_FACTS` 那份登记表）。前缀缓存能不能命中
-            # 全看这一格是不是空的（空 = system 里没有每步会变的东西）。
+            # 全看这一格是不是空的（空 = system 里没有任何会变的东西）。
             "system_dynamic_facts": sorted(moved_facts),
         }, sid=self.sid)
 
@@ -7656,11 +7735,33 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
     inbox, _fresh, _problems2 = inbox_digest(root, role, sid=sid,
                                              parent_task_id=str(head.get("parent_task_id") or ""),
                                              parent_role=str(head.get("summoned_by") or ""))
-    out: list[dict[str, Any]] = [user_message(
-        _opening_transcript(task, inbox=inbox,
-                            summoned_by=str(head.get("summoned_by") or ""),
-                            task_id=str(head.get("task_id") or ""),
-                            depth=int(head.get("depth") or 1)))]
+    # 十格事实的还原口径（2026-10-21 起它们住在开场那条 user 消息里，见 `_opening_transcript`）：
+    #
+    # - 起点事件里整包落了一份 `opening_facts`（这一趟**开始那一刻**的快照）⇒ 逐格读回；
+    # - `task` / `summoned_by` / `task_id` / `depth` 四个老键在事件上是平铺的（那一版就有），
+    #   它们与 `opening_facts` 同值，取平铺那份即可；
+    # - `inbox` **仍然现读**（`inbox_digest`）：续跑本来就该听到新到的留言 —— 这是这条
+    #   重建路上唯一"该变"的一格，写在 `resume_messages` 的 docstring 第 1 条边界里。
+    #   于是"重建 == 当时那一份"在**没有新留言**时逐条成立，有新留言时只差收件箱那一段
+    #   （只会变新，不会变假）。
+    opening: dict[str, Any] = {k: (head.get("opening_facts") or {}).get(k, "")
+                               for k in OPENING_FACT_KEYS}
+    opening.update({
+        "task": task,
+        "inbox": inbox,
+        # `user_replies` 与 `inbox` 一样**现读**（2026-10-21）：用户的回答可能在两趟之间
+        # 才到（"迟到的回答"那一档就是这条路的常客），用起点事件里的旧快照会让那句话
+        # 在续跑那一趟**彻底消失** —— 而它此前在 system 里、每趟现算，所以现读才是
+        # 改前的行为。其余八格是"这一趟的事实"（谁派的、深度、台账号、名册、板、工作区），
+        # 用事件里的快照重建：它们不该在续跑时被"今天盘上的样子"替换掉，
+        # 否则重建出来的那一段与当时那一段不是同一趟（判据 `rebuilt == run.messages`）。
+        "user_replies": AP.user_replies_digest(
+            U.read_replies(root, role=role, sid=sid)),
+        "summoned_by": str(head.get("summoned_by") or ""),
+        "task_id": str(head.get("task_id") or ""),
+        "depth": int(head.get("depth") or 1),
+    })
+    out: list[dict[str, Any]] = [user_message(_opening_transcript(**opening))]
     next_step = 0
     for e in events[begin + 1:end]:
         if e.get("kind") != "agent_step" or str(e.get("role")) != role:

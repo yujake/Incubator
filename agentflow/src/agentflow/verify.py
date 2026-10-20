@@ -23,7 +23,7 @@ import re
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Mapping
 
 from . import conceptrows as CR
 from . import dedup as D
@@ -1711,6 +1711,50 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
                     f"status={status!r} 自称成功，而 experiment_ids 里的 {refuters!r} 的 result='refutes'"))
 
 
+#: 「概念行带证明文本」这一条审计的**受控 kind 名**（`Issue.code`）。
+#:
+#: 为什么要它（2026-10-21，本批缺陷三）：概念行（`statements.kind == "concept"`）的
+#: `proof_text` 只该是空的 —— 定义不需要证明，而"良定义性证明"一旦编出来就是造假
+#: （`conceptrows` 的写入期闸写着这一句）。读侧早就点名了这件事
+#: （`verifications.proof_review_gap`：概念行带 `proof_text` ⇒ `why` 说"概念行不该带证明文本"），
+#: 但那只是**读侧**：`verify_all` 的 error 清单里没有它，于是"审计通过"这句话在
+#: 这一类存量行面前是假的 —— 而审计是交付面上唯一被当成"没有问题"的那一栏。
+#:
+#: 历史形态（真机 `projects/mp3`）：**1143 条**概念行全带哨兵 `concept:primitive`
+#: （迁移脚本 `migrate_concepts.PRIMITIVE_PROOF` 造的），于是任何"有没有证明"的
+#: 读数（`proof_review_gap` 的非空判据、收工门的 `reviewed` 档、五元位）都被顶高。
+#: 存量行改不动（审计只能点名），所以这一条**逐条点名**：带上 `stmt_id` 与 `created_by`，
+#: 让"这是谁写进来的、有多少条"成为一个可读的读数，而不是一个被平均掉的数字。
+CONCEPT_PROOF_TEXT_CODE = "concept_row_carries_proof_text"
+
+
+def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """`kind == "concept"` 且 `proof_text` 非空的行 —— 这条判据的**判据本体**（一处口径）。
+
+    返回 `[{stmt_id, proof_head, proof_chars, created_by}]`（按 `stmt_id` 排序）：
+    三态纪律在这里的落点 —— `proof_text` 是 `None` / 空串 / 全空白都算"没有"
+    （那不是"有证明"），只有**真的写了字**才算这一条点名的那一类。
+
+    为什么单独抽成函数：判据（`tests/test_verify.py`）要能对它做负控
+    （"把这一条摘掉 ⇒ 判据红"），而"摘掉"必须摘的是**判据本体**，
+    不是某条断言的字符串。这也是 `_check_13` 里唯一读它的地方。
+    """
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("kind") or "") != "concept":
+            continue
+        proof = str(row.get("proof_text") or "")
+        if not proof.strip():
+            continue
+        out.append({
+            "stmt_id": str(row.get("stmt_id") or ""),
+            "proof_head": proof.strip()[:80],
+            "proof_chars": len(proof.strip()),
+            "created_by": str(row.get("created_by") or ""),
+        })
+    return sorted(out, key=lambda item: item["stmt_id"])
+
+
 def _check_13(rep, store) -> None:
     """`verify_all` 的第 13 段：命题台账（`statements`）的不变量（`draft/37` §16 P1）。
 
@@ -1748,6 +1792,12 @@ def _check_13(rep, store) -> None:
        所以不是 error；但"有 `proof_text` ＋ V 签「成立」＋ sha 相符却被写成弱档"
        会让论文的强度声明长期虚低，而没有任何读数指出来 —— 这一格就是那个读数。
        口径同样只一处（`verifications.weaker_than_evidence_gaps`）。
+    8. **概念行带 `proof_text`**（`concept_row_carries_proof_text`，**error**）：
+       概念行的 `proof_text` 只该为空。这一条此前**只在读侧**存在
+       （`verifications.proof_review_gap` 的 `why` 会点名"概念行不该带证明文本"），
+       而审计面没有它 ⇒ 一个装满历史概念行的工作区可以"审计通过"。
+       存量行改不动，所以这一条**逐条点名**（`stmt_id` + `created_by` + 那一段的开头）。
+       口径只一处：:func:`concept_rows_with_proof_text`。
     """
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
@@ -1885,6 +1935,29 @@ def _check_13(rep, store) -> None:
                 "weaker_than_evidence",
                 f"{gap['why']}",
             ))
+    # ---- 概念行带 `proof_text`（2026-10-21，**存量**那条路：审计只能点名）
+    #
+    # 改前的分工：写入期（`conceptrows` 的闸）拒收、读侧（`proof_review_gap`）点名。
+    # 审计面没有对应的一条 ⇒ 一个装满历史概念行的工作区可以"审计通过"，而
+    # `proof_review_gap` 会为同一条行说"概念行不该带证明文本" —— 两处口径不一致，
+    # 而"审计通过"是交付面上唯一被当成"没有问题"的那一栏。
+    #
+    # 为什么是 **error**（而不是像 `weaker_than_evidence` 那样的 warning）：
+    # 这一条说的不是"降档"（安全方向），是"这一行在**有没有证明**这个问题上说了假话" ——
+    # 哨兵 `concept:primitive` 会把依赖它的每一条读数顶高（真机 mp3：1143 条）。
+    # 而它不是"来路可疑"，是"这一格本来就不该有内容"。
+    #
+    # 口径只一处（:func:`concept_rows_with_proof_text`）：判据的负控摘的就是它。
+    for row in concept_rows_with_proof_text(statements):
+        rep.issues.append(Issue(
+            "error", "statements", row["stmt_id"] or None, CONCEPT_PROOF_TEXT_CODE,
+            f"概念行 {row['stmt_id'] or '（无号）'} 带 `proof_text`"
+            f"（{row['proof_head']!r}，{row['proof_chars']} 字；来源 created_by="
+            f"{row['created_by'] or '（未记）'}）⇒ 概念行的 `proof_text` 只该是空的："
+            "定义不需要证明，而写进去的每一段都会被下游当成'这一条有证明'"
+            "（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。"
+            "存量行审计改不动 ⇒ 要么把这一格清空，要么按真结论改回概念/定理的归属",
+        ))
 
 
 #: 报告面：工作区里 `reports/` 下那一层 markdown。D 的跨趟研究手稿（`reports/RESEARCH.md`）

@@ -36,17 +36,24 @@ SID = "s1i"
 
 
 class _Gate:
-    """照剧本回答的替身（记录 system 提示词，不联网）。"""
+    """照剧本回答的替身（记录 system 与 user 两条消息，不联网）。
+
+    2026-10-21 起 `{{board}}` 那一格从 system 挪进了开场那条 user 消息
+    （跨 run 会变的事实不再进前缀，见 `promptstability.STEP_VOLATILE_FACTS`），
+    所以这里两条都记：判据据此同时断言"板项不进 system"与"板项确实进了 user"。
+    """
 
     spec = type("Spec", (), {"model": "stub", "api_key": "x"})()
 
     def __init__(self, replies: list[str]) -> None:
         self.replies = list(replies)
         self.systems: list[str] = []
+        self.prompts: list[str] = []
 
     def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
                  **kw: Any) -> Any:
         self.systems.append(system or "")
+        self.prompts.append(str(prompt))
         text = self.replies[min(len(self.systems) - 1, len(self.replies) - 1)]
         return type("Reply", (), {"ok": True, "text": text, "tokens_in": 10, "tokens_out": 10,
                                   "error_detail": "", "error_kind": ""})()
@@ -98,9 +105,13 @@ def test_a_board_item_reaches_the_prompt_and_is_marked_seen(tmp_path: pathlib.Pa
     assert run.stop_reason == "final", run.to_dict()
 
     system = gate.systems[-1]
+    user = gate.prompts[-1]
     assert "挂在你名下的工作项" in system, system[-600:]
-    assert item in system, ("板项没进提示词（编号都没出现）", system[-600:])
-    assert "把 X 的族构造证据补齐" in system, system[-600:]
+    # 板项的**内容**在 user 消息里（2026-10-21 起它不再进 system：那一格是"这一趟的
+    # 事实"，进了 system 就把整条前缀绑死在这一趟上）。
+    assert item in user, ("板项没进提示词（编号都没出现）", user[-900:])
+    assert "把 X 的族构造证据补齐" in user, user[-900:]
+    assert item not in system, ("板项还在 system 里 ⇒ 前缀跨不过 run", system[-600:])
 
     row = _row(st, item)
     assert row["item_state"] == "seen", row
@@ -125,7 +136,7 @@ def test_an_item_outside_the_window_is_not_marked_seen(tmp_path: pathlib.Path):
     assert len(seen) == 8, ("窗口是 8：恰好 8 条被标 seen", len(seen))
     left = [i for i in items if _row(st, i)["item_state"] != "seen"]
     assert len(left) == 1, left
-    assert "还有 1 项没渲染" in gate.systems[-1], gate.systems[-1][-600:]
+    assert "还有 1 项没渲染" in gate.prompts[-1], gate.prompts[-1][-900:]
 
 
 def test_another_instances_items_never_enter_my_prompt(tmp_path: pathlib.Path):
@@ -144,7 +155,8 @@ def test_another_instances_items_never_enter_my_prompt(tmp_path: pathlib.Path):
         tx.upsert("tasks", row, note="reparent")
     gate = _Gate([json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)])
     _run(cond, st, ws, gate, me)
-    assert other not in gate.systems[-1], ("别人的项进了我的提示词", gate.systems[-1][-600:])
+    assert other not in gate.prompts[-1], ("别人的项进了我的提示词", gate.prompts[-1][-900:])
+    assert other not in gate.systems[-1], ("别人的项进了我的 system", gate.systems[-1][-600:])
     assert _row(st, other)["item_state"] != "seen", _row(st, other)
 
 
