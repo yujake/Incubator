@@ -740,6 +740,11 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "userio.ask_user": "同 autonomy.run_autonomous",
     "verifications.cold_start_prompt": "同 autonomy.run_autonomous（V 那一格的入口说明："
                                        "它说清 V 走的是冷启动入口，不是工具）",
+    "own.register_statement": "动作被包成的那一件工具（`AgentLoop._registry_with_own_action`：名字是 "
+                              "`own.<动作名>`，只活在**被派那一趟的循环注册表**里 —— 按角色/按派活现装）。"
+                              "基座 `build_registry()` 里没有它，本文件的夹具按基座渲染，所以扫不到；"
+                              "它是真工具名（B 手册里的短名 `register_statement` 由 `_do_tool` 的别名格映到它，"
+                              "判据见 `tests/test_own_action_tool.py` 那一组）",
 }
 
 #: "像工具名"的点号 token：反引号包着、两段都是小写标识符。
@@ -2508,7 +2513,25 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: **实测 10 格全换值、0 格不动**（pytest 环境里现算）：换值 = A / B / C / D / E / F / G / H / V / M。
 #: 原因对得上：这一轮十个角色**各自**的 `policy` 都被改到了（伙伴表只印 `duty` / `boundary`，
 #: 但每个角色自己的 policy 都在它自己的提示词里 ⇒ 没有一格能不动）。
-_FROZEN_PROMPT_VERSION = "p167"
+#: p167 → p168（2026-10-20，**三条交接口径 ＋ T5 那条链**）：只动 `policy`，六处全部
+#: **并进既有条目**（没有新开第 N 条 ⇒ 条目数一格没变：A4 / B8 / C3 / D12 / M40），
+#: 每一处只讲「该做什么 / 什么算够」，不写步骤、不写命令、不摆长例子：
+#:   A 并进「继续搜还是收手」：取回的这批要被引用成断言就**派 B 整理**（概念行与关系行），
+#:     自己不建概念网、也不把一批文献直接扔给下一环 —— `edges=('B',)` 是既有设计，而真机
+#:     `projects/fb-cover` 那一趟 A 取了 116 条文献、**一条 B 都没派**（policy 里此前没写这件事）；
+#:   B 并进「证据档按有什么凭据定」：改档位或正文 ⇒ 同一份内容**再交一次**
+#:     `own.register_statement`；`table.update` 那类通用写口对 statements 已被封（撞了白跑一趟）；
+#:   C 并进「缺口不许只写在报告里」：分析出「可能的更短证明路径」就照同一条渠道交出去
+#:     （`analysis.register_report`），并写清**关键那一步**是什么、为什么因此更短；
+#:   D 并进「立了猜想就必须在同一趟里派 F」：C 交来更短路径 ⇒ 按它立一条可判猜想再派 F 落实证明；
+#:   M 并进两处 ——「交付物按任务那句话说」（A 派了 B 就只读 B 整理过的概念与关系，没派就说清
+#:     为什么不需要）与「调查 / 探索 / 综述这一类任务要把 C 用起来」（题目要「更短的证明路径」时
+#:     链上要有 看（C）→立猜想（D）→攻（F）；跳过哪一步就在 `conductor.summon` 的 task 里说清为什么）。
+#:
+#: **实测 5 格换值、5 格不动**（pytest 环境里现算：`AGENTFLOW_LEAN_ENABLED=1` ＋ `build_registry()`）：
+#: 换值 = A / B / C / D / M；不动 = E / F / G / H / V。
+#: 原因对得上：这一轮只动这五格的 `policy`（伙伴表只印 `duty` / `boundary`，不含 policy）。
+_FROZEN_PROMPT_VERSION = "p168"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2519,16 +2542,18 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # ⚠️ 十格是**两批改动先后落地之后**现算的：上面那两批在同一时刻改同一批文件，
     #    这张表按最后一版树重算（`pytest -k test_the_prompt_version_moves` 的同一环境）。
     #    再改 `specs/*` 就必须连版本号一起动（这条判据两个方向都判）。
-    "A": "9b962dfb19e1dbdc7438d01bd2889ac9ea8885c1055ce6079457194f4e56e361",
-    "B": "731802033af6d0221e4d9882d43128df86e6f0e18d6b8042ef460661eb5ef347",
-    "C": "d8e2c58ff106c08e80de80f2c2fdac78f323ed1304e45a6051491120c6f60150",
-    "D": "ca31187b8039720be17ba771c20fa79a12624e3c7ed730d2e1877f54c4f66322",
+    # ⚠️ `p168` 这一版只动 A / B / C / D / M 五格 ⇒ 这五行的值换了，另五行**逐字未动**
+    #    （E / F / G / H / V 与 `p167` 那一版相同 —— 这本身就是"改动作用域"的读数）。
+    "A": "0b1def0ea5526313139f11a4da32b53f8465be10702aea5309952c6870bf5d33",
+    "B": "75129624d12ec9bab8e19d552bb6b1035f47e6a41b1f653c858b7b0aed28d5a8",
+    "C": "966866cd0daf5891f3f77c38fa8f338483421feefe1d395a38c39a551f6c277e",
+    "D": "978e861c4f275792e72e9be50c92ccc692afd63c3104271377bd8c3e94a29e66",
     "E": "2e1ceff7ee604077aca9848cf88b1ac8fd5ee3930854e20e41e8093ce361521b",
     "F": "99b2512ac4b65c7c898724a61eb7e378484e1604c8eea03d55324f771aa5500a",
     "G": "7b182a00c69e5041397d012ab40c6c89119d50c40091996fa73934d0ad2e444d",
     "H": "9311a886be7ad7233e277c0cd8ceaeb57254b3584a2070c1a0f6ba5e383952d4",
     "V": "1a9051a38c1ec749a78de9288ce1fcc44de7f524275181ec38a5619d6c6a221f",
-    "M": "4c77a3753f8b3c1eefe649f810e9f299bcc0d90a04c045f9a5073b3ff7c6d10e",
+    "M": "e5cb8437dc2136d2258964ab1e4f3b90a8dfb5be0c1d83580a5e7b53914c39a3",
 }
 
 

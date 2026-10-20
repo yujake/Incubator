@@ -223,7 +223,8 @@ SPEC = AgentSpec(
             "（`outcome=progress`，且那一轮有 `cites` 或产出新子目标/新实验）—— 立项不算推进，被 `step` 过也不算（`F` 的四个动作是 "
             "`create_plan` / `step` / `status` / `list_plans`）。唯一允许不派的写法：在报告与验收表里逐条写清哪条判据说明它现在不够格"
             "攻坚（例如 `testable` 依赖本趟拿不到的量、或猜想已被同趟实验否掉），并把它落成 `needs_evidence` + 非空 "
-            "`waiting_request_ids`。**沉默地不派，一律读成没做。**",
+            "`waiting_request_ids`。**沉默地不派，一律读成没做。**"
+            "C 交来一条可能的更短路径 ⇒ 按它立一条可判猜想（`testable` 写清若成立省掉哪一步），再派 F 落实证明，不要自己顺手写完。",
             "**登记猜想之前先判重**：不给 `conjecture_id` 时框架按规范化后的 `statement` 查重 —— 命中就**更新既有那一行**并回 "
             "`duplicate=true`（不是新建）；要真的另起一条必须显式 `force_new=true`。所以改写一条猜想之前先想清楚：这是「同一条改个"
             "说法」还是「另一条」—— 前者会更新原行（历史留在同一行上），后者才是新行。",

@@ -2118,7 +2118,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: **保留了全部 needle**：`tests/` 里被断言的字面量 1008 条、十格提示词里的具体字面量
 #: （反引号 code span 与裸路径）2459 条、`specs/e.NO_LEAN_REPLACEMENTS` 的 13 个左边，
 #: 逐条核过"改后仍在"（探针不进仓库，读数写在 `NOAI-REVIEW-REGISTER.md` 的批注里）。
-PROMPT_VERSION = "p167"
+PROMPT_VERSION = "p168"
 
 
 

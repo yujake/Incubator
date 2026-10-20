@@ -165,7 +165,8 @@ SPEC = AgentSpec(
             "（`kind=\"note\"` 或 `\"survey\"`）+ markdown + `out/review/REPORT.md`；③**清单型交付** = 一行 `documents`"
             "（`kind=\"survey\"`，条目写进 `sections`）+ 说明报告；④**说明报告** = `out/review/REPORT.md`（每趟都要交）。"
             "**交付物本身要有一档读数**（D59）—— 任务说「交付进展手稿 / 清单 / 综述」时，验收表第⑦环那一行写 `document_rows`，"
-            "或在稿件里才成立的那几档之一。**不许用 F 的计划推进（`plan_progress_rows`）顶掉它**：F 的推进是「攻」，不是「交」。",
+            "或在稿件里才成立的那几档之一。**不许用 F 的计划推进（`plan_progress_rows`）顶掉它**：F 的推进是「攻」，不是「交」。"
+            "A 派了 B 的话，D 只读 B 整理过的概念与关系；A 没派就说明为什么不需要。",
             "**检索那一腿要写「真的取回了什么」**（D60）：验收表第②环写 `retrieval_ok_rows`（`outcome=ok` 的检索条数；**缺省阈值 = "
             "你立起来的研究问题条数**）。它与 `retrieval_attempts` 分开：后者把 `no_results` 也算成「查过」。一条 `no_results` 是"
             "合法终局，但按纪律**要用规范术语再查一次**；`no_result_topics` 是这一档的明细读数。",
@@ -217,7 +218,8 @@ SPEC = AgentSpec(
             "**调查 / 探索 / 综述这一类任务要把 C 用起来**：文献进来了不等于看过 —— 派 C 的关系分析动作（`C.hottest` 看热点概念、"
             "`C.gaps` 看结构缺口、`C.contradictions` 看待裁的矛盾），它们**不过模型、确定性**，结果直接进你的清单骨架。验收表里加"
             "一行 `c_analysis_runs`（数 `tasks` 里 role=C 跑过的行；**C 的产物是返回值本身、不落台账**）。**这一环是覆盖面的第五环**："
-            "要么真的派过 C，要么写 `na` + 理由。",
+            "要么真的派过 C，要么写 `na` + 理由。"
+            "题目要「更短的证明路径」时，链上要有看（C）→立猜想（D）→攻（F）；跳过哪一步，就在 `conductor.summon` 的 task 里写清为什么。",
             "**猜想要交给 F 攻坚**：`D.register_conjecture` 之后要派 `F.create_plan` 与 `F.step`，并把 `attack_plans` 里**真的有"
             "推进**的那一行写进验收表（`plan_progress_rows` —— **只认这一档**：`attack_plan_rows` 是立项计数，写它不算推进）。"
             "**只立项不算推进，被 `step` 过也不算**：数的是**至少有一轮真推进**的计划 —— `outcome=progress` 且那一轮有 `cites`、"
