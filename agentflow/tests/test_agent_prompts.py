@@ -2562,7 +2562,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: ⚠️ 这一格号钉的是**冻结那一刻的树**，不是日期：那一刻逐文件记了 sha256（见本次收口回报）；
 #:    哪一份文件在冻完之后又动了，`test_the_prompt_version_moves` 会当场红 —— 那时**先看
 #:    是不是别人的线又落了东西**，再决定是重算这张表（同版本号、新时刻）还是抬下一格。
-_FROZEN_PROMPT_VERSION = "p170"
+_FROZEN_PROMPT_VERSION = "p171"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2579,15 +2579,15 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
     #    C 的两句假话 → B / C / D / F / M 这五格）。
     "A": "7b4835138720e638005d9c12c589c719e86235217d3218a82080066a57a769ae",
-    "B": "f3b454bd2b669756072c16d876b7ab5484ef8829311cb3cb32e021a7a7505c4e",
+    "B": "61288a0b077f67870d4ec010281166723e2a0aee7cf473137dca858749454cba",
     "C": "8fa11cf60fd55d85c1242fea844c290a363d5fd1a168351dead1008d301c5a6e",
-    "D": "e7e9c40cd5c5620e0a9981da3e8f1e0a3d4e49c6cfee32351626a841b9dc0eac",
+    "D": "390933407f4b5e1089b949eb8d6c1c5d237781763c43410412ca4369fd789428",
     "E": "19e3118f92601f8e5277627d80c97a5e7de44c2469faa6d9d522bb2dbc59f4b9",
     "F": "3b3e96dcc51f2481d4125eeaabb9b1ef65334c72ef8f887101ccd156832890df",
     "G": "38b2a4b2187c2d6253a1ad175d4432649ec4e1be6effb8bd35baefd8ac31bff9",
     "H": "e2f7ebc4a31df9445795e3bb136c4543cc20ffc398d51896167e81462c685595",
     "V": "bb2580818c7a060ae57b38247f58a1dc71e0d8e8840c59405daacd22ecd707e2",
-    "M": "5d2453432af56b32efadaae2c25904ce63709e2d65e056441eb475bcfeea21c3",
+    "M": "689ae03ea3d60ea889376b6895568f9ac03e9b0d0ad574f6d0b814eb1528f329",
 }
 
 

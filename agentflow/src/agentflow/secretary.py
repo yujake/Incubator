@@ -321,12 +321,17 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         if not name:
             continue
         item = items.setdefault(name, {"name": name, "role": str(r.get("role") or ""),
-                                       "brief": "", "task_id": "", "retired": False})
+                                       "brief": "", "brief_source": "", "task_id": "",
+                                       "retired": False})
         kind = str(r.get("kind") or "")
         if str(r.get("role") or ""):
             item["role"] = str(r.get("role") or "")
         if kind == "add":
             item["brief"] = str(r.get("brief") or "")
+            # 简介是谁写的（业主 2026-10-20：「简介没写，秘书帮忙写」）：
+            # `parent` = 父给的原话；`secretary` = 秘书从任务原文派生的一句；
+            # `""` = 这一格是改前落的行（那时还没有这一格，不许倒填成"父给的"）。
+            item["brief_source"] = str(r.get("brief_source") or "")
             item["task_id"] = str(r.get("task_id") or "")
             item["first_task_id"] = str(r.get("first_task_id") or r.get("task_id") or "")
             item["surface"] = str(r.get("surface") or "")
@@ -363,6 +368,43 @@ def _fold_index(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         if r.get("first") or not item.get("first_task_id"):
             item["first_task_id"] = str(r.get("task_id") or item.get("first_task_id") or "")
     return [items[k] for k in sorted(items)]
+
+
+#: 名册简介的字数上限 —— **与内容闸是同一个数**（`roster_add` 里 `len(text) > 60` 那一档）。
+#: 代写那一支必须自己截到这个长度以内：否则秘书写出来的那句话会被秘书自己的闸拒，
+#: "没给简介"就变成"永远登记不上"（死角）。
+BRIEF_MAX = 60
+
+#: 句末标点（取"第一句"时截到它为止，**含它**）。刻意不收 `.`：小数（`1.5`）、
+#: 文献号、相对路径（`../x`）里的点会把一句话切碎，而任务原文的句末几乎总是这几个。
+_SENTENCE_END: tuple[str, ...] = ("。", "！", "？", "!", "?", "；", ";")
+
+
+def brief_from_task(task: str, *, limit: int = BRIEF_MAX) -> str:
+    """从任务原文派生一句名册简介（**确定性**：不调模型、不花钱、不随机）。
+
+    业主 2026-10-20 裁定逐字：「简介没写，则**秘书帮忙写**，秘书的重要职责就是**辅助通讯**」
+    ⇒ 名册里那一句不再只能由父给：父没给而写了 `task` 时，由秘书代写并**留痕**
+    （`brief_source="secretary"`），不许静默冒充"父给的"。
+
+    规则（五步，逐条可复算；判据见 `tests/test_secretary_writes_the_brief.py`）：
+
+    1. **折平**：`str.split()` —— 换行 / 制表 / 连续空白一律折成一个半角空格、首尾去净。
+       于是结果**不含换行**（那正是内容闸要求的那一档）；
+    2. **取第一句**：扫到第一个句末标点（`_SENTENCE_END`，含该标点）为止；一个都没有就取全文；
+    3. **截断**：`limit` 个字符（缺省 `BRIEF_MAX` = 内容闸的同一个数 60）；
+    4. **去尾**：`strip()` 掉截断留下的尾巴空白；
+    5. **空就是空**：给的全是空白 ⇒ `""` —— 调用方据此走"没给一句任务简介"那一档，**不许编**。
+    """
+    flat = " ".join(str(task or "").split())
+    if not flat:
+        return ""
+    cut = len(flat)
+    for i, ch in enumerate(flat):
+        if ch in _SENTENCE_END:
+            cut = i + 1
+            break
+    return flat[:min(cut, int(limit))].strip()
 
 
 def _state_from(branch: str, retired: bool, cond: Any, task_id: str) -> str:
@@ -2245,23 +2287,37 @@ class Secretary:
         return f"{role}{max(used, default=0) + 1}", ""
 
     def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
-                   task_id_first: str = "", want_name: str = "", reuse: str = "",
-                   surface: str = "") -> dict[str, Any]:
-        """名册登记（增那一支）：`{"name","role","task_id","problem"}`。
+                   task: str = "", task_id_first: str = "", want_name: str = "",
+                   reuse: str = "", surface: str = "") -> dict[str, Any]:
+        """名册登记（增那一支）：`{"name","role","task_id","brief","brief_written","problem"}`。
 
         - `reuse` 给了名字 ⇒ 只推进对照表的当前调用，名册项不动（复用不是增）；
         - 否则：`want_name` 给了就用它（已被用过的名字一律拒，含已退役的 ⇒ "已销号"），
           没给就用 `next_name`；
         - 名册行与对照表行一笔写：任一写失败 ⇒ 返回 problem 并不留下半份
           （先写对照表再写名册；前者失败就不写后者。反过来会造出"有名字没电话"的项）。
-        - `brief` 为空 ⇒ 拒（内容面：那句话是退役时认人的唯一依据，秘书不替它编）。
+        - `brief` 缺失（空 / 纯空白）而 `task` 非空 ⇒ **秘书代写**：由 `brief_from_task`
+          从任务原文派生一句（确定性、不调模型、不花钱，≤60 字、单行），登记行里那一格记
+          `brief_source="secretary"`、返回 `brief_written=True`；父给的那一句记
+          `brief_source="parent"`、`brief_written=False` —— **不许静默冒充"父给的"**
+          （业主 2026-10-20：「简介没写，则秘书帮忙写，秘书的重要职责就是辅助通讯」）。
+        - `brief` 与 `task` **都**空 ⇒ 拒（内容面：那句话是退役时认人的唯一依据，
+          秘书不替它编 —— 这一档刻意保留）；父给的 `brief` 超长 / 多行 ⇒ 照旧拒
+          （"超长属于内容，秘书不替它删"）；代写那一支自己就截在 60 字以内，
+          所以**它永远不会撞上这道内容闸**（否则会形成"没给简介⇒永远登记不上"的死角）。
         """
         text = str(brief or "").strip()
+        source = "parent"
+        if not text:
+            text = brief_from_task(task)
+            source = "secretary"
         if not text:
             return {"name": "", "role": str(role), "task_id": str(task_id),
+                    "brief": "", "brief_written": False,
                     "problem": "没给一句任务简介（它进名册：退役时读的人靠它认人）"}
-        if len(text) > 60 or "\n" in text:
+        if len(text) > BRIEF_MAX or "\n" in text:
             return {"name": "", "role": str(role), "task_id": str(task_id),
+                    "brief": text, "brief_written": source == "secretary",
                     "problem": "任务简介必须是单行、不超过 60 字（超长属于内容，秘书不替它删）"}
         at = _now_iso()
         if reuse:
@@ -2272,13 +2328,18 @@ class Secretary:
             if self._is_retired(owner, name):
                 return {"name": name, "role": str(role), "task_id": str(task_id),
                         "problem": f"{name} 已销号（退役的名字永久不复用，业主 B1）"}
-            ok, why = append_jsonl(roster_index_path(self.root, owner),
-                                   {"kind": "bind", "owner": owner, "name": name,
-                                    "role": str(role), "task_id": str(task_id), "at": at})
+            bind: dict[str, Any] = {"kind": "bind", "owner": owner, "name": name,
+                                    "role": str(role), "task_id": str(task_id), "at": at}
+            if source == "secretary":
+                # 复用支不写名册行 ⇒ 这一次代写的那句话也得留痕（否则"谁写的"就丢了）。
+                # 只在代写时补这两格：父给的那一支落盘逐字不变。
+                bind.update({"brief": text, "brief_source": "secretary"})
+            ok, why = append_jsonl(roster_index_path(self.root, owner), bind)
             if not ok:
                 return {"name": name, "role": str(role), "task_id": str(task_id),
                         "problem": f"对照表没写成：{why}"}
-            return {"name": name, "role": str(role), "task_id": str(task_id), "problem": ""}
+            return {"name": name, "role": str(role), "task_id": str(task_id),
+                    "brief": text, "brief_written": source == "secretary", "problem": ""}
 
         if want_name:
             name = str(want_name)
@@ -2309,12 +2370,14 @@ class Secretary:
                                  {"kind": "add", "owner": owner, "name": name,
                                   "role": str(role), "task_id": str(task_id),
                                   "first_task_id": str(task_id_first or task_id),
-                                  "brief": text, "surface": str(got_surface.get("slot") or ""),
+                                  "brief": text, "brief_source": source,
+                                  "surface": str(got_surface.get("slot") or ""),
                                   "at": at})
         if not ok2:
             return {"name": name, "role": str(role), "task_id": str(task_id),
                     "problem": f"名册没写成（对照表那一行已经落了 ⇒ 读侧会报'半份登记'）：{why2}"}
         return {"name": name, "role": str(role), "task_id": str(task_id),
+                "brief": text, "brief_written": source == "secretary",
                 "surface": str(got_surface.get("slot") or ""), "problem": ""}
 
     # ---- 读写面与槽位池（S1n）
@@ -3342,6 +3405,8 @@ class Secretary:
                                      {"kind": "add", "owner": owner, "name": name, "role": role,
                                       "task_id": tid, "first_task_id": tid,
                                       "brief": "（补登记：这一条当时没写进名册）",
+                                      # 这句话是秘书写的（不是父给的）⇒ 留痕那一格照写
+                                      "brief_source": "secretary",
                                       "at": _now_iso(), "repaired": True})
             if not ok2:
                 return fixed, f"名册补写没成：{why2}"
@@ -3448,7 +3513,9 @@ class Secretary:
                     limit: int = 20) -> dict[str, Any]:
         """名册视图（只读，不许修补 —— I-15）：`{"checked","rows","more","reason","diagnostics"}`。
 
-        每一行：`name` / `role` / `brief` / `state`（活跃 / 待命 / 已停 / 已退役 / 未登记）/
+        每一行：`name` / `role` / `brief` / `brief_source`（`parent` 父给的原话 /
+        `secretary` 秘书从任务原文代写 / `""` 改前落的行）/ `state`（活跃 / 待命 / 已停 /
+        已退役 / 未登记）/
         `retirable`（按 `conductor.retire_ready` 的三分支）/ `items_open`（只报不拦）/
         `task_id`（当前调用），外加 S-H（裁定 14）补的三格：
 
@@ -3525,6 +3592,8 @@ class Secretary:
             row: dict[str, Any] = {
                 "name": str(r.get("name") or ""), "role": str(r.get("role") or ""),
                 "brief": str(r.get("brief") or ""), "state": state,
+                # 简介是谁写的（`parent` 父给的原话 / `secretary` 秘书代写 / `""` 改前的行）
+                "brief_source": str(r.get("brief_source") or ""),
                 "retirable": branch == "waiting_no_children",
                 "items_open": int(((by_child.get(tid) or {}).get("reading") or {})
                                   .get("items_open") or 0),

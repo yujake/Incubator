@@ -5296,9 +5296,13 @@ class AgentLoop:
                 auto[role] = [f"{role}#{k}" for k in range(1, n + 1)]
         used: dict[str, int] = {}
         calls = []
-        #: 每个 target 的 `brief`（与 `calls` 同序）—— 登记时逐项取自己的那一句，
-        #: 口径与 `_do_summon` 逐字一致（**不拿 `task` 顶替**：那条放宽业主还没批）。
+        #: 每个 target 的 `brief` / `task`（与 `calls` 同序）—— 登记时逐项取自己的那两句。
+        #: 2026-10-20 业主裁定（「简介没写，则秘书帮忙写」）：`brief` 只原样传下去，
+        #: **代写这件事在秘书那一侧做**（`roster_add(task=…)` 内部派生 + 留痕
+        #: `brief_source="secretary"`）—— 这里刻意不写 `brief or task`（那是"任务原文顶替"，
+        #: 业主选的是"秘书写"）。
         briefs: list[str] = []
+        tasks: list[str] = []
         blank: list[str] = []
         for t in targets:
             instance = str(t.get("instance") or "")
@@ -5325,6 +5329,7 @@ class AgentLoop:
                                                 or _summon_key(t_action, t_params)),
                                      instance=instance))
             briefs.append(str(t.get("brief") or ""))
+            tasks.append(t_task)
         if blank:
             return {"summoned": [], "ok": False, "count": 0,
                     "error": ("这批里有 target 没写清活（role="
@@ -5359,7 +5364,9 @@ class AgentLoop:
         # 三条口径（与 `_do_summon` 同一处，不另造一份）：
         #   · 只登记**真的受理了**的那一项（`refused` 不登记：它没跑）；
         #   · `owner` = 父的绝对编号、`task_id` = 这一项的绝对编号、`brief` = 这一项自己的
-        #     那一句（**不许**用 `task` 顶替 —— 那条放宽业主还没批）；
+        #     那一句，同一项的 `task` 一并交给秘书 —— 简介没写时**由秘书代写并留痕**
+        #     （2026-10-20 业主裁定「简介没写，则秘书帮忙写」；这里不写 `brief or task`：
+        #     业主选的是"秘书写"，不是"任务原文顶替"）；
         #   · **一项失败不许带走整批**：失败只写进 `roster_problems`，`ok` 照旧。
         #
         # 三态不折平：`failed` / `cancelled` 的那一项也不许静默跳过 —— 它没进名册这件事
@@ -5379,7 +5386,8 @@ class AgentLoop:
                     reg = self.secretary.roster_add(
                         owner=self.my_task_id, role=call.role,
                         task_id=str(r.task_id or ""),
-                        brief=briefs[i] if i < len(briefs) else "")
+                        brief=briefs[i] if i < len(briefs) else "",
+                        task=tasks[i] if i < len(tasks) else "")
                     if reg.get("problem"):
                         problems.append(f"{call.role}：{reg['problem']}")
                     else:
@@ -5781,16 +5789,21 @@ class AgentLoop:
         # ---- 名册登记（S1k-2；业主 T22："名册的增、删都由秘书做"）
         #
         # 只登记真的受理了的那一次（`refused` 不登记：它没跑）。
-        # `brief` 的口径（与 `draft/92` 的一处偏差，理由写在提交信息里）：
-        #   · 父点了名（`name` / `reuse`）却没给简介 ⇒ 受控拒绝式的读数（不打回派活）——
-        #     一句话说明"名册没写进去"；这与 L-05e 的裁定同族（"阻塞一条委托比放行更贵"）；
-        #   · 没点名也没给简介 ⇒ 照常派活，名册那一格如实报问题（不替它编）。
+        # `brief` 的口径（2026-10-20 业主裁定逐字：「简介没写，则**秘书帮忙写**，秘书的
+        # 重要职责就是**辅助通讯**」—— 改前这里把 `brief_arg` 直接传死，于是真机 100 次
+        # 失败里 75 次是名册当场拒收"没给一句任务简介"）：
+        #   · 简介由**秘书**判：`brief` 只原样传下去，`task` 一并给它（`roster_add(task=…)`）；
+        #   · 父没给简介 ⇒ 秘书从任务原文派生一句（≤60 字、单行），登记行记
+        #     `brief_source="secretary"` —— **不许静默冒充"父给的"**；
+        #   · 这里刻意**不**写 `brief_arg or task_arg`：业主选的是"秘书写"，
+        #     不是"拿任务原文顶替"（代写与留痕都在秘书那一侧，只此一份）。
         if self.secretary is not None and str(res.status or "") in ("pending", "running", "done"):
             if str(res.outcome or "") != "refused":
                 try:
                     reg = self.secretary.roster_add(
                         owner=self.my_task_id, role=role, task_id=str(res.task_id or ""),
-                        brief=brief_arg, want_name=name_arg, reuse=reuse_arg)
+                        brief=brief_arg, task=task_arg,
+                        want_name=name_arg, reuse=reuse_arg)
                     if reg.get("problem"):
                         out["roster_problem"] = str(reg["problem"])
                     else:

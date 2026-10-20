@@ -2400,7 +2400,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                        f"这一行记 `unknown`、不记 `pass`。"
                        "「攻」问的是「这一跳真的往前走了吗」：F 交了论证"
                        "（`statement_id` 有了）而没有人签，等于那一条还停在「自称被审过」。"
-                       f"处置：派 V 走查那几条（`V.verify_proof`，产物就是 "
+                       f"处置：派 D 去核签那几条（D 会让 F 补签；产物就是 "
                        f"`verifications/<命题号>.jsonl` 的那一行），回来再收工")
                 row_out.update({"state": "unknown", "ok": False, "unknown": True, "reason": why})
                 unknown_rows.append({"id": cid, "kind": kind,
