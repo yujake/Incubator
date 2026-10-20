@@ -81,6 +81,24 @@ def reset_cache() -> None:
     _CONDUCTORS.clear()
 
 
+def cached_conductor(store: Any) -> Conductor | None:
+    """这个工作区**已经存在**的主控实例；没有就返回 `None`（**绝不顺手建一个**）。
+
+    ## 为什么要与 `conductor_for` 分开
+
+    `conductor_for` 是"取（或建）"，它建出来的那个主控没有角色登记表、没有 policy
+    （`registry=None`）。谁先在装配之前叫它一次，后来的 `wired_llm_conductor` 就会
+    按缓存静默复用到那个空壳 —— 于是"我要的是接了线的主控"与"实际跑的是空壳"
+    在读数上长得一模一样（这条缓存纪律写在 `host.wired_llm_conductor` 的 docstring 里，
+    `conductor_for` 自己也写着）。
+
+    所以"只想借用一下这一趟的主控身份说句话"的调用方（今天只有一个：F 上报缺缝，
+    见 `agent_f/core.py::_escalate_missing_seam`）只能借用**已经存在**的那一个；
+    不存在时它必须如实说"这一层没接到主控"，而不是为了发一条消息把会话的主控建歪。
+    """
+    return _CONDUCTORS.get(str(Path(getattr(store, "root", ".")).resolve()))
+
+
 #: `payload_preview` 的字数上限（`draft/37` §130）。
 #:
 #: 为什么要把它给主控：`SummonResult.payload` 是「动作的返回值」 —— 而此前

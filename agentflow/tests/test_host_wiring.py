@@ -462,7 +462,9 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     # 实测 HEAD 上就有一条红（`assert 19 == 18`），补在这里并把出处写清楚。
     # 19 → 20 是 `conductor.broadcast`（S6-b，业主 T20/T21：一件能力、所有角色同一做法，
     # M 也在里面；只读角色 C/H/V 不在它的 `roles` 声明里）。
-    assert len(m_tools) == 20, m_tools
+    # 2026-10-20 计数口径：M 的编排面新增 `conductor.escalate`（`conductor.acceptance` 已在 HEAD），
+    # 故 20 -> 21；这条只钉计数，不钉名单（名单在 ROLE-SPECS §R0 与角色面判据里）。
+    assert len(m_tools) == 21, m_tools
     assert "conductor.board" in m_tools, m_tools
     assert "conductor.broadcast" in m_tools, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
@@ -475,8 +477,9 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
         assert name not in m_tools, (name, m_tools)
     # ③ 知识表与检索仍是禁区
     assert not [n for n in m_tools if n.startswith(("table.", "prov.", "search."))], m_tools
-    # 编排面那 12 件 + `conductor.board`（S1b）+ `conductor.broadcast`（S6-b）⇒ 14
-    assert len([n for n in m_tools if n.startswith("conductor.")]) == 14, m_tools
+    # 编排面那 12 件 + `conductor.board`（S1b）+ `conductor.broadcast`（S6-b）⇒ 14；
+    # 2026-10-20 再加 `conductor.escalate`（父子上行，十角色都有）⇒ 15
+    assert len([n for n in m_tools if n.startswith("conductor.")]) == 15, m_tools
 
 
 # ---------------------------------------------------------------- ⑥ A 的文献检索真的通

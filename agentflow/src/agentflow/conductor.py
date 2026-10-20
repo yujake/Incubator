@@ -2113,6 +2113,49 @@ class Conductor:
                          "级联由它们各自决定 —— 框架不代转，要全树就逐层向下")}
 
     # ---------------------------------------------------------------- 上行（业主 2026-10-19）
+    def _escalation_roster_check(self, *, mine: str, to: str, who: str,
+                                 root: str) -> dict[str, Any]:
+        """上行收件人的名册判据（与 `message` 同一份实现：`agent_loop.roster_addresses`）。
+
+        业主 2026-10-19：「代理之间的通信必须经名册」；`escalate` 发的是父，
+        但**路径上必须真经过校验** —— "它本来就发给父"不是跳过校验的理由
+        （改前这一支信任调用方给的 `parent_task_id`：给一个堂兄弟的编号，
+        这条上行就写进了堂兄弟的收件箱）。
+
+        三个取舍：
+
+        - **只读名册、不另造判据**：`roster_addresses` 是这件事的唯一实现
+          （`message` 那一支也用它）；这里再写一遍"是不是我的父"就是第二份判据；
+        - **按绝对编号寻址**（`to=父的台账号`）：角色名在同名多实例时是歧义的，
+          而歧义在这里的代价是"这条上行投给了别人的父"；
+        - **名册读不成 ⇒ fail-open**（`how="roster_unavailable"`，调用方把读数标出来）：
+          与 `message` 那一路同一条纪律 —— "说话不该被一次读失败挡住"。
+          这一档**不是**"校验通过"。
+        """
+        from . import agent_loop as AL
+
+        out: dict[str, Any] = {"checked": False, "how": "roster_unavailable", "refused": "",
+                               "error": "", "why": "", "to": str(to), "task_id": "",
+                               "name": "", "kind": "", "role": "", "callable": "",
+                               "candidates": []}
+        sec = getattr(self, "secretary", None)
+        if sec is None or not hasattr(sec, "roster_view"):
+            try:
+                from .secretary import Secretary
+
+                sec = Secretary(str(who or S.CONDUCTOR_ROLE), root=Path(str(root)),
+                                store=getattr(self, "store", None))
+            except Exception as exc:  # noqa: BLE001 —— 拿不到名册 ⇒ 读数标出来（fail-open）
+                out["why"] = f"名册拿不到（{type(exc).__name__}: {exc}）⇒ 退回运行期解析出的父"
+                return out
+        try:
+            got = AL.roster_addresses(sec, to=str(to), owner=str(mine),
+                                      my_task_id=str(mine), sender=str(who))
+        except Exception as exc:  # noqa: BLE001 —— 判据自己坏了也是"没查成"
+            out["why"] = f"名册寻址没跑成（{type(exc).__name__}: {exc}）⇒ 退回运行期解析出的父"
+            return out
+        return {**out, **dict(got)}
+
     def escalate(self, *, need: str, kind: str, evidence: Sequence[str] = (),
                  by: str = "", my_task_id: str = "", parent_task_id: str = "",
                  parent_role: str = "", session_root: str = "", sid: str = "",
@@ -2211,6 +2254,24 @@ class Conductor:
                            "没有会话根（root）⇒ 收件箱落在哪个会话都不确定："
                            "按缺省会话写等于把这条上报丢进一个父不会读的文件")
 
+        # ---- 名册校验（业主 2026-10-19：上行与 `message` 同一条判据）。
+        # 收件人是"运行期解析出的父"，但**路径上**必须真的过一遍名册：
+        # `not_in_roster`（给了不是父的编号）/ `member_retired` / `not_upward`（给了子）
+        # 一律受控拒绝、一行都不写；`roster_unavailable` 是 fail-open（读数标出来）。
+        addr = self._escalation_roster_check(mine=mine, to=pid, who=who, root=root)
+        refused = str(addr.get("refused") or "")
+        if refused:
+            bad = _refuse(refused, f"上行收件人不在名册上（{addr.get('error') or refused}）"
+                                   "⇒ 这一条一行都没写")
+            bad["addressing"] = addr
+            return bad
+        if str(addr.get("how") or "") == "child":
+            bad = _refuse("not_upward",
+                          "上行只能发给父：这个编号在你的名册上是**子**"
+                          "（`escalate` 是向上，不是向下）⇒ 这一条一行都没写")
+            bad["addressing"] = addr
+            return bad
+
         subject = f"{ESCALATE_SUBJECT}（{kind_name}）：{text[:40]}"
         body_lines = [
             f"来自：{who or '（未知角色）'}（台账号 {mine or '未拿到'}）",
@@ -2249,6 +2310,8 @@ class Conductor:
         out.update({"ok": True, "state": "escalated", "to": role, "to_task_id": pid,
                     "need": text, "kind": kind_name, "evidence": ev, "msg_id": msg_id,
                     "reason": "", "error": "",
+                    "addressing": addr,
+                    "roster_unavailable": str(addr.get("how") or "") == "roster_unavailable",
                     "note": (f"已写进 {role} 的收件箱（msg_id={msg_id}）⇒ 这一趟以 "
                              "stop_reason=escalated 收工，等父处理"
                              + (f"；留痕没写成（{problem}）" if problem else ""))})

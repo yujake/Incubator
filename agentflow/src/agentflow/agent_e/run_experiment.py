@@ -8,6 +8,23 @@ from collections.abc import Mapping
 
 from ._support import Any, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
 
+#: 「玩具例子」在台账上的落点：`experiments.observations[TOY_EXAMPLE_KEY]`。
+#:
+#: 为什么落 `observations` 而不是新加一列 / 改声明：`specs/e.py` 的动作声明面与
+#: `schema.Experiment` 都是契约（前者在禁改区），而 `observations` 本来就是
+#: "这一次到底算了什么"的自由读数格 —— 落在这里不动任何声明面。
+#: 判据与三态见 :func:`_toy_example_reading` 的 docstring。
+TOY_EXAMPLE_KEY = "toy_example"
+
+#: 「小到能手工核对」的规模上限：`n <= 8`。
+#:
+#: 业主口径（2026-10，本批的验收词）：「玩具例子」= **在一个小到能手工核对的情形上，
+#: 把断言跑成可复现的读数** —— 一条最小脚本 ＋ 一次真实执行 ＋ 一个读得出的数。
+#: 它**不是**"再跑一遍原脚本"，也**不是**"把界从 n<=8 推到 n<=12"那种扫描清单：
+#: 后者的读数是"扫到哪儿"，前者要的是"这一个数对不对，人能手算出来"。
+TOY_EXAMPLE_MAX_N = 8
+
+
 class _RunExperiment:
     def run_experiment(
         self,
@@ -196,6 +213,18 @@ class _RunExperiment:
         if reused:
             notes.append(reused)
 
+        # ---- [4c] 玩具例子读数（`observations[TOY_EXAMPLE_KEY]`）
+        #
+        # 业主口径（本批的验收词）：玩具例子 = "在一个小到能手工核对的情形上，把断言跑成
+        # 可复现的读数" —— 一条最小脚本 ＋ 一次真实执行 ＋ 一个读得出的数。
+        # 落点、上限与三态见 `_toy_example_reading` 的 docstring；没声明就什么都不加
+        # （既有实验行逐字节不变）。
+        toy = _toy_example_reading(params=params, exit_code=run["exit_code"],
+                                   code_path=_relpath(path, self.workspace_root),
+                                   code_hash=chash)
+        if toy is not None:
+            derived["observations"][TOY_EXAMPLE_KEY] = toy
+
         # ---- [4b]（在事务内写日志：文件名要用实验号，见 [5]）
 
         # ---- [5] 一个事务：alloc_id + 写 experiments
@@ -366,3 +395,77 @@ def _as_obs_dict(value: Any) -> dict:
     if isinstance(value, Mapping):
         return dict(value)
     return {}
+
+
+def _toy_example_reading(*, params: Mapping[str, Any] | None, exit_code: Any,
+                         code_path: str, code_hash: str) -> dict | None:
+    """把「这一次跑的是一个玩具例子」落成一格可查的读数（`observations["toy_example"]`）。
+
+    ## 一个玩具例子在台账上长什么样（这正是验收判据读的那一格）
+
+    ```python
+    {"declared": {"n": 6, "expect": 265, "quantity": "D(6)"},   # 调用方声明，原样
+     "checked": True, "within_limit": True, "n": 6, "limit": 8,   # 规模够小
+     "executed": True, "exit_code": 0,                            # 真跑过
+     "script_path": "code/attack_s1.py",                          # 跑的是哪一份
+     "script_sha256": "e86a6c9a16d7d4cf",                          # 与 code_hash 同一份文件
+     "why": ""}
+    ```
+
+    ## 谁声明、谁算（两边都不许越界）
+
+    「这是一个玩具例子」是**调用方**的声明：`run_experiment(params=...)` 里的
+    `toy_example` 那一格（F 把子目标的 `params` 原样带下来，一个字不改）。
+    本函数只做三件**机械的**事 —— 不替调用方判断"这算不算玩具"，也不相信**脚本的**
+    自我陈述（脚本能自报的只有 `REPRO_RESULT`，它决定不了"这次实验的规模够不够小"）：
+
+    ① 核对声明的规模 `n` 不超过 :data:`TOY_EXAMPLE_MAX_N`：超过 ⇒ `within_limit=False`
+       并把上限写在同一格里（"标了玩具但其实是个扫描清单"是读得出来的，不是被吞掉）；
+    ② 贴上"真跑过"的事实：`executed`（有没有退出码）、`exit_code`、`script_path`、
+       `script_sha256` —— 于是"只写了脚本"与"真的跑过一次"在行上分得开（反真空）；
+    ③ 把声明原样留在 `declared` 里（不改写、不解释、不替它补字段）。
+
+    ## 三态（`checked`）
+
+    - `checked=True, within_limit=True/False`：声明成形、判过了；
+    - `checked=False, within_limit=None`：声明不成形（不是对象 / 没有数值 `n`）——
+      **判不了 ≠ 合格**，`why` 里写清缺什么。这一档照旧落行（实验本身跑完了），
+      但读数不会假装它是个合格的玩具例子。
+
+    没声明 `params["toy_example"]` ⇒ 返回 `None`：调用方不写这一格，台账就与从前
+    逐字节相同（既有实验行一个字都不动）。
+    """
+    params = dict(params) if isinstance(params, Mapping) else {}
+    declared = params.get(TOY_EXAMPLE_KEY)
+    if declared is None:
+        return None
+    out: dict[str, Any] = {
+        "declared": dict(declared) if isinstance(declared, Mapping) else declared,
+        "checked": False,
+        "within_limit": None,
+        "n": None,
+        "limit": TOY_EXAMPLE_MAX_N,
+        # 执行事实与"规模判没判成"无关：这两格无论 `checked` 是哪一档都照实给。
+        "executed": exit_code is not None,
+        "exit_code": exit_code,
+        "script_path": str(code_path or ""),
+        "script_sha256": str(code_hash or ""),
+        "why": "",
+    }
+    if not isinstance(declared, Mapping):
+        out["why"] = (f"`params[{TOY_EXAMPLE_KEY!r}]` 不是对象（{type(declared).__name__}）⇒ "
+                      "判不了这一条算不算玩具例子（要 {n, expect, quantity} 这样的对象）")
+        return out
+    n = declared.get("n")
+    if isinstance(n, bool) or not isinstance(n, (int, float)):
+        out["why"] = (f"`params[{TOY_EXAMPLE_KEY!r}]` 里没有数值 `n`（收到 {n!r}）⇒ "
+                      f"判不了规模有没有小到能手工核对（上限 {TOY_EXAMPLE_MAX_N}）")
+        return out
+    out["checked"] = True
+    out["n"] = n
+    out["within_limit"] = bool(float(n) <= TOY_EXAMPLE_MAX_N)
+    if not out["within_limit"]:
+        out["why"] = (f"声明的规模 n={n} 超过玩具例子的上限 {TOY_EXAMPLE_MAX_N} ⇒ 这一条"
+                      "不是玩具例子（它是一份扫描清单：读数是'扫到哪儿'，不是"
+                      "'这一个数人能手算出来对不上'）")
+    return out

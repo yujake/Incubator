@@ -2907,6 +2907,15 @@ class ClosingReport:
             return []
         return list(got.get("gaps") or [])
 
+    @property
+    def summon_consumption(self) -> dict[str, Any]:
+        """收工门的「子产出处理」那一格（口径见 `summon_consumption_reading`）。
+
+        它不是八格之一，也没有 `status`：业主裁定这条规矩**不 fail 收工**，
+        但它必须读得到。`checked=False` = "这一格没查成"（不是"处理了"）。
+        """
+        return dict(self.readings.get("summon_consumption") or {})
+
     def to_dict(self) -> dict[str, Any]:
         """整份读数的可读视图（CLI、工具与落档共用同一个形状）。"""
         return {
@@ -2930,9 +2939,24 @@ class ClosingReport:
                    f"{len(self.status)}"
                    + (f"；fail={self.failed}" if self.failed else "")
                    + (f"；unknown={self.unknowns}" if self.unknowns else ""))
+        # 子产出处理那一格（业主裁定：父必须处理子代理的产出）：只在**真的没处理**时
+        # 往这句话里加一句 —— 它是读数不是判据，所以既不影响 `can_close`，
+        # 也不给"这一格没查成/没有对象"的寻常日子加噪声（三态仍在 `readings` 里）。
+        sum_note = ""
+        got = self.summon_consumption
+        if got.get("checked") and int(got.get("summons_unconsumed") or 0) > 0:
+            sum_note = (f"；**子产出没处理** {got['summons_unconsumed']}/"
+                        f"{got.get('summons_total')} 条（读数，不拦门）")
+        # 名册登记那一格（"名册写没写"）：只在**真的有问题**时加半句话 ——
+        # 它是读数不是判据（不拦门），所以寻常日子不给收工那一行加噪声。
+        ros = self.readings.get("roster_registration") or {}
+        ros_note = ""
+        if isinstance(ros, Mapping) and ros.get("checked") and int(ros.get("with_problem") or 0):
+            ros_note = (f"；**名册有 {int(ros['with_problem'])} 处没登记**"
+                        f"（{ros['with_problem']} 条 `roster_problem`；读数，不拦门）")
         if not self.m_verdict:
             return (f"收工门：{machine} —— M 没有提交自己的判据（它按自己列的任务列表判"
-                    "『活做完了没有』）⇒ `can_close=false`")
+                    f"『活做完了没有』）⇒ `can_close=false`{sum_note}{ros_note}")
         tasks = [t for t in (self.m_verdict.get("tasks") or []) if isinstance(t, Mapping)]
         done = sum(1 for t in tasks if str(t.get("state") or "") == "done")
         list_note = f"；任务列表 {done}/{len(tasks)} done" if tasks else "；任务列表：没提交"
@@ -2942,7 +2966,7 @@ class ClosingReport:
         gaps = self.escalation_gaps
         gap_note = (f"；没上报的项：{[x.get('what') for x in gaps]}" if gaps else "")
         return (f"收工门：M 判「我这一趟的活{met}」⇒ can_close={self.can_close}"
-                f"（{machine}{list_note}{tail}{gap_note}）")
+                f"（{machine}{list_note}{tail}{gap_note}{sum_note}{ros_note}）")
 
 
 # ------------------------------------------------------------------ 各条实现
@@ -4104,6 +4128,152 @@ def _escalation_reading(session_root: Any, sid: str | None, tasks: list[dict[str
             "reason": ""}
 
 
+def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> dict[str, Any]:
+    """收工门的「子产出处理」格：这一段会话里各趟运行自报的读数汇总。
+
+    ## 它为什么在收工门上（业主裁定：**父代理必须处理子代理的产出**）
+
+    这条规矩**不 fail 收工**（业主逐字："不一定要 fail，但必须可见"），但它必须
+    在门上有读数 —— 一趟 run 派了子、拿到结果、直接 `final`，其它八格**一格都看不出来**：
+    `tasks` 里那几行是 `done`、`substance` 非空、报告也在盘上。于是这一格读
+    `agent_run_end.summon_consumption`（每趟运行自己算的那一份，
+    `agent_loop.summon_consumption` 是唯一实现）—— 只汇总，不重算（两处各算一份
+    必然分叉，而分叉的形态是"事件说处理了、门说没有"）。
+
+    ## 三态（`checked=False` 绝不是"处理了"）
+
+    - 没有会话根 ⇒ `checked=False` + 理由；
+    - 会话读不成 / 有坏行 ⇒ `checked=False` + 理由（"没读成"不是"没问题"）；
+    - 会话读得成、但**没有任何一趟**带这一格（老会话）⇒ `checked=False` +
+      "这一段会话里没有任何一趟报过这个读数" —— 不许把"没有这一格"折成 0。
+
+    ## 反真空（业主 ⑤）
+
+    汇总出来的 `summons_total == 0`（会话里没有一趟派过子）⇒ 这一格**不红**：
+    判据没有对象。它照样报 `summons_total=0`，于是"没派过"与"派了没处理"分得开。
+    """
+    out: dict[str, Any] = {"checked": True, "runs": 0, "reported_runs": 0,
+                           "summons_total": 0, "summons_consumed": 0,
+                           "summons_continued": 0, "summons_waived": 0,
+                           "summons_unconsumed": 0, "unconsumed": [], "reason": ""}
+    if session_root is None:
+        out.update(checked=False, reason="没有会话记录根 ⇒ 子产出处理这一格没查成")
+        return out
+    from . import sessions as SS
+
+    try:
+        events, problems = SS.read_session(session_root, sid=sid)
+    except Exception as exc:  # noqa: BLE001 —— 读不成不是"处理了"
+        out.update(checked=False, reason=f"{type(exc).__name__}: {exc}")
+        return out
+    if problems:
+        out.update(checked=False,
+                   reason=f"会话有 {len(problems)} 处读不出来：{problems[0]}")
+        return out
+    for e in events:
+        if str(e.get("kind") or "") != "agent_run_end":
+            continue
+        out["runs"] += 1
+        got = e.get("summon_consumption")
+        if not isinstance(got, Mapping):
+            continue
+        out["reported_runs"] += 1
+        for key in ("summons_total", "summons_consumed", "summons_continued",
+                    "summons_waived", "summons_unconsumed"):
+            out[key] += int(got.get(key) or 0)
+        for p in (got.get("productions") or []):
+            if not isinstance(p, Mapping):
+                continue
+            if str(p.get("disposition") or "") != "unconsumed":
+                continue
+            out["unconsumed"].append({"role": str(e.get("role") or ""),
+                                      "task_id": str(p.get("task_id") or ""),
+                                      "step": p.get("step")})
+    if out["reported_runs"] == 0:
+        out.update(checked=False,
+                   reason=("这一段会话里没有任何一趟带 `summon_consumption` 读数"
+                           "（老会话，或是别的工具写的事件）⇒ 这一格没查成"))
+    return out
+
+
+def roster_registration_reading(session_root: Any, *, sid: str | None = None) -> dict[str, Any]:
+    """收工门的「名册写没写」格：这一段会话里 `roster_problem` 非空的次数。
+
+    ## 它为什么在收工门上（"名册登记"一直是静默的）
+
+    名册是"代理之间的通信必须经名册"那条纪律的地址面（父 ＋ 直接子 ＋ 绝对编号）。
+    但"这一趟派活有没有把子代理写进名册"在收工读数里**一格都没有**：
+    `summon_consumption` 只问"子产出处理了没有"，八格问的都是交付面。
+    于是两种完全不同的日子在收工输出上长得一样：名册 0 行（批量派活那条路
+    改前一次登记都没有）与名册都写上了。
+
+    这一格只回答一个数：`with_problem` = `roster_problem`（单个 summon）与
+    `roster_problems`（批量那些逐项问题）非空的**条数**。`registered` 是
+    成功登记的名字条数（读数，用于与 `with_problem` 对照）。
+
+    ## 三态（`checked=False` 绝不是"都写上了"）
+
+    - 没有会话根 ⇒ `checked=False` + 理由；
+    - 会话读不成 / 有坏行 ⇒ `checked=False` + 理由（"没读成"不是"没问题"）；
+    - 读得成但一步都没有（`agent_step` 0 条）⇒ `checked=False` + 理由
+      （"没有对象"与"查过了是 0"必须分得开）。
+
+    ## 不许 fail（业主口径：只可见）
+
+    它是 `readings` 里的一格，**不进** `status`、**不进** `machine_pass`、
+    不产生 `Finding`：名册某一条没写上是"这一格没成事"，与"门该不该拦"是两件事
+    （前者已经在派的那个地方受控拒绝 / 报 problem 了）。收工时它只在
+    :meth:`ClosingReport.summary` 里加半句话，加不加都不改 `can_close`。
+    """
+    out: dict[str, Any] = {"checked": True, "runs": 0, "steps": 0, "registered": 0,
+                           "with_problem": 0, "problems": [], "reason": ""}
+    if session_root is None:
+        out.update(checked=False, reason="没有会话记录根 ⇒ 名册登记这一格没查成")
+        return out
+    from . import sessions as SS
+
+    try:
+        events, bad = SS.read_session(session_root, sid=sid)
+    except Exception as exc:  # noqa: BLE001 —— 读不成不是"都写上了"
+        out.update(checked=False, reason=f"{type(exc).__name__}: {exc}")
+        return out
+    if bad:
+        out.update(checked=False, reason=f"会话有 {len(bad)} 处读不出来：{bad[0]}")
+        return out
+    for e in events:
+        kind = str(e.get("kind") or "")
+        if kind == "agent_run_end":
+            out["runs"] += 1
+            continue
+        if kind != "agent_step":
+            continue
+        out["steps"] += 1
+        res = e.get("result")
+        if not isinstance(res, Mapping):
+            continue
+        who = str(e.get("role") or "")
+        where = {"step": e.get("index"), "role": who}
+        one = str(res.get("roster_problem") or "")
+        if one:
+            out["problems"].append({**where, "detail": one, "field": "roster_problem"})
+        for item in (res.get("roster_problems") or []):
+            text = str(item or "")
+            if text:
+                out["problems"].append({**where, "detail": text,
+                                        "field": "roster_problems"})
+        names = res.get("roster_names")
+        if isinstance(names, (list, tuple)):
+            out["registered"] += len([x for x in names if str(x or "")])
+        elif str(res.get("roster_name") or ""):
+            out["registered"] += 1
+    out["with_problem"] = len(out["problems"])
+    if out["steps"] == 0:
+        out.update(checked=False,
+                   reason=("这一段会话里没有任何一步（`agent_step`）⇒ 名册登记这一格没查成"
+                           "（不是『名册都写上了』）"))
+    return out
+
+
 def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   session_root: Any = None, checks: tuple[str, ...] = DEFAULT_CHECKS,
                   sid: str | None = None,
@@ -4195,6 +4365,35 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     if rep.m_verdict:
         rep.readings["verdict_escalation"] = _escalation_reading(
             root, sid, list(rep.m_verdict.get("tasks") or []))
+    # ---- 子产出处理那一格（业主裁定：**父代理必须处理子代理的产出**）
+    #
+    # 为什么不进 `DEFAULT_CHECKS`（十八格之一）、也不进退出码：业主逐字
+    # 「不一定要 fail，但必须可见」。它是一格**读数**，落 `readings`（`to_dict()`
+    # 与服务端都能读到）+ 一条 `warning`（`summons_unconsumed > 0` 时，它会被
+    # `agentflow closing` 逐条打出来）—— `machine_pass` 只看 `blocker`，
+    # 所以"没处理"不会偷偷把门的强度改了，也不会被静默折成通过。
+    #
+    # `checked=False`（没查成 / 老会话）**不**升成一条 finding：那会给今天所有
+    # 老工作区的收工输出加一行噪声。三态仍然保留在 `readings` 里 ——
+    # "没查成"与"查过了是 0"分得开，只是不刷屏。
+    rep.readings["summon_consumption"] = summon_consumption_reading(root, sid=sid)
+    _sum = rep.readings["summon_consumption"]
+    if _sum.get("checked") and int(_sum.get("summons_unconsumed") or 0) > 0:
+        _ids = [str(x.get("task_id") or "") for x in (_sum.get("unconsumed") or [])][:6]
+        rep.findings.append(Finding(
+            "summon_consumption", "child_output_not_processed", "warning",
+            f"这一段会话里有 {_sum['summons_unconsumed']} 条子产出没有被父处理"
+            f"（一共派了 {_sum['summons_total']} 条；被点到的是 {_ids}）⇒ "
+            "拿到结果不等于处理了：要么在它之后留下一个指到它的效应（写台账 / 改计划 / "
+            "改猜想 / 写报告 / 再派活 / 折进收工结论），要么写 `not_consumed`"
+            "（受控理由码 + 一句理由）如实声明不处理。"
+            "**这一格不拦门**（业主逐字：不一定要 fail，但必须可见），它是读数"))
+    # ---- 名册登记那一格（"名册写没写"必须可审）
+    #
+    # 口径与理由见 `roster_registration_reading`：它只数"`roster_problem` 非空的次数"，
+    # 落 `readings`、在 `summary()` 里加半句话；**不**进 `status`、**不**产生 `Finding`
+    # ⇒ 它不改变门的强度，只让"名册 0 行"与"名册都写上了"在收工输出上分得开。
+    rep.readings["roster_registration"] = roster_registration_reading(root, sid=sid)
     return rep
 
 

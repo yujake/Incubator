@@ -445,8 +445,31 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                         seam_factory: Any = None,
                         semantic_review: bool = False,
                         attack_reasoning: bool = False,
+                        experiment_reasoning: bool = False,
                         stop_file: str | Path | None = None) -> dict[str, Any]:
     """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
+
+    ## 三个"花钱的判断类能力"开关，默认全关，且**互不连带**
+
+    | 开关 | 给谁接缝 | 不打开时那一侧怎么如实报 |
+    |---|---|---|
+    | `semantic_review` | H（`claims_semantically_judged`） | 那一格记"没查" |
+    | `attack_reasoning` | F（`attack.step` 真推一轮） | 落 `dead_end(缺工具)` |
+    | `experiment_reasoning` | E（`author_script` 按判据写脚本） | 落 `no_seam` |
+
+    三条同一条纪律：环境里有 key 也不改变行为（`DEFAULT_LLM_LOOPS` 的注释逐字写着）。
+
+    ## 为什么 `attack_reasoning` **不**连带打开 `experiment_reasoning`
+
+    两个开关各自可解释：F 的推理是"想这一步该怎么打"，E 的推理是"把判据写成一份能跑的
+    脚本"。它们是两笔可以分别买账的钱 —— 有人只要 F 想、脚本由人写，那就只开前者。
+
+    代价必须说清（`projects/mp4` 的真机读数，`attack_plans.json` 计划 000003 的 r1/r2）：
+    **只开 F 的缝、E 没有缝 ⇒ F 需要脚本时写不出来**，那一轮落
+    `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝，不是脚本）——
+    改前它是静默的 `no_change`，于是看上去像"跑了但没结果"。要让这条链整条通，
+    三个开关里必须同时有 `attack_reasoning`（F 造判据）与
+    `experiment_reasoning`（E 写脚本、跑玩具例子）。
 
     ## 语义（与 `LlmBackend` 的 docstring 逐字一致）
 
@@ -528,6 +551,39 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         from . import agent_f as _AF
 
         _AF.set_default_llm(None)
+    # ---- E 的写脚本推理（`--experiment-reasoning`，业主裁定：「把 F 与 E 的接缝做好」）
+    #
+    # ## 缝在哪被 gate（这一处就是根因，2026-10 的真机读数）
+    #
+    # E 的缝一直只有"插座"没有"线"：`agent_e/author_script.py` 在 `self.llm is None`
+    # 时受控拒绝 `no_seam`，而 `self.llm` 的来源只有两个入口 ——
+    #   ① `specs/e.py::_build` 的 `llm=d.llm`（`d.llm` 由 `_Builder._llm_for("E")` 给，
+    #      而 `role_llm` 里从来没有登记过 `"E"`）；
+    #   ② `agent_f/core.py` 的 `e` 属性里的 `llm=role_seam("E")`（`llmseam` 的按角色表）。
+    # 两个入口的开关都在这几行：`role_llm["E"]` 与 `set_role_seam("E", …)`。
+    # 于是 F 每轮都撞同一句"子目标有判据但没有脚本（no_seam）"。
+    #
+    # ## 两条路都要接（与 F 那一处同一条理由）
+    #
+    # 真机里 M 派 `F.step` 走的是工具层（`attack_tools._agent_for` → `AgentF(store)`），
+    # 那条路拿不到这里的装配上下文 ⇒ 只登记 `role_llm["E"]` 的话，工具路径上 E 仍是
+    # `llm=None`。所以两处都写：角色工厂一处、`llmseam` 的按角色表一处（同一份缝对象）。
+    e_llm = None
+    from .llmseam import set_role_seam as _set_role_seam
+
+    if experiment_reasoning:
+        e_llm = _seam("E")
+        _set_role_seam("E", e_llm)
+        notes_experiment = (
+            "E 的写脚本推理：接线（`--experiment-reasoning`，角色工厂与 F 的工具路径"
+            "两条路都接）⇒ `author_script` 能按判据写脚本、跑玩具例子")
+    else:
+        # 同一进程里跑第二趟时不许继承上一趟登记的缝（与 F 那一支逐字同一条纪律）。
+        _set_role_seam("E", None)
+        notes_experiment = (
+            "E 的写脚本推理：未接线（默认确定性）⇒ 有判据的子目标会落 `no_seam`，"
+            "F 那一轮如实落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是缝）；"
+            "要真写脚本就加 `--experiment-reasoning` —— 只开 `--attack-reasoning` 不连带打开它")
     # ---- D 的模型精修（`R1-B-x` 裁定 3）：缝不由角色开关决定，由"这次运行有没有模型"决定。
     #
     # 裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 那样等一个
@@ -550,12 +606,14 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     else:
         notes_d = ("D 的模型精修：未接线（这次运行没有模型 key）⇒ `_llm_refine` 落 `not_wired`，"
                    "分析走确定性那一份（fail-open，不中断研究）")
-    notes: list[str] = [notes_attack, notes_d]
+    notes: list[str] = [notes_attack, notes_experiment, notes_d]
     role_llm: dict[str, Any] = {}
     if h_llm is not None:
         role_llm["H"] = h_llm
     if f_llm is not None:
         role_llm["F"] = f_llm
+    if e_llm is not None:
+        role_llm["E"] = e_llm
     if d_llm is not None:
         role_llm["D"] = d_llm
     role_reg = build_role_registry(store, providers=providers, extractor=extractor,

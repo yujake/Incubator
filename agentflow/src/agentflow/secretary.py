@@ -3385,6 +3385,65 @@ class Secretary:
     #: ⇒ 把它也读成 `ready` 会让模型去 `send_message` 一个再也叫不醒的名字。
     STATUS_VALUES: tuple[str, ...] = ("running", "idle", "ready", "retired")
 
+    def parent_of(self, *, owner: str) -> dict[str, Any]:
+        """这个台账号（`owner`）的「父代理」：`{"checked","task_id","role","name","why"}`。
+
+        业主 2026-10-19：名册 = 「一个代理能看到的：自己的父代理是谁（含绝对编号）、
+        自己的子代理是谁（含绝对编号）」。改前这一份名册只答得出后一半 ——
+        父是谁只躺在 `AgentLoop.parent_task_id` 那个内存字段里，盘上的名册一个字都没有；
+        于是"给父发一条"在位址这一步无据可依（只能按角色名发，那就绕开了名册）。
+
+        四个格的口径：
+
+        - `task_id`：「绝对编号」（我那一行的 `parent_task_id`）。空串 = 顶层发起
+          （`open_top_level_run` 建的那一行是它自己的父 ⇒ 也当"没有父"）；
+        - `role`：父那一行的 `role`（读不到 ⇒ 空串 + `why`）；
+        - `name`：父的「名册名」。它记在「祖父」的名册索引里（相对名 vs 绝对编号：
+          `name_of(owner=祖父, task_id=父)` 这一步就是换算），读不到 ⇒ 空串 + `why`；
+        - `checked`：这一格读成了没有。`False` 「不等于」"没有父"（三态纪律）。
+
+        只读（`draft/92` I-15：查只报不修）：一行都不写。
+        """
+        out: dict[str, Any] = {"checked": False, "task_id": "", "role": "", "name": "",
+                               "why": ""}
+        cond = self._conductor()
+        if cond is None:
+            out["why"] = "没有 store ⇒ 读不到台账（父是谁判不了）"
+            return out
+        mine = str(owner or "")
+        if not mine:
+            out["why"] = "没给台账号 ⇒ 不知道问谁的父"
+            return out
+        try:
+            row = cond._task(mine) or {}
+        except Exception as exc:  # noqa: BLE001 —— 读不成要如实说
+            out["why"] = f"台账读不成（{type(exc).__name__}: {exc}）"
+            return out
+        if not row:
+            out["why"] = f"台账里没有 {mine} 这一行 ⇒ 父是谁读不出来"
+            return out
+        pid = str(row.get("parent_task_id") or "")
+        out["checked"] = True
+        if not pid or pid == mine:
+            out["why"] = "顶层发起（没有父代理）"
+            return out
+        out["task_id"] = pid
+        try:
+            prow = cond._task(pid) or {}
+        except Exception as exc:  # noqa: BLE001
+            out["why"] = f"父那一行读不成（{type(exc).__name__}: {exc}）"
+            return out
+        out["role"] = str(prow.get("role") or "")
+        gp = str(prow.get("parent_task_id") or "")
+        if gp and gp != pid:
+            try:
+                name, _why = self.name_of(owner=gp, task_id=pid)
+            except Exception:  # noqa: BLE001
+                name = ""
+            out["name"] = name
+        out["why"] = "" if out["name"] else "父的名册名读不到（它记在祖父的名册里）"
+        return out
+
     def roster_view(self, *, owner: str, scope: str = "self",
                     limit: int = 20) -> dict[str, Any]:
         """名册视图（只读，不许修补 —— I-15）：`{"checked","rows","more","reason","diagnostics"}`。
@@ -3403,6 +3462,13 @@ class Secretary:
         `scope="descendants"` 时给全树（每一行多 `parent` 与 `depth`）—— 改前只有下一层。
         规模：默认只回 20 项 + `more`（与 `inbox_digest` 的窗口同族口径）。
 
+        ## 父是谁（业主 2026-10-19：「名册 = 父 + 子 + 绝对编号」）
+
+        每一份视图都带一格 `parent`（见 :meth:`parent_of`：**绝对编号** + 角色 + 名册名），
+        `scope="descendants"` 的行另带 `parent_task_id` —— 改前那些行只有相对名 `parent`，
+        而"相对名"没法拿去发消息（那正是这一轮要补的那一格）。于是
+        "我能通话的是谁"这件事在同一份读数里自足了，寻址不必再另造一个视图。
+
         ## 逐行 diagnostic（不再一行坏就整份拒）
 
         改前：名册里有一行读不出来 ⇒ `{"checked": False, "rows": []}`（整体拒）。
@@ -3414,23 +3480,27 @@ class Secretary:
         cond = self._conductor()
         rows, bad = self.roster_rows(owner)
         diagnostics = [_diagnose_line(line) for line in bad]
+        # 「我自己的父是谁」那一格（业主 2026-10-19：名册 = 父 + 子 + 绝对编号）。
+        # 改前这一份视图只有"我名下的子代理"—— 父是谁只能从 `AgentLoop.parent_task_id`
+        # 那个内存字段读到，而名册自己（盘上那一份）答不上来。现在六条 return 都带上它。
+        parent = self.parent_of(owner=owner)
         if not rows and bad:
             return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics,
+                    "diagnostics": diagnostics, "parent": parent,
                     "reason": f"名册有 {len(bad)} 行读不出来、且没有一行读得出来：{bad[0]}"}
         if cond is None:
             return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics,
+                    "diagnostics": diagnostics, "parent": parent,
                     "reason": "没有 store ⇒ 读不到台账（状态判不了）"}
         try:
             ready = cond.retire_ready(owner)
         except Exception as exc:  # noqa: BLE001
             return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics,
+                    "diagnostics": diagnostics, "parent": parent,
                     "reason": f"就绪读数没读成（{type(exc).__name__}: {exc}）"}
         if not ready.get("checked"):
             return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics,
+                    "diagnostics": diagnostics, "parent": parent,
                     "reason": f"就绪读数没读成（{ready.get('reason')}）"}
         by_child = {str(r["task_id"]): r for r in ready.get("ready", [])}
         # 一份手稿读数，逐行取"它最近报了什么"（每行读一次会把名册变成 N 次全表读）。
@@ -3447,6 +3517,7 @@ class Secretary:
         out: list[dict[str, Any]] = []
         for t in targets:
             r, parent_name, depth = t["row"], t["parent"], t["depth"]
+            parent_tid = str(t.get("parent_tid") or "")
             tid = str(r.get("task_id") or "")
             branch = str((by_child.get(tid) or {}).get("branch") or "")
             facts = t["facts"]
@@ -3464,11 +3535,14 @@ class Secretary:
             }
             if scope == "descendants":
                 row["parent"] = parent_name
+                # 业主 2026-10-19：`parent` 记的是**相对名**，而通话要的是**绝对编号**。
+                # 两格都给（相对名给人读，绝对编号给机器判）；改前只有相对名。
+                row["parent_task_id"] = parent_tid
                 row["depth"] = depth
             out.append(row)
         more = max(0, len(out) - int(limit))
         return {"checked": True, "rows": out[:int(limit)], "more": more, "scope": scope,
-                "diagnostics": diagnostics, "reason": ""}
+                "diagnostics": diagnostics, "parent": parent, "reason": ""}
 
     def _roster_targets(self, *, owner: str, rows: list[dict[str, Any]], scope: str,
                         cond: Any) -> list[dict[str, Any]]:
@@ -3487,20 +3561,22 @@ class Secretary:
         out: list[dict[str, Any]] = []
         root_by = dict((parent_facts(owner).get("by_child") or {}))
         if scope != "descendants":
-            return [{"row": r, "parent": "", "depth": 1,
+            return [{"row": r, "parent": "", "parent_tid": "", "depth": 1,
                      "facts": dict(root_by.get(str(r.get("task_id") or "")) or {})}
                     for r in rows]
         # 全树：逐层往下，每一层的 facts 从它的父那一格里取。
         # 这一格最容易写错（第一版就是）：`children_facts(X)` 给的是"X 名下"的读数，
         # 而某一行要的是"它父名下的它自己"那一格 —— 拿 X 去查 X 只会得到空表，
         # 于是全树的每一行都会读成 `ready`（一个安静的错误：没有任何地方会报错）。
-        queue: list[tuple[dict[str, Any], str, int, dict[str, Any]]] = [
-            (r, "", 1, dict(root_by.get(str(r.get("task_id") or "")) or {})) for r in rows]
+        queue: list[tuple[dict[str, Any], str, str, int, dict[str, Any]]] = [
+            (r, "", str(owner or ""), 1,
+             dict(root_by.get(str(r.get("task_id") or "")) or {})) for r in rows]
         seen = 0
         while queue and seen < 512:
-            r, parent_name, depth, facts = queue.pop(0)
+            r, parent_name, parent_tid, depth, facts = queue.pop(0)
             seen += 1
-            out.append({"row": r, "parent": parent_name, "depth": depth, "facts": facts})
+            out.append({"row": r, "parent": parent_name, "parent_tid": parent_tid,
+                        "depth": depth, "facts": facts})
             if depth >= 64:
                 continue
             tid = str(r.get("task_id") or "")
@@ -3510,7 +3586,8 @@ class Secretary:
             by = dict((parent_facts(tid).get("by_child") or {}))
             for k in kids:
                 kt = str(k.get("task_id") or "")
-                queue.append((k, str(r.get("name") or ""), depth + 1, dict(by.get(kt) or {})))
+                queue.append((k, str(r.get("name") or ""), tid, depth + 1,
+                              dict(by.get(kt) or {})))
         return out
 
     def latest_report_of(self, *, task_id: str, role: str = "") -> dict[str, Any]:

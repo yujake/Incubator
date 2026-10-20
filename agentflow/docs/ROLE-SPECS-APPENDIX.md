@@ -555,7 +555,7 @@ C 的产出有两类，状态语义完全不同。
 | 数组字段已声明 | `undeclared_array_field` | error |
 | **C 不能写知识表** | 由 `capabilities.assert_capabilities()` 的**只读角色写集例外**断言保证（`capabilities.assert_capabilities`） | 导入期 `AssertionError` |
 | **C 的工具面 1 个写工具**（`analysis.register_report`，READONLY_CALL_EXCEPTIONS['C'] 逐条登记） | `tools.base.ToolRegistry.for_role` 结构性剥离 + `role_filter_notes` 留痕 | 实测 1（2026-10-20） |
-| **C 只召唤 D 一个角色** | `ALLOWED_EDGES["C"] == {"D"}`（`capabilities.ALLOWED_EDGES`；2026-10-19 业主裁定 C→D 交候选路径） | 静态表 |
+| **C 不召唤任何角色**（它的汇报 = 返回值） | `ALLOWED_EDGES["C"] == frozenset()`（`capabilities.ALLOWED_EDGES`；2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C） | 静态表 |
 
 ### C.7 [附录·实测] 下沉明细
 

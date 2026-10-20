@@ -705,24 +705,18 @@ def test_forbidden_edge_is_recorded_in_ledger(tmp_path):
 
 
 def test_refusal_negative_control_forbidden_pair_actually_allowed_list(tmp_path):
-    """负控：`C → B` 被拒，且 `C` 只对**一条**目标放行（`D`）。
+    """负控：`C → B` 被拒，且 C 对每一个目标都一律被拒。
 
-    2026-10-19 业主裁定：C→D 用于把候选路径交给 D 立猜想 —— 改前这一条断言的是
-    "C 对每一个目标都一律被拒（它的边真的是空的）"。那条理由现在只剩
-    **半句**成立：C 的边不是空的，但它**只有一个**目标。所以这一条改成两向：
-    - 正向：`C → D` 真的走得通（D 已接线 ⇒ `ok`，不是"被别的闸门挡下"）；
-    - 负向：其余三个目标仍然一律 `forbidden_edge`（不是"某些边被挡了但另一些漏过去了"）。
+    即：C 的边真的是空的，不是"某些边被挡了但另一些漏过去了"。
+    2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一条按原句恢复
+    （2026-10-19 那一版曾为 C→D 改成"C 只对 D 放行"、并把 `D` 从越权清单里摘掉）。
     """
     store = _mk_store(tmp_path)
-    c = _conductor(store, registry={"A": ("object", TwoStep("a")), "C": ("object", FakeC()),
-                                    "D": ("object", FakeD())})
-    # 正向：C 唯一那条出边真的通（这是裁定要的那一件事）
-    ok_call = c.summon("D", "probe_c", {"qid": "q1"}, by="C", input_key="C→D")
-    assert ok_call.outcome == "ok", (ok_call.outcome, ok_call.refusal_reason, ok_call.detail)
-    # 负向：除 D 之外，一个都不许漏过去
+    c = _conductor(store, registry={"A": ("object", TwoStep("a")), "C": ("object", FakeC())})
     for target, action, params in (
         ("A", "run_once", {}),
         ("B", "run_once", {}),
+        ("D", "poll", {}),
         ("E", "evidence_for", {"claim_key": "k"}),
     ):
         r = c.summon(target, action, params, by="C", input_key=f"越权-{target}")

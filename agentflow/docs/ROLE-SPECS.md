@@ -174,18 +174,16 @@ B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍�
 读数：`reviewed_proof_rows = 0`，而那一趟正文里有三条证明级断言 —— V 的逐行走查签名一个都没有，
 因为 V 只能经 `F→V`、那一趟没走。开放这条边之后 `M→V` 是**首选路径**（`M→B→V` 仍可走，
 `M→D→F→V` 不必再绕）。复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"` ⇒ `33`。
-**2026-10-19 加一条 `C→D` 到 34**：业主裁定逐字「**C 要能把"候选的更短路径"交给 D**」
-（C 的图读数里"哪条链绕远路"要能变成一条猜想，而 D 是唯一能立猜想的那一环；
-改前 C 只能写进回复，或者借别人的边绕两跳 —— 真机 `t5-run2` 里 B 就是借 `H` 绕去找 A 的）。
-这条边只给"请求"：C 仍然 `read_only`，`WRITE_SETS["C"]` 与它的写集一个字没动；
-它的 `params` 侧证据是 D 那个 `run_round` 的动作说明里早就写着
-「一份 C 的分析报告（`analysis_reports` 那行的对象；**C→D 那条路就是这么传的**）」。
-复跑 ⇒ `34`。判据：`tests/test_c_hands_the_shorter_path_to_d.py`
-（两层读数 + 一次真的 `Conductor.summon(..., by="C")` + "把边改回空 ⇒ 同一次召唤被
-`forbidden_edge` 拒"的负控）。
-**读数的连带**：`secretary.reach_fit` 的闭包读数里，C 从此够得到每个非主控角色的动作
-（`C → D → …`，实测实表上已没有 unreachable 的 `(角色, 动作)` 对）——
-那是闭包**读数**，不是权限：真正的闸门仍只看**直接**出边（`policy.check`）。
+**2026-10-20 撤掉那条 `C→D`，回到 33（改回原设定：C 无出边）**：业主裁定逐字「把协作改成
+「D 唤起 C、C 向 D 汇报」，并保留 C 无出边的原始设定」—— 2026-10-19 加的那条 `C→D`（到 34）
+撤回，链条是 **`D → C` 单向**：D 用 `conductor.summon` 派 C，**C 的"汇报"就是它的返回值**
+（C 没有出边、也不许给它加一条把话送回去的通道）。复跑 ⇒ `33`。
+判据：`tests/test_d_summons_c_and_c_reports_back.py`（正控：D 派 C、报告随返回值交回且
+D 的下一步读得到它；反真空：`ALLOWED_EDGES["C"] == frozenset()`、边总数 33；两条负控：
+把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ 反真空红；把 D 的 `_do_summon` 改成"不读返回值
+直接 final" ⇒ 正控红）。
+**读数的连带**：`secretary.reach_fit` 对 C 的闭包又只剩它自己（`unreachable` 那一档在实表上
+重新有对象）—— 那是闭包**读数**，不是权限：真正的闸门仍只看**直接**出边（`policy.check`）。
 
 **没有任何角色能召唤 `M`**（`capabilities.NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`）。
 
@@ -705,16 +703,16 @@ C 的产出有两类，状态语义完全不同。
   （`tools/base.py` 的 `READONLY_CALL_EXCEPTIONS['C']`，写面钉死在 `analysis_reports`
   一张表）—— 除了它，`for_role("C")` 拿不到任何 `write_local` 工具。
   > 旧文写"0 个写工具"是 2026-10-18 之前的口径（业主那次裁定加了 C 的产出登记通道）。
-- **C 只召唤 `D` 一个角色**（`ALLOWED_EDGES["C"] = frozenset({"D"})`，2026-10-19 业主裁定：
-  把候选路径交给 D 立猜想）—— 除这一条边之外，它发不出任何别的召唤。
+- **C 不召唤任何角色**（`ALLOWED_EDGES["C"] = frozenset()`，2026-10-20 业主裁定：
+  改回 C 无出边、由 D 唤起 C）—— 它的报告随返回值交给派它的人，不需要一条出边。
 
 ### C.9 接口
 
 - **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`B`（`:596`）、`D`（`:598`）、
   `F`（`:600`）。**C 也能被 `A`/`E`/`G`/`H` 召唤吗？不能。**
-- **C 能召唤谁**：只有 **`D`**（`ALLOWED_EDGES["C"] = frozenset({"D"})`，2026-10-19 业主裁定
-  C→D 用于把候选路径交给 D 立猜想；**写面一个字没动**，所以只读身份不变）。
-  旧文写"没有人"是 2026-10-19 之前的口径（那时这条边是空的）。
+- **C 能召唤谁**：**没有人**（`ALLOWED_EDGES["C"] = frozenset()`，2026-10-20 业主裁定：
+  改回 C 无出边、由 D 唤起 C —— 候选更短路径由 D 自己派 C 来要，C 的汇报就是它的返回值；
+  **写面一个字没动**，只读身份不变）。2026-10-19 那一版曾写着"只有 `D`"，已撤回。
 - **入参从哪来**：`statements`（含概念行）/ `relations` 表（B 写入）；`request` 原文（人/编排层给的）。
 - **产出被谁消费**：
   - `analysis_reports` 行 + `reports/*.md` → **D**（`ingest` 把它消化成研究问题）

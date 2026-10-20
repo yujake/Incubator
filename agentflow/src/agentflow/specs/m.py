@@ -219,7 +219,8 @@ SPEC = AgentSpec(
             "`C.gaps` 看结构缺口、`C.contradictions` 看待裁的矛盾），它们**不过模型、确定性**，结果直接进你的清单骨架。验收表里加"
             "一行 `c_analysis_runs`（数 `tasks` 里 role=C 跑过的行；**C 的产物是返回值本身、不落台账**）。**这一环是覆盖面的第五环**："
             "要么真的派过 C，要么写 `na` + 理由。"
-            "题目要「更短的证明路径」时，链上要有看（C）→立猜想（D）→攻（F）；跳过哪一步，就在 `conductor.summon` 的 task 里写清为什么。",
+            "题目要「更短的证明路径」时，要候选路径就派 D：D 自己唤起 C 拿报告、立猜想、再派 F——C 没有出边，"
+            "M 不要直接派 C 要结论；跳过哪一步，就在 `conductor.summon` 的 task 里写清为什么。",
             "**猜想要交给 F 攻坚**：`D.register_conjecture` 之后要派 `F.create_plan` 与 `F.step`，并把 `attack_plans` 里**真的有"
             "推进**的那一行写进验收表（`plan_progress_rows` —— **只认这一档**：`attack_plan_rows` 是立项计数，写它不算推进）。"
             "**只立项不算推进，被 `step` 过也不算**：数的是**至少有一轮真推进**的计划 —— `outcome=progress` 且那一轮有 `cites`、"

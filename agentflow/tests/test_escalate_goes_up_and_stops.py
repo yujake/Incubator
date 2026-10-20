@@ -286,7 +286,13 @@ def test_a_top_level_agent_is_refused_with_not_caller(tmp_path: pathlib.Path) ->
 
 def test_negative_control_without_the_guard_it_writes_and_stops(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """负控③：把守卫换成"伪造一个父" ⇒ 它照样写、照样以 escalated 收工 ⇒ ③ 那三条全红。"""
+    """负控③：把守卫换成"伪造一个父" ⇒ 它照样写、照样以 escalated 收工 ⇒ ③ 那三条全红。
+
+    2026-10-20（业主「上行也必须真过名册」之后）：`escalate` 现在有**两道**守卫 ——
+    `not_caller`（没有父）与名册判据（伪造的那个父不在名册上 ⇒ `not_in_roster`）。
+    "去掉守卫"因此要把两道都去掉（只去一道，这条负控会变成"另一道把它拦住了"，
+    而那不是这条判据要证明的事）。名册那一格的坏实现就是"无论收件人是谁都返回父"。
+    """
     st, ws = _ws(tmp_path)
     cond = _cond(st)
     pid = _parent_row(cond)
@@ -294,11 +300,18 @@ def test_negative_control_without_the_guard_it_writes_and_stops(
     # 伪造一个**别的**父（顶层 M 的那一行就是它自己 ⇒ 必须换成一条真正的别人）
     forged = _parent_row(cond)
 
+    def _roster_blind(self, **kw: Any) -> dict[str, Any]:
+        return {"checked": True, "how": "parent", "refused": "", "error": "",
+                "to": str(kw.get("to") or ""), "task_id": str(kw.get("to") or ""),
+                "kind": "parent", "name": "", "role": "", "callable": "",
+                "candidates": [], "why": "（坏实现：不看名册，一律当父）"}
+
     def _unguarded(self, **kw: Any):
         # 等价于"去掉 `not_caller` 那一支"：凭空给一个父，守卫就再也命中不了。
         kw["parent_task_id"] = forged
         return real(self, **kw)
 
+    monkeypatch.setattr(CD.Conductor, "_escalation_roster_check", _roster_blind)
     monkeypatch.setattr(CD.Conductor, "escalate", _unguarded)
     loop, _gw = _loop("M", ws=ws, st=st, cond=cond, registry=_registry(st, cond),
                       replies=[_escalate_reply(), '{"final": "我自己办"}'])

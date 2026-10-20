@@ -2157,7 +2157,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 收口回报里（`agent_prompts.py` / `agent_skills.py` / `litstage.py` / `search_tools.py` /
 #: `conductor_tools.py` / `conductor.py` / `agent_loop.py` / `schema.py` / `store.py` /
 #: `specs/a.py` / `specs/c.py` / `cli.py` 逐个）。
-PROMPT_VERSION = "p169"
+PROMPT_VERSION = "p170"
 
 
 
@@ -4001,7 +4001,9 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-    ("C", "能讨论"): "把结构读数讲清楚给 D 与人听；要有人往下做就走 D（你只发这一种请求）。",
+    # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一句与 `specs/c.py`
+    # `local_notes["能讨论"]` 逐字同步回"你自己不发请求（边是空的）"。
+    ("C", "能讨论"): "把结构读数讲清楚给 D 与人听；你自己不发请求（边是空的）。",
 
 
 

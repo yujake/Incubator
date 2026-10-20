@@ -156,6 +156,16 @@ JSON_TAIL = (
 #: 公共频道。`message.to` 写它 = 所有人都能收到（说话，而不是派活）。
 PUBLIC = "#public"
 
+#: 公聊里"这条其实是在对某个具体代理下指令"的指令语气词表
+#: （判据本体 `AgentLoop._public_addressee`；受控词表，加一个取值就是放宽一整格）。
+#: 为什么需要这一格：业主 2026-10-19 第 5 条 —— `#public` 若保留，它是**公告栏**，
+#: 不是对话；"公告栏里点名某人下指令"正是绕开名册的那条路（它进的是收件箱，
+#: 而收件箱是按角色收的 ⇒ 同角色的所有实例都会读到）。
+PUBLIC_DIRECTIVE_MARKS: tuple[str, ...] = (
+    "请", "你去", "你要", "要你", "必须", "务必", "立刻", "马上", "尽快",
+    "给我", "回我", "回复我", "执行", "照做", "去做", "来做",
+)
+
 #: 草稿本目录名：`<项目根>/notes/<角色>.md`。它刻意不在数据面里 ——
 #: 于是只读角色（C / H）也能"有手"：写自己的思考不算写数据。
 NOTES_DIR_NAME = "notes"
@@ -1047,6 +1057,32 @@ class LoopRun:
     #: 这一趟按 notify 表真的落成的手稿编号（按发生顺序）。空列表 + `stop_reason="final"`
     #: 只对主控成立（M 向用户回复不做这套）。
     handoffs: list[str] = field(default_factory=list)
+    #: 这一趟**每次派活产生了哪些子产出**（`_call_productions` 的条目，按发生顺序）：
+    #: `{kind, counted, task_id, role, step, status, outcome, handoff_id, outputs,
+    #:   disposition, evidence?, recon_only?, waiver?}`。
+    #:
+    #: 为什么它是一个一等字段（而不是收工时从 `steps` 现算）：业主的规矩是
+    #: **父代理必须处理子代理的产出**，而"这一次调用产出了什么"要在**调用那一刻**
+    #: 就落下来 —— 会话事件里同样有一份（`agent_step.productions`），
+    #: 两处同源（`_call_productions` 只实现一次）。
+    productions: list[dict[str, Any]] = field(default_factory=list)
+    #: 子产出的处理读数（业主裁定：父必须处理子产出）。口径见 `summon_consumption`：
+    #: `summons_total`（有产出的子任务数）、`summons_consumed`（留下了指到它的效应）、
+    #: `summons_waived`（写了受控的 `not_consumed`）、
+    #: `summons_unconsumed`（既没效应也没声明 —— 判据要抓的那一格）。
+    #: `summons_continued` 是 `summons_consumed` 的细分（其中"再派活"的有几条），
+    #: 是读数不是判据。
+    #:
+    #: 为什么是一等字段：收工那一行（`agent_run_end`）要打印它，而那一行的读者
+    #: （人、Web UI、**下一个父代理**）手上没有 `LoopRun` 对象 —— 这条规矩唯一的
+    #: 执行面就是"读数看得见"。
+    summons_total: int = 0
+    summons_consumed: int = 0
+    summons_continued: int = 0
+    summons_waived: int = 0
+    summons_unconsumed: int = 0
+    #: 那份明细（`summon_consumption()` 的完整返回：逐条处置 + 不成立的拒绝说明）。
+    summon_consumption: dict[str, Any] = field(default_factory=dict)
     #: 这一趟是什么时候开始的（`S.now_iso()` 的形态）。
     #:
     #: 为什么要有它（`draft/37` §125）：`user_stop` 那条判据要的是"本次运行「开始之后」
@@ -1104,6 +1140,15 @@ class LoopRun:
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons, "messages_sent": self.messages_sent,
+            # 子产出处理读数（业主裁定：父必须处理子产出）：四个数 + 那份明细。
+            # 与 `agent_run_end` 的那一格同源（同一份 `summon_consumption`）。
+            "productions": [dict(p) for p in self.productions],
+            "summons_total": self.summons_total,
+            "summons_consumed": self.summons_consumed,
+            "summons_continued": self.summons_continued,
+            "summons_waived": self.summons_waived,
+            "summons_unconsumed": self.summons_unconsumed,
+            "summon_consumption": dict(self.summon_consumption),
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
             # 提示词缓存的汇总（`LoopRun.prompt_cache` 的说明）：与 `spend` 并列，
             # 因为它们是同一笔钱的两面（花了多少 / 省了多少）。
@@ -1844,6 +1889,14 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # 只在给了的时候带过（与 `notify` 同一纪律：恒为空的键会让"没声明"与"声明了空"
         # 长得一样），校验与落痕都在 `_execute` 那一层（`note_blocked`）。
         payload["blocked"] = data.get("blocked")
+    if data.get("not_consumed") is not None:
+        # 业主裁定（父必须处理子产出）的**如实声明**那一格：父在收工那句话里显式写
+        # `"not_consumed": [{"task_id": …, "code": …, "why": …}]`。
+        # 解码器只做"认出了这个键、原样带过"（与 `notify` / `blocked` 同一纪律：
+        # 恒为空的键会让"没声明"与"声明了空"长得一样）；受控理由码与
+        # "这个 task_id 是不是这趟真的派过的"在 `summon_consumption` 里判 ——
+        # 那里才知道这一趟派过什么（解码器是纯函数，判不了）。
+        payload["not_consumed"] = data.get("not_consumed")
     return key, payload, ""
 
 
@@ -1960,6 +2013,215 @@ def message_admission(role: str, to: str, reply_to: str = "") -> str:
             f"⇒ 私聊不成立；要么发到公共频道（to={PUBLIC}），要么先公开开口。")
 
 
+def _callable_members(secretary: Any, *, owner: str
+                      ) -> tuple[list[dict[str, Any]], str]:
+    """我「能通话的人」 = 我的父 + 我的子（业主 2026-10-19，逐字：「只有这些编号能通话」）。
+
+    返回 `(成员, 问题)`；问题非空 ⇒ 名册这一格没读成（调用方按 `roster_unavailable`
+    处理 —— 不许当成"名册里一个人都没有"，那会把一次读失败变成一次静默的按角色名投递）。
+
+    每个成员：`{"kind": "parent"|"child", "name", "task_id", "role", "brief", "retired"}`，
+    其中 `task_id` 是「绝对编号」（业主的要求），`name` 是名册名（父的名册名记在祖父
+    的名册里，由 `roster_view` 的 `parent` 那一格换算好；读不到就是空串）。
+
+    三件刻意的事：
+
+    - 「只读 `roster_view(owner=我自己)` 这一份」：父与子都在这份读数里
+      （`parent` 那一格 + `rows` 那一列）—— 不另造视图（业主要求「已有就用它」）。
+    - `limit` 给到极大：默认只回 20 行，拿默认值数"名册里有几个匹配"会在第 21 个
+      子代理上悄悄数错（`more` 是读数，不能当判据）。
+    - 父的 `checked` 为假（台账读不成 / 我这一行不在台账里）⇒ 整个集合「不完整」
+      ⇒ 报问题而不是"没有父"。少一个成员在这里会变成一次「误拒」，与"多放进来一个"
+      一样是错的，所以这一格用三态而不是空列表。
+    """
+    try:
+        view = secretary.roster_view(owner=str(owner or ""), limit=1_000_000)
+    except Exception as exc:  # noqa: BLE001 —— 读不成要如实说
+        return [], f"名册读不成（{type(exc).__name__}: {exc}）"
+    if not view.get("checked"):
+        return [], f"名册没读成（{view.get('reason') or '未给理由'}）"
+    parent = dict(view.get("parent") or {})
+    if not parent.get("checked"):
+        return [], (f"父是谁没读成（{parent.get('why') or '未给理由'}）"
+                    "⇒ 能通话的集合不完整（不许当成'没有父'）")
+    members: list[dict[str, Any]] = []
+    if str(parent.get("task_id") or ""):
+        members.append({"kind": "parent", "name": str(parent.get("name") or ""),
+                        "task_id": str(parent.get("task_id") or ""),
+                        "role": str(parent.get("role") or ""), "brief": "",
+                        "retired": False})
+    for r in view.get("rows") or []:
+        members.append({"kind": "child", "name": str(r.get("name") or ""),
+                        "task_id": str(r.get("task_id") or ""),
+                        "role": str(r.get("role") or ""),
+                        "brief": str(r.get("brief") or ""),
+                        # `status` 的四档里 `retired` 是唯一"不许再被寻址"的那一档；
+                        # `running`/`idle`/`ready` 都还叫得应（板项会等它下次进循环）。
+                        "retired": str(r.get("status") or "") == "retired"})
+    return members, ""
+
+
+def _callable_line(members: Sequence[Mapping[str, Any]]) -> str:
+    """「你能通话的是：…」那一句（受控拒绝的拒信里必须给的那一份名单）。"""
+    live = [m for m in members if not m.get("retired")]
+    if not live:
+        return "（这张名册上没有一个可通话的人：先派活，名下才会有子代理）"
+    parts = []
+    for m in live:
+        mark = "父" if str(m.get("kind") or "") == "parent" else "子"
+        parts.append(f"{mark} {m.get('name') or '（无名）'}（{m.get('task_id')}）")
+    return "、".join(parts)
+
+
+def roster_addresses(secretary: Any, *, to: str, owner: str = "",
+                     my_task_id: str = "", sender: str = "") -> dict[str, Any]:
+    """把收件人写法 `to` 解析成"名册上的那个成员"（业主 2026-10-19 的裁定）。
+
+    ## 口径（逐字来自业主）
+
+    > 名册 = 一个代理能看到的：自己的父代理是谁（含绝对编号）、自己的子代理是谁
+    > （含绝对编号）。「只有这些编号能通话」 —— 除此之外的 `to` 一律拒收
+    > （不许按角色名随便发）。
+
+    于是可接受的写法只有三种，且「三种都必须落在"父 ∪ 子"这个集合里」：
+
+    1. 「绝对编号」（`task_id`）——业主点名的第一公民；
+    2. 「名册名」（`F1` / `D1`）；
+    3. 「角色名」（`F`）—— 只作便利写法：在名册内「唯一匹配」才算数，
+       「匹配到 0 个或多个都拒」（不许"按角色名广发"，也不许随便挑一个）。
+
+    返回（三态，不许折平）：
+
+    | 键 | 意思 |
+    |---|---|
+    | `checked` | 名册读成了没有。`False` 「不等于」"名册里没有这个人" |
+    | `how` | 这一条为什么这么投（见下） |
+    | `kind` / `name` / `task_id` / `role` | 解析到的那个成员（解析到了才有） |
+    | `candidates` | 名册内同名多匹配时「全部的候选名册名」 |
+    | `callable` | 「你能通话的是：…」那一句（每一张拒信都带它） |
+    | `refused` | 受控拒绝的理由码（空串 = 没拒） |
+    | `error` | 给人/给模型读的那句拒信 |
+
+    `how` 的取值（每一个都由下面某一行产出，没有死取值）：
+
+    - `outside_roster`：三档「不是"给名册上的某个代理发消息"」的收件人 ——
+      ① `#public` / `ALL`（公共频道有自己那一套可见面判据，业主 T20/T21）；
+      ② 用户（频道外的读者）；③ 主控 M（顶层发起方，名册上没有它的上级，
+      代唤协议逐字要求任何角色都能把申请发给它）。外加主控**当发信人**时
+      按角色名派活/通知那一档（那时"名下还没有那个角色的实例"是正常形态）；
+    - `roster_unavailable`：没有秘书 / 没有台账号 / 名册读不成 ⇒ 退回现状
+      （按原来的那条路投递），调用方「必须」把 `roster_unavailable` 标出来 ——
+      这一档「不是」"名册校验通过"；
+    - `parent` / `child`：解析到了名册上的父 / 子 ⇒ 「只投那一个」；
+    - `member_retired`：那个成员已退役 ⇒ 受控拒绝（业主 B1：名字永久不复用）；
+    - `not_in_roster`：不在"父 ∪ 子"里 ⇒ 受控拒绝（拒不按角色名广发）；
+    - `ambiguous_in_roster`：角色名在名册内匹配到多个 ⇒ 受控拒绝 + 列候选
+      （「不替你挑一个」）。
+
+    这一格「只判"发给谁"」，不判"能不能发"：协作边准入仍是 `message_admission`
+    那一份唯一实现（"派活要许可，说话不需要"是设计口径，不许在这里收紧）。
+    """
+    out: dict[str, Any] = {
+        "to": str(to or ""), "checked": False, "how": "", "kind": "", "name": "",
+        "task_id": "", "role": "", "brief": "", "candidates": [], "callable": "",
+        "refused": "", "error": "", "why": "",
+    }
+    token = str(to or "").strip()
+    if _is_all_recipient(token) or token in ("user", "用户") or token == S.CONDUCTOR_ROLE:
+        out.update(checked=True, how="outside_roster",
+                   why=("`#public` / `ALL` / 用户 / 主控 M 不是'给名册上的某个代理发消息'："
+                        "公共频道另有可见面判据（业主 T20/T21），用户是频道外的读者，"
+                        "而 M 是顶层发起方（名册上没有它的上级）—— 代唤协议逐字要求"
+                        "任何角色都能把申请发给它"))
+        return out
+    if secretary is None:
+        out.update(how="roster_unavailable",
+                   why="这一趟没有秘书 ⇒ 名册不在手上（退回原来的路，读数标 roster_unavailable）")
+        return out
+    if not str(owner or ""):
+        out.update(how="roster_unavailable",
+                   why="这一趟没有台账号 ⇒ 不知道读谁的名册（退回原来的路）")
+        return out
+    members, problem = _callable_members(secretary, owner=str(owner))
+    if problem:
+        out.update(how="roster_unavailable", why=f"{problem} ⇒ 退回原来的路")
+        return out
+    out["callable"] = _callable_line(members)
+    mine = str(my_task_id or "")
+    # ① 绝对编号（业主点名的第一公民）；自己那一行不算（"发给我自己"没有意义）
+    hit = [m for m in members
+           if str(m.get("task_id") or "") and str(m["task_id"]) == token
+           and str(m["task_id"]) != mine]
+    how_hint = token
+    # ② 名册名
+    if not hit:
+        hit = [m for m in members if str(m.get("name") or "") and str(m["name"]) == token]
+    # ③ 角色名（便利写法：名册内唯一匹配）
+    if not hit and token.upper() in S.ROLES:
+        role = token.upper()
+        live = [m for m in members if str(m.get("role") or "") == role
+                and not m.get("retired")]
+        if len(live) == 1:
+            hit = live
+            how_hint = f"角色名 {role} 在名册内唯一匹配"
+        elif len(live) > 1:
+            names = sorted(str(m.get("name") or m.get("task_id") or "") for m in live)
+            out.update(checked=True, how="ambiguous_in_roster", role=role,
+                       candidates=names, refused="ambiguous_in_roster",
+                       error=(f"角色名 {role} 在你的名册里匹配到 {len(names)} 个"
+                              f"（{'、'.join(names)}）⇒ 受控拒绝："
+                              f"要发给谁：{' 还是 '.join(names)}"
+                              "（写成名册名或绝对编号就只投那一个；不替你挑一个）"),
+                       why=f"名册内同名多匹配：{names}")
+            return out
+        else:
+            dead = [m for m in members
+                    if str(m.get("role") or "") == role and m.get("retired")]
+            if dead:
+                m = dead[0]
+                return _retired_member(out, m)
+    if not hit:
+        if str(sender or "") == S.CONDUCTOR_ROLE and token.upper() in S.ROLES:
+            # 主控「按角色派活/通知」那一档：它名下此刻还没有这个角色的实例是正常形态
+            # （实例是它 `summon` 时才造出来的），而调度的第一句话就是按角色说的。
+            # 这「不是」新放宽：改前 `to="E"` 走的正是这条通道（判据
+            # `test_agent_loop.py::test_messages_are_durable_and_reach_only_the_recipient`）。
+            # 名册里「有」匹配时上面那几支先命中，所以"同名多实例不许随便挑"对 M 同样成立。
+            out.update(checked=True, how="outside_roster", role=token.upper(),
+                       why=(f"发信人是主控 M ⇒ 按角色名 {token.upper()} 派活/通知不归名册管"
+                            "（它名下这会还没有那个角色的实例）"))
+            return out
+        out.update(checked=True, how="not_in_roster", refused="not_in_roster",
+                   error=(f"{token or '（空）'} 不在你的名册里（只有父与子能通话）⇒ 受控拒绝："
+                          f"不许按角色名随便发。你能通话的是：{out['callable']}"),
+                   why=f"名册上没有 {token}（父 ∪ 子 里没有这个编号/名字）")
+        return out
+    member = hit[0]
+    if member.get("retired"):
+        return _retired_member(out, member)
+    out.update(checked=True, how=str(member.get("kind") or ""),
+               kind=str(member.get("kind") or ""), name=str(member.get("name") or ""),
+               task_id=str(member.get("task_id") or ""),
+               role=str(member.get("role") or ""), brief=str(member.get("brief") or ""),
+               why=(f"名册成员（{'父' if member.get('kind') == 'parent' else '子'}）"
+                    f"{member.get('name') or member.get('task_id')} → "
+                    f"实例 {member.get('task_id')}（{how_hint}）"))
+    return out
+
+
+def _retired_member(out: dict[str, Any], member: Mapping[str, Any]) -> dict[str, Any]:
+    """退役的名册成员 ⇒ 受控拒绝（理由码 `member_retired`，可读）。"""
+    label = str(member.get("name") or member.get("task_id") or "")
+    out.update(checked=True, how="member_retired", kind=str(member.get("kind") or ""),
+               name=str(member.get("name") or ""),
+               task_id=str(member.get("task_id") or ""),
+               role=str(member.get("role") or ""), refused="member_retired",
+               error=(f"{label} 已退役（业主 B1：名字永久不复用）⇒ 受控拒绝："
+                      "退役的名册成员不许再被寻址"),
+               why=f"{label} 在名册里标着 retired")
+    return out
+
+
 def _recipient_for_channel(token: Any, *, all_as: str = PUBLIC) -> str:
     """收件人归一成这条通道的规范写法；角色名一律大写。
 
@@ -2069,6 +2331,400 @@ def _summon_key(action: str, params: Mapping[str, Any]) -> str:
     raw = json.dumps({"action": action, "params": dict(params or {})},
                      ensure_ascii=False, sort_keys=True, default=str)
     return f"{action}@{_sha(raw)[:12]}"
+
+
+# ------------------------------------------------------------------ 子产出的处理
+#
+# 业主裁定（真机证据，已核实）：**父代理必须处理子代理的产出**。
+#
+# 现场是 `projects/mp4/data/tasks.json`：F 的所有任务 `called_by=D`，而 D 的派活
+# 任务只写"读 C 的报告立猜想"—— D 派完 F、拿到 F 的结果、就 `final` 了；F 的产出
+# 只留在台账、由 M 在下一轮读。于是"父拿到了结果却不处理"，整条链的推进责任被
+# 真空地转给了最上层。
+#
+# 这一节把它做成可判读的三样东西（`summon_consumption` 是唯一的判据实现）：
+#   ① 一次调用**产生了哪些子产出**（`_call_productions` → `LoopRun.productions`，
+#      会话事件的落点是 `agent_step.productions`）；
+#   ② 每条子产出的**处置**（`consumed` / `waived` / `unconsumed`）；
+#   ③ 四个汇总读数（`LoopRun.summons_total` 等，落进 `agent_run_end` = 收工那一行）。
+#
+# ⚠️ 判据口径（业主 2026-10 的修正）：**"处理"不是一张白名单**。
+# 业主原来的三条（消费 / 拒绝并说明 / 继续派）只是**举例**。真实形态还有
+# 把子产出写进台账、改计划、立/改猜想、写报告、据以改派别的角色、用它的读数
+# 做一次判断、把它交给 H 审 …… 一张**正**表会把没被列举到的合法形态全判红，
+# 而且每加一种形态就要改一次判据。所以判据落成**效应证据**口径：
+#
+#     在这一次 summon 之后，父只要在**任何一步**留下可查的效应、且这一步
+#     **指到了那条子产出**（`task_id` / 产物路径 / 台账 id），就算处理了。
+#
+# "可查的效应"用**负表**判（`_is_effect_evidence`）：只排除只读侦察与无效步，
+# 其余一律算候选。于是"列举"只出现在文档里，不出现在判据里。
+
+#: 一条子产出的处置（受控词表）。`unconsumed` 就是这条规矩要抓的那一格。
+#:
+#: 顺序即文档顺序：处理了（效应证据）/ 如实声明不处理 / 没处理。
+#: 注意这里**没有**"属于哪一类处理"的取值 —— 那不是判据（见上面的口径说明）；
+#: 每一类处理的形状记在那条产出的 `evidence.effect` 里，只作说明、不参与判定。
+SUMMON_DISPOSITIONS: tuple[str, ...] = ("consumed", "waived", "unconsumed")
+
+#: `not_consumed` 的**受控理由码**。自造码 / 空串**都不算** waive（负控 ④）：
+#: 一张随便写的"我不处理它"等于把这条规矩降成一句自我声明。
+NOT_CONSUMED_CODES: tuple[str, ...] = ("superseded", "out_of_scope", "waiting_on_other")
+
+#: "只读侦察"的工具名：命中了子产出也**不算**效应。
+#:
+#: 业主逐字给的例子是 `fs.list` / `status_report`。这里把同族的"看一眼"一并登记
+#: （`fs.stat` 只看元信息、`fs.search` 只搜、`table.list` / `table.schema` 只看表结构）——
+#: 它们的共同形态是"参数能指到产物，但这一步没有改变任何东西"。
+#: 刻意**不含** `fs.read`：读子代理写的那份报告**就是**在用它。
+RECON_ONLY_TOOLS: tuple[str, ...] = ("fs.list", "fs.stat", "fs.search", "status_report",
+                                     "conductor.status", "table.list", "table.schema")
+
+#: 子产出里"可以被别人指到"的两类字面量：台账 id 与产物路径。
+#: 判据就是"后续那一步的参数/载荷里出现了其中一个"——业主逐字点名的两类指称。
+_CHILD_OUTPUT_ID = re.compile(
+    r"\b(?:t|exp|stmt|lit|rel|doc|msg|q|conj|att|proof|ho|handoff|plan|bit)-\d{4,8}\b")
+_CHILD_OUTPUT_PATH = re.compile(
+    r"(?:[\w.-]+/)+[\w.-]+\.(?:md|markdown|json|jsonl|txt|tex|lean|csv|py|bib)")
+
+
+def child_outputs_of(result: Mapping[str, Any], *, own_task_id: str = "",
+                     limit: int = 40) -> list[str]:
+    """这次调用留下的、**可以被别人指到**的子产出（台账 id + 产物路径）。
+
+    为什么判据落在"字面量"上（而不是"语义上有没有用到"）：机器读数只能读出一行
+    参数里出现了什么。`t-000006` 这种台账号与 `reports/attack-1.md` 这种产物路径
+    正是父子之间**已经在用**的指称（业主的措辞逐字就是这两类）；"语义上有没有
+    用到"要人来读，不是判据能回答的问题。
+
+    父自己的台账号被剔掉（`own_task_id`）：否则父在后续任何一句里提到自己，
+    都会把**所有**子产出判成"处理过了"—— 那是这条判据最容易被凑绿的一条路。
+
+    三态：抽不到任何字面量 ⇒ 空列表。这不等于"没有产出"：`task_id` 一定在
+    （由 `_production_item` 补上），它是业主逐字允许的指称。
+    """
+    text = json.dumps(result, ensure_ascii=False, default=str)
+    raw: list[str] = [m.group(0) for m in _CHILD_OUTPUT_ID.finditer(text)]
+    raw += [m.group(0) for m in _CHILD_OUTPUT_PATH.finditer(text)]
+    own = str(own_task_id or "")
+    seen: list[str] = []
+    for token in raw:
+        if own and token == own:
+            continue
+        if token and token not in seen:
+            seen.append(token)
+    return seen[:limit]
+
+
+def _production_item(result: Mapping[str, Any], *, step: int,
+                     own_task_id: str) -> dict[str, Any] | None:
+    """一条 summon 产出（`task_id` 是它的身份；被拒的调用没有产出）。"""
+    tid = str(result.get("task_id") or "")
+    outcome = str(result.get("outcome") or "")
+    if not tid or outcome == "refused":
+        return None
+    outputs: list[str] = []
+    for token in [tid, *child_outputs_of(result, own_task_id=own_task_id)]:
+        if token and token not in outputs:
+            outputs.append(token)
+    return {"kind": "summon", "counted": True, "task_id": tid,
+            "role": str(result.get("role") or result.get("summoned") or ""),
+            "step": int(step), "status": str(result.get("status") or ""),
+            "outcome": outcome, "handoff_id": "", "outputs": outputs,
+            "disposition": ""}
+
+
+def _call_productions(shape: str, payload: Mapping[str, Any], result: Mapping[str, Any],
+                      *, step: int, own_task_id: str = "") -> list[dict[str, Any]]:
+    """把一次 `summon` / `summon_many` / `handoff` 折成"这次调用产生了哪些子产出"。
+
+    三种形状的落点不一样，逐个说清（免得后人以为漏了一种）：
+
+    - `summon`：一个 `task_id` + 它带回来的结果（`status` / `outcome` / 产物路径
+      与 `final` 里出现的台账 id）；
+    - `summon_many`：每个 target 各一条。批量结果是**没有**逐项 `final`/路径的形状
+      （见 `_do_summon_many` 的 `results` 条目），于是它的产出字面量只有 `task_id`
+      —— 而业主的判据逐字允许用 `task_id` 指称（"子任务写进台账的 id、`task_id`"）；
+    - `handoff`：手稿是**对等通道**，不是"下级产出"（没有 `task_id`、也没有子结果
+      可以消费）⇒ 记一条 `counted=False`，**不进** `summons_*` 四个读数。
+      进 `productions` 只是因为业主点名要"这次调用产生了哪些子产出"在一处读得到。
+
+    被拒的调用（`outcome="refused"`）没有子产出 ⇒ 一条都不记（于是判据对它
+    没有对象，而不是把它算成"父没处理"）。
+    """
+    out: list[dict[str, Any]] = []
+    if shape == "summon":
+        item = _production_item(result, step=step, own_task_id=own_task_id)
+        if item:
+            out.append(item)
+    elif shape == "summon_many":
+        rows = result.get("results")
+        if isinstance(rows, (list, tuple)):
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                item = _production_item(row, step=step, own_task_id=own_task_id)
+                if item:
+                    out.append(item)
+    elif shape == "handoff":
+        hid = str(result.get("id") or "")
+        if bool(result.get("ok")) and hid:
+            out.append({"kind": "handoff", "counted": False, "task_id": "", "role": "",
+                        "step": int(step), "status": "", "outcome": "ok", "handoff_id": hid,
+                        "outputs": [], "disposition": ""})
+    return out
+
+
+def _waiver_declarations(run: "LoopRun",
+                         known: set[str]) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """把各步（含收工那一步）里的 `not_consumed` 读成 waive 表 + **不成立**的理由。
+
+    受控三件套（缺一不算 —— 负控 ④ 就是这三条）：`task_id` 指到这一趟真的派过的
+    子任务、`code` 在 `NOT_CONSUMED_CODES` 里、`why` 非空（一句话理由）。
+
+    不成立的声明**不静默丢弃**：逐条进 `problems`，收工那一行会把它念出来。
+    静默丢弃会造出最坏的形态 —— 模型写了"我为什么没处理它"，框架不认，
+    而双方都以为已经交代过了。
+    """
+    waivers: dict[str, dict[str, Any]] = {}
+    problems: list[str] = []
+    for s in run.steps:
+        raw = dict(s.payload).get("not_consumed")
+        if raw is None:
+            continue
+        if isinstance(raw, Mapping):
+            items: list[Any] | None = [raw]
+        elif isinstance(raw, (list, tuple)):
+            items = list(raw)
+        else:
+            items = None
+        if items is None:
+            problems.append(f"第 {s.index} 步的 not_consumed 必须是数组或对象，"
+                            f"收到 {type(raw).__name__}")
+            continue
+        for i, item in enumerate(items):
+            where = f"第 {s.index} 步 not_consumed[{i}]"
+            if not isinstance(item, Mapping):
+                problems.append(f"{where} 必须是一个对象（task_id / code / why）")
+                continue
+            tid = str(item.get("task_id") or "").strip()
+            code = str(item.get("code") or "").strip()
+            why = str(item.get("why") or "").strip()
+            if not tid:
+                problems.append(f"{where} 没写 task_id ⇒ 不知道在拒哪一条子产出，不算 waive")
+                continue
+            if tid not in known:
+                problems.append(f"{where} 指的 {tid} 不是这一趟派过的子任务 ⇒ 不算 waive")
+                continue
+            if code not in NOT_CONSUMED_CODES:
+                problems.append(f"{where} 的理由码 {code!r} 不在受控表里"
+                                f"（只认 {list(NOT_CONSUMED_CODES)}）⇒ 不算 waive")
+                continue
+            if not why:
+                problems.append(f"{where} 只有理由码、没有一句话理由（why 是空的）⇒ 不算 waive")
+                continue
+            waivers[tid] = {"code": code, "why": why, "step": int(s.index)}
+    return waivers, problems
+
+
+def _is_effect_evidence(shape: str, payload: Mapping[str, Any]) -> bool:
+    """这一步有没有留下**可查的效应** —— 判据是负表，不是白名单。
+
+    为什么是负表（业主 2026-10 的修正，逐字）："处理"的真实形态远不止三条 ——
+    写进台账、改计划、立/改猜想、写报告、据以改派别的角色、用它的读数做判断、
+    把它交给 H 审、把它折进收工结论 …… 一张**正**表（"只有这三种算"）会把
+    没被列举到的合法形态全判红，而且每加一种形态就要改一次判据 ——
+    于是判据的强度取决于"我们想到了几种"。
+
+    所以这里只排除两档：
+
+    - **只读侦察**（`RECON_ONLY_TOOLS`）：业主逐字「`fs.list`/`status_report`
+      这类只读侦察不算」—— 它没有改变任何东西，不是效应；
+    - `invalid` 步：它连一次真的调用都不是（那是"没按协议说"）。
+
+    其余一律算**效应候选**，真正的判据落在那句"它有没有指到那条子产出"上。
+    于是"列举"只活在文档里（给读的人举例），不活在判据里。
+    """
+    if shape == "invalid":
+        return False
+    if shape == "tool":
+        return str(payload.get("name") or "") not in RECON_ONLY_TOOLS
+    return True
+
+
+def _effect_label(shape: str, payload: Mapping[str, Any]) -> str:
+    """这次效应**长什么样**（只作说明，不参与判定 —— 判据不是按形状分类的）。
+
+    为什么要给这行字：读数要能被人读懂"它到底做了什么"。但它**不进判据**：
+    写成"只认下面这几行字"就把效应证据又缩回成白名单了。
+    """
+    if shape == "tool":
+        return f"工具 {str(payload.get('name') or '?')}"
+    if shape in ("summon", "summon_many"):
+        return "再派活"
+    if shape == "handoff":
+        return "交接手稿"
+    if shape == "final":
+        return "收工结论里的具体产物指涉"
+    if shape == "message":
+        return "对外留言"
+    if shape == "note":
+        return "笔记"
+    return f"形状 {shape}"
+
+
+def summon_consumption(run: "LoopRun") -> dict[str, Any]:
+    """父代理**处理了**它派出去的子产出没有 —— 一趟运行结束时的现算读数。
+
+    ## 判据（效应证据口径；**不是**一张"哪几种算"的白名单）
+
+    在这一次 summon 之后，父只要在**任何一步**留下了可查的效应、且这一步
+    **指到了那条子产出**（`task_id` / 产物路径 / 台账 id —— 业主逐字点名的两类
+    指称），就算**处理了**（`disposition="consumed"`）。
+
+    业主点名的形态**只是举例，不是穷举**：写进台账（`table.create/update`、
+    `register_*`）、改计划、立/改猜想、写报告（`fs.write`）、再派活（`summon`，
+    task 里带该子产物的指涉）、把它交给 H 审、用它做一次判断、把它折进 final
+    （带具体产物指涉）…… 任何一条都算。"可查的效应"由 `_is_effect_evidence`
+    用**负表**判：只排除只读侦察（`fs.list` / `status_report` 这类）与 `invalid` 步。
+
+    ## 另外两条（不是"另外两种处理方式"，是这条判据的两端）
+
+    - **如实声明不处理**（`disposition="waived"`）：父显式写一条 `not_consumed`
+      （`{"task_id": …, "code": <受控理由码>, "why": "<一句话理由>"}`）。
+      理由码必须在 `NOT_CONSUMED_CODES` 里、理由不许是空串 —— 自造码 / 空码 /
+      空理由**都不算**（负控 ④）。它的作用是"如实声明"，不是唯一合法出口。
+    - **没处理**（`disposition="unconsumed"`）：既没留下指到它的效应，也没声明。
+      判据要抓的就是这一格。
+
+    ## 三态纪律与反真空
+
+    - `summons_total == 0`（这一趟没派过子）⇒ 这条判据**没有对象**：不红，
+      但仍然报 `summons_total=0`（"没派过"不许与"派了没处理"长得一样）；
+    - 被拒的调用（`outcome="refused"`）没有子产出 ⇒ 不进 `summons_total`；
+    - 只读侦察指到了产物（`recon_only`）：既不算处理，也不静默 —— 逐条留在
+      那一条产出的明细里，于是"我看了但没做"与"我根本没看"分得开。
+    """
+    productions = [dict(p) for p in (getattr(run, "productions", None) or [])]
+    counted = [p for p in productions
+               if bool(p.get("counted", True)) and str(p.get("task_id") or "")]
+    waivers, problems = _waiver_declarations(run, {str(p["task_id"]) for p in counted})
+    for p in counted:
+        tid = str(p["task_id"])
+        if tid in waivers:
+            p["disposition"] = "waived"
+            p["waiver"] = dict(waivers[tid])
+            continue
+        hit: dict[str, Any] | None = None
+        recon: dict[str, Any] | None = None
+        for s in run.steps:
+            if int(s.index) <= int(p["step"]):
+                continue
+            step_payload = dict(s.payload)
+            # ⚠️ 判据只看"它拿这条子产出做了什么"，**不看它怎么拒绝它**：
+            # `not_consumed` 声明里必然写着那个 `task_id`（不然不知道在拒哪一条），
+            # 把它算成"指到了产物"会让**每一条合法的 waiver 都自动变成消费** ——
+            # "拒绝并说明"那条通路就当场失去意义（负控 ④ 当场抓出过这个形态）。
+            scan = {k: v for k, v in step_payload.items() if k != "not_consumed"}
+            text = json.dumps(scan, ensure_ascii=False, default=str)
+            refs = [str(t) for t in (p.get("outputs") or [])
+                    if str(t) and str(t) in text]
+            if not refs:
+                continue
+            if not _is_effect_evidence(s.shape, step_payload):
+                recon = recon or {"step": int(s.index), "shape": s.shape,
+                                  "effect": _effect_label(s.shape, step_payload),
+                                  "refs": refs}
+                continue
+            hit = {"step": int(s.index), "shape": s.shape,
+                   "effect": _effect_label(s.shape, step_payload), "refs": refs}
+            break
+        if hit is not None:
+            p["disposition"] = "consumed"
+            p["evidence"] = hit
+        else:
+            p["disposition"] = "unconsumed"
+            if recon is not None:
+                p["recon_only"] = recon
+    # 三个计数的**唯一**取值来源是那张受控词表（`SUMMON_DISPOSITIONS`）：
+    # 于是"有哪几种处置"只在定义处回答一次，这里不另抄一份取值清单
+    # （抄两份的形态是"词表加了取值、计数悄悄不认它"）。
+    counts = {d: sum(1 for p in counted if str(p.get("disposition") or "") == d)
+              for d in SUMMON_DISPOSITIONS}
+    consumed, waived, unconsumed = (counts["consumed"], counts["waived"],
+                                    counts["unconsumed"])
+    # "继续派"只是 consumed 的一个细分（读数，不是判据）：它回答的是
+    # "这些处理里有多少是把它接着派出去了"，而"算不算处理"由效应证据判。
+    continued = sum(1 for p in counted if p["disposition"] == "consumed"
+                    and str((p.get("evidence") or {}).get("shape") or "")
+                    in ("summon", "summon_many"))
+    return {
+        "summons_total": len(counted),
+        "summons_consumed": consumed,
+        "summons_continued": continued,
+        "summons_waived": waived,
+        "summons_unconsumed": unconsumed,
+        "productions": productions,
+        "waiver_problems": problems,
+    }
+
+
+def summon_consumption_sentence(reading: Mapping[str, Any]) -> str:
+    """收工那一行里的那句话（与 `agent_run_end.summon_consumption` 同源）。
+
+    为什么总要说一句（哪怕 `summons_total=0`）：这条判据的反真空形态就是
+    "这一趟没有对象"。不出声时，"没派过子"与"派了没处理"在收工那一行上
+    长得一模一样 —— 而那正是这条规矩要消灭的形态。
+    """
+    total = int(reading.get("summons_total") or 0)
+    if total == 0:
+        return ("子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的"
+                "子产出；判据没有对象，不红）")
+    line = (f"子产出处理读数：summons_total={total}，"
+            f"consumed={int(reading.get('summons_consumed') or 0)}，"
+            f"waived={int(reading.get('summons_waived') or 0)}，"
+            f"unconsumed={int(reading.get('summons_unconsumed') or 0)}")
+    if int(reading.get("summons_continued") or 0):
+        line += f"（consumed 里有 {int(reading['summons_continued'])} 条是『继续派』）"
+    bad = [str(p.get("task_id") or "") for p in (reading.get("productions") or [])
+           if isinstance(p, Mapping) and str(p.get("disposition") or "") == "unconsumed"]
+    if bad:
+        line += (f"；**没处理**的是 {bad} —— 拿到结果不等于处理了：在它之后留下任何"
+                 "指到它的效应（写台账 / 改计划 / 改猜想 / 写报告 / 再派活 / 折进结论 …），"
+                 "或者写 `not_consumed`（受控码 + 一句理由）如实声明不处理")
+    problems = [str(x) for x in (reading.get("waiver_problems") or [])]
+    if problems:
+        line += f"；不成立的拒绝说明：{'；'.join(problems)}"
+    return line
+
+
+def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
+    """这条判据的**红/绿两行可演示**形态：一行状态、一行为什么。
+
+    - `green`：`summons_total > 0` 且 `summons_unconsumed == 0`；
+    - `red`：`summons_unconsumed > 0`（拿到了结果却没留下指到它的效应）；
+    - `n/a`：`summons_total == 0` —— 判据**没有对象**。它既不是红、也不是通过：
+      把"没派过子"折成通过，等于给一条什么都没管的 run 发绿灯（反真空，业主 ⑤）。
+    """
+    total = int(reading.get("summons_total") or 0)
+    bad = int(reading.get("summons_unconsumed") or 0)
+    if total == 0:
+        status = "n/a"
+        why = ("这一趟没有派过子代理（summons_total=0）⇒ 判据没有对象：不红，"
+               "但也不记通过")
+    elif bad:
+        status = "red"
+        why = (f"派了 {total} 条子任务，其中 {bad} 条拿到了结果却没有处理"
+               "（它之后没有任何一步留下指到它的效应，也没有写受控的 not_consumed）")
+    else:
+        status = "green"
+        why = (f"派了 {total} 条子任务，全部处理过"
+               f"（consumed={int(reading.get('summons_consumed') or 0)}，"
+               f"waived={int(reading.get('summons_waived') or 0)}）")
+    return {"status": status, "why": why, "summons_total": total,
+            "summons_unconsumed": bad,
+            "line": (f"[父必须处理子产出] {status.upper()} "
+                     f"summons_total={total} unconsumed={bad}：{why}")}
 
 
 @dataclass
@@ -3066,12 +3722,22 @@ class AgentLoop:
                 # 而 `depth` 分得开（顶趟 1、被召唤 2 起，`agent_loop.py:4815`）。
                 parent_role = str(self.parent_role or "")
                 if int(self.depth or 1) > 1 and parent_role:
-                    _mid, mproblem = send_message(
-                        self.session_root, sender=self.role, to=parent_role,
-                        subject=f"步数超限：{self.role} 已用 {step + 1} 步",
-                        body=step_note, sid=self.sid, from_task_id=my_task_id)
-                    if mproblem:
-                        run.notes.append(f"步数上报未送达：{mproblem}")
+                    # 名册（业主 2026-10-19）：步数上报也是"代理发给代理"（它挂的是
+                    # 我的名字 `sender=self.role`，不是框架通报）。收件人是父，
+                    # 按**父的绝对编号**过同一份判据；名册拒了就不发，并把理由留在
+                    # `run.notes` 里（"没发出去"不许长得像"报过了"）。
+                    _addr, _gate = self._roster_gate(
+                        parent_role, to_task_id=str(self.parent_task_id or ""))
+                    if _gate:
+                        run.notes.append(
+                            f"步数上报没发出（受控拒绝 {_gate['refused']}）：{_gate['error']}")
+                    else:
+                        _mid, mproblem = send_message(
+                            self.session_root, sender=self.role, to=parent_role,
+                            subject=f"步数超限：{self.role} 已用 {step + 1} 步",
+                            body=step_note, sid=self.sid, from_task_id=my_task_id)
+                        if mproblem:
+                            run.notes.append(f"步数上报未送达：{mproblem}")
             stop_reason = self._user_stop_reason(run)
             if stop_reason:
                 # 人叫停：把这一步之前做过的事「如实收尾」（不是把进程杀掉）。
@@ -3464,6 +4130,19 @@ class AgentLoop:
                     if hand.get("ok"):
                         run.handoffs.append(str(hand.get("id") or ""))
                     result = {**result, "dispatch_handoff": hand}
+            # ---- 子产出的落点（业主裁定：**父代理必须处理子代理的产出**）
+            #
+            # 在**调用那一刻**就把"这次调用产生了哪些子产出"记进 `LoopRun`
+            # （而不是等收工时从 steps 反推）：`summon` 的 `task_id` 与它带回来的
+            # 结果、`summon_many` 每个 target 一条、`handoff` 一条（对等通道，
+            # 不计入 `summons_*`，见 `_call_productions`）。
+            #
+            # 会话事件里的落点是 `agent_step.productions` 那一格 —— 只在真的有产出时
+            # 写（老载荷的键集因此一个字节不变）；两处同源（同一份 `_call_productions`）。
+            step_productions = _call_productions(
+                shape, payload, result, step=step, own_task_id=str(self.my_task_id or ""))
+            if step_productions:
+                run.productions.extend(step_productions)
             if secretary_note:
                 result = {**result, "秘书": secretary_note}
             # 耳朵一直开着：这一步做完先听一次新消息与板项，把它并进这一步的结果里
@@ -3562,6 +4241,10 @@ class AgentLoop:
             }
             if thought:
                 event["reasoning"] = thought
+            if step_productions:
+                # 子产出的会话落点（业主裁定：父必须处理子产出）。与 `LoopRun.productions`
+                # 是同一份 —— 只在真的有产出时写这一格（其余步的键集一个字节不变）。
+                event["productions"] = step_productions
             SS.append(self.session_root, event, sid=self.sid)
             # S-C（裁定 5甲）：这一笔进消息序列 —— assistant（它要求了什么，
             # 结构化一份 `tool_calls`）+ tool（框架给了什么，`tool_call_id` 配对）。
@@ -3666,6 +4349,23 @@ class AgentLoop:
         cache_note = PSTAB.cache_sentence(run.prompt_cache)
         if cache_note:
             run.notes.append(cache_note)
+        # ---- 子产出的处理读数（业主裁定：**父代理必须处理子代理的产出**）
+        #
+        # 为什么在这里算（而不是在步循环里逐条记）：这一格要回答的是"这一趟**整体**
+        # 有没有把子产出用起来"，而"用起来"的判据允许后续任何一步（含收工那一句里的
+        # 具体产物指涉）—— 只有全部步都走完才判得准。判据本体在 `summon_consumption`，
+        # 这里只把结果落成 `LoopRun` 的读数 + 收工那一行的一句话。
+        #
+        # 四个数进 `agent_run_end`（收工那一行）与 `to_dict()`：`summons_unconsumed > 0`
+        # 时它必须**看得见**（不 fail，但收工门的相应格读得到 —— 见
+        # `closing.summon_consumption_reading`）。
+        run.summon_consumption = summon_consumption(run)
+        run.summons_total = int(run.summon_consumption["summons_total"])
+        run.summons_consumed = int(run.summon_consumption["summons_consumed"])
+        run.summons_continued = int(run.summon_consumption["summons_continued"])
+        run.summons_waived = int(run.summon_consumption["summons_waived"])
+        run.summons_unconsumed = int(run.summon_consumption["summons_unconsumed"])
+        run.notes.append(summon_consumption_sentence(run.summon_consumption))
         run.elapsed_sec = time.monotonic() - t0
         run.messages = list(messages)
         run.transcript = render_messages(messages)
@@ -3745,6 +4445,17 @@ class AgentLoop:
             # `_for_record` 与 `agent_step` 落档同一把尺（单字段 2000 字上限）：
             # 两处存的是同一件事，截断口径不该有两份。
             "final_payload": dict(run.final_payload),
+            # ---- 子产出的处理读数（业主裁定：**父代理必须处理子代理的产出**）
+            #
+            # 收工那一行必须读得到这四个数（`summons_total` / `summons_consumed` /
+            # `summons_waived` / `summons_unconsumed`）—— 它们是这条规矩唯一的执行面：
+            # "没处理"不 fail，但**必须可见**（收工门那一格读的就是它，
+            # 见 `closing.summon_consumption_reading`）。
+            #
+            # 只落这一份（不再把四个数另抄一份到顶层）：`summon_consumption` 是
+            # `summon_consumption()` 的完整返回，四个数就在里面 —— 同一件事两份落点
+            # 迟早会分叉，而分叉的形态是"事件说处理了、明细说没处理"。
+            "summon_consumption": dict(run.summon_consumption),
         }, sid=self.sid)
         # ---- 业主裁定（「M 停整棵树」的删除半）：全工作区开关的删除推迟到这一趟收尾，
         # 且只有树根删（`_stop_to_consume_at_end` 只由树根挂上）。位置必须在这里 ——
@@ -4585,6 +5296,9 @@ class AgentLoop:
                 auto[role] = [f"{role}#{k}" for k in range(1, n + 1)]
         used: dict[str, int] = {}
         calls = []
+        #: 每个 target 的 `brief`（与 `calls` 同序）—— 登记时逐项取自己的那一句，
+        #: 口径与 `_do_summon` 逐字一致（**不拿 `task` 顶替**：那条放宽业主还没批）。
+        briefs: list[str] = []
         blank: list[str] = []
         for t in targets:
             instance = str(t.get("instance") or "")
@@ -4610,6 +5324,7 @@ class AgentLoop:
                                      input_key=(str(t.get("input_key") or "")
                                                 or _summon_key(t_action, t_params)),
                                      instance=instance))
+            briefs.append(str(t.get("brief") or ""))
         if blank:
             return {"summoned": [], "ok": False, "count": 0,
                     "error": ("这批里有 target 没写清活（role="
@@ -4633,6 +5348,53 @@ class AgentLoop:
             "results": items,
             "ok": True,
         }
+        # ---- 名册登记（S1k-2 的**批量**那一支；业主 T22：「名册的增、删都由秘书做」）
+        #
+        # 改前这一整条路上一次登记都没有：`roster_add(` 全仓只有定义与单个 summon 那一个
+        # 调用点，于是批量派出去的子代理在名册上根本不存在 —— 生产读数批量步 1006 次、
+        # 派出 2822 个子代理，名册只登记 413 个（`p6e`/`p7e` 那种 108/119 个批量子代理、
+        # 名册 0 行）。名册是"代理之间的通信必须经名册"那条纪律的地址面，缺了这一支，
+        # 批量派出去的子代理谁都找不到。
+        #
+        # 三条口径（与 `_do_summon` 同一处，不另造一份）：
+        #   · 只登记**真的受理了**的那一项（`refused` 不登记：它没跑）；
+        #   · `owner` = 父的绝对编号、`task_id` = 这一项的绝对编号、`brief` = 这一项自己的
+        #     那一句（**不许**用 `task` 顶替 —— 那条放宽业主还没批）；
+        #   · **一项失败不许带走整批**：失败只写进 `roster_problems`，`ok` 照旧。
+        #
+        # 三态不折平：`failed` / `cancelled` 的那一项也不许静默跳过 —— 它没进名册这件事
+        # 必须读得出来（与下面单个 summon 那条 `elif` 同一句话）。
+        if self.secretary is not None:
+            names: list[str] = []
+            problems: list[str] = []
+            for i, (r, call) in enumerate(zip(results, calls)):
+                status_now = str(r.status or "")
+                if status_now not in ("pending", "running", "done"):
+                    problems.append(f"{call.role}：这次派活没跑成（status={status_now}）"
+                                    "⇒ 名册没登记")
+                    continue
+                if str(r.outcome or "") == "refused":
+                    continue
+                try:
+                    reg = self.secretary.roster_add(
+                        owner=self.my_task_id, role=call.role,
+                        task_id=str(r.task_id or ""),
+                        brief=briefs[i] if i < len(briefs) else "")
+                    if reg.get("problem"):
+                        problems.append(f"{call.role}：{reg['problem']}")
+                    else:
+                        names.append(str(reg.get("name") or ""))
+                except Exception as exc:  # noqa: BLE001 —— 一项登记失败不许带走整批
+                    problems.append(f"{call.role}：名册登记没跑成："
+                                    f"{type(exc).__name__}: {exc}")
+            # 老键一字节不动：这两格只在有值时才加（"这一批一个都没登记"与
+            # "这一批都登记了"因此分得开）。
+            if names:
+                out["roster_names"] = names
+            if problems:
+                out["roster_problems"] = problems
+        else:
+            out["roster_problems"] = ["这一趟没有秘书 ⇒ 名册不在手上（一个都没有登记）"]
         # 批量里的越权也要有出路（与 `_do_summon` 同一条纪律）：一次汇总成一条
         # 代唤申请，而不是每一项发一条（那会把主控的收件箱灌满，让信号贬值）。
         need = [i for i in items if self._needs_relay(str(i["role"]), str(i["refusal_reason"] or ""))]
@@ -5037,6 +5799,15 @@ class AgentLoop:
                     out["roster_problem"] = f"名册登记没跑成：{type(exc).__name__}: {exc}"
         elif self.secretary is None:
             out["roster_problem"] = "这一趟没有秘书 ⇒ 名册不在手上（没有登记）"
+        elif str(res.status or "") in ("failed", "cancelled"):
+            # ---- 三态不许折平（改前 `elif` 只覆盖"没有秘书"这一格）
+            #
+            # `failed` / `cancelled` 的那一次派活**没跑成** ⇒ 它当然也没进名册，
+            # 而改前这条路一个读数都不留：`roster_name` 没有、`roster_problem` 也没有，
+            # 于是"没登记"与"登记失败"与"根本不需要登记"在读数上长得一模一样。
+            # 生产读数：`failed`/`cancelled` 共 29 次全部静默。
+            out["roster_problem"] = (f"这次派活没跑成（status={res.status}）⇒ 名册没登记"
+                                    "（不是『不需要登记』，也不是『登记过了』）")
         return out
 
     def _needs_relay(self, role: str, reason: str) -> bool:
@@ -5080,6 +5851,27 @@ class AgentLoop:
         # 顶层（没有父）才发给主控 M。父那一行读不到 ⇒ 落回 M，并把"为什么落回"记进读数
         # （不静默改主，也不把申请丢掉）。
         to_role, whose = self._relay_recipient()
+        # ---- 名册（业主 2026-10-19）：请代唤也是"代理发给代理"。
+        # 收件人通常是直接父（名册内），顶层才落回主控 M（`outside_roster`：名册上
+        # 没有 M 的上级）。按**父的绝对编号**寻址：角色名在同名多实例时是歧义的，
+        # 而歧义在这里的代价是"这条申请投给了别人的父"。
+        _addr, _gate = self._roster_gate(
+            to_role,
+            to_task_id=(str(self.parent_task_id or "")
+                        if str(to_role) == str(self.parent_role or "") else ""))
+        if _gate:
+            # 一行留言都不发（受控拒绝），但"申请发生过"仍要留痕：它是这一趟的实际行为。
+            SS.append(self.session_root, {
+                "kind": "agent_summon_request", "role": self.role, "wants_role": role,
+                "wants_action": action, "params": asked, "refusal_reason": reason,
+                "message_id": "", "relay_to": to_role, "relay_why": whose,
+                "refused": _gate["refused"], "problem": _gate["error"],
+            }, sid=self.sid)
+            return {"to": to_role, "subject": RELAY_SUBJECT, "message_id": "",
+                    "problem": _gate["error"], "refused": _gate["refused"],
+                    "addressing": _addr,
+                    "note": ("受控拒绝：这一条没有写进任何收件箱"
+                             "（名册上只有父与子能通话）")}
         if whose:
             body_lines_extra = [f"收件人：{whose}"]
         else:
@@ -5106,7 +5898,7 @@ class AgentLoop:
             rec["problem"] = problem
         SS.append(self.session_root, rec, sid=self.sid)
         return {"to": to_role, "subject": RELAY_SUBJECT, "message_id": msg_id,
-                "problem": problem,
+                "problem": problem, "addressing": _addr,
                 "note": (f"越权的边不会因为重试而成立 ⇒ 已向 {to_role} 申请代唤（{whose}）；"
                          "不要把这条申请当成'对方已经在做'。")}
 
@@ -5142,6 +5934,17 @@ class AgentLoop:
                                                 "⇒ 按 §15.4 向上爬到主控 M")
         else:
             to_role, whose = self._relay_recipient()
+        # ---- 名册（业主 2026-10-19）：定义报文也是"代理发给代理"，与 `message`
+        # 同一判据（直接父 = 名册内的父，爬到 M = `outside_roster`）。
+        _addr, _gate = self._roster_gate(
+            to_role,
+            to_task_id=(str(self.parent_task_id or "")
+                        if str(to_role) == str(self.parent_role or "") else ""))
+        if _gate:
+            return {"checked": True, "to": to_role, "subject": DEFINITION_ASK_SUBJECT,
+                    "message_id": "", "ask_why": whose, "concepts": [],
+                    "escalated": bool(escalate), "refused": _gate["refused"],
+                    "problem": _gate["error"], "addressing": _addr}
         names = "、".join(str(p.get("id") or p.get("stmt_id") or "?") for p in items[:8])
         body_lines = [
             f"收件人：{whose}",
@@ -5172,7 +5975,7 @@ class AgentLoop:
             rec["ledger_problem"] = f"{type(exc).__name__}: {exc}"
         out: dict[str, Any] = {"checked": True, "to": to_role, "subject": DEFINITION_ASK_SUBJECT,
                                "message_id": msg_id, "ask_why": whose, "concepts": rec["concepts"],
-                               "escalated": bool(escalate)}
+                               "escalated": bool(escalate), "addressing": _addr}
         if problem:
             out["problem"] = problem
         if rec.get("ledger_problem"):
@@ -5206,23 +6009,266 @@ class AgentLoop:
             return S.CONDUCTOR_ROLE, f"父就是主控（{pid}）⇒ 发给 M"
         return role, f"发给直接父 {role}（台账号 {pid}）"
 
-    def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        to = str(payload.get("to"))
-        reply_to = str(payload.get("reply_to") or "")
-        # ---- 名册名那一支（S1k-2；业主 §1.8 的两个方向）
-        #
-        # 收件人写本地名（`D1` = 我名下的子代理；或我父名册里的名字 = 上行给父）。
-        # 译码是秘书的事（接线员），落到盘上是一条挂在收件人名下的板项（不是公共频道）：
-        # 那样"发给谁的只有谁能读"（T20 禁止代读）由板项的收件人字段天然保证。
+    def _address_of(self, to: str) -> dict[str, Any]:
+        """这一条该发给谁（「名册 ⊆ 通话面」）：把 `roster_addresses` 接到本实例的上下文上。
+
+        fail-open：名册读坏 / 寻址那一格自己抛异常 ⇒ 退回原来那条路并把读数标成
+        `roster_unavailable`。为什么不在这儿拦：「说话不该被一次读失败挡住」
+        （与秘书那一侧的 fail-open 同一条纪律：`_outbound_hook` 的 `draft/53` §9.7）。
+        但"退回去了"这件事必须看得见 —— 折成"解析成功"就是本仓最忌的那种静默错
+        （业主 2026-10-19 第 ⑦ 条要的就是这一格）。
+        """
+        try:
+            return roster_addresses(self.secretary, to=to,
+                                    owner=str(self.my_task_id or ""),
+                                    my_task_id=str(self.my_task_id or ""),
+                                    sender=str(self.role or ""))
+        except Exception as exc:  # noqa: BLE001 —— fail-open，但读数要如实
+            return {"to": str(to or ""), "checked": False, "how": "roster_unavailable",
+                    "kind": "", "name": "", "task_id": "", "role": "", "brief": "",
+                    "candidates": [], "callable": "", "refused": "", "error": "",
+                    "why": (f"名册寻址没跑成（{type(exc).__name__}: {exc}）"
+                            "⇒ 退回原来的路（这不是'名册校验通过'）")}
+
+    def _handoff_address(self, to: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """交接手稿的收件人（`handoff` / 收工 `notify` 共用）：`(addr, gate)`。
+
+        ## 为什么它不能照抄 `message` 那一格
+
+        手稿通道的收件人面**本来就是角色**（`manuscripts/handoffs.jsonl` 的 `to` 是
+        角色或 `ALL`：`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它），
+        名册上没有"手稿收件人"这个地址面（`secretary.handoff_add` 在**写的时候**
+        就把非角色收件人拒掉了：`ValueError: 收件人必须是 [A…M, V] 之一`）。于是：
+
+        | `to` 的写法 | 判据 |
+        |---|---|
+        | 名册名 / 绝对编号（解析成父或子） | 手稿那一行写**它的角色**（台账的口径），通知投**那个实例**的板项 |
+        | 角色名 | 手稿写那个角色；通知按协作边准入（`message_admission`）—— 这就是"接到 `_address_of` / `message_admission` 上"的那一半 |
+        | 角色名 = 我自己 | 自记一笔（不是代理之间的通信）⇒ 放行 |
+        | `ALL` / `#public` / 用户 / 主控 | `outside_roster`（公告栏与频道外读者，不归名册管） |
+        | 解析不到的名册名 / 编号 | 受控拒绝 `handoff_is_role_addressed`（手稿台账没有实例地址面） |
+
+        为什么角色名那一档用**协作边**而不是名册：`notify`（每个终态都要有）在生产里
+        正是靠它把"手稿编号 + 一句话"交给下一个角色，而手稿的收件人面是角色而不是实例。
+        按名册拒掉会把整条交付链掐死；而"按角色名随便发"这个真问题，在这里由
+        协作边那一份判据守着（改前它**一条都没查**）。这一档也**不是**"名册校验通过"：
+        读数里 `how="outside_roster"`，且 `delivery="role"`。
+        """
+        token = str(to or "").strip()
+        base: dict[str, Any] = {"checked": True, "how": "", "to": token, "kind": "",
+                                "name": "", "task_id": "", "role": "", "brief": "",
+                                "candidates": [], "callable": "", "refused": "",
+                                "error": "", "why": "", "delivery": "role",
+                                "manuscript_to": token}
+        if (not token or _is_all_recipient(token) or token in ("user", "用户")
+                or token == S.CONDUCTOR_ROLE):
+            return {**base, "how": "outside_roster",
+                    "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）"}, {}
+        addr = self._address_of(token)
+        how = str(addr.get("how") or "")
+        if how in ("parent", "child"):
+            role = str(addr.get("role") or "")
+            if not role:
+                return {**base, **addr, "how": "roster_unavailable",
+                        "why": "名册成员的角色读不出来 ⇒ 手稿那一行没有收件人面"}, {}
+            return {**base, **addr, "delivery": "roster", "manuscript_to": role,
+                    "why": f"名册成员（{how}）⇒ 手稿写角色 {role}，通知投实例 {token}"}, {}
+        if str(token).upper() in S.ROLES:
+            role = str(token).upper()
+            if role == str(self.role or "").upper():
+                return {**base, **addr, "how": "outside_roster", "manuscript_to": role,
+                        "why": "交接给'我自己'是自记一笔（不是代理之间的通信）"}, {}
+            reason = message_admission(self.role, role)
+            if reason:
+                gate = {"refused": "not_an_edge", "error": f"交接给 {role} 不成立：{reason}",
+                        "addressing": {**base, **addr, "how": "not_an_edge",
+                                       "manuscript_to": role}}
+                return {**base, **addr, "how": "not_an_edge", "manuscript_to": role}, gate
+            return {**base, **addr, "how": "outside_roster", "manuscript_to": role,
+                    "why": "角色级收件人面（手稿台账的口径）+ 协作边成立"}, {}
+        if how == "roster_unavailable":
+            # 名册读不成 ⇒ 不回退成"按名字发"（那会写进一个没人读的收件箱），
+            # 也不把一次读失败说成"这个名字不存在"：让调用方按三态处理。
+            return {**base, **addr, "how": "roster_unavailable"}, {}
+        gate = {"refused": "handoff_is_role_addressed",
+                "error": (f"手稿的收件人只认角色或 ALL（台账的主键面），收到 {token!r} ⇒ 受控拒绝："
+                          "要给**某个实例**说话请用 `message`（`to` 写名册名或绝对编号）；"
+                          "要把手稿交给一个角色，`to` 写角色名。"),
+                "addressing": {**base, **addr, "how": "handoff_is_role_addressed"}}
+        return {**base, **addr, "how": "handoff_is_role_addressed"}, gate
+
+    def _roster_gate(self, to: str, *, to_task_id: str = ""
+                     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """「这一条要发给谁」的唯一判据 —— 给 `message` 之外那几条通道共用。
+
+        业主 2026-10-19：「代理之间的通信必须经名册（父 ＋ 直接子 ＋ 绝对编号）」。
+        `_do_message` 走的是 `_address_of`（那一支由另一条线负责，这里不改它）；
+        而 `handoff` / 请代唤 / 定义报文 / 步数上报这四条也**是代理发给代理**，
+        它们此前直接调 `send_message`（按角色名写进角色级收件箱）⇒ 绕开了名册。
+        这一格把它们接到**同一份判据**上（`roster_addresses`，不是第二份实现）。
+
+        返回 `(addr, gate)`：`gate` 为空 dict = 放行；非空 = 受控拒绝的那三格
+        （`refused` / `error` / `addressing`）。三态照旧：
+        `roster_unavailable`（名册读不成 ⇒ 放行，由调用方把读数标出来）不是拒绝，
+        也「不是」"名册校验通过"。
+
+        `to_task_id` 给了就按**绝对编号**寻址（比角色名强：同名多实例时不会歧义，
+        这正是"父的编号"该被用的地方）。
+        """
+        addr = self._address_of(str(to_task_id or to))
+        if str(addr.get("refused") or "") and str(to_task_id or "") \
+                and str(to_task_id) != str(to):
+            # 绝对编号没落在名册上 ⇒ 退回按「写法本身」再判一次（三态：这一步不吞问题）。
+            # 为什么必须有这一步：收件人是**主控 M**（顶层那一档）时，调用方手里那个
+            # `parent_task_id` 指的其实是"这一趟自己那一行"，拿它去寻址只会得到一个假的
+            # `not_in_roster` —— 真机上就是"请代唤"发不出去
+            # （判据 `test_agent_loop.py::test_a_forbidden_edge_becomes_a_relay_request_to_the_conductor`）。
+            alt = self._address_of(str(to))
+            if not str(alt.get("refused") or ""):
+                addr = alt
+        if not str(addr.get("refused") or ""):
+            return addr, {}
+        return addr, {"refused": str(addr.get("refused") or ""),
+                      "error": str(addr.get("error") or ""),
+                      "addressing": addr,
+                      "candidates": [str(x) for x in (addr.get("candidates") or [])]}
+
+    def _all_recipient_refusal(self, to: str = "ALL") -> dict[str, Any]:
+        """`to="ALL"` 走到**内部直调**那一支时的受控拒绝（`_message_my_children` 已被删除）。
+
+        ## 为什么是拒绝而不是补回那个方法
+
+        广播的语义今天由 `conductor.broadcast`（名下直接子代理，每人一条 ack 板项）与
+        `public_visibility`（公共频道的可见面）承担；`to="ALL"` 在**解码层**已经归一成
+        `#public`（`_decode_shape` → `_recipient_for_channel`）⇒ 能走到这里只剩内部直调。
+        改前这两支各调一次一个全仓没有 def 的方法 ⇒ `AttributeError`：
+        "没发出去"看起来像"框架坏了"，而`AttributeError` 不是一种可处置的拒绝
+        （调用方按三态读不出"该换哪条路"）。补回那个方法更糟：它会把一条
+        "按角色名逐项展开"的老语义复活，与 `conductor.broadcast` 那份实现分叉。
+
+        所以这里如实拒：理由码 `broadcast_only` + 一句话指路（拒信里带工具名，
+        读的人不必再去翻文档）。
+        """
+        return {"message": "未发出", "to": str(to or "ALL"), "ok": False,
+                "receipt": "unknown", "refused": "broadcast_only",
+                "error": ("给名下子代理广播用 `conductor.broadcast`；"
+                          "`to=\"ALL\"` 在解码层已归一成 `#public`"),
+                "note": ("这一条受控拒绝：`_message_my_children` 已被删除（语义由 "
+                         "`conductor.broadcast` 与 `public_visibility` 承担）⇒ "
+                         "一条都没发、一个板项都没开（受控拒绝不是「稍后再试」）")}
+
+    def _message_legacy(self, payload: Mapping[str, Any], to: str,
+                        reply_to: str) -> dict[str, Any]:
+        """没有名册时的那条老路（「逐字照旧」）：名字类写法走板项，其余走角色通道。
+
+        单独抽出来是因为它是"名册读不成"那一档的回退 —— 回退必须是「逐字」的旧行为，
+        否则"名册坏了"与"改坏了寻址"在读数上会分不开。
+        """
         if to and to != PUBLIC and to != "ALL" and to not in (*S.ROLES, S.CONDUCTOR_ROLE,
                                                              "user", "用户"):
             return self._message_by_name(payload, to)
         if to == "ALL" and self.secretary is not None and str(self.my_task_id or ""):
-            return self._message_my_children(payload)
+            return self._all_recipient_refusal(to)
         return self._message_by_channel(payload, to, reply_to)
 
+    def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """`message` 形状的寻址与投递（业主 2026-10-19：「只有名册上的编号能通话」）。"""
+        to = str(payload.get("to"))
+        reply_to = str(payload.get("reply_to") or "")
+        # ---- 寻址：先问名册
+        #
+        # 改前这里是"`to` 像不像角色名"的字符串启发式：不在 `S.ROLES` 里就当名册名。
+        # 那个启发式把名册「绕开」了 —— 角色名那一条路从不问名册，于是
+        # ①名册名在发消息这条路上用不上、②同名多实例时行为未定义（谁都能读到）、
+        # ③退役的名字仍可被寻址。现在判据只有一处（`roster_addresses`），
+        # 而"发给谁"的结论进读数 `addressing`（三态：读成了 / 不在名册 / 读不成）。
+        addr = self._address_of(to)
+        # 权限先于路由（业主 2026-10-19 之后仍然如此）：`to` 写成「角色名」时，
+        # 那句拒信必须先说"没有协作边"，而不是"你要发给谁" —— 否则同一个越权会被
+        # 读成一次寻址问题，而准入判据的唯一实现仍只有 `message_admission` 那一份。
+        # 名册名 / 绝对编号不吃这一条（与改前 `_message_by_name` 同口径）。
+        if to.upper() in S.ROLES:
+            not_allowed = message_admission(self.role, to, reply_to)
+            if not_allowed:
+                return {"message": "未发出", "to": to, "ok": False,
+                        "error": not_allowed, "addressing": addr}
+        refused = str(addr.get("refused") or "")
+        if refused:
+            return {"message": "未发出", "to": to, "ok": False, "receipt": "unknown",
+                    "refused": refused,
+                    "candidates": [str(x) for x in (addr.get("candidates") or [])],
+                    "addressing": addr, "error": str(addr.get("error") or ""),
+                    "note": (f"{addr.get('error')}（这一条没有落盘：`send_message` 没调、"
+                             "板项没开 —— 受控拒绝不是「稍后再试」）")}
+        how = str(addr.get("how") or "")
+        if how == "roster_unavailable":
+            # 无秘书 / 名册读不成 ⇒ 退回原来的路，但「读数必须标出来」（业主第 ⑦ 条）
+            out = self._message_legacy(payload, to, reply_to)
+            out["roster_unavailable"] = True
+            out["addressing"] = addr
+            return out
+        if how in ("parent", "child"):
+            # 名册成员 ⇒ 落成"挂在收件人名下的板项"（只有它自己读得到，父不代读 T20）
+            out = self._message_to_member(payload, addr)
+        elif to == "ALL" and self.secretary is not None and str(self.my_task_id or ""):
+            out = self._all_recipient_refusal(to)
+        else:
+            # `#public` / 用户 / `ALL`（没有秘书那一档）：原来的通道逐字不动
+            out = self._message_by_channel(payload, to, reply_to)
+        out["addressing"] = addr
+        return out
+
+    def _message_to_member(self, payload: Mapping[str, Any],
+                           addr: Mapping[str, Any]) -> dict[str, Any]:
+        """投给名册上的一个成员（父或子）—— 落到它名下的一条板项。
+
+        与 `_message_by_name` 的区别只有一处：这里「不再自己译码」 —— 名字 / 绝对编号 /
+        角色名的解析已经在 `roster_addresses` 里做过，重复译码会让"判据说发给 A、实际
+        投给 B"这种事在两条实现之间漂（本仓反复记过的同一种病）。
+        """
+        tid = str(addr.get("task_id") or "")
+        name = str(addr.get("name") or tid)
+        kind = str(addr.get("kind") or "")
+        return self._deliver_to_instance(
+            payload, name=name, tid=tid, role=str(addr.get("role") or ""),
+            direction="上行" if kind == "parent" else "下行",
+            how=f"名册成员（{kind}）")
+
+    def _deliver_to_instance(self, payload: Mapping[str, Any], *, name: str, tid: str,
+                             role: str, direction: str, how: str) -> dict[str, Any]:
+        """往某个「实例」的板上开一条 `message` 项（唯一的投递实现）。"""
+        if self.conductor is None:
+            return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
+                    "note": "这一趟没有 conductor ⇒ 开不了收件人名下的板项（不是'已送到'）"}
+        try:
+            row = self.conductor._task(tid) or {}
+        except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，不许当"没有这一行"
+            return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
+                    "note": f"台账里那一行读不成（{type(exc).__name__}: {exc}）⇒ 没投"}
+        role = role or str(row.get("role") or "")
+        subject = str(payload.get("subject") or "")
+        body = str(payload.get("body") or "")
+        item_id = self.conductor.open_item(
+            kind="message", role=role or S.CONDUCTOR_ROLE, expects="ack", action="message",
+            summary=subject or f"来自 {self.role} 的一条留言",
+            called_by=self.role, parent_task_id=tid,
+            depth=int(row.get("depth") or 1) + 1 if row else 2,
+            input_key=f"message@{self.role}:{self.my_task_id or '-'}->{tid}")
+        self.conductor.set_item_detail(item_id, (subject + "\n" + body).strip()[:400])
+        return {"message": "已投递到收件人的板", "to": name, "to_task_id": tid,
+                "item_id": item_id, "direction": direction, "channel": "roster",
+                "receipt": "queued", "ok": True, "how": how,
+                "note": ("这一条挂在收件人名下（板项），只有它自己会渲染到 —— "
+                         "父不许代读（T20）。若它此刻没有在跑，板项会等着它下次进循环。")}
+
     def _message_by_name(self, payload: Mapping[str, Any], name: str) -> dict[str, Any]:
-        """按名册名发一条（下行走我名下的名册，上行走我父名册）—— 落到收件人名下的板项。"""
+        """按名册名发一条（「名册读不成那一档的老路」）：译码 → 落到收件人名下的板项。
+
+        `_do_message` 在名册可读时不再走这里（判据在 `roster_addresses`）；
+        这里保留给两条路：① `roster_unavailable` 的回退（逐字旧行为）；
+        ② `to="ALL"` 的内部直调 —— 那一支已改成受控拒绝（见 `_all_recipient_refusal`，
+        `_message_my_children` 已被删除，语义由 `conductor.broadcast` 承担）。
+        """
         if self.secretary is None or self.conductor is None:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
                     "note": "这一趟没有秘书/conductor ⇒ 名册不在手上，译不出这个名字"}
@@ -5234,48 +6280,37 @@ class AgentLoop:
         if problem:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
                     "note": f"名册里没有 {name!r}（下行与上行都查过）⇒ 受控拒绝并点名：{problem}"}
-        row = self.conductor._task(tid) or {}
-        role = str(row.get("role") or "")
-        subject = str(payload.get("subject") or "")
-        body = str(payload.get("body") or "")
-        item_id = self.conductor.open_item(
-            kind="message", role=role or S.CONDUCTOR_ROLE, expects="ack", action="message",
-            summary=subject or f"来自 {self.role} 的一条留言",
-            called_by=self.role, parent_task_id=tid,
-            depth=int(row.get("depth") or 1) + 1 if row else 2,
-            input_key=f"message@{self.role}:{self.my_task_id or '-'}->{name}")
-        self.conductor.set_item_detail(item_id, (subject + "\n" + body).strip()[:400])
-        return {"message": "已投递到收件人的板", "to": name, "to_task_id": tid,
-                "item_id": item_id, "direction": direction, "channel": "roster",
-                "receipt": "queued", "ok": True,
-                "note": ("这一条挂在收件人名下（板项），只有它自己会渲染到 —— "
-                         "父不许代读（T20）。若它此刻没有在跑，板项会等着它下次进循环。")}
-
-    def _message_my_children(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """`to="ALL"` ⇒ 按我名下名册逐项开板项（内容一条、行为 per-recipient）。"""
-        view = self.secretary.roster_view(owner=self.my_task_id)
-        if not view.get("checked"):
-            return {"message": "未发出", "to": "ALL", "ok": False, "receipt": "unknown",
-                    "note": f"名册没读成（{view.get('reason')}）⇒ 不许当'没有收件人'"}
-        active = [r for r in view.get("rows", []) if r.get("state") in ("活跃", "待命")]
-        if not active:
-            return {"message": "未发出", "to": "ALL", "ok": False, "receipt": "no_reader",
-                    "note": "我名下名册里没有活跃/待命的子代理 ⇒ 没有收件人"}
-        sent = [self._message_by_name(payload, str(r["name"])) for r in active]
-        return {"message": "已按名册展开", "to": "ALL", "ok": all(x.get("ok") for x in sent),
-                "receipt": "queued", "recipients": [r["name"] for r in active],
-                "items": [x.get("item_id") for x in sent],
-                "note": ("内容一条、行为 per-recipient：每项各自 ack；"
-                         "'展开成功'不等于'都读到了'（读数看板面）。")}
+        return self._deliver_to_instance(
+            payload, name=name, tid=str(tid), role="", direction=direction,
+            how="名册名（回退路）")
 
     def _message_by_channel(self, payload: Mapping[str, Any], to: str,
                             reply_to: str) -> dict[str, Any]:
-        """既有的那条路（角色 / `#public`）：准入与私聊逐字不动，公聊加一格身份。
+        """`#public` / 用户 / `ALL` 那一档：留言落 `send_message`（append-only），准入逐字不动。
 
         S6-a（业主 T20/T21 附二 乙）：公共频道的可见面 = 发信人的直接子代理
         ⇒ 发公聊必须带发信人的实例号；没有编号就受控拒绝（不许退回
         "全角色可见" —— 那正是 T20 要治的形态：任何角色随手 `to=#public`
         就等于全树广播）。
+
+        谁能走到这一支（业主 2026-10-19 之后）：只有 `#public` / `ALL` / 用户，
+        以及"名册读不成"那一档的回退。**给某个代理的私聊不再走这里** ——
+        那条路现在由 `roster_addresses` 判据 + `_message_to_member` 投递
+        （`to` 必须是名册上的父或子）。这一支刻意**不**加名册校验：
+        公共频道不是"给某个代理发消息"，它有自己那一套可见面判据。
+
+        ## 公告栏（业主 2026-10-19 第 5 条："若保留，必须写成公告栏，不是对话"）
+
+        `#public` 保留，但它**是公告栏**：一条公聊里若点名了名册上的某个成员
+        （名册名 / 绝对编号）**并且**带指令语气（`PUBLIC_DIRECTIVE_MARKS`）或显式
+        收件人写法（`@F1` / `F1：` / `to=F1` / `给 F1`），它实际上就是"对某个具体
+        代理下指令" ⇒ 受控拒绝 `public_is_not_a_conversation`，并由拒信指路
+        （用名册编号发私聊）。其余公聊照发，但记录上带 `board_kind="bulletin"` ——
+        读的人（人 / UI / 审计）能一眼分清"公告"与"对话"。
+
+        为什么这条必须机械可判：公聊进的是**角色级**收件箱（`to == role` 才进收件箱），
+        所以"公告栏里点名某人"这一句会被**那个角色的所有实例**读到 —— 那正是
+        名册要挡的形态（名册能指到编号，角色名指不到实例）。
         """
         # 准入判据只有一份（模块级 `message_admission`）：这里与秘书那一侧都调它。
         not_allowed = message_admission(self.role, to, reply_to)
@@ -5287,11 +6322,25 @@ class AgentLoop:
                               "『发信人的直接子代理』，没有发信人编号就没人能判断"
                               "该不该看见这一条（业主 T20/T21）"),
                     "receipt": "unknown"}
+        # 公告栏判据（见 docstring）：点名 + 指令语气 ⇒ 这不是公告，是对某个代理下指令。
+        board_kind = "bulletin" if to == PUBLIC else ""
+        if to == PUBLIC:
+            named = self._public_addressee(payload)
+            if named:
+                return {"message": "未发出", "to": to, "ok": False, "receipt": "unknown",
+                        "refused": "public_is_not_a_conversation", "board_kind": board_kind,
+                        "error": (f"这是在公告栏里点名 {named} 下指令 ⇒ 受控拒绝："
+                                  f"{PUBLIC} 是公告栏，不是对话（公告不构成对某个具体代理的指令）。"
+                                  "要指定收件人请用名册编号发一条私聊"
+                                  "（`message.to` 写名册名或绝对编号）。"),
+                        "note": ("这一条没有落盘：公聊进的是角色级收件箱，"
+                                 "点名会让那个角色的所有实例都读到 —— 那不是对话")}
         msg_id, problem = send_message(self.session_root, sender=self.role, to=to,
                                        subject=str(payload.get("subject") or ""),
                                        body=str(payload.get("body") or ""),
                                        reply_to=reply_to, sid=self.sid,
-                                       from_task_id=str(self.my_task_id or ""))
+                                       from_task_id=str(self.my_task_id or ""),
+                                       extra={"board_kind": board_kind} if board_kind else None)
         if problem:
             return {"message": "未发出", "to": to, "ok": False, "error": problem}
         where = "公共频道" if to == PUBLIC else f"给 {to} 的私聊"
@@ -5307,8 +6356,42 @@ class AgentLoop:
         receipt, reader_note = self._receipt_for(
             to, child_count=(self._my_children_count() if to == PUBLIC else None))
         return {"message_sent": msg_id, "to": to, "channel": where,
+                "board_kind": board_kind,
                 "receipt": receipt, "ok": receipt != "no_reader",
                 "note": reader_note}
+
+    def _public_addressee(self, payload: Mapping[str, Any]) -> str:
+        """公聊里"点名某个名册成员 + 指令语气"⇒ 返回那个成员（否则空串）。
+
+        判据本体在 `_message_by_channel` 那一支（拒/放行）；这里只做机器可判的那一半：
+
+        1. 名册（父 ∪ 子）里有成员的**名册名**或**绝对编号**出现在 subject/body 里；
+        2. 并且满足下面任一条：
+           - 显式收件人写法：`@F1` / `F1:` / `F1：` / `to=F1` / `给 F1`；
+           - 指令语气词（`PUBLIC_DIRECTIVE_MARKS`）。
+
+        名册读不成（无秘书 / 读失败）⇒ 返回空串：这一格"没查成"不许当成"查过了没问题"，
+        但也不许因此把整条公聊拒掉 —— 它由 `board_kind="bulletin"` 的标注兜底。
+        """
+        if self.secretary is None or not str(self.my_task_id or ""):
+            return ""
+        try:
+            members, problem = _callable_members(self.secretary, owner=str(self.my_task_id))
+        except Exception:  # noqa: BLE001 —— 判不了 ⇒ 不拒（标注那一路兜底）
+            return ""
+        if problem:
+            return ""
+        text = f"{payload.get('subject') or ''}\n{payload.get('body') or ''}"
+        for m in members:
+            for token in (str(m.get("name") or ""), str(m.get("task_id") or "")):
+                if not token or token not in text:
+                    continue
+                if any(f in text for f in (f"@{token}", f"{token}:", f"{token}：",
+                                           f"to={token}", f"给{token}", f"给 {token}")):
+                    return token
+                if any(mark in text for mark in PUBLIC_DIRECTIVE_MARKS):
+                    return token
+        return ""
 
     def _my_children_count(self) -> int | None:
         """我名下直接子实例的个数（`None` = 这一格没读成，不许当 0）。"""
@@ -5622,6 +6705,19 @@ class AgentLoop:
                     or str(payload.get("brief") or "").strip()
                     or str(payload.get("title") or "").strip())
         why = str(payload.get("why") or "").strip()
+        # ---- 收件人（业主 2026-10-19）：名册名 / 绝对编号这一档必须落在名册上
+        # （判据与理由见 `_handoff_address`：手稿的收件人面是角色，名册给的是实例）。
+        # 拒绝发生在**写任何东西之前**：半份状态（手稿写了、人没收到）比没写更贵。
+        _addr, _gate = self._handoff_address(to)
+        if _gate:
+            return {"handoff": "未写成", "ok": False, "to": channel,
+                    "refused": _gate["refused"], "candidates": (_gate.get("candidates") or []),
+                    "addressing": _addr, "error": _gate["error"],
+                    "note": ("这一条受控拒绝：手稿一行没写、留言一条没发"
+                             "（受控拒绝不是「稍后再试」）")}
+        # 手稿那一行的收件人 = 名册解析出的**角色**（台账的口径）；`ALL` 走公共频道。
+        manuscript_to = str(_addr.get("manuscript_to") or to)
+        channel = PUBLIC if _is_all_recipient(to) else manuscript_to
         if self.secretary is None:
             return {
                 "handoff": "未写成", "ok": False,
@@ -5641,7 +6737,7 @@ class AgentLoop:
                     reason=why, note=str(payload.get("note") or ""))
             else:
                 rec = self.secretary.handoff_add(
-                    to=to, summary=one_line, body=str(payload.get("body") or ""),
+                    to=manuscript_to, summary=one_line, body=str(payload.get("body") or ""),
                     refs=list(payload.get("refs") or []), sid=self.sid or "",
                     task_id=self.my_task_id,          # ← 同上（真机 593 行缺这一格）
                     note=str(payload.get("note") or ""))
@@ -5653,7 +6749,8 @@ class AgentLoop:
         # `R2b-⑲` 的"查"：先问一句"这件事是不是已经交接过"（`handoff_query` 的用途就是
         # 判重复委派）。只摆读数、不阻断 —— 重复与否归本体与秘书判断（机器不替它裁）。
         try:
-            same = [r for r in self.secretary.handoff_query(to=to, sender=self.role)
+            same = [r for r in self.secretary.handoff_query(to=manuscript_to,
+                                                             sender=self.role)
                     if str(r.get("summary") or "").strip() == summary
                     and str(r.get("id") or "") != str(rec.get("id") or "")]
             dup_note: Any = {"count": len(same),
@@ -5665,22 +6762,34 @@ class AgentLoop:
             dup_note = {"count": 0, "ids": [],
                         "problem": f"{type(exc).__name__}: {exc}（这一格没查成）"}
         shown = revises or str(rec.get("id") or "")
-        msg_id, problem = send_message(
-            self.session_root, sender=self.role, to=channel,
-            subject=f"手稿 {shown}：{summary}",
-            body=(f"[手稿 {shown}] {summary}"
-                  + ("（订正行，旧行保留）" if revises else "")
-                  + (f"\n（为什么找你：{why}）" if why else "")
-                  + f"\n全文：`manuscripts.read(id=\"{shown}\")`"
-                    f"（盘上 {rec.get('path')}）"),
-            sid=self.sid, from_task_id=str(self.my_task_id or ""))
+        notify_subject = f"手稿 {shown}：{summary}"
+        notify_body = (f"[手稿 {shown}] {summary}"
+                       + ("（订正行，旧行保留）" if revises else "")
+                       + (f"\n（为什么找你：{why}）" if why else "")
+                       + f"\n全文：`manuscripts.read(id=\"{shown}\")`"
+                         f"（盘上 {rec.get('path')}）")
+        notify_how = "role"
+        if str(_addr.get("delivery") or "") == "roster":
+            # 名册成员 ⇒ 投到**那个实例**的板项（实例级）。改前这里对名册名也走
+            # `send_message(to="D1")`，而收件箱是按角色收的 ⇒ 那条留言没有任何人读得到。
+            deliv = self._message_to_member({"subject": notify_subject, "body": notify_body},
+                                            _addr)
+            msg_id, problem = str(deliv.get("item_id") or ""), (
+                "" if deliv.get("ok") else str(deliv.get("note") or "投递没成"))
+            notify_how = "roster"
+        else:
+            msg_id, problem = send_message(
+                self.session_root, sender=self.role, to=channel,
+                subject=notify_subject, body=notify_body,
+                sid=self.sid, from_task_id=str(self.my_task_id or ""))
         return {"handoff": shown, "ok": not problem, "id": shown,
                 "path": rec.get("path"), "to": channel, "brief": summary,
+                "addressing": _addr, "notify_channel": notify_how,
                 "revises": revises,
                 "existing_same_summary": dup_note,
                 "notified": msg_id if not problem else "",
                 "error": problem,
-                "note": ("收件人下次运行时（或本步之后）会在收件箱里看到编号；"
+                "note": ("收件人下次运行时（或本步之后）会在收件箱/板上看到编号；"
                          "它用 `manuscripts.read` 读全文")}
 
     def _record_interjection_effect(self, run: LoopRun, pending: dict[str, Any] | None,

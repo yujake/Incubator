@@ -1059,6 +1059,186 @@ class _Core:
             "count_attempt": True,
         }
 
+    # ------------------------------------------------- E 没有缝（`no_seam`）那一档
+
+    #: `dead_end` 里"缺的是缝"这一档用的受控理由（`attackround.DEAD_END_REASONS` 之一）。
+    #:
+    #: 为什么是 `缺工具`：缝就是"E 手里那把写脚本的工具"，缺了它这一轮什么都交不出来。
+    #: 另外六个受控值（反例 / 方法不适用 / 缺定义 / 缺文献 / 超出本轮预算 /
+    #: 需要先证别的命题）一个都不对 —— 不许为了"看起来更精确"去加新取值
+    #: （受控词表是 `attackround` 的声明面，加一个取值是另一条裁定）。
+    SEAM_MISSING_REASON = "缺工具"
+
+    def _missing_seam_round(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
+                            note: str, spec_line: str) -> dict:
+        """E 没有模型缝 ⇒ 这一轮落 `dead_end(缺工具)` 并**向召唤者上报**（不再静默 `no_change`）。
+
+        ## 改前是什么形态（真机读数，`projects/mp4/data/attack_plans.json` 计划 000003 r1/r2）
+
+        逐字：`子目标 sg1 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ 未推进`，
+        `action="script_not_authored"`、`outcome="no_change"`、**没有产物**。
+        于是这一轮在 `attack_plans.history` 上与"跑了但没结果"同形，而真正缺的东西
+        （E 的缝）只活在一句散文里 —— 没有任何上行通道把它送到召唤者手上，
+        下一轮再撞一次同一句话，直到计划 `stalled`。
+
+        ## 现在两件事一起做（都用现成工具，不发明新语义）
+
+        ① **产物**：`attackround.dead_end_row`（四档之一，`reason="缺工具"`），
+           于是 history 上读得出来"这一轮交的是死路"，`dead_end_reason` 也在；
+        ② **上行**：`conductor.escalate(kind="missing_input")`（业主 2026-10-19 的父子
+           双向通道）—— `need` 写"需要 E 的缝"、`evidence` 带子目标名，父代理下一趟
+           在收件箱里就看得见要动哪一处。上报的结果（成功 / 受控拒绝的理由码）逐字进
+           `detail` 与 `blocked_reason`：**"上报了"与"没上报成"必须分得开**（三态）。
+
+        ## 状态与计数
+
+        `status="blocked"`（卡住了、要人来解，必须留在表里看得见）＋ `in_flight=True`
+        （这一轮之后没有新事情可做：再选一次还是同一句话）。
+        `count_attempt=False`：`no_seam` 是环境事实，不是"对这条子目标的一次尝试"
+        —— 既有口径一个字没改。
+        """
+        from .. import attackround as AR
+
+        sid = str(sg.get("sid") or "")
+        esc = self._escalate_missing_seam(sg, plan=plan)
+        if esc["state"] == "escalated":
+            esc_line = (f"；已用 `conductor.escalate(kind=\"missing_input\")` 向召唤者上报"
+                        f"（留言 {esc['msg_id']} ⇒ {esc['to']}，会话根 {esc['session_root']}）")
+            esc_short = f"已上报 missing_input（{esc['msg_id']} ⇒ {esc['to']}）"
+        elif esc["attempted"]:
+            esc_line = (f"；已尝试 `conductor.escalate(kind=\"missing_input\")`，被受控拒绝 "
+                        f"`{esc['reason']}`（{esc['why']}）—— 这条上报没有送出去，"
+                        "别把这一行读成「父已经收到」")
+            esc_short = f"上报被拒（{esc['reason']}）"
+        else:
+            esc_line = (f"；这一层没有可用的主控（{esc['why']}）⇒ 上报没发出去，"
+                        "缺缝这件事只落在本行读数里")
+            esc_short = "没有可用的主控，未上报"
+        detail = (f"子目标 {sid} 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ "
+                  f"**缺的是 E 的模型缝，不是脚本**（没有脚本就没有实验可跑；"
+                  f"这不是'跑了但没结果'）。{note}{spec_line}"
+                  f"；要打开的是 `--experiment-reasoning`（给 E 接缝）{esc_line}")
+        product = AR.dead_end_row(
+            strategy="套用已知定理",
+            reason=self.SEAM_MISSING_REASON,
+            evidence=(f"子目标 {sid}（{sg.get('text')}）的判据要写成一份能跑的脚本，"
+                      "而 E 这一次没有接模型缝（`llm=None` ⇒ `author_script` 受控拒绝 "
+                      "`no_seam`）⇒ 缺的是缝；接线开关是 `--experiment-reasoning`"),
+            best_partial=self._unwired_partial(sg),
+            why_strategy=("缺的是外部输入（E 的模型缝），不是数学上的死路 ⇒ 受控产物只有 "
+                          "`dead_end(缺工具)`，并把它上报给召唤者"),
+        )
+        return {
+            "action": "dead_end",
+            "outcome": "no_change",
+            "product": product,
+            "detail": detail,
+            "evidence": [],
+            "status": "blocked",
+            "blocked_reason": (f"E 写不出脚本：no_seam｜{note}｜"
+                               f"缺的是 E 的模型缝（要打开 `--experiment-reasoning`）；"
+                               f"{esc_short}"),
+            "in_flight": True,
+            "count_attempt": False,
+            # 机器可读的那一份（`step` 不透传它，直接调 `_deploy_e` 的调用方读得到）：
+            # 上报成功与否必须与那句散文分开可查。
+            "escalation": esc,
+        }
+
+    def _escalate_missing_seam(self, sg: Mapping[str, Any], *,
+                               plan: Mapping[str, Any]) -> dict[str, Any]:
+        """用既有 `Conductor.escalate` 把"缺 E 的缝"写进父的收件箱（`kind="missing_input"`）。
+
+        ## 为什么走这条通道，而不是新造一个"缺输入"事件
+
+        业主 2026-10-19 裁定"父子天然双向"：孩子跟召唤它的人说话**不是**一条权限边、
+        不需要在 `edges` 里登记。`conductor.escalate` 就是那个入口，它已经把
+        「谁是我的召唤者」「留言落进哪个会话」「收件箱怎么登记已读」三件事做完了
+        （`conductor.py` 的 docstring 逐字写着）。这里只做一件事：**把它叫对**。
+
+        ## 三件"这一层可能不知道"的事，各有一条如实的退路
+
+        | 需要什么 | 优先取 | 退路（并留痕） |
+        |---|---|---|
+        | 我的召唤号 | `conductor.current_task_id()` | 空 ⇒ 照旧传空（`escalate` 会拒 `not_caller`） |
+        | 我的父 | `conductor.current_parent()`（工具路径由 `calling_as` 挂上） | 空而我有召唤号 ⇒ 读 `tasks` 那一行的 `parent_task_id` / `called_by` |
+        | 会话根 / 会话号 | `conductor.current_session()` | 根空 ⇒ `store.root`（`run-agent` 的会话根就是工作区根）；会话号空 ⇒ 交给缺省档，读数里写明 |
+
+        为什么父要从台账读（这一条不读就没有第二条路）：**只有工具路径**会挂
+        `calling_as(parent_…)`（`AgentLoop._do_tool`）；而 F 也可能由
+        `Conductor.summon` → `LocalBackend.call` 直接跑，那条路只挂召唤号
+        （`conductor.py` 的 `LocalBackend.call`）。只认 ContextVar 的话，
+        真机里"F 被 M 召唤"这一条最常走的路永远上报不出去 —— 而读数会写成
+        "已尝试、被拒"，看上去像没人管，其实是这一层没去找。
+
+        返回 `{"attempted", "state", "reason", "why", "msg_id", "to", "need",
+        "session_root", "sid"}`（成功与否只由 `state` 表达，不用布尔 `ok` ——
+        一个布尔会把"没上报成"的几种原因折成一档）：
+
+        - `attempted=False, state="no_conductor"`：这一层没有已装配的主控；
+        - `attempted=True, state="escalated"`：留言真的写进了父的收件箱（`msg_id` 可查）；
+        - `attempted=True, state="refused"`：`escalate` 的受控拒绝（`not_caller` /
+          `no_session` / `invalid_params` / `inbox_write_failed`），理由码原样带回。
+
+        **绝不把"没上报"写成"上报了"**：三种结果在返回值里占三种 `state`。
+        """
+        from .. import conductor as CX
+
+        sid = str(sg.get("sid") or "")
+        need = (f"E 没有接模型缝（llm=None）⇒ 写不出子目标 {sid} 的核验脚本。"
+                "请给 E 接上缝：run-agent --experiment-reasoning"
+                "（或装配期 llmseam.set_role_seam(\"E\", …)）—— 这里缺的是缝，不是脚本")
+        mine = str(CX.current_task_id() or "")
+        pid, prole = CX.current_parent()
+        why_parent = "运行期上下文（`calling_as`）里挂着的"
+        if mine and not pid:
+            row = next((r for r in self.store.rows("tasks")
+                        if str(r.get("task_id")) == mine), None)
+            pid = str((row or {}).get("parent_task_id") or "")
+            prole = str((row or {}).get("called_by") or "")
+            why_parent = f"`tasks` 里 {mine} 那一行读到的"
+        root, csid = CX.current_session()
+        root = str(root or "") or str(getattr(self.store, "root", "") or "")
+        base: dict[str, Any] = {
+            "attempted": False, "state": "no_conductor", "reason": "",
+            "why": "", "msg_id": "", "to": "", "need": need,
+            "session_root": root, "sid": str(csid or ""),
+        }
+        try:
+            from ..tools.conductor_tools import cached_conductor
+
+            conductor = cached_conductor(self.store)
+        except Exception as exc:  # noqa: BLE001 —— 取不到主控是"没上报"，不是崩溃
+            return {**base, "why": f"取主控失败（{type(exc).__name__}: {exc}）"}
+        if conductor is None:
+            return {**base,
+                    "why": "`conductor_tools.conductor_for` 的缓存里没有这个工作区的主控"
+                           "（这一层没有被装配过）"}
+        evidence = [f"子目标 {sid}", f"plan:{plan.get('plan_id')}"]
+        evidence += [f"exp:{x}" for x in (sg.get("experiment_ids") or [])]
+        try:
+            got = conductor.escalate(
+                need=need, kind="missing_input", evidence=evidence,
+                by="F", my_task_id=mine, parent_task_id=pid, parent_role=prole,
+                session_root=root, sid=str(csid or ""),
+            )
+        except Exception as exc:  # noqa: BLE001 —— 上报失败不许打断攻坚（FC-21）
+            return {**base, "attempted": True, "state": "failed",
+                    "why": f"{type(exc).__name__}: {exc}"}
+        got = dict(got or {})
+        return {
+            **base,
+            "attempted": True,
+            # 三态只用 `state` 表达（`escalated` / `refused` / `no_conductor` / `failed`）：
+            # 一个布尔 `ok` 会把"没上报成"的三种原因折成一档，而这一格正是要分开它们的地方。
+            "state": str(got.get("state") or ("escalated" if got.get("ok") else "refused")),
+            "reason": str(got.get("reason") or ""),
+            "why": str(got.get("error") or "") or (
+                f"父 = {pid or '（没有召唤号）'}（{why_parent}）"),
+            "msg_id": str(got.get("msg_id") or ""),
+            "to": str(got.get("to") or ""),
+        }
+
     # ---------------------------------------------------------------- 产物出口（P3-6）
 
     #: 攻坚台账的落点（工作区相对）。与 `specs/f.py` 的 policy 逐字一致
@@ -1570,6 +1750,16 @@ class _Core:
                 spec_line = (f"；这一条子目标带的判据是：criterion={spec.get('criterion')!r}、"
                              f"params={spec.get('params')!r}、期望界={spec.get('expected_bound')!r} —— "
                              "E 要先把脚本写进工作区（`script_path`）再跑")
+                if code == "no_seam":
+                    # ---- 缺的是缝（环境事实），不是"这一轮想错了"
+                    #
+                    # 这一支为什么要单独一条路（业主裁定，真机依据见
+                    # `_missing_seam_round` 的 docstring）：改前它和"跑了但没结果"
+                    # 在 `history` 上同形（`outcome="no_change"`、没有产物、没有上行），
+                    # 于是 F 每一轮都撞同一句"有判据但没有脚本"，直到计划 `stalled`。
+                    # 现在落 `dead_end(缺工具)` + `conductor.escalate(missing_input)`。
+                    return self._missing_seam_round(sg, plan=plan, note=note,
+                                                    spec_line=spec_line)
                 return {
                     "action": "script_not_authored",
                     "outcome": "no_change",
@@ -1584,6 +1774,9 @@ class _Core:
                     # `no_seam` 是环境事实（再试一次还是同一句话，要去接线）⇒ 不计尝试；
                     # 其余（`bad_source` / `bad_spec` / `write_failed` / `judge_*`）都要计 ——
                     # 它们是"真的试过一次"，重试要有读数。
+                    # （`no_seam` 现在走上面 `_missing_seam_round` 那一支，所以这一格
+                    # 对它恒为 True；表达式原样留着是纵深防御：将来若有人把那一支并回来，
+                    # "环境事实不计尝试"这条口径不会跟着丢。）
                     "count_attempt": code != "no_seam",
                 }
             script_path = str(authored.get("script_path") or "")
