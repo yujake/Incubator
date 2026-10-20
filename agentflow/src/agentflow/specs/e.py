@@ -271,6 +271,38 @@ SPEC = AgentSpec(
     build=_build,
 )
 
+def _action_summary(action: str) -> str:
+    """本角色动作表里那个动作的摘要（`ACTIONS` 是它的唯一落点）。
+
+    提示词里那一行是 `- {动作名}：{摘要}{参数提示}；副作用 …`，所以"动作名：摘要"
+    正好是它的前缀（见 `agent_prompts.actions_lines`）。
+    """
+    for spec in ACTIONS:
+        if spec.action == action:
+            return spec.summary
+    raise LookupError(f"E 的动作表里没有 {action!r} ⇒ 改写表的左边没有出处")
+
+
+def _tool_summary(tool_name: str) -> str:
+    """工具面上那件工具的摘要（`ToolSpec.summary` 是它的唯一落点）。
+
+    提示词里那一行是 `- {工具名}：{摘要}{参数提示}；副作用 …`（见
+    `agent_prompts.tools_lines`），所以"工具名：摘要"正好是它的前缀。
+
+    为什么依赖写成函数内 import：`specs` ← `capabilities` ← 装配面是既有方向，本模块
+    新增的这条边只往 `tools.verify_tools` 去（那个模块只依赖 `schema` / `store` /
+    `tools.base`，不回指 `specs`），沿着它走不回本模块 ⇒ 不成环。写在函数里只是让
+    "这条边存在"显式地只出现在用到它的那一处。
+    """
+    from ..tools import verify_tools as _VT
+
+    for value in vars(_VT).values():
+        spec = getattr(value, "__tool_spec__", None)
+        if getattr(spec, "name", None) == tool_name:
+            return spec.summary
+    raise LookupError(f"工具面上没有 {tool_name!r} ⇒ 改写表的左边没有出处")
+
+
 #: 关掉 Lean 之后，E 的「面」按业主 2026-10-12 的口径改写（逐字）：
 #: 「负责 Lean 的智能体 E 在开关关掉时可不载入有关形式化验证的提示词，全体成员关于 E 的
 #: 印象也可以没有『负责形式化验证』这个说法，一旦提到形式化验证所有人的第一反应是
@@ -284,11 +316,30 @@ SPEC = AgentSpec(
 #: 所以：**声明不动**，动的只是"渲染给模型看的那份文本"；改写表跟声明住在同一个文件里
 #: （同一个事实只有一个落点），由 `agent_prompts` 在渲染之后按开关应用。
 #:
+#: ## 为什么"左边"不许手抄（同源）
+#:
+#: 左边如果是从工具面**手抄**来的一句，它就多了一份会漂的副本 —— 实测漂过一次：
+#: `verify.check_formal` 的描述改成了「把一条命题（Lean 源码，给 `source` 或 `script_path`）
+#: 交给检查器**真跑**一次。」，而本表左边还写着旧句「（Lean 源码）交给检查器真跑一次：」。
+#: 后果不是报错，是**静默失效**：关掉形式化那一档里这一条什么都没替换，模型照样读到
+#: "把 Lean 源码交给检查器真跑一次"，而"关掉时没有形式化字样"这句话就成了假绿
+#: （唯一会响的是判据的"反真空"那一条：它报的是"表失效了"，不是"面广告了"）。
+#:
+#: 所以工具面与动作面这两条的左边**从真身读**：`_tool_summary()` 读
+#: `tools.verify_tools` 里 `ToolSpec.summary`，`_action_summary()` 读本文件的 `ACTIONS`
+#: —— 都是那条面在提示词里的原样前缀（`agent_prompts.tools_lines` / `actions_lines`
+#: 印的就是 `- {名字}：{摘要}…`）。工具描述再改一次，这一条自动跟着改；改到对不上
+#: 就是"提示词里根本没有这一行"，那由判据的反真空那一半当场报出来。
+#:
+#: 刻意**整段**替换（不只替换第一句）：摘要是"这件工具怎么用、哪些状态算通过"，
+#: 关掉之后整段都不该再教（它的后半句还提着 Lean 源码与 `.lean` 文件）。
+#:
 #: ## 判据（`tests/test_lean_switch.py`）
 #:
 #: ① 开关开着时：每一条的左边必须在**整份提示词里逐字出现**（反真空 —— 否则这张表
 #:    会在某次重写之后悄悄失效，而"关掉时没有形式化字样"这句话就成了假绿）；
-#: ② 开关关掉时：左边一条都不许再出现，且提示词里必须出现"系统做不了形式化验证"。
+#: ② 开关关掉时：左边一条都不许再出现、每一条的右边必须出现（= 这一条真的被应用了），
+#:    且提示词里必须出现"系统做不了形式化验证"。
 NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     # 职责句（E 自己的开头 + 全体角色的伙伴表里那一行都是这一句）
     ('数值实验与形式化验证：把一条断言变成可复现的实验或可检查的形式化代码',
@@ -304,12 +355,12 @@ NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     # E 的官能注解（有品味那一条里的"验到什么程度算够"）
     ('哪种验证才算证据、验到什么程度算够：这是你的品味，要写出取舍理由。',
      '哪种证据才算数、审到什么程度算够：这是你的品味，要写出取舍理由。'),
-    # 工具面上的那一件（E/F/G 都看得见）
-    ('verify.check_formal：把一条命题（Lean 源码）交给检查器真跑一次：',
+    # 工具面上的那一件（E/F/G 都看得见）：左边从工具面读（同源，见上面「为什么不许手抄」）
+    (f"verify.check_formal：{_tool_summary('verify.check_formal')}",
      'verify.check_formal：本会话形式化已关闭 —— 系统做不了形式化验证'
      '（调它只会拿到 reason=lean_disabled）：'),
-    # 工具面上的那一件（E 自己的"手段"清单里是短名字那一行）
-    ('check_formal：转发到形式化检查器；没有后端时如实回答『没做』。',
+    # 工具面上的那一件（E 自己的"手段"清单里是短名字那一行）：左边从本文件的 ACTIONS 读
+    (f"check_formal：{_action_summary('check_formal')}",
      'check_formal：本会话形式化已关闭 —— 系统做不了形式化验证（reason=lean_disabled），'
      '别派它。'),
     # ⚠️ **2026-10-16 退场一条**（业主口径 S1「M 只派活」）：这里原本还有一条
@@ -318,8 +369,8 @@ NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     # 不印动作与参数"之后，那一行在任何角色的提示词里都不再出现 ⇒ 这条改写永远匹配不到
     # （判据 `test_the_no_lean_variant_rewrites_every_role_face` 的"改写表的左边在开着时的
     # 提示词里找不到（表失效了）"当场报了出来）。E 自己提示词里的形式化面仍由上面那两条守
-    # （`verify.check_formal` 的 tools 行、`check_formal：转发到形式化检查器…` 的短名行）
-    # —— 覆盖面没有丢，去掉的是一个**已经不存在的面**。
+    # （`verify.check_formal` 的 tools 行、`check_formal：…` 的短名行，两条的左边现在都
+    # 从真身读）—— 覆盖面没有丢，去掉的是一个**已经不存在的面**。
     # 别人的口径里"要不要形式化"的两处（D 的"初步审阅"与"可挽救性评估"）
     ('数学对错的最终背书在形式化（E）或人', '数学对错的最终背书在逐行审阅（E / V）或人'),
     ('要多少预算（大概几步、要不要形式化）', '要多少预算（大概几步）'),

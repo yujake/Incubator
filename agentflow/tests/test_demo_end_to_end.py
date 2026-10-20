@@ -82,6 +82,18 @@ def test_demo_relations_and_concepts(demo_store: Store) -> None:
 
 def test_demo_deep_verify_has_no_issues(demo_store: Store) -> None:
     """端到端数据必须通过 deep 校验（含重开文献复核引文）：0 error / 0 warning。"""
+    # 反真空（2026-10-21）：`warnings == []` 不许靠"demo 里根本没有那一类行"通过 ——
+    # 4 条概念行（`external_lit` + `active` + `quote_verified=None`）必须**还在**。
+    # 它们是"概念行不适用逐字回验"那条口径的素材：判据本体与依据写在
+    # `verify.active_stmt_needs_quote_check` 上面（`source_lit_id` 不是"逐字抄自"、
+    # `proof_text` 概念行结构上不许带、读侧早已跳过），反真空由
+    # `tests/test_verify.py::test_an_unsourced_non_concept_statement_still_warns` 钉住。
+    concept_rows = [r for r in demo_store.rows("statements")
+                    if str(r.get("kind") or "") == "concept"
+                    and str(r.get("origin") or "") == "external_lit"
+                    and str(r.get("status") or "") == "active"
+                    and r.get("quote_verified") is not True]
+    assert len(concept_rows) == 4, [r.get("stmt_id") for r in concept_rows]
     rep = verify_all(demo_store, deep=True, extract_text=extract_text)
     assert rep.ok is True, [i.to_dict() for i in rep.errors]
     assert rep.warnings == [], [i.to_dict() for i in rep.warnings]

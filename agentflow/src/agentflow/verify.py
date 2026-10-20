@@ -1755,6 +1755,49 @@ def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]]) -> list[dict
     return sorted(out, key=lambda item: item["stmt_id"])
 
 
+#: 「`active` 的文献命题必须逐字回验」这一条判据的**判据本体**（一处口径）。
+#:
+#: ## 为什么概念行不在这一条的适用面里
+#:
+#: （2026-10-21，`demo/run` 深验实测 4 条 `active_stmt_quote_unverified`，全部是概念行）
+#:
+#: ① 概念行的 `source_lit_id` **不是**"定义逐字抄自那里"：`agent_b/run_once.py` 写这一格时
+#:    逐字注明「这一格记的是"这个术语是从哪一篇抽出来的"（概念行的出处），不是"定义逐字
+#:    抄自那里"」。而 `origin` 正是从这一格推出来的（`conceptrows.resolve_concept_origin`：
+#:    有出处 ⇒ `external_lit`）⇒ 概念行上的 `origin="external_lit"` 只说"术语的来路是
+#:    某篇文献"，**不构成**"这里有一段原文摘录等着被逐字回验"。
+#: ② `quote_verified` 的比对对象是 `Statement.proof_text`（`schema.Statement` 的 docstring：
+#:    「`proof_text`（逐字摘录）：`quote_verified` 的比对对象就是它。没有逐字原文，
+#:    "引文回验"这件事无从做起」），而概念行**结构上不许**带 `proof_text`
+#:    （`conceptrows.concept_statement` 收到非空 `proof_text` 当场 `ValueError`；那唯一写口
+#:    写死 `proof_text=""` + `quote_verified=None`）。⇒ 这一条对概念行**永远不可能被满足**，
+#:    留着它就是把审计变成一台恒红的机器（"审计天天报警，人就开始忽略它"）。
+#: ③ 读侧早就是这么判的，两处都**显式**跳过概念行，理由串都援引「概念不参与等级链」
+#:    （`draft/97` §14.5；`evidencebits.derive_grade` 对 `kind="concept"` 短路成
+#:    `not_applicable`）：`verifications.proof_review_gap` 写"这一格对它**不适用**"、
+#:    `weaker_than_evidence_gaps` 直接 `continue`。`draft/83` 的真机读数也是同一形态
+#:    （「`statements` 344 条是概念行，`quote_verified` 全 `None` 且带受控理由」——那是
+#:    **正常**，不是欠账）。审计面单独把它们算成 warning 就是两处口径不一致。
+#:
+#: ## 反真空不许省
+#:
+#: 把概念行排除**不是**把这一条摘掉：真的有一条"没出处"的**非概念**命题（`active` +
+#: `external_lit` + `quote_verified is not True`），这一条照旧出 —— 由
+#: `tests/test_verify.py::test_an_unsourced_non_concept_statement_still_warns` 钉住，
+#: 并用"把判据本体换成永远 False"的负控证明那条断言不是真空的。
+def active_stmt_needs_quote_check(row: Mapping[str, Any]) -> bool:
+    """这一行适不适用"`active` 的文献命题必须逐字回验"（`_check_13` 第 4 条的**唯一口径**）。
+
+    三态纪律：`quote_verified is not True` 收的是 `False`（比对过、不一致）与 `None`
+    （还没查）两档 —— 它们与 `True` 不是同一件事，所以这里写 `is not True` 而不是 `!=`。
+    """
+    if str(row.get("kind") or "") == "concept":
+        return False
+    return (str(row.get("status") or "") == "active"
+            and str(row.get("origin") or "") == "external_lit"
+            and row.get("quote_verified") is not True)
+
+
 def _check_13(rep, store) -> None:
     """`verify_all` 的第 13 段：命题台账（`statements`）的不变量（`draft/37` §16 P1）。
 
@@ -1773,6 +1816,9 @@ def _check_13(rep, store) -> None:
        "B 的唯一自动幻觉防线"就是逐字回验（见 `quoteverify` 的 docstring）。
        它降为 warning 而不是 error，理由与 `external_unavailable` 那条一致：
        这是已知未做、不是谎报；但它在报告里必须看得见。
+       **概念行不在适用面里**（判据本体：:func:`active_stmt_needs_quote_check`，
+       理由三条写在那个函数上面：概念行的 `source_lit_id` 不是"逐字抄自"、
+       `quote_verified` 的比对对象 `proof_text` 概念行结构上不许带、读侧两处早已跳过）。
     5. 五元位与它们各自的台账对不对得上（业主 2026-10-09：「再确认一条命题的五元状态
        是哪张表在维护，要做好映射（如果五元状态里说有证明，证明应该在 B 维护的表里
        可查）」）：判据本体是 `evidencebits.bit_evidence_gaps`（位 ⇒ 表的映射也住那里，
@@ -1864,9 +1910,7 @@ def _check_13(rep, store) -> None:
                     "要么把这条命题降为 cross_check，要么先解决被引用的那一条"
                     "（§8/§9：矛盾与错文献都要落到'压在它上面的结论怎么办'）",
                 ))
-        if (str(s.get("status") or "") == "active"
-                and str(s.get("origin") or "") == "external_lit"
-                and s.get("quote_verified") is not True):
+        if active_stmt_needs_quote_check(s):
             rep.issues.append(Issue(
                 "warning", "statements", sid, "active_stmt_quote_unverified",
                 f"命题 {sid} 是 active 的文献命题，但 quote_verified={s.get('quote_verified')!r}"

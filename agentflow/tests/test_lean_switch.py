@@ -227,16 +227,29 @@ def test_the_prompt_blocks_follow_the_switch(monkeypatch: pytest.MonkeyPatch) ->
 
 
 # ============================================================ 5b. 关掉时的「面」
+def _unapplied_entries(table: tuple[tuple[str, str], ...],
+                       text: str) -> list[tuple[int, str]]:
+    """逐条判"这一条改写真的被应用了吗"：**原句还在**、或**改写后的文本没出现** ⇒ 没应用。
+
+    为什么两条都要判（`T-L3`，2026-10-20 修的那一处静默失效）：只判"原句不在"会被
+    `old` 自己写错骗过去 —— 写错的原句当然不在任何文本里，于是"关掉时没有形式化字样"
+    成了假绿。`new` 必须出现才是"这一条真的替换过"。
+    """
+    return [(i, old) for i, (old, new) in enumerate(table)
+            if old in text or new not in text]
+
+
 def test_the_no_lean_variant_rewrites_every_role_face(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """业主 2026-10-12（逐字）：「负责 Lean 的智能体 E 在开关关掉时可不载入有关形式化验证的
     提示词，全体成员关于 E 的印象也可以没有『负责形式化验证』这个说法，一旦提到形式化验证
     所有人的第一反应是系统做不了」。
 
-    三个方向都判：① 反真空（改写表/删除表的左边必须在开着时的提示词里逐字出现，
+    四个方向都判：① 反真空（改写表/删除表的左边必须在开着时的提示词里逐字出现，
     否则它们会在某次重写之后悄悄失效，而"关掉时没有形式化字样"就成了假绿）；
     ② 关掉时十个角色里一个形式化广告面都不许剩（职责句 / 工具描述 / 伙伴表都算），
-    且每格都必须出现「系统做不了」；③ 关掉时 E 不再载入 `TOOLCHAIN_FORMAL` 那一段。
+    且每格都必须出现「系统做不了」；③ 关掉时**逐条**核这张表的每一条都真的被应用了
+    （原句不剩 ＋ 改写后的文本在位 ＋ 改写文本自己不提 Lean）；④ 开着时收口逐字返回原文。
     """
     from agentflow import agent_prompts as AP
     from agentflow import schema as S
@@ -249,6 +262,9 @@ def test_the_no_lean_variant_rewrites_every_role_face(
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     AP.reset_toolchain_readings()
     on_text = "\n".join(AP.system_prompt(r, registry=reg) for r in roles)
+    # ④ 开着 ⇒ 原样：收口在开着那一档必须逐字返回原文（一次替换都不做）
+    assert AP._apply_no_lean_variant(on_text) == on_text, \
+        "开着时收口改了提示词的一个字（负控：这一档必须与没这张表时逐字相同）"
     for old, _new in E.NO_LEAN_REPLACEMENTS:
         assert old in on_text, f"改写表的左边在开着时的提示词里找不到（表失效了）：{old!r}"
     for mark in E.NO_LEAN_DROP_LINE_MARKERS:
@@ -260,6 +276,8 @@ def test_the_no_lean_variant_rewrites_every_role_face(
     AP.reset_toolchain_readings()
     try:
         facts = AP.toolchain_facts_text()
+        off_text = "\n".join(
+            AP.system_prompt(role, registry=reg, toolchain_facts=facts) for role in roles)
         for role in roles:
             text = AP.system_prompt(role, registry=reg, toolchain_facts=facts)
             for face in ("数值实验与形式化验证", "转发到形式化检查器",
@@ -268,9 +286,76 @@ def test_the_no_lean_variant_rewrites_every_role_face(
                 assert face not in text, f"{role} 的提示词里还留着形式化广告面：{face!r}"
             assert "系统做不了" in text, (
                 f"{role} 的提示词里必须说清「本会话不做形式化验证：系统做不了」")
+        # ③ 逐条：关掉之后每一条原句都必须被改写掉、且改写后的那一段必须真的在位。
+        #    只判"原句不在"是不够的（写错的原句当然不在）—— 两条一起才是"逐条断言"，
+        #    负控见 `test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name`。
+        unapplied = _unapplied_entries(E.NO_LEAN_REPLACEMENTS, off_text)
+        assert unapplied == [], (
+            "关掉形式化之后这些改写没有生效（原句还在 / 改写文本没出现）："
+            + "；".join(f"第 {i} 条 {old[:40]!r}…" for i, old in unapplied))
+        for i, (old, new) in enumerate(E.NO_LEAN_REPLACEMENTS):
+            assert "Lean" not in new, (
+                f"改写表第 {i} 条（{old[:40]!r}…）的改写文本自己还提着 Lean：{new!r}")
     finally:
         monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")   # 还原成套件钉的那一档
         AP.reset_toolchain_readings()
+
+
+def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """负控（③ 那把尺子）：把表里一条原句**改坏** ⇒ 必须红，并点名是哪一条。
+
+    为什么这条负控必须有：工具面/动作面那两条的左边现在是**从真身读的**
+    （`specs/e._tool_summary` / `_action_summary`），所以"表与工具面抄漂"这种失效
+    结构上不会再发生 —— 但"这张表根本没跑"仍然可能（例如收口换了匹配方式、或那一行
+    被别处先删掉了）。`specs/e.py` 那一批的原始故障正是"左边对不上 ⇒ 静默不替换"，
+    它当时唯一的读数就是判据报"表失效了"，而"面还在广告"这件事**没有任何断言**。
+    这条负控钉住的就是后者。
+
+    取的是工具面那一条（`old` 以 `verify.check_formal：` 开头）：它正是当年漂掉的那一条，
+    改坏它 ⇒ 关掉时那一行照旧读作"把 Lean 源码交给检查器真跑一次"。
+    """
+    from agentflow import agent_prompts as AP
+    from agentflow import schema as S
+    from agentflow.specs import e as E
+    from agentflow.tools import build_registry
+
+    roles = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
+    reg = build_registry().registry
+    victim = next(i for i, (old, _n) in enumerate(E.NO_LEAN_REPLACEMENTS)
+                  if old.startswith("verify.check_formal："))
+
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
+    AP.reset_toolchain_readings()
+    try:
+        facts = AP.toolchain_facts_text()
+
+        def _off_text() -> str:
+            return "\n".join(
+                AP.system_prompt(r, registry=reg, toolchain_facts=facts) for r in roles)
+
+        # 正控：原表条条都应用得上（否则负控的"改坏"就分不清是谁的问题）
+        assert _unapplied_entries(E.NO_LEAN_REPLACEMENTS, _off_text()) == []
+
+        old, new = E.NO_LEAN_REPLACEMENTS[victim]
+        broken = list(E.NO_LEAN_REPLACEMENTS)
+        broken[victim] = (old + "（故意改坏）", new)
+        monkeypatch.setattr(E, "NO_LEAN_REPLACEMENTS", tuple(broken))
+        AP.reset_toolchain_readings()
+        hit = _unapplied_entries(tuple(broken), _off_text())
+        assert [i for i, _old in hit] == [victim], (
+            f"改坏第 {victim} 条之后尺子没有点名它（点到了 {hit!r}）")
+        assert hit[0][1].endswith("（故意改坏）"), hit
+        # 反真空的另一半：被改坏的那一条在**开着**的那一档也找不到了 —— 这就是
+        # "表失效"的形态本身（不是"面没被改写"）。
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+        AP.reset_toolchain_readings()
+        on_text = "\n".join(AP.system_prompt(r, registry=reg) for r in roles)
+        assert hit[0][1] not in on_text, "改坏的原句居然还在提示词里（那它没改坏）"
+    finally:
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+        AP.reset_toolchain_readings()
+
 
 
 # ============================================================ 6. 用词上限（论文那一档）

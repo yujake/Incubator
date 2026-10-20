@@ -353,3 +353,103 @@ def test_a_concept_row_without_proof_text_is_not_flagged(clean_store: Store) -> 
         row["proof_text"] = "一段真实的证明正文"
     assert concept_rows_with_proof_text(others) == [], (
         "非概念行被当成了'概念行带证明文本'")
+
+
+# ------------------------ `active` 文献命题的逐字回验：概念行不在适用面里（2026-10-21）
+#
+# 起因（真机读数）：`real:fresh-demo` 的深验比冻结快照多出 **4 条**
+# `active_stmt_quote_unverified`，4 条全是概念行（`origin=external_lit`、`status=active`、
+# `quote_verified=None`）。判断的方向不是"把 demo 数据补上逐字出处"，而是**这一条规则对
+# 概念行不适用** —— 三条依据（逐字）都写在 `verify.active_stmt_needs_quote_check` 上面：
+# ① 概念行的 `source_lit_id` 是"术语从哪一篇抽出来的"，不是"定义逐字抄自那里"；
+# ② `quote_verified` 的比对对象是 `proof_text`，而概念行结构上不许带 `proof_text`
+#    （`conceptrows.concept_statement` 当场 `ValueError`）⇒ 这一条对概念行永远不可能满足；
+# ③ 读侧 `verifications.proof_review_gap` / `weaker_than_evidence_gaps` 早就显式跳过概念行
+#    （「概念不参与等级链」，`draft/97` §14.5）。
+#
+# 下面三条：① 概念行 ⇒ 不报；② 反真空 ⇒ 同一行换成**非概念**命题就照旧报；
+# ③ 负控 ⇒ 把判据本体（`active_stmt_needs_quote_check`）换成"永远不适用"⇒ ② 红。
+
+
+def _put_statement(store: Store, row) -> None:
+    """把一条已经 `validate()` 过的 `Statement` 落进库（夹具的写侧，走正常事务）。
+
+    落完立刻对齐计数器（`conftest.sync_counters`）：手工插行不同步它，`verify_all` 会报一条
+    与"本次要验证的不变量"毫无关系的 `counter_behind` —— 那是噪音，不是判据。
+    """
+    from conftest import sync_counters
+
+    with store.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row.to_dict())
+    sync_counters(store)
+
+
+def _quote_unverified(rep) -> list:
+    """只挑 `active_stmt_quote_unverified` 那一条的 issue（判据的读法一处）。"""
+    return [i for i in rep.issues if i.code == "active_stmt_quote_unverified"]
+
+
+def _concept_row_like_the_demo(store: Store, sid: str = "0002"):
+    """造一条**与 demo 同形**的概念行：`external_lit` + `active` + `quote_verified=None`。
+
+    刻意走生产写口（`conceptrows.concept_statement`），不手搓字段：这条判据的分界线
+    必须建立在"真写进来的那种行"上，否则判的是一个不存在的形状。
+    """
+    lit = str(store.rows("literature")[0]["lit_id"])
+    row = CR.concept_statement(stmt_id=sid, label="ring",
+                               definition="a ring in which every nonzero element has an "
+                                          "inverse（这条定义只为判据而造）",
+                               source_lit_id=lit)
+    assert row.origin == "external_lit" and row.status == "active", (row.origin, row.status)
+    assert row.quote_verified is None and row.proof_text == ""
+    return row
+
+
+def test_a_concept_row_is_not_an_unverified_literature_quote(clean_store: Store) -> None:
+    """① 正控：概念行（与 demo 同形）⇒ **不**报 `active_stmt_quote_unverified`。
+
+    为什么这条不是"把规则放宽"：概念行既没有"原文摘录"（`source_lit_id` 记的是术语来路），
+    也没有可比对的 `proof_text`（结构上不许带）⇒ 这一条对它恒不可满足，留着就是恒红。
+    """
+    _put_statement(clean_store, _concept_row_like_the_demo(clean_store))
+    rep = verify_all(clean_store)
+    assert _quote_unverified(rep) == [], [i.to_dict() for i in _quote_unverified(rep)]
+    assert rep.ok is True, [i.to_dict() for i in rep.errors]
+
+
+def test_an_unsourced_non_concept_statement_still_warns(clean_store: Store) -> None:
+    """② 反真空：**非概念**命题真没逐字回验 ⇒ 这一条照旧出（证明规则没被整体摘掉）。
+
+    素材与上一条只差 `kind` 一格 —— 分界线就是它，所以这一对判据读的是同一个事实的两面。
+    """
+    row = _concept_row_like_the_demo(clean_store)
+    _put_statement(clean_store, row)
+    # 把这一行的 `kind` 换成非概念（其余一个字段不动）：它现在是一条"文献命题"，
+    # 说得出出处、却拿不出逐字回验 ⇒ 正是这一条 warning 的靶子。
+    _mutate_table(clean_store, "statements",
+                  lambda rows: [r.__setitem__("kind", "theorem")
+                                for r in rows if str(r.get("stmt_id") or "") == "0002"])
+    hits = _quote_unverified(verify_all(clean_store))
+    assert [i.row_id for i in hits] == ["0002"], [i.to_dict() for i in hits]
+    assert hits[0].level == "warning", hits[0].to_dict()
+    assert "quote_verified" in hits[0].message, hits[0].message
+
+
+def test_removing_the_quote_rule_makes_the_anti_vacuum_assertion_red(
+        clean_store: Store, monkeypatch) -> None:
+    """③ 负控：把判据本体换成"永远不适用" ⇒ ② 那条断言必须红。
+
+    摘的是**判据本体**（`verify.active_stmt_needs_quote_check`），不是某条断言的字符串：
+    这样"红"才说明 ② 真的走这一条判据，而不是碰巧读了别处的数据。
+    """
+    from agentflow import verify as V
+
+    _put_statement(clean_store, _concept_row_like_the_demo(clean_store))
+    _mutate_table(clean_store, "statements",
+                  lambda rows: [r.__setitem__("kind", "theorem")
+                                for r in rows if str(r.get("stmt_id") or "") == "0002"])
+    assert [i.row_id for i in _quote_unverified(verify_all(clean_store))] == ["0002"]
+
+    monkeypatch.setattr(V, "active_stmt_needs_quote_check", lambda row: False)
+    assert _quote_unverified(verify_all(clean_store)) == [], (
+        "把判据本体摘掉之后还报得出来 ⇒ ② 不是这条判据给的（那条断言是真空的）")

@@ -408,8 +408,18 @@ def test_the_prompt_digest_does_not_move_between_calls() -> None:
 
     负控：把某一行的摘要改一个字符 ⇒ 必须红，且报出"有几种摘要"。
     """
+    # 2026-10-21 口径修正：这条判据问的是"**同一趟**里同一角色两次调用是不是同一段前缀"，
+    # 不是"跨趟也不许变" —— 跨趟会变正是我们要的（提示词改了、facts 挪了位置）。
+    # 旧写法把所有趟的行混在一起比，于是"提示词真的改过一次"会被读成"同一角色两次调用不一致"。
+    # 所以按 `at`（趟）分组；跨趟一致性由 `test_the_recorded_digests_still_match_the_rendered_prompts` 守最新一趟。
     rows = [row for run in _runs() for row in (run.get("rows") or [])]
-    problems = _digest_problems(TARGETS, rows)
+    per_run = []
+    for run in _runs():
+        group = list(run.get("rows") or [])
+        if group:
+            per_run.extend(_digest_problems(TARGETS, group) and [f'趟 {run.get("at")}：' + x
+                                                             for x in _digest_problems(TARGETS, group)] or [])
+    problems = per_run
     assert not problems, "；".join(problems)
 
     # 负控：改**一行**的摘要 ⇒ 同一个函数必须看见。
