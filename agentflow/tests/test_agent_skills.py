@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 
@@ -385,18 +386,63 @@ def test_every_role_index_is_generated_from_the_catalog():
             assert slug not in block, f"{role} 的索引里混进了别人的条目：{slug}"
 
 
+#: "V 是 M 的直接边"这一类说法的可扫写法（2026-10-20 之后都不许出现在手册里）。
+#: `M→B→V` 不含 `M→V`，所以留住那条两跳路不会被误判。
+_V_AS_DIRECT_MARKERS = ("直接派V", "V本身是直接边", "出边里已有V", "M→V")
+
+#: 撤 V 直连之后**仍然必须读得到**的义务句（反真空：不许用"整段删掉"冒充"改对"）。
+_HANDOVER_KEEP = ("D去核", "由D让F补签")
+
+#: 强调符号与空白：`派 **D** 去核` 与 `派 D 去核` 是同一句话（按"读到的意思"判）。
+_EMPHASIS = re.compile(r"[\s*`]+")
+
+
+def _flat(text: str) -> str:
+    """去掉强调符号与所有空白 —— 判"读到的意思"，不判排版。"""
+    return _EMPHASIS.sub("", text)
+
+
+def _manual_route_problems(body: str) -> list[str]:
+    """手册里"派 V 的路"写错的地方（空列表 = 写对了）。"""
+    flat = _flat(body)
+    out = [
+        f"手册里读不到「{needle}」—— 那条路今天仍然通（2026-10-20 只撤了 M 直连 V）"
+        for needle in ("M→B→V", "M→D→F") if needle not in flat
+    ]
+    out += [
+        f"手册里还写着「{needle}」—— V 不在 M 的出边里"
+        f"（2026-10-20 业主裁定：M 不再直连 V；派 V 只有 F 与 B 两个入口）"
+        for needle in _V_AS_DIRECT_MARKERS if needle in flat
+    ]
+    return out
+
+
+def _manual_handover_problems(body: str) -> list[str]:
+    """手册里"义务已转交 D"那几句的缺失（空列表 = 都在）。"""
+    flat = _flat(body)
+    return [
+        f"手册里读不到「{needle}」—— 删假陈述不许把义务一起删"
+        f"（业主：这条义务**挪给 D**，不是取消）"
+        for needle in _HANDOVER_KEEP if needle not in flat
+    ]
+
+
 def test_the_conductor_skill_records_the_current_dispatch_routes():
-    """M 的"派给谁"那一条必须写着**现状**，而不是旧路线（2026-10-18 更正读数）。
+    """M 的"派给谁"那一条必须写着**现状**，而不是旧路线（2026-10-20 更正读数）。
 
     与 `tests/test_the_conductor_does_not_directly_control_bfv.py` 同一条裁定的另一侧：
-    权限面里**只剩 `F`** 不许直接控制（`B` 于 2026-10-13、`V` 于 2026-10-18 被业主加回）
-    ⇒ "要 F 派给谁"必须在 M 的操作手册里写成链，"要 V 走查"必须写成**直接派 V**。
-    这条判据刻意不写死整段文字，只钉住四件事：
+    主控不许直接控制的**有两个** —— `F`（`M→D→F`）与 `V`（2026-10-20 业主裁定撤掉
+    `M→V`；V 只剩**经 B** 的两跳路 `M→B→V`）。`B` 于 2026-10-13 被加回、今天仍在出边里。
+    这条判据刻意不写死整段文字，只钉住五件事：
       ① F 仍然在 M 的出边外，手册给出那条链（`M → D → F`）；
-      ② V 现在是**直接边**，手册要写 `M → V` 并且 V 的动作可以出现在这个条目的
-         可派清单里（旧断言写的是"V 不许出现"，那是 2026-10-18 之前的读数）；
+      ② V 也**不在** M 的出边里 ⇒ 手册要写**经 B** 的 `M→B→V`，并且 V 的动作
+         不许再出现在这个条目的可派清单里（`validate()` 会把它判成做不到的指令）；
       ③ `forbidden_edge` 这个读数仍在（被拒时换链的依据）；
-      ④ 条目里不许把 F 列成能直接派的。
+      ④ 条目里不许把 F 列成能直接派的；
+      ⑤ 反真空：义务句"让 D 去核、由 D 让 F 补签"仍读得到（不许整段删掉冒充改对）。
+
+    # 2026-10-20 业主裁定：撤 M→V（改前这里是"V 是直接边 ⇒ 手册要写 M→V"；
+    # 期望值换了，判据强度没换）。
     """
     route = next(s for s in AS.CATALOG["M"] if "按任务类型" in s.slug)
     body = route.body
@@ -404,10 +450,40 @@ def test_the_conductor_skill_records_the_current_dispatch_routes():
     assert "M → D → F" in body or "D → F" in body, body[:300]
     assert "forbidden_edge" in body, "没写「被拒的读数长什么样」"
     assert "F" not in heads, f"M 的条目里不许把 F 列成能直接派的：{route.actions}"
-    # 2026-10-18 的裁定：V 是直接边 ⇒ 条目里**可以**出现 V 的动作，而且手册要写清 M→V
-    assert "V" in heads and "V.verify_proof" in route.actions, route.actions
-    assert "M→V" in body or "M → V" in body, body[:300]
+    # 2026-10-20 业主裁定「撤 M→V」：V 不在 M 的出边里 ⇒ V 也不许在可派清单里
+    assert "V" not in heads, f"M 的条目里不许把 V 列成能直接派的：{route.actions}"
     assert "D.propose_question" in route.actions and "B.run_once" in route.actions, route.actions
+    problems = _manual_route_problems(body) + _manual_handover_problems(body)
+    assert problems == [], "手册里的路线与 2026-10-20 的边表对不上：\n  - " + "\n  - ".join(problems)
+
+
+def test_the_negative_control_the_old_direct_v_sentence_in_the_manual_is_caught():
+    """负控：把"V 是直接边"的旧句加回手册 ⇒ 红；把义务句整段删掉 ⇒ 红（反真空）。
+
+    没有这一条，"手册里没有 M→V"就只是一句注释：旧句加回去，F 那条链、`forbidden_edge`
+    与动作清单全都照样过。另一半守的是"删掉≠转交"。
+    """
+    route = next(s for s in AS.CATALOG["M"] if "按任务类型" in s.slug)
+    body = route.body
+    assert _manual_route_problems(body) == [], "夹具前提：真身已改成经 B 的两跳路"
+    assert _manual_handover_problems(body) == [], "夹具前提：义务句还在"
+    # (a) 旧口径的三种写法各自加回，必须各自咬住
+    for old, needle in (
+        ("要 V 走查就**直接派 V**。", "直接派V"),
+        ("V 本身是直接边。", "V本身是直接边"),
+        ("你的出边里已有 V。", "出边里已有V"),
+        ("`M → V` 是你的直接边。", "M→V"),
+    ):
+        got = _manual_route_problems(body + "\n" + old)
+        assert any(needle in p for p in got), (old, got)
+    # (b) 反真空：把写着义务的那几行整段删掉 ⇒ 红（"删掉"不是"转交"）
+    dropped = "\n".join(line for line in body.splitlines() if "D 去核" not in line)
+    assert dropped != body, "夹具前提：手册里真有一行写着「让 D 去核」"
+    got = _manual_handover_problems(dropped)
+    assert any("D去核" in p for p in got), got
+    assert any("由D让F补签" in p for p in got), got
+    # 收尾（负控的负控）：原样的手册必须重新成立
+    assert _manual_route_problems(body) == [] and _manual_handover_problems(body) == []
 
 
 def test_the_negative_control_catches_a_path_under_no_registered_root(monkeypatch):

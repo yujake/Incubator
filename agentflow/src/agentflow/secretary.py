@@ -87,6 +87,32 @@ KIND_DECISION = "secretary_decision"
 #: 秘书的判断结论词表（`draft/55` §2 的 B 类）——**派活那一轴**的结论。
 DECISIONS = ("可派", "建议重排", "建议改派", "建议不派", "已优化", "已提醒", "已执笔")
 
+# ---------------------------------------------------------------- 两段式：洗 → 请示 → 确认
+#
+# 业主裁定（2026-10-21）：派活时的"委托秘书洗一遍格式"是**两段**，不是一段：
+#
+# | 段 | 谁做 | 产物 |
+# |---|---|---|
+# | ① 洗 + 请示 | 发件方秘书 | `washed == original` ⇒ 无事发生（直接执行，不多花一轮）；有差异 ⇒ **不执行**，出一份受控的请示读数（`outcome=wash_proposed` + `proposal_id` + 逐字段 diff） |
+# | ② 确认 | 发起方（父） | `accept_proposal=<id>` ⇒ 用 `washed` 执行；`reject_proposal=<id>` ⇒ 用 `original` 执行并留痕 |
+#
+# 为什么不是"直接应用"（S1g 的旧形态）：那等于秘书**替本体表态**（`draft/53` §2 的两条红线），
+# 而与它相对的那一版（"永远只建议"）又把洗格式变成摆设（`draft/90` E5 的差）。
+# 两段式把"洗"与"要不要按洗过的派"分开：洗是格式面的确定性命中，**要不要**是父的事。
+#
+# 受控词：确认/拒绝的字段名、请示的 `outcome` 取值 —— 三者都只有这一份定义。
+ACCEPT_PROPOSAL = "accept_proposal"
+REJECT_PROPOSAL = "reject_proposal"
+PROPOSAL_KEYS: tuple[str, ...] = (ACCEPT_PROPOSAL, REJECT_PROPOSAL)
+#: 第一段的受控 `outcome` 值（步骤结果里就这一个词说"这一步没有派活"）。
+OUTCOME_WASH_PROPOSED = "wash_proposed"
+#: 执行那一趟台账 `decision` 那一格的受控取值（请示 / 接受 / 拒绝，只有这三个词）。
+#: 三个都只在 :meth:`Secretary.optimize_outbound` 那一处产生，且与步骤结果的
+#: `outcome` / `accepted` 一一对应（读台账的人不必再去猜"这一行是请示还是确认"）。
+DECISION_PROPOSED = "洗出格式差异 ⇒ 请示"
+DECISION_ACCEPTED = "接受了秘书的格式洗"
+DECISION_REJECTED = "拒绝了秘书的格式洗"
+
 #: 「这条命题够不够格入库」的结论词表（业主 2026-10-14 裁决第 12 条**前半**）。
 #:
 #: 为什么要**另一张**词表而不是往 `DECISIONS` 里加两个字：那是两根不同的轴 ——
@@ -142,15 +168,19 @@ def _append_lock(path: Path) -> Any:
         return lock
 
 
-def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
-    """唯一的秘书台账追加口（S1m）：进程内锁 + 跨进程 `filelock`，`seq` 在锁内算。
+def _append_locked(path: str | Path, rec: Mapping[str, Any], *,
+                   stamp_field: str = "", stamp_prefix: str = ""
+                   ) -> tuple[bool, str, dict[str, Any]]:
+    """追加一行的**真身**：锁内取号（可选：顺手把 `stamp_field` 也发成号）。
 
-    返回 `(写成了吗, 问题)`。为什么必须集中到一处（`draft/91` §7 的 D107）：旧写法是
-    "先读全表算 `seq = max+1`、再 `path.open("a")` 追加" —— 读与写之间没有锁，
-    同角色的两个实例并发时会拿到同一个 `seq`（与 `_write_new_row` 修过的那个缺陷同族）。
+    返回 `(写成了吗, 问题, 落盘那一行)`。三件事只在这一处做：进程内锁、跨进程锁、
+    `seq = max+1`。`stamp_field` 非空时，那一格的值 = `stamp_prefix + 锁内 seq`
+    —— 这是"编号由秘书发"的唯一落点（`draft/90` §1.2 的请示编号，
+    见 :meth:`Secretary.note_decision` 的 `proposal`）：**同一个 seq 既是行号也是号源**，
+    于是"这个编号指向哪一行"在结构上不可能漂。
 
-    `seq` 的口径是每片自增（片就是"一个实例的账"），所以两片之间 `seq` 可以重复 ——
-    合并视图（`Secretary.merged_decisions`）按 `at` 排序，不靠 `seq` 全局唯一。
+    为什么要发号而不是让调用方拼一个：拼号的两种写法（时间戳、载荷哈希）都在
+    **锁外**取值 —— 并发下会重号，而重号的请示意味着"接受 A 的编号却执行了 B 的洗"。
     """
     from filelock import FileLock
 
@@ -158,7 +188,7 @@ def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        return False, f"{type(exc).__name__}: {exc}"
+        return False, f"{type(exc).__name__}: {exc}", {}
     # ⚠️ 2026-10-17（真机 T2r/T5e 两趟同一个崩溃）：这里原本 `json.dumps(dict(rec))` **没有**
     # `default=`、且**在 try 之外** ⇒ 交接行里一旦带 `TopicalityReport` 这类冻结 dataclass，
     # 就**直接冒泡**成「A 执行中异常 TypeError: … is not JSON serializable」。
@@ -166,7 +196,7 @@ def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
     try:
         line = json.dumps(dict(rec), ensure_ascii=False, sort_keys=True, default=str) + "\n"
     except Exception as exc:  # noqa: BLE001 —— 与本函数契约一致：写不成要如实报
-        return False, f"{type(exc).__name__}: {exc}"
+        return False, f"{type(exc).__name__}: {exc}", {}
     with _append_lock(target):
         try:
             with FileLock(str(target) + ".lock", timeout=30.0):
@@ -185,12 +215,35 @@ def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
                             seq = max(seq, int(row.get("seq") or 0) + 1)
                 out = dict(rec)
                 out["seq"] = seq
+                if stamp_field:
+                    out[str(stamp_field)] = f"{stamp_prefix}{seq:04d}"
                 line = json.dumps(out, ensure_ascii=False, sort_keys=True, default=str) + "\n"
                 with target.open("a", encoding="utf-8", newline="\n") as fh:
                     fh.write(line)
         except Exception as exc:  # noqa: BLE001 —— 写不成要如实报（调用方留痕）
-            return False, f"{type(exc).__name__}: {exc}"
-    return True, ""
+            return False, f"{type(exc).__name__}: {exc}", {}
+    return True, "", out
+
+
+def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
+    """唯一的秘书台账追加口（S1m）：进程内锁 + 跨进程 `filelock`，`seq` 在锁内算。
+
+    返回 `(写成了吗, 问题)`。为什么必须集中到一处（`draft/91` §7 的 D107）：旧写法是
+    "先读全表算 `seq = max+1`、再 `path.open("a")` 追加" —— 读与写之间没有锁，
+    同角色的两个实例并发时会拿到同一个 `seq`（与 `_write_new_row` 修过的那个缺陷同族）。
+
+    `seq` 的口径是每片自增（片就是"一个实例的账"），所以两片之间 `seq` 可以重复 ——
+    合并视图（`Secretary.merged_decisions`）按 `at` 排序，不靠 `seq` 全局唯一。
+    """
+    ok, problem, _row = _append_locked(path, rec)
+    return ok, problem
+
+
+def append_jsonl_stamped(path: str | Path, rec: Mapping[str, Any], *,
+                         field: str, prefix: str = "") -> tuple[bool, str, str]:
+    """同一条追加口，另把 `field` 一格发成 `prefix + 锁内 seq`（编号由秘书发）。"""
+    ok, problem, row = _append_locked(path, rec, stamp_field=field, stamp_prefix=prefix)
+    return ok, problem, str(row.get(str(field)) or "")
 
 
 def _pid_alive(pid: int) -> bool:
@@ -900,7 +953,9 @@ class Secretary:
                       before: str = "", after: str = "", mid: str = "",
                       changes: Sequence[Mapping[str, Any]] = (),
                       negotiation: Sequence[Mapping[str, Any]] = (), fail_open: bool = False,
-                      error: str = "", judge: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                      error: str = "", judge: Mapping[str, Any] | None = None,
+                      proposal: str | None = None,
+                      fingerprint: str = "") -> dict[str, Any]:
         """追加一行台账（`draft/55` §5.3 的字段表）。
 
         原文与加工后并列（`before` / `after`）：只留结论会让复核无从下手 ——
@@ -909,6 +964,22 @@ class Secretary:
         `changes`（S1g）：逐格写"洗了什么"（`[{"field","from","to","why"}]`）。
         只留 `before`/`after` 两份全文也能 diff 出来，但"哪几格是秘书动的"必须一眼可读
         —— 否则"模型写错了"与"秘书替它补对了"在纸上长得一样（`draft/90` §1.2）。
+
+        `proposal`（两段式）：三态，**不许折平** ——
+
+        | 值 | 这一行是什么 | `proposal_id` 那一格 |
+        |---|---|---|
+        | `None`（默认） | 普通台账行（老行为逐字不变，不多一个键） | 不写 |
+        | `""` | 一条**新请示** ⇒ 编号由本秘书在锁内发（与这一行的 `seq` 同源） | `W-<role>-<task>-<seq>` |
+        | `"<id>"` | 确认/拒绝那一行 ⇒ **指向**原来那条请示 | 原样记 `"<id>"` |
+
+        为什么编号必须在这里发（而不是调用方拼）：见 :func:`_append_locked` 的 docstring ——
+        拼号都在锁外取值，并发下重号的请示意味着"接受 A 的编号、执行 B 的洗"。
+
+        `fingerprint`（两段式）：这一行是**对哪一份载荷**发的（12 hex）。
+        它让"接受/拒绝"那一步在台账里就能核"这个编号是不是对这份载荷发的" ——
+        不给的话，接受方可以拿 A 的编号去确认 B 的载荷（编号存在、执行成立，
+        但执行的不是它看过的那一份）。空串 = 不写这一格（老行逐字不变）。
 
         写入走 `append_jsonl`（S1m）：锁内算 `seq`、进程内 + 跨进程两层锁。
         旧写法（先读全表算 `seq`、再裸 `open("a")`）在并发下会重号（D107）。
@@ -948,13 +1019,29 @@ class Secretary:
             rec["mid"] = str(mid)
         if error:
             rec["error"] = str(error)
+        if fingerprint:
+            rec["proposal_fingerprint"] = str(fingerprint)
         path = self.decisions_path()
-        ok, problem = append_jsonl(path, rec)
+        resolved = str(proposal or "")
+        if proposal == "":
+            # 新请示：编号在锁内发（与写这一行同一个临界区）⇒ 发号与落行不可能分叉。
+            ok, problem, resolved = append_jsonl_stamped(
+                path, rec, field="proposal_id", prefix=self.proposal_prefix())
+            if resolved:
+                rec["proposal_id"] = resolved
+            else:
+                self._log(f"秘书台账没发成号（请示没有编号）：{problem}")
+        else:
+            if resolved:
+                rec["proposal_id"] = resolved
+            ok, problem = append_jsonl(path, rec)
         if not ok:
             # 台账写不成不许带走秘书的判断（fail-open 的第一层：留痕是手段不是目的）。
             # 但也不静默：日志口子与返回值两条路都留下这件事。
             self._log(f"秘书台账没写成：{problem}")
             rec["ledger_problem"] = problem
+            if resolved:
+                rec["proposal_id"] = resolved
             return rec
         # 写成了：把锁内定的 `seq` 读回来（`append_jsonl` 返回的是"写成没写成"；
         # 这里再读一次只为把 `seq` 放进返回值 —— 与旧行为对齐，读侧仍然只认盘上的那一行）。
@@ -1449,6 +1536,13 @@ class Secretary:
         fail-open：超时/自己出错 ⇒ 原样放行 + 台账留痕（`fail_open=True`）。
         """
         original = dict(payload)
+        # ---- 两段式（业主 2026-10-21 裁定）：确认/拒绝那两个字段是**协议**字段，
+        # 不进洗格式的输入、也不进"原稿/洗后"这两份被并列记录的内容面载荷。
+        # 分开取而不是洗完之后再删：`original` 与 `washed` 必须是**同一件事**的两份，
+        # 否则"逐字段 diff"会把一个协议字段算成内容差异。
+        accept = str(payload.get(ACCEPT_PROPOSAL) or "")
+        reject = str(payload.get(REJECT_PROPOSAL) or "")
+        body = {k: v for k, v in original.items() if k not in PROPOSAL_KEYS}
         t0 = time.monotonic()
         try:
             if time.monotonic() - t0 > self.deadline_sec:
@@ -1456,7 +1550,7 @@ class Secretary:
             # ---- S1g：洗格式（E5 的落地）。位置：判"该不该介入"之前 ——
             # 预筛要核的是洗过之后那一份（否则"错名"永远是错的，洗了白洗）。
             # 内容面一个字不动（`wash_delegation` 的边界逐条写在它的 docstring 里）。
-            wash = self.wash_delegation(shape, payload)
+            wash = self.wash_delegation(shape, body)
             if wash.get("refused"):
                 # 硬拒也要把预筛读数算出来：这一趟是死了，但"它另外还把工具名写错了、
                 # 候选是这几个"是有用的东西（真机上模型下一步就得靠它改）。
@@ -1480,7 +1574,10 @@ class Secretary:
                         "surface": self.surface_readings(shape, original, base=base),
                         "judge": {"checked": False, "reason": "硬拒：没有可判的载荷"},
                         "engaged": False, "fail_open": False, "seq": rec.get("seq")}
-            washed = dict(wash.get("payload") or original) if wash.get("checked") else original
+            washed = dict(wash.get("payload") or body) if wash.get("checked") else body
+            # ---- 两段式的判据本体（纯决定，不写盘）：这一次执行哪一份 / 要不要请示。
+            # 编号在下面那一行台账里发（同一个临界区），所以这里只拿到"要不要发"。
+            plan = self.plan_wash(original=body, wash=wash, accept=accept, reject=reject)
             to = str(washed.get("to") or washed.get("role") or "")
             action = str(washed.get("action") or "")
             params = (washed.get("params") if isinstance(washed.get("params"), Mapping) else {})
@@ -1494,24 +1591,60 @@ class Secretary:
                 # 三件，而预筛会把 `to` 当角色名去查能力表 —— 对 `to=#public` 会报出两条
                 # "读不到 #public 的角色定位"的假警（频道名不是角色）。它的整个预筛面
                 # 就是下面这两格：共用准入判据 + 两个必填字段。
-                alarms = self._message_alarms(payload, admission=admission)
+                alarms = self._message_alarms(body, admission=admission)
             else:
                 alarms = self.prescreen(to=to, action=action, params=params or {}, tool=tool)
             # 预筛报警不是"判决"：它只说"照声明看不合规"，改法（映到哪个名字、
             # 补哪个字段）是判断 ⇒ 只有该介入时才叫模型。
             judged: dict[str, Any] = {"checked": False, "reason": "预筛没有报警 ⇒ 不必判断"}
             engage = self.should_engage(alarms=alarms, duplicates=0, overdue=0, novel=bool(tool))
-            if engage and tool and any("真名" in a for a in alarms):
-                judged = self.judge("tool_name", {"tool": tool, "to": to,
-                                                  "candidates": declarations_candidates(
-                                                      tool, self._tool_names())})
+            # 请示/受控拒绝/确认这三档都**没有要发出去的载荷** ⇒ 不叫模型判
+            # （判断的对象是"这次派活该怎么写"，而这次派活根本不发生）。
+            if not plan["outcome"] and not plan["problem"] and plan["accepted"] is None:
+                if engage and tool and any("真名" in a for a in alarms):
+                    judged = self.judge("tool_name", {"tool": tool, "to": to,
+                                                      "candidates": declarations_candidates(
+                                                          tool, self._tool_names())})
             decision = ("已优化" if not alarms else "建议重排")
             if judged.get("checked"):
                 decision = str(judged.get("decision") or decision)
             changes = list(wash.get("changes") or ())
+            # ---- 台账那一行（一次调用一行；两段式的三档各带自己的 `decision`/`kind`）
+            proposal_arg: str | None = None
+            fingerprint = ""
+            reason = "；".join(alarms) or "没有触发预筛报警（原样放行）"
+            if plan["outcome"]:
+                # 第一段：请示。编号**由本秘书在锁内发**（`proposal=""` 那一档）；
+                # 同一份载荷已经请示过 ⇒ 复用那个编号（`proposal="<id>"` 那一档），
+                # 于是"同一件事的两步"在读数上逐字相同（否则原地打转判不出来）。
+                decision = DECISION_PROPOSED
+                # 指纹随行落账：确认那一步要拿它核"这个编号是对哪份载荷发的"。
+                fingerprint = self.proposal_fingerprint(body)
+                prior = self.find_proposal_by_fingerprint(fingerprint)
+                if prior is not None:
+                    proposal_arg = str(prior.get("proposal_id") or "")
+                    plan["proposal_id"] = proposal_arg
+                else:
+                    proposal_arg = ""
+                reason = ("；".join(plan["changes"]) or "（改了格式格）"
+                          ) + "｜**没有执行**：等父用 accept_proposal / reject_proposal 表态"
+            elif plan["problem"]:
+                decision = "洗格式请示：这个编号不成立 ⇒ 受控拒绝"
+                proposal_arg = plan["proposal_id"] or None
+                reason = plan["problem"]
+            elif plan["accepted"] is True:
+                decision = DECISION_ACCEPTED
+                proposal_arg = plan["proposal_id"]
+                reason = "按洗过的那一份执行（parent 接受了格式洗）"
+            elif plan["accepted"] is False:
+                decision = DECISION_REJECTED
+                proposal_arg = plan["proposal_id"]
+                reason = "按原稿执行（parent 拒绝了秘书的格式洗）"
             rec = self.note_decision(
-                duty=1, kind=KIND_OPTIMIZED, decision=decision,
-                reason="；".join(alarms) or "没有触发预筛报警（原样放行）",
+                duty=1,
+                kind=KIND_PROPOSAL if plan["outcome"] else KIND_OPTIMIZED,
+                decision=decision,
+                reason=reason,
                 basis=["specs/<role>.py 的参数表", "tools.build_registry() 的真名"],
                 target={"to": to, "action": action}, judge=judged,
                 before=json.dumps(original, ensure_ascii=False, sort_keys=True, default=str)[:2000],
@@ -1520,13 +1653,29 @@ class Secretary:
                 after=json.dumps(washed, ensure_ascii=False, sort_keys=True, default=str)[:2000],
                 changes=changes,
                 fail_open=False,
+                proposal=proposal_arg,
+                fingerprint=fingerprint,
             )
-            return {"problem": "；".join(alarms), "payload": original, "after": washed,
-                    "wash": wash, "changes": changes,
-                    "washed": bool(wash.get("washed")), "refused": False,
-                    "alarms": alarms, "judge": judged, "engaged": bool(engage),
-                    "surface": self.surface_readings(shape, washed, base=base),
-                    "fail_open": False, "seq": rec.get("seq")}
+            if plan["issue"]:
+                # 编号从落盘那一行回来（同一个 `seq`）⇒ "这个编号指向哪一行"不可能漂。
+                plan["proposal_id"] = str(rec.get("proposal_id") or "")
+                if not str(rec.get("proposal_id") or ""):
+                    # 发号失败（台账写不成）⇒ 不许回一个"无法确认"的请示：
+                    # 受控拒绝，并把原因写清（fail-open 只剩这一档是安全的）。
+                    plan.update(outcome="", issue=False, proposal_id="", problem=(
+                        "请示编号没能发出（台账写不成）⇒ 这一趟没有派活："
+                        f"{rec.get('ledger_problem') or '未知原因'}"))
+            ret = {"problem": "；".join(alarms), "payload": original, "after": washed,
+                   "wash": wash, "changes": changes,
+                   "washed": bool(wash.get("washed")), "refused": False,
+                   "alarms": alarms, "judge": judged, "engaged": bool(engage),
+                   "surface": self.surface_readings(shape, washed, base=base),
+                   "fail_open": False, "seq": rec.get("seq")}
+            if plan["outcome"] or plan["problem"] or plan["accepted"] is not None:
+                # 只在真的进了第二段时给这一格：老载荷的键集因此一个字节不变
+                # （没差异的那条路不是"两段式"，多一格会让人以为它也请示过）。
+                ret["wash_proposal"] = plan
+            return ret
         except Exception as exc:  # noqa: BLE001 - fail-open：超时/出错一律放行
             self.note_decision(duty=1, kind=KIND_OPTIMIZED, decision="已优化",
                                reason="秘书没跑成 ⇒ 原样放行", fail_open=True,
@@ -1550,8 +1699,12 @@ class Secretary:
 
     #: 形状自己的键（不是 `params` 的键）：顶层折叠时要跳过它们，
     #: 否则一个恰好叫 `name` 的动作参数会把名册那一格（S1k）偷走。
+    #: 两段式的确认/拒绝两个字段也在这里：它们是**协议**字段，既不是动作参数、
+    #: 也不许被"顶层折叠"搬进 `params`（否则一次派活会带一个叫 `accept_proposal` 的参数
+    #: 撞闸门，而"接受"这件事在语义上根本不是那件活的参数）。
     _SHAPE_KEYS: tuple[str, ...] = ("role", "action", "params", "brief", "name", "reuse",
-                                    "input_key", "instance", "targets", "notify", "why")
+                                    "input_key", "instance", "targets", "notify", "why",
+                                    *PROPOSAL_KEYS)
 
     def wash_delegation(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """洗一遍格式面（S1g / E5），内容面一个字不动。
@@ -1755,6 +1908,211 @@ class Secretary:
                    refused="",
                    reason="；".join(bad[:3]) if bad else "")
         return out
+
+    # ------------------------------------------------------------ 两段式：请示 / 确认（S1g-2）
+
+    def proposal_prefix(self) -> str:
+        """请示编号的前缀：`W-<role>-<实例>-`，编号本身由台账锁内的 `seq` 发。
+
+        为什么带实例：台账是**分片**的（`out/secretary/<role>-<task_id>.jsonl`），
+        `seq` 只在片内唯一 ⇒ 只带角色的话，同角色两个并发实例会发出同名编号。
+        （判据：新判据文件里"编号唯一 + 指得回那一行"那一条。）
+        """
+        return f"W-{self.role}-{self.task_id or 'x'}-"
+
+    def proposal_fingerprint(self, payload: Mapping[str, Any]) -> str:
+        """这份载荷的指纹（12 hex）：确认那一步用它判"这个编号是不是对这份载荷发的"。
+
+        为什么要有它：只按编号回查，接受方就可以拿 A 的编号去确认 B 的载荷 ——
+        编号存在、执行成立、**接受的那份内容却不是它看过的那份**。
+        为什么让它抛（而不是把算不出来的折成空串）：空串会与另一份同样算不出来的载荷
+        撞成同一个指纹 ⇒ 冒充成同一份。调用方在 try 里 ⇒ 成环/怪对象一律 fail-open 原样放行。
+        """
+        text = json.dumps(dict(payload or {}), ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+    def find_proposal(self, proposal_id: str) -> dict[str, Any] | None:
+        """按编号回查那条**请示**（回查范围 = 本实例的账：老文件 + 本片）。
+
+        只认"请示行"—— 也就是带着指纹的那一行（`:meth:`note_decision` 的 `fingerprint=`）。
+        为什么必须这么筛：接受/拒绝/受控拒绝那几行**也带同一个 `proposal_id`**（那是留痕，
+        让"这个编号后来被谁接受过"读得回来）。若不筛，倒序扫到的第一行会是最近那次确认，
+        它没有指纹 ⇒ "指纹对不上"这一格永远轮不到判 ⇒ 拿 A 的编号确认 B 的载荷会**静默通过**。
+        （实测：本函数第一版就是这样，探针第 6 格读不到"指纹不一致"。）
+
+        三态不折平：**没有这一行** 返回 `None`（调用方必须按受控拒绝处理），
+        而"台账读不成"由 `_read_ledger` 的坏行读数另行报出 —— 不许把读不成当成"没有"。
+        """
+        want = str(proposal_id or "")
+        if not want:
+            return None
+        rows, _bad = self._read_ledger()
+        for row in reversed(rows):
+            if (str(row.get("proposal_id") or "") == want
+                    and str(row.get("proposal_fingerprint") or "")):
+                return row
+        return None
+
+    def find_proposal_by_fingerprint(self, fingerprint: str) -> dict[str, Any] | None:
+        """同一份载荷已经请示过 ⇒ 把那条请示找回来（编号复用，不另发一个）。
+
+        为什么必须复用：模型很可能"看到了请示、但下一步又把同一句话重说一遍"
+        （它没有改格式，只是没表态）。若每一步都新发一个号，步骤结果的读数就每步不同
+        ⇒ 循环那一层的"同一条路 + 同一读数"判据（`_call_reading`）**永远判不出原地打转**
+        （实测：本函数还没有时，同一份载荷在两步里拿到 `…-0001` 与 `…-0004` 两个号）。
+        "一次派活一个"也是业主的原话：同一份载荷的同一次请示，编号就该是同一个。
+        """
+        want = str(fingerprint or "")
+        if not want:
+            return None
+        rows, _bad = self._read_ledger()
+        for row in reversed(rows):
+            if (str(row.get("proposal_fingerprint") or "") == want
+                    and str(row.get("proposal_id") or "")):
+                return row
+        return None
+
+    @staticmethod
+    def _value_at(payload: Mapping[str, Any], field: str) -> Any:
+        """从 `changes[].field` 的那种写法里取值（`params.k` / `<顶层>.k` / `k`）。"""
+        text = str(field or "")
+        if text.startswith("<顶层>."):
+            return payload.get(text[len("<顶层>."):])
+        if text.startswith("params."):
+            params = payload.get("params")
+            return params.get(text[len("params."):]) if isinstance(params, Mapping) else None
+        return payload.get(text)
+
+    def _same_value(self, a: Any, b: Any) -> bool:
+        """两个值是不是同一份（成环对象只认 `is`，绝不递归比）。"""
+        if a is b:
+            return True
+        try:
+            return bool(a == b)
+        except Exception:  # noqa: BLE001 —— 比不了就按"不同"处理（宁可多报一处差异）
+            return False
+
+    def _wash_diff(self, original: Mapping[str, Any], washed: Mapping[str, Any],
+                   changes: Sequence[Mapping[str, Any]]) -> tuple[list[str], dict[str, Any]]:
+        """逐字段 diff：**只列改了哪几个键**（值原样摆出来，供人核"值其实没动"）。
+
+        为什么从 `changes` 反推、而不是递归比两棵载荷：`changes` 是洗函数自己记的
+        "我动了哪几格"（唯一事实），而递归比一份 60 层深/成环的载荷会当场炸掉
+        （`test_secretary_noise.py` 的那两口噪声）。
+        """
+        keys: list[str] = []
+        diff: dict[str, Any] = {}
+        for c in changes or ():
+            where = str(c.get("where") or "").strip("：: ")
+            field = str(c.get("field") or "")
+            path = f"{where}.{field}" if where else field
+            why = str(c.get("why") or "")
+            #: 每一条洗出来的改动都只可能在**格式面**上（真名 / 键名 / 位置）——
+            #: 内容面那一半由 `tests/test_the_wash_is_proposed_not_applied.py` 的
+            #: `_boundary_problems` 逐个值核（值多重集不变、正文逐字不变）。
+            line: dict[str, Any] = {"why": why, "face": "格式面"}
+            if "from" in c:
+                line["from"] = c.get("from")
+            if "to" in c:
+                line["to"] = c.get("to")
+            before = self._value_at(original, field)
+            # `to` 有两种写法：**键路径**（`params.statement_text`）与**值**（动作真名
+            # `register_statement`）。按有没有路径分隔判，别把后者当键名去查
+            # （第一版就是这么错的：`value_after` 恒为 null，"改了真名"看起来像"值被清了"）。
+            target = str(c.get("to") or field)
+            if "." not in target and "<顶层>" not in target:
+                target = field
+            after = self._value_at(washed, target)
+            if before is not None or after is not None:
+                # `value_changed=False` 是关键读数：键换了位置**而值逐字没动**
+                line["value_before"] = before
+                line["value_after"] = after
+                line["value_changed"] = not self._same_value(before, after)
+            keys.append(path)
+            diff[path] = line
+        return keys, diff
+
+    def _change_line(self, change: Mapping[str, Any]) -> str:
+        """一条改动写成**一句话**（业主给的形状：`动作名 own.register_statement → register_statement`）。"""
+        where = str(change.get("where") or "").strip("：: ")
+        field = str(change.get("field") or "")
+        to = str(change.get("to") or "")
+        why = str(change.get("why") or "")
+        frm = str(change.get("from") or change.get("field") or "")
+        head = f"{where} " if where else ""
+        if "动作真名" in why:
+            return f"{head}动作名 {frm} → {to}"
+        if "折叠" in why or "键名归一" in why:
+            return f"{head}参数键 {field} → {to}"
+        if why:
+            return f"{head}{field}：{why}"
+        return f"{head}{field} → {to}"
+
+    def plan_wash(self, *, original: Mapping[str, Any], wash: Mapping[str, Any],
+                  accept: str = "", reject: str = "") -> dict[str, Any]:
+        """两段式的判据本体：这一次派活**执行哪一份**、要不要先请示。
+
+        判决表（每一格都只有一种结局，三态不折平）：
+
+        | 输入 | 结局 | 谁执行 |
+        |---|---|---|
+        | 没带确认键、`washed == original` | `outcome=""`（无事发生） | 直接执行原稿（**不进第二段**） |
+        | 没带确认键、`washed != original` | `outcome="wash_proposed"` + `issue=True` | **谁都不执行**（0 行新任务、0 次子任务调用） |
+        | `accept_proposal=<id>` 且编号与载荷都对得上 | `accepted=True` | 用 `washed` |
+        | `reject_proposal=<id>` 且编号与载荷都对得上 | `accepted=False` | 用 `original` |
+        | 编号查不到 / 指纹对不上 / 两个都给了 | `problem` 非空 | **谁都不执行**（受控拒绝） |
+
+        "洗不动/没洗成"（`wash.checked=False`）按"没有差异"处理 —— 这一格秘书什么都没主张，
+        本来也不该挡下一步（`fail-open` 的同一条纪律）。
+        """
+        body = dict(original or {})
+        checked = bool(wash.get("checked"))
+        washed = dict((wash.get("payload") or body) if checked else body)
+        changes = [dict(c) for c in (wash.get("changes") or ())]
+        keys, diff = self._wash_diff(body, washed, changes)
+        plan: dict[str, Any] = {
+            "outcome": "", "proposal_id": "", "issue": False,
+            "original": body, "washed": washed,
+            "accepted": None, "executed_with": "", "execute": {},
+            "changes": [self._change_line(c) for c in changes],
+            "changed_keys": keys, "diff": diff,
+            "problem": "",
+        }
+        want_accept = str(accept or "").strip()
+        want_reject = str(reject or "").strip()
+        if want_accept and want_reject:
+            plan["problem"] = (f"同一步同时给了 {ACCEPT_PROPOSAL} 与 {REJECT_PROPOSAL} "
+                               "⇒ 不知道该按哪一份派（两份都没派）")
+            return plan
+        want = want_accept or want_reject
+        if want:
+            row = self.find_proposal(want)
+            if row is None:
+                plan["problem"] = (f"台账里没有请示 {want!r}（编号由秘书发，不许自己拼）"
+                                   "⇒ 这一趟没有派活")
+                plan["proposal_id"] = ""
+                return plan
+            got_fp = str(row.get("proposal_fingerprint") or "")
+            try:
+                want_fp = self.proposal_fingerprint(body)
+            except Exception as exc:  # noqa: BLE001 —— 算不出指纹 ⇒ 判不了，不许当成"对得上"
+                plan["problem"] = (f"这份载荷算不出指纹（{type(exc).__name__}）⇒ "
+                                   "确认不成立，这一趟没有派活")
+                return plan
+            if got_fp and got_fp != want_fp:
+                plan["problem"] = (f"请示 {want!r} 是对**另一份**载荷发的（指纹不一致）⇒ "
+                                   "不能拿它确认这一份，这一趟没有派活")
+                plan["proposal_id"] = want
+                return plan
+            plan["proposal_id"] = want
+            plan["accepted"] = bool(want_accept)
+            plan["execute"] = dict(washed if want_accept else body)
+            plan["executed_with"] = "washed" if want_accept else "original"
+            return plan
+        if checked and keys and washed != body:
+            plan["outcome"] = OUTCOME_WASH_PROPOSED
+            plan["issue"] = True
+        return plan
 
     def _action_spec(self, role: str, action: str) -> Any:
         """该角色该动作的声明（读不到 ⇒ `None`，调用方按"这一格没洗成"处理）。"""

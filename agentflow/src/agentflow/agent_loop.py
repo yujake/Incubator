@@ -1657,13 +1657,32 @@ def _unwrap_alias(data: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str]:
     return None, ""
 
 
+def _proposal_fields() -> tuple[str, str]:
+    """两段式的两个受控字段名（`accept_proposal` / `reject_proposal`）。
+
+    真身只在 `secretary`（`ACCEPT_PROPOSAL` / `REJECT_PROPOSAL`）—— 本模块不抄第二份，
+    只延迟取一次：解码那一步要保证它们活着，循环那一步要把"下一步该带什么"回给模型。
+    """
+    from .secretary import ACCEPT_PROPOSAL, REJECT_PROPOSAL
+
+    return ACCEPT_PROPOSAL, REJECT_PROPOSAL
+
+
 def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
     """规范形态的解码：一次只说一件事，取的那个键必须是 `SHAPES` 里的一种。
 
     清单与条数以 `SHAPES` 为唯一来源，本处不重抄第二份 —— 这里原先手抄的形状条数
     与 `SHAPES` 不一致，漏掉的正是 `handoff`（手稿落行的唯一入口：真机 1542 行手稿里
     967 行由框架派生、模型自写 0 行，而正典表里看不见它）。别名只负责把扁平形态
-    改写成这里认的形态。"""
+    改写成这里认的形态。
+
+    两段式（业主 2026-10-21）：`accept_proposal` / `reject_proposal` 这两个受控字段
+    由**这一步的解码**带过去 —— 解码是白名单，漏带就等于"父说了接受、框架没听见"，
+    而那在读数上与"父还没表态"完全一样。两个名字的真身只在 `secretary`（唯一来源，
+    本处延迟导入）：这里不解码它们的内容，只保证它们活得过去。
+    """
+    accept_field, reject_field = _proposal_fields()
+
     present = [k for k in SHAPES if k in data]
     if len(present) != 1:
         return "", {}, (f"一次只能说一件事：同时出现 {present}" if present
@@ -1697,6 +1716,14 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # 当场抓出这一条（它就是为这种"广告一份、解码另一份"设的）。
         extra: dict[str, Any] = {k: str(value.get(k)) for k in ("brief", "name", "reuse", "task")
                                  if str(value.get(k) or "").strip()}
+        # 两段式（业主 2026-10-21）：确认/拒绝那两个受控字段要带过去 ——
+        # 这一步的解码是**白名单**，不带就等于"父说了接受、框架没听见"，
+        # 而那在读数上与"父还没表态"长得一样（同一族缺陷见上面 `brief`/`task` 那两段）。
+        # 只在给了的时候带：老载荷的键集因此一个字节不变。
+        # 字段名不在这里另写一份：真身在 `secretary`（延迟导入 —— 那个模块在装秘书那一侧
+        # 才需要，本模块在解码这一步只需要两个字符串）。
+        extra.update({k: str(value.get(k)) for k in (accept_field, reject_field)
+                      if str(value.get(k) or "").strip()})
         # S1g：动作声明里的参数被摆在了顶层（不在 `params` 里）时，别再静默丢掉它们
         # —— 今天这条路把它们丢在校验之前，于是模型看到的是「缺必填参数」，而那个值
         # 明明就在它写的那一句话里。带两类：① 声明过的键；② 名字写错、但按唯一候选
@@ -1737,6 +1764,9 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
                           "input_key": str(item.get("input_key") or ""),
                           **item_extra})
         out: dict[str, Any] = {"targets": clean, "why": str(value.get("why") or "")}
+        # 两段式：一批也能整批请示/确认（与 `summon` 同一口径，只在给了的时候带）。
+        out.update({k: str(value.get(k)) for k in (accept_field, reject_field)
+                    if str(value.get(k) or "").strip()})
         return key, _with_notify(out, value), ""
     if key == "ask_user":
         if not isinstance(value, Mapping):
@@ -1957,7 +1987,11 @@ def _carried_top_level_params(role: str, action: str, raw: Mapping[str, Any],
 #: 那边管"折叠时跳过谁"，这边管"压根不带谁"，两处不同名会被读成两件事。
 _SHAPE_PROTOCOL_KEYS: tuple[str, ...] = ("role", "action", "params", "brief", "name",
                                          "reuse", "input_key", "instance", "targets",
-                                         "notify", "why", "shape_alias", "tool", "args")
+                                         "notify", "why", "shape_alias", "tool", "args",
+                                         # 两段式的确认/拒绝：它们是**协议**字段，
+                                         # 既不是动作参数，也不许被折算进 `params`
+                                         # （真身见 `secretary.ACCEPT_PROPOSAL` / `REJECT_PROPOSAL`）。
+                                         "accept_proposal", "reject_proposal")
 
 
 def _with_notify(payload: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -4091,12 +4125,24 @@ class AgentLoop:
             # "一张表的格式"而让一次真的要发生的派活停下来。
             # （S1g 之后这段搬到了洗格式之后：留痕要看的是真正发出去的那一份载荷。）
             secretary_note = self._outbound_hook(shape, payload)
-            # S1g：洗格式在发出去之前（`_outbound_hook` 与建议同一次调用、一行台账）。
-            # 洗过的那一份才是真正发出去的那一份 —— 否则"秘书洗了"只是一句摆设，
-            # 而模型原稿带着错名继续撞闸门（E5 实测：`run_once({"request_id": …})`
-            # ⇒ `refused / invalid_params`「出现未声明的参数」）。
+            # ---- 两段式（业主 2026-10-21 裁定）：**洗格式 → 请示 → 确认 → 才执行**。
+            #
+            # 为什么不是"直接应用"（S1g 的旧形态）：那等于秘书替本体表态
+            # （`draft/53` §2 的两条红线：不替它承诺、不改结论）。为什么也不是
+            # "永远只建议"（E5 之前的形态）：那让"洗一遍格式"变成一句摆设，
+            # 派活实际发出的仍是错名原稿、继续撞闸门。
+            #
+            # 三档，各有各的读数：
+            #   ① 无差异（`washed == original`）⇒ 直接执行，**不进第二段**（不为"没差异"多花一轮）；
+            #   ② 有差异、父还没表态        ⇒ **不执行**，返回 `outcome="wash_proposed"` +
+            #      `proposal_id` + 逐字段 diff（台账里那一行也带着同一个编号）；
+            #   ③ 父带了 `accept_proposal` / `reject_proposal` ⇒ 按它说的那一份执行
+            #      （`accepted` 真/假进这一步的结果），编号在台账里核过。
             washed_payload = secretary_note.pop("_washed_payload", None)
+            wash_plan = secretary_note.pop("wash_proposal", None)
+            accept_field, reject_field = _proposal_fields()
             dispatch_notify: dict[str, Any] | None = None
+            wash_audit: dict[str, Any] | None = None
             if secretary_note.get("wash", {}).get("refused"):
                 # 硬拒（只有"连派给谁/做什么都不全"这一格）：一行都不落（`draft/90` §1.2）。
                 # 其它"洗不动"（缺必填参数…）照旧交给闸门 —— 那一档还会落 `refused` 行
@@ -4106,17 +4152,72 @@ class AgentLoop:
                           "detail": ("秘书洗格式：这一趟派活连『派给谁/做什么』都不全 ⇒ 受控拒绝"
                                      f"（{secretary_note['wash'].get('reason') or ''}）"),
                           "washed": False}
+            elif isinstance(wash_plan, Mapping) and wash_plan.get("outcome"):
+                # ② 有差异 ⇒ **不执行**。这一格的 `ok` 是 False：确实什么都没派出去；
+                # 而 `outcome` 说清"它不是失败，是在等父表态"（受控词表只有这几个值）。
+                pid = str(wash_plan.get("proposal_id") or "")
+                lines = [str(x) for x in (wash_plan.get("changes") or ())]
+                result = {
+                    "ok": False, "outcome": str(wash_plan.get("outcome") or ""),
+                    "executed": False, "proposal_id": pid,
+                    "detail": (f"秘书洗出 {len(lines)} 处格式差异 ⇒ 这一趟没有派活"
+                               "（0 行新任务、0 次子任务调用）：要按洗过的形状派 ⇒ 下一步"
+                               f"带 accept_proposal=\"{pid}\" 再派一次；要按原稿派 ⇒ 带 "
+                               f"reject_proposal=\"{pid}\""),
+                    "original": dict(wash_plan.get("original") or {}),
+                    "washed": dict(wash_plan.get("washed") or {}),
+                    "changes": lines,
+                    "changed_keys": list(wash_plan.get("changed_keys") or ()),
+                    "diff": dict(wash_plan.get("diff") or {}),
+                    "next": {accept_field: pid, reject_field: pid},
+                }
+                run.notes.append(
+                    f"秘书洗格式：{len(lines)} 处格式差异 ⇒ **没有派活**（请示 {pid}）："
+                    "下一步带 accept_proposal / reject_proposal 再派一次")
+            elif isinstance(wash_plan, Mapping) and wash_plan.get("problem"):
+                # 确认/拒绝的编号不成立（查不到 / 指纹不符 / 两个都给了）⇒ 受控拒绝，
+                # **不猜**它想按哪一份执行。理由码沿用闸门那一档：这次调用本身不成立。
+                result = {"ok": False, "outcome": "refused",
+                          "refusal_reason": "invalid_params",
+                          "detail": str(wash_plan.get("problem") or ""),
+                          "washed": False,
+                          "proposal_id": str(wash_plan.get("proposal_id") or "")}
             else:
+                # ③ 确认/拒绝，或 ① 无差异：执行的那一份就是 `wash_plan["execute"]`
+                # （接受 ⇒ washed；拒绝 ⇒ original）。没有计划时按**原稿**执行 ——
+                # 失败方向必须是"发原稿"，绝不因为缺一格读数就静默发洗过的那一份。
+                confirmed = (isinstance(wash_plan, Mapping)
+                             and wash_plan.get("accepted") is not None)
+                if confirmed:
+                    # 「执行哪一份」只有一处判据（秘书那一侧 `plan_wash` 的 `execute`）：
+                    # 接受 ⇒ washed；拒绝 ⇒ original。这里只照做，不自己再选一次
+                    # （两处各选一次 ⇒ 读数说 washed、发出去 original 而没人报错）。
+                    chosen = wash_plan.get("execute")
+                    if not isinstance(chosen, Mapping) and wash_plan.get("accepted") is True:
+                        chosen = washed_payload        # 兜底：秘书没给那一格时仍按 washed
+                    if isinstance(chosen, Mapping):
+                        payload = dict(chosen)
+                    run.notes.append("秘书洗格式：parent **接受了** —— 按洗过的那一份派出"
+                                     if wash_plan.get("accepted") is True else
+                                     "秘书洗格式：parent **拒绝了** —— 按原稿派出（留痕）")
                 if (isinstance(washed_payload, Mapping)
-                        and secretary_note.get("wash", {}).get("checked")):
-                    if dict(washed_payload) != dict(payload):
-                        run.notes.append("秘书洗格式：" + ("；".join(
-                            f"{c.get('field')}→{c.get('to') or c.get('why')}"
-                            for c in (secretary_note.get("changes") or ()))
-                            or "（改了格式格）"))
-                    # 洗过的那一份进入后面所有判据：notify 留痕、活性读数、步骤记录
-                    # 都看同一次真正发出去的载荷（两份载荷并存必然分叉）。
-                    payload = dict(washed_payload)
+                        and secretary_note.get("wash", {}).get("checked")
+                        and dict(washed_payload) != dict(payload)):
+                    run.notes.append("秘书洗格式：" + ("；".join(
+                        str(c) for c in (wash_plan.get("changes") or ()))
+                        if isinstance(wash_plan, Mapping) else "（改了格式格）"))
+                if confirmed:
+                    # 执行那一刻的三份读数（业主：`original` / `washed` / `accepted` / `proposal_id`
+                    # 一起进这一步的结果 —— 不另造表，它进的就是 `agent_step` 那一格）。
+                    wash_audit = {
+                        "proposal_id": str(wash_plan.get("proposal_id") or ""),
+                        "original": dict(wash_plan.get("original") or {}),
+                        "washed": dict(wash_plan.get("washed") or {}),
+                        "accepted": bool(wash_plan.get("accepted")),
+                        "executed_with": str(wash_plan.get("executed_with") or ""),
+                        "changes": [str(x) for x in (wash_plan.get("changes") or ())],
+                        "changed_keys": list(wash_plan.get("changed_keys") or ()),
+                    }
                 if shape in ("summon", "summon_many") and self.role == S.CONDUCTOR_ROLE:
                     gate, dispatch_notify = self._dispatch_notify(payload)
                     if gate:
@@ -4130,6 +4231,8 @@ class AgentLoop:
                     if hand.get("ok"):
                         run.handoffs.append(str(hand.get("id") or ""))
                     result = {**result, "dispatch_handoff": hand}
+                if wash_audit is not None:
+                    result = {**result, "wash": wash_audit}
             # ---- 子产出的落点（业主裁定：**父代理必须处理子代理的产出**）
             #
             # 在**调用那一刻**就把"这次调用产生了哪些子产出"记进 `LoopRun`
@@ -6536,6 +6639,12 @@ class AgentLoop:
                            "reason": str(wash.get("reason") or "")}
             out["changes"] = [dict(x) for x in (got.get("changes") or ())]
             out["_washed_payload"] = got.get("after")
+            # ---- 两段式（业主 2026-10-21）：这一格是"这次派活该执行哪一份"的受控读数 ——
+            # 要么是一条请示（`outcome=wash_proposed` + `proposal_id` + diff），
+            # 要么是一次确认/拒绝的结论（`accepted` 真/假），要么是"编号不成立"的受控拒绝。
+            # 循环取完就 pop 掉，然后按它决定：执行 washed / 执行 original / 谁都不执行。
+            if isinstance(got.get("wash_proposal"), Mapping):
+                out["wash_proposal"] = dict(got["wash_proposal"])
             # ---- S1g-2：面适配读数（业主 2026-10-09「"超越职责"的一个主要可能是
             # 无法在被分配的读写面内完成任务，这个秘书也要帮忙看」）。
             # `base` 传本实例自己的根：子代理那一趟它的根是它的面，父视角的基准
@@ -7718,6 +7827,11 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     if seam is None:
         seam = LlmSeam.for_role(role, session_root=root, gateway=gateway,
                                 usd_budget=usd_budget, sid=sid, from_env=from_env)
+    #: 装配失败的理由（空 = 装配成了 / 或者调用方自带一只）。⚠️ 必须**在分支之外**初始化：
+    #: 它只在"自动装配"那一支里被赋值，而下面对应的那一行无条件读它 —— 于是
+    #: `run_role(..., secretary=<自带的一只>)` 这条路会抛 `UnboundLocalError`
+    #: （2026-10-21 实测：本文件的新判据把秘书传进来时当场炸，而那是公开形参）。
+    secretary_problem: str = ""
     if secretary is None:
         # A 线：每个智能体自带一名秘书（同一个类，每角色一份配置）。
         # 生产路径自动装配 —— 不给就自动造，是为了让"手稿写权移交"不需要
@@ -7733,7 +7847,6 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
         #     读不成时就是这一种）+ 在 `run.notes` 里留一条（那一格会进
         #     `agent_run_end` 的 `notes`）。三态纪律：`except` 里不猜原因，把
         #     `type(exc).__name__` 与原文照抄。
-        secretary_problem = ""
         try:
             secretary = _secretary_for(role, root=root, store=store, registry=registry,
                                        seam=seam, sid=sid)

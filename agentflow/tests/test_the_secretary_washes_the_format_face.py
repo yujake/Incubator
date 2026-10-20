@@ -222,9 +222,17 @@ def test_the_loop_sends_the_washed_payload_and_the_ledger_keeps_both(tmp_path: p
     assert step["秘书"]["alarms"] == [], step["秘书"]
 
     child = [r for r in st.rows("tasks") if str(r.get("role")) == "E"]
-    assert len(child) == 1, child
-    assert str(child[0].get("action") or "") == "", child[0]        # 派活：不点动作
-    assert str(child[0].get("outcome") or "") in ("ok", "refused", "failed"), child[0]
+    # ⚠️ 2026-10-21：这一条在 HEAD（`c0da9d3`）上**已经是红的**，红的原因与洗格式无关 ——
+    # 派活那一刻框架会给收件人开一条**板项**（`action="message"`，投递那一份留痕），
+    # 于是 `role=E` 的行有两行而不是一行。判据的**强度没有降**：
+    # ① 派活行仍然**恰好一条**（多派/少派照样红）；② 另一条必须**恰好是那条投递板项**。
+    delegates = [r for r in child if str(r.get("action") or "") != "message"]
+    plates = [r for r in child if str(r.get("action") or "") == "message"]
+    assert len(delegates) == 1, child
+    assert len(plates) == 1, child
+    assert str(plates[0].get("status") or "") == "pending", plates[0]
+    assert str(delegates[0].get("action") or "") == "", delegates[0]   # 派活：不点动作
+    assert str(delegates[0].get("outcome") or "") in ("ok", "refused", "failed"), delegates[0]
     # 台账（秘书的）：这一趟**留下了记录**（before/after 都在），只是 changes 为空
     ledgers = sorted((root / "out" / "secretary").glob("M-*.jsonl"))
     assert len(ledgers) == 1, ledgers

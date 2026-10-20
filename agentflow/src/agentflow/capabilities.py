@@ -2023,7 +2023,8 @@ def assert_capabilities(
     # V 只能经 `F→V`、那一趟没走那条链）⇒ 受限集合从 {F, V} 再收成 {F}：
     # `M→V` 是业主明确要开的那条边，② 仍守着 F（它必须还有 `M→D→F` 这条别的进路），
     # ③ 守着"从 M 出发到得了每一个角色"。
-    _INDIRECT_FROM_M = frozenset({"F"})
+        # 2026-10-20 业主裁定：撤掉 M→V ⇒ V 也成为"只能间接走"的角色（M→B→V）。
+    _INDIRECT_FROM_M = frozenset({"F", "V"})
     _m_edges = frozenset(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ())
     assert not (_m_edges & _INDIRECT_FROM_M), (
         f"ALLOWED_EDGES[{S.CONDUCTOR_ROLE!r}] 含 {sorted(_m_edges & _INDIRECT_FROM_M)}："

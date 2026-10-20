@@ -300,6 +300,14 @@ READING_INTERNAL: dict[str, str] = {
     "reach_reason": "同一格的逐项理由串（`reach_fit` 的分格）",
     "assessment_fail_open": "`fail_open` 那一族的分格：评估那一格炸了。认总的那一格就够",
     "negotiation_fail_open": "同上：协商那一格炸了",
+    # 2026-10-21（两段式：洗 → 请示 → 确认 → 才执行）：这一格是**钩子与循环之间的承载键**
+    # （与 `_washed_payload` 同族，只是它不以 `_` 打头 —— 因为它装的是几个有名字的读数）。
+    # 循环取完就 pop 掉，**不进**这一步的结果；角色真正读到的是循环按它摆出来的那几格
+    # （`outcome="wash_proposed"` / `proposal_id` / `changes` / `diff` / `next`）——
+    # 那是 `agent_loop.run` 的结果面，不在本表扫描的范围内（本表扫的是 `_outbound_hook`）。
+    "wash_proposal": "秘书 → 循环的承载键（这一次执行哪一份 / 要不要先请示）。"
+                     "循环 pop 掉它，再把它摆成 `outcome` / `proposal_id` / `changes` / "
+                     "`diff` / `next` 这几格给角色 —— 角色认的是那几格，不是这个键",
 }
 
 
