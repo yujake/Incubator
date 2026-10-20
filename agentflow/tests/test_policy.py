@@ -165,13 +165,15 @@ def test_allowed_edges_match_design_table():
     # `V`（验证者）只与 F 交互：出边只有 F（用户 2026-10-05 第七轮裁定）。
     assert C.ALLOWED_EDGES["V"] == frozenset({"F"})
     # 主控的出边（业主 2026-10-10 第 146 轮第 4 条裁定：「不许直接控制 B、F、V，
-    # 只可间接由父代理转达」；此后两次由业主加回：2026-10-13「补 M 到 B」、
-    # 2026-10-18「给 M 开 V 出边」）。改前它是 `frozenset(S.ROLES)` 九条；
-    # 今天只剩 F 一个仍然只走间接（`M→D→F`），"够得到每一个角色"另有判据守
+    # 只可间接由父代理转达」；2026-10-13「补 M 到 B」加回 B；2026-10-18「给 M 开 V
+    # 出边」加回 V；**2026-10-20 业主裁定重新撤掉 V**：「派 V 只有 F（自产证明）与
+    # B（文献侧内容）两个入口；M 不再直连 V」⇒ 今天只剩 F 一个仍然只走间接
+    # （`M→D→F`），V 走 `M→B→V` / `M→D→F→V` 两条间接路，"够得到每一个角色"另有判据守
     # （本文件下面那条负控 + `capabilities.assert_capabilities` 第 [1b] 条）。
-    assert C.ALLOWED_EDGES["M"] == frozenset({"A", "B", "C", "D", "E", "G", "H", "V"}), \
-        "主控的直接出边：F 按裁定必须走父代理（M→D→F）；B 与 V 已在出边里（2026-10-13 / 2026-10-18）"
-    # 负控（这条改动最该守住的边界）：H 与 V 仍然是只读角色 —— 新加的两条边只让它
+    assert C.ALLOWED_EDGES["M"] == frozenset({"A", "B", "C", "D", "E", "G", "H"}), \
+        "主控的直接出边：F 按裁定必须走父代理（M→D→F）；V 按 2026-10-20 的裁定撤掉" \
+        "（派 V 只有 F 与 B 两个入口）；B 在出边里（2026-10-13 补 M 到 B）"
+    # 负控（这条改动最该守住的边界）：H 与 V 仍然是只读角色 —— 那两条边只让它
     # "请求"，权限面（工具层）没有跟着动。
     from agentflow.tools import READ_ONLY_ROLES as _RO
 
@@ -216,9 +218,9 @@ def test_negative_control_missing_a_role_in_the_conductor_edges_is_rejected():
     这样改仍守着原来的意图（"够不到就得炸"），只是换了一刀真的会造成够不到。
     """
     original = frozenset(C.ALLOWED_EDGES["M"])
-    assert original == frozenset({"A", "B", "C", "D", "E", "G", "H", "V"}), \
-        ("前提：真表上主控的直接出边就是这八条（裁定第 4 条 + 2026-10-13「补 M 到 B」"
-         "+ 2026-10-18「给 M 开 V 出边」之后）")
+    assert original == frozenset({"A", "B", "C", "D", "E", "G", "H"}), \
+        ("前提：真表上主控的直接出边就是这七条（裁定第 4 条 + 2026-10-13「补 M 到 B」"
+         "+ 2026-10-18 开 V、2026-10-20 又撤掉 V 之后）")
     C.ALLOWED_EDGES["M"] = frozenset()
     try:
         with pytest.raises(AssertionError, match="到不了这些角色"):
@@ -536,46 +538,63 @@ def test_the_refusal_names_who_can_relay() -> None:
     from agentflow import capabilities as C
 
     names = m_to_f.split("改派 ", 1)[1].split(" ——", 1)[0].split("、")
-    # 2026-10-18 之后 `V` 也进了 M 的出边，而 `V` 的出边里有 `F` ⇒ 它成了一个
-    # 真实可用的中转（提示是现算的，所以它准确地多点了 V 一个）。这是读数的更正，
-    # 不是放宽：三个名字逐个核过"它的出边里真的有 F"。
-    assert names == ["D", "G", "V"], m_to_f
+    # 2026-10-18 之后 `V` 也在 M 的出边里 ⇒ 那三个名字里含 V；**2026-10-20 业主裁定
+    # 撤掉 `M→V` 之后它回到两个**（提示是现算的，所以它准确地少点了 V 一个）——
+    # 这是边表改动的读数，不是放宽：两个名字逐个核过"它的出边里真的有 F"。
+    assert names == ["D", "G"], m_to_f
     for via in names:
         assert "F" in C.edges_for(via, registry=reg), via
-    # ---- 2026-10-18 业主裁定「给 M 开 V 出边」之后：`M → V` **不再是被拒的边**
+    # ---- 2026-10-20 业主裁定「派 V 只有 F 与 B 两个入口；M 不再直连 V」之后：
+    # `M → V` 翻成**被拒的边**（同一套判据口径：读的是真边表）。
     #
-    # 这一格原来是"必须点名 B（M→B→V）"。现在它翻成"必须放行"—— 同一套判据口径
-    # （"读的是真边表"），只是边表变了；把这一格删掉就等于没人守"V 的那条边还在"。
-    assert "V" in C.ALLOWED_EDGES["M"], "M→V 没接上（2026-10-18 的裁定）"
-    assert P.check(P.Policy(), _d(frm="M", to="V", action="verify_proof"),
-                   registry=reg) is None, "M→V 仍然被 strategy 拒 —— 边表与策略不同步"
+    # 这一格原来是"必须放行"（2026-10-18 那一版）。翻回来不是删判据，而是把期望值
+    # 换成这一天的裁定 —— 把这一格删掉就等于没人守"V 不许再从 M 直接派"。
+    assert "V" not in C.ALLOWED_EDGES["M"], "M→V 没撤干净（2026-10-20 的裁定）"
+    r_mv = P.check(P.Policy(), _d(frm="M", to="V", action="verify_proof"), registry=reg)
+    assert r_mv is not None and r_mv.reason == "forbidden_edge", (
+        "M→V 仍然被 strategy 放行 —— 边表与策略不同步（2026-10-20 的裁定）", r_mv)
+    # 而拒绝那一刻必须指得出替它派 V 的人（B 与 F 都在 M 的出边里，一跳就够）
+    assert "B" in r_mv.detail, r_mv.detail
     # 而 `M → F` 仍然只有间接路：那条拒绝必须继续点名能替它派的人
     assert "F" not in C.ALLOWED_EDGES["M"], "M→F 不许直接放行（2026-10-10 的裁定仍然有效）"
 
 
 def test_the_conductor_may_summon_b_and_v_but_not_f():
-    """业主 2026-10-13「补 M 到 B」＋ 2026-10-18「给 M 开 V 出边」的守卫。
+    """业主 2026-10-13「补 M 到 B」＋ 2026-10-18 开 `M→V` ＋ **2026-10-20 撤掉 `M→V`** 的守卫。
 
-    为什么要单列：这两条边都是**加宽权限面**的那一类改动（30 → 31 → 33），而目的
-    分别是让「命题进台账」与「证明逐条走查」从主控够得着（`M→B`、`M→V`）。
-    判据两向都钉：正向（B 与 V 在 `ALLOWED_EDGES["M"]` 里、策略放行），
-    反向（F 仍然只走间接 `M→D→F`，直接派它必须 `forbidden_edge`）。
+    为什么要单列：这几条边都是**改权限面**的那一类改动（30 → 31 → 33 → 32），而目的是
+    让「命题进台账」与「证明逐条走查」从主控够得着。2026-10-20 的裁定把 V 那条收回：
+    派 V 只有两个入口 —— F（自产证明）与 B（文献侧内容）。
+    判据三向都钉：正向（B 在 `ALLOWED_EDGES["M"]` 里、策略放行 `M→B`）；
+    反向（F 仍然只走间接 `M→D→F`、V 也不再直连 ⇒ 直接派它们必须 `forbidden_edge`）；
+    反真空（V 的两个入口 F/B 一条没少、`M→B→V` 那条两跳路仍成立）。
+    函数名保留（`may_summon_b_and_v`）是历史名字：V 那一半今天翻成"不许直连"，
+    改名会让指向它的别处失去锚点，故只在 docstring 里更正口径。
     """
     from agentflow import capabilities as C
     from agentflow.agentspec import builtin_registry
 
     reg = builtin_registry()
     assert "B" in C.ALLOWED_EDGES["M"], "M→B 没接上"
-    assert "V" in C.ALLOWED_EDGES["M"], "M→V 没接上（2026-10-18 的裁定）"
-    # 两跳那条老路还在（B→V）—— 它不是"首选路径"，但仍然成立
+    # 2026-10-20 业主裁定：M 不再直连 V（派 V 只有 F 与 B 两个入口）
+    assert "V" not in C.ALLOWED_EDGES["M"], "M→V 没撤干净（2026-10-20 的裁定）"
+    # 两个入口一个都不能少（V 不许成为孤儿）
+    for holder in ("F", "B"):
+        assert "V" in C.ALLOWED_EDGES[holder], f"{holder}→V 不见了 ⇒ V 没有入口"
+    # 两跳那条老路还在（B→V）—— 它现在是 M 够得着 V 的唯一一跳的路
     assert "V" in C.ALLOWED_EDGES["B"], "B→V 没接上 ⇒ M→B→V 那条两跳路不成立"
-    for allowed, act in (("B", "run_once"), ("V", "verify_proof")):
-        assert P.check(P.Policy(), _d(frm="M", to=allowed, action=act),
-                       registry=reg) is None, f"M→{allowed} 被拒了"
-    # 反向：F 仍然只能间接
+    assert P.check(P.Policy(), _d(frm="M", to="B", action="run_once"),
+                   registry=reg) is None, "M→B 被拒了"
+    # 反向①：F 仍然只能间接
     assert "F" not in C.ALLOWED_EDGES["M"], "M→F 不许直接放行"
     r = P.check(P.Policy(), _d(frm="M", to="F", action="step"), registry=reg)
     assert r is not None and r.reason == "forbidden_edge", r
+    # 反向②：V 也不再直连（2026-10-20）
+    r_v = P.check(P.Policy(), _d(frm="M", to="V", action="verify_proof"), registry=reg)
+    assert r_v is not None and r_v.reason == "forbidden_edge", r_v
+    # 反真空：M 的其余七条一条没少（撤 V 不许顺手撤别的）
+    assert C.ALLOWED_EDGES["M"] >= frozenset({"A", "B", "C", "D", "E", "G", "H"}), \
+        sorted(C.ALLOWED_EDGES["M"])
 
 
 def test_forbidden_edge_takes_priority_over_depth():

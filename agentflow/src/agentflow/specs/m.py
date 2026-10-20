@@ -322,7 +322,13 @@ SPEC = AgentSpec(
         # 逐行走查签过名）。⇒ 这里补 `V`，`M→V` 成为**首选路径**（`M→B→V` 仍可走，
         # `M→D→F→V` 不必再绕）。`F` 仍只走间接（`M→D→F`）—— 判定 F 的那一条从
         # `{F, V}` 收成 `{F}`，见 `capabilities._INDIRECT_FROM_M`。
-        'V',
+        #
+        # 2026-10-20 业主裁定：派 V 只有 F（自产证明）与 B（文献侧内容）两个入口；M 不再直连 V。
+        # ⇒ 上面那条 2026-10-18 加的 `V` 撤掉（边总数 33 → 32）。两跳/三跳路仍都在：
+        # `M→B→V`（B 入库文献侧内容时请 V 签）与 `M→D→F→V`（F 交出证明时那签已由 F 办好）。
+        # 判据：`tests/test_v_signing_belongs_to_f_and_b.py`（① 边表：M 不含 V、V 的两个
+        # 入口是 F 与 B、M 的其余七条 A–E/G/H 一条没少）＋ `tests/test_policy.py`
+        # （端到端 `M→V` ⇒ `forbidden_edge`）。
     ),
     write_set=frozenset(()),
     class_path='agentflow.conductor:Conductor',

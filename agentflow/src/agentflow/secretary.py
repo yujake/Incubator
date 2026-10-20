@@ -3586,7 +3586,7 @@ class Secretary:
             r, parent_name, depth = t["row"], t["parent"], t["depth"]
             parent_tid = str(t.get("parent_tid") or "")
             tid = str(r.get("task_id") or "")
-            branch = str((by_child.get(tid) or {}).get("branch") or "")
+            branch = str(t.get("branch") or "")
             facts = t["facts"]
             state = _state_from(branch, bool(r.get("retired")), cond, tid)
             row: dict[str, Any] = {
@@ -3629,23 +3629,51 @@ class Secretary:
 
         out: list[dict[str, Any]] = []
         root_by = dict((parent_facts(owner).get("by_child") or {}))
+        # 每一层的"可退役分支"（`branch` 是 `_state_from` 折四态的那一格）。
+        #
+        # 2026-10-20（真机读数驱动，`projects/tree-check`）：改前 `by_child`（在 `roster_view`
+        # 里由 **owner 那一层**的 `retire_ready` 构造）只覆盖**直接子**，于是全树视图里
+        # 孙代及以下的 `branch` 恒为空 ⇒ `_state_from` 落到「未登记」，而它们明明在名册上。
+        # 实测那一份工作区：7 行里有 5 行（C1/F1/B1/B2/E1 --- 深度 2/3）被读成「未登记」，
+        # 只有直接子 D1 读对（已停）。这与 `draft/90` §1.4「必须看到名册名 + 一句简介 +
+        # **工作状态**」直接冲突，也是机制②（M 看整棵树）唯一的真缺口。
+        # 修法：**逐层**问它父那一层的 `retire_ready`（同一处实现，不另写一份分支判据），
+        # 每个父只问一次（`branch_by_parent` 缓存）。
+        branch_by_parent: dict[str, dict[str, str]] = {}
+
+        def branches_of(parent_id: str) -> dict[str, str]:
+            if parent_id in branch_by_parent:
+                return branch_by_parent[parent_id]
+            got: dict[str, Any]
+            try:
+                got = cond.retire_ready(parent_id)
+            except Exception:  # noqa: BLE001 —— 读不成 ⇒ 这一层没有分支（状态如实落到"未登记"）
+                got = {"checked": False}
+            found = ({str(r.get("task_id") or ""): str(r.get("branch") or "")
+                      for r in (got.get("ready") or [])} if got.get("checked") else {})
+            branch_by_parent[parent_id] = found
+            return found
         if scope != "descendants":
+            top = branches_of(str(owner or ""))
             return [{"row": r, "parent": "", "parent_tid": "", "depth": 1,
+                     "branch": top.get(str(r.get("task_id") or ""), ""),
                      "facts": dict(root_by.get(str(r.get("task_id") or "")) or {})}
                     for r in rows]
         # 全树：逐层往下，每一层的 facts 从它的父那一格里取。
         # 这一格最容易写错（第一版就是）：`children_facts(X)` 给的是"X 名下"的读数，
         # 而某一行要的是"它父名下的它自己"那一格 —— 拿 X 去查 X 只会得到空表，
         # 于是全树的每一行都会读成 `ready`（一个安静的错误：没有任何地方会报错）。
-        queue: list[tuple[dict[str, Any], str, str, int, dict[str, Any]]] = [
+        top_branches = branches_of(str(owner or ""))
+        queue: list[tuple[dict[str, Any], str, str, int, dict[str, Any], str]] = [
             (r, "", str(owner or ""), 1,
-             dict(root_by.get(str(r.get("task_id") or "")) or {})) for r in rows]
+             dict(root_by.get(str(r.get("task_id") or "")) or {}),
+             top_branches.get(str(r.get("task_id") or ""), "")) for r in rows]
         seen = 0
         while queue and seen < 512:
-            r, parent_name, parent_tid, depth, facts = queue.pop(0)
+            r, parent_name, parent_tid, depth, facts, branch = queue.pop(0)
             seen += 1
             out.append({"row": r, "parent": parent_name, "parent_tid": parent_tid,
-                        "depth": depth, "facts": facts})
+                        "depth": depth, "branch": branch, "facts": facts})
             if depth >= 64:
                 continue
             tid = str(r.get("task_id") or "")
@@ -3653,10 +3681,11 @@ class Secretary:
             if not kids:
                 continue
             by = dict((parent_facts(tid).get("by_child") or {}))
+            their = branches_of(tid)
             for k in kids:
                 kt = str(k.get("task_id") or "")
                 queue.append((k, str(r.get("name") or ""), tid, depth + 1,
-                              dict(by.get(kt) or {})))
+                              dict(by.get(kt) or {}), their.get(kt, "")))
         return out
 
     def latest_report_of(self, *, task_id: str, role: str = "") -> dict[str, Any]:

@@ -5286,6 +5286,11 @@ class AgentLoop:
         from . import scheduler as SC
 
         c = self.conductor
+        # 父的绝对编号（2026-10-20）：整批共用这一格；空 ⇒ 受控拒绝（同 `_do_summon`）。
+        owner = self._summon_owner()
+        if not owner:
+            got = self._no_owner_refusal("把这一批活派出去：")
+            return {**got, "summoned": [], "count": 0}
         auto: dict[str, list[str]] = {}
         counted: dict[str, int] = {}
         for t in targets:
@@ -5324,7 +5329,7 @@ class AgentLoop:
                 t_params["task"] = t_task
             calls.append(SC.TaskCall(role=str(t.get("role")), action=t_action,
                                      params=t_params, by=self.role,
-                                     parent_task_id=self.my_task_id or None,
+                                     parent_task_id=owner,
                                      input_key=(str(t.get("input_key") or "")
                                                 or _summon_key(t_action, t_params)),
                                      instance=instance))
@@ -5334,7 +5339,12 @@ class AgentLoop:
             return {"summoned": [], "ok": False, "count": 0,
                     "error": ("这批里有 target 没写清活（role="
                               + "、".join(blank) + "）：`task` 必填")}
-        results = c.run_plan(calls, token=self.token)
+        # 父是谁要挂到上下文里（`run_plan` 的队列认领那一步从这里读）—— 不走形参，
+        # 见 `conductor.consuming_as` 的理由（一批判据的替身函数不接受新形参）。
+        from .conductor import consuming_as
+
+        with consuming_as(owner):
+            results = c.run_plan(calls, token=self.token)
         probe = getattr(c, "_last_probe", None)
         waves = [len(w) for w in P.waves_of(calls,
                                             limit=getattr(c.policy, "max_concurrency", None))]
@@ -5711,6 +5721,39 @@ class AgentLoop:
                                 "面外一律不做：要别的目录就请父给你切一块（业主 T23）")
         return "；".join(refusals)
 
+    def _summon_owner(self) -> str:
+        """这一笔派活的**父的绝对编号**（空串 = 这一趟没有台账编号 ⇒ 不许派）。
+
+        口径（2026-10-20，真机 `projects/tree-check` 的 t-000019 那一行孤儿）：
+        `tasks.parent_task_id` 是父子关系的唯一权威来源（`draft/104` §2.5），
+        所以它**不许为空**（只有顶趟那一行 `parent=None`，它是树根）。
+        号一律取自台账/上下文（`self.my_task_id` 是 `run_role` 开行时拿到的绝对编号；
+        conductor 那一侧还会回退到当前调用上下文与本进程顶趟）——**这里不拼号**。
+        """
+        own = str(getattr(self, "my_task_id", "") or "").strip()
+        if own:
+            return own
+        look = getattr(self.conductor, "_owner_task_id", None)
+        if callable(look):
+            try:
+                return str(look() or "")
+            except Exception:  # noqa: BLE001 —— 读不成按"没有号"处理（下面会拒）
+                return ""
+        return ""
+
+    def _no_owner_refusal(self, what: str) -> dict[str, Any]:
+        """没有父的绝对编号 ⇒ **受控拒绝**（不许造一行 `parent_task_id=None` 的子行）。
+
+        改前的形态是 `parent_task_id=self.my_task_id or None`：号一空就落 None，
+        于是子代理在台账上是孤儿 —— 名册里没有它、任何父的扇出也不数它、
+        `roster_view(scope="descendants")` 走不到它（真机 t-000019 就是这一行）。
+        """
+        return {"ok": False, "refused": "no_owner", "to": "",
+                "error": (f"{what}没有父的绝对编号（这一趟还没落台账）⇒ 不派："
+                          "子行不许出现 `parent_task_id=None`"
+                          "（`draft/104` §2.5：父子关系的唯一权威来源是台账）"),
+                "why": ["这一趟的 `my_task_id` 是空串，且 conductor 那侧也读不到顶趟"]}
+
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
         # 2026-10-16（口径 S2 最终形态）：「**完全不要有填 action 的位置**」——
@@ -5751,9 +5794,14 @@ class AgentLoop:
         # 否则这一行落库时键为空、`verify_tasks` 会报 `task_without_input_key`
         # （真机实测：场景 G 的 t-0252）。模型若显式给了就用它给的。
         key = str(payload.get("input_key") or "") or _summon_key("", params)
+        # 父的绝对编号（2026-10-20）：空 ⇒ 受控拒绝，**不许**落一行孤儿（见 `_summon_owner`）。
+        owner = self._summon_owner()
+        if not owner:
+            out.update(self._no_owner_refusal(f"把「{task_arg[:40]}」派给 {role}："))
+            return out
         try:
             res = self.conductor.summon(role, "", params,
-                                        by=self.role, parent_task_id=self.my_task_id or None,
+                                        by=self.role, parent_task_id=owner,
                                         token=self.token, input_key=key)
         except Exception as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}")

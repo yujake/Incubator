@@ -9,10 +9,12 @@
 
 所以四件事要同时成立，缺一件模型就会照着错的那一句派活：
 
-- **边表**（①）：`D.edges` 与 `capabilities.ALLOWED_EDGES["D"]` 都**不含 V**，边总数仍是 **33**。
-  D 不派 V。`M→V` 那条边**仍然在**（树根"可派任何人"的既有口径，2026-10-18 的裁定），
-  但"派 V 走查证明"这个**义务**已不在 M 名下 ⇒ 见 ②。
-- **M 的文字面**（②）：`specs/m.py` 的 policy 里不再有"派 V / `verify_proof`"这一类**义务句**。
+- **边表**（①）：`D.edges` 与 `capabilities.ALLOWED_EDGES["D"]` 都**不含 V**，而且 V 只有
+  **两个入口**：`F`（自产证明时签）与 `B`（文献侧内容入库时签）。**`M→V` 已撤**（2026-10-20
+  业主裁定「派 V 只有 F 与 B 两个入口；M 不再直连 V」），边总数 **33 → 32**。
+  `M→B→V` 与 `M→D→F→V` 两条间接路都还在 ⇒ 撤这条边不会让 V 变成孤儿（判据里有反真空）。
+  此前"树根可派任何人"那一句（2026-10-18 的裁定）已被本裁定取代 —— 派 V 走查证明这件事
+  由 F 在交出证明时办好，M 不再直连 V；见 ②。- **M 的文字面**（②）：`specs/m.py` 的 policy 里不再有"派 V / `verify_proof`"这一类**义务句**。
   原来那两条（`reviewed_proof_rows` 记 0；`history` 里出现 `statement_id`）都改成"派 D 去办"。
 - **D 的文字面**（③）：D 的义务是"确认 F 交回的证明带 V 的签字；没有就让 F 去补签"，
   并明说"你不要自己派 V"。
@@ -51,21 +53,30 @@ from agentflow.verifications import (
     unverified_statement_refs,
 )
 
-#: 边总数的现读：业主 2026-10-20 的裁定**没有**加减任何一条边（C 无出边那一批之后就是 33）。
-EXPECTED_EDGE_TOTAL = 33
+#: 边总数的现读：D 不派 V 那一批之后是 33；2026-10-20 同一裁定把 `M→V` 也撤了
+#: （"派 V 只有 F 与 B 两个入口"）⇒ **32**。
+EXPECTED_EDGE_TOTAL = 32
+
+#: V 的两个入口（2026-10-20 业主裁定逐字：「派 V 只有 F（自产证明）与 B（文献侧内容）
+#: 两个入口；M 不再直连 V」）。**F 与 B 两条一条都不许少**，而 `M` 必须**不在**里面。
+V_ENTRANCES = frozenset({"F", "B"})
+
+#: M 的出边（反真空：撤 V 之后这七条一条都不许少）。
+M_EDGES = frozenset({"A", "B", "C", "D", "E", "G", "H"})
 
 #: D 的出边（反真空：这五条一条都不许少 —— 那条裁定只否掉了 `V`，没否掉别的）。
 D_EDGES = frozenset({"A", "B", "C", "E", "F"})
 
 
-# ============================================================ ① 边表：D 不派 V
+# ============================================================ ① 边表：D 不派 V、M 也不直连 V
 
-def _edge_problems(d_edges, table) -> list[str]:
-    """D 的出边（声明层 + 派生层）与边总数的全部问题（空列表 = 全对）。
+def _edge_problems(d_edges, table, m_edges=None) -> list[str]:
+    """两边（D 与 M）的出边与边总数的全部问题（空列表 = 全对）。
 
-    三个分量分开报，因为它们坏起来是三种不同的事：声明层被人补了 `V`、派生表与声明不同步、
-    总数变了（有边被顺手加/删）。**反真空**（`D_EDGES` 一条都没少）也在这一格里 ——
-    否则"不含 V"可以用"干脆一条边都没有"来满足。
+    五个分量分开报，因为它们坏起来是五种不同的事：声明层被人补了 `V`、派生表与声明
+    不同步、总数变了（有边被顺手加/删）、某一边的**反真空**没成立（"不含 V"可以用
+    "干脆一条边都没有"来满足）。`m_edges` 给了就一并核 M 的声明层（不给 ⇒ 只核
+    派生层的 `table["M"]`）。
     """
     out: list[str] = []
     declared = tuple(d_edges)
@@ -78,41 +89,129 @@ def _edge_problems(d_edges, table) -> list[str]:
     total = sum(len(v) for v in table.values())
     if total != EXPECTED_EDGE_TOTAL:
         out.append(f"边总数是 {total}，不是 {EXPECTED_EDGE_TOTAL} —— "
-                   "这条裁定一条边都没加减（D→V 没有加、M→V 也没有撤）")
+                   "2026-10-20 的裁定：D→V 没有加，`M→V` 撤掉一条（33 → 32）")
     lost = sorted(D_EDGES - derived)
     if lost:
         out.append(f"D 少了这些边 {lost} —— 反真空：其余五条（A/B/C/E/F）一条都不许少")
+    # ---- M 那一侧（同一条裁定把 `M→V` 也撤了：派 V 只有 F 与 B 两个入口）----
+    if m_edges is not None and "V" in set(m_edges):
+        out.append(f"M 的声明层出边含 V：{tuple(m_edges)} —— "
+                   "2026-10-20 业主裁定：M 不再直连 V（派 V 只有 F 与 B 两个入口）")
+    m_derived = set(table.get("M", frozenset()))
+    if "V" in m_derived:
+        out.append(f"派生层 ALLOWED_EDGES['M'] 含 V：{sorted(m_derived)}")
+    m_lost = sorted(M_EDGES - m_derived)
+    if m_lost:
+        out.append(f"M 少了这些边 {m_lost} —— 反真空：其余七条（A/B/C/D/E/G/H）一条都不许少")
     return out
 
 
 def test_d_has_no_edge_to_v_and_the_total_is_unchanged() -> None:
-    """① 正控：D 的出边里没有 `V`，边总数 33，D 的其余五条一条没少。"""
-    problems = _edge_problems(builtin_specs()["D"].edges, C.ALLOWED_EDGES)
-    assert problems == [], "D 的出边与 2026-10-20 的裁定不一致：\n  - " + "\n  - ".join(problems)
-    # 反真空（正控的另一半）：V 的**两个入口**与树根那条边都还在，否则上面那条"不含 V"
+    """① 正控：D 的出边里没有 `V`、M 的出边里也没有 `V`，边总数 32，两边的其余边一条没少。"""
+    specs = builtin_specs()
+    problems = _edge_problems(specs["D"].edges, C.ALLOWED_EDGES, specs["M"].edges)
+    assert problems == [], ("D/M 的出边与 2026-10-20 的裁定不一致：\n  - "
+                            + "\n  - ".join(problems))
+    # 反真空（正控的另一半）：V 的**两个入口**（F 与 B）都还在，否则上面那条"不含 V"
     # 可能只是"整个 V 都没人够得着"。
-    for holder in ("F", "B", "M"):
-        assert "V" in C.ALLOWED_EDGES[holder], (
-            f"{holder}→V 不见了：V 的签字入口只剩 {sorted(r for r, t in C.ALLOWED_EDGES.items() if 'V' in t)}"
-            "（F 产出时签、B 入库文献侧时签，是两个入口；M→V 是 2026-10-18 的裁定，本批不许撤）")
+    assert set(V_ENTRANCES) == {r for r, tos in C.ALLOWED_EDGES.items() if "V" in tos}, (
+        "V 的入口集合变了（2026-10-20 裁定：只有 F 与 B 两个入口）",
+        sorted(r for r, t in C.ALLOWED_EDGES.items() if "V" in t))
+    for holder in sorted(V_ENTRANCES):
+        assert "V" in C.ALLOWED_EDGES[holder], f"{holder}→V 不见了（V 少了一个入口）"
 
 
 def test_negative_control_putting_v_back_on_d_is_caught() -> None:
     """① 负控：把 `V` 塞回 D 的出边（声明层 / 派生层各注入一次）⇒ 判据必须红。"""
     spec = builtin_specs()["D"]
+    m_spec = builtin_specs()["M"]
     # (a) 声明层：有人又在 `specs/d.py` 里补了 'V'
     drifted = dataclasses.replace(spec, edges=(*spec.edges, "V"))
-    got = _edge_problems(drifted.edges, C.ALLOWED_EDGES)
+    got = _edge_problems(drifted.edges, C.ALLOWED_EDGES, m_spec.edges)
     assert any("声明层" in p for p in got), got
     # (b) 派生层：有人在运行期改了那张表（不碰源码也能造出"D 能派 V"）
     tampered = {role: frozenset(tos) for role, tos in C.ALLOWED_EDGES.items()}
     tampered["D"] = frozenset(D_EDGES | {"V"})
-    got = _edge_problems(spec.edges, tampered)
+    got = _edge_problems(spec.edges, tampered, m_spec.edges)
     assert any("派生层" in p for p in got), got
     # (c) 总数也得咬人：多一条边（D→V 那种形态）必须被这一格点名
     assert any("边总数" in p for p in got), got
     # 收尾（负控的负控）：真身没被动过 ⇒ 同一条判据在原始输入上仍然成立
-    assert _edge_problems(spec.edges, C.ALLOWED_EDGES) == []
+    assert _edge_problems(spec.edges, C.ALLOWED_EDGES, m_spec.edges) == []
+
+
+def test_negative_control_putting_v_back_on_m_is_caught() -> None:
+    """① 负控（2026-10-20 那一半）：把 `V` 加回 M（声明层 / 派生层各一次）⇒ 判据必须红。
+
+    没有这一条，"M 不含 V"就只能靠人记得 —— 而它是这一天业主裁定的**核心那一格**：
+    把 V 加回去等于让 M 又能直连 V，而 V 的两个入口（F / B）不再独占。
+    """
+    m_spec = builtin_specs()["M"]
+    d_spec = builtin_specs()["D"]
+    # (a) 声明层：有人在 `specs/m.py` 里又把 'V' 补回 `edges`
+    drifted = dataclasses.replace(m_spec, edges=(*m_spec.edges, "V"))
+    got = _edge_problems(d_spec.edges, C.ALLOWED_EDGES, drifted.edges)
+    assert any("M 的声明层" in p for p in got), got
+    # (b) 派生层：运行期改表（不碰源码也能造出"M 能派 V"）
+    tampered = {role: frozenset(tos) for role, tos in C.ALLOWED_EDGES.items()}
+    tampered["M"] = frozenset(M_EDGES | {"V"})
+    got = _edge_problems(d_spec.edges, tampered, m_spec.edges)
+    assert any("派生层 ALLOWED_EDGES['M']" in p for p in got), got
+    # (c) 总数那一格：把 V 加回 M ⇒ 33，判据必须点出"不是 32"
+    assert any("边总数" in p for p in got), got
+    # 收尾（负控的负控）：真身没被动过 ⇒ 仍然全对
+    assert _edge_problems(d_spec.edges, C.ALLOWED_EDGES, m_spec.edges) == []
+
+
+#: 端到端那一条用的替身缝：这一组判据不碰模型（只碰边表闸门与台账）。
+class _NoModel:
+    spec = type("Spec", (), {"model": "stub", "api_key": "x"})()
+
+    def complete(self, prompt, *, scope="", system=None, **kw):  # pragma: no cover
+        raise AssertionError("这一条判据不许调到模型")
+
+
+def test_m_dispatching_v_end_to_end_is_forbidden(tmp_path) -> None:
+    """① 判据②（端到端）：M 真的去派 V ⇒ `conductor.summon` 判 `forbidden_edge`，一行活都没跑。
+
+    为什么不能只断言 `policy.check`：那是"策略函数怎么判"，而这一条要守的是
+    "**M 的派活这条路**走不通" —— 中间还隔着 `AgentLoop._do_summon` 的形状解码、
+    `Conductor.summon` 的边闸门、以及台账那一行。改前（2026-10-18 ~ 2026-10-20）
+    这整条路是通的；撤边之后必须在**最后那一层**也拒，而不只是在边表里看不见。
+    顺带把"被拒的那一行也带父的绝对编号"钉住（拒绝 ≠ 孤儿）。
+    """
+    import pathlib
+
+    from agentflow.agent_loop import AgentLoop
+    from agentflow.conductor import Conductor, LocalBackend
+    from agentflow.llmseam import LlmSeam
+    from agentflow.store import Store
+    from agentflow.tools import build_registry
+
+    ws = pathlib.Path(tmp_path) / "ws"
+    st = Store(ws)
+    st.init()
+    cond = Conductor(st, policy=None, backend=LocalBackend({}))
+    reg = build_registry(store=st, conductor=cond).registry
+    top = cond.open_top_level_run("M", "顶层这一趟")
+    loop = AgentLoop(role="M", session_root=ws, registry=reg, conductor=cond,
+                     seam=LlmSeam(role="M", session_root=ws, gateway=_NoModel(),
+                                  price=(0.0, 0.0), sid="s-v-entrance"),
+                     store=st, sid="s-v-entrance", max_steps=2)
+    loop.my_task_id = top
+    out = loop._do_summon({"role": "V", "task": "走查 stmt:000000 那一条证明"})
+    assert out.get("ok") is False, out
+    assert str(out.get("refusal_reason") or "") == "forbidden_edge", (
+        "M 真的把 V 派出去了（或拒成了别的理由）—— 2026-10-20 的裁定要求 forbidden_edge", out)
+    assert "V" in str(out.get("detail") or "") or "只能召唤" in str(out.get("detail") or ""), out
+    # 台账那一行：被拒的尝试也落行，且父是顶趟的绝对编号（不是 None）
+    rows = [r for r in st.rows("tasks") if str(r.get("role")) == "V"]
+    assert len(rows) == 1, rows
+    assert str(rows[0].get("outcome")) == "refused", rows[0]
+    assert str(rows[0].get("refusal_reason")) == "forbidden_edge", rows[0]
+    assert str(rows[0].get("parent_task_id") or "") == top, (
+        "被拒的那一行没有父（孤儿形态）—— 拒绝也是派活，父必须是顶趟的绝对编号", rows[0])
+    assert str(rows[0].get("called_by")) == "M", rows[0]
 
 
 # ============================================================ ② M 不再有"派 V"的义务句

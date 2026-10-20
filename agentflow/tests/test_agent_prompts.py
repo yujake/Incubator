@@ -1202,9 +1202,11 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
             assert "不可以被任何人唤起" in text, f"{role} 不可召唤，但提示词没写"
     # 反真空：这一批就是因为主控有"看得见、唤不起"的角色才加的。
     # 2026-10-13：业主「补 M 到 B」之后，主控唤不起的从 {B,F,V} 收成 {F,V}；
-    # 2026-10-18：业主「给 M 开 V 出边」之后只剩 {F} —— 而这一条**必须非空**，
-    # 否则下面那句"看得见但唤不起"的判据整体空转（`gaps[M]` 为空时它一句都不验）。
-    assert gaps["M"] == {"F"}, gaps["M"]
+    # 2026-10-18：业主「给 M 开 V 出边」之后只剩 {F}；
+    # **2026-10-20：业主撤掉 `M→V`（「派 V 只有 F 与 B 两个入口」）⇒ 回到 {F, V}** ——
+    # 而这一条**必须非空**，否则下面那句"看得见但唤不起"的判据整体空转
+    # （`gaps[M]` 为空时它一句都不验）。期望值跟着裁定走，判据强度不变。
+    assert gaps["M"] == {"F", "V"}, gaps["M"]
     assert gaps["M"], "主控的『唤不起』集合空了 ⇒ 这一整条判据退化成空转"
     assert not any(gaps[r] for r in gaps if r != "M"), \
         f"只有主控该有这一档（其余角色的条目就是出边）：{ {r: g for r, g in gaps.items() if g} }"
@@ -2562,7 +2564,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: ⚠️ 这一格号钉的是**冻结那一刻的树**，不是日期：那一刻逐文件记了 sha256（见本次收口回报）；
 #:    哪一份文件在冻完之后又动了，`test_the_prompt_version_moves` 会当场红 —— 那时**先看
 #:    是不是别人的线又落了东西**，再决定是重算这张表（同版本号、新时刻）还是抬下一格。
-_FROZEN_PROMPT_VERSION = "p171"
+_FROZEN_PROMPT_VERSION = "p172"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2586,8 +2588,8 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "F": "3b3e96dcc51f2481d4125eeaabb9b1ef65334c72ef8f887101ccd156832890df",
     "G": "38b2a4b2187c2d6253a1ad175d4432649ec4e1be6effb8bd35baefd8ac31bff9",
     "H": "e2f7ebc4a31df9445795e3bb136c4543cc20ffc398d51896167e81462c685595",
-    "V": "bb2580818c7a060ae57b38247f58a1dc71e0d8e8840c59405daacd22ecd707e2",
-    "M": "689ae03ea3d60ea889376b6895568f9ac03e9b0d0ad574f6d0b814eb1528f329",
+    "V": "c0895e6f4320746bd026267db4a8df07b506c54a5992bfd4383ef7749621f332",
+    "M": "8aae2de7d49359c007299c91515774348ef60f181e7bc37c45203145a7b325dc",
 }
 
 

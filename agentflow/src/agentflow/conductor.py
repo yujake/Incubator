@@ -549,6 +549,32 @@ _CURRENT_SESSION_ROOT: contextvars.ContextVar[str] = contextvars.ContextVar(
 _CURRENT_SID: contextvars.ContextVar[str] = contextvars.ContextVar(
     "agentflow_session_sid", default="")
 
+#: "这一笔框架代办的派活，父是谁"的挂点（2026-10-20，根治 `projects/tree-check` 的
+#: t-000019 那一行孤儿）。与 `calling_as` 同构：号跟着这一次调用走，出作用域就复位
+#: —— 不挂实例属性（`Conductor` 会被并发共用，一个属性会让 A 的号盖掉 B 的）。
+#:
+#: 谁用它：`AgentLoop._do_summon_many` 在调 `run_plan` 之前挂上自己的绝对编号
+#: （`run_plan` 里"派活时顺手认领队列"那一步要拿它当父）；工具路径不用它 ——
+#: 那条路已经由 `calling_as` 把 `task_id` 挂在 `_CURRENT_TASK_ID` 上了。
+_CURRENT_OWNER_HINT: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "agentflow_owner_hint", default="")
+
+
+@contextlib.contextmanager
+def consuming_as(parent_task_id: str):
+    """在 `with` 里把"这一笔派活的父"挂上（见 `_CURRENT_OWNER_HINT`）。
+
+    用法与 `calling_as` 一样只有一处：`Conductor.run_plan` 的队列认领那一步从这里读父。
+    为什么不做成 `run_plan` 的一个形参：那个函数的调用方里有一批是判据的替身
+    （`lambda calls, token=None: ...`），加形参会把"登记有没有发生"的判据变成
+    `TypeError` —— 那是判据坏了，不是实现坏了。
+    """
+    tok = _CURRENT_OWNER_HINT.set(str(parent_task_id or ""))
+    try:
+        yield
+    finally:
+        _CURRENT_OWNER_HINT.reset(tok)
+
 
 #: 上行（`conductor.escalate`）的受控取值：**要父代理做的那件事属于哪一类**。
 #:
@@ -2360,6 +2386,8 @@ class Conductor:
         # 遗留的 running 顶趟标成 `failed`（带原因）是安全的：它们的进程已经不在。
         self._sweep_stale_top_running(role)
         tid = self._write_new_row(row, note=f"top:{role}")
+        # 顶趟的绝对编号记下来：框架自己发起的派活（队列认领）拿它当父（见 `_top_task_id`）。
+        self._top_task_id = tid
         self._log(f"顶趟开行 {role} → {tid}", task_id=tid)
         return tid
 
@@ -2395,8 +2423,39 @@ class Conductor:
     #: 它是读数：让 (乙) 形态对"即"字的折扣可度量（主控批 (乙) 的条件之一）。
     _consume_counts: dict[str, int]
 
+    #: 队列认领那一路的名册登记问题（非空 ⇒ 有名册外子代理的候选，读侧可查）。
+    _consume_roster_problems: list[str]
+
+    #: 最近一次 `open_top_level_run` 拿到的**绝对编号**（台账发的，不是这里拼的）。
+    #:
+    #: 为什么需要它（2026-10-20，真机 `projects/tree-check` 的 t-000019）：框架自己
+    #: 发起的那几条派活（队列认领 `consume_pending_search_requests`）不属于任何
+    #: 代理调用的调用栈，于是 `summon` 的 `parent_task_id` 走到了默认值 `None`
+    #: ⇒ 台账里出现一行 `role=A / called_by=M / parent_task_id=None / depth=1` 的**孤儿**：
+    #: 它不在任何名册里（`roster_view(owner=任一父)` 都读不到它），也不占任何父的扇出。
+    #: 口径（`draft/90` §1.1 / `draft/104` §2.5「父子关系的唯一权威来源是台账」）：
+    #: 子行的父亲必须是**父的绝对编号**；顶层（M 自己那一趟）就用**顶趟编号**，
+    #: 只有顶趟那一行才允许 `parent=None`（它是树根）。
+    _top_task_id: str = ""
+
+    def _owner_task_id(self, given: str = "") -> str:
+        """这一笔派活的父的绝对编号（空串 = 连顶趟都没有 ⇒ 调用方要自己造一个树根）。
+
+        三个来源，**按权威性排序**（都是台账/上下文里已有的值，没有一处是自己拼的）：
+        ① 调用方显式给的（`finish_top_level_run` 给它自己那一行）；② `consuming_as`
+           挂上的 owner 提示（`_do_summon_many` 那一支）与当前调用上下文
+           （`calling_as` 挂的 `task_id`，工具路径走这一格）；③ 本进程最近一次顶趟
+           （`open_top_level_run` 记下的）。
+        """
+        for cand in (given, _CURRENT_OWNER_HINT.get(), current_task_id(),
+                     getattr(self, "_top_task_id", "")):
+            if str(cand or "").strip():
+                return str(cand)
+        return ""
+
     def consume_pending_search_requests(self, *, by: str = S.CONDUCTOR_ROLE,
-                                        limit: int = 1, trigger: str = "dispatch") -> list[Any]:
+                                        limit: int = 1, trigger: str = "dispatch",
+                                        parent_task_id: str = "") -> list[Any]:
         """S-03（队列认领 · 乙形态）：把还没做完的检索请求交给 A 的 `run_once`。
 
         ## "即"字的折扣（写在明面上，不许藏）
@@ -2428,8 +2487,23 @@ class Conductor:
         `seen` 每次都从全表重建）。判据与 `_occupies_fanout_slot` 同源：
         只有走完第 [5] 步（写 `running` 行）的召唤才带 `_ADMITTED_MARK`，
         闸门拒绝在写 running 行之前就返回了。
+
+        ## 父是谁（2026-10-20；根因见 `_top_task_id` 的注释）
+
+        认领出来的那个 `A` 也是**派活**，所以它必须有父（`draft/90` §1.1：
+        名册项 = 子代理，`tasks` 行 = 一次调用；`draft/104` §2.5：父子关系的唯一权威
+        来源是台账）。父按 `_owner_task_id` 取，优先级：显式 `parent_task_id` →
+        当前调用上下文 → 本进程顶趟。三者都没有（例如判据里裸造了一个 `Conductor`、
+        连顶趟都没开）⇒ **当场造一个真树根**（`_write_new_row`，编号由台账发，
+        `parent=None` 是树根的合法形态）并把它收行 —— 宁可多一行树根，也不许再出现
+        `parent_task_id=None` 的子行（真机 t-000019 就是那一行孤儿）。
+        认领完顺手登记进那个 owner 的名册（名字与读写面都由秘书发号 —— 这一条
+        正是"名册外子代理"那个洞：改前 `conductor.summon` 直连后端，一次登记都没有）。
         """
         out: list[Any] = []
+        owner = ""
+        opened_root = ""
+        roster_problems: list[str] = []
         try:
             rows = list(self.store.rows("search_requests"))
         except Exception as exc:  # noqa: BLE001 - 扫不到队就如实留痕（不当成"队是空的"）
@@ -2449,15 +2523,26 @@ class Conductor:
             key = f"consume:{rid}"
             if key in seen:
                 continue                      # 幂等：这一条已经消费过（含正在跑的那一次）
+            if not owner:
+                # 父的绝对编号（见本方法 docstring 最后一段）。真的连顶趟都没有 ⇒
+                # 造一个树根：`parent=None` 只在**树根**上是合法的。
+                owner = self._owner_task_id(parent_task_id)
+                if not owner:
+                    owner = self._open_consume_root(trigger)
+                    opened_root = owner
             try:
-                res = self.summon("A", "run_once", {}, by=by, input_key=key)
+                res = self.summon("A", "run_once", {}, by=by, input_key=key,
+                                  parent_task_id=owner)
             except Exception as exc:  # noqa: BLE001 - 一条消费失败不许拖住其余
                 self._log(f"队列认领失败（{trigger}，{rid}）：{type(exc).__name__}: {exc}")
                 continue
             out.append(res)
             seen.add(key)
+            self._register_consumed(owner, res, rid=rid, problems=roster_problems)
             if len(out) >= max(1, int(limit)):
                 break
+        if opened_root:
+            self._close_consumed_root(opened_root, trigger=trigger)
         if out:
             counts = getattr(self, "_consume_counts", None)
             if counts is None:
@@ -2466,7 +2551,67 @@ class Conductor:
             counts[str(trigger)] = counts.get(str(trigger), 0) + len(out)
             self._log(f"队列认领（{trigger}）：消费 {len(out)} 条",
                       task_ids=[str(getattr(r, "task_id", "")) for r in out])
+        if roster_problems:
+            self._consume_roster_problems = roster_problems
+            self._log(f"队列认领的名册登记有 {len(roster_problems)} 处没写进去："
+                      f"{roster_problems[0]}")
         return out
+
+    def _open_consume_root(self, trigger: str) -> str:
+        """给"没有任何父在场"的队列认领造一个**真树根**行（编号由台账发）。
+
+        为什么不用 `open_top_level_run`：它会顺手把**同角色**遗留的 running 顶趟标成
+        `failed`（`_sweep_stale_top_running`）。队列认领跑在 M 那一趟的内部，
+        用 M 这个角色去开行会把**正在跑的那一趟 M** 标死 —— 那是比孤儿更坏的错。
+        所以这里直接走 `_write_new_row`（与 `summon` 同一个建行临界区），
+        角色记框架（`M`）、`called_by="conductor"`（不是冒充某个角色发起的）。
+        """
+        tid = self._write_new_row({
+            "task_id": "", "role": S.CONDUCTOR_ROLE, "action": "run",
+            "called_by": "conductor", "parent_task_id": None, "depth": 1,
+            "input_key": f"top:{S.CONDUCTOR_ROLE}:consume:{trigger}",
+            "status": "running", "outcome": None, "refusal_reason": None,
+            "instance": "", "detail": f"队列认领（{trigger}）：框架自发起的一趟（树根）",
+            "error": None, "started_at": S.now_iso(), "ended_at": None,
+            "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
+        }, note=f"top:{S.CONDUCTOR_ROLE}:consume")
+        self._log(f"队列认领（{trigger}）没有父在场 ⇒ 开一条树根 {tid}", task_id=tid)
+        return tid
+
+    def _close_consumed_root(self, tid: str, *, trigger: str) -> None:
+        """收掉 `_open_consume_root` 那一行（不许在台账上留一条永远 running 的树根）。"""
+        try:
+            self._end(tid, status="done", outcome="no_result",
+                      detail=f"队列认领（{trigger}）的树根行：认领已完成")
+        except Exception as exc:  # noqa: BLE001 - 收行失败只留日志（认领本身已经发生）
+            self._log(f"队列认领的树根行没收成（{tid}）：{type(exc).__name__}: {exc}")
+
+    def _register_consumed(self, owner: str, res: Any, *, rid: str,
+                           problems: list[str]) -> None:
+        """把认领出来的那个子代理登记进 `owner` 的名册（名字/面都由秘书发号）。
+
+        三态：没装配秘书 ⇒ 记一条"名册不在手上"（不是"登记过了"）；登记失败 ⇒
+        记问题（不许静默）；被拒的那一次不登记（它没跑，与 `_do_summon` 同口径）。
+        """
+        sec = getattr(self, "secretary", None)
+        if sec is None:
+            problems.append(f"{rid}：这一趟没有秘书 ⇒ 名册不在手上（没有登记）")
+            return
+        if str(getattr(res, "status", "") or "") not in ("pending", "running", "done"):
+            problems.append(f"{rid}：这次认领没跑成（status={getattr(res, 'status', '')}）"
+                            "⇒ 名册没登记")
+            return
+        if str(getattr(res, "outcome", "") or "") == "refused":
+            return
+        try:
+            reg = sec.roster_add(owner=owner, role="A",
+                                 task_id=str(getattr(res, "task_id", "") or ""),
+                                 brief="", task=f"认领检索请求 {rid}")
+        except Exception as exc:  # noqa: BLE001 - 登记失败不许带走这次认领
+            problems.append(f"{rid}：名册登记没跑成：{type(exc).__name__}: {exc}")
+            return
+        if reg.get("problem"):
+            problems.append(f"{rid}：{reg['problem']}")
 
     def finish_top_level_run(self, task_id: str, *, stop_reason: str,
                              detail: str = "") -> SummonResult:
@@ -2497,7 +2642,9 @@ class Conductor:
         # 最需要它的时候（这一趟就要结束了）反而不会消费。计数分 trigger 记，
         # 于是"即"的折扣在读数上可度量（"派活时 N 条 / 收尾时 M 条"）。
         try:
-            self.consume_pending_search_requests(trigger="finish")
+            # 父 = 这一趟自己的绝对编号（2026-10-20：改前这里不给 ⇒ 认领出来的 A 行
+            # `parent_task_id=None`，成了名册外的孤儿 t-000019）。
+            self.consume_pending_search_requests(trigger="finish", parent_task_id=task_id)
         except Exception as exc:  # noqa: BLE001 - 扫队失败不许带走收行
             self._log(f"收尾扫队失败：{type(exc).__name__}: {exc}")
         # 秘书职责 3（闭环提醒）的生产调用点（`draft/53` §2；主控 2026-10-04 裁定"接上"）：
@@ -3680,6 +3827,11 @@ class Conductor:
 
         返回列表长度恒等于 `len(plan)` 且顺序与 plan 一致（I-10）。
         并发度不改变结果顺序 —— 这是"可复现"的判据本身。
+
+        父是谁（2026-10-20）：plan 里那些 call **自己**带着 `parent_task_id`（一件一件
+        各归各的父）；而"派活时顺手认领队列"那一步的父不在这里传 —— 它由调用方用
+        :func:`consuming_as` 挂上（工具路径已经有 `calling_as`，shape 路径由
+        `_do_summon_many` 挂），见 `consume_pending_search_requests` 的最后一段。
         """
         from . import scheduler as SC
 

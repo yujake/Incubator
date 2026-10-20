@@ -80,14 +80,17 @@ def test_the_registry_is_not_vacuous() -> None:
     assert len(reg.roles()) == 10
     assert reg.read_only_roles() == ("C", "H", "V"), reg.read_only_roles()
     assert "M" not in reg.summonable_roles()
-    # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C（34 → 33）。
-    assert sum(len(v) for v in reg.edges().values()) == 33, (
+    # 2026-10-20 业主裁定：派 V 只有 F（自产证明）与 B（文献侧内容）两个入口，M 不再直连 V
+    # （33 → 32）；同一天早一批改回 C 无出边、由 D 唤起 C（34 → 33）。
+    assert sum(len(v) for v in reg.edges().values()) == 32, (
         "边总数：2026-10-10 裁定第 4 条去掉 M→B / M→F / M→V 三条（32 → 29）；"
         "2026-10-13 业主裁定「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」（29 → 30）；"
         "2026-10-13 业主裁定「补 M 到 B」（30 → 31）；"
         "2026-10-14 业主裁定「允许 B 和 H 协作，B 唤起 H」＋「回验……保持语义相同即可」（31 → 32）；"
         "2026-10-18 业主裁定「给 M 开 V 出边」（32 → 33，`projects/t3d` 三·1："
         "`reviewed_proof_rows = 0`，V 只能经 F→V）；"
+        "2026-10-20 业主裁定「派 V 只有 F 与 B 两个入口，M 不再直连 V」（33 → 32，"
+        "V 的两个入口仍在：F 自产证明时签、B 入库文献侧内容时签）；"
         "文档那一份在 docs/ROLE-SPECS.md §0.5"
     )
     for role in reg.roles():

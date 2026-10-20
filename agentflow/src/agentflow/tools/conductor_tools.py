@@ -389,6 +389,11 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
             role=target_role, action="",
             params=dict(item.get("params") or {}),
             by=S.CONDUCTOR_ROLE,
+            # 2026-10-20：父必须是**发起这一批的那一趟的绝对编号**（改前这一格缺 ⇒
+            # `TaskCall.parent_task_id` 走默认 `None` ⇒ 批量派出去的子代理在台账上
+            # 全是孤儿，名册 owner 也落成空串/隐藏文件）。号从调用上下文读，
+            # 不在这里拼（`calling_as` 挂上的就是这一趟的 `task_id`）。
+            parent_task_id=current_task_id() or None,
             input_key=str(item.get("input_key") or ""),
             instance=instance,
         ))
