@@ -46,22 +46,44 @@ def test_a_blank_action_still_checks_the_edge() -> None:
     的裁定会被一个空字符串整个架空，而**没有任何读数会报出来**。
 
     ⚠️ 2026-10-16 实测更正：**`B` 在 M 的出边里**（当时 `ALLOWED_EDGES['M']`
-    = `['A','B','C','D','E','G','H']`，7 条）；**2026-10-18 业主「给 M 开 V 出边」之后
-    `V` 也在里面**（8 条）。而 `partners_lines` 的注释与 `visible_partners` 的 docstring
+    = `['A','B','C','D','E','G','H']`，7 条）；2026-10-18 业主「给 M 开 V 出边」之后
+    `V` 也进过一次（8 条）。而 `partners_lines` 的注释与 `visible_partners` 的 docstring
     写着"主控不许直接控制 **B** / F / V" —— **那两句是旧读数**（边表才是权威）。
-    这条判据按边表写：**只剩 F 拦**（V 现在是直接边，拿它当"该拦"的例子会变成假红）。
+
+    2026-10-20 业主裁定：**撤 M→V**（边表回到 7 条）⇒ 这一格的期望值跟着边表走：
+
+    - `M → V` ⇒ `forbidden_edge`（负向负控 —— V 是**该拦**的那条边）；
+    - `M → B` ⇒ 放行（正向负控 —— 反真空：总得留一条"能派的"直接边，
+      否则"空动作也查边"可以被"把所有边都拒掉"这种改法骗过去）；
+    - `M → F` ⇒ `forbidden_edge`（F 从来不在 M 的出边里）。
     """
-    for to in ("F",):
+    for to in ("F", "V"):
         assert _edge_refusal("M", to, "") == "forbidden_edge", (
             f"M 用空动作派 {to} 竟然没被拦 —— 空动作成了越权的后门"
         )
     # 直接边 + 空动作 ⇒ 放行（这才是这一格要支持的东西）
     assert _edge_refusal("M", "D", "") == "", "M 派 D 一件活（不点动作）应当放行"
-    assert _edge_refusal("M", "B", "") == "", "B 在 M 的出边里（实测 8 条含 B）"
-    assert _edge_refusal("M", "V", "") == "", "V 于 2026-10-18 进了 M 的出边（8 条）"
+    assert _edge_refusal("M", "B", "") == "", "B 在 M 的出边里（7 条）"
+    # 2026-10-20 业主裁定：撤 M→V
+    assert _edge_refusal("M", "V", "") == "forbidden_edge", "V 已被撤出 M 的出边"
     assert _edge_refusal("D", "F", "") == "", "D 派 F 一件活（不点动作）应当放行"
     # 反真空：这条判据仍然**真的拦过东西**（不然"succeed 的放行"三行说明不了什么）
     assert _edge_refusal("C", "A", "") == "forbidden_edge", "C 的边是空的，空动作也拦不住"
+
+
+def test_negctl_putting_v_back_into_ms_edges_would_be_red(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """负控：把 `V` 加回 M 的边表 ⇒ 上面那条 `M → V ⇒ forbidden_edge` 必红。
+
+    这一格守的是"期望值跟着边表走"：裁定被翻回去（边表里又出现 M→V）而判据没跟着
+    改，必须当场红 —— 否则"撤 M→V"这件事只活在一次提交信息里。
+    """
+    before = P.C.ALLOWED_EDGES["M"]
+    assert "V" not in before, ("负控的前提不成立：V 本来就在 M 的出边里", sorted(before))
+    monkeypatch.setitem(P.C.ALLOWED_EDGES, "M", frozenset(before | {"V"}))
+    assert _edge_refusal("M", "V", "") == "", "坏实现：V 又进了 M 的出边"
+    with pytest.raises(AssertionError):
+        test_a_blank_action_still_checks_the_edge()
 
 
 def test_a_blank_action_is_not_an_unknown_action() -> None:

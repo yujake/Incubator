@@ -1822,7 +1822,7 @@ def _edgeless_roles() -> list[str]:
     """一个伙伴都唤不动的角色（出边为空）—— [c] 对它们无从填起（今天只有 C）。
 
     2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一档在真实树上又有对象了
-    （2026-10-19 那一版曾为 C→D 改用合成角色 `_SYNTH_EDGELESS`，现按原形态恢复）。
+    （2026-10-19 那一版曾为 C→D 改用一个无出边的合成角色顶上，现按原形态恢复）。
     """
     return [r for r in ALL_ROLES if not C.ALLOWED_EDGES.get(r, ())]
 

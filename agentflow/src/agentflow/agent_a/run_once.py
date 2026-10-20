@@ -3,8 +3,8 @@
 拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
 
 ⚠️ 2026-10-20 业主口径（待新增文献列表）之后，上面那句"逐字未改"**不再成立**：
-本方法多了一段"先暂存、后入库"的接线（见 `_rehearse_stage` 的说明与
-`agentflow/litstage.py` 的模块 docstring）。原来那条判据是迁移期的临时锚点，
+本方法多了一段"先暂存、后入库"的接线（见 `agentflow/litstage.py` 的模块 docstring
+与 `stage_entries` / `admission_plan` 的说明）。原来那条判据是迁移期的临时锚点，
 它守的是"拆文件没有顺手改行为"；本轮是**业主明确要求的行为变更**，
 所以锚点让位给新判据（`tests/test_agent_a*.py` 与新判据文件）。
 """

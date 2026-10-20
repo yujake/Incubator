@@ -185,7 +185,7 @@ def help_text() -> str:
     """`run-agent --help` 的运行时文本（用户读的是它，不是源码里的字面量）。
 
     两处都要取：`add_parser(help=…)` 那一句不挂在子 parser 上，而是挂在父 action 的
-    `_choices_actions`（argparse 的内部结构，`choices` 列表里那行摘要）——
+    那张内部结构上（`choices` 列表里那一行摘要，只能按私有属性名 `getattr` 取）——
     只看子 parser 的 `description` 会漏掉摘要那一份，而那正是最常被读到的一份。
     """
     parser = CLI.build_parser()

@@ -295,20 +295,67 @@ def test_negctl_without_the_admission_check_a_stranger_role_gets_the_handoff(
 # ============================================================ ③ escalate 与 message 同一判据
 
 
-def test_escalate_to_the_parent_goes_through_the_roster(tmp_path: pathlib.Path):
-    """判据③（正控）：上行发给**名册上的父** ⇒ 成功，且读数里带着名册的判定。"""
-    env = _env(tmp_path)
-    got = env["cond"].escalate(need="要 lit:0007 的全文", kind="fetch_fulltext",
-                               by=ME, my_task_id=env["me"], parent_task_id=env["pa"],
-                               session_root=str(env["ws"]), sid=SID)
+def _escalate_to_the_parent(env: dict[str, Any]) -> dict[str, Any]:
+    """跑一次「上行给名册上的父」，返回 `escalate` 的返回值（正控与负控共用）。"""
+    return env["cond"].escalate(need="要 lit:0007 的全文", kind="fetch_fulltext",
+                                by=ME, my_task_id=env["me"], parent_task_id=env["pa"],
+                                session_root=str(env["ws"]), sid=SID)
 
+
+def _one_escalation_in_the_parents_inbox(env: dict[str, Any],
+                                         got: dict[str, Any]) -> None:
+    """判据①的全部断言（正控与负控同形：负控就是让同一组断言在坏实现上失败）。
+
+    ⚠️ 2026-10-20 诊断更正（原判据写错在读侧，不是写侧真的重复投递）：
+    这一格原先写的是 `inbox = read_messages(...)` 之后 `len(inbox) == 1` ——
+    而 `read_messages` 返回的是 `(消息, 问题)` **两元组** ⇒ `len(inbox)` 恒等于 2，
+    那个 2 是元组的两格，不是两条留言。盘上的实况（读夹具 + 打点实测）是：
+    `conductor.escalate` 里只有**一处** `send_message`，一次上行恰好落**一条**
+    `agent_message`；另有一条 `agent_escalation`（可审计留痕，同一个 `msg_id`），
+    而 `read_messages` 只认 `kind == "agent_message"` ⇒ 它进不了收件箱。
+    所以这里做两件事：① 元组解包；② 写侧与读侧各钉一次（不许只靠读侧的过滤
+    去重 —— "一次上行写了两条"必须在**盘上的留言条数**那一格就红）。
+    """
     assert got.get("ok") is True and got.get("state") == "escalated", got
     addr = got.get("addressing") or {}
     assert (addr.get("checked"), addr.get("how")) == (True, "parent"), addr
     assert addr.get("task_id") == env["pa"], addr
     assert got.get("roster_unavailable") is False, got
-    inbox = read_messages(env["ws"], PARENT, sid=SID)
+    # ---- 写侧：父名下的 `agent_message` 恰好一条（不过任何读侧判据，直接数盘上的行）
+    landed = [e for e in _messages(env["ws"]) if str(e.get("to")) == PARENT]
+    assert len(landed) == 1, ("一次上行在写侧落了不止一条留言", landed)
+    assert landed[0].get("msg_id") == got.get("msg_id"), (landed, got)
+    # ---- 读侧：父的收件箱里恰好那一条，且带着 `escalation` 结构
+    inbox, problems = read_messages(env["ws"], PARENT, sid=SID)
+    assert problems == [], problems
     assert len(inbox) == 1 and inbox[0].get("escalation"), inbox
+
+
+def test_escalate_to_the_parent_goes_through_the_roster(tmp_path: pathlib.Path):
+    """判据③（正控）：上行发给**名册上的父** ⇒ 成功，且读数里带着名册的判定。"""
+    env = _env(tmp_path)
+    _one_escalation_in_the_parents_inbox(env, _escalate_to_the_parent(env))
+
+
+def test_negctl_a_duplicated_escalation_would_be_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
+    """负控①：让一次上行在**写侧**落两条 ⇒ 判据① 的"恰好一条"必红。
+
+    坏实现刻意做在写侧（把 `send_message` 调两遍），不在读侧按 `msg_id` /
+    `to_task_id` 去重 —— 去重只是把读数抹平，"一次上行写两条"这件事还在。
+    """
+    env = _env(tmp_path)
+    real = AL.send_message
+
+    def twice(*a: Any, **kw: Any) -> tuple[str, str]:
+        real(*a, **kw)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(AL, "send_message", twice)
+    got = _escalate_to_the_parent(env)
+    assert got.get("ok") is True, ("坏实现应当报成功（否则这条负控抓的是别的东西）", got)
+    with pytest.raises(AssertionError):
+        _one_escalation_in_the_parents_inbox(env, got)
 
 
 def test_escalate_to_a_non_parent_is_refused(tmp_path: pathlib.Path):
@@ -445,6 +492,25 @@ def test_negctl_without_the_addressee_check_the_directive_is_posted(
 # ============================================================ ⑤ 反真空：框架通报与用户插话
 
 
+def _a_framework_stop_notice_gets_through(env: dict[str, Any]) -> None:
+    """框架通报（`by_framework=True`）**点了名、带指令语气**⇒ 仍然照发、且全角色可见。
+
+    这一格守的是公告栏判据上的**显式豁免**：叫停那一路是框架代表主控发的全树通知，
+    它必然点名 + 用指令语气（"F1 请立刻收工"）—— 若被"点名 + 指令 ⇒ 受控拒绝"这条
+    判据当作"公告栏里的对话"拦下，听不到叫停的子孙会继续烧钱跑实验。豁免的落点是
+    `_message_by_channel` 里那一句（判据本体），摘掉它这条就红（负控在同文件里）。
+    """
+    loop, ws = env["loop"], env["ws"]
+    got = loop._do_message({"to": PUBLIC, "subject": "叫停",
+                            "body": "F1 请立刻收工，别再跑实验", "by_framework": True})
+    assert got.get("message_sent"), ("框架通报被公告栏判据挡住了", got)
+    assert got.get("board_kind") == "bulletin", got
+    # 可见面：`by_framework=True` ⇒ 连"不是它子代理"的角色也读得到（叫停那一档的形态）
+    seen, _ = read_messages(ws, "E", sid=SID, parent_task_id=env["uncle"], parent_role="E")
+    assert [m for m in seen if m.get("channel") == "public" and m.get("by_framework")], (
+        "框架通报没有按『全角色可见』送到名册外的人手上", seen)
+
+
 def test_framework_notice_and_user_interjection_still_get_through(tmp_path: pathlib.Path):
     """判据⑤（反真空）：这次收紧不许把框架通报与用户插话一起打死。
 
@@ -455,6 +521,8 @@ def test_framework_notice_and_user_interjection_still_get_through(tmp_path: path
       它是框架代为落的一条通报，不是代理在说话）；
     - **框架公告**（`by_framework=True`）：全角色可见（叫停那一路的形态），
       即"不是发信人的子代理"也读得到 —— 证明公告栏的可见面判据没被这次收紧改坏；
+      另外它**走公告栏判据那一支也不受限**（点名 + 指令语气照发，见
+      `_a_framework_stop_notice_gets_through`）；
     - **用户插话**：`user → M` 照旧可发可读（插话不是代理间通信）。
     """
     env = _env(tmp_path)
@@ -478,14 +546,40 @@ def test_framework_notice_and_user_interjection_still_get_through(tmp_path: path
     assert [m for m in seen if m.get("channel") == "public"], (
         "框架公告被公告栏的可见面判据挡住了", seen)
     assert all(m.get("by_framework") for m in seen if m.get("channel") == "public"), seen
+    # ②b 同一档走公告栏**判据本体**：点名 + 指令语气也照发（显式豁免，摘掉就红）
+    _a_framework_stop_notice_gets_through(env)
 
     # ③ 用户插话：照旧可发、可读（且只有 M 收）
-    iid, problem = AL.send_interjection(ws, sender=U.USER, subject="注意", body="先看 lit:0007")
+    #
+    # ⚠️ 2026-10-20 诊断更正：这里原先没给 `sid` ⇒ `send_interjection` 落到**缺省会话**
+    # （`sessions.session_id()`，实测 `20261020`），而读的那一侧拿的是 `SID`（"talk"）
+    # ⇒ 读到的永远是空表，与"插话通道坏了"在读数上长得一样。通道本身没坏（写读同一
+    # `sid` 就对得上，见 `tests/test_agent_interjection.py`），坏的是这一格的夹具。
+    iid, problem = AL.send_interjection(ws, sender=U.USER, subject="注意",
+                                        body="先看 lit:0007", sid=SID)
     assert iid and not problem, (iid, problem)
     mine, _ = read_interjections(ws, "M", sid=SID)
     assert [i for i in mine if i.get("interjection_id") == iid], mine
     other, _ = read_interjections(ws, PARENT, sid=SID)
     assert other == [], ("插话漏给了非主控", other)
+
+
+def test_negctl_without_the_framework_exemption_the_stop_notice_is_refused(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
+    """负控⑤b：把公告栏判据上的**框架豁免**摘掉 ⇒ 那条叫停通报被当成"对话"拒掉 ⇒ 红。
+
+    摘的就是判据本体里那一格（`_public_framework_exempt`），不是换个措辞绕过去：
+    坏实现下同一条通报拿到 `public_is_not_a_conversation` 的拒信、盘上一行不落。
+    """
+    env = _env(tmp_path)
+    monkeypatch.setattr(AgentLoop, "_public_framework_exempt", lambda self, payload: False)
+    got = env["loop"]._do_message({"to": PUBLIC, "subject": "叫停",
+                                   "body": "F1 请立刻收工，别再跑实验", "by_framework": True})
+    assert str(got.get("refused") or "") == "public_is_not_a_conversation", (
+        "坏实现应当把这条框架通报当成『公告栏里的指令』拒掉", got)
+    assert _messages(env["ws"]) == [], ("受控拒绝却落了盘", _messages(env["ws"]))
+    with pytest.raises(AssertionError):
+        _a_framework_stop_notice_gets_through(env)
 
 
 def test_negctl_a_vacuum_would_be_red(tmp_path: pathlib.Path,

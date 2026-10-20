@@ -13,8 +13,8 @@
    （改前那个 `elif` 只覆盖"没有秘书"）⇒ 守卫的第三态被折平。
 
 外加两处地雷：`_do_handoff` 读 `_gate["candidates"]` 而 `_handoff_address` 的 gate
-没有这个键（`KeyError`）；`_message_my_children` 有调用点、全仓没有 def
-（`to="ALL"` 的内部直调 ⇒ `AttributeError`）。
+没有这个键（`KeyError`）；`to="ALL"` 的内部直调**有调用点、全仓没有那个方法的 def**
+（⇒ `AttributeError`）。
 
 ## 纪律（这几条是判据本身的一部分，别顺手放宽）
 
@@ -333,7 +333,7 @@ def _all_direct_call_is_refused(out: dict[str, Any]) -> None:
 
 
 def test_a_direct_all_call_is_refused_instead_of_raising(tmp_path: pathlib.Path):
-    """判据⑤：两支内部直调都改成受控拒绝（`_message_my_children` 已被删除，不许补回）。
+    """判据⑤：两支内部直调都改成受控拒绝（那个按名册逐项开板项的旧实现已删，不许补回）。
 
     负控（反过来证明）：那个方法真的不存在 ⇒ 改回"调那个方法"必抛 `AttributeError`。
     """

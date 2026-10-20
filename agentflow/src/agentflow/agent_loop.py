@@ -6298,7 +6298,7 @@ class AgentLoop:
                       "candidates": [str(x) for x in (addr.get("candidates") or [])]}
 
     def _all_recipient_refusal(self, to: str = "ALL") -> dict[str, Any]:
-        """`to="ALL"` 走到**内部直调**那一支时的受控拒绝（`_message_my_children` 已被删除）。
+        """`to="ALL"` 走到**内部直调**那一支时的受控拒绝（那个按名册逐项开板项的旧实现已删）。
 
         ## 为什么是拒绝而不是补回那个方法
 
@@ -6317,7 +6317,7 @@ class AgentLoop:
                 "receipt": "unknown", "refused": "broadcast_only",
                 "error": ("给名下子代理广播用 `conductor.broadcast`；"
                           "`to=\"ALL\"` 在解码层已归一成 `#public`"),
-                "note": ("这一条受控拒绝：`_message_my_children` 已被删除（语义由 "
+                "note": ("这一条受控拒绝：那个按名册逐项开板项的旧实现已删（语义由 "
                          "`conductor.broadcast` 与 `public_visibility` 承担）⇒ "
                          "一条都没发、一个板项都没开（受控拒绝不是「稍后再试」）")}
 
@@ -6431,7 +6431,7 @@ class AgentLoop:
         `_do_message` 在名册可读时不再走这里（判据在 `roster_addresses`）；
         这里保留给两条路：① `roster_unavailable` 的回退（逐字旧行为）；
         ② `to="ALL"` 的内部直调 —— 那一支已改成受控拒绝（见 `_all_recipient_refusal`，
-        `_message_my_children` 已被删除，语义由 `conductor.broadcast` 承担）。
+        那个按名册逐项开板项的旧实现已删，语义由 `conductor.broadcast` 承担）。
         """
         if self.secretary is None or self.conductor is None:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
@@ -6487,8 +6487,15 @@ class AgentLoop:
                               "该不该看见这一条（业主 T20/T21）"),
                     "receipt": "unknown"}
         # 公告栏判据（见 docstring）：点名 + 指令语气 ⇒ 这不是公告，是对某个代理下指令。
+        #
+        # **一句明确的口径**：框架通报（`by_framework=True`，叫停那一路）与用户插话
+        # **不受**这条判据限制 —— 它们不是"代理在对话"，是框架/人代表全树说话
+        # （听不到叫停的子孙会继续烧钱跑实验）。豁免落在 `_public_framework_exempt`
+        # 这一格、且是显式的：摘掉它，同文件的
+        # `test_framework_notice_and_user_interjection_still_get_through` 当场红。
         board_kind = "bulletin" if to == PUBLIC else ""
-        if to == PUBLIC:
+        by_framework = self._public_framework_exempt(payload)
+        if to == PUBLIC and not by_framework:
             named = self._public_addressee(payload)
             if named:
                 return {"message": "未发出", "to": to, "ok": False, "receipt": "unknown",
@@ -6504,6 +6511,7 @@ class AgentLoop:
                                        body=str(payload.get("body") or ""),
                                        reply_to=reply_to, sid=self.sid,
                                        from_task_id=str(self.my_task_id or ""),
+                                       by_framework=by_framework,
                                        extra={"board_kind": board_kind} if board_kind else None)
         if problem:
             return {"message": "未发出", "to": to, "ok": False, "error": problem}
@@ -6556,6 +6564,16 @@ class AgentLoop:
                 if any(mark in text for mark in PUBLIC_DIRECTIVE_MARKS):
                     return token
         return ""
+
+    def _public_framework_exempt(self, payload: Mapping[str, Any]) -> bool:
+        """公告栏判据的显式豁免位（口径只有一句，写在 `_message_by_channel` 的判据本体里）。
+
+        取的是**框架自己落的那一格**（`by_framework`），不是模型能写出来的东西：
+        `_decode_shape` 的 `message` 白名单只带 `to` / `subject` / `body` / `reply_to`
+        ⇒ 代理把这一格塞进载荷也到不了这里；真机上的框架通报
+        （`conductor_tools` 的叫停）走 `send_message(by_framework=True)` 那条直路。
+        """
+        return bool(payload.get("by_framework"))
 
     def _my_children_count(self) -> int | None:
         """我名下直接子实例的个数（`None` = 这一格没读成，不许当 0）。"""
