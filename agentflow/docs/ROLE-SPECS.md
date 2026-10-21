@@ -250,7 +250,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | CLI 入口 | `agentflow ... web`（帮助逐字：「起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）」） | `python -m agentflow.cli web --help` |
 | 服务端模块 | `src/agentflow/webui/` **9** 个 `.py` | `(Get-ChildItem src/agentflow/webui/*.py).Count` |
 | 端点 | `webui/routes.py` 的 `ROUTES` **26** 条（`GET 19` + `POST 7`） | `python -c "from agentflow.webui.routes import ROUTES;import collections;print(len(ROUTES),collections.Counter(r[0] for r in ROUTES))"` |
-| 静态产物（**已构建，运行期不需要 `node_modules`**） | `src/agentflow/web/static/`：`index.html` 0.9 KB、`assets/index.*.js` 111.8 KB（114,524 字节）、`assets/index.*.css` 22.5 KB | `Get-ChildItem -Recurse src/agentflow/web/static` |
+| 静态产物（**已构建，运行期不需要 `node_modules`**） | `src/agentflow/web/static/`：`index.html` 0.9 KB、`assets/index.*.js` 112.4 KB（115109 B）、`assets/index.*.css` 22.5 KB | `Get-ChildItem -Recurse src/agentflow/web/static` |
 | 前端源码 | `agentflow/ui/`（`api.ts` 端点、`sse.ts` 事件 kind、`types.ts` 字段、`main.tsx` 路由） | `Get-ChildItem agentflow/ui/src`（相对仓库根） |
 | 判据 | `tests/test_webui{,_contracts,_help_is_current,_pages,_readers,_roster_panel,_settings_write,_sse,_static,_writes,_browser}.py`，**11** 个文件 | `(Get-ChildItem tests/test_webui*.py).Count` |
 | 已知边界 | 原始七层出处的 `draft/35` **没有这一层**（后加）；`draft/114` 记的是"九页 / 十条只读面 / 五条写端点"（**当次读数，未复跑**） | — |
