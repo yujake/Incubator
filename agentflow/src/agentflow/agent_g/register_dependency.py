@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._support import Any
+from .. import proofloc as _PL
 
 class _RegisterDependency:
     def register_dependency(
@@ -13,6 +14,7 @@ class _RegisterDependency:
         kind: str,
         label: str,
         *,
+        proof_no: int = _PL.DEFAULT_PROOF_NO,
         source_lit_id: str | None = None,
         source_experiment_id: str | None = None,
         source_stmt_id: str | None = None,
@@ -31,10 +33,26 @@ class _RegisterDependency:
         `source_stmt_id`（2026-10-09 加的第四种来源）：被依赖的是我们自己的一条命题
         （定理用到定理 / 用到某个概念）—— 那条边此前无处安放，承重链断在命题之间。
         `path_group`：证明路径不唯一时它是组号（同一 `used_by` 下组内都要、组间任一）。
+        `proof_no`（2026-10-22 多证明模型）：这条依赖挂在被引命题的第几条证明上。
+        尾巴由 `proofloc.used_by_of` 生成（全仓唯一解析点），这里只把命题号交过去；
+        `doc:` 前缀的引用原样透传（它的 `#` 后面是 claim 号，不是证明号）。
+        它刻意不进 `_call` 的关键字：工具面 schema 没有这一格，`additionalProperties=False`
+        会把多出来的参数判成非法调用。
         """
+        try:
+            no = int(proof_no or _PL.DEFAULT_PROOF_NO)
+        except (TypeError, ValueError):
+            raise ValueError(f"proof_no 必须是正整数（收到 {proof_no!r}）") from None
+        if no < 1:
+            raise ValueError(f"proof_no 必须是正整数（收到 {proof_no!r}）："
+                             "第 0 条证明不存在（不带 `#pN` 等价于第 1 条）")
+        text = str(used_by)
+        if not text.startswith("doc:") and no > _PL.DEFAULT_PROOF_NO:
+            # 已经带着尾巴的写法先归一到命题号，再挂上这一次的证明号（不拼第二段尾巴）。
+            text = _PL.used_by_of(_PL.parse_used_by(text)[0], no)
         data = self._call(
             "doc.register_dependency",
-            used_by=used_by,
+            used_by=text,
             kind=kind,
             label=label,
             source_lit_id=source_lit_id,

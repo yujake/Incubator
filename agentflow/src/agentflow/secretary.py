@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import manuscripts as MS
+from . import proofloc as _PL
 from . import schema as S
 
 #: 台账落点：`<工作区>/out/secretary/<role>.jsonl`（追加式、脚本发号，`draft/53` §11.2）。
@@ -3357,8 +3358,18 @@ class Secretary:
             out["concept_quota"] = quota.reading()
             for step in steps:
                 dep_id = tx.alloc_id(S.TABLES["dependencies"]["id_kind"])
+                # 多证明模型（业主 2026-10-22）：这条命题的依赖属于它的第几条证明。
+                # 载荷没写 ⇒ canonical（第 1 条）⇒ 生成出来的 `used_by` 与改前逐字相同
+                # （`proofloc.used_by_of` 对第 1 条不写 `#pN` 尾巴）。
+                # `path_group` 一个字没动：它说的是"第几条路径"，与"第几条证明"是两维。
+                proof_no = step.get("proof_no") or body.get("proof_no") or _PL.DEFAULT_PROOF_NO
+                try:
+                    proof_no = int(proof_no)
+                except (TypeError, ValueError):
+                    proof_no = _PL.DEFAULT_PROOF_NO
                 dep = S.Dependency(
-                    dep_id=dep_id, used_by=f"stmt:{stmt_id}",
+                    dep_id=dep_id,
+                    used_by=_PL.used_by_of(f"stmt:{stmt_id}", proof_no),
                     kind=str(step.get("kind") or "theorem"),
                     label=str(step.get("label") or "") or _dep_label(step),
                     source_lit_id=step.get("source_lit_id"),

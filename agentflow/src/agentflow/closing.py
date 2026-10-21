@@ -1568,6 +1568,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         from . import verifications as _VR_R10
         rows = list(store.rows("statements"))
         counted: list[dict[str, Any]] = []
+        #: 这一格真正数过的键：`(stmt_id, proof_no)`。用它去重（同一条证明在清单里
+        #: 出现两次不许数两遍），并用它的 `stmt_id` 投影出定理级的汇总数。
+        counted_pairs: set[tuple[str, int]] = set()
+        counted_stmts: set[str] = set()
         grades: dict[str, int] = {}
         grades_with_bits: dict[str, int] = {}
         cited_skipped = 0
@@ -1637,8 +1641,38 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                         "label": str(r.get("label") or "")[:60],
                     })
                     continue
-                counted.append({"stmt_id": sid, "grade": grade,
-                                "label": str(r.get("label") or "")[:60]})
+                # 逐条证明展开：这一格的键是 `(stmt_id, proof_no)`，不是"一条命题一行"。
+                # 一条命题可以有几条证明，每条证明各自有第 3 位（#p2 签过不等于 #p1 签过）；
+                # 折成一行会让"#p2 有成立那一签"把 #p1 也记成审过（借光）。
+                #
+                # 有台账 ⇒ 用台账现算出来的逐条等级（`statement_review_reading` 的
+                # `proofs[*]["grade"]`：只有 signed 的那一份才到 pre_theorem/theorem）。
+                # 没台账（历史行 / 夹具）⇒ 位是命题级汇总，落在 canonical #p1 上
+                # （老数据只有那一条证明）—— 读数与改前逐字相同。
+                per_proof: list[tuple[int, str]] = [(1, grade)]
+                if reading is not None and reading.get("ledger_present"):
+                    per_proof = []
+                    for p in reading.get("proofs") or []:
+                        no = _VR_R10.as_proof_no(p.get("proof_no")) or 1
+                        # 等级在这里现算（唯一入口仍是 `EB.derive_grade`）：只有那一条证明
+                        # 自己被签住才可能到 pre_theorem/theorem —— 拿 #p1 的签给 #p2 记同一档
+                        # 就是借光。就地读 `reading` 里那份等级会绕过上面那条 AST 判据
+                        # （等级只许来自 `bits_from_row` / `derive_grade`）。
+                        one = dict(bits)
+                        one["reviewed"] = bool(p.get("reviewed"))
+                        per_proof.append(
+                            (no, str(EB.derive_grade(one, kind=str(r.get("kind") or "")))))
+                for no, proof_grade in per_proof:
+                    if proof_grade not in ("pre_theorem", "theorem"):
+                        continue
+                    pair = (sid, no)
+                    if pair in counted_pairs:
+                        continue
+                    counted_pairs.add(pair)
+                    counted_stmts.add(sid)
+                    counted.append({"stmt_id": sid, "proof_no": no,
+                                    "grade": proof_grade,
+                                    "label": str(r.get("label") or "")[:60]})
         detail: dict[str, Any] = {
             "statements": len(rows),
             # ---- 三态的逐档读数（分母必须并列，否则"0 条高档"读不出是哪一种 0）
@@ -1646,6 +1680,13 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "statements_without_bits": len(without_bits_ids),
             "without_bits_ids": without_bits_ids[:8],
             "counted": counted[:8],
+            #: 逐条证明的键 `(stmt_id, proof_no)` 数（`counted` 里每一条一行；同一份证明
+            #: 出现两次只数一次）。它是"这一格数了几条证明"，不是腿的读数。
+            "counted_total": len(counted_pairs),
+            #: 定理级汇总数（腿的读数就是它）：按 `stmt_id` 去重 —— 一条命题有几条被审过的
+            #: 证明都只算这一条命题。「任一条证明 in-sync 成立即算」（`statement_review_reading`
+            #: 的 `reviewed`），所以三条证明不许把一条命题吹成三条。
+            "counted_statements": len(counted_stmts),
             #: 全行的等级分布（兼容读数：没有位记录的行按"五位全空"算，进 `conjecture`）。
             "grades": grades,
             #: 只数「真的有位记录」的行 —— 这一格才是"算了之后落在哪一档"。
@@ -1693,7 +1734,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                                "要么没审过（五位里第 2/3 位为空）；自报的 `status=proved` / "
                                "`evidence_kind=proof` 不算凭据（先看 `statements_without_bits` "
                                "是不是等于 `statements`：若是，说明产出方这一趟没写过位记录）")
-        return len(counted), detail
+        # 腿的读数是定理级汇总数（按命题去重）：一条命题三条证明都审过仍只算一条 ——
+        # "造了几条判决性证据"问的是命题，不是证明的份数。逐条证明的明细在 `counted`
+        # （键 `(stmt_id, proof_no)`）与 `counted_total` 里。
+        return len(counted_stmts), detail
     if kind == "numeric_experiment_rows":
         # `draft/39` §6.49 八 的 D66（用户 2026-10-06 裁「产出太保守」）：这一档从
         # 「跑过多少次数值实验」改成「跑出过几个结论」—— 旧口径只数

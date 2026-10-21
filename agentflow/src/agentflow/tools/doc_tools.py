@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
 from .. import papercompile as PC
+from .. import proofloc as _PL
 from .. import schema as S
 from .. import textutil as T
 from .. import verifications as VR
@@ -1703,6 +1704,7 @@ def register_dependency(
     source_experiment_id: str | None = None,
     source_stmt_id: str | None = None,
     path_group: int = 1,
+    proof_no: int = 1,
     page_range: Any = None,
     quote: str = "",
     status: str = "dangling",
@@ -1720,6 +1722,12 @@ def register_dependency(
     表里没有它），于是"承重链"在数据面上断在命题之间。
     `path_group`：证明路径不唯一 ⇒ 一条定理可以有多组依赖（两个文献各有证明、或一条更漂亮的路径）。同一 `used_by` + 同一 `path_group`
     = 一条路径（组内 AND：都要走通）；不同 `path_group` = 可选路径（组间 OR：任一走通即可）。 B 那一侧交的是二维列表，秘书按外层下标写这一列（`Secretary.record_statement`）。
+    ## 规矩 A（业主 2026-10-22）：`source_stmt_id` 按"实际收录过的序号"回填
+    给了 `source_stmt_id` 的任何一条边（不分 status）在写入前都要过三态判定：那个号在
+    `statements` 里存在吗 / 它 `active` 吗（口径取自 `schema.STATEMENT_UNUSABLE_STATUSES`）/
+    `statements` 读得出来吗。三条读数各自有拒绝理由（"不存在" / "没 closed" / "没查成"），
+    而不是一句"依赖不合法"；读不到绝不当成通过。判据在
+    `tests/test_dependency_strictness.py`。
     """
     if not str(used_by or "").strip():
         raise ValueError("used_by 不能为空（依赖必须挂到某个具体的使用点，如 'doc:0001#claim-3'）")
@@ -1770,10 +1778,77 @@ def register_dependency(
             f"path_group 必须是正整数（收到 {path_group!r}）：0 或负数会让'第几组'失去意义"
             "（同一 used_by + 同一组 = 一条路径，不同组 = 可选路径）")
 
+    # ---- 多证明模型（业主 2026-10-22）：`used_by` 的 `#pN` 尾巴只在这里生成一次。
+    # `proofloc` 是全仓拆/拼这个尾巴的唯一解析点（"台账上是第 2 条、读出来是第 1 条"
+    # 这种错没有任何东西会报）。先按前缀分流：`doc:` 前缀的 `used_by` 也用 `#`
+    # （`doc:0001#claim-3`，见 `dependencies_for_doc` 的归属判据），那个尾巴是 claim 号、
+    # 不是证明号 —— 什么都不做，绝不往上拼。
+    # 缺省 `proof_no=1` ⇒ 生成的 `used_by` 与改前逐字相同（canonical 不写尾巴）。
+    try:
+        no = int(proof_no or _PL.DEFAULT_PROOF_NO)
+    except (TypeError, ValueError):
+        raise ValueError(f"proof_no 必须是正整数（收到 {proof_no!r}）") from None
+    if no < 1:
+        raise ValueError(f"proof_no 必须是正整数（收到 {proof_no!r}）："
+                         "第 0 条证明不存在（不带 `#pN` 等价于第 1 条）")
+    if str(used_by).startswith("doc:"):
+        if no > _PL.DEFAULT_PROOF_NO:
+            raise ValueError(
+                f"`doc:` 前缀的 used_by 没有证明号（收到 {used_by!r} + proof_no={no}）："
+                "`doc:0001#claim-3` 的尾巴是 claim 号，证明号只挂在 `stmt:` 引用上")
+        used_text = str(used_by)
+    else:
+        # 已经带着尾巴的写法先经 `proofloc` 归一到命题号，再挂上这一次的证明号。
+        used_text = (str(used_by) if no <= _PL.DEFAULT_PROOF_NO
+                     else _PL.used_by_of(_PL.parse_used_by(str(used_by))[0], no))
+
     with store.tx(
         "dependencies", "literature", "experiments", "statements",
         actor=actor, note="register_dependency"
     ) as tx:
+        # ---- 严格规矩 A（业主 2026-10-22：「转写是提示词侧点一下就行……其它要严格」）
+        # `source_stmt_id` 必须按"实际收录过的序号"回填：任何 status 都核，不再只在
+        # `status='closed'` 时核（一条 `dangling` 边指着一个不存在的号同样是坏数据：
+        # 它在盘上长得像"这条结论依赖某条命题"，而那条命题根本不存在）。
+        #
+        # 三态，各给一条能行动的理由，绝不当成通过：
+        #   ① 那个号不在 `statements` 里 ⇒ 不存在；
+        #   ② 在册但状态不是 `active` ⇒ 没 closed（`pending_definition` / `disputed` /
+        #      `refuted` / `superseded` 都不是依据；口径直接读
+        #      `schema.STATEMENT_UNUSABLE_STATUSES`，不在这里另立第二份名单）；
+        #   ③ `statements` 读不出来 ⇒ 没查成（读不到绝不等价于"核过了"，也不等价于
+        #      "库里没有这一条"）。
+        # 为什么必须在写入期核：verify 的依赖闭合审计只看得到盘上已经有的行，一条回填错的
+        # 序号进了库之后，"这条结论靠什么站着"就已经答错了，而报告照样亮绿。
+        if source_stmt_id is not None:
+            try:
+                stmt_rows = list(tx.rows("statements"))
+            except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
+                raise ValueError(
+                    f"source_stmt_id={source_stmt_id!r} 没查成：statements 表读不出来"
+                    f"（{type(exc).__name__}: {exc}）⇒ 拒绝写入。三态纪律：'读不到'不是"
+                    "'核过了'，也不是'库里没有这一条'—— 先用 `agentflow verify` 定位"
+                    "（必要时 `agentflow rebuild` 重建），再登记这条边"
+                ) from None
+            anchor = next((r for r in stmt_rows
+                           if str(r.get("stmt_id")) == source_stmt_id), None)
+            if anchor is None:
+                raise ValueError(
+                    f"source_stmt_id={source_stmt_id!r} 不存在：statements 表里没有这一行"
+                    f"（表里现有 {len(stmt_rows)} 条命题）。依赖边必须按实际收录过的序号"
+                    "回填，不许指一个还没进库的号 —— 指一条不存在的命题，"
+                    "'这条结论靠什么站着'就答不出来（`draft/97` §15.0 的第四种来源）"
+                )
+            anchor_status = str(anchor.get("status") or "").strip()
+            if anchor_status != "active":
+                shown = anchor_status or "（空）"
+                raise ValueError(
+                    f"source_stmt_id={source_stmt_id!r} 没 closed：那一行的 "
+                    f"statements.status={shown!r}，只有在册可用的 'active' 才算已闭合"
+                    f"（{S.STATEMENT_UNUSABLE_STATUSES} 这几档都不是依据）。"
+                    "要么先让那条命题走到 active，要么这条边不许写成依赖它 —— "
+                    "拿一条待补定义/有争议/被证否/被取代的命题当依据，是一条空头支票"
+                )
         if status == "closed":
             if source_lit_id is not None and not any(
                 str(r.get("lit_id")) == source_lit_id for r in tx.rows("literature")
@@ -1790,18 +1865,13 @@ def register_dependency(
                     f"status='closed' 但 experiments 表里没有 experiment_id={source_experiment_id!r}。"
                     "依赖闭合必须核到**已入库**的来源（FC-23）"
                 )
-            if source_stmt_id is not None and not any(
-                str(r.get("stmt_id")) == source_stmt_id for r in tx.rows("statements")
-            ):
-                raise ValueError(
-                    f"status='closed' 但 statements 表里没有 stmt_id={source_stmt_id!r}。"
-                    "我方命题之间的那条边同样要核到已入库的行：指一条不存在的命题，"
-                    "'这条结论靠什么站着'就答不出来（`draft/97` §15.0 的第四种来源）"
-                )
+            # `source_stmt_id` 那一档的核已经提到事务开头（规矩 A：任何 status 都核，
+            # 三态分开命名）—— 这里刻意不留第二份判据：同一件事两处实现，漂移时
+            # 没有任何东西会红。
         dep_id = tx.alloc_id("dep")
         row = S.Dependency(
             dep_id=dep_id,
-            used_by=str(used_by),
+            used_by=used_text,
             kind=kind,
             label=str(label),
             status=status,

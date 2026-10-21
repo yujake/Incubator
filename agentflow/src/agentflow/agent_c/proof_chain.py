@@ -21,6 +21,9 @@ from pathlib import Path
 import json
 
 from ._support import Any, Mapping, S, Sequence, _cfg_int, tool  # noqa: F401
+# 依赖的 `used_by` 尾巴（`#pN`）只有一个解析点（`proofloc`）：两份解析意味着
+# "台账上是第 2 条证明、读出来是第 1 条"这种错没有任何东西会报（业主 2026-10-22）。
+from .. import proofloc as _PL  # noqa: E402
 # 历史概念行上那个哨兵（唯一出处是 `migrate_concepts.PRIMITIVE_PROOF`）。
 # 读侧仍认它（不动历史）：迁移折出来的老概念、以及 2026-10-21 之前写进来的那些行，
 # `proof_text` 就是这一个值。而「写入侧」已经不再写它
@@ -30,6 +33,26 @@ from ..migrate_concepts import PRIMITIVE_PROOF as CONCEPT_PRIMITIVE_MARKER  # no
 
 #: 走到根就算完的两种 `kind`（第三种是 `lit:` 行本身，见 `_DepGraph.is_root`）。
 _PROOF_KINDS = ("proof",)
+
+
+def _split_used_by(used_by: str) -> tuple[str, int, str]:
+    """把一条依赖的 `used_by` 拆成 `(命题侧键, 证明号, problem)`，先按前缀分流。
+
+    为什么分流必须在调 `proofloc` 之前（2026-10-22 审计的三条硬约束之一）：
+    `doc:` 前缀的 `used_by` 也用 `#`（`doc:0001#claim-3`，见
+    `tools.doc_tools.dependencies_for_doc` 的归属判据）—— 那个尾巴是 claim 号、
+    不是证明号。不分流就把 `#claim-3` 送进 `proofloc`，于是一条正常的 claim 引用
+    被记成"坏尾巴"（`problem` 非空），而坏尾巴的读法是"按 canonical 读" ——
+    读数看着没变，台账里已经悄悄多了一类假缺陷。
+
+    `problem` 非空 = 尾巴是坏的（`#p0` / `#pabc` / 多段 …），此时按 canonical（第 1 条）
+    读，并把坏尾巴原文交回调用方留痕 —— 绝不抛：读侧拿不到答案比"读成 canonical 并留痕"更坏。
+    """
+    text = str(used_by or "")
+    if text.startswith("doc:"):
+        return text, _PL.DEFAULT_PROOF_NO, ""
+    head, number, problem = _PL.parse_used_by_checked(text)
+    return head, number, problem
 
 
 class _ProofChain:
@@ -73,14 +96,21 @@ class _ProofChain:
 
         graph = _DepGraph(stmts=stmts, deps=deps, exps=exps, lits=lits,
                           root=getattr(getattr(self, "store", None), "root", None))
+        # 二维展开：每个 `(证明号, 组号)` 是一条候选路径。证明号那一维是"第几条证明"，
+        # 组号那一维是"第几条路径"（语义未改：组内 AND / 组间 OR）。
+        by_proof = graph.groups_of(node["stmt_id"])
+        proof_nos = sorted(by_proof)
         groups_out: list[dict[str, Any]] = []
-        for group, edges in sorted(graph.groups_of(node["stmt_id"]).items()):
-            got = graph.walk(node["stmt_id"], group=group, edges=edges,
-                             max_depth=max_depth)
-            groups_out.append(got)
-        # 并列（长度相同）按组号升序取前 k 组；`groups_total` 报全部组数（不假装只有 k 组）
-        ranked = sorted(groups_out, key=lambda g: (g["length"] if g["reached"] else 10 ** 6,
-                                                   g["group"]))
+        for proof_no, by_group in sorted(by_proof.items()):
+            for group, edges in sorted(by_group.items()):
+                got = graph.walk(node["stmt_id"], group=group, proof_no=proof_no,
+                                 edges=edges, max_depth=max_depth)
+                groups_out.append(got)
+        # 并列（长度相同）按"证明号、组号"升序取前 k 组；`groups_total` 报全部组数
+        # （不假装只有 k 组）。单条证明时顺序与改前逐字相同（证明号恒为 1）。
+        ranked = sorted(groups_out,
+                        key=lambda g: (g["length"] if g["reached"] else 10 ** 6,
+                                       g.get("proof_no") or 1, g["group"]))
         best = ranked[0] if ranked and ranked[0]["reached"] else None
         if any(g.get("cycle") for g in groups_out):
             warnings.append("有 " + str(sum(1 for g in groups_out if g.get("cycle")))
@@ -103,6 +133,7 @@ class _ProofChain:
                     summary=summary,
                     payload={"checked": True, "target": str(target), "matched_by": matched_by,
                              "groups": [], "best_group": None, "groups_total": 0,
+                             "best_proof_no": None, "proof_nos": [],
                              "closed": True, "roots": [node["stmt_id"]],
                              "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
                                       "label": node.get("label")}},
@@ -113,20 +144,29 @@ class _ProofChain:
                          f"**不满足根的条件**（{target_why}）⇒ 依赖没写，不是『到根了』"),
                 payload={"checked": True, "target": str(target), "matched_by": matched_by,
                          "groups": [], "best_group": None, "groups_total": 0,
+                         "best_proof_no": None, "proof_nos": [],
                          "closed": False, "roots": [], "unwritten": [node["stmt_id"]],
                          "why": target_why},
                 ok_=False, error="unwritten_dependencies",
             )
+        if best is None:
+            where = "没有一组走到根（见 warnings）"
+        elif len(proof_nos) > 1:
+            where = (f"最短是第 {best.get('proof_no') or 1} 条证明的第 {best['group']} 组"
+                     f"（{best['length']} 跳）")
+        else:
+            where = f"最短是第 {best['group']} 组（{best['length']} 跳）"
         summary = (f"{node.get('label') or node['stmt_id']}："
-                   f"{len(groups_out)} 组可选路径，"
-                   + (f"最短是第 {best['group']} 组（{best['length']} 跳）" if best
-                      else "没有一组走到根（见 warnings）"))
+                   f"{len(groups_out)} 组可选路径，{where}")
         payload = {
             "checked": True, "target": str(target), "matched_by": matched_by,
             "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
                      "label": node.get("label")},
             "groups": groups_out, "groups_total": len(groups_out),
             "best_group": best["group"] if best else None,
+            "best_proof_no": (best.get("proof_no") or 1) if best else None,
+            #: 这条命题的依赖按哪几条证明分的（升序；老数据恒为 `[1]`）
+            "proof_nos": proof_nos,
             # 跨组汇总按节点去重（多写一组路径不许把规模读数吹大）
             "unique_nodes": len({h["node"] for g in groups_out for h in g["hops"]}),
             "truncated": truncated,
@@ -167,35 +207,47 @@ class _DepGraph:
         self.stmts = {str(r.get("stmt_id") or ""): dict(r) for r in stmts}
         self.exps = {str(r.get("exp_id") or ""): dict(r) for r in exps}
         self.lits = {str(r.get("lit_id") or ""): dict(r) for r in lits}
-        self.edges: dict[str, list[dict[str, Any]]] = {}
+        #: 边索引：使用点 → 证明号 → `path_group` → 边。两层键都是这台机器的口径：
+        #: 第一层是"这条命题的第几条证明"（`#pN`，不带尾巴 = canonical #p1），
+        #: 第二层是"第几条路径"（`path_group`）。
+        self.edges: dict[str, dict[int, dict[int, list[dict[str, Any]]]]] = {}
         for d in deps:
             used = str(d.get("used_by") or "")
             if not used:
                 continue
             # `used_by` 的两种写法都要认：`stmt:0007`（台账里推荐的那种）与裸号 `0007`
             # —— 索引一律按裸号存，查询也按裸号查（一处口径，不分叉）。
-            key = used[5:] if used.startswith("stmt:") else used
-            self.edges.setdefault(key, []).append(dict(d))
-            if key != used:
-                self.edges.setdefault(used, []).append(dict(d))
+            head, proof_no, _problem = _split_used_by(used)
+            key = head[5:] if head.startswith("stmt:") else head
+            try:
+                group = int(d.get("path_group") or 1)
+            except (TypeError, ValueError):
+                group = 1
+            for slot in (key,) if key == head else (key, head):
+                by_proof = self.edges.setdefault(slot, {})
+                by_group = by_proof.setdefault(proof_no, {})
+                by_group.setdefault(group, []).append(dict(d))
 
-    def groups_of(self, used_by: str) -> dict[int, list[dict[str, Any]]]:
-        """某一个使用点的边按 `path_group` 分组（组内 AND、组间"任一成立即到根"）。
+    def groups_of(self, used_by: str) -> dict[int, dict[int, list[dict[str, Any]]]]:
+        """某一个使用点的边：先按证明号分组，再按 `path_group` 分组（二维）。
+
+        第一维（`proof_no`）：一条命题可以有几条证明（`used_by="stmt:0004#p2"`），
+        每条证明各自有一份依赖。这里不跨证明合并 —— `#p1` 的第 1 组与 `#p2` 的第 1 组
+        是两条不同的路径；合并等于让一份证明借另一份证明的依赖，而"借光"正是这套模型
+        最要紧的那条负控。
+        第二维（`path_group`）：语义一个字没改 —— 组内 AND（都要走通）、组间 OR（任一到根）。
 
         `used_by` 的两种写法（`stmt:0007` 与裸号 `0007`）都认 —— 索引里两种都挂了，
         这里再兜一次，免得调用方传了另一种写法就静默拿到空组（"没查到"与"没有依赖"
         必须分得开）。
         """
-        out: dict[int, list[dict[str, Any]]] = {}
         key = str(used_by or "")
         bare = key[5:] if key.startswith("stmt:") else key
-        for d in (self.edges.get(bare, []) or self.edges.get(key, [])):
-            try:
-                g = int(d.get("path_group") or 1)
-            except (TypeError, ValueError):
-                g = 1
-            out.setdefault(g, []).append(d)
-        return out
+        # 与索引侧同一个"择一"口径（两种写法挂了同一批边：先按裸号查，查不到才用原样键）
+        # —— 两边都取再合并会把同一条边数两遍（那是"规模读数被吹大"的另一种形态）。
+        found = self.edges.get(bare) or self.edges.get(key) or {}
+        return {no: {group: list(edges) for group, edges in by_group.items()}
+                for no, by_group in found.items()}
 
     def target_of(self, dep: Mapping[str, Any]) -> tuple[str, str]:
         """一条边的被依赖端 ⇒ `(节点号, 种类)`（`stmt:` / `exp:` / `lit:` / `doc:` / `""`）。"""
@@ -268,8 +320,14 @@ class _DepGraph:
             return False, "依赖没写（没有边，也没有 proof 证据；也不是经审核的自证定理）"
         return False, ""
 
-    def walk(self, start: str, *, group: int, edges, max_depth: int) -> dict[str, Any]:
+    def walk(self, start: str, *, group: int, edges, max_depth: int,
+             proof_no: int = _PL.DEFAULT_PROOF_NO) -> dict[str, Any]:
         """从 `start` 沿这一组的边走到根；组内 AND：每条边都要走到根才算到。
+
+        `proof_no` 是"这是第几条证明的路径"：它只标在读数上（每一跳带 `proof_no`），
+        不在这一层改变 `path_group` 的语义 —— 组内 AND、组间 OR 一个字没动。
+        子命题那一层有自己的证明维度（`groups_of` 返回的两层键），这里逐条证明、
+        逐组展开，与改前"逐组展开"的形状同构。
 
         `length`（这一条路径的长度）= 链上最深的跳数（1 + 子节点那条链的长度）——
         不是"这一层的边数"（那是第一步的宽度，会把长链读成短链，与"最短依赖链"的
@@ -281,12 +339,18 @@ class _DepGraph:
         cycle = False
         unwritten: list[str] = []
 
-        def _grow(node: str, depth: int, path: Sequence[str]) -> int:
-            """返回 `node` 到根还有几跳（本身是根 ⇒ 0）。`depth` 只用于超深判定。"""
+        def _grow(node: str, depth: int, path: Sequence[str],
+                  via_proof: int = _PL.DEFAULT_PROOF_NO) -> int:
+            """返回 `node` 到根还有几跳（本身是根 ⇒ 0）。`depth` 只用于超深判定。
+
+            `via_proof` 是"从这个节点被走到的那一层证明号"：结构性的那几跳（超深度 /
+            环 / 依赖没写）挂在它上面 —— 它们说的是"在第几条证明的这条路上出的问题"。
+            """
             nonlocal reached, truncated, cycle
             if depth > max_depth:
                 truncated, reached = True, False
                 hops.append({"node": node, "via_dep_id": "", "path_group": group,
+                             "proof_no": via_proof,
                              "kind": "", "status": "depth", "why": "超过 max_depth"})
                 return 0
             ok, why = self.is_root(node)
@@ -296,6 +360,7 @@ class _DepGraph:
                 cycle = True
                 reached = False
                 hops.append({"node": node, "via_dep_id": "", "path_group": group,
+                             "proof_no": via_proof,
                              "kind": "", "status": "cycle", "why": "依赖里出现环"})
                 return 0
             sub = self.groups_of(node)
@@ -303,20 +368,27 @@ class _DepGraph:
                 reached = False
                 unwritten.append(node)
                 hops.append({"node": node, "via_dep_id": "", "path_group": group,
+                             "proof_no": via_proof,
                              "kind": "", "status": "unwritten", "why": why})
                 return 0
             best = 0
-            for g in sorted(sub):
-                for dep in sub[g]:
-                    tgt, kind = self.target_of(dep)
-                    status = str(dep.get("status") or "")
-                    hops.append({"node": tgt or node, "via_dep_id": str(dep.get("dep_id") or ""),
-                                 "path_group": g, "kind": kind, "status": status,
-                                 "why": str(dep.get("status_reason") or "")})
-                    if not tgt or status == "dangling":
-                        reached = False
-                        continue
-                    best = max(best, 1 + _grow(tgt, depth + 1, list(path) + [node]))
+            # 子命题的二维展开：逐条证明（`sub_no`）、逐组（`g`），与改前"逐组"同构 ——
+            # 组内 AND / 组间 OR 的语义没动，只是每条证明各走各的边（不跨证明合并）。
+            for sub_no in sorted(sub):
+                for g in sorted(sub[sub_no]):
+                    for dep in sub[sub_no][g]:
+                        tgt, kind = self.target_of(dep)
+                        status = str(dep.get("status") or "")
+                        hops.append({"node": tgt or node,
+                                     "via_dep_id": str(dep.get("dep_id") or ""),
+                                     "path_group": g, "proof_no": sub_no,
+                                     "kind": kind, "status": status,
+                                     "why": str(dep.get("status_reason") or "")})
+                        if not tgt or status == "dangling":
+                            reached = False
+                            continue
+                        best = max(best, 1 + _grow(tgt, depth + 1,
+                                                   list(path) + [node], sub_no))
             return best
 
         deepest = 0
@@ -324,7 +396,8 @@ class _DepGraph:
             tgt, kind = self.target_of(dep)
             status = str(dep.get("status") or "")
             hops.append({"node": tgt or start, "via_dep_id": str(dep.get("dep_id") or ""),
-                         "path_group": group, "kind": kind, "status": status,
+                         "path_group": group, "proof_no": proof_no,
+                         "kind": kind, "status": status,
                          "why": str(dep.get("status_reason") or "")})
             if not tgt:
                 reached = False
@@ -332,8 +405,8 @@ class _DepGraph:
             if status == "dangling":
                 reached = False
                 continue
-            deepest = max(deepest, 1 + _grow(tgt, 1, [start]))
-        return {"group": group, "hops": hops,
+            deepest = max(deepest, 1 + _grow(tgt, 1, [start], proof_no))
+        return {"group": group, "proof_no": proof_no, "hops": hops,
                 "length": deepest, "reached": bool(reached),
                 "truncated": truncated, "cycle": cycle,
                 "unwritten": unwritten,

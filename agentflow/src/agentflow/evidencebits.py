@@ -230,6 +230,47 @@ def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
 #: `bits` 这一栏里位本身之外允许出现的键（写台账时要经过 `bits_shape_problems`）。
 BIT_META_KEYS: tuple[str, ...] = ("evidence", "voided_by", "origin", "grade", "audited_badge")
 
+#: 逐条证明的第 3 位记在 `bits.evidence` 的这一格（写侧是 `verifications.sign_statement`）。
+#:
+#: 结构逐字是"证明号 ⇒ 布尔"：`{"1": true, "2": false}`。为什么住在 `evidence` 里而不是
+#: `bits` 顶层：`bits` 的顶层键集由 :func:`bits_shape_problems` 拥有，未知键在写入期就会被
+#: 拒收；`evidence` 是它明确留白的凭据口袋（`normalize_raw` 原样保留整份 dict），
+#: 所以"不新增 schema 字段"与"把逐条读数放在这一栏"在这里是同一句话。
+REVIEWED_BY_PROOF_KEY = "reviewed_by_proof"
+
+
+def reviewed_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
+    """按证明看第 3 位：`{证明号: 有没有签}`（写侧签下的那张表）。
+
+    ## 它回答什么、不回答什么
+    这是"签名当时判过这一份"的逐条记录：只签了 `#p1` 而这条定理还有 `#p2` ⇒
+    `{1: True, 2: False}`（`#p2` 不许借 `#p1` 的光）。它不回答"签的是不是现在这一份
+    正文"：那件事只有 `verifications` 的台账能回答（`review_standing` 的
+    signed / stale / rejected / unsigned），所以这一格也绝不拿 sha 去否决任何写入 ——
+    哈希是读数，不是授权凭证。
+    ## 入参与兼容
+    收 statements 行（有 `bits` 键）或一份 `bits` dict（没有 `bits` 键、自己就是）。
+    正位是 `bits.evidence.reviewed_by_proof`；若某一行把它写在 `bits` 顶层
+    （手写或别的写者），这里也读。认不出的键跳过（它们不是证明号）；值按 `bool` 归一一遍
+    （盘上是 JSON，可能是 `true` / `1` / `"true"`）。
+    """
+    outer = row if isinstance(row, Mapping) else {}
+    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
+    pocket = bits.get(REVIEWED_BY_PROOF_KEY)
+    if not isinstance(pocket, Mapping):
+        pocket = dict(bits.get("evidence") or {}).get(REVIEWED_BY_PROOF_KEY)
+    if not isinstance(pocket, Mapping):
+        return {}
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    out: dict[int, bool] = {}
+    for raw_no, value in pocket.items():
+        no = _VR.as_proof_no(raw_no)
+        if no < 1:
+            continue
+        out[no] = bool(value)
+    return out
+
 
 def normalize_raw(raw: Mapping[str, Any], *, origin: str = "own_result",
                   voided_by: Mapping[str, Any] | None = None,

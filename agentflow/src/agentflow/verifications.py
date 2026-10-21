@@ -30,6 +30,14 @@ JSON、字段缺、取值不在词表里）不是这三个之一 —— `record(
 sha 不符而拒收（`proof_review_gaps` 明确把 `stale` 当成"待复核"这个读数，而不是"没有凭据"）。
 签名落盘之后「同一次写」把那条证明的 `reviewed` 翻上去（:func:`sign_statement`）：
 先追加台账那一行、再在 `statements` 的事务里改那一行；事务没成就把刚追加的那一行撤回。
+逐条证明的第 3 位落在命题行的 `bits.evidence.reviewed_by_proof`（`{"1": true, "2": false}`），
+而 `bits.reviewed` 仍是"任一份成立即为 True"的汇总位（老读者只认它）。
+## 老键与老行（兼容，不迁移）
+签名行记的三格是 `stmt_id` / `proof_no` / `proof_sha256`。更早的真机行只有
+`statement_id`（没有 `stmt_id`），更早的写法还可能把证明号写成 `rev`。读侧认这三对写法：
+`stmt_id` 缺 ⇒ 读 `statement_id`；`proof_no` 缺 ⇒ 读 `rev`（见 :func:`proof_no_of`）；
+两个都没有 ⇒ `#p1`（缺省证明号，见 `proofloc`）。写侧只写正名 —— 迁移要重写历史台账，
+而兼容只需要一行读法，且不会把"谁在什么时候签的"改成"我们改写过它"。
 """
 from __future__ import annotations
 
@@ -43,6 +51,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from . import jsonlfile as JF
 from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
 from . import textutil as T  # 引用解析的唯一实现（`citation_ref_parts`，`P-5`）
+from .proofloc import DEFAULT_PROOF_NO  # canonical 证明号只有一个出处（`proofloc`）
 
 #: 验证台账目录（工作区根下）。
 VERIFICATIONS_DIR = "verifications"
@@ -175,16 +184,51 @@ def as_proof_no(value: Any) -> int:
     两份解析意味着"台账上是第 2 条、读出来是第 1 条"这种错没有任何东西会报。
     """
     text = str(value or "").strip()
+    # 只带前缀的写法（`"#p2"`）先去掉那颗 `#`：`proofloc` 把"没有命题号的 `#p2`"判成坏尾巴
+    # （它是在 `used_by` 上判的，那里确实没有命题号），而本函数的入参允许这种简写。
+    if text.startswith("#") and "#" not in text[1:]:
+        text = text[1:]
     if "#p" in text:
         from . import proofloc as _PL   # 惰性：`proofloc` 只被这一处与依赖读侧用到
 
-        return _PL.parse_used_by(text)[1]
+        _head, no, problem = _PL.parse_used_by_checked(text)
+        # 坏尾巴（`#p0` / `#p` / `#pabc` / 多段 …）不是"第 1 条证明"：`parse_used_by` 会把它们
+        # 静默折成 canonical（它是给"读侧照读"用的），而这里的返回值是给调用方判
+        # "这一格到底有没有写证明号"用的 —— 折成 1 会让"这不是一个证明号"读成"这就是 #p1"。
+        # 0 是本函数唯一的"不是证明号"取值（调用方一律按 `or 1` 兜底 canonical）。
+        return 0 if problem else no
     text = text.lstrip("#").lstrip("pP")
     try:
         got = int(text)
     except (TypeError, ValueError):
         return 0
     return got if got >= 1 else 0
+
+
+#: 证明号在行上的键名。`proof_no` 是正名；`rev` 是更早的写法。
+#:
+#: 为什么读侧认两个名字、而不是做一次迁移：台账是追加式文件（`verifications/*.jsonl`），
+#: 改键名只能重写历史行 —— 那会把"谁在什么时候签的"改成"我们改写过它"。兼容的代价是
+#: 一行读法，迁移的代价是不可逆的审计记录。`no` 是清单项里更短的那个旧别名。
+PROOF_NO_KEYS: tuple[str, ...] = ("proof_no", "rev", "no")
+
+
+def proof_no_of(row: Mapping[str, Any]) -> int:
+    """这一行（签名行 / 证明清单项 / 任何带证明号的 dict）记的证明号；没写 ⇒ canonical（1）。
+
+    0（"这不是一个证明号"）不出现在返回值里：调用方问的是"这一行属于哪一份证明"，
+    而答案永远有一个 —— 没写就是 `#p1`（老数据的读法，业主 2026-10-22 口径：
+    不带 `#pN` / 不带 `proof_no` 的老数据，读数与行为逐字不变，证明号缺省 1）。
+    认不出的值同样按 1 读：读侧拿不到答案，比读成 canonical 更坏（`as_proof_no` 的
+    0 留给"判这一格有没有写号"那一档用）。
+    """
+    for key in PROOF_NO_KEYS:
+        value = row.get(key)
+        if str(value or "").strip():
+            got = as_proof_no(value)
+            if got >= 1:
+                return got
+    return DEFAULT_PROOF_NO
 
 
 def proof_list(row: Mapping[str, Any]) -> list[tuple[int, str]]:
@@ -205,7 +249,7 @@ def proof_list(row: Mapping[str, Any]) -> list[tuple[int, str]]:
     for entry in raw:
         if not isinstance(entry, Mapping):
             continue
-        no = as_proof_no(entry.get("proof_no") or entry.get("no"))
+        no = proof_no_of(entry)
         if no <= 1 or no in seen:
             continue
         seen.add(no)
@@ -426,7 +470,7 @@ def bit3_payload(row: Mapping[str, Any]) -> dict[str, Any]:
             "evidence": f"verifications/{sid}.jsonl#"
                         f"{row.get('verification_id')}",
             "findings": list(row.get("findings") or []),
-            "proof_no": as_proof_no(row.get("proof_no")) or 1,
+            "proof_no": proof_no_of(row),
             "proof_sha256": str(row.get("proof_sha256") or ""),
         },
     }
@@ -471,10 +515,19 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
                            *, proof_text: str, proof_no: int = 1) -> dict[str, Any]:
     """命题那一行改成"那一份证明的第 3 位已签"的样子。
 
-    只动两处：那一份证明的 `reviewed`（#p1 = `bits.reviewed`；#p2+ = `proofs` 清单里
-    对应项）与凭据 `reviewed_by`；别的一格不碰。等级必须现算
+    只动三处：那一份证明的 `reviewed`（#p1 = `bits.reviewed` 的汇总位；#p2+ 另外把
+    `proofs` 清单里对应项标上）、逐条证明的那张表
+    （`bits.evidence.reviewed_by_proof = {"1": true, "2": false, ...}`）与凭据
+    `reviewed_by`；别的一格不碰。等级必须现算
     （`evidencebits.normalize_raw` 的唯一入口）：盘上那份 `grade` 只是缓存，写下去的
     必须与现算逐字相同，否则提交期 `bits_shape_problems` 会拒收这一笔。
+
+    ## 逐条表为什么必须整表写，而不是只写被签的那一格
+    业主的负控是"签了 #p1、#p2 读成 False"。只写 `{"1": true}` 的话，`#p2` 是"表里
+    没有这一格"——而"没有"与"有、值为 False"在读侧长得不一样：前者要靠调用方记得
+    缺省是 False，后者是直接读出来的结论。所以这里把 `proof_list` 里每一份都列出来，
+    被签的那一份为 True，其余按原来的值（没有再按 False）。汇总位
+    `bits.reviewed` 的语义不变：任一份为 True 即 True。
     """
     from . import evidencebits as _EB   # 惰性：只在真写这一行时需要（不新增模块级依赖边）
 
@@ -484,11 +537,17 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
     reviewed_by = dict(payload.get("reviewed_by") or {})
     bits = dict(new.get("bits") or {})
     ev = dict(bits.get("evidence") or {})
+    # 逐条表整表写（含未签的那几份为 False）：`#p2` 不许借 `#p1` 的光。
+    per = {str(n): bool(v) for n, v in
+           (_EB.reviewed_by_proof(new) or {}).items()}
+    per = {str(n): bool(per.get(str(n), False)) for n, _ in proof_list(new)}
+    per[str(no)] = True
+    ev[_EB.REVIEWED_BY_PROOF_KEY] = per
     # 命题那一行的 `bits.reviewed` 是"这条命题至少有一份证明被审过"的汇总位（老读者
     # 只认它）；真正的凭据按证明记：`reviewed_by` 里带 `proof_no` 与 `proof_sha256`，
     # 于是"这一位说的是哪一份"不再靠猜。
     ev["reviewed_by"] = reviewed_by
-    bits["reviewed"] = True
+    bits["reviewed"] = any(per.values())
     bits["evidence"] = ev
     new["bits"] = _EB.normalize_raw(bits, origin=str(new.get("origin") or "own_result"),
                                     kind=str(new.get("kind") or ""))
@@ -496,7 +555,7 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
         entries = [dict(p) if isinstance(p, Mapping) else p
                    for p in (new.get(PROOFS_KEY) or [])]
         for p in entries:
-            if isinstance(p, dict) and as_proof_no(p.get("proof_no")) == no:
+            if isinstance(p, dict) and proof_no_of(p) == no:
                 p["reviewed"] = True
                 p["reviewed_by"] = dict(reviewed_by)
         new[PROOFS_KEY] = entries
@@ -531,7 +590,9 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     命题不在册或那一份证明不在（没有可写的行）、事务失败（附回滚结果）。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "")
-    no = as_proof_no(proof_no or row.get("proof_no")) or 1
+    # 证明号：调用方给的那个（`proof_no`）；没给就按这一行自己记的那一格 —— 老行只有
+    # `rev` 时由 `proof_no_of` 按正名读（兼容，不迁移）。
+    no = as_proof_no(proof_no) or proof_no_of(row)
     out: dict[str, Any] = {
         "written": False, "reason": "", "rolled_back": False, "grade": "",
         "statement_id": sid, "proof_no": no,
@@ -628,7 +689,7 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         out.update(why=(f"{proof_label(sid, no)} 的正文是空的 ⇒ 没有被审的那一份，"
                         "这一格既不是「签过」也不是「签过过期」"))
         return out
-    mine = [r for r in rows if (as_proof_no(r.get("proof_no")) or 1) == no]
+    mine = [r for r in rows if proof_no_of(r) == no]
     out["proof_rows"] = len(mine)
     if not mine:
         out.update(why=(f"`{out['ledger']}` 里没有 #{no} 这一份证明的签"

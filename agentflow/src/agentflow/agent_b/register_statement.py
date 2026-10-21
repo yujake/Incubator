@@ -27,12 +27,108 @@ A–D 都能调）—— `agent_b/` 里 `statements` 一个字都没有，所以
 读出来是"五位全空"，与"我们没算"长得一模一样；- 形状不合规 ⇒ 拒绝并如实记 `kind="bad_bits"` + 逐条 `problems`，整笔不写。
 `numeric`/`formal`（E）、`reviewed`（V）、`audited`（H）都不是 B 的读数，一律按"还没做"留空 —— 替别人签正是这套位要堵的洞（`evidencebits.BIT_OWNERS` 是那五位的
 owner 表）。
+第九件：一条定理可以有好几份证明（业主 2026-10-22 的多证明模型，S2 的写侧）
+可选参数 `proofs`（JSON 数组，元素 `{proof_no, text}`）把"这条定理的证明有几份"一次交清：
+`#p1` 落进既有的 `proof_text`（老字段、老写法逐字不变），`#p2` 及以上落进同一行的证明清单
+（键就是 `verifications.PROOFS_KEY`，元素 `{proof_no, text, created_at}`）。不给 `proofs`
+而只给 `proof_text` 的调用与今天完全一致（等价 `#p1`）。三条校验各有一条可读的拒绝理由
+（`duplicate_proof_no` 重复的号 / `empty_proof_text` 空正文 / `bad_proof_no` 非法号），
+且"一条坏 ⇒ 整笔不写"：清单先整份核完再交给秘书，挑掉坏的、写好的是"静默丢弃"的另一种形态。
+证明号与清单形状的读写口径只此一处来源 `verifications`（`PROOFS_KEY` / `proof_list` /
+`as_proof_no`）—— 自己再拆一份，就会造出"盘上是第 2 条、读出来是第 1 条"这种没有任何东西
+会报的错。
+第十件：外部证明的上下文定理必须"重锚 或 显式声明"（业主 2026-10-22：「转写是提示词侧
+点一下就行……其它要严格」）`origin="external_lit"` 的命题在 `derived_from` 里点名的每一
+条上下文定理，写库前都要在依赖图上找到下面两件里的一件：一条重锚边（kind=theorem 或相应
+kind、status=closed、带 source_lit_id 或 source_stmt_id、page_range 非空、quote 逐字
+非空，且指的是这个号），或者一条显式声明（status="external_unavailable"、
+`status_reason` 以 `not_in_our_graph:` 开头并点名这个号）。两件都没有 ⇒ 整笔不写，拒信
+逐条点出缺的是哪一件。三态：依赖图读不到 ⇒ 同样拒绝并说明"没查成"，绝不当成通过。
+不新增状态词、不新增字段（`schema.py` 在禁改区）—— 这一档用的正是 `Dependency` 类
+docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
 """
 from __future__ import annotations
 
+from typing import Mapping
+
 from ._support import S
 from .. import evidencebits as _EB
+from .. import verifications as _VR
 from ..refusals import refuse as _refuse
+
+
+def _normalize_proofs(raw: object, *, proof_text: str) -> tuple[list[dict], str, dict | None]:
+    """校验并归一调用方交来的证明清单，返回 `(第 2 条以后的清单, #p1 的正文, 拒绝)`。
+
+    三态（与这个模块其余几级预检同一条纪律：要求写进返回值里看得见的形状）：
+    - 没给（`None` / 空数组）⇒ `([], proof_text, None)`，与今天逐字一致；
+    - 不合规 ⇒ `([], "", 拒绝)`：整笔不写，理由指到第几项、错在哪；
+    - 合规 ⇒ `(清单, canonical 正文, None)`；清单里只有 `#p2` 及以后（`#p1` 是行上那一格）。
+
+    ## 为什么"一条坏"等于"整笔不写"
+    `proofs` 是"这条定理的证明有哪几份"的声明。挑掉坏的那一条、把好的写进去，会在盘上留下
+    一条"看起来交了三份、其实只有两份"的记录，而没有任何读数会说少了哪一份。业主口径是
+    "不许静默丢弃某一条"，所以整份先核完再交给秘书。
+
+    ## `#p1` 只有一个权威
+    `#p1` 的正文就是行上的 `proof_text`（老写者只会写那一格）。清单里给了 `#p1`、同时
+    `proof_text` 也非空而两者不同 ⇒ 拒绝（`proof_text_conflict`）：同一格两个权威，写谁
+    都等于静默丢掉另一个。两者相同则照收（那是等价的两种写法）。
+
+    ## `created_at` 在这里发
+    每一份证明落行时带自己的 `created_at`：清单是追加式的，"第 2 份是什么时候来的"必须
+    读得出来 —— 只留正文的话，两份证明的时间先后只能靠猜。
+    """
+    if raw is None or raw == []:
+        return [], str(proof_text or ""), None
+    if not isinstance(raw, (list, tuple)):
+        return [], "", _refuse(
+            "bad_proofs",
+            "proofs 必须是 JSON 数组（元素形如 {\"proof_no\": 2, \"text\": \"...\"}），"
+            f"收到 {type(raw).__name__} —— 一份证明一条，整份一起交")
+    canon = str(proof_text or "")
+    seen: dict[int, int] = {}
+    entries: list[dict] = []
+    for i, item in enumerate(raw):
+        where = f"proofs[{i}]"
+        if not isinstance(item, Mapping):
+            return [], "", _refuse(
+                "bad_proofs",
+                f"{where} 必须是对象（形如 {{\"proof_no\": 2, \"text\": \"...\"}}），"
+                f"收到 {type(item).__name__}：{item!r}")
+        raw_no = item.get("proof_no", item.get("no"))
+        no = _VR.as_proof_no(raw_no)
+        if no < 1:
+            return [], "", _refuse(
+                "bad_proof_no",
+                f"{where}.proof_no 必须是 >= 1 的整数（1 = canonical，缺省也是它），"
+                f"收到 {raw_no!r} —— 认不出的号与小于 1 的号都不写：清单里一条都不能静默丢")
+        if no in seen:
+            return [], "", _refuse(
+                "duplicate_proof_no",
+                f"证明号 #{no} 在这一笔里出现了两次（proofs[{seen[no]}] 与 {where}）—— "
+                "同一条定理的两份证明不许共用一个号（共号之后签名分不清签的是哪一份），"
+                "整笔不写")
+        text = item.get("text")
+        if text is None:
+            text = item.get("proof_text")
+        text = str(text or "")
+        if not text.strip():
+            return [], "", _refuse(
+                "empty_proof_text",
+                f"{where}（#{no}）的 text 是空的 —— 空正文不是「还没写」，"
+                "而是「这一条其实没交」；要么补上正文，要么把它从清单里去掉")
+        if no == 1 and canon.strip() and canon.strip() != text.strip():
+            return [], "", _refuse(
+                "proof_text_conflict",
+                "清单里 #p1 的正文与 proof_text 不是同一份 —— #p1 是行上 proof_text 的"
+                "唯一权威，同一格两个权威写谁都是静默丢掉另一个。二选一：只给 proof_text，"
+                "或者只给 proofs 里的 #p1")
+        seen[no] = i
+        if no == 1:
+            canon = text
+        entries.append({"proof_no": no, "text": text, "created_at": S.now_iso()})
+    return [e for e in entries if int(e["proof_no"]) > 1], str(canon or ""), None
 
 
 def _normalize_range(raw: object, *, what: str) -> tuple[dict, str]:
@@ -87,7 +183,8 @@ def _normalize_range(raw: object, *, what: str) -> tuple[dict, str]:
 
 class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
-                        quote_verified: bool | None) -> tuple[dict, dict | None]:
+                        quote_verified: bool | None,
+                        other_proofs: list[str] | None = None) -> tuple[dict, dict | None]:
         """按 `evidencebits` 现算五元位，返回 `(bits, 拒绝)`；拒绝非空 ⇒ 整笔不写。
 
         三态见模块 docstring 的"第八件"。这里只做两件事：「算」（`bits_of`）与
@@ -98,16 +195,22 @@ class _RegisterStatement:
         是"从原文摘下来的逐字摘录"，它本身不构成我方的证明过程。若不分来源就把它
         当成第 2 位，一条引文回验没过（`quote_verified=False`）的外部命题会被记成"有证明"，等级也从
         猜想抬到预备定理级 —— 而那正是这套位要堵的那类自报。
+
+        `other_proofs` 是证明清单里第 2 份以后的正文（多证明模型）。第 2 位是行级的
+        "这条命题有没有证明"，所以它看的是"任何一份有正文"，而 `proof_process` 仍然优先
+        取 canonical 那一份（老字段的读数不变）；只有 canonical 空、别的份有正文时才拿
+        第一份顶上 —— 否则一条"证明在 #p2 里"的命题会被记成"没有证明"。
         """
         own = str(origin) == "own_result"
-        text = str(proof_text or "")
+        texts = [str(t or "") for t in ([proof_text] + list(other_proofs or []))]
+        texts = [t for t in texts if t.strip()]
         try:
             bits = _EB.bits_of(
                 origin=origin,
                 source_lit_id=lit_id,
                 quote_verified=quote_verified,
-                proof=bool(text.strip()) and own,
-                proof_process=text if own else "",
+                proof=bool(texts) and own,
+                proof_process=(texts[0] if own and texts else ""),
             )
             problems = list(_EB.bits_shape_problems(bits))
         except Exception as exc:  # noqa: BLE001 - 算不出来要如实记，不许折成空 bits
@@ -124,12 +227,82 @@ class _RegisterStatement:
                 problems=problems)
         return bits, None
 
+    def _attach_proofs(self, stmt_id: str, entries: list[dict]) -> dict:
+        """把证明清单挂到既有那一行（同一把 `statements` 锁里读-改-写）。
+
+        为什么不能交给秘书：秘书的白名单（`Secretary._statement_from`）只认 `Statement` 的
+        字段，`proofs` 不在 schema 里（业主口径：不加 schema 字段），所以它到不了盘上。
+        这一格因此是 B 的写侧里唯一一处"直接改那一行"的地方，改动面严格限定为：
+        往行 JSON 的 `proofs` 键追加条目，其余键原样保留。
+
+        三态：`written=True` 表示清单真的多了一条以上；`already` 是"号在册、正文逐字相同"
+        （重复交同一份证明不算失败，也不改写既有的 `created_at`）；`refused` 是"号在册、
+        正文不同"—— 整笔不写（不许静默覆盖既有的一条证明：那是把一份已经存在的证明换掉，
+        而签名可能仍然挂在其上）。
+        """
+        out: dict = {"written": False, "attached": [], "already": [],
+                     "refused": "", "reason": ""}
+        if not entries:
+            return out
+        store = getattr(self, "store", None)
+        if store is None:
+            out["reason"] = ("这一趟没有 store ⇒ 证明清单挂不上去（第 1 份已由秘书落行，"
+                             "第 2 份起无处可写）")
+            return out
+        with store.tx("statements", actor=str(getattr(self, "actor", "agent-B") or "agent-B"),
+                      note=f"agent_b.register_statement:proofs:{stmt_id}") as tx:
+            found = tx.find("statements", stmt_id=stmt_id)
+            if found is None:
+                out["reason"] = (f"`statements` 里没有 {stmt_id} ⇒ 证明清单无处可挂"
+                                 "（行没落成，清单也就没有落点）")
+                return out
+            row = dict(found)
+            have = {no: text for no, text in _VR.proof_list(row)}
+            listed = [dict(p) if isinstance(p, Mapping) else p
+                      for p in (row.get(_VR.PROOFS_KEY) or [])]
+            for entry in entries:
+                no = int(entry["proof_no"])
+                text = str(entry["text"])
+                if no in have:
+                    if str(have[no]).strip() == text.strip():
+                        out["already"].append(no)
+                        continue
+                    out["refused"] = "proof_no_taken"
+                    out["reason"] = (
+                        f"#{no} 已经在这条命题的证明清单里，而这一笔交来的正文与它不同 ⇒ "
+                        "整笔不写（覆盖既有的一条证明等于把它换掉，而签名可能还挂在它上面）。"
+                        "确实要换这一份：另起一个证明号，或者先由人把旧的那一条与它的签名"
+                        "一并处置")
+                    return out
+                listed.append({"proof_no": no, "text": text,
+                               "created_at": str(entry.get("created_at") or S.now_iso())})
+                out["attached"].append(no)
+            if not out["attached"]:
+                return out
+            row[_VR.PROOFS_KEY] = listed
+            tx.upsert("statements", row,
+                      note=f"agent_b.register_statement:proofs:{stmt_id}")
+            out["written"] = True
+        return out
+
+    @staticmethod
+    def _proofs_reading(attach: Mapping) -> dict:
+        """把 `_attach_proofs` 的读数翻成返回值里那几格（谁挂上了、谁本来就在册）。"""
+        return {
+            "proofs": [{"proof_no": int(n)} for n in (attach.get("attached") or [])],
+            "proofs_already": [int(n) for n in (attach.get("already") or [])],
+            "proofs_refused": str(attach.get("refused") or ""),
+        }
+
     def register_statement(
         self,
         *,
         statement_full: str,
         source_lit_id: str = "",
         proof_text: str = "",
+        #: 多证明（业主 2026-10-22）：`[{proof_no, text}, ...]`。#p1 落 `proof_text`，
+        #: #p2 及以后落同一行的 `proofs` 清单；不给就与今天逐字一致（等价 #p1）。
+        proofs: list | None = None,
         kind: str = "theorem",
         label: str = "",
         statement_text: str = "",
@@ -183,6 +356,7 @@ class _RegisterStatement:
         #    而不是在这里把文献术语标成自己的结果；
         # ① `proof_text`：概念行不许带它 ⇒ 不写，但把"丢了什么"写进返回值（留痕）。
         proof_text_dropped = ""
+        proofs_dropped: list = []
         if str(kind or "").strip() == "concept":
             if origin == "own_result":
                 return _refuse(
@@ -195,6 +369,18 @@ class _RegisterStatement:
             if str(proof_text or "").strip():
                 proof_text_dropped = str(proof_text)[:120]
                 proof_text = ""
+            if proofs:
+                # 与 `proof_text` 同一条口径：概念不参与等级链，也没有"证明"这一档。
+                # 丢掉但不静默 —— 交来的清单原文进返回值（调用方要能看出自己交错了）。
+                proofs_dropped = [dict(p) if isinstance(p, Mapping) else p
+                                  for p in (proofs or [])]
+                proofs = None
+        # 第九件（多证明）：清单先整份核完，再把 #p1 的正文接进 `proof_text`。
+        # 位置在这里而不是更靠后：`needs_proof` / 第 2 位 / 秘书载荷都读 `proof_text`，
+        # 三处必须是同一份正文（"#p1 在清单里"与"#p1 在 proof_text 里"不许有两种读数）。
+        proofs_listed, proof_text, proofs_bad = _normalize_proofs(proofs, proof_text=proof_text)
+        if proofs_bad is not None:
+            return proofs_bad
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
         # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
         # `PageRange.__post_init__` 的比大小，`TypeError` 从动作里抛出去。
@@ -316,11 +502,42 @@ class _RegisterStatement:
                                f"收到 {_value!r} —— 形态由 schema.require_id 定义，"
                                "本动作在写库前用同一个谓词核，整笔不写")
 
+        # ---- 严格规矩 B（业主 2026-10-22）：外部命题的上下文定理必须重锚或显式声明。
+        # 判据在 `_context_theorem_gaps`（读面只有 dependencies / statements 两张表）；
+        # 这里只做一件事：两件都没有 ⇒ 整笔不写，并把"缺的是哪一件"说清。
+        # 只对 `origin="external_lit"` 生效：自产命题的上下文走 `derived_from` 的承重链，
+        # 那一侧的口径在 `closing` 的收工门；这条规矩问的是"抄来的东西靠什么站着"。
+        # `derived_from` 空 ⇒ 这一笔没点名任何上下文定理，这里没有可判的东西（不静默：
+        # 一条都不点名的命题在读数上就是"没有声明过上下文"，而它不是这条判据的输入）。
+        _refs = S.sorted_unique(list(derived_from or []))
+        if str(origin) == "external_lit" and _refs:
+            _gaps, _why_not = self._context_theorem_gaps(_refs)
+            if _why_not:
+                return _refuse("context_graph_unreadable", _why_not)
+            if _gaps:
+                _detail = "；".join(
+                    f"{g['ref']}（{'在命题台账里' if g['in_ledger'] else '连命题台账里都没有这一条'}）"
+                    for g in _gaps)
+                return _refuse(
+                    "context_theorem_not_anchored",
+                    "这一笔点名了上下文定理（`derived_from`），而依赖图上它们既没有重锚边、"
+                    f"也没有显式声明 ⇒ 整笔不写。缺的是这两件里的一件：{_detail}。"
+                    "① 重锚边：用 `doc.register_dependency` 登记一条 kind=theorem（或相应 "
+                    "kind）、status=closed、带 source_lit_id 或 source_stmt_id、page_range "
+                    "非空、quote 逐字非空的边，并在 label（或 status_reason）里点这个号；"
+                    "② 或者显式声明它不在我们的依赖图内：登记一条 "
+                    "status=\"external_unavailable\"、`status_reason` 以 "
+                    "`not_in_our_graph:` 开头并点名这个号的边。"
+                    "两条都不给，'没处理'就会被下游读成'处理过了'"
+                    "（既有词表没有第二个能表达这件事的档，而新增状态词要改 schema.py，"
+                    "那是禁改区）")
+
         # ---- 业主 2026-10-09：「B 不直接用增工具，秘书实际操作增、改、查工具，
         # B 纯粹负责消化理解」⇒ 上面那些是内容的判据（B 的判断），写盘这一段交给秘书。
         bits, bits_bad = self._statement_bits(
             origin=str(origin), lit_id=lit_id, proof_text=str(proof_text or ""),
-            quote_verified=quote_verified)
+            quote_verified=quote_verified,
+            other_proofs=[str(e.get("text") or "") for e in proofs_listed])
         if bits_bad is not None:
             return bits_bad
         sec = self._statement_secretary()
@@ -348,27 +565,60 @@ class _RegisterStatement:
             # 通用写口 `table.update("statements")` 已被 `store.direct_write_refusal` 拒
             # （它能同时改 bits / proof_text / quote_verified，而没有任何东西核过那些字段）。
             # 对调用方来说这是"成功了"（那一行的档位变了），不是重复读数。
-            return {"ok": True, "stmt_id": str(written.get("stmt_id") or ""),
-                    "source_lit_id": lit_id or None,
-                    "quote_verified": quote_verified, "origin": origin,
-                    "quote_mode": str(quote_mode or ""),
-                    "evidence_kind": evidence_kind, "upgraded": True,
-                    "row": dict(written.get("row") or {}),
-                    "changes": list(written.get("changes") or []),
-                    "note": ("这一条**没有新建行**：同一条 statement_full 已在册，而这一笔"
-                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
-                             f"（{written.get('reason') or ''}）。"
-                             "内容面一个字没动；要改内容请另起一条（force_new）并写清为什么。")}
+            stmt_now = str(written.get("stmt_id") or "")
+            attach = self._attach_proofs(stmt_now, proofs_listed)
+            out = {"ok": True, "stmt_id": stmt_now,
+                   "source_lit_id": lit_id or None,
+                   "quote_verified": quote_verified, "origin": origin,
+                   "quote_mode": str(quote_mode or ""),
+                   "evidence_kind": evidence_kind, "upgraded": True,
+                   "row": dict(written.get("row") or {}),
+                   "changes": list(written.get("changes") or []),
+                   "note": ("这一条**没有新建行**：同一条 statement_full 已在册，而这一笔"
+                            "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
+                            f"（{written.get('reason') or ''}）。"
+                            "内容面一个字没动；要改内容请另起一条（force_new）并写清为什么。")}
+            if proofs_listed:
+                out.update(self._proofs_reading(attach))
+            if proofs_dropped:
+                out["proofs_dropped"] = proofs_dropped
+            return out
         if written.get("duplicate") and not written.get("created"):
             # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
             # 同一条 `statement_full`（按 `textutil.normalize` 比）已在册 ⇒ 不新建行。
+            #
+            # 多证明模型下这条分支多了一个合法用途：这条定理已经在册，而这一笔带来的是
+            # 它的一条新证明（#p2 及以后）⇒ 行不新建，证明挂到既有那一行上。
+            stmt_dup = str(written.get("stmt_id") or "")
+            attach = self._attach_proofs(stmt_dup, proofs_listed)
+            if attach.get("refused"):
+                return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
+                               stmt_id=stmt_dup)
+            if attach.get("written"):
+                out = {"ok": True, "stmt_id": stmt_dup,
+                       "source_lit_id": lit_id or None,
+                       "quote_verified": quote_verified, "origin": origin,
+                       "quote_mode": str(quote_mode or ""),
+                       "evidence_kind": evidence_kind, "new_row": False,
+                       "note": ("这一条**没有新建行**（同一条命题已在册），但这一笔带来的"
+                                "证明挂上去了：清单是追加式的，#p1 仍是那一行原来的 "
+                                "`proof_text`。")}
+                out.update(self._proofs_reading(attach))
+                return out
+            if proofs_listed and not attach.get("already"):
+                return _refuse("proofs_not_attached",
+                               str(attach.get("reason") or "证明清单没挂上"),
+                               stmt_id=stmt_dup)
             # 对调用方来说这是"这一次没有新行"，必须说出来（`ok=False` + `kind`），
             # 并把既有那一条的号给它 —— 否则它只会看到"没写成"而不知道东西在哪。
             return _refuse("duplicate_statement",
                            "同一条命题（按规范化后的 statement_full 比）已在册 ⇒ "
                            "秘书查重后没有新建行；要引用它请用返回的 stmt_id，"
-                           "确实要另起一条才走 `force_new`（本动作不暴露它）",
-                           stmt_id=str(written.get("stmt_id") or ""))
+                           "确实要另起一条才走 `force_new`（本动作不暴露它）"
+                           + ("；这一笔带来的证明清单里每一条都已经在册且逐字相同"
+                              "（没有重复登记，也没有覆盖任何一份证明）"
+                              if attach.get("already") else ""),
+                           stmt_id=stmt_dup)
         if not written.get("checked") or not written.get("created"):
             extra = {k: v for k, v in written.items()
                      if k in ("literature_rows", "available_lit_ids", "unresolved")}
@@ -377,6 +627,18 @@ class _RegisterStatement:
                            stmt_id=str(written.get("stmt_id") or ""), **extra)
         stmt_id = str(written["stmt_id"])
         data = dict(written.get("row") or {})
+        attach = self._attach_proofs(stmt_id, proofs_listed)
+        if proofs_listed and not attach.get("written"):
+            # 行已经由秘书落好了（#p1 在盘上），而清单没挂上 —— 不许当成功返回：
+            # 调用方会以为"这条定理的第二份证明交上去了"。如实报，并给出 stmt_id。
+            return _refuse("proofs_not_attached",
+                           ("命题那一行已经落好了（stmt_id 见下），而证明清单没挂上："
+                            + str(attach.get("reason") or "原因不明")
+                            + " ⇒ 第 2 份及以后的证明没有写进库（不是写了一半，是那几条没写）"),
+                           stmt_id=stmt_id)
+        if attach.get("written"):
+            data = next((dict(r) for r in self.store.rows("statements")
+                         if str(r.get("stmt_id") or "") == stmt_id), data)
         # 定义待补那一档要看得见（`draft/97` §15.4 的补法优先级）：
         # 抽不到定义 ⇒ ①先问直接父（它手里有原文，就地能给）→ ②A 上网搜 → ③B 自撰。
         # 这里只把"要给谁"写进读数（载体那一步在循环那一层：它才知道自己的父是谁）。
@@ -399,6 +661,13 @@ class _RegisterStatement:
                 #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为
                 #: "概念也能带证明"，下一次还这么交。
                 "proof_text_dropped": proof_text_dropped,
+                #: 概念行带进来的证明清单（同上：丢掉但留痕）。
+                "proofs_dropped": proofs_dropped,
+                #: 这一笔挂到行上的多证明（#p2 及以后）：空列表 = 没交清单。
+                #: 只在真交了清单时才出现这一个键 —— 老写法（只给 proof_text）
+                #: 的返回值因此与今天逐字相同。
+                **({"proofs": [{"proof_no": int(e["proof_no"])} for e in proofs_listed]}
+                   if proofs_listed else {}),
                 # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
                 # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
                 # 也能扫到它；这里再给一次是为了让调用方当场就知道）。
@@ -419,4 +688,133 @@ class _RegisterStatement:
                             if needs_proof else "")
                          + (f"概念行**不带** proof_text：交来的 {proof_text_dropped!r} "
                             "没有写进库（概念不参与等级链，要补的是定义，不是证明）。"
-                            if proof_text_dropped else ""))}
+                            if proof_text_dropped else "")
+                         + ("这一笔还给这条定理挂了多证明（"
+                            + "、".join(f"#{int(e['proof_no'])}"
+                                       for e in proofs_listed)
+                            + "）：#p1 是行上的 `proof_text`，其余进行的 "
+                            f"`{_VR.PROOFS_KEY}` 清单（追加式，各带 `created_at`）。"
+                            "每一份的第 3 位（审过）各自独立，由 V 逐份签 —— "
+                            "登记不等于审过。"
+                            if proofs_listed else ""))}
+
+    # ---------------------------------------------------------------- 规矩 B
+    #
+    # 严格规矩 B（业主 2026-10-22：「转写是提示词侧点一下就行……其它要严格」）：
+    # 外部证明的上下文定理必须"重锚 或 显式声明"。判据在下面三格，调用点在
+    # `register_statement` 的第六级之后（写库前的最后一道预检）。
+    #
+    # 为什么"上下文定理"读的是 `derived_from`：那一格的 schema 语义逐字就是
+    # "这条命题用到了哪些别的命题（本表内的 stmt_id）"，而且它已经在 B 的动作参数面上
+    # （`specs/b.py` 是禁改区，加不了新参数）。命题正文里扫出来的引用不在这里判：
+    # 那一半由秘书的 `_scan_proof_deps` 自己落成依赖边（`label` 就是那一条引用），
+    # 而 B 手里没有任何一格能按"每一条引用"给出页码与逐字引文 —— 硬按它判会把所有
+    # 带引用的历史命题都判红，却指不出一条能补的路。
+    #: 上下文定理的"重锚边"认哪几种 kind。数据集 / 实验 / 先前工作不算上下文定理：
+    #: 它们的依据面是另一回事，混进来会让这条判据退化成"任何一条依赖都算"。
+    _CONTEXT_EDGE_KINDS = ("theorem", "lemma", "proposition", "definition")
+
+    #: "这个引用不在我们的依赖图内"的受控理由码前缀。用既有词表表达：
+    #: `Dependency.status="external_unavailable"` + 自由文本 `status_reason` 以它开头
+    #: （`Dependency` 的类 docstring 里 companion book [6, Thm. 6.5] 那个例子用的就是
+    #: 这一档）。刻意不新增状态词、不新增字段 —— `schema.py` 在禁改区。
+    _NOT_IN_GRAPH_PREFIX = "not_in_our_graph:"
+
+    @staticmethod
+    def _names_token(text: str, key: str) -> bool:
+        """`text` 里有没有一个"整号"形态的 `key`（左右两侧都不是数字）。
+
+        为什么不直接 `key in text`：`0004` 是 `000042` 的子串。用子串判会把一条
+        属别人的声明算成这一条的，而那种错在读数上完全看不见（声明还在，只是指的
+        不是它）。
+        """
+        if not text or not key:
+            return False
+        start = 0
+        while True:
+            at = text.find(key, start)
+            if at < 0:
+                return False
+            before = text[at - 1] if at > 0 else ""
+            after_at = at + len(key)
+            after = text[after_at] if after_at < len(text) else ""
+            if not before.isdigit() and not after.isdigit():
+                return True
+            start = at + 1
+
+    def _context_ref_handled(self, ref: str, deps: list) -> bool:
+        """这一个上下文定理号有没有"重锚边"或"显式声明"（两件里的一件即算处理过）。"""
+        for row in deps:
+            status = str(row.get("status") or "")
+            reason = str(row.get("status_reason") or "")
+            label = str(row.get("label") or "")
+            if status == "external_unavailable":
+                if (reason.startswith(self._NOT_IN_GRAPH_PREFIX)
+                        and (self._names_token(reason, ref)
+                             or self._names_token(label, ref))):
+                    return True
+                continue
+            if status != "closed":
+                continue
+            if str(row.get("kind") or "") not in self._CONTEXT_EDGE_KINDS:
+                continue
+            if not (str(row.get("source_lit_id") or "")
+                    or str(row.get("source_stmt_id") or "")):
+                continue
+            page = row.get("page_range")
+            if isinstance(page, Mapping):
+                has_page = (bool(page.get("start"))
+                            or bool(str(page.get("label") or "").strip()))
+            else:
+                has_page = bool(str(page or "").strip())
+            if not has_page or not str(row.get("quote") or "").strip():
+                continue
+            if str(row.get("source_stmt_id") or "") == ref:
+                return True
+            if self._names_token(label, ref) or self._names_token(reason, ref):
+                return True
+        return False
+
+    def _context_theorem_gaps(self, refs: list) -> tuple[list, str]:
+        """规矩 B 的读侧判定：逐条判"重锚"还是"显式声明"，返回 `(缺的清单, 没查成的理由)`。
+
+        ## 判什么（业主 2026-10-22）
+        `origin="external_lit"` 的命题在 `derived_from` 里点名它用到的上下文定理。
+        对每一个号，依赖图上必须有下面两件里的一件：
+          1. 重锚边：`dependencies` 里一条 `kind` 属于 `_CONTEXT_EDGE_KINDS`、
+             `status="closed"`、带 `source_lit_id` 或 `source_stmt_id`、`page_range`
+             非空、`quote` 非空的边，且那条边指的就是这个号（`source_stmt_id` 等于它，
+             或者 label / status_reason 里点了它的名）。这就是"这条上下文定理落在哪
+             一页、原文哪一句" —— 只写"依赖 stmt:000007"不算重锚。
+          2. 显式声明：一条 `status="external_unavailable"` 且 `status_reason` 以
+             `not_in_our_graph:` 开头、并点名那个号的边 —— "这条引用不在我们的依赖图内"。
+        两件都没有 ⇒ 那个号进"缺的"列表，调用方据此拒绝落库。
+
+        ## 三态（未处理绝不静默等于处理过了）
+        返回 `([], "")` = 查了、每一条都处理过了；`(缺的清单, "")` = 查了、有点名的号
+        两件都没有；`([], 理由)` = 没查成（表读不出来 / 这一趟没有 store），它不等于通过。
+
+        ## 有界：读面只有本工作区的两张表
+        `store.rows("dependencies")` 与 `store.rows("statements")`。不新开模块、不跨
+        工作区、不读事件流 —— 这条判据要能在任何一次登记里跑完。
+        """
+        store = getattr(self, "store", None)
+        if store is None:
+            return [], ("没查成：这一趟没有 store，读不到本工作区的 dependencies / "
+                        "statements ⇒ 判不了上下文定理有没有重锚或声明（不许当成通过）")
+        try:
+            deps = [dict(r) for r in store.rows("dependencies")]
+            known = {str(r.get("stmt_id") or "") for r in store.rows("statements")}
+        except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
+            return [], (f"没查成：dependencies / statements 读不出来"
+                        f"（{type(exc).__name__}: {exc}）⇒ 拒绝落库。三态纪律：'读不到'"
+                        "不是'都处理过了'，也不是'一个引用都没有'")
+        missing: list = []
+        for ref in refs:
+            key = str(ref or "").strip()
+            if not key:
+                continue
+            if self._context_ref_handled(key, deps):
+                continue
+            missing.append({"ref": key, "in_ledger": key in known})
+        return missing, ""
