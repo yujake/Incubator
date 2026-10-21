@@ -425,6 +425,9 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p179", "count": 14,
      "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
      "note": "抬版本 p179（2026-10-21）：修掉提示词里被转义吃掉的 \brief\/\name\/\reuse\（原来渲染成控制字符）；键集未变"},
+    {"version": "p180", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p180（2026-10-21）：B/D/G/H 四角色的 stance 各加一条（非平凡性分档写作 / 研究生视角六类困惑 / 入库给素材不判档 / T4 先问缺哪个工具）；键集未变"},
 )
 
 

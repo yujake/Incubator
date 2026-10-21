@@ -2090,7 +2090,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p179"
+_FROZEN_PROMPT_VERSION = "p180"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2107,13 +2107,13 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
     #    C 的两句假话 → B / C / D / F / M 这五格）。
     "A": "5cf5bf89198c506203b4b389769199eedd2852003804a84af2c86e7612ae360c",
-    "B": "288dcb98a24d91bcd4155ff70aa9d6e3e95b4d5fc0d7da76da2eac76eda7b22e",
+    "B": "94509219e9d680897a3785efc6417f7c94f978b572c02e97a973ead399a96f27",
     "C": "f2d234521d58c3e7b22ce68fcb5dba781f42323dc9c1ab99064d267690fac52c",
-    "D": "20d7b768331ff15eaf73a5e5ea5d14cd905cbf600e4693ef942c11a6f9eb73e7",
+    "D": "10fff18dfc267c507181f46c4b1594d2e6d5a8235ff61db0a2711b298ca0fc9c",
     "E": "486305b098b3421560dd738dcb0e60913de8347848cd35a6f9b449c4dd65bc0f",
     "F": "f7046c8befab285e3185ca56b0e32f59c9fe4ddd8daa5b053feb665013f55724",
-    "G": "6a0dabd2802c475d85275c5f9307424fb9dcae3587f21947fb72ede82cf5d893",
-    "H": "a64344be42b657b92c3fd255b087611870cf61d8e57a6d2967b73e65a5453555",
+    "G": "b44ad72ac77373567851d45e6a6b43bb78aec726f36080a1569f8ddc8f2b96c6",
+    "H": "95d2d11cb57104a76a60c3f936769060e8878cabbb7d09622d94314b6ee5dc6f",
     "V": "6357d37167aa8343e1065af305cbb18fb5c33a2bf4e7df6c960af80017451ecf",
     "M": "a8b4fc9879e0faee46ce6b4fa366c0e7ebe008c65e33a340744ac96ecfb92b4d",
 }
