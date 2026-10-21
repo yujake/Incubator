@@ -2318,6 +2318,23 @@ def cmd_closing(args) -> int:
         print(tty.bullet(f"{name}：{mark}"))
     for f in rep.findings:
         print(f"  [{f.level}] {f.code}：{f.detail}")
+    # 非平凡性那一格（S3/S4）：读数必须在**人看得见的地方**露面 —— 只塞进 readings 字典
+    # 等于"接了一半的线"（业主 2026-10-21 追问"请确认真的接线了"时暴露的缺口）。
+    _nt = (rep.readings or {}).get("nontriviality") or {}
+    if _nt:
+        if _nt.get("checked"):
+            _counts = _nt.get("counts") or {}
+            print(tty.bullet(
+                "非平凡性："
+                + " / ".join(f"T{level} {_counts.get(f'T{level}', 0)}" for level in (1, 2, 3, 4))
+                + f" / 未判 {_counts.get('unjudged', 0)}"
+                + f"（共 {_nt.get('statements_total', 0)} 条命题；T3/T4 {_nt.get('high_tier_total', 0)} 条）"))
+        else:
+            print(tty.bullet(f"非平凡性：没读到（{_nt.get('reason') or '台账为空'}）"))
+        for _label, _key in (("论文侧缺铺垫", "paper_scaffolding_problems"),
+                             ("T4 缺造梯子记录", "t4_ladder_problems")):
+            for _problem in (_nt.get(_key) or []):
+                print(f"  [warning] nontriviality：{_label} —— {_problem}")
     print(rep.summary())
     if getattr(args, "no_review_acceptance", False):
         # 关掉是显式的：它让"零调用的那段历史"仍可复现，也方便对拍接线前后的读数。
