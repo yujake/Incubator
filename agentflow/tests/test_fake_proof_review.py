@@ -163,16 +163,25 @@ def test_a_defective_last_signature_is_not_a_signature(ws: Store):
 
 
 def test_a_signature_for_another_version_does_not_cover_this_one(ws: Store):
-    """签的是另一版证明（`proof_sha256` 不符）⇒ 不算凭据。
+    """签的是另一版证明（`proof_sha256` 不符）⇒ 不算凭据，但不拦写入。
 
         台账记 `proof_sha256` 的唯一用途就是这个：不查它，"V 审过"会退化成
-        "V 审过某个东西"—— 改完证明不再送审，签名照样成立，而没有任何读数能证伪。"""
+        "V 审过某个东西"—— 改完证明不再送审，签名照样成立，而没有任何读数能证伪。
+
+        2026-10-22 口径变化（业主：哈希是读数，不是授权凭证）：这一条不再在写入期
+        拒收 —— "正文改过了"是正常动作，任何写入路径都不许因为 sha 不符被拒。`gap` 仍判
+        `ok=False`（这一行现在够不上 `proof_review`），但盘上那一行写得进去；"签过、
+        签的是旧版"这件事由收工门 R10 的 `stale_ids` 与逐条证明的 `proofs_stale` 读出来
+        （判据见 `tests/test_proof_review_reaches_the_statement.py` 的负控一）。"""
     _sign(ws, "000000", proof_text="1. （这是改之前那一版证明。）")
     gap = VR.proof_review_gap(ws.root, _row())
     assert gap["ok"] is False and gap["sha_matches"] is False, gap
     assert "另一版" in gap["why"], gap["why"]
-    with pytest.raises(ValueError):
-        _write(ws, _row())
+    assert gap["state"] == "stale", gap
+    # 写入期闸只问"有没有过「成立」那一签"：签的是旧版 ⇒ 是读数（待复核），不是拒收理由。
+    assert VR.proof_review_gaps(ws.root, [_row()]) == [], "stale 不许被折成「没有凭据」"
+    _write(ws, _row())
+    assert [str(r.get("stmt_id")) for r in ws.rows("statements")] == ["000000"]
 
 
 def test_a_proof_review_without_proof_text_is_refused(ws: Store):
