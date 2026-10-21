@@ -2183,6 +2183,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）",
      (("index", "number"), ("who", "string"), ("role", "string"), ("kind", "string"),
       ("ts", "string"), ("title", "string"), ("text", "string"),
+      ("task_id", "string"), ("task_id_source", "string"),
       ("clipped", "boolean"), ("qid?", "string"), ("options?", "ChatOption[]"))),
     ("ChatSession",
      "chat_face() 的 sessions[] —— 供对话页挑会话（`sessions.list_sessions` 的四栏）",

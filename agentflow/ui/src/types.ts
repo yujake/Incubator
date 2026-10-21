@@ -439,6 +439,8 @@ export interface ChatLine {
   ts: string;
   title: string;
   text: string;
+  task_id: string;
+  task_id_source: string;
   clipped: boolean;
   qid?: string;
   options?: ChatOption[];
