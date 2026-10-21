@@ -4458,6 +4458,51 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         "high_tier": high,
         "high_tier_total": len(high),
         "paper_scaffolding_problems": paper_proof_scaffolding_problems(root),
+        "t4_ladder_problems": t4_ladder_problems(root),
         "sid": str(sid or ""),
         "reason": "" if rows else "`statements` 一行都没有 ⇒ 这一格没读到（不是\"全是 T1\"）",
     }
+
+def _ledger_rows(root: str | Path, table: str) -> list[dict[str, Any]]:
+    path = Path(root) / "data" / f"{table}.json"
+    if not path.is_file():
+        return []
+    try:
+        return list((json.loads(path.read_text(encoding="utf-8")) or {}).get("rows") or [])
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def t4_ladder_problems(root: str | Path) -> list[str]:
+    """T4 的"造梯子"记录：每条 T4 的命题都要能指到一次尝试（成了或没成都算）。空清单 = 合格。
+
+    业主 2026-10-21 的口径：「出现 T4 主要是要激励研究侧造梯子把非平凡性降下来」。
+    所以这一条判的不是"降到几档"，而是"有没有去造"：
+    * 有尝试（哪怕失败、哪怕只落了一条 research_question 写清缺哪个工具）⇒ 合格；
+    * 一点记录都没有 ⇒ 不合格（那说明研究侧根本没接这个信号）。
+
+    记录在哪：`research_questions` 或 `attack_plans` 里的任意一行，文本里点名这条命题
+    （`stmt_id` 或命题正文的前 40 字）。
+    """
+    rows = _paper_statement_rows(root)
+    from . import secretary as _SEC
+    questions = _ledger_rows(root, "research_questions")
+    plans = _ledger_rows(root, "attack_plans")
+    haystack = " ".join(json.dumps(r, ensure_ascii=False, default=str) for r in questions + plans)
+    problems: list[str] = []
+    for row in rows:
+        text = str(row.get("statement_full") or row.get("statement_text") or "")
+        if not text.strip():
+            continue
+        level = int(_SEC.nontriviality_of(root, text).get("level") or 0)
+        if level < 4:
+            continue
+        sid = str(row.get("stmt_id") or "")
+        needle = text.strip()[:40]
+        if (sid and sid in haystack) or (needle and needle in haystack):
+            continue
+        problems.append(
+            f"`stmt:{sid or '?'}` 判成 T4（需要天才洞察/极长思维链/偏离主流的构造），"
+            "但 research_questions 与 attack_plans 里都没有一次\"造梯子\"的尝试记录 —— "
+            "T4 的价值是逼研究侧去造工具把它降下来，不是直接写进论文就完事")
+    return problems
