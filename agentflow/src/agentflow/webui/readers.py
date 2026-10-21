@@ -1803,10 +1803,13 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     }
 
     if not dir_p.exists():
+        fb = _roster_from_tasks(root_p)
+        out.update({k: fb[k] for k in ("nodes", "roots", "count", "max_depth", "coverage")})
         out["reason"] = (
-            f"{dir_p} 不在盘上 ⇒ 这个工作区还没有名册。answer=unknown："
-            "这是「没读到」，不是「名册上一个子代理都没有」"
-            "（名册只在有人被派活时才落盘，空树不冒充「没有子代理」）")
+            f"{dir_p} 不在盘上 ⇒ 名册那一格没读到。answer=unknown："
+            "这是「没读到」，不是「名册上一个子代理都没有」。"
+            + (fb["reason"] if fb["nodes"] else "台账里也没有带父的代理行"))
+        out["diagnostics"].append(out["reason"])
         return out
     if not dir_p.is_dir():
         out["tri"] = TRI_UNREADABLE
@@ -1819,9 +1822,12 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         out["reason"] = why
         return out
     if not found:
+        fb = _roster_from_tasks(root_p)
+        out.update({k: fb[k] for k in ("nodes", "roots", "count", "max_depth", "coverage")})
         out["reason"] = (
             f"{dir_p} 在盘上但一个 <父编号>.jsonl 都没有（还没有人往名册里写过一行）⇒ "
-            "answer=unknown：这是「没读到」，不是「名册上一个子代理都没有」")
+            "answer=unknown。" + fb["reason"])
+        out["diagnostics"].append(out["reason"])
         return out
 
     diagnostics: list[str] = []
@@ -2405,3 +2411,82 @@ HANDLERS.update({
     "handle_chat": handle_chat,
     "handle_roster": handle_roster,
 })
+
+def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
+    """台账兜底：名册读不到时，**从 `data/tasks.json` 建一棵树**（标成 `unregistered`）。
+
+    业主 2026-10-21（"网页完整接入名册机制!!"）：名册是"父 + 子 + 绝对编号"的唯一真身，
+    但当登记**没发生**时，页面上不该是"什么都没有" —— 那会让读的人以为"这次没派活"。
+    台账里明明有 A/E/D 这些带父的代理行，它们就是"**存在、但不在名册上**"的证据。
+
+    所以这一档三件事一起给：
+    1. `nodes` 照给（`task_id` / `role` / `parent_task_id` / `depth` / `status`），
+       每个节点带 `registered=False` 与 `name=""`（它确实没有名册名）；
+    2. `coverage.unrostered` 点名这些编号（"名册上没有它们"是结论，不是缺省）；
+    3. `answer` 仍然是 `"unknown"`（名册那一格没读到），但 `reason` 里说清
+       "下面这棵树来自台账，不是名册" —— 三态不折平，页面上却看得见人。
+    """
+    path = root_p / "data" / "tasks.json"
+    try:
+        rows = list((json.loads(path.read_text(encoding="utf-8")) or {}).get("rows") or [])
+    except (OSError, json.JSONDecodeError):
+        return {"nodes": [], "roots": [], "count": None, "max_depth": None,
+                "coverage": {"tasks_agents": None, "roster_nodes": 0, "unrostered": None},
+                "reason": f"{path} 读不出来 ⇒ 台账兜底也读不到"}
+    agents = [r for r in rows if str(r.get("kind") or "") == "" and str(r.get("task_id") or "")]
+    by_parent: dict[str, list[dict[str, Any]]] = {}
+    for r in agents:
+        by_parent.setdefault(str(r.get("parent_task_id") or ""), []).append(r)
+    ids = {str(r.get("task_id")) for r in agents}
+    roots = [str(r.get("task_id")) for r in agents
+             if str(r.get("parent_task_id") or "") not in ids]
+    depth_of: dict[str, int] = {}
+
+    def depth(tid: str, seen: set[str] | None = None) -> int:
+        if tid in depth_of:
+            return depth_of[tid]
+        seen = (seen or set()) | {tid}
+        row = next((r for r in agents if str(r.get("task_id")) == tid), None)
+        parent = str((row or {}).get("parent_task_id") or "")
+        got = 1 if parent not in ids or parent in seen else 1 + depth(parent, seen)
+        depth_of[tid] = got
+        return got
+
+    nodes: list[dict[str, Any]] = []
+
+    def walk(tid: str) -> None:
+        row = next((r for r in agents if str(r.get("task_id")) == tid), None)
+        if row is None:
+            return
+        parent = str(row.get("parent_task_id") or "")
+        kids = [{"name": "", "role": str(k.get("role") or ""), "task_id": str(k.get("task_id")),
+                 "retired": False} for k in by_parent.get(tid, [])]
+        status = str(row.get("status") or "")
+        nodes.append({
+            "task_id": tid, "name": "", "role": str(row.get("role") or ""),
+            "parent_task_id": parent, "parent_name": "",
+            "children": kids, "retired": False, "retired_branch": "",
+            "brief": "", "brief_source": "", "surface": "",
+            "status": status, "task_found": True,
+            "in_flight": 1 if status in ("pending", "running") else 0,
+            "inbox": {"tri": "not_applicable", "open": None, "by_state": {}, "by_kind": {},
+                      "items": [], "more": 0,
+                      "reason": "名册没读到 ⇒ 这一档按台账兜底，收件箱未查"},
+            "depth": depth(tid), "registered": False,
+        })
+        for kid in kids:
+            walk(kid["task_id"])
+
+    for rid in roots:
+        walk(rid)
+    # 三态纪律：一条代理行都没有 ⇒ `count` 是 None（读不到），不是 0
+    # （判据 `test_webui_roster_panel` 的"无名册 ⇒ count 为 null"那一档钉着这一点）。
+    empty = not agents
+    return {"nodes": nodes, "roots": roots, "count": None if empty else len(nodes),
+            "max_depth": None if empty else max((n["depth"] for n in nodes), default=None),
+            "coverage": {"tasks_agents": None if empty else len(agents),
+                         "roster_nodes": None if empty else 0,
+                         "unrostered": None if empty else len(agents)},
+            "reason": (f"名册那一格没读到，但台账里有 {len(agents)} 个带父的代理行"
+                       f"（头几个：{sorted(ids)[:5]}）⇒ 下面这棵树来自 `data/tasks.json`，"
+                       "它们**存在、但不在名册上**（名册登记没有发生）")}
