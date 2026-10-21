@@ -80,6 +80,14 @@ class TaskCall:
     #: 空串 = "这个角色只有那一个实例"，与从前逐字同义（写集冲突照旧按角色算）。
     #: 显式给两个不同的标签 ⇒ 这两个调用允许同波并发（见 `policy.estimate_write_conflict`）。
     instance: str = ""
+    #: 名册登记要用的那几格（`brief` / `task` / `name` / `reuse`；2026-10-21）。
+    #:
+    #: 为什么挂在 TaskCall 上而不是让 `summon` 从台账读：`schema.Task` 里没有
+    #: `brief` / `task` 两格（禁改区），而"父给的那句简介"只活在派活的那个载荷里
+    #: （`_do_summon_many` 的每个 target）。批量那条路上 `summon` 是由 `scheduler`
+    #: 逐个调起来的，中间只传 `TaskCall` ⇒ 这一格是那份材料唯一的载体。
+    #: `None` = 这一路没有材料（例如 `pipeline` / `deliver`），秘书按任务原文代写。
+    roster: Mapping[str, Any] | None = None
 
 
 class MemoryBudgetTracker:
@@ -308,6 +316,7 @@ def _guarded(
             # 见 `TaskCall.lineage` 那段：把它折成 `()` 会让 `cycle` 判据不可达）。
             lineage=call.lineage,
             instance=str(getattr(call, "instance", "") or ""),
+            roster=dict(call.roster) if call.roster else None,
         )
     finally:
         end = _time()

@@ -947,40 +947,75 @@ class Conductor:
                 # 与 `tests/test_task_instance.py` 就是抓住它的那两条）。
                 # 键集与键序只留一处口径：这里，用 dataclass 自己吐出来的那一份。
                 tx.upsert("tasks", task.to_dict(), note=note)
-                # 2026-10-21 真机缺陷（`projects/p3-verify`：tasks 有 5 个带父的代理行，
-                # 而 `out/roster/` 一个文件都没有）：名册登记必须挂在**子行建立的同一个临界区之后**，
-                # 因为它是"一个子代理被建立"这件事的唯一漏斗 —— 走 `_do_summon`、`_do_summon_many`、
-                # conductor、队列认领，最后都要经过这里。
-                self._roster_register_row(task.to_dict(), note=note)
         return str(row["task_id"])
 
-    def _roster_register_row(self, row: dict, *, note: str = "") -> None:
-        """子行建立之后登记名册（三态：没 sink ⇒ 留 problem；失败 ⇒ 留 problem；不是子行 ⇒ 跳过）。
+    # ---------------------------------------------------------------- 名册登记（唯一漏斗）
+    #
+    # 2026-10-21 真机缺陷（`projects/p3-verify`）：`tasks` 里 5 个带父的代理行，而
+    # `out/roster/` 连目录都没有、三份秘书台账里提到 roster 的行数 = 0。只读盘上证据：
+    #   · M 第 9 步调的是**原生工具** `conductor.summon_many`（3 个 target，`instance`
+    #     分别是 lit / num / audit34）⇒ `tools/conductor_tools.py` → `Conductor.run_plan`
+    #     → `scheduler` → `Conductor.summon` —— 这条链上一次 `roster_add` 都没有；
+    #   · `t-000006`（`called_by=D` / `parent=t-000005` / `depth=3`）的派活卡在
+    #     `Conductor.summon` 里被 `cli stop --force` 杀掉 ⇒ D 那一步连 `agent_step`
+    #     事件都没有（事件是在 handler 返回之后才落的）。
+    # 两条合起来说明：**"登记"必须发生在"受理那一行落盘之后、`backend.call` 之前"**，
+    # 而不是等子代理跑完再登记。改前那两处（`_do_summon` / `_do_summon_many`）都排在
+    # 返回之后 ⇒ 被杀在途中的子代理永远不登记，而且批量那一路要等**整批**跑完。
+    #
+    # 为什么收在 `Conductor.summon` 这一处：所有派活路径最后都经过它（形状那两条、
+    # `tools/conductor_tools` 的两个工具、队列认领、`scheduler` / `deliver` / `pipeline`）。
+    # 谁调它不重要，重要的是"子行建立成功"这件事只有一个发生点。
+    #
+    # 副产品（同一处时序缺陷的另一半）：`LlmBackend.call` 给子代理起循环时按
+    # `surface_of(owner=父, task_id=子)` 从名册里读那一趟的读写面；改前名册行是返回之后
+    # 才有的 ⇒ 面切割从来没生效过。登记提前之后它第一次有行可读。
 
-        为什么不是"每个调用点各写一遍"：那样漏一条路就静默不登记，而这次真机就是这样漏的
-        （`conductor._register_consumed` 只在队列认领那条路上，且它要求 conductor 自带秘书）。
-        父编号取 `row["parent_task_id"]`：顶趟那一行没有父 ⇒ 它本来就不该进任何人的名册。
+    def _register_roster(self, *, task_id: str, role: str, owner: str,
+                         meta: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """把"刚建立的那个子行"登记进 `owner` 的名册。返回 `{name, problem, considered}`。
+
+        三条口径（与 :meth:`summon` 的第 [5] 步一起构成"恰好登记一次"）：
+        1. 只在这里登记 —— 调用点一个都不许再自己调 `roster_add`（重复行会让名册里出现
+           两条同名项，`Secretary.next_name` 按角色序号发号，第二条会变成 X2）；
+        2. 没写入口（`roster_sink` 与 `secretary` 都空）⇒ 返回一条 problem，**不抛**：
+           "名册不在手上"与"登记过了"必须分得开（三态，不是两态）；
+        3. 秘书拒收 / 抛异常 ⇒ 返回 problem，**不抛**（登记失败不许带走这次派活），
+           原文照抄，不替它改写成"没给简介"。
         """
-        sink = getattr(self, "roster_sink", None)
-        owner = str(row.get("parent_task_id") or "")
-        role = str(row.get("role") or "")
-        task_id = str(row.get("task_id") or "")
-        if not owner or not task_id or not role:
-            return                      # 顶趟 / 残缺行：这一格不适用（不是"查过了没问题"）
+        meta = dict(meta or {})
+        if not str(owner or "").strip():
+            # 没有父的绝对编号 ⇒ 名册上没有它的位置（顶趟本来就不进任何人的名册，
+            # 但一次**召唤**没有父是结构问题：孤儿行）。两种都要留理由，别静默。
+            return {"name": "", "considered": True,
+                    "problem": (f"{task_id}：没有父的绝对编号 ⇒ 名册没地方登记"
+                                "（`tasks.parent_task_id` 是父子关系的唯一权威来源）")}
+        if not str(task_id or "").strip():
+            return {"name": "", "considered": True,
+                    "problem": "这一笔还没有台账编号 ⇒ 名册没登记"}
+        sink = self.roster_sink if self.roster_sink is not None else self.secretary
         if sink is None:
-            self._roster_problems.append(
-                f"{task_id}：没有名册写入口（conductor.roster_sink 为 None）⇒ 名册没登记")
-            return
+            return {"name": "", "considered": True,
+                    "problem": ("这一趟没有秘书 ⇒ 名册不在手上（没有登记）"
+                                "（`conductor.roster_sink` 与 `conductor.secretary` 都是 None）")}
         try:
-            got = sink.roster_add(owner=owner, role=role, task_id=task_id,
-                                  brief=str(row.get("brief") or ""),
-                                  task=str(row.get("task") or ""))
-        except Exception as exc:  # noqa: BLE001 - 登记失败不许带走这次派活
-            self._roster_problems.append(f"{task_id}：名册登记抛了 {type(exc).__name__}: {exc}")
-            return
-        problem = str((got or {}).get("problem") or "") if isinstance(got, dict) else ""
+            got = sink.roster_add(
+                owner=str(owner), role=str(role), task_id=str(task_id),
+                brief=str(meta.get("brief") or ""),
+                # `task` 一并交给秘书：简介没写时由它代写并留痕（2026-10-20 裁定），
+                # 所以这里不写 `brief or task`（那是"任务原文顶替"）。
+                task=str(meta.get("task") or ""),
+                want_name=str(meta.get("name") or ""),
+                reuse=str(meta.get("reuse") or ""),
+            )
+        except Exception as exc:  # noqa: BLE001 —— 登记失败不许带走这次派活
+            return {"name": "", "considered": True,
+                    "problem": f"{task_id}：名册登记没跑成：{type(exc).__name__}: {exc}"}
+        problem = str((got or {}).get("problem") or "") if isinstance(got, Mapping) else ""
         if problem:
-            self._roster_problems.append(f"{task_id}：{problem}")
+            return {"name": "", "considered": True, "problem": f"{task_id}：{problem}"}
+        name = str((got or {}).get("name") or "") if isinstance(got, Mapping) else ""
+        return {"name": name, "considered": True, "problem": ""}
 
     # ---------------------------------------------------------------- 工作项板（业主 2026-10-08 裁 A1=甲）
     #
@@ -2311,7 +2346,10 @@ class Conductor:
                     opened_root = owner
             try:
                 res = self.summon("A", "run_once", {}, by=by, input_key=key,
-                                  parent_task_id=owner)
+                                  parent_task_id=owner,
+                                  # 名册登记要用的那句任务原文（简介由秘书据它代写并留痕）：
+                                  # 登记本身发生在 `summon` 的 [5b]，这里只把材料交过去。
+                                  roster={"task": f"认领检索请求 {rid}"})
             except Exception as exc:  # noqa: BLE001 - 一条消费失败不许拖住其余
                 self._log(f"队列认领失败（{trigger}，{rid}）：{type(exc).__name__}: {exc}")
                 continue
@@ -2367,30 +2405,20 @@ class Conductor:
 
     def _register_consumed(self, owner: str, res: Any, *, rid: str,
                            problems: list[str]) -> None:
-        """把认领出来的那个子代理登记进 `owner` 的名册（名字/面都由秘书发号）。
+        """把认领那一路的名册读数收进 `problems`。**登记本身不在这里**（唯一漏斗是
+        `Conductor.summon` 的 [5b] 一步，见 :meth:`_register_roster`）。
 
-        三态：没装配秘书 ⇒ 记一条"名册不在手上"（不是"登记过了"）；登记失败 ⇒
-        记问题（不许静默）；被拒的那一次不登记（它没跑，与 `_do_summon` 同口径）。
+        为什么这个方法还留着：认领是唯一一条"框架自己发起、调用方不看返回值"的派活
+        （`finish_top_level_run` / `run_plan` 顺手扫队），它的名册问题没有别的地方能读到。
+        改前它在自己这一处调 `roster_add` —— 那是第三个登记点，与漏斗同源时会让同一个
+        子代理有两条同名项；收口的做法是"只读数、不写字"。
+
+        三态照旧：没登记上就留一条问题（不许静默）；登记上了 `roster_problem` 是空串。
+        谁没登记上、为什么，原文在 `roster_problem` 里（漏斗已经写全了 owner/原因）。
         """
-        sec = getattr(self, "secretary", None)
-        if sec is None:
-            problems.append(f"{rid}：这一趟没有秘书 ⇒ 名册不在手上（没有登记）")
-            return
-        if str(getattr(res, "status", "") or "") not in ("pending", "running", "done"):
-            problems.append(f"{rid}：这次认领没跑成（status={getattr(res, 'status', '')}）"
-                            "⇒ 名册没登记")
-            return
-        if str(getattr(res, "outcome", "") or "") == "refused":
-            return
-        try:
-            reg = sec.roster_add(owner=owner, role="A",
-                                 task_id=str(getattr(res, "task_id", "") or ""),
-                                 brief="", task=f"认领检索请求 {rid}")
-        except Exception as exc:  # noqa: BLE001 - 登记失败不许带走这次认领
-            problems.append(f"{rid}：名册登记没跑成：{type(exc).__name__}: {exc}")
-            return
-        if reg.get("problem"):
-            problems.append(f"{rid}：{reg['problem']}")
+        problem = str(getattr(res, "roster_problem", "") or "")
+        if problem:
+            problems.append(f"{rid}：{problem}")
 
     def finish_top_level_run(self, task_id: str, *, stop_reason: str,
                              detail: str = "") -> SummonResult:
@@ -2639,6 +2667,13 @@ class Conductor:
         return SummonResult(
             task_id=tid, role=row["role"], action=action, status="done", outcome="refused",
             refusal_reason=reason, detail=detail, depth=row["depth"],  # type: ignore[arg-type]
+            # 名册那三格：被拒的那一次**不登记**（它没跑，没有可登记的子代理）。
+            # 为什么 `roster_problem` 留空：拒绝的理由已经在 `refusal_reason` / `detail`
+            # 上（那是它的正式落点）；把"一次正常的拒绝"也记成"名册出了一个问题"，
+            # 会让收工门那一格（`roster_registration`：数 `roster_problem` 条数）
+            # 把策略拒绝读成名册故障。`roster_considered=True` 让人分得开
+            # "走过了、结论是不登记"与"根本没走过"。
+            roster_considered=True,
         )
 
     # ---------------------------------------------------------------- 记账（FC-19）
@@ -2804,6 +2839,7 @@ class Conductor:
         token: CancelToken | None = None,
         lineage: Sequence[tuple[str, str, str]] | None = None,
         instance: str = "",
+        roster: Mapping[str, Any] | None = None,
     ) -> SummonResult:
         """唯一的召唤入口。见模块 docstring 的完整流程。
 
@@ -2815,6 +2851,12 @@ class Conductor:
             被 `LocalBackend` 解析成不同的对象，并允许同波并发（`policy.estimate_write_conflict`）。它只影响"哪个实例
             干活"，不进 `tasks` 行 —— `tasks` 的字段是 schema 契约（禁改区），实例身份落在数据行的 `actor` 上（由
             `host` 按实例造对象时写死），那才是可审计的那一份。
+        roster : 名册登记要用的那几格（`brief` / `task` / `name` / `reuse`），缺省 `None` = 一个都没给。
+            为什么走形参而不是从 `tasks` 行读：`schema.Task` 里**没有** `brief` / `task` 两格（它是禁改区的
+            schema 契约），而"父给的那句简介"只活在派活的那个载荷里（`agent_loop._do_summon` 的 `brief`、
+            `summon_many` 每个 target 的那一格）。2026-10-21 的在途实现正是从行里读这两格 ⇒ 恒为空 ⇒
+            `roster_add` 用"没给一句任务简介"拒收每一条（名册照样空，只是 problem 变多）。
+            没给 `brief` 是合法的：秘书从 `task` 代写一句并留痕（2026-10-20 业主裁定）。
         """
         params = dict(params or {})
         token = token or self.token
@@ -2827,6 +2869,9 @@ class Conductor:
         # 不再有新的召唤发生。给被取消的召唤补一行台账，恰恰违反了它。
         # 返回 `task_id=None` 而不是编一个号：没有 start 就没有 end，
         # 编一个号会让调用方去查一条不存在的行。
+        #
+        # 名册那三格照旧要写：**没被受理 ⇒ 不登记，但要留理由**（"没跑成"与"不需要登记"
+        # 与"登记过了"是三件事，折平了就没法读数）。
         if token.cancelled:
             r = token.reason
             with self._lock:
@@ -2834,6 +2879,9 @@ class Conductor:
             return SummonResult(
                 task_id=None, role=role, action=action, status="cancelled", outcome="cancelled",
                 detail=f"未启动：{detail_of(r)}", elapsed_sec=time.monotonic() - t0,
+                roster_considered=True,
+                roster_problem=f"未受理（取消：{detail_of(r)}）⇒ 名册不登记"
+                               "（没有子行就没有名册项）",
             )
         if self._disposed:
             with self._lock:
@@ -2842,6 +2890,8 @@ class Conductor:
                 task_id=None, role=role, action=action, status="cancelled", outcome="cancelled",
                 detail="未启动：Conductor 已 dispose（dispose 之后不再产生新任务）",
                 elapsed_sec=time.monotonic() - t0,
+                roster_considered=True,
+                roster_problem="未受理（Conductor 已 dispose）⇒ 名册不登记",
             )
 
         # ---- [1] 角色 / 动作存在性（不落台账的只有"取消"这一种，见上）
@@ -3057,6 +3107,21 @@ class Conductor:
         self._log(f"召唤 {by} → {role}.{action}（{tid}, depth={depth}"
                   + (f", instance={instance}" if instance else "") + "）")
 
+        # ---- [5b] 名册登记：子行已经落盘、子代理还没跑。这是**唯一**的登记点。
+        #
+        # 位置就是判据本身（三条，缺一条都会退回真机那个缺陷）：
+        # ① 在 `_write_new_row` 之后 —— 只有真的建了子行才登记（被拒的召唤在
+        #    `_refuse` 里另有一条路，它不经过这里 ⇒ 不会登记）；
+        # ② 在 `backend.call` 之前 —— 子代理可能跑很久、也可能被强停（`projects/p3-verify`
+        #    的 D 与它的 E 就是这样），等它返回再登记等于"没跑完的都不在名册上"；
+        # ③ 只在这里 —— 调用点（`_do_summon` / `_do_summon_many` / 队列认领 / 两个工具）
+        #    一个都不许再自己调 `roster_add`，否则同一个子代理会有两条同名项。
+        #
+        # 失败姿态：`_register_roster` 从不抛（没秘书/秘书拒收/抛异常都变成一条 problem），
+        # 所以登记不会带走这次派活；读数随 `SummonResult.roster_*` 交回调用方。
+        roster_rec = self._register_roster(task_id=tid, role=role,
+                                           owner=str(parent_task_id or ""), meta=roster)
+
         # ---- [6] 执行
         try:
             # `task_id` 传下去（2026-09-30）：并发多实例时"按角色找那条 running 行"
@@ -3126,6 +3191,12 @@ class Conductor:
         # —— 判据面不许把展示面改窄。
         res.children = self._children_of(tid)
         res.elapsed_sec = time.monotonic() - t0
+        # 名册三格：登记发生在 [5b]（跑之前），读数在这里交回 —— 登记与结局是两件事，
+        # 所以一个 failed 的结局不会改写"它被建立过、也进过名册"这个事实（台账里
+        # `outcome=failed` 回答"跑成没有"，名册回答"有没有它"）。
+        res.roster_considered = bool(roster_rec.get("considered"))
+        res.roster_name = str(roster_rec.get("name") or "")
+        res.roster_problem = str(roster_rec.get("problem") or "")
         return res
 
     # ---------------------------------------------------------------- 参数校验

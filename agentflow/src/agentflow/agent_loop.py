@@ -2794,6 +2794,7 @@ class AgentLoop:
         但"没有秘书"这件事必须留痕，否则"没装配"与"不用装配"在盘上长得一样。
         """
         if self.secretary is not None or not self.auto_secretary:
+            self._bind_roster_sink()
             return
         if self.store is None:
             self.secretary_problem = ("秘书没装配：这一趟没有 store（`AgentLoop` 裸构造时"
@@ -2813,6 +2814,7 @@ class AgentLoop:
                                               "note": self.secretary_problem}, sid=self.sid)
             except Exception:  # noqa: BLE001 —— 连留痕都写不成时不许把它变成"装配成功"
                 pass
+        self._bind_roster_sink()
 
     # ------------------------------------------------- 父与子（业主 T21 附，S1d）
     def _parent_of_mine(self) -> tuple[str, str, str]:
@@ -5191,7 +5193,14 @@ class AgentLoop:
                                      parent_task_id=owner,
                                      input_key=(str(t.get("input_key") or "")
                                                 or _summon_key(t_action, t_params)),
-                                     instance=instance))
+                                     instance=instance,
+                                     # 名册那两格随这一项走（`scheduler` 逐个调 `summon`
+                                     # 时原样转交）—— 登记在 `summon` 的 [5b]，而 brief
+                                     # 只活在这个载荷里（`tasks` 行没有这两格）。
+                                     roster={"brief": str(t.get("brief") or ""),
+                                             "task": t_task,
+                                             "name": str(t.get("name") or ""),
+                                             "reuse": str(t.get("reuse") or "")}))
             briefs.append(str(t.get("brief") or ""))
             tasks.append(t_task)
         if blank:
@@ -5222,48 +5231,37 @@ class AgentLoop:
             "results": items,
             "ok": True,
         }
-        # ---- 名册登记（S1k-2 的批量那一支；业主 T22：「名册的增、删都由秘书做」）
-        # 改前这条路上一次登记都没有（`roster_add(` 全仓只有定义与单个 summon 那一个调用点）：批量派出去的子代理在
-        # 名册上根本不存在 —— 生产读数批量步 1006 次、派出 2822 个子代理，名册只登记 413 个（`p6e`/`p7e` 那种
-        # 108/119 个批量子代理、名册 0 行）。名册是"代理之间的通信必须经名册"那条纪律的地址面，缺这一支谁都找不到
-        # 那些子代理。三条口径（与 `_do_summon` 同一处，不另造一份）：只登记真的受理了的那一项（`refused` 不登记，
-        # 它没跑）；`owner` = 父的绝对编号、`task_id` = 这一项的绝对编号、`brief` = 这一项自己那句、`task` 一并交给
-        # 秘书（简介没写时由秘书代写并留痕 —— 2026-10-20 业主裁定，所以这里不写 `brief or task`）；一项失败只进
-        # `roster_problems`、`ok` 照旧。三态不折平（与下面单个 summon 那条 `elif` 同一句话）：`failed` /
-        # `cancelled` 的那一项没进名册也必须读得出来。
+        # ---- 名册登记：**读数在这里，写字不在这里**（2026-10-21 收口）
+        #
+        # 唯一的登记点是 `Conductor.summon` 的第 [5b] 步（子行落盘之后、子代理跑起来
+        # 之前）。这条路（`run_plan` → `scheduler` → `summon`）改前一个登记点都没有：
+        # 生产读数批量步 1006 次、派出 2822 个子代理，名册只登记 413 个；真机
+        # `projects/p3-verify` 也是这条路（M 第 9 步的原生工具 `conductor.summon_many`），
+        # 名册 0 行。现在每一项目标自己带着 `roster`（`brief` / `task`）交给 `summon`，
+        # 这一层只把结果里的读数汇总回返回值：
+        #   · `roster_names`：登记上了的那些（顺序与 targets 一致）；
+        #   · `roster_problems`：没登记的逐项理由（没秘书 / 秘书拒收 / 没有父编号…）。
+        # 老键一字节不动：两格只在有值时才加（"一个都没登记"与"都登记了"分得开）。
+        # 一项登记失败不带走整批（`ok` 照旧）—— 这是本文件与秘书两侧共同的口径。
         self._bind_roster_sink()
-        if self.secretary is not None:
-            names: list[str] = []
-            problems: list[str] = []
-            for i, (r, call) in enumerate(zip(results, calls)):
-                status_now = str(r.status or "")
-                if status_now not in ("pending", "running", "done"):
-                    problems.append(f"{call.role}：这次派活没跑成（status={status_now}）"
-                                    "⇒ 名册没登记")
-                    continue
-                if str(r.outcome or "") == "refused":
-                    continue
-                try:
-                    reg = self.secretary.roster_add(
-                        owner=self.my_task_id, role=call.role,
-                        task_id=str(r.task_id or ""),
-                        brief=briefs[i] if i < len(briefs) else "",
-                        task=tasks[i] if i < len(tasks) else "")
-                    if reg.get("problem"):
-                        problems.append(f"{call.role}：{reg['problem']}")
-                    else:
-                        names.append(str(reg.get("name") or ""))
-                except Exception as exc:  # noqa: BLE001 —— 一项登记失败不许带走整批
-                    problems.append(f"{call.role}：名册登记没跑成："
-                                    f"{type(exc).__name__}: {exc}")
-            # 老键一字节不动：这两格只在有值时才加（"这一批一个都没登记"与
-            # "这一批都登记了"因此分得开）。
-            if names:
-                out["roster_names"] = names
-            if problems:
-                out["roster_problems"] = problems
-        else:
-            out["roster_problems"] = ["这一趟没有秘书 ⇒ 名册不在手上（一个都没有登记）"]
+        names: list[str] = []
+        problems: list[str] = []
+        for i, (r, call) in enumerate(zip(results, calls)):
+            got_name, got_problem = self._roster_reading(
+                r, owner=str(self.my_task_id or ""), role=str(call.role),
+                task_id=str(getattr(r, "task_id", "") or ""),
+                brief=briefs[i] if i < len(briefs) else "",
+                task=tasks[i] if i < len(tasks) else "",
+                name=str((targets[i] or {}).get("name") or "") if i < len(targets) else "",
+                reuse=str((targets[i] or {}).get("reuse") or "") if i < len(targets) else "")
+            if got_name:
+                names.append(got_name)
+            if got_problem:
+                problems.append(f"{call.role}：{got_problem}")
+        if names:
+            out["roster_names"] = names
+        if problems:
+            out["roster_problems"] = problems
         # 批量里的越权也要有出路（与 `_do_summon` 同一条纪律）：一次汇总成一条
         # 代唤申请，而不是每一项发一条（那会把主控的收件箱灌满，让信号贬值）。
         need = [i for i in items if self._needs_relay(str(i["role"]), str(i["refusal_reason"] or ""))]
@@ -5569,22 +5567,64 @@ class AgentLoop:
     def _bind_roster_sink(self) -> None:
         """把本实例的秘书接成 conductor 的名册写入口（幂等；没秘书就不接）。
 
-        为什么要有这一步（2026-10-21 真机）：conductor 那条路原来只在队列认领时登记，
-        而且要求 conductor 自己带秘书 —— 真机上它没有 ⇒ 整条路的子代理**一个都没进名册**
-        （`projects/p3-verify`：tasks 有 5 个带父的行，`out/roster/` 空）。
-        名册登记现在收拢到 `Conductor._roster_register_row`（子行建立之后唯一漏斗），
-        这一步只负责把"写的人"接上去。幂等：重复调用不改变任何东西。
+        为什么要有这一步（2026-10-21 真机）：登记收口在 `Conductor.summon` 的第 [5b] 步
+        （子行落盘之后、子代理跑起来之前），而那一步要一个"写的人"。conductor 自己的
+        `secretary` 只在 `run_role` 那一条路上被挂上；工具路径（`conductor.summon` /
+        `conductor.summon_many` 这两个原生工具）与 `LlmBackend.call` 起的子循环都不经过
+        `run_role` ⇒ 只靠 `conductor.secretary` 会让"谁写名册"取决于装配运气（真机
+        `projects/p3-verify` 的名册就是这么空的）。所以每个循环把自己的秘书接上去。
+
+        两条口径：
+        1. **先到先得**（只在 `roster_sink is None` 时接）：同一个 conductor 会被父与
+           所有子循环共用，先接上的那个是"这一棵树的主写入口"，后来者不该把它换掉
+           （名册写的是 `owner` + 那几格，换人对盘上结果没有影响，但"谁写的"应当稳定）；
+        2. 接不上（老装配 / 只读桩 / 属性只读）⇒ 什么都不做、也不抛 —— 那一态由
+           `Conductor._register_roster` 记成一条 problem（"名册不在手上"），不在这里抛。
         """
         cond = getattr(self, "conductor", None)
         sec = getattr(self, "secretary", None)
         if cond is None or sec is None:
             return
-        if getattr(cond, "roster_sink", None) is sec:
+        if getattr(cond, "roster_sink", None) is not None:
             return
         try:
             cond.roster_sink = sec
         except Exception:  # noqa: BLE001 - 老装配 / 只读桩：接不上就留 problem，不在这一层抛
             pass
+
+    def _roster_reading(self, res: Any, *, owner: str, role: str, task_id: str,
+                        brief: str = "", task: str = "", name: str = "",
+                        reuse: str = "") -> tuple[str, str]:
+        """从一次派活的结果里读回名册那两格：`(名册名, 问题)`。
+
+        两条路，判据是 `res.roster_considered`（那是第三态，不是布尔）：
+        * `True` —— 这次派活走过 `Conductor.summon` 的 [5b] 漏斗 ⇒ **只读数、不写字**。
+          登记已经发生（或已经带理由地没发生），这一层再调一次 `roster_add` 就会让同一个
+          子代理在名册上有两条同名项（`next_name` 按角色序号发号，第二条是 X2）——
+          这正是这次改动要钉死的"恰好一次"。
+        * `False` —— 这个结果不是 `Conductor.summon` 产出的（判据里的替身、老实现）。
+          漏斗没走过 ⇒ 这一层按老口径补一次登记，否则"登记有没有发生"在那类替身上永远
+          读不出来（`test_roster_registration_holes` 的批量正控就打在替身上）。
+        """
+        if getattr(res, "roster_considered", False):
+            return (str(getattr(res, "roster_name", "") or ""),
+                    str(getattr(res, "roster_problem", "") or ""))
+        sec = getattr(self, "secretary", None)
+        status = str(getattr(res, "status", "") or "")
+        if sec is None:
+            return "", "这一趟没有秘书 ⇒ 名册不在手上（没有登记）"
+        if status not in ("pending", "running", "done"):
+            return "", (f"这次派活没跑成（status={status}）⇒ 名册没登记"
+                        "（不是『不需要登记』，也不是『登记过了』）")
+        if str(getattr(res, "outcome", "") or "") == "refused":
+            return "", ""            # 被拒的那一次没跑：不登记（理由在 refusal_reason 上）
+        try:
+            reg = sec.roster_add(owner=owner, role=role, task_id=task_id, brief=brief,
+                                 task=task, want_name=name, reuse=reuse)
+        except Exception as exc:  # noqa: BLE001 —— 登记失败不许带走这次派活
+            return "", f"名册登记没跑成：{type(exc).__name__}: {exc}"
+        problem = str(reg.get("problem") or "")
+        return ("" if problem else str(reg.get("name") or "")), problem
 
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
@@ -5634,7 +5674,11 @@ class AgentLoop:
         try:
             res = self.conductor.summon(role, "", params,
                                         by=self.role, parent_task_id=owner,
-                                        token=self.token, input_key=key)
+                                        token=self.token, input_key=key,
+                                        # 名册登记的材料（登记发生在 `Conductor.summon`
+                                        # 的 [5b]：子行落盘之后、子代理跑起来之前）。
+                                        roster={"brief": brief_arg, "task": task_arg,
+                                                "name": name_arg, "reuse": reuse_arg})
         except Exception as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             return out
@@ -5666,42 +5710,26 @@ class AgentLoop:
             out["payload"] = _clip({k: v for k, v in payload.items() if k != "llm_run"}, 400)
         else:
             out["payload"] = _clip(payload, 800)
-        # ---- 名册登记（S1k-2；业主 T22："名册的增、删都由秘书做"）
+        # ---- 名册：写字在 `Conductor.summon` 的 [5b]，这里只把材料交过去、读数读回来
         #
-        # 只登记真的受理了的那一次（`refused` 不登记：它没跑）。
-        # `brief` 的口径（2026-10-20 业主裁定逐字：「简介没写，则秘书帮忙写，秘书的
-        # 重要职责就是辅助通讯」—— 改前这里把 `brief_arg` 直接传死，于是真机 100 次
-        # 失败里 75 次是名册当场拒收"没给一句任务简介"）：
-        #   · 简介由秘书判：`brief` 只原样传下去，`task` 一并给它（`roster_add(task=…)`）；
-        #   · 父没给简介 ⇒ 秘书从任务原文派生一句（≤60 字、单行），登记行记
-        #     `brief_source="secretary"` —— 不许静默冒充"父给的"；
-        #   · 这里刻意不写 `brief_arg or task_arg`：业主选的是"秘书写"，
-        #     不是"拿任务原文顶替"（代写与留痕都在秘书那一侧，只此一份）。
+        # 材料（2026-10-21）：`brief` / `task` / `name` / `reuse` 四格随 `roster=` 进漏斗。
+        # 为什么不从 `tasks` 行读：`schema.Task` 里没有 `brief` / `task` 两格（禁改区），
+        # 而"父给的那句简介"只活在这个载荷里 —— 改前那版在途实现从行里读 ⇒ 恒空 ⇒
+        # 秘书用"没给一句任务简介"拒收每一条（名册照样空）。
+        # 口径（2026-10-20 业主裁定逐字：「简介没写，则秘书帮忙写」）：`brief` 只原样传，
+        # `task` 一并给秘书（`roster_add(task=…)`）；这里刻意不写 `brief_arg or task_arg`
+        # —— 业主选的是"秘书写"，不是"拿任务原文顶替"（代写与留痕都在秘书那一侧）。
+        # 读数（`_roster_reading`）：走过漏斗就只读 `res.roster_*`，不再自己调 `roster_add`
+        # —— 同一子代理登记两次会让名册里出现两条同名项（X1 与 X2）。
         self._bind_roster_sink()
-        if self.secretary is not None and str(res.status or "") in ("pending", "running", "done"):
-            if str(res.outcome or "") != "refused":
-                try:
-                    reg = self.secretary.roster_add(
-                        owner=self.my_task_id, role=role, task_id=str(res.task_id or ""),
-                        brief=brief_arg, task=task_arg,
-                        want_name=name_arg, reuse=reuse_arg)
-                    if reg.get("problem"):
-                        out["roster_problem"] = str(reg["problem"])
-                    else:
-                        out["roster_name"] = str(reg.get("name") or "")
-                except Exception as exc:  # noqa: BLE001 —— 登记失败不许带走这次派活
-                    out["roster_problem"] = f"名册登记没跑成：{type(exc).__name__}: {exc}"
-        elif self.secretary is None:
-            out["roster_problem"] = "这一趟没有秘书 ⇒ 名册不在手上（没有登记）"
-        elif str(res.status or "") in ("failed", "cancelled"):
-            # ---- 三态不许折平（改前 `elif` 只覆盖"没有秘书"这一格）
-            #
-            # `failed` / `cancelled` 的那一次派活没跑成 ⇒ 它当然也没进名册，
-            # 而改前这条路一个读数都不留：`roster_name` 没有、`roster_problem` 也没有，
-            # 于是"没登记"与"登记失败"与"根本不需要登记"在读数上长得一模一样。
-            # 生产读数：`failed`/`cancelled` 共 29 次全部静默。
-            out["roster_problem"] = (f"这次派活没跑成（status={res.status}）⇒ 名册没登记"
-                                    "（不是『不需要登记』，也不是『登记过了』）")
+        got_name, got_problem = self._roster_reading(
+            res, owner=str(self.my_task_id or ""), role=role,
+            task_id=str(res.task_id or ""), brief=brief_arg, task=task_arg,
+            name=name_arg, reuse=reuse_arg)
+        if got_name:
+            out["roster_name"] = got_name
+        if got_problem:
+            out["roster_problem"] = got_problem
         return out
 
     def _needs_relay(self, role: str, reason: str) -> bool:

@@ -113,6 +113,13 @@ def _summon_dict(res: SummonResult) -> dict:
             "error": res.error, "tokens": res.tokens, "usd": res.usd,
             "depth": res.depth, "elapsed_sec": res.elapsed_sec,
             "children": list(res.children or ()), "checked": res.checked,
+            # ---- 名册那三格（2026-10-21 真机缺陷的读数面）：主控自己就是"派活的人"，
+            # 它要能读回"这一条进名册没有、叫什么、没进的理由是什么"。改前这里一个字都
+            # 没有，而真机 `projects/p3-verify` 恰恰就是主控用这个工具派的活 ⇒ 名册空了
+            # 也没人读得出来（`roster_considered` 回答"走没走过漏斗"，是第三态）。
+            "roster_name": str(getattr(res, "roster_name", "") or ""),
+            "roster_problem": str(getattr(res, "roster_problem", "") or ""),
+            "roster_considered": bool(getattr(res, "roster_considered", False)),
             "payload_preview": preview, "payload_bytes": size,
             "payload_keys": keys,
             "payload_truncated": size > PAYLOAD_PREVIEW_CHARS,
@@ -235,6 +242,7 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
     roles=("M",),
     returns=("{'task_id','role','action','status','outcome','refusal_reason','detail',"
              "'error','tokens','usd','depth','elapsed_sec','children','checked',"
+             "'roster_name','roster_problem','roster_considered',"
              "'payload_preview','payload_bytes','payload_keys','payload_truncated','artifacts'}"),
 )
 def conductor_summon(_conductor, target_role: str, task: str, params: dict | None = None,
@@ -265,7 +273,16 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
     # 也在用的内部接口，它保留动作那一格），「不是留给模型填的位置」。
     params = {**dict(params or {}), "task": str(task)}
     res = _conductor().summon(target_role, "", params or {}, by=S.CONDUCTOR_ROLE,
-                              input_key=input_key)
+                              input_key=input_key,
+                              # 父必须是"发起这一趟的绝对编号"（与 `conductor.summon_many`
+                              # 那一处同一条口径，2026-10-20 修孤儿行时补的）：改前这一格
+                              # 缺 ⇒ 每条工具派出去的子行 `parent_task_id=None`，于是它既
+                              # 不在任何人的名册上、也不占任何父的扇出。号从调用上下文
+                              # 读（`calling_as` 挂上的就是这一趟的 `task_id`），不在这里拼。
+                              parent_task_id=current_task_id() or None,
+                              # 名册登记要用的任务原文：登记发生在 `summon` 的 [5b]，
+                              # 简介没写时由秘书据它代写并留痕（2026-10-20 裁定）。
+                              roster={"task": str(task)})
     data = _summon_dict(res)
     return ok(data, **data)
 
@@ -309,7 +326,7 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
              "'concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 "
              "{'role','action','instance','auto_instance','task_id','status','outcome',"
              "'refusal_reason','detail','error','tokens','usd','elapsed_sec','checked',"
-             "'children'}"),
+             "'children','roster_name','roster_problem','roster_considered'}"),
 )
 def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResult:
     """工具体：一次派一批活，走 `Conductor.run_plan`（分波 + 线程池 + 探针）。
@@ -372,6 +389,10 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
             parent_task_id=current_task_id() or None,
             input_key=str(item.get("input_key") or ""),
             instance=instance,
+            # 名册登记要用的那两格（2026-10-21）：`task` 是这一项自己的那句活，
+            # `brief` 如果模型给了就原样带（工具的 schema 里没有 `brief` 这一格 ——
+            # 那是形状面 `summon_many` 的；这里容忍它存在，给了就用，没给由秘书代写）。
+            roster={"task": work, "brief": str(item.get("brief") or "")},
         ))
     t0 = time.monotonic()
     results = c.run_plan(calls)
