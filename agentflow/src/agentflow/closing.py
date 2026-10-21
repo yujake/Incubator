@@ -4322,7 +4322,8 @@ def _paper_text(root: str | Path) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
-def _statement_rows(root: str | Path) -> list[dict[str, Any]]:
+def _paper_statement_rows(root: str | Path) -> list[dict[str, Any]]:
+    """读论文侧要用的台账行（**自成一路**：不改既有的 `_statement_rows(root, store)`）。"""
     path = Path(root) / "data" / "statements.json"
     if not path.is_file():
         return []
@@ -4393,7 +4394,7 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
     tex = _paper_text(root)
     if not tex.strip():
         return []          # 没有论文 ⇒ 这一族不适用（不是"通过"：调用方看 reading 里有没有稿）
-    rows = _statement_rows(root)
+    rows = _paper_statement_rows(root)
     problems: list[str] = []
     for name, body, after in _env_bodies(tex):
         row = _provable_in_ledger(body, rows)

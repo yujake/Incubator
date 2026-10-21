@@ -1,13 +1,13 @@
-"""S2 判据：论文里的证明**不许失踪**（业主 2026-10-21 口径）。
+"""S2 判据：论文里的证明不许失踪（业主 2026-10-21 口径）。
 
 ## 三条口径（`draft/138` §5）
 
-1. **所有定理的完整证明都要可查，B 侧都要有收录**；
+1. 所有定理的完整证明都要可查，B 侧都要有收录；
 2. 产出丰盛时按档压缩：T1 可压缩、T2 把繁复工作移附录（正文留框架）——
-   **压缩可以，失踪不行**：压了/移了，正文必须给指针；
-3. **T3/T4 不许整段移出正文**（框架与动机必须留正文，只许技术细节进附录）。
+   压缩可以，失踪不行：压了/移了，正文必须给指针；
+3. T3/T4 不许整段移出正文（框架与动机必须留正文，只许技术细节进附录）。
 
-## 这一条**不**判什么（都是业主否掉的）
+## 这一条不判什么（都是业主否掉的）
 
 - 不判篇幅（"T4 占 8%" 那版已否）；
 - 不数"显然/易得"的出现次数（计数会逼出废话）。
@@ -16,9 +16,9 @@
 
 ① 正文每条定理都能在台账里找到行，且那行"完整证明可查"（自有 `proof_text` 非空；
    引用 `source_lit_id` + 页码 + 逐字核验）；
-② 台账里**没有**这条定理 ⇒ 红（"正文有、台账无"正是"证明失踪"的形态）；
+② 台账里没有这条定理 ⇒ 红（"正文有、台账无"正是"证明失踪"的形态）；
 ③ 档位 T3/T4 且正文只剩一段指针（<400 字符且指附录）⇒ 红；
-④ 反真空：T1/T2 用指针压缩 ⇒ **必须绿**（防误伤——这是"压缩可以"那一半的机器证据）。
+④ 反真空：T1/T2 用指针压缩 ⇒ 必须绿（防误伤——这是"压缩可以"那一半的机器证据）。
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def test_a_cited_result_without_page_or_quote_is_red(tmp_path: pathlib.Path) -> 
 
 
 def test_a_low_tier_proof_may_be_compressed_with_a_pointer(tmp_path: pathlib.Path) -> None:
-    """④ 反真空（必须绿）：T1/T2 的证明被压缩、正文只留指针 ⇒ **不许红**。"""
+    """④ 反真空（必须绿）：T1/T2 的证明被压缩、正文只留指针 ⇒ 不许红。"""
     tex = ("\\begin{theorem}自由群因子是 II_1 型因子\\end{theorem}\n"
            "标准论证，见附录 A.2。\n")
     root = _workspace(tmp_path, tex, [_OWN_PROOF, _CITED])
@@ -93,7 +93,7 @@ def test_a_high_tier_framework_moved_to_the_appendix_is_red(tmp_path: pathlib.Pa
 
 
 def test_no_paper_means_not_applicable_not_pass(tmp_path: pathlib.Path) -> None:
-    """没有论文 ⇒ 这一族不适用（空清单），但**调用方**要靠 reading 区分"没有稿"。"""
+    """没有论文 ⇒ 这一族不适用（空清单），但调用方要靠 reading 区分"没有稿"。"""
     (tmp_path / "data").mkdir(parents=True)
     assert closing.paper_proof_scaffolding_problems(tmp_path) == []
     assert not (tmp_path / "out" / "paper" / "main.tex").exists()
