@@ -94,21 +94,14 @@ __all__ = [
 
 
 #: `graph.neighbors` 返回的邻居条数上限（结果封装/剪枝的那道闸）。
-#:
 #: 为什么必须有一个数（FC-17 的上下文预算在这个工具上曾经完全失效）：
-#: 上下文预算的剪枝（`contextbudget.prune_tool_result`）只按字符长度剪
-#: `data` 里的字符串。`graph.neighbors` 的返回是"很多个很短的 dict"——
-#: 实测 3000 个邻居 = 265960 字符的 JSON，剪枝后 `pruned=False`、
-#: 条数一条都没少（每个 `name`/`concept_id` 都远短于 `threshold_chars`）。
-#: 于是"结果太大"这条防线在它上面不生效，而它又不像 `paths()` /
-#: `neighborhood()` 那样带 `truncated` —— 调用方会把"我只拿到前 N 个"
-#: 读成"它就只有这些邻居"。
-#:
-#: 200 的来由：正常概念图里一个概念的邻居数是几个到几十个（概念是"概念组"，
-#: 不是词项）；200 已经覆盖远超常规的稠密情形，同时把最坏返回量钉在
-#: 数十 KB 量级。要更多邻居的调用方应当用 `graph.svc_neighbors`
-#: （`AgentC.neighbors`，带 `depth`/`max_nodes` 与三态）按需展开，
-#: 而不是让一次低层查询把整张邻接表拖出来。
+#: `contextbudget.prune_tool_result` 只按字符长度剪 `data` 里的字符串，而 `graph.neighbors` 的返回是
+#: "很多个很短的 dict" —— 实测 3000 个邻居 = 265960 字符的 JSON，剪枝后 `pruned=False`、条数一条都没少。
+#: 于是"结果太大"这条防线在它上面不生效，而它又不像 `paths()` / `neighborhood()` 那样带 `truncated`
+#: ⇒ 调用方会把"我只拿到前 N 个"读成"它就只有这些邻居"。
+#: 200 的来由：正常概念图里一个概念的邻居数是几个到几十个（概念是"概念组"，不是词项），200 已覆盖远超
+#: 常规的稠密情形、同时把最坏返回量钉在数十 KB 量级。要更多邻居的调用方应当用 `graph.svc_neighbors`
+#: （`AgentC.neighbors`，带 `depth`/`max_nodes` 与三态）按需展开，而不是让一次低层查询把整张邻接表拖出来。
 MAX_NEIGHBORS_DEFAULT = 200
 
 

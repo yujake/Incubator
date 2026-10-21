@@ -672,28 +672,14 @@ def _propagate_levels(funcs: list[FuncInfo]) -> None:
 # ---------------------------------------------------------------- 已核实覆盖（豁免名单）
 
 
-#: 已人工核实有直接测试、但本脚本的"按名出现"判据看不到的函数。
-#:
-#: ## 为什么必须有这张表（而不是把判据放宽）
-#:
-#: 判据是"名字出现在 tests/ 里"。它有一类结构性的假阴性：
-#: 测试间接调用某个函数时，那个函数的名字可能从未出现。实测例子：
-#:
-#: - `interactions.adjudicate_contradiction` —— `tests/test_interactions.py` 里
-#:   有 9 条测试直接调 `I.adjudicate_contradiction(...)`，
-#:   分别覆盖 side_removed / side_superseded / no_longer_conflicting /
-#:   unresolved / persistent / new_contradiction 六个分支。
-#:   把它列为"零测试"是把假阴性当成了缺口。
-#:
-#: 放宽判据（例如"任何以 `test_` 开头的名字就算"）会让判据失去分辨力，
-#: 所以选择显式豁免，并且豁免必须可核：表里每条都写明
-#: `(模块, 限定名) -> (覆盖它的测试函数名, 一句理由)`，
-#: 而 `_selfcheck_exonerations()` 会断言那些测试函数名真的存在于 tests/ 里
-#: —— 于是一旦有人改了测试名、或删了那条测试，本脚本以退出码 2 报出来，
-#: 而不是静默地把缺口抹掉。静默豁免正是本项目最忌讳的失败形态。
-#:
-#: 这张表只放已核实有直接测试的，不许放"我觉得它不重要"的。
-#: 判定口径：表里必须能写出至少一个直接调用它的测试函数名。
+#: 已人工核实有直接测试、但本脚本的"按名出现"判据看不到的函数（逐条豁免，且豁免必须可核）。 为什么需要这张表而不是放宽判据：判据是"名字出现在 tests/ 里"，它有一类结构性假阴性 —— 测试间接调用
+#: 某个函数时那个名字可能从未出现（实测：`interactions.adjudicate_contradiction` 在
+#: `tests/test_interactions.py` 里有 9 条测试直接调它，覆盖 side_removed / side_superseded /
+#: no_longer_conflicting / unresolved / persistent / new_contradiction 六个分支 ⇒ 把它列为"零测试"
+#: 是把假阴性当成了缺口）。放宽判据（例如"任何以 `test_` 开头的名字就算"）会让判据失去分辨力，所以选
+#: 显式豁免：表里每条写 `(模块, 限定名) -> (覆盖它的测试函数名, 一句理由)`，而 `_selfcheck_exonerations()`
+#: 会断言那些测试函数名真的存在 —— 改了测试名或删了那条测试 ⇒ 退出码 2 报出来，而不是静默抹掉缺口。
+#: 表只放已核实有直接测试的（必须写得出至少一个直接调用它的测试函数名），不许放"我觉得它不重要"的。
 _EXONERATED: dict[tuple[str, str], tuple[tuple[str, ...], str]] = {
     ("src/agentflow/interactions.py", "adjudicate_contradiction"): (
         (
@@ -862,25 +848,13 @@ def _name_occurrences(blob: str, needle: str) -> int:
 
 
 #: 本项目的测试命名约定：`def test_<被测函数名>_<预期>` 或 `def test_<被测函数名>(`。
-#:
-#: ## 为什么这条要单独一条判据、并且单独报告
-#:
-#: `_name_pattern` 的左侧要求"非词字符"，于是 `def test_validate_claim_rejects_x`
-#: 里紧挨在 `validate_claim` 左边的 `_` 让它匹配不上。这不是可以靠调正则
-#: 顺手解决的：`_` 既是标识符字符又是词分隔符，在文本上无法区分
-#: "作为后缀出现的 `validate_claim`"与"作为前缀出现的 `parse`（在 `parse_work` 里）"。
-#:
-#: 所以这里把它做成一条显式的、按项目约定命名的判据：只有当 `needle`
-#: 前面正好是 `test_` 且后面不是字母数字时才算命中。这条规则：
-#:
-#: - 不会让 `needle="parse"` 命中 `parse_work`（前面不是 `test_`）；
-#: - 不会让 `needle="process"` 命中 `reprocess_once`（同上）；
-#: - 会让 `needle="validate_claim"` 命中 `def test_validate_claim_rejects_...`。
-#:
-#: 它仍然可能被"某个测试恰好叫这个名字、但测的是别的东西"骗到 —— 所以命中它的
-#: 函数在 `--json` 里被标成 `via: "test_name"`（与 `via: "direct"` 分开），
-#: 人可以直接核。这个区分是本脚本可信度的关键：把两者混成一个布尔值，
-#: 就等于把"有直接调用"与"有个名字像的测试"当成同一件事。
+#: 为什么单独一条判据：`_name_pattern` 的左侧要求"非词字符"，于是 `def test_validate_claim_rejects_x`
+#: 里紧挨在 `validate_claim` 左边的 `_` 让它匹配不上 —— 这不是调正则能顺手解决的：`_` 既是标识符字符
+#: 又是词分隔符，文本上无法区分"作为后缀出现的 `validate_claim`"与"作为前缀出现的 `parse`（在 `parse_work` 里）"。
+#: 所以做成按项目约定命名的显式判据：只有 `needle` 前面正好是 `test_` 且后面不是字母数字时才算命中 ——
+#: 不会让 `needle="parse"` 命中 `parse_work`、不会让 `process` 命中 `reprocess_once`、会让
+#: `validate_claim` 命中 `def test_validate_claim_rejects_...`。它仍可能被"某个测试恰好叫这个名字、但测的
+#: 是别的东西"骗到，所以命中它的函数在 `--json` 里标成 `via: "test_name"`（与 `via: "direct"` 分开）：把 两者混成一个布尔值，就等于把"有直接调用"与"有个名字像的测试"当成同一件事。
 _TEST_NAME_TMPL = r"\btest_{n}(?![0-9A-Za-z])"
 
 

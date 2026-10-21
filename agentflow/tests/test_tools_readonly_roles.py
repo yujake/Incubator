@@ -197,23 +197,14 @@ def test_for_role_releases_exec_when_sandbox_is_declared_available(monkeypatch):
     assert any("沙箱已声明可用" in n and "tool.exec" in n for n in notes), notes
 
 
-#: 真实树上"外部动作 = `exec`"的工具清单。
-#:
-#: 为什么钉成常量，而不是只断言"只读角色拿不到 exec 工具"：后者在"任何" exec
-#: 工具存在时都成立，于是每多一个 exec 工具都不会被任何人注意到 —— 而
-#: `for_role` 的剥离规则意味着"多一个 exec 工具"就等于"C/H 的工具面少一个"
-#: （P-13 §8.2 的受影响清单）。钉住清单 ⇒ 每次迁移都必须显式改这一行，改动可见。
-#:
-#: 现状：恰好 3 条 —— `verify.run_experiment`（B3 第 0 步）与 `verify.check_formal`
-#: （B3 收官），加上 `doc.paper_compile`（框架自己起 LaTeX 引擎那一档）。
-#: 前者同时是写工具（`side_effect="write_local"`）⇒ 就算 exec 轴不存在，
-#: C/H 也照样拿不到它；`verify.check_formal` 是 `read` + `exec` ⇒ 只有 exec 轴能把它
-#: 剥掉，所以这一条是"第二根轴的剥离规则真的在干活"的证据
-#: （它的 `roles` 也已从 `_ROLES` 改成 `_ROLES_WRITE`，不靠过滤兜底）。
-#: 2026-10-13（业主裁定「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，
-#: 退场面见 `draft/117`）：旧路那四条 exec 工具（渲染 / 重编 / 查锚 / 读锚）整条退场，
-#: 编译那一格由 `doc.paper_compile` 一件接手（`write_local` + `exec` + `roles=("G",)`
-#: 写死在声明里）⇒ 这份清单从 6 条收回到 3 条。
+#: 真实树上"外部动作 = `exec`"的工具清单。为什么钉成常量而不是只断言"只读角色拿不到 exec 工具"：后者在
+#: "任何" exec 工具存在时都成立，于是每多一个 exec 工具都不会被任何人注意到 —— 而 `for_role` 的剥离规则意味着
+#: "多一个 exec 工具"就等于"C/H 的工具面少一个"（P-13 §8.2 的受影响清单）；钉住清单 ⇒ 每次迁移都必须显式改这一行。
+#: 现状 3 条：`verify.run_experiment`（B3 第 0 步）、`verify.check_formal`（B3 收官）、`doc.paper_compile`
+#: （框架自己起 LaTeX 引擎那一档）。前者同时是写工具 ⇒ 就算 exec 轴不存在 C/H 也拿不到它；`verify.check_formal`
+#: 是 `read` + `exec` ⇒ 只有 exec 轴能把它剥掉（`roles` 也已从 `_ROLES` 改成 `_ROLES_WRITE`，不靠过滤兜底），
+#: 所以它是"第二根轴的剥离规则真的在干活"的证据。2026-10-13（业主裁定「paper_package 里那些都是古早废案了，
+#: 我们要智能体写文章」，退场面见 `draft/117`）：旧路那四条 exec 工具（渲染 / 重编 / 查锚 / 读锚）整条退场， 编译那一格由 `doc.paper_compile` 一件接手 ⇒ 这份清单从 6 条收回到 3 条。
 KNOWN_EXEC_TOOLS = frozenset({"verify.run_experiment", "verify.check_formal",
                               "doc.paper_compile"})
 

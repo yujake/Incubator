@@ -2,34 +2,20 @@
 
 这是 A/B 两个智能体唯一的交汇点，因此把三件事集中在这里做对：
 
-1. 不存在"部分写入" —— 一律"写临时文件 → os.replace"，且先校验后落盘。
-   校验失败就整笔放弃，快照不会被污染成半成品。
-2. 不存在"丢失更新" —— 任何读-改-写都在同一把排他锁内完成。A 追加文献、
-   B 改 `processed`，两者并发时若各自"读全表→改一行→写全表"，后写的一方会
-   把先写的一方覆盖掉。锁是这里唯一正确的解法。
-3. 不存在"说不清谁改了什么" —— 每次落盘同时追加事件到 `events.jsonl`。
-   事件里带的是整行 upsert（而不是 diff），于是 `rebuild()` 只需按主键折叠
-   就能重建快照；这让"快照损坏/手工改坏"永远可恢复。
+1. 不存在"部分写入" —— 一律"写临时文件 → os.replace"，且先校验后落盘；校验失败就整笔放弃。
+2. 不存在"丢失更新" —— 任何读-改-写都在同一把排他锁内完成（否则后写的一方覆盖先写的）。
+3. 不存在"说不清谁改了什么" —— 每次落盘同时追加事件到 `events.jsonl`；事件里带的是整行
+   upsert（不是 diff），于是 `rebuild()` 只需按主键折叠就能重建快照。
 
 多表事务按固定顺序加锁（见 `LOCK_ORDER`），这是避免死锁的标准做法。
 
 ## "看着对、其实不成立"的地方（`F-1` / `F-3` / `G-12` / `R6-AN-1`，已修）
 
-上面三句话曾经各自有一个反例，都在全面体检里被实测复现过，修法与代价逐条写在
-对应函数的 docstring 里（`_atomic_write` / `tx` 的提交块 / `init` / `rebuild` /
-`_merge_counters_for_commit`）：
-
-- `_atomic_write` 的临时名是固定的 `<file>.tmp`，os.replace 不重试 ⇒
-  Windows 上两个并发写者互相抢同一个临时名，抛 `PermissionError [WinError 32]`（`F-3`）；
-- `init(force=True)` 与 `rebuild()` 完全不加锁，且用 `_atomic_write` 逐个写表 ⇒
-  并发写者会看到"表被清空到一半"的中间态（`G-12`）；
-- 提交顺序是"先落盘全部快照、再追加事件" ⇒ 两者之间崩一次，磁盘上出现
-  "快照里有、事件里没有"的行，而 `rebuild()` 会不报错地丢掉最后一次提交，
-  并把 counters 退回到落后于表的状态（`F-1`）；
-- 提交块用事务自己那份 counters 缓存整份覆盖 `counters.json` ⇒ 在"事务已读、
-  尚未提交"的窗口里 `set_counters` 落盘的写入被静默吞掉（`R6-AN-1`，实测
-  999 → 4）。修法就是让 counters 的读-改-写也进写者锁、并对"两个方向"各留一条
-  痕迹事件（`R7-AN-1` 补上"盘上被拨低"那一半）⇒ 上面第 2 条承诺对这条路径成立。
+上面三句话曾经各自有反例，修法与代价逐条写在对应函数的 docstring 里：`_atomic_write`（固定
+临时名 `<file>.tmp` ⇒ Windows 上并发写者互抢，`F-3`）· `init` / `rebuild`（不加锁 ⇒ 读到
+"清空到一半"的中间态，`G-12`）· `tx` 的提交块（先快照后事件 ⇒ 崩一次就留下"快照有、事件无"
+的行并被重建静默丢掉，`F-1`）· `_merge_counters_for_commit`（用事务缓存整份覆盖
+`counters.json` ⇒ 窗口内的 `set_counters` 被静默吞掉，`R6-AN-1`）。
 """
 
 from __future__ import annotations
@@ -195,49 +181,16 @@ _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
 def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any], *,
                               before_rows: Iterable[Mapping[str, Any]] = ()) -> None:
     """写入期闸（2026-10-19）：`evidence_kind="proof_review"` 的命题必须有 V 那一签。
-
-    ## 这一条在堵什么（活证据，2026-10-19 现算的读数）
-
-    `projects/mp1/data/statements.json` 里有 **10 条** `evidence_kind="proof_review"`，
-    它们的 `verification_id` / `reviewed_by` 全是 `null`、`bits` 是 `{}`；而盘上
-    `projects/mp1/verifications/` 有 10 个文件（各 1 行）—— 其中 **7 条**最近一签是
-    「成立」（且 `proof_sha256` 与现行 `proof_text` 相符），**3 条**（`000031` /
-    `000032` / `000036`）最近一签是「有毛病」（`unresolved_errors` 1/2/1）。
-    也就是说：这 3 条**自称"证明经逐行审阅"却没有任何「成立」那一签**，而写入时
-    没有任何东西核过它。`schema.EVIDENCE_KINDS` 上面那段定义逐字要求「`proof_text`
-    非空 ＋ V 的 `verifications` 里那一条签「成立」」，但 2026-10-19 之前**没有任何
-    代码强制**它（唯一的强制是 `disclaimer`，而那句话作者自己就能写）。
-
-    ## 为什么是拒收（而不是"降档 + 待办"）
-
-    `own_result` 缺 `proof_text` 那一档刻意**不拒**（P-06：拒收只挡住了"如实登记"，
-    见 `schema.Statement.validate` 的那段注释）—— 因为那一条的缺省读数是"猜想级"，
-    数据本身没有说谎。`proof_review` 不是这一类：它是**一句话**（"V 审过了"），
-    而这句话的真假只有 `verifications` 能回答。一条查不到凭据的 `proof_review`
-    在报告里会让一条猜想级命题以"审阅过的证明"出现在交付面上 —— 这正是那句
-    "测试全绿、上线即越权"的形态。所以这一档的选择是**当场拒收**（与
-    `experiment.evidence_kind=proof` 靠检查器输出背书同一档强度）。
-
-    判据本体在 `verifications.proof_review_gap`（一处口径：写入期、审计期、
-    收工门都读它），这里只把它的读数翻成一次拒收。
-
-    ## 作用域（2026-10-19 晚，`projects/mp2` 那条读数带出来的一处**过宽**）
-
-    这道闸只核**这一笔事务改到的那些行**（`changed`：与盘上那一份逐字段比，
-    新行 / 改过的行都算）。改前它核整张表 —— 于是**别的行**的历史缺陷会挡住
-    这一笔写入，连"如实降档"这条出口本身都写不进去：
-
-    - `projects/mp1` 那 10 条存量里有 3 条查不到「成立」那一签 ⇒ 在那份工作区里
-      **任何** `statements` 写入（包括一条完全无关的新 `heuristic` 行）都会被拒，
-      而拒信说的是"你有 3 条 fake proof_review"—— 写的人改不了别人的行，只能放弃；
-    - 存量本来就该由**审计期**那一档点名（`verify._check_13` 的
-      `proof_review_without_verification`，error 级），这条分工在本函数上面那段
-      注释与 `tx` 提交块的注释里都写着 —— 写入期再去核一遍存量，是把"读历史"
-      变成"改历史"的同一种病，只是发生在另一个出口上。
-
-    收窄之后**强度不变**：任何一笔**新写或改写**的 `proof_review` 行都仍然要过
-    三条判据（`proof_text` / V 最近一签「成立」/ `proof_sha256` 相符）。唯一
-    变化的是：改 A 行时不再顺带核 B 行。
+    活证据（`projects/mp1` 现算）：10 条 `proof_review` 的 `verification_id` / `reviewed_by` 全是
+    `null`、`bits` 是 `{}`，其中 3 条（`000031`/`000032`/`000036`）最近一签是「有毛病」—— 自称
+    "证明经逐行审阅"却没有任何「成立」那一签，而 2026-10-19 之前没有任何代码强制它。
+    为什么是拒收而不是"降档 + 待办"：`own_result` 缺 `proof_text` 那一档的缺省读数是"猜想级"，
+    数据没说谎；而 `proof_review` 是一句话（"V 审过了"），真假只有 `verifications` 能回答 ⇒ 放行
+    会让猜想级命题以"审阅过的证明"出现在交付面上（"测试全绿、上线即越权"的形态）。
+    判据本体在 `verifications.proof_review_gap`（一处口径：写入期、审计期、收工门都读它）。
+    作用域（2026-10-19 晚，`projects/mp2` 带出的一处过宽）：只核这一笔事务改到的行（`changed`），
+    存量缺陷由审计期 `verify._check_13` 的 `proof_review_without_verification` 点名 ⇒ 改 A 行不再
+    顺带核 B 行；新写/改写的行仍要过三条判据（`proof_text` / 最近一签「成立」/ `sha256` 相符）。
     """
     if table != "statements":
         return
@@ -546,58 +499,17 @@ class Tx:
     # ---- ID 分配（锁内进行，与建行同事务）
     def alloc_id(self, kind: str) -> str:
         """分配一个 4 位 ID。
-
-        ## 为什么必须在这里跳过已被占用的号（一次真实缺陷的修复）
-
-        `counters.json` 是 ID 分配器的缓存，它的真源是各张表里已经用掉的号。
-        两者一旦漂移（手工建行、从台账恢复、外部脚本写入、旧版 `rebuild`），
-        分配器就会发出一个已经被占用的号 —— 而 `upsert` 是按主键替换，
-        于是新行会静默覆盖掉旧行：不报重复 ID、不报错、旧数据凭空消失。
-
-        实测教训：D 的 `adjudicate` 建矛盾问题时，新建的 (0002,0004) 问题被
-        已存在的 0000 顶掉，`new_question_ids` 还返回 `["0000"]` ——
-        调用方看到"新建成功"，而知识库里少了一条问题。
-
-        所以这里做三件事（任何一条单独都不够）：
-
-        1. 在已声明的事务表里查一遍该号是否已被占用，占用就往后跳；
-        2. 跳完之后把 `counters` 推到最终号 + 1，于是这个缓存会
-           自愈（下次 `verify` 不会再报 `counter_behind`）；
-        3. 越界（超过 :data:`MAX_ID`）时抛 :class:`IdExhausted`，不静默升位宽。
-
-        为什么用"跳过"而不是"抛异常"：漂移是既成事实（数据已经在表里），
-        此时让整个智能体崩掉并不能修好它；往后跳一位既能继续工作，
-        又保证了"不会覆盖"。真正的失序仍然由 `verify` 的 `counter_behind`
-        与 `id_gap` 报出来 —— 这里负责不破坏数据，`verify` 负责报告失序。
-
-        ## `F-2`：查占用这件事不许被静默跳过
-
-        上面第 1 条曾经写成 `if table is not None and table in self.tables:` ——
-        也就是说：没声明目标表时，占用检查被整段跳过，而函数照样发号。
-        实测（`temp/auditF-probe1.txt` [D1]）：把 `counters.lit` 拨回 0 之后，
-        声明了 `literature` 的事务给出 `0001`（正确地跳过 `0000`），
-        而只声明 `counters` 的事务给出 `0000`（已被占用）；随后把这个号写回
-        `literature` ⇒ `['first','second']` 变成 `['OVERWRITER','second']`，
-        行数不变，旧行静默消失。
-
-        这正是本函数 docstring 第 194-203 行那段教训（D 的 `adjudicate` 被顶号）
-        的同一个形态，而它自己的守卫留了一个不报错的缺口。
-        现在的判据：`alloc_id(kind)` 要求事务声明了那张表，否则抛
-        :class:`StoreError` 并说清"要分配 X 的号就得同时声明表 Y"。
-        如果将来真的需要"只取号、不建行"，那必须是一个显式可审计的形状
-        （例如另开一个 `reserve_id()` 并说明为什么不需要查占用），而不是
-        默默把检查跳过。
-
-        ## `R6-AN-1`：本事务取过哪些类别，提交时要用
-
-        `counters.json` 是整份写回的。提交时若直接拿本事务的缓存覆盖它，
-        就会把"事务已读、尚未提交"这个窗口里别的写者（`set_counters`）写下的值
-        无声地吞掉（实测：C 写 999、盘上确认 999，B 提交后那份 999 不见了，
-        无日志无异常）。
-        所以这里记下取过号的类别（`self._alloc_kinds`）；提交块只改这些类别，
-        其余类别照盘上的值，并对"盘上比我更靠前"的类别留一条痕迹事件 ——
-        见 `Store._merge_counters_for_commit`。
-        """
+        `counters.json` 是缓存、真源是各张表里已用掉的号；漂移（手工建行 / 从台账恢复 / 旧版
+        `rebuild`）时分配器会发出已被占用的号，而 `upsert` 按主键替换 ⇒ 新行静默覆盖旧行（实测：
+        `adjudicate` 新建的 0002/0004 被 0000 顶掉，调用方还看到"新建成功"）。所以三件事缺一不可：
+        ① 在事务声明的表里查该号是否已被占用，占用就往后跳；② 跳完把 `counters` 推到最终号 + 1
+        （缓存自愈，`verify` 不再报 `counter_behind`）；③ 越界抛 :class:`IdExhausted`，不静默升位宽。
+        用"跳过"而不是"抛异常"：漂移是既成事实，往后跳既继续工作又保证不覆盖，失序由 `verify` 的
+        `counter_behind` / `id_gap` 报出。
+        `F-2`：查占用不许被静默跳过 —— `alloc_id(kind)` 要求事务声明了那张表，否则抛
+        :class:`StoreError`（"要分配 X 的号就得同时声明表 Y"）。`R6-AN-1`：`counters.json` 整份写回，
+        提交时直接用本事务缓存覆盖会吞掉窗口里 `set_counters` 写的值 ⇒ 只改 `self._alloc_kinds` 里
+        那些类别（见 `Store._merge_counters_for_commit`）。"""
         if kind not in S.ID_COUNTERS:
             raise StoreError(f"未知 ID 类别：{kind}")
         if "counters" not in self.tables:
@@ -888,53 +800,17 @@ class Store:
 
     def set_counters(self, values: Mapping[str, int], *, actor: str, note: str = "") -> dict:
         """公开地写 `counters.json`（`c-7`；`R7-AN-1` 把"窗口里会怎样"写准）。
-
-        ## 这个方法保证什么、不保证什么（逐字事实）
-
-        - 在调用返回时，本方法写的那个文件里就是给定值（拿写者锁、原子落盘）；
-          没有在飞事务时，拨低就是拨低，`verify` 会照实报 `counter_behind`。
-        - 但如果此刻有另一个事务已经读过 counters、尚未提交，那个事务的提交会把该类别的
-          终值取 `max(盘上的值, 它读到的值)`（`R6-AN-1` / `R7-AN-1` 的合并规则）⇒
-          在窗口里显式拨低不会降低盘上值，但会留下一条带方向的痕迹
-          （`counters_commit_merged`，`direction=disk_lower`，带盘上/缓存/基线/合并四个读数）
-          ⇒ 那次写入是可判定的，不是无声消失。
-        - 窗口结束后再调用一次，拨低按正常语义生效（重审实测：提交后重试 ⇒ 盘上就是给定值）
-          ⇒ 被吞掉的是窗口，不是这个方法本身坏了。
-        - 在窗口里写入更大的值同样不会被吞：终值取 max，那次写入直接留在盘上
-          （痕迹方向是 `disk_higher`）。
-
-        ## 为什么需要这个公开入口
-
-        `counters.json` 是 ID 分配器的缓存，真源是各张表里用掉的号。少数场景需要把它
-        故意拨到某个位置（复现"计数器落后/超前"的缺陷、造探针夹具）。以前只能绕过
-        事务直接调私有的 `_atomic_write` —— 实测 `tools/probe_gap_ledger.py` 就是这么干的
-        （`c-7`），而那条路既不拿写者锁、也不进事务：
-
-        - 与并发 `tx` 的 `alloc_id` 争同一份 counters ⇒ 计数器漂移 ⇒ 跳号，
-          严重时真撞号并被 `upsert` 静默覆盖旧行；
-        - 它同时说明"`_atomic_write` 必须在锁内"这条约束只有下划线前缀作提示、没有结构性防线
-          （探针能这么写，别人也能）。
-
-        所以这里给它一个公开路径：拿写者锁（与 `init`/`rebuild`/`tx` 的提交块同一把），
-        再原子落盘。调用方从此不需要、也不应该去碰私有 API。
-
-        ## `R6-AN-1`：这把写者锁不保证"与在飞事务不漂移"，别把它读成那句承诺
-
-        重审实测（两个真进程）：C 调用本方法写下 `concept=999`（当时盘上确认 999），
-        另一个进程里的事务 B 在 C 之前就读过 counters、在 C 之后才提交 ⇒
-        提交后盘上是 4，999 消失，且没有任何日志或异常。
-        原因是提交侧当时用事务自己那份旧缓存整份覆盖 `counters.json`，
-        而事务体全程不持写者锁（写者锁只在提交块里拿）。
-        撤掉本方法里的写者锁后同一形态读数完全相同 ⇒ 分辨力不在这一把锁上，
-        而在提交侧的合并：`_merge_counters_for_commit` 把 counters 的读-改-写
-        搬进了同一把写者锁，并对两个方向各留一条痕迹事件。
-        所以这一段不许再写成"拿了写者锁 ⇒ 与并发 tx 不漂移"。
-
-        返回值是写进去的文档（便于日志与断言）。不做"计数器不得小于表里最大号"这类
-        校验：本方法的用途之一正是故意造出落后状态去复现缺陷（窗口内的那一次按上面
-        的规则处置，窗口外的那一次照常生效），替调用方做策略会把这个用途堵掉；
-        该判据属于 `verify_all`（`counter_behind`）。
-        """
+        保证：调用返回时文件里就是给定值（拿写者锁 + 原子落盘）。但不保证"与在飞事务不漂移"：若此刻
+        有事务已读过 counters、尚未提交，它的提交会按 `_merge_counters_for_commit` 取
+        `max(盘上值, 缓存值)`（`R6-AN-1`）⇒ 窗口里显式拨低不会降低盘上值，只留一条带方向的痕迹
+        （`counters_commit_merged`，`direction=disk_lower`，带盘上/缓存/基线/合并四个读数）；窗口
+        结束后拨低按正常语义生效。
+        为什么需要这个公开入口：以前只能绕过事务调私有 `_atomic_write`（`tools/probe_gap_ledger.py`
+        的 `c-7` 就是这么干的），那条路不拿写者锁、也不进事务 ⇒ 与并发 `alloc_id` 争同一份 counters
+        ⇒ 漂移、严重时撞号并被 `upsert` 静默覆盖。所以给它一个公开路径（与 `init`/`rebuild`/`tx` 的
+        提交块同一把写者锁）。但**这把锁不保证上面那句"不漂移"**：分辨力在提交侧的合并。
+        返回值是写进去的文档。刻意不校验"计数器不得小于表里最大号"：本方法的用途之一正是故意造出
+        落后状态去复现缺陷，该判据属于 `verify_all`（`counter_behind`）。"""
         kind_map = S.ID_COUNTERS
         unknown = sorted(set(values) - set(kind_map))
         if unknown:
@@ -956,66 +832,17 @@ class Store:
 
     def _merge_counters_for_commit(self, t: "Tx") -> dict:
         """`R6-AN-1`：提交 counters 之前先读盘、再按"不丢"合并。
-
-        调用点只有一个：`tx` 的提交块，而且必须在写者锁内（读盘 → 合并 → 落盘
-        这三步要与 `set_counters` 互斥，否则窗口只是变窄，没有关上）。
-
-        ## 判据先行：这是缺陷，不是"刻意的 last-write-wins"
-
-        四条理由（逐条可核）：
-
-        1. 提交侧改的是它自己没碰过的内容：`counters.json` 是整份写回的，
-           事务只对取过号的那几个类别有所有权，却把整份文件按旧缓存覆盖；
-        2. 这与 `set_counters` 自己的 docstring 相反（那把写者锁声明的目标是
-           "与并发 tx 的 alloc_id 不漂移"），而实测撤锁后读数完全相同 ⇒
-           两处声明与实现互相矛盾；
-        3. 与模块 docstring 第 2 条（"不存在丢失更新：任何读-改-写都在同一把
-           排他锁内完成"）相反 —— 旧形态正是一次跨临界区的读-改-写；
-        4. `tools/probe_gap_ledger.py` 用 `set_counters` 造 `c-7` 的读数 ⇒
-           它造出的读数会被在飞事务吞掉，也就是"用来验证不漂移的工具本身不可复现"。
-        刻意的 LWW 会是"逐键 + 有时间戳/版本 + 有痕迹"的，而这里三样都没有。
-
-        ## 合并规则（两条，都是"不丢"而不是"谁赢"）
-
-        1. 本事务取过号的类别：取 `max(盘上值, 缓存值)`。取号只会单调前进，
-           所以 max 既保住本事务发出去的号的推进，也保住窗口里写下的更大值；
-        2. 本事务没碰过的类别：用盘上的值。`set_counters` 是显式覆盖，
-           一个没碰过该类别的在飞事务把它回退掉才是越权。盘上没有而缓存里有（例如
-           `set_counters` 这次没写它）时不从缓存补回来 —— 缓存里那份是
-           本事务读过的旧状态，补回来就是把它当成"我的写入"。
-
-        ## `R7-AN-1`：窗口里的拨低也必须可判定（`R6-AN-1` 只覆盖了抬高方向）
-
-        `max` 只会把计数器往前推，所以显式拨低在窗口里不会降低盘上值 ——
-        这一点是刻意的（改成"缓存赢"会重开 `R6-AN-1` 的 raising 方向，实测过）。
-        但反方向如果一条痕迹都不留，那次写入就是无声消失、判据上也看不见
-        （`R7-AN-1` 实测：C 写 `concept=0`、盘上确认 0，B 提交后盘上是 4、痕迹 0 条）。
-        所以痕迹改成双向：
-
-        - 触发条件：取过号的类别里，盘上值 ≠ 本事务读到的基线（`Tx._alloc_base`）；
-        - 方向：`direction` 逐类别给 `disk_higher`（盘上更高，被别的写者抬高了）
-          或 `disk_lower`（盘上更低，被别的写者拨低了，本次提交用 max 抬回）；
-        - 读数：`disk` / `cache` / `baseline` / `merged` 四个字典都按类别给，
-          两个方向各自有完整读数；`disk_higher` / `disk_lower` 两个列表点名归属。
-
-        为什么触发条件写"≠ 基线"而不是字面上的"盘上 ≠ 缓存"：本事务自己的那次推进
-        就是 `盘上(读时的值) → 缓存(推进后的值)`，拿缓存当基准会让每一次普通取号
-        都满足"盘上 ≠ 缓存"，于是每次 alloc 提交都写一条痕迹，而那条痕迹的方向会把
-        本事务自己的推进说成"别的写者拨低了盘上值"（假归因）。
-        基线与缓存的差（`cache - baseline`）是本事务自己的账，不算别人的写入；
-        把 `baseline` 一并写进事件，读的人可以自己把这个差算出来。
-        `tests/test_store_counters_commit.py::test_quiet_commit_advances_the_counter_without_a_trace`
-        钉住这条：常态下盘上值是 3、缓存是 4（确实不等），但一条痕迹都不许写。
-
-        它在 `_append_events` 之前追加，所以和这一批事务事件一起落进 `events.jsonl`
-        （`rebuild` 只重放 upsert，不会被它影响）。
-
-        ## 边界（如实写下来，免得被读成无条件）
-
-        `rebuild` 的 counters 仍然只由事件里那些 alloc 推出（`set_counters`
-        不写事件）⇒ 重建后计数器会回到"日志里发过的号 + 1"。这是 `rebuild`
-        的既有边界（"重建的唯一输入是事件日志"），不是本次合并引入的。
-        """
+        调用点只有一个：`tx` 的提交块，且必须在写者锁内（读盘 → 合并 → 落盘三步要与 `set_counters`
+        互斥，否则窗口只是变窄、没有关上）。这是缺陷而不是"刻意的 last-write-wins"：事务只对取过号
+        的类别有所有权，却把整份文件按旧缓存覆盖，与"读-改-写都在同一把锁内"相反。
+        合并规则（两条都是"不丢"而不是"谁赢"）：① 取过号的类别取 `max(盘上值, 缓存值)`；② 没碰过的
+        类别用盘上的值（盘上没有而缓存里有时不补回来 —— 那是本事务读过的旧状态）。
+        `R7-AN-1`：痕迹双向 —— 触发条件是"取过号的类别里盘上值 ≠ 基线 `Tx._alloc_base`"（拿缓存当
+        基准会让每次普通取号都写一条假归因痕迹），方向给 `disk_higher` / `disk_lower`，读数按类别给
+        `disk` / `cache` / `baseline` / `merged`；判据
+        `tests/test_store_counters_commit.py::test_quiet_commit_advances_the_counter_without_a_trace`。
+        事件在 `_append_events` 之前追加。边界：`rebuild` 的 counters 仍只由事件里的 alloc 推出
+        （`set_counters` 不写事件）⇒ 重建后回到"日志里发过的号 + 1"（既有边界，不是本次引入）。"""
         disk = self._load("counters")
         cache = self._dirty_counters or disk
         # 2026-10-17（store #4 的真身）：counters 是可被手改的 JSON；`int("abc")` 会把

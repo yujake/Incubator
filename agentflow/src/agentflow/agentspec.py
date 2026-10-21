@@ -1,37 +1,22 @@
 # -*- coding: utf-8 -*-
 """一个 agent 的声明（`goal-7f5116c1` 的 M2）：它"是什么"，写在一个地方。
 
-## 为什么要有这个模块
-
 今天"一个 agent 由什么定义"散在六处、且每一处都是手抄的：
 
 | 处 | 内容 |
 |---|---|
 | `schema.py::ROLES` | 角色词表（禁改区） |
 | `tools/__init__.py` | `ROLES` / `TOOL_ROLES` / `READ_ONLY_ROLES`（禁改区） |
-| `capabilities.py` | 动作表 `CAPABILITIES`、召唤边 `ALLOWED_EDGES`、写集 `WRITE_SETS`（禁改区） |
-| `agent_prompts.py` | `ROLE_BRIEFS`（职责/边界/政策/招牌错误/交付物/姿态）、`FACULTY_EMPHASIS`、`FACULTY_LOCAL` |
+| `capabilities.py` | `CAPABILITIES` / `ALLOWED_EDGES` / `WRITE_SETS`（禁改区） |
+| `agent_prompts.py` | `ROLE_BRIEFS` / `FACULTY_EMPHASIS` / `FACULTY_LOCAL` |
 | `host.py` | 每个角色的构造器 `agent_x()` |
 | `docs/ROLE-SPECS.md` | 每角色一节 + 手抄的动作表 |
 
-于是"新建一个 agent"要同时改六处（三处在禁改区），而"调整某个 agent 的行为"要在一个
-4000 行的模块里找落点。`AgentSpec` 的落点是：每个角色自己的模块里写一份 SPEC，
-装配面（M3/M4）改成从这里读。
-
-## 这一版（M2）接管了什么、没接管什么
-
-接管（每一格都有对账判据，见 `tests/test_agent_spec_reconciliation.py`）：
-
-- `brief`：职责 / 边界 / 政策 / 招牌错误 / 交付物 / 姿态（今天在 `agent_prompts.ROLE_BRIEFS`）；
-- `emphasis` + `local_notes`：十项官能在这一岗上的轻重与自己那几句话
-  （今天在 `agent_prompts.FACULTY_EMPHASIS` / `FACULTY_LOCAL`）；
-- `read_only` / `summonable`：权限面上的两个布尔（今天在 `tools.READ_ONLY_ROLES` / `NON_SUMMONABLE`）；
-- `edges` / `write_set`：它能召唤谁、会写哪些表（今天在 `capabilities`）；
-- `class_path`：它的实现类（今天只在 `host.py` 的构造器里隐含）。
-
-没接管（写清楚，免得被读成"已经做完了"）：动作表 `ActionSpec` 还在 `capabilities.py`，
-构造工厂还在 `host.py`。M3 搬动作表、M4 搬构造工厂，两处都按同一套对账判据走；
-在那之前本模块不复制那两份数据（复制一份假的真相比手抄更坏）。
+`AgentSpec` 的落点：每个角色自己的模块里写一份 SPEC，装配面（M3/M4）从这里读；每一格都有
+对账判据（`tests/test_agent_spec_reconciliation.py`）。M2 接管 `brief` / `emphasis` +
+`local_notes` / `read_only` / `summonable` / `edges` / `write_set` / `class_path`。
+没接管（写清楚，免得被读成"已经做完了"）：动作表 `ActionSpec` 还在 `capabilities.py`、构造
+工厂还在 `host.py`（M3 / M4 搬）；在那之前本模块不复制那两份数据。
 """
 from __future__ import annotations
 

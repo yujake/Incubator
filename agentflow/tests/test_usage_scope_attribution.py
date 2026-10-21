@@ -293,24 +293,14 @@ def test_the_ledger_row_records_the_scope_it_was_given(store: Store):
 
 # ------------------------------------------------------- G-6：产出点登记（三态）
 
-#: 与 :data:`schema.USAGE_SCOPE_PRODUCERS` 逐档对账的固定期望。
-#:
-#: 为什么把它抄成一份字面量而不是直接读 `schema`：那样会变成同义反复 ——
-#: 改 `schema` 里的登记，测试跟着一起改，判据一声不响。抄一份之后，
-#: 两边都得改才会绿，而"改了产出点却没改测试"会红。
-#:
-#: 今天有产出点的只有两档（2026-09-26 全面体检实测，登记册 `G-6`）：
-#: `summon` ← `conductor._charge_and_settle` 的 `Charge(scope="summon")`；
-#: `reason` ← `runflow` 的作答调用点（`scope=SCOPE_ANSWER`，值是 `"reason"`）。
-#: 另外四档今天没有任何生产调用点（A–H 的 `self.llm.complete(prompt)` 走的
-#: 是 `llm.LLMExtractor` 的 `.complete(prompt) -> str` 协议，不带 scope）。
-#: 这一条不是"接受缺陷"，而是把它变成可判定的：谁哪天把 search 接上了，
-#: 就得同时改这里与 `schema`，而不是让读者继续从 `by_scope` 的全零里猜。
-#:
-#: 2026-09-28：`extract` 从"没有产出点"变成"有产出点"—— 模型读本地文献那条通路
-#: （`projects.extract_with_model` → `modelclient.ModelClient`，归口 scope='extract'）
-#: 上线，`schema.USAGE_SCOPE_PRODUCERS` 同批改。按上面那句约定，两处都改才允许这张
-#: 冻结期望变；只改一处会被 `schema` 的导入期断言或这条断言抓住。
+#: 与 :data:`schema.USAGE_SCOPE_PRODUCERS` 逐档对账的固定期望。为什么抄成一份字面量而不是直接读 `schema`：
+#: 那样会变成同义反复（改 `schema` 的登记，测试跟着改，判据一声不响）；抄一份之后两边都得改才会绿，
+#: 而"改了产出点却没改测试"会红。今天有产出点的档（2026-09-26 体检实测，登记册 `G-6`）：`summon` ←
+#: `conductor._charge_and_settle` 的 `Charge(scope="summon")`；`reason` ← `runflow` 的作答调用点
+#: （`scope=SCOPE_ANSWER`，值 `"reason"`）；`extract`（2026-09-28 起：`projects.extract_with_model` →
+#: `modelclient.ModelClient`，归口 scope='extract'，`schema` 同批改）。其余档今天没有生产调用点（A–H 的
+#: `self.llm.complete(prompt)` 走 `llm.LLMExtractor` 的协议，不带 scope）。这不是"接受缺陷"，而是把它变成
+#: 可判定的：谁哪天把某档接上了，就得同时改这里与 `schema`，而不是让读者从全零的 `by_scope` 里猜。
 EXPECTED_PRODUCED = {"summon", "reason", "extract"}
 EXPECTED_NOT_PRODUCED = {"experiment", "search", "review"}
 

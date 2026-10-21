@@ -172,25 +172,14 @@ def test_check_formal_normalizes_script_path_and_keeps_old_signature(
 
     def _spy(claim, **kw):
         seen.update(kw)
-        # 桩必须逐键模拟声明的契约（`E-12(a)` 之后是 9 个键，本行此前写「8 个」是
-        # 照着 `G-18` 那一句手抄的 —— 实测 `CONTRACT_KEYS` =
-        # ['checked', 'claim', 'detail', 'exit_code', 'missing_imports', 'reason',
-        #  'verified', 'verifier_output', 'verifier_status']，读数
-        # `temp/reaudit4B-d2-contract-keys.txt`）：
-        # 桩少一个键时，被 `AgentE` 原样透传出去，`assert set(out) == CONTRACT_KEYS`
-        # 会把它读成"实现违约" —— 其实是桩自己腐了。同理，桩多一个键也会红（那才是要抓的）。
-        #
-        # 注意：这句话有两个例外，写在这里免得下一个人照它推断错（`N-4`）：
-        # `verifier_status` 与 `reason` 少给不会红 —— `AgentE.check_formal` 会把它们
-        # 重新算出来（`data["reason"] = _FORMAL_REASON_BY_TOOL_REASON.get(raw_reason, …)`
-        # 与 `data["verifier_status"] = raw_reason` 都是无条件赋值，键于是又回来了，
-        # 只是值被改写成 `status_unregistered` / 空串）。所以这两格是"桩腐了、而这条判据
-        # 看不出来"的两处 —— 它们的守卫在工具层自己的键集合判据（`tests/test_tools_audit_fixes.py`
-        # 逐条分支核键）与下面 `test_the_contract_stub_comment_matches_the_live_key_set` 里。
-        # `exit_code` 不在例外里（`E-12(a)` 之后逐键少给一次实测）：`AgentE.check_formal`
-        # 从不给它赋值 ⇒ 桩少给它就真的少（`set(out) != CONTRACT_KEYS` ⇒ 红）——
-        # 这正是这一格能被抓住的原因。
-        # 实测（本节观测 2026-09-27，`E-12(a)` 后复测）：九个键里只有那两个 `set(out)` 仍等于契约。
+        # 桩必须逐键模拟声明的契约（`E-12(a)` 之后是 9 个键；本行此前写「8 个」是照着 `G-18` 那一句手抄的 ——
+        # 实测 `CONTRACT_KEYS` = ['checked', 'claim', 'detail', 'exit_code', 'missing_imports', 'reason',
+        # 'verified', 'verifier_output', 'verifier_status']，读数 `temp/reaudit4B-d2-contract-keys.txt`）：桩少一个
+        # 键时会 `assert set(out) == CONTRACT_KEYS` 读成"实现违约"（其实是桩自己腐了），桩多一个也会红（那才是要抓的）。
+        # 两个例外（`N-4`）：`verifier_status` 与 `reason` 少给不会红 —— `AgentE.check_formal` 会无条件重算 # 它们（`data["reason"] = _FORMAL_REASON_BY_TOOL_REASON.get(raw_reason, …)`、
+        # `data["verifier_status"] = raw_reason`，值被改写成 `status_unregistered` / 空串）⇒ 这两格是"桩腐了而
+        # 这条判据看不出来"，守卫在工具层自己的键集合判据与 `test_the_contract_stub_comment_matches_the_live_key_set` 里。
+        # `exit_code` 不在例外里（`E-12(a)` 后逐键少给实测）：`AgentE.check_formal` 从不给它赋值 ⇒ 少给就真少、当场红。
         return VT.ok({"checked": False, "verified": None, "claim": claim,
                       "reason": "no_backend", "detail": "", "verifier_output": "",
                       "missing_imports": [], "exit_code": None})

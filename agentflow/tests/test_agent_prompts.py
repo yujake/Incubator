@@ -1901,7 +1901,7 @@ _BLOCK_C = '''\
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
-   每一项还能带与 2) 一样的**名册三格**（\rief\ / ame\ / euse\）—— 一批里派三件不同的活时，
+   每一项还能带与 2) 一样的**名册三格**（\brief\ / \name\ / \reuse\）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
    **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是
@@ -2161,7 +2161,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p178"
+_FROZEN_PROMPT_VERSION = "p179"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2177,16 +2177,16 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # ⚠️ `p169` 十格全换值（理由逐条见上面那一段：A 的 boundary → 十格的伙伴表；
     #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
     #    C 的两句假话 → B / C / D / F / M 这五格）。
-    "A": "62988bdc78945892ead586cf1530e59d832f58a34b2ff88e1bf672283cd7417b",
-    "B": "a0f4ba7d47e60cbf8185343fb53d2059851f2fa6b4a1e3cf8fc52087383309a2",
+    "A": "5cf5bf89198c506203b4b389769199eedd2852003804a84af2c86e7612ae360c",
+    "B": "288dcb98a24d91bcd4155ff70aa9d6e3e95b4d5fc0d7da76da2eac76eda7b22e",
     "C": "f2d234521d58c3e7b22ce68fcb5dba781f42323dc9c1ab99064d267690fac52c",
-    "D": "66d698416c400e781cb5a98f76c00e5a8ea1d24ab1516c84672ade70bbadd40c",
-    "E": "de2a1679040e7a22af14f376edd38666ac2a4f67f74b418e838ad430dfee6765",
-    "F": "49f9f4310d8172904c53b39d5766b370964fcc5847333beb070540ec5acee71c",
-    "G": "91a7e7ac9dcd0134baba11037586a9cf0498bceecf87c2f0e30826ef2e1dbd6c",
-    "H": "e8e05e0dd925be7e902b1f0a64651448b9c74a03fa20d12dd08566aff83726ce",
-    "V": "1e0564d16f17c1662dae48301bb71f59479938162249f4e2b086d5a3aad6b168",
-    "M": "b0d04c64d9396bb27f8b1363b7edeb02fed74f9bfa678e551e1c92f70987babc",
+    "D": "20d7b768331ff15eaf73a5e5ea5d14cd905cbf600e4693ef942c11a6f9eb73e7",
+    "E": "486305b098b3421560dd738dcb0e60913de8347848cd35a6f9b449c4dd65bc0f",
+    "F": "f7046c8befab285e3185ca56b0e32f59c9fe4ddd8daa5b053feb665013f55724",
+    "G": "6a0dabd2802c475d85275c5f9307424fb9dcae3587f21947fb72ede82cf5d893",
+    "H": "a64344be42b657b92c3fd255b087611870cf61d8e57a6d2967b73e65a5453555",
+    "V": "6357d37167aa8343e1065af305cbb18fb5c33a2bf4e7df6c960af80017451ecf",
+    "M": "a8b4fc9879e0faee46ce6b4fa366c0e7ebe008c65e33a340744ac96ecfb92b4d",
 }
 
 

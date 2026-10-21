@@ -27,23 +27,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: 每个入口一条：`(标签, argv, 子命令前是否补 `--root <tmp>`)`。argv 里不写解释器，
-#: 由 `sys.executable` 补。
-#:
-#: 成本取舍（实测）：`coverage_zero_test.py` 全量跑一次要 68 秒，而它在这个矩阵里只是
-#: "又一个入口"。所以这里用它的 `--selftest`（324 毫秒，同一条 `main()` 与打印路径）。
-#: 代价是"打印含 `⇒` 的发现行"这一格不再由它覆盖 —— 那一格由 `lint_rules` 覆盖
-#: （它的 R006/R010/R009 消息里就有 `⇒`，6 秒）。慢的门最后会被跳过，所以这一格必须便宜。
-#:
-#: 第三列（`needs_root`）为什么必须存在：`cli demo` 的 `run_demo()` 会
-#: `rmtree(root / "demo" / "run")` 再重建。不给 `--root` 时它按 `DEFAULT_ROOT`
-#: 落在仓库内，于是"跑一次这个测试"就等于改写了被跟踪的
-#: `agentflow/demo/run/data/*` —— 而"仓库冻结、sha256 前后不变"那一类断言
-#: 恰恰以这个仓库为前提。实测过：`cli demo` 无 `--root` 跑一次，
-#: `demo/run/data/*` 里 5 个文件的 sha256 都变了（负控见
-#: `temp/i1-neg-before.txt` 与 `temp/i1-neg-after.txt`）。
-#: 给 `--root <tmp_path>`（顶层的 `--root` 必须写在子命令之前）之后，
-#: 它只在临时目录里造数据。
+#: 每个入口一条：`(标签, argv, 子命令前是否补 --root <tmp>)`；argv 里不写解释器，由 `sys.executable` 补。
+#: 成本取舍（实测）：`coverage_zero_test.py` 全量跑一次要 68 秒，而它在这个矩阵里只是"又一个入口"，所以用它的
+#: `--selftest`（324 毫秒，同一条 `main()` 与打印路径）；代价是"打印含 `⇒` 的发现行"这一格不再由它覆盖 ——
+#: 那一格由 `lint_rules` 覆盖（它的 R006/R010/R009 消息里就有 `⇒`，6 秒）。慢的门最后会被跳过，所以必须便宜。
+#: 第三列（`needs_root`）为什么必须存在：`cli demo` 的 `run_demo()` 会 `rmtree(root / "demo" / "run")` 再重建；
+#: 不给 `--root` 时它按 `DEFAULT_ROOT` 落在仓库内 ⇒ "跑一次这个测试"就等于改写了被跟踪的 `agentflow/demo/run/
+#: data/*`，而"仓库冻结、sha256 前后不变"那类断言恰恰以这个仓库为前提（实测：无 `--root` 跑一次，5 个文件的
+#: sha256 都变了；负控见 `temp/i1-neg-before.txt` 与 `temp/i1-neg-after.txt`）。给 `--root <tmp_path>` 之后它就 只在临时目录里造数据（顶层的 `--root` 必须写在子命令之前）。
 ENTRIES: list[tuple[str, list[str], bool]] = [
     ("lint_rules", ["scripts/lint_rules.py"], False),
     ("noai_consistency", ["scripts/noai_gate.py", "--check-consistency"], False),

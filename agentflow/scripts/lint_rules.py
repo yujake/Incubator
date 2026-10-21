@@ -825,20 +825,13 @@ _R010_ALLOWED_SITES: dict[str, str] = {}
 #: 例外清单里的每一条都必须在真实树上命中 —— 所以是删掉它，而不是留着一条永不生效的豁免。
 
 #: R010-a 的已知漏检（这条规则看不见、但按定义/按事实确实会起进程的工具）。
-#:
-#: 为什么要把漏检写下来：三态纪律要求"没查成"与"查过了没问题"分开。
-#: 这三个工具没有被 R010-a 命中，原因是转发链断在工具层之外：
-#:
-#: - `verify.run_experiment` 的 handler 调 `_run_experiment_tool`，后者在本文件里
-#:   只是转发到 `agent_e.AgentE.run_experiment`（`agent_e.py` 的 `subprocess.run`）——
-#:   工具层里没有任何一行叫 subprocess 的代码；
-#: - `ocr.backends` 的 handler 调 `_h_backends` → `PytesseractBackend.available()`
-#:   → `pytesseract.get_tesseract_version()`，而起进程的是那个第三方库内部，
-#:   源码里没有 `subprocess` 这个字。
-#:
-#: 两个都是"起进程在工具层之外"，所以本规则的字面判据看不到它们 ——
-#: 这不是"它们没问题"，而是"这条规则查不到"。用户/下一个执行者必须知道这件事，
-#: 所以它是报告里的正常条目，不是注释里的一句话。
+#: 为什么要把漏检写下来：三态纪律要求"没查成"与"查过了没问题"分开。这三个工具没有被 R010-a 命中，原因是
+#: 转发链断在工具层之外：`verify.run_experiment` 的 handler 调 `_run_experiment_tool`，后者在本文件里只是转发
+#: 到 `agent_e.AgentE.run_experiment`（`agent_e.py` 的 `subprocess.run`）—— 工具层里没有任何一行叫 subprocess
+#: 的代码；`ocr.backends` 的 handler 调 `_h_backends` → `PytesseractBackend.available()` →
+#: `pytesseract.get_tesseract_version()`，而起进程的是那个第三方库内部，源码里没有 `subprocess` 这个字。
+#: 两个都是"起进程在工具层之外"，所以本规则的字面判据看不到它们 —— 这不是"它们没问题"，而是"这条规则查不到"；
+#: 用户/下一个执行者必须知道这件事，所以它是报告里的正常条目，不是注释里的一句话。
 _R010_KNOWN_GAPS: dict[str, str] = {
     "verify.run_experiment": "起进程发生在 `agent_e.AgentE.run_experiment`（工具层之外的文件），工具层里没有 subprocess 字面",
     "ocr.backends": (
@@ -876,24 +869,14 @@ _R010_EGRESS_BLIND_SPOTS: dict[str, str] = {
 }
 
 
-#: R010-c（声明 `none` 而链里有网络标记）的**假阳性登记表**。
-#:
-#: 为什么需要它：R010-c 的判据是"`_R010_NETWORK_MARKERS` 里的标记在 handler 链里可达"，
-#: 而那张标记表里有两条是按**末段相等**匹配的（`search` / `download`）——
-#: 它们是为"provider 对象的检索入口"加的（`prov.search` / `downloader.download`），
-#: 代价是 `re.search` / `rx.search` 这种**正则方法**也会被算成网络入口。
-#: 实测（补回这个方向的那一刻，真实树 58 条声明）：4 个候选里 2 个是这种正则假阳性
-#: （`doc.build_document` 的 `re.search`、`fs.search` 的 `rx.search`）。
-#:
-#: 三种处置里选哪一种（与 `_R010_EGRESS_BLIND_SPOTS` 同一套取舍）：
-#: - 改标记表：`search` 是**两条方向共用**的（R010-b 靠它认 `prov.search`），
-#:   动它就是动既有判据 —— 本批的硬约束是不许放宽任何既有规则；
-#: - `noqa` 静默：本项目的成文教训是"静默豁免是最难查的形态"（`P15` 同族）；
-#: - 登记 + 照旧打印 info（本表）：warning 归零，而"这一条我判不了"仍然可见。
-#:
-#: 每一条都必须写清"这个标记命中的到底是什么"。它与 `_R010_KNOWN_GAPS`（链断了看不见）、
-#: `_R010_EGRESS_BLIND_SPOTS`（出网在库内部）是三张不同的表：本表说的是
-#: "**标记命中了，但那个东西不是网络**"——把三张表合并会让"哪一段我核不了"失去答案。
+#: R010-c（声明 `none` 而链里有网络标记）的假阳性登记表。 为什么需要它：R010-c 判"`_R010_NETWORK_MARKERS` 里的标记在 handler 链里可达"，而那张表里有两条按末段
+#: 相等匹配（`search` / `download`）—— 它们是为"provider 的检索入口"加的（`prov.search` /
+#: `downloader.download`），代价是 `re.search` / `rx.search` 这种正则方法也被算成网络入口。实测（补回这个
+#: 方向那一刻，真实树 58 条声明）：4 个候选里 2 个是这种正则假阳性（`doc.build_document` 的 `re.search`、
+#: `fs.search` 的 `rx.search`）。三种处置里选"登记 + 照旧打印 info"：改标记表会动既有判据（`search` 是两条
+#: 方向共用的，本批硬约束是不许放宽既有规则）；`noqa` 静默是本项目成文教训里最难的形态。每条都必须写清
+#: "这个标记命中的到底是什么"。它与 `_R010_KNOWN_GAPS`（链断了看不见）、`_R010_EGRESS_BLIND_SPOTS`（出网在
+#: 库内部）是三张不同的表：本表说的是"标记命中了，但那个东西不是网络"，合并三表会让"哪一段我核不了"失去答案。
 _R010_NETWORK_FALSE_POSITIVES: dict[str, str] = {
     "doc.build_document": (
         "命中的是 `re.search`（标准库正则，`import re` 在文件顶部）—— "

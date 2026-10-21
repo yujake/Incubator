@@ -128,34 +128,18 @@ _H_FINDING_KIND_OF_CA_CODE: dict[str, str] = {
 
 
 # ---- `P-9` 候选 A 的四键 + 「最小修法」：产出侧的唯一声明表（`X-96.3-1`）
-#
 # 背景（`draft/28` §96.3 第 1 条，`temp/FIXG4.md` §9.1）：`gates.gate_g10` 只对
-# `created_at >= schema.REVIEW_FINDING_FORMAT_SINCE`（2026-09-27）的发现要求四键齐，
-# 而今天的真实产出方就是本模块 —— 本模块一个都不产，于是 G10 对每一条今天写出的
-# 发现都只能报 `unknown`（"schema 里没有这四个字段"改判成"产出方还没补键"）。
-# 四个字段本身已在 `schema.ReviewFinding` 里（禁 AI 区，2026-09-27 所有者裁定候选 A），
-# 缺的只有产出侧，所以本文件的改动就是"补参 + 补 `scan_document` 的产出"。
-#
-# 两条纪律（写在 `schema.ReviewFinding` 的类 docstring 里，这里落地）：
-#   1. 这四键不进去重键 —— `_dedup_key` 仍是 `(kind, target, message)`，一字未动。
-#      把 `line`/`verbatim_quote` 塞进去会让稿件每改一个词就产生一批新发现，
-#      并打断"标了 fixed 但其实还在"的重开逻辑。
-#   2. 表里给出的取值全部非空。空值不是"更宽松"：G10 的六字段判据会把空值读成
-#      "缺这一格" ⇒ 整批发现被打回（`fail`），比原来那句 `unknown` 更坏 ——
-#      那等于把"产出方没给"报成"这一批不合格式"。
-#
-# 每条取值的判据（不是"看起来对"）：
-#
-# * `axis`（取值域 = `gates.AXES` = 数学/体例/工程/证据）—— 这条缺陷落在哪条轴上。
-#   判据是"它判的是外部依据还是稿件自己的表述"：判外部依据的
-#   （没有引用 / 引了拿不到的结论）走 `证据`（与 G2/G6/G7/G8 同轴）；判稿件自己
-#   怎么写、字段合不合规、哪里自相矛盾的走 `体例`（与 G3/G4/G9/G13 同轴）。
-# * `maths`（`yes`/`no`，取值域 = `schema.FINDING_MATHS_VALUES`）—— 同一把尺子的另
-#   一半：这条发现要读断言本身（断言内容 / 它的证据等级 / 里面的数字 / 否定分类）
-#   才能判 ⇒ `yes`；只判它的机械形态或登记簿（词表外的取值、未声明字段、
-#   依赖登没登记原因）⇒ `no`。
-# * `suggestion`（G10 六格里的"最小修法"，与历史键名 `minimal_fix` 同格）——
-#   逐 kind 一句最小动作：它要能被执行，不是"请注意质量"。
+# `created_at >= schema.REVIEW_FINDING_FORMAT_SINCE`（2026-09-27）的发现要求四键齐，而今天的真实产出方
+# 就是本模块 —— 本模块一个都不产，于是 G10 对每一条今天写出的发现都只能报 `unknown`。四个字段本身已在
+# `schema.ReviewFinding` 里（禁 AI 区，2026-09-27 所有者裁定候选 A），缺的只有产出侧。
+# 两条纪律（详见 `schema.ReviewFinding` 的类 docstring）：① 这四键不进去重键 —— `_dedup_key` 仍是
+# `(kind, target, message)`，塞进去会让稿件每改一个词就产生一批新发现并打断"标了 fixed 但其实还在"的重开；
+# ② 取值全部非空 —— 空值不是"更宽松"，G10 的六字段判据会把它读成"缺这一格"⇒ 整批发现被打回（`fail`），
+# 比原来那句 `unknown` 更坏。
+# 取值判据：`axis`（取值域 = `gates.AXES`）判的是外部依据还是稿件自己的表述 —— 外部依据走 `证据`（与
+# G2/G6/G7/G8 同轴），稿件怎么写/字段合不合规/哪里自相矛盾走 `体例`（与 G3/G4/G9/G13 同轴）；`maths`
+# （`schema.FINDING_MATHS_VALUES`）要读断言本身才能判 ⇒ `yes`，只判机械形态或登记簿 ⇒ `no`；
+# `suggestion`（与历史键名 `minimal_fix` 同格）逐 kind 一句可执行的最小动作。
 _FOUR_GATE_KEYS_OF_KIND: dict[str, tuple[str, str, str]] = {
     # kind                    axis    maths  最小修法(suggestion)
     "unsupported_claim": ("证据", "yes",
@@ -548,24 +532,16 @@ def scan_document(
         seen_ids[cid] = text
 
     # ---- 语义级判据（`R-42`）："结论强于引文"这一条措辞级判据看不见
-    #
-    # 上面那个循环用的是 `OVERCLAIM_MARKERS` 逐词匹配 —— 它只能抓"把交叉验证说成证明"
-    # 这类写在脸上的形态。抓不住的是：措辞干净（没有 `证明`/`定理` 这类词），
-    # 但结论的强度确实超过引文能支撑的范围（引文只做了 n=3 的数值检查，
-    # 断言写成一般性结论）。那一层要读语义，只有 LLM 或人能判。
-    #
-    # 本框架默认零 LLM 调用 ⇒ 这里默认没查。三条纪律：
-    #   ① 没接线时 `checked=False` + 逐字理由，不许折成"没问题"（与 `dep_check` 同形）；
-    #   ② 判据答 `unknown` 也不算查过（`claims_unknown` 单独计数）——
-    #      "模型答不上来"与"我判过、一致"是两件事；
-    #   ③ 判据自己抛异常/返回不合法 ⇒ `checker_errors += 1` + 一条 warning 级 `garbled`
-    #      （与 `claimanatomy` 的 `checker_error` 同一处置：检查器没跑成不是稿件的错，
-    #      但绝不能静默）。
-    #
-    # 为什么语义级发现定 warning 而不是 error：措辞级那条是机械可判的（error 站得住），
-    # 而语义判定来自一个可能犯错的判据 —— 判错一次就会把一份合格的稿件判成 `rejected`。
-    # 定 warning 让它可见（verdict 落 `accepted_with_warnings`）而不越权。要不要升到
-    # error 是口径问题，属 FC-27 的 `eval-criteria` 类 ⇒ 留给人裁，不在这里替人定。
+    # 上面那个循环用 `OVERCLAIM_MARKERS` 逐词匹配 —— 只能抓"把交叉验证说成证明"这类写在脸上的形态。
+    # 抓不住的是：措辞干净（没有 `证明`/`定理`），但结论强度确实超过引文能支撑的范围（引文只做了 n=3 的
+    # 数值检查，断言写成一般性结论）。那一层要读语义，只有 LLM 或人能判。
+    # 本框架默认零 LLM 调用 ⇒ 这里默认没查。三条纪律：① 没接线时 `checked=False` + 逐字理由，不许折成
+    # "没问题"（与 `dep_check` 同形）；② 判据答 `unknown` 也不算查过（`claims_unknown` 单独计数）；③ 判据
+    # 自己抛异常/返回不合法 ⇒ `checker_errors += 1` + 一条 warning 级 `garbled`（检查器没跑成不是稿件的错，
+    # 但绝不能静默）。
+    # 为什么定 warning 而不是 error：措辞级那条机械可判（error 站得住），语义判定来自一个可能犯错的判据 ——
+    # 判错一次就会把合格稿件判成 `rejected`；定 warning 让它可见（`accepted_with_warnings`）而不越权。
+    # 要不要升到 error 是口径问题（FC-27 的 `eval-criteria` 类）⇒ 留给人裁。
     semantic_check: dict[str, Any] = {
         "checked": False,
         "judge": "",

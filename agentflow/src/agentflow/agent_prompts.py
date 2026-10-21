@@ -2157,7 +2157,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 收口回报里（`agent_prompts.py` / `agent_skills.py` / `litstage.py` / `search_tools.py` /
 #: `conductor_tools.py` / `conductor.py` / `agent_loop.py` / `schema.py` / `store.py` /
 #: `specs/a.py` / `specs/c.py` / `cli.py` 逐个）。
-PROMPT_VERSION = "p178"
+PROMPT_VERSION = "p179"
 
 
 
@@ -2244,7 +2244,7 @@ LOOP_PROTOCOL = """\
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
-   每一项还能带与 2) 一样的**名册三格**（\rief\ / ame\ / euse\）—— 一批里派三件不同的活时，
+   每一项还能带与 2) 一样的**名册三格**（\brief\ / \name\ / \reuse\）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
    **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是
@@ -2998,7 +2998,7 @@ _LOOP_BLOCK_C = '''\
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
-   每一项还能带与 2) 一样的**名册三格**（\rief\ / ame\ / euse\）—— 一批里派三件不同的活时，
+   每一项还能带与 2) 一样的**名册三格**（\brief\ / \name\ / \reuse\）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
    **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是

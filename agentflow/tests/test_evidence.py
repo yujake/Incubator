@@ -1080,21 +1080,14 @@ def test_no_comparable_text_at_all_is_the_only_case_that_is_not_checked():
     assert res["checked"] is False
 
 
-# ================== `R2-AN-5` / `R2-AN-6`：比过了没找到 ≠ 没有可比文本；拒绝判定要有名字
-#
-# 两条缺陷都在"`_check_quote_levels` 的第五个返回值 / `_read_verdict` 的默认值"这一小段里：
-#
-# - `R2-AN-5`：「有全文、没有摘要、全文逐字比过但没命中」从前返回 `comparable=False`，
-#   调用方把它读成"这条来源没有可比文本" ⇒ 台账落 `unknown` +
-#   `no_comparable_text_in_any_source`。判决与理由都是不实陈述：全文真的比过，
-#   结论是"没找到"。方向是 fail-closed（不是假通过），但硬事实被丢掉，
-#   而且一个假理由会真的写进库（`draft/28` §40.4）。
-# - `R2-AN-6`：`_read_verdict` 在 `verified is None` 时默认给 `"unknown"`，
-#   于是调用方那句 `or "verifier_refused_to_judge"` 永远走不到 ——
-#   一个更具体的字面量成了死词汇。默认值因此搬进 `_read_verdict`（唯一一处定义）。
-#
-# 同一条修法里不许顺手删掉 `or "not_found"`：`verified=False` 时第二项可以是
-# 空串（与 `verified is None` 不同），那条兜底是可达的。下面最后一条用例守它。
+# ================== `R2-AN-5` / `R2-AN-6`：比过了没找到 ≠ 没有可比文本；拒绝判定要有名字 两条缺陷都在"`_check_quote_levels` 的第五个返回值 / `_read_verdict` 的默认值"这一小段里：
+# - `R2-AN-5`：「有全文、没有摘要、全文逐字比过但没命中」从前返回 `comparable=False`，调用方把它读成"这条
+#   来源没有可比文本" ⇒ 台账落 `unknown` + `no_comparable_text_in_any_source`。判决与理由都是不实陈述：全文
+#   真的比过、结论是"没找到"（方向是 fail-closed，但硬事实被丢掉，而且假理由会真的写进库，`draft/28` §40.4）。
+# - `R2-AN-6`：`_read_verdict` 在 `verified is None` 时默认给 `"unknown"`，于是调用方那句
+#   `or "verifier_refused_to_judge"` 永远走不到 —— 一个更具体的字面量成了死词汇；默认值因此搬进
+#   `_read_verdict`（唯一一处定义）。同一条修法里不许顺手删掉 `or "not_found"`：`verified=False` 时第二项可以是
+#   空串（与 `verified is None` 不同），那条兜底是可达的 —— 下面最后一条用例守它。
 
 
 def _verdict_fn(verified, reason=""):

@@ -72,22 +72,14 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # `tests/test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"
     # 仍然逐工具跑过这三件（探针不求模型，走 `checked=False` 那条）。
     "verify_tools.py": 6,
-    # T0-9（2026-09-28）：主控工具模块 8 件，工具体一律 `ok(data, data)` ——
-    # 键由运行时数据决定，静态扫描读不出来，所以这些处如实记在"看不清"这一栏。
-    # §198（2026-09-30）：`conductor.summon_many` 加进来 ⇒ 16 → 18（旧数法）；
-    # 2026-10-01 按调用点去重后是 9（见上）。
-    # 该函数的载荷是运行时算出来的，见它自己的注释；`returns=` 仍逐字声明键集，
-    # 由 `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住。
-    # 2026-10-09（S1b 加 `conductor.board` 时欠下的一格，H-1a 归位）：10 → 11 ——
-    # `conductor_board` 写的是 `ok(view, **view)`，与上面那 10 处同族（键由
-    # `Conductor.board_view` 的返回值决定，静态扫描读不出来）。该工具的 `returns=`
-    # 逐字声明 `{'checked','open_items','open_count','readings'}` 并已通过
-    # `test_tools_returns_declaration.py` 的实跑核（真跑一次 `board_view`）。
-    # 2026-10-09（S6-b 加 `conductor.broadcast` 时欠下的一格，同批归位）：11 → 12 ——
-    # `conductor_broadcast` 写的是 `ok(got, **got)`，与上面那些同族（键由
-    # `Conductor.broadcast` 的返回值决定，静态扫描读不出来）。该工具的 `returns=`
-    # 逐字声明八个键，并由 `test_tools_returns_declaration.py` 的实跑核钉住
-    # （探针在 `calling_as` 里跑，走"没有收件人"那一支）。
+    # 主控工具模块里"键由运行时数据决定、静态扫描读不出来"的那几处（如实记在"看不清"这一栏，逐批归位）：
+    # T0-9（2026-09-28）：8 件，工具体一律 `ok(data, data)`；§198（2026-09-30）`conductor.summon_many` 加进来
+    # ⇒ 16 → 18（旧数法），2026-10-01 按调用点去重后是 9。2026-10-09（S1b 加 `conductor.board` 时欠下的一格，
+    # H-1a 归位）：10 → 11 —— `conductor_board` 写 `ok(view, **view)`，键由 `Conductor.board_view` 的返回值决定，
+    # 它的 `returns=` 逐字声明 `{'checked','open_items','open_count','readings'}` 并已通过实跑核。
+    # 2026-10-09（S6-b 加 `conductor.broadcast` 时欠下的一格，同批归位）：11 → 12 —— `conductor_broadcast`
+    # 写 `ok(got, **got)`，键由 `Conductor.broadcast` 的返回值决定，`returns=` 逐字声明八个键并由实跑核钉住
+    # （探针在 `calling_as` 里跑，走"没有收件人"那一支）。该函数的载荷见它自己的注释；"声明必须是实跑键集的 # 子集"由 `test_tools_returns_declaration.py` 钉住。
     "conductor_tools.py": 12,
     # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
     # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，

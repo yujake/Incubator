@@ -1,32 +1,22 @@
 """主控接线：把 A–H 接到 `LocalBackend`（依据 `draft/30` §T3-H）。
 
-## 这一层解决什么
-
-`conductor.summon` 是 M 唯一的派活动作，它把活交给"后端"。进程内那个后端
-（`LocalBackend`）明确拒绝自动创建角色实例（构造依赖靠猜就等于静默少做事），
-所以调用方必须给一张登记表。默认没人给 ⇒ 每次召唤都如实落
-`refused/not_wired`（这是设计，不是缺陷：没接线就说没接线）。
-
-这一层就是那张登记表的唯一装配点：按各角色实测的构造签名造工厂。
-实测（2026-09-29，`temp/_probe_agent_construction.py`）：八个角色只给 `store`
-就能自组装工具面（D 9 / E 6 / F 6 / G 63 / H 22 件，A/B/C 为 `None`），
-所以这里不重复装配工具，只补两类真实依赖：
-
-- `A` 需要 `providers`（检索的后端）—— 没给就不进登记表（不编造 provider 列表）；
-- `B` 需要 `extractor` + `extract_text`；且 B 的签名里没有 `llm`：
-  它的 LLM 走 extractor 协议（`LLMExtractor`），有 `llm` 时用它、没有时用 `RuleExtractor`。
+`conductor.summon` 把活交给"后端"，而进程内的 `LocalBackend` 明确拒绝自动创建角色实例
+（构造依赖靠猜就等于静默少做事）⇒ 调用方必须给一张登记表；没人给就每次召唤都如实落
+`refused/not_wired`（这是设计，不是缺陷）。本模块是那张登记表的唯一装配点：按各角色实测的
+构造签名造工厂。实测（2026-09-29，`temp/_probe_agent_construction.py`）：八个角色只给
+`store` 就能自组装工具面（D 9 / E 6 / F 6 / G 63 / H 22 件，A/B/C 为 `None`），所以这里不重复
+装配工具，只补两类真实依赖：`A` 需要 `providers`（没给就不进登记表，不编造 provider 列表）；
+`B` 需要 `extractor` + `extract_text`，且它的签名里没有 `llm` —— B 的 LLM 走 extractor 协议
+（`LLMExtractor`），没有时用 `RuleExtractor`。
 
 ## 它不是计划器（`draft/31` P10 的形式约束）
 
-本模块不含计划 JSON schema、prompt 模板库、plan 解析器、重计划状态机，
-也不决定"该派谁"。它只回答一件事：每个角色的实例怎么造出来。
-"派谁、派什么"是 M 的工具调用序列。
+本模块不含计划 JSON schema、prompt 模板库、plan 解析器、重计划状态机，也不决定"该派谁"；它
+只回答一件事：每个角色的实例怎么造出来。"派谁、派什么"是 M 的工具调用序列。
 
 ## 三态纪律
-
-`wiring_status()` 逐角色给 `"wired"` 或 `"no_provider"`。没有第三种"看起来能跑"：
-没接线的角色在台账里落 `refused/not_wired`，而其余角色照常工作 ——
-拒绝是逐角色的，不是整表失效。
+`wiring_status()` 逐角色给 `"wired"` 或 `"no_provider"`，没有第三种"看起来能跑"：没接线的角色
+在台账里落 `refused/not_wired`，其余角色照常工作 —— 拒绝是逐角色的，不是整表失效。
 """
 
 from __future__ import annotations

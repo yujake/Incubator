@@ -682,21 +682,14 @@ def main(argv: list[str] | None = None) -> int:
           "仍需人逐行走查 + 2 名 reviewer 批准 —— 它全绿**不构成发布许可**。")
 
     if args.json:
-        # 写文件用 `open(..., newline="")`：这是 G-42 的换行纪律（禁 `Path.write_text()`）
-        # 在本文件里的落地形态 —— `write_text` 在 Windows 上会把 LF 刷成 CRLF，
-        # 而产物的 sha256 与"盘上那一版"必须对得上（draft/22 §12.15.2 记过那次事故）。
-        #
-        # 这条纪律不再只是一段散文（`c-12`）：它现在是
-        # `scripts/lint_rules.py` 的 `R012`（`rule_R012_write_text_newline`）——
-        # 对 `scripts/` 与 `tools/` 下每个 `.py`，AST 里出现
-        # `X.write_text(...)` 而没有 `newline=` ⇒ 一条 `warning`，并在
-        # `python scripts/lint_rules.py --strict` 的报告里逐条点名。
-        # 引用这条纪律时请引 `R012` 这个规则号，不要引 `G-42`：
-        # `G-42` 只是 `docs/PROPOSALS.md` 里的一条教训，不是任何一条能跑的判据。
-        #
-        # 同族的另外两处本轮已按同一口径改掉（`c-12`）：
-        # `scripts/release_check.py` 的 `--json` 出口与 `scripts/lint_rules.py` 的
-        # `--json` 出口，两处都从 `Path.write_text` 改成 `open(..., newline="")`。
+        # 写文件用 `open(..., newline="")`：这是 G-42 的换行纪律（禁 `Path.write_text()`）在本文件里的落地形态 ——
+        # `write_text` 在 Windows 上会把 LF 刷成 CRLF，而产物的 sha256 与"盘上那一版"必须对得上
+        # （draft/22 §12.15.2 记过那次事故）。这条纪律不再只是一段散文（`c-12`）：它现在是
+        # `scripts/lint_rules.py` 的 `R012`（`rule_R012_write_text_newline`）—— 对 `scripts/` 与 `tools/` 下
+        # 每个 `.py`，AST 里出现 `X.write_text(...)` 而没有 `newline=` ⇒ 一条 `warning`，并在
+        # `python scripts/lint_rules.py --strict` 的报告里逐条点名。引用这条纪律时请引 `R012`，不要引 `G-42`
+        # （`G-42` 只是 `docs/PROPOSALS.md` 里的一条教训，不是任何一条能跑的判据）。同族的另外两处本轮已按同一
+        # 口径改掉（`c-12`）：`scripts/release_check.py` 与 `scripts/lint_rules.py` 的 `--json` 出口。
         Path(args.json).parent.mkdir(parents=True, exist_ok=True)
         with open(args.json, "w", encoding="utf-8", newline="") as fh:
             fh.write(json.dumps(

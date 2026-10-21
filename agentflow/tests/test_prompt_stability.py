@@ -403,24 +403,14 @@ def test_a_dynamic_section_that_is_not_registered_is_red(tmp_path: pathlib.Path)
         probe_a, probe_b, whitelist={"PROBE_STEP_CLOCK", "TASK_BUDGET", "TASK_NOTEBOOK"})
 
 
-#: `STEP_VOLATILE_FACTS` 的**键集**账本（事务三 2026-10-21：堵审计射程的边界）。
-#:
-#: ## 为什么必须另立一个常量（而不是并进 `_FROZEN_PROMPT_DIGESTS`）
-#:
-#: 那张冻结表按**缺省事实**渲染模板 ⇒ 它钉的是"段文本"。而 facts 迁移（把某几格事实从
-#: system 挪进 user 消息）**不改任何一段的文本** ⇒ 十格摘要一个字节都不会变。
-#: 上一批（2026-10-21 第一批，2 格 → 12 格）就是这样：判据没红、也没有抬版本，
-#: 而模型读到的**落点**整个换了一遍。审计射程到此为止 —— 这条账本补上那一格。
-#:
-#: ## 口径（`promptstability.facts_migration_problem`）
-#:
-#: 按顺序记 `(version, count, keys_sha256)`；判据只认**最后一格**：
-#: live 键集必须等于它（否则"迁了而账本没记"），且它的 `version` 必须等于
-#: `PROMPT_VERSION`（否则"迁了而版本没抬"）。前面的几格是历史 —— 不参与判绿，
-#: 但它们正是"哪一次迁移没抬版本"这件事在盘上的读数，所以留着。
-#:
-#: ⚠️ 维护规则：动 `STEP_VOLATILE_FACTS` ⇒ 在 `PROMPT_VERSION` 抬一格，并在账本末尾
-#: 追加一格（`count` / `keys_sha256` 用 `PS.volatile_facts_digest()` 现算，不手抄）。
+#: `STEP_VOLATILE_FACTS` 的键集账本（事务三 2026-10-21：堵审计射程的边界）。为什么另立一个常量而不是并进
+#: `_FROZEN_PROMPT_DIGESTS`：那张冻结表按缺省事实渲染模板 ⇒ 它钉的是"段文本"，而 facts 迁移（把某几格事实
+#: 从 system 挪进 user 消息）不改任何一段的文本 ⇒ 十格摘要一个字节都不会变。上一批（2026-10-21 第一批，
+#: 2 格 → 12 格）就是这样：判据没红、也没抬版本，而模型读到的落点整个换了一遍 —— 审计射程到此为止，这条账本
+#: 补上那一格。口径（`promptstability.facts_migration_problem`）：按顺序记 `(version, count, keys_sha256)`，
+#: 判据只认最后一格 —— live 键集必须等于它（否则"迁了而账本没记"）、且它的 `version` 必须等于 `PROMPT_VERSION`（否则"迁了而版本没抬"）；前面的几格是历史、不参与判绿，但它们是"哪一次迁移没抬版本"
+#: 在盘上的读数，所以留着。维护：动 `STEP_VOLATILE_FACTS` ⇒ 抬 `PROMPT_VERSION` 一格并在账本末尾追加一格
+#: （`count` / `keys_sha256` 用 `PS.volatile_facts_digest()` 现算，不手抄）。
 _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     # 上一批：`budget_left` / `notebook` + 跨 run 那十格。**没抬版本**（这就是那条教训）。
     {"version": "p173", "count": 12,
@@ -446,6 +436,9 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p178", "count": 14,
      "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
      "note": "抬版本 p178（2026-10-21）：D/F/V/M 减负（D 两条合并、V 删重复尾巴）；键集未变"},
+    {"version": "p179", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p179（2026-10-21）：修掉提示词里被转义吃掉的 \brief\/\name\/\reuse\（原来渲染成控制字符）；键集未变"},
 )
 
 

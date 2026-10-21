@@ -1,30 +1,22 @@
 """端到端一条命令：给一个主题、一个美元上限，产出一份可复核的完整运行记录。
-一条命令把"配 key → 调模型 → 记账 → 熔断 → 落产物"串起来（`run_topic`）：一次调用一条账、一次运行六件
-产物、一个退出码；不需要 key 也能跑（明确以退出码 2 + 清单里的 `no_key` 结束）。分段能跑与端到端能跑
-是两件事 —— 缺口恰恰在段与段之间（"记账没接上""预算拦不住"）。
-流程：`evidence.retrieve`（OpenAlex + Crossref，带 provenance 写进 `evidence.json`）→
-`evidence.acquire_fulltext`（`fulltext=True` 时逐条并六态记账：`ok` / `no_pdf` / `download_failed` /
-`no_text_layer` / `extract_failed` / `not_configured`）→ 摘要拼进 prompt、要求每条结论附一条逐字引文 →
-`claims.split_claims` 拆成原子断言（先按 `||`、再按列表标记、最后按句末标点；三态 `parsed` / `no_claims` /
-`unparsable`，超上限的截断数逐条写明；`claims.ledger_rows` 与判决合成台账）→ `evidence.verify_claims`
-逐条回验（引文逐字存在才算 `verified`，否则 `not_found`；通过项带 `level`（`abstract` / `fulltext`）与
-`locator`）。检索没查成（`retrieval_failed` / `not_configured`）时不调模型：没有材料只会印出无法回验的结论。
-六件产物（缺任何一件都算没跑成）：`run-manifest.json`（配置、每次调用、总额、退出原因、未接线清单）、
-`model-transcript.jsonl`（每行一条 `reply.to_dict()`）、`evidence.json`（逐源状态与全文六态）、
-`claims.json`（断言台账 + `claims_ledger` 拆法说明；`--lean` 时另有每段 Lean 片段结论与到达的证据等级）、
-`cost.json`（必须与 `usage_ledger` 汇总一致）、`report.md`（人读，含证据段与 unknowns 段）。
-`verdict` 只取 `verified` / `not_found` / `known_unverifiable` / `unknown`：没有引文的断言以
-`known_unverifiable` 落台账（丢弃会让"我们没验这一条"看起来像"这条断言不存在"）；`claims_ledger` 的摘牌
-判据只有"这次真的拆过（`split_claims` 给了 `parsed`）"。退出三态与 `lint_rules` / `noai_gate` 同口径：
-0 成功、1 查过了确实失败（预算耗尽一律 1，跑飞被熔断必须能从退出码看见）、2 没查成；回验未通过不改退出码
-（证据不足由 `claims.json` 的 `verdict`、报告证据段与 unknowns 表达）。熔断 fail-closed：先查钱再花钱，
-口径是"这一次运行"的 `budget_usd`（`G-4`）而不是整本台账累计（改前用后者 ⇒ 同一工作区第二次运行被第一次
-的花销提前熔断），两个数都在产物里（`cost.json` 的 `spent_usd_this_run` 与 `usage_ledger.usd`）。
+一条命令把"配 key → 调模型 → 记账 → 熔断 → 落产物"串起来（`modelgw` 调模型、`tokenmeter` 记账）：由`run_topic` 一次调用一条账、一次运行六件产物、一个退出码；不需要 key 也能跑（退出码 2 + 清单里的 `no_key`）。
+流程：`evidence.retrieve`（OpenAlex + Crossref，provenance 写进 `evidence.json`）→ `evidence.acquire_fulltext`
+（`fulltext=True` 时六态记账：`ok` / `no_pdf` / `download_failed` / `no_text_layer` / `extract_failed` /
+`not_configured`）→ 摘要拼进 prompt、要求每条结论附逐字引文 → `claims.split_claims` 拆成原子断言（按 `||`、
+列表标记、句末标点；三态 `parsed` / `no_claims` / `unparsable`，超上限的截断数写明；`claims.ledger_rows` 与判决合成台账）→
+`evidence.verify_claims`（引文逐字存在才算 `verified`，否则 `not_found`；带 `level`（`abstract` /
+`fulltext`）与 `locator`）。检索没查成（`retrieval_failed` / `not_configured`）时不调模型。六件产物（缺任何一件都算没跑成）：`run-manifest.json`（配置、每次调用、总额、退出原因、未接线清单）、
+`model-transcript.jsonl`（每行一条 `reply.to_dict()`）、`evidence.json`、`claims.json`（断言台账 +
+`claims_ledger` 拆法；`--lean` 时另有 Lean 片段结论）、`cost.json`（与 `usage_ledger` 汇总一致）、`report.md`。
+`verdict` 只取 `verified` / `not_found` / `known_unverifiable` / `unknown`；没有引文的断言以
+`known_unverifiable` 落台账（丢弃会让"没验这一条"看起来像"不存在"）；`claims_ledger` 摘牌只看"这次真拆过
+（`split_claims` 给了 `parsed`）"。退出三态同 `lint_rules` / `noai_gate`：0 成功（走到 `max_calls` 为止）、
+1 查过了确实失败（预算耗尽一律 1，跑飞被熔断必须能从退出码看见）、2 没查成；回验未通过不改退出码。熔断 fail-closed（先查钱再花钱），口径是"这一次运行"的 `budget_usd`（`G-4`，达则落 `budget_exhausted`），
+不是 `usage_ledger` 累计（改前用后者 ⇒ 同工作区第二次运行被第一次的花销熔断：`calls=0` 而 `spent_usd` 报上次的钱）；两个数都在产物里（`cost.json` 的 `spent_usd_this_run` 与 `usage_ledger.usd`）。
 测试接缝七个：`transport` / `search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` / `lean_run_fn` /
-`claims_parse_fn`（生产为 `None`，分别走 `urllib` / 禁改区的 `providers` 与 `quoteverify` / `fetch` /
-`extract` / 探测到的 Lean 后端 / 纯启发式；`lean_run_fn` 见 `formalgw.check_lean`，`claims_parse_fn` 只提供
-候选，注入与否记进 `claims_ledger.parse_fn_used`）—— 刻意不加 `AGENTFLOW_MODEL_FAKE` 一类环境变量后门。
-除 `from typing import Any, Mapping` 外不再 import：拆分层的类型来自 `claims`，这里只透传。
+`claims_parse_fn`（生产 `None`，走 `urllib` / 禁改区的 `providers` 与 `quoteverify` / `fetch` / `extract` /
+`formalgw.check_lean` / 纯启发式；注入与否记进 `claims_ledger.parse_fn_used`）—— 刻意不加
+`AGENTFLOW_MODEL_FAKE` 一类环境变量后门；除 `from typing import Any, Mapping` 外不再 import（拆分层的类型来自 `claims`，这里只透传）。
 """
 
 from __future__ import annotations
@@ -277,7 +269,7 @@ def _complete_or_not_checked(gw: ModelGateway, prompt: str, *, scope: str,
                              model: str = "") -> ModelReply:
     """调一次模型，并把"网关自己抛出来了"折回三态里的"没查成"（`G-7`）。
     `ModelGateway.complete` 承诺"返回三态结局，从不抛异常"，而 `modelgw._once` 只捕 `TimeoutError` /
-    `ConnectionError`；`urllib_transport` 把 `urllib.request.Request(...)` 建在 `try` 之外，于是
+    `ConnectionError`（2026-09-26 全面体检）；`urllib_transport` 把 `urllib.request.Request(...)` 建在 `try` 之外，于是
     `AGENTFLOW_MODEL_BASE_URL` 写错就抛 `ValueError: unknown url type`（实测 `temp/auditG-probe1.txt` P6 段）。
     调用点没有 `try` ⇒ 一个配置错误让整条 run 崩在这次调用上：六件产物一件不写、账本一行没有、熔断不生效，
     而"没查成"与"代码崩了"在下游无法区分。这里堵的是调用点（`G-7` 口径二）：折成的结局是
@@ -320,7 +312,7 @@ def _new_task_row(*, task_id: str, topic: str, status: str, outcome: str | None,
                   detail: str, started_at: str, ended_at: str | None, tokens: int,
                   usd: float, error: str = "") -> dict:
     """一次 `agentflow run` 的 `tasks` 行的唯一构造点（`G-3`）。
-    构造只有一份、写入有两处（开跑时的占位行 `status="running"` 与收工的终态行 `_settle_run_task`）：两处
+    构造只有一份、写入有两处（`run_topic` 里开跑时的占位行 `status="running"` 与收工的终态行 `_settle_run_task`）：两处
     各拼一份 dict，"这次运行是哪一次"（`role` / `action` / `called_by` / `depth` / `input_key`）与"哪些字段
     该留空"（`artifacts`）就会漂移，而漂移的表现是同一张表里两种形状的行，没有任何判据会响。
     `task_id` 必须是返回 dict 的第一个键：快照按键顺序序列化、`rebuild()` 用 `Task.to_dict()`（dataclass
@@ -378,26 +370,22 @@ def _settle_run_task(store: Any, *, task_id: str, topic: str, reason: str, exit_
                      records: Sequence[CallRecord],
                      meter: TokenMeter, started_at: str, stamp: str) -> dict:
     """把这次 `run_topic` 的 `tasks` 行改写成终态（`G-3` / `R5-AN-1`）。
-    为什么必须有这一行：`usage_ledger.task_id` 是审计的挂点（`verify` 的 `dangling_usage_task` 查"账本行
-    指向的任务不在 `tasks` 里"），不补行就每跑一次 `agentflow run` 多两条 error 级发现 ⇒ error 永远红就
-    没有区分力；另一口径（把 task_id 置 None）只是把"这次花了多少"从审计面摘出去。
-    它写的是"改写"不是"新写"：开跑时取号那一段已以 `status="running"` 落库（号必须当场占住，否则并发的
-    第二次运行会拿到同一个 `t-NNNN`），本函数按同一个 `task_id` 整行 upsert ⇒ "每个 start 恰好一个 end"
-    由"先占号、后收工"两步共同保证，占位行丢了也能补写。
-    六条口径与 `conductor._charge_and_settle` 对齐：`role="M"`；`status` 按 `reason` 映射而不是退退出码
-    （`done` / `failed`，可取消的调用方才有 `cancelled`；`R5-F4`：这条通路可达的只有 `done` 与 `failed`，
-    如 `auth_failed` / `rate_limited` / `bad_response`，依据见 `_run_task_verdict` 与 `RUN_TOPIC_REASON_LITERALS`）；
-    `outcome` 取 `ok` / `no_result` / `failed`；`tokens` / `usd` 用 `meter.tokens_for(task_id)` /
-    `usd_for(task_id)`（与账本同一口径，不是第二份计算）；`artifacts` 留空 —— 那六件产物是磁盘文件不是表里
-    的行（契约是 `"<表名>:<行 id>"`），六个名字写在 `detail` 里（`R5-AN-5`：写成"本运行承诺的六件产物"会与
-    同一屏的 `artifacts=[]` 矛盾并新增 6 条 `unknown_artifact_kind` warning，那是 `R5-F3` 已改掉的旧形态）；
-    `inputs` 只写形状；`detail` 写清这一行是谁写的、为什么；`error` 只在 `status="failed"` 时非空
-    （`schema.Task.validate` 的硬要求，`FINAL-R5-01`：改前不给 `error`，那三个码的行写不进去、占位行永远
-    停在 `running`）。三态纪律：写失败不吞（返回 `written=False` 与 `error`，`run_topic` 落进
-    `run-manifest.json` 的 `task_row` 段并往 `unknowns` 加一行；`R5-F6`：此前写的是"在返回值里可见"，而那个
-    返回值从未被读过 —— 写失败恰恰没有那一行 `tasks`，连 `detail` 都留不下来）；退出码不改。
-    `R5-AN-5` 的另一半：`out` 与 `ledger` 两个形参函数体里一次都没用过（AST 读数
-    `temp/reaudit6-R5-p4.txt`），已删 —— 形参也是接口面。
+    必须补这一行：`usage_ledger.task_id` 是审计挂点（`verify` 的 `dangling_usage_task`），不补就每跑一次
+    `agentflow run` 多两条 error 级发现 ⇒ error 永远红就没有区分力（把 task_id 置 None 只是把"这次花了
+    多少"从审计面摘出去）。它写的是"改写"：开跑时取号那一段已以 `status="running"` 落库（号必须当场占住，
+    否则并发的第二次运行会拿到同一个 `t-NNNN`），本函数按同一个 `task_id` 整行 upsert ⇒ "每个 start 恰好
+    一个 end"由"先占号、后收工"两步共同保证，占位行丢了也能补写。
+    六条口径与 `conductor._charge_and_settle` 对齐：`role="M"`；`status` 按 `reason` 而不是 `exit_code` 映射
+    （`done` / `failed`，`cancelled` 只有可取消的调用方才有；`R5-F4`：可达的只有 `done` 与 `failed`，如
+    `auth_failed` / `rate_limited` / `bad_response`，依据见 `_run_task_verdict` 与 `RUN_TOPIC_REASON_LITERALS`）；
+    `outcome` 取 `ok` / `no_result` / `failed`；`tokens` / `usd` 由 `meter.tokens_for` / `usd_for` 现算（`meter` 是唯一一处，`tokens_for` 与 `usd_for` 就是账本口径）；
+    `artifacts` 留空（那六件产物是磁盘文件，契约是 `"<表名>:<行 id>"`，六个名字进 `detail`；`R5-AN-5`：写成
+    "这一趟承诺的那六件产物"会与 `artifacts=[]` 矛盾并新增 6 条 `unknown_artifact_kind` warning，那是 `R5-F3`
+    改掉的旧形态）；`inputs` 只写形状；`detail` 写清谁写的、为什么；`error` 只在 `status="failed"` 时非空
+    （`schema.Task.validate` 硬要求，`FINAL-R5-01`：改前不给 `error`，那三个码的行写不进去、占位行停在
+    `running`）。三态纪律：写失败不吞（`written=False` 与 `error` 落 `run-manifest.json` 的 `task_row` 段并往
+    `unknowns` 加一行；`R5-F6`：此前说"在返回值里可见"而那个返回值从未被读过）；退出码不改。`R5-AN-5` 另一半：
+    `out` / `ledger` 两个形参函数体里从没用过（`temp/reaudit6-R5-p4.txt`），已删 —— 形参也是接口面。
     """
     tokens = int(meter.tokens_for(task_id))
     usd = round(float(meter.usd_for(task_id)), 6)
@@ -476,18 +464,15 @@ TASK_DONE_REASONS: frozenset[str] = RUN_TOPIC_REASON_LITERALS | frozenset({
 def _run_task_verdict(*, reason: str, exit_code: int) -> tuple[str, str]:
     """`(tasks.status, tasks.outcome)`（`G-3`）。
     为什么不按 `exit_code` 映射：退出码是三态（0/1/2），而 `tasks.status` 说的是"这次召唤的终态"。一次
-    `no_key` 的运行退出码 2（没查成），它在台账里的终态却是 `done`（这一行确实跑完了、结论是"没有 key 所以
-    没调模型"）；写成 `failed` 会让"环境缺 key"看起来像"这次召唤崩了"。
+    `no_key` 的运行退出码 2（没查成），它在台账里的终态却是 `done`（这一行确实跑完了、结论是"没有 key 所以没调模型"）；写成 `failed` 会让"环境缺 key"看起来像"这次召唤崩了"。
     可达性（`R5-F4`：这里原先有三处与事实不符）：① `cancelled` 在 `run_topic` 这条通路上到不了（它没有取消
     入口：不收 CancelToken，`cli.py` 里也没有 signal / KeyboardInterrupt 处理），留着是因为本函数是纯映射、
     将来接进取消面的调用方要用它，但"`agentflow run` 会产出 status=cancelled"是假的；② `failed` 曾经也不
-    可达（旧实现只认字面量 `"error"`，而 `run_topic` 赋给 `reason` 的是 `reply.error_kind`，于是"模型调用
-    确实失败了"被静默记成 `done` / `no_result`），现在按 `modelgw` 的两张词表分档；③ 旧实现里有一段
-    `if reason in (…7 个常量…): pass` 的空块，看着在分档其实什么都没做，现在那张名单是 `TASK_DONE_REASONS`
+    可达（旧实现只认字面量 `"error"`，而 `run_topic` 赋给 `reason` 的是 `reply.error_kind`，于是"模型调用确实失败了"被静默记成 `done` / `no_result`），现在按 `modelgw` 的两张词表分档；③ 旧实现里有一段
+    `if reason in (…7 个常量…): pass` 的空块（`success` 另判、其余走兜底），看着在分档其实什么都没做，现在那张名单是 `TASK_DONE_REASONS`
     且真被用来判定。分档口径（与 `modelgw.NOT_CHECKED` 同一口径）：`reason in NOT_CHECKED`（`no_key` /
     `timeout` / `network` / `server_error` / `unknown`）是"没查成" ⇒ `done` / `no_result`；其余
-    `MODEL_ERROR_KINDS`（`auth_failed` / `rate_limited` / `bad_response`…）是查过了、确实不行 ⇒ `failed` /
-    `failed`。把第 2 类读成第 1 类，正是 `G-7` 那一族"把失败折叠成没有结论"的形态。
+    `MODEL_ERROR_KINDS`（`auth_failed` / `rate_limited` / `bad_response`…）是查过了、确实不行 ⇒ `failed` /`failed`。把第 2 类读成第 1 类，正是 `G-7` 那一族"把失败折叠成没有结论"的形态。
     """
     from .modelgw import MODEL_ERROR_KINDS, NOT_CHECKED
 
@@ -898,7 +883,7 @@ def _phase_1(max_calls, now, out_dir, spec, store, topic):
     out.mkdir(parents=True, exist_ok=True)
     stamp = now or S.now_iso()
     started_at = stamp
-    # 单价按**这一趟自己的时刻**取（`at=stamp`），不是按"结账时的墙钟"：
+    # 单价按「这一趟自己的时刻」取（`at=stamp`），不是按"结账时的墙钟"：
     # 一趟跑在低谷、收尾时已进峰值，读墙钟会把整趟按峰值计价 —— 而账面上
     # 看不出来（数字自洽）。`price_of` 会按 cfg 上的厂商/模型去价目表取；
     # 认不出厂商就回落成环境变量/缺省价（口径见 `modelcost.price_of`）。
@@ -1497,30 +1482,23 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
               text_store_dir: str | Path | None = None) -> dict:
     """跑一次端到端：检索 → 取全文 → 作答 → 逐字回验 → 记账 → 熔断 → 六件产物 → 退出三态。
     返回 ``{"exit_code", "reason", "out_dir", "artifacts", "calls", "spent_usd", "spent_usd_this_run"}``。
-    无论走到哪一步都产出六件产物：一份"因为没 key 所以什么都没写"的目录与"根本没跑"在磁盘上长得一样，
-    而它们必须能分辨。`FINAL-R5-02` 的边界：被中断的那一跑例外 —— 这条通路今天没有取消面（不收 `CancelToken`），
+    无论走到哪一步都产出六件产物：一份"因为没 key 所以什么都没写"的目录与"根本没跑"在磁盘上长得一样，而它们必须能分辨。`FINAL-R5-02` 的边界：被中断的那一跑例外 —— 这条通路今天没有取消面（不收 `CancelToken`），
     `KeyboardInterrupt` 是 `BaseException`、会穿出 `except Exception` 兜底，留下的"部分产物"三者不同形但都
     不可消费，所以 `cli.main` 把它折成退出码 2 并打印显式说明；真正的修法（走完六件产物 + `status=cancelled`）
-    要接进取消面。`store` 是工作区（`usage_ledger` 的落点）、`out_dir` 是产物落点，两者刻意分开：账本属于
-    工作区（跨运行累计），产物属于这一次运行。`budget_usd` 是这一次运行的额度（`G-4`）；本次花销按 `task_id`
-    过滤 `usage_ledger`（`F5-FOUND-1` 之后），所以并发另一次运行与历史花销都不会算进我的额度（改前是
-    "工作区增量"，`R5-AN-1` 把并发修通后就不再成立，逐字读数见 `_spent_this_run`）。两个口径都在产物里：
+    要接进取消面。本函数（`run_topic`）的 `store` 是工作区（`usage_ledger` 的落点）、`out_dir` 是产物落点，两者刻意分开：账本属于
+    工作区（跨运行累计），产物属于这一次运行。`budget_usd` 是这一次运行的额度（`G-4`）；本次花销按 `task_id`过滤 `usage_ledger`（`F5-FOUND-1` 之后），所以并发另一次运行与历史花销都不会算进我的额度（改前是
+    "`spent` 取一次 `baseline` 再相减"的工作区增量，`R5-AN-1` 把并发修通后就不再成立，逐字读数见 `_spent_this_run`）。两个口径都在产物里：
     `spent_usd_this_run` 是本次运行，`cost.json` 的 `usage_ledger.usd` 与返回值 `spent_usd` 是工作区累计。
     `now` 只为测试注入固定时间戳；`search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` 是四个动作的测试接缝
     （生产为 `None`，分别走禁改区里的 `providers` / `quoteverify` / `fetch` / `extract`）；`retrieval_limit` 与
-    `retrieval_timeout_sec` 只影响检索本身。`fulltext` 缺省关闭（全文获取是逐条网络下载）：关闭时它如实写进
-    未接线清单，理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，与 `lean` 那条同形；
-    常量里"没有接进本流程"是关于流程的断言，真相是"接了、本次没要"，见 `X-NEW-2` / `draft/28` §98.4）。
+    `retrieval_timeout_sec` 只影响检索本身。`fulltext` 缺省关闭（全文获取是逐条网络下载，打开后逐条六态：`no_pdf` / `download_failed` …）：关闭时它如实写进
+    未接线清单，理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，与 `lean` 那条同形；常量里"没有接进本流程"是关于流程的断言，真相是"接了、本次没要"，见 `X-NEW-2` / `draft/28` §98.4）。
     `lean` 缺省关闭；打开后每个 `` ```lean `` 代码块都交给 `formalgw.check_lean` 真跑一次，结论与到达的证据
     等级写进 `claims.json` 的 `lean` 段与报告的形式化验证小节 —— 它是 `evidence_kind="proof"` 的唯一来源，
-    所以默认关、且真跑过之前不许把 lean 从"未接线"清单摘掉（`lean_run_fn` 是它唯一的测试接缝）。
-    `claims_parse_fn` 缺省 `None`（纯启发式，同一答复必得同一结论）；注入它只提供候选，编号、去重、截断与
-    指纹仍由 `claims.split_claims` 决定，用没用它写进产物。`claims_max` 是断言上限，截掉的条数写进
-    `claims.json`、清单与 unknowns —— 静默截断会让"登记了 200 条"读成"一共只有 200 条"。
-    两种"没查成"（没有模型 key、检索没查成）都不调模型、直接退出码 2：产物本该由"材料 + 逐字引文"支撑，
-    缺一半跑下去只会得到无法回验的结论。全文获取失败不改退出码（摘要在手上就还能回验，只是级别停在摘要级）；
-    拆分没成（`no_claims` / `unparsable`）也不改退出码 —— 它说的是"这一层没查成"，处置写在 `claims.json`
-    与未接线清单里，与"结论对不对"不是一件事。
+    所以默认关、且真跑过之前不许把 lean 从"未接线"清单摘掉（`lean_run_fn` 是它唯一的测试接缝）。`claims_parse_fn` 缺省 `None`（纯启发式，同一答复必得同一结论）；注入它只提供候选，编号、去重、截断与
+    指纹仍由 `claims.split_claims` 决定，用没用它写进产物。`claims_max` 是断言上限，截掉的条数写进`claims.json`、清单与 unknowns —— 静默截断会让"登记了 200 条"读成"一共只有 200 条"。
+    两种"没查成"（没有模型 key、检索没查成）都不调模型、直接退出码 2：产物本该由"材料 + 逐字引文"支撑，缺一半跑下去只会得到无法回验的结论。全文获取失败不改退出码（摘要在手上就还能回验，只是级别停在摘要级）；
+    拆分没成（`no_claims` / `unparsable`）也不改退出码 —— 它说的是"这一层没查成"，处置写在 `claims.json`与未接线清单里，与"结论对不对"不是一件事。
     """
     if prompt_version not in PROMPT_VERSIONS:
         raise ValueError(f"未知 prompt 版本 {prompt_version!r}（已知 {PROMPT_VERSIONS}）")

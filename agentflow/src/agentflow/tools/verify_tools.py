@@ -809,45 +809,28 @@ def _verify_detect_verifier():
            "required": ["claim"],
            "additionalProperties": False,
            },
-    # 注意：handler 的形参名必须是 checker_name，不许为了省事沿用它原来的
-    # 名字 name：`ToolRegistry.call` 会用关键字参数调用 handler，
-    # 而它传进来的键名就是这里声明的属性名。名字对不上 ⇒ 每次调用都 TypeError。
-    # 装配时的 root 是"工作区"在这里的唯一来源：相对 script_path
-    # 必须解析到它，而不是解析到进程 CWD（见 `check_formal` 的 docstring）。
-    # read + exec：它真的起检查器子进程（命令内容由调用方给），
-    # 并可能写临时 .lean 文件；两者都如实声明，各占一根轴。
-    # ⚠️ 字段名是 `declared_external`（「不是」 `external` —— 后者是属性名，
-    # 写进构造器会 `TypeError`，G-45 已登记）。
-    #
-    # `roles` 从 `_ROLES` 改成 `_ROLES_WRITE`，理由与 `verify.run_experiment`
-    # 同族但更值得写下来：「声明本身必须正确」，不能靠 `for_role` 兜底。
-    # `role_filter_notes` 的语义是"声明写错"的留痕，靠过滤兜底会让留痕
-    # 变成常态噪音 —— 而噪音里会藏着真正的错误。
-    # 行为变化（如实登记）：它从此需要审批（沙箱未声明时 `egress`/`exec`
-    # 一律要签字），H 的工具面因此从 23 条变 22 条。
+    # 注意：handler 的形参名必须是 checker_name，不许沿用它原来的名字 name：`ToolRegistry.call` 用关键字
+    # 参数调用 handler，传进来的键名就是这里声明的属性名 —— 名字对不上 ⇒ 每次调用都 TypeError。装配时的
+    # root 是"工作区"在这里的唯一来源：相对 script_path 必须解析到它，而不是进程 CWD（见 `check_formal` 的
+    # docstring）。read + exec：它真的起检查器子进程（命令内容由调用方给），并可能写临时 .lean 文件；两者
+    # 都如实声明，各占一根轴。
+    # 字段名是 `declared_external`（「不是」 `external` —— 后者是属性名，写进构造器会 `TypeError`，G-45 已
+    # 登记）。`roles` 从 `_ROLES` 改成 `_ROLES_WRITE`，理由与 `verify.run_experiment` 同族但更值得写下来：
+    # 「声明本身必须正确」，不能靠 `for_role` 兜底 —— `role_filter_notes` 的语义是"声明写错"的留痕，靠过滤
+    # 兜底会让留痕变成常态噪音，而噪音里会藏着真正的错误。行为变化（如实登记）：它从此需要审批，H 的工具面
+    # 因此从 23 条变 22 条。
     side_effect="read",
     roles=_ROLES_WRITE,
-    # `records` 声明的是 ok 分支的键集合（与同模块 `verify.code_hash`
-    # 同一种写法：分号后面写失败分支的形态）。分号是刻意的：`C2` 之前这里
-    # 写的是一个无条件的 8 键集合，而本工具有 3 条 `return fail(...)`
-    # 分支（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）走的是
-    # `ok=False` + `data=None`，一个键都不给 —— 声明逐字描述的是成功路径，
-    # 却长得像在描述全部路径，于是读声明的人以为失败分支也给这 8 个键。
-    #
-    # `D2`：这个字符串不是"逐分支采样"的契约。`tests/test_tools_audit_fixes.py`
-    # 的 `test_check_formal_return_shape_matches_its_declaration` 只采样 3 条
-    # ok 分支（无后端 / 无脚本 / 声明名对不上），断言它们的键集合与这里逐字相同；
-    # 3 条 fail 分支由本行的分号形态声明，目前没有逐分支采样用例。
-    # 待办：给失败分支补逐分支采样 —— 由父代理（`tests/` 的归属方）在
-    # C2 的失败分支口径定稿之后补进 tests/test_tools_audit_fixes.py；
-    # 在那之前，"失败分支给什么键"只有这一行声明，没有判据钉着。
-    #
-    # `verifier_status`（`G-24①`）是第 8 个键：它是检查器原样报的那个状态
-    # 的透传栏，与 `reason`（受控词表）成对存在。
-    #
-    # `exit_code`（E-12(a)，`draft/44`）是第 9 个键：「检查器进程的真实退出码」。
-    # 它分的是退出码（`agent_e` 那边的 `observations.tri_state` 分的是三态），
-    # 没跑成时是 `None`（绝不用 0 冒充"跑过"）。
+    # `records` 声明的是 ok 分支的键集合（与同模块 `verify.code_hash` 同一种写法：分号后面写失败分支的形态）。
+    # 分号是刻意的：`C2` 之前这里写的是一个无条件的 8 键集合，而本工具有 3 条 `return fail(...)` 分支（拿不到
+    # 声明名 / 声明名参数不合法 / 桥接层抛异常）走 `ok=False` + `data=None`、一个键都不给 —— 声明逐字描述的是
+    # 成功路径，却长得像在描述全部路径。
+    # `D2`：这个字符串不是"逐分支采样"的契约。`tests/test_tools_audit_fixes.py` 的
+    # `test_check_formal_return_shape_matches_its_declaration` 只采样 3 条 ok 分支（无后端 / 无脚本 / 声明名对不
+    # 上），断言键集合与这里逐字相同；3 条 fail 分支由本行的分号形态声明，目前没有逐分支采样用例（待办：由
+    # 父代理在 C2 的失败分支口径定稿之后补）。`verifier_status`（`G-24①`）是第 8 个键（检查器原样报的状态透
+    # 传，与受控词表 `reason` 成对）；`exit_code`（E-12(a)，`draft/44`）是第 9 个键（检查器进程真实退出码，没
+    # 跑成时是 `None`，绝不用 0 冒充"跑过"）。
     returns=(
             "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}"
             "；失败（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）：ok=False + kind(param_error/check_failed) + data=None"

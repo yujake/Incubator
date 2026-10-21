@@ -299,35 +299,16 @@ def scan_claim(claim: Mapping[str, Any]) -> dict:
     }
 
 
-#: `ClaimIssue.code` → `schema.FINDING_KINDS` 的受控词。
-#:
-#: 为什么需要这一层：`claimanatomy` 的 code 是判据层的词（`missing_field`
-#: / `bad_enum` / `inconsistent_status` …），而 `review_findings.kind` 是
-#: 落库层的词（`schema.FINDING_KINDS`，而 `schema.py` 在禁 AI 区，
-#: 不能给它加成员）。两者必须能对上，否则 H 的发现落库时会被 schema 拒。
-#: 这张表是唯一的映射处（FC-03）：
-#:
-#: ==========================  ==========================  ================================
-#: claimanatomy code             finding kind                为什么这样映射
-#: ==========================  ==========================  ================================
-#: `missing_field`               `unsupported_claim`         缺的字段是断言成立的前提（引用/正文）
-#: `empty_required`              `unsupported_claim`         同上，只是"键在但值为空"
-#: `bad_enum` / `bad_type`       `garbled`                   取值/类型非法 = 表述无法解析
-#: `inconsistent_status`         `overclaim`                 两轴矛盾/过度声称
-#: `unknown_status_axis`         `scope_drift`               "有个分类没法定"——不是 `garbled`，
-#:                                                          也不是 `missing_negation_kind`：
-#:                                                          前者会与"取值非法"撞同一个 kind，
-#:                                                          后者会与"否定未分类"撞而级别不同
-#:                                                          （一个是 info、一个是 error）
-#: `undeclared_field`            `scope_drift`               未声明字段无法被任何门读到
-#: `duplicate_claim_id`          `inconsistent_number`       同一标识对应两处不同内容
-#: `checker_error`               `garbled`                   检查器自己没跑成
-#: `overclaim`                   `overclaim`                 措辞超出证据等级（族 6）
-#: `incomplete_numeric_evidence` `unsupported_claim`         数值证据四元组不齐（族 7）
-#: `missing_disclaimer`          `unsupported_claim`         受控声明整个没写（族 5）
-#: `uncontrolled_disclaimer`     `unsupported_claim`         声明写了、但不是受控那一句（族 5）
-#: `lifecycle_incomplete`        `inconsistent_number`       生命周期没闭合（族 4）
-#: ==========================  ==========================  ================================
+#: `ClaimIssue.code` → `schema.FINDING_KINDS` 的受控词（唯一的映射处，FC-03）。
+#: 为什么需要这一层：`claimanatomy` 的 code 是判据层的词（`missing_field` / `bad_enum` /
+#: `inconsistent_status` …），而 `review_findings.kind` 是落库层的词（`schema.FINDING_KINDS`，
+#: 而 `schema.py` 在禁 AI 区、不能加成员）；两者必须能对上，否则 H 的发现落库时会被 schema 拒。
+#: 映射：`missing_field` / `empty_required` / `incomplete_numeric_evidence` / `missing_disclaimer` /
+#: `uncontrolled_disclaimer` → `unsupported_claim`（缺的字段是断言成立的前提 / 数值证据四元组不齐 /
+#: 受控声明没写或写错）；`bad_enum` / `bad_type` / `checker_error` → `garbled`（取值非法 / 检查器没跑成）；
+#: `inconsistent_status` / `overclaim` → `overclaim`；`unknown_status_axis` / `undeclared_field` →
+#: `scope_drift`（前者不与 `garbled` 撞 kind、也不与"否定未分类"撞级别）；`duplicate_claim_id` /
+#: `lifecycle_incomplete` → `inconsistent_number`。
 _FINDING_KIND_OF_CODE: dict[str, str] = {
     "missing_field": "unsupported_claim",
     "empty_required": "unsupported_claim",
@@ -345,23 +326,14 @@ _FINDING_KIND_OF_CODE: dict[str, str] = {
     "incomplete_numeric_evidence": "unsupported_claim",
     "missing_disclaimer": "unsupported_claim",
     "lifecycle_incomplete": "inconsistent_number",
-    # ⚠️ 「2026-10-15 补登记」：`uncontrolled_disclaimer` 是 `claimanatomy` 在
-    # 2026-10-13（无 Lean T2 的真机）新加的 code，它登记进了 `CLAIM_FAMILY_BY_CODE`
-    # （族 5）与 `test_lean_switch`，却「漏了这里」 ⇒ 落据那一步抛 `KeyError`，
-    # 于是 `build_document` 整条失败（G 渲染不出稿件），而它在盘上看起来
-    # 只是"G 拒绝了这次调用"。
-    #
-    # 为什么是 `unsupported_claim` 而不是 `garbled`：它判的是"
-    # 这条断言声称的那一档凭什么"没被那受控的一句承诺住 —— 与 `missing_disclaimer`
-    # 同族同义（族 5），区别只在"没写"与"写错了"，而两者该改的栏是同一个
-    # （把 disclaimer 改回受控那句）。落 `garbled`（"表述无法解析"）会把
-    # "声明不对"读成"读不懂"，而下游按 kind 分档 ⇒ 分错档。
-    #
-    # 为什么这条注释要写这么长：这张表的设计是"未登记就当场炸"，
-    # 所以它的每一次漏登记都是一次「可观测的故障」；而这次的教训是
-    # "炸在谁身上"—— 它炸在 G 的渲染上，不在判据自己身上。
-    # 现在的防线是 `tests/test_claimanatomy.py` 里那条按 `CLAIM_FAMILY_BY_CODE`
-    # 逐 code 对账的判据（不再靠人记得同步两张表）。
+    # 「2026-10-15 补登记」：`uncontrolled_disclaimer` 是 `claimanatomy` 在 2026-10-13（无 Lean T2 的真机）
+    # 新加的 code，它登记进了 `CLAIM_FAMILY_BY_CODE`（族 5）与 `test_lean_switch`，却漏了这里 ⇒ 落据那一步
+    # 抛 `KeyError`，于是 `build_document` 整条失败（G 渲染不出稿件），而盘上看起来只是"G 拒绝了这次调用"。
+    # 为什么是 `unsupported_claim` 而不是 `garbled`：它判的是"这条断言声称的那一档凭什么没被那受控的一句
+    # 承诺住" —— 与 `missing_disclaimer` 同族同义（族 5），区别只在"没写"与"写错了"，两者该改的栏是同一个；
+    # 落 `garbled`（"表述无法解析"）会把"声明不对"读成"读不懂"，下游按 kind 分档 ⇒ 分错档。
+    # 教训：这张表"未登记就当场炸"，而这次炸在 G 的渲染上、不在判据自己身上；现在的防线是
+    # `tests/test_claimanatomy.py` 里那条按 `CLAIM_FAMILY_BY_CODE` 逐 code 对账的判据。
     "uncontrolled_disclaimer": "unsupported_claim",
 }
 
@@ -385,22 +357,15 @@ def _finding_kind_of(issue: "CA.ClaimIssue") -> str:
 
 
 # ---------------------------------------------------------------- 引用存在性（FC-02 第二道闸）
-#
-# 这一节是 `scan_claim` 的补集：`scan_claim` 只查"有没有引用"（形状），
-# 查不出"引用的东西在不在"（存在性）。两者缺一不可 ——
-# `register_dependency` 早就对 `status='closed'` 用真实数据核过来源
-# （见本文件 `:753-768` 的长注释），而 `build_document` 此前没有这道闸：
-# `citations=["lit:9999"]` 能通过全部检查、写库、渲染，直到 `verify` 事后
-# 才报 `dangling_citation` —— 那时坏引用已经进了稿件。
-#
-# 引用前缀 → 它必须存在于哪张表。与 `verify.py` 的 `dangling_citation` 同口径
-# （`partition(":")` 取前缀、`split("#")` 去页码后缀），因为"什么算一条合法引用"
-# 只能有一处定义：写入期比审计期更严是可以的，两处对同一个字符串给出不同结论则不行。
-#
-# 这张表不再内联：它从唯一声明面 `schema.CITATION_PREFIXES` 派生
-# （2026-10-07 所有者裁定 `draft/68` 题 1 选 A，本次改动由所有者授权、主控代改）。
-# 改前它与 `verify.CITATION_KINDS`、`gates.gate_g2` 内联的四个前缀是三处各写一份，
-# 于是 `stmt:` 加进一处之后其余两处各自自洽 —— "写入期认、审计期不认"没有任何读数会响。
+# 这一节是 `scan_claim` 的补集：`scan_claim` 只查"有没有引用"（形状），查不出"引用的东西在不在"
+# （存在性）。两者缺一不可：`register_dependency` 早就对 `status='closed'` 用真实数据核过来源（见本文件
+# `:753-768` 的长注释），而 `build_document` 此前没有这道闸 —— `citations=["lit:9999"]` 能通过全部检查、
+# 写库、渲染，直到 `verify` 事后才报 `dangling_citation`，那时坏引用已经进了稿件。
+# 引用前缀 → 它必须存在于哪张表。与 `verify.py` 的 `dangling_citation` 同口径（`partition(":")` 取前缀、
+# `split("#")` 去页码后缀）：写入期比审计期更严可以，两处对同一个字符串给出不同结论则不行。
+# 这张表不再内联：它从唯一声明面 `schema.CITATION_PREFIXES` 派生（2026-10-07 所有者裁定 `draft/68` 题 1
+# 选 A）；改前它与 `verify.CITATION_KINDS`、`gates.gate_g2` 内联的四个前缀是三处各写一份，于是 `stmt:`
+# 加进一处之后其余两处各自自洽 —— "写入期认、审计期不认"没有任何读数会响。
 _CITATION_TABLES: dict[str, str] = dict(S.CITATION_PREFIXES)
 
 
@@ -1067,21 +1032,14 @@ def check_proofs(
             if citation_ref_parts(x)[0] == "exp"
         ]
         # ---- 第五道（2026-10-13，无 Lean T2 的真机）：引一条否证的实验当支撑。
-        #
-        # 现场：`projects/p6t2-research-20261012b` 的 exp:0002 自己的结论是
-        # `result="refutes"`（`counterexample: criterion mismatch …, mismatches: 108`），
-        # 而论文的 claim-2 把它列进 `citations` 当支撑用，交付说明只用一句
-        # "那只是脚本内部判据的问题"带过。`check_citations` 只问"引用的对象在不在"，
-        # 所以这条一路写库；而按 `evidence_kind` 的分档，一条"被自己的实验否证"的断言
-        # 与"被自己的实验支持"的断言在纸面上长得一模一样。
-        #
-        # 判据：引了 `result="refutes"` 的实验 ⇒ 这条断言必须是否定型里"已证否"那一档
-        # （`is_negative` 且 `negation_kind="disproved"`）。别的组合都报 —— 因为
-        # "实验否证了 P"与"P 成立"是两件相反的事，不许靠读正文才分得出来。
-        # 2026-10-21：判定本体搬进 `verifications.opposite_direction_evidence`
-        # （FC-03：同一句话在写入期与审计期各写一份必然漂移）。本处只保留
-        # "problem 的 kind / detail"这一层翻译；判据本身、以及"哪一半判不了"的
-        # 上界，都写在那个函数里。行为逐字不变（同一组字段、同一条报文）。
+        # 现场：`projects/p6t2-research-20261012b` 的 exp:0002 自己的结论是 `result="refutes"`
+        # （`counterexample: criterion mismatch …, mismatches: 108`），而论文的 claim-2 把它列进 `citations`
+        # 当支撑用。`check_citations` 只问"引用的对象在不在"，所以这条一路写库；而按 `evidence_kind` 分档，
+        # "被自己的实验否证"与"被自己的实验支持"在纸面上长得一模一样。判据：引了 `result="refutes"` 的实验 ⇒
+        # 这条断言必须是否定型里"已证否"那一档（`is_negative` 且 `negation_kind="disproved"`）—— "实验否证了 P"
+        # 与"P 成立"是两件相反的事，不许靠读正文才分得出来。2026-10-21：判定本体搬进
+        # `verifications.opposite_direction_evidence`（FC-03：同一句话两处各写一份必然漂移），本处只保留
+        # "problem 的 kind / detail"这一层翻译；判据本身与"哪一半判不了"的上界都写在那个函数里。
         for ref in exp_refs:
             row = exp_by_id.get(ref)
             if row is None:

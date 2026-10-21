@@ -160,25 +160,14 @@ def _pin_settings_path() -> str:
 
 PINNED_SETTINGS_PATH = _pin_settings_path()
 
-#: 判据套件跑在「Lean 形式化开着」那一档（产品缺省是关的，业主 2026-10-12：
-#: 「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）。
-#:
-#: ## 为什么套件与产品缺省不同
-#:
-#: 这一套判据守的是形式化那条路的接线：桥接层（`formalgw` / `verify_tools`）、
-#: E 的动作与受控理由、提示词里的"怎么写"那一段、收工门的承重格、`runflow` 的 Lean 段、
-#: 以及两份冻结快照里的形式化声明。产品缺省关掉它，只是"默认不烧那笔钱"，
-#: 不是"这条路没有了" —— 业主写 `lean_enabled: true` 时全流程必须逐字回到老套路。
-#: 若让整批跑在关掉那一档，几百条判据会去测一个"这条路不存在"的世界，
-#: 而"开着时逐字不变"这条性质就再没有判据看着了（2026-10-12 实测：翻缺省的那一刻
-#: 98 条判据变红，全部落在这一档）。
-#:
-#: ## 两个方向都有判据
-#:
-#: `tests/test_lean_switch.py` 自己设置/删除这个环境变量（它按用例显式声明自己测哪一档），
-#: 并显式钉住"产品缺省是 `False`"与"设置文件示例里写的是 `false`"这两件事；
-#: 本行由 `test_settings.py::test_the_suite_pins_the_lean_switch_on` 守着。
-#: 子进程（`python -m agentflow.agent_e` 这类自检）继承 `os.environ`，所以它们也在这条钉上。
+#: 判据套件跑在「Lean 形式化开着」那一档（产品缺省是关的，业主 2026-10-12：「默认设置中 Lean 关闭帮用户 在无严苛要求时省钱」）。为什么套件与产品缺省不同：这一套判据守的是形式化那条路的接线（桥接层
+#: `formalgw` / `verify_tools`、E 的动作与受控理由、提示词里的"怎么写"那段、收工门的承重格、`runflow` 的
+#: Lean 段、两份冻结快照里的形式化声明）。产品缺省关掉它只是"默认不烧那笔钱"，不是"这条路没有了" ——
+#: 业主写 `lean_enabled: true` 时全流程必须逐字回到老套路；若整批跑在关掉那一档，几百条判据会去测一个
+#: "这条路不存在"的世界，"开着时逐字不变"就再没有判据看着（2026-10-12 实测：翻缺省那一刻 98 条判据变红，
+#: 全部落在这一档）。两个方向都有判据：`tests/test_lean_switch.py` 自己设置/删除这个环境变量并按用例显式 钉住"产品缺省是 `False`"与"设置文件示例里写的是 `false`"；本行由
+#: `test_settings.py::test_the_suite_pins_the_lean_switch_on` 守着。子进程（`python -m agentflow.agent_e`
+#: 这类自检）继承 `os.environ`，所以它们也在这条钉上。
 os.environ["AGENTFLOW_LEAN_ENABLED"] = "1"
 
 from agentflow import conceptrows as _CR  # noqa: E402  （并表过渡期：夹具也要两处同号）
@@ -426,23 +415,13 @@ def add_relation(
 
 
 # --------------------------------------------------------------------------- J2/K2 夹具
-#
-# 裁定 J2 / K2：六件产物与 V 的验证台账真机没有样本（`draft/74 §0.3` 实测：
-# 全树 `**/run-manifest.json` 搜到 0 个、`verifications/` 目录 0 个），所以它们的
-# 判据输入由夹具造，并在页面上标明"夹具样本"。造在这里（`tests/conftest.py`）的理由
-# 是 `draft/78 §2` 的边界：这个文件归 B 线独有，A/C 要造夹具就造在自己文件的局部
-# fixture 里 —— 一份共享样本只有一个落点，改了不会只改一半。
-#
-# 形状逐个有出处，不是编的：
-# - 六件产物的名字：`runflow.ARTIFACTS`（六个名字）；
-# - 台账行的 9 个键：`artifacts.FIELDS`；
-# - 交接行的键：`manuscripts.write` 写的那个 dict；
-# - 秘书决策行的键：`secretary.Secretary.note_decision`；
-# - 验收表的行键 `id/kind/min/name/note`：`draft/75 §1.3` 的真机读数（8 行 C1–C8）；
-# - 体例的四节名字：`draft/74 §0.4` 的真机读数；
-# - 检查点的 10 个键：`agent_loop.save_run_checkpoint`（第 10 个 `prompt_cache`
-#   是 2026-10-19 补的，形状 = `promptstability.summarize_prompt_cache` 的 11 格）；
-# - 验证行的键：`verifications.record_verification`。
+# 裁定 J2 / K2：六件产物与 V 的验证台账真机没有样本（`draft/74 §0.3` 实测：全树 `**/run-manifest.json` 搜到
+# 0 个、`verifications/` 目录 0 个）⇒ 判据输入由夹具造，并在页面上标明"夹具样本"。造在 `tests/conftest.py`
+# 的理由是 `draft/78 §2` 的边界：这个文件归 B 线独有，A/C 要造夹具就造在自己文件的局部 fixture 里 —— 一份 共享样本只有一个落点，改了不会只改一半。形状逐个有出处：六件产物的名字 ← `runflow.ARTIFACTS`；台账行的
+# 9 个键 ← `artifacts.FIELDS`；交接行的键 ← `manuscripts.write` 写的那个 dict；秘书决策行 ←
+# `secretary.Secretary.note_decision`；验收表的行键 `id/kind/min/name/note` ← `draft/75 §1.3` 的 8 行真机
+# 读数；体例四节名字 ← `draft/74 §0.4`；检查点的 10 个键 ← `agent_loop.save_run_checkpoint`（第 10 个
+# `prompt_cache` 是 2026-10-19 补的，形状 = `promptstability.summarize_prompt_cache` 的 11 格）；验证行的键 ← `verifications.record_verification`。
 
 #: 六件产物的名字（`runflow.ARTIFACTS`；真机没有样本 ⇒ 裁定 J2 用夹具造）。
 RUN_PRODUCT_NAMES: tuple[str, ...] = (

@@ -53,29 +53,14 @@ def test_a_clean_change_set_is_pass() -> None:
     assert _verdict(["docs/INDEX.md"]) == "pass"
 
 
-# ------------------------------- `F10`：签字前契约 → 签字后的契约
-#
-# 所有者 2026-09-27 完成禁改区文件的逐行走查，把签字落进
-# `.noai-approvals.json`：当时是 18 个文件、17 条各 2 名不同 reviewer；
-# 随后 `A5` 扩容又把 3 条纳入清单并各配 2 名 reviewer。
-# 这几个数刻意不在这里钉死 —— 台账会随签字增长，当次读数才是权威。
-# 当时的读数（2026-09-27 15:0x 之前，`FIX11` 组 B4 落笔时）：entries 22 条、
-# `reviewers` 逐条分布 {0: 2, 2: 20}、元素总数 40 —— 它此后又漂过（`pyproject.toml`
-# 由人补签 2/2、`A5` 扩容后的条目陆续补齐），所以这三个数只能当"当时"读，
-# 不许当当前值引用。当次读数一律复跑 `python temp\_ledger_snapshot.py` 的汇总行，
-# 或直读 `.noai-approvals.json` 的 `entries` / 逐条 `reviewers`。
-# 这不是代码变更 ——
-# 世界变了。本节改前那两条用例逐字断言「命中禁改区 ⇒ fail」；签字之后
-# `src/agentflow/dedup.py` 这一版拿到 2 名不同 reviewer 且 `sha256` 与盘上一致，
-# 于是同一条命令判 `pass`，两条用例同时变红（实测见 `temp/FIX6-F1.md` 的 F1-R10 节）。
-# 那句话在签字前是真的，在签字后不再是契约。现在的契约是：
-#
-#   未批准（`unregistered` / `stale` / `insufficient_reviewers`）⇒ fail；
-#   有 2 名不同 reviewer 且 `sha256` 与盘上这一版一致 ⇒ 不判 fail。
-#
-# 判据在 `noai_gate.evaluate_approval`（`scripts/noai_gate.py`，禁改区，本批次不动它）。
-# 本节只读真实台账：它是人的签字记录，一个字节都不许由测试改。负控一律打在
-# `tmp_path` 下的台账副本上，并先证明注入真的生效（副本路径 + 两处 sha256）。
+# ------------------------------- `F10`：签字前契约 → 签字后的契约 所有者 2026-09-27 完成禁改区的逐行走查并把签字落进 `.noai-approvals.json`（此后 `A5` 扩容又纳入 3 条、
+# 各配 2 名 reviewer）。那几个数刻意不在这里钉死 —— 台账会随签字增长，当次读数才是权威：复跑
+# `temp\_ledger_snapshot.py` 的汇总行，或直读 `.noai-approvals.json` 的 `entries` / 逐条 `reviewers`。
+# 这不是代码变更，是世界变了：改前那两条用例逐字断言「命中禁改区 ⇒ fail」，签字之后 `src/agentflow/dedup.py`
+# 这一版拿到 2 名不同 reviewer 且 `sha256` 与盘上一致 ⇒ 同一条命令判 `pass`（实测 `temp/FIX6-F1.md` 的 F1-R10 节）。
+# 现在的契约：未批准（`unregistered` / `stale` / `insufficient_reviewers`）⇒ fail；有 2 名不同 reviewer 且
+# `sha256` 一致 ⇒ 不判 fail（判据在 `noai_gate.evaluate_approval`，本批次不动它）。本节只读真实台账：一个字节
+# 都不许由测试改，负控一律打在 `tmp_path` 下的副本上并先证明注入生效（副本路径 + 两处 sha256）。
 
 #: 真实仓库根（`release_check.REPO_ROOT` 就是 `agentflow/`）。
 _REAL_ROOT = RC.REPO_ROOT

@@ -181,24 +181,14 @@ def test_the_paper_pack_section_is_versioned(store: Store):
     assert int(AP.PROMPT_VERSION[1:]) >= 24, AP.PROMPT_VERSION
 
 
-#: `2026-10-01` 真机实测逼出来的那一条：光说"让包跟上"不够，还要点名走哪条路径 ——
-#: 实测的那次（工作区 `projects/p3-review`）主控派的是 `G.build_document`（两次都被
-#: `invalid_params` 拒），包一个字节没变、锚报 `drifted`，21 步打完收工，交付说明里
-#: 写着"包与台账分家"。
-#: 第二次实测（`projects/p3-review-20261001-220936`）证明点名动作这条路走通了（G 真的重渲染重编译），
-#: 但顺序错了：`H.verify_fixes` 排在 G 之后，它又改了 `review_findings`，锚当场变回 `drifted`
-#: ⇒ 段里必须同时写"会写台账的动作排在最后一次重渲染之前"。
-#: 第三次实测（`projects/p3-review-20261001-221654`）锚一致了，但 `main.tex` 一个字节没变
-#: ⇒ 段里必须点名"核验证明的主路径是 E 的形式化核验"（H 的机械门 + G 重渲染不会让稿子变好）。
-#: 第四次（2026-10-03，`draft/37` §58/§59）：第九趟主控连派三次 `G.revise` 都没能让包跟上
-#: （`revise` / `refresh_markdown` / `render` 动的是稿件 markdown），而"重渲染 + 重编译 + 核锚"
-#: 是三个工具、没有动作能召唤 ⇒ 于是加了 `G.paper_package`（一次做完三件事并回报 verdict）。
-#:
-#: **2026-10-13（业主裁定，`draft/117`）**：`G.paper_package` 那一整条退场 —— 正文由智能体
-#: 自己写。所以这一组事实换对象：段里必须点名"正文怎么进去的（`fs.write`）"、
-#: "用哪件工具编（`doc.paper_compile`）"、"核什么（`COMPILE-RECEIPT.json` 里的 `tex_sha256`）"，
-#: 以及"没有建论文包这个动作"这个反例。第二次实测那条顺序纪律随机制消失
-#: （新回执只认 `main.tex`，写台账不再让 PDF 过期）—— 它不是被删，是没了对象。
+#: 这一段的四轮真机读数，每一轮都逼出一句必须写进提示词的话（`draft/37` §58/§59、`draft/117`）：
+#: ① 2026-10-01（`projects/p3-review`）：只说"让包跟上"不够 —— 主控派 `G.build_document`（两次
+#: `invalid_params`），包一个字节没变、锚报 `drifted`，21 步打完收工 ⇒ 段里要点名走哪条路径。
+#: ② 同批第二次（`p3-review-20261001-220936`）：点名动作走通了，但 `H.verify_fixes` 排在 G 之后又改了
+#: `review_findings`、锚当场变回 `drifted` ⇒ 段里要写"会写台账的动作排在最后一次重渲染之前"。 ③ 第三次（`...-221654`）：锚一致但 `main.tex` 一字未变 ⇒ 要写"核验证明的主路径是 E 的形式化核验"。
+#: ④ 第四次（2026-10-03）：连派三次 `G.revise` 都没让包跟上（它动的是稿件 markdown）⇒ 于是加了 `G.paper_package`；2026-10-13 业主裁定（`draft/117`）那一整条退场、正文由智能体自己写：段里改点名
+#: "正文怎么进去（`fs.write`）/ 用哪件工具编（`doc.paper_compile`）/ 核什么（`COMPILE-RECEIPT.json` 的
+#: `tex_sha256`）"，外加"没有建论文包这个动作"这个反例；②那条顺序纪律随机制消失（不是被删，是没了对象）。
 PACK_FOLLOW_FACTS = ("fs.write", "doc.paper_compile", "COMPILE-RECEIPT.json",
                      "tex_sha256", "build_document", "G.revise",
                      '没有"建论文包"这个动作', "最后一次改正文",
