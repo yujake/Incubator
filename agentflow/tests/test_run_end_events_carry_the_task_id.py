@@ -179,13 +179,20 @@ def test_an_old_run_end_inherits_the_only_id_of_that_role(tmp_path: pathlib.Path
     那一条在盘上），而收工那一行没有编号只说明它落盘的时刻早于写侧补丁。回填要标出来的
     理由也在这里：它不是"事件里真有"，读的人有权知道这一格的来路。
     """
-    root = _store_with(tmp_path, _worker("M", "t-000001"))
+    root = _store_with(tmp_path, _worker("M", "t-000001") + [
+        # 主控问用户的那一条也属于这一趟（它的 `role` 就是"问的人"）：同一档回填。
+        {"kind": "user_question", "role": "M", "qid": "q0001", "text": "问你一件事",
+         "options": []},
+    ])
     lines = _lines([], root=root, sid="t")
     deliveries = [l for l in lines if str(l.get("kind")) == "agent_run_end"]
     assert len(deliveries) == 1, lines
     line = deliveries[0]
     assert line["task_id"] == "t-000001", line
     assert line["task_id_source"] == "inherited", line
+    asks = [l for l in lines if str(l.get("kind")) == "user_question"]
+    assert asks and asks[0]["task_id"] == "t-000001", asks
+    assert asks[0]["task_id_source"] == "inherited", asks
     # 另一半：起趟那条线本来就有编号 ⇒ 它是 event，不许被回填规则改写
     starts = [l for l in lines if str(l.get("kind")) == "agent_run_start"]
     assert starts and starts[0]["task_id_source"] == "event", starts
