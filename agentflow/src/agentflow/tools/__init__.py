@@ -26,12 +26,11 @@ from typing import Any, Iterable, Mapping
 # `EFFECT` / `EXTERNAL` / `SANDBOX_AVAILABLE` 曾经也在这里被 import（`axes-5`）：本文件对这三个名字的使用
 # 次数各 0 次、也都不在 `__all__` 里，但"本文件没用"与"没有消费者"是两件事：
 # - `EFFECT` / `EXTERNAL` 删掉 —— 全仓库没有地方从 `agentflow.tools` 顶层取它们；词表的落位是
-#   `tools/base.py`（定义）与 `capabilities.py`（本层自己那一份字面量 + 导入期交叉断言），留着会被读成
-#   "词表单一来源就在本文件"（`axes-5` 的影响面）。
+#   `tools/base.py` 与 `capabilities.py`，留着会被读成"词表单一来源就在本文件"（`axes-5` 的影响面）。
 # - `SANDBOX_AVAILABLE` 保留：`tests/test_r4_roles_surface.py` 用
-#   `monkeypatch.setattr(T, "SANDBOX_AVAILABLE", True)` 取它，删掉那个用例会以 AttributeError 变红。它唯一的
-#   设置点就是测试里的 monkeypatch（装配层不设它，本文件也没有 `sandbox_available=` 入口），不要读成"沙箱
-#   可用性在装配层设置"（`axes-3` 要防的正是这个错误结论）。
+#   `monkeypatch.setattr(T, "SANDBOX_AVAILABLE", True)` 取它。它唯一的设置点就是测试里的 monkeypatch（装配层
+#   不设它，本文件也没有 `sandbox_available=` 入口），不要读成"沙箱可用性在装配层设置"（`axes-3` 要防的正是
+#   这个错误结论）。
 from .base import (
     READONLY_CALL_EXCEPTIONS,
     SANDBOX_AVAILABLE,  # noqa: F401  - 只为顶层再导出，理由见上；唯一的消费者在 tests/ 里
@@ -60,12 +59,10 @@ from .base import SIDE_EFFECTS as _BASE_SIDE_EFFECTS
 #: 智能体角色。顺序无关，但保持稳定便于日志可比。
 #: A/B/C/D 是最初的文献流水线；E/F/G/H 是面向"数学研究"补上的四个角色（E 数值实验与形式化验证 / F 多轮
 #: 难题攻坚 / G 论文撰写 / H 审校），它们与 A–D 一样遵循"角色即权限面"：H 只读、C 只读，是为了让"改稿的
-#: 人"与"审稿的人"在结构上不能是同一个人。
-#: ⚠️ 单一来源：角色名单定义在 `schema.ROLES`，这里只是把它引过来。
-#: 为什么不能各写一份：`schema` 需要"role 是否合法"的判据（`Task.validate`），而 `tools` 需要"按角色过滤
-#: 工具面"；两处各写一份就会出现"schema 认为合法的角色，工具层不认"这种没有报错的分裂 —— 这正是 FC-03
-#: （跨模块字符串约定必须集中定义）要防的事。`schema` 不 import `tools`（依赖方向是 tools -> schema），
-#: 所以放 schema 里没有循环。
+#: 人"与"审稿的人"在结构上不能是同一个人。⚠️ 单一来源：角色名单定义在 `schema.ROLES`，这里只是把它引过来。
+#: 为什么不能各写一份：`schema` 需要"role 是否合法"的判据（`Task.validate`），而 `tools` 需要"按角色过滤工具
+#: 面"；两处各写一份就会出现"schema 认为合法的角色，工具层不认"这种没有报错的分裂 —— 这正是 FC-03（跨模块
+#: 字符串约定必须集中定义）要防的事。`schema` 不 import `tools`（依赖方向是 tools -> schema），所以没有循环。
 from ..schema import ROLES, CONDUCTOR_ROLE  # noqa: E402  (放在这里是为了让上面的说明紧贴定义)
 
 #: 能持有工具的角色名 = 可被召唤的 A–H + 主控 M。
@@ -84,25 +81,21 @@ TOOL_ROLES: tuple[str, ...] = tuple(ROLES) + (CONDUCTOR_ROLE,)
 #: - H（审校）：若审校者能直接改稿，它就同时是"发现者"与"修正者"，于是"发现问题"与"掩盖问题"在结构上
 #:   无法区分。
 #: 实现不在这个常量本身，而在 `ToolRegistry.for_role`（结构性过滤）—— 常量只是这条约束的单一来源（FC-03）。
-#: V（验证者）在这里的理由同族但落点不同：它不写任何「表」（`capabilities.WRITE_SETS["V"]` 是空集），唯一
-#: 的产物是 `verifications/<命题号>.jsonl` 这个文件；只靠"约定只读"的话 `for_role("V")` 会照旧把写工具发给
-#: 它，而"V 只改证明"这条路会在没有任何报错的情况下被打开。
+#: V（验证者）同理但落点不同：它不写任何「表」（`capabilities.WRITE_SETS["V"]` 是空集），唯一的产物是
+#: `verifications/<命题号>.jsonl`；只靠"约定只读"的话 `for_role("V")` 会照旧把写工具发给它。
 READ_ONLY_ROLES = ("C", "H", "V")
 
 #: 有写副作用的等级 —— 第一根轴词表里"写"的那一半（另一半是下面的 `_NON_WRITE_EFFECTS`）。单列一份是为了
 #: 让 `READ_ONLY_ROLES` 的判据在一个地方可读（FC-07：`side_effect` 是一等公民）。
-#: `X-91.5-5` 更正：这两行此前写着"与 `base.SIDE_EFFECTS` 的尾部一致"—— 那是一句按位置说的话（"尾巴"既没
-#: 点明是哪一半，也会在词表末尾追加一个非写等级时当场变成假话，而那种假话不会报错）。准确的说法是一个二分，
-#: 而且已被机器钉住：下面的 `_check_write_levels_are_registered()` 在 `agentflow.tools` 被导入时断言"词表 =
-#: 写等级 ∪ 非写等级、两栏不相交、两栏都取自词表"。
-#: B3 收官之后这里只剩 `write_local`（遗留取值 `network` 已从两处词表里删掉），于是 `external == "exec"` 的
-#: 剥离判据（`ToolRegistry.for_role`）是只读角色在"写"之外唯一还要看的那一根轴。两处词表不能分批删：
-#: `capabilities.assert_capabilities` 第 5 条断言 `set(capabilities.SIDE_EFFECTS) == set(base.SIDE_EFFECTS)`，
-#: 只删一处会导入期就炸 —— 这是好事，但排期上必须知道它们是一个原子改动。
-#: `R4-AN-4` / `N-5`：光有两处词表相等还不够，写等级这一份也要被钉住 —— 往第一根轴加一个写等级却忘了把它
-#: 登记进这张表，`for_role` 的剥离判据（`s.side_effect in SIDE_EFFECTS_WRITE`）就不把它算写工具，于是只读角色
-#: C/H 会静默拿到它（`R4` 用副本注入实测）。这正是 `.noai-paths` 第七类的原文"测试全绿、上线即越权"，而且两
-#: 处落点都在 FC-27 禁改区里；判据就是下面那条模块级断言（`agentflow.tools` 一被导入就跑）。
+#: `X-91.5-5` 更正：此前写的"与 `base.SIDE_EFFECTS` 的尾部一致"是一句按位置说的话（"尾巴"既没点明是哪一半，
+#: 也会在词表末尾追加一个非写等级时当场变成假话，而那种假话不会报错）。准确的说法是一个二分，而且已被机器
+#: 钉住：`_check_write_levels_are_registered()` 在 `agentflow.tools` 被导入时断言"词表 = 写等级 ∪ 非写等级、
+#: 两栏不相交、两栏都取自词表"。
+#: B3 收官之后这里只剩 `write_local`，于是 `external == "exec"` 的剥离判据（`ToolRegistry.for_role`）是只读角
+#: 色在"写"之外唯一还要看的那根轴；两处词表不能分批删（`capabilities.assert_capabilities` 第 5 条要求两处逐字
+#: 相等，只删一处会导入期就炸）。`R4-AN-4` / `N-5`：光有两处相等还不够 —— 加了写等级却忘了登记进这张表，
+#: `for_role` 就不把它算写工具、只读角色 C/H 会静默拿到它（`R4` 用副本注入实测），那正是 `.noai-paths` 第七类
+#: 的原文"测试全绿、上线即越权"；判据是下面那条模块级断言。
 SIDE_EFFECTS_WRITE = ("write_local",)
 
 #: 第一根轴上"不是写"的那些等级。它与 `SIDE_EFFECTS_WRITE` 一起构成词表的二分。
@@ -156,13 +149,11 @@ _check_write_levels_are_registered()
 
 #: 模块名 -> 它需要的依赖键（值从 build_registry 的 kwargs 里按名取）。
 #: `P-14` 之后工具面与可调用面是两个集合：`ToolRegistry.call` 要求调用方声明角色（`role=`，或装配期用
-#: `ToolRegistry.scoped_to(role)` 绑定），判据与 `for_role` 共用同一份私有谓词 `_role_surface`。两个面刻意
-#: 分开命名：
-#: - 工具面（`ToolRegistry.for_role`）：这个角色声明能拿到什么 —— 只读角色在这里被结构性剥离写工具与
-#:   `external="exec"`，`role_filter_notes` 留痕。
-#: - 可调用面（`ToolRegistry.call_surface`）：工具面 + 逐条登记的落库代理（`base.READONLY_CALL_EXCEPTIONS`，
-#:   今天只有 `H` 的三个 `review.*`）。第二个集合只允许由那张显式登记表产生 —— 没有第二条产生路径；`H` 的
-#:   落库代理是它的第一个用户（`agent_h.AgentH.writers`）。
+#: `ToolRegistry.scoped_to(role)` 绑定），判据与 `for_role` 共用同一份私有谓词 `_role_surface`。两个面刻意分开
+#: 命名：工具面（`ToolRegistry.for_role`）＝ 这个角色声明能拿到什么（只读角色在这里被结构性剥离写工具与
+#: `external="exec"`，`role_filter_notes` 留痕）；可调用面（`ToolRegistry.call_surface`）＝ 工具面 + 逐条登记的
+#: 落库代理（`base.READONLY_CALL_EXCEPTIONS`，今天只有 `H` 的三个 `review.*`）。第二个集合只允许由那张显式
+#: 登记表产生 —— 没有第二条产生路径；`H` 的落库代理是它的第一个用户（`agent_h.AgentH.writers`）。
 _MODULES: tuple[str, ...] = (
     "table_tools",
     "fs_tools",
