@@ -109,7 +109,7 @@ def _workspace(root: pathlib.Path, *, rows: list[dict] | None = None,
                ledger: dict[str, list[dict]] | None = None) -> pathlib.Path:
     """造一个工作区：台账三张表 + 正文 + 包内那些真实文件 + 对应表三份。
 
-    `rows=None` 时**不写**论文包里的 `MAPPING.json`（测"没交表"）。台账文件先按
+    `rows=None` 时不写论文包里的 `MAPPING.json`（测"没交表"）。台账文件先按
     `Store.init()` 的信封写一遍再换 rows：收工门那一格要在同一个工作区里跑，版本号必须是真的。
     """
     root = pathlib.Path(root)
