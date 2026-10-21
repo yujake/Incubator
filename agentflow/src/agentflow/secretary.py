@@ -2093,9 +2093,18 @@ class Secretary:
                                           "（先看一眼是不是同一件事的重试）")
         elif mismatch:
             decision, reason = "建议重排", "；".join(mismatch)
-        elif not self._can_take(to, action):
-            decision, reason = "建议改派", (f"{to} 的能力面里没有 {action}"
-                                          "（改派权在 M：这只是建议）")
+        elif not str(action or "").strip():
+            # 2026-10-21 真机缺陷（业主："秘书拦了好几回派活，看看到底是真的派活不准确还是系统缺陷"）：
+            # 这一条**没有点名具体动作**（role 级派活：把一件活派给某个角色，而不是"调某个动作"），
+            # 而下面那条判据是"这个动作在不在你的动作表里" —— 拿空动作去查，答案必然是"不在"，
+            # 于是每一次 role 级派活都被建议改派。真机上 M 派 A/E/D 全被判「能力面里没有 」，
+            # 而它们其实都派成了（`tasks` 里那四行就是证据）。这不是派活不准，是判据用错了对象。
+            #
+            # 口径：没点名动作时**不拿动作表卡它**（动作表管的是"调什么"，不是"派给谁"）；
+            # 角色存在性与可召唤性由 `prescreen` 那一侧管。判"可派"，并在 basis 里说清为什么没查动作。
+            decision, reason = "可派", ("这一条没点名具体动作（role 级派活）⇒ "
+                                        "不拿动作表去卡它；角色存在性由预筛管")
+            basis_note = "没点名动作 ⇒ 跳过动作表那一格（动作表管「调什么」，不管「派给谁」）"
         elif face_bad:
             # 面这一维与"能力面"是两回事：能力面说"这个动作你能做"，面说"那块盘
             # 不在你手里"—— 后者今天没有任何别的地方能在派活那一刻看出来。
@@ -2106,6 +2115,8 @@ class Secretary:
         else:
             decision, reason = "可派", "没有发现重复候选，能力面与参数都对得上"
         basis = ["specs/<role>.py 的动作表", "tasks: 同 key 的既有终态行"]
+        if not str(action or "").strip():
+            basis.append("没点名动作 ⇒ 动作表那一格不适用")
         if surface.get("checked"):
             basis.append("out/surfaces/<父>/<槽位>：这件活点名的路径在不在里面")
         # ---- 判断类：只有该介入时才叫模型（"切勿全写死成机器判据"的落点）。
