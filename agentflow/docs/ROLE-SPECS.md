@@ -52,7 +52,8 @@ python -c "import tempfile,pathlib;from agentflow.store import Store;from agentf
 > 逐条登记了这四个**该角色自己的落库代理**（`review.review_document` / `review.verify_fixes` /
 > `review.report` / `review.record_finding`；写面钉死在 `review_findings` / `documents.status`）。
 > `cli tools` 会把它们打出来并标"!! 有泄漏"——那一行是**声明面的读数**，行为面已被 `for_role` 拦下：
-> H 仍然拿不到任何 `fs.*` / `table.*` 写工具。**V、C 两栏是空的**。
+> H 仍然拿不到任何 `fs.*` / `table.*` 写工具。**V 那一栏是空的；C 那一栏只有 `analysis.register_report`
+> 一件**（见上表第 3 行 —— 它同样是 `READONLY_CALL_EXCEPTIONS['C']` 登记的落库代理）。
 
 ### 0.3 复跑命令（本文所有工具数字的出处）
 
@@ -203,7 +204,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | `C` | `analysis_reports`, `search_requests`（**两格都是只读角色的显式登记例外**：`analysis_reports` 是 `handle` 的产出登记口，`search_requests` 是 I3 直连那条通道；真身 `specs/c.py` 的 `write_set`，两条理由见 §C 的那张表与 `agent_c/core.py` 的注释） |
 | `D` | `research_questions`, `search_requests`（**不含** `relations`：D 对关系是**读** —— `specs/d.py` 的 `write_set` 是它的真身，`capabilities.py` 的注释逐字写着"D 的 `relations` 是读"；改关系状态的是 B） |
 | `E` | `experiments` |
-| `F` | `attack_plans`, `search_requests`, `reprocess_requests` |
+| `F` | `attack_plans`, `search_requests`, `reprocess_requests`, `statements`（2026-10-19 的**写集扩容**：`attack.step` 的 `proof` 产物自己落一行，`evidence_kind` 由 V 在 `verifications/<命题号>.jsonl` 里的签名现算；真身 `specs/f.py` 的 `write_set`） |
 | `G` | `documents`, `dependencies`, `review_findings` |
 | `H` | `review_findings`, `documents`（只读角色的显式登记例外） |
 | `V` | （空 ⇒ 只读：唯一产物是 `verifications/<命题号>.jsonl` 这个**文件**，不是表；`READ_ONLY_ROLES` 里的 `"V"` 与 `for_role` 的结构性剥离一起守它） |
@@ -249,7 +250,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | CLI 入口 | `agentflow ... web`（帮助逐字：「起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）」） | `python -m agentflow.cli web --help` |
 | 服务端模块 | `src/agentflow/webui/` **9** 个 `.py` | `(Get-ChildItem src/agentflow/webui/*.py).Count` |
 | 端点 | `webui/routes.py` 的 `ROUTES` **26** 条（`GET 19` + `POST 7`） | `python -c "from agentflow.webui.routes import ROUTES;import collections;print(len(ROUTES),collections.Counter(r[0] for r in ROUTES))"` |
-| 静态产物（**已构建，运行期不需要 `node_modules`**） | `src/agentflow/web/static/`：`index.html` 0.9 KB、`assets/index.*.js` 111.9 KB、`assets/index.*.css` 22.5 KB | `Get-ChildItem -Recurse src/agentflow/web/static` |
+| 静态产物（**已构建，运行期不需要 `node_modules`**） | `src/agentflow/web/static/`：`index.html` 0.9 KB、`assets/index.*.js` 111.8 KB（114,524 字节）、`assets/index.*.css` 22.5 KB | `Get-ChildItem -Recurse src/agentflow/web/static` |
 | 前端源码 | `agentflow/ui/`（`api.ts` 端点、`sse.ts` 事件 kind、`types.ts` 字段、`main.tsx` 路由） | `Get-ChildItem agentflow/ui/src`（相对仓库根） |
 | 判据 | `tests/test_webui{,_contracts,_help_is_current,_pages,_readers,_roster_panel,_settings_write,_sse,_static,_writes,_browser}.py`，**11** 个文件 | `(Get-ChildItem tests/test_webui*.py).Count` |
 | 已知边界 | 原始七层出处的 `draft/35` **没有这一层**（后加）；`draft/114` 记的是"九页 / 十条只读面 / 五条写端点"（**当次读数，未复跑**） | — |
@@ -363,22 +364,25 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 ### R0.1 94 个工具的公共事实（现读）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑 `validate_params`，非法即 `fail(kind="param_error")`，**不会进 handler**。
-- `roles_consistent_with_side_effect = true`：**没有任何写工具声明了 C 或 V**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。**H 是唯一例外**，且例外逐条登记在 `READONLY_CALL_EXCEPTIONS['H']`（4 件落库代理，见 §H.4）。
+- `roles_consistent_with_side_effect = true`：**写工具声明 C 或 V 会被剥掉**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。今天的登记例外只有两处：`READONLY_CALL_EXCEPTIONS['C']`（1 件：`analysis.register_report`）与 `READONLY_CALL_EXCEPTIONS['H']`（4 件落库代理，见 §H.4）；**V 一件没有**。
 - handler 形态（94）：`functools.partial` **91** / `lambda` **3** / 具名闭包 **0** ⇒ 那 3 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
 - 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools`（**94**）少"需要 store 才能注册"的那一族；**本文一律用 B 口径**。
 - **V 的 12 件公共只读**（`conductor.escalate` 1 + `fs.*` 4 + `table.*` 5 + `manuscripts.*` 2）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。
 
 复跑：`python -m agentflow.cli tools`（条数 + 两根轴）与 `python tools/verify_role_specs.py`（逐角色对账）。
 
-### R0.2 不经 `build_registry` 的 14 个工具（**必须单列**）
+### R0.2 不在 `build_registry` 那 94 里的 **9** 个工具（**必须单列**）
 
 | 来源 | 数量 | 工具 | `side_effect` | 是否过角色校验 |
 |---|---:|---|---|---|
 | `agent_c.register_tools` | 9 | `graph.hottest` `paths` `cold` `gaps` `svc_neighbors` `svc_relations_between` `contradictions` `structural_duplicates` `check_conflict` | 全 `read` | **否** |
-| `agent_d._fallback_trace_tools` | 3 | `trace.relation` `trace.concept` `trace.literature`（降级替身） | 全 `read` | **否**（`install_d_tools` 直接 `ToolRegistry(...)`） |
-| `review_tools.register(include_writers=True)` | 2 | `review.review_document` `review.verify_fixes` | `write_local` | 走模块注册路径，**默认不注册** |
 
-> 9+3+2 = **14**，且**不在 `cli tools` 的 94 里** ⇒ 别把它们加进"某角色的工具数"。
+> 这 9 件**不在 `cli tools` 的 94 里** ⇒ 别把它们加进"某角色的工具数"。
+> 另两处"自注册面"**不另算条数**（它们的名字已经在 94 里）：`agent_d._fallback_trace_tools` 的
+> 3 个替身只在 D 自己构造的注册表里生效，而 94 里的 `trace.relation`/`trace.concept`/`trace.literature`
+> 来自 `tools/trace_tools.py` 的正常注册（`roles=("C","D")`）；`review_tools` 的 4 件写侧
+> 自 2026-10-17（业主裁定「方案 1」）起由装配器自动 `include_writers=True` 装进主表
+> （`roles=("H",)`，见 §H.4）。
 > ⚠️ 那 3 个替身的 `roles=("agent-C","agent-D")` **带 `agent-` 前缀**（不是 `"C"`/`"D"`），而 `install_d_tools` 又直接构造注册表 ⇒ `for_role("C")`/`for_role("D")` **永远拿不到它们** —— 正是 `build_registry` 专门加断言要拦的那类错误。
 > `AgentH.install_h_tools` **不是新工具**：它复制 H 子集并用 `filter_readonly_h_surface` 再拒一次 + 留痕（`refused_write_tools`）。
 
@@ -449,7 +453,7 @@ A 产出的行有**两个**状态机。
 > "在途条数 ≤ 20"（瞬时）与 `agent_d.max_total_requests = 20`
 > （`agent_d.AgentD.max_total_requests`，每 run）。**按"这条关系问了几次"计的 token 预算没有**：
 > 全库的 token / 花销计量在 `tokenmeter.TokenMeter`（`(scope, task)` 一维），
-> 写 `usage_ledger` 的唯一入口是 `tokenmeter.charge()`，由模型缝 `llmseam` 每次调用记一笔 ——
+> 写 `usage_ledger` 的入口在 `tokenmeter.TokenMeter`（`charge()` 与它的幂等形态 `charge_once()`），由模型缝 `llmseam` 每次调用记一笔 ——
 > **检索路径自己不写它**（本次仍未在 A/B/C 的任何代码里核到写 `usage_ledger` 的调用）。
 > 旧文那句"`token_meter` / `token_budget` 在 `src/agentflow/**` 里 0 命中"已按代码改正：
 > `tokenmeter.py` 就在盘上，`Policy` 的 `token_budget` 一格已于 2026-10-15 撤掉。
@@ -624,7 +628,7 @@ B 的"没有结果"逐个列：
 **C 把三张知识表变成可读的结构结论**，且**全量只读**。
 它回答：**"这张关系图长什么样？哪里是热点、哪里是空洞、哪两条路径最值得下钻？"**
 
-**C 是唯一"只读但确实会写自己的产出表"的角色**（`capabilities.WRITE_SETS["C"] = {"analysis_reports", "search_requests"}`）。
+**C 也是"只读但确实会写自己的产出表"的角色之一**（另一处是 H 的 `review_findings` / `documents.status`；`capabilities.WRITE_SETS["C"] = {"analysis_reports", "search_requests"}`）。
 这不是冲突：`analysis_reports` 是 C 写**它自己说过什么**（`AnalysisReport.persist`，`agent_c.AnalysisReport.persist`）；
 `search_requests` 是 I3 直连那条通道（`handle` 分派需求时直接建检索请求行）—— **两条都是只读角色的显式登记例外**，真身是 `specs/c.py` 的 `write_set`；
 它**一行 `statements`/`relations` 都不碰**。
@@ -817,7 +821,7 @@ C 的产出有两类，状态语义完全不同。
 > ⚠️ **FC-19 未落地**（`DESIGN-CONDUCTOR.md` 与 `LESSONS.md` 都点名）：
 > **按"D 向 A 问了几次"计的 token 预算没有** —— 全库的 token / 花销计量在
 > `tokenmeter.TokenMeter`（`(scope, task)` 一维），写 `usage_ledger` 的入口是
-> `tokenmeter.charge()`（由模型缝 `llmseam` 每次调用记一笔）。
+> `TokenMeter.charge()` / `charge_once()`（模型缝 `llmseam` 走后者，每次调用记一笔）。
 > `schema.UsageEntry` + `usage_ledger` 表**已有**，`verify` 已有
 > `dangling_usage_task` / `usage_task_total_mismatch` 两条检查，
 > 但**没有 D/A/B 路径自己往里写**（本次仍未在 `agent_*.py` 里核到写 `usage_ledger` 的调用；
@@ -998,7 +1002,7 @@ C 的产出有两类，状态语义完全不同。
 | 不做什么 | 为什么不由 F 做 | 该由谁做 |
 |---|---|---|
 | 自己"想数学" | `attack.step` 的 `summary` 逐字："C/D/F 的推理**未接线**" —— 本轮的 F 是**确定性调度器**，不是推理者 | 由 `SubagentBackend` 承担（**未接线**） |
-| 写知识表 | F 的写集是 `{attack_plans, search_requests, reprocess_requests}` | **B** |
+| 写知识表 | F 的写集是 `{attack_plans, search_requests, reprocess_requests, statements}` —— 表级知识写只有 `statements`（2026-10-19 扩容：`proof` 产物落一行），概念 / 关系一张都不碰 | **B**（概念 / 关系 / 命题的常规登记） |
 | 把 `supported_not_proved` 说成 `resolved` | FC-22：无任何 `proof` 时计划状态**只能**是 `supported_not_proved` | schema 硬拦（自检实测："计划状态随之变成 `supported_not_proved`（无任何 proof）"） |
 | 无限重试 | `TERMINAL_STATUSES` 含 `stalled`；`stalled` 不可重入 | `tools.attack_tools.TERMINAL_STATUSES` |
 | 决定难题值不值得攻坚 | 立项是**D 的升级决定**（I10） | **D**（`D → F`） |
@@ -1221,7 +1225,7 @@ C 的产出有两类，状态语义完全不同。
 **H 产出"发现"，且发现本身必须有证据**，并且**只读**。
 它回答：**"这份稿件有没有不合格的地方？改过之后真的改好了吗？"**
 
-**H 是唯一"能写，但只能写两样东西"的角色**：`review_findings`（自己的发现）
+**H 也是"能写，但只写两样东西"的只读角色**（另一处是 C：`analysis_reports` / `search_requests`）：`review_findings`（自己的发现）
 与 `documents.status`（只改状态，**改不了任何一句断言**）。
 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]` 逐字登记了这个例外
 （`capabilities.READ_ONLY_WRITE_EXCEPTIONS`）。
@@ -1322,7 +1326,7 @@ C 的产出有两类，状态语义完全不同。
   —— H 仍只读，落库代理仍钉死在 `review_findings` / `documents.status` 上（"判"与"落"分居两处）。
 - **H 能召唤谁**：`A E G`（`capabilities.ALLOWED_EDGES`）。
 - **入参从哪来**：`documents` 行 + `dependencies`（**必须由调用方显式提供**，
-  不提供就 `checked=False`）；`capabilities.CAPABILITIES` 的 3 个动作 schema。
+  不提供就 `checked=False`）；`capabilities.CAPABILITIES` 的 5 个动作 schema。
 - **产出被谁消费**：
   - `review_findings` → **G**（`revise` 按 `fixed_findings` 修改）、人
   - `documents.status` → **G**（`revise` 前要读到 `in_review`）、**verify**
@@ -1570,7 +1574,7 @@ C 的产出有两类，状态语义完全不同。
 | `max_concurrency` | 新召唤 `refused/concurrency_exceeded` |
 | `max_tasks_per_run` | 新召唤 `refused/...`（`total = _started_total + _cancelled_total`） |
 | `wall_clock_sec` | 新召唤 `refused/deadline_exceeded`，**并 `_signal_stop("deadline", …)` 协作式取消在跑的** |
-| `token_budget` / `usd_budget` | `refused/budget_exceeded` |
+| `usd_budget`（`token_budget` 这一轴已于 2026-10-15 撤掉：**只判钱**） | `refused/budget_exceeded` |
 | `dispose()` | **合成 `cancelled` 的 end**（`detail` 写"结果未知"），**不自动重试** |
 
 > ⚠️ **一个易被绕过的细节**（`conductor.Conductor.__init__` 逐字）：
@@ -1630,8 +1634,8 @@ C 的产出有两类，状态语义完全不同。
   - `SummonResult` → 调用方（**永远不抛业务异常**）
   - `stats()` / `tree()` → 给用户的汇总
   - `usage_ledger` 行（`UsageEntry`）→ **M 的 `budget.spend()` 只写内存**
-    （`MemoryBudgetTracker`，`scheduler.py:72-115`）；**`usage_ledger` 的写入方是模型缝**
-    （`llmseam` 每次调用 → `tokenmeter.TokenMeter.charge()`），`tasks.tokens`/`usd`
+    （`scheduler.MemoryBudgetTracker`，按符号定位）；**`usage_ledger` 的写入方是模型缝**
+    （`llmseam` 每次调用 → `tokenmeter.TokenMeter.charge_once()`，`charge()` 的幂等形态），`tasks.tokens`/`usd`
     （`finish(..., tokens=, usd=)`）由那本账派生 —— 两处口径的一致性由 `verify` 的
     `usage_task_total_mismatch` 盯。旧文写"`usage_ledger` 表没有写入方"已按代码改正。
 

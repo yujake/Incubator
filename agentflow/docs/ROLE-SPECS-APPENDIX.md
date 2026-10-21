@@ -34,17 +34,19 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 > **那个取值现在不存在**（`agentspec.EFFECT == ("none","read","write_local")`），
 > 所以任何"`network` 有几个"的问题都已经**没有取值可答**。
 
-**自注册面（14 件，不过 `build_registry` 的角色校验）**：9 个 `graph.*`（`agent_c.register_tools`）
-+ 3 个 `trace.*` 替身（`agent_d._fallback_trace_tools`）+ 2 个 `review.*` 写侧
-（`review_tools.register(include_writers=True)`）。9+3+2 = 14。
-**`cli tools` 的 94 里不含它们** ⇒ 引用"某角色有几个工具"时不要把它们加进去。
+**自注册面（9 件，不过 `build_registry` 的角色校验）**：9 个 `graph.*`（`agent_c.register_tools`）
+—— **`cli tools` 的 94 里不含它们** ⇒ 引用"某角色有几个工具"时不要把它们加进去。
+另两处同名面**不另算条数**：`agent_d._fallback_trace_tools` 的 3 个 `trace.*` 替身只在 D
+自己构造的注册表里生效（94 里的同名三件来自 `tools/trace_tools.py`，`roles=("C","D")`）；
+`review_tools` 的 4 件写侧自 2026-10-17 起由装配器自动 `include_writers=True` 装进主表
+（`roles=("H",)`）。
 
 ---
 
-## R0.2 [附录·实测] 不经 `build_registry` 的 14 个工具的逐条对账
+## R0.2 [附录·实测] 不经 `build_registry` 的那批工具的逐条对账（2026-10-18 记 14 件；2026-10-21 复核 ⇒ 不在 94 里的只有 9 件）
 
 正文 §R0.2 已经把这张表写全（来源 / 位置 / 数量 / 工具 / `side_effect` / `roles` / 是否过角色校验）。
-本节只登记**当次复核结论**：
+本节只登记**当次复核结论**（下面三条是 2026-10-18 的读数；14 → 9 的那次复核见正文 §R0.2）：
 
 - 9 个 `graph.*` 的 `roles=("C","D")` —— **当次未逐字复核**（`agent_c.register_tools`）。
 - 3 个 `trace.*` 替身的 `roles=("agent-C","agent-D")` **仍带 `agent-` 前缀** ——
@@ -145,9 +147,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 需审批 | **1** |
 
 > ⚠️ **旧版本节写"21 = 第一层 19 + 自注册 9"，那道算术不成立**（19 + 9 = 28 ≠ 21）：
-> 自注册的那 9 个 `graph.*` **根本不在 `cli tools` 的计数里**，它们既不加进 21、也不在
-> `build_registry` 的角色校验里。21 的构成只有"19 + `search.local`/`search.shelf` 2"这一种读法。
-> **2026-10-21 重算**：21 → **23**（`analysis.register_report` + `conductor.escalate`）。
+> 自注册的那 9 个 `graph.*` **根本不在 `cli tools` 的计数里**，它们既不加进这个数、也不在
+> `build_registry` 的角色校验里。2026-10-18 那次 **21** 的构成只有"19 + `search.local`/`search.shelf` 2"这一种读法。
+> **2026-10-21 重算**：21 → **23**（19 + `search.local`/`search.shelf` 2 + `analysis.register_report` 1 + `conductor.escalate` 1）。
 
 **C 拿不到**：`fs.*`/`table.*` 的写工具（**结构性**：只读角色）、`search.*` 的其余 7 件
 （除 `local`/`shelf`）、`ocr.*`、`research.*`、`verify.*`、`doc.*`、`review.*`、`attack.*`、
@@ -175,7 +177,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 **D 拿不到**：`attack.create_plan` / `attack.step`（F 的立项与推进）、`doc.build_document` /
 `doc.register_dependency` / `doc.paper_compile`（G 的写稿）、`review.report` /
-`review.review_document` / `review.verify_fixes`（H 的落库代理）、`search.*` 全部 9 件、
+`review.review_document` / `review.verify_fixes` / `review.record_finding`（H 的 4 件落库代理）、`search.*` 全部 9 件、
 `ocr.*`、`text.extract`、`verify.check_formal` / `verify.run_experiment`（所以 D **读得到**证据、
 **产生不了**证据）。
 
@@ -240,7 +242,8 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 `review.*` 2 · `verify.*` 6 · `conductor.broadcast` / `conductor.escalate` 2。
 
 **G 拿不到**：`attack.create_plan`/`attack.step`、`graph.*`/`trace.*`、`research.*`、`search.*`、
-`ocr.*`、`text.extract`、`review.report`/`review.review_document`/`review.verify_fixes`（H 的落库代理）、
+`ocr.*`、`text.extract`、`review.report`/`review.review_document`/`review.verify_fixes`/`review.record_finding`
+（H 的 4 件落库代理）、
 `verify.list_verifications`/`verify.read_proof`/`verify.verify_proof`（V 的台账面）。
 
 ---
@@ -479,7 +482,7 @@ A 产出的行有**两个**状态机。
 
 **(b) `relations.status`**
 
-`RELATION_STATUS = ("active","suspect","rejected")`（`schema.py:67`）。
+`RELATION_STATUS = ("active","suspect","rejected")`（`schema.RELATION_STATUS`）。
 
 | 从 → 到 | 允许？ | 触发条件 | 谁拦 |
 |---|---|---|---|
@@ -1048,7 +1051,7 @@ SELF-CHECK FAILED
 | 9 | G 的 `dependencies.used_by` 是否有直接的 verify 检查 | 读了 `verify.py` 当次的 code 列表（2026-10-21 现读 **105** 个去重 / **132** 处调用点，见正文 §0.4） | 只看到 `dangling_doc_ref`（经 `review_findings`），没看到 `used_by` 的检查 |
 | 10 | `G → D/E/F` 的实际召唤是否有代码路径 | 读了边表（`capabilities.ALLOWED_EDGES`） | 没 grep `Conductor.summon("D", …)` 之类的调用点 |
 | 11 | `LocalBackend.registry` 在真实运行里怎么接 | 读了 `conductor.LocalBackend` | 没找到任何生产调用方（**这可能意味着 M 目前只有测试驱动**） |
-| 12 | `usage_ledger` 表是否有任何写入方 | 2026-10-21 复跑：grep `usage_ledger` 全仓 + 读 `tokenmeter.py` | **已核实（不再是"可能无写入方"）**：写入方是 `tokenmeter.TokenMeter.charge()`（`store.tx("usage_ledger", …)` + `tx.upsert`），由模型缝 `llmseam` 每次调用记一笔；`agent_*.py` 本身不直接写它 —— 旧结论"无写入方"是错的 |
+| 12 | `usage_ledger` 表是否有任何写入方 | 2026-10-21 复跑：grep `usage_ledger` 全仓 + 读 `tokenmeter.py` | **已核实（不再是"可能无写入方"）**：写入方是 `tokenmeter.TokenMeter.charge()` / `charge_once()`（`store.tx("usage_ledger", …)` + `tx.upsert`），由模型缝 `llmseam` 每次调用记一笔；`agent_*.py` 本身不直接写它 —— 旧结论"无写入方"是错的 |
 | 13 | `subagent` backend 接上 DSH 后的行为 | 读了 `SubagentBackend`（恒 `not_wired`） | 无 API key / 无 harness 权限面，**无法实测** |
 | 14 | `method="formal"` 的真实后端路径 | 读了 `verify_tools.py` 的 `fail(kind="not_implemented")` | 本机无 Lean/Coq/Isabelle，**无法实测** |
 | 15 | 真实联网端到端 | 读了 `test_providers_online.py`（8 例，默认 deselect） | 本次**未跑 `-m network`** |

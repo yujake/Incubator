@@ -98,19 +98,19 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
 
 | 路由 | 页面 | 端点（`ui/src/api.ts` 的 `ENDPOINTS`） | 读的栏位（后端键逐字） | 空态（"读到了，里面是 0"） | 三态落点 |
 |---|---|---|---|---|---|
-| `/` | `Home.tsx` | `GET /api/state` | `pending_questions`（**全局，不按会话过滤**）· `sessions`（`events_seen`/`bad_lines`/`last_kind`/`pending`/`runs`/`orphans`）· `problems` · `ledger.events`/`tables`/`tables_note` · `runs[].waiting_on` | "没有待回答的问题（合法初态，不是「没查成」）" | `problems` 非空 ⇒ 顶部横幅显红；`bad_lines > 0` ⇒ 行内徽标 |
+| `/` | `Home.tsx` | `GET /api/state` + `GET /api/chat`（`?sid=`，逐条来回） | `pending_questions`（**全局，不按会话过滤**）· `sessions`（`events_seen`/`bad_lines`/`last_kind`/`pending`/`runs`/`orphans`）· `problems` · `ledger.events`/`tables`/`tables_note` · `runs[].waiting_on` | "没有待回答的问题（合法初态，不是「没查成」）" | `problems` 非空 ⇒ 顶部横幅显红；`bad_lines > 0` ⇒ 行内徽标 |
 | `/run/:sid` | `Run.tsx` | `GET /api/run/{sid}` + `GET /api/run-index` + `GET /api/run/{sid}/events`（`?since_index=` `?limit=`） | `runs[]`（`steps`/`llm_calls`/`usd`/`unknown_usd`/`last_shape`/`stop_reason`/`waiting_on`/`events_in_run`）· `report`（`ok`/`missing`/`unknown`）· `checkpoint.spend`（首选花销）· `drift`/`usable`/`tri`（趟次索引对账）· `orphans`/`orphan_summary` · 逐条事件：`total`/`from_index`/`to_index`/`truncated`/`events[]`（每条 `index`/`kind`/`ts`/`role`，另有"有就带上"的 `shape`/`ok`/`usd`/`tokens_in`/`tokens_out`/`payload`/`result`/`text`/`stopped`） | "这一段会话里一趟都没有" + "没有轮次之外的零散事件" + 逐条事件"游标已经到末尾" | 索引 `tri != computed` ⇒ 显红并说明"本页回退现算"；两个花销来源都读到才谈"是否一致"，任一边没读到 ⇒ "没查成"；交付说明走 `ReportTri` 那一套词；逐条事件 `unreadable` ⇒ 显"没查成（不是一张空列表）"、计数栏是 `unknown` 而不是 0（`not_applicable` = 会话在盘上但还没有事件） |
 | `/evidence` | `Evidence.tsx` | `GET /api/evidence` | `statements` · `conjectures`（含 `counterexample_experiment_id`）· `experiments` · `review_findings` · `relations.quote_verified`（真/假/未查三个数）· `verifications` · `secretary` | 每一栏各自的 `<栏>_tri == computed` 且 0 行 ⇒ "0 条（读到了，里面是空的）" | **逐栏**读 `<栏>_tri`（整面一个词会吞掉"哪一栏没读成"）；`quote_verified !== true` 必须连 `quote_reason` 一起看 |
 | `/artifacts` | `Artifacts.tsx` | `GET /api/artifacts` | `ledger` · `ledger_verify`（台账钉的 sha vs 盘上现在这一版）· `handoffs`（`body` 按 `CLIP=400` 截断）· `checks` · `style.sections` · `secretary` · `products`（六件，裁定 J2 的夹具样本）· `tasks` | 逐栏："台账 0 行（读到了，里面是空的）" | 逐栏 `<栏>_tri`；`products_tri == not_applicable` ⇒ "这一路本机还没跑过"，不是"六件都不在" |
 | `/acceptance` | `Acceptance.tsx` | `GET /api/acceptance`（`?project_dir=` `?report_path=` `?cap_usd=`） | `criteria`（5 条，值 `pass`/`fail`/`unknown`）· `details` · `auxiliary`（5 条）· `failed` · `auxiliary_note` | "一条判据都没读到"（判据名表来自 `reviewaccept.CRITERIA`，页面不另抄） | `unknown` 显成"没查成（不是通过）"；**不给 `cap_usd` ⇒「在成本上限内」那一格必为 `unknown`** |
 | `/machine` | `Machine.tsx` | `GET /api/machine` + `POST /api/settings` | `provers`（含 `checked` 与 `sources` —— "从哪一档找到的"）· `mathlib` · `lean_ready`/`can_do_formal` · `settings.path`/`exists`/三段 · `settings.model.configured`（**永无 key 值**）；写面：`toolchain.*` / `model.*` / `workspace.*` 逐格 + `confirm=1` | "探测读数里一格都没有" | `provers.checked=false` ⇒ 整面 `unreadable`（探测没跑完 ≠ 一个都没找到）；`lean_ready`/`can_do_formal` 的 `null` 显 `unknown`，不折成 `false`；写面 403（没开 `--allow-writes`）如实显示回执 |
 | `/budget` | `Budget.tsx` | `GET /api/budget` + `POST /api/budget` | `total_usd`/`spent_usd`/`remaining_usd`/`exceeded`/`source`/`problem` · `added[]`（`kind`/`usd`/`by`/`at`/`note`）· `by_role`/`by_scope` · `spent_tri`/`spent_reason`；写面：`action=add\|set` · `usd` · `note` · `confirm=1` | "还没有任何追加/重设记录（寄存器里 added[] 是空的）" | 寄存器缺席 ⇒ `not_applicable`（还没设过，不是"没查成"）；寄存器读不出来 ⇒ `unreadable` + `problem`，且**不许显示成"不限量"**；账本读不出来 ⇒ `spent_tri=unreadable` 且金额显示 `unknown`（**不是 $0.000000**）；`exceeded` 是读数不是错误 |
-| `/live` | `Live.tsx` | `GET /api/live` + `GET /api/status-reports` + `GET /api/usage` | `answer`/`running[]`/`live[]`/`unreadable_sessions`/`switch`/`switch_present`/`history[]`/`interrupts[]` · `reports[]`（`ts`/`name`/`bytes`/`json_path`）· `spent`/`by_role`/`by_scope`/`entries` | "会话面：没有在跑的循环（每一趟起过的都收到了工）" | `answer` 有三档字面量（"有" / "没有" / "没查成"）：读不出来时 **必须**显"没查成"——那一格正是用户决定要不要叫停时看的 |
+| `/live` | `Live.tsx` | `GET /api/live` + `GET /api/status-reports` + `GET /api/usage` + `GET /api/roster`（名册树：父/子/绝对编号） | `answer`/`running[]`/`live[]`/`unreadable_sessions`/`switch`/`switch_present`/`history[]`/`interrupts[]` · `reports[]`（`ts`/`name`/`bytes`/`json_path`）· `spent`/`by_role`/`by_scope`/`entries` | "会话面：没有在跑的循环（每一趟起过的都收到了工）" | `answer` 有三档字面量（"有" / "没有" / "没查成"）：读不出来时 **必须**显"没查成"——那一格正是用户决定要不要叫停时看的 |
 | `/help` | `Help.tsx` | （不调端点：说明页） | 角色分工 · 常用命令 · 预算 · Lean 开关 · 报错去哪看 | ——（没有读数，也就没有空态） | 不适用 |
 
 **后三页是业主 2026-10-12 那两条的落点**（「做预算设置和显示窗口，用户可追加预算」
 「特别照顾……对多智能体系统的监控能力」+「使用说明」）：`/budget` 是预算窗口，
-`/live` 是监控面，`/help` 是使用说明。三条读端点（`GET /api/budget` / `/api/live` /
+`/live` 是监控面，`/help` 是使用说明。四条读端点（`GET /api/budget` / `/api/live` /
 `/api/usage` / `/api/status-reports`）与两条写端点（`POST /api/budget` / `POST /api/settings`）
 从 2026-10-13 起是接线的一部分：`Run` 页原来的两处"缺口"（停机状态、活进程）随之接上，
 只剩"检索腿"（`search_requests` 汇总）仍是缺口。
@@ -165,13 +165,16 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
 2. **主控的产出只有两类**：召唤与"给用户的汇总"。它不产出知识、不写关系、不改稿件；
    它的"正确性" = 发出的召唤序列是否满足策略与预算（同节）。
 3. **主控在策略之内、且不可被召唤**：`capabilities.NON_SUMMONABLE = {"M"}`
-   ⇒ 主控永远是顶层入口；`ALLOWED_EDGES` 里 `M → {A,C,D,E,G,H}`
-   （**不许直接控制 B / F / V**，2026-10-10 裁定：B 走 `A`、F 走 `D`、V 走 `F`）、`A→B`、`B→C`、
-   `D→{E,C,B,F,A}`、`E→{B,D}`、`F→{C,E,D,B,A,V}`、`G→{F,A,E,D}`、`H→{G,A,E}`。
+   ⇒ 主控永远是顶层入口；`ALLOWED_EDGES` 里 `M → {A,B,C,D,E,G,H}`
+   （**不许直接控制 F / V**：2026-10-10 裁定要间接转达，`M→B` 2026-10-13 加回、`M→V`
+   2026-10-18 开又于 2026-10-20 撤 ⇒ F 走 `M→D→F`、V 走 `M→B→V` / `M→D→F→V`）、
+   `A→B`、`B→{C,H,V}`、`C→∅`（2026-10-20 改回"无出边"：D 唤起 C、C 的汇报就是它的返回值）、
+   `D→{A,B,C,E,F}`、`E→{B,D}`、`F→{A,B,C,D,E,V}`、`G→{A,D,E,F}`、`H→{A,E,G}`。
 4. **A–H 对召唤者负责**：被动（主控召唤）或同伴召唤，受三条约束 —— 边必须被策略允许、
-   深度有限（默认 3）、同一 `(role, action, input_key)` 不得在祖先链上重复（§1.2）。
+   深度有限（`policy.Policy.max_depth` 现读 **12**）、同一 `(role, action, input_key)` 不得在祖先链上重复（§1.2）。
 5. **并发是策略、不是常量**；可并发的判据是"会不会写同一张表的同一批行"（§1.3）；
-   写集由 `capabilities.WRITE_SETS` 定义，只读角色（C/H）拿不到写工具。
+   写集由 `capabilities.WRITE_SETS` 定义；只读角色（C/H/V）拿不到 `fs.*` / `table.*` 的写工具
+   （C/H 各自的落库代理由 `tools.base.READONLY_CALL_EXCEPTIONS` 逐条登记 —— C 1 件、H 4 件，V 一件没有）。
 6. **人机通道归主控**（由 1 与 3 推出，不是抄来的）：只有 `schema.CONDUCTOR_ROLE`
    可以当面问人；A–H 把未决问题写进自己的结果交回召唤者。落点
    `agent_loop._do_ask_user`（`role != CONDUCTOR_ROLE` ⇒ `not_conductor`），

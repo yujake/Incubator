@@ -2066,7 +2066,7 @@ def cmd_web(args) -> int:
     （`R003` 防的正是"同一个公开名两处各有一份实现"）。`cli.main` 是命令总入口，`webui.run` 是这一个
     子命令的实现；两者的名字因此不同。
     两个开关按裁定 T1 加（`--allow-writes` 题 C2、`--no-settings-write` 题 E1）。W3/W4 之后它们真的
-    改变行为，两条都在 `writes.authorize()` 的矩阵里：`--allow-writes` 是第 3 层（不开 ⇒ 所有写端点
+    改变行为，两条都在 `writes.authorize()` 的矩阵里：`--allow-writes` 是第 3 层（不开 ⇒ `/api/` 下那六条写端点
     403），`--no-settings-write` 是第 4 层（只关 `POST /api/settings`）。`getattr` 的默认值是为了让
     直接构造 `Namespace` 的老调用方（
     `tests/test_webui.py::test_the_cli_web_subcommand_forwards_to_the_module_entry`）照旧能跑：

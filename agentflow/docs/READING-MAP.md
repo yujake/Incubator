@@ -114,7 +114,7 @@
 | `budget.py` | 可追加的总预算：盘上寄存器（工作区根下那一个 JSON）+ 每次花钱前现读的口子 —— 花销不在这里（唯一权威账是 `usage_ledger`） |
 | `toolchain.py` | 这台机器上的证明工具链（一处定义）：显式配置（`AGENTFLOW_LEAN_BIN` 等）→ `AGENTFLOW_PROVER_PATH`（两者都是环境变量）→ **设置文件的 `toolchain.*`** → PATH 四档查找 + 三态探测 + Mathlib 那一轴；探测（禁改区的 `verify_tools.detect_verifier`）与调用（`formalgw.find_lean`）共用这一个答案，`agentflow doctor` 把读数打给人看（打的是"从哪一档找到的"） |
 | `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`）；`web/assets.py` 是令牌的唯一真身（**我们自己的组件样式在 W5 随旧壳退场，搬到了前端工程的 `ui/src/theme/app.css`**）、`web/emit_theme.py` 把它生成到前端；`web/static/` 是**前端构建产物**（裁定 B1：入库；`index.html` + `assets/*.js|css`，`GET /` 与 `GET /run/{sid}` 吐的就是它） |
-| `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`（九页 `pages/*.tsx` · 六组件 `components/*.tsx` · `main.tsx` 路由 · `api.ts` 端点表 · `sse.ts` 订阅 · `live.tsx` 一次订阅分发给九页 · `theme/app.css`），其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库；开发说明见 `ui/README-DEV.md` |
+| `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`（九页 `pages/*.tsx` · 八组件 `components/*.tsx` · `main.tsx` 路由 · `api.ts` 端点表 · `sse.ts` 订阅 · `live.tsx` 一次订阅分发给九页 · `theme/app.css`），其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库；开发说明见 `ui/README-DEV.md` |
 | `__main__.py` | `python -m agentflow` 的入口 |
 | `__init__.py` | 包说明与公开面 |
 | `demo.py` | 离线端到端演示：不访问网络，把 A→B→校验整条链路真跑一遍 |
@@ -163,7 +163,7 @@
 | `tools/graph_tools.py` | 图索引与查询（纯读） |
 | `tools/trace_tools.py` | 代号溯源（纯读） |
 | `tools/text_tools.py` | A 专用：`text.extract`（读 PDF 自带的文字层、写 `library/<编号>.txt`；2026-10-17 新增，原 PDF 原样保留、写盘前核质量） |
-| `tools/analysis_tools.py` | C 的**产出登记通道**（业主 2026-10-18 裁定「只读角色的产出要能进台账」）：唯一一件工具 `analysis.register_report`，`roles=("C",)` —— 把这一趟 C **自己算出来的**分析经 `agent_c._support.AnalysisReport.persist` 落成 `analysis_reports` 一行（存盘顺序、发号、文件名都还是那一份实现，这里不重写），`kind` 取 `schema.REPORT_KINDS`，`markdown` 写正文与边界。**为什么要有它**：C 的五个动作（`gaps`/`handle`/`paths`/`cold`/`hottest`）只能由父代理 `summon` 唤起，空动作的自由任务里 C 手上一件写工具都没有 ⇒ `analysis_reports` 恒 0、图读数只活在回复里（`projects/mp3` 末节第 5 条）。**边界**：只写 `analysis_reports`（`capabilities.TOOL_WRITE_SETS` 与实现 AST 逐格比对，不碰 `claims`/`literature`/`relations`；`_not_wired` 如实失败、绝不返回假 `report_id`）。**谁读它**：D 的 `write_report` 路径按 `report_id` 回读（`agent_d/core.py`）、`pipeline.py` 的 replay 分支、`closing.py` 的 `analysis_report_rows` 那一档、`verify.py` 的 `report_file_missing`。判据 `tests/test_readonly_output_channel.py` + `tests/test_tools_returns_declaration.py` |
+| `tools/analysis_tools.py` | C 的**产出登记通道**（业主 2026-10-18 裁定「只读角色的产出要能进台账」）：唯一一件工具 `analysis.register_report`，`roles=("C",)` —— 把这一趟 C **自己算出来的**分析经 `agent_c._support.AnalysisReport.persist` 落成 `analysis_reports` 一行（存盘顺序、发号、文件名都还是那一份实现，这里不重写），`kind` 取 `schema.REPORT_KINDS`，`markdown` 写正文与边界。**为什么要有它**：C 的十个动作（`gaps`/`handle`/`paths`/`cold`/`hottest`/`neighbors`/`relations_between`/`contradictions`/`structural_duplicates`/`proof_chain`）只能由父代理 `summon` 唤起，空动作的自由任务里 C 手上一件写工具都没有 ⇒ `analysis_reports` 恒 0、图读数只活在回复里（`projects/mp3` 末节第 5 条）。**边界**：只写 `analysis_reports`（`capabilities.TOOL_WRITE_SETS` 与实现 AST 逐格比对，不碰 `claims`/`literature`/`relations`；`_not_wired` 如实失败、绝不返回假 `report_id`）。**谁读它**：D 的 `write_report` 路径按 `report_id` 回读（`agent_d/core.py`）、`pipeline.py` 的 replay 分支、`closing.py` 的 `analysis_report_rows` 那一档、`verify.py` 的 `report_file_missing`。判据 `tests/test_readonly_output_channel.py` + `tests/test_tools_returns_declaration.py` |
 | `tools/research_tools.py` | D 专用：研究问题台账 + 知识缺口提问 |
 | `tools/verify_tools.py` | E 的工具：数值实验与形式化验证（禁改区） |
 | `tools/attack_tools.py` | F 的工具：多轮难题攻坚 |
@@ -255,7 +255,7 @@
 | `modelgw.py` | 模型网关：全仓唯一读 API key 的地方 |
 | `modelclient.py` | 把 `modelgw` 适配成抽取层要的 `.complete(prompt) -> str` |
 | `modelcost.py` | 模型花销入账适配器 |
-| `tokenmeter.py` | token / 花销预算（硬约束，重试也计入） |
+| `tokenmeter.py` | token / 花销记账（`usage_ledger` 的唯一写入方）：**硬约束只剩钱那一轴**（2026-10-15 撤掉 token 预算，token 只是读数），重试也计入 |
 | `providers.py` | 文献检索 provider 层（禁改区） |
 | `fetch.py` | 下载层：流式下载、原子落盘、限速重试、镜像回退 |
 | `extract.py` | 文本抽取层：`extract_text(path) -> DocumentText`（禁改区） |
@@ -296,7 +296,7 @@
 | 动**发布门** | `tools/release_all.py`（禁改区） | `tools/coverage_zero_test.py`、`tools/run_each_test_file.py` | `tests/test_release_all.py`、`README.md` §6 |
 | 动**lint 规则** | `scripts/lint_rules.py`（禁改区） | `tools/vocab_census.py`（禁改区） | `tests/test_lint_rules*.py` |
 | 改**禁改区规则本身** | `AGENTS.md` + `.noai-paths`（两处必须逐条一致） | `scripts/noai_gate.py`（禁改区） | `tests/test_noai_gate.py`、`--check-consistency` |
-| 改**用户端网页**（页面 / 端点 / SSE） | `ui/src/api.ts` 的 `ENDPOINTS`（端点的唯一出口）+ `webui/routes.py`（`ROUTES`） | `ui/src/pages/*.tsx`（九页）· `ui/src/live.tsx`（一次订阅分发给九页）· `webui/readers.py`（只读面：十个面，含 2026-10-13 加的预算/在飞/用量/状态报告）· `webui/sse.py`（流与钩子）· `webui/server.py`（`/` 的外壳与静态路由） | `tests/test_webui_contracts.py`（A–D 四条名字层 + 新鲜度）、`tests/test_webui_pages.py`（每页真读数/空态/三态）、`tests/test_webui_readers.py`（各面正控/负控 + 逐条事件的分页与编号口径）、`tests/test_webui_sse.py`（流）、`tests/test_webui_static.py`（`/` 与静态）、`ui/README-DEV.md` |
+| 改**用户端网页**（页面 / 端点 / SSE） | `ui/src/api.ts` 的 `ENDPOINTS`（端点的唯一出口）+ `webui/routes.py`（`ROUTES`） | `ui/src/pages/*.tsx`（九页）· `ui/src/live.tsx`（一次订阅分发给九页）· `webui/readers.py`（只读面：`readers.ROUTES` **现读 14** 条，含 2026-10-13 加的预算/在飞/用量/状态报告与后加的 `/api/chat`、`/api/roster`）· `webui/sse.py`（流与钩子）· `webui/server.py`（`/` 的外壳与静态路由） | `tests/test_webui_contracts.py`（A–D 四条名字层 + 新鲜度）、`tests/test_webui_pages.py`（每页真读数/空态/三态）、`tests/test_webui_readers.py`（各面正控/负控 + 逐条事件的分页与编号口径）、`tests/test_webui_sse.py`（流）、`tests/test_webui_static.py`（`/` 与静态）、`ui/README-DEV.md` |
 | 加一个**子命令** | `cli.py`（`build_parser`） | 对应 `cmd_*` | `tests/test_cli_run.py`、`tests/test_user_quickstart.py` |
 | 查**一次运行到底做了什么** | 产物目录 `out/run-N/`（六件） | `runflow.py`、`evidence.py` | `report.md` / `run-manifest.json` |
 | 查**谁在什么时候说了什么** | `sessions.py` 的会话记录 | `agent_loop.py`（事件种类） | `tests/test_sessions.py` |
@@ -309,7 +309,7 @@
 |---|---:|---|---|
 | `agent_d/core.py` | 1698 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员（含 core 自身共 1698 行）；`agent_d/_support.py` 是模块级 helper 与常量，999 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
 | `agent_loop.py` | 7615 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 `_statement_filing_refusal`（B 入库前让它的秘书判一次"太平凡吗"，只在那件动作**真在注册表里**时才问） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
-| `agent_c/core.py` | 1087 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
+| `agent_c/core.py` | 1087 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 2269 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `agent_skills.py` | 2810 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**44 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
 | `providers.py` | 3269 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试（2026-10-15 两件：① `_europepmc_urls` 不再把 Europe PMC 报来的 `?pdf=render` 网站页当下载直链 —— 它永远 403；有 `pmcid` 且 `isOpenAccess=Y` 时走 EBI 的 OA 全文路由，T5 的可读语料 6 → 11 篇；② 新增 `walk_citations` / `_fetch_one_work` 给新动作 `A.walk_citations`，`SELECT_FIELDS` 加 `referenced_works`；**取不到源记录时抛错而不是返回空表**） | 上游越多、字段越脏，解析越长（禁改区） |
@@ -334,7 +334,7 @@
 | 工具面 / 角色面 | `python -B tools/verify_role_specs.py`、`tests/test_role_specs_complete.py` | 工具条数与文档一致 |
 | 禁改区 | `python -B scripts/noai_gate.py --git --since <ref>` | 退出码 1 = 需要 2 名 reviewer |
 | 发布相关 | `python -B tools/release_all.py`、`python -B tools/coverage_zero_test.py --level 2` | 发布门与覆盖门 |
-| 文档里写了数字 | 先看 `DEVELOPMENT.md` §0.3 的"手抄数字清单" | 哪些数字有判据、哪些要人同步 |
+| 文档里写了数字 | 先看 `docs/DEVELOPMENT-SPEC.md` §1.2 的"手抄数字清单" | 哪些数字有判据、哪些要人同步 |
 
 ---
 

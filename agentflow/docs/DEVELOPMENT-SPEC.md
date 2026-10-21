@@ -110,7 +110,7 @@ LIVE-READINGS:END
 **已逐条登记的落库代理**（`review.report` / `review.review_document` / `review.verify_fixes` /
 `review.record_finding`），`C` 也有一件（`analysis.register_report`），全部由
 `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS` 产生，命令自己会打印这些名字与放行理由
-（2026-10-21 实测，复跑 `python -m agentflow.cli tools` 的末行 ⇒
+（2026-10-21 实测，复跑 `python -m agentflow.cli tools`，读「只读角色写工具泄漏」那一行 ⇒
 `{'C': ['analysis.register_report'], 'H': ['review.review_document', 'review.verify_fixes',
 'review.report', 'review.record_finding'], 'V': []}`；取法就是读 `tools/base.py` 的
 `READONLY_CALL_EXCEPTIONS` 两个键）。
@@ -307,7 +307,8 @@ LIVE-READINGS:END
 - **已知边界**：**只读角色的泄漏那一行今天不是空表** —— `H` 有 4 个**已逐条登记**的落库代理
   （`review.report` / `review.review_document` / `review.verify_fixes` / `review.record_finding`），
   `C` 有 1 个（`analysis.register_report`），全部由
-  `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS` 产生（2026-10-21 实测，复跑末条命令见 §0.2）。
+  `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS` 产生（2026-10-21 实测，复跑
+  `python -m agentflow.cli tools` 的「只读角色写工具泄漏」那一行，见 §0.2）。
   "空 = 正常"这个读法**已过期**：要判的是"命令有没有打印**未登记**的泄漏"。
 
 **④ 角色面**
@@ -361,16 +362,17 @@ LIVE-READINGS:END
     `routes.py` / `server.py` / `state.py` / `writes.py` / `readers.py` / `sse.py` / `audit.py`）；
     复跑 `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`，键 `webui_modules`；
   - 端点清单的唯一来源是 `webui/routes.py` 的 `ROUTES`：**26 条**（GET **19** / POST **7**；
-    按读写二分 `READER_ROUTES` **14** / `WRITE_ROUTES` **7**，余 **5** 条是外壳与静态：
-    `/`、`/index.html`、`/run/{sid}`、`/static/{file...}` 等）。2026-10-21 实测，复跑
+    按读写二分 `READER_ROUTES` **14** / `WRITE_ROUTES` **7**，余 **5** 条是自有端点与外壳/静态：
+    `/`、`/index.html`、`/run/{sid}`、`/static/{file...}`、`/api/run-index` —— 最后这条是 A 线自有端点，
+    不属于只读面那六个）。2026-10-21 实测，复跑
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES),len(r.READER_ROUTES),len(r.WRITE_ROUTES))"`
     ⇒ `26 14 7`；键 `webui_routes` / `webui_routes_get` / `webui_routes_post`；
   - 事件种类在 `webui/sse.py` 的 `EVENT_KINDS`：**6** 个
     （`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`）。复跑
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
-  - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（920 B）+
-    `static/assets/index.D3dGM9uN.js`（114272 B）+ `static/assets/index.C9Q9zyMH.css`（23080 B）；
+  - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（948 B）+
+    `static/assets/index.D_uyFXzU.js`（115109 B）+ `static/assets/index.C9Q9zyMH.css`（23080 B）；
     （2026-10-21 实测，复跑 `(Get-ChildItem src/agentflow/web -Recurse -File | Select-Object Name,Length)`；
     文件名带构建哈希 ⇒ 重建前端就会换名，别把这三个名字当规格）；
     `src/agentflow/web/` 根一层是**源码/生成器**（`__init__.py` 1753 B、`assets.py` 23902 B、
@@ -1434,7 +1436,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 | 一次调用的审计记录 | `llmseam.py:477-478` 转成 `SeamCall` 两格（`to_dict()` 也带，`llmseam.py:150-151`） |
 | 每一步 | `promptstability.prompt_cache_record`（`promptstability.py:478` = `def` 所在行）⇒ `agent_step.prompt_cache`（`agent_loop.py:3785` / `:3876` / `:4176` 三处 `"prompt_cache": dict(step_cache)`） |
 | 一趟的汇总 | `promptstability.summarize_prompt_cache`（`promptstability.py:556`）⇒ `LoopRun.prompt_cache`（`agent_loop.py:4275` 的 `run.prompt_cache = …`；字段声明在 `:997`、`to_dict()` 在 `:1178`） |
-| 收工两个落点 | `agent_run_end`（`agent_loop.py:4345` 的 `SS.append(...)` 事件，`prompt_cache` 那一格在 `:4358`）与检查点第 10 个键（`agent_loop.py:7115` 的 `"prompt_cache": dict(prompt_cache or {})`，判据 `promptstability.checkpoint_prompt_cache_problem`） |
+| 收工两个落点 | `agent_run_end`（`agent_loop.py:4345` 的 `SS.append(...)` 事件，`prompt_cache` 那一格在 `:4358`）与检查点 payload 的第 9 个键（`agent_loop.py:7115` 的 `"prompt_cache": dict(prompt_cache or {})`，判据 `promptstability.checkpoint_prompt_cache_problem`） |
 
 **`write` 这一格是推导量，不是上游字段**：上游没有"写"计数，本仓把它定义为
 `write = prompt_cache_miss_tokens`（`write_source="derived:miss"`）。它说的是
@@ -1490,7 +1492,7 @@ python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,secretary `
 > ⇒ 秘书那一格 304）。**"改了形状 ⇒ 它一定命中"没有人复跑过** ⇒ 这一格仍是 unknown，
 > **不许**把上面那行读数反着读成"秘书现在已落地"。
 > ② **可复用前缀已不是 112–145 字符**（§14.6 那条"跨 run 命中"的更正讲的是同一件事）：
-> 活账那几格已被挪出 system，读数容器里的 `cross_run_prefix_chars` 实测 `M 51,727` /
+> 活账那几格已被挪出 system，读数容器里的 `cross_run_prefix_chars` 实测 `M 51,726–51,727` /
 > `H 37,380–37,381`（取法：`python -c "import json;d=json.load(open('tests/fixtures/prompt_cache_warm.json',encoding='utf-8'));print([(r['role'],r['cross_run_prefix_chars']) for run in d['runs'] for r in (run.get('cross_run_hit') or [])])"`）。
 > ③ **这张表的 `system 字符` / `write` 三栏是那一版提示词的读数**：`prompt_version` 现在
 > 是 **p179**（`agent_prompts.PROMPT_VERSION`），盘上容器里最近 8 趟（`04:34–07:35Z`）
@@ -1556,6 +1558,6 @@ python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,secretary
   `workspace_root` / `availability` / `parent_limits`（复跑
   `python -c "import sys;sys.path.insert(0,'src');from agentflow import promptstability as P;print(sorted(P.STEP_VOLATILE_FACTS))"`）。
   可复用前缀也随之从一百多个字符变成数万（读数容器的 `cross_run_prefix_chars` 实测
-  `M 51,727` / `H 37,380–37,381`；取法见 §14.3 那条更正的第 ② 条）。
+  `M 51,726–51,727` / `H 37,380–37,381`；取法见 §14.3 那条更正的第 ② 条）。
   ⚠️ **"跨 run 第一次就命中"仍要真发请求才量得出来**，本轮没有复跑 ⇒ 那一格仍是 unknown。
 
