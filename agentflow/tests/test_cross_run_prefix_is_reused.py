@@ -275,6 +275,171 @@ def test_deleting_one_fact_from_the_user_message_makes_the_criterion_red(
         "把 board 清空之后 user 消息里还读得到它 ⇒ 这条负控没删到东西")
 
 
+# --------------------------------------------- 4. 换**伙伴配置**（2026-10-21 第二批）
+#
+# 上一批收的两根轴是"每步会变"与"换一趟活会变"。这一批补第三根：**换一份配置**会变。
+#
+#   `availability`（`host.wiring_status`：谁配了 provider / key）此前是 system 里
+#   `PARTNER_AVAILABILITY`（段序 4520）那一段的全部内容，逐字也出现在伙伴行的
+#   "（现在没接线：X）"标记里；`parent_limits`（`Policy`：墙钟 / 预算 / 四类上限）
+#   是段序 5210 那一段。实测（本机、M 岗、`first_difference`）：
+#
+#     改前：两份不同的接线态 ⇒ system 从第 32,568 / 51,935 字符（62.7%）处不同
+#           ⇒ 换个伙伴配置就砍掉 37% 的前缀（`parent_limits` 在 88% 处再断一次）
+#     改后：system 逐字节相同（整份都是前缀），差的那几行只在开场那条 user 消息里
+#
+# 判据：①两套配置 ⇒ system 逐字节相同、而 user 消息不同（负控：塞回 system ⇒ 红 +
+# 报出断点）；②信息一个字没丢（静态伙伴表逐项 + 接线态逐项；负控：删掉一个伙伴 ⇒ 红）。
+
+#: 配置甲：A 缺 provider、C 缺 key（真机第一次跑就是这个形态 —— M 派了 A 才被拒）。
+_CONFIG_A: dict[str, str] = {
+    "A": "no_provider", "B": "wired", "C": "no_key", "D": "wired", "E": "wired",
+    "F": "wired", "G": "wired", "H": "wired", "V": "wired",
+}
+#: 配置乙：全都接线了（与甲逐格不同 —— 反真空要的那一半）。
+_CONFIG_B: dict[str, str] = {k: "wired" for k in _CONFIG_A}
+
+
+def _policy_a() -> Any:
+    """配置甲的 `Policy`（缺省那一档）。"""
+    from agentflow import policy as POL
+
+    return POL.Policy()
+
+
+def _policy_b() -> Any:
+    """配置乙的 `Policy`：墙钟 / 四类上限都换过 ⇒ `parent_limits` 那一格逐字不同。"""
+    from agentflow import policy as POL
+
+    return POL.Policy(max_depth=9, max_fanout=7, max_concurrency=3,
+                      max_tasks_per_run=11, wall_clock_sec=None)
+
+
+def _render_with_config(role: str, config: Mapping[str, str], policy: Any,
+                        registry: Any) -> tuple[str, str]:
+    """按生产路径渲染 `(system, 开场那条 user 消息)` —— 两份配置各走一次同一个函数。"""
+    from agentflow.agent_loop import opening_facts
+
+    facts: dict[str, Any] = dict(_JOB_A)
+    facts["availability"] = dict(config)
+    facts["parent_limits"] = AP.parent_limits_text(policy, role, depth=facts["depth"])
+    system_facts, _moved = PS.split_facts(facts)
+    return (AP.system_prompt(role, registry=registry, **system_facts),
+            _opening_transcript(**opening_facts(facts)))
+
+
+def test_two_partner_configs_render_the_same_system(registry: Any) -> None:
+    """判据 ①（主判据）：换一份**伙伴配置** ⇒ system 逐字节相同、而 user 消息不同。
+
+    十个角色各判一遍（`PARTNER_AVAILABILITY` 与伙伴行的接线态标记是共享段，但 M 与 H
+    还各自多几段 ⇒ 只判 M 会漏掉只在别的角色模板里出现的那一份）。
+    反真空两条：①system 必须够长（不是"两边都空"的假相等）；
+    ②两份配置与两份 `Policy` **真的**不同 —— 否则"相同"什么也没证明。
+    """
+    for role in sorted(AP.ROLE_BRIEFS):
+        system_a, prompt_a = _render_with_config(role, _CONFIG_A, _policy_a(), registry)
+        system_b, prompt_b = _render_with_config(role, _CONFIG_B, _policy_b(), registry)
+        assert len(system_a) > 20_000, f"{role} 的 system 只有 {len(system_a)} 字 ⇒ 反真空"
+        reading = PS.step_stability(system_a, system_b)
+        assert reading["stable"] is True, (
+            f"{role}：换一份伙伴配置，system 就变了 ⇒ 这一份配置之后的前缀全部作废\n"
+            f"{reading['reason']}")
+        assert _sha(system_a) == _sha(system_b), role
+        # 反真空两半：user 消息**真的**不同（差异落在它身上），而 system 一个字没动。
+        assert prompt_a != prompt_b, f"{role}：两份配置的 user 消息一模一样 ⇒ 信息被删了"
+        assert len(prompt_a) < len(system_a), "开场消息不该比 system 还长（反真空）"
+
+
+def test_putting_the_wiring_state_back_into_the_system_makes_it_red(
+        registry: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """负控（① 的牙）：把接线态塞回 system ⇒ 必红，且报出**断点位置**。
+
+    怎么造"改前那个形态"：把 `PARTNER_AVAILABILITY` 那一段的静态指路语换回
+    **这一次的接线态本身**（`wiring_text(config)`）—— 那正是改前那一段的内容。
+    两次渲染各用自己那份配置，于是 system 从那一处起分家。
+
+    位置也要对：断点必须落在 system 的**中后段**（改前实测 ~63%），因为这条判据的
+    意义就是"这一处往后的前缀全部作废"；报一个"反正不同"而位置在第 95 个字符，
+    说明红的是别的东西（那由兄弟判据 `test_putting_task_id_back_...` 守）。
+    """
+    from agentflow import policy as POL  # noqa: F401 —— 只为与上面那两个夹具同源
+
+    systems: dict[str, str] = {}
+    for tag, config in (("a", _CONFIG_A), ("b", _CONFIG_B)):
+        monkeypatch.setattr(AP, "PARTNER_WIRING_POINTER", AP.wiring_text(config))
+        systems[tag] = _render_with_config("M", config, _policy_a(), registry)[0]
+    reading = PS.step_stability(systems["a"], systems["b"])
+    assert reading["stable"] is False, (
+        "把接线态塞回 system 之后两份配置的 system 仍然逐字节相同 ⇒ 这条负控是空转")
+    diff = reading["first_diff"]
+    assert diff is not None, reading
+    problem = reading["reason"]
+    assert "从第" in problem and "个字符起不同" in problem, problem
+    # 断点就在那一段里：报出来的上下文里读得到接线态那几行。
+    assert "- A：no_provider" in diff["prev_context"] or "- A：wired" in diff["cur_context"], (
+        f"报出来的不知道是哪一段：{diff}")
+    # 位置：落在 system 的中后段（改前实测 62.7%）。
+    ratio = diff["index"] / max(1, len(systems["a"]))
+    assert ratio > 0.5, (
+        f"断点在第 {diff['index']} / {len(systems['a'])} 字符（{ratio:.1%}）⇒ "
+        f"红的原因可能不是接线态那一段：{problem}")
+
+
+def test_every_partner_stays_in_the_static_table_and_in_the_wiring_line(registry: Any) -> None:
+    """判据 ②（信息一个字没丢）：静态伙伴表逐项仍在 system，接线态逐项仍在 user 消息。
+
+    两半都要判，而且方向相反：
+    - 静态表（谁是谁、交付什么、边界）**必须**留在 system（它是可复用的前缀）；
+    - 接线态（谁当前接线了、什么状态）**必须**只在 user 消息里（它随配置变）。
+    只判第一半，"为了命中率把接线态删掉"也能全绿 —— 那是这一批最危险的走法。
+    """
+    for role in sorted(AP.ROLE_BRIEFS):
+        system, opening = _render_with_config(role, _CONFIG_A, _policy_a(), registry)
+        # ① 静态表：`visible_partners` 逐项都在（`- X：职责…` 那几行）。
+        missing = [p for p in AP.visible_partners(role) if f"- {p}：" not in system]
+        assert not missing, f"{role} 的静态伙伴表里少了 {missing}（信息被删）"
+        # ② 接线态：每个伙伴（含状态）逐项都在开场那条 user 消息里。
+        lost = [f"- {p}：{_CONFIG_A[p]}" for p in sorted(_CONFIG_A)
+                if f"- {p}：{_CONFIG_A[p]}" not in opening]
+        assert not lost, f"{role} 的 user 消息里少了接线态 {lost}（换位置而不是删）"
+        # ③ 反向：接线态**不许**再出现在 system 里（否则前缀断点还在）。
+        leaked = [f"- {p}：{_CONFIG_A[p]}" for p in sorted(_CONFIG_A)
+                  if f"- {p}：{_CONFIG_A[p]}" in system]
+        assert not leaked, f"{role} 的 system 里还有接线态 {leaked} ⇒ 换个配置前缀就断"
+        # ④ 派活上限那四类数字：也不许在 system 里（它们在同一个落点上）。
+        assert "同时在飞的子代理最多" not in system, f"{role} 的 system 里还有派活上限的数字"
+
+
+def test_deleting_one_partner_makes_the_information_criterion_red(
+        registry: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """负控（② 的牙）：删掉一个伙伴 ⇒ 同一个读法必红（静态表与接线态各打一次）。"""
+    system, _opening = _render_with_config("M", _CONFIG_A, _policy_a(), registry)
+    assert [p for p in AP.visible_partners("M") if f"- {p}：" not in system] == []
+
+    # ① 静态表：把 M 伙伴表里 B 那一行删掉。
+    real = AP.partners_lines
+
+    def without_b(role: str, availability: Any = None) -> list[str]:
+        return [line for line in real(role, availability) if not line.startswith("- B：")]
+
+    monkeypatch.setattr(AP, "partners_lines", without_b)
+    system, opening = _render_with_config("M", _CONFIG_A, _policy_a(), registry)
+    missing = [p for p in AP.visible_partners("M") if f"- {p}：" not in system]
+    assert "B" in missing, "删掉一个伙伴之后它还在 system 里 ⇒ 这条判据没在读静态表"
+    monkeypatch.undo()
+
+    # ② 接线态：喂一份"少了 V 的读数" ⇒ user 消息里也就没有 V（证明它读的是原值）。
+    from agentflow.agent_loop import opening_facts
+
+    thin = {k: v for k, v in _CONFIG_A.items() if k != "V"}
+    facts = dict(_JOB_A, availability=thin,
+                 parent_limits=AP.parent_limits_text(_policy_a(), "M", depth=1))
+    opening_thin = _opening_transcript(**opening_facts(facts))
+    assert "- V：wired" not in opening_thin, (
+        "喂进去的读数里没有 V，user 消息里却还有它 ⇒ 那几行不是现读的")
+    assert "- A：no_provider" in opening_thin, opening_thin[:600]
+
+
 # ---------------------------------------------------------------- 读数面（真机）
 
 def _load_warm() -> Any:
@@ -356,6 +521,73 @@ def test_setting_the_recorded_cross_run_hit_to_zero_makes_the_criterion_red() ->
     assert _cross_run_problem(poisoned), "把第一次见的 hit 改成 0 之后仍判合格 ⇒ 判据没在读那个数"
     poisoned_both = [dict(cross[0], hit=0), dict(cross[1], hit=0)]
     assert "hit=0" in _cross_run_problem(poisoned_both), poisoned_both
+
+
+#: 真机只要这两个角色（省钱样本）：`M` 是最大的一份（51,726 字符），`H` 是
+#: 107k→37k 那一档里"节点最多"的一份（41 件工具）。两份都换过伙伴配置之后
+#: 都该 ≥90% —— 只挑一个角色的话，"某一段只在另一个角色的模板里"就漏掉了。
+_REAL_MACHINE_ROLES: tuple[str, ...] = ("M", "H")
+
+
+def _latest_cross_run_by_role(runs: list[Mapping[str, Any]]) -> dict[str, list[Mapping[str, Any]]]:
+    """每个角色**最近一趟**的跨 run 探针（两行：第一次见 / 第二次见）。"""
+    out: dict[str, list[Mapping[str, Any]]] = {}
+    for run in runs:
+        cross = list(run.get("cross_run_hit") or [])
+        if len(cross) == 2:
+            out[str(cross[0].get("role"))] = cross
+    return out
+
+
+def test_two_partner_configs_hit_ninety_percent_on_the_real_machine() -> None:
+    """判据 ③（真机，M 与 H 各两次）：**换一份伙伴配置**之后仍 ≥90% 命中。
+
+    读数由 `scripts/warm_prompt_cache.py --roles <角色> --hit-sample <角色>
+    --probe-cross-run <角色>` 产出：`pass=4/5` 那两行发的是 `OTHER_RUN_FACTS` 的
+    system —— 它既是**另一件活**（task / task_id / depth / 收件箱全不同），也是
+    **另一份伙伴配置**（`availability` 换了一份、`parent_limits` 换了一份 Policy）。
+    改前：那份 system 从 63% / 88% 处就断了 ⇒ 第一次见它命中不了多少；
+    改后：整份 system 都是前缀 ⇒ 两行都该接近满。
+
+    这一条只读盘上的读数（不联网、不花钱）；"换配置之后还剩多少"这个数由它守。
+    """
+    if not _READINGS.is_file():
+        pytest.skip(f"读数不在盘上：{_READINGS}")
+    by_role = _latest_cross_run_by_role(_load_warm().load_readings(_READINGS))
+    missing = [role for role in _REAL_MACHINE_ROLES if role not in by_role]
+    assert not missing, (
+        f"读数里没有 {missing} 这两角色的跨 run 探针 ⇒ 这一次没量（不是'合格'）："
+        f"盘上有的是 {sorted(by_role)}；重跑 warm_prompt_cache.py --probe-cross-run")
+    problems: list[str] = []
+    for role in _REAL_MACHINE_ROLES:
+        cross = by_role[role]
+        problem = _cross_run_problem(cross)
+        if problem:
+            problems.append(f"{role}：{problem}")
+            continue
+        for got in cross:
+            assert int(got["hit"]) + int(got["miss"]) == int(got["tokens_in"]), got
+            rate = int(got["hit"]) / max(1, int(got["tokens_in"]))
+            assert rate >= 0.90, (role, rate, got)
+    assert not problems, "换伙伴配置之后命中率掉下来了：\n" + "\n".join(problems)
+
+
+def test_setting_the_partner_config_hit_to_zero_makes_the_criterion_red() -> None:
+    """负控（③ 的读法）：把 M 或 H 的读数 `hit` 改成 0 ⇒ 同一个判据必须红。
+
+    守的是"这个数字真的在被读"：判据若把 `hit` 折掉（或只看 `tokens_in` 非零），
+    改成 0 也照样绿 —— 而"换一份配置的第一次调用命中 0"正是这一批要修掉的那个数。
+    """
+    if not _READINGS.is_file():
+        pytest.skip(f"读数不在盘上：{_READINGS}")
+    by_role = _latest_cross_run_by_role(_load_warm().load_readings(_READINGS))
+    for role in _REAL_MACHINE_ROLES:
+        assert _cross_run_problem(by_role[role]) == "", (role, _cross_run_problem(by_role[role]))
+        cross = by_role[role]
+        poisoned = [dict(cross[0], hit=0), dict(cross[1])]
+        problem = _cross_run_problem(poisoned)
+        assert problem, f"{role}：把第一次见的 hit 改成 0 之后仍判合格 ⇒ 判据没在读那个数"
+        assert "hit=0" in problem, (role, problem)
 
 
 # ---------------------------------------------------------------- 夹具：记 system/user 的替身

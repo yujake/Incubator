@@ -162,11 +162,19 @@ SPEC = AgentSpec(
     local_notes={
         '高观点': '枢纽、冗余、绕行：结构判断要落到读数上（度数、重复、绕行长度）。',
         '能思辨': '两条链矛盾时追共同上游：矛盾常常来自同一个定义被两种口径使用。',
-        '敢创新': '你可以提候选缺口（那是猜想）；要不要把它变成检索请求由调用方决定（派你时给 `submit_requests=true`）—— 你在自己的循环里不拧这个开关。',
+        # 判据：policy 第一条（`'缺口不许只写在报告里'`）里同一条义务仍逐字在（本处是重复，不是唯一出处）。
+        '敢创新': '你可以提候选缺口（那是猜想）；要不要把它变成检索请求由调用方决定。',
+        # 2026-10-21 减负：这一条**想删但没删** —— 它已经被
+        # `tests/test_agent_prompts.py::test_read_only_roles_do_not_advertise_hands_on_the_data_plane`
+        # 守着，但那条判据守的是**这句话本身**（官能行里必须出现「结构禁止」），不是行为；
+        # 行为那一侧另有 `test_real_registry_gives_no_write_tool_to_read_only_roles`。
+        # 删这句 = 改判据 ⇒ 按纪律留下。
         '手': '数据面写是结构禁止的（只读角色）；草稿本 note 照写。',
         '眼睛': '读的是关系图与计数：形状、度数、重复、绕行，不是文献本身。',
         '脑子': "把'图长什么样'变成'哪条链值得下钻'：判断要可复算。",
-        '能讨论': '把结构读数讲清楚给 D 与人听；你自己不发请求（边是空的）。',
+        # 判据：`tests/test_dispatch_without_action.py::test_a_blank_action_still_checks_the_edge`
+        # （空动作也拦得住越权召边）＋ 伙伴表里"你的边是空的"那一句仍由 `partners_lines` 现算。
+        '能讨论': '把结构读数讲清楚给 D 与人听。',
     },
     read_only=True,
     summonable=True,

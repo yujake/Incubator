@@ -60,6 +60,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -72,6 +73,8 @@ __all__ = [
     "SYSTEM_PLACEHOLDERS",
     "split_facts",
     "first_difference",
+    "volatile_facts_digest",
+    "facts_migration_problem",
     "step_stability",
     "stability_problem",
     "dynamic_sections",
@@ -111,6 +114,13 @@ DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 #: |---|---|---|
 #: | 每步会变 | 谁在步边界上被现算 | `budget_left` / `notebook`（`_prompt` 每步现读） |
 #: | 跨 run 会变 | 谁在 `run()` 开头被**重新**算一次 | task 正文 / `task_id` / `depth` / `parent_task_id` / `summoned_by` / `children` / `board` / `inbox` / `user_replies` / `workspace_root` |
+#: | 跨 run 会变（配置轴） | 谁随**这一趟的配置**变 | `availability`（伙伴配置）/ `parent_limits`（`Policy`：墙钟 / 预算 / 四类上限） |
+#:
+#: 为什么第三轴也收（2026-10-21 第二批）：前两轴收的是"换一趟**活**"，这一轴收的是
+#: "换一份**配置**"。而"配置"与"活"在上游缓存眼里没有区别 —— 都是另一份前缀。
+#: 实测（本机，M 岗）：`availability` 两份不同的读数让 system 从第 32,568 / 51,935
+#: 字符（62.7%）处断开，`parent_limits` 让它从第 ~88% 处再断一次 ⇒ 换一次伙伴配置
+#: 就砍掉 37% 的前缀。它们现在的落点与前十格同一个（开场那条 user 消息）。
 #:
 #: 为什么第二轴也收：一趟之内逐字不变的东西，**换一趟就换一份**，而上游前缀缓存要的
 #: 是"另一趟也能用同一段前缀"。只挪第一轴，换一趟活的第一次调用永远 `hit=0`
@@ -128,16 +138,20 @@ DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 #: - 值那一侧在 `agent_loop.run` 的 `facts = dict(...)`（`agent_loop.py:3610`）算一次，
 #:   凡"这一次运行的事实"都在这张表里被重新算 ⇒ 它们都是"另一段前缀"。
 #: - 现在的载体：每步会变的两格仍在 `_prompt` 尾部现读（`agent_loop.py:3106-3112`）；
-#:   其余十格在开场那一条 user 消息里（`agent_loop._opening_transcript`，
+#:   其余十二格在开场那一条 user 消息里（`agent_loop._opening_transcript`，
 #:   `agent_loop.py:886`）—— 那是**消息**，不是前缀：换一趟活换的是消息，前缀照旧。
 #:
 #: ⚠️ 加一格之前先问：**换一趟活它会不会变？** 会 ⇒ 登记在这里（并在 user 消息里
 #: 真写出来，否则就是"信息被删"）；不会 ⇒ 留在 system，它是可复用的前缀。
-#: 刻意**没有**登记的几格（跨 run 会变但判据是"同一台机器/同一份配置"）：
-#: `availability`（`PARTNER_AVAILABILITY`，段序 4520：改配置才变）、
-#: `toolchain_facts` / `toolchain_formal`（段序 9000/9010：换机器才变）、
-#: `parent_limits`（段序 5210：改策略才变）。它们若哪天变成"每趟都不一样"，
-#: 判据（两条渲染逐字节比对 + 段白名单）会先红 —— 那时再决定挪不挪。
+#: 刻意**没有**登记的几格（跨 run 会变但判据是"同一台机器"）：
+#: `toolchain_facts` / `toolchain_formal`（段序 9000/9010：换机器才变）。
+#: 它们若哪天变成"每趟都不一样"，判据（两条渲染逐字节比对 + 段白名单）会先红 ——
+#: 那时再决定挪不挪。
+#:
+#: ⚠️ 2026-10-21 第二批把 `availability` / `parent_limits` **加进了**这张表（它们此前在
+#: 上面那句"刻意没有登记"里）：判据从"同一台机器/同一份配置"改成了"**换一份配置**"，
+#: 因为业主的口径是"换一次伙伴配置不该砍掉 37% 的前缀"。这两格的真值同样念在开场那条
+#: user 消息里（`agent_loop._opening_transcript` 的「现在的接线态」/「派活上限」两栏）。
 STEP_VOLATILE_FACTS: Mapping[str, str] = {
     "budget_left": (
         "`agent_loop._budget_text()`（`agent_loop.py:2752`）：读 `seam.spent_usd()` 现算"
@@ -188,6 +202,18 @@ STEP_VOLATILE_FACTS: Mapping[str, str] = {
         "`AgentLoop.run` 的 `workspace_root`（`agent_loop.py:3614`）：换个项目/工作区就换一个"
         "根目录 ⇒ 它此前在 `WORKSPACE_FACTS`（段序 10000，system 的倒数第二段）里，"
         "是 cross-run 前缀的最后一处断点。"
+    ),
+    "availability": (
+        "`host.wiring_status(store)`（`host.py:633` → `agent_loop` 的 `facts['availability']`）："
+        "读的是**这一份伙伴配置**（谁配了 provider / key）⇒ 换一份配置就是另一份读数。"
+        "它此前在 `PARTNER_AVAILABILITY`（段序 4520）里，本机实测：两份不同的接线态让"
+        "M 的 system 从第 32,568 / 51,935 字符（62.7%）处断开 —— 换配置就砍掉 37% 的前缀。"
+    ),
+    "parent_limits": (
+        "`AP.parent_limits_text(policy, role, depth=…)`（段序 5210 那一段的数字部分）："
+        "`cli.py` 每趟用 `Policy(wall_clock_sec=…, usd_budget=…)` 现造那个 Policy ⇒ "
+        "墙钟 / 预算 / 四类上限换一次 run 就可能换一份数字，而这一段在 M 的 system 里"
+        "位于第 ~88% 处（第二个断点）。"
     ),
 }
 
@@ -249,6 +275,14 @@ SYSTEM_PLACEHOLDERS: Mapping[str, str] = {
         "见本次对话第一条消息的「工作区根目录」（换项目就换一个根；这一格刻意不写路径 —— "
         "路径一换，它后面那几段就再也不是同一段前缀）"
     ),
+    "availability": (
+        "见本次对话第一条消息的「现在的接线态」（它随**伙伴配置**变：谁配了 provider / key；"
+        "这一格刻意不写状态 —— 写进来就等于把这一段前缀绑死在这一份配置上）"
+    ),
+    "parent_limits": (
+        "见本次对话第一条消息的「派活上限」（四类上限与墙钟都是这一趟 run 的 Policy 现算的；"
+        "这一格刻意不写数字 —— 换个 run 的配置就换一段前缀）"
+    ),
 }
 
 
@@ -262,7 +296,7 @@ def split_facts(facts: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any
     （:func:`step_stability` 钉前一条，`tests/test_cross_run_prefix_is_reused.py` 钉后一条）。
 
     进 user 的那一份逐字保留原值（调用方负责把它念进 user 消息里：
-    每步会变的两格在 `agent_loop._prompt` 尾部，其余十格在开场的
+    每步会变的两格在 `agent_loop._prompt` 尾部，其余十二格在开场的
     `agent_loop._opening_transcript`）。
     用 `dict(...)` 复制而不是原地改：调用方手上的那份 `facts` 还要给别处用
     （`prompt_audit` 之类），改它会制造"两个读者看到两份事实"。
@@ -278,6 +312,63 @@ def split_facts(facts: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any
 
 
 # ---------------------------------------------------------------- 逐字节判据
+# ---------------------------------------------------------------- 事实登记表的版本痕迹
+def volatile_facts_digest(mapping: Mapping[str, str] | None = None) -> tuple[int, str]:
+    """`STEP_VOLATILE_FACTS` 的**键集**指纹：`(键数, sha256)`。
+
+    ## 这一格为什么必须存在（事务三：堵审计射程的边界）
+
+    `tests/test_agent_prompts.py` 的 `_FROZEN_PROMPT_DIGESTS` 按**缺省事实**渲染模板
+    ⇒ 它钉的是"段文本"，钉不住"哪几格事实被挪出了 system"。上一批把登记表从 2 格扩到
+    12 格（`2026-10-21`）时，十格摘要一个都没变 ⇒ 那条判据没红、也没抬版本，而
+    **提示词里模型看到的落点整个换了一遍**（从 system 挪进 user 消息）。
+    审计射程到此为止 —— 这条函数就是补上的那一格读数。
+
+    ## 为什么是"键集"而不是"值"
+
+    值那部分（每一格为什么收进来）是会持续改写的散文（长注释、行号、真机读数）；
+    键集才是**模型实际读到的结构**：少一格 = 那一格的事实被挪回了 system 或整段被删。
+    于是指纹只对键集算，散文随便改都不会让判据红。
+
+    `mapping` 只为让判据能喂替身进来做负控（缺省取模块级登记表）。
+    """
+    keys = tuple(sorted((STEP_VOLATILE_FACTS if mapping is None else mapping)))
+    return len(keys), hashlib.sha256("\n".join(keys).encode("utf-8")).hexdigest()
+
+
+def facts_migration_problem(version: str, *, frozen: Sequence[Mapping[str, Any]],
+                            mapping: Mapping[str, str] | None = None) -> str:
+    """facts 迁移有没有**版本痕迹**？返回问题串（空 = 合格）。
+
+    ## 口径（三态 + 一条纪律）
+
+    纪律：**动 `STEP_VOLATILE_FACTS` 就必须动 `PROMPT_VERSION`**。理由与
+    `_FROZEN_PROMPT_DIGESTS` 那条同源 —— 事后要回答"这句话是哪个版本的提示词说的"，
+    而"哪几格事实在 user 消息里"是提示词的一部分（模型读到的落点变了）。
+
+    判据（`frozen` 是一份**按顺序记的账本**，每一格是 `{version, count, keys_sha256}`）：
+
+    - live 键集必须等于账本**最后一格** ⇒ 否则红（"facts 迁了而账本没记"）；
+    - 最后一格的 `version` 必须等于 `PROMPT_VERSION` ⇒ 否则红（"迁了但没抬版本"）。
+
+    账本里留着历史各格（不止最后一格）：被跨过的那几格正是"哪一次迁移没抬版本"的
+    读数 —— 它们不参与判绿，但读的人看得见。
+    """
+    live = dict(mapping) if mapping is not None else dict(STEP_VOLATILE_FACTS)
+    count, digest = volatile_facts_digest(live)
+    if not frozen:
+        return "账本是空的 ⇒ 没有任何一格键集被冻过，这条判据什么也没守"
+    last = dict(frozen[-1])
+    if int(last.get("count", -1)) != count or str(last.get("keys_sha256", "")) != digest:
+        return (f"facts 迁移了而账本最后一格没记：live {count} 格 / {digest[:12]}… vs "
+                f"账本 {last.get('count')} 格 / {str(last.get('keys_sha256'))[:12]}… ⇒ "
+                f"改动 `STEP_VOLATILE_FACTS` 必须在账本里留一格，并把 `PROMPT_VERSION` 抬一格")
+    if str(last.get("version", "")) != str(version):
+        return (f"facts 迁移了而 PROMPT_VERSION 还是 {version!r}（账本最后一格说这次是 "
+                f"{last.get('version')!r}）⇒ 事后分不清哪几格事实属于哪一版提示词")
+    return ""
+
+
 def first_difference(prev: str, cur: str, *, context: int = 80) -> dict[str, Any] | None:
     """两段文本第一处不同的读数；逐字节相同 ⇒ `None`。
 

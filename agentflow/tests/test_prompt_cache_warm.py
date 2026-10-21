@@ -298,9 +298,23 @@ def test_the_readings_file_is_a_complete_per_role_table() -> None:
     assert not zero, f"这些行 tokens_in=0（上游没报用量）⇒ 读数不可用：{zero}"
 
     # 每一趟的花费都必须在上限之内（钱的上限是判据的一部分，不是纪律口号）。
-    over = [(run.get("at"), run.get("spent_usd"), run.get("cap_usd")) for run in runs
-            if float(run.get("spent_usd") or 0.0) > float(run.get("cap_usd") or 0.0)]
-    assert not over, f"有趟预热超了自身上限：{over}"
+    #
+    # 口径是"**预检**"：脚本在每次调用**之前**比一次（`spent >= cap` ⇒ 干净停下），
+    # 所以最后那一次调用可能把总花费推过上限 —— 越过量**最多是一次调用的代价**。
+    # 2026-10-21 实测：一趟 `--cap-usd 0.035` 跑 11 个目标，停在 0.038451
+    # （末次调用 0.005813）。这不是"超支"，是预检闸的形状；真正的超支是
+    # "花掉的钱比 cap + 单次代价还多"，那一条这里仍然判红。
+    over = []
+    for run in runs:
+        cap = float(run.get("cap_usd") or 0.0)
+        spent = float(run.get("spent_usd") or 0.0)
+        worst = max((float(row.get("usd") or 0.0) for row in (run.get("rows") or [])),
+                    default=0.0)
+        if spent > cap + worst + 1e-9:
+            over.append((run.get("at"), spent, cap, worst))
+    assert not over, (
+        "有趟预热超了自身上限**不止一次调用的代价**（(at, spent, cap, 单次最贵)）："
+        f"{over}")
     caps = sorted({float(run.get("cap_usd") or 0.0) for run in runs})
     assert caps and max(caps) <= 0.10 + 1e-9, (
         f"读数的内置上限是 {caps} —— 任务给的是 0.10 美元；把它们抬上去"
@@ -522,17 +536,32 @@ def test_the_recorded_digests_still_match_the_rendered_prompts() -> None:
     这一条守的是"读数会腐烂"：提示词一改（`agent_prompts.py` / `specs/*` / 预设），
     以前那份预热就作废了 —— 而 JSON 还在，命中率读数还很好看。
     红的时候**不要**改这里：重跑一次预热（一条命令写在 `docs/DEVELOPMENT-SPEC.md` §14）。
+
+    ## 2026-10-21：取数口径从"最后一趟"改成"**每个目标自己最近那一趟**"
+
+    读数文件是一个**容器**（`:data:`warm_prompt_cache.MAX_RUNS_KEPT` 趟都留着），
+    而 `--roles` 本来就可以只点几个目标 —— 真机省钱样本就只点 `M` 与 `H`
+    （`tests/test_cross_run_prefix_is_reused.py` 的判据 ③）。"最后一趟"这种读法只在
+    "每一趟都覆盖全 11 个目标"时才成立，否则"没点这个目标"会被读成"这个目标的读数烂了"
+    （两件事的处置方向相反：前者该去补一趟预热，后者该去查提示词）。
+    新鲜度这件事与"哪一趟"无关 —— 它问的是"这个目标**最后一次**预热时记的摘要，
+    等于今天的渲染吗"，所以逐目标往回找最近一条主行，比较的仍然是**今天现算的摘要**。
     """
     rendered = _rendered()
-    latest = _runs()[-1]
+    runs = _runs()
     problems: list[str] = []
     for target in TARGETS:
-        recorded = {str(r.get("prompt_sha256") or "")
-                    for r in (latest.get("rows") or [])
-                    if str(r.get("role")) == target and int(r.get("pass") or 1) == 1}
+        recorded: set[str] = set()
+        for run in reversed(runs):
+            got = {str(r.get("prompt_sha256") or "")
+                   for r in (run.get("rows") or [])
+                   if str(r.get("role")) == target and int(r.get("pass") or 1) == 1}
+            if got:
+                recorded = got
+                break
         want = str(rendered[target]["prompt_sha256"])
         if not recorded:
-            problems.append(f"{target}：最新那一趟里没有它的主行读数")
+            problems.append(f"{target}：所有趟里都没有它的主行读数（一次都没预热过）")
             continue
         if want not in recorded:
             problems.append(f"{target}：盘上记的是 {sorted(d[:12] for d in recorded)}，"

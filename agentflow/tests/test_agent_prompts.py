@@ -1261,9 +1261,23 @@ def test_every_declared_action_is_listed_with_its_required_params(registry: Tool
 
 
 def test_availability_section_lists_states_and_marks_unwired_partners(registry: ToolRegistry):
-    """给 availability 时要多出一栏接线态、在伙伴条目里标出没接线的那个；不给时不许有这一栏。
-    若这条破了：主控会派活给一个当场没接线的伙伴（真机第一次跑就是这样），
-    或者反过来，把"没有读数"与"全都接线了"折叠成同一句话。"""
+    """接线态**换了落点**（2026-10-21 第二批）：从 system 的 `PARTNER_AVAILABILITY`
+    挪进开场那条 user 消息；system 里只剩一句静态指路语。
+
+    为什么挪：这一段逐字节跟着**伙伴配置**变 ⇒ 它是 system 里第 63% 处的断点
+    （M 岗实测 32,568 / 51,935），换个配置就砍掉 37% 的前缀。判据
+    `tests/test_cross_run_prefix_is_reused.py::test_two_partner_configs_render_the_same_system`
+    是它的端到端版本（十角色、两次渲染逐字节比对）；这一条守的是**同一个落点上的三件事**：
+
+    ① system 里**永远**有那一句指路语（不管给没给读数 —— 段的有无不许随配置变，
+       否则"有没有这一段"本身又成了一个随配置变的字节）；
+    ② 给了读数时，逐个伙伴的 `- X：状态` 与"没接线的那个会被拒"那句都在
+       **开场那条 user 消息**里（`agent_loop._opening_transcript`）；
+    ③ 伙伴行里**不再**夹带"（现在没接线：X）"这个逐配置动的标记 —— 它在 system 里。
+
+    三态照旧：`availability=None` 时 user 消息里必须写"（没有读数…）"，
+    **不许**把"没读到"与"全都接线了"折叠成同一句话。
+    """
     availability = {
         "A": "no_provider",
         "B": "wired",
@@ -1278,25 +1292,136 @@ def test_availability_section_lists_states_and_marks_unwired_partners(registry: 
         # 会在这里 KeyError，而那不是"V 没接线"，是夹具没跟上角色表。
         "V": "wired",
     }
+    from agentflow.agent_loop import _opening_transcript
+
     for role in ALL_ROLES:
         text = _prompt(role, registry, availability=availability)
-        lines = text.splitlines()
         audit = AP.prompt_audit(role, registry=registry, task=TASK, workspace_root=ROOT,
                                 availability=availability)
+        # ① system 里那一段**在**，但只是一句指路语（逐字节静态，见下一条判据）。
         assert "PARTNER_AVAILABILITY" in audit["sections"], audit["sections"]
-        for other, state in availability.items():
-            assert f"- {other}：{state}" in text, f"{role} 的接线态栏里没有 {other}：{state}"
+        assert "见本次对话第一条消息的「现在的接线态」那一栏" in text, role
+        # ③ 伙伴行里不再夹带逐配置动的标记。
         for partner in AP.partners_out(role):
-            bullet = _partner_bullet_line(lines, partner)
-            if availability[partner] == "wired":
-                assert "现在没接线" not in bullet, bullet
-            else:
-                assert f"（现在没接线：{availability[partner]}）" in bullet, bullet
+            bullet = _partner_bullet_line(text.splitlines(), partner)
+            assert "现在没接线" not in bullet, bullet
+        assert "（现在没接线：" not in text, f"{role} 的 system 里还有逐配置动的接线态标记"
 
-        plain = _prompt(role, registry)
+        # ② 真值在开场那条 user 消息里：逐伙伴一行，且"没接线的会被拒"那句跟着出现。
+        opening = _opening_transcript(
+            task=TASK, inbox="", summoned_by="user", task_id="t-a", depth=1,
+            parent_task_id="", children="", board="", user_replies="",
+            workspace_root=str(ROOT), availability=availability,
+            parent_limits="（判据夹具）")
+        for other, state in availability.items():
+            assert f"- {other}：{state}" in opening, f"{role} 的开场消息里没有 {other}：{state}"
+        assert "没接线的伙伴派了也会被拒" in opening, role
+
+        # 三态：没给读数 ⇒ 一句"没有读数"，不是"全都 wired"。
+        silent = _opening_transcript(
+            task=TASK, inbox="", summoned_by="user", task_id="t-a", depth=1,
+            workspace_root=str(ROOT), availability="", parent_limits="（判据夹具）")
+        assert "没有读数" in silent and "wired" not in silent, silent
+        # 而 system 那一句指路语两种情况下一字不差 ⇒ 给不给读数，system 逐字节相同
+        # （比"段名在不在"更强：段的有无、内容都不许随配置变）。
         plain_audit = AP.prompt_audit(role, registry=registry, task=TASK, workspace_root=ROOT)
-        assert "PARTNER_AVAILABILITY" not in plain_audit["sections"], plain_audit["sections"]
-        assert "现在的接线态" not in plain, f"{role} 没有接线态读数却渲染了那一栏"
+        assert "PARTNER_AVAILABILITY" in plain_audit["sections"], plain_audit["sections"]
+        assert _prompt(role, registry) == text, (
+            f"{role}：给不给 availability 读数，system 竟然不同 ⇒ 前缀仍随伙伴配置变")
+
+
+# ------------------------------------------------ 角色减负的反真空（2026-10-21 事务二）
+#
+# 这一批从 A / B / C / E / G / H 的 `policy` / `local_notes` 里删掉了几条**已有判据在守**
+# 的义务（逐条出处写在 `specs/*.py` 原处的 `判据：` 旁注里）。减负有一个射程：
+# **身份 / 边界 / 上报路径 / 交接规则 / 不硬凑 / 必填字段**一律不许碰 ——
+# 那几类是安全与正确性，判据替不了它们（判据只能事后抓，抓不到"它根本不知道该向谁上报"
+# 这种形态：那时模型会把没做成的写成做成了，而没有任何门会响）。
+#
+# 所以减负必须配一条**反真空**：删完之后，每个角色的提示词里仍然读得到这四类锚点，
+# **逐角色**断言。只断言"某几个角色还在"就会给"顺手删过头"留一条缝。
+
+#: 四类锚点各自的读法（都是**逐字**锚，不是关键词模糊匹配）。
+_ANCHOR_KINDS: dict[str, tuple[str, ...]] = {
+    "身份": ("号角色，职责是：",),                      # `AGENT_IDENTITY`
+    "上报": ("干不了 / 干不着就上报",),                 # `PARENT_STOP`（十个角色都有）
+    "交接": ("交接手稿（交接工作前的标准动作",),         # `HANDOFF_PROTOCOL`
+}
+#: 「边界」不能只认抬头那一行：`brief_sections` 在 `boundary=()` 时**只**印抬头
+#: （实测：`'边界（这些是硬约束，越过它们做的事一律不算数）：\n'`）—— 只认抬头的话，
+#: 有人把边界条目整批删掉也判绿，那正是这条反真空要抓的形态。
+_BOUNDARY_HEADER = "边界（这些是硬约束"
+
+
+def _boundary_still_lists_a_clause(text: str) -> bool:
+    """边界那一段还在、且真的**列了条目**（抬头后面紧跟着 `- ` 那几行）。"""
+    lines = text.splitlines()
+    head = next((i for i, line in enumerate(lines) if line.startswith(_BOUNDARY_HEADER)), None)
+    if head is None:
+        return False
+    return any(line.startswith("- ") for line in lines[head + 1:head + 4])
+
+
+def _missing_anchors(text: str) -> list[str]:
+    """这段提示词里**缺**哪几类锚点（空 = 四类都在）。判据本体只这一处。"""
+    missing = [kind for kind, needles in _ANCHOR_KINDS.items()
+               if not all(needle in text for needle in needles)]
+    if not _boundary_still_lists_a_clause(text):
+        missing.insert(0, "边界")
+    return missing
+
+
+def test_every_role_still_carries_the_four_anchor_kinds(registry: ToolRegistry):
+    """判据（减负的反真空）：十角色逐个都还读得到身份 / 边界 / 上报 / 交接。
+
+    四类各取一句**逐字**锚（见 `_ANCHOR_KINDS`）：身份与边界回答"我是谁、不许做什么"，
+    上报回答"做不了时找谁"，交接回答"怎么把活交出去"。减负删的是"已有判据在守"的
+    行为义务，这四类**没有**判据能替代 —— 删掉它们，模型不会报错，只会静默地少做。
+    """
+    # 反真空（判据自己）：四类名一个不少（"边界"由 `_boundary_still_lists_a_clause` 单独判）。
+    assert sorted(_ANCHOR_KINDS) == sorted(("上报", "交接", "身份")), sorted(_ANCHOR_KINDS)
+    checked: list[str] = []
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        missing = _missing_anchors(text)
+        assert not missing, (
+            f"{role} 的提示词里缺了 {missing} 这几类锚点 ⇒ 减负删过头了"
+            "（身份/边界/上报/交接一律不许删）")
+        checked.append(role)
+    assert len(checked) == 10, checked
+
+
+def test_deleting_a_safety_clause_makes_the_anchor_criterion_red(
+        registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
+    """负控（减负的反真空）：把删除范围**扩大到安全条款** ⇒ 必红。
+
+    两刀，各打在一条"判据替不了"的条款上：
+    ① 把某个角色的 `boundary` 清空（那是它的**边界**，`AgentBrief` 的六格之一）；
+    ② 把 `HANDOFF_PROTOCOL` 换成空串（那是**交接规则**，十格共享）。
+    两刀都必须让 `_missing_anchors` 点名对应的那一类 —— 只报"少了点什么"不够，
+    报不出是哪一类的话，读的人还得自己去比对三十万字的提示词。
+    """
+    from agentflow.agentspec import AgentBrief
+
+    victim = "E"
+    brief = AP.ROLE_BRIEFS[victim]
+    assert isinstance(brief, AgentBrief), brief
+    assert _missing_anchors(_prompt(victim, registry)) == []
+    monkeypatch.setitem(AP.ROLE_BRIEFS, victim,
+                        replace(brief, boundary=()))
+    assert _missing_anchors(_prompt(victim, registry)) == ["边界"], (
+        "清空 boundary 之后判据没点名「边界」⇒ 这条反真空抓不住扩大的删除范围")
+    monkeypatch.undo()
+
+    assert _missing_anchors(_prompt(victim, registry)) == []
+    # ② 交接：把那份协议换成一份**块数相同**（2 块，`_block_sections` 按空行切、
+    # 块数与 `_HANDOFF_BLOCK_NAMES` 不等会当场抛）但没有那句锚的正文 —— 于是
+    # "交接手稿（交接工作前的标准动作" 不再出现，而提示词其余部分照常渲染。
+    monkeypatch.setattr(AP, "HANDOFF_PROTOCOL",
+                        "交接（探针）：锚点那一句被删掉了。\n\n规则（探针）：照旧。\n\n")
+    assert _missing_anchors(_prompt(victim, registry)) == ["交接"], (
+        "删掉交接协议里那句锚之后判据没点名「交接」")
+    monkeypatch.undo()
 
 
 def test_prompt_audit_records_version_sections_variables_and_task_hash(registry: ToolRegistry):
@@ -2564,7 +2689,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: ⚠️ 这一格号钉的是**冻结那一刻的树**，不是日期：那一刻逐文件记了 sha256（见本次收口回报）；
 #:    哪一份文件在冻完之后又动了，`test_the_prompt_version_moves` 会当场红 —— 那时**先看
 #:    是不是别人的线又落了东西**，再决定是重算这张表（同版本号、新时刻）还是抬下一格。
-_FROZEN_PROMPT_VERSION = "p173"
+_FROZEN_PROMPT_VERSION = "p174"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2580,16 +2705,16 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # ⚠️ `p169` 十格全换值（理由逐条见上面那一段：A 的 boundary → 十格的伙伴表；
     #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
     #    C 的两句假话 → B / C / D / F / M 这五格）。
-    "A": "7b4835138720e638005d9c12c589c719e86235217d3218a82080066a57a769ae",
-    "B": "61288a0b077f67870d4ec010281166723e2a0aee7cf473137dca858749454cba",
-    "C": "8fa11cf60fd55d85c1242fea844c290a363d5fd1a168351dead1008d301c5a6e",
-    "D": "390933407f4b5e1089b949eb8d6c1c5d237781763c43410412ca4369fd789428",
-    "E": "19e3118f92601f8e5277627d80c97a5e7de44c2469faa6d9d522bb2dbc59f4b9",
-    "F": "3b3e96dcc51f2481d4125eeaabb9b1ef65334c72ef8f887101ccd156832890df",
-    "G": "38b2a4b2187c2d6253a1ad175d4432649ec4e1be6effb8bd35baefd8ac31bff9",
-    "H": "e2f7ebc4a31df9445795e3bb136c4543cc20ffc398d51896167e81462c685595",
-    "V": "c0895e6f4320746bd026267db4a8df07b506c54a5992bfd4383ef7749621f332",
-    "M": "3e1b28bdf5a642ca4adf9d269bc747d734eb3e741aa3dc805bf7a7f703eee589",
+    "A": "2b54722b7fee182885fc8194f199b43a9c3322dc984b055f3ab234fd6149b7f3",
+    "B": "60e35fd5ba41b98660da309531b72ce316c9d1c30bd0a7fed0345b6ca39bdbef",
+    "C": "f2d234521d58c3e7b22ce68fcb5dba781f42323dc9c1ab99064d267690fac52c",
+    "D": "d695c795cfa7c923db03a889e6c215b11d22c22866bfee85e041bc018da09eac",
+    "E": "de2a1679040e7a22af14f376edd38666ac2a4f67f74b418e838ad430dfee6765",
+    "F": "49f9f4310d8172904c53b39d5766b370964fcc5847333beb070540ec5acee71c",
+    "G": "f75a840a75a4f6bc94e86813b5cd4a1259bba036fc659854bddd09acf165fa28",
+    "H": "e8e05e0dd925be7e902b1f0a64651448b9c74a03fa20d12dd08566aff83726ce",
+    "V": "97ca671168ac54d1ee986f02b2c6e0942c4aee23f4fb4c84e0b0f1b2da05008c",
+    "M": "b0d04c64d9396bb27f8b1363b7edeb02fed74f9bfa678e551e1c92f70987babc",
 }
 
 

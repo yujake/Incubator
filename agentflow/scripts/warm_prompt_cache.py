@@ -158,6 +158,18 @@ OTHER_RUN_FACTS: Mapping[str, Any] = {
     "inbox": "- [m-0001] 一条留言",
     "user_replies": "- [q-0001] 问：… → 用户答（user）：…",
     "workspace_root": "/tmp/another-workspace",
+    # ---- 2026-10-21 第二批：**另一份伙伴配置**（不只是另一件活）。
+    #
+    # `availability`（`host.wiring_status` 的读数）与 `parent_limits`（`Policy` 的数字）
+    # 此前住在 system 里（段序 4520 / 5210），于是"换一份伙伴配置"在这里会表现为
+    # 前缀从 63% / 88% 处断开 —— 跨 run 探针那一行（`pass=4`，第一次见这份 system）
+    # 的 `hit` 就是"换配置之后还剩多少前缀"的实测值。
+    # 改后它们只在开场那条 user 消息里（消息不是前缀）⇒ `pass=4` 也该≥90%。
+    # 判据：`tests/test_cross_run_prefix_is_reused.py::test_two_partner_configs_hit_...`。
+    "availability": {"A": "no_provider", "B": "wired", "C": "no_key", "D": "wired",
+                     "E": "wired", "F": "wired", "G": "wired", "H": "wired", "V": "wired"},
+    "parent_limits": ("这一次 run 的派活上限（现算读数，不是记忆）：\n"
+                      "- （另一份配置：同时在飞 7 个、墙钟不限）"),
 }
 
 

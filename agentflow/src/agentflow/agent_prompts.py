@@ -2157,7 +2157,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 收口回报里（`agent_prompts.py` / `agent_skills.py` / `litstage.py` / `search_tools.py` /
 #: `conductor_tools.py` / `conductor.py` / `agent_loop.py` / `schema.py` / `store.py` /
 #: `specs/a.py` / `specs/c.py` / `cli.py` 逐个）。
-PROMPT_VERSION = "p173"
+PROMPT_VERSION = "p174"
 
 
 
@@ -3869,7 +3869,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-    ("C", "敢创新"): "你可以提候选缺口（那是猜想）；要不要把它变成检索请求由调用方决定（派你时给 `submit_requests=true`）—— 你在自己的循环里不拧这个开关。",
+    ("C", "敢创新"): "你可以提候选缺口（那是猜想）；要不要把它变成检索请求由调用方决定。",
 
 
 
@@ -4003,7 +4003,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
     # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一句与 `specs/c.py`
     # `local_notes["能讨论"]` 逐字同步回"你自己不发请求（边是空的）"。
-    ("C", "能讨论"): "把结构读数讲清楚给 D 与人听；你自己不发请求（边是空的）。",
+    ("C", "能讨论"): "把结构读数讲清楚给 D 与人听。",
 
 
 
@@ -7693,7 +7693,64 @@ _NO_PARENT_LIMITS = ("这一次没有读到策略读数 ⇒ 派活按最保守�
 
 
 
-def parent_limits_text(policy: Any, role: str) -> str:
+#: 开场那条 user 消息里「现在的接线态」那一栏的**唯一渲染口**（2026-10-21 从 system 挪出来）。
+#:
+#: 为什么挪：`host.wiring_status` 的读数随**伙伴配置**变（谁配了 provider / key），而它此前
+#: 就是 system 里 `PARTNER_AVAILABILITY`（段序 4520）那一段的全部内容 —— 换一次配置，
+#: M 的 system 从第 31,8xx / 50,1xx 字符（63%）处就分家（本机实测，判据
+#: `tests/test_cross_run_prefix_is_reused.py::test_two_partner_configs_render_the_same_system`）
+#: ⇒ 那 37% 的前缀一个 token 都复用不了。它现在只出现在开场那一条 user 消息里
+#: （消息不是前缀：换一趟活换的是消息）。
+#:
+#: 三态照旧：`None` = 这一次**没读到**读数 —— 它不等于"全都接线了"，所以这一栏写
+#: "（没有读数…）"，而不是把所有伙伴都写成 wired（那会把两件处置方向相反的事混成一件）。
+def wiring_text(availability: Mapping[str, str] | None) -> str:
+    """这一次的接线态（`- 伙伴：状态` 逐行 + 一句"派活前先看它"）。"""
+    if availability is None:
+        return ("（没有读数：这一次没读到接线态 —— 这**不等于**全都接线了；"
+                "派活前问一下框架，别把「没读到」当成「都能派」。）")
+    unusable = sorted(k for k, v in availability.items() if str(v) != "wired")
+    lines = "\n".join(f"- {k}：{availability[k]}" for k in sorted(availability))
+    return (lines or "（没有读数）") + (
+        "\n派活前先看这一栏：没接线的伙伴派了也会被拒（refused/not_wired），"
+        "不如改派能做的，或如实说明缺什么。" if unusable else "")
+
+
+#: `PARTNER_AVAILABILITY` 在 system 里剩下的那一句指路语（**逐字节静态**）。
+#:
+#: 两条纪律与 `promptstability.SYSTEM_PLACEHOLDERS` 同源：①不写状态（写进去就等于把这一段
+#: 前缀绑在这一份伙伴配置上）；②指得出真值在哪（开场那条 user 消息的第一栏）。
+PARTNER_WIRING_POINTER = (
+    "现在的接线态（谁当前真的能被唤起）：见本次对话第一条消息的「现在的接线态」那一栏。\n"
+    "那一栏是**这一趟的事实**，不是建议 —— 派活前先看它：没接线的伙伴派了也会被拒"
+    "（`refused` / `not_wired`），不如改派能做的，或如实说明缺什么。\n"
+    "（这一格刻意不写在这里：换一次伙伴配置它就变，而 system 是每一趟的前缀 —— "
+    "写进段里，换个配置之后这一处往后的前缀就一个 token 都复用不了。）"
+)
+
+#: `PARENT_LIMITS` 在 system 里剩下的那一半：口径与处置（**没有一个数字**）。
+#:
+#: 另一半（四类上限的具体数字 + 墙钟 + 你现在在深度几）按同一口径挪进了开场那条 user
+#: 消息的「派活上限」：数字由 `Policy` 现算，而 `Policy` 是**每一趟 run 的**
+#: （`cli.py` 用 `Policy(wall_clock_sec=…, usd_budget=…)` 现造）⇒ 换一次 run 的配置就
+#: 换一段字节，而这一段此前在 M 的 system 里位于第 ~88% 处（第二个断点）。
+#: 留在这里的两条"怎么处置"与数字无关，任何一趟都该读到 —— 它们正是这一段存在的理由。
+PARENT_LIMITS_RULES = (
+    "这一次 run 的派活上限（四类数字都是现算读数）：见本次对话第一条消息的「派活上限」那一栏。\n"
+    "口径是「**同时在飞**」：子行 `status` 还在 `pending`/`running` 的那些；"
+    "子代理一返回就腾出名额，与它返回得好不好无关。名额是**逐实例**的 —— "
+    "别人再向同一个角色派活会新建一个实例（D#2），不是让忙着的那个接手。\n"
+    "- **触顶的处置是「先等」，不是「这条路不通」**：达到派活上限时框架会让你等到"
+    "一个子代理返回再照常派（`fanout_wait_sec`）；等到超时或墙钟到点才算真的被拒。\n"
+    "- 被拒不是「你不会做」：读 `refusal_reason` 的原话（`fanout_exceeded` / "
+    "`depth_exceeded` / `concurrency_exceeded` / `deadline_exceeded` / `budget_exceeded` / "
+    "`forbidden_edge`）写进汇报 —— 「被策略挡下」与「我不会做」是两件事。\n"
+    "（数字刻意不写在这里：四类上限与墙钟都是这一次 run 的配置，换一趟就可能换数字 "
+    "⇒ 写进 system 就是「换个 run 就换一段前缀」。）"
+)
+
+
+def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> str:
 
 
 
@@ -7809,6 +7866,11 @@ def parent_limits_text(policy: Any, role: str) -> str:
 
 
 
+    #: 深度那一句里的"你现在在深度 X"：system 那一侧走 `{{depth}}` 变量插值，
+    #: 而这一段现在念在**开场 user 消息**里（不经过 `promptkit`），所以由调用方把
+    #: 现成的数字递进来；不递（审计/判据直呼）就原样留 `{{depth}}` —— 两种读法各答
+    #: 各的问题，谁也不冒充谁。
+    depth_text = "{{depth}}" if depth is None else str(int(depth))
     wall = policy.wall_clock_sec
 
 
@@ -7853,7 +7915,8 @@ def parent_limits_text(policy: Any, role: str) -> str:
 
 
 
-        "这一次 run 的派活上限（现算读数，不是记忆）：\n"
+        # 2026-10-21：标题那一行搬去了 `_opening_transcript` 的栏名（它现在是开场那条
+        # user 消息里的一栏，不是 system 里的一段）—— 两处各印一遍标题会让同一句话读两次。
 
 
 
@@ -7873,7 +7936,7 @@ def parent_limits_text(policy: Any, role: str) -> str:
 
 
 
-        f"- 召唤链深度上限 {int(policy.max_depth)}（主控发起 = 1）。你现在在深度 {{{{depth}}}}"
+        f"- 召唤链深度上限 {int(policy.max_depth)}（主控发起 = 1）。你现在在深度 {depth_text}"
 
 
 
@@ -8328,7 +8391,7 @@ def write_profiles(root: str | Path, *, registry: Any = None,
 
 
 
-#: 「这一次运行的事实」那十二格的值与缺省句（**唯一来源**）。
+#: 「这一次运行的事实」那十四格的值与缺省句（**唯一来源**）。
 #:
 #: 为什么抽成函数（2026-10-21）：这些事实从 system 挪进了 user 消息，于是它们的值有
 #: **两个**读者 —— `role_prompt_registry`（system 模板里的变量，经
@@ -8343,13 +8406,17 @@ def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
                  depth: int = 1, parent_task_id: str = "", children: str = "",
                  board: str = "", budget_left: str = "", inbox: str = "",
                  notebook: str = "", user_replies: str = "",
-                 workspace_root: str = "") -> dict[str, str]:
-    """这十二格事实的字符串值（**缺省句也在这里**，一处定义、两个读者）。
+                 workspace_root: str = "",
+                 availability: Any = None, parent_limits: str = "") -> dict[str, str]:
+    """这十四格事实的字符串值（**缺省句也在这里**，一处定义、两个读者）。
 
     键序与改前那张字面量逐格一致（`prompt_audit["variables"]` 是排序过的，
     但"顺序只在能读出来的地方才有意义"）：
     `task` / `summoned_by` / `task_id` / `parent_task_id` / `children` / `depth` /
-    `budget_left` / `inbox` / `board` / `notebook` / `user_replies` / `workspace_root`。
+    `budget_left` / `inbox` / `board` / `notebook` / `user_replies` / `workspace_root`，
+    外加 2026-10-21 从 system 挪出来的两格：`availability`（接线态）/ `parent_limits`
+    （派活上限 —— 它此前在 system 里，`{{depth}}` 由 `promptkit` 插值；现在念在
+    user 消息里，`depth` 由 `parent_limits_text(depth=…)` 直接代入）。
     """
     return {
         "task": task or "（这一次没有给出任务描述）",
@@ -8369,6 +8436,22 @@ def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
         "notebook": notebook or "（草稿本还是空的）",
         "user_replies": user_replies or "（用户还没有回答过你的问题）",
         "workspace_root": workspace_root or "（未指定）",
+        # ---- 2026-10-21：这两格从 system 挪进开场那条 user 消息（同一口径、同一落点）。
+        #
+        # 它们都是"这一次 run 的配置"而不是"这一趟活的事实"：
+        # `availability` 随伙伴配置变（谁配了 provider / key），`parent_limits` 随
+        # `Policy` 变（`cli.py` 每趟用 `wall_clock_sec` / `usd_budget` 现造）。
+        # 换一次配置 ⇒ system 里那两段（段序 4520 / 5210，M 岗实测断点 63% 与 88%）之后
+        # 的前缀全部作废。现在它们的真值只在这里念一遍（`_opening_transcript`）。
+        #
+        # `availability` 收三种形态（**各有真实调用方**，不是一个宽松的入口）：
+        #   - `Mapping`：直呼渲染 API 的调用方（`host.write_profiles` / 判据夹具）给的就是它；
+        #   - `str`：`promptstability.split_facts` 把 `{{availability}}` 换成静态替身之后
+        #     的那一份（system 那一侧读到的是它，而它不该再被渲染一次）；
+        #   - `None`：这一次没读到读数（三态里的第三态，**不是**"全都接线了"）。
+        "availability": (availability.strip() if isinstance(availability, str)
+                         else wiring_text(availability)) or wiring_text(None),
+        "parent_limits": parent_limits or _NO_PARENT_LIMITS,
     }
 
 
@@ -8400,7 +8483,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-                        availability: Mapping[str, str] | None = None,
+                        availability: Mapping[str, str] | str | None = None,
 
 
 
@@ -8595,7 +8678,8 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         **prompt_facts(task=task, summoned_by=summoned_by, task_id=task_id, depth=depth,
                        parent_task_id=parent_task_id, children=children, board=board,
                        budget_left=budget_left, inbox=inbox, notebook=notebook,
-                       user_replies=user_replies, workspace_root=workspace_root),
+                       user_replies=user_replies, workspace_root=workspace_root,
+                       availability=availability, parent_limits=parent_limits),
 
 
 
@@ -8924,7 +9008,10 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-    partners = partners_lines(role, availability)
+    # 2026-10-21：伙伴行里**不再**带"（现在没接线：X）"那个标记 —— 它在 system 里，
+    # 换一次伙伴配置就把这一段前缀劈成两半（`partners_lines` 仍认 `availability`：
+    # 落盘的 `PROFILES_FILE` 画像要用它，而那份文件不是前缀，信息一个字不丢）。
+    partners = partners_lines(role)
 
 
 
@@ -8936,39 +9023,14 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-    if availability is not None:
-
-
-
-        unusable = sorted(k for k, v in availability.items() if str(v) != "wired")
-
-
-
-        reg.section(Section("PARTNER_AVAILABILITY", SECTION_ORDERS["PARTNERS"] + 20,
-
-
-
-                            "现在的接线态（这一栏是事实，不是建议）：\n"
-
-
-
-                            + ("\n".join(f"- {k}：{availability[k]}" for k in sorted(availability))
-
-
-
-                               or "（没有读数）")
-
-
-
-                            + ("\n派活前先看这一栏：没接线的伙伴派了也会被拒（refused/not_wired），"
-
-
-
-                               "不如改派能做的，或如实说明缺什么。"
-
-
-
-                               if unusable else "")))
+    # 2026-10-21：这一段从「这一次的接线态」换成**静态指路语**（逐字节静态）。
+    #
+    # 根因：`host.wiring_status` 随伙伴配置变 ⇒ 这一段一变，它后面那 37% 的前缀
+    # 全部作废（M 岗实测断点 31,8xx / 50,1xx = 63%，判据
+    # `tests/test_cross_run_prefix_is_reused.py::test_two_partner_configs_render_the_same_system`）。
+    # 真值只进开场那条 user 消息（`agent_loop._opening_transcript`），三态在那里写清。
+    reg.section(Section("PARTNER_AVAILABILITY", SECTION_ORDERS["PARTNERS"] + 20,
+                        PARTNER_WIRING_POINTER))
 
 
 
@@ -9112,11 +9174,10 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
+        # 2026-10-21：数字（四类上限 + 墙钟 + 你现在在深度几）挪进开场那条 user
+        # 消息的「派活上限」；这里只剩口径与处置 —— 它们与数字无关，且每一趟都该读到。
         reg.section(Section("PARENT_LIMITS", SECTION_ORDERS["PARENT_LIMITS"],
-
-
-
-                            (parent_limits or "").strip() or _NO_PARENT_LIMITS))
+                            PARENT_LIMITS_RULES))
 
 
 

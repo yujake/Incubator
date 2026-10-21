@@ -403,6 +403,109 @@ def test_a_dynamic_section_that_is_not_registered_is_red(tmp_path: pathlib.Path)
         probe_a, probe_b, whitelist={"PROBE_STEP_CLOCK", "TASK_BUDGET", "TASK_NOTEBOOK"})
 
 
+#: `STEP_VOLATILE_FACTS` 的**键集**账本（事务三 2026-10-21：堵审计射程的边界）。
+#:
+#: ## 为什么必须另立一个常量（而不是并进 `_FROZEN_PROMPT_DIGESTS`）
+#:
+#: 那张冻结表按**缺省事实**渲染模板 ⇒ 它钉的是"段文本"。而 facts 迁移（把某几格事实从
+#: system 挪进 user 消息）**不改任何一段的文本** ⇒ 十格摘要一个字节都不会变。
+#: 上一批（2026-10-21 第一批，2 格 → 12 格）就是这样：判据没红、也没有抬版本，
+#: 而模型读到的**落点**整个换了一遍。审计射程到此为止 —— 这条账本补上那一格。
+#:
+#: ## 口径（`promptstability.facts_migration_problem`）
+#:
+#: 按顺序记 `(version, count, keys_sha256)`；判据只认**最后一格**：
+#: live 键集必须等于它（否则"迁了而账本没记"），且它的 `version` 必须等于
+#: `PROMPT_VERSION`（否则"迁了而版本没抬"）。前面的几格是历史 —— 不参与判绿，
+#: 但它们正是"哪一次迁移没抬版本"这件事在盘上的读数，所以留着。
+#:
+#: ⚠️ 维护规则：动 `STEP_VOLATILE_FACTS` ⇒ 在 `PROMPT_VERSION` 抬一格，并在账本末尾
+#: 追加一格（`count` / `keys_sha256` 用 `PS.volatile_facts_digest()` 现算，不手抄）。
+_VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
+    # 上一批：`budget_left` / `notebook` + 跨 run 那十格。**没抬版本**（这就是那条教训）。
+    {"version": "p173", "count": 12,
+     "keys_sha256": "650a06dca214b4cad3c628887390c3e21fa0b6bf91ef376f86acf6c3c0ae472f",
+     "note": "第一批（2026-10-21）：budget_left/notebook + 跨 run 十格；无版本痕迹"},
+    # 本批：`availability` / `parent_limits` 从 system 的那两段挪进开场 user 消息。
+    # 同样**没抬版本**（业主口径：本批不许动 `PROMPT_VERSION`）；业主抬格时把这格一起看一眼。
+    {"version": "p173", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "第二批（2026-10-21）：availability / parent_limits 也搬进开场消息"},
+    {"version": "p174", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p174（2026-10-21）：其它角色减负 + availability/parent_limits 迁移记账；键集未变"},
+)
+
+
+def test_facts_migration_must_leave_a_version_trace() -> None:
+    """判据（事务三）：动 `STEP_VOLATILE_FACTS` 必须在 `PROMPT_VERSION` 上留痕迹。
+
+    ## 这一条守的是"审计射程的边界"（不是"提示词文本"）
+
+    `_FROZEN_PROMPT_DIGESTS`（`test_agent_prompts.py`）按缺省事实渲染模板 ⇒ 它看得见
+    "哪一段的字变了"，看不见"哪几格事实被挪出了 system"。而后者对模型是同一件事：
+    落点变了 = 它读到的地方变了。所以"facts 迁移"必须与"改段"同等待遇 —— 抬版本。
+
+    三处都判：
+    ① **正控**：live 键集 = 账本最后一格，且那一格的版本 = `PROMPT_VERSION`（今天成立）；
+    ② **反真空**：账本至少两格、相邻两格的键集哈希不同（否则"记账"这件事没有内容，
+       一个恒等于 live 的账本什么也守不住）—— 而且它记下了"上一批没抬版本"这个事实；
+    ③ **负控**（两个方向都打）：
+       - 删掉一个键而不抬版本 ⇒ 必红（报"facts 迁移了而账本最后一格没记"）；
+       - 键集没动而账本最后一格的版本落后一格 ⇒ 必红（报"版本没抬"）。
+       外加一条正控的反面：抬一格版本**并**在账本里记下新键集 ⇒ 绿（证明它不是"永远红"）。
+    """
+    version = AP.PROMPT_VERSION
+    problem = PS.facts_migration_problem(version, frozen=_VOLATILE_FACT_SETS)
+    assert problem == "", problem
+
+    # ---- 反真空 ①：账本真的记过东西（不是一格空表）。
+    assert len(_VOLATILE_FACT_SETS) >= 2, _VOLATILE_FACT_SETS
+    first, last = dict(_VOLATILE_FACT_SETS[0]), dict(_VOLATILE_FACT_SETS[-1])
+    assert first["keys_sha256"] != last["keys_sha256"], (
+        "账本里两格的键集哈希相同 ⇒ 这一批 facts 迁移没留下任何读数")
+    assert int(last["count"]) == len(PS.STEP_VOLATILE_FACTS), (
+        int(last["count"]), len(PS.STEP_VOLATILE_FACTS))
+    # 反真空 ②：账本最后一格**就是** live 的现算值（不手抄、也不是一个随手写的常数）。
+    assert (int(last["count"]), str(last["keys_sha256"])) == PS.volatile_facts_digest(), (
+        last, PS.volatile_facts_digest())
+    # 反真空 ③：上一批那一格记的是"12 格"（它证明这本账记得住历史，而不是只有一格）。
+    assert int(first["count"]) == 12, first
+
+    # ---- 负控 ①：删掉一个键（不改版本）⇒ 必红，且报的是"账本没记"这一档。
+    shrunk = {k: v for k, v in PS.STEP_VOLATILE_FACTS.items() if k != "parent_limits"}
+    assert len(shrunk) == len(PS.STEP_VOLATILE_FACTS) - 1, "负控没删到东西"
+    red = PS.facts_migration_problem(version, frozen=_VOLATILE_FACT_SETS, mapping=shrunk)
+    assert red, "删掉一格登记表元素而不抬版本，判据却放过了 ⇒ 这条判据什么也守不住"
+    assert "账本最后一格没记" in red, red
+
+    # ---- 负控 ②：键集换了、也记了新账，但版本号没抬（最后一格还写着上一版）⇒ 必红。
+    stale_version = dict(last, version="p172")
+    red = PS.facts_migration_problem(version, frozen=(*_VOLATILE_FACT_SETS[:-1], stale_version))
+    assert red and "PROMPT_VERSION" in red, red
+
+    # ---- 正控（相反的一跳）：抬一格版本 + 账本跟着记 ⇒ 绿（红不是写死的）。
+    bumped = f"p{int(version[1:]) + 1}"
+    ok = PS.facts_migration_problem(bumped, frozen=(*_VOLATILE_FACT_SETS[:-1],
+                                                    dict(last, version=bumped)))
+    assert ok == "", ok
+    # 抬版本时忘了记账（键集还停在上一格）⇒ 也必红（"版本动了而这一格没跟上"）。
+    red = PS.facts_migration_problem(bumped, frozen=(*_VOLATILE_FACT_SETS[:-1],
+                                                    dict(first, version=bumped)))
+    assert red, "只抬版本、键集账本没跟上，判据却放过了"
+
+
+def test_the_volatile_fact_keyset_digest_is_order_independent() -> None:
+    """判据的读数本身：键集指纹与**插入顺序**无关（否则重构一下 dict 就"迁移"了）。"""
+    reversed_map = dict(reversed(list(PS.STEP_VOLATILE_FACTS.items())))
+    assert PS.volatile_facts_digest(reversed_map) == PS.volatile_facts_digest()
+    # 少一格 / 多一格都必须换指纹（判据的牙）。
+    fewer = {k: v for k, v in PS.STEP_VOLATILE_FACTS.items() if k != "availability"}
+    more = dict(PS.STEP_VOLATILE_FACTS, **{"a_new_fact": "探针"})
+    assert PS.volatile_facts_digest(fewer)[1] != PS.volatile_facts_digest()[1]
+    assert PS.volatile_facts_digest(more)[1] != PS.volatile_facts_digest()[1]
+
+
 def test_the_dynamic_section_whitelist_is_registered_and_small() -> None:
     """反真空：登记表是**显式的一份**，且段白名单**初始为空**（不是"什么都允许"）。
 
@@ -411,8 +514,9 @@ def test_the_dynamic_section_whitelist_is_registered_and_small() -> None:
 
     事实登记表（`STEP_VOLATILE_FACTS`）反过来必须是**写全的一份**：2026-10-21 起它
     除了"每步会变"的两格，还收"跨 run 会变"的十格（否则换一趟活的第一次调用
-    永远命中不了）。这里钉住精确的键集 —— 少一格（有人把某格挪回 system）与
-    多一格（有人把静态事实也挪出去、于是模型读不到它）都会红。
+    永远命中不了），以及"随**这一趟的配置**变"的两格（`availability` / `parent_limits`
+    —— 2026-10-21 第二批；见那一节的三轴表）。这里钉住精确的键集 —— 少一格（有人把
+    某格挪回 system）与多一格（有人把静态事实也挪出去、于是模型读不到它）都会红。
     """
     assert isinstance(PS.DYNAMIC_SECTION_WHITELIST, frozenset), PS.DYNAMIC_SECTION_WHITELIST
     assert PS.DYNAMIC_SECTION_WHITELIST == frozenset(), PS.DYNAMIC_SECTION_WHITELIST
@@ -423,6 +527,8 @@ def test_the_dynamic_section_whitelist_is_registered_and_small() -> None:
         # 跨 run 会变（开场那条 user 消息里现读）
         "task", "task_id", "depth", "parent_task_id", "summoned_by",
         "children", "board", "inbox", "user_replies", "workspace_root",
+        # 随这一趟的**配置**变（也是开场那条 user 消息里现读，2026-10-21 第二批）
+        "availability", "parent_limits",
     }, sorted(PS.STEP_VOLATILE_FACTS)
     # 每一格都必须有**静态替身**（空串会被 `promptkit` 的严格插值拒掉，
     # 而那正是"挪出去但没留指路语"的形态）。

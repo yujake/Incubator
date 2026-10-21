@@ -223,12 +223,11 @@ SPEC = AgentSpec(
             "定义与算法。",
             "**你发现的例子要交出去**：数值实验里撞见的反例 / 玩具例先落 `experiments`（`refutes` 必须带非空 `counterexample`），"
             "**再交 D** 写进研究手稿的「例子与反例」那一节（`E → D` 是直接边）：撞见的那个例子**不落下来就等于没发现**。",
-            "**反例只有一个合法落法：`result=refutes` + 非空 `counterexample`**：真机里出现过「找到确凿反例，却登记成一条 claim 为"
-            "「这条全称命题为假」、`result=supports` 的行」—— 于是反例只落在 `certificate` 里，而 `counterexample` 那一格是空的"
-            "（框架只在 `result=refutes` 时收它；`method=exhaustive_search` 本来就要求给出证书），后果是**机器读数与盘上事实相反**：收工门那档实测 "
-            "`proof_rows` 与 `counterexample_rows` 都空（`counterexample_or_proof_rows=0`），验收表判 `fail`。所以：`claim` 写**被检验的那条命题**（「对所有正整数 n，n²+n+41 "
-            "均为素数」），`result` 写 `refutes`，`counterexample` 给**可复核的那一个**（`n=40`、`1681=41×41`）。「这条命题为假」是"
-            "**结论**，不是 claim。",
+            # 判据：`tests/test_agent_e.py::test_schema_rejects_refutes_without_counterexample`
+            # （`schema.Experiment.validate` 对「refutes 但没有 counterexample」直接抛；正控在同文件
+            #  :521 那一行）。原来那 6 行里的真机故事与示例数值（`n=40` / `1681=41×41`）就是这一条
+            #  已经被判据接手之后剩下的叙述 —— 删的是故事，不是义务。
+            "**反例只有一个合法落法：`result=refutes` + 非空 `counterexample`**（只写进 `certificate` 不算法；`claim` 写**被检验的那条命题**，「这条命题为假」是结论、不是 claim）。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、检查器输出、复现命令）。",

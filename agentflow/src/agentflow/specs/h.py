@@ -159,8 +159,10 @@ SPEC = AgentSpec(
             "「由 X 得 Y」—— 出现「由 `exp:NNNN` 可得」「见附录表 N」这种以编号代替论证的句子即不合格；④ 证不了的是不是明写成 "
             "`Conjecture` / `Open problem` 并写明缺哪一步；⑤ 有没有「机器验证」「Lean 已验证」，而台账里只有 `proof_review`。",
             "**稿子落成研究报告时的裁决：不许 `accepted`**：正文带着台账气（内部编号进正文、自审小节、过程词、长度靠清单而不是定理"
-            "与证明撑起来）时，落 **error 级** finding（`level=\"error\"`，这是裁决 `rejected` 的唯一入口；受控词里没有 "
-            "`has_defects` 这一档，**别自己造词**）；你若认为它够不上 error，那也只能落 warning 并把裁决压在 "
+            # 判据：`tests/test_p910_p9_review_finding_format.py` 里 FINDING_LEVELS 那一组
+            # （`schema.Finding` 的 `__post_init__` 对词表外的 level 直接抛 —— 造词会当场拿到
+            # 一句 "level 必须是 ('error','warning','info') 之一"，不需要先在提示词里背一遍）。
+            "与证明撑起来）时，落 **error 级** finding（`level=\"error\"`，这是裁决 `rejected` 的唯一入口）；你若认为它够不上 error，那也只能落 warning 并把裁决压在 "
             "`accepted_with_warnings` —— **`accepted` 在这一形态上不可用**。判据就是 G 那份论文体例的合格线那一条。还要判「相对台账"
             "新增了什么」：把 `documents.claims` 与 `statements` 逐条对，每条断言都要能指到册子上有没有对应行；都有 ⇒ 落 error 级 "
             "finding「没有新增结论」。",
@@ -192,6 +194,9 @@ SPEC = AgentSpec(
     local_notes={
         '能思辨': '强度与证据相称、论证不留跳步：把不确定的话写成确定的话是你最该抓的。',
         '有品味': "用'一个不在场的人能不能读懂'来判：记号有定义、指代明确、体例一致。",
+        # 2026-10-21 减负：这一条**想删但没删** —— 与 C 那一条同源
+        # （`tests/test_agent_prompts.py::test_read_only_roles_do_not_advertise_hands_on_the_data_plane`
+        # 守的就是这句话本身）。
         '手': '数据面写是结构禁止的；发现问题落 findings，再按性质找 A（引文）/ E（形式化或实验）核实或请 G 修订。',
         '敢创新': '不改稿、不新增论断：你是判定者，不是作者。',
         '眼睛': "读稿与它引的证据：判'说清楚没有'必须看原文。",
