@@ -167,7 +167,7 @@ class SummonResult:
     checked: bool | None = None
     #: 名册登记的三格（2026-10-21 真机缺陷的读数面，见 `Conductor._register_roster`）。
     #:
-    #: `roster_considered`：这次召唤**走没走过**名册漏斗。`False` = 这个结果不是由
+    #: `roster_considered`：这次召唤走没走过名册漏斗。`False` = 这个结果不是由
     #: `Conductor.summon` 产出的（替身 / 老实现）⇒ 调用方无从判断"登记了没有"，
     #: 而"没走过"与"走过了没登记"必须分得开（三态，不是两态）。
     #: `roster_name`：登记成功后秘书发的名册名（空 = 没登记上，理由在下一格）。
@@ -708,13 +708,13 @@ class Conductor:
         #:
         #: 为什么另起一格而不是直接用 `self.secretary`：`secretary` 那一格同时兼着"派活前的
         #: 委派评估"（`_note_delegation_quality`），语义是"主控的秘书"；名册的写入口可能来自
-        #: **发起这次派活的那个循环**（`agent_loop` 把自己的秘书接上来）。两者在真机上是同
+        #: 发起这次派活的那个循环（`agent_loop` 把自己的秘书接上来）。两者在真机上是同
         #: 一个类、同一个工作区根，但"谁写名册"必须是一个显式的、可判定的接线动作 ——
         #: 否则真机出现"conductor 有秘书、循环没秘书"那一态时，名册就又静默不登记
         #: （`projects/p3-verify` 就是这么空的）。
         #:
         #: `None` = 没接（不是"名册不重要"）：:meth:`_register_roster` 会把它记成一条
-        #: problem（"名册不在手上"），而这一步**不抛**（登记失败不许带走派活）。
+        #: problem（"名册不在手上"），而这一步不抛（登记失败不许带走派活）。
         self.roster_sink: Any = roster_sink
         #: 墙钟起点与截止（`time.monotonic()`，不受 NTP 回拨影响）。
         self._start = time.monotonic()
@@ -953,15 +953,15 @@ class Conductor:
     #
     # 2026-10-21 真机缺陷（`projects/p3-verify`）：`tasks` 里 5 个带父的代理行，而
     # `out/roster/` 连目录都没有、三份秘书台账里提到 roster 的行数 = 0。只读盘上证据：
-    #   · M 第 9 步调的是**原生工具** `conductor.summon_many`（3 个 target，`instance`
+    #   · M 第 9 步调的是原生工具 `conductor.summon_many`（3 个 target，`instance`
     #     分别是 lit / num / audit34）⇒ `tools/conductor_tools.py` → `Conductor.run_plan`
     #     → `scheduler` → `Conductor.summon` —— 这条链上一次 `roster_add` 都没有；
     #   · `t-000006`（`called_by=D` / `parent=t-000005` / `depth=3`）的派活卡在
     #     `Conductor.summon` 里被 `cli stop --force` 杀掉 ⇒ D 那一步连 `agent_step`
     #     事件都没有（事件是在 handler 返回之后才落的）。
-    # 两条合起来说明：**"登记"必须发生在"受理那一行落盘之后、`backend.call` 之前"**，
+    # 两条合起来说明：登记必须发生在"受理那一行落盘之后、`backend.call` 之前",
     # 而不是等子代理跑完再登记。改前那两处（`_do_summon` / `_do_summon_many`）都排在
-    # 返回之后 ⇒ 被杀在途中的子代理永远不登记，而且批量那一路要等**整批**跑完。
+    # 返回之后 ⇒ 被杀在途中的子代理永远不登记，而且批量那一路要等整批跑完。
     #
     # 为什么收在 `Conductor.summon` 这一处：所有派活路径最后都经过它（形状那两条、
     # `tools/conductor_tools` 的两个工具、队列认领、`scheduler` / `deliver` / `pipeline`）。
@@ -978,15 +978,15 @@ class Conductor:
         三条口径（与 :meth:`summon` 的第 [5] 步一起构成"恰好登记一次"）：
         1. 只在这里登记 —— 调用点一个都不许再自己调 `roster_add`（重复行会让名册里出现
            两条同名项，`Secretary.next_name` 按角色序号发号，第二条会变成 X2）；
-        2. 没写入口（`roster_sink` 与 `secretary` 都空）⇒ 返回一条 problem，**不抛**：
+        2. 没写入口（`roster_sink` 与 `secretary` 都空）⇒ 返回一条 problem，不抛：
            "名册不在手上"与"登记过了"必须分得开（三态，不是两态）；
-        3. 秘书拒收 / 抛异常 ⇒ 返回 problem，**不抛**（登记失败不许带走这次派活），
+        3. 秘书拒收 / 抛异常 ⇒ 返回 problem，不抛（登记失败不许带走这次派活），
            原文照抄，不替它改写成"没给简介"。
         """
         meta = dict(meta or {})
         if not str(owner or "").strip():
             # 没有父的绝对编号 ⇒ 名册上没有它的位置（顶趟本来就不进任何人的名册，
-            # 但一次**召唤**没有父是结构问题：孤儿行）。两种都要留理由，别静默。
+            # 但一次召唤没有父是结构问题：孤儿行）。两种都要留理由，别静默。
             return {"name": "", "considered": True,
                     "problem": (f"{task_id}：没有父的绝对编号 ⇒ 名册没地方登记"
                                 "（`tasks.parent_task_id` 是父子关系的唯一权威来源）")}
@@ -2405,7 +2405,7 @@ class Conductor:
 
     def _register_consumed(self, owner: str, res: Any, *, rid: str,
                            problems: list[str]) -> None:
-        """把认领那一路的名册读数收进 `problems`。**登记本身不在这里**（唯一漏斗是
+        """把认领那一路的名册读数收进 `problems`。登记本身不在这里（唯一漏斗是
         `Conductor.summon` 的 [5b] 一步，见 :meth:`_register_roster`）。
 
         为什么这个方法还留着：认领是唯一一条"框架自己发起、调用方不看返回值"的派活
@@ -2667,7 +2667,7 @@ class Conductor:
         return SummonResult(
             task_id=tid, role=row["role"], action=action, status="done", outcome="refused",
             refusal_reason=reason, detail=detail, depth=row["depth"],  # type: ignore[arg-type]
-            # 名册那三格：被拒的那一次**不登记**（它没跑，没有可登记的子代理）。
+            # 名册那三格：被拒的那一次不登记（它没跑，没有可登记的子代理）。
             # 为什么 `roster_problem` 留空：拒绝的理由已经在 `refusal_reason` / `detail`
             # 上（那是它的正式落点）；把"一次正常的拒绝"也记成"名册出了一个问题"，
             # 会让收工门那一格（`roster_registration`：数 `roster_problem` 条数）
@@ -2852,7 +2852,7 @@ class Conductor:
             干活"，不进 `tasks` 行 —— `tasks` 的字段是 schema 契约（禁改区），实例身份落在数据行的 `actor` 上（由
             `host` 按实例造对象时写死），那才是可审计的那一份。
         roster : 名册登记要用的那几格（`brief` / `task` / `name` / `reuse`），缺省 `None` = 一个都没给。
-            为什么走形参而不是从 `tasks` 行读：`schema.Task` 里**没有** `brief` / `task` 两格（它是禁改区的
+            为什么走形参而不是从 `tasks` 行读：`schema.Task` 里没有 `brief` / `task` 两格（它是禁改区的
             schema 契约），而"父给的那句简介"只活在派活的那个载荷里（`agent_loop._do_summon` 的 `brief`、
             `summon_many` 每个 target 的那一格）。2026-10-21 的在途实现正是从行里读这两格 ⇒ 恒为空 ⇒
             `roster_add` 用"没给一句任务简介"拒收每一条（名册照样空，只是 problem 变多）。
@@ -2870,7 +2870,7 @@ class Conductor:
         # 返回 `task_id=None` 而不是编一个号：没有 start 就没有 end，
         # 编一个号会让调用方去查一条不存在的行。
         #
-        # 名册那三格照旧要写：**没被受理 ⇒ 不登记，但要留理由**（"没跑成"与"不需要登记"
+        # 名册那三格照旧要写：没被受理 ⇒ 不登记，但要留理由（"没跑成"与"不需要登记"
         # 与"登记过了"是三件事，折平了就没法读数）。
         if token.cancelled:
             r = token.reason
@@ -3107,7 +3107,7 @@ class Conductor:
         self._log(f"召唤 {by} → {role}.{action}（{tid}, depth={depth}"
                   + (f", instance={instance}" if instance else "") + "）")
 
-        # ---- [5b] 名册登记：子行已经落盘、子代理还没跑。这是**唯一**的登记点。
+        # ---- [5b] 名册登记：子行已经落盘、子代理还没跑。这是唯一的登记点。
         #
         # 位置就是判据本身（三条，缺一条都会退回真机那个缺陷）：
         # ① 在 `_write_new_row` 之后 —— 只有真的建了子行才登记（被拒的召唤在

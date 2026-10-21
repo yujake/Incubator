@@ -9,7 +9,7 @@
 - `by_role`：这一行是谁写的。按 `readers.LEDGER_ROLE_FIELDS` 的有序回退取第一个非空的
   那一格（`created_by` → `role` → `producer` → `sender` → `verifier` → `author`），
   六格全空就是空串（页面显示"（未记录角色）"，不许编）；
-- `by_role_source`：上面那一格**取自哪个字段**。派生的角色必须带着它的出处，否则
+- `by_role_source`：上面那一格取自哪个字段。派生的角色必须带着它的出处，否则
   "这一行确实记录了角色"与"我们从一个邻近字段推出来的"在读的人眼里长得一样；
 - `by_task_id`：这一行是哪一个绝对编号的那一趟写的（从事件流反查；找不到就是空串，
   不许编）。
@@ -314,12 +314,12 @@ def test_the_role_falls_back_in_order_and_says_which_field_it_came_from(
 
     这一条钉四件事：
 
-    1. 那六格的有序回退每一档都取得到，而 `by_role_source` 说的是**真的那一格**
+    1. 那六格的有序回退每一档都取得到，而 `by_role_source` 说的是真的那一格
        （`created_by` / `role` / `producer` / `sender` / `verifier`）；
     2. 优先级是"先到先得"，不是"哪个更像角色"：一行同时有 `created_by` 与 `role` 时
        取 `created_by`；
     3. 负控（不许编）：六个角色字段全空 ⇒ `by_role=""`、`by_role_source=""`
-       （页面显示"（未记录角色）"），**不退到** `task_id` / `path` / `kind` 这类
+       （页面显示"（未记录角色）"），不退到 `task_id` / `path` / `kind` 这类
        非角色字段 —— "这一行属于哪一趟"与"这一行是谁写的"是两根轴；
     4. 声明同步：`by_role` / `by_role_source` 在那 14 个行接口的声明里都真的有。
     """

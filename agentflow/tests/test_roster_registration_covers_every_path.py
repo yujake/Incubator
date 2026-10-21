@@ -6,19 +6,19 @@
 `t-000005 D d2` / `t-000006 E d3`），而 `out/roster/` 连目录都没有、三份秘书台账里
 提到 roster 的行数 = 0。两条各自独立的缺口（都有盘上证据）：
 
-1. 主控第 9 步调的是**原生工具** `conductor.summon_many`（3 个 target，`instance`
+1. 主控第 9 步调的是原生工具 `conductor.summon_many`（3 个 target，`instance`
    分别是 lit / num / audit34）⇒ `tools/conductor_tools.py` → `Conductor.run_plan`
    → `scheduler` → `Conductor.summon`。这条链上改前一次 `roster_add` 都没有 ——
    登记只写在 `agent_loop` 的两条形状路上（`_do_summon` / `_do_summon_many`），
    而真机用的是工具那条路。
 2. `t-000006`（`called_by=D` / `parent=t-000005` / `depth=3`）的派活卡在
    `Conductor.summon` 里被 `cli stop --force` 杀掉 ⇒ D 那一步连 `agent_step` 事件
-   都没有（事件在 handler 返回之后才落）。改前登记排在 `summon` 返回**之后**
+   都没有（事件在 handler 返回之后才落）。改前登记排在 `summon` 返回之后
    ⇒ 被杀在途中的子代理永远不会登记，批量那一路还要等整批跑完。
 
 ## 修法（本文件钉的就是它）
 
-登记收口到 `Conductor.summon` 的第 [5b] 步：**受理那一行落盘之后、子代理跑起来之前**，
+登记收口到 `Conductor.summon` 的第 [5b] 步：受理那一行落盘之后、子代理跑起来之前，
 只此一处；`brief` / `task` 随 `summon(..., roster={...})` 带进来（`schema.Task` 里
 没有这两格，从行里读会恒空）。各派活路径只读回 `SummonResult.roster_*`，不再自己
 调 `roster_add`（同一子代理两条同名项就是"登记两次"的形态）。
@@ -38,7 +38,7 @@
 
 | 判据 | 这条问什么 |
 |---|---|
-| ⑦ | 登记发生在子代理跑起来**之前**：假后端在自己的 `call` 里按 `surface_of(owner=父, task_id=子)` 读面，读得到 |
+| ⑦ | 登记发生在子代理跑起来之前：假后端在自己的 `call` 里按 `surface_of(owner=父, task_id=子)` 读面，读得到 |
 
 ## 纪律
 
@@ -188,8 +188,11 @@ def test_path_two_summon_many_writes_every_accepted_child(tmp_path: pathlib.Path
     ids = [str(r.get("task_id") or "") for r in out.get("results") or []]
     assert len(ids) == 2 and all(ids), out
     adds = _adds(env["ws"], env["me"])
-    assert [str(a.get("task_id")) for a in adds] == ids, (adds, ids)
-    assert [str(a.get("brief")) for a in adds] == [t["brief"] for t in targets], adds
+    # 顺序不判（批量是并发跑的：两行按"谁先登记完"落盘，与 targets 的顺序无关）；
+    # 判的是"每个受理子恰好一行，且 brief 是它自己那句"。
+    by_tid = {str(a.get("task_id")): a for a in adds}
+    assert sorted(by_tid) == sorted(ids), (adds, ids)
+    assert [str(by_tid[k].get("brief")) for k in ids] == [t["brief"] for t in targets], adds
     assert "roster_problems" not in out, out
 
 
@@ -214,7 +217,8 @@ def test_path_three_the_conductor_tools_are_covered_too(tmp_path: pathlib.Path) 
     ids += [str(r.get("task_id") or "") for r in many.data.get("results") or []]
     assert len(ids) == 3 and all(ids), (one.data, many.data)
     adds = _adds(env["ws"], env["me"])
-    assert [str(a.get("task_id")) for a in adds] == ids, (adds, ids)
+    # 同上：批量那两条的落盘顺序不判，判"每个受理子恰好一行"。
+    assert sorted(str(a.get("task_id")) for a in adds) == sorted(ids), (adds, ids)
     for kid in ids:
         assert str(_task_row(env["ws"], kid).get("parent_task_id")) == env["me"], kid
     # 读数面：工具体自己也要能回答"这一条进名册没有"（改前这里一个字都没有）。
@@ -228,7 +232,7 @@ def test_path_three_the_conductor_tools_are_covered_too(tmp_path: pathlib.Path) 
 def test_a_refused_summon_is_not_registered(tmp_path: pathlib.Path) -> None:
     """判据②：被拒的那一次不进名册 —— 同一次派活里另有一条受理的子代理做对照。
 
-    红点在哪（改前）：受理的那一条**也**没登记（整条路 0 行）⇒ 对照那一半先红，
+    红点在哪（改前）：受理的那一条也没登记（整条路 0 行）⇒ 对照那一半先红，
     而被拒的那一条"恰好没登记"就变得不可判定（0 行既可能是"没登记"，也可能是
     "根本没走过漏斗"）。这一条把两件事分开：名册里必须恰好有受理的那一个编号。
     """
@@ -255,7 +259,7 @@ def test_an_unadmitted_summon_writes_no_roster_line_but_says_why(tmp_path: pathl
     两档各有一个对照：
     * 取消：`token` 已置位 ⇒ `Conductor.summon` 在 [0] 就返回，没有子行；
     * 没有父：`agent_loop._do_summon` 的受控拒绝 `no_owner`，一行子行都不落。
-    改前的红点：同一工作区里随后那次**受理**的派活不登记 ⇒ 名册 0 行，于是
+    改前的红点：同一工作区里随后那次受理的派活不登记 ⇒ 名册 0 行，于是
     "未受理的没登记"与"受理的也没登记"分不开。
     """
     env = _env(tmp_path, top=False)
@@ -352,12 +356,12 @@ def test_each_child_is_registered_exactly_once(tmp_path: pathlib.Path) -> None:
 def test_roster_face_reads_back_the_whole_tree(tmp_path: pathlib.Path) -> None:
     """判据⑥：跑完三条路径之后，用 `webui.readers.roster_face(root)` 读回来。
 
-    读侧的口径（见 `readers.roster_face`）：`nodes` 是整棵树，**根那一行也在里面**
+    读侧的口径（见 `readers.roster_face`）：`nodes` 是整棵树，根那一行也在里面
     （根 = 名册文件的主人，它自己没有名册名；真机 p3 的读数是 `t-000001 M d1` 打头、
     `count=5`），所以 `count` = 1（根）+ 受理子数。断言：
     * `answer="ok"`（名册真读成了，不是台账兜底）；
     * `count == 1 + 受理子数`，子节点数与受理子数一致；
-    * 每个**子**节点都不是 `registered=False`（名册节点不带 `registered` 那一格：
+    * 每个子节点都不是 `registered=False`（名册节点不带 `registered` 那一格：
       它出现在名册里本身就是"登记了"；`False` 只出现在台账兜底那一档，那正是
       "名册没读到"的形态）；
     * `coverage.unrostered == 0`（台账里没有"有父却不在名册上"的行）。
@@ -414,7 +418,7 @@ def test_registration_happens_before_the_child_runs(tmp_path: pathlib.Path) -> N
 
     这条是同一处时序缺陷的另一半：`LlmBackend.call` 给子代理起循环时按
     `surface_of(owner=父, task_id=子)` 从名册里读那一趟的读写面（S1n-b/c）。改前
-    名册行是 `summon` 返回**之后**才有的 ⇒ 面切割从来没生效过（子代理永远拿到空面，
+    名册行是 `summon` 返回之后才有的 ⇒ 面切割从来没生效过（子代理永远拿到空面，
     回到父的工作区里读写）。登记提前之后，后端一进去就该读得到那一格。
     """
     ws = tmp_path / "ws"
