@@ -53,6 +53,11 @@ _RUNTIME_PRODUCTS = frozenset({
     # （`LEDGER_NAME` 逐字就是它），把它降级成 `ARTIFACTS.<ext>` 等于为了让判据好过
     # 而让文档不再指到真名 —— 那正是这张图的用途的反面。
     "ARTIFACTS.jsonl", "ARTIFACTS.json",
+    # 名册旁支（`out/roster/<父编号>-index.jsonl` 与 `-retired.jsonl`）：同样只在工作区里
+    # 才有，仓库里没有。读图里写的是**真名**（带 `<父编号>` 前缀），但切词从 `-index` 起算、
+    # 又把 `.jsonl` 切成 `.json` ⇒ 得到 `-index.json` / `-retired.json` 两个 token。
+    # 与 handoffs/ARTIFACTS 同一个已知切词行为，登记而不是把真名改成占位写法。
+    "-index.json", "-retired.json",
 })
 
 

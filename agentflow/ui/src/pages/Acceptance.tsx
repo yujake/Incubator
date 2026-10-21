@@ -89,7 +89,7 @@ export function Acceptance() {
           <input
             class="input"
             type="text"
-            placeholder="不给就用不着：那一格会记「没查成」"
+            placeholder="不给就不用：那一格会记「没查成」"
             value={capText}
             onInput={(ev) => {
               setCapText(ev.currentTarget.value);

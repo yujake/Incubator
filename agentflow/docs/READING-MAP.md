@@ -1,12 +1,11 @@
-# 读代码的入口：七层 + "想改什么 ⇒ 读哪几个文件"
+# 读代码的入口：八层 + "想改什么 ⇒ 读哪几个文件"
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-13
-> （`paper_package` 整条退场后复算），
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-21，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **211 个 `.py`、125,026 行**，**45 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,988 行** —— 批 R40 把它补进了 §3 的表；
-> §3 那张表里最大的一行是 `schema.py`，逐文件行数见那张表）。
+> **218 个 `.py`、145,384 行**，**50 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，7,615 行** —— 批 R40 把它补进了 §3 的表；
+> §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > 新人打开任何一个文件都是一本小册子，
@@ -30,6 +29,8 @@
 > **2026-10-13 R72 收尾再改一次**：124,829 → **124,841**（净 +12 行：改掉三条被全量套件抓出来的
 > 陈旧读数 —— `capabilities.py` 里被 `test_r4_roles_surface` 逐字比对的那句对账读数、
 > `tools/doc_tools.py` 的成功支从 `ok(body)` 改成字面量键表；文件数 211 与 `>800 行` 的 44 都不变。
+> **2026-10-21 再改一次**：124,841 → **145,384**（文件数 211 → **218**，`>800 行` 44 → **50**；
+> `agent_loop.py` 6,511 → **7,615** 行，新增 `litstage.py` / `promptstability.py` 等模块）。
 > 复算命令就是上面那一条）。
 > **退场的那三个模块名这里刻意不写 `.py` 扩展名**：本图自己的判据要求图里每个像文件名的
 > token 都在盘上真的存在，写全名会让那条判据红 —— 而它们确实已经不在盘上了）。）
@@ -93,7 +94,12 @@
 
 ---
 
-## §1 七层与它们各自的文件
+## §1 八层与它们各自的文件
+
+> **层号怎么对**：本文第 0 层是"入口"（`cli.py` / `webui/` / `web/` / `ui/` 等），第 1–7 层与
+> [`DEVELOPMENT-SPEC.md`](DEVELOPMENT-SPEC.md) §2 的 ①–⑦ 逐层对应；那份规范里的第 ⑧ 层
+> **Web / 用户端**就是本文第 0 层那三行（`webui/` / `web/` / `ui/`）。层数是 **八层**
+> （`DEVELOPMENT-SPEC.md` §2 由 `draft/35` 的"七层"改为八层，那一份的分层表多出第 ⑧ 层）。
 
 层与层之间是**单向**的：上层可以读下层，下层不反向 import 上层。
 括号里是这个文件存在的理由（取自它自己的模块 docstring）。
@@ -102,7 +108,7 @@
 
 | 文件 | 是什么 |
 |---|---|
-| `cli.py` | 命令行入口（24 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`/`web`/`doctor`…） |
+| `cli.py` | 命令行入口（25 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`/`web`/`doctor`…） |
 | `webui/` | 用户端网页（包；2026-10-07 的 W0 从单文件模块一次拆到位）：`webui/state.py` 是**读模型**（`snapshot()`：全局待回答面板 + 运行态 + 一趟的事件回放，只读投影；待答与选项按裁定 L1 转发到 `userio`）、`webui/readers.py` 是**只读面**（`/api/state` · `/api/run/{sid}` · `/api/run/{sid}/events`（题 T2-a 的逐条事件：`index` 与 `run_view` 的 `start_index`/`end_index` 同一套编号，`since_index`/`limit` 游标分页） · `/api/evidence` · `/api/artifacts` · `/api/acceptance` · `/api/machine`，各带三态头）、`webui/sse.py` 是 `GET /api/stream` 的广播器 + 写路径钩子（`attach`/`detach`，谁开的代谁接 —— 生产路径在 `server.serve()`）、`webui/writes.py` 是唯一写路径（`POST /answer` → `userio.answer_question`）与它的写面、`webui/routes.py` 是路由表 `ROUTES`（= `_OWN` + `readers.ROUTES` + `writes.ROUTES`）、`webui/server.py` 是 http.server + 静态路由 + 两条页面入口（`/` 与 `/run/{sid}`）的 SPA 外壳 + SPA 回退 + 服务器自己写的那几张错误页；服务端渲染的旧壳已在 W5 清仓（裁定 P1 的两面都迁到 SPA 外壳，那个文件整件退场）；公开面由 `webui/__init__.py` re-export（W5 收窄：旧壳的两个渲染入口随之退场） |
 | `settings.py` | **机器级设置的一处定义**（2026-10-07 起）：落点（默认是 `agentflow/` 下的那份，被 git 忽略；`AGENTFLOW_SETTINGS` 指到别处）、键名（`toolchain.*` / `model.*` / `workspace.projects_dir`）与**唯一口径的优先级**（环境变量 > 设置文件 > 内置默认/自动探测，唯一实现 `env_or_setting`）。为什么要有它：本机路径与模型 key 此前散在"代码里的字面量 + 环境变量"两处 —— 换一台机器就有一句假话。判据 `tests/test_settings.py`（含"源码里 0 条死地址"与三道 key 安全阀） |
 | `budget.py` | 可追加的总预算：盘上寄存器（工作区根下那一个 JSON）+ 每次花钱前现读的口子 —— 花销不在这里（唯一权威账是 `usage_ledger`） |
@@ -152,9 +158,11 @@
 | `tools/table_tools.py` | 表 CRUD（共用数据面原子动作） |
 | `tools/fs_tools.py` | 文件 CRUD（共用，沙箱在工作区内） |
 | `tools/search_tools.py` | A 专用：provider 探测 / 检索 / 下载 / 判重检查 / 文献登记 |
+| `litstage.py` | **待新增文献列表的判据真身**（业主 2026-10-20；不在 `tools/` 下，但工具层是它的手）：条数上限（`MAX_ADMIT_PER_CALL` / `MAX_ADMIT_PER_DELEGATION`）、重叠口径（`OVERLAP_HIGH_JACCARD` / `OVERLAP_KINDS`）、状态机（`schema.CANDIDATE_STATUSES`）、筛选理由码、报告两块结构只有这一处；`tools/search_tools.py` 的四件 `lit.*` 只把它的结论翻成 `ToolResult`（不重新判一遍） |
 | `tools/ocr_tools.py` | B 专用：后端探测 / 文本层判断 / 按页 OCR |
 | `tools/graph_tools.py` | 图索引与查询（纯读） |
 | `tools/trace_tools.py` | 代号溯源（纯读） |
+| `tools/text_tools.py` | A 专用：`text.extract`（读 PDF 自带的文字层、写 `library/<编号>.txt`；2026-10-17 新增，原 PDF 原样保留、写盘前核质量） |
 | `tools/analysis_tools.py` | C 的**产出登记通道**（业主 2026-10-18 裁定「只读角色的产出要能进台账」）：唯一一件工具 `analysis.register_report`，`roles=("C",)` —— 把这一趟 C **自己算出来的**分析经 `agent_c._support.AnalysisReport.persist` 落成 `analysis_reports` 一行（存盘顺序、发号、文件名都还是那一份实现，这里不重写），`kind` 取 `schema.REPORT_KINDS`，`markdown` 写正文与边界。**为什么要有它**：C 的五个动作（`gaps`/`handle`/`paths`/`cold`/`hottest`）只能由父代理 `summon` 唤起，空动作的自由任务里 C 手上一件写工具都没有 ⇒ `analysis_reports` 恒 0、图读数只活在回复里（`projects/mp3` 末节第 5 条）。**边界**：只写 `analysis_reports`（`capabilities.TOOL_WRITE_SETS` 与实现 AST 逐格比对，不碰 `claims`/`literature`/`relations`；`_not_wired` 如实失败、绝不返回假 `report_id`）。**谁读它**：D 的 `write_report` 路径按 `report_id` 回读（`agent_d/core.py`）、`pipeline.py` 的 replay 分支、`closing.py` 的 `analysis_report_rows` 那一档、`verify.py` 的 `report_file_missing`。判据 `tests/test_readonly_output_channel.py` + `tests/test_tools_returns_declaration.py` |
 | `tools/research_tools.py` | D 专用：研究问题台账 + 知识缺口提问 |
 | `tools/verify_tools.py` | E 的工具：数值实验与形式化验证（禁改区） |
@@ -176,7 +184,7 @@
 | `agent_f/`（包） | F：多轮难题攻坚 |
 | `agent_g/`（包） | G：论文撰写 |
 | `agent_h/`（包） | H：审校（只读） |
-| `agent_v/`（包） | V：**证明级验证**（只读，`draft/39` §3.21 一/五/六）：把 F 交回来的证明按写成后的样子整体重读，给三态结论（`成立`/`有毛病`/`看不出来`）并签五元位第 3 位；`agent_v/core.py` 的 `AgentV`（三个动作：`verify_proof`/`list_verifications`/`read_proof`）+ `agent_v/__main__.py` 的自检入口（`python -m agentflow.agent_v`，16 条 `[PASS]`）。声明真身在 `specs/v.py`，读写在 `verifications.py` |
+| `agent_v/`（包） | V：**证明级验证**（只读，`draft/39` §3.21 一/五/六）：把 F 交回来的证明按写成后的样子整体重读，给三态结论（`成立`/`有毛病`/`看不出来`）并签五元位第 3 位；`agent_v/core.py` 的 `AgentV`（三个动作：`verify_proof`/`list_verifications`/`read_proof`）+ `agent_v/__main__.py` 的自检入口（`python -m agentflow.agent_v`，17 条 `[PASS]`）。声明真身在 `specs/v.py`，读写在 `verifications.py` |
 
 > 九个角色（除主控 M）的包形状是一样的（`goal-7f5116c1` M6/M7 + F-02 的 V）：入口 `__init__.py`、
 > 其余成员与 mixin 组装在 `agent_a/core.py` 这样的 core 模块里、模块级 helper 与常量在
@@ -188,7 +196,7 @@
 | `attackround.py` | F 的**一轮真推理**形态（`draft/39` §3.16）：四种产物 `reduction`/`proof`/`counterexample_request`/`dead_end`（**没有 `no_change`**）、策略工具箱（每轮必填方法与理由）、#5 缝的两条合法出口（写出来 / 声明成前提）、花钱前的确定性闸门（I9）、缺陷继承（I11）、超预算的 `too_large`（I16） |
 | `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句） |
 | `verifications.py` | 验证者 **V** 的证明级审校台账（`draft/39` §3.21）：`verifications/<命题号>.jsonl` 追加式一行一次审校（三态结论 `成立/有毛病/看不出来`、`defect_step`、逐条 findings 带步号、输入证明 sha）；`cold_start_prompt()` 是纯函数（签名里没有 store/conductor/registry ⇒ 冷启动是结构性质）；`signs_bit3()`/`bit3_payload()` 决定并产出五元位第 3 位的凭据 |
-| `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_rework`/`handoff_query`）+ **命题写入代理**（`wash_statement`/`record_statement`，业主 2026-10-09：B 交内容、秘书落盘——洗格式 / 拿编号 / 查重 / 改表四件，写集只有 `statements` 与 `dependencies`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态** |
+| `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_revise`/`handoff_query`）+ **命题写入代理**（`wash_statement`/`record_statement`，业主 2026-10-09：B 交内容、秘书落盘——洗格式 / 拿编号 / 查重 / 改表四件，写集只有 `statements` 与 `dependencies`）+ **名册**（S1k，业主 2026-10-19/20：「名册 = 父 + 子 + 绝对编号」）：落点 `out/roster/<父编号>.jsonl`（append-only，`_fold_roster` 折叠 `add`/`bind`/`retire`/`keep_alive`，另有 `<父编号>-index.jsonl` 对照表与 `<父编号>-retired.jsonl` 销号名单），`roster_view` / `parent_of` 答"我的父是谁、我的子是谁"（行里带绝对编号 `task_id` 与名册名 `name`），`brief_source` 记简介是父给的原话（`parent`）还是秘书代写（`secretary`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态**（"委托秘书洗一遍格式"是**两段式**：`wash_proposed` 请示 ⇒ 父用 `accept_proposal`/`reject_proposal` 定） |
 | `evidencebits.py` | 命题的**五元证据位**与派生等级（`draft/39` §3.14）：哪位角色欠哪一位（数值验证/有证明/审过/形式化通过/正式审查）、`na` 与"还没做"分得开的四态、等级**机械派生**（数值封顶在"强猜想"）、引用命题凭文献代号进第 2+3 位、作废四条缺一不可。另加**位 ⇒ 台账的映射**（`BIT_LEDGERS`：哪一位去哪张表查；`bit_evidence_gaps`：位上说有、表里要查得到）——业主 2026-10-09 点名的那一条。纯函数层：不读盘、不写盘，读入口是 `bits_from_row()`（收工门的 `reviewed_proof_rows` 与状态报告都走它） |
 | `quoteverify.py` | 引文校验：引文级回验（禁改区） |
 | `dedup.py` | 判重：文献 / 概念 / 关系（禁改区） |
@@ -205,6 +213,7 @@
 | `judge.py` | LLM 判定的唯一缝协议 |
 | `judges.py` | 语义判据的接入方式：注册表 + 三态 + 引用落地过滤 |
 | `promptkit.py` | 提示词装配：有序段 + 变量 + 作用域遮蔽 + 动态上下文（快照那一类） |
+| `promptstability.py` | **system 提示词的前缀稳定性**（2026-10-19/21）：静态 / 动态分离（`STEP_VOLATILE_FACTS` 登记表 + `SYSTEM_PLACEHOLDERS` 静态替身）、逐字节判据、缓存读数汇总 —— 上游前缀缓存要求前缀**逐字节相同**，而 system 过去每一步都在重算（`budget_left` 一变整条前缀作废）；登记表现已扩成"**跨 run 会变**"的事实，它们改在 user 消息里现读（判据 `tests/test_cross_run_prefix_is_reused.py`） |
 | `persona.py` | 身份的两个具名槽位 + 唯一注册入口：部署那一份无条件注册、角色那一份靠同名遮蔽、`scope` 必填（学 DSH 的 `dsh-persona`；`draft/101` §3） |
 | `presets.py` | 预设机制：目录 = 一个预设（`preset.<yaml>` + `agent.<宿主>.yml`，DSH 的 YAML 形状；两份的名字是常量 `PRESET_MANIFEST_NAME` / `COMPOSITION_NAME`）、根优先级、坏预设带理由、挂一次 + 生成戳、只许复制式创作、`!!js` 门落 conditional（学 DSH 的 `dsh-agent-presets`；`draft/101` §2） |
 | `composition.py` | 预设的**接线层**：组装行名 → 解析函数（今天两行：`agentflow.text_blocks` 给写死的正文块、`agentflow.brief_blocks` 声明五格身份文本由真身 `specs/<role>.py` 渲染）、随包预设根 `agentflow/presets/roles/`、角色 id → 预设 id（小写化）、以及回落时的读数 `prompt_audit["preset"]`；约定只有一条：预设决定"写死的块由哪段文件给"，代码永远给现算的块（`draft/103` §4.1b） |
@@ -231,7 +240,7 @@
 | `deliver.py` | 交付前的判据闸门：逐项判据 + 机械半 → 结论、报告、派回去的工作项 |
 | `closing.py` | 收工门（`draft/37` §16 P3）：**八格**各自一个三态读数（`closing.DEFAULT_CHECKS` 是权威清单）—— 论文那一格（回执里的 `tex_sha256` 与盘上那份 `main.tex` 的摘要对得上；没有 `main.tex` ⇒ 不适用，回执读不到 ⇒ 没查成）/ 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题 / 实质产出（`documents`/`relations`/`experiments`/`review_findings`/`statements` 至少一张非空）/ 验收表的机器可判行 / 产物台账与盘上一致（`ARTIFACTS.jsonl` 逐条重算）。**工具 `conductor.closing` 与 CLI `agentflow closing` 都调 `closing.check_closing`（同一份实现、两个入口）**；`unknown` 不是通过 |
 | `reviewaccept.py` | 审稿场景的**内容级**验收（`draft/37` §17.3）：报告九节且每栏有读数 / 定理台账每条有完整假设与出处页码 / 三态分支落盘可查 / 在成本上限内 / 每跳留下可读输入。**判据与辅助读数分栏** —— `sha`/页数/锚/行数那五种"容易拿到"的读数照原样给出，但**一个都不参与 `passed`** |
-| `tools/text_tools.py` | 297 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
+| `tools/text_tools.py` | 284 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
 | `migrate_concepts.py` | `concepts` 并进 `statements` 的折叠内核与**迁移计划**（`draft/97` §10/§14/§15.2）：`plan_migration`（计划 = 折叠 + 关系改号 + 逐条落账 + 边界读数，真跑的那一笔照抄它）、`counter_alloc`（确定性发号替身，让预演与真跑的号逐条对得上）、`ledger_lines`（改号台账的行形状：`out/` 下那份 `migrate-map` 记录）、`fold_concepts` / `remap_concept_ids`（内核：概念号走同一分配器重发、定义待补标记、别名带过）。纯函数，不碰盘 |
 | `conceptrows.py` | 并表**过渡期**概念行的唯一读写口（`draft/97` §10.3）：写的时候新标准（`statements`）先写、老表（`concepts`）照旧镜像且**两处同号**；读的时候合成一个视图（新标准优先，逐行标 `via="statements"/"legacy"`）；`legacy_present` 三态（表已退役而老文件还在 ⇒ `stale_file` 点名）；四个计数分开给（`merged` / `legacy_only` / `definition_only_in_legacy` / `statements`）—— 有了它，读侧可以一个一个搬到新标准，而"两边不同步"永远看得见 |
 | `paperledger.py` | S1q **正文重建**（`draft/97` §9.5 + §16.1）：台账里的定理搬进论文正文时，逐字（①）、重写论文号（②）、带 `stmt:` 引用（③）、映射落 `dependencies`（④，字段组合照 §9.5 —— 只挂**手稿**那一端，"四选一"是硬闸），以及 `check_paper_ledger` 的五条判据（逐字 / 引用在 / 映射唯一 / **两个方向都判**：正文有而映射缺、映射有而正文没有、`\ref` 悬空 / 论文里不许引 `doc:`）。正文排版仍归人/模型 —— 这一层只判"搬进来的对不对得上台账" |
@@ -264,8 +273,8 @@
 | 我想… | 先读（权威） | 再读（实现） | 判据 / 副作用 |
 |---|---|---|---|
 | 加一个新的**工具** | `tools/base.py`（`ToolSpec`/`register`） | `tools/<模块>.py` | `tests/test_tools_returns_declaration.py`（`TOOL_COUNT`）、`docs/ROLE-SPECS.md` §R0、`tests/test_role_specs_complete.py` |
-| 加一个**角色动作** | `capabilities.py`（`CAPABILITIES`；禁改区） | `agent_<x>.py` 的方法 | `tests/test_coverage_policy.py`、`tests/test_capabilities_two_layer.py`、`_KNOWN_UNMATCHED_ACTIONS` |
-| 改**谁能叫谁**（召唤边） | `capabilities.py`（`ALLOWED_EDGES`；禁改区） | `policy.py`、`conductor.py` | `tests/test_policy.py`、`.noai-approvals.json`（登记 ≠ 批准） |
+| 加一个**角色动作** | `specs/<角色>.py` 的 `ACTIONS` + `SPEC`（**声明真身**；禁改区）→ `capabilities.py`（`CAPABILITIES` 由它派生；禁改区） | `agent_<x>/<动作>.py` 的方法 | `tests/test_coverage_policy.py`、`tests/test_capabilities_two_layer.py`、`capabilities._KNOWN_UNMATCHED_ACTIONS` |
+| 改**谁能叫谁**（召唤边） | `specs/<角色>.py` 的 `SPEC.edges`（**声明真身**；禁改区）→ `capabilities.py`（`ALLOWED_EDGES` 由它派生；禁改区） | `policy.py`、`conductor.py` | `tests/test_policy.py`、`tests/test_v_signing_belongs_to_f_and_b.py`、`.noai-approvals.json`（登记 ≠ 批准） |
 | 改**表结构 / 字段** | `schema.py`（禁改区） | `store.py`、`verify.py` | `tests/test_schema.py`、`tests/test_verify*.py` |
 | 跑一次**端到端** | `cli.py`（`cmd_run`） | `runflow.py`（`run_topic`）→ `evidence.py` / `claims.py` | `tests/test_r5_orchestration_cost.py` |
 | 动**项目工作区 / 本地书架** | `cli.py`（`cmd_project`） | `projects.py` → `locallib.py` | `tests/test_projects.py`、`tests/test_user_quickstart.py` |
@@ -298,20 +307,21 @@
 
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
-| `agent_d/core.py` | 1775 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员，1771 行；`agent_d/_support.py` 是模块级 helper 与常量，999 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
-| `agent_loop.py` | 6511 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 `_statement_filing_refusal`（B 入库前让它的秘书判一次"太平凡吗"，只在那件动作**真在注册表里**时才问） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
-| `agent_c/core.py` | 1157 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1153 行（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
-| `capabilities.py` | 2638 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
-| `agent_skills.py` | 2680 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**44 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
+| `agent_d/core.py` | 1698 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员（含 core 自身共 1698 行）；`agent_d/_support.py` 是模块级 helper 与常量，999 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
+| `agent_loop.py` | 7615 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 `_statement_filing_refusal`（B 入库前让它的秘书判一次"太平凡吗"，只在那件动作**真在注册表里**时才问） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
+| `agent_c/core.py` | 1087 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
+| `capabilities.py` | 2269 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
+| `agent_skills.py` | 2810 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**44 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
 | `providers.py` | 3269 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试（2026-10-15 两件：① `_europepmc_urls` 不再把 Europe PMC 报来的 `?pdf=render` 网站页当下载直链 —— 它永远 403；有 `pmcid` 且 `isOpenAccess=Y` 时走 EBI 的 OA 全文路由，T5 的可读语料 6 → 11 篇；② 新增 `walk_citations` / `_fetch_one_work` 给新动作 `A.walk_citations`，`SELECT_FIELDS` 加 `referenced_works`；**取不到源记录时抛错而不是返回空表**） | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2928 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
-| `schema.py` | 3514 | 16 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
-| `runflow.py` | 2043 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层。批 R113：单价改成按**这一趟自己的时间戳**取（`price_of(cfg, at=stamp)`），不再读结账时的墙钟 |
+| `schema.py` | 3443 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
+| `runflow.py` | 1719 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层。批 R113：单价改成按**这一趟自己的时间戳**取（`price_of(cfg, at=stamp)`），不再读结账时的墙钟 |
 | `evidence.py` | 1899 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 2718 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
+| `cli.py` | 2811 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态 / 六档退出码（门是三态 `0/1/2`；`run-agent` 是六档 `0/1/2/3/4/5`，见 `cli.EXIT_CODE_BY_STOP`）、卡片式输出 |
 | `claimanatomy.py` | 1889 | 断言解剖学（每条断言的可判定性）；批 R71 加了第 5 族的第二个码 `uncontrolled_disclaimer`（自造免责声明不再过关，见 `draft/116`） | 判据多且互相独立 |
-| `agent_b/core.py` | 1316 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1314 行；`agent_b/_support.py` 是模块级 helper 与常量，186 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
-| `verify.py` | 2017 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
+| `agent_b/core.py` | 1274 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员（含 core 自身共 1274 行）；`agent_b/_support.py` 是模块级 helper 与常量，186 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
+| `verify.py` | 2016 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
+| `tools/text_tools.py` | 284 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
 
 ---
 

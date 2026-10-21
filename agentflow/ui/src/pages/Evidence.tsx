@@ -286,7 +286,9 @@ export function Evidence() {
         right={<TriState tri={ev.verifications_tri} label="verifications" />}
       >
         <div class="readings">
-          本机没有验证台账样本；此栏读数为夹具样本。
+          这一栏是 V 的签名行：<span class="mono">verdict</span> 只有「成立」显绿，其余档显黄
+          （不假装通过）；<span class="mono">unresolved_errors</span> 与
+          <span class="mono">proof_sha256</span> 要一起读，才知道这一行可不可回验。
         </div>
         {isUnreadable(ev.verifications_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>

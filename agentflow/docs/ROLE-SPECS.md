@@ -5,7 +5,7 @@
 > 🧭 **导航 3/6 —— 权威地图** → [`INDEX.md`](INDEX.md)：哪份算数、哪份只作依据；**新增文档必须在那里登记一行**。
 > 🧭 **导航 4/6 —— 三类内容分家**：**规格**（本文件，随代码同步改）／**实测附录**（带日期、会过期，冲突以代码为准）／**历史**（`PROPOSALS.md`、`ROLE-SPECS-DRAFT-*.md` 等，只解释"为什么是现在这样"）。
 > 🧭 **导航 5/6 —— 数字口径**：会变的**分份数不手抄**，一律写「现读：`python -m agentflow.cli tools --role X`」；本文件保留的每一个读数旁都带复跑命令。
-> 🧭 **导航 6/6 —— 冲突与分层**：与代码冲突以**代码**为准，冲突本身是**本文的 bug**（见 `DEVELOPMENT.md` §10）。系统分层 = **八层**，第 8 层是 **Web / 用户端**（见 §0.8）：它**不属于任何角色的权限面**。
+> 🧭 **导航 6/6 —— 冲突与分层**：与代码冲突以**代码**为准，冲突本身是**本文的 bug**（见 `docs/DEVELOPMENT-SPEC.md` §12；`DEVELOPMENT.md` 已缩成入口指针，本文原先指的「§10」在那里已不存在）。系统分层 = **八层**，第 8 层是 **Web / 用户端**（见 §0.8）：它**不属于任何角色的权限面**。
 
 ---
 
@@ -48,8 +48,9 @@ python -c "import tempfile,pathlib;from agentflow.store import Store;from agentf
 > 旧的 `network` 已从两处词表删除 —— 联网/起进程那件事搬到**第二根轴** `external ∈ ("none","egress","exec")` 上。
 > 所以"某工具是不是 `network`"这个问题已经**没有取值可答**；要问的是"它的 `external` 是什么"。
 >
-> ⚠️ **H 那 3 件写工具是"已登记的例外"，不是泄漏**：`tools/base.py` 的 `READONLY_CALL_EXCEPTIONS['H']`
-> 逐条登记了这三个**该角色自己的落库代理**（写面钉死在 `review_findings` / `documents.status`）。
+> ⚠️ **H 那 4 件写工具是"已登记的例外"，不是泄漏**：`tools/base.py` 的 `READONLY_CALL_EXCEPTIONS['H']`
+> 逐条登记了这四个**该角色自己的落库代理**（`review.review_document` / `review.verify_fixes` /
+> `review.report` / `review.record_finding`；写面钉死在 `review_findings` / `documents.status`）。
 > `cli tools` 会把它们打出来并标"!! 有泄漏"——那一行是**声明面的读数**，行为面已被 `for_role` 拦下：
 > H 仍然拿不到任何 `fs.*` / `table.*` 写工具。**V、C 两栏是空的**。
 
@@ -88,7 +89,7 @@ python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 > 逐角色的 `.4` 小节不再手抄"29/41/22…"这类会变的分份数 —— 每节给出的都是
 > **现读命令**，读数随代码走。
 
-### 0.4 全库不变式检查项（`verify.py`，机械抽取 **103** 个去重 `Issue.code`、**126** 处调用点）
+### 0.4 全库不变式检查项（`verify.py`，机械抽取 **105** 个去重 `Issue.code`、**132** 处调用点）
 
 **任何角色**的产出都会被下面这些检查覆盖（`verify_all`，`verify.verify_all`）。
 
@@ -147,7 +148,7 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 | `M`（主控） | `A B C D E G H` —— **只剩 `F` 与 `V` 不许直接控制**（2026-10-10 裁定要间接转达 B / F / V；`M→B` 2026-10-13「补 M 到 B」加回；`M→V` 2026-10-18 开、**2026-10-20 撤**：「派 V 只有 F（自产证明）与 B（文献侧内容）两个入口；M 不再直连 V」；F 走 `M→D→F`，V 走 `M→B→V` / `M→D→F→V`） |
 | `A` | `B` |
 | `B` | `C H V`（`H` 是 2026-10-14 加的：语义档的引文回验由 H 判） |
-| `C` | `D` —— **2026-10-19 业主裁定**：「C 要能把"候选的更短路径"交给 D」。改前这里是**空**（"只读角色连请求都不直接发"）；现在它只发这一种请求，`read_only` / `write_set` 一个字没动 —— 写入仍由 D 落表 |
+| `C` | **（无出边）** —— 2026-10-19 曾按「C 要能把"候选的更短路径"交给 D」加过一条 `C→D`，**2026-10-20 业主裁定撤回**（逐字：「把协作改成『D 唤起 C、C 向 D 汇报』，并保留 C 无出边的原始设定」）⇒ 今天 `ALLOWED_EDGES["C"] == frozenset()`；C 的"汇报"就是它的返回值。`read_only` / `write_set` 一个字没动 |
 | `D` | `A B C E F` |
 | `E` | `B D` |
 | `F` | `A B C D E V` |
@@ -247,10 +248,10 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 |---|---|---|
 | CLI 入口 | `agentflow ... web`（帮助逐字：「起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）」） | `python -m agentflow.cli web --help` |
 | 服务端模块 | `src/agentflow/webui/` **9** 个 `.py` | `(Get-ChildItem src/agentflow/webui/*.py).Count` |
-| 端点 | `webui/routes.py` 的 `ROUTES` **25** 条（`GET 18` + `POST 7`） | `python -c "from agentflow.webui.routes import ROUTES;import collections;print(len(ROUTES),collections.Counter(r[0] for r in ROUTES))"` |
-| 静态产物（**已构建，运行期不需要 `node_modules`**） | `src/agentflow/web/static/`：`index.html` 0.9 KB、`assets/index.*.js` 91.6 KB、`assets/index.*.css` 21.6 KB | `Get-ChildItem -Recurse src/agentflow/web/static` |
+| 端点 | `webui/routes.py` 的 `ROUTES` **26** 条（`GET 19` + `POST 7`） | `python -c "from agentflow.webui.routes import ROUTES;import collections;print(len(ROUTES),collections.Counter(r[0] for r in ROUTES))"` |
+| 静态产物（**已构建，运行期不需要 `node_modules`**） | `src/agentflow/web/static/`：`index.html` 0.9 KB、`assets/index.*.js` 111.9 KB、`assets/index.*.css` 22.5 KB | `Get-ChildItem -Recurse src/agentflow/web/static` |
 | 前端源码 | `agentflow/ui/`（`api.ts` 端点、`sse.ts` 事件 kind、`types.ts` 字段、`main.tsx` 路由） | `Get-ChildItem agentflow/ui/src`（相对仓库根） |
-| 判据 | `tests/test_webui{,_contracts,_pages,_readers,_settings_write,_sse,_static,_writes,_browser}.py`，**9** 个文件 | `(Get-ChildItem tests/test_webui*.py).Count` |
+| 判据 | `tests/test_webui{,_contracts,_help_is_current,_pages,_readers,_roster_panel,_settings_write,_sse,_static,_writes,_browser}.py`，**11** 个文件 | `(Get-ChildItem tests/test_webui*.py).Count` |
 | 已知边界 | 原始七层出处的 `draft/35` **没有这一层**（后加）；`draft/114` 记的是"九页 / 十条只读面 / 五条写端点"（**当次读数，未复跑**） | — |
 
 ---
@@ -431,7 +432,7 @@ A 产出的行有**两个**状态机。
 | `done=False → True` | ✅ | — |
 | `True → False` | ❌ **不许** | `verify.done_without_result`（`verify.verify_all`）与 schema 的追溯字段共同保证；A-7 的先写实体后置标志纪律（`DESIGN.md`） |
 | `done=True` 且 `outcome is None` 且无 `result_lit_ids` 且无 `last_error` | ❌ | `verify.done_without_result`（error） |
-| `outcome="no_results"`（搜了确实没命中）且无文献无错误 | ✅ | `schema` 明确允许（`verify.verify_all` 的注释逐字记录曾把它误报为 error，已修 → 见 `DEVELOPMENT.md` §10-D4） |
+| `outcome="no_results"`（搜了确实没命中）且无文献无错误 | ✅ | `schema` 明确允许（`verify.py` 的 `done_without_result` 注释逐字记录曾把它误报为 error，已修；见该函数里 `SEARCH_OUTCOMES` 那段） |
 
 ### A.6 预算与终止条件
 
@@ -446,10 +447,12 @@ A 产出的行有**两个**状态机。
 
 > ⚠️ **FC-19 未落地**：**D 向 A 的总提问预算未定值**。现有的只有
 > "在途条数 ≤ 20"（瞬时）与 `agent_d.max_total_requests = 20`
-> （`agent_d.AgentD.max_total_requests`，每 run）。**没有 token 预算计量**：
-> 实测 `token_meter` / `token_budget` 在 `src/agentflow/**` 里 **0 命中**。
-> 新增的 `schema.UsageEntry`与 `usage_ledger` 表**已存在**，
-> 但**没有一个检索路径往里写**（本次未在 A/B/C 的任何代码里核到写 `usage_ledger` 的调用）。
+> （`agent_d.AgentD.max_total_requests`，每 run）。**按"这条关系问了几次"计的 token 预算没有**：
+> 全库的 token / 花销计量在 `tokenmeter.TokenMeter`（`(scope, task)` 一维），
+> 写 `usage_ledger` 的唯一入口是 `tokenmeter.charge()`，由模型缝 `llmseam` 每次调用记一笔 ——
+> **检索路径自己不写它**（本次仍未在 A/B/C 的任何代码里核到写 `usage_ledger` 的调用）。
+> 旧文那句"`token_meter` / `token_budget` 在 `src/agentflow/**` 里 0 命中"已按代码改正：
+> `tokenmeter.py` 就在盘上，`Policy` 的 `token_budget` 一格已于 2026-10-15 撤掉。
 
 ### A.7 三态与失败模式（“已知会犯的错”明细见附录 §A.7）
 
@@ -482,8 +485,9 @@ A 的"没有结果"逐个列：
 
 ### A.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（`:598`）、`F`（`:600`）。
-  **A 能被 B/C/E/G/H 召唤吗？不能** —— 边表里没有这些来源。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9）、`F`（§F.9）、`G`（§G.9）、
+  `H`（§H.9）—— `G→A` 是 2026-10-13 加的「写稿时缺证据 ⇒ 直接再检索一轮」，`H→A` 是「向 A 核引文」。
+  **A 能被 B/C/E 召唤吗？不能** —— 边表里没有这些来源。
 - **A 能召唤谁**：只有 `B`（`capabilities.ALLOWED_EDGES`）。
 - **入参从哪来**：`search_requests` 表的待办行（由 CLI `submit`、D 的
   `research.submit_gap`、C 的 `gaps(submit_requests=True)`、F 的 `attack.step` 的
@@ -594,8 +598,8 @@ B 的"没有结果"逐个列：
 
 ### B.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`A`（`:595`）、`D`（`:598`）、
-  `E`（`:599`）、`F`（`:600`）。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`A`（§A.9）、`D`（§D.9）、
+  `E`（§E.9）、`F`（§F.9）。
 - **B 能召唤谁**：`C H V`（`capabilities.ALLOWED_EDGES`）—— "整理完请 C 看图的形状"；`H` 是 2026-10-14 加的（语义档引文回验由 H 判），`V` 是 2026-10-13 加的（采信链第一环把收录进台账的证明直接交给 V 逐行走查）。
 - **入参从哪来**：
   - `literature` 的 `processed=false` 行（A 写入）
@@ -712,8 +716,8 @@ C 的产出有两类，状态语义完全不同。
 
 ### C.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`B`（`:596`）、`D`（`:598`）、
-  `F`（`:600`）。**C 也能被 `A`/`E`/`G`/`H` 召唤吗？不能。**
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`B`（§B.9）、`D`（§D.9）、
+  `F`（§F.9）。**C 也能被 `A`/`E`/`G`/`H` 召唤吗？不能。**
 - **C 能召唤谁**：**没有人**（`ALLOWED_EDGES["C"] = frozenset()`，2026-10-20 业主裁定：
   改回 C 无出边、由 D 唤起 C —— 候选更短路径由 D 自己派 C 来要，C 的汇报就是它的返回值；
   **写面一个字没动**，只读身份不变）。2026-10-19 那一版曾写着"只有 `D`"，已撤回。
@@ -745,11 +749,11 @@ C 的产出有两类，状态语义完全不同。
 | D-2 | 用**可核实判据**判断"知识不足" | 三条：`a_no_keyword_hit` / `b_low_degree_unverified` / 矛盾（`DESIGN-INTERACTIONS.md` §6.4） |
 | D-3 | 向 A 提问（把缺口变成 `search_requests` 行） | `agent_d.submit_gaps`；配额 `max_requests_per_question=2`、`max_total_requests=20` |
 | D-4 | 复查在途请求与文献消化进度 | `agent_d.AgentD.poll`；`poll_waiting` 纯只读 |
-| D-5 | 溯源（L1/L2/L3） | `trace_question`（`:1738`）/ `trace_l3`（`:1968`） |
-| D-6 | 裁决矛盾（I2 闭环） | `adjudicate`（`:2514`）；`max_rounds_per_contradiction=2` |
-| D-7 | 对证据就绪的问题写出带**置信度**的结论 | `research`（`:2941`）；置信度**不许拔高** |
-| D-8 | 渲染研究报告 | `write_report`（`:3341`） |
-| D-9 | 按问题向 C 点菜 | `probe_c`（`:920`）；`max_c_neighbor_queries=2` / `max_c_pair_queries=2` |
+| D-5 | 溯源（L1/L2/L3） | `agent_d/trace_question.py` / `agent_d/trace_l3.py`（M7 起一个动作一个文件） |
+| D-6 | 裁决矛盾（I2 闭环） | `agent_d/adjudicate.py`；`max_rounds_per_contradiction=2` |
+| D-7 | 对证据就绪的问题写出带**置信度**的结论 | `agent_d/research.py`；置信度**不许拔高** |
+| D-8 | 渲染研究报告 | `agent_d/write_report.py` |
+| D-9 | 按问题向 C 点菜 | `agent_d/probe_c.py`；`max_c_neighbor_queries=2` / `max_c_pair_queries=2` |
 
 ### D.3 明确不负责
 
@@ -811,10 +815,13 @@ C 的产出有两类，状态语义完全不同。
 | `run_round` 轮数 | CLI `--gap-rounds` 默认 2 | `cli.build_parser` | 正常返回 |
 
 > ⚠️ **FC-19 未落地**（`DESIGN-CONDUCTOR.md` 与 `LESSONS.md` 都点名）：
-> **token 预算计量的代码在 `src/agentflow/**` 里 0 命中**（实测 `token_meter` / `token_budget` = 0）。
+> **按"D 向 A 问了几次"计的 token 预算没有** —— 全库的 token / 花销计量在
+> `tokenmeter.TokenMeter`（`(scope, task)` 一维），写 `usage_ledger` 的入口是
+> `tokenmeter.charge()`（由模型缝 `llmseam` 每次调用记一笔）。
 > `schema.UsageEntry` + `usage_ledger` 表**已有**，`verify` 已有
 > `dangling_usage_task` / `usage_task_total_mismatch` 两条检查，
-> 但**没有任何 D/A/B 路径往里写**（本次未在 `agent_*.py` 里核到 `usage_ledger` 的写入调用）。
+> 但**没有 D/A/B 路径自己往里写**（本次仍未在 `agent_*.py` 里核到写 `usage_ledger` 的调用；
+> 旧文那句"`token_meter` / `token_budget` 在 `src/agentflow/**` 里 0 命中"已过期，按代码改正）。
 
 ### D.7 三态与失败模式（“已知会犯的错”明细见附录 §D.7）
 
@@ -841,8 +848,8 @@ C 的产出有两类，状态语义完全不同。
 
 ### D.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`F`（`:600`）、`G`（`:601`，**"写稿时发现缺证据 → 回去要"**）。
-  `D` 也能被 `E` 召唤（`E → D`，反例回流，`:599`）。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`F`（§F.9）、`G`（§G.9，**"写稿时发现缺证据 → 回去要"**）。
+  `D` 也能被 `E` 召唤（`E → D`，反例回流，§E.9）。
 - **D 能召唤谁**：`A B C E F`（`capabilities.ALLOWED_EDGES`）。**不能召唤 G/H。**
 - **入参从哪来**：
   - `analysis_reports`（C 的产出）
@@ -948,7 +955,8 @@ C 的产出有两类，状态语义完全不同。
 
 ### E.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（`:598`）、`F`（`:600`）、`G`（`:601`）。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9）、`F`（§F.9）、`G`（§G.9）、
+  `H`（§H.9，"向 E 核形式化"）。
 - **E 能召唤谁**：`B`（"引文不可核实 → 请 B 重抽取"）与 `D`（"发现反例 → 回 D"）
   （`capabilities.ALLOWED_EDGES`）。
 - **入参从哪来**：`claim` / `claim_key` / `script_path`（调用方给的）；
@@ -1077,8 +1085,9 @@ C 的产出有两类，状态语义完全不同。
 
 ### F.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（`:598`，I10 升级）、`G`（`:601`）。
-- **F 能召唤谁**：`A B C D E`（`capabilities.ALLOWED_EDGES`）—— "攻坚需要一切"。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9，I10 升级）、`G`（§G.9）。
+- **F 能召唤谁**：`A B C D E V`（`capabilities.ALLOWED_EDGES`）—— "攻坚需要一切"；`V` 那一格是
+  **F 交出证明时由 V 签字**（2026-10-06 加的 `F→V`，2026-10-20 裁定后 V 只有 F 与 B 两个入口）。
   **不能召唤 G/H。**
 - **入参从哪来**：`attack_plans` 行（F 自己写）+ `capabilities.CAPABILITIES` 的 4 个动作 schema。
 - **产出被谁消费**：
@@ -1190,7 +1199,7 @@ C 的产出有两类，状态语义完全不同。
 
 ### G.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、**`H`**（`:602`，"审校发现问题 → 请 G 修订"）。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、**`H`**（§H.9，"审校发现问题 → 请 G 修订"）。
   **G 不能被 A/B/C/D/E/F 召唤。**
 - **G 能召唤谁**：`A D E F`（`capabilities.ALLOWED_EDGES`）—— "写稿时发现缺证据 → 回去要"（`A` 是 2026-10-13 加的：缺证据时要能直接再检索一轮）。
 - **入参从哪来**：`relations` / `experiments` / `analysis_reports`（别人的产出）；
@@ -1299,7 +1308,8 @@ C 的产出有两类，状态语义完全不同。
 - `accepted` 稿件不得有 open error。
 - `proof` 断言的依赖闭合（H 是复核方）。
 - 证据等级不得过度声称。
-- **H 的写面只有 3 件已登记的落库代理**。
+- **H 的写面只有 4 件已登记的落库代理**（`review.review_document` / `review.verify_fixes` /
+  `review.report` / `review.record_finding`）。
 - **H 只召唤 `A E G`**。
 
 ### H.9 接口
@@ -1333,7 +1343,7 @@ C 的产出有两类，状态语义完全不同。
 `<工作区>/verifications/<命题号>.jsonl`（追加式，一行 = 一次审校）。
 `capabilities.WRITE_SETS["V"] == frozenset()`（空集）与 `tools.READ_ONLY_ROLES = ("C","H","V")`
 一起说这件事：**在"会写哪几张表"这根轴上是只读的，而它确实要落一样东西** ——
-两者不矛盾，只是分处两根轴（`schema.TABLES` 是 **16** 张，V 一张都没加）。
+两者不矛盾，只是分处两根轴（`schema.TABLES` 是 **17** 张，V 一张都没加）。
 
 ### V.2 职责
 
@@ -1414,7 +1424,7 @@ C 的产出有两类，状态语义完全不同。
 
 ### V.9 接口
 
-- **能被谁召唤**：`M` / `B` / `F`（`capabilities.ALLOWED_EDGES`）；`D` / `E` / `G` / `H` 不能直接召唤 V。
+- **能被谁召唤**：`B` / `F`（`capabilities.ALLOWED_EDGES`；V 的入口只有这两个，`M` 不在里面）；`D` / `E` / `G` / `H` / `M` 都不能直接召唤 V。
   V 的对话对象仍是 F（"提交/退回"那条边是 `F ↔ V`），而 `B→V` 是 2026-10-13 加的那条
   （业主逐字：「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」）；`M→V` 曾是 2026-10-18
   加的那条，**2026-10-20 已被业主撤掉**（逐字「派 V 只有 F（自产证明）与 B（文献侧内容）
@@ -1485,7 +1495,7 @@ C 的产出有两类，状态语义完全不同。
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。
-> **`M` 的出边今天只剩 `F` 不在里面**（2026-10-10 裁定要间接转达的那三个角色，B 与 V
+> **`M` 的出边今天只剩 `F` 与 `V` 不在里面**（2026-10-10 裁定要间接转达的那三个角色，B 与 V
 > 后来被业主逐个加回，V 又在 2026-10-20 被撤掉）：`B` 于 2026-10-13 加回（逐字「补 M 到 B」：
 > 采信链第一环要够得到）；`V` 于 2026-10-18 开、**2026-10-20 撤**（业主裁定逐字「派 V 只有
 > F（自产证明）与 B（文献侧内容）两个入口；M 不再直连 V」⇒ 边总数 33 → 32）。
@@ -1619,10 +1629,11 @@ C 的产出有两类，状态语义完全不同。
   - `tasks` 行 → **`verify`**（6 类检查）、**人**（审计"谁召唤了谁、为了什么"）
   - `SummonResult` → 调用方（**永远不抛业务异常**）
   - `stats()` / `tree()` → 给用户的汇总
-  - `usage_ledger` 行（`UsageEntry`）→ **M 的 `budget.spend()` 目前只写内存**
-    （`MemoryBudgetTracker`，`scheduler.py:72-115`）。
-    ⚠️ **`tasks.tokens`/`usd` 会落库**（`finish(..., tokens=, usd=)`），但
-    **`usage_ledger` 表没有写入方** —— 这是 FC-19 未落地的一部分。
+  - `usage_ledger` 行（`UsageEntry`）→ **M 的 `budget.spend()` 只写内存**
+    （`MemoryBudgetTracker`，`scheduler.py:72-115`）；**`usage_ledger` 的写入方是模型缝**
+    （`llmseam` 每次调用 → `tokenmeter.TokenMeter.charge()`），`tasks.tokens`/`usd`
+    （`finish(..., tokens=, usd=)`）由那本账派生 —— 两处口径的一致性由 `verify` 的
+    `usage_task_total_mismatch` 盯。旧文写"`usage_ledger` 表没有写入方"已按代码改正。
 
 ### M.10 自检入口
 

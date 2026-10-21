@@ -4,12 +4,10 @@
  * 三条纪律：
  *
  * 1. 路径只在 ENDPOINTS 里写一次 —— `tests/test_webui_contracts.py` 的 A 条把
- *    这里的路径字面量集合与后端 `webui/routes.py` 的 ROUTES 逐字比对。
- *    后端有的（B 线那十个只读面 + A 线的 /api/run-index + C 线的
- *    POST /answer / POST /api/stop / POST /api/submit / POST /api/settings /
- *    POST /api/budget）前端必须逐条声明；反过来，前端多写一个后端没有的端点也会红。
- *    （2026-10-12 更正：这段注释此前写着"stop/submit/settings 后端今天还没有那三条路由"——
- *    它们早已落地，注释留在那里就是一处在说谎的路标。预算那两条与本条同一批落地。）
+ *    这里的路径字面量集合与后端 `webui/routes.py` 的 ROUTES 逐字比对：后端有的
+ *    前端必须逐条声明，前端多写一个后端没有的也会红。**谁有多少条不在这里抄** ——
+ *    抄一份就会与那边漂移（这一段此前写着"写面只到 W3，停/提交/设置还没落地"、
+ *    又漏了 /api/run 与 /api/task，而那七条写端点早已全部接线）。
  * 2. 失败不许折成空读数：HTTP 非 2xx 与网络故障都抛 ApiError，三态走 `tri`
  *    （`unreadable` = 没查成），由页面渲染成 TriState。绝不返回空对象装作读到了。
  * 3. 写请求带 X-CSRF-Token（从 `<meta name="csrf-token">` 读；服务端每进程换一个）。
@@ -227,7 +225,7 @@ export async function postJSON<T>(
   return await readJSON<T>(resp);
 }
 
-/** 一次写动作的结局（三态；写面的统一回执 `WriteResult` 要等 C 线 W3/W4）。 */
+/** 一次写动作的结局（三态）。`/answer` 之外那几条写端点回的是 `WriteResult`（本结构是它的子集）。 */
 export interface WriteOutcome {
   ok: boolean;
   tri: Tri;
@@ -276,17 +274,17 @@ export async function postSettings(
 }
 
 /**
- * 回答一个问题（`POST /answer`，C 线今天唯一已有的写路径）。
+ * 回答一个问题（`POST /answer` —— 写面七条里唯一回 PRG、不回 `WriteResult` 的那一条）。
  *
- * 为什么不用 `postJSON`：这一批的 `/answer` 回的是 PRG（303 回首页），不是
- * `WriteResult`。跟着重定向走会拿到一支 HTML 而 `fetch` 把它当 200，于是"写成了"
- * 会被读成"正文不是 JSON" —— 那正是三态纪律要挡的那种错读。
+ * 为什么不用 `postJSON`：`/answer` 回的是 PRG（303 回首页），不是 `WriteResult`。
+ * 跟着重定向走会拿到一支 HTML 而 `fetch` 把它当 200，于是"写成了"会被读成
+ * "正文不是 JSON" —— 那正是三态纪律要挡的那种错读。
  *
  * 所以这里 `redirect: "manual"`，按响应分档：
  *
  * - `opaqueredirect` ⇒ 服务端回了 303：这次回答真的落盘了（`handle_answer` 只在
- *   `writes.answer` 成功时回 303）。`tri` 记 `not_applicable`：这一格现在没有
- *   "算出来的读数"，如实说明回执要等 W3，而不是假装拿到了 `ok`；
+ *   `writes.answer` 成功时回 303）。`tri` 记 `not_applicable`：这一条端点没有
+ *   `WriteResult` 那种"算出来的回执"，如实说明这一档，而不是假装拿到了 `ok`；
  * - 409 ⇒ 这条 qid 不待答（已答过 / 未知），按既有判据盘上零写入；
  * - 其余非 2xx ⇒ 按状态码如实报错。
  */
@@ -296,7 +294,7 @@ export async function postAnswer(body: Record<string, string | string[]>): Promi
     return {
       ok: true,
       tri: "not_applicable",
-      reason: "服务端回了 PRG（303 回首页）⇒ 这次回答落盘了；写面的统一回执（WriteResult）要等 W3",
+      reason: "服务端回了 PRG（303 回首页）⇒ 这次回答落盘了（这一条端点回的是重定向，不是 WriteResult）",
     };
   }
   if (resp.status === 409) {

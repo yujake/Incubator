@@ -7,11 +7,12 @@
       CSRF 令牌的占位符：服务端在吐这一页时把 `__CSRF__` 换成"每进程随机"的那一个
       （`webui/server.py` 的 `_inject_csrf`）。文件里刻意不许出现真的令牌 ——
       构建产物要入库（裁定 B1），写死一个令牌等于把它连同产物一起发布出去。
-      W0 没有任何端点消费它（写面在 W3），它先占位、先有判据（源码里只有占位符）。
+      W0 时它没人消费；今天七条写端点都要它（`writes.authorize()` 的第 2 层），
+      而源码里照旧只有占位符。
     -->
     <meta name="csrf-token" content="__CSRF__" />
     <title>agentflow 用户端</title>
-    <script type="module" crossorigin src="/static/assets/index.D9G_4Tz9.js"></script>
+    <script type="module" crossorigin src="/static/assets/index.CC0CE5vH.js"></script>
     <link rel="stylesheet" crossorigin href="/static/assets/index.C9Q9zyMH.css">
   </head>
   <body>

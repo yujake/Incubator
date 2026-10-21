@@ -3,7 +3,9 @@
 > **本文件是 [`ROLE-SPECS.md`](ROLE-SPECS.md) 的实测附录**：`R0.1`–`R0.3`、各角色 `.4` 工具面明细、
 > 全部 `.10` 自检实测、`M.4.2` / `M.4.3`、`M.8` 补核、`S1`–`S3`。
 > **每一节的首行都标 `[附录·实测]`。读数带日期、不构成判据；与代码冲突以代码为准。**
-> 采集日期：**2026-10-18**。复跑前置：`cd D:\Incubator\agentflow` 且
+> 采集日期：**2026-10-18**；**2026-10-21 按 `cli tools` 现读重算了各角色工具面**（`R0.1`、`R0.3`
+> 右栏、`A.4`–`M.4`、`M.4` 的编排面条数、`S3` 第 1 行），其余节仍是 2026-10-18 的读数。
+> 复跑前置：`cd D:\Incubator\agentflow` 且
 > `$env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'`。
 > 三类内容分家：**规格**在正文（判据）／**实测**在此（会过期，过期就重跑）／**历史**在
 > `PROPOSALS.md`、`ROLE-SPECS-DRAFT-*.md` 等（只解释"为什么是现在这样"）。
@@ -11,9 +13,9 @@
 
 ---
 
-## R0.1 [附录·实测] 84 个工具的公共事实（机械读数，2026-10-18）
+## R0.1 [附录·实测] 94 个工具的公共事实（机械读数，2026-10-21）
 
-**handler 的形态**：`functools.partial` **81** / `lambda` **3** / 具名闭包 **0**（共 84）。
+**handler 的形态**：`functools.partial` **91** / `lambda` **3** / 具名闭包 **0**（共 94）。
 
 ```powershell
 python -c "import collections,functools,tempfile,pathlib;from agentflow.store import Store;from agentflow.tools import ROLES,build_registry;d=pathlib.Path(tempfile.mkdtemp());st=Store(d);st.init();r=build_registry(store=st,workspace_root=d,roles=tuple(ROLES)).registry;c=collections.Counter('partial' if isinstance(s.handler,functools.partial) else ('lambda' if getattr(s.handler,'__name__','')=='<lambda>' else ('closure' if getattr(s.handler,'__closure__',None) else 'function')) for s in r._specs.values());print(dict(c))"
@@ -24,7 +26,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 口径 | 命令 | 工具数 | 备注 |
 |---|---|---:|---|
 | A 口径（不含 store） | `build_registry(store=None, workspace_root='.', roles=schema.ROLES)` | 比 B 口径少"需要 store 才能注册"的那一族 | **本文与正文一律用 B 口径** |
-| B 口径（含 store 的完整装配） | `python -m agentflow.cli tools` | **84** | 权威读数 |
+| B 口径（含 store 的完整装配） | `python -m agentflow.cli tools` | **94** | 权威读数 |
 
 > ⚠️ **历史读数（留档，不构成判据）**：2026-09-26 那次装配是 **55** 个工具 / 11 个模块；
 > 当时手抄的分布是 `side_effect {'read':32,'write_local':18,'none':5}`、
@@ -35,7 +37,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 **自注册面（14 件，不过 `build_registry` 的角色校验）**：9 个 `graph.*`（`agent_c.register_tools`）
 + 3 个 `trace.*` 替身（`agent_d._fallback_trace_tools`）+ 2 个 `review.*` 写侧
 （`review_tools.register(include_writers=True)`）。9+3+2 = 14。
-**`cli tools` 的 84 里不含它们** ⇒ 引用"某角色有几个工具"时不要把它们加进去。
+**`cli tools` 的 94 里不含它们** ⇒ 引用"某角色有几个工具"时不要把它们加进去。
 
 ---
 
@@ -58,18 +60,18 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 `D:\Incubator\temp\inventory\INVENTORY.md:3` 逐字写明它普查的是 **`D:\Incubator\test\test1\`（包名 `abflow`）**，
 不是本目录 `agentflow`。当次核对（2026-10-18）：该文件首行为 `# abflow 契约现状清单（机械产出）` ⇒ 口径警告**仍成立**。
 
-**右栏读数已按 2026-10-18 重测**。旧版那一列写的是 2026-10-06 的装配读数（81 个工具、
+**右栏读数已按 2026-10-21 重测**。旧版那一列写的是 2026-10-06 的装配读数（81 个工具、
 `A26 B21 C21 D40 E24 F35 G40 H27 V14 M18`、`read 48 / write_local 28 / none 5`、
 `external none 71 / egress 4 / exec 6`、审批 `32 / 81`、"只读泄漏 0"）——
 那些旧值**作为历史读数留档**，**不要再引用**：
 
-| 项 | `INVENTORY.md`（abflow） | 本文实测（agentflow，2026-10-18） | 是否一致 |
+| 项 | `INVENTORY.md`（abflow） | 本文实测（agentflow，2026-10-21） | 是否一致 |
 |---|---|---|---|
-| 工具总数 | 55 | **84**（`python -m agentflow.cli tools`） | ⚠️ |
-| 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A29 B22 C21 D41 E25 F36 G37 H29 V14 M20`（同一命令读"各角色工具数"那一行） | ⚠️ |
-| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **84 口径**：`read 48 / write_local 31 / none 5`；`external`：`none 76 / egress 5 / exec 3`（非 `none` 共 8 件） | ⚠️ |
-| 需审批 | 17 / 55 | **35 / 84** | ⚠️ |
-| 只读角色泄漏 | 0 | **3 件，全在 H**（`review.review_document` / `review.verify_fixes` / `review.report`，`READONLY_CALL_EXCEPTIONS['H']` 登记的落库代理）；`C` / `V` 两栏为空 | ⚠️ |
+| 工具总数 | 55 | **94**（`python -m agentflow.cli tools`） | ⚠️ |
+| 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A37 B23 C23 D42 E26 F37 G38 H31 V15 M21`（同一命令读"各角色工具数"那一行） | ⚠️ |
+| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **94 口径**：`read 51 / write_local 38 / none 5`；`external`：`none 86 / egress 5 / exec 3`（非 `none` 共 8 件） | ⚠️ |
+| 需审批 | 17 / 55 | **42 / 94** | ⚠️ |
+| 只读角色泄漏 | 0 | **5 件**：`H` 4 件（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`，`READONLY_CALL_EXCEPTIONS['H']` 登记的落库代理）+ `C` 1 件（`analysis.register_report`，`READONLY_CALL_EXCEPTIONS['C']`）；`V` 一栏为空 | ⚠️ |
 | 零测试工具 | 7 个（`table.list` `table.count` `table.schema` `table.search` `fs.list` `search.register` `search.download`） | 用"工具名字符串是否出现在 `tests/`"口径，**本次未复算** | ⚠️ |
 | `INVENTORY` 未覆盖的 schema 对象 | 无 `Task`/`UsageEntry`/`EvalResult` | **有**（`schema.EvalResult`） | ❌ **INVENTORY 落后** |
 
@@ -79,90 +81,97 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## A.4 [附录·实测] 工具面明细（29 件）
+## A.4 [附录·实测] 工具面明细（37 件）
 
-**现读**：`python -m agentflow.cli tools --role A`
+**现读**：`python -m agentflow.cli tools --role A`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **29** |
-| `side_effect` | `read 17 / write_local 12 / none 0` |
-| `external` | `none 25 / egress 4 / exec 0` |
-| 需审批 | **15** |
+| 总数 | **37** |
+| `side_effect` | `read 20 / write_local 17 / none 0` |
+| `external` | `none 33 / egress 4 / exec 0` |
+| 需审批 | **20** |
 
-**逐件清单（按模块，共 29）**：`fs.*` 8（`list` `read` `search` `stat` `write` `edit` `move` `delete`）·
+**逐件清单（按模块，共 37）**：`fs.*` 8（`list` `read` `search` `stat` `write` `edit` `move` `delete`）·
 `table.*` 8（`count` `get` `list` `schema` `search` `create` `update` `delete`）·
 `search.*` 9（`dedup_check` `download` `ingest_local` `literature` `local` `providers` `register` `shelf` `walk_citations`）·
-`manuscripts.*` 2（`list` `read`）· `conductor.broadcast` 1 · `text.extract` 1。
+`lit.*` 7（`stage_add` `stage_list` `stage_withdraw` `stage_reject` `overlap_check` `admit` `admit_all` —— 2026-10-20 的"待新增列表"面）·
+`manuscripts.*` 2（`list` `read`）· `text.extract` 1 ·
+`conductor.broadcast` / `conductor.escalate` 2（`escalate` 是十个角色全体都有的一件，见正文 §R0 第 97 行）。
 
 **A 拿不到**：`research.*`（D 的决策）、`ocr.*`（B 的解析）、`graph.*`/`trace.*`（C/D）、
-`verify.*`（E/F/G/H/V）、`doc.*` / `review.*`、`attack.*`、`conductor.*` 的其余 19 件。
+`verify.*`（E/F/G/H/V）、`doc.*` / `review.*`、`attack.*`、
+`conductor.*` 的其余 13 件（15 件里 A 只有 `broadcast` 与 `escalate`）。
 
-> 逐件的 summary / 参数 / 返回结构 / 测试 / 已知问题见正文 §R0 的 84 行全表（逐行与注册表对账）。
+> 逐件的 summary / 参数 / 返回结构 / 测试 / 已知问题见正文 §R0 的 94 行全表（逐行与注册表对账）。
 > **旧版本节是手抄的逐件表，已经漂过**（写着 `network`、写着 "26 个工具"）——
 > 现在改成"现读命令 + 分组清单"，不再手抄会变的分份数。
+> **2026-10-21 重算**：29 → **37**（`lit.*` 7 件 + `conductor.escalate` 1 件）。
 
 ---
 
-## B.4 [附录·实测] 工具面明细（22 件）
+## B.4 [附录·实测] 工具面明细（23 件）
 
-**现读**：`python -m agentflow.cli tools --role B`
+**现读**：`python -m agentflow.cli tools --role B`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **22** |
-| `side_effect` | `read 12 / write_local 10 / none 0` |
-| `external` | `none 21 / egress 1`（唯一那件是 `ocr.run`：会下 OCR 模型） |
+| 总数 | **23** |
+| `side_effect` | `read 13 / write_local 10 / none 0` |
+| `external` | `none 22 / egress 1`（唯一那件是 `ocr.run`：会下 OCR 模型） |
 | 需审批 | **10** |
 
-**逐件清单（共 22）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `ocr.*` 3（`backends` `detect_text_layer` `run`）· `conductor.broadcast` 1。
+**逐件清单（共 23）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `ocr.*` 3（`backends` `detect_text_layer` `run`）·
+`conductor.broadcast` / `conductor.escalate` 2。
 
 **B 拿不到**：`search.*`（A 的检索面，B 只消费其结果）、`graph.*`/`trace.*`、`research.*`、
 `verify.*`、`doc.*`/`review.*`（G/H 的写稿与审校）、`attack.*`、`text.extract`（A 的抽取入口）、
-`conductor.*` 的其余 19 件。
+`conductor.*` 的其余 13 件。
 
 ---
 
-## C.4 [附录·实测] 工具面明细（21 件 = 两层）
+## C.4 [附录·实测] 工具面明细（23 件 = 两层）
 
-**现读**：`python -m agentflow.cli tools --role C`
+**现读**：`python -m agentflow.cli tools --role C`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数（`cli tools` 报的） | **21** |
+| 总数（`cli tools` 报的） | **23** |
 | 第一层：注册表里 | **19** 件 = `fs.*` 4（`list` `read` `search` `stat`）+ `table.*` 5（`count` `get` `list` `schema` `search`）+ `manuscripts.*` 2 + `graph.*` 4（`build` `neighbors` `relations_between` `stats`）+ `trace.*` 4（`chain` `concept` `literature` `relation`） |
-| 第二层：本轮新增 | `search.local` / `search.shelf` **2** 件 ⇒ 19 + 2 = **21** |
+| 第二层：后来加的 | `search.local` / `search.shelf` **2** 件 + `analysis.register_report` **1** 件 + `conductor.escalate` **1** 件 ⇒ 19 + 4 = **23** |
 | 不入 `cli tools` 计数的一层 | `agent_c.register_tools` 自注册的 **9** 个 `graph.*`：`graph.hottest` `paths` `cold` `gaps` `svc_neighbors` `svc_relations_between` `contradictions` `structural_duplicates` `check_conflict`（**不过 `build_registry`**，见 §R0.2） |
-| `side_effect` | `read 21 / write_local 0 / none 0` |
-| `external` | `none 21` |
-| 需审批 | **0** |
+| `side_effect` | `read 22 / write_local 1 / none 0`（那 1 件是 `analysis.register_report` —— 只读角色的显式登记例外） |
+| `external` | `none 23` |
+| 需审批 | **1** |
 
 > ⚠️ **旧版本节写"21 = 第一层 19 + 自注册 9"，那道算术不成立**（19 + 9 = 28 ≠ 21）：
 > 自注册的那 9 个 `graph.*` **根本不在 `cli tools` 的计数里**，它们既不加进 21、也不在
 > `build_registry` 的角色校验里。21 的构成只有"19 + `search.local`/`search.shelf` 2"这一种读法。
+> **2026-10-21 重算**：21 → **23**（`analysis.register_report` + `conductor.escalate`）。
 
 **C 拿不到**：`fs.*`/`table.*` 的写工具（**结构性**：只读角色）、`search.*` 的其余 7 件
 （除 `local`/`shelf`）、`ocr.*`、`research.*`、`verify.*`、`doc.*`、`review.*`、`attack.*`、
-`conductor.*` 全部（**C 连 `conductor.broadcast` 都没有**：`ALLOWED_EDGES["C"] == frozenset()`）。
+`conductor.broadcast`（C 拿不到它；但 `conductor.escalate` 有 —— 那一件是十角色全体都有的）。
 
 ---
 
-## D.4 [附录·实测] 工具面明细（41 件，全项目最宽）
+## D.4 [附录·实测] 工具面明细（42 件，全项目最宽）
 
-**现读**：`python -m agentflow.cli tools --role D`
+**现读**：`python -m agentflow.cli tools --role D`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **41** |
-| `side_effect` | `read 25 / write_local 11 / none 5` |
-| `external` | `none 41`（**零 `egress`/`exec`**） |
+| 总数 | **42** |
+| `side_effect` | `read 26 / write_local 11 / none 5` |
+| `external` | `none 42`（**零 `egress`/`exec`**） |
 | 需审批 | **11** |
 
-**逐件清单（共 41）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `graph.*` 4 · `trace.*` 4 ·
+**逐件清单（共 42）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `graph.*` 4 · `trace.*` 4 ·
 `research.*` 5（`list_gaps` `poll_waiting` `set_status` `submit_gap` `write_note`）·
 `doc.*` 3（`compose_claim` `list_documents` `scan_claim`）·
 `review.*` 2（`list_findings` `scan_document`）·
-`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`）· `conductor.broadcast` 1。
+`attack.*` 4（`check_budget` `list_plans` `pick_next_subgoal` `status`）·
+`conductor.broadcast` / `conductor.escalate` 2。
 
 **D 拿不到**：`attack.create_plan` / `attack.step`（F 的立项与推进）、`doc.build_document` /
 `doc.register_dependency` / `doc.paper_compile`（G 的写稿）、`review.report` /
@@ -172,20 +181,20 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## E.4 [附录·实测] 工具面明细（25 件）
+## E.4 [附录·实测] 工具面明细（26 件）
 
-**现读**：`python -m agentflow.cli tools --role E`
+**现读**：`python -m agentflow.cli tools --role E`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **25** |
-| `side_effect` | `read 16 / write_local 9 / none 0` |
-| `external` | `none 23 / exec 2`（`verify.check_formal` / `verify.run_experiment`） |
+| 总数 | **26** |
+| `side_effect` | `read 17 / write_local 9 / none 0` |
+| `external` | `none 24 / exec 2`（`verify.check_formal` / `verify.run_experiment`） |
 | 需审批 | **10** |
 
-**逐件清单（共 25）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
+**逐件清单（共 26）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
 `verify.*` 6（`check_formal` `code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）·
-`conductor.broadcast` 1。
+`conductor.broadcast` / `conductor.escalate` 2。
 
 **E 拿不到**：`graph.*` / `trace.*`（C/D 的图面）、`research.*`（D 的问题台账）、
 `attack.*`（F 的攻坚）、`doc.*`/`review.*`（G/H 的写稿与审校）、`search.*`/`ocr.*`/`text.extract`（A/B 的取材与解析）、
@@ -193,40 +202,42 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## F.4 [附录·实测] 工具面明细（36 件）
+## F.4 [附录·实测] 工具面明细（37 件）
 
-**现读**：`python -m agentflow.cli tools --role F`
-
-| 维度 | 读数 |
-|---|---|
-| 总数 | **36** |
-| `side_effect` | `read 20 / write_local 11 / none 5` |
-| `external` | `none 34 / exec 2` |
-| 需审批 | **12** |
-
-**逐件清单（共 36）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
-`attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`）·
-`doc.*` 3 · `review.*` 2 · `verify.*` 6 · `conductor.broadcast` 1。
-
-> **F 自己的写面只有 2 件**（`attack.create_plan` / `attack.step`）；其余写工具都是
-> `fs.*`/`table.*` 那 5 件共用写工具。F 拿不到 `graph.*`/`trace.*`/`research.*`/`search.*`/`ocr.*`/`text.extract`。
-
----
-
-## G.4 [附录·实测] 工具面明细（37 件）
-
-**现读**：`python -m agentflow.cli tools --role G`
+**现读**：`python -m agentflow.cli tools --role F`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
 | 总数 | **37** |
-| `side_effect` | `read 20 / write_local 12 / none 5` |
-| `external` | `none 34 / exec 3`（`doc.paper_compile` 真的起 LaTeX 引擎，是 G 独有的第三件 `exec`） |
+| `side_effect` | `read 21 / write_local 11 / none 5` |
+| `external` | `none 35 / exec 2` |
+| 需审批 | **12** |
+
+**逐件清单（共 37）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
+`attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`）·
+`doc.*` 3 · `review.*` 2 · `verify.*` 6 · `conductor.broadcast` / `conductor.escalate` 2。
+
+> **F 自己的写面只有 2 件**（`attack.create_plan` / `attack.step`）；其余写工具是
+> `fs.*` 4 件（`write` `edit` `delete` `move`）+ `table.*` 3 件（`create` `update` `delete`）
+> + `verify.run_experiment` + `conductor.broadcast` 两件共用写工具（2026-10-21 现读：F 的
+> `write_local` 共 11 件）。F 拿不到 `graph.*`/`trace.*`/`research.*`/`search.*`/`ocr.*`/`text.extract`。
+
+---
+
+## G.4 [附录·实测] 工具面明细（38 件）
+
+**现读**：`python -m agentflow.cli tools --role G`（2026-10-21）
+
+| 维度 | 读数 |
+|---|---|
+| 总数 | **38** |
+| `side_effect` | `read 21 / write_local 12 / none 5` |
+| `external` | `none 35 / exec 3`（`doc.paper_compile` 真的起 LaTeX 引擎，是 G 独有的第三件 `exec`） |
 | 需审批 | **13** |
 
-**逐件清单（共 37）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `attack.*` 4 ·
+**逐件清单（共 38）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `attack.*` 4 ·
 `doc.*` 6（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim`）·
-`review.*` 2 · `verify.*` 6 · `conductor.broadcast` 1。
+`review.*` 2 · `verify.*` 6 · `conductor.broadcast` / `conductor.escalate` 2。
 
 **G 拿不到**：`attack.create_plan`/`attack.step`、`graph.*`/`trace.*`、`research.*`、`search.*`、
 `ocr.*`、`text.extract`、`review.report`/`review.review_document`/`review.verify_fixes`（H 的落库代理）、
@@ -234,73 +245,75 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## H.4 [附录·实测] 工具面明细（29 件，含 3 件已登记的写侧例外）
+## H.4 [附录·实测] 工具面明细（31 件，含 4 件已登记的写侧例外）
 
-**现读**：`python -m agentflow.cli tools --role H`
+**现读**：`python -m agentflow.cli tools --role H`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **29** |
-| `side_effect` | `read 21 / none 5 / **write_local 3**` |
-| `external` | `none 29` |
-| 需审批 | **3** |
+| 总数 | **31** |
+| `side_effect` | `read 22 / none 5 / **write_local 4**` |
+| `external` | `none 31` |
+| 需审批 | **4** |
 
-**那 3 件写工具（`write_local` + 需审批）**：`review.review_document` / `review.verify_fixes` /
-`review.report` —— 它们是 H **自己的落库代理**（写面钉死在 `review_findings` / `documents.status`），
-由 `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS['H']` 逐条登记。
+**那 4 件写工具（`write_local` + 需审批）**：`review.review_document` / `review.verify_fixes` /
+`review.report` / `review.record_finding` —— 它们是 H **自己的落库代理**（写面钉死在 `review_findings` /
+`documents.status`），由 `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS['H']` 逐条登记。
 `cli tools` 会在"只读角色写工具泄漏"那一行把它们打出来并标 `!! 有泄漏` ——
 **那是声明面的读数**；行为面由 `for_role` 挡住：H 仍然拿不到 `fs.*`/`table.*` 的任何写工具。
 
 > ⚠️ **旧版本节写"`side_effect {'read':21,'none':5}` —— 0 个 `write_local`，0 个需审批"，
-> 与当次实测不符**：实测就是 `write_local 3` / 需审批 3。差异不是"漂移"，是**旧文漏记**了
-> `READONLY_CALL_EXCEPTIONS['H']` 那三件落库代理。
+> 与当次实测不符**：实测就是 `write_local 4` / 需审批 4。差异不是"漂移"，是**旧文漏记**了
+> `READONLY_CALL_EXCEPTIONS['H']` 那几件落库代理（`review.record_finding` 是 2026-10-18 之后加的）。
 
-**逐件清单（共 29）**：`fs.*` 4（只读四件）· `table.*` 5（只读五件）· `manuscripts.*` 2 ·
-`attack.*` 4 · `doc.*` 3 · `review.*` 5（`list_findings` `report` `review_document` `scan_document` `verify_fixes`）·
-`search.local` / `search.shelf` 2 · `verify.*` 4（`code_hash` `detect_verifier` `evidence_for` `list_experiments`）。
+**逐件清单（共 31）**：`fs.*` 4（只读四件）· `table.*` 5（只读五件）· `manuscripts.*` 2 ·
+`attack.*` 4 · `doc.*` 3 · `review.*` 6（`list_findings` `record_finding` `report` `review_document` `scan_document` `verify_fixes`）·
+`search.local` / `search.shelf` 2 · `verify.*` 4（`code_hash` `detect_verifier` `evidence_for` `list_experiments`）·
+`conductor.escalate` 1。
 
 **H 拿不到**：`graph.*`/`trace.*`/`research.*`、`search.*` 的其余 7 件、`ocr.*`、
 `verify.run_experiment` / `verify.check_formal`（后者 `external="exec"` ⇒ 需审批，H 拿不到）、
 `doc.build_document` / `doc.register_dependency` / `doc.paper_compile`、`attack.create_plan`/`attack.step`、
-`conductor.*` 全部（**H 连 `conductor.broadcast` 都没有**），以及所有 `fs.*`/`table.*` 写工具。
+`conductor.broadcast`（H 拿不到它，但 `conductor.escalate` 有），以及所有 `fs.*`/`table.*` 写工具。
 
 ---
 
-## V.4 [附录·实测] 工具面明细（14 件）
+## V.4 [附录·实测] 工具面明细（15 件）
 
-**现读**：`python -m agentflow.cli tools --role V`
+**现读**：`python -m agentflow.cli tools --role V`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **14** |
-| `side_effect` | `read 14 / write_local 0 / none 0` |
-| `external` | `none 14` |
+| 总数 | **15** |
+| `side_effect` | `read 15 / write_local 0 / none 0` |
+| `external` | `none 15` |
 | 需审批 | **0** |
 
-**逐件清单（共 14）**：`fs.*` 4 · `table.*` 5 · `manuscripts.*` 2 ·
-`verify.*` 3（`verify_proof` `list_verifications` `read_proof` —— 声明里 `roles=("V",)`）。
+**逐件清单（共 15）**：`fs.*` 4 · `table.*` 5 · `manuscripts.*` 2 ·
+`verify.*` 3（`verify_proof` `list_verifications` `read_proof` —— 声明里 `roles=("V",)`）·
+`conductor.escalate` 1（十个角色全体都有的一件）。
 
-**V 拿不到**：除上面 14 件以外的一切 —— 尤其是 `fs.*`/`table.*` 的写工具（**结构性**）、
-`graph.*`/`trace.*`、`doc.*`/`review.*`、`attack.*`、`conductor.*`、
+**V 拿不到**：除上面 15 件以外的一切 —— 尤其是 `fs.*`/`table.*` 的写工具（**结构性**）、
+`graph.*`/`trace.*`、`doc.*`/`review.*`、`attack.*`、`conductor.broadcast`、
 以及 `verify.run_experiment` / `verify.check_formal` / `verify.evidence_for` / `verify.code_hash` /
 `verify.detect_verifier` / `verify.list_experiments`（V 只审"证明"，不跑实验）。
 
 ---
 
-## M.4 [附录·实测] 工具面明细（20 件 = 编排面 14 + 文件面 6）
+## M.4 [附录·实测] 工具面明细（21 件 = 编排面 15 + 文件面 6）
 
-**现读**：`python -m agentflow.cli tools --role M`
+**现读**：`python -m agentflow.cli tools --role M`（2026-10-21）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **20** |
-| `side_effect` | `read 12 / write_local 8 / none 0` |
-| `external` | `none 20` |
+| 总数 | **21** |
+| `side_effect` | `read 13 / write_local 8 / none 0` |
+| `external` | `none 21` |
 | 需审批 | **8** |
 
-**编排面 14 件**：`conductor.summon` `summon_many` `stop` `cancel` `ensure_project`（5 件写）
-+ `conductor.board` `ledger` `state` `resume_brief` `acceptance` `closing` `role_spec` `status_report`（8 件只读）
-+ `conductor.broadcast`（1 件写）。
+**编排面 15 件**：`conductor.summon` `summon_many` `stop` `cancel` `ensure_project`（5 件写）
++ `conductor.broadcast`（1 件写）
++ `conductor.board` `ledger` `state` `resume_brief` `acceptance` `closing` `role_spec` `status_report` `escalate`（9 件只读）。
 
 **文件面白名单 6 件**：`fs.list` `fs.read` `fs.search` `fs.stat`（只读四件）+ `fs.write` `fs.edit`（一支笔 + 一把手）。
 **没有** `fs.delete` / `fs.move`（一个真删、一个换位置，都不可逆）。
@@ -308,7 +321,7 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 **M 拿不到**：`table.*` 全部 8 件（主控不直接改表）、`manuscripts.*`、`graph.*`/`trace.*`、
 `research.*`、`search.*`、`ocr.*`、`doc.*`、`review.*`、`attack.*`、`verify.*`、`text.extract`。
 
-> 逐件的 summary / 参数 / 返回结构见正文 §R0 的 80–83 号与 70–79 号行。
+> 逐件的 summary / 参数 / 返回结构见正文 §R0 的 70–83 号与 97 号（`conductor.escalate`）行。
 
 ---
 
@@ -835,7 +848,7 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 | `accepted` 稿件不得有 open error | `accepted_with_open_error` | error |
 | `proof` 断言的依赖闭合（H 是复核方） | `proof_claim_with_unclosed_dependency` / `proof_claim_on_refuted_dependency` / `proof_claim_on_disputed_dependency` | error |
 | 证据等级不得过度声称 | `overclaim` / `proof_claim_rests_on_weaker_evidence` | error |
-| **H 的写面只有 3 件已登记的落库代理** | `READONLY_CALL_EXCEPTIONS['H']`（`review.review_document` / `review.verify_fixes` / `review.report`）+ `for_role` 把其余写工具结构性剥离 | 实测 3 件 `write_local`（声明面）/ 0 件（`fs.*`/`table.*` 写工具） |
+| **H 的写面只有 4 件已登记的落库代理** | `READONLY_CALL_EXCEPTIONS['H']`（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）+ `for_role` 把其余写工具结构性剥离 | 实测 4 件 `write_local`（声明面）/ 0 件（`fs.*`/`table.*` 写工具） |
 | **H 只召唤 `A E G`** | `ALLOWED_EDGES["H"] == {"A","E","G"}` | 静态表 |
 
 ### H.7 [附录·实测] 下沉明细
@@ -867,14 +880,14 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 
 | 不变式 | 检查项名 / 判据 | 级别 |
 |---|---|---|
-| **V 的工具面 0 个写工具** | `for_role("V")` 结构性剥离 + `tools.READ_ONLY_ROLES` 里的 `"V"` | 实测 0（`{'C': [], 'H': [], 'V': []}`） |
+| **V 的工具面 0 个写工具** | `for_role("V")` 结构性剥离 + `tools.READ_ONLY_ROLES` 里的 `"V"` | 实测 0（2026-10-21 现读：`{'C': ['analysis.register_report'], 'H': ['review.review_document','review.verify_fixes','review.report','review.record_finding'], 'V': []}` ⇒ V 一栏是空的） |
 | **输出不合法绝不落台账行** | `verifications.parse_verdict` 抛 `VerificationError` ⇒ `record_verification` 不写行 | 自检 `[PASS] 没查成不落行` |
 | **台账只追加、编号由脚本发** | `v-{S.format_id(len(rows) + 1)}`（六位，与手稿编号、台账 id 同一套做法） | 自检 `[PASS] 编号从 v-000001 起（六位；旧四位号读侧兼容）` —— **2026-10-18 修复轮后转绿**；采集当天红在写死四位的断言上（F-5，判为断言过期） |
 | **第 3 位只在 `成立` 且无未解决 error 时被签** | `verifications.signs_bit3` / `bit3_payload`（签不了 ⇒ 返回 `{}`：**"没签"不是"忘了写"**） | 自检 `[PASS] 成立才签第 3 位` / `[PASS] 有毛病不签第 3 位` |
 | **冷启动没有句柄** | `cold_start_prompt` 的签名里没有 `store`/`conductor`/`registry`/`session_root` | 自检 `[PASS] 冷启动提示词没有句柄参数` |
 | **命题号必须是六位十进制（旧四位可读）** | `verifications.verification_ledger_path` → `schema.is_valid_id`（`schema.ID_DIGITS == 6`，读侧兼容四位） | 自检标签已对齐成「命题号必须 6 位（旧数据里的 4 位号仍可读）」，并加核 `detail` 里报出的宽度（采集当天标签写 4 位，F-6，已对齐） |
 | **`limit=0` 是零条** | `verifications.list_verifications`（`out[-0:]` 的巧合已修） | 自检 `[PASS] limit=None 是全量而不是零条` |
-| **V 不写任何表** | `capabilities.WRITE_SETS["V"] == frozenset()`；`schema.TABLES` 是 **16** 张（**V 没加表**） | 静态表 |
+| **V 不写任何表** | `capabilities.WRITE_SETS["V"] == frozenset()`；`schema.TABLES` 是 **17** 张（**V 没加表**） | 静态表 |
 | **V 只能召唤 F** | `ALLOWED_EDGES["V"] == {"F"}` | 静态表 |
 | **V 只能被 `B` / `F` 召唤** | `NON_SUMMONABLE` 里没有 V；指到 V 的边只有 `B→V` 与 `F→V`（`M` 的出边 `A B C D E G H` 里**没有** V） | 静态表 |
 | **V 的只读读数由调用方取好传进来** | `verify.verify_proof` 的 `readonly_facts` 是**字符串**，不是 `store` 句柄 | 参数 schema |
@@ -1032,10 +1045,10 @@ SELF-CHECK FAILED
 | 6 | `review_rounds` 的具体上限数值 | 读了 `tools.review_tools.verify_fixes` 的分支 | 没找到显式常量；上限来自调用方 |
 | 7 | `test_rebuild.py` 是否覆盖 `tasks` 表（I-9） | 读了 `DESIGN-CONDUCTOR.md:264` 声称"`rebuild()` 后 `tasks` 表逐字节一致" | 没读 `tests/test_rebuild.py` 的 3 个用例体 |
 | 8 | `doc.build_document` / `doc.register_dependency` 的断言数/依赖数是否有间接上限 | 读了 `capabilities.CAPABILITIES` 的 params（无 `maxItems`） | 没读 `doc_tools.py` 的 handler 体 |
-| 9 | G 的 `dependencies.used_by` 是否有直接的 verify 检查 | 读了 `verify.py` 当次的 code 列表（现读 **103** 个去重 / **126** 处调用点，见 §0.4） | 只看到 `dangling_doc_ref`（经 `review_findings`），没看到 `used_by` 的检查 |
+| 9 | G 的 `dependencies.used_by` 是否有直接的 verify 检查 | 读了 `verify.py` 当次的 code 列表（2026-10-21 现读 **105** 个去重 / **132** 处调用点，见正文 §0.4） | 只看到 `dangling_doc_ref`（经 `review_findings`），没看到 `used_by` 的检查 |
 | 10 | `G → D/E/F` 的实际召唤是否有代码路径 | 读了边表（`capabilities.ALLOWED_EDGES`） | 没 grep `Conductor.summon("D", …)` 之类的调用点 |
 | 11 | `LocalBackend.registry` 在真实运行里怎么接 | 读了 `conductor.LocalBackend` | 没找到任何生产调用方（**这可能意味着 M 目前只有测试驱动**） |
-| 12 | `usage_ledger` 表是否有任何写入方 | grep 了 `agent_*.py` | 只见到 schema/verify，没见到写入调用（**结论可能是"无写入方"**） |
+| 12 | `usage_ledger` 表是否有任何写入方 | 2026-10-21 复跑：grep `usage_ledger` 全仓 + 读 `tokenmeter.py` | **已核实（不再是"可能无写入方"）**：写入方是 `tokenmeter.TokenMeter.charge()`（`store.tx("usage_ledger", …)` + `tx.upsert`），由模型缝 `llmseam` 每次调用记一笔；`agent_*.py` 本身不直接写它 —— 旧结论"无写入方"是错的 |
 | 13 | `subagent` backend 接上 DSH 后的行为 | 读了 `SubagentBackend`（恒 `not_wired`） | 无 API key / 无 harness 权限面，**无法实测** |
 | 14 | `method="formal"` 的真实后端路径 | 读了 `verify_tools.py` 的 `fail(kind="not_implemented")` | 本机无 Lean/Coq/Isabelle，**无法实测** |
 | 15 | 真实联网端到端 | 读了 `test_providers_online.py`（8 例，默认 deselect） | 本次**未跑 `-m network`** |
@@ -1075,7 +1088,7 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 
 | # | 命令 | 当次实测输出（摘要） | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：84（已装模块 14…）`；`各角色工具数：{'A':29,'B':22,'C':21,'D':41,'E':25,'F':36,'G':37,'H':29,'V':14,'M':20}`；`只读角色写工具泄漏：{'C': [], 'H': ['review.review_document','review.verify_fixes','review.report'], 'V': []}（!! 有泄漏）` | 0 |
+| 1 | `python -m agentflow.cli tools` | `工具总数：94（已装模块 15…）`；`各角色工具数：{'A': 37, 'B': 23, 'C': 23, 'D': 42, 'E': 26, 'F': 37, 'G': 38, 'H': 31, 'V': 15, 'M': 21}`；`只读角色写工具泄漏：{'C': ['analysis.register_report'], 'H': ['review.review_document','review.verify_fixes','review.report','review.record_finding'], 'V': []}（!! 有泄漏）` | 0 |
 | 2 | `python -m agentflow.cli tools --role E` | 正常输出 E 的工具清单（**不再是 `invalid choice`**） | 0 |
 | 3 | `python -m pytest --collect-only -q` | `5433/5461 tests collected (28 deselected) in 8.28s` | 0 |
 | 4 | `python -m agentflow.agent_a` | `[agent_a 自检] 24/24 项通过` | 0 |

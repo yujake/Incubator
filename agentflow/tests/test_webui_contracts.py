@@ -980,12 +980,13 @@ def _sub_get(base: str, path: str) -> tuple[int, str, str, str]:
         conn.close()
 
 
-def test_the_two_cli_switches_exist_and_say_they_do_nothing_yet() -> None:
-    """正控（裁定 T1）：两个开关在 CLI 与模块入口上都有，且 --help 里说明还没接线。
+def test_the_two_cli_switches_exist_and_say_what_they_switch() -> None:
+    """正控（裁定 T1）：两个开关在 CLI 与模块入口上都有，且 --help 说清它们各管哪一面。
 
-    为什么连 help 文案也钉住：本批开关只做到"解析并透传"，若 help 不写这一句，
-    读 help 的人会以为自己已经拿到了写面（那是假读数）。W3/W4 真正接线时，
-    这两条断言会红 —— 那时连同文案一起改，正是它该被想起来的地方。
+    为什么连 help 文案也钉住：`--allow-writes` 缺省关着，读 help 的人很容易把
+    "缺省只读"读成"还没接线"。W3/W4 之前这里钉的是"还没有接线"那句；接线之后
+    那句就成了假读数（写面真的会 403、真的放行了），所以判据连同文案一起改 ——
+    这正是它该被想起来的地方。
     """
     from agentflow import cli
 
@@ -1000,8 +1001,12 @@ def test_the_two_cli_switches_exist_and_say_they_do_nothing_yet() -> None:
                 if isinstance(a.choices, dict) and "web" in a.choices)
     for action in subs.choices["web"]._actions:  # noqa: SLF001
         helps[action.dest] = str(action.help or "")
+    assert "写面" in helps.get("allow_writes", ""), helps.get("allow_writes")
+    assert "403" in helps.get("allow_writes", ""), helps.get("allow_writes")
+    assert "设置写面" in helps.get("no_settings_write", ""), helps.get("no_settings_write")
     for dest in ("allow_writes", "no_settings_write"):
-        assert "还没有接线" in helps.get(dest, ""), (dest, helps.get(dest))
+        # 反向：接线之后再说"还没接线"就是假读数（W3/W4 之前这一条恰好相反）。
+        assert "还没有接线" not in helps.get(dest, ""), (dest, helps.get(dest))
 
     # 模块入口的签名同样带着这两个开关（parse-and-pass-through 的落点）
     import inspect
@@ -1015,8 +1020,9 @@ def test_the_two_cli_switches_exist_and_say_they_do_nothing_yet() -> None:
 def test_the_switches_are_bound_on_the_server_and_readable(tmp_path: pathlib.Path) -> None:
     """正控（透传）：`serve(..., allow_writes=..., settings_write=...)` 真的挂到了句柄上。
 
-    本批它们不改变任何行为（W3/W4 才判）—— 所以这里查的就是"解析并透传"这一件事：
-    调用方给的值能在句柄上读回来。查"它改变了什么行为"在这里是错的（它还没接判断）。
+    这一条查的是"解析并透传"：调用方给的值能在句柄上读回来。判断它们"改变了什么行为"
+    不在这里 —— 那两条判据在 `tests/test_webui_writes.py`（不开写面 ⇒ 403、`--no-settings-write`
+    ⇒ 只关设置那一面），此处各管一段，别互相顶替。
     """
     root = tmp_path / "ws"
     root.mkdir()

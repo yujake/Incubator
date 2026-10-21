@@ -50,7 +50,10 @@ const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
   { key: "workspace.projects_dir", hint: "默认项目目录（留空 = 工作区自己那一个）" },
 ];
 
-/** 十个角色（`schema.ROLES` 的十个字母；`models.<角色>.<键>` 是三段形状）。 */
+/** 十个角色（`capabilities.CAPABILITIES` 的十个键，含主控 M；`models.<角色>.<键>` 是三段形状）。
+ *
+ * 别写成 `schema.ROLES`：那里只有 A–H、V 九个 —— 主控 M 在权限面（`CAPABILITIES` /
+ * `ALLOWED_EDGES`）里，而"每个角色用哪把 key"这件事对 M 同样成立。 */
 const ROLES: readonly string[] = ["A", "B", "C", "D", "E", "F", "G", "H", "V", "M"];
 
 /** 按角色那一档要填的键（业主 2026-10-14：「允许不同角色智能体用不同模型厂商的不同 api key」）。
@@ -494,13 +497,11 @@ export function Machine() {
         right={<Badge kind="badge-pass" text="已接线：见「在飞」页" />}
       >
         <div class="readings">
-          活着的循环与进程、停机开关与历史、状态报告、用量拆解 —— 都在
+          活着的循环与进程、停机开关与历史、状态报告、用量拆解、名册树 —— 都在
           <a class="nav-link" href="/live">
             「在飞」
           </a>
- 那一页（GET /api/live / /api/status-reports / /api/usage 三条只读端点）。
- 这一张卡片此前渲染的是 not_applicable 加一句"没有端点给它"——
-          那在今天是错的，所以改成指路。
+ 那一页（GET /api/live / /api/status-reports / /api/usage / /api/roster 四条只读端点）。
         </div>
       </Card>
     </>

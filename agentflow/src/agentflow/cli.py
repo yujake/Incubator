@@ -2065,9 +2065,10 @@ def cmd_web(args) -> int:
     它只是把 CLI 的参数翻成 `agentflow.webui.run()` 的 argv —— 实现在那一个模块里，这里不重写第二份
     （`R003` 防的正是"同一个公开名两处各有一份实现"）。`cli.main` 是命令总入口，`webui.run` 是这一个
     子命令的实现；两者的名字因此不同。
-    两个开关按裁定 T1 加（`--allow-writes` 题 C2、`--no-settings-write` 题 E1）。它们在本批（W0）还
-    没接任何判断：写面要等 W3、设置写面要等 W4，所以这里只做透传 —— 给不给都不改变行为（`--help`
-    里也逐字这么写）。`getattr` 的默认值是为了让直接构造 `Namespace` 的老调用方（
+    两个开关按裁定 T1 加（`--allow-writes` 题 C2、`--no-settings-write` 题 E1）。W3/W4 之后它们真的
+    改变行为，两条都在 `writes.authorize()` 的矩阵里：`--allow-writes` 是第 3 层（不开 ⇒ 所有写端点
+    403），`--no-settings-write` 是第 4 层（只关 `POST /api/settings`）。`getattr` 的默认值是为了让
+    直接构造 `Namespace` 的老调用方（
     `tests/test_webui.py::test_the_cli_web_subcommand_forwards_to_the_module_entry`）照旧能跑：
     缺这两个字段就当"没给"。
     """
@@ -2758,12 +2759,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="只打印一行 URL 的 JSON（起后台任务时用它拿确切地址）")
     sp.add_argument("--token", default="",
                     help="访问口令（也可用环境变量 AGENTFLOW_WEB_TOKEN；给了就必须带上）")
-    # 裁定 T1：只加这两个开关。（注意）本批它们还没有接线（W3 的写面、W4 的设置写面），
-    # 下面两句 help 逐字说明这一点 —— 免得读 help 的人以为写面已经开了。
+    # 裁定 T1：只加这两个开关。W3/W4 之后它们真的接线（`writes.authorize()` 的第 3/4 层），
+    # 下面两句 help 逐字说明它们各管哪一面 —— 免得读 help 的人以为"缺省只读"是"还没接线"。
     sp.add_argument("--allow-writes", action="store_true",
-                    help="允许写面（本批还没有接线：W3 才真正生效，现在给不给都一样）")
+                    help="允许写面（起一趟 / 插话 / 答问 / 叫停 / 改设置 / 改预算）；"
+                         "缺省只读，不开这一档时写端点一律 403")
     sp.add_argument("--no-settings-write", action="store_true",
-                    help="关掉设置写面（本批还没有接线：W4 才真正生效，现在给不给都一样）")
+                    help="关掉设置写面（只关 POST /api/settings，其余写面照旧）")
     sp.set_defaults(func=cmd_web)
 
     # 体检：跑之前先知道这台机器能做哪些事（有没有 key / 有没有证明检查器 / Mathlib 对不对得上）。

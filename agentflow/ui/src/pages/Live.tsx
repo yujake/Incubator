@@ -251,7 +251,11 @@ export function Live() {
         ) : (
           <>
             <div class="readings">
-              合计 <Money usd={null} unknownCalls={0} />{" "}
+              合计{" "}
+              <Money
+                usd={typeof usage.data.spent.usd === "number" ? usage.data.spent.usd : null}
+                unknownCalls={0}
+              />{" "}
               {Object.keys(usage.data.spent).length === 0 ? null : (
                 <span class="mono">
                   {cell(usage.data.spent.entries)} 笔 · {cell(usage.data.spent.tokens)} tokens
@@ -259,8 +263,8 @@ export function Live() {
               )}
             </div>
             <div class="readings">
-              （合计那两栏在上面的「预算」页里有金额读数；这一页给的是按角色与按归口的
-              拆解 —— 谁花的、为了什么花的。）
+              合计那一栏就是账本（<span class="mono">usage_ledger</span>）的累计；下面两张表是
+              按角色与按归口的拆解 —— 谁花的、为了什么花的。「预算」页看的是额度与剩余。
             </div>
             <Table
               rows={buckets(usage.data.by_role as unknown as Record<string, unknown>)}

@@ -155,8 +155,12 @@ $env:PYTHONPATH='src'   # 只有跑 `python -m agentflow.*` / `python -c "...imp
 ```
 
 > ⚠️ **上面那个泄漏行今天已不成立**：`H` 后来有了一组**已逐条登记**的落库代理
-> （`review.report` / `review.review_document` / `review.verify_fixes`，由
-> `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS` 产生）⇒ 现在的输出**不是空表**。
+> （`review.report` / `review.review_document` / `review.verify_fixes` /
+> `review.record_finding`），`C` 也有一件（`analysis.register_report`），全部由
+> `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS` 产生（2026-10-21 实测，复跑
+> `python -m agentflow.cli tools` 的末行 ⇒ `{'C': ['analysis.register_report'],
+> 'H': ['review.review_document', 'review.verify_fixes', 'review.report',
+> 'review.record_finding'], 'V': []}`）⇒ 现在的输出**不是空表**。
 > 这一条正是"读数会漂"的活标本：**"空 = 正常"这个读法本身也是要过期的**。
 
 > **"上表里只有两条非零退出码"这句话本身不是好消息** —— 退 1 与退 2 是

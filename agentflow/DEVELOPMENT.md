@@ -25,7 +25,7 @@
 | 顺序 | 节 | 什么时候必须读 |
 |---:|---|---|
 | 1 | **SPEC §5 六条硬纪律** | **每次改动**（三态 / 单一来源 / fail-closed / 证据等级 / 拒绝≠失败 / 派生态） |
-| 2 | **SPEC §8 禁止模式清单（P1–P18）** | **每次改动**（静态可查的形态；其中 P1–P9 与 P17 已落成 lint 规则 R001–R012） |
+| 2 | **SPEC §8 禁止模式清单（P1–P18）** | **每次改动**（静态可查的形态；其中 P1–P9 与 P17–P18 已落成 lint 规则 R001–R012） |
 | 3 | **SPEC §6 Definition of Done** | 按你改的东西选一份 checklist（表 / 字段 / 工具 / 交互 / 角色 / 验证门） |
 | — | **SPEC §0.2 的 `LIVE-READINGS` 块** | 要**当前读数**时才读这一格；它由 `tests/test_release_all.py::test_development_md_linter_readings_and_rule_range_match_the_repo` 逐键盯着 —— **不要相信任何抄在散文里的数字** |
 
