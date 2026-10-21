@@ -1541,7 +1541,15 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     else:
         return None
     body, clipped = _chat_clip(text)
+    # 业主 2026-10-21（"全面接入"）：每一条对话线都要能回答"**是哪个绝对编号的哪个角色**在说话"。
+    # 绝对编号从事件里取（`task_id`；老事件没有就退到 `sid` 那一层，仍空则显式写空串 ——
+    # 空串在页面上显示成"（未记录编号）"，比编一个假编号好）。
+    task_id = str(event.get("task_id") or event.get("from_task_id") or "")
     line: dict[str, Any] = {"index": index, "who": who, "role": role, "kind": kind,
+                            "task_id": task_id,
+                            # 三态：编号是"事件里真有"还是"这条事件没记"—— 页面据此显示
+                            # "（未记录编号）"，判据据此要求"不许悄悄空着不标"。
+                            "task_id_source": "event" if task_id else "missing",
                             "ts": str(event.get("ts") or ""), "title": title,
                             "text": body, "clipped": clipped}
     if qid:
