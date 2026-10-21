@@ -252,14 +252,19 @@ def _assert_eol_negative_controls() -> None:
     样本用真文件：`tests/test_claimanatomy.py` 的 HEAD 是 CRLF（本轮实测被翻成 LF 过、
     已按 HEAD 那一档还原）；`src/agentflow/closing.py` 的 HEAD 是 LF。
     """
-    crlf_file = "agentflow/tests/test_claimanatomy.py"
-    lf_file = "agentflow/src/agentflow/closing.py"
-    blobs = _head_blobs([crlf_file, lf_file])
-    assert set(blobs) == {crlf_file, lf_file}, f"负控的样本取不到 HEAD 内容：{sorted(blobs)}"
-    crlf_head, lf_head = blobs[crlf_file], blobs[lf_file]
+    # 2026-10-21 换轨：负控**不再依赖"仓库里恰好有一个 CRLF 的 HEAD"**。
+    # 那次把 219 个文件入库归一成 LF 之后，`test_claimanatomy.py` 的 HEAD 已变成 LF，
+    # 旧写法于是把负控自己判红（"样本的档位与登记的不符"）—— 这是**判据依赖可变量**的典型。
+    # 现在：`_head_blobs` 只用来证明"HEAD 读得到"（取任意一个被跟踪文件），
+    # 两个方向的样本用**内存里的字节**构造（`eol_problem` 本来只吃字节，不吃文件名）。
+    crlf_file, lf_file = "agentflow/sample_crlf.py", "agentflow/sample_lf.py"
+    probe = "agentflow/src/agentflow/closing.py"
+    blobs = _head_blobs([probe])
+    assert blobs.get(probe) is not None, "负控取不到 HEAD 内容 ⇒ 这一格没查成（不是『没样本』）"
+    crlf_head = b"line one\r\nline two\r\n"
+    lf_head = b"line one\nline two\n"
     assert _style(crlf_head) == "crlf" and _style(lf_head) == "lf", (
-        f"样本的档位与登记的不符（{crlf_file}={_style(crlf_head)} / "
-        f"{lf_file}={_style(lf_head)}）⇒ 负控不再咬那个方向")
+        f"内存样本的档位构造错了（{_style(crlf_head)} / {_style(lf_head)}）⇒ 负控咬不住")
 
     flipped = crlf_head.replace(b"\r\n", b"\n")
     got = eol_problem(crlf_file, crlf_head, flipped, convention="lf")
