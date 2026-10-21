@@ -2,10 +2,10 @@
 
 ## 钉三件事
 
-1. **每一行都有 `task_id` 与 `task_id_source` 两个键**（缺键 = 页面无法显示"谁在说话"）；
-2. `task_id_source` 只许是 `event` / `missing` 两值（**三态**：编号要么来自事件，
+1. 每一行都有 `task_id` 与 `task_id_source` 两个键（缺键 = 页面无法显示"谁在说话"）；
+2. `task_id_source` 只许是 `event` / `missing` 两值（三态：编号要么来自事件，
    要么显式标"这条事件没记" —— 不许空着不标，那会让读的人以为"这个代理没有编号"）；
-3. 事件里**有** `task_id` 的那一行，`task_id_source` 必须是 `event`（负控：
+3. 事件里有 `task_id` 的那一行，`task_id_source` 必须是 `event`（负控：
    把有编号的行标成 missing 要红）。
 """
 

@@ -2318,7 +2318,7 @@ def cmd_closing(args) -> int:
         print(tty.bullet(f"{name}：{mark}"))
     for f in rep.findings:
         print(f"  [{f.level}] {f.code}：{f.detail}")
-    # 非平凡性那一格（S3/S4）：读数必须在**人看得见的地方**露面 —— 只塞进 readings 字典
+    # 非平凡性那一格（S3/S4）：读数必须在人看得见的地方露面 —— 只塞进 readings 字典
     # 等于"接了一半的线"（业主 2026-10-21 追问"请确认真的接线了"时暴露的缺口）。
     _nt = (rep.readings or {}).get("nontriviality") or {}
     if _nt:

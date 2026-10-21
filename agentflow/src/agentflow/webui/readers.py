@@ -1833,6 +1833,34 @@ def _single_run_start_ids(events: Sequence[Mapping[str, Any]]) -> dict[str, str]
     return out
 
 
+def _chat_role(event: Mapping[str, Any]) -> tuple[str, str]:
+    """这条事件里"说话的那个角色"，以及这一格是从哪来的（`role_source` 三档）。
+
+    取值口径（三档，与 `task_id_source` 同一套纪律）：
+
+    - `event`：事件自带 `role`（绝大多数事件都这样，`agent_run_start` / `agent_run_end`
+      / `user_question` / `user_answer` 都是）⇒ 原样用；
+    - `from`：事件没有 `role` 而 `kind` 是 `agent_message` ⇒ 用 `from`。那条记录写的是
+      "这条报文是谁发的"，`from` 是它唯一的身份格（`send_message` 只写
+      `from` / `to` / `channel`），于是用它补齐是可复核的，不是猜；
+    - `missing`：两格都没有 ⇒ `("", "missing")`。页面据此显示「（未记录角色）」，
+      绝不替它编一个。
+
+    为什么只对 `agent_message` 看 `from`：别的 kind 的 `from` 不是角色 ——
+    `agent_interjection` 的 `from` 是用户（`userio.USER`），拿它当角色会让"用户的插话"
+    在角色那一格印成 `user`，而角色是 A–H / M / V 那个编号空间里的东西。用户那几条线
+    "谁在说话"由 `who="user"` 那一格说（页面印"你"），不需要角色来重复。
+    """
+    role = str(event.get("role") or "")
+    if role:
+        return role, "event"
+    if str(event.get("kind") or "") == "agent_message":
+        sender = str(event.get("from") or "")
+        if sender:
+            return sender, "from"
+    return "", "missing"
+
+
 def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     """一条会话事件 → 一条对话线；不是"对话"的事件回 `None`。
 
@@ -1856,7 +1884,7 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     from ..schema import CONDUCTOR_ROLE as M
 
     kind = str(event.get("kind") or "")
-    role = str(event.get("role") or "")
+    role, role_source = _chat_role(event)
     who = ""
     title = ""
     text = ""
@@ -1912,6 +1940,11 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     # 永远读不到 `inherited`；要拿回填后的读数就调 `chat_face`（见 `_single_run_start_ids`）。
     task_id = str(event.get("task_id") or event.get("from_task_id") or "")
     line: dict[str, Any] = {"index": index, "who": who, "role": role, "kind": kind,
+                            # 角色那一格的来路（见 `_chat_role`）：`event`（事件自带
+                            # `role`）/ `from`（`agent_message` 只有 `from`，读侧用它补）/
+                            # `missing`（两格都没有 —— 页面显示"（未记录角色）"，判据据此
+                            # 要求"不许留空、也不许猜一个"）。
+                            "role_source": role_source,
                             "task_id": task_id,
                             # 三档口径（值域）：`event`（事件里真有）/ `inherited`
                             # （`chat_face` 从同岗唯一那一趟的 start 回填的，本函数不产它）/
@@ -1950,6 +1983,13 @@ def chat_face(root: str | Path, sid: str = "", *,
     同一岗在这段会话里唯一那一趟的 `agent_run_start` 有编号 ⇒ 用它，判据在
     :func:`_single_run_start_ids`）、`missing`（拿不准或确实没记）。回填只在唯一时发生：
     同一岗跑过两趟以上（或有一条 start 自己没记编号）就照实标 `missing`，不猜。
+
+    角色那一格：每条线都有 `role` 与 `role_source`，来源同样三档 —— `event`（事件自带
+    `role`）、`from`（`agent_message` 只记了 `from`，读侧用它补齐，见 :func:`_chat_role`）、
+    `missing`（两格都没有 ⇒ 页面显示「（未记录角色）」，不猜）。这一格补的是真机读数里
+    `E → D（private）` 那条线"哪个角色"空着的缺口：那条记录只有 `from`，而 `from` 就是
+    发信人的角色。为什么不交给前端去解析标题里的 `E → D` —— 标题是给人看的一句话，
+    不是数据（改一次文案就会把它悄悄拆掉，而没有任何判据会红）。
     """
     root_p = Path(str(root))
     sessions = [{"sid": str(s.get("sid") or ""),
@@ -2588,9 +2628,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "`task_id` 是说话那一方的绝对编号，`task_id_source` 只说这个编号从哪来："
      "event（事件里真有）/ inherited（老事件没记，同一岗在本段唯一那一趟的 "
      "agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示"
-     "「（未记录编号）」，绝不编一个假编号）",
+     "「（未记录编号）」，绝不编一个假编号）。`role` 是说话那一方的角色，`role_source` "
+     "同一条纪律：event（事件自带）/ from（`agent_message` 只记了 `from`，读侧用它补齐，"
+     "页面括注「承自发件人」）/ missing（两格都没有，页面显示「（未记录角色）」）",
      (("index", "number"), ("who", "string"), ("role", "string"), ("kind", "string"),
       ("ts", "string"), ("title", "string"), ("text", "string"),
+      ("role_source", "string"),
       ("task_id", "string"), ("task_id_source", "string"),
       ("clipped", "boolean"), ("qid?", "string"), ("options?", "ChatOption[]"))),
     ("ChatSession",
@@ -2879,11 +2922,11 @@ HANDLERS.update({
 })
 
 def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
-    """台账兜底：名册读不到时，**从 `data/tasks.json` 建一棵树**（标成 `unregistered`）。
+    """台账兜底：名册读不到时，从 `data/tasks.json` 建一棵树（标成 `unregistered`）。
 
     业主 2026-10-21（"网页完整接入名册机制!!"）：名册是"父 + 子 + 绝对编号"的唯一真身，
-    但当登记**没发生**时，页面上不该是"什么都没有" —— 那会让读的人以为"这次没派活"。
-    台账里明明有 A/E/D 这些带父的代理行，它们就是"**存在、但不在名册上**"的证据。
+    但当登记没发生时，页面上不该是"什么都没有" —— 那会让读的人以为"这次没派活"。
+    台账里明明有 A/E/D 这些带父的代理行，它们就是"存在、但不在名册上"的证据。
 
     所以这一档三件事一起给：
     1. `nodes` 照给（`task_id` / `role` / `parent_task_id` / `depth` / `status`），
