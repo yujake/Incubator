@@ -6863,12 +6863,12 @@ class LlmBackend:
         # S1n-c：这一趟用哪一个注册表 —— 有面且有工厂 ⇒ 按面造一个
         # （面就是这一趟的 `fs.*` 根，业主 T23 的"面 = 新的根"）；否则共用那个。
         # 2026-10-22 真机缺陷（p3-verify2 收官趟，`manuscripts/handoffs.jsonl` 的 000017/000018）：
-        # 父给 G 切了一个**空**的槽（`out/surfaces/t-000025/S01`），于是 G 的 `fs.*` 根就是那个空目录，
+        # 父给 G 切了一个空的槽（`out/surfaces/t-000025/S01`），于是 G 的 `fs.*` 根就是那个空目录，
         # 连 `out/paper/main.tex` 都读不到（两条读法都 `path_denied`），`doc.paper_compile` 只能报
         # `paper_no_source` ⇒ 论文那一格永远 unknown。
-        # 口径：**空面不算切面**。切面是为了"把这一趟要用的那一块切进来"，一个空目录切进去，
+        # 口径：空面不算切面。切面是为了"把这一趟要用的那一块切进来"，一个空目录切进去，
         # 等于把这一趟的手脚绑住；它与"面读不到就不切"是同一条纪律的两种情形。
-        # 三态照旧：不切要**留痕**（下面 `child_surface_empty`），不许静默退回项目根冒充"面切过了"。
+        # 三态照旧：不切要留痕（下面 `child_surface_empty`），不许静默退回项目根冒充"面切过了"。
         child_surface, child_surface_empty = _surface_root_decision(child_surface)
         child_registry = self.registry
         if child_surface and callable(self.registry_factory):
@@ -7708,9 +7708,9 @@ if __name__ == "__main__":
 def _surface_root_decision(surface: str) -> tuple[str, bool]:
     """这一趟该不该把 `fs.*` 的根切到面上：返回（要用的面；空串 = 不切）与"是否因空而退回"。
 
-    口径（2026-10-22 真机）：**空面不算切面**。切面是为了"把这一趟要用的那一块切进来"；
+    口径（2026-10-22 真机）：空面不算切面。切面是为了"把这一趟要用的那一块切进来"；
     切一个空目录进去等于把这一趟的手脚绑住（真机上 G 因此读不到 `out/paper/main.tex`）。
-    面读不到（路径不存在 / 不是目录）与面是空的同属"不切"这一档，但两者都**留痕**，
+    面读不到（路径不存在 / 不是目录）与面是空的同属"不切"这一档，但两者都留痕，
     不许静默退回项目根冒充"面切过了"。
     """
     text = str(surface or "")
