@@ -221,11 +221,12 @@ SPEC = AgentSpec(
             "`counterexample_experiment_id`），并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。"
             "**这一轮逐条点名新增的东西**（有模型缝时 ≥3 条：新猜想、新问题或一步新归约、新读数，可组合；缝没接时如实报 "
             "`not_wired`，不硬凑三条）；只整理已有成果不算推进。",
-            "**猜想写出来之后要交给 F 攻坚**：D→F 的边是通的 —— **用循环的 `summon` 形状**唤起 F 的 `create_plan`（那件召唤工具不在"
-            "你的工具面上），`problem_key` 就用猜想的 `conjecture_id`（计划与猜想在台账上因此对得上），`subgoals` 给一到三个可判定的"
-            "子目标。被实验反驳的猜想同样是成果：登记那条反例（`result=refutes` + 非空 `counterexample`）、把 `status` 推成 "
-            "`refuted`，并**立刻**告诉 F 那条路封了（否则它会替一条已死的猜想烧预算）。",
-            "**立了猜想就必须在同一趟里派 F**（硬义务）：`register_conjecture` 成功之后的下一步就派 `F.create_plan`，并至少推进一步 "
+            # 2026-10-21 减负：原来这是**两条**（"猜想写出来交给 F"＋"立了猜想必须派 F"），
+            # 前者的机制细节并进后者、重复的说理删掉；三处关键事实（D→F 边通 / summon 形状 / problem_key 用 conjecture_id）逐字保留，
+            # 判据：tests/test_d_summons_c_and_c_reports_back::… 与 closing 的 attack 那一格。
+            "**立了猜想就必须在同一趟里派 F**（硬义务，`D→F` 的边是通的、用循环的 `summon` 形状唤起 `F.create_plan`，"
+            "`problem_key` 就用猜想的 `conjecture_id`、`subgoals` 给一到三个可判定的子目标）：`register_conjecture` 成功之后的下一步就派 "
+            "`F.create_plan`，并至少推进一步 "
             "`F.step`（按别的名字派只会拿到 `unknown_action`）。**派了 F 就要在同一趟里读回它的结果**：推得动就让 F 继续"
             # 2026-10-20 业主裁定（逐字："我们自己经 F 产出的证明天生带 V 签字"）：D **不派 V**
             # —— V 的签字由 F 在交出证明时一并办好（F 是唯一能派 V 的人），D 只核"带没带签"。

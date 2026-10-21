@@ -443,6 +443,9 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p177", "count": 14,
      "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
      "note": "抬版本 p177（2026-10-21）：B 的两条 policy 合并去重（三处锚点短语逐字保留）；键集未变"},
+    {"version": "p178", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p178（2026-10-21）：D/F/V/M 减负（D 两条合并、V 删重复尾巴）；键集未变"},
 )
 
 
