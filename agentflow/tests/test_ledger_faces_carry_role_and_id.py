@@ -140,9 +140,16 @@ def test_the_evidence_rows_carry_a_role_and_the_run(tmp_path: pathlib.Path) -> N
     assert second["by_task_id"] == "", second
     assert second["by_task_id_tri"] == "missing", second
 
-    # 多出来的三格必须同时出现在生成的类型声明里（契约 C 是双向的）
+    # 多出来的三格必须同时出现在生成的类型声明里（契约 C 是双向的）。
+    # 逐键相等这一条不适用于这一栏：夹具写的是两行"只有主键 + 谁写的"的最小行，
+    # `schema.Statement` 的其余字段没有值可写（`store.rows` 不补默认值）。
+    # 这里钉的是契约 C 真正问的两件事：后端给的键都在声明里、三格两边都在。
     for row in got["statements"]:
-        assert set(row) == set(FIELDS["StatementRow"]), sorted(row)
+        assert set(row) <= set(FIELDS["StatementRow"]), (
+            sorted(set(row) - set(FIELDS["StatementRow"])))
+        for key in ("by_role", "by_task_id", "by_task_id_tri"):
+            assert key in FIELDS["StatementRow"], key
+            assert key in row, (key, sorted(row))
 
 
 # ====================================================================== 判据二：产物面
@@ -246,16 +253,20 @@ def test_the_reverse_lookup_only_scans_the_recent_sessions(tmp_path: pathlib.Pat
         {"stmt_id": "000001", "created_by": "B", "created_at": TS},
         {"stmt_id": "000002", "created_by": "V", "created_at": TS},
     ])
-    for i in range(total):
-        path = _append_event(root, f"s{i:02d}", kind="agent_note", role="B", ts=TS,
-                             text=f"第 {i} 段会话的噪声事件")
-        _age(path, 1_600_000_000 + i)
+    sids = [f"s{i:02d}" for i in range(total)]
+    for i, sid in enumerate(sids):
+        _append_event(root, sid, kind="agent_note", role="B", ts=TS,
+                      text=f"第 {i} 段会话的噪声事件")
     # 最老的那一段带着 000002 的写入事件：它在窗口之外
-    _append_event(root, "s00", kind="agent_step", role="V", task_id="t-000098", ts=TS,
+    _append_event(root, sids[0], kind="agent_step", role="V", task_id="t-000098", ts=TS,
                   detail="落了 stmt:000002")
     # 最新的一段带着 000001 的写入事件：它在窗口之内
-    _append_event(root, f"s{total - 1:02d}", kind="agent_step", role="B",
-                  task_id="t-000009", ts=TS, detail="落了 stmt:000001")
+    _append_event(root, sids[-1], kind="agent_step", role="B", task_id="t-000009", ts=TS,
+                  detail="落了 stmt:000001")
+    # mtime 必须最后一步定死：`sessions.append` 每追一条都会把 mtime 刷成"现在"，
+    # 边写边定会让"最老的那一段"变成最新的那一段（窗口就名存实亡了）。
+    for i, sid in enumerate(sids):
+        _age(SS.session_path(root, sid), 1_600_000_000 + i)
 
     started = time.monotonic()
     got = R.evidence_chain(root)
@@ -269,8 +280,7 @@ def test_the_reverse_lookup_only_scans_the_recent_sessions(tmp_path: pathlib.Pat
     # 1. 窗口常量被尊重：盘上 total 段，真正被取用的恰好 n 段、且是最新的那 n 段
     files = R._recent_session_files(root)
     assert len(files) == n, [p.name for p in files]
-    assert [p.stem for p in files] == [f"s{i:02d}" for i in range(total - 1,
-                                                                 total - n - 1, -1)], files
+    assert [p.stem for p in files] == sids[::-1][:n], files
 
     # 3. 再多塞几段更老的会话：窗口没变 ⇒ 读数一格不动
     before = {k: str(v["by_task_id"]) for k, v in rows.items()}

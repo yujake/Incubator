@@ -162,6 +162,9 @@ export interface RunProduct {
   lines: number | null;
   sha256: string;
   tri: Tri;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：检查点的花销子树（`llmseam.SeamSpend.to_dict()`：calls/tokens_in/tokens_out/usd/unknown_usd_calls）。 */
@@ -300,9 +303,21 @@ export interface AcceptanceView {
   reason: string;
   criteria: Record<string, string>;
   details: Record<string, string>;
+  rows: AcceptanceRow[];
   auxiliary: Record<string, string>;
   failed: string[];
   auxiliary_note: string;
+}
+
+/** 出处：acceptance_face() 的 rows[] —— 一条验收判据一行（键名来自 reviewaccept.CRITERIA；编号那一格恒为 not_applicable：判据是现算的、不落任何台账行）。 */
+export interface AcceptanceRow {
+  key: string;
+  title: string;
+  value: string;
+  detail: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：machine_face() 的 `settings` —— 设置文件的各段（key 只给掩码后的那一份）。 */
@@ -487,6 +502,9 @@ export interface StatementRow {
   line_range: string;
   created_at: string;
   created_by: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：store.rows("review_findings")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）。 */
@@ -509,6 +527,9 @@ export interface ReviewFindingRow {
   verbatim_quote: string;
   maths: string;
   line_unavailable_reason: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：store.rows("relations")（无真机样本 ⇒ 权威来源是 `schema.Relation`）。 */
@@ -528,6 +549,9 @@ export interface RelationRow {
   duplicate_of: string;
   created_at: string;
   supporting_lit_ids: string[];
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：verifications.list_verifications()（裁定 K2：无真机样本 ⇒ 夹具造一行）。 */
@@ -547,6 +571,9 @@ export interface VerificationRow {
   used_faces: string[];
   submission_id: string;
   at: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）。 */
@@ -560,6 +587,9 @@ export interface ArtifactRow {
   task_id: string;
   exit_code: number | null;
   note: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：artifacts.verify_entries() 的行 —— 台账钉的 sha 与盘上现在这一版是不是同一版。 */
@@ -570,6 +600,9 @@ export interface LedgerVerifyRow {
   at: string;
   sha256_now: string;
   status: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：manuscripts.read_rows() 的行（`manuscripts.write` 写的 14 个键；`revises`/`kind`/`ref_problems` 是「有就带上」的三栏）。 */
@@ -591,6 +624,9 @@ export interface HandoffRow {
   revises?: string;
   kind?: string;
   ref_problems?: Record<string, string>;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：out/secretary/<角色>.jsonl（老文件）与 out/secretary/<角色>-<实例号>.jsonl（S1m 起的分片）的行（`secretary.Secretary.note_decision` 写的；`decision`/`reason`/`basis` 等是「有就带上」的几栏）。`task_id` 是 S1m 补的那一格：分片之后「这一行是哪一个实例写的」必须读得出来。 */
@@ -609,6 +645,9 @@ export interface SecretaryDecision {
   basis?: string[];
   before?: string;
   target?: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：out/paper/ACCEPTANCE-CHECKS.json 的一行（真机 8 行 C1–C8；`closing.ACCEPTANCE_CHECKS_NAME`）。 */
@@ -618,6 +657,9 @@ export interface AcceptanceCheck {
   min: number;
   name: string;
   note: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：out/review/REPORT-STYLE.json 的 `sections`（真机四节名字）。 */
@@ -653,6 +695,9 @@ export interface TaskRow {
   seen_by: string;
   seen_step: number | null;
   keep_alive: boolean;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：store.rows("conjectures")（真机 p9b/data/conjectures.json；无样本时以 `schema.Conjecture` 为准）。 */
@@ -675,6 +720,9 @@ export interface ConjectureRow {
   promoted_to: string;
   withdraw_reason: string;
   duplicate: boolean | null;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：store.rows("experiments")（真机 p9b/data/experiments.json；无样本时以 `schema.Experiment` 为准）。 */
@@ -702,6 +750,9 @@ export interface ExperimentRow {
   created_at: string;
   created_by: string;
   for_question_id: string;
+  by_role: string;
+  by_task_id: string;
+  by_task_id_tri: string;
 }
 
 /** 出处：store.rows("usage_ledger")（真机 p9b/data/usage_ledger.json 37 行）。 */
