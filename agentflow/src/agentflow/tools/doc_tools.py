@@ -1845,7 +1845,7 @@ def register_dependency(
                 raise ValueError(
                     f"source_stmt_id={source_stmt_id!r} 没 closed：那一行的 "
                     f"statements.status={shown!r}，只有在册可用的 'active' 才算已闭合"
-                    f"（{S.STATEMENT_UNUSABLE_STATUSES} 这几档都不是依据）。"
+                    f"（这几档都不是依据：{S.STATEMENT_UNUSABLE_STATUSES}）。"
                     "要么先让那条命题走到 active，要么这条边不许写成依赖它 —— "
                     "拿一条待补定义/有争议/被证否/被取代的命题当依据，是一条空头支票"
                 )

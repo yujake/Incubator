@@ -227,7 +227,8 @@ class _RegisterStatement:
                 problems=problems)
         return bits, None
 
-    def _attach_proofs(self, stmt_id: str, entries: list[dict]) -> dict:
+    def _attach_proofs(self, stmt_id: str, entries: list[dict],
+                       canonical: str = "") -> dict:
         """把证明清单挂到既有那一行（同一把 `statements` 锁里读-改-写）。
 
         为什么不能交给秘书：秘书的白名单（`Secretary._statement_from`）只认 `Statement` 的
@@ -239,10 +240,14 @@ class _RegisterStatement:
         （重复交同一份证明不算失败，也不改写既有的 `created_at`）；`refused` 是"号在册、
         正文不同"—— 整笔不写（不许静默覆盖既有的一条证明：那是把一份已经存在的证明换掉，
         而签名可能仍然挂在其上）。
+
+        `canonical` 是这一笔带来的 #p1 正文（`proof_text`）。行已经在册时它若与盘上那一份
+        不同，同样整笔不写并把 `canonical_differs` 置真：那等于要把 canonical 那一份换掉，
+        而 V 的签名正挂在它上面 —— 静默忽略（看起来"交上去了"）比拒绝更坏。
         """
         out: dict = {"written": False, "attached": [], "already": [],
-                     "refused": "", "reason": ""}
-        if not entries:
+                     "refused": "", "reason": "", "canonical_differs": False}
+        if not entries and not str(canonical or "").strip():
             return out
         store = getattr(self, "store", None)
         if store is None:
@@ -257,6 +262,17 @@ class _RegisterStatement:
                                  "（行没落成，清单也就没有落点）")
                 return out
             row = dict(found)
+            want = str(canonical or "").strip()
+            have_canon = str(row.get("proof_text") or "").strip()
+            if want and have_canon and want != have_canon:
+                out["canonical_differs"] = True
+                out["refused"] = "proof_text_taken"
+                out["reason"] = (
+                    "这一条命题已在册，而这一笔交来的 #p1（proof_text）与盘上那一份正文"
+                    "不同 ⇒ 整笔不写：canonical 只有一份，覆盖它等于把 V 挂在上面的签名"
+                    "一起作废（而这里没有任何东西核过那一签）。要换 canonical 那一份："
+                    "另起一个证明号，或者先由人处置旧的那一份与它的签名")
+                return out
             have = {no: text for no, text in _VR.proof_list(row)}
             listed = [dict(p) if isinstance(p, Mapping) else p
                       for p in (row.get(_VR.PROOFS_KEY) or [])]
@@ -566,7 +582,8 @@ class _RegisterStatement:
             # （它能同时改 bits / proof_text / quote_verified，而没有任何东西核过那些字段）。
             # 对调用方来说这是"成功了"（那一行的档位变了），不是重复读数。
             stmt_now = str(written.get("stmt_id") or "")
-            attach = self._attach_proofs(stmt_now, proofs_listed)
+            attach = self._attach_proofs(stmt_now, proofs_listed,
+                                         canonical=str(proof_text or ""))
             out = {"ok": True, "stmt_id": stmt_now,
                    "source_lit_id": lit_id or None,
                    "quote_verified": quote_verified, "origin": origin,
@@ -582,6 +599,12 @@ class _RegisterStatement:
                 out.update(self._proofs_reading(attach))
             if proofs_dropped:
                 out["proofs_dropped"] = proofs_dropped
+            if attach.get("refused"):
+                # 升档已经发生（秘书那一笔改完了），所以这里不回滚、也不改 ok；
+                # 但"清单没挂上"必须说出来 —— 静默忽略等于让调用方以为交上去了。
+                out["note"] += ("这一笔带来的证明清单没有写进库："
+                                + str(attach.get("reason") or "")
+                                + "（档位那一笔已经落盘，这一格不回滚）")
             return out
         if written.get("duplicate") and not written.get("created"):
             # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
@@ -590,7 +613,8 @@ class _RegisterStatement:
             # 多证明模型下这条分支多了一个合法用途：这条定理已经在册，而这一笔带来的是
             # 它的一条新证明（#p2 及以后）⇒ 行不新建，证明挂到既有那一行上。
             stmt_dup = str(written.get("stmt_id") or "")
-            attach = self._attach_proofs(stmt_dup, proofs_listed)
+            attach = self._attach_proofs(stmt_dup, proofs_listed,
+                                         canonical=str(proof_text or ""))
             if attach.get("refused"):
                 return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
                                stmt_id=stmt_dup)
@@ -627,7 +651,8 @@ class _RegisterStatement:
                            stmt_id=str(written.get("stmt_id") or ""), **extra)
         stmt_id = str(written["stmt_id"])
         data = dict(written.get("row") or {})
-        attach = self._attach_proofs(stmt_id, proofs_listed)
+        attach = self._attach_proofs(stmt_id, proofs_listed,
+                                     canonical=str(proof_text or ""))
         if proofs_listed and not attach.get("written"):
             # 行已经由秘书落好了（#p1 在盘上），而清单没挂上 —— 不许当成功返回：
             # 调用方会以为"这条定理的第二份证明交上去了"。如实报，并给出 stmt_id。
@@ -789,6 +814,10 @@ class _RegisterStatement:
           2. 显式声明：一条 `status="external_unavailable"` 且 `status_reason` 以
              `not_in_our_graph:` 开头、并点名那个号的边 —— "这条引用不在我们的依赖图内"。
         两件都没有 ⇒ 那个号进"缺的"列表，调用方据此拒绝落库。
+
+        `used_by` 不参与判定：这条边要在这个命题落库之前写好，而它的号那时还没分配
+        （`stmt:<号>` 还不存在）。所以判据读的是 source 那一端（`source_stmt_id` /
+        `source_lit_id`）与页码、引文，以及 label / status_reason 里点没点这个号。
 
         ## 三态（未处理绝不静默等于处理过了）
         返回 `([], "")` = 查了、每一条都处理过了；`(缺的清单, "")` = 查了、有点名的号

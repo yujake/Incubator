@@ -4,58 +4,99 @@
 业主原话：「G 产出论文时需附上对应表，说明每条定理、引理、命题、例子、实验对应产出物的
 真实文件和序号是什么，H 依据此核查，G 也依据此写作」。
 
-## 两个落点、一份内容
+## 三个落点、一份内容（都在论文包里）
 
-- `out/paper/MAPPING.json`：机器读。本模块是它唯一的读侧（解析 + 校验）。
-- `out/paper/MAPPING.md`：人读，由 json 生成（`render_markdown`）。不许手写第二份：
-  两份不一致时，读 md 的人与读 json 的机器会得到两个结论，而没有任何东西会报错。
+论文包就是 `main.tex` / `main.pdf` 所在那一个目录（`papercompile.package_dir`，通常是
+`out/paper/`）。下面三份都住在包里，包外那一份不算数：
+
+- `<论文包>/MAPPING.json`：机器读，唯一真身。本模块是它唯一的读侧（解析 + 校验）；
+- `<论文包>/MAPPING.md`：人读，由 json 生成（`render_markdown`）。不许手写第二份；
+- `<论文包>/mapping-appendix.tex`：正文附录（`附录：产出对应表`），由 json 生成
+  （`render_appendix`），`main.tex` 用 `\\input{mapping-appendix}` 把它印进 PDF。
+
+生成顺序是死的：先写 json -> 由 json 渲染 md 与附录 -> 再编 PDF。改完正文必须重编一次
+（`doc.paper_compile`），否则 `closing` 的 `paper` 那一格会报"PDF 是旧正文编的"。
 
 ## 每一行的字段与口径
 
-| 字段 | 口径 |
-|---|---|
-| `kind` | 受控词表 `ENV_KINDS`（theorem / lemma / proposition / corollary / example / experiment） |
-| `label` | 正文里那个 `\\label{...}` 的值（不带花括号） |
-| `env_no` | 正文里第几个该环境，1 起，按同类环境在正文里的出现顺序数（第 2 个 theorem ⇒ 2） |
-| `ledger_id` | `stmt:NNNNNN` / `exp:NNNNNN` / `rel:NNNNNN`；多证明带 `#pN`（`stmt:000004#p2`） |
-| `file` | 该条完整证明或实验所在的真实文件，相对工作区根（`proofs/thm-main.tex`） |
-| `page_or_section` | 可选，给人看的定位（`§3` / `p.7`） |
+| 字段 | 必填 | 口径 |
+|---|---|---|
+| `kind` | 是 | 受控词表 `ENV_KINDS`（theorem / lemma / proposition / corollary / example / experiment） |
+| `label` | 是 | 正文里那个 `\\label{...}` 的值（不带花括号） |
+| `env_no` | 是 | 正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数） |
+| `ledger_id` | 是 | `stmt:NNNNNN` / `exp:NNNNNN` / `rel:NNNNNN`；多证明带 `#pN`（`stmt:000004#p2`） |
+| `proof_no` | 是 | 这条定理名下第几号证明：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份 |
+| `file` | 是 | 该条完整证明或实验所在的真实文件，论文包内的相对路径（`proofs/000004-p1.md`） |
+| `page_or_section` | 否 | 给人看的定位（`3` / `p.7`） |
+| `citation_loc` | 视来源 | 引文的本地位置：`{"file": 包内相对路径, "page_range"|"line_range"|"char_range": [起点, 终点]}` |
+| `citation_loc_reason` | 视来源 | 不给 `citation_loc` 时那句理由 |
+
+`file` 与 `citation_loc.file` 都是包内相对路径：绝对路径在别人的机器上等于不存在，
+而指向包外的相对路径同样过不了"换一台机器也能复核"这一关（两者都判红）。
+
+### `proof_no` 的口径
+
+多证明时 `ledger_id` 与 `proof_no` 说的是同一件事：`stmt:000004#p2` 的 `proof_no` 必须是 2。
+`proof_no` 不许省：默认成 1 会让"没写"与"第 1 条"分不开，而多证明模型要挡的正是这个。
+它解析到哪一份证明只走 `verifications.proof_list`（`#p1` 恒在且排第一），不在这里
+重写那份清单的读法。`file` 的指向随之分档：`proof_no` = 1 指台账行本身或附录里那一段正文，
+2 及以上指那一份证明自己的文件。
+
+### `citation_loc` 的三态
+
+- 台账行 `origin="external_lit"`（从文献摘的）=> 必填，缺就是 `mapping_citation_loc_missing`；
+- `origin="own_result"`（我们自己得的）=> 允许为空，但必须给 `citation_loc_reason`；
+  两样都没有 => 同样是 `mapping_citation_loc_missing`；
+- 给了 `citation_loc` 而它那个 `file` 不在包里 => `mapping_citation_file_missing`。
+
+区间三种任选其一（至少一种），值写成 `[起点, 终点]` 或 `{"start": ..., "end": ...}`，
+两者都必须是正整数且起点不大于终点。
 
 ## 双向都不许有孤儿
 
 正文里每个定理类环境都必须在表里有一行，表里每一行也必须在正文里有一个环境。
 两个方向的成因不同：前者是"写了正文没登记"，后者是"登记了但正文里没有它"，
-两件事要分开报（合成一句就分不出该改哪一边）。
+两件事分开报（合成一句就分不出该改哪一边）。一条定理有多条证明时，每一条证明各占一行。
+
+## 附录必须是从 json 渲染出来的
+
+`render_appendix` 是唯一的渲染函数，产物带一对界标
+（`MAPPING-APPENDIX BEGIN` / `END`）与每行一条机器可读的 `MAPPING-ROW` 注释。
+判据就是"正文里那一段与 `render_appendix(盘上 json)` 逐字相等"：
+手抄一遍等于把渲染器再抄一遍，而抄错一个字符就是 `mapping_paper_mismatch`。
 
 ## 三态
 
-- 表不在盘上 ⇒ `state="unknown"` + `mapping_missing`（不是通过，也不是"表坏了"）；
-- 表在、但有 `MAPPING_KINDS` / `MD_KINDS` 里的问题 ⇒ `state="fail"`，逐条列；
-- 表在且干净 ⇒ `state="pass"`。
+- 有正文、但包里没有 `MAPPING.json` => `state="fail"` + `mapping_package_missing`
+  （G 产出论文却没交表：这是没产出，不是没查成）；
+- 没有正文、也没有表 => `state="unknown"`（不适用，不是通过）；
+- 表在、但有 `ALL_PROBLEM_KINDS` 里的问题 => `state="fail"`，逐条列；
+- 表在且干净 => `state="pass"`。
 
 "路径不存在"与"内容为空"必须分得开（`file_state` 的 `missing` 与 `empty`）：
-前者是这一行指错了地方，后者是那个文件真的还没写。
+前者是这一行指错了地方，后者是那个文件真的还没写内容。
 
 ## 与 H 的关系（这条边界的由来）
 
-`schema.FINDING_KINDS` 是禁改区里的受控词表，四个 `mapping_*` 不在里面 ⇒ 这一类
+`schema.FINDING_KINDS` 是禁改区里的受控词表，这些 `mapping_*` 不在里面，所以这一类
 暂时落不进 `review_findings`，只能落收工读数（`closing` 的 `mapping` 格）。
-词表与分档在 `agent_h/mapping_judge.py`，本模块只负责"表与正文对不对得上"这个事实。
+词表与分档在 `agent_h/mapping_judge.py`；本模块只负责"表与正文对不对得上"这个事实。
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import papercompile as PC
 from . import proofloc as PL
 from . import schema as S
+from . import verifications as V
 
-#: 论文包相对项目根的落点（与 `papercompile` 同一个目录）。
+#: 论文包相对项目根的落点（与 `papercompile.package_dir` 同一个目录）。
 PACKAGE_SUBDIR: tuple[str, ...] = ("out", "paper")
 
 #: 机器读那一份的文件名。
@@ -64,41 +105,87 @@ MAPPING_JSON_NAME = "MAPPING.json"
 #: 人读那一份的文件名（由 `MAPPING_JSON_NAME` 生成）。
 MAPPING_MD_NAME = "MAPPING.md"
 
-#: 正文里要进对应表的六类环境（顺序就是 md 表里 kind 的推荐顺序）。
+#: 正文附录那一份的文件名（由 `MAPPING_JSON_NAME` 生成）。
+APPENDIX_FILE_NAME = "mapping-appendix.tex"
+
+#: `main.tex` 里引用附录的那一行（`write_appendix` 负责插进去）。
+APPENDIX_INPUT = "\\input{mapping-appendix}"
+
+#: 附录那一节的标题（业主点名：中文标题就用「附录：产出对应表」）。
+APPENDIX_TITLE = "附录：产出对应表"
+
+#: 附录块的界标（判据靠这一对定位；手抄的那一段没有它就对不上）。
+APPENDIX_BEGIN = ("% ==== MAPPING-APPENDIX BEGIN"
+                  "（由 out/paper/MAPPING.json 渲染，不许手改）====")
+APPENDIX_END = "% ==== MAPPING-APPENDIX END ===="
+
+#: 附录里每一行的机器可读注释（`% MAPPING-ROW kind|env_no|label|ledger_id|proof_no|file`）。
+APPENDIX_ROW_PREFIX = "% MAPPING-ROW "
+
+#: 正文里要进对应表的六类环境（顺序就是 md 与附录里 kind 的推荐顺序）。
 ENV_KINDS: tuple[str, ...] = (
     "theorem", "lemma", "proposition", "corollary", "example", "experiment",
 )
 
-#: 每一行的必填字段（`page_or_section` 可选，见 `OPTIONAL_ROW_FIELDS`）。
-ROW_FIELDS: tuple[str, ...] = ("kind", "label", "env_no", "ledger_id", "file")
+#: 每一行的必填字段（其余见 `OPTIONAL_ROW_FIELDS` 与 `CONDITIONAL_ROW_FIELDS`）。
+ROW_FIELDS: tuple[str, ...] = (
+    "kind", "label", "env_no", "ledger_id", "proof_no", "file",
+)
 
-#: 可选字段。
+#: 可以不给的字段。
 OPTIONAL_ROW_FIELDS: tuple[str, ...] = ("page_or_section",)
+
+#: 按来源决定要不要给的字段（口径见模块 docstring 的 `citation_loc` 三态）。
+CONDITIONAL_ROW_FIELDS: tuple[str, ...] = ("citation_loc", "citation_loc_reason")
+
+#: `citation_loc` 里三种区间（至少给一种）。
+RANGE_KEYS: tuple[str, ...] = ("page_range", "line_range", "char_range")
 
 #: 能解析的台账前缀（表名从 `schema.citation_prefix_table` 取，不在这里抄第二份）。
 LEDGER_PREFIXES: tuple[str, ...] = ("stmt", "exp", "rel")
 
-#: 表 / 正文 / 文件三条轴上的问题类别（H 认的客观四类，见 `agent_h/mapping_judge.py`）。
+#: 能承载 `ledger_id` 的三张台账表。
+LEDGER_TABLES: tuple[str, ...] = ("statements", "experiments", "relations")
+
+#: 表 / 正文 / 文件三条轴上的问题类别（业主点名的客观四类，见 `agent_h/mapping_judge.py`）。
 #:
-#: `mapping_missing`：表不在盘上（或读不出来）；
-#: `mapping_orphan`：孤儿 —— 正文里的环境表里没有，或表里的行正文里没有（`detail` 里写方向）；
-#: `mapping_unresolvable`：这一行读不懂，或 `ledger_id` 在台账里解析不到；
-#: `mapping_file_missing`：`file` 指的路径在盘上不存在。
+#: `mapping_missing`：表写好了、但放错了落点（包外那一份不算数）；
+#: `mapping_orphan`：孤儿 —— 正文里的环境表里没有，或表里的行正文里没有（`detail` 写方向）；
+#: `mapping_unresolvable`：这一行读不懂，或 `ledger_id` / `proof_no` 在台账里解析不到；
+#: `mapping_file_missing`：`file` 指的路径在论文包里不存在。
 MAPPING_KINDS: tuple[str, ...] = (
     "mapping_missing", "mapping_orphan", "mapping_unresolvable", "mapping_file_missing",
 )
 
-#: 人读那一份的问题类别（同一张表的第二落点）。
+#: 引文那一格的两个类别（`citation_loc`）。
+CITATION_KINDS: tuple[str, ...] = (
+    "mapping_citation_loc_missing", "mapping_citation_file_missing",
+)
+
+#: 人读那一份的问题类别（同一张表的第二个落点）。
 #:
-#: `md_missing`：`MAPPING.md` 不在盘上；
-#: `md_drifted`：它与 `MAPPING.json` 生成出来的内容不一致（手写了一份，或者改了没重生成）。
+#: `md_missing`：`MAPPING.md` 不在包里；
+#: `md_drifted`：它与 json 生成出来的内容不一致（手写了一份，或者改了没重生成）。
 MD_KINDS: tuple[str, ...] = ("md_missing", "md_drifted")
 
-#: 本模块会产出的全部问题类别（判据要覆盖它，见 `tests/test_paper_mapping_table.py`）。
-ALL_PROBLEM_KINDS: tuple[str, ...] = MAPPING_KINDS + MD_KINDS
+#: 论文侧的三条（落地在包里 / 印在正文里 / 印出来的与 json 一致）。
+#:
+#: `mapping_package_missing`：论文包里没有 `MAPPING.json`（没产出，不是没查成）；
+#: `mapping_not_in_paper`：json 在、但正文里读不到「附录：产出对应表」那一节；
+#: `mapping_paper_mismatch`：印出来的那一段与 json 渲染出来的不一致
+#: （行数不等、或某个 label 只在一边出现）。
+PAPER_KINDS: tuple[str, ...] = (
+    "mapping_package_missing", "mapping_not_in_paper", "mapping_paper_mismatch",
+)
+
+#: 本模块会产出的全部问题类别（判据要逐类覆盖它，见 `tests/test_paper_mapping_table.py`）。
+ALL_PROBLEM_KINDS: tuple[str, ...] = MAPPING_KINDS + CITATION_KINDS + MD_KINDS + PAPER_KINDS
 
 #: 三态取值。
 STATES: tuple[str, ...] = ("pass", "fail", "unknown")
+
+#: `file` 的五个状态（`present` 之外的四个各自有判据）。
+FILE_STATES: tuple[str, ...] = ("present", "empty", "missing", "directory", "outside")
 
 #: 正文里的一类环境：`\\begin{theorem}`（允许带星号，`end` 必须同名同星号）。
 _ENV_RE = re.compile(
@@ -111,8 +198,42 @@ _ENV_RE = re.compile(
 #: 环境里的标签（取第一个）。
 _LABEL_RE = re.compile(r"\\label\{([^{}]*)\}")
 
+#: `main.tex` 里的 `\\input{...}`（附录可以被 `\\input` 进来）。
+_INPUT_RE = re.compile(r"\\input\{([^{}]+)\}")
+
 #: 台账代号必须是纯数字（宽度由 `schema.ID_DIGITS` 定，这里只判"是数字"）。
 _DIGITS_RE = re.compile(r"^[0-9]+$")
+
+#: LaTeX 特殊字符的替换表（逐字符映射：替换出来的反斜杠不会被二次转义）。
+_TEX_SPECIALS: dict[str, str] = {
+    "\\": "\\textbackslash{}", "&": "\\&", "%": "\\%", "$": "\\$", "#": "\\#",
+    "_": "\\_", "{": "\\{", "}": "\\}", "~": "\\textasciitilde{}",
+    "^": "\\textasciicircum{}",
+}
+
+
+def _problem(kind: str, detail: str, *, label: str = "", where: str = "") -> dict[str, Any]:
+    """一条问题（四个字段都要有：kind 是 H 的分档把手，其余是给人看的定位）。"""
+    return {"kind": kind, "detail": detail, "label": label, "where": where}
+
+
+def _int_or_none(value: Any) -> int | None:
+    """把一个正整数写成的东西读成 int（`2` / `"2"`）；读不成或小于 1 => None。"""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 1 else None
+    if isinstance(value, str):
+        text = value.strip()
+        if _DIGITS_RE.match(text):
+            got = int(text)
+            return got if got >= 1 else None
+    return None
+
+
+def _tex_escape(text: Any) -> str:
+    """把一段文字转成能放进 `tabular` 的 LaTeX（逐字符替换，顺序无关）。"""
+    return "".join(_TEX_SPECIALS.get(ch, ch) for ch in str(text or ""))
 
 
 @dataclass(frozen=True)
@@ -123,16 +244,23 @@ class Row:
     label: str
     env_no: int
     ledger_id: str
+    proof_no: int
     file: str
     page_or_section: str = ""
+    citation_loc: Mapping[str, Any] | None = None
+    citation_loc_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """写回 json 的形状（字段顺序固定，diff 才读得懂）。"""
         out: dict[str, Any] = {"kind": self.kind, "label": self.label,
                                "env_no": int(self.env_no), "ledger_id": self.ledger_id,
-                               "file": self.file}
+                               "proof_no": int(self.proof_no), "file": self.file}
         if self.page_or_section:
             out["page_or_section"] = self.page_or_section
+        if self.citation_loc is not None:
+            out["citation_loc"] = dict(self.citation_loc)
+        if self.citation_loc_reason:
+            out["citation_loc_reason"] = self.citation_loc_reason
         return out
 
 
@@ -146,15 +274,32 @@ class BodyEnv:
     line: int
 
 
-def _problem(kind: str, detail: str, *, label: str = "", where: str = "") -> dict[str, Any]:
-    """一条问题（四个字段都要有：kind 是 H 的分档把手，其余是给人看的定位）。"""
-    return {"kind": kind, "detail": detail, "label": label, "where": where}
+@dataclass
+class _RowCheck:
+    """一行的校验结果（问题清单 + 解析到的台账行，供第二个方向复用）。"""
+
+    problems: list[dict[str, Any]] = field(default_factory=list)
+    ledger_row: Mapping[str, Any] | None = None
+    proof_no: int = 0
+
+    def add(self, kind: str, detail: str, *, label: str = "", where: str = "") -> None:
+        self.problems.append(_problem(kind, detail, label=label, where=where))
+
+
+def package_dir(project_root: str | Path) -> Path:
+    """论文包目录（`<项目根>/out/paper`，与 `papercompile` 同一处——不另写一份路径）。"""
+    return PC.package_dir(project_root)
 
 
 def mapping_paths(project_root: str | Path) -> tuple[Path, Path]:
-    """对应表两个落点的绝对路径（`(json, md)`）。"""
-    pkg = Path(project_root).joinpath(*PACKAGE_SUBDIR)
+    """对应表两个落点的绝对路径（`(json, md)`），都在论文包里。"""
+    pkg = package_dir(project_root)
     return pkg / MAPPING_JSON_NAME, pkg / MAPPING_MD_NAME
+
+
+def appendix_path(project_root: str | Path) -> Path:
+    """正文附录那一份（由 json 渲染）的绝对路径。"""
+    return package_dir(project_root) / APPENDIX_FILE_NAME
 
 
 def body_envs(tex: str) -> list[BodyEnv]:
@@ -176,11 +321,11 @@ def read_ledger(workspace_root: str | Path) -> dict[str, list[Mapping[str, Any]]
 
     为什么读盘而不是读 store：这一格要在收工门里跑，而收工门有"运行外"的出口
     （`agentflow closing`）—— 那里没有 store，只有工作区目录。
-    读不出来（不在盘上 / 坏 JSON）⇒ 那张表返回空列表，由"代号在表里找不到"报出来。
+    读不出来（不在盘上 / 坏 JSON）就返回空表，由"代号在表里找不到"报出来。
     """
     root = Path(workspace_root)
     out: dict[str, list[Mapping[str, Any]]] = {}
-    for table in ("statements", "experiments", "relations"):
+    for table in LEDGER_TABLES:
         name = str((S.TABLES.get(table) or {}).get("file") or "")
         rows: list[Any] = []
         if name:
@@ -201,27 +346,46 @@ def read_ledger(workspace_root: str | Path) -> dict[str, list[Mapping[str, Any]]
 def ledger_ids(ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
                table: str) -> set[str]:
     """某张台账表里已有的全部代号（按 `schema.TABLES` 的 `id_field` 取列）。"""
-    field = str((S.TABLES.get(table) or {}).get("id_field") or "")
+    field_name = str((S.TABLES.get(table) or {}).get("id_field") or "")
     ids: set[str] = set()
-    if not field:
+    if not field_name:
         return ids
     for row in ((ledger or {}).get(table) or ()):
         if isinstance(row, Mapping):
-            got = str(row.get(field) or "")
+            got = str(row.get(field_name) or "")
             if got:
                 ids.add(got)
     return ids
+
+
+def ledger_row(ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+               table: str, row_id: str) -> Mapping[str, Any] | None:
+    """按代号在台账里找那一行（找不到 => None）。"""
+    field_name = str((S.TABLES.get(table) or {}).get("id_field") or "")
+    if not field_name:
+        return None
+    for row in ((ledger or {}).get(table) or ()):
+        if isinstance(row, Mapping) and str(row.get(field_name) or "") == str(row_id):
+            return row
+    return None
+
+
+def proof_nos_of(row: Mapping[str, Any] | None) -> list[int]:
+    """一条命题名下到底有哪几号证明（`#p1` 恒在；其余来自 `verifications.proof_list`）。"""
+    if not isinstance(row, Mapping):
+        return []
+    return [int(no) for no, _text in V.proof_list(row)]
 
 
 def resolve_ledger_id(ledger_id: Any,
                       ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None) -> dict[str, Any]:
     """把一行的 `ledger_id` 解析到台账上。
 
-    返回 `{"ok", "prefix", "table", "row_id", "proof_no", "reason", "ledger_id"}`。
+    返回 `{"ledger_id", "ok", "prefix", "table", "row_id", "proof_no", "reason"}`。
 
-    多证明的尾巴由 `proofloc.parse_used_by_checked` 解析（全仓唯一解析点）。
-    坏尾巴必须红，不许折成 `#p1`：折平之后"这一行指的是第 2 条证明"这件事
-    就静默变成了"第 1 条"，而台账上两条证明各自指向不同的文件。
+    多证明的尾巴由 `proofloc.parse_used_by_checked` 解析（全仓唯一解析点），
+    坏尾巴必须红、不许折成 `#p1`：折平之后"这一行指的是第 2 条证明"就静默
+    变成了"第 1 条"，而两条证明各自指向不同的文件。
     """
     raw = str(ledger_id or "").strip()
     out: dict[str, Any] = {"ledger_id": raw, "ok": False, "prefix": "", "table": "",
@@ -235,7 +399,7 @@ def resolve_ledger_id(ledger_id: Any,
                          f"（前缀 {list(LEDGER_PREFIXES)} 之一 + 冒号 + 代号）")
         return out
     table = S.citation_prefix_table(prefix)
-    if table not in ("statements", "experiments", "relations"):
+    if table not in LEDGER_TABLES:
         out["reason"] = (f"`ledger_id` 的前缀 {prefix!r} 不认：只认 "
                          f"{[p + ':' for p in LEDGER_PREFIXES]}")
         return out
@@ -263,28 +427,28 @@ def resolve_ledger_id(ledger_id: Any,
     return out
 
 
-def file_state(workspace_root: str | Path, rel: Any) -> dict[str, Any]:
-    """`file` 那一栏在盘上是什么状态。
+def file_state(package_root: str | Path, rel: Any) -> dict[str, Any]:
+    """`file` 那一栏在论文包里是什么状态。
 
-    四态：`present`（在、非空）· `empty`（在、0 字节）· `missing`（路径不存在）·
-    `outside`（不是工作区里的相对路径）· `directory`（路径在、但它是个目录）。
+    五态（`FILE_STATES`）：`present`（在、非空）· `empty`（在、0 字节）·
+    `missing`（路径不存在）· `directory`（路径在、但它是个目录）·
+    `outside`（不是包内相对路径，或指到了论文包之外）。
 
     `empty` 与 `missing` 必须分开：前者是"文件还没写内容"，后者是"根本没有这个文件"。
-    把两者折成一个读数，就会把"指错地方"读成"写得短"。
+    折成一个读数，就会把"指错地方"读成"写得短"。
     """
     raw = str(rel or "").strip()
     out: dict[str, Any] = {"file": raw, "state": "missing", "abs": "", "reason": ""}
     if not raw:
-        out["state"] = "missing"
         out["reason"] = "`file` 是空的"
         return out
     path = Path(raw)
-    root = Path(workspace_root)
+    root = Path(package_root)
     if path.is_absolute():
         out["state"] = "outside"
         out["abs"] = str(path)
-        out["reason"] = ("`file` 必须相对工作区根写（收到的是绝对路径 "
-                         f"{raw!r}）—— 换一台机器就指不到了")
+        out["reason"] = ("`file` 必须写论文包内的相对路径（收到的是绝对路径 "
+                         f"{raw!r}）—— 绝对路径在别人的机器上等于不存在")
         return out
     absolute = (root / path).resolve()
     out["abs"] = str(absolute)
@@ -292,7 +456,7 @@ def file_state(workspace_root: str | Path, rel: Any) -> dict[str, Any]:
         absolute.relative_to(root.resolve())
     except ValueError:
         out["state"] = "outside"
-        out["reason"] = f"`file` 指到了工作区之外：{raw!r}"
+        out["reason"] = f"`file` 指到了论文包之外：{raw!r}"
         return out
     if absolute.is_dir():
         out["state"] = "directory"
@@ -300,7 +464,7 @@ def file_state(workspace_root: str | Path, rel: Any) -> dict[str, Any]:
         return out
     if not absolute.is_file():
         out["state"] = "missing"
-        out["reason"] = f"`file` 在盘上不存在：{raw!r}（解析成 {absolute}）"
+        out["reason"] = f"`file` 在论文包里不存在：{raw!r}（解析成 {absolute}）"
         return out
     try:
         size = absolute.stat().st_size
@@ -312,21 +476,99 @@ def file_state(workspace_root: str | Path, rel: Any) -> dict[str, Any]:
     return out
 
 
+def _range_problem(value: Any) -> str:
+    """一个区间的形态问题（空串 = 合法：两个正整数、起点不大于终点）。"""
+    if isinstance(value, Mapping):
+        start, end = value.get("start"), value.get("end")
+    elif isinstance(value, (list, tuple)) and len(value) == 2:
+        start, end = value[0], value[1]
+    else:
+        return (f"区间要写成 [起点, 终点] 或 {{\"start\": ..., \"end\": ...}}，"
+                f"收到 {value!r}")
+    for name, got in (("起点", start), ("终点", end)):
+        if isinstance(got, bool) or not isinstance(got, int) or got < 1:
+            return f"{name}必须是正整数，收到 {got!r}"
+    if int(start) > int(end):
+        return f"起点 {start} 大于终点 {end}"
+    return ""
+
+
+def _citation_problems(row: Row, package_root: Path,
+                       origin: str) -> list[dict[str, Any]]:
+    """`citation_loc` 那一格的三态判据（口径见模块 docstring）。"""
+    problems: list[dict[str, Any]] = []
+    loc = row.citation_loc
+    if loc is None:
+        if origin == "external_lit":
+            problems.append(_problem(
+                "mapping_citation_loc_missing",
+                f"表里 label={row.label!r} 指着外部文献的命题（origin=external_lit），"
+                "`citation_loc` 必填 —— 引文在包里哪一份文件、哪一段，H 要靠它逐字核",
+                label=row.label, where=MAPPING_JSON_NAME))
+        elif origin == "own_result" and not row.citation_loc_reason:
+            problems.append(_problem(
+                "mapping_citation_loc_missing",
+                f"表里 label={row.label!r} 没有 `citation_loc`，也没有 `citation_loc_reason` —— "
+                "我们自己得的命题允许无引文位置，但那句理由必须写出来",
+                label=row.label, where=MAPPING_JSON_NAME))
+        return problems
+    if not isinstance(loc, Mapping):
+        problems.append(_problem(
+            "mapping_citation_loc_missing",
+            f"表里 label={row.label!r} 的 `citation_loc` 必须是对象 "
+            f"{{file, page_range|line_range|char_range}}，收到 {type(loc).__name__}",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return problems
+    file_raw = str(loc.get("file") or "").strip()
+    if not file_raw:
+        problems.append(_problem(
+            "mapping_citation_loc_missing",
+            f"表里 label={row.label!r} 的 `citation_loc` 缺 `file`（包内那份文件的相对路径）",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return problems
+    given = [(k, loc.get(k)) for k in RANGE_KEYS if loc.get(k) is not None]
+    if not given:
+        problems.append(_problem(
+            "mapping_citation_loc_missing",
+            f"表里 label={row.label!r} 的 `citation_loc` 三种区间一个都没给"
+            f"（{list(RANGE_KEYS)} 至少给一种）",
+            label=row.label, where=MAPPING_JSON_NAME))
+    for key, value in given:
+        bad = _range_problem(value)
+        if bad:
+            problems.append(_problem(
+                "mapping_citation_loc_missing",
+                f"表里 label={row.label!r} 的 `citation_loc.{key}` 读不懂：{bad}",
+                label=row.label, where=MAPPING_JSON_NAME))
+    if file_raw.lower().startswith(("http://", "https://")):
+        problems.append(_problem(
+            "mapping_citation_file_missing",
+            f"表里 label={row.label!r} 的 `citation_loc.file` 是外网 URL（{file_raw!r}）—— "
+            "要的是论文包里那份抽取文本 / PDF / 占位文件的相对路径",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return problems
+    state = file_state(package_root, file_raw)
+    if state["state"] in ("missing", "directory", "outside"):
+        problems.append(_problem(
+            "mapping_citation_file_missing",
+            f"表里 label={row.label!r} 的 `citation_loc.file` 读不到：{state['reason']}",
+            label=row.label, where=MAPPING_JSON_NAME))
+    return problems
+
+
 def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
     """把 json 的载荷读成行（读不懂的行落一条 `mapping_unresolvable`，不静默丢）。
 
     载荷同时接受 `{"rows": [...]}` 与裸列表：前者是写侧（`write_mapping`）的形状，
-    后者是人手写的常见形状 —— 两种都读，但每一行的字段判据只有一份。
+    后者是人手写的常见形状 —— 两种都读，而每一行的字段判据只有这一份。
     """
-    if isinstance(payload, Mapping):
-        raw_rows = payload.get("rows")
-    else:
-        raw_rows = payload
+    raw_rows = payload.get("rows") if isinstance(payload, Mapping) else payload
     problems: list[dict[str, Any]] = []
     if not isinstance(raw_rows, (list, tuple)):
         problems.append(_problem(
             "mapping_unresolvable",
-            f"表的形状不对：顶层应当是 `{{\"rows\": [...]}}` 或一个列表，收到 {type(payload).__name__}"))
+            "表的形状不对：顶层应当是 {\"rows\": [...]} 或一个列表，收到 "
+            f"{type(payload).__name__}"))
         return [], problems
     rows: list[Row] = []
     for i, item in enumerate(raw_rows, start=1):
@@ -334,8 +576,8 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
             problems.append(_problem(
                 "mapping_unresolvable", f"第 {i} 行不是对象（收到 {type(item).__name__}）"))
             continue
-        missing = [f for f in ROW_FIELDS if not str(item.get(f) if f != "env_no" else item.get(f)).strip()
-                   and item.get(f) not in (0,)]
+        missing = [f for f in ROW_FIELDS
+                   if not str(item.get(f) if item.get(f) is not None else "").strip()]
         if missing:
             problems.append(_problem(
                 "mapping_unresolvable",
@@ -350,58 +592,135 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 label=str(item.get("label") or "")))
             continue
         label = str(item.get("label") or "").strip()
-        if label.startswith("label:"):
-            label = label[len("label:"):].strip()
-        env_no = item.get("env_no")
-        if isinstance(env_no, bool) or not isinstance(env_no, (int, str)):
+        env_no = _int_or_none(item.get("env_no"))
+        if env_no is None:
             problems.append(_problem(
                 "mapping_unresolvable",
-                f"第 {i} 行的 `env_no` 不是整数：{env_no!r}", label=label))
+                f"第 {i} 行的 `env_no` 必须是 1 起的整数，收到 {item.get('env_no')!r}",
+                label=label))
             continue
-        try:
-            env_no_i = int(str(env_no).strip())
-        except (TypeError, ValueError):
+        proof_no = _int_or_none(item.get("proof_no"))
+        if proof_no is None:
             problems.append(_problem(
                 "mapping_unresolvable",
-                f"第 {i} 行的 `env_no` 读不成整数：{env_no!r}", label=label))
+                f"第 {i} 行的 `proof_no` 必须是 1 起的整数（1 = canonical），"
+                f"收到 {item.get('proof_no')!r}",
+                label=label))
             continue
-        if env_no_i < 1:
+        loc = item.get("citation_loc")
+        if loc is not None and not isinstance(loc, Mapping):
             problems.append(_problem(
                 "mapping_unresolvable",
-                f"第 {i} 行的 `env_no` 必须从 1 起：{env_no_i}", label=label))
+                f"第 {i} 行的 `citation_loc` 必须是对象，收到 {type(loc).__name__}",
+                label=label))
             continue
-        rows.append(Row(kind=kind, label=label, env_no=env_no_i,
+        rows.append(Row(kind=kind, label=label, env_no=env_no,
                         ledger_id=str(item.get("ledger_id") or "").strip(),
+                        proof_no=proof_no,
                         file=str(item.get("file") or "").strip(),
-                        page_or_section=str(item.get("page_or_section") or "").strip()))
+                        page_or_section=str(item.get("page_or_section") or "").strip(),
+                        citation_loc=dict(loc) if isinstance(loc, Mapping) else None,
+                        citation_loc_reason=str(item.get("citation_loc_reason") or "").strip()))
     return rows, problems
 
 
-def _rows_from_payload(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
-    """`parse_rows` 的别名（写侧与读侧共用同一份行解析）。"""
-    return parse_rows(payload)
+def _loc_text(row: Row) -> str:
+    """`citation_loc` 在 md 里的一格写法（空串 = 没给）。"""
+    loc = row.citation_loc
+    if not isinstance(loc, Mapping):
+        return ""
+    parts = [str(loc.get("file") or "")]
+    for key in RANGE_KEYS:
+        value = loc.get(key)
+        if isinstance(value, Mapping):
+            parts.append(f"{key} {value.get('start')}-{value.get('end')}")
+        elif isinstance(value, (list, tuple)) and len(value) == 2:
+            parts.append(f"{key} {value[0]}-{value[1]}")
+        elif value is not None:
+            parts.append(f"{key} {value!r}")
+    return " · ".join(p for p in parts if p)
+
+
+def _row_key_text(row: Row) -> str:
+    """附录里那条机器可读注释的内容（`|` 分隔，判据靠它数行与比 label）。"""
+    return "|".join([row.kind, str(int(row.env_no)), row.label, row.ledger_id,
+                     str(int(row.proof_no)), row.file])
+
+
+def appendix_row_keys(block: str) -> list[tuple[str, str]]:
+    """从附录块里读出 `(kind, label)` 清单（只认 `MAPPING-ROW` 那条注释）。"""
+    out: list[tuple[str, str]] = []
+    for line in str(block or "").split("\n"):
+        text = line.strip()
+        if not text.startswith(APPENDIX_ROW_PREFIX.strip()):
+            continue
+        parts = text[len(APPENDIX_ROW_PREFIX.strip()):].strip().split("|")
+        if len(parts) >= 3:
+            out.append((parts[0], parts[2]))
+    return out
+
+
+def render_appendix(rows: Iterable[Row]) -> str:
+    """把行渲染成正文附录（唯一渲染函数；手抄的那一段过不了逐字比对）。"""
+    items = list(rows)
+    lines = [
+        APPENDIX_BEGIN,
+        "\\section*{" + APPENDIX_TITLE + "}",
+        "",
+        "本表由 \\texttt{" + MAPPING_JSON_NAME + "} 渲染（\\texttt{agentflow.papermapping.render\\_appendix}），"
+        "不许手抄第二份。\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件。",
+        "",
+        "\\begin{tabular}{llllp{0.24\\textwidth}p{0.24\\textwidth}}",
+        "环境 & label & 台账序号 & 证明号 & 真实文件 & 引文位置 \\\\",
+        "\\hline",
+    ]
+    for row in items:
+        lines.append(APPENDIX_ROW_PREFIX + _row_key_text(row))
+        lines.append(" & ".join([
+            _tex_escape(f"{row.kind} {int(row.env_no)}"),
+            "\\texttt{" + _tex_escape(row.label) + "}",
+            "\\texttt{" + _tex_escape(row.ledger_id) + "}",
+            str(int(row.proof_no)),
+            "\\texttt{" + _tex_escape(row.file) + "}",
+            _tex_escape(_loc_text(row) or row.citation_loc_reason or ""),
+        ]) + " \\\\")
+    lines += ["\\hline", "\\end{tabular}", "", APPENDIX_END, ""]
+    return "\n".join(lines)
 
 
 def render_markdown(rows: Iterable[Row]) -> str:
     """把行渲染成人读的那一份（表格列顺序固定，任何人都能用同一段代码重生成）。"""
     items = list(rows)
     lines = [
-        f"# 论文对应表（`{MAPPING_JSON_NAME}` 的人读版）",
+        "# 论文对应表（`" + MAPPING_JSON_NAME + "` 的人读版）",
         "",
-        f"这一份由 `{MAPPING_JSON_NAME}` 生成，不许手写第二份 —— 两份不一致时，"
+        "这一份由 `" + MAPPING_JSON_NAME + "` 生成，不许手写第二份 —— 两份不一致时，"
         "读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。",
         "",
-        f"重生成：`sync_markdown(项目根)`（`agentflow.papermapping`）。"
-        f"`env_no` 的口径：正文里第几个该环境，1 起，按同类环境的出现顺序数。",
+        "重生成：`sync_markdown(项目根)`（`agentflow.papermapping`）。",
+        "正文附录里印的就是这张表（「" + APPENDIX_TITLE + "」，由 `render_appendix` 渲染）。",
+        "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数"
+        "（theorem 单独数、lemma 单独数）。",
+        "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 "
+        "`proofs` 清单里那一份。多证明时每一条证明各占一行。",
+        "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上"
+        "等于不存在，指到包外的相对路径同样过不了复核。",
+        "`file` 的指向：`proof_no` = 1 指台账行本身或附录里那一段正文；2 及以上指那一份"
+        "证明自己的文件。",
         "",
-        "| # | kind | label | env_no | ledger_id | file | page_or_section |",
-        "|---|---|---|---|---|---|---|",
+        "| # | kind | label | env_no | ledger_id | proof_no | file | citation_loc "
+        "| citation_loc_reason | page_or_section |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for i, row in enumerate(items, start=1):
-        lines.append("| {i} | {kind} | {label} | {no} | {ledger} | {file} | {where} |".format(
-            i=i, kind=row.kind, label=row.label or "（没有 label）", no=int(row.env_no),
-            ledger=row.ledger_id, file=row.file or "（空）",
-            where=row.page_or_section or ""))
+        lines.append(
+            "| {i} | {kind} | {label} | {no} | {ledger} | {proof} | {file} | {loc} "
+            "| {reason} | {where} |".format(
+                i=i, kind=row.kind, label=row.label or "（没有 label）", no=int(row.env_no),
+                ledger=row.ledger_id, proof=int(row.proof_no),
+                file=row.file or "（空）", loc=_loc_text(row) or "",
+                reason=row.citation_loc_reason or "",
+                where=row.page_or_section or ""))
     lines.append("")
     counts: dict[str, int] = {}
     for row in items:
@@ -413,13 +732,13 @@ def render_markdown(rows: Iterable[Row]) -> str:
 
 
 def _norm_text(text: str) -> str:
-    """比对两份 markdown 时的归一化：只压掉行尾空白与首尾空行（内容一个字符都不放过）。"""
+    """比对两份渲染产物时的归一化：只压掉行尾空白与首尾空行（内容一个字符都不放过）。"""
     body = str(text or "").replace("\r\n", "\n")
     return "\n".join(line.rstrip() for line in body.split("\n")).strip("\n")
 
 
 def write_mapping(project_root: str | Path, rows: Iterable[Row]) -> tuple[Path, Path]:
-    """写两份（json 与 md），返回它们的路径。
+    """写 json 与 md 两份，返回它们的路径（都在论文包里）。
 
     只走这一个写口：两份由同一次 `rows` 生成，于是"手写第二份"在结构上不可能发生。
     """
@@ -442,15 +761,51 @@ def sync_markdown(project_root: str | Path) -> Path:
     return md_path
 
 
+def write_appendix(project_root: str | Path) -> Path:
+    """按盘上的 json 渲染附录，并保证 `main.tex` 里有那一行 `\\input`。
+
+    写的是两份东西：`<论文包>/mapping-appendix.tex`（附录正文）与 `main.tex` 里
+    那一行 `\\input{mapping-appendix}`（已存在就不重复插）。正文因此变长 =>
+    必须重编一次（`doc.paper_compile`），否则 `closing` 的 `paper` 那一格会报
+    "PDF 是旧正文编的"——那是既有判据，不因本模块而放宽。
+    """
+    root = Path(project_root)
+    json_path, _md_path = mapping_paths(root)
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    rows, _problems = parse_rows(payload)
+    frag = appendix_path(root)
+    frag.parent.mkdir(parents=True, exist_ok=True)
+    frag.write_bytes((render_appendix(rows) + "\n").encode("utf-8"))
+    tex = package_dir(root) / PC.TEX_NAME
+    if tex.is_file():
+        text = tex.read_text(encoding="utf-8")
+        if APPENDIX_INPUT not in text:
+            end = text.rfind("\\end{document}")
+            if end < 0:
+                raise ValueError(
+                    f"{tex} 里没有 \\end{{document}} ⇒ 附录插不进去（正文不是一份完整的 LaTeX 稿）")
+            text = text[:end] + APPENDIX_INPUT + "\n" + text[end:]
+            tex.write_bytes(text.encode("utf-8"))
+    return frag
+
+
+def write_package(project_root: str | Path, rows: Iterable[Row]) -> tuple[Path, Path, Path]:
+    """G 的唯一写口：json + md + 附录（三份都由同一批 `rows` 生成）。"""
+    items = list(rows)
+    json_path, md_path = write_mapping(project_root, items)
+    frag = write_appendix(project_root)
+    return json_path, md_path, frag
+
+
 def _md_reading(project_root: Path, rows: Sequence[Row]) -> tuple[str, list[dict[str, Any]]]:
-    """人读那一份的状态（`present` / `missing` / `drifted` / `unreadable`）与问题。"""
+    """人读那一份的状态（`present` / `missing` / `drifted` / `unreadable`）与它的问题。"""
     _json_path, md_path = mapping_paths(project_root)
     problems: list[dict[str, Any]] = []
     if not md_path.is_file():
         problems.append(_problem(
             "md_missing",
-            f"人读那一份不在盘上：{md_path} —— 由 json 生成（`sync_markdown`），"
-            "不许只交机器读那一份（H 与业主读的是这一份）"))
+            f"人读那一份不在包里：{md_path} —— 它由 json 生成（`sync_markdown`）；"
+            "只交机器读那一份，H 与业主手上就没有可读的那一份"))
         return "missing", problems
     try:
         got = md_path.read_text(encoding="utf-8")
@@ -458,8 +813,7 @@ def _md_reading(project_root: Path, rows: Sequence[Row]) -> tuple[str, list[dict
         problems.append(_problem(
             "md_drifted", f"人读那一份读不出来：{md_path}（{type(exc).__name__}: {exc}）"))
         return "unreadable", problems
-    want = render_markdown(rows)
-    if _norm_text(got) != _norm_text(want):
+    if _norm_text(got) != _norm_text(render_markdown(rows)):
         problems.append(_problem(
             "md_drifted",
             f"{md_path.name} 与 {MAPPING_JSON_NAME} 生成出来的内容不一致 —— "
@@ -468,16 +822,64 @@ def _md_reading(project_root: Path, rows: Sequence[Row]) -> tuple[str, list[dict
     return "present", problems
 
 
+def _appendix_block(project_root: Path, tex: str) -> str:
+    """正文里那一段附录的字节（找不到 => 空串）。"""
+    if APPENDIX_BEGIN in tex:
+        start = tex.find(APPENDIX_BEGIN)
+        end = tex.find(APPENDIX_END, start)
+        if end >= 0:
+            return tex[start:end + len(APPENDIX_END)]
+        return tex[start:]
+    for name in _INPUT_RE.findall(tex or ""):
+        candidate = package_dir(project_root) / str(name).strip()
+        paths = [candidate] if candidate.suffix else [candidate, candidate.with_suffix(".tex")]
+        for path in paths:
+            if path.is_file():
+                try:
+                    got = path.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+                if APPENDIX_BEGIN in got:
+                    start = got.find(APPENDIX_BEGIN)
+                    end = got.find(APPENDIX_END, start)
+                    return got[start:end + len(APPENDIX_END)] if end >= 0 else got[start:]
+    return ""
+
+
+def _appendix_reading(project_root: Path, tex: str,
+                      rows: Sequence[Row]) -> tuple[str, list[dict[str, Any]]]:
+    """附录那一节的状态（`present` / `missing` / `mismatch`）与它的问题。"""
+    block = _appendix_block(project_root, tex)
+    if not block.strip():
+        return "missing", [_problem(
+            "mapping_not_in_paper",
+            f"正文里读不到「{APPENDIX_TITLE}」那一节 —— 由 json 渲染（`write_appendix`），"
+            f"再把 `{APPENDIX_INPUT}` 放进正文；表只在盘上、没印进正文，H 读稿时看不到它",
+            where=PC.TEX_NAME)]
+    want = render_appendix(rows)
+    if _norm_text(block) == _norm_text(want):
+        return "present", []
+    in_paper = appendix_row_keys(block)
+    in_json = [(row.kind, row.label) for row in rows]
+    only_paper = [k for k in in_paper if k not in in_json]
+    only_json = [k for k in in_json if k not in in_paper]
+    detail = (f"正文附录与 {MAPPING_JSON_NAME} 渲染出来的不一致："
+              f"附录里 {len(in_paper)} 行、json 里 {len(in_json)} 行")
+    if only_paper:
+        detail += f"；只在附录里出现的：{[f'{k[0]} {k[1]}' for k in only_paper][:6]}"
+    if only_json:
+        detail += f"；只在 json 里出现的：{[f'{k[0]} {k[1]}' for k in only_json][:6]}"
+    detail += "（附录由 `write_appendix` 从 json 重渲染一次，别手改）"
+    return "mismatch", [_problem("mapping_paper_mismatch", detail, where=PC.TEX_NAME)]
+
+
 def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[str, Any]]:
-    """双向孤儿（正文有环境表里没有 / 表里有行正文没有 / 序号对不上 / label 重复）。"""
+    """双向孤儿（正文有环境表里没有 / 表里有行正文没有 / 序号对不上 / 行重复）。"""
     problems: list[dict[str, Any]] = []
     body_by_key: dict[tuple[str, str], list[BodyEnv]] = {}
     for env in envs:
         body_by_key.setdefault((env.kind, env.label), []).append(env)
-    row_by_key: dict[tuple[str, str], list[Row]] = {}
-    for row in rows:
-        row_by_key.setdefault((row.kind, row.label), []).append(row)
-
+    env_by_key: dict[tuple[str, str], BodyEnv] = {}
     for key, got in body_by_key.items():
         kind, label = key
         if not label:
@@ -495,17 +897,40 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
                 f"（第 {[e.line for e in got]} 行）—— 重复的 label 无法与表行一一对应",
                 label=label, where=f"{PC.TEX_NAME}:{got[0].line}"))
             continue
-        matched = row_by_key.get(key) or []
-        if not matched:
-            env = got[0]
-            problems.append(_problem(
-                "mapping_orphan",
-                f"正文第 {env.line} 行的 {kind}（label={label!r}，第 {env.env_no} 个 {kind}）"
-                "在表里没有对应行 —— 正文有、表里没有，就是一个孤儿环境",
-                label=label, where=f"{PC.TEX_NAME}:{env.line}"))
+        env_by_key[key] = got[0]
+
+    rows_by_key: dict[tuple[str, str], list[Row]] = {}
+    for row in rows:
+        rows_by_key.setdefault((row.kind, row.label), []).append(row)
+    for key, env in env_by_key.items():
+        if key in rows_by_key:
             continue
-        env = got[0]
-        for row in matched:
+        kind, label = key
+        problems.append(_problem(
+            "mapping_orphan",
+            f"正文第 {env.line} 行的 {kind}（label={label!r}，第 {env.env_no} 个 {kind}）"
+            "在表里没有对应行 —— 正文有、表里没有，就是一个孤儿环境",
+            label=label, where=f"{PC.TEX_NAME}:{env.line}"))
+    for key, got in rows_by_key.items():
+        kind, label = key
+        env = env_by_key.get(key)
+        if env is None:
+            if not label:
+                problems.append(_problem(
+                    "mapping_orphan",
+                    f"表里有 {len(got)} 行 {kind} 的 label 是空的 —— 空 label 在正文里指不到环境",
+                    where=MAPPING_JSON_NAME))
+            elif len(body_by_key.get(key) or ()) > 1:
+                continue          # 正文那一侧已经报过"重复 label"，不再报一次
+            else:
+                problems.append(_problem(
+                    "mapping_orphan",
+                    f"表里的行 label={label!r}（{kind} 第 {got[0].env_no} 个）在正文里找不到"
+                    f"对应环境（正文里共有 {len(envs)} 个环境）—— 表有、正文没有，就是孤儿行",
+                    label=label, where=MAPPING_JSON_NAME))
+            continue
+        seen: dict[str, Row] = {}
+        for row in got:
             if int(row.env_no) != int(env.env_no):
                 problems.append(_problem(
                     "mapping_orphan",
@@ -513,29 +938,74 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
                     f"而正文里它是第 {env.env_no} 个（正文第 {env.line} 行）—— "
                     "同一行对不上同一个环境",
                     label=label, where=f"{PC.TEX_NAME}:{env.line}"))
-
-    for key, got in row_by_key.items():
-        kind, label = key
-        if not label:
-            problems.append(_problem(
-                "mapping_orphan",
-                f"表里有 {len(got)} 行 {kind} 的 label 是空的 —— 空 label 在正文里指不到任何环境",
-                where=MAPPING_JSON_NAME))
-            continue
-        if len(got) > 1:
-            problems.append(_problem(
-                "mapping_orphan",
-                f"表里 label={label!r} 出现了 {len(got)} 行 —— 重复的行无法与正文环境一一对应",
-                label=label, where=MAPPING_JSON_NAME))
-            continue
-        if key not in body_by_key:
-            problems.append(_problem(
-                "mapping_orphan",
-                f"表里的行 label={label!r}（{kind} 第 {got[0].env_no} 个）在正文里找不到"
-                f"对应环境（正文里有 {len(body_by_key)} 个环境）—— 表有、正文没有，"
-                "就是一个孤儿行",
-                label=label, where=MAPPING_JSON_NAME))
+            prev = seen.get(row.ledger_id)
+            if prev is not None:
+                problems.append(_problem(
+                    "mapping_orphan",
+                    f"表里 label={label!r} 有两行的 `ledger_id` 都是 {row.ledger_id!r}"
+                    "（第 {a} 个与第 {b} 个）—— 多证明那几行必须各指自己那一条"
+                    "（`#p1` / `#p2` 不许互相顶替）".format(a=prev.env_no, b=row.env_no),
+                    label=label, where=MAPPING_JSON_NAME))
+            seen[row.ledger_id] = row
     return problems
+
+
+def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
+                package_root: Path) -> _RowCheck:
+    """一行的三条轴：台账代号码 / 证明号 / 文件（三条互不遮蔽：一条坏不影响别条被报）。"""
+    got = _RowCheck()
+    resolved = resolve_ledger_id(row.ledger_id, ledger)
+    if not resolved["ok"]:
+        got.add("mapping_unresolvable",
+                f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 "
+                f"`ledger_id` = {row.ledger_id!r} 在台账里解析不到：{resolved['reason']}",
+                label=row.label, where=MAPPING_JSON_NAME)
+    else:
+        table, row_id = str(resolved["table"]), str(resolved["row_id"])
+        target = ledger_row(ledger, table, row_id)
+        got.ledger_row, got.proof_no = target, int(row.proof_no)
+        tail_no = int(resolved["proof_no"])
+        if row.proof_no != tail_no:
+            got.add("mapping_unresolvable",
+                    f"表里 label={row.label!r} 的 `ledger_id` 写的是第 {tail_no} 条证明"
+                    f"（{row.ledger_id!r}），而 `proof_no` 写的是 {row.proof_no} —— "
+                    "同一件事两处不一致",
+                    label=row.label, where=MAPPING_JSON_NAME)
+        if table != "statements":
+            if row.proof_no != PL.DEFAULT_PROOF_NO:
+                got.add("mapping_unresolvable",
+                        f"表里 label={row.label!r} 的 `ledger_id` = {row.ledger_id!r} 指的不是 "
+                        f"`statements`，却写了 `proof_no` = {row.proof_no} —— "
+                        "证明号只对 `stmt:` 有意义",
+                        label=row.label, where=MAPPING_JSON_NAME)
+        else:
+            known = proof_nos_of(target)
+            if int(row.proof_no) not in known:
+                got.add("mapping_unresolvable",
+                        f"表里 label={row.label!r} 的 `proof_no` = {row.proof_no}，"
+                        f"而 `stmt:{row_id}` 的证明清单里只有 {known}（`proofs` 那一条）"
+                        "—— 证明号必须能被台账解析到",
+                        label=row.label, where=MAPPING_JSON_NAME)
+    state = file_state(package_root, row.file)
+    if state["state"] in ("missing", "directory"):
+        got.add("mapping_file_missing",
+                f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 `file` "
+                f"读不到：{state['reason']}", label=row.label, where=MAPPING_JSON_NAME)
+    elif state["state"] == "outside":
+        got.add("mapping_unresolvable",
+                f"表里 label={row.label!r} 的 `file` 不合口径：{state['reason']}",
+                label=row.label, where=MAPPING_JSON_NAME)
+    return got
+
+
+def _stray_mapping_copies(project: Path, workspace: Path) -> list[Path]:
+    """包外那些"放错落点"的 `MAPPING.json`（它们不算数，但要被点名）。"""
+    found: list[Path] = []
+    for base in (project, workspace, project / "papers"):
+        path = base / MAPPING_JSON_NAME
+        if path.is_file() and path not in found:
+            found.append(path)
+    return found
 
 
 def mapping_reading(project_root: str | Path, *,
@@ -545,33 +1015,57 @@ def mapping_reading(project_root: str | Path, *,
     """读一个项目的对应表并校验（纯读，不写盘）。
 
     三态：`pass` / `fail` / `unknown`（`unknown` 是"没查成 / 不适用"，绝不是通过）。
-    `problems` 里每一条都带 `kind`（取值在 `ALL_PROBLEM_KINDS` 里），
-    由 `agent_h.mapping_judge.level_of` 决定它拦不拦门。
+    `problems` 里每条都带 `kind`（取值在 `ALL_PROBLEM_KINDS` 里），拦不拦门由
+    `agent_h.mapping_judge.level_of` 决定。
     """
     project = Path(project_root)
     workspace = Path(workspace_root) if workspace_root is not None else project
+    package = package_dir(project)
     json_path, md_path = mapping_paths(project)
+    if tex is None:
+        tex_path = package / PC.TEX_NAME
+        tex_text = tex_path.read_text(encoding="utf-8") if tex_path.is_file() else ""
+    else:
+        tex_text = str(tex)
+    has_paper = bool(str(tex_text or "").strip())
+    envs = body_envs(tex_text)
     reading: dict[str, Any] = {
         "checked": False,
         "state": "unknown",
         "project_root": str(project),
         "workspace_root": str(workspace),
+        "package": str(package),
         "mapping_json": str(json_path),
         "mapping_md": str(md_path),
         "rows": 0,
-        "envs": 0,
+        "envs": len(envs),
         "md_state": "",
+        "appendix_state": "",
         "empty_files": [],
         "problems": [],
         "reason": "",
     }
+
     if not json_path.is_file():
-        reading["problems"] = [_problem(
-            "mapping_missing",
-            f"对应表不在盘上：{json_path} —— G 写正文之前必须先有它"
-            f"（`out/paper/{MAPPING_JSON_NAME}` 与 `out/paper/{MAPPING_MD_NAME}`）")]
-        reading["reason"] = ("对应表不存在 ⇒ 这一格没查成（不是通过，也不是表里有问题）；"
-                             "先让 G 把它写出来再核一遍")
+        if not has_paper:
+            reading["reason"] = (
+                f"这个项目没有论文正文（{package / PC.TEX_NAME} 不在盘上），论文包里也没有对应表"
+                " —— 这一格不适用（不是通过）")
+            return reading
+        reading["checked"] = True
+        reading["state"] = "fail"
+        problems = [_problem(
+            "mapping_package_missing",
+            f"论文包里没有对应表：{json_path} —— 有正文却没有表，是没产出（不是没查成）；"
+            f"G 要先写 `out/paper/{MAPPING_JSON_NAME}`，再渲染 md 与附录，最后才编 PDF")]
+        for stray in _stray_mapping_copies(project, workspace):
+            problems.append(_problem(
+                "mapping_missing",
+                f"表放在了论文包之外：{stray} —— 包外那一份不算数（它不随论文一起交付，"
+                f"H 与业主读不到）；把它移到 {json_path}"))
+        reading["problems"] = problems
+        reading["reason"] = ("论文包里没有对应表 ⇒ 这一格是红的（有正文、没交表）；"
+                             "见 problems 里那两条")
         return reading
 
     try:
@@ -581,11 +1075,11 @@ def mapping_reading(project_root: str | Path, *,
         reading["state"] = "fail"
         reading["problems"] = [_problem(
             "mapping_unresolvable",
-            f"对应表在盘上但读不出来：{json_path}（{type(exc).__name__}: {exc}）")]
-        reading["reason"] = "表在盘上、但没有一行是能读的（先修 json 语法）"
+            f"对应表在包里但读不出来：{json_path}（{type(exc).__name__}: {exc}）")]
+        reading["reason"] = "表在包里、但没有一行是能读的（先修 json 语法）"
         return reading
 
-    rows, problems = _rows_from_payload(payload)
+    rows, problems = parse_rows(payload)
     reading["rows"] = len(rows)
     reading["checked"] = True
 
@@ -593,65 +1087,54 @@ def mapping_reading(project_root: str | Path, *,
     reading["md_state"] = md_state
     problems += md_problems
 
-    if tex is None:
-        tex_path = json_path.parent / PC.TEX_NAME
-        tex_text = tex_path.read_text(encoding="utf-8") if tex_path.is_file() else ""
-    else:
-        tex_text = str(tex)
-    envs = body_envs(tex_text)
-    reading["envs"] = len(envs)
-
-    if not str(tex_text or "").strip():
-        problems += [p for p in reading["problems"]]
+    if not has_paper:
         reading["problems"] = problems
         reading["state"] = "unknown"
-        reading["reason"] = (f"这个项目没有论文正文（{json_path.parent / PC.TEX_NAME} 不在盘上）"
-                             "⇒ 对应表没有可对的东西（不适用，不是通过）")
+        reading["reason"] = (f"这个项目没有论文正文（{package / PC.TEX_NAME} 不在盘上），"
+                             "对应表没有可对的东西（不适用，不是通过）")
         return reading
 
+    appendix_state, appendix_problems = _appendix_reading(project, tex_text, rows)
+    reading["appendix_state"] = appendix_state
+    problems += appendix_problems
+
     problems += _orphan_problems(envs, rows)
+    known = ledger if ledger is not None else read_ledger(workspace)
+    seen_targets: dict[tuple[str, int], Row] = {}
+    for row in rows:
+        got = _row_checks(row, known, package)
+        problems += got.problems
+        if got.ledger_row is not None:
+            key = (str(row.ledger_id).split("#")[0], int(row.proof_no))
+            prev = seen_targets.get(key)
+            if prev is not None:
+                problems.append(_problem(
+                    "mapping_orphan",
+                    f"表里 {row.ledger_id} 的第 {row.proof_no} 条证明被登记了两次"
+                    f"（label={prev.label!r} 与 label={row.label!r}）—— 同一条证明只能占一行，"
+                    "两行指同一个 (命题, 证明号) 就是互相顶替",
+                    label=row.label, where=MAPPING_JSON_NAME))
+            seen_targets[key] = row
+        origin = ""
+        if isinstance(got.ledger_row, Mapping) and str(row.ledger_id).startswith("stmt:"):
+            origin = str(got.ledger_row.get("origin") or "")
+        problems += _citation_problems(row, package, origin)
 
     for row in rows:
-        got = resolve_ledger_id(row.ledger_id, ledger if ledger is not None else read_ledger(workspace))
-        if not got["ok"]:
-            problems.append(_problem(
-                "mapping_unresolvable",
-                f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 "
-                f"`ledger_id` = {row.ledger_id!r} 在台账里解析不到：{got['reason']}",
-                label=row.label, where=MAPPING_JSON_NAME))
-            continue
-        if got["proof_no"] != PL.DEFAULT_PROOF_NO and got["table"] != "statements":
-            problems.append(_problem(
-                "mapping_unresolvable",
-                f"表里 label={row.label!r} 的 `ledger_id` = {row.ledger_id!r} 带了证明号尾巴，"
-                "而它指的不是 `statements`",
-                label=row.label, where=MAPPING_JSON_NAME))
-
-    for row in rows:
-        state = file_state(workspace, row.file)
+        state = file_state(package, row.file)
         if state["state"] == "empty":
             reading["empty_files"].append(state["file"])
-            continue
-        if state["state"] == "present":
-            continue
-        kind = "mapping_file_missing" if state["state"] in ("missing", "directory") \
-            else "mapping_unresolvable"
-        problems.append(_problem(
-            kind,
-            f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 `file` "
-            f"读不到：{state['reason']}",
-            label=row.label, where=MAPPING_JSON_NAME))
 
     reading["problems"] = problems
     if problems:
         reading["state"] = "fail"
         counts: dict[str, int] = {}
-        for p in problems:
-            counts[p["kind"]] = counts.get(p["kind"], 0) + 1
-        reading["reason"] = ("表在盘上、但有 {n} 处问题（{by}）—— 逐条见 problems".format(
+        for item in problems:
+            counts[item["kind"]] = counts.get(item["kind"], 0) + 1
+        reading["reason"] = ("表在包里、但有 {n} 处问题（{by}）—— 逐条见 problems".format(
             n=len(problems), by="、".join(f"{k} {v}" for k, v in counts.items())))
     else:
         reading["state"] = "pass"
-        reading["reason"] = (f"{len(rows)} 行与正文 {len(envs)} 个环境逐一对上，"
-                             f"`ledger_id` 都能在台账里解析到，`file` 都在盘上")
+        reading["reason"] = (f"{len(rows)} 行与正文 {len(envs)} 个环境逐一对上，附录逐字一致，"
+                             "`ledger_id` 与 `proof_no` 都能在台账里解析到，`file` 都在包里")
     return reading

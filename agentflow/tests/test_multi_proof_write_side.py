@@ -206,8 +206,46 @@ def test_a_duplicate_proof_no_refuses_the_whole_call(tmp_path):
         assert st_bad.rows("statements") == [], (bad, st_bad.rows("statements"))
 
 
-# ============================================================ ④ 签名带对象
+def test_a_later_proof_is_appended_and_an_existing_one_is_never_overwritten(tmp_path):
+    """③ 的同族（既有行这一侧）：后补的证明追加，同号不同正文一律不覆盖。
 
+    分三步，每一步都判"盘上到底变了什么"：
+    1. 先登记（#p1 + #p2）；
+    2. 再交同一条定理、带 #p3 ⇒ 不新建行，清单追加 #p3（这是"一条定理多条证明"的常态：
+       证明不是一次交齐的）；
+    3. 再交同号 #p2、正文不同 ⇒ `proof_no_taken`，整笔不写（#p2 还是原来那一份，
+       而它的签名可能还挂着）。
+    """
+    st = _ws(tmp_path)
+    b = _agent(st)
+    first = b.register_statement(
+        **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
+    assert first["ok"] is True, first
+    sid = _row(st)["stmt_id"]
+
+    P3 = "第三条路线：\n1. 用对偶。\n2. 收尾。"
+    more = b.register_statement(
+        **OWN, proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 3, "text": P3}])
+    assert more["ok"] is True, more
+    assert more["stmt_id"] == sid and more.get("new_row") is False, more
+    assert len(st.rows("statements")) == 1, st.rows("statements")
+    assert [no for no, _ in VR.proof_list(_row(st))] == [1, 2, 3], VR.proof_list(_row(st))
+
+    taken = b.register_statement(
+        **OWN, proofs=[{"proof_no": 1, "text": P1},
+                       {"proof_no": 2, "text": P2 + "\n（换了一个版本）"}])
+    assert taken["ok"] is False and taken["kind"] == "proof_no_taken", taken
+    assert "#2" in taken["error"], taken["error"]
+    assert VR.proof_text_of(_row(st), 2) == P2, "既有 #p2 的正文不许被覆盖"
+    assert [no for no, _ in VR.proof_list(_row(st))] == [1, 2, 3], VR.proof_list(_row(st))
+
+    # #p1 也一样：同一条定理再交一次、canonical 正文不同 ⇒ 不覆盖（签名正挂在它上面）。
+    canon = b.register_statement(**OWN, proof_text=P1 + "\n（换了一个版本）")
+    assert canon["ok"] is False and canon["kind"] == "proof_text_taken", canon
+    assert _row(st)["proof_text"] == P1, _row(st)["proof_text"]
+
+
+# ============================================================ ④ 签名带对象
 def test_signing_proof_two_records_the_object_in_the_signature_line(tmp_path):
     """④ 签 `(命题, proof_no=2)` ⇒ 台账行 `stmt_id` 非空、`proof_no=2`、sha 是 #p2 的。
 

@@ -3078,6 +3078,63 @@ def _check_paper(rep: ClosingReport, project_dir: str, store: Any) -> None:
     ))
 
 
+def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
+    """论文对应表那一格（业主 2026-10-22）：三态齐全，且不是第八格之外的第九格。
+
+    业主原话：「G 产出论文时需附上对应表，说明每条定理、引理、命题、例子、实验对应
+    产出物的真实文件和序号是什么，H 依据此核查，G 也依据此写作」。
+
+    为什么它是一格读数而不是 `DEFAULT_CHECKS` 的第九格：既有的八格各有各的语义
+    （`status` 里每一格都参与 `machine_pass` 与退出码），加一格就会改变"收工门几格"
+    这个读数与 `tri_state_exit_code` 的分布。这一格照着 `roster_registration` /
+    `nontriviality` 的形状落 `readings`，并且仍然给 `Finding`（有问题时拦门）：
+    "表在、但表与正文对不上"是查得出来的事实，压成一条不拦的读数会把它读成建议。
+
+    三态（`readings['mapping']['state']`）：
+    - 表不在盘上 ⇒ `unknown` + 一句说明（不是通过，也不是"表里有什么问题"）；
+    - 表在、但有一条以上问题 ⇒ `fail`，逐条 `Finding`（kind 见
+      `agentflow.agent_h.mapping_judge`）；
+    - 表在且干净 ⇒ `pass`。
+
+    判据只有一处实现（`agentflow.papermapping.mapping_reading`），分档只有一处
+    （`agentflow.agent_h.mapping_judge.level_of`）—— 这里只做接线与折成 `Finding`。
+    """
+    if not str(project_dir or "").strip():
+        rep.readings["mapping"] = {
+            "checked": False, "state": "unknown", "rows": 0, "envs": 0,
+            "problems": [], "findings": 0, "blockers": 0, "problem_counts": {},
+            "reason": ("没给项目根（project_dir）⇒ 论文对应表那一格没查成"
+                       "（不是通过，也不是表里没问题）"),
+        }
+        rep.findings.append(Finding(
+            "mapping", "mapping_missing", "warning",
+            "没给项目根（project_dir）⇒ 论文对应表那一格没查成。这是没查成，不是一致 —— "
+            "交付论文那一档要指到项目根再跑一次（对应表在 <项目根>/out/paper/MAPPING.json）",
+        ))
+        return
+    # 惰性导入：`closing` 被工具层（`conductor_tools`）反过来 import，
+    # 而 `agent_h` 整包会拉起工具层与 specs —— 在模块级接上就是一条循环。
+    from . import papermapping as PM
+    from .agent_h import mapping_judge as MJ
+
+    root = Path(resolve_under_workspace(store, project_dir))
+    workspace_root = Path(str(getattr(store, "root", "") or "."))
+    got = PM.mapping_reading(root, workspace_root=workspace_root)
+    findings = MJ.findings_of(got)
+    got["findings"] = len(findings)
+    got["blockers"] = sum(1 for f in findings if f["level"] == MJ.LEVEL_BLOCKER)
+    got["problem_counts"] = MJ.problem_counts(findings)
+    rep.readings["mapping"] = got
+    for item in findings:
+        # `Finding.level` 只有 blocker / warning 两档；主观档（info，"只点名不拦"）
+        # 落到 warning —— 看得见、但不动门的强度。
+        level = str(item.get("level") or "")
+        rep.findings.append(Finding(
+            "mapping", str(item.get("kind") or ""),
+            level if level in ("blocker", "warning") else "warning",
+            str(item.get("message") or "")))
+
+
 #: 污染面的残余边界（改前那句已作废，逐字理由见下）。
 #:
 #: 改前（`R5-组 4` 的 B 方案）这里写的是"断言级污染面判不了：
@@ -4285,6 +4342,10 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     if rep.m_verdict:
         rep.readings["verdict_escalation"] = _escalation_reading(
             root, sid, list(rep.m_verdict.get("tasks") or []))
+    # ---- 论文对应表那一格（业主 2026-10-22）：G 写正文之前先有它，H 依据它逐行核。
+    # 无条件算一次（不进 `checks`）：它是读数 + 有问题时的 Finding，不是第九格 ——
+    # 八格的语义（`status` / `machine_pass` / 退出码）一个都不动。
+    _check_mapping(rep, project_dir, store)
     # ---- 子产出处理那一格（业主裁定：父代理必须处理子代理的产出）
     #
     # 为什么不进 `DEFAULT_CHECKS`（十八格之一）、也不进退出码：业主逐字

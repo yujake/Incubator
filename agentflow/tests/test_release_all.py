@@ -2375,6 +2375,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "proofloc.py": "证明定位的唯一解析点：DEFAULT_PROOF_NO / used_by_of / parse_used_by / "
                    "parse_used_by_checked / proof_nos_of / is_canonical —— 不带 #pN 等价 #p1，"
                    "坏后缀不抛、按 canonical 读并留 problem",
+    # 2026-10-22（业主：「G 产出论文时需附上对应表」）：论文对应表的唯一读侧 ——
+    # 它要同时被 H 的核查（`agent_h/mapping_judge.py`）与收工门那一格读，
+    # 而收工门有运行外的出口（没有 store、只有工作区目录）⇒ 它必须是一个能独立
+    # 读盘的顶层模块，不许挂在 `closing.py` 或某个角色的包里。
+    "papermapping.py": "论文对应表的唯一读侧（`out/paper/MAPPING.json` + 由它生成的 .md）："
+                       "ENV_KINDS / MAPPING_KINDS / CITATION_KINDS / MD_KINDS、body_envs（正文"
+                       "环境的 label 与 env_no）、resolve_ledger_id（stmt:/exp:/rel: 与 #pN，"
+                       "坏尾巴不折成 #p1）、proof_nos_of（走 verifications.proof_list）、"
+                       "file_state（present/empty/missing/directory/outside）、render_markdown /"
+                       " sync_markdown（人读那份只由 json 生成）、mapping_reading（三态）",
     # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
     # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
     "promptstability.py": "系统提示的步间稳定性与 prompt 缓存读数：split_facts（把每步会变的事实键移出 system）、"
