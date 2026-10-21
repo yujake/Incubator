@@ -1023,7 +1023,7 @@ class ToolRegistry:
         """`P-14` 的唯一判据：这个角色能不能调这个 spec？
         返回 ``None`` 表示"可以"，否则返回拒绝理由（两处拒绝都必须给理由，不许静默放行 —— "没写"不等于"允许"）。
         ## 谁走这里（`roles-1`：这句话此前是错的）
-        」 `for_role` 直接调 `_role_surface(..., call_surface=False)`，从不经过本函数。旧 docstring 逐字写着"`for_role` 与 `call` 都
+        只有 `call` 走这里。`for_role` 直接调 `_role_surface(..., call_surface=False)`，从不经过本函数。旧 docstring 逐字写着"`for_role` 与 `call` 都
         走这里"，而全仓库唯一的真调用点（`call` 里那一处）传的是 `include_registered_writers=True`⇒ 本函数里 
         `include_registered_writers=False` 那一支是「死代码」（没有调用方，也没有测试），而按那句文档去理解两个面的差别，恰好是 `P-14` 之后最容易搞错的地方。
         判据本身仍然只有一份：`for_role` 与 `call` 都落在 `_role_surface` 上（那是 `FC-03` 的要求），本函数只是 `call` 侧"把理由说清"的那一层。

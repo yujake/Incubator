@@ -337,7 +337,9 @@ def test_the_dead_branch_is_gone_and_the_docstring_says_who_calls_this() -> None
     text = BASE.read_text(encoding="utf-8")
     assert "本方法的行为不因" in text  # 定位：我们读的是 base.py 里那份 docstring
     assert "旧 docstring 逐字写着" in text, "修改说明不见了（判据的落点变了，请更新本用例）"
-    assert "**只有 `call` 走这里。**" in text, "docstring 必须显式说清谁走 _callable_for"
+    # 2026-10-21：钉"文字"，不钉"装饰"。R009 明令 docstring 里不许 `**…**`（那盏灯我们这轮才熄），
+    # 所以这句契约文本现在是裸的；判据要守的是"说清了谁走这里"，不是它外面那对星号。
+    assert "只有 `call` 走这里。" in text, "docstring 必须显式说清谁走 _callable_for"
     assert "include_registered_writers=True）才是它的通路" not in text, \
         "死分支的拒绝理由还在（它永不执行，留着会让人以为有第二条判据）"
 
