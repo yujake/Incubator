@@ -181,8 +181,50 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
     if not raw:
         return bits_of(origin=origin, source_lit_id=str(row.get("source_lit_id") or ""),
                        quote_verified=quote_explains_itself(row), kind=kind)
-    return normalize_raw(raw, origin=origin, kind=kind,
+    bits = normalize_raw(raw, origin=origin, kind=kind,
                          voided_by=dict(raw.get("voided_by") or row.get("refuted_by") or {}))
+    return _stale_review_cleared(bits, row, kind=kind)
+
+
+def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
+                          kind: str = "") -> dict[str, Any]:
+    """第 3 位写的时候记了「签的是哪一份」而现行正文不是那一份 ⇒ 这一位读成没审过。
+
+    ## 为什么读侧要判这一条（业主 2026-10-22 口径：哈希是读数，不是授权凭证）
+    写侧把 `reviewed` 翻真时会把这一签盖住的那一份正文的 `proof_sha256` 连同证明号
+    `proof_no` 记进 `evidence.reviewed_by`。此后正文可能又被改过（改稿是正常动作，
+    不许因此拒写），而位还停在 `True` 上 —— 于是"审过"这个读数会过期。读侧的判据
+    就一句：记下来的那份 sha 与它现在这一份不同 ⇒ 这一位现在不是"审过"，而是
+    "签过、过期了"。
+    ## 边界（三态：判不了就不判）
+    - 位是假 ⇒ 什么都不做（没签过不是 stale）；
+    - `reviewed_by` 里没有 `proof_sha256`（历史行 / 引用命题那条凭据是 `lit:` 代号）
+      ⇒ 判不了，原样返回（不许把判不了的读成"过期"）；
+    - 那一份证明的正文取不到（行里没有 `proof_text`，也没有对应证明号的清单项）
+      ⇒ 判不了，原样返回。
+    """
+    if not bits.get("reviewed"):
+        return bits
+    ev = dict(bits.get("evidence") or {})
+    reviewed_by = dict(ev.get("reviewed_by") or {})
+    want = str(reviewed_by.get("proof_sha256") or "")
+    if not want:
+        return bits
+    from . import verifications as _VR   # 惰性：证明号与 sha 的口径各只有一处
+
+    proof_no = _VR.as_proof_no(reviewed_by.get("proof_no")) or 1
+    text = _VR.proof_text_of(row, proof_no)
+    if proof_no == 1 and "proof_text" not in row:
+        return bits          # 部分调用方只喂 `bits`：没有正文可判
+    got = _VR.proof_sha(text)
+    if got == want:
+        return bits
+    out = dict(bits)
+    out["reviewed"] = False
+    out["grade"] = derive_grade(out, kind=kind)
+    out["audited_badge"] = (bool(out.get("audited"))
+                            and out["grade"] not in ("conjecture", GRADE_NOT_APPLICABLE))
+    return out
 
 
 #: `bits` 这一栏里位本身之外允许出现的键（写台账时要经过 `bits_shape_problems`）。

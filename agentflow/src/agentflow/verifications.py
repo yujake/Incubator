@@ -18,6 +18,18 @@ JSON、字段缺、取值不在词表里）不是这三个之一 —— `record(
 `VerificationError`，绝不写一行"看不出来"来冒充"审过了"。签"审过"（§3.21 五）：`verdict="成立"`
 且 findings 里没有未解决的 `error` ⇒ `signs_bit3()`，`bit3_payload()` 给出五元位第 3 位那份
 读数（`reviewed=True` + 凭据）。
+## 「复核过的是哪一份」怎么记（业主 2026-10-22 口径，治那处结构性断链）
+签名行记 `(stmt_id, proof_no, proof_sha256)`。`proof_no` 是证明号：`1` = canonical
+（缺省，老数据不带它就等价于 `#p1`），`2, 3, …` 是同一条命题的其它证明（见 :data:`PROOFS_KEY`）。
+每条证明各自有第 3 位（`reviewed`）：签的是"这一份的每一步站得住"，别的证明不许借光。
+判定永远看那条证明现在这一份正文：它的现行 sha 有「成立」那一签 ⇒ `signed`；
+签的是旧版 ⇒ `stale`（待复核，第 3 位不计）；被签过、结论不是「成立」⇒ `rejected`；
+一次都没签 ⇒ `unsigned`。命题级的定理档 = 在 in-sync 的证明里取最高
+（:func:`statement_grade`），一条 in-sync 都没有 ⇒ 猜想。
+哈希只回答"这份稿在你签完之后有没有被改过"，它是读数，不是授权凭证：任何写入路径都不因
+sha 不符而拒收（`proof_review_gaps` 明确把 `stale` 当成"待复核"这个读数，而不是"没有凭据"）。
+签名落盘之后「同一次写」把那条证明的 `reviewed` 翻上去（:func:`sign_statement`）：
+先追加台账那一行、再在 `statements` 的事务里改那一行；事务没成就把刚追加的那一行撤回。
 """
 from __future__ import annotations
 
@@ -132,6 +144,82 @@ def proof_sha(proof_text: str) -> str:
     return hashlib.sha256(str(proof_text or "").encode("utf-8")).hexdigest()
 
 
+#: 一条证明（或一条命题）相对「它现在这一份正文」的五种读数（唯一口径在
+#: :func:`review_standing` / :func:`statement_review_reading`）。
+#:
+#: 顺序是"从查清了到没查成"：`signed`（现行版有「成立」那一签）/ `stale`（签的是旧版，
+#: 待复核）/ `rejected`（现行版被签过，结论不是「成立」）/ `unsigned`（一次都没签）/
+#: `unreadable`（台账读不出来 —— 没查成，不是通过、也不是没签过）。
+#:
+#: 为什么 stale 与 rejected 必须分开（三态纪律）：前者是"签过、但签的不是现在这一份"，
+#: 后者是"签的就是这一份、结论是没过"。把两者折成同一个"不算"会让"改完稿还没送审"
+#: 与"审过了、没过"在读数上长得一样，而处置完全不同（前者重派 V，后者改证明）。
+REVIEW_STATES: tuple[str, ...] = ("signed", "stale", "rejected", "unsigned", "unreadable")
+
+#: 多证明模型的落点（业主 2026-10-22：不加 schema 字段）。
+#:
+#: 一条命题可以有几份证明：canonical 是 `#p1`，它的正文就是行上既有的 `proof_text`
+#: （老写者只会写那一格，所以它必须继续是 `#p1` 的权威正文）；其余证明落在行 JSON
+#: 里一个额外的键 `proofs`：`[{"proof_no": 2, "proof_text": "..."}, ...]`。
+#: `schema.row_from_dict` 只取它认识的键（"未知字段会被忽略"），所以盘上多这一个键
+#: 不需要动 `schema` —— 而"证明清单"本身是数据，不是磁盘格式契约的新字段。
+PROOFS_KEY = "proofs"
+
+
+def as_proof_no(value: Any) -> int:
+    """把一个证明号归一成正整数（`2` / `"2"` / `"p2"` / `"#p2"` 都认）；认不出 ⇒ 0。
+
+    0 表示"这不是一个证明号"。写入口用它把调用方给的 `proof_no` 归一，读侧用它判
+    "这一格有没有写证明号"；两处用同一个函数，免得一边认 `p2` 一边不认。
+    """
+    text = str(value or "").strip().lstrip("#").lstrip("pP")
+    try:
+        got = int(text)
+    except (TypeError, ValueError):
+        return 0
+    return got if got >= 1 else 0
+
+
+def proof_list(row: Mapping[str, Any]) -> list[tuple[int, str]]:
+    """这条命题的证明清单 `[(proof_no, 正文), ...]`，`#p1` 恒在且排第一。
+
+    两处来源（与 `PROOFS_KEY` 的注释同一口径）：
+    - `#p1`（canonical）：行上的 `proof_text` —— 老写者（B / F / 秘书）只会写那一格，
+      所以它必须继续是 canonical 的权威正文；
+    - `#p2` 及以上：行 JSON 的 `proofs` 清单里，每项 `{"proof_no": n, "proof_text": …}`。
+      清单里若也写了 1 号，读侧以 `proof_text` 为准（同一格不许有两个权威）。
+    没有清单的旧行 ⇒ 只有一条 `(1, proof_text)`，读数与改前逐字相同。
+    """
+    out: list[tuple[int, str]] = [(1, str(row.get("proof_text") or ""))]
+    raw = row.get(PROOFS_KEY)
+    if not isinstance(raw, (list, tuple)):
+        return out
+    seen = {1}
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        no = as_proof_no(entry.get("proof_no") or entry.get("no"))
+        if no <= 1 or no in seen:
+            continue
+        seen.add(no)
+        out.append((no, str(entry.get("proof_text") or entry.get("text") or "")))
+    return sorted(out, key=lambda item: item[0])
+
+
+def proof_text_of(row: Mapping[str, Any], proof_no: int = 1) -> str:
+    """这条命题的某一份证明现在长什么样（找不到那一份 ⇒ 空串）。"""
+    want = as_proof_no(proof_no) or 1
+    for no, text in proof_list(row):
+        if no == want:
+            return text
+    return ""
+
+
+def proof_label(statement_id: str, proof_no: int = 1) -> str:
+    """读数里的写法：`000004#p2`（不带 `#pN` 的老写法等价于 `#p1`）。"""
+    return f"{str(statement_id or '')}#p{as_proof_no(proof_no) or 1}"
+
+
 def parse_verdict(text: str) -> dict[str, Any]:
     """把 V 的那一句输出解析成一次审校的结论；不合法 ⇒ 抛 `VerificationError`（没查成）。
 
@@ -191,12 +279,27 @@ def next_verification_id(root: str | Path, statement_id: str) -> str:
 
 def record_verification(root: str | Path, *, statement_id: str, proof_text: str, verdict: Mapping[str, Any],
            verifier: str = "V", round_no: int | None = None,
-           used_faces: Iterable[str] = (), submission_id: str = "") -> dict[str, Any]:
+           used_faces: Iterable[str] = (), submission_id: str = "",
+           store: Any = None, proof_no: int = 1) -> dict[str, Any]:
     """把一次审校写进这个命题的台账（追加一行），返回那一行。
 
     编号 `v-NNNN` 由脚本按文件内顺序发（`draft/39` §3.21 五：与手稿编号、台账 id 同一套）。
     写之前把结论再规范化一遍（`parse_verdict` 的同一套校验）—— 调用方绕开解析直接
     构造一个 dict 时，坏结论会在写入期被挡住，而不是等到下游读它的时候。
+
+    ## 这一行记什么（2026-10-22 补上右边的三格）
+    `(stmt_id, proof_no, proof_sha256)`：`stmt_id` 是被审的那条命题（与 `statement_id`
+    同值，两个键都写是为了不让读的人去猜哪个才是号）；`proof_no` 是被审的那一份证明
+    （缺省 1 = canonical，见 :data:`PROOFS_KEY`）；`proof_sha256` 是这一份正文的指纹。
+    三者合起来回答"复核过的是哪一份"。
+
+    ## `store` 给了就顺手把那条证明的第 3 位翻上去（业主 2026-10-22：同一次写）
+    给了 `store` 且这一签签得住第 3 位（`signs_bit3`）⇒ 追加台账之后立刻调
+    :func:`sign_statement`，在同一个 `statements` 事务里把那条证明的 `reviewed` 置真并把
+    `reviewed_by` 换成这一签的凭据（含 `proof_no` 与 `proof_sha256`）。返回值里多一格
+    `statement_writeback`（写没写成、为什么、回滚了没有）—— 台账那一行是权威记录，
+    位是它的缓存；写位失败不回滚签名（签名确实发生过），但必须如实报出来。
+    不给 `store` ⇒ 只追加台账（老行为，夹具与自检走这条）。
     """
     checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
                                         "defect_step": verdict.get("defect_step"),
@@ -210,21 +313,32 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     if problems:
         raise VerificationError(f"这个命题的验证台账有读不出来的行：{problems[:3]}")
     vid = next_verification_id(root, statement_id)
+    sha = proof_sha(proof_text)
+    no = as_proof_no(proof_no) or 1
     row = {
-        "verification_id": vid, "statement_id": str(statement_id),
+        "verification_id": vid,
+        # 两个键同值：`statement_id` 是历史名（老行只有它），`stmt_id` 是"被审的命题"的
+        # 那一个名字（业主 2026-10-22 点名要它）。只写一个会让按另一个键读的人读到 None，
+        # 而"读到 None"与"这一签不属于任何命题"在读数上长得一样。
+        "statement_id": str(statement_id), "stmt_id": str(statement_id),
+        #: 被审的是哪一份证明（1 = canonical，#p1）。老行没有这一格 ⇒ 读侧按 1 算。
+        "proof_no": no,
         "verifier": str(verifier or "V"), "verdict": checked["verdict"],
         "defect_step": checked["defect_step"], "quote": checked["quote"],
         "why": checked["why"], "findings": checked["findings"],
         "unresolved_errors": checked["unresolved_errors"],
-        "proof_sha256": proof_sha(proof_text),
+        "proof_sha256": sha,
         "proof_chars": len(str(proof_text or "")),
         "round": int(round_no) if round_no is not None else len(rows) + 1,
         "used_faces": [str(x) for x in used_faces],
         "submission_id": str(submission_id or ""),
         "at": _now_iso(),
     }
-    with path.open("a", encoding="utf-8", newline="\n") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+    if store is None:
+        _append_verification(path, row)
+        return row
+    row["statement_writeback"] = sign_statement(store, row=row, proof_text=proof_text,
+                                                path=path, proof_no=no)
     return row
 
 
@@ -282,9 +396,13 @@ def bit3_payload(row: Mapping[str, Any]) -> dict[str, Any]:
 
     签不了（`有毛病` / `看不出来` / 有未解决 error）⇒ 返回 `{}`（第 3 位保持空）——
     这不是"忘了写"，是"没签"。
+
+    凭据里带 `proof_no` 与 `proof_sha256`（2026-10-22）：读侧要拿它们回答"位上说审过的
+    那一份，还是不是现在这一份"（`evidencebits.bits_from_row` 与收工门的 R10 都读这两格）。
     """
     if not signs_bit3(row):
         return {}
+    sid = str(row.get("stmt_id") or row.get("statement_id") or "")
     return {
         "reviewed": True,
         "reviewed_by": {
@@ -292,11 +410,354 @@ def bit3_payload(row: Mapping[str, Any]) -> dict[str, Any]:
             "verification_id": str(row.get("verification_id") or ""),
             "round": row.get("round"),
             "verdict": str(row.get("verdict") or ""),
-            "evidence": f"verifications/{row.get('statement_id')}.jsonl#"
+            "evidence": f"verifications/{sid}.jsonl#"
                         f"{row.get('verification_id')}",
             "findings": list(row.get("findings") or []),
+            "proof_no": as_proof_no(row.get("proof_no")) or 1,
+            "proof_sha256": str(row.get("proof_sha256") or ""),
         },
     }
+
+
+def _verification_line(row: Mapping[str, Any]) -> str:
+    """台账的一行怎么落盘（唯一实现：追加与撤回都拿它算字节）。"""
+    return json.dumps(dict(row), ensure_ascii=False, sort_keys=True, default=str) + "\n"
+
+
+def _append_verification(path: Path, row: Mapping[str, Any]) -> int:
+    """追加一行，返回追加前的文件字节数（撤回时按它截断）。"""
+    line = _verification_line(row).encode("utf-8")
+    before = path.stat().st_size if path.exists() else 0
+    with path.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write(line.decode("utf-8"))
+    return before
+
+
+def _rollback_append(path: Path, before: int, row: Mapping[str, Any]) -> bool:
+    """把刚追加的那一行撤掉（只撤我们自己的那一行）；撤不动 ⇒ False。
+
+    判据是"文件尾逐字等于我们写的那一行"：文件尾若已经变成别人的行，截断会
+    删掉别人的记录 —— 那种情况下宁可留着我们这一行（它确实发生过），也不动别人的。
+    """
+    want = _verification_line(row).encode("utf-8")
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return False
+    if data[before:] != want:
+        return False
+    try:
+        with path.open("r+b") as fh:
+            fh.truncate(before)
+        return True
+    except OSError:
+        return False
+
+
+def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[str, Any],
+                           *, proof_text: str, proof_no: int = 1) -> dict[str, Any]:
+    """命题那一行改成"那一份证明的第 3 位已签"的样子。
+
+    只动两处：那一份证明的 `reviewed`（#p1 = `bits.reviewed`；#p2+ = `proofs` 清单里
+    对应项）与凭据 `reviewed_by`；别的一格不碰。等级必须现算
+    （`evidencebits.normalize_raw` 的唯一入口）：盘上那份 `grade` 只是缓存，写下去的
+    必须与现算逐字相同，否则提交期 `bits_shape_problems` 会拒收这一笔。
+    """
+    from . import evidencebits as _EB   # 惰性：只在真写这一行时需要（不新增模块级依赖边）
+
+    new = dict(found)
+    no = as_proof_no(proof_no) or 1
+    payload = bit3_payload(verification_row)
+    reviewed_by = dict(payload.get("reviewed_by") or {})
+    bits = dict(new.get("bits") or {})
+    ev = dict(bits.get("evidence") or {})
+    # 命题那一行的 `bits.reviewed` 是"这条命题至少有一份证明被审过"的汇总位（老读者
+    # 只认它）；真正的凭据按证明记：`reviewed_by` 里带 `proof_no` 与 `proof_sha256`，
+    # 于是"这一位说的是哪一份"不再靠猜。
+    ev["reviewed_by"] = reviewed_by
+    bits["reviewed"] = True
+    bits["evidence"] = ev
+    new["bits"] = _EB.normalize_raw(bits, origin=str(new.get("origin") or "own_result"),
+                                    kind=str(new.get("kind") or ""))
+    if no > 1:
+        entries = [dict(p) if isinstance(p, Mapping) else p
+                   for p in (new.get(PROOFS_KEY) or [])]
+        for p in entries:
+            if isinstance(p, dict) and as_proof_no(p.get("proof_no")) == no:
+                p["reviewed"] = True
+                p["reviewed_by"] = dict(reviewed_by)
+        new[PROOFS_KEY] = entries
+    return new
+
+
+def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
+                   path: Path | None = None, proof_no: int = 1) -> dict[str, Any]:
+    """把一签写回 `statements` 那一行里那一条证明的第 3 位（与台账同一次写）。
+
+    ## 这一格为什么原来永远是 False
+    第 3 位的唯一写者是 B 的 `register_statement`，而它按设计不替 V 签字（`BIT_OWNERS`：
+    第 3 位的 owner 是 V）；V 自己的写口（本模块的 `record_verification`）当时只写台账
+    那个文件，从来不碰 `statements`。于是"V 真的签了、台账上写着成立"与"命题那一行
+    的 `reviewed` 位"之间没有连接：收工门的 R10 读位 ⇒ 恒 0。这一格就是那条断链的补口。
+
+    ## 不借光（多证明模型）
+    签名只翻被签的那一份（`proof_no`）的 `reviewed`；别的证明一个字不动。
+    `proof_no > 1` 而命题行的证明清单里没有那一份 ⇒ 只落台账、不翻位（没有可翻的
+    那一条证明），理由串写清 —— 不许把凭据记到 #p1 头上。
+
+    ## 顺序与回滚（为什么不是纯原子事务）
+    台账是追加式文件、`statements` 是快照 JSON，两者不可能进同一个事务。所以取这个顺序：
+    ① 在 `statements` 的事务里（事务已持有该表锁 ⇒ 并发签同一行时"读-改-写"是原子的）
+       先追加台账那一行；② 改内存里那一行（那条证明的 `reviewed=True` + 凭据换成本签）；
+    ③ 提交。提交失败 ⇒ 把刚追加的那一行撤回（只撤我们自己的那一行），整笔"没发生"；
+    撤回不了 ⇒ 留着台账行并如实报"位没写成"—— 签名确实发生过，抹掉它比留一条
+    "位没跟上"更坏；而读侧（`review_standing`）按台账现算，所以断链不会因此复现。
+
+    返回键：`written` / `reason` / `rolled_back` / `grade` / `statement_id` / `proof_no` /
+    `proof_sha256`。`written=False` 的三种来路各有理由串：签不住第 3 位（不改位）、
+    命题不在册或那一份证明不在（没有可写的行）、事务失败（附回滚结果）。
+    """
+    sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+    no = as_proof_no(proof_no or row.get("proof_no")) or 1
+    out: dict[str, Any] = {
+        "written": False, "reason": "", "rolled_back": False, "grade": "",
+        "statement_id": sid, "proof_no": no,
+        "proof_sha256": str(row.get("proof_sha256") or ""),
+    }
+    if not signs_bit3(row):
+        out["reason"] = ("这一签签不住第 3 位（verdict 不是「成立」，或有未解决的 error）"
+                         "⇒ 位不动：没签住的字不该改任何读数")
+        return out
+    ledger = path or verification_ledger_path(store.root, sid)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    before = -1
+    try:
+        with store.tx("statements", actor=f"verifier-{row.get('verifier') or 'V'}",
+                      note=f"verify.sign:{sid}#p{no}") as tx:
+            found = tx.find("statements", stmt_id=sid)
+            before = _append_verification(ledger, row)
+            if found is None:
+                out["reason"] = (f"`statements` 里没有命题 {sid} ⇒ 只落了台账（签名）那一行，"
+                                 "第 3 位没有可写的行")
+                return out
+            if no > 1 and no not in {n for n, _ in proof_list(found)}:
+                out["reason"] = (f"命题 {sid} 的证明清单里没有 #{no}（`{PROOFS_KEY}` 那一条）"
+                                 "⇒ 只落了台账那一行；第 3 位不翻（不许把这一签记到 #p1 头上）")
+                return out
+            new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no)
+            tx.upsert("statements", new, note=f"verify.sign:{sid}#p{no}")
+            out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""))
+    except Exception as exc:  # noqa: BLE001 - 写位失败要如实报（签名那一行已经在盘上了）
+        rolled = _rollback_append(ledger, before, row) if before >= 0 else False
+        out.update(
+            written=False, rolled_back=bool(rolled),
+            reason=(f"第 3 位没写成（{type(exc).__name__}: {exc}）；"
+                    + ("台账那一行已撤回（整笔没发生，可以重试）" if rolled else
+                       "台账那一行留着（签名确实发生过）；读侧按台账现算，不按这一位"))),
+    return out
+
+
+def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
+                    proof_no: int = 1) -> dict[str, Any]:
+    """一条证明的第 3 位相对「它现在这一份正文」的读数（唯一判定口，纯读）。
+
+    ## 判据（业主 2026-10-22 多证明模型）
+    只看 `proof_no` 这一份证明的现行正文的 sha：
+    有 `signs_bit3` 的签 ⇒ `signed`；签的是旧版 ⇒ `stale`（R10 不计，单列
+    `proofs_stale`）；被签过、结论不是「成立」⇒ `rejected`；这一份一次都没签 ⇒
+    `unsigned`（哪怕同一条命题的别的证明签过 —— 不许借光）；台账读不出来 ⇒
+    `unreadable`（没查成，不是通过）。
+    "旧签名是历史，不是否决票"：旧版上的结论（包括「有毛病」）不否决现行这一份上的
+    「成立」那一签（哈希只回答"这份稿在你签完之后有没有被改过"）。
+
+    ## 哈希在这里的角色：读数，不是授权
+    `stale` 与 `rejected` 都不拦任何写入（见 :func:`proof_review_gaps`），它们只让第 3 位
+    不计入、并各自有一个可读的理由。返回键：`checked` / `state` / `ok` / `in_sync` /
+    `ledger_present` / `statement_id` / `proof_no` / `sha` / `verification_id` / `verdict` /
+    `round` / `unresolved_errors` / `rows`（这条命题的台账总行数）/ `proof_rows`（本份
+    证明的行数）/ `problems` / `ledger` / `why`。
+    """
+    sid = str(statement_id or "").strip()
+    no = as_proof_no(proof_no) or 1
+    sha = proof_sha(proof_text)
+    out: dict[str, Any] = {
+        "checked": False, "state": "unsigned", "ok": False, "in_sync": None,
+        "ledger_present": False, "statement_id": sid, "proof_no": no, "sha": sha,
+        "verification_id": "", "verdict": "", "round": None,
+        "unresolved_errors": 0, "rows": 0, "proof_rows": 0, "problems": [],
+        "ledger": "", "why": "",
+    }
+    if not sid:
+        out.update(checked=True, why="没有命题号 ⇒ 查不到台账（不是没签过）")
+        return out
+    try:
+        path = verification_ledger_path(root, sid)
+    except VerificationError as exc:
+        out.update(checked=True, why=f"命题号 {sid!r} 不是编号形态（{exc}）⇒ 查不到台账")
+        return out
+    out["ledger"] = f"{VERIFICATIONS_DIR}/{sid}.jsonl"
+    out["ledger_present"] = path.is_file()
+    if not out["ledger_present"]:
+        out.update(checked=True,
+                   why=f"`{out['ledger']}` 不在盘上 ⇒ 一次审校都没有（不是签过过期）")
+        return out
+    rows, problems = JF.read_jsonl(path)
+    out["rows"] = len(rows)
+    out["problems"] = list(problems)
+    if problems:
+        out.update(state="unreadable",
+                   why=(f"`{out['ledger']}` 有读不出来的行（{problems[:3]}）⇒ "
+                        "第 3 位没查成（不是「没签过」，也不是「签过过期」）"))
+        return out
+    out["checked"] = True
+    mine = [r for r in rows if (as_proof_no(r.get("proof_no")) or 1) == no]
+    out["proof_rows"] = len(mine)
+    if not mine:
+        out.update(why=(f"`{out['ledger']}` 里没有 #{no} 这一份证明的签"
+                        "（别的证明签过也不算 —— 不许借光）"))
+        return out
+    covering = [r for r in mine if str(r.get("proof_sha256") or "") == sha]
+    signed = [r for r in covering if signs_bit3(r)]
+    chosen = signed[-1] if signed else (covering[-1] if covering else mine[-1])
+    out.update({
+        "verification_id": str(chosen.get("verification_id") or ""),
+        "verdict": str(chosen.get("verdict") or ""),
+        "round": chosen.get("round"),
+        "unresolved_errors": int(chosen.get("unresolved_errors") or 0),
+    })
+    if signed:
+        out.update(state="signed", ok=True, in_sync=True,
+                   why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）有「成立」那一签："
+                        f"{out['verification_id']}（{out['ledger']}）"))
+        return out
+    if covering:
+        out.update(state="rejected", in_sync=True,
+                   why=(f"{proof_label(sid, no)} 的现行正文（sha {sha[:12]}…）被签过，"
+                        f"而那一签是 {out['verification_id']}：verdict={out['verdict']!r}、"
+                        f"unresolved_errors={out['unresolved_errors']} ⇒ 复核过、结论不是「成立」"
+                        f"（why：{str(chosen.get('why') or '')[:120]}）"))
+        return out
+    out.update(state="stale", in_sync=False,
+               why=(f"`{out['ledger']}` 里 {proof_label(sid, no)} 有 {len(mine)} 签，"
+                    f"但没有一签盖住它现在这一份：最近一签 {out['verification_id']} 签的是"
+                    f"另一版（台账 sha256={str(chosen.get('proof_sha256') or '')[:12]}…，"
+                    f"现行这一份={sha[:12]}…）⇒ 待复核（stale）：第 3 位不计，"
+                    "等 V 对现在这一份重签"))
+    return out
+
+
+def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]:
+    """一条命题在「多证明」模型下的第 3 位读数（纯读，逐条证明分开）。
+
+    ## 为什么命题级读数不能只有一个布尔
+    多证明模型（业主 2026-10-22）里，每条证明各自有第 3 位：`#p1` 签过不等于 `#p2`
+    签过（不许借光），`#p2` 签过也不等于 `#p1` 签过。命题级要回答的是"这条定理有没有
+    一份被审过的证明"，所以它是逐条读数的汇总，而逐条读数各自独立。
+
+    返回键：
+    - `proofs`: `[{proof_no, state, ok, in_sync, reviewed, grade, verification_id,
+      proof_sha256, why}]`（每条证明一条，按 `proof_no` 升序）；
+    - `reviewed`: 命题级 —— 至少一条证明 `signed`（定理档取"最高"就落在这一格）；
+    - `grade`: 由 `evidencebits.derive_grade` 现算（`proof` 位共用，`reviewed` 取上面
+      那一格）；一条 in-sync 都没有 ⇒ `conjecture`；
+    - `state`: 命题级五态（有 signed 就 `signed`；否则有 stale 就 `stale`；否则有
+      rejected 就 `rejected`；否则 `unsigned`；有 unreadable 且没别的 ⇒ `unreadable`）；
+    - `proofs_unreviewed` / `proofs_stale` / `proofs_rejected`: 逐条证明的编号写法
+      （`000004#p2`），不许折进"没有证明"：它们是两条独立读数；
+    - `checked` / `ledger_present` / `problems` / `why`。
+    """
+    from . import evidencebits as _EB   # 惰性：等级的唯一入口
+    sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+    kind = str(row.get("kind") or "")
+    bits = _EB.bits_from_row(row)
+    entries: list[dict[str, Any]] = []
+    unreviewed: list[str] = []
+    stale: list[str] = []
+    rejected: list[str] = []
+    problems: list[str] = []
+    ledger_present = False
+    for no, text in proof_list(row):
+        st = review_standing(root, statement_id=sid, proof_text=text, proof_no=no)
+        ledger_present = ledger_present or bool(st.get("ledger_present"))
+        problems.extend(str(p) for p in (st.get("problems") or []))
+        if str(row.get("kind") or "") == "concept":
+            # 概念行不参与等级链（`derive_grade` 的 not_applicable）：这一格对它不适用
+            grade = _EB.GRADE_NOT_APPLICABLE
+            state = "unsigned"
+        else:
+            per = dict(bits)
+            per["reviewed"] = bool(st.get("ok"))
+            grade = _EB.derive_grade(per, kind=kind)
+            state = str(st.get("state") or "unsigned")
+        entries.append({
+            "proof_no": no, "label": proof_label(sid, no), "state": state,
+            "ok": bool(st.get("ok")), "in_sync": st.get("in_sync"),
+            "reviewed": bool(st.get("ok")), "grade": grade,
+            "proof_sha256": str(st.get("sha") or ""),
+            "verification_id": str(st.get("verification_id") or ""),
+            "why": str(st.get("why") or ""),
+        })
+        if str(row.get("kind") or "") == "concept":
+            continue
+        if state == "unsigned":
+            unreviewed.append(proof_label(sid, no))
+        elif state == "stale":
+            stale.append(proof_label(sid, no))
+        elif state == "rejected":
+            rejected.append(proof_label(sid, no))
+    reviewed = any(e["ok"] for e in entries)
+    states = [e["state"] for e in entries]
+    if reviewed:
+        state = "signed"
+    elif "stale" in states:
+        state = "stale"
+    elif "rejected" in states:
+        state = "rejected"
+    elif "unreadable" in states:
+        state = "unreadable"
+    else:
+        state = "unsigned"
+    out_bits = dict(bits)
+    out_bits["reviewed"] = reviewed
+    grade = _EB.derive_grade(out_bits, kind=kind)
+    why = ""
+    if not reviewed:
+        if state == "stale":
+            why = (f"{sid} 的证明都签过旧版（或签过但没盖住现在这一份）"
+                   f"（stale：{'、'.join(stale)}）⇒ 一条 in-sync 的签名都没有")
+        elif state == "rejected":
+            why = (f"{sid} 的证明现在这一份被签过、结论不是「成立」"
+                   f"（rejected：{'、'.join(rejected)}）")
+        elif state == "unreadable":
+            why = f"{sid} 的验证台账读不出来 ⇒ 第 3 位没查成（不是「没签过」）"
+        else:
+            why = (f"{sid} 的证明一次都没签（{'、'.join(unreviewed) or '没有证明'}）"
+                   "⇒ 第 3 位是没签过，不是签过过期")
+    return {
+        "checked": not problems,
+        "ledger_present": ledger_present,
+        "statement_id": sid,
+        "proofs": entries,
+        "state": state,
+        "reviewed": reviewed,
+        "grade": grade,
+        "proofs_unreviewed": unreviewed,
+        "proofs_stale": stale,
+        "proofs_rejected": rejected,
+        "problems": problems,
+        "why": why,
+    }
+
+
+def statement_grade(root: str | Path, row: Mapping[str, Any]) -> str:
+    """这条命题的定理档（多证明模型里"在 in-sync 的证明里取最高"的唯一落点）。
+
+    实现就是 :func:`statement_review_reading` 的 `grade`：`proof` 位是行级共用的，
+    `reviewed` 取"至少一条证明 signed"（等价于"在 in-sync 的证明里取最高"：一条 in-sync
+    都没有 ⇒ `conjecture`）。判据本体仍是 `evidencebits.derive_grade`，这里只喂给它
+    汇总后的第 3 位。
+    """
+    return str(statement_review_reading(root, row).get("grade") or "")
 
 
 def banned_markers_in(proof_text: str) -> list[str]:
@@ -343,6 +804,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
         "ok": False, "checked": False, "why": "", "statement_id": sid,
         "verification_id": "", "verdict": "", "round": None,
         "sha_matches": None, "ledger": "", "rows": 0, "problems": [],
+        #: 现行这一份的读数（`REVIEW_STATES`）与证明号：`ok` 只在 `signed` 时为真。
+        #: `state="stale"` 是"签过、但签的是旧版"—— 它是待复核这个读数，不是"没签过"。
+        "state": "", "proof_no": None,
     }
     checks: list[dict[str, Any]] = [
         {"item": "proof_text 非空（有被审的那份证明）", "ok": False, "detail": "还没判到"},
@@ -435,47 +899,51 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
                       "（「有这个文件」不等于「审过」）")
         return out
 
-    def _key(r: Mapping[str, Any]) -> tuple[int, str]:
-        try:
-            return (int(r.get("round") or 0), str(r.get("verification_id") or ""))
-        except (TypeError, ValueError):
-            return (0, str(r.get("verification_id") or ""))
-
-    latest = dict(max(rows, key=_key))
+    # ---- 判定只有一个口（2026-10-22）：`review_standing` 现算"这一份证明现在被谁签过"。
+    # 读的行不是"最近一次审校"，而是"盖住这一份现行正文的那一签"—— 台账是追加式的，
+    # 上一次审校可能签的是上一版；拿它当判据会让"改完证明还没送审"读成"签过"。
+    # `evidence_kind` 是命题级的声明，它说的是 canonical 那一份证明（`#p1`）。
+    st = review_standing(root, statement_id=sid, proof_text=text, proof_no=1)
     out.update({
-        "checked": True,
-        "verification_id": str(latest.get("verification_id") or ""),
-        "verdict": str(latest.get("verdict") or ""),
-        "round": _key(latest)[0],
-        # 给拒收消息用（"最近一签是 verdict=X、unresolved_errors=N"）：读数，
+        "checked": bool(st.get("checked")),
+        "state": str(st.get("state") or ""),
+        "proof_no": st.get("proof_no"),
+        "sha_matches": st.get("in_sync"),
+        "verification_id": str(st.get("verification_id") or ""),
+        "verdict": str(st.get("verdict") or ""),
+        "round": st.get("round"),
+        # 给拒收消息用（"这一签是 verdict=X、unresolved_errors=N"）：读数，
         # 不参与判据 —— 判据只看 `signs_bit3`（一处口径）。
-        "unresolved_errors": int(latest.get("unresolved_errors") or 0),
+        "unresolved_errors": int(st.get("unresolved_errors") or 0),
     })
-    if not signs_bit3(latest):
-        checks[1]["detail"] = (f"最近一签 {out['verification_id']}：verdict={out['verdict']!r}、"
-                               f"unresolved_errors={int(latest.get('unresolved_errors') or 0)}")
-        checks[2]["detail"] = "没有签住，无从比"
-        out["why"] = (f"命题 {sid} 的 evidence_kind={PROOF_REVIEW_KIND!r}，而 "
-                      f"`{out['ledger']}` 里**最近一签**是 "
-                      f"{out['verification_id']}：verdict={out['verdict']!r}、"
-                      f"unresolved_errors={int(latest.get('unresolved_errors') or 0)}"
-                      f"（why：{str(latest.get('why') or '')[:120]}）⇒ "
-                      "**没有「成立」那一签**。这一档要的正是那一签"
-                      "（「成立」且没有未解决的 error）")
+    if st.get("state") == "signed":
+        checks[1].update(ok=True, detail=f"{out['verification_id']}：{out['verdict']}")
+        checks[2].update(ok=True, detail=f"{str(st.get('sha') or '')[:12]}…")
+        out["ok"] = True
+        out["why"] = str(st.get("why") or "")
         return out
-    checks[1].update(ok=True, detail=f"{out['verification_id']}：{out['verdict']}")
-    want = proof_sha(text)
-    got = str(latest.get("proof_sha256") or "")
-    out["sha_matches"] = (got == want)
-    if got != want:
-        checks[2]["detail"] = f"台账 {got[:12]}… ≠ 现行 {want[:12]}…（签的是另一版）"
-        out["why"] = (f"命题 {sid} 的凭据 {out['verification_id']} 签的是**另一版**证明"
-                      f"（台账 sha256={got[:12]}…，现在这一版={want[:12]}…）⇒ "
-                      "审过的那份与现在这一份不是同一份，签名不覆盖现在这一版。"
-                      f"改过证明就要重新派 V 走一遍（`verify_proof(stmt:{sid})`）")
+    if st.get("state") == "rejected":
+        checks[1]["detail"] = (f"现行这一版被签过：{out['verification_id']} "
+                               f"verdict={out['verdict']!r}、"
+                               f"unresolved_errors={out['unresolved_errors']}")
+        checks[2]["detail"] = "签的就是现行这一版，但结论不是「成立」"
+        out["why"] = (
+            f"命题 {sid} 的 evidence_kind={PROOF_REVIEW_KIND!r}，而 `{out['ledger']}` 里"
+            f"{proof_label(sid, 1)} 现在这一份上那一签是 {out['verification_id']}："
+            f"verdict={out['verdict']!r}、unresolved_errors={out['unresolved_errors']}"
+            f"（why：{str(st.get('why') or '')[:120]}）⇒ 复核过、结论不是「成立」。"
+            "这一档要的正是「成立」那一签；改好证明再派 V 走一遍，或者如实降档")
         return out
-    checks[2].update(ok=True, detail=f"{want[:12]}…")
-    out["ok"] = True
+    if st.get("state") == "stale":
+        checks[1]["detail"] = (f"{proof_label(sid, 1)} 有 {st.get('proof_rows') or 0} 签，"
+                               f"没有一签盖住现在这一份（最近一签 {out['verification_id']}）")
+        checks[2]["detail"] = "签的是另一版，无从比"
+        out["why"] = str(st.get("why") or "")
+        return out
+    checks[1]["detail"] = "台账读不出来（没查成）"
+    checks[2]["detail"] = "同上"
+    out["checked"] = False
+    out["why"] = str(st.get("why") or "台账没查成（不是「没签过」）")
     return out
 
 
@@ -539,6 +1007,15 @@ def proof_review_gaps(root: str | Path, rows: Iterable[Mapping[str, Any]]) -> li
 
     只挑 `evidence_kind == "proof_review"` 的行去核（其它档不归这条判据管：
     `proof` 由 `evidencebits.bit_evidence_gaps` 核，`cross_check`/`heuristic` 只需声明）。
+
+    ## 哪些算"凭据不够"（业主 2026-10-22 口径改了半边）
+    这一份的调用者是写入期闸（`store._refuse_fake_proof_review`）与审计期档
+    （`verify._check_13`），所以"不够"的判据就是"该不该拒收/点名"：
+    - `unsigned`（一次「成立」都没有）/ `unreadable`（台账读不出来）⇒ 不够，照旧；
+    - `rejected`（现行这一版被签过、结论不是「成立」）⇒ 不够，照旧；
+    - `stale`（签过、但签的是旧版）⇒ 不再算"没有凭据"。哈希是读数不是授权凭证：
+      "正文改过了"是正常动作，任何写入路径都不许因为它被拒收。这一档现在是待复核
+      这个读数（收工门 R10 的 `stale_ids`），不是"没签过"。
     """
     out: list[dict[str, Any]] = []
     for row in rows:
@@ -547,8 +1024,9 @@ def proof_review_gaps(root: str | Path, rows: Iterable[Mapping[str, Any]]) -> li
         if str(row.get("evidence_kind") or "") != PROOF_REVIEW_KIND:
             continue
         gap = proof_review_gap(root, row)
-        if not gap["ok"]:
-            out.append(gap)
+        if gap["ok"] or gap.get("state") == "stale":
+            continue
+        out.append(gap)
     return out
 
 

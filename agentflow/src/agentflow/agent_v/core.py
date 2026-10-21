@@ -10,6 +10,14 @@ H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五�
 `read_only=True`、`write_set=frozenset()`（`specs/v.py`）。它唯一的产物是
 `verifications/<命题号>.jsonl`（追加式，`verifications.record_verification` 发号）。所以它拿不到任何写工具
 —— 这不是"约定只读"，是 `tools.base._role_surface`的结构性剥离（`tools.READ_ONLY_ROLES` 含 `"V"`）。
+## 2026-10-22 补：签字要能到命题那一行上
+`verify_proof` 签完之后调 `verifications.record_verification(..., store=self.store)`：它先把
+台账那一行落盘，再在同一个 `statements` 事务里把被签的那一份证明（`proof_no`）的
+`reviewed` 翻上去（凭据换成这一签的 `verification_id` / `proof_sha256` / `proof_no`）。
+为什么必须由签名这条路径自己写：此前第 3 位的唯一写者是 B 的 `register_statement`，而它按
+`evidencebits.BIT_OWNERS` 不替 V 签字 ⇒ "V 签了、台账上写着成立"与"命题那一行的 reviewed 位"
+之间没有连接，收工门 R10 恒 0。写回的结果在返回值 `review_write` 里（写没写成、为什么、
+回滚了没有），失败不静默吞掉。
 ## 三态纪律在这里的落法（这一层最容易出错的地方）
 `成立` / `有毛病` / `看不出来` 是对证明的三个结论；"检查器自己没跑成"（没接线 / 输出不是合法 JSON / 字段缺 / 取值不在词表里）不是这三个之一。
 `verify_proof` 因此有两种失败形态，各自的读数分开：
@@ -161,7 +169,8 @@ class AgentV:
     # ------------------------------------------------------------------ 三个动作
 
     def verify_proof(self, statement_id: str, proof_text: str = "",
-                     readonly_facts: str = "", **kw: Any) -> dict[str, Any]:
+                     readonly_facts: str = "", proof_no: int = 1,
+                     **kw: Any) -> dict[str, Any]:
         """把一份证明整体重读一遍，落一行验证台账（`v-NNNN`）。
         
         `proof_text` 不给时从 `statements.proof_text` 取（那是 F 交回来的那一份）；两处都没有 ⇒ 如实报 `no_proof_text`（不
@@ -184,6 +193,7 @@ class AgentV:
             "findings": [],
             "unresolved_errors": 0,
             "proof_sha256": "",
+            "proof_no": None,
             "proof_chars": 0,
             "signed_bit3": False,
             "reviewed_by": {},
@@ -251,8 +261,10 @@ class AgentV:
 
         row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
                                      verdict=verdict, verifier=self.actor,
-                                     submission_id=str(self.cfg.get("submission_id") or ""))
+                                     submission_id=str(self.cfg.get("submission_id") or ""),
+                                     store=self.store, proof_no=proof_no)
         payload = VR.bit3_payload(row)
+        writeback = dict(row.get("statement_writeback") or {})
         bits: dict[str, Any] = {}
         try:
             from .. import evidencebits as EB
@@ -262,6 +274,14 @@ class AgentV:
             self._emit(f"verify_proof({sid})：五元位合成失败（{type(exc).__name__}: {exc}）")
         self._emit(f"verify_proof({sid})：{row['verification_id']} verdict={row['verdict']} "
                    f"signed_bit3={bool(payload)}")
+        if writeback and writeback.get("written"):
+            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, proof_no)} 的 reviewed 已写回"
+                       f"（grade={writeback.get('grade') or '（没算出等级）'}）")
+        elif writeback and not writeback.get("written"):
+            # 写位失败不许静默：台账那一行已经在盘上，而"位没翻上去"必须能读出来
+            # （读侧按台账现算，所以它不是断链，但它是一处要修的失败）。
+            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, proof_no)} 没写成 —— "
+                       f"{writeback.get('reason') or ''}")
         out.update({
             "checked": True,
             "verification_id": row["verification_id"],
@@ -270,10 +290,12 @@ class AgentV:
             "findings": row["findings"],
             "unresolved_errors": row["unresolved_errors"],
             "proof_sha256": row["proof_sha256"],
+            "proof_no": row.get("proof_no"),
             "proof_chars": row["proof_chars"],
             "signed_bit3": bool(payload),
             "reviewed_by": dict(payload.get("reviewed_by") or {}),
             "bits": bits,
+            "review_write": writeback,
             "ledger": f"verifications/{sid}.jsonl#{row['verification_id']}",
             "reason": f"{row['verification_id']}：{row['verdict']}"
                       + ("（签第 3 位）" if payload else "（不签第 3 位）"),

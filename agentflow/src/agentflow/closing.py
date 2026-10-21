@@ -1562,6 +1562,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # （产出方没走过 / 老数据）· ② 有记录、但等级只到 `conjecture` · ③ 有记录、且到 `pre_theorem`/`theorem`
         # （这一档要数的）—— ①与②在旧读数里同形，而"没算过"与"算了、不够档"是两件事。局部导入已删
         # （2026-10-14）：`_leg_reading` 是跨上千行的大 if 链，函数里任何一处 `import EB` 都会让整个函数里的 `EB`变成局部名 ⇒ 上面 `quote_verified_rows` 那一档用模块级导入时报 `UnboundLocalError`（那一格 pass 变 unknown）。
+        # 局部导入要用一个只在本分支出现的名字：`_leg_reading` 是一条跨上千行的大
+        # if 链，任何一处把模块级名字导成局部名都会让别的分支 `UnboundLocalError`
+        # （这一格 2026-10-14 踩过，见上面 `quote_verified_rows` 的注释）。
+        from . import verifications as _VR_R10
         rows = list(store.rows("statements"))
         counted: list[dict[str, Any]] = []
         grades: dict[str, int] = {}
@@ -1569,6 +1573,25 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         cited_skipped = 0
         cited_skipped_rows: list[dict[str, str]] = []
         without_bits_ids: list[str] = []
+        # ---- 第 3 位相对「每份证明现在那一份正文」的读数（2026-10-22，业主口径）
+        #
+        # 多证明模型：每条证明各自有 reviewed，`#p1` 签过不等于 `#p2` 签过。`bits.reviewed`
+        # 是写口翻的汇总位，而"签的是不是现在这一份"只有 `verifications` 台账能回答：
+        # 签完之后正文又被改过（`stale`）时，位可能还停在 True 上。
+        # 三态落法：
+        #   · 有台账（`verifications/<号>.jsonl` 在盘上）=> 以台账为准：只有至少一条
+        #     证明 `signed` 才算审过；`stale` / `rejected` / `unsigned` 不计；
+        #     `unreadable` 记成"没查成"（不折成任何一种通过）；
+        #   · 没台账 => 仍按位读（历史行 / 夹具：那一位就是它们的唯一读数）。
+        # 这不是新增一档门，是让这一档数的是"现在这一份被审过"，而不是"曾经审过"。
+        review_states: dict[str, int] = {s: 0 for s in _VR_R10.REVIEW_STATES}
+        stale_ids: list[str] = []
+        rejected_ids: list[str] = []
+        unreadable_ids: list[str] = []
+        unsigned_ids: list[str] = []
+        proofs_stale: list[str] = []
+        proofs_unreviewed: list[str] = []
+        ledger_rows = 0
         for r in rows:
             sid = str(r.get("stmt_id") or r.get("id") or "")
             has_bits = isinstance(r.get("bits"), dict) and bool(r.get("bits"))
@@ -1579,6 +1602,30 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             # （判据见 `tests/test_closing_gate.py::test_the_grade_reading_comes_from_bits_from_row`）。
             bits = EB.bits_from_row(r)
             grade = str(bits.get("grade") or "")
+            reading: dict[str, Any] | None = None
+            if str(r.get("proof_text") or "").strip() and str(r.get("kind") or "") != "concept":
+                reading = _VR_R10.statement_review_reading(
+                    getattr(store, "root", project_root), r)
+            if reading is not None and reading.get("ledger_present"):
+                ledger_rows += 1
+                state = str(reading.get("state") or "")
+                review_states[state] = review_states.get(state, 0) + 1
+                if state == "stale":
+                    stale_ids.append(sid)
+                elif state == "rejected":
+                    rejected_ids.append(sid)
+                elif state == "unsigned":
+                    unsigned_ids.append(sid)
+                elif state == "unreadable":
+                    unreadable_ids.append(sid)
+                proofs_stale.extend(str(x) for x in (reading.get("proofs_stale") or []))
+                proofs_unreviewed.extend(str(x) for x in (reading.get("proofs_unreviewed") or []))
+                reviewed_now = bool(reading.get("reviewed"))
+                # 位与台账对不上（签完又改过正文 / 别的证明签的）=> 按台账重算等级
+                if reviewed_now != bool(bits.get("reviewed")):
+                    bits = dict(bits)
+                    bits["reviewed"] = reviewed_now
+                    grade = str(EB.derive_grade(bits, kind=str(r.get("kind") or "")))
             grades[grade] = grades.get(grade, 0) + 1
             if has_bits:
                 grades_with_bits[grade] = grades_with_bits.get(grade, 0) + 1
@@ -1603,6 +1650,29 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "grades": grades,
             #: 只数「真的有位记录」的行 —— 这一格才是"算了之后落在哪一档"。
             "grades_with_bits": grades_with_bits,
+            # ---- 第 3 位相对现行正文的五态（只在有台账的行上判；多证明按证明逐条记）
+            "review_states": review_states,
+            "review_ledger_rows": ledger_rows,
+            "stale_ids": stale_ids[:8],
+            "stale_total": len(stale_ids),
+            "rejected_ids": rejected_ids[:8],
+            "unsigned_ids": unsigned_ids[:8],
+            "unreadable_ids": unreadable_ids[:8],
+            #: 逐条证明的两档读数（写法人人是 `000004#p2`；不带 `#pN` 等价 `#p1`）。
+            #: 它们是"待复核"与"还没审"这两件事，不折进"没有证明"。
+            "proofs_stale": proofs_stale[:8],
+            "proofs_stale_total": len(proofs_stale),
+            "proofs_unreviewed": proofs_unreviewed[:8],
+            "proofs_unreviewed_total": len(proofs_unreviewed),
+            "review_note": (
+                "有 `verifications/<号>.jsonl` 的行以台账现算（逐条证明分开）：`signed` = "
+                "至少一条证明现在这一份有「成立」那一签（计入）；`stale` = 签过、但签的是"
+                "旧版 ⇒ 待复核、不计入（见 `stale_ids` / `proofs_stale`）；`rejected` = 现在"
+                "这一份被签过、结论不是「成立」；`unsigned` = 一次都没签（见 "
+                "`proofs_unreviewed`）；`unreadable` = 台账读不出来（没查成）。"
+                "没有台账的行（历史行 / 夹具）仍按 `bits.reviewed` 读。"
+                "哈希是读数不是授权：`stale` 只影响这一格计不计，不拦任何写入；"
+                "定理档 = 在 in-sync 的证明里取最高（`verifications.statement_grade`）"),
             "cited_skipped": cited_skipped,
             "cited_skipped_rows": cited_skipped_rows[:8],
             "cited_skipped_reason": (
@@ -3485,7 +3555,19 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         # `verify.read_proof` 两个工具用的那一口；在这里再解析一遍 JSONL 会有
         # 两个"什么算一行审校"的答案。
         vrows, _problems = _VR.list_verifications(store.root, limit=None)
-        signed = {str(r.get("statement_id") or "") for r in vrows if _VR.signs_bit3(r)}
+        # 2026-10-22：只有「现行这一版被签过」才算凭据（`verifications.review_standing`
+        # 的唯一口径）。改前这里数的是"台账里出现过任意一签「成立」" —— 签完之后正文
+        # 又被改过的行也会被算成"V 审过"，而"审过的那一份还是不是现在这一份"正是
+        # 这一格要回答的（`stale` 不算凭据）。
+        signed: set[str] = set()
+        for s in stmts:
+            if str(s.get("kind") or "") == "concept":
+                continue
+            if not str(s.get("proof_text") or "").strip():
+                continue
+            got = _VR.statement_review_reading(store.root, s)
+            if got.get("reviewed"):
+                signed.add(str(s.get("stmt_id") or ""))
         # 概念行不算"我方走完「有证明过程 + 审过」的命题"（2026-10-21，本批缺陷一的读侧）：
         # 真机 mp3 有 1143 条概念行，每一条都带 `proof_text`（哨兵 `concept:primitive`），
         # 于是"`proof_text` 非空 且 V 签了成立"这条读数只要撞上一次签名就把概念算进去 ——
