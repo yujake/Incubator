@@ -1,26 +1,26 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""**一键发布检查** —— 把正式版要求的全部门串成一条命令，并做三态汇总。
+"""一键发布检查 —— 把正式版要求的全部门串成一条命令，并做三态汇总。
 
 ## 为什么需要它（而不是"照文档手敲六条命令"）
 
 用户对正式版的要求逐字是：
 
-> **"建立一键发布检查（release check：全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter）"**
+> "建立一键发布检查（release check：全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter）"
 
-`scripts/release_check.py` 覆盖了其中**五项**（全量测试 / 全部自检 / verify / 工具普查 / linter），
-但**没有验收测试**这一项。两份东西合起来才等于用户点名的清单，而"照文档手敲六条命令"
+`scripts/release_check.py` 覆盖了其中五项（全量测试 / 全部自检 / verify / 工具普查 / linter），
+但没有验收测试这一项。两份东西合起来才等于用户点名的清单，而"照文档手敲六条命令"
 是发布流程里最容易被跳过的一步 —— **手敲的清单没有退出码，于是"少跑了一条"与"跑了都过了"
 在任何自动化里长得一模一样**（本项目 `draft/17` §6.3 的教训逐字：
 *"多数脚本不设退出码，于是『未报错』被误读为『无问题』"*）。
 
-## 三态汇总（**`unknown` 绝不是 `pass`**）
+## 三态汇总（`unknown` 绝不是 `pass`）
 
 每一步都只有三种结论，与全项目的口径一致：
 
 - ``pass``    —— 跑了，退出码 0；
-- ``fail``    —— 跑了，退出码非 0（**并且**不是"没跑成"）；
-- ``unknown`` —— **没跑成**：解释器都起不来、超时、被取消（`Ctrl-C`）、可执行文件不存在。
+- ``fail``    —— 跑了，退出码非 0（并且不是"没跑成"）；
+- ``unknown`` —— 没跑成：解释器都起不来、超时、被取消（`Ctrl-C`）、可执行文件不存在。
 
 总判定：**任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`；空表 ⇒ `unknown`
 （没有可判的项，不是"全过"）；全 `pass` ⇒ `pass`。**
@@ -30,8 +30,8 @@
 ## 为什么它不在 `scripts/release_check.py` 里
 
 `scripts/release_check.py` 命中 FC-27 禁 AI 区（`.noai-paths` 的 `release-deploy` 类），
-**给它加一项要人审**（`docs/PROPOSALS.md` 的 **P-11**）。
-所以本脚本是**并列的编排层**：它**调用**那个门，**不修改**它，也**不放松**它 ——
+给它加一项要人审（`docs/PROPOSALS.md` 的 P-11）。
+所以本脚本是并列的编排层：它调用那个门，不修改它，也不放松它 ——
 它只增加检查、不减少检查。本脚本自身也已登记进禁改区（发布门的一部分）。
 
 ## 用法
@@ -41,16 +41,16 @@
     python tools/release_all.py --skip acceptance        # 只跑不用联网/不耗时的部分
     python tools/release_all.py --only role-specs,coverage   # 只跑指定步骤（调试用）
 
-注意 `--only` 认的是**步骤 key**（`release-check` / `acceptance` / `repro` /
+注意 `--only` 认的是步骤 key（`release-check` / `acceptance` / `repro` /
 `role-specs` / `coverage` / `per-file`），不是发布门内部的子项名：
-`lint` 是 `release-check` 这一步里的第 5 项，**不是**一个步骤 key
+`lint` 是 `release-check` 这一步里的第 5 项，不是一个步骤 key
 （`D3` 实测：旧版这里举的例子是 `--only lint,role-specs`，直接以退出码 2 失败，
 而那是本 docstring 里唯一的一个 `--only` 例子）。
 `tests/test_release_all.py` 会把本 docstring 里出现的每个 `--only` 示例真跑一遍，
 判据是那两句话：stderr 不许出现「未知的步骤 key」，且被点名的每个 key 不许记成
-`[unknown]`（**不许**拿退出码当判据：`--only` 是**子集**运行，未选中的步骤按 `H-5`
-记 `unknown`，而 `unknown` 就是退出码 **2** —— 这一个数同时表示"用法错误"与"跑通了但有
-步骤未知"两种事实，拿它判其中一种是**把两种含义折成一个读数**。`D-13` 记录了那次踩坑：
+`[unknown]`（不许拿退出码当判据：`--only` 是子集运行，未选中的步骤按 `H-5`
+记 `unknown`，而 `unknown` 就是退出码 2 —— 这一个数同时表示"用法错误"与"跑通了但有
+步骤未知"两种事实，拿它判其中一种是把两种含义折成一个读数。`D-13` 记录了那次踩坑：
 旧判据 `returncode != 2` 长期为真，只因为当时另一个门红着、整体退出码是 1）。
 """
 
@@ -305,8 +305,8 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
 
     `D4` 的实测（改前）：这里原写"用户点名的六项 + 三个结构性门（角色规格、
     coverage 分档、逐文件单跑）"，按它自己的分解 —— 六项落在 2 个步骤里
-    （`release-check` 覆盖 5 项 + `acceptance` 1 项），加 3 个结构性门 = **5**，
-    而本函数实际返回 **6**。多出来的那个是 `repro`（论文独立复现），
+    （`release-check` 覆盖 5 项 + `acceptance` 1 项），加 3 个结构性门 = 5，
+    而本函数实际返回 6。多出来的那个是 `repro`（论文独立复现），
     清单完全没有它：按 docstring 数步骤会漏掉一个门。
     `tests/test_release_all.py` 现在把这份清单与 `build_steps` 的实际条数铆在一起
     （往表里加一个步骤而不同步这段 ⇒ 测试必红）。
@@ -325,11 +325,11 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
       这一步正是把"排序给的那部分绿灯"收回去。它很慢，但 `--skip` 会记成 `unknown`。
 
     第七个步骤 `frontend`（裁定 G2）守的是"入库的前端产物与源码脱节"：
-    前端构建产物 `src/agentflow/web/static/` 是**入库**的（裁定 B1），于是"改了
+    前端构建产物 `src/agentflow/web/static/` 是入库的（裁定 B1），于是"改了
     `ui/src/` 忘了重建"在全量测试里没有任何判据看得见 —— 那正是这一步。
     它自带三态（`tools/frontend_gate.py`：`0=pass / 1=fail / 2=unknown`）：
     没装 node/pnpm、或构建环境起不来（例如本沙箱不允许 Node 用管道 stdio 起
-    esbuild ⇒ `spawn EPERM`）⇒ 记 `unknown`，**绝不是** `pass`。
+    esbuild ⇒ `spawn EPERM`）⇒ 记 `unknown`，绝不是 `pass`。
     """
     acc = acceptance_root or (root.parent / "test" / "test2")
     # `D-2.3`：让 release-check 把它的逐项结构写成 JSON，编排层再读回来嵌进自己的 JSON。

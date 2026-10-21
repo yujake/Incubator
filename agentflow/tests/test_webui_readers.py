@@ -744,6 +744,10 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     got["LiveView"] = set(R.live_face(artifacts_ws))
     got["UsageView"] = set(R.usage_face(artifacts_ws))
     got["StatusReportsView"] = set(R.status_reports_face(artifacts_ws))
+    # 2026-10-21（名册那一棵树）：夹具上没有 `out/roster/`，读数落在 `answer="unknown"`
+    # 那一档 —— 但顶层 15 个键照样在（这正是 `roster_face` 的规格：每一档键集合同一批），
+    # 所以它和上面四周一样有落脚点；行一级的五个类型登记在 `UNCHECKED_TYPES` 里。
+    got["RosterView"] = set(R.roster_face(artifacts_ws))
     # 2026-10-13（R92 的对话面）：夹具那一段会话里有主控的 run_start 与一条提问，
     # 所以顶层与行一级（含 `options[]` 里的 `ChatOption`）都读得出键。
     chat = R.chat_face(artifacts_ws, SID)
@@ -861,7 +865,9 @@ def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
                     "handle_budget_view", "handle_live", "handle_usage",
                     "handle_status_reports",
                     # 2026-10-13（业主的对话框）
-                    "handle_chat"}, ours
+                    "handle_chat",
+                    # 2026-10-21（业主的「名册监视」）：整棵名册树那一条只读端点
+                    "handle_roster"}, ours
     for _m, path, name in R.ROUTES:
         assert path in routes.patterns(), f"{path} 没进总表"
         assert routes.handler_for(name) is not None, f"{name} 没有实现"

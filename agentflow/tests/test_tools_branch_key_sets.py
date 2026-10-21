@@ -59,7 +59,17 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 2026-10-09（S6-b 加 `conductor.broadcast` 时欠下的一格，同批归位）：11 → 12 —— `conductor_broadcast`
     # 写 `ok(got, **got)`，键由 `Conductor.broadcast` 的返回值决定，`returns=` 逐字声明八个键并由实跑核钉住
     # （探针在 `calling_as` 里跑，走"没有收件人"那一支）。该函数的载荷见它自己的注释；"声明必须是实跑键集的 # 子集"由 `test_tools_returns_declaration.py` 钉住。
-    "conductor_tools.py": 12,
+    # 2026-10-21：12 → 13 —— 第 13 处是 `conductor_escalate` 的 `ok(payload, **got)`。
+    # 它 2026-10-19 随 `conductor.escalate`（业主「父子天然双向」）进树时就没登记，
+    # 于是这一条前存红（清洁前 `cdcb843` 上同样红，不是清洁造成的）。
+    # 为什么它是"看不清"而不是"看得见"：键由 `Conductor.escalate` 的返回 dict 决定
+    # （`checked`/`state`/`to`/`msg_id` … 十二条都在运行时那一份里），静态扫描读不出来。
+    # 为什么不改成字面量 dict（本条判据的"好"方向）：那一处现在是**透传**
+    # （只摘掉 `addressing` / `roster_unavailable` 两格框架读数，其余照原样给出），
+    # 而 `test_tools_returns_declaration.py` 的"给了却没声明"那一半正是靠透传才咬得住
+    # —— 硬写字面量会让它以后新加的键永远不可能"出现在 `data` 里"，那条判据对这一件
+    # 工具就永远看不见缺口了。两害相权：保透传 + 在这里如实登记处数。
+    "conductor_tools.py": 13,
     # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
     # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
     # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由

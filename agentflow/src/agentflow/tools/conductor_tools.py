@@ -1284,6 +1284,23 @@ def conductor_broadcast(_conductor: Any, subject: str, body: str = "") -> ToolRe
     return ok(got, **got)
 
 
+#: 上行成功那一支里**不属于载荷**的两格（`data` 里不给，`meta` 里照旧给全）：
+#:
+#: - `addressing`：`_escalation_roster_check` 的原样读数（`checked` / `how` / `kind` /
+#:   `error` / `candidates` …）—— 它回答的是「这个编号是怎么被认成父的」；
+#: - `roster_unavailable`：上一条派生出来的三态位（名册没读成 ⇒ 按运行期解析的父投递）。
+#:
+#: 为什么要分出来（2026-10-21，判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare`）：
+#: 这两格是**框架读数**，不是这次上行的载荷；`returns=` 声明的就是 `data` 的键集合
+#: （同一张面的先例：`conductor.broadcast` 的 `returns` 与它的 `data` 逐键相同）。
+#: 读数一个字都没少：`ok(payload, **got)` 的 `**got` 把它们留在 `meta` 里，而 `meta`
+#: 整格都渲染进模型看到的那条工具结果（`agent_loop._flatten_one_level` 只摊平 `data`，
+#: `meta` 原样保留）⇒ 「模型不知道这两格存在」这个后果不会发生。
+#: 为什么不反向补进 `returns=`：那会让工具面与冻结快照
+#: （`tests/golden/tool_surface_snapshot.json`，FC-27 禁改区）不一致，重冻必须由人逐格看过。
+_ESCALATE_READING_KEYS: tuple[str, ...] = ("addressing", "roster_unavailable")
+
+
 @tool(
     "conductor.escalate",
     "把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工"
@@ -1337,7 +1354,10 @@ def conductor_escalate(_conductor: Any, need: str, kind: str,
         meta["kind"] = str(got.get("reason") or "escalate_refused")
         meta["escalate_kind"] = str(got.get("kind") or "")
         return fail(str(got.get("error") or "上行没成"), **meta)
-    return ok(got, **got)
+    # 成功那一支：`data` 只给 `returns=` 声明过的那几格，名册寻址那两格留在 `meta`
+    # （理由见 `_ESCALATE_READING_KEYS` 的注释）。
+    payload = {k: v for k, v in got.items() if k not in _ESCALATE_READING_KEYS}
+    return ok(payload, **got)
 
 
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (

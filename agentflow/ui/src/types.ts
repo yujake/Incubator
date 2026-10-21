@@ -739,6 +739,80 @@ export interface SearchRequestRow {
   timestamp: string;
 }
 
+/** 出处：roster_face() —— 当前工作区整棵名册树（`out/roster/<父编号>.jsonl` 折叠 + `data/tasks.json` 的 status/收件箱读数）。 */
+export interface RosterView {
+  answer: string;
+  tri: Tri;
+  reason: string;
+  root: string;
+  dir: string;
+  nodes: RosterNode[];
+  roots: string[];
+  count: number | null;
+  max_depth: number | null;
+  files: string[];
+  diagnostics: string[];
+  coverage: RosterCoverage;
+  tasks_tri: Tri;
+  tasks_reason: string;
+  truncated: boolean;
+}
+
+/** 出处：roster_face() 的一个节点 —— 一个 agent（名册里它那一行 + 台账里它那一行；`depth` 是名册链上的相对深度，根 = 1）。 */
+export interface RosterNode {
+  task_id: string;
+  name: string;
+  role: string;
+  depth: number;
+  parent_task_id: string;
+  parent_name: string;
+  children: RosterChild[];
+  retired: boolean;
+  retired_branch: string;
+  brief: string;
+  brief_source: string;
+  surface: string;
+  status: string;
+  task_found: boolean;
+  in_flight: number | null;
+  inbox: RosterInbox;
+}
+
+/** 出处：roster_face() 的 nodes[].children[] 一项 —— 名册里的一个子（绝对编号 + 名册名）。 */
+export interface RosterChild {
+  task_id: string;
+  name: string;
+  role: string;
+  retired: boolean;
+}
+
+/** 出处：roster_face() 的 nodes[].inbox —— 收件箱积压（板项：`kind` 非空、`parent_task_id` = 收件人、`item_state != "done"` 的那些行）。 */
+export interface RosterInbox {
+  tri: Tri;
+  open: number | null;
+  by_state: Record<string, number>;
+  by_kind: Record<string, number>;
+  items: RosterInboxItem[];
+  more: number;
+  reason: string;
+}
+
+/** 出处：roster_face() 的 nodes[].inbox.items[] 一项 —— 一条还没消的消息/通知。 */
+export interface RosterInboxItem {
+  task_id: string;
+  kind: string;
+  state: string;
+  called_by: string;
+  detail: string;
+}
+
+/** 出处：roster_face() 的 coverage —— 台账里的代理行与名册节点的对账（读不到就是 null）。 */
+export interface RosterCoverage {
+  tasks_agents: number | null;
+  roster_nodes: number | null;
+  unrostered: number | null;
+}
+
 /** 出处：写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */
 export interface WriteResult {
   ok: boolean;

@@ -373,3 +373,68 @@ h3 {
   max-height: 24em;
   overflow: auto;
 }
+
+/* 名册那一棵树（2026-10-21）：一行一个节点，左缩进由 `depth` 现算（见
+   `components/Roster.tsx` 的 `indentOf`）。行本身是一个按钮 —— 点开看那一格的
+   收件箱与在飞读数。字号与间距只走 token（判据 test_app_css_uses_only_tokens 会拦裸色值）。 */
+.roster-tree {
+  margin: var(--sp-2) 0;
+}
+
+.roster-node {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.roster-node:first-of-type {
+  border-top: 0;
+}
+
+.roster-pick {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: var(--fs-2);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.roster-pick:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.roster-name {
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.roster-detail {
+  margin: var(--sp-1) 0 var(--sp-2) var(--sp-4);
+  padding: var(--sp-2);
+  border-left: 2px solid var(--dsw-alias-border-l2);
+}
+
+.roster-children,
+.roster-brief,
+.roster-diag {
+  font-size: var(--fs-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.roster-unread {
+  border-left: 2px solid var(--dsw-alias-state-warn-primary);
+  padding-left: var(--sp-2);
+}
+
+.roster-inbox-item {
+  align-items: flex-start;
+}
+

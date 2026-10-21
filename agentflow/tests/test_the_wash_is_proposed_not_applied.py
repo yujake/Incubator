@@ -92,7 +92,11 @@ class _Gate:
 
     def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
                  **kw: Any) -> Any:
-        if "你是「秘书」的判断面" in prompt:
+        # 秘书的判断面自 2026-10-21 起是两条消息：稳定头进 `system`、材料进 `prompt`
+        # （`secretary._judge_system` / `_judge_material`，见
+        # `tests/test_secretary_system_carries_the_head.py`）⇒ 只认 `prompt` 的桩会漏掉它，
+        # 于是秘书那一趟吃掉剧本里的一步（实测：派活的第二步变成收工）。两处一起认。
+        if "你是「秘书」的判断面" in f"{prompt}\n{system or ''}":
             text = JUDGE_REPLY
         else:
             i = min(self.calls, len(self.replies) - 1)

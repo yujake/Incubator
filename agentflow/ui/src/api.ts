@@ -21,6 +21,7 @@ import type {
   EvidenceView,
   LiveView,
   MachineView,
+  RosterView,
   RunEventsView,
   RunIndexDrift,
   RunView,
@@ -58,6 +59,9 @@ export const ENDPOINTS = {
   usage: "/api/usage",
   statusReports: "/api/status-reports",
   chat: "/api/chat",
+  // 2026-10-21（业主的「名册监视」）：整棵名册树（父/子/绝对编号/角色/深度/收件箱积压）。
+  // 只读一条 —— 这个端点在路由表里没有配对的 POST，前端也不该有写它的函数。
+  roster: "/api/roster",
   stream: "/api/stream",
 } as const;
 
@@ -337,6 +341,17 @@ export const api = {
     getJSON<StatusReportsView>(ENDPOINTS.statusReports),
   getChat: (sid: string, opts: { lines?: number } = {}): Promise<ChatView> =>
     getJSON<ChatView>(chatPath(sid, opts)),
+  /**
+   * 名册那一棵树（`GET /api/roster`，2026-10-21）。
+   *
+   * 一个 agent 一个节点：父是谁、子有哪些、每个成员的绝对编号／名册名／角色／深度，
+   * 外加"收件箱积压"那一格。**只读**：这个端点在路由表里没有配对的 POST，所以这里
+   * 只有取数函数，没有写函数。
+   *
+   * 三态：`answer === "unknown"` 是"这份读数没拿到"（名册目录不在、或读不出来），
+   * **不是**"这个工作区没有子代理"—— 面板必须把这两档画成两句话。
+   */
+  getRoster: (): Promise<RosterView> => getJSON<RosterView>(ENDPOINTS.roster),
 };
 
 /**

@@ -141,6 +141,12 @@ def _append_locked(path: str | Path, rec: Mapping[str, Any], *,
     见 :meth:`Secretary.note_decision` 的 `proposal`）：同一个 seq 既是行号也是号源，
     于是"这个编号指向哪一行"在结构上不可能漂。
 
+    `seq` 的**宽度**从 `schema.format_id` 取（与 `store.alloc_id` / 手稿号 / 留言号同一个
+    发号形态）：本文件此前自己按"四位 + 冒号补零"的写死宽度拼号，于是业主 2026-10-14 把宽度
+    定成六位之后，请示编号是**唯一**还在发四位的那一处（判据
+    `tests/test_id_width.py::test_no_four_digit_mint_remains_in_the_source` 咬的就是它）。
+    宽度只有一处可改这件事，靠的就是每个发号点都走 `format_id`。
+
     为什么要发号而不是让调用方拼一个：拼号的两种写法（时间戳、载荷哈希）都在
     锁外取值 —— 并发下会重号，而重号的请示意味着"接受 A 的编号却执行了 B 的洗"。
     """
@@ -178,7 +184,7 @@ def _append_locked(path: str | Path, rec: Mapping[str, Any], *,
                 out = dict(rec)
                 out["seq"] = seq
                 if stamp_field:
-                    out[str(stamp_field)] = f"{stamp_prefix}{seq:04d}"
+                    out[str(stamp_field)] = f"{stamp_prefix}{S.format_id(seq)}"
                 line = json.dumps(out, ensure_ascii=False, sort_keys=True, default=str) + "\n"
                 with target.open("a", encoding="utf-8", newline="\n") as fh:
                     fh.write(line)

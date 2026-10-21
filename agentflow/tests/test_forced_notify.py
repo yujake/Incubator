@@ -311,7 +311,20 @@ def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path
     assert "n≥3 时" in rows[0]["body"] and "把猜想立起来" in rows[0]["body"], rows[0]
     # 派活本身照常发生
     # 同上：按角色数那一行（`action` 那格现在恒为 `""`）。
-    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("role")) == "D"]) == 1, \
+    #
+    # 2026-10-21：这里**只数派活那一行**，`action == "message"` 的行要摘掉 ——
+    # 它 2026-10-19 起是**该有的**：`_handoff_address` 把 `to="D"` 解析成名册上的
+    # 那个子实例（`how="child"`）之后，`_do_handoff` 的通知那一半走
+    # `_message_to_member` ⇒ `open_item(kind="message", action="message")` 在那个实例
+    # 名下开一条 ack 板项（实测：`t-000004`，`parent_task_id=t-000002`，
+    # `detail="手稿 000000：…"`，`dispatch_handoff.notified == "t-000004"`）。
+    # 它是**通知**（同一件事的第二半），不是第二次派活；判据要的"派活只发生一次"
+    # 由派活那一行（`action=""`、`parent_task_id` = 本趟那一行）回答。
+    # 同一口径的先例：`tests/test_the_wash_is_proposed_not_applied.py` 里
+    # "受控拒绝/请示没有派活"那一条也是按 `action != "message"` 数的。
+    assert len([r for r in _ws_rows(ws, "tasks")
+                if str(r.get("role")) == "D"
+                and str(r.get("action") or "") != "message"]) == 1, \
         _ws_rows(ws, "tasks")
     assert run.steps[0].result.get("dispatch_handoff", {}).get("ok") is True, run.steps[0]
 
@@ -332,7 +345,11 @@ def test_a_malformed_dispatch_notify_still_dispatches_and_falls_back(tmp_path):
         {"final": "派完了"},
     ], role="M")
     assert [s.shape for s in run.steps] == ["summon", "final"], [s.shape for s in run.steps]
-    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("role")) == "D"]) == 1, _ws_rows(ws, "tasks")
+    # 只数派活那一行：`action == "message"` 那一行是通知投到那个实例板上的 ack 项
+    # （该有的第二半，理由与上一处逐字相同）。
+    assert len([r for r in _ws_rows(ws, "tasks")
+                if str(r.get("role")) == "D"
+                and str(r.get("action") or "") != "message"]) == 1, _ws_rows(ws, "tasks")
     rows = MS.rows(ws)
     assert len(rows) == 1, rows
     assert "框架据派活派生" in rows[0]["note"], rows[0]["note"]

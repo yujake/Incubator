@@ -614,6 +614,13 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     out["UsageView"] = set(RD.usage_face(root))
     out["StatusReportsView"] = set(RD.status_reports_face(root))
 
+    # 名册那一棵树（2026-10-21 的 `GET /api/roster`）：同一个口径 —— 新面落地后要让
+    # 后端那一侧真的去读它，否则 `RosterView` 会"既不在受核对名单、也没在欠账名单"。
+    # 夹具工作区里没有 `out/roster/`（名册只在有人被派活时才落盘）⇒ 读出来是
+    # `answer="unknown"` 那一档，顶层 15 个键照样在；行一级的五个类型恒为空数组，
+    # 逐个登记在 `readers.UNCHECKED_TYPES` 里（理由与 BudgetView 那一批同族）。
+    out["RosterView"] = set(RD.roster_face(root))
+
     acc = RD.acceptance_face(root)
     out.setdefault("AcceptanceView", set(acc))
     return out

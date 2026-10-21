@@ -13,11 +13,20 @@
  * 三态纪律在这一页上的落点：`answer` 只有三档字面量（"有" / "没有" / "没查成"）——
  * 读不出来时**必须**显"没查成"，不许显"没有"（那会把"没查成"读成"没人跑"，
  * 而用户正要用这一格决定要不要叫停）。
+ *
+ * ## 2026-10-21（业主的「名册监视」）：这一页多了第四张卡 —— 名册树
+ * 用户端此前没有任何地方看得到"谁是谁的子、每个子代理的绝对编号与名册名"：名册的
+ * 真身（`out/roster/<父编号>.jsonl`）在盘上，而页面只有 `/api/live` 那一份"谁在跑"。
+ * 现在这一页接上 `api.getRoster()`（`<RosterPanel />`，实现只有一处）：它既补上
+ * 「在飞」那两张表里只有角色名、没有绝对编号的缺口，也把父→子那一层摆出来。
+ * 为什么落在这里而不是新开一页：监控面的问题是"现在有谁在跑、谁是谁的子"，两件事
+ * 在同一屏才读得通（另开一页=让人来回对号）。
  */
 import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Money } from "../components/Money";
+import { RosterPanel } from "../components/Roster";
 import { Table, cell } from "../components/Table";
 import { StopButtons } from "../components/Stop";
 import { TriState, isUnreadable } from "../components/TriState";
@@ -124,6 +133,10 @@ export function Live() {
           </>
         )}
       </Card>
+
+      {/* 名册那一棵树（2026-10-21）：父→子 + 绝对编号 + 深度 + 收件箱积压。
+          紧挨着「在飞」那张卡，因为"谁在跑"与"它是谁的子"是同一个问题。 */}
+      <RosterPanel />
 
       <Card
         title="停机开关与历史"
