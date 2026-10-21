@@ -1692,7 +1692,7 @@ def _roster_clip(text: str, limit: int = ROSTER_INBOX_CLIP) -> str:
     return body[:int(limit)] + f"……（截断：全文 {len(body)} 字）"
 
 
-def _roster_inbox(tid: str, rows: list[dict[str, Any]], *, tasks_tri: str,
+def _roster_inbox(rows: list[dict[str, Any]], *, tasks_tri: str,
                   limit: int = ROSTER_INBOX_ITEMS) -> dict[str, Any]:
     """一个节点的「收件箱积压」：它名下还没消的板项（`{tri, open, by_state, ...}`）。
 
@@ -1709,7 +1709,6 @@ def _roster_inbox(tid: str, rows: list[dict[str, Any]], *, tasks_tri: str,
     "收件箱是空的"会让监控面板在真出事时最安静）；台账还没写过 ⇒ `not_applicable`
     + `open=None`（合法初态）；读到了 ⇒ `computed`，`open` 是**真数字**（可以是 0）。
     """
-    del tid
     if tasks_tri == TRI_UNREADABLE:
         return {"tri": TRI_UNREADABLE, "open": None, "by_state": {}, "by_kind": {},
                 "items": [], "more": 0,
@@ -1936,7 +1935,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             "task_found": bool(trow),
             "in_flight": (in_flight_by_tid.get(tid) if out["tasks_tri"] == TRI_COMPUTED
                           else None),
-            "inbox": _roster_inbox(tid, board_by_recipient.get(tid) or [],
+            "inbox": _roster_inbox(board_by_recipient.get(tid) or [],
                                    tasks_tri=out["tasks_tri"], limit=inbox_items),
         }
         nodes.append(node)

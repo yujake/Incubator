@@ -93,11 +93,11 @@ cli_tools_role_h        = 31
 cli_tools_role_v        = 15
 cli_tools_role_m        = 21
 webui_modules           = 9    # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
-webui_routes            = 25   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
-webui_routes_get        = 18   # 同上，按 `x[0] == 'GET'` 计数
+webui_routes            = 26   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
+webui_routes_get        = 19   # 同上，按 `x[0] == 'GET'` 计数
 webui_routes_post       = 7    # 同上，按 `x[0] == 'POST'` 计数
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 9    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
+webui_test_files        = 10    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
 LIVE-READINGS:END
 ```
 
