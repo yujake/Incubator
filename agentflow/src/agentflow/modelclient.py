@@ -103,8 +103,8 @@ class ModelClient:
     #: 那是三态被折平：把"没有台账号"伪装成"有一个叫 (未接线) 的台账号"。
     task_id: str | None = None
     role: str = "B"
-    #: ⚠️ **`max_tokens` 这一格已删**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
-    #: 它此前是"抽取那条路显式给 8192"的落点，而真调用对照证明：**不带这一栏时上游给得更宽**
+    #: `max_tokens` 这一格已删（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
+    #: 它此前是"抽取那条路显式给 8192"的落点，而真调用对照证明：不带这一栏时上游给得更宽
     #: （`finish_reason=stop`、`tokens_out=14,015`）。请求体里从此不出现 `max_tokens`。
     #: 逐笔记账结局（`modelcost.charge_reply` 的原样返回值）。
     charges: list[dict] = field(default_factory=list)
@@ -185,9 +185,9 @@ class ModelClient:
             "tokens_in": tin,
             "tokens_out": tout,
             "scope": self.scope,
-            # ⚠️ **2026-10-17（长跑 goal）**：**采样钉死**。审核类调用（V 的 `verify_proof` 等）
-            # 原先用默认采样 ⇒ **同一份证明会一次判「成立」、一次判「有毛病」**（实测），
-            # 于是"经审核才进定理库/才作根"这扇门**天生不可复现** ⇒ 长跑里证明链反复开合。
+            # 2026-10-17（长跑 goal）：采样钉死。审核类调用（V 的 `verify_proof` 等）
+            # 原先用默认采样 ⇒ 同一份证明会一次判「成立」、一次判「有毛病」（实测），
+            # 于是"经审核才进定理库/才作根"这扇门天生不可复现 ⇒ 长跑里证明链反复开合。
             # 默认 0；要改由配置面显式覆盖（这一栏同时进读数，见 `SeamCall`）。
             "temperature": 0,
             "model": getattr(self.gateway.spec, "model", ""),
@@ -209,10 +209,10 @@ def client_from_env(*, scope: str = SCOPE_EXTRACT, meter: Any = None,
     由 `verify.dangling_usage_task` 按"未接线"容忍；给了号就必须是 `tasks` 里
     真有的那一行（否则审计会如实地报它挂不上 —— 那正是我们要它报的）。
 
-    ⚠️ **`max_tokens` 这一栏已删**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
+    `max_tokens` 这一栏已删（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
     它此前是"抽取那条路必须显式给 8192"的落点，理由是"概念表一长，输出的 JSON 就被
-    4096 截在半句上"—— 那个诊断对，处方错了：**不该由我们再设一个更大的上限，而该不设**。
-    真调用对照（2026-10-15）：同一段 prompt **不带** `max_tokens` 时上游回
+    4096 截在半句上"—— 那个诊断对，处方错了：不该由我们再设一个更大的上限，而该不设。
+    真调用对照（2026-10-15）：同一段 prompt 不带 `max_tokens` 时上游回
     `finish_reason=stop`、`tokens_out=14,015`；带上 `32768` 时 `12,987` ⇒ 缺省比我们给的更宽。
     """
     spec = spec_from_env(env)

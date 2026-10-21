@@ -77,12 +77,12 @@ DEFAULT_RETRIES = 3
 #: 需要重试的 HTTP 状态码。
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
-#: **本机 TLS 栈**那一类失败的识别串（2026-10-16，我亲自下一轮文献后加的）。
+#: 本机 TLS 栈那一类失败的识别串（2026-10-16，我亲自下一轮文献后加的）。
 #:
-#: 判据来自现场读数：同一个 UTexas URL，默认走 **122 秒**才判死
+#: 判据来自现场读数：同一个 UTexas URL，默认走 122 秒才判死
 #: （Schannel `CRYPT_E_REVOCATION_OFFLINE`；Python/OpenSSL 侧报
 #: `CERTIFICATE_VERIFY_FAILED`），而加客户端开关（`curl --ssl-no-revoke`）后
-#: **0.55 秒**就拿到状态码 ⇒ 这是**本机去够吊销/中间证书够不到**，**重试修不好**。
+#: 0.55 秒就拿到状态码 ⇒ 这是本机去够吊销/中间证书够不到，重试修不好。
 _TLS_CERT_MARKERS = (
     "certificate verify failed",
     "cert_verify",
@@ -94,7 +94,7 @@ _TLS_CERT_MARKERS = (
     "revocation",
 )
 
-#: **TLS 握手超时**那一类（与普通超时分开）：多半是对方挡脚本，重试至多一次。
+#: TLS 握手超时那一类（与普通超时分开）：多半是对方挡脚本，重试至多一次。
 #: 现场读数：MDPI 那个 PDF 连续三次都是 `_ssl.c:985: The handshake operation timed out`。
 _TLS_TIMEOUT_MARKERS = (
     "handshake operation timed out",
@@ -744,18 +744,18 @@ class HttpDownloader:
                 logger.warning("下载 %s 得到 HTTP %s，%.1fs 后重试（%d/%d）", url, last_status, delay, attempt + 1, self.retries)
                 self._sleep(delay)
             except urllib.error.URLError as exc:
-                # ⚠️ **2026-10-16（我亲自下过一轮文献之后的归因）**：这一支此前**无差别重试** ——
-                # 而它罩着两类**重试永远修不好**的故障，实测代价极大（`projects/p8o` 那一趟
+                # 2026-10-16（我亲自下过一轮文献之后的归因）：这一支此前无差别重试 ——
+                # 而它罩着两类重试永远修不好的故障，实测代价极大（`projects/p8o` 那一趟
                 # 72 分钟只走了 15 次模型调用，全耗在这上面）：
                 #
-                #   * **证书/吊销类**（`CERTIFICATE_VERIFY_FAILED`、Schannel 的
+                #   * 证书/吊销类（`CERTIFICATE_VERIFY_FAILED`、Schannel 的
                 #     `CRYPT_E_REVOCATION_OFFLINE`）：同一个 URL 重试只会再等一次同样的
-                #     超时。实测：UTexas 那个 URL 每次要 **122 秒**才判死；加客户端开关
-                #     （`curl --ssl-no-revoke`）后 **0.55 秒**就拿到状态码 ⇒ 这是**本机
-                #     TLS 栈**的事，不是网络抖动 ⇒ **不重试**，如实记成 `tls_cert`。
-                #   * **TLS 握手超时**（`handshake operation timed out`）：与普通超时不同，
+                #     超时。实测：UTexas 那个 URL 每次要 122 秒才判死；加客户端开关
+                #     （`curl --ssl-no-revoke`）后 0.55 秒就拿到状态码 ⇒ 这是本机
+                #     TLS 栈的事，不是网络抖动 ⇒ 不重试，如实记成 `tls_cert`。
+                #   * TLS 握手超时（`handshake operation timed out`）：与普通超时不同，
                 #     它多半是对方把我们挡在门外；实测 MDPI 连续三次都是它 ⇒ 至多再试
-                #     **一次**，记成 `tls_timeout`。
+                #     一次，记成 `tls_timeout`。
                 #
                 # 其余（连接重置/断流/普通超时）照旧重试 —— 那些换一跳或换镜像真的能过。
                 reason_text = str(getattr(exc, "reason", exc))

@@ -94,33 +94,33 @@ __all__ = [
     "charge_reply",
 ]
 
-#: 每百万输入 token 的美元价。**DeepSeek 官方定价页的观测值**（抓取时刻见下），
+#: 每百万输入 token 的美元价。DeepSeek 官方定价页的观测值（抓取时刻见下），
 #: 调价后请用环境变量覆盖，或把新数补进 :data:`VENDOR_PRICES`。
 #:
 #: 2026-10-14 抓 `https://api-docs.deepseek.com/quick_start/pricing`（英文页）：
-#: 官方把输入拆成 **cache hit / cache miss** 两档，且**峰谷两价**（低谷 = 峰值的一半），
-#: 所以"一个数"只能是最保守的那一档。这里的缺省取 `deepseek-flash` 的**低谷**价
+#: 官方把输入拆成 cache hit / cache miss 两档，且峰谷两价（低谷 = 峰值的一半），
+#: 所以"一个数"只能是最保守的那一档。这里的缺省取 `deepseek-flash` 的低谷价
 #: （$0.15 / $0.6）—— 真正该走的是 :func:`price_for`（按厂商 × 模型 × 峰谷取）。
 DEFAULT_PRICE_IN_USD_PER_M = 0.15
 #: 每百万输出 token 的美元价。同上（`deepseek-flash` 低谷）。
 DEFAULT_PRICE_OUT_USD_PER_M = 0.6
 
-#: **厂商 × 模型 × 峰谷**的价目表（业主 2026-10-14：「花销计算标准与供应商定价吻合」）。
+#: 厂商 × 模型 × 峰谷的价目表（业主 2026-10-14：「花销计算标准与供应商定价吻合」）。
 #:
 #: 口径来源逐字：`https://api-docs.deepseek.com/quick_start/pricing`，抓取于 2026-10-14。
-#: 单位是**每百万 token 的美元**，形状 `{键: {"hit"/"in"/"out": (peak, off_peak)}}`：
+#: 单位是每百万 token 的美元，形状 `{键: {"hit"/"in"/"out": (peak, off_peak)}}`：
 #:
 #: | 模型 | 输入(命中) | 输入(未命中) | 输出 |
 #: |---|---|---|---|
 #: | `deepseek-flash` | 0.006 / 0.003 | 0.3 / 0.15 | 1.2 / 0.6 |
 #: | `deepseek-v4-pro` | 0.044 / 0.022 | 1.32 / 0.66 | 3.96 / 1.98 |
 #:
-#: 峰谷按官方页面的原文判定：**峰值时段 = UTC 周一至周五的 01:00–04:00 与 06:00–10:00**
+#: 峰谷按官方页面的原文判定：峰值时段 = UTC 周一至周五的 01:00–04:00 与 06:00–10:00
 #: （不含中国法定节假日），其余时段（含周末与节假日整日）都是低谷；低谷价 = 峰值价的一半。
 #: 我们按调用发生的时刻现算（见 :func:`is_peak`），并把用了哪一档写进计价读数 ——
 #: 否则"账单对不上"这件事又变成没法定位的。
 #:
-#: 没登记的组合**不猜**：回落到 `DEFAULT_PRICE_*` 并在读数里标 `price_fallback`。
+#: 没登记的组合不猜：回落到 `DEFAULT_PRICE_*` 并在读数里标 `price_fallback`。
 VENDOR_PRICES: dict[str, dict[str, dict[str, tuple[float, float]]]] = {
     "deepseek": {
         "deepseek-flash": {"hit": (0.006, 0.003), "in": (0.3, 0.15), "out": (1.2, 0.6)},
@@ -133,7 +133,7 @@ VENDOR_PRICES: dict[str, dict[str, dict[str, tuple[float, float]]]] = {
 PEAK_HOURS_UTC: tuple[tuple[int, int], ...] = ((1, 4), (6, 10))
 #: 峰谷判定的显式覆盖：`1`/`0`（认得的真假写法同 `settings`）。
 #:
-#: 为什么要有它：峰谷判据读的是**墙钟**，于是同一份判据在不同时刻会算出两个不同的
+#: 为什么要有它：峰谷判据读的是墙钟，于是同一份判据在不同时刻会算出两个不同的
 #: 数（差一倍）—— 那让"花销"这件事在判据里不可复现。真机当然按钟走；判据与
 #: 离线复算用这一格把它钉住（也顺手给运维一个"按谷价批账"的显式开关）。
 ENV_PEAK = "AGENTFLOW_MODEL_PEAK"
@@ -153,7 +153,7 @@ def peak_override(env: Mapping[str, str] | None = None) -> bool | None:
 
 ENV_PRICE_IN = "AGENTFLOW_MODEL_PRICE_IN_USD_PER_M"
 ENV_PRICE_OUT = "AGENTFLOW_MODEL_PRICE_OUT_USD_PER_M"
-#: 命中缓存那一档的输入价（每百万 token 美元）。**故意没有默认值**：
+#: 命中缓存那一档的输入价（每百万 token 美元）。故意没有默认值：
 #: 这一档的价是供应商价目表上的一个具体数字，没登记就按未命中价算并留痕，
 #: 不许由一个"看起来差不多"的数字顶上（业主 2026-10-14：口径要与供应商定价吻合）。
 ENV_PRICE_IN_HIT = "AGENTFLOW_MODEL_PRICE_IN_HIT_USD_PER_M"
@@ -171,11 +171,11 @@ class Price:
 
     ## 为什么是三格而不是两格（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
 
-    供应商的价目表按**三种 token** 分开登：命中缓存的输入、未命中缓存的输入、输出。
+    供应商的价目表按三种 token 分开登：命中缓存的输入、未命中缓存的输入、输出。
     我们此前只记两格（`in` / `out`），于是"命中缓存的那部分按未命中价算"——
     系统性偏高，而且偏得没法核对（供应商账单上那三档是分开列的）。
 
-    `usd_per_m_in_hit` 的三态：`None` = **我们不知道这一档的价**（不是 0）。
+    `usd_per_m_in_hit` 的三态：`None` = 我们不知道这一档的价（不是 0）。
     未知时按未命中价计（偏保守），并在 `source` 里如实标出来 —— 宁可算贵，
     也不许把"我不知道"写成一个更便宜的数字。
     """
@@ -208,7 +208,7 @@ class Price:
 
     @property
     def hit_price_known(self) -> bool:
-        """命中缓存那一档的价**知不知道**（三态的那一格）。"""
+        """命中缓存那一档的价知不知道（三态的那一格）。"""
         return self.usd_per_m_in_hit is not None
 
     @property
@@ -229,7 +229,7 @@ def _float_env(env: Mapping[str, str], name: str, default: float) -> float:
 
 
 def _float_env_opt(env: Mapping[str, str], name: str) -> float | None:
-    """读一个**可缺**的浮点环境变量：没给就是 `None`（"未登记"，不是 0）。"""
+    """读一个可缺的浮点环境变量：没给就是 `None`（"未登记"，不是 0）。"""
     raw = str(env.get(name) or "").strip()
     if not raw:
         return None
@@ -248,7 +248,7 @@ def price_from_env(env: Mapping[str, str] | None = None) -> Price:
         usd_per_m_in=_float_env(src, ENV_PRICE_IN, DEFAULT_PRICE_IN_USD_PER_M),
         usd_per_m_out=_float_env(src, ENV_PRICE_OUT, DEFAULT_PRICE_OUT_USD_PER_M),
         usd_per_m_in_hit=_float_env_opt(src, ENV_PRICE_IN_HIT),
-        # 来源按**这一份 env** 记（不是按进程环境现读）—— 见 `Price.source_note`。
+        # 来源按这一份 env 记（不是按进程环境现读）—— 见 `Price.source_note`。
         source_note=(f"env:{'/'.join(named)}" if named else ""),
     )
 
@@ -257,18 +257,18 @@ def price_of(spec: Any = None, *, at: Any = None,
              env: Mapping[str, str] | None = None) -> tuple[float, float]:
     """一次调用该按什么价算 ⇒ `(输入价, 输出价)`，单位是美元每百万 token。
 
-    ⚠️ 这是**两格**那个口径（未命中输入 / 输出），保留给"只想要两个数"的调用方
+    这是两格那个口径（未命中输入 / 输出），保留给"只想要两个数"的调用方
     （`runflow` 的清单、`cost.json`）。要用上缓存命中那一档，请用
     :func:`price_of_full`。
 
-    **本函数现在也看厂商与峰谷**（2026-10-14）：从 `spec` 上读 `vendor` / `model`
+    本函数现在也看厂商与峰谷（2026-10-14）：从 `spec` 上读 `vendor` / `model`
     （认不出厂商就按端点认，见 `modelgw.vendor_model_of`），再走 :func:`price_for`。
     改之前它只读环境变量与缺省价 ⇒ `agentflow run` 那条路的账与多智能体那条路
-    口径不一致（两边都自洽，谁也不会报错）。`spec=None` / 认不出厂商时**行为逐字不变**
+    口径不一致（两边都自洽，谁也不会报错）。`spec=None` / 认不出厂商时行为逐字不变
     （回落成 env/default），所以既有调用点不受影响。
 
     `at` 是"这一笔发生在哪一刻"（决定峰谷）。不给就用现在 —— 但调用方手上常有
-    这一笔自己的时间戳，**按它计价**才对（一趟跑在低谷、结账时已进峰值，
+    这一笔自己的时间戳，按它计价才对（一趟跑在低谷、结账时已进峰值，
     读墙钟会把整趟按峰值算）。
     """
     p = price_of_full(spec, at=at, env=env)
@@ -290,7 +290,7 @@ def price_of_full(spec: Any = None, *, at: Any = None,
 
 
 def _vendor_model_of(spec: Any) -> tuple[str, str]:
-    """`modelgw.vendor_model_of` 的**惰性**取用（`modelcost` 不依赖 `modelgw` 的导入期）。
+    """`modelgw.vendor_model_of` 的惰性取用（`modelcost` 不依赖 `modelgw` 的导入期）。
 
     为什么惰性：`modelgw` 的导入期不轻（读设置文件、拼工具面那条链上也有它），
     而 `modelcost` 被 `tokenmeter` → `store` 那条最底层的链引着 —— 让计价模块
@@ -307,11 +307,11 @@ def _vendor_model_of(spec: Any) -> tuple[str, str]:
 
 
 def is_peak(at: Any = None) -> bool:
-    """这次调用落在**峰值时段**吗（官方口径：UTC 周一至周五的 01–04 与 06–10 点）。
+    """这次调用落在峰值时段吗（官方口径：UTC 周一至周五的 01–04 与 06–10 点）。
 
     `at` 收一个带时区的 `datetime`，也收 ISO 字符串（调用方手上常常只有
     `S.now_iso()` 那个串 —— 见 `price_of` 的 `at`）；不给就用"现在"（UTC）。
-    周末整日低谷；中国法定节假日官方页面说"整日低谷"，我们**没有节假日表**，
+    周末整日低谷；中国法定节假日官方页面说"整日低谷"，我们没有节假日表，
     所以那一档如实不判（见 :func:`price_for` 的读数：`holiday_table=False`）——不假装知道。
     """
     from datetime import datetime, timezone
@@ -326,7 +326,7 @@ def is_peak(at: Any = None) -> bool:
 def _as_datetime(at: Any):
     """把 `at` 收成带时区的 `datetime`：ISO 串按 `fromisoformat` 读，裸时间按 UTC。
 
-    为什么裸 `datetime` 按 UTC（而不是按本机时区）：这一格判的是**供应商的**峰谷窗口，
+    为什么裸 `datetime` 按 UTC（而不是按本机时区）：这一格判的是供应商的峰谷窗口，
     而官方口径写的是 UTC。按本机时区解释一个朴素时间，等于让"这台机器在哪"悄悄
     改变一笔账的价格 —— 那正是"两边都自洽而互相矛盾"的那类形态。
     """
@@ -344,11 +344,11 @@ def _as_datetime(at: Any):
 
 def price_for(vendor: str = "", model: str = "", *, at: Any = None,
               env: Mapping[str, str] | None = None) -> tuple[Price, dict[str, Any]]:
-    """按**厂商 × 模型 × 峰谷**取价；返回 `(Price, 读数)`。
+    """按厂商 × 模型 × 峰谷取价；返回 `(Price, 读数)`。
 
     读数（进 `billing_reading` 与账本 note）回答四件事：用了哪一档（`peak`）、
     价格是从价目表还是回落来的（`price_source`）、有没有命中价（`hit_price_known`）、
-    以及我们**没有**节假日表这一条（`holiday_table=False`）——
+    以及我们没有节假日表这一条（`holiday_table=False`）——
     最后一条是"低谷判定可能偏严（把节假日算成峰值）"的如实交代，不是缺陷掩盖。
 
     环境变量仍然压在最上面（`price_from_env`）：CI 与既有脚本不许被这次改动弄坏。
@@ -408,7 +408,7 @@ def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:
     ## 三档 token（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
 
     上游回 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 时，输入那一块按
-    **两档价**分别算：命中部分用 `usd_per_m_in_hit`，未命中部分用 `usd_per_m_in`。
+    两档价分别算：命中部分用 `usd_per_m_in_hit`，未命中部分用 `usd_per_m_in`。
     上游没回这两格（`None`）⇒ 全部按未命中价算（保守），并在
     :func:`billing_reading` 里留一条读数，免得"我们不知道"被读成"没有这回事"。
     """
@@ -433,7 +433,7 @@ def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:
 
 
 def billing_reading(reply: Any, price: tuple[float, float] | Price) -> dict[str, Any]:
-    """这一笔的**计价读数**：用了哪几档价、命中多少、有没有"我们不知道"的格子。
+    """这一笔的计价读数：用了哪几档价、命中多少、有没有"我们不知道"的格子。
 
     它存在的理由（三态纪律）：`usd` 只是一个数，而"这个数是怎么来的"必须能复核 ——
     尤其是"命中缓存的价没登记"与"上游没回命中数"这两种情形，它们都会让

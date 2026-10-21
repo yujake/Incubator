@@ -285,7 +285,7 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
 
     `force_nonempty=True` 只由 `adopt_project` 在"用户自己往文件夹里丢过东西"
     那一档传进来（业主 2026-10-13 的口径）；它只是对 `Store.init` 那道
-    "外来目录"守卫开一次口子，**不**改变本函数对文件的任何行为。
+    "外来目录"守卫开一次口子，不改变本函数对文件的任何行为。
     """
     from . import schema as S
 
@@ -315,7 +315,7 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
 
 def adopt_project(root: str | Path, *, name: str | None = None, now: str | None = None,
                   allow_nonempty: bool = True) -> dict[str, Any]:
-    """把一个**用户自己建的、里面已经有东西的**文件夹收编成项目（业主 2026-10-13）。
+    """把一个用户自己建的、里面已经有东西的文件夹收编成项目（业主 2026-10-13）。
 
     业主的原话：「要知道有时候用户会自己在 projects 里建文件夹，然后把几个文件丢进去，
     就用系统开始工作的。也就是项目中除了系统成体系的产出，其他内容不会是结构化的」。
@@ -326,14 +326,14 @@ def adopt_project(root: str | Path, *, name: str | None = None, now: str | None 
     落点现状              动作
     ====================  ==================================================
     不存在 / 空的          普通冷启动（`create_project` 那套骨架）
-    **不空、不是工作区**   **收编**：把原有条目逐条记进项目卡（`user_files`，
-                          它们就是这一趟的输入材料），再铺骨架；**一个字节都不动**
+    不空、不是工作区   收编：把原有条目逐条记进项目卡（`user_files`，
+                          它们就是这一趟的输入材料），再铺骨架；一个字节都不动
     已经是工作区          热启动复用（不重铺、不报错）
     ====================  ==================================================
 
     "不动用户的文件"不是口号，是这一条的三处机械保证：① 只 `mkdir` 与写我们自己的
     三件（`data/`、`.agentflow-workspace`、`project.json`），从不删改别的路径；
-    ② 原有条目**逐条记进项目卡**（`user_files`），事后能回答"哪些是用户带进来的"；
+    ② 原有条目逐条记进项目卡（`user_files`），事后能回答"哪些是用户带进来的"；
     ③ 返回的读数里逐条列出它们（`adopted`），而不是悄悄吞掉。
 
     `allow_nonempty=False` 时才回到旧口径（拒绝非空的外来目录）—— 那是给"我要一个干净落点"
@@ -353,7 +353,7 @@ def adopt_project(root: str | Path, *, name: str | None = None, now: str | None 
         return {"project": ProjectRef(chosen, path, True, "warm",
                                       f"热启动：{why}", "auto").to_dict(),
                 "card": _load_card(path), "adopted": [], "created": False}
-    # 收编/冷启动：骨架照铺；`force=True` 这一处**只**为"非空"开（用户自己的文件不动）
+    # 收编/冷启动：骨架照铺；`force=True` 这一处只为"非空"开（用户自己的文件不动）
     card = create_project(ProjectRef(chosen, path, False, "cold", f"收编：{why}", "auto"),
                           now=now, force_nonempty=_nonempty_ok(path, state))
     if before:
@@ -369,7 +369,7 @@ def _nonempty_ok(path: Path, state: str) -> bool:
 
 
 def _remember_user_files(project: Path, names: list[str], *, now: str | None = None) -> dict:
-    """把用户原有的条目记进项目卡（`user_files`）—— 收编的**唯一**痕迹，不猜内容。"""
+    """把用户原有的条目记进项目卡（`user_files`）—— 收编的唯一痕迹，不猜内容。"""
     import json as _json
 
     card = _load_card(project)
@@ -392,14 +392,14 @@ def seed_source_paper(project: str | Path, *, paper: str | Path,
     """把一篇外部论文铺进项目：`source/` = 只读基线，`out/paper/main.tex` = 可改副本。
 
     为什么要有这一条（业主 2026-10-13：「打通正常的创建项目逻辑」）：`create_project` 只铺
-    工作区骨架，**没有任何受支持的路径把"那篇论文"放进项目** —— 于是 T1 的夹具是手搓的，
+    工作区骨架，没有任何受支持的路径把"那篇论文"放进项目 —— 于是 T1 的夹具是手搓的，
     而绕过守卫手抄（`init --force`）会留下一个没有项目卡、产物归属也接不上的文件夹。
 
     口径三条：
-    1. **只读基线不许被覆盖**：`source/main.*` 已在盘上时拒绝（`force=True` 才覆盖）——
+    1. 只读基线不许被覆盖：`source/main.*` 已在盘上时拒绝（`force=True` 才覆盖）——
        它是"前后对比"的分母，覆盖它等于把这一趟的判据毁掉；
-    2. **可改正文只从基线复制**：给了同目录的 `.tex` 就复制成 `out/paper/main.tex`；
-       只给 PDF 时**不替它编正文**（如实说"可改正文还没写"），那是 G 的活；
+    2. 可改正文只从基线复制：给了同目录的 `.tex` 就复制成 `out/paper/main.tex`；
+       只给 PDF 时不替它编正文（如实说"可改正文还没写"），那是 G 的活；
     3. 返回读数 `{project, source, manuscript, note}` —— 铺了哪些、没铺什么、为什么。
     """
     import shutil
@@ -442,7 +442,7 @@ def seed_source_paper(project: str | Path, *, paper: str | Path,
 def create_review_project(root: str | Path, *, paper: str | Path,
                           name: str | None = None, now: str | None = None,
                           force: bool = False) -> dict[str, Any]:
-    """**正常地**建一个审阅型项目：走 `resolve(start="cold")` 的守卫 + 骨架 + 铺那篇论文。
+    """正常地建一个审阅型项目：走 `resolve(start="cold")` 的守卫 + 骨架 + 铺那篇论文。
 
     与手抄的区别（这才是"打通"）：外来目录/已存在的目录在 `resolve` 那一层就被拒
     （不是靠 `init --force` 绕过去）；建出来的文件夹带 `.agentflow-workspace` 与 `project.json`，
@@ -612,7 +612,7 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         # 后者是"这笔没有真的入账"（`uncharged()` 数的是后者）—— 两件事不许合并成一个标签。
         client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
                                 task_id=task_id or None, role="B")
-        # 输出额度**不再由我们设**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
+        # 输出额度不再由我们设（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
         # 这里曾写 `max_tokens=8192`，理由是"缺省 4096 会把长输出截在半句上"。
         # 真调用对照（2026-10-15）：请求体里不带 `max_tokens` 时上游回
         # `finish_reason=stop`、`tokens_out=14,015`（带上 32,768 反而只有 12,987）。

@@ -123,22 +123,22 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
 
 
 def quote_state(row: Mapping[str, Any]) -> str:
-    """一条引文现在的**状态**（引文回验的唯一读口径，2026-10-14 业主裁定之后）。
+    """一条引文现在的状态（引文回验的唯一读口径，2026-10-14 业主裁定之后）。
 
     业主那句话：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。
     于是"通过"这件事分两档，四态字面量：
 
     - `"verbatim"`：逐字命中（`quoteverify.check_quote` 那一档，不花模型钱）；
     - `"semantic"`：语义相同（H 判的；允许改写、换记号、跨语言）；
-    - `"mismatch"`：查过了、不一致（`quote_verified is False`）——**语义档也救不了它**：
+    - `"mismatch"`：查过了、不一致（`quote_verified is False`）——语义档也救不了它：
       H 的判据是"引文与来源说同一件事"，"结论强于引文"照样落这一档；
-    - `"unchecked"`：还没查（`None`），**或者**方式那一栏是**认不出的词**
+    - `"unchecked"`：还没查（`None`），或者方式那一栏是认不出的词
       （词表外的值 ⇒ 说不出怎么通过的 ⇒ 按没查算）。
 
-    空 `quote_mode` 按 `verbatim` 读（**历史事实**，不是默认值）：这一栏是 2026-10-14
+    空 `quote_mode` 按 `verbatim` 读（历史事实，不是默认值）：这一栏是 2026-10-14
     才有的，在那之前 `quote_verified=True` 只可能来自 `quoteverify.check_quote`
     （逐字那一档）—— 判据 `test_a_legacy_external_lit_row_keeps_its_citation_credit`
-    钉着这条读法。**新的写入方必须说明方式**：`schema` 拒绝词表外的值，B 的语义档要
+    钉着这条读法。新的写入方必须说明方式：`schema` 拒绝词表外的值，B 的语义档要
     显式写 `semantic`（那条链的判据在 `tests/test_quote_semantics.py`）。
 
     为什么读侧还要再判一次（写侧 `schema._normalize_quote_mode` 已经归一过）：盘上是

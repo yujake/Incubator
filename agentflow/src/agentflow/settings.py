@@ -180,14 +180,14 @@ BOOL_KEYS: tuple[str, ...] = (LEAN_ENABLED_KEY,)
 #: 在这里再写一份就是同一个词表的第二个定义点。词表外的取值由
 #: `modelgw.ModelSpec` 构造时当场拒绝（拼错一个字母会报错，不会静默按缺省跑）。
 MODEL_KEYS: tuple[str, ...] = ("vendor", "api_key", "base_url", "name", "reasoning_effort")
-#: `models` 段（**按角色**覆盖，业主 2026-10-14：「允许不同角色智能体用不同模型厂商的
+#: `models` 段（按角色覆盖，业主 2026-10-14：「允许不同角色智能体用不同模型厂商的
 #: 不同 api key」）：键是角色名（`A`–`H` / `V` / `M`）或 `default`，值是那一段
 #: `MODEL_KEYS` 的子集。取缝时的梯子是：`models.<角色>` → `models.default` → `model`
 #: → 环境变量 → 缺省（唯一实现 `modelgw.spec_for`）。
 MODELS_SECTION = "models"
 #: `models` 段里那个"谁都兜底"的角色名。
 DEFAULT_MODEL_SLOT = "default"
-#: `secretary` 段：**所有角色的秘书共用**的那一档（业主同一条裁定的后半句：
+#: `secretary` 段：所有角色的秘书共用的那一档（业主同一条裁定的后半句：
 #: 「所有智能体的秘书另外共用一个 api key」）。形状与 `model` 段逐字相同。
 SECRETARY_SECTION = "secretary"
 #: `workspace` 段认识的键（顺序即文档顺序）。
@@ -358,7 +358,7 @@ def model_settings(path: str | Path | None = None, *,
     `reasoning_effort` 空串 = 未设置 = 用缺省（`modelgw.DEFAULT_REASONING_EFFORT`，High）；
     它的词表外取值也不在这里判（见 `MODEL_KEYS` 上面那段理由）。
 
-    它是**默认档**：按角色取缝走 :func:`model_settings_for`（那一口把 `models.<角色>`
+    它是默认档：按角色取缝走 :func:`model_settings_for`（那一口把 `models.<角色>`
     与 `models.default` 叠在上面）；`model` 段本身仍然有效（向后兼容：只配过它的
     工作区/机器行为逐字不变）。
     """
@@ -369,7 +369,7 @@ def _models_section(path: str | Path | None = None, *,
                     env: Mapping[str, str] | None = None) -> dict[str, dict[str, str]]:
     """`models` 段原文：`{角色: {键: 值}}`（只认 `MODEL_KEYS`，缺的补空串）。
 
-    形状不合法（不是对象 / 某个槽不是对象）时**跳过那一格**并在
+    形状不合法（不是对象 / 某个槽不是对象）时跳过那一格并在
     :func:`models_reading` 里如实报出来 —— 不清空别人的配置，也不假装读过。
     """
     raw = load_settings(path, env=env)
@@ -392,11 +392,11 @@ def model_settings_for(role: str, path: str | Path | None = None, *,
 
         `models.<角色>`（逐键取非空） → `models.default` → `model` 段 → 空串
 
-    为什么是**逐键**取而不是"整段覆盖"：运维最常见的写法是"只给 A 换一把 key、
+    为什么是逐键取而不是"整段覆盖"：运维最常见的写法是"只给 A 换一把 key、
     其余沿用默认档" —— 整段覆盖会把 `base_url` / `name` 一起清空，
     症状是"A 那一路突然按缺省端点跑"，而那不会有任何报错。
 
-    `来源` 记的是这一档的**出处**（`role:A` / `models.default` / `model` / 空串 =
+    `来源` 记的是这一档的出处（`role:A` / `models.default` / `model` / 空串 =
     什么都没有，调用方接着走环境变量与缺省）。它进读数：出了事要能回答
     "这把 key 是从哪一格来的"。
     """
@@ -421,7 +421,7 @@ def model_settings_for(role: str, path: str | Path | None = None, *,
 
 def secretary_settings(path: str | Path | None = None, *,
                        env: Mapping[str, str] | None = None) -> tuple[dict[str, str], str]:
-    """**所有角色的秘书共用**的那一档模型（业主 2026-10-14 的后半句）。
+    """所有角色的秘书共用的那一档模型（业主 2026-10-14 的后半句）。
 
     梯子与 :func:`model_settings_for` 同形，只是第一格换成 `secretary` 段：
     `secretary` → `models.default` → `model` → 空串。
@@ -524,7 +524,7 @@ def _write_sections() -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 
 def _nested_write_sections() -> tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]:
-    """**嵌套**的那两段：`models`（槽 → 键）与 `secretary`（平的一段）。
+    """嵌套的那两段：`models`（槽 → 键）与 `secretary`（平的一段）。
 
     为什么单列一张表而不是把 `_write_sections` 改成嵌套形状：平的那三段被
     `_section()` / `_masked_section()` / 面板 `/api/machine` 三处按「段→键」读，
@@ -659,7 +659,7 @@ def _masked_section(section: str, seg: Mapping[str, Any]) -> dict[str, str]:
 
 
 def _masked_models(seg: Mapping[str, Any]) -> dict[str, Any]:
-    """`models` 段的回显形态：**每一个槽**的 `api_key` 都换成掩码。
+    """`models` 段的回显形态：每一个槽的 `api_key` 都换成掩码。
 
     只掩 `model` 段那一处是最容易写漏的地方（判据 `test_role_models` 里有一条
     负控专门盯它）：按角色配 key 之后，一个漏掩的槽就等于把那把 key 回显出来了。

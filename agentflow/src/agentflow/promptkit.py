@@ -139,7 +139,7 @@ SECTION_ORDERS: dict[str, int] = {
     # 十一种形状"什么时候用哪个"（决策表；写法在循环协议里）。
     "COLLAB_SHAPES": 5270,
     # 这一岗的 skills 索引（slug + 一句话 + 什么时候读它 + 盘上路径）。
-    # 正文**不在这里** —— 按需 `fs.read`（业主 2026-10-14：「防止前置大量提示词，现做现读」）。
+    # 正文不在这里 —— 按需 `fs.read`（业主 2026-10-14：「防止前置大量提示词，现做现读」）。
     "SKILLS_INDEX": 5280,
     # 环境事实分两段：工作区（结构/版本）与这台机器的工具链（现算读数）。
     # 后者由调用方传进来（`agent_prompts.role_prompt_registry(toolchain_facts=…)`）——

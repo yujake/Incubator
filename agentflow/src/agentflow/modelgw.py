@@ -284,7 +284,7 @@ class ModelSpec:
     #: 厂商名（`settings` 的 `model.vendor` / `models.<角色>.vendor` / `secretary.vendor`）。
     #:
     #: 它今天做两件事：`base_url` 没给时按它选内置端点（`VENDOR_BASE_URLS`），
-    #: 以及**计价**时按它 + `model` 去 `modelcost.VENDOR_PRICES` 取那一档价
+    #: 以及计价时按它 + `model` 去 `modelcost.VENDOR_PRICES` 取那一档价
     #: （业主 2026-10-14：「花销计算标准与供应商定价吻合」）。空串 = 没配
     #: （计价那一侧会按端点猜一次，猜不到就如实回落并在读数里标出来）。
     vendor: str = ""
@@ -304,22 +304,22 @@ class ModelSpec:
     #: 要按机器改就设 `AGENTFLOW_MODEL_TIMEOUT_SEC`（或设置文件里那一档，见 `spec_from_env`）。
     #:
     #: 2026-10-15 业主裁定「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），
-    #: 删或将触发水平抬高到几乎不可能触发的程度」⇒ 从 300 抬到 **1800 秒**：
+    #: 删或将触发水平抬高到几乎不可能触发的程度」⇒ 从 300 抬到 1800 秒：
     #: 实测最坏的一次单请求是 260 秒（T2 步 0），1800 是它的七倍 ——
     #: 正常调用几乎不可能碰到；它留着只为挡住"永远不回来的请求"（那条会挂死整趟）。
     timeout_sec: float = 1800.0
     max_retries: int = 2
     temperature: float = 0.2
-    #: ⚠️ **这一格已删**（2026-10-15 业主裁定：**「我们不卡 token，只卡总花销的钱」**）。
+    #: 这一格已删（2026-10-15 业主裁定：「我们不卡 token，只卡总花销的钱」）。
     #:
     #: `ModelSpec.max_tokens` 与 `agent_loop.max_output_tokens`、抽取那条路的
     #: `client_from_env(max_tokens=8192)`、`LlmSeam.ask(max_tokens=…)` 四处一起删掉，
-    #: 请求体里**不再出现 `max_tokens`** —— 额度交回上游（它们的缺省比我们给的更宽）。
+    #: 请求体里不再出现 `max_tokens` —— 额度交回上游（它们的缺省比我们给的更宽）。
     #:
     #: 为什么这是对的（AI 代理 2026-10-15 的两发真调用对照，合计 ≈ $0.017）：
-    #: 同一段 prompt，**不带 `max_tokens`** 时上游回 `finish_reason=stop`、
+    #: 同一段 prompt，不带 `max_tokens` 时上游回 `finish_reason=stop`、
     #: `tokens_out=14,015`；带 `max_tokens=32768` 时 `tokens_out=12,987` ——
-    #: 缺省**不是** 4096，我们原本那一栏反而是在**压低**它的额度。
+    #: 缺省不是 4096，我们原本那一栏反而是在压低它的额度。
     #: 而此前那些"产出丢了"的真机读数（`output_exhausted`：推理把输出预算吃光、正文 0 字）
     #: 正是被这一栏咬的：推理与本应写正文的额度共用同一份上限。
     #:
@@ -377,7 +377,7 @@ class ModelSpec:
     def redacted(self) -> dict[str, Any]:
         """可安全写进日志/台账的配置快照（永不包含 key 本体）。
 
-        `vendor` 在 2026-10-14 加进来：它是**按角色配模型**那一批的可见字段之一
+        `vendor` 在 2026-10-14 加进来：它是按角色配模型那一批的可见字段之一
         （`settings.MODEL_KEYS` 里有它、面板上每个角色都有一格），而这份快照此前
         只给 `base_url` / `model` ⇒ 机器面读不到"这个角色用的是哪一家"。
         面板那一侧的表现是：盘上写了 `models.A.vendor`，输入框却永远是空的
@@ -402,7 +402,7 @@ class ModelSpec:
 def spec_for(role: str = "", *, secretary: bool = False,
              path: str | Path | None = None,
              env: Mapping[str, str] | None = None) -> tuple[ModelSpec, str]:
-    """**按角色**（或按秘书那一档）取模型配置：返回 `(spec, 来源)`。
+    """按角色（或按秘书那一档）取模型配置：返回 `(spec, 来源)`。
 
     业主 2026-10-14：「允许不同角色智能体用不同模型厂商的不同 api key
     （所有智能体的秘书另外共用一个 api key）」。梯子在 `settings` 里实现（唯一一处）：
@@ -416,7 +416,7 @@ def spec_for(role: str = "", *, secretary: bool = False,
     是排障时第一个要回答的问题，而它此前只能靠人翻文件。
 
     `vendor` 今天只做一件事：`base_url` 没给时按它选一个内置端点
-    （见 :data:`VENDOR_BASE_URLS`）。多厂商的**价目表**在 `modelcost` 那一侧，
+    （见 :data:`VENDOR_BASE_URLS`）。多厂商的价目表在 `modelcost` 那一侧，
     下一批接（口径要与供应商定价页对齐）。
     """
     src = dict(os.environ if env is None else env)
@@ -456,23 +456,23 @@ VENDOR_BASE_URLS: dict[str, str] = {
 
 
 def vendor_model_of(spec: Any = None) -> tuple[str, str]:
-    """从一个模型配置里读出 `(厂商, 模型名)` —— **取价前的第一步**。
+    """从一个模型配置里读出 `(厂商, 模型名)` —— 取价前的第一步。
 
     ## 为什么要有这一个函数（而不是各调用点自己 getattr）
 
-    它此前是**抄了两份**的：`llmseam._price_now` 里一份（`vendor` 没配就按端点猜一家），
+    它此前是抄了两份的：`llmseam._price_now` 里一份（`vendor` 没配就按端点猜一家），
     而 `modelcost.price_of` 那一支干脆不猜（于是 `runflow` 那条路上价目表形同虚设）。
     结果是同一次运行里两条路的计价口径不一致：多智能体那条按厂商表算，
-    `agentflow run` 那条按缺省价算 —— 而**两个数字都自洽**，没有任何地方会报错。
+    `agentflow run` 那条按缺省价算 —— 而两个数字都自洽，没有任何地方会报错。
     业主 2026-10-14「花销计算标准调整到与模型供应商定价吻合」要的正是把这一格收成一处。
 
     ## 口径（三态，不猜成"没有厂商"）
 
     - 配置里写了 `vendor` ⇒ 用它（小写去空白）；
-    - 没写 ⇒ 按 `base_url` 的**主机名**在 `VENDOR_BASE_URLS` 里认一家
+    - 没写 ⇒ 按 `base_url` 的主机名在 `VENDOR_BASE_URLS` 里认一家
       （只有主机名相同才算，子串匹配会把 `api.deepseek.com.evil.tld` 也认成 deepseek）；
     - 都认不出 ⇒ 返回 `("", 模型名)`，调用方据此回落到环境变量/缺省价
-      （"认不出"不是"没有厂商"：那一档的价格**不许**当成已知）。
+      （"认不出"不是"没有厂商"：那一档的价格不许当成已知）。
     """
     if spec is None:
         return "", ""
@@ -582,19 +582,19 @@ class ModelReply:
     http_status: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
-    #: 输入 token 里**缓存命中**的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
+    #: 输入 token 里缓存命中的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
     #:
     #: ## 为什么必须单独有一格（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
     #:
-    #: 供应商的账单价目表**不是一个价**：命中缓存的输入、未命中缓存的输入、输出
+    #: 供应商的账单价目表不是一个价：命中缓存的输入、未命中缓存的输入、输出
     #: 是三档不同的单价（DeepSeek 的定价页就是这么登的）。只记 `tokens_in` 一个数，
-    #: 这一层的花销就永远对不上供应商的账单 —— 而且差得**系统性偏向贵**（把命中价
+    #: 这一层的花销就永远对不上供应商的账单 —— 而且差得系统性偏向贵（把命中价
     #: 的那部分按未命中价算了）。
     #:
     #: 三态：`None` = 上游没回这一格（"没查成"），`0` = 上游明说零命中。
     #: 折成同一个 0 会让"这家上游不报这一格"与"这次真的零命中"分不开。
     cache_hit_tokens: int | None = None
-    #: 输入 token 里**未命中缓存**的那一部分（上游 `usage.prompt_cache_miss_tokens`）。
+    #: 输入 token 里未命中缓存的那一部分（上游 `usage.prompt_cache_miss_tokens`）。
     #: 与 `cache_hit_tokens` 同一条三态纪律。
     cache_miss_tokens: int | None = None
     attempts: int = 1
@@ -743,7 +743,7 @@ class ModelGateway:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        # **请求体里没有 `max_tokens`**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
+        # 请求体里没有 `max_tokens`（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
         # 额度交回上游 —— 真调用对照过，上游缺省比我们原先给的那一栏更宽
         # （见 `ModelSpec` 那一格上面的读数）。我们这一侧只留"钱"和"墙钟"两道闸。
         body: dict[str, Any] = {

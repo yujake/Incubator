@@ -339,7 +339,7 @@ def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[s
 
     开关的生命周期见 `consume_stop`（`draft/37` §140 修的 bug）：它是一份"信号"，
     被一趟运行消费之后就撤走，审计留在 `runs/stop-history.jsonl` 里。全工作区那一档
-    是**树根**在**那一趟收尾**时才撤（业主裁定「M 停整棵树」：读的时候谁都不删，
+    是树根在那一趟收尾时才撤（业主裁定「M 停整棵树」：读的时候谁都不删，
     见 `AgentLoop._consume_stop_at_teardown`），不是"第一个读到的"。
     """
     path = stop_path(root, explicit)
@@ -381,15 +381,15 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     ## `remove=False`（S4 子树开关 + 业主裁定的「整棵树」）
 
     一档上多个循环（同一棵树里并行的子孙、或同一支上的多个循环）各自都要读到
-    这把开关，所以只有「撤它有责任的那一个」撤它 —— 全工作区开关是**树根**
+    这把开关，所以只有「撤它有责任的那一个」撤它 —— 全工作区开关是树根
     （`AgentLoop._is_tree_root`：没有台账号 / 没有父任务的那一趟），子树开关是
-    **那一支的根**（`my_task_id == root_task_id`）；别的人都只记一笔
+    那一支的根（`my_task_id == root_task_id`）；别的人都只记一笔
     （`removed=False`，`level` 里带自己是哪一档）。否则"先读到的那个把开关吃掉"，
     后面的成员下一刻读到的就是"没人叫停"、静默继续跑
     （与 §140 那个 bug 同一族，只是方向反过来）。
 
-    读的时候**连树根也不删**（业主裁定「M 停整棵树」的删除半）：树根的删除推迟到
-    **这一趟自己的收尾**（`AgentLoop._consume_stop_at_teardown`，排在 `agent_run_end`
+    读的时候连树根也不删（业主裁定「M 停整棵树」的删除半）：树根的删除推迟到
+    这一趟自己的收尾（`AgentLoop._consume_stop_at_teardown`，排在 `agent_run_end`
     之后），因为树根也是"先读到的那一个"—— 读到即删，还没走到步边界的兄弟/子孙
     下一刻读到的同样是"没人叫停"。所以本函数的调用分两处：成员在读取时以
     `remove=False` 记一笔，树根在收工时以 `remove=True` 记这一笔并撤走文件。
@@ -746,21 +746,21 @@ def running_loops(root: str | Path) -> dict[str, Any]:
 
 def block_remaining_tasks(store: Any, *, task_id: str = "", why: str,
                           all_runs: bool = False) -> dict[str, Any]:
-    """优雅停止：把这一趟**还没做完**的任务与委托由框架翻成 `block`（业主 2026-10-13）。
+    """优雅停止：把这一趟还没做完的任务与委托由框架翻成 `block`（业主 2026-10-13）。
 
     业主的原话：「接收到停的时候，剩余任务委托状态自动变成block」+「最终由M整理汇报用户」。
     所以这一层的三件事，一件都不许靠模型自觉：
 
-    1. **它翻谁**：`task_id` 那一行自己（还 `pending`/`running` 时），以及**它派出去的**
+    1. 它翻谁：`task_id` 那一行自己（还 `pending`/`running` 时），以及它派出去的
        那些行（`parent_task_id == task_id` 且还没终态）—— 那正是"剩余任务与委托"；
-    2. **它留什么**：`status="block"` + `detail`（为什么停：`why`）+ `ended_at`（什么时候）；
+    2. 它留什么：`status="block"` + `detail`（为什么停：`why`）+ `ended_at`（什么时候）；
        名下的板项（`kind` 非空、`item_state` 还没 `done`）跟着置 `block` —— 否则一件
        被停掉的委托会在板上永远挂着"待办"；
-    3. **它报什么**：（`{"checked", "blocked", "blocked_items", "why"}`）——
+    3. 它报什么：（`{"checked", "blocked", "blocked_items", "why"}`）——
        父拿到的子结果里带这份清单（`agent_loop` 把它放进结果与 `agent_run_end`），
        M 再把它汇总进交付说明。
 
-    三态：`store` 不在（没接线）或写不进去 ⇒ `checked=False` + `why`，**不写成"没有剩余"**。
+    三态：`store` 不在（没接线）或写不进去 ⇒ `checked=False` + `why`，不写成"没有剩余"。
     """
     if store is None:
         return {"checked": False, "blocked": [], "blocked_items": [], "why": why,
@@ -776,7 +776,7 @@ def block_remaining_tasks(store: Any, *, task_id: str = "", why: str,
         return {"checked": False, "blocked": [], "blocked_items": [], "why": why,
                 "reason": f"tasks 读不到：{type(exc).__name__}: {exc}"}
     if all_runs:
-        # 主控那条优雅停止操作要停的是**整趟**（它的树就是工作区里这一趟的全部召唤）
+        # 主控那条优雅停止操作要停的是整趟（它的树就是工作区里这一趟的全部召唤）
         # ⇒ 按"所有还没终态的行"翻，而不是只翻自己那一条与直接子代。
         targets = rows
     else:

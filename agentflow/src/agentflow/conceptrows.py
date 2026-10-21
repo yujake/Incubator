@@ -44,43 +44,43 @@ from .migrate_concepts import PENDING_SEARCH, fold_concepts
 #: 过渡期还在盘上的老表名（迁移那一笔之后它从 `TABLES` 里消失）。
 LEGACY_TABLE = "concepts"
 
-#: 概念行**允许**的 `origin`（受控集合，唯一出处 = 这一处）。
+#: 概念行允许的 `origin`（受控集合，唯一出处 = 这一处）。
 #:
 #: 口径逐字来自业主 2026-10-21（mp3 那批的验收词）：
 #:
 #: > 来自文献的 ⇒ `external_lit`；自己造的 ⇒ `own_result`；
-#: > **概念行的 origin 不许是 `own_result`**（除非它确实是自己定义的新概念）
+#: > 概念行的 origin 不许是 `own_result`（除非它确实是自己定义的新概念）
 #:
-#: 真机读数（`projects/mp3/data/statements.json`，2026-10-21 现算）：**1143 条概念行、
-#: 其中 1142 条带 `source_lit_id`**（术语确实出自文献），而 `origin` 一律是
+#: 真机读数（`projects/mp3/data/statements.json`，2026-10-21 现算）：1143 条概念行、
+#: 其中 1142 条带 `source_lit_id`（术语确实出自文献），而 `origin` 一律是
 #: `own_result` —— 于是"文献里来的术语"在报告里被读成"我们自己的结果"。
 #: 根因在 `concept_statement` 把 `origin="own_result"` 写死（本批缺陷一）。
 CONCEPT_ORIGINS: tuple[str, ...] = ("external_lit", "own_result")
 
-#: 一轮之内**新建**概念的上限（业主 2026-10-21：「概念应按轮限量，一轮几十条以内」）。
+#: 一轮之内新建概念的上限（业主 2026-10-21：「概念应按轮限量，一轮几十条以内」）。
 #:
 #: 为什么是 30（可自证）：
 #:
-#: - 真机读数：mp3 的一轮消化灌进 **1143 条**概念（19 篇文献 × 每篇几十个关系名），
+#: - 真机读数：mp3 的一轮消化灌进 1143 条概念（19 篇文献 × 每篇几十个关系名），
 #:   于是"每轮产出新事实"这条读数被一次水漫金山顶平 —— 一轮 1143 与一轮 3 条
 #:   在多轮趋势上长得一样；
 #: - 业主给的口径是"一轮几十条以内"：30 落在"几十"的下半区，既容得下一篇文献的
 #:   显式概念草稿（真机里通常 < 30），又让配额确实咬得住；
-#: - 它是**每轮**（`B.run` 一次 / 一次 `run_once` / 秘书的一笔）的总量，不是"每篇"：
+#: - 它是每轮（`B.run` 一次 / 一次 `run_once` / 秘书的一笔）的总量，不是"每篇"：
 #:   按篇限量挡不住"篇数多"那种水漫（19 篇 × 30 = 570 仍然过大）。
 CONCEPTS_PER_ROUND_MAX = 30
 
 
 def concept_origin_problem(*, origin: str, source_lit_id: str = "",
                            self_authored: bool = False) -> str:
-    """概念行的 `origin` 口径 ⇒ 空串 = 放行，否则一句可读的拒信。**唯一实现**。
+    """概念行的 `origin` 口径 ⇒ 空串 = 放行，否则一句可读的拒信。唯一实现。
 
     三条判据（每一条都对着 mp3 那个真形态）：
 
     1. `origin` 必须在 :data:`CONCEPT_ORIGINS` 里（受控集合，不猜拼错的写法）；
     2. `external_lit`（文献里来的）必须给 `source_lit_id` —— 没有出处的"文献术语"
        与"我们自己造的"在数据面上就分不开了；
-    3. `own_result`（我们自己造的）必须**显式**声明 `self_authored=True`：
+    3. `own_result`（我们自己造的）必须显式声明 `self_authored=True`：
        它不是默认值。默认值才是 mp3 那 1142 条错标的来源 ——
        "没声明"与"确实是新概念"必须分得开，否则这条判据永远拦不住沉默的错标。
 
@@ -112,7 +112,7 @@ def concept_origin_problem(*, origin: str, source_lit_id: str = "",
 
 def resolve_concept_origin(*, origin: str = "", source_lit_id: str = "",
                            self_authored: bool = False) -> str:
-    """没显式给 `origin` 时按数据推断（**只在没给的时候**，不覆盖调用方的声明）。
+    """没显式给 `origin` 时按数据推断（只在没给的时候，不覆盖调用方的声明）。
 
     推断规则（两条，与 :func:`concept_origin_problem` 同一口径）：
 
@@ -120,7 +120,7 @@ def resolve_concept_origin(*, origin: str = "", source_lit_id: str = "",
     - 没有出处 ⇒ `own_result`（定义就在这一行上，是我们自己写的）。
 
     推断出来的 `own_result` 视为"自己定义的新概念"（定义正文就在同一行），
-    所以调用方**不必**再传 `self_authored`；而**显式**写 `origin="own_result"`
+    所以调用方不必再传 `self_authored`；而显式写 `origin="own_result"`
     就必须传它 —— 一句话：默认推断可以沉默，主动声明必须负责。
     """
     o = str(origin or "").strip()
@@ -149,7 +149,7 @@ class ConceptQuota:
     | 配额用完 | `False`（名字进 `refused`） | `reading()` 里 `limit` / `written` / `refused` / `why` |
 
     `reading()["why"]` 就是业主点名的那个读数："这一轮概念配额用完，剩下的下一轮或
-    写进报告"。已经写进去的一条都不回滚（"已写的保留"：配额是**写入闸**，
+    写进报告"。已经写进去的一条都不回滚（"已写的保留"：配额是写入闸，
     不是事务回滚 —— 回滚会把这一轮的真产出一起抹掉）。
     """
 
@@ -329,17 +329,17 @@ def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases
     + `quote_reason` 里的待补标记（`concept:pending_search`：等 A 检索回来，
     或基本概念由 B 自撰）。不许落成 `active` + 空定义，也不许干脆不落。
 
-    ## 概念行**不带** `proof_text`（本批缺陷一的写入侧）
+    ## 概念行不带 `proof_text`（本批缺陷一的写入侧）
 
-    真机读数（`projects/mp3/data/statements.json`）：**1143 条概念行，每一条都带
-    `proof_text="concept:primitive"`** —— 于是任何"有没有证明"的读数（
+    真机读数（`projects/mp3/data/statements.json`）：1143 条概念行，每一条都带
+    `proof_text="concept:primitive"` —— 于是任何"有没有证明"的读数（
     `proof_review_gap` 的 `proof_text` 非空判据、收工门的 `reviewed` 档、
-    `prose_reviewed_statements`）都被虚高。那个值不是证明，是一个**哨兵**：
+    `prose_reviewed_statements`）都被虚高。那个值不是证明，是一个哨兵：
     它当初是为了表达"这是一个原始概念、没有良定义性证明可写"，而表达式本该是
     "`proof_text` 留空 + 这个概念不参与等级链"（`evidencebits.derive_grade` 对
     `kind="concept"` 本来就短路成 `not_applicable`）。
 
-    所以这一格现在**永远写空**：调用方传了 `proof_text` 就是传错了词，当场拒绝
+    所以这一格现在永远写空：调用方传了 `proof_text` 就是传错了词，当场拒绝
     （`ValueError`，消息里写清原因），而不是悄悄丢掉 —— 静默丢会让调用方以为
     "概念也能带证明"。历史行一个字不动（本批的边界：只堵写入侧）。
 
@@ -687,7 +687,7 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
 
     `origin` / `self_authored` 原样交给 :func:`concept_statement`（口径只在那里面，
     这里不抄第二份）。`proof_text` 保留在签名里只为兼容既有调用点：
-    概念行**不许**带它，传了非空值 ⇒ `ValueError`（本批缺陷一）。
+    概念行不许带它，传了非空值 ⇒ `ValueError`（本批缺陷一）。
 
     `mirror=True` 只在老表还在 schema 里时才有意义（落刀之后那张表不存在，
     硬写会以"未知表"整笔失败）⇒ 这里自己判、把判断收进这一处，

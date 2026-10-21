@@ -3,39 +3,39 @@
 这一层与 `tools/search_tools.py` 的分工，照本仓的老规矩（`dedup.py` / `secretary.py`
 都是这个形状）：
 
-- **本模块是判据的真身**：条数上限（`MAX_ADMIT_PER_CALL` / `MAX_ADMIT_PER_DELEGATION`）、
+- 本模块是判据的真身：条数上限（`MAX_ADMIT_PER_CALL` / `MAX_ADMIT_PER_DELEGATION`）、
   重叠口径（`OVERLAP_HIGH_JACCARD` / `OVERLAP_KINDS`）、状态机
   （`schema.CANDIDATE_STATUSES`）、筛选理由的受控词表（`schema.CANDIDATE_REASON_CODES`）、
   报告的两块结构（`report_markdown` / `report_violations`）只有这一处实现；
-- **工具层是模型的手**：把本模块的结论翻成 `ToolResult`（`fail(kind=...)` 给模型看），
+- 工具层是模型的手：把本模块的结论翻成 `ToolResult`（`fail(kind=...)` 给模型看），
   不重新判一遍。两份判据必然漂，而漂的形态是"工具说拒了、实现却写进去了"。
 
-## 列表的生命周期 = **一次查询委托**（业主 2026-10-20 补充的第 1 条）
+## 列表的生命周期 = 一次查询委托（业主 2026-10-20 补充的第 1 条）
 
-待新增列表**不是全局常驻**的：一行候选属于某一次委托（`request_id`，形如 `r-000001`，
+待新增列表不是全局常驻的：一行候选属于某一次委托（`request_id`，形如 `r-000001`，
 就是 `search_requests` 里那一行）。于是：
 
-- 新委托开始时，`stage_list` 的**默认视图**只看得到本委托的行（`current_request_id`）；
-- 旧委托的行**不参与本次筛选**（查历史要显式给 `request_id`）；
-- 迁移完一次委托就把它的列表**清空**（`cleared` / 终态 + `cleared_at`），于是"下一次委托
+- 新委托开始时，`stage_list` 的默认视图只看得到本委托的行（`current_request_id`）；
+- 旧委托的行不参与本次筛选（查历史要显式给 `request_id`）；
+- 迁移完一次委托就把它的列表清空（`cleared` / 终态 + `cleared_at`），于是"下一次委托
   看不到本委托的残留"—— 这一条由 `admit_all` 的结算与 `current_request_id` 的取值共同保证。
 
 ## 为什么"入库"不在本模块里写 literature 行
 
-业主口径逐字：「入库走**现有的 literature 登记路径**（别绕开它）」。
+业主口径逐字：「入库走现有的 literature 登记路径（别绕开它）」。
 现有路径有两条，而且它们本来就不同：
 
 - 工具面：`tools/search_tools._h_register`（`search.register` 的 handler，走
   `store.tx` + `alloc_id("lit")` + 判重 + 收编文件）；
 - 动作面：`agent_a.run_once` 的阶段 2（同一个事务里重做一次判重、回填请求行）。
 
-所以本模块的 `admit` / `admit_all` 只做**筛选与结算**，把"该入库的那几条"交给调用方
+所以本模块的 `admit` / `admit_all` 只做筛选与结算，把"该入库的那几条"交给调用方
 注入的 `registrar`（就是上面那条现有路径），拿回 `lit_id` 之后再回填候选行。
 "绕开登记路径"在结构上做不到：本模块里没有一处 `tx.upsert("literature", …)`。
 
 ## 三态纪律（与 `search_tools` 的模块 docstring 同源）
 
-- `store is None` ⇒ 不是"没有重叠"，是**判不了**（`checked=False`）；
+- `store is None` ⇒ 不是"没有重叠"，是判不了（`checked=False`）；
 - 表读不出来 ⇒ 同上（`StoreError` 一路抛给调用方，由工具层折成 `table_unreadable`）；
 - `overlap_score is None` ⇒ 没查过（不是 0.0 —— 0.0 是"查了，一点也不重叠"）。
 """
@@ -83,7 +83,7 @@ __all__ = [
 #: 不同的事，合成一个会让"分两批把 20 篇都塞进去"变成合法。
 MAX_ADMIT_PER_CALL: int = 10
 
-#: 同一个**委托**（`request_id` = 一次检索委托）累计入库上限（业主口径 ①）。
+#: 同一个委托（`request_id` = 一次检索委托）累计入库上限（业主口径 ①）。
 #:
 #: 它与 `MAX_ADMIT_PER_CALL` 都必需：只有每次调用的上限 ⇒ 分几批就能突破；
 #: 只有委托上限 ⇒ 一次调用 100 篇也照样过。两条一起才等于"一次文献检索至多入库 10 篇"。
@@ -92,22 +92,22 @@ MAX_ADMIT_PER_DELEGATION: int = 10
 #: 标题词集 Jaccard 的"重叠度高"阈值（业主口径 ④，自定但必须写在这里）。
 #:
 #: 0.60 的依据（不是拍脑袋）：同一篇文献的两种写法（预印本 vs 正式版、带/不带副标题）
-#: 实测 Jaccard 落在 0.7–0.95；而同一领域的**不同**论文（共享 "abelian group" 这类
-#: 高频词组）通常落在 0.1–0.35。0.60 落在两簇中间，且**宁可误报**——误报的代价只是
+#: 实测 Jaccard 落在 0.7–0.95；而同一领域的不同论文（共享 "abelian group" 这类
+#: 高频词组）通常落在 0.1–0.35。0.60 落在两簇中间，且宁可误报——误报的代价只是
 #: "多要一句 `new_content`"（人写一句话即可），漏报的代价是"同一篇进库两次"
 #: （两条 lit_id、两套引文，下游无法合并）。
 OVERLAP_HIGH_JACCARD: float = 0.60
 
 #: `lit_candidates.overlap_kind` 的受控取值。
 #:
-#:   doi_exact     —— DOI 完全相同 ⇒ **视为重复**（不是"高度重叠"：它就是同一篇，
+#:   doi_exact     —— DOI 完全相同 ⇒ 视为重复（不是"高度重叠"：它就是同一篇，
 #:                    没有任何"新内容"可陈述，所以给不给 `new_content` 都不放行）
 #:   title_jaccard —— 按标题词集 Jaccard 算出来的重叠度（0..1，见 `title_jaccard`）
 OVERLAP_KINDS: tuple[str, ...] = ("doi_exact", "title_jaccard")
 
 #: 委托报告的落点（相对工作区根）：`reports/lit-<request_id>.md`。
 #:
-#: 为什么是文件而不是只放在工具返回值里（业主 2026-10-20 第 3 条：这是**交付物**）：
+#: 为什么是文件而不是只放在工具返回值里（业主 2026-10-20 第 3 条：这是交付物）：
 #: 下一次委托的 D/H 要用它 —— 而"D/H 读一个工具调用的返回值"这件事在结构上做不到
 #: （它们是另外的角色、另外的循环）。写在 `reports/` 下之后，任何带 `fs.read` 的角色
 #: 都读得到，它也就成了台账之外唯一一份"这次检索进了哪几篇、挡了哪几篇与为什么"的证据。
@@ -136,7 +136,7 @@ def title_terms(title: str | None) -> set[str]:
     为什么不用 `textutil.similarity`（那是 difflib 的字符级比率）：字符级比率对
     "同一批词换个次序"几乎不敏感，而"同一篇文献换个次序"恰恰是最常见的重复形态
     （正式版把副标题挪到前面）。词集 Jaccard 对次序不敏感、对增删词敏感，
-    正是这一档需要的口径。**这不是判重主通道** —— 判重的唯一口径仍是
+    正是这一档需要的口径。这不是判重主通道 —— 判重的唯一口径仍是
     `dedup.literature_keys` / `find_existing_literature`（DOI → 标题+年 → 仅标题），
     本函数只服务"重叠度高到要不要问一句 `new_content`"。
     """
@@ -162,19 +162,19 @@ def title_jaccard(a: str | None, b: str | None) -> float:
 
 
 def overlap_check(store: Store | None, title: str, doi: str | None = None) -> dict:
-    """与**本地库**（`literature` 表）比对：DOI 完全相同 ⇒ 重复；否则按标题词集 Jaccard。
+    """与本地库（`literature` 表）比对：DOI 完全相同 ⇒ 重复；否则按标题词集 Jaccard。
 
     返回的字典逐键：
 
     - `checked`：这一趟到底查没查（`store is None` ⇒ `False`，不是"没有重叠"）；
-    - `duplicate`：`True` 只在 DOI 与本地某一行**完全相同**时（这一档没有 `new_content`
+    - `duplicate`：`True` 只在 DOI 与本地某一行完全相同时（这一档没有 `new_content`
       可救 —— 同一篇文献说不出"新内容"）；
     - `overlap_score` / `overlap_kind` / `overlap_with`：与哪一行、重叠多少；
     - `requires_new_content`：重叠度 ≥ `OVERLAP_HIGH_JACCARD` ⇒ `True`
       （调用方必须给 `new_content`，否则拒收）；
     - `reason`：一句人话，直接可以进拒信。
 
-    表读不出来时**不吞异常**：`store.rows` 的 `StoreError` 一路抛给调用方
+    表读不出来时不吞异常：`store.rows` 的 `StoreError` 一路抛给调用方
     （工具层折成 `table_unreadable`）。"表坏了"折成"没有重叠"会让重复文献静默进库。
     """
     if store is None:
@@ -241,7 +241,7 @@ def _rows(store: Store) -> list[dict]:
 def _code_label(code: str) -> str:
     """受控理由码的短标签（写进行上的 `withdrawn_reason` / `reject_reason` / `clear_reason`）。
 
-    行上的那一栏必须**非空**（`schema.LitCandidate.validate` 守），而调用方可能只给
+    行上的那一栏必须非空（`schema.LitCandidate.validate` 守），而调用方可能只给
     理由码、不给散文 —— 那就用登记表里的标签顶上，而不是留空或编一句。
     """
     return S.CANDIDATE_REASON_LABELS.get(str(code), str(code))
@@ -260,7 +260,7 @@ def _check_code(code: str) -> str:
 
 
 def current_request_id(store: Store | None) -> str:
-    """当前委托 = **槽位号最大**那一行所属的 `request_id`（没有行 ⇒ 空串）。
+    """当前委托 = 槽位号最大那一行所属的 `request_id`（没有行 ⇒ 空串）。
 
     为什么这样定"当前"：槽位号只增不复用（`store.alloc_id("candidate")`），
     于是"最后一个开始暂存的委托"就是号最大的那一行的委托 —— 不需要另一处
@@ -295,16 +295,16 @@ def stage_entries(
     actor: str = "agent-A",
     note: str = "lit.stage_add",
 ) -> dict:
-    """把候选追加进**本次委托**的待新增列表（一次可追加任意条，**超过 10 条也允许**）。
+    """把候选追加进本次委托的待新增列表（一次可追加任意条，超过 10 条也允许）。
 
-    为什么暂存不设上限：上限管的是**入库**（业主口径 ①），不是"广搜能拿回多少"。
+    为什么暂存不设上限：上限管的是入库（业主口径 ①），不是"广搜能拿回多少"。
     把上限提前到暂存这一档，会让"广搜 30 条、精选 8 条入库"这条正路直接走不通 ——
     而业主明确要求"广搜可以超过 10 篇，但正式入库最多 10"。
 
-    槽位号由 `store.alloc_id("candidate")` 发：**只增不复用**（撤掉的号不会被再发一次），
+    槽位号由 `store.alloc_id("candidate")` 发：只增不复用（撤掉的号不会被再发一次），
     所以第 2 批的序号接着第 1 批往下排（12 条 + 3 条 = 1..15，撤掉的 3、7 空着）。
 
-    `request_id` **必须给**（业主 2026-10-20 第 1 条：列表按委托重置）——
+    `request_id` 必须给（业主 2026-10-20 第 1 条：列表按委托重置）——
     新委托换一个 `request_id` 就是"从空列表开始"，不需要（也不许）清空旧行。
     """
     if store is None:
@@ -369,13 +369,13 @@ def stage_entries(
 
 
 def _scoped_rows(rows: Sequence[Mapping[str, Any]], rid: str) -> list[dict]:
-    """把行按委托过滤（"默认视图只看当前委托"的**唯一实现**）。
+    """把行按委托过滤（"默认视图只看当前委托"的唯一实现）。
 
     三态，与 `request_id` 的三种取值一一对应：
 
     - `rid == "*"` ⇒ 不过滤（审计用：查全部委托）；
     - `rid` 非空 ⇒ 只留这一次委托的行；
-    - `rid` 为空 ⇒ **一行都不给**（不是"全表"）。"说不清这是哪一次委托"与"所有委托"
+    - `rid` 为空 ⇒ 一行都不给（不是"全表"）。"说不清这是哪一次委托"与"所有委托"
       是两件事，后者会把旧委托的行混进本次筛选 —— 而那正是业主第 1 条要挡的。
 
     单独成函数是为了让"按委托重置"这条判据有一个可被负控替代的落点
@@ -395,13 +395,13 @@ def list_candidates(
     batch: int | None = None,
     status: str | None = None,
 ) -> dict:
-    """按委托 / batch / status 查待新增列表。**空槽位照样出现在列表里**。
+    """按委托 / batch / status 查待新增列表。空槽位照样出现在列表里。
 
-    "空槽位"指 `status="withdrawn"` 的那些行：它们**没有被物理删除**（序号不复用），
+    "空槽位"指 `status="withdrawn"` 的那些行：它们没有被物理删除（序号不复用），
     所以题名、`withdrawn_reason`、`added_at` 全都还在 —— 于是"第 3 号被撤了哪一篇、
     为什么"是查得出来的。这正是业主口径 ③ 的落点：撤掉 ≠ 删掉。
 
-    默认视图**只按当前委托过滤**（业主 2026-10-20 第 1 条）；要看旧委托请显式给
+    默认视图只按当前委托过滤（业主 2026-10-20 第 1 条）；要看旧委托请显式给
     `request_id`（`request_id="*"` 表示全查，用于审计"历史有没有残留"）。
     """
     if store is None:
@@ -421,7 +421,7 @@ def list_candidates(
         scoped = [r for r in scoped if int(r.get("batch") or 0) == int(batch)]
     rows = sorted(([r for r in scoped if str(r.get("status") or "") == status]
                    if status is not None else scoped), key=lambda r: str(r.get("slot") or ""))
-    # 计数按**委托过滤后、状态过滤前**那一份算：调用方问"这一批还有几篇 pending"时
+    # 计数按委托过滤后、状态过滤前那一份算：调用方问"这一批还有几篇 pending"时
     # 需要同时看到全部态，否则 status=admitted 那一次查询会把"总数 12"读成"总数 9"。
     counts = {s: 0 for s in S.CANDIDATE_STATUSES}
     for r in scoped:
@@ -491,9 +491,9 @@ def _terminal(store: Store, slot: str, *, status: str, code: str, note: str,
 
 def withdraw(store: Store | None, slot: str, reason_code: str, note: str = "",
              *, actor: str = "agent-A") -> dict:
-    """撤掉某一槽：写 `withdrawn_reason` + `reason_code`、状态置 `withdrawn`，**不物理删除**。
+    """撤掉某一槽：写 `withdrawn_reason` + `reason_code`、状态置 `withdrawn`，不物理删除。
 
-    撤掉之后可以再 `stage_add` 补位 —— 但新条进的是**新序号**（旧号不复用），
+    撤掉之后可以再 `stage_add` 补位 —— 但新条进的是新序号（旧号不复用），
     所以列表里会同时看到"第 3 号（撤掉，理由…）"与"第 13 号（补进来的那条）"。
 
     `reason_code` 必须是 `schema.CANDIDATE_REASON_CODES` 里的受控取值
@@ -508,7 +508,7 @@ def withdraw(store: Store | None, slot: str, reason_code: str, note: str = "",
 
 def reject(store: Store | None, slot: str, reason_code: str, note: str = "",
            *, actor: str = "agent-A") -> dict:
-    """审内容后拒收：写 `reject_reason` + `reason_code`、状态置 `rejected`，**不物理删除**。"""
+    """审内容后拒收：写 `reject_reason` + `reason_code`、状态置 `rejected`，不物理删除。"""
     if store is None:
         raise LitStageError("未配置 store：拒收不了（不是「已经拒过了」）", kind="no_store")
     code = _check_code(reason_code)
@@ -528,7 +528,7 @@ def _cap_of(cap: int | None) -> int:
 
 def _refusal(slot: str, title: Any, why: str, code: str,
              overlap: Mapping[str, Any] | None = None) -> dict:
-    """一条"这一槽没入库"的记录（**键集合固定**：`slot` / `title` / `why` / `code` / `overlap`）。
+    """一条"这一槽没入库"的记录（键集合固定：`slot` / `title` / `why` / `code` / `overlap`）。
 
     为什么键集合必须固定：工具层把它声明成数组元素，而"同一个数组里有的元素带
     `overlap`、有的不带"会让下游的键级判据失去对象
@@ -551,29 +551,29 @@ def admission_plan(
     on_over_cap: str = "refuse_all",
     duplicate_branch_ok: bool = False,
 ) -> dict:
-    """入库前的那一笔判断：条数上限 + 重叠检查 + 逐条该不该进（**一行都不写**）。
+    """入库前的那一笔判断：条数上限 + 重叠检查 + 逐条该不该进（一行都不写）。
 
     ## 两档超限处置（`on_over_cap`）
 
-    - `"refuse_all"`（`lit.admit` 用）：本次要入的条数超过上限 ⇒ **整笔拒绝**，
+    - `"refuse_all"`（`lit.admit` 用）：本次要入的条数超过上限 ⇒ 整笔拒绝，
       一条都不入。为什么整笔：如果前 10 条进了、第 11 条被挡，调用方会读成
       "第 11 条被审掉了"，而真相是"这一次调用根本不成立"。
-    - `"truncate"`（`lit.admit_all` / A 的自动链路用）：按槽位号顺序把**前 N 条**
+    - `"truncate"`（`lit.admit_all` / A 的自动链路用）：按槽位号顺序把前 N 条
       通过检查的收进来，其余进 `cleared`（`reason_code="over_cap"`）——
       一键迁移的语义是"把通过的都迁走"，不是"有一条超限就全不动"。
 
     ## 逐条拒收（业主口径 ②④）
 
     - `status != "pending"`（已撤 / 已拒 / 已入库 / 已清空）⇒ 拒（`already_terminal`）；
-    - DOI 与本地库某一行**完全相同** ⇒ 视为重复，拒（`duplicate_doi`）。
-      `duplicate_branch_ok=True` 时**不拒**、而是标 `existing_duplicate`：那是
+    - DOI 与本地库某一行完全相同 ⇒ 视为重复，拒（`duplicate_doi`）。
+      `duplicate_branch_ok=True` 时不拒、而是标 `existing_duplicate`：那是
       A 的自动链路要的语义 —— 现有登记路径的判重分支会命中它、只追加
       `source_request_ids` 而不新建行（"同一篇文献两个 lit_id"仍然不可能）。
-    - 标题词集 Jaccard ≥ 0.60 且**没有** `new_content` ⇒ 拒
+    - 标题词集 Jaccard ≥ 0.60 且没有 `new_content` ⇒ 拒
       （`overlap_without_new_content`；行上的 `new_content` 优先，调用级兜底）；
     - 行上显式 `overlap_ok=False` ⇒ 拒（`overlap_ok_false`）。
 
-    `new_content` 是**调用级别的兜底**：候选行上已经有 `new_content` 时以行上的为准
+    `new_content` 是调用级别的兜底：候选行上已经有 `new_content` 时以行上的为准
     （那一句是对着这一篇写的），调用级的那句只填空。
     """
     if store is None:
@@ -698,7 +698,7 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
     （`status` 取 `admitted` / `rejected` / `cleared` / `withdrawn`）。
 
     为什么把它做成"拿 tx 进来"的函数：A 的自动链路（`agent_a.run_once`）里，
-    "写 literature 行"与"回填候选行"必须在**同一个事务**里 —— 否则崩在中间会留下
+    "写 literature 行"与"回填候选行"必须在同一个事务里 —— 否则崩在中间会留下
     "literature 有了、候选还 pending"的一对，下一次迁移会把它当新的再登记一次。
     工具面那一路（`lit.admit` / `lit.admit_all`）的登记路径自带事务，于是它自己开
     一个只写 `lit_candidates` 的事务调这里（同样是一个原子步）。
@@ -816,13 +816,13 @@ def admit(
     actor: str = "agent-A",
     write_report_file: bool = True,
 ) -> dict:
-    """正式入库（**逐条**）：过 `admission_plan` ⇒ 走现有登记路径 ⇒ 回填候选行。
+    """正式入库（逐条）：过 `admission_plan` ⇒ 走现有登记路径 ⇒ 回填候选行。
 
-    超限即**整笔拒绝**（`on_over_cap="refuse_all"`，见 `admission_plan`）。
-    逐条被挡的槽位**不在这里终态**（保持 `pending`，理由在 `refused[]` 里）：
+    超限即整笔拒绝（`on_over_cap="refuse_all"`，见 `admission_plan`）。
+    逐条被挡的槽位不在这里终态（保持 `pending`，理由在 `refused[]` 里）：
     `lit.admit` 是"补一句 `new_content` 再试"的入口；终态留给 `admit_all` 的结算
     或调用方的 `lit.stage_reject`。登记失败同样保持 `pending`（它还可以重试）。
-    本函数**不清空**列表，但它会**刷新委托报告** —— 业主第 3 条把报告说成交付物：
+    本函数不清空列表，但它会刷新委托报告 —— 业主第 3 条把报告说成交付物：
     只要这个委托动过库，报告就得在盘上。
     """
     plan = admission_plan(store, request_id=request_id, slots=slots, batch=batch,
@@ -830,7 +830,7 @@ def admit(
     if not plan.get("ok"):
         return {**plan, "admitted": [], "registered": 0, "report": None, "report_path": None}
     lit_ids, failures, got_all = _register(plan, registrar)
-    # **逐条档不结算"没进"的那几条**：`lit.admit` 是"再试一次"的入口 —— 被
+    # 逐条档不结算"没进"的那几条：`lit.admit` 是"再试一次"的入口 —— 被
     # `overlap_without_new_content` / `duplicate_doi` 挡下的槽位保持 `pending`，
     # 于是调用方可以补一句 `new_content` 再入，或用 `lit.stage_reject` 显式给它终态
     # （理由码一样进报告）。"结算"是一次委托的收尾动作，属于 `admit_all` ——
@@ -886,18 +886,18 @@ def admit_all(
     actor: str = "agent-A",
     write_report_file: bool = True,
 ) -> dict:
-    """**一键迁移**（业主 2026-10-20 第 2 条）：把本委托 `pending` 且过审的行一次迁进 literature。
+    """一键迁移（业主 2026-10-20 第 2 条）：把本委托 `pending` 且过审的行一次迁进 literature。
 
     ## 它做四件事，顺序不能换
 
     1. 取本委托所有 `pending` 行（槽位顺序），过 `admission_plan(on_over_cap="truncate")`：
        DOI 重复 / 高重叠无 `new_content` / `overlap_ok=False` 的逐条拒收；
        超配额的进 `cleared(over_cap)`（一键迁移不整笔拒绝 —— 它的语义是"把通过的都迁走"）；
-    2. 通过的那些走**现有登记路径**（`registrar`）落 literature；
-    3. **结算清空本委托**：成功的落 `admitted`、被拒的落 `rejected(理由码)`、
+    2. 通过的那些走现有登记路径（`registrar`）落 literature；
+    3. 结算清空本委托：成功的落 `admitted`、被拒的落 `rejected(理由码)`、
        剩下的落 `cleared(over_cap)` + `cleared_at` —— 于是"迁移后 `stage_list(本委托)`
        没有 `pending` 残留"，下一次委托也看不到本委托的行（`request_id` 已经换了）；
-    4. 写**委托报告**（`reports/lit-<request_id>.md`）：已入库一块 + 未入库一块（含受控理由）。
+    4. 写委托报告（`reports/lit-<request_id>.md`）：已入库一块 + 未入库一块（含受控理由）。
 
     "不许物理删"是结构性的：本函数只改 `status` 与那几格证据，一次 `delete` 都没有。
     """
@@ -925,7 +925,7 @@ def admit_all(
     decisions = _decisions_from(plan, lit_ids, failures)
     with store.tx("lit_candidates", actor=actor, note="lit.admit_all") as tx:
         apply_settlement(tx, decisions)
-        # 结算之后再扫一遍：**任何**还停在本委托 pending 上的行都落 cleared（`not_screened`），
+        # 结算之后再扫一遍：任何还停在本委托 pending 上的行都落 cleared（`not_screened`），
         # 这样"迁移后本委托没有 pending"是一条结构性事实，而不是"我们相信它没有"。
         leftover = [dict(r) for r in tx.rows("lit_candidates")
                     if str(r.get("request_id") or "") == rid
@@ -985,11 +985,11 @@ def report_path(store: Store, request_id: str) -> Path:
 
 def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
                     *, generated_at: str = "") -> str:
-    """委托报告正文：**两块都必须有**（业主 2026-10-20 第 3 条）。
+    """委托报告正文：两块都必须有（业主 2026-10-20 第 3 条）。
 
     - `## 已入库`：每篇的 `lit_id` / 标题 / 年份 / DOI（或 provider）+ 一句"为什么与本次
       检索相关"（`relevance`，没写就退回 `new_content`，再没有就写明"未写"）；
-    - `## 未入库`：每篇的槽位 / 标题 / **受控理由码**（`schema.CANDIDATE_REASON_CODES`）
+    - `## 未入库`：每篇的槽位 / 标题 / 受控理由码（`schema.CANDIDATE_REASON_CODES`）
       + 一行散文（撤掉 / 拒收 / 重叠度高无新内容 / 超配额 …）。
 
     两块即使没有行也各留一行 `（无）`：否则"这一块是空的"与"这一块被忘了写"在
@@ -1061,7 +1061,7 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
 
 
 def report_violations(text: str) -> list[str]:
-    """委托报告的判据：**两块都在、都非空、未入库的理由都是受控取值**。
+    """委托报告的判据：两块都在、都非空、未入库的理由都是受控取值。
 
     返回违规描述列表（空 = 通过）。由 `tests/test_search_tools_stage_admit.py` 的正控
     与负控直接打它 —— 负控若不走同一条判据，就证明不了"去掉一块会红"。

@@ -87,7 +87,7 @@ DECISION_REJECTED = "拒绝了秘书的格式洗"
 #: 三态：判不了是正经结论之一（没缝 / 开关关着 / 模型没回），不是"先收了再说"。
 STATEMENT_VERDICTS = ("合格", "太平凡", "判不了")
 
-#: 非平凡性的四档（业主 2026-10-21）：**它回答"多不平凡"，与 `STATEMENT_VERDICTS`（"收不收"）是两根轴**。
+#: 非平凡性的四档（业主 2026-10-21）：它回答"多不平凡"，与 `STATEMENT_VERDICTS`（"收不收"）是两根轴。
 #:
 #: | 档 | 语义（业主原话） |
 #: |---|---|
@@ -153,9 +153,9 @@ def _append_locked(path: str | Path, rec: Mapping[str, Any], *,
     见 :meth:`Secretary.note_decision` 的 `proposal`）：同一个 seq 既是行号也是号源，
     于是"这个编号指向哪一行"在结构上不可能漂。
 
-    `seq` 的**宽度**从 `schema.format_id` 取（与 `store.alloc_id` / 手稿号 / 留言号同一个
+    `seq` 的宽度从 `schema.format_id` 取（与 `store.alloc_id` / 手稿号 / 留言号同一个
     发号形态）：本文件此前自己按"四位 + 冒号补零"的写死宽度拼号，于是业主 2026-10-14 把宽度
-    定成六位之后，请示编号是**唯一**还在发四位的那一处（判据
+    定成六位之后，请示编号是唯一还在发四位的那一处（判据
     `tests/test_id_width.py::test_no_four_digit_mint_remains_in_the_source` 咬的就是它）。
     宽度只有一处可改这件事，靠的就是每个发号点都走 `format_id`。
 
@@ -4112,10 +4112,10 @@ class Secretary:
             pass
 
 
-#: 非平凡性档位的旁支台账（**不新增表、不改 schema**）：一行 = 一次判断。
+#: 非平凡性档位的旁支台账（不新增表、不改 schema）：一行 = 一次判断。
 #: 为什么用旁支而不是 `statements` 的列：档位会随研究进展变（T4 造出梯子后要降到 T2/T3），
-#: 它是**时间序列**不是记录属性；append-only 的旁支天然保留"降档发生过"的完整历史。
-#: 键用 `statement_sha256` 而不是 `stmt_id`：判断发生在入库**之前**，那时还没有编号。
+#: 它是时间序列不是记录属性；append-only 的旁支天然保留"降档发生过"的完整历史。
+#: 键用 `statement_sha256` 而不是 `stmt_id`：判断发生在入库之前，那时还没有编号。
 NONTRIVIALITY_LEDGER = "nontriviality.jsonl"
 
 
@@ -4129,9 +4129,9 @@ def _statement_sha(statement_full: str) -> str:
 
 
 def _nontriviality_level(value: Any) -> int:
-    """把模型给的档位收敛到 `0|1|2|3|4`（别的一律当 0 = 判不了，**不许当 1**）。
+    """把模型给的档位收敛到 `0|1|2|3|4`（别的一律当 0 = 判不了，不许当 1）。
 
-    只认**整数**（或纯数字字符串）：`1.9` 这种不是"第 1 档"，它是坏输入 —— 四舍五入会把
+    只认整数（或纯数字字符串）：`1.9` 这种不是"第 1 档"，它是坏输入 —— 四舍五入会把
     坏输入变成一个合法档位，那正是"静默降级"的形态。
     """
     if isinstance(value, bool):
@@ -4159,10 +4159,10 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: int,
 
 
 def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:
-    """这条命题**当前**的非平凡性档位（折叠旁支台账里同一个 sha 的最后一行）。
+    """这条命题当前的非平凡性档位（折叠旁支台账里同一个 sha 的最后一行）。
 
     三态：读到 ⇒ `{"tri": "computed", "level": 1..4, "basis": …}`；
-    没有记录 / 全是 0 ⇒ `{"tri": "unknown", "level": 0, …}`（**不是 1**）。
+    没有记录 / 全是 0 ⇒ `{"tri": "unknown", "level": 0, …}`（不是 1）。
     """
     path = nontriviality_path(root)
     sha = _statement_sha(statement_full)

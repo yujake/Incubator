@@ -1629,7 +1629,7 @@ def cmd_run_agent(args) -> int:
     `--rounds N` 那条多轮路径查的是同一张表（`_autonomy_exit_code`），只多两档多轮特有形态：轮数
     用完且最后那轮给了 final ⇒ 0、没给 final ⇒ 5；续跑发现这一程已跑完（`resumed_done`）⇒ 0。
     ## 三个"花钱的判断类能力"开关：默认全关，互不连带 —— `--semantic-review`（H 的语义判据）/ `--attack-reasoning`（F 的攻坚推理）/ `--experiment-reasoning`（E 的写脚本推理，S-10(a) 的 `author_script`）。三条同一条纪律：环境里有 key 也不改变行为。
-    **`--attack-reasoning` 不连带打开 E 的缝**（两个开关各自可解释：F 想这一步怎么打、E 把判据写成
+    `--attack-reasoning` 不连带打开 E 的缝（两个开关各自可解释：F 想这一步怎么打、E 把判据写成
     一份能跑的脚本）。代价必须知道：只开 F 的缝时，F 需要脚本的那一轮写不出来 ⇒ 落
     `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）。改前它是静默的 `no_change`（真机
     `projects/mp4` 计划 000003 的 r1/r2 逐字："子目标 sg1 有判据但没有脚本，而 E 没能把它写出来

@@ -1,4 +1,4 @@
-"""FC-19：token/花销记账 —— 硬约束**只剩钱那一轴**，且重试也计入。
+"""FC-19：token/花销记账 —— 硬约束只剩钱那一轴，且重试也计入。
 
 ## 为什么这一条最后才做，以及它为什么必须自己成一个模块
 
@@ -13,7 +13,7 @@ FC-19 的原文（`test/test2/LESSONS.md` §6.5）：
 > ③ D 向 A 提问的预算必须已定值并写进配置。
 > 落地形态：`token_meter` + 预算守卫 + 一条"重试也扣预算"的测试。
 
-⚠️ **2026-10-15 业主裁定修正了 ①**：**「我们不卡 token，只卡总花销的钱」**。
+ 2026-10-15 业主裁定修正了 ①：「我们不卡 token，只卡总花销的钱」。
 理由是实测（`draft/121`、`draft/122`）：卡 token 卡的恰好是"它想清楚"那一段 ——
 同一个提示词下不设 `max_tokens` 反而花 14,015 token 正常收尾，而设了额度的
 6 份文献全部 `output_exhausted`。于是：
@@ -21,11 +21,11 @@ FC-19 的原文（`test/test2/LESSONS.md` §6.5）：
 - `budget_tokens` 参数、`MeterReading.budget_tokens`/`remaining_tokens` 两格、
   `Policy.token_budget`、`Decision.tokens_left/tokens_wanted`、以及
   `modelgw`/`modelclient`/`llmseam`/`agent_loop` 上那一串"输出额度"参数
-  **全部删除**（同一轮）；
-- token 仍然是**读数**（`spent()` / `usd_reading()` / `usage_ledger`）：
+  全部删除（同一轮）；
+- token 仍然是读数（`spent()` / `usd_reading()` / `usage_ledger`）：
   "这一趟花了多少 token"必须看得见 —— 看得见与拦得住是两件事；
-- ② 与 ③ 不动：重试照样按次计费（这是**记账口径**，与"卡不卡"无关），
-  D 向 A 提问的配额照样是配额（那是**交互纪律**，不是模型额度）。
+- ② 与 ③ 不动：重试照样按次计费（这是记账口径，与"卡不卡"无关），
+  D 向 A 提问的配额照样是配额（那是交互纪律，不是模型额度）。
 
 本模块剩下两件事：
 
@@ -176,8 +176,8 @@ class MeterReading:
     allowed: bool
     spent_tokens: int
     spent_usd: float
-    #: ⚠️ `budget_tokens` / `remaining_tokens` 两格已删（2026-10-15 业主裁定
-    #: **「我们不卡 token，只卡总花销的钱」**）。留下的 `spent_tokens` 是**读数**：
+    #: `budget_tokens` / `remaining_tokens` 两格已删（2026-10-15 业主裁定
+    #: 「我们不卡 token，只卡总花销的钱」）。留下的 `spent_tokens` 是读数：
     #: "这一趟花了多少 token"要看得见，但它不参与 `allowed`。
     budget_usd: float | None
     remaining_usd: float | None
@@ -207,12 +207,12 @@ class TokenMeter:
 
     def __init__(self, store: Any, *, budget_usd: float | None = None,
                  log: Any = None) -> None:
-        """⚠️ **只有钱这一轴**（2026-10-15 业主裁定：**「我们不卡 token，只卡总花销的钱」**）。
+        """ 只有钱这一轴（2026-10-15 业主裁定：「我们不卡 token，只卡总花销的钱」）。
 
         这里此前还有一个 `budget_tokens` 参数（"预算从配置来"那条纪律的落点）。
-        它**删掉了**：T5 实测（`draft/121`）里卡住智能体的正是它 ——
+        它删掉了：T5 实测（`draft/121`）里卡住智能体的正是它 ——
         6 份有全文的文献全部 `output_exhausted`（reasoning 吃掉 26,995–39,076 字符），
-        而未卡住的两份都 ≤10,396 字符。**"想得久"不是一种过错，它是好结果的必要条件。**
+        而未卡住的两份都 ≤10,396 字符。"想得久"不是一种过错，它是好结果的必要条件。
         token 从此只是读数（:meth:`spent` / :meth:`usd_reading`）。
         """
         if budget_usd is not None and budget_usd < 0:
@@ -498,11 +498,11 @@ class TokenMeter:
     # ---------------------------------------------------------------- 守卫
 
     def _over(self, tokens: int, usd: float) -> bool:
-        """"花爆了没有" —— **只算钱**（2026-10-15 业主裁定 A7：不卡 token）。
+        """"花爆了没有" —— 只算钱（2026-10-15 业主裁定 A7：不卡 token）。
 
-        ⚠️ **边界口径与 `policy.check` 对齐**：这里是 `usd >= budget_usd`，
+        边界口径与 `policy.check` 对齐：这里是 `usd >= budget_usd`，
         `policy.check` 那边是 `usd_left = max(0, budget - spent) <= 0`，
-        两者都在"**恰好花光**"这一刻判停。此前这里是严格 `>`，于是
+        两者都在"恰好花光"这一刻判停。此前这里是严格 `>`，于是
         "花光了"这一格在两处给出相反答案（守卫说还能做、策略说不能再做）——
         同一件事两处判且不一致，比哪一处更宽松都更危险。
         """
@@ -516,7 +516,7 @@ class TokenMeter:
           （不是"够用"）。
         - `limited=True` ⇒ 按 `已花` 与钱上限比较。
 
-        ⚠️ `estimate_tokens` 现在**只剩签名兼容**：token 不再是判据
+        `estimate_tokens` 现在只剩签名兼容：token 不再是判据
         （裁定 A7），所以它不影响 `allowed`，只被原样抄进读数里当上下文。
         留着它是因为调用方确实知道"这一步大概要花多少"，
         而这个数字在账上比丢在调用方手里有用。

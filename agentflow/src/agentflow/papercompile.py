@@ -4,7 +4,7 @@
 ## 为什么这一层被换成现在这样（旧的一整条退场了）
 
 旧的一路上有 `renderanchor`（渲染锚）、`paperbuild`（项目脚本通道）与角色动作
-`G.paper_package`，它们要求**项目里自带一对脚本**（`code/make_paper.py` +
+`G.paper_package`，它们要求项目里自带一对脚本（`code/make_paper.py` +
 `code/compile_paper.py`）来"从台账机械地渲染出 LaTeX、再编译、再核锚"。
 业主 2026-10-13 的裁定逐字是：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」
 —— 正文由智能体（G）自己写进 `out/paper/main.tex`（散文体、章节自排），框架不再要求
@@ -14,25 +14,25 @@
 `G.paper_package` 四次 `package_build_failed`（"脚本不在盘上"）⇒ 主控在会话里现写了一个
 Python 生成器（`code/make_paper.py` 步 30/34、`code/compile_paper.py` 步 35…52 重写 5 次），
 于是排版固化成脚本模板（一节一整段、摘要硬编码、非 ASCII 静默变空格、没有 fontenc
-⇒ `>=` 印成 `¿=`）。**要求"项目自带渲染脚本"这件事本身就是病灶**，所以它整条退场。
+⇒ `>=` 印成 `¿=`）。要求"项目自带渲染脚本"这件事本身就是病灶，所以它整条退场。
 
 ## 现在这一层管什么（只此一件）
 
 `compile_paper(project_root)`：找 `out/paper/main.tex` → 起 LaTeX 引擎（两遍）→
-写 `main.pdf` 与**框架自己写的** `COMPILE-RECEIPT.json`（这份 PDF 是从哪一份 tex 编出来的）。
+写 `main.pdf` 与框架自己写的 `COMPILE-RECEIPT.json`（这份 PDF 是从哪一份 tex 编出来的）。
 
 四条刻意的口径：
 
-1. **不跑项目脚本**：引擎由框架直接起（`subprocess.run([engine, ...])`），项目里有没有
+1. 不跑项目脚本：引擎由框架直接起（`subprocess.run([engine, ...])`），项目里有没有
    `code/*.py` 与本层无关；
-2. **回执由框架写**：`tex_sha256` / `pdf_sha256` / `engine` / `runs` / `exit_codes` /
+2. 回执由框架写：`tex_sha256` / `pdf_sha256` / `engine` / `runs` / `exit_codes` /
    `pages` / `pdf_bytes` / `compiled_at`。它是"这份 PDF 不是旧 tex 编的"唯一读数
    （人改完正文不重编，这一格说得出来）；
-3. **退出码与产物分开报**：本机 MiKTeX 在收尾时可能以 `0xC0000409` 退出却**已经写出 PDF**
+3. 退出码与产物分开报：本机 MiKTeX 在收尾时可能以 `0xC0000409` 退出却已经写出 PDF
    （第二次 T2 的实测：`exit_codes=[3221226505, 3221226505]`、`pages=3`）——
    所以"拿到 PDF"与"引擎退出码是 0"是两栏，谁也不冒充谁。用户目录挪进项目
    （`MIKTEX_USERDATA` / `MIKTEX_USERCONFIG`）正是按那次读数加的环境适配；
-4. **三态**：
+4. 三态：
    `not_applicable`（`main.tex` 不在盘上 = 还没写正文，合法初态）；
    `unknown`（引擎不在 PATH / 超时 / 没编出 PDF）；
    `computed`（拿到 PDF —— 页数与退出码如实带上）。
@@ -57,7 +57,7 @@ __all__ = ["ENGINE_ENV", "ENGINES", "PDF_NAME", "RECEIPT_NAME", "TEX_NAME", "com
 PACKAGE_REL = ("out", "paper")
 TEX_NAME = "main.tex"
 PDF_NAME = "main.pdf"
-#: 编译回执：**框架写**（旧路里它由项目脚本写，那是退场的一部分）。
+#: 编译回执：框架写（旧路里它由项目脚本写，那是退场的一部分）。
 RECEIPT_NAME = "COMPILE-RECEIPT.json"
 
 #: 引擎候选（按这个顺序取第一个在 PATH 上的）。
@@ -65,7 +65,7 @@ ENGINES: tuple[str, ...] = ("pdflatex", "xelatex", "lualatex")
 
 #: 指定引擎的环境变量（覆盖上面那条探测顺序）。给它一个绝对路径就按它起 ——
 #: 判据（`tests/test_papercompile.py`）与"本机装了别的 TeX 发行版"这两种场合都要它。
-#: 给的名字不存在时**不编造读数**：`subprocess` 抛 `FileNotFoundError` ⇒ 如实
+#: 给的名字不存在时不编造读数：`subprocess` 抛 `FileNotFoundError` ⇒ 如实
 #: 落 `tri="unknown"` + `reason`。
 ENGINE_ENV = "AGENTFLOW_LATEX_ENGINE"
 
@@ -97,7 +97,7 @@ def _snapshot(pdf: Path) -> tuple[float, str] | None:
 
 
 def _fresh(pdf: Path, before: tuple[float, str] | None) -> bool:
-    """盘上那份 PDF 是不是**这一趟**写出来的。
+    """盘上那份 PDF 是不是这一趟写出来的。
 
     判据是"编译前后的快照变了"（修改时间变新，或内容换了）—— 不是"文件在不在"：
     上一次编的 PDF 会一直躺在那里，把它当成本次读数就等于说"这一次编成功了"。
@@ -164,7 +164,7 @@ def _page_count(pdf: Path) -> int | None:
 def _engine_env(project_root: Path) -> dict[str, str]:
     """引擎的环境：把 MiKTeX 的用户目录挪进项目内（见模块 docstring 第 3 条）。
 
-    只 `setdefault`（本机已经配好的那一套优先），并且**不**改 `PATH`。
+    只 `setdefault`（本机已经配好的那一套优先），并且不改 `PATH`。
     """
     env = dict(os.environ)
     root = project_root / ".miktex"
@@ -194,10 +194,10 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
     receipt_path, pdf_fresh, engine_stderr_tail, engine_stdout_tail, problems}`。
 
     - `tri="not_applicable"`：`main.tex` 不在盘上（还没写正文）；
-    - `tri="unknown"`：没引擎 / 超时 / **这一次没编出 PDF**（`reason` 说清是哪一档）——
+    - `tri="unknown"`：没引擎 / 超时 / 这一次没编出 PDF（`reason` 说清是哪一档）——
       盘上可能还躺着上一次编的 `main.pdf`（`pdf_fresh=False` 就是这一档：产物不是这一趟的，
       不许当成本次读数）；
-    - `tri="computed"`：**这一趟**拿到 PDF（`exit_codes` 与 `pages` 如实带上 —— 引擎非 0
+    - `tri="computed"`：这一趟拿到 PDF（`exit_codes` 与 `pages` 如实带上 —— 引擎非 0
       退出但写出 PDF 的形态在本机真实存在，两栏分开报）。
     """
     root = Path(project_root)

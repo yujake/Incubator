@@ -62,12 +62,12 @@ class SeamCall:
     system_sha256: str = ""
     tokens_in: int = 0
     tokens_out: int = 0
-    #: 输入里**命中缓存**的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
+    #: 输入里命中缓存的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
     #: `None` = 上游没回这一格（"没查成"），`0` = 明说零命中 —— 三态，不许折平。
     #: 它与 `usd` 成对：供应商按"命中/未命中/输出"三档计价，而这一格是那三档里
     #: 唯一被我们此前丢掉的一档（业主 2026-10-14：「花销标准与供应商定价吻合」）。
     cache_hit_tokens: int | None = None
-    #: 输入里**未命中缓存**的那一部分（上游 `usage.prompt_cache_miss_tokens`）。三态同上。
+    #: 输入里未命中缓存的那一部分（上游 `usage.prompt_cache_miss_tokens`）。三态同上。
     cache_miss_tokens: int | None = None
     #: 这一笔的计价读数（`modelcost.billing_reading` 的返回：用了哪几档价、命中多少、
     #: "命中价没登记 / 上游没报命中"这两种偏高情形各留一条痕迹）。
@@ -114,7 +114,7 @@ class SeamCall:
     #: 原始的 `tool_calls`（`ask_step` 要把它们翻成循环的形状）。
     #: 刻意不进 `to_dict()`：审计面留条数与工具面摘要就够，逐条原文会随每次调用膨胀。
     tool_call_list: tuple[dict[str, Any], ...] = ()
-    #: 这一次**到底发没发请求**（`False` 只有两条早退路：没接线 / 预算已尽）。
+    #: 这一次到底发没发请求（`False` 只有两条早退路：没接线 / 预算已尽）。
     #:
     #: 为什么它必须与 `ok=False` 分开（2026-10-19）：缓存读数的三态之外还有"第零态"——
     #: 根本没发请求的调用不可能有 `prompt_cache_*`，把它算进 `unknown_calls` 会让
@@ -143,7 +143,7 @@ class SeamCall:
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
             # 缓存两格（2026-10-19 补）：它们从 2026-10-14 起就存在 `SeamCall` 上、
-            # 计价也按两档算了（`modelcost.usd_for`），但 `to_dict()` 此前**漏了这两格**
+            # 计价也按两档算了（`modelcost.usd_for`），但 `to_dict()` 此前漏了这两格
             # ⇒ `llm_call` 事件里根本没有"这一次命中没命中"的读数，于是
             # "提示词前缀稳不稳"在审计面上不可回答（上层再想汇总也无源可汇）。
             # 三态照旧：`None` = 上游没给这一格，与 `0` = 明说零命中分得开。
@@ -300,15 +300,15 @@ class LlmSeam:
         return self.usd_budget if got is None else got
 
     def spent_usd(self) -> tuple[float, str]:
-        """**全局**已花多少钱，以及这个数是从哪儿读来的（`(usd, source)`）。
+        """全局已花多少钱，以及这个数是从哪儿读来的（`(usd, source)`）。
 
         ## 为什么必须是全局口径（2026-10-15 业主裁定 B2）
 
-        `budget_limit()` 给的是**这一趟的总预算**（盘上寄存器 / `--budget-usd`），
-        而这里此前比的是 `self.spend.usd` —— **这一条缝自己的**累计。
+        `budget_limit()` 给的是这一趟的总预算（盘上寄存器 / `--budget-usd`），
+        而这里此前比的是 `self.spend.usd` —— 这一条缝自己的累计。
         一个角色一条缝（`for_role`），于是每个角色都以为"我最多能花整笔"：
         十个角色就能把总预算花成十倍，而每一处闸门看起来都在"正常工作"。
-        业主那句「只卡**总花销**的钱」说的正是这个数，不是某条缝的数。
+        业主那句「只卡总花销的钱」说的正是这个数，不是某条缝的数。
 
         权威账只有一处：`usage_ledger`（`tokenmeter.TokenMeter.spent()`）。
         `meter is None`（没有账本的裸缝：单测与旧调用点）⇒ 退回 `self.spend.usd`，
@@ -316,11 +316,11 @@ class LlmSeam:
         与"读的是同一本总账"混成同一个数（那正是 B2 这个缺陷的形态）。
 
         `source` 的三态（读的人据此判这个数有多可信）：
-        - `ledger`   —— 从 `usage_ledger` 现读（权威，包含**所有**角色的花销）；
+        - `ledger`   —— 从 `usage_ledger` 现读（权威，包含所有角色的花销）；
         - `per_seam` —— 没有账本，只有这条缝自己的内存累计（口径更窄，如实标注）；
         - `ledger_unreadable` —— 有账本但读不出来（盘坏了）。回退到 `per_seam`
           并把问题记在 source 里：少算只意味着"这一处早停得晚一点"，
-          而**真正会拦住失控的那一处**（`conductor._meter_guard`）读的是同一本账，
+          而真正会拦住失控的那一处（`conductor._meter_guard`）读的是同一本账，
           它读不出来时会走它自己的失败路径，不会静默放行。
         """
         if self.meter is None:
@@ -351,7 +351,7 @@ class LlmSeam:
     def for_secretary(cls, *, owner_role: str = "", session_root: Path | str,
                       gateway: Any | None = None, from_env: bool = True,
                       settings_path: str | Path | None = None, **kw: Any) -> "LlmSeam":
-        """**所有角色的秘书共用**的那一把 key（业主 2026-10-14 的后半句）。
+        """所有角色的秘书共用的那一把 key（业主 2026-10-14 的后半句）。
 
         它与 :meth:`for_role` 的差别只有一处：配置的第一格是 `secretary` 段
         （`modelgw.spec_for(secretary=True)`），而不是那个角色自己的那一档。
@@ -397,7 +397,7 @@ class LlmSeam:
             face: "ToolFace | None" = None) -> SeamCall:
         """发一次调用，落一条审计记录，返回结局（不抛业务异常）。
 
-        ⚠️ **`max_tokens` 这一栏已删**（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
+        `max_tokens` 这一栏已删（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
         它此前由循环步（`agent_loop`）传 32,768；删掉之后请求体里不再有这一栏，
         额度交回上游（真调用对照：不带比带 32768 还宽）。
         """
@@ -506,12 +506,12 @@ class LlmSeam:
         """这一笔该按哪一档价算（厂商 × 模型 × 峰谷）+ 取价读数。
 
         显式给了 `self.price`（判据与替身模型走这条）就用它，读数标 `explicit`；
-        否则按**这次调用用的那个模型**去价目表取（`modelcost.price_for`）——
+        否则按这次调用用的那个模型去价目表取（`modelcost.price_for`）——
         这正是"花销与供应商定价吻合"那条要求落地的地方：不同厂商/不同模型/峰谷
         各有自己的价，而不是一个数打天下。
 
         "从配置里读出厂商与模型"这一步（含"没配 vendor 就按端点认一家"）
-        **不在本函数里**，在 `modelgw.vendor_model_of`：它此前是抄了两份的
+        不在本函数里，在 `modelgw.vendor_model_of`：它此前是抄了两份的
         （这一处一份，`modelcost.price_of` 那一处干脆没有）⇒ 两条路的计价口径
         不一致而两边都自洽。口径只许有一处。
         """
@@ -586,7 +586,7 @@ class LlmSeam:
         outcome = "ok" if call.ok else (call.problem or "failed")
         note = f"source=llmseam;role={self.role};call_index={idx};outcome={outcome}"
         # 花销口径的留痕（业主 2026-10-14：「花销计算标准与供应商定价吻合」）：
-        # 账本那一行**自己**要说得清这笔钱按哪一档价算的 —— 否则"和供应商账单对不上"
+        # 账本那一行自己要说得清这笔钱按哪一档价算的 —— 否则"和供应商账单对不上"
         # 只能靠翻会话事件才查得出来。四格都从 `SeamCall.billing` 现抄（不另算一份）。
         billing = dict(getattr(call, "billing", None) or {})
         if billing:
@@ -800,12 +800,12 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "type": "object",
         "properties": {
             "role": {"type": "string", "enum": list("ABCDEFGHV")},
-            # ⚠️ **2026-10-16（业主口径 S2 最终形态）**：`action` **整个摘掉** ——
-            # 原话逐字：「**一致改成 task 必填，action 不填**」「**action 完全不用父代理填**」。
-            # ⇒ 派活只有一种形状：**`role` + `task`**。点哪个动作是被派者自己的事
+            # 2026-10-16（业主口径 S2 最终形态）：`action` 整个摘掉 ——
+            # 原话逐字：「一致改成 task 必填，action 不填」「action 完全不用父代理填」。
+            # ⇒ 派活只有一种形状：`role` + `task`。点哪个动作是被派者自己的事
             # （它那一趟跑自己的循环、从自己的工具面与手册里选）。
             # 内部调用方（`pipeline` / `scheduler` / `deliver`）直接调
-            # `Conductor.summon(role, action, params)`，**不受这一格影响**。
+            # `Conductor.summon(role, action, params)`，不受这一格影响。
             "task": {"type": "string", "description":
                      "**必填**：这一趟派给它的是什么活（写清做什么；可带起手建议，怎么做由它定）"},
             "params": {"type": "object"},
@@ -819,7 +819,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
             # 主控派活时的留痕（CS-18）：与 `_dispatch_notify` 同源，`to` 可省略。
             "notify": DISPATCH_NOTIFY_JSON_SCHEMA,
         },
-        # 2026-10-16（业主口径 S2）：**`task` 进必填，`action` 保持可选**。
+        # 2026-10-16（业主口径 S2）：`task` 进必填，`action` 保持可选。
         # 口径是"派活" —— 那件活是必说的；点不点动作由派活方决定（点了就是老行为）。
         "required": ["role", "task"],
     }),

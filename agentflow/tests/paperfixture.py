@@ -3,13 +3,13 @@
 
 为什么要有它（三条，每条都是本仓栽过的形态）：
 
-1. **判据不该依赖"这台机器恰好在 PATH 上装了 LaTeX"**：要判的是"回执与盘上这份正文
+1. 判据不该依赖"这台机器恰好在 PATH 上装了 LaTeX"：要判的是"回执与盘上这份正文
    对不对得上"，不是"TeX 发行版装没装"。所以假引擎（一个写 PDF 的脚本）经
    `papercompile.ENGINE_ENV`（`AGENTFLOW_LATEX_ENGINE`）注入 —— 那条通路本身也是产品的
    一部分（换发行版、换引擎时要它；名字不存在时如实落 `unknown`，见 `compile_paper`）。
-2. **只留一份造法**：旧路里 `test_paperbuild` / `test_renderanchor` 与各条收工门判据
+2. 只留一份造法：旧路里 `test_paperbuild` / `test_renderanchor` 与各条收工门判据
    各造一份假论文包 —— 三份口径必然漂（旧路退场时正是这个形态：四个模块一个落点）。
-3. 假引擎**只写 `main.pdf`**，绝不碰 `main.tex`：真机血案是"生成器把正文整份重写、
+3. 假引擎只写 `main.pdf`，绝不碰 `main.tex`：真机血案是"生成器把正文整份重写、
    G 改的那一段被抹掉"（`draft/37` §1.1）。这条纪律写在夹具里，用它的判据自然继承。
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ def fake_engine(dirpath: str | pathlib.Path, *, exit_code: int = 0, writes_pdf: 
                 stderr: str = "") -> pathlib.Path:
     """造一个假 LaTeX 引擎（可执行脚本），返回它的路径。
 
-    - `exit_code`：引擎的退出码（**非 0 但写出 PDF 是本机 MiKTeX 的真实形态**，
+    - `exit_code`：引擎的退出码（非 0 但写出 PDF 是本机 MiKTeX 的真实形态，
       用它验"产物与退出码两栏不互相冒充"）；
     - `writes_pdf=False`：什么都不产（用它验 `unknown` 与 stderr 尾巴那一栏）。
     """

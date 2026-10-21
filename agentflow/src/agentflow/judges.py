@@ -279,8 +279,8 @@ def _ground(artifact: str, raw_findings: Any) -> tuple[list[dict[str, str]], lis
     return kept, dropped
 
 
-#: 值得重试一次的失败档（见 `judge()` 里那一段）：模型**答歪了**（散文 / JSON 不可解析）
-#: 或**答案被思维链吃光**。这两档都不是"判过了没问题"，也不该只试一次就放弃 ——
+#: 值得重试一次的失败档（见 `judge()` 里那一段）：模型答歪了（散文 / JSON 不可解析）
+#: 或答案被思维链吃光。这两档都不是"判过了没问题"，也不该只试一次就放弃 ——
 #: 而"没接模型"（`judge_not_wired`）、"预算耗尽"、"超时"不在此列（重试也没用）。
 RETRY_PROBLEMS: tuple[str, ...] = ("judge_bad_json", "judge_output_limit")
 
@@ -299,7 +299,7 @@ def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
 
     prompt = criterion.prompt(artifact, context)
     data, problem, call = J.seam_json(seam, prompt, point=f"judge:{criterion.id}")
-    # 一次重试（2026-10-14 真机实测逼出来的）：这一档用的是**会思考**的模型，
+    # 一次重试（2026-10-14 真机实测逼出来的）：这一档用的是会思考的模型，
     # 思维链把输出预算吃光（`judge_output_limit`）或把 JSON 说成散文（`judge_bad_json`）
     # 都会让判据落到"没查成"—— 而那两档都不是"判过了没问题"，也不该白扔一次判定。
     # 重试只加一句"先给 JSON"，只重试一次；仍然不行就如实回那一档（三态纪律）。
@@ -396,7 +396,7 @@ def semantic_judge_for(seam: Any, *, criterion_id: str = "claims.conclusion_stre
 # ============================================================ 引文回验的语义档（2026-10-14）
 # 业主：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」，落点是 B 唤起 H。
 # 逐字那一档仍归 `quoteverify.check_quote`（不花模型钱，先走它）；逐字不中才轮到这一档。
-# **不许**把模型调用塞进 `check_quote`：那是禁改区里的逐字判据，混进模型会让
+# 不许把模型调用塞进 `check_quote`：那是禁改区里的逐字判据，混进模型会让
 # "引文级证据"的口径取决于模型 —— 两档分居两处，靠 `quote_mode` 那一栏分开记账。
 
 _register(Criterion(
@@ -420,7 +420,7 @@ _register(Criterion(
     ),
 ))
 
-#: 负控（`registry_problems` 要求每条判据至少两条）：两条都必须在**语义**上不成立，
+#: 负控（`registry_problems` 要求每条判据至少两条）：两条都必须在语义上不成立，
 #: 而字面上都与来源沾边 —— 这正是这一档存在的理由（逐字档判不了它们，
 #: 而"看起来像"也不该放过它们）。
 NEGATIVE_CONTROLS["quote.same_meaning"] = (
@@ -434,15 +434,15 @@ def quote_semantics_judge_for(
     """把一条模型缝接成"引文 ↔ 来源"的语义判据（给 H 用；B 唤起 H 之后由它判）。
 
     输入 `material` 的四栏（调用方给，H 不自己去猜）：
-    `quote`（待核的引文）、`span`（来源里那一段，**逐字**取来的）、
+    `quote`（待核的引文）、`span`（来源里那一段，逐字取来的）、
     `statement`（这条引文要支撑的断言，可空）、`where`（落点：文件/页码，给人看的）。
 
     返回 `{"verdict", "why", "call"}`：`verdict` 是判据词表里的四档之一或 `unknown`；
     `call` 是这次调用的审计事实（model / prompt_sha256 / prompt_version）——
-    **语义那一档必须留证据**（业主那一句的后半段），这三格就是"可复查的调用记录"。
+    语义那一档必须留证据（业主那一句的后半段），这三格就是"可复查的调用记录"。
 
     三态：缝没接（或没有 key）⇒ `judge_not_wired` ⇒ `verdict="unknown"` 且理由写明
-    "没判成，不是判过了没问题"；坏 JSON 同理。**没有 key 时如实回没查**。
+    "没判成，不是判过了没问题"；坏 JSON 同理。没有 key 时如实回没查。
     """
     def _judge(material: Mapping[str, Any]) -> dict[str, Any]:
         quote = str(material.get("quote") or "").strip()
@@ -472,13 +472,13 @@ def quote_semantics_judge_for(
 
 def quote_fields_from_verdict(verdict: str, why: str, *, judge: str = "H"
                               ) -> tuple[bool | None, str, str]:
-    """一条语义判定 ⇒ `(quote_verified, quote_mode, quote_reason)`（**唯一**口径）。
+    """一条语义判定 ⇒ `(quote_verified, quote_mode, quote_reason)`（唯一口径）。
 
     三条，逐条对着业主那句裁定：
 
-    - `same_meaning` ⇒ `(True, "semantic", …)`：**语义相同即通过**（这正是要改的那一条）；
+    - `same_meaning` ⇒ `(True, "semantic", …)`：语义相同即通过（这正是要改的那一条）；
     - `different` / `stronger_than_source` ⇒ `(False, "", …)`：语义不同、或引文把来源的
-      结论加强了 —— 那一档**绝不会**因为"字面沾边"就被放过；
+      结论加强了 —— 那一档绝不会因为"字面沾边"就被放过；
     - 其余（`unjudgeable` / `unknown`）⇒ `(None, "", "还没查：…")`：三态里的第三档，
       没判成不许折成通过，也不许折成不通过。
     """
@@ -529,7 +529,7 @@ def json_rules_problems() -> list[str]:
     为什么单列一条（2026-10-14 真机实测的教训）：新加的 `quote.same_meaning`
     第一版模板忘了接 `_JSON_RULES` —— 夹具（假缝回 JSON）全绿，真机上 5 条引文
     全部 `judge_bad_json`（模型回的是散文），于是那一档在真机上恒"没查成"。
-    这不是"模型不行"，是**判据自己没把形状说给模型听**。凡新增判据，这一条都会先红。
+    这不是"模型不行"，是判据自己没把形状说给模型听。凡新增判据，这一条都会先红。
     """
     missing = [cid for cid, c in CRITERIA.items() if _JSON_RULES not in c.template]
     return [f"{cid} 的模板没带上 `_JSON_RULES`（模型不知道要回 JSON）" for cid in missing]

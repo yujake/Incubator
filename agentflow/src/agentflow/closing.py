@@ -29,7 +29,7 @@ from . import papercompile as PC
 from . import schema as S
 from . import textutil as T
 from . import userio as U
-# 引文回验的两档口径（业主 2026-10-14）：`quote_state` 是**唯一**读口径 ——
+# 引文回验的两档口径（业主 2026-10-14）：`quote_state` 是唯一读口径 ——
 # "true 而说不清怎么通过的"按没查算，收工门这一格必须跟着它走（见 `quote_verified_rows`）。
 from . import evidencebits as EB
 
@@ -209,17 +209,17 @@ LEG_CHECK_KINDS: dict[str, str] = {
                     "子目录（`agent_d.reports_subdir`，缺省 `reports`）—— 写者读配置，"
                     "读数就得读同一份配置（2026-10-04 T2 第 1 趟：报告真的写出来了，"
                     "而读数只看一个写死的目录 ⇒ 读到 0 条）",
-    # ---- 立项计数（**informational**：这一档只报数，不判 pass/fail）
+    # ---- 立项计数（informational：这一档只报数，不判 pass/fail）
     #
     # 2026-10-19 改口径（根因在 `closing.py` 的 `RESEARCH_CHAIN_GROUPS`）：这一档此前与
-    # `plan_progress_rows` **同属**「攻（攻坚推进）」那一格的成员，于是验收表写一行
-    # `attack_plan_rows: min 1` 就能让那一格变绿 —— 只要**立过项**就算「攻」有推进，
+    # `plan_progress_rows` 同属「攻（攻坚推进）」那一格的成员，于是验收表写一行
+    # `attack_plan_rows: min 1` 就能让那一格变绿 —— 只要立过项就算「攻」有推进，
     # 而实测里"立了项、`history` 一步没长"的计划比比皆是（mp1 的 `000000`：1 轮
     # `no_change`、`statement_id` 为 null）。「立项」与「推进」是两件事，把它们放进同一格
     # 的成员表里，"哪一个读数是这一格的结论"就说不清了。
     #
-    # 现在：这一档是**立项计数（informational）**——读数照样现算并写进 `rows`（人要看
-    # "立过几项"），但**非 `na` 行不参与** pass/fail，也不参与研究链覆盖面；「攻」那一格的
+    # 现在：这一档是立项计数（informational）——读数照样现算并写进 `rows`（人要看
+    # "立过几项"），但非 `na` 行不参与 pass/fail，也不参与研究链覆盖面；「攻」那一格的
     # 通过只由 `plan_progress_rows` 决定（`INFORMATIONAL_KINDS` / `_check_acceptance`）。
     # 写成 `{"na": true, "note": "…"}` 仍然算「这一环被如实标注过」（D49 的第三态出口；
     # 存量里调查型项目正是这么写"这一趟没有攻坚计划"的）。
@@ -319,17 +319,17 @@ LEG_CHECK_KINDS: dict[str, str] = {
 
 }
 
-#: **只报数、不判 pass/fail** 的受控档（informational）。
+#: 只报数、不判 pass/fail 的受控档（informational）。
 #:
 #: 为什么需要这一档（2026-10-19，根因在 `RESEARCH_CHAIN_GROUPS` 的「攻」那一格）：
-#: `attack_plan_rows` 数的是**立过几项**（立项计数），而「攻（攻坚推进）」那一格问的是
-#: **推进了没有**。两者此前同列 ⇒ 验收表写 `attack_plan_rows: min 1` 就能那一格变绿，
+#: `attack_plan_rows` 数的是立过几项（立项计数），而「攻（攻坚推进）」那一格问的是
+#: 推进了没有。两者此前同列 ⇒ 验收表写 `attack_plan_rows: min 1` 就能那一格变绿，
 #: 而盘上的计划可以一步没动（`history` 全 `no_change`、`statement_id` 为 null）。
 #:
 #: 处置：把"立项"这一档从阈值判定里摘出来 —— 它照旧现算、照旧写进 `rows`
 #: （`state="informational"`，`got` 就是立项数，人要看的就是这个数），但它
 #: ① 不进 `unmet`（写多少都不判红）、② 不进 `computed_kinds`（关不掉任何自动分支）、
-#: ③ **不进研究链覆盖面**（只写它 ⇒ 那一环算「一行都没有」⇒ 整格红）。
+#: ③ 不进研究链覆盖面（只写它 ⇒ 那一环算「一行都没有」⇒ 整格红）。
 #: 第三条是关键：它让"只凭立过项过关"在结构上不可能，而不是靠阈值调大。
 INFORMATIONAL_KINDS: frozenset[str] = frozenset({"attack_plan_rows"})
 
@@ -1004,8 +1004,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         rel = store.rows("relations")
         rows = list(st) + list(rel)
         # 两档口径（2026-10-14 业主裁定：「回验……保持语义相同即可」）：`true` 那一栏
-        # **按 `evidencebits.quote_state` 算**，于是"说了通过却说不清怎么通过的"
-        # （`quote_mode` 空/认不出的词）**不算 true**，落回 `unchecked`。
+        # 按 `evidencebits.quote_state` 算，于是"说了通过却说不清怎么通过的"
+        # （`quote_mode` 空/认不出的词）不算 true，落回 `unchecked`。
         # 逐字与语义分开报：前者不花模型钱、后者是 H 判的，混成一个数就看不出钱花在哪。
         states = {"verbatim": 0, "semantic": 0, "mismatch": 0, "unchecked": 0}
         for r in rows:
@@ -1069,7 +1069,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
     if kind in ("reviewed_documents", "accepted_documents"):
         # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：
-        # **审过**读 `review_verdict != ""`；**通过**才读 `review_verdict == "成立"`
+        # 审过读 `review_verdict != ""`；通过才读 `review_verdict == "成立"`
         # （与 V 的「成立」同形）。不再用 `status ∈ accepted/revised` 冒充"审过" ——
         # 那是把"通过"折成"审过"，而 T5 第 9 趟正是靠这个折平才七格全绿。
         want = "成立" if kind == "accepted_documents" else None
@@ -1206,7 +1206,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         draft_items = (draft.read_text(encoding="utf-8", errors="replace").count("\\bibitem")
                        if draft.is_file() else None)
         rows = list(store.rows("statements")) + list(store.rows("relations"))
-        # 与 `quote_verified_rows` 同一口径（`evidencebits.quote_state`）：有**结论**的行
+        # 与 `quote_verified_rows` 同一口径（`evidencebits.quote_state`）：有结论的行
         # = 逐字命中 / 语义相同 / 不一致；说了通过却说不清方式的按"没查"算。
         verdict = [r for r in rows
                    if EB.quote_state(r) in ("verbatim", "semantic", "mismatch")]
@@ -1429,9 +1429,9 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # 「登记了但没被 B 消化」那一档（业主 2026-10-18 口径）。
         #
         # 为什么需要它：`literature.unprocessed` 此前只是报告里的一句话 ——
-        # `projects/mp2` R10 逐字写「`literature.unprocessed`=32 **未清零**」却记 pass；
+        # `projects/mp2` R10 逐字写「`literature.unprocessed`=32 未清零」却记 pass；
         # `projects/mp3` P8 记 20 记 pass；`projects/t3d` ⑧ 记 12 记成立。
-        # 三份验收表都能「如实写出这个读数」而照样绿，因为**没有任何一行判它**。
+        # 三份验收表都能「如实写出这个读数」而照样绿，因为没有任何一行判它。
         # 这一档把那个读数变成一条可复算的判据：缺省上限 0（与 `unfinished_request_rows`
         # 同一根轴：越少越好），超过就要红；同时它给「请求闭环」那一行提供降级判据
         # （`unprocessed > 0` ⇒ 那一行记 `unknown`，并要求写清为什么可以带着它收工）。
@@ -1774,12 +1774,12 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "with_quote_verdict": len(verified), "derived": len(derived),
             "note": "文献来的要带 `quote_verified`（真/假/未查+理由），我方派生的要在 `derived_from` 里给出处"}
     if kind == "plan_progress_rows":
-        # 口径（2026-10-19 修，`draft/44` 的「攻」那一格）：**真的推进过的计划**才算。
+        # 口径（2026-10-19 修，`draft/44` 的「攻」那一格）：真的推进过的计划才算。
         #
         # 改前的实现是 `advanced = [r for r in rows if r["history"]]` —— 它只问
         # "这份计划被 step 过没有"，不问"step 出了什么"。于是两轮全 `no_change`
         # 的计划（`dead_end` 逐轮落库、子目标一条没动）与四轮全 `progress` 的计划
-        # 在这一格上**等值**（真机 mp3：`000000` 与 `000001` 读到同一个数）。
+        # 在这一格上等值（真机 mp3：`000000` 与 `000001` 读到同一个数）。
         # 这一格是"攻（攻坚推进）"的唯一读数，等值 = 那一格量不到任何东西。
         # 判据本体在 :func:`_round_advanced`（一处口径，读不到两种说法）。
         rows = list(store.rows("attack_plans"))
@@ -2048,7 +2048,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     #: 今天只有一档 —— `attack_plan_rows`（立项计数）。
     informational_rows: list[dict[str, Any]] = []
     #: `literature.unprocessed` 的现算读数（三态：整数 / `None` = 读不到 + 理由）。
-    #: 惰性算一次，行循环里那一格用；算不出来时**不许**读成"没有未消化"（那正是
+    #: 惰性算一次，行循环里那一格用；算不出来时不许读成"没有未消化"（那正是
     #: 这一条要防的形态：`mp2` 记 32 而被当成 pass）。
     _unprocessed_cache: dict[str, Any] = {}
     seen_ids: set[str] = set()
@@ -2069,8 +2069,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     #:
     #: 惰性算一次（只有真出现 `plan_progress_rows` 那一行时才需要它）—— 判据本体在
     #: `verifications.unverified_statement_refs`（与写入期闸、审计期档读同一处"什么叫一签"）。
-    #: 三态：`checked=False` ⇒ 这一格**没查成**（读不到 `attack_plans` 或账本坏行），
-    #: 那时最多记 `unknown`，**绝不**记 `pass`。
+    #: 三态：`checked=False` ⇒ 这一格没查成（读不到 `attack_plans` 或账本坏行），
+    #: 那时最多记 `unknown`，绝不记 `pass`。
     _vref_cache: dict[str, Any] = {}
 
     def _proof_review_backlog() -> dict[str, Any]:
@@ -2187,8 +2187,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             continue
         # ---- informational（2026-10-19）：只报数、不判 pass/fail。
         #
-        # 为什么这一支必须在阈值判定**之前**：`attack_plan_rows` 数的是**立项数**，
-        # 而「攻（攻坚推进）」那一格问的是**推进了没有**。让立项那一行照样按阈值判，
+        # 为什么这一支必须在阈值判定之前：`attack_plan_rows` 数的是立项数，
+        # 而「攻（攻坚推进）」那一格问的是推进了没有。让立项那一行照样按阈值判，
         # 写 `min: 1` 就能让整格 pass（这正是要堵的那条路：立过项、零推进）。
         # 所以它只留读数（`got` = 立项数，人要看的就是这个数），
         # ① 不进 `unmet`、② 不进 `computed_kinds`、③ 不进研究链覆盖面
@@ -2236,8 +2236,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         # ---- 第三条队列（业主 2026-10-18 裁定）：`literature.unprocessed > 0` ⇒ 不许 pass。
         #
         # 缺陷读数（本条的负控就是它）：`projects/mp2` R10 逐字写「`literature.unprocessed`=32
-        # **未清零**」而结论是 pass；`projects/mp3` P8 记 20 记 pass；`projects/t3d` ⑧ 记 12
-        # 记成立。三份验收表都**如实写出了这个读数**，却没有一行判它 —— 「写出来了」不等于
+        # 未清零」而结论是 pass；`projects/mp3` P8 记 20 记 pass；`projects/t3d` ⑧ 记 12
+        # 记成立。三份验收表都如实写出了这个读数，却没有一行判它 —— 「写出来了」不等于
         # 「有人判了」。所以判据落在这里：这一行算出来的 `pass` 在 `unprocessed > 0` 时降成
         # `unknown`，并要求写清为什么可以带着它收工。
         #
@@ -2287,7 +2287,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         # 的一行之后，`statement_id` 进了 `attack_plans.history`（P3-6），而"后来有没有
         # 人审它"在收工门上没有任何读数 —— 于是"F 交了、没人签"与"F 交了、V 签了"
         # 在这一格里长得一模一样。`unknown` 是刻意的：这不是 fail（那一轮推进是真的），
-        # 但它**绝不能**读成 pass（那会把"没人签"说成"审过了"）。
+        # 但它绝不能读成 pass（那会把"没人签"说成"审过了"）。
         if kind == "plan_progress_rows" and ok_row:
             b = _proof_review_backlog()
             if isinstance(detail, dict):
@@ -2797,7 +2797,7 @@ class ClosingReport:
     def summon_consumption(self) -> dict[str, Any]:
         """收工门的「子产出处理」那一格（口径见 `summon_consumption_reading`）。
 
-        它不是八格之一，也没有 `status`：业主裁定这条规矩**不 fail 收工**，
+        它不是八格之一，也没有 `status`：业主裁定这条规矩不 fail 收工，
         但它必须读得到。`checked=False` = "这一格没查成"（不是"处理了"）。
         """
         return dict(self.readings.get("summon_consumption") or {})
@@ -2825,7 +2825,7 @@ class ClosingReport:
                    f"{len(self.status)}"
                    + (f"；fail={self.failed}" if self.failed else "")
                    + (f"；unknown={self.unknowns}" if self.unknowns else ""))
-        # 子产出处理那一格（业主裁定：父必须处理子代理的产出）：只在**真的没处理**时
+        # 子产出处理那一格（业主裁定：父必须处理子代理的产出）：只在真的没处理时
         # 往这句话里加一句 —— 它是读数不是判据，所以既不影响 `can_close`，
         # 也不给"这一格没查成/没有对象"的寻常日子加噪声（三态仍在 `readings` 里）。
         sum_note = ""
@@ -2833,7 +2833,7 @@ class ClosingReport:
         if got.get("checked") and int(got.get("summons_unconsumed") or 0) > 0:
             sum_note = (f"；**子产出没处理** {got['summons_unconsumed']}/"
                         f"{got.get('summons_total')} 条（读数，不拦门）")
-        # 名册登记那一格（"名册写没写"）：只在**真的有问题**时加半句话 ——
+        # 名册登记那一格（"名册写没写"）：只在真的有问题时加半句话 ——
         # 它是读数不是判据（不拦门），所以寻常日子不给收工那一行加噪声。
         ros = self.readings.get("roster_registration") or {}
         ros_note = ""
@@ -3597,7 +3597,7 @@ def _alternatives_note(store: Any, kind: str, project_root: Path) -> str:
         for m in members:
             if m == kind:
                 continue
-            # informational 的档**不是出路**（2026-10-19）：`attack_plan_rows` 只报立项数，
+            # informational 的档不是出路（2026-10-19）：`attack_plan_rows` 只报立项数，
             # 把它当成"同一环换一档就达标"来提，等于把刚堵上的那条路又指给人走。
             if m in INFORMATIONAL_KINDS:
                 continue
@@ -4159,15 +4159,15 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     if rep.m_verdict:
         rep.readings["verdict_escalation"] = _escalation_reading(
             root, sid, list(rep.m_verdict.get("tasks") or []))
-    # ---- 子产出处理那一格（业主裁定：**父代理必须处理子代理的产出**）
+    # ---- 子产出处理那一格（业主裁定：父代理必须处理子代理的产出）
     #
     # 为什么不进 `DEFAULT_CHECKS`（十八格之一）、也不进退出码：业主逐字
-    # 「不一定要 fail，但必须可见」。它是一格**读数**，落 `readings`（`to_dict()`
+    # 「不一定要 fail，但必须可见」。它是一格读数，落 `readings`（`to_dict()`
     # 与服务端都能读到）+ 一条 `warning`（`summons_unconsumed > 0` 时，它会被
     # `agentflow closing` 逐条打出来）—— `machine_pass` 只看 `blocker`，
     # 所以"没处理"不会偷偷把门的强度改了，也不会被静默折成通过。
     #
-    # `checked=False`（没查成 / 老会话）**不**升成一条 finding：那会给今天所有
+    # `checked=False`（没查成 / 老会话）不升成一条 finding：那会给今天所有
     # 老工作区的收工输出加一行噪声。三态仍然保留在 `readings` 里 ——
     # "没查成"与"查过了是 0"分得开，只是不刷屏。
     rep.readings["summon_consumption"] = summon_consumption_reading(root, sid=sid)
@@ -4185,7 +4185,7 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # ---- 名册登记那一格（"名册写没写"必须可审）
     #
     # 口径与理由见 `roster_registration_reading`：它只数"`roster_problem` 非空的次数"，
-    # 落 `readings`、在 `summary()` 里加半句话；**不**进 `status`、**不**产生 `Finding`
+    # 落 `readings`、在 `summary()` 里加半句话；不进 `status`、不产生 `Finding`
     # ⇒ 它不改变门的强度，只让"名册 0 行"与"名册都写上了"在收工输出上分得开。
     rep.readings["roster_registration"] = roster_registration_reading(root, sid=sid)
     return rep
@@ -4300,3 +4300,118 @@ def tri_state_exit_code(rep: ClosingReport) -> int:
     if not rep.m_verdict:
         return 2
     return 1
+
+# ---------------------------------------------------------------- 论文证明的可查性（S2）
+#
+# 业主 2026-10-21 两条口径（`draft/138` §5）：
+#   ① 所有定理的完整证明都要可查，B 侧都要有收录；
+#   ② 产出丰盛时按档压缩：T1 可压缩证明长度、T2 把繁复工作移附录（正文留框架）、
+#      T3/T4 不许整段移出正文。
+# 所以这一族只判三件事，不判篇幅、不判次数（那两条已被业主否掉）：
+#   A. 正文里每条 theorem/lemma/proposition/corollary 都能在台账里找到对应行，
+#      且那一行的"完整证明可查"（自有结果：`proof_text` 非空；引用：`source_lit_id` + 页码 + 逐字核验）；
+#   B. 证明被压缩/移走的，正文必须给指针（"见附录"或台账编号入口）；
+#   C. 档位 ≥3 的那几条，框架与动机不许整段移出正文。
+
+_THM_ENVS = ("theorem", "lemma", "proposition", "corollary")
+_APPENDIX_POINTER = re.compile(r"(见\s*附录|see\s+(the\s+)?appendix|附录\s*[A-Z0-9]|Appendix\s+[A-Z0-9])", re.I)
+
+
+def _paper_text(root: str | Path) -> str:
+    path = Path(root) / "out" / "paper" / "main.tex"
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def _statement_rows(root: str | Path) -> list[dict[str, Any]]:
+    path = Path(root) / "data" / "statements.json"
+    if not path.is_file():
+        return []
+    try:
+        return list((json.loads(path.read_text(encoding="utf-8")) or {}).get("rows") or [])
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip().lower()
+
+
+def _env_bodies(tex: str, tail: int = 400) -> list[tuple[str, str, str]]:
+    """正文里每个定理类环境的 (环境名, 环境内正文, 其后 400 字符的正文)。
+
+    为什么要带"其后正文"：压缩之后的指针（"见附录 A.2"）写在定理环境之外，
+    只看 `\\begin{theorem}…\\end{theorem}` 之间的字会把它当成"框架还在正文里"。
+    """
+    out: list[tuple[str, str, str]] = []
+    for name in _THM_ENVS:
+        pattern = re.compile(r"\\begin\{" + name + r"\}(.*?)\\end\{" + name + r"\}", re.S)
+        for m in pattern.finditer(tex):
+            out.append((name, m.group(1), tex[m.end():m.end() + tail]))
+    return out
+
+
+def _provable_in_ledger(tex_statement: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """在台账里找这条定理对应的行（按去掉空白/大小写后的子串匹配）。"""
+    want = _norm(tex_statement)
+    if not want:
+        return None
+    for row in rows:
+        for field in ("statement_text", "statement_full"):
+            got = _norm(row.get(field) or "")
+            if got and (got in want or want in got):
+                return row
+    return None
+
+
+def _proof_queryable(row: dict[str, Any] | None) -> str:
+    """那一行的"完整证明可查"读到什么（空串 = 可查）。
+
+    自有结果看 `proof_text`；引用结果看 `source_lit_id` + 页码 + 逐字核验 ——
+    我们不可能收录别人的全文，但必须指得到（这是"可查"的诚实下限）。
+    """
+    if row is None:
+        return "正文这条定理在台账里没有对应行 ⇒ 完整证明无处可查"
+    if str(row.get("proof_text") or "").strip():
+        return ""
+    if str(row.get("source_lit_id") or "").strip():
+        missing = [name for name, key in (("页码", "page_range"), ("逐字核验", "quote_verified"))
+                   if not (row.get(key) or (key == "quote_verified" and row.get(key) is True))]
+        if missing:
+            return f"引用型断言缺 {'/'.join(missing)}（`stmt:{row.get('stmt_id', '?')}`）"
+        return ""
+    return f"`stmt:{row.get('stmt_id', '?')}` 既没有 `proof_text`、也没有 `source_lit_id` ⇒ 证明不可查"
+
+
+def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
+    """论文证明的可查性/指针/关键结果不被塞走（S2 的三条）。空清单 = 合格。
+
+    三条的边界（业主 2026-10-21）：
+    * 不判篇幅（"T4 给 8%" 那版已被否）；
+    * 不数"显然"（计数会逼出废话）；
+    * 只判"证明在不在了、压了有没有指针、关键的有没有被搬走"。
+    """
+    tex = _paper_text(root)
+    if not tex.strip():
+        return []          # 没有论文 ⇒ 这一族不适用（不是"通过"：调用方看 reading 里有没有稿）
+    rows = _statement_rows(root)
+    problems: list[str] = []
+    for name, body, after in _env_bodies(tex):
+        row = _provable_in_ledger(body, rows)
+        got = _proof_queryable(row)
+        if got:
+            problems.append(f"{name}: {got}")
+        # 档位那一条与证明在不在无关：证明在台账里、但框架被搬进附录，一样是"塞走"
+        tier = 0
+        if row is not None:
+            try:  # 档位是旁支台账里的读数（`secretary.nontriviality_of`）；取不到就当没判
+                from . import secretary as _SEC
+                tier = int(_SEC.nontriviality_of(root, str(row.get("statement_full") or ""))["level"])
+            except Exception:  # noqa: BLE001 - 读数取不到不影响这条判据
+                tier = 0
+        in_body = (body + after).strip()
+        points_to_appendix = bool(_APPENDIX_POINTER.search(in_body))
+        if tier >= 3 and points_to_appendix and len(in_body) < 400:
+            problems.append(
+                f"{name}: 档位 T{tier} 的框架被整段移进附录（正文只剩 {len(in_body)} 字符的指针）"
+                " —— T3/T4 的框架与动机必须留在正文")
+    return problems

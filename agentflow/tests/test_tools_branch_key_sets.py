@@ -64,7 +64,7 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 于是这一条前存红（清洁前 `cdcb843` 上同样红，不是清洁造成的）。
     # 为什么它是"看不清"而不是"看得见"：键由 `Conductor.escalate` 的返回 dict 决定
     # （`checked`/`state`/`to`/`msg_id` … 十二条都在运行时那一份里），静态扫描读不出来。
-    # 为什么不改成字面量 dict（本条判据的"好"方向）：那一处现在是**透传**
+    # 为什么不改成字面量 dict（本条判据的"好"方向）：那一处现在是透传
     # （只摘掉 `addressing` / `roster_unavailable` 两格框架读数，其余照原样给出），
     # 而 `test_tools_returns_declaration.py` 的"给了却没声明"那一半正是靠透传才咬得住
     # —— 硬写字面量会让它以后新加的键永远不可能"出现在 `data` 里"，那条判据对这一件

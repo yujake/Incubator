@@ -122,7 +122,7 @@ class CancelReason:
 CANCEL_CODES: tuple[str, ...] = (
     "user",              # 人/调用方显式取消
     "deadline",          # 墙钟截止
-    "budget",            # 钱花光了（`budget` 注册表 / M 主动喊停）—— ⚠️ 不是 token
+    "budget",            # 钱花光了（`budget` 注册表 / M 主动喊停）—— 不是 token
     "dispose",           # Conductor 被销毁
     "cancelled",         # 未分类（不要用它：它等于没写原因）
 )
@@ -144,8 +144,8 @@ CANCEL_CODES: tuple[str, ...] = (
 #:   unknown            —— `CancelReason.by` 的默认值（没记谁喊的）
 #:   user               —— `Conductor.cancel` 的默认 `by="user"`
 #:   deadline           —— `CancelToken.reason` 的惰性路径 + `Conductor` 的 `_signal_stop("deadline", ...)`
-#:   budget             —— `agent_loop` 的美元预算停止点（`by="budget"`；⚠️ 2026-10-15 裁定
-#:                         A1/A2/A3 之后**不再**由 `CancelToken` 的 token 预算产出）
+#:   budget             —— `agent_loop` 的美元预算停止点（`by="budget"`； 2026-10-15 裁定
+#:                         A1/A2/A3 之后不再由 `CancelToken` 的 token 预算产出）
 #:   conductor.dispose  —— `Conductor.dispose` 合成终态时
 CANCEL_BY_VALUES: tuple[str, ...] = (
     "unknown",
@@ -174,13 +174,13 @@ class CancelToken:
       系统时间被 NTP 往回拨时，墙钟会让"到点"变成"还没到"（或反之），
       而这种抖动在测试里表现为偶发失败。
 
-    ⚠️ **`token_budget` 这一格已删**（2026-10-15 业主裁定 A1/A2/A3：
-    **「我们不卡 token，只卡总花销的钱」**）。它此前是一条真实的**强杀**路径
+    `token_budget` 这一格已删（2026-10-15 业主裁定 A1/A2/A3：
+    「我们不卡 token，只卡总花销的钱」）。它此前是一条真实的强杀路径
     （`_tokens_used >= _token_budget` ⇒ `cancelled` 变 True ⇒ 在跑的 handler
     在下一个 `raise_if_cancelled` 点被掀掉）。为什么必须删而不是留着不用：
     它把"想得多"变成了一种过错 —— 而 T5 实测（`draft/121`）里
    卡住智能体的正是它。`tokens_used` 仍然记（`consume_tokens`），
-    它只是**读数**，不再有任何一处在它上面说"停"。
+    它只是读数，不再有任何一处在它上面说"停"。
     钱的闸门在 `tokenmeter.TokenMeter.guard()`（那才是现在唯一会拒绝的地方）。
     """
 
@@ -290,7 +290,7 @@ class CancelToken:
 
     @property
     def tokens_used(self) -> int:
-        """这一趟花了多少 token —— **读数**（2026-10-15 裁定 A1 之后不再是判据）。"""
+        """这一趟花了多少 token —— 读数（2026-10-15 裁定 A1 之后不再是判据）。"""
         with self._lock:
             return self._tokens_used
 
@@ -344,12 +344,12 @@ class CancelToken:
         return reason_obj
 
     def consume_tokens(self, n: int) -> int:
-        """记一笔 token 消耗，返回**累计值**（读数，不是判据）。
+        """记一笔 token 消耗，返回累计值（读数，不是判据）。
 
-        ⚠️ 2026-10-15 业主裁定 A1/A2/A3 之后这个方法的语义变了：它此前返回
+        2026-10-15 业主裁定 A1/A2/A3 之后这个方法的语义变了：它此前返回
         "这次消耗之后是否仍然没超预算"（一个 bool），并在超预算时把
-        `cancelled` 置起来 —— 那是一条**强杀**路径。现在它只记账：
-        "这一趟花了多少"必须看得见，但花多少都**不会**让这一趟停。
+        `cancelled` 置起来 —— 那是一条强杀路径。现在它只记账：
+        "这一趟花了多少"必须看得见，但花多少都不会让这一趟停。
 
         为什么仍然返回一个数而不是 `None`：调用方就地能拿到累计值
         （写成 `None` 的话，想看这个数的人得再抢一次锁读属性），

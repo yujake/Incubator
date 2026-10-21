@@ -751,7 +751,7 @@ class _FakeB:
                 # 用 lit_id 派生一个稳定的关系号（900000 段），避免和种子关系冲突
                 rid = S.format_id(900000 + (int(lit_id) % 1000) if S.is_valid_id(lit_id) else 900000)
                 if added == 0 and rid not in {str(r.get("relation_id")) for r in tx.rows("relations")}:
-                    # 概念号取**夹具里那两条概念行自己的号**（四位）：读侧兼容四位，
+                    # 概念号取夹具里那两条概念行自己的号（四位）：读侧兼容四位，
                     # 而这条关系要真的指到已存在的概念上 —— 指到别的写法会让下游的
                     # "等待集就绪"那一环查不到概念（`python -m agentflow.pipeline` 自检当场红）。
                     concept_ids = ["0000", "0001"]

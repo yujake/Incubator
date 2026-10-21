@@ -413,7 +413,7 @@ def handle_settings(handler: Any, params: Mapping[str, str],
             continue                      # confirm 之类的顶层字段不进设置
         text = _text(vals[0]) if vals else ""
         section, rest = str(raw_key).split(".", 1)
-        # `models` 是**三段**的键（`models.<角色>.<键>`，业主 2026-10-14 的按角色配置）：
+        # `models` 是三段的键（`models.<角色>.<键>`，业主 2026-10-14 的按角色配置）：
         # 表单是平的，所以这里再切一刀；其余段仍是两段。
         if section == SET.MODELS_SECTION and "." in rest:
             slot, key = rest.split(".", 1)
@@ -524,11 +524,11 @@ def _run_argv(root: Path, task: str, *, sid: str = "",
               resume: bool = False) -> list[str]:
     """起一趟要跑的那条命令行（判据拿它比对；`dry_run` 也回它）。
 
-    `sid` / `resume`（R91，业主「要能对话」）：对话页在 M **闲着**的时候要让那一段
-    会话接着说下去 —— 用户的话先落进收件箱（`/api/task`），再按**同一句话任务**
+    `sid` / `resume`（R91，业主「要能对话」）：对话页在 M 闲着的时候要让那一段
+    会话接着说下去 —— 用户的话先落进收件箱（`/api/task`），再按同一句话任务
     唤醒 M（`--sid <那段会话> --resume`）。为什么必须带上原来那句话：`resume_messages`
     按"role 相同 + task 原文相同 + 是全新开始"来定重建窗口，换了任务就是另一趟
-    （`--resume` 会以指纹不符拒掉，那是有意的守卫）。收件箱那一段是**现读**的，
+    （`--resume` 会以指纹不符拒掉，那是有意的守卫）。收件箱那一段是现读的，
     所以新留言正好落在 M 醒来的第一步里。
     """
     argv = [sys.executable, "-B", "-m", "agentflow", "--root", str(root),
@@ -576,7 +576,7 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
     """`POST /api/run`：用一句话起一趟工作流（等价 CLI 的 `run-agent M --task …`）。
 
     请求字段：`task`（要系统做的那件事，一句话）· `confirm=1` · `dry_run?` ·
-    `sid?` + `resume?`（R91：让**闲着**的那段会话接着说下去 —— 对话页在 M 不跑时
+    `sid?` + `resume?`（R91：让闲着的那段会话接着说下去 —— 对话页在 M 不跑时
     走的就是这一支；`resume` 必须配 `sid`，因为它问的是"接着哪一段跑"）。
     三态：没开写面 / CSRF 不对 ⇒ 403；任务为空 / 缺 confirm / `resume` 没给 `sid`
     ⇒ 400（一个字节都不写）；起不来 ⇒ 500 并原样给错误；起来了 ⇒ 200 + `{pid, log, argv}`。
@@ -625,11 +625,11 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
 
 def handle_interject(handler: Any, params: Mapping[str, str],
                 query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
-    """`POST /api/task`：**往正在跑的那一趟插话**（只有用户能发、只有 M 收）。
+    """`POST /api/task`：往正在跑的那一趟插话（只有用户能发、只有 M 收）。
 
     请求字段：`body`（要说的话）· `subject?` · `sid?` · `confirm=1` · `dry_run?`。
     送达方式由 `agent_loop.send_interjection` 定义：下一步开头单列一段【插话】，
-    **不打断当前步**；写进会话事件流（`agent_interjection`），所以盘上可复查。
+    不打断当前步；写进会话事件流（`agent_interjection`），所以盘上可复查。
     """
     del params, query
     from .. import agent_loop as AL

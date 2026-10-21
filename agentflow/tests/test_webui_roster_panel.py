@@ -11,7 +11,7 @@
 | 判据 | 它守的是 | 失败时的样子 |
 |---|---|---|
 | ① `test_the_endpoint_returns_the_whole_tree_*` | 有真名册的工作区：父/子/绝对编号/深度/收件箱齐，且互相自洽 | 树少一层、编号不是绝对的、收件箱读成 0 |
-| ② `test_a_workspace_without_a_roster_answers_unknown_*` | **没名册 ≠ 空树**（负控：`answer="unknown"` 且 `count is None`） | 端点回 `{"nodes": []}` 冒充"没有子代理" |
+| ② `test_a_workspace_without_a_roster_answers_unknown_*` | 没名册 ≠ 空树（负控：`answer="unknown"` 且 `count is None`） | 端点回 `{"nodes": []}` 冒充"没有子代理" |
 | ③ `test_the_endpoint_refuses_post_*` | 写面为零（路由表里没有配对的 POST，HTTP 也不接受） | 只读面板配了一条能写的端点 |
 | ④ `test_the_frontend_really_reads_the_roster_endpoint` | 前端源码真的引用了这条端点（防"后端做了前端没接"） | 端点绿着、页面上一个字都没有 |
 
@@ -19,7 +19,7 @@
 
 "没有名册"与"名册上一个人都没有"在读数上必须分得开 —— 这是本仓库最贵的一条纪律
 （`readers` 的三态词表就是为它存在的）。所以②不只断言 `answer == "unknown"`，还断言
-`count is None`（不是 0）、`nodes == []` 但**同时**有一条非空 `reason`，并且断言
+`count is None`（不是 0）、`nodes == []` 但同时有一条非空 `reason`，并且断言
 "若把 `answer` 改回 `ok` 这条判据必须红"（`_empty_workspace_problems` 的负控）。
 
 ## 为什么走真 HTTP
@@ -60,7 +60,7 @@ _AT = "2026-10-21T00:00:00+08:00"
 
 def _row(task_id: str, *, role: str, parent: str | None, depth: int,
          status: str) -> dict[str, Any]:
-    """一条**实例行**（`kind == ""`：一个 agent 一行，与 `schema.Task` 同形）。
+    """一条实例行（`kind == ""`：一个 agent 一行，与 `schema.Task` 同形）。
 
     `started_at` / `ended_at` 按 `schema.Task.validate` 的两条硬规矩给：在飞
     （`pending`/`running`）必有 `started_at` 且 `ended_at` 为空；终态必有 `ended_at`。
@@ -79,7 +79,7 @@ def _row(task_id: str, *, role: str, parent: str | None, depth: int,
 
 def _board_row(task_id: str, *, parent: str, kind: str, state: str,
                called_by: str, detail: str) -> dict[str, Any]:
-    """一条**板项行**（`kind` 非空）：它的 `parent_task_id` 是**收件人**的编号。
+    """一条板项行（`kind` 非空）：它的 `parent_task_id` 是收件人的编号。
 
     `expects="ack"` 是 `schema.Task` 对板项行的硬要求（"什么算做完"的口径）。
     """
@@ -91,7 +91,7 @@ def _board_row(task_id: str, *, parent: str, kind: str, state: str,
 
 
 def _roster_workspace(tmp: pathlib.Path) -> pathlib.Path:
-    """造一份**有真名册**的最小工作区（`Secretary.roster_add` 是写侧的唯一实现）。
+    """造一份有真名册的最小工作区（`Secretary.roster_add` 是写侧的唯一实现）。
 
     为什么用真写侧而不是手写 JSONL：字段名与"哪一格是谁写的"（`brief_source`）都由
     `secretary.roster_add` 决定 —— 手抄一份就等于把盘上格式再定义一遍（两处迟早漂移）。
@@ -180,7 +180,7 @@ def _tree_problems(payload: Mapping[str, Any]) -> list[str]:
     """树干那一份读数自洽吗（父/子/绝对编号/深度/收件箱）。
 
     逐条都是"这一格与那一格对不上"，而不是"这一格存在"：
-    - 每个非根节点的 `parent_task_id` 必须**真的有一个父节点**，且父的 `children`
+    - 每个非根节点的 `parent_task_id` 必须真的有一个父节点，且父的 `children`
       里点着它（父子两处必须互指 —— 单向的父子是名册最容易出的那种错）；
     - `depth` 必须是父的 `depth + 1`、根是 1（深度不是装饰：它就是缩进）；
     - `task_id` 不许为空、不许重复（绝对编号是这一整套的主键）；
@@ -322,7 +322,7 @@ def test_the_tree_judgment_is_not_vacuous() -> None:
 
 # ====================================================================== ② 没名册
 def _empty_workspace_problems(payload: Mapping[str, Any]) -> list[str]:
-    """②的判据本身：这一档必须**明说没读到**，不许拿空数组冒充"没有子代理"。
+    """②的判据本身：这一档必须明说没读到，不许拿空数组冒充"没有子代理"。
 
     四条一起看（少一条就能被"看起来对"的形状蒙过去）：
     `answer == "unknown"`、`count is None`（不是 0）、`nodes == []` 而 `reason` 非空、
@@ -405,7 +405,7 @@ def test_the_endpoint_refuses_post_and_has_no_write_face(tmp_path: pathlib.Path)
 
 # ====================================================================== ④ 前端接上
 def _frontend_problems(api_text: str, panel_text: str, live_text: str) -> list[str]:
-    """④的判据本身：前端源码真的引用了这条端点，而且面板是**接进已有的运行态页**的。
+    """④的判据本身：前端源码真的引用了这条端点，而且面板是接进已有的运行态页的。
 
     为什么是文本级：这一条防的是"后端做了、前端没接"（那种状态下所有后端判据全绿，
     而用户界面上一个字都没有）。三处必须同时成立：
@@ -461,7 +461,7 @@ def test_the_panel_is_not_an_isolated_page() -> None:
 
     两条断言：
     - `main.tsx` 的客户端路由表没有因为这一批多出一条（多一条就要动 C4 契约表 ——
-      而名册是**运行态监控**的一块，它应当在「在飞」页里）；
+      而名册是运行态监控的一块，它应当在「在飞」页里）；
     - `pages/` 下没有多出 `Roster.tsx` 这样的第十页（组件在 `components/` 里）。
     """
     main_text = (UI_SRC / "main.tsx").read_text(encoding="utf-8")

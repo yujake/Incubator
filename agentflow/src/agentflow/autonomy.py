@@ -28,8 +28,8 @@
 - `rounds`：轮次用尽（这是唯一的正常终点，"跑完了"就是它）；
 - `budget`：花销预算已到（有共享的模型缝就问缝，没有就把各轮的用量加起来）；
 - `stop_file`：磁盘上出现了那个开关文件（人不用等着发指令就能叫停）；
-- `user_stop`：**已删除**（业主口径 2026-10-17「删掉旁路」：停意由主控**理解意思**后调
-  `conductor.stop` 完成，**不靠单词匹配**）。
+- `user_stop`：已删除（业主口径 2026-10-17「删掉旁路」：停意由主控理解意思后调
+  `conductor.stop` 完成，不靠单词匹配）。
 
 `not_wired` 是第五种停法，它在第一轮跑完之后判：没有接线时循环不发起任何请求，
 这时继续排下一轮只会连排 N 次空转 —— 所以停，并说明"后续轮次不再发起"。
@@ -65,9 +65,9 @@ from . import sessions as SS
 from .agent_loop import PUBLIC, LoopRun, run_role, send_message
 from .llmseam import LlmSeam
 
-#: **（已删除）** 原本这里是 `STOP_TOKEN = "STOP"` 的**字面匹配**旁路。
-#: 业主口径 2026-10-17「删掉旁路」：优雅停是**主控的工具/动作** —— 用户**表达出意思**，
-#: 主控就会启动 `conductor.stop`，**不靠单词匹配**（字面匹配必然漏：中文「停」「收工」都不认）。
+#: （已删除） 原本这里是 `STOP_TOKEN = "STOP"` 的字面匹配旁路。
+#: 业主口径 2026-10-17「删掉旁路」：优雅停是主控的工具/动作 —— 用户表达出意思，
+#: 主控就会启动 `conductor.stop`，不靠单词匹配（字面匹配必然漏：中文「停」「收工」都不认）。
 #: 旧常量删掉之后，任何还引用 `autonomy.STOP_TOKEN` 的代码都会立刻 `NameError`（这是有意的：
 #: 静默返回"没叫停"比报错更坏）。
 
@@ -281,7 +281,7 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
 
     顺序是 `waiting_for_user` → `escalated` → `rounds` → `budget` → `stop_file`：
     先看"上一轮停在等用户回答、而「那个回答到现在还没来」"（唯一一条不能靠继续跑绕过去的），
-    再看"上一轮已经把卡住的那件事交给召唤者了"（同一族：等的是**别人**，不是钱也不是轮次），
+    再看"上一轮已经把卡住的那件事交给召唤者了"（同一族：等的是别人，不是钱也不是轮次），
     再耗尽轮次，再看钱，再看磁盘上那个人工开关，最后看用户最新那句话。
     多条同时成立时按这个顺序给一个确定的答案 —— 否则"为什么停"这件事会取决于读取顺序，
     而那是不可复现的。
@@ -303,11 +303,11 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
     # ---- 已上报召唤者（`conductor.escalate`，业主 2026-10-19「父子天然双向」）
     #
     # 与 `waiting_for_user` 同一族、同一个理由：上一轮把孩子卡住的那件事已经交给
-    # 召唤者了，再开一轮就是**替父把判断定了**（还多烧一轮钱）。
+    # 召唤者了，再开一轮就是替父把判断定了（还多烧一轮钱）。
     # 为什么排在 `rounds` / `budget` / `stop_file` 之前：它不是"跑完了"也不是"钱没了"——
     # 那三条都说"这一趟可以不跑了"，而这一条说"这一趟必须等别人"。
     # 为什么 `escalated` 不是"用户叫停"：停意不是用户下的（`_user_stop_reason` 只会给
-    # `stop_file` / `force_stop` / `interrupted_by_parent`），这一档是**这一趟自己**
+    # `stop_file` / `force_stop` / `interrupted_by_parent`），这一档是这一趟自己
     # 决定交出去 —— 判据 `tests/test_escalate_goes_up_and_stops.py` 两向都钉着。
     if last_stop_reason == "escalated":
         return "escalated"
@@ -486,7 +486,7 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                                checkpoint=str(cp_path))
         else:
             # 2026-10-17（IO #8）：`load_checkpoint` 只校验"能解析成 dict"，字段级不校验；
-            # `completed_rounds: "abc"` 的脏检查点会把一次**续跑**变成 traceback。
+            # `completed_rounds: "abc"` 的脏检查点会把一次续跑变成 traceback。
             try:
                 resumed_from = int(cp.get("completed_rounds") or 0)
             except (TypeError, ValueError):

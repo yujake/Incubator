@@ -131,7 +131,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/status-reports", "handle_status_reports"),
     # 业主 2026-10-13 的对话框：一段会话里"用户 ↔ 主控"的来回（对话页那一面）。
     ("GET", "/api/chat", "handle_chat"),
-    # 2026-10-21（业主的「名册监视」）：当前工作区的**整棵名册树** —— 父是谁、子有哪些、
+    # 2026-10-21（业主的「名册监视」）：当前工作区的整棵名册树 —— 父是谁、子有哪些、
     # 每个成员的绝对编号／名册名／角色／深度，外加"收件箱积压"那一格。
     # 只读一条：这个端点的消费者是只读面板，写面为零（表里没有与它配对的 POST，
     # 判据 `tests/test_webui_roster_panel.py` 的第三条就钉着这一条）。
@@ -170,7 +170,7 @@ CHECKED_TYPES: tuple[str, ...] = (
     # 与"没查成"都只是三态里的另一档）；夹具那一段会话里有主控的 run_start 与一条
     # 提问，所以行一级的 `ChatLine` / `ChatSession` 也读得出键。
     "ChatView", "ChatLine", "ChatSession", "ChatOption",
-    # 2026-10-21（业主的「名册监视」）：`RosterView` 的顶层键在**每一档**上都在
+    # 2026-10-21（业主的「名册监视」）：`RosterView` 的顶层键在每一档上都在
     # （名册目录不在 ⇒ `answer=unknown` 也是同一批键，见 `roster_face` 里那张表），
     # 所以它进受核对名单；行一级的五个类型见 `UNCHECKED_TYPES` 的理由。
     "RosterView",
@@ -962,7 +962,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
     tool = {k: str(v) for k, v in toolchain_settings().items()}
     model = {k: str(v) for k, v in model_settings().items()}
     work = {k: str(v) for k, v in workspace_settings().items()}
-    # 按角色 / 秘书那两档（业主 2026-10-14）：只给**掩码后**的形态 + "配没配"
+    # 按角色 / 秘书那两档（业主 2026-10-14）：只给掩码后的形态 + "配没配"
     # （真 key 一个字都不进读数，与 `model.api_key` 同一条纪律）。
     slots: dict[str, Any] = {}
     for slot in sorted((raw.get(MODELS_SECTION) or {}) if isinstance(raw, dict) else {}):
@@ -976,7 +976,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                             "name": red_slot["model"],
                             "vendor": red_slot["vendor"],
                             "reasoning_effort": red_slot["reasoning_effort"],
-                            # ⚠️ 这一格必须取**这一档自己的** `key_source`（`spec_for` 已经
+                            # 这一格必须取这一档自己的 `key_source`（`spec_for` 已经
                             # 按这一档算过 env/settings）。此前这里调的是全局 `key_source()` ——
                             # 它读的是 `model` 段 ⇒ 每一档都报同一个来源：`models.A` 的 key
                             # 明明是从这一档取的，读数却说"看的是 model 段"。
@@ -1010,7 +1010,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         spec = ModelSpec(base_url=model.get("base_url", "") or "",
                          model=model.get("name", "") or "",
                          api_key=model.get("api_key", "") or "",
-                         # ⚠️ `vendor` 必须一起传（2026-10-14）：这一格的读数取自
+                         # `vendor` 必须一起传（2026-10-14）：这一格的读数取自
                          # `spec.redacted()`，不传就等于"盘上写了厂商、机器面说没有"
                          # —— 而面板上那一格的初值正是从这份读数取的。
                          vendor=model.get("vendor", "") or "",
@@ -1033,7 +1033,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         "toolchain": {k: tool.get(k, "") for k in TOOLCHAIN_KEYS},
         "model": {"api_key": red["api_key"], "base_url": red["base_url"],
                   "name": red["model"],
-                  # 厂商（2026-10-14）：`type_decls()` 里一直声明着这一格，而这里**没给** ——
+                  # 厂商（2026-10-14）：`type_decls()` 里一直声明着这一格，而这里没给 ——
                   # 于是 `types.ts` 的 `SettingsReading.model.vendor` 名存实亡，
                   # 面板上那一格的初值永远取不到（盘上写了也不显示）。
                   # 这是"声明与读数差一格"，两个方向都该由判据管住（见
@@ -1048,7 +1048,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                   "configured": spec.configured},
         "workspace": {k: work.get(k, "") for k in WORKSPACE_KEYS},
         # 按角色那一档与秘书那一档（业主 2026-10-14）：`key_source` 报的是
-        # 那份**设置文件**里 key 的来源，`configured` 是"这一档到底有没有 key"。
+        # 那份设置文件里 key 的来源，`configured` 是"这一档到底有没有 key"。
         MODELS_SECTION: slots,
         SECRETARY_SECTION: sec_cell,
         "raw_keys": sorted(raw) if isinstance(raw, dict) else [],
@@ -1451,10 +1451,10 @@ def handle_status_reports(handler: Any, params: Mapping[str, str],
 #:
 #: 为什么必须有界：`agent_run_end.final` 与 `agent_message.body` 动辄上万字
 #: （本机实测：M 的一份 final 一万六千字），一次几十条塞进浏览器既慢又没人看。
-#: 截断这件事**不许静默**（本项目的三态纪律）：截过的线自己带着那句话。
+#: 截断这件事不许静默（本项目的三态纪律）：截过的线自己带着那句话。
 CHAT_LINE_CLIP = 4000
 
-#: 一次最多给多少条对话线（取**最近**的这么多条，总数照实报）。
+#: 一次最多给多少条对话线（取最近的这么多条，总数照实报）。
 CHAT_LINES_MAX = 300
 
 #: 对话线的三种身份。业主 2026-10-13 要的是"用户 ↔ 主控"的对话框，所以前两档是主角；
@@ -1556,18 +1556,18 @@ def chat_face(root: str | Path, sid: str = "", *,
     """`GET /api/chat` 的读模型：一段会话里的"用户 ↔ 主控"对话（逐条、有界）。
 
     业主 2026-10-13：「用户和主控的对话不应该只做成只能一句话启动任务，应该是能对话的」。
-    这一面就是那句话的读侧 —— 把一段会话里属于**对话**的事件投影成逐条线，
+    这一面就是那句话的读侧 —— 把一段会话里属于对话的事件投影成逐条线，
     与「一趟详情」的逐条事件分开：后者是"盘上发生了什么"（含工具与模型调用），
     这一面是"谁对谁说了什么"。
 
     口径四条：
 
-    - `sid` 不给 ⇒ 取**最近**的那一段（按 `last_ts`），并在 `reason` 里写明这件事
+    - `sid` 不给 ⇒ 取最近的那一段（按 `last_ts`），并在 `reason` 里写明这件事
       （那是替用户做的选择，不许无声无息）；
     - 没有会话 ⇒ `not_applicable` + "还没有会话（合法初态）"，不是错误；
     - 会话文件不在盘上 ⇒ `unreadable`（`sid` 是调用方给的，找不到就是"没查成"）；
     - 有坏行 ⇒ `unreadable` + 坏行数，读得出来的那些线照常给（与 `run_events` 同一条）；
-    - 线是有界的：只给**最近** `lines_max` 条，`total`/`shown` 照实报，截断逐条标明。
+    - 线是有界的：只给最近 `lines_max` 条，`total`/`shown` 照实报，截断逐条标明。
     """
     root_p = Path(str(root))
     sessions = [{"sid": str(s.get("sid") or ""),
@@ -1584,8 +1584,8 @@ def chat_face(root: str | Path, sid: str = "", *,
                     "reason": "这个工作区还没有会话（合法初态，不是没查成）"}
         # 默认选哪一段（R94 实测的坑）：不能只看 `last_ts` —— 框架自己会往"今天那段
         # 缺省会话"里写结算类事件（`task_end`，没有 sid），它的 `last_ts` 往往比真跑过的
-        # 那一段**还新**，于是对话框一打开就停在一段几乎没有来回的会话上。
-        # 口径：先在最近的若干段里找**最近起过一趟**（有 `agent_run_start` 的对话线）
+        # 那一段还新，于是对话框一打开就停在一段几乎没有来回的会话上。
+        # 口径：先在最近的若干段里找最近起过一趟（有 `agent_run_start` 的对话线）
         # 的那一段，找不到才退回"最近有动静的那一段"，并把这次选择写进 `reason`。
         def _has_run_start(row: dict[str, str]) -> bool:
             events, _bad = SS.read_session(root_p, sid=row["sid"])
@@ -1637,7 +1637,7 @@ def handle_chat(handler: Any, params: Mapping[str, str],
 #: 一棵名册树最多给几个节点（超了截断，并在 `reason` 里说清截了多少）。
 #:
 #: 为什么要有这个闸：一个端点得有自己的规模上限 —— 真机最大的工作区今天只有几十个
-#: 节点，但"名册是 append-only 的事件流"意味着它只增不减，而这一页是**给人看**的。
+#: 节点，但"名册是 append-only 的事件流"意味着它只增不减，而这一页是给人看的。
 ROSTER_NODES_MAX = 500
 
 #: 一个节点的收件箱最多列几条（条数照实报，列表截断写在 `inbox.more` 里）。
@@ -1648,13 +1648,13 @@ ROSTER_INBOX_CLIP = 160
 
 #: 名册目录（与 `secretary.ROSTER_DIR` 同一个落点；这一层只读它）。
 #:
-#: 为什么是 `out/roster/` 而不是 `data/`：名册是**秘书写的 append-only 事件流**
+#: 为什么是 `out/roster/` 而不是 `data/`：名册是秘书写的 append-only 事件流
 #: （`<父的绝对编号>.jsonl`），与库表不是一回事 —— `secretary.py` 的注释逐字写了
 #: 这个落点，以及"为什么不放 `out/secretary/`"（会被 `*.jsonl` 的目录 glob 混进
 #: 秘书决定台账那一面）。
 _ROSTER_DIR: tuple[str, ...] = ("out", "roster")
 
-#: 名册目录里的三个**旁支**文件（与 `<父>.jsonl` 同目录、同后缀，但不是"某个父名下的
+#: 名册目录里的三个旁支文件（与 `<父>.jsonl` 同目录、同后缀，但不是"某个父名下的
 #: 子代理"）：电话簿 `-index` / 槽位池事件 `-surfaces` / 销号名单 `-retired`。
 #: 折叠这一棵树时不许把它们混进去 —— 混进去一个名字就会变成两个节点。
 _ROSTER_SIDE_SUFFIX: tuple[str, ...] = ("-index.jsonl", "-surfaces.jsonl",
@@ -1664,7 +1664,7 @@ _ROSTER_SIDE_SUFFIX: tuple[str, ...] = ("-index.jsonl", "-surfaces.jsonl",
 def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], str]:
     """名册目录里"哪个父有哪一份名册"：`([(父的绝对编号, 路径)], 问题)`。
 
-    文件名就是父的绝对编号（`t-000001.jsonl`），文件里每一行是一个**子**（`task_id`
+    文件名就是父的绝对编号（`t-000001.jsonl`），文件里每一行是一个子（`task_id`
     是子的绝对编号）。这条布局是 `secretary.roster_path()` 定的，这里只按它读 ——
     不另立第二份命名约定（两处命名漂移的后果是"名册在盘上、页面说没有"）。
     """
@@ -1697,17 +1697,17 @@ def _roster_inbox(rows: list[dict[str, Any]], *, tasks_tri: str,
     """一个节点的「收件箱积压」：它名下还没消的板项（`{tri, open, by_state, ...}`）。
 
     ## 收件箱的盘上真身
-    `data/tasks.json` 里有两类行：**实例行**（`kind == ""`，一个 agent 一行）与
-    **板项行**（`kind` 非空：`message` 一条消息 / `notice` 一条通知）。板项行的
-    `parent_task_id` 口径是"**收件人**的编号"（不是派活方）—— 所以
+    `data/tasks.json` 里有两类行：实例行（`kind == ""`，一个 agent 一行）与
+    板项行（`kind` 非空：`message` 一条消息 / `notice` 一条通知）。板项行的
+    `parent_task_id` 口径是"收件人的编号"（不是派活方）—— 所以
     "`parent_task_id == 这个节点` 且 `item_state != "done"`"就是这个人名下还没消的
     东西。这与 `conductor.open_items_of()` 是同一条判据（那一处 docstring 逐字写了
     板项行与实例行是两轴，不许混算）。
 
     ## 三态
-    台账读不出来 ⇒ `tri="unreadable"` + `open=None`，**不是 0 条**（把"没查成"读成
+    台账读不出来 ⇒ `tri="unreadable"` + `open=None`，不是 0 条（把"没查成"读成
     "收件箱是空的"会让监控面板在真出事时最安静）；台账还没写过 ⇒ `not_applicable`
-    + `open=None`（合法初态）；读到了 ⇒ `computed`，`open` 是**真数字**（可以是 0）。
+    + `open=None`（合法初态）；读到了 ⇒ `computed`，`open` 是真数字（可以是 0）。
     """
     if tasks_tri == TRI_UNREADABLE:
         return {"tri": TRI_UNREADABLE, "open": None, "by_state": {}, "by_kind": {},
@@ -1738,7 +1738,7 @@ def _roster_inbox(rows: list[dict[str, Any]], *, tasks_tri: str,
 
 def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                 inbox_items: int = ROSTER_INBOX_ITEMS) -> dict[str, Any]:
-    """`GET /api/roster` 的读模型：当前工作区**整棵名册树**（只读、三态）。
+    """`GET /api/roster` 的读模型：当前工作区整棵名册树（只读、三态）。
 
     ## 一个节点是什么（业主 2026-10-19：「名册 = 父 + 子 + 绝对编号」）
     一个 agent 一个节点，字段逐个来自盘上：
@@ -1755,43 +1755,43 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     | `brief` / `brief_source` / `surface` | 同一行的 `brief` / `brief_source` / `surface` |
     | `status` / `task_found` / `in_flight` | `data/tasks.json` 里它自己那一行（`status`；在飞 = `pending`/`running`） |
     | `inbox` | `data/tasks.json` 的板项行（见 :func:`_roster_inbox`） |
-    | `depth` | **名册链**现算：根 = 1（口径写在下面） |
+    | `depth` | 名册链现算：根 = 1（口径写在下面） |
 
     ## 深度：`depth` 是"这一棵树里的距离"，不是 `tasks.depth`
-    `tasks.depth` 是**全局召唤深度**（主控发起 = 1，`schema.Task.depth` 的 docstring
+    `tasks.depth` 是全局召唤深度（主控发起 = 1，`schema.Task.depth` 的 docstring
     逐字如此）；本函数的 `depth` 是"离这棵树根的层数，根 = 1"。两者在"根就是顶趟那股"
     时相等，而在"根是某一支子树的头"时差一个常数 —— 混用会让读的人以为看见了两个
     不同的深度。前端只显示这一个（树里的相对位置才是名册树要说的事）。
 
-    折叠口径与写侧**同一处实现**（`secretary._fold_roster`：`add` 建项、`bind` 推
+    折叠口径与写侧同一处实现（`secretary._fold_roster`：`add` 建项、`bind` 推
     当前调用、`retire` 标退役、`keep_alive` 只记那一格）。这里不另写一份折叠 ——
     两份折叠意味着"名册在盘上是一回事、页面读出来是另一回事"，而那种错没有任何
     东西会报。
 
     ## 三态（这一条是端点的主要纪律）
-    - `answer`：`"ok"`（名册真读成了）或 `"unknown"`。**名册目录不在、目录里一个名册
-      文件都没有、名册读不出来、有一条读不出来**——四档一律 `unknown`，并在 `reason`
+    - `answer`：`"ok"`（名册真读成了）或 `"unknown"`。名册目录不在、目录里一个名册
+      文件都没有、名册读不出来、有一条读不出来——四档一律 `unknown`，并在 `reason`
       里逐档说清。不许用 `nodes: []` 冒充"这个工作区没有子代理"（那是把"读不到"折成
       "没有"，本项目最贵的一类缺陷）。
     - `tri`：`computed` / `unreadable` / `not_applicable`（本模块统一词表）。名册目录
-      还没写过 ⇒ `not_applicable` + `answer="unknown"`：**"还没写过"也不等于"名册上是
-      空的"**，因为名册只在有人被派活时才落盘。
+      还没写过 ⇒ `not_applicable` + `answer="unknown"`："还没写过"也不等于"名册上是
+      空的"，因为名册只在有人被派活时才落盘。
     - `count`：`None` = 一行都没读到（下面那些 `answer="unknown"` 的分支）；读到一部分
-      时它是**真数字**，而 `answer` 照旧是 `"unknown"` 并说明哪一份没读成。
+      时它是真数字，而 `answer` 照旧是 `"unknown"` 并说明哪一份没读成。
     - `tasks_tri` / `tasks_reason`：台账那一栏自己的三态（树照样给，`inbox` 与
       `status` 逐节点标 `unreadable`）。
 
     ## 规模
     节点上限 `limit`（默认 :data:`ROSTER_NODES_MAX`），超了截断并置 `truncated`；
     一个节点的收件箱只列 `inbox_items` 条（`inbox.more` 报剩下几条）。`nodes` 是
-    **前序遍历**（父一定在子前面）—— 前端按 `depth` 缩进就能画出树，不必自己递归。
+    前序遍历（父一定在子前面）—— 前端按 `depth` 缩进就能画出树，不必自己递归。
     """
     from ..secretary import _fold_roster      # noqa: PLC0415 - 折叠口径的唯一实现
     from ..store import Store                 # noqa: PLC0415 - 台账那一栏
 
     root_p = Path(str(root))
     dir_p = root_p.joinpath(*_ROSTER_DIR)
-    #: 顶层键集合在**每一档**都一模一样（契约判据 C 拿 `set(RosterView)` 与 TS 比对，
+    #: 顶层键集合在每一档都一模一样（契约判据 C 拿 `set(RosterView)` 与 TS 比对，
     #: 而"某档少一个键"会让那条判据红在一件与类型毫无关系的事上）。
     out: dict[str, Any] = {
         "answer": "unknown", "tri": TRI_NOT_APPLICABLE, "reason": "",
@@ -1887,7 +1887,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             if not tid:
                 continue
             if str(row.get("kind") or ""):
-                # 板项行：`parent_task_id` 是**收件人**（`conductor._children_of` 的
+                # 板项行：`parent_task_id` 是收件人（`conductor._children_of` 的
                 # docstring 逐字写了这条"两轴"口径）。`item_state == "done"` 才算消了。
                 if str(row.get("item_state") or "") != "done":
                     board_by_recipient.setdefault(
@@ -1950,7 +1950,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
 
     truncated = bool(queue)
     if truncated:
-        # 截断是**规模的界**，不是读失败：它不进 `problems`（`answer` 照旧是 "ok"），
+        # 截断是规模的界，不是读失败：它不进 `problems`（`answer` 照旧是 "ok"），
         # 但必须在读数里说得出口 —— 静默截断等于让"树只有这么大"与"树被砍了"一样。
         diagnostics.append(f"名册节点超过上限 {int(limit)} ⇒ 只给了前 {len(nodes)} 个"
                            f"（`truncated=true`，还有 {len(queue)} 个没展开）")
@@ -1961,7 +1961,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     out["max_depth"] = max_depth
     out["diagnostics"] = diagnostics
     out["truncated"] = truncated
-    # `answer` 说的是**名册这一棵树**读成了没有：每一份名册文件都折叠干净、且至少
+    # `answer` 说的是名册这一棵树读成了没有：每一份名册文件都折叠干净、且至少
     # 有一个节点 ⇒ "ok"。台账那一栏的失败不进这里（它有自己的 `tasks_tri`）。
     out["answer"] = "ok" if not problems else "unknown"
     if problems or out["tasks_tri"] == TRI_UNREADABLE:
@@ -1992,7 +1992,7 @@ def handle_roster(handler: Any, params: Mapping[str, str],
                   query: Mapping[str, Sequence[str]]) -> None:
     """`GET /api/roster`：整棵名册树（只读）。
 
-    消费者只有一个：前端那几张**只读**面板（「在飞」页里的名册面板）。所以这个端点
+    消费者只有一个：前端那几张只读面板（「在飞」页里的名册面板）。所以这个端点
     在路由表里只有一条 GET —— 没有配对的 POST，也没有任何写路径（写名册是秘书的事，
     走 `secretary.roster_add`，不经过 HTTP）。
     """
@@ -2025,7 +2025,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("prompt_cache", "CheckpointCacheView | Record<string, never>"),
       ("at", "string"))),
     # 2026-10-19：顶趟的缓存汇总（`promptstability.summarize_prompt_cache` 的 11 格）。
-    # 为什么它必须是**声明出来的**而不是 `Record<string, unknown>`：这一格是
+    # 为什么它必须是声明出来的而不是 `Record<string, unknown>`：这一格是
     # "提示词改动到底省了多少"在盘上唯一的读数（顶趟不写产出文件），
     # 顶层键含糊了，前端就只能把它当黑盒渲染 —— 而 C 条判据会把它与夹具上
     # 真读出来的键集合逐条对齐（键多一个、少一个都红）。

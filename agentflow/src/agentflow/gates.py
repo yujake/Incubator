@@ -1329,7 +1329,7 @@ def gate_g7(ctx: GateContext) -> GateResult:
 
 
 #: G8 回执（`run_evidence.commands[*]`）的必备键（业主 2026-10-18 裁定：
-#: G8 改由 **M 代跑**、把回执交给 H 核，H 只判「回执是否合格」）。
+#: G8 改由 M 代跑、把回执交给 H 核，H 只判「回执是否合格」）。
 #:
 #: 为什么是这四个：`claim_id` 让回执与断面对上；`command` 是"精确命令"；
 #: `exit_code` 是"跑过没有 + 绿还是红"的唯一机器读数（少了它，红与绿分不开 ——
@@ -1341,7 +1341,7 @@ G8_RECEIPT_KEYS: tuple[str, ...] = ("claim_id", "command", "exit_code", "output_
 def g8_receipt_problems(commands: Sequence[Mapping[str, Any]]) -> list[str]:
     """逐条判「这份回执合不合格」⇒ 返回问题清单（空列表 = 合格）。
 
-    为什么把"合格"做成判据而不是信任调用方：G8 的输入是**调用方给的**，
+    为什么把"合格"做成判据而不是信任调用方：G8 的输入是调用方给的，
     而"调用方给了一份读不懂的回执"在旧实现里有两条静默路径 ——
       - `commands` 不是数组时（真机：`{"checked": true, "commands": "     "}`），
         旧代码 `[dict(x) for x in "     " if isinstance(x, Mapping)]` 得到 `[]`；
@@ -1407,7 +1407,7 @@ def gate_g8(ctx: GateContext) -> GateResult:
             criterion_revision=criterion_revision,
         )
     if ev.get("checked") is not True:
-        # ---- 第三态（业主 2026-10-18：「没跑 ⇒ unknown **并写明为什么没跑**，不许静默」）。
+        # ---- 第三态（业主 2026-10-18：「没跑 ⇒ unknown 并写明为什么没跑，不许静默」）。
         #
         # 缺陷读数（本条的第一条负控）：`projects/mp3` 末节第 4 条与 `projects/t3d` 三·4
         # 都逐字写着「H 只读、拿不到执行工具 ⇒ G8 只能记 unknown」—— 那一档从"读数"退化成
@@ -1457,7 +1457,7 @@ def gate_g8(ctx: GateContext) -> GateResult:
     # 真机读数（`projects/mp3` round 2，H 传给 `review.report` 的 run_evidence）：
     #   {"checked": true, "commands": "     "}
     # 旧实现把那个空白字符串当可迭代对象遍历了一遍（每个字符都不是 Mapping），
-    # 得到 `commands = []`；而那一轮 `numeric = 0` ⇒ 差集为空 ⇒ **G8 = pass**，
+    # 得到 `commands = []`；而那一轮 `numeric = 0` ⇒ 差集为空 ⇒ G8 = pass，
     # 报告里写着"0 条实跑记录覆盖全部数值断言"。这就是"回执读不懂"被读成"覆盖了"。
     raw = ev.get("commands")
     if not isinstance(raw, (list, tuple)):
@@ -1496,7 +1496,7 @@ def gate_g8(ctx: GateContext) -> GateResult:
     # 三态口径（与 G8 的其余部分一致）：
     #   * 没有实跑记录（`checked=true` 却一条都没有）⇒ `unknown`（不是 vacuous pass）；
     #   * 回执缺键 ⇒ `unknown` + 逐条问题（不许静默跳过缺键的那一条）；
-    #   * 回执齐但退出码非零 ⇒ **`fail`**（"跑过而且红了"）。
+    #   * 回执齐但退出码非零 ⇒ `fail`（"跑过而且红了"）。
     receipt_problems = g8_receipt_problems(commands)
     counts_base = {
         "需要命令的数值断言数": len(numeric),
