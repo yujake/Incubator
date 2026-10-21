@@ -44,7 +44,49 @@ function blockedRun(snapshot: StateSnapshot, q: PendingQuestion): RunRow | null 
   return null;
 }
 
-/** 一条对话线（`谁来的一行 + 正文`）。 */
+/** 绝对编号那一格印什么：`A · t-000002` 的右半边（三档来源见 `ChatLine.task_id_source`）。
+ *
+ * - `event`：事件自己记着编号 ⇒ 正常印（`t-000002`），不加括注；
+ * - `inherited`：老事件没记，从本段同一岗唯一那一趟的 `agent_run_start` 回填的
+ *   （`readers._single_run_start_ids`）⇒ 编号照印，另加一个括注当记号，让读的人
+ *   知道这一格不是这条事件自己记的；
+ * - `missing`（以及认不出的来源）：明写「（未记录编号）」—— 留空会被读成"这个代理
+ *   没有编号"，那是另一句话；也不许替它编一个。
+ */
+function idCell(taskId: string, source: string): string {
+  if (source === "event") {
+    return taskId === "" ? "（未记录编号）" : taskId;
+  }
+  if (source === "inherited") {
+    return taskId === "" ? "（未记录编号）" : `${taskId}（承自本趟起跑）`;
+  }
+  return "（未记录编号）";
+}
+
+/** 角色那一格印什么：`A · t-000002` 的左半边（三档来源见 `ChatLine.role_source`）。
+ *
+ * - `event`：事件自带角色 ⇒ 原样印（`A`）；
+ * - `from`：`agent_message` 那条记录只写了发件人 `from`，读侧（`readers._chat_role`）
+ *   用它补齐 ⇒ 角色照印，另加括注说清这一格是读侧补的（不是这条事件自己记的）；
+ * - `missing`（以及认不出的来源）：明写「（未记录角色）」，不留空、也不猜一个。
+ */
+function roleCell(role: string, source: string): string {
+  if (source === "event") {
+    return role === "" ? "（未记录角色）" : role;
+  }
+  if (source === "from") {
+    return role === "" ? "（未记录角色）" : `${role}（承自发件人）`;
+  }
+  return "（未记录角色）";
+}
+
+/** 一条对话线（`谁来的一行 + 正文`）。
+ *
+ * 头一行除了谁说的，还要印"哪个角色、哪个绝对编号"（业主 2026-10-21「全面接入」：
+ * 两条对话线的壳早就有了这两个键，页面此前只印 `who` / `title` / `ts` / `text`，
+ * 于是"谁在说话、哪一趟"在屏幕上是看不见的）。用户那几条线也照印：它们的 `role` 是
+ * "这句话属于哪一趟的角色"，`task_id` 就是那一趟的号 —— 与后端给的口径一致。
+ */
 function Line(props: { line: ChatLine }) {
   const l = props.line;
   const who = l.who === "user" ? "你" : l.who === "conductor" ? "主控" : "团队";
@@ -54,6 +96,10 @@ function Line(props: { line: ChatLine }) {
       <div class="readings">
         <b>{who}</b>
         <span class="tri-reason"> {l.title}</span>
+        {" "}
+        <span class="mono">{roleCell(l.role, l.role_source)}</span>
+        <span class="tri-reason"> · </span>
+        <span class="mono">{idCell(l.task_id, l.task_id_source)}</span>
         {" "}
         <span class="mono tri-reason">{l.ts}</span>
         {l.clipped ? <span class="tri-reason">（正文截断过）</span> : null}

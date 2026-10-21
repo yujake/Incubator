@@ -447,7 +447,7 @@ export interface ChatOption {
   description: string;
 }
 
-/** 出处：chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）。`task_id` 是说话那一方的绝对编号，`task_id_source` 只说这个编号从哪来：event（事件里真有）/ inherited（老事件没记，同一岗在本段唯一那一趟的 agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示「（未记录编号）」，绝不编一个假编号）。 */
+/** 出处：chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）。`task_id` 是说话那一方的绝对编号，`task_id_source` 只说这个编号从哪来：event（事件里真有）/ inherited（老事件没记，同一岗在本段唯一那一趟的 agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示「（未记录编号）」，绝不编一个假编号）。`role` 是说话那一方的角色，`role_source` 同一条纪律：event（事件自带）/ from（`agent_message` 只记了 `from`，读侧用它补齐，页面括注「承自发件人」）/ missing（两格都没有，页面显示「（未记录角色）」）。 */
 export interface ChatLine {
   index: number;
   who: string;
@@ -456,6 +456,7 @@ export interface ChatLine {
   ts: string;
   title: string;
   text: string;
+  role_source: string;
   task_id: string;
   task_id_source: string;
   clipped: boolean;
