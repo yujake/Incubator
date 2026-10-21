@@ -1486,7 +1486,7 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     `KeyboardInterrupt` 是 `BaseException`、会穿出 `except Exception` 兜底，留下的"部分产物"三者不同形但都
     不可消费，所以 `cli.main` 把它折成退出码 2 并打印显式说明；真正的修法（走完六件产物 + `status=cancelled`）
     要接进取消面。本函数（`run_topic`）的 `store` 是工作区（`usage_ledger` 的落点）、`out_dir` 是产物落点，两者刻意分开：账本属于
-    工作区（跨运行累计），产物属于这一次运行。`budget_usd` 是这一次运行的额度（`G-4`）；本次花销按 `task_id`过滤 `usage_ledger`（`F5-FOUND-1` 之后），所以并发另一次运行与历史花销都不会算进我的额度（改前是
+    工作区（跨运行累计），产物属于这一次运行。`budget_usd` 是这一次运行的额度（`G-4`）；本次花销按 `task_id` 过滤 `usage_ledger`（`F5-FOUND-1` 之后），所以并发另一次运行与历史花销都不会算进我的额度（改前是
     "`spent` 取一次 `baseline` 再相减"的工作区增量，`R5-AN-1` 把并发修通后就不再成立，逐字读数见 `_spent_this_run`）。两个口径都在产物里：
     `spent_usd_this_run` 是本次运行，`cost.json` 的 `usage_ledger.usd` 与返回值 `spent_usd` 是工作区累计。
     `now` 只为测试注入固定时间戳；`search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` 是四个动作的测试接缝
@@ -1496,9 +1496,9 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     `lean` 缺省关闭；打开后每个 `` ```lean `` 代码块都交给 `formalgw.check_lean` 真跑一次，结论与到达的证据
     等级写进 `claims.json` 的 `lean` 段与报告的形式化验证小节 —— 它是 `evidence_kind="proof"` 的唯一来源，
     所以默认关、且真跑过之前不许把 lean 从"未接线"清单摘掉（`lean_run_fn` 是它唯一的测试接缝）。`claims_parse_fn` 缺省 `None`（纯启发式，同一答复必得同一结论）；注入它只提供候选，编号、去重、截断与
-    指纹仍由 `claims.split_claims` 决定，用没用它写进产物。`claims_max` 是断言上限，截掉的条数写进`claims.json`、清单与 unknowns —— 静默截断会让"登记了 200 条"读成"一共只有 200 条"。
+    指纹仍由 `claims.split_claims` 决定，用没用它写进产物。`claims_max` 是断言上限，截掉的条数写进 `claims.json`、清单与 unknowns —— 静默截断会让"登记了 200 条"读成"一共只有 200 条"。
     两种"没查成"（没有模型 key、检索没查成）都不调模型、直接退出码 2：产物本该由"材料 + 逐字引文"支撑，缺一半跑下去只会得到无法回验的结论。全文获取失败不改退出码（摘要在手上就还能回验，只是级别停在摘要级）；
-    拆分没成（`no_claims` / `unparsable`）也不改退出码 —— 它说的是"这一层没查成"，处置写在 `claims.json`与未接线清单里，与"结论对不对"不是一件事。
+    拆分没成（`no_claims` / `unparsable`）也不改退出码 —— 它说的是"这一层没查成"，处置写在 `claims.json` 与未接线清单里，与"结论对不对"不是一件事。
     """
     if prompt_version not in PROMPT_VERSIONS:
         raise ValueError(f"未知 prompt 版本 {prompt_version!r}（已知 {PROMPT_VERSIONS}）")

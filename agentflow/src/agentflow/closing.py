@@ -1,33 +1,21 @@
 # -*- coding: utf-8 -*-
 """收工门（`draft/37` §16 P3）：把"能不能交"从一句判断变成八格各自能造红的读数。
 
-## 为什么需要一个门（而不是让 M 自己总结一句"我觉得可以交了"）
-
-真机读数里最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件事：
-包是旧的（锚 `drifted`）、有一条依赖还挂着争议、承重的那条结论只有数值支持却写着
-"已证明"、报告缺了三节、还有一个问题在等用户回答 —— 这些每一条都能被机器判，
-而它们混在一段总结里就只剩一句"基本完成"。
-
-## 各条（`DEFAULT_CHECKS`）+ 三态
+判据：`DEFAULT_CHECKS` 八格，每格都能单独造红（`tests/test_closing_gate.py`：每条一条负控 + 一条反真空）。
+三态纪律：`pass` / `fail` / `unknown`，`unknown` 不是通过（"没查成"与"查过了没问题"必须分得开）；
+`can_close` 只在每格都 `pass` 时为真。最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件
+事：包是旧的（锚 `drifted`）、有一条依赖还挂着争议、承重的那条结论只有数值支持却写着"已证明"、报告
+缺了三节、还有一个问题在等用户回答。
 
 | 检查 | 判什么 |
 |---|---|
-| `paper` | 有论文正文（`out/paper/main.tex`）⇒ 必须由**本次**编译出 `main.pdf`（回执里的 `tex_sha256` == 盘上那一份）；没有正文 ⇒ 不适用。旧那一格是「渲染锚 consistent」，2026-10-13 随 `paper_package` 整条退场（`draft/117`） |
-| `contradictions` | 没有未裁决的矛盾：`dependencies.status ∈ {disputed, refuted}`、
-|  | `statements.status = disputed`、稿件 `status = unresolved_review` |
+| `paper` | 有论文正文（`out/paper/main.tex`）⇒ 必须由「本次」编译出 `main.pdf`（回执里的 `tex_sha256` == 盘上那一份）；没有正文 ⇒ 不适用。旧那一格是「渲染锚 consistent」，2026-10-13 随 `paper_package` 整条退场（`draft/117`） |
+| `contradictions` | 没有未裁决的矛盾：`dependencies.status ∈ {disputed, refuted}`、`statements.status = disputed`、稿件 `status = unresolved_review` |
 | `load_bearing` | 承重结论（正文里 `evidence_kind="proof"` 的断言）必须有 T3（形式化）或已降档 |
 | `report_shape` | 报告形状：附件三件套判实（来源 / 依据 / 版本 sha）+ M 声明的体例有没有兑现 |
 | `user_pending` | 没有还在等用户回答的问题（有 ⇒ 必须停在"等待用户"，不许续跑） |
-| `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算 —— 派过活、花过钱可以在什么都没产出时也非空） |
+| `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算） |
 | `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`，只有 `changed` ⇒ `unknown`（登记后被正常改写是常态） |
-
-三态纪律：每条给出 `pass` / `fail` / `unknown`，`unknown` 不是通过
-（"没查成"与"查过了没问题"必须分得开）。`can_close` 只在每一条都 `pass` 时为真。
-
-## 每一条都能单独造红
-
-判据见 `tests/test_closing_gate.py`：每条各一条负控（把这一条弄坏 ⇒ 它单独红、
-其余各条仍然绿），外加一条反真空（好数据必须全绿）。
 """
 from __future__ import annotations
 
@@ -510,18 +498,14 @@ def claim_evidence_fit(
 ) -> dict[str, Any]:
     """一条断言与它引的证据对不对口 —— 逐条判据的唯一实现（`D61`/`D62`）。
 
-    两个调用方共用它，这是刻意的（`R003` 那条纪律：同一判据不许有第二份实现）：
+两个调用方共用它，这是刻意的（`R003`：同一判据不许有第二份实现）：`citation_fit`（收工门那一档，读
+全库）与 `doc_tools.citation_coverage`（写稿那一刻的读数）—— 后者的由来是 T4 第 3 趟 `t4c`：
+`documents/0000` 的 5 条断言里 2 条把数学教育论文当出处，收工门的 `citation_fit` 点名了、M 调了
+5 次 `closing` 看到之后仍按 met=true 收工，而写稿期那条读数当时只报"引了几条"、不报"对不对口"。
 
-    - `citation_fit`（收工门那一档，读全库）；
-    - `doc_tools.citation_coverage`（写稿那一刻的读数）—— T4 第 3 趟 `t4c` 的真机读数
-      逼出来的：那一趟 `documents/0000` 的 5 条断言里 2 条把数学教育论文当出处，
-      收工门的 `citation_fit` 点名了、M 调了 5 次 `closing` 看到之后仍按 met=true 收工；
-      而写稿期那条读数当时只报"引了几条"，不报"对不对口"。
-      同一份判据放到写稿那一刻，才有机会在收工前改掉。
-
-    判据分两条腿，都是特征交集（详见 `citation_fit` 的 docstring）：
-    引 `exp:` 比整数特征，引 `lit:` 比英文实词；两侧任一侧没有可判特征 ⇒ `unjudged`
-    （"没查成"，绝不读成"对上了"）。
+判据分两条腿，都是特征交集（详见 `citation_fit` 的 docstring）：引 `exp:` 比整数特征，引 `lit:`
+比英文实词；两侧任一侧没有可判特征 ⇒ `unjudged`（"没查成"，绝不读成"对上了"）。同一份判据放到写稿
+那一刻，才有机会在收工前改掉。
     """
     claim_nums = _numbers_in(claim.get("text"))
     claim_words = _words_in(claim.get("text"))
@@ -571,16 +555,14 @@ def claim_evidence_fit(
 def citation_fit(store: Any) -> dict[str, Any]:
     """逐条断言核「它引的证据是不是说的同一件事」（确定性、可复算，D61/D62）。
 
-    判据分两条腿，都是特征交集：
-    - 引 `exp:`：断言正文的整数集合 与 被引实验的 `claim` / `claim_key` / `search_bound` /
-      `params` 里的整数集合，两边都非空时必须有交集（真机读数：一条断言说"n=3，界 2000"，
-      引的实验是"n=4，界 1000" ⇒ 交集为空 ⇒ 对不上）；
-    - 引 `lit:`：断言正文的英文实词集合 与 被引文献的题名/摘要的实词集合，两边都非空时
-      必须有交集（真机读数：讲 Wiles 三条承重腿的断言引了「PRIMES is in P」⇒ 交集为空）。
+判据分两条腿，都是特征交集：
+- 引 `exp:`：断言正文的整数集合 与 被引实验的 `claim` / `claim_key` / `search_bound` / `params` 里的
+  整数集合，两边都非空时必须有交集（真机："n=3，界 2000" 引了 "n=4，界 1000" ⇒ 交集为空）；
+- 引 `lit:`：断言正文的英文实词集合 与 被引文献题名/摘要的实词集合，两边都非空时必须有交集
+  （真机：讲 Wiles 三条承重腿的断言引了「PRIMES is in P」⇒ 交集为空）。
 
-    三态：两边任何一侧没有可判特征 ⇒ 那一条记 `unjudged`（"没查成"，绝不读成"对上了"）。
-    一条断言引了多条证据时，只要有一条判成"对得上"就算这一条对得上（不因为一条
-    跑题的引文把整条断言判死 —— 但也绝不放过"全都对不上"）。
+三态：任一侧没有可判特征 ⇒ 记 `unjudged`（"没查成"，绝不读成"对上了"）。一条断言引了多条证据
+时，只要有一条"对得上"就算这一条对得上（不因一条跑题引文判死整条，也绝不放过"全都对不上"）。
     """
     docs = [dict(r) for r in store.rows("documents")]
     exps = {str(r.get("experiment_id") or ""): dict(r) for r in store.rows("experiments")}
@@ -676,16 +658,14 @@ def _is_check_section(title: str) -> bool:
 def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
     """论文有没有承载本轮结果（T3 口径，用户 2026-10-06 裁）。
 
-    三条读数（都不看自述，只看 `out/paper/main.tex` 这一份盘上的稿子）：
+三条读数（都不看自述，只看 `out/paper/main.tex` 这一份盘上的稿子）：
 
-    - `bibitems`：主稿里 `\\bibitem` 的条数（真机读数 `p6r`：1 条）；
-    - `result_sections`：正文里出现 `stmt:` / `exp:` / `rel:` 的非核查章节
-      （这一条才是「承载本轮结果」：真机 `p6r` 的 `exp:0008` 只出现在
-      `Evidence and status` 那一节里 ⇒ 结果被写进了核查章节）；
-    - `check_sections`：只出现在核查章节里的那些引用（读数，用来分开报）。
+- `bibitems`：主稿里 `\\bibitem` 的条数（真机读数 `p6r`：1 条）；
+- `result_sections`：正文里出现 `stmt:` / `exp:` / `rel:` 的非核查章节（这一条才是「承载本轮结果」：
+  真机 `p6r` 的 `exp:0008` 只出现在 `Evidence and status` 那一节里 ⇒ 结果被写进了核查章节）；
+- `check_sections`：只出现在核查章节里的那些引用（读数，用来分开报）。
 
-    没有 `out/paper/main.tex` ⇒ `LegNotApplicable`（这个工作区没有论文，
-    这一档用不上；不是「查过了没问题」）。
+没有 `out/paper/main.tex` ⇒ `LegNotApplicable`（这个工作区没有论文，这一档用不上；不是「查过了没问题」）。
     """
     draft = Path(project_root) / "out" / "paper" / "main.tex"
     if not draft.is_file():
@@ -721,18 +701,13 @@ def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
 def c_products_in_delivery(store: Any, project_root: Path) -> dict[str, Any]:
     """C 的分析产物有没有进交付面（`draft/39` §6.49 八 的 D67）。
 
-    真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）：`tasks` 里 role=C 四行
-    `done`（`hottest` / `contradictions` / `gaps` / `cold`）、`relations` 107 行，
-    而 `analysis_reports` 0 行、手稿 `refs` 里一条 `rel:` 都没有 ——
-    C 是这几趟里唯一产出真知识的角色，产物却被扔掉了。
+真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）：`tasks` 里 role=C 四行 `done`（`hottest` /
+`contradictions` / `gaps` / `cold`）、`relations` 107 行，而 `analysis_reports` 0 行、手稿 `refs`
+里一条 `rel:` 都没有 —— C 是这几趟里唯一产出真知识的角色，产物却被扔掉了。
 
-    两条出口（任一成立就算进了交付面）：
-
-    - `rel:` 引用出现在手稿账本的 `refs` 里，或出现在 `documents` 的断言
-      `citations` 里（`manuscripts.OBJECT_REFS` 已经认这个前缀并逐条校验指向的
-      关系行在不在册）；
-    - 或 `analysis_reports` 有行（C 的报告落进了 `reports/<id>-<kind>.md`
-      与那张表）。
+两条出口（任一成立即算进了交付面）：`rel:` 引用出现在手稿账本的 `refs` 里，或出现在 `documents` 的
+断言 `citations` 里（`manuscripts.OBJECT_REFS` 已认这个前缀并逐条校验指向的关系行在不在册）；或
+`analysis_reports` 有行（C 的报告落进了 `reports/<id>-<kind>.md` 与那张表）。
     """
     from . import manuscripts as MS
 
@@ -767,22 +742,15 @@ def content_leg_unmet(store: Any, project_root: Path, *,
                       computed_kinds: Iterable[str]) -> tuple[list[str], dict[str, Any]]:
     """五条内容判据（`draft/39` §6.49 八；用户 2026-10-06 裁「产出太保守」）。
 
-    为什么要有这一批（用户逐字）：「我检查了 T1 到 T4 的产出，都是颇为保守（即根本
-    没啥实质的研究产出，功夫全用在核查上了）……看 handoffs 里面没有几条有效信息全在
-    强调纪律」。根因的第一层写在同处：门的判据只会因为「过程/诚实」问题拦人，
-    永远不会因为「这数学太平凡」拦人，而最省力的过关方式是如实记缺口
-    （`na` + 理由）⇒ 系统学到的是「少做、如实说」。
+根因（第一层）：门的判据只会因「过程/诚实」拦人、永不因「这数学太平凡」拦人，而最省力的过关方式是如
+实记缺口（`na` + 理由）⇒ 系统学到「少做、如实说」（用户逐字：「我检查了 T1 到 T4 的产出，都是颇为保
+守……看 handoffs 里面没有几条有效信息全在强调纪律」）。这一批把五条「过程读数」升级成「产出读数」
+（前四条对应 §6.49 八的四条，第五条是 T5 第 7 趟暴露的「论文没承载本轮结果」）：
+1. 「算」那一环要结论（D66 算半边，只对研究型项目说话）；2. 「造」那一环要我方派生的命题（D66 造
+半边，只在表里声明了这一环时判）；3. C 的分析产物要进交付面（D67）；4. 逐字引文一条都没核到不算
+交付（T1 口径）；5. 论文要承载本轮结果（T3 口径）。
 
-    这一批把五条「过程读数」升级成「产出读数」（前四条对应 §6.49 八的四条，
-    第五条是 T5 第 7 趟暴露的「论文没承载本轮结果」）：
-
-    1. 「算」那一环要结论（D66 算半边，只对研究型项目说话）；
-    2. 「造」那一环要我方派生的命题（D66 造半边，只在表里声明了这一环时判）；
-    3. C 的分析产物要进交付面（D67）；
-    4. 逐字引文一条都没核到不算交付（T1 口径）；
-    5. 论文要承载本轮结果（T3 口径）。
-
-    三态纪律：读不出来的一律不当成「没有」（那一档各自 try 住，读数里留 `unreadable`）。
+三态纪律：读不出来的一律不当成「没有」（那一档各自 try 住，读数里留 `unreadable`）。
     """
     kinds = {str(k) for k in computed_kinds}
     unmet: list[str] = []
@@ -978,29 +946,23 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
 def _round_advanced(rec: Mapping[str, Any]) -> tuple[bool, str]:
     """这一条 `attack_plans.history` 记录算不算"这一轮真的推进了"（`plan_progress_rows` 的唯一口径）。
 
-    ## 为什么要有它（改前的读数）
+改前那一档的口径只有一句"`history` 非空"（`closing.py` 的 `advanced = [r for r in rows if
+r["history"]]`）⇒ 两轮全 `no_change` 与四轮全 `progress` 的计划在「攻（攻坚推进）」那一格上等值
+（真机 mp3：`000000` 与 `000001` 读到同一个数）—— 这一格就什么都没量到。
 
-    改前那一档的口径只有一句"`history` 非空"（`closing.py` 的 `advanced = [r for r in
-    rows if r["history"]]`）⇒ 一份两轮全 `no_change` 的计划与一份四轮全 `progress` 的
-    计划在「攻（攻坚推进）」那一格上**等值**（真机 mp3：`000000` 与 `000001` 读到同一个数）。
-    那一格是这一环节的唯一读数，等值就等于这一格没有量到任何东西。
+判据三条（`outcome` 那一半与"产出了什么"那一半缺一不可）：
+① `outcome == "progress"` —— `no_change` / `blocked` 都不是推进：前者是"这一轮没有新事实"
+   （`dead_end` 逐轮落库时就是它），后者是"卡住了"（等回填 / 不成形 / 假引用被拒）；
+② 有据可依：产物里有 `cites`（`proof` 的 `steps[].cites`、`dead_end` 的 `best_partial[].ids`）；
+③ 或者产出了新东西：`reduction` 的 `new_subgoals` 非空、`counterexample_request` 派出了 E 子目标、
+   `run_experiment` 落了一行实验。
 
-    ## 判据（三条，`outcome` 那一半与"产出了什么"那一半缺一不可）
+②与③是"或"：一条纯粹派发检索请求的轮（`submit_search_request`）两条都不满足 ⇒ 不算推进 —— 把活递出
+去（`search_requests` / `reprocess_requests`）会在台账上多一行请求，但难题本身一步没动；它该由
+「闭（请求闭环）」那一档读，不该让「攻」变绿。
 
-    ① `outcome == "progress"` —— `no_change` / `blocked` 都不是推进：前者是"这一轮没有
-       新事实"（`dead_end` 逐轮落库时就是它），后者是"卡住了"（等回填 / 不成形 / 假引用被拒）；
-    ② **有据可依**：产物里有 `cites`（`proof` 的 `steps[].cites`、`dead_end` 的
-       `best_partial[].ids`）—— 这是"这一步真的落到了台账里的某条东西上"；
-    ③ **或者产出了新东西**：`reduction` 的 `new_subgoals` 非空（计划里真的多了子目标）、
-       `counterexample_request` 派出了 E 子目标、`run_experiment` 落了一行实验。
-
-    ②与③是"或"：一条纯粹派发检索请求的轮（`submit_search_request`）两条都不满足
-    ⇒ **不算推进**。这是刻意的：把活递出去（`search_requests` / `reprocess_requests`）
-    会在台账上多一行请求，但难题本身一步没动 —— 它该由「闭（请求闭环）」那一档读，
-    不该让「攻」变绿（`plan_progress_rows` 改前的形态正是被这一条蒙过去的）。
-
-    返回 `(算不算, 为什么)`：`why` 是**读数**，不是装饰 —— 一份计划为什么读到 0，
-    要能从这一格里直接看出来（三态纪律：读不到 0 与 真的是 0 必须分得开）。
+返回 `(算不算, 为什么)`：`why` 是读数，不是装饰 —— 一份计划为什么读到 0，要能从这一格里直接看出来
+（三态纪律：读不到 0 与 真的是 0 必须分得开）。
     """
     outcome = str(rec.get("outcome") or "")
     if outcome != "progress":
@@ -2006,17 +1968,15 @@ def _acceptance_row_problem(cid: str, raw: Mapping[str, Any],
 def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """验收表的机器可判行（`draft/37` §94）：逐行现算，任一不满足 ⇒ `fail`。
 
-    三态（`draft/52` CC-02 裁定 (a) 之后按结构级 / 行级分界）：
+三态（`draft/52` CC-02 裁定 (a) 之后按结构级 / 行级分界）：
 
-    - 文件不在 ⇒ `pass` 并写明"这个项目没有机器可判的验收行"（"没有这一栏"）；
-    - 结构级读不懂（顶层不是 JSON / 不是数组）⇒ 整格 `unknown`（没有行可读）；
-    - 行级读不懂（一行不是对象/词表外 `kind`/`na` 无理由/`na` 非布尔/
-      `min`·`max` 非整数/台账读不到/id 缺失或重复）⇒ 该行 `unreadable`，
-      其余行照常判；整格 = 有好行不达标 ⇒ `fail`，否则有任何 `unreadable` ⇒ `unknown`
-      （绝不 `pass`）；
-    - `informational` 那些档（`INFORMATIONAL_KINDS`：`attack_plan_rows` 立项计数）⇒
-      照样现算读数，但**不参与**阈值判定，也不进研究链覆盖面；
-    - 逐行都满足 ⇒ `pass`。
+- 文件不在 ⇒ `pass` 并写明"这个项目没有机器可判的验收行"（"没有这一栏"）；
+- 结构级读不懂（顶层不是 JSON / 不是数组）⇒ 整格 `unknown`（没有行可读）；
+- 行级读不懂（一行不是对象 / 词表外 `kind` / `na` 无理由 / `na` 非布尔 / `min`·`max` 非整数 / 台账
+  读不到 / id 缺失或重复）⇒ 该行 `unreadable`，其余行照常判；整格 = 有好行不达标 ⇒ `fail`，否则有
+  任何 `unreadable` ⇒ `unknown`（绝不 `pass`）；
+- `informational` 那些档（`INFORMATIONAL_KINDS`：`attack_plan_rows` 立项计数）⇒ 照样现算读数，但
+  「不参与」阈值判定，也不进研究链覆盖面；逐行都满足 ⇒ `pass`。
     """
     if not str(project_dir or "").strip():
         rep.status["acceptance"] = "unknown"
@@ -2900,18 +2860,14 @@ class ClosingReport:
 def resolve_under_workspace(store: Any, given: str) -> str:
     """把"相对工作区"的路径解析成绝对路径（`"."` = 工作区根）。
 
-    ## 为什么必须有它（`draft/37` §60 的真机读数）
+为什么必须有它（`draft/37` §60 的真机读数）：第十趟主控按工具描述传 `project_dir="."` 与
+`report_path="out/review/REPORT.md"`（描述逐字写"相对工作区"），然后撞上一串怪读数：`closing` 报
+"报告不在盘上"（它刚写完、`fs.stat` 也确认 6,743 字节）、"锚文件读不到"（文件也在盘上），
+`conductor.acceptance(project_dir=".")` 还解析到了工作区上一级；它花了 8 步去查（步 27–34），结论是
+"`project_dir='.'` 被解析到工作区上一级"。
 
-    第十趟主控按工具描述传 `project_dir="."` 与 `report_path="out/review/REPORT.md"`
-    （描述逐字写的是"相对工作区"），然后撞上一串怪读数：
-    `closing` 报"报告不在盘上"（它明明刚写完、`fs.stat` 也确认 6,743 字节）、
-    "锚文件读不到"（文件也在盘上），`conductor.acceptance(project_dir=".")`
-    还解析到了工作区上一级。它花了 8 步去查这件事（步 27–34），
-    最后结论："`project_dir='.'` 被解析到工作区上一级"。
-
-    病因在实现侧：`Path(given)` 是按进程当前目录解析的，而工具的契约是
-    "相对工作区" —— 两个口径不一致时，错的读数看起来像"文件不在"。
-    处置：在入口处解析一次（`store.root` 为基准），并把绝对路径原样放过。
+病因在实现侧：`Path(given)` 按进程当前目录解析，而工具契约是"相对工作区" —— 两个口径不一致时，错的
+读数看起来像"文件不在"。处置：在入口处按 `store.root` 解析一次，绝对路径原样放过。
     """
     raw = str(given or "").strip()
     if not raw:
@@ -2948,18 +2904,15 @@ def _reports_subdir_of(project_root: Path) -> str:
 def _check_paper(rep: ClosingReport, project_dir: str, store: Any) -> None:
     """论文那一格：有正文就要求"这份 PDF 是本次从盘上这份 tex 编的"，没有正文就是不适用。
 
-    判据只有一处实现（`agentflow.papercompile`）。旧那一格叫 `anchor`，查的是"渲染锚三维
-    （源表 / 渲染出的源文件 / 编译回执）"—— 它随 `paper_package` 整条退场
-    （业主 2026-10-13：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，
-    退场面与理由见 `draft/117`）：正文由智能体自己写，框架只负责编译，所以"包与台账
-    同不同时点"这件事不再成立，成立的是"**这份 PDF 是不是盘上这份正文编的**"。
+判据只有一处实现（`agentflow.papercompile`）。旧那一格叫 `anchor`，查的是"渲染锚三维（源表 / 渲染
+出的源文件 / 编译回执）"—— 它随 `paper_package` 整条退场（业主 2026-10-13：「paper_package 里那些
+东西都是古早废案了，我们要智能体写文章」，退场面与理由见 `draft/117`）：正文由智能体自己写、框架
+只负责编译 ⇒"包与台账同不同时点"不再成立，成立的是「这份 PDF 是不是盘上这份正文编的」。
 
-    三态（`receipt_matches_tex` 的话原样带出）：
-
-    - 没有 `out/paper/main.tex` ⇒ `pass` + `not_applicable`（这个项目不交付论文，合法）；
-    - 有正文、回执也在、`tex_sha256` 对得上 ⇒ `pass`；
-    - 有正文而回执的 tex 哈希对不上 ⇒ `fail` + `paper_pdf_is_stale`（改完正文没重编）；
-    - 回执不在 / 读不出来 ⇒ `unknown` + `paper_not_checked`（没查成，不是通过）。
+三态（`receipt_matches_tex` 的话原样带出）：没有 `out/paper/main.tex` ⇒ `pass` + `not_applicable`
+（不交付论文，合法）；有正文、回执在、`tex_sha256` 对得上 ⇒ `pass`；有正文而回执的 tex 哈希对不上
+⇒ `fail` + `paper_pdf_is_stale`（改完正文没重编）；回执不在 / 读不出来 ⇒ `unknown` +
+`paper_not_checked`（没查成，不是通过）。
     """
     if not str(project_dir or "").strip():
         rep.status["paper"] = "unknown"
@@ -3116,22 +3069,15 @@ def _statement_citations(rows: Iterable[Any]) -> list[dict[str, str]]:
 def statements_cited_by_claims(store: Any) -> dict[str, Any]:
     """正文断言引了哪些命题（按命题号归拢）+ 其中悬空的那几条。
 
-    口径只有一句：`documents.claims[].citations` 里带 `stmt:` 前缀的引用，
-    就是"这条正文断言压在那条命题上"这条边（`draft/68` 题 1，2026-10-07 所有者裁定 A；
-    本次改动由所有者授权、主控代改）。
+口径只有一句：`documents.claims[].citations` 里带 `stmt:` 前缀的引用，就是"这条正文断言压在那条命题
+上"这条边（`draft/68` 题 1，2026-10-07 所有者裁定 A）。
 
-    三态（这是本函数的核心，不是细节）：
+三态（这是本函数的核心，不是细节）：`computed` = 查过了（`by_statement` / `dangling` 都是算出来的
+读数）；`unreadable` = `documents` 或 `statements` 读不到 ⇒ 没查成（不是"没有断言压着"）。
 
-    ====================  ==================================================================
-    state                 含义
-    ====================  ==================================================================
-    `computed`            查过了：`by_statement` / `dangling` 都是算出来的读数
-    `unreadable`          `documents` 或 `statements` 读不到 ⇒ 没查成（不是"没有断言压着"）
-    ====================  ==================================================================
-
-    `dangling` 单独一栏是"目标不存在"那一态的载体：`stmt:9999` 这种引用的目标不在
-    命题账本里，它既不许被静默算成"压在 9999 上"，也不许被静默丢掉 ——
-    它是悬空引用，写入期（`doc_tools.check_citations`）与审计期（`verify`）各自报 error。
+`dangling` 单独一栏是"目标不存在"那一态的载体：`stmt:9999` 这种引用的目标不在命题账本里，它既不许
+被静默算成"压在 9999 上"，也不许被静默丢掉 —— 它是悬空引用，写入期（`doc_tools.check_citations`）与
+审计期（`verify`）各自报 error。
     """
     rows, why = _document_rows(store)
     if rows is None:
@@ -3167,18 +3113,13 @@ def statements_cited_by_claims(store: Any) -> dict[str, Any]:
 def assertions_pressing_on(store: Any, stmt_id: str) -> dict[str, Any]:
     """哪几条正文断言压在这条命题上（`stmt:<命题号>` 引用）。三态。
 
-    为什么单独一个函数而不是把这一格塞进 `pollution_set` 的返回值：`pollution_set`
-    回的是命题号列表，而这里是"稿件行 + 断言号"的二元组 —— 两种东西混进同一个列表，
-    读的人再也分不清"跟着倒的命题"与"压在上面的正文断言"（而它们的处置不同：
-    前者要撤结论，后者要改稿）。所以两者分开给，但同处一个三态读数里。
+为什么不把这一格塞进 `pollution_set` 的返回值：它回的是命题号列表，而这里是"稿件行 + 断言号"的二元
+组 —— 两种东西混进同一个列表，读的人再也分不清"跟着倒的命题"与"压在上面的正文断言"（处置不同：前者要撤
+结论，后者要改稿）。所以两者分开给，但同处一个三态读数里。
 
-    ====================  ==========================================================
-    state                 含义
-    ====================  ==========================================================
-    `computed`            查过了（`assertions` 可能为空 = 确实没有断言引它）
-    `no_such_statement`   命题账本里没有这条命题 ⇒ 判不了（不是"没有断言引它"）
-    `unreadable`          这一趟没查成（`documents` 或 `statements` 读不到）
-    ====================  ==========================================================
+三态：`computed` = 查过了（`assertions` 可能为空 = 确实没有断言引它）；`no_such_statement` = 命题账
+本里没有这条命题 ⇒ 判不了（不是"没有断言引它"）；`unreadable` = 这一趟没查成（`documents` 或
+`statements` 读不到）。
     """
     cites = statements_cited_by_claims(store)
     if cites["state"] != "computed":
@@ -3240,21 +3181,15 @@ def pollution_reading(store: Any, stmt_id: str) -> dict[str, Any]:
 def pollution_set(store: Any, stmt_id: str) -> list[str]:
     """一条命题被推翻时跟着倒的那些命题（`draft/37` §9 / R20 的"污染面"）。
 
-    做法是 `statements.derived_from` 上的传递闭包（谁用到我、谁又用到它……），
-    不含自身。为什么必须有它：§9 的处置不是"把这一条划掉"就完事 ——
-    `draft/37` 的用词是"如果错的是文献，那么压在它上面的结论就不能再算数"，
-    而"压在它上面"在数据面上就是这张有向图。
+做法是 `statements.derived_from` 上的传递闭包（谁用到我、谁又用到它……），不含自身。§9 的处置不是
+"把这一条划掉"就完事 ——"压在它上面的结论不能再算数"在数据面上就是这张有向图。
 
-    第二层（正文断言层）：`documents.claims[].citations` 里的 `stmt:<命题号>`
-    引用也是"压在它上面"，但那一条边连着的是稿件里的断言，不是命题 ——
-    所以它不进本函数的返回值（把两种东西混进一个列表就再也分不清了），
-    而是走 :func:`assertions_pressing_on` 与 `pollution_reading` 的 `assertions` 格。
-    2026-10-07 所有者裁定 `draft/68` 题 1 选 A 之前，这一层没有数据形式可判
-    （`citations` 只认 `lit:`/`exp:`/`rel:`），现在有 `stmt:` 前缀了，
-    于是"哪几条正文断言压在这条命题上"从一个边界文字变成一条真读数。
-
-    三态：本函数只回闭包本身，`[]` 既可能是"没有下游"也可能是"没查成"——
-    要分清就读 :func:`pollution_reading`（它多回一个 `state`）。
+第二层（正文断言层）：`documents.claims[].citations` 里的 `stmt:<命题号>` 引用也是"压在它上面"，但
+那条边连的是稿件里的断言 ⇒ 不进本函数返回值（两种东西混进一个列表就分不清了），走
+:func:`assertions_pressing_on` 与 `pollution_reading` 的 `assertions` 格。2026-10-07 所有者裁定
+`draft/68` 题 1 选 A 之前 `citations` 只认 `lit:`/`exp:`/`rel:`、这一层没有数据形式可判；现在有
+`stmt:` 前缀了，"哪几条正文断言压在这条命题上"从边界文字变成一条真读数。
+三态：本函数只回闭包本身，`[]` 既可能是"没有下游"也可能是"没查成"；要分清就读 `pollution_reading`（它多回一个 `state`）。
     """
     return list(pollution_reading(store, stmt_id)["downstream"])
 
@@ -3299,23 +3234,15 @@ def proposition_level_pollution(store: Any) -> dict[str, Any]:
 def assertion_level_pollution(store: Any) -> dict[str, Any]:
     """正文断言层的污染面：多少条正文断言引了命题 + 每条命题被几条断言压着。
 
-    改前这一格按设计是 `not_judged`（缺的是数据形式：`citations` 没有引用命题的
-    写法）。2026-10-07 所有者裁定 `draft/68` 题 1 选 A（本次改动由所有者授权、
-    主控代改）之后它变成一条现算读数 —— 判据跟着改的地方与理由写在
-    `tests/test_contradiction_fixtures.py` 对应用例的 docstring 里。
+改前这一格按设计是 `not_judged`（缺的是数据形式：`citations` 没有引用命题的写法）。2026-10-07 所有者
+裁定 `draft/68` 题 1 选 A 之后它变成一条现算读数 —— 判据跟着改的地方与理由写在
+`tests/test_contradiction_fixtures.py` 对应用例的 docstring 里。
 
-    三态：
+三态：`computed` = 查过了（每一格都是算出来的读数，`0` 是真 0）；`unreadable` = `documents` 或 `statements` 读不到 ⇒ 没查成。
 
-    ====================  ==========================================================
-    state                 含义
-    ====================  ==========================================================
-    `computed`            查过了（下面每一格都是算出来的读数，`0` 是真 0）
-    `unreadable`          `documents` 或 `statements` 读不到 ⇒ 没查成
-    ====================  ==========================================================
-
-    为什么 `claims_total` 与 `claims_citing_a_statement` 必须分开给：
-    "这一批稿件里没有一条断言引命题"（0 / 40）与"这一趟一条断言都没扫到"（0 / 0）
-    是两件事 —— 只给一个 0，读的人分不清"这一层干净"与"这一层根本没数据"。
+为什么 `claims_total` 与 `claims_citing_a_statement` 必须分开给："这一批稿件里没有一条断言引命题"
+（0 / 40）与"这一趟一条断言都没扫到"（0 / 0）是两件事 —— 只给一个 0，读的人分不清"这一层干净"与
+"这一层根本没数据"。
     """
     cites = statements_cited_by_claims(store)
     if cites["state"] != "computed":
@@ -3339,17 +3266,15 @@ def assertion_level_pollution(store: Any) -> dict[str, Any]:
 def _check_contradictions(rep: ClosingReport, store: Any) -> None:
     """未裁决的矛盾：三种病因各自一个 code（`draft/37` §8 / R19）+ 污染面（R20）。
 
-    为什么不能只报一句"有矛盾"：三种病因的处置方向完全不同，而代码就是处置把手 ——
+为什么不能只报一句"有矛盾"：三种病因的处置方向完全不同，而代码就是处置把手 ——
 
-    | 病因 | code | 谁去做什么 |
-    |---|---|---|
-    | 我们读错了文献（下成另一篇） | `contradiction_wrong_paper` | A：重取对的那一篇（`matched="mismatch"` 已在 P2 落成一栏） |
-    | 来源本身有争议（两篇文献两说） | `contradiction_disputed_source` | D 追原始证明 → 判不了就 `ask_user`（§8 的裁决闭环） |
-    | 我们自己的证明有洞 | `contradiction_own_hole` | D 给可挽救性评估，E 补 T3，或如实降档 |
-    | 稿件审校未过（H 的未决项） | `review_unresolved` | G 修订 / H 复审（§14.4 的"未决问题"那一节） |
-
-    前三种正是 §17.1 要求"三种病因各一条负控"的那三条；第四种来自 §14.4
-    的报告第九节，单列是因为它的处置是"回稿子"而不是"回证据"。
+| 病因 | code | 谁去做什么 |
+|---|---|---|
+| 我们读错了文献（下成另一篇） | `contradiction_wrong_paper` | A：重取对的那一篇（`matched="mismatch"` 已在 P2 落成一栏） |
+| 来源本身有争议（两篇文献两说） | `contradiction_disputed_source` | D 追原始证明 → 判不了就 `ask_user`（§8 的裁决闭环） |
+| 我们自己的证明有洞 | `contradiction_own_hole` | D 给可挽救性评估，E 补 T3，或如实降档 |
+| 稿件审校未过（H 的未决项） | `review_unresolved` | G 修订 / H 复审（§14.4 的"未决问题"那一节） |
+前三种正是 §17.1 要求"三种病因各一条负控"的那三条；第四种来自 §14.4 的报告第九节，单列是因为它的处置是"回稿子"而不是"回证据"。
     """
     if store is None:
         rep.status["contradictions"] = "unknown"
@@ -3697,16 +3622,15 @@ def _alternatives_note(store: Any, kind: str, project_root: Path) -> str:
 def declared_report_sections(store: Any, report_path: str) -> tuple[list[str], str]:
     """M 声明的报告体例（`REPORT_STYLE_NAME`）；返回 `(节名, 为什么读不到)`。
 
-    R9（`draft/52` 裁决 1 = C''）之后，报告体例由 M 裁定：门不再自带任何节名清单，
-    只核对"M 声明的体例有没有兑现"。声明的落点是一份机器可读的小文件
-    （`out/review/REPORT-STYLE.json`，形如 `{"sections": ["一、任务与范围", ...]}`）。
+R9（`draft/52` 裁决 1 = C''）之后，报告体例由 M 裁定：门不再自带任何节名清单，只核对"M 声明的体例有
+没有兑现"。声明的落点是一份机器可读的小文件（`out/review/REPORT-STYLE.json`，形如
+`{"sections": ["一、任务与范围", ...]}`）。
 
-    三态（与全仓其余读数同一套纪律）：
-
-    - 声明文件不在盘上 ⇒ `([], "")`：这一趟没有体例声明，门不判体例
-      （不是"通不过"，也不是"通过"—— 读数里写 `style_source: "none"`）；
-    - 读不懂 / 形状不对 ⇒ `([], 原因)`：没查成（不许折成"没声明"）；
-    - 读到了 ⇒ `(节名, "")`，由调用方逐节核它在不在报告里。
+三态（与全仓其余读数同一套纪律）：
+- 声明文件不在盘上 ⇒ `([], "")`：这一趟没有体例声明，门不判体例（不是"通不过"，也不是"通过" ——
+  读数里写 `style_source: "none"`）；
+- 读不懂 / 形状不对 ⇒ `([], 原因)`：没查成（不许折成"没声明"）；
+- 读到了 ⇒ `(节名, "")`，由调用方逐节核它在不在报告里。
     """
     if not str(report_path or "").strip():
         return [], ""
@@ -3731,26 +3655,15 @@ def declared_report_sections(store: Any, report_path: str) -> tuple[list[str], s
 def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> None:
     """报告那一格：报告在不在、附件三件套齐不齐、M 声明的体例兑现没有（全是读数）。
 
-    ## 为什么不再是"九节"
+不再卡"九节"（R9，`draft/52` 裁决 1 = C''）："报告要写九节"是 review 线的交付规格，被当成通用判据用 ⇒ 直接废除
+（`REPORT_SECTIONS` / `SPLIT_MARKERS` 已删）。也不再卡"形式"（业主 2026-10-09：「T1的5不是已经说过工作内容和交付
+形式由M决定了吗？不卡机械判据。但M需要知道一些任务需要的明确的交付格式，如什么叫论文包之类的」）。
 
-    R9（`draft/52` 裁决 1 = C''）："报告要写九节"是 review 线的交付规格，
-    被当成通用判据用 ⇒ 直接废除（`REPORT_SECTIONS` / `SPLIT_MARKERS` 已删）。
-
-    ## 为什么现在也不卡"形式"（业主 2026-10-09）
-
-    逐字：「T1的5不是已经说过工作内容和交付形式由M决定了吗？不卡机械判据。但M需要知道
-    一些任务需要的明确的交付格式，如什么叫论文包之类的。这样M在排任务的时候自然会把这些
-    内容的生产写进任务排期。」
-
-    ⇒ 这一格只做两件事：报告在不在盘上（不在 ⇒ `unknown` + warning；读不成 ⇒
-    `unknown`）与把缺的件逐条摆出来（附件三件套、M 声明的体例，各进一条 warning）。
-    报告在盘上且读得成 ⇒ `pass`。此前它把"缺附件三件套的一件"读成 `fail` + `blocker`
-    （T1 `t1v` 与 T2 `t2a` 连续两趟就是被这一格拦下的），而裁定 3 已经定了收工由 M 判。
-
-    两个码分开（`attachment_fields_missing` / `declared_sections_missing`）：
-    它们要读的人不同 —— 前者是"这条结论的来路没写全"，后者是"M 自己声明的体例没兑现"。
-    （`draft/44` J-19 那条"并入同一个 code"针对的是拦门的码表；
-    这一格已经不拦门，两条读数各自点名比合成一句更好读。）
+⇒ 这一格只做两件事：报告在不在盘上（不在 ⇒ `unknown` + warning；读不成 ⇒ `unknown`）与把缺的件逐条摆出
+来（附件三件套、M 声明的体例，各进一条 warning）。报告在盘上且读得成 ⇒ `pass`。此前它把"缺附件三件套的
+一件"读成 `fail` + `blocker`（T1 `t1v` 与 T2 `t2a` 连续两趟就是被这一格拦下的），而裁定 3 已经定了收工由
+M 判。两个码分开（`attachment_fields_missing` / `declared_sections_missing`）：前者是"来路没写全"，后者是
+"体例没兑现"（`draft/44` J-19 的"并入同一个 code"针对拦门的码表；这一格不拦门，两条读数各自点名更好读）。
     """
     if not str(report_path or "").strip():
         rep.status["report_shape"] = "unknown"
@@ -3826,18 +3739,15 @@ def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> Non
 def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """第八格（EE-05，`draft/52` C4）：产物台账必须与盘上一致。
 
-    三态按判据强度收窄（这是 C4 的核心，避免把正常产物读成坏）：
+三态按判据强度收窄（C4 的核心，避免把正常产物读成坏）：
 
-    - 全部 `ok` ⇒ `pass`；
-    - 有 `missing` / `unreadable` ⇒ `fail`（登记过的东西盘上没了 / 读不到 —— 真缺陷）；
-    - 只有 `changed` ⇒ `pass` + warning（D9，2026-10-09 裁定"收窄"）：比对口径改成
-      按路径取最后一条登记（台账是 append-only 历史，逐行比会把正常改写读成 changed），
-      而"最后一次登记之后又被改写"是常态（真机 t1u：23 条全是框架自己幂等重写的
-      `out/tasks/*.json`）⇒ 不再把这一格读成 `unknown`（旧口径下任何有派活的跑批都收不了工）；
-    - 台账不在盘上 ⇒ `pass` + 读数写明"没有这一栏"（`absent: true`）——
-      与 `acceptance` 对非研究型项目的口径一致："没有这一栏"不是"没查成"。
-      要说清的是"这一趟没有产物台账"，而不是"产物与盘上一致"（读数里 `entries: 0`
-      与 `absent: true` 分得开）。
+- 全部 `ok` ⇒ `pass`；
+- 有 `missing` / `unreadable` ⇒ `fail`（登记过的东西盘上没了 / 读不到 —— 真缺陷）；
+- 只有 `changed` ⇒ `pass` + warning（D9，2026-10-09 裁定"收窄"）：比对口径改成按路径取最后一条登记，
+  而"最后一次登记之后又被改写"是常态（真机 t1u：23 条全是框架自己幂等重写的 `out/tasks/*.json`）⇒
+  不再把这一格读成 `unknown`（旧口径下任何有派活的跑批都收不了工；台账是 append-only 历史）；
+- 台账不在盘上 ⇒ `pass` + 读数写明"没有这一栏"（`absent: true`）—— 与 `acceptance` 对非研究型项目的
+  口径一致："没有这一栏"不是"没查成"（`entries: 0` 与 `absent: true` 分得开）。
     """
     if not str(project_dir or "").strip():
         rep.status["artifact_ledger"] = "unknown"
@@ -3893,19 +3803,14 @@ def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> 
 def _check_substance(rep: ClosingReport, store: Any) -> None:
     """实质产出：这一趟到底产出了什么（空台账不许报「可交付」）。
 
-    ## 为什么要有这一格（T1 实测，`draft/37` §84 的 D2）
+为什么要有这一格（T1 实测，`draft/37` §84 的 D2）：那一趟退出码 0、报告九节齐全、`user_pending: pass`，
+而台账是 `documents=0 / statements=0 / relations=0 / experiments=0 / review_findings=0` —— 前五格全过、
+`can_close=true`、报告写「可交付」。原因不是判据写错了，而是没有一格问"产出了什么"：`report_shape` 只
+看节名，而 `anchor` / `contradictions` / `load_bearing` 在空台账上天然为空（真空成立）—— 正是本项目最
+忌的同族形态：把"没做"读成"没问题"。
 
-    那一趟退出码 0、报告九节齐全、`user_pending: pass`，而台账是
-    `documents=0 / statements=0 / relations=0 / experiments=0 / review_findings=0`
-    —— 前五格全过、`can_close=true`、报告写「可交付」。原因不是判据写错了，
-    而是没有一格问"产出了什么"：`report_shape` 只看节名，而 `anchor` /
-    `contradictions` / `load_bearing` 在空台账上天然为空（真空成立）。
-    这正是本项目最忌的同族形态：把"没做"读成"没问题"。
-
-    ## 三态
-
-    - 五张表都读得到：全 0 ⇒ `fail`（读数逐张列出）；有非空 ⇒ `pass`；
-    - 有表读不到 ⇒ `unknown`（"问不出来"不是"没问题"）。
+三态：五张表都读得到 ⇒ 全 0 判 `fail`（读数逐张列出）、有非空判 `pass`；有表读不到 ⇒ `unknown`
+（"问不出来"不是"没问题"）。
     """
     if store is None:
         rep.status["substance"] = "unknown"
@@ -3993,20 +3898,15 @@ def _escalation_reading(session_root: Any, sid: str | None, tasks: list[dict[str
                         ) -> dict[str, Any]:
     """"干不了/没做完"的那些项，有没有在本段会话里上报（业主 2026-10-09 第三句）。
 
-    「如果某代理认为某件任务自己无法胜任且无法通过派子代理解决，则会将情况上报父智能体。
-    特别地，M 向用户上报。」⇒ 上报要有落盘的载体，本函数按两处找：
+「如果某代理认为某件任务自己无法胜任且无法通过派子代理解决，则会将情况上报父智能体。特别地，M 向用
+户上报。」⇒ 上报要有落盘的载体，本函数按两处找：
+- M → 用户：`userio.pending_questions`（还没答的）+ `userio.read_replies`（答过的）—— 这两处合起来就是"问过用户"的全集；
+- 子 → 父：会话里的 `agent_message`（S1k 的名字面：给父/给名下子代理的报文，`to` 是名册名或角色名）与 `agent_handoff`（交接手稿那一行也是上行）。
 
-    - M → 用户：`userio.pending_questions`（还没答的）+ `userio.read_replies`（答过的）
-      —— 这两处合起来就是"问过用户"的全集；
-    - 子 → 父：会话里的 `agent_message`（S1k 的名字面：给父/给名下子代理的报文，
-      `to` 是名册名或角色名）与 `agent_handoff`（交接手稿那一行也是上行）。
-
-    匹配是字面的：项里的 `what`（去掉空白）要出现在某条上报的正文/标题/问题正文里。
-    这是刻意的弱判据 —— 它只回答"这件事有没有被说出来"，不评价说得对不对
-    （那要人读）。`what` 太短（<2 字）时不做字面匹配，只认"有上报"这一档，
-    免得一个单字把任何一条报文都判成"说到了"。
-
-    三态：会话读不成 / 没有会话根 ⇒ `checked=False` + `reason`（"没读成"不是"没上报"）。
+匹配是字面的：项里的 `what`（去掉空白）要出现在某条上报的正文/标题/问题正文里 —— 刻意的弱判据，只回
+答"这件事有没有被说出来"，不评价说得对不对（那要人读）；`what` 太短（<2 字）时只认"有上报"这一档，
+免得一个单字把任何一条报文都判成"说到了"。三态：会话读不成 / 没有会话根 ⇒ `checked=False` + `reason`
+（"没读成"不是"没上报"）。
     """
     open_items = [{"what": str(t.get("what") or ""), "state": str(t.get("state") or ""),
                    "why": str(t.get("why") or "")}
@@ -4063,26 +3963,15 @@ def _escalation_reading(session_root: Any, sid: str | None, tasks: list[dict[str
 def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> dict[str, Any]:
     """收工门的「子产出处理」格：这一段会话里各趟运行自报的读数汇总。
 
-    ## 它为什么在收工门上（业主裁定：**父代理必须处理子代理的产出**）
+它为什么在收工门上（业主裁定：「父代理必须处理子代理的产出」）：这条规矩「不 fail 收工」，但必须可见 ——
+一趟 run 派了子、拿到结果、直接 `final`，其它八格「一格都看不出来」：`tasks` 那几行是 `done`、
+`substance` 非空、报告也在盘上。于是这一格读 `agent_run_end.summon_consumption`（每趟运行自己算的那一份，
+`agent_loop.summon_consumption` 是唯一实现）—— 只汇总，不重算（两处各算一份必然分叉："事件说处理了、门说没有"）。
 
-    这条规矩**不 fail 收工**（业主逐字："不一定要 fail，但必须可见"），但它必须
-    在门上有读数 —— 一趟 run 派了子、拿到结果、直接 `final`，其它八格**一格都看不出来**：
-    `tasks` 里那几行是 `done`、`substance` 非空、报告也在盘上。于是这一格读
-    `agent_run_end.summon_consumption`（每趟运行自己算的那一份，
-    `agent_loop.summon_consumption` 是唯一实现）—— 只汇总，不重算（两处各算一份
-    必然分叉，而分叉的形态是"事件说处理了、门说没有"）。
+三态（`checked=False` 绝不是"处理了"）：没有会话根 / 读不成 / 有坏行 ⇒ `checked=False` + 理由；会话读得成
+但「没有任何一趟」带这一格（老会话）⇒ `checked=False` + "这一段会话里没有任何一趟报过这个读数"，不许折成 0。
 
-    ## 三态（`checked=False` 绝不是"处理了"）
-
-    - 没有会话根 ⇒ `checked=False` + 理由；
-    - 会话读不成 / 有坏行 ⇒ `checked=False` + 理由（"没读成"不是"没问题"）；
-    - 会话读得成、但**没有任何一趟**带这一格（老会话）⇒ `checked=False` +
-      "这一段会话里没有任何一趟报过这个读数" —— 不许把"没有这一格"折成 0。
-
-    ## 反真空（业主 ⑤）
-
-    汇总出来的 `summons_total == 0`（会话里没有一趟派过子）⇒ 这一格**不红**：
-    判据没有对象。它照样报 `summons_total=0`，于是"没派过"与"派了没处理"分得开。
+反真空（业主 ⑤）：`summons_total == 0`（会话里没有一趟派过子）⇒ 这一格「不红」（判据没有对象），但照样报 `summons_total=0`，于是"没派过"与"派了没处理"分得开。
     """
     out: dict[str, Any] = {"checked": True, "runs": 0, "reported_runs": 0,
                            "summons_total": 0, "summons_consumed": 0,
@@ -4131,31 +4020,15 @@ def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> 
 def roster_registration_reading(session_root: Any, *, sid: str | None = None) -> dict[str, Any]:
     """收工门的「名册写没写」格：这一段会话里 `roster_problem` 非空的次数。
 
-    ## 它为什么在收工门上（"名册登记"一直是静默的）
+名册是"代理之间的通信必须经名册"那条纪律的地址面（父 + 直接子 + 绝对编号），但"这一趟派活有没有把子
+代理写进名册"在收工读数里「一格都没有」：`summon_consumption` 只问"子产出处理了没有"，八格问的都是交
+付面 —— 名册 0 行（改前批量派活那条路一次登记都没有）与名册都写上了，两种日子长得一样。这一格只回答一个数：
+`with_problem` = `roster_problem`（单个 summon）与 `roster_problems`（批量逐项问题）非空的「条数」；`registered` 是成功登记的名字条数（与 `with_problem` 对照）。
 
-    名册是"代理之间的通信必须经名册"那条纪律的地址面（父 ＋ 直接子 ＋ 绝对编号）。
-    但"这一趟派活有没有把子代理写进名册"在收工读数里**一格都没有**：
-    `summon_consumption` 只问"子产出处理了没有"，八格问的都是交付面。
-    于是两种完全不同的日子在收工输出上长得一样：名册 0 行（批量派活那条路
-    改前一次登记都没有）与名册都写上了。
-
-    这一格只回答一个数：`with_problem` = `roster_problem`（单个 summon）与
-    `roster_problems`（批量那些逐项问题）非空的**条数**。`registered` 是
-    成功登记的名字条数（读数，用于与 `with_problem` 对照）。
-
-    ## 三态（`checked=False` 绝不是"都写上了"）
-
-    - 没有会话根 ⇒ `checked=False` + 理由；
-    - 会话读不成 / 有坏行 ⇒ `checked=False` + 理由（"没读成"不是"没问题"）；
-    - 读得成但一步都没有（`agent_step` 0 条）⇒ `checked=False` + 理由
-      （"没有对象"与"查过了是 0"必须分得开）。
-
-    ## 不许 fail（业主口径：只可见）
-
-    它是 `readings` 里的一格，**不进** `status`、**不进** `machine_pass`、
-    不产生 `Finding`：名册某一条没写上是"这一格没成事"，与"门该不该拦"是两件事
-    （前者已经在派的那个地方受控拒绝 / 报 problem 了）。收工时它只在
-    :meth:`ClosingReport.summary` 里加半句话，加不加都不改 `can_close`。
+三态（`checked=False` 绝不是"都写上了"）：没有会话根 / 读不成 / 有坏行 ⇒ `checked=False` + 理由；读得成但
+一步都没有（`agent_step` 0 条）⇒ 同样 `checked=False`（"没有对象"与"查过了是 0"必须分开）。不许 fail（业
+主口径：只可见）：它是 `readings` 里的一格，不进 `status` / `machine_pass`、不产生 `Finding` —— 名册某一条
+没写上是"这一格没成事"，与"门该不该拦"是两件事。收工时只在 :meth:`ClosingReport.summary` 里加半句话，加不加都不改 `can_close`。
     """
     out: dict[str, Any] = {"checked": True, "runs": 0, "steps": 0, "registered": 0,
                            "with_problem": 0, "problems": [], "reason": ""}
@@ -4214,26 +4087,15 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   ) -> ClosingReport:
     """跑收工门，返回读数（不抛业务异常 —— 没查成落成 `unknown`）。
 
-    `session_root` 不给时取 `store.root`（会话记录与工作区本来就是同一个根，
-    两处分开写迟早会出现"审计记录落在别处"的静默错位）。
-    `project_dir` / `report_path` 不给 ⇒ 对应的那一两格是 `unknown`（不是 pass）：
-    门宁可说"我没查成"，也不许在缺少读数时说"可以交"。
-    `sid` 三态见 :data:`NO_SESSION`：具体会话号 / `None`（缺省会话）/
-    `NO_SESSION`（没有会话身份 ⇒ `user_pending` 那格 `unknown`）。
+`session_root` 不给时取 `store.root`（会话记录与工作区本来就是同一个根，两处分开写迟早出"审计记录落在别
+处"的静默错位）。`project_dir` / `report_path` 不给 ⇒ 对应的那一两格是 `unknown`（不是 `pass`）—— 门宁可
+说"我没查成"，也不许在缺少读数时说"可以交"。`sid` 三态见 :data:`NO_SESSION`：具体会话号 / `None`
+（缺省会话）/ `NO_SESSION`（没有会话身份 ⇒ `user_pending` 那格 `unknown`）。
 
-    ## 收工由 M 判（业主 2026-10-09）
-
-    第一句：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；
-    第二句：「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，
-    只是 M 需要根据用户指令给自己设计任务列表」⇒ 于是：
-
-    - `task_list` 是 M 自己列的任务（`[{what, state: done|not_done|cannot, why}]`）——
-      停的判据是它，不是八格；
-    - `goal_met` 是 M 的一句话结论（`None` = 它没判 ⇒ `can_close=false` + 「没人判过」）；
-    - `goal` / `basis` 是它的自述（目标是什么、依据哪几条读数）；
-    - 八格照旧逐格现算，作为读数（`status` / `machine_pass`）与 `overrode`
-      （不一致逐格点名）留在报告里；`verdict_conflicts` 再点名"自述与自己的任务列表
-      对不上"的地方 —— 判据归 M，读数的可见性不减。
+收工由 M 判（业主 2026-10-09）：第一句「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；第二句「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」
+⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是八格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `can_close=false` + 「没人判过」）；
+  `goal` / `basis` 是自述。八格照旧逐格现算作读数（`status` / `machine_pass` / `overrode` 逐格点名不一致，
+  `verdict_conflicts` 再点名自述与任务列表对不上）—— 判据归 M，读数的可见性不减。
     """
     rep = ClosingReport()
     tasks = [dict(t) for t in (task_list or ()) if isinstance(t, Mapping)]
