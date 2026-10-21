@@ -542,7 +542,7 @@ def test_every_category_is_in_manifest_docstring_order() -> None:
 
 
 def test_manifest_globs_point_at_real_files() -> None:
-    """    每条 glob（除 `src/agentflow/release_check.py` 这条刻意预登记外）都必须指向真实存在的文件。
+    """每条 glob（除 `src/agentflow/release_check.py` 这条刻意预登记外）都必须指向真实存在的文件。
 
     理由：写错的 glob 不会报错，它只会永远不命中 —— 那是一个静默的假阴性。
 
@@ -656,7 +656,7 @@ def manifest_symbol_problems(
     target_text: str = "",
     py_files: tuple[str, ...] | None = None,
 ) -> list[str]:
-    """    一条理由里的每一个反引号符号都必须有出处；返回问题清单（空 = 全都有出处）。
+    """一条理由里的每一个反引号符号都必须有出处；返回问题清单（空 = 全都有出处）。
 
     ## 三种"有出处"
 
@@ -706,7 +706,7 @@ def manifest_symbol_problems(
 
 
 def test_python_manifest_referenced_symbols_exist() -> None:
-    """    理由里用反引号写出的符号名，必须真的存在于对应的源文件里。
+    """理由里用反引号写出的符号名，必须真的存在于对应的源文件里。
 
     为什么需要这条：清单的"理由"是给人读的，写错一个函数名不会报错 ——它只会把人指向一段不存在的代码，而禁改区仍然"看起来被登记了"。这比行号更强：行号漂了它不响（行号本来就易失），符号没了它必响。
 
@@ -1839,7 +1839,7 @@ _REQUIRED_ENTRY_KEYS = (
 
 
 def test_real_ledger_is_readable_and_registers_the_round() -> None:
-    """    真实台账：可读、结构合规、覆盖本轮命中的文件（不断言签字状态）。
+    """真实台账：可读、结构合规、覆盖本轮命中的文件（不断言签字状态）。
 
     `F10` 重写了这一条。改前它逐字断言两件"签字前"的形态：`G.LEDGER_NAME not in paths`（台账不给自己登记）与每条`authored_basis == "inferred"`。所有者
     2026-09-27 完成逐行走查并签字之后，这两条同时变成假的（实测第一条的原始输出：AssertionError: 台账不该给自己登记（它永远 unapproved，登记只会制造噪音）assert
@@ -1978,7 +1978,7 @@ def _r1c_root(tmp_path: Path) -> tuple[Path, Path, str]:
 
 def _r1c_evidence(root: Path, tag: str, *, auditor: str = "", sha256: str = "",
                   scope: str = "") -> tuple[str, str]:
-    """    `(绝对路径, sha256)` —— 每条记录一份内容不同的证据。
+    """`(绝对路径, sha256)` —— 每条记录一份内容不同的证据。
 
     为什么必须不同：`counted_audits` 的键是 `(归一化路径, 内容 hash)`，共用一份证据会被正确地折叠成一条（那正是 `c-17` 的行为）。这一节要测的是维度/身份的判据，
     所以先让"三条记录真的是三条独立的证据"这件事成立。
@@ -2428,7 +2428,7 @@ def test_r1c_f5_scope_must_name_a_real_symbol(tmp_path: Path) -> None:
 
 
 def test_r1c_f6_negative_control_must_say_what_was_seen(tmp_path: Path) -> None:
-    """    `R5-R1b-6`：四种空话必须被拒 —— 长度、标记词、比出来什么、不是重复填充。
+    """`R5-R1b-6`：四种空话必须被拒 —— 长度、标记词、比出来什么、不是重复填充。
 
     正控：写清"拿什么比 + 比出来什么"且够长的负控通过（`_R1C_NC`）。负控：四种空话逐条报出问题，且 `record_audit` 拒写。
 

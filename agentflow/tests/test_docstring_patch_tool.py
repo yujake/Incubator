@@ -1,24 +1,18 @@
-"""工装判据：`scripts/docstring_patch.py` 必须能**安全地**写回含反斜杠/三引号的 docstring。
-
+"""工装判据：`scripts/docstring_patch.py` 必须能安全地写回含反斜杠/三引号的 docstring。
 ## 这一条守的是 2026-10-21 那轮的两次真事故
 
-1. **`\\bibitem` 变成退格符**：docstring 是普通字符串字面量，把 `\bibitem` 按单反斜杠写进源码，
-   解析出来的值就是 `\x08ibitem`（U+0008）—— 而那正是"非 Unicode 字符"里最难查的一类。
-2. **断言被改，而不是被修**：有人为了绕过「写回值必须等于给的文本」这条断言，改的是**断言**
-   （`cl2x.py`），而不是让序列化正确。判据要的是后者。
+1. 反斜杠那一路上真出过事故：`\\bibitem` 按单反斜杠写进源码后，解析出来的值就是 `ibitem`（U+0008）—— 那是"非 Unicode 字符"里最难查的一类。
+2. 断言被改，而不是被修：有人为了绕过「写回值必须等于给的文本」这条断言，改的是断言（`cl2x.py`）而不是让序列化正确 —— 判据要的是后者。
 
 ## 判据
 
-① `literal()` 序列化后再 `ast.literal_eval`，值**逐字等于**原文（含字面反斜杠、三引号、行尾引号、中文、制表符）；
-② `apply_patch()` 真写一个临时 `.py` 文件后，解析出的 docstring 值逐字等于 `text`，且**没有 CRLF**；
+① `literal()` 序列化后再 `ast.literal_eval`，值逐字等于原文（含字面反斜杠、三引号、行尾引号、中文、制表符）；
+② `apply_patch()` 真写一个临时 `.py` 文件后，解析出的 docstring 值逐字等于 `text`，且没有 CRLF；
 ③ `verify_one()` 能抓到三类破坏：AST（去 docstring 后）不同、非 doc 字面量不同、指针丢失；
-④ 反真空：**没被破坏**的文件必须判绿（否则"抓得到"可以靠"什么都报"实现）；
+④ 反真空：没被破坏的文件必须判绿（否则"抓得到"可以靠"什么都报"实现）；
 ⑤ 负控：把序列化换回"直接塞原文"（原始写法）⇒ ① 必须红 —— 证明①测的确实是转义。
 
-## 为什么用临时文件而不是真仓文件
-
-这一条只考工装本身，不该依赖任何具体的业务文件（那样它会在清洁工并行改动时抖动）。
-"""
+## 为什么用临时文件而不是真仓文件：这一条只考工装本身，不该依赖任何具体的业务文件（那样它会在清洁工并行改动时抖动）。"""
 
 from __future__ import annotations
 
@@ -94,6 +88,34 @@ def test_apply_patch_writes_the_exact_value_and_no_crlf(tmp_path: Path) -> None:
     tree = parsed
     funcs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
     assert [f.name for f in funcs] == ["foo"]
+
+
+def test_a_chinese_docstring_can_be_patched_twice_without_eating_the_newline(tmp_path: Path) -> None:
+    """负控（字节偏移）：`col_offset` 是 **UTF-8 字节**，不是字符。
+
+    真事故：docstring 的收尾三引号粘在一条**含中文**的行尾时，用字符偏移去切
+    `str` 会把行尾换行吃掉 ⇒ 收尾三引号与下一条语句粘成一行（SyntaxError）。
+    这里同一节点**连打两次**，两次都必须：① 文件能 `ast.parse`；② 值等于最后一次的 text；
+    ③ 收尾三引号与下一条语句之间仍有换行。
+    """
+    tool = _tool()
+    target = tmp_path / "zh.py"
+    original = (
+        '"""中文模块摘要，结尾带标点。"""\n'
+        "from __future__ import annotations\n"
+        "\n\nVALUE = 1\n"
+    )
+    target.write_bytes(original.encode("utf-8"))
+    # `head` 必须给"**盘上现在**的首行"（它就是定位键）：第二次改写时首行还没变，
+    # 所以两次都传原始首行 —— 这也是给使用者的一条口径：别把"想要的首行"当定位键。
+    for text in ("中文模块摘要，结尾带标点。", "第二次改写的中文摘要，也带标点。"):
+        tool.apply_patch({"file": str(target), "kind": "module", "name": "<module>",
+                          "head": "中文模块摘要，结尾带标点。", "text": text})
+        parsed = ast.parse(target.read_bytes().decode("utf-8"))
+        assert ast.get_docstring(parsed, clean=False) == text
+        written = target.read_bytes().decode("utf-8")
+        assert '"""\n' in written or written.count('"""') == 2, written
+        assert "from __future__" in written and "VALUE = 1" in written
 
 
 def test_verify_catches_pointer_loss_and_ast_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

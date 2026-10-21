@@ -187,7 +187,7 @@ def test_without_a_live_census_the_check_is_silent_about_the_numbers() -> None:
 
 
 def test_the_cli_reports_unknown_when_the_package_cannot_be_imported(tmp_path):
-    """    负控 3（三态）：装配不了工具层 ⇒ 退出码 2（没查成），不是 0。
+    """负控 3（三态）：装配不了工具层 ⇒ 退出码 2（没查成），不是 0。
 
     这条与 `H-8` 的"要不要让门依赖包可导入"那个取舍直接相关：选的是"依赖它、但依赖不上时如实报未知"——不静默退回"只判结构"。
 
@@ -212,7 +212,7 @@ def test_the_cli_reports_unknown_when_the_package_cannot_be_imported(tmp_path):
 
 
 def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
-    """    `X-91.5-2` 的回归判据：本文件里每一个捕获输出的子进程都必须显式钉住 stdio 编码。
+    """`X-91.5-2` 的回归判据：本文件里每一个捕获输出的子进程都必须显式钉住 stdio 编码。
 
     为什么值得一条判据（而不是"这一次改完就算"）：`X-91.5-2` 的形态是只在某些环境里红—— 门口径环境（`PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`）下全绿，GBK 控制台（本机
     `chcp` = 936）下 4 条红。一次性修法挡不住下一个人新加一条 `subprocess.run(...)`：新调用不带 `env=` 时，乱码 / 子进程
@@ -248,7 +248,7 @@ def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
 
 
 def test_no_test_module_pollutes_the_parent_env_with_a_stdio_encoding() -> None:
-    """    `X-91.5-2` 的根因判据（2026-10-15 加）：父进程的编码变量不许被会话级改写。为什么上面那条不够：它扫的是 `Path(__file__)` —— 只管得住本文件。实测就漏了
+    """`X-91.5-2` 的根因判据（2026-10-15 加）：父进程的编码变量不许被会话级改写。为什么上面那条不够：它扫的是 `Path(__file__)` —— 只管得住本文件。实测就漏了
     `tests/test_temp_root_pin.py`：全量跑里它是唯一那条"只在全量跑里红、单独跑是绿的"用例。机制（已复现到字节，3.25 秒）：本文件此前在三处用
     `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`改了父进程的环境 ⇒ 按目录字母序跑在 `test_temp_root_pin.py` 之前 ⇒
     那个文件起子进程时把变量继承下去 ⇒ 子进程吐 UTF-8、父进程按 GBK 解 ⇒ `_readerthread`

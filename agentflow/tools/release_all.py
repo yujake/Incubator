@@ -177,7 +177,7 @@ def _read_step_json(path: Path | None) -> tuple[list[dict], dict, list[str]]:
 
 
 def verdict_from_subitems(items: list[dict]) -> str | None:
-    """    按子项汇总该步的结论（`D-2.3`）：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`。
+    """按子项汇总该步的结论（`D-2.3`）：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`。
 
     这条口径与 `scripts/release_check.py::Report.overall` 「逐字相同」（刻意如此）：编排层要能「独立」从子项重算一遍，于是"子进程的总判定"与"逐项明细"之间一旦不一致就会被发现，
     而不是被信任。空列表 ⇒ `None`，且这个 `None` 的含义是"「没有可汇总的东西」"，调用方应退回用退出码判定，「而不是」凭空得出 `pass`。
@@ -229,7 +229,7 @@ def classify(
     step: Step | None = None,
     output: str = "",
 ) -> str:
-    """    把"跑成什么样"映射到三态。
+    """把"跑成什么样"映射到三态。
 
     「这个函数是本脚本的核心判据」，所以它的分支顺序本身就是设计：`timed_out` / `started=False`「必须先于」`exit_code == 0` 判断 ——否则"超时被杀"会走到某一侧去（Windows
     上被强杀的进程退出码常是 1，与"检查发现问题"的 1 无法区分）。这正是三态纪律要挡的那种静默兜底。
@@ -520,7 +520,7 @@ def run_step(step: Step, timeout: float) -> Result:
 
 
 def overall(results: list[Result]) -> str:
-    """    总判定：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`；空表 ⇒ `unknown`。
+    """总判定：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`；空表 ⇒ `unknown`。
 
     `H-5` / `T4` / `I-7`（本轮修）：空表不再返回 `pass`。旧口径是"三项计数都是 0 ⇒ 其余 ⇒ `pass`"，于是
     `overall([]) == "pass"` ——一个"没有可判的项"的输入被读成"全过"，与姊妹函数`verdict_from_subitems([])`（返回 `None`，逐字写着"不许凭空得出 pass"）

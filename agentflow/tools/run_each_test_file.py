@@ -150,7 +150,7 @@ def pytest_argv(test_file: Path) -> list[str]:
 
 
 def classify_pytest_result(returncode: int, output: str) -> tuple[str, str]:
-    """    把一个 pytest 子进程的结果映射到本门的状态，返回 `(状态, 证据行)`。
+    """把一个 pytest 子进程的结果映射到本门的状态，返回 `(状态, 证据行)`。
     状态取值 `ok` / `fail` / `all_skipped` / `all_xfail` / `deselected` / `no_tests`；`unknown` 由调用方在超时/起不来时直接给，不经过这里。
     ## `I-2`：`exit 0` 不等于"有东西跑过且都过了"
     旧版第一句是 `if returncode == 0: return "ok", summary` —— 于是一个全部被 skip 的文件（汇总行是 `1 skipped in 0.01s`、一个 `passed` 都没有）被判成 `ok`。

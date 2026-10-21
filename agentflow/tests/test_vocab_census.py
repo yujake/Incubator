@@ -97,7 +97,7 @@ def test_missing_schema_is_unknown_not_clean(tmp_path: Path) -> None:
 
 
 def test_the_real_repo_reports_the_registered_dead_values() -> None:
-    """    对着真仓库：`P-22`/`P-23` 点名的那些值必须在 `reserved` 栏，且不在 `unclaimed` 栏。
+    """对着真仓库：`P-22`/`P-23` 点名的那些值必须在 `reserved` 栏，且不在 `unclaimed` 栏。
 
     判据刻意不是"什么都不报"：那会变成真空通过（普查器一坏也全绿）。它也不是"仍在死的清单里"就够 —— 两栏的语义完全不同：`reserved` = 无产出但已登记（有理由）；`unclaimed` = 无产出且无人认领。
     一个已登记为预留的取值跑到 `unclaimed` 栏里去，与"它彻底消失"同属"审计不再看得见它"的失败形态。

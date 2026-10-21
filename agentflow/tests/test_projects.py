@@ -183,7 +183,7 @@ def test_registration_only_run_does_not_consume_a_run_number_or_make_an_out_dir(
 
 def test_extract_step_opens_a_real_task_row_and_leaves_verify_clean(
         tmp_path: Path, monkeypatch) -> None:
-    """    `--extract` 的花销必须挂在一条真台账号上，且跑完 `verify` 无错无警。
+    """`--extract` 的花销必须挂在一条真台账号上，且跑完 `verify` 无错无警。
 
     为什么单钉这一条：抽取的花销按 `task_id` 记进 `usage_ledger`，而花销必须挂得上一条 `tasks` 行。曾经这里用的是 `f"{project_name}-extract"`（例如
     `project1-extract`）—— 既不是台账号格式（`t-NNNN`），台账里也没有对应的行 ⇒ 用户跑完`project run --extract` 再自查，会看到两条

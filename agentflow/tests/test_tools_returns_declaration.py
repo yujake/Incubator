@@ -818,7 +818,7 @@ def _seed(store: Store, root: Path) -> None:
 
 
 class _RoleGateBypassedRegistry(ToolRegistry):
-    """    测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
+    """测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
 
     `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 55 个工具 —— 那是设计意图（只读角色拿不到写工具）。
     本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写那一个谓词。
@@ -1104,7 +1104,7 @@ def test_negative_control_folding_unparseable_into_parsed_makes_the_gate_red(
 def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """    全部 55 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
+    """全部 55 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
     分开：`ok=False` ⇒ 跳过键比对，但记下来（它既不是「一致」也不是「不一致」）；* `ok=True` 且 data 是对象 ⇒ 做比对。不许把「工具跑不起来」当成「一致」—— 那正是本项目反复踩过的坑（「没检查」
     被读成「检查过了没问题」）。因此末尾还要断言被跳过的工具数 ≤ MAX_SKIPPED。`MAX_SKIPPED = 0` 的依据：本文件的
     `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 55 个工具全部走到 ok 分支。
@@ -1377,7 +1377,7 @@ def _count_comparable_arrays(value: object) -> int:
 def test_every_element_of_an_array_carries_the_same_top_level_keys(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """    补上 `SUBSET_CHECK_SCOPE` 自己点名的第二个盲区：数组里逐元素的一致性。
+    """补上 `SUBSET_CHECK_SCOPE` 自己点名的第二个盲区：数组里逐元素的一致性。
     ## 为什么这一条有独立的价值（不是"更强一点的同一件事"）
     上一条（`declared - actual`）把同一个数组的多个元素并成一份键集合，所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对调用方不是：它按自己在别的元素上看到的形状去读 `field["enum"]`，
     在不带那一格的那些元素上会拿到 KeyError —— 那不是"这个字段没有词表"，是读数与事实不符。
@@ -1444,7 +1444,7 @@ def _undeclared_top_level(returns: str, obs: Observation) -> list[str]:
 def test_no_tool_returns_a_top_level_key_it_does_not_declare(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """    补上 `SUBSET_CHECK_SCOPE` 的第一个盲区：实跑给了、而声明没提的键。
+    """补上 `SUBSET_CHECK_SCOPE` 的第一个盲区：实跑给了、而声明没提的键。
     ## 为什么这一条值得存在（2026-10-15 更正了一条我自己的错判）
     我此前判它"按比例不动"，依据是"声明不全只会让调用方少看到字段"。那句的后果算轻了：`tools/base.py:721` 逐字 `description = summary + "\\n返回：" + returns`⇒
     `returns` 会拼进 function-calling 的 `description`，也就是模型看得到。模型读到的就是这一串键；声明里没有的字段，它不知道存在，于是不会用。

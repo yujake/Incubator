@@ -224,7 +224,7 @@ def test_secretary_prescreens_and_only_engages_on_alarm(tmp_path: pathlib.Path):
 
 def test_secretary_tool_names_fallback_uses_the_registry_it_can_build(
         tmp_path: pathlib.Path):
-    """    判据（2026-10-04 主控探针实测的缺陷）：`registry=None` 时 fallback 必须带 `store`。
+    """判据（2026-10-04 主控探针实测的缺陷）：`registry=None` 时 fallback 必须带 `store`。
 
     改前：没有 `registry` 时 fallback 是 `build_registry()`（不带 `store`）——实测 68 件真名，而
     `fs.read` 不在里面；`build_registry(store=...)` 是 81 件、`fs.read` 在里面。后果是真名被判成错名：任何
@@ -1093,7 +1093,7 @@ def test_rework_inbound_runs_through_the_inbound_hook(tmp_path: pathlib.Path):
 
 
 def test_declarations_candidates_is_one_shared_judgement_used_by_prescreen(tmp_path):
-    """    `R7-⑭` ②：`declarations_candidates` 是内部 helper —— 直接钉转发与边界。
+    """`R7-⑭` ②：`declarations_candidates` 是内部 helper —— 直接钉转发与边界。
 
     它给谁用（现算：三处引用全在 `secretary.py` 自己内部 `:401` / `:407` / `:624`）：`Secretary.prescreen()`（动作错名 / 工具错名的并列候选）
     与`Secretary.optimize_outbound()`（把候选交给 `judge` 做判断）。它自己不是生产入口，生产路径是 `AgentLoop._outbound_hook` →

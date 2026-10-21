@@ -165,7 +165,7 @@ def test_artifact_path_fallback_never_lands_in_the_repo(monkeypatch):
 
 
 def test_the_old_fallback_path_is_no_longer_a_live_file_in_the_repo():
-    """    负控（`c-11` / F8）的「前提」：旧回退路径已经不是一个活着的仓库文件。
+    """负控（`c-11` / F8）的「前提」：旧回退路径已经不是一个活着的仓库文件。
 
     改前这条要的是"它确实被 git 跟踪"—— 那是为了证明"回退到它会改仓库状态"这个缺陷成立。F8（`draft/52`）把那个过期产物删掉了（`rules_run` 只列到 R010、`scanned` 停在
     52/79、R004/R006 已退休、R009 那条 error 今天不存在 —— 自证过期四点），于是这条负控的对象换了（它自己的 docstring 就要求"对象换了就回来重新校准"）：

@@ -89,7 +89,7 @@ def test_readonly_exception_is_not_a_blank_cheque():
 
 
 def test_conditional_write_cannot_silently_disappear():
-    """    裁决 3 的判据：C 的条件性写必须留在写集里，且不许静默消失。
+    """裁决 3 的判据：C 的条件性写必须留在写集里，且不许静默消失。
 
     这条断言的作用是：有人把 `agent_c._submit_gap_requests` 删掉（或把`gaps(submit_requests=True)` 的写入面挪走）时，这条测试会红
     ——而不是让"只读角色的写面"悄悄变窄，然后某天有人以为 C 从不写。
@@ -195,7 +195,7 @@ def test_unknown_edge_target_is_rejected():
 
 
 def test_negative_control_missing_a_role_in_the_conductor_edges_is_rejected():
-    """    负控（`FINAL-R4-01`）：主控够不到某个角色（值少一个）⇒ 能力层自家判据必须炸。这一条钉的是"键集判据看不见的那一半"：`set(ALLOWED_EDGES) >= set(S.ROLES)`只问"每个角色有没有
+    """负控（`FINAL-R4-01`）：主控够不到某个角色（值少一个）⇒ 能力层自家判据必须炸。这一条钉的是"键集判据看不见的那一半"：`set(ALLOWED_EDGES) >= set(S.ROLES)`只问"每个角色有没有
     出边条目"，不问"主控能不能够到每一个角色"。实测（R4 批）：把 `ALLOWED_EDGES["M"]` 写成 7 元字面量后，按权限相关的 7 个测试文件跑子集全绿（守点在别处）。
 
     ## 2026-10-10 口径更新（裁定第 4 条之后）+ 2026-10-14 的第二次收紧
@@ -455,7 +455,7 @@ def test_unknown_role_and_unknown_action_are_different_refusals():
 
 
 def test_summoning_the_conductor_is_a_forbidden_edge_not_an_unknown_action():
-    """    `G-11`：召唤主控必须报 `forbidden_edge`，而不是 `unknown_action`。
+    """`G-11`：召唤主控必须报 `forbidden_edge`，而不是 `unknown_action`。
 
     ## 为什么这条断言换过 reason（这是断言错，不是实现错）
 
@@ -485,7 +485,7 @@ def test_forbidden_edge_c_to_b():
 
 
 def test_the_refusal_names_who_can_relay() -> None:
-    """    判据（2026-10-13，无 Lean T2 的真机）：越权拒绝必须可行动。
+    """判据（2026-10-13，无 Lean T2 的真机）：越权拒绝必须可行动。
 
     真机现场（`projects/p6t2-research-20261012b`，t2b 步 9/10）：M 先按政策派了`A.run_once`（想让 A 转达 B 消化 13 条未处理的文献），A 回
     `no_pending_request`；M 于是试了一次直接派 B（brief 逐字"试直接派 B 以确认链路"）—— 拿到的是这一句`forbidden_edge`。旧的理由只说"这条边不在允许的边里"，没说那该找谁，
@@ -780,7 +780,7 @@ def test_estimate_write_conflict_accepts_action_spec():
 
 
 def test_waves_of_keeps_input_order_and_mutual_exclusion():
-    """    分波：波内写集互不相交，波内下标升序，且划分是确定性的。
+    """分波：波内写集互不相交，波内下标升序，且划分是确定性的。
 
     这里刻意不断言"摊平后的顺序 == 输入顺序"：贪婪装箱会把后面的调用塞进前面未满的波（输入 `(E,C,H,E,A)` ⇒ `[[0,1,2],[3,4]]`，摊平是 `0,1,2,3,4` 只是碰巧；换一组输入就会变，
     例如把 A 换成第二个 C会得到 `[[0,1,2,4],[3]]`）。跨波的顺序不重要 —— 结果合并顺序是由`scheduler.run_waves` 按下标写回 `out[i]` 保证的（见 I-10），

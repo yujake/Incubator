@@ -111,7 +111,7 @@ def test_client_from_env_reads_the_documented_env_names() -> None:
 
 
 def test_unwired_task_id_is_not_folded_into_a_fake_string(tmp_path) -> None:
-    """    判据（主控裁定 · B→A 需求单）：没接线的 `task_id` 原样透传 `None`，不折成字符串。
+    """判据（主控裁定 · B→A 需求单）：没接线的 `task_id` 原样透传 `None`，不折成字符串。
 
     ## 为什么这是三态问题而不是措辞问题
 

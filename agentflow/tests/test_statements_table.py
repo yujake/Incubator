@@ -116,7 +116,7 @@ def test_the_new_table_is_visible_to_the_generic_table_tools(store):
 
 
 def test_the_schema_reflection_is_jsonable(store):
-    """    只读工具的返回必须能被如实记录：`table.schema` 的 `default` 不许是行内对象。
+    """只读工具的返回必须能被如实记录：`table.schema` 的 `default` 不许是行内对象。
 
     ## 这条判据治的是真机上的一个"三跳断在第二跳"（2026-10-13，`p9-t1-nolean`）
 

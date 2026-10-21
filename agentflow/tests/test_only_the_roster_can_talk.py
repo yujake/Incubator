@@ -510,7 +510,7 @@ def _a_framework_stop_notice_gets_through(env: dict[str, Any]) -> None:
 
 
 def test_framework_notice_and_user_interjection_still_get_through(tmp_path: pathlib.Path):
-    """    判据⑤（反真空）：这次收紧不许把框架通报与用户插话一起打死。
+    """判据⑤（反真空）：这次收紧不许把框架通报与用户插话一起打死。
 
     三档各一条：
 

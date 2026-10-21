@@ -169,7 +169,7 @@ def rule_R001_bare_except_pass(root: Path) -> list[Finding]:
 
 
 def rule_R002_none_folds_to_empty(root: Path) -> list[Finding]:
-    """    `if <x> is None:` 之后两行内 `return []` / `return {}` —— 把"没做"折叠成"没有"。
+    """`if <x> is None:` 之后两行内 `return []` / `return {}` —— 把"没做"折叠成"没有"。
 
     这是本项目最贵的那个缺陷形态（`DESIGN-INTERACTIONS.md` §3.4）。允许例外：分支里同时出现 `checked`/`reason`/`raise` 的（说明它显式表达了"没做"）。一次校准：
     带伴生原因的返回不算折叠：真实假阳性：`tools/search_tools._literature_rows` 写
@@ -232,7 +232,7 @@ SAME_NAME_ALLOWED: dict[str, str] = {
 
 
 def _is_forwarder(path: Path, name: str) -> bool:
-    """    该模块里的 `name` 定义是不是一个转发（而不是一份独立实现）？判定（AST，够用即可）：
+    """该模块里的 `name` 定义是不是一个转发（而不是一份独立实现）？判定（AST，够用即可）：
     - 函数体在剥掉 docstring 与前导的 `import` 之后，只剩一条语句，
     且该语句是 `return <something>.name(...)` 或 `return name(...)`；
     - 或者函数体只有一条 `return <导入自别处的同名对象>`。为什么要自动识别转发：`agent_d.detect_contradictions` 是刻意的转发（"唯一权威实现已移到
@@ -331,7 +331,7 @@ def rule_R003_duplicate_public_defs(root: Path) -> list[Finding]:
 
 
 def rule_R004_registry_outside_tools(root: Path) -> list[Finding]:
-    """    在工具层之外直接构造 `ToolRegistry` —— 绕过装配期的角色校验。已退休（`P-1`，本函数不再产生 findings）：
+    """在工具层之外直接构造 `ToolRegistry` —— 绕过装配期的角色校验。已退休（`P-1`，本函数不再产生 findings）：
     这条规则的存在理由只有一条：`build_registry` 之外构造的注册表没有核过`roles ⊆ schema.ROLES`（`agent_d.install_d_tools` 因此静默少过 3
     个工具，`agent_e` / `agent_f` 的装配路径也一直带着这个缺口）。`P-1` 把判据下沉到`ToolRegistry.register*` 之后，"构造一张没核过角色的注册表"在结构上不可能
     ——判据跑在注册那一刻，覆盖所有入口。于是这条规则的判据面变成真空：它还能报的每一处都已经是合规代码。与其让它继续以 warning 的形式报"已知的、
@@ -347,7 +347,7 @@ def rule_R004_registry_outside_tools(root: Path) -> list[Finding]:
 
 
 def rule_R005_hardcoded_role_list(root: Path) -> list[Finding]:
-    """    写死完整角色名单的第二份副本（FC-03）。
+    """写死完整角色名单的第二份副本（FC-03）。
 
     ## 判据的校准（这条规则被改过一次）
 
@@ -376,7 +376,7 @@ def rule_R005_hardcoded_role_list(root: Path) -> list[Finding]:
 
 
 def rule_R006_read_tool_touches_network(root: Path) -> list[Finding]:
-    """    `side_effect="read"` 的文件里出现网络/子进程/模型下载调用。这条规则的校准（被改过一次）：第一版是逐行报 warning，在真实代码上产生 19 条 warning，散落在`search_tools` /
+    """`side_effect="read"` 的文件里出现网络/子进程/模型下载调用。这条规则的校准（被改过一次）：第一版是逐行报 warning，在真实代码上产生 19 条 warning，散落在`search_tools` /
     `ocr_tools` / `verify_tools` / `table_tools` / `agent_c` 里。问题在于判据是文件级共现：一个文件里只要既有 `side_effect="read"` 又有`subprocess`（哪怕那个
     `read` 工具跟网络毫无关系），就会命中。19 条 warning 里绝大多数是这种无关共现 —— 而噪音会让整条规则被忽略。所以改成每个文件一条、级别 `info`：它交付的是"去这个文件里核一下具体那个工具"这个指针，而不是一个缺陷判定。
     真正的缺陷判定由人看过之后写进`DEVELOPMENT.md` 的清单，或者由工具层自己的测试断言（`test_tools_search_ocr.py`里对 `search.providers` 的 `side_effect` 断言就是那种形态）。
@@ -430,7 +430,7 @@ def _load_vocab_census():
 
 
 def rule_R011_dead_vocab(root: Path) -> list[Finding]:
-    """    受控词表里的死取值：登记了、而 `src/` 里找不到产出点（`G-26` 第二步）。
+    """受控词表里的死取值：登记了、而 `src/` 里找不到产出点（`G-26` 第二步）。
     ## 两栏分开、级别不同（`P-22` / `P-23` 的裁定）
     登记表只有一处（`tools/vocab_census.py` 的 `RESERVED_VALUES`），而普查把它读成两栏：
     | 栏 | 含义 | 级别 | 为什么这个级别 |
@@ -519,7 +519,7 @@ def rule_R011_dead_vocab(root: Path) -> list[Finding]:
 
 
 def rule_R007_missing_docstring(root: Path, *, strict: bool = False) -> list[Finding]:
-    """    公开函数/方法缺 docstring。
+    """公开函数/方法缺 docstring。
     ## 这个"数"为什么不能是一个全局数字（校准）
     第一版只打印 `公开函数 497 个，其中 188 个没有 docstring` —— 一个不可行动的数字：它既没说是哪些文件，也没说"新写的函数该不该补"。而 `DEVELOPMENT.md` §2.4是一条成文的规则（"每个公开函数必须有
     docstring 且含'为什么'段落"）。一条成文的规则配一个不可行动的数字，等于这条规则没有门。
@@ -574,7 +574,7 @@ def rule_R007_missing_docstring(root: Path, *, strict: bool = False) -> list[Fin
 
 
 def rule_R008_scripts_without_exit_code(root: Path) -> list[Finding]:
-    """    `scripts/` 下的脚本没有 `sys.exit` / `raise SystemExit`。参考体例的教训："未报错"被误读为"无问题"（多数脚本不设退出码，于是 5 行 ~5100 字的假阴性没人发现）。
+    """`scripts/` 下的脚本没有 `sys.exit` / `raise SystemExit`。参考体例的教训："未报错"被误读为"无问题"（多数脚本不设退出码，于是 5 行 ~5100 字的假阴性没人发现）。
     检查脚本必须有退出码。
 
     ## 为什么分两级（`scripts/` 是 error，仓库根的 `tools/` 是 warning）
@@ -919,7 +919,7 @@ def _r010_markers_reachable(
 
 
 def rule_R010_external_axis_mismatch(root: Path) -> list[Finding]:
-    """    声明与代码在 `external` 这根轴上不符（R006 的对偶）。
+    """声明与代码在 `external` 这根轴上不符（R006 的对偶）。
     R006 问的是"声明 `read`、实际联网/起进程"，但判据是文件级共现、还要求同文件里有 `side_effect="read"` 的声明 ⇒ `src/agentflow/tools/search_tools.py` 里三个真发
     HTTP 的 `network` 工具一次都不出现（`P-13` §10 第 5 条）。R010 改按工具判：读出每个 `ToolSpec` / `@tool` 的声明，从 handler 按名字解析转发（深度上限 4）。
     三条子规则各问一个方向：R010-a 声明 `external != "exec"` 而链里起子进程 ⇒ error（"声明与代码不符"的确定形态，决定审批与沙箱是否生效）；R010-b 声明 `egress` 而链里看不到网络 ⇒
@@ -1200,7 +1200,7 @@ def _r009_mask_code(text: str) -> str:
 
 
 def _r009_scan(text: str) -> tuple[list[tuple[int, str]], int]:
-    """    扫一个源文件 ⇒ `([(行号, 装饰种类)], 扫到的注释/文档串个数)`。
+    """扫一个源文件 ⇒ `([(行号, 装饰种类)], 扫到的注释/文档串个数)`。
 
     ## 第二个返回值为什么必须返回
 
@@ -1263,7 +1263,7 @@ def _r009_scan(text: str) -> tuple[list[tuple[int, str]], int]:
 
 
 def rule_R009_decoration_in_comments(root: Path) -> list[Finding]:
-    """    注释与 docstring 里出现 Markdown 强调标记或 emoji。源码注释不会经过渲染器。写在里面的成对星号与 emoji，到了读者眼里就是一堆符号 —— 它表达的不是强调，而是"这段文字是被生成出来的"。这类标记一旦出现就会扩散：下一段注释照抄上一段的写法，
+    """注释与 docstring 里出现 Markdown 强调标记或 emoji。源码注释不会经过渲染器。写在里面的成对星号与 emoji，到了读者眼里就是一堆符号 —— 它表达的不是强调，而是"这段文字是被生成出来的"。这类标记一旦出现就会扩散：下一段注释照抄上一段的写法，
     几十个文件之后就成了默认风格。所以它值得一条机器可查的规则，而不是依赖每次 code review 都有人提。禁改区（FC-27）之外的文件，AI 可以改，这条规则必须挡住回归，所以是 `error`。禁改区之内的文件（`dedup.py` / `store.py` /
     `release_check.py` 等）按 FC-27 只能由人编写或人逐行走查 —— 对它们报 `error` 会造出一条永远红的灯：它只能靠人去改那些人专属文件才能变绿，而每个文件的改动各需要 2 名 reviewer。
     一条永远红的门与一条永远绿的门一样没有信息量（本项目 R001/R006 都栽在噪音上），所以区内只报一条汇总 `info`：能看见、不阻塞，并列出要清哪几个文件。在真实树上试过四类候选，命中量与误报如下（131 个 `.py`，8167 个注释/文档串）：成对星号强调：
@@ -1430,7 +1430,7 @@ def _r012_violations(tree: ast.Module) -> list[ast.Call]:
 
 
 def rule_R012_write_text_newline(root: Path) -> list[Finding]:
-    """    编排层里"不做行尾控制就写文本"的调用点（`G-42` 的机器判据，`c-12`）。
+    """编排层里"不做行尾控制就写文本"的调用点（`G-42` 的机器判据，`c-12`）。
 
     这条规则为什么存在（而不是一条注释）：`tools/release_all.py` 的注释引用了一条禁令 —— `G-42：禁止 Path.write_text()` ——而全仓 grep 显示 `RULES` 里当时只有
     R001–R011，没有任何一条叫 G-42。也就是说：那条"被引用的禁令"在门里查不到，读者以为有机器防线，实际只有一段散文。散文不是判据 —— 它随文件一起漂，而漂的方向永远是"没人再记得它"。

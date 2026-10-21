@@ -397,7 +397,7 @@ def test_the_untracked_draft_gap_is_a_visible_state() -> None:
 
 
 def test_the_draft_family_resumes_as_soon_as_draft_is_tracked_again() -> None:
-    """    守卫：`draft/` 一旦重新被跟踪，这一族的 skip 必须立刻收回。
+    """守卫：`draft/` 一旦重新被跟踪，这一族的 skip 必须立刻收回。
 
     为什么需要它：`pytest.skip` 是"这一族当前不可判"的临时形态，不是常态 ——没有这条守卫，`draft/` 哪天被重新跟踪（或换个名字重新入库），上面两条判据会继续 skip，
     而"整族睡着"与"整族绿着"在报告里长得一样（本仓库反复踩的坑）。

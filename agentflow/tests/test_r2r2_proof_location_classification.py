@@ -72,7 +72,7 @@ def test_the_classifier_gives_the_declared_kind(loc: str, want: str) -> None:
 
 
 def test_the_two_call_sites_agree_on_every_case(ws: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """    交叉断言（`R2R2-R1` 的判据）：写入期与事后门对同一输入必须同分类。
+    """交叉断言（`R2R2-R1` 的判据）：写入期与事后门对同一输入必须同分类。
 
     要判的不是"两处结论相同"（处置本来就不同），而是分类相同。
 

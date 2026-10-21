@@ -309,7 +309,7 @@ def _src_text(rel: str) -> str:
 
 
 def _called_in_production(symbol: str) -> list[str]:
-    """    `symbol` 在生产面（`src/agentflow` 的 py）被调用的每一处。
+    """`symbol` 在生产面（`src/agentflow` 的 py）被调用的每一处。
 
     两种调用形态都要认（第一版只认第一种，于是把 `candidate_tool_names` 误报成"死的"）：属性调用 `.symbol(` —— 例如 `self.secretary.prescreen(...)`；
     2. 裸调用 `symbol(` —— 例如 `from .tools.base import candidate_tool_names` 之后的直接调用。

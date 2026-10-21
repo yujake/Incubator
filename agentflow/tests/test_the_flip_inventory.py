@@ -93,7 +93,7 @@ def test_the_flip_inventory_matches_the_tree():
 
 
 def test_the_inventory_is_not_vacuous():
-    """    反真空：四个模式都必须真的扫到东西（否则"清单一致"是在比两个空集）。
+    """反真空：四个模式都必须真的扫到东西（否则"清单一致"是在比两个空集）。
 
     为什么要单列：`test_the_flip_inventory_matches_the_tree` 判的是"登记 == 盘上"，而四个空清单与四个空盘上扫描同样相等 —— 于是整个 `_scan` 坏掉（正则写错、
     目录找不到、文件被排除）时，那张表会以"全部一致"的形式亮绿。这里钉住每一节至少扫到一处，于是"扫不到东西"与"扫到了、结果干净"分得开。

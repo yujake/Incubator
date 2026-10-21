@@ -205,7 +205,7 @@ def _content_values(payload: Mapping[str, Any]) -> list[Any]:
 
 def _boundary_problems(original: Mapping[str, Any],
                        washed: Mapping[str, Any]) -> list[str]:
-    """    判据 ④：洗格式没有越界（`draft/90` §1.2 + `draft/53` §2 的两条红线）。
+    """判据 ④：洗格式没有越界（`draft/90` §1.2 + `draft/53` §2 的两条红线）。
 
     四条，逐条对着"可以洗什么 / 一个字不许动什么"：值逐字相同：内容值的多重集不变 —— 不许多出一个（"不静默补默认值"）、
     不许少一个（"不替它删"）、不许改一个（"不改结论/证据"）；

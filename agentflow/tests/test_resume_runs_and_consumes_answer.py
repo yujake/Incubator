@@ -93,7 +93,7 @@ def test_the_answer_reaches_the_resumed_round_prompt(tmp_path):
 
 
 def test_resuming_without_an_answer_does_not_invent_one(tmp_path):
-    """    反真空（按"停着"的新契约改过）：没答就 `resume=True` ⇒ 「根本不开下一轮」。
+    """反真空（按"停着"的新契约改过）：没答就 `resume=True` ⇒ 「根本不开下一轮」。
 
     ## 这条判据为什么改（`draft/37` §72，用户裁定"问了就停着"）
 

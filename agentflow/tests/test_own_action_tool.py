@@ -181,7 +181,7 @@ def test_the_injected_tool_writes_through_the_real_implementation(tmp_path):
 
 
 def test_without_the_injection_the_child_is_back_to_writing_tables_by_hand(tmp_path, monkeypatch):
-    """    反负控：把注入关掉 ⇒ 这一趟两条路都断（正路没有、野路被拒）。
+    """反负控：把注入关掉 ⇒ 这一趟两条路都断（正路没有、野路被拒）。
     ## 这一条的口径在 2026-10-19 晚换过（`projects/mp2` 的真机读数）
     改前它断的是"关掉注入之后 `table.create` 那条路真的走得通" —— 那时野路还开着，于是"绿是注入带来的"用"手写表落了库"来证明。
     现在野路被`store.direct_write_refusal` 受控拒绝（`mp2-7.jsonl` 第 97 行就是它的真机形态），所以本判据改成更强的那一版：
@@ -228,7 +228,7 @@ def test_without_the_injection_the_child_is_back_to_writing_tables_by_hand(tmp_p
 # 负控 = 未注册名（`own_not_registered_thing`）必须 `unknown_tool`、`aliased_from` 为空 —— 只测正控的话
 # "宽映射"与"窄映射"长得一模一样，这一条才是分辨率所在。
 def test_the_underscored_advertised_name_reaches_the_same_action_and_nothing_else(tmp_path):
-    """    正控：带下划线的广告名映回同一件真实现；负控：没注册的名字必须 `unknown_tool`。为什么两条必须写在同一条里：它们守的是同一张表的两侧（`face.names` 里有什么 /没有什么）。分两条写时，"正控绿、
+    """正控：带下划线的广告名映回同一件真实现；负控：没注册的名字必须 `unknown_tool`。为什么两条必须写在同一条里：它们守的是同一张表的两侧（`face.names` 里有什么 /没有什么）。分两条写时，"正控绿、
     负控也绿"无法排除"负控那一步其实根本没跑到"—— 这里两步出自同一趟的同一个注册表，读数可以直接对起来。
 
     ## 剧本为什么是三条回复（第二条会"多花"一次调用）

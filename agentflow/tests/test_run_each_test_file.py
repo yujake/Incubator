@@ -213,7 +213,7 @@ def test_a_file_that_really_passed_alongside_an_xfail_is_still_ok() -> None:
 
 
 def test_the_xfail_only_bucket_is_its_own_registered_state() -> None:
-    """    `R6-7` 工具侧（本批修好）：整文件 xfail 单列一档 `all_xfail`，措辞不许说"一个用例都没有"。
+    """`R6-7` 工具侧（本批修好）：整文件 xfail 单列一档 `all_xfail`，措辞不许说"一个用例都没有"。
 
     这一条原来钉的是改前形态（`status == "no_tests"`），而它的 docstring 逐字写着"修法落在 `tools/run_each_test_file.py`，不归本批次；哪天它改了，这条会红，
     逼人回来改成新桶名" —— 本批就是那一天。改前的缺陷有两半：桶错了：`no_tests` 的语义是"这个文件一个用例都没有"，而整文件 xfail 的文件

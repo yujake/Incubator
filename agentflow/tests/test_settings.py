@@ -552,7 +552,7 @@ def test_the_scanner_has_teeth_on_every_form_of_the_dead_path(tmp_path: Path) ->
 
 
 def test_the_machine_path_scanner_survives_a_backslash_storm() -> None:
-    """    守卫（2026-10-07 的真事故）：连续多反斜杠不许让这条判据回溯到卡死。
+    """守卫（2026-10-07 的真事故）：连续多反斜杠不许让这条判据回溯到卡死。
 
     改前的正则里有一个"能匹配空的内层量词套在外层量词里"（`(?:[^\\/…]*[\\/]+)*?`）。形态：在 `temp/g5-mp3.txt`（5,161 字符 / 576 个反斜杠，
     内容是`\\\\Local\\\\\\\\Temp\\\\\\\\…` 这种多反斜杠路径）上，单条判据 >45 s 不返回—— 而全量门会跑这条判据，所以那等于"把门钉死"。
@@ -813,7 +813,7 @@ def test_the_projects_dir_setting_is_strict_about_shapes(
 
 
 def test_the_suite_pins_the_lean_switch_on() -> None:
-    """    守卫（业主 2026-10-12 翻缺省之后）：整趟套件跑在「Lean 形式化开着」那一档。
+    """守卫（业主 2026-10-12 翻缺省之后）：整趟套件跑在「Lean 形式化开着」那一档。
 
     两件事必须分开、各自有判据：
 
@@ -832,7 +832,7 @@ def test_the_suite_pins_the_lean_switch_on() -> None:
 
 
 def test_the_suite_pins_the_machine_settings_away() -> None:
-    """    守卫（2026-10-07 的全量门真事故）：判据不许读到本机那份设置文件。
+    """守卫（2026-10-07 的全量门真事故）：判据不许读到本机那份设置文件。
 
     事实：设置层落地之后，本机真有 `agentflow/settings.json`（里面有真的 API key 与这台机器的 Lean / Mathlib 落点）。而一批判据断言的恰恰是"没配的时候"的分支——
     `run` 没 key ⇒ 退出码 2 且报 `no_key`、`detect_verifier` 报"没装"、"build 期不碰模型" —— 它们在本机那份文件面前全部变红（实测那趟门 12 条红）。另外，按老习惯

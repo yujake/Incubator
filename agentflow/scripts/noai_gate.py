@@ -543,7 +543,7 @@ def check_manifest_consistency(
 
 @dataclass(frozen=True)
 class LedgerReconciliation:
-    """    清单与台账的差集对账结果（只读，由 `--check-ledger` 呈现）。
+    """清单与台账的差集对账结果（只读，由 `--check-ledger` 呈现）。
 
     字段分成三组：两个集合的读数（`manifest_paths` / `ledger_entries`）、两个方向的差集（`pre_registered` +
     `missing_registration` 是"清单有而台账无"，`ledger_only` 是"台账有而清单无"）、以及给人读的 `explanation`。
@@ -602,7 +602,7 @@ def check_manifest_ledger(
     ledger_path: str | Path | None = None,
     root: str | Path | None = None,
 ) -> LedgerReconciliation:
-    """    只读对账：清单里的每条唯一路径，台账里都要有对应条目。
+    """只读对账：清单里的每条唯一路径，台账里都要有对应条目。
 
     为什么只查一个方向（刻意不要求对称）：台账是只增的历史记录，清单是今天的保护范围。台账里有而清单里没有的条目是正常的：路径可以退出清单（保护范围收窄）、也可以改名，而历史记录照实留着才是对的。要求两个集合相等，
     会把"保护范围收窄"这件正常的事报成缺陷，而它给出的处置动作（删历史条目）反而是破坏性的。所以那个方向只作信息打印。差集的两个类别（`H-11` 要的机械判据）：盘上没有这个文件 ⇒
@@ -707,7 +707,7 @@ def check_manifest_ledger(
 
 
 def _path_candidates(path: str, root: Path | None) -> list[str]:
-    """    把一条改动路径化成若干"可拿来与 glob 比"的候选串。
+    """把一条改动路径化成若干"可拿来与 glob 比"的候选串。
 
     为什么需要多条候选：调用方给的可能是绝对路径（`D:/repo/src/a.py`），而清单里的 glob 是仓库相对的（`src/*.py`）。如果只比原样，绝对路径永远不命中 ——
     那是一个静默的假阴性（"没命中"读成"没问题"）。
@@ -1047,7 +1047,7 @@ def _resolve_evidence_file(rel: str, base: Path) -> Path:
 
 
 def _receipt_digest(record_without_hash: dict) -> str:
-    """    一条回执的自身 hash：对它除 `hash` 之外的规范化 JSON 求 sha256。
+    """一条回执的自身 hash：对它除 `hash` 之外的规范化 JSON 求 sha256。
 
     ## 为什么这里不 import `agentflow.canonical`（`R-33` 的最终口径）
 
@@ -1106,7 +1106,7 @@ def check_receipt_chain(
     root: str | Path | None = None,
     expect: Sequence[tuple[str, str]] = (),
 ) -> dict:
-    """    读回执链并重算整条链。返回 `{"exists", "records", "problems", "tail", "covered"}`。
+    """读回执链并重算整条链。返回 `{"exists", "records", "problems", "tail", "covered"}`。
 
     `expect` 是 `(path, sha256)` 对：每一条都必须在链里出现过一次（精确到"批准/审计的是这一版"），否则 `covered` 为 False。
 
@@ -1217,7 +1217,7 @@ def append_receipt(
 def _check_audit_evidence(
     audits: Sequence["ReviewAudit"], repo: str | Path | None, target_text: str = ""
 ) -> dict:
-    """    逐条核对机审的证据锚：证据文件在不在、内容 hash 对不对。返回值 `{"checked": [...], "problems": [...]}`，`problems` 非空 ⇒ 调用方判 `unknown`。
+    """逐条核对机审的证据锚：证据文件在不在、内容 hash 对不对。返回值 `{"checked": [...], "problems": [...]}`，`problems` 非空 ⇒ 调用方判 `unknown`。
 
     ## 为什么这一层必须在判定时再跑一次
 
@@ -1285,7 +1285,7 @@ def _check_audit_evidence(
 
 @dataclass(frozen=True)
 class Reviewer:
-    """    一次已完成的人工逐行走查。`scope` 必须具体到符号或行区间。
+    """一次已完成的人工逐行走查。`scope` 必须具体到符号或行区间。
 
     「写"看过了"等于没看」—— 与清单理由"只在一边写理由，等价于另一边没有理由"同一个道理。
 
@@ -1349,7 +1349,7 @@ def reviewer_anchor_problem(reviewer: Mapping[str, Any] | Reviewer, *, repo: Pat
 
 @dataclass(frozen=True)
 class ReviewAudit:
-    """    一次机器审计的记录（与 `Reviewer` 平行的那条通路，两者永不混写）。
+    """一次机器审计的记录（与 `Reviewer` 平行的那条通路，两者永不混写）。
     ## 为什么要有这个类型（口径变更，2026-09-26 由所有者批准）
     FC-27 原本只认"2 名人逐行走查"（`Reviewer`）。所有者批准了一条并行通路：多个子代理从多个维度独立审计、全部未发现任何问题 ⇒ 视为通过。这条通路不是"AI
     代替人签字"：`reviewers` 数组仍然只能由人写，审计记录写进 `audits` 数组，两者在台账里分列、在输出里分行，读门的报告永远能看出"这一条是靠人签的、还是靠机审的"。
@@ -1426,7 +1426,7 @@ class LedgerEntry:
 
     @property
     def clean_audits(self) -> tuple[ReviewAudit, ...]:
-        """        清白的审计：无 finding、且 sha256 与本条一致、且负控与独立性声明合格、且证据 hash 非空。
+        """清白的审计：无 finding、且 sha256 与本条一致、且负控与独立性声明合格、且证据 hash 非空。
 
         六项缺一不可：`sha256` 不对 = 审的不是这一版；负控为空 = 没证明有能力发现问题；有 finding = 它其实发现了问题（那这条通路就不该放行）；`evidence_sha256` 为空 =
         这条记录没法核对证据（`temp/verify-audit-forge.txt`那次伪造复现就发生在只检查"非空"的版本上）；`at` 读不出 / 落在未来 = 时间戳不可信（`R5-R1b-7`）；署名者未知时
@@ -1497,7 +1497,7 @@ class LedgerEntry:
 
     @property
     def distinct_reviewers(self) -> tuple[str, ...]:
-        """        不同姓名的 reviewer —— 按 :func:`normalize_subject` 归一后去重计。
+        """不同姓名的 reviewer —— 按 :func:`normalize_subject` 归一后去重计。
 
         批准数按不同姓名计，不按记录条数计：同一个人签两次不是"2 名 reviewer"，而 FC-27 要求 2 名正是为了拿到互相独立的复核（1 名 reviewer 与"作者自己再看一遍"在结构上无法区分）。
         重复的签名记录照实保留（它是事实），只是不增加批准数。
@@ -1637,7 +1637,7 @@ def _content_chunks(text: str) -> tuple[set[str], int, int]:
 
 
 def negative_control_problem(text: str) -> str:
-    """    负控内容的判据：合格返回空串，否则返回"为什么不合格"。写入侧（`record_audit`）与判定侧（`clean_audits`）共用这一处实现 ——两处各写一份就会出现"写得进去、判不出来"，那是本项目记过的老毛病。
+    """负控内容的判据：合格返回空串，否则返回"为什么不合格"。写入侧（`record_audit`）与判定侧（`clean_audits`）共用这一处实现 ——两处各写一份就会出现"写得进去、判不出来"，那是本项目记过的老毛病。
     判据（`R5-R1b-6` 改的就是这里）——四条都要满足：长度 ≥ :data:`NEGCTL_MIN_CHARS`（`H-1c` 的原始门，保留）；2. 出现 :data:`NEGCTL_MARKERS` 之一：拿什么去比（改前那一版 / 坏样本
     / 注入）；3. 出现 :data:`NEGCTL_OBSERVED_MARKERS` 之一：比出来看到了什么（`报红` / `被拒` / `失败` / `退出码`…）；4. 这段文字不是重复堆出来的（`_content_chunks`：不同片段 ≥:
     data:`NEGCTL_MIN_DISTINCT_CHUNKS`、同一片段重复 ≤:data:`NEGCTL_MAX_CHUNK_REPEATS` 次、不同片段占比 ≥ :data:`NEGCTL_MIN_CHUNK_RATIO`）。为什么第 1、2
@@ -1730,7 +1730,7 @@ _INVISIBLE_FILLERS = ("\u115f", "\u1160", "\u3164", "\uffa0", "\u2800", "\u00ad"
 
 
 def normalize_subject(name: str) -> str:
-    """    身份字符串的归一化（`H-1a` / `R5-R1b-2` / `R5-R1b-3` / `R6-R1d-7`）：唯一一处实现。做五件事，每一件都对应一条实测过的绕过：`NFKC` ——
+    """身份字符串的归一化（`H-1a` / `R5-R1b-2` / `R5-R1b-3` / `R6-R1d-7`）：唯一一处实现。做五件事，每一件都对应一条实测过的绕过：`NFKC` ——
     全角/半角同形字（`ＲＥＡＵＤＩＴ５` ⇒ `REAUDIT5`）；2. 去掉 `Cf`（零宽/方向控制/BOM）与 `Mn` / `Me`（组合记号：变体选择符`U+FE0F`/`U+FE0E`、组合用圈
     `U+20E3`、组合用重音 `U+0301`）—— `R5-R1b-2`：只去 `Cf` 时，`reaudit5-H` 与 `reaudit5-H`+`U+FE0F` 是肉眼同一个名字却算出两名审计者，而
     `_mentions_word` 又认它们（`U+FE0F` 不属于 `[0-9a-z_]`）⇒写入侧不拒、判定侧把一个人算成两名；3. 控制字符（`Cc`）直接丢掉，`Zs`/`Zl`/`Zp`（各种空白与分隔符）
@@ -1869,7 +1869,7 @@ def _assignment_target_names(node: object) -> set[str]:
 
 
 def _identifiers_of(text: str) -> set[str]:
-    """    被审对象里出现的标识符集合（`R5-R1b-5` 修正后的口径）。修的是什么：这里曾经是纯词法扫描——`re.finditer(r"[A-Za-z_][A-Za-z0-9_.]{2,}")`把 Python
+    """被审对象里出现的标识符集合（`R5-R1b-5` 修正后的口径）。修的是什么：这里曾经是纯词法扫描——`re.finditer(r"[A-Za-z_][A-Za-z0-9_.]{2,}")`把 Python
     关键字与内建名也算成标识符（实测 `import` / `return` / `int` / `def` /`math` 全算），于是
     `--audit-scope 'import return int'` 能过`_evidence_cross_check` ③ —— 那三个词与"这次审计覆盖了哪些符号"毫无关系，而每个 `.py` 文件里都有它们。
     判据的强度因此从"自称覆盖的符号必须落在那个文件上"退化成"必须落在那类文件都会有的词上"。现在的口径分两层：被审对象是能被 `ast` 解析的 Python ⇒ 取定义处的名字：`def` / `class` /
@@ -1944,7 +1944,7 @@ def _observation_tokens(
     reuse_across: Sequence[str] | None = None,
     drop_self_scope: bool = False,
 ) -> list[str]:
-    """    一条 `scope` 里算作"观察面"的 token（`R6-R1d-5` 修正后的口径）。
+    """一条 `scope` 里算作"观察面"的 token（`R6-R1d-5` 修正后的口径）。
 
     两层过滤，两层都是变严：丢掉以文件后缀结尾的 token（`target.py` 是"被审对象的落点"，不是"覆盖了哪个
     符号"）—— 原口径，见 `_SCOPE_PATH_SUFFIXES`；
@@ -2007,7 +2007,7 @@ def _observation_key(
     reuse_across: Sequence[str] | None = None,
     drop_self_scope: bool = False,
 ) -> str:
-    """    一条审计的观察面标识（`R5-R1b-1`）：归一化后排序去重的符号 token 字符串。
+    """一条审计的观察面标识（`R5-R1b-1`）：归一化后排序去重的符号 token 字符串。
 
     为什么需要它：`counted_audits` 的键 `(evidence_path, evidence_sha256)` 只能证明"这不是同一个文件"，挡不住"同一份观察复制成 N 份、每份改一个字节"（实测：
     一名审计者用三份只差尾部空格的副本 + 3 个自填 `dimension` 就凑够了 3 个"维度"）。
@@ -2027,7 +2027,7 @@ def _disjoint_face_count(
     *,
     reuse_across: bool = False,
 ) -> int:
-    """    计入门槛的审计里，两两不相交的观察面最多能挑出几个（口径裁决①）。
+    """计入门槛的审计里，两两不相交的观察面最多能挑出几个（口径裁决①）。
 
     这就是"几次独立观察"的可判定读数。为什么不能只数"不同的观察面字符串"：`VALUE bump` 与 `VALUE` 是两个不同的字符串，却是两个相交的集合（后者是前者的子集）—— 它们是同一批符号的两种写法，
     不是两次独立观察。
@@ -2063,7 +2063,7 @@ def dimension_independence_problem(
     *,
     require: int = MIN_DISTINCT_DIMENSIONS,
 ) -> str:
-    """    `MIN_DISTINCT_DIMENSIONS` 的判据：那几个"维度"必须来自各自独立的观察面。
+    """`MIN_DISTINCT_DIMENSIONS` 的判据：那几个"维度"必须来自各自独立的观察面。
     它修的是 `R5-R1b-1`：`MIN_DISTINCT_DIMENSIONS` 数的是提交者自填的 `dimension`（受控词表里的一员），`c-17` 的 `counted_audits` 只挡"同一份文件重复计数"（键 = 归一化路径 + 内容
     hash），挡不住"同一份观察复制 N 份、每份改一个字节"（hash 各不相同）⇒ 一名审计者单独就能供满 3 个维度（`temp/reaudit5-R1b-solo.txt` 对照 B ⇒ approved），门槛退化成"≥2 个不同名字的字符串"。
     四条判据都机器可判定（合格返回空串）。0 一名审计者不能独占门槛：贡献维度最多的那一名，它的维度数超过 `max_share = max(1, ceil(require / 2))` ⇒ 报红（`require = 3` 时一人至多 2 个 ⇒ 3
@@ -2208,7 +2208,7 @@ def _parse_audit_at(at: str) -> _dt.datetime | None:
 
 
 def audit_timestamp_problem(at: str, *, now: _dt.datetime | None = None) -> str:
-    """    `at` 的判据（`R5-R1b-7`）：时间戳必须可解析、且不许来自未来。合格 ⇒ 空串。
+    """`at` 的判据（`R5-R1b-7`）：时间戳必须可解析、且不许来自未来。合格 ⇒ 空串。
 
     为什么要有它：`at` 曾经是整个通路里唯一一个"写了就信、读回不校验"的字段（实测：把门的时钟拨到 2099 写进去，`record_audit` 照收，判定侧从不读它）。
     台账里"谁在什么时候走查的"这句话因此在时间维度上没有下限 —— 对"这次审计是否发生在本轮冻结窗口内"这类问题，台账给不出可判定的答案。判据刻意只有两条（其余窗口留给外部锚，不在这里造）：必须能被
@@ -2245,7 +2245,7 @@ def audit_timestamps_not_monotonic(
     *,
     now: _dt.datetime | None = None,
 ) -> str:
-    """    一串审计的时间戳必须非递减（按盘上顺序）。合格 ⇒ 空串（`R6-R1d-3`）。
+    """一串审计的时间戳必须非递减（按盘上顺序）。合格 ⇒ 空串（`R6-R1d-3`）。
 
     为什么单条判据不够（`audit_timestamp_problem` 只管"能不能解析 / 是不是未来"）：三条审计的时间戳可以整体倒挂（先记 03:00、再记 02:00、最后记 01:00）而每一条都合规 —— 门照样
     `approved`，而输出里那串 `audit_timestamps` 会按写入顺序打成递减。对"这些审计是不是各自独立发生在本轮冻结窗口内"这类问题，倒挂的时间戳给不出可判定的答案（三条都在窗口内、
@@ -2639,7 +2639,7 @@ def evaluate_approval(
     repo: str | Path | None = None,
     receipt_log: str | Path | None = None,
 ) -> dict:
-    """    一条命中路径的批准判定。这是批准判据的唯一实现（FC-03）。判定顺序是刻意的（前一条胜过后一条）：台账自指 ⇒ `unapproved`（理由码 `ledger_self_approval`）——
+    """一条命中路径的批准判定。这是批准判据的唯一实现（FC-03）。判定顺序是刻意的（前一条胜过后一条）：台账自指 ⇒ `unapproved`（理由码 `ledger_self_approval`）——
     台账不能批准自己，哪怕它的 hash 一致、reviewers 也够。
     2. 台账里没有条目 ⇒ `unapproved` / `unregistered`（"从没登记"，与"登记过但版本漂了"分开）。
     3. 磁盘 hash 拿不到 ⇒ `unknown`（没查成；不猜）。
@@ -2930,7 +2930,7 @@ def check_approvals(
     root: str | Path | None = None,
     receipt_log: str | Path | None = None,
 ) -> GateResult:
-    """    命中禁改区之后，用 hash 台账判定"批准的是不是盘上这一版"。
+    """命中禁改区之后，用 hash 台账判定"批准的是不是盘上这一版"。
 
     判定逻辑（与 :func:`check_paths` 并列，不是它的替代）：先按 `check_paths` 取命中集。没有命中 ⇒ 原样返回 `clean`：
     台账读不读都不影响这个结论（台账只在需要它的时候才是必需的）。
@@ -3092,7 +3092,7 @@ def register_baseline(
     default_authored_basis: str = "inferred",
     now: _dt.datetime | None = None,
 ) -> tuple[Ledger, list[dict]]:
-    """    登记基线与刷新：写 `sha256` / `glob` / `category` / 摘要。绝不写 `reviewers`。
+    """登记基线与刷新：写 `sha256` / `glob` / `category` / 摘要。绝不写 `reviewers`。
 
     「登记」与「批准」是两个动作，不许合并（合并等于让 AI 自己给自己发批准）。本函数是登记路径的唯一实现：CLI 的 `--baseline` 与脚本化的基线建立都走它。刷新时的两条规则：内容 hash 变了 ⇒
     `reviewers` 清空。旧签名批准的是旧那一版，
@@ -3373,7 +3373,7 @@ def record_audit(
     receipt_log: str | Path | None = None,
     now: _dt.datetime | None = None,
 ) -> tuple[Ledger, dict]:
-    """    给某一条追加一个机器审计记录（第二条通路）。与 `add_approval` 的三处刻意不同：不校验 `--scope` 非空（审计有 `dimension` 就够具体了）；但仍然要求 `evidence` 与
+    """给某一条追加一个机器审计记录（第二条通路）。与 `add_approval` 的三处刻意不同：不校验 `--scope` 非空（审计有 `dimension` 就够具体了）；但仍然要求 `evidence` 与
     `negative_control` 非空 —— 后两者才是这条通路的信用来源。2. 允许记 `findings`：审计发现了问题就如实记下来，门会把这一条判成"不放行"并把 finding 原文列出来。不许把 finding 藏掉只记一次"通过"。
     3. 仍然绝不写 `reviewers`：两条通路分列，机器审计永远不冒充人。台账自指：与 `add_approval` 一样的拒绝（`c-19`）：目标路径就是台账自己时，本函数与 :
     func:`add_approval` 一样拒绝写入（`LedgerError`）。此前这条拒绝只有 `add_approval` 有，于是"往台账自己那条记录里追加一次审计"写得进去 —— 放行确实仍被
@@ -3657,7 +3657,7 @@ def _git_lines(repo: Path, argv: list[str]) -> tuple[list[str] | None, str]:
 
 
 def git_changed_paths(root: str | Path | None = None, *, since: str | None = None) -> tuple[list[str] | None, str]:
-    """    取改动集：已提交的 `since..HEAD` ∪ 未提交改动 ∪ 未跟踪新文件。
+    """取改动集：已提交的 `since..HEAD` ∪ 未提交改动 ∪ 未跟踪新文件。
     `paths is None` ⇒ 取不到（不在 git 仓库 / 没有 git / 命令失败）。调用方必须据此判 ``unknown``：取不到就是没查成，不是干净。
     ## 为什么不能只用 `git diff --name-only HEAD`（实测的两条绕过路径）
     1. 提交即隐身：它比的是"工作区/索引 vs HEAD" ⇒ 把禁改区改动提交掉之后
@@ -4260,7 +4260,7 @@ def _pin_utf8() -> None:
 
 
 def _suspect_paths_values(paths: Sequence[str] | None) -> list[str]:
-    """    挑出 `--paths` 里含逗号或换行的取值（`G-46`：它们会被静默读成一条路径）。
+    """挑出 `--paths` 里含逗号或换行的取值（`G-46`：它们会被静默读成一条路径）。
     ## 为什么这是一个假 clean 的入口（`G-38` 同族）
     `--paths` 是 `nargs="*"` ⇒ 逗号不是分隔符。整串 `"a.py,b.py"` 被当成一条路径，不匹配任何 glob ⇒ 门报 `clean(0)`。实测（`temp/G46-evidence.md`）：
     --paths "src/agentflow/schema.py,src/agentflow/verify.py"   → [clean] exit=0   ← 假 clean

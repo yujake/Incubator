@@ -682,7 +682,7 @@ def test_a_corrupt_legacy_file_makes_verify_fail_loudly(store, monkeypatch):
 
 
 def test_verify_reports_an_unreadable_view_instead_of_a_flood(clean_store, monkeypatch):
-    """    视图判不了 ⇒ `verify` 报一条 `concept_view_unreadable`，且它只报一次。
+    """视图判不了 ⇒ `verify` 报一条 `concept_view_unreadable`，且它只报一次。
 
     这一条钉两件事：判不了有它自己的码（不是"库里没有概念"），以及"满屏"的反面 ——一条读数而不是每行一条。用 `clean_store`（两条概念 + 一条关系）而不是空库：空库上"没有假红"是真空的，判据根本判不出东西。
 

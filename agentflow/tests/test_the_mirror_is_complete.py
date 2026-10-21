@@ -37,7 +37,7 @@ _CONCEPT_SPEC = {"file": "concepts.json", "row": S.Concept, "id_field": "concept
 
 
 def _pre_flip(monkeypatch) -> None:
-    """    把老表按落刀之前的形态装回 schema —— 只用于模拟过渡期，不是产品路径。
+    """把老表按落刀之前的形态装回 schema —— 只用于模拟过渡期，不是产品路径。
 
     为什么 `TABLES` 一处不够（四处都要装回去，缺一处模拟出来的就不是过渡期）：
 

@@ -181,7 +181,26 @@ def _find_node(tree: ast.AST, kind: str, name: str, head: str) -> ast.AST:
     return hits[0]
 
 
+def _byte_layout(source: bytes) -> list[int]:
+    """每一行起始字符的**字节**偏移（`ast` 的 `col_offset` 是 UTF-8 字节，不是字符）。"""
+    offsets = [0]
+    for line in source.splitlines(keepends=True):
+        offsets.append(offsets[-1] + len(line))
+    return offsets
+
+
 def apply_patch(entry: Mapping[str, Any]) -> str:
+    """把一个 docstring 换成 `entry["text"]`（转义、缩进、行尾全由本函数负责）。
+
+    两个必须做对的地方（都是真事故）：
+
+    1. **列偏移是 UTF-8 字节，不是字符**：Python 3.8+ 的 `col_offset` / `end_col_offset`
+       按字节算。拿它去切 `str`，只要那一行含中文，`tail_part` 就会取成空、
+       **把行尾换行吃掉**，于是收尾三引号与下一条语句粘成一行 → SyntaxError。
+       这里整段改在 **bytes** 上做（`_byte_layout` 给每行的字节起点）。
+    2. **先在内存里验证再落盘**：新源码必须能 `ast.parse`，且解析出的 docstring
+       值（`dedent` 后）逐字等于 `text`；任何一条不成立就 SystemExit，**不写盘**。
+    """
     path = Path(str(entry["file"]))
     if not path.is_file():
         raise SystemExit(f"{path}: 文件不存在（没查成，不是通过）")
@@ -189,39 +208,41 @@ def apply_patch(entry: Mapping[str, Any]) -> str:
     if b"\r\n" in raw:
         raise SystemExit(f"{path}: 落盘前就是 CRLF —— 先统一换行再来打补丁")
     source = raw.decode("utf-8")
-    tree = ast.parse(source)
-    node = _find_node(tree, str(entry["kind"]), str(entry["name"]), str(entry.get("head", "")))
+    node = _find_node(ast.parse(source), str(entry["kind"]), str(entry["name"]), str(entry.get("head", "")))
     body0 = node.body[0]
     value = body0.value
     assert isinstance(value, ast.Constant)
     text = str(entry["text"])
 
-    # 用"行号 + 列号"把旧字面量整段换掉（三引号本身在内）
-    lines = source.splitlines(keepends=True)
-    start_line = value.lineno - 1
-    start_col = value.col_offset
-    end_line = (value.end_lineno or value.lineno) - 1
-    end_col = value.end_col_offset or 0
-    indent = " " * start_col
-    new_block = literal(text, indent)
-    head_part = lines[start_line][:start_col]
-    tail_part = lines[end_line][end_col:]
-    body_lines = text.count("\n")
-    remainder = "".join(lines[end_line + 1:])
-    new_source = "".join(lines[:start_line]) + head_part + new_block + tail_part + remainder
+    starts = _byte_layout(raw)
+    abs_start = starts[value.lineno - 1] + int(value.col_offset)
+    abs_end = starts[(value.end_lineno or value.lineno) - 1] + int(value.end_col_offset or 0)
+    indent = " " * int(value.col_offset)
+    new_block = literal(text, indent).encode("utf-8")
+    new_source = raw[:abs_start] + new_block + raw[abs_end:]
 
-    path.write_bytes(new_source.encode("utf-8"))
-    # 写盘后立刻复核：值必须逐字等于 text（这条永远该成立 —— 序列化负责它）
-    got = ast.get_docstring(_find_node(ast.parse(new_source), str(entry["kind"]),
-                                       str(entry["name"]), text.strip().splitlines()[0].strip()
-                                       if text.strip() else ""), clean=False)
-    # 比较口径=`inspect.cleandoc`：**缩进是排版不是内容**（缩进块里的续行本来就要前缀缩进），
-    # 所以两边都先 cleandoc 再比 —— 这条断言永远该成立，序列化负责它。
+    # —— 先验后写：解析得出、值对得上，才落盘
+    try:
+        rebuilt = new_source.decode("utf-8")
+        tree = ast.parse(rebuilt)
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise SystemExit(f"{path} {entry['name']}: 生成的源码不合法（未写盘）：{exc}") from None
+    got = None
+    for node2 in ast.walk(tree):
+        if not isinstance(node2, DOC_OWNERS) or kind_of(node2) != str(entry["kind"]):
+            continue
+        if name_of(node2) != str(entry["name"]):
+            continue
+        got = ast.get_docstring(node2, clean=False)
+        break
+    # 比较口径 = `dedent`：缩进是排版不是内容（`inspect.cleandoc` 会 expandtabs，不能用）
     if dedent(got or "", indent) != text:
-        raise SystemExit(f"{path} {entry['name']}: 写回值与 text 不等（序列化出错）")
+        raise SystemExit(f"{path} {entry['name']}: 写回值与 text 不等（未写盘）")
+
+    path.write_bytes(new_source)
     if b"\r\n" in path.read_bytes():
         raise SystemExit(f"{path}: 写回后出现 CRLF（换行没显式指定）")
-    return f"ok   {path}: {entry['name']} 写入 {body_lines + 1} 行"
+    return f"ok   {path}: {entry['name']} 写入 {text.count(chr(10)) + 1} 行"
 
 
 # ---------------------------------------------------------------- 验证

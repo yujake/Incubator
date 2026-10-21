@@ -429,7 +429,7 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
 
 
 def test_facts_migration_must_leave_a_version_trace() -> None:
-    """    判据（事务三）：动 `STEP_VOLATILE_FACTS` 必须在 `PROMPT_VERSION` 上留痕迹。
+    """判据（事务三）：动 `STEP_VOLATILE_FACTS` 必须在 `PROMPT_VERSION` 上留痕迹。
 
     ## 这一条守的是"审计射程的边界"（不是"提示词文本"）
 

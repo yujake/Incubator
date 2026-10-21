@@ -206,7 +206,7 @@ def test_alloc_id_skips_the_occupied_id_when_the_table_is_declared(store: Store)
 
 
 def test_the_temp_name_is_unique_per_writer(store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
-    """    行为判据（`R3-7` 的修法）：真的观察 `os.replace` 的源路径，而不是读源码找子串。
+    """行为判据（`R3-7` 的修法）：真的观察 `os.replace` 的源路径，而不是读源码找子串。
 
     这是 `WinError 32` 的直接来源：旧版固定名 `<file>.tmp`，两个写者互抢。改前的判据是"读 `store.py` 的文本，断言里面含
     `os.getpid()` 与`threading.get_ident()`"——它连一行注释都能满足（重审实测：把临时名换回固定名、只在注释里写上这两个子串，这条 passes，而端到端那条

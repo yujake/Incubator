@@ -373,7 +373,7 @@ def test_p9_positive_control_zero_findings_is_pass_not_not_applicable():
 def test_p9_negative_control_a_truncated_created_at_is_in_scope(
     tmp_path: Path, created_at: str, tag: str
 ):
-    """    负控（A2，第 11 轮）：生效日常量的四个真前缀截断串都不许被豁免。
+    """负控（A2，第 11 轮）：生效日常量的四个真前缀截断串都不许被豁免。
 
     这四档是"旧口径与修复后口径结论相反"的全部位置：`created_at` 是常量的一个真前缀 ⇒ 纯字典序比较说它小于常量（⇒ 历史行 ⇒ 豁免），而契约的判据是"拿不到合法创建时刻就不能主张豁免"。
 

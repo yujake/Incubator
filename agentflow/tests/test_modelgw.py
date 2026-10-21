@@ -235,7 +235,7 @@ def test_scope_travels_with_the_reply_and_into_to_dict():
 
 
 def test_every_vocabulary_scope_is_accepted_but_other_is_not():
-    """    词表里的每一档都被接受；`other` 不是词表里的一档，所以必须被拒（`G-6`）。
+    """词表里的每一档都被接受；`other` 不是词表里的一档，所以必须被拒（`G-6`）。
 
     ## 为什么这条要单独写（改前的形态是错的）
 

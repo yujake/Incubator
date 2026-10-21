@@ -57,7 +57,7 @@ def _branch_strings(node: ast.AST) -> set[str]:
 
 
 def stop_reasons_in_source(src: str) -> set[str]:
-    """    从源码现扫「这一趟可能落成哪些 `stop_reason`」（只认生产点，不认散文）。
+    """从源码现扫「这一趟可能落成哪些 `stop_reason`」（只认生产点，不认散文）。
 
     走 AST 而不是正则：正则会把注释与 docstring 里举例的取值也算成生产点，于是「新档没登记」和「注释里多写一句 `stop_reason="…"`」分不开 —— 那种假阳会逼着后来的人绕开这条判据。AST
     只看得见真的会执行的那几处赋值 / 传参。四类生产点逐类扫：`run.stop_reason = "<取值>"`（循环里各个 `break` 之前那一步）；

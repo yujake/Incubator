@@ -417,7 +417,7 @@ def test_the_page_says_when_the_env_var_overrides_the_lean_switch(
 
 def test_no_settings_input_is_prefilled_with_the_word_unknown(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """    设置窗口那几格不许被填上字面量 `unknown`（R90，这一条是业主报的那件事的真身）。
+    """设置窗口那几格不许被填上字面量 `unknown`（R90，这一条是业主报的那件事的真身）。
 
     取证（本机 2026-10-13，真浏览器读输入框的 `value`）：盘上没写的四格—— `toolchain.coq_bin` / `toolchain.isabelle_bin` /
     `toolchain.lean_enabled` /`workspace.projects_dir` —— 全被填上了 `unknown`。原因是输入框初值走了`currentOf()` → `field()` →
@@ -560,7 +560,7 @@ def test_the_budget_set_button_really_writes_the_register(tmp_path: pathlib.Path
 
 # ============================================================ 6 两处"跟系统说话"的入口
 def test_the_chat_box_routes_the_message_by_state(tmp_path: pathlib.Path) -> None:
-    """    对话框（R94，业主：「要把前端做成对话框」）：同一个输入框按当刻状态走对的那条路。
+    """对话框（R94，业主：「要把前端做成对话框」）：同一个输入框按当刻状态走对的那条路。
 
     量四条路，逐条对应一条真端点：还没有会话 ⇒ 这一句起一趟（`POST /api/run`，`task=` 就是这句话）；
     2. 这一段收过工、闲着 ⇒ 先把话记进收件箱（`POST /api/task`），再用

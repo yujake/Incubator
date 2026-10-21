@@ -285,7 +285,7 @@ def test_attack_plan_error_keeps_its_own_kind_not_unexpected(store: Store):
 def test_attack_validation_error_names_the_offending_field(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ):
-    """    核心：`ValueError` ⇒ `kind="validation_error"`，且绝不是 `"unexpected"`。
+    """核心：`ValueError` ⇒ `kind="validation_error"`，且绝不是 `"unexpected"`。
 
     ## 为什么这一支要靠打桩才能打到（如实说明，不含糊）
 
@@ -464,7 +464,7 @@ def test_attack_list_plans_tool_does_not_invert_a_null_default(store: Store):
 
 
 def test_attack_status_not_found_is_not_an_error(store: Store):
-    """    负控（不许"顺手修错"）：计划不存在时 `attack.status` 是`ok=True` + `checked=False`，不是失败。
+    """负控（不许"顺手修错"）：计划不存在时 `attack.status` 是`ok=True` + `checked=False`，不是失败。
 
     这是 INVENTORY 4.3(c) 记的刻意设计：`checked=False` 表示"没查"（这里的"没查"= 那个代号根本不在计划表里），调用方必须看 `checked` 而不是
     `ok`（`docs/ROLE-SPECS.md` R0 的那一行 + `tests/test_agent_f.py:616` 同口径）。本用例的作用是上锁：`_guard` 只许改"异常怎么分类"，不许把这条"查了、
@@ -535,7 +535,7 @@ def _assert_store_error(res: object, name: str) -> None:
 
 
 def test_graph_index_queries_report_store_errors_when_they_build_the_index(tmp_path: Path):
-    """    核心（首次查询那一刻）：三个索引查询在自己按需建图时也要结构化失败。
+    """核心（首次查询那一刻）：三个索引查询在自己按需建图时也要结构化失败。
 
     两个刻意的构造细节（都不是随手写的）：
 
@@ -751,7 +751,7 @@ def test_graph_neighbors_result_is_not_prunable_by_context_budget(store: Store):
 
 
 def test_relation_graph_neighbors_stays_a_plain_list(store: Store):
-    """    证据（不改成封装的那个决定）：`RelationGraph.neighbors()` 仍是裸 `list`。为什么不改它（题目要求"若判断会破坏调用方，先用证据说明"）：`grep` 出的全部调用点（逐个判断）：
+    """证据（不改成封装的那个决定）：`RelationGraph.neighbors()` 仍是裸 `list`。为什么不改它（题目要求"若判断会破坏调用方，先用证据说明"）：`grep` 出的全部调用点（逐个判断）：
     ==========================================  ==========================================调用点
     它怎么用返回值==========================================  ==========================================`agent_c.py:1479`
     `set(g.neighbors(a)) & set(g.neighbors(b))``agent_c.py:1489`
@@ -806,7 +806,7 @@ def test_graph_tools_forwards_the_one_guard_instead_of_copying_it():
 
 
 def test_attack_handlers_are_wrapped_by_the_guard(store: Store, monkeypatch: pytest.MonkeyPatch):
-    """    遍历式负控：六个 `attack.*` handler 都经过 `_guard`（不是"改了五个漏一个"）。判据为什么是"看栈 / 看 kind"，而不是内省 handler 的 code object：handler 写成
+    """遍历式负控：六个 `attack.*` handler 都经过 `_guard`（不是"改了五个漏一个"）。判据为什么是"看栈 / 看 kind"，而不是内省 handler 的 code object：handler 写成
     `lambda ...: _guard(lambda: ...)`，而外层 lambda 引用的是内层lambda 的细胞（那个细胞里才装着 `_guard`）—— 实测 `co_freevars` 与 `LOAD_DEREF`都会漏报，
     于是内省式判据会冤枉一个正确的实现。行为式判据也不能只认"抛"：`_guard` 的契约是"已知失败原因 ⇒ 结构化失败"（它返回 `ToolResult`，只有 `ToolError` 那一支才上抛）。所以两支都算证据：抛了 ⇒ traceback 里必须出现
     `_guard` 帧；- 没抛 ⇒ 返回值必须是有受控 `kind` 的 `ToolResult`（`plan_error` /`validation_error`）—— 那不是 `ok(...)`，正是 `_guard` 的产物。为什么两支探针要打桩、

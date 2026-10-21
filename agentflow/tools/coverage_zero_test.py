@@ -369,7 +369,7 @@ def _is_main_block(node: ast.AST | None) -> bool:
 
 
 def _enclosing_scope(tree: ast.AST, node: ast.AST) -> tuple[str, str] | None:
-    """    `node` 是否定义在另一个函数体、私有类体或 `__main__` 自检块内？返回 (种类, 宿主限定名)。
+    """`node` 是否定义在另一个函数体、私有类体或 `__main__` 自检块内？返回 (种类, 宿主限定名)。
 
     ## 为什么需要（三个实测的例子，不是假想）
 
@@ -644,7 +644,7 @@ def _readable(p: Path) -> bool:
 
 
 def _name_pattern(needle: str) -> re.Pattern[str]:
-    """    `needle` 作为标识符位置出现的正则。这里改过一次，改的原因是一个实测的假阴性（不是推测）：第一版判据是 `(?<![\\w.])needle(?![\\w])` —— 两侧都必须是"非词字符"。它把
+    """`needle` 作为标识符位置出现的正则。这里改过一次，改的原因是一个实测的假阴性（不是推测）：第一版判据是 `(?<![\\w.])needle(?![\\w])` —— 两侧都必须是"非词字符"。它把
     `parse` 与 `parse_work` 正确分开了，但同时把项目的测试命名约定整类漏掉了：本项目的测试名是 `test_<函数名>_rejects_...`，而
     `adjudicate_contradiction` 后面紧跟的正是 `_`（一个词字符）⇒`tests/test_interactions.py` 里明明直接调用了
     `adjudicate_contradiction`六次，第一版却把它报成"零测试"。实测规模：修正前后等级 2 的零测试函数从 31 个降到 19 个 ——也就是第一版把 12 个有直接测试的函数误报成了零测试（39%
@@ -707,7 +707,7 @@ def _qualified_occurrences(blob: str, needle: str) -> int:
 
 
 def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
-    """    标出每个函数是否"有测试"。判据由三条可分辨的分量组成，三条都记进 `tested_by`（带 `via:` 前缀）：`via:direct` —— 裸名/限定名作为独立标识符出现在 tests/ 里（`adjudicate_contradiction(` 这种）。注意
+    """标出每个函数是否"有测试"。判据由三条可分辨的分量组成，三条都记进 `tested_by`（带 `via:` 前缀）：`via:direct` —— 裸名/限定名作为独立标识符出现在 tests/ 里（`adjudicate_contradiction(` 这种）。注意
     `_name_pattern` 的左边界排除 `.`，所以"别名限定调用"不在这一档；- `via:alias_direct` —— 以被点号限定的成员形态出现（`I.foo(`、`mod.foo(`）；- `via:test_name` —— 出现在项目约定的测试名
     `test_<名字>_...` 里；- `via:tool_name` —— 只在测试里出现过一次这个 `@tool` 的点号名（`conductor.stop` / `fs.move`）。`L-13`（`draft/52` F7）
     把它从前一档（`via:direct tool:…`）拆出来单独记：它是四个分量里最弱的一个 ——"在测试里写一次工具名"与"真的构造上下文并调用它"是两件事，而等级 1（写路径，最高风险档）的零测试数全靠它从 7 变成 0（`draft/43-D` §2.2）。
@@ -747,7 +747,7 @@ def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
 
 def production_caller_reading(funcs: list[FuncInfo], zero: list[FuncInfo],
                               level: int) -> dict[str, Any]:
-    """    F7 / L-13 的读数（`draft/52` F7；收紧已落地 ⇒ 见 `mark_tested` 的 docstring）。
+    """F7 / L-13 的读数（`draft/52` F7；收紧已落地 ⇒ 见 `mark_tested` 的 docstring）。
     ## 为什么必须有这个读数（`draft/43-D` §2.2 逐字）
     "发布门看到的读数是 0，而忽略'工具名串'那一条判据后是 7（等级 1，写路径，最高风险档）" —— 也就是说最高风险档上那条绿灯，是被一个字符串满足的。
     ## 三个口径并列（不许只选一个）

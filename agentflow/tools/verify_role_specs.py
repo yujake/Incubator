@@ -54,7 +54,7 @@ DEFAULT_ROLES: tuple[str, ...] | None = None
 
 
 def role_letters(roles: tuple[str, ...] | None = None) -> tuple[str, ...]:
-    """    把角色集合解析为单个大写字母序列。
+    """把角色集合解析为单个大写字母序列。
 
     ── 为什么必须给本门一个"角色集合可传参"的入口（FC-27 外的真实缺口）──
 
@@ -102,7 +102,7 @@ def project_root(start: Path | None = None) -> Path:
 
 
 def live_tool_counts(*, root: Path) -> tuple[dict[str, int] | None, str]:
-    """    真的装配一次注册表，返回 `({角色: 工具数}, "")`；取不到时返回 `(None, 原因)`。
+    """真的装配一次注册表，返回 `({角色: 工具数}, "")`；取不到时返回 `(None, 原因)`。
     ## `H-8`：这道门此前从来没有做过它自己声称的那个对账
     实测（`draft/28` 的 `H-8`）：把副本里 `§D 工具面（37 个，实测）` 改成 `999 个`、`§H 工具面（22 个，实测）` 改成 `1 个`，本门照样 `[OK] … 工具条数 [37]`/
     `[OK] … 工具条数 [1]`、退出码 0。旧实现只检查"标题里能不能读出一个数字"，而 `docs/INDEX.md:16` 与
@@ -133,7 +133,7 @@ def live_tool_counts(*, root: Path) -> tuple[dict[str, int] | None, str]:
 
 
 def live_roles(*, root: Path) -> tuple[tuple[str, ...] | None, str]:
-    """    真的 import 一次包，返回 `(现场角色集合, 原因)`；取不到时 `(None, 原因)`。
+    """真的 import 一次包，返回 `(现场角色集合, 原因)`；取不到时 `(None, 原因)`。
 
     ## `R6-6`（工具侧）：这份对账此前只在 pytest 里做过
 
@@ -156,7 +156,7 @@ def check(doc: Path, *, roles: tuple[str, ...] | None = None,
           live_counts: dict[str, int] | None = None,
           live_reason: str = "",
           live_role_list: tuple[str, ...] | None = None) -> dict:
-    """    返回结构化结果。`verdict` ∈ ``ok`` / ``incomplete`` / ``unknown``。
+    """返回结构化结果。`verdict` ∈ ``ok`` / ``incomplete`` / ``unknown``。
 
     `roles=None` 时用 `EXPECTED_ROLES`（默认行为与原版相同）；给了就用它当判据。
 

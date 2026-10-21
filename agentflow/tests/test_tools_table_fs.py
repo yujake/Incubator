@@ -138,7 +138,7 @@ def test_the_generic_write_tools_refuse_the_two_tables_the_secretary_owns(tables
 
 
 def test_table_create_autofills_request_id_and_derived_relation_fields(tables):
-    """    建行时派生字段（search_requests 的 r-NNNN、relations 的 concept_group_key）必须补齐。
+    """建行时派生字段（search_requests 的 r-NNNN、relations 的 concept_group_key）必须补齐。
 
     这一条断言被修正过（`"r-0000"` → `"r-0001"`）：原先它编码的是`table_tools` 自己的"取最小可用号"语义，而那与`interactions.next_prefixed_id`（CLI / C
     / D / F 都在用）冲突。

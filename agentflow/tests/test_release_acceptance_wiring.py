@@ -223,7 +223,7 @@ def _print_review_acceptance_calls() -> list[str]:
 
 
 def test_the_production_callers_are_exactly_the_registered_readonly_exits():
-    """    接线判据（正控 + 逐条登记）：生产面的调用者恰好是登记的那几个。
+    """接线判据（正控 + 逐条登记）：生产面的调用者恰好是登记的那几个。
 
     改前必红：这一层此前在生产面上 0 个调用者（`src/`/`tools/`/`scripts/`都到不了它），于是"五条内容级判据"在真机上从来没跑过一次。
 

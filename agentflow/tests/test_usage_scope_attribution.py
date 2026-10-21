@@ -202,7 +202,7 @@ def test_a_forgotten_scope_is_refused_not_silently_bucketed(store: Store):
 
 
 def test_a_scope_outside_the_vocabulary_lands_in_unclassified_visibly(store: Store):
-    """    负控②：账本里存在编外/空的 scope ⇒ 落显式的"未分类"档，且原值被记下来。
+    """负控②：账本里存在编外/空的 scope ⇒ 落显式的"未分类"档，且原值被记下来。
     ## 为什么这一条用假账本行，而不是往真账本里写一行编外值
     写入侧是 fail-closed 的：`UsageEntry.validate` 与 `Charge.validate` 都会当场拒绝编外的 scope（`schema.py` 的受控词表断言）。
     也就是说"编外值出现在账本里"这件事在本版本不可能由正常写入产生 —— 它只能来自另一个写入方：旧版本进程、或直接改 `data/usage_ledger.json` 的人。

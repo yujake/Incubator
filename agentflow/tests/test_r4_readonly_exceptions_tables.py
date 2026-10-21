@@ -38,7 +38,7 @@ def test_the_assertion_passes_on_the_real_tree() -> None:
 
 
 def test_adding_an_overreaching_tool_to_the_tool_level_table_is_caught() -> None:
-    """    负控（核心）：例外工具的逐工具写集若越出表级例外 ⇒ 断言必须红。
+    """负控（核心）：例外工具的逐工具写集若越出表级例外 ⇒ 断言必须红。
 
     注入走 `assert_capabilities` 的注入形参（见它的 docstring：第 `[5c]` 条是导入期判据，不注入就没法在进程内给它做负控）。这里把表级例外的 H 收窄成只剩
     `review_findings` ⇒ `review.verify_fixes` /`review.review_document` 的写集里有 `documents` ⇒ 必须报越界。

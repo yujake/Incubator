@@ -130,7 +130,7 @@ def _eval_row(store, eid: str = "0000") -> None:
 
 
 def test_unknown_citation_kind_message_lists_every_declared_prefix(store):
-    """    `D10` 正控：拒绝消息里的受控词表必须与判据元组双向包含。
+    """`D10` 正控：拒绝消息里的受控词表必须与判据元组双向包含。
 
     现状（`D10` 登记，登记册 :819-824）：判据收 `("rel","lit","exp","eval")` 四档，而消息写的是"应为 rel:/lit:/exp:" —— 漏了 `eval:`，而
     `eval:` 正是上一行刚被单独检查过的那一档。调用方按消息改写法，会把一个合法的 `eval:` 引用当成非法引用。修法是让消息从判据元组派生（`FC-03`），这条断言就打在"两处逐字一致"上，
@@ -799,7 +799,7 @@ def test_the_bound_diagnostic_reader_has_a_single_definition():
 def test_negative_control_a_counter_without_a_table_is_checked_not_silently_skipped(
     monkeypatch: pytest.MonkeyPatch, store
 ) -> None:
-    """    负控（`FINAL-R4-03`）：`ID_COUNTERS` 里某个 `id_field` 在 `TABLES` 里找不到表时，`verify_all` 必须把这一项记成没查成
+    """负控（`FINAL-R4-03`）：`ID_COUNTERS` 里某个 `id_field` 在 `TABLES` 里找不到表时，`verify_all` 必须把这一项记成没查成
     （`checked[kind] is None` + 一条 warning），而不是静默少查一项还报通过。
 
     这一支此前零测试覆盖（`grep -c counter_table_missing tests/*.py` = 0），而它正是"将来某次 schema 改名只改了 `ID_COUNTERS`"时唯一的报警器。注入方式是

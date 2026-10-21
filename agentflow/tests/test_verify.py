@@ -72,7 +72,7 @@ def test_missing_literature_is_reported_as_dangling_lit(clean_store: Store) -> N
 
 
 def test_related_concepts_drift_has_no_home_in_the_new_standard(clean_store: Store) -> None:
-    """    `related_concepts` 不是新标准的一格：真相由 `relations` 表派生，"没判"必须看得见。
+    """`related_concepts` 不是新标准的一格：真相由 `relations` 表派生，"没判"必须看得见。
 
     改写自 `test_wrong_related_concepts_is_reported_as_related_drift`（原文：把`concepts.json` 里某行的 `related_concepts` 改错 →
     断言 verify 报`related_drift`）。并表之后那一格在新标准里没有承载点：`view(shape="legacy")`对 `statements` 那一档一律投影成空列表并带

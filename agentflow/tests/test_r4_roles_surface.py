@@ -205,7 +205,7 @@ def _surface_probe(name: str, *, side_effect: str = "read", external: str = "non
 
 
 def test_for_role_notes_follow_the_current_state(monkeypatch) -> None:
-    """    负控 2：状态变了 ⇒ 留痕只保留与当前状态一致的那一条。
+    """负控 2：状态变了 ⇒ 留痕只保留与当前状态一致的那一条。
 
     审计者 A 的实测：`SANDBOX_AVAILABLE` 从 `None` 改成 `True` 之后再调一次，旧实现里 `notes['H']` 同时留着"剥掉了含 `probe.exec_read` 的 2
     个工具"与"放行了 `probe.exec_read`" —— 前一条与当前状态相反。`R4-AN-5`：改前这条用例有两重空转，本版两处都修掉（否则它是恒真断言）：
@@ -252,7 +252,7 @@ def test_for_role_notes_follow_the_current_state(monkeypatch) -> None:
 
 
 def test_the_sandbox_monkeypatch_is_pinned_to_the_base_module_namespace(monkeypatch) -> None:
-    """    `N-2` 的反空转指纹：那个 monkeypatch 必须打在 `tools/base.py` 的模块全局上。
+    """`N-2` 的反空转指纹：那个 monkeypatch 必须打在 `tools/base.py` 的模块全局上。
 
     批 C（观测 2026-09-26，证据 `temp/batchC-axes5-vacuous-monkeypatch.txt`）
     实测的原始缺陷：`monkeypatch.setattr(T, "SANDBOX_AVAILABLE", True)`（`T` = `agentflow.tools` 包对象）打在没人读的命名空间上 ——
@@ -343,7 +343,7 @@ def test_the_dead_branch_is_gone_and_the_docstring_says_who_calls_this() -> None
 
 
 def test_the_parameter_is_still_load_bearing() -> None:
-    """    正控：`include_registered_writers` 这个参数不能一起删掉。
+    """正控：`include_registered_writers` 这个参数不能一起删掉。
 
     它真正的作用在 `_role_surface(..., call_surface=include_registered_writers)` 那一句里（可调用面是否含已登记的落库代理）。删掉它会静默改变 `call` 的行为
     ——而"删死代码时顺手删掉一个活参数"正是这类清理最容易犯的错。
@@ -383,7 +383,7 @@ def test_the_parameter_is_still_load_bearing() -> None:
 
 
 def test_the_write_level_register_is_cross_checked_at_import() -> None:
-    """    写等级登记表与第一根轴的词表必须互相穷举（`R4-AN-4` / 台账 `N-5`）。
+    """写等级登记表与第一根轴的词表必须互相穷举（`R4-AN-4` / 台账 `N-5`）。
 
     缺陷：`tools/base.SIDE_EFFECTS` 与 `tools/__init__.SIDE_EFFECTS_WRITE` 之间此前没有任何导入期判据。只读角色的结构性剥离读的是
     `SIDE_EFFECTS_WRITE`（`for_role` / `call` / `_callable_for` 三处共用 `_role_surface`），于是"往词表加一个写等级、忘了登记进这张表"的后果是静默的：

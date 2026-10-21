@@ -285,7 +285,7 @@ def test_invented_facts_reads_the_evidence_pack_not_a_word_list():
 # ======================================================= ⑤ 召唤号与花销（P-09 的键）
 
 def test_the_summon_number_is_reported_and_never_faked(tmp_path: pathlib.Path):
-    """    `llm_task_id`（P-09 的挂点）：号在 ⇒ 读数带号且账本按号读；号不在 ⇒ 如实说"没号"。三态（需求单第 3 条）—— 这三档必须分得开：
+    """`llm_task_id`（P-09 的挂点）：号在 ⇒ 读数带号且账本按号读；号不在 ⇒ 如实说"没号"。三态（需求单第 3 条）—— 这三档必须分得开：
 
     | 情形 | `attached` | `usd` |
     |---|---|---|

@@ -839,7 +839,7 @@ def test_the_budget_page_has_two_explicit_buttons_and_no_dead_select() -> None:
 
 
 def test_the_machine_page_really_has_a_lean_switch() -> None:
-    """    判据（业主 2026-10-13：「lean 开关网页上没法真的开关」）：这一页要能看、能翻。取证（本机实测）：后端一直在给这一格 —— `GET /api/machine` 有`lean_enabled`（开关）=
+    """判据（业主 2026-10-13：「lean 开关网页上没法真的开关」）：这一页要能看、能翻。取证（本机实测）：后端一直在给这一格 —— `GET /api/machine` 有`lean_enabled`（开关）=
     `false`、`lean_enabled_source`（谁定的 = 缺省）、`formal_mode`（走了哪一档 = `prose_review`）；`POST /api/settings`
     写`toolchain.lean_enabled=true` 也一直是好的（写完 `settings.lean_enabled()`立刻回 `(True, "settings")`）。缺的是台面：这一页原先只画 `lean_ready`（这台机器装没装
     Lean）与 `can_do_formal`，既不画开关本身，也没有一个能按的开关 —— 改它只能去「设置窗口」那个自由文本框里手打 `true` / `false`。所以这一条钉三件事：
@@ -859,7 +859,7 @@ def test_the_machine_page_really_has_a_lean_switch() -> None:
 
 
 def test_the_evidence_and_artifacts_pages_drop_the_dead_readings() -> None:
-    """    R93 体检（业主逐条点出来的那几格）：该拿的拿、该撤的撤、该改档的改档。
+    """R93 体检（业主逐条点出来的那几格）：该拿的拿、该撤的撤、该改档的改档。
 
     业主 2026-10-13 在跑着的 T1 上逐页看了一遍，点名六处"永远是 unknown / 不适用"。逐条对着盘上真数据定过性（读数记在那一轮的提交信息里），这一条把结论钉在源码上：
 
@@ -934,7 +934,7 @@ def test_the_home_page_is_a_chat_box_that_picks_the_right_endpoint() -> None:
 
 
 def test_the_settings_panel_prefills_from_the_reading() -> None:
-    """    判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。
+    """判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。
 
     按源码读（与这一组其余判据同一条路）：页面是客户端渲染的，Python 判据看不到 DOM，但这件事实在源码里是结构可见的 —— 输入框的 `value` 必须落到"读数 ⊕ 用户输入"这个表达式上，而不是恒为空串。
 

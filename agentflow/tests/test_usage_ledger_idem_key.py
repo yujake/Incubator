@@ -233,7 +233,7 @@ def test_verify_surfaces_the_old_criterion_that_cannot_see_it(store: Store):
 
 
 def test_rollback_drops_the_field_but_the_note_marker_survives(store: Store, monkeypatch) -> None:
-    """    回滚陷阱（真跑一遍 `rebuild`，不是推理）：
+    """回滚陷阱（真跑一遍 `rebuild`，不是推理）：
 
     `row_from_dict` 按 `__dataclass_fields__` 过滤，所以回滚代码之后一次 `rebuild` 会把 `idem_key` 静默丢掉；而 `note` 里的文本标记（提案 B 那一层）
     是老字段，回滚不丢 —— 这正是"两层都要留着"的操作性理由。

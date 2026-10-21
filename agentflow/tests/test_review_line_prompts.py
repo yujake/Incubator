@@ -123,7 +123,7 @@ def test_the_facts_table_covers_exactly_the_six_roles_of_this_phase() -> None:
 
 @pytest.mark.parametrize("role", ["A", "B", "C", "D", "H", "M"])
 def test_the_role_brief_and_the_spec_are_the_same_object(role: str) -> None:
-    """    这六条口径必须落在 `boundary` 或 `policy` 里，不许只落在 `stance` 里。
+    """这六条口径必须落在 `boundary` 或 `policy` 里，不许只落在 `stance` 里。
 
     ## 唯一化之后（业主 2026-10-11）
 

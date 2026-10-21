@@ -227,7 +227,7 @@ def _write_report(root: pathlib.Path, text: str) -> pathlib.Path:
 
 # ====================================================================== 1 正控
 def test_pending_question_shows_up_on_the_global_panel(tmp_path: pathlib.Path):
-    """    正控（全局面板）：待答问题的机器读数在，而 `/` 这一格是 SPA 外壳。
+    """正控（全局面板）：待答问题的机器读数在，而 `/` 这一格是 SPA 外壳。
 
     迁移说明（2026-10-07，裁定 P1 的第一块）：`/` 不再服务端渲染待答面板 —— 它吐的是SPA 外壳，面板由 `ui/src/pages/Home.tsx` 从 `/api/state` 渲染。
     于是这一条钉的两件事换了面、但守的是同一件事：旧：`GET /` 的 HTML 里出现 qid / 正文 / 每个选项的 label 与 description / 提交表单；
@@ -402,7 +402,7 @@ def test_answering_twice_is_409_and_does_not_duplicate(tmp_path: pathlib.Path):
 
 # ====================================================================== 7 负控
 def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path, monkeypatch):
-    """    负控（投影而非缓存）：两次读逐字节相同；盘上新增 ⇒ 读数必须变。W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端渲染页（两趟 HTML 逐字节相同 +
+    """负控（投影而非缓存）：两次读逐字节相同；盘上新增 ⇒ 读数必须变。W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端渲染页（两趟 HTML 逐字节相同 +
     追加一条事件后 HTML 变）。旧壳退场后"详情面"是`GET /api/run/{sid}` 的 JSON，于是同一个意思换成三处真读盘的读数 ——每一处都还是"盘上变了，面就得跟着变"，
     而且各自比原来更具体：`/api/run/t` 两次读逐字节相同（投影，不是缓存）—— 原来断言的是渲染两次的
     HTML 相同，同一条意思；顺带钉住这份读数里那两条事件的可读内容（`task` 来自 `agent_run_start`、`last_shape` 来自 `agent_step`）；
@@ -474,7 +474,7 @@ def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path, monkeypat
 
 # ====================================================================== 8 负控
 def test_model_and_user_text_is_escaped(tmp_path: pathlib.Path):
-    """    负控（安全）：用户/模型产生的文本不许在页面里变成 HTML。W5 迁移（2026-10-08，裁定 P1 的最后一块）：旧壳退场之后，服务器自己写 HTML 的地方只剩错误页（`server._error_page`），
+    """负控（安全）：用户/模型产生的文本不许在页面里变成 HTML。W5 迁移（2026-10-08，裁定 P1 的最后一块）：旧壳退场之后，服务器自己写 HTML 的地方只剩错误页（`server._error_page`），
     盘上文本一律走 JSON。于是"转义"这件事在三处真读数上钉 —— 它跟着「攻击面」搬，而不是跟着旧代码搬：用户给的串进 HTML 的那一条活路（写路径给的 409 正文，嵌在错误页里）：
     `POST /answer` 的 `qid` 里塞 `<script>` 必须变成 `&lt;script&gt;`。原来断言的是旧壳渲染问题正文时转义，这是同一件事在新落点上的形态；
     2. 错误页的理由串也转义（静态路由那个名字是请求方给的）：`/static/<坏名字>`
@@ -532,7 +532,7 @@ def test_model_and_user_text_is_escaped(tmp_path: pathlib.Path):
 
 # ====================================================================== 9 负控
 def test_app_css_uses_only_tokens():
-    """    负控（只用令牌）：`ui/src/theme/app.css` 无字面色值，且确实在令牌体系里写样式。
+    """负控（只用令牌）：`ui/src/theme/app.css` 无字面色值，且确实在令牌体系里写样式。
 
     W5 迁移（2026-10-08）：被检对象从旧壳内联的 `web/assets.py::APP_CSS` 换成 SPA 的组件样式 `ui/src/theme/app.css` ——
     旧壳退场后组件样式只剩这一份（`ui/index.html`里 `<link>` 引的就是它，构建时打进 `web/static/assets/`）。断言逐条等价、强度不变：原：`APP_CSS` 里不许有
@@ -623,7 +623,7 @@ def test_pending_list_is_never_filtered_by_session(tmp_path: pathlib.Path):
 
 # ====================================================================== 12 正控
 def test_run_detail_replays_events_and_report(tmp_path: pathlib.Path):
-    """    正控（一趟详情）：读数与交付说明都拿得到；没有这一段会话 ⇒ 如实说"没查成"。
+    """正控（一趟详情）：读数与交付说明都拿得到；没有这一段会话 ⇒ 如实说"没查成"。
 
     W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端渲染页（事件卡片里出现四个 kind、步骤的形状与下标、报告原文在一个 `<pre>` 里、不存在的 sid ⇒
     404 页）。旧壳退场后同一件事分两处、逐条等价：页面入口 `/run/r1` 是 SPA 外壳（`_spa_run` 的三样机器读数 + 外壳里没有盘上数据）；
@@ -710,7 +710,7 @@ def test_the_run_path_serves_the_spa_shell(tmp_path: pathlib.Path):
 
 # ====================================================================== 13 负控
 def test_events_outside_a_run_never_become_a_run(tmp_path: pathlib.Path):
-    """    负控（投影不造假）：轮次之外的零散事件不许被折成一趟，`last_run` 不许被顶掉。
+    """负控（投影不造假）：轮次之外的零散事件不许被折成一趟，`last_run` 不许被顶掉。
 
     父在真工作区上的复现（`projects/p5-run15`）：`agent_run_end` 之后紧跟的一条`user_answer`（人刚按下「提交」写进去的那条）被当成新一轮的开始，于是页头「最近一趟」显示的是一个
     `steps=0 / llm_calls=0 / usd=null / stop_reason=""`的空壳；那个工作区里另一个会话甚至一个 `agent_run_start` 都没有，却被报成「role=A 的一趟运行」。
@@ -822,7 +822,7 @@ def test_unknown_paths_and_methods(tmp_path: pathlib.Path):
 # ====================================================================== 16 负控
 def test_a_client_that_hangs_up_leaves_no_traceback_on_stderr(
         tmp_path: pathlib.Path, monkeypatch):
-    """    负控（客户端中途挂断）：服务端不留未处理异常，也不影响后续请求。形态出处（W5 收工门 §8 的 stderr 读数）：那里混进过两
+    """负控（客户端中途挂断）：服务端不留未处理异常，也不影响后续请求。形态出处（W5 收工门 §8 的 stderr 读数）：那里混进过两
     行`Exception occurred during processing of request from ('127.0.0.1', …)` +`ConnectionAbortedError: [WinError 10053]`。它不影响判定，
     但那是一条假错误信号：日志里多一条"服务器出错了"，真错误就难找了，"stderr 里有没有东西"这类判据也不好写。成因在 `handle_one_request`：SSE 的响应头写着`Connection: keep-alive` ⇒
     handler 返回后这一层会再读一次请求行，读到的正是那条已被掐断的套接字。掐断怎么造（本机五种打法都实测过：SSE 读两帧后 close、SSE 读两帧后带 RST 关闭、完整 GET 后 RST、半截请求后 RST、POST 正文没收完就

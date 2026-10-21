@@ -112,7 +112,7 @@ def test_e15_2_the_next_steps_are_derived_from_readings_not_written_by_a_model(t
 
 
 def test_ee04_the_report_carries_the_faculty_mechanics(tmp_path):
-    """    EE-04：状态报告里必须有十项官能的机械半读数（给它一条不依赖 `gate` CLI 的调用者）。
+    """EE-04：状态报告里必须有十项官能的机械半读数（给它一条不依赖 `gate` CLI 的调用者）。
 
     改动前的调用链（`draft/48-09 §4.10`）：`faculty_checks` 的函数 ← `deliver.py:167/185/188`← `cli.py:1648 cmd_gate`（子命令注册
     `cli.py:2370`）⇒ 那条 CLI 一退场，`faculty_checks` 就成了孤儿模块。现在 `statusreport.collect` 直接调它的纯函数：为什么不走 `deliver` ——

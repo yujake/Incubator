@@ -150,7 +150,7 @@ def test_the_summary_call_is_charged_with_the_compaction_note(tmp_path: pathlib.
 
 
 def test_the_rebuild_replays_the_swap(tmp_path: pathlib.Path) -> None:
-    """    正控（12-I=甲 的另一半）：`resume_messages` 按 `surface_op` 重放 ⇒ 逐条相等。
+    """正控（12-I=甲 的另一半）：`resume_messages` 按 `surface_op` 重放 ⇒ 逐条相等。
 
     这是 S-C 那条"逐条相等"判据在压缩之后的形态：只在内存里压（不落替换事件）会让续跑那一趟看到没压过的版本。
 

@@ -132,7 +132,7 @@ def test_the_only_field_append_stamps_is_the_clock_one(tmp_path: pathlib.Path):
 
 def test_the_lock_judge_still_goes_red_when_the_content_really_differs(
         tmp_path: pathlib.Path):
-    """    负控（`R0-A2`）：归一化不许把"真的改坏"一起放过 —— 四个方向各给一次。判据的意图是"锁只挡交错、不改内容"，所以只要内容的集合变了就必须不等：
+    """负控（`R0-A2`）：归一化不许把"真的改坏"一起放过 —— 四个方向各给一次。判据的意图是"锁只挡交错、不改内容"，所以只要内容的集合变了就必须不等：
 
     | 改坏的方式 | 期望 | 为什么 |
     |---|---|---|

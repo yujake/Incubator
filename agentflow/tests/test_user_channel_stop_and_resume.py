@@ -299,7 +299,7 @@ def test_the_selected_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, cap
 
 
 def test_resume_messages_is_item_equal_to_the_live_sequence(tmp_path: pathlib.Path):
-    """    正控（续跑的正确性）：重建出来的消息序列与当时那份逐条相等。
+    """正控（续跑的正确性）：重建出来的消息序列与当时那份逐条相等。
 
     为什么这条是"最重要的一条"：续跑要给模型的，是「当时那份对话」。差一条、差一个字段，模型看到的处境就变了，而"它是不是接着上次说的往下做"就没有判据了。
 
@@ -418,7 +418,7 @@ def test_no_ask_through_the_cli_keeps_running(tmp_path: pathlib.Path, monkeypatc
 
 
 def test_only_the_conductor_may_ask_the_user(tmp_path: pathlib.Path):
-    """    正控 + 两条负控（运行时协作纪律）：只有主控能当面问人。
+    """正控 + 两条负控（运行时协作纪律）：只有主控能当面问人。
 
     依据是我们自己的设计，不是外来的：`DESIGN-CONDUCTOR.md` §1.1 逐字"它是用户唯一面对的东西"（用户只对主控说话），而
     `capabilities.NON_SUMMONABLE = {"M"}` 让它在结构上成立（主控不可被召唤 ⇒ 永远是顶层入口）。

@@ -78,7 +78,7 @@ def test_alloc_id_records_a_visible_event_when_it_jumps(store):
 
 
 def test_alloc_id_without_the_target_table_declared_raises(store):
-    """    `F-2` 的负控：没声明目标表就发号 ⇒ 必须抛（改前这里返回一个已被占用的号）。
+    """`F-2` 的负控：没声明目标表就发号 ⇒ 必须抛（改前这里返回一个已被占用的号）。
 
     旧版把占用检查写成 `if table is not None and table in self.tables:`，于是"没声明表"这一支整段跳过检查、照样发号。实测（`temp/auditF-probe1.txt`的
     [D1]）：把 `counters.lit` 拨回 0 后，只声明 `counters` 的事务给出 `0000`（已被占用），随后写回 `literature` ⇒

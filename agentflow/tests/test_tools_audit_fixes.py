@@ -95,7 +95,7 @@ def seed_document(store: Store, row: dict) -> None:
 
 
 def parse_declared_keys(returns: str) -> tuple[set[str], str]:
-    """    三态入口：从 `ToolSpec.returns` 里抽键名，并把"抽的结果"如实分类。返回值是 ``(键集合, 状态)``，状态取三个值之一：======================
+    """三态入口：从 `ToolSpec.returns` 里抽键名，并把"抽的结果"如实分类。返回值是 ``(键集合, 状态)``，状态取三个值之一：======================
     ==========================================================状态                     含义======================
     ==========================================================``"parsed"``            抽到了至少一个键 ——
     声明是机器可读的``"empty_declaration"`` 声明本身是空串/全空白 —— 这个工具没有声明返回形状``"unparseable"``       声明非空，但一个键都抽不出来 ——
@@ -296,7 +296,7 @@ def test_scan_document_flags_the_checks_it_used_to_miss(sample: dict, expected_k
 
 
 def test_scan_document_never_passes_a_document_that_g_rejects():
-    """    4.5#10 的危险方向：G 判 error ⇒ H 也必须判 error（H 可以更严，不许更松）。
+    """4.5#10 的危险方向：G 判 error ⇒ H 也必须判 error（H 可以更严，不许更松）。
     "G 认为违规、H 认为通过"是没有任何报错的静默分裂 —— 它会让审校环节变成 G 的橡皮图章。反向（H 更严）是安全的：H 面对的是盘上可能绕过 schema写进来的历史行，fail-closed 是它的本分。
     # 待修：G 侧的判据层正在被迁移到 `agentflow.claimanatomy`（本轮实测到它在
     # 十几分钟内改了两次 code→kind 映射：`unknown_status_axis` 先映射成
@@ -558,7 +558,7 @@ def test_research_tools_request_id_is_the_interactions_implementation():
 
 
 def test_table_tools_and_research_tools_share_the_one_request_id_implementation():
-    """    `table_tools` 与 `research_tools` 的取号必须与权威实现逐个一致（FC-11）。
+    """`table_tools` 与 `research_tools` 的取号必须与权威实现逐个一致（FC-11）。
 
     历史：全项目曾有三份 `r-NNNN` 分配器（`table_tools` 取最小可用号、`research_tools` 取 max+1 且无守卫、`interactions.next_prefixed_id` 取
     max+1且带前缀守卫）。同一张 `search_requests` 表因此有三个取号器，语义互相冲突：表里只有 `r-0001`、`r-0003` 时，一个给 `r-0000`、另一个给 `r-0004`。
@@ -828,25 +828,17 @@ def test_detect_verifier_checked_false_when_the_version_probe_fails(store: Store
 
 
 def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeypatch: pytest.MonkeyPatch):
-    """    声明与实现不许再分裂：`returns=` 里承诺的键 == 每一条 ok 分支实际返回的键。本用例在 P1 接线（`check_formal` 转发到 `formalgw.check_lean`）之后被改过两处，两处都是旧断言的收敛，
-    而不是判据放宽：`summary` 过去必须含"未接线"（那时它确实没接线）；现在必须说清它会真跑一次；- 第三条路径过去断言 `reason == "not_implemented"`。
-    那条路径给的是`script_path="proofs/x.lean"`，而工作区里没有这个文件：接线之后它读不到源码。`E-3` 之前这里报的是 `decl_mismatch`（"文件里没有你要证的东西"，`checked=True`），
-    那是"错的旧形态" —— 读不到源码是"没查成"，不是"查了、命题不成立"。现在 `formalgw` 给出 `source_unreadable`，于是 `checked=False`、`verified=None`（不是 `False`）。
-    改这条断言不是为了让测试变绿，而是断言本身断的就是那个错的旧形态（`E-3` 的现状读数与 `draft/28` §26.2的授权都在）。四条 ok 分支的键集合仍必须逐字相同。- `missing_imports`（B8a/G-18）是新加的第 7
-    个键：`import_unavailable` 要能回答"哪个库不可得"，而六键形态里没有位置放它。它四条路径都在（历史形态"要么都有、要么都没有"保持不变），空列表只表示"检查器没有抱怨找不到包"。-
-    `verifier_status`（B5b/B8b 的 `G-24①`）是第 8 个键：`reason` 收口进`agent_e.FORMAL_REASONS`/本层受控词表之后，检查器原样报的那个状态必须有一个透传栏（收口与透传成对存在，
-    否则收口就是删信息）。四条路径都在，拒绝路径上是空串（"没有检查器状态可透传"）。- `exit_code`（`E-12(a)`，`draft/44`）是第 9 个键：真机 50 条 formal 里 41 条`exit_code=None`，
-    而那一格改前同时表示"没查成"与"检查器跑完了"两件事 ——检查器进程的真实退出码必须有自己的位置（上游读数是 `agent_e/core.py`的 `_record_formal`，它把"跑到哪一步"与"结论是什么"分开记）。四条 ok 分支都在：
-    三条"没起检查器"的分支给 `None`（"没有退出码"是诚实的值，不是 `0` —— `0` 会被读成"检查器跑完了、退出码 0"），主分支给检查器原样报的那个值。口径是「契约对每一条分支都成立」（主控 2026-10-07 裁 (a)）：key
-    集合不随分支变，所以 `set(返回) == 声明` 这条判据在每条分支上都仍然有效。同口径的另两处是`tests/test_check_formal_wiring.py`（桩 + 注释键数 + `N-4` 的例外表）与 agent 侧
-    `agent_e/core.py::_formal_refusal`（拒绝分支补 `exit_code: None`）。- 第 4 条 ok 分支 `tool_crashed`（`E-4`：探测本身没做成）此前没有被采样（`B-R7` 登记过这件事），
-    现在补上。这里采的是 ok 分支。失败那一侧是「2 个 `return fail(...)` 调用点，覆盖 3 类情形」—— 本文件与 `tools/verify_tools.py` 的旧措辞都写成"三条 `return fail(...)` 分支"，
-    那是把「情形数」当成了「调用点数」（`R0-B2` 实测：AST 数出 2 个调用点）：①拿不到声明名、②声明名参数不合法 —— 这两类汇进同一个调用点（`except ValueError` ⇒
-    `kind="param_error"`，`verify_tools.py:436-443`）；③桥接层抛异常走另一个调用点（`except Exception` ⇒ `kind="check_failed"`，`:444-450`）。
-    两个调用点给的都是 `ok=False` + `data=None`（一个键都不给），由本文件里逐条 `return` 比对声明的用例与运行期那
-    条`test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind` 钉住（`I-4`/`T3`/`C2`）。
-    上面这个数字有机械判据守着（`test_the_fail_call_site_count_in_this_docstring_is_live`）：改了调用点数而没改这句话，它会红。
-    """
+    """声明与实现不许再分裂：`returns=` 里承诺的键 == 每一条 ok 分支实际返回的键。本用例在 P1 接线（`check_formal` 转发到 `formalgw.check_lean`）之后被改过两处，两处都是旧断言的收敛，
+    而不是判据放宽：`summary` 过去必须含"未接线"（那时它确实没接线）；现在必须说清它会真跑一次；- 第三条路径过去断言 `reason == "not_implemented"`。那条路径给的是 `script_path="proofs/x.lean"`，而工作区里没有这个文件：接线之后它读不到源码。
+    `E-3` 之前这里报的是 `decl_mismatch`（"文件里没有你要证的东西"，`checked=True`），那是"错的旧形态" —— 读不到源码是"没查成"，不是"查了、命题不成立"。现在 `formalgw` 给出 `source_unreadable`，于是 `checked=False`、`verified=None`（不是 `False`）。改这条断言不是为了让测试变绿，而是断言本身断的就是那个错的旧形态（`E-3` 的现状读数与 `draft/28` §26.2 的授权都在）。四条 ok 分支的键集合仍必须逐字相同。
+    - `missing_imports`（B8a/G-18）是新加的第 7 个键：`import_unavailable` 要能回答"哪个库不可得"，而六键形态里没有位置放它。它四条路径都在（历史形态"要么都有、要么都没有"保持不变），空列表只表示"检查器没有抱怨找不到包"。
+    - `verifier_status`（B5b/B8b 的 `G-24①`）是第 8 个键：`reason` 收口进 `agent_e.FORMAL_REASONS`/本层受控词表之后，检查器原样报的那个状态必须有一个透传栏（收口与透传成对存在，否则收口就是删信息）。四条路径都在，拒绝路径上是空串（"没有检查器状态可透传"）。
+    - `exit_code`（`E-12(a)`，`draft/44`）是第 9 个键：真机 50 条 formal 里 41 条 `exit_code=None`，而那一格改前同时表示"没查成"与"检查器跑完了"两件事 —— 检查器进程的真实退出码必须有自己的位置（上游读数是 `agent_e/core.py` 的 `_record_formal`，它把"跑到哪一步"与"结论是什么"分开记）。三条"没起检查器"的分支给 `None`（"没有退出码"是诚实的值，不是 `0` —— `0` 会被读成"检查器跑完了、退出码 0"），主分支给检查器原样报的那个值。
+    口径是「契约对每一条分支都成立」（主控 2026-10-07 裁 (a)）：key 集合不随分支变，所以 `set(返回) == 声明` 这条判据在每条分支上都仍然有效。同口径的另两处是 `tests/test_check_formal_wiring.py`（桩 + 注释键数 + `N-4` 的例外表）与 agent 侧 `agent_e/core.py::_formal_refusal`（拒绝分支补 `exit_code: None`）。
+    - 第 4 条 ok 分支 `tool_crashed`（`E-4`：探测本身没做成）此前没有被采样（`B-R7` 登记过这件事），现在补上。这里采的是 ok 分支。
+    失败那一侧是「2 个 `return fail(...)` 调用点，覆盖 3 类情形」—— 本文件与 `tools/verify_tools.py` 的旧措辞都写成"三条 `return fail(...)` 分支"，那是把「情形数」当成了「调用点数」（`R0-B2` 实测：AST 数出 2 个调用点）：①拿不到声明名、②声明名参数不合法 —— 这两类汇进同一个调用点（`except ValueError` ⇒ `kind="param_error"`，`verify_tools.py:436-443`）；③桥接层抛异常走另一个调用点（`except Exception` ⇒ `kind="check_failed"`，`:444-450`）。
+    两个调用点给的都是 `ok=False` + `data=None`（一个键都不给），由本文件里逐条 `return` 比对声明的用例与运行期那条 `test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind` 钉住（`I-4`/`T3`/`C2`）。
+    上面这个数字有机械判据守着（`test_the_fail_call_site_count_in_this_docstring_is_live`）：改了调用点数而没改这句话，它会红。"""
     reg = registry_for(VT, store, root=store.root)
     spec = reg.get("verify.check_formal")
     declared = declared_keys(spec.returns)
@@ -1072,7 +1064,7 @@ def test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind(
 def test_code_hash_failure_kinds_match_its_declaration_every_branch(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ):
-    """    `C1`：`verify.code_hash` 的 `returns=` 失败词表与各分支实测 kind 集合逐值相同。
+    """`C1`：`verify.code_hash` 的 `returns=` 失败词表与各分支实测 kind 集合逐值相同。
 
     现状（`C1` 登记）：声明写 ``kind(io_error/param_error)``，而两条最可能的失败——脚本路径越界、工作区内文件不存在——都抛 `ParamError`（`ToolError` 的子类），被
     `base.ToolRegistry.call` 的 `except ToolError` 兜成泛化的 `kind="tool_error"`：声明的取值集合里少了一个真实取值，而承诺的那两个一个都不出现。
@@ -1212,7 +1204,7 @@ def _branch_shapes(source: str, func: str):
 
 
 def test_every_return_of_check_formal_matches_its_declaration(store: Store):
-    """    `I-4`/`T3`：逐条 `return` 与声明比对 —— 覆盖全部 ok 分支与全部 fail 分支。
+    """`I-4`/`T3`：逐条 `return` 与声明比对 —— 覆盖全部 ok 分支与全部 fail 分支。
 
     旧判据只采 3 条 ok 分支，于是「分支间键集合不一致」与「失败分支被改成放行」在套件里结构性看不见（`I-4` 的注入实验：把拒绝分支改成猜一个名字，104 条相关用例照样全绿）。这里改成语法级判据：从
     `verify_tools` 的源码里把`check_formal` 的每一条 `return` 抽出来，逐条与声明比对。三条硬要求：

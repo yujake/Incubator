@@ -189,7 +189,7 @@ def _single_source_problems(tree: ast.AST) -> list[str]:
 
 
 def test_the_citation_prefix_registry_is_the_single_source():
-    """    前缀声明面：`schema.CITATION_PREFIXES` 是唯一真身，别处一律从它派生。
+    """前缀声明面：`schema.CITATION_PREFIXES` 是唯一真身，别处一律从它派生。
 
     改前是几处各写一份（`verify.CITATION_KINDS` 一张元组、`doc_tools._CITATION_TABLES`一张 dict、`gates.gate_g2` 内联的四个前缀），于是 `stmt:` 在
     `verify`/`doc_tools`侧已经被认（`R-03` 那次代改），而 G2 仍报"不在可解析的种类里"、`closing` 仍说"判不了" —— 同一个字符串四个结论，没有任何读数会响。

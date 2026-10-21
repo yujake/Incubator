@@ -137,7 +137,7 @@ def test_a_missing_declared_name_falls_back_to_the_subject_key(store):
 
 
 def test_the_evidence_ceiling_is_registered_next_to_the_criterion():
-    """    守卫：`selfreported_proof` 的证据上界必须写在判据旁边，且写明它到不了哪一层。
+    """守卫：`selfreported_proof` 的证据上界必须写在判据旁边，且写明它到不了哪一层。
 
     为什么断言在源码文本上：这条修复的形态就是"如实登记边界"（`R2b-AN-2-A`的两个可选方向里的第二个）。如果没有任何断言看着它，"注释被删掉"与"注释还在"在测试里完全一样 ——
     那正是本仓反复登记的"零断言点"形态。

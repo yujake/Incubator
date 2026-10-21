@@ -501,7 +501,7 @@ def test_putting_budget_left_back_into_the_system_makes_the_criterion_red(
 
 
 def test_the_recorded_digests_still_match_the_rendered_prompts() -> None:
-    """    读数的新鲜度：盘上记的 `prompt_sha256` 必须等于今天重算的摘要。这一条守的是"读数会腐烂"：提示词一改（`agent_prompts.py` / `specs/*` / 预设），以前那份预热就作废了 —— 而
+    """读数的新鲜度：盘上记的 `prompt_sha256` 必须等于今天重算的摘要。这一条守的是"读数会腐烂"：提示词一改（`agent_prompts.py` / `specs/*` / 预设），以前那份预热就作废了 —— 而
     JSON 还在，命中率读数还很好看。红的时候不要改这里：重跑一次预热（一条命令写在 `docs/DEVELOPMENT-SPEC.md` §14）。
 
     ## 2026-10-21：取数口径从"最后一趟"改成"每个目标自己最近那一趟"
@@ -543,7 +543,7 @@ def test_the_recorded_digests_still_match_the_rendered_prompts() -> None:
 
 
 def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
-    """    两条诊断读数必须与文档 §14 的两句话一致（否则改的是文档，不是读数）。
+    """两条诊断读数必须与文档 §14 的两句话一致（否则改的是文档，不是读数）。
 
     - 工具面不在缓存前缀里：同一份 system，带工具面预热过之后去掉工具面
     再发一次仍然命中（`tools_in_prefix=False`，实测 hit 11,904 / 12,126）；

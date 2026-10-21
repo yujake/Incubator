@@ -106,7 +106,7 @@ def _build_our_manuscript(reg, lit_id: str, *, text: str, evidence_kind: str = "
 
 
 def test_external_paper_intake_chain_is_walkable_with_existing_tools(wired):
-    """    正控（① 的主判据）：盘上的论文 → `literature` → `statements` → 我方 `documents` → H 审过。
+    """正控（① 的主判据）：盘上的论文 → `literature` → `statements` → 我方 `documents` → H 审过。
 
     四步全部经既有工具/动作走完，一步不新增；最后两条断言钉的是这件事的实质：可追溯的那条线：`statements.source_lit_id` 指外部来源，
     `documents.claims[].citations` 指同一条 `lit:` —— 两处指向同一个 id，才谈得上"改这篇论文时知道依据来自哪一篇"；
