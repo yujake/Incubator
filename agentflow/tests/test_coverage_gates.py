@@ -1052,7 +1052,8 @@ def test_gate_criterion_revision_texts_are_a_single_source(ws: Path):
     `numeric_evidence.script`、G14 的 `main_body_claims` 同判据。G10 是核心：`unknown` 侧管
     `line`/`verbatim_quote`/`minimal_fix`/`maths` 缺失（`schema.ReviewFinding` 早先没有这四字段，
     `P-9` 补上，`X-96.3-3`；证据 `test_gate_g10_is_unknown_when_a_finding_lacks_the_four_fields`），
-    逐字侧管六字段齐全按 §8.4 判（`test_gate_g10_accepts_a_conforming_finding_list` / `test_gate_g10_rejects_an_overlong_verbatim_quote`）⇒ 合成一句。"""
+    逐字侧管六字段齐全按 §8.4 判（`test_gate_g10_accepts_a_conforming_finding_list`
+    / `test_gate_g10_rejects_an_overlong_verbatim_quote`）⇒ 合成一句。"""
     ctx = _frozen_ctx(ws)
     no_doc_ctx = G.GateContext.build(None)
     mismatched: dict[str, tuple[str, str]] = {}
@@ -1118,7 +1119,8 @@ def test_no_gate_function_holds_a_second_criterion_or_revision_literal():
     为什么必需（"逐字相等"与哨兵试验都不够）：`GateResult.criterion_revision` 是运行时输出，只有走到
     某条 return 才被比对；把字面量写回去的函数只要抄对了今天照样过，下次改声明表就重新漂移 ——
     G-7 修好 `criterion` 后 G-12 立刻在同一形状上复发就是实证。用 `ast` 不用正则：正则会把注释与
-    docstring 里的逐字引文一起误伤。例外通道 `CRITERION_LITERAL_EXCEPTIONS`（目前为空）；正控两处：必须真扫到 15 个 `gate_g*` 函数、且真数到 ≥15 个 `GateResult(...)` 构造点。"""
+    docstring 里的逐字引文一起误伤。例外通道 `CRITERION_LITERAL_EXCEPTIONS`（目前为空）；正控两处：必须真扫到 15 个 `gate_g*` 函数、且真数到 ≥15
+    个 `GateResult(...)` 构造点。"""
     import ast
 
     src = (Path(__file__).resolve().parents[1] / "src" / "agentflow" / "gates.py").read_text(

@@ -141,9 +141,12 @@ def test_overclaim_markers_and_disclaimer_are_not_a_second_copy():
 def test_every_claimanatomy_code_lands_on_a_registered_finding_kind():
     """FC-03 跨层：`claimanatomy` 的每个 code 都必须登记进落据表（2026-10-15 补）。
 
-    两层词表：`claimanatomy` 的 `code` 是判据层的词，`schema.FINDING_KINDS` 是落库层的词，中间那张 `doc_tools._FINDING_KIND_OF_CODE` 是唯一的桥。桥缺一条 ⇒ :func:`doc_tools._finding_kind_of` 抛 `KeyError`。
+    两层词表：`claimanatomy` 的 `code` 是判据层的词，`schema.FINDING_KINDS` 是落库层的词，中间那张 `doc_tools._FINDING_KIND_OF_CODE`
+    是唯一的桥。桥缺一条 ⇒ :func:`doc_tools._finding_kind_of` 抛 `KeyError`。
 
-    真机现场（2026-10-15，`example/LANDING.md`）：`uncontrolled_disclaimer`（2026-10-13 新加，登记进了 `CLAIM_FAMILY_BY_CODE` 与 `test_lean_switch`）漏了这张表 ⇒ `G.build_document` 整条失败、稿件渲染不出来，而全量判据全绿 —— 因为 `test_lean_switch` 只走到 `validate_claim`，没有任何一条跨过这座桥。这条路就是这座桥的看门人。
+    真机现场（2026-10-15，`example/LANDING.md`）：`uncontrolled_disclaimer`（2026-10-13 新加，登记进了 `CLAIM_FAMILY_BY_CODE`
+    与 `test_lean_switch`）漏了这张表 ⇒ `G.build_document` 整条失败、稿件渲染不出来，而全量判据全绿 —— 因为 `test_lean_switch`
+    只走到 `validate_claim`，没有任何一条跨过这座桥。这条路就是这座桥的看门人。
 
     方向是单向的：`claimanatomy` 产的 code 必须全在表里；表里可以多出 `checker_error`（那是 `doc_tools` 自己的 code，不由 `claimanatomy` 产）。"""
     produced = set(CA.CLAIM_FAMILY_BY_CODE)
@@ -834,11 +837,13 @@ def _inline_domain_problem(sources: Mapping[str, str]) -> list[str]:
 def test_the_six_claim_vocabularies_have_exactly_one_definition_in_schema():
     """`EE-06` ①：六张词表各只有一处定义，且那一处在 `schema.py`，工具侧只引用不内联。
 
-    这条守的是 `EE-06` 的原意（"取值域校验存在、且只有一份"）加 2026-10-07 的裁定 `draft/68` 题 2 选 B（真身搬进 `schema.py`，本次由所有者授权、主控代改）：判据从"不许有第二份"升级成"只有一份、且那一份在 `schema.py`" —— 搬回去一半（在 `claimanatomy` 里再写一份同值字面量）会同时踩两条。
+    这条守的是 `EE-06` 的原意（"取值域校验存在、且只有一份"）加 2026-10-07 的裁定 `draft/68` 题 2 选 B（真身搬进 `schema.py`，本次由所有者授权、主控代改）：
+    判据从"不许有第二份"升级成"只有一份、且那一份在 `schema.py`" —— 搬回去一半（在 `claimanatomy` 里再写一份同值字面量）会同时踩两条。
 
     为什么"位置"也值得判：同值但不共用的两份拷贝在改名、加值、删值时会静默漂移（`CAM` 那族缺陷的形态），而两侧各自自洽、没有任何东西会红。位置 + 唯一性一起判，才等价于"两边读的是同一份"。
 
-    负控（同一条里，三半都验）：① 往源码集合里塞一份词表副本 ⇒ 同一个读法必须报出 2 处；② 把 `doc_tools` 的 `list(CA.X)` 换成内联字面量 ⇒ `_inline_domain_problem` 必须报出来；③ 把定义处从 `schema.py` 挪到别的文件 ⇒ `_VOCAB_HOME` 那一半必须报出来。"""
+    负控（同一条里，三半都验）：① 往源码集合里塞一份词表副本 ⇒ 同一个读法必须报出 2 处；② 把 `doc_tools` 的 `list(CA.X)` 换成内联字面量
+    ⇒ `_inline_domain_problem` 必须报出来；③ 把定义处从 `schema.py` 挪到别的文件 ⇒ `_VOCAB_HOME` 那一半必须报出来。"""
     sources = _tree_sources()
     # 反真空：扫描器真的读到了整棵包（读不到时下面每一格都会"恰好一处"缺席，
     # 而不是恰好一处 —— 但把下限写出来，这条判据就不会因为"扫了个空树"而变绿）

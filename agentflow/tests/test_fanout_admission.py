@@ -1,20 +1,35 @@
 """扇出口径判据：扇出 = 此刻在飞的子代理数，不是累计受理数（所有者 2026-10-08 裁定）。
 
-口径：在飞 = 子行 `status ∈ {"pending", "running"}`（`Conductor._in_flight_children_of`；状态词表唯一来源 `schema.TASK_STATUSES`）。`Conductor.summon` 第 [4] 步喂给 `Decision.fanout`（`conductor.py:1413`），判定在 `policy.check` 第 [5] 步（`policy.py:352-375`）。
-返回即腾位：`done` / `failed` / `cancelled` 都带 `ended_at` ⇒ 立刻从分子里消失。触顶时"只可等待"：`Conductor._await_fanout_slot`（默认 `DEFAULT_FANOUT_WAIT_SEC`；`fanout_wait_sec=0` = 不等、立即拒），等到即派、窗口用完才拒。
+口径：在飞 = 子行 `status ∈ {"pending", "running"}`（`Conductor._in_flight_children_of`；
+状态词表唯一来源 `schema.TASK_STATUSES`）。`Conductor.summon` 第 [4] 步喂给 `Decision.fanout`（`conductor.py:1413`），
+判定在 `policy.check` 第 [5] 步（`policy.py:352-375`）。
+返回即腾位：`done` / `failed` / `cancelled` 都带 `ended_at` ⇒ 立刻从分子里消失。
+触顶时"只可等待"：`Conductor._await_fanout_slot`（默认 `DEFAULT_FANOUT_WAIT_SEC`；`fanout_wait_sec=0` = 不等、立即拒），等到即派、
+窗口用完才拒。
 
-旧口径的代价：`len(self._children_of(parent))` 连闸门拒掉的召唤也数（`Conductor._refuse` 落 `note="refused:<reason>"` 行）⇒ 触顶后每次召唤都被 `fanout_exceeded` 拒、每次拒绝又占一格 ⇒ 名额只增不减。
-真机：`agentflow/projects/p9-post-merge-probe` 2026-10-07 里 `t-0001` 下 10 个子行、末 5 条 `t-0007`…`t-0011` 全是 `refused/fanout_exceeded`，主控只派出 3 件活 ⇒ `experiments=0`。
-另一头：`p5-review-t18`（sid `t1r` / `t1s`）第 51–88 步花完 20 个累计名额 ⇒ `G.build_document` 与 Lean 重派进不去、`documents` 0 行；"在飞 20 个"由 `Policy` 的 `max_concurrency` 管。
+旧口径的代价：`len(self._children_of(parent))` 连闸门拒掉的召唤也数（`Conductor._refuse` 落 `note="refused:<reason>"` 行）⇒
+触顶后每次召唤都被 `fanout_exceeded` 拒、每次拒绝又占一格 ⇒ 名额只增不减。
+真机：`agentflow/projects/p9-post-merge-probe` 2026-10-07 里 `t-0001` 下 10 个子行、末 5 条 `t-0007`…`t-0011`
+全是 `refused/fanout_exceeded`，主控只派出 3 件活 ⇒ `experiments=0`。
+另一头：`p5-review-t18`（sid `t1r` / `t1s`）第 51–88 步花完 20 个累计名额 ⇒ `G.build_document` 与 Lean 重派进不去、`documents` 0 行；
+"在飞 20 个"由 `Policy` 的 `max_concurrency` 管。
 
-累计读数退到审计面：`Conductor._admitted_children_of`（配 `_occupies_fanout_slot`）只回答"累计派过几件"、不再参与判定；`_children_of` 仍服务 `SummonResult.children`（展示面，`test_display_face_still_lists_attempts`）。
-受理标记与 `status="running"` 同事务落盘（`_ADMITTED_MARK`）；旧法挂 `tokenmeter:settled`，而 `_charge_and_settle` 兜住异常 ⇒ 行缺标记 ⇒ 累计少算 1（`_set_usage`）。
-夹具：`_seed_in_flight` / `_mark_returned` 直写 `status="running"`、`started_at` 非空、`ended_at=None`（逐字对齐 `schema.Task.validate` 的 `schema.py:2131-2139`），等待窗同步点等 `readings` 非空而非 `sleep`（日志层另有 `_log`）。
+累计读数退到审计面：`Conductor._admitted_children_of`（配 `_occupies_fanout_slot`）只回答"累计派过几件"、不再参与判定；`_children_of`
+仍服务 `SummonResult.children`（展示面，`test_display_face_still_lists_attempts`）。
+受理标记与 `status="running"` 同事务落盘（`_ADMITTED_MARK`）；旧法挂 `tokenmeter:settled`，而 `_charge_and_settle` 兜住异常 ⇒ 行缺标记
+⇒ 累计少算 1（`_set_usage`）。
+夹具：`_seed_in_flight` / `_mark_returned` 直写 `status="running"`、`started_at`
+非空、`ended_at=None`（逐字对齐 `schema.Task.validate` 的 `schema.py:2131-2139`），等待窗同步点等 `readings`
+非空而非 `sleep`（日志层另有 `_log`）。
 
-逐条断言：`test_..._returns_in_time` / `..._times_out` / `test_await_fanout_slot_...` / `test_conductor_tier...` / `test_conductor_tier_is_exactly_twenty` / `test_gate_refusal_does_not_consume_a_fanout_slot` /
-`test_refused_attempts_at_the_cap_never_deepen_the_poison` / `test_a_failed_child_frees_the_slot_on_return` / `test_a_role_refused_child_frees_the_slot_on_return` /
-`test_the_admission_mark_is_on_disk_while_the_handler_runs` / `test_a_contained_charge_failure_still_occupies_the_slot` /
-`test_a_failed_charge_writeback_still_occupies_the_slot` / `test_the_previous_minimal_fix_would_miss_this_row` / `test_a_legacy_refused_row_keeps_the_old_verdict`。"""
+逐条断言：`test_..._returns_in_time` / `..._times_out` / `test_await_fanout_slot_...` / `test_conductor_tier...`
+/ `test_conductor_tier_is_exactly_twenty` / `test_gate_refusal_does_not_consume_a_fanout_slot` /
+`test_refused_attempts_at_the_cap_never_deepen_the_poison` / `test_a_failed_child_frees_the_slot_on_return`
+/ `test_a_role_refused_child_frees_the_slot_on_return` /
+`test_the_admission_mark_is_on_disk_while_the_handler_runs`
+/ `test_a_contained_charge_failure_still_occupies_the_slot` /
+`test_a_failed_charge_writeback_still_occupies_the_slot`
+/ `test_the_previous_minimal_fix_would_miss_this_row` / `test_a_legacy_refused_row_keeps_the_old_verdict`。"""
 
 from __future__ import annotations
 

@@ -3,16 +3,18 @@
 
 ## 改前的读数（`draft/44` 的 P1-1）
 
-`closing._leg_reading` 里那一档只有一行判据：`advanced = [r for r in rows if list(r.get("history") or [])]`。于是两轮全 `no_change` 的计划（`dead_end` 逐轮落库、子目标一条没动）与四轮全 `progress` 的计划在收工门上等值（真机 mp3：`000000` 读到的数与 `000001` 一样）。那一格是「攻」这一环节的唯一读数 —— 等值就等于这一格什么都没量到。
+`closing._leg_reading` 里那一档只有一行判据：`advanced = [r for r in rows if list(r.get("history") or [])]`。
+于是两轮全 `no_change` 的计划（`dead_end` 逐轮落库、子目标一条没动）与四轮全 `progress` 的计划在收工门上等值（真机 mp3：`000000` 读到的数与 `000001` 一样）。
+那一格是「攻」这一环节的唯一读数 —— 等值就等于这一格什么都没量到。
 
 ## 改后的口径
 
-判据本体是 `closing._round_advanced`，三条缺一不可：① `outcome == "progress"`（`no_change` / `blocked` 都不是推进）；② 有据可依：产物里有 `cites`（`proof.steps[].cites` / `dead_end.best_partial[].ids`）；③ 或者产出了新东西：`reduction.new_subgoals` / `counterexample_request` 派出 E 子目标 / `run_experiment` 落了一行实验。
+判据本体是 `closing._round_advanced`，三条缺一不可：① `outcome == "progress"`（`no_change` / `blocked` 都不是推进）；② 有据可依：
+产物里有 `cites`（`proof.steps[].cites` / `dead_end.best_partial[].ids`）；③ 或者产出了新东西：`reduction.new_subgoals`
+/ `counterexample_request` 派出 E 子目标 / `run_experiment` 落了一行实验。
 
 ②③是"或"；只派检索/重抽取请求的那种轮两条都不满足 ⇒ 不算推进（那是「闭」那一档的事）。
-
 ## 判据的形状
-
 - 正控：两份计划（全 `no_change` / 有 `progress`）在同一张台账里，读数必须是 `0` 与 `1`，而且不得相等；
 - 负控①（证明改前会红）：把口径换回"`history` 非空即算" ⇒ 两份计划的读数变成相等，这正是改前那一格的形态；
 - 负控②：只派检索请求的轮不算（`submit_search_request` 那种"把活递出去"的轮）；

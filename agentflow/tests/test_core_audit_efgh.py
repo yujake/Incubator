@@ -323,7 +323,8 @@ def test_plan_error_does_not_escape_as_unexpected_and_keeps_its_own_kind(tmp_pat
 
     本用例的断言被改过一次（改的是期望值，不是判据），逐字留痕：旧 `assert bad.meta.get("kind") == "tool_error"`，
     且第一句 docstring 写着"`attack_tools.py` 没有 `guard_result`（该文件不属于本次交付），所以
-    `agent_f.PlanError` 必须自己继承 `ToolError` 让工具层给出 `kind="tool_error"`"；新 `assert bad.meta.get("kind") == "plan_error"`。
+    `agent_f.PlanError` 必须自己继承 `ToolError` 让工具层给出 `kind="tool_error"`"；
+    新 `assert bad.meta.get("kind") == "plan_error"`。
 
     为什么旧断言是错的（不是"因为它变红了"）：`PlanError` 继承 `ToolError` 只是让失败不再无声 —— 它把
     "攻坚计划层面的拒绝"和"工具层自己的异常"（参数错 / 未接线）压进同一个 `tool_error` 档，而调用方要靠
@@ -621,7 +622,8 @@ def test_agent_h_writers_registry_exposes_exactly_the_declared_write_tools(tmp_p
 
     事实变了（业主 2026-10-18 裁定）：3 件 → 4 件。多出来的是 `review.record_finding`（H 自己读出来的
     那一条发现的登记通道 —— `review_document` 只落机械扫描算得出来的那批）。不是写面放宽：只写
-    `review_findings`，不改 `documents.status`、不碰任何知识表；登记处是 `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]`（同一笔裁定，逐字理由在那）、
+    `review_findings`，不改 `documents.status`、不碰任何知识表；登记处是 `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]`（同一笔裁定，
+    逐字理由在那）、
     `capabilities.TOOL_WRITE_SETS["review.record_finding"] == {"review_findings"}`（逐工具写集，与实现 AST
     逐格比对）与 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]`（表级例外，`{review_findings, documents}`
     那一条 —— 它没变）。所以这里把期望集合更新到新事实，判据本身（"逐个点名、多一件就红"）一字没改。"""

@@ -1,8 +1,14 @@
 """`G-19`：两层声明的对账面不许静默缩小。
 
-实测背景（`D-9` 更正；当次观测 2026-09-26 19:0x）：`declaration_divergences()` 返回的条目全部是"没有比对"（`two_layer_name_unmatched`：两层名字对不上 ⇒ 三态里的 unknown），warning 0、error 0。那个条数刻意不写死 —— 手抄的数字会过期（`R4-AN-2` 实测到它从 32 漂到 33），等式不会：它等于 `len(two_layer_reconciliation()['unmatched'])`，也等于 `_KNOWN_UNMATCHED_ACTIONS` 的条数，而 `assert_capabilities()` 第 [7] 条的两条断言（`new_unmatched` 与 `stale` 都为空）钉着这个相等。要读当次数就跑 `python -c "from agentflow import capabilities as C; print(C.two_layer_reconciliation())"`。（本文件原来写"33 条 + 1 条 warning"，那条 warning `two_layer_external_imprecise` 在 B3 收官后已经不存在了 —— 与 `capabilities.py` 里同一处注释一起更正。）
+实测背景（`D-9` 更正；当次观测 2026-09-26 19:0x）：`declaration_divergences()` 返回的条目全部是"没有比对"（`two_layer_name_unmatched`：
+两层名字对不上 ⇒ 三态里的 unknown），warning 0、error 0。那个条数刻意不写死 —— 手抄的数字会过期（`R4-AN-2` 实测到它从 32 漂到 33），等式不会：
+它等于 `len(two_layer_reconciliation()['unmatched'])`，也等于 `_KNOWN_UNMATCHED_ACTIONS` 的条数，
+而 `assert_capabilities()` 第 [7] 条的两条断言（`new_unmatched` 与 `stale` 都为空）钉着这个相等。
+要读当次数就跑 `python -c "from agentflow import capabilities as C; print(C.two_layer_reconciliation())"`。（本文件原来写"33
+条 + 1 条 warning"，那条 warning `two_layer_external_imprecise` 在 B3 收官后已经不存在了 —— 与 `capabilities.py` 里同一处注释一起更正。）
 
-而"第 [7] 条只过滤 `error`"那一版确实曾经是恒真的：门看起来接上了，实际上绝大多数动作根本没有被两层比对过。今天第 [7] 条钉的是"没比对"登记表的双向相等、第 [7b] 条钉的是"三格互斥且穷尽"这个结构本身（`R4-AN-3` 之后第 [7] 条还真的读 warning），所以"静默少比对"有判据看着了。
+而"第 [7] 条只过滤 `error`"那一版确实曾经是恒真的：门看起来接上了，实际上绝大多数动作根本没有被两层比对过。今天第 [7] 条钉的是"没比对"登记表的双向相等、第 [7b]
+条钉的是"三格互斥且穷尽"这个结构本身（`R4-AN-3` 之后第 [7] 条还真的读 warning），所以"静默少比对"有判据看着了。
 
 所以这一节钉的不是"再严一点"，而是"不许静默地少比对"：新出现的"没比对"必须显式登记，登记表里已经对上的必须删掉。"""
 
@@ -117,7 +123,10 @@ def test_the_cross_check_actually_compares_at_least_one_action() -> None:
 
     没有这条，一个"匹配全线失效"的实现（所有动作都进 unmatched）也会因为上面那条恒真的 error 断言而看起来正常 —— 这正是 `G-19` 的形态。
 
-    D-3 裁决把它加固成分区判据（`capabilities.two_layer_reconciliation`）：动作表里的每一个动作都必须恰好落进 `compared` / `unmatched` / `ambiguous` 三格之一 —— 也就是"三格互斥且穷尽"，判据读的是 `recon["total"]`，不写死动作条数（`R4-AN-2` 的形态：手抄的数字会过期，等式不会）。为什么不能只钉 `compared > 0`：钉死任何一个具体的数都会变成一条"任何正当的工具增减都让它红"的断言（`DEVELOPMENT.md` §6 的 P15 反面）。分区结构自我维护 —— 哪一格变了都必然在 `len(...)` 之和或互斥性上露出来。"""
+    D-3 裁决把它加固成分区判据（`capabilities.two_layer_reconciliation`）：动作表里的每一个动作都必须恰好落进 `compared` / `unmatched`
+    / `ambiguous` 三格之一 —— 也就是"三格互斥且穷尽"，判据读的是 `recon["total"]`，不写死动作条数（`R4-AN-2` 的形态：手抄的数字会过期，等式不会）。
+    为什么不能只钉 `compared > 0`：钉死任何一个具体的数都会变成一条"任何正当的工具增减都让它红"的断言（`DEVELOPMENT.md` §6 的 P15 反面）。分区结构自我维护 ——
+    哪一格变了都必然在 `len(...)` 之和或互斥性上露出来。"""
     recon = C.two_layer_reconciliation()
     compared, unmatched, ambiguous = recon["compared"], recon["unmatched"], recon["ambiguous"]
     assert len(compared) + len(unmatched) + len(ambiguous) == recon["total"], recon
@@ -163,9 +172,12 @@ def test_the_partition_assertion_catches_an_empty_compared_set(
 ) -> None:
     """负控：对账面上一个动作都没比对上 ⇒ 分区断言必须红。
 
-    造法：两步打桩，逼出"匹配全线失效"这一种失败。第一步把 `_candidates` 打桩成"一个都匹配不上" ⇒ 每个动作都掉进 `unmatched`（`compared` 空、`ambiguous` 空）。第二步把 `_KNOWN_UNMATCHED_ACTIONS` 打桩成"全部动作" ⇒ 让第 [7] 条那两条登记表断言（新增未登记 / 登记表烂成噪音）在这条负控下恰好都不触发，于是唯一会红的就是第 [7b] 条的分区断言。
+    造法：两步打桩，逼出"匹配全线失效"这一种失败。第一步把 `_candidates` 打桩成"一个都匹配不上" ⇒ 每个动作都掉进 `unmatched`（`compared` 空、`ambiguous` 空）。
+    第二步把 `_KNOWN_UNMATCHED_ACTIONS` 打桩成"全部动作" ⇒ 让第 [7] 条那两条登记表断言（新增未登记 / 登记表烂成噪音）在这条负控下恰好都不触发，于是唯一会红的就是第 [7b]
+    条的分区断言。
 
-    为什么必须做第二步：伪造一张能力表很容易在第 [1]/[2]/[6] 条先炸，于是"负控命中了别的断言"，变成假证明（我第一版就是这样，报错落在第 [2] 条上）。这里的打桩让 [1]–[6] 与本条要测的命题之外的一切都保持真实，被改变的只有"匹配"这件事本身 —— 而"匹配全线失效"正是这条负控要测的（`G-19`：所有动作都进 unmatched，门却看起来正常）。"""
+    为什么必须做第二步：伪造一张能力表很容易在第 [1]/[2]/[6] 条先炸，于是"负控命中了别的断言"，变成假证明（我第一版就是这样，报错落在第 [2] 条上）。这里的打桩让 [1]–[6]
+    与本条要测的命题之外的一切都保持真实，被改变的只有"匹配"这件事本身 —— 而"匹配全线失效"正是这条负控要测的（`G-19`：所有动作都进 unmatched，门却看起来正常）。"""
     monkeypatch.setattr(C, "_candidates", lambda spec, tools: [])
     monkeypatch.setattr(C, "_KNOWN_UNMATCHED_ACTIONS",
                         frozenset(f"{r}.{s.action}" for r, specs in C.CAPABILITIES.items()

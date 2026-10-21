@@ -170,17 +170,17 @@ def test_the_resolver_falling_over_falls_back_to_the_static_cap(ws: pathlib.Path
 
 # ============================================================ 2b. 口径必须是全局的（裁定 B2）
 #
-# 2026-10-15 业主裁定 B2：钱那一格此前比的是 `self.spend.usd`（**这一条缝自己的**
-# 累计），而 `budget_limit()` 是**全局**额度 ⇒ 每个角色都以为"我最多能花整笔"。
+# 2026-10-15 业主裁定 B2：钱那一格此前比的是 `self.spend.usd`（这一条缝自己的
+# 累计），而 `budget_limit()` 是全局额度 ⇒ 每个角色都以为"我最多能花整笔"。
 # 一组十个角色就能把总预算花成十倍，而每一处闸门看起来都在"正常工作"。
 
 
 def test_the_money_gate_reads_the_shared_ledger_not_this_seams_pocket(
         ws: pathlib.Path) -> None:
-    """**B2 的钉子**：别的角色花掉的钱，这一条缝必须看得见。
+    """B2 的钉子：别的角色花掉的钱，这一条缝必须看得见。
 
-    构造：全局预算 1.0；账上已经有一笔**别的角色**花的 2.0；
-    这一条缝自己的 `spend.usd` 是 **0**。
+    构造：全局预算 1.0；账上已经有一笔别的角色花的 2.0；
+    这一条缝自己的 `spend.usd` 是 0。
     改前它读到 0 < 1.0 ⇒ 放行（钱会被花成两倍）；改后它读到全局 2.0 ⇒ 拒。
     """
     st = Store(ws)
@@ -200,7 +200,7 @@ def test_the_money_gate_reads_the_shared_ledger_not_this_seams_pocket(
 
 def test_a_seam_without_a_ledger_says_its_reading_is_only_its_own(
         ws: pathlib.Path) -> None:
-    """三态：没有账本 ⇒ 读数只能报这条缝自己的，而且**必须写明**是哪个口径。
+    """三态：没有账本 ⇒ 读数只能报这条缝自己的，而且必须写明是哪个口径。
 
     为什么这条要单独立：把 `per_seam` 与 `ledger` 折叠成同一个数，正是 B2 那个缺陷
     的形态 —— 两个口径给出同一个数字时，没有人能看出它们本该不同。

@@ -611,12 +611,16 @@ def test_ensure_project_refuses_inside_an_existing_workspace(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """正控（`draft/37` §37.4 ④ / §41）：已经在项目里、又没说项目落哪 ⇒ 拒绝，且一个目录都不建。
 
-    这条门是怎么来的（不是设计洁癖，是真机读数）：`projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)` —— 一个与本工作区无关的默认落点。于是 M 在一个已存在的工作区里调这一件，得到的是在别处新建的一个空项目，而不是"热启动当前项目"：
+    这条门是怎么来的（不是设计洁癖，是真机读数）：`projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)` —— 一个与本工作区无关的默认落点。于是 M
+    在一个已存在的工作区里调这一件，得到的是在别处新建的一个空项目，而不是"热启动当前项目"：
 
-    - §37 那趟真机 23 步里有 4 步在 `ensure_project`，其中一次真的建出了 `D:\Incubator\projects\project11`（`project.json` 的 `created_at` 与那次运行同秒级）—— 当时账本上没有任何一步显示"我建了个项目"。
+    - §37 那趟真机 23 步里有 4 步在 `ensure_project`，其中一次真的建出了 `D:\Incubator\projects\project11`（`project.json`
+    的 `created_at` 与那次运行同秒级）—— 当时账本上没有任何一步显示"我建了个项目"。
     - 同一天本仓库自己的普查探针（没给 `projects_dir`）也建了 `project12`/`project13` —— 写探针的人同样踩，说明缺省值才是因。
 
-    判据取三条，缺一条都算这件事没修好：① `ok is False` 且 `kind == "already_a_project"`（不是含糊的失败）；② 缺省落点里一个条目都没多（"拒绝了但顺手建了目录"是最坏的形态）；③ 消息里点名出口（显式给 `projects_dir`）—— 只会说"不行"的守卫会把人卡死。"""
+    判据取三条，缺一条都算这件事没修好：① `ok is False` 且 `kind == "already_a_project"`（不是含糊的失败）；②
+    缺省落点里一个条目都没多（"拒绝了但顺手建了目录"是最坏的形态）；
+    ③ 消息里点名出口（显式给 `projects_dir`）—— 只会说"不行"的守卫会把人卡死。"""
     projects_root = tmp_path / "default-projects"
     projects_root.mkdir()
     monkeypatch.setattr(P, "DEFAULT_PROJECTS_DIR", projects_root, raising=True)

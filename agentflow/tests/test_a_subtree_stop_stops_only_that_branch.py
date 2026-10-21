@@ -10,7 +10,7 @@
 正控：① 子树开关：那一支里的循环停（`stop_reason="stop_file"`），别的支不停；
   ② 那一支的根自己撤开关，成员不撤（同支别的循环还要读到它）；
   ③ 缺省（没有 `root_task_id`）⇒ 全停 + 只有树根撤（业主裁定"全工作区开关 = 整棵树停"：
-  成员停但不撤、树根**读时也不撤**，撤推迟到它这一趟的收尾；逐条见
+  成员停但不撤、树根读时也不撤，撤推迟到它这一趟的收尾；逐条见
   `test_stop_scope_is_the_whole_tree.py`）。
 
 负控：① 判不了（台账里没有我这一行 / 没给编号）⇒ 不停 + 一句读数；
@@ -117,8 +117,8 @@ def test_the_root_of_the_branch_removes_the_switch_members_do_not(tmp_path: path
 def test_the_default_switch_still_stops_everyone(tmp_path: pathlib.Path):
     """正控③：缺省开关（没有 `root_task_id`）⇒ 全停 + 只有树根撤。
 
-    业主裁定（"全工作区开关 = 整棵树停"）之后，这一档的**停**没变（谁读到都停），
-    **撤**变了：成员不许撤（`remove=False`，别人还要读到它），只有树根撤
+    业主裁定（"全工作区开关 = 整棵树停"）之后，这一档的停没变（谁读到都停），
+    撤变了：成员不许撤（`remove=False`，别人还要读到它），只有树根撤
     （`_is_tree_root`）。四档逐条见 `test_stop_scope_is_the_whole_tree.py`。
     """
     _st, cond, ws, top = _env(tmp_path)
@@ -132,7 +132,7 @@ def test_the_default_switch_still_stops_everyone(tmp_path: pathlib.Path):
     assert member._user_stop_reason(LoopRun(role="D", task="t")) == "stop_file"
     assert stopctl.read_stop(ws) is not None, "成员不当'第一个读到的人'（别人还要读）"
 
-    # 树根（顶趟，父落在自己身上）：停；**读时不撤**（业主「M 停整棵树」的删除半），
+    # 树根（顶趟，父落在自己身上）：停；读时不撤（业主「M 停整棵树」的删除半），
     # 撤发生在这一趟自己的收尾（`run()` 末尾 / `_consume_stop_at_teardown`）。
     root = _loop(ws, cond, task_id=top, parent=top, role="M")
     assert root._user_stop_reason(LoopRun(role="M", task="t")) == "stop_file"

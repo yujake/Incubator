@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""编号宽度：**发号只发六位**（反真空）+ **旧四位读得进来**（读侧兼容）。
+"""编号宽度：发号只发六位（反真空）+ 旧四位读得进来（读侧兼容）。
 
-业主 2026-10-14 逐字：「**所有四位编号改成六位**（`0000`→`000000`，防溢出）……
+业主 2026-10-14 逐字：「所有四位编号改成六位（`0000`→`000000`，防溢出）……
 并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。
 
 ## 两半必须分开判（这是这一组存在的理由）
@@ -9,12 +9,12 @@
 把"读得进来"与"发得出去"折成一个判据，就会得到两种坏形态里的一种：
 
 - 只判"旧数据读得进" ⇒ 六位这件事没有任何东西看着（改回四位照样全绿）；
-- 只判"新号是六位" ⇒ 历史行会在 `store.rebuild()` 里被判成坏行**静默跳过**
+- 只判"新号是六位" ⇒ 历史行会在 `store.rebuild()` 里被判成坏行静默跳过
   （那是数据毁灭，不是迁移）。`row_from_dict` + `validate` 走的是同一个 `require_id`。
 
 所以这一组按两半写：
 
-1. 反真空（六位）：**每一个发号点的输出**都必须是六位 —— 逐个真发一次，
+1. 反真空（六位）：每一个发号点的输出都必须是六位 —— 逐个真发一次，
    不读任何文档/注释里的宽度；
 2. 读侧兼容（四位）：四位的历史号照样通过 `require_id` / `is_valid_process_id`，
    且 `id_width()` 能把两种宽度分开报出来（迁移读数靠它）。
@@ -37,7 +37,7 @@ from agentflow.store import MAX_ID, Store
 
 
 def test_the_declared_width_is_six_and_the_ceiling_matches():
-    """宽度与上限**同一处对账**（判据本身也钉一遍，免得它随别处一起漂）。"""
+    """宽度与上限同一处对账（判据本身也钉一遍，免得它随别处一起漂）。"""
     assert S.ID_DIGITS == 6, f"业主裁定的宽度是六位，读到的 {S.ID_DIGITS} 位"
     assert S.ID_PATTERN == r"\d{6}", S.ID_PATTERN
     assert MAX_ID == 10 ** S.ID_DIGITS - 1 == 999999, MAX_ID
@@ -46,7 +46,7 @@ def test_the_declared_width_is_six_and_the_ceiling_matches():
 
 
 def test_every_allocator_emits_the_current_width(tmp_path: pathlib.Path):
-    """**所有发号点**的输出都必须是六位：逐个真发一次（不是读文档）。
+    """所有发号点的输出都必须是六位：逐个真发一次（不是读文档）。
 
     为什么逐个发而不能只查 `format_id`：改宽度最容易漏的形态是"某个发号点自己
     拼了 `f\"{n:04d}\"`"—— 那种点不看 `format_id`，只查一处函数是抓不到的。
@@ -89,7 +89,7 @@ def test_every_allocator_emits_the_current_width(tmp_path: pathlib.Path):
 def test_no_four_digit_mint_remains_in_the_source():
     """反真空的第二条：源码里不许再有"自己拼四位数"的发号点。
 
-    查的是 `f"{...:04d}"` 这种**写死的宽度**（读侧兼容的 `f"{n:04d}"` 只允许出现在
+    查的是 `f"{...:04d}"` 这种写死的宽度（读侧兼容的 `f"{n:04d}"` 只允许出现在
     明确标注"旧数据"的那一处 —— 目前只有 `manuscripts._mid_forms` 一处）。
     """
     root = pathlib.Path(__import__("agentflow").__file__).parent
@@ -114,7 +114,7 @@ def test_no_four_digit_mint_remains_in_the_source():
 
 
 def test_legacy_four_digit_ids_are_still_accepted_on_the_read_side():
-    """旧四位数据**读得进来**：形态判据两种宽度都认，且能分辨是哪一种。"""
+    """旧四位数据读得进来：形态判据两种宽度都认，且能分辨是哪一种。"""
     assert S.is_valid_id("0000") and S.is_legacy_id("0000")
     assert S.is_valid_id("000000") and not S.is_legacy_id("000000")
     assert S.require_id("0000") == "0000"
@@ -127,7 +127,7 @@ def test_legacy_four_digit_ids_are_still_accepted_on_the_read_side():
 def test_a_legacy_row_in_a_real_store_is_read_not_dropped(tmp_path: pathlib.Path):
     """一条真实的历史行（四位号）必须能读、能重建，不被当成坏行静默跳过。
 
-    这是读侧兼容的**端到端**那一半：`store.rebuild()` 逐行调
+    这是读侧兼容的端到端那一半：`store.rebuild()` 逐行调
     `row_from_dict` + `validate`，任何异常都被 `except: skipped += 1` 吃掉 ——
     所以"只认六位"的后果是历史行凭空消失，且不报错。
     """
@@ -151,8 +151,8 @@ def test_a_legacy_row_in_a_real_store_is_read_not_dropped(tmp_path: pathlib.Path
 
 def test_a_new_write_with_a_legacy_id_is_still_shape_valid_but_the_allocator_is_not(
         tmp_path: pathlib.Path):
-    """写侧与发号侧的分工：手写一个四位号**仍然合法**（旧数据要能续写/迁移），
-    但**发号器只发六位** —— "新号必须六位"这条判据落在发号点上，不落在形态判据上。
+    """写侧与发号侧的分工：手写一个四位号仍然合法（旧数据要能续写/迁移），
+    但发号器只发六位 —— "新号必须六位"这条判据落在发号点上，不落在形态判据上。
 
     为什么刻意这样分（业主裁定的两半分法）：形态判据要同时服务"读旧数据"与
     "写新数据"，把它收紧成只认六位就会把历史行判死；而"新写的号是几位"这件事

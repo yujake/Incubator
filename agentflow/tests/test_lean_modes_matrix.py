@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""有 Lean / 无 Lean 的**模式矩阵**判据（`docs/LEAN-MODES.md` 的可执行版本）。
+"""有 Lean / 无 Lean 的模式矩阵判据（`docs/LEAN-MODES.md` 的可执行版本）。
 
 为什么要有这一条：`tests/test_lean_switch.py` 只盯 5 个固定 face，而本矩阵覆盖
-**开关在两条链上的全部可观察差异** —— 提示词第一行、V 的强度声明、`check_formal` 的直拒、
+开关在两条链上的全部可观察差异 —— 提示词第一行、V 的强度声明、`check_formal` 的直拒、
 `run_experiment(formal)` 的直拒、`detect_verifier` 的许可读数、以及三个角色的义务句。
 
 ## 怎么在"两种模式"之间切换
 
 `settings` 在模块级缓存读数 ⇒ 每个用例用 `importlib.reload` 重置它，再用 `monkeypatch.setenv`
-设/删 `AGENTFLOW_LEAN_ENABLED`，从而**真的**跑两条分支（不是断言源码文本）。
+设/删 `AGENTFLOW_LEAN_ENABLED`，从而真的跑两条分支（不是断言源码文本）。
 """
 from __future__ import annotations
 
@@ -58,21 +58,21 @@ def lean_on(monkeypatch):
 
 # ---------------------------------------------------------------- 1. 第一行
 def test_the_first_line_of_toolchain_facts_is_the_switch_state(lean_off):
-    """**六处提示词都写"看第一行"** ⇒ 第一行必须是开关状态（S1）。"""
+    """六处提示词都写"看第一行" ⇒ 第一行必须是开关状态（S1）。"""
     first = _prompts().toolchain_facts_text().splitlines()[0]
     assert "已关闭" in first
     assert "第一行" not in first  # 它自己就是那一行
 
 
 def test_the_first_line_says_explicitly_enabled_when_on(lean_on):
-    """开时必须有"已开启"三个字 —— 否则六条条件句**匹配不到**（S1）。"""
+    """开时必须有"已开启"三个字 —— 否则六条条件句匹配不到（S1）。"""
     first = _prompts().toolchain_facts_text().splitlines()[0]
     assert "已开启" in first
 
 
 # ---------------------------------------------------------------- 2. V 的强度
 def test_v_is_told_its_verdict_is_never_proof_in_both_modes(lean_off, lean_on):  # noqa: ARG001
-    """V 的真实入口（`cold_start_prompt`）必须写明"成立 ≠ proof"，**两种模式都要**（S3）。"""
+    """V 的真实入口（`cold_start_prompt`）必须写明"成立 ≠ proof"，两种模式都要（S3）。"""
     text = _verifications().cold_start_prompt("命题", "证明")
     assert "Lean 形式化" in text
     assert "不构成 `proof`" in text
@@ -80,7 +80,7 @@ def test_v_is_told_its_verdict_is_never_proof_in_both_modes(lean_off, lean_on): 
 
 # ---------------------------------------------------------------- 3. check_formal
 def test_check_formal_is_a_controlled_refusal_when_off(lean_off):
-    """关着时 `check_formal` **不是**工具失败：`ok` 且 `reason=lean_disabled`（审计 §4）。"""
+    """关着时 `check_formal` 不是工具失败：`ok` 且 `reason=lean_disabled`（审计 §4）。"""
     from agentflow.tools import verify_tools as VT
 
     res = VT.check_formal("1 + 1 = 2")
@@ -102,7 +102,7 @@ def test_detect_verifier_reports_permission_not_just_environment(lean_off):
 
 # ---------------------------------------------------------------- 5. settings 读不懂
 def test_an_unreadable_switch_falls_back_to_off(tmp_path, monkeypatch):
-    """读不懂 ⇒ **按关处理**（fail-closed，S4）。"""
+    """读不懂 ⇒ 按关处理（fail-closed，S4）。"""
     # `conftest.py` 在导入期就把 `AGENTFLOW_LEAN_ENABLED=1` 钉住了 ⇒ 这条用例必须先摘掉它，
     # 否则读到的是"环境变量说开"，根本走不到"设置文件读不懂"那一支。
     monkeypatch.delenv("AGENTFLOW_LEAN_ENABLED", raising=False)

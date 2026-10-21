@@ -5,15 +5,19 @@
 
 T1 那一趟里，`E.run_experiment` 被调 12 次 —— 「9 次被参数校验拒、3 次因硬约束失败」，而模型每一次的行为都是「合理」的：它按自己看得见的形状调用。错在框架：
 
-- `method="exhaustive_search"` 时 `schema.Experiment` 的硬约束 2c 要求 `certificate`，而 `certificate` / `search_bound` 「不在任何 schema 里」（动作表、工具 schema、方法签名都没有）⇒ 模型不可能知道，「每一次尝试都注定失败」；`P-8` 只把通道接到了 `_support.build_experiment`，没接到公开入口。
+- `method="exhaustive_search"` 时 `schema.Experiment` 的硬约束 2c 要求 `certificate`，而 `certificate`
+/ `search_bound` 「不在任何 schema 里」（动作表、工具 schema、方法签名都没有）⇒ 模型不可能知道，「每一次尝试都注定失败」；`P-8`
+只把通道接到了 `_support.build_experiment`，没接到公开入口。
 - `name` / `imports` 是条件性参数（只对 `method='formal'` 有效），却被无条件广告 ⇒ 模型给计算类方法传了它们，被拒三次。
 
 判据分成两半，缺一不可：
 
-1. 「可做性（正控）」：按广告的形状调用「必须真的能把事做成」 —— 带 `certificate` + `search_bound` 的 `exhaustive_search` 要落下一行 `experiments`；
+1. 「可做性（正控）」：按广告的形状调用「必须真的能把事做成」 —— 带 `certificate` + `search_bound` 的 `exhaustive_search`
+要落下一行 `experiments`；
 2. 「可发现性（判据自己盯住广告面）」：那两格必须在「动作表」与「工具 schema」两处都出现，且方法签名真的收它们 —— 否则"广告了但收不下"或"收得下但没广告"都无人发现。
 
-负控两条：不给 `certificate` 必须「如实拒绝」（而不是静默落一行没有证书的"穷举结论"）；把 `certificate` 传给非穷举类方法必须被拒（与 `name`/`imports` 同一条纪律：不许静默忽略）。"""
+负控两条：不给 `certificate` 必须「如实拒绝」（而不是静默落一行没有证书的"穷举结论"）；把 `certificate` 传给非穷举类方法必须被拒（与 `name`/`imports` 同一条纪律：
+不许静默忽略）。"""
 from __future__ import annotations
 
 import inspect
@@ -196,7 +200,9 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
 
     ## 第 ① 级（缺 `proof_text`）为什么是"落行 + 挂待办"而不是"拒收"
 
-    `F-05`（主控裁定，2026-10-06）改判了这一档：以前它 `_refuse`，于是"证明还没做完"永远进不了库，`draft/53:181` 那个消费端永远拿不到一条待办。现在它落在库里、带 `pending` 待办与 `notes` 明写，等级由 `evidencebits.derive_grade` 现算（『猜想』）。所以本用例这一级断言的是两件事：①-a 它真的进去了且待办挂得住；①-b 这条改判不许蔓延 —— `external_lit` 缺 `source_lit_id` 仍然必须拒。
+    `F-05`（主控裁定，2026-10-06）改判了这一档：以前它 `_refuse`，于是"证明还没做完"永远进不了库，`draft/53:181` 那个消费端永远拿不到一条待办。现在它落在库里、
+    带 `pending` 待办与 `notes` 明写，等级由 `evidencebits.derive_grade` 现算（『猜想』）。所以本用例这一级断言的是两件事：①-a 它真的进去了且待办挂得住；①-b
+    这条改判不许蔓延 —— `external_lit` 缺 `source_lit_id` 仍然必须拒。
 
     负控逐级来，是因为模型在 T1 里正是一级一级撞上去的：每个负控都对应它当时得到的那一种拒绝。"""
     st, b = _b_instance(tmp_path)

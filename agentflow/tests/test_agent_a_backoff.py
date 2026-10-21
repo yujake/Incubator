@@ -1,22 +1,21 @@
 """退避租约被读（而不只是被写）：`AgentA._claim` 必须遵守 `lease_until`。
 
 ## 本文件修的是什么
-
-搜索失败时 `run_once` 会写下一条"退避租约"：`claimed_by=None` + `lease_until=make_lease(self.retry_backoff_seconds)`。而 `_claim` 的跳过判据曾是 `if r.get("claimed_by") and not lease_expired(r.get("lease_until"))` —— 它同时要求 `claimed_by` 非空，而失败分支恰好把它置成了 `None` ⇒ 这条租约永远不会被读到 ⇒ 同一个 A 实例下一轮立刻再领同一条，连打同一个 API（最多到 `max_attempts` 才 `gave_up`）。
-
-"写进存储的约束"与"被执行的约束"是两件事：当时的自检只断言了写（`bool(r3["lease_until"]) and r3["claimed_by"] is None`）—— 一个断言"写入了"的测试，无法发现"没有任何地方读它"。所以本文件的每一条都是"读了没有"的断言，而不是"写了没有"。
-
+搜索失败时 `run_once` 会写下一条"退避租约"：`claimed_by=None` + `lease_until=make_lease(self.retry_backoff_seconds)`。
+而 `_claim` 的跳过判据曾是 `if r.get("claimed_by") and not lease_expired(r.get("lease_until"))` ——
+它同时要求 `claimed_by`非空，而失败分支恰好把它置成了 `None` ⇒ 这条租约永远不会被读到 ⇒ 同一个 A 实例下一轮立刻再领同一条，连打同一个 API（最多到 `max_attempts`
+才 `gave_up`）。
+"写进存储的约束"与"被执行的约束"是两件事：当时的自检只断言了写（`bool(r3["lease_until"]) and r3["claimed_by"] is None`）—— 一个断言"写入了"的测试，
+无法发现"没有任何地方读它"。所以本文件的每一条都是"读了没有"的断言，而不是"写了没有"。
 ## 判定矩阵（四种情形，缺一不可）
-
-``claimed_by`` 非空 + ``lease_until`` 在未来 ⇒ 不可领，计数落 ``skipped_lease_active``（他人持有）；``claimed_by`` 空 + 在未来 ⇒ 不可领，落 ``skipped_lease_backoff``（本文件的存在理由）；``claimed_by`` 任意（含非空）+ 已过期/为空 ⇒ 可领并接管（原有语义必须保留）；空 + 为空 ⇒ 可领。
-
+``claimed_by`` 非空 + ``lease_until`` 在未来 ⇒ 不可领，计数落 ``skipped_lease_active``（他人持有）；``claimed_by`` 空 + 在未来 ⇒ 不可领，
+落 ``skipped_lease_backoff``（本文件的存在理由）；``claimed_by`` 任意（含非空）+ 已过期/为空 ⇒ 可领并接管（原有语义必须保留）；空 + 为空 ⇒ 可领。
 ## 判据来源（不许另写一份）
-
-"租约是否仍在有效期内"只有 `agentflow.store.lease_expired` 一份实现（`interactions.order_pending_requests` 内部用的也是它）。本文件调用它来造场景（例如断言 `FUTURE_LEASE` 真的没过期，避免测试空洞），不在测试里另写比较。
-
+"租约是否仍在有效期内"只有 `agentflow.store.lease_expired` 一份实现（`interactions.order_pending_requests` 内部用的也是它）。
+本文件调用它来造场景（例如断言 `FUTURE_LEASE` 真的没过期，避免测试空洞），不在测试里另写比较。
 ## 本文件只调用、不改动
-
-`order_pending_requests` / `lease_expired` / `admit_search_request` 都在 `src/agentflow/interactions.py`（FC-27 禁 AI 区）与 `store.py`；本文件只调用它们。"""
+`order_pending_requests` / `lease_expired` / `admit_search_request` 都在 `src/agentflow/interactions.py`（FC-27
+禁 AI 区）与 `store.py`；本文件只调用它们。"""
 
 from __future__ import annotations
 
@@ -250,7 +249,8 @@ def test_backoff_row_does_not_block_later_fresh_work(store):
     1. 不抢占：退避行虽然优先级更高、排在最前，但它是跳过的（不是领走的），于是排在它后面的全新请求照样被取走 —— 队列不会被一条正在退避的活堵死；
     2. 不撒谎：被跳过的那条要按"退避"计数（`skipped_lease_backoff`），不是按"别人持着"计数。
 
-    为什么把退避行设成 `high`：`_claim` 只统计在被取走的那条之前扫过的行（领到就 `return`），而排序键的第一档是优先级。若退避行是 low、全新行是 medium，全新行会先被扫到并直接领走，退避行根本不会被扫到 —— 那样断言 `skipped_lease_backoff == 1` 就成了一个永远不成立的空洞期望。"""
+    为什么把退避行设成 `high`：`_claim` 只统计在被取走的那条之前扫过的行（领到就 `return`），而排序键的第一档是优先级。若退避行是 low、全新行是 medium，全新行会先被扫到并直接领走，
+    退避行根本不会被扫到 —— 那样断言 `skipped_lease_backoff == 1` 就成了一个永远不成立的空洞期望。"""
     provider = CountingProvider()
     _add_req(store, "r-0001", priority="high", topic="退避中", attempts=1, claimed_by=None, lease_until=FUTURE_LEASE)
     _add_req(store, "r-0002", priority="low", topic="全新的")

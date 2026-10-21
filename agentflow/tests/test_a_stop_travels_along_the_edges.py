@@ -3,11 +3,14 @@
 
 `draft/84` §2.2：先根后子按边逐层落停止通知；每个收到者记 ack、停派新活、把通知再传给自己的子；收尾等子交差（有界），超时如实记 pending，不冒充"子已交差"。
 
-本批落地：① `Conductor.notify_children_of_stop` 给我还在飞的直接子各开一条 `notice`/`ack` 板项 + 父那一行留一行落痕；② 循环在停机那一步最后调它；③ 循环读到 `notice`/`ack` 项时框架替这一趟 ack（对象是"这一趟进程"，不是要模型交付的活）；④ `stop_edge_readings` 把 `notified_at / acked_at / settled_at / timeout` 分开报；⑤ 没有 ack 就不许消边。
+本批落地：① `Conductor.notify_children_of_stop` 给我还在飞的直接子各开一条 `notice`/`ack` 板项 + 父那一行留一行落痕；② 循环在停机那一步最后调它；③
+循环读到 `notice`/`ack` 项时框架替这一趟 ack（对象是"这一趟进程"，不是要模型交付的活）；④ `stop_edge_readings`
+把 `notified_at / acked_at / settled_at / timeout` 分开报；⑤ 没有 ack 就不许消边。
 
 判据（正控 3 / 负控 2 / 反真空 1）：
 
-正控：① 沿边下发：两条在飞的边 ⇒ 两条 `notice`/`ack` 项 + 两行落痕，已通知过的边不重复下发（幂等）；② 子那一趟读到之后框架替它 ack ⇒ `acked_at` 非空、`item_state="done"`、`item_close` 以 `acked@` 开头；③ 真跑一趟循环 ⇒ 它收工前把通知发给了名下在飞的子。
+正控：① 沿边下发：两条在飞的边 ⇒ 两条 `notice`/`ack` 项 + 两行落痕，已通知过的边不重复下发（幂等）；② 子那一趟读到之后框架替它 ack ⇒ `acked_at`
+非空、`item_state="done"`、`item_close` 以 `acked@` 开头；③ 真跑一趟循环 ⇒ 它收工前把通知发给了名下在飞的子。
 负控：① 抹掉 ack（通知了但没被读）⇒ 消边判据拒绝；② 台账/父行读不成 ⇒ `stop_edge_readings` 三态 `checked=False`（不许把"没读成"报成"没有边"）。
 反真空：名下没有在飞的子 ⇒ `notified=[]` + 说清（不是"通知过了"）。"""
 from __future__ import annotations

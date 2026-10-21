@@ -595,7 +595,7 @@ def test_defaults_are_complete_and_positive():
 
 
 def test_the_quota_numbers_are_the_2026_10_15_ruling_values():
-    """六道交互配额的**数字**逐个钉住（业主 2026-10-15 裁定 C9）。
+    """六道交互配额的数字逐个钉住（业主 2026-10-15 裁定 C9）。
 
     为什么值得单立一条：这些数字此前是 2026-09 的离线单机读数下定的
     （那时候一次检索几毫秒），而裁定把它们整体抬高到了"几乎不可能由正常研究触发"——
@@ -603,7 +603,7 @@ def test_the_quota_numbers_are_the_2026_10_15_ruling_values():
     而不是散在六个不同测试里各写一半。
 
     抬高的方向与理由见 `draft/123` §二：这些配额剩下的职责是"防一次编程错误
-    把请求数炸成 O(n²)"，而真正该管住"烧钱不给结论"的是**钱**（`usd_budget` + 总账）。
+    把请求数炸成 O(n²)"，而真正该管住"烧钱不给结论"的是钱（`usd_budget` + 总账）。
     """
     assert I.DEFAULTS["max_inflight_requests"] == 200, "I7：20 → 200"
     assert I.DEFAULTS["max_rounds_per_contradiction"] == 12, "I2 单条：2 → 12"
@@ -621,7 +621,7 @@ def test_next_prefixed_id_normal_range_is_unchanged():
 
     上限下沉最大的风险是"顺手改了取号语义"。这条用例把改前的行为逐条钉住
     （改前实测序列见 `temp/_b5a_p4_before.txt`）；
-    2026-10-14 业主裁定"四位改六位"之后，序列的**号身**跟着宽度走
+    2026-10-14 业主裁定"四位改六位"之后，序列的号身跟着宽度走
     （`schema.format_id` 一处），语义（max+1、不复用空洞）逐字不变。
     """
     assert I.next_prefixed_id([], "request_id", "r") == "r-000001"

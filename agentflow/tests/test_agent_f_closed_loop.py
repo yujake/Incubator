@@ -6,7 +6,7 @@
 | 组 | 改前的真机形态 |
 |---|---|
 | P2-3 证据正文 | 提示词里只有 `已跑实验：['000001']` ⇒ 模型拿不到"那条证据说了什么" |
-| P2-4 history 回灌 | 提示词里一个字都没有"上一轮" ⇒ mp3 `000001` 的 r1/r3/r4 **逐字重复** |
+| P2-4 history 回灌 | 提示词里一个字都没有"上一轮" ⇒ mp3 `000001` 的 r1/r3/r4 逐字重复 |
 | P3-5 带原因重问 | 一次不成形 = 永久封存（`RoundError` ⇒ `blocked` + `in_flight=True`） |
 | P3-6 产物出口 | `product_detail` 只写不读；`proof` 不进 `statements`、盘上无 `reports/attack-*.md` |
 | P4-7 子目标优先 | `counterexample_request` 之后父目标仍 `in_progress` ⇒ 子目标永远 `todo` |
@@ -96,7 +96,7 @@ def _experiment(store: Store, *, eid: str = "000001", claim: str, result: str = 
 # ============================================================ P2-3：证据正文进提示词
 
 def test_the_evidence_body_is_in_the_prompt_not_just_the_id(store: Store):
-    """判据：提示词里要出现那条证据的**正文**（`claim` / `result`），不只是 id。"""
+    """判据：提示词里要出现那条证据的正文（`claim` / `result`），不只是 id。"""
     _experiment(store, claim="n<=18 的穷举没有反例", result="supports")
     llm = FakeLLM(_proof_round())
     f = _f(store, llm=llm)
@@ -131,7 +131,7 @@ def test_an_evidence_id_that_is_not_in_the_ledger_is_said_out_loud(store: Store)
 
 
 def test_without_evidence_the_prompt_says_there_is_none(store: Store):
-    """反真空：一条证据都没有时，提示词要**明说**没有（而不是留一块空白）。"""
+    """反真空：一条证据都没有时，提示词要明说没有（而不是留一块空白）。"""
     llm = FakeLLM(_proof_round())
     f = _f(store, llm=llm)
     f.step(_new_plan(f))
@@ -180,7 +180,7 @@ def test_the_same_strategy_twice_asks_for_a_different_one(store: Store):
 # ============================================================ P3-5：带原因重问
 
 def test_a_malformed_round_is_asked_again_with_its_own_reason(store: Store):
-    """判据：第一次不成形 ⇒ 带着它自己的原因重问；第二次成形 ⇒ 这一轮**真推进**。"""
+    """判据：第一次不成形 ⇒ 带着它自己的原因重问；第二次成形 ⇒ 这一轮真推进。"""
     bad = _round(product="reduction", new_subgoals=[])          # 归约必须给 1–3 条
     good = _round(product="proof", steps=[{"text": "这才是论证", "assumption": True}])
     llm = FakeLLM(bad, good)
@@ -229,7 +229,7 @@ def test_a_proof_round_lands_a_statement_and_a_report_line(store: Store):
     row = stmts[0]
     assert row["origin"] == "own_result" and row["kind"] == "lemma", row
     assert "这是第一步" in row["proof_text"], row
-    # 等级**不许**自报更高：V 没签过 ⇒ 只能 heuristic，而且五元位是空的
+    # 等级不许自报更高：V 没签过 ⇒ 只能 heuristic，而且五元位是空的
     assert row["evidence_kind"] == "heuristic", row
     assert not dict(row.get("bits") or {}), row
     assert row["quote_reason"], row
@@ -274,7 +274,7 @@ def test_the_same_proof_twice_is_not_registered_twice(store: Store):
 # ============================================================ P4-7：子目标优先
 
 def test_a_dispatched_subgoal_is_picked_before_its_parent(store: Store):
-    """判据：`counterexample_request` 造出 E 子目标之后，下一轮选的是**子目标**。"""
+    """判据：`counterexample_request` 造出 E 子目标之后，下一轮选的是子目标。"""
     llm = FakeLLM(_round(product="counterexample_request",
                          script_spec={"criterion": "k-圈数 >= 2", "params": "m=3, k=6",
                                       "expected_bound": "n_max=18"},

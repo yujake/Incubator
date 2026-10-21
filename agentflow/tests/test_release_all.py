@@ -2376,7 +2376,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "dynamic_sections / unregistered_dynamic_sections（动态段白名单）、"
                           "prompt_cache_record / summarize_prompt_cache（每步与整趟的命中率、可省金额）",
     # 2026-10-21：文档面/文献台面的支撑模块（`promptstability` 之后新增的第二个"不属于任何角色"的顶层模块）。
-    # 它同样只被循环面与质量面读，故按上面那条同一口径登记：**事实登记**，不是"批准它存在"。
+    # 它同样只被循环面与质量面读，故按上面那条同一口径登记：事实登记，不是"批准它存在"。
     "litstage.py": "「待新增文献列表」的实现核心（业主 2026-10-20 口径）：按委托暂存 → 审 → 一键迁移 → 报告；"
                    "条数上限 / 重叠口径 / 状态机 / 筛选理由词表都在这里，与 `tools/search_tools.py` 分工如 `dedup.py`",
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",

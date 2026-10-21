@@ -2,18 +2,18 @@
 
 ## 为什么补这个文件
 
-`search.download` **失败时**此前把下载层的细分类压成笼统的 `download_failed`
-（`res.kind` 只留在自由文本里）⇒ **A 读不到"为什么没下到"**，也就无法决定
-"换源 / 停手 / 重试"。而我亲自下一轮文献的读数说明这三类的**正确处置是相反的**：
+`search.download` 失败时此前把下载层的细分类压成笼统的 `download_failed`
+（`res.kind` 只留在自由文本里）⇒ A 读不到"为什么没下到"，也就无法决定
+"换源 / 停手 / 重试"。而我亲自下一轮文献的读数说明这三类的正确处置是相反的：
 
 | 类别 | 现场读数 | 正确处置 |
 |---|---|---|
-| `tls_cert` | 同一 URL 默认 **122 秒**才判死（本机证书/吊销检查），换客户端开关后 **0.55 秒**拿到状态码 | 换源；重试修不好 |
+| `tls_cert` | 同一 URL 默认 122 秒才判死（本机证书/吊销检查），换客户端开关后 0.55 秒拿到状态码 | 换源；重试修不好 |
 | `tls_timeout` | MDPI 那个 PDF 连试三次都是它（对方挡脚本） | 至多再试一次 |
 | `http_403` | 浏览器化请求头也照样 403 | 直接换源，别重试 |
 
-⇒ 三类必须**分别可见**地传到 A 手上（第 1、2 组），而且 A 被**告知**的类名必须与
-代码真能产出的类名**对齐**（第 3 组，业主点名的"描述侧对齐"）。
+⇒ 三类必须分别可见地传到 A 手上（第 1、2 组），而且 A 被告知的类名必须与
+代码真能产出的类名对齐（第 3 组，业主点名的"描述侧对齐"）。
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def _registry(tmp_path: Path, result: F.FetchResult) -> tuple[ToolRegistry, _Fak
 
 
 def _payload(res: object) -> dict:
-    """工具结果的**载荷**：`fail(...)` 把具名参数放 `meta`，成功路径放 `data`（实测）。"""
+    """工具结果的载荷：`fail(...)` 把具名参数放 `meta`，成功路径放 `data`（实测）。"""
     out: dict = {}
     for attr in ("data", "meta"):
         val = getattr(res, attr, None)
@@ -67,7 +67,7 @@ def _payload(res: object) -> dict:
 
 
 def test_a_download_failure_carries_the_fetch_layer_class(tmp_path) -> None:
-    """正控：失败时 **`fetch_kind`** 要原样带出去（A 据此决定下一步）。"""
+    """正控：失败时 `fetch_kind` 要原样带出去（A 据此决定下一步）。"""
     result = F.FetchResult(ok=False, kind="tls_cert", error="tls_cert: 本机吊销检查够不到")
     reg, _fake = _registry(tmp_path, result)
     res = reg.call("search.download", url="https://example.invalid/paper.pdf")
@@ -77,7 +77,7 @@ def test_a_download_failure_carries_the_fetch_layer_class(tmp_path) -> None:
 
 @pytest.mark.parametrize("kind", ["tls_cert", "tls_timeout", "http_403", "network_error"])
 def test_each_class_stays_distinguishable(tmp_path, kind: str) -> None:
-    """**负控（防折平）**：四个类别的正确处置各不相同 ⇒ 它们不许折成同一个值。
+    """负控（防折平）：四个类别的正确处置各不相同 ⇒ 它们不许折成同一个值。
 
     （改前它们全被压成 `download_failed` ⇒ 这条会红。）
     """
@@ -110,7 +110,7 @@ def _download_description() -> str:
 
 
 def _class_names_in(text: str) -> set[str]:
-    """从一段描述里挑出**像失败类别**的那些词（受控词表里的 + `http_NNN`）。"""
+    """从一段描述里挑出像失败类别的那些词（受控词表里的 + `http_NNN`）。"""
     known = set(F.ERROR_KINDS)
     hits = {k for k in known if k in text}
     hits |= set(re.findall(r"http_\d{3}", text))
@@ -118,10 +118,10 @@ def _class_names_in(text: str) -> set[str]:
 
 
 def test_both_description_surfaces_tell_a_the_same_classes() -> None:
-    """**描述侧对齐**：`search.download` 的说明与 A 的手册必须说到同一批类别。
+    """描述侧对齐：`search.download` 的说明与 A 的手册必须说到同一批类别。
 
-    为什么不是"两边提到同样的字"就算过：这里取的是**两边各自命中的类名集合**，
-    要求两集合**相等**（不是包含）—— 少一边就说明有读者会被漏掉：
+    为什么不是"两边提到同样的字"就算过：这里取的是两边各自命中的类名集合，
+    要求两集合相等（不是包含）—— 少一边就说明有读者会被漏掉：
     只写进工具说明、没写进手册 ⇒ A 不知道该怎么办；只写进手册、工具不报 ⇒ A 看不到。
     """
     tool_hits = _class_names_in(_download_description())
@@ -133,7 +133,7 @@ def test_both_description_surfaces_tell_a_the_same_classes() -> None:
 
 
 def test_the_classes_a_is_told_about_are_really_producible() -> None:
-    """反真空：A 被告知的类名必须是**下载层真能产出**的（不许写一个不存在的档）。"""
+    """反真空：A 被告知的类名必须是下载层真能产出的（不许写一个不存在的档）。"""
     told = _class_names_in(_a_literature_body()) | _class_names_in(_download_description())
     assert told, "一个类名都没有 ⇒ 上面那条对齐是空断言"
     producible = set(F.ERROR_KINDS) | {"http_403", "http_401"}
@@ -145,7 +145,7 @@ def test_the_classes_a_is_told_about_are_really_producible() -> None:
 
 
 def _a_tools_and_actions(tmp_path: Path) -> tuple[set[str], set[str]]:
-    """A 真有的工具名与动作名（工具面读**完整注册表**，动作面读声明真身）。"""
+    """A 真有的工具名与动作名（工具面读完整注册表，动作面读声明真身）。"""
     from agentflow.specs import a as A_spec
     from agentflow.tools import build_registry
 
@@ -158,9 +158,9 @@ def _a_tools_and_actions(tmp_path: Path) -> tuple[set[str], set[str]]:
 
 
 def test_every_tool_the_manual_names_is_one_a_can_actually_call(tmp_path) -> None:
-    """**描述侧对齐（能力面）**：手册里点名的工具，A 必须真能调。
+    """描述侧对齐（能力面）：手册里点名的工具，A 必须真能调。
 
-    为什么这条不是"机械判据"：它守的是**两份描述之间的一致性**（手册说"你去调 X"
+    为什么这条不是"机械判据"：它守的是两份描述之间的一致性（手册说"你去调 X"
     ↔ 工具面里到底有没有 X）。手册让 A 去调一件它没有的工具，A 那一趟就只能空转；
     而这件事在纯行为测试里测不出来（要真模型才会踩）。
     """

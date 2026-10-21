@@ -440,7 +440,8 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
 
     红线口径：从"M 不碰盘"→「M 有眼睛和笔」→「有眼睛、有笔、能改该改的那一处，但不碰知识表、不做
     检索、不删东西、不挪东西」。守三件事：1. 白名单六件必须在（`fs.list` / `fs.read` / `fs.search` /
-    `fs.stat` / `fs.write` / `fs.edit`）；2. `fs.delete` / `fs.move` 不许有（真删 / 换位置，不可逆）；3. `table.*` / `prov.*` / `search.*` 一件都不许有（知识表与检索仍是 M 的禁区）。"""
+    `fs.stat` / `fs.write` / `fs.edit`）；2. `fs.delete` / `fs.move` 不许有（真删 / 换位置，不可逆）；3. `table.*` / `prov.*`
+    / `search.*` 一件都不许有（知识表与检索仍是 M 的禁区）。"""
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry

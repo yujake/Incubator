@@ -119,7 +119,8 @@ def _pin_settings_path() -> str:
     为什么"把判据改成看环境"是错的：那些判据守的是代码分支（没配 ⇒ 三态里的"没查成"），不是"这台机器
     上装了什么"；让它们随本机配置变形 ⇒ 把"这条分支还在不在"变成一台机器上一个答案，CI 与开发机
     会给出不同结论。所以：判据在确定性环境里跑，要测设置层的判据自己造文件 —— `tests/test_settings.py`
-    用 `monkeypatch.setenv(SET.ENV_SETTINGS, <自己造的>)`（结束时还原成这里钉的值），守卫在 `tests/test_settings.py::test_the_suite_pins_the_machine_settings_away`。"""
+    用 `monkeypatch.setenv(SET.ENV_SETTINGS, <自己造的>)`（结束时还原成这里钉的值），
+    守卫在 `tests/test_settings.py::test_the_suite_pins_the_machine_settings_away`。"""
     if os.environ.get(_NO_SETTINGS_PIN_ENV):
         return ""
     for name in _MACHINE_ENV_NAMES[1:]:

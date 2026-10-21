@@ -416,9 +416,13 @@ def _manual_handover_problems(body: str) -> list[str]:
 def test_the_conductor_skill_records_the_current_dispatch_routes():
     """M 的"派给谁"那一条必须写着现状，而不是旧路线（2026-10-20 更正读数）。
 
-    与 `tests/test_the_conductor_does_not_directly_control_bfv.py` 同一条裁定的另一侧：主控不许直接控制的有两个 —— `F`（`M→D→F`）与 `V`（2026-10-20 业主裁定撤掉 `M→V`；V 只剩经 B 的两跳路 `M→B→V`）。`B` 于 2026-10-13 被加回、今天仍在出边里。
+    与 `tests/test_the_conductor_does_not_directly_control_bfv.py` 同一条裁定的另一侧：主控不许直接控制的有两个 —— `F`（`M→D→F`）
+    与 `V`（2026-10-20 业主裁定撤掉 `M→V`；V 只剩经 B 的两跳路 `M→B→V`）。`B` 于 2026-10-13 被加回、今天仍在出边里。
 
-    这条判据刻意不写死整段文字，只钉住五件事：① F 仍然在 M 的出边外，手册给出那条链（`M → D → F`）；② V 也不在 M 的出边里 ⇒ 手册要写经 B 的 `M→B→V`，并且 V 的动作不许再出现在这个条目的可派清单里（`validate()` 会把它判成做不到的指令）；③ `forbidden_edge` 这个读数仍在（被拒时换链的依据）；④ 条目里不许把 F 列成能直接派的；⑤ 反真空：义务句"让 D 去核、由 D 让 F 补签"仍读得到（不许整段删掉冒充改对）。
+    这条判据刻意不写死整段文字，只钉住五件事：① F 仍然在 M 的出边外，手册给出那条链（`M → D → F`）；② V 也不在 M 的出边里 ⇒ 手册要写经 B 的 `M→B→V`，并且 V
+    的动作不许再出现在这个条目的可派清单里（`validate()` 会把它判成做不到的指令）；③ `forbidden_edge` 这个读数仍在（被拒时换链的依据）；④ 条目里不许把 F 列成能直接派的；⑤
+    反真空：
+    义务句"让 D 去核、由 D 让 F 补签"仍读得到（不许整段删掉冒充改对）。
 
     2026-10-20 业主裁定：撤 M→V（改前这里是"V 是直接边 ⇒ 手册要写 M→V"；期望值换了，判据强度没换）。"""
     route = next(s for s in AS.CATALOG["M"] if "按任务类型" in s.slug)
@@ -561,11 +565,18 @@ def test_the_manuscript_sections_are_enumerated_once_and_identically():
 def test_the_skills_tool_surface_equals_the_surface_the_prompt_renders() -> None:
     """两个工具面必须是同一个（2026-10-16 复查十个协作面时发现的一处不一致）。
 
-    `_role_tool_surface()` 是 `validate()` 第三条硬约束的基准面（"一条 skill 正文里点名的工具必须在本角色的工具面上"）。它原先建注册表时给了 `workspace_root` 却没给 `store` —— 而它自己的 docstring 第 1 点正引着 `secretary.py` 那条读数（"不带 `store` 出 68 件、`fs.read` 不在里面；带上出 81 件、在里面"）：文档知道 store 要紧，实现漏了它。
+    `_role_tool_surface()` 是 `validate()` 第三条硬约束的基准面（"一条 skill 正文里点名的工具必须在本角色的工具面上"）。
+    它原先建注册表时给了 `workspace_root`
+    却没给 `store` —— 而它自己的 docstring 第 1 点正引着 `secretary.py` 那条读数（"不带 `store` 出 68 件、`fs.read` 不在里面；带上出 81 件、
+    在里面"）：
+    文档知道 store 要紧，实现漏了它。
 
-    实测差异（同一台机、同一份代码，逐角色比对）：其余九格相同；D 是 36 对 41。差的 5 件逐字是 `research.list_gaps` / `research.poll_waiting` / `research.set_status` / `research.submit_gap` / `research.write_note`（全是只有 D 用的那些）。
+    实测差异（同一台机、同一份代码，逐角色比对）：其余九格相同；D 是 36 对 41。差的 5 件逐字是 `research.list_gaps` / `research.poll_waiting`
+    / `research.set_status` / `research.submit_gap` / `research.write_note`（全是只有 D 用的那些）。
 
-    为什么这是缺陷而不是"更严一点"：模型看到的是带 store 的那一面（`tools_lines(role, registry)` 读宿主的注册器），判据查另一个面 ⇒ 一条 D 的手册只要正经点名 `research.set_status`，就会被报成"不在你的工具面上" —— 假阳性，而假阳性会让人开始不信这份判据（与 docstring 第 1 点的论证同型）。今天没有手册提到 `research.*`，所以它是潜伏的；这条判据让它不再潜伏。
+    为什么这是缺陷而不是"更严一点"：模型看到的是带 store 的那一面（`tools_lines(role, registry)` 读宿主的注册器），判据查另一个面 ⇒ 一条 D
+    的手册只要正经点名 `research.set_status`，就会被报成"不在你的工具面上" —— 假阳性，而假阳性会让人开始不信这份判据（与 docstring 第 1 点的论证同型）。
+    今天没有手册提到 `research.*`，所以它是潜伏的；这条判据让它不再潜伏。
 
     反真空：两侧都必须非空且件数 ≥ 10 —— 两个空表也会"相等"，而那是"没查成"。"""
     from agentflow.store import Store

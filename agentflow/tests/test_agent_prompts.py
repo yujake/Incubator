@@ -289,7 +289,8 @@ def test_the_parent_limits_are_computed_from_the_policy():
     2026-10-15 改（承 `draft/123` 裁定 C4/C5）：缺省值整体抬高（`max_depth` 5→12、`max_fanout` 5→25、
     `max_concurrency` 4→16、`max_tasks_per_run` 200→5000、`wall_clock_sec` 900→14400、M 档 20→100），
     而这条判据里的字面量没有跟着改 ⇒ 它红了。改法刻意把新旧两套缺省值都放进负控：职责是"默认值
-    不许被写死在渲染里"，所以凡是当期缺省值都不许出现在被覆盖过的那一段里 —— 只列旧值会在下一次抬阈值时再变成谎言。（同族教训：`test_refusal_family_numbers` 那份手写 code 清单做"反真空"自相矛盾。）"""
+    不许被写死在渲染里"，所以凡是当期缺省值都不许出现在被覆盖过的那一段里 —— 只列旧值会在下一次抬阈值时再变成谎言。（同族教训：`test_refusal_family_numbers` 那份手写 code
+    清单做"反真空"自相矛盾。）"""
     from agentflow import policy as POL
 
     odd = POL.Policy(max_depth=9, max_fanout=7, max_concurrency=3,
@@ -1184,7 +1185,8 @@ def test_roles_that_can_summon_a_are_told_its_index_is_english(registry: ToolReg
     探针钉的是"对唤起者说的那句"（`唤起 A 时注意`），不是"英文关键词"这个词：2026-10-11 接线批 C1
     之前它钉的是词，而 A 自己的第一段写死的正文（`presets/roles/a/blocks/search_style.md`，段名
     `A_SEARCH_STYLE`）里合法地写着"`topic` 里要带英文关键词" —— 那是对 A 自己说的，与这句对唤起者
-    说的不是同一句，钉词会变成假红（实测：`p68` 时 A 的 `partners_out` 里没有 A，而提示词里有这个词 ⇒ 判据红）。要守的性质是"谁读到了这句提醒"，主体是收件人（`draft/105` 已登记这一形态）。"""
+    说的不是同一句，钉词会变成假红（实测：`p68` 时 A 的 `partners_out` 里没有 A，而提示词里有这个词 ⇒ 判据红）。要守的性质是"谁读到了这句提醒"，主体是收件人（`draft/105`
+    已登记这一形态）。"""
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         can_summon_a = "A" in AP.partners_out(role)
@@ -1968,7 +1970,8 @@ def test_the_summon_many_block_reaches_every_role_that_can_summon(
     2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一条按原形态恢复（2026-10-19 那一版为 C→D
     临时改用过合成角色；"出边为空"那一档又回到真实角色 C）。
 
-    留残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）；整块删掉后这一档读到"八种"却只数得出 7 项 —— 描述与自身矛盾。残桩保住表头为真、枚举仍是 8 项，而 565 字的用法说明不再进这一档的提示词。
+    留残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）；整块删掉后这一档读到"八种"却只数得出 7 项 ——
+    描述与自身矛盾。残桩保住表头为真、枚举仍是 8 项，而 565 字的用法说明不再进这一档的提示词。
     反真空：至少一个角色拿到整段（八个非 M），且出边为空的那个拿到的是残桩；反负控四端都走真渲染：
     ① 恒真（谁拿的都是全量协议）⇒"该没有的没有"红；② 恒假（[c] 换残桩那版发给所有人）⇒"主控含整段"
     红；③ 旧作用域（把 [c] 当成 M 专段）⇒"该有的有"红；④ 整块删、不留残桩 ⇒"出边为空的有残桩"红。"""

@@ -220,9 +220,9 @@ def test_literature_without_local_file_is_marked_processed(store):
 def test_the_digested_reading_does_not_count_rows_that_were_only_skipped():
     """判据（2026-10-15，T5 第 8 趟 `t5h`）：`digested` = `processed` − `unreadable`。
 
-    `processed` 这一个布尔里同时装着**处置相反**的两件事：「我读过并抽了」与
+    `processed` 这一个布尔里同时装着处置相反的两件事：「我读过并抽了」与
     「我连文件都没有、跳过了」。下游读的全是 `processed` ⇒ 台账上写着"34 条已消化"，
-    真相是"10 条有全文"。这一格就是把那一折打开的地方，所以它是**读数判据的第一条**：
+    真相是"10 条有全文"。这一格就是把那一折打开的地方，所以它是读数判据的第一条：
     折回去了，后面两条就没意义了。
     """
     from agentflow.agent_b._support import BRunResult, task_outcome
@@ -243,12 +243,12 @@ def test_the_digested_reading_does_not_count_rows_that_were_only_skipped():
 
 
 def test_a_run_that_only_skipped_unreadable_rows_is_no_result_not_ok(store):
-    """判据（同上，端到端）：**什么都没消化**不许报成 ok —— 这一趟就是 T5 那一趟的缩影。
+    """判据（同上，端到端）：什么都没消化不许报成 ok —— 这一趟就是 T5 那一趟的缩影。
 
     真机现场：A 取回 41 条，其中 31 条没有本地全文；B 连着跑了 11 次、11 次
     `outcome=ok`（`detail` 还是"执行完成（handler 未声明 outcome，按有产出处理）"），
     而新建概念 0 / 新增关系 0。主控据此以为"文献消化过了"，继续派同一种活 ——
-    一整轮预算花在读不到的东西上。**"什么都没做成"被报成了成功。**
+    一整轮预算花在读不到的东西上。"什么都没做成"被报成了成功。
     """
     add_literature(store, "0000", title="没有全文", path=None)
     add_literature(store, "0001", title="文件被删", path="0001/gone.txt")
@@ -264,7 +264,7 @@ def test_a_run_that_only_skipped_unreadable_rows_is_no_result_not_ok(store):
 def test_a_run_that_really_digested_is_ok_and_says_how_many(store):
     """反负控（与上一条配对）：真抽过必须是 `ok`，且 `digested` 与产出一起报出来。
 
-    没有这一条，上一条可以靠"凡 run 都报 no_result"满足 —— 而那样主控会把**真干活**
+    没有这一条，上一条可以靠"凡 run 都报 no_result"满足 —— 而那样主控会把真干活
     的那几趟也当成白跑，处置方向正好反了。
     """
     write_library_file(store, "0000/a.txt", QUOTE)

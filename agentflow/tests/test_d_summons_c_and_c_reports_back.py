@@ -15,8 +15,8 @@ C 没有出边，链条是 `D → C` 单向：要「候选的更短路径」由 
 ③ 负控：把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ ② 必须红（证明 ② 真的在读权限面）。
 ④ 负控：把 D 的 `_do_summon` 改成"不读返回值直接 final" ⇒ ① 必须红（证明 ① 守的是"报告回到了 D
 手上"，不是"派出去过"）。
-
-为什么 ④ 改在 `_do_summon` 而不是 `conductor.summon`：④ 要考的正是"D 把返还值用了没有"这件事本身 —— 召唤照样发生（台账那两格仍然对），只是 D 把答案扔了；若改在 `conductor.summon`，那条 C 任务行
+为什么 ④ 改在 `_do_summon` 而不是 `conductor.summon`：④ 要考的正是"D 把返还值用了没有"这件事本身 —— 召唤照样发生（台账那两格仍然对），只是 D 把答案扔了；
+若改在 `conductor.summon`，那条 C 任务行
 都不会有，红的就变成"没派"，与命题无关。判据口径与 `test_two_hop_summon.py` 同一份：真循环、真边
 闸门、真台账，只把模型换成照剧本回答的替身（不联网、不调 API）。"""
 from __future__ import annotations

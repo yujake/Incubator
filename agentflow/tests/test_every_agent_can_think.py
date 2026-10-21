@@ -1,8 +1,14 @@
 """判据：「所有智能体都要能 thinking，且开默认到 High」（所有者 2026-10-10 裁定）。
 
-为什么读"发出去的字节"而不是读配置：改前的缺陷在网线上只有一处证据 —— `modelgw._payload` 组出来的请求体里没有 `reasoning_effort` 这一栏（全仓 grep `reasoning` 零命中）。因此 `spec.reasoning_effort == "high"` 只能证明"想让它开"，只有把 `transport=` 抓到的请求体拆开看，才能证明"真的开了"。每条用例都走后者。
+为什么读"发出去的字节"而不是读配置：改前的缺陷在网线上只有一处证据 —— `modelgw._payload` 组出来的请求体里没有 `reasoning_effort` 这一栏（全仓
+grep `reasoning` 零命中）。因此 `spec.reasoning_effort == "high"` 只能证明"想让它开"，只有把 `transport=` 抓到的请求体拆开看，才能证明"真的开了"。
+每条用例都走后者。
 
-真机对照读数（`temp/_thinking_probe.py`，`deepseek-chat`，同一条 prompt）：裸调 200 reasoning_chars=absent tokens_in=13 tokens_out=1；reasoning_effort=high 200 reasoning_chars=76 tokens_in=39 tokens_out=30；thinking={type:disabled} 200 reasoning_chars=absent tokens_in=13 tokens_out=1（`off` 那条形状端点也认）；reasoning_effort=medium 200 reasoning_chars=101 tokens_in=39 tokens_out=36 —— 最后这条是这一批里最要紧的：端点对词表外的取值不报错（`medium` 照 200 照返回思维链），所以"拦住拼错的强度"这件事只能由客户端做，判据见 `test_an_effort_outside_the_vocabulary_is_refused_before_any_request`。"""
+真机对照读数（`temp/_thinking_probe.py`，`deepseek-chat`，同一条 prompt）：裸调 200 reasoning_chars=absent tokens_in=13
+tokens_out=1；reasoning_effort=high 200 reasoning_chars=76 tokens_in=39 tokens_out=30；thinking={type:disabled}
+200 reasoning_chars=absent tokens_in=13 tokens_out=1（`off` 那条形状端点也认）；reasoning_effort=medium 200
+reasoning_chars=101 tokens_in=39 tokens_out=36 —— 最后这条是这一批里最要紧的：端点对词表外的取值不报错（`medium` 照 200 照返回思维链），
+所以"拦住拼错的强度"这件事只能由客户端做，判据见 `test_an_effort_outside_the_vocabulary_is_refused_before_any_request`。"""
 
 from __future__ import annotations
 
@@ -168,9 +174,14 @@ def test_a_reply_with_thinking_but_no_answer_is_still_not_success():
 
     这一栏的必要性：`content` 被截断（输出上限太小）与"根本没开 thinking"是两种不同的病因，折成同一句"空内容"会让排障的人去查错方向。
 
-    批 R62 追加（2026-10-12 真机读数）：还要说清"它是被输出额度截断，还是真的没答" —— 严格口径 T1 那 5 次 `ModelReplyNotOk` 就是 `length` 那一档（思维链 26215 / 26814 字把 8,192 的输出额度吃满、正文 0 字），探针读数见 `temp/_probe_chain.txt`。
+    批 R62 追加（2026-10-12 真机读数）：还要说清"它是被输出额度截断，还是真的没答" —— 严格口径 T1 那 5 次 `ModelReplyNotOk` 就是 `length` 那一档（思维链
+    26215
+    / 26814 字把 8,192 的输出额度吃满、正文 0 字），探针读数见 `temp/_probe_chain.txt`。
 
-    批 R68 改口径（同一天的 T2 真机：思维链 109,397 / 96,969 字把 32,768 吃满）："想太久把预算吃光"从 `bad_response` 里分出来成 `output_exhausted` —— 因为处方相反（这一档是"拆小这一步 / 压短思考"，`bad_response` 是"查响应/提示词"），而 `stop` + 思维链那一档仍是 `bad_response`。两档都判，判据才不是"这一栏永远等于某个值"。"""
+    批 R68 改口径（同一天的 T2 真机：思维链 109,397 / 96,969 字把 32,768 吃满）："想太久把预算吃光"从 `bad_response`
+    里分出来成 `output_exhausted`
+    —— 因为处方相反（这一档是"拆小这一步 / 压短思考"，`bad_response` 是"查响应/提示词"），而 `stop` + 思维链那一档仍是 `bad_response`。两档都判，
+    判据才不是"这一栏永远等于某个值"。"""
     bodies: list[dict] = []
     reply = _gw(bodies, _reply("", reasoning="想了很多但是没写答案",
                                finish_reason="length")).complete("1+1=?", scope="reason")

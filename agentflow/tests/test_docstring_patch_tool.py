@@ -91,11 +91,11 @@ def test_apply_patch_writes_the_exact_value_and_no_crlf(tmp_path: Path) -> None:
 
 
 def test_a_chinese_docstring_can_be_patched_twice_without_eating_the_newline(tmp_path: Path) -> None:
-    """负控（字节偏移）：`col_offset` 是 **UTF-8 字节**，不是字符。
+    """负控（字节偏移）：`col_offset` 是 UTF-8 字节，不是字符。
 
-    真事故：docstring 的收尾三引号粘在一条**含中文**的行尾时，用字符偏移去切
+    真事故：docstring 的收尾三引号粘在一条含中文的行尾时，用字符偏移去切
     `str` 会把行尾换行吃掉 ⇒ 收尾三引号与下一条语句粘成一行（SyntaxError）。
-    这里同一节点**连打两次**，两次都必须：① 文件能 `ast.parse`；② 值等于最后一次的 text；
+    这里同一节点连打两次，两次都必须：① 文件能 `ast.parse`；② 值等于最后一次的 text；
     ③ 收尾三引号与下一条语句之间仍有换行。
     """
     tool = _tool()
@@ -106,7 +106,7 @@ def test_a_chinese_docstring_can_be_patched_twice_without_eating_the_newline(tmp
         "\n\nVALUE = 1\n"
     )
     target.write_bytes(original.encode("utf-8"))
-    # `head` 必须给"**盘上现在**的首行"（它就是定位键）：第二次改写时首行还没变，
+    # `head` 必须给"盘上现在的首行"（它就是定位键）：第二次改写时首行还没变，
     # 所以两次都传原始首行 —— 这也是给使用者的一条口径：别把"想要的首行"当定位键。
     for text in ("中文模块摘要，结尾带标点。", "第二次改写的中文摘要，也带标点。"):
         tool.apply_patch({"file": str(target), "kind": "module", "name": "<module>",
@@ -147,7 +147,7 @@ def test_verify_catches_pointer_loss_and_ast_change(tmp_path: Path, monkeypatch:
 
 
 def test_the_tool_refuses_a_missing_baseline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空（三态纪律）：取不到 HEAD 基线时抛 SystemExit，**不是**判绿。"""
+    """反真空（三态纪律）：取不到 HEAD 基线时抛 SystemExit，不是判绿。"""
     tool = _tool()
     target = tmp_path / "x.py"
     target.write_bytes('"""a"""\n'.encode("utf-8"))

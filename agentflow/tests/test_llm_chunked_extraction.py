@@ -3,16 +3,16 @@
 ## 这一组测试防的是什么
 
 T5 第 8 趟里 B 连跑 11 次报 ok 却零产出。事后逐篇读数（`draft/121` §七）
-给出的原因不是"模型偷懒"，而是**一整篇一次调用**这条装配：
+给出的原因不是"模型偷懒"，而是一整篇一次调用这条装配：
 
     正文字符     结局
-      10,396    ✓ 抽出来了
-       2,720    ✗ 上游超时（另一档）
-      22,874    ✗ `output_exhausted`（思维链 28,080 字）
-      81,903    ✗（26,995 字；已被 `max_chars` 截到 60,000 再喂）
-   1,319,328    ✗（32,039 字；468 页的书，同样只喂了前 60,000 字符 = 4.5%）
+      10,396     抽出来了
+       2,720     上游超时（另一档）
+      22,874     `output_exhausted`（思维链 28,080 字）
+      81,903    （26,995 字；已被 `max_chars` 截到 60,000 再喂）
+   1,319,328    （32,039 字；468 页的书，同样只喂了前 60,000 字符 = 4.5%）
 
-于是 `LLMExtractor` 改成"按页切块、一块一次调用"，并且**一块失败不拖垮整篇**。
+于是 `LLMExtractor` 改成"按页切块、一块一次调用"，并且一块失败不拖垮整篇。
 这一组测试把这条装配的每一条性质钉住 —— 尤其是"不拖垮"那一条：
 它既是这一轮修复的目的，也是最容易在重构里悄悄退回"一失败就整篇丢"的地方。
 """
@@ -58,7 +58,7 @@ def _relation(names, quote, page=1, description="d"):
 
 
 def _pages(n: int, *, size: int = 400) -> tuple[list[str], list[str]]:
-    """造 `n` 页；每页的文字是**可逐字引用**的（引文回验要靠它）。"""
+    """造 `n` 页；每页的文字是可逐字引用的（引文回验要靠它）。"""
     pages = [f"Page {i + 1} says: " + ("x" * (size - 20)) for i in range(n)]
     return pages, pages
 
@@ -79,7 +79,7 @@ def test_a_short_document_is_still_exactly_one_chunk():
 def test_a_long_document_is_split_into_bounded_chunks():
     """正控：一篇长文献 ⇒ 多块，且每一块都不超过 `chunk_chars`。
 
-    上界同时是**成本上界**：块数 = ceil(总字符 / chunk_chars)，
+    上界同时是成本上界：块数 = ceil(总字符 / chunk_chars)，
     所以"一次调用噎死"这件事在结构上不可能再发生。
     """
     pages, _ = _pages(40, size=400)          # 16,000 字符
@@ -99,7 +99,7 @@ def test_pages_are_never_cut_in_half():
     "这一段在第几页"说不清 —— 引文照样能回验，页号却是错的，
     而错页号不会让任何测试变红。
 
-    判据写成"整页（标记 + 正文）必须是**某一块的连续子串**"：
+    判据写成"整页（标记 + 正文）必须是某一块的连续子串"：
     切碎一页会让它跨在块的边界上，于是任何一块里都找不到这一段。
     """
     pages, _ = _pages(6, size=500)
@@ -117,7 +117,7 @@ def test_pages_are_never_cut_in_half():
 def test_a_page_bigger_than_the_chunk_is_truncated_and_reported():
     """单页就超过 `chunk_chars` ⇒ 它自己一块、截断，并且 `truncated=True`。
 
-    宁可截断并**记一笔**，也不抛：抛会让整篇文献卡住（B 那一侧会退回租约重试，
+    宁可截断并记一笔，也不抛：抛会让整篇文献卡住（B 那一侧会退回租约重试，
     而重试对"这一页本来就太长"毫无帮助）。
     """
     huge = "y" * 5_000
@@ -133,7 +133,7 @@ def test_a_page_bigger_than_the_chunk_is_truncated_and_reported():
 
 
 def test_one_bad_chunk_does_not_throw_away_the_good_chunks():
-    """**这一组里最重要的一条**：第 2 块炸了，第 1 块的产出必须留下。
+    """这一组里最重要的一条：第 2 块炸了，第 1 块的产出必须留下。
 
     这正是 T5 第 8 趟的真实形态 —— 一整篇一次调用时，"这一次调用失败"
     与"这一篇没救了"是同一件事；切块之后它们必须分开。
@@ -154,12 +154,12 @@ def test_one_bad_chunk_does_not_throw_away_the_good_chunks():
 
 
 def test_all_chunks_failing_still_raises_so_the_caller_can_see_it():
-    """负控：**全部**块都失败 ⇒ 抛 `ExtractionError`。
+    """负控：全部块都失败 ⇒ 抛 `ExtractionError`。
 
     为什么不能"全军覆没也返回空"：B 那一侧的失败语义是
     "不置 `processed`、留 `last_mine_error`、留给租约重试"。
     把"这一篇没抽成"折成"抽成了、只是没有概念"，会让一篇文献
-    静默地永远不再被抽 —— 而它在台账上看起来是**成功**的。
+    静默地永远不再被抽 —— 而它在台账上看起来是成功的。
     """
     pages, _ = _pages(4, size=400)
     doc = DocumentText(text="\n".join(pages), pages=pages, source_kind="pdf")
@@ -194,7 +194,7 @@ def test_a_chunk_that_returns_unparseable_json_counts_as_failed_not_as_empty():
 def test_the_same_concept_in_two_chunks_becomes_one_concept():
     """跨块同名概念只留一条（定义并起来、别名取并集）。
 
-    为什么必须合并：agent_b 的解析是**按名字**做的，同一个名字出现两条
+    为什么必须合并：agent_b 的解析是按名字做的，同一个名字出现两条
     会让它走到"已存在、复用"的分支；更糟的是概念表里会出现两行同名，
     而下游任何一个 `by name` 的字典都会静默丢掉其中一行。
     """
@@ -222,7 +222,7 @@ def test_merging_an_empty_definition_never_leaves_a_dangling_separator():
 
 def test_relations_dedupe_on_the_verbatim_quote_not_the_description():
     """关系的判重键是 `(概念对, 原话)`：换个说法的同一句原话合掉，
-    同一对概念的两段**不同**原话是两条真关系，必须都留。"""
+    同一对概念的两段不同原话是两条真关系，必须都留。"""
     drafts = [
         RelationDraft(concept_names=["a", "b"], description="说法甲",
                       quote="原话一", page_range=None),

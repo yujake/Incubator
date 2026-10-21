@@ -204,7 +204,7 @@ def test_ok_false_with_a_foreign_outcome_is_not_folded_into_ok_either(tmp_path: 
               if k in {f.name for f in dataclasses.fields(S.Task)}}).validate()
 
 
-# ------------------------------- 返回值是**结果对象**时，也认它自己声明的那一格
+# ------------------------------- 返回值是结果对象时，也认它自己声明的那一格
 
 
 @dataclasses.dataclass
@@ -219,14 +219,14 @@ class _ResultObject:
 def test_a_result_object_declaring_no_result_is_not_recorded_as_ok(tmp_path: Path):
     """判据（2026-10-15，T5 第 8 趟 `t5h` 的真机读数）：结果对象声明的 `no_result` 要采信。
 
-    真机现场：`B.run` 返回的是**结果对象**（`BRunResult`），而 `_end_from_payload` 对
+    真机现场：`B.run` 返回的是结果对象（`BRunResult`），而 `_end_from_payload` 对
     "不是 Mapping 的返回值"一律记 `ok` —— 于是"这一趟什么都没产出"与"这一趟干得漂亮"
-    在 `tasks` 台账上**同形**。那一趟 11 次 `B.run` 全是 `ok`，而新建概念 0、新增关系 0：
+    在 `tasks` 台账上同形。那一趟 11 次 `B.run` 全是 `ok`，而新建概念 0、新增关系 0：
     主控据此以为文献消化过了，继续派同一种活，一整轮预算花在读不到的东西上。
 
-    只采信**受控词表**里的取值：角色自己的判定词（`no_change` 这类）不在
+    只采信受控词表里的取值：角色自己的判定词（`no_change` 这类）不在
     `TASK_OUTCOMES` 里 ⇒ 不采信、仍记 `ok`，原样留在 payload 里 ——
-    这是"两套词表不许折叠"那一条在**对象**这一支上的落点（反负控见下一条）。
+    这是"两套词表不许折叠"那一条在对象这一支上的落点（反负控见下一条）。
     """
     st, _fake, c = _wired(tmp_path, _ResultObject(
         outcome="no_result", detail="真消化 0 篇（新建概念 0 / 新增关系 0）", digested=0))
@@ -238,7 +238,7 @@ def test_a_result_object_declaring_no_result_is_not_recorded_as_ok(tmp_path: Pat
 
 
 def test_a_result_object_with_a_foreign_outcome_is_still_ok(tmp_path: Path):
-    """反负控（与上一条配对）：角色自己的判定词在**对象**这一支上也不许被采信。
+    """反负控（与上一条配对）：角色自己的判定词在对象这一支上也不许被采信。
 
     没有这一条，上一条可以靠"凡对象都读它的 outcome"满足 —— 而 F 的子目标判定
     （`progress` / `no_change`）走的正是对象这一支，把它当任务级结果就会重演

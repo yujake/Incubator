@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""**`json.dumps` 必须带 `default=`**（真机崩溃族的一次性收口）。
+"""`json.dumps` 必须带 `default=`（真机崩溃族的一次性收口）。
 
 ## 现场（2026-10-17，T1/T4/T5 三趟并发）
 
@@ -10,14 +10,14 @@ TypeError: Object of type TopicalityReport is not JSON serializable
 ```
 
 它此前分三处修过（`store` / `secretary.append_jsonl` / `canonical_json_text`），但只要
-**还有一处漏网**，同一类崩溃就会在别的路径上再来一次 —— 于是改成"**全仓一次扫干净**"：
+还有一处漏网，同一类崩溃就会在别的路径上再来一次 —— 于是改成"全仓一次扫干净"：
 `src/agentflow/**` 里每一处 `json.dumps(...)` 都带 `default=str`。
 
-**为什么这样安全**：对纯 JSON 数据，`default=str` **不改变任何字节**（输出与原来逐字相同）
-⇒ 历史哈希、快照、回执都不受影响；对含非 JSON 值的载荷，此前**根本 dump 不出来**，
+为什么这样安全：对纯 JSON 数据，`default=str` 不改变任何字节（输出与原来逐字相同）
+⇒ 历史哈希、快照、回执都不受影响；对含非 JSON 值的载荷，此前根本 dump 不出来，
 所以没有"既有字节"会被改掉。
 
-本判据用 **AST**（不看正则、不看注释）扫运行路径，扫到一处就红。
+本判据用 AST（不看正则、不看注释）扫运行路径，扫到一处就红。
 """
 
 from __future__ import annotations

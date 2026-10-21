@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-"""D 的两个动作**返回不是字典**：`submit_gaps -> list[str]`、`write_report -> str`。
+"""D 的两个动作返回不是字典：`submit_gaps -> list[str]`、`write_report -> str`。
 
 ## 为什么补这个文件
 
-亲测 D 时我按"动作都回 dict"的惯例去 `.get(...)`，**连撞两次** `AttributeError`。
-两件事其实**都真的落地了**（检索请求真的入队、报告文件真的写出），
-坏的是"**结果读不出来**"—— 业主口径：*"凡是你凭感觉第一次运行工具发现红了，
+亲测 D 时我按"动作都回 dict"的惯例去 `.get(...)`，连撞两次 `AttributeError`。
+两件事其实都真的落地了（检索请求真的入队、报告文件真的写出），
+坏的是"结果读不出来"—— 业主口径：*"凡是你凭感觉第一次运行工具发现红了，
 都要假想真实智能体也会在这里困惑并浪费时间和 token。"*
 
-处置：这两个返回形状是**刻意**的（`submit_gaps` 给你"提交出去的编号"、
+处置：这两个返回形状是刻意的（`submit_gaps` 给你"提交出去的编号"、
 `write_report` 给你"写下的那个路径"，且"只写文件、不落表"），
-所以在 **D 的手册**里写明了（描述侧对齐，不改代码）；
-这一组判据钉住**行为**——返回的东西必须真的落地：
+所以在 D 的手册里写明了（描述侧对齐，不改代码）；
+这一组判据钉住行为——返回的东西必须真的落地：
 
-1. `write_report()` 返回的路径**真的存在**，而且里面是这个问题的内容；
-2. `submit_gaps()` 返回的编号**每一条都能在 `search_requests` 里找到**（不是随口一串）；
-3. **负控**：没有可提交的缺口时，它给的是**空的列表**（而不是 None / 抛异常）。
+1. `write_report()` 返回的路径真的存在，而且里面是这个问题的内容；
+2. `submit_gaps()` 返回的编号每一条都能在 `search_requests` 里找到（不是随口一串）；
+3. 负控：没有可提交的缺口时，它给的是空的列表（而不是 None / 抛异常）。
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def _question(d: AgentD) -> str:
 
 
 def test_write_report_returns_a_path_that_really_exists(tmp_path: pathlib.Path) -> None:
-    """正控：返回的是**路径**，而且那份文件真的在盘上、里面是这个问题。"""
+    """正控：返回的是路径，而且那份文件真的在盘上、里面是这个问题。"""
     d, _store = _d(tmp_path)
     qid = _question(d)
     assert qid, "propose_question 没给出 qid"
@@ -64,7 +64,7 @@ def test_submit_gaps_returns_ids_that_really_landed(tmp_path: pathlib.Path) -> N
 
 
 def test_no_gap_to_submit_is_an_empty_list_not_none(tmp_path: pathlib.Path) -> None:
-    """**负控**：没有可提交的缺口 ⇒ 空列表（不是 None、也不抛）—— 空与"没做成"是两件事。"""
+    """负控：没有可提交的缺口 ⇒ 空列表（不是 None、也不抛）—— 空与"没做成"是两件事。"""
     d, _store = _d(tmp_path)
     qid = _question(d)
     first = d.submit_gaps(qid)

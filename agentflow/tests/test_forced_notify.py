@@ -233,9 +233,12 @@ def test_the_forced_table_is_retired_in_code_and_the_prompt_half_is_bs():
 
     改前必红：`AgentLoop.run` 里还调着 `_notify_bounce(` 且写着 `no_notify` —— 那是"收工不带 notify 就打回"的两处痕迹。
 
-    这一条钉的是退场之后的契约：① 收工侧的打回没了（源码里不再调 `_notify_bounce`）；② `no_notify` 这个停止理由没了（不可达的停止理由留着只会误导读的人）；③ 读数还在（`notify_problem`）：退场 ≠ 沉默 —— 有没有留痕仍然看得见（这是"闸门降级成读数"的全部意义）。
+    这一条钉的是退场之后的契约：① 收工侧的打回没了（源码里不再调 `_notify_bounce`）；② `no_notify` 这个停止理由没了（不可达的停止理由留着只会误导读的人）；③
+    读数还在（`notify_problem`）：退场 ≠ 沉默 —— 有没有留痕仍然看得见（这是"闸门降级成读数"的全部意义）。
 
-    为什么不在这里断言 `agent_prompts.LOOP_PROTOCOL` 的文字：那是 B 的广告面，而 `draft/45 §2` 的硬约束是"代码先接住、提示词后撤" —— 若继续钉提示词的"强制/不代填"，B 撤广告的那一刻这里会红，而红的原因是分工不是回归。"""
+    为什么不在这里断言 `agent_prompts.LOOP_PROTOCOL` 的文字：那是 B 的广告面，而 `draft/45 §2` 的硬约束是"代码先接住、提示词后撤" ——
+    若继续钉提示词的"强制/不代填"，
+    B 撤广告的那一刻这里会红，而红的原因是分工不是回归。"""
     import inspect
 
     from agentflow.agent_loop import AgentLoop

@@ -3,17 +3,20 @@
 
 ## 真机读数（`projects/mp3/data/statements.json`，2026-10-21 现算）
 
-statements 1147 行：kind 分布 concept 1143 / theorem 2 / lemma 2；origin 分布 own_result 1145、external_lit 2；每一条 concept 都带 proof_text，值是 "concept:primitive"；其中 1142 条带 source_lit_id（术语确实出自文献）。
+statements 1147 行：kind 分布 concept 1143 / theorem 2 / lemma 2；origin 分布 own_result 1145、external_lit 2；每一条
+concept 都带 proof_text，值是 "concept:primitive"；其中 1142 条带 source_lit_id（术语确实出自文献）。
 
 三处错（业主 2026-10-21 的验收词，逐条对应下面的判据）：
 
-1. 概念行带 `proof_text` ⇒ 任何"有没有证明"的读数都被虚高（`proof_review_gap` 的 `proof_text` 非空判据、收工门的 reviewed 档、`closing` 的 `prose_reviewed_statements`）；
+1. 概念行带 `proof_text` ⇒ 任何"有没有证明"的读数都被虚高（`proof_review_gap` 的 `proof_text` 非空判据、收工门的 reviewed 档、`closing`
+的 `prose_reviewed_statements`）；
 2. `origin=own_result` 错标：文献里来的术语是 `external_lit`，不是自己的结果；
 3. 一轮灌进上千条：概念应按轮限量（一轮几十条以内）。
 
 ## 判据（每条都配一处负控；负控不红 = 这条判据没在咬）
 
-① 写一条概念 ⇒ 落盘 `proof_text` 为空，且 `proof_review_gap` 不把它算成"有证明"；负控：给它塞 `concept:primitive` ⇒ 判据红，且 `why` 点名"概念行不该带证明文本"。
+① 写一条概念 ⇒ 落盘 `proof_text` 为空，且 `proof_review_gap` 不把它算成"有证明"；负控：给它塞 `concept:primitive` ⇒ 判据红，且 `why`
+点名"概念行不该带证明文本"。
 ② 写概念时 `origin` 在受控集合里；`own_result` ⇒ 拒；负控：把闸门放开（`return ""`）⇒ 判据红。
 ③ 一轮写超过上限 ⇒ 第 N+1 条受控拒绝、读数可见、已写的保留；负控：让配额不拦也不记（"静默丢"）⇒ 判据红。"""
 from __future__ import annotations

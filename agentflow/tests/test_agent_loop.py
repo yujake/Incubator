@@ -666,7 +666,8 @@ def test_the_shape_table_has_exactly_one_source(tmp_path: pathlib.Path):
 
     四条一起判，每条都配一条活体负控（拿改前那段原文当输入，判据必须认出来）：① 提示词骨架
     （`JSON_TAIL`）必须逐字含上 `SHAPES` 的每一个形状；② `_decode_shape` 的 docstring 必须指向
-    `SHAPES` 且不再自带任何条数声明；③ 全文件：凡条数声明一律由 `len(SHAPES)` 现算，凡形状并列名单一律要带 `SHAPES`（不许手抄第二份）；④ 正控：把提示词真拼一遍，那一句里必须同时有正确条数与全部形状名（否则第 3 条可以靠"把那句话删掉"骗过去）。"""
+    `SHAPES` 且不再自带任何条数声明；③ 全文件：凡条数声明一律由 `len(SHAPES)` 现算，凡形状并列名单一律要带 `SHAPES`（不许手抄第二份）；④ 正控：把提示词真拼一遍，
+    那一句里必须同时有正确条数与全部形状名（否则第 3 条可以靠"把那句话删掉"骗过去）。"""
     import re
 
     from agentflow.agent_loop import JSON_TAIL, SHAPES, AgentLoop, _decode_shape

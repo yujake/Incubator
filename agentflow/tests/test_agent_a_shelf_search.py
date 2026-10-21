@@ -129,9 +129,9 @@ def test_shelf_search_shape_matches_the_action_contract(tmp_path: pathlib.Path):
 def test_shelf_accepts_a_query_and_filters_by_title_or_path(tmp_path: pathlib.Path):
     """业主口径：「第一次凭感觉敲红的，真实智能体也会在这里困惑。」
 
-    `search.shelf` 的名字里带 search，而它的参数原本**只有** `limit` / `lit_id`
+    `search.shelf` 的名字里带 search，而它的参数原本只有 `limit` / `lit_id`
     —— 我第一次凭感觉敲的就是 `query=`，吃了一个「未声明的参数」。
-    这一条钉住修好之后的行为：**`query` 收下了，而且是按题名/路径过滤**（不读全文）。
+    这一条钉住修好之后的行为：`query` 收下了，而且是按题名/路径过滤（不读全文）。
     """
     st = _store(tmp_path)
     _add_book(st, lit_id="0001", path="a.txt", text="alpha")
@@ -145,7 +145,7 @@ def test_shelf_accepts_a_query_and_filters_by_title_or_path(tmp_path: pathlib.Pa
 
 
 def test_a_query_that_matches_nothing_is_not_an_empty_shelf(tmp_path: pathlib.Path):
-    """负控（三态）：**没匹配**与**书架是空的**必须是两件事（读数上分得开）。"""
+    """负控（三态）：没匹配与书架是空的必须是两件事（读数上分得开）。"""
     st = _store(tmp_path)
     _add_book(st, lit_id="0001", path="a.txt", text="alpha")
     out = _a(st).shelf_search(limit=10, query="zzz")

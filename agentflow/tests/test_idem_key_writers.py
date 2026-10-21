@@ -6,13 +6,15 @@
 
 > 生产写入方仍未填 `idem_key`：`tokenmeter.charge_once` 目前只把标记写在 `note` 里。
 
-后果是字段级防线（`schema.validate_table` 的唯一性断言、`verify.duplicate_idem_key`）在真实路径上永远没有输入 —— 它们在测试里常绿，在生产上从不生效。本文件把"字段真的被填了"变成可判定的断言，并给出两条会红的负控。
+后果是字段级防线（`schema.validate_table` 的唯一性断言、`verify.duplicate_idem_key`）在真实路径上永远没有输入 —— 它们在测试里常绿，在生产上从不生效。
+本文件把"字段真的被填了"变成可判定的断言，并给出两条会红的负控。
 
 两条写入方与它们的键来源：
 
 | 写入方 | 键 | 语义 |
 |---|---|---|
-| `modelcost.charge_reply`（经 `TokenMeter.charge_once`） | `modelcost.idempotency_key(task_id, call_index)` | 第 i 次模型调用 |
+| `modelcost.charge_reply`（经 `TokenMeter.charge_once`） | `modelcost.idempotency_key(task_id, call_index)` | 第
+i 次模型调用 |
 | `conductor._charge_and_settle`（经 `TokenMeter.charge_once`） | `modelcost.settle_key(task_id)` | 一次召唤的汇总结算 |
 
 两者都写同一个键到 `note` 的 token 与 `idem_key` 字段：少任何一层都有明确的后果（少 `note` ⇒ 回滚后判重失去依据；少字段 ⇒ 表级唯一性断言形同虚设）。"""

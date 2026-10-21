@@ -645,7 +645,7 @@ def test_i2_stops_within_budget_and_marks_persistent(tmp_path):
     seen: list[dict] = []
     # 模拟"A 检索 → B 消化 → 回来再裁决"；真矛盾永远不收敛。
     # 循环上界跟着 `cap` 走（2026-10-15 裁定 C9 把它从 2 抬到 12）——
-    # 写死 10 会让这条判据在 cap 抬高之后**因为跑不完而断言失败**，
+    # 写死 10 会让这条判据在 cap 抬高之后因为跑不完而断言失败，
     # 而失败的原因看起来像"真矛盾没收敛"，会被读成功能坏了。
     for _ in range(cap + 2):
         out = agent.adjudicate("0000")

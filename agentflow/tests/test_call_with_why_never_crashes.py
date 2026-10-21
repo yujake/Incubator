@@ -3,7 +3,8 @@
 
 ## 这个缺陷有多贵
 
-`tools/base.py` 的调用日志段原来是：`entry` 只在 `if self.log_calls:` 里赋值，而 `if _why:` 那段没有 log_calls 判断就写 `entry["why"]` —— 生产默认 `log_calls=False` ⇒ `UnboundLocalError: cannot access local variable 'entry'`。
+`tools/base.py` 的调用日志段原来是：`entry` 只在 `if self.log_calls:` 里赋值，而 `if _why:` 那段没有 log_calls 判断就写 `entry["why"]`
+—— 生产默认 `log_calls=False` ⇒ `UnboundLocalError: cannot access local variable 'entry'`。
 
 于是生产里任何带 `why` 的工具调用都会抛 `UnboundLocalError`。真机三处报错全是它：
 

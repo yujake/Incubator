@@ -250,9 +250,11 @@ def test_run_agent_refuses_to_resume_a_different_task(tmp_path: pathlib.Path, mo
 def test_the_gate_subcommand_has_retired_and_deliver_keeps_no_cli_dependency():
     """L-05c（`48-09 §4.10`）：`cli gate` 子命令退场，而语义判据与机械半都留着。
 
-    改前必红：`build_parser()` 的 choices 里有 `gate`、`cli.cmd_gate` 存在、`cli.py` 里 import 着 `deliver`（`cmd_gate` 是它的唯一 CLI 入口）。
+    改前必红：`build_parser()` 的 choices 里有 `gate`、`cli.cmd_gate` 存在、`cli.py` 里 import 着 `deliver`（`cmd_gate` 是它的唯一
+    CLI 入口）。
 
-    退场的依据（真机读数）：`gates/*.json` 0 份、`delivery_gate` 事件 0 —— 这个入口从来没人用过；而语义判据真的跑过（116 份任务产物含 `claims_semantically_judged`，其中 44 份 > 0）。所以"没人用的 CLI"退场、"真在跑的判据"留着，两件事不许混为一谈。
+    退场的依据（真机读数）：`gates/*.json` 0 份、`delivery_gate` 事件 0 —— 这个入口从来没人用过；而语义判据真的跑过（116
+    份任务产物含 `claims_semantically_judged`，其中 44 份 > 0）。所以"没人用的 CLI"退场、"真在跑的判据"留着，两件事不许混为一谈。
 
     这一条同时钉住没有造出孤儿模块：`faculty_checks` 的机械半现在有真生产调用者（`statusreport` 那条链，B 的 EE-04）⇒ 判据断言那条链仍在。"""
     import pathlib as _p

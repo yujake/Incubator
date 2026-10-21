@@ -7,10 +7,10 @@
 2. 「优雅停止就是主控用这个操作或预算耗尽自动触发主控用这个操作」
 3. 「接收到停的时候，剩余任务委托状态自动变成block」
 
-判据分四组：**词表**（`block` 这一档存在、且必须有来路）· **搬运**（谁被翻、谁不许被翻）·
-**两条通路**（预算耗尽与主控的操作都接上了）· **回报**（它随子结果与事件回给父，M 汇总）。
+判据分四组：词表（`block` 这一档存在、且必须有来路）· 搬运（谁被翻、谁不许被翻）·
+两条通路（预算耗尽与主控的操作都接上了）· 回报（它随子结果与事件回给父，M 汇总）。
 
-为什么这一档必须由**框架**翻而不是"让模型汇报"：预算耗尽那一支**根本没有模型回合**
+为什么这一档必须由框架翻而不是"让模型汇报"：预算耗尽那一支根本没有模型回合
 （循环在步边界直接 break）—— 想让它汇报只能等下一次模型调用，而那时钱已经没了。
 """
 from __future__ import annotations
@@ -53,7 +53,7 @@ def test_the_block_state_exists_and_has_only_one_meaning():
 
 
 def test_a_blocked_row_must_carry_why_it_stopped():
-    """`block` 行**必须**有 `detail`（为什么停）：三态纪律 —— 不许让"没做完"没有来路。"""
+    """`block` 行必须有 `detail`（为什么停）：三态纪律 —— 不许让"没做完"没有来路。"""
     row = S.Task(task_id="t-0001", role="B", action="run_once", status="block")
     with pytest.raises(ValueError, match="detail"):
         row.validate()
@@ -104,7 +104,7 @@ def test_a_finished_row_is_never_flipped(tmp_path: pathlib.Path):
 
 
 def test_all_runs_blocks_the_whole_turn(tmp_path: pathlib.Path):
-    """主控那条操作要停的是**整趟**：`all_runs=True` 时整棵树里未终态的行都翻。"""
+    """主控那条操作要停的是整趟：`all_runs=True` 时整棵树里未终态的行都翻。"""
     st = Store(tmp_path)
     st.init(force=True)
     with st.tx("tasks", actor="test") as tx:
@@ -119,7 +119,7 @@ def test_all_runs_blocks_the_whole_turn(tmp_path: pathlib.Path):
 
 
 def test_no_store_is_unknown_not_nothing_left(tmp_path: pathlib.Path):
-    """三态：没接线 ⇒ `checked=False` + 理由 —— **不许**折成"没有剩余"。"""
+    """三态：没接线 ⇒ `checked=False` + 理由 —— 不许折成"没有剩余"。"""
     got = SC.block_remaining_tasks(None, task_id="t-0001", why="budget")
     assert got["checked"] is False and got["blocked"] == [], got
     assert "没查成" in got["reason"] or "翻不了" in got["reason"], got
@@ -132,7 +132,7 @@ def test_the_two_stop_paths_call_the_helper():
     """判据（接线）：预算耗尽那一支与"接收到停"那一支都真的调了 `_block_remaining`。
 
     为什么按源码读而不是跑一遍循环：这两支分别在"钱花完"与"收到停"那一刻触发，
-    跑真循环要造出那两个状态；而这一条要守的是"**接线没有掉**"——接了没有，
+    跑真循环要造出那两个状态；而这一条要守的是"接线没有掉"——接了没有，
     读调用点就够，跑一遍反而更脆（预算那条要伪造账本）。行为那一半由上面几条判据钉。
     """
     from agentflow import agent_loop as AL
@@ -160,7 +160,7 @@ def test_the_conductors_stop_operation_blocks_the_whole_turn():
 def test_the_flip_leaves_no_nonterminal_rows(tmp_path: pathlib.Path):
     """翻完之后"未终态的行"是空的 —— 续跑简报那一栏读的就是这个口径（不是被 block 顶掉）。
 
-    这里刻意**不**断言简报内部复用哪个函数：判的是台账那一栏本身（`pending`/`running` 的行数），
+    这里刻意不断言简报内部复用哪个函数：判的是台账那一栏本身（`pending`/`running` 的行数），
     那是"还剩什么活"的唯一权威来源。
     """
     st = Store(tmp_path)

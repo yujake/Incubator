@@ -2,15 +2,20 @@
 
 ## 为什么补这个文件
 
-`tools/coverage_zero_test.py --level 2` 在批边界那次读数（`temp/b73-release-all.json`）里报了一个等级 2（判据/决策）的零测试公开函数：`src/agentflow/fetch.py` L118 `is_controlled_error_kind`（"可能间接覆盖"，判据 2a:裸名含决策词缀 ['is_']）。
+`tools/coverage_zero_test.py --level 2` 在批边界那次读数（`temp/b73-release-all.json`）里报了一个等级 2（判据/决策）
+的零测试公开函数：`src/agentflow/fetch.py` L118 `is_controlled_error_kind`（"可能间接覆盖"，判据 2a:裸名含决策词缀 ['is_']）。
 
-它不是可有可无的辅助函数：`FetchResult.__post_init__`（`fetch.py:195`）用它把"失败的下载必须答得出为什么"变成构造期硬约束（`F-6`）。零测试意味着这条约束没有任何判据守着 —— 把 `ERROR_KINDS` 或那两条 `ValueError` 改坏，套件不会红。
+它不是可有可无的辅助函数：`FetchResult.__post_init__`（`fetch.py:195`）用它把"失败的下载必须答得出为什么"变成构造期硬约束（`F-6`）。零测试意味着这条约束没有任何判据守着
+—— 把 `ERROR_KINDS` 或那两条 `ValueError` 改坏，套件不会红。
 
 ## 本文件守什么（三组，每组都有负控）
 
-1. 判定面：`is_controlled_error_kind` 对每种合法形态给 `True`（`None` / 每个 `ERROR_KINDS` 成员 / `http_NNN`），对每种非法形态给 `False`（含近似但非法的形态：`http_40`、`http_4040`、大小写、前后空白、空串）—— 后一组是负控，它挡住"把正则放宽成 `startswith('http')`"那类改法；
-2. 守卫面：`FetchResult(ok=False, kind=<非法>)` 必须抛，且消息里点名那个非法值；另外两条守卫（`ok=False` 而 `kind=None`、`ok=True` 而 `kind` 是失败档）各一条负控；
-3. 变异负控（证明判据有咬合力）：把 `fetch.is_controlled_error_kind` 在内存里换成恒真的实现 ⇒ 同一个非法构造不再抛 —— 没有这一条，就无法排除"上面那些 `raises` 其实是被别的东西挡住的"。
+1. 判定面：`is_controlled_error_kind` 对每种合法形态给 `True`（`None` / 每个 `ERROR_KINDS` 成员 / `http_NNN`），
+对每种非法形态给 `False`（含近似但非法的形态：`http_40`、`http_4040`、大小写、前后空白、空串）—— 后一组是负控，它挡住"把正则放宽成 `startswith('http')`"那类改法；
+2. 守卫面：`FetchResult(ok=False, kind=<非法>)` 必须抛，且消息里点名那个非法值；另外两条守卫（`ok=False` 而 `kind=None`、`ok=True` 而 `kind`
+是失败档）各一条负控；
+3. 变异负控（证明判据有咬合力）：把 `fetch.is_controlled_error_kind` 在内存里换成恒真的实现 ⇒ 同一个非法构造不再抛 —— 没有这一条，就无法排除"上面那些 `raises`
+其实是被别的东西挡住的"。
 
 `ERROR_KINDS` 本身也在这里被断言非空且是 frozenset/tuple（空词表会让第 1 组恒真地通过）。"""
 

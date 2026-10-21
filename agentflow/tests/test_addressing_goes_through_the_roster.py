@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 """业主裁定（2026-10-19 第二版）：「名册就是可通话名单 —— 只有名册上的人能通话。」
 
-诊断：`_do_message` 只把 `to not in (*S.ROLES, M, "user", "用户")` 当名册名，角色通道从不问名册 ⇒ 按角色名随便发（名下有 F1/F2 两个实例也照发）；`roster_view` 每行有 `name` / `role` / `brief` / `state` / `status` / `task_id`（绝对编号已在），`scope="descendants"` 再给 `parent` 与 `depth`，但"我自己的父是谁"只活在 `AgentLoop.parent_task_id` 内存字段里，盘上名册一个字都没有；退役成员拒收却读不出理由码。
+诊断：`_do_message` 只把 `to not in (*S.ROLES, M, "user", "用户")` 当名册名，角色通道从不问名册 ⇒ 按角色名随便发（名下有 F1/F2 两个实例也照发）
+；`roster_view` 每行有 `name` / `role` / `brief` / `state` / `status` / `task_id`（绝对编号已在），`scope="descendants"`
+再给 `parent` 与 `depth`，但"我自己的父是谁"只活在 `AgentLoop.parent_task_id` 内存字段里，盘上名册一个字都没有；退役成员拒收却读不出理由码。
 
-判据：正控 ① 给「父」发 ⇒ 收件人 `task_id` == 名册里的父编号（编号与名册名两种写法）② 给「子」发 ⇒ 收件人是那个子 ③ 名册外的角色（"E"）⇒ `not_in_roster` ＋列出可通话名单 ④ 退役的子 ⇒ `member_retired` ⑤ 祖父（父的上线）⇒ 拒收 ⑥ `escalate` 上行链路仍绿（`tests/test_escalate_goes_up_and_stops.py` 的 test_escalate_goes_up_and_stops）⑦ 无秘书 ⇒ 退回原路并标 `roster_unavailable`，且这一档不是"名册校验通过"（名册外的角色照样发得出去）。
+判据：正控 ① 给「父」发 ⇒ 收件人 `task_id` == 名册里的父编号（编号与名册名两种写法）② 给「子」发 ⇒ 收件人是那个子 ③ 名册外的角色（"E"）⇒ `not_in_roster` ＋列出可通话名单
+④ 退役的子 ⇒ `member_retired` ⑤ 祖父（父的上线）⇒ 拒收 ⑥ `escalate` 上行链路仍绿（`tests/test_escalate_goes_up_and_stops.py` 的
+test_escalate_goes_up_and_stops）⑦ 无秘书 ⇒ 退回原路并标 `roster_unavailable`，且这一档不是"名册校验通过"（名册外的角色照样发得出去）。
 
-负控（每条都真跑"坏实现"）：去掉 `roster_view` 的父那一格 / 父解析成随便一个成员 / 守卫去掉（`not_in_roster` 放行成老通道）/ 退役当还活着 / 祖父放行 / 无秘书当解析成功 ⇒ 均红。
+负控（每条都真跑"坏实现"）：去掉 `roster_view` 的父那一格 / 父解析成随便一个成员 / 守卫去掉（`not_in_roster` 放行成老通道）/ 退役当还活着 / 祖父放行 / 无秘书当解析成功 ⇒
+均红。
 
 边界：按绝对编号 / 名册名发消息不需要召唤边（"派活要许可，说话不需要"）。"""
 from __future__ import annotations

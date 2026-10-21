@@ -9,7 +9,10 @@
 | 我父是谁 | 在（我那一行的 `parent_task_id`） | 缺（提示词只给角色名 `{{summoned_by}}`） |
 | 我子有谁 | 在（`_children_of(我的编号)`） | 缺 |
 
-这一批补的就是"渲染"那一半：`AGENT_IDENTITY` 补 `{{parent_task_id}}` / `{{children}}` 两格（共享段 ⇒ `PROMPT_VERSION` p44 → p45，十格摘要一起动，那条判据在 `tests/test_agent_prompts.py`）。同一批修 D89：`_emit_settlement` 把终态通报挂在自己名下（`parent_task_id=self.my_task_id`、`role=M`），而板项那一格的列义是"收件人的编号" ⇒ 子报给父时必须写父的台账号，否则父的待办视图（`open_items_of(父的编号)`）里永远看不到"哪个子向我交差了"。
+这一批补的就是"渲染"那一半：`AGENT_IDENTITY` 补 `{{parent_task_id}}` / `{{children}}` 两格（共享段 ⇒ `PROMPT_VERSION` p44 → p45，
+十格摘要一起动，那条判据在 `tests/test_agent_prompts.py`）。同一批修 D89：`_emit_settlement`
+把终态通报挂在自己名下（`parent_task_id=self.my_task_id`、`role=M`），而板项那一格的列义是"收件人的编号" ⇒ 子报给父时必须写父的台账号，
+否则父的待办视图（`open_items_of(父的编号)`）里永远看不到"哪个子向我交差了"。
 
 判据在这个文件里成对给：正控（渲染出来的提示词里读得到父/子的编号）+ 负控（把那一格删掉/换成别人的编号 ⇒ 红）。所有替身都不联网。"""
 from __future__ import annotations

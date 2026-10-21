@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-"""长跑预演（阶段 3）：**离线多轮多角色**跑一遍 —— 断言"零阻塞 ＋ 链闭合"。
+"""长跑预演（阶段 3）：离线多轮多角色跑一遍 —— 断言"零阻塞 ＋ 链闭合"。
 
 业主口径（2026-10-17）：*"用离线真实模拟（多轮、多角色、桩 provider/桩模型）跑通一遍，
-把**会在哪停**逐条找出来并修掉，再配判据守住。"*
+把会在哪停逐条找出来并修掉，再配判据守住。"*
 
-这一条模拟的是**最坏组合**：**零文献**（台账空）＋ **源全挂**（每次检索都抛）。
+这一条模拟的是最坏组合：零文献（台账空）＋ 源全挂（每次检索都抛）。
 它断言两件事：
 
-1. **零阻塞**：A→B→D→F→E→V→G→H 每一格都**返回读数**（不抛异常）；"没查成"必须是**读得出的三态**，
+1. 零阻塞：A→B→D→F→E→V→G→H 每一格都返回读数（不抛异常）；"没查成"必须是读得出的三态，
    而不是把流程打断；
-2. **链闭合**：F 路线上的 `own_result` 自证命题，经 V 审核（注入假判定，稳定返"成立"）之后
-   ⇒ 它是**证明链的根**（`proof_chain.closed=True`、`roots=[sid]`）。
+2. 链闭合：F 路线上的 `own_result` 自证命题，经 V 审核（注入假判定，稳定返"成立"）之后
+   ⇒ 它是证明链的根（`proof_chain.closed=True`、`roots=[sid]`）。
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class _DeadProvider:
 
 
 class _FixedSeam:
-    """桩模型：每次 `complete` 都回同一段 JSON —— 审核判定**可复现**。"""
+    """桩模型：每次 `complete` 都回同一段 JSON —— 审核判定可复现。"""
 
     def __init__(self, verdict: str = "成立") -> None:
         self.verdict = verdict
@@ -71,7 +71,7 @@ def _as_dict(out) -> dict:
 
 
 def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_path):
-    """最坏组合（零文献 ＋ 源全挂）下：**每一步都返回读数**，且**证明链闭合**。"""
+    """最坏组合（零文献 ＋ 源全挂）下：每一步都返回读数，且证明链闭合。"""
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
@@ -117,7 +117,7 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
                               script_path="scripts/probe.py", method="numeric"))
     steps.append("E.run_experiment")
 
-    # ⑥ B 登记一条**自证**命题（零文献依赖）＋ V 审核（桩模型稳定判"成立"）
+    # ⑥ B 登记一条自证命题（零文献依赖）＋ V 审核（桩模型稳定判"成立"）
     req = dict(origin="own_result", statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
                kind="theorem", proof_text=PROOF, line_range={"start": 1},
                doc_id="000000", quote_verified=False, quote_reason="自证：无外部引文")
@@ -137,7 +137,7 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
 
     # ⑧ G 成稿 ＋ H 审校（都要返回读数、不抛）
     g = AgentG(st)
-    # 零文献场景下，稿子的依据只能是**我们自己刚审过的那条命题**（`stmt:` 引用）——
+    # 零文献场景下，稿子的依据只能是我们自己刚审过的那条命题（`stmt:` 引用）——
     # 这也正是"缺文献也能把研究做完"的正面样子（FC-02：没有引用的断言不许进稿件）。
     claim = _as_dict(g.compose_claim(text="阿贝尔群是一种群。",
                                      citations=[f"stmt:{sid}"],

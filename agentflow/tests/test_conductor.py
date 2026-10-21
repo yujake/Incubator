@@ -4,16 +4,25 @@
 
 | # | 不变式 | 测试（断言正方向） | 负控（证明判据真的在卡） |
 |---|---|---|---|
-| I-1 | 每个 `started_at` 恰好一个 `ended_at` | `test_i1_every_start_has_exactly_one_end` | `test_i1_negative_control_running_row_is_inspectable` |
+| I-1 | 每个 `started_at` 恰好一个 `ended_at` | `test_i1_every_start_has_exactly_one_end`
+| `test_i1_negative_control_running_row_is_inspectable` |
 | I-2 | 终态不可改写 | `test_i2_terminal_state_is_immutable` | `test_i2_negative_control_first_writer_wins` |
-| I-3 | 深度单调不减（子 = 父 + 1） | `test_i3_depth_is_parent_plus_one` | `test_i3_negative_control_dangling_parent_is_refused` |
-| I-4 | 拒绝必须带受控理由 | `test_i4_refused_always_has_controlled_reason` | `test_i4_negative_control_no_refusal_reason_on_ok` |
-| I-5 | 并发度不超上限 | `test_i5_peak_concurrency_within_limit` | `test_i5_negative_control_limit_is_actually_reached` |
-| I-6 | 写集相交不并发 | `test_i6_intersecting_write_sets_are_serialized` | `test_i6_negative_control_disjoint_are_parallel` |
-| I-7 | 预算耗尽后不再新开任务 | `test_i7_budget_exhaustion_refuses_new_tasks` | `test_i7_negative_control_unlimited_budget_never_refuses` |
-| I-8 | 取消是协作式且不自动重试 | `test_i8_cancel_is_cooperative_and_never_retries` | `test_i8_negative_control_without_cancel_task_runs` |
-| I-9 | 台账可重建 | `test_i9_tasks_snapshot_rebuilds_byte_identical` | `test_i9_negative_control_rebuild_detects_manual_corruption` |
-| I-10 | 结果合并顺序确定 | `test_i10_merge_order_is_deterministic_across_runs` | `test_i10_negative_control_order_is_input_order_not_completion` |
+| I-3 | 深度单调不减（子 = 父 + 1） | `test_i3_depth_is_parent_plus_one`
+| `test_i3_negative_control_dangling_parent_is_refused` |
+| I-4 | 拒绝必须带受控理由 | `test_i4_refused_always_has_controlled_reason`
+| `test_i4_negative_control_no_refusal_reason_on_ok` |
+| I-5 | 并发度不超上限 | `test_i5_peak_concurrency_within_limit`
+| `test_i5_negative_control_limit_is_actually_reached` |
+| I-6 | 写集相交不并发 | `test_i6_intersecting_write_sets_are_serialized`
+| `test_i6_negative_control_disjoint_are_parallel` |
+| I-7 | 预算耗尽后不再新开任务 | `test_i7_budget_exhaustion_refuses_new_tasks`
+| `test_i7_negative_control_unlimited_budget_never_refuses` |
+| I-8 | 取消是协作式且不自动重试 | `test_i8_cancel_is_cooperative_and_never_retries`
+| `test_i8_negative_control_without_cancel_task_runs` |
+| I-9 | 台账可重建 | `test_i9_tasks_snapshot_rebuilds_byte_identical`
+| `test_i9_negative_control_rebuild_detects_manual_corruption` |
+| I-10 | 结果合并顺序确定 | `test_i10_merge_order_is_deterministic_across_runs`
+| `test_i10_negative_control_order_is_input_order_not_completion` |
 
 另外覆盖规格书明确要求的若干条（"拒绝也是一个结果"、深度链、扇出、循环、预算、
 墙钟、取消、dispose 幂等、backend 抽象、tree/stats）。

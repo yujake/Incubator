@@ -1,24 +1,36 @@
 # -*- coding: utf-8 -*-
 """判据：`evidence_kind="proof_review"` 必须有 V 那一签（2026-10-19，堵「假 proof_review」）。
-
 ## 为什么要有这一条（活证据）
-
-`projects/mp1/data/statements.json` 里有 10 条 `evidence_kind="proof_review"`，它们的 `verification_id` / `reviewed_by` 全是 `null`、`bits` 是 `{}` —— 这 10 条自称「证明经逐行审阅」，而写入时没有任何东西核过它。`schema.py:1071` 那段定义逐字要求「`statements` 表的 `proof_text` 非空 ＋ V 的 `verifications` 里那一条签「成立」」，但 2026-10-19 之前没有任何代码强制（唯一被强制的是 `disclaimer`，而那句话作者自己就能写）。
-
+`projects/mp1/data/statements.json` 里有 10 条 `evidence_kind="proof_review"`，它们的 `verification_id`
+/ `reviewed_by` 全是 `null`、`bits`
+是 `{}` —— 这 10 条自称「证明经逐行审阅」，而写入时没有任何东西核过它。`schema.py:1071`那段定义逐字要求「`statements` 表的 `proof_text` 非空 ＋ V
+的 `verifications` 里那一条签「成立」」，但
+2026-10-19之前没有任何代码强制（唯一被强制的是 `disclaimer`，而那句话作者自己就能写）。
 ## 判据落在哪一层（为什么不是 `Statement.validate`）
-
-跨表（其实是跨文件账本）的校验需要工作区根，而 `Statement.validate` 是字段级、手上没有根；且它被 `rebuild` 重放与 `verify` 读侧共用 —— 把这条判据塞进去，会让"读历史"变成"改历史"（存量那 10 条会当场把重建炸掉）。所以判据本体是 `verifications.proof_review_gap`（一处口径，写入期 / 审计期都读它）；写入期闸是 `store.tx` 提交时的 `store._refuse_fake_proof_review` ⇒ `ValueError: proof_review_without_evidence`，整笔事务一行都不写；审计期档是 `verify._check_13` 的 `proof_review_without_verification`（error），逐条点名存量。
-
+跨表（其实是跨文件账本）的校验需要工作区根，而 `Statement.validate` 是字段级、手上没有根；且它被 `rebuild` 重放与 `verify` 读侧共用 —— 把这条判据塞进去，
+会让"读历史"变成"改历史"（存量那 10 条会当场把重建炸掉）。
+所以判据本体是 `verifications.proof_review_gap`（一处口径，写入期 / 审计期都读它）；
+写入期闸是 `store.tx`提交时的 `store._refuse_fake_proof_review`
+⇒ `ValueError: proof_review_without_evidence`，整笔事务一行都不写；审计期档是 `verify._check_13`
+的 `proof_review_without_verification`（error），逐条点名存量。
 口径边界（业主 2026-10-19 裁定 A）：只按那句定义判，不要求在命题行回填 `verification_id`（那是更严的可选口径 B：需要 V 签完之后回写 `statements`，属新的写路径）。
-
 ## 两侧 + 负控（只测一侧的判据可能是一条恒真的判据）
-
-① 有凭据的 `proof_review` 收：先落一条「成立」的签 ⇒ 这一行写得进去、`verify_all` 不点名；② 无凭据的 `proof_review` 拒：没有那一签 ⇒ 提交当场 `ValueError`（错误码在消息里），且一行都没写进去，审计期另一条网把它点成 error；③ 负控：把写入期那道闸拿掉（monkeypatch 成 no-op）⇒ 同一行写得进去 —— 于是"被拒"这件事只能来自那道闸，不是别的校验顺手挡的。
-④ 三态旁支：最近一签是「有毛病」、或签的是另一版证明（`proof_sha256` 不符）、或 `proof_text` 空 ⇒ 都算没有凭据（各有独立理由串）；⑤ 反真空：`heuristic` / `cross_check` 不受这条闸影响（它只管 `proof_review` 一档）。
-
-⑥ 正控（写入路径，反方向的事实）：真机 `projects/mp2` 的 `stmt:000003` 有 `proof_text` 1909 字、`verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行正文相符，按定义这条就是 `proof_review`，盘上却落 `heuristic`。所以满足定义的行必须写得进去，且不许顺手多要别的字段（`disclaimer` / `verification_id` / `reviewed_by` 一个都不是这一档的判据）；负控是"把闸改回要 `disclaimer` 才放行 ⇒ 这条红"（实测过：临时加一条 `and not row.get("disclaimer")` 的判据，本文件 6 条变红）。
-⑦ 作用域：闸只核这一笔改到的行。别的行的历史缺陷挡住一笔无关写入时，"如实降档"这条出口本身也被堵死（`projects/mp1` 那种存量上任何 `statements` 写入都会撞 3 条历史 fake）—— 存量归审计期点名。
-⑧ 降档告警：够格却被写成 `heuristic` / `cross_check` ⇒ `verify_all` 报 warning `weaker_than_evidence`（不是 error：降档是安全方向，但要让读数看见）；负控是"同一条凭据写成 `proof_review` ⇒ 这条告警不出现"（删掉判据则 ⑧ 红）。"""
+① 有凭据的 `proof_review` 收：先落一条「成立」的签 ⇒ 这一行写得进去、`verify_all` 不点名；② 无凭据的 `proof_review` 拒：没有那一签 ⇒
+提交当场 `ValueError`（错误码在消息里），且一行都没写进去，
+审计期另一条网把它点成 error；③ 负控：把写入期那道闸拿掉（monkeypatch 成 no-op）⇒ 同一行写得进去 —— 于是"被拒"这件事只能来自那道闸，不是别的校验顺手挡的。④ 三态旁支：
+最近一签是「有毛病」、
+或签的是另一版证明（`proof_sha256` 不符）、或 `proof_text` 空 ⇒ 都算没有凭据（各有独立理由串）；⑤ 反真空：`heuristic` / `cross_check`
+不受这条闸影响（它只管 `proof_review` 一档）。
+⑥ 正控（写入路径，反方向的事实）：真机 `projects/mp2` 的 `stmt:000003` 有 `proof_text` 1909
+字、`verifications/000003.jsonl`里 `v-000001` 签「成立」
+、`proof_sha256` 与现行正文相符，按定义这条就是 `proof_review`，盘上却落 `heuristic`。所以满足定义的行必须写得进去，且不许顺手多要别的字段（`disclaimer`
+/ `verification_id`
+/ `reviewed_by` 一个都不是这一档的判据）；负控是"把闸改回要 `disclaimer` 才放行 ⇒这条红"（实测过：临时加一条 `and not row.get("disclaimer")` 的判据，
+本文件 6 条变红）。⑦ 作用域：
+闸只核这一笔改到的行。别的行的历史缺陷挡住一笔无关写入时，"如实降档"这条出口本身也被堵死（`projects/mp1` 那种存量上任何 `statements` 写入都会撞 3 条历史 fake）——
+存量归审计期点名。⑧ 降档告警：
+够格却被写成 `heuristic` / `cross_check` ⇒ `verify_all` 报 warning `weaker_than_evidence`（不是 error：降档是安全方向，但要让读数看见）；
+负控是"同一条凭据写成 `proof_review` ⇒ 这条告警不出现"（删掉判据则 ⑧ 红）。"""
 from __future__ import annotations
 
 import pathlib

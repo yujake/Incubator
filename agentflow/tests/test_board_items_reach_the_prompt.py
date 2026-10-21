@@ -107,7 +107,7 @@ def test_a_board_item_reaches_the_prompt_and_is_marked_seen(tmp_path: pathlib.Pa
     system = gate.systems[-1]
     user = gate.prompts[-1]
     assert "挂在你名下的工作项" in system, system[-600:]
-    # 板项的**内容**在 user 消息里（2026-10-21 起它不再进 system：那一格是"这一趟的
+    # 板项的内容在 user 消息里（2026-10-21 起它不再进 system：那一格是"这一趟的
     # 事实"，进了 system 就把整条前缀绑死在这一趟上）。
     assert item in user, ("板项没进提示词（编号都没出现）", user[-900:])
     assert "把 X 的族构造证据补齐" in user, user[-900:]

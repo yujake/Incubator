@@ -9,7 +9,8 @@
 
 | # | 落点 | 这一档的行为 |
 |---|---|---|
-| 1 | `settings.lean_enabled` | 环境变量 `AGENTFLOW_LEAN_ENABLED` > 设置文件 `toolchain.lean_enabled` > 缺省 `True`；读不懂当场报错 |
+| 1 | `settings.lean_enabled` | 环境变量 `AGENTFLOW_LEAN_ENABLED` > 设置文件 `toolchain.lean_enabled` > 缺省 `True`；
+读不懂当场报错 |
 | 2 | `toolchain`（读数层） | `toolchain_report()` 给 `lean_enabled` / `formal_mode`；关掉时 `can_do_formal=False` |
 | 3 | `formalgw.check_lean`（桥接层） | 关掉 ⇒ `status="lean_disabled"`、`checked=False`、连探测/进程都不起 |
 | 4 | `agent_e`（实现层） | 关掉 ⇒ `run_experiment(method="formal")` 前置拒绝（`lean_disabled`），`check_formal` 如实回没查成 |

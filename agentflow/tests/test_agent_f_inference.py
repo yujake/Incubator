@@ -449,9 +449,14 @@ def test_the_tool_layer_path_gets_the_registered_seam(store: Store):
 def test_j07_the_tool_path_receives_the_config_of_its_own_root(tmp_path):
     """J-07：工具路径的 F 必须拿到它那个工作区登记的那份配置（按 root 键，防 B8 复发）。
 
-    `tools/attack_tools._agent_for` 此前是 `AgentF(store, llm=…)` —— 不传 `config=` ⇒ F 的预算四键在工具路径上永远是空 dict（`draft/44` J-07 实测：那四个键全仓无赋值点）。这里给配置补一条工具路径的登记口：`llmseam.set_role_config(role, root, cfg)`，按 `(角色, root)` 键，不是全局单值 —— `draft/41` 的 B8 逐字记着 `conductor_for` 按 root 缓存、同进程第二次装配会沿用第一次的设定；全局单值会把 B8 换个地方重演：A 工作区的配置发给 B 工作区的 F，而读数上两边都"看起来正常"。
+    `tools/attack_tools._agent_for` 此前是 `AgentF(store, llm=…)` —— 不传 `config=` ⇒ F 的预算四键在工具路径上永远是空
+    dict（`draft/44` J-07 实测：那四个键全仓无赋值点）。这里给配置补一条工具路径的登记口：`llmseam.set_role_config(role, root, cfg)`，
+    按 `(角色, root)` 键，不是全局单值 —— `draft/41` 的 B8 逐字记着 `conductor_for` 按 root 缓存、同进程第二次装配会沿用第一次的设定；全局单值会把 B8
+    换个地方重演：
+    A 工作区的配置发给 B 工作区的 F，而读数上两边都"看起来正常"。
 
-    判据三条 + 一条反负控：① 不登记 ⇒ `cfg == {}`（与不传 config 逐字同形）；② 在 root A 登记 ⇒ A 的 F 拿到它；③ 反负控：两个 root 各登记一份 ⇒ 互不影响；④ 登记 `None` ⇒ 回到不登记的行为。"""
+    判据三条 + 一条反负控：① 不登记 ⇒ `cfg == {}`（与不传 config 逐字同形）；② 在 root A 登记 ⇒ A 的 F 拿到它；③ 反负控：两个 root 各登记一份 ⇒ 互不影响；④
+    登记 `None` ⇒ 回到不登记的行为。"""
     from agentflow import llmseam as LS
     from agentflow.tools import attack_tools as AT
 

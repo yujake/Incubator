@@ -260,11 +260,13 @@ def test_run_demo_rebuilds_the_manifest_so_external_edits_cannot_redirect_it(tmp
 
     ## 原来的假设与实测结果
 
-    我原本假设 `run_demo` 会消费调用方已经写好的 `candidates.json`，于是写了"把它清空后 `run_demo` 应当失败"这条断言。实测：它仍然返回 0。读代码后确认原因：`demo.py:214` 的 `run_demo` 第一件事就是 `cpath = build_fixtures(root)` —— 它无条件重新生成清单，从不读现成的。
+    我原本假设 `run_demo` 会消费调用方已经写好的 `candidates.json`，于是写了"把它清空后 `run_demo` 应当失败"这条断言。实测：它仍然返回 0。
+    读代码后确认原因：`demo.py:214` 的 `run_demo` 第一件事就是 `cpath = build_fixtures(root)` —— 它无条件重新生成清单，从不读现成的。
 
     ## 所以这里改测实际成立的那条性质
 
-    无条件重建 ⇒ 调用方外部改清单不能改变 demo 的行为。这是一条真实的（虽然更弱的）保证：它意味着 demo 的输入不可被"上游残留状态"污染。断言写成"篡改清单后 `run_demo` 依然成功，且篡改被覆盖回正确的清单"。
+    无条件重建 ⇒ 调用方外部改清单不能改变 demo 的行为。这是一条真实的（虽然更弱的）保证：它意味着 demo 的输入不可被"上游残留状态"污染。断言写成"篡改清单后 `run_demo` 依然成功，
+    且篡改被覆盖回正确的清单"。
 
     这条不是"`build_fixtures` 的产物被消费"的证据 —— 那条证据本文件里没有，我没有做到。它被记进了 `docs/PROPOSALS.md` 的 G-4 条。"""
     build_fixtures(tmp_path)

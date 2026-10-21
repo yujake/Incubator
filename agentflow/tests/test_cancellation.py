@@ -232,14 +232,14 @@ def test_manual_cancel_beats_deadline():
 
 
 def test_token_spend_is_only_a_reading_and_never_cancels():
-    """2026-10-15 业主裁定 A1/A2/A3：**「我们不卡 token，只卡总花销的钱」**。
+    """2026-10-15 业主裁定 A1/A2/A3：「我们不卡 token，只卡总花销的钱」。
 
-    这一条是那一轮裁定的钉子：`CancelToken` 上必须**没有**任何按 token 停的路径。
+    这一条是那一轮裁定的钉子：`CancelToken` 上必须没有任何按 token 停的路径。
     它此前有一条（`token_budget=10` ⇒ 花到 12 ⇒ `cancelled` 变 True ⇒
     在跑的 handler 在下一个 `raise_if_cancelled` 点被掀掉），
-    那是一条**强杀**——正是裁定要删的东西。
+    那是一条强杀——正是裁定要删的东西。
     """
-    t = CancelToken()          # ⚠️ 连这个参数都不该再存在
+    t = CancelToken()          #  连这个参数都不该再存在
     assert "token_budget" not in CancelToken.__init__.__code__.co_varnames
     for _ in range(1000):
         assert t.consume_tokens(10 ** 6) == t.tokens_used

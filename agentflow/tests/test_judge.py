@@ -165,15 +165,15 @@ class _Reply:
 
 
 def test_every_kind_in_the_gateway_vocabulary_lands_on_a_declared_code():
-    """判据（一处定义）：`modelgw.MODEL_ERROR_KINDS` 里每一档都要落到本层的**受控码**上。
+    """判据（一处定义）：`modelgw.MODEL_ERROR_KINDS` 里每一档都要落到本层的受控码上。
 
     为什么这条非有不可（2026-10-15 T5 第 8 趟 `t5h` 的真机读数）：本函数此前只认
-    `timeout` 与 `output_exhausted` 两个名字，**词表里其余各档一律落成
-    `judge_failed:ModelReplyNotOk`**。于是本机 DNS 失效（`error_kind="network"`）
+    `timeout` 与 `output_exhausted` 两个名字，词表里其余各档一律落成
+    `judge_failed:ModelReplyNotOk`。于是本机 DNS 失效（`error_kind="network"`）
     被下游算成"模型回了坏 JSON"，三步连击把整趟 run 判成 `bad_json_limit`，
     收场那句话是「连续 3 次没有给出可解析的 JSON」—— 模型一个字都没说。
 
-    现在按词表分流：**词表加一档，这里自动跟着走**（这正是"一处定义"要的效果）。
+    现在按词表分流：词表加一档，这里自动跟着走（这正是"一处定义"要的效果）。
     反真空：词表本身要非空且含本趟真机那两档，否则这条判据什么都没查。
     """
     from agentflow import modelgw as MG
@@ -193,7 +193,7 @@ def test_every_kind_in_the_gateway_vocabulary_lands_on_a_declared_code():
 
 
 def test_the_reply_failure_split_is_the_same_set_as_the_gateway_declares():
-    """判据：`is_no_reply` 的成员集**恰好**是"没查成"那一档（加上重试完的限流）。
+    """判据：`is_no_reply` 的成员集恰好是"没查成"那一档（加上重试完的限流）。
 
     左：本层判成"没拿到可用的回复"的码；右：网关声明为 `NOT_CHECKED` 的那几档
     （`rate_limited` 不在 `NOT_CHECKED` 里 —— 它在 `RETRYABLE`，但重试完之后
@@ -209,7 +209,7 @@ def test_the_reply_failure_split_is_the_same_set_as_the_gateway_declares():
         f"两边对不上：本层判成「没拿到回复」的是 {sorted(no_reply_kinds)}，"
         f"网关声明的是 {sorted(want)}")
 
-    # 剩下的那几档必须**不**进这一族：它回了，只是不可用（或 key 无效 —— 那是另一档）。
+    # 剩下的那几档必须不进这一族：它回了，只是不可用（或 key 无效 —— 那是另一档）。
     for kind in set(MG.MODEL_ERROR_KINDS) - want:
         code = J.problem_of_reply(_Reply(False, kind))
         assert not J.is_no_reply(code), (kind, code)

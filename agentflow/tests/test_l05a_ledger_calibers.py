@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """L-05a 的判据：模型管道三代记账口径收敛到同一本账（`usage_ledger`）。
 
-`44` 的原始读数：`llm.py`+`modelclient.py`（服务"B 用模型读文献"）的 `scope="extract"` 真机 0 次；`runflow` 走 `modelcost.charge_reply`；只有 `agent_loop→llmseam→modelgw` 活着。裁定是"减（合并记账口径）"，并逐字附了一条红线：不许删 `modelclient`/`extract`（真机 115 行花销、27 个工作区）。
+`44` 的原始读数：`llm.py`+`modelclient.py`（服务"B 用模型读文献"）的 `scope="extract"` 真机 0 次；`runflow`
+走 `modelcost.charge_reply`；只有 `agent_loop→llmseam→modelgw` 活着。裁定是"减（合并记账口径）"，并逐字附了一条红线：
+不许删 `modelclient`/`extract`（真机 115 行花销、27 个工作区）。
 
 ## 收敛的判据形态：不是"只有一个函数"，而是"只有一本账"
 
@@ -11,9 +13,12 @@
 |---|---|---|
 | `llm.py`+`modelclient`（extract） | `modelcost.charge_reply` → `TokenMeter` | `modelclient.py:44/147` |
 | `runflow` | `modelcost.charge_reply` → `TokenMeter` | `runflow.py` 的记账处 |
-| `agent_loop→llmseam→modelgw` | `llmseam._charge_ledger` → 同一个 `TokenMeter.charge_once` | `llmseam.py`（B 的文件，本条只读不改） |
+| `agent_loop→llmseam→modelgw` | `llmseam._charge_ledger` → 同一个 `TokenMeter.charge_once` | `llmseam.py`（B 的文件，
+本条只读不改） |
 
-一处已知的"不收敛"，如实登记（不擅自改）：`llmseam._charge_ledger` 刻意不走 `charge_reply` —— 它的 docstring 逐字说明了理由（`charge_reply` 自己拿 `reply` 重算 `usd_for(...)`，而 `SeamCall` 没有 `attempts` ⇒ 走它会让"网关重试过的调用"只按一次计价，于是与 `llm_call` 事件里的 `usd` 不等）。合并那两处行构造要动 `llmseam.py`（B 线）⇒ 按纪律写需求单，不在这条线里改。"""
+一处已知的"不收敛"，如实登记（不擅自改）：`llmseam._charge_ledger` 刻意不走 `charge_reply` —— 它的 docstring 逐字说明了理由（`charge_reply`
+自己拿 `reply` 重算 `usd_for(...)`，而 `SeamCall` 没有 `attempts` ⇒ 走它会让"网关重试过的调用"只按一次计价，于是与 `llm_call` 事件里的 `usd` 不等）。
+合并那两处行构造要动 `llmseam.py`（B 线）⇒ 按纪律写需求单，不在这条线里改。"""
 from __future__ import annotations
 
 import json

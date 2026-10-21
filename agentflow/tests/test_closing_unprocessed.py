@@ -11,13 +11,13 @@
 ⇒ 照常判；`> 0` 且那一行写了 `unprocessed_reason` ⇒ 这一行 `state="unknown"`、整格 `unknown`；
 `> 0` 而没写理由 ⇒ `unmet`（blocker），不许静默带着队列收工；`literature` 读不到 ⇒ `unknown`
 （读不到 ≠ 清零）。
-
 负控（每条都钉在"修好之前会绿"的那一格）：`test_a_clear_queue_still_passes`：正控（反真空）——
 队列清零时这一行照常 `pass`、整格 `pass`（证明新判据不是"恒 unknown"）；
 `test_a_dirty_queue_without_a_reason_is_a_blocker`：32 条未消化且没写理由 ⇒ 整格 `fail` + 点名
 `acceptance_unprocessed_without_reason`（修法前这里是 `pass`）；
 `test_a_dirty_queue_with_a_reason_downgrades_to_unknown`：写了理由 ⇒ 行 `unknown`、整格 `unknown`
-（不是 `pass`），读数 `got` 仍在；`test_the_third_queue_has_its_own_leg`：`literature_unprocessed_rows` 自己算得出 32，且它的上限是 0（写进验收表时它自己会红）。"""
+（不是 `pass`），读数 `got` 仍在；`test_the_third_queue_has_its_own_leg`：`literature_unprocessed_rows` 自己算得出 32，且它的上限是
+0（写进验收表时它自己会红）。"""
 from __future__ import annotations
 
 import json

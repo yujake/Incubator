@@ -192,10 +192,13 @@ def test_admit_reprocess_request_rejects_blank_only_relation_ids():
     为什么是真缺陷：守卫的语义是"没有任何有效目标就拒绝"，`if x` 本意正是丢掉非字符串/空的元素，于是
     `["", "  "]` 与 `[]` 语义等价（零个有效目标），但实现里只有 `[]` 走拒绝分支。后果与缺陷描述一字
     不差：B 拿着空目标集去重抽取，退化成全量重抽，把 A 的产能烧在整张关系表上。而
-    `tests/test_interactions.py::test_admit_reprocess_request_negative_control_empty_target` 只测了 `relation_ids=[]`，
+    `tests/test_interactions.py::test_admit_reprocess_request_negative_control_empty_target`
+    只测了 `relation_ids=[]`，
     这个空档至今没有测试覆盖。修法：归一之后判空 —— `rids = sorted({str(x).strip() for x in relation_ids if str(x).strip()})`
     再 `if not rids: return {拒绝}`（把 `strip()` 提到过滤条件里，让"纯空白"与"空"归一后同形）。
-    xfail(strict=True) 与 `test_gate_g1_rejects_a_windows_drive_absolute_proof_location`（TEST-RED-1）同一取舍：套件绿、缺陷可见、修好后 XPASS 提醒删标记。"""
+    xfail(strict=True) 与 `test_gate_g1_rejects_a_windows_drive_absolute_proof_location`（TEST-RED-1）同一取舍：套件绿、
+    缺陷可见、
+    修好后 XPASS 提醒删标记。"""
     got = I.admit_reprocess_request([], relation_ids=["", "  "], reason=_a_reprocess_reason())
     assert got["admitted"] is False, got
     assert "全量重抽" in got["reason"], got

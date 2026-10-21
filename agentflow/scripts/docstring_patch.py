@@ -4,28 +4,28 @@
 
 2026-10-21 那一轮"代码清洁"里，四个执行者各自写了临时脚本，踩到两类事故：
 
-1. **写回值不等于给的文本**：docstring 是普通字符串字面量，`\\bibitem` 这样的写法在**非 raw**
+1. 写回值不等于给的文本：docstring 是普通字符串字面量，`\\bibitem` 这样的写法在非 raw
    文档串里解析出来是 `\bibitem` —— 于是"给的文本"与"落盘后解析出来的值"永远不等，
    有人为了绕过去改了断言，有人把 `\bibitem` 写成了单反斜杠、当场变成退格符 U+0008。
-2. **CRLF 回来了**：`Path.write_text` 在 Windows 上按 `os.linesep` 翻译换行。
+2. CRLF 回来了：`Path.write_text` 在 Windows 上按 `os.linesep` 翻译换行。
 
 所以这里的 `patch` 子命令做两件必须做对的事：
-- **把文本序列化成安全的字面量**（反斜杠、三引号、行尾引号都转义），再写盘 ——
-  于是"解析出来的值 == 你给的文本"这条断言**永远成立**，不需要谁去改断言；
-- **显式指定换行**（`newline="\\n"`），写盘后立刻按字节复核 `\\r\\n` 计数为 0。
+- 把文本序列化成安全的字面量（反斜杠、三引号、行尾引号都转义），再写盘 ——
+  于是"解析出来的值 == 你给的文本"这条断言永远成立，不需要谁去改断言；
+- 显式指定换行（`newline="\\n"`），写盘后立刻按字节复核 `\\r\\n` 计数为 0。
 
 ## 子命令
 
 - `list <路径...>`：列出超限 docstring（模块 >20 行、类/函数 >12 行；行数 = 该常量在源码里跨的行数）。
 - `patch <补丁.py>`：补丁文件里放 `PATCHES = [dict(file=..., kind=..., name=..., text=...)]`；
-  按「kind + name + 首行」定位（**不按行号**，行号会漂），写回并断言值一致。
+  按「kind + name + 首行」定位（不按行号，行号会漂），写回并断言值一致。
 - `verify <路径...>`：四条硬检查 + 两条读数 ——
   ① 去 docstring 后 AST 与 `git show HEAD:<file>` 相同；
   ② 非 docstring 字符串字面量逐字节相同；
   ③ 文件里 `\\r\\n` 为 0；
-  ④ 超限段为 0（对**本文件**而言）；
+  ④ 超限段为 0（对本文件而言）；
   ⑤ 指针零丢失（反引号标识符 / `draft/NN` / `§` / 日期 / `test_*` / `文件:行`）；
-  ⑥ 首行文字未变（只允许去掉 `**…**` 的星号）。
+  ⑥ 首行文字未变（只允许去掉 `…` 的星号）。
 
 ## 退出码（三态纪律：没查成 ≠ 没问题）
 
@@ -37,8 +37,8 @@
 
 ## 与 FC-27 的关系
 
-它只改 **docstring**，不改代码；但 `store.py` / `schema.py` / `verify.py` / `capabilities.py` /
-`agentspec.py` 这些文件本身在禁改区 ⇒ 用本工具动它们的 docstring **仍要 2 名人审**
+它只改 docstring，不改代码；但 `store.py` / `schema.py` / `verify.py` / `capabilities.py` /
+`agentspec.py` 这些文件本身在禁改区 ⇒ 用本工具动它们的 docstring 仍要 2 名人审
 （`scripts/noai_gate.py` 会照常拦）。本工具不替你签任何东西。
 """
 
@@ -129,7 +129,7 @@ def bare(text: str) -> str:
 
 
 def dedent(value: str, indent: str) -> str:
-    """把 `literal()` 加在续行上的前缀缩进去掉（**只去那一段前缀**，不做 `expandtabs`）。
+    """把 `literal()` 加在续行上的前缀缩进去掉（只去那一段前缀，不做 `expandtabs`）。
 
     为什么不用 `inspect.cleandoc`：它会对每一行 `expandtabs()`，而制表符展开后的宽度
     依赖行首列号 —— 带缩进与不带缩进的两份文本会展开成不同结果（实测过）。这里只做
@@ -145,7 +145,7 @@ def dedent(value: str, indent: str) -> str:
 
 
 def literal(text: str, indent: str) -> str:
-    """把 `text` **安全地**序列化成一个三引号字面量（缩进后逐行落盘）。
+    """把 `text` 安全地序列化成一个三引号字面量（缩进后逐行落盘）。
 
     这是本工具存在的理由：反斜杠与三引号都要转义，否则"解析出来的值"会与 `text` 不等
     （真事故：`\\bibitem` 被写成单反斜杠 ⇒ 落盘后是退格符 U+0008）。
@@ -165,7 +165,7 @@ def literal(text: str, indent: str) -> str:
 
 
 def _find_node(tree: ast.AST, kind: str, name: str, head: str) -> ast.AST:
-    """按 kind + name + 首行定位（**不按行号**：行号在并行编辑里会漂）。"""
+    """按 kind + name + 首行定位（不按行号：行号在并行编辑里会漂）。"""
     hits: list[ast.AST] = []
     for node in ast.walk(tree):
         if not isinstance(node, DOC_OWNERS) or kind_of(node) != kind or name_of(node) != name:
@@ -182,7 +182,7 @@ def _find_node(tree: ast.AST, kind: str, name: str, head: str) -> ast.AST:
 
 
 def _byte_layout(source: bytes) -> list[int]:
-    """每一行起始字符的**字节**偏移（`ast` 的 `col_offset` 是 UTF-8 字节，不是字符）。"""
+    """每一行起始字符的字节偏移（`ast` 的 `col_offset` 是 UTF-8 字节，不是字符）。"""
     offsets = [0]
     for line in source.splitlines(keepends=True):
         offsets.append(offsets[-1] + len(line))
@@ -194,12 +194,12 @@ def apply_patch(entry: Mapping[str, Any]) -> str:
 
     两个必须做对的地方（都是真事故）：
 
-    1. **列偏移是 UTF-8 字节，不是字符**：Python 3.8+ 的 `col_offset` / `end_col_offset`
+    1. 列偏移是 UTF-8 字节，不是字符：Python 3.8+ 的 `col_offset` / `end_col_offset`
        按字节算。拿它去切 `str`，只要那一行含中文，`tail_part` 就会取成空、
-       **把行尾换行吃掉**，于是收尾三引号与下一条语句粘成一行 → SyntaxError。
-       这里整段改在 **bytes** 上做（`_byte_layout` 给每行的字节起点）。
-    2. **先在内存里验证再落盘**：新源码必须能 `ast.parse`，且解析出的 docstring
-       值（`dedent` 后）逐字等于 `text`；任何一条不成立就 SystemExit，**不写盘**。
+       把行尾换行吃掉，于是收尾三引号与下一条语句粘成一行 → SyntaxError。
+       这里整段改在 bytes 上做（`_byte_layout` 给每行的字节起点）。
+    2. 先在内存里验证再落盘：新源码必须能 `ast.parse`，且解析出的 docstring
+       值（`dedent` 后）逐字等于 `text`；任何一条不成立就 SystemExit，不写盘。
     """
     path = Path(str(entry["file"]))
     if not path.is_file():
@@ -249,7 +249,7 @@ def apply_patch(entry: Mapping[str, Any]) -> str:
 
 
 def _repo_relative(rel: str) -> str:
-    """把"相对当前目录的路径"换算成 **仓库根相对** 的 posix 路径。
+    """把"相对当前目录的路径"换算成 仓库根相对 的 posix 路径。
 
     本仓的 `.git` 在上一级（交付物在 `agentflow/` 子目录里）⇒ `git show HEAD:src/…` 一定失败，
     必须换算成 `agentflow/src/…`。换算不出来就报 SystemExit（没查成，不是通过）。
