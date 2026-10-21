@@ -55,7 +55,7 @@ const OPEN: CmdRow[] = [
   },
   {
     cmd: "python -m agentflow.cli --root <工作区> web --allow-writes",
-    why: "打开写面（缺省只读）：起一趟 / 插话 / 答问 / 叫停 / 改设置 / 改预算都走这一档",
+    why: "打开写面（缺省只读）：起一趟 / 插话 / 叫停 / 改设置 / 改预算都走这一档；答问除外 —— POST /answer 是既有写路径，不进那张授权矩阵，缺省也放行",
   },
   {
     cmd: "python -m agentflow.cli --root <工作区> web --no-settings-write",
@@ -203,7 +203,7 @@ const MISREADS: MisreadRow[] = [
   },
   {
     wrong: "名册是空的，说明没有子代理",
-    right: "名册面板给出 answer=unknown，说的是「名册没读到」（目录不在 / 一个名册文件都没有 / 读不出来 / 有一条读不出来）。名册只在有人被派活时才落盘，后端给 count=null 而不是 0。",
+    right: "名册面板给出 answer=unknown，说的是「名册没读到」（目录不在 / 一个名册文件都没有 / 读不出来 / 有一条读不出来）。名册只在有人被派活时才落盘，后端给 count=null（一行都没读到）或只读到的那几个（读到一部分），而不是 0。",
   },
   {
     wrong: "退出码不是 0，就是坏了",
@@ -215,7 +215,7 @@ const MISREADS: MisreadRow[] = [
   },
   {
     wrong: "写面默认关着，说明网页还接不了线",
-    right: "七条 POST 全在路由表里（/answer、/api/stop、/api/submit、/api/settings、/api/budget、/api/run、/api/task）；缺省只读是因为服务端要 --allow-writes 才放行，不是没接线。",
+    right: "七条 POST 全在路由表里（/answer、/api/stop、/api/submit、/api/settings、/api/budget、/api/run、/api/task）；缺省只读是因为服务端要 --allow-writes 才放行（/api/ 下那六条写端点如此；/answer 是既有写路径、缺省也放行），不是没接线。",
   },
 ];
 
@@ -272,7 +272,9 @@ export function Help() {
         </div>
         <div class="readings">
           授权次序是四层：回环来源 ⇒ CSRF 令牌 ⇒ <span class="mono">--allow-writes</span> ⇒
-          （只有改设置才要）设置写面。每一次到达写端点的尝试（含被拒）都追加一行
+          （只有改设置才要）设置写面 —— 这四层管的是 <span class="mono">/api/</span>
+          下那六条写端点；<span class="mono">POST /answer</span> 是既有写路径，不进那张矩阵（只落审计）。
+          每一次到达写端点的尝试（含被拒）都追加一行
           <span class="mono">web-actions.jsonl</span>；<span class="mono">/api/</span>
           下未注册的路径回 404，那一类不算一次写尝试。
         </div>
@@ -383,8 +385,9 @@ export function Help() {
           只有 computed 档的 0 才读成"没有"。名册那条端点另用一套字：
           <span class="mono">answer="ok"</span>（名册真读成了）/
           <span class="mono">answer="unknown"</span>（名册没读到 —— 目录不在、目录里一个名册文件都没有、
-          目录读不出来、有一条读不出来，四档都算），此时 <span class="mono">count</span> 是
-          <span class="mono">null</span> 而不是 0。「在飞」面同理：它的
+          目录读不出来、有一条读不出来，四档都算），此时 <span class="mono">count</span>
+          一行都没读到时是 <span class="mono">null</span>、只读到一部分时是那一部分的真数字
+          —— 不是 0。「在飞」面同理：它的
           <span class="mono">answer</span> 只有「有」/「没有」/「没查成」三档，读不出来时显"没查成"，
           不许显"没有"。
         </div>
