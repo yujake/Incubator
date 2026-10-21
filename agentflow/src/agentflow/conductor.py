@@ -165,6 +165,16 @@ class SummonResult:
     #: 三态：这个结果查过没有。`None` = 这个动作不适用"查"这个概念
     #: （例如"写一行 documents"）；`False` = 没法查（`payload` 里必须有 reason）。
     checked: bool | None = None
+    #: 名册登记的三格（2026-10-21 真机缺陷的读数面，见 `Conductor._register_roster`）。
+    #:
+    #: `roster_considered`：这次召唤**走没走过**名册漏斗。`False` = 这个结果不是由
+    #: `Conductor.summon` 产出的（替身 / 老实现）⇒ 调用方无从判断"登记了没有"，
+    #: 而"没走过"与"走过了没登记"必须分得开（三态，不是两态）。
+    #: `roster_name`：登记成功后秘书发的名册名（空 = 没登记上，理由在下一格）。
+    #: `roster_problem`：没登记上的理由（空 = 登记成功或未受理那一档不适用）。
+    roster_name: str = ""
+    roster_problem: str = ""
+    roster_considered: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -622,6 +632,7 @@ class Conductor:
         specs: Any = None,
         secretary: Any = None,
         fanout_wait_sec: float | None = None,
+        roster_sink: Any = None,
     ) -> None:
         """`secretary`（A 线）：M 的派活路径上那一个钩子（`draft/54 §2` 的第 3 个落点）。
 
@@ -690,6 +701,21 @@ class Conductor:
         self._started_total = 0
         #: dispose 后一律拒绝新召唤（幂等）。
         self._disposed = False
+        #: 名册的写入口（2026-10-21）。名册是"父与子"的地址面，而"一个子代理被建立"
+        #: 这件事的唯一收口在 :meth:`summon`（所有派活路径最后都经过它：`_do_summon`、
+        #: `_do_summon_many` / `run_plan`、`tools/conductor_tools` 的两个工具、队列认领、
+        #: `scheduler` / `deliver` / `pipeline`）。所以登记只写一处，sink 只负责"写的人是谁"。
+        #:
+        #: 为什么另起一格而不是直接用 `self.secretary`：`secretary` 那一格同时兼着"派活前的
+        #: 委派评估"（`_note_delegation_quality`），语义是"主控的秘书"；名册的写入口可能来自
+        #: **发起这次派活的那个循环**（`agent_loop` 把自己的秘书接上来）。两者在真机上是同
+        #: 一个类、同一个工作区根，但"谁写名册"必须是一个显式的、可判定的接线动作 ——
+        #: 否则真机出现"conductor 有秘书、循环没秘书"那一态时，名册就又静默不登记
+        #: （`projects/p3-verify` 就是这么空的）。
+        #:
+        #: `None` = 没接（不是"名册不重要"）：:meth:`_register_roster` 会把它记成一条
+        #: problem（"名册不在手上"），而这一步**不抛**（登记失败不许带走派活）。
+        self.roster_sink: Any = roster_sink
         #: 墙钟起点与截止（`time.monotonic()`，不受 NTP 回拨影响）。
         self._start = time.monotonic()
         wall = self.policy.wall_clock_sec
@@ -921,7 +947,40 @@ class Conductor:
                 # 与 `tests/test_task_instance.py` 就是抓住它的那两条）。
                 # 键集与键序只留一处口径：这里，用 dataclass 自己吐出来的那一份。
                 tx.upsert("tasks", task.to_dict(), note=note)
+                # 2026-10-21 真机缺陷（`projects/p3-verify`：tasks 有 5 个带父的代理行，
+                # 而 `out/roster/` 一个文件都没有）：名册登记必须挂在**子行建立的同一个临界区之后**，
+                # 因为它是"一个子代理被建立"这件事的唯一漏斗 —— 走 `_do_summon`、`_do_summon_many`、
+                # conductor、队列认领，最后都要经过这里。
+                self._roster_register_row(task.to_dict(), note=note)
         return str(row["task_id"])
+
+    def _roster_register_row(self, row: dict, *, note: str = "") -> None:
+        """子行建立之后登记名册（三态：没 sink ⇒ 留 problem；失败 ⇒ 留 problem；不是子行 ⇒ 跳过）。
+
+        为什么不是"每个调用点各写一遍"：那样漏一条路就静默不登记，而这次真机就是这样漏的
+        （`conductor._register_consumed` 只在队列认领那条路上，且它要求 conductor 自带秘书）。
+        父编号取 `row["parent_task_id"]`：顶趟那一行没有父 ⇒ 它本来就不该进任何人的名册。
+        """
+        sink = getattr(self, "roster_sink", None)
+        owner = str(row.get("parent_task_id") or "")
+        role = str(row.get("role") or "")
+        task_id = str(row.get("task_id") or "")
+        if not owner or not task_id or not role:
+            return                      # 顶趟 / 残缺行：这一格不适用（不是"查过了没问题"）
+        if sink is None:
+            self._roster_problems.append(
+                f"{task_id}：没有名册写入口（conductor.roster_sink 为 None）⇒ 名册没登记")
+            return
+        try:
+            got = sink.roster_add(owner=owner, role=role, task_id=task_id,
+                                  brief=str(row.get("brief") or ""),
+                                  task=str(row.get("task") or ""))
+        except Exception as exc:  # noqa: BLE001 - 登记失败不许带走这次派活
+            self._roster_problems.append(f"{task_id}：名册登记抛了 {type(exc).__name__}: {exc}")
+            return
+        problem = str((got or {}).get("problem") or "") if isinstance(got, dict) else ""
+        if problem:
+            self._roster_problems.append(f"{task_id}：{problem}")
 
     # ---------------------------------------------------------------- 工作项板（业主 2026-10-08 裁 A1=甲）
     #

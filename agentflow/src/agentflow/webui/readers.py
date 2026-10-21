@@ -1472,6 +1472,53 @@ def _chat_clip(raw: Any, limit: int = CHAT_LINE_CLIP) -> tuple[str, bool]:
             True)
 
 
+#: 允许"从同岗的 `agent_run_start` 回填编号"的那几个 kind（见 :func:`_single_run_start_ids`）。
+#:
+#: 为什么只这几个：回填出来的编号是一句"这一条属于那一趟"的断言，而只有"某个代理说的话"
+#: 才属于某一趟。`user_answer` / `agent_question` 那些线的 `role` 是"问的人/答的人"，
+#: 把它们回填成某一趟的编号等于说"用户这句话是那一趟说的" —— 那不是"有把握"。
+CHAT_INHERIT_KINDS = ("agent_run_end", "agent_message")
+
+
+def _single_run_start_ids(events: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    """每一岗在这次会话里"唯一那一趟"的绝对编号；拿不准的岗不进结果。
+
+    业主 2026-10-21（"全面接入"第二步的兼容半）：老事件（写侧补 `task_id` 之前落盘的
+    `agent_run_end`）盘上没有编号，于是"某某交付"那条线只能一直标 `missing`。这一条
+    函数算的是"能回填到什么程度"：
+
+    口径（三档，逐条都能在盘上对上）：
+
+    - 同一会话内，取该 `role` 的 `agent_run_start` 事件的 `task_id`；
+    - 这些编号去重后恰好一个，且每一条 start 都带着编号 ⇒ 回填它（`inherited`）；
+    - 去重后有两个以上不同编号 ⇒ 不猜（那一段里这一岗跑过不止一趟，收工那一行属于
+      哪一趟盘上没有证据）；
+    - 只要有一条 start 没记编号 ⇒ 也不猜（"老的那一趟"与"新的那一趟"分不开）。
+
+    "被拒的续跑"（带 `resume_refused`）不参与计数：它也落一条 `agent_run_start`，但它
+    一步都没跑、不会有配对的收工事件 —— 让它参与就会把"某一次被拒过续跑"的整段会话
+    回填全部否掉（那是把一个不相关的读数折成 missing）。
+
+    返回 `{role: task_id}`，只含拿得准的岗（空串 / 空角色不进结果）。
+    """
+    seen: dict[str, list[str]] = {}
+    for ev in events:
+        if str(ev.get("kind") or "") != "agent_run_start":
+            continue
+        if str(ev.get("resume_refused") or ""):
+            continue
+        role = str(ev.get("role") or "")
+        seen.setdefault(role, []).append(str(ev.get("task_id") or ""))
+    out: dict[str, str] = {}
+    for role, ids in seen.items():
+        if not role or not ids or any(not one for one in ids):
+            continue
+        distinct = sorted(set(ids))
+        if len(distinct) == 1:
+            out[role] = distinct[0]
+    return out
+
+
 def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     """一条会话事件 → 一条对话线；不是"对话"的事件回 `None`。
 
@@ -1541,14 +1588,21 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     else:
         return None
     body, clipped = _chat_clip(text)
-    # 业主 2026-10-21（"全面接入"）：每一条对话线都要能回答"**是哪个绝对编号的哪个角色**在说话"。
-    # 绝对编号从事件里取（`task_id`；老事件没有就退到 `sid` 那一层，仍空则显式写空串 ——
-    # 空串在页面上显示成"（未记录编号）"，比编一个假编号好）。
+    # 业主 2026-10-21（"全面接入"）：每一条对话线都要能回答"是哪个绝对编号的哪个角色在说话"。
+    # 绝对编号从事件里取（`task_id`；`agent_message` 那一路写的是 `from_task_id`），
+    # 两个都没有就留空串 —— 空串在页面上显示成"（未记录编号）"，比编一个假编号好。
+    #
+    # 这一层只认两种来源：`event`（事件里真有）与 `missing`（这条事件没记）。"从同一岗的
+    # `agent_run_start` 推出来"的那一档（`inherited`）刻意不在这里做：那是 `chat_face`
+    # 的事 —— 它要看整段会话才判得准，而本函数的输入只有一条事件。于是直接调本函数的人
+    # 永远读不到 `inherited`；要拿回填后的读数就调 `chat_face`（见 `_single_run_start_ids`）。
     task_id = str(event.get("task_id") or event.get("from_task_id") or "")
     line: dict[str, Any] = {"index": index, "who": who, "role": role, "kind": kind,
                             "task_id": task_id,
-                            # 三态：编号是"事件里真有"还是"这条事件没记"—— 页面据此显示
-                            # "（未记录编号）"，判据据此要求"不许悄悄空着不标"。
+                            # 三档口径（值域）：`event`（事件里真有）/ `inherited`
+                            # （`chat_face` 从同岗唯一那一趟的 start 回填的，本函数不产它）/
+                            # `missing`（这条事件确实没记 —— 页面显示"（未记录编号）"，
+                            # 判据据此要求"不许悄悄空着不标"）。
                             "task_id_source": "event" if task_id else "missing",
                             "ts": str(event.get("ts") or ""), "title": title,
                             "text": body, "clipped": clipped}
@@ -1576,6 +1630,12 @@ def chat_face(root: str | Path, sid: str = "", *,
     - 会话文件不在盘上 ⇒ `unreadable`（`sid` 是调用方给的，找不到就是"没查成"）；
     - 有坏行 ⇒ `unreadable` + 坏行数，读得出来的那些线照常给（与 `run_events` 同一条）；
     - 线是有界的：只给最近 `lines_max` 条，`total`/`shown` 照实报，截断逐条标明。
+
+    编号那一格（业主 2026-10-21「全面接入」第二步的兼容半）：每条线都有 `task_id` 与
+    `task_id_source`，来源分三档 —— `event`（事件里真有）、`inherited`（老事件没记，但
+    同一岗在这段会话里唯一那一趟的 `agent_run_start` 有编号 ⇒ 用它，判据在
+    :func:`_single_run_start_ids`）、`missing`（拿不准或确实没记）。回填只在唯一时发生：
+    同一岗跑过两趟以上（或有一条 start 自己没记编号）就照实标 `missing`，不猜。
     """
     root_p = Path(str(root))
     sessions = [{"sid": str(s.get("sid") or ""),
@@ -1616,6 +1676,22 @@ def chat_face(root: str | Path, sid: str = "", *,
     events, bad = SS.read_session(root_p, sid=chosen)
     mapped = [line for i, ev in enumerate(events)
               if (line := _chat_line(i, ev)) is not None]
+    # 老数据的有把握回填（`inherited`）：只补"某个代理说的话"那两类线，且只在同一岗
+    # 唯一那一趟有编号时才补 —— 判据与理由全在 `_single_run_start_ids` 里。
+    # 不补的三类：`event`（本来就有）、用户那几条（用户的话不属于任何一趟）、
+    # 以及 `missing` 但拿不准的岗（两趟以上 / start 自己没记编号）。
+    inheritable = _single_run_start_ids(events)
+    if inheritable:
+        for line in mapped:
+            if str(line.get("task_id_source")) != "missing":
+                continue
+            if str(line.get("kind") or "") not in CHAT_INHERIT_KINDS:
+                continue
+            one = str(inheritable.get(str(line.get("role") or "")) or "")
+            if not one:
+                continue
+            line["task_id"] = one
+            line["task_id_source"] = "inherited"
     total = len(mapped)
     shown = mapped[-int(lines_max):] if int(lines_max) > 0 else mapped
     if total > len(shown):
@@ -2180,7 +2256,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "chat_face() 的 options[] 一项（`userio.option_view` 渲染视图里的两栏）",
      (("label", "string"), ("description", "string"))),
     ("ChatLine",
-     "chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）",
+     "chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）。"
+     "`task_id` 是说话那一方的绝对编号，`task_id_source` 只说这个编号从哪来："
+     "event（事件里真有）/ inherited（老事件没记，同一岗在本段唯一那一趟的 "
+     "agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示"
+     "「（未记录编号）」，绝不编一个假编号）",
      (("index", "number"), ("who", "string"), ("role", "string"), ("kind", "string"),
       ("ts", "string"), ("title", "string"), ("text", "string"),
       ("task_id", "string"), ("task_id_source", "string"),

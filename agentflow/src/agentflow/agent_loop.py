@@ -4341,8 +4341,24 @@ class AgentLoop:
         flight_note = self._in_flight_reading()
         if flight_note:
             run.notes.append(flight_note)
+        # ---- 业主 2026-10-21「全面接入」第二步（写侧）：收工那一行也要带绝对编号。
+        #
+        # 改前的形态就是下面这行去掉 `task_id` 那个键：`agent_run_start` 带编号
+        # （`"task_id": my_task_id`，见本文件 run() 里那条 start 事件）、`agent_message`
+        # 带 `from_task_id`，唯独 `agent_run_end` 不带。后果不在这一层，而在读侧：
+        # `webui.readers._chat_line` 的 `task_id_source` 于是对"某某交付"那条对话线
+        # 恒判 `missing`（真机读数 projects/p3-verify：A 交付 / E 交付两条都是 missing，
+        # 而同段会话里 A、E 的 `agent_run_start` 都有编号）—— 页面上的那句话
+        # "哪个绝对编号的哪个角色在说话"在交付那一行上答不出来。
+        #
+        # 取值的口径与 start 那条逐字相同：`self.my_task_id` 就是 `run_role` 为这一趟
+        # 开出来的 tasks 行号（子代理那条路是 `row["task_id"]`），不是新编的号。
+        # 空串照落（不造一个假编号）：没拿到台账号的那一趟，读侧要看得见"没拿到"。
         SS.append(self.session_root, {
-            "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,            "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
+            "kind": "agent_run_end", "role": self.role,
+            "task_id": str(self.my_task_id or ""),
+            "stop_reason": run.stop_reason, "steps": len(run.steps), "summons": run.summons,
+            "messages": run.messages_sent,
             "blocked_remaining": dict(run.blocked_remaining),
             # 停在等谁（空 = 不是那一档）：界面与 `inbox` 要的就地读数，
             # 不必去解析 `final` 那句话里的 qid。
@@ -5215,6 +5231,7 @@ class AgentLoop:
         # 秘书（简介没写时由秘书代写并留痕 —— 2026-10-20 业主裁定，所以这里不写 `brief or task`）；一项失败只进
         # `roster_problems`、`ok` 照旧。三态不折平（与下面单个 summon 那条 `elif` 同一句话）：`failed` /
         # `cancelled` 的那一项没进名册也必须读得出来。
+        self._bind_roster_sink()
         if self.secretary is not None:
             names: list[str] = []
             problems: list[str] = []
@@ -5549,6 +5566,26 @@ class AgentLoop:
                           "（`draft/104` §2.5：父子关系的唯一权威来源是台账）"),
                 "why": ["这一趟的 `my_task_id` 是空串，且 conductor 那侧也读不到顶趟"]}
 
+    def _bind_roster_sink(self) -> None:
+        """把本实例的秘书接成 conductor 的名册写入口（幂等；没秘书就不接）。
+
+        为什么要有这一步（2026-10-21 真机）：conductor 那条路原来只在队列认领时登记，
+        而且要求 conductor 自己带秘书 —— 真机上它没有 ⇒ 整条路的子代理**一个都没进名册**
+        （`projects/p3-verify`：tasks 有 5 个带父的行，`out/roster/` 空）。
+        名册登记现在收拢到 `Conductor._roster_register_row`（子行建立之后唯一漏斗），
+        这一步只负责把"写的人"接上去。幂等：重复调用不改变任何东西。
+        """
+        cond = getattr(self, "conductor", None)
+        sec = getattr(self, "secretary", None)
+        if cond is None or sec is None:
+            return
+        if getattr(cond, "roster_sink", None) is sec:
+            return
+        try:
+            cond.roster_sink = sec
+        except Exception:  # noqa: BLE001 - 老装配 / 只读桩：接不上就留 problem，不在这一层抛
+            pass
+
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
         # 2026-10-16（口径 S2 最终形态）：「完全不要有填 action 的位置」——
@@ -5640,6 +5677,7 @@ class AgentLoop:
         #     `brief_source="secretary"` —— 不许静默冒充"父给的"；
         #   · 这里刻意不写 `brief_arg or task_arg`：业主选的是"秘书写"，
         #     不是"拿任务原文顶替"（代写与留痕都在秘书那一侧，只此一份）。
+        self._bind_roster_sink()
         if self.secretary is not None and str(res.status or "") in ("pending", "running", "done"):
             if str(res.outcome or "") != "refused":
                 try:
@@ -5739,8 +5777,13 @@ class AgentLoop:
         body_lines.append(f"申请方：{self.role}（台账号 {self.my_task_id or '未拿到'}）；"
                           "批准与否由你决定，我这一步不会替你做。")
         body = "\n".join(body_lines)
+        # `from_task_id`（业主 2026-10-21「全面接入」第二步）：这条留言也是"某个
+        # 编号的某一岗在说话"，与别处那三条 `send_message` 同一口径（`_do_message` /
+        # `_do_notify` / 收工 `notify` 都带）。漏了它的后果只在线上一格可见：
+        # `readers._chat_line` 给这条线判 `missing`，而说话的人自己有绝对编号。
         msg_id, problem = send_message(self.session_root, sender=self.role, to=to_role,
-                                       subject=RELAY_SUBJECT, body=body, sid=self.sid)
+                                       subject=RELAY_SUBJECT, body=body, sid=self.sid,
+                                       from_task_id=str(self.my_task_id or ""))
         rec: dict[str, Any] = {"kind": "agent_summon_request", "role": self.role,
                                "wants_role": role, "wants_action": action, "params": asked,
                                "refusal_reason": reason, "message_id": msg_id,
@@ -5804,7 +5847,9 @@ class AgentLoop:
         body_lines.append(f"申请方：{self.role}（台账号 {self.my_task_id or '未拿到'}）")
         msg_id, problem = send_message(self.session_root, sender=self.role, to=to_role,
                                        subject=DEFINITION_ASK_SUBJECT, body="\n".join(body_lines),
-                                       sid=self.sid)
+                                       sid=self.sid,
+                                       # 同上一条申请报文：谁的编号在说话，事件里就要有它。
+                                       from_task_id=str(self.my_task_id or ""))
         rec: dict[str, Any] = {"kind": "definition_ask", "role": self.role,
                                "asks": to_role, "ask_why": whose,
                                "concepts": [str(p.get("id") or p.get("stmt_id") or "") for p in items],
@@ -6483,7 +6528,12 @@ class AgentLoop:
         # `handoffs.jsonl`，板项只是"有一条回报"这件事本身）。写进 detail 是为了
         # 读板的人能一眼看见结论或那句"它没有留下结论"。
         self.conductor.set_item_detail(item_id, body)
+        # `task_id`（业主 2026-10-21「全面接入」第二步）：这一条是"哪个编号的哪一岗
+        # 在报告收工"—— 它与 `agent_run_end` 是同一件事的两条落点（一条进板、一条进
+        # 会话记录），编号口径必须同一份（`self.my_task_id`），否则读侧要把两条事件
+        # 对起来时只能按 role 猜。
         SS.append(self.session_root, {"kind": "agent_settlement_item", "role": self.role,
+                                      "task_id": str(self.my_task_id or ""),
                                       "item_id": item_id, "stop_reason": run.stop_reason,
                                       # 收件人也进读数：事后要能回答"这条通报是挂给谁的"（D89）
                                       "to_task_id": to_id, "to_role": to_role,
@@ -7289,7 +7339,7 @@ def _task_fingerprint(role: str, task: str) -> str:
 
 
 def _note_resume_refusal(root: Path, role: str, task: str, sid: str | None, why: str,
-                         *, attempted_from: int = 0) -> None:
+                         *, attempted_from: int = 0, task_id: str = "") -> None:
     """续跑被拒时也落一条 `agent_run_start`：为什么拒必须留在会话记录里。
 
     为什么不静默返回：`--resume` 被拒的那一趟在盘上什么都没留下，读会话记录的人只会看到"上一趟到此为止"，而"
@@ -7297,10 +7347,16 @@ def _note_resume_refusal(root: Path, role: str, task: str, sid: str | None, why:
     带 `resume_refused` 这个码，且没有后续的 `agent_step`（一步都没跑）；它不写 `resumed_from`，而写
     `resume_attempted_from` —— 因为 `resumed_from` 的口径是"这一趟真的从第几步接着跑"（0 = 全新开始），被拒
     的续跑一步都没跑，写 0 会被读成"它从第 0 步续的"。"它想从第几步续"是另一件事，就得有另一个名字。
+
+    `task_id`（业主 2026-10-21「全面接入」第二步）：这条 `agent_run_start` 也是"某一岗
+    说的话"，编号口径与 `AgentLoop.run` 里那条 start 一致（`run_role` 开出来的那一行）。
+    它此前没有这一格 ⇒ 被拒的续跑在对话线上是一条"（未记录编号）"的起趟。
     """
-    SS.append(root, {"kind": "agent_run_start", "role": role, "task": task,
-                     "waiting_for": "", "resume_refused": why,
-                     "resume_attempted_from": int(attempted_from)}, sid=sid)
+    payload: dict[str, Any] = {"kind": "agent_run_start", "role": role, "task": task,
+                               "task_id": str(task_id or ""),
+                               "waiting_for": "", "resume_refused": why,
+                               "resume_attempted_from": int(attempted_from)}
+    SS.append(root, payload, sid=sid)
 
 
 def _secretary_for(role: str, *, root: Path | str, store: Any, registry: Any,
@@ -7459,7 +7515,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                       "fingerprint": _task_fingerprint(role, task),
                       "waiting_for": "", "stop_reason": ""}
             else:
-                _note_resume_refusal(root, role, task, sid, "no_checkpoint")
+                _note_resume_refusal(root, role, task, sid, "no_checkpoint", task_id=top_tid)
                 return LoopRun(role=role, task=task, stop_reason="no_checkpoint",
                                final=(f"要求续跑，但既读不到检查点"
                                       f"（{run_checkpoint_path(root, role, sid)}），"
@@ -7468,7 +7524,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
         if str(cp.get("fingerprint")) != _task_fingerprint(role, task):
             # 指纹不符时「不给」 `attempted_from`：那份检查点是另一个任务的，
             # 它的 `step` 数不是"这件事做到第几步"。
-            _note_resume_refusal(root, role, task, sid, "checkpoint_mismatch")
+            _note_resume_refusal(root, role, task, sid, "checkpoint_mismatch", task_id=top_tid)
             # `draft/37` §140：拒信要把检查点里那条任务原文交回去（照抄就能续）。
             # 实测（2026-10-05，两个工作区各撞一次）：用"原任务"去续一条以"续作任务"
             # 起的检查点 ⇒ 被拒，而拒信里没有那句该照抄的话，于是那一段成了空段
@@ -7482,7 +7538,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                                   f"`task` 字段）：\n{was}"))
         if str(cp.get("stop_reason")) == "final":
             _note_resume_refusal(root, role, task, sid, "already_finished",
-                                 attempted_from=int(cp.get("step") or 0))
+                                 attempted_from=int(cp.get("step") or 0), task_id=top_tid)
             return LoopRun(role=role, task=task, stop_reason="already_finished",
                            final="上一趟已收工（final），续跑没有意义：没有要做的事。"
                                  "要做新的事就给一个新的任务原文（那会换一份检查点）。")
@@ -7498,7 +7554,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
             answered = {str(r.get("qid") or "") for r in U.read_replies(root, sid=sid)}
             if waiting not in answered:
                 _note_resume_refusal(root, role, task, sid, "still_waiting",
-                                     attempted_from=int(cp.get("step") or 0))
+                                     attempted_from=int(cp.get("step") or 0), task_id=top_tid)
                 return LoopRun(role=role, task=task, stop_reason="waiting_for_user",
                                waiting_for=waiting,
                                final=(f"还在等 {waiting} 的回答：没有人答就不接着跑"
@@ -7511,7 +7567,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
         rebuilt, step0 = resume_messages(root, role, sid, task=task)
         if step0 <= 0:
             _note_resume_refusal(root, role, task, sid, "resume_no_transcript",
-                                 attempted_from=int(cp.get("step") or 0))
+                                 attempted_from=int(cp.get("step") or 0), task_id=top_tid)
             return LoopRun(role=role, task=task, stop_reason="resume_no_transcript",
                            final=("要求续跑，但会话记录里重建不出这一趟的任何一步"
                                   "（同角色 + 同任务原文的 `agent_step` 一条都没有）"
