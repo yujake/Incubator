@@ -10,7 +10,7 @@
 | ③ 子代理销号 | `draft/90` §1.3 删、§1.9 三分支 | `Secretary.retire` / `retired_names` / `alive_path` / `roster_view` 的 `state` ＋ 寻址闸门 `member_retired` | `AgentLoop._do_retire`（`agent_loop.py:5219`）→ 工具 `retire`；`AgentLoop._address_of` → `member_retired`（`agent_loop.py:2213`） |
 | ④ 子代理读写面切割 | `draft/90` §1.10 / §1.11（裁定 `draft/93` §T23） | `Secretary.surface_alloc` / `surface_of` / `-surfaces.jsonl` / `surface_fit` / `reach_fit` | `roster_add` → `surface_alloc`（`secretary.py:2358`）；`LlmBackend.call` → `surface_of` → `registry_factory(face)`（`agent_loop.py:6987-7002`）；硬拦 `_surface_refusal`（`agent_loop.py:5642`）；读数 `agent_tool_face.advertised`（`agent_loop.py:3661`） |
 
-每一条的负控都问同一个问题：**把它关掉，读数或行为会不会变坏**。不会变坏的判据是假绿。
+每一条的负控都问同一个问题：把它关掉，读数或行为会不会变坏。不会变坏的判据是假绿。
 """
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ def test_the_parent_reads_its_children_from_the_roster(tmp_path: pathlib.Path):
 
 def test_negctl_children_text_degrades_loudly_when_the_roster_is_unreadable(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
-    """① 负控：关掉名册（`checked=False`）⇒ 那一格必须**如实说没读成**，不许变成"没有子代理"。
+    """① 负控：关掉名册（`checked=False`）⇒ 那一格必须如实说没读成，不许变成"没有子代理"。
 
     "空串"在提示词层的含义是"名下没有子代理"（渲染成「（此刻名下没有子代理）」）——
     把"读不成"折成空串，就是让模型以为自己是光杆。这一条守的正是那个折平。
@@ -169,9 +169,9 @@ def test_the_conductor_sees_the_whole_tree_with_parent_ids_and_depths(tmp_path: 
     assert by_tid[c_tid]["parent_task_id"] == d_tid, (
         "孙代的 `parent_task_id` 不是它父的绝对编号", by_tid[c_tid])
     # 另外两条 M 手上的整树读数：台账按深度的分布 + 状态报告里的顶趟数。
-    # ⚠️ 两个 `depth` **同名不同义**（`draft/104` §4.5 登记过这件事）：
-    # 台账那一格是**绝对**深度（顶趟 = 1 ⇒ D = 2 ⇒ C = 3），名册视图那一格是
-    # **相对**层深（直接子 = 1 ⇒ 孙代 = 2）。两处都读、都写清口径，不许折成一个数。
+    #  两个 `depth` 同名不同义（`draft/104` §4.5 登记过这件事）：
+    # 台账那一格是绝对深度（顶趟 = 1 ⇒ D = 2 ⇒ C = 3），名册视图那一格是
+    # 相对层深（直接子 = 1 ⇒ 孙代 = 2）。两处都读、都写清口径，不许折成一个数。
     stats = env["cond"].stats()
     assert stats.get("by_depth") == {"1": 1, "2": 1, "3": 1}, stats.get("by_depth")
     rep = SR.collect(env["st"], env["ws"])
@@ -198,9 +198,9 @@ def test_a_grandchild_reports_its_state_not_unregistered(tmp_path: pathlib.Path,
     """② 判据（真机读数驱动）：孙代那一行的 `state` 必须是四态之一，不许读成「未登记」。
 
     真机现场（`projects/tree-check`，只读取证）：`scope="descendants"` 的 7 行里，改前
-    **5 行**（C1/F1 深度 2、B1/B2/E1 深度 3）读成「未登记」，只有直接子 D1 读对 ——
-    因为 `branch` 只从**owner 那一层**的 `retire_ready` 取。这与 `draft/90` §1.4
-    「必须看到 …**工作状态**」冲突：M 看得见孙代的名字，却看不出它在干什么。
+    5 行（C1/F1 深度 2、B1/B2/E1 深度 3）读成「未登记」，只有直接子 D1 读对 ——
+    因为 `branch` 只从owner 那一层的 `retire_ready` 取。这与 `draft/90` §1.4
+    「必须看到 …工作状态」冲突：M 看得见孙代的名字，却看不出它在干什么。
     修法在 `secretary._roster_targets`（逐层问它父那一层的 `retire_ready`，每个父只问一次）。
     """
     env = _env(tmp_path)
@@ -236,7 +236,7 @@ def test_a_grandchild_reports_its_state_not_unregistered(tmp_path: pathlib.Path,
 
 
 def test_retiring_a_child_keeps_it_visible_but_refuses_to_be_addressed(tmp_path: pathlib.Path):
-    """③ 正控：退役之后它**还在父的名册里**（标 retired），但**再被寻址就拒**（`member_retired`）。"""
+    """③ 正控：退役之后它还在父的名册里（标 retired），但再被寻址就拒（`member_retired`）。"""
     env = _env(tmp_path)
     child, name = _add_child(env, brief="可以退的那一件")
     # 退役前：寻址不落在 member_retired 上（对照，见下面的负控）
@@ -261,7 +261,7 @@ def test_retiring_a_child_keeps_it_visible_but_refuses_to_be_addressed(tmp_path:
 
 
 def test_negctl_before_retiring_the_same_name_is_not_refused(tmp_path: pathlib.Path):
-    """③ 负控：同一句话在**退役之前**不会落在 `member_retired` 上 ⇒ 上面那条不是恒真。"""
+    """③ 负控：同一句话在退役之前不会落在 `member_retired` 上 ⇒ 上面那条不是恒真。"""
     env = _env(tmp_path)
     _child, name = _add_child(env)
     got = env["loop"]._do_message({"to": name, "subject": "题", "body": "文"})
@@ -274,10 +274,10 @@ def test_negctl_before_retiring_the_same_name_is_not_refused(tmp_path: pathlib.P
 
 def test_every_child_gets_its_own_surface_and_the_tools_root_follows_it(
         tmp_path: pathlib.Path):
-    """④ 正控：两个子代理拿到**不同的面**；按面造出来的注册表 `fs` 根就是那个面。
+    """④ 正控：两个子代理拿到不同的面；按面造出来的注册表 `fs` 根就是那个面。
 
-    真机读数那一格（`agent_tool_face.advertised`）也在这里量：它是**角色级**的数，
-    两个面**应当相同** —— 面切在 `fs.*` 的根上，不在工具条数上（`draft/90` §1.10
+    真机读数那一格（`agent_tool_face.advertised`）也在这里量：它是角色级的数，
+    两个面应当相同 —— 面切在 `fs.*` 的根上，不在工具条数上（`draft/90` §1.10
     「`fs.*` 的 `root` 换成这个实例的面，其余判据一个字不改」）。所以"面切过"的
     证据只能是根，不可能是条数；判据两样都给，把这条口径钉在明处。
     """
@@ -360,7 +360,7 @@ def test_negctl_an_out_of_face_path_is_refused_before_and_during_use(tmp_path: p
 
 def test_the_negative_controls_really_turn_the_readings_red(tmp_path: pathlib.Path,
                                                            monkeypatch: pytest.MonkeyPatch):
-    """把四个机制**逐个关掉**，各取一条读数，证明它们不是"永远为真"的装饰。
+    """把四个机制逐个关掉，各取一条读数，证明它们不是"永远为真"的装饰。
 
     这一条不替代上面四条，而是把"关掉 ⇒ 变坏"压在一处可复核：
     ① 关名册 ⇒ `_children_text` 从"有名字"变成"没读成"；

@@ -70,50 +70,50 @@ from pathlib import Path
 
 VERDICT_EXIT = {"pass": 0, "fail": 1, "unknown": 2}
 
-#: 三个合法结论，**从 `VERDICT_EXIT` 派生**（不另写一份枚举：两份枚举必然漂移，
+#: 三个合法结论，从 `VERDICT_EXIT` 派生（不另写一份枚举：两份枚举必然漂移，
 #: 而漂移的表现是"某一步的 verdict 合法但退出码查不到"）。
 VERDICTS: tuple[str, ...] = tuple(VERDICT_EXIT)
 
 
 @dataclass
 class Step:
-    """一个发布检查步骤。`argv` 是**完整命令**（含解释器），不经过 shell。"""
+    """一个发布检查步骤。`argv` 是完整命令（含解释器），不经过 shell。"""
 
     key: str
     title: str
     argv: list[str]
     cwd: Path
-    #: 该步骤的环境变量。**空字典 = 继承当前环境**（传给 `subprocess.run` 时折叠成 `None`）。
+    #: 该步骤的环境变量。空字典 = 继承当前环境（传给 `subprocess.run` 时折叠成 `None`）。
     #:
-    #: 为什么必须折叠：`subprocess.run(env={})` 在 Windows 上是**空环境块**，
+    #: 为什么必须折叠：`subprocess.run(env={})` 在 Windows 上是空环境块，
     #: `CreateProcess` 直接以 `OSError: [WinError 87] 参数错误` 失败 —— 步骤于是被判成
     #: `unknown`（"没跑成"），而真因是编排层传了一个空环境。实测：`build_steps` 造的步骤
     #: 都带完整环境（`_env()`），所以这条只在"手写一个 Step 去跑"时才炸 ——
     #: 也就是只在测试里炸，正是最容易被忽略的形态。
     #: 空环境没有任何正当用途（连 `PATH` 都没有，解释器都起不来），所以"空 = 继承"。
     env: dict[str, str] = field(default_factory=dict)
-    #: 该步骤**预期**耗时（秒），只用于打印，不参与判定 ——
+    #: 该步骤预期耗时（秒），只用于打印，不参与判定 ——
     #: 用一个估算值去判超时会造出"机器慢就红"的假报警（`DEVELOPMENT.md` §5.5）。
     expect_seconds: int = 60
-    #: **该步骤自己的退出码语义**：退出码 → 三态结论。
+    #: 该步骤自己的退出码语义：退出码 → 三态结论。
     #:
-    #: ⚠️ **这是本编排层最容易写错的一处，而第一版就写错了**：
+    #:  这是本编排层最容易写错的一处，而第一版就写错了：
     #: 它当时把所有非零退出码一律判成 `fail`，于是 `scripts/release_check.py`
-    #: 返回 **2**（它自己的"**没查成**"档）时，编排层报的是 `fail` ——
-    #: **把"没查成"读成了"发现问题"**，正好是本项目三态纪律要挡的那件事，
+    #: 返回 2（它自己的"没查成"档）时，编排层报的是 `fail` ——
+    #: 把"没查成"读成了"发现问题"，正好是本项目三态纪律要挡的那件事，
     #: 而且发生在"用来挡住这类错误的那一层"里。
     #:
-    #: 所以每一步都必须**显式声明**自己的码表。默认只认 `0 = pass`，
+    #: 所以每一步都必须显式声明自己的码表。默认只认 `0 = pass`，
     #: 其余一律 `fail`（那是普通 pytest 风格脚本的语义）。
     exit_map: dict[int, str] = field(default_factory=lambda: {0: "pass"})
-    #: 该步骤若会把**自己的逐项结构**写成 JSON，这里给出那个路径（`D-2.3`）。
+    #: 该步骤若会把自己的逐项结构写成 JSON，这里给出那个路径（`D-2.3`）。
     #:
     #: 为什么编排层要读它：子进程（`scripts/release_check.py`）本来就把八项逐项
     #: 结果算好了（`items[]` + `counts{}` + `overall`）。编排层此前只留最后 12 行
-    #: `tail`，把那份**已经算好的结构丢掉了** —— 于是"8 项各自 pass 还是 unknown"
+    #: `tail`，把那份已经算好的结构丢掉了 —— 于是"8 项各自 pass 还是 unknown"
     #: 在编排层的 JSON 里读不出来，只能靠翻文本。缺口在编排层，不在发布门。
     json_out: Path | None = None
-    #: 这一步**已知的、会被绿的缺口**（`FINAL-R7-05`）：在报告里逐条打出来。
+    #: 这一步已知的、会被绿的缺口（`FINAL-R7-05`）：在报告里逐条打出来。
     #: 为什么要有这个字段而不是只写在标题里：标题会被 `[:56]` 截断（见汇总那一行），
     #: 而"这一步的绿不覆盖什么"恰恰是最容易被截掉的那半句。
     notes: tuple[str, ...] = ()
@@ -122,18 +122,18 @@ class Step:
         return self.exit_map.get(code, "fail")
 
 
-#: 本项目里**自带三态**的门：`0 = 通过 / 1 = 发现问题 / 2 = 没查成`。
+#: 本项目里自带三态的门：`0 = 通过 / 1 = 发现问题 / 2 = 没查成`。
 #: 用同一份字面量给多个步骤，避免"每处各写一遍码表"（那种写法迟早会有一处漏掉 2）。
 TRI_STATE_EXIT: dict[int, str] = {0: "pass", 1: "fail", 2: "unknown"}
 
 #: 验收 / 论文复现用的普通脚本语义：`0 = 全过`，其余 `= 有问题`。
-#: ⚠️ 它们**不**是三态 —— 但它们的 docstring 里必须写清"非零 = 跑过且发现问题"，
+#:  它们不是三态 —— 但它们的 docstring 里必须写清"非零 = 跑过且发现问题"，
 #: 否则"脚本崩了"与"检查不通过"仍然分不开（那是它们自己的事，见各自的 README）。
 PLAIN_EXIT: dict[int, str] = {0: "pass"}
 
 #: 崩溃指纹：脚本没跑起来，或跑起来后自己抛了异常。
 #:
-#: 为什么必须从**输出**认：`test/test2` 的验收与复现脚本只有 0/1 两个码，于是
+#: 为什么必须从输出认：`test/test2` 的验收与复现脚本只有 0/1 两个码，于是
 #: "脚本崩了"与"检查不通过"在退出码上完全同形。两个方向的错法不对称：
 #: 把崩溃读成"没查成"只会让人来查；把崩溃读成"发现问题"会让人去改一个没坏的东西。
 #: 所以这里保守地降级（只会把 `fail` 降成 `unknown`，绝不会把 `pass` 抬上来）。
@@ -152,11 +152,11 @@ def _looks_like_a_crash(output: str) -> bool:
 def _read_step_json(path: Path | None) -> tuple[list[dict], dict, list[str]]:
     """读一个步骤写下的子 JSON（`D-2.3`）。返回 `(items, counts, notes)`。
 
-    ⚠️ 三态纪律在这里同样适用：**读不到**与**读到了但是空的**不是一件事。
+     三态纪律在这里同样适用：读不到与读到了但是空的不是一件事。
     读不到时返回空 `items` 并附一条 note（于是"这一项没有逐项结构"是可见的），
     绝不返回一个"看起来像全都通过"的空结构。
 
-    结构不合规（`items` 不是对象数组 / 缺 `verdict`）时**不猜**：把异常如实记进
+    结构不合规（`items` 不是对象数组 / 缺 `verdict`）时不猜：把异常如实记进
     note，让那一项的 `subitems` 保持为空 —— 猜出来的逐项明细比没有更危险。
     """
     if path is None:
@@ -177,23 +177,15 @@ def _read_step_json(path: Path | None) -> tuple[list[dict], dict, list[str]]:
 
 
 def verdict_from_subitems(items: list[dict]) -> str | None:
-    """按子项汇总该步的结论（`D-2.3`）：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`。
+    """    按子项汇总该步的结论（`D-2.3`）：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`。
 
-    这条口径与 `scripts/release_check.py::Report.overall` 「逐字相同」（刻意如此）：
-    编排层要能「独立」从子项重算一遍，于是"子进程的总判定"与"逐项明细"之间
-    一旦不一致就会被发现，而不是被信任。
+    这条口径与 `scripts/release_check.py::Report.overall` 「逐字相同」（刻意如此）：编排层要能「独立」从子项重算一遍，于是"子进程的总判定"与"逐项明细"之间一旦不一致就会被发现，
+    而不是被信任。空列表 ⇒ `None`，且这个 `None` 的含义是"「没有可汇总的东西」"，调用方应退回用退出码判定，「而不是」凭空得出 `pass`。
 
-    ⚠️ 空列表 ⇒ `None`，且这个 `None` 的含义是"「没有可汇总的东西」"，
-    调用方应退回用退出码判定，「而不是」凭空得出 `pass`。
-
-    `H-5` 之前的裂缝正是出在这一档：姊妹实现 `Report.overall()` 的空表分支返回
-    `pass`（"三项计数都是 0 ⇒ 其余 ⇒ pass"），于是两处只在非空时相同 ——
-    "独立重算一遍"这条防线在空集上整个失效，编排层看到 `subitems=[]` 时
-    不会与发布门分家，两边都绿。现在 `Report.overall()` 的空表也返回 `unknown`
-    （见 `tests/test_release_all.py` 的交叉断言：非空组合两处逐字一致，
-    空表一律读成 `unknown`）。这里保留 `None` 而不是直接给 `"unknown"`：
-    它的调用方（`run_step`）需要区分"没有逐项明细可汇总"（⇒ 没有别的证据，
-    退回退出码）与"逐项明细说 unknown"，两者后续处理不同。
+    `H-5` 之前的裂缝正是出在这一档：姊妹实现 `Report.overall()` 的空表分支返回`pass`（"三项计数都是 0 ⇒ 其余 ⇒ pass"），于是两处只在非空时相同
+    ——"独立重算一遍"这条防线在空集上整个失效，编排层看到 `subitems=[]` 时不会与发布门分家，两边都绿。现在 `Report.overall()` 的空表也返回 `unknown`（见
+    `tests/test_release_all.py` 的交叉断言：非空组合两处逐字一致，空表一律读成 `unknown`）。这里保留 `None` 而不是直接给 `"unknown"`：它的调用方（`run_step`）
+    需要区分"没有逐项明细可汇总"（⇒ 没有别的证据，退回退出码）与"逐项明细说 unknown"，两者后续处理不同。
     """
     if not items:
         return None
@@ -212,7 +204,7 @@ class Result:
     exit_code: int | None
     seconds: float
     tail: list[str]
-    #: 该步骤**自己的逐项结构**（`D-2.3`）：原样嵌进来的子进程 JSON 的 `items[]`。
+    #: 该步骤自己的逐项结构（`D-2.3`）：原样嵌进来的子进程 JSON 的 `items[]`。
     #: 刻意"原样嵌"而不是"改写成一个我们自己的结构"：同一件事两个落点必然漂移，
     #: 而这里要的恰恰是"发布门逐项到底怎么判的"这件事只由发布门说了算。
     subitems: list[dict] = field(default_factory=list)
@@ -237,18 +229,14 @@ def classify(
     step: Step | None = None,
     output: str = "",
 ) -> str:
-    """把"跑成什么样"映射到三态。
+    """    把"跑成什么样"映射到三态。
 
-    ⚠️「这个函数是本脚本的核心判据」，所以它的分支顺序本身就是设计：
-    `timed_out` / `started=False`「必须先于」`exit_code == 0` 判断 ——
-    否则"超时被杀"会走到某一侧去（Windows 上被强杀的进程退出码常是 1，
-    与"检查发现问题"的 1 无法区分）。这正是三态纪律要挡的那种静默兜底。
+    「这个函数是本脚本的核心判据」，所以它的分支顺序本身就是设计：`timed_out` / `started=False`「必须先于」`exit_code == 0` 判断 ——否则"超时被杀"会走到某一侧去（Windows
+    上被强杀的进程退出码常是 1，与"检查发现问题"的 1 无法区分）。这正是三态纪律要挡的那种静默兜底。
 
-    退出码的解释走 `step.exit_map`（「每一步显式声明自己的码表」）——
-    把"2 = 没查成"这类项目内约定留给步骤自己说，而不是在这里猜。
+    退出码的解释走 `step.exit_map`（「每一步显式声明自己的码表」）——把"2 = 没查成"这类项目内约定留给步骤自己说，而不是在这里猜。
 
-    另加一条「保守降级」：码表里没有 unknown 这一档的步骤（普通 0/1 脚本），
-    若输出里带崩溃指纹，则判 `unknown` 而不是 `fail` —— 理由见 `CRASH_MARKERS`。
+    另加一条「保守降级」：码表里没有 unknown 这一档的步骤（普通 0/1 脚本），若输出里带崩溃指纹，则判 `unknown` 而不是 `fail` —— 理由见 `CRASH_MARKERS`。
     """
     if not started or timed_out:
         return "unknown"
@@ -356,9 +344,9 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             + (["--changed-file", str(changed_file)] if changed_file is not None else [])
             + ["--json", str(release_check_json)],
             cwd=root, env=_env(), expect_seconds=300,
-            # ⚠️ **`release_check.py` 自带三态**：`0=pass / 1=fail / 2=unknown`。
+            #  `release_check.py` 自带三态：`0=pass / 1=fail / 2=unknown`。
             # 第一版漏了这一行，于是它返回 2 时编排层报的是 `fail` ——
-            # "没查成"被读成"发现问题"。**必须显式声明码表。**
+            # "没查成"被读成"发现问题"。必须显式声明码表。
             # 这里还曾把那一项 unknown 归因于"这不是 git 仓库"。真因是调用方不传改动集
             # （P-25）；本仓现在就是 git 仓库，而那一项照样 unknown。改动集由
             # `--since` / `--changed-file` 供上，取不到时仍如实报 unknown。
@@ -389,18 +377,18 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             "coverage", "零测试公开函数的风险分档清单（等级 1/2 应为 0；"
                         "注意：传递判据 `--propagate` 本步**不开**，见 `FINAL-R7-05`）",
             [sys.executable, str(root / "tools" / "coverage_zero_test.py")],
-            # `REL-01`（`draft/52` F11）：耗时声明必须与**实测**对得上。
+            # `REL-01`（`draft/52` F11）：耗时声明必须与实测对得上。
             # 旧值 60 而实测 928.6 s（`draft/43-D` §0.3：本机后台真跑完一次 `--json`），
             # 差 15 倍 ⇒ 那是一句假声明（读发布报告的人会以为这一步几秒钟就能跑完）。
             # 取 1000（保守取实测值的上界附近）：`--timeout` 默认 1800 仍留 1.8 倍余量，
-            # 所以**不动** `--timeout`（调小会把"慢"变成"超时 ⇒ unknown"）。
+            # 所以不动 `--timeout`（调小会把"慢"变成"超时 ⇒ unknown"）。
             cwd=root, env=_env(), expect_seconds=1000,
             exit_map=TRI_STATE_EXIT,
             # `FINAL-R7-05`：`coverage_zero_test` 的传递判据（等级 1e/2c，"自身 AST 里
             # 没有写原语、只经由 callee 写盘"）默认关闭，而本步不传 `--propagate`
             # ⇒ 这类零测试编排函数落到等级 4，既不进 `gate`（阈值 2）也不进等级 1/2 清单。
             # 实测（R7）：真实树副本开 `--propagate` 后 gate=22（9+13）—— 也就是说
-            # "开了就会红"。所以这里**不改判据强度**（那要先把那 22 个函数补上测试，
+            # "开了就会红"。所以这里不改判据强度（那要先把那 22 个函数补上测试，
             # 属于另一件事），但把这句缺口写进步骤标题与 notes：读发布报告的人
             # 不会把这一步的绿读成"编排函数都被覆盖了"。
             notes=("传递判据（1e/2c）本次关闭 ⇒ 本步的『等级 1/2 = 0』不含"
@@ -428,7 +416,7 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
                         "（`src/agentflow/web/static/` 与刚构建的结果逐字节比）",
             [sys.executable, str(root / "tools" / "frontend_gate.py")],
             cwd=root, env=_env(), expect_seconds=180,
-            # `tools/frontend_gate.py` 自带三态（`0/1/2`）⇒ **必须**用 `TRI_STATE_EXIT`。
+            # `tools/frontend_gate.py` 自带三态（`0/1/2`）⇒ 必须用 `TRI_STATE_EXIT`。
             # 为什么这条不能省：默认码表只认 `0=pass`，于是"本机没装 node"（它返回 2）
             # 会被判成 `fail` —— 把"没查成"读成"发现问题"，正是本项目三态纪律要挡的事。
             # 反方向的错更要命：若这里写成 `{0: "pass", 1: "pass", 2: "pass"}` 之类的
@@ -479,7 +467,7 @@ def run_step(step: Step, timeout: float) -> Result:
         timed_out = True
         out = (exc.stdout or "") + (exc.stderr or "") if isinstance(exc.stdout, str) else ""
     except OSError as exc:
-        # 解释器不在 / 路径不对 / 目录不存在 —— **没跑成**，不是失败。
+        # 解释器不在 / 路径不对 / 目录不存在 —— 没跑成，不是失败。
         started = False
         out = f"{type(exc).__name__}: {exc}"
     except KeyboardInterrupt:
@@ -496,7 +484,7 @@ def run_step(step: Step, timeout: float) -> Result:
         cancelled = True
         started = False
         out = "（被中断：KeyboardInterrupt）"
-    except Exception as exc:  # noqa: BLE001 —— 理由：编排层不许让**任何**异常变成"看起来没跑过"。
+    except Exception as exc:  # noqa: BLE001 —— 理由：编排层不许让任何异常变成"看起来没跑过"。
         # 这里兜住的是"检查器自己炸了"，它必须落进 `unknown` 而不是把整个发布门带崩；
         # 消息里带上异常类型，于是"没跑成"仍可归因。
         out = f"编排层捕获到未预期异常：{type(exc).__name__}: {exc}"
@@ -520,7 +508,7 @@ def run_step(step: Step, timeout: float) -> Result:
                                    subitems, subcounts, notes))
     verdict = classify(code, started, timed_out, step, out)
     if subitems:
-            # `D-2.3`：该步的结论按**它自己的逐项明细**汇总，而不是只信一个整数退出码。
+            # `D-2.3`：该步的结论按它自己的逐项明细汇总，而不是只信一个整数退出码。
             derived = verdict_from_subitems(subitems)
             if derived is not None and derived != verdict:
                 notes.append(
@@ -532,20 +520,15 @@ def run_step(step: Step, timeout: float) -> Result:
 
 
 def overall(results: list[Result]) -> str:
-    """总判定：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`；空表 ⇒ `unknown`。
+    """    总判定：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`；空表 ⇒ `unknown`。
 
-    `H-5` / `T4` / `I-7`（本轮修）：空表**不再**返回 `pass`。
-    旧口径是"三项计数都是 0 ⇒ 其余 ⇒ `pass`"，于是 `overall([]) == "pass"` ——
-    一个"没有可判的项"的输入被读成"全过"，与姊妹函数
-    `verdict_from_subitems([])`（返回 `None`，逐字写着"不许凭空得出 pass"）
-    在同一仓库里给了两种口径。空集的含义是**没查成**，不是通过。
+    `H-5` / `T4` / `I-7`（本轮修）：空表不再返回 `pass`。旧口径是"三项计数都是 0 ⇒ 其余 ⇒ `pass`"，于是
+    `overall([]) == "pass"` ——一个"没有可判的项"的输入被读成"全过"，与姊妹函数`verdict_from_subitems([])`（返回 `None`，逐字写着"不许凭空得出 pass"）
+    在同一仓库里给了两种口径。空集的含义是没查成，不是通过。
 
-    真实路径上 `main()` 走不到这里：它对 `build_steps(...)` 的每一条都
-    `results.append(...)`（跳过记 `unknown`、跑了记结果），而步骤表恒非空
-    （`tests/test_release_all.py::test_main_records_one_result_per_step_so_the_empty_table_is_unreachable`
-    把这件事从散文变成了可红的判据）。所以这一支今天只在被单测直接调用时可达 ——
-    但"不可达"不是把语义写错的理由：口径一旦被别的调用方复用，
-    写错的那一支就会成为下一个静默的"通过"。
+    真实路径上 `main()` 走不到这里：它对 `build_steps(...)` 的每一条都`results.append(...)`（跳过记 `unknown`、跑了记结果），
+    而步骤表恒非空（`tests/test_release_all.py::test_main_records_one_result_per_step_so_the_empty_table_is_unreachable`把这件事
+    从散文变成了可红的判据）。所以这一支今天只在被单测直接调用时可达 ——但"不可达"不是把语义写错的理由：口径一旦被别的调用方复用，写错的那一支就会成为下一个静默的"通过"。
     """
     if any(r.verdict == "fail" for r in results):
         return "fail"
@@ -560,7 +543,7 @@ def overall(results: list[Result]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # 输出编码不许依赖调用者的 locale：本脚本会打印中文与"⚠️"这类符号，
+    # 输出编码不许依赖调用者的 locale：本脚本会打印中文与""这类符号，
     # 在 cp936(GBK) 控制台上默认编码会直接抛 UnicodeEncodeError（退出码 1 之外的一类崩溃，
     # 发布门"没跑成"而不是"发现问题"）。显式指定 UTF-8 并用 replace 兜底，
     # 于是无论调用方是什么代码页，脚本都能把结论打印完。
@@ -603,11 +586,11 @@ def main(argv: list[str] | None = None) -> int:
     keys = {s.key for s in steps}
     skip = {k.strip() for k in args.skip.split(",") if k.strip()}
     only = {k.strip() for k in args.only.split(",") if k.strip()}
-    # ⚠️ **两个集合都要校验**，不能只校验"最终被跳过的那批"。
+    #  两个集合都要校验，不能只校验"最终被跳过的那批"。
     # 第一版写成 `bad = (skip | (keys - only)) - keys`，于是 `--only lin`（打错一个字母）
-    # 算出来的"跳过集"正好是整个 `keys`，`bad` 因此为空 ⇒ **静默地什么都没跑，然后退出码 2**。
+    # 算出来的"跳过集"正好是整个 `keys`，`bad` 因此为空 ⇒ 静默地什么都没跑，然后退出码 2。
     # 退出码凑巧是对的，理由却是错的 —— 而如果将来有人把跳过记成 `pass`，
-    # 这个拼写错误就会变成一次"全绿的空跑"。**判据必须打在用户输入上，不是打在派生结果上。**
+    # 这个拼写错误就会变成一次"全绿的空跑"。判据必须打在用户输入上，不是打在派生结果上。
     bad = (skip | only) - keys
     if bad:
         print(f"[release_all] 未知的步骤 key：{sorted(bad)}（合法：{sorted(keys)}）", file=sys.stderr)
@@ -638,7 +621,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         for s in steps:
             if s.key in skip or (only and s.key not in only):
-                # ⚠️ **跳过记成 `unknown`，不是 `pass`** —— 这是本脚本最重要的一条取舍。
+                #  跳过记成 `unknown`，不是 `pass` —— 这是本脚本最重要的一条取舍。
                 # 跳过 = 没查成；把它记成 pass 会让 `--skip acceptance` 变成
                 # "发布门全绿"的捷径，而那正是"发布门可以被绕过"。
                 results.append(Result(s, "unknown", None, 0.0, ["跳过（--skip / --only）⇒ 没查成，不是通过"]))
@@ -665,7 +648,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"[skip ] {s.key:14s} {s.title}")
 
     verdict = overall(results)
-    # `D-2.5`：三个计数**只算一次**，stdout 的总判定行与 JSON 顶层用的是同一个 dict。
+    # `D-2.5`：三个计数只算一次，stdout 的总判定行与 JSON 顶层用的是同一个 dict。
     # 各算一遍就会漂移，而漂移的表现是"打印说 pass=5、JSON 里说 pass=4" ——
     # 两个都对不上，读者不知道该信哪个。
     counts = {v: sum(1 for r in results if r.verdict == v) for v in ("pass", "fail", "unknown")}

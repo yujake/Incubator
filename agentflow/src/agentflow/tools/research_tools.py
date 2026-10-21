@@ -1,43 +1,22 @@
 """D 专用工具：研究问题台账 + 知识缺口提问 + 等待集复查。
-
-设计基线：``test/test1/DESIGN-TOOLS.md`` §2.1（``research_questions`` 表）、
-§4.4（"知识不足"的可核实判据）、§1.1（工具清单的最后一行）。
-
+设计基线：``test/test1/DESIGN-TOOLS.md`` §2.1（``research_questions`` 表）、§4.4（"知识不足"的可核实判据）、§1.1（工
+具清单的最后一行）。
 ## 这一层为什么必须存在
-
-D 的核心不是"生成文本"，而是管理一个 问题 → 证据 → 缺口 → 新证据 的循环
-（§4.1）。循环里每一步都是标准操作：
-
-  列出问题 / 记笔记 / 提交查询请求 / 复查等待中的请求 / 改状态
-
-如果让 LLM 直接手写 JSON 去改这两张表，代价有两个：一次转义错误就写坏数据；
-而且每一次"改一行"都要占掉一轮思维链。把它们固化成工具之后，智能体的思维链
-只花在判断该调哪个工具上。
-
+D 的核心不是"生成文本"，而是管理一个 问题 → 证据 → 缺口 → 新证据 的循环（§4.1）。循环里每一步都是标准操作：
+列出问题 / 记笔记 / 提交查询请求 / 复查等待中的请求 / 改状态
+如果让 LLM 直接手写 JSON 去改这两张表，代价有两个：一次转义错误就写坏数据；而且每一次"改一行"都要占掉一轮思维链。把它们固化成工具之后，智能体的思维链只花在判断该调哪个工具
+上。
 ## 三个刻意的设计
-
-1. `research.submit_gap` 必须查重（§4.4 最后一句）。
-   同一问题若已有未完成的等待请求，绝不重复提交 —— 否则每跑一轮就向 A 的
-   队列里塞一条相同的请求，A 被自己的回音刷爆，而"查重"这件事只能在这里做：
-   只有这里同时知道 `question` 与 `waiting_request_ids`。
-
-2. `research.poll_waiting` 只做确定性判断，且不写盘。
-   "请求是否做完"看 `outcome`，"新文献是否消化完"看 `processed`（§4.2）。
-   把状态迁移留给调用方（agent_d）而不是工具内部：工具一旦偷偷改状态，
-   "这一轮到底谁动了什么"就不可审计了。这也让本工具保持 `read` 副作用，
-   可以被任意多次调用而无需审批。
-
-3. 台账（``data/research_request_ledger.json``）刻意不是 schema 表。
-   它是"本问题已经问过 A 什么"的去重台账，模块私有；放进 ``schema.TABLES``
-   会牵动 LOCK_ORDER / verify / rebuild，而那是别人负责的公共契约。
-   用同一把 ``research_questions.lock`` 保护它，是因为所有对它的读写都在
-   已经持有该锁的事务里发生（见 :func:`_read_ledger` 的前置条件）。
-
+1. `research.submit_gap` 必须查重（§4.4 最后一句）。同一问题若已有未完成的等待请求，绝不重复提交 —— 否则每跑一轮就向 A 的队列里塞一条相同的请求，
+A 被自己的回音刷爆，而"查重"这件事只能在这里做：只有这里同时知道 `question` 与 `waiting_request_ids`。
+2. `research.poll_waiting` 只做确定性判断，且不写盘。"请求是否做完"看 `outcome`，"新文献是否消化完"看 `processed`（§4.2）。把状
+态迁移留给调用方（agent_d）而不是工具内部：工具一旦偷偷改状态，"这一轮到底谁动了什么"就不可审计了。这也让本工具保持 `read` 副作用，可以被任意多次调用而无需审批。
+3. 台账（``data/research_request_ledger.json``）刻意不是 schema 表。它是"本问题已经问过 A 什么"的去重台账，模块私有；放进 
+``schema.TABLES``会牵动 LOCK_ORDER / verify / rebuild，而那是别人负责的公共契约。用同一把 
+``research_questions.lock`` 保护它，是因为所有对它的读写都在已经持有该锁的事务里发生（见 :func:`_read_ledger` 的前置条件）。
 ## 与 Store / schema 的边界
-
-- 写盘一律走 ``store.tx(...)``，先校验后落盘由 store 保证。
-- 状态合法性以 ``schema`` 为准（``QUESTION_STATUSES`` 等）；本模块不另定义
-  一套词表，否则"谁说了算"会出现第二个版本。
+- 写盘一律走 ``store.tx(...)``，先校验后落盘由 store 保证。- 状态合法性以 ``schema`` 为准（``QUESTION_STATUSES`` 等）；本
+模块不另定义一套词表，否则"谁说了算"会出现第二个版本。
 """
 
 from __future__ import annotations
@@ -139,25 +118,15 @@ def pending_requests_of(question_row: dict, request_rows: list[dict]) -> list[di
 
 def _next_request_id(rows: list[dict]) -> str:
     """给 `search_requests` 取一个 ``r-NNNN``。
-
     ## 这里是转发，不是第二份实现（此前的缺陷在这里）
-
-    本函数原先自带一份"取 max+1"的副本（`interactions.next_prefixed_id` 的同族
-    逻辑，但没有前缀守卫、也没有任何上限保护），于是同一个
-    `search_requests` 表有两个取号器：`table.create` / CLI / C / D / F 各走
-    各的，号段语义互相冲突。更糟的是副本连
-    `interactions.next_prefixed_id` 那次真实事故的教训都没带上 ——
-    它接受了任意前缀形态而不做校验。
-
-    现在：取号规则只有一份实现（`interactions.next_prefixed_id`，
-    `interactions.py:1134`），前缀守卫 / 形态 / 冲突跳过全部由它负责；
-    `P-4` 之后上限也在它里面，末尾的 `assert_request_id_in_space` 是第二道
-    守卫（覆盖"别人自己拼了一个号传进来"的情形）。
-
-    `P-4` 的翻译：`next_prefixed_id` 越界时抛具名的 `IdSpaceExhausted`
-    （继承 `ValueError`），这里精确翻成工具层的 `ToolError` —— 不翻的话它会冒到
-    `ToolRegistry.call` 被兜成 `kind='unexpected'`，于是"空间用尽（已知、可处理）"
-    与"工具内部有 bug"在下游同形。不翻整个 `ValueError`：前缀违规属调用方编码错误。
+    本函数原先自带一份"取 max+1"的副本（`interactions.next_prefixed_id` 的同族逻辑，但没有前缀守卫、也没有任何上限保护），于是同一个
+    `search_requests` 表有两个取号器：`table.create` / CLI / C / D / F 各走各的，号段语义互相冲突。更糟的是副本连
+    `interactions.next_prefixed_id` 那次真实事故的教训都没带上 ——它接受了任意前缀形态而不做校验。
+    现在：取号规则只有一份实现（`interactions.next_prefixed_id`，`interactions.py:1134`），前缀守卫 / 形态 / 冲突跳过
+    全部由它负责；`P-4` 之后上限也在它里面，末尾的 `assert_request_id_in_space` 是第二道守卫（覆盖"别人自己拼了一个号传进来"的情形）。
+    `P-4` 的翻译：`next_prefixed_id` 越界时抛具名的 `IdSpaceExhausted`（继承 `ValueError`），这里精确翻成工具层的 
+    `ToolError` —— 不翻的话它会冒到`ToolRegistry.call` 被兜成 `kind='unexpected'`，于是"空间用尽（已知、可处理）"与"工
+    具内部有 bug"在下游同形。不翻整个 `ValueError`：前缀违规属调用方编码错误。
     """
     try:
         return assert_request_id_in_space(next_prefixed_id(rows, "request_id", "r"))
@@ -462,20 +431,13 @@ def research_write_note(store: Any, question_id: str, note: str) -> ToolResult:
 )
 def research_poll_waiting(store: Any) -> ToolResult:
     """检查等待中的请求。
-
     ## 为什么"继续"必须靠等待集（§4.2）
-
-    没有 ``waiting_request_ids``，D 就只能看到"库里多了几篇文献"，无法判断
-    新来的文献是不是我在等的那批。这一条是 D 的循环能自动接上的唯一依据，
-    所以这里的判断必须全部来自落盘的数据，而不是"感觉应该有新东西了"：
-
-    - 请求是否结束 ⇒ ``search_requests.done`` / ``outcome``（复用 A 的终局字段）；
-    - 新文献是否消化完 ⇒ ``literature.processed``（B 的语义："B 处理完了"）；
-    - 两者都成立 ⇒ 该问题就绪，可以由调用方拉回 ``researching``。
-
-    全是确定性判断，不需要 LLM，因此本工具是 ``read`` 副作用：
-    它可以被任意多次调用而不触发审批，也不改变任何状态（状态迁移留给 agent_d，
-    这样"这一轮谁改了什么"才可审计）。
+    没有 ``waiting_request_ids``，D 就只能看到"库里多了几篇文献"，无法判断新来的文献是不是我在等的那批。这一条是 D 的循环能自动接上的唯一依据，所
+    以这里的判断必须全部来自落盘的数据，而不是"感觉应该有新东西了"：
+    - 请求是否结束 ⇒ ``search_requests.done`` / ``outcome``（复用 A 的终局字段）；- 新文献是否消化完 ⇒ 
+    ``literature.processed``（B 的语义："B 处理完了"）；- 两者都成立 ⇒ 该问题就绪，可以由调用方拉回 ``researching``。
+    全是确定性判断，不需要 LLM，因此本工具是 ``read`` 副作用：它可以被任意多次调用而不触发审批，也不改变任何状态（状态迁移留给 agent_d，这样"这一轮谁改了
+    什么"才可审计）。
     """
     try:
         qrows = _questions(store)
@@ -581,17 +543,13 @@ LEGAL_TRANSITIONS: dict[str, tuple[str, ...]] = {
 )
 def research_set_status(store: Any, question_id: str, status: str, notes: str | None = None) -> ToolResult:
     """改状态。
-
-    为什么非法迁移要 fail 而不是静默接受：状态机是 D 的循环的骨架。
-    如果 ``answered → open`` 被放行，"已给出结论"这件事就不再是终局，
-    报告与台账之间会永久性地互相矛盾，而没有任何一处会报错。
-    宁可让调用方拿到一个明确的失败并自己决定，也不要把矛盾写进盘。
-
-    为什么要以 schema 为准：``status`` 的词表、``needs_evidence`` 必须有
-    等待集、``dropped`` 必须写 notes —— 这些不变量已经在
-    :class:`agentflow.schema.ResearchQuestion` 里实现过一次。这里先走本模块的
-    状态机（给出"哪一步不允许"这种可读信息），再让 schema 做终审，
-    两道关卡的判定权都只有一份，不会出现第二个版本。
+    
+    为什么非法迁移要 fail 而不是静默接受：状态机是 D 的循环的骨架。如果 ``answered → open`` 被放行，"已给出结论"这件事就不再是终局，报告与台账之
+    间会永久性地互相矛盾，而没有任何一处会报错。宁可让调用方拿到一个明确的失败并自己决定，也不要把矛盾写进盘。
+    
+    为什么要以 schema 为准：``status`` 的词表、``needs_evidence`` 必须有等待集、``dropped`` 必须写 notes —— 这些不变
+    量已经在:class:`agentflow.schema.ResearchQuestion` 里实现过一次。这里先走本模块的状态机（给出"哪一步不允许"这种可读信息），再让
+    schema 做终审，两道关卡的判定权都只有一份，不会出现第二个版本。
     """
     if not S.is_valid_id(question_id):
         return fail(f"question_id 必须是 {S.ID_DIGITS} 位十进制字符串（旧数据里的 4 位号仍可读），收到 {question_id!r}", kind="bad_id")

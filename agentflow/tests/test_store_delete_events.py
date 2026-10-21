@@ -1,31 +1,20 @@
 """`R-57` 的判据：删除必须进事件流，否则 `rebuild()` 会让删掉的行复活。
-
 ## 改前是什么样（`draft/28` §173 的 R-57）
-
-"删一行"只有一条路：把 `tx.rows(table)` 那个列表就地改掉再 `mark_dirty`
-（`tools/table_tools.py::table_delete` 就是那样写的）。快照变了，
-但 `events.jsonl` 里没有任何痕迹 —— 而重建的唯一输入是事件日志
-⇒ 删掉的行在 `rebuild()` 之后回来，而那次重建的每一个计数都"正常"：
-`batches_incomplete=0`、`snapshot_rows_not_in_log=0`。
-也就是说没有一个读数会告诉读的人"你刚恢复出来的数据比删之前多"。
-
+"删一行"只有一条路：把 `tx.rows(table)` 那个列表就地改掉再 `mark_dirty`（`tools/table_tools.py::table_delete` 就是那样写的）。快照变了，但
+`events.jsonl` 里没有任何痕迹 —— 而重建的唯一输入是事件日志⇒ 删掉的行在 `rebuild()` 之后回来，
+而那次重建的每一个计数都"正常"：`batches_incomplete=0`、`snapshot_rows_not_in_log=0`。也就是说没有一个读数会告诉读的人"你刚恢复出来的数据比删之前多"。
 ## 这一组判据守什么
-
 1. 删除留下 `op="delete"` 事件，带被删的整行（审计需要：否则事后只能看到"少了一行"，
-   查不出少的是什么）；
+查不出少的是什么）；
 2. 重建重放删除 ⇒ 那一行不复活，且 `deletes_replayed` 把它数出来；
 3. 同一事务里 upsert/delete 混用 ⇒ 按调用顺序折叠（upsert 后 delete ⇒ 没了；反之 ⇒ 在）；
 4. `tool` 层那条路（`table.delete`）也走事件（否则产品路径上 R-57 照旧）；
 5. 认不出的 `op` 进 `unknown_ops`（不给"日志里有读不懂的东西"留静默）；
 6. 没有删除事件的日志 ⇒ `deletes_replayed=0`、`unknown_ops=[]`（不许误报）。
-
 ## S1r 并表（`SCHEMA_VERSION=2`）之后的改动
-
-本文件守的是存储层判据（删除事件 / 重放 / 顺序折叠），而被删的那一行只是
-标本。并表把 `concepts` 表真删（概念行住进 `statements`）⇒ 标本换成
-`statements` 的一行（`kind="stmt"` / 主键 `stmt_id`），断言一个字都没松：
-事件里依旧必须带被删的整行（这里改判 `label` 与 `origin`，与原先判 `name`
-同一条不变量 —— 事件里留下的是"被删的那一行长什么样"）。
+本文件守的是存储层判据（删除事件 / 重放 / 顺序折叠），而被删的那一行只是标本。并表把 `concepts` 表真删（概念行住进 `statements`）⇒
+标本换成`statements` 的一行（`kind="stmt"` / 主键 `stmt_id`），断言一个字都没松：事件里依旧必须带被删的整行（这里改判 `label` 与 `origin`，与原先判 `name`同一条不变量
+—— 事件里留下的是"被删的那一行长什么样"）。
 """
 from __future__ import annotations
 

@@ -19,22 +19,13 @@ from .run import _Run
 
 def _give_up_note(row: Mapping[str, Any], *, max_attempts: int) -> str:
     """到达重试上限时的结论：必须分清「真抽过、失败 N 次」与「从未真抽」。
-
     ## 为什么这不是措辞问题（`D-2` 的第四档，2026-10-02 主控裁定）
-
-    `mine_attempts` 只在 `_claim` 里累加，而「这台机器没有任何够格的抽取器」
-    （`R-56` 的拒抽，`last_mine_error == no_llm_extractor`）走的是同一条认领路径
-    ⇒ 到上限时那句原本统一写下的「超过最大抽取尝试次数」把「一次都没做」写成了
-    「做过并反复失败」。这正是本项目对第三态的全部纪律所禁止的折叠
-    （"没做" != "做了没成"；`draft/28` 的 `#3`）。
-
-    计数语义本身（让领取计数区分这两档）是设计级残余（已登记 `draft/58`），
-    本函数只负责如实说：到上限的是排队次数，不是抽取次数。
-
-    判据在 `tests/test_d2_lease_alignment.py`：
-    - 没有抽取器的那一行 ⇒ 说明里不许出现"超过最大抽取尝试次数"，且必须点出
-      "没有可用的抽取器 / 从未真抽"；
-    - 真抽过 3 次失败的那一行 ⇒ 仍是"真抽过失败"那一档（原话与 `上一次错误` 都保留）。
+    `mine_attempts` 只在 `_claim` 里累加，而「这台机器没有任何够格的抽取器」（`R-56` 的拒抽，
+    `last_mine_error == no_llm_extractor`）走的是同一条认领路径⇒ 到上限时那句原本统一写下的「超过最大抽取尝试次数」把「一次都没做」写成了
+    「做过并反复失败」。这正是本项目对第三态的全部纪律所禁止的折叠（"没做" != "做了没成"；`draft/28` 的 `#3`）。
+    计数语义本身（让领取计数区分这两档）是设计级残余（已登记 `draft/58`），本函数只负责如实说：到上限的是排队次数，不是抽取次数。
+    判据在 `tests/test_d2_lease_alignment.py`：- 没有抽取器的那一行 ⇒ 说明里不许出现"超过最大抽取尝试次数"，且必须点出"没有可用的抽取
+    器 / 从未真抽"；- 真抽过 3 次失败的那一行 ⇒ 仍是"真抽过失败"那一档（原话与 `上一次错误` 都保留）。
     """
     last = str(row.get("last_mine_error") or "").strip()
     if last == NO_EXTRACTOR_ERROR:
@@ -150,21 +141,14 @@ class _Core:
         return tx.rows("relations")
     def _claim(self) -> BClaimOutcome:
         """在锁内领一条未处理文献：置 `claimed_by` / `lease_until` / `mine_attempts+=1`。
-
-        返回 :class:`BClaimOutcome` 而不是 `dict | None` —— 理由见那个类的 docstring：
-        "队列空了" / "全被别人持着" / "全被放弃" 必须能被区分，`skipped_reason` 逐个命名
-        （``no_unprocessed_literature`` / ``pending_literature_all_leased`` /
-        ``no_claimable_literature``）。
-
-        顺序即优先级：先判租约、再判 attempts。一条正被别人跑着的文献不该由我们来
-        "放弃"（各有各的 `mine_attempts` 计数），否则会把别人手上的活单方面判死。
-
-        `R3-⑩` 的计数语义：`mine_attempts` 记的是「真抽次数」（真正调用抽取器的次数），
-        领取本身不计。于是它读起来是"抽取质量"而不是"排队长度"，而"从未真抽"那一档
-        （本机没有够格的抽取器 ⇒ `run_once` 直接拒抽）在数据面上就是
-        `mine_attempts == 0` + `last_mine_error == no_llm_extractor` —— 不再需要靠
-        `_give_up_note` 的文字去分辨。旧行里的这个数记的是"领取次数"（改前的口径），
-        比真抽次数大，是上界而不是等值。
+        返回 :class:`BClaimOutcome` 而不是 `dict | None` —— 理由见那个类的 docstring："队列空了" / "全被别人持着" / "
+        全被放弃" 必须能被区分，`skipped_reason` 逐个命名（``no_unprocessed_literature`` / 
+        ``pending_literature_all_leased`` /``no_claimable_literature``）。
+        顺序即优先级：先判租约、再判 attempts。一条正被别人跑着的文献不该由我们来"放弃"（各有各的 `mine_attempts` 计数），否则会把别人手上的活单方面判死。
+        `R3-⑩` 的计数语义：`mine_attempts` 记的是「真抽次数」（真正调用抽取器的次数），领取本身不计。于是它读起来是"抽取质量"而不是"排队长度"，而"从未真
+        抽"那一档（本机没有够格的抽取器 ⇒ `run_once` 直接拒抽）在数据面上就是`mine_attempts == 0` + 
+        `last_mine_error == no_llm_extractor` —— 不再需要靠`_give_up_note` 的文字去分辨。旧行里的这个数记的是"领取次数"（改
+        前的口径），比真抽次数大，是上界而不是等值。
         """
         with self.store.tx("literature", actor=self.actor, note="claim") as tx:
             rows = tx.rows("literature")
@@ -241,40 +225,26 @@ class _Core:
     @staticmethod
     def _is_fallback_extractor(extractor: Any) -> bool:
         """这个抽取器是不是框架的回退（`R-56`）？
-
         ## 判据是声明，不是类名（`draft/28` §172 的更正）
-
         第一版按类名判（`type(extractor).__name__ == "RuleExtractor"`）。它有两个问题：
-
-        1. 一个"改个名字的复制品"就能绕过它 —— 而绕过的人不需要撒谎，只需要重命名；
-        2. 更糟的是误伤：演示与单测明确点名要用离线基线（它们需要一个
-           确定性抽取器），却和"框架偷偷回退"被同一个判据一起挡住 ⇒
-           `demo` 与 `tests/test_demo_end_to_end.py` 当场变红（§172 的读数）。
-
-        现在读类属性 `is_framework_fallback`：
-        `llm.RuleExtractor` 声明 `True`（它就是回退）；`llm.OfflineFixtureExtractor`
-        声明 `False`（同一个实现，但调用方点名要它）。没有这个属性的第三方抽取器
-        一律按"调用方自己给的"处理（`getattr(..., False)`）。
-
+        1. 一个"改个名字的复制品"就能绕过它 —— 而绕过的人不需要撒谎，只需要重命名； 2. 更糟的是误伤：演示与单测明确点名要用离线基线（它们需要一个确定性抽取器），却和"
+        框架偷偷回退"被同一个判据一起挡住 ⇒`demo` 与 `tests/test_demo_end_to_end.py` 当场变红（§172 的读数）。
+        现在读类属性 `is_framework_fallback`：`llm.RuleExtractor` 声明 `True`（它就是回退）；
+        `llm.OfflineFixtureExtractor`声明 `False`（同一个实现，但调用方点名要它）。没有这个属性的第三方抽取器一律按"调用方自己给的"处理（`getattr(..., False)`）。
         判据仍然不 import `llm`：不去拖 LLM 那一层的依赖进 B 的 import 图。
         """
         return bool(getattr(extractor, "is_framework_fallback", False))
     def _extraction_meta(self, lit: dict) -> dict:
         """构造传给抽取器的元数据。
-
-        为什么要塞 `seed_concepts`：规则抽取器（以及多数 LLM 提示词）判断
-        "这句话还提到了哪些概念"时，需要一个"已知概念"的参照集合。最自然的参照集合
-        就是概念表当前的内容 —— 因为 B 的目标恰恰是把新文献接到已有概念网络上。
-        不传它，定义句就只会产出一个概念名，关系因 `len(concept_ids) < 2` 被全部丢弃，
+        
+        为什么要塞 `seed_concepts`：规则抽取器（以及多数 LLM 提示词）判断"这句话还提到了哪些概念"时，需要一个"已知概念"的参照集合。最自然的参照集合就是概念
+        表当前的内容 —— 因为 B 的目标恰恰是把新文献接到已有概念网络上。不传它，定义句就只会产出一个概念名，关系因 `len(concept_ids) < 2` 被全部丢弃，
         表现为"抽取器什么都抽不到"，而真正的原因在调用方没给上下文。
-
-        种子是提示而非权威：这里允许读无锁快照，因为种子只影响召回率，
-        不影响正确性（概念的唯一性仍由提交事务内的锁保证）。
-
-        但"读不到概念表"是另一回事，必须显式传给抽取器（`seed_concepts_error`）：
-        读不到 ⇒ 种子退化成"只有配置里那几个" ⇒ 定义句只产出一个概念名 ⇒
-        所有关系因 `len(concept_ids) < 2` 被丢弃，而症状是"文献处理完了、
-        却一条关系都没新增"，没有任何报错。静默失败比崩溃更危险，所以这里不吞。
+        
+        种子是提示而非权威：这里允许读无锁快照，因为种子只影响召回率，不影响正确性（概念的唯一性仍由提交事务内的锁保证）。
+        
+        但"读不到概念表"是另一回事，必须显式传给抽取器（`seed_concepts_error`）：读不到 ⇒ 种子退化成"只有配置里那几个" ⇒ 定义句只产出一个概念名 ⇒所
+        有关系因 `len(concept_ids) < 2` 被丢弃，而症状是"文献处理完了、却一条关系都没新增"，没有任何报错。静默失败比崩溃更危险，所以这里不吞。
         """
         meta = {
             "title": lit.get("title"),
@@ -352,18 +322,15 @@ class _Core:
         tx.upsert("reprocess_requests", row, note="reprocess_rejected")
     def _claim_reprocess(self) -> tuple[dict | None, list[dict]]:
         """认领一条 pending 的重抽取请求（与 literature 同样的租约模式）。
-
+        
         准入的四条判据在这里一次做完（顺序即优先级）：
-
-        1. 尝试次数 —— 超限就放弃（标 rejected，而不是永远挂着）；
-        2. 目标非空 —— 无目标的重抽取会退化成全量重抽（I4 明写的幂等陷阱）；
-        3. 目标存在 —— 关系可能已被删除、或已被 I5 合并（此时候选应转到 survivor）；
-        4. 配额（`interactions.admit_reprocess_request`）—— 同一关系最多被受理
-           `DEFAULTS["max_reprocess_per_relation"]` 次，被拒的不计入。
-
-        为什么在"认领"这一步做完而不是在收尾时做：被拒的请求根本不该进入重活阶段
-        （读全文、重新抽取可能几十秒）。四条判据用的都是同一个事务里读到的行，
-        因此不存在"A 看到还有额度、B 看到没有了"的窗口。
+        
+        1. 尝试次数 —— 超限就放弃（标 rejected，而不是永远挂着）； 2. 目标非空 —— 无目标的重抽取会退化成全量重抽（I4 明写的幂等陷阱）； 3. 目标存在
+        —— 关系可能已被删除、或已被 I5 合并（此时候选应转到 survivor）； 4. 配额（`interactions.admit_reprocess_request`）
+        —— 同一关系最多被受理`DEFAULTS["max_reprocess_per_relation"]` 次，被拒的不计入。
+        
+        为什么在"认领"这一步做完而不是在收尾时做：被拒的请求根本不该进入重活阶段（读全文、重新抽取可能几十秒）。四条判据用的都是同一个事务里读到的行，因此不存在"A 看到还有额度、
+        B 看到没有了"的窗口。
         """
         rejected: list[dict] = []
         with self.store.tx("reprocess_requests", "relations", actor=self.actor, note="reprocess_claim") as tx:
@@ -501,19 +468,16 @@ class _Core:
 
     def _ocr_doc(self, got: Mapping[str, Any]) -> Any:
         """把 `ocr.run` 的逐页文本包成与 `extract_text` 同型的文档对象。
-
-        为什么要包成 `DocumentText` 而不是自造一个：下游（`_candidate_passages` /
-        `text_at` / 引文回验）读的是 `pages` 与 `text_at` 这一对契约，同型才不会让
-        "OCR 来的文本"在下游变成另一种东西。
-
-        页号按 OCR 自己报的 `page`（1-based）落位，不按列表下标：`ocr.run` 有
-        `max_pages` 截断与逐页失败，下标当页号会把"第 5 页的内容"写成第 1 页 ——
-        那是逐字引文回验里最难查的一种错（页码错、字面全对）。
-
-        `source_kind` 仍记 `"pdf"`：来源确实是 PDF（只是文本来自栅格化后识别）。
-        `DocumentText` 的字段注释把取值定死在 `pdf | txt | md | html`，而那个文件在
-        禁改区里 —— 自造第五个取值会悄悄改掉一个受控词表，所以 OCR 这件事记在
-        `ocr_readings` 里，不塞进 `source_kind`。
+        
+        为什么要包成 `DocumentText` 而不是自造一个：下游（`_candidate_passages` /`text_at` / 引文回验）读的是 `pages` 与
+        `text_at` 这一对契约，同型才不会让"OCR 来的文本"在下游变成另一种东西。
+        
+        页号按 OCR 自己报的 `page`（1-based）落位，不按列表下标：`ocr.run` 有`max_pages` 截断与逐页失败，下标当页号会把"第 5 页的内容"
+        写成第 1 页 ——那是逐字引文回验里最难查的一种错（页码错、字面全对）。
+        
+        `source_kind` 仍记 `"pdf"`：来源确实是 PDF（只是文本来自栅格化后识别）。`DocumentText` 的字段注释把取值定死在 
+        `pdf | txt | md | html`，而那个文件在禁改区里 —— 自造第五个取值会悄悄改掉一个受控词表，所以 OCR 这件事记在`ocr_readings` 里，
+        不塞进 `source_kind`。
         """
         from ..extract import DocumentText
 
@@ -1040,19 +1004,13 @@ class AgentB(_RunOnce, _ReprocessOnce, _RunReprocess, _DecideStructuralDuplicate
 
 def _selftest() -> int:
     """`python -m agentflow.agent_b` 的自检：跑通主路径并断言关键不变量。
-
     ## 为什么这个函数必须存在（它修的是一个静默空成功）
-
-    `scripts/release_check.py` 第 2 项会逐个 `python -m agentflow.agent_<role>` 并看退出码。
-    在本次修复之前，`agent_b` 没有 `__main__` 块，于是那条命令输出 0 行、退出码 0
-    —— 旧判据会把它记成"自检通过"，而它其实什么都没检查。这正是本项目最忌讳的形态：
-    "没做"被读成"通过"（`DEVELOPMENT.md` §10-D5 / 附录 C 第 4 条；
-    `release_check.item_selftests` 现在专门用 `has_selftest` 把这种情况报成 `unknown`）。
-
-    自检只覆盖离线、确定性的路径：概念复用与别名合并、引文回验失败的降级
-    （suspect 而不是丢弃）、`processed` 的语义（抽取失败不置）、I6 闸门的三态计数、
-    结构重复的保守否决、以及取文献侧的三态（队列空 / 全被别人占着 / 全被放弃）。
-
+    `scripts/release_check.py` 第 2 项会逐个 `python -m agentflow.agent_<role>` 并看退出码。在本次修复之前，
+    `agent_b` 没有 `__main__` 块，于是那条命令输出 0 行、退出码 0—— 旧判据会把它记成"自检通过"，而它其实什么都没检查。这正是本项目最忌讳的形态：
+    "没做"被读成"通过"（`DEVELOPMENT.md` §10-D5 / 附录 C 第 4 条；`release_check.item_selftests` 现在专门用 
+    `has_selftest` 把这种情况报成 `unknown`）。
+    自检只覆盖离线、确定性的路径：概念复用与别名合并、引文回验失败的降级（suspect 而不是丢弃）、`processed` 的语义（抽取失败不置）、I6 闸门的三态计数、结
+    构重复的保守否决、以及取文献侧的三态（队列空 / 全被别人占着 / 全被放弃）。
     退出码：`0` = 全部通过；`1` = 有失败项。
     """
     import shutil

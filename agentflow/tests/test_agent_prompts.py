@@ -80,11 +80,11 @@ def _partner_bullets(text: str) -> set[str]:
 
 
 def _partner_bullet_line(lines: list[str], role: str) -> str:
-    """某个伙伴的条目行（**描述那一行**），不是接线态那一栏。
+    """某个伙伴的条目行（描述那一行），不是接线态那一栏。
 
     2026-10-16：原先靠行里含 `可调用动作` 辨认 —— 那条口径撤掉之后，伙伴行只剩
     `- <角色>：<职责>；它交付：…`。而接线态那一栏也是 `- <角色>：<状态>`（同样以
-    `- 角色：` 开头）⇒ 用"**；它交付**"这个只在描述行里出现的分段来区分。
+    `- 角色：` 开头）⇒ 用"；它交付"这个只在描述行里出现的分段来区分。
     """
     hits = [
         line for line in lines
@@ -107,17 +107,14 @@ def test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded(
         registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
     """判据（`draft/37` §89）：这台机器的证明工具链读数要进提示词，且它必须现算。
 
-    真机读数（T1 第 3 趟）：`E.check_formal` 被派 8 次，6 次撞在 `import Mathlib`
-    报 `unknown package 'Mathlib'` 上 —— 框架早就知道本机没装 Mathlib
-    （`toolchain.mathlib_state()` 是 §82 为这一轴做的读数），却从没写进模型看得见的地方；
-    而 E 的提示词里那句"要 Mathlib 就显式传 imports"在这台机器上是一句误导。
+    真机读数（T1 第 3 趟）：`E.check_formal` 被派 8 次，6 次撞在 `import Mathlib` 报
+    `unknown package 'Mathlib'` 上 —— 框架早就知道本机没装（`toolchain.mathlib_state()` 是 §82
+    为这一轴做的读数），却从没写进模型看得见的地方；而 E 的提示词里那句"要 Mathlib 就显式传
+    imports"在这台机器上是一句误导。
 
-    判据分两半，缺一不可：
-      ① 每个角色的提示词里都有这一段，且没传读数时它说"没有读到读数"
-         （不许静默缺席 —— 那会让"我不知道"看起来像"本来就没有"）；
-      ② 传了读数时它逐字出现 —— 且把探针换成两个不同的替身，正文跟着变
-         （证明这一行是投影，不是写死的一句话）。
-    """
+    判据分两半：① 每个角色的提示词里都有这一段，且没传读数时说"没有读到读数"（不许静默缺席 ——
+    否则"我不知道"看起来像"本来就没有"）；② 传了读数时它逐字出现，且把探针换成两个替身正文跟着变
+    （证明这一行是投影，不是写死的一句话）。"""
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         assert "证明工具链" in text, f"{role} 的提示词里没有工具链那一段"
@@ -187,19 +184,15 @@ def test_the_toolchain_line_says_to_pass_mathlib_when_the_probe_says_it_works(
 ):
     """判据：Mathlib 可用时，那一段必须说"显式传 `['Mathlib']`"，而不是叫你去写自足文件。
 
-    真机读数（2026-10-05 T1 第 16 趟）：这一段在 Mathlib 可用时仍然写死
-    "`check_formal` 可达的写法是不 import Mathlib 的自足文件" —— 它与上面一行的现算读数
-    直接打架，而模型信了它：`experiments` 里 8 次 formal 全是
-    `imports=（默认：不注入任何库）`、全部 `compile_error`（检查器原话
-    `failed to synthesize instance`），一条 proof 行都没落成。
-    负控：读数说没装时，"自足文件"那句必须还在 —— 那一支的处置本来就该是它。
+    真机读数（2026-10-05 T1 第 16 趟）：这一段在 Mathlib 可用时仍写死"`check_formal` 可达的写法是
+    不 import Mathlib 的自足文件"，与现算读数直接打架，而模型信了它：`experiments` 里 8 次 formal
+    全是 `imports=（默认：不注入任何库）`、全部 `compile_error`（检查器原话
+    `failed to synthesize instance`），一条 proof 行都没落成。负控：读数说没装时，"自足文件"那句
+    必须还在 —— 那一支的处置本来就该是它。
 
-    2026-10-11（E 的迁移批）这一轴拆成两段：事实（`toolchain_facts_text`，
-    全角色）与怎么写（`toolchain_formal_text`，持有 `verify.check_formal` 的角色）。
-    这条判据因此同时钉住"拆干净了"：事实段里不再出现写法口径
-    （否则九个不写 Lean 的角色照样读到它 ⇒ 拆了个寂寞），
-    而口径段里按读数给路（三档都测）。
-    """
+    2026-10-11（E 的迁移批）这一轴拆成两段：事实（`toolchain_facts_text`，全角色）与怎么写
+    （`toolchain_formal_text`，持有 `verify.check_formal` 的角色）。这条判据因此同时钉住"拆干净了"：
+    事实段里不再出现写法口径（否则九个不写 Lean 的角色照样读到它 ⇒ 拆了个寂寞），口径段里按读数给路。"""
     from agentflow import agent_prompts as AP2
     from agentflow import toolchain as TC
 
@@ -287,22 +280,16 @@ def test_the_parent_limits_block_goes_to_whoever_can_summon(registry: ToolRegist
 def test_the_parent_limits_are_computed_from_the_policy():
     """数字必须从 `Policy` 现算，一个都不许写死（业主口径 C：从代码现算）。
 
-    正控：换一个把四类上限都改掉的 `Policy` ⇒ 渲染出来的那一句跟着换；
-    负控：**缺省值一个字都不该出现在改过的那一段里** ——
-    写死的数字在"被覆盖过的 run"里就是一句谎话（`cli.py` 就传过 `wall_clock_sec`）。
-    另外钉住两处口径：主控那一档来自 `FANOUT_LIMIT_BY_ROLE`（**100**，同时把工人档
-    **25** 写出来做对照），而 `wall_clock_sec=None` 那一支必须写成"这一次不限"
-    （不是"限 0"，也不是不写 —— 业主裁定 B 的另一面：墙钟不缩短，
-    但"没设"与"设为 0"必须分得开）。
+    正控：换一个把四类上限都改掉的 `Policy` ⇒ 渲染出来的那一句跟着换；负控：缺省值一个字都不该
+    出现在改过的那一段里 —— 写死的数字在"被覆盖过的 run"里就是谎话（`cli.py` 就传过 `wall_clock_sec`）。
+    另钉两处口径：主控那一档来自 `FANOUT_LIMIT_BY_ROLE`（100，同时把工人档 25 写出来做对照），而
+    `wall_clock_sec=None` 那一支必须写成"这一次不限"（不是"限 0"，也不是不写 —— 业主裁定 B 的另一面：
+    墙钟不缩短，但"没设"与"设为 0"必须分得开）。
 
-    ⚠️ **2026-10-15 改（承 `draft/123` 裁定 C4/C5）**：缺省值整体抬高了
-    （`max_depth` 5→12、`max_fanout` 5→25、`max_concurrency` 4→16、
-    `max_tasks_per_run` 200→5000、`wall_clock_sec` 900→14400、M 档 20→100），
-    而这条判据里的**字面量没有跟着改** ⇒ 它红了。改法刻意**把新旧两套缺省值都放进负控**：
-    这条判据的职责是"默认值不许被写死在渲染里"，所以**凡是当期缺省值都不许出现在
-    被覆盖过的那一段里** —— 只列旧值会让它在下一次抬阈值时再一次变成谎言。
-    （同族教训：`test_refusal_family_numbers` 那份手写 code 清单做"反真空"是自相矛盾的。）
-    """
+    2026-10-15 改（承 `draft/123` 裁定 C4/C5）：缺省值整体抬高（`max_depth` 5→12、`max_fanout` 5→25、
+    `max_concurrency` 4→16、`max_tasks_per_run` 200→5000、`wall_clock_sec` 900→14400、M 档 20→100），
+    而这条判据里的字面量没有跟着改 ⇒ 它红了。改法刻意把新旧两套缺省值都放进负控：职责是"默认值
+    不许被写死在渲染里"，所以凡是当期缺省值都不许出现在被覆盖过的那一段里 —— 只列旧值会在下一次抬阈值时再变成谎言。（同族教训：`test_refusal_family_numbers` 那份手写 code 清单做"反真空"自相矛盾。）"""
     from agentflow import policy as POL
 
     odd = POL.Policy(max_depth=9, max_fanout=7, max_concurrency=3,
@@ -310,7 +297,7 @@ def test_the_parent_limits_are_computed_from_the_policy():
     text = AP.parent_limits_text(odd, "E")
     for want in ("7 个", "9", "3 个", "11 个", "这一次**不限**"):
         assert want in text, f"改过 Policy 之后这一段里没有 {want!r}：{text}"
-    # 负控：旧缺省值（2026-10-15 之前）与**当期**缺省值都不许出现。
+    # 负控：旧缺省值（2026-10-15 之前）与当期缺省值都不许出现。
     stale_defaults = ("最多 5 个", "全局同时运行 4 个", "总数 200 个", "墙钟：900 秒",
                       "最多 25 个", "全局同时运行 16 个", "总数 5000 个", "墙钟：14400 秒")
     for stale in stale_defaults:
@@ -329,21 +316,16 @@ def test_the_parent_limits_are_computed_from_the_policy():
 def test_the_role_that_writes_the_acceptance_table_knows_every_controlled_kind():
     """广告面判据（D35）：写表的人必须拿到受控词表的逐字清单。
 
-    真机读数（T2 第 7 趟 `projects/p6i-research-from-zero`）：M 的验收表 P1 用了
-    `manuscript_edited`，而那个从零工作区没有只读基线 `source/` ⇒ 那一行的读数算不出来
-    ⇒ 整张表判没查成、`can_close=false`（七格里唯一红的那格其实是 `anchor`，而
-    `acceptance` 连读数都没留下）。词表不在 brief 里时，写表就是猜；猜错一个名字废掉的是
-    整张表，不是那一行 —— 所以这一条按"词表里每一档都要在 brief 里出现"来守。
+    真机读数（T2 第 7 趟 `projects/p6i-research-from-zero`）：M 的验收表 P1 用了 `manuscript_edited`，
+    而那个从零工作区没有只读基线 `source/` ⇒ 那一行读数算不出来 ⇒ 整张表判没查成、`can_close=false`
+    （七格里唯一红的那格其实是 `anchor`，而 `acceptance` 连读数都没留下）。词表不在 brief 里时写表
+    就是猜；猜错一个名字废掉的是整张表，不是那一行 —— 所以按"词表里每一档都要在 brief 里出现"守。
 
-    ## CC-09（list 半，2026-10-06）：从"名字出现过"升级为"清单 == 词表"
-
-    旧的判据只查"每一档的名字在 brief 里出现过"——它看不穿两件事：① 那一串平铺清单
-    漏了某一档（而那一档恰好在别处被提到 ⇒ 名字查得到 ⇒ 判据照样绿）；
-    ② 清单里混进了词表外的名字（提示词教人照清单挑 ⇒ 挑出一个框架不认识的档）。
-    实测：清单 30 项而词表 31 档（漏 `c_analysis_runs`）。
-    现在这一条把那份清单解析出来，与词表双向对拍（漏一档、多一档都红），
-    并带两条反真空（清单解析不出 20 项以上 ⇒ 红；清单里有重复项 ⇒ 红）。
-    """
+    CC-09（list 半，2026-10-06）：从"名字出现过"升级为"清单 == 词表"。旧判据看不穿两件事：
+    ① 平铺清单漏了某一档（而那档恰好在别处被提到 ⇒ 名字查得到 ⇒ 照样绿）；② 清单混进词表外的名字
+    （提示词教人照清单挑 ⇒ 挑出框架不认识的档）。实测清单 30 项而词表 31 档（漏 `c_analysis_runs`）。
+    现在解析那份清单与词表双向对拍（漏一档、多一档都红），并带两条反真空（解析不出 20 项以上 ⇒ 红；
+    清单里有重复项 ⇒ 红）。"""
     from agentflow import agent_prompts as AP
     from agentflow import closing as CL
 
@@ -379,7 +361,7 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     assert "F.create_plan" in text and "attack_plans" in text, text
     assert "plan_progress_rows" in text, text
     # 2026-10-13 业主口径：M 的第一步是"看工作区、认输入、据此排工作流"
-    # 2026-10-13 业主当场更正：提示词里**不要写业主的话**，这一条就一句"先扫一眼工作区"
+    # 2026-10-13 业主当场更正：提示词里不要写业主的话，这一条就一句"先扫一眼工作区"
     assert "开工先扫一眼工作区" in text, text
     # 这一条只钉"别把业主那几句话抄进提示词"（别的条目里的历史括注不动）
     for quoted in ("不要刻意认为丢进来的都是论文", "其他内容不会是结构化的",
@@ -398,7 +380,7 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
 
     # 2026-10-13 业主口径：两阶段分工（研究阶段不写论文）+ review 是一类任务且要落产物
     assert "两阶段的分工" in text and "所有角色都可能有任务" in text, text
-    # 业主 2026-10-13 更正：审校**不是一种模式**，而是一条以 B / H / V 为中心的协作链 ——
+    # 业主 2026-10-13 更正：审校不是一种模式，而是一条以 B / H / V 为中心的协作链 ——
     # 这一条钉的正是"M 有没有按这条链排期"，不是"表里有没有一行 review"。
     assert "以 B / H / V 为中心的协作链" in text, text
     assert "不是一种模式" not in text, "提示词里还抄着业主原话"
@@ -461,17 +443,15 @@ def test_the_research_brief_asks_for_literature_citations_and_three_search_readi
 def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: ToolRegistry):
     """判据（`draft/37` §92）：提示词必须说清"形式化核验分两步"，且第二步是落库。
 
-    真机读数（第 6 趟）：主控照提示词派了 6 次 `E.check_formal`，其中两条真的
-    `verified=true`（`exactness_core` / `fekete_core`），而 `experiments` 表是 0 行 ——
-    因为 `check_formal` 只给裁决、不落台账。于是它随后的 10 条 proof 级断言一条都建不进
-    `documents`（FC-22 要 `exp:` 引用），`documents` 与 H 那两跳全落空；
-    而旧提示词写的是「`check_formal` 给出的 `verified=True` 是证据升级（台账里那条断言的
-    证据跟着变）」——那句话与实现不符。
+    真机读数（第 6 趟）：主控照提示词派了 6 次 `E.check_formal`，其中两条真的 `verified=true`
+    （`exactness_core` / `fekete_core`），而 `experiments` 表是 0 行 —— 因为 `check_formal` 只给裁决、
+    不落台账。于是随后 10 条 proof 级断言一条都建不进 `documents`（FC-22 要 `exp:` 引用），
+    `documents` 与 H 那两跳全落空；旧提示词写的「`check_formal` 给出的 `verified=True` 是证据升级
+    （台账里那条断言的证据跟着变）」与实现不符。
 
-    判据的形状：①提示词里必须有 `run_experiment` 与 `method='formal'` 这条落库路径；
-    ②必须写明 `check_formal` 不落台账；③负控（事实那一侧）：`check_formal` 跑完之后
-    `experiments` 行数不变 —— 万一有人把它改成会写行，这条判据会红，提醒改提示词。
-    """
+    判据的形状：① 提示词里必须有 `run_experiment` 与 `method='formal'` 这条落库路径；② 必须写明
+    `check_formal` 不落台账；③ 负控（事实那一侧）：`check_formal` 跑完之后 `experiments` 行数不变 ——
+    万一有人把它改成会写行，这条判据会红，提醒改提示词。"""
     paper_pack_roles = [r for r in ALL_ROLES if r in AP.PAPER_PACK_ROLES]
     assert paper_pack_roles, "没有角色拿到论文包那一段 ⇒ 这条判据失去对象"
     for role in paper_pack_roles:
@@ -517,20 +497,16 @@ def test_e_is_told_to_write_the_lean_source_into_the_workspace(registry: ToolReg
 
 def test_every_action_in_the_partner_table_says_what_it_does(
         registry: ToolRegistry):
-    """判据（**2026-10-16 翻面**，业主口径）：伙伴表里**不许出现动作名与参数提示**。
+    """判据（2026-10-16 翻面，业主口径）：伙伴表里不许出现动作名与参数提示。
 
-    原话逐字：「M 只是个派活的，对所有角色都一样，只根据它们的能力范围派活，
-    **不指定能力**。M 能看到的只是各角色描述，**看不到具体的工具箱与动作**，
-    但可在角色描述中暗示它各角色能干什么。」
+    原话逐字：「M 只是个派活的，对所有角色都一样，只根据它们的能力范围派活，不指定能力。
+    M 能看到的只是各角色描述，看不到具体的工具箱与动作，但可在角色描述中暗示它各角色能干什么。」
 
-    ## 它取代了什么（`draft/39` §6.45 的 D56，2026-10-16 退场）
-
-    D56 当年加的是"每个动作带一句摘要"，理由是"无参动作只有一个名字 ⇒ M 从没派过
-    `A.run_once`，F 的请求 `r-0004` 整趟没人做"。那条判据的**前提是"M 要点名动作"**；
-    2026-10-16 的口径把那个前提整个撤掉了（M 只派活、动作由被派者自己选）⇒
-    "让 M 看懂每个动作"不再需要，**需要的是让 M 别去碰动作**。
-    ⇒ 判据方向翻转：**动作名、参数提示、`可调用动作` 字样，一条都不许有。**
-    """
+    它取代了什么（`draft/39` §6.45 的 D56，2026-10-16 退场）：D56 当年加的是"每个动作带一句摘要"，
+    理由是"无参动作只有一个名字 ⇒ M 从没派过 `A.run_once`，F 的请求 `r-0004` 整趟没人做"。那条判据
+    的前提是"M 要点名动作"；2026-10-16 的口径把那个前提整个撤掉（M 只派活、动作由被派者自己选）
+    ⇒ "让 M 看懂每个动作"不再需要，需要的是让 M 别去碰动作 ⇒ 判据方向翻转：动作名、参数提示、
+    `可调用动作` 字样，一条都不许有。"""
     import re
 
     from agentflow import agent_prompts as AP
@@ -756,19 +732,15 @@ _DOTTED_TOKEN = re.compile(r"`([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)`")
 def test_the_prompt_never_names_a_tool_that_does_not_exist(registry: ToolRegistry):
     """广告面不说谎：提示词里每个"像工具名"的 token 要么是真工具，要么登记过理由。
 
-    真机代价（`draft/105` 的 B1/B2 + `draft/41`）：`unknown_action` 52 次，
-    其中一部分就是提示词指名了一个不存在的工具 —— 从前写着"要发给某一个同伴看
-    就用 `manuscripts.write`"（全仓没有这件工具：`manuscript_tools.py` 的表格逐字写着
-    "它不是工具：走循环形状 handoff"）与"传话走留言（`message.send`）"（也没有这个名字，
-    `message` 是形状）。批 Q1 把两处改成形状名，并加了这一条判据 ——
-    它是那两条的通用形式：与其为每个名字写一条短语探针，不如扫一遍十格提示词。
+    真机代价（`draft/105` 的 B1/B2 + `draft/41`）：`unknown_action` 52 次，其中一部分就是提示词指名
+    了一个不存在的工具 —— 从前写着"要发给某一个同伴看就用 `manuscripts.write`"（全仓没有这件工具：
+    `manuscript_tools.py` 的表格逐字写着"它不是工具：走循环形状 handoff"）与"传话走留言
+    （`message.send`）"（也没有这个名字，`message` 是形状）。批 Q1 把两处改成形状名，并加了这一条
+    判据 —— 它是那两条的通用形式：与其为每个名字写一条短语探针，不如扫一遍十格提示词。
 
-    两侧都钉：
-      - 正控：十格提示词里抽得到 token（抽不到 = 扫描面坏了，不是"没有问题"）；
-      - 对拍：每个 token 要么在这一岗的工具面里，要么在 `_NON_TOOL_DOTTED_TOKENS`
-        里逐条登记过理由；
-      - 反真空：登记表里每一条都真的还在提示词里（豁免表腐烂时红）。
-    """
+    两侧都钉：正控：十格提示词里抽得到 token（抽不到 = 扫描面坏了，不是"没有问题"）；对拍：每个
+    token 要么在这一岗的工具面里，要么在 `_NON_TOOL_DOTTED_TOKENS` 里逐条登记过理由；反真空：
+    登记表里每一条都真的还在提示词里（豁免表腐烂时红）。"""
     seen: dict[str, list[str]] = {}
     for role in ALL_ROLES:
         text = _prompt(role, registry)
@@ -1076,19 +1048,16 @@ def test_no_prompt_claims_a_step_limit_and_the_actionless_role_is_told_why(
         registry: ToolRegistry):
     """两件同族的"读起来像另一个人写的"（`draft/106` §4 第 3 块 + `draft/105` A21 的第三处）。
 
-    ① 没有哪一格说"步数有限"：框架不设步数闸（`max_steps` 只是报告阈值，
-    12-K 裁定与 `agent_loop` 的注释都这么写），协议里那句"步数不是收工理由"才是真的。
-    `specs/m.py` 曾有两条政策拿"步数有限"当前提（"步数有限：现状侦察最多做一次…"与
-    "步数预算有限，留出最后几步…"）—— 而同一份提示词的协议里写着"框架不设步数闸"
-    ⇒ 一格里两句互相矛盾（批 R1 改掉；这是 A21 的第三处与它的同族，前两处由 p65 修）。
-    这条判据钉两头：旧前提不许留（含"步数预算有限"这种同一个意思的换词写法 ——
-    只判那四个字会漏掉它）、真话必须在。
+    ① 没有哪一格说"步数有限"：框架不设步数闸（`max_steps` 只是报告阈值，12-K 裁定与 `agent_loop` 的
+    注释都这么写），协议里那句"步数不是收工理由"才是真的。`specs/m.py` 曾有两条政策拿"步数有限"当前提
+    （"步数有限：现状侦察最多做一次…"与"步数预算有限，留出最后几步…"）—— 而同一份提示词的协议里写着
+    "框架不设步数闸" ⇒ 一格里两句互相矛盾（批 R1 改掉）。这条判据钉两头：旧前提不许留（含"步数预算
+    有限"这种换词写法 —— 只判那四个字会漏掉它）、真话必须在。
 
-    ② 0 个对外动作的角色（现算：`actions_lines(role)` 空 ⇒ 实测只有 M）要读到
-    "这是设计，不是缺口"与它的三张面（对用户 / 对同伴 / 对框架）——
-    原来那一句"你没有对外可被调用的动作（你的产出由框架直接读）"读起来像缺省值，
-    像在说"我什么都做不了"（`draft/103` §5.2 第 2 条点过；`draft/106` §4 的 `M_DELIVERABLE`）。
-    """
+    ② 0 个对外动作的角色（现算：`actions_lines(role)` 空 ⇒ 实测只有 M）要读到"这是设计，不是缺口"
+    与它的三张面（对用户 / 对同伴 / 对框架）—— 原来那句"你没有对外可被调用的动作（你的产出由框架
+    直接读）"读起来像缺省值、像在说"我什么都做不了"（`draft/103` §5.2 第 2 条点过；`draft/106` §4 的
+    `M_DELIVERABLE`）。"""
     #: "步数…有限"的几种写法都算命中：中间那几格是"预算"这类修饰语。
     claims = re.compile(r"步数[^。；，、\n]{0,4}有限")
     for role in ALL_ROLES:
@@ -1123,21 +1092,16 @@ def _hint_text(line: str) -> str:
 def test_every_tool_on_the_face_is_listed_with_its_required_parameter_keys(registry: ToolRegistry):
     """工具面上的每件工具都必须在提示词里，且参数提示列出必填键、且只列必填。
 
-    口径变更（2026-10-07，R6 `draft/63 §2-①②`）：参数提示从"必填 + 可选枚举"改成只列必填。
-    改前那条断言的依据是一次真机事故 —— 模型按只列必填的提示词多传了一个键、拿到
-    `invalid_params`（本文件这条判据的 docstring 原来逐字记着它）。那次事故现在的接住方是：
+    口径变更（2026-10-07，R6 `draft/63 §2-①②`）：参数提示从"必填 + 可选枚举"改成只列必填。改前那条
+    断言的依据是一次真机事故 —— 模型按只列必填的提示词多传了一个键、拿到 `invalid_params`（本文件
+    这条判据的 docstring 原来逐字记着它）。那次事故现在的接住方是：可用键是封闭集合、写错时框架把
+    完整参数表回给你（LOOP 规则①里各写一次）；兜底本体 `agent_loop._param_table`（`tool` / `summon` /
+    `summon_many` 三条形状全覆盖），判据在 `tests/test_param_table_on_refusal.py`；本族口径的守卫在
+    `tests/test_prompt_param_hints.py`（可选枚举回到提示词里必红）。
 
-    * 可用键是封闭集合、写错时框架把完整参数表回给你 —— LOOP 规则①里各写一次；
-    * 兜底本体 `agent_loop._param_table`（`tool` / `summon` / `summon_many` 三条形状全覆盖），
-      判据在 `tests/test_param_table_on_refusal.py`；
-    * 本族口径的守卫在 `tests/test_prompt_param_hints.py`（可选枚举回到提示词里必红）。
-
-    为什么要换：那串枚举是十角色合计 10,458 字符，而每一次运行的每一步都要重付这笔钱；
-    兜底那张表只在写错时付一次。
-
-    若这条破了：模型会去调一个不存在的工具名（unknown_tool），或者连必填键都不知道 ——
-    后者连兜底都救不了（被拒之前它根本凑不出一次合法调用）。
-    """
+    为什么要换：那串枚举是十角色合计 10,458 字符，而每一次运行的每一步都要重付这笔钱；兜底那张表
+    只在写错时付一次。若这条破了：模型会去调一个不存在的工具名，或者连必填键都不知道 —— 后者连
+    兜底都救不了（被拒之前它根本凑不出一次合法调用）。"""
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         lines = text.splitlines()
@@ -1167,18 +1131,14 @@ def test_every_tool_on_the_face_is_listed_with_its_required_parameter_keys(regis
 def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
     """伙伴条目 = "看得见的那些"；"唤不起的"必须逐条标出来。
 
-    若这条破了：模型会去唤起一个边表不允许的伙伴（换回 forbidden_edge），
-    或者根本不知道某条已经放开的边存在；不可召唤的角色还会误以为自己能被召唤。
+    若这条破了：模型会去唤起一个边表不允许的伙伴（换回 forbidden_edge），或者根本不知道某条已经
+    放开的边存在；不可召唤的角色还会误以为自己能被召唤。
 
-    ## 2026-10-10 口径更新（看两层，不再是一层）
-
-    改前这里是"伙伴条目恰等于出边"（一层）。裁定第 4 条之后主控的出边只剩六个，
-    而 2026-10-09 的裁定又要求「M 要看到所有人的简介」—— 两句话同时成立 ⇒
-    主控的条目是全体，其中唤不起的三个带「你唤不起它」标记。
-    所以这条判据改成：① 条目恰等于 `visible_partners`（不多不少）；
-    ② 看得见但唤不起的那些必须有标记（否则"看得见"会被读成"派得动"）；
-    ③ 反真空：真的存在这样的角色（否则 ② 是空转）。
-    """
+    2026-10-10 口径更新（看两层，不再是一层）：改前是"伙伴条目恰等于出边"（一层）。裁定第 4 条之后
+    主控的出边只剩六个，而 2026-10-09 的裁定又要求「M 要看到所有人的简介」—— 两句话同时成立 ⇒
+    主控的条目是全体，其中唤不起的三个带「你唤不起它」标记。所以这条判据改成：① 条目恰等于
+    `visible_partners`（不多不少）；② 看得见但唤不起的那些必须有标记（否则"看得见"会被读成"派得动"）；
+    ③ 反真空：真的存在这样的角色（否则 ② 是空转）。"""
     gaps: dict[str, set[str]] = {}
     for role in ALL_ROLES:
         text = _prompt(role, registry)
@@ -1203,8 +1163,8 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
     # 反真空：这一批就是因为主控有"看得见、唤不起"的角色才加的。
     # 2026-10-13：业主「补 M 到 B」之后，主控唤不起的从 {B,F,V} 收成 {F,V}；
     # 2026-10-18：业主「给 M 开 V 出边」之后只剩 {F}；
-    # **2026-10-20：业主撤掉 `M→V`（「派 V 只有 F 与 B 两个入口」）⇒ 回到 {F, V}** ——
-    # 而这一条**必须非空**，否则下面那句"看得见但唤不起"的判据整体空转
+    # 2026-10-20：业主撤掉 `M→V`（「派 V 只有 F 与 B 两个入口」）⇒ 回到 {F, V} ——
+    # 而这一条必须非空，否则下面那句"看得见但唤不起"的判据整体空转
     # （`gaps[M]` 为空时它一句都不验）。期望值跟着裁定走，判据强度不变。
     assert gaps["M"] == {"F", "V"}, gaps["M"]
     assert gaps["M"], "主控的『唤不起』集合空了 ⇒ 这一整条判据退化成空转"
@@ -1215,22 +1175,16 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
 def test_roles_that_can_summon_a_are_told_its_index_is_english(registry: ToolRegistry):
     """能唤起 A 的角色必须被明确告知：A 的检索面是英文文献库。
 
-    为什么值得一条判据：`providers.query_applicability` 对抽不出英文关键词的题面是
-    fail-closed（`query_not_applicable_cjk`）。模型不知道这件事就会拿中文题面去唤起，
-    拿回一个"这一问没发出去"的结果、却当成"没有这篇文献"（真机实测：`draft/28` §203
-    的中文 description 把 `precise` 的查询清零，而两层闸门都不拦它）。
-    这条判据同时钉住两半：有 A 这条边的角色要读到、没有这条边的角色不要读到
+    为什么值得一条判据：`providers.query_applicability` 对抽不出英文关键词的题面是 fail-closed
+    （`query_not_applicable_cjk`）。模型不知道就会拿中文题面去唤起，拿回一个"这一问没发出去"的结果、
+    却当成"没有这篇文献"（真机实测：`draft/28` §203 的中文 description 把 `precise` 的查询清零，
+    而两层闸门都不拦它）。这条判据同时钉住两半：有 A 这条边的角色要读到、没有这条边的角色不要读到
     （无差别地贴一句放之四海皆准的提示词，就是把提示词当噪音）。
 
-    探针钉的是"对唤起者说的那句"（`唤起 A 时注意`），不是"英文关键词"这个词：
-    2026-10-11 接线批 C1 之前它钉的是词，而 A 自己的第一段写死的正文
-    （`presets/roles/a/blocks/search_style.md`，段名 `A_SEARCH_STYLE`）里合法地
-    写着"`topic` 里要带英文关键词" —— 那是对 A 自己说的，与这句对唤起者说的不是同一句。
-    钉词的判据在那一刻变成假红（实测：`p68` 时 A 的 `partners_out` 里没有 A，
-    而提示词里有这个词 ⇒ 判据红）—— 而这条判据要守的性质是
-    "谁读到了这句提醒"，主体是收件人。（`draft/105` 已登记这一条形态：
-    探针钉词而不钉收件人时，任何一个角色自己谈到同一个概念都会把它钉红。）
-    """
+    探针钉的是"对唤起者说的那句"（`唤起 A 时注意`），不是"英文关键词"这个词：2026-10-11 接线批 C1
+    之前它钉的是词，而 A 自己的第一段写死的正文（`presets/roles/a/blocks/search_style.md`，段名
+    `A_SEARCH_STYLE`）里合法地写着"`topic` 里要带英文关键词" —— 那是对 A 自己说的，与这句对唤起者
+    说的不是同一句，钉词会变成假红（实测：`p68` 时 A 的 `partners_out` 里没有 A，而提示词里有这个词 ⇒ 判据红）。要守的性质是"谁读到了这句提醒"，主体是收件人（`draft/105` 已登记这一形态）。"""
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         can_summon_a = "A" in AP.partners_out(role)
@@ -1261,23 +1215,18 @@ def test_every_declared_action_is_listed_with_its_required_params(registry: Tool
 
 
 def test_availability_section_lists_states_and_marks_unwired_partners(registry: ToolRegistry):
-    """接线态**换了落点**（2026-10-21 第二批）：从 system 的 `PARTNER_AVAILABILITY`
+    """接线态换了落点（2026-10-21 第二批）：从 system 的 `PARTNER_AVAILABILITY`
     挪进开场那条 user 消息；system 里只剩一句静态指路语。
 
-    为什么挪：这一段逐字节跟着**伙伴配置**变 ⇒ 它是 system 里第 63% 处的断点
-    （M 岗实测 32,568 / 51,935），换个配置就砍掉 37% 的前缀。判据
+    为什么挪：这一段逐字节跟着伙伴配置变 ⇒ 它是 system 里第 63% 处的断点（M 岗实测 32,568 / 51,935），
+    换个配置就砍掉 37% 的前缀。判据
     `tests/test_cross_run_prefix_is_reused.py::test_two_partner_configs_render_the_same_system`
-    是它的端到端版本（十角色、两次渲染逐字节比对）；这一条守的是**同一个落点上的三件事**：
+    是它的端到端版本（十角色、两次渲染逐字节比对）；这一条守的是同一个落点上的三件事：
 
-    ① system 里**永远**有那一句指路语（不管给没给读数 —— 段的有无不许随配置变，
-       否则"有没有这一段"本身又成了一个随配置变的字节）；
-    ② 给了读数时，逐个伙伴的 `- X：状态` 与"没接线的那个会被拒"那句都在
-       **开场那条 user 消息**里（`agent_loop._opening_transcript`）；
-    ③ 伙伴行里**不再**夹带"（现在没接线：X）"这个逐配置动的标记 —— 它在 system 里。
-
-    三态照旧：`availability=None` 时 user 消息里必须写"（没有读数…）"，
-    **不许**把"没读到"与"全都接线了"折叠成同一句话。
-    """
+    ① system 里永远有那一句指路语（不管给没给读数 —— 段的有无不许随配置变）；② 给了读数时，逐个
+    伙伴的 `- X：状态` 与"没接线的那个会被拒"那句都在开场那条 user 消息里
+    （`agent_loop._opening_transcript`）；③ 伙伴行里不再夹带"（现在没接线：X）"这个逐配置动的标记。
+    三态照旧：`availability=None` 时 user 消息里必须写"（没有读数…）"，不许把"没读到"与"全都接线了"折叠成同一句话。"""
     availability = {
         "A": "no_provider",
         "B": "wired",
@@ -1298,7 +1247,7 @@ def test_availability_section_lists_states_and_marks_unwired_partners(registry: 
         text = _prompt(role, registry, availability=availability)
         audit = AP.prompt_audit(role, registry=registry, task=TASK, workspace_root=ROOT,
                                 availability=availability)
-        # ① system 里那一段**在**，但只是一句指路语（逐字节静态，见下一条判据）。
+        # ① system 里那一段在，但只是一句指路语（逐字节静态，见下一条判据）。
         assert "PARTNER_AVAILABILITY" in audit["sections"], audit["sections"]
         assert "见本次对话第一条消息的「现在的接线态」那一栏" in text, role
         # ③ 伙伴行里不再夹带逐配置动的标记。
@@ -1332,29 +1281,29 @@ def test_availability_section_lists_states_and_marks_unwired_partners(registry: 
 
 # ------------------------------------------------ 角色减负的反真空（2026-10-21 事务二）
 #
-# 这一批从 A / B / C / E / G / H 的 `policy` / `local_notes` 里删掉了几条**已有判据在守**
+# 这一批从 A / B / C / E / G / H 的 `policy` / `local_notes` 里删掉了几条已有判据在守
 # 的义务（逐条出处写在 `specs/*.py` 原处的 `判据：` 旁注里）。减负有一个射程：
-# **身份 / 边界 / 上报路径 / 交接规则 / 不硬凑 / 必填字段**一律不许碰 ——
+# 身份 / 边界 / 上报路径 / 交接规则 / 不硬凑 / 必填字段一律不许碰 ——
 # 那几类是安全与正确性，判据替不了它们（判据只能事后抓，抓不到"它根本不知道该向谁上报"
 # 这种形态：那时模型会把没做成的写成做成了，而没有任何门会响）。
 #
-# 所以减负必须配一条**反真空**：删完之后，每个角色的提示词里仍然读得到这四类锚点，
-# **逐角色**断言。只断言"某几个角色还在"就会给"顺手删过头"留一条缝。
+# 所以减负必须配一条反真空：删完之后，每个角色的提示词里仍然读得到这四类锚点，
+# 逐角色断言。只断言"某几个角色还在"就会给"顺手删过头"留一条缝。
 
-#: 四类锚点各自的读法（都是**逐字**锚，不是关键词模糊匹配）。
+#: 四类锚点各自的读法（都是逐字锚，不是关键词模糊匹配）。
 _ANCHOR_KINDS: dict[str, tuple[str, ...]] = {
     "身份": ("号角色，职责是：",),                      # `AGENT_IDENTITY`
     "上报": ("干不了 / 干不着就上报",),                 # `PARENT_STOP`（十个角色都有）
     "交接": ("交接手稿（交接工作前的标准动作",),         # `HANDOFF_PROTOCOL`
 }
-#: 「边界」不能只认抬头那一行：`brief_sections` 在 `boundary=()` 时**只**印抬头
+#: 「边界」不能只认抬头那一行：`brief_sections` 在 `boundary=()` 时只印抬头
 #: （实测：`'边界（这些是硬约束，越过它们做的事一律不算数）：\n'`）—— 只认抬头的话，
 #: 有人把边界条目整批删掉也判绿，那正是这条反真空要抓的形态。
 _BOUNDARY_HEADER = "边界（这些是硬约束"
 
 
 def _boundary_still_lists_a_clause(text: str) -> bool:
-    """边界那一段还在、且真的**列了条目**（抬头后面紧跟着 `- ` 那几行）。"""
+    """边界那一段还在、且真的列了条目（抬头后面紧跟着 `- ` 那几行）。"""
     lines = text.splitlines()
     head = next((i for i, line in enumerate(lines) if line.startswith(_BOUNDARY_HEADER)), None)
     if head is None:
@@ -1363,7 +1312,7 @@ def _boundary_still_lists_a_clause(text: str) -> bool:
 
 
 def _missing_anchors(text: str) -> list[str]:
-    """这段提示词里**缺**哪几类锚点（空 = 四类都在）。判据本体只这一处。"""
+    """这段提示词里缺哪几类锚点（空 = 四类都在）。判据本体只这一处。"""
     missing = [kind for kind, needles in _ANCHOR_KINDS.items()
                if not all(needle in text for needle in needles)]
     if not _boundary_still_lists_a_clause(text):
@@ -1374,9 +1323,9 @@ def _missing_anchors(text: str) -> list[str]:
 def test_every_role_still_carries_the_four_anchor_kinds(registry: ToolRegistry):
     """判据（减负的反真空）：十角色逐个都还读得到身份 / 边界 / 上报 / 交接。
 
-    四类各取一句**逐字**锚（见 `_ANCHOR_KINDS`）：身份与边界回答"我是谁、不许做什么"，
+    四类各取一句逐字锚（见 `_ANCHOR_KINDS`）：身份与边界回答"我是谁、不许做什么"，
     上报回答"做不了时找谁"，交接回答"怎么把活交出去"。减负删的是"已有判据在守"的
-    行为义务，这四类**没有**判据能替代 —— 删掉它们，模型不会报错，只会静默地少做。
+    行为义务，这四类没有判据能替代 —— 删掉它们，模型不会报错，只会静默地少做。
     """
     # 反真空（判据自己）：四类名一个不少（"边界"由 `_boundary_still_lists_a_clause` 单独判）。
     assert sorted(_ANCHOR_KINDS) == sorted(("上报", "交接", "身份")), sorted(_ANCHOR_KINDS)
@@ -1393,11 +1342,11 @@ def test_every_role_still_carries_the_four_anchor_kinds(registry: ToolRegistry):
 
 def test_deleting_a_safety_clause_makes_the_anchor_criterion_red(
         registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
-    """负控（减负的反真空）：把删除范围**扩大到安全条款** ⇒ 必红。
+    """负控（减负的反真空）：把删除范围扩大到安全条款 ⇒ 必红。
 
     两刀，各打在一条"判据替不了"的条款上：
-    ① 把某个角色的 `boundary` 清空（那是它的**边界**，`AgentBrief` 的六格之一）；
-    ② 把 `HANDOFF_PROTOCOL` 换成空串（那是**交接规则**，十格共享）。
+    ① 把某个角色的 `boundary` 清空（那是它的边界，`AgentBrief` 的六格之一）；
+    ② 把 `HANDOFF_PROTOCOL` 换成空串（那是交接规则，十格共享）。
     两刀都必须让 `_missing_anchors` 点名对应的那一类 —— 只报"少了点什么"不够，
     报不出是哪一类的话，读的人还得自己去比对三十万字的提示词。
     """
@@ -1414,7 +1363,7 @@ def test_deleting_a_safety_clause_makes_the_anchor_criterion_red(
     monkeypatch.undo()
 
     assert _missing_anchors(_prompt(victim, registry)) == []
-    # ② 交接：把那份协议换成一份**块数相同**（2 块，`_block_sections` 按空行切、
+    # ② 交接：把那份协议换成一份块数相同（2 块，`_block_sections` 按空行切、
     # 块数与 `_HANDOFF_BLOCK_NAMES` 不等会当场抛）但没有那句锚的正文 —— 于是
     # "交接手稿（交接工作前的标准动作" 不再出现，而提示词其余部分照常渲染。
     monkeypatch.setattr(AP, "HANDOFF_PROTOCOL",
@@ -1818,28 +1767,16 @@ def test_loop_protocol_shape_table_lists_every_shape_the_loop_accepts():
 def test_every_served_prompt_carries_the_whole_shape_table(registry: ToolRegistry):
     """那段形状表要真的进到每个角色的提示词里（常量里写对、却没接进提示词＝没改）。
 
-    负控在下面那条：把"少一种形状"的那种旧表喂进同一个读法，必须被认出来。
-
-    ## `R6` §2-⑥ 之后这一条按角色切（改过一次，逐字留痕）
-
-    改动前：循环协议是一个常量发给所有角色，所以"每个角色的提示词里都有同一段
-    形状表（八种一个不缺）"这句话成立。改动后：协议按角色渲染
-    （`agent_prompts.loop_protocol_for`）—— 主控那一版仍是 `LOOP_PROTOCOL` 本身，
-    其余九个角色那一版少掉三块只有 M 用得到的文本，其中 [c] 就是 `2b) summon_many`
-    那一段。于是成立的替换命题是：
-
-    - 每个角色的提示词里都有它那一版协议的整张形状表（逐字节等于
-      `loop_protocol_for(role)` 里那一段，切法与本文件其它地方同一套锚点）；
-    - `agent_loop.SHAPES` 里被它漏掉的形状恰好是 `summon_many`，且只有非 M 会漏。
-
-    这一个缺口不是静默放过：下面那半句把它逐字钉住（多缺一个/少缺一个都红），
-    而 `summon_many` 的形状骨架仍由 `agent_loop.JSON_TAIL` 在每一步发给所有人
-    （每一步的提示词都无条件追加它）—— 撤的只是"对 M 说的那一段说明"。
-
-    `R6` §2-⑥ 的作用域更正（2026-10-07，主控裁定）：会缺 `summon_many` 的不是
-    "所有非 M"，而是出边为空、一个伙伴都唤不动的角色（`_summon_capable_roles`
-    从 `capabilities.ALLOWED_EDGES` 现算；今天只有 C）。判据因此按那个集合算。
-    """
+    负控在下面那条：把"少一种形状"的旧表喂进同一个读法，必须被认出来。`R6` §2-⑥ 之后这一条按角色切：
+    改前协议是一个常量发给所有角色，"每个角色都有同一段形状表（八种一个不缺）"成立；改后按角色渲染
+    （`agent_prompts.loop_protocol_for`）—— 主控那一版仍是 `LOOP_PROTOCOL` 本身，其余九个少掉三块只有
+    M 用得到的文本，其中 [c] 就是 `2b) summon_many` 那一段。
+    于是成立的替换命题：每个角色的提示词里都有它那一版协议的整张形状表（逐字节等于
+    `loop_protocol_for(role)` 里那一段）；`agent_loop.SHAPES` 里被它漏掉的形状恰好是 `summon_many`，
+    且只有非 M 会漏。这个缺口不是静默放过：下面那半句逐字钉住（多缺一个/少缺一个都红），而
+    `summon_many` 的形状骨架仍由 `agent_loop.JSON_TAIL` 在每一步发给所有人（撤的只是"对 M 说的那一段
+    说明"）。`R6` §2-⑥ 的作用域更正（2026-10-07，主控裁定）：会缺它的不是"所有非 M"，而是出边为空、
+    一个伙伴都唤不动的角色（`_summon_capable_roles` 从 `capabilities.ALLOWED_EDGES` 现算；今天只有 C）。"""
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         seg = _shape_table(AP.loop_protocol_for(role))
@@ -2026,26 +1963,15 @@ def test_the_summon_many_block_reaches_every_role_that_can_summon(
         registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
     """[c] `2b)` 那一段：出边非空的角色拿到整段说明，出边为空的角色拿到残桩。
 
-    作用域是主控 2026-10-07 更正过的那一条（见上面那段注释）：不是"所有非 M"，
-    而是"一个伙伴都唤不动的角色"——今天只有 C（`ALLOWED_EDGES["C"]` 是空的）。
-    判据按真身现算（`capabilities.ALLOWED_EDGES`），不写死角色名。
+    作用域是主控 2026-10-07 更正过的那一条：不是"所有非 M"，而是"一个伙伴都唤不动的角色"——今天只有 C
+    （`ALLOWED_EDGES["C"]` 是空的）。判据按真身现算（`capabilities.ALLOWED_EDGES`），不写死角色名。
+    2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一条按原形态恢复（2026-10-19 那一版为 C→D
+    临时改用过合成角色；"出边为空"那一档又回到真实角色 C）。
 
-    2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一条按原形态恢复
-    （"出边为空"那一档又回到真实角色 C；2026-10-19 那一版为 C→D 临时改用过合成角色）。
-
-    这一档为什么留残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量
-    自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）。
-    整块删掉之后，这一档读到"八种"却只数得出 7 项 —— 描述与自身矛盾。残桩保住
-    表头为真、枚举仍是 8 项，而 565 字的用法说明不再进这一档的提示词。
-
-    反真空：至少有一个角色拿到整段（今天八个非 M 都有），且出边为空的那个角色
-    确实拿到的是残桩（不是整段、也不是什么都没有）。
-    反负控（四端，都走真的渲染路径）：
-      ① 恒真（谁拿的都是全量协议）⇒ "该没有的没有"那半必须红；
-      ② 恒假（[c] 换残桩那版发给所有人）⇒ "主控含整段"那半必须红；
-      ③ 旧作用域（把 [c] 当成 M 专段 —— 只有主控有）⇒ "该有的有"那半必须红；
-      ④ 整块删、不留残桩（作用域更正前那一版的形状）⇒ "出边为空的有残桩"那半必须红。
-    """
+    留残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）；整块删掉后这一档读到"八种"却只数得出 7 项 —— 描述与自身矛盾。残桩保住表头为真、枚举仍是 8 项，而 565 字的用法说明不再进这一档的提示词。
+    反真空：至少一个角色拿到整段（八个非 M），且出边为空的那个拿到的是残桩；反负控四端都走真渲染：
+    ① 恒真（谁拿的都是全量协议）⇒"该没有的没有"红；② 恒假（[c] 换残桩那版发给所有人）⇒"主控含整段"
+    红；③ 旧作用域（把 [c] 当成 M 专段）⇒"该有的有"红；④ 整块删、不留残桩 ⇒"出边为空的有残桩"红。"""
     m = _prompt(S.CONDUCTOR_ROLE, registry)
     assert _BLOCK_C in m, "反真空：主控那一版里没有 2b 整段 ⇒ 下面的断言证明不了任何事"
     capable, edgeless = _summon_capable_roles(), _edgeless_roles()
@@ -2169,12 +2095,12 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # ② 十格的前置提示词压缩（业主要求「稍微压一下，但必要的提示词不能删」）：只动
     #    `specs/*.py` 的 `policy`，needle 1008 条 + 十格具体字面量 2459 条 + `NO_LEAN_REPLACEMENTS`
     #    的 13 个左边逐条核过"改后仍在"（探针不进仓库）。
-    # ⚠️ 十格是**两批改动先后落地之后**现算的：上面那两批在同一时刻改同一批文件，
+    #  十格是两批改动先后落地之后现算的：上面那两批在同一时刻改同一批文件，
     #    这张表按最后一版树重算（`pytest -k test_the_prompt_version_moves` 的同一环境）。
     #    再改 `specs/*` 就必须连版本号一起动（这条判据两个方向都判）。
-    # ⚠️ `p168` 这一版只动 A / B / C / D / M 五格 ⇒ 这五行的值换了，另五行**逐字未动**
+    #  `p168` 这一版只动 A / B / C / D / M 五格 ⇒ 这五行的值换了，另五行逐字未动
     #    （E / F / G / H / V 与 `p167` 那一版相同 —— 这本身就是"改动作用域"的读数）。
-    # ⚠️ `p169` 十格全换值（理由逐条见上面那一段：A 的 boundary → 十格的伙伴表；
+    #  `p169` 十格全换值（理由逐条见上面那一段：A 的 boundary → 十格的伙伴表；
     #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
     #    C 的两句假话 → B / C / D / F / M 这五格）。
     "A": "5cf5bf89198c506203b4b389769199eedd2852003804a84af2c86e7612ae360c",

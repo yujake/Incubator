@@ -1,38 +1,21 @@
 """G 的工具：论文撰写。
-
 ## 这一层唯一的核心规矩
-
 没有引用的断言不允许进入稿件。
-
-这不是文风要求，而是本领域可信度的技术基础：数学断言的价值完全取决于
-"它来自哪里"。一旦允许无引用的断言，稿件就退化成一个听起来很合理的
-文本 —— 而"听起来合理"与"有证据"之间的差距，正是幻觉最容易藏身的地方。
-
-因此本模块把三条约束做成了可机械判定的检查（`scan_claim`），
-并由 `schema.Document.validate` 在写入时强制执行：
-
-1. `citations` 非空（FC-02）；
-2. `evidence_kind="cross_check"` 的断言必须自带 `disclaimer`
-   （"数值交叉验证，不构成证明"）—— 这句话由结构强制，不靠人记得写（FC-22）；
-3. 否定型断言必须给 `negation_kind`（FC-25，"未证明"≠"已证否"）。
-
+这不是文风要求，而是本领域可信度的技术基础：数学断言的价值完全取决于"它来自哪里"。一旦允许无引用的断言，稿件就退化成一个听起来很合理的文本 —— 而"听起来合理"与"有证
+据"之间的差距，正是幻觉最容易藏身的地方。
+因此本模块把三条约束做成了可机械判定的检查（`scan_claim`），并由 `schema.Document.validate` 在写入时强制执行：
+1. `citations` 非空（FC-02）； 2. `evidence_kind="cross_check"` 的断言必须自带 `disclaimer`（"数值交叉验
+证，不构成证明"）—— 这句话由结构强制，不靠人记得写（FC-22）； 3. 否定型断言必须给 `negation_kind`（FC-25，"未证明"≠"已证否"）。
 ## 本模块的入口
-
-| 函数 | 作用 | 关键纪律 |
-|---|---|---|
-| `scan_claim` | 一条断言的机械检查（纯函数） | 唯一判据；G 与 H 共用同一份 |
-| `compose_claim` | 构造一条合规断言 | `cross_check` 自动补 disclaimer；否定型未分类、无引用、过度声称 ⇒ 构造时抛 |
-| `build_document` | 落库 + 渲染 markdown | 先逐条 `scan_claim`、再核 citations 指向的对象真的存在（两张闸都过才写库） |
-| `register_dependency` | 登记外部依赖（FC-23 第一道闸） | `closed` 必须用真实数据核到已入库来源 |
-| `render_markdown` | 人可读渲染（FC-10 / FC-22 / FC-23 / FC-25 的呈现层） | 三分档计数、否定分类、依赖表都必须出现 |
-| `list_documents` | 只读列举 | 供 H / F / D 消费 |
-
+| 函数 | 作用 | 关键纪律 ||---|---|---|| `scan_claim` | 一条断言的机械检查（纯函数） | 唯一判据；G 与 H 共用同一份 || 
+`compose_claim` | 构造一条合规断言 | `cross_check` 自动补 disclaimer；否定型未分类、无引用、过度声称 ⇒ 构造时抛 || 
+`build_document` | 落库 + 渲染 markdown | 先逐条 `scan_claim`、再核 citations 指向的对象真的存在（两张闸都过才写库）
+|| `register_dependency` | 登记外部依赖（FC-23 第一道闸） | `closed` 必须用真实数据核到已入库来源 || 
+`render_markdown` | 人可读渲染（FC-10 / FC-22 / FC-23 / FC-25 的呈现层） | 三分档计数、否定分类、依赖表都必须出现
+|| `list_documents` | 只读列举 | 供 H / F / D 消费 |
 ## 为什么"在构造时就抛"比"写库时才抛"重要
-
-`schema.Document.validate` 已经拦得住无引用断言，但它的报错形如
-"claims[3] 没有 citations" —— 读者得自己回去数"第 3 条到底是哪句话"，
-而构造现场（手里正拿着那句话、那段引用）才是信息最全的地方。
-写库时的 schema 是最后一道闸，不是唯一一道。
+`schema.Document.validate` 已经拦得住无引用断言，但它的报错形如"claims[3] 没有 citations" —— 读者得自己回去数"第 3 
+条到底是哪句话"，而构造现场（手里正拿着那句话、那段引用）才是信息最全的地方。写库时的 schema 是最后一道闸，不是唯一一道。
 """
 
 from __future__ import annotations
@@ -86,20 +69,16 @@ def _disclaimer_for(evidence_kind: str) -> str:
 
 def wording_ceiling() -> tuple[str, ...]:
     """允许「定理 / 证明 / 必然」这类措辞的证据等级（唯一口径，两处消费者共用）。
-
-    业主 2026-10-12 的口径（逐字）：「比如写论文那一档原先卡每个定理都要到 proof 水平，
-    但没 Lean 显然做不到，但也要能写」。
-
+    
+    业主 2026-10-12 的口径（逐字）：「比如写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，但也要能写」。
+    
     两档：
-
-    - `proof` 永远在：检查器核过的证明，任何模式下都是最高一档；
-    - `proof_review` 只在 Lean 开关关掉时在：那一档说的是"一份逐行审阅过的证明
-      （`statements.proof_text` + V 签「成立」）"，是关掉 Lean 之后能达到的最高证据。
-      开关开着时它不在这一档里 —— 老套路不变：只有检查器说过的才算证明，
-      「逐行审阅过」仍然低于 `proof`，用了那些措辞照样判 `overclaim`。
-
-    开关读不出来（设置文件写坏）时按开着处理（保守方向）：那一边会误报，
-    而误报是可修的；反方向的漏报会让"数值/审阅"悄悄冒充"证明"。
+    
+    - `proof` 永远在：检查器核过的证明，任何模式下都是最高一档；- `proof_review` 只在 Lean 开关关掉时在：那一档说的是"一份逐行审阅过的证明（`statements.proof_text`
+    + V 签「成立」）"，是关掉 Lean 之后能达到的最高证据。开关开着时它不在这一档里 —— 老套路不变：只有检查器说过的才算证明，「逐行审阅过」仍然低于 `proof`，
+    用了那些措辞照样判 `overclaim`。
+    
+    开关读不出来（设置文件写坏）时按开着处理（保守方向）：那一边会误报，而误报是可修的；反方向的漏报会让"数值/审阅"悄悄冒充"证明"。
     """
     kinds = ["proof"]
     try:
@@ -213,19 +192,16 @@ def resolve_out_path(
     root: Path, out_path: Any, doc_id: str, default_subdir: str
 ) -> tuple[str, Path]:
     """把 out_path 解析成工作区内的绝对路径，并返回 (相对路径, 绝对路径)。
-
-    越界一律拒绝（而不是"写到外面再警告"）：工作区边界是沙箱契约的一部分，
-    允许一次越界写就等于承认这个边界可以被绕开。用 `resolve()` 之后再
+    
+    越界一律拒绝（而不是"写到外面再警告"）：工作区边界是沙箱契约的一部分，允许一次越界写就等于承认这个边界可以被绕开。用 `resolve()` 之后再
     `relative_to()` 判断，而不是靠字符串 `..` 检查 —— 后者会被符号链接绕过。
-
+    
     ## 为什么它是公开的（`draft/37` §118）
-
-    `D.write_report` 原先自己写 `Path(out_path)` —— 相对路径于是按「进程当前目录」
-    解析。T2 第 1 趟真机：主控传 `out_path="out\\review\\D-analysis.md"`（工作区内的
-    合法落点），文件却写到了 `agentflow/out/review/D-analysis.md`（工作区根相对）
-    （进程 cwd），「整个交付物静默离开工作区」，而那一趟记的是 `outcome=ok`。
-    同一条规则不能有两份实现（那正是"两份判据必然漂移"），所以它在这里公开，
-    由角色方法直接复用。
+    
+    `D.write_report` 原先自己写 `Path(out_path)` —— 相对路径于是按「进程当前目录」解析。T2 第 1 趟真机：主控传 
+    `out_path="out\\review\\D-analysis.md"`（工作区内的合法落点），文件却写到了 
+    `agentflow/out/review/D-analysis.md`（工作区根相对）（进程 cwd），「整个交付物静默离开工作区」，而那一趟记的是 
+    `outcome=ok`。同一条规则不能有两份实现（那正是"两份判据必然漂移"），所以它在这里公开，由角色方法直接复用。
     """
     raw = str(out_path) if out_path else f"{default_subdir}/{doc_id}.md"
     p = Path(raw)
@@ -246,26 +222,16 @@ def resolve_out_path(
 
 def scan_claim(claim: Mapping[str, Any]) -> dict:
     """对一条断言做可判定的机械检查（转发 `claimanatomy.validate_claim`）。
-
     返回 ``{"ok": bool, "findings": [{kind, level, message, evidence}], "checked": True, ...}``。
-
-    `findings` 里的 `kind` 与 :data:`agentflow.schema.FINDING_KINDS` 同词表 ——
-    这样 H 的审校发现与 G 的自检发现是同一批类型，可以互相印证，
-    而不会出现"G 自查用一套名字、H 审查用另一套"的分裂。
-
+    `findings` 里的 `kind` 与 :data:`agentflow.schema.FINDING_KINDS` 同词表 ——这样 H 的审校发现与 G 的自检发现是同一批类
+    型，可以互相印证，而不会出现"G 自查用一套名字、H 审查用另一套"的分裂。
     ## 判据只有一份（本函数现在只是适配层）
-
-    字段级与交叉轴的判据全部在 :mod:`agentflow.claimanatomy`（`CLAIM_FIELDS`
-    是一张可被文档生成与 CLI 读取的声明表）。本函数只做两件事：
-    ① 把 `ClaimIssue.code` 翻成 `FINDING_KINDS` 的受控词（下游只认后者）；
-    ② 把结论压成 `ok / error_count / warning_count` 的旧形状。
-    它不再自己写任何一条检查 —— 这里曾经有过第二份实现，
-    而"两份判据必然漂移，漂移的后果是 G 认为合规、H 认为通过，且没有任何报错"
-    （FC-03 / INVENTORY 4.5#10）。
-
-    三态纪律：`unknown_status_axis`（判定"判不了"）不计入 `error_count`，
-    但会原样出现在 `findings` 里，并由 `decided` 位单独传出 ——
-    "字段缺失"与"字段非法"与"检查器没跑成"必须能分开。
+    字段级与交叉轴的判据全部在 :mod:`agentflow.claimanatomy`（`CLAIM_FIELDS`是一张可被文档生成与 CLI 读取的声明表）。本函数只做两件事：① 
+    把 `ClaimIssue.code` 翻成 `FINDING_KINDS` 的受控词（下游只认后者）；② 把结论压成 
+    `ok / error_count / warning_count` 的旧形状。它不再自己写任何一条检查 —— 这里曾经有过第二份实现，而"两份判据必然漂移，漂移的后果是 G 认为合规、
+    H 认为通过，且没有任何报错"（FC-03 / INVENTORY 4.5#10）。
+    三态纪律：`unknown_status_axis`（判定"判不了"）不计入 `error_count`，但会原样出现在 `findings` 里，并由 `decided` 位单独传出
+    ——"字段缺失"与"字段非法"与"检查器没跑成"必须能分开。
     """
     spec = CA.validate_claim(claim)
     findings: list[dict] = []
@@ -371,18 +337,15 @@ _CITATION_TABLES: dict[str, str] = dict(S.CITATION_PREFIXES)
 
 def citation_prefix_examples() -> str:
     """引用前缀的用法示例串（`rel:<id>` / `lit:<id>` / …），按声明面的次序生成。
-
-    唯一来源是 `_CITATION_TABLES`（= `schema.CITATION_PREFIXES`）：这一串出现在
-    两处面向模型与读者的声明面上 —— 工具 `doc.build_document` 的 JSON schema 里
-    `claims[].citations` 那一格的 `description`，以及渲染出来的稿件"0. 阅读须知"
-    的第 1 条。两处各写一份的后果实测过（题 19，2026-10-07 所有者裁定 A）：
-
-    - 工具面那一格只举了 `lit:` / `stmt:` / `doc:`；
-    - 渲染说明只举了 `rel:` / `lit:` / `exp:`。
-
-    一个模型照着其中任一处去写，都看不到另外几个前缀是合法的（`stmt:` 缺席时
-    "引我们自己的命题"这条写法根本不可见），而没有任何读数会响。所以两处都改成
-    从声明面派生：这里按 `_CITATION_TABLES` 的次序逐个生成，改口径只有一处可改。
+    
+    唯一来源是 `_CITATION_TABLES`（= `schema.CITATION_PREFIXES`）：这一串出现在两处面向模型与读者的声明面上 —— 工具 
+    `doc.build_document` 的 JSON schema 里`claims[].citations` 那一格的 `description`，以及渲染出来的稿件
+    "0. 阅读须知"的第 1 条。两处各写一份的后果实测过（题 19，2026-10-07 所有者裁定 A）：
+    
+    - 工具面那一格只举了 `lit:` / `stmt:` / `doc:`；- 渲染说明只举了 `rel:` / `lit:` / `exp:`。
+    
+    一个模型照着其中任一处去写，都看不到另外几个前缀是合法的（`stmt:` 缺席时"引我们自己的命题"这条写法根本不可见），而没有任何读数会响。所以两处都改成从声明面派生：这
+    里按 `_CITATION_TABLES` 的次序逐个生成，改口径只有一处可改。
     """
     return " / ".join(f"`{prefix}:<id>`" for prefix in _CITATION_TABLES)
 
@@ -447,26 +410,14 @@ def citation_ref_parts(citation: Any) -> tuple[str, str]:
 
 def _doc_citation_problem(raw: str, rows_of: Callable[[str], Iterable[Mapping[str, Any]]]) -> str:
     """`doc:` 内部引用的判定（空串 = 通过）。
-
     两种形状（业主 2026-10-09 的裁定，见 `signatures.doc_ref_verdict` 的 docstring）：
-
-    - `doc:<稿件>#<断言>@<内容哈希前 16 位>` —— 引某条断言（三段式，`@哈希` 可省）；
-    - `doc:<稿件>` / `doc:<稿件>@<内容哈希前 16 位>` —— 引我方那份手稿的整体成果。
-      此前这一档被判"形状不对"⇒"用手稿里的成果"只剩"在正文里从零重搭"一条路。
-
-    唯一实现在 `agentflow.signatures.doc_ref_verdict`（题 5/5a 把写入期与审计期
-    原先各一份的三段逻辑合成了一份：两份各判一次时，漂了没有任何地方会报）。
-
-    本函数只做两件事：把"查稿件"的能力递给那一份实现，再把判定码翻成一句人话。
-    它不再自己解析、不再自己算哈希 —— 那样就等于又长出一份三段逻辑。
-    钉了哈希就要对上：改稿之后旧引用必须失效（只看"稿件还在"会让一份改过的
-    稿件继续被旧哈希引着，而那正是 `draft/30` §T4-A 设计这几段要防的事）；
-    而两段式没钉版本是合法的一档（读数里 `pinned=False` 看得见）。
-
-    写入期只判这几段，刻意不判"目标稿件必须 `accepted`"（`draft/68` 题 12 选 A：
-    两侧保持不对称）—— 写稿阶段要能引一份还在审的稿子（否则"边写边审"会被挡住）；
-    那一条是审计期独有的内容政策（`draft/29` §8.5 第 1 条）。两侧共用（
-    `signatures.doc_ref_verdict`），调用方档不在那里 —— 见那个函数的 docstring。
+    - `doc:<稿件>#<断言>@<内容哈希前 16 位>` —— 引某条断言（三段式，`@哈希` 可省）；- `doc:<稿件>` / `doc:<稿件>@<内容哈希前 16 位>` —— 引我
+    方那份手稿的整体成果。此前这一档被判"形状不对"⇒"用手稿里的成果"只剩"在正文里从零重搭"一条路。
+    唯一实现在 `agentflow.signatures.doc_ref_verdict`（题 5/5a 把写入期与审计期原先各一份的三段逻辑合成了一份：两份各判一次时，漂了没有任何地方会报）。
+    本函数只做两件事：把"查稿件"的能力递给那一份实现，再把判定码翻成一句人话。它不再自己解析、不再自己算哈希 —— 那样就等于又长出一份三段逻辑。钉了哈希就要对上：改稿之后旧引用必须失效（只看"稿件
+    还在"会让一份改过的稿件继续被旧哈希引着，而那正是 `draft/30` §T4-A 设计这几段要防的事）；而两段式没钉版本是合法的一档（读数里 `pinned=False` 看得见）。
+    写入期只判这几段，刻意不判"目标稿件必须 `accepted`"（`draft/68` 题 12 选 A：两侧保持不对称）—— 写稿阶段要能引一份还在审的稿子（否则"边写边审"会被挡住）；那一条是
+    审计期独有的内容政策（`draft/29` §8.5 第 1 条）。两侧共用（`signatures.doc_ref_verdict`），调用方档不在那里 —— 见那个函数的 docstring。
     """
     from .. import signatures as SIG  # 惰性：与 `:1390` 同一处依赖，不新增模块级边
 
@@ -498,40 +449,16 @@ def check_citations(
     rows_of: Any, claims: Sequence[Mapping[str, Any]], *,
     citing_kind: str = "") -> dict:
     """逐条核对 citations 指向的对象真的存在。
-
-    三态（这是本函数的核心，不是细节）：
-
-    ==============================  ============================================
-    调用方式                          返回
-    ==============================  ============================================
-    `rows_of` 是读表函数             `checked=True`，`missing` 可能为空（=都查过了）
-    `rows_of is None`（没有 store）  `checked=False`，不得读成"引用都存在"
-    ==============================  ============================================
-
-    `rows_of(table) -> 行序列`：给的是读表能力而不是 store 实例，
-    这样它既能在事务内用 `tx.rows` 跑（拿到一致的快照），也能被单测直接喂假表。
-
-    ## `citing_kind`：两阶段口径（业主 2026-10-09 逐字）
-
-    > 「明确：研究手稿阶段可以互相引用，正式论文阶段只能引用真实论文，
-    > 正式论文中手稿内容不可直接引用，必须重建」
-
-    - 研究手稿阶段（`note` / `survey` / `reproduction_report` 等）：
-      可以互相引用我方手稿 —— `doc:<稿件>`（引整体成果）与三段式
-      `doc:<稿件>#<断言>@<哈希>` 都合法（后者更精确、能钉版本）；
-    - 正式论文（`kind="paper"`）：只许引真实论文（`lit:`）。`doc:` 一律拒，
-      理由写明"手稿里的内容要进论文必须在正文里重建"—— 重建出来的东西再以
-      `stmt:` / `exp:` / `rel:` 落台账、被论文引用（`closing.PAPER_LEDGER_PREFIXES`
-      要的正是这三种）。
-    - 没给 `citing_kind`（历史调用点/单测）⇒ 只判形状与存在性（老行为逐字不变）。
-
-    返回 ``{"checked", "reason", "missing": [{claim_id, citation, kind, ref, why}],
-    "resolved": n, "doc_whole": [...], "doc_unpinned": [...]}``。
-
-    后两格是读数（两阶段口径之后才有意义）：`doc_whole` = 引"我方那份手稿的
-    整体成果"的那些引用（两段式）；`doc_unpinned` = 其中没钉版本的那些 ——
-    没钉版本是合法的，但"改稿之后旧引用不会失效"这件事必须看得见，
-    不许与"钉过了"混作一谈。
+    ==============================  ============================================调用方式                          返回
+    ==============================  ============================================`rows_of` 是读表函数             `checked=True`，
+    `missing` 可能为空（=都查过了）`rows_of is None`（没有 store）  `checked=False`，不得读成"引用都存在
+    "==============================  ============================================`rows_of(table) -> 行序列`：给的是读表能力而不是 store 实例，这
+    样它既能在事务内用 `tx.rows` 跑（拿到一致的快照），也能被单测直接喂假表。`citing_kind`：两阶段口径（业主 2026-10-09 逐字）- 研究手稿阶段（`note` / `survey` / 
+    `reproduction_report` 等）：可以互相引用我方手稿 —— `doc:<稿件>`（引整体成果）与三段式`doc:<稿件>#<断言>@<哈希>` 都合法（后者更精确、能钉版本）；- 正式论文（`kind="paper"`）：只许
+    引真实论文（`lit:`）。`doc:` 一律拒，理由写明"手稿里的内容要进论文必须在正文里重建"—— 重建出来的东西再以`stmt:` / `exp:` / `rel:` 落台账、被论文引用（`closing.PAPER_LEDGER_PREFIXES`
+    要的正是这三种）。- 没给 `citing_kind`（历史调用点/单测）⇒ 只判形状与存在性（老行为逐字不变）。返回 ``{"checked", "reason", "missing": [{claim_id, citation, kind, ref, why}],"resolved": n, "doc_whole": [...], "doc_unpinned": [...]}``。
+    后两格是读数（两阶段口径之后才有意义）：`doc_whole` = 引"我方那份手稿的整体成果"的那些引用（两段式）；`doc_unpinned` = 其中没钉版本的那些 ——没钉版本是合法的，但"改稿之后旧引用不会失效"这件事必须看得见，不许
+    与"钉过了"混作一谈。
     """
     if rows_of is None:
         return {
@@ -668,28 +595,16 @@ def citation_coverage(
     library_root: str | Path | None = None,
 ) -> dict:
     """这份稿子引了哪几张表的凭据、库里还有多少可以引的东西 —— 只报数，不拦。
-
     ## 为什么要有这一格（T2 第 24 趟 `t2s` 的真机形态）
-
-    那一趟：检索 2 条全 `ok`、17 篇文献全部消化、`relations` 73 条、C 跑了 3 次、
-    2 条实验 —— 而三份稿件的 9 条断言全引 `exp:0001`：`lit:` 0 条、`rel:` 0 条。
-    收工门那一档（`closing` 的 `document_literature_citations`）读得出这个 0，
-    但它只在 M 把那一行写进验收表时才进报告（这一趟 M 没写），而 G/M 在写稿那一刻
-    看不到任何数字：`build_document` 的返回值里只有落库后的那一行。
-
+    那一趟：检索 2 条全 `ok`、17 篇文献全部消化、`relations` 73 条、C 跑了 3 次、 2 条实验 —— 而三份稿件的 9 条断言全引 `exp:0001`：`lit:` 0 条、
+    `rel:` 0 条。收工门那一档（`closing` 的 `document_literature_citations`）读得出这个 0，但它只在 M 把那一行写进验收表时才进报告（这一趟 M 没写），而
+    G/M 在写稿那一刻看不到任何数字：`build_document` 的返回值里只有落库后的那一行。
     ## 它与 `check_citations` 是两件事，不许合并
-
-    - `check_citations` 判——引用指向的对象存不存在，fail-closed，拦下一笔写入；
-    - 本函数只报数——引了什么、库里有什么、缺哪一类。它不拦任何一笔写入，
-      也不改 `data`（那一行还要落库/算内容哈希）：读数走工具结果的 `meta`。
-
+    - `check_citations` 判——引用指向的对象存不存在，fail-closed，拦下一笔写入；- 本函数只报数——引了什么、库里有什么、缺哪一类。它不拦任何一笔写入，也不改 `data`（那一行
+    还要落库/算内容哈希）：读数走工具结果的 `meta`。
     ## 三态（与全项目同一条纪律）
-
-    库读不到 ⇒ `readable=False` 且 `available` 全是 `-1`（"没查成"），
-    不许读成"库里没有可引的东西"；`gaps` 那几句只在 `readable=True` 时才可能非空。
-
-    返回 ``{"own", "counts", "available", "readable", "gaps", "suggest_lit",
-    "suggest_rel", "note"}``。
+    库读不到 ⇒ `readable=False` 且 `available` 全是 `-1`（"没查成"），不许读成"库里没有可引的东西"；`gaps` 那几句只在 `readable=True` 时才可能非空。
+    返回 ``{"own", "counts", "available", "readable", "gaps", "suggest_lit","suggest_rel", "note"}``。
     """
     own: dict[str, list[str]] = {k: [] for k in ("lit", "rel", "exp", "stmt", "doc")}
     for i, c in enumerate(claims, 1):
@@ -893,25 +808,16 @@ def _check_citations_needs_kind() -> str:
 
 def classify_proof_location(loc: object, known_ids: Iterable[Any]) -> tuple[str, str]:
     """`proof_location` 的形态分类：整个仓库只有这一份实现（`R2R2-R1`/`R2R2-R2`）。
-
-    为什么必须只有一份：写入期（本模块的 :func:`check_proofs`）与事后门
-    （`gates.gate_g3`）对同一个字符串必须给出同一个分类。旧版各写一套正则、
-    彼此没有交叉断言，实测同一份数据 18 档里有 9 档分歧 —— 其中最难看的一档是
-    "断言自己连 `claim_id` 都没有，`proof_location="claim-1:3"`"：
-    写入期报"指向一个不存在的断言"，事后门却判成 `file:line` 并 pass。
-
+    为什么必须只有一份：写入期（本模块的 :func:`check_proofs`）与事后门（`gates.gate_g3`）对同一个字符串必须给出同一个分类。旧版各写一套正则、
+    彼此没有交叉断言，实测同一份数据 18 档里有 9 档分歧 —— 其中最难看的一档是"断言自己连 `claim_id` 都没有，
+    `proof_location="claim-1:3"`"：写入期报"指向一个不存在的断言"，事后门却判成 `file:line` 并 pass。
     返回 `(kind, base)`：
-
-    - `("self_ref", base)`：`loc` 是本文档里真实存在的 `claim_id`（裸写、或
-      `claim_id:行号`）；`base` 是那个 `claim_id`。
-    - `("cross_ref", base)`：形态是 `名字:数字`（没有点号后缀 ⇒ 不是文件名），
-      但 `base` 不在 `known_ids` 里。两个调用方对此处置不同、分类相同：
-      `gate_g3` 报 error（事后分不清"忘了登记"与"根本不存在"，fail-closed）；
-      `check_proofs` 报 `proof_location_not_found`（写入期能说得更准）。
-      注意：这条差别是刻意的：分类同口径 ≠ 处置同强度。
-    - `("file", base)`：其余一切，当路径看。是否真的存在由调用方决定 ——
-      `check_proofs` 要求"工作区内、盘上真实存在"，`gate_g3` 只要求"形态可解析"
-      （它是事后门，不读盘；这层强弱差别同样刻意的，见 `gate_g3` 的适配说明）。
+    - `("self_ref", base)`：`loc` 是本文档里真实存在的 `claim_id`（裸写、或`claim_id:行号`）；`base` 是那个 
+    `claim_id`。- `("cross_ref", base)`：形态是 `名字:数字`（没有点号后缀 ⇒ 不是文件名），但 `base` 不在 `known_ids`
+    里。两个调用方对此处置不同、分类相同：`gate_g3` 报 error（事后分不清"忘了登记"与"根本不存在"，fail-closed）；`check_proofs` 报
+    `proof_location_not_found`（写入期能说得更准）。注意：这条差别是刻意的：分类同口径 ≠ 处置同强度。- `("file", base)`：其余一切，
+    当路径看。是否真的存在由调用方决定 ——`check_proofs` 要求"工作区内、盘上真实存在"，`gate_g3` 只要求"形态可解析"（它是事后门，不读盘；这层强弱
+    差别同样刻意的，见 `gate_g3` 的适配说明）。
     """
     rel = str(loc or "").strip().split("#")[0].strip()
     known = {str(x) for x in known_ids}
@@ -943,57 +849,24 @@ def check_proofs(
     workspace_root: Any = None,
 ) -> dict:
     """核对 `evidence_kind="proof"` 的断言真的挂在一份形式化证据上（`D-1`）。
-
-    ## 为什么需要它（`temp/auditD-proof-selfreport.txt` 那次复现）
-
-    `check_citations` 只回答"引用的对象存不存在"。而 `evidence_kind="proof"` 这一档
-    在写入期一条判据都没有：实测（`temp/r2-d1-probe.txt`）下面四种形态全部写库成功：
-
-    ① `proof_location="PROOF-DOES-NOT-EXIST.lean:1"`（文件根本不在盘上）；
-    ② 连 `proof_location` 都不给；
-    ③ 只引 `lit:`（不引任何 `exp:` —— 没有任何实验参与过）；
-    ④ 引一条 `evidence_kind="cross_check"` 的数值实验却声称 proof。
-    四种的共同后果：`documents` 里出现一条"看起来有形式化背书"的断言，
-    而没有任何检查器参与过；下游（报告、gates）把 `evidence_kind` 当证据等级读。
-    `verify` 侧只有"引用了 `exp:` 时才查那条实验的等级"（`verify.py` 的
-    `proof_claim_rests_on_weaker_evidence`），所以 ③ 那种"一条 exp: 都不引"的形态
-    连事后也查不出来。
-
-    ## 五条判据（全部 fail-closed）
-
-    ==========================================  ==========================================
-    条件                                        要求
-    ==========================================  ==========================================
-    引用的 `exp:` 行                            `result` 是 `"refutes"` 时必须是否定型断言
-                                                （`is_negative` + `negation_kind="disproved"`）
-                                                —— 2026-10-13 加：引一条否证当支撑此前一路过闸
-    `evidence_kind == "proof"`                  必须至少有 1 条 `exp:` 引用
-    被引用的 `exp:` 行                          `evidence_kind` 必须是 `"proof"`
-    同一条断言                                  必须给出 `proof_location`
-    `proof_location`                            必须指向工作区内真实存在的文件；或者
-                                                是本文档里真实存在的 `claim_id`（自指）
-    ==========================================  ==========================================
-
-    第四条只证明"文件在"，不证明"文件里有那条证明" —— 那是形式化检查器
-    （`formalgw`）的事，本函数不冒充它。这两件事必须分开写，否则读者会把
-    "文件存在"读成"证明成立"（本项目最忌的那种折叠）。
-
-    注意：第四条曾经有个可被满足的形态缺口（`R2-R1` / `R2-R2`，重审实测）：
-    只要 `proof_location` 长得像 `名字:数字`（例如 `not-a-claim:7`）就整条跳过，
-    于是"指向一个不存在的断言"与"指向工作区外的文件"两种写法都写库成功。
-    现在两条都报问题。
-
-    注意口径的准确说法（`R2R2-R1` 更正）：本函数与事后门 `gates.gate_g3`
-    共用同一份形态分类实现（:func:`classify_proof_location`），但判据强度不同 ——
-    `check_proofs` 在分类之上加两道（工作区包含性 + 盘上存在性），
-    `gate_g3` 只做形态可解析（事后门，不读盘）。所以写入期拦下的，事后门不一定拦得住
-    （历史行靠事后门兜）。说"两处口径一致"是错的；准确说法是"同分类、不同强度"。
-
-    ## 三态
-
-    与 `check_citations` 同形：`rows_of is None` ⇒ `checked=False`（没查成，
-    不得读成"证据都齐"）。
-
+    为什么需要它（`temp/auditD-proof-selfreport.txt` 那次复现）`check_citations` 只回答"引用的对象存不存在"。而 `evidence_kind="proof"` 这一档在写入期一条判据都没有：实
+    测（`temp/r2-d1-probe.txt`）下面四种形态全部写库成功：
+    ① `proof_location="PROOF-DOES-NOT-EXIST.lean:1"`（文件根本不在盘上）；② 连 `proof_location` 都不给；③ 只引 `lit:`（不引任何 `exp:` —— 没有任何实验参与过）；
+    ④ 引一条 `evidence_kind="cross_check"` 的数值实验却声称 proof。四种的共同后果：`documents` 里出现一条"看起来有形式化背书"的断言，而没有任何检查器参与过；下游（报告、gates）把 
+    `evidence_kind` 当证据等级读。`verify` 侧只有"引用了 `exp:` 时才查那条实验的等级"（`verify.py` 的`proof_claim_rests_on_weaker_evidence`），所以 ③ 那种"一条
+    exp: 都不引"的形态连事后也查不出来。
+    ==========================================  ==========================================条件
+    要求==========================================  ==========================================引用的 `exp:` 行
+    `result` 是 `"refutes"` 时必须是否定型断言（`is_negative` + `negation_kind="disproved"`）—— 2026-10-13 加：引一条否证当支撑此前一路过闸
+    `evidence_kind == "proof"`                  必须至少有 1 条 `exp:` 引用被引用的 `exp:` 行                          `evidence_kind` 必须是 
+    `"proof"`同一条断言                                  必须给出 `proof_location``proof_location`                            必须指向工作区内真
+    实存在的文件；或者是本文档里真实存在的 `claim_id`（自指）==========================================  ==========================================
+    第四条只证明"文件在"，不证明"文件里有那条证明" —— 那是形式化检查器（`formalgw`）的事，本函数不冒充它。
+    注意：第四条曾经有个可被满足的形态缺口（`R2-R1` / `R2-R2`，重审实测）：只要 `proof_location` 长得像 `名字:数字`（例如 `not-a-claim:7`）就整条跳过，于是"指向一个不存在的断言"与"指向工作区
+    外的文件"两种写法都写库成功。
+    注意口径的准确说法（`R2R2-R1` 更正）：本函数与事后门 `gates.gate_g3`共用同一份形态分类实现（:func:`classify_proof_location`），但判据强度不同 ——`check_proofs` 在分类之上
+    加两道（工作区包含性 + 盘上存在性），`gate_g3` 只做形态可解析（事后门，不读盘）。
+    与 `check_citations` 同形：`rows_of is None` ⇒ `checked=False`（没查成，不得读成"证据都齐"）。
     返回 ``{"checked", "reason", "problems": [{claim_id, kind, detail}], "resolved"}``。
     """
     if rows_of is None:
@@ -1194,48 +1067,16 @@ def compose_claim(
     errata_ids: Sequence[str] | None = None,
 ) -> dict:
     """构造一条合规的 claim dict。不合规就在这里抛 `ValueError`。
-
-    ## 闸门在这里，但判据只有一份（`claimanatomy`）
-
-    schema 也会拦（`Document.validate` 有同样的三条硬约束），但它的报错
-    只能说到"claims[3] 没有 citations" —— 而在撰写现场，真正需要被指出来的是
-    "就是这一句话缺引用"。等写库时才炸，会丢掉"哪一句话出的问题"这个信息。
-
-    本函数不再自己写任何一条检查：它把参数装配成一条 claim，然后交给
-    :func:`agentflow.claimanatomy.validate_claim` 判，把第一个 error 抛出来。
-    这样 G 与 H 的判据不可能漂移（FC-03 / INVENTORY 4.5#10）。
-
-    ## 强制的规则（全部由 `claimanatomy.CLAIM_FIELDS` 声明）
-
-    - `evidence_kind == "cross_check"` ⇒ 自动填
-      ``disclaimer = CROSS_CHECK_DISCLAIMER``。不靠调用方记得写（FC-22）。
-    - `is_negative=True` 且没给 `negation_kind` ⇒ 抛（不静默填默认值）：
-      "未证明"、"已证否"、"没搜过"是三件不同的事，默认值等于替作者做了
-      一个他可能不同意的数学判断。
-    - `citations` 为空 ⇒ 抛。无引用的断言在结构上不允许存在（FC-02）。
-    - 正文含超过用词上限的措辞 ⇒ 抛（上限由 `wording_ceiling()` 现算：
-      `proof` 永远在，关掉 Lean 时 `proof_review` 也在 —— 2026-10-13 更正：
-      这一行此前写的是"而 `evidence_kind != "proof"`"，那是加 `proof_review` 之前的旧口径，
-      与代码不符；没有 Lean 的用户照着它读会以为"逐行审阅过的证明"不许写「定理 / 证明」）。
-    - `status="作废"` 且既无 `errata_ids` 又无 `freeze_reason` ⇒ 抛
-      （作废必须有原因）。
-    - `frozen=True` 且 `freeze_reason` 为空 ⇒ 抛。
-
-    ## §8.3 新增的 12 个字段（全部可选）
-
-    `kind` / `status` / `proof_location` / `numeric_evidence` / `counterexamples`
-    / `frozen`+`freeze_reason` / `allowed_use` / `scope_caveat` / `revision_hash`
-    / `errata_ids` 都是可选参数：不给就不写进 dict（不是写一个假默认值）——
-    "没提这件事"与"明确说了没有"必须能分开（三态纪律）。
-    给了要用的但取值非法，在构造现场就抛。
-
-    返回的是磁盘形态（正文字段名是 `text`）：`schema.Document.validate`
-    逐字读 `c.get("text")`，而它在 FC-27 禁 AI 区、本任务无权改。
-    判据层的正名是 `statement`，两者的往返由
-    `claimanatomy.migrate_claim` / `to_storage_claim` 一处完成。
-
-    `claim_id` 可省略：此时按内容派生一个稳定代号（同样的内容得到同样的代号）。
-    `build_document` 落库时会按顺序补成 `claim-1…claim-N`。
+    闸门在这里，但判据只有一份（`claimanatomy`）schema 也会拦（`Document.validate` 有同样的三条硬约束），但它的报错只能说到"claims[3] 没有 citations" —— 而在撰写现场，真正需要被指出来的是"就是这一句话缺引用"。本函数不再自己写任
+    何一条检查：它把参数装配成一条 claim，然后交给:func:`agentflow.claimanatomy.validate_claim` 判，把第一个 error 抛出来。这样 G 与 H 的判据不可能漂移（FC-03 / INVENTORY 4.5#10）。强制的规则（全部由 
+    `claimanatomy.CLAIM_FIELDS` 声明）- `evidence_kind == "cross_check"` ⇒ 自动填``disclaimer = CROSS_CHECK_DISCLAIMER``。不靠调用方记得写（FC-22）。- 
+    `is_negative=True` 且没给 `negation_kind` ⇒ 抛（不静默填默认值）："未证明"、"已证否"、"没搜过"是三件不同的事，默认值等于替作者做了一个他可能不同意的数学判断。-`citations` 为空 ⇒ 抛。无引用的断言在结构上不允许存在（FC-02）。- 
+    正文含超过用词上限的措辞 ⇒ 抛（上限由 `wording_ceiling()` 现算：`proof` 永远在，关掉 Lean 时`proof_review` 也在 —— 2026-10-13 更正：这一行此前写的是"而 `evidence_kind != "proof"`"，那是加 
+    `proof_review` 之前的旧口径，与代码不符；- `status="作废"`且既无 `errata_ids` 又无 `freeze_reason` ⇒ 抛（作废必须有原因）。- `frozen=True` 且 `freeze_reason` 为空 ⇒ 抛。§8.3 新增的 12 个
+    字段（全部可选）`kind` / `status` / `proof_location` / `numeric_evidence` / `counterexamples`/ `frozen`+`freeze_reason` / `allowed_use` / `scope_caveat`
+    / `revision_hash`/ `errata_ids` 都是可选参数：不给就不写进 dict（不是写一个假默认值）——"没提这件事"与"明确说了没有"必须能分开（三态纪律）。返回的是磁盘形态（正文字段名是 `text`）：`schema.Document.validate`逐字读 
+    `c.get("text")`，而它在 FC-27 禁 AI 区、本任务无权改。判据层的正名是 `statement`，两者的往返由`claimanatomy.migrate_claim` / `to_storage_claim` 一处完成。`claim_id` 可省略：此时按内容派生一个稳
+    定代号（同样的内容得到同样的代号）。`build_document` 落库时会按顺序补成 `claim-1…claim-N`。
     """
     cites = [str(c) for c in (citations or [])]
     # 这两条先判：它们要的报错信息里带着断言原文，而 claimanatomy 的
@@ -1333,35 +1174,16 @@ def render_markdown(
     dependencies: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
     """把稿件渲染成人可读的 markdown（中文、表格优先、每条断言带代号）。
-
     风格沿用 `agent_d.write_report`：中文、表格优先、每条结论带代号。
-
-    渲染层强制包含四张表（不是排版选择，是 FC 的呈现要求）：
-
-    ====================================  ==========================================
-    表                                     对应约束
-    ====================================  ==========================================
-    证据等级统计（proof / cross_check /      FC-10：三档分开计数，禁止单一通过率
-    heuristic）
-    否定型结论分类（未证明/已证否/未搜索）   FC-25：四种否定分开计数
-    依赖表（带 external_unavailable 标注）  FC-23：引用的外部结论必须显式可见
-    断言清单（每条带 citations）            FC-02：每条断言都能回答"我引用谁"
-    ====================================  ==========================================
-
-    三态纪律：`dependencies=None` 表示调用方没给依赖清单（没查），
-    此时表里写"未提供"，而不是写"0 条" —— "没查"和"查了、没有"必须能分开。
-
+    ====================================  ==========================================表
+    对应约束====================================  ==========================================证据等级统计（proof / cross_check /      FC-10：
+    三档分开计数，禁止单一通过率 heuristic）否定型结论分类（未证明/已证否/未搜索）   FC-25：四种否定分开计数依赖表（带 external_unavailable 标注）
+    FC-23：引用的外部结论必须显式可见断言清单（每条带 citations）            FC-02：每条断言都能回答"我引用谁
+    "====================================  ==========================================
+    三态纪律：`dependencies=None` 表示调用方没给依赖清单（没查），此时表里写"未提供"，而不是写"0 条" —— "没查"和"查了、没有"必须能分开。
     ## 渲染层门（`draft/17` §8.4 的 G14 降级合规门在这里落地）
-
-    `status="作废"` 的断言 —— 以及 `allowed_use="移入 open"` 的断言 ——
-    不得出现在正文主结果区（§3 断言清单）。它们被移到附录 A，
-    并必须带上撤销原因（`errata_ids` 或 `freeze_reason`）。
-    判据只有一份：`claimanatomy.main_body_claims()` / `retracted_claims()`。
-
-    为什么这是渲染层的职责而不是"作者自己记得别写进去"：
-    证据等级与生命周期是数据，数据在写库时已经定稿；渲染是它变成"人能读到的正文"的
-    最后一道闸 —— 一条已撤销的断言出现在主结果里，比它出现在附录里危险得多，
-    而"记得别写"不是结构约束。
+    `status="作废"` 的断言 —— 以及 `allowed_use="移入 open"` 的断言 ——不得出现在正文主结果区（§3 断言清单）。它们被移到附录 A，并必须带上撤销原因（`errata_ids`
+    或 `freeze_reason`）。判据只有一份：`claimanatomy.main_body_claims()` / `retracted_claims()`。
     """
     all_claims = [c for c in (doc.get("claims") or []) if isinstance(c, Mapping)]
     # G14 的渲染层落地：正文主结果区只放未被撤销、且未被降级为 open 的断言。
@@ -1724,29 +1546,16 @@ def build_document(
     default_subdir: str = "documents",
 ) -> dict:
     """写一行 `documents`，并把 markdown 渲染到工作区内。返回落库后的行 dict。
-
-    顺序刻意如此：先逐条机械检查 → 再核引用是否存在 → 再分配 ID → 再渲染 → 最后提交。
-    这样任何一条不合规的断言、任何一条指向不存在对象的引用，都不会换来一个
-    "半成品稿件 + 一个已经烧掉的 doc_id"。
-
-    为什么 markdown 在工作区内渲染（而不是返回字符串了事）：`markdown_path` 是
-    FC-02 追溯链的一环 —— 稿件必须有一个可被人打开的落点，
-    否则"H 审的是哪个版本"就无法回答。
-
+    顺序刻意如此：先逐条机械检查 → 再核引用是否存在 → 再分配 ID → 再渲染 → 最后提交。这样任何一条不合规的断言、任何一条指向不存在对象的引用，都不会换来一个"半成品稿件 + 一个已经烧掉的
+    doc_id"。
+    为什么 markdown 在工作区内渲染（而不是返回字符串了事）：`markdown_path` 是 FC-02 追溯链的一环 —— 稿件必须有一个可被人打开的落点，否则"H 审的是哪个版本"就无法回答。
     ## 引用必须真的存在（本函数曾经的缺陷）
-
-    `scan_claim` 只查"`citations` 非空"，从不解析 `lit:` / `rel:` / `exp:`
-    指向的对象是否存在。于是 `citations=["lit:9999"]` 会照样写库 + 渲染，
-    直到事后 `verify` 才报 `dangling_citation` —— 而那时坏引用已经进了稿件。
-    现在写库前用 `check_citations` 核一遍四张表；有坏引用就整笔不写，
-    并把每一条坏引用逐条列进失败详情（`kind="dangling_citation"`）。
-
+    `scan_claim` 只查"`citations` 非空"，从不解析 `lit:` / `rel:` / `exp:`指向的对象是否存在。于是 `citations=["lit:9999"]` 会照样写库
+    + 渲染，直到事后 `verify` 才报 `dangling_citation` —— 而那时坏引用已经进了稿件。现在写库前用 `check_citations` 核一遍四张表；有坏引用就整笔不写，并把每一
+    条坏引用逐条列进失败详情（`kind="dangling_citation"`）。
     ## `evidence_kind="proof"` 的证据锚（`D-1`）
-
-    引用存在还不够：一条自报 `proof` 的断言即使引用都存在，也可能"没有任何
-    形式化检查参与过"（实测四种形态全部写库成功，见 `temp/r2-d1-probe.txt`）。
-    所以紧接着再跑 `check_proofs`：必须有 `exp:` 引用、那条实验必须是 proof 级、
-    必须有 `proof_location`、且那个文件必须真的在盘上。
+    引用存在还不够：一条自报 `proof` 的断言即使引用都存在，也可能"没有任何形式化检查参与过"（实测四种形态全部写库成功，见 `temp/r2-d1-probe.txt`）。所以紧接着再跑 
+    `check_proofs`：必须有 `exp:` 引用、那条实验必须是 proof 级、必须有 `proof_location`、且那个文件必须真的在盘上。
     """
     if kind not in S.DOC_KINDS:
         raise ValueError(f"kind 必须是 {S.DOC_KINDS} 之一，收到 {kind!r}")
@@ -1901,27 +1710,16 @@ def register_dependency(
     actor: str = "agent-G",
 ) -> dict:
     """登记一条外部依赖（FC-23）。返回落库后的行 dict。
-
     ## 为什么"closed 必须指向已入库来源"要在这里再核一遍
-
-    `schema.Dependency.validate` 只能检查"`status='closed'` 时字段非空" ——
-    它看不见 `literature` / `experiments` / `statements` 表，因此一个不存在的 lit_id
-    也能通过 schema。而"这个 lit_id 真的存在"正是"依赖闭合"的全部含义。
-    所以第一道闸必须在 G 手里用真实数据核：字段非空 ≠ 来源存在。
-
-    第二道闸（依赖集的可查询闭合性）由 H/verify 侧的重算负责 —— 两道闸缺一不可：
-    一个查"引用长得对不对"，一个查"引用的东西在不在"。
-
+    `schema.Dependency.validate` 只能检查"`status='closed'` 时字段非空" ——它看不见 `literature` / 
+    `experiments` / `statements` 表，因此一个不存在的 lit_id 也能通过 schema。而"这个 lit_id 真的存在"正是"依赖闭合"的全
+    部含义。所以第一道闸必须在 G 手里用真实数据核：字段非空 ≠ 来源存在。
+    第二道闸（依赖集的可查询闭合性）由 H/verify 侧的重算负责 —— 两道闸缺一不可：一个查"引用长得对不对"，一个查"引用的东西在不在"。
     ## 第四种来源与"多组路径"（2026-10-09，业主两句裁定）
-
-    `source_stmt_id`：被依赖的那一端是我们自己的一条命题（定理用到定理、定理用到某个
-    概念）。此前那种边无处安放（`draft/97` §15.0 的 E2：字段表里没有它），于是"承重链"
-    在数据面上断在命题之间。
-
-    `path_group`：证明路径不唯一 ⇒ 一条定理可以有多组依赖（两个文献各有证明、
-    或一条更漂亮的路径）。同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：
-    都要走通）；不同 `path_group` = 可选路径（组间 OR：任一走通即可）。
-    B 那一侧交的是二维列表，秘书按外层下标写这一列（`Secretary.record_statement`）。
+    `source_stmt_id`：被依赖的那一端是我们自己的一条命题（定理用到定理、定理用到某个概念）。此前那种边无处安放（`draft/97` §15.0 的 E2：字段
+    表里没有它），于是"承重链"在数据面上断在命题之间。
+    `path_group`：证明路径不唯一 ⇒ 一条定理可以有多组依赖（两个文献各有证明、或一条更漂亮的路径）。同一 `used_by` + 同一 `path_group`
+    = 一条路径（组内 AND：都要走通）；不同 `path_group` = 可选路径（组间 OR：任一走通即可）。 B 那一侧交的是二维列表，秘书按外层下标写这一列（`Secretary.record_statement`）。
     """
     if not str(used_by or "").strip():
         raise ValueError("used_by 不能为空（依赖必须挂到某个具体的使用点，如 'doc:0001#claim-3'）")
@@ -2087,7 +1885,7 @@ def guard_result(fn: Any) -> Any:
            },
     side_effect="none",
     roles=_ROLES,
-    # ⚠️ 2026-10-15 补齐：这五格实跑都在返回里，而声明里没有。
+    # 2026-10-15 补齐：这五格实跑都在返回里，而声明里没有。
     # 为什么这件事要紧（`draft/124` §15.2 的更正）：`returns` 会拼进
     # function-calling 的 `description`（`tools/base.py:721`：`summary + "\n返回：" + returns`）
     # ⇒ 「模型看得到」。而它此前看不到 `status_axis` / `undecided_reason` ——
@@ -2229,7 +2027,7 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
                     },
                 },
             },
-            # ⚠️ 「2026-10-15 补」：这一格此前是光秃秃的 `{"type":"array","items":{"type":"object"}}`
+            # 「2026-10-15 补」：这一格此前是光秃秃的 `{"type":"array","items":{"type":"object"}}`
     # —— 没有说明、没有 `properties`。后果是「形状不可达」：
     #   · 模型照它填，只能猜每个元素是什么；
     #   · 被拒之后框架会给"完整参数表"（`agent_loop._param_table`），

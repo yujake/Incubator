@@ -16,28 +16,16 @@ class _Revise:
         note: str = "",
     ) -> dict:
         """按 H 的发现修订稿件。
-
-        - `review_rounds += 1`、`status = "revised"`、并重渲染 markdown；
-        - `new_claims` 里代号已存在的断言会替换原断言（修订），
-          新代号则追加。没有这条替换语义，G 就只能"再加一句新话"，
-          永远改不掉那句错话 —— 那 `revise` 就修不好任何一条审校发现；
-        - `fixed_findings` 里的 finding 只改 `status`/`resolution_note`，
-          内容一个字不改（那是 H 的判断依据）。发现不属于本稿 ⇒ 抛错：
-          G 不许借"修订"去动别人的稿件上的发现。
-
-        这里标的 `fixed` 不是终局判定：H 的 `verify_fixes` 会重跑检查，
-        仍复现就把状态改回 `open`。
-
+        - `review_rounds += 1`、`status = "revised"`、并重渲染 markdown；- `new_claims` 里代号已存在的断言会替换原
+        断言（修订），新代号则追加。没有这条替换语义，G 就只能"再加一句新话"，永远改不掉那句错话 —— 那 `revise` 就修不好任何一条审校发现；- 
+        `fixed_findings` 里的 finding 只改 `status`/`resolution_note`，内容一个字不改（那是 H 的判断依据）。发现不属于本稿
+        ⇒ 抛错： G 不许借"修订"去动别人的稿件上的发现。
+        这里标的 `fixed` 不是终局判定：H 的 `verify_fixes` 会重跑检查，仍复现就把状态改回 `open`。
         ## 修订同样要核"引用是否真的存在"（此前的缺口）
-
-        `build_document` 有两道闸：`normalize_claims`（`citations` 非空）与
-        `check_citations`（引用指向的对象真的在库里）。`revise` 此前只过了
-        第一道，于是 `revise(new_claims=[claim citing "lit:9999"])` 会成功写库 ——
-        一份用"改写"这条路绕开引用存在性检查的稿件。这比"没有引用"更隐蔽：
-        读者看到的是一个像模像样的 `lit:9999`，而库里根本没有这篇文献。
-
-        现在两条路复用同一个 `DT.check_citations`（不另写第二份判据），
-        并把它放在同一笔事务里读表，避免"核引用"与"写 documents"看到不同快照。
+        `build_document` 有两道闸：`normalize_claims`（`citations` 非空）与`check_citations`（引用指向的对象真的在库
+        里）。`revise` 此前只过了第一道，于是 `revise(new_claims=[claim citing "lit:9999"])` 会成功写库 ——一份用"改写"
+        这条路绕开引用存在性检查的稿件。这比"没有引用"更隐蔽：读者看到的是一个像模像样的 `lit:9999`，而库里根本没有这篇文献。
+        现在两条路复用同一个 `DT.check_citations`（不另写第二份判据），并把它放在同一笔事务里读表，避免"核引用"与"写 documents"看到不同快照。
         """
         doc_id = str(doc_id)
         with self.store.tx(

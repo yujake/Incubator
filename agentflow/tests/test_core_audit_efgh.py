@@ -321,23 +321,16 @@ def test_attack_list_plans_tool_agrees_with_omission_on_null(tmp_path):
 def test_plan_error_does_not_escape_as_unexpected_and_keeps_its_own_kind(tmp_path):
     """INVENTORY 4.3(b)：`attack.*` 的失败此前逃出工具层被兜成 `kind="unexpected"`。
 
-    本用例的断言被改过一次（改的是期望值，不是判据），逐字留痕：
+    本用例的断言被改过一次（改的是期望值，不是判据），逐字留痕：旧 `assert bad.meta.get("kind") == "tool_error"`，
+    且第一句 docstring 写着"`attack_tools.py` 没有 `guard_result`（该文件不属于本次交付），所以
+    `agent_f.PlanError` 必须自己继承 `ToolError` 让工具层给出 `kind="tool_error"`"；新 `assert bad.meta.get("kind") == "plan_error"`。
 
-    - 旧：`assert bad.meta.get("kind") == "tool_error"`，并且第一句 docstring 写着
-      *"`attack_tools.py` 没有 `guard_result`（该文件不属于本次交付），所以
-      `agent_f.PlanError` 必须自己继承 `ToolError`，让工具层给出 `kind="tool_error"`"*；
-    - 新：`assert bad.meta.get("kind") == "plan_error"`。
-
-    为什么旧断言是错的（不是"因为它变红了"）：`PlanError` 继承 `ToolError`
-    只是让失败不再无声——它把"攻坚计划层面的拒绝"和"工具层自己的异常"
-    （参数错 / 未接线）压进了同一个 `tool_error` 档。而调用方要靠 kind 决定
-    "重试还是改输入"：计划不存在 ⇒ 改 plan_id；表坏了 ⇒ 先修表。
-    工具层现在有了守卫（`attack_tools._guard`，与 `doc_tools.guard_result` 同形），
-    守卫把 `PlanError` 映射成它自己那一档 `plan_error`，消息逐字保留。
-    判据没变：不许是 `unexpected`，且原因必须可读（下面两句仍在）。
-    改名是为了让"它断言的是什么"与"实现给的是什么"重新对齐 ——
-    名字里留着 `is_a_tool_error` 会继续教下一个人"这一档就该是笼统的"。
-    """
+    为什么旧断言是错的（不是"因为它变红了"）：`PlanError` 继承 `ToolError` 只是让失败不再无声 —— 它把
+    "攻坚计划层面的拒绝"和"工具层自己的异常"（参数错 / 未接线）压进同一个 `tool_error` 档，而调用方要靠
+    kind 决定"重试还是改输入"：计划不存在 ⇒ 改 plan_id；表坏了 ⇒ 先修表。工具层现在有了守卫
+    （`attack_tools._guard`，与 `doc_tools.guard_result` 同形），它把 `PlanError` 映射成自己那一档
+    `plan_error`，消息逐字保留。判据没变：不许是 `unexpected`，原因必须可读（下面两句仍在）；改名是为了
+    让"它断言的是什么"与"实现给的是什么"重新对齐 —— 留着 `is_a_tool_error` 会继续教下一个人"这一档就该是笼统的"。"""
     st, _ = _f_store(tmp_path)
     reg = install_f_tools(st)
 
@@ -371,19 +364,15 @@ def test_attack_create_plan_schema_violation_is_reported_with_a_reason(tmp_path)
     """schema 的 `ValueError` 也必须被换成带原因的受控 kind（而不是 `unexpected`）。
 
     本用例的断言被改过一次（改的是期望值，不是判据），逐字留痕：
+    - 旧 `assert res.ok is False and res.meta.get("kind") == "tool_error"`；
+    - 新 `assert res.ok is False and res.meta.get("kind") == "plan_error"`。
 
-    - 旧：`assert res.ok is False and res.meta.get("kind") == "tool_error"`；
-    - 新：`assert res.ok is False and res.meta.get("kind") == "plan_error"`。
-
-    为什么旧断言是错的：`AgentF.create_plan` 把 schema 的 `ValueError`
-    包成了 `PlanError`（`agent_f.py:1088`，语义正确的包装），所以这一支
-    实际走的是 `PlanError`。旧断言只能说出"笼统的 tool_error"，
-    而它真正要钉住的判据是"非法计划不许落库，且原因（哪个字段、什么取值）
-    必须逐字可见" —— 下面两句正是那句判据，它们没有变。
-    工具层现在把 `PlanError` 单列成 `plan_error`（守卫只此一份，
-    `attack_tools._guard`），比"笼统的 tool_error"更能回答
-    "该重试还是该改输入"。
-    """
+    为什么旧断言是错的：`AgentF.create_plan` 把 schema 的 `ValueError` 包成了 `PlanError`
+    （`agent_f.py:1088`，语义正确的包装），所以这一支实际走的是 `PlanError`。旧断言只能说出
+    "笼统的 tool_error"，而它真正要钉住的判据是"非法计划不许落库，且原因（哪个字段、什么取值）
+    必须逐字可见" —— 下面两句正是那句判据，它们没有变。工具层现在把 `PlanError` 单列成
+    `plan_error`（守卫只此一份，`attack_tools._guard`），比"笼统的 tool_error"更能回答
+    "该重试还是该改输入"。"""
     st, _ = _f_store(tmp_path)
     reg = install_f_tools(st)
     res = reg.call(
@@ -602,17 +591,14 @@ def test_agent_h_module_writes_tables_only_inside_the_declared_fixture_harness()
 def test_agent_h_source_never_assigns_documents_claims():
     """职责边界（H）：`agent_h.py` 里不许有任何一处给 `...["claims"]` 赋值。
 
-    这条是本文件最有价值的一条。修之前本文件里有两处：
-    1. `_selftest` 里 ``row = tx.find("documents", ...); row["claims"] = ...``
-       （actor 写着 "fake-G"）—— 一份明文可抄的"绕过 H 只读、直接改稿"的写法，
-       就写在"证明 H 只读"的那个文件里；
-    2. `_selftest` 里 ``bad = dict(clean); bad["claims"] = [...]`` —— 同样是
-       "拿一行稿件改掉它的断言"的形状。
+    这条是本文件最有价值的一条。修之前本文件里有两处：1. `_selftest` 里
+    ``row = tx.find("documents", ...); row["claims"] = ...``（actor 写着 "fake-G"）—— 一份明文可抄的
+    "绕过 H 只读、直接改稿"的写法，就写在"证明 H 只读"的那个文件里；2. `_selftest` 里
+    ``bad = dict(clean); bad["claims"] = [...]`` —— 同样是"拿一行稿件改掉它的断言"的形状。
 
-    第 1 处改成调用真正的改写方 `AgentG.revise`；第 2 处改成整行字面量
-    （构造一份坏输入喂给 H，而不是改动一行已有稿件）。现在任何一处
-    ``X["claims"] = ...`` 都会让这条变红 —— 包括"我只是想在自检里顺手改一下数据"。
-    """
+    第 1 处改成调用真正的改写方 `AgentG.revise`；第 2 处改成整行字面量（构造一份坏输入喂给 H，
+    而不是改动一行已有稿件）。现在任何一处 ``X["claims"] = ...`` 都会让这条变红 —— 包括"我只是想
+    在自检里顺手改一下数据"。"""
     hits: list[str] = []
     for f in _role_files("agent_h.py"):
         tree = ast.parse(f.read_text(encoding="utf-8"))
@@ -629,22 +615,16 @@ def test_agent_h_source_never_assigns_documents_claims():
 def test_agent_h_writers_registry_exposes_exactly_the_declared_write_tools(tmp_path):
     """职责边界（H）的运行期形式：H 的落库代理里能写的只有这四个工具。
 
-    本轮从 2 个变成 3 个：新增 `review.report`（G1–G15 审校报告，
-    markdown 落盘）。它不是对"H 只读"的放宽 —— 它的落点仍被钉死在一个报告
-    文件上，不碰任何数据表、不碰 `claims`（`tests/test_gates.py` 有一条
-    逐字节断言）。这条用例的判据因此从"数量"改成"逐个点名"：
-    数量会随着正当的新增而漂移，而"落点清单"必须是人逐条写下来的。
+    本轮从 2 个变成 3 个：新增 `review.report`（G1–G15 审校报告，markdown 落盘）。它不是对"H 只读"的
+    放宽 —— 落点仍被钉死在一个报告文件上，不碰任何数据表、不碰 `claims`（`tests/test_gates.py` 有一条
+    逐字节断言）。判据因此从"数量"改成"逐个点名"：数量会随正当的新增漂移，"落点清单"必须人逐条写下。
 
-    **事实变了（业主 2026-10-18 裁定）：3 件 → 4 件。** 多出来的那一件是
-    `review.record_finding`（H 自己读出来的那一条发现的登记通道 —— `review_document`
-    只落机械扫描算得出来的那批）。它不是写面放宽：只写 `review_findings`，
-    不改 `documents.status`、不碰任何知识表；登记处是
-    `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]`（同一笔裁定，逐字理由在那）、
-    `capabilities.TOOL_WRITE_SETS["review.record_finding"] == {"review_findings"}`
-    （逐工具写集，与实现 AST 逐格比对）与 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]`
-    （表级例外，`{review_findings, documents}` 那一条 —— 它没变）。
-    所以这里把期望集合更新到新事实，判据本身（"逐个点名、多一件就红"）一个字没改。
-    """
+    事实变了（业主 2026-10-18 裁定）：3 件 → 4 件。多出来的是 `review.record_finding`（H 自己读出来的
+    那一条发现的登记通道 —— `review_document` 只落机械扫描算得出来的那批）。不是写面放宽：只写
+    `review_findings`，不改 `documents.status`、不碰任何知识表；登记处是 `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]`（同一笔裁定，逐字理由在那）、
+    `capabilities.TOOL_WRITE_SETS["review.record_finding"] == {"review_findings"}`（逐工具写集，与实现 AST
+    逐格比对）与 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]`（表级例外，`{review_findings, documents}`
+    那一条 —— 它没变）。所以这里把期望集合更新到新事实，判据本身（"逐个点名、多一件就红"）一字没改。"""
     st = Store(tmp_path / "ws")
     st.init()
     h = AgentH(st)
@@ -884,21 +864,16 @@ def test_quote_check_verified_is_three_state_and_never_coerced():
 def test_quote_check_unknown_page_records_that_nothing_was_searched():
     """未决项（需要人裁决，本次刻意不改行为）：页码未知且不许全文兜底。
 
-    此时 `tried == ("no_window",)` —— 一个窗口都没搜过，但 `verified` 是
-    `False`（"校验失败"）而不是 `None`（"没能校验"）。按模块自己的三条判定原则
-    （`quoteverify.py` 第 13-14 行："'没校验'和'校验失败'是两件不同的事"），
-    这一支的取值是可疑的。
+    此时 `tried == ("no_window",)` —— 一个窗口都没搜过，但 `verified` 是 `False`（"校验失败"）而不是
+    `None`（"没能校验"）。按模块自己的三条判定原则（`quoteverify.py` 第 13-14 行："'没校验'和'校验
+    失败'是两件不同的事"），这一支的取值是可疑的。
 
-    不改的理由有三条，都写在这里以免以后被当成疏漏：
-    1. `quoteverify.py` 在 `.noai-paths` 的 prover-bridge 禁改区，改判据需要
-       2 名 reviewer 批准（FC-27）；
-    2. `tests/test_quoteverify.py::test_unknown_page_without_fallback_is_false`
-       已经把 `False` 编码成契约，不许放宽/改写既有断言来掩盖；
-    3. 调用方并非无法区分 —— `reason="not_found_page_unknown"` 与
-       `tried=("no_window",)` 已经把"没搜过"如实写在同一份返回值里。
-
-    所以本用例钉住当前契约并把问题显式登记出来。
-    """
+    不改的理由有三条，都写在这里以免以后被当成疏漏：1. `quoteverify.py` 在 `.noai-paths` 的
+    prover-bridge 禁改区，改判据需要 2 名 reviewer 批准（FC-27）；
+    2. `tests/test_quoteverify.py::test_unknown_page_without_fallback_is_false` 已经把 `False` 编码成契约，
+    不许放宽/改写既有断言来掩盖；3. 调用方并非无法区分 —— `reason="not_found_page_unknown"` 与
+    `tried=("no_window",)` 已经把"没搜过"如实写在同一份返回值里。所以本用例钉住当前契约并把问题
+    显式登记出来。"""
     doc = _doc([P1, P2, P3])
     chk = check_quote(doc, P2, S.PageRange(None, None, ""), allow_fulltext_fallback=False)
     assert chk.verified is False

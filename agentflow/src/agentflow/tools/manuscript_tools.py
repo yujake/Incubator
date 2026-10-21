@@ -1,32 +1,20 @@
 # -*- coding: utf-8 -*-
 """交接手稿的工具面（`draft/37` §134）：写 / 读 / 列。
-
 用户口径（逐字）：
-
-> 我觉得各智能体在互相传递信息时可以借助手稿的方式，即建一个收集手稿的文件夹，
-> 每个智能体要交接工作前写一份手稿放在里面，且有标号（这个标号靠脚本拿最新的，从 0000 开始顺次标），
-> 传信息时就传手稿编号。这样的话派活也有依据，溯源也很清晰。
-
-实现本体只有一份：`agentflow.manuscripts`（编号分配 + 追加式账本 + 读回）。存储是
-`manuscripts/handoffs.jsonl`（一行一份交接，`draft/39` §C1 起；旧格式 `.md` 仍读得回来）。
-这里只是把它包成工具，让「每个角色」（含只读的 C/H —— 交接手稿不是领域表，
-与 `notes/<角色>.md` 同族）都能用。
-
+> 我觉得各智能体在互相传递信息时可以借助手稿的方式，即建一个收集手稿的文件夹，> 每个智能体要交接工作前写一份手稿放在里面，且有标号（这个标号靠脚本拿最新的，从
+0000 开始顺次标），> 传信息时就传手稿编号。这样的话派活也有依据，溯源也很清晰。
+实现本体只有一份：`agentflow.manuscripts`（编号分配 + 追加式账本 + 读回）。存储是`manuscripts/handoffs.jsonl`（一行
+一份交接，`draft/39` §C1 起；旧格式 `.md` 仍读得回来）。这里只是把它包成工具，让「每个角色」（含只读的 C/H —— 交接手稿不是领域表，与 
+`notes/<角色>.md` 同族）都能用。
 三件工具：
-
-| 工具 | 谁用 | 作用 |
-|---|---|---|
-| `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 `id` —— 它不是工具：走循环形状 `handoff` |
-| `manuscripts.read` | A–H | 按编号读全文（留言里传的就是这个编号） |
-| `manuscripts.list` | A–H | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
-
+| 工具 | 谁用 | 作用 ||---|---|---|| `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 
+`id` —— 它不是工具：走循环形状 `handoff` || `manuscripts.read` | A–H | 按编号读全文（留言里传的就是这个编号） || 
+`manuscripts.list` | A–H | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
 ## 为什么主控 M 不在这张工具面上（口径，别改回去）
-
 M 的工具面是"编排面 + 文件面白名单"（`draft/37` §38/§57，判据
-`tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`），
-而 `manuscripts.read` / `manuscripts.list` 是领域读面：把它们塞进 M 的面里，
-扩的就不是"能不能碰盘"这条边界，而是"M 拿什么读"这条边界 —— 那要先有裁定。
-M 不是看不见手稿：它手上有 `fs.list` / `fs.read` / `fs.search`（§38 的白名单），
+`tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`），而 
+`manuscripts.read` / `manuscripts.list` 是领域读面：把它们塞进 M 的面里，扩的就不是"能不能碰盘"这条边界，而是"M 拿什么读"这
+条边界 —— 那要先有裁定。 M 不是看不见手稿：它手上有 `fs.list` / `fs.read` / `fs.search`（§38 的白名单），
 `manuscripts/` 就在工作区里，读文件这条路本来就通。
 """
 from __future__ import annotations
@@ -49,7 +37,7 @@ _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
      "required": ["id"], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
-    # ⚠️ 2026-10-15 补齐（`draft/124` §17）：实跑返回的是整份手稿行（含正文 `body`），
+    # 2026-10-15 补齐（`draft/124` §17）：实跑返回的是整份手稿行（含正文 `body`），
     # 而声明里只列了 `text` 那一格 ⇒ 模型看不到 `body`/`refs`/`format`/`sid`/`created_at`/`task_id`。
     # `returns` 会拼进 function-calling 的 `description`（`tools/base.py:721`）⇒ 模型看得到。
     returns="{'id','path','sender','to','summary','text','sha256','bytes',"
@@ -62,7 +50,7 @@ def manuscripts_read(store, id: str) -> ToolResult:
         raise ToolError("manuscripts.read 需要一个带 root 的 store")
     got = M.read(root, id)
     if got is None:
-        # ⚠️ 2026-10-16（亲测 A 的工具面时当场撞出来的真 bug）：这里原写成
+        # 2026-10-16（亲测 A 的工具面时当场撞出来的真 bug）：这里原写成
         # `raise ToolError(msg, kind="manuscript_not_found")` —— 而 `ToolError.__init__`
         # 不收 `kind`（只有 `message/tool/detail`）⇒ 本该是"没有这份手稿，去看
         # `manuscripts.list`"的可读拒绝，「变成了 `TypeError: ToolError.__init__() got an

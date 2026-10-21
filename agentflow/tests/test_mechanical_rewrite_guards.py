@@ -4,21 +4,18 @@
 治的是本轮施工实测过的三次真事故（不是假想）：
 
 1. 换行风格：`Path.write_text` 的脚本把 7 个文件从 CRLF 翻成 LF
-   （`conductor.py` / `test_agent_loop.py` / `test_judges.py` / `test_agent_e_formal_path.py`
-   （HEAD 本就是 CRLF，方向相反）/ `secretary.py` / `test_secretary.py` / `draft/46-01`）；
+（`conductor.py` / `test_agent_loop.py` / `test_judges.py` / `test_agent_e_formal_path.py`（HEAD 本就是 CRLF，方向相反）/
+`secretary.py` / `test_secretary.py` / `draft/46-01`）；
 2. 底稿被 R009 族脚本改写：`draft/46-01` 644→550 行、`draft/46-03` 797→556 行
-   （连行 + 把强调标记换成空格），两个文件都靠 `git checkout HEAD --` 逐字节还原；
+（连行 + 把强调标记换成空格），两个文件都靠 `git checkout HEAD --` 逐字节还原；
 3. 改写后行号锚点漂。
 
-这一条判据守前两条。第三条走既有的两条（`tests/test_reading_map.py` 的行数判据与
-`test_r5_orchestration_cost.py` 的 `test_the_stale_line_number_references_are_gone`）——
-本文件刻意不新造"扫全仓 `x.py:123`"的通用判据：`test_r5_orchestration_cost.py` 里
-逐字记着为什么（全仓三十余处那种引用、多数指向别处的文档，通用判据只会造一盏
-靠别人改文件才变绿的灯）。
+这一条判据守前两条。第三条走既有的两条（`tests/test_reading_map.py` 的行数判据与`test_r5_orchestration_cost.py` 的
+`test_the_stale_line_number_references_are_gone`）——本文件刻意不新造"扫全仓
+`x.py:123`"的通用判据：`test_r5_orchestration_cost.py` 里逐字记着为什么（全仓三十余处那种引用、多数指向别处的文档，通用判据只会造一盏靠别人改文件才变绿的灯）。
 
-三态：`draft/` 里有一部分是未跟踪的底稿 —— 它们没有 HEAD 可对拍。那不是"没问题"，
-是"这一格覆盖不到"，所以判据把那个份数当读数报出来
-（`test_the_untracked_draft_gap_is_a_visible_state`），不许静默跳过。
+三态：`draft/` 里有一部分是未跟踪的底稿 —— 它们没有 HEAD 可对拍。那不是"没问题"，是"这一格覆盖不到"，
+所以判据把那个份数当读数报出来（`test_the_untracked_draft_gap_is_a_visible_state`），不许静默跳过。
 """
 from __future__ import annotations
 
@@ -252,11 +249,11 @@ def _assert_eol_negative_controls() -> None:
     样本用真文件：`tests/test_claimanatomy.py` 的 HEAD 是 CRLF（本轮实测被翻成 LF 过、
     已按 HEAD 那一档还原）；`src/agentflow/closing.py` 的 HEAD 是 LF。
     """
-    # 2026-10-21 换轨：负控**不再依赖"仓库里恰好有一个 CRLF 的 HEAD"**。
+    # 2026-10-21 换轨：负控不再依赖"仓库里恰好有一个 CRLF 的 HEAD"。
     # 那次把 219 个文件入库归一成 LF 之后，`test_claimanatomy.py` 的 HEAD 已变成 LF，
-    # 旧写法于是把负控自己判红（"样本的档位与登记的不符"）—— 这是**判据依赖可变量**的典型。
+    # 旧写法于是把负控自己判红（"样本的档位与登记的不符"）—— 这是判据依赖可变量的典型。
     # 现在：`_head_blobs` 只用来证明"HEAD 读得到"（取任意一个被跟踪文件），
-    # 两个方向的样本用**内存里的字节**构造（`eol_problem` 本来只吃字节，不吃文件名）。
+    # 两个方向的样本用内存里的字节构造（`eol_problem` 本来只吃字节，不吃文件名）。
     crlf_file, lf_file = "agentflow/sample_crlf.py", "agentflow/sample_lf.py"
     probe = "agentflow/src/agentflow/closing.py"
     blobs = _head_blobs([probe])
@@ -293,7 +290,7 @@ def _accident_simulation(head: bytes) -> bytes:
 #:
 #: 2026-10 业主裁定：`draft/`、`temp/`、`test/` 从 git 索引移除并写进 `.gitignore`，
 #: 不许恢复跟踪。于是下面两条判据（真事故样本的负控、未跟踪底稿缺口的读数）
-#: **失去了对象**：底稿不在 HEAD 里，就没有"改前"可比。
+#: 失去了对象：底稿不在 HEAD 里，就没有"改前"可比。
 #:
 #: 三态纪律要求这件事显式可见：既不许静默通过（那会把"覆盖不到"读成"没问题"），
 #: 也不许把判据删掉（那等于"这一族从此没人看"）。所以两条判据各自
@@ -400,19 +397,16 @@ def test_the_untracked_draft_gap_is_a_visible_state() -> None:
 
 
 def test_the_draft_family_resumes_as_soon_as_draft_is_tracked_again() -> None:
-    """守卫：`draft/` 一旦重新被跟踪，这一族的 skip 必须立刻收回。
+    """    守卫：`draft/` 一旦重新被跟踪，这一族的 skip 必须立刻收回。
 
-    为什么需要它：`pytest.skip` 是"这一族当前不可判"的**临时**形态，不是常态 ——
-    没有这条守卫，`draft/` 哪天被重新跟踪（或换个名字重新入库），上面两条判据会
-    继续 skip，而"整族睡着"与"整族绿着"在报告里长得一样（本仓库反复踩的坑）。
+    为什么需要它：`pytest.skip` 是"这一族当前不可判"的临时形态，不是常态 ——没有这条守卫，`draft/` 哪天被重新跟踪（或换个名字重新入库），上面两条判据会继续 skip，
+    而"整族睡着"与"整族绿着"在报告里长得一样（本仓库反复踩的坑）。
 
     它钉两件事，缺一件就会变成橡皮图章：
-    - **状态**：`git ls-files draft` 非空 ⇒ 那个不可判的理由必须自己消失，
-      且真事故样本必须取得到 HEAD 内容（底稿回来了、判据没回来 ⇒ 红）；
-      为空 ⇒ 理由必须逐字带出来（"不可判"不许静默变"没问题"）。
-    - **接线**：上面两条判据必须仍然经过同一个 `_draft_family_skip_reason()` 与
-      `pytest.skip(...)`（读本文件源码判）。把 skip 写死进函数体、或把判据从
-      理由上摘下来，都会在这里红 —— 那正是"未来被跟踪却仍然 skip"的形态。
+    - 状态：`git ls-files draft` 非空 ⇒ 那个不可判的理由必须自己消失，
+    且真事故样本必须取得到 HEAD 内容（底稿回来了、判据没回来 ⇒ 红）；为空 ⇒ 理由必须逐字带出来（"不可判"不许静默变"没问题"）。
+    - 接线：上面两条判据必须仍然经过同一个 `_draft_family_skip_reason()` 与
+    `pytest.skip(...)`（读本文件源码判）。把 skip 写死进函数体、或把判据从理由上摘下来，都会在这里红 —— 那正是"未来被跟踪却仍然 skip"的形态。
     """
     src = pathlib.Path(__file__).resolve().read_text(encoding="utf-8")
     tree = ast.parse(src)

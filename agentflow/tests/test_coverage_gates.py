@@ -1,39 +1,18 @@
 """`gates.py` 里 19 个零直接测试函数的逐函数判据测试（全部等级 2：判据/决策）。
 
-## 为什么必须逐函数点名（这是本文件存在的全部理由）
+为什么必须逐函数点名：`tests/test_gates.py` 对 15 道门只跑一个泛化循环，它证明不了任何一道门的
+判据 —— 一个"15 道门全部无条件返回 `pass` 并附带合法自证"的实现照样让 `verdict in (...)` 成立、
+`GateResult.__post_init__` 照样满足，于是 `gate_g1` … `gate_g15` 从未被点名调用过（零直接测试：
+不是"没跑过"，而是"跑了但没有任何一条断言能因它而红"）。
 
-`tests/test_gates.py` 已经是 52 条断言的成熟文件，但它对 15 道门的检查是
-一个泛化的循环：
+两条纪律：① 每道门一条正向 + 一条负控，负控打在 `verdict` 的四态语义上
+（`pass` / `fail` / `unknown` / `not_applicable`），不是"返回了 GateResult"；
+② 夹具不写死受控词表取值（§5.3）：`axis` 来自 `G.AXES`，`claim_id` / `status` 取自
+`claimanatomy` 的常量或本文件自建的契约常量。
 
-```python
-for gid in G.GATE_IDS:
-    r = G.run_gate(gid, ctx)
-    assert r.verdict in ("pass", "fail", "unknown", "not_applicable")
-```
-
-这条断言证明不了任何一道门的判据：一个"15 道门全部无条件返回 `pass` 并附带
-合法自证"的实现，`verdict in (...)` 照样成立、`GateResult.__post_init__` 照样满足。
-于是 `gate_g1` … `gate_g15` 从未被点名调用过 —— 这就是零直接测试的形态
-（不是"没跑过"，而是"跑了但没有任何一条断言能因它而红"）。
-
-## 本文件的两条纪律
-
-1. 每道门一条正向 + 一条负控，且负控都打在 `verdict` 的四态语义上
-   （`pass` / `fail` / `unknown` / `not_applicable`），不是"返回了 GateResult"。
-2. 夹具不写死受控词表取值（§5.3）：`axis` 来自 `G.AXES`，
-   `claim_id` / `status` 等取自 `claimanatomy` 的常量或本文件自建的契约常量。
-
-## 四态语义（本文件的核心判据，逐条来自 `gates.py` 的模块 docstring）
-
-```text
-pass            查过了，没有该门判据下的问题
-fail            查过了，有该门判据下的问题
-unknown         **没查成**（缺输入 / 依赖读不到 / 本轮没跑过）
-not_applicable  **这道门在本项目的数据模型上没有可判定的对象**（附理由）
-```
-
-负控的重点因此是："缺输入"绝不等于 `pass`。
-"""
+四态语义（逐条来自 `gates.py` 的模块 docstring）：`pass` = 查过了没问题；`fail` = 查过了有问题；
+`unknown` = 没查成（缺输入 / 依赖读不到 / 本轮没跑过）；`not_applicable` = 这道门在本项目的
+数据模型上没有可判定的对象（附理由）。负控的重点因此是："缺输入"绝不等于 `pass`。"""
 
 from __future__ import annotations
 
@@ -174,20 +153,14 @@ def test_gate_g1_counts_paths_inside_the_workspace(ws: Path):
 def test_gate_g1_accepts_a_windows_drive_path_inside_the_workspace(ws: Path):
     """正控（修 G-6 时的受控实验）：盘符绝对路径指向工作区内 ⇒ 仍然 `pass`。
 
-    为什么必须有这一条：修 G-6 最省事的错法是"看见盘符就判 `fail`"
-    （例如把 `^[A-Za-z]:` 当成"包外"的同义词）。那样上面的负控会全绿，
-    而一条合法的工作区内绝对路径引用会被误判成阻断交付 ——
-    两种错法在"五档负控"下无法区分，只有这条正控能把它们分开。
+    为什么必须有：修 G-6 最省事的错法是"看见盘符就判 `fail`"（把 `^[A-Za-z]:` 当成"包外"的同义词）
+    —— 那样上面的负控会全绿，而一条合法的工作区内绝对路径会被误判成阻断交付；两种错法在
+    "五档负控"下无法区分，只有这条正控能把它们分开。它同时钉住第二件事：
+    `C:<工作区>/code/p1.py:12` 这种盘符 + 尾部行号的写法，行号只能被尾部那一次切分吃掉；
+    若实现又一次"在第一个 `:` 处切"，`path_text` 会变成 `"C"` 而报错。
 
-    它同时钉住第二件事：`C:<工作区>/code/p1.py:12` 这种盘符 + 尾部行号的写法，
-    行号只能被尾部那一次切分吃掉；若实现又一次"在第一个 `:` 处切"，
-    这里的 `path_text` 会变成 `"C"` 而报错。
-
-    平台相关处如实跳过而不是假装通过：把工作区写成绝对路径，需要"工作区
-    真实所在的盘符"。`tmp_path` 与工作区在同一棵树里（本夹具正是这么建的），
-    所以盘符必然相同；若某个环境下连盘符都取不到（POSIX），就显式 `skip`
-    并说明原因 —— 那不是判据失败，不许把它折算成 `pass`。
-    """
+    平台相关处如实 `skip` 并说明原因（不是判据失败，不许折算成 `pass`）：把工作区写成绝对路径需要
+    真实盘符，`tmp_path` 与工作区在同一棵树里（本夹具正是这么建的）⇒ 盘符必然相同；POSIX 取不到就跳过。"""
     drive = ws.resolve().drive
     if not drive:
         pytest.skip("本平台的工作区路径没有盘符概念（POSIX）⇒ 这条盘符正控不适用")
@@ -250,42 +223,16 @@ def test_gate_g1_rejects_a_windows_drive_absolute_proof_location(
 ):
     """负控（盘符 / 绝对路径这一档，缺陷 G-6 的原形状）：⇒ `fail` + `工作区外` 计数。
 
-    ## 这条测试存在的理由（缺陷已修，标记已删）
-
-    修之前：`_looks_like_path("C:/outside/p1.py:12")` 为真 ⇒ 它成为候选；
-    但 `rel = raw.split(":")[0].strip()` 得到 `"C"`（盘符被当成了 `file:line`
-    的分隔符切掉）⇒ `root / "C"` 被解析成 `<root>/C` ⇒ 落在工作区内 ⇒
-    `工作区外=0` ⇒ G1 报 `pass`；而同一份代码对相对逃逸（`../outside/p1.py`）
-    判 `fail`。所以这不是"门没实现"，而是盘符绝对路径这一档被静默地判成了"包内"。
-
-    为什么它不可接受：G1 的判据是"正文不得引用工作区外的路径"、失败处置是
-    阻断交付，而 `claims[*].proof_location` 恰好长得就像 `file:line` ⇒
-    最典型的一种"包外引用"被漏掉了。
-
-    ## 为什么断言是"参数化的五档"（而不是只测一条）
-
-    修法把判据换成了"按字符串形态判绝对路径 + 只切尾部 `:行号`"，
-    这两条新规则各自都有它自己的负控：
-
-    * 只切尾部且必须是数字 ⇒ `C:/outside/p1.py`（无行号）也必须被拒
-      —— 只测带行号的那条，`split(":")` 型的实现照样能过；
-    * 绝对路径不止盘符一种形态 ⇒ `/abs/outside/p3.py:3`（POSIX 绝对）与
-      `C:\\outside\\p2.py`（反斜杠盘符）必须各自被拒。
-
-    ## 平台无关性是这条测试的核心价值
-
-    这五档在 Linux CI 与 Windows 开发机上必须给出同一个结论。
-    特别注意 `/abs/outside/p3.py:3` 在 Windows 上若用
-    `Path.is_absolute()` 判，会得到 `False`（POSIX 根路径在 Windows 上算相对路径）
-    —— 而那正是本缺陷在另一个平台上的镜像。所以断言不能只写在
-    `sys.platform == "win32"` 分支里。
-
-    ## 期望行为
-
-    `verdict == "fail"`（不是 `pass`、也不是 `unknown` —— 这一档能判），
-    且 `counts["工作区外"] == 1`、`counts["工作区内"] == 0`：
-    没有把"在外"错算进"在内"。
-    """
+    修之前：`_looks_like_path("C:/outside/p1.py:12")` 为真 ⇒ 成为候选；但 `rel = raw.split(":")[0].strip()`
+    得到 `"C"`（盘符被当成 `file:line` 分隔符切掉）⇒ `root / "C"` = `<root>/C` ⇒ 落在工作区内 ⇒
+    `工作区外=0` ⇒ G1 报 `pass`，而相对逃逸（`../outside/p1.py`）判 `fail`：盘符这一档被静默判成
+    "包内"，而 G1 的失败处置是阻断交付 ⇒ `claims[*].proof_location` 里最典型的"包外引用"被漏掉。
+    五档必须各自被拒：`C:/outside/p1.py`（无行号）、`/abs/outside/p3.py:3`（POSIX 绝对）、
+    `C:\outside\p2.py`（反斜杠盘符）、`/outside/p1.py`、`/outside/p1.py:12` —— 只测带行号那条，
+    `split(":")` 型实现照样能过（修法：按字符串形态判绝对 + 只切尾部 `:行号`）。
+    平台无关性：`/abs/outside/p3.py:3` 若用 `Path.is_absolute()` 判，在 Windows 得 `False`（POSIX 根
+    路径算相对），正是本缺陷在另一平台的镜像，所以断言不能只写在 `sys.platform == "win32"` 分支里。
+    期望 `verdict == "fail"`（不是 `pass` / `unknown`）且 `counts["工作区外"] == 1`、`counts["工作区内"] == 0`。"""
     claim = _claim(proof_location=proof_location)
     claim.pop("numeric_evidence")
     ctx = _ctx(ws, files=[])
@@ -303,22 +250,15 @@ def test_gate_g1_rejects_a_windows_drive_absolute_proof_location(
 def test_strip_line_suffix_only_cuts_a_numeric_suffix_at_the_very_end():
     """点名单测 `_strip_line_suffix`：只切尾部且其后必须是数字。
 
-    为什么必须单独点名它（G-12 顺带发现的盲点，G-6 的实现者做变异试验时发现）：
-    把 `_LINE_SUFFIX_RE` 的 `$` 锚点去掉（`r":(\\d+)$"` → `r":(\\d+)"`）之后
-    没有任何测试会红。实测：见证串 `C:/out12:30/p1.py` 被切成 `C:/out12:30/p1`
-    （`re.search` 从左往右撞上第一个 `:<数字>`，也就是 `:30`），
-    而整个 `tests/test_coverage_gates.py` 里 32 条 G1 断言全绿 ——
-    因为切出来的那段仍然是绝对路径，G1 的结论仍是 `fail`、`counts` 也不变
-    （这道门的判据只看"是不是绝对路径 + 在不在工作区内"，不看路径本体对不对）。
-    也就是说"只切尾部"这条要求缺少独立证据：一条被切坏的路径照样让所有断言通过。
+    为什么必须单独点名（G-12 顺带发现的盲点）：把 `_LINE_SUFFIX_RE` 的 `$` 锚点去掉
+    （`r":(\d+)$"` → `r":(\d+)"`）之后没有任何 `verdict` 会变 —— 见证串 `C:/out12:30/p1.py` 被
+    `re.search` 切成 `C:/out12:30/p1`（撞上第一个 `:<数字>`，即 `:30`），而整个
+    `tests/test_coverage_gates.py` 里 32 条 G1 断言全绿（切出来仍是绝对路径 ⇒ G1 仍 `fail`、
+    `counts` 不变）：判据只看"是不是绝对路径 + 在不在工作区内"，不看路径本体对不对。
 
-    这条测试把证据补在函数本身上（而不是间接地看 `verdict`）：
-    尾部不是 `:<数字>` 的字符串必须原样返回。
-
-    四档一起断言是刻意的：只断言"见证串原样返回"的话，一个 `return raw`
-    （恒等函数）也能过 —— 而那样 G1 会把 `code/p1.py:12` 当成一个文件名
-    （行号切分整条失效）。所以必须同时断言"尾部 `:<数字>` 仍然要被切掉"。
-    """
+    所以证据补在函数本身上：尾部不是 `:<数字>` 的必须原样返回；四档一起断言是刻意的 ——
+    只断言"见证串原样返回"，一个 `return raw`（恒等函数）也能过（那样 G1 会把 `code/p1.py:12`
+    当成文件名、行号切分整条失效），所以必须同时断言尾部 `:<数字>` 仍要被切掉。"""
     assert G._strip_line_suffix("C:/out12:30/p1.py") == "C:/out12:30/p1.py", (
         "尾部不是 `:<数字>` ⇒ 必须原样返回；被切成 `C:/out12:30/p1` 这类残缺串说明 "
         "`_LINE_SUFFIX_RE` 丢了 `$` 锚点（只在中间切、不管尾部）"
@@ -698,24 +638,16 @@ def test_gate_g10_returns_unknown_without_a_findings_list(ws: Path):
 def test_gate_g10_is_unknown_when_a_finding_lacks_the_four_fields(ws: Path):
     """判据（键不全的那一半）：这一条发现的键不全 ⇒ `unknown`。
 
-    `gates.gate_g10` 的 docstring 逐字："键不全的行：仍然报 `unknown` 并把缺的键逐条列出来
-    （不删门、不判 pass）。这些行是契约生效日之前落盘的历史行，或尚未补键的产出方写出的行
-    —— 两种都要看得见。"
+    `gates.gate_g10` 的 docstring 逐字："键不全的行：仍然报 `unknown` 并把缺的键逐条列出来（不删门、
+    不判 pass）。这些行是契约生效日之前落盘的历史行，或尚未补键的产出方写出的行 —— 两种都要看得见。"
 
-    注意：本用例的旧名字与旧 docstring 已过期，`X-96.3-3` 就地更正：它此前叫
-    `test_gate_g10_is_unknown_because_schema_lacks_the_four_fields`，理由是
-    "`schema.ReviewFinding`（禁 AI 区）只有
-    `kind/level/target/message/evidence/status/round/resolution_note` ——
-    没有 `line`、`verbatim_quote`、`minimal_fix`、`maths` 这四个字段。
-    因此这道门在本项目上不可能逐字判定。"那句话已经不成立：`P-9` 候选 A 之后
-    `ReviewFinding` 带上了这四个字段（`axis` 也一并补上），所以 `unknown` 的成因不再是
-    "schema 缺字段"，而是"这一条发现的键不全"（历史行，或还没补键的产出方）。
-    行为与判据一个字都没动 —— 改的只是名字与这句过期的话。
-
-    所以这条测试的期望值仍然是 `unknown`，而不是"它坏了"。
-    关键断言是：它必须如实报 unknown 并把缺失字段逐条列出来，
-    而不是删门或报 pass。
-    """
+    旧名字与旧 docstring 已过期，`X-96.3-3` 就地更正：它此前叫
+    `test_gate_g10_is_unknown_because_schema_lacks_the_four_fields`，理由是 `schema.ReviewFinding`
+    只有 `kind/level/target/message/evidence/status/round/resolution_note`、没有 `line` /
+    `verbatim_quote` / `minimal_fix` / `maths`（这道门不可能逐字判定）。那句话已不成立：`P-9`
+    候选 A 之后 `ReviewFinding` 带上了这四个字段（`axis` 也一并补上），所以 `unknown` 的成因不再是
+    "schema 缺字段"而是"这一条发现键不全"（历史行，或还没补键的产出方）；行为与判据一个字没动。
+    关键断言仍是：如实报 `unknown` 并逐条列出缺失字段，而不是删门或报 pass。"""
     ctx = _ctx(ws, findings=[{
         "finding_id": "0000", "kind": "overclaim", "level": "error", "target": "claim-1",
         "message": "m", "evidence": "e", "status": "open", "round": 1, "resolution_note": "",
@@ -1064,21 +996,15 @@ def test_known_gate_ids_rejects_a_missing_or_extra_gate(monkeypatch: pytest.Monk
 def test_run_gate_returns_the_named_gate_and_only_that_gate(ws: Path):
     """正向：`run_gate(gid, ctx)` 返回的 `gate_id` / `name` / `axis` 取自该门自己的声明行。
 
-    为什么这条重要（也是 `test_gates.py` 那条泛化循环欠缺的）：一个
-    "总是返回 G1 的结论"的实现在泛化循环里照样过（`r.gate_id == gid` 那半句
-    确实抓它，但抓不到"门内容错配"）—— 这里额外断言内容取自 `G.GATES[gid]`。
+    为什么重要（`test_gates.py` 那条泛化循环欠缺的）：一个"总是返回 G1 的结论"的实现在泛化循环里
+    照样过（`r.gate_id == gid` 只抓门号、抓不到"门内容错配"），这里额外断言内容取自 `G.GATES[gid]`。
 
-    `criterion` 这一维曾经只能断言前缀，因为那时项目里有三份文本
-    （① `GATES[gid]["criterion"]` 声明表、② 每个 `gate_gN` 里的局部变量、
-    ③ `GateResult(...)` 构造时传的那个），实测 15 道门里 6 道的 ①③ 不一致
-    （`docs/PROPOSALS.md` G-7）。该缺陷已修：现在每个门只在函数体开头
-    写一句 `criterion = GATES[gate_id]["criterion"]`，所以抽样这三门
-    （G1 / G5 / G15）与声明表逐字相同 —— 断言随之收紧。
-
-    同一形态的第二个字段（G-12）：`criterion_revision` 现在也从它自己的声明表
-    （`GATE_CRITERIA_REVISION`）取，所以这里一并断言。穷尽式的 15 门断言在下一条
-    （`test_gate_criterion_revision_texts_are_a_single_source`）。
-    """
+    `criterion` 曾经只能断言前缀：那时有三份文本（① `GATES[gid]["criterion"]` 声明表、② 每个
+    `gate_gN` 里的局部变量、③ `GateResult(...)` 构造时传的那个），实测 15 道门里 6 道的 ①③ 不一致
+    （`docs/PROPOSALS.md` G-7）。已修：每个门只在函数体开头写一句
+    `criterion = GATES[gate_id]["criterion"]`，所以抽样这三门（G1 / G5 / G15）与声明表逐字相同。
+    同一形态的第二个字段（G-12）：`criterion_revision` 现在也从 `GATE_CRITERIA_REVISION` 取；
+    穷尽式的 15 门断言在下一条 `test_gate_criterion_revision_texts_are_a_single_source`。"""
     ctx = _frozen_ctx(ws)
     for gid in ("G1", "G5", "G15"):
         r = G.run_gate(gid, ctx)
@@ -1094,37 +1020,16 @@ def test_run_gate_returns_the_named_gate_and_only_that_gate(ws: Path):
 def test_gate_criterion_texts_are_a_single_source(ws: Path):
     """反漂移（单一来源，缺陷 G-7）：15 道门的 `GateResult.criterion` 逐字等于声明表那一份。
 
-    ## 这条测试存在的理由（缺陷已修，标记已删）
-
-    修之前：跑 `run_gate(gid, ctx)` × 15，逐条与 `GATES[gid]["criterion"]` 比对，
-    一致 9 / 不一致 6。不一致的六道，以及每一道最终选了哪一份文本：
-
-    | 门 | 选了哪一份 | 为什么 |
-    |---|---|---|
-    | G2 | 声明表（补「含通配符」并显式写出失败处置） | 实现那份把"不可解析必须阻断"写进了判据（那其实是失败处置），却丢了声明表里的"裸文件名也能在工作区内解析"这一档 —— 两份各缺一块，互补后取更全的 |
-    | G3 | 声明表（"目标标签真实存在"） | 参考体例 `draft/17-…md:1062` 逐字是"目标标签"；实现把它简化成"目标"，丢了"标签"这个受控词 |
-    | G4 | 声明表（补「卷内文件全被列出、声明的字数在容差内」） | 实现那份只有声明表的一个子集；丢掉的两档在 `criterion_revision` 里如实登记为"本项目对不上" |
-    | G7 | 声明表（禁止『仅泛证』） | 参考体例 §8.4 表格逐字如此；`仅泛证型` 是同一档的另一个名字（词表漂移），统一到参考体例的名字 |
-    | G11 | 声明表（补「不二次编辑」） | 实现那份丢了参考体例 `:1070` 的第四个分句 |
-    | G15 | 声明表（补「缺失则退回」） | 那正是参考体例 `:1074` 的失败处置；判据与其处置必须一起被声明 |
-
-    另外，每个 `gate_gN` 函数体里原先还各自有一个 `criterion` 字符串字面量
-    （15 道门里 6 道与声明表不一致），而 `_no_doc()` 用的又是函数内那一份 ——
-    于是"同一个门号在不同的返回路径上会打印不同的判据"。
-
-    ## 为什么这是真缺陷
-
-    这与 `schema.py` 的"单一来源受控词表"、`cli.cmd_tools` 的
-    "角色清单必须来自 `ROLES`"是同一条纪律（FC-03）：同一判据只能有一处定义。
-    `gate_report` 把 `criterion` 写进报告给人看，而人核对时读的可能是声明表 ——
-    两份文本漂移意味着报告里那句"判据"不是声明的那条判据。
-
-    ## 期望行为
-
-    每个门只从声明表取：`criterion = GATES[gate_id]["criterion"]`。
-    注意"只改 `criterion` 的值"是不够的：`_no_doc()` 与各条 `return` 路径
-    都读同一个局部名，所以取值那一句必须是唯一的。
-    """
+    修之前：`run_gate(gid, ctx)` × 15 与 `GATES[gid]["criterion"]` 比对，一致 9 / 不一致 6；六道都取
+    声明表并补齐实现缺的那块：G2 补「含通配符」+ 显式失败处置；G3 取"目标标签真实存在"（参考体例
+    `draft/17-…md:1062` 逐字是"目标标签"，实现丢了"标签"这个受控词）；G4 补「卷内文件全被列出、
+    字数在容差内」（缺的两档在 `criterion_revision` 里登记为"本项目对不上"）；G7 禁止『仅泛证』
+    （参考体例 §8.4 逐字；`仅泛证型` 是别名）；G11 补「不二次编辑」（实现丢了参考体例 `:1070` 的
+    第四个分句）；G15 补「缺失则退回」——`:1074` 的失败处置。另外每个 `gate_gN` 函数体原先各有
+    一个 `criterion` 字面量，而 `_no_doc()` 用的又是函数内那份 ⇒ 同一门号在不同返回路径打印不同判据。
+    这是真缺陷（FC-03）：与 `schema.py` 的"受控词表单一来源"、`cli.cmd_tools` 的"角色清单必须来自
+    `ROLES`"同一条纪律；`gate_report` 写进报告的 `criterion` 与声明表不能是两份。期望每个门只从声明
+    表取（`criterion = GATES[gate_id]["criterion"]`），取值那一句必须唯一（`_no_doc()` 与各条 `return` 都读它）。"""
     ctx = _frozen_ctx(ws)
     mismatched: dict[str, tuple[str, str]] = {}
     for gid in G.GATE_IDS:
@@ -1137,84 +1042,17 @@ def test_gate_criterion_texts_are_a_single_source(ws: Path):
 
 def test_gate_criterion_revision_texts_are_a_single_source(ws: Path):
     """反漂移（单一来源，缺陷 G-12）：15 道门的 `GateResult.criterion_revision`
-    逐字等于声明表 `GATE_CRITERIA_REVISION[gid]` —— 而且两条返回路径都算。
-
-    ## 修之前（实测，探针 `temp/probe_g12_baseline.py`，可复跑）
-
-    * `GateResult.criterion_revision` 与 `GATE_CRITERIA_REVISION[gid]`：15 / 15 不一致；
-    * `GATE_CRITERIA_REVISION` 在运行期从未被读到 —— `gates.py` 里唯一一处使用
-      是 `if _gid not in GATE_CRITERIA_REVISION`（键检查），真正的值来自函数体里的
-      字面量 ⇒ 声明表是死的，报告里印的是另一份；
-    * 还有第三份：`GateResult` 的字段默认值 `"逐字照搬 §8.4"`。修之前凡是没传
-      `criterion_revision=` 的返回路径都打印它 —— 15 门里 14 门各有一条 `_no_doc`
-      路径（`G13` 不走 `_no_doc`），另有 10 个"缺某项输入"的分支也没传
-      （`G1`/`G6` 无 `workspace_root`、`G8` 两条、`G9`、`G10`、`G11` 两条、`G13`、`G15`），
-      合计 24 条返回路径会让一道适配过的门自称"逐字照搬"。修完后再测：
-      210 个 (门, 输入档) 组合，0 处不一致。
-
-    ## 为什么断言要跑两条路径
-
-    只跑"全输入齐"那一份会漏掉 `_no_doc` 那条：修之前它给 15 门全部返回默认值，
-    而"全输入齐"那份至少还是各门的字面量。两条路径合起来才覆盖"同一个门号在不同
-    返回路径上打印不同判据修订状态"这个真实形态（G-10 与 G-12 都是它）。
-
-    ## 逐门裁决（哪一份权威、为什么）—— 与 G-7 那张 `criterion` 表同一形态
-
-    判据不是"一律取声明表"：修之前两份各有各的完整度，下面逐门记的是比过之后的裁决。
-    绝大多数取的是实现那一份（它更完整：带 §8.3/§8.5 出处、带"为什么"），
-    少数是两份互补后合成的一句。理由是"这一栏的读者是要弄清我们的门与参考体例差在
-    哪里"，所以信息更全且更准确的那一份赢，而不是"表赢"或"实现赢"。
-
-    | 门 | 唯一来源取的是 | 为什么 |
-    |---|---|---|
-    | G1 | 实现 | 实现那份写明替换发生在哪（"『包』在这里读成『工作区』"）且语法完整（"卷/包的概念"）；表那份只是省了字 |
-    | G2 | 实现 | 实现那份多出"『裸文件名』档在本项目不存在"——那正是"为什么只报 warning 而不阻断"的理由；表那份缺了它，读者会以为我们漏判了一档 |
-    | G3 | 两份互补 | 表那份有 `**适配**` 标记但把改判后的判据说成"目标必须真实存在"（太笼统，没说是哪种存在）；实现那份写全了"本文档内真实存在的 claim_id 或可解析的 file:line"却多一句自我指涉的"（必须显式登记）"。合成一句：留标记 + 用实现的正文 |
-    | G4 | 实现 + 补登记缺口 | 实现那份点明了两侧对象（索引/README ↔ documents 行）；表那份只有我们这一侧。另按 G-7 自己的登记承诺补上"参考体例的另三档本实现不判"（修 G-7 时那句承诺在 `criterion_revision` 里并不存在，见报告里的追加发现） |
-    | G5 | 两份互补 | 两条返回路径原本各有一份：`not_applicable` 路径写"缺词表报 not_applicable 而不是 pass"，正常路径写"15 中文词 + 12 英文连词表属于人的文风决定"。各缺一块 ⇒ 合成一句 |
-    | G6 | 实现 + 补登记缺口 | 实现那份带 §8.3 出处与"按 glob 展开"；表那份丢了出处与展开方式。再补"参考体例的『数据文件』档本实现不判"（只核 `numeric_evidence.script`） |
-    | G7 | 实现 | 实现那份多出"参考体例 §8.5 明确『仅泛证型』档我们应直接取消"——那是"为什么这样适配"的依据 |
-    | G8 | 实现 | 实现那份写全了出处（`RP/00_STANDARD.md:149-150` 门 B）；表那份只有一个括号 |
-    | G9 | 实现 | 两句语义无差别（纯措辞），取实现那份更顺的（"同一份稿件在不同读取路径下的数字"）。这是措辞选择，不是事实判定 |
-    | G10 | 两份合成一句（本缺陷的核心） | 见下面"G10 的事实判定" |
-    | G11 | 实现 | 实现那份补了"故判 unknown"——那正是三态纪律的落点；表那份只说到"只能证明钉住了 hash" |
-    | G12 | 实现 | 两句语义无差别（纯措辞），取实现那份；同 G9 |
-    | G13 | 实现 | 实现那份带 §8.4 出处；"结构强制"那半句两份都有 |
-    | G14 | 实现 | 实现那份带 §8.3 出处与"`main_body_claims` 是同一份判据"的交叉引用 |
-    | G15 | 实现 | 实现那份带 §8.4 出处；"必填参数：不写就 fail"两份都有 |
-
-    ## G10 的事实判定（简报说这两份"事实性对立"，实测不是）
-
-    简报的表述是：声明表说"适配（实测缺口）⇒ 报 `unknown`"、实现说"逐字照搬 §8.4"，
-    两者"事实性对立"。读实现 + 读测试之后，事实是：两句各说了一条返回路径，
-    都不假、也都不全（所以处置不是二选一，而是合成一句）：
-
-    * 发现侧四字段缺失时（当时的常态：`schema.ReviewFinding` 那时还没有
-      `line`/`verbatim_quote`/`minimal_fix`/`maths`；`P-9` 候选 A 已把这四个字段补上，
-      所以今天这一档管的是"这一条发现键不全"，`X-96.3-3`）⇒ 报 `unknown` 并逐条列出缺哪些
-      —— 证据：`test_gate_g10_is_unknown_when_a_finding_lacks_the_four_fields`；
-    * 发现侧六字段齐全时，这道门确实按 §8.4 逐字判 ⇒ 证据：
-      `test_gate_g10_accepts_a_conforming_finding_list`（齐全 ⇒ `pass`）与
-      `test_gate_g10_rejects_an_overlong_verbatim_quote`（引文超 20 词 ⇒ 报出来）。
-
-    真正必须消掉的"两句并存"是另一件事，我在修之前实测到了：同一个门号在两条
-    返回路径上打印两份不同的 `criterion_revision`（G10 有 3 份不同文本、G5 有 2 份；
-    其余各门 2 份 = 各门自己的那份 + `_no_doc` 漏出的默认值）。现在两条路径打印同一句。
-    只留"适配 ⇒ unknown"会让人以为这门永远报 unknown；只留"逐字照搬"会掩盖 schema
-    缺口 —— 而 `criterion_revision` 是"适配"这件事的唯一留痕，两者都必须留在那一句里。
-
-    ## 顺带核过的一件事：`criterion_revision` 与 `criterion` 有没有重复
-
-    逐门读过：没有一门是在用另一栏的话说同一件事。两栏回答的是两个问题 ——
-    `criterion`（GATES 声明表）= 判什么（参考体例那一行），
-    `criterion_revision` = 我们与他差在哪、为什么。G3/G12/G14 的重合度最高
-    （修订栏点名了判据栏里的对象载体：claim_id/file:line、counterexamples、allowed_use），
-    但那是"指认载体"而不是"复述判据"，保留两栏是对的（合并会让报告再也分不清
-    "体例要求的"与"我们改过的"）。唯一一处跨栏重复是 G8：
-    `GATES["G8"]["script"] = "新增（摘自 RP/00_STANDARD.md:149-150 门 B）"` 与修订栏里的
-    出处是同一句 ⇒ 保留（`render_review_report` 只打印修订栏，不打印 `script` 栏，
-    删掉它报告里就没有出处了）。这条记为观察，未改。
-    """
+    逐字等于声明表 `GATE_CRITERIA_REVISION[gid]` —— 两条返回路径都算；`GATE_CRITERIA_REVISION` 修前在
+    运行期从未被读到（`gates.py` 唯一用处 `if _gid not in GATE_CRITERIA_REVISION` 键检查），真值来自
+    函数体字面量；第三份是 `GateResult` 的默认值 `"逐字照搬 §8.4"`：没传 `criterion_revision=` 的返回
+    路径都打印它（14 门的 `_no_doc`，`G13` 不走，+ 10 个"缺某项输入"分支如 `G1`/`G6` 无 `workspace_root`、
+    `G8`、`G9`、`G10`、`G11`、`G15`，共 24 条）；探针 `temp/probe_g12_baseline.py` 修前 15 / 15 不一致，
+    修完 210 个 (门, 输入档) 组合 0 处不一致。
+    逐门裁决：多数取实现（带 §8.3/§8.5 出处与"为什么"），少数两份互补合成；G6 只核
+    `numeric_evidence.script`、G14 的 `main_body_claims` 同判据。G10 是核心：`unknown` 侧管
+    `line`/`verbatim_quote`/`minimal_fix`/`maths` 缺失（`schema.ReviewFinding` 早先没有这四字段，
+    `P-9` 补上，`X-96.3-3`；证据 `test_gate_g10_is_unknown_when_a_finding_lacks_the_four_fields`），
+    逐字侧管六字段齐全按 §8.4 判（`test_gate_g10_accepts_a_conforming_finding_list` / `test_gate_g10_rejects_an_overlong_verbatim_quote`）⇒ 合成一句。"""
     ctx = _frozen_ctx(ws)
     no_doc_ctx = G.GateContext.build(None)
     mismatched: dict[str, tuple[str, str]] = {}
@@ -1234,26 +1072,16 @@ def test_gate_criteria_revision_table_is_read_not_merely_key_checked(
 ):
     """"声明表真的被读到"（G-12 的第 4 条要求）：把表里的值换成哨兵 ⇒ 报告必须跟着换。
 
-    ## 为什么选"动态哨兵"而不是"源码里出现在取值位置"
+    为什么选"动态哨兵"而不是"源码里出现在取值位置"：① 它判的是运行期事实 —— 报告里那句
+    `criterion_revision` 到底从表里取，还是从别处（函数体字面量 / `GateResult` 的默认值）来；
+    ② 静态做法更弱：一句没人用的死代码（`_ = GATE_CRITERIA_REVISION[gid]`）或"读了却不用"的
+    取值都能让它过，而哨兵不能造假（注入什么，报告里就必须出现什么）；③ 单纯的"逐字相等"也不够
+    （那是上一条）：把表里的文本抄回函数体的实现能让它全绿而表已经是死的，哨兵试验对它必红。
+    两条合起来才是"文本一致" + "来源唯一"。
 
-    * 判据更直接：它判的是运行期的事实 —— 报告里那句 `criterion_revision`
-      到底是从表里取的，还是从别处（函数体字面量 / `GateResult` 的默认值）来的。
-    * 静态做法（断言 `gates.py` 源码里 `GATE_CRITERIA_REVISION` 出现在取值位置）更弱：
-      一句没人用的死代码（`_ = GATE_CRITERIA_REVISION[gid]`）、或"读了却不用"的取值
-      都能让它通过。哨兵不能造假：注入什么，报告里就必须出现什么。
-    * 单纯的"逐字相等"也还不够（那是上一条）：一个把表里的文本抄回函数体的实现
-      （字面量恰好抄对）能让"逐字相等"全绿，而表已经是死的 —— 哨兵试验对它必红。
-      两条断言合起来才是"文本一致" + "来源唯一"。
-
-    ## 覆盖的路径
-
-    每个门号跑两条路径：全输入齐 + `doc=None`（`_no_doc` 那条）。
-    修之前 `_no_doc` 打印的是 `GateResult` 的默认值 `"逐字照搬 §8.4"` ⇒
-    15 门在哨兵试验下全部会红。
-
-    哨兵是注入后立刻还原的（`monkeypatch.setitem` 在每个门号上原地改、teardown
-    统一还原），断言只比对返回值，不把哨兵写进任何持久状态。
-    """
+    覆盖两条路径：全输入齐 + `doc=None`（`_no_doc` 那条）；修之前 `_no_doc` 打印 `GateResult` 的
+    默认值 `"逐字照搬 §8.4"` ⇒ 15 门在哨兵试验下全红。哨兵用 `monkeypatch.setitem` 原地注入、
+    teardown 还原，断言只比返回值；`GATE_CRITERIA_REVISION` 的读法在 `gates.py` 里，不改文件。"""
     ctx = _frozen_ctx(ws)
     no_doc_ctx = G.GateContext.build(None)
     misses: list[tuple[str, str, str, str]] = []
@@ -1281,31 +1109,16 @@ CRITERION_LITERAL_EXCEPTIONS: dict[str, str] = {}
 def test_no_gate_function_holds_a_second_criterion_or_revision_literal():
     """反漂移（AST 级）：`gate_g*` 函数体里不许再有第二份判据文本。
 
-    三件事都是结构上的（与"跑一遍看输出"无关）：
+    三件事都是结构上的（与"跑一遍看输出"无关）：① `Assign` 的右值是字符串常量 ⇒ 又写了一份字面量
+    （G-7 的 `criterion`、G-12 的 `criterion_revision` 一起扫）；② 把字面量直接当关键字实参传进
+    `GateResult(...)` ⇒ "只在某一条 return 上生效的第二份文本"（G-10/G-12 的形状，正则抓不到、AST 能）；
+    ③ `gate_g*` 里每个 `GateResult(...)` 必须传 `criterion_revision=`，否则 `GateResult` 的默认值会替
+    这道门打印一句它没登记过的修订状态（修 G-12 前 14 门的 `_no_doc` + 10 个分支共 24 条返回路径漏了它）。
 
-    1. `Assign` 的右值是字符串常量 ⇒ 又写了一份字面量（G-7 的 `criterion`、
-       G-12 的 `criterion_revision`，两个字段一起扫）；
-    2. 把字面量直接当关键字实参传进 `GateResult(...)` ⇒ 那是"只在某一条 return 上
-       生效的第二份文本"，正是 G-10/G-12 的形状（正则式扫描抓不到它，AST 能）；
-    3. `gate_g*` 里每个 `GateResult(...)` 必须传 `criterion_revision=` ⇒ 否则
-       `GateResult` 的默认值会替这道门打印一句它没有登记过的判据修订状态。
-       实测（修 G-12 之前）：14 门的 `_no_doc` 路径 + 10 个"缺某项输入"的分支
-       （共 24 条返回路径）漏了它，于是适配过的门自称"逐字照搬"。
-
-    为什么这条是必需的（仅靠"逐字相等"与哨兵试验还不够）：`GateResult.criterion_revision`
-    是运行时输出，只能走到某条 return 时才被比对。一个把字面量写回去的函数在今天
-    照样能让那两条过（只要它抄对了），而下次有人改声明表就会重新漂移 ——
-    G-7 修好 `criterion` 之后，G-12 立刻在同一形状上复发，就是"抄对了也还是会漂"的实证。
-
-    为什么用 `ast` 而不是正则：正则会把注释、docstring 里的引文一起误伤
-    （本文档里就有大量逐字引文）；AST 只认真正的赋值节点与关键字实参。
-
-    例外通道：`CRITERION_LITERAL_EXCEPTIONS`（目前为空）。若某道门确实需要
-    动态拼这两栏，把它登记进那个字典并写明理由 —— 但不许默默写回一份字面量。
-
-    正控（两处，防"扫描本身失效"）：必须真的扫到 15 个 `gate_g*` 函数、
-    且真的数到 ≥15 个 `GateResult(...)` 构造点，否则下面的空结果毫无意义。
-    """
+    为什么必需（"逐字相等"与哨兵试验都不够）：`GateResult.criterion_revision` 是运行时输出，只有走到
+    某条 return 才被比对；把字面量写回去的函数只要抄对了今天照样过，下次改声明表就重新漂移 ——
+    G-7 修好 `criterion` 后 G-12 立刻在同一形状上复发就是实证。用 `ast` 不用正则：正则会把注释与
+    docstring 里的逐字引文一起误伤。例外通道 `CRITERION_LITERAL_EXCEPTIONS`（目前为空）；正控两处：必须真扫到 15 个 `gate_g*` 函数、且真数到 ≥15 个 `GateResult(...)` 构造点。"""
     import ast
 
     src = (Path(__file__).resolve().parents[1] / "src" / "agentflow" / "gates.py").read_text(
@@ -1412,27 +1225,16 @@ def test_run_all_gates_returns_every_gate_id_and_a_consistent_verdict(ws: Path):
 def test_run_all_gates_is_accepted_when_g10_sees_zero_findings(ws: Path):
     """正控（`R2b-AN-1` 的下游后果）：全绿的上下文 + `findings=[]` ⇒ 总体 `accepted`。
 
-    ## 这条测试守的是什么
+    守的是什么：`G10` 在 `findings == []` 时曾落 `not_applicable`（修前 `gate_g10` 那一句少了
+    `all_findings and` 这半句守卫）。后果不在 `G10` 自己身上而在汇总表：`gate_verdict` 只要看见
+    任何一个 `not_applicable` 就报 `accepted_with_gaps` ⇒ 一篇没有任何发现的稿件被读成"有门没判"。
+    所以守卫必须打在下游：总体结论、`pass` 计数、`not_applicable_gates` 三者一起断言。
 
-    `G10` 在 `findings == []` 时曾经落 `not_applicable`（修前的形状：`gate_g10` 里
-    那一句少了 `all_findings and` 这半句守卫）。后果不在 `G10` 自己身上，在汇总表上：
-    `gate_verdict` 只要看见任何一个 `not_applicable` 就报 `accepted_with_gaps`，
-    于是一篇没有任何发现的稿件会被读成"有门没判"。所以守卫必须打在下游：
-    总体结论、`pass` 计数、`not_applicable_gates` 三者一起断言。
-
-    ## 为什么夹具要额外给一份禁词表
-
-    `G5` 的对象是词表，不给词表它判 `not_applicable`（这是三态纪律，不是缺陷）。
-    所以"15 门全绿"的上下文除了 `_frozen_ctx` 之外还需要一份非空词表，
-    而正文里不含该词 ⇒ `G5` 落 `pass`。"缺词表就进不了全绿"这件事由
-    `test_gate_g5_returns_not_applicable_without_a_word_list` 单独钉着。
-
-    ## 最后一个差分块的作用
-
-    它把 `G10` 的结论改回修前那一档（`not_applicable`），断言总体判定与那三个数
-    同时变。这就是本用例"不是恒真"的证据：谁把 A1 的守卫删掉，上面三条断言
-    当场红，而差分块读出的正是红成什么样。
-    """
+    为什么夹具要额外给禁词表：`G5` 的对象是词表，不给词表它判 `not_applicable`（三态纪律，不是缺陷），
+    所以"15 门全绿"的上下文除 `_frozen_ctx` 之外还需要一份非空词表（正文不含该词 ⇒ `G5` 落 `pass`）；
+    "缺词表就进不了全绿"由 `test_gate_g5_returns_not_applicable_without_a_word_list` 单独钉着。
+    最后一个差分块把 `G10` 的结论改回修前那一档（`not_applicable`），断言总体判定与那三个数同时变 ——
+    这就是"不是恒真"的证据：谁删掉 A1 的守卫，上面三条断言当场红，差值读出的正是红成什么样。"""
     ctx = _frozen_ctx(ws, banned_words=["显然"])
     assert ctx.findings == [], "夹具前提：这一份上下文里确实是零发现"
     out = G.run_all_gates(ctx)

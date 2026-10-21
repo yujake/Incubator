@@ -89,17 +89,15 @@ def test_readonly_exception_is_not_a_blank_cheque():
 
 
 def test_conditional_write_cannot_silently_disappear():
-    """裁决 3 的判据：C 的条件性写必须留在写集里，且不许静默消失。
+    """    裁决 3 的判据：C 的条件性写必须留在写集里，且不许静默消失。
 
-    这条断言的作用是：有人把 `agent_c._submit_gap_requests` 删掉（或把
-    `gaps(submit_requests=True)` 的写入面挪走）时，这条测试会红 ——
-    而不是让"只读角色的写面"悄悄变窄，然后某天有人以为 C 从不写。
+    这条断言的作用是：有人把 `agent_c._submit_gap_requests` 删掉（或把`gaps(submit_requests=True)` 的写入面挪走）时，这条测试会红
+    ——而不是让"只读角色的写面"悄悄变窄，然后某天有人以为 C 从不写。
 
     背景（两句话，说的是两件事）：
     - 工具层的 `ToolSpec.side_effect` 描述默认调用的副作用
-      （`submit_requests` 默认 False ⇒ 默认纯读，所以 `graph.gaps` 的
-      `side_effect="read"` 是对的，不该改成写工具 —— 改了会被
-      `for_role` 从 C 的工具面里过滤掉，反而砍掉 C 的核心能力）；
+    （`submit_requests` 默认 False ⇒ 默认纯读，所以 `graph.gaps` 的`side_effect="read"` 是对的，不该改成写工具 —— 改了会被`for_role` 从 C
+    的工具面里过滤掉，反而砍掉 C 的核心能力）；
     - 能力层的 `WRITE_SETS` 描述可能写的表 —— 条件性写也算可能写。
     """
     assert "search_requests" in C.WRITE_SETS["C"], (
@@ -155,7 +153,7 @@ def test_allowed_edges_match_design_table():
     # 这一条只加"B 可以直接请 V 签字"，`V` 的只读/冷启动面与它自己的出边一个字未动。
     # 2026-10-14（业主裁定逐字：「允许 B 和 H 协作，B 唤起 H」）：理由是引文回验的口径
     # 改了 ——「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。逐字那一档 B
-    # 自己走（`check_quote`，不花钱）；**逐字不中而语义相同**的由 H 判，B 拿判定回填
+    # 自己走（`check_quote`，不花钱）；逐字不中而语义相同的由 H 判，B 拿判定回填
     # `quote_verified` + `quote_mode="semantic"`。H 的只读面与它的落库代理一个字未动。
     assert C.ALLOWED_EDGES["B"] == frozenset({"C", "H", "V"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
@@ -166,7 +164,7 @@ def test_allowed_edges_match_design_table():
     assert C.ALLOWED_EDGES["V"] == frozenset({"F"})
     # 主控的出边（业主 2026-10-10 第 146 轮第 4 条裁定：「不许直接控制 B、F、V，
     # 只可间接由父代理转达」；2026-10-13「补 M 到 B」加回 B；2026-10-18「给 M 开 V
-    # 出边」加回 V；**2026-10-20 业主裁定重新撤掉 V**：「派 V 只有 F（自产证明）与
+    # 出边」加回 V；2026-10-20 业主裁定重新撤掉 V：「派 V 只有 F（自产证明）与
     # B（文献侧内容）两个入口；M 不再直连 V」⇒ 今天只剩 F 一个仍然只走间接
     # （`M→D→F`），V 走 `M→B→V` / `M→D→F→V` 两条间接路，"够得到每一个角色"另有判据守
     # （本文件下面那条负控 + `capabilities.assert_capabilities` 第 [1b] 条）。
@@ -197,25 +195,16 @@ def test_unknown_edge_target_is_rejected():
 
 
 def test_negative_control_missing_a_role_in_the_conductor_edges_is_rejected():
-    """负控（`FINAL-R4-01`）：主控够不到某个角色（值少一个）⇒ 能力层自家判据必须炸。
-
-    这一条钉的是"键集判据看不见的那一半"：`set(ALLOWED_EDGES) >= set(S.ROLES)`
-    只问"每个角色有没有出边条目"，不问"主控能不能够到每一个角色"。
-    实测（R4 批）：把 `ALLOWED_EDGES["M"]` 写成 7 元字面量后，
-    按权限相关的 7 个测试文件跑子集全绿（守点在别处）。
+    """    负控（`FINAL-R4-01`）：主控够不到某个角色（值少一个）⇒ 能力层自家判据必须炸。这一条钉的是"键集判据看不见的那一半"：`set(ALLOWED_EDGES) >= set(S.ROLES)`只问"每个角色有没有
+    出边条目"，不问"主控能不能够到每一个角色"。实测（R4 批）：把 `ALLOWED_EDGES["M"]` 写成 7 元字面量后，按权限相关的 7 个测试文件跑子集全绿（守点在别处）。
 
     ## 2026-10-10 口径更新（裁定第 4 条之后）+ 2026-10-14 的第二次收紧
 
-    改前这里删的是最后一条直接边（因为当时"够得到"等价于"直接边里有它"）。
-    裁定之后"直接边里有它"不再是必要条件 ⇒ 删直接边不再必然让判据炸
-    （删 B / F / V 正是裁定要的形态）。
+    改前这里删的是最后一条直接边（因为当时"够得到"等价于"直接边里有它"）。裁定之后"直接边里有它"不再是必要条件 ⇒ 删直接边不再必然让判据炸（删 B / F / V 正是裁定要的形态）。
 
-    2026-10-14（业主裁定「允许 B 和 H 协作，B 唤起 H」）之后**单删一条也不再炸**：
-    边表更密了 —— 删 `M→H` 还有 `M→B→H`，删 `M→G` 还有 `M→B→H→G`，
-    删 `M→A` 还有 `M→B→H→A`……除 F 之外每个角色都有第二条进路，而 F 走 `M→D→F`
-    也够得着。所以这一条负控改成删**主控的全部直接出边**（那是一刀真正的割）：
-    那时整张图里没有一个角色够得到，`assert_capabilities()` 必须报"到不了这些角色"。
-    这样改仍守着原来的意图（"够不到就得炸"），只是换了一刀真的会造成够不到。
+    2026-10-14（业主裁定「允许 B 和 H 协作，B 唤起 H」）之后单删一条也不再炸：边表更密了 —— 删 `M→H` 还有 `M→B→H`，删 `M→G` 还有 `M→B→H→G`，删 `M→A` 还有
+    `M→B→H→A`……除 F 之外每个角色都有第二条进路，而 F 走 `M→D→F`也够得着。所以这一条负控改成删主控的全部直接出边（那是一刀真正的割）：
+    那时整张图里没有一个角色够得到，`assert_capabilities()` 必须报"到不了这些角色"。这样改仍守着原来的意图（"够不到就得炸"），只是换了一刀真的会造成够不到。
     """
     original = frozenset(C.ALLOWED_EDGES["M"])
     assert original == frozenset({"A", "B", "C", "D", "E", "G", "H"}), \
@@ -466,23 +455,16 @@ def test_unknown_role_and_unknown_action_are_different_refusals():
 
 
 def test_summoning_the_conductor_is_a_forbidden_edge_not_an_unknown_action():
-    """`G-11`：召唤主控必须报 `forbidden_edge`，而不是 `unknown_action`。
+    """    `G-11`：召唤主控必须报 `forbidden_edge`，而不是 `unknown_action`。
 
     ## 为什么这条断言换过 reason（这是断言错，不是实现错）
 
-    改前这里断言的是 `unknown_action`（附一句"主控没有 Agent 动作"）。
-    那条断言之所以能一直是绿的，是因为 `check` 把整件事交给了
-    `check_action`：它在第一步就把 `to == S.CONDUCTOR_ROLE` 判成
-    `unknown_action` 并返回，于是 `NON_SUMMONABLE` 那条显式判据
-    （连同它 docstring 里"不靠 `ALLOWED_EDGES` 里没人写 M 这个偶然事实"的理由）
-    从来执行不到 —— 登记册 `G-11` 的实测就是"两条判据不可达"。
-
-    代价是读者拿到 `unknown_action` 会以为"角色名拼错了 / 动作不存在"，
-    而事实上发生的是"召唤主控这件事本身不允许"。两者处置相反：
-    前者去查名字，后者去改设计。所以按 `G-11` 的验收判据改成 `forbidden_edge`，
-    并把"主控没有 Agent 动作"这半句留给 `check_action` 自己的用例
-    （`tests/test_coverage_policy.py::test_check_action_accepts_the_conductor_role_presence_but_never_an_action`
-    —— 那一层一个字符没动）。
+    改前这里断言的是 `unknown_action`（附一句"主控没有 Agent 动作"）。那条断言之所以能一直是绿的，是因为 `check` 把整件事交给了`check_action`：它在第一步就把
+    `to == S.CONDUCTOR_ROLE` 判成`unknown_action` 并返回，于是 `NON_SUMMONABLE` 那条显式判据（连同它 docstring 里"不靠
+    `ALLOWED_EDGES` 里没人写 M 这个偶然事实"的理由）从来执行不到 —— 登记册 `G-11` 的实测就是"两条判据不可达"。代价是读者拿到 `unknown_action` 会以为"角色名拼错了 /
+    动作不存在"，而事实上发生的是"召唤主控这件事本身不允许"。两者处置相反：前者去查名字，后者去改设计。所以按 `G-11` 的验收判据改成 `forbidden_edge`，并把"主控没有 Agent 动作"这半句留给
+    `check_action` 自己的用例（`tests/test_coverage_policy.py::test_check_action_accepts_the_conductor_role_presence_but_never_an_action`—
+    — 那一层一个字符没动）。
     """
     r3 = P.check(P.Policy(), _d(to=S.CONDUCTOR_ROLE, action="summon"))
     assert r3 is not None and r3.reason == "forbidden_edge", (
@@ -503,25 +485,15 @@ def test_forbidden_edge_c_to_b():
 
 
 def test_the_refusal_names_who_can_relay() -> None:
-    """判据（2026-10-13，无 Lean T2 的真机）：越权拒绝必须可行动。
+    """    判据（2026-10-13，无 Lean T2 的真机）：越权拒绝必须可行动。
 
-    真机现场（`projects/p6t2-research-20261012b`，t2b 步 9/10）：M 先按政策派了
-    `A.run_once`（想让 A 转达 B 消化 13 条未处理的文献），A 回 `no_pending_request`；
-    M 于是试了一次直接派 B（brief 逐字"试直接派 B 以确认链路"）—— 拿到的是这一句
-    `forbidden_edge`。旧的理由只说"这条边不在允许的边里"，没说那该找谁，
-    于是那一趟的「消化文献」这条腿就断在这里（P8 收尾时 13 条仍是未处理）。
-
-    这条判据钉两件事：
-
-    1. 能绕的：`M → F` 的理由里必须点名一跳能到的那几个伙伴
-       （取自同一张边表，不是另抄一份名单）；
-    2. `M → V` **不再是被拒的边**（业主 2026-10-18「给 M 开 V 出边」）⇒ 这一格翻成
-       "策略必须放行它"（同一套口径：读的是真边表）。此前它是"必须点名 B
-       （`M→B→V`）"，那条两跳路今天仍然成立，只是不再是唯一路径。
-
-    2026-10-13：`M → B` 从这一组挪走了 —— 业主「补 M 到 B」之后它**不再是被拒的边**
-    （所以这里不能再拿它当负控；守卫这一侧的那条判据见
-    `test_the_conductor_may_summon_b_and_v_but_not_f`）。
+    真机现场（`projects/p6t2-research-20261012b`，t2b 步 9/10）：M 先按政策派了`A.run_once`（想让 A 转达 B 消化 13 条未处理的文献），A 回
+    `no_pending_request`；M 于是试了一次直接派 B（brief 逐字"试直接派 B 以确认链路"）—— 拿到的是这一句`forbidden_edge`。旧的理由只说"这条边不在允许的边里"，没说那该找谁，
+    于是那一趟的「消化文献」这条腿就断在这里（P8 收尾时 13 条仍是未处理）。这条判据钉两件事：能绕的：`M → F` 的理由里必须点名一跳能到的那几个伙伴
+    （取自同一张边表，不是另抄一份名单）；
+    2. `M → V` 不再是被拒的边（业主 2026-10-18「给 M 开 V 出边」）⇒ 这一格翻成
+    "策略必须放行它"（同一套口径：读的是真边表）。此前它是"必须点名 B（`M→B→V`）"，那条两跳路今天仍然成立，只是不再是唯一路径。2026-10-13：`M → B` 从这一组挪走了 —— 业主「补 M 到 B」
+    之后它不再是被拒的边（所以这里不能再拿它当负控；守卫这一侧的那条判据见`test_the_conductor_may_summon_b_and_v_but_not_f`）。
     """
     from agentflow.agentspec import builtin_registry
 
@@ -538,14 +510,14 @@ def test_the_refusal_names_who_can_relay() -> None:
     from agentflow import capabilities as C
 
     names = m_to_f.split("改派 ", 1)[1].split(" ——", 1)[0].split("、")
-    # 2026-10-18 之后 `V` 也在 M 的出边里 ⇒ 那三个名字里含 V；**2026-10-20 业主裁定
-    # 撤掉 `M→V` 之后它回到两个**（提示是现算的，所以它准确地少点了 V 一个）——
+    # 2026-10-18 之后 `V` 也在 M 的出边里 ⇒ 那三个名字里含 V；2026-10-20 业主裁定
+    # 撤掉 `M→V` 之后它回到两个（提示是现算的，所以它准确地少点了 V 一个）——
     # 这是边表改动的读数，不是放宽：两个名字逐个核过"它的出边里真的有 F"。
     assert names == ["D", "G"], m_to_f
     for via in names:
         assert "F" in C.edges_for(via, registry=reg), via
     # ---- 2026-10-20 业主裁定「派 V 只有 F 与 B 两个入口；M 不再直连 V」之后：
-    # `M → V` 翻成**被拒的边**（同一套判据口径：读的是真边表）。
+    # `M → V` 翻成被拒的边（同一套判据口径：读的是真边表）。
     #
     # 这一格原来是"必须放行"（2026-10-18 那一版）。翻回来不是删判据，而是把期望值
     # 换成这一天的裁定 —— 把这一格删掉就等于没人守"V 不许再从 M 直接派"。
@@ -560,9 +532,9 @@ def test_the_refusal_names_who_can_relay() -> None:
 
 
 def test_the_conductor_may_summon_b_and_v_but_not_f():
-    """业主 2026-10-13「补 M 到 B」＋ 2026-10-18 开 `M→V` ＋ **2026-10-20 撤掉 `M→V`** 的守卫。
+    """业主 2026-10-13「补 M 到 B」＋ 2026-10-18 开 `M→V` ＋ 2026-10-20 撤掉 `M→V` 的守卫。
 
-    为什么要单列：这几条边都是**改权限面**的那一类改动（30 → 31 → 33 → 32），而目的是
+    为什么要单列：这几条边都是改权限面的那一类改动（30 → 31 → 33 → 32），而目的是
     让「命题进台账」与「证明逐条走查」从主控够得着。2026-10-20 的裁定把 V 那条收回：
     派 V 只有两个入口 —— F（自产证明）与 B（文献侧内容）。
     判据三向都钉：正向（B 在 `ALLOWED_EDGES["M"]` 里、策略放行 `M→B`）；
@@ -622,9 +594,9 @@ def test_the_default_depth_is_twelve_after_the_2026_10_15_ruling():
     前情：默认深度 3 → 5 是所有者 2026-10-08 的裁定（「我们限制递归调用深度为5，
     毕竟 20*(5*5*5*5) 也非常可观了」）。2026-10-15 的裁定标准逐字是
     「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），删或把
-    触发水平**抬高到几乎不可能触发**的程度」，依据是 T5 第 8 趟的真实链长：
+    触发水平抬高到几乎不可能触发的程度」，依据是 T5 第 8 趟的真实链长：
     正常研究里一次"D 的追问"会再走一遍 `D → A → B`，链长立刻 6 ——
-    也就是说 5 不是"上限"，它是**正常工作会撞到的一堵墙**。
+    也就是说 5 不是"上限"，它是正常工作会撞到的一堵墙。
 
     两件事：①默认值就是 12；②边界精确 —— 第 12 层放行、第 13 层拒。
     """
@@ -673,7 +645,7 @@ def test_fanout_exceeded():
 def test_fanout_limit_is_per_initiator_role():
     """扇出上限按发起方角色取：主控一档 = 100，默认档 = `Policy.max_fanout`（25）。
 
-    那两个数钉在判据里是刻意的：它们是**人裁的编排余量**（题15 选B，2026-10-07
+    那两个数钉在判据里是刻意的：它们是人裁的编排余量（题15 选B，2026-10-07
     定的双档；数字由业主 2026-10-15 裁定 C5 抬到 100 / 25），
     改它应当先改那一处裁定，而不是顺手调一个常量。口径在 2026-10-08 被所有者
     改成"单时刻在飞"（`fanout` = 此刻还没返回的子代理数；见 `policy` 的模块 docstring），
@@ -707,10 +679,10 @@ def test_total_tasks_budget_exceeded():
 
 
 def test_token_spend_never_becomes_a_refusal():
-    """2026-10-15 业主裁定 A1/A2/A3/A7：**不卡 token，只卡总花销的钱**。
+    """2026-10-15 业主裁定 A1/A2/A3/A7：不卡 token，只卡总花销的钱。
 
-    这一条是那一轮裁定的**钉子**：token 位必须从判据的两个入口上彻底消失，
-    "花爆了 token"必须无法表达成一次拒绝。理由不是宽容，是**必需**——
+    这一条是那一轮裁定的钉子：token 位必须从判据的两个入口上彻底消失，
+    "花爆了 token"必须无法表达成一次拒绝。理由不是宽容，是必需——
     T5 实测（`draft/121`）：6 份有全文的文献全部 `output_exhausted`，
     reasoning 吃掉 26,995–39,076 字符，而同一批文献里 2,720 字符的两份超时、
     ≤10,396 字符的两份成功 —— 卡 token 卡的正是"它想清楚"那一段。
@@ -808,17 +780,13 @@ def test_estimate_write_conflict_accepts_action_spec():
 
 
 def test_waves_of_keeps_input_order_and_mutual_exclusion():
-    """分波：波内写集互不相交，波内下标升序，且划分是确定性的。
+    """    分波：波内写集互不相交，波内下标升序，且划分是确定性的。
 
-    这里刻意不断言"摊平后的顺序 == 输入顺序"：贪婪装箱会把后面的
-    调用塞进前面未满的波（输入 `(E,C,H,E,A)` ⇒ `[[0,1,2],[3,4]]`，
-    摊平是 `0,1,2,3,4` 只是碰巧；换一组输入就会变，例如把 A 换成第二个 C
-    会得到 `[[0,1,2,4],[3]]`）。跨波的顺序不重要 —— 结果合并顺序是由
-    `scheduler.run_waves` 按下标写回 `out[i]` 保证的（见 I-10），
+    这里刻意不断言"摊平后的顺序 == 输入顺序"：贪婪装箱会把后面的调用塞进前面未满的波（输入 `(E,C,H,E,A)` ⇒ `[[0,1,2],[3,4]]`，摊平是 `0,1,2,3,4` 只是碰巧；换一组输入就会变，
+    例如把 A 换成第二个 C会得到 `[[0,1,2,4],[3]]`）。跨波的顺序不重要 —— 结果合并顺序是由`scheduler.run_waves` 按下标写回 `out[i]` 保证的（见 I-10），
     不是靠分波顺序。把它当成"顺序保证"是两件事被混为一谈的典型形态。
 
-    这一组的分波是 `[[0,1,2],[3,4]]`：第 4 个（E）与波 0 里的 E 相交 ⇒ 新开一波；
-    A（4）写 `search_requests`，而C 现在也写 `search_requests`（I3 受控例外，
+    这一组的分波是 `[[0,1,2],[3,4]]`：第 4 个（E）与波 0 里的 E 相交 ⇒ 新开一波；A（4）写 `search_requests`，而C 现在也写 `search_requests`（I3 受控例外，
     见 `WRITE_SETS["C"]`），所以 A 与 C 相交 ⇒ 也只能进第 1 波。
     """
     calls = [P.Decision(role=r) for r in ("E", "C", "H", "E", "A")]
@@ -841,7 +809,7 @@ def test_waves_of_respects_limit():
 
 
 def test_budget_state_keeps_none_semantics():
-    """`None`（不限）与 `0`（已耗尽）不许折叠 —— 但这条现在只对**钱**成立。
+    """`None`（不限）与 `0`（已耗尽）不许折叠 —— 但这条现在只对钱成立。
 
     2026-10-15 业主裁定 A7：`tokens_left` 这一格已删；`spent_tokens` 留着当读数
     （"这一趟花了多少 token"要看得见），但它不再是任何闸门的输入。

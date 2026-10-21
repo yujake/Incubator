@@ -86,7 +86,7 @@ def test_a_mapping_row_has_the_field_combination_from_the_spec(store):
     assert row["dep_id"] == S.format_id(0), row["dep_id"]
     assert row["used_by"] == f"doc:{S.format_id(9)}#c-1.1", row["used_by"]
     assert row["kind"] == "theorem" and row["label"] == "1.1", row
-    # 来源手稿号取自**那一行自己**（`stmts[0]` 是夹具里的行，号由夹具给）——
+    # 来源手稿号取自那一行自己（`stmts[0]` 是夹具里的行，号由夹具给）——
     # 判据断言的是"抄对了来源"，不是"来源恰好是哪个十进制写法"。
     assert row["source_doc_id"] == str(stmts[0]["doc_id"]), row
     assert row["source_claim_id"] == "c-1.1", row

@@ -3,9 +3,9 @@
 
 ## 这一组守什么
 
-P3 的收工门是"把纪律变成门"，所以判据的重点不是"门能不能跑"，而是
-每一条都能单独造红：把某一条弄坏之后，红的必须正好是它，其余四条仍然绿。
-只测"全好 ⇒ 全绿"是不够的 —— 那样的门完全可能是一条恒真的判据。
+P3 的收工门是"把纪律变成门"，所以判据的重点不是"门能不能跑"，而是每一条都能单独造红：
+把某一条弄坏之后，红的必须正好是它，其余四条仍然绿。只测"全好 ⇒ 全绿"是不够的 ——
+那样的门完全可能是一条恒真的判据。
 
 五条与它们的负控（`draft/37` §16 P3 逐字要求"每一条都能单独造红（五条负控）"）：
 
@@ -17,10 +17,8 @@ P3 的收工门是"把纪律变成门"，所以判据的重点不是"门能不�
 | `report_shape` | 报告抽掉一节 + 抽掉分栏标记 |
 | `user_pending` | 问了一个还没被回答的问题 |
 
-外加两条反向判据（§10.2 的负控②、"没查成"那一档）：
-- 已降档的结论不许因为没上 T3 而判失败（省下来的钱要看得见）；
-- 没给项目根 / 没给报告路径 ⇒ `unknown`，而 `unknown` 不许算通过。
-"""
+外加两条反向判据（§10.2 的负控②、"没查成"那一档）：已降档的结论不许因为没上 T3 而判失败
+（省下来的钱要看得见）；没给项目根 / 没给报告路径 ⇒ `unknown`，而 `unknown` 不许算通过。"""
 from __future__ import annotations
 
 import json
@@ -42,7 +40,7 @@ def _seal(root: pathlib.Path, st: Store) -> None:
 
     旧口径（2026-10-13 之前）是"封渲染锚"，那时锚把 `store` 的行也算进一个维度 ⇒
     写完台账必须重新封锚，否则锚一出生就是 `drifted`。现在回执只认 `main.tex`：
-    **写台账不再让 PDF 过期**，所以下面那些"写完台账再封一次"的调用留着无害，
+    写台账不再让 PDF 过期，所以下面那些"写完台账再封一次"的调用留着无害，
     但它们守的东西已经变了（退场面见 `draft/117`）。`st` 参数保留只为不改调用点。
     """
     engine = FX.fake_engine(root / "_engine")
@@ -196,17 +194,14 @@ def _gate(st: Store, report: pathlib.Path | None, *, project_dir: pathlib.Path |
 def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
     """正控：每条都过 ⇒ `machine_pass` 为真、没有 blocker；`can_close` 由 M 判。
 
-    业主 2026-10-09 的两句（逐字）：
-    「是否收工不要用机械判据，由 M 制定的目标是否达成为准」＋
-    「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令
-    给自己设计任务列表」⇒ 八格全过只说明"机器没意见"；能不能停要 M 按它自己列的
-    任务列表说一句。所以这一条现在钉两半：
-    ① 没有 M 的判据 ⇒ `can_close=false`、退出码 2（"没人判过"，不是"可以交"）；
+    业主 2026-10-09 的两句（逐字）：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」＋
+    「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给
+    自己设计任务列表」⇒ 八格全过只说明"机器没意见"；能不能停要 M 按它自己列的任务列表说一句。
+    所以这一条钉两半：① 没有 M 的判据 ⇒ `can_close=false`、退出码 2（"没人判过"，不是"可以交"）；
     ② M 交了判据（任务列表全 done + `goal_met=True`）⇒ `can_close=true`、退出码 0。
 
-    这一条本身不足以证明门有效（一条恒真的判据也能过），所以后面每一条
-    都配一条"只把它弄坏"的负控 —— 合起来才是这组判据的全部。
-    """
+    这一条本身不足以证明门有效（一条恒真的判据也能过），所以后面每一条都配一条"只把它弄坏"的
+    负控 —— 合起来才是这组判据的全部。"""
     st, report = _good(tmp_path)
     rep = _gate(st, report)
     assert rep.status == {name: "pass" for name in CL.DEFAULT_CHECKS}, rep.to_dict()
@@ -232,7 +227,7 @@ def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
 def _acceptance_checks(root: pathlib.Path, rows: list[dict], *, st: Store | None = None) -> pathlib.Path:
     """把机器可判的验收行写进项目（`out/paper/ACCEPTANCE-CHECKS.json`）。
 
-    给了 `st` 就顺手再编一次：**这一行现在不是必需的**（回执只认 `main.tex`，
+    给了 `st` 就顺手再编一次：这一行现在不是必需的（回执只认 `main.tex`，
     写 `out/paper/ACCEPTANCE-CHECKS.json` 不会再让 PDF 过期）—— 留着是因为它在旧口径
     （锚的 `files` 维度覆盖整个 `out/paper`）下是必需的，调用点因此保持原样。
     """
@@ -282,7 +277,7 @@ def test_the_acceptance_cell_passes_once_each_leg_has_a_ledger_row(tmp_path: pat
         with s.tx("documents", actor="test") as tx:
             row = dict(tx.rows("documents")[0])
             row["review_rounds"] = 1
-            # 2026-10-17（业主：「审过和通过是不同的状态」）：审过由**审核轴**决定
+            # 2026-10-17（业主：「审过和通过是不同的状态」）：审过由审核轴决定
             row["review_verdict"] = "成立"
             row["reviewed_at"] = TS
             row["reviewed_by"] = "agent-H"
@@ -339,12 +334,12 @@ def test_the_acceptance_cell_only_excuses_the_row_that_is_really_met(tmp_path: p
 
 def test_the_reviewed_documents_leg_counts_hs_verdict_not_only_revision_rounds(
         tmp_path: pathlib.Path):
-    """判据（业主 2026-10-17：「**H 审过和通过是完全不同的状态**，通过标准和 V 一样」）。
+    """判据（业主 2026-10-17：「H 审过和通过是完全不同的状态，通过标准和 V 一样」）。
 
     旧版把 `status='accepted'` 当"审过"——那正是被折平的地方。现在判三件事：
-    ① `review_verdict='成立'` ⇒ **审过** ≥1 且 **通过** ≥1；
-    ② `review_verdict='有毛病'` ⇒ **审过** ≥1 而 **通过** = 0（审过 ≠ 通过）；
-    ③ **负控**：`status='accepted'` 但 `review_verdict=''`（没审过）⇒ 两条都**不算**。
+    ① `review_verdict='成立'` ⇒ 审过 ≥1 且 通过 ≥1；
+    ② `review_verdict='有毛病'` ⇒ 审过 ≥1 而 通过 = 0（审过 ≠ 通过）；
+    ③ 负控：`status='accepted'` 但 `review_verdict=''`（没审过）⇒ 两条都不算。
     """
     def _seed_with(verdict: str):
         def seed(s: Store) -> None:
@@ -454,21 +449,16 @@ def test_the_per_citation_leg_counts_against_the_read_only_baseline(
         tmp_path: pathlib.Path):
     """判据（`draft/37` §103 + E-05 ②）：引文那一档的分母取只读基线。
 
-    第 12 趟钻过去的口子：那一档当时只要求"≥1 条带 `quote_verified` 的行"，
-    于是做一条就算（它落了一条 `quote_verified=false` 就过了），而任务原文要的是"逐条"。
-    现在阈值 = 只读基线 `source/main.tex` 里 `\\bibitem` 的条数 —— 分母不许由
-    可改的主稿自己给（旧口径取主稿 ⇒ 删文献就能把门槛一起压低，`draft/43-C` C-05）。
+    第 12 趟钻过去的口子：那一档当时只要求"≥1 条带 `quote_verified` 的行"，于是做一条就算
+    （`quote_verified=false` 也过），而任务原文要的是"逐条"。现在阈值 = 只读基线 `source/main.tex` 里
+    `\\bibitem` 的条数 —— 分母不许由可改的主稿自己给（旧口径取主稿 ⇒ 删文献就能把门槛一起压低，`draft/43-C` C-05）。
 
-    2026-10-06 的 T1 口径（`draft/39` §6.49 八 第四条）又加了一条：只读基线有
-    `\\bibitem`、而台账里 `origin="external_lit"` 的行一条 `quote_verified=True` 都没有
-    ⇒ 门自己报「逐字引文一条都没核到」（"哪几条没查到"本身不是交付）。
-    所以这份夹具的三条记录里必须留一条真的核到的（`0002`：`quote_verified=True`
-    + 逐字理由）：这三行的 `quote_reason` 写的全是文献比对的结论（"与原文不一致" /
-    "原文不在盘上 ⇒ 未查"），它们本来就是引文记录 —— 一条核到的都不留，这份夹具就
-    不再配叫"引文逐条核过"了。（本夹具按这里的既有写法把三行登记成 `own_result`，
-    T1 那条判据只看 `external_lit` ⇒ 它不看这三行；那个口径的正反两面由
-    `test_unretrieved_quotes_alone_do_not_satisfy_the_citation_leg` 单列。）
-    """
+    2026-10-06 的 T1 口径（`draft/39` §6.49 八 第四条）又加一条：基线有 `\\bibitem`、而台账里
+    `origin="external_lit"` 的行一条 `quote_verified=True` 都没有 ⇒ 门报「逐字引文一条都没核到」。
+    所以这份夹具的三条记录里必须留一条真的核到的（`0002`：`quote_verified=True` + 逐字理由）：
+    三行 `quote_reason` 全是文献比对结论（"与原文不一致" / "原文不在盘上 ⇒ 未查"），一条核到的都不留
+    就不配叫"逐条核过"。本夹具把三行登记成 `own_result`，T1 那条判据只看 `external_lit` ⇒ 不看这三行；
+    那个口径的正反两面由 `test_unretrieved_quotes_alone_do_not_satisfy_the_citation_leg` 单列。"""
     def seed(s: Store) -> None:
         _t3_experiment(s)
         _paper_with_claim(s)
@@ -578,18 +568,15 @@ def test_the_retrieval_leg_requires_a_search_that_actually_ran(
 def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monkeypatch):
     """判据（`draft/38` 的 T2）：研究类那四档各数自己那张表（不是互相替代）。
 
-    从零做一轮研究要看的四件事各有落点：立起问题（`research_questions`）、
-    检索取回（`search_requests`）、算一遍（`experiments` 的 numeric 行）、
-    分析报告与攻坚计划（D 与 F 的交付物）。四档要是混着数，一门绿就会掩盖另一门空。
+    从零做一轮研究要看的四件事各有落点：立起问题（`research_questions`）、检索取回
+    （`search_requests`）、算一遍（`experiments` 的 numeric 行）、分析报告与攻坚计划（D 与 F 的
+    交付物）—— 四档混着数，一门绿就会掩盖另一门空。
 
-    2026-10-19 改口径（根因在 `closing.RESEARCH_CHAIN_GROUPS` 的「攻」那一格）：
-    `attack_plan_rows` 从"那一格的成员"降为**立项计数（informational）** ——
-    它照旧数 `attack_plans` 的行数（读数 `got=1`），但 `ok` 是 `None`：
-    立过项不判推进，也不再让「攻（攻坚推进）」那一环算覆盖（那一环只认
-    `plan_progress_rows`）。改前这一行断言的是 `(1, True)` —— 那正是"只凭立过项
-    就能让「攻」变绿"的读数，事实变了，断言跟着变（不是放宽：见下面那条
-    `test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell`）。
-    """
+    2026-10-19 改口径（根因在 `closing.RESEARCH_CHAIN_GROUPS` 的「攻」那一格）：`attack_plan_rows`
+    从"那一格的成员"降为立项计数（informational）—— 它照旧数 `attack_plans` 的行数（读数 `got=1`），
+    但 `ok` 是 `None`：立过项不判推进，也不再让「攻」那一环算覆盖（那一环只认 `plan_progress_rows`）。
+    改前这一行断言的是 `(1, True)` —— 那正是"只凭立过项就能让「攻」变绿"的读数，事实变了，断言
+    跟着变（不是放宽：见下面那条 `test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell`）。"""
     st, report = _good(tmp_path)
     fake = {
         "research_questions": [{"question_id": "q-0001", "status": "open"}],
@@ -612,7 +599,7 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
     rows_read = rep.readings["acceptance"]["rows"]
     got = {r["id"]: (r["got"], r["ok"]) for r in rows_read}
     assert got["R1"] == (1, True) and got["R5"] == (1, True), got
-    # 立项计数照样数得出来（读数照给人看），但它**不判**（`ok=None`）。
+    # 立项计数照样数得出来（读数照给人看），但它不判（`ok=None`）。
     assert got["R6"] == (1, None), got
     assert {r["id"]: r["state"] for r in rows_read}["R6"] == "informational", rows_read
     # 夹具里的那条 T3 实验是 formal ⇒ numeric 那一档必须是 0（各数各的表）
@@ -819,7 +806,7 @@ def test_a_project_without_a_paper_has_nothing_to_check(tmp_path: pathlib.Path):
     而旧那一格只会报 `unknown`（锚文件读不到）—— `can_close` 要求各格全 pass
     ⇒ 那类测试永远关不上门，而它们本来就不该交论文。
 
-    判据从「`out/paper/` 目录在不在」改成「**盘上有没有 `main.tex`**」：
+    判据从「`out/paper/` 目录在不在」改成「盘上有没有 `main.tex`」：
     人给的验收表按 `ACCEPTANCE_CHECKS_NAME` 的定义就住在 `out/paper/` 里，于是
     "目录在"是个恒真信号（本轮预检实测：空白 T2 工作区 `anchor=unknown`、门永远关不上）。
     反面那一半照旧守住：「有正文」而回执读不到 ⇒ 仍然是 `unknown`（那是真出了问题，不许被吞掉）。
@@ -850,7 +837,7 @@ def test_a_project_without_a_paper_has_nothing_to_check(tmp_path: pathlib.Path):
 def test_the_review_files_row_counts_review_reports_not_the_agents_own_report(
         tmp_path: pathlib.Path):
     """判据（业主 2026-10-13：「review 只是任务的一种，咋产出中稳定产出 review 文件夹呢？」）：
-    `review_files` 数的是 `out/review/` 里的**审校报告**，且必须减掉 M 自己那两份。
+    `review_files` 数的是 `out/review/` 里的审校报告，且必须减掉 M 自己那两份。
 
     为什么必须单列：`out/review/` 同时住着 M 的交付说明（`REPORT.md`）与状态报告
     （`STATUS-*.md`）⇒ 只 glob `*.md` 会让「M 写了一份说明」冒充「审过了」。
@@ -1093,19 +1080,16 @@ def test_a_missing_report_file_is_unknown_not_a_failure(tmp_path: pathlib.Path):
 def test_the_wrong_directory_gets_an_actionable_message(tmp_path: pathlib.Path):
     """正控 + 可行动性（`draft/37` §44.5 / §45）：传错目录时，错误必须说清该传哪一个。
 
-    `project_dir` 要的是**项目根**，正文与回执在 `<项目根>/out/paper/` 下。
-    2026-10-02 那趟真机上，主控照着工具描述（原话"论文包所在目录"）传了 `out/paper`，
-    结果工具去找 `out/paper/out/paper/...`，那一格变成 `unknown`，白花一步 ——
-    而那句错误当时只说"读不到 <双拼路径>"，没有一个字提示路径多了一层。
+    `project_dir` 要的是项目根，正文与回执在 `<项目根>/out/paper/` 下。2026-10-02 那趟真机上，
+    主控照着工具描述（原话"论文包所在目录"）传了 `out/paper`，结果工具去找
+    `out/paper/out/paper/...`，那一格变成 `unknown`，白花一步 —— 而那句错误当时只说"读不到
+    <双拼路径>"，没有一个字提示路径多了一层。
 
-    所以这条判据守两件事：
-    1. 传项目根 ⇒ `pass`（正确姿势能过）；
-    2. 传论文包目录 ⇒ `unknown`（不改判据口径，仍然不许当"一致"），
-       但 finding 里必须点名"你给的是哪一层"与"改传项目根"这个动作。
+    所以这条判据守两件事：1. 传项目根 ⇒ `pass`（正确姿势能过）；2. 传论文包目录 ⇒ `unknown`
+    （不改判据口径，仍然不许当"一致"），但 finding 里必须点名"你给的是哪一层"与"改传项目根"。
 
-    2026-10-13 之后认这一层的判据从"路径被拼了两次"改成**结构性的**：那个目录下
-    直接躺着 `main.tex` ⇒ 它就是论文包本身（不再依赖路径拼接的读数）。
-    """
+    2026-10-13 之后认这一层的判据从"路径被拼了两次"改成结构性的：那个目录下直接躺着 `main.tex`
+    ⇒ 它就是论文包本身（不再依赖路径拼接的读数）。"""
     st, report = _good(tmp_path)
     right = _gate(st, report, project_dir=tmp_path)
     assert right.status["paper"] == "pass", right.to_dict()
@@ -2251,24 +2235,18 @@ def test_a_stage_cannot_be_covered_by_a_reading_about_something_else(
 # ==================================================== 「攻」只认真推进（2026-10-19）
 def test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell(
         tmp_path: pathlib.Path):
-    """负控（2026-10-19）：**「立过项」不许让「攻（攻坚推进）」那一格变绿**。
+    """负控（2026-10-19）：「立过项」不许让「攻（攻坚推进）」那一格变绿。
 
-    ## 改前的缺陷（根因在 `closing.RESEARCH_CHAIN_GROUPS`）
+    改前的缺陷（根因在 `closing.RESEARCH_CHAIN_GROUPS`）：`attack_plan_rows`（立项计数）与
+    `plan_progress_rows`（真推进计数）此前同属「攻」那一格的成员 ⇒ 验收表写一行
+    `attack_plan_rows: min 1` 就够了：只要立过项，那一格就 pass —— 而盘上的计划可以一步没动
+    （`history` 空 / 全 `no_change`；真机 `projects/mp1` 的 `000000` 就是 1 轮 `no_change`）。
 
-    `attack_plan_rows`（立项计数）与 `plan_progress_rows`（真推进计数）此前**同属**
-    「攻」那一格的成员 ⇒ 验收表写一行 `attack_plan_rows: min 1` 就够了：
-    只要**立过项**，那一格就 pass —— 而盘上的计划可以一步没动（`history` 空 /
-    全 `no_change`；真机 `projects/mp1` 的 `000000` 就是 1 轮 `no_change`）。
-
-    ## 现在
-
-    ① `attack_plan_rows` 是 **informational**：读数照出（`got` = 立项数），
-       `ok=None`、`state="informational"`，**不进研究链覆盖面**；
-    ② 「攻」那一环只认 `plan_progress_rows` ⇒ 只写立项那一行 ⇒ 那一环算
-       「一行都没有」⇒ 整格 `fail`（不是 `unknown`，也不是 `pass`）；
-    ③ 两侧都测：同一张表把那一行换成 `plan_progress_rows`（底座里那份计划真的推进过
-       一轮）⇒ `pass` —— 判据不是"恒红"。
-    """
+    现在：① `attack_plan_rows` 是 informational：读数照出（`got` = 立项数）、`ok=None`、
+    `state="informational"`，不进研究链覆盖面；② 「攻」那一环只认 `plan_progress_rows` ⇒ 只写立项
+    那一行 ⇒ 那一环算「一行都没有」⇒ 整格 `fail`（不是 `unknown`，也不是 `pass`）；③ 两侧都测：
+    同一张表把那一行换成 `plan_progress_rows`（底座里那份计划真的推进过一轮）⇒ `pass` ——
+    判据不是"恒红"。"""
     from agentflow import closing as CL
 
     st, report, root = _research_ready(tmp_path)
@@ -2276,7 +2254,7 @@ def test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell(
     base = _gate(st, report)
     assert base.status["acceptance"] == "pass", _acc_detail(base)
 
-    # 1) 把「攻」那一行换成**立项计数**（改前那一条绕过法）⇒ 那一格不再能 pass
+    # 1) 把「攻」那一行换成立项计数（改前那一条绕过法）⇒ 那一格不再能 pass
     cover = [dict(r) for r in _RESEARCH_COVER]
     for r in cover:
         if r["id"] == "R6":
@@ -2288,7 +2266,7 @@ def test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell(
     chain = bad.readings["acceptance"]["research_chain"]
     assert any("攻（攻坚推进）" in m for m in chain["missing"]), chain
     r6 = _acc_row(bad, "R6")
-    # 立项数照样读得出来（1 份计划），但它**不判** —— 这正是"读数留下、结论不给"。
+    # 立项数照样读得出来（1 份计划），但它不判 —— 这正是"读数留下、结论不给"。
     assert r6["got"] == 1 and r6["ok"] is None and r6["state"] == "informational", r6
     assert "informational" in CL.ROW_STATES
     # 读数里也如实列出这一档
@@ -2304,12 +2282,12 @@ def test_a_planned_but_unadvanced_attack_can_never_pass_the_attack_cell(
 
 def test_saying_na_on_the_plan_count_still_marks_the_attack_stage(
         tmp_path: pathlib.Path):
-    """兼容面（2026-10-19）：`attack_plan_rows` 写成 **`na` + 理由** 仍算「这一环标注过」。
+    """兼容面（2026-10-19）：`attack_plan_rows` 写成 `na` + 理由 仍算「这一环标注过」。
 
     为什么不许把它一并读成"缺一行"：存量里有 12 份调查型项目的表就是这么写的
     （`{"kind": "attack_plan_rows", "na": true, "note": "调查型任务无攻坚计划，F 未派"}`）——
     D49 的第三态出口对任何档都成立，`na` ≠ 通过 ≠ 失败。这一档降为 informational
-    只针对**非 `na` 的行**（那种行"立过项就算覆盖"才是要堵的洞）。
+    只针对非 `na` 的行（那种行"立过项就算覆盖"才是要堵的洞）。
 
     两侧：
     - `na: true` + 理由 ⇒ 「攻」那一环被如实标注（`missing` 里没有它），整格 `pass`；
@@ -2480,7 +2458,7 @@ def _accepted_doc(st: Store) -> dict:
     with st.tx("documents", actor="test") as tx:
         row = dict(tx.rows("documents")[0])
         row["status"] = "accepted"
-        # 2026-10-17（业主：「审过和通过是不同的状态」）：**审过**由审核轴记，
+        # 2026-10-17（业主：「审过和通过是不同的状态」）：审过由审核轴记，
         # `status` 只表生命周期。夹具要同时给两样，才代表"H 审过且通过"。
         row["review_verdict"] = "成立"
         row["reviewed_at"] = TS
@@ -2905,7 +2883,7 @@ _RESEARCH_COVER: list[dict] = [
      "note": "登记了一条可检验的猜想"},
     {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
      "note": "派过 C 的关系分析"},
-    # 「攻（攻坚推进）」那一环（2026-10-19 收窄）：**只认 `plan_progress_rows`**（真推进）。
+    # 「攻（攻坚推进）」那一环（2026-10-19 收窄）：只认 `plan_progress_rows`（真推进）。
     # 底座里那份计划因此必须真的推进过一轮（见 `seed` 的 `attack_plans` 注释）。
     # 改前这一行写的是 `attack_plan_rows`（立项计数）—— 它现在只是 informational，
     # 写它不会让这一环变绿（那一格只由 `plan_progress_rows` 决定）。
@@ -2957,7 +2935,7 @@ def _research_ready(root: pathlib.Path, *, cover: list[dict] | None = None,
                 "created_at": TS, "created_by": "test"})
         with s.tx("attack_plans", actor="test") as tx:
             # 「攻（攻坚推进）」那一环只认 `plan_progress_rows`（2026-10-19），
-            # 所以这份计划必须**真的推进过一轮**：一轮 `outcome=progress`、且那一轮的
+            # 所以这份计划必须真的推进过一轮：一轮 `outcome=progress`、且那一轮的
             # 产物里 `cites` 指到在册的 id（口径见 `closing._round_advanced`）。
             # 写成"立过项、`history` 空"的形态 ⇒ 那一环读 0 ⇒ 整张表红。
             tx.upsert("attack_plans", {
@@ -3077,18 +3055,15 @@ def test_the_calculate_stage_reports_when_no_experiment_concludes(tmp_path: path
 def test_the_construct_stage_needs_an_own_derived_statement(tmp_path: pathlib.Path):
     """D66 造半边（`draft/39` §6.49 八 第二条）：声明了「造」那一环的项目要有我方派生产物。
 
-    只在 `computed_kinds` 含 `reviewed_proof_rows` / `counterexample_or_proof_rows` 时判
-    （只走数值那一腿的项目不受这一条约束）：`statements` 里 `origin="own_result"` 的行，
-    至少要有一行写清它派生于什么（`derived_from` 或 `source_lit_id` 非空）——
-    「造」= 我方自己提出并证明的命题，而且来路要能被复核。
+    只在 `computed_kinds` 含 `reviewed_proof_rows` / `counterexample_or_proof_rows` 时判（只走数值
+    那一腿的项目不受这一条约束）：`statements` 里 `origin="own_result"` 的行，至少要有一行写清它
+    派生于什么（`derived_from` 或 `source_lit_id` 非空）——「造」= 我方自己提出并证明的命题，
+    而且来路要能被复核。
 
-    两侧：
-    - 红：我方命题 `0003`（有证明过程 + 审过）没有 `derived_from` ⇒ blocker 含
-      「「造」那一环没有我方派生的命题」，读数 `construct_leg.with_basis == 0`；
-      而 R3（`reviewed_proof_rows`）照样成立 ⇒ 红的是内容判据这一条，不是那一行的读数；
-    - 绿：给它 `derived_from=["0000"]`（`0000` 是同夹具里已登记的命题号）⇒ 那句话消失、
-      `with_basis == 1`，整格 `pass`。
-    """
+    两侧：红：我方命题 `0003`（有证明过程 + 审过）没有 `derived_from` ⇒ blocker 含「「造」那一环
+    没有我方派生的命题」，读数 `construct_leg.with_basis == 0`；而 R3（`reviewed_proof_rows`）照样
+    成立 ⇒ 红的是内容判据这一条，不是那一行的读数；绿：给它 `derived_from=["0000"]`（`0000` 是同
+    夹具里已登记的命题号）⇒ 那句话消失、`with_basis == 1`，整格 `pass`。"""
     cover = [dict(r) for r in _RESEARCH_COVER]
     cover[2] = {"id": "R3", "name": "造（我方判决性证据）", "kind": "reviewed_proof_rows",
                 "min": 1, "note": "我方命题走到了预备定理级"}
@@ -3120,18 +3095,14 @@ def test_the_construct_stage_needs_an_own_derived_statement(tmp_path: pathlib.Pa
 def test_a_rel_ref_carries_c_analysis_into_the_delivery(tmp_path: pathlib.Path):
     """D67（`draft/39` §6.49 八 第三条）：C 的关系分析跑过 ⇒ 产物至少要能被交付物引到。
 
-    真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）：`tasks` 里 role=C 四行 `done`
-    （`hottest` / `contradictions` / `gaps` / `cold`）、`relations` 107 行，而
-    `analysis_reports` 0 行、手稿 `refs` 里一条 `rel:` 都没有 —— C 是那几趟里唯一产出真
-    知识的角色，产物却被扔掉了。两条出口（任一成立就算进交付面）：手稿/文档断言里引一条
-    `rel:`，或 `analysis_reports` 有行。
+    真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）：`tasks` 里 role=C 四行 `done`（`hottest` /
+    `contradictions` / `gaps` / `cold`）、`relations` 107 行，而 `analysis_reports` 0 行、手稿 `refs`
+    里一条 `rel:` 都没有 —— C 是那几趟里唯一产出真知识的角色，产物却被扔掉了。两条出口（任一成立
+    就算进交付面）：手稿/文档断言里引一条 `rel:`，或 `analysis_reports` 有行。
 
-    两侧：
-    - 红：C 跑过而交付面一条 `rel:` 都没有 ⇒ blocker 含「产物一条都没进交付面」，
-      读数 `c_delivery.c_analysis_runs == 1` / `manuscript_rel_refs == []` /
-      `analysis_reports == 0`；
-    - 绿：手稿引一条 `rel:0000`（那条关系行在册）⇒ 那句话消失，整格 `pass`。
-    """
+    两侧：红：C 跑过而交付面一条 `rel:` 都没有 ⇒ blocker 含「产物一条都没进交付面」，读数
+    `c_delivery.c_analysis_runs == 1` / `manuscript_rel_refs == []` / `analysis_reports == 0`；
+    绿：手稿引一条 `rel:0000`（那条关系行在册）⇒ 那句话消失，整格 `pass`。"""
     st, report, ws = _research_ready(tmp_path, c_delivery=False)
     red = _gate(st, report)
 
@@ -3158,18 +3129,14 @@ def test_a_rel_ref_carries_c_analysis_into_the_delivery(tmp_path: pathlib.Path):
 def test_unretrieved_quotes_alone_do_not_satisfy_the_citation_leg(tmp_path: pathlib.Path):
     """T1 口径（`draft/39` §6.49 八 第四条）：「哪几条没查到」本身不是交付。
 
-    触发条件三条同时成立：只读基线 `source/main.tex` 存在且含 `\\bibitem`、
-    台账里 `origin="external_lit"` 的行数 > 0、而这些行里一条 `quote_verified=True`
-    都没有。只看 `external_lit`：我方自产命题（`own_result`）本来就没有外部原文可比对，
-    把它算进来会把"自己证的定理"读成"没核到的引文"。
+    触发条件三条同时成立：只读基线 `source/main.tex` 存在且含 `\\bibitem`、台账里
+    `origin="external_lit"` 的行数 > 0、而这些行里一条 `quote_verified=True` 都没有。只看
+    `external_lit`：我方自产命题（`own_result`）本来就没有外部原文可比对，算进来会把"自己证的
+    定理"读成"没核到的引文"。
 
-    两侧：
-    - 红：三条 `external_lit` 记录全停在"未查 / 不一致" ⇒ blocker 含「逐字引文一条都没
-      核到」，读数 `quote_verification.citation_rows == 3` / `verified == 0` /
-      `baseline_bibitems == 3`；
-    - 绿：其中一条改成 `quote_verified=True` + 逐字理由 ⇒ 那句话消失、`verified == 1`，
-      整格 `pass`。
-    """
+    两侧：红：三条 `external_lit` 记录全停在"未查 / 不一致" ⇒ blocker 含「逐字引文一条都没核到」，
+    读数 `quote_verification.citation_rows == 3` / `verified == 0` / `baseline_bibitems == 3`；
+    绿：其中一条改成 `quote_verified=True` + 逐字理由 ⇒ 那句话消失、`verified == 1`，整格 `pass`。"""
     st, report, ws = _research_ready(tmp_path)
     (ws / "source").mkdir(parents=True, exist_ok=True)
     (ws / "source" / "main.tex").write_text(
@@ -3210,16 +3177,14 @@ def test_the_paper_must_carry_this_rounds_results(tmp_path: pathlib.Path):
     """T3 口径（`draft/39` §6.49 八 第五条）：论文要承载本轮结果。
 
     只在"从结果写论文"的形态上判（没有只读基线 `source/main.tex`），且只判真的像论文的稿子
-    （`looks_like_article`：含 `\\documentclass` / `\\begin{document}`）—— T1 那一类审阅项目
-    的 `out/paper/main.tex` 是被审的稿件本身，它的参考文献与引用形态由原稿决定。
-    两条判据：① `\\bibitem` ≥ 2；② 正文里 `stmt:` / `exp:` / `rel:` 引用不能只出现在
-    核查章节里（真机 `p6r`：那一篇 5 节里 `exp:0008` 只出现在 `Evidence and status` 节）。
+    （`looks_like_article`：含 `\\documentclass` / `\\begin{document}`）—— T1 那一类审阅项目的
+    `out/paper/main.tex` 是被审的稿件本身，它的参考文献与引用形态由原稿决定。两条判据：
+    ① `\\bibitem` ≥ 2；② 正文里 `stmt:` / `exp:` / `rel:` 引用不能只出现在核查章节里（真机 `p6r`：
+    那一篇 5 节里 `exp:0008` 只出现在 `Evidence and status` 节）。
 
-    两侧：
-    - 红：1 条 `\\bibitem` + `exp:0001` 只写在 `Evidence and status` 节 ⇒ blocker 同时含
-      「论文的参考文献只有」与「核查章节」；
-    - 绿：2 条 `\\bibitem` + `exp:0001` 写在 `Results` 节 ⇒ 两句话都消失，整格 `pass`。
-    """
+    两侧：红：1 条 `\\bibitem` + `exp:0001` 只写在 `Evidence and status` 节 ⇒ blocker 同时含
+    「论文的参考文献只有」与「核查章节」；绿：2 条 `\\bibitem` + `exp:0001` 写在 `Results` 节 ⇒
+    两句话都消失，整格 `pass`。"""
     st, report, ws = _research_ready(tmp_path)
     _write_article(ws, bibitems=1, cite_in="check")
     _seal(ws, st)
@@ -3248,27 +3213,16 @@ def test_a_statement_named_by_a_plan_must_be_signed_before_the_attack_cell_passe
         tmp_path: pathlib.Path, monkeypatch):
     """判据（2026-10-19，接 V 的回路的收工侧）：`history` 里的 `statement_id` 要有那一签。
 
-    ## 这一条补什么
+    这一条补什么：`F.step` 把那一轮的论证落成 `statements` 的一行之后，`statement_id` 会进 `attack_plans.history`
+    （`agent_f/step.py` 的 P3-6）—— M 在 `attack.status` 里看得见它。但收工门此前只问"计划推进了没有"，
+    不问"交出来的那一条后来有没有人签"，于是「F 交了、没人签」与「F 交了、V 签了」在那一格里同形。
 
-    `F.step` 把那一轮的论证落成 `statements` 的一行之后，`statement_id` 会进
-    `attack_plans.history`（`agent_f/step.py` 的 P3-6）——**M 在 `attack.status` 里看得见它**。
-    但"看得见"与"有人审过"是两件事：收工门此前只问"计划推进了没有"，不问"交出来的
-    那一条后来有没有人签"，于是「F 交了、没人签」与「F 交了、V 签了」在那一格里同形。
-
-    ## 判据
-
-    `plan_progress_rows` 那一行算出来是 `pass` 的前提下，若 `history` 里有 `statement_id`
-    而 `verifications/<命题号>.jsonl` **没有对应行** ⇒ 这一行记 **`unknown`**（不是 `pass`），
-    整格跟着 `unknown`。三态留在读数里：`checked=False`（读不到账本）也只是 `unknown`。
-
-    两侧 + 两个负控：
-    - 红：history 里点名 `stmt:0000` 而没有 `verifications/000000.jsonl` ⇒ `unknown`；
-    - 负控①（证明红的是这一条闸）：把闸本身拿掉（`unverified_statement_refs` 返回空）
-      ⇒ 同一份工作区回到 `pass`；
-    - 绿：按 M 的路子派 V 走查（`verifications.record_verification` 落那一行）⇒ `pass`；
-    - 负控②：V 的结论是「有毛病」也**算有对应行**（这一条只管"有没有人看"，
-      "看完了过没过"归审计期那一档 `proof_review_without_verification`）。
-    """
+    判据：`plan_progress_rows` 那行算出 `pass` 的前提下，若 `history` 里有 `statement_id` 而 `verifications/<命题号>.jsonl`
+    没有对应行 ⇒ 这一行记 `unknown`（不是 `pass`），整格跟着 `unknown`；`checked=False`（读不到账本）也只是 `unknown`。
+    两侧 + 两个负控：红：历史里点名 `stmt:0000` 而没有 `verifications/000000.jsonl` ⇒ `unknown`；负控①
+    （证明红的是这一条闸）：把闸拿掉（`unverified_statement_refs` 返回空）⇒ 回到 `pass`；绿：派 V 走查
+    （`verifications.record_verification` 落那一行）⇒ `pass`；负控②：V 的结论是「有毛病」也算有对应行
+    （只管"有没有人看"，过没过归审计期那一档 `proof_review_without_verification`）。"""
     from agentflow import closing as CL
     from agentflow import verifications as VR
 

@@ -1,34 +1,22 @@
 # -*- coding: utf-8 -*-
 """R13 的第一跳（离线夹具）：B 消化一条定理 → 台账落库 → 下游读得到。
-
 ## 为什么单挑这一跳
-
-`draft/37` §16 P2 把"B 把命题的完整假设与证明逐字摘出来、页码写进台账"
-写成了提示词口径 —— 而口径要能落地，前提是 B 在自己的工具面上真的写得进去、
-下游（D / H）真的读得出来。这正是本项目反复踩的那类坑：
+`draft/37` §16 P2 把"B 把命题的完整假设与证明逐字摘出来、页码写进台账"写成了提示词口径 —— 而口径要能落地，前提是 B 在自己的工具面上真的写得进去、下游（D / H）真的读得出来。这正是本项目反复踩的那类坑：
 "写好的提示词产出的东西无处可放"（§16 的 ② 数据面存在的理由）。
-
 所以这一组不接模型，直接把"B 到底怎么写进 `statements`"按角色走一遍：
-
 | 判据 | 它挡的形态 |
 |---|---|
-| B 交内容、秘书落盘，一行完整命题真的落库 | 提示词要求的东西在**正路**上做不到 |
-| 缺 `statement_full`（完整假设）的行**在正路上**被拒 | 数据层的闸门只在单测里有效、真跑时绕过 |
+| B 交内容、秘书落盘，一行完整命题真的落库 | 提示词要求的东西在正路上做不到 |
+| 缺 `statement_full`（完整假设）的行在正路上被拒 | 数据层的闸门只在单测里有效、真跑时绕过 |
 | 拼错的 `status` / 词表外的取值在参数期被拒（词表已登记） | 写进去一个谁都不认识的取值而没人响 |
 | `table.create("statements")` 这条野路被拒 | 模型的手绕过秘书（真机 `mp2-7.jsonl` 第 97 行） |
 | 只读角色（C / H）的面上没有写工具 | 只读角色靠"没写"拿到刀 |
 | 下游角色读得回来（`table.get` / `table.list`） | "每一跳都有下游可见的产物"（R13 判据①） |
 | 交给 D 的消息里带 `stmt_id`（R13 判据③） | 下游知道"有定理了"却不知道去查哪一行 |
-
 ## 2026-10-19 晚改过一次口径（`projects/mp2` 的真机读数）
-
-这一组原先把 `table.create(table="statements")` 当成"B 的正路" —— 那正是
-`mp2-7.jsonl` 第 97 行的形态：B 拿到 `unknown_tool` 之后用手写表落了
-`bits={}` + `evidence_kind="heuristic"` 的一行。现在那条约会被
-`store.direct_write_refusal` 受控拒绝（`direct_write_refused`），
-所以本文件的"正路"改成 **B 交内容、秘书落盘**（`Secretary.record_statement`），
-并**新增**一条判据盯着野路被拒。断言没有放宽：每一格判的还是同一件事
-（"提示词要求的东西真的做得成"），只是做得成的那条路换了。
+这一组原先把 `table.create(table="statements")` 当成"B 的正路" —— 那正是`mp2-7.jsonl` 第 97 行的形态：B 拿到 `unknown_tool` 之后用手写表落了`bits={}` +
+`evidence_kind="heuristic"` 的一行。现在那条约会被`store.direct_write_refusal` 受控拒绝（`direct_write_refused`），所以本文件的"正路"改成 B 交内容、
+秘书落盘（`Secretary.record_statement`），并新增一条判据盯着野路被拒。断言没有放宽：每一格判的还是同一件事（"提示词要求的东西真的做得成"），只是做得成的那条路换了。
 """
 from __future__ import annotations
 
@@ -66,7 +54,7 @@ def _create(reg, *, role: str, row: dict, table: str = "statements"):
 
 
 def _register(st, row: dict) -> dict:
-    """B 交内容、秘书落盘（**正路**；`table.create("statements")` 已被受控拒绝）。"""
+    """B 交内容、秘书落盘（正路；`table.create("statements")` 已被受控拒绝）。"""
     from agentflow.secretary import Secretary
 
     sec = Secretary("B", root=st.root, store=st)
@@ -97,7 +85,7 @@ def test_b_lands_a_complete_statement_by_handing_it_to_its_secretary(tmp_path):
 def test_the_wild_road_through_table_create_is_refused(tmp_path):
     """负控（`mp2-7.jsonl` 第 97 行那个形态）：B 用通用写口直写 `statements` ⇒ 被拒。
 
-    判据落在**工具层**（模型的手）：`ok=False`、`kind=direct_write_refused`，
+    判据落在工具层（模型的手）：`ok=False`、`kind=direct_write_refused`，
     而拒信里必须逐字写着该走哪条路（`Secretary.record_statement` / `own.register_statement`）
     —— 模型据此能改，而不是只知道"不行"。盘上一条都不许落。
     """
@@ -111,7 +99,7 @@ def test_the_wild_road_through_table_create_is_refused(tmp_path):
 
 
 def test_the_guard_fires_through_the_front_door_not_only_in_a_unit_test(tmp_path):
-    """负控：缺完整假设的命题**在正路上**被拒（数据层的闸门在真跑路径上同样有效）。"""
+    """负控：缺完整假设的命题在正路上被拒（数据层的闸门在真跑路径上同样有效）。"""
     st, reg = _world(tmp_path)
     bad = dict(_ROW)
     bad["statement_full"] = ""
@@ -125,7 +113,7 @@ def test_a_bogus_status_is_rejected_at_the_parameter_layer(tmp_path):
     """负控：词表外的取值在参数期被拒 —— 词表登记过才谈得上这件事。
 
     样品换成 `literature.type`（`LIT_TYPES`）：`statements`/`dependencies` 已不由
-    通用写口直写，而"参数期词表校验"这条判据要说的是**登记过就会校验**，
+    通用写口直写，而"参数期词表校验"这条判据要说的是登记过就会校验，
     与挂在哪张表上无关（`_VOCAB_BY_FIELD` 是那张登记表）。
     """
     st, reg = _world(tmp_path)

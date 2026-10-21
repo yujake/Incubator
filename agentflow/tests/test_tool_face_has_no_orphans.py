@@ -1,28 +1,20 @@
-"""能力面复核（第一片）：工具面上**没有可删的多余项** —— 但这件事要有机器读数。
-
+"""能力面复核（第一片）：工具面上没有可删的多余项 —— 但这件事要有机器读数。
 ## 这一条守的是什么
-
-业主的经验文档要求定期做"角色能力面复核"，找**工具面/动作面的多余项**。
-2026-10-21 第一遍量下来（现读注册表），跨域工具一共 58 处，**逐个都有职责理由**：
-
+业主的经验文档要求定期做"角色能力面复核"，找工具面/动作面的多余项。2026-10-21 第一遍量下来（现读注册表），跨域工具一共 58 处，逐个都有职责理由：
 | 跨域工具 | 出现在谁的面 | 为什么不是噪音 |
 |---|---|---|
-| `conductor.escalate` | 十个角色**全部** | 通用上行通道：任何角色都要能向父代理上报（业主 2026-10-19 裁定） |
-| `conductor.broadcast` | 只有**有子代理的**角色（A/B/D/E/F/G） | 广播是"向我的子代理"——没有子代理的人拿到它才是噪音 |
-| `attack.check_budget` / `list_plans` / `pick_next_subgoal` / `status` | D / G / H | **读**别的角色的计划是统筹与审稿需要的（D 派 F、H 评 F 的产出） |
+| `conductor.escalate` | 十个角色全部 | 通用上行通道：任何角色都要能向父代理上报（业主 2026-10-19 裁定） |
+| `conductor.broadcast` | 只有有子代理的角色（A/B/D/E/F/G） | 广播是"向我的子代理"——没有子代理的人拿到它才是噪音 |
+| `attack.check_budget` / `list_plans` / `pick_next_subgoal` / `status` | D / G / H | 读别的角色的计划是统筹与审稿需要的（D 派 F、H 评 F
+的产出） |
 | `doc.compose_claim` / `list_documents` / `scan_claim` | D / F / H | 同上：读稿件面 |
-| `verify.run_experiment` / `code_hash` / `check_formal` | E / F / G / H | 这些**本来就是 E 的工具**（`verify.` 前缀里混着 E 与 V 两家）——按前缀当"域"会**误报** |
-
-⇒ 结论：**没有"看得见却调不动"或明显多余的项**。这一条把它钉住，
-免得以后有人凭"看着不像他的"删掉一件别人真需要的工具。
-
+| `verify.run_experiment` / `code_hash` / `check_formal` | E / F / G / H | 这些本来就是 E 的工具（`verify.` 前缀里混着 E 与 V 两家）
+——按前缀当"域"会误报 |
+⇒ 结论：没有"看得见却调不动"或明显多余的项。这一条把它钉住，免得以后有人凭"看着不像他的"删掉一件别人真需要的工具。
 ## 判据（含负控）
-
-① `conductor.escalate` 在**十个角色**面上都有（通用上行，少一个就有人上不了报）；
-② `conductor.broadcast` **只**出现在有子代理的角色面上（A/B/D/E/F/G）；
-③ **M 的面是纯编排面**：不许出现 `attack.*` / `doc.*` / `verify.*` / `lit.*` / `analysis.*`
-   （M 的活是统筹与搭桥，研究侧的执行归 D）；
-④ 反真空：十个角色面都非空、并集 = 全库工具数（94）——否则"没有多余项"可能是"面是空的"。
+① `conductor.escalate` 在十个角色面上都有（通用上行，少一个就有人上不了报）；② `conductor.broadcast` 只出现在有子代理的角色面上（A/B/D/E/F/G）；③ M 的面是纯编排面：
+不许出现 `attack.*` / `doc.*` / `verify.*` / `lit.*` / `analysis.*`（M 的活是统筹与搭桥，研究侧的执行归 D）；④ 反真空：十个角色面都非空、并集 = 全库工具数（94）
+——否则"没有多余项"可能是"面是空的"。
 """
 
 from __future__ import annotations
@@ -64,7 +56,7 @@ def test_broadcast_is_only_for_roles_with_children(faces: dict[str, list[str]]) 
     no_children = [r for r in with_broadcast if not CAP.ALLOWED_EDGES.get(r)]
     assert not no_children, (
         f"这些角色没有可以唤起的伙伴，却拿到了 `conductor.broadcast`（噪音）：{no_children}")
-    # 反真空：没有出边的角色**不该**拿到它（否则"只给有子的"这句是空话）
+    # 反真空：没有出边的角色不该拿到它（否则"只给有子的"这句是空话）
     for role in ROLES:
         if not CAP.ALLOWED_EDGES.get(role):
             assert "conductor.broadcast" not in faces[role], (

@@ -113,20 +113,15 @@ def _summon_step(run: Any) -> dict:
 def test_f1_a_top_level_run_gets_a_task_row_and_its_spend_is_attributable(tmp_path: pathlib.Path):
     """F1 的向前走半（`44 J-32` / `draft/52` F 组）：顶趟运行建 `tasks` 行 + 新账挂得上 task_id。
 
-    两条一起钉（它们是同一件事的两半：没有行就无处可挂）：
+    两条一起钉（同一件事的两半：没有行就无处可挂）：① 建 M 顶趟行：`run_role("M", …)` 跑完要在
+    `tasks` 里留下 `role="M"` 的行且它是终态（`status="done"`），否则"这一趟发生过"在台账上不存在；
+    ② 新行填 `usage_ledger.task_id`：这一趟里每一次模型调用落下的账都要挂到那个行上（改前 `run_role`
+    传的是 `my_task_id=""` ⇒ `llmseam._charge_ledger` 把 `""` 归一成 `None` ⇒ 账上一行都读不出"这笔钱
+    属于哪一次召唤"）。`verify.verify_all` 的 `dangling_usage_task` 于是也不该报（挂的是真行）。
 
-    1. 建 M 顶趟行：`run_role("M", …)` 跑完要在 `tasks` 里留下 `role="M"` 的行，
-       且它是终态（`status="done"`）—— 否则"这一趟发生过"在台账上不存在；
-    2. 新行填 `usage_ledger.task_id`：这一趟里每一次模型调用落下的账都要挂到那个行上
-       （改前 `run_role` 传的是 `my_task_id=""` ⇒ `llmseam._charge_ledger` 把
-       `""` 归一成 `None` ⇒ 账上一行都读不出"这笔钱属于哪一次召唤"）。
-       `verify.verify_all` 的 `dangling_usage_task` 于是也不该报（挂的是真行）。
-
-    历史 null 不回填：盘上存量那 66% `task_id=null` 的行是历史事件，`store.rebuild`
-    重放的是同一批 —— 改代码不改写历史。而 `None` 不进 `dangling_usage_task`
-    的判据（`verify.py` 逐字 `if tk is not None and str(tk) not in task_by_id:`）⇒
-    它是一条已知基线，不是红。
-    """
+    历史 null 不回填：盘上存量那 66% `task_id=null` 的行是历史事件，`store.rebuild` 重放的是同一批 ——
+    改代码不改写历史。而 `None` 不进 `dangling_usage_task` 的判据（`verify.py` 逐字
+    `if tk is not None and str(tk) not in task_by_id:`）⇒ 它是一条已知基线，不是红。"""
     from agentflow import verify as V
     from agentflow.tokenmeter import TokenMeter
 
@@ -445,10 +440,10 @@ def test_an_illegal_edge_is_refused_by_the_policy_not_by_the_prompt(tmp_path: pa
 def test_an_unknown_action_is_refused_with_its_own_reason(tmp_path: pathlib.Path):
     """负控（三态）：把动作名写错 ⇒ 理由码是动作不存在，而不是"被别人抢走了"之类。
 
-    2026-10-16（口径 S2「M 只派活」）：这条命题的**载体换了**。原来靠"模型在 summon
-    形状里写一个错的动作名"造场景，而新契约下**形状里没有动作可写**（父代理不填动作）
-    ⇒ 命题搬到**策略门那一层**：内部 API `Conductor.summon(role, action, params)`
-    仍然收动作（`pipeline` / `scheduler` / `deliver` 都在用它）。**判据本身一字没改。**
+    2026-10-16（口径 S2「M 只派活」）：这条命题的载体换了。原来靠"模型在 summon
+    形状里写一个错的动作名"造场景，而新契约下形状里没有动作可写（父代理不填动作）
+    ⇒ 命题搬到策略门那一层：内部 API `Conductor.summon(role, action, params)`
+    仍然收动作（`pipeline` / `scheduler` / `deliver` 都在用它）。判据本身一字没改。
     """
     _st, cond, _registry, _gw, _root = _wired(tmp_path, {"M": []})
     res = cond.summon("D", "no_such_action", {}, by="M")
@@ -545,14 +540,14 @@ def test_thinking_that_eats_the_output_budget_is_its_own_failure(tmp_path: pathl
 
 
 def test_a_network_failure_is_not_a_bad_json_either(tmp_path: pathlib.Path):
-    """判据（2026-10-15 T5 第 8 趟 `t5h` 的真机读数）：**没连上**也不许算成坏 JSON。
+    """判据（2026-10-15 T5 第 8 趟 `t5h` 的真机读数）：没连上也不许算成坏 JSON。
 
     真机现场：本机 DNS 中途失效（`detail='gaierror: [Errno 11002] getaddrinfo failed'`，
     网关的 `error_kind="network"`），连着三步如此。当时判定"没拿到回复"的成员表只写了
     `judge_timeout` 与 `judge_output_limit` 两个名字 ⇒ `network` 落成
     `judge_failed:ModelReplyNotOk` ⇒ 被算进 `bad_json_streak` ⇒ 三步之后整趟 run
     以 `bad_json_limit` 收场，收场那句话是「连续 3 次没有给出可解析的 JSON」——
-    **模型一个字都没说**，是这台机器没连上。这一条把那三件事一起钉住：
+    模型一个字都没说，是这台机器没连上。这一条把那三件事一起钉住：
     停止理由是 `model_unreachable`、账不记到 `bad_json` 头上、收场那句话说实话。
     """
     st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=5)
@@ -571,7 +566,7 @@ def test_a_network_failure_is_not_a_bad_json_either(tmp_path: pathlib.Path):
 
 
 def test_the_boundary_bad_response_is_still_counted_as_bad_json(tmp_path: pathlib.Path):
-    """反负控（与上一条配对）：**它回了、只是那份回复不可用**仍走坏 JSON 那一档。
+    """反负控（与上一条配对）：它回了、只是那份回复不可用仍走坏 JSON 那一档。
 
     没有这一条，上一条可以靠"凡 `ok=False` 都算没拿到回复"来满足 —— 那样一来
     `bad_response`（响应不是预期的 JSON / 缺字段 / 内容为空，模型确实回了）会被
@@ -590,7 +585,7 @@ def test_the_boundary_bad_response_is_still_counted_as_bad_json(tmp_path: pathli
 
 
 def test_a_dead_key_stops_at_once_with_its_own_reason(tmp_path: pathlib.Path):
-    """判据（与上面两条同批）：key 无效**立刻停**，理由自己一档，且不并进任何 streak。
+    """判据（与上面两条同批）：key 无效立刻停，理由自己一档，且不并进任何 streak。
 
     它不是"没查成"（`modelgw.NOT_CHECKED` 里没有 `auth_failed`：查过了、确定不行），
     也不是"它说错了"。重试三次只是把钱再烧一遍 ⇒ 一次就停，且读数必须说出真正的原因
@@ -663,21 +658,15 @@ def _shape_list_is_hand_copied(line: str, shapes) -> bool:
 def test_the_shape_table_has_exactly_one_source(tmp_path: pathlib.Path):
     """判据：形状清单与条数只许有 `SHAPES` 一处来源，别处不许手抄第二份。
 
-    为什么这不是文字问题（2026-10-04 普查挖出的真缺陷）：`SHAPES` 是八个形状，
-    而同一文件里三处手抄的名单/条数各说各话 —— 模块 docstring 写"四种形状"、
-    `_decode_shape` 的 docstring 写"七种形状"并把 `handoff` 漏掉、
-    递给模型的提示词写"六种形状取其一"。`handoff` 是手稿落行的唯一入口
-    （真机 1542 行手稿里 967 行由框架派生、模型自写 0 行），正典表里看不见它，
-    模型就看不见它 —— 而那句提示词正好是它最后读到的一行。
+    为什么这不是文字问题（2026-10-04 普查挖出的真缺陷）：`SHAPES` 是八个形状，而同一文件里三处手抄的
+    名单/条数各说各话 —— 模块 docstring 写"四种形状"、`_decode_shape` 的 docstring 写"七种形状"并把
+    `handoff` 漏掉、递给模型的提示词写"六种形状取其一"。`handoff` 是手稿落行的唯一入口（真机 1542 行
+    手稿里 967 行由框架派生、模型自写 0 行），正典表里看不见它，模型就看不见它 —— 而那句提示词正好是
+    它最后读到的一行。
 
-    四条一起判，每条都配一条活体负控（拿改前那段原文当输入，判据必须认出来）：
-    1. 提示词骨架（`JSON_TAIL`）必须逐字含上 `SHAPES` 的每一个形状；
-    2. `_decode_shape` 的 docstring 必须指向 `SHAPES`，且不再自带任何条数声明；
-    3. 全文件：凡条数声明一律由 `len(SHAPES)` 现算；凡关于形状的并列名单
-       一律要带 `SHAPES`（不许手抄第二份）；
-    4. 正控：把提示词真拼一遍，那一句里必须同时有正确条数与全部形状名
-       （否则第 3 条可以靠"把那句话删掉"骗过去）。
-    """
+    四条一起判，每条都配一条活体负控（拿改前那段原文当输入，判据必须认出来）：① 提示词骨架
+    （`JSON_TAIL`）必须逐字含上 `SHAPES` 的每一个形状；② `_decode_shape` 的 docstring 必须指向
+    `SHAPES` 且不再自带任何条数声明；③ 全文件：凡条数声明一律由 `len(SHAPES)` 现算，凡形状并列名单一律要带 `SHAPES`（不许手抄第二份）；④ 正控：把提示词真拼一遍，那一句里必须同时有正确条数与全部形状名（否则第 3 条可以靠"把那句话删掉"骗过去）。"""
     import re
 
     from agentflow.agent_loop import JSON_TAIL, SHAPES, AgentLoop, _decode_shape
@@ -762,19 +751,15 @@ def test_the_loop_hands_the_live_toolchain_reading_to_the_model(tmp_path: pathli
 def test_handoff_accepts_all_like_message_and_notify(tmp_path: pathlib.Path):
     """判据（主控 2026-10-06 裁定 (a)）：`handoff` 的 `to` 也收 `ALL`，三通道同一份词表。
 
-    改前红：`_decode_shape({"handoff": {"to": "ALL", …}})` 拒，而拒信自己教的
-    正是 `ALL`（"给所有人写 to="ALL""），`JSON_TAIL` 里的骨架也写 `<伙伴/M/ALL>`；
-    `message` / `notify` 两条路却两种写法都收。于是模型照提示词写 `ALL` 被拒、
-    被拒后拿到的改法还是 `ALL` —— 同一步可能连撞两次（"提示词教了一个框架不收的
-    字面量"那一形态，`tests/test_agent_prompts.py` 那条判据的 A 面就在这里）。
+    改前红：`_decode_shape({"handoff": {"to": "ALL", …}})` 拒，而拒信自己教的正是 `ALL`（"给所有人写
+    to="ALL""），`JSON_TAIL` 里的骨架也写 `<伙伴/M/ALL>`；`message` / `notify` 两条路却两种写法都收。
+    于是模型照提示词写 `ALL` 被拒、被拒后拿到的改法还是 `ALL` —— 同一步可能连撞两次（"提示词教了框架
+    不收的字面量"那一形态，`tests/test_agent_prompts.py` 那条判据的 A 面就在这里）。
 
-    四条一起判：
-    1. `to="ALL"` 与 `to="#public"` 都被收，且都归一成手稿通道的规范形 `ALL`；
-    2. 反负控：`to="Z"`（真不存在的收件人）仍拒 —— 不许把"放宽"做成"什么都收"；
-    3. 三通道同一份等价关系：`_is_all_recipient` 判 `ALL`/`#public`/`all` 为真、
-       `_known_recipient` 认角色与主控，`handoff`/`message`/`notify` 都调它们；
-    4. 小写角色名归一成大写（与 `notify` 的口径一致）。
-    """
+    四条一起判：① `to="ALL"` 与 `to="#public"` 都被收，且都归一成手稿通道的规范形 `ALL`；
+    ② 反负控：`to="Z"`（真不存在的收件人）仍拒 —— 不许把"放宽"做成"什么都收"；③ 三通道同一份等价
+    关系：`_is_all_recipient` 判 `ALL`/`#public`/`all` 为真、`_known_recipient` 认角色与主控，
+    `handoff`/`message`/`notify` 都调它们；④ 小写角色名归一成大写（与 `notify` 的口径一致）。"""
     from agentflow.agent_loop import (_decode_shape, _is_all_recipient,  # noqa: PLC0415
                                      _known_recipient, _recipient_for_channel, clean_notify)
 
@@ -1029,7 +1014,7 @@ def test_a_forbidden_edge_becomes_a_relay_request_to_the_conductor(tmp_path: pat
     """
     import json as _json
 
-    # 2026-10-16（口径 S2）：形状里没有动作可写；这条考的是**边**（C 够不到 A），
+    # 2026-10-16（口径 S2）：形状里没有动作可写；这条考的是边（C 够不到 A），
     # 与动作名无关 ⇒ 只写清那件活。
     asking = _json.dumps({"summon": {"role": "A",
                                      "task": "缺一份 1971 年的原文，请帮我取回"}},
@@ -1071,9 +1056,9 @@ def test_relay_is_not_sent_when_the_edge_exists_and_only_the_params_are_wrong(tm
     """
     import json as _json
 
-    # 2026-10-16（口径 S2）：新契约下**形状里没有参数可错**（派活只有 role+task）
-    # ⇒ 命题搬到**内部 API**：边在、参数错 ⇒ 理由码是 `invalid_params`，
-    # 而**不许**变成一条代唤申请（防"把主控当万能兜底"）。
+    # 2026-10-16（口径 S2）：新契约下形状里没有参数可错（派活只有 role+task）
+    # ⇒ 命题搬到内部 API：边在、参数错 ⇒ 理由码是 `invalid_params`，
+    # 而不许变成一条代唤申请（防"把主控当万能兜底"）。
     _st, cond, _registry, _gw, _root = _wired(tmp_path, {"G": []})
     res = cond.summon("D", "write_report", {"nonsense_key": 1}, by="G")
     assert res.outcome == "refused", res
@@ -1141,18 +1126,18 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
         "M": [
             _json.dumps({"summon": {"role": "C", "task": "hottest",
                                     "params": {"top_n": 2, "request": "证据"}}}, ensure_ascii=False),
-            # ⚠️ 2026-10-16（口径 S2 迁移时实测）：**秘书那一趟跑在 M 的 seam 上**，
-            # 于是它会**吃掉 M 脚本的一项** —— 这正是此前"M 只走了两步、中间那项
+            #  2026-10-16（口径 S2 迁移时实测）：秘书那一趟跑在 M 的 seam 上，
+            # 于是它会吃掉 M 脚本的一项 —— 这正是此前"M 只走了两步、中间那项
             # 无论写成 `summon` 还是 `tool` 形状都没被执行"的真因（探针读数：
             # `run.steps=[summon(→C), final]`，而 M 的脚本有三项）。
             # ⇒ 这里显式给秘书一条回复（它要的是一个 JSON 对象）。
             _json.dumps({"decision": "可派", "reason": "这条委托照声明合规",
                          "basis": ["收件方与这条活匹配"]}, ensure_ascii=False),
             # 第二步：M 读到申请（收件箱在结果里），替 C 派 A。
-            # 2026-10-16（口径 S2）：这里原先用 **`tool` 形状**调 `conductor.summon`
+            # 2026-10-16（口径 S2）：这里原先用 `tool` 形状调 `conductor.summon`
             # （`args: {target_role, task, input_key}`）—— 而真机里 M 的步只记到
-            # `[summon, final]`：**那一步根本没被执行**（探针读数：`run.steps` 缺 `tool` 步、
-            # 台账也没有 `A called_by=M` 那一行）。新契约下"派活"的**正路是 `summon` 形状**
+            # `[summon, final]`：那一步根本没被执行（探针读数：`run.steps` 缺 `tool` 步、
+            # 台账也没有 `A called_by=M` 那一行）。新契约下"派活"的正路是 `summon` 形状
             # （与 `conductor.summon` 工具同一套语义）⇒ 改用它，避免这条端到端判据
             # 依赖两条形状的差异（那差异本身另立判据去钉）。
             _json.dumps({"summon": {"role": "A", "task": "缺 lit:0037 的原文，去取回来"}},
@@ -1177,7 +1162,7 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
             claims=[{"claim_id": "C1", "text": "一条 cross_check 断言",
                      "evidence_kind": "cross_check", "citations": ["lit:0037"],
                      "section": "S1", "disclaimer": "数值交叉验证，不构成证明"}]).to_dict())
-    # 接住返回值：这条用例的断言要能看 M 的**步**（2026-10-16：`run.steps` 是
+    # 接住返回值：这条用例的断言要能看 M 的步（2026-10-16：`run.steps` 是
     # "M 到底走到哪一步、那一步报了什么"的唯一读数）。
     run = run_role("M", "核验这篇稿子的证据", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
@@ -1192,18 +1177,18 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
     # H 自己那一次被拒（边表里 H 只能叫 G）—— 这正是要转成代唤申请的那一次
     assert direct and direct[0]["outcome"] == "refused", direct
     assert direct[0]["refusal_reason"] in ("forbidden_edge", "invalid_params"), direct[0]
-    # 主控**收到了**那次申请 —— 判据锚在"申请被受理并变成一条真实的落点"上。
+    # 主控收到了那次申请 —— 判据锚在"申请被受理并变成一条真实的落点"上。
     #
-    # ⚠️ 2026-10-16（口径 S2 迁移时实测，附读数）：
-    #   原来这一条还要求"**M 在这一趟里**就替 C 派了 A"（`A called_by=M` 的行）。
+    #  2026-10-16（口径 S2 迁移时实测，附读数）：
+    #   原来这一条还要求"M 在这一趟里就替 C 派了 A"（`A called_by=M` 的行）。
     #   实测 `run.steps` = `[summon(→C), final]` —— M 的脚本里有三项（派 C ／ 派 A ／ final），
-    #   而 **M 只走了两步**：中间那一项无论写成 `summon` 形状还是 `tool` 形状**都没被执行**
-    #   （两个形状都试过，读数一模一样）。同时台账里有 `('M','C',None)` —— 那是**代唤机制
-    #   自己建的 M 任务行**，`A called_by=C` 的越权行与 `agent_summon_request` 事件都在。
+    #   而 M 只走了两步：中间那一项无论写成 `summon` 形状还是 `tool` 形状都没被执行
+    #   （两个形状都试过，读数一模一样）。同时台账里有 `('M','C',None)` —— 那是代唤机制
+    #   自己建的 M 任务行，`A called_by=C` 的越权行与 `agent_summon_request` 事件都在。
     #   ⇒ 缺的不是"代唤有没有被受理"，而是"夹具有没有把 M 的下一步真的喂进去"；那是
-    #   **单趟循环的夹具/索引问题**（与口径无关），不该由这条端到端判据承担。
-    #   所以判据收在两处**确凿的凭据**上：① 代唤申请被受理并落了 M 的任务行；
-    #   ② 会话里留下结构化事件（下面 `reqs`）。"M 真的派了 A"由**多趟**运行（T5 真机）
+    #   单趟循环的夹具/索引问题（与口径无关），不该由这条端到端判据承担。
+    #   所以判据收在两处确凿的凭据上：① 代唤申请被受理并落了 M 的任务行；
+    #   ② 会话里留下结构化事件（下面 `reqs`）。"M 真的派了 A"由多趟运行（T5 真机）
     #   与代唤那两条用例覆盖。
     relay_rows = [r for r in rows
                   if str(r.get("role")) == "M" and str(r.get("called_by")) == "C"]
@@ -1222,9 +1207,9 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
     reqs = [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
     assert reqs and reqs[0]["wants_role"] == "A", reqs
     # M 收到的提示词里必须真的出现过那条申请（否则它只是"碰巧"派了 A）。
-    # ⚠️ 2026-10-16：这里**不许钉死"第 1 条"**。实测 M 的那一串提示词里会**混进秘书那一趟**
+    #  2026-10-16：这里不许钉死"第 1 条"。实测 M 的那一串提示词里会混进秘书那一趟
     # （秘书跑在 M 的 seam 上，见上面 `scripts["M"]` 那条注释），所以 `prompts[1]` 拿到的
-    # 是秘书的判断面提示词 —— 这条判据的命题是"**申请出现在 M 看得见的地方**"，
+    # 是秘书的判断面提示词 —— 这条判据的命题是"申请出现在 M 看得见的地方"，
     # 按命题写成"任意一条里出现"即可（钉序号会把"秘书插了一趟"误判成"没看到申请"）。
     assert any("请代唤" in p for p in gw["M"].prompts), [
         p[-300:] for p in gw["M"].prompts
@@ -1275,7 +1260,7 @@ def test_a_batch_that_cannot_reach_its_target_still_asks_for_relay(tmp_path: pat
     """
     import json as _json
 
-    # 2026-10-16（口径 S2）：同样是**边**的问题（G/C 够不到 A）⇒ 只写清活。
+    # 2026-10-16（口径 S2）：同样是边的问题（G/C 够不到 A）⇒ 只写清活。
     asking = _json.dumps({"summon_many": {"targets": [
         {"role": "A", "task": "要第一批文献"}, {"role": "A", "task": "要第二批文献"}],
         "why": "要两批文献"}}, ensure_ascii=False)
@@ -1289,7 +1274,7 @@ def test_a_batch_that_cannot_reach_its_target_still_asks_for_relay(tmp_path: pat
     step = next(s.result for s in run.steps if s.shape == "summon_many")
     assert step["refused_count"] == 2 and step["ok_count"] == 0, step
     relay = step.get("relay_requested") or {}
-    # 断言消息里带上每一项的**理由码**（2026-10-16）：代唤只在 `_needs_relay` 认的理由码上发，
+    # 断言消息里带上每一项的理由码（2026-10-16）：代唤只在 `_needs_relay` 认的理由码上发，
     # "没发"必须能一眼看出是"理由码不对"还是"代唤那段没走"。
     assert relay.get("to") == "M" and relay.get("message_id"), (
         step, [(i.get("role"), i.get("refusal_reason")) for i in (step.get("results") or [])]

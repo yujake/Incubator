@@ -46,29 +46,16 @@ class _RunOnce:
 
     def run_once(self) -> BRunResult:
         """处理至多一篇未处理文献，返回本轮的完整审计结果。
-
         ## 概念配额（2026-10-21，本批缺陷一第三处：一轮灌进 1143 条）
-
-        配额是「轮」预算，挂在实例上（`self._concept_quota`）：`B.run` 在轮首建一个、
-        逐篇共用；单独调 `run_once()` 时这一调用自己建一个
-        （上限 `conceptrows.CONCEPTS_PER_ROUND_MAX`）—— 于是"每轮几十条以内"这条口径
-        在两条入口上都成立，而不会因为"没人传"就变成无限。
-
-        为什么挂在实例上而不是加一个形参：`run_once` 的方法签名在
-        `tests/golden/agent_surface_snapshot.json` 里被冻结（禁改区），
-        改签名等于重冻那份快照 —— 而"这一轮建了多少概念"是「轮」状态，
-        本来也不该出现在动作的调用面上（模型不该能传一个配额进来）。
-
-        三态纪律在这里有两个落点：
-
-        1. 取不到文献不等于"队列空了"：`skipped_reason` 由 `_claim()` 的三态给出
-           （`no_unprocessed_literature` / `pending_literature_all_leased` /
-           `pending_literature_all_in_backoff` / `no_claimable_literature`），并同时暴露
-           `skipped_lease_active` / `skipped_lease_backoff` / `gave_up` 三个计数。
-           原先无论哪种情况都写"no_unprocessed_literature"，是误导运维。
-        2. 抽取失败不等于处理完了：不置 `processed`，只留 `last_mine_error`，
-           并写下一条退避租约（`D-2`：写了就必须有人认它 —— `_claim` 的跳过判据
-           在 2026-10-02 之前要求 `claimed_by` 非空，于是这条租约写了等于没写）。
+        配额是「轮」预算，挂在实例上（`self._concept_quota`）：`B.run` 在轮首建一个、逐篇共用；单独调 `run_once()` 时这一调用自己建一个（上
+        限 `conceptrows.CONCEPTS_PER_ROUND_MAX`）—— 于是"每轮几十条以内"这条口径在两条入口上都成立，而不会因为"没人传"就变成无限。
+        为什么挂在实例上而不是加一个形参：`run_once` 的方法签名在`tests/golden/agent_surface_snapshot.json` 里被冻结（禁改区），
+        改签名等于重冻那份快照 —— 而"这一轮建了多少概念"是「轮」状态，本来也不该出现在动作的调用面上（模型不该能传一个配额进来）。
+        1. 取不到文献不等于"队列空了"：`skipped_reason` 由 `_claim()` 的三态给出（`no_unprocessed_literature` / 
+        `pending_literature_all_leased` /`pending_literature_all_in_backoff` / 
+        `no_claimable_literature`），并同时暴露`skipped_lease_active` / `skipped_lease_backoff` / 
+        `gave_up` 三个计数。 2. 抽取失败不等于处理完了：不置 `processed`，只留 `last_mine_error`，并写下一条退避租约（`D-2`：写了就
+        必须有人认它 —— `_claim` 的跳过判据在 2026-10-02 之前要求 `claimed_by` 非空，于是这条租约写了等于没写）。
         """
         res = BRunResult()
         # 概念配额：`B.run` 在轮首放好的那个（`self._concept_quota`）优先；

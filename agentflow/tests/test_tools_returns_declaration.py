@@ -2,42 +2,20 @@
 
 ## 这个文件修的是什么
 
-仓库里早就有一条判据 `tests/test_tools_audit_fixes.py::declared_keys`：
-
-```python
-def declared_keys(returns: str) -> set[str]:
-    return set(re.findall(r"'([a-z_][a-z0-9_]*)'", returns))
-```
-
-它只抓单引号键，下游断言是 ``declared - actual == set()``。于是任何不带引号
-的写法（``data={src, dst}``、``{question_id, from, to}``、``data=整数行数。``）都被抽成
-空集 —— 而空集永远是子集 ⇒ 判据真空通过，那条「docstring 与实现一致」
-的审计结论在这些工具上从来没有被执行过。
-
-本轮实测（`D:\\Incubator\\temp\\_probe_returns_parse.py`）：55 个工具里 36 个
-（65%）的 ``returns=`` 非空却抽不出任何键。这个文件就是为这 36 个工具补上的门。
+仓库里早就有一条判据 `tests/test_tools_audit_fixes.py::declared_keys`：```python def declared_keys(returns: str) -> set[str]: return set(re.findall(r"'([a-z_][a-z0-9_]*)'", returns))```它只抓单引号键，下游断言是 ``declared - actual == set()``。于是任何不带引号的写法（``data={src, dst}``、``{question_id, from, to}``、``data=整数行数。``）都被抽成空集 —— 而空集永远是子集 ⇒ 判据真空通过，那条「docstring 与实现一致」的审计结论在这些工具上从来没有被执行过。本轮实测（`D
+:\\Incubator\\temp\\_probe_returns_parse.py`）：55 个工具里 36 个（65%）的 ``returns=`` 非空却抽不出任何键。这个文件就是为这 36 个工具补上的门。
 
 ## 三条断言，以及它们各自不能证明什么
 
 1. `test_every_tool_returns_declaration_is_machine_readable`
-   —— 声明必须能被 `parse_declared_keys` 判成 `parsed`（键集合非空），
-   除非它在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么它没有键集合」的理由）。
-   它不能证明「声明的键是对的」—— 那是第 2 条的事。
-
-2. `test_declared_keys_are_a_subset_of_what_the_handler_actually_returns`
-   —— 对全部 55 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），
-   断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，
-   抓不到「给了却没声明」 —— 后者会让 LLM 少看到有用的键，但不会让调用方读错。
-   这条不对称关系写在 `SUBSET_CHECK_SCOPE` 里，免得下一个人以为它更强。
-
-3. 负控（`test_negative_control_*`）—— 没有负控的门就是橡皮图章：
-   - 声明里塞一个实现不返回的键 ⇒ 第 2 条必须红；
-   - 把某个 `returns=` 换回不带引号的写法 ⇒ 第 1 条必须红；
-   - 把 `parse_declared_keys` 的 `unparseable` 折成 `parsed` + 空集
-     （这正是旧 `declared_keys` 的形态）⇒ 第 1 条必须红。
-
-最后一条负控是这个文件存在的理由：空集在下游是真空通过，
-「我没抽到键」与「它没有键」必须分开（三态纪律）。
+—— 声明必须能被 `parse_declared_keys` 判成 `parsed`（键集合非空），除非它在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么它没有键集合」的理由）。它不能证明「声明的键是对的」
+—— 那是第 2 条的事。`test_declared_keys_are_a_subset_of_what_the_handler_actually_returns`
+—— 对全部 55 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
+LLM 少看到有用的键，但不会让调用方读错。这条不对称关系写在 `SUBSET_CHECK_SCOPE` 里，免得下一个人以为它更强。负控（`test_negative_control_*`）—— 没有负控的门就是橡皮图章：
+- 声明里塞一个实现不返回的键 ⇒ 第 2 条必须红；
+- 把某个 `returns=` 换回不带引号的写法 ⇒ 第 1 条必须红；
+- 把 `parse_declared_keys` 的 `unparseable` 折成 `parsed` + 空集
+（这正是旧 `declared_keys` 的形态）⇒ 第 1 条必须红。最后一条负控是这个文件存在的理由：空集在下游是真空通过，「我没抽到键」与「它没有键」必须分开（三态纪律）。
 """
 
 from __future__ import annotations
@@ -88,12 +66,12 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-13 随 `paper_package` 退场（`draft/117`）从 83 改成 79：
 #: 四条旧工具（`paper_render` / `paper_build` / `paper_anchor` / `paper_state`）
 #: 一起下线，编译那一格由既有的 `doc.paper_compile` 接手。
-#: 2026-10-18：84 → **86**（业主裁定给只读角色开产出登记通道：
+#: 2026-10-18：84 → 86（业主裁定给只读角色开产出登记通道：
 #: `analysis.register_report`（C→`analysis_reports`）、`review.record_finding`（H→`review_findings`））。
-#: 2026-10-20：86 → **93**（业主口径：待新增文献列表 —— `lit.overlap_check` /
+#: 2026-10-20：86 → 93（业主口径：待新增文献列表 —— `lit.overlap_check` /
 #: `lit.stage_add` / `lit.stage_list` / `lit.stage_withdraw` / `lit.stage_reject` /
 #: `lit.admit` / `lit.admit_all` 七件）。
-#: 2026-10-19 业主裁定「父子天然双向」：93 → **94**
+#: 2026-10-19 业主裁定「父子天然双向」：93 → 94
 #: （`conductor.escalate` —— 子代理把卡住的那件事写进父的收件箱）。
 TOOL_COUNT = 94
 
@@ -271,7 +249,7 @@ def tool_params() -> dict[str, dict]:
         "conductor.board": {},
         "conductor.role_spec": {"role_name": "C"},
         "conductor.acceptance": {},
-        # 收工门（`draft/37` §16 P3）：探针没给项目根 ⇒ **两格都是 unknown**
+        # 收工门（`draft/37` §16 P3）：探针没给项目根 ⇒ 两格都是 unknown
         # （`paper` 落 `paper_not_checked`、`acceptance` 落 `acceptance_not_checked`）——
         # 而 unknown 不是失败：这条走的就是那个成功支，`can_close` 为假不算工具失败。
         # （旧那一格是 `anchor`，2026-10-13 随 `paper_package` 整条退场，见 `draft/117`。）
@@ -281,7 +259,7 @@ def tool_params() -> dict[str, dict]:
         # "读成了、没有收件人"那一支（`recipients=[]` + `note` 说清，不是失败）。
         # "我是谁"由 `observations` 夹具的 `calling_as` 提供（工具形状里没有这一格）。
         "conductor.broadcast": {"subject": "探针：广播一次", "body": "只验键集，不派活"},
-        # 上行（业主 2026-10-19「父子天然双向」）：探针必须走到**成功支**（`state="escalated"`），
+        # 上行（业主 2026-10-19「父子天然双向」）：探针必须走到成功支（`state="escalated"`），
         # 因为受控拒绝那一档（`not_caller`）`data=None` ⇒ 键集合根本拿不到。
         # "我是谁 / 我的召唤者是谁 / 哪个会话"三件事都由 `observations` 夹具的
         # `calling_as` 提供（工具形状里没有这几格）—— 夹具因此给它挂了一个父。
@@ -360,7 +338,7 @@ def tool_params() -> dict[str, dict]:
     "search.literature": {"topic": "群", "mode": "topical",
                           "providers": ["fixture", "openalex"]},
         "search.local": {"query": "群"},
-        # 引文走查（2026-10-15 加）：源必须是**盘上已登记**的那一篇 ——
+        # 引文走查（2026-10-15 加）：源必须是盘上已登记的那一篇 ——
         # 夹具里 `_seed()` 铺的正是 `0000`；provider 由 `_StubProvider.walk_citations` 接住。
         "search.walk_citations": {"lit_id": "0000"},
         "search.shelf": {},
@@ -369,7 +347,7 @@ def tool_params() -> dict[str, dict]:
         # ---- 待新增文献列表（业主 2026-10-20）：七件各探一次 ----
         # `_seed()` 在本委托 `r-000001` 下铺了 4 个槽：
         #   000000（admit 探针用）/ 000001（withdraw）/ 000002（reject）/ 000003（admit_all 用）。
-        # 委托号一律**显式**给：默认视图是"当前委托"，而"当前"取决于探针的先后顺序 ——
+        # 委托号一律显式给：默认视图是"当前委托"，而"当前"取决于探针的先后顺序 ——
         # 靠顺序决定参数会让这条判据在改动执行次序时静默换一条分支（同一族的老坑）。
         "lit.overlap_check": {"title": "An unrelated paper about nothing in the library"},
         "lit.stage_add": {"request_id": "r-900001",
@@ -387,7 +365,7 @@ def tool_params() -> dict[str, dict]:
         # `research_questions` —— `statements` / `dependencies` 已不由通用写口直写
         # （`store.direct_write_refusal`；真机读数 `projects/mp2/sessions/mp2-7.jsonl`
         # 第 97 行）。本判据问的是"`returns=` 与实现给不给同一套键"，与样品表无关：
-        # 键集合仍由**实跑**观测（这两件在 `NO_KEY_SET_EXEMPTIONS` 里，data 是标量）。
+        # 键集合仍由实跑观测（这两件在 `NO_KEY_SET_EXEMPTIONS` 里，data 是标量）。
         # `_seed()` 已经铺了 research_questions `0000`；create 新建的那一条是 `0001`
         # （`MUTATING_LAST` 的顺序保证 create 先于 delete 跑）。
         "table.create": {"table": "research_questions",
@@ -464,7 +442,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 广播（S6-b）：探针走"读成了、没有收件人"那一支（工作区里没有子代理），
         # 键集合与有收件人那一支逐字相同 ⇒ 这条探针验得了"声明 ⊆ 实现"。
         "conductor.broadcast",
-        # 上行（2026-10-19「父子天然双向」）：探针走**成功支**（`state="escalated"`，
+        # 上行（2026-10-19「父子天然双向」）：探针走成功支（`state="escalated"`，
         # 父与会话身份由 `observations` 的 `calling_as` 挂上），键名读自实跑观测。
         "conductor.escalate",
         # 文字层抽取：探针真跑（`tool_params()` 给了 `SOURCE_REL`）⇒ 键名读自实现。
@@ -531,7 +509,7 @@ MUTATING_LAST: frozenset[str] = frozenset(
         "attack.create_plan",
         "attack.step",
         "verify.run_experiment",
-        # 待新增文献列表里**会写 literature** 的两支（2026-10-20）：它们必须在别的探针
+        # 待新增文献列表里会写 literature 的两支（2026-10-20）：它们必须在别的探针
         # 之后跑 —— `lit.admit` / `lit.admit_all` 会往 `literature` 加行，而
         # `search.local` / `trace.literature` / `table.count` 那些探针读的是同一张表。
         # 三支 stage_* 只写 `lit_candidates`，没有先后要求，留在字母序里。
@@ -809,7 +787,7 @@ def _seed(store: Store, root: Path) -> None:
     probes.mkdir(parents=True, exist_ok=True)
     (probes / "honest.py").write_text(HONEST_PROBE, encoding="utf-8")
     # 待新增文献列表（业主 2026-10-20）：`lit.*` 的七件探针要有东西可动。
-    # 六个槽，**每一支工具各吃一个**，多出来的两个是"必须被拒"的样本：
+    # 六个槽，每一支工具各吃一个，多出来的两个是"必须被拒"的样本：
     #   000000 → `lit.admit` 探针（会被准入）
     #   000001 → `lit.stage_withdraw` 探针（会被撤）
     #   000002 → `lit.stage_reject` 探针（会被拒）
@@ -840,18 +818,16 @@ def _seed(store: Store, root: Path) -> None:
 
 
 class _RoleGateBypassedRegistry(ToolRegistry):
-    """测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
+    """    测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
 
-    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张
-    正常注册表能调全部 55 个工具 —— 那是设计意图（只读角色拿不到写工具）。
-    本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写
-    那一个谓词。
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 55 个工具 —— 那是设计意图（只读角色拿不到写工具）。
+    本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写那一个谓词。
 
     为什么这是可接受的、而不是"测试把门拆了"：
     1. 覆写发生在本文件的子类上，生产类 `ToolRegistry` 一字未改
-       （`test_tools_base.py` / `test_tools_readonly_roles.py` 有成对负控守着那个谓词）；
+    （`test_tools_base.py` / `test_tools_readonly_roles.py` 有成对负控守着那个谓词）；
     2. 夹具里断言每个工具都至少属于一个角色（`_every_tool_has_a_role`）——
-       于是"绕过"与"工具根本没挂给任何人"仍然分得开（后者是真实的声明缺陷）。
+    于是"绕过"与"工具根本没挂给任何人"仍然分得开（后者是真实的声明缺陷）。
     """
 
     def _callable_for(self, spec, role, *, include_registered_writers):  # type: ignore[override]
@@ -939,7 +915,7 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     # 那一支（不存在时它们照样 ok=True，但只有 checked/plan_id/reason 三个键 —— 那不是主路径）。
     bootstrap = reg.call("attack.create_plan", problem="P", problem_key="pk", budget=BUDGET)
     assert bootstrap.ok, bootstrap.error
-    # 探针表里那两条按"刚立的那个计划"取参数：计划号是**分配**出来的（当前宽度六位），
+    # 探针表里那两条按"刚立的那个计划"取参数：计划号是分配出来的（当前宽度六位），
     # 写死四位会让它们落到"查不到"那一支（返回只有 checked/plan_id/reason）⇒ 声明与实返对不上。
     # `create_plan` 的 data 是一个字典（含 created/plan_id/…）⇒ 从这里取号。
     got = bootstrap.data if isinstance(bootstrap.data, dict) else {}
@@ -1128,40 +1104,16 @@ def test_negative_control_folding_unparseable_into_parsed_makes_the_gate_red(
 def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """全部 55 个工具：`declared - set(实际 data)` 必须为空。
-
-    ## 三态：`ok=False` 怎么办
-
-    有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
-    分开：
-
-    * `ok=False` ⇒ 跳过键比对，但记下来（它既不是「一致」也不是「不一致」）；
-    * `ok=True` 且 data 是对象 ⇒ 做比对。
-
-    不许把「工具跑不起来」当成「一致」—— 那正是本项目反复踩过的坑
-    （「没检查」被读成「检查过了没问题」）。因此末尾还要断言
-    被跳过的工具数 ≤ MAX_SKIPPED。
-
-    `MAX_SKIPPED = 0` 的依据：本文件的 `_seed()` 铺齐了每个工具需要的前置数据
-    （概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，
-    `verify.run_experiment` 有真的探针脚本 ⇒ 55 个工具全部走到 ok 分支。
-    把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
-
-    本判据只抓「声明了却没给」（见 `SUBSET_CHECK_SCOPE`），抓不到「给了却没声明」。
-
-    ## `ok=False` 与「豁免的工具」是两种不同的"没法比对"
-
-    * `ok=False` ⇒ 工具没查成 ⇒ 计入 `skipped`（末尾断言其数量 ≤ MAX_SKIPPED）；
-    * 声明在 `NO_KEY_SET_EXEMPTIONS` 里（data 是标量/行对象）⇒ 查成了，
-      只是没有键集合可比 ⇒ 不计入 skipped（它有自己的一条负控
-      `test_negative_control_an_exempted_tool_is_still_probed_for_real` 盯着它的行为）。
-      但豁免 ≠ 免检：`ok=True` 是硬要求 —— 一个标量工具若连跑都跑不起来，照样要红。
-
-    `MAX_SKIPPED = 0` 的依据：本文件的 `_seed()` 铺齐了每个工具需要的前置数据
-    （概念/关系/文献/正文/稿件/审校发现/研究问题/实验行），联网工具用桩注入，
-    `verify.run_experiment` 有真的探针脚本，`ocr.run` 给的是真图片 ⇒ 55 个工具
-    全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明
-    「哪个工具为什么跑不起来」。
+    """    全部 55 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
+    分开：`ok=False` ⇒ 跳过键比对，但记下来（它既不是「一致」也不是「不一致」）；* `ok=True` 且 data 是对象 ⇒ 做比对。不许把「工具跑不起来」当成「一致」—— 那正是本项目反复踩过的坑（「没检查」
+    被读成「检查过了没问题」）。因此末尾还要断言被跳过的工具数 ≤ MAX_SKIPPED。`MAX_SKIPPED = 0` 的依据：本文件的
+    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 55 个工具全部走到 ok 分支。
+    把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。本判据只抓「声明了却没给」（见 `SUBSET_CHECK_SCOPE`），抓不到「给了却没声明」。`ok=False` 与「豁免的工具」
+    是两种不同的"没法比对"：`ok=False` ⇒ 工具没查成 ⇒ 计入 `skipped`（末尾断言其数量 ≤ MAX_SKIPPED）；* 声明在 `NO_KEY_SET_EXEMPTIONS` 里（data
+    是标量/行对象）⇒ 查成了，只是没有键集合可比 ⇒ 不计入 skipped（它有自己的一条负控`test_negative_control_an_exempted_tool_is_still_probed_for_real`
+    盯着它的行为）。但豁免 ≠ 免检：`ok=True` 是硬要求 —— 一个标量工具若连跑都跑不起来，照样要红。`MAX_SKIPPED = 0` 的依据：本文件的
+    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/审校发现/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本，`ocr.run` 给的是真图片
+    ⇒ 55 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
     """
     mismatches: list[str] = []
     skipped: list[str] = []
@@ -1360,21 +1312,21 @@ def test_search_register_declares_keys_that_the_duplicate_branch_also_returns(
 
 # ------------------------------------------------ 诊断（临时）：数组里逐元素的一致性
 #
-# 这一格是 `SUBSET_CHECK_SCOPE` 自己点名的**第二个盲区**：
+# 这一格是 `SUBSET_CHECK_SCOPE` 自己点名的第二个盲区：
 # "它也不检查数组里逐元素的一致性：同一个数组的多个元素被并成一份键集合，
 #  所以『元素 A 有、元素 B 没有』这种漂移抓不到。"
 #
-# 先只**打印**、不断言 —— 看清规模再决定改法（改声明的措辞、还是改实现的元素构造）。
+# 先只打印、不断言 —— 看清规模再决定改法（改声明的措辞、还是改实现的元素构造）。
 
 
 def _array_element_missing(value: object, path: str = "", out: list[str] | None = None) -> list[str]:
     """递归找"同一个数组里，某些元素缺了别的元素顶层有的键"。
 
-    ⚠️ 这里比的是元素的**顶层键**，不是递归取并集之后的键集合。
-    我第一版用了 `_collect_keys`（递归），结果是**假阳性**：
+     这里比的是元素的顶层键，不是递归取并集之后的键集合。
+    我第一版用了 `_collect_keys`（递归），结果是假阳性：
     某个元素的 `default` 里嵌套着 `{"start","end","label"}`，而另一个元素的 `default`
-    是 `0` ——递归取键会把前者那三个键算进**那个元素**，于是"两个元素的 `default`
-    形状不同"被报成了"键不一致"。而调用方读的是 `field["enum"]` 这种**顶层**键，
+    是 `0` ——递归取键会把前者那三个键算进那个元素，于是"两个元素的 `default`
+    形状不同"被报成了"键不一致"。而调用方读的是 `field["enum"]` 这种顶层键，
     嵌套值的形状本来就允许不同（默认值本来就各不相同）。
     """
     out = [] if out is None else out
@@ -1398,11 +1350,11 @@ def _array_element_missing(value: object, path: str = "", out: list[str] | None 
 
 
 #: 本判据今天在多少"可比数组"上被评过（数组含 ≥2 个 dict 元素才算可比）。
-#: 写死是刻意的（与 `TOOL_COUNT` 同一种做法）：它掉下去就说明判据**能评的东西变少了**
+#: 写死是刻意的（与 `TOOL_COUNT` 同一种做法）：它掉下去就说明判据能评的东西变少了
 #: ——"少测了几个"与"都测过了"必须能分开。
 #:
-#: 2026-10-16：**38 → 37**，原因是口径 S1（M 只派活）：`conductor.role_spec` 不再返回
-#: `actions`（那是一个"数组里全是同形对象"的可比数组）。这是**正当的减少**——
+#: 2026-10-16：38 → 37，原因是口径 S1（M 只派活）：`conductor.role_spec` 不再返回
+#: `actions`（那是一个"数组里全是同形对象"的可比数组）。这是正当的减少——
 #: 少的不是判据的覆盖面，而是那一格数据本身被撤掉了；其余 37 个一个没丢。
 #: （判据自己的话：「先解释清楚再改这个数」——这段就是那句解释。）
 COMPARABLE_ARRAYS_MIN = 37
@@ -1425,29 +1377,16 @@ def _count_comparable_arrays(value: object) -> int:
 def test_every_element_of_an_array_carries_the_same_top_level_keys(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """补上 `SUBSET_CHECK_SCOPE` 自己点名的**第二个盲区**：数组里逐元素的一致性。
-
+    """    补上 `SUBSET_CHECK_SCOPE` 自己点名的第二个盲区：数组里逐元素的一致性。
     ## 为什么这一条有独立的价值（不是"更强一点的同一件事"）
-
-    上一条（`declared - actual`）把**同一个数组的多个元素并成一份键集合**，
-    所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对**调用方**不是：
-    它按自己在别的元素上看到的形状去读 `field["enum"]`，在不带那一格的那些元素上
-    会拿到 **KeyError** —— 那不是"这个字段没有词表"，是**读数与事实不符**。
-
+    上一条（`declared - actual`）把同一个数组的多个元素并成一份键集合，所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对调用方不是：它按自己在别的元素上看到的形状去读 `field["enum"]`，
+    在不带那一格的那些元素上会拿到 KeyError —— 那不是"这个字段没有词表"，是读数与事实不符。
     ## 实测（2026-10-15）
-
-    全 79 个工具里只有 **`table.schema`** 有这个形态，而它有 **132 处**
-    （`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
-    那件工具的用途恰恰是"让智能体读受控词表"，所以这一格坏得最不是地方。
-    修法是**每个元素都给这三格、不适用时给如实空值**（`[]` / `None`）。
-
-    ## 一条**不许**混进来的东西（我第一版判据就栽在这）
-
-    比的是元素的**顶层键**，不是递归取并集之后的键集合。递归取键会把元素
-    `default` 里嵌套的 `{"start","end","label"}` 算进**那个元素**，于是
-    "两个元素的 `default` 形状不同"（**合法**：默认值本来就各不相同）
-    被报成"键不一致" —— 实测那会造出 37 处假阳性。负控
-    `test_negative_control_nested_value_shape_differences_are_not_reported` 钉住这一条。
+    全 79 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
+    那件工具的用途恰恰是"让智能体读受控词表"，所以这一格坏得最不是地方。修法是每个元素都给这三格、不适用时给如实空值（`[]` / `None`）。
+    ## 一条不许混进来的东西（我第一版判据就栽在这）
+    比的是元素的顶层键，不是递归取并集之后的键集合。递归取键会把元素`default` 里嵌套的 `{"start","end","label"}` 算进那个元素，于是"两个元素的 `default` 形状不同"（合法：默认值本来就各不相同）
+    被报成"键不一致" —— 实测那会造出 37 处假阳性。负控`test_negative_control_nested_value_shape_differences_are_not_reported` 钉住这一条。
     """
     bad: list[str] = []
     comparable = 0
@@ -1481,7 +1420,7 @@ def test_negative_control_the_element_check_turns_red_on_a_non_uniform_array() -
 
 
 def test_negative_control_nested_value_shape_differences_are_not_reported() -> None:
-    """负控（钉住我第一版的假阳性）：**嵌套值的形状不同是合法的**，不许报。"""
+    """负控（钉住我第一版的假阳性）：嵌套值的形状不同是合法的，不许报。"""
     clean = {"fields": [{"name": "a", "default": [{"start": 1, "end": 2}]},
                         {"name": "b", "default": 0}]}
     assert _array_element_missing(clean, "t") == [], (
@@ -1493,9 +1432,9 @@ def test_negative_control_nested_value_shape_differences_are_not_reported() -> N
 
 
 def _undeclared_top_level(returns: str, obs: Observation) -> list[str]:
-    """`actual − declared`，**只看顶层键**。
+    """`actual − declared`，只看顶层键。
 
-    为什么只看顶层：深层键（`graph.build` 里 `'true'`/`'false'` 那种**查表的键**）
+    为什么只看顶层：深层键（`graph.build` 里 `'true'`/`'false'` 那种查表的键）
     不是"字段"，全枚举既不必要也没用；而调用方按 `data["x"]` 读的是顶层。
     """
     declared = shared_declaration.declared_keys(returns)
@@ -1505,24 +1444,14 @@ def _undeclared_top_level(returns: str, obs: Observation) -> list[str]:
 def test_no_tool_returns_a_top_level_key_it_does_not_declare(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """补上 `SUBSET_CHECK_SCOPE` 的**第一个盲区**：实跑给了、而声明没提的键。
-
+    """    补上 `SUBSET_CHECK_SCOPE` 的第一个盲区：实跑给了、而声明没提的键。
     ## 为什么这一条值得存在（2026-10-15 更正了一条我自己的错判）
-
-    我此前判它"按比例不动"，依据是"声明不全只会让调用方**少看到**字段"。**那句的后果算轻了**：
-    `tools/base.py:721` 逐字 `description = summary + "\\n返回：" + returns`
-    ⇒ **`returns` 会拼进 function-calling 的 `description`，也就是模型看得到**。
-    模型读到的就是这一串键；声明里没有的字段，**它不知道存在，于是不会用**。
-
-    实测的代价（当时那 16 件里最重的一件）：`doc.scan_claim` 的声明只列
-    `{checked,claim_id,ok,findings,error_count,warning_count}`，而它实跑还给
-    `status_axis` / `undecided_reason` —— **那两格正是三态**（"这条没查成"与
-    "这条查过没问题"靠它们分开）。模型看不到它们，三态纪律在**模型这一侧**又折回去了。
-
+    我此前判它"按比例不动"，依据是"声明不全只会让调用方少看到字段"。那句的后果算轻了：`tools/base.py:721` 逐字 `description = summary + "\\n返回：" + returns`⇒
+    `returns` 会拼进 function-calling 的 `description`，也就是模型看得到。模型读到的就是这一串键；声明里没有的字段，它不知道存在，于是不会用。
+    实测的代价（当时那 16 件里最重的一件）：`doc.scan_claim` 的声明只列`{checked,claim_id,ok,findings,error_count,warning_count}`，
+    而它实跑还给`status_axis` / `undecided_reason` —— 那两格正是三态（"这条没查成"与"这条查过没问题"靠它们分开）。模型看不到它们，三态纪律在模型这一侧又折回去了。
     ## 今天的读数
-
-    全 80 个工具、**零个**顶层键未声明（2026-10-15 一次清完：先补 6 件最重的，
-    再补剩下 10 件）。下面的反真空与负控保证这条判据不是"扫了个寂寞"。
+    全 80 个工具、零个顶层键未声明（2026-10-15 一次清完：先补 6 件最重的，再补剩下 10 件）。下面的反真空与负控保证这条判据不是"扫了个寂寞"。
     """
     bad: list[str] = []
     checked = 0

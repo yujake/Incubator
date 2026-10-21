@@ -97,17 +97,12 @@ def test_write_report_marks_evidence_as_backfilled_only_when_research_was_not_ru
 
     ## 实测到的两个可区分态（这是本断言的事实基础）
 
-    `research()` 生产路径总是把 `evidence` 放进取值结果的（`agent_d.py:3133`），
-    所以"研究过了但 `evidence` 是 `None`" 不是一个可达的状态。可达的两态是：
+    `research()` 生产路径总是把 `evidence` 放进取值结果的（`agent_d.py:3133`），所以"研究过了但 `evidence` 是 `None`"不是一个可达的状态。可达的两态是：
 
-    - 态 A = 没做：`last_research` 里没有这个问题 ⇒ `write_report` 就地补取
-      一次溯源，并必须写明"本问题本轮未进入研究步骤 + 报告期补取"；
-    - 态 B = 做了有结果：`last_research` 里有它（由真实 `research()` 写入）⇒
-      报告用那份记录里的证据，不得出现"报告期补取"这个标记。
+    - 态 A = 没做：`last_research` 里没有这个问题 ⇒ `write_report` 就地补取一次溯源，并必须写明"本问题本轮未进入研究步骤 + 报告期补取"；
+    - 态 B = 做了有结果：`last_research` 里有它（由真实 `research()` 写入）⇒ 报告用那份记录里的证据，不得出现"报告期补取"这个标记。
 
-    只断言"文件里有 0000"会让"两态写成同一句话"的实现照样通过 ——
-    而那正是被修掉的那个缺陷，也正是 `DEVELOPMENT.md` §3 纪律 1 的形态。
-    """
+    只断言"文件里有 0000"会让"两态写成同一句话"的实现照样通过 —— 而那正是被修掉的那个缺陷，也正是 `DEVELOPMENT.md` §3 纪律 1 的形态。"""
     st = Store(tmp_path / "ws")
     st.init()
     _graph(st)
@@ -199,18 +194,14 @@ def test_build_fixtures_writes_sources_manifest_and_returns_candidates_json(tmp_
 def test_build_fixtures_keeps_the_two_deliberate_duplicate_samples(tmp_path: Path):
     """判据：两种不同的重复样本都必须在位（少一条 = 少验证一件事）。
 
-    `demo.py` 的模块 docstring 逐字列出三个理由，前两个各靠一对特定重叠触发，
-    而这两对的重叠方式不同（实测清单已核对）：
+    `demo.py` 的模块 docstring 逐字列出三个理由，前两个各靠一对特定重叠触发，而这两对的重叠方式不同（实测清单已核对）：
 
     | 对 | 素材 | 重叠在哪 | 触发什么 |
     |---|---|---|---|
     | 元数据重复 | 两条候选都指向 `abelian_group_reprint.txt` | `(title, doi, year)` 全同 | 文献去重（应复用既有 lit_id） |
     | 正文重复 | `abelian_group.txt` 与 `abelian_group_reprint.txt` | 正文逐字相同，元数据不同 | 关系判重（同一概念组 + 同一引文 ⇒ 拒绝写入） |
 
-    断言这两件事同时成立（而不是"候选数 >= 5"）：只数条数的话，
-    把这两对样本删掉、随手加两条新候选也能通过 —— 而 demo 会照常返回 0，
-    于是"去重与判重验证过"变成一句没有依据的话。
-    """
+    断言这两件事同时成立（而不是"候选数 >= 5"）：只数条数的话，把这两对样本删掉、随手加两条新候选也能通过 —— 而 demo 会照常返回 0，于是"去重与判重验证过"变成一句没有依据的话。"""
     payload = json.loads(build_fixtures(tmp_path).read_text(encoding="utf-8"))
     cands = payload["candidates"]
 
@@ -269,20 +260,13 @@ def test_run_demo_rebuilds_the_manifest_so_external_edits_cannot_redirect_it(tmp
 
     ## 原来的假设与实测结果
 
-    我原本假设 `run_demo` 会消费调用方已经写好的 `candidates.json`，
-    于是写了"把它清空后 `run_demo` 应当失败"这条断言。实测：它仍然返回 0。
-    读代码后确认原因：`demo.py:214` 的 `run_demo` 第一件事就是
-    `cpath = build_fixtures(root)` —— 它无条件重新生成清单，从不读现成的。
+    我原本假设 `run_demo` 会消费调用方已经写好的 `candidates.json`，于是写了"把它清空后 `run_demo` 应当失败"这条断言。实测：它仍然返回 0。读代码后确认原因：`demo.py:214` 的 `run_demo` 第一件事就是 `cpath = build_fixtures(root)` —— 它无条件重新生成清单，从不读现成的。
 
     ## 所以这里改测实际成立的那条性质
 
-    无条件重建 ⇒ 调用方外部改清单不能改变 demo 的行为。这是一条真实的
-    （虽然更弱的）保证：它意味着 demo 的输入不可被"上游残留状态"污染。
-    断言写成"篡改清单后 `run_demo` 依然成功，且篡改被覆盖回正确的清单"。
+    无条件重建 ⇒ 调用方外部改清单不能改变 demo 的行为。这是一条真实的（虽然更弱的）保证：它意味着 demo 的输入不可被"上游残留状态"污染。断言写成"篡改清单后 `run_demo` 依然成功，且篡改被覆盖回正确的清单"。
 
-    这条不是"`build_fixtures` 的产物被消费"的证据 —— 那条证据本文件里
-    没有，我没有做到。它被记进了 `docs/PROPOSALS.md` 的 G-4 条。
-    """
+    这条不是"`build_fixtures` 的产物被消费"的证据 —— 那条证据本文件里没有，我没有做到。它被记进了 `docs/PROPOSALS.md` 的 G-4 条。"""
     build_fixtures(tmp_path)
     cpath = tmp_path / "demo" / "fixtures" / "candidates.json"
     cpath.write_text(json.dumps({"candidates": []}, ensure_ascii=False), encoding="utf-8")

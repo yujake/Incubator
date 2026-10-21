@@ -2,22 +2,18 @@
 
 ## 缺陷（子智能体实测发现）
 
-`table.*` / `fs.*` 在注册时把注入的全部 `ROLES` 写进了每个工具的 `roles`，
-于是按角色装配出来的审校者 H 的工具面里出现了 `table.update`、`fs.write`、
-`verify.run_experiment` —— 也就是说 H 手里有能改数据/稿件的刀。
+`table.*` / `fs.*` 在注册时把注入的全部 `ROLES` 写进了每个工具的 `roles`，于是按角色装配出来的审校者 H 的工具面里出现了
+`table.update`、`fs.write`、`verify.run_experiment` —— 也就是说 H 手里有能改数据/稿件的刀。
 
-而"H 只读"不是洁癖：若审校者能直接改，它就同时是"发现者"与"修正者"，
-于是"发现问题"与"掩盖问题"在结构上无法区分。
-C 同理：一旦 C 能写，它就成了"绕过 B 引文回验"的写入路径，
-而 B 的引文逐字回验是全系统唯一能自动发现幻觉引文的地方。
+而"H 只读"不是洁癖：若审校者能直接改，它就同时是"发现者"与"修正者"，于是"发现问题"与"掩盖问题"在结构上无法区分。C 同理：一旦 C 能写，它就成了"绕过 B 引文回验"的写入路径，而 B
+的引文逐字回验是全系统唯一能自动发现幻觉引文的地方。
 
 ## 修法（两道防线，缺一不可）
 
 1. 声明正确：写工具的角色集合里不含只读角色（`table_tools` / `fs_tools` /
-   `verify_tools` 各自过一遍）。
+`verify_tools` 各自过一遍）。
 2. `ToolRegistry.for_role` 结构性拦截：对只读角色，无论 spec 怎么声明，
-   一律过滤掉有写副作用的工具，并把被剥掉的名字记进 `role_filter_notes`
-   （静默过滤会让"声明错误"永远暴露不了）。
+一律过滤掉有写副作用的工具，并把被剥掉的名字记进 `role_filter_notes`（静默过滤会让"声明错误"永远暴露不了）。
 
 本文件守的是第 2 道 —— 因为它才是"工具作者无法绕过"的那一道。
 """
@@ -114,14 +110,14 @@ def test_real_registry_gives_no_write_tool_to_read_only_roles(store):
     for role in READ_ONLY_ROLES:
         specs = build.registry.for_role(role)
         leaks = [s.name for s in specs if s.side_effect in SIDE_EFFECTS_WRITE]
-        # 2026-10-17（业主裁定「方案 1」）：只读角色**自己的落库代理**是允许的
+        # 2026-10-17（业主裁定「方案 1」）：只读角色自己的落库代理是允许的
         from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
         _ex = {n for n, _w in _EXC.get(role, ())}
         leaks = [n for n in leaks if n not in _ex]
         assert leaks == [], f"{role} 的工具面里有**未登记**的写工具：{leaks}"
         assert specs, f"{role} 一个工具都没有 —— 那不是只读，那是没接线"
     # 声明侧也应当已经干净（`for_role` 的留痕为空），否则说明有人又写错了 roles
-    # 2026-10-17（业主裁定「方案 1」）：H 的落库代理是**登记过的**放行，不是"声明错误"。
+    # 2026-10-17（业主裁定「方案 1」）：H 的落库代理是登记过的放行，不是"声明错误"。
     _notes = {k: [m for m in v if "方案 1」放行了" not in m and "方案 1」放行" not in m]
               for k, v in build.registry.role_filter_notes.items()}
     _notes = {k: v for k, v in _notes.items() if v}
@@ -270,5 +266,5 @@ def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(s
     _notes = {k: v for k, v in _notes.items() if v}
     assert _notes == {}, f"未登记的写工具声明：{_notes}"
     # 原断言（`role_filter_notes == {}`）在「方案 1」之后不再成立：H 的三个落库代理是
-    # **登记过的**放行，会在留痕里各留一条。上面那条已把这一条剔掉再判空 ——
-    # 保留的语义不变：**未登记**的写工具声明仍然一个都不许有。
+    # 登记过的放行，会在留痕里各留一条。上面那条已把这一条剔掉再判空 ——
+    # 保留的语义不变：未登记的写工具声明仍然一个都不许有。

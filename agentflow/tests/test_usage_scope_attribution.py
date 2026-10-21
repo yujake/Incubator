@@ -1,33 +1,20 @@
 """G-20 / G-6：成本归因（每一次 modelgw 调用都带一个显式 `scope`）。
-
 ## 这一条要修的缺陷
-
-`USAGE_SCOPES` 有七档（`summon` / `experiment` / `search` / `extract` / `review` /
-`reason` / `other`），而账本答不出"搜索/抽取/审校各花了多少" —— 因为唯一的记账入口
-`modelcost.charge_reply` 的 `scope` 缺省是 `"reason"`，任何忘记传的调用点都静默落进
-那一档。账本的总额与条目数完全自洽，问题只是永远答不出来。
-
+`USAGE_SCOPES` 有七档（`summon` / `experiment` / `search` / `extract` / `review` /`reason` / `other`），
+而账本答不出"搜索/抽取/审校各花了多少" —— 因为唯一的记账入口`modelcost.charge_reply` 的 `scope` 缺省是 `"reason"`，任何忘记传的调用点都静默落进那一档。账本的总额与条目数完全自洽，
+问题只是永远答不出来。
 ## 这个文件守的三件事
-
 1. 正控：一次多角色流程跑完，账本里 `scope` 分布至少 4 档非零，
-   且总额不变（`usage_task_total_mismatch` 不响：分档只改归属，不改数字）。
+且总额不变（`usage_task_total_mismatch` 不响：分档只改归属，不改数字）。
 2. 负控：某一处 `scope` 缺掉/写错 ⇒ 那一档归零或落"未分类"，而且看得见
-   （不是静默落进别的档）。
+（不是静默落进别的档）。
 3. `G-6`：每一档归口要么有真实的产出点、要么被显式标注为"没有产出点" ——
-   两者在 `by_scope` 的固定零值键里完全同形，所以不能靠读零值来区分。
-
-多角色流程用 `ModelGateway` 的真实现 + 假传输（`transport=` 接缝），
-全程离线、秒级、可重复。刻意不自己拼 `Charge` 对象：那样测的就不是
-"modelgw → 账本"这条真路径了。
-
+两者在 `by_scope` 的固定零值键里完全同形，所以不能靠读零值来区分。
+多角色流程用 `ModelGateway` 的真实现 + 假传输（`transport=` 接缝），全程离线、秒级、可重复。刻意不自己拼 `Charge` 对象：那样测的就不是"modelgw → 账本"这条真路径了。
 ## `G-6` 的处置（为什么 `other` 从词表里消失了）
-
-`modelgw.complete` 的 docstring 自己写着"缺省也不许是「其它」：一个「其他」档会把
-「有人忘了写」伪装成一个正常的分类"，而 `"other"` 恰恰在词表里 ——
-`Charge(scope="other")` 不拒、`by_scope["other"]` 与正常档同形，那句承诺在数据上
-不成立。本仓没有任何地方产出 `other`，所以按"要么有真实产出点、要么不在词表里"
-取后者。同一个判据也适用于每一档：`schema.USAGE_SCOPE_PRODUCERS` 逐档登记
-（`None` = 本版本没有产出点），并且由 `schema` 在导入期对账。
+`modelgw.complete` 的 docstring 自己写着"缺省也不许是「其它」：一个「其他」档会把「有人忘了写」伪装成一个正常的分类"，而 `"other"` 恰恰在词表里
+——`Charge(scope="other")` 不拒、`by_scope["other"]` 与正常档同形，那句承诺在数据上不成立。本仓没有任何地方产出 `other`，所以按"要么有真实产出点、要么不在词表里"取后者。
+同一个判据也适用于每一档：`schema.USAGE_SCOPE_PRODUCERS` 逐档登记（`None` = 本版本没有产出点），并且由 `schema` 在导入期对账。
 """
 
 from __future__ import annotations
@@ -215,25 +202,15 @@ def test_a_forgotten_scope_is_refused_not_silently_bucketed(store: Store):
 
 
 def test_a_scope_outside_the_vocabulary_lands_in_unclassified_visibly(store: Store):
-    """负控②：账本里存在编外/空的 scope ⇒ 落显式的"未分类"档，且原值被记下来。
-
+    """    负控②：账本里存在编外/空的 scope ⇒ 落显式的"未分类"档，且原值被记下来。
     ## 为什么这一条用假账本行，而不是往真账本里写一行编外值
-
-    写入侧是 fail-closed 的：`UsageEntry.validate` 与 `Charge.validate` 都会当场拒绝
-    编外的 scope（`schema.py` 的受控词表断言）。也就是说"编外值出现在账本里"
-    这件事在本版本不可能由正常写入产生 —— 它只能来自另一个写入方：
-    旧版本进程、或直接改 `data/usage_ledger.json` 的人。
-
-    那么读账那一侧就必须对它有确定的、可见的处置，而不是丢掉或塞进 `other`：
-    丢掉会让分档之和小于总额（一个静默的假不一致），塞进 `other` 会把
-    "有人写了编外归口"这件事藏起来。这里用一份构造的账本行来验那条读侧判据，
-    并同时断言写入侧确实拒绝同一个值 —— 两侧的判据都要有。
-
+    写入侧是 fail-closed 的：`UsageEntry.validate` 与 `Charge.validate` 都会当场拒绝编外的 scope（`schema.py` 的受控词表断言）。
+    也就是说"编外值出现在账本里"这件事在本版本不可能由正常写入产生 —— 它只能来自另一个写入方：旧版本进程、或直接改 `data/usage_ledger.json` 的人。
+    那么读账那一侧就必须对它有确定的、可见的处置，而不是丢掉或塞进 `other`：丢掉会让分档之和小于总额（一个静默的假不一致），塞进 `other` 会把"有人写了编外归口"这件事藏起来。
+    这里用一份构造的账本行来验那条读侧判据，并同时断言写入侧确实拒绝同一个值 —— 两侧的判据都要有。
     ## 为什么假账本只需要 `rows()`
-
-    `TokenMeter.by_scope` 是纯读侧：它只调 `self.store.rows("usage_ledger")`。
-    所以这里注入一个最小替身（而不是真 `Store`），正是为了构造出真 `Store`
-    这一版写不出来的那种行。
+    `TokenMeter.by_scope` 是纯读侧：它只调 `self.store.rows("usage_ledger")`。所以这里注入一个最小替身（而不是真 `Store`），正是为了构造出真
+    `Store`这一版写不出来的那种行。
     """
     bad_rows = [
         {"usage_id": "0000", "scope": "", "role": "legacy", "task_id": None,

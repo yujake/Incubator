@@ -1,43 +1,21 @@
 """通用判据：工具 schema 声明的每个 property，必须被 spec.handler 的签名接受。
-
 ## 这条判据要抓的是什么（R2-AN-1 / R2b-AN-1-A）
-
 `ToolRegistry.call` 的两步是：
-
-1. `validate_params(spec.params, merged)` —— 按 schema 判参数合法性；
-2. `spec.handler(**merged)` —— 按关键字把参数交给 handler。
-
-只要 schema 声明了一个 handler 形参表里没有的 property，两步就分家了：
-第 1 步放行（schema 说它是合法参数），第 2 步抛 `TypeError`，而
-`tools/base.py` 的兜底把它记成 `ok=False / kind='unexpected'`。
-`unexpected` 是"库内部出错"那一类，于是调用方拿着 schema 的声明写参数，
-拿回来一个会让人去查工具注册表的分类 —— 这正是 `R2b-AN-1-A` 实测的
-假 bug 分类，落点是 `verify.check_formal` 与 `verify.run_experiment` 两处
-schema 里的旧名 `name`（两个 handler 都不收它）。
-
+1. `validate_params(spec.params, merged)` —— 按 schema 判参数合法性；2. `spec.handler(**merged)` —— 按关键字把参数交给 handler。
+只要 schema 声明了一个 handler 形参表里没有的 property，两步就分家了：第 1 步放行（schema 说它是合法参数），第 2 步抛 `TypeError`，而`tools/base.py` 的兜底把它记成
+`ok=False / kind='unexpected'`。`unexpected` 是"库内部出错"那一类，于是调用方拿着 schema 的声明写参数，拿回来一个会让人去查工具注册表的分类 —— 这正是
+`R2b-AN-1-A` 实测的假 bug 分类，落点是 `verify.check_formal` 与 `verify.run_experiment` 两处schema 里的旧名 `name`（两个 handler 都不收它）。
 ## 为什么判据是"逐条看每个工具"，而不是"盯住那两个名字"
-
-盯名字只能抓住已经被发现的这一处；这条判据抓的是整类形态：
-任何工具在任何时候多声明一个 handler 收不下的 property，它都会红
-（`R2-AN-1` 的原始要求，`draft/28` 42.3 已实测"可行、零误伤"）。
+盯名字只能抓住已经被发现的这一处；这条判据抓的是整类形态：任何工具在任何时候多声明一个 handler 收不下的 property，它都会红（`R2-AN-1` 的原始要求，`draft/28` 42.3 已实测"可行、零误伤"）。
 所以这里不写任何工具名，只遍历注册表。
-
 ## 跳过 `**kwargs` 的 handler
-
-有两个 handler 收 `**kwargs`（`doc.compose_claim` / `doc.register_dependency`）。
-对它们来说，schema 多声明一个 property 不会变成 `kind='unexpected'`
-（那个键真的进得了 handler），所以它对这条缺陷不适用，判据跳过它。
-跳过是"按定义不适用"，不是"给它开例外"：这两个工具的真实参数契约由
-它们自己的 schema 与返回声明承担，本条判据不假装管得着。
-
+有两个 handler 收 `**kwargs`（`doc.compose_claim` / `doc.register_dependency`）。对它们来说，schema 多声明一个 property 不会变成
+`kind='unexpected'`（那个键真的进得了 handler），所以它对这条缺陷不适用，判据跳过它。跳过是"按定义不适用"，不是"给它开例外"：这两个工具的真实参数契约由它们自己的 schema 与返回声明承担，
+本条判据不假装管得着。
 ## 三条自校（守判据自己，不是守被测对象）
-
-- `armed()`：把一个假 property 真注入注册表 ⇒ 判据必须报出它，
-  且报出的差集恰好只含这个假名字（证明判据不是恒真，也不是恒窄）；
-- `disarmed()`：同一处注入撤掉 ⇒ 判据必须零违反（证明 `armed()` 的红
-  来自注入本身，不是判据写坏了）；
-- 正控：`test_every_registered_tool_schema_property_is_accepted_by_its_handler`
-  对整个注册表跑同一条判据 —— 违反数必须为 0。
+- `armed()`：把一个假 property 真注入注册表 ⇒ 判据必须报出它，且报出的差集恰好只含这个假名字（证明判据不是恒真，也不是恒窄）；- `disarmed()`：同一处注入撤掉 ⇒ 判据必须零违反（证明
+`armed()` 的红来自注入本身，不是判据写坏了）；- 正控：`test_every_registered_tool_schema_property_is_accepted_by_its_handler`对整个注册表跑同一条判据
+—— 违反数必须为 0。
 """
 
 from __future__ import annotations

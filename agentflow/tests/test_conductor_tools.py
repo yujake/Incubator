@@ -44,21 +44,21 @@ M_TOOL_FACE = {
     # （「M 要广播全树就逐层向下调用即可」）。只读角色不在它的 `roles` 里。
     "conductor.broadcast",
     # 上行（2026-10-19 业主裁定「父子天然双向」）：M 也拿得到这一件 —— 判据要的是
-    # 顶层调用会被**受控拒绝**（`not_caller`），而不是"顶层看不见这个工具"
+    # 顶层调用会被受控拒绝（`not_caller`），而不是"顶层看不见这个工具"
     # （"看不见"与"不许"是两件事：前者模型会以为能力不存在而绕路）。
     "conductor.escalate",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 13 件）；留给"编排面本身"的判据用。
 #:
-#: ⚠️ **刻意从"只读角色一件都拿不到"的那张表里剔掉 `conductor.escalate`**：
-#: 那张表守的是**编排权**（派活 / 叫停 / 广播 / 看板 / 收工门 —— 谁能指挥谁、谁能停谁）。
-#: `escalate` 不是编排权，它是**上行汇报通道**（孩子跟召唤它的人说话），
+#:  刻意从"只读角色一件都拿不到"的那张表里剔掉 `conductor.escalate`：
+#: 那张表守的是编排权（派活 / 叫停 / 广播 / 看板 / 收工门 —— 谁能指挥谁、谁能停谁）。
+#: `escalate` 不是编排权，它是上行汇报通道（孩子跟召唤它的人说话），
 #: 与 `message` / `note` / `ask_user` 三个循环形态同一个平面 —— 那三个 C/H/V 本来就有。
-#: 业主 2026-10-19 裁定「父子天然双向」正是要求**所有角色**都有它，包括只读角色；
+#: 业主 2026-10-19 裁定「父子天然双向」正是要求所有角色都有它，包括只读角色；
 #: 把它留在下面这张表里，等于用一条旧判据把新裁定挡掉（而 321 行那条断言会被读成
 #: "只读角色拿到了编排工具"——那是假读数）。判据强度不变：真正的编排面工具
-#: 仍然一件都不许出现在只读角色面上，另加一条正控钉住"只读角色**必须**拿到 escalate"。
+#: 仍然一件都不许出现在只读角色面上，另加一条正控钉住"只读角色必须拿到 escalate"。
 ORCHESTRATION_TOOLS = {n for n in M_TOOL_FACE if n.startswith("conductor.")} - {
     "conductor.escalate"}
 
@@ -253,10 +253,10 @@ def test_role_spec_carries_the_brief_not_only_the_actions(tmp_path: Path):
     assert res.data["duty"] == brief.duty, res.data
     assert list(res.data["boundary"]) == list(brief.boundary), res.data
     assert res.data["signature_error"] == brief.signature_error, res.data
-    # ⚠️ **2026-10-16 翻面**（业主口径）：这一格此前断言"`actions` 不能被挤掉"。
-    # 原话逐字：「M 只是个派活的……**不指定能力**。M 能看到的只是各角色描述，
-    # **看不到具体的工具箱与动作**，但可在角色描述中暗示它各角色能干什么。」
-    # ⇒ 判据从"动作必须在"翻成"**动作与工具都不许在**"。
+    #  2026-10-16 翻面（业主口径）：这一格此前断言"`actions` 不能被挤掉"。
+    # 原话逐字：「M 只是个派活的……不指定能力。M 能看到的只是各角色描述，
+    # 看不到具体的工具箱与动作，但可在角色描述中暗示它各角色能干什么。」
+    # ⇒ 判据从"动作必须在"翻成"动作与工具都不许在"。
     assert "actions" not in res.data and "tools" not in res.data, (
         "`conductor.role_spec` 又把动作面/工具面露出来了 —— 那样 M 只要逐个角色查一遍，"
         "就能重新拿到每个角色的动作与必填参数，刚在伙伴表上关掉的门等于白关"
@@ -333,7 +333,7 @@ def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
     # 只读角色拿不到编排面工具（原来守的就是这一条）
     for read_only in ("C", "H"):
         assert not ({s.name for s in reg.for_role(read_only)} & ORCHESTRATION_TOOLS)
-    # 而**上行**那一件只读角色必须有（2026-10-19 业主裁定「父子天然双向」：
+    # 而上行那一件只读角色必须有（2026-10-19 业主裁定「父子天然双向」：
     # 上行不是编排权）。这一条与上面那条是同一个边界的两个方向，缺一不可：
     # 只有上面那条时，"escalate 没装进只读角色的面"不会有任何东西变红。
     for read_only in ("C", "H", "V"):
@@ -350,7 +350,7 @@ def test_summon_runs_the_role_and_lands_a_ledger_row(tmp_path: Path):
     """正控：主控派活 → 角色真的被调用 → 台账里有一行 `by=agent-M` 的终态行。"""
     fake = _FakeE()
     store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", fake)})
-    # 2026-10-16（口径 S2）迁到**内部 API**：工具层那条路现在一律走角色自己的循环
+    # 2026-10-16（口径 S2）迁到内部 API：工具层那条路现在一律走角色自己的循环
     # （测的是"被派者自己选动作"），而这条用例考的是"确定性实现真的被执行" ——
     # 那是 `Conductor.summon(role, action, params)` 这一层的事。
     res = _c.summon("E", "list_experiments", {}, by="M", input_key="E.list_experiments")
@@ -399,8 +399,8 @@ def test_summon_many_fans_out_the_same_role_in_parallel(tmp_path: Path):
     assert data["waves"] == [3], data["waves"]
     assert data["concurrent_peak"] == 3, data["concurrent_peak"]
     assert [r["instance"] for r in data["results"]] == ["1", "2", "3"]
-    # ④ 的期望按 2026-10-16 的新契约改了：工具层派活**走被派角色自己的循环**
-    # （口径："动作由它自己选"），而 `_SlowE` 是这个夹具里的**确定性替身** ——
+    # ④ 的期望按 2026-10-16 的新契约改了：工具层派活走被派角色自己的循环
+    # （口径："动作由它自己选"），而 `_SlowE` 是这个夹具里的确定性替身 ——
     # 在循环那条路上它不会被直接调用 ⇒ 这一趟不承诺 `outcome == "ok"`。
     # `count` 恒等于输入长度那一条仍然守着"不许静默丢项"（上面已断言）。
     assert all(r["status"] in ("done", "refused", "failed") for r in data["results"]), data["results"]
@@ -461,9 +461,9 @@ def test_summon_many_refuses_a_bad_target_shape(tmp_path: Path):
     并且要确认一条任务都没落（"拒绝了"与"跳过那一项、其余照跑"是两回事）。
     """
     store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
-    # ⚠️ 夹具必须是**真的坏形状**。2026-10-16 迁新契约时我用正则批量把这里的 `"action"`
-    # 改成了 `"task"`，顺手把这条"坏形状"改成了**合法的一条** ⇒ 用例失真（它当场红了）。
-    # 按它自己的 docstring 恢复：塞一个**非对象**（字符串）进去。
+    #  夹具必须是真的坏形状。2026-10-16 迁新契约时我用正则批量把这里的 `"action"`
+    # 改成了 `"task"`，顺手把这条"坏形状"改成了合法的一条 ⇒ 用例失真（它当场红了）。
+    # 按它自己的 docstring 恢复：塞一个非对象（字符串）进去。
     res = reg.call("conductor.summon_many", role="M", targets=["E"])
     assert res.ok is False and res.error, res
     assert "targets" in str(res.error) and "对象" in str(res.error), res.error
@@ -528,10 +528,9 @@ def test_summon_without_wiring_refuses_and_still_writes_the_row(tmp_path: Path):
 def test_summon_refuses_illegal_targets(tmp_path: Path):
     """负控：派给不可召唤的角色（主控自己）与不存在的动作 ⇒ 都被拒。
 
-    2026-10-16（口径 S2）：**工具层已不接受 `action`**（"完全不要有填 action 的位置"）
-    ⇒ "不存在的动作被拒"这条命题**搬到内部 API** 去考（`Conductor.summon(role, action, …)`
-    仍然收动作，`pipeline`/`scheduler`/`deliver` 都在用它）。
-    """
+        2026-10-16（口径 S2）：工具层已不接受 `action`（"完全不要有填 action 的位置"）
+        ⇒ "不存在的动作被拒"这条命题搬到内部 API 去考（`Conductor.summon(role, action, …)`
+        仍然收动作，`pipeline`/`scheduler`/`deliver` 都在用它）。"""
     _store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
     to_m = reg.call("conductor.summon", role="M", target_role="M", task="派活：list_experiments", input_key="E.list_experiments")
     assert to_m.data["outcome"] == "refused", to_m.data
@@ -567,7 +566,7 @@ def test_stop_is_graceful_and_idempotent(tmp_path: Path):
 def test_resume_brief_reads_back_what_stop_wrote(tmp_path: Path):
     """续跑简报读得回来，且带"做了什么"的事实（不是建议）。"""
     _store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
-    # 2026-10-16（口径 S2）：这条考"续跑简报读得回来"，而那一行得先有 —— 走**内部 API**
+    # 2026-10-16（口径 S2）：这条考"续跑简报读得回来"，而那一行得先有 —— 走内部 API
     # 落一行（工具层那条路现在走角色自己的循环，见 `test_summon_runs_…` 的说明）。
     _c.summon("E", "list_experiments", {}, by="M", input_key="E.list_experiments")
     reg.call("conductor.stop", role="M", reason="user")
@@ -612,22 +611,12 @@ def test_ensure_project_refuses_inside_an_existing_workspace(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """正控（`draft/37` §37.4 ④ / §41）：已经在项目里、又没说项目落哪 ⇒ 拒绝，且一个目录都不建。
 
-    这条门是怎么来的（不是设计洁癖，是真机读数）：
-    `projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)`
-    —— 一个与本工作区无关的默认落点。于是 M 在一个已存在的工作区里调这一件，
-    得到的是在别处新建的一个空项目，而不是"热启动当前项目"：
+    这条门是怎么来的（不是设计洁癖，是真机读数）：`projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)` —— 一个与本工作区无关的默认落点。于是 M 在一个已存在的工作区里调这一件，得到的是在别处新建的一个空项目，而不是"热启动当前项目"：
 
-    - §37 那趟真机 23 步里有 4 步在 `ensure_project`，其中一次真的建出了
-      `D:\\Incubator\\projects\\project11`（`project.json` 的 `created_at`
-      与那次运行同秒级）。当时账本上没有任何一步显示"我建了个项目"。
-    - 同一天本仓库自己的普查探针（没给 `projects_dir`）也建了 `project12`/`project13`
-      —— 写探针的人同样踩，说明缺省值才是因。
+    - §37 那趟真机 23 步里有 4 步在 `ensure_project`，其中一次真的建出了 `D:\Incubator\projects\project11`（`project.json` 的 `created_at` 与那次运行同秒级）—— 当时账本上没有任何一步显示"我建了个项目"。
+    - 同一天本仓库自己的普查探针（没给 `projects_dir`）也建了 `project12`/`project13` —— 写探针的人同样踩，说明缺省值才是因。
 
-    判据取三条，缺一条都算这件事没修好：
-    1. `ok is False` 且 `kind == "already_a_project"`（不是含糊的失败）；
-    2. 缺省落点里一个条目都没多（"拒绝了但顺手建了目录"是最坏的形态）；
-    3. 消息里点名出口（显式给 `projects_dir`）—— 只会说"不行"的守卫会把人卡死。
-    """
+    判据取三条，缺一条都算这件事没修好：① `ok is False` 且 `kind == "already_a_project"`（不是含糊的失败）；② 缺省落点里一个条目都没多（"拒绝了但顺手建了目录"是最坏的形态）；③ 消息里点名出口（显式给 `projects_dir`）—— 只会说"不行"的守卫会把人卡死。"""
     projects_root = tmp_path / "default-projects"
     projects_root.mkdir()
     monkeypatch.setattr(P, "DEFAULT_PROJECTS_DIR", projects_root, raising=True)
@@ -743,7 +732,7 @@ def test_state_and_role_spec_are_read_only_views(tmp_path: Path):
     assert st.ok and st.data["tables"].get("tasks") == 0
     spec = reg.call("conductor.role_spec", role="M", role_name="C")
     # 2026-10-16（业主口径）：这儿原先读 `spec.data["actions"]` 验"来自 capabilities"。
-    # 现在读的是**描述**那一面 —— 动作面不再外露（见上一条判据的同一段口径）。
+    # 现在读的是描述那一面 —— 动作面不再外露（见上一条判据的同一段口径）。
     assert spec.data["role"] == "C"
     assert spec.data["duty"] and spec.data["deliverable"], "角色描述必须来自声明层"
     assert "actions" not in spec.data and "tools" not in spec.data

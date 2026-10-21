@@ -1,54 +1,22 @@
 """B 专用 OCR 工具：后端探测 / 文本层判断 / 按页 OCR。
-
 基于 ``tools/base.py`` 的 ``ToolSpec`` / ``ToolResult`` 写（见 ``DESIGN-TOOLS.md`` §7）。
-
-## 本机已勘察的环境事实（实测复核，不要再假设）
-
-| 后端 | 状态 | 实测证据 |
-|---|---|---|
-| ``easyocr`` | 装了但跑不了 | ``import easyocr`` 成功（3.4s，1.7.2）；但 ① ``torch 2.0.1+cpu`` 与 ``numpy 2.4.6`` ABI 不匹配，``torch.from_numpy(...)`` 抛 ``RuntimeError: Numpy is not available``（easyocr 的检测/识别路径里确实有 ``torch.from_numpy``，见 ``detection.py`` / ``recognition.py``）；② ``~/.EasyOCR`` 建不出来，构造 ``Reader`` 直接 ``PermissionError [WinError 5]``。模型也未缓存（``~/.EasyOCR/model`` 不存在）。 |
-| ``pytesseract`` | 装了但缺二进制 | ``import pytesseract`` 成功（0.3.13），``get_tesseract_version()`` 抛 ``TesseractNotFoundError``：``tesseract`` 不在 PATH。 |
-| ``fitz`` / ``PIL`` / ``numpy`` / ``cv2`` | 可用 | 栅格化用 ``fitz``（PyMuPDF），不依赖 MiKTeX 带来的 ``pdftoppm``，少一个外部依赖。 |
-
-结论：本机没有任何可用的 OCR 后端。所以本模块最重要的产出不是"识别出文字"，
-而是如实报告"没做成"，并给出可执行的修复建议。
-
-## 三条不可让步的原则
-
-1. ``available()`` 必须真探测。``pytesseract`` 要真的调 ``get_tesseract_version()``
-   并捕获异常（"装了 pytesseract" ≠ "装了 tesseract"）；``easyocr`` 只检查
-   ``import``、``Reader`` 可调用性、torch↔numpy 桥、模型目录可写性 ——
-   绝不在探测阶段真去构造 Reader（那会下 ~100MB 模型，让 ``ocr.backends``
-   卡上几分钟，探测本身就成了故障）。
-
-2. 绝不允许"假装 OCR 成功返回空文本"。这与 ``DESIGN.md`` §6.3
-   "无文本层返回 ``None`` 而不是 ``False``"同源："没做"和"做了但没结果"是两件事。
-   于是：
-   - 没有可用后端 ⇒ ``fail("无可用 OCR 后端…")``，一个字符都不返回；
-   - 后端抛异常的那一页 ⇒ 记 ``error``，不算成功；
-   - 后端真的跑了但结果是空串 ⇒ ``ok`` + 逐页 ``empty=True`` + ``warnings``
-     里明说"做了但没结果"，不把它包装成识别成功。
-   自检里用一个"返回空串的测试桩后端"把这条语义钉死。
-
-3. ``max_pages`` 是硬保护。OCR 慢得离谱（一页数秒到数十秒），必须限量，
-   并且必须在 ``warnings`` 里说明截断了多少页 —— 静默截断会让"我没看到那几页"
-   伪装成"那几页没有内容"。
-
-## 副作用等级：这三个工具不都是 ``read``
-
-曾经三个工具一律声明 ``read``（"OCR 不改盘，模型缓存是后端自己的事"），
-这是权限面在说假话 —— ``base.SIDE_EFFECTS`` 的 ``read`` 意味着不需要审批：
-
-- ``ocr.run`` ⇒ ``network``：``EasyOcrBackend._reader``（``:252``）会构造
-  ``easyocr.Reader``，首次构造要下载约 100MB 模型。这是联网行为，
-  与"某一次调用恰好命中了本地缓存"无关（副作用声明的是能力）。
-- ``ocr.backends`` ⇒ ``write_local``：``EasyOcrBackend.available``（``:220``）
-  会对 easyocr 的真实模型目录 ``mkdir(parents=True, exist_ok=True)``
-  —— 该目录在 ``~/.EasyOCR/model``，在工作区之外；``PytesseractBackend``
-  还会起一个 ``tesseract --version`` 子进程。这里刻意保留这次 mkdir
-  （它是"模型目录到底可不可写"的唯一可靠判据，``os.access`` 在沙箱里会说谎），
-  因此如实声明 ``write_local`` 而不是偷偷写盘。
-- ``ocr.detect_text_layer`` ⇒ ``read``：只读文件、不写盘、不起进程。
+| 后端 | 状态 | 实测证据 ||---|---|---|| ``easyocr`` | 装了但跑不了 | ``import easyocr`` 成功（3.4s，1.7.2）；但 ① ``torch 2.0.1+cpu`` 与 
+``numpy 2.4.6`` ABI 不匹配，``torch.from_numpy(...)`` 抛 ``RuntimeError: Numpy is not available``（easyocr 的检测/识别路径里确实有 
+``torch.from_numpy``，见 ``detection.py`` / ``recognition.py``）；② ``~/.EasyOCR`` 建不出来，构造 ``Reader`` 直接 
+``PermissionError [WinError 5]``。模型也未缓存（``~/.EasyOCR/model`` 不存在）。 || ``pytesseract`` | 装了但缺二进制 | ``import pytesseract`` 成
+功（0.3.13），``get_tesseract_version()`` 抛 ``TesseractNotFoundError``：``tesseract`` 不在 PATH。 || ``fitz`` / ``PIL`` / 
+``numpy`` / ``cv2`` | 可用 | 栅格化用 ``fitz``（PyMuPDF），不依赖 MiKTeX 带来的 ``pdftoppm``，少一个外部依赖。
+1. ``available()`` 必须真探测。``pytesseract`` 要真的调 ``get_tesseract_version()``并捕获异常（"装了 pytesseract" ≠ "装了 tesseract"）；
+``easyocr`` 只检查``import``、``Reader`` 可调用性、torch↔numpy 桥、模型目录可写性 ——绝不在探测阶段真去构造 Reader（那会下 ~100MB 模型，让 ``ocr.backends``卡上几分钟，
+探测本身就成了故障）。
+这与 ``DESIGN.md`` §6.3"无文本层返回 ``None`` 而不是 ``False``"同源："没做"和"做了但没结果"是两件事。于是：- 没有可用后端 ⇒ ``fail("无可用 OCR 后端…")``，一个字符都不返回；- 
+后端抛异常的那一页 ⇒ 记 ``error``，不算成功；- 后端真的跑了但结果是空串 ⇒ ``ok`` + 逐页 ``empty=True`` + ``warnings``里明说"做了但没结果"，不把它包装成识别成功。
+3. ``max_pages`` 是硬保护。OCR 慢得离谱（一页数秒到数十秒），必须限量，并且必须在 ``warnings`` 里说明截断了多少页 —— 静默截断会让"我没看到那几页"伪装成"那几页没有内容"。
+副作用等级：这三个工具不都是 ``read``曾经三个工具一律声明 ``read``（"OCR 不改盘，模型缓存是后端自己的事"），这是权限面在说假话 —— ``base.SIDE_EFFECTS`` 的 ``read`` 意味着不需要审批：
+- ``ocr.run`` ⇒ ``network``：``EasyOcrBackend._reader``（``:252``）会构造``easyocr.Reader``，首次构造要下载约 100MB 模型。- ``ocr.backends``
+⇒ ``write_local``：``EasyOcrBackend.available``（``:220``）会对 easyocr 的真实模型目录 ``mkdir(parents=True, exist_ok=True)``—— 该目录在 
+``~/.EasyOCR/model``，在工作区之外；``PytesseractBackend``还会起一个 ``tesseract --version`` 子进程。这里刻意保留这次 mkdir （它是"模型目录到底可不可写"的唯一可靠判据，
+``os.access`` 在沙箱里会说谎），因此如实声明 ``write_local`` 而不是偷偷写盘。- ``ocr.detect_text_layer`` ⇒ ``read``：只读文件、不写盘、不起进程。
 """
 
 from __future__ import annotations
@@ -509,7 +477,7 @@ def _h_backends(ctx: _Ctx, refresh: bool = False) -> Any:
 def _target_path(ctx: "_Ctx", path: str, lit_id: str) -> tuple[str, dict | None]:
     """把"给路径"或"给「文献编号」"归一成一个路径。返回 `(path, fail_payload)`。
 
-    ⚠️ 「2026-10-16（亲测 B 时加的）」：这两件工具的必填键是 `path`，而 B 整个域都按
+    「2026-10-16（亲测 B 时加的）」：这两件工具的必填键是 `path`，而 B 整个域都按
     `lit_id` 说话（`literature` 行）—— 我第一次凭感觉敲的就是编号，吃了一个"缺少必填参数"。
     按业主口径（"第一次凭感觉敲红的，真实智能体也会困惑"）⇒ 让「第一猜能 work」：
     给编号时去 `literature` 行里找回它那一份全文（`store.library_path` 优先，退回工作区相对路径）。
@@ -1038,7 +1006,7 @@ def _ocr_backends(ctx, refresh=False):
     side_effect="read",
     roles=("B",),
     # 键名从一个真实调用读出（`_h_detect_text_layer`）。
-    # ⚠️ 2026-10-15 补齐：`page_count_known` / `page_count_source` 是"这个页数是怎么来的"
+    # 2026-10-15 补齐：`page_count_known` / `page_count_source` 是"这个页数是怎么来的"
     # （三态：数出来的 / 猜的 / 数不了），`failed_pages` 是"哪几页没做成"。
     # `returns` 会拼进 function-calling 的 `description`（模型看得到）⇒ 缺这三格
     # 等于模型不知道"页数可能是未知的"，于是会把 `page_count=0` 读成"真的没有页"。
@@ -1130,20 +1098,15 @@ def register(
     actor: str = "agent-B",
 ) -> list[ToolSpec]:
     """把 B 的 OCR 工具注册进 ``registry``，返回注册的 ``ToolSpec`` 列表。
-
+    
     - ``backends``：后端列表。顺序即 ``auto`` 的优先级；不传时用默认的
-      ``[EasyOcrBackend(), PytesseractBackend(), NullBackend()]``。
-      注入是给离线测试与将来换后端（如 RapidOCR）用的。
-    - ``store``：只用于解析路径（相对路径会依次按工作区、``library/`` 试）与
-      推导默认工作区；OCR 本身不读也不写任何表。
-    - ``workspace``：工作区根目录；别名 ``workspace_root`` / ``root`` 也接受
-      （装配器用这两个名字注入）。
-    - 副作用等级逐个如实声明（不要用一句"三个都是 read"概括，见模块 docstring
-      最后一节）：``ocr.backends`` 是 ``write_local``（会在 ``~/.EasyOCR/model``
-      建目录、会起 ``tesseract --version``），``ocr.run`` 是 ``network``
-      （easyocr 首次构造 Reader 会下载模型），只有 ``ocr.detect_text_layer`` 是 ``read``。
-      这三者都需要/不需要审批的差异是真实的：把它们压成同一个 ``read``
-      就等于对审批说"这些都不用管"。
+    ``[EasyOcrBackend(), PytesseractBackend(), NullBackend()]``。注入是给离线测试与将来换后端（如 RapidOCR）
+    用的。- ``store``：只用于解析路径（相对路径会依次按工作区、``library/`` 试）与推导默认工作区；OCR 本身不读也不写任何表。- 
+    ``workspace``：工作区根目录；别名 ``workspace_root`` / ``root`` 也接受（装配器用这两个名字注入）。- 副作用等级逐个如实声明（不
+    要用一句"三个都是 read"概括，见模块 docstring 最后一节）：``ocr.backends`` 是 ``write_local``（会在 
+    ``~/.EasyOCR/model``建目录、会起 ``tesseract --version``），``ocr.run`` 是 ``network``（easyocr 
+    首次构造 Reader 会下载模型），只有 ``ocr.detect_text_layer`` 是 ``read``。这三者都需要/不需要审批的差异是真实的：把它们压成同一
+    个 ``read``就等于对审批说"这些都不用管"。
     """
     if backends is None:
         backend_list: list[Any] = [EasyOcrBackend(), PytesseractBackend(), NullBackend()]

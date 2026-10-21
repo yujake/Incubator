@@ -285,21 +285,15 @@ class _Core:
         cold_ids: set[str],
     ) -> dict:
         """§3.3(3) 的弱连接判据（全部可核实，没有一条靠语感）。
-
-        四条判据各计 1 分（`weak_score = 得分 / 4`）：
-        1. `quote_verified is not True`（含 False 与 None）：引文没被证实；
-        2. `status == "suspect"`：判重存疑；
-        3. 它是该概念唯一的连接：断了这个概念就彻底孤立；
-        4. 另一端也很冷门：借不到力。
-
-        为什么用"等权计数"而不是拍一个加权分：这四个信号没有客观的强弱次序，
-        随便定权重会变成一个无法辩护的数字。等权 + 逐条理由字符串，读者可以
-        自己决定"哪条理由在这个学科里更要紧"。
-
-        刻意不把 `status == "rejected"` 计进来：§3.3(3) 列的四条是"弱连接"
-        信号，而 rejected 的关系语义上是"已被否决"，它不是"弱"而是"不该存在"。
-        把它混进弱分会让"唯一连接是 rejected"这种极端情况被稀释成一个 0.25；
-        所以单独用 `has_rejected` 标出来，交给人/D 直接处理。
+        
+        四条判据各计 1 分（`weak_score = 得分 / 4`）： 1. `quote_verified is not True`（含 False 与 None）：引文没
+        被证实； 2. `status == "suspect"`：判重存疑； 3. 它是该概念唯一的连接：断了这个概念就彻底孤立； 4. 另一端也很冷门：借不到力。
+        
+        为什么用"等权计数"而不是拍一个加权分：这四个信号没有客观的强弱次序，随便定权重会变成一个无法辩护的数字。等权 + 逐条理由字符串，读者可以自己决定"哪条理由在这个学科里更
+        要紧"。
+        
+        刻意不把 `status == "rejected"` 计进来：§3.3(3) 列的四条是"弱连接"信号，而 rejected 的关系语义上是"已被否决"，它不是"弱"而是
+        "不该存在"。把它混进弱分会让"唯一连接是 rejected"这种极端情况被稀释成一个 0.25；所以单独用 `has_rejected` 标出来，交给人/D 直接处理。
         """
         points = 0
         reasons: list[str] = []
@@ -369,23 +363,16 @@ class _Core:
         hot_ids: Iterable[str] = (),
     ) -> dict:
         """对一个候选缺口评估"是否确实可能有值得研究的关系"（§3.3(4) 第 2 步）。
-
+        
         信号分两档，这个区分是需求"若确实有，则报告"能否成立的关键：
-
-        - 否决项（veto）：相关关系的 `quote_verified` 全部为 False、
-          概念名明显不是概念、两者已被判重（`duplicate_of` 非空）。
-          这三条中的任何一条都意味着"这条候选拿不出可核实的依据"。
-          它们不参与净分，而是直接把候选剔除出 `candidate_gaps`。
-          为什么不能当扣分项：扣除 -0.5 之后，共同邻居、热门度、文献数这些
-          正向分足以把净分抬回 medium —— 于是报告会声称"找到了值得研究的缺口"，
-          而它其实一条能在原文里找到的引文都没有。这正是必须避免的
-          "把没找到包装成找到了"。
-        - 扣分项（仍参与净分）：引文校验部分失败、`status=suspect` 占比、
-          存在 rejected、候选端仅有单一连接。这些是"证据偏弱"而非"没有证据"，
-          所以扣分但不剔除。
-
-        正向与负向信号都留下 `signals` 文本，使"为什么被否决/为什么置信度低"
-        在报告里可以被反驳，而不是一句黑箱结论。
+        
+        - 否决项（veto）：相关关系的 `quote_verified` 全部为 False、概念名明显不是概念、两者已被判重（`duplicate_of` 非空）。这三条中的
+        任何一条都意味着"这条候选拿不出可核实的依据"。它们不参与净分，而是直接把候选剔除出 `candidate_gaps`。为什么不能当扣分项：扣除 -0.5 之后，共同邻居、
+        热门度、文献数这些正向分足以把净分抬回 medium —— 于是报告会声称"找到了值得研究的缺口"，而它其实一条能在原文里找到的引文都没有。这正是必须避免的"把没找到包装成
+        找到了"。- 扣分项（仍参与净分）：引文校验部分失败、`status=suspect` 占比、存在 rejected、候选端仅有单一连接。这些是"证据偏弱"而非"没有证据"，
+        所以扣分但不剔除。
+        
+        正向与负向信号都留下 `signals` 文本，使"为什么被否决/为什么置信度低"在报告里可以被反驳，而不是一句黑箱结论。
         """
         hot = set(hot_ids)
         pos = 0.0
@@ -559,50 +546,15 @@ class _Core:
         }
     def _submit_gap_requests(self, candidates: Sequence[Mapping[str, Any]], *, enabled: bool) -> dict:
         """把 `gaps` 的候选直接变成 A 的检索请求（I3，唯一的确定性写入路径）。
-
-        ## 这是 `WRITE_SETS["C"]` 的受控例外（可判定的一段，不是"先这样"）
-
-        C 是只读角色：它的写入面只有两处，且这两处的性质完全不同 ——
-
-        | 表 | 性质 | 依据 |
-        |---|---|---|
-        | `analysis_reports` | C 自己的产出（登记行），合法写入 | `AnalysisReport.persist()` |
-        | `search_requests` | 本条：受控例外（不是知识） | 本方法，`submit_requests=True` 才开启 |
-
-        为什么它不构成越界（三条判据，逐条可查）：
-
-        1. 工具面仍然全量只读。`graph.gaps` 刻意不暴露 `submit_requests`
-           （见 `register_tools` 里那段注释），所以"C 的推理链不能写任何东西"
-           这一条没有被破 —— 权限面（工具）与这条确定性代码路径是两件事。
-        2. 写的是过程记录，不是知识。`search_requests` 是"请 A 去查一查"的请求；
-           `literature` / `concepts` / `relations` 三张知识表在 C 里零写入点
-           （`tests/test_agent_c_service.py::test_the_four_service_methods_do_not_touch_a_single_byte`
-           与本文件的 `test_agent_c_writes_only_analysis_reports_and_never_the_knowledge_tables`
-           都断言了这一点）。"绕过 B 引文逐字回验"的风险来自写知识，不来自"请求检索"。
-        3. 默认关闭（`submit_requests=False`），且只能由编排层显式开启。
-           默认路径上 C 的写入面就只有 `analysis_reports`。
-
-        `capabilities.WRITE_SETS["C"]` 需要登记这条例外（登记动作在 conductor
-        一侧，不在本模块）。在登记落地之前，静态写集与这里的实际行为是不一致的 ——
-        而那种不一致正是本项目最恨的形态：`assert_capabilities()` 查不出来，
-        只有某天有人对着表问"C 凭什么能写 search_requests"时才会暴露。
-
-        默认关闭。开启时的全部动作都在一个 `store.tx("search_requests")` 里完成
-        —— 不是"图省事"，而是因为配额判定（`admit_search_request`）与写入必须看到
-        同一份在途清单：分成两个事务的话，两次判定之间另一个提交方可能已经占满配额，
-        于是"闸门说可以"与"实际写进去"不再对应，配额形同虚设。
-
-        三条闸门（缺一条都会把 A 的队列淹掉）：
-        1. 只收通过 veto 且 confidence >= medium 的候选 —— 它们就是 `gaps` 里
-           已经算好的 `candidate_gaps`。不达标却硬提，等于把"证据不足"洗成"去查一查"；
-        2. 单次最多 `interactions.DEFAULTS["max_gap_requests_per_run"]` 条，按净分降序；
-        3. 全局在途上限由 `interactions.admit_search_request` 判定，超限就拒绝
-           并把理由留在 `rejected_requests` 里 —— 拒绝会把压力传导回提交方，
-           而"无限排队"只会让所有请求（包括最关键的那条矛盾）一起变慢。
-
-        主题去重与已有未完成请求比对（复用 `textutil.normalize`，不另写规范化）。
-        去重放在配额闸门之前：一个重复主题的正确标签是"跳过重复"，
-        而不是"因配额被拒" —— 后者会让报告把"本来就不该提交"说成"资源不够"。
+        这是 `WRITE_SETS["C"]` 的受控例外（可判定的一段，不是"先这样"）| 表 | 性质 | 依据 ||---|---|---|| `analysis_reports` | C 自己的产出（登记行），合法写入 | `AnalysisReport.persist()` || 
+        `search_requests` | 本条：受控例外（不是知识） | 本方法，`submit_requests=True` 才开启 |`graph.gaps` 刻意不暴露 `submit_requests`（见 `register_tools` 里那段注释），所以"C 的推理链不能写任何东
+        西"这一条没有被破 —— 权限面（工具）与这条确定性代码路径是两件事。`search_requests` 是"请 A 去查一查"的请求；`literature` / `concepts` / `relations` 三张知识表在 C 里零写入点（`tests/test_agent_c_service.py::test_the_four_service_methods_do_not_touch_a_single_byte`
+        与本文件的 `test_agent_c_writes_only_analysis_reports_and_never_the_knowledge_tables`都断言了这一点）。 3. 默认关闭（`submit_requests=False`），且只能由编排层显式开启。默认路径上 C 的写入
+        面就只有 `analysis_reports`。`capabilities.WRITE_SETS["C"]` 需要登记这条例外（登记动作在 conductor 一侧，不在本模块）。在登记落地之前，静态写集与这里的实际行为是不一致的 ——而那种不一致正是本项目最恨的形态：
+        `assert_capabilities()` 查不出来，只有某天有人对着表问"C 凭什么能写 search_requests"时才会暴露。开启时的全部动作都在一个 `store.tx("search_requests")` 里完成—— 不是"图省事"，而是因为配额判定（`admit_search_request`）
+        与写入必须看到同一份在途清单：分成两个事务的话，两次判定之间另一个提交方可能已经占满配额，于是"闸门说可以"与"实际写进去"不再对应，配额形同虚设。三条闸门（缺一条都会把 A 的队列淹掉）： 1. 只收通过 veto 且 confidence >= medium 的候选 —— 它们就是 
+        `gaps` 里已经算好的 `candidate_gaps`。 2. 单次最多`interactions.DEFAULTS["max_gap_requests_per_run"]` 条，按净分降序； 3. 全局在途上限由 `interactions.admit_search_request`
+        判定，超限就拒绝并把理由留在`rejected_requests` 里 —— 拒绝会把压力传导回提交方，而"无限排队"只会让所有请求（包括最关键的那条矛盾）一起变慢。主题去重与已有未完成请求比对（复用 `textutil.normalize`，不另写规范化）。
         """
         max_per_run = int(interactions.DEFAULTS["max_gap_requests_per_run"])
         out: dict = {
@@ -785,7 +737,7 @@ class _Core:
         except Exception:  # noqa: BLE001
             return None
     _PATH_HINTS = ("之间", "关系链", "的关系", "路径", "联系", "关联", "怎么连", "连通", "connection")
-    # ⚠️ 2026-10-16（亲测 C 的 `handle` 时补的）：原来只有"最热门"，而「"最热"」（更短、更自然）
+    # 2026-10-16（亲测 C 的 `handle` 时补的）：原来只有"最热门"，而「"最热"」（更短、更自然）
     # 与"热度/中心性/hottest/核心概念"都不命中 ⇒ 一句最普通的"什么最热"会被判成「关键词未命中」。
     # 业主口径："第一次凭感觉敲红的，真实智能体也会在这里困惑" —— 这里是「智能体的第一句话」就会撞上。
     _HOT_HINTS = ("最热门", "最热", "热门", "热度", "统计", "频次", "排行", "排名",
@@ -938,38 +890,16 @@ class _Core:
         ]
     def register_tools(self, registry: ToolRegistry) -> list[str]:
         """把四个分析器 + I1 服务面注册成工具（`graph.*`，全部 `side_effect="read"`）。
-
-        DESIGN-TOOLS.md §1.1 把 `graph.hottest/paths/cold/gaps` 列为 C 的工具。
-        它们与 `tools/graph_tools.py` 里那四个低层图查询工具共用 `graph.` 前缀：
-        低层工具回答"图长什么样"，这里回答"结论是什么"；I1 新增的五个服务工具
-        （neighbors / relations_between / contradictions / structural_duplicates /
-        check_conflict）回答"就我现在追问的这一点，图上具体是什么情况"。
-
-        C 的工具面必须全量只读（DESIGN-INTERACTIONS.md §2 的硬规则）：一旦 C 能写，
-        它就成了绕过 B 引文逐字回验的写入路径，而那是全系统唯一能自动发现幻觉引文的地方。
-        所以：
-        - 这里注册的每一个工具都是 `side_effect="read"`；
-        - `graph.gaps` 刻意不暴露 `submit_requests`（I3 的写入口只能由编排层直接调方法，
-          见该处的注释）。
-
+        DESIGN-TOOLS.md §1.1 把 `graph.hottest/paths/cold/gaps` 列为 C 的工具。它们与 `tools/graph_tools.py` 里那四个低层图查询工具共用
+        `graph.` 前缀：低层工具回答"图长什么样"，这里回答"结论是什么"；
+        C 的工具面必须全量只读（DESIGN-INTERACTIONS.md §2 的硬规则）：一旦 C 能写，它就成了绕过 B 引文逐字回验的写入路径，而那是全系统唯一能自动发现幻觉引文的地方。所以：- 这里注册
+        的每一个工具都是 `side_effect="read"`；- `graph.gaps` 刻意不暴露 `submit_requests`（I3 的写入口只能由编排层直接调方法，见该处的注释）。
         ## 命名冲突（已解决：服务版改名 `graph.svc_*`）
-
-        这段原先写的是"已知的命名冲突……本次不改，仍是未决项"，而下方 I1 的注册块
-        已经把它解决了 —— 同一份 docstring 里两段互相矛盾（INVENTORY 4.5 第 11 条点的
-        就是这处）。以实现为准（代码已经落地 `graph.svc_neighbors` /
-        `graph.svc_relations_between`），这里改写成对现状的准确描述：
-
-        - `graph.neighbors` / `graph.relations_between` 这两个名字已被低层图工具占用
-          （`tools/graph_tools.py`），它们是另一套返回契约（低层给"图长什么样"）。
-        - C 的服务版（三态 + 有界）因此注册为 `graph.svc_neighbors` /
-          `graph.svc_relations_between`，`svc` 一眼表明"三态的服务接口（D 点菜用）"。
-        - 不改低层工具（它们各有既有测试与调用方）；方法层
-          `AgentC.neighbors()` / `AgentC.relations_between()` 名字不变 ——
-          D 的 `_c_digest` 就是按方法层读的。
-        - 为什么必须改名而不是"按注册顺序决定谁生效"：同名挂两种契约时，D 拿到的形状
-          取决于注册顺序，而注册顺序是一个没人会去读的细节 —— 这正是"同名不同义"
-          最典型的隐患（详见下方 I1 注册块的注释与测试
-          `test_service_tool_names_do_not_collide_with_low_level_tools`）。
+        - `graph.neighbors` / `graph.relations_between` 这两个名字已被低层图工具占用（`tools/graph_tools.py`），它们是另一套返回契约（低层给"图长
+        什么样"）。- C 的服务版（三态 + 有界）因此注册为 `graph.svc_neighbors` /`graph.svc_relations_between`，`svc` 一眼表明"三态的服务接口（D 点
+        菜用）"。方法层`AgentC.neighbors()` / `AgentC.relations_between()` 名字不变 ——D 的 `_c_digest` 就是按方法层读的。- 为什么必须改名而不是
+        "按注册顺序决定谁生效"：同名挂两种契约时，D 拿到的形状取决于注册顺序，而注册顺序是一个没人会去读的细节 —— 这正是"同名不同义"最典型的隐患（详见下方 I1 注册块的注释与测试
+        `test_service_tool_names_do_not_collide_with_low_level_tools`）。
         """
         added: list[str] = []
 

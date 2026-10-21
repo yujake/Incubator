@@ -1,35 +1,21 @@
 """判据：system 提示词的前缀稳定性 + 缓存读数进 run 记录（2026-10-19）。
-
 ## 这一组守什么（以及为什么现在才有）
-
-上游的前缀缓存（`usage.prompt_cache_hit_tokens`）只有在**前缀逐字节相同**时才命中。
-框架里 system 提示词是每一段对话的前缀，而它每一步都重算：
-
-    agent_loop.py:2882（开局一次）→ agent_loop.py:3090（每个步边界再算一次）
-    改前那一步（旧实现，今 `_system_at_step` 的前身）把每步会变的 `budget_left` / `notebook`
-    **重算并写回 system** ⇒ 几乎每一步整条 system 都换了 ⇒ 前缀缓存结构性永不命中。
-
+上游的前缀缓存（`usage.prompt_cache_hit_tokens`）只有在前缀逐字节相同时才命中。框架里 system 提示词是每一段对话的前缀，而它每一步都重算：
+agent_loop.py:2882（开局一次）→ agent_loop.py:3090（每个步边界再算一次）改前那一步（旧实现，今 `_system_at_step` 的前身）把每步会变的 `budget_left` /
+`notebook`重算并写回 system ⇒ 几乎每一步整条 system 都换了 ⇒ 前缀缓存结构性永不命中。
 实测（2026-10-19 本机、M 岗、非零价）：
-
-    第 0 步 system 54,902 字 / 第 1 步 54,902 字，identical=False
-    从第 35,035 个字符起不同：`剩余预算：5.000000 美元（…已用 0.000000…）`
-                          vs  `剩余预算：4.998800 美元（…已用 0.001200…）`
-
-同时，上游的缓存两格从 2026-10-14 起就被读进来了（`llmseam.py:459-460`），
-计价也按两档算了（`modelcost.py:410-432`），但**从没汇总进任何 run 记录** ——
-于是"提示词改完到底省了多少"在真机上一条读数都没有。
-
+第 0 步 system 54,902 字 / 第 1 步 54,902 字，identical=False从第 35,035 个字符起不同：`剩余预算：5.000000 美元（…已用 0.000000…）`vs
+`剩余预算：4.998800 美元（…已用 0.001200…）`
+同时，上游的缓存两格从 2026-10-14 起就被读进来了（`llmseam.py:459-460`），计价也按两档算了（`modelcost.py:410-432`），但从没汇总进任何 run 记录
+——于是"提示词改完到底省了多少"在真机上一条读数都没有。
 ## 判据（四条，每条带负控）
-
 1. 稳定性：同一角色 / 同一 task / 同一 registry 下，连续两步的 system 逐字节相同。
-   负控：把每步会变的东西塞回 system（时间戳 / 步号 / 预算）⇒ 判据红，且报出
-   "从第几个字符起不同 + 前后各 80 字"。
+负控：把每步会变的东西塞回 system（时间戳 / 步号 / 预算）⇒ 判据红，且报出"从第几个字符起不同 + 前后各 80 字"。
 2. 缓存读数：每一步的 `step` 记录里都有 `prompt_cache`（`hit` / `miss` 三态）；
-   `LoopRun.prompt_cache` 有汇总，`agent_run_end` 带着它，收工那行有一句人话。
-   负控：把那个键从事件里删掉 ⇒ 判据红（`missing_prompt_cache_steps`）。
+`LoopRun.prompt_cache` 有汇总，`agent_run_end` 带着它，收工那行有一句人话。负控：把那个键从事件里删掉 ⇒ 判据红（`missing_prompt_cache_steps`）。
 3. 自洽：上游给了读数时 `hit + miss == tokens_in`。
 4. 动态段白名单：变了的 system 段必须登记在 `promptstability.DYNAMIC_SECTION_WHITELIST`
-   里（初始为空）。负控：白名单外塞一段动态内容 ⇒ 红。
+里（初始为空）。负控：白名单外塞一段动态内容 ⇒ 红。
 """
 from __future__ import annotations
 
@@ -56,7 +42,7 @@ _SCRIPTS = {"M": [json.dumps({"tool": "conductor.role_spec", "args": {"role_name
 
 
 class _CacheGateway:
-    """照剧本回答、并**报出缓存读数**的替身模型（上游 `usage.prompt_cache_*` 的形状）。
+    """照剧本回答、并报出缓存读数的替身模型（上游 `usage.prompt_cache_*` 的形状）。
 
     `hit=None` / `miss=None` 就是"上游没给这两格"那一档（三态里的 unknown）——
     它与 `0`（明说零命中）必须在读数上分得开，所以用两个不同的替身跑两趟。
@@ -90,7 +76,7 @@ def _run(tmp_path: pathlib.Path, *, hit: int | None, miss: int | None,
          sid: str = "t-cache"):
     """跑一趟两步的 M（替身模型报缓存读数）；返回 `(run, gateway, root, events)`。
 
-    会话记录按**这次的 sid** 读（`test_agent_loop._events` 钉的是 `test-run`）——
+    会话记录按这次的 sid 读（`test_agent_loop._events` 钉的是 `test-run`）——
     读错 sid 会得到一份空会话，而"空"与"没有 agent_step 事件"在断言里长得一样。
     """
     st, cond, registry, _gw, root = _wired(tmp_path, _SCRIPTS, max_steps=3)
@@ -133,11 +119,11 @@ def test_two_consecutive_steps_send_a_byte_identical_system(tmp_path: pathlib.Pa
 
 
 def test_every_role_renders_a_stable_system_across_steps(tmp_path: pathlib.Path) -> None:
-    """十个角色各走一遍：**静态事实相同**时，第二步的 system 与第一步逐字节相同。
+    """十个角色各走一遍：静态事实相同时，第二步的 system 与第一步逐字节相同。
 
     为什么逐角色（而不是只测 M）：某一段是"可调用对象、读外部状态"时，只有那个角色
     的提示词会随步漂移（`Section.text` 允许 lambda）。这里用 `AgentLoop._system_at_step`
-    罚真身那条路（它正是每个步边界上跑的那一个），两步之间只让**每步会变的两格**变
+    罚真身那条路（它正是每个步边界上跑的那一个），两步之间只让每步会变的两格变
     —— 而它们已经被 `split_facts` 挪出去了。
     """
     st, cond, registry, _gw, root = _wired(tmp_path, _SCRIPTS, max_steps=3)
@@ -153,17 +139,17 @@ def test_every_role_renders_a_stable_system_across_steps(tmp_path: pathlib.Path)
                                          sid="t-role"))
         system_facts, _moved = PS.split_facts(facts)
         first = AP.system_prompt(role, registry=registry, **system_facts)
-        # 第二步：每步会变的那两格在**原始事实**里已经变了（花销涨了 / 笔记多了一条），
+        # 第二步：每步会变的那两格在原始事实里已经变了（花销涨了 / 笔记多了一条），
         # 但它们不该影响 system —— 这正是静态/动态分离要证明的事。
         later = dict(facts)
         later["budget_left"] = "0.500000 美元（上限 1.000000，已用 0.500000，读数来自 per_seam）"
         later["notebook"] = "- [第 2 步] 记一笔"
         later_system_facts, moved = PS.split_facts(later)
-        # 2026-10-21：登记表从"每步会变"扩到"跨 run 也会变"⇒ `moved` 是登记表的**全部**
+        # 2026-10-21：登记表从"每步会变"扩到"跨 run 也会变"⇒ `moved` 是登记表的全部
         # 键（`facts` 里给齐了）。这里判"一格不少、一格不多"，改动见
         # `promptstability.STEP_VOLATILE_FACTS` 上面那张两轴的说明。
         assert set(moved) == set(PS.STEP_VOLATILE_FACTS), sorted(moved)
-        # 值逐格是**原值**（进 user 消息那一份），不是替身句。
+        # 值逐格是原值（进 user 消息那一份），不是替身句。
         assert moved == {k: later[k] for k in PS.STEP_VOLATILE_FACTS}, moved
         assert moved["budget_left"] == later["budget_left"]
         assert moved["notebook"] == later["notebook"]
@@ -175,11 +161,11 @@ def test_every_role_renders_a_stable_system_across_steps(tmp_path: pathlib.Path)
 
 def test_a_timestamp_in_the_system_makes_the_criterion_red(tmp_path: pathlib.Path,
                                                            monkeypatch: pytest.MonkeyPatch) -> None:
-    """负控（稳定性）：往 system 里塞一个**每步会变**的东西 ⇒ 判据必红。
+    """负控（稳定性）：往 system 里塞一个每步会变的东西 ⇒ 判据必红。
 
-    这里塞的是**时间戳 + 步号**（`time.time()` 的六位小数 + 一个自增计数）：
+    这里塞的是时间戳 + 步号（`time.time()` 的六位小数 + 一个自增计数）：
     它比"预算变了"更硬 —— 预算要花掉钱才变，时间戳不花钱也会变。所以"它红了"
-    证明这条判据量的是**前缀逐字节相同**，而不是"恰好这一趟预算没动"。
+    证明这条判据量的是前缀逐字节相同，而不是"恰好这一趟预算没动"。
     """
     import time
 
@@ -232,7 +218,7 @@ def test_every_step_records_the_upstream_cache_readings(tmp_path: pathlib.Path) 
     assert run.stop_reason == "final", run.to_dict()
     steps = [e for e in events if e.get("kind") == "agent_step"]
     assert steps, events
-    # ⚠️ 收工那一步**不落 `agent_step`**（它在公共尾段之前 `break`，见
+    #  收工那一步不落 `agent_step`（它在公共尾段之前 `break`，见
     # `LoopRun.final_payload` 那段说明）⇒ 它的 step 记录只在 `run.steps` 里。
     # 所以"每步都有读数"要在两处各判一次，只判事件会漏掉收工那一步。
     assert len(run.steps) == 2 and len(steps) == 1, (len(run.steps), len(steps))
@@ -266,12 +252,12 @@ def test_every_step_records_the_upstream_cache_readings(tmp_path: pathlib.Path) 
     expected = round(600 * (prices["usd_per_m_in"] - prices["usd_per_m_in_hit"])
                      / 1_000_000.0 * len(run.steps), 6)
     assert summary["saved_usd"] is not None, summary
-    # 金额比较用**容差**，不是改判据强度（2026-10-20 实测复现）：上面 `expected` 走的是
+    # 金额比较用容差，不是改判据强度（2026-10-20 实测复现）：上面 `expected` 走的是
     # "先乘完再 `round(…, 6)`"，而实现是逐次累计后落到微美元那一档 —— 两条路的舍入方向
     # 可以差 1 个微美元（实测 0.000352 vs 0.000353，`< 1e-9` 当场红、复跑仍红）。
     # 差 1 个微美元以内的两个数说的是同一件事；真算错（价格口径用错、单位错、忘了乘步数）
     # 差的是量级，落不进这条容差里。
-    # ⚠️ 用**整数微美元**比较而不是 `abs(a - b) <= 1e-6`：那两个数在二进制浮点里相减是
+    #  用整数微美元比较而不是 `abs(a - b) <= 1e-6`：那两个数在二进制浮点里相减是
     # 1.0000000000000243e-06（刚好比 1e-6 大一点点）⇒ 写成 `<= 1e-6` 会留下一条
     # "差值确实是 1 个微美元、却被浮点表示判红"的假红。
     assert abs(round(summary["saved_usd"] * 1_000_000) - round(expected * 1_000_000)) <= 1, (
@@ -288,7 +274,7 @@ def test_every_step_records_the_upstream_cache_readings(tmp_path: pathlib.Path) 
 
 
 def test_a_silent_upstream_stays_unknown_and_is_not_folded_into_zero(tmp_path: pathlib.Path) -> None:
-    """负控（三态）：上游没给缓存读数 ⇒ 记 unknown，**不许折成 0**。
+    """负控（三态）：上游没给缓存读数 ⇒ 记 unknown，不许折成 0。
 
     折成 0 的后果不是"少一个数"，是把两件处置方向相反的事混成一件：
     "这家上游不报这一格"（改读数口径）与"这次真的零命中"（改提示词）。
@@ -329,7 +315,7 @@ def test_deleting_the_cache_write_makes_the_criterion_red(tmp_path: pathlib.Path
         stripped.append(copy)
     missing = PS.missing_prompt_cache_steps(stripped)
     assert missing, "删掉了写入还判绿 ⇒ 这条判据什么也没测"
-    # 事件里**只有**非收工的那几步（收工那一步不落 `agent_step`）——
+    # 事件里只有非收工的那几步（收工那一步不落 `agent_step`）——
     # 这条判据只能看事件面，`run.steps` 那一半由上面那条 `LoopStep.to_dict()` 判。
     assert missing == [int(e["index"]) for e in events if e.get("kind") == "agent_step"], missing
 
@@ -354,7 +340,7 @@ def _assemblies(role: str, registry: Any, prev: dict[str, Any], cur: dict[str, A
 
 
 def test_no_system_section_changes_between_steps_after_the_split(tmp_path: pathlib.Path) -> None:
-    """正控：分离之后，**没有任何一段**随"每步会变的两格"而变。
+    """正控：分离之后，没有任何一段随"每步会变的两格"而变。
 
     这是"白名单为空"能成立的机械前提：不是"我们没发现变化"，而是
     `dynamic_sections()` 给出空列表。十个角色各扫一遍。
@@ -373,7 +359,7 @@ def test_no_system_section_changes_between_steps_after_the_split(tmp_path: pathl
 def test_a_dynamic_section_that_is_not_registered_is_red(tmp_path: pathlib.Path) -> None:
     """负控（白名单）：两跳 —— 没登记的动态段必红，登记了就绿。
 
-    ① 用**未分离**的事实（改前的形态）：`TASK_BUDGET` / `TASK_NOTEBOOK` 会随步变，
+    ① 用未分离的事实（改前的形态）：`TASK_BUDGET` / `TASK_NOTEBOOK` 会随步变，
        而登记表是空的 ⇒ 判据点名这两段（红）。
     ② 白名单里塞一段"每步都在变的段"（步号/时钟）：它不在登记表里 ⇒ 红；
        `task_checksum` 那样显式登记它 ⇒ 绿。这一跳证明"红"不是写死的。
@@ -412,12 +398,12 @@ def test_a_dynamic_section_that_is_not_registered_is_red(tmp_path: pathlib.Path)
 #: 在盘上的读数，所以留着。维护：动 `STEP_VOLATILE_FACTS` ⇒ 抬 `PROMPT_VERSION` 一格并在账本末尾追加一格
 #: （`count` / `keys_sha256` 用 `PS.volatile_facts_digest()` 现算，不手抄）。
 _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
-    # 上一批：`budget_left` / `notebook` + 跨 run 那十格。**没抬版本**（这就是那条教训）。
+    # 上一批：`budget_left` / `notebook` + 跨 run 那十格。没抬版本（这就是那条教训）。
     {"version": "p173", "count": 12,
      "keys_sha256": "650a06dca214b4cad3c628887390c3e21fa0b6bf91ef376f86acf6c3c0ae472f",
      "note": "第一批（2026-10-21）：budget_left/notebook + 跨 run 十格；无版本痕迹"},
     # 本批：`availability` / `parent_limits` 从 system 的那两段挪进开场 user 消息。
-    # 同样**没抬版本**（业主口径：本批不许动 `PROMPT_VERSION`）；业主抬格时把这格一起看一眼。
+    # 同样没抬版本（业主口径：本批不许动 `PROMPT_VERSION`）；业主抬格时把这格一起看一眼。
     {"version": "p173", "count": 14,
      "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
      "note": "第二批（2026-10-21）：availability / parent_limits 也搬进开场消息"},
@@ -443,22 +429,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
 
 
 def test_facts_migration_must_leave_a_version_trace() -> None:
-    """判据（事务三）：动 `STEP_VOLATILE_FACTS` 必须在 `PROMPT_VERSION` 上留痕迹。
+    """    判据（事务三）：动 `STEP_VOLATILE_FACTS` 必须在 `PROMPT_VERSION` 上留痕迹。
 
     ## 这一条守的是"审计射程的边界"（不是"提示词文本"）
 
-    `_FROZEN_PROMPT_DIGESTS`（`test_agent_prompts.py`）按缺省事实渲染模板 ⇒ 它看得见
-    "哪一段的字变了"，看不见"哪几格事实被挪出了 system"。而后者对模型是同一件事：
-    落点变了 = 它读到的地方变了。所以"facts 迁移"必须与"改段"同等待遇 —— 抬版本。
-
-    三处都判：
-    ① **正控**：live 键集 = 账本最后一格，且那一格的版本 = `PROMPT_VERSION`（今天成立）；
-    ② **反真空**：账本至少两格、相邻两格的键集哈希不同（否则"记账"这件事没有内容，
-       一个恒等于 live 的账本什么也守不住）—— 而且它记下了"上一批没抬版本"这个事实；
-    ③ **负控**（两个方向都打）：
-       - 删掉一个键而不抬版本 ⇒ 必红（报"facts 迁移了而账本最后一格没记"）；
-       - 键集没动而账本最后一格的版本落后一格 ⇒ 必红（报"版本没抬"）。
-       外加一条正控的反面：抬一格版本**并**在账本里记下新键集 ⇒ 绿（证明它不是"永远红"）。
+    `_FROZEN_PROMPT_DIGESTS`（`test_agent_prompts.py`）按缺省事实渲染模板 ⇒ 它看得见"哪一段的字变了"，看不见"哪几格事实被挪出了 system"。而后者对模型是同一件事：
+    落点变了 = 它读到的地方变了。所以"facts 迁移"必须与"改段"同等待遇 —— 抬版本。三处都判：① 正控：live 键集 = 账本最后一格，且那一格的版本 = `PROMPT_VERSION`（今天成立）；②
+    反真空：账本至少两格、相邻两格的键集哈希不同（否则"记账"这件事没有内容，一个恒等于 live 的账本什么也守不住）—— 而且它记下了"上一批没抬版本"这个事实；③ 负控（两个方向都打）：
+    - 删掉一个键而不抬版本 ⇒ 必红（报"facts 迁移了而账本最后一格没记"）；
+    - 键集没动而账本最后一格的版本落后一格 ⇒ 必红（报"版本没抬"）。
+    外加一条正控的反面：抬一格版本并在账本里记下新键集 ⇒ 绿（证明它不是"永远红"）。
     """
     version = AP.PROMPT_VERSION
     problem = PS.facts_migration_problem(version, frozen=_VOLATILE_FACT_SETS)
@@ -471,7 +451,7 @@ def test_facts_migration_must_leave_a_version_trace() -> None:
         "账本里两格的键集哈希相同 ⇒ 这一批 facts 迁移没留下任何读数")
     assert int(last["count"]) == len(PS.STEP_VOLATILE_FACTS), (
         int(last["count"]), len(PS.STEP_VOLATILE_FACTS))
-    # 反真空 ②：账本最后一格**就是** live 的现算值（不手抄、也不是一个随手写的常数）。
+    # 反真空 ②：账本最后一格就是 live 的现算值（不手抄、也不是一个随手写的常数）。
     assert (int(last["count"]), str(last["keys_sha256"])) == PS.volatile_facts_digest(), (
         last, PS.volatile_facts_digest())
     # 反真空 ③：上一批那一格记的是"12 格"（它证明这本账记得住历史，而不是只有一格）。
@@ -501,7 +481,7 @@ def test_facts_migration_must_leave_a_version_trace() -> None:
 
 
 def test_the_volatile_fact_keyset_digest_is_order_independent() -> None:
-    """判据的读数本身：键集指纹与**插入顺序**无关（否则重构一下 dict 就"迁移"了）。"""
+    """判据的读数本身：键集指纹与插入顺序无关（否则重构一下 dict 就"迁移"了）。"""
     reversed_map = dict(reversed(list(PS.STEP_VOLATILE_FACTS.items())))
     assert PS.volatile_facts_digest(reversed_map) == PS.volatile_facts_digest()
     # 少一格 / 多一格都必须换指纹（判据的牙）。
@@ -512,14 +492,14 @@ def test_the_volatile_fact_keyset_digest_is_order_independent() -> None:
 
 
 def test_the_dynamic_section_whitelist_is_registered_and_small() -> None:
-    """反真空：登记表是**显式的一份**，且段白名单**初始为空**（不是"什么都允许"）。
+    """反真空：登记表是显式的一份，且段白名单初始为空（不是"什么都允许"）。
 
     "初始为空"是一条判据而不是一种风格：白名单一空，任何一段随步变化都会被点名；
     它一旦被随手填满，前缀缓存就又会悄悄失效，而没有一条测试会因此变红。
 
-    事实登记表（`STEP_VOLATILE_FACTS`）反过来必须是**写全的一份**：2026-10-21 起它
+    事实登记表（`STEP_VOLATILE_FACTS`）反过来必须是写全的一份：2026-10-21 起它
     除了"每步会变"的两格，还收"跨 run 会变"的十格（否则换一趟活的第一次调用
-    永远命中不了），以及"随**这一趟的配置**变"的两格（`availability` / `parent_limits`
+    永远命中不了），以及"随这一趟的配置变"的两格（`availability` / `parent_limits`
     —— 2026-10-21 第二批；见那一节的三轴表）。这里钉住精确的键集 —— 少一格（有人把
     某格挪回 system）与多一格（有人把静态事实也挪出去、于是模型读不到它）都会红。
     """
@@ -532,10 +512,10 @@ def test_the_dynamic_section_whitelist_is_registered_and_small() -> None:
         # 跨 run 会变（开场那条 user 消息里现读）
         "task", "task_id", "depth", "parent_task_id", "summoned_by",
         "children", "board", "inbox", "user_replies", "workspace_root",
-        # 随这一趟的**配置**变（也是开场那条 user 消息里现读，2026-10-21 第二批）
+        # 随这一趟的配置变（也是开场那条 user 消息里现读，2026-10-21 第二批）
         "availability", "parent_limits",
     }, sorted(PS.STEP_VOLATILE_FACTS)
-    # 每一格都必须有**静态替身**（空串会被 `promptkit` 的严格插值拒掉，
+    # 每一格都必须有静态替身（空串会被 `promptkit` 的严格插值拒掉，
     # 而那正是"挪出去但没留指路语"的形态）。
     assert set(PS.SYSTEM_PLACEHOLDERS) == set(PS.STEP_VOLATILE_FACTS), PS.SYSTEM_PLACEHOLDERS
     for key, text in PS.SYSTEM_PLACEHOLDERS.items():
@@ -593,14 +573,14 @@ def test_the_run_record_carries_a_cache_field_even_with_no_calls(tmp_path: pathl
 #
 # 2026-10-19 真机（`projects/t5-empty`，`sid=t5-1`）那两处读数的落点，逐处一条判据：
 #
-#   ① `runs/agent-<角色>-<sid>.json`（**顶趟在 `runs/` 下唯一那份"跑了什么"的记录**）
+#   ① `runs/agent-<角色>-<sid>.json`（顶趟在 `runs/` 下唯一那份"跑了什么"的记录）
 #      —— 改前它 9 格、只有 `spend`，`prompt_cache` 一格都没有；
 #   ② 会话里的 `agent_step` 事件 —— 每一步的两格（`prompt_cache_hit_tokens` /
 #      `prompt_cache_miss_tokens`，上游字段名照抄）在 `prompt_cache` 之下。
 #
 # 为什么 ① 是这份文件而不是产出文件：产出文件 `runs/<角色>-<时间戳>-<序号>.json`
-# 只在**被召唤**那条路上写（`AgentLoop._write_run_artifact` 的调用点在 `_summon` 里），
-# `run_role` 收工**只**写检查点。改前那一趟 M（顶趟）在 `runs/` 下就只有 9 格那一份。
+# 只在被召唤那条路上写（`AgentLoop._write_run_artifact` 的调用点在 `_summon` 里），
+# `run_role` 收工只写检查点。改前那一趟 M（顶趟）在 `runs/` 下就只有 9 格那一份。
 def _checkpoint_of(root: pathlib.Path, sid: str) -> dict[str, Any]:
     """读这一趟的检查点文件（不在盘上就当场红：那是"没写成"，不是"少了某一格"）。"""
     path = AL.run_checkpoint_path(root, "M", sid)
@@ -612,9 +592,9 @@ def test_the_step_checkpoint_carries_the_cache_summary(tmp_path: pathlib.Path) -
     """判据 ①（run 记录文件）：检查点里有 `prompt_cache`，且 `hit + miss == tokens_in`。
 
     三条一起判，缺一条这条判据就不成立：
-    - 这一格**在**（改前不在：`j.get("prompt_cache") is None`）；
+    - 这一格在（改前不在：`j.get("prompt_cache") is None`）；
     - `hit + miss == tokens_in`（上游给了读数时的自洽判据，与 `mismatched_calls` 同一口径）；
-    - `calls == len(run.steps)`（汇总覆盖了每一步，包括**不落事件**的收工那一步）。
+    - `calls == len(run.steps)`（汇总覆盖了每一步，包括不落事件的收工那一步）。
     """
     sid = "t-ckpt-known"
     run, _gateway, root, _events = _run(tmp_path, hit=600, miss=400, sid=sid)
@@ -637,12 +617,12 @@ def test_the_step_checkpoint_carries_the_cache_summary(tmp_path: pathlib.Path) -
 
 
 def test_a_silent_upstream_leaves_both_places_unknown(tmp_path: pathlib.Path) -> None:
-    """判据 ③（三态，两处都判）：上游不给读数 ⇒ 两处都是 unknown，**不许折成 0**。
+    """判据 ③（三态，两处都判）：上游不给读数 ⇒ 两处都是 unknown，不许折成 0。
 
     折成 0 的后果与单次调用那一档同源（`test_a_silent_upstream_stays_unknown…`）：
     "这家上游不报这一格"（改读数口径）与"这次真的零命中"（改提示词）会长得一模一样。
     这里逐处点名：事件的 `hit`/`miss` 是 `None`；检查点汇总的 `hit_rate` /
-    `saved_usd` 是 `None`，`unknown_calls` 计数**不是 0**，`why` 说清原因。
+    `saved_usd` 是 `None`，`unknown_calls` 计数不是 0，`why` 说清原因。
     """
     sid = "t-ckpt-unknown"
     run, _gateway, root, events = _run(tmp_path, hit=None, miss=None, sid=sid)
@@ -673,10 +653,10 @@ def test_deleting_the_checkpoint_cache_write_makes_the_criterion_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """负控（① 的写入被删）：把收工那次 `save_run_checkpoint` 换回改前的 9 格写法 ⇒ 必红。
 
-    为什么这样造"删掉写入"：改前的形态**不是**"先写文件后算汇总"（顺序没错），
+    为什么这样造"删掉写入"：改前的形态不是"先写文件后算汇总"（顺序没错），
     而是 `save_run_checkpoint` 自己拼了一份 9 格的 payload，`prompt_cache` 这条路
     从头到尾没接上（调用点只传了 `spend`）。所以负控就是那一份 payload —— 用它写，
-    然后看判据红不红。红的位置也要对：检查点**在**（`spend` 有值），只少了那一格
+    然后看判据红不红。红的位置也要对：检查点在（`spend` 有值），只少了那一格
     —— 否则这条负控红在"没写成"上，什么也没证明。
     """
     from agentflow import autonomy as AU
@@ -713,7 +693,7 @@ def test_every_step_event_carries_the_two_upstream_fields(tmp_path: pathlib.Path
     """判据 ②（step 事件）：每一个 `agent_step` 事件都带着那两个上游字段名。
 
     计数口径（这一格最容易读错，所以逐条写出来）：
-    - **收工那一步不落 `agent_step`**（它在公共尾段之前 `break`，见
+    - 收工那一步不落 `agent_step`（它在公共尾段之前 `break`，见
       `LoopRun.final_payload` 那段说明与 `test_every_step_records_the_upstream…` 的
       `len(run.steps) == 2 and len(steps) == 1`）⇒ 事件数 == 步数 − 1；
     - 收工那一步的读数在 `run.steps[-1].to_dict()`（产出文件/检查点的来源）与
@@ -751,7 +731,7 @@ def test_hollowing_the_two_fields_from_the_step_event_makes_it_red(
 
     这一刀比"把整个键删掉"细：`{}` 让 `event.get("prompt_cache") is not None` 仍然
     成立（改前那条判据只看键在不在），而两格读数一个字都没落 ——
-    那正是"看起来写了、其实没写"的形态。所以判据收在**字段名**上（见
+    那正是"看起来写了、其实没写"的形态。所以判据收在字段名上（见
     `missing_prompt_cache_steps` 的说明）。
     """
     _run_ok, _gateway, _root, events = _run(tmp_path / "ok", hit=600, miss=400, sid="t-hollow")
@@ -764,7 +744,7 @@ def test_hollowing_the_two_fields_from_the_step_event_makes_it_red(
         hollowed.append(copy)
     missing = PS.missing_prompt_cache_steps(hollowed)
     assert missing == [int(e["index"]) for e in events if e.get("kind") == "agent_step"], missing
-    # 中间那一档也要分得清：unknown（两格是 None）**不算**缺。
+    # 中间那一档也要分得清：unknown（两格是 None）不算缺。
     unknown_but_present: list[dict[str, Any]] = []
     for event in events:
         copy = dict(event)
@@ -778,7 +758,7 @@ def test_hollowing_the_two_fields_from_the_step_event_makes_it_red(
 def test_a_summary_that_folds_unknown_into_zero_percent_is_red() -> None:
     """负控（三态，汇总层）：把 unknown 折成 0% / 用 0 顶上去 ⇒ `cache_summary_problem` 必红。
 
-    单次调用那一档已有判据（`prompt_cache_record` 的 `None`）；这一条守的是**汇总**
+    单次调用那一档已有判据（`prompt_cache_record` 的 `None`）；这一条守的是汇总
     这一层：`hit_rate=0.0` 与 `hit_rate=None` 在 JSON 里都"看起来是个数"，而前者会
     让下一次读它的人得出"命中率 0%，提示词还得改"这个错误结论。
     """

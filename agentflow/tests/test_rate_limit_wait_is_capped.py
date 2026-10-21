@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""长 `Retry-After` 不许**原地睡**（缺陷 ⑭，真机 T2 抓到）。
+"""长 `Retry-After` 不许原地睡（缺陷 ⑭，真机 T2 抓到）。
 
 ## 现场
 
 `providers.http_get_json` 收到 HTTP 429 时，会按服务端给的 `Retry-After` 睡过去再试。
-OpenAlex 回的是 **`Retry-After: 60`** ⇒ 每一次限流都睡 60 秒。
-真机读数（`projects/t2t`）：**20 分钟只烧掉 $0.09** —— 时间全花在等，不在做研究。
+OpenAlex 回的是 `Retry-After: 60` ⇒ 每一次限流都睡 60 秒。
+真机读数（`projects/t2t`）：20 分钟只烧掉 $0.09 —— 时间全花在等，不在做研究。
 
-这与 `_h_download` 里那条既有原则是同一句话：**限流要换源，不在原地耗时间**。
+这与 `_h_download` 里那条既有原则是同一句话：限流要换源，不在原地耗时间。
 
 ## 现在的口径
 
-`delay > RATE_LIMIT_MAX_WAIT_SEC`（10 秒）⇒ **不睡**，立刻抛 `rate_limited`，
+`delay > RATE_LIMIT_MAX_WAIT_SEC`（10 秒）⇒ 不睡，立刻抛 `rate_limited`，
 让检索层去换 provider。短的 `Retry-After`（≤10s）仍照常等待重试。
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ def _patch(monkeypatch, *, retry_after: str | None):
 
 
 def test_a_long_retry_after_does_not_block(monkeypatch):
-    """**正控**：`Retry-After: 60` ⇒ 一次都不睡，立刻抛（检索层才能换源）。"""
+    """正控：`Retry-After: 60` ⇒ 一次都不睡，立刻抛（检索层才能换源）。"""
     calls, slept, logger = _patch(monkeypatch, retry_after="60")
     with pytest.raises(Exception) as ei:
         P.http_get_json("https://api.openalex.org/works", retries=3)
@@ -60,7 +60,7 @@ def test_a_long_retry_after_does_not_block(monkeypatch):
 
 
 def test_a_short_retry_after_still_retries(monkeypatch):
-    """**负控**：`Retry-After: 2` 是短等待 ⇒ 仍按原策略重试（不许把好的一起砍掉）。"""
+    """负控：`Retry-After: 2` 是短等待 ⇒ 仍按原策略重试（不许把好的一起砍掉）。"""
     calls, slept, _ = _patch(monkeypatch, retry_after="2")
     with pytest.raises(Exception):
         P.http_get_json("https://api.openalex.org/works", retries=2)

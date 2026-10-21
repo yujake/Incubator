@@ -1,45 +1,22 @@
 """A 专用检索工具：provider 探测 / 文献检索 / 下载 / 判重检查 / 文献登记。
-
 基于 ``tools/base.py`` 的 ``ToolSpec`` / ``ToolResult`` 写（见 ``DESIGN-TOOLS.md`` §1）。
-
 ## 为什么需要这一层
-
-A 的思维链只该花在"判断该调哪个工具、该用哪个检索词"上，不该花在"怎么把
-provider 的参数拼对"、"这条是不是已经登记过"上。工具层把这些标准动作固化成
-有名字、有 schema、有校验、有结构化返回、声明副作用的原子动作。
-
+A 的思维链只该花在"判断该调哪个工具、该用哪个检索词"上，不该花在"怎么把 provider 的参数拼对"、"这条是不是已经登记过"上。工具层把这些标准动作固化成有名字、有 schema、有校验、有结构化返
+回、声明副作用的原子动作。
 ## 三条贯穿全模块的原则
-
-1. 判重结论随候选一起返回。``search.literature`` 的每条候选都带
-   ``dedup_key`` / ``existing`` / ``is_new``：A 看到候选列表的同时就知道哪几条是
-   新的。否则 A 必须"搜完再问一次判重"——白占一轮思维链，还多打一次工具。
-
-2. "没做"与"做了没结果"必须分开（与 ``DESIGN.md`` §6.3 的"无文本层返回
-   ``None`` 而不是 ``False``"同源）：
-   - provider 检索抛异常 ⇒ ``fail``（没做成）；检索正常但零命中 ⇒
-     ``ok`` + 空列表（做了，结论就是"没有"）。二者绝不能混。
-   - 未配置 ``store`` 时无法比对既有文献表 ⇒ 候选的 ``existing`` 是 ``None``
-     （未知），而不是 ``False``（"新的"）。把"没查"写成"新的"会让 A 重复登记。
-
-3. 可用性靠真探测，不靠假设。``search.providers`` 对每个 provider 发一次
-   极小的真实请求；``ABFLOW_SKIP_NETWORK=1`` 时明确标 ``unverified``（未探测），
-   而不是把"没探测"写成"可用"或"不可用"。
-
-   正因为它真的发 HTTP，它的 ``side_effect`` 是 ``network``（需要审批），
-   不是 ``read``。这一处曾经声明成 ``read``：那等于在权限面上说
-   "这个工具不联网、不必审批"，而它每次调用都会向外部源发起请求 ——
-   声明与实际不符的副作用等级会让"审批"这个闸门在该拦的地方不拦。
-   （``ABFLOW_SKIP_NETWORK=1`` 只是"这一次没探测"，不是"这个工具不联网"；
-   副作用等级声明的是能力，不是某一次调用的结果。）
-
+``search.literature`` 的每条候选都带``dedup_key`` / ``existing`` / ``is_new``：A 看到候选列表的同时就知道哪几条是新的。
+2. "没做"与"做了没结果"必须分开（与 ``DESIGN.md`` §6.3 的"无文本层返回``None`` 而不是 ``False``"同源）：- provider 检索抛异常 ⇒ ``fail``（没
+做成）；检索正常但零命中 ⇒``ok`` + 空列表（做了，结论就是"没有"）。- 未配置 ``store`` 时无法比对既有文献表 ⇒ 候选的 ``existing`` 是 ``None``（未知），而不是
+``False``（"新的"）。
+``search.providers`` 对每个 provider 发一次极小的真实请求；``ABFLOW_SKIP_NETWORK=1`` 时明确标 ``unverified``（未探测），而不是把"没探测
+"写成"可用"或"不可用"。
+正因为它真的发 HTTP，它的 ``side_effect`` 是 ``network``（需要审批），不是 ``read``。这一处曾经声明成 ``read``：那等于在权限面上说"这个工具不联网、不必审批
+"，而它每次调用都会向外部源发起请求 ——声明与实际不符的副作用等级会让"审批"这个闸门在该拦的地方不拦。（``ABFLOW_SKIP_NETWORK=1`` 只是"这一次没探测"，不是"这个工具不联网"；
 ## 文件落点（为什么这样定）
-
-- ``search.download`` 下到 ``<workspace>/downloads/`` —— 这是一个中间态：
-  文件名由 ``fetch`` 层 slug 化并去重，下载器保证"不覆盖已有文件"。
-- ``search.register`` 把文件收编进 ``<store.library>/<lit_id>/``：因为
-  ``schema.Literature.path`` 必须是 library/ 下的相对路径，绝对路径会被
-  ``Literature.validate()`` 直接拒绝。收编失败时行照建、``path`` 置 ``null``
-  并给 warning —— "知道有这篇但拿不到全文"本身就是有价值的结果（DESIGN.md §2.4）。
+- ``search.download`` 下到 ``<workspace>/downloads/`` —— 这是一个中间态：文件名由 ``fetch`` 层 slug 化并去重，下载器保证"不覆盖已有文件"。
+- ``search.register`` 把文件收编进 ``<store.library>/<lit_id>/``：因为``schema.Literature.path`` 必须是 library/ 下的相
+对路径，绝对路径会被``Literature.validate()`` 直接拒绝。收编失败时行照建、``path`` 置 ``null``并给 warning —— "知道有这篇但拿不到全文"本身就是有价值的
+结果（DESIGN.md §2.4）。
 """
 
 from __future__ import annotations
@@ -260,7 +237,7 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
 
     books: list[dict] = []
     missing = 0
-    # ⚠️ 「2026-10-16（亲测 A 的工具面时加的）」：这一件叫 `search.shelf`，可它的参数里
+    # 「2026-10-16（亲测 A 的工具面时加的）」：这一件叫 `search.shelf`，可它的参数里
     # 「没有 `query`」 —— 我第一次凭感觉敲的就是 `query=`，吃了一个"未声明的参数"。
     # 按业主口径（"第一次凭感觉敲红的，真实智能体也会在这里困惑"）⇒ 让「第一猜能 work」：
     # 可选 `query`，按「题名/路径」做子串过滤（大小写不敏感）。它不读全文
@@ -420,24 +397,16 @@ def _resolve_provider(ctx: _Ctx, name: str) -> Any:
 
 def _provider_diagnostics(prov: Any) -> dict:
     """把 provider 自带的统计/查询串捞出来。
-
-    这是"为什么只回来 2 条"的唯一可查证据：``last_query_text`` 说明实际发出去的
-    检索串，``filter_notes`` 说明有多少条被 precise 的标题过滤筛掉。
-    ``last_phrase_fallbacks`` 与 ``last_channel_errors`` 是 `C-4` 之后新增的两条
-    （短语零召回 ⇒ 退了词项检索 / 这一路抛了异常）：缺了它们，"只回来 2 条"
-    与"整串短语把召回打成 0"在读数上长得一模一样。
-
-    `FINAL-R3-05`：`stats` 里那几个计数是跨多跑累积的（同一个 provider 对象被
-    反复读时它一直涨），而 `last_*` 全是逐跑读数 —— 两组数并排放着容易被读成
-    同一时刻的同一件事。产物里没有"这一跑的 stats 快照"这一档（本次没有加：
-    加字段要动 `evidence` 侧的折算），所以读的时候请以 `last_*` 为准，
-    `stats` 只用来看"这个对象一共发过多少请求"。
-
-    E-10（`draft/44`）：`last_topicality` 必须在这一屏里 —— 它是"返回 0 条"与
-    "这一问根本没问出去"的唯一分界（`QueryApplicability` 的第三态：`query_empty` /
-    `query_not_applicable_cjk`）。此前这一屏只捞 `stats`/`last_query_text`/…，
-    于是空 topic 那次 `return []` 在生产读数上与"问了、零命中"长得一模一样。
-    `last_query_provenance` 同理：它逐条记"这一路 query 发没发出去（`dispatched`）"。
+    这是"为什么只回来 2 条"的唯一可查证据：``last_query_text`` 说明实际发出去的检索串，``filter_notes`` 说明有多少条被
+    precise 的标题过滤筛掉。``last_phrase_fallbacks`` 与 ``last_channel_errors`` 是 `C-4` 之后新增的两条（短语
+    零召回 ⇒ 退了词项检索 / 这一路抛了异常）：缺了它们，"只回来 2 条"与"整串短语把召回打成 0"在读数上长得一模一样。
+    `FINAL-R3-05`：`stats` 里那几个计数是跨多跑累积的（同一个 provider 对象被反复读时它一直涨），而 `last_*` 全是逐跑读数 —— 两组数
+    并排放着容易被读成同一时刻的同一件事。产物里没有"这一跑的 stats 快照"这一档（本次没有加：加字段要动 `evidence` 侧的折算），所以读的时候请以 
+    `last_*` 为准，`stats` 只用来看"这个对象一共发过多少请求"。
+    E-10（`draft/44`）：`last_topicality` 必须在这一屏里 —— 它是"返回 0 条"与"这一问根本没问出去"的唯一分界（`QueryApplicability`
+    的第三态：`query_empty` /`query_not_applicable_cjk`）。此前这一屏只捞 `stats`/`last_query_text`/…，于是
+    空 topic 那次 `return []` 在生产读数上与"问了、零命中"长得一模一样。`last_query_provenance` 同理：它逐条记"这一路
+    query 发没发出去（`dispatched`）"。
     """
     out: dict[str, Any] = {}
     for attr in ("stats", "last_query_text", "last_filter_notes", "last_filtered_out",
@@ -667,20 +636,14 @@ def _h_literature(
     providers: Iterable[str] | None = None,
 ) -> Any:
     """``search.literature``：检索候选，并把判重结论一并算好。
-
     ## `providers=[…]`：一次问多源（`R2b` ⑱）
-
-    给了它就忽略 `provider`，走 `providers.MultiProvider` 把多个源合并（按
-    `_merge_identity_key` 去重、`raw.providers` 留住"这条来自哪些源"）。
-    三条硬要求在这里的落点：
-
-    1. 逐源三态：`sources[]` 逐源给出 `status`/`count`/`error_kind`/`error`；
-       某个源失败不影响别的源的结果（`fail_fast=False`）；
-       一个源都没交货（全 `failed` 或全 `refused`）⇒ 这一调用落 `fail`，
-       绝不折成"检索正常、零命中"——那会把"没查成"写成"查了没有"。
-    2. 去重口径只留一处：本函数不自己合并，跨源合并在 `MultiProvider` 里、
-       与文献表比对仍走 `dedup.literature_keys` / `find_existing_literature`（同一份）。
-    3. 成本可读：`cost.provider_calls`（这次向上游发了几次）+ `cost.elapsed_s`。
+    给了它就忽略 `provider`，走 `providers.MultiProvider` 把多个源合并（按`_merge_identity_key` 去重、
+    `raw.providers` 留住"这条来自哪些源"）。三条硬要求在这里的落点：
+    1. 逐源三态：`sources[]` 逐源给出 `status`/`count`/`error_kind`/`error`；某个源失败不影响别的源的结果（`fail_fast=False`）；
+    一个源都没交货（全 `failed` 或全 `refused`）⇒ 这一调用落 `fail`，绝不折成"检索正常、零命中"——那会把"没查成"写成"查了没有"。 2. 去重
+    口径只留一处：本函数不自己合并，跨源合并在 `MultiProvider` 里、与文献表比对仍走 `dedup.literature_keys` / 
+    `find_existing_literature`（同一份）。 3. 成本可读：`cost.provider_calls`（这次向上游发了几次）+ 
+    `cost.elapsed_s`。
     """
     description = description or ""
     # 与 schema.SearchRequest 的约束保持一致：精确模式必须给出内容描述，
@@ -921,7 +884,7 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         return fail(f"下载异常：{type(exc).__name__}: {exc}", kind="download_error", url=url)
 
     if not res.ok:
-        # ⚠️ 「2026-10-16（把 A 做成会应变的智能体）」：这里要把「下载层那一档」
+        # 「2026-10-16（把 A 做成会应变的智能体）」：这里要把「下载层那一档」
         # 原样带出去（`fetch_kind`）。改前只给一个笼统的 `download_failed`，
         # 细分类（`tls_cert` / `tls_timeout` / `http_403` / `network_error` …）只剩在
         # 自由文本里 ⇒ 「A 读不到"为什么没下到"，也就没法决定"换源还是重试"」。
@@ -1661,17 +1624,16 @@ def _stage_fail(exc: Exception) -> Any:
 
 def _h_lit_overlap_check(ctx: _Ctx, title: str, doi: str | None = None) -> Any:
     """``lit.overlap_check``：「不联网」，说明"这一条与本地库重叠多少、要不要 new_content"。
-
+    
     口径（与 `litstage.overlap_check` 「同一份实现」，这里只补两句读数）：
-
-    - 「DOI 完全相同 ⇒ 视为重复」（`duplicate=True`）：同一篇文献说不出"新内容"，
-      所以给不给 `new_content` 都不入库；
-    - 否则按「标题词集 Jaccard」 算重叠度，阈值 ``OVERLAP_HIGH_JACCARD = 0.60``
-      （取值依据见 `litstage.OVERLAP_HIGH_JACCARD` 的 docstring）：
-      ≥ 0.60 ⇒ `requires_new_content=True`，调用方必须给 `new_content`。
-
-    三态：未配置 store ⇒ `fail(kind="no_store")` + `checked=False`（「不是」"没有重叠"）；
-    表读不出来 ⇒ `fail(kind="store_error")`（同样不是"没有重叠"）。
+    
+    - 「DOI 完全相同 ⇒ 视为重复」（`duplicate=True`）：同一篇文献说不出"新内容"，所以给不给 `new_content` 都不入库；- 否则按「标题词
+    集 Jaccard」 算重叠度，阈值 ``OVERLAP_HIGH_JACCARD = 0.60``（取值依据见 
+    `litstage.OVERLAP_HIGH_JACCARD` 的 docstring）：≥ 0.60 ⇒ `requires_new_content=True`，调用方必
+    须给 `new_content`。
+    
+    三态：未配置 store ⇒ `fail(kind="no_store")` + `checked=False`（「不是」"没有重叠"）；表读不出来 ⇒ 
+    `fail(kind="store_error")`（同样不是"没有重叠"）。
     """
     from ..litstage import overlap_check
 
@@ -1825,31 +1787,15 @@ def _h_lit_admit(
     overlap_ok: bool | None = None,
 ) -> Any:
     """``lit.admit``：正式入库（逐条）—— 「条数上限 + 重叠检查」都过了才走现有登记路径。
-
     ## 两个上限（业主口径 ①，超了「整笔拒绝」）
-
-    - 本次调用 ≤ ``MAX_ADMIT_PER_CALL = 10`` 条；
-    - 该委托累计已入库 + 本次 ≤ ``MAX_ADMIT_PER_DELEGATION = 10`` 条。
-
-    "整笔"是刻意的：如果前 10 条进了、第 11 条被挡，调用方会读成"第 11 条被审掉了"，
-    而真相是"这一次调用根本不成立"。拒信里给三个读数：本次 / 本委托已入 / 上限。
-
+    - 本次调用 ≤ ``MAX_ADMIT_PER_CALL = 10`` 条；- 该委托累计已入库 + 本次 ≤ ``MAX_ADMIT_PER_DELEGATION = 10`` 条。
     ## 逐条拒收（业主口径 ②④）
-
-    - `status != "pending"`（已撤 / 已拒 / 已入库 / 已清空）⇒ 拒；
-    - DOI 与本地库某一行「完全相同」 ⇒ 视为重复，拒（这一档 `new_content` 救不了）；
-    - 标题词集 Jaccard ≥ 0.60 且「没有」 `new_content` ⇒ 拒
-      （行上写的 `new_content` 优先，`items[].new_content` / 调用级 `new_content` 兜底）。
-
-    `overlap_ok=True` 「不替代」 `new_content`：它只如实记下"调用方表过态"，
-    真正的放行仍要有那句新内容。`overlap_ok=False` 则直接拒这一条。
-
+    - `status != "pending"`（已撤 / 已拒 / 已入库 / 已清空）⇒ 拒；- DOI 与本地库某一行「完全相同」 ⇒ 视为重复，拒（这一档 `new_content` 救不了）；- 标题词集
+    Jaccard ≥ 0.60 且「没有」 `new_content` ⇒ 拒（行上写的 `new_content` 优先，`items[].new_content` / 调用级 `new_content` 兜底）。
+    `overlap_ok=True` 「不替代」 `new_content`：它只如实记下"调用方表过态"，真正的放行仍要有那句新内容。`overlap_ok=False` 则直接拒这一条。
     ## 入库走的是现有路径
-
-    registrar 就是 `search.register` 的 handler（`_h_register`：判重 → `alloc_id("lit")`
-    → 落 `literature` 行 → 收编文件）。本工具里没有一处直接写 `literature` ——
-    "绕开登记路径"在结构上做不到（判据见 `tests/test_search_tools_stage_admit.py`）。
-
+    registrar 就是 `search.register` 的 handler（`_h_register`：判重 → `alloc_id("lit")`→ 落 `literature` 行 → 收编文件）。本工具里没有
+    一处直接写 `literature` ——"绕开登记路径"在结构上做不到（判据见 `tests/test_search_tools_stage_admit.py`）。
     「它不清空列表」：清空是一次委托的收尾动作，属于 `lit.admit_all`。
     """
     from ..litstage import LitStageError, admit as _admit
@@ -1953,18 +1899,15 @@ def _h_lit_admit_all(
     new_content: str = "",
 ) -> Any:
     """``lit.admit_all``：「一键迁移」 —— 把本委托待审且过筛的行一次迁进 literature，然后清空。
-
+    
     业主 2026-10-20 第 2 条，四件事顺序固定（实现见 `litstage.admit_all`）：
-
-    1. 取本委托所有 `pending` 行，逐条过「重叠检查」（DOI 重复 / 高重叠无 `new_content`
-       ⇒ 拒收；超配额 ⇒ 这一条不入库）；
-    2. 通过的走「现有登记路径」（与 `search.register` 同一条）；
-    3. 「结算清空本委托」：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
-       `cleared(over_cap / not_screened)` + `cleared_at` ⇒ 迁移后本委托没有 `pending` 残留，
-       下一次委托看不到本委托的行（`request_id` 已经换了）。「不物理删」；
-    4. 写「委托报告」 `reports/lit-<request_id>.md`：已入库一块（含一句相关性）+
-       未入库一块（含受控理由）—— 这是交付物，不是可选（业主第 3 条）。
-
+    
+    1. 取本委托所有 `pending` 行，逐条过「重叠检查」（DOI 重复 / 高重叠无 `new_content`⇒ 拒收；超配额 ⇒ 这一条不入库）； 2. 通过的走
+    「现有登记路径」（与 `search.register` 同一条）； 3. 「结算清空本委托」：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
+    `cleared(over_cap / not_screened)` + `cleared_at` ⇒ 迁移后本委托没有 `pending` 残留，下一次委托看不到本委托的
+    行（`request_id` 已经换了）。「不物理删」； 4. 写「委托报告」 `reports/lit-<request_id>.md`：已入库一块（含一句相关性）+未入
+    库一块（含受控理由）—— 这是交付物，不是可选（业主第 3 条）。
+    
     它仍守"一次委托至多入库 10 篇"与"重叠高需 `new_content`"两条。
     """
     from ..litstage import LitStageError, admit_all as _admit_all
@@ -2296,27 +2239,16 @@ def _h_walk_citations(
     ctx: _Ctx, lit_id: str, direction: str = "backward", limit: int = 20
 ) -> Any:
     """``search.walk_citations``：由一篇「已登记的」文献出发，在引文图上走一步。
-
     业主 2026-10-15 裁定：引文图「用新动作的方式落」 —— 本函数是那件动作的工具面。
-
-    - ``backward``（「回溯」）：这一篇「引了谁」 —— 读它的 ``referenced_works`` 再批量解析；
-    - ``forward``（「前推」）：「谁引了这一篇」 —— ``filter=cites:<W…>``。
-
+    - ``backward``（「回溯」）：这一篇「引了谁」 —— 读它的 ``referenced_works`` 再批量解析；- ``forward``（「前推」）：「谁引了这一篇」 —— 
+    ``filter=cites:<W…>``。
     ## 为什么这里「不」替判重（与 ``search.literature`` 的差别是刻意的）
-
-    ``search.literature`` 会给每条候选标 ``is_new``，好让 A 少跑一次判重工具。
-    本工具「不做这件事」：判重（``dedup_key`` / ``existing`` / ``is_new``）在本模块里
-    只有 ``_h_literature`` 那一处内联实现，在这里再写一份就是"同一件事两处实现" ——
-    而"同一篇文献只留一个键"正是本仓划进禁改区的那条纪律（``dedup.py``）。
-    所以这里只交「书目字段」；要不要登记、怎么登记，走既有的
-    ``search.dedup_check`` → ``search.register`` 那条路。
-
+    ``search.literature`` 会给每条候选标 ``is_new``，好让 A 少跑一次判重工具。本工具「不做这件事」：判重（``dedup_key`` / ``existing``
+    / ``is_new``）在本模块里只有 ``_h_literature`` 那一处内联实现，在这里再写一份就是"同一件事两处实现" ——而"同一篇文献只留一个键"正是本仓划进禁改区的那条纪律（``dedup.py``）。
+    所以这里只交「书目字段」；要不要登记、怎么登记，走既有的``search.dedup_check`` → ``search.register`` 那条路。
     ## 为什么源必须是「盘上已登记」的那一篇
-
-    引文走查要从"我们手上的这一篇"出发（拿它的 DOI / OpenAlex id）。
-    不接受任意 DOI：那样它就成了第二个检索入口，而"检索"这件事的账
-    （``search_requests`` 的终局、I7 准入闸门）只在 ``search.literature`` 那一处记。
-    ``lit_id`` 不在 ``literature`` 表里 ⇒ ``ok=False`` 并说明（不是空列表）。
+    引文走查要从"我们手上的这一篇"出发（拿它的 DOI / OpenAlex id）。不接受任意 DOI：那样它就成了第二个检索入口，而"检索"这件事的账（``search_requests`` 的
+    终局、I7 准入闸门）只在 ``search.literature`` 那一处记。``lit_id`` 不在 ``literature`` 表里 ⇒ ``ok=False`` 并说明（不是空列表）。
     """
     fail_meta = {"lit_id": lit_id, "direction": direction, "count": 0}
     if ctx.store is None:
@@ -2371,7 +2303,7 @@ def _h_walk_citations(
         }
         for c in cands
     ]
-    # ⚠️ 成功也要走 `ok(...)`，「不许直接 return 一个普通 dict」。
+    # 成功也要走 `ok(...)`，「不许直接 return 一个普通 dict」。
     #
     # 为什么（这是实测踩出来的）：注册表两种都收（普通 dict 会被它包成 `ToolResult`），
     # 所以"直接 return dict"在「工具调用」那一侧看不出问题。但「动作层」是直接调
@@ -2406,20 +2338,16 @@ def register(
     actor: str = "agent-A",
 ) -> list[ToolSpec]:
     """把 A 的检索工具注册进 ``registry``，返回注册的 ``ToolSpec`` 列表。
-
+    
     参数（全部可选，按需注入 —— 没注入的能力只是少一点便利，不会让工具层起不来）：
-
-    - ``store``：文献表所在的工作区。不传时 ``search.dedup_check`` /
-      ``search.register`` 会明确 ``fail``（而不是给出假结论），``search.literature``
-      的 ``is_new`` 会是 ``null``。这是刻意的：判重结论宁可说"没查"，不能说错。
-    - ``providers``：provider 实例列表（离线测试注入假对象用）。不传则按名字
-      惰性构造内置 provider（``providers.build_providers``），注册本身不联网。
-    - ``downloader``：下载器实例（不传则用 ``fetch.default_downloader``）。
-    - ``workspace``：工作区根目录（``downloads/`` 落在它下面）。别名
-      ``workspace_root`` / ``root`` 也接受（装配器用这两个名字注入）。
-      默认取 ``store.root``，再退回当前目录。
-    - ``provider_config``：透传给 provider 构造函数的参数（如 ``mailto``、
-      ``fixture_path``、``min_interval``）。
+    
+    - ``store``：文献表所在的工作区。不传时 ``search.dedup_check`` /``search.register`` 会明确 ``fail``（而不是
+    给出假结论），``search.literature``的 ``is_new`` 会是 ``null``。这是刻意的：判重结论宁可说"没查"，不能说错。- 
+    ``providers``：provider 实例列表（离线测试注入假对象用）。不传则按名字惰性构造内置 provider（``providers.build_providers``），
+    注册本身不联网。- ``downloader``：下载器实例（不传则用 ``fetch.default_downloader``）。- ``workspace``：工作区根
+    目录（``downloads/`` 落在它下面）。别名``workspace_root`` / ``root`` 也接受（装配器用这两个名字注入）。默认取 
+    ``store.root``，再退回当前目录。- ``provider_config``：透传给 provider 构造函数的参数（如 ``mailto``、
+    ``fixture_path``、``min_interval``）。
     """
     ws = _pick_workspace(workspace, workspace_root, root, store)
     ctx = _Ctx(

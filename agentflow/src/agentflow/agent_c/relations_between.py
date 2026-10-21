@@ -8,23 +8,13 @@ from __future__ import annotations
 class _RelationsBetween:
     def relations_between(self, a: str, b: str, *, include_inactive: bool = True) -> dict:
         """两个概念之间的全部关系（同步、只读、有界）。
-
-        返回
-        ----
-        ``{"checked", "a", "b", "relation_ids", "relations": [精简行...],
-           "empty", "reason", ...}``
-
+        返回----``{"checked", "a", "b", "relation_ids", "relations": [精简行...],"empty", "reason", ...}``
         三态在这里的分工（DESIGN §3.4 明写的一条）：
-
-        - ``relation_ids == []`` + ``empty=True`` + ``checked=True`` —— 查了，没有；
-        - ``checked=False`` —— 没查（概念表为空，图上没有任何可查代号）。
-
-        把前者压成后者（或反过来）会让 D 分不清"这两点确实没有关系"与"我根本没查到"，
-        而前者是一条可以写进研究结论的确定性判断，后者只是一个待办。
-
-        `include_inactive=False` 只过滤 `status != "active"` 的关系（判重存疑/已否决）。
-        被过滤掉多少条会写进 `reason` 与 `filtered_out` —— 否则"过滤后为空"
-        与"本来就没有"又是同一个形状。
+        - ``relation_ids == []`` + ``empty=True`` + ``checked=True`` —— 查了，没有；- 
+        ``checked=False`` —— 没查（概念表为空，图上没有任何可查代号）。
+        把前者压成后者（或反过来）会让 D 分不清"这两点确实没有关系"与"我根本没查到"，而前者是一条可以写进研究结论的确定性判断，后者只是一个待办。
+        `include_inactive=False` 只过滤 `status != "active"` 的关系（判重存疑/已否决）。被过滤掉多少条会写进 `reason` 与 
+        `filtered_out` —— 否则"过滤后为空"与"本来就没有"又是同一个形状。
         """
         g = self._g()
         aid, bid = str(a or ""), str(b or "")

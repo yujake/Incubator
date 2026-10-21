@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""`table.schema` 必须能**只取一张表**（缺陷 ⑤）。
+"""`table.schema` 必须能只取一张表（缺陷 ⑤）。
 
 ## 现场（真机 T4/T5）
 
-`table.schema` 无参调用返回全部 17 张表 = **47070 字节**，被上下文预算截断；
-于是模型改用"**故意写错一个字段名**、从 validation 错误里读字段清单"那种笨办法
+`table.schema` 无参调用返回全部 17 张表 = 47070 字节，被上下文预算截断；
+于是模型改用"故意写错一个字段名、从 validation 错误里读字段清单"那种笨办法
 （33 次失败调用里 15 次是 `table.create`，白烧步数与钱）。
 
 ## 现在的口径
 
-* 无参 ⇒ 行为**逐字节不变**（16 张表，47070 B）；
-* `table="statements"` ⇒ 只回那一张（8045 B，**1/6 体积**）；
-* `table="nope"` ⇒ **可读拒信** `unknown_table` ＋ 在册表名（不是"这张表没有字段"）。
+* 无参 ⇒ 行为逐字节不变（16 张表，47070 B）；
+* `table="statements"` ⇒ 只回那一张（8045 B，1/6 体积）；
+* `table="nope"` ⇒ 可读拒信 `unknown_table` ＋ 在册表名（不是"这张表没有字段"）。
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def reg():
 
 
 def test_without_argument_every_table_is_still_listed(reg):
-    """**负控（行为不许变）**：无参调用仍是全部在册表。"""
+    """负控（行为不许变）：无参调用仍是全部在册表。"""
     from agentflow import schema as S
 
     r = reg.call("table.schema", role="B")
@@ -41,7 +41,7 @@ def test_without_argument_every_table_is_still_listed(reg):
 
 
 def test_one_table_can_be_asked_for_alone(reg):
-    """**正控**：`table="statements"` 只回一张，且体积显著小于全量。"""
+    """正控：`table="statements"` 只回一张，且体积显著小于全量。"""
     full = reg.call("table.schema", role="B")
     one = reg.call("table.schema", role="B", table="statements")
     assert one.ok, one.error
@@ -53,7 +53,7 @@ def test_one_table_can_be_asked_for_alone(reg):
 
 
 def test_an_unknown_table_is_a_readable_refusal(reg):
-    """**三态**：未知表 ⇒ `unknown_table` ＋ 在册表名（不是空字段表）。"""
+    """三态：未知表 ⇒ `unknown_table` ＋ 在册表名（不是空字段表）。"""
     r = reg.call("table.schema", role="B", table="nope")
     assert not r.ok
     # `fail(error, **meta)` ⇒ `ToolResult(False, None, error, meta)`：失败时 `data` 恒为

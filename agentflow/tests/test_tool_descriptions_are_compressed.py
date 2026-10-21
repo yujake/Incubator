@@ -1,126 +1,21 @@
 # -*- coding: utf-8 -*-
-"""判据：工具说明压到「一两句」，而**声明契约一个字都没动**。
-
-## 这一批改了什么
-
-十个角色的 system prompt 里，工具声明是最大的一块静态文本（实测 G 的工具面
-4 237 字符 / 提示词 37 093 字符；而 function-calling 的声明 JSON 是 26 117 字符
-= 提示词的 70.4%）。声明里能压的只有一格：`summary`（工具说明）。参数 schema、
-`returns`、`side_effect`、`roles` 全都不许动 —— 它们是契约。
-
-所以那一批只做一件事：把每件工具的 `summary` 从「一段长文」压到「一两句」，
-保留 **做什么 / 什么时候用 / 关键约束**，删掉 **为什么这么设计 / 历史沿革 /
-长例子 / 与别的工具的比较论述 / 重复 `returns` 已逐字列过的返回键清单**。
-
-## 判据守的是什么：压缩批次的说明不得回涨（不是「库里永远只有 86 件」）
-
-压缩那一批是 **86 件**，名单冻结在基线里（`compression_cohort`）。比例判据
-**只在 cohort 上算**：
-
-    sum(cohort 现状 summary 长度) / sum(cohort 基线 summary 长度) <= 75%
-
-为什么不是「全库总量 / 8932」：工具面在长，2026-10-20 新增了 8 件
-（`lit.stage_add` / `lit.stage_list` / `lit.stage_withdraw` / `lit.stage_reject` /
-`lit.overlap_check` / `lit.admit` / `lit.admit_all` / `conductor.escalate`）。
-它们是**新写的说明、从来没被压过**，把它们算进分子分母等于要求「新工具自带
-压缩配额」，而老板的口径是「**压缩那一批的说明不得回涨**」。全库口径下
-7514 / 8932 = 84.1% 会红，而 cohort 口径下只有压缩过的那 86 件参与比较 ——
-新 8 件既不在分子也不在分母，比例只可能被「那 86 件回涨」推上去。
-
-这个口径**不是放宽**，因为它把「回涨」这件事钉得更紧：
-
-- 分母 `baseline_summary_chars` 必须逐件等于 `summary_lens_before` 之和
-  （`cohort_problems`）⇒ 想靠「把某件工具从 cohort 里踢出去」来减分母，
-  得同时改名单、逐件长度表、总量三处，且名单与 `added_after_compression`
-  的并集必须覆盖基线全部声明；
-- 少算一件就等于把它的字数从分子分母里一起抹掉 ⇒ `cohort_ratio` 直接抛
-  `ValueError`，不是静默跳过；
-- 新工具不许混进 cohort（否则会拿它的字数去稀释比例），
-  在 cohort 里也不许偷偷标 `added_after_compression`。
-
-## 四条判据，各自只能证明一件事
-
-1. `test_declaration_contracts_are_unchanged`（① 契约不变）
-   —— 与 `tests/fixtures/tool_declaration_baseline.json` 里**压缩前**那份声明逐键比：
-   `params` / `returns` / `side_effect` / `external` / `roles` / `tags` / `handler_name`
-   必须完全相同；工具集合也必须相同（新增/删除工具必须在基线里登记，否则红）。
-   差异**只**在一种情况下允许通过：基线 `contract_amendments` 里有一条
-   `reason` + 与该差异**逐项对上**的编辑清单（见下「三种合法的契约演进」）。
-   它**不能**证明说明压得好不好 —— 那是第 2 条。
-
-2. `test_cohort_descriptions_shrank_by_at_least_a_quarter`（② 说明没回涨）
-   —— 压缩批次 86 件的 `summary` 现总量必须 ≤ 基线的 75%。它**不能**证明删掉的
-   是废话 —— 那是第 4 条与人的 review。
-
-3. `test_every_new_tool_is_registered`（③ 新工具已登记）
-   —— 不在 `compression_cohort` 里的每一件现盘工具，都必须在基线 `declarations`
-   里有一行、且带 `added_after_compression: true`；那 8 件的名字必须在
-   `added_after_compression.tools` 名单里。它**不能**证明它们的说明写得好。
-
-4. `test_every_asserted_literal_survives`（④ needle 全在）
-   —— needle = tests 里 `assert X in <声明面>`（summary / prompt / text / desc / spec）
-   形态的字面量 X，且压缩前逐字出现在某件工具的 `summary` 里。每一条都必须还在。
-   它**不能**证明没删掉别的重要字句 —— 那是「删什么」这件事本身要靠 review。
-
-## 三种合法的契约演进（为什么要 `contract_amendments` 而不是「params 不许变」）
-
-「`params` 逐键相同」这条判据必须**继续抓**「名字/类型/枚举被偷偷改」。但契约
-本身会合法演进 —— 本轮实测的那一次是：表枚举新增 `lit_candidates`（16 → 17 张表），
-于是 `table.count` / `create` / `delete` / `get` / `list` / `search` / `update`
-这七件的 `params` 各变了两处（枚举多一项、`"N 张表之一"` 那句跟着改）。
-
-处理方式**不是**把判据删掉或放宽，而是：基线里那七件的 `params` 更新为当前值
-（重冻），并在 `contract_amendments` 里留一条记着 `reason` 与**逐项编辑清单**的
-记录。这条记录是**内容寻址**的，不是一张「table.* 的 params 随便动」的通行证：
-
-- 判据①拿现值与基线逐键比，差异要变成编辑清单（`value_edits`）；
-- 只有与 `amendments` 里某条的 `tools` / `key` / `edits` **逐项相等**的差异才算
-  有 `reason`；枚举里改**另一个**值（`lit_candidates` → `lit_candidatez`）、
-  或者只动那句「N 张表之一」不带枚举，编辑清单都对不上 ⇒ 照样红。
-  没记 `reason` 的差异更是一律红。
-
-## 为什么负控是这几条
-
-没有负控的门就是橡皮图章。每条负控各自打在**同一条判据函数**上（不是另写一套）：
-
-- 改一个参数名 / 删一个 `returns` 键 ⇒ ① 必须红
-  （`test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red`）；
-- 把 `table.create` 的枚举偷偷改一个值、或只动那句「N 张表之一」 —— 基线里有
-  `reason` 但编辑清单对不上 ⇒ ① 必须红
-  （`test_negative_control_a_silent_table_enum_edit_goes_red`）；
-- 把 cohort 里某条说明塞回 200 字论述 / 整批退回压缩前 ⇒ ② 必须红
-  （`test_negative_control_putting_a_long_essay_back_goes_red`）；
-- 从基线里删掉 `lit.admit` 那一行（模拟「新工具不登记」）⇒ ③ 必须红
-  （`test_negative_control_an_unregistered_new_tool_goes_red`）；
-- 删掉一条 needle ⇒ ④ 必须红
-  （`test_negative_control_deleting_a_needle_goes_red`）。
-
-还有几条「反负控」：真没改的契约不许被误判成改动；压缩后的现值必须过 ②；
-基线 `reason` 里**真的记过**的那一次演进必须被放行（否则 `amendments` 是死代码，
-而「记了 reason 就放行」这句话没人验过 —— 这一条单独成判据：
-`test_the_recorded_amendments_are_the_only_thing_they_excuse`）；原样的 needle
-一份不许少。判据与业主口径 ①–⑥ 的对应：
-
-| 业主口径 | 本文件里的判据 |
-|---|---|
-| ① cohort 比例 ≤75%（正控） | `test_cohort_descriptions_shrank_by_at_least_a_quarter` |
-| ② 塞回 200 字论述（负控） | `test_negative_control_putting_a_long_essay_back_goes_red` |
-| ③ 新 8 件已登记（正控） | `test_every_new_tool_is_registered` |
-| ④ 删掉 `lit.admit` 那一行（负控） | `test_negative_control_an_unregistered_new_tool_goes_red` |
-| ⑤ 偷改表枚举一个值（负控） | `test_negative_control_a_silent_table_enum_edit_goes_red` |
-| ⑥ 删一条断言字面量（负控） | `test_negative_control_deleting_a_needle_goes_red` |
-
-## 口径上的两个刻意选择（写在代码里，别猜）
-
-- **needle 的收集口径**是「`assert X in Y` 且 Y 是声明面」，不是「任何测试字符串」：
-  `assert "sha256" in res.data` 那种断言与说明的措辞无关（它断言的是返回数据里有
-  这个键），把它算成 needle 只会逼着人把说明写成一份返回键清单。
-- **`table.schema` 的「N 张表」与 `conductor.closing` 的八格点名**不是字面量形态，
-  它们由另外几条既有判据守着（`test_tool_summary_readings.py` /
-  `test_conductor_tools.py::test_the_closing_tool_advertises_every_gate_cell`）。
-  本文件不重复它们，只在下面 `test_the_two_semantic_pins_hold` 里把**与措辞直接
-  相关**的那两条（`verify.check_formal` 的「真跑」、`search.download` 的失败类别
-  集合）保留下来，因为它们要证明的正是「压说明不许把关键约束压掉」。
+"""判据：工具说明压到「一两句」，而声明契约一个字都没动。
+十个角色的 system prompt 里，工具声明是最大的一块静态文本（实测 G 的工具面 4 237 字符 / 提示词 37 093 字符，而 function-calling 的声明 JSON 是 26 117 字符 = 70.4%）。那一批只压 `summary` 一格
+—— 参数 schema、`returns`、`side_effect`、`roles` 都是契约，一个字没动；`summary` 从「一段长文」压到「一两句」，保留做什么 / 什么时候用 / 关键约束，删掉为什么这么设计、历史沿革、长例子与重复
+`returns` 的返回键清单。
+判据守的是「压缩那一批的说明不得回涨」：86 件的名单冻结在基线 `compression_cohort`，比例只在 cohort 上算（现总量 ≤ 基线 75%）。2026-10-20 新增的 8 件（`lit.stage_add` / `lit.stage_list` /
+`lit.stage_withdraw` / `lit.stage_reject` / `lit.overlap_check` / `lit.admit` / `lit.admit_all` / `conductor.escalate`）没被压过，
+算进分子分母等于要求新工具自带压缩配额（全库口径 84.1% 会红）。这口径不是放宽：分母 `baseline_summary_chars` 必须逐件等于 `summary_lens_before` 之和，少算一件 `cohort_ratio` 直接抛 `ValueError`。
+四条判据各自只证明一件事：① `test_declaration_contracts_are_unchanged` 与 `tests/fixtures/tool_declaration_baseline.json` 里压缩前那份逐键比（`params` / `returns` /
+`side_effect` / `roles` 等与工具集合都必须相同；差异只在 `contract_amendments` 有 `reason` 时放行）；② `test_cohort_descriptions_shrank_by_at_least_a_quarter` 看总量
+≤75%；③ `test_every_new_tool_is_registered` 要求不在 cohort 里的每件工具在基线 `declarations` 里有一行且带 `added_after_compression: true`；④
+`test_every_asserted_literal_survives` 要求 `assert X in <声明面>` 的每条 needle 都还在（不可字面量化的两条由 `test_tool_summary_readings.py` 等守着）。
+契约会合法演进：本轮枚举新增 `lit_candidates`（16 → 17 张表），`table.count` / `create` / `delete` / `get` / `list` / `search` / `update` 七件的 `params` 各变两处，
+处置是把基线重冻并留 `reason` + 逐项编辑清单（内容寻址：差异要变成 `value_edits` 并与某条 `amendments` 的 `tools` / `key` / `edits` 逐项相等，改另一个枚举值或只动「N 张表之一」都对不上）。
+每条负控打在同一条判据函数上：改参数名 / 删 `returns` 键 ⇒ ① 红（`test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red`）；偷改 `table.create` 枚举 ⇒
+① 红（`test_negative_control_a_silent_table_enum_edit_goes_red`）；塞回 200 字论述 ⇒ ② 红（`test_negative_control_putting_a_long_essay_back_goes_red`）；
+删掉 `lit.admit` 那一行 ⇒ ③ 红（`test_negative_control_an_unregistered_new_tool_goes_red`）；删一条 needle ⇒ ④
+红（`test_negative_control_deleting_a_needle_goes_red`）。
 """
 
 from __future__ import annotations
@@ -148,10 +43,10 @@ CONTRACT_KEYS: tuple[str, ...] = (
 )
 
 #: 说明总量最多留下基线的这个比例（业主批准的打法：降 ≥25%）。
-#: 分母 = 压缩批次（`compression_cohort`）压缩前的总量，**不是**全库 —— 理由见 docstring。
+#: 分母 = 压缩批次（`compression_cohort`）压缩前的总量，不是全库 —— 理由见 docstring。
 MAX_RATIO = 0.75
 
-#: 新增名单里**必须**登记的那 8 件（2026-10-20 新增，不在压缩批次里）。
+#: 新增名单里必须登记的那 8 件（2026-10-20 新增，不在压缩批次里）。
 #: 判据只要求「这 8 件都在」；将来再加新工具时只改基线，不必改这里。
 EXPECTED_NEW_TOOLS: frozenset[str] = frozenset({
     "lit.stage_add", "lit.stage_list", "lit.stage_withdraw", "lit.stage_reject",
@@ -160,7 +55,7 @@ EXPECTED_NEW_TOOLS: frozenset[str] = frozenset({
 
 #: needle 的收集口径：断言右操作数（或整条 assert 源码）里出现这些词 ⇒ 它断言的是
 #: 「声明面」的文字。刻意不写成「任何测试字符串」—— 理由见文件 docstring。
-#: `line` / `面` 也在里面：`assert "sha256" in detail_line` 这种读的是**这一行的读数**，
+#: `line` / `面` 也在里面：`assert "sha256" in detail_line` 这种读的是这一行的读数，
 #: 与 `text` / `desc` 是同一族（读数面）。
 SURFACE_HINTS: tuple[str, ...] = (
     "summary", "prompt", "text", "desc", "tools_lines", "spec", "line", "面",
@@ -222,7 +117,7 @@ def summaries_of(current: dict[str, dict]) -> dict[str, str]:
 # ---------------------------------------------------------------- 契约差异：结构化编辑
 #
 # 契约判据与基线里的 `contract_amendments` 共用同一套编辑词汇：这样「记了 reason」
-# 不是一句嘴上的豁免，而是一份**必须逐项对上**的编辑清单（内容寻址）。
+# 不是一句嘴上的豁免，而是一份必须逐项对上的编辑清单（内容寻址）。
 
 
 def _minus(items: list, other: list) -> list:
@@ -238,7 +133,7 @@ def _minus(items: list, other: list) -> list:
 
 
 def value_edits(before: object, after: object, path: str = "") -> list[dict]:
-    """两份 JSON 值之间的**结构化**差异（词汇见 `EDIT_OPS`；空列表 = 完全相同）。
+    """两份 JSON 值之间的结构化差异（词汇见 `EDIT_OPS`；空列表 = 完全相同）。
 
     粒度刻意选在「叶子」上：字典逐键递归、等长列表逐位比、不等长列表按多重集
     增删、标量给 `from`/`to`。表枚举那种「列表里多一项」记成 `append_item`，
@@ -288,7 +183,7 @@ def _resolve(root: object, path: str) -> object:
 def apply_edits(value: object, edits: list[dict], reverse: bool = False) -> object:
     """把编辑清单应用到一个值上（`reverse=True` 则逐项退回）。
 
-    存在的理由：正控要证明「基线里记过的那一次演进**真的**被放行」—— 只有能
+    存在的理由：正控要证明「基线里记过的那一次演进真的被放行」—— 只有能
     把现值退回改动前，才能拿出那份差异去撞判据。退不回去的编辑清单 = 记的账
     与盘上的东西对不上，必须报错而不是悄悄跳过。
     """
@@ -298,7 +193,7 @@ def apply_edits(value: object, edits: list[dict], reverse: bool = False) -> obje
         if op not in EDIT_OPS:  # pragma: no cover - 词表外的 op 是基线写坏了
             raise AssertionError(f"基线 contract_amendments 里出现了词表外的编辑 {op!r}")
         if op in ("append_item", "remove_item", "replace_item"):
-            # 列表类编辑的 path 指的是**列表本身**（不是「列表/键」）
+            # 列表类编辑的 path 指的是列表本身（不是「列表/键」）
             target = _resolve(out, str(edit["path"]))
             if op == "append_item":
                 target.remove(edit["item"]) if reverse else target.append(copy.deepcopy(edit["item"]))
@@ -329,7 +224,7 @@ def apply_contract_edits(row: dict, key: str, edits: list[dict],
                          reverse: bool = False) -> object:
     """按记账把「一行声明里的那一格」推进/退回。
 
-    路径以**整行**为根（`params` / `returns` / … 是路径的第一段）——与
+    路径以整行为根（`params` / `returns` / … 是路径的第一段）——与
     `contract_diffs` 里 `value_edits(..., path=key)` 的口径完全同一套，否则记的账
     与撞判据用的差异会长得不一样。
     """
@@ -359,7 +254,7 @@ def canonical(edits: list[dict]) -> tuple[str, ...]:
 
 def amendment_for(amendments: Sequence[dict], name: str, key: str,
                   edits: list[dict]) -> dict | None:
-    """找一条**逐项对上**的已记账演进；没有就返回 None（= 没记 `reason`）。"""
+    """找一条逐项对上的已记账演进；没有就返回 None（= 没记 `reason`）。"""
     want = canonical(edits)
     for amend in amendments or ():
         if amend.get("key") != key:
@@ -532,8 +427,8 @@ def missing_needles(needles: dict[str, list[str]], summaries: dict[str, str]) ->
 def assert_needles_of(path: Path) -> list[str]:
     """从一份测试文件里抽「`assert X in <声明面>`」形态的字面量 X。
 
-    ⚠️ 不用 `ast.get_source_segment`：它每次都把整份源码重新切一遍，413 个测试文件
-    逐个 assert 调一次要两分钟。这里自己算行首**字节**偏移（`col_offset` 是 UTF-8
+     不用 `ast.get_source_segment`：它每次都把整份源码重新切一遍，413 个测试文件
+    逐个 assert 调一次要两分钟。这里自己算行首字节偏移（`col_offset` 是 UTF-8
     字节偏移），一次拿全。
     """
     data = path.read_bytes()
@@ -590,7 +485,7 @@ def collected_needles(summaries: dict[str, str]) -> dict[str, list[str]]:
 
 # ---------------------------------------------------------------- 语义钉子（两条）
 #
-# 这两条断言不是字面量形态（比的是**集合**与**单词**），而它们要证明的正是
+# 这两条断言不是字面量形态（比的是集合与单词），而它们要证明的正是
 # 「压说明不许把关键约束压掉」，所以留在这里；各自对应的既有判据在 docstring 里。
 
 
@@ -643,7 +538,7 @@ def test_declaration_contracts_are_unchanged(current: dict[str, dict], frozen: d
 
 def test_the_recorded_amendments_are_the_only_thing_they_excuse(
         current: dict[str, dict], frozen: dict) -> None:
-    """正控：基线里记过账的那一次演进**真的**被放行，且只放行它自己那一次。
+    """正控：基线里记过账的那一次演进真的被放行，且只放行它自己那一次。
 
     不做这条，"记了 reason 就放行"这句话没有任何人验过 —— 而一条从不生效的
     豁免机制与一段死代码在读数上分不开。
@@ -793,7 +688,7 @@ def test_the_two_semantic_pins_hold(current: dict[str, dict]) -> None:
 
 def test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red(
         current: dict[str, dict], frozen: dict) -> None:
-    """负控①：改一个**参数名**、删一个 **returns 键** ⇒ ① 必须红。"""
+    """负控①：改一个参数名、删一个 returns 键 ⇒ ① 必须红。"""
     amendments = frozen.get("contract_amendments") or ()
 
     renamed = {name: dict(row) for name, row in current.items()}
@@ -821,7 +716,7 @@ def test_negative_control_a_silent_table_enum_edit_goes_red(
 
     这是「`params` 不许变」这条判据有没有被放宽的试金石：本轮为了「表枚举新增
     `lit_candidates`」重冻了七件 `table.*` 的 `params`，如果那条 amendment 被写成
-    「table.* 的 params 随便动」，下面第一条就会**绿** —— 那才是真正的放宽。
+    「table.* 的 params 随便动」，下面第一条就会绿 —— 那才是真正的放宽。
     """
     amendments = frozen.get("contract_amendments") or ()
 
@@ -877,7 +772,7 @@ def test_negative_control_putting_a_long_essay_back_goes_red(
         f"把 {victim} 的说明塞回 200 字论述（{len(essay)} 字符）而 ② 没红 ⇒ 它没在量回涨"
     )
 
-    # (b2) 只把压得最狠的**那一件**退回压缩前长度（业主口径里的「改回压缩前长度」）
+    # (b2) 只把压得最狠的那一件退回压缩前长度（业主口径里的「改回压缩前长度」）
     worst = max(cohort,
                 key=lambda name: int(frozen["summary_lens_before"][name]) - len(summaries[name]))
     only_one = dict(summaries, **{worst: "x" * int(frozen["summary_lens_before"][worst])})

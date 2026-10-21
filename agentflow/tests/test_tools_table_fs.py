@@ -8,13 +8,13 @@
 
 ## 2026-10-19 晚：样品的表换过一次（`projects/mp2` 的真机读数）
 
-CRUD 的样品原先是 `statements`。现在那两张表（`statements` / `dependencies`）**不由
-通用写口直写**：`store.direct_write_refusal` 会以 `direct_write_refused` 拒绝
+CRUD 的样品原先是 `statements`。现在那两张表（`statements` / `dependencies`）不由
+通用写口直写：`store.direct_write_refusal` 会以 `direct_write_refused` 拒绝
 `table.create` / `table.update`，正路只有 `Secretary.record_statement`（B 交内容、
 秘书落盘）。真机形态见 `projects/mp2/sessions/mp2-7.jsonl` 第 94/97 行。
 
 于是本文件的 CRUD 样品换成 `literature`（同样的 `create→get→update→delete` 语义，
-同样的"未给字段必须保留"），而"删被引用的命题"那一档改用**正路**（秘书）铺数据 ——
+同样的"未给字段必须保留"），而"删被引用的命题"那一档改用正路（秘书）铺数据 ——
 保护的两个意图（部分更新、外键保护）一个字没变。野路被拒本文件也顺带钉一条
 （`test_the_generic_write_tools_refuse_the_two_tables_the_secretary_owns`）。
 """
@@ -43,12 +43,12 @@ def tables(store):
 
 
 def _concept(reg, store, label: str) -> str:
-    """铺一条概念行（`statements` 里 `kind="concept"`）—— 走**正路**：B 交、秘书落。
+    """铺一条概念行（`statements` 里 `kind="concept"`）—— 走正路：B 交、秘书落。
 
     为什么不再用 `table.create`：`statements` 已不由通用写口直写
     （`store.direct_write_refusal`），而那正是本文件要钉的新契约。
 
-    2026-10-21（本批缺陷一）：**不再显式写 `origin="own_result"`** —— 概念行的
+    2026-10-21（本批缺陷一）：不再显式写 `origin="own_result"` —— 概念行的
     `origin` 按来源分档（有出处 ⇒ external_lit；没有 ⇒ 自己定义的新概念，
     `conceptrows.resolve_concept_origin` 推断）。显式写 own_result 必须带
     `self_authored`，而这条夹具造的就是"没有出处的自撰概念"。
@@ -121,7 +121,7 @@ def test_the_generic_write_tools_refuse_the_two_tables_the_secretary_owns(tables
     真机形态（`projects/mp2/sessions/mp2-7.jsonl` 第 97 行）：B 拿不到
     `register_statement`，于是 `table.create(table="statements")` 手写
     `bits={}` + `evidence_kind="heuristic"` —— 秘书那四件活与五元位一件没跑。
-    拒信必须逐字写出该走哪条路（模型据此能改），且**一行都不落**。
+    拒信必须逐字写出该走哪条路（模型据此能改），且一行都不落。
     """
     for table in ("statements", "dependencies"):
         made = tables.call("table.create", table=table,
@@ -138,18 +138,14 @@ def test_the_generic_write_tools_refuse_the_two_tables_the_secretary_owns(tables
 
 
 def test_table_create_autofills_request_id_and_derived_relation_fields(tables):
-    """建行时派生字段（search_requests 的 r-NNNN、relations 的 concept_group_key）必须补齐。
+    """    建行时派生字段（search_requests 的 r-NNNN、relations 的 concept_group_key）必须补齐。
 
-    这一条断言被修正过（`"r-0000"` → `"r-0001"`）：原先它编码的是
-    `table_tools` 自己的"取最小可用号"语义，而那与
-    `interactions.next_prefixed_id`（CLI / C / D / F 都在用）冲突。
+    这一条断言被修正过（`"r-0000"` → `"r-0001"`）：原先它编码的是`table_tools` 自己的"取最小可用号"语义，而那与`interactions.next_prefixed_id`（CLI / C
+    / D / F 都在用）冲突。
 
-    改它是修正一条编码了错误行为的断言，不是放宽断言掩盖失败：
-    最小可用号会复用已删行的号，而 `literature.source_request_ids` 与
-    `research_questions.waiting_request_ids` 都长期引用 `r-NNNN` —— 号一旦被复用，
-    溯源会静默指向另一条请求（静默错误指向，比崩溃危险）。
-    `interactions.next_prefixed_id` 的 docstring 自己写着"删除中间行不会导致撞号"。
-    现在取号只有一份实现，空表得 `r-0001`（max+1）。
+    改它是修正一条编码了错误行为的断言，不是放宽断言掩盖失败：最小可用号会复用已删行的号，而 `literature.source_request_ids`
+    与`research_questions.waiting_request_ids` 都长期引用 `r-NNNN` —— 号一旦被复用，溯源会静默指向另一条请求（静默错误指向，
+    比崩溃危险）。`interactions.next_prefixed_id` 的 docstring 自己写着"删除中间行不会导致撞号"。现在取号只有一份实现，空表得 `r-0001`（max+1）。
     """
     req = tables.call("table.create", table="search_requests", row={"timestamp": "2026-01-01T00:00:00+00:00", "topic": "群", "mode": "broad"})
     assert req.ok and req.data == f"r-{S.format_id(1)}", req.error
@@ -182,7 +178,7 @@ def test_delete_concept_referenced_by_relation_names_the_referrer(tables, store)
     概念行并表之后住在 `statements` 里（`kind="concept"`）—— 名字与这条判据的
     保护意图都不变（静默删掉被引用的行会让 verify 报 `dangling_*`，而那时
     "原来是谁引用的"已经查不出来了），变的只是行现在落在哪张表。
-    概念行**走正路**铺（B 交内容、秘书落盘）：`table.create("statements")` 已受控拒绝。
+    概念行走正路铺（B 交内容、秘书落盘）：`table.create("statements")` 已受控拒绝。
     """
     _concept(tables, store, "群")
     _concept(tables, store, "阿贝尔群")

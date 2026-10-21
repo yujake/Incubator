@@ -1,29 +1,17 @@
 # -*- coding: utf-8 -*-
 """`runflow.run_topic` 的快照判据（`draft/36` 的 T-7 第 ① 条：拆之前先钉住行为）。
-
 ## 为什么 T-7 的尺子与 T-5 不一样
-
-`verify_all` 是纯函数（同一批输入 ⇒ 同一份报告），所以 T-5 的尺子比"报告逐字相同"就够了。
-`run_topic` 不一样：它会调模型、写六个产物、往四张表里落行。所以这条尺子要钉住
-"一次运行的全部可观察后果"：
-
+`verify_all` 是纯函数（同一批输入 ⇒ 同一份报告），所以 T-5 的尺子比"报告逐字相同"就够了。`run_topic` 不一样：它会调模型、写六个产物、往四张表里落行。所以这条尺子要钉住"一次运行的全部可观察后果"：
 1. 返回值（`exit_code` / `reason` / `artifacts` / `spent_usd_this_run` / `not_wired`…）；
 2. `out_dir` 下六件产物的内容（逐字节；时间戳用固定值 `now=TS`，所以不必遮）；
 3. 这一次运行在库里落的行（`tasks` / `usage_ledger`）；
 4. 公开签名（拆成若干 `_phase_*` 之后，`run_topic` 的形参一个都不许变）。
-
 ## 两次运行，两种路径（覆盖"跑模型"与"没查成"两支）
-
 - `ok`：注入了确定性的检索 / 取全文 / 抽取 / 传输层 ⇒ 走完"检索 → 作答 → 回验 → 落产物"；
 - `no-key`：`spec` 里没有 key ⇒ 退出码 2 + `retrieval_status=not_configured`（三态那一支）。
-
 ## 重新生成
-
-```powershell
-cd D:\\Incubator\\agentflow
-$env:PYTHONUTF8='1'; python -B tests/test_runflow_snapshot.py --write
-```
-生成之后先看 diff：差在哪、为什么。这条命令只该在"行为确实变了"时用。
+```powershell cd D:\\Incubator\\agentflow$env:PYTHONUTF8='1'; python -B tests/test_runflow_snapshot.py --write ```生成
+之后先看 diff：差在哪、为什么。这条命令只该在"行为确实变了"时用。
 """
 from __future__ import annotations
 

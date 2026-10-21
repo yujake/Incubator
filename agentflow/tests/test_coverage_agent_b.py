@@ -208,17 +208,14 @@ def test_resolve_structural_duplicate_rejects_when_name_recheck_fails(b: AgentB,
 def test_resolve_structural_duplicate_rejects_tombstone_and_bad_shape(b: AgentB, store: Store):
     """负控（三个早退分支各一条）：墓碑 / 数量不对 / 概念不存在。
 
-    三态纪律的近亲：这三种原因的 `reason` 必须互不相同，否则人拿到
-    "拒绝"以后不知道该去查什么。合成一条"非空即可"的断言会丢掉这个区分。
+    三态纪律的近亲：这三种原因的 `reason` 必须互不相同，否则人拿到"拒绝"以后不知道该去查什么；合成一条
+    "非空即可"的断言会丢掉这个区分。
 
-    墓碑那一条的输入变了（判据本身没变，一个字都没放宽）：并表之后新标准里
-    墓碑是 `status="superseded"`，没有 `merged_into` 这一列，而
-    `view(shape="legacy")` 把 `merged_into` 一律投影成 `None` ⇒ 从 store 里造不出
-    "投影中有墓碑"的行。`decide_structural_duplicate` 本来就收 `concepts=` 入参
-    （`resolve_structural_duplicate` 也是把行喂进去的），所以这里显式喂两行、
-    其中一行带老字段名的墓碑 —— 于是"候选里有一方是墓碑 ⇒ 拒绝且理由点名墓碑"
-    这条判据照旧可判、也会因为实现把这一支删掉而变红。
-    """
+    墓碑那一条的输入变了（判据本身没变，一个字都没放宽）：并表之后新标准里墓碑是 `status="superseded"`、
+    没有 `merged_into` 这一列，而 `view(shape="legacy")` 把 `merged_into` 一律投影成 `None` ⇒ 从 store 里
+    造不出"投影中有墓碑"的行。`decide_structural_duplicate` 本来就收 `concepts=` 入参
+    （`resolve_structural_duplicate` 也是把行喂进去的），所以这里显式喂两行、其中一行带老字段名的墓碑
+    —— 于是"候选里有一方是墓碑 ⇒ 拒绝且理由点名墓碑"这条判据照旧可判、也会因为实现把这一支删掉而变红。"""
     _two_concepts_same_name(store)
     marked = [dict(r) for r in CR.view(store, shape="legacy")["rows"]]
     for r in marked:

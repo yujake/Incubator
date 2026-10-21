@@ -1,41 +1,22 @@
 # -*- coding: utf-8 -*-
 """`documents.claims[].citations` 的 `stmt:<命题号>` 前缀（`draft/68` 题 1，裁定 A）。
-
 ## 这一组守什么
-
-改前（实测）：`closing` 的污染面只覆盖命题之间的 `derived_from`；正文断言的
-`citations` 只认 `lit:` / `exp:` / `rel:`，没有引用命题的形式 ⇒
-"哪几条正文断言压在这条命题上"判不了（那时它是一句写进读数的边界文字）。
-
-2026-10-07 所有者裁定 `draft/68` 题 1 选 A，本次改动由所有者授权、主控代改：
-`stmt:<命题号>` 成了一种合法写法，于是那句话从"判不了"变成一条真读数。
-
+改前（实测）：`closing` 的污染面只覆盖命题之间的 `derived_from`；正文断言的`citations` 只认 `lit:` / `exp:` / `rel:`，没有引用命题的形式 ⇒"哪几条正文断言压在这条命题上"判不了（那时它是一句写进读数的边界文字）。
+2026-10-07 所有者裁定 `draft/68` 题 1 选 A，本次改动由所有者授权、主控代改：`stmt:<命题号>` 成了一种合法写法，于是那句话从"判不了"变成一条真读数。
 ## 三态（本文件的核心判据结构）
-
 "合法 / 不存在 / 没查到"三态各有落点，一条都不许折平：
-
-```text
-合法      前缀认得（`schema.CITATION_PREFIXES`）+ 目标在 `statements` 里
-不存在    目标不在账本里 ⇒ 悬空引用：写入期与审计期各自报 error，不许静默放过
-没查到    台账读不到 ⇒ `state="unreadable"`（不是"没有断言压着"）
-```
-
+```text合法      前缀认得（`schema.CITATION_PREFIXES`）+ 目标在 `statements` 里不存在    目标不在账本里 ⇒ 悬空引用：写入期与审计期各自报 error，不许静默放过没查到    台账读不到 ⇒ `state="unreadable"`（不是"没有断言压着"）```
 ## 判据的三条纪律
-
 1. 前缀的唯一声明面是 `schema.CITATION_PREFIXES`，别处一律从它派生：
-   `verify.CITATION_KINDS` 是算出来的，`doc_tools._CITATION_TABLES` 也是。
-   ## 这一条口径的升级（题 18 选 A，2026-10-07 所有者裁定）
-
-   改前 `verify` 侧那一份是逐字重抄的第二份字面量，于是这条判据只能把两边钉成
-   "集合相等" —— 而"集合相等"对"两处各抄一份、恰好抄得一样"是恒真的：把 `stmt`
-   从两处同时删掉，判据照样绿。升级后它问的是"只有一处来源"：`verify` 的源码里
-   除了逐档分支那一侧的实现声明（`_BRANCH_KINDS`），不许再出现任何
-   "抄了一整份前缀"的字面量容器；而 `CITATION_KINDS` 的取值必须真的引用声明面。
-   判据只加不松：原来那条集合相等仍然在里面（现在是等式，连次序都钉住）。
+`verify.CITATION_KINDS` 是算出来的，`doc_tools._CITATION_TABLES` 也是。
+## 这一条口径的升级（题 18 选 A，2026-10-07 所有者裁定）
+改前 `verify` 侧那一份是逐字重抄的第二份字面量，于是这条判据只能把两边钉成"集合相等" —— 而"集合相等"对"两处各抄一份、恰好抄得一样"是恒真的：把 `stmt`从两处同时删掉，判据照样绿。
+升级后它问的是"只有一处来源"：`verify` 的源码里除了逐档分支那一侧的实现声明（`_BRANCH_KINDS`），不许再出现任何"抄了一整份前缀"的字面量容器；而 `CITATION_KINDS` 的取值必须真的引用声明面。判据只加不松：
+原来那条集合相等仍然在里面（现在是等式，连次序都钉住）。
 2. 负控打在"目标不存在必须拒绝"与"污染面真的能顺着 claim 找到命题"上 ——
-   不是"跑通了"。
+不是"跑通了"。
 3. 反真空：新增的读数不许恒为空（把 `stmt:` 引用从夹具里去掉之后，
-   同一格必须变成 0，而"扫到多少条断言"那一格不许跟着变成 0）。
+同一格必须变成 0，而"扫到多少条断言"那一格不许跟着变成 0）。
 """
 from __future__ import annotations
 
@@ -208,21 +189,16 @@ def _single_source_problems(tree: ast.AST) -> list[str]:
 
 
 def test_the_citation_prefix_registry_is_the_single_source():
-    """前缀声明面：`schema.CITATION_PREFIXES` 是唯一真身，别处一律从它派生。
+    """    前缀声明面：`schema.CITATION_PREFIXES` 是唯一真身，别处一律从它派生。
 
-    改前是几处各写一份（`verify.CITATION_KINDS` 一张元组、`doc_tools._CITATION_TABLES`
-    一张 dict、`gates.gate_g2` 内联的四个前缀），于是 `stmt:` 在 `verify`/`doc_tools`
-    侧已经被认（`R-03` 那次代改），而 G2 仍报"不在可解析的种类里"、`closing` 仍说
-    "判不了" —— 同一个字符串四个结论，没有任何读数会响。
+    改前是几处各写一份（`verify.CITATION_KINDS` 一张元组、`doc_tools._CITATION_TABLES`一张 dict、`gates.gate_g2` 内联的四个前缀），于是 `stmt:` 在
+    `verify`/`doc_tools`侧已经被认（`R-03` 那次代改），而 G2 仍报"不在可解析的种类里"、`closing` 仍说"判不了" —— 同一个字符串四个结论，没有任何读数会响。
 
     ## 口径（题 18 选 A 之后）：不是"两边相等"，是"只有一处来源"
 
-    只断言集合相等，对"两处各抄一份、恰好抄得一样"是恒真的。现在钉三件事：
-    `verify.CITATION_KINDS` 与声明面逐字相等（含次序）、它的取值真的引用声明面、
-    以及 `verify.py` 源码里除了逐档分支那一侧的 `_BRANCH_KINDS` 再无第二份清单。
-
-    反真空：这张表必须真的指向 `TABLES` 里存在的表（否则"一致"可以靠两边都错来达成），
-    且 `stmt` 那一格必须在（它是 `draft/68` 题 1 的落点）。
+    只断言集合相等，对"两处各抄一份、恰好抄得一样"是恒真的。现在钉三件事：`verify.CITATION_KINDS` 与声明面逐字相等（含次序）、它的取值真的引用声明面、以及
+    `verify.py` 源码里除了逐档分支那一侧的 `_BRANCH_KINDS` 再无第二份清单。反真空：这张表必须真的指向 `TABLES` 里存在的表（否则"一致"可以靠两边都错来达成），且
+    `stmt` 那一格必须在（它是 `draft/68` 题 1 的落点）。
     """
     assert S.CITATION_PREFIXES["stmt"] == "statements", S.CITATION_PREFIXES
     assert len(S.CITATION_PREFIXES) >= 4, S.CITATION_PREFIXES

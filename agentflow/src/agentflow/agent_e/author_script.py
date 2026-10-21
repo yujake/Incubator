@@ -1,35 +1,21 @@
 """角色 E 的动作 `author_script`（S-10(a)）：把一份判据变成落进工作区的核验脚本。
-
 ## 它补的是哪一跳（`draft/44` S-10）
-
-F 的 `counterexample_request` 造出来的 E 子目标带着判据（`script_spec` 的
-`criterion` / `params` / `expected_bound`）却没有 `script_path`
-⇒ `F._deploy_e` 只能回一句"没有给 `script_path` ⇒ 未推进"，那条子目标原地打转，
-直到计划标记 `stalled`。这一跳就是"按判据写脚本"。
-
+F 的 `counterexample_request` 造出来的 E 子目标带着判据（`script_spec` 的`criterion` / `params` / 
+`expected_bound`）却没有 `script_path`⇒ `F._deploy_e` 只能回一句"没有给 `script_path` ⇒ 未推进"，那条子目标
+原地打转，直到计划标记 `stalled`。这一跳就是"按判据写脚本"。
 ## 生成与判读是两件事（FC-16 一个字不改）
-
-E 的判读路径（`run_experiment` / `_derive` / `_parse_conclusion` / `check_formal`）
-必须是确定性的：结论只从脚本输出与检查器来，一次模型都不许问（FC-16）。
-本动作只做生成。写出来的脚本仍然要自己打印 `REPRO_RESULT:` 那一行才作数，
-判它的人还是 `run_experiment` 那一套规则。
-
-`AgentE.__init__` 的 `llm` 形参此前刻意留着不用，理由写在 `_support.py` 的
-模块 docstring 里（"显式说明 E 不用 LLM，而不是让调用方以为没传 llm 所以功能缺了一块"）。
-现在它的用途收窄成一句话：只用来写脚本。
-
+E 的判读路径（`run_experiment` / `_derive` / `_parse_conclusion` / `check_formal`）必须是确定性的：结论
+只从脚本输出与检查器来，一次模型都不许问（FC-16）。本动作只做生成。写出来的脚本仍然要自己打印 `REPRO_RESULT:` 那一行才作数，判它的人还是 
+`run_experiment` 那一套规则。
+`AgentE.__init__` 的 `llm` 形参此前刻意留着不用，理由写在 `_support.py` 的模块 docstring 里（"显式说明 E 不用 LLM，
+而不是让调用方以为没传 llm 所以功能缺了一块"）。现在它的用途收窄成一句话：只用来写脚本。
 ## 五种没写成，各归各的码（不许折成"原地打转"）
-
-| 情形 | `reason` |
-|---|---|
-| 缝没接（`llm is None`） | `no_seam` |
-| 判据不完整（缺 `criterion` 或 `expected_bound`） | `bad_spec` |
-| 模型给的源码不合格（空 / 没有 `REPRO_RESULT` / 过长） | `bad_source` |
-| 写盘失败（含落点越出工作区） | `write_failed` |
-| 缝本身没查成（`judge_*`，原话见 `judge.reason_of`） | `judge_*` |
-
-五档都返回 `ok=False` 且 `script_path=""` —— 调用方据此把码写进 `blocked_reason`：
-`no_seam` 要去接线，`bad_source` 要改脚本，两件事不该在读数上长得一样。
+| 情形 | `reason` ||---|---|| 缝没接（`llm is None`） | `no_seam` || 判据不完整（缺 `criterion` 或 
+`expected_bound`） | `bad_spec` || 模型给的源码不合格（空 / 没有 `REPRO_RESULT` / 过长） | `bad_source`
+|| 写盘失败（含落点越出工作区） | `write_failed` || 缝本身没查成（`judge_*`，原话见 `judge.reason_of`） | 
+`judge_*` |
+五档都返回 `ok=False` 且 `script_path=""` —— 调用方据此把码写进 `blocked_reason`：`no_seam` 要去接线，
+`bad_source` 要改脚本，两件事不该在读数上长得一样。
 """
 from __future__ import annotations
 
@@ -91,16 +77,11 @@ class _AuthorScript:
     def author_script(self, spec: Mapping[str, Any], *, rel_dir: str = "code",
                       name: str = "", sid: str = "") -> dict[str, Any]:
         """按判据写一份核验脚本，落进工作区并返回它的相对路径。
-
-        参数
-        ----
-        spec : `{"criterion", "params", "expected_bound"}`（F 那一侧
-            `counterexample_request` 交下来的那三样）。
-        rel_dir : 落点目录，默认 `code/`。
-        name : 文件名，默认按 `sid` 生成（`attack_<sid>.py`）。
-
-        为什么必须落进工作区（这一条踩过）：`check_formal(source=...)` 把源码放在
-        临时目录里跑，那份文件既不是 `proof_location`、也交不了
+        
+        参数----spec : `{"criterion", "params", "expected_bound"}`（F 那一侧`counterexample_request`
+        交下来的那三样）。 rel_dir : 落点目录，默认 `code/`。 name : 文件名，默认按 `sid` 生成（`attack_<sid>.py`）。
+        
+        为什么必须落进工作区（这一条踩过）：`check_formal(source=...)` 把源码放在临时目录里跑，那份文件既不是 `proof_location`、也交不了
         `run_experiment(script_path=...)`：裁决与落库之间只差"把源码写进工作区"。
         """
         criterion = str(spec.get("criterion") or "").strip()

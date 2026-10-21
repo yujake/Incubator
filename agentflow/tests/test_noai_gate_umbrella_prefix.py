@@ -2,20 +2,15 @@
 
 ## 缺陷（2026-09-26 本轮跑 `release_all --since HEAD` 时实测）
 
-本仓库的 `.git` 在上一级（交付物在 `agentflow/` 子目录里），所以
-`git diff --name-only` 给出的是仓库根相对路径（形如 `agentflow/.noai-paths`）。
-`tools/release_all.py` 把这些原样交给 `scripts/noai_gate.py --check-approvals --paths …`，
-而旧版 `_repo_rel_key` 走 `(repo / "agentflow/.noai-paths")` ⇒ 指向
-`agentflow/agentflow/...`（不存在）⇒ 键落回 `agentflow/.noai-paths`，
-而台账里的键是 `.noai-paths` ⇒ 门报 `unregistered`（"从没登记"）。
+本仓库的 `.git` 在上一级（交付物在 `agentflow/` 子目录里），所以`git diff --name-only` 给出的是仓库根相对路径（形如
+`agentflow/.noai-paths`）。`tools/release_all.py` 把这些原样交给 `scripts/noai_gate.py --check-approvals --paths …`，而旧版
+`_repo_rel_key` 走 `(repo / "agentflow/.noai-paths")` ⇒ 指向`agentflow/agentflow/...`（不存在）⇒ 键落回
+`agentflow/.noai-paths`，而台账里的键是 `.noai-paths` ⇒ 门报 `unregistered`（"从没登记"）。实测对照（同一个文件、同一版内容）：
 
-实测对照（同一个文件、同一版内容）：
+--paths .noai-paths             ⇒ unapproved / insufficient_reviewers（0/2 名 reviewer）
+--paths agentflow/.noai-paths   ⇒ unapproved / unregistered   ← 键错了
 
-    --paths .noai-paths             ⇒ unapproved / insufficient_reviewers（0/2 名 reviewer）
-    --paths agentflow/.noai-paths   ⇒ unapproved / unregistered   ← 键错了
-
-`unregistered` 在报告里读作"这个文件从来没登记过"，而真相是"它登记过、只是没人签字"。
-两种情形的处置完全不同（前者要 `--baseline`，后者要 `--approve`），所以这不是措辞问题。
+`unregistered` 在报告里读作"这个文件从来没登记过"，而真相是"它登记过、只是没人签字"。两种情形的处置完全不同（前者要 `--baseline`，后者要 `--approve`），所以这不是措辞问题。
 
 ## 本文件守什么
 

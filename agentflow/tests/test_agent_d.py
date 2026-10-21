@@ -338,16 +338,13 @@ def test_submit_gap_goes_through_the_i7_gate(tmp_path):
     """缺口提交必须过 I7 在途闸门（CS-1：这条路径曾是唯一不过闸门的角色面）。
 
     在途到上限时，`research.submit_gap` 必须一行都不写，并如实说清是被配额挡下的：
-    `request_id is None`、理由里含"已达上限"，而 `duplicated` 仍是 False ——
-    它不是"查重挡下的"（那件事由上一支负责），两者压进同一个布尔位调用方就再也分不开了。
+    `request_id is None`、理由里含"已达上限"，而 `duplicated` 仍是 False —— 它不是"查重挡下的"
+    （那件事由上一支负责），两者压进同一个布尔位调用方就再也分不开了。
 
-    为什么判据长在工具层：`agent_d/submit_gaps.py` 自己那一层预算只挡得住 D 自己；
-    工具层才是"任何调用方走这条路"的咽喉（`demo.py`、`agent_c/__main__.py` 的转交、
-    手敲的工具调用都从这里过）。
+    为什么判据长在工具层：`agent_d/submit_gaps.py` 自己那一层预算只挡得住 D 自己；工具层才是
+    "任何调用方走这条路"的咽喉（`demo.py`、`agent_c/__main__.py` 的转交、手敲的工具调用都从这里过）。
 
-    反真空一并在内：把在途腾出一格 ⇒ 同一条路必须放行（否则"加了闸门"与"把这条路
-    整个堵死"在读数上同形）。
-    """
+    反真空一并在内：把在途腾出一格 ⇒ 同一条路必须放行（否则"加了闸门"与"把这条路整个堵死"在读数上同形）。"""
     st = _opaque_store(tmp_path / "ws")
     add_question(st, "0000", question="完全不存在的关键词XYZ",
                  related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])

@@ -3,29 +3,19 @@
 
 ## 为什么与 `test_review_chain_hop.py` 分开
 
-那一组证明的是"正路在**工具面**上做得成"（B 交内容、秘书落盘，按角色直接调）；
-这一组证明的是"**循环驱动得动**"：模型说一句 `{"tool": "own.register_statement", …}`，
-框架真的把那一行落了库、把这一步记进 `LoopRun`、并且下游读得到。
-
-两者不是同一件事：工具面能写 ≠ 循环里写得成（循环还要求①形状被判对、
-②工具在该角色的面上、③结果回给模型时没有被观测层截成半句）。
+那一组证明的是"正路在工具面上做得成"（B 交内容、秘书落盘，按角色直接调）；这一组证明的是"循环驱动得动"：模型说一句 `{"tool": "own.register_statement", …}`，框架真的把那一行落了库、
+把这一步记进 `LoopRun`、并且下游读得到。两者不是同一件事：工具面能写 ≠ 循环里写得成（循环还要求①形状被判对、②工具在该角色的面上、③结果回给模型时没有被观测层截成半句）。
 
 ## 2026-10-19 晚：这一组换成真机那条派活路径（`projects/mp2` 的读数）
 
-改前这里剧本写的是 `table.create(table="statements")`，而且用 `run_role` 直接起循环 ——
-两处都绕开了真机：真机的派活是 **S2 口径的「只派活、不点动作」**（`tasks.action=""`），
-走 `LlmBackend.call` 的那条路；而 `table.create` 那条路现在被
-`store.direct_write_refusal` 受控拒绝（`mp2-7.jsonl` 第 97 行就是它）。
-
-所以现在：
-
-- 派活走 `backend.call("B", "", {"task": …})`（空动作 = 真机那条路）；
+改前这里剧本写的是 `table.create(table="statements")`，而且用 `run_role` 直接起循环 ——两处都绕开了真机：真机的派活是 S2 口径的「只派活、不点动作」
+（`tasks.action=""`），走 `LlmBackend.call` 的那条路；而 `table.create` 那条路现在被`store.direct_write_refusal` 受控拒绝（`mp2-7.jsonl`
+第 97 行就是它）。所以现在：派活走 `backend.call("B", "", {"task": …})`（空动作 = 真机那条路）；
 - 剧本喊 `own.register_statement`（这一趟循环里由 `_registry_with_own_action` 注入，
-  见 `agent_loop` 那段注释），handler 走 `AgentB.register_statement` 的**真实现**；
+见 `agent_loop` 那段注释），handler 走 `AgentB.register_statement` 的真实现；
 - 落盘由秘书完成（`created_by="secretary-B"`），`bits` 由动作现算。
 
-判据本身没有放宽：仍然判"循环里那一行真的落库了、下游按号读得到、
-这一步在 `LoopRun` 里读得出来"。
+判据本身没有放宽：仍然判"循环里那一行真的落库了、下游按号读得到、这一步在 `LoopRun` 里读得出来"。
 """
 from __future__ import annotations
 
@@ -42,7 +32,7 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 
 #: `("B", "")` 是真机的形状（只派活、不点动作）；`("B", "run_once")` 给下面那条
-#: 「dangling artifact」的判据用（它要走一次**点名动作**的召唤）。
+#: 「dangling artifact」的判据用（它要走一次点名动作的召唤）。
 LOOPS: dict[tuple[str, str], dict] = {("B", ""): {"max_steps": 4},
                                      ("B", "run_once"): {"max_steps": 4}}
 
@@ -108,7 +98,7 @@ def _world(tmp_path: pathlib.Path):
                                        "## 我卡在哪\n不卡。\n", "refs": []}},
                    ensure_ascii=False),
     ])
-    # 内层后端里放**真实现**：`own.register_statement` 的 handler 走 `self.inner.call`，
+    # 内层后端里放真实现：`own.register_statement` 的 handler 走 `self.inner.call`，
     # 于是闸门一个不少（出处核对 / 页码形状 / 五元位 / 秘书落盘）。
     inner = LocalBackend({"A": ("object", _StubA()),
                           "B": ("object", AgentB(st, extractor=None, extract_text=None))})
@@ -149,7 +139,7 @@ def test_the_loop_can_drive_b_to_register_a_statement(tmp_path):
     assert len(rows) == 1, rows
     assert rows[0]["statement_full"] == _ROW["statement_full"], rows[0]
     assert rows[0]["page_range"]["start"] == 7 and rows[0]["quote_verified"] is True, rows[0]
-    # 落盘那一笔的留痕是**秘书**，不是模型自己写表
+    # 落盘那一笔的留痕是秘书，不是模型自己写表
     assert rows[0]["created_by"] == "secretary-B", rows[0]["created_by"]
     # 而五元位是动作现算的那一份（手写表那条路给的是 `{}`，见 mp2 的读数）
     assert rows[0]["bits"], rows[0]["bits"]
@@ -176,7 +166,7 @@ def test_the_downstream_role_reads_it_after_the_loop_ran(tmp_path):
 def test_the_loop_cannot_reach_the_generic_table_writer(tmp_path):
     """负控（真机 `mp2-7.jsonl` 第 97 行）：循环里喊 `table.create("statements")` ⇒ 被拒。
 
-    它与上面那条正控成对：**同一条循环**、同一个模型、只是这一句喊的是野路
+    它与上面那条正控成对：同一条循环、同一个模型、只是这一句喊的是野路
     ⇒ 一行都不许落，而拒信要能把模型指回正路。没有这一条，正控的绿说明不了
     "野路被封了"。
     """

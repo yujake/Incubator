@@ -1,28 +1,23 @@
 # -*- coding: utf-8 -*-
 """S1e：板项不许吃扇出名额 / 两轴分开 / `dispose` 不碰板项（业主 T22 的"两轴分开"）。
 
-## 为什么这一批是 T1 重跑的硬前置（实测，不是推测）
+`_in_flight_children_of` 旧口径只按 `parent_task_id` + `status ∈ {pending, running}` 数行，而板项行
+（`open_item` 建的行，`kind` 非空）恰好 `status="pending"`，且板的状态机（`_set_item`）只改
+`item_state`、从不改 `status` ⇒ 一条已 ack 的板项永远是在飞的子代理。
 
-`_in_flight_children_of` 旧口径只按 `parent_task_id` + `status ∈ {pending, running}` 数行，
-而板项行（`open_item` 建的行，`kind` 非空）恰好 `status="pending"`，且板的状态机
-（`_set_item`）只改 `item_state`、从不改 `status` ⇒ 一条已 ack 的板项永远是
-"在飞的子代理"。
+实测（`temp/_probe_board_vs_fanout_and_dispose.py` 与 `..._refusal_reason.py`，不是推测）：父名下挂
+20 条"子代理已收工"的 `notice`（零代理）⇒ 该读数 = 20 ⇒ 同一父下派活被拒 `fanout_exceeded`，detail
+逐字「此刻在飞 20 个子代理，达到发起方 M 的同时在飞上限 20」；负控（不挂板项）同一个调用走到执行
+（`not_wired`）⇒ T1 会在累积约 20 次交差之后卡住。
 
-实测（`temp/_probe_board_vs_fanout_and_dispose.py` 与 `..._refusal_reason.py`）：
-父名下挂 20 条"子代理已收工"的 `notice`（零代理）⇒ 该读数 = 20 ⇒ 同一父下派活被拒
-`fanout_exceeded`，detail 逐字「此刻在飞 20 个子代理，达到发起方 M 的同时在飞上限 20」；
-负控（不挂板项）同一个调用走到执行（`not_wired`）。⇒ T1 会在累积约 20 次交差之后卡住。
-
-## 本文件钉住四件事
-
+本文件钉住四件事：
 1. 正控：板项不再占名额 —— 20 条 `notice` 之下，同一个派活不被 `fanout_exceeded` 拒；
 2. 负控（反真空）：真子代理行照旧占名额（这一批不许把分子改成"永远 0"）；
-3. 边界（两轴分开）：`kind="delegation"` 的派活项不算在飞代理，但
-   `open_items_of(父)`（工作项轴，纯读数）数得到它；
+3. 边界（两轴分开）：`kind="delegation"` 的派活项不算在飞代理，但 `open_items_of(父)`
+   （工作项轴，纯读数）数得到它；
 4. `dispose` 不碰板项：dispose 之后板项行逐字不变 + 读数里有 `board_items_left`。
 
-夹具都用真 `Conductor` + 真盘（`tmp_path`），不手写 dict 落盘。
-"""
+夹具都用真 `Conductor` + 真盘（`tmp_path`），不手写 dict 落盘。"""
 from __future__ import annotations
 
 import json

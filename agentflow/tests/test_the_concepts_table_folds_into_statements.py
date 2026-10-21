@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
 """S1r-fold：`concepts` → `statements` 的折叠规则（纯函数，先于"真跑迁移"落地）。
 
-业主 2026-10-09：「concept表真并进statements。由于你用"类型"标记了concept的身份，
-proof里就证这个概念为什么是良定义的」/「并表了就并干净」/「由于秘书会查重，D10的合并概念
-不会发生」/「抽不到定义的概念就让A去网上搜，写入时定义内容留空，等A返回后写入；
-如果概念很基础，是数学基本概念，允许B自己写定义」。
+业主 2026-10-09：「concept表真并进statements。由于你用"类型"标记了concept的身份，proof里就证这个概念为什么是良定义的」/「并表了就并干净」/「由于秘书会查重，D10的合并概念不会发生」
+/「抽不到定义的概念就让A去网上搜，写入时定义内容留空，等A返回后写入；如果概念很基础，是数学基本概念，允许B自己写定义」。
 
 判据（正控 2 / 负控 2 / 反真空 3）：
 
 - 正控①：一条概念折成一条 `statements`（`kind="concept"`、`label=name`、
-  `statement_full=definition`、`aliases` 原样带过来），新号由分配器给（不是沿用旧号）；
+`statement_full=definition`、`aliases` 原样带过来），新号由分配器给（不是沿用旧号）；
 - 正控②：`relations.concept_ids` 里的旧号被换成新号，改号逐条落账；
 - 负控①：定义空着的行 ⇒ 落 `pending_search` 待补标记 + 进 `notes`（不许编定义），
-  且 `quote_reason` 非空（`Statement.validate` 的硬要求）；
+且 `quote_reason` 非空（`Statement.validate` 的硬要求）；
 - 负控②：迁移行不许出现"这是它的证明"那种字样（`proof_text` 只能是
-  `concept:primitive` 这一档；编一段良定义性证明 = 造假）；
+`concept:primitive` 这一档；编一段良定义性证明 = 造假）；
 - 反真空①：`merged_into` 非空的行走 `notes` 点名（并表后没有承载点，不静默丢）；
 - 反真空②：关系表里挂着"概念表里没有的号" ⇒ 进 `missing` 点名，且原样留着
-  （丢掉会让"挂着一个不存在的号"这件事消失）；
+（丢掉会让"挂着一个不存在的号"这件事消失）；
 - 反真空③：折叠出来的每一行都要过 `Statement.validate()`（形状受控，不是"先折了再说"）。
 """
 from __future__ import annotations

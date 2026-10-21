@@ -4,23 +4,18 @@
 
 做了（policy 层，可以单独判）：
 1. 估值器（`tokenestimate`）：搬 DSH `dsh-token-meter/lib/types/estimate.js` 的
-   三支（`text/reasoning` 走密度、`tool-call` 拆名字与参数、`system` 不含逐块开销）
-   与三个常量（`CHARS_PER_TOKEN`/`BLOCK_OVERHEAD`/`ROLE_OVERHEAD`，名字原样保留）；
-   "每 token 几个字符"是配置项（12-H=甲），读数里写明用的哪一档。
+三支（`text/reasoning` 走密度、`tool-call` 拆名字与参数、`system` 不含逐块开销）与三个常量（`CHARS_PER_TOKEN`/`BLOCK_OVERHEAD`/`ROLE_OVERHEAD`，
+名字原样保留）；"每 token 几个字符"是配置项（12-H=甲），读数里写明用的哪一档。
 2. 容量标定与两道门（`compact_by_pressure`）：`thresholdTokens = floor(cw*0.8)`、
-   `retainTokens = floor(cw*0.16)`；`total < threshold ⇒ 一次也不压`；
-   `retain_tokens = 0 ⇒ 只留最后一个节点`。
+`retainTokens = floor(cw*0.16)`；`total < threshold ⇒ 一次也不压`；`retain_tokens = 0 ⇒ 只留最后一个节点`。
 3. 三条不变量：节点 0 永不遮蔽 / 配对平衡回退（切点不许落在调用与结果之间）/
-   摘要必须更小（判据是 `>=`，等于也拒）。
-4. 三态：容量读不到 ⇒ 自动路径"警告一次 + 带完整历史继续"，手动路径（`strict=True`）抛。
-
-没做（下一批）：把这一步接进循环（步边界上调一次 + 事件三件套 + LLM 摘要器 +
-用量记 `note="compaction"`），以及剪枝那个"假开"读数的修法。
+摘要必须更小（判据是 `>=`，等于也拒）。
+4. 三态：容量读不到 ⇒ 自动路径"警告一次 + 带完整历史继续"，手动路径（`strict=True`）抛。没做（下一批）：把这一步接进循环（步边界上调一次 + 事件三件套 + LLM 摘要器 +用量记
+`note="compaction"`），以及剪枝那个"假开"读数的修法。
 
 ## 为什么这一批能单独成立
 
-它判的是口径与不变量（纯函数），而接线判的是"循环里真的调了没有"。
-两批分开之后，"口径对不对"与"接上了没有"是两个独立的红。
+它判的是口径与不变量（纯函数），而接线判的是"循环里真的调了没有"。两批分开之后，"口径对不对"与"接上了没有"是两个独立的红。
 """
 
 from __future__ import annotations

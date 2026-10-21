@@ -1,50 +1,22 @@
 # -*- coding: utf-8 -*-
-"""判据：秘书的**稳定头**进 `system`（2026-10-21，事务一）。
+"""判据：秘书的稳定头进 `system`（2026-10-21，事务一）。
 
-## 改前是什么
+改前是什么：`Secretary.judge` 此前调的是 `seam.ask_json(_judge_prompt(kind, context))` ——不带 `system`（`LlmSeam.ask` 的
+`system` 缺省 `""`）。于是那 175 token 的稳定头（抬头 + 这一类自己的问题）与"材料"挤在同一条 user 消息里，而材料每问一次都变。
+真机读数（`2026-10-21` 改前，`--roles secretary --hit-sample secretary`）：连发两趟都是 `hit=0 / miss=175`。改法：稳定头走
+`system=`（`llmseam` 早就有的通道：`LlmSeam.ask(system=…)` →`ModelGateway.complete(system=…)` → `messages[0]` 的 `system` 位），
+材料留在 user。没有新造通道 —— 十个角色的循环走的就是同一个参数。改完之后的实测：`hit` 仍然是 0，而且原因不在"头放在哪一位"：
+改后的读数（`python scripts/warm_prompt_cache.py --roles <十一个> --hit-sample M,C,secretary`）：十一个目标：A…M 的 `hit` 都在
+98.9%–99.6%（前缀里有几万 token）；secretary：pass1 `miss=176 / hit=0`、pass2 `miss=176 / hit=0`（1 秒内连发两趟，逐字节相同）。
+把同一份稳定头放进不同长度的前缀里再连发两次（本机 `2026-10-21` 实测，探针跑完即删）：前缀 176 token（生产形状，就是稳定头本身）：两次都 hit=0，隔 8s / 15s 再发仍是 0；前缀 407
+token（稳定头 + 填充）：第一次 hit=128，第二次 hit=256；前缀 752 token：第一次 hit=384，第二次 hit=512；前缀 1557 token：第一次 hit=640，第二次 hit=1408。
+⇒ 上游对"可缓存前缀"有一个长度下限（实测落在 176 与 407 token 之间），而秘书这一趟的整条提示词只有 176 token ⇒ 它一个可报告的命中都不会有。这条判据能诚实断言的是结构那三件（下面 1–3），"第二次
+hit>0" 在今天的生产形状下做不到，读数里如实是 0 —— 所以本文件不把它写成判据（写了就是假绿：把 `hit` 改成 1 也能过）。要让它命中，得让前缀越过那个下限，那是提示词体量的取舍。判据（三条，每条带负控）：
 
-`Secretary.judge` 此前调的是 `seam.ask_json(_judge_prompt(kind, context))` ——
-**不带 `system`**（`LlmSeam.ask` 的 `system` 缺省 `""`）。于是那 175 token 的稳定头
-（抬头 + 这一类自己的问题）与"材料"挤在同一条 **user** 消息里，而材料每问一次都变。
-真机读数（`2026-10-21` 改前，`--roles secretary --hit-sample secretary`）：
-连发两趟都是 `hit=0 / miss=175`。
-
-## 改法
-
-稳定头走 `system=`（`llmseam` 早就有的通道：`LlmSeam.ask(system=…)` →
-`ModelGateway.complete(system=…)` → `messages[0]` 的 `system` 位），材料留在 user。
-**没有新造通道** —— 十个角色的循环走的就是同一个参数。
-
-## ⚠️ 改完之后的实测：**`hit` 仍然是 0**，而且原因不在"头放在哪一位"
-
-改后的读数（`python scripts/warm_prompt_cache.py --roles <十一个> --hit-sample M,C,secretary`）：
-
-    十一个目标：A…M 的 `hit` 都在 98.9%–99.6%（前缀里有几万 token）；
-    secretary：pass1 `miss=176 / hit=0`、pass2 `miss=176 / hit=0`（1 秒内连发两趟，逐字节相同）。
-
-把同一份稳定头放进**不同长度的前缀**里再连发两次（本机 `2026-10-21` 实测，探针跑完即删）：
-
-    前缀 176 token（生产形状，就是稳定头本身）：两次都 hit=0，隔 8s / 15s 再发仍是 0；
-    前缀 407 token（稳定头 + 填充）：第一次 hit=128，第二次 hit=256；
-    前缀 752 token：第一次 hit=384，第二次 hit=512；
-    前缀 1557 token：第一次 hit=640，第二次 hit=1408。
-
-⇒ **上游对"可缓存前缀"有一个长度下限**（实测落在 176 与 407 token 之间），
-而秘书这一趟的整条提示词只有 176 token ⇒ 它一个可报告的命中都不会有。
-这条判据能诚实断言的是**结构**那三件（下面 1–3），"第二次 hit>0" 在今天的
-生产形状下**做不到**，读数里如实是 0 —— 所以本文件不把它写成判据（写了就是假绿：
-把 `hit` 改成 1 也能过）。要让它命中，得让前缀越过那个下限，那是提示词体量的取舍。
-
-## 判据（三条，每条带负控）
-
-1. **稳定头真的走 `system` 位**：真机读数里 secretary 每一行的 `system_sha256` 非空、
-   等于 `prompt_sha256`（被预热的那段就是发出去的 system），且**两趟同一个值**；
-   `system_chars` 等于今天代码里那一段的长度（读数不许腐烂）。
-   负控：把 `system_sha256` 清空（改前那个形态）⇒ 红。
-2. **稳定头与可变部分分离**（渲染面）：材料变了，`system_sha256` 不变、`prompt_sha256` 变；
-   两条合起来逐字节等于改前那条整提示词（只换了位置、没改一个字）。
-   负控：把稳定头塞回 user（重放改前那一行）⇒ 两次调用的"前缀身份"必然不同 ⇒ 红。
-3. 反真空：稳定头不是空串，且**真的**是"那个类别的问题"（逐字带那一类的词表）。
+1. 稳定头真的走 `system` 位：真机读数里 secretary 每一行的 `system_sha256` 非空、等于 `prompt_sha256`（被预热的那段就是发出去的 system），
+且两趟同一个值；`system_chars` 等于今天代码里那一段的长度（读数不许腐烂）。负控：把 `system_sha256` 清空（改前那个形态）⇒ 红。2. 稳定头与可变部分分离（渲染面）：
+材料变了，`system_sha256` 不变、`prompt_sha256` 变；两条合起来逐字节等于改前那条整提示词（只换了位置、没改一个字）。负控：把稳定头塞回 user（重放改前那一行）⇒ 两次调用的"前缀身份"必然不同 ⇒
+红。3. 反真空：稳定头不是空串，且真的是"那个类别的问题"（逐字带那一类的词表）。
 """
 from __future__ import annotations
 
@@ -63,7 +35,7 @@ _READINGS = _REPO / "tests" / "fixtures" / "prompt_cache_warm.json"
 
 
 class _RecordingSeam:
-    """替身缝：把**两条消息**分别记下来，并按剧本回一份合法结论。
+    """替身缝：把两条消息分别记下来，并按剧本回一份合法结论。
 
     形状与 `LlmSeam.ask_json(prompt, *, system=…, task_id=…, note=…)` 一致 ——
     `Secretary.judge` 只会这么调它（多一个参数、少一个参数都会在这里 TypeError，
@@ -102,7 +74,7 @@ def test_the_stable_head_goes_into_system_and_the_material_stays_in_the_user_mes
         tmp_path: pathlib.Path) -> None:
     """正控（判据 ②）：材料变了 ⇒ `system_sha256` 一个字不变、`prompt_sha256` 变。
 
-    "分离"这件事只有这两条读数能证明：只判"system 非空"时，把**整条**提示词复制一份
+    "分离"这件事只有这两条读数能证明：只判"system 非空"时，把整条提示词复制一份
     进 system 也能过（那等于材料也进了前缀，第二次照样不命中）。
     """
     seam = _RecordingSeam()
@@ -114,15 +86,15 @@ def test_the_stable_head_goes_into_system_and_the_material_stays_in_the_user_mes
 
     head_a, head_b = seam.systems
     user_a, user_b = seam.prompts
-    # ① 稳定头：两次逐字节相同，且**非空**（反真空：不许是"没有 system"）。
+    # ① 稳定头：两次逐字节相同，且非空（反真空：不许是"没有 system"）。
     assert head_a.strip(), "秘书的 system 是空的 ⇒ 稳定头没有进 system 位"
     assert head_a == head_b, (head_a, head_b)
     # ② 可变部分：两次不同（材料真的换了）。
     assert user_a != user_b, "两份不同的材料渲染出了同一条 user 消息 ⇒ 这条判据没测到分离"
-    # ③ 材料**不在** system 里（否则等于没分离）。
+    # ③ 材料不在 system 里（否则等于没分离）。
     for marker in ("k-1", "k-2"):
         assert marker not in head_a, (marker, head_a)
-    # ④ 稳定头**不在** user 里（否则同一条提示词被发了两遍 = 前缀还是被材料绑住）。
+    # ④ 稳定头不在 user 里（否则同一条提示词被发了两遍 = 前缀还是被材料绑住）。
     assert head_a.strip() not in user_a, user_a
     # ⑤ 两条合起来逐字节等于改前那条整提示词（"只换了位置、没改一个字"）。
     assert head_a + user_a == SEC._judge_prompt("duplicate_retry",
@@ -131,7 +103,7 @@ def test_the_stable_head_goes_into_system_and_the_material_stays_in_the_user_mes
 
 
 def test_the_head_is_the_one_of_that_kind_not_a_placeholder() -> None:
-    """反真空：稳定头里逐字带着**这一类自己的词表**（不是一句占位语）。
+    """反真空：稳定头里逐字带着这一类自己的词表（不是一句占位语）。
 
     为什么单列：`judge()` 的校验按类别取词表（`JUDGE_VERDICTS[kind]`），
     而提示词若只写"按规矩回 JSON"，模型给出的结论会被校验层判成词表外 ⇒ 全都不采信。
@@ -166,17 +138,17 @@ def _secretary_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _head_carried_problem(rows: Iterable[Mapping[str, Any]]) -> str:
-    """判据 ①的本体：真机读数里秘书那一档**真的**把稳定头放在 system 位吗（空串 = 合格）。
+    """判据 ①的本体：真机读数里秘书那一档真的把稳定头放在 system 位吗（空串 = 合格）。
 
     四件事，逐条对应一种"看起来做了、其实没做"的形态：
 
     1. 有读数（`pass=1` 与 `pass=2` 各一行 —— 没有就没有"第二次"这件事可谈）；
-    2. `system_sha256` **非空**（空 = 改前那个形态：整条提示词在 user 位）；
+    2. `system_sha256` 非空（空 = 改前那个形态：整条提示词在 user 位）；
     3. `system_sha256 == prompt_sha256`（被预热的那一段就是真正发出去的 system 本身，
        不是另抄一份摘要骗读数）；
-    4. 两趟**同一个** `system_sha256`（同一份稳定头；不同 = 每问一次换一段前缀）。
+    4. 两趟同一个 `system_sha256`（同一份稳定头；不同 = 每问一次换一段前缀）。
 
-    另外钉住"读数不许腐烂"：`system_chars` 必须等于**今天**代码里那段稳定头的长度。
+    另外钉住"读数不许腐烂"：`system_chars` 必须等于今天代码里那段稳定头的长度。
     """
     hr = _secretary_rows(rows)
     passes = {int(r.get("pass") or 1) for r in hr}
@@ -201,10 +173,10 @@ def _head_carried_problem(rows: Iterable[Mapping[str, Any]]) -> str:
 
 
 def test_the_recorded_secretary_calls_carry_the_head_in_system() -> None:
-    """判据 ①（读数面）：真机上秘书那两趟**都是**"稳定头在 system 位"。
+    """判据 ①（读数面）：真机上秘书那两趟都是"稳定头在 system 位"。
 
-    这一条能诚实断言的是**结构**：`system_sha256` 非空、等于 `prompt_sha256`、两趟相同，
-    且长度与今天的代码逐字一致。它**不**断言 `hit>0` —— 为什么见模块 docstring：
+    这一条能诚实断言的是结构：`system_sha256` 非空、等于 `prompt_sha256`、两趟相同，
+    且长度与今天的代码逐字一致。它不断言 `hit>0` —— 为什么见模块 docstring：
     上游对可缓存前缀有长度下限，而秘书整条提示词只有 176 token，实测三趟（0s / 8s / 15s）
     都是 `hit=0`；把 `hit` 写成判据就是假绿（把 0 改成 1 也能过）。
 
@@ -231,8 +203,8 @@ def test_the_recorded_secretary_calls_carry_the_head_in_system() -> None:
 def test_clearing_the_system_digest_makes_the_criterion_red() -> None:
     """负控（① 的牙）：把 `system_sha256` 清空（= 稳定头塞回 user 的改前形态）⇒ 必红。
 
-    为什么这一刀而不是"把 hit 改成 0"：改前的读数**本来就是** `hit=0`，改它证明不了什么；
-    改前与改后**结构上**唯一的分界是"稳定头在不在 system 位"，而它由 `system_sha256`
+    为什么这一刀而不是"把 hit 改成 0"：改前的读数本来就是 `hit=0`，改它证明不了什么；
+    改前与改后结构上唯一的分界是"稳定头在不在 system 位"，而它由 `system_sha256`
     回答。清空它 = 退回改前那个形态。
     """
     if not _READINGS.is_file():
@@ -268,7 +240,7 @@ def test_putting_the_head_back_into_the_user_message_makes_the_criterion_red(
         tmp_path: pathlib.Path) -> None:
     """负控（判据 ② 的反面 ⇒ ① 红）：把稳定头塞回 user ⇒ 两次调用的前缀身份不同。
 
-    怎么造"改前那个形态"：`ask_json(_judge_prompt(kind, ctx))`（**不带** system）。
+    怎么造"改前那个形态"：`ask_json(_judge_prompt(kind, ctx))`（不带 system）。
     那正是 `judge()` 改前的那一行。于是：
     - `system_sha256` 是空 ⇒ 稳定头一个字节都没落在 system 位；
     - 两次的 `prompt_sha256` 不同（材料在第一行就变）⇒ 上游的前缀从第一个字符起就不同,
@@ -280,11 +252,11 @@ def test_putting_the_head_back_into_the_user_message_makes_the_criterion_red(
     sec.judge("duplicate_retry", {"input_key": "k-2", "rows": ["b"]})
 
     class _OldShape(_RecordingSeam):
-        """把稳定头塞回 user 的那种调用 —— **逐字重放改前那一行**：
+        """把稳定头塞回 user 的那种调用 —— 逐字重放改前那一行：
 
             self.seam.ask_json(_judge_prompt(kind, context), task_id=…, note=…)
 
-        注意：这里**不**走今天 `judge()`（它已经改成两条消息了），否则"旧形态"里
+        注意：这里不走今天 `judge()`（它已经改成两条消息了），否则"旧形态"里
         录到的还是新形态的两条消息 —— 负控会空转（第一版就是这么写错的）。
         """
 
@@ -309,7 +281,7 @@ def test_putting_the_head_back_into_the_user_message_makes_the_criterion_red(
     old_ids = _prefix_identity(old)
     # 正控：新形态两次的前缀身份相同（第二次能命中）。
     assert new_ids[0] == new_ids[1], (new_ids, seam.systems)
-    # 负控：旧形态两次的前缀身份**不同** ⇒ 判据 ① 必红（这条断言就是"红"的读数）。
+    # 负控：旧形态两次的前缀身份不同 ⇒ 判据 ① 必红（这条断言就是"红"的读数）。
     assert old_ids[0] != old_ids[1], (
         "把稳定头塞回 user 之后两次的前缀身份仍然相同 ⇒ 这条负控是空转"
         "（材料必须在第一行就不同）")
@@ -318,7 +290,7 @@ def test_putting_the_head_back_into_the_user_message_makes_the_criterion_red(
 
 @pytest.mark.parametrize("kind", sorted(SEC.JUDGE_VERDICTS))
 def test_every_kind_has_a_non_empty_and_stable_head(kind: str) -> None:
-    """反真空（逐类别）：每一类的稳定头都非空，且**与材料无关**（调两次逐字节相同）。"""
+    """反真空（逐类别）：每一类的稳定头都非空，且与材料无关（调两次逐字节相同）。"""
     head = SEC._judge_system(kind)
     assert head.strip(), kind
     assert SEC._judge_system(kind) == head, kind

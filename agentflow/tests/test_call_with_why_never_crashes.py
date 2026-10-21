@@ -1,28 +1,17 @@
 # -*- coding: utf-8 -*-
-"""带 `why` 的调用在 `log_calls=False` 时**不许炸**（缺陷 ⑬，2026-10-18 根因）。
+"""带 `why` 的调用在 `log_calls=False` 时不许炸（缺陷 ⑬，2026-10-18 根因）。
 
 ## 这个缺陷有多贵
 
-`tools/base.py` 的调用日志段原来是：
+`tools/base.py` 的调用日志段原来是：`entry` 只在 `if self.log_calls:` 里赋值，而 `if _why:` 那段没有 log_calls 判断就写 `entry["why"]` —— 生产默认 `log_calls=False` ⇒ `UnboundLocalError: cannot access local variable 'entry'`。
 
-```python
-if self.log_calls:
-    entry = {"tool": …, "ok": res.ok, …}      # ← entry 只在这里赋值
-if _why:                                       # ← 没有 log_calls 判断
-    entry["why"] = str(_why)[:400]             # ← 生产默认 log_calls=False ⇒ UnboundLocalError
-    self._call_log.append(entry)
-```
-
-于是**生产里任何带 `why` 的工具调用都会抛** `UnboundLocalError: cannot access local variable 'entry'`。
-真机三处报错全是它：
+于是生产里任何带 `why` 的工具调用都会抛 `UnboundLocalError`。真机三处报错全是它：
 
 * `table.create`（T2 的 D 写 `research_questions`，idx 5/6/8 三次失败、idx 9 换别名成功）；
 * `review.verify_fixes`（T1 的 H 复审那一趟）；
 * M 在验收表里把它误记成「`search.download` 对内联 URL 一律 `UnboundLocalError`」。
 
-它**间歇**是因为只有"调用方传了 `why`"才触发 —— 所以探针不传 `why` 时全绿，
-真机一传就炸。这条判据同时钉住两个方向：`log_calls` 开/关 × 传/不传 `why`。
-"""
+它间歇是因为只有"调用方传了 `why`"才触发 —— 所以探针不传 `why` 时全绿，真机一传就炸。这条判据同时钉住两个方向：`log_calls` 开/关 × 传/不传 `why`。"""
 from __future__ import annotations
 
 import pathlib
@@ -49,7 +38,7 @@ def _row(q: str) -> dict:
 
 @pytest.mark.parametrize("log_calls", [False, True])
 def test_a_call_with_why_never_raises(log_calls):
-    """**正控**：`log_calls` 两种取值下，带 `why` 的 `table.create` 都必须正常返回。"""
+    """正控：`log_calls` 两种取值下，带 `why` 的 `table.create` 都必须正常返回。"""
     reg = _registry(log_calls=log_calls)
     r = reg.call("table.create", role="D", table="research_questions", row=_row("q1"),
                  why="这条为什么值得登记")
@@ -58,7 +47,7 @@ def test_a_call_with_why_never_raises(log_calls):
 
 @pytest.mark.parametrize("log_calls", [False, True])
 def test_why_lands_in_the_call_log_when_logging_is_on(log_calls):
-    """**留痕**：`log_calls=True` 时 `why` 必须真的进了调用日志（不是被静默丢掉）。"""
+    """留痕：`log_calls=True` 时 `why` 必须真的进了调用日志（不是被静默丢掉）。"""
     reg = _registry(log_calls=log_calls)
     before = len(reg.call_log())
     reg.call("table.create", role="D", table="research_questions", row=_row("q2"),
@@ -72,7 +61,7 @@ def test_why_lands_in_the_call_log_when_logging_is_on(log_calls):
 
 
 def test_a_call_without_why_is_unaffected():
-    """**负控**：不带 `why` 的调用行为不变（两种模式都能过）。"""
+    """负控：不带 `why` 的调用行为不变（两种模式都能过）。"""
     for flag in (False, True):
         reg = _registry(log_calls=flag)
         r = reg.call("table.create", role="D", table="research_questions", row=_row(f"q-{flag}"))

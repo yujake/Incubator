@@ -2,37 +2,16 @@
 
 ## 缺陷（2026-09-26 全面体检 · 子代理 E 发现）
 
-`test/test2/run_acceptance.py` 的 `Runner._Ctx.__exit__` 旧实现是：
-
-```python
-if self.p.ok is None:
-    self.p.ok = True
-```
-
-而 `Phase.ok` 的契约（`Phase` 类的 docstring 逐字）是三态：
-`True` 通过 / `False` 失败 / `None` 未执行（"没跑"与"跑了没过"是两件事）。
-那一行把 `None` 折叠成 `True`，于是：
-
-1. 阶段里 `if missing: p.ok = None; return`（"未接线"）被记成 PASS；
-2. `summary['not_run']` 恒为 0，终结打印里 `{None: 'N/A '}` 成了死分支；
-3. 退出码只看 `return 0 if s['failed'] == 0 else 1` ⇒ 全部阶段都没接线也能 exit 0。
+`test/test2/run_acceptance.py` 的 `Runner._Ctx.__exit__` 旧实现里那段 `if self.p.ok is None: self.p.ok = True` 把 `None` 折叠成 `True`；而 `Phase.ok` 的契约（`Phase` 类 docstring 逐字）是三态：`True` 通过 / `False` 失败 / `None` 未执行（"没跑"与"跑了没过"是两件事）。后果：阶段里 `if missing: p.ok = None; return`（"未接线"）被记成 PASS；`summary['not_run']` 恒为 0，终结打印的 `{None: 'N/A '}` 成死分支；退出码只看 `return 0 if s['failed'] == 0 else 1` ⇒ 全部阶段都没接线也能 exit 0。
 
 ## 本文件守什么（两条判据，都不依赖真跑验收）
 
 1. `__exit__` 不再替调用方下结论：只跑 `with` 块、块内一条断言都不做 ⇒ `ok` 保持 `None`。
-2. "通过"这件事现在只由 `checkpoint()` 写：过 ⇒ `True`（除非已被标红），
-   不过 ⇒ `False`，且此后再过也不许把 `False` 改回 `True`。
-   （这一条是修法本身的另一半：把 `__exit__` 的兜底撤掉之后，
-   若 `checkpoint()` 不写 `True`，全量验收会变成"10 个阶段全部 `N/A`" ——
-   实测过，见 `temp/r2-e6-out2.txt`。）
+2. "通过"现在只由 `checkpoint()` 写：过 ⇒ `True`（除非已被标红），不过 ⇒ `False`，且此后再过也不许把 `False` 改回 `True`。（这是修法的另一半：撤掉 `__exit__` 兜底之后若 `checkpoint()` 不写 `True`，全量验收会变成"10 个阶段全部 `N/A`"——实测见 `temp/r2-e6-out2.txt`。）
 
 ## 为什么不用"跑一遍验收程序"当判据
 
-那条路要起一个写 `test/test2/acceptance-run/` 的子进程（越出 `temp/` 的边界），
-而且它跑一次要 2 分多钟。三态判据是本文件的对象，在进程内就能判定。
-端到端那一条另有两份实测记录：`temp/r2-e6-out5.txt`（全量 ⇒ exit 0）
-与 `temp/r2-e6-out6.txt`（`--phases P9` 单独跑 ⇒ exit 2）。
-"""
+那条路要起一个写 `test/test2/acceptance-run/` 的子进程（越出 `temp/` 的边界），跑一次 2 分多钟；三态判据是本文件的对象，在进程内就能判定。端到端另有实测：`temp/r2-e6-out5.txt`（全量 ⇒ exit 0）、`temp/r2-e6-out6.txt`（`--phases P9` 单独跑 ⇒ exit 2）。"""
 from __future__ import annotations
 
 import importlib.util

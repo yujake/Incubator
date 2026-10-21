@@ -1,38 +1,13 @@
 # -*- coding: utf-8 -*-
 """业主裁定（2026-10-19 第二版）：「名册就是可通话名单 —— 只有名册上的人能通话。」
 
-## 诊断（改前那三句病）
+诊断：`_do_message` 只把 `to not in (*S.ROLES, M, "user", "用户")` 当名册名，角色通道从不问名册 ⇒ 按角色名随便发（名下有 F1/F2 两个实例也照发）；`roster_view` 每行有 `name` / `role` / `brief` / `state` / `status` / `task_id`（绝对编号已在），`scope="descendants"` 再给 `parent` 与 `depth`，但"我自己的父是谁"只活在 `AgentLoop.parent_task_id` 内存字段里，盘上名册一个字都没有；退役成员拒收却读不出理由码。
 
-1. `_do_message` 决定"这一条发给谁"靠的是「字符串启发式」：
-   `to not in (*S.ROLES, M, "user", "用户")` ⇒ 当成名册名，否则走角色通道。
-   名册只在"名字长得不像角色名"时被用到；「角色名那一条路从不问名册」
-   ⇒ 按角色名随便发（"给 F 发一条"哪怕名下有 F1/F2 两个实例也照发，谁都能读到）。
-2. `roster_view`（秘书侧）只答得出"我名下的子代理"这一半：
-   每行有 `name` / `role` / `brief` / `state` / `status` / `task_id`（「绝对编号已在」），
-   `scope="descendants"` 再给 `parent`（「相对名」）与 `depth`；
-   「"我自己的父是谁（含绝对编号）"那一格根本不存在」 —— 它只活在
-   `AgentLoop.parent_task_id` 这个内存字段里，盘上的名册一个字都没有。
-3. 退役的名册成员可以寻址到"未登记「或」已退役"这一档：拒是拒了，但理由码读不出来。
+判据：正控 ① 给「父」发 ⇒ 收件人 `task_id` == 名册里的父编号（编号与名册名两种写法）② 给「子」发 ⇒ 收件人是那个子 ③ 名册外的角色（"E"）⇒ `not_in_roster` ＋列出可通话名单 ④ 退役的子 ⇒ `member_retired` ⑤ 祖父（父的上线）⇒ 拒收 ⑥ `escalate` 上行链路仍绿（`tests/test_escalate_goes_up_and_stops.py` 的 test_escalate_goes_up_and_stops）⑦ 无秘书 ⇒ 退回原路并标 `roster_unavailable`，且这一档不是"名册校验通过"（名册外的角色照样发得出去）。
 
-## 判据（正控 7 / 负控 6 / 边界 1）
+负控（每条都真跑"坏实现"）：去掉 `roster_view` 的父那一格 / 父解析成随便一个成员 / 守卫去掉（`not_in_roster` 放行成老通道）/ 退役当还活着 / 祖父放行 / 无秘书当解析成功 ⇒ 均红。
 
-正控：① 给「父」发 ⇒ 成功，收件人 task_id == 我名册里的父编号（编号与名册名两种写法）
-② 给「子」发 ⇒ 成功，收件人是那个子
-③ 给「名册外的角色」（"E"：既不是父也不是子）⇒ `not_in_roster` ＋ 列出可通话名单
-④ 给「退役的子」 ⇒ 拒收（`member_retired`）
-⑤ 给「祖父」（父的上线）⇒ 拒收（不在"父 ∪ 子"里）
-⑥ `escalate` 的上行链路仍绿 —— 见 `tests/test_escalate_goes_up_and_stops.py`
-⑦ 无秘书 ⇒ 退回原来的路但读数标 `roster_unavailable`，
-   且「另加一条」判据说明这一档不是"名册校验通过"（名册外的角色照样发得出去）
-负控（每条都真跑一遍"坏实现"，证明同一组断言会红）：
-① 去掉 `roster_view` 的父那一格 ⇒ 红
-② 把父解析成"随便一个成员" ⇒ 红
-③ 把守卫去掉（`not_in_roster` 放行成老通道）⇒ 红
-④ 把退役当成还活着 ⇒ 红
-⑤ 给祖父放行 ⇒ 红
-⑦ 把"无秘书"当成解析成功 ⇒ 红
-边界：按绝对编号 / 名册名发消息「不需要召唤边」（"派活要许可，说话不需要"）。
-"""
+边界：按绝对编号 / 名册名发消息不需要召唤边（"派活要许可，说话不需要"）。"""
 from __future__ import annotations
 
 import json
@@ -53,7 +28,7 @@ from agentflow.tools import build_registry
 SID = "addr"
 
 #: 这一条链是四层，因为判据⑤要一个"父的上线"：
-#: `M`（顶层发起行）→ `A`（祖父）→ `D`（我的父）→ `B`（**我**）→ `F1`/`F2`（我的子）
+#: `M`（顶层发起行）→ `A`（祖父）→ `D`（我的父）→ `B`（我）→ `F1`/`F2`（我的子）
 ME_ROLE, PARENT_ROLE, GRANDPARENT_ROLE = "B", "D", "A"
 #: 名册外的角色：既不是父（D）也不是子（F），而 `B` 与它之间有协作边
 #: （`ALLOWED_EDGES["E"]` 含 "B"）⇒ 准入不会先拒，量到的就只是"名册守卫"。
@@ -109,7 +84,7 @@ def _env(tmp_path: pathlib.Path) -> dict[str, Any]:
     loop.parent_task_id = pa
     assert loop.secretary is not None, "这一组判据要的是'名册在手上'那一档"
     sec = loop.secretary
-    # 父的名册名：记在**祖父**那一侧的名册里（相对名 → 绝对编号那一步的输入）
+    # 父的名册名：记在祖父那一侧的名册里（相对名 → 绝对编号那一步的输入）
     assert sec.roster_add(owner=gp, role=PARENT_ROLE, task_id=pa,
                           brief="我那一层的父")["name"] == "D1"
     assert sec.roster_add(owner=me, role="F", task_id=f1, brief="甲那一件")["name"] == "F1"
@@ -136,10 +111,9 @@ def _no_side_effects(env: dict[str, Any], nobody: list[str]) -> None:
 # ---------------------------------------------------------------- 断言组（正控与负控共用）
 
 def _to_parent_works(env: dict[str, Any]) -> dict[str, Any]:
-    """判据①：给**父**发 ⇒ 成功，收件人 task_id == 我名册里的父编号。
+    """判据①：给父发 ⇒ 成功，收件人 task_id == 我名册里的父编号。
 
-    两种写法各发一条（绝对编号 / 父的名册名）—— 两种都必须落到**同一个**编号上。
-    """
+    两种写法各发一条（绝对编号 / 父的名册名）—— 两种都必须落到同一个编号上。"""
     loop, cond, pa = env["loop"], env["cond"], env["pa"]
     view = loop.secretary.roster_view(owner=env["me"])
     assert view["parent"]["checked"] is True, view["parent"]
@@ -167,7 +141,7 @@ def _to_parent_works(env: dict[str, Any]) -> dict[str, Any]:
 
 
 def _to_child_works(env: dict[str, Any]) -> dict[str, Any]:
-    """判据②：给**子**发 ⇒ 成功，收件人是那个子（名册名与绝对编号两种写法）。"""
+    """判据②：给子发 ⇒ 成功，收件人是那个子（名册名与绝对编号两种写法）。"""
     loop, cond, f1, f2 = env["loop"], env["cond"], env["f1"], env["f2"]
     by_name = loop._do_message({"to": "F1", "subject": "题", "body": "文"})
     assert by_name.get("ok") is True, by_name
@@ -225,7 +199,7 @@ def _retired_child_is_refused(env: dict[str, Any]) -> dict[str, Any]:
 
 
 def _grandparent_is_refused(env: dict[str, Any]) -> dict[str, Any]:
-    """判据⑤：给**父的上线**（祖父）发 ⇒ 拒收（不在"父 ∪ 子"里）。"""
+    """判据⑤：给父的上线（祖父）发 ⇒ 拒收（不在"父 ∪ 子"里）。"""
     loop, cond = env["loop"], env["cond"]
     pa, gp = env["pa"], env["gp"]
     assert str((cond._task(pa) or {}).get("parent_task_id")) == gp, "夹具：gp 是父的上线"
@@ -243,8 +217,7 @@ def _grandparent_is_refused(env: dict[str, Any]) -> dict[str, Any]:
 def _unavailable_is_flagged(bare: AgentLoop, ws: pathlib.Path) -> dict[str, Any]:
     """判据⑦：无秘书 ⇒ 退回原来的路，读数 `roster_unavailable=True`。
 
-    **并且**这一档不是"名册校验通过"：名册外的角色照样发得出去（见调用方那条断言）。
-    """
+    并且这一档不是"名册校验通过"：名册外的角色照样发得出去（见调用方那条断言）。"""
     got = bare._do_message({"to": OUTSIDE_ROLE, "subject": "题", "body": "文"})
     assert got.get("roster_unavailable") is True, got
     addr = got.get("addressing") or {}
@@ -259,9 +232,8 @@ def _unavailable_is_flagged(bare: AgentLoop, ws: pathlib.Path) -> dict[str, Any]
 def test_the_roster_view_gives_parent_and_children_with_absolute_ids(tmp_path: pathlib.Path):
     """正控（第 1 件）：`roster_view` 现在同时给出"父"与"子"，且编号都是绝对的。
 
-    改前：`rows` 已有 `task_id`（绝对编号）✅，但"我自己的父是谁"**一格都没有** ❌
-    （只有 `scope="descendants"` 的相对名 `parent`）。
-    """
+    改前：`rows` 已有 `task_id`（绝对编号），但"我自己的父是谁"一格都没有
+    （只有 `scope="descendants"` 的相对名 `parent`）。"""
     env = _env(tmp_path)
     view = env["loop"].secretary.roster_view(owner=env["me"])
     assert view["checked"] is True, view
@@ -278,7 +250,7 @@ def test_the_roster_view_gives_parent_and_children_with_absolute_ids(tmp_path: p
     tree = env["loop"].secretary.roster_view(owner=env["me"], scope="descendants")
     assert [r["parent_task_id"] for r in tree["rows"]] == [env["me"], env["me"]], tree["rows"]
     assert [r["parent"] for r in tree["rows"]] == ["", ""], tree["rows"]
-    # 顶层没有父（`checked=True, task_id=""`：**读成了、没有父**，不是"没读成"）
+    # 顶层没有父（`checked=True, task_id=""`：读成了、没有父，不是"没读成"）
     top = env["loop"].secretary.roster_view(owner=env["top"])
     assert (top["parent"]["checked"], top["parent"]["task_id"]) == (True, ""), top["parent"]
     assert "顶层" in top["parent"]["why"], top["parent"]
@@ -310,7 +282,7 @@ def test_the_grandparent_is_not_callable(tmp_path: pathlib.Path):
 
 
 def test_no_secretary_is_a_fallback_not_a_roster_check(tmp_path: pathlib.Path):
-    """正控⑦：无秘书 ⇒ 退回原来的路并标 `roster_unavailable`；**它不是名册校验通过**。"""
+    """正控⑦：无秘书 ⇒ 退回原来的路并标 `roster_unavailable`；它不是名册校验通过。"""
     env = _env(tmp_path)
     bare = AgentLoop(role=ME_ROLE, session_root=env["ws"], registry=env["loop"].registry,
                      conductor=env["cond"], seam=env["loop"].seam, store=env["st"],
@@ -318,7 +290,7 @@ def test_no_secretary_is_a_fallback_not_a_roster_check(tmp_path: pathlib.Path):
     bare.my_task_id = env["me"]
     assert bare.secretary is None, "这一条判据要的就是'秘书不在手上'那一档"
     _unavailable_is_flagged(bare, env["ws"])
-    # 「这不是名册校验通过」的**那一条判据**：名册外（甚至根本不是名册上任何人）的
+    # 「这不是名册校验通过」的那一条判据：名册外（甚至根本不是名册上任何人）的
     # 角色，在这一档照样发得出去 —— 因为它压根没查名册。
     assert _messages(env["ws"]) and str(_messages(env["ws"])[0].get("to")) == OUTSIDE_ROLE, \
         ("无秘书那一档必须露出'没查名册'这件事", _messages(env["ws"]))
@@ -432,10 +404,9 @@ def test_negctl_calling_the_fallback_a_successful_resolution_is_red(
 def test_a_message_to_a_roster_member_needs_no_summon_edge(tmp_path: pathlib.Path):
     """防误伤："派活要许可，说话不需要" —— 按编号/名册名发不吃召唤边。
 
-    我是 B，`ALLOWED_EDGES["B"] == {C, H, V}`：**B 叫不到 F**。而 F1 是我名下的子，
+    我是 B，`ALLOWED_EDGES["B"] == {C, H, V}`：B 叫不到 F。而 F1 是我名下的子，
     `to="F1"` 与 `to=<F1 的绝对编号>` 都必须照投（`_message_to_member` 从不问召唤边）。
-    谁若把名册校验顺手接成"先查召唤边"，这一条会红。
-    """
+    谁若把名册校验顺手接成"先查召唤边"，这一条会红。"""
     env = _env(tmp_path)
     assert "F" not in C.ALLOWED_EDGES.get(ME_ROLE, frozenset()), (
         "这条判据要的就是一条不存在的召唤边；边表变了就得换一对角色",

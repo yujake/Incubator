@@ -1,35 +1,22 @@
 # -*- coding: utf-8 -*-
 """概念行的读写口（`conceptrows`）：并表落刀之后仍然作数的判据。
 
-`concepts` 已经并进 `statements`（`kind="concept"`）：`SCHEMA_VERSION=2`、表从
-`schema.TABLES` / `store.LOCK_ORDER` / `schema.ID_COUNTERS` / `schema.ARRAY_FIELD_KINDS`
-里真删，老表那些行由 `store.rebuild` 折进新家（折叠内核 `migrate_concepts`）——
-这是一次动磁盘格式的迁移（`AGENTS.md` 七类之一），所以判据必须跟着走，而不是跟着删。
+`concepts` 已经并进 `statements`（`kind="concept"`）：`SCHEMA_VERSION=2`、表从`schema.TABLES` / `store.LOCK_ORDER` /
+`schema.ID_COUNTERS` / `schema.ARRAY_FIELD_KINDS`里真删，老表那些行由 `store.rebuild` 折进新家（折叠内核 `migrate_concepts`）
+——这是一次动磁盘格式的迁移（`AGENTS.md` 七类之一），所以判据必须跟着走，而不是跟着删。
 
 ## 这一组守什么（两层，分开写清楚）
 
-落刀之后仍然作数（不需要任何模拟）：
+落刀之后仍然作数（不需要任何模拟）：正控：写一条概念 ⇒ 只落一处（`statements`，`kind="concept"`），盘上不多建老文件；秘书那条路（B 交内容）同样只落一处；- 三态：退役的老表读不了，
+而那条错必须指路（新表名 + 统一入口 + 怎么迁）；盘上还留着迁移前那份 `data/concepts.json` ⇒ 必须被点名（`stale_file` + 视图读数里的`reason`），而里面的行不许悄悄合进视图；
+那份文件坏掉之后"它还在"这件事照样判得了；- 写侧入口：`upsert_legacy_shaped` 对老形状的行写正好一行新标准，没有号就返回`None`（零行）；`tables_for_concept_write` 跟着
+`TABLES` 走，调用方给的表一个不丢；- `raise_counter_to` 的语义：`stmt` 计数器抬到号之后、一个号都不烧（不报 `counter_behind`也不报 `id_gap`），退役的
+`concept` 类别不许留在计数器里；- 视图（`view` / `view_tx`）与图入口（`RelationGraph.from_store`）的三态：读不成 ⇒ 明说，不许折成"库里没有概念"；-
+`verify` 不对"新标准没有那一格"报假红，且"跳过几行"是一个看得见的读数。只在过渡期里作数（一律靠 `_pre_flip` 把老表按落刀前的形态装回 schema ⇒ 模拟，docstring 里逐条写明）：两处同号、
+镜像、老写侧的行可见、`definition_only_in_legacy`那份读数、两个计数器、老表读不成那一态、以及"老表还在"时 `verify` 真的判 `related_concepts`。
 
-- 正控：写一条概念 ⇒ 只落一处（`statements`，`kind="concept"`），盘上不多建老文件；
-  秘书那条路（B 交内容）同样只落一处；
-- 三态：退役的老表读不了，而那条错必须指路（新表名 + 统一入口 + 怎么迁）；
-  盘上还留着迁移前那份 `data/concepts.json` ⇒ 必须被点名（`stale_file` + 视图读数里的
-  `reason`），而里面的行不许悄悄合进视图；那份文件坏掉之后"它还在"这件事照样判得了；
-- 写侧入口：`upsert_legacy_shaped` 对老形状的行写正好一行新标准，没有号就返回
-  `None`（零行）；`tables_for_concept_write` 跟着 `TABLES` 走，调用方给的表一个不丢；
-- `raise_counter_to` 的语义：`stmt` 计数器抬到号之后、一个号都不烧（不报 `counter_behind`
-  也不报 `id_gap`），退役的 `concept` 类别不许留在计数器里；
-- 视图（`view` / `view_tx`）与图入口（`RelationGraph.from_store`）的三态：读不成 ⇒ 明说，
-  不许折成"库里没有概念"；
-- `verify` 不对"新标准没有那一格"报假红，且"跳过几行"是一个看得见的读数。
-
-只在过渡期里作数（一律靠 `_pre_flip` 把老表按落刀前的形态装回 schema ⇒ 模拟，
-docstring 里逐条写明）：两处同号、镜像、老写侧的行可见、`definition_only_in_legacy`
-那份读数、两个计数器、老表读不成那一态、以及"老表还在"时 `verify` 真的判 `related_concepts`。
-
-为什么要留着这一层而不是随表一起删：`conceptrows` 的过渡层代码还在（`LEGACY_TABLE`、
-镜像、`_from_legacy`、`legacy_present` 的四态），而"它当时为什么是对的"只有这些判据能守。
-删掉它们等于把那一层变成没有判据的活代码。
+为什么要留着这一层而不是随表一起删：`conceptrows` 的过渡层代码还在（`LEGACY_TABLE`、镜像、`_from_legacy`、`legacy_present` 的四态），
+而"它当时为什么是对的"只有这些判据能守。删掉它们等于把那一层变成没有判据的活代码。
 """
 
 from __future__ import annotations
@@ -168,7 +155,7 @@ def test_the_secretary_writes_the_concept_once(store):
     sec = SEC.Secretary("B", root=store.root, store=store)
     out = sec.record_statement(
         # 2026-10-21（本批缺陷一）：概念行的 `origin` 不再默认 `own_result` ——
-        # 确实是自己定义的新概念要**显式**声明 `self_authored`；概念行也不再带
+        # 确实是自己定义的新概念要显式声明 `self_authored`；概念行也不再带
         # `proof_text`（那个哨兵把"有没有证明"的读数全顶高了，见
         # `conceptrows.concept_statement` 的 docstring）。
         {"origin": "own_result", "self_authored": True, "kind": "concept",
@@ -190,7 +177,7 @@ def test_the_secretary_mirrors_when_the_legacy_table_is_present(store, monkeypat
     sec = SEC.Secretary("B", root=store.root, store=store)
     out = sec.record_statement(
         # 2026-10-21（本批缺陷一）：概念行的 `origin` 不再默认 `own_result` ——
-        # 确实是自己定义的新概念要**显式**声明 `self_authored`；概念行也不再带
+        # 确实是自己定义的新概念要显式声明 `self_authored`；概念行也不再带
         # `proof_text`（那个哨兵把"有没有证明"的读数全顶高了，见
         # `conceptrows.concept_statement` 的 docstring）。
         {"origin": "own_result", "self_authored": True, "kind": "concept",
@@ -695,18 +682,14 @@ def test_a_corrupt_legacy_file_makes_verify_fail_loudly(store, monkeypatch):
 
 
 def test_verify_reports_an_unreadable_view_instead_of_a_flood(clean_store, monkeypatch):
-    """视图判不了 ⇒ `verify` 报一条 `concept_view_unreadable`，且它只报一次。
+    """    视图判不了 ⇒ `verify` 报一条 `concept_view_unreadable`，且它只报一次。
 
-    这一条钉两件事：判不了有它自己的码（不是"库里没有概念"），以及"满屏"的反面 ——
-    一条读数而不是每行一条。用 `clean_store`（两条概念 + 一条关系）而不是空库：
-    空库上"没有假红"是真空的，判据根本判不出东西。
+    这一条钉两件事：判不了有它自己的码（不是"库里没有概念"），以及"满屏"的反面 ——一条读数而不是每行一条。用 `clean_store`（两条概念 + 一条关系）而不是空库：空库上"没有假红"是真空的，判据根本判不出东西。
 
-    【实测到的未修缺陷】（2026-10-10，只报不改：`src/agentflow/verify.py` 不在
-    本判据的处置面内）：`_check_1` 报了 `concept_view_unreadable` 之后没有抑制下游的
-    关系段 ⇒ 每一条引用概念的 relation 仍会各报一条 `dangling_concept`
-    （本仓实测：1 条关系 ⇒ 2 条 `dangling_concept`）。`verify.py` 里那段注释写着
-    "不许变成'每一条关系都指向不存在的概念'，满屏假红"，而那一半今天没有实现。
-    所以本用例只断言"有自己的码 + 只报一次"，既不给出那个错误形态绿灯，也不把它锁死。
+    【实测到的未修缺陷】（2026-10-10，只报不改：`src/agentflow/verify.py` 不在本判据的处置面内）：`_check_1` 报了
+    `concept_view_unreadable` 之后没有抑制下游的关系段 ⇒ 每一条引用概念的 relation 仍会各报一条 `dangling_concept`（本仓实测：1 条关系 ⇒ 2 条
+    `dangling_concept`）。`verify.py` 里那段注释写着"不许变成'每一条关系都指向不存在的概念'，满屏假红"，而那一半今天没有实现。所以本用例只断言"有自己的码 + 只报一次"，
+    既不给出那个错误形态绿灯，也不把它锁死。
     """
     from agentflow import verify as V
 

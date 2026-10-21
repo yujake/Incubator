@@ -1,32 +1,20 @@
 """逐个工具的参数校验门（objective 第 (3) 条："参数校验"那一项的机械化判据）。
-
 ## 为什么需要它
-
-`DEVELOPMENT.md` §4.3 的"工具 DoD"要求每个工具声明 `params`（JSON Schema 子集），
-而 `ToolRegistry.call` 在调 handler 之前调 `validate_params`（`tools/base.py`）。
-于是"参数校验"这件事有两半，而两半都可能坏：
-
+`DEVELOPMENT.md` §4.3 的"工具 DoD"要求每个工具声明 `params`（JSON Schema 子集），而 `ToolRegistry.call` 在调 handler 之前调
+`validate_params`（`tools/base.py`）。于是"参数校验"这件事有两半，而两半都可能坏：
 1. 声明存在但没生效：schema 写错（例如 `additionalProperties` 没设成 `False`），
-   于是垃圾参数静默通过，一路走到 handler 里 —— 而 handler 往往对多出来的键
-   要么忽略（静默）要么在深处炸（`unexpected`）。两种都不是"参数错误"。
+于是垃圾参数静默通过，一路走到 handler 里 —— 而 handler 往往对多出来的键要么忽略（静默）要么在深处炸（`unexpected`）。两种都不是"参数错误"。
 2. 校验发生了但 handler 还是被调了：那意味着"校验"只是个装饰。
-   判据必须打在副作用是否发生上，不是打在返回值上 ——
-   一个"先干活再报参数错"的实现，返回值看起来完全一样。
-
+判据必须打在副作用是否发生上，不是打在返回值上 ——一个"先干活再报参数错"的实现，返回值看起来完全一样。
 ## 本文件怎么判（55 个工具，逐个）
-
 对注册表里的每一个工具：
 - (A) schema 形状：`type == "object"`、`properties` 是 dict、`additionalProperties is False`；
 - (B) 额外参数必须被拒：`kind == "param_error"`，且 handler 未被调用；
 - (C) 缺必填参数必须被拒：同上；
 - (D) 通过校验的调用必须真的调到 handler（否则 (B)(C) 可能只是"永远不调用"的假门）。
-
 ## 三态
-
-`param_error` 是受控的拒绝（`schema.REFUSAL_REASONS` 的同族口径），
-不是"失败"。所以 (B)(C) 断言的是"恰好是 `param_error`"，
-而不是"`ok is False`" —— 后者对 `unexpected`/`tool_error` 也成立，
-于是一个把参数错误报成"未知异常"的实现照样能通过。那正是三态纪律要挡的形态。
+`param_error` 是受控的拒绝（`schema.REFUSAL_REASONS` 的同族口径），不是"失败"。所以 (B)(C) 断言的是"恰好是 `param_error`"，而不是"`ok is False`" ——
+后者对 `unexpected`/`tool_error` 也成立，于是一个把参数错误报成"未知异常"的实现照样能通过。那正是三态纪律要挡的形态。
 """
 
 from __future__ import annotations
@@ -66,18 +54,16 @@ def _names(registry) -> list[str]:
 
 
 class _RoleGateBypassedRegistry(ToolRegistry):
-    """测试专用子类：参数门要逐个工具跑，而"所有工具"跨越每一个角色面。
+    """    测试专用子类：参数门要逐个工具跑，而"所有工具"跨越每一个角色面。
 
-    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张
-    正常注册表能调全部 55 个工具（那是设计的意图：只读角色拿不到写工具）。
-    本模块的判据是"参数校验对每个工具都生效"，与权限无关 —— 所以这里只覆写
-    那一个谓词，让参数门能覆盖全表。
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 55 个工具（那是设计的意图：只读角色拿不到写工具）。本模块的判据是"参数校验对每个工具都生效"，
+    与权限无关 —— 所以这里只覆写那一个谓词，让参数门能覆盖全表。
 
     为什么这是可接受的、而不是"测试把门拆了"：
     1. 覆写发生在本文件的子类上，生产类 `ToolRegistry` 一字未改（有
-       `test_tools_base.py` 的成对负控守着那个谓词本身）；
+    `test_tools_base.py` 的成对负控守着那个谓词本身）；
     2. `_role_surface` 的只读剥离不经过本覆写，所以下面"探针表与真表工具面一致"
-       那条自检仍然在同一个过滤判据上（它比的是 `names()`，不是"能不能调"）。
+    那条自检仍然在同一个过滤判据上（它比的是 `names()`，不是"能不能调"）。
     """
 
     def _callable_for(self, spec, role, *, include_registered_writers):  # type: ignore[override]

@@ -213,19 +213,15 @@ def test_a_file_that_really_passed_alongside_an_xfail_is_still_ok() -> None:
 
 
 def test_the_xfail_only_bucket_is_its_own_registered_state() -> None:
-    """`R6-7` 工具侧（本批修好）：整文件 xfail 单列一档 `all_xfail`，措辞不许说"一个用例都没有"。
+    """    `R6-7` 工具侧（本批修好）：整文件 xfail 单列一档 `all_xfail`，措辞不许说"一个用例都没有"。
 
-    这一条原来钉的是改前形态（`status == "no_tests"`），而它的 docstring 逐字
-    写着"修法落在 `tools/run_each_test_file.py`，不归本批次；哪天它改了，这条会红，
-    逼人回来改成新桶名" —— 本批就是那一天。改前的缺陷有两半：
-
-    1. 桶错了：`no_tests` 的语义是"这个文件一个用例都没有"，而整文件 xfail 的文件
-       用例在、只是都被标成了预期失败；
+    这一条原来钉的是改前形态（`status == "no_tests"`），而它的 docstring 逐字写着"修法落在 `tools/run_each_test_file.py`，不归本批次；哪天它改了，这条会红，
+    逼人回来改成新桶名" —— 本批就是那一天。改前的缺陷有两半：桶错了：`no_tests` 的语义是"这个文件一个用例都没有"，而整文件 xfail 的文件
+    用例在、只是都被标成了预期失败；
     2. 措辞错了：`main()` 对 `no_tests` 打印"文件里一个用例都没有"，
-       并把它算进 `[per-file] … 一个用例都没有 M` 那一栏。
+    并把它算进 `[per-file] … 一个用例都没有 M` 那一栏。
 
-    安全侧没有丢：`all_xfail` 仍然走退出码 2（没查成），绝不是过 ——
-    由下面的端到端用例钉住。
+    安全侧没有丢：`all_xfail` 仍然走退出码 2（没查成），绝不是过 ——由下面的端到端用例钉住。
     """
     status, detail = R.classify_pytest_result(0, "1 xfailed in 0.01s\n")
     assert status == "all_xfail", (

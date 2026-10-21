@@ -1,25 +1,18 @@
 # -*- coding: utf-8 -*-
 """`precise` 的第三档降级：主串与词项串都零召回时，退到"只用 topic"（脱开 description）。
-
 ## 这条判据守的是什么（真机读数）
-
-T2 第 23 趟（`t2r`，2026-10-10）的 `projects/p6t-research-from-zero/data/search_requests.json`
-里，`r-0002` / `r-0004` / `r-0006` 三次 topic=`edge-girth-regular graphs`、`mode=precise`、
-带一段 ~30 词的 `content_description` ⇒ 三次全 `no_results`（`attempts=1`、`last_error=null`），
-而同一天放宽成 `girth-regular graphs` 的 `r-0005` 一次取回 5 篇。本机现算（`temp/_probe_retrieval2.py`）
-把这两条参数逐字打一遍：`r-0002` 的主串与降级串都是 0 条（上游 `meta.count=0`，不是被
-标题过滤掉），而同一个 topic 只要脱开那段 description 就是 10 条 —— 含标题逐字是
-《Edge-girth-regular graphs》的那一篇。也就是说"查不到"的真原因是查询串太长，
-而既有的两档降级都带着 description 的词项，两档一起归零。
-
+T2 第 23 趟（`t2r`，2026-10-10）的 `projects/p6t-research-from-zero/data/search_requests.json`里，`r-0002` / `r-0004` /
+`r-0006` 三次 topic=`edge-girth-regular graphs`、`mode=precise`、带一段 ~30 词的 `content_description` ⇒ 三次全
+`no_results`（`attempts=1`、`last_error=null`），而同一天放宽成 `girth-regular graphs` 的 `r-0005` 一次取回 5 篇。
+本机现算（`temp/_probe_retrieval2.py`）把这两条参数逐字打一遍：`r-0002` 的主串与降级串都是 0 条（上游 `meta.count=0`，不是被标题过滤掉），而同一个 topic 只要脱开那段
+description 就是 10 条 —— 含标题逐字是《Edge-girth-regular graphs》的那一篇。也就是说"查不到"的真原因是查询串太长，而既有的两档降级都带着 description 的词项，两档一起归零。
 ## 判据的形状（红/绿成对 + 反真空）
-
 * 正控：两档都 0、第三档有 ⇒ 真的换到第三档、结果回得来、台账两句话都写出来；
 * 负控①（"降级不许变成每次都发三遍"）：第一档就有结果 ⇒ 只发 1 次，第三档一次都不发；
 * 负控②（"换了也没查到"与"换到了"分得开）：三档全 0 ⇒ 结果仍是 0，但读数里
-  `last_resort_count == 0`，且台账确实记着"退到第三档"这件事；
+`last_resort_count == 0`，且台账确实记着"退到第三档"这件事；
 * 反真空①：description 为空时 `last_resort` 必须是空串（第一档已经是"只用 topic"，
-  第三档会是一条一模一样的请求）；
+第三档会是一条一模一样的请求）；
 * 反真空②：第三档串真的不含 description 里的词、且含 topic。
 """
 from __future__ import annotations

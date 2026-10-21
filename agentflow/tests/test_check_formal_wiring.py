@@ -33,17 +33,12 @@ from agentflow.tools.base import ParamError, validate_params
 def _declared_contract_keys() -> set[str]:
     """从声明里读 `verify.check_formal` 的返回键契约（FC-03：不在测试里手抄一份）。
 
-    ## 为什么这里必须从声明读，而不是写一个常量
-
-    本文件原先写的是 `CONTRACT_KEYS = {…6 个键…}`，注释还写着"与 `ToolSpec.returns`
-    逐字一致" —— 那是一份手抄副本。`G-18` 给返回加了第 7 个键 `missing_imports`
-    之后，声明改了、手抄副本没改，于是三条断言一起红：看上去像实现违约，
-    实际是这个测试自己腐了（"注释声称与某处一致"而实际是副本，正是本项目
+    原先这里写的是 `CONTRACT_KEYS = {…6 个键…}`，注释还声称"与 `ToolSpec.returns` 逐字一致"
+    —— 那是一份手抄副本：`G-18` 给返回加了第 7 个键 `missing_imports` 之后，声明改了、
+    副本没改，于是三条断言一起红（看上去像实现违约，实际是这个测试自己腐了，正是
     `FC-03` 要防的形态）。
 
-    现在改成读声明的字面量：声明加键 ⇒ 测试自动跟上；但声明忘了加、而返回多给了键
-    ⇒ 仍然红（那才是这条判据要抓的东西）。
-    """
+    现在改成读声明的字面量：声明加键 ⇒ 测试自动跟上；声明忘了加、而返回多给了键 ⇒ 仍然红。"""
     tmp = Path(tempfile.mkdtemp(prefix="cfw-contract-"))
     store = Store(tmp / "s.sqlite3")
     reg = build_registry(store=store, workspace_root=tmp).registry

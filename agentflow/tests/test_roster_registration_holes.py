@@ -2,25 +2,19 @@
 
 ## 这一组判据守的是什么
 
-名册（`projects/*/out/roster/*.jsonl`）是"代理之间的通信必须经名册"那条纪律的
-**地址面**（父 ＋ 直接子 ＋ 绝对编号）。生产读数：名册一直在写（453 个文件 / 55 个工作区），
-但两条路是**静默**的：
+名册（`projects/*/out/roster/*.jsonl`）是"代理之间的通信必须经名册"那条纪律的地址面（父 ＋ 直接子 ＋ 绝对编号）。生产读数：名册一直在写（453 个文件 / 55 个工作区），但两条路是静默的：
 
-1. `summon_many`（`_do_summon_many`）走 `Conductor.run_plan`，**一次登记都没有** ——
-   生产读数批量步 1006 次、派出 2822 个子代理，名册只登记 413 个（`p6e`/`p7e`
-   那种 108/119 个批量子代理、名册 0 行）；
+1. `summon_many`（`_do_summon_many`）走 `Conductor.run_plan`，一次登记都没有 ——
+生产读数批量步 1006 次、派出 2822 个子代理，名册只登记 413 个（`p6e`/`p7e`那种 108/119 个批量子代理、名册 0 行）；
 2. `status=failed` / `cancelled` 的那 29 次既不进名册、也不写 `roster_problem`
-   （改前那个 `elif` 只覆盖"没有秘书"）⇒ 守卫的第三态被折平。
-
-外加两处地雷：`_do_handoff` 读 `_gate["candidates"]` 而 `_handoff_address` 的 gate
-没有这个键（`KeyError`）；`to="ALL"` 的内部直调**有调用点、全仓没有那个方法的 def**
-（⇒ `AttributeError`）。
+（改前那个 `elif` 只覆盖"没有秘书"）⇒ 守卫的第三态被折平。外加两处地雷：`_do_handoff` 读 `_gate["candidates"]` 而 `_handoff_address` 的
+gate没有这个键（`KeyError`）；`to="ALL"` 的内部直调有调用点、全仓没有那个方法的 def（⇒ `AttributeError`）。
 
 ## 纪律（这几条是判据本身的一部分，别顺手放宽）
 
-- `brief` **不拿 `task` 顶替**（那条放宽业主还没批）⇒ 没给简介的那一项如实报 problem；
-- 一条 target 登记失败**不许**带走整批（与单个 summon 的"登记失败不许带走这次派活"同口径）；
-- 名册写没写的那一格**不拦门**（只可见），所以它不进 `status`、不产生 blocker。
+- `brief` 不拿 `task` 顶替（那条放宽业主还没批）⇒ 没给简介的那一项如实报 problem；
+- 一条 target 登记失败不许带走整批（与单个 summon 的"登记失败不许带走这次派活"同口径）；
+- 名册写没写的那一格不拦门（只可见），所以它不进 `status`、不产生 blocker。
 """
 from __future__ import annotations
 
@@ -100,7 +94,7 @@ def _env(tmp_path: pathlib.Path, *, child: bool = False) -> dict[str, Any]:
 
 
 def _stub_run_plan(cond: Conductor, parent: str):
-    """`Conductor.run_plan` 的替身：**真的**落台账行（绝对编号是真的），不跑模型。
+    """`Conductor.run_plan` 的替身：真的落台账行（绝对编号是真的），不跑模型。
 
     这一组判据量的是"登记有没有发生"，不是并发引擎；真 `run_plan` 在夹具里
     没有可跑的循环（没派角色自己的 seam）⇒ 会回 `failed`，那会把判据①的
@@ -137,7 +131,7 @@ def _adds(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _every_target_is_registered(out: dict[str, Any], rows: list[dict[str, Any]],
                                 targets: list[dict[str, Any]], owner: str) -> None:
-    """判据①：派 3 个 target ⇒ 名册里 3 条，每条带**绝对编号**与父的 `owner`。"""
+    """判据①：派 3 个 target ⇒ 名册里 3 条，每条带绝对编号与父的 `owner`。"""
     assert out.get("ok") is True, out
     assert out.get("count") == len(targets), out
     ids = [str(r.get("task_id") or "") for r in out.get("results") or []]
@@ -152,7 +146,7 @@ def _every_target_is_registered(out: dict[str, Any], rows: list[dict[str, Any]],
     names = [str(r.get("name") or "") for r in adds]
     assert names and len(set(names)) == len(names), names
     assert out.get("roster_names") == names, (out.get("roster_names"), names)
-    # brief 逐项是**它自己那一句**（不是 `task`，也不是第一个 target 的）
+    # brief 逐项是它自己那一句（不是 `task`，也不是第一个 target 的）
     assert [str(r.get("brief") or "") for r in adds] == \
            [str(t.get("brief") or "") for t in targets], adds
     assert "roster_problems" not in out, out
@@ -193,7 +187,7 @@ def test_negctl_dropping_the_summon_many_registration_is_red(
 
 def _one_bad_target_does_not_take_the_batch(out: dict[str, Any],
                                             rows: list[dict[str, Any]]) -> None:
-    """判据②：一条 target 登记失败（brief 超长）⇒ 其余照常、读数非空、整批**不失败**。"""
+    """判据②：一条 target 登记失败（brief 超长）⇒ 其余照常、读数非空、整批不失败。"""
     assert out.get("ok") is True, ("整批不许因为一条登记失败而失败", out)
     assert out.get("count") == 3, out
     ids = [str(r.get("task_id") or "") for r in out.get("results") or []]
@@ -279,7 +273,7 @@ def test_negctl_a_silent_failed_summon_is_red(status: str):
 # ---------------------------------------------------------------- 判据④
 
 def _old_candidates_line(gate: dict[str, Any]) -> list[str]:
-    """改前那一行**逐字**（`_gate["candidates"]`）：用来证明 key 真的缺。"""
+    """改前那一行逐字（`_gate["candidates"]`）：用来证明 key 真的缺。"""
     return gate["candidates"]
 
 
@@ -290,7 +284,7 @@ def test_a_handoff_to_a_roster_name_does_not_raise_key_error(
     两半都要：
     - 名册成员那一档照常写手稿（不许因为这次改动误伤正路）；
     - 解析不到的名册名 ⇒ 受控拒绝 `handoff_is_role_addressed`，且 `candidates` 是 `[]`。
-    负控：对**同一份 gate** 跑改前那一行 ⇒ 必 `KeyError`（证明这个键真的缺）。
+    负控：对同一份 gate 跑改前那一行 ⇒ 必 `KeyError`（证明这个键真的缺）。
     """
     env = _env(tmp_path, child=True)
     loop = env["loop"]
@@ -404,7 +398,7 @@ def test_the_closing_gate_counts_roster_problems(tmp_path: pathlib.Path,
 
 
 def test_the_roster_reading_is_three_state_not_zero(tmp_path: pathlib.Path):
-    """判据⑥ 的三态：一步都没有的会话 ⇒ `checked=False`，**不是** 0（"没查成"≠"都写上了"）。"""
+    """判据⑥ 的三态：一步都没有的会话 ⇒ `checked=False`，不是 0（"没查成"≠"都写上了"）。"""
     root = tmp_path / "ws"
     root.mkdir()
     SS.append(root, {"kind": "agent_run_end", "role": MY_ROLE, "stop_reason": "final"},

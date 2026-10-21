@@ -130,22 +130,16 @@ def _eval_row(store, eid: str = "0000") -> None:
 
 
 def test_unknown_citation_kind_message_lists_every_declared_prefix(store):
-    """`D10` 正控：拒绝消息里的受控词表必须与判据元组双向包含。
+    """    `D10` 正控：拒绝消息里的受控词表必须与判据元组双向包含。
 
-    现状（`D10` 登记，登记册 :819-824）：判据收 `("rel","lit","exp","eval")` 四档，
-    而消息写的是"应为 rel:/lit:/exp:" —— 漏了 `eval:`，而 `eval:` 正是上一行
-    刚被单独检查过的那一档。调用方按消息改写法，会把一个合法的 `eval:` 引用
-    当成非法引用。修法是让消息从判据元组派生（`FC-03`），这条断言就打在
-    "两处逐字一致"上，所以它对任一方向的漂移都红：消息多写一档也红。
+    现状（`D10` 登记，登记册 :819-824）：判据收 `("rel","lit","exp","eval")` 四档，而消息写的是"应为 rel:/lit:/exp:" —— 漏了 `eval:`，而
+    `eval:` 正是上一行刚被单独检查过的那一档。调用方按消息改写法，会把一个合法的 `eval:` 引用当成非法引用。修法是让消息从判据元组派生（`FC-03`），这条断言就打在"两处逐字一致"上，
+    所以它对任一方向的漂移都红：消息多写一档也红。
 
-    期望词表在这里逐字写死（不从 `verify.CITATION_KINDS` 取）：判据要能回答
-    "消息把人引向哪个写法"，而那个答案不该由被测对象自己提供 —— 从被测对象取
-    词表会让"两边一起改错"照样绿。
+    期望词表在这里逐字写死（不从 `verify.CITATION_KINDS` 取）：判据要能回答"消息把人引向哪个写法"，而那个答案不该由被测对象自己提供 —— 从被测对象取词表会让"两边一起改错"照样绿。
 
-    `stmt`（`R-03` / `draft/49` 裁"方案 A"）是后来补进来的第六档：命题台账也是可引的
-    对象，而加它之前写入期会把 `stmt:0004` 这类合法引用判成"前缀无法识别"
-    （`draft/49:868` 逐字："比不查更糟"）。补一档就要同轮改这里的逐字清单 ——
-    它逐字写死正是为了拦住"词表变了而消息没跟上"。
+    `stmt`（`R-03` / `draft/49` 裁"方案 A"）是后来补进来的第六档：命题台账也是可引的对象，而加它之前写入期会把
+    `stmt:0004` 这类合法引用判成"前缀无法识别"（`draft/49:868` 逐字："比不查更糟"）。补一档就要同轮改这里的逐字清单 ——它逐字写死正是为了拦住"词表变了而消息没跟上"。
     """
     expected_kinds = ("rel", "lit", "exp", "eval", "doc", "stmt")
     add_literature(store, "0000", title="某文献")
@@ -805,18 +799,15 @@ def test_the_bound_diagnostic_reader_has_a_single_definition():
 def test_negative_control_a_counter_without_a_table_is_checked_not_silently_skipped(
     monkeypatch: pytest.MonkeyPatch, store
 ) -> None:
-    """负控（`FINAL-R4-03`）：`ID_COUNTERS` 里某个 `id_field` 在 `TABLES` 里找不到表时，
-    `verify_all` 必须把这一项记成没查成（`checked[kind] is None` + 一条 warning），
-    而不是静默少查一项还报通过。
+    """    负控（`FINAL-R4-03`）：`ID_COUNTERS` 里某个 `id_field` 在 `TABLES` 里找不到表时，`verify_all` 必须把这一项记成没查成
+    （`checked[kind] is None` + 一条 warning），而不是静默少查一项还报通过。
 
-    这一支此前零测试覆盖（`grep -c counter_table_missing tests/*.py` = 0），
-    而它正是"将来某次 schema 改名只改了 `ID_COUNTERS`"时唯一的报警器。
-    注入方式是 monkeypatch 那张受控表（不动 `schema.py` 的字节）。
+    这一支此前零测试覆盖（`grep -c counter_table_missing tests/*.py` = 0），而它正是"将来某次 schema 改名只改了 `ID_COUNTERS`"时唯一的报警器。注入方式是
+    monkeypatch 那张受控表（不动 `schema.py` 的字节）。
 
     装置自控：先证明未注入时这个键根本不在 `checked` 里（这一支只在缺表时写键）。
 
-    注意判据用 `in` 而不是 `.get()`：`checked` 里"键不在"与"键在但值是 None"是两件事，
-    而 `.get()` 会把它们折成一个 None —— 正是这一支要防的那种折平。
+    注意判据用 `in` 而不是 `.get()`：`checked` 里"键不在"与"键在但值是 None"是两件事，而 `.get()` 会把它们折成一个 None —— 正是这一支要防的那种折平。
     """
     kind = "experiment"
     assert kind not in verify_all(store).checked, (

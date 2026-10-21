@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """写面判据（W3 / 裁定 C2 · D2 · I1 · Q1）。
-
 ## 这一组守什么
-
 | 守什么 | 用例 |
 |---|---|
 | 接缝：三条写入 `writes.ROUTES` + `writes.HANDLERS`，真 HTTP 走得到 | `test_the_write_endpoints_*` |
@@ -11,20 +9,12 @@
 | 失败不许折成 200（三态不塌） | `test_a_failed_audit_does_not_turn_into_a_clean_success` |
 | 不许绕闸门（负控） | `test_the_stop_audit_follows_the_gate` · `test_the_answer_write_really_goes_through_userio` |
 | `/api/submit` 不走 `admit_search_request` | `test_submit_does_not_go_through_the_admission_gate` |
-
 ## 一处口径要写清楚：`/answer` 不进授权矩阵
-
-`draft/73` §2.5 给 `POST /answer` 的闸门栏逐字是"现状，不动"，而且
-`tests/test_webui.py` 里有 21 条用例在缺省只读的服务上提交表单、要求 303/409
-（`tests/test_webui.py:55` 的 `server()` 用缺省 `allow_writes=False`，
-`:180`/`:282`/`:296` 三条钉着状态码）。所以 C 线只给它补审计，
+`draft/73` §2.5 给 `POST /answer` 的闸门栏逐字是"现状，不动"，而且`tests/test_webui.py` 里有 21 条用例在缺省只读的服务上提交表单、要求
+303/409（`tests/test_webui.py:55` 的 `server()` 用缺省 `allow_writes=False`，`:180`/`:282`/`:296` 三条钉着状态码）。所以 C 线只给它补审计，
 不给它加 `--allow-writes` 这一层 —— 加了那 21 条会全红，而那不是本线的授权。
-
 ## 负控怎么造
-
-每条判据的负控都用"把闸门换成桩/把中间那一步改坏"的形态，并且断言读数真的变了：
-换桩之后审计里的 `result` 必须跟着变、`admission` 桩必须一次都没被调用。
-少了这一条，"写路径真的经过既有闸门"就只是一句话。
+每条判据的负控都用"把闸门换成桩/把中间那一步改坏"的形态，并且断言读数真的变了：换桩之后审计里的 `result` 必须跟着变、`admission` 桩必须一次都没被调用。少了这一条，"写路径真的经过既有闸门"就只是一句话。
 """
 
 from __future__ import annotations
@@ -758,10 +748,10 @@ def test_a_run_can_wake_an_idle_session_with_the_same_task(
     """R91（业主「要能对话」）：`resume=1` + `sid` ⇒ argv 带 `--sid` 与 `--resume`。
 
     这是"M 闲着的时候还能跟它说话"那一支的落点：用户的话先落进收件箱
-    （`/api/task`），再用**同一句话任务**把那段会话唤醒 —— `resume_messages` 按
+    （`/api/task`），再用同一句话任务把那段会话唤醒 —— `resume_messages` 按
     "role 相同 + task 原文相同 + 是全新开始"挑重建窗口，换了任务就是另一趟
     （`--resume` 会以指纹不符拒掉，那是有意的守卫）。所以这一条钉两件事：
-    续跑那一支带 `--sid` + `--resume`；**不续跑那一支一个都不带**（否则"起一趟"
+    续跑那一支带 `--sid` + `--resume`；不续跑那一支一个都不带（否则"起一趟"
     会静默变成"接上一趟"）。
     """
     root = _mk(tmp_path)

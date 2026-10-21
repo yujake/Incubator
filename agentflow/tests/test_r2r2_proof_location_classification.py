@@ -72,17 +72,13 @@ def test_the_classifier_gives_the_declared_kind(loc: str, want: str) -> None:
 
 
 def test_the_two_call_sites_agree_on_every_case(ws: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """交叉断言（`R2R2-R1` 的判据）：写入期与事后门对同一输入必须同分类。
+    """    交叉断言（`R2R2-R1` 的判据）：写入期与事后门对同一输入必须同分类。
 
     要判的不是"两处结论相同"（处置本来就不同），而是分类相同。
 
-    `R6-AN-2`（本轮修）：旧版这里写的是
-    `assert DT.classify_proof_location(loc, KNOWN) == DT.classify_proof_location(loc, KNOWN)`
-    —— 同一次调用的同参数写了两遍，对任何纯函数、任何输入都恒真；用例名与上一版
-    docstring 却声称守的是"两个调用点"，实际只有上面那条模块同一性断言在干活。
-    现在改成真的把第二个调用点跑起来：把共享分类函数换成一个记账的替身，
-    真跑一次 `gate_g3`，再看它是不是逐个走了这份函数、且用的已知集合就是该文档的
-    `claim_id` 集合。事后门若改回内联正则（历史上就是这么错的），替身一条也记不到，
+    `R6-AN-2`（本轮修）：旧版这里写的是`assert DT.classify_proof_location(loc, KNOWN) == DT.classify_proof_location(loc, KNOWN)`—
+    — 同一次调用的同参数写了两遍，对任何纯函数、任何输入都恒真；用例名与上一版docstring 却声称守的是"两个调用点"，实际只有上面那条模块同一性断言在干活。现在改成真的把第二个调用点跑起来：
+    把共享分类函数换成一个记账的替身，真跑一次 `gate_g3`，再看它是不是逐个走了这份函数、且用的已知集合就是该文档的`claim_id` 集合。事后门若改回内联正则（历史上就是这么错的），替身一条也记不到，
     下面那句"事后门只对 N 个输入调了共享分类函数"立刻红。
     """
     from agentflow.gates import doc_tools as gates_doc_tools

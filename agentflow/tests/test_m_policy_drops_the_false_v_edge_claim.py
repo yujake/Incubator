@@ -1,40 +1,21 @@
 # -*- coding: utf-8 -*-
-"""判据：M 的 policy 里**不再**把 `M→V` 说成"你的出边"，但"派 D 去核 / 由 D 让 F 补签"必须留着。
-
+"""判据：M 的 policy 里不再把 `M→V` 说成"你的出边"，但"派 D 去核 / 由 D 让 F 补签"必须留着。
 ## 为什么这道判据存在
-
-`specs/m.py::SPEC.brief.policy` 是**逐字进提示词**的东西（`agent_prompts.ROLE_BRIEFS`
-只是它的视图，`specs/` 是唯一真身）⇒ 政策里写错一句**权限事实**，模型就照着它派活。
-
-2026-10-20 业主裁定撤掉 `M→V`（现 `M.edges = ('A','B','C','D','E','G','H')`，边总数 32），
-而 policy 第 2 条里逐字留着改前的措辞：
-
+`specs/m.py::SPEC.brief.policy` 是逐字进提示词的东西（`agent_prompts.ROLE_BRIEFS`只是它的视图，`specs/` 是唯一真身）⇒ 政策里写错一句权限事实，模型就照着它派活。
+2026-10-20 业主裁定撤掉 `M→V`（现 `M.edges = ('A','B','C','D','E','G','H')`，边总数 32），而 policy 第 2 条里逐字留着改前的措辞：
 > `M→V` 那条边也在你的出边里（`ALLOWED_EDGES['M']` 里已有 V，`M→B→V` 仍可走）
-
-这句**今天是假话**：`"V" not in ALLOWED_EDGES["M"]`，端到端派 V 判 `forbidden_edge`
-（边表那一侧由 `tests/test_v_signing_belongs_to_f_and_b.py` 与 `tests/test_policy.py` 守）。
-它比"少写一句"更坏：假陈述让主控反复去撞一条不存在的边，撞完还不知道该换哪条路 ——
-而 `forbidden_edge` 的正确读法是"换链"，前提是提示词里那条**真的**存在的链还在。
-
+这句今天是假话：`"V" not in ALLOWED_EDGES["M"]`，端到端派 V 判 `forbidden_edge`（边表那一侧由
+`tests/test_v_signing_belongs_to_f_and_b.py` 与 `tests/test_policy.py` 守）。它比"少写一句"更坏：假陈述让主控反复去撞一条不存在的边，撞完还不知道该换哪条路
+——而 `forbidden_edge` 的正确读法是"换链"，前提是提示词里那条真的存在的链还在。
 ## 四条，缺一条就会被"改一半"混过去
-
-- ① **删干净**：policy 里不再出现那三种写法（`M→V` / `ALLOWED_EDGES['M']` / `出边里已有`），
-  也不再出现"B 与 V 你可以直接派"这个**权限断言** —— B 那一半是真的，V 那一半是假的
-  （M 的七条出边里没有 V），整句留着就还是在说"你能派 V"。
-- ② **反真空**：义务**转交**的两句必须还在（`派 … D 去核`、`由 D 让 F 补签`），
-  `B 你可以直接派` 也还在 —— 否则"删掉假陈述"可以退化成"整段删掉"，
-  而业主说的是"这条义务**挪给 D**"，不是"取消"。
-- ③ **`M→B→V` 要写成"经 B 的路"**：这条路今天仍可达（现读 `M.edges` 含 B、`B.edges` 含 V），
-  所以留住 —— 但必须写成**两跳**，不许读成"我直连 V"。
-- ④ **负控**：① 的三种写法各自加回 ⇒ 红；整段删掉 ⇒ 红；把 `M→B→V` 说成直连 ⇒ 红；
-  把 `B→V` 从边表里摘掉（那句话就成了假话）⇒ 红。
-
+- ① 删干净：policy 里不再出现那三种写法（`M→V` / `ALLOWED_EDGES['M']` / `出边里已有`），也不再出现"B 与 V 你可以直接派"这个权限断言 —— B 那一半是真的，V 那一半是假的（M
+的七条出边里没有 V），整句留着就还是在说"你能派 V"。- ② 反真空：义务转交的两句必须还在（`派 … D 去核`、`由 D 让 F 补签`），`B 你可以直接派` 也还在 —— 否则"删掉假陈述"可以退化成"整段删掉"，
+而业主说的是"这条义务挪给 D"，不是"取消"。- ③ `M→B→V` 要写成"经 B 的路"：这条路今天仍可达（现读 `M.edges` 含 B、`B.edges` 含 V），所以留住 —— 但必须写成两跳，不许读成"我直连
+V"。- ④ 负控：① 的三种写法各自加回 ⇒ 红；整段删掉 ⇒ 红；把 `M→B→V` 说成直连 ⇒ 红；把 `B→V` 从边表里摘掉（那句话就成了假话）⇒ 红。
 ## 为什么不扫文件文本
-
-`specs/m.py` 里那两段 2026-10-18 / 2026-10-20 的裁定注释**必须**可以写 `M→V`
-（它们是历史读数与撤边记录，注释不进提示词）。所以和
-`test_v_signing_belongs_to_f_and_b.py::_prove_walk_obligations` 同一条纪律：
-这里只看**声明**（`brief.policy`），不看源码文本 —— 否则一句正确修复会被历史注释钉红。
+`specs/m.py` 里那两段 2026-10-18 / 2026-10-20 的裁定注释必须可以写 `M→V`（它们是历史读数与撤边记录，注释不进提示词）。
+所以和`test_v_signing_belongs_to_f_and_b.py::_prove_walk_obligations` 同一条纪律：这里只看声明（`brief.policy`），不看源码文本 ——
+否则一句正确修复会被历史注释钉红。
 """
 from __future__ import annotations
 
@@ -42,7 +23,7 @@ import re
 
 from agentflow.specs import builtin_specs
 
-#: 改前那句**假陈述**的可扫写法（任何一种命中 ⇒ "边在你的出边里"这类权限事实还在）。
+#: 改前那句假陈述的可扫写法（任何一种命中 ⇒ "边在你的出边里"这类权限事实还在）。
 #: `M→B→V` 不含 `M→V`，所以保留那条两跳路不会被误判（③ 单独判它怎么写）。
 _FALSE_CLAIM_MARKERS = (
     "M→V",                  # 直连那条边
@@ -51,7 +32,7 @@ _FALSE_CLAIM_MARKERS = (
     "那条边也在你的出边里",   # 同一句的口语形态
 )
 
-#: 改前那个**权限断言**的抬头：B 那一半真、V 那一半假 ⇒ 整句都不许再出现。
+#: 改前那个权限断言的抬头：B 那一半真、V 那一半假 ⇒ 整句都不许再出现。
 _FALSE_HEADER = "B 与 V 你可以直接派"
 
 #: 强调符号与空白：`派 **D** 去核` 与 `派 D 去核` 是同一句话（反真空按"读出来的意思"判）。
@@ -72,7 +53,7 @@ def _flat(text: str) -> str:
 # ============================================================ ① 假陈述必须删干净
 
 def _false_claim_problems(policy) -> list[str]:
-    """policy 里"边在你的出边里"这类**假权限陈述**的全部命中（空列表 = 一句都没有）。"""
+    """policy 里"边在你的出边里"这类假权限陈述的全部命中（空列表 = 一句都没有）。"""
     out: list[str] = []
     for i, item in enumerate(policy):
         text = str(item)
@@ -161,9 +142,9 @@ def _two_hop_problems(policy, m_edges, b_edges) -> list[str]:
 
     两个面一起判，因为它们坏起来是两件事：
 
-    - **数据面**：这条路得**真的**还通（`B ∈ M.edges`、`V ∈ B.edges`）—— 边被撤了而提示词
+    - 数据面：这条路得真的还通（`B ∈ M.edges`、`V ∈ B.edges`）—— 边被撤了而提示词
       还点着它，就是换了个方向说同一句假话；
-    - **文字面**：必须写明"**经 B**"且"不是你直连 V"—— 只写 `M→B→V` 三个字母，
+    - 文字面：必须写明"经 B"且"不是你直连 V"—— 只写 `M→B→V` 三个字母，
       读的人（尤其模型）会把它当成"到 V 的一条路"的另一种写法，与旧直连句分不开。
     """
     text = "\n".join(str(s) for s in policy)
@@ -183,7 +164,7 @@ def _two_hop_problems(policy, m_edges, b_edges) -> list[str]:
 
 
 def test_the_two_hop_route_is_described_as_going_through_b() -> None:
-    """③ 正控：`M→B→V` 仍在，且写明是**经 B** 的两跳路、不是 M 直连 V（边表现读核可达）。"""
+    """③ 正控：`M→B→V` 仍在，且写明是经 B 的两跳路、不是 M 直连 V（边表现读核可达）。"""
     specs = builtin_specs()
     policy = specs["M"].brief.policy
     problems = _two_hop_problems(policy, specs["M"].edges, specs["B"].edges)

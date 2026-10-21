@@ -109,7 +109,7 @@ def test_a_forbidden_summon_becomes_a_relay_request_to_the_conductor(tmp_path):
     # M 的收件箱里必须有那条申请，而且它点名了要谁
     heard, ids, _sent = AL.inbox_digest(st.root, "M", sid="t")
     assert ids, heard
-    # 2026-10-16（口径 S2 最终形态）：代唤申请现在**只点名角色、不点名动作** ——
+    # 2026-10-16（口径 S2 最终形态）：代唤申请现在只点名角色、不点名动作 ——
     # 「action 完全不用父代理填」⇒ 申请里那一格恒为空（`wants_action == ""`）。
     # 原来还断 `"run_experiment" in heard`，那一档已不存在。
     assert "E" in heard, heard

@@ -63,13 +63,13 @@ def test_the_latest_answer_wins_when_the_user_changes_their_mind(tmp_path: pathl
 
 
 def test_saying_stop_is_not_a_word_match(tmp_path: pathlib.Path):
-    """**说"停"不再靠字面匹配**（业主 2026-10-17「删掉旁路」）。
+    """说"停"不再靠字面匹配（业主 2026-10-17「删掉旁路」）。
 
     原先这里守的是"回答里含 `STOP_TOKEN` ⇒ `user_stop`"。那条旁路已删：字面匹配必然漏
-    （中文「停」「收工」一个都不认），而"停"现在是**主控的工具**（`conductor.stop`），
-    由主控**理解意思**后主动调。所以这一条现在反过来断言：
+    （中文「停」「收工」一个都不认），而"停"现在是主控的工具（`conductor.stop`），
+    由主控理解意思后主动调。所以这一条现在反过来断言：
 
-    - 回答里写什么字（含 `STOP`）都**不再**直接产生 `user_stop`；
+    - 回答里写什么字（含 `STOP`）都不再直接产生 `user_stop`；
     - 优先级顺序不变（轮次先于预算先于停机文件）。
     """
     assert AU._stop_before_round(1, rounds=9, spent_usd=0.0, usd_budget=None,

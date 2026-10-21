@@ -21,7 +21,7 @@ from agentflow import cli
 
 #: 仓库根（`agentflow/`）：fixture 素材要从这里拷进临时工作区。
 REPO = Path(__file__).resolve().parents[1]
-# 2026-10-18（业主）：README 挪到**仓库根**（`D:\Incubator/README.md`）。
+# 2026-10-18（业主）：README 挪到仓库根（`D:\Incubator/README.md`）。
 # 判据跟着改锚点：优先读仓库根，读不到再退回本目录（两种布局都判得动）。
 def _readme_path() -> Path:
     root = REPO.parent / "README.md"
@@ -180,7 +180,7 @@ def test_the_readme_does_not_document_a_flag_that_does_not_exist():
     text = text[start:nxt if nxt > 0 else len(text)]
     flags: set[str] = set()
     # 2026-10-18：示例用反斜杠续行，`--task` 不在含 `run-agent` 的那一行上。
-    # 所以扫**整段**；`lines` 仍只用来确认"确实有 run-agent 示例"。
+    # 所以扫整段；`lines` 仍只用来确认"确实有 run-agent 示例"。
     lines = [ln for ln in text.splitlines() if "run-agent" in ln]
     scan_lines = text.splitlines()
     assert lines, "夹具前提：首次运行那一节里应当有 run-agent 的示例命令"

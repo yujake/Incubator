@@ -111,19 +111,15 @@ def test_client_from_env_reads_the_documented_env_names() -> None:
 
 
 def test_unwired_task_id_is_not_folded_into_a_fake_string(tmp_path) -> None:
-    """判据（主控裁定 · B→A 需求单）：没接线的 `task_id` 原样透传 `None`，不折成字符串。
+    """    判据（主控裁定 · B→A 需求单）：没接线的 `task_id` 原样透传 `None`，不折成字符串。
 
     ## 为什么这是三态问题而不是措辞问题
 
-    `verify.py` 的 `dangling_usage_task` 逐字容忍 `None`（"未接线"），只在
-    "非 None 且不在 `tasks` 表里"时报 error。而 `modelclient` 此前写的是
-    `task_id=self.task_id or "(未接线)"` —— 把 `None` 折成字符串，于是每一笔
-    未接线的花销都会落成一条 dangling 行。真机同族现场：根1 的 106 行
-    `host-wiring` 假任务号（那是 `host.py:86` 的历史，B 已改成 None）。
+    `verify.py` 的 `dangling_usage_task` 逐字容忍 `None`（"未接线"），只在"非 None 且不在 `tasks` 表里"时报 error。而
+    `modelclient` 此前写的是`task_id=self.task_id or "(未接线)"` —— 把 `None` 折成字符串，于是每一笔未接线的花销都会落成一条 dangling 行。真机同族现场：根1 的
+    106 行`host-wiring` 假任务号（那是 `host.py:86` 的历史，B 已改成 None）。
 
-    本判据钉两件事：① 账上那一行的 `task_id` 是 `None`（不是假字符串）；
-    ② `uncharged` 那条"未接线"读数逐字不变（`task_id` 这个标签与
-    "有没有真的入账"是两件事，不许合并）。
+    本判据钉两件事：① 账上那一行的 `task_id` 是 `None`（不是假字符串）；② `uncharged` 那条"未接线"读数逐字不变（`task_id` 这个标签与"有没有真的入账"是两件事，不许合并）。
     """
     from agentflow import verify as V
 

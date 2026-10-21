@@ -1,34 +1,22 @@
 """公共 fixture 与构造工具。
 
-设计约束：
-- 所有测试都在 ``tmp_path`` 下自建工作区，绝不碰 ``test/test1/data/``
-  或 ``test/test1/demo/run/``（那是演示数据，必须保持干净）。
-- 只通过 ``sys.path`` 注入 ``src/``，不要求安装包。
-- 时间戳一律写死为常量，避免测试依赖"当前时间/时区"。
+设计约束：所有测试都在 ``tmp_path`` 下自建工作区，绝不碰 ``test/test1/data/`` 或
+``test/test1/demo/run/``（演示数据必须保持干净）；只通过 ``sys.path`` 注入 ``src/``、不要求安装包；
+时间戳一律写死为常量，避免测试依赖"当前时间/时区"。
 
-## 为什么这里要显式钉临时根（`X-2` 的剩余面）
-
-`draft/25` 的 `X-2` 登记过一处残留：仓库根冒出 `pytest-of-unknown/`。读 pytest 9.1.0
-的 `TempPathFactory.getbasetemp` 可以看清成因 —— 没有显式 `--basetemp` 时，它算的是
-
-    temproot = Path(os.environ.get("PYTEST_DEBUG_TEMPROOT") or tempfile.gettempdir()).resolve()
-    rootdir  = temproot / f"pytest-of-{get_user() or 'unknown'}"
-
-而 `tempfile.gettempdir()` 在没有任何可写临时目录时会退回当前工作目录
-（Python 的既有行为，不是 pytest 的 bug）⇒ 这时 basetemp 就落在仓库根；
-`PYTEST_DEBUG_TEMPROOT` 若给的是相对路径，`.resolve()` 也会把它解到 cwd。
-
-本文件在导入期把 `PYTEST_DEBUG_TEMPROOT` 钉到一个先验证过可写的绝对路径。
-为什么是导入期而不是某个 hook：`getbasetemp()` 是惰性的（第一次用 `tmp_path` 才调用），
-而它每次都现读这个环境变量；conftest 的导入早于任何用例执行，所以这个写入一定在它之前生效。
-为什么不用 `pytest_load_initial_conftests` 往 args 里插 `--basetemp`（第一版这么写过，
-实测不生效：pytest 9.1.0 下 `tests/conftest.py` 的这个 hook 根本没被调用 —— 加了
-调试打印也一行都不出）。教训与 `draft/28` 的"装置陷阱"同族：注入要证明它真的生效，
-本模块的自测用例（`test_x2_temp_root_is_pinned`）就是钉这件事的。
-
-候选临时根一个都写不了时退回包内固定目录（`.pytest-tmp/`，已在仓库根 `.gitignore` 登记）。
-于是"跑一次全量 ⇒ 仓库根不新增目录"这条判据不再依赖环境变量对不对。
-"""
+为什么这里要显式钉临时根（`X-2` 的剩余面）：`draft/25` 的 `X-2` 登记过一处残留 —— 仓库根冒出
+`pytest-of-unknown/`。读 pytest 9.1.0 的 `TempPathFactory.getbasetemp` 可以看清成因：没有显式
+`--basetemp` 时它算 `tempfile.gettempdir()` 下的 `pytest-of-<user>`，而 `tempfile.gettempdir()` 在
+没有任何可写临时目录时会退回当前工作目录（Python 既有行为）⇒ basetemp 落在仓库根；
+`PYTEST_DEBUG_TEMPROOT` 若给相对路径，`.resolve()` 也会把它解到 cwd。
+本文件因此在导入期把 `PYTEST_DEBUG_TEMPROOT` 钉到一个先验证过可写的绝对路径。为什么是导入期：
+`getbasetemp()` 是惰性的（第一次用 `tmp_path` 才调用）且每次都现读这个变量，而 conftest 的导入早于
+任何用例执行 ⇒ 这个写入一定在它之前生效。为什么不用 `pytest_load_initial_conftests` 往 args 里插
+`--basetemp`：第一版这么写过、实测不生效（pytest 9.1.0 下 `tests/conftest.py` 的这个 hook 根本没被
+调用，加调试打印也一行不出）—— 教训与 `draft/28` 的"装置陷阱"同族，注入要证明它真的生效，
+`test_x2_temp_root_is_pinned` 就是钉这件事的自测用例。
+候选临时根一个都写不了时退回包内固定目录 `.pytest-tmp/`（已在仓库根 `.gitignore` 登记）⇒
+"跑一次全量 ⇒ 仓库根不新增目录"这条判据不再依赖环境变量对不对。"""
 from __future__ import annotations
 
 import json
@@ -122,28 +110,16 @@ _MACHINE_ENV_NAMES = (
 def _pin_settings_path() -> str:
     """把"设置文件在哪"钉到一个不存在的路径，并清掉本机事实类的环境变量。
 
-    ## 为什么必须有这一手（2026-10-07 全量门的真事故，12 条红全是它）
-
-    机器级设置文件（`agentflow/settings.json`）落地之后，这台机器上真的有那份文件
-    （里面有真的 API key 与这台机器的 Lean / Mathlib 落点）。而判据里有一批断言的是
-    "没配的时候"的行为：`agentflow run` 没有 key ⇒ 退出码 2 且报 `no_key`、
-    `detect_verifier` 报"没装"、"build 期不碰模型"…… 它们在本机那份文件面前全部变红
-    （实测：`test_agent_cli` / `test_cli_run` / `test_cli_console_encoding` /
-    `test_host_wiring`×3 / `test_formalgw` / `test_tools_audit_fixes`×2 /
+    为什么必须有这一手（2026-10-07 全量门的真事故，12 条红全是它）：机器级设置文件
+    （`agentflow/settings.json`）落地后这台机器上真的有那份文件（含真 API key 与 Lean / Mathlib 落点），
+    而一批断言的是"没配的时候"的行为：`agentflow run` 没有 key ⇒ 退出码 2 且报 `no_key`、
+    `detect_verifier` 报"没装"、"build 期不碰模型"……它们全部变红（实测 `test_agent_cli` / `test_cli_run` /
+    `test_cli_console_encoding` / `test_host_wiring`×3 / `test_formalgw` / `test_tools_audit_fixes`×2 /
     `test_user_quickstart` / `test_user_channel_stop_and_resume` 共 12 条）。
-
-    ## 为什么"把判据改成看环境"是错的答案
-
-    那些判据守的是代码的分支（没配 ⇒ 三态里的"没查成"），不是"这台机器上装了什么"。
-    让它们随本机配置变形，等于把"这条分支还在不在"变成一台机器上一个答案 ——
-    而 CI 上（没配）与开发机上（配了）会给出不同的结论，绿灯的含义随之漂移。
-
-    ## 所以：判据在确定性环境里跑；要测设置层的判据自己造文件
-
-    `tests/test_settings.py` 用 `monkeypatch.setenv(SET.ENV_SETTINGS, <自己造的>)` ——
-    monkeypatch 在用例结束时会把它还原成这里钉的值，两者不冲突。守卫在
-    `tests/test_settings.py::test_the_suite_pins_the_machine_settings_away`。
-    """
+    为什么"把判据改成看环境"是错的：那些判据守的是代码分支（没配 ⇒ 三态里的"没查成"），不是"这台机器
+    上装了什么"；让它们随本机配置变形 ⇒ 把"这条分支还在不在"变成一台机器上一个答案，CI 与开发机
+    会给出不同结论。所以：判据在确定性环境里跑，要测设置层的判据自己造文件 —— `tests/test_settings.py`
+    用 `monkeypatch.setenv(SET.ENV_SETTINGS, <自己造的>)`（结束时还原成这里钉的值），守卫在 `tests/test_settings.py::test_the_suite_pins_the_machine_settings_away`。"""
     if os.environ.get(_NO_SETTINGS_PIN_ENV):
         return ""
     for name in _MACHINE_ENV_NAMES[1:]:
@@ -211,18 +187,15 @@ def write_library_file(store: Store, rel: str, text: str) -> Path:
 def sync_counters(store: Store) -> None:
     """把 counters.json 对齐到"max(已用 4 位 ID) + 1"。
 
-    verify 会检查 counters 与表内已用 ID 的一致性；测试里手工插行必须同步它，
-    否则会引入与"本次要验证的不变量"无关的 ``counter_behind`` 噪音。
+    verify 会检查 counters 与表内已用 ID 的一致性；测试里手工插行必须同步它，否则会引入与"本次要
+    验证的不变量"无关的 ``counter_behind`` 噪音。
 
-    覆盖范围由 `S.ID_COUNTERS` 反查，不在这里另写一张 (kind, table) 表。
-    原先这里写死了 3 个 kind（lit/concept/relation），于是新增
-    `experiment` / `plan` / `doc` / `dep` / `finding` 五类之后，用本函数同步过的库
-    仍会报 counter_behind —— 而报错的内容与测试真正想验证的东西毫无关系，纯属噪音。
-    这正是"跨模块约定必须只有一处定义"（FC-03）在测试代码里的形态：
-    测试代码也是代码，写死第二份名单同样会漂移。
-    S1r 并表之后 `concept` 这一档随表退役（`ID_COUNTERS` 里已经没有它）⇒
-    本函数自动不再写那一格，调用方一个字都不用改（这正是"反查"的用处）。
-    """
+    覆盖范围由 `S.ID_COUNTERS` 反查，不在这里另写一张 (kind, table) 表：原先这里写死 3 个 kind
+    （lit/concept/relation），于是新增 `experiment` / `plan` / `doc` / `dep` / `finding` 五类之后，用本
+    函数同步过的库仍报 counter_behind，而报错内容与测试真正想验证的东西无关，纯属噪音。这正是
+    "跨模块约定必须只有一处定义"（FC-03）在测试代码里的形态：测试代码也是代码，写死第二份名单同样
+    会漂移。S1r 并表之后 `concept` 这一档随表退役（`ID_COUNTERS` 里已经没有它）⇒ 本函数自动不再写
+    那一格，调用方一个字都不用改（这正是"反查"的用处）。"""
     counters: dict[str, int] = {}
     for kind, field in S.ID_COUNTERS.items():
         table = next((t for t, spec in S.TABLES.items() if spec["id_field"] == field), None)
@@ -479,24 +452,16 @@ def make_run_products(root: Path, *, run: str = "out/run-1") -> Path:
 def make_artifacts_sample(root: Path, *, sid: str = "fix-sid") -> Path:
     """在临时工作区里造出六个只读面各自的样本（裁定 J2）。
 
-    造出来的东西逐项对应一个读者：
+    造出来的东西逐项对应一个读者：`out/run-1/` 六件产物 → `readers.run_products`；`ARTIFACTS.jsonl`
+    （`artifacts.record` 写）→ `readers.artifacts_face` 的 `ledger`；`manuscripts/handoffs.jsonl`
+    （`manuscripts.write`）→ `handoffs`；`out/paper/ACCEPTANCE-CHECKS.json` → `checks`；
+    `out/review/REPORT-STYLE.json` + `REPORT.md` → `style` / `RunView.report`；`out/secretary/M.jsonl`
+    （`Secretary.note_decision`）→ `secretary`；`out/experiments/*.log` + `out/tasks/t-.json` → 产物面的
+    "M 那一路真机产物"；`runs/agent-<角色>-<sid>.json`（`save_run_checkpoint`）→ `readers.run_view` 的
+    检查点；`data/tasks.json` 一行（`S.Task`）→ 产物面的 `tasks`；一场会话（提问 + 一趟）→ 证据面的
+    `triage_branch_recorded`。
 
-    | 造的东西 | 谁读它 |
-    |---|---|
-    | `out/run-1/` 六件产物 | `readers.run_products` |
-    | `ARTIFACTS.jsonl`（`artifacts.record` 写） | `readers.artifacts_face` 的 `ledger` |
-    | `manuscripts/handoffs.jsonl`（`manuscripts.write`） | `handoffs` |
-    | `out/paper/ACCEPTANCE-CHECKS.json` | `checks` |
-    | `out/review/REPORT-STYLE.json` + `REPORT.md` | `style` / `RunView.report` |
-    | `out/secretary/M.jsonl`（`Secretary.note_decision`） | `secretary` |
-    | `out/experiments/*.log` + `out/tasks/t-.json` | 产物面的"M 那一路真机产物" |
-    | `runs/agent-<角色>-<sid>.json`（`save_run_checkpoint`） | `readers.run_view` 的检查点 |
-    | `data/tasks.json` 一行（`S.Task`） | 产物面的 `tasks` |
-    | 一场会话（提问 + 一趟） | 证据面的 `triage_branch_recorded` |
-
-    返回工作区根。顺序有讲究：文件先落盘，`artifacts.record` 才登记得进去
-    （它拒绝登记不存在的路径 —— 那是它的核心纪律）。
-    """
+    返回工作区根。顺序有讲究：文件先落盘，`artifacts.record` 才登记得进去（它拒绝登记不存在的路径 —— 那是它的核心纪律）。"""
     from agentflow import agent_loop as AL
     from agentflow import artifacts as AR
     from agentflow import manuscripts as MS
@@ -597,7 +562,7 @@ def make_artifacts_sample(root: Path, *, sid: str = "fix-sid") -> Path:
 def _reset_provider_cooldowns():
     """每条判据前后都清空 provider 冷却表（缺陷 ⑰ 的副作用隔离）。
 
-    `providers` 的冷却是**进程级**的字典（生产里正是要"这一趟记住这个源被限流了"），
+    `providers` 的冷却是进程级的字典（生产里正是要"这一趟记住这个源被限流了"），
     但判据之间必须互不污染：先前跑过的那条判据把一个 provider 打进冷却，
     下一条就会拿到 `ProviderError: …正在限流冷却`，看起来像本身的断言失败。
     """

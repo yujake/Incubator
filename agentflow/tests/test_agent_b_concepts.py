@@ -3,29 +3,19 @@
 
 ## 真机读数（`projects/mp3/data/statements.json`，2026-10-21 现算）
 
-```
-statements 1147 行：kind 分布 concept 1143 / theorem 2 / lemma 2
-origin 分布：own_result 1145、external_lit 2
-每一条 concept 都带 proof_text，值是 "concept:primitive"
-其中 1142 条**带 source_lit_id**（术语确实出自文献）
-```
+statements 1147 行：kind 分布 concept 1143 / theorem 2 / lemma 2；origin 分布 own_result 1145、external_lit 2；每一条 concept 都带 proof_text，值是 "concept:primitive"；其中 1142 条带 source_lit_id（术语确实出自文献）。
 
 三处错（业主 2026-10-21 的验收词，逐条对应下面的判据）：
 
-1. **概念行带 `proof_text`** ⇒ 任何"有没有证明"的读数都被虚高
-   （`proof_review_gap` 的 `proof_text` 非空判据、收工门的 reviewed 档、
-   `closing` 的 `prose_reviewed_statements`）；
-2. **`origin=own_result` 错标**：文献里来的术语是 `external_lit`，不是自己的结果；
-3. **一轮灌进上千条**：概念应按轮限量（一轮几十条以内）。
+1. 概念行带 `proof_text` ⇒ 任何"有没有证明"的读数都被虚高（`proof_review_gap` 的 `proof_text` 非空判据、收工门的 reviewed 档、`closing` 的 `prose_reviewed_statements`）；
+2. `origin=own_result` 错标：文献里来的术语是 `external_lit`，不是自己的结果；
+3. 一轮灌进上千条：概念应按轮限量（一轮几十条以内）。
 
 ## 判据（每条都配一处负控；负控不红 = 这条判据没在咬）
 
-| # | 判的是 | 负控 |
-|---|---|---|
-| ① | 写一条概念 ⇒ 落盘 `proof_text` 为空，且 `proof_review_gap` **不**把它算成"有证明" | 给它塞 `concept:primitive` ⇒ 判据红，且 `why` 点名"概念行不该带证明文本" |
-| ② | 写概念时 `origin` 在受控集合里；`own_result` ⇒ 拒 | 把闸门放开（`return ""`）⇒ 判据红 |
-| ③ | 一轮写超过上限 ⇒ 第 N+1 条受控拒绝、读数可见、已写的保留 | 让配额不拦也不记（"静默丢"）⇒ 判据红 |
-"""
+① 写一条概念 ⇒ 落盘 `proof_text` 为空，且 `proof_review_gap` 不把它算成"有证明"；负控：给它塞 `concept:primitive` ⇒ 判据红，且 `why` 点名"概念行不该带证明文本"。
+② 写概念时 `origin` 在受控集合里；`own_result` ⇒ 拒；负控：把闸门放开（`return ""`）⇒ 判据红。
+③ 一轮写超过上限 ⇒ 第 N+1 条受控拒绝、读数可见、已写的保留；负控：让配额不拦也不记（"静默丢"）⇒ 判据红。"""
 from __future__ import annotations
 
 import pytest
@@ -74,7 +64,7 @@ def _concept_rows(store: Store) -> list[dict]:
 
 def _write_one_concept(store: Store, *, definition: str = "边上权重的倒数",
                        source_lit_id: str = "0000", label: str = "电导") -> dict:
-    """走**生产的写入侧**（秘书那一笔）写一条概念，返回落盘的那一行。"""
+    """走生产的写入侧（秘书那一笔）写一条概念，返回落盘的那一行。"""
     _one_paper(store)
     from agentflow.secretary import Secretary
 
@@ -96,11 +86,10 @@ def _write_one_concept(store: Store, *, definition: str = "边上权重的倒数
 
 
 def _assert_concept_has_no_proof_text(row: dict) -> None:
-    """① 的尺子：**落盘那一格为空**，而且 `proof_review_gap` 不把它算成"有证明"。
+    """① 的尺子：落盘那一格为空，而且 `proof_review_gap` 不把它算成"有证明"。
 
-    两半都要判：只判"落盘为空"时，读侧仍可能把历史行（或别处塞进来的那一格）
-    当成"有证明"；只判读侧时，写入侧可以继续往库里灌哨兵。
-    """
+        两半都要判：只判"落盘为空"时，读侧仍可能把历史行（或别处塞进来的那一格）
+        当成"有证明"；只判读侧时，写入侧可以继续往库里灌哨兵。"""
     assert str(row.get("proof_text") or "") == "", (
         f"概念行的 proof_text 必须是空的（它是“这段证明被审过”的比对对象，"
         f"概念不参与等级链）：实得 {row.get('proof_text')!r}")
@@ -122,9 +111,8 @@ def test_a_concept_row_lands_without_proof_text_and_is_not_counted_as_proof(stor
 def test_negative_control_a_concept_row_with_the_old_sentinel_turns_the_criterion_red(store):
     """① 负控：给这条概念行塞 `concept:primitive` ⇒ 判据必须红，且点名"概念行不该带证明文本"。
 
-    这一格是**存量行的形态**（mp3 那 1143 条就是这个样子）：判据要能在数据面上
-    认出它，而不是"反正写入侧不写了，读侧就看不见了"。
-    """
+        这一格是存量行的形态（mp3 那 1143 条就是这个样子）：判据要能在数据面上
+        认出它，而不是"反正写入侧不写了，读侧就看不见了"。"""
     row = dict(_write_one_concept(store))
     row["proof_text"] = "concept:primitive"
     gap = VR.proof_review_gap(".", row)
@@ -198,14 +186,14 @@ def test_negative_control_an_open_origin_gate_turns_the_criterion_red(
     monkeypatch.setattr(CR, "concept_origin_problem", lambda **_: "")
     with pytest.raises(AssertionError):
         _assert_writer_refuses_own_result()
-    # 反真空：放开之后那条写**真的**会落成 own_result（判据红得有理由）
+    # 反真空：放开之后那条写真的会落成 own_result（判据红得有理由）
     row = CR.concept_statement(stmt_id="000003", label="noetherian", definition="d",
                                source_lit_id="0000", origin="own_result")
     assert row.origin == "own_result" and row.source_lit_id == "0000"
 
 
 def test_a_self_authored_concept_is_allowed_only_when_declared():
-    """② 的受控集合：自己定义的新概念可以 `own_result`，但必须**显式**声明。"""
+    """② 的受控集合：自己定义的新概念可以 `own_result`，但必须显式声明。"""
     with pytest.raises(ValueError):
         CR.concept_statement(stmt_id="000004", label="我自己造的概念", definition="d",
                              origin="own_result")
@@ -237,13 +225,12 @@ def test_the_digest_path_labels_literature_concepts_as_external_lit(store):
 
 
 def _assert_quota_bites(store: Store, out: dict, *, limit: int, wanted: int) -> None:
-    """③ 的尺子：写到上限就停，第 N+1 条**受控拒绝且读数可见**，已写的保留。
+    """③ 的尺子：写到上限就停，第 N+1 条受控拒绝且读数可见，已写的保留。
 
-    三件事缺一不可：
-    ① 写下来的正好是 `limit` 条（不是"全写"也不是"全不写"）；
-    ② 拒绝有读数（`concepts_refused` 非零 + `concept_quota.why` 写明上限与去处）；
-    ③ 被拒的名字在 `details` 里点名（"静默丢"那一档就是没有这一格）。
-    """
+        三件事缺一不可：
+        ① 写下来的正好是 `limit` 条（不是"全写"也不是"全不写"）；
+        ② 拒绝有读数（`concepts_refused` 非零 + `concept_quota.why` 写明上限与去处）；
+        ③ 被拒的名字在 `details` 里点名（"静默丢"那一档就是没有这一格）。"""
     written = len(_concept_rows(store))
     assert written == limit, (
         f"配额 {limit} 但落了 {written} 条概念（写了 {wanted} 条）—— "

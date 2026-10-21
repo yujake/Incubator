@@ -321,12 +321,11 @@ def test_a_broken_seam_is_recorded_as_not_checked_not_as_a_dead_end(store: Store
 def test_a_malformed_round_comes_back_with_the_original_reason(store: Store):
     """不成形 ⇒ 原话带回去（而不是只说"没进展"）：调用方要能据它改提示词。
 
-    2026-10-19（`draft/44` P3-5）：**原话要带进下一次提问**，不是只写进 history。
+    2026-10-19（`draft/44` P3-5）：原话要带进下一次提问，不是只写进 history。
     改前 `RoundError` 一次就把子目标标成 `blocked` + `in_flight=True`，而 `step` 的
-    选目标过滤会摘掉 `in_flight` 的子目标 ⇒ 一次不成形的回答 = 这条路**永久封存**
+    选目标过滤会摘掉 `in_flight` 的子目标 ⇒ 一次不成形的回答 = 这条路永久封存
     （预算里的 `max_persist_attempts` 在 F 侧零消费者）。现在重问到上限才 blocked，
-    且重试用尽的 blocked **不带** `in_flight`（下轮仍会重试它）。
-    """
+    且重试用尽的 blocked 不带 `in_flight`（下轮仍会重试它）。"""
     bad = _round(product="reduction", new_subgoals=[])            # reduction 必须给 1–3 条
     llm = FakeLLM(bad, bad)                                       # 预算里 max_persist_attempts=2
     f = _f(store, llm=llm)
@@ -450,17 +449,9 @@ def test_the_tool_layer_path_gets_the_registered_seam(store: Store):
 def test_j07_the_tool_path_receives_the_config_of_its_own_root(tmp_path):
     """J-07：工具路径的 F 必须拿到它那个工作区登记的那份配置（按 root 键，防 B8 复发）。
 
-    `tools/attack_tools._agent_for` 此前是 `AgentF(store, llm=…)` —— 不传 `config=`
-    ⇒ F 的预算四键在工具路径上永远是空 dict（`draft/44` J-07 实测：那四个键全仓无赋值点）。
-    这里给配置补一条工具路径的登记口：`llmseam.set_role_config(role, root, cfg)`，
-    按 `(角色, root)` 键（不是全局单值 —— `draft/41` 的 B8 逐字记着 `conductor_for`
-    按 root 缓存、同进程第二次装配会沿用第一次的设定；全局单值会把 B8 换个地方重演：
-    A 工作区的配置发给 B 工作区的 F，而读数上两边都"看起来正常"）。
+    `tools/attack_tools._agent_for` 此前是 `AgentF(store, llm=…)` —— 不传 `config=` ⇒ F 的预算四键在工具路径上永远是空 dict（`draft/44` J-07 实测：那四个键全仓无赋值点）。这里给配置补一条工具路径的登记口：`llmseam.set_role_config(role, root, cfg)`，按 `(角色, root)` 键，不是全局单值 —— `draft/41` 的 B8 逐字记着 `conductor_for` 按 root 缓存、同进程第二次装配会沿用第一次的设定；全局单值会把 B8 换个地方重演：A 工作区的配置发给 B 工作区的 F，而读数上两边都"看起来正常"。
 
-    判据三条 + 一条反负控：① 不登记 ⇒ `cfg == {}`（与不传 config 逐字同形）；
-    ② 在 root A 登记 ⇒ A 的 F 拿到它；③ 反负控：两个 root 各登记一份 ⇒ 互不影响；
-    ④ 登记 `None` ⇒ 回到不登记的行为。
-    """
+    判据三条 + 一条反负控：① 不登记 ⇒ `cfg == {}`（与不传 config 逐字同形）；② 在 root A 登记 ⇒ A 的 F 拿到它；③ 反负控：两个 root 各登记一份 ⇒ 互不影响；④ 登记 `None` ⇒ 回到不登记的行为。"""
     from agentflow import llmseam as LS
     from agentflow.tools import attack_tools as AT
 

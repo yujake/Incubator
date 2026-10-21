@@ -1,42 +1,21 @@
 """主控工具：给主控 M 配手与眼。
-
-## 为什么需要这个模块（实测的洞）
-
-`registry.for_role("M") == []` —— 主控此前一件工具都没有：
-它作为确定性执行者能被 `Conductor` 调用，却没有"派活"这个动作可用。
-于是一句"评审这篇论文并给我更好的论文包"要落地，只能靠调用方在代码里替它把
-`plan` 拼出来 —— 那不是主 Agent，那是"人在派活"。
-
-## 这里刻意不做什么（所有者两次点名要防的形态）
-
-不写计划 JSON schema、不写 prompt 模板库、不写 plan 解析器、不写重计划状态机。
-判断在 M（主 Agent）那里；本模块只提供两件事：
-能不能做（闸门在 `Conductor` 内部：`ALLOWED_EDGES` / `CAPABILITIES` /
-参数接缝 / `policy` 四上限 / 预算）与做了什么（`tasks` 台账）。
-
-## 工具面（一个模块一个组前缀：`conductor.`）
-
-| 工具 | 侧效 | 作用 |
-|---|---|---|
-| `conductor.summon` | write_local | 唯一的派活动作（过全部闸门） |
-| `conductor.ledger` | read | 看台账：派了什么、被拒什么、剩多少 |
-| `conductor.stop` | write_local | 优雅停止：不再新开任务 → 等在飞收尾 → 合成终态（无僵尸）→ 落续跑简报 |
-| `conductor.resume_brief` | read | 读续跑简报（做了什么 / 剩什么 / 从哪继续） |
-| `conductor.cancel` | write_local | 硬取消（不等收尾，协作式） |
-| `conductor.ensure_project` | write_local | 冷启动 / 热启动由 M 决定（四态如实给） |
-| `conductor.state` | read | 只读状态视图（给 M 判断用） |
-| `conductor.role_spec` | read | 某角色的动作与工具面（派给谁、怎么写 brief） |
-| `conductor.summon_many` | write_local | 批量派活（分波与峰值在返回里；同角色多实例） |
-| `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
-| `conductor.closing` | read | 跑收工门八格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` = M 自己交的判据 `goal_met`，八格退成读数 `status`/`machine_pass`） |
-| `conductor.board` | read | 板上还挂着什么（工作项 + 走到哪一档 + 谁读的） |
-| `conductor.broadcast` | write_local | 给我名下的直接子代理广播一条通告（每人一条 ack 板项；级联由它们自己决定） |
-
-## 为什么 M 的写面变了不等于"主控开始产出知识"
-
-写侧工具改的是编排状态（台账行、取消信号、工作区目录、停止回执），
-`CAPABILITIES["M"] = ()`（零动作）与 `WRITE_SETS["M"] = {}`（不写领域表）
-一个字都没动 —— 领域表仍然只有 A–H 能写。
+`registry.for_role("M") == []` —— 主控此前一件工具都没有：它作为确定性执行者能被 `Conductor` 调用，却没有"派活"这个动作可用。
+于是一句"评审这篇论文并给我更好的论文包"要落地，只能靠调用方在代码里替它把`plan` 拼出来 —— 那不是主 Agent，那是"人在派活"。
+本模块只提供两件事：能不能做（闸门在 `Conductor` 内部：`ALLOWED_EDGES` / `CAPABILITIES` /参数接缝 / `policy` 四上
+限 / 预算）与做了什么（`tasks` 台账）。
+工具面（一个模块一个组前缀：`conductor.`）| 工具 | 侧效 | 作用 ||---|---|---|| `conductor.summon`
+| write_local | 唯一的派活动作（过全部闸门） || `conductor.ledger` | read | 看台账：派了什么、被拒什么、剩多少 || 
+`conductor.stop` | write_local | 优雅停止：不再新开任务 → 等在飞收尾 → 合成终态（无僵尸）→ 落续跑简报 || 
+`conductor.resume_brief` | read | 读续跑简报（做了什么 / 剩什么 / 从哪继续） || `conductor.cancel`
+| write_local | 硬取消（不等收尾，协作式） || `conductor.ensure_project` | write_local | 冷启动 / 热启动由
+M 决定（四态如实给） || `conductor.state` | read | 只读状态视图（给 M 判断用） || `conductor.role_spec`
+| read | 某角色的动作与工具面（派给谁、怎么写 brief） || `conductor.summon_many` | write_local | 批量派活（分波与
+峰值在返回里；同角色多实例） || `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） || 
+`conductor.closing` | read | 跑收工门八格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` = M 自己交的判据 
+`goal_met`，八格退成读数 `status`/`machine_pass`） || `conductor.board` | read | 板上还挂着什么（工作项
++ 走到哪一档 + 谁读的） || `conductor.broadcast` | write_local | 给我名下的直接子代理广播一条通告（每人一条 ack 板项；
+写侧工具改的是编排状态（台账行、取消信号、工作区目录、停止回执），`CAPABILITIES["M"] = ()`（零动作）与 `WRITE_SETS["M"] = {}`
+（不写领域表）一个字都没动 —— 领域表仍然只有 A–H 能写。
 """
 from __future__ import annotations
 
@@ -83,18 +62,15 @@ def reset_cache() -> None:
 
 def cached_conductor(store: Any) -> Conductor | None:
     """这个工作区「已经存在」的主控实例；没有就返回 `None`（「绝不顺手建一个」）。
-
+    
     ## 为什么要与 `conductor_for` 分开
-
-    `conductor_for` 是"取（或建）"，它建出来的那个主控没有角色登记表、没有 policy
-    （`registry=None`）。谁先在装配之前叫它一次，后来的 `wired_llm_conductor` 就会
-    按缓存静默复用到那个空壳 —— 于是"我要的是接了线的主控"与"实际跑的是空壳"
-    在读数上长得一模一样（这条缓存纪律写在 `host.wired_llm_conductor` 的 docstring 里，
-    `conductor_for` 自己也写着）。
-
-    所以"只想借用一下这一趟的主控身份说句话"的调用方（今天只有一个：F 上报缺缝，
-    见 `agent_f/core.py::_escalate_missing_seam`）只能借用「已经存在」的那一个；
-    不存在时它必须如实说"这一层没接到主控"，而不是为了发一条消息把会话的主控建歪。
+    
+    `conductor_for` 是"取（或建）"，它建出来的那个主控没有角色登记表、没有 policy （`registry=None`）。谁先在装配之前叫它一次，后来的 
+    `wired_llm_conductor` 就会按缓存静默复用到那个空壳 —— 于是"我要的是接了线的主控"与"实际跑的是空壳"在读数上长得一模一样（这条缓存纪律写在 
+    `host.wired_llm_conductor` 的 docstring 里，`conductor_for` 自己也写着）。
+    
+    所以"只想借用一下这一趟的主控身份说句话"的调用方（今天只有一个：F 上报缺缝，见 `agent_f/core.py::_escalate_missing_seam`）只能
+    借用「已经存在」的那一个；不存在时它必须如实说"这一层没接到主控"，而不是为了发一条消息把会话的主控建歪。
     """
     return _CONDUCTORS.get(str(Path(getattr(store, "root", ".")).resolve()))
 
@@ -243,7 +219,7 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
         "type": "object",
         "properties": {
             "target_role": {"type": "string", "description": "被召唤的角色（A–H）"},
-            # ⚠️ 「2026-10-16（业主口径 S2 最终形态）」：`action` 「整个摘掉」 ——
+            # 「2026-10-16（业主口径 S2 最终形态）」：`action` 「整个摘掉」 ——
             # 「一致改成 task 必填，action 不填」「action 完全不用父代理填」。
             # 派活只有 `target_role` + `task`；点哪个动作是被派者自己的事。
             "task": {"type": "string", "description":
@@ -454,22 +430,15 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
 )
 def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> ToolResult:
     """工具体：把台账的视图读出来（只读，不写任何字节）。
-
-    `view="relays"` 是 2026-09-30 加的（`draft/28` §199）：同伴够不到某个边时，
-    框架会自动给主控发一条 `subject=请代唤` 的留言并落一条 `agent_summon_request`
-    事件（`agent_loop._request_relay`）。留言是给人看的，这个视图是给主控看的 ——
-    它把那些申请整理成一张可判定的表：每条申请后面有没有出现"要的那个
-    (角色, 动作)"的任务行 ⇒ `fulfilled` / 待受理。三态纪律：查不到会话记录时
+    `view="relays"` 是 2026-09-30 加的（`draft/28` §199）：同伴够不到某个边时，框架会自动给主控发一条 `subject=请代唤` 的
+    留言并落一条 `agent_summon_request`事件（`agent_loop._request_relay`）。留言是给人看的，这个视图是给主控看的 ——它把那些
+    申请整理成一张可判定的表：每条申请后面有没有出现"要的那个(角色, 动作)"的任务行 ⇒ `fulfilled` / 待受理。三态纪律：查不到会话记录时
     `relay_pending` 报 `None`（没查成），不报 0（"没有申请"）。
-
     ## 口径（F1 之后 `tasks` 里多了顶趟行，这一屏必须说清它数的是什么）
-
-    `task_count = len(c.tree())` 数的是 `tasks` 台账全量 —— 里面包含顶趟行
-    （`role=M` / `action="run"` / `called_by="user"`，由 `conductor.open_top_level_run`
-    开、`finish_top_level_run` 收）：那是用户发起的那一趟，不是一次召唤。
-    它留在读数里是刻意的（它同时是"谁在派活"的身份行），但下游不许把 `M.run`
-    当成"第 N 次召唤"；要召唤数就看 `view="stats"` 的 `started_total`
-    （那一格的口径连同 `calibers` 一起写在 `conductor.stats()` 里）。
+    `task_count = len(c.tree())` 数的是 `tasks` 台账全量 —— 里面包含顶趟行（`role=M` / `action="run"` / 
+    `called_by="user"`，由 `conductor.open_top_level_run`开、`finish_top_level_run` 收）：那是用户发起的
+    那一趟，不是一次召唤。它留在读数里是刻意的（它同时是"谁在派活"的身份行），但下游不许把 `M.run`当成"第 N 次召唤"；要召唤数就看 `view="stats"` 
+    的 `started_total`（那一格的口径连同 `calibers` 一起写在 `conductor.stats()` 里）。
     """
     c = _conductor()
     payload: dict[str, Any] = {"view": view, "rows": [], "stats": {}, "issues": [],
@@ -524,22 +493,16 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
                    force: bool = False, notify: bool = True,
                    root_task_id: str = "") -> ToolResult:
     """工具体：停止（优雅 = 喊停 → 有界收尾 → 合成终态 → 续跑简报；强制 = 直接停）。
-
-    `draft/37` §128 加的两件（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，
-    还要写个强制停止是直接杀掉"）：
-
-    1. 「先落停机开关」（`stopctl`）—— 它是唯一能打断"在飞工作"的通道：卡在等待循环里的
-       子进程（E 的实验脚本）每 0.2 s 看一次它，于是会被立刻终止（实测 30 s → 0.36 s）；
-    2. `notify=True` 时在「公共频道广播」一条叫停（`#public`）：A–H 每个角色都收得到。
-       2026-10-08 晚改回留言（所有者 T18：「插话只有 M 可能受到用户的插话」）：
-       D07 当年把它改成集体插话的理由是"留言躺在收件箱里等下一次听、打断不了在跑的同伴"，
-       而那句话今天已经不成立 —— 步边界的 `_hear()` 会把新留言并进这一步的结果
-       （`agent_loop._hear`，判据见 `draft/85` §5 的表），所以留言同样"下一步就看到"，
-       而且它在盘上有收件人、可 ack（`draft/85` §2.1）。body 里仍然点明"收到广播不等于被叫停，
-       开关才算"，免得同伴误判。
-
-    `force=True` 是"直接杀掉"：不等待收尾，并按进程登记把子进程连子孙一起杀
-    （「排除自己」：杀掉自己的进程树会让这次调用永远回不去；M 随后由步循环的停机判据收工）。
+    
+    `draft/37` §128 加的两件（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，还要写个强制停止是直接杀掉"）：
+    
+    1. 「先落停机开关」（`stopctl`）—— 它是唯一能打断"在飞工作"的通道：卡在等待循环里的子进程（E 的实验脚本）每 0.2 s 看一次它，于是会被立刻终止（实测
+    30 s → 0.36 s）； 2. `notify=True` 时在「公共频道广播」一条叫停（`#public`）：A–H 每个角色都收得到。 2026-10-08 晚改
+    回留言（所有者 T18：「插话只有 M 可能受到用户的插话」）： D07 当年把它改成集体插话的理由是"留言躺在收件箱里等下一次听、打断不了在跑的同伴"，而那句话今天已经不
+    成立 —— 步边界的 `_hear()` 会把新留言并进这一步的结果（`agent_loop._hear`，判据见 `draft/85` §5 的表），所以留言同样"下一步
+    就看到"，而且它在盘上有收件人、可 ack（`draft/85` §2.1）。body 里仍然点明"收到广播不等于被叫停，开关才算"，免得同伴误判。
+    
+    `force=True` 是"直接杀掉"：不等待收尾，并按进程登记把子进程连子孙一起杀（「排除自己」：杀掉自己的进程树会让这次调用永远回不去；M 随后由步循环的停机判据收工）。
     """
     from .. import stopctl
     from ..agent_loop import PUBLIC, send_message
@@ -693,29 +656,16 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
                              books_dir: str = "", books_limit: int | None = None,
                              projects_dir: str = "") -> ToolResult:
     """工具体：冷/热启动由主控决定，四态如实返回（不替它猜）。
-
     ## 为什么"已经在项目里"要直接拒（2026-10-02 真机读数逼出来的守卫）
-
-    `projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)`
-    —— 一个与工作区无关的默认落点（本机读数 `projects/`，工作区根相对；
-    `projects.DEFAULT_PROJECTS_DIR` 是"由本包位置推出的工作区根 + `projects/`"，
-    也可用设置文件的 `workspace.projects_dir` 覆盖）。
-    于是"在一个已存在的工作区里调它"会得到一个在别处新建的空项目，
-    而不是"热启动当前项目"：
-
-    - 真机实测（`draft/37` §37）：那一趟 23 步里有 4 步在 `ensure_project`，
-      其中一次真的建出了 `projects/project11`
-      （`project.json` 的 `created_at` = 2026-10-02T20:39:47+08:00，
-      与那次运行同秒级）—— 而当时的账本上没有任何一步显示"我建了个项目"。
-    - 同一天，本仓库自己的普查探针（`temp/_p40_m_tool_smoke.py`）在没给
-      `projects_dir` 时也建了 `project12` / `project13` 两个空项目 ——
-      写探针的人也会踩，说明这不是"M 的纪律问题"，是缺省值的问题。
-
-    守卫的边界刻意很窄：只拒"当前工作区自己就是一个初始化过的项目、
-    而调用方又没显式说项目落在哪"。显式给 `projects_dir`（或设
-    `AGENTFLOW_PROJECTS_DIR`）时照旧工作 —— 那是操作者在说"我知道落在哪"。
-    不这么定就会误伤既有判据：`tests/test_conductor_tools.py` 里那两条
-    冷/热启动用例正是"在一个工作区里、把项目建到另一个显式指定的目录"。
+    `projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)`—— 一个与工作区无关的默认落点（本机读数 `projects/`，工作区根相对；
+    `projects.DEFAULT_PROJECTS_DIR` 是"由本包位置推出的工作区根 + `projects/`"，也可用设置文件的 `workspace.projects_dir` 覆盖）。
+    于是"在一个已存在的工作区里调它"会得到一个在别处新建的空项目，而不是"热启动当前项目"：
+    - 真机实测（`draft/37` §37）：那一趟 23 步里有 4 步在 `ensure_project`，其中一次真的建出了 `projects/project11`（`project.json`
+    的 `created_at` = 2026-10-02T20:39:47+08:00，与那次运行同秒级）—— 而当时的账本上没有任何一步显示"我建了个项目"。- 同一天，本仓库自己的普查探针（`temp/_p40_m_tool_smoke.py`）
+    在没给`projects_dir` 时也建了 `project12` / `project13` 两个空项目 ——写探针的人也会踩，说明这不是"M 的纪律问题"，是缺省值的问题。
+    守卫的边界刻意很窄：只拒"当前工作区自己就是一个初始化过的项目、而调用方又没显式说项目落在哪"。显式给 `projects_dir`（或设`AGENTFLOW_PROJECTS_DIR`）时照旧工
+    作 —— 那是操作者在说"我知道落在哪"。不这么定就会误伤既有判据：`tests/test_conductor_tools.py` 里那两条冷/热启动用例正是"在一个工作区里、把项目建到另一个显式
+    指定的目录"。
     """
     from .. import projects as P
     from .. import settings as SET
@@ -905,12 +855,12 @@ def conductor_state(_conductor, ) -> ToolResult:
     },
     side_effect="read",
     roles=("M",),
-    # ⚠️ 2026-10-15 补齐：这把工具体返回的是那个角色的整份 brief（六个字段），
+    # 2026-10-15 补齐：这把工具体返回的是那个角色的整份 brief（六个字段），
     # 而声明里只列了 `{role, actions, tools, summonable}` ⇒ 模型看不到
     # `duty` / `boundary` / `policy` / `stance` / `signature_error` / `deliverable` ——
     # 而这件的用途「恰恰是」"让一个角色读到另一个角色的口径"。
     # `returns` 会拼进 function-calling 的 `description`（模型看得到）。
-    # ⚠️ 「2026-10-16（业主口径）」：这里「不再返回 `actions` / `tools`」。
+    # 「2026-10-16（业主口径）」：这里「不再返回 `actions` / `tools`」。
     # 原话逐字：「M 只是个派活的……「不指定能力」。M 能看到的只是各角色描述，
     # 「看不到具体的工具箱与动作」，但可在角色描述中暗示它各角色能干什么。」
     # 所以这一格从"查它的动作面与工具面"改成"读它的描述"（`role` + `summonable`
@@ -994,22 +944,14 @@ def _brief_of(role: str) -> dict[str, Any] | None:
 def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
                          max_chars: int = 60, ids: list | None = None) -> ToolResult:
     """工具体：把验收表读成结构化的十行（读不到就如实说读不到，不给空表）。
-
-    `ids` 是给"一次读不完"准备的：真机实测（2026-09-29）十行的完整读数会被
-    上下文预算剪枝，而主控手里没有读文件工具（它的面只有 `conductor.*`）⇒
+    `ids` 是给"一次读不完"准备的：真机实测（2026-09-29）十行的完整读数会被上下文预算剪枝，而主控手里没有读文件工具（它的面只有 `conductor.*`）⇒
     被剪掉的部分读不回来。按批读是"不靠猜"的做法（而不是让 M 猜 P5–P11 写了什么）。
-
     ## 路径解析（`draft/37` §88：这一处是三个落点里被漏掉的那一个）
-
-    `conductor.acceptance(project_dir=".")` 原先按进程 cwd 解析 ——
-    而工具描述逐字写的是"相对工作区"。T1 第 2 趟真机（2026-10-04）：主控传
-    `{"project_dir": "."}`，工具去读 `agentflow/out/paper/ACCEPTANCE.md`（工作区根相对）
-    （进程 cwd 所在的仓库目录），连报两次"验收表不在盘上"，而那张表就在工作区里
-    —— 主控因此始终没看到 P1–P11 判据，后面每一跳都靠猜。
-
-    同一件事 `closing.resolve_under_workspace` 的 docstring 里已经记过一次
-    （`draft/37` §60：`closing` 与 `reviewaccept` 都改成了那一个解析口），
-    本工具是那批里的第三个落点却漏改了 ⇒ 现在共用同一个解析口，不另写一份。
+    `conductor.acceptance(project_dir=".")` 原先按进程 cwd 解析 ——而工具描述逐字写的是"相对工作区"。T1 第 2 趟真机（2026-10-04）：
+    主控传`{"project_dir": "."}`，工具去读 `agentflow/out/paper/ACCEPTANCE.md`（工作区根相对）（进程 cwd 所在的仓
+    库目录），连报两次"验收表不在盘上"，而那张表就在工作区里—— 主控因此始终没看到 P1–P11 判据，后面每一跳都靠猜。
+    同一件事 `closing.resolve_under_workspace` 的 docstring 里已经记过一次（`draft/37` §60：`closing` 与 
+    `reviewaccept` 都改成了那一个解析口），本工具是那批里的第三个落点却漏改了 ⇒ 现在共用同一个解析口，不另写一份。
     """
     raw_project = str(project_dir or "").strip()
     if store is not None:
@@ -1171,61 +1113,22 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
                       goal_met: bool | None = None, basis: str = "",
                       task_list: Any = None) -> ToolResult:
     """工具体：把收工门包成一次只读调用（判据在 `agentflow.closing`，这里不另写一份）。
-
-    为什么主控需要它：交付说明里"能不能交"这句话必须有可查的读数撑腰。
-    真机读数里最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件事 ——
-    包是旧的、依赖还挂着争议、承重结论只有数值支持。这些每一条都能被机器判，
-    混在一段总结里就只剩一句"基本完成"。
-
-    ## `session` 是装配期注入的「会话身份」（`draft/37` §63，修法 B）
-
-    `session` = `{"root": <会话记录根>, "sid": <这一趟的会话号>}`，由
-    `tools.build_registry(session_root=..., sid=...)` 放进装配依赖里。
-    为什么不让工具体自己"猜"一个 sid：真机实测（第 11 趟 `real11`）主控在
-    第 28 步调 `conductor.closing` 拿到 `can_close: true, failed: []`，
-    而同一次运行外部带 `sid=real11` 的读数报 `failed: ['user_pending']` ——
-    工具体此前按 `sid=None` 走到了缺省会话文件 `sessions/<今天>.jsonl`，
-    而那一趟的提问落在 `sessions/real11.jsonl`。「假绿」。
-    修法不是"让工具按调用时的日期猜得准一点"，而是把身份做成装配期的显式输入：
-    装配时知道这一趟是谁，就一路带到判据里。
-    没注入时按 `closing.NO_SESSION` 传下去 ⇒ 那一格记 `unknown`（不是 pass，
-    也不是"读今天那份"——三态纪律）。
-
-    ## 收工那一步也要看得见内容级验收（所有者 2026-10-07 裁定「题 13 选 B」）
-
-    决定收工的人是主控，而"能不能交"有两层问法：收工门的八格问结构与凭据，
-    `reviewaccept` 问同一份交付的内容层（定理台账有没有假设与出处、三态分支、
-    成本上限、每跳的输入可读、附件诚实）。第二层此前只有 CLI 出口
-    （`agentflow closing`）能看见，运行内的主控看不见 —— 于是它做收工决定时
-    手里只有八格。这一条就是把同一份读数接到工具体上：同一次只读调用、
-    零模型调用、不写任何台账。
-
-    为什么与 CLI 出口同形：两个入口读的是同一批入参（`project_dir` /
-    `report_path` / `session_root` / `sid` / 成本上限），就该给出同一栏读数 ——
-    判据名、判据顺序、辅助读数的标签与那句禁令全部现取自 `reviewaccept`
-    （`CRITERIA` / `AUXILIARY_SIGNALS` / `to_dict`），本文件不抄第二份。
-    抄一份的下场是两个落点各自漂，而"哪一份是真的"没人说得清。
-
-    三态纪律照旧，一格都不折平：每条判据各自一个三态值；`cap_usd` 不给时
-    成本那一格是「没查成」而不是「通过」（与 CLI 那边的缺省一致）。
-
-    ## 收工由 M 判（业主 2026-10-09）
-
-    「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 本工具新增
-    `goal` / `goal_met` / `basis` 三个入参：`can_close` 是 M 的判据，
-    机器那八格退成读数（`status` / `machine_pass`），两者不一致时 `overrode` 逐格点名。
-    M 不给 `goal_met` ⇒ `can_close=false` + 「没人判过」的读数（不是「可以交」）。
-    内容级验收（`review_acceptance`）照旧只是读数 —— 它从不参与 `can_close`，
-    这一条从裁定题 13 起就没变过。
-
-    ## M 交判据 ⇒ 落盘（同一批的补）
-
-    判据由 M 在运行内给，而门还有运行外的出口（`agentflow closing` / 发布门）：
-    两处必须得出同一个结论（`draft/37` §63 记过一次"运行内 `can_close=true`、
-    外部 `failed=[...]`"的假绿）。所以 M 给判据的那一次调用把它落到
-    `out/review/m-verdicts.jsonl`（append-only，取最后一行）—— 运行外那一趟
-    没有显式入参时读它。门本身仍然只读：`check_closing` 不写任何东西，
-    写这一笔的是本工具（M 的动作），落盘失败如实进 `verdict_written`。
+    `session` 是装配期注入的「会话身份」（`draft/37` §63，修法 B）`session` = `{"root": <会话记录根>, "sid": <这一趟的会话号>}`，由
+    `tools.build_registry(session_root=..., sid=...)` 放进装配依赖里。为什么不让工具体自己"猜"一个 sid：真机实测（第 11 趟 `real11`）主控在第 28 步调 
+    `conductor.closing` 拿到 `can_close: true, failed: []`，而同一次运行外部带 `sid=real11` 的读数报 `failed: ['user_pending']` ——工具体此前按 
+    `sid=None` 走到了缺省会话文件 `sessions/<今天>.jsonl`，而那一趟的提问落在 `sessions/real11.jsonl`。没注入时按 `closing.NO_SESSION` 传下去 ⇒ 那一格记 
+    `unknown`（不是 pass，也不是"读今天那份"——三态纪律）。
+    收工那一步也要看得见内容级验收（所有者 2026-10-07 裁定「题 13 选 B」）决定收工的人是主控，而"能不能交"有两层问法：收工门的八格问结构与凭据，`reviewaccept` 问同一份交付的内容层（定理台账有没有假设与出处、三态分
+    支、成本上限、每跳的输入可读、附件诚实）。第二层此前只有 CLI 出口（`agentflow closing`）能看见，运行内的主控看不见 —— 于是它做收工决定时手里只有八格。
+    为什么与 CLI 出口同形：两个入口读的是同一批入参（`project_dir` /`report_path` / `session_root` / `sid` / 成本上限），就该给出同一栏读数 ——判据名、判据顺序、辅助读数的标签与那句禁令
+    全部现取自 `reviewaccept`（`CRITERIA` / `AUXILIARY_SIGNALS` / `to_dict`），本文件不抄第二份。
+    `cap_usd` 不给时成本那一格是「没查成」而不是「通过」（与 CLI 那边的缺省一致）。
+    收工由 M 判（业主 2026-10-09）「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 本工具新增`goal` / `goal_met` / `basis` 三个入参：`can_close` 是 M 的判据，机器那八格退成读数
+    （`status` / `machine_pass`），两者不一致时 `overrode` 逐格点名。 M 不给 `goal_met` ⇒ `can_close=false` + 「没人判过」的读数（不是「可以交」）。内容级验收（`review_acceptance`）
+    照旧只是读数 —— 它从不参与 `can_close`，这一条从裁定题 13 起就没变过。
+    判据由 M 在运行内给，而门还有运行外的出口（`agentflow closing` / 发布门）：两处必须得出同一个结论（`draft/37` §63 记过一次"运行内 `can_close=true`、外部 `failed=[...]`"的
+    假绿）。所以 M 给判据的那一次调用把它落到`out/review/m-verdicts.jsonl`（append-only，取最后一行）—— 运行外那一趟没有显式入参时读它。门本身仍然只读：`check_closing` 不写任何东西，写这
+    一笔的是本工具（M 的动作），落盘失败如实进 `verdict_written`。
     """
     if store is None:
         return fail("没有工作区 ⇒ 收工门没查成（不是「可以交」）", kind="no_store", can_close=False)
@@ -1474,21 +1377,13 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
              session: Any = None,
              backend: Any = "local") -> list[str]:
     """把主控工具注册进 `registry`，返回注册的工具名列表。
-
-    参数
-    ----
-    store : Store | None
-        台账与状态视图的来源；不给时工具仍会注册，但一被调用就明确报
-        "没有工作区"（没查成 ≠ 没有问题）。
-    conductor : Conductor | None
-        现成的主控（不给就用 `conductor_for(store)` 按工作区取/建一个）。
-    role_registry : Mapping | None
-        `LocalBackend` 的角色接线（role -> 实例/工厂）；不给我方仍可派活，
-        但被派的角色会以 `refused/not_wired` 如实落台账。
-    session : Mapping | None
-        这一趟的会话身份 `{"root": ..., "sid": ...}`，由
-        `tools.build_registry(session_root=, sid=)` 注入；不给 ⇒
-        `conductor.closing` 的 `user_pending` 那一格记 `unknown`（§63 修法 B）。
+    
+    参数----store : Store | None 台账与状态视图的来源；不给时工具仍会注册，但一被调用就明确报"没有工作区"（没查成 ≠ 没有问题）。
+    conductor : Conductor | None 现成的主控（不给就用 `conductor_for(store)` 按工作区取/建一个）。
+    role_registry : Mapping | None`LocalBackend` 的角色接线（role -> 实例/工厂）；不给我方仍可派活，但被派的角色会以 
+    `refused/not_wired` 如实落台账。 session : Mapping | None 这一趟的会话身份 
+    `{"root": ..., "sid": ...}`，由`tools.build_registry(session_root=, sid=)` 注入；不给 ⇒
+    `conductor.closing` 的 `user_pending` 那一格记 `unknown`（§63 修法 B）。
     """
     def _conductor() -> Conductor:
         if conductor is not None:
@@ -1557,29 +1452,15 @@ def _acceptance_header_cells(cells: list[str]) -> bool:
 
 def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
     """把验收表（markdown）解析成结构化的行。
-
-    认的是项目脚本自己的写法：一行标题（含「P1–P11」之类）、一行结论
-    （`结论：「全部成立」（10/10）`）、一张四栏表（默认表头 `| 判据 | 名称 | 结论 | 读数 |`）。
-
+    认的是项目脚本自己的写法：一行标题（含「P1–P11」之类）、一行结论（`结论：「全部成立」（10/10）`）、一张四栏表（默认表头 `| 判据 | 名称 | 结论 | 读数 |`）。
     ## 表头与结论都归一化后再判（`draft/52` CC-02）
-
-    真机里 8/54 行被读成 0 行的原因就是两张逐字判据：表头只认 `cells[0] == "判据"`、
-    结论只认 `cells[2].strip() == "成立"` —— 表是人手写的，写法一换就整张表读不出来。
-    现在：表头认 `_ACCEPTANCE_HEADER_ALIASES`、结论认两张别名表（不成立先于成立判）。
-
+    真机里 8/54 行被读成 0 行的原因就是两张逐字判据：表头只认 `cells[0] == "判据"`、结论只认 `cells[2].strip() == "成立"` —— 表是人手写的，写法一换就整张表读不出来。现在：表头认 
+    `_ACCEPTANCE_HEADER_ALIASES`、结论认两张别名表（不成立先于成立判）。
     ## 行状态的口径只有一处（`closing`）
-
-    每一行的 `state` 由 `closing.acceptance_row_state` 给（词表是 `closing.ROW_STATES`）：
-    本模块只做"这一行读不懂"这一个判断（空编号 / 编号重复 / 结论格认不出来），
-    不抄第二份口径 —— 同一张表两种读法正是 CC-02 要治的形态。
-    读不懂的行仍然出现在 `rows` 里（带 `state` 与 `reason`）并在 `problems` 里点名：
-    "读不出来"既不是 `0 行`、也不是 `不通过`（三态）。
-
-    `max_chars` 是交付说明能不能逐条对齐的关键：真机实测（2026-09-29，只读重放）
-    十行的完整读数合起来 >1400 字，工具结果被上下文预算截断，M 只看到 P1–P4，
-    于是它如实写"P5–P11 未核到"。默认截到 60 字/行 ⇒ 十行约 0.6k 字，
-    够 M 逐条引用；需要全量时把 `max_chars` 调大（读数原文仍在盘上，随时可读）。
-
+    每一行的 `state` 由 `closing.acceptance_row_state` 给（词表是 `closing.ROW_STATES`）：本模块只做"这一行读不懂"这一个判断（空编号 / 编号重复 / 结论格认不出来），不
+    抄第二份口径 —— 同一张表两种读法正是 CC-02 要治的形态。读不懂的行仍然出现在 `rows` 里（带 `state` 与 `reason`）并在 `problems` 里点名："读不出来"既不是 `0 行`、也不是 
+    `不通过`（三态）。
+    `max_chars` 是交付说明能不能逐条对齐的关键：真机实测（2026-09-29，只读重放）十行的完整读数合起来 >1400 字，工具结果被上下文预算截断，M 只看到 P1–P4，于是它如实写"P5–P11 未核到"。
     解析不出来时 `rows` 为空而 `problems` 非空 —— 空表与"解析失败"必须分得开。
     """
     # 行状态口径的唯一来源在 `closing`（`acceptance_row_state` / `ROW_STATES` /

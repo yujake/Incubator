@@ -1,50 +1,21 @@
 """`G-1` / `G-2` / `G-3` / `R5-AN-1` 的回归判据（编排与成本，落点都不在 FC-27 清单里）。
-
-改前备份（`R7-R5-3` 更正）：这份 docstring 此前列着四份 `temp/zone-backup-r5-*.py`，
-而那一批没有留下这类备份（`draft/28` §13 逐字登记过这件事），四份一份都不存在。
-真实情况有两条可核的线索，都不需要编造文件名：
-
-- 那一批的改前字节由审计产物钉住：`temp/REAUDIT6-R5.json` 的 `files_sha256_before`
-  里逐文件记着 sha256（本文件自己也在里面）；
-- 第 6 轮修复批（`F5`）真的留了改前副本，命名是 `temp/FIX6-F5-before_<路径下划线化>.py`
-  （`src/agentflow/runflow.py` / `modelcost.py` / `conductor.py` / `tools/table_tools.py` 四份）。
-
-为什么把这件事写进 docstring 而不是删掉：读这段的人要能回答"改前的形态去哪找"，
-而不是得到一串不存在的文件名（`R7-R5-3` 那类缺陷的形态就是"注释里的引用没人核"）。
-
-| 条目 | 缺陷（改前实测） | 本文件里"改前必红"的那条 |
-|---|---|---|
-| `G-1` | `LocalBackend.call` 收下 `token` 却末行 `return fn(given)` ⇒ 取消到不了在跑的 handler；`raise_if_cancelled` 调用点为 0；子进程（Lean）完全在取消面之外 | `test_a_running_handler_sees_the_token` / `test_cancel_kills_a_running_child_process` |
-| `G-2` | 幂等键只按主题命名 ⇒ 同一主题跑第二遍整轮被判 duplicate，账本少记一轮真实花费，而第二次的报告把第一次的钱记在自己名下 | `test_two_runs_of_the_same_topic_are_not_deduplicated` |
-| `G-3` | `run_topic` 给账本行写了 `task_id` 却从不建 `tasks` 行 ⇒ 每跑一次全库审计多两条 error 级 `dangling_usage_task` | `test_a_run_creates_the_task_row_verify_wants` |
-| `R5-AN-1` | 取号在 `store.tx` 之外 ⇒ 两个并发 `agentflow run` 撞同一个 `t-NNNN`：`tasks` 只剩 1 行、存活行 `tokens` 是两跑之和、两条 usage 都挂同一行，而 `verify_all` 的 code 集合是 `[]`（静默） | `test_two_concurrent_runs_never_share_a_task_id` |
-
-## `R5-AN-1` 改掉的契约（读本文件前先读这段）
-
-`tasks` 那一行现在分两次写，两个写入点必须在同一个 `store.tx` 语义下理解：
-
-1. 开跑时（取号那一段）：在 `store.tx("tasks")` 内取号，并在同一个临界区里落一行
-   占位行（`status="running"`、`outcome=None`、`tokens=0`、`ended_at=None`）。
-   落行是取号的一部分：`interactions.next_prefixed_id` 是纯函数、没有计数器，
-   号只有在盘上可见时才对下一个并发进程有意义；
-2. 收工时（`_settle_run_task`）：按同一个 `task_id` 把那一行整行改写成终态。
-
-⇒ 与本次改动前相比，契约变了三件事（不是"判据被改松了"）：
-
-- 跑到一半的库里可能出现 `status="running"` 的行（崩在收工之前），
-  这时 `verify_all` 报的是 warning `task_still_running` —— 那是事实，不是噪音；
-- 即使 `_settle_run_task` 写失败，账本行也不再悬空（占位行已经在），
-  所以 `dangling_usage_task` 不再是这个形态的判据；
-- 因此"没写成终态"这件事的判据是「那一行仍是 `running` 且没被改写」，
-  而不是"`tasks` 表是空的"（后者是本次改动前的形态）。
-
-### 为什么这一条非要改契约（改前最小修法的实测读数）
-
-"只把取号搬进 `store.tx`、不落行"这条最小修法不成立：第二个进程在第一个
-进程写行之前进 tx，读到的还是同一份快照。实测（两真进程 + 起跑屏障，
-`temp/fix6_f5-minimal.txt`）：`E1/E2/E3/E5` 四条判据全部仍为 `False`
-（撞号、丢行、`tokens` 混算、usage 指错行，一个都没消失）。
-落行之后同一套读数全部翻面（`temp/fix6_f5-after-an1.txt`）。
+改前备份（`R7-R5-3` 更正）：这份 docstring 此前列着四份 `temp/zone-backup-r5-*.py`，而那一批没有留下这类备份（`draft/28` §13 逐字登记过这件事），四份一份都不存在。
+可核的线索有两条：`temp/REAUDIT6-R5.json` 的 `files_sha256_before` 里逐文件记着 sha256（本文件自己也在里面）；第 6 轮修复批（`F5`）真的留了改前副本，命名
+`temp/FIX6-F5-before_<路径下划线化>.py`（`src/agentflow/runflow.py` / `modelcost.py` / `conductor.py` / `tools/table_tools.py` 四份）。把这件事写进
+docstring 而不是删掉，是因为读这段的人要能回答"改前的形态去哪找"，而不是得到一串不存在的文件名。
+四条缺陷（改前实测）各有一条"改前必红"的判据：`G-1` `LocalBackend.call` 收下 `token` 却末行 `return fn(given)` ⇒ 取消到不了在跑的 handler，`raise_if_cancelled` 调用点为 0、
+子进程（Lean）整个在取消面之外（`test_a_running_handler_sees_the_token` / `test_cancel_kills_a_running_child_process`）；`G-2` 幂等键只按主题命名 ⇒
+同一主题跑第二遍整轮被判 duplicate、账本少记一轮真实花费（`test_two_runs_of_the_same_topic_are_not_deduplicated`）；`G-3` `run_topic` 给账本行写了 `task_id` 却从不建
+`tasks` 行 ⇒ 每跑一次全库审计多两条 error 级 `dangling_usage_task`（`test_a_run_creates_the_task_row_verify_wants`）；`R5-AN-1` 取号在 `store.tx` 之外 ⇒
+两个并发 `agentflow run` 撞同一个 `t-NNNN`（`tasks` 只剩 1 行、存活行 `tokens` 是两跑之和、两条 usage 都挂同一行，而 `verify_all` 的 code 集合是 `[]`）
+（`test_two_concurrent_runs_never_share_a_task_id`）。
+`R5-AN-1` 改掉的契约（读本文件前先读这段）：`tasks` 那一行现在分两次写。开跑时（取号那一段）在 `store.tx("tasks")` 内取号并在同一个临界区里落一行占位行
+（`status="running"`、`outcome=None`、`tokens=0`、`ended_at=None`）—— 落行是取号的一部分：`interactions.next_prefixed_id` 是纯函数、没有计数器，
+号只有在盘上可见时才对下一个并发进程有意义；收工时 `_settle_run_task` 按同一个 `task_id` 把那一行整行改写成终态。合约因此变了三件事（不是"判据被改松了"）：跑到一半的库里可能出现
+`status="running"` 的行（崩在收工之前），这时 `verify_all` 报 warning `task_still_running` —— 那是事实、不是噪音；即使 `_settle_run_task` 写失败，账本行也不再悬空（占位行已经在），
+所以 `dangling_usage_task` 不再是这个形态的判据；"没写成终态"的判据是「那一行仍是 `running` 且没被改写」。
+"只把取号搬进 `store.tx`、不落行"这条最小修法不成立：第二个进程在第一个进程写行之前进 tx，读到的还是同一份快照。实测（两真进程 + 起跑屏障，`temp/fix6_f5-minimal.txt`）：`E1/E2/E3/E5` 四条判据全部仍为
+`False`（撞号、丢行、`tokens` 混算、usage 指错行，一个都没消失）；落行之后同一套读数全部翻面（`temp/fix6_f5-after-an1.txt`）。
 """
 from __future__ import annotations
 
@@ -67,20 +38,20 @@ from agentflow import modelcost
 from agentflow import modelgw
 from agentflow import schema as S
 
-#: 一次自检调用（11 in / 3 out，无缓存命中栏）该值多少钱 —— **现算**，不抄数。
+#: 一次自检调用（11 in / 3 out，无缓存命中栏）该值多少钱 —— 现算，不抄数。
 #:
 #: 为什么现算（2026-10-14 业主改了花销口径：三档 token + 峰谷两价）：把
 #: `6e-06` 那样的数抄进判据，等于把"当时的价目表"冻进判据里 —— 调一次价就假红一次。
-#: 峰谷那一位钉在**低谷**（`AGENTFLOW_MODEL_PEAK=0`）：读墙钟的话，同一条判据在峰值
+#: 峰谷那一位钉在低谷（`AGENTFLOW_MODEL_PEAK=0`）：读墙钟的话，同一条判据在峰值
 #: 时段会算出差一倍的钱（那正是"花销不可复现"）。
 
 
 @pytest.fixture(autouse=True)
 def _pin_off_peak(monkeypatch):
-    """本文件的用例都在低谷价上判 —— **按用例作用域钉**，不许在导入期动环境。
+    """本文件的用例都在低谷价上判 —— 按用例作用域钉，不许在导入期动环境。
 
     这里此前是模块级的 `os.environ.setdefault(modelcost.ENV_PEAK, "0")`。
-    它看着无害，实际是**进程级**的：pytest 在**收集期**就把每个测试文件导入一遍，
+    它看着无害，实际是进程级的：pytest 在收集期就把每个测试文件导入一遍，
     于是这条 setdefault 在任何用例跑起来之前就已经改了整台进程的环境
     ——`test_cost_matches_vendor.py::test_peak_and_off_peak_are_chosen_by_the_clock`
     因此在全量跑里拿到 `peak_source='env'` 而红、单跑那个文件却是绿的
@@ -91,7 +62,7 @@ def _pin_off_peak(monkeypatch):
 
 
 def _one_call_usd(tokens_in: int = 11, tokens_out: int = 3) -> float:
-    """一次自检调用的美元数（走**唯一那一处**价目表，与生产口径同源）。"""
+    """一次自检调用的美元数（走唯一那一处价目表，与生产口径同源）。"""
     price, _reading = modelcost.price_for("deepseek", modelgw.DEFAULT_MODEL)
     return round((tokens_in * price.usd_per_m_in
                   + tokens_out * price.usd_per_m_out) / 1_000_000.0, 6)
@@ -437,21 +408,16 @@ def _run_two_processes(tmp_path: pathlib.Path, *, delay: float) -> tuple[dict, d
 
 
 def test_two_concurrent_runs_never_share_a_task_id(tmp_path: pathlib.Path) -> None:
-    """`R5-AN-1` 正控（核心）：两个真进程并发跑 ⇒ 两个不同的 `t-NNNN`、两行、各记各的账。
+    """    `R5-AN-1` 正控（核心）：两个真进程并发跑 ⇒ 两个不同的 `t-NNNN`、两行、各记各的账。
 
-    改前实测（`temp/reaudit6-R5-p6.txt` 与 `temp/fix6_f5-smoke-pre.txt`）：
-    两个进程都拿到 `t-0001`；`tasks` 表只剩 1 行而它的 `tokens` 是两跑之和
-    （28 = 14 + 14）；两条 `usage_ledger` 都挂 `t-0001`；`verify_all` 的 code
-    集合是 `[]` —— 静默丢行，一条判据都不响。
+    改前实测（`temp/reaudit6-R5-p6.txt` 与 `temp/fix6_f5-smoke-pre.txt`）：两个进程都拿到 `t-0001`；`tasks` 表只剩 1 行而它的
+    `tokens` 是两跑之和（28 = 14 + 14）；两条 `usage_ledger` 都挂 `t-0001`；`verify_all` 的 code集合是 `[]` —— 静默丢行，一条判据都不响。
 
-    判据四条，各自对应一种失真（少任何一条，另外三条都可能在"两个进程其实
-    没并发"的装置故障下通过）：
-    E1 两个 task_id 不同；E2 `tasks` 恰好两行；E3 每行 tokens = 自己那一跑；
-    E5 每一条 usage 挂到自己那一行上。
+    判据四条，各自对应一种失真（少任何一条，另外三条都可能在"两个进程其实没并发"的装置故障下通过）：E1 两个 task_id 不同；E2 `tasks` 恰好两行；E3 每行 tokens = 自己那一跑；E5 每一条
+    usage 挂到自己那一行上。
 
-    `now` 必须显式给（两个不同的值）：`now=None` 时生产形态的运行标识带随机
-    后缀，两条账不会互判重放，而显式不同的 `now` 让"这是两次独立逻辑运行"
-    这件事在账本上也成立 —— 见 `R5-F5` 与 `draft/28` §84.3 ①。
+    `now` 必须显式给（两个不同的值）：`now=None` 时生产形态的运行标识带随机后缀，两条账不会互判重放，而显式不同的 `now` 让"这是两次独立逻辑运行"这件事在账本上也成立 —— 见 `R5-F5` 与
+    `draft/28` §84.3 ①。
     """
     from agentflow.verify import verify_all
 
@@ -814,22 +780,16 @@ def test_the_reconciliation_flag_still_catches_a_real_gap(monkeypatch, store: St
 
 def test_a_failed_settle_is_visible_in_the_manifest(monkeypatch, store: Store,
                                                     tmp_path: pathlib.Path) -> None:
-    """`R5-F6` 负控（核心）：`tasks` 那一行写不成终态时，产物里必须看得见。
+    """    `R5-F6` 负控（核心）：`tasks` 那一行写不成终态时，产物里必须看得见。
 
-    改前 `_settle_run_task` 的返回值从未被读过，而它的 docstring 说写失败
-    "会被记进 detail 并让这一项在返回值里可见" —— 两件都不成立：写失败恰恰
-    意味着那一行 `tasks` 不在，于是连 `detail` 都留不下来，消费者完全看不出来。
-    注入的是 `store.tx("tasks")`（不是把整个函数换掉）：被测对象就是
-    "那一笔写入失败之后会发生什么"。
+    改前 `_settle_run_task` 的返回值从未被读过，而它的 docstring 说写失败"会被记进 detail 并让这一项在返回值里可见" —— 两件都不成立：写失败恰恰意味着那一行 `tasks` 不在，
+    于是连 `detail` 都留不下来，消费者完全看不出来。注入的是 `store.tx("tasks")`（不是把整个函数换掉）：被测对象就是"那一笔写入失败之后会发生什么"。
 
-    `R5-AN-1` 之后这一条的判据变了（见模块 docstring）：占位行在开跑时
-    已经落库，所以"settle 失败"不再等于"表里 0 行"，而是等于
-    "那一行仍是 `running`、字段一个都没被改写"。这个新口径比旧口径强：
-    它同时证明"占位行没有被失败的那次写入污染"。
+    `R5-AN-1` 之后这一条的判据变了（见模块 docstring）：占位行在开跑时已经落库，所以"settle 失败"不再等于"表里 0 行"，而是等于"那一行仍是 `running`、字段一个都没被改写"。
+    这个新口径比旧口径强：它同时证明"占位行没有被失败的那次写入污染"。
 
-    这是真负控：把 `_settle_run_task` 里的改写改回"不写"（注入本身），
-    断言就必须红 —— 因为那时表里连占位行都不会有（改前形态表里是 0 行），
-    而这条用例的两条断言（有那一行、且它是 running）都会落空。
+    这是真负控：把 `_settle_run_task` 里的改写改回"不写"（注入本身），断言就必须红 —— 因为那时表里连占位行都不会有（改前形态表里是 0 行），而这条用例的两条断言（有那一行、且它是 running）
+    都会落空。
     """
     real_tx = store.tx
     state: dict = {"rows": None}
@@ -877,24 +837,16 @@ def test_a_failed_settle_is_visible_in_the_manifest(monkeypatch, store: Store,
 
 def test_a_small_budget_ignores_the_workspaces_history(store: Store,
                                                        tmp_path: pathlib.Path) -> None:
-    """`G-4` 回归：额度是"这一次运行"的，工作区里已经花掉的钱不许提前熔断它。
+    """    `G-4` 回归：额度是"这一次运行"的，工作区里已经花掉的钱不许提前熔断它。
 
-    工作区里先有一笔别的花销（模拟"这个工作区已经用了很久"），再跑一次
-    `budget_usd=一次调用的价`（现算，见 `_one_call_usd()`；远小于那笔历史花销）
-    且 `max_calls=2` 的运行：第一次调用必须真的发出去；第二次调用之前的熔断
-    才该停下它（`stopped_by == "budget"`、`reason == "budget_exhausted"`）。
+    工作区里先有一笔别的花销（模拟"这个工作区已经用了很久"），再跑一次`budget_usd=一次调用的价`（现算，见 `_one_call_usd()`；远小于那笔历史花销）且 `max_calls=2` 的运行：
+    第一次调用必须真的发出去；第二次调用之前的熔断才该停下它（`stopped_by == "budget"`、`reason == "budget_exhausted"`）。
 
-    `F5-FOUND-1` 之后这条判据的实现口径是"按 `task_id` 过滤账本"；
-    改前是"开跑时的账本基线 + 工作区增量"。两种口径在不可重叠的场景下
-    给出同一个答案，所以这条用例对两种实现都是绿的 —— 它守的是口径的
-    意图（额度是本次运行的）。并发下的差别由
-    `test_two_concurrent_runs_never_share_a_task_id` 里那几条
-    `spent_usd_this_run` 断言守。
+    `F5-FOUND-1` 之后这条判据的实现口径是"按 `task_id` 过滤账本"；改前是"开跑时的账本基线 + 工作区增量"。两种口径在不可重叠的场景下给出同一个答案，所以这条用例对两种实现都是绿的 ——
+    它守的是口径的意图（额度是本次运行的）。并发下的差别由`test_two_concurrent_runs_never_share_a_task_id` 里那几条`spent_usd_this_run` 断言守。
 
-    注意 `budget_exhausted` 这一位是"熔断器是否响过"，由 `stopped_by` 权威表达：
-    额度小到连一次调用都盖不住时，第一次调用照发（金额是调用粒度，不能再切），
-    跑完看账面当然超了 —— 那时 `reason == "success"`、`stopped_by == "max_calls"`。
-    这里刻意不用那种"额度小于单次价"的输入去判熔断。
+    注意 `budget_exhausted` 这一位是"熔断器是否响过"，由 `stopped_by` 权威表达：额度小到连一次调用都盖不住时，第一次调用照发（金额是调用粒度，不能再切），跑完看账面当然超了 —— 那时
+    `reason == "success"`、`stopped_by == "max_calls"`。这里刻意不用那种"额度小于单次价"的输入去判熔断。
     """
     from agentflow.modelcost import charge_reply
     from agentflow.modelgw import ModelReply
@@ -929,18 +881,13 @@ def test_a_small_budget_ignores_the_workspaces_history(store: Store,
 
 def test_the_task_row_survives_a_rebuild_byte_for_byte(store: Store,
                                                        tmp_path: pathlib.Path) -> None:
-    """`I-9` 回归：跑一次之后 `rebuild()` 必须逐字节重现 `tasks.json`。
+    """    `I-9` 回归：跑一次之后 `rebuild()` 必须逐字节重现 `tasks.json`。
 
-    为什么 `R5-AN-1` 必须带这一条：那一行现在是"开跑写占位行、收工整行改写"
-    两次写，而快照按 dict 的键顺序序列化、`rebuild()` 用 `Task.to_dict()` 重建。
-    两次写的字段集合或键顺序只要不一致，`tasks.json` 在 `rebuild()` 之后
-    就逐字节不同 —— 数据一个字段都没错，但"可重建"这条承诺破了，
-    而且没有任何判据会响。
+    为什么 `R5-AN-1` 必须带这一条：那一行现在是"开跑写占位行、收工整行改写"两次写，而快照按 dict 的键顺序序列化、`rebuild()` 用 `Task.to_dict()` 重建。
+    两次写的字段集合或键顺序只要不一致，`tasks.json` 在 `rebuild()` 之后就逐字节不同 —— 数据一个字段都没错，但"可重建"这条承诺破了，而且没有任何判据会响。
 
-    本批实测踩到过：占位行第一版是手工列的十五个字段（少了
-    `parent_task_id` / `refusal_reason` / `error`），盘上是 1091 字节、
-    rebuild 之后 1172 字节（读数 `temp/fix6_f5-shape.txt`）。
-    现在两处都走 `_new_task_row`（内部 `Task.to_dict()`），相等由构造保证。
+    本批实测踩到过：占位行第一版是手工列的十五个字段（少了`parent_task_id` / `refusal_reason` / `error`），盘上是 1091 字节、rebuild 之后 1172 字节（读数
+    `temp/fix6_f5-shape.txt`）。现在两处都走 `_new_task_row`（内部 `Task.to_dict()`），相等由构造保证。
     """
     _run(store, tmp_path, "a", now=TS1)
     before = (store.data / "tasks.json").read_bytes()
@@ -954,25 +901,15 @@ def test_the_task_row_survives_a_rebuild_byte_for_byte(store: Store,
 
 
 def test_the_settle_signature_and_docstring_agree_with_the_implementation() -> None:
-    """`R5-AN-5`：`_settle_run_task` 的接口面（签名 + docstring）必须说真话。
+    """    `R5-AN-5`：`_settle_run_task` 的接口面（签名 + docstring）必须说真话。
 
-    改前两处都不是真话（读数 `temp/reaudit6-R5-p4.txt`）：
-
-    - docstring 的六条口径清单里写着 `artifacts` 是"本运行承诺的六件产物"，
-      而同一屏的实现是 `artifacts=[]`（`R5-F3` 已经改掉的旧形态）——
-      照那句 docstring 写回去会立刻新增 6 条 `unknown_artifact_kind` warning；
+    改前两处都不是真话（读数 `temp/reaudit6-R5-p4.txt`）：docstring 的六条口径清单里写着 `artifacts` 是"本运行承诺的六件产物"，
+    而同一屏的实现是 `artifacts=[]`（`R5-F3` 已经改掉的旧形态）——照那句 docstring 写回去会立刻新增 6 条 `unknown_artifact_kind` warning；
     - 两个形参 `out` / `ledger` 在函数体里从未被使用，而 docstring 把它们
-      当契约在列 —— 形参也是接口面，列着不用会让读的人以为
-      "产物目录与账本汇总参与了这一行的构造"。
-
-    判据取两半：签名里不许有未被使用的形参（按 AST 逐形参核）；
-    docstring 与 `artifacts` 有关的那一条必须说的是"留空 + 名字进 detail"。
-    负控见 `temp/fix6_f5-neg-V5-an5-old-doc.txt` 与 `-V5b-an5-params.txt`。
-
-    判据读的源码路径从 `__file__` 推（不从 `inspect.getsourcefile` 或
-    `agentflow.__file__` 推）：`sys.path` 上可能有另一份 `agentflow`
-    （负控就是在整树副本上跑的），而 `linecache` 按键缓存 —— 一旦缓存了
-    另一份的路径，`inspect.getsource` 就可能去读一个不存在的文件，
+    当契约在列 —— 形参也是接口面，列着不用会让读的人以为"产物目录与账本汇总参与了这一行的构造"。判据取两半：签名里不许有未被使用的形参（按 AST 逐形参核）；docstring 与
+    `artifacts` 有关的那一条必须说的是"留空 + 名字进 detail"。负控见 `temp/fix6_f5-neg-V5-an5-old-doc.txt` 与 `-V5b-an5-params.txt`。
+    判据读的源码路径从 `__file__` 推（不从 `inspect.getsourcefile` 或`agentflow.__file__` 推）：`sys.path` 上可能有另一份
+    `agentflow`（负控就是在整树副本上跑的），而 `linecache` 按键缓存 —— 一旦缓存了另一份的路径，`inspect.getsource` 就可能去读一个不存在的文件，
     那会让这条判据在任何变体上都红（假红比假绿更难查）。
     """
     import ast
@@ -1004,22 +941,16 @@ def test_the_settle_signature_and_docstring_agree_with_the_implementation() -> N
 
 def test_a_model_side_failure_lands_as_a_failed_task_row(store: Store,
                                                         tmp_path: pathlib.Path) -> None:
-    """正控（`FINAL-R5-01`，最后一次集中审查抓到的那条）：模型侧"查过了、确实不行"
-    的结局必须真的写进 `tasks` 行，而不是把占位行永远留在 `running`。
+    """    正控（`FINAL-R5-01`，最后一次集中审查抓到的那条）：模型侧"查过了、确实不行"的结局必须真的写进 `tasks` 行，而不是把占位行永远留在 `running`。
 
-    改前 `_new_task_row` 从不设 `error`，而 `schema.Task.validate` 要求
-    `status="failed"` 必须带非空 `error` 且 `outcome="failed"` ⇒ 收工那次
-    `validate` 抛异常、`written=False`，占位行停在 `running`。
-    受害面逐字是 `modelgw.MODEL_ERROR_KINDS` 里不在 `NOT_CHECKED` 的那三个码
-    （`auth_failed` / `rate_limited` / `bad_response`）—— 也就是说
-    "模型侧确实失败了"这一类在台账上根本不可达。
+    改前 `_new_task_row` 从不设 `error`，而 `schema.Task.validate` 要求`status="failed"` 必须带非空 `error` 且 `outcome="failed"` ⇒
+    收工那次`validate` 抛异常、`written=False`，占位行停在 `running`。受害面逐字是 `modelgw.MODEL_ERROR_KINDS` 里不在
+    `NOT_CHECKED` 的那三个码（`auth_failed` / `rate_limited` / `bad_response`）—— 也就是说"模型侧确实失败了"这一类在台账上根本不可达。
 
-    为什么这条改前不会被现有用例抓住：`test_the_verdict_covers_every_reason_run_topic_can_produce`
-    只断言 `_run_task_verdict` 这个纯映射函数的返回值，而缺陷在
-    "把返回值写进行"这一步 —— 映射对、写入失败。
+    为什么这条改前不会被现有用例抓住：`test_the_verdict_covers_every_reason_run_topic_can_produce`只断言
+    `_run_task_verdict` 这个纯映射函数的返回值，而缺陷在"把返回值写进行"这一步 —— 映射对、写入失败。
 
-    这一条走的是真路径（401 的 transport ⇒ `reply.error_kind="auth_failed"`
-    ⇒ `reason` 落进 `MODEL_ERROR_KINDS`），不是直接调私有函数。
+    这一条走的是真路径（401 的 transport ⇒ `reply.error_kind="auth_failed"`⇒ `reason` 落进 `MODEL_ERROR_KINDS`），不是直接调私有函数。
     """
 
     def _transport_401(url: str, headers: dict, data: bytes,  # noqa: ARG001
@@ -1172,7 +1103,7 @@ _REF_KNOWN_MENTION_TOKENS = (
     # —— 2026-10-19：`_plan` 从本表退出（同一条等额纪律，登记过期）——
     # 它原登记为"早期散文写法（今天真名是 `_plan_mode`）"，唯一的文本提及是
     # `providers.py` 里那句 ``_plan``。这一批新增的 `tests/test_closing_attack_progress.py`
-    # 里有一个**真函数** `_plan`（一个 def + 六处调用 = 7 个 NAME 记号），
+    # 里有一个真函数 `_plan`（一个 def + 六处调用 = 7 个 NAME 记号），
     # 按判据自己的口径（真符号出现 > 1 次 ⇒ 不再是"只有文本提及"）它已经不需要豁免。
     # 这不是放宽判据：口径仍是"真符号出现 ≤ 1 次的提及要逐条登记"，变的是那个 token 的
     # 真符号读数；留着它反而会被第二条断言的反向等额规则判成"登记过期"。
@@ -1180,7 +1111,7 @@ _REF_KNOWN_MENTION_TOKENS = (
                                   # `docs/PROPOSAL-side-effect-axes.md` 在讲当年的 exec 定义冲突时仍引它）
     "_mismatch",                  # 旧词表里那种"`quote` 加后缀"的取值名（词表已改写法）
     "_notify_bounce",             # 存活但已无调用点的退场实现（`agent_loop.py` 的 def；`tests/test_forced_notify.py:238` 在说它不再被调用）—— 名字是真的，读的人找得到
-    "_readerthread",              # CPython **标准库**内部函数（`subprocess` 的读线程）—— 不是本仓的符号，但**名字是真的**：2026-10-15 那条"只在全量跑里红"的编码缺陷，追到的最后一帧就是它抛 `UnicodeDecodeError`（`tests/test_temp_root_pin.py:123` 与 `tests/test_role_specs_complete.py` 的留痕按纪律必须点名那一帧 —— 不点名读者就不知道红在哪一层）。留痕按纪律必须点名出事的那个东西，哪怕它在标准库里
+    "_readerthread",              # CPython 标准库内部函数（`subprocess` 的读线程）—— 不是本仓的符号，但名字是真的：2026-10-15 那条"只在全量跑里红"的编码缺陷，追到的最后一帧就是它抛 `UnicodeDecodeError`（`tests/test_temp_root_pin.py:123` 与 `tests/test_role_specs_complete.py` 的留痕按纪律必须点名那一帧 —— 不点名读者就不知道红在哪一层）。留痕按纪律必须点名出事的那个东西，哪怕它在标准库里
     "_shell_demo",                # R8-A-1 退场的入口处理函数（2026-10-07 删）：`cli.py` 的留痕注释在讲"这里原有它、为什么摘掉"；留痕按纪律必须点名被删的东西
     "_persist_report",            # R8-A-6 退场的旧落盘函数（2026-10-07 已在全树无符号出现）：`DEVELOPMENT.md` 与 `DESIGN-TOOLS.md` 的说明在讲"为什么要删它"
     "_notify_gate",               # 2026-10-07 改名成 `notify_reading`（旧名在说谎：它不打回）：`agent_loop.py` 里那段改名留痕必须点名旧名 —— 留痕按纪律必须点名被删/被改的东西
@@ -1237,27 +1168,16 @@ _REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
 
 
 def _python_identifiers_in_text(p: pathlib.Path, text: str) -> list[str]:
-    """该文件里"算真符号"的标识符（只在 `.py` 上有；`.md` 返回空表）。
+    """    该文件里"算真符号"的标识符（只在 `.py` 上有；`.md` 返回空表）。
 
-    口径（`FIX11` 的 `C2`，第 2 条；`FIX12` 的 `R5-AN-11-3` 更正了这里的实现与说法）：
-    用 `tokenize` 取 `NAME` 记号 ⇒ 字符串字面量里的提及、`.md` 正文里的提及一律不算；
-    再把 docstring 所在的行剔掉（那是字符串常量，同样不产生 `NAME` 记号）⇒
-    "docstring 里随手写下的名字"不算。剩下的就是这个文件里真的写在代码上的名字。
-
-    注释不需要额外剔除，也不该被剔除：注释正文本来就不是 `NAME` 记号
-    —— `tokenize` 把 `# 注释里的 _foo` 整个吐成一个 `COMMENT` 记号，注释里的名字
-    根本不会进 `out`。改前这里按 `COMMENT` 记号的行号去剔 `NAME`（第二遍里
-    `tok.start[0] not in drop`），而那条规则剔不掉任何注释，只能把同一行上的真代码
-    整行吃掉：实测整棵树被吃掉 2533 个真代码 `NAME` 记号，330 个被 tick 的 token 里
-    有 14 个两种口径计数不同（`_callable_for` 2 vs 4、`_store` 13 vs 21、
-    `_search` 26 vs 30）。方向是保守的（只会假红、不会假绿），但"真符号计数"这个
-    口径名不副实，所以那条规则被删掉。
-
-    为什么用 `tokenize` 而不是正则：正则会把一个更长的名字（它以 `_ROLE_PAT` 开头）
-    数成 `_ROLE_PAT` 的一次命中。
-
-    读不到（`OSError`）或记不过（`TokenError` / `IndentationError`，例如半截写坏的
-    `.py`）的文件当作"没有真符号"：宁可把它当可疑，也不假装它干净。
+    口径（`FIX11` 的 `C2`，第 2 条；`FIX12` 的 `R5-AN-11-3` 更正了这里的实现与说法）：用 `tokenize` 取 `NAME` 记号 ⇒
+    字符串字面量里的提及、`.md` 正文里的提及一律不算；再把 docstring 所在的行剔掉（那是字符串常量，同样不产生 `NAME` 记号）⇒"docstring 里随手写下的名字"不算。
+    剩下的就是这个文件里真的写在代码上的名字。注释不需要额外剔除，也不该被剔除：注释正文本来就不是 `NAME` 记号—— `tokenize` 把 `# 注释里的 _foo` 整个吐成一个 `COMMENT` 记号，
+    注释里的名字根本不会进 `out`。改前这里按 `COMMENT` 记号的行号去剔 `NAME`（第二遍里`tok.start[0] not in drop`），而那条规则剔不掉任何注释，只能把同一行上的真代码整行吃掉：
+    实测整棵树被吃掉 2533 个真代码 `NAME` 记号，330 个被 tick 的 token 里有 14 个两种口径计数不同（`_callable_for` 2 vs 4、`_store` 13 vs
+    21、`_search` 26 vs 30）。方向是保守的（只会假红、不会假绿），但"真符号计数"这个口径名不副实，所以那条规则被删掉。为什么用 `tokenize` 而不是正则：正则会把一个更长的名字（它以
+    `_ROLE_PAT` 开头）数成 `_ROLE_PAT` 的一次命中。读不到（`OSError`）或记不过（`TokenError` / `IndentationError`，例如半截写坏的`.py`）
+    的文件当作"没有真符号"：宁可把它当可疑，也不假装它干净。
     """
     if p.suffix != ".py":
         return []
@@ -1340,27 +1260,16 @@ def _looks_like_a_checkout(tree: pathlib.Path) -> bool:
 
 
 def _reference_scan_roots() -> tuple[pathlib.Path, pathlib.Path] | None:
-    """`(agentflow 树, 工作区根)`；判据的落点定不下来时返回 `None`（那是真的仓外）。
-
+    """    `(agentflow 树, 工作区根)`；判据的落点定不下来时返回 `None`（那是真的仓外）。
     ## 三种结局，不是一个
-
-    1. 找到 → 返回 `(tree, ws_root)`；
-    2. `tree` 的祖先里有 checkout 结构、但上溯到盘符根都没找到 `_ROOT_MARKERS`
-       那两条 ⇒ 抛 `_RootNotFound`：那说明"我在仓里却认不出仓"，是判据自己坏了，必须 FAILED；
-    3. 连 checkout 结构都没有（例如把本文件单独拷到系统临时目录）⇒ 返回 `None`，
-       调用方 `pytest.skip`：那是真的 `unknown`，不是通过。
-
+    1. 找到 → 返回 `(tree, ws_root)`；2. `tree` 的祖先里有 checkout 结构、但上溯到盘符根都没找到 `_ROOT_MARKERS`那两条 ⇒ 抛 `_RootNotFound`：
+    那说明"我在仓里却认不出仓"，是判据自己坏了，必须 FAILED；3. 连 checkout 结构都没有（例如把本文件单独拷到系统临时目录）⇒ 返回 `None`，调用方 `pytest.skip`：那是真的
+    `unknown`，不是通过。
     根锚为什么必须是随仓走的两条（`X-91.5-3`）：逐字见 `_ROOT_MARKERS` 上面那段。
-
     ## 为什么不是固定层级（`R8-R5-1`）
-
-    这里此前是"最多向上三级"。第 8 轮的布局矩阵实测：`<ws>/agentflow` 与
-    `copytree(agentflow, <ws>/temp/<label>)` 两种布局都能找到根，但
-    `<ws>/temp/<a>/<b>`（三层）与更深找不到 ⇒ 判据退化成 `pytest.skip`，
-    而在 pytest 汇总行里 `skipped` 与 `passed` 一样容易被读成"这盏灯没问题"
-    —— 「未知被读成通过」，正是本仓三态纪律禁止的那件事。
-    现在改成上溯到盘符根（`tree.parents` 本身有界，成本可忽略），
-    并把"在仓里找不到"与"不在仓里"分成上面的第 2 / 第 3 档。
+    这里此前是"最多向上三级"。第 8 轮的布局矩阵实测：`<ws>/agentflow` 与`copytree(agentflow, <ws>/temp/<label>)` 两种布局都能找到根，
+    但`<ws>/temp/<a>/<b>`（三层）与更深找不到 ⇒ 判据退化成 `pytest.skip`，而在 pytest 汇总行里 `skipped` 与 `passed` 一样容易被读成"这盏灯没问题"——
+    「未知被读成通过」，正是本仓三态纪律禁止的那件事。现在改成上溯到盘符根（`tree.parents` 本身有界，成本可忽略），并把"在仓里找不到"与"不在仓里"分成上面的第 2 / 第 3 档。
     """
     tree = pathlib.Path(__file__).resolve().parents[1]
     for base in (tree, *tree.parents):
@@ -1541,19 +1450,13 @@ def _test_file_exists(ref: str, *, tree: pathlib.Path, ws_root: pathlib.Path,
 
 
 def test_a_scratch_copy_cannot_cure_a_dangling_reference(tmp_path: pathlib.Path):
-    """`R7-⑮` 的负控（B 方案）：草稿目录里的副本抬不动"真符号出现次数"。
+    """    `R7-⑮` 的负控（B 方案）：草稿目录里的副本抬不动"真符号出现次数"。
 
-    改前的病（`R0-C2` 实测）：在 `temp/` 下放一份整树副本 ⇒ 每个 token 的真符号计数
-    被抬高 ⇒ 一条真悬空的引用被判成"不悬空" ⇒ 判据安静变绿，而读数里没有任何一处
-    会告诉你。修法刻意窄：`temp/` 照旧进扫描面（它里面的悬空提及照旧要报、它引的
-    一次脚本路径照旧要真存在），只是不许参与计数那一维
-    （`_REF_SYMBOL_COUNT_SKIP_DIRS`）。
+    改前的病（`R0-C2` 实测）：在 `temp/` 下放一份整树副本 ⇒ 每个 token 的真符号计数被抬高 ⇒ 一条真悬空的引用被判成"不悬空" ⇒ 判据安静变绿，而读数里没有任何一处会告诉你。
+    修法刻意窄：`temp/` 照旧进扫描面（它里面的悬空提及照旧要报、它引的一次脚本路径照旧要真存在），只是不许参与计数那一维（`_REF_SYMBOL_COUNT_SKIP_DIRS`）。
 
-    三档读数（缺一档这条负控就退化成恒真）：
-    ① 裸夹具：那条引用必须是悬空（计数 1、登记表 `_REF_KNOWN_MENTION_TOKENS` 里也没有它）；
-    ② 把同名副本放进草稿目录：悬空读数逐字不变（副本抬不动计数）；
-    ③ 反真空：把同一份副本放进非草稿目录 ⇒ 那条引用必须不再悬空
-       （证明计数这一维还活着，②的"不变"不是因为计数坏了）。
+    三档读数（缺一档这条负控就退化成恒真）：① 裸夹具：那条引用必须是悬空（计数 1、登记表 `_REF_KNOWN_MENTION_TOKENS` 里也没有它）；② 把同名副本放进草稿目录：悬空读数逐字不变（副本抬不动计数）；
+    ③ 反真空：把同一份副本放进非草稿目录 ⇒ 那条引用必须不再悬空（证明计数这一维还活着，②的"不变"不是因为计数坏了）。
     """
     token = "_scratch_copy_probe_dup"
     (tmp_path / "src").mkdir()
@@ -1584,18 +1487,13 @@ def test_a_scratch_copy_cannot_cure_a_dangling_reference(tmp_path: pathlib.Path)
 
 
 def test_the_reference_scan_root_anchor_is_not_a_temp_artifact() -> None:
-    """`X-91.5-3` 的反真空判据：根锚必须随仓走，不许挂在一份会被清理的产物上。
+    """    `X-91.5-3` 的反真空判据：根锚必须随仓走，不许挂在一份会被清理的产物上。
 
-    改前的锚是 `temp/REAUDIT6-R5.json`（第 6 轮的一份未跟踪审计产物）。它的坏处不是
-    "今天找不到"（今天找得到），而是"清一次 `temp/` 就变成判据自己坏了"：`_RootNotFound`
-    会让整条引用判据 FAILED，而读数据的人看不出真正的原因是一份审计 JSON 被删了。
+    改前的锚是 `temp/REAUDIT6-R5.json`（第 6 轮的一份未跟踪审计产物）。它的坏处不是"今天找不到"（今天找得到），而是"清一次
+    `temp/` 就变成判据自己坏了"：`_RootNotFound`会让整条引用判据 FAILED，而读数据的人看不出真正的原因是一份审计 JSON 被删了。
 
-    判据分三层（任何一层单独都不够）：
-    ① 今天真的解析得出根（解析不出 = 判据自己坏了，不是 unknown）；
-    ② 两条锚在盘上，且都不在 `temp/` 下 —— 这是"未跟踪 scratch"的形态面；
-    ③ 锚表本身不许再出现 `temp…` 形态 —— 这是第 ① 层抓不到的：今天它还在盘上，
-       所以 ①② 都可以是绿的，只有第 ③ 层能拦住"把锚改回 scratch"这个动作
-       （负控就是在副本里做这第 ③ 层，见交付报告）。
+    判据分三层（任何一层单独都不够）：① 今天真的解析得出根（解析不出 = 判据自己坏了，不是 unknown）；② 两条锚在盘上，且都不在 `temp/` 下 —— 这是"未跟踪 scratch"的形态面；③
+    锚表本身不许再出现 `temp…` 形态 —— 这是第 ① 层抓不到的：今天它还在盘上，所以 ①② 都可以是绿的，只有第 ③ 层能拦住"把锚改回 scratch"这个动作（负控就是在副本里做这第 ③ 层，见交付报告）。
     """
     roots = _reference_scan_roots()
     assert roots is not None, (
@@ -1848,21 +1746,16 @@ def _module_with_the_probe_token_in_a_comment() -> dict:
 
 @contextlib.contextmanager
 def _probe_tree_copy(tree: pathlib.Path, ws_root: pathlib.Path):
-    """整树真副本（`shutil.copytree`，不是硬链接），落在工作区 `temp/` 下；退出时删掉。
+    """    整树真副本（`shutil.copytree`，不是硬链接），落在工作区 `temp/` 下；退出时删掉。
 
-    为什么必须有这个装置（`FIX12` 的 `R5-AN-11-1`）：机制守卫要在"别处真的有一条悬空
-    引用"的树上跑判据，而改前它把那一行直接写进真仓的 `src/agentflow/runflow.py`
-    （`finally` 里再还原）。那条注入在盘上存活 7.13–7.68 秒，于是
+    为什么必须有这个装置（`FIX12` 的 `R5-AN-11-1`）：机制守卫要在"别处真的有一条悬空引用"的树上跑判据，而改前它把那一行直接写进真仓的
+    `src/agentflow/runflow.py`（`finally` 里再还原）。那条注入在盘上存活 7.13–7.68 秒，于是
 
     - 硬杀 pytest（`finally` 不跑）⇒ 受审源码留在盘上：多一行假引用，外加 `write_text`
-      的默认换行翻译把整份文件转成 CRLF（+1958 字节）⇒ 四道门的读数当场作废；
-    - 同树并发的另一个 pytest 读到瞬时注入 ⇒ 假红。
-
-    复制范围 = 判据扫描所需的全集：`_iter_ref_scan_files` 会 `rglob` 整棵树，所以副本
-    必须覆盖全部 `.py` / `.md`（少一份，副本的符号计数就不再等于真树）；缓存目录按判据
-    自己的跳过表 `_REF_SCAN_SKIP_DIRS` 跳过 —— 判据本来就看不见它们，读数不受影响。
-    实测（本机 2026-09-27 16:52:23，UTC+8）：整树 274 个文件、其中 216 个被扫文件，
-    `copytree` 0.63 秒。
+    的默认换行翻译把整份文件转成 CRLF（+1958 字节）⇒ 四道门的读数当场作废；
+    - 同树并发的另一个 pytest 读到瞬时注入 ⇒ 假红。复制范围 = 判据扫描所需的全集：`_iter_ref_scan_files` 会 `rglob` 整棵树，所以副本必须覆盖全部 `.py` /
+    `.md`（少一份，副本的符号计数就不再等于真树）；缓存目录按判据自己的跳过表 `_REF_SCAN_SKIP_DIRS` 跳过 —— 判据本来就看不见它们，读数不受影响。实测（本机 2026-09-27 16:52:23，
+    UTC+8）：整树 274 个文件、其中 216 个被扫文件，`copytree` 0.63 秒。
     """
     import os
     import shutil
@@ -1904,36 +1797,16 @@ def _probe_apparatus_reading(copy_root: pathlib.Path, tree: pathlib.Path) -> tup
 
 
 def test_a_token_written_only_in_this_file_cannot_cure_a_dangling_reference() -> None:
-    """机制守卫（`R5-AN-10-1` 的验收）：判据文件里的一次提及救不了别处的悬空引用。
-
-    第 10 轮实测的假绿就是这个形态：判据的悬空口径数的是"全树文本出现次数"，
-    而它把本文件里的提及也算一次 ⇒ 在本文件里随手写下被引用的 token
-    （不带反引号即可）就把计数从 1 抬到 2 ⇒ 别处那条真悬空的引用不再算悬空
-    ⇒ 判据安静变绿（`symbCrit` / `symbBoth` 两档实测 `passed`）。
-
-    这条用例自己造那个注入，而且仓内一个字节都不写（`FIX12` 的 `R5-AN-11-1`）：
-    注入的落点是工作区 `temp/` 下的一份整树真副本（`shutil.copytree`，见
-    `_probe_tree_copy`），扫描与子进程断言都在副本上跑、跑完把副本删掉。改前这一步直接
-    改写真仓的 `src/agentflow/runflow.py`（追加一行带反引号的假引用、`finally` 里再
-    `write_bytes` 还原）：盘上带注入的状态实测存活 7.13–7.68 秒，硬杀 pytest 就把带假
-    引用的源码留在盘上（`write_text` 的换行翻译还把整份文件转成 CRLF，+1958 字节），
-    同树并发的另一个 pytest 读到瞬时注入会假红 —— 受审源码文件的字节被改，四道门的读数
-    当场作废。这句 docstring 此前写的是"不动盘上的文件"，实现不是；现在实现是了
-    （真仓那份受审源码的字节与 mtime 由本用例自己在末段断言钉住）。
-
-    两个对照 ——
-
-    ① 注入的只是文本：把本模块的源码 + 一行裸提及在内存里 `exec` 一份（不落盘），
-       `dangling` 与 `dangling_tokens` 必须与不注入时逐字相同
-       （旧口径下这里会少一条，这条断言当场变红）；
-    ② 注入升级成"判据文件里裸写 token + 别处真有一条悬空引用"：两处注入都写在副本上
-       （判据文件里一行裸提及 + 别处一条带反引号的引用），`dangling` 必须多出恰好那一条，
-       且它就是本文件里那处裸提及没有治好的那条（①与②合起来才是"救不了"的完整证据）。
-       副本先自证与真树读数逐字相同，这一条才归因得到注入上。
-
-    为什么必须独立成一条：判据本体里的每条断言都是"仓里现在没问题"，
-    而这条判的是判据的能力——"没报"不等于"没有"，检测能力被削弱的形态
-    恰恰是"读上去与干净一模一样"，所以它要自己造一个必须报红的输入。
+    """    机制守卫（`R5-AN-10-1` 的验收）：判据文件里的一次提及救不了别处的悬空引用。第 10 轮实测的假绿就是这个形态：判据的悬空口径数的是"全树文本出现次数"，而它把本文件里的提及也算一次 ⇒
+    在本文件里随手写下被引用的 token（不带反引号即可）就把计数从 1 抬到 2 ⇒ 别处那条真悬空的引用不再算悬空⇒ 判据安静变绿（`symbCrit` / `symbBoth` 两档实测 `passed`）。
+    这条用例自己造那个注入，而且仓内一个字节都不写（`FIX12` 的 `R5-AN-11-1`）：注入的落点是工作区 `temp/` 下的一份整树真副本（`shutil.copytree`，
+    见`_probe_tree_copy`），扫描与子进程断言都在副本上跑、跑完把副本删掉。改前这一步直接改写真仓的 `src/agentflow/runflow.py`（追加一行带反引号的假引用、`finally` 里
+    再`write_bytes` 还原）：盘上带注入的状态实测存活 7.13–7.68 秒，硬杀 pytest 就把带假引用的源码留在盘上（`write_text` 的换行翻译还把整份文件转成 CRLF，+1958 字节），
+    同树并发的另一个 pytest 读到瞬时注入会假红 —— 受审源码文件的字节被改，四道门的读数当场作废。这句 docstring 此前写的是"不动盘上的文件"，实现不是；现在实现是了（真仓那份受审源码的字节与 mtime
+    由本用例自己在末段断言钉住）。两个对照 ——① 注入的只是文本：把本模块的源码 + 一行裸提及在内存里 `exec` 一份（不落盘），`dangling` 与
+    `dangling_tokens` 必须与不注入时逐字相同（旧口径下这里会少一条，这条断言当场变红）；② 注入升级成"判据文件里裸写 token + 别处真有一条悬空引用"：两处注入都写在副本上（判据文件里一行裸提及 +
+    别处一条带反引号的引用），`dangling` 必须多出恰好那一条，且它就是本文件里那处裸提及没有治好的那条（①与②合起来才是"救不了"的完整证据）。副本先自证与真树读数逐字相同，这一条才归因得到注入上。
+    为什么必须独立成一条：判据本体里的每条断言都是"仓里现在没问题"，而这条判的是判据的能力——"没报"不等于"没有"，检测能力被削弱的形态恰恰是"读上去与干净一模一样"，所以它要自己造一个必须报红的输入。
     """
     roots = _reference_scan_roots()
     if roots is None:

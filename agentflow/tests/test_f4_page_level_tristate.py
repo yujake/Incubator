@@ -1,32 +1,21 @@
 """`F-4` 的回归判据：逐页三态 —— "这页没抽出来"不许与"这句话不在这页上"同形。
 
-## 缺陷（2026-09-26 全面体检 · 子代理 F 发现，`temp/auditF-probe3.txt` [K]）
+缺陷（2026-09-26 全面体检 · 子代理 F 发现，`temp/auditF-probe3.txt` [K]）：`DocumentText` 只有
+`text/pages/source_kind/encoding` 四个字段，PyPDF2 后端单页失败时 `pages.append("")`。于是
+`_finish_pdf(['有','空','有'])` 给出 `has_text_layer=True`、
+`pages=['page one text','','page three text']`，与"第 2 页本来就是空白页"在返回形态上完全同形。
+下游客观后果：`ocr.detect_text_layer` 判 `has_layer=bool(doc.pages)` 后逐字打印「有文本层：N 页
+可定位文本……引文校验可以正常判定 true/false」；`quoteverify.check_quote` 只在 `pages == []` 时
+给 `verified=None`，部分页失败时给 `QuoteCheck(False, reason='not_found')` —— 真引文被判成幻觉
+（B 的唯一自动幻觉防线给出假阳性）。
 
-`DocumentText` 只有 `text/pages/source_kind/encoding` 四个字段，
-PyPDF2 后端单页失败时 `pages.append("")`。于是 `_finish_pdf(['有','空','有'])`
-给出 `has_text_layer=True`、`pages=['page one text','','page three text']`，
-与"第 2 页本来就是空白页"在返回形态上完全同形。下游客观后果：
-
-- `ocr.detect_text_layer` 判 `has_layer=bool(doc.pages)` 后逐字打印
-  「有文本层：N 页可定位文本……引文校验可以正常判定 true/false」；
-- `quoteverify.check_quote` 只在 `pages == []` 时给 `verified=None`，
-  部分页失败时给 `QuoteCheck(False, reason='not_found')` ——
-  真引文被判成幻觉（B 的唯一自动幻觉防线给出假阳性）。
-
-修法是给 `DocumentText` 加一个纯增量字段 `page_status`（默认空元组 =
-没有逐页信息 = 与旧行为逐字一致），并让两个消费点各判一次。
-
-## 本文件守什么
-
-1. 字段与辅助方法本身（`failed_pages` / `page_status_of` / `page_unreadable`）；
-2. `check_quote` 的三态：声明窗口里有失败页且没命中 ⇒ `None`，
-   而不是旧行为的 `False`；
-3. `check_quote` 的方向：命中优先于失败（引文真在可读页上 ⇒ `True`，
-   哪怕同一次声明的窗口里还有别的失败页）；
-4. `ocr.detect_text_layer` 的 reason 必须点名失败页；
-5. 负控：`page_status` 为空的旧形态仍然给出旧答案（`False`/`not_found`）——
-   证明这一层是"新增信息"而不是"把一切都变严"。
-"""
+修法是给 `DocumentText` 加一个纯增量字段 `page_status`（默认空元组 = 没有逐页信息 = 与旧行为
+逐字一致），并让两个消费点各判一次。本文件守五件：1. 字段与辅助方法本身（`failed_pages` /
+`page_status_of` / `page_unreadable`）；2. `check_quote` 的三态：声明窗口里有失败页且没命中 ⇒
+`None`，而不是旧行为的 `False`；3. `check_quote` 的方向：命中优先于失败（引文真在可读页上 ⇒
+`True`，哪怕同一次声明的窗口里还有别的失败页）；4. `ocr.detect_text_layer` 的 reason 必须点名
+失败页；5. 负控：`page_status` 为空的旧形态仍然给出旧答案（`False`/`not_found`）—— 证明这一层
+是"新增信息"而不是"把一切都变严"。"""
 from __future__ import annotations
 
 import pathlib

@@ -1,33 +1,22 @@
 """I7 检索预算与优先级（DESIGN-INTERACTIONS.md §1 I7 / §4 验收）。
 
-本文件只测两件事：
-
-1. A 按优先级取任务（`AgentA._claim` → `interactions.order_pending_requests`）；
-2. 准入闸门（`interactions.admit_search_request`：定优先级 + 超限拒绝）。
+本文件只测两件事：A 按优先级取任务（`AgentA._claim` → `interactions.order_pending_requests`）；
+准入闸门（`interactions.admit_search_request`：定优先级 + 超限拒绝）。时间戳一律写死常量
+（不依赖"当前时间"），租约用固定的过去/未来时刻表示"已过期/有效"。
 
 验收口径与每条负控（"构造它不该触发的场景，断言它确实没触发"）：
-
-===================================================  ==========================================
-验收                                                  对应用例
-===================================================  ==========================================
-混合队列 → 先 high 后 low                             ``test_high_priority_is_claimed_before_low...``
-同级 FIFO（timestamp），同 timestamp 按 request_id    ``test_same_priority_is_fifo...total_order``
-同级下：租约已过期 排在 租约仍在走 之前                 ``test_expired_lease_is_claimed_before_a_still_running_lease``
-同级下：全新请求与过期租约平手（契约实测）          ``test_fresh_request_and_expired_lease_tie_on_fifo...``
-顺序只能来自 `interactions`（不许第二套判据）         ``test_claim_order_comes_from_interactions_only``
-顺序与优先级可从结果外部观察                          ``test_run_result_exposes_priority...``
-负控 1：`done=True` 的（哪怕 high）永不被取           ``test_done_request_is_never_claimed_even_if_high``
-负控 2：租约未过期的（哪怕 high）永不被取              ``test_active_lease_blocks_claim_even_if_high``
-负控 3：超限时逐字节确认没有写入                   ``test_over_limit_is_rejected_and_writes_nothing``
-四态：队列空 / 全被别人持着 / 全在退避中 / 全被放弃     ``test_claim_skip_reasons_are_four_distinct_states``
-      必须可区分（退避租约 = `claimed_by` 空 + 未来的
-      `lease_until`；它不得被压进"全被别人持着"）
-退避租约被遵守（`claimed_by` 为空也照样拦住）          ``tests/test_agent_a_backoff.py`` 整个文件
-准入闸门：默认优先级表、非法值回退、陌生来源落 low     ``test_admit_*``
-===================================================  ==========================================
-
-时间戳一律写死常量（不依赖"当前时间"）；租约用固定的过去/未来时刻表示"已过期/有效"。
-"""
+- 混合队列 → 先 high 后 low：``test_high_priority_is_claimed_before_low...``
+- 同级 FIFO（timestamp），同 timestamp 按 request_id：``test_same_priority_is_fifo...total_order``
+- 同级下：租约已过期 排在 租约仍在走 之前：``test_expired_lease_is_claimed_before_a_still_running_lease``
+- 同级下：全新请求与过期租约平手（契约实测）：``test_fresh_request_and_expired_lease_tie_on_fifo...``
+- 顺序只能来自 `interactions`（不许第二套判据）：``test_claim_order_comes_from_interactions_only``
+- 顺序与优先级可从结果外部观察：``test_run_result_exposes_priority...``
+- 负控 1：`done=True` 的（哪怕 high）永不被取：``test_done_request_is_never_claimed_even_if_high``
+- 负控 2：租约未过期的（哪怕 high）永不被取：``test_active_lease_blocks_claim_even_if_high``
+- 负控 3：超限时逐字节确认没有写入：``test_over_limit_is_rejected_and_writes_nothing``
+- 四态：队列空 / 全被别人持着 / 全在退避中 / 全被放弃 必须可区分：``test_claim_skip_reasons_are_four_distinct_states``
+- 退避租约（`claimed_by` 空 + 未来的 `lease_until`）不得被压进"全被别人持着"，被遵守：``tests/test_agent_a_backoff.py`` 整个文件
+- 准入闸门：默认优先级表、非法值回退、陌生来源落 low：``test_admit_*``"""
 
 from __future__ import annotations
 
@@ -190,20 +179,16 @@ def test_same_priority_is_fifo_by_timestamp_then_request_id_total_order(store):
 def test_expired_lease_is_claimed_before_a_still_running_lease(store):
     """同优先级下，租约已过期的请求排在"租约仍在走"的请求之前（收回沉没成本）。
 
-    一条"有人拿到却没做完、租约已经烂掉"的请求，重试它比从零开始更接近完成；
-    而一条租约仍在走的请求（上一轮搜索失败后 A 自己设的退避租约）应当往后排，
-    免得在同一段时间里反复重打同一个上游 API。
+    一条"有人拿到却没做完、租约已经烂掉"的请求，重试它比从零开始更接近完成；而租约仍在走的
+    请求（上一轮搜索失败后 A 自己设的退避租约）应当往后排，免得反复重打同一个上游 API。
 
-    这条用例的措辞是照着 `interactions.order_pending_requests` 的真实判据写的，
-    不是照抄设计文档的字面：契约把"租约为空（无人持有）"与"租约已过期"放进同一个桶，
-    两者都排在"租约仍在走"的前面。实测证据与后果见
-    ``test_fresh_request_and_expired_lease_tie_on_fifo_instead_of_jumping_queue``。
+    措辞照着 `interactions.order_pending_requests` 的真实判据写，不是照抄设计文档：契约把
+    "租约为空（无人持有）"与"租约已过期"放进同一个桶，两者都排在"租约仍在走"之前（实测证据与
+    后果见 ``test_fresh_request_and_expired_lease_tie_on_fifo_instead_of_jumping_queue``）。
 
-    旧断言 `second.request["request_id"] == "r-0001"` 编码的是一个缺陷行为
-    （"退避租约（`claimed_by` 为空 + 未来的 `lease_until`）可以在同一进程里立刻被重领"），
-    已按"租约仍在有效期内就得跳过，不管 `claimed_by` 是谁"改正 ——
-    详见下面那段负控与 `tests/test_agent_a_backoff.py`。
-    """
+    旧断言 `second.request["request_id"] == "r-0001"` 编码的是一个缺陷行为（"退避租约
+    （`claimed_by` 为空 + 未来的 `lease_until`）可以在同一进程里立刻被重领"），已按"租约仍在
+    有效期内就得跳过，不管 `claimed_by` 是谁"改正 —— 详见下面那段负控与 `tests/test_agent_a_backoff.py`。"""
     _add_req(store, "r-0001", priority="medium", timestamp=T1, lease_until=FUTURE_LEASE)  # 退避中（租约仍在走）
     _add_req(
         store,
@@ -573,7 +558,7 @@ def test_admit_unregistered_submitter_falls_to_low(store):
 
 
 def test_admit_limit_default_is_high_and_is_overridable(store):
-    """`DEFAULTS["max_inflight_requests"]` 现在是 **200**（业主 2026-10-15 裁定 C9：
+    """`DEFAULTS["max_inflight_requests"]` 现在是 200（业主 2026-10-15 裁定 C9：
     20 → 200，「凡是可能阻止智能体完成大项目的……抬到几乎不可能触发」），
     但 `max_inflight` 仍可覆盖（含 0）。"""
     assert X.DEFAULTS["max_inflight_requests"] == 200

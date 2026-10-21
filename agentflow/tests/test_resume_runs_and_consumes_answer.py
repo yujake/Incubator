@@ -93,19 +93,15 @@ def test_the_answer_reaches_the_resumed_round_prompt(tmp_path):
 
 
 def test_resuming_without_an_answer_does_not_invent_one(tmp_path):
-    """反真空（按"停着"的新契约改过）：没答就 `resume=True` ⇒ 「根本不开下一轮」。
+    """    反真空（按"停着"的新契约改过）：没答就 `resume=True` ⇒ 「根本不开下一轮」。
 
     ## 这条判据为什么改（`draft/37` §72，用户裁定"问了就停着"）
 
-    它原来守的是旧契约："没人答也照跑下一轮，但提示词里不许编一句'用户说……'"。
-    新契约把那条路「堵死在更前面」：上一轮停在等用户回答、而那个问题还挂在待答清单里 ⇒
-    多轮驱动不许开下一轮（`autonomy._stop_before_round` 的 `waiting_for_user` 那一档）。
-    于是"编造回答"这件事在结构上不可能发生 —— 不是靠提示词自律，是靠根本不进那一步。
+    它原来守的是旧契约："没人答也照跑下一轮，但提示词里不许编一句'用户说……'"。新契约把那条路「堵死在更前面」：上一轮停在等用户回答、而那个问题还挂在待答清单里
+    ⇒多轮驱动不许开下一轮（`autonomy._stop_before_round` 的 `waiting_for_user` 那一档）。于是"编造回答"这件事在结构上不可能发生 —— 不是靠提示词自律，是靠根本不进那一步。
 
-    判据因此钉两件事：「一个模型请求都没发」（`after == []`），且停因是
-    `waiting_for_user`（不是"跑完了"也不是"没查成"）。原来那句"提示词里不许出现
-    '用户说……'"保留成一条反真空断言：它在 `after` 为空时自动成立，
-    而万一将来有人把这条闸门放宽，它会立刻红。
+    判据因此钉两件事：「一个模型请求都没发」（`after == []`），且停因是`waiting_for_user`（不是"跑完了"也不是"没查成"）。原来那句"提示词里不许出现'用户说……'"保留成一条反真空断言：它在
+    `after` 为空时自动成立，而万一将来有人把这条闸门放宽，它会立刻红。
     """
     st, registry, cond, root, gw = _wire(tmp_path, [_ASK, _FINAL])
     _run(st, registry, cond, root, gw, rounds=1)

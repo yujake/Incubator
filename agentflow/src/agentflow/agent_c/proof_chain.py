@@ -1,26 +1,19 @@
 # -*- coding: utf-8 -*-
 """角色 C 的动作 `proof_chain`：一条成果的最短证明依赖链（业主 2026-10-09）。
 
-> 「想想C怎么找最短依赖链？总归得在记录定理和证明时同样把依赖写清，直到找到最根上的
->  依赖（某文献或某无前提依赖的自证定理）为止」
-> 「B走乙。由于B这边出了多依赖写法，C的分析需要做适配」
-> 「别名按乙，毕竟定理也可能有别名」
+> 「想想C怎么找最短依赖链？总归得在记录定理和证明时同样把依赖写清，直到找到最根上的>  依赖（某文献或某无前提依赖的自证定理）为止」> 「B走乙。由于B这边出了多依赖写
+法，C的分析需要做适配」> 「别名按乙，毕竟定理也可能有别名」
 
 设计（`draft/97` §12.2 / §14.4d / §15.0）：
 
-- 图：节点 = `statements`（定理/定义/引理/命题/概念）+ `experiments` + `literature`；
-  边 = `dependencies`（有向：`used_by` → 被依赖的那一端）；
-- 组：同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：都要）；
-  不同组 = 可选路径（组间 OR：任一） ⇒ 结果给每组一条链并挑最短那组（`best_group`）；
-- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
-  `evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 2026-10-21 之前
-  要求 `proof_text == "concept:primitive"`，那个哨兵正是 mp3 那 1143 条污染行的来源，
-  现在按"定义在不在"判，历史行带哨兵照旧是根）。"没有边又没有证明证据" ⇒ 依赖没写
-  （`unknown`），不是根；
-- 边界：环 ⇒ 那一组报 `cycle` 并跳过（不牵连别的组）；`dangling` 边 ⇒ 那一组不完整；
-  超 `max_depth` ⇒ `truncated=True`（给已走到的前缀）；跨组汇总按节点去重（多写一组
-  路径不许把"牵动多少节点"吹大）；
-- 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。
+- 图：节点 = `statements`（定理/定义/引理/命题/概念）+ `experiments` + `literature`；边 = `dependencies`
+（有向：`used_by` → 被依赖的那一端）；- 组：同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：都要）；不同组 = 可选
+路径（组间 OR：任一） ⇒ 结果给每组一条链并挑最短那组（`best_group`）；- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
+`evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 2026-10-21 之前要求 
+`proof_text == "concept:primitive"`，那个哨兵正是 mp3 那 1143 条污染行的来源，现在按"定义在不在"判，历史行带哨兵照旧是根）。
+"没有边又没有证明证据" ⇒ 依赖没写（`unknown`），不是根；- 边界：环 ⇒ 那一组报 `cycle` 并跳过（不牵连别的组）；`dangling` 边 ⇒ 那一
+组不完整；超 `max_depth` ⇒ `truncated=True`（给已走到的前缀）；跨组汇总按节点去重（多写一组路径不许把"牵动多少节点"吹大）；- 别名：
+`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。
 """
 from __future__ import annotations
 from pathlib import Path
@@ -96,7 +89,7 @@ class _ProofChain:
             warnings.append("有 " + str(sum(1 for g in groups_out if not g["reached"]))
                             + " 组没走到根（悬空边 / 超深度 / 依赖没写，逐组见 payload）")
         truncated = any(g.get("truncated") for g in groups_out)
-        # ⚠️ 「2026-10-17」：「无依赖的 target 自己也要判一次根」 ——
+        # 「2026-10-17」：「无依赖的 target 自己也要判一次根」 ——
         # 原实现只 walk 依赖组 ⇒ 一条"无前提自证定理/原始概念"被读成
         # "0 组可选路径，没有一组走到根"，而按本仓口径它「本来就是根」（链闭合）。
         target_is_root, target_why = graph.is_root(f"stmt:{node['stmt_id']}")
@@ -266,7 +259,7 @@ class _DepGraph:
                 return False, "概念的定义还没到（pending_definition）⇒ 这一条还不是根"
             if str(row.get("evidence_kind") or "") in _PROOF_KINDS:
                 return True, ""
-            # ⚠️ 「2026-10-17 业主口径」：*"自证定理在审核后要能进定理证明库"* ⇒
+            # 「2026-10-17 业主口径」：*"自证定理在审核后要能进定理证明库"* ⇒
             # 一条 `own_result` 的命题，只要「审核台账里记着"成立"」，它就已经是
             # 本库里的「已证定理」 ⇒ 它「可以当根」（后面的定理能引它）。
             # 没审核过的同形命题「不许」当根（三态不许折平）。

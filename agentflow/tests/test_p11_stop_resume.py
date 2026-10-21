@@ -68,7 +68,7 @@ def test_inflight_task_caught_by_stop_is_recorded_as_unknown_and_not_retried(tmp
     holder: dict = {}
 
     def worker() -> None:
-        # 2026-10-16（口径 S2）：这条判据考"确定性实现被 stop 抓到" ⇒ 走**内部 API**
+        # 2026-10-16（口径 S2）：这条判据考"确定性实现被 stop 抓到" ⇒ 走内部 API
         # （工具层那条路现在一律走角色自己的循环，不进确定性实现）。
         holder["res"] = c.summon("E", "list_experiments", {}, by="M",
                                  input_key="P11:inflight")

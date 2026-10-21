@@ -1,48 +1,22 @@
 # -*- coding: utf-8 -*-
-"""两条业主裁定（2026-10-20）的判据：**秘书代写简介** + **研究侧由 D 主导、M 只统筹搭桥**。
-
+"""两条业主裁定（2026-10-20）的判据：秘书代写简介 + 研究侧由 D 主导、M 只统筹搭桥。
 ## 裁定一逐字（业主）
-
-> 「简介没写，则**秘书帮忙写**，秘书的重要职责就是**辅助通讯**」
-
-改前的读数：`agent_loop.py` 把 `brief_arg` 直接传死，而 `Secretary.roster_add` 在 `brief`
-为空时**拒绝登记**（"没给一句任务简介"）—— 真机 **100 次失败里 75 次**是这一条。
-
-所以现在：`brief` 缺失（空 / 纯空白）而 `task` 非空 ⇒ **秘书从任务原文派生**一句
-（`secretary.brief_from_task`：确定性、不调模型、不花钱、≤60 字、单行），登记行里多一格
-`brief_source="secretary"`、返回值 `brief_written=True`；父给的那一句记
-`brief_source="parent"`、`brief_written=False` —— **不许静默冒充"父给的"**。
-`brief` 与 `task` **都**空 ⇒ 照旧拒收（不许编造）。
-
-⚠️ `agent_loop` 那两侧**只把 `task` 传下去**，刻意不写 `brief or task`：业主选的是
-"秘书写"，不是"拿任务原文顶替"。判据 ①b / ①c 守在 loop 那一层，正是为了钉住
-"代写发生在秘书那里、留痕也在那里"。
-
+> 「简介没写，则秘书帮忙写，秘书的重要职责就是辅助通讯」
+改前的读数：`agent_loop.py` 把 `brief_arg` 直接传死，而 `Secretary.roster_add` 在 `brief`为空时拒绝登记（"没给一句任务简介"）—— 真机 100 次失败里 75 次是这一条。
+所以现在：`brief` 缺失（空 / 纯空白）而 `task` 非空 ⇒ 秘书从任务原文派生一句（`secretary.brief_from_task`：确定性、不调模型、不花钱、≤60 字、单行），登记行里多一格`brief_source="secretary"`、返回值
+`brief_written=True`；父给的那一句记`brief_source="parent"`、`brief_written=False` —— 不许静默冒充"父给的"。`brief` 与 `task` 都空 ⇒ 照旧拒收（不许编造）。
+`agent_loop` 那两侧只把 `task` 传下去，刻意不写 `brief or task`：业主选的是"秘书写"，不是"拿任务原文顶替"。判据 ①b / ①c 守在 loop 那一层，正是为了钉住"代写发生在秘书那里、留痕也在那里"。
 ## 裁定二逐字（业主）
-
-> 「**F 和 E 都是 D 的研究侧直属，M 的职责是统筹协调，D 是真正主导研究**……请**加强 D 侧
-> 研究的积极性，压低 M 自主操纵研究的积极性**，M 的重要职责是**规划方案以及在特殊情况
-> 作为代理间的桥梁**」
-
-两处都只是**提示词文本**（不加减任何边）：`specs/d.py` 加一条"你主导研究"，
-`specs/m.py` 把"自己下场操纵研究"的措辞压下去（并确保 `policy[20]/[21]` 那两条
-"派 V"的义务已改成"派 D 去办"）。
-
+> 「F 和 E 都是 D 的研究侧直属，M 的职责是统筹协调，D 是真正主导研究……请加强 D 侧
+> 研究的积极性，压低 M 自主操纵研究的积极性，M 的重要职责是规划方案以及在特殊情况
+> 作为代理间的桥梁」
+两处都只是提示词文本（不加减任何边）：`specs/d.py` 加一条"你主导研究"，`specs/m.py` 把"自己下场操纵研究"的措辞压下去（并确保 `policy[20]/[21]` 那两条"派 V"的义务已改成"派 D 去办"）。
 ## 判据（五条，每条都带负控）
-
-① 不给 `brief`、给 `task` ⇒ 登记成功、`brief` 是秘书派生的一句（≤60 字、无换行）、
-   `brief_source=="secretary"`、返回 `brief_written=True`；
-   负控：**把代写关掉**（派生函数恒返回 `""`）⇒ 回到"没给一句任务简介"拒收。
-   ①b / ①c：`_do_summon` 与 `_do_summon_many` 这两条生产路走**同一口径**（代写 + 留痕）。
-② `brief` 与 `task` 都空 ⇒ 仍然拒收（**不许编造**）；负控：改成放行（派生函数恒返回一句）
-   ⇒ 判据必红。
-③ 代写的 `brief` 不许超过 60 字或含换行（否则会撞上 `roster_add` 自己的内容闸，形成
-   "没给简介 ⇒ 永远登记不上"的死角）；超长 `task` 必须读出**被截断**而不是**被拒**。
-   负控：把截断关掉（派生函数原样返回）⇒ 同一调用被内容闸拒。
-④ `specs/d.py` 的 policy 里有"研究侧由你主导"＋ C/E/F/让 F 带 V 的列举，且那条 ≤90 字；
-   负控：删掉 ⇒ 红。
-⑤ `specs/m.py` 的 policy 里有"不自己派 E 做实验"这类**压低**措辞，且**不再出现**
-   "派 V / `verify_proof`"这类**义务句**；负控：把那两句加回 ⇒ 红。
+① 不给 `brief`、给 `task` ⇒ 登记成功、`brief` 是秘书派生的一句（≤60 字、无换行）、`brief_source=="secretary"`、返回 `brief_written=True`；负控：把代写关掉（派生函数恒返回 `""`）⇒
+回到"没给一句任务简介"拒收。①b / ①c：`_do_summon` 与 `_do_summon_many` 这两条生产路走同一口径（代写 + 留痕）。② `brief` 与 `task` 都空 ⇒ 仍然拒收（不许编造）；负控：改成放行（派生函数恒返回一句）⇒ 判据必红。③
+代写的 `brief` 不许超过 60 字或含换行（否则会撞上 `roster_add` 自己的内容闸，形成"没给简介 ⇒ 永远登记不上"的死角）；超长 `task` 必须读出被截断而不是被拒。负控：把截断关掉（派生函数原样返回）⇒ 同一调用被内容闸拒。④
+`specs/d.py` 的 policy 里有"研究侧由你主导"＋ C/E/F/让 F 带 V 的列举，且那条 ≤90 字；负控：删掉 ⇒ 红。⑤ `specs/m.py` 的 policy 里有"不自己派 E 做实验"这类压低措辞，且不再出现"派 V /
+`verify_proof`"这类义务句；负控：把那两句加回 ⇒ 红。
 """
 from __future__ import annotations
 
@@ -129,7 +103,7 @@ def _brief_written_by_secretary(got: dict[str, Any], rows: list[dict[str, Any]],
 def test_the_secretary_writes_the_brief_from_the_task(tmp_path: pathlib.Path):
     """① 正控：不给 `brief`、给 `task` ⇒ 登记成功，简介由秘书派生并留痕。
 
-    细则：只取**第一句**（第二句 "然后再看 Y 那一条。" 不该进来），且单行。
+    细则：只取第一句（第二句 "然后再看 Y 那一条。" 不该进来），且单行。
     """
     env = _env(tmp_path)
     tid = _child(env["cond"], env["owner"], key="brief@a")
@@ -159,7 +133,7 @@ def test_negctl_turning_the_derivation_off_is_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     """① 负控：把代写关掉（派生函数恒返回 `""`）⇒ 回到"没给一句任务简介"拒收。
 
-    这就是**改前**那一版的形态：`brief` 空 ⇒ `roster_add` 当场拒，名册一行都没有。
+    这就是改前那一版的形态：`brief` 空 ⇒ `roster_add` 当场拒，名册一行都没有。
     """
     env = _env(tmp_path)
     tid = _child(env["cond"], env["owner"], key="brief@c")
@@ -219,7 +193,7 @@ LONG_TASK = ("把第 7 节那个族构造的每一层都重算一遍：\n"
 
 def _clipped_not_refused(got: dict[str, Any], rows: list[dict[str, Any]],
                          task: str) -> None:
-    """判据③：超长 `task` ⇒ **被截断**（≤60、单行、是原文前缀），而不是被内容闸拒。"""
+    """判据③：超长 `task` ⇒ 被截断（≤60、单行、是原文前缀），而不是被内容闸拒。"""
     assert got.get("problem") == "", ("代写没有截断 ⇒ 撞上内容闸被拒，于是「没给简介」变成"
                                       "「永远登记不上」（死角）", got)
     brief = str(got.get("brief") or "")
@@ -337,8 +311,8 @@ def test_summon_many_without_brief_is_registered_by_the_secretary(
 def test_negctl_agent_loop_substituting_the_task_for_the_brief_is_red(tmp_path: pathlib.Path):
     """① 负控（口径那一半）：业主选的是"秘书写"，不是"拿任务原文顶替"。
 
-    改前别的实现在 loop 那一层写 `brief=brief_arg or task_arg` —— 那样**盘上没有
-    `brief_source`**（那句话被当成父给的），判据要能读出这个差别。这里直接构造那一份
+    改前别的实现在 loop 那一层写 `brief=brief_arg or task_arg` —— 那样盘上没有
+    `brief_source`（那句话被当成父给的），判据要能读出这个差别。这里直接构造那一份
     "顶替出来的"登记行：`brief` 与 `task` 逐字相同、却没有 `brief_source`，
     于是 `_brief_written_by_secretary` 必红。
     """
@@ -416,10 +390,10 @@ def _m_low_key_ok(policy) -> str:
 
 
 def _m_obligations(policy) -> list[str]:
-    """M 的 policy 里"派 V 走查证明"这一类**义务句**（空列表 = 一句都没有）。
+    """M 的 policy 里"派 V 走查证明"这一类义务句（空列表 = 一句都没有）。
 
     两个分量：点名 `verify_proof`（V 的主动作）；或义务词 + "派 V"（同一个意思的另一种写法）。
-    **只看声明、不看注释**：传进来的只有 `policy` 这个元组，而 `specs/m.py` 里那些
+    只看声明、不看注释：传进来的只有 `policy` 这个元组，而 `specs/m.py` 里那些
     2026-10-20 的裁定注释必须写（"这条边还在但不由你派"也是要留的话）。
     """
     out: list[str] = []

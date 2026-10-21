@@ -1,39 +1,20 @@
 # -*- coding: utf-8 -*-
 """用户频道「停着」与「可续跑」的判据：问 → 停 → 答 → 续（离线，替身模型）。
-
 ## 这一组守什么（以及它是谁的判据）
-
-用户 2026-10-03 的裁定：「就停着」—— 问了就要停在那里，不许超时之后继续往下跑。
-这一组把那条裁定钉成可复核的读数，一共三件事：
-
-1. 「停」：`ask_user` 没拿到回答时，这一趟以 `stop_reason="waiting_for_user"` 停下，
-   `waiting_for` 记下问题号，并且「不再发任何模型请求」（"停着 = 不烧钱"的判据：
-   数会话里的 `llm_call` 事件条数，再断言没有新的）。
-2. 「答」：人通过 `agentflow answer`（`--select` / `--custom` / 位置参数三条路）写下的
-   那句话，`--resume` 那一段看到的上下文里读得到，而且那一趟真的跑到 `final`。
-3. 「续」：`resume_messages` 重建出来的消息序列与循环里那一份
-   「逐字相等」 —— 否则"续跑"会变成"换一段稍微不同的话接着问"，而没有任何判据
-   看得见那个漂移。
-
+用户 2026-10-03 的裁定：「就停着」—— 问了就要停在那里，不许超时之后继续往下跑。这一组把那条裁定钉成可复核的读数，一共三件事：
+1. 「停」：`ask_user` 没拿到回答时，这一趟以 `stop_reason="waiting_for_user"` 停下，`waiting_for` 记下问题号，并且「不再发任何模型请求」（"停着 = 不烧钱"的判据：
+数会话里的 `llm_call` 事件条数，再断言没有新的）。2. 「答」：人通过 `agentflow answer`（`--select` / `--custom` / 位置参数三条路）
+写下的那句话，`--resume` 那一段看到的上下文里读得到，而且那一趟真的跑到 `final`。3. 「续」：`resume_messages` 重建出来的消息序列与循环里那一份「逐字相等」 ——
+否则"续跑"会变成"换一段稍微不同的话接着问"，而没有任何判据看得见那个漂移。
 ## 负控清单（每一条都对着一个"看起来能用、其实是假的"形态）
-
-- 没回答就 `--resume`：必须明确报"还在等 qid"，一步模型都不调（不许静默重跑，
-  不许把"没答"当成默许）；
-- 任务指纹不符：`checkpoint_mismatch` + CLI 退出码 2 + 零模型调用；
-- 无人值守档（`ASK_POLICY="unattended"`，历史别名 `"never"`）：`ask_refused`、
-  问题「不落」待答清单、循环继续；
-- 非主控角色问用户（`not_conductor`）：问题不落盘、循环继续，未决问题写进结果 ——
-  这一条是「运行时协作纪律」，出处是我们自己的 `DESIGN-CONDUCTOR.md` §1.1
-  （"它是用户唯一面对的东西"）与 `capabilities.NON_SUMMONABLE = {"M"}`。
-  被召唤的一环与"顶层但不是主控"（人工直接 `run-agent D`）都被拒；
-  只有主控能问 —— 否则"人机通道归主控"这条纪律没有判据看着；
-- 别的 sid 的回答不算这一趟的（`read_replies(sid=…)` 隔离）。
-
+- 没回答就 `--resume`：必须明确报"还在等 qid"，一步模型都不调（不许静默重跑，不许把"没答"当成默许）；- 任务指纹不符：`checkpoint_mismatch` + CLI 退出码 2 + 零模型调用；-
+无人值守档（`ASK_POLICY="unattended"`，历史别名 `"never"`）：`ask_refused`、问题「不落」待答清单、循环继续；- 非主控角色问用户（`not_conductor`）：问题不落盘、
+循环继续，未决问题写进结果 ——这一条是「运行时协作纪律」，出处是我们自己的 `DESIGN-CONDUCTOR.md` §1.1（"它是用户唯一面对的东西"）与
+`capabilities.NON_SUMMONABLE = {"M"}`。被召唤的一环与"顶层但不是主控"（人工直接 `run-agent D`）都被拒；只有主控能问 —— 否则"人机通道归主控"这条纪律没有判据看着；- 别的
+sid 的回答不算这一趟的（`read_replies(sid=…)` 隔离）。
 ## 用的是替身模型，不联网、不花钱
-
-替身（`ScriptedGateway`）与真模型同接口（`complete(prompt, *, scope, system)`），
-照剧本回话。所以这一组验的是「框架行为」（停、答、续），不是"模型据此改主意了"——
-后者要一次真机。
+替身（`ScriptedGateway`）与真模型同接口（`complete(prompt, *, scope, system)`），照剧本回话。所以这一组验的是「框架行为」（停、答、续），
+不是"模型据此改主意了"——后者要一次真机。
 """
 from __future__ import annotations
 
@@ -278,13 +259,13 @@ def test_the_custom_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, capsy
     second, gw2 = _run(st, registry, cond, root, [FINISH], resume=True)
     assert second.stop_reason == "final", second.to_dict()
     assert second.resumed_from == 1, second.to_dict()   # 从第 2 步接着跑，不重做第 1 步
-    # 续跑那一段接着上次那份对话：**开场之后**那几条消息逐条相同。
-    # 开场那一条会变是**对的**（2026-10-21）：`user_replies` / `inbox` 都现读 ——
+    # 续跑那一段接着上次那份对话：开场之后那几条消息逐条相同。
+    # 开场那一条会变是对的（2026-10-21）：`user_replies` / `inbox` 都现读 ——
     # 用户刚答的那一句必须在续跑那一趟听得到（下一条断言），而它此前住在 system 里、
     # 所以在 transcript 里看不见；现在它进了开场那条 user 消息。
     assert second.messages[:len(first.messages)][1:] == first.messages[1:], (
         "续跑那一段没有接着上次那份对话", second.messages[:2], first.messages[:2])
-    # 用户那句话进的是**开场那条 user 消息**里的「用户回答过的问题」那一栏
+    # 用户那句话进的是开场那条 user 消息里的「用户回答过的问题」那一栏
     # （2026-10-21 起它从 system 挪了出来；信息没丢，只是换了位置）。
     assert "审这篇论文" in gw2.prompts[0], "用户那句话没有进续跑那一段看到的上下文"
     assert "审这篇论文" not in gw2.systems[0], "回答还在 system 里 ⇒ 前缀跨不过 run"
@@ -318,19 +299,15 @@ def test_the_selected_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, cap
 
 
 def test_resume_messages_is_item_equal_to_the_live_sequence(tmp_path: pathlib.Path):
-    """正控（续跑的正确性）：重建出来的消息序列与当时那份逐条相等。
+    """    正控（续跑的正确性）：重建出来的消息序列与当时那份逐条相等。
 
-    为什么这条是"最重要的一条"：续跑要给模型的，是「当时那份对话」。差一条、差一个字段，
-    模型看到的处境就变了，而"它是不是接着上次说的往下做"就没有判据了。
+    为什么这条是"最重要的一条"：续跑要给模型的，是「当时那份对话」。差一条、差一个字段，模型看到的处境就变了，而"它是不是接着上次说的往下做"就没有判据了。
 
     ## 判据形态换过一次（S-C 第 ② 步 / 裁定 5甲），理由留在这里
 
-    改前这里判的是 `rebuilt == run.transcript`（两份字符串逐字节相等），因为当时的
-    历史载体就是一段字符串。S-C 之后载体是消息序列（`run.messages`），
-    字符串只是它的渲染 ⇒ 判据跟着换成"序列逐条相等"，渲染那一句降级成派生读数
-    （它仍然被断言：两条序列相等时渲染必然相等，这是"我的渲染是纯函数"这个前提的读数）。
-    名字也从 `..._byte_equal_to_the_live_transcript` 改成 `..._item_equal_to_the_live_sequence`：
-    名字在说一件事、断言在说另一件，是本仓反复踩过的形态。
+    改前这里判的是 `rebuilt == run.transcript`（两份字符串逐字节相等），因为当时的历史载体就是一段字符串。S-C 之后载体是消息序列（`run.messages`），字符串只是它的渲染 ⇒
+    判据跟着换成"序列逐条相等"，渲染那一句降级成派生读数（它仍然被断言：两条序列相等时渲染必然相等，这是"我的渲染是纯函数"这个前提的读数）。名字也从
+    `..._byte_equal_to_the_live_transcript` 改成 `..._item_equal_to_the_live_sequence`：名字在说一件事、断言在说另一件，是本仓反复踩过的形态。
     """
     st, registry, cond, root = _ws(tmp_path)
     # 停法换过一次（裁定 12-K）：改前这里是 `[NOTE]*3` + `max_steps=3`，靠步数闸
@@ -441,18 +418,13 @@ def test_no_ask_through_the_cli_keeps_running(tmp_path: pathlib.Path, monkeypatc
 
 
 def test_only_the_conductor_may_ask_the_user(tmp_path: pathlib.Path):
-    """正控 + 两条负控（运行时协作纪律）：只有主控能当面问人。
+    """    正控 + 两条负控（运行时协作纪律）：只有主控能当面问人。
 
-    依据是我们自己的设计，不是外来的：`DESIGN-CONDUCTOR.md` §1.1 逐字"它是用户唯一
-    面对的东西"（用户只对主控说话），而 `capabilities.NON_SUMMONABLE = {"M"}` 让它
-    在结构上成立（主控不可被召唤 ⇒ 永远是顶层入口）。
+    依据是我们自己的设计，不是外来的：`DESIGN-CONDUCTOR.md` §1.1 逐字"它是用户唯一面对的东西"（用户只对主控说话），而
+    `capabilities.NON_SUMMONABLE = {"M"}` 让它在结构上成立（主控不可被召唤 ⇒ 永远是顶层入口）。
 
-    三条一起判，才说明判据是"角色是不是主控"：
-      ① 被召唤的一环（有父任务号）问 ⇒ `not_conductor`，问题不落盘，循环继续；
-      ② 顶层但不是主控（人工直接 `run-agent D` 那条路）问 ⇒ 同样被拒 ——
-         这一条是本轮改的那个口子：旧判据只看"有没有父任务号"，于是顶层 D 被当成
-         "用户通道"，与 §1.1 冲突（那条路是运维/测试路径）；
-      ③ 主控问 ⇒ 通到待答清单，并且这一趟停下来等人（否则"人机通道"不可达）。
+    三条一起判，才说明判据是"角色是不是主控"：① 被召唤的一环（有父任务号）问 ⇒ `not_conductor`，问题不落盘，循环继续；② 顶层但不是主控（人工直接 `run-agent D` 那条路）问 ⇒ 同样被拒
+    ——这一条是本轮改的那个口子：旧判据只看"有没有父任务号"，于是顶层 D 被当成"用户通道"，与 §1.1 冲突（那条路是运维/测试路径）；③ 主控问 ⇒ 通到待答清单，并且这一趟停下来等人（否则"人机通道"不可达）。
     """
     st, registry, cond, root = _ws(tmp_path)
     # ① 被召唤的一环

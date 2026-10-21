@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """父是谁、子有谁（业主 T21 附）+ 终态回报挂在父名下（D89）—— 2026-10-08 深夜，S1d。
 
-业主的追问逐字：「不就应该是知道我的父代理是谁，子代理有谁，然后往它们按编号沟通吗」。
-对着代码逐件核对，三件事里两件的渲染缺了：
+业主的追问逐字：「不就应该是知道我的父代理是谁，子代理有谁，然后往它们按编号沟通吗」。对着代码逐件核对，三件事里两件的渲染缺了：
 
 | 要知道的 | 数据在不在 | 渲染 |
 |---|---|---|
@@ -10,16 +9,9 @@
 | 我父是谁 | 在（我那一行的 `parent_task_id`） | 缺（提示词只给角色名 `{{summoned_by}}`） |
 | 我子有谁 | 在（`_children_of(我的编号)`） | 缺 |
 
-这一批补的就是"渲染"那一半：`AGENT_IDENTITY` 补 `{{parent_task_id}}` / `{{children}}`
-两格（共享段 ⇒ `PROMPT_VERSION` p44 → p45，十格摘要一起动，那条判据在
-`tests/test_agent_prompts.py`）。同一批修 D89：`_emit_settlement` 把终态通报挂在
-自己名下（`parent_task_id=self.my_task_id`、`role=M`），而板项那一格的列义是
-"收件人的编号" ⇒ 子报给父时必须写父的台账号，否则父的待办视图
-（`open_items_of(父的编号)`）里永远看不到"哪个子向我交差了"。
+这一批补的就是"渲染"那一半：`AGENT_IDENTITY` 补 `{{parent_task_id}}` / `{{children}}` 两格（共享段 ⇒ `PROMPT_VERSION` p44 → p45，十格摘要一起动，那条判据在 `tests/test_agent_prompts.py`）。同一批修 D89：`_emit_settlement` 把终态通报挂在自己名下（`parent_task_id=self.my_task_id`、`role=M`），而板项那一格的列义是"收件人的编号" ⇒ 子报给父时必须写父的台账号，否则父的待办视图（`open_items_of(父的编号)`）里永远看不到"哪个子向我交差了"。
 
-判据在这个文件里成对给：正控（渲染出来的提示词里读得到父/子的编号）+
-负控（把那一格删掉/换成别人的编号 ⇒ 红）。所有替身都不联网。
-"""
+判据在这个文件里成对给：正控（渲染出来的提示词里读得到父/子的编号）+ 负控（把那一格删掉/换成别人的编号 ⇒ 红）。所有替身都不联网。"""
 from __future__ import annotations
 
 import json
@@ -49,7 +41,7 @@ _CHILDREN_ANCHOR = ("这一趟开始那一刻你名下的子代理（名册摘�
                     "**这是快照** —— 这一趟里新派的不会自己出现在这里，要看活的用 "
                     "`{\"roster\": {\"of\": \"self\"}}`）：")
 
-#: 2026-10-21 起父/子/板/名册这几格从 **system** 挪进了开场那条 **user** 消息
+#: 2026-10-21 起父/子/板/名册这几格从 system 挪进了开场那条 user 消息
 #: （跨 run 会变的事实不许进前缀：`promptstability.STEP_VOLATILE_FACTS`）。
 #: 所以判据要读 `gate.prompts[-1]`，锚也随之换成 user 消息里那一句。
 _USER_CHILDREN_ANCHOR = ("你名下的子代理（名册摘要：名字 · 一句简介 · 状态；"
@@ -186,7 +178,7 @@ def test_the_prompt_tells_a_parent_which_children_it_has(tmp_path: pathlib.Path)
         assert kid not in line, ("E17：那一格是名册摘要，不许出现台账号", line, kid)
     assert "第 1 件活" in line and "第 2 件活" in line, ("一句简介也要出现", line)
     assert other not in line, ("兄弟（同一个父、但父不是我）不许进我这一格：", line)
-    # 名册摘要**不许**还在 system 里（那样换一趟活前缀就从那一格起不同）：
+    # 名册摘要不许还在 system 里（那样换一趟活前缀就从那一格起不同）：
     # system 里那一格只剩 `promptstability.SYSTEM_PLACEHOLDERS["children"]` 那段指路语。
     from agentflow import promptstability as _PS
 
@@ -283,7 +275,7 @@ def test_an_unreadable_ledger_is_not_folded_into_having_no_parent(tmp_path: path
                                              my_task_id="t-9999", depth=2)
     assert any("父代理没读成" in str(n) for n in run.notes), run.notes
     assert any("t-9999" in str(n) for n in run.notes), run.notes
-    # 2026-10-21 起父那一格在**开场那条 user 消息**里（system 里只剩指路语）。
+    # 2026-10-21 起父那一格在开场那条 user 消息里（system 里只剩指路语）。
     user = gate.prompts[-1]
     assert f"{_USER_PARENT_ANCHOR}（没读成：" in user, user[-900:]
     assert f"{_USER_PARENT_ANCHOR}t-9999" not in user, (

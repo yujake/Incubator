@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
-"""`text.extract` 不许留下**幽灵文件**（T5 第 2 趟真机读数驱动，2026-10-17）。
+"""`text.extract` 不许留下幽灵文件（T5 第 2 趟真机读数驱动，2026-10-17）。
 
 ## 现场
 
 A 在真机上调的是 `text.extract({"lit_id": "lit:000000"})`（带 `lit:` 前缀）。
-原实现把 `lit_id` **原样**拼进文件名 ⇒ `lit:000000.txt` ⇒ 在 Windows 上那是个
-**NTFS 备用数据流**（`lit` 文件的 ADS）⇒ 盘上留下一个 **0 字节、无扩展名**的
+原实现把 `lit_id` 原样拼进文件名 ⇒ `lit:000000.txt` ⇒ 在 Windows 上那是个
+NTFS 备用数据流（`lit` 文件的 ADS）⇒ 盘上留下一个 0 字节、无扩展名的
 `library/lit`，谁也看不出它是谁写的。
 
 ## 修法
 
-`_safe_stem()`：取冒号后的**裸编号**，再把 Windows 非法字符替换成 `_`。
+`_safe_stem()`：取冒号后的裸编号，再把 Windows 非法字符替换成 `_`。
 
 这一组钉两件事（含负控）：
-1. 带前缀的 `lit_id` ⇒ 落 `library/<裸编号>.txt`（文件名里**没有**冒号）；
-2. **负控**：`library/` 里**不许**出现"无扩展名的残留文件"（幽灵文件的形态）。
+1. 带前缀的 `lit_id` ⇒ 落 `library/<裸编号>.txt`（文件名里没有冒号）；
+2. 负控：`library/` 里不许出现"无扩展名的残留文件"（幽灵文件的形态）。
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def test_a_prefixed_lit_id_lands_as_a_bare_named_txt(tmp_path: pathlib.Path) -> 
 
 
 def test_no_extensionless_ghost_file_is_left(tmp_path: pathlib.Path) -> None:
-    """**负控**：`library/` 里不许出现无扩展名的残留（幽灵文件的形态）。"""
+    """负控：`library/` 里不许出现无扩展名的残留（幽灵文件的形态）。"""
     ws, reg = _wired(tmp_path)
     reg.call("text.extract", role="A", lit_id="lit:000000")
     ghosts = [p.name for p in (ws / "library").iterdir()

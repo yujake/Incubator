@@ -10,21 +10,14 @@ from .. import conceptrows as _CR   # 轮配额（`CONCEPTS_PER_ROUND_MAX`）的
 class _Run:
     def run(self, max_docs: int | None = None) -> dict:
         """处理若干篇文献（`max_docs=None` = 处理到没有可领的为止），最后处理定向重抽取。
-
-        退出/停止条件只有一条：`run_once()` 给出 `skipped_reason`（队列空 / 全被别人
-        占着 / 全被放弃）。返回累加后的 `BRunResult.to_dict()` + `reprocess` 摘要。
-
+        退出/停止条件只有一条：`run_once()` 给出 `skipped_reason`（队列空 / 全被别人占着 / 全被放弃）。返回累加后的 
+        `BRunResult.to_dict()` + `reprocess` 摘要。
         ## 概念配额是「轮」预算（2026-10-21，本批缺陷一的第三处）
-
-        真机 mp3：这一层的一轮（19 篇文献）灌进 「1143 条」概念 —— 于是"每轮产出新事实"
-        这条读数被一次水漫金山顶平，且 1143 条概念全是 `proof_text="concept:primitive"`
-        的术语行。配额按"一轮"限（`conceptrows.CONCEPTS_PER_ROUND_MAX` = 30），
-        并且「跨篇累加」：按篇限量挡不住"篇数多"那种水漫（19 × 30 还是 570）。
-        超出的被受控拒绝并留读数（`concepts_refused` / `relations_deferred` /
-        `concept_quota` / `details[*stage=concept_quota]`），已经写进去的照旧保留。
-
-        轮边界就在这一层：轮首换一个新的 `ConceptQuota`（挂在实例上，见
-        `run_once` 的 docstring —— 动作的调用面上不许出现"配额"这个参数）。
+        真机 mp3：这一层的一轮（19 篇文献）灌进 「1143 条」概念 —— 于是"每轮产出新事实"这条读数被一次水漫金山顶平，且 1143 条概念全是 
+        `proof_text="concept:primitive"`的术语行。配额按"一轮"限（`conceptrows.CONCEPTS_PER_ROUND_MAX`
+        = 30），并且「跨篇累加」：按篇限量挡不住"篇数多"那种水漫（19 × 30 还是 570）。超出的被受控拒绝并留读数（`concepts_refused` / 
+        `relations_deferred` /`concept_quota` / `details[*stage=concept_quota]`），已经写进去的照旧保留。
+        轮边界就在这一层：轮首换一个新的 `ConceptQuota`（挂在实例上，见`run_once` 的 docstring —— 动作的调用面上不许出现"配额"这个参数）。
         """
         total = BRunResult()
         quota = _CR.ConceptQuota()

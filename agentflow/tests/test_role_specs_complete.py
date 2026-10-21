@@ -2,25 +2,20 @@
 
 ## 这个文件在测什么，为什么它值得存在
 
-用户对正式版的要求里有两条是文档要求：
-
-1. "为 A–H 八个角色各写详细规格说明书"，并逐字点名了小节
-   （职责 / 明确不负责 / 逐个工具的契约 / 状态机 / 预算与终止 / 三态与失败模式 / 不变式 / 接口）；
+用户对正式版的要求里有两条是文档要求："为 A–H 八个角色各写详细规格说明书"，并逐字点名了小节
+（职责 / 明确不负责 / 逐个工具的契约 / 状态机 / 预算与终止 / 三态与失败模式 / 不变式 / 接口）；
 2. 审计判据里有 "docstring 与实现一致"。
 
-一份 2000+ 行的规格最容易的坏法不是写错，而是写漏 —— 少写一节，没有任何东西会变红，
-而读者会以为"这一节大概没有那些内容"。本文件把"写漏"变成红点。
+一份 2000+ 行的规格最容易的坏法不是写错，而是写漏 —— 少写一节，没有任何东西会变红，而读者会以为"这一节大概没有那些内容"。本文件把"写漏"变成红点。
 
 ## 三态（本文件的负控重点）
 
 `tools/verify_role_specs.py` 有三个结论，本文件对三个都有断言：
 
 - `ok`（结构完整）/ `incomplete`（查过、有缺失）/ `unknown`（没查成：文档不存在、
-  读不到、或一个角色节都没匹配到）。
+读不到、或一个角色节都没匹配到）。
 
-`unknown` 绝不能等于 `ok` —— 文档被改名或格式被改坏时，
-"什么都没读到"必须报"没查成"，而不是"通过"。这是本项目反复踩过的坑
-（`DEVELOPMENT.md` §3 纪律 1）。
+`unknown` 绝不能等于 `ok` —— 文档被改名或格式被改坏时，"什么都没读到"必须报"没查成"，而不是"通过"。这是本项目反复踩过的坑（`DEVELOPMENT.md` §3 纪律 1）。
 """
 
 from __future__ import annotations
@@ -192,20 +187,15 @@ def test_without_a_live_census_the_check_is_silent_about_the_numbers() -> None:
 
 
 def test_the_cli_reports_unknown_when_the_package_cannot_be_imported(tmp_path):
-    """负控 3（三态）：装配不了工具层 ⇒ 退出码 2（没查成），不是 0。
+    """    负控 3（三态）：装配不了工具层 ⇒ 退出码 2（没查成），不是 0。
 
-    这条与 `H-8` 的"要不要让门依赖包可导入"那个取舍直接相关：
-    选的是"依赖它、但依赖不上时如实报未知"——不静默退回"只判结构"。
+    这条与 `H-8` 的"要不要让门依赖包可导入"那个取舍直接相关：选的是"依赖它、但依赖不上时如实报未知"——不静默退回"只判结构"。
 
-     实测（第一版写错）：`--root <空的 tmp>` 不足以让装配失败 ——
-    `live_tool_counts` 会 `sys.path.insert(0, root/"src")`，而父进程的
-    `PYTHONPATH=src` 会被子进程继承（`agentflow` 于是仍然 import 得到）。
-    判据要按事实造：必须把 `PYTHONPATH` 从子进程环境里摘掉。
+    实测（第一版写错）：`--root <空的 tmp>` 不足以让装配失败 ——`live_tool_counts` 会 `sys.path.insert(0, root/"src")`，
+    而父进程的`PYTHONPATH=src` 会被子进程继承（`agentflow` 于是仍然 import 得到）。判据要按事实造：必须把 `PYTHONPATH` 从子进程环境里摘掉。
 
-    `X-91.5-2`：摘掉 `PYTHONPATH` 的同时必须把 stdio 编码钉回来 ——
-    这条断言读的是子进程打印的中文（"对账没做"），不钉的话在 GBK 控制台下
-    父进程按 utf-8 解码得到乱码、断言红，而它与"包装配不上"这件事无关
-    ⇒ 这里用 `_GATE_ENV_NO_PYTHONPATH`（同源、只少 `PYTHONPATH`）。
+    `X-91.5-2`：摘掉 `PYTHONPATH` 的同时必须把 stdio 编码钉回来 ——这条断言读的是子进程打印的中文（"对账没做"），不钉的话在 GBK 控制台下父进程按 utf-8 解码得到乱码、断言红，
+    而它与"包装配不上"这件事无关⇒ 这里用 `_GATE_ENV_NO_PYTHONPATH`（同源、只少 `PYTHONPATH`）。
     """
     root = tmp_path / "nowhere"
     (root / "docs").mkdir(parents=True)
@@ -222,18 +212,15 @@ def test_the_cli_reports_unknown_when_the_package_cannot_be_imported(tmp_path):
 
 
 def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
-    """`X-91.5-2` 的回归判据：本文件里每一个捕获输出的子进程都必须显式钉住 stdio 编码。
+    """    `X-91.5-2` 的回归判据：本文件里每一个捕获输出的子进程都必须显式钉住 stdio 编码。
 
-    为什么值得一条判据（而不是"这一次改完就算"）：`X-91.5-2` 的形态是只在某些环境里红
-    —— 门口径环境（`PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`）下全绿，GBK 控制台
-    （本机 `chcp` = 936）下 4 条红。一次性修法挡不住下一个人新加一条 `subprocess.run(...)`：
-    新调用不带 `env=` 时，乱码 / 子进程 `UnicodeEncodeError` 那一档就静默回来了，
-    而它在门口径环境下照样绿。
+    为什么值得一条判据（而不是"这一次改完就算"）：`X-91.5-2` 的形态是只在某些环境里红—— 门口径环境（`PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`）下全绿，GBK 控制台（本机
+    `chcp` = 936）下 4 条红。一次性修法挡不住下一个人新加一条 `subprocess.run(...)`：新调用不带 `env=` 时，乱码 / 子进程
+    `UnicodeEncodeError` 那一档就静默回来了，而它在门口径环境下照样绿。
 
-    判据落在本文件自己的源码上（不靠人记得）：`capture_output=True` 的
-    `subprocess.run(...)` 必须在同一个调用里出现 `_GATE_ENV`（`_GATE_ENV_NO_PYTHONPATH`
-    是同一份约定的派生，名字里含它）或逐字写了 `PYTHONIOENCODING`。
-    扫不到任何这样的调用 ⇒ 报"失去对象"（删掉子进程不等于编码被钉住了）。
+    判据落在本文件自己的源码上（不靠人记得）：`capture_output=True` 的`subprocess.run(...)` 必须在同一个调用里出现
+    `_GATE_ENV`（`_GATE_ENV_NO_PYTHONPATH`是同一份约定的派生，名字里含它）或逐字写了 `PYTHONIOENCODING`。扫不到任何这样的调用 ⇒
+    报"失去对象"（删掉子进程不等于编码被钉住了）。
     """
     src = Path(__file__).read_text(encoding="utf-8")
     capturing: list[int] = []
@@ -261,27 +248,16 @@ def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
 
 
 def test_no_test_module_pollutes_the_parent_env_with_a_stdio_encoding() -> None:
-    """`X-91.5-2` 的**根因**判据（2026-10-15 加）：父进程的编码变量不许被会话级改写。
-
-    为什么上面那条不够：它扫的是 `Path(__file__)` —— **只管得住本文件**。
-    实测就漏了 `tests/test_temp_root_pin.py`：全量跑里它是**唯一**那条"只在全量跑里红、
-    单独跑是绿的"用例。机制（已复现到字节，3.25 秒）：
-    本文件此前在三处用 `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`
-    **改了父进程的环境** ⇒ 按目录字母序跑在 `test_temp_root_pin.py` 之前 ⇒ 那个文件起子进程时
-    把变量继承下去 ⇒ 子进程吐 UTF-8、父进程按 GBK 解 ⇒ `_readerthread` 抛
-    `UnicodeDecodeError: 'gbk' codec can't decode byte 0xa2 in position 584`。
-
-    为什么判"根因"而不是去把 `tests/` 里那 15 处没钉编码的 `subprocess.run` 逐个改掉：
-    编码的**唯一**正确钉法是"在起子进程那一处钉"（`subprocess.run(..., env=)` 或 `encoding=`）。
-    在会话级改 `os.environ` 是**跨测试的隐式耦合** —— 它让"哪个文件先跑"变成另一个文件红绿的条件，
-    而那正是这条缺陷的形态。所以这里禁掉的是**那种写法本身**：
-    要传编码就**拼一份 env 传下去**（`{**os.environ, "PYTHONIOENCODING": ...}`），
-    不要改进程自己的环境。
-
-    ⚠️ 判据用 **AST** 而不是文本扫描：第一版按行找那几个字面量，结果是它把
-    **本文件里解释这件事的注释**也当成了违规（注释里逐字引用了被禁的写法）——
-    文本扫描分不清"代码"与"在讨论这段代码的话"。AST 只认真正会执行的那两种形态：
-    `os.environ.setdefault(...)` / `os.environ[...] = ...`。
+    """    `X-91.5-2` 的根因判据（2026-10-15 加）：父进程的编码变量不许被会话级改写。为什么上面那条不够：它扫的是 `Path(__file__)` —— 只管得住本文件。实测就漏了
+    `tests/test_temp_root_pin.py`：全量跑里它是唯一那条"只在全量跑里红、单独跑是绿的"用例。机制（已复现到字节，3.25 秒）：本文件此前在三处用
+    `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`改了父进程的环境 ⇒ 按目录字母序跑在 `test_temp_root_pin.py` 之前 ⇒
+    那个文件起子进程时把变量继承下去 ⇒ 子进程吐 UTF-8、父进程按 GBK 解 ⇒ `_readerthread`
+    抛`UnicodeDecodeError: 'gbk' codec can't decode byte 0xa2 in position 584`。为什么判"根因"而不是去把 `tests/` 里那 15 处没钉编码的
+    `subprocess.run` 逐个改掉：编码的唯一正确钉法是"在起子进程那一处钉"（`subprocess.run(..., env=)` 或 `encoding=`）。在会话级改
+    `os.environ` 是跨测试的隐式耦合 —— 它让"哪个文件先跑"变成另一个文件红绿的条件，而那正是这条缺陷的形态。所以这里禁掉的是那种写法本身：要传编码就拼一份 env
+    传下去（`{**os.environ, "PYTHONIOENCODING": ...}`），不要改进程自己的环境。判据用 AST 而不是文本扫描：第一版按行找那几个字面量，
+    结果是它把本文件里解释这件事的注释也当成了违规（注释里逐字引用了被禁的写法）——文本扫描分不清"代码"与"在讨论这段代码的话"。AST 只认真正会执行的那两种形态：`os.environ.setdefault(...)` /
+    `os.environ[...] = ...`。
     """
     banned_vars = ("PYTHONIOENCODING", "PYTHONUTF8")
     mutating_attrs = {"setdefault", "update", "pop"}
@@ -706,15 +682,15 @@ def _registered_tool_names() -> list[str]:
     with tempfile.TemporaryDirectory(prefix="role_specs_reg_") as td:
         st = _store.Store(Path(td))
         st.init()
-        # ⚠️ 这里与下面两处此前各有一句 `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`
+        #  这里与下面两处此前各有一句 `os.environ.setdefault("PYTHONIOENCODING", "utf-8")`
         # （2026-10-15 删）。它做了两件事，两件都不该做：
-        #   ① 对本进程**已经打开**的 stdout 编码没有任何作用（那时它已经定了）；
-        #   ② **污染父进程的 `os.environ`**，于是同一趟 pytest 里**后跑**的测试起子进程时
+        #   ① 对本进程已经打开的 stdout 编码没有任何作用（那时它已经定了）；
+        #   ② 污染父进程的 `os.environ`，于是同一趟 pytest 里后跑的测试起子进程时
         #      会继承它 —— 子进程吐 UTF-8、父进程仍按 GBK 解。
         # 真机后果（全量跑里唯一那条"只在全量跑里红"的用例）：`tests/test_temp_root_pin.py`
         # 的端到端负控 `_readerthread` 抛 `UnicodeDecodeError: 'gbk' codec can't decode
         # byte 0xa2 in position 584` ⇒ `proc.stdout` 变成 `None` ⇒ 断言里 `+` 抛 TypeError。
-        # 编码的**唯一**正确钉法是"在起子进程那一处钉"（`subprocess.run(..., env=)` 或
+        # 编码的唯一正确钉法是"在起子进程那一处钉"（`subprocess.run(..., env=)` 或
         # `encoding=`）；会话级改环境变量是把"谁先跑"变成别人红绿的条件。
         build = build_registry(store=st, workspace_root=Path(td), roles=tuple(ROLES))
         return sorted(build.registry.names())

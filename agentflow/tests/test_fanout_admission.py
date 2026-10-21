@@ -1,110 +1,20 @@
 """扇出口径判据：扇出 = 此刻在飞的子代理数，不是累计受理数（所有者 2026-10-08 裁定）。
 
-## 这一条判的是什么
+口径：在飞 = 子行 `status ∈ {"pending", "running"}`（`Conductor._in_flight_children_of`；状态词表唯一来源 `schema.TASK_STATUSES`）。`Conductor.summon` 第 [4] 步喂给 `Decision.fanout`（`conductor.py:1413`），判定在 `policy.check` 第 [5] 步（`policy.py:352-375`）。
+返回即腾位：`done` / `failed` / `cancelled` 都带 `ended_at` ⇒ 立刻从分子里消失。触顶时"只可等待"：`Conductor._await_fanout_slot`（默认 `DEFAULT_FANOUT_WAIT_SEC`；`fanout_wait_sec=0` = 不等、立即拒），等到即派、窗口用完才拒。
 
-所有者逐字（2026-10-08）：
+旧口径的代价：`len(self._children_of(parent))` 连闸门拒掉的召唤也数（`Conductor._refuse` 落 `note="refused:<reason>"` 行）⇒ 触顶后每次召唤都被 `fanout_exceeded` 拒、每次拒绝又占一格 ⇒ 名额只增不减。
+真机：`agentflow/projects/p9-post-merge-probe` 2026-10-07 里 `t-0001` 下 10 个子行、末 5 条 `t-0007`…`t-0011` 全是 `refused/fanout_exceeded`，主控只派出 3 件活 ⇒ `experiments=0`。
+另一头：`p5-review-t18`（sid `t1r` / `t1s`）第 51–88 步花完 20 个累计名额 ⇒ `G.build_document` 与 Lean 重派进不去、`documents` 0 行；"在飞 20 个"由 `Policy` 的 `max_concurrency` 管。
 
-    「我认为的"派活上限"不是累计的，是单时刻的，即 M 同时派出在后台运行的子代理数
-    不超过 20，各角色智能体允许同时向其它智能体派活数不超过 5，智能体返回后腾出空间。」
+累计读数退到审计面：`Conductor._admitted_children_of`（配 `_occupies_fanout_slot`）只回答"累计派过几件"、不再参与判定；`_children_of` 仍服务 `SummonResult.children`（展示面，`test_display_face_still_lists_attempts`）。
+受理标记与 `status="running"` 同事务落盘（`_ADMITTED_MARK`）；旧法挂 `tokenmeter:settled`，而 `_charge_and_settle` 兜住异常 ⇒ 行缺标记 ⇒ 累计少算 1（`_set_usage`）。
+夹具：`_seed_in_flight` / `_mark_returned` 直写 `status="running"`、`started_at` 非空、`ended_at=None`（逐字对齐 `schema.Task.validate` 的 `schema.py:2131-2139`），等待窗同步点等 `readings` 非空而非 `sleep`（日志层另有 `_log`）。
 
-机器化的三件事：
-
-1. 分子说的是"此刻在飞"，台账上的形态是子行里 `status ∈ {"pending", "running"}`
-   的那些（`Conductor._in_flight_children_of`；`schema.TASK_STATUSES` 是状态词表的
-   唯一来源）。`Conductor.summon` 第 [4] 步给 `Decision.fanout` 喂的就是这个数
-   （`conductor.py:1413`），判定在 `policy.check` 的第 [5] 步（`policy.py:352-375`）。
-2. 返回即腾位：子代理一返回（`done` / `failed` / `cancelled`，三者都带
-   `ended_at`）就从分子里消失 —— 与它返回得好不好无关。这是所有者那句话里
-   "智能体返回后腾出空间"的直译，也是本文件与改前口径差别最大的地方：
-   改前那一版按"受理数"算名额（题15 选B，2026-10-07），跑完的行永远占着格子。
-   触顶时的动作也是所有者规定的（2026-10-08 追加）：「当达到派活上限后，父智能体
-   或主控只可等待子智能体返回结果」⇒ `summon` 先等（`Conductor._await_fanout_slot`，
-   默认 `DEFAULT_FANOUT_WAIT_SEC`；`fanout_wait_sec=0` = 不等、立即拒），等到了就
-   照常派，等到窗口用完仍满才拒（报文尾部带上等的那一段读数）。这一条在本文件里
-   有正控、负控与单元级三层断言（`test_..._returns_in_time` / `..._times_out` /
-   `test_await_fanout_slot_...`）。
-3. 累计读数退到审计面：`Conductor._admitted_children_of`（配合
-   `_occupies_fanout_slot`）仍然回答"这一趟累计真的派出去过几件"，状态报告与审计
-   要用它；但它不再参与策略判定 —— 本文件里凡涉及它的断言都只证明
-   "累计读数不许被记账炸掉而少算"，不再证明"它影响上限"。
-
-## 改前口径的代价（累计口径的真机读数）
-
-累计口径与"受理数"口径合起来有一个不可恢复的形态：闸门拒掉的召唤也落一行台账
-（`Conductor._refuse` 的 `note="refused:<reason>"`），而旧实现的扇出读数是
-`len(self._children_of(parent))` —— 数的是全部子行，于是"被拒的那一次"自己也占一个
-名额：父任务触顶 → 之后每一次召唤都被 `fanout_exceeded` 拒掉 → 每一次拒绝又落一行、
-又占一格 → 名额只增不减 → 父任务再也派不出活。
-
-真机读数（工作区 `agentflow/projects/p9-post-merge-probe`，2026-10-07 台账）：
-顶趟行 `t-0001` 名下 10 个子行，末 5 条（`t-0007`…`t-0011`）全是
-`refused/fanout_exceeded`，detail 里的读数从"已派生 5 个"一路涨到"已派生 9 个"
-（那就是自我毒化的机器形态）；本趟主控只成功派了 3 件活（A 检索 / D 立题 /
-D 登记猜想），E 的实验永远进不去 ⇒ `experiments=0`、收工门两格红。
-
-而累计口径另有它自己的代价（这一版改口径的直接动因）：T1 第 18/19 趟
-（工作区 `p5-review-t18`，sid `t1r` / `t1s`）在第 51–88 步就用完了 20 个累计
-名额，此后 `G.build_document` 与修好的 Lean 重派全部进不去 ⇒ `documents` 0 行、
-P8/P9 两行红。一趟 78–138 步的研究型跑批只许派 20 次活，是结构性不够；
-"同时在飞 20 个"在同一份 `Policy` 里另有 `max_concurrency` 约束着，所以这一格
-不需要再当作总量额度来花。
-
-## 三份读数在这里怎么落地
-
-1. 单时刻口径的正面：`test_gate_refusal_does_not_consume_a_fanout_slot`
-   （闸门拒掉的根本不在飞 ⇒ 满格前的那一次拒绝不占位）与
-   `test_refused_attempts_at_the_cap_never_deepen_the_poison`（在飞数不随拒绝上涨）。
-2. 返回即腾位：`test_a_failed_child_frees_the_slot_on_return` 与
-   `test_a_role_refused_child_frees_the_slot_on_return`（语义反转：改前它们是
-   "跑完也占名额"，现在是"跑完就腾位"）；两条档位判据
-   （`test_conductor_tier...` / `test_conductor_tier_is_exactly_twenty`）里也各有一段
-   "把一行标成返回 ⇒ 名额立刻还回来"的显式断言。
-3. 反真空：上面每一条里"闸门仍然会拒、报文里带着在飞几与上限几"的那几段断言 ——
-   它们防止有人用"把闸门拆掉"的方式让前两组变绿。
-
-## 受理标记为什么必须与 running 行同事务（题 21 选 B，2026-10-07 所有者裁定）
-
-这一族函数行为没变：它们测的是受理标记与累计审计读数（`_occupies_fanout_slot` /
-`_admitted_children_of`），而口径改成"在飞"之后累计读数今天只服务审计面。
-上一轮的最小修法把"占不占名额"挂在 `tokenmeter:settled` 上，而那是收尾的记账写回
-（`_set_usage`）打的标记 —— 它能炸：`_charge_and_settle` 刻意兜住记账异常，兜住之后
-这一行就缺标记 ⇒ 被当成"没跑" ⇒ 累计读数少算 1。本轮的判据换成"受理那一刻就落盘的
-标记"（`_ADMITTED_MARK`，与 `status="running"` 同一笔事务写下），于是它与后续任何一步
-的成败解耦。四条读数：
-
-- `test_the_admission_mark_is_on_disk_while_the_handler_runs`：跑到一半看盘，标记已在
-  （而结算标记还不在）—— 这是"在受理那一刻打的"的结构性证据；
-- `test_a_contained_charge_failure_still_occupies_the_slot`：记账抛异常被兜住 ⇒ 累计读数仍算它；
-- `test_a_failed_charge_writeback_still_occupies_the_slot`：记账写回炸掉（异常逸出
-  `summon`）⇒ 累计读数仍算它；
-- `test_the_previous_minimal_fix_would_miss_this_row`：负控 —— 同一个行喂给旧判据
-  （只看结算标记）给 False、喂给新判据给 True，这就是本轮与上一轮的差别。
-
-老行（本题之前落盘的、没有受理标记的行）退回读结算标记：历史台账的累计判法与改前一致
-（`test_a_legacy_refused_row_keeps_the_old_verdict`）。
-
-## 展示面为什么单独有一条
-
-`_children_of` 还服务 `SummonResult.children`（谁试过什么必须看得见）。本次修法
-不就地改它，而是另加 `_admitted_children_of`；`test_display_face_still_lists_attempts`
-就是"没有顺手把展示面改坏"的机器证据。
-
-## 夹具怎么造出"此刻在飞 k 个"
-
-真派活是同步的：`summon` 返回时那件活在台账上已经是终态，所以"派一件、它还在飞"
-在单进程测试里造不出来。要判"在飞数"，就必须直接往台账写"在飞"的子行 ——
-`_seed_in_flight` / `_mark_returned` 就是那两个夹具（口径：`status="running"` 且
-`started_at` 非空、`ended_at=None`，逐字对齐 `schema.Task.validate`
-的 `schema.py:2131-2139`）。
-
-## "只可等待"那两组怎么判才不赌时序
-
-等待窗与"谁把行标成返回"是两件事：测试用一个很短的窗（5s）加一个后台线程
-（0.4s 后 `_mark_returned`），所以整份文件仍然是秒级。同步点选"台账里出现等待读数"
-而不是固定 `sleep`：线程等 `readings` 非空（= 主线程已经进了等待循环）才动手，
-之后再给足余量。读数从 `_await_fanout_slot` 的返回值取 —— 与其解析日志文本，
-不如把那个返回值截下来直接断言（日志那一层另有 `_log` 钩子，本文件不依赖它）。
-"""
+逐条断言：`test_..._returns_in_time` / `..._times_out` / `test_await_fanout_slot_...` / `test_conductor_tier...` / `test_conductor_tier_is_exactly_twenty` / `test_gate_refusal_does_not_consume_a_fanout_slot` /
+`test_refused_attempts_at_the_cap_never_deepen_the_poison` / `test_a_failed_child_frees_the_slot_on_return` / `test_a_role_refused_child_frees_the_slot_on_return` /
+`test_the_admission_mark_is_on_disk_while_the_handler_runs` / `test_a_contained_charge_failure_still_occupies_the_slot` /
+`test_a_failed_charge_writeback_still_occupies_the_slot` / `test_the_previous_minimal_fix_would_miss_this_row` / `test_a_legacy_refused_row_keeps_the_old_verdict`。"""
 
 from __future__ import annotations
 
@@ -267,18 +177,13 @@ def _seed_in_flight(store: Store, parent: str, n: int, *, base: int = 0,
                     role: str = "G", action: str = "revise", called_by: str = "H") -> list[str]:
     """往台账写 n 行"此刻在飞"的子行（父 = `parent`），返回它们的 `task_id`。
 
-    口径 = `Conductor._in_flight_children_of` 认的那一档，逐字对齐
-    `schema.Task.validate`（`schema.py:2131-2139`）：`status="running"` ⇒
-    `started_at` 必须非空；`status ∈ {"pending","running"}` ⇒ `ended_at` 必须为 None；
-    `outcome` 必须是 None（不能是空串 —— `TASK_OUTCOMES` 里没有 `""`）。
-
-    号段是 `t-9{base+i:03d}`：`base` 让同一个父任务可以分两批加在飞行
-    （例如先 19 行判"第 20 件受理"，再加 1 行判"触顶被拒"）而不撞号。
-
-    读累计读数时要注意：在飞的行在 `_occupies_fanout_slot` 眼里也算"曾经受理过的
-    派活"（`outcome is None` ⇒ 非 refused ⇒ True）。这是对的 —— 一件正在飞的活确实
-    已经被受理了 —— 所以断言累计值时要把 seed 的行算进去。
-    """
+    口径 = `Conductor._in_flight_children_of` 认的那一档，逐字对齐 `schema.Task.validate`
+    （`schema.py:2131-2139`）：`status="running"` ⇒ `started_at` 必须非空；
+    `status ∈ {"pending","running"}` ⇒ `ended_at` 必须为 None；`outcome` 必须是 None（不能是空串 ——
+    `TASK_OUTCOMES` 里没有 `""`）。号段是 `t-9{base+i:03d}`：`base` 让同一个父任务分两批加在飞行
+    而不撞号。读累计读数时注意：在飞的行在 `_occupies_fanout_slot` 眼里也算"曾经受理过的派活"
+    （`outcome is None` ⇒ 非 refused ⇒ True）—— 一件在飞的活确实已被受理，所以断言累计值时要把
+    seed 的行算进去。"""
     ids = [f"t-9{base + i:03d}" for i in range(n)]
     with store.tx("tasks", actor="test") as tx:
         for tid in ids:
@@ -843,18 +748,13 @@ def test_a_saturated_instance_does_not_block_another_parents_dispatch(tmp_path):
     """名额挂在实例（任务行）上，不挂在角色上：忙的那个满了，别人另起一个。
 
     所有者逐字：「如果 D 外派了 5 个智能体，又有其它人向 D 派活且不是之前唤起 D 的那个人，
-    这时应该是唤起另一个 D2 而非让这个 D 去接手。」
-
-    本仓库里"实例"的落点就是任务行：`Decision.fanout` 数的是"这一个父任务此刻在飞的
-    子代理"，不是"这个角色一共有几个子在飞"。所以这条判据的两件事是：
-
+    这时应该是唤起另一个 D2 而非让这个 D 去接手。」本仓库里"实例"的落点就是任务行：`Decision.fanout`
+    数的是"这一个父任务此刻在飞的子代理"，不是"这个角色一共有几个子在飞"。所以两件事：
     ① 父任务 P1 自己在飞 5 个（上限 5）⇒ 它自己再派一件被拒（它的位满了，这没错）；
-    ② 另一个父任务 P2 派同一角色的活 ⇒ 立刻受理（它是另一个实例，自己的在飞数是 0）
-       —— 这正是"唤起另一个 D2 而不是让 P1 里那个 D 去接手"在台账上的形态。
-
-    为什么必须单列这一条：把名额挂到角色上（"这个角色一共有几个子在飞"）会把并行度
-    压成"每个角色 5 个"，而那与所有者说的 20*(5*5*5*5) 是两回事 —— 后者要求名额沿链相乘。
-    """
+    ② 另一个父任务 P2 派同一角色的活 ⇒ 立刻受理（它是另一个实例，自己的在飞数是 0）——
+    这正是"唤起另一个 D2 而不是让 P1 里那个 D 去接手"在台账上的形态。为什么必须单列：把名额挂到
+    角色上（"这个角色一共有几个子在飞"）会把并行度压成"每个角色 5 个"，而那与所有者说的
+    20*(5*5*5*5) 是两回事 —— 后者要求名额沿链相乘。"""
     store = _mk_store(tmp_path)
     c = _mk_conductor(store, max_fanout=5)
     p1 = _parent(c, doc_id="0001")

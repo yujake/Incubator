@@ -2,32 +2,20 @@
 
 ## 改前是什么样（`draft/28` §136.3 事故 B）
 
-一个复核脚本对 `projects/` 下每个目录跑了 `Store(...).init()`，
-于是 `projects/manual-notes/`（人的文件夹，里面只有 `我的资料.txt`）被补出整套
-`data/`（19 个条目）+ `library/`。那个脚本的判态函数对它的判定自始至终是
-`not_a_project` —— 是它先动手、后判态。
-处置时删的只是建出来的 `data/`、`library/`；`我的资料.txt` 的 sha256 前后逐字节相同。
-
-产品级缺口：同一件事两个入口两种安全性 —— 工具层 `projects.ensure_project`
-有"拒绝外来目录"的守卫，直连 `Store` 没有。
+一个复核脚本对 `projects/` 下每个目录跑了 `Store(...).init()`，于是 `projects/manual-notes/`（人的文件夹，里面只有 `我的资料.txt`）被补出整套`data/`（19
+个条目）+ `library/`。那个脚本的判态函数对它的判定自始至终是`not_a_project` —— 是它先动手、后判态。处置时删的只是建出来的 `data/`、`library/`；`我的资料.txt` 的 sha256
+前后逐字节相同。产品级缺口：同一件事两个入口两种安全性 —— 工具层 `projects.ensure_project`有"拒绝外来目录"的守卫，直连 `Store` 没有。
 
 ## 这一组判据守什么
 
-```text
-允许 init ⇔  root 不存在
-          ∨ data/ 已存在
-          ∨ .agentflow-workspace 在
-          ∨ root 里没有不属于本框架的条目（`store._WORKSPACE_ROOT_ENTRIES`）
-```
+```text允许 init ⇔  root 不存在∨ data/ 已存在∨ .agentflow-workspace 在∨ root 里没有不属于本框架的条目（`store._WORKSPACE_ROOT_ENTRIES`）```
 
-正/负控 + 一格"拒绝之后一个字节都没写"（这是这一组里最要紧的一格：
-只断言"抛了异常"是不够的 —— 一个先建目录再抛的实现照样能过那些断言）。
+正/负控 + 一格"拒绝之后一个字节都没写"（这是这一组里最要紧的一格：只断言"抛了异常"是不够的 —— 一个先建目录再抛的实现照样能过那些断言）。
 
-`draft/28` §176 补的一格（误拦方向）：判据的第一版把"除 `data/` 与 `library/`
-之外还有条目"一律当外来目录，于是工作区根里有 `projects/` 这种正常部署被拦下了
-（`tests/test_conductor_tools.py` 里那个布局在全量套件里当场变红）。
-`test_a_workspace_root_holding_projects_is_allowed` 与
-`test_a_workspace_root_holding_a_stray_file_is_still_refused` 把这条边界两侧各钉一次。
+`draft/28` §176 补的一格（误拦方向）：判据的第一版把"除 `data/` 与 `library/`之外还有条目"一律当外来目录，于是工作区根里有
+`projects/` 这种正常部署被拦下了（`tests/test_conductor_tools.py` 里那个布局在全量套件里当场变
+红）。`test_a_workspace_root_holding_projects_is_allowed` 与`test_a_workspace_root_holding_a_stray_file_is_still_refused`
+把这条边界两侧各钉一次。
 """
 from __future__ import annotations
 

@@ -1,29 +1,21 @@
 """`rebuild` 的无损性。
 
-背景（真实缺陷）：`rebuild()` 的事件折叠原本走 `S.row_from_dict()`，而它只保留
-dataclass 字段 —— 于是带下划线前缀的诊断/扩展字段（`_keys`、`_quote_check`）
-在重建后全部消失。功能上判重还能靠 `doi`/`dedup_key` 兜底，但
-"能重建"不应该意味着"重建出更少的信息"：一旦丢字段，事后就无法回答
-"当初这条文献是从哪些键命中/被判定为重复的"。
+背景（真实缺陷）：`rebuild()` 的事件折叠原本走 `S.row_from_dict()`，而它只保留dataclass 字段 —— 于是带下划线前缀的诊断/扩展字段（`_keys`、`_quote_check`）
+在重建后全部消失。功能上判重还能靠 `doi`/`dedup_key` 兜底，但"能重建"不应该意味着"重建出更少的信息"：一旦丢字段，事后就无法回答"当初这条文献是从哪些键命中/被判定为重复的"。
 
 本文件把"无损"固定下来。
 
 ## S1r 并表那一笔给这一份加的第二件事（2026-10-10）
 
-`SCHEMA_VERSION=2` 起 `concepts` 不在 `TABLES` 里了，而老盘的事件日志里
-`{"table": "concepts"}` 到处都是 ⇒ `rebuild` 必须把它们折进新家
-（`statements` + `kind="concept"`，折叠内核 `migrate_concepts`），不是拒掉、
-也不是记成"认不出的表"。这一份因此多两部分判据：
+`SCHEMA_VERSION=2` 起 `concepts` 不在 `TABLES` 里了，而老盘的事件日志里`{"table": "concepts"}` 到处都是 ⇒
+`rebuild` 必须把它们折进新家（`statements` + `kind="concept"`，折叠内核 `migrate_concepts`），不是拒掉、也不是记成"认不出的表"。这一份因此多两部分判据：
 
 - 折叠本身与它的读数（`migrated_concepts` / `migrated_v1_events` /
-  `migrated_relations_renumbered` / `migrated_pending_search` /
-  `migration_ledger_lines` / `out/migrate-map.jsonl`）；
+`migrated_relations_renumbered` / `migrated_pending_search` /`migration_ledger_lines` / `out/migrate-map.jsonl`）；
 - 版本容忍的边界：只有 `SCHEMA_VERSION-1` 被容忍，别的版本照旧 fail-closed。
 
-样本本身（`_seed`）里的概念行落新标准 —— `concepts` 已经不是一张能写的表了
-（`store.tx(CR.LEGACY_TABLE, …)` 会以"未知表"受控失败），拿它当"通用被测表"的地方
-一律换 `statements`。纯函数的折叠规则由
-`test_the_concepts_table_folds_into_statements.py` 单独守。
+样本本身（`_seed`）里的概念行落新标准 —— `concepts` 已经不是一张能写的表了（`store.tx(CR.LEGACY_TABLE, …)` 会以"未知表"受控失败），拿它当"通用被测表"的地方一律换
+`statements`。纯函数的折叠规则由`test_the_concepts_table_folds_into_statements.py` 单独守。
 """
 
 from __future__ import annotations

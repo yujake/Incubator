@@ -1,31 +1,21 @@
 """`draft/37` §37.4 ①（方案 A）的判据：外部论文的摄取链用既有工具就能走通。
-
 ## 这一条判据要挡的是什么
-
-§37 那趟真机里，盘上明明有一篇论文，`documents` 表里却没有它 ——
-于是 `G.revise(doc_id="main")` / `H.review_report(doc_id="main")` / `H.review(...)`
-四个审稿动作全部被拒（理由："稿件 main 不存在"）。缺的不是某个工具，
-而是"盘上的论文怎么进台账"这一步没有归属人。
-
+§37 那趟真机里，盘上明明有一篇论文，`documents` 表里却没有它 ——于是 `G.revise(doc_id="main")` / `H.review_report(doc_id="main")` /
+`H.review(...)`四个审稿动作全部被拒（理由："稿件 main 不存在"）。缺的不是某个工具，而是"盘上的论文怎么进台账"这一步没有归属人。
 用户 2026-10-02 裁定的方案 A把它定下来（零新增面）：
-
 | 东西 | 落在哪 | 谁写 |
 |---|---|---|
 | 别人写的那份论文 | `literature`（`source_lit_id` 指向它） | A（`search.register` / `search.ingest_local`） |
 | 论文里的定理/命题 | `statements`（`origin="external_lit"` + 逐字 `proof_text` + `page_range`） | B（`table.create`） |
 | 我方修订稿 | `documents`（claims 的 citations 引 `lit:` / `exp:`） | G（`doc.build_document`） |
 | 审阅发现 | `review_findings`（挂在我方稿件那一行上） | H（`review` 动作） |
-
 ## 两条由真机与探针逼出来的口径（写在这里免得下一个人再撞）
-
 1. `Statements.origin` 的取值是 `external_lit` / `own_result`，
-   而 `evidence_kind` 是证据强度（`proof` / `cross_check` / `heuristic`），
-   不是来源 —— 来源走 `source_lit_id`。第一版探针把 `origin` 写成 `literature`
-   当场被 `validate()` 拒（`kind='validation'`）。
+而 `evidence_kind` 是证据强度（`proof` / `cross_check` / `heuristic`），不是来源 —— 来源走 `source_lit_id`。第一版探针把 `origin` 写成
+`literature`当场被 `validate()` 拒（`kind='validation'`）。
 2. `ReviewFinding.doc_id` 是必填（`require_id(self.doc_id, "doc_id")`）⇒
-   发现只能挂在 `documents` 行上，挂不到 `literature` 行上。
-   这正是方案 A 里"我方修订稿必须先有 `documents` 行"的结构原因 ——
-   也是为什么"拿外部论文去 `revise`"不是一个可以绕过去的做法。
+发现只能挂在 `documents` 行上，挂不到 `literature` 行上。这正是方案 A 里"我方修订稿必须先有 `documents` 行"的结构原因 ——也是为什么"拿外部论文去
+`revise`"不是一个可以绕过去的做法。
 """
 from __future__ import annotations
 
@@ -116,24 +106,16 @@ def _build_our_manuscript(reg, lit_id: str, *, text: str, evidence_kind: str = "
 
 
 def test_external_paper_intake_chain_is_walkable_with_existing_tools(wired):
-    """正控（① 的主判据）：盘上的论文 → `literature` → `statements` → 我方 `documents` → H 审过。
+    """    正控（① 的主判据）：盘上的论文 → `literature` → `statements` → 我方 `documents` → H 审过。
 
-    四步全部经既有工具/动作走完，一步不新增；最后两条断言钉的是这件事的实质：
-
-    - 可追溯的那条线：`statements.source_lit_id` 指外部来源，
-      `documents.claims[].citations` 指同一条 `lit:` —— 两处指向同一个 id，
-      才谈得上"改这篇论文时知道依据来自哪一篇"；
+    四步全部经既有工具/动作走完，一步不新增；最后两条断言钉的是这件事的实质：可追溯的那条线：`statements.source_lit_id` 指外部来源，
+    `documents.claims[].citations` 指同一条 `lit:` —— 两处指向同一个 id，才谈得上"改这篇论文时知道依据来自哪一篇"；
     - 审阅真的发生了（而不是"没报错"）：`checked is True`，且我方稿件的
-      `documents.status` 由 `draft` 被推成 `accepted` —— 那是 H 记下它结论的地方
-      （实测：`review` 动作在一份合规稿件上只改这一个键，`review_rounds` 不动）。
-      这一条是刻意加的：干净的稿件产出零条发现，而"零条发现"与"根本没审"
-      在读数上长得一模一样（本项目的三态纪律正是为这个而设；
-      `test_agent_h.py` 里有那另一半：坏稿件必须被审出发现来）。
+    `documents.status` 由 `draft` 被推成 `accepted` —— 那是 H 记下它结论的地方（实测：`review` 动作在一份合规稿件上只改这一个键，`review_rounds` 不动）。
+    这一条是刻意加的：干净的稿件产出零条发现，而"零条发现"与"根本没审"在读数上长得一模一样（本项目的三态纪律正是为这个而设；`test_agent_h.py` 里有那另一半：坏稿件必须被审出发现来）。
 
-    顺带记一条写侧比读侧更早的事实：`doc.build_document` 在写入期就会拒掉
-    "`cross_check` 却说已证明"这类过度声称（G12 的机械门），所以要造一份"有缺陷的稿件"
-    必须绕过工具层（`test_agent_h.py` 的 `inject_raw_document` 就是这么做的）。
-    也就是说：外部论文进来之后真正会出问题的地方，是语义那一半，不是机械那一半。
+    顺带记一条写侧比读侧更早的事实：`doc.build_document` 在写入期就会拒掉"`cross_check` 却说已证明"这类过度声称（G12 的机械门），
+    所以要造一份"有缺陷的稿件"必须绕过工具层（`test_agent_h.py` 的 `inject_raw_document` 就是这么做的）。也就是说：外部论文进来之后真正会出问题的地方，是语义那一半，不是机械那一半。
     """
     store, _conductor, reg = wired
     lit_id = _register_external_paper(reg)
@@ -144,7 +126,7 @@ def test_external_paper_intake_chain_is_walkable_with_existing_tools(wired):
     # 这正是 §37 那次混得起来的原因，也是为什么拒信里那句"稿件 0000 不存在"必须点名
     # 是哪张表（判据在下面那条负控里）。
 
-    # 2026-10-16（口径 S2）：这条考"确定性实现真的跑了"（稿件状态要变）⇒ 走**内部 API**；
+    # 2026-10-16（口径 S2）：这条考"确定性实现真的跑了"（稿件状态要变）⇒ 走内部 API；
     # 工具层那条路现在一律走角色自己的循环，不进确定性实现。
     res = _conductor.summon("H", "review", {"doc_id": doc_id}, by="M",
                             input_key="intake-chain")

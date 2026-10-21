@@ -42,18 +42,15 @@ class _BuildDocument:
 
     def _citation_coverage(self, data: Mapping[str, Any], *, kind: str) -> dict:
         """这份稿子引了几条台账凭据 / 库里还有多少可引的（T2 第 25 趟抓出来的缺口）。
-
+        
         ## 为什么单开一个方法（这条缺口值得记）
-
-        `doc.build_document` 的工具层在 `meta.citation_coverage` 里给了这份读数
-        （`tools/doc_tools.py`），但 `AgentG._call` 只把 `res.data` 交出来 ——
-        meta 被丢在门里。M 手里那条路（`conductor.summon` → `G.build_document`）
-        因此一个字都看不到：真机读数（T2 第 25 趟 `t2t`，`sessions/t2t.jsonl`）
-        全文件搜 `citation_coverage` 0 命中，而这一趟恰好引了一条 `lit:` ——
-        也就是说"引了文献"这件事与这条读数无关。
-        与 `revise` 那条路同形（`check_citations` / `check_proofs` 各在这条路上
-        补过一次），也与 d1 那次"两个入口分家"同形：改一处入口不算改。
-
+        
+        `doc.build_document` 的工具层在 `meta.citation_coverage` 里给了这份读数（`tools/doc_tools.py`），但 
+        `AgentG._call` 只把 `res.data` 交出来 ——meta 被丢在门里。M 手里那条路（`conductor.summon` → 
+        `G.build_document`）因此一个字都看不到：真机读数（T2 第 25 趟 `t2t`，`sessions/t2t.jsonl`）全文件搜 
+        `citation_coverage` 0 命中，而这一趟恰好引了一条 `lit:` ——也就是说"引了文献"这件事与这条读数无关。与 `revise` 那条路同形（`check_citations`
+        / `check_proofs` 各在这条路上补过一次），也与 d1 那次"两个入口分家"同形：改一处入口不算改。
+        
         读数只报数、不拦：`check_citations` 在工具层已经判过"引用存不存在"。
         """
         from ..tools import doc_tools as DT

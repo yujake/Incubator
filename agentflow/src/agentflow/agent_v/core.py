@@ -1,36 +1,22 @@
 # -*- coding: utf-8 -*-
 """智能体 V：证明级验证（只读；`draft/39` §3.21 一/五/六 的用户定案）。
-
 ## 它是谁
-
-H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五元位第 3 位）。
-V 做三件事（用户点名的 I12/I10/I17），三条都在这里落地：
-
-1. I12 冷启动：每次审校只把"对象（证明全文）+ 只读读数"拼进提示词 ——
-   拼提示词的函数（`verifications.cold_start_prompt`）只收字符串，没有任何
-   store / conductor / registry 句柄参数，"独立性"因此是结构性质；
-2. I10 硬禁令 + 同段依据：逐条查无条件前提 / 无依据的步骤 / "易证、显然"这类缝 /
-   引用到不干净的命题，每条问题指到那一步（落进 findings 的 `step` 字段）；
-3. I17 整篇重读：证明是整体一次交给它的输入，不是逐单元切开的碎片。
-
+H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五元位第 3 位）。 V 做三件事（用户点名的 I12/I10/I17），三条都在这里落地：
+1. I12 冷启动：每次审校只把"对象（证明全文）+ 只读读数"拼进提示词 ——拼提示词的函数（`verifications.cold_start_prompt`）只收字
+符串，没有任何 store / conductor / registry 句柄参数，"独立性"因此是结构性质； 2. I10 硬禁令 + 同段依据：逐条查无条件前提 / 无
+依据的步骤 / "易证、显然"这类缝 /引用到不干净的命题，每条问题指到那一步（落进 findings 的 `step` 字段）； 3. I17 整篇重读：证明是整体一次交
+给它的输入，不是逐单元切开的碎片。
 ## 它只写一个文件，不写任何表
-
 `read_only=True`、`write_set=frozenset()`（`specs/v.py`）。它唯一的产物是
-`verifications/<命题号>.jsonl`（追加式，`verifications.record_verification` 发号）。
-所以它拿不到任何写工具 —— 这不是"约定只读"，是 `tools.base._role_surface`
-的结构性剥离（`tools.READ_ONLY_ROLES` 含 `"V"`）。
-
+`verifications/<命题号>.jsonl`（追加式，`verifications.record_verification` 发号）。所以它拿不到任何写工具
+—— 这不是"约定只读"，是 `tools.base._role_surface`的结构性剥离（`tools.READ_ONLY_ROLES` 含 `"V"`）。
 ## 三态纪律在这里的落法（这一层最容易出错的地方）
-
-`成立` / `有毛病` / `看不出来` 是对证明的三个结论；"检查器自己没跑成"
-（没接线 / 输出不是合法 JSON / 字段缺 / 取值不在词表里）不是这三个之一。
+`成立` / `有毛病` / `看不出来` 是对证明的三个结论；"检查器自己没跑成"（没接线 / 输出不是合法 JSON / 字段缺 / 取值不在词表里）不是这三个之一。
 `verify_proof` 因此有两种失败形态，各自的读数分开：
-
-- `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；
-- `checked=False, reason="unparsable"`：看了、但拿回来的东西不是合法结论 ⇒ 不落台账行。
-
-两者都不落台账（`verifications.record_verification` 在没有合法结论时抛
-`VerificationError`，绝不写一行"看不出来"来冒充"审过了"）。
+- `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；- 
+`checked=False, reason="unparsable"`：看了、但拿回来的东西不是合法结论 ⇒ 不落台账行。
+两者都不落台账（`verifications.record_verification` 在没有合法结论时抛`VerificationError`，绝不写一行"看不出来"来冒
+充"审过了"）。
 """
 
 from __future__ import annotations
@@ -177,18 +163,15 @@ class AgentV:
     def verify_proof(self, statement_id: str, proof_text: str = "",
                      readonly_facts: str = "", **kw: Any) -> dict[str, Any]:
         """把一份证明整体重读一遍，落一行验证台账（`v-NNNN`）。
-
-        `proof_text` 不给时从 `statements.proof_text` 取（那是 F 交回来的那一份）；
-        两处都没有 ⇒ 如实报 `no_proof_text`（不许拿空证明去问模型，那只会换来
-        一句"信息不足"的 `看不出来`，而它会被读成一次真实审校）。
-        `readonly_facts` 不给时由本方法从前面的只读面现算（见 `_read_only_facts`）。
-
+        
+        `proof_text` 不给时从 `statements.proof_text` 取（那是 F 交回来的那一份）；两处都没有 ⇒ 如实报 `no_proof_text`（不
+        许拿空证明去问模型，那只会换来一句"信息不足"的 `看不出来`，而它会被读成一次真实审校）。`readonly_facts` 不给时由本方法从前面的只读面现算（见 
+        `_read_only_facts`）。
+        
         ## 键集合在三条返回路径上完全相同（与 `verify.evidence_for` 同一纪律）
-
-        "没查成"（`checked=False`）不是工具失败（同 `verify.check_formal` 的
-        `no_backend`：那是没查成，不是查了没过）⇒ 照样 `ok` 返回、键一个不少，
-        由 `checked` / `reason` 说出真相。少给键会让下游把"这一格没有读数"
-        读成"这一格是零"。
+        
+        "没查成"（`checked=False`）不是工具失败（同 `verify.check_formal` 的`no_backend`：那是没查成，不是查了没过）⇒ 照样 
+        `ok` 返回、键一个不少，由 `checked` / `reason` 说出真相。少给键会让下游把"这一格没有读数"读成"这一格是零"。
         """
         del kw  # 声明层没有别的参数；多给的键在这里不静默生效
         out: dict[str, Any] = {
@@ -224,7 +207,7 @@ class AgentV:
             except (StoreError, AttributeError, TypeError):
                 hit = None
             if hit is None:
-                # ⚠️ 「2026-10-17 补」（业主 2026-10-17 授权动禁改区；亲测抓到的缺口）：
+                # 「2026-10-17 补」（业主 2026-10-17 授权动禁改区；亲测抓到的缺口）：
                 # 命题「不在册」时不许给 verdict。原实现接着用"（命题 … 的正文没读到）"
                 # 当占位把证明审下去 ⇒ 返回 `checked=True` ＋ 一个 verdict，调用方读起来
                 # 像"「命题与证明都审过了」"，而"这个命题在不在册"没有任何一处说过。

@@ -102,18 +102,16 @@ def test_the_step_budget_is_enough_to_finish_a_task() -> None:
 
 
 def test_no_step_passes_a_token_allowance_to_the_gateway(tmp_path: pathlib.Path) -> None:
-    """**循环步与任何调用都不许再给网关传 `max_tokens`**（业主 2026-10-15 裁定）。
+    """循环步与任何调用都不许再给网关传 `max_tokens`（业主 2026-10-15 裁定）。
 
-    裁定逐字：**「我们不卡 token，只卡总花销的钱」**，且「凡是可能阻止智能体完成大项目的
-    （限制输入、思考、产出、步数等），删或将触发水平抬高到几乎不可能触发的程度」。
+    裁定逐字：「我们不卡 token，只卡总花销的钱」，且「凡是可能阻止智能体完成大项目的（限制
+    输入、思考、产出、步数等），删或将触发水平抬高到几乎不可能触发的程度」。
 
-    这一格此前叫 `test_the_writing_step_passes_a_larger_output_allowance`，
-    钉的是"写稿步必须显式给一个**更大**的额度（32,768 > 缺省 4,096）"——
-    **那个处方是错的**：真调用对照（2026-10-15，同一段 prompt）证明，请求体里
-    **不带** `max_tokens` 时上游回 `finish_reason=stop`、`tokens_out=14,015`；
-    带上 32,768 反而只有 12,987。⇒ 这一栏整条路删掉（`modelgw._payload` 里不再出现），
-    本判据改成**反向钉死**：谁要是再把 token 闸加回来，这里当场红。
-    """
+    这一格此前叫 `test_the_writing_step_passes_a_larger_output_allowance`，钉的是"写稿步必须
+    显式给一个更大的额度（32,768 > 缺省 4,096）"—— 那个处方是错的：真调用对照（2026-10-15，
+    同一段 prompt）证明，请求体里不带 `max_tokens` 时上游回 `finish_reason=stop`、
+    `tokens_out=14,015`；带上 32,768 反而只有 12,987。⇒ 这一栏整条路删掉（`modelgw._payload`
+    里不再出现），本判据改成反向钉死：谁要是再把 token 闸加回来，这里当场红。"""
     st, cond, registry, root = _wired(tmp_path)
     gw = _Recorder(['{"final": "写完了", "evidence": []}'])
     seam = LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0), sid="t")
@@ -135,18 +133,14 @@ def test_no_step_passes_a_token_allowance_to_the_gateway(tmp_path: pathlib.Path)
 def test_the_request_timeout_covers_a_high_effort_step() -> None:
     """请求超时默认值必须容得下「开 thinking 的一步」（实测最坏 260 秒）。
 
-    两条真机读数（2026-10-12）：
+    两条真机读数（2026-10-12）：探针 `temp/_probe_chain.py` 的 `max_tokens=32768` 那次跑了 181 秒
+    才回（32,768 token 全是思维链）；无 Lean 模式跑 T2 第一趟（`projects/p6t2-research-20261012`，
+    sid `t2u1`）步 0 用 260 秒（`tokens_out=12178`、思维链 39,755 字）并成功，步 1 被旧的 60 秒
+    上限砍成 `超过 60.0s 未返回`（重试 3 次共 424 秒）—— 它不是模型不会做，是我们把"想得久"
+    设成了失败。
 
-    - 探针 `temp/_probe_chain.py`：`max_tokens=32768` 的那一次跑了 181 秒才回
-      （32,768 token 全是思维链）；
-    - 无 Lean 模式跑 T2 的第一趟（`projects/p6t2-research-20261012`，sid `t2u1`）：
-      步 0 用 260 秒（`tokens_out=12178`、思维链 39,755 字）并成功，步 1 就被旧的
-      60 秒上限砍成 `超过 60.0s 未返回`（重试 3 次共 424 秒）——它不是模型不会做，
-      是我们把"想得久"设成了失败。
-
-    所以这条判据钉两件事：默认值 ≥ 180 秒（覆盖实测最坏情况），
-    以及 `AGENTFLOW_MODEL_TIMEOUT_SEC` 那一档仍然压在最上面（要按机器改走它）。
-    """
+    所以钉两件事：默认值 ≥ 180 秒（覆盖实测最坏情况），以及 `AGENTFLOW_MODEL_TIMEOUT_SEC`
+    那一档仍然压在最上面（要按机器改走它）。"""
     from agentflow import modelgw as MG
 
     assert MG.ModelSpec().timeout_sec >= 180.0, (
@@ -188,7 +182,7 @@ def test_the_wall_clock_is_configurable_and_live(tmp_path: pathlib.Path) -> None
                               "--wall-clock-sec", "7200"]).wall_clock_sec == 7200.0
     assert parser.parse_args(["run-agent", "M", "--task", "x",
                               "--wall-clock-sec", "5"]).wall_clock_sec == 5.0
-    # ⚠️ 2026-10-15 业主裁定 C4：框架缺省从 900 s（15 分钟）抬到 14,400 s（4 小时）——
+    #  2026-10-15 业主裁定 C4：框架缺省从 900 s（15 分钟）抬到 14,400 s（4 小时）——
     # T5 第 8 趟那种"开 thinking 的整趟研究"实测跑了 52 分钟，900 秒会从中间掐断它。
     # 这条断言同时钉住"CLI 的 3600 与框架缺省是两个数"这件事：抬缺省之后
     # 框架缺省（14,400）反而比 `run-agent` 的 CLI 缺省（3600）宽 —— 这是刻意的：

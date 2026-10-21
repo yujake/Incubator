@@ -1,31 +1,10 @@
 """`eval_results` 这一档的边界：产品代码里没有产出方（所有者 2026-10-07 裁定「题 4 选 C」＝如实登记 `na`）。
 
-现算读数（2026-10-07，命令见本文件末）：
-- 产品代码（`src/`、`tools/`、`scripts/`）里 0 个 `eval_results` 的写入方
-  （AST 扫 `tx.upsert(...)` / `insert(...)` 这类实调，不数注释、不数字符串）；
-- 真机工作区（`agentflow/projects` 58 个 + 旧根 `projects` 23 个 = 81 个 `eval_results.json`）
-  的 `rows` 全为空（每个文件都是 `{"schema_version": 1, "rows": []}`）；
-- 全盘唯一 12 个 `rows` 非空的落在 `temp/audit/bt/**`，是测试夹具写出来的合成行
-  （内容形如 `created_by: "agent-E"`、`date: "2026-01-01"`），不是真机产出。
+现算读数（2026-10-07）：产品代码（`src/`、`tools/`、`scripts/`）里 0 个 `eval_results` 的写入方（AST 扫 `tx.upsert(...)` / `insert(...)` 这类实调，不数注释、不数字符串）；真机工作区（`agentflow/projects` 58 个 + 旧根 `projects` 23 个 = 81 个 `eval_results.json`）的 `rows` 全为空（每个文件都是 `{"schema_version": 1, "rows": []}`）；全盘唯一 12 个 `rows` 非空的落在 `temp/audit/bt/**`，是测试夹具写出来的合成行（内容形如 `created_by: "agent-E"`、`date: "2026-01-01"`），不是真机产出。复算是三条 `python -B -c`（在 `D:\Incubator` 下）：① AST 扫 `upsert` / `insert` 实调里的 `eval_results` 写入方；② 数两处根下 `eval_results.json` 的总数与 `rows` 非空数；③ 全盘列出 `rows` 非空的那几个。三条命令的逐字文本在 `docs/REPRO-eval-results-no-producer.md`（它们含 `\"` 与转义换行，写进 docstring 会被源码重新解释成别的值）。
 
 所以"这一档 0 行"的准确含义是 没有产出方，不是"评测 0 分"，也不是"没问题"（三态里的第三态）。
 
-为什么这条边界需要一条判据看着：`verify.py` 里 `evals = store.rows("eval_results")` 之后，
-0 行就不进任何检查 ⇒ 一份"审计干净"的报告会被读成"评测这一档没问题"。
-而 `verify.py` 在 FC-27 禁改区，动它要人审 —— 所以这条边界钉在测试侧：
-一旦有人真的补上产出方（那是好事），这条判据会红，逼人回来把真正的评测判据与这份登记一起补上，
-而不是让"0 行"悄悄变成"有几行、但那几行没人验收"。
-
-复算命令（三条，逐条可在 `D:\\Incubator` 下跑）：
-```
-# ① 产品代码里的写入方（AST 实调）
-python -B -c "import ast,pathlib;hits=[(str(p),n.lineno) for p in pathlib.Path('agentflow/src').rglob('*.py') for n in ast.walk(ast.parse(p.read_text(encoding='utf-8'))) if isinstance(n,ast.Call) and getattr(n.func,'attr','') in ('upsert','insert') and n.args and isinstance(n.args[0],ast.Constant) and n.args[0].value=='eval_results'];print(hits or '（无）')"
-# ② 真机根下的文件数与"rows 非空"的文件数
-python -B -c "import pathlib,re;fs=[p for r in ('agentflow/projects','projects') for p in pathlib.Path(r).rglob('eval_results.json')];ne=[p for p in fs if not re.search(r'\\\"rows\\\":\\s*\\[\\s*\\]', p.read_text(encoding='utf-8'))];print(len(fs),'个文件；rows 非空',len(ne))"
-# ③ 全盘非空的那几个是谁
-python -B -c "import pathlib,re;fs=pathlib.Path('.').rglob('eval_results.json');ne=[str(p) for p in fs if not re.search(r'\\\"rows\\\":\\s*\\[\\s*\\]', p.read_text(encoding='utf-8'))];print(len(ne));print('\\n'.join(ne[:14]))"
-```
-"""
+为什么这条边界需要一条判据看着：`verify.py` 里 `evals = store.rows("eval_results")` 之后，0 行就不进任何检查 ⇒ 一份"审计干净"的报告会被读成"评测这一档没问题"。而 `verify.py` 在 FC-27 禁改区，动它要人审 —— 所以这条边界钉在测试侧：一旦有人真的补上产出方（那是好事），这条判据会红，逼人回来把真正的评测判据与这份登记一起补上，而不是让"0 行"悄悄变成"有几行、但那几行没人验收"。"""
 
 from __future__ import annotations
 

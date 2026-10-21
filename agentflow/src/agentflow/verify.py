@@ -11,8 +11,8 @@
 
 `verify` 分两级：默认只做静态检查（快，随时可跑）；`--deep` 会重新打开文献做引文复核
 （慢，需要文件在本地）。`--deep` 报两类引文问题，分级不同：引文找不到
-（`quote_not_found` / `quote_known_unverifiable`）与引文**逐字存在、但页码不在声明的
-范围内**（`page_range_mismatch`，`E-11`）—— 后者的引文是真的，错的是页码标注，
+（`quote_not_found` / `quote_known_unverifiable`）与引文逐字存在、但页码不在声明的
+范围内（`page_range_mismatch`，`E-11`）—— 后者的引文是真的，错的是页码标注，
 所以是 warning，处置是改 `page_range` 而不是查幻觉。
 """
 
@@ -122,18 +122,14 @@ class VerifyReport:
 def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], int]:
     """检查 4 位 ID 是否从 0000 起连续无空洞。
 
-    空洞本身不是错误（ID 只需唯一+单调），但值得报警告：它通常意味着
-    "分配了 ID 却没建成行"，也就是某次事务中途出过问题。
-
-    `D-R44`（第 44 轮新发现，判据四第 5 组的负控里撞出来的）：**非数字 ID 不许
-    把审计器炸掉**。实测形态（`temp/g5-mp3.txt`）：库里有一行 `lit_id='raw-p3-97'`
-    （裸写/迁移脚本造出来的坏行）时，旧实现 `int(ids[-1])` 直接抛
-    `ValueError: invalid literal for int() with base 10: 'raw-p3-97'` ——
-    `verify_all` 于是从"审计器"变成"崩溃点"：调用方拿到的是一次 Python 异常，
-    而不是一条"这一行 ID 不合法"的 finding。三态纪律里"查了、结论是坏"与
-    "没查成"必须分开，而崩掉两者都不是。
-    现在：非数字 ID 被显式报出来（`missing` 里给出那些串），`maxid` 只取数字 ID 的
-    最大值（一个数字 ID 都没有时为 -1，与"空表"同形 —— 那本身会由 schema 级判据接住）。
+    空洞本身不是错误（ID 只需唯一+单调），但值得报警告：它通常意味着"分配了 ID 却没建成行"。
+    `D-R44`（第 44 轮新发现，判据四第 5 组的负控里撞出来的）：非数字 ID 不许把审计器炸掉。
+    实测形态（`temp/g5-mp3.txt`）：库里有一行 `lit_id='raw-p3-97'` 时，旧实现 `int(ids[-1])`
+    直接抛 `ValueError: invalid literal for int() with base 10: 'raw-p3-97'` —— `verify_all`
+    于是从"审计器"变成"崩溃点"：调用方拿到一次 Python 异常，而不是一条"ID 不合法"的 finding。
+    三态纪律里"查了、结论是坏"与"没查成"必须分开，而崩掉两者都不是。现在：非数字 ID 被显式
+    报出来（`missing` 里给出那些串），`maxid` 只取数字 ID 的最大值（一个都没有时为 -1，与
+    "空表"同形 —— 那本身会由 schema 级判据接住）。
     """
     ids = sorted(str(r[id_field]) for r in rows if id_field in r)
     if not ids:
@@ -145,7 +141,7 @@ def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], in
         return False, bad, (max(int(i) for i in numeric) if numeric else -1)
     missing: list[str] = []
     for i in range(len(ids)):
-        # 按**数值**比，不按固定宽度比：宽度是 `schema.ID_DIGITS` 一处定义的
+        # 按数值比，不按固定宽度比：宽度是 `schema.ID_DIGITS` 一处定义的
         # （2026-10-14 四位改六位），而盘上同时存在两种宽度的历史行 ——
         # 按字面量比会把全部旧行报成"缺号"（那是假读数，不是缺号）。
         if int(ids[i]) != i:
@@ -182,7 +178,7 @@ def _check_1(rep, store):
     if not _crow_view["checked"]:
         # 三态：读不成 ⇒ 报出来，不许当成"库里没有概念"（那会让下面每一条
         # 关系都变成"指向一个不存在的概念"，满屏假红——比不报更糟）。
-        # `rep.checked["concept_view"] = None` 是**三态里的"没查成"那一档**：
+        # `rep.checked["concept_view"] = None` 是三态里的"没查成"那一档：
         # `_check_3` 据此把 `dangling_concept` 那一段整段跳过（并记下跳过了几条），
         # 而不是让它拿一个空的概念表去逐条关系报红。
         # 这一格原先只写在注释里、没有实现（`test_the_concept_view_during_the_merge.py`
@@ -205,7 +201,7 @@ def _check_1(rep, store):
 
     # ---- ID 唯一性与连续性
     #
-    # ⚠️ "哪些表属于 4 位编号空间"必须从 schema 推导，不许写死表名。
+    #  "哪些表属于 4 位编号空间"必须从 schema 推导，不许写死表名。
     #
     # 这里原先只写了 `if table == "search_requests": continue`。新增
     # `reprocess_requests`（ID 形如 `p-NNNN`）之后，`_id_contiguity` 会对它做
@@ -327,16 +323,16 @@ def _check_2(rep, lit_by_id, literature, requests, store):
                       "无法判断是真的搜索过还是空转。请补 outcome（ok/no_results/search_failed/gave_up）")
             )
 
-    # ---- I7 在途上限的**事后读数**（CS-1 的乙半边，批 R19 新增；本段其余部分是 T-5 的逐字搬移）
+    # ---- I7 在途上限的事后读数（CS-1 的乙半边，批 R19 新增；本段其余部分是 T-5 的逐字搬移）
     #
     # 为什么必须有这条读数：I7 的闸门（`interactions.admit_search_request`）只装在
-    # **角色面**的入队口上；**人工面**（CLI `submit`、WebUI `/api/submit`）刻意不过闸门 ——
+    # 角色面的入队口上；人工面（CLI `submit`、WebUI `/api/submit`）刻意不过闸门 ——
     # 理由逐字写在 `agent_a/core.py:60-63`（"CLI 那条人工路径不闸（人自己知道自己在提交什么）"）。
-    # 于是"在途超过上限"在盘上是一个**合法**状态。合法不等于不必看见：上限是 A 的产能约束，
-    # 超了就意味着 A 的队列比设计的更长，而在此之前**没有任何地方**会说出这件事
+    # 于是"在途超过上限"在盘上是一个合法状态。合法不等于不必看见：上限是 A 的产能约束，
+    # 超了就意味着 A 的队列比设计的更长，而在此之前没有任何地方会说出这件事
     # （角色面被闸门挡住 ⇒ 没有读数；人工面不闸 ⇒ 也没有读数。这正是"没人看守的那条边"）。
     #
-    # 判据只报**事实**、不判对错：人有权把队列排长（他可能正要手工塞一批），
+    # 判据只报事实、不判对错：人有权把队列排长（他可能正要手工塞一批），
     # 机器要做的是把"谁把它排长的"指名道姓地写下来，而不是替人决定不许。
     inflight = IX.inflight_requests(requests)
     rep.checked["inflight_requests"] = len(inflight)
@@ -362,7 +358,7 @@ def _check_2(rep, lit_by_id, literature, requests, store):
     # 这条兜底"（否则"F 提交的需求读到 low，看上去像框架决定它不重要，实际是框架没登记它"）。
     # 登记面漂了不会让任何判据变红，所以在审计里读一次：过闸门的来源若不在那张表里，
     # 它的优先级会落到 low、理由串会写成"陌生来源" —— 对框架自己的角色那是一句错话。
-    # 只读**在途**行：请求结束之后 `priority` 已经是历史，活着的那个值才是排队依据。
+    # 只读在途行：请求结束之后 `priority` 已经是历史，活着的那个值才是排队依据。
     _strangers = sorted({str(r.get("submitted_by") or "") for r in inflight}
                         - set(S.SUBMITTER_DEFAULT_PRIORITY))
     if _strangers:
@@ -450,9 +446,9 @@ def _check_3(rep, con_by_id, lit_by_id, rel_by_id, relations):
     """
     # ---- 关系
     #
-    # `dangling_concept` 只在概念视图**查成了**的时候判：视图读不成时 `con_by_id`
+    # `dangling_concept` 只在概念视图查成了的时候判：视图读不成时 `con_by_id`
     # 是空的，逐条关系报"引用了不存在的概念"会把真问题淹掉（`_check_1` 已经报过
-    # `concept_view_unreadable`，那一条才是要读的东西）。跳过要**计数**，不许静默
+    # `concept_view_unreadable`，那一条才是要读的东西）。跳过要计数，不许静默
     # （三态纪律）：`checked.dangling_concept_skipped_relations` 是这一段的"没查成"读数。
     concept_view_ok = rep.checked.get("concept_view", 0) is not None
     dangling_skipped = 0
@@ -676,7 +672,7 @@ def _check_5(rep, lit_by_id, questions, store):
         # —— `method=exhaustive_search` 本来就要求给出证书，E 给得很诚实（`n=40`、
         # `1681=41×41`）。于是 `counterexample` 那一格是空的（框架只在 `result=refutes`
         # 时收它），收工门那一档实测 `counterexample_or_proof_rows=0`、验收表判 `fail`。
-        # **盘上有反例证书、台账那一格却是空的** —— 症状不是"丢了反例"，
+        # 盘上有反例证书、台账那一格却是空的 —— 症状不是"丢了反例"，
         # 而是"机器读数与盘上事实相反"，而下游（五元位、收工门、验收表）读的全是那一格。
         cert = e.get("certificate")
         if (isinstance(cert, dict) and str(cert.get("kind") or "") == "counterexample"
@@ -756,7 +752,7 @@ def _check_5(rep, lit_by_id, questions, store):
             else:
                 dep_ok += 1
         elif st == "external_unavailable":
-            # ⚠️ 分级（FC-13）：这是"我们已经知道并记录了这个前提拿不到" ——
+            #  分级（FC-13）：这是"我们已经知道并记录了这个前提拿不到" ——
             # 属于已知边界，不是谎报 ⇒ warning。
             # 报成 error 会把红灯训练成噪音，于是真正的 error 也会被忽略。
             rep.issues.append(Issue(
@@ -964,7 +960,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
 
     # ---- 稿件断言的可追溯性（FC-02）
     #
-    # ⚠️ 这里除了"引用存不存在"，还要查被引用的东西现在还算不算数。
+    #  这里除了"引用存不存在"，还要查被引用的东西现在还算不算数。
     #
     # 这一条来自对本地先例 Danus 的观摩：它有明确的撤回（retraction）语义，
     # 并强调"撤回会级联"、"没有 revoke 动作时要把撤回面向上暴露"。
@@ -1098,7 +1094,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                     rep.issues.append(Issue("warning", "documents", docid, "unknown_citation_kind",
                                             f"断言 {cid} 的引用 {x!r} 前缀无法识别"
                                             f"（应为 {'/'.join(k + ':' for k in CITATION_KINDS)}）"))
-                # ---- policy[7]：引用一条与断言方向相反的证据行（**error**）
+                # ---- policy[7]：引用一条与断言方向相反的证据行（error）
                 #
                 # 这是"比没有引用更坏"的那一形态：读者会以为它被核过，而它自己的
                 # `result` 正是否证。判据本体只有一份
@@ -1142,7 +1138,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
 
     # ---- policy[9]：同一份证据不能当第二份用（`draft/39` §6.27 的 D39）
     #
-    # **warning 而不是 error**：同一份证据被两条断言引用可以是正当的 —— 定理与它的
+    # warning 而不是 error：同一份证据被两条断言引用可以是正当的 —— 定理与它的
     # 推论、综述复述同一条读数、两条不同表述压在同一次计算上。台账分不出"两条独立
     # 支撑"与"一份支撑被数了两遍"，所以它必须是看得见的读数而不是硬拦；硬拦会红掉
     # 合规稿件（"判据过窄 ⇒ 红掉合规输入"），完全不说又正是 D39 的形态。
@@ -1668,32 +1664,32 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
                     f"status={status!r} 自称成功，而 experiment_ids 里的 {refuters!r} 的 result='refutes'"))
 
 
-#: 「概念行带证明文本」这一条审计的**受控 kind 名**（`Issue.code`）。
+#: 「概念行带证明文本」这一条审计的受控 kind 名（`Issue.code`）。
 #:
 #: 为什么要它（2026-10-21，本批缺陷三）：概念行（`statements.kind == "concept"`）的
 #: `proof_text` 只该是空的 —— 定义不需要证明，而"良定义性证明"一旦编出来就是造假
 #: （`conceptrows` 的写入期闸写着这一句）。读侧早就点名了这件事
 #: （`verifications.proof_review_gap`：概念行带 `proof_text` ⇒ `why` 说"概念行不该带证明文本"），
-#: 但那只是**读侧**：`verify_all` 的 error 清单里没有它，于是"审计通过"这句话在
+#: 但那只是读侧：`verify_all` 的 error 清单里没有它，于是"审计通过"这句话在
 #: 这一类存量行面前是假的 —— 而审计是交付面上唯一被当成"没有问题"的那一栏。
 #:
-#: 历史形态（真机 `projects/mp3`）：**1143 条**概念行全带哨兵 `concept:primitive`
+#: 历史形态（真机 `projects/mp3`）：1143 条概念行全带哨兵 `concept:primitive`
 #: （迁移脚本 `migrate_concepts.PRIMITIVE_PROOF` 造的），于是任何"有没有证明"的
 #: 读数（`proof_review_gap` 的非空判据、收工门的 `reviewed` 档、五元位）都被顶高。
-#: 存量行改不动（审计只能点名），所以这一条**逐条点名**：带上 `stmt_id` 与 `created_by`，
+#: 存量行改不动（审计只能点名），所以这一条逐条点名：带上 `stmt_id` 与 `created_by`，
 #: 让"这是谁写进来的、有多少条"成为一个可读的读数，而不是一个被平均掉的数字。
 CONCEPT_PROOF_TEXT_CODE = "concept_row_carries_proof_text"
 
 
 def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """`kind == "concept"` 且 `proof_text` 非空的行 —— 这条判据的**判据本体**（一处口径）。
+    """`kind == "concept"` 且 `proof_text` 非空的行 —— 这条判据的判据本体（一处口径）。
 
     返回 `[{stmt_id, proof_head, proof_chars, created_by}]`（按 `stmt_id` 排序）：
     三态纪律在这里的落点 —— `proof_text` 是 `None` / 空串 / 全空白都算"没有"
-    （那不是"有证明"），只有**真的写了字**才算这一条点名的那一类。
+    （那不是"有证明"），只有真的写了字才算这一条点名的那一类。
 
     为什么单独抽成函数：判据（`tests/test_verify.py`）要能对它做负控
-    （"把这一条摘掉 ⇒ 判据红"），而"摘掉"必须摘的是**判据本体**，
+    （"把这一条摘掉 ⇒ 判据红"），而"摘掉"必须摘的是判据本体，
     不是某条断言的字符串。这也是 `_check_13` 里唯一读它的地方。
     """
     out: list[dict[str, Any]] = []
@@ -1721,7 +1717,7 @@ def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]]) -> list[dict
 #: 反真空不许省：没出处的非概念命题（`active` + `external_lit` + `quote_verified is not True`）照旧出 ——
 #: `tests/test_verify.py::test_an_unsourced_non_concept_statement_still_warns` 钉住，负控是"把判据本体换成永远 False"。
 def active_stmt_needs_quote_check(row: Mapping[str, Any]) -> bool:
-    """这一行适不适用"`active` 的文献命题必须逐字回验"（`_check_13` 第 4 条的**唯一口径**）。
+    """这一行适不适用"`active` 的文献命题必须逐字回验"（`_check_13` 第 4 条的唯一口径）。
 
     三态纪律：`quote_verified is not True` 收的是 `False`（比对过、不一致）与 `None`
     （还没查）两档 —— 它们与 `True` 不是同一件事，所以这里写 `is not True` 而不是 `!=`。
@@ -1736,49 +1732,15 @@ def active_stmt_needs_quote_check(row: Mapping[str, Any]) -> bool:
 def _check_13(rep, store) -> None:
     """`verify_all` 的第 13 段：命题台账（`statements`）的不变量（`draft/37` §16 P1）。
 
-    这一段的五条判据，各守一种已经在真机上出现过的病（第 5 条是业主 2026-10-09 点名的）：
-
-    1. 出处必须存在（`dangling_lit_ref` / `dangling_doc_ref`）：一条"从文献里摘的"
-       命题指着一篇不存在的文献 —— 逐字回验就没有第二份文本，而报告照样印。
-       这与 `dangling_dep` 同族，只是发生在命题级。
-    2. `derived_from` 引用完整性（`dangling_stmt_ref`）：承重链上少一环，
-       "这条结论靠什么站着"就答不出来（`draft/37` §4 的依赖图读数就是被这种缺口污染的）。
-    3. `proof` 级命题不许压在不可用的命题上（`proof_stmt_on_unusable_stmt`）：
-       这是 §8/§9 的矛盾闭环在命题级的落点，与依赖级的
-       `proof_claim_on_refuted_dependency` 成对。`refuted` / `superseded` 报 error
-       （结论必须撤或降档），`disputed` 报 warning（等裁决）。
-    4. `active` 的文献命题却没逐字回验（`active_stmt_quote_unverified`，warning）：
-       "B 的唯一自动幻觉防线"就是逐字回验（见 `quoteverify` 的 docstring）。
-       它降为 warning 而不是 error，理由与 `external_unavailable` 那条一致：
-       这是已知未做、不是谎报；但它在报告里必须看得见。
-       **概念行不在适用面里**（判据本体：:func:`active_stmt_needs_quote_check`，
-       理由三条写在那个函数上面：概念行的 `source_lit_id` 不是"逐字抄自"、
-       `quote_verified` 的比对对象 `proof_text` 概念行结构上不许带、读侧两处早已跳过）。
-    5. 五元位与它们各自的台账对不对得上（业主 2026-10-09：「再确认一条命题的五元状态
-       是哪张表在维护，要做好映射（如果五元状态里说有证明，证明应该在 B 维护的表里
-       可查）」）：判据本体是 `evidencebits.bit_evidence_gaps`（位 ⇒ 表的映射也住那里，
-       本处只把它的读数翻成 `Issue`，不抄第二份口径）。
-    6. `evidence_kind="proof_review"` 的命题必须真有 V 那一签
-       （`proof_review_without_verification`，**error**）—— 这一条补的是"定义写了、
-       没人执行"的那个洞（见下）。
-
-       **本判据只按 `schema.EVIDENCE_KINDS` 那句定义判**：`statements.proof_text` 非空
-       ＋ `verifications` 里**最近那一签**是「成立」且它的 `proof_sha256` 等于现行
-       `proof_text`。**不要求**在命题行里回填 `verification_id`（存在更严的可选口径 B：
-       "要求 `statements.verification_id` 回填"——**本批未采用**，理由是它需要 V 签完之后
-       回写 `statements`，那是一道新的写路径与新的权限面；归人裁，不顺手加）。
-
-    7. 第 6 条的**反方向**（`weaker_than_evidence`，**warning**）：凭据已经够
-       `proof_review`，这一行却登记成 `heuristic` / `cross_check`。降档是安全方向，
-       所以不是 error；但"有 `proof_text` ＋ V 签「成立」＋ sha 相符却被写成弱档"
-       会让论文的强度声明长期虚低，而没有任何读数指出来 —— 这一格就是那个读数。
-       口径同样只一处（`verifications.weaker_than_evidence_gaps`）。
-    8. **概念行带 `proof_text`**（`concept_row_carries_proof_text`，**error**）：
-       概念行的 `proof_text` 只该为空。这一条此前**只在读侧**存在
-       （`verifications.proof_review_gap` 的 `why` 会点名"概念行不该带证明文本"），
-       而审计面没有它 ⇒ 一个装满历史概念行的工作区可以"审计通过"。
-       存量行改不动，所以这一条**逐条点名**（`stmt_id` + `created_by` + 那一段的开头）。
-       口径只一处：:func:`concept_rows_with_proof_text`。
+    这一段八条判据各守一种真机上出现过的病（第 5 条是业主 2026-10-09 点名的）：
+    1. 出处必须存在（`dangling_lit_ref` / `dangling_doc_ref`）：命题指着不存在的文献 ⇒ 逐字回验没有第二份文本而报告照样印；与 `dangling_dep` 同族，只是命题级。
+    2. `derived_from` 引用完整性（`dangling_stmt_ref`）：承重链少一环，"靠什么站着"就答不出来（`draft/37` §4 的依赖图读数被这种缺口污染）。
+    3. `proof` 级命题不许压在不可用的命题上（`proof_stmt_on_unusable_stmt`）：§8/§9 矛盾闭环的命题级落点，与 `proof_claim_on_refuted_dependency` 成对；`refuted` / `superseded` 报 error（结论必须撤或降档），`disputed` 报 warning（等裁决）。
+    4. `active` 的文献命题没逐字回验（`active_stmt_quote_unverified`，warning）："B 的唯一自动幻觉防线"就是逐字回验（见 `quoteverify`）；降 warning 的理由同 `external_unavailable`（已知未做、不是谎报），但报告里必须看得见。概念行不在适用面（:func:`active_stmt_needs_quote_check`：`source_lit_id` 不是"逐字抄自"、`quote_verified` 的比对对象 `proof_text` 概念行不许带、读侧两处早已跳过）。
+    5. 五元位与各自的台账对不对得上（业主 2026-10-09）：判据本体是 `evidencebits.bit_evidence_gaps`，本处只把读数翻成 `Issue`，不抄第二份口径。
+    6. `evidence_kind="proof_review"` 的命题必须真有 V 那一签（`proof_review_without_verification`，error）：只按 `schema.EVIDENCE_KINDS` 那句定义判 —— `statements.proof_text` 非空 ＋ `verifications` 里最近那一签是「成立」且 `proof_sha256` 等于现行 `proof_text`；不要求在命题行里回填 `verification_id`（`statements.verification_id` 这更严的可选口径 B 本批未采用：它需要 V 签完回写 `statements`，是一道新的写路径与权限面，归人裁）。
+    7. 第 6 条的反方向（`weaker_than_evidence`，warning）：凭据够 `proof_review`，这一行却登记成 `heuristic` / `cross_check`；降档是安全方向，但强度声明会长期虚低而没有任何读数指出（口径只一处：`verifications.weaker_than_evidence_gaps`）。
+    8. 概念行带 `proof_text`（`concept_row_carries_proof_text`，error）：概念行的 `proof_text` 只该为空。此前只在读侧（`verifications.proof_review_gap` 的 `why` 点名过），审计面没有它 ⇒ 装历史概念行的工作区可以"审计通过"；存量改不动，所以逐条点名（`stmt_id` + `created_by` + 开头），口径只一处：:func:`concept_rows_with_proof_text`。
     """
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
@@ -1789,7 +1751,7 @@ def _check_13(rep, store) -> None:
     usable = 0
     bit_gaps = 0
     # 2026-10-18（业主：「完美跑通 T1」/ 缺陷 ④）：`evidence_kind="proof"` 的命题必须有
-    # **formal 实验**背书 —— 否则命题可以自称 proof 而绕过检查器。`Statement` 没有引用
+    # formal 实验背书 —— 否则命题可以自称 proof 而绕过检查器。`Statement` 没有引用
     # 实验的字段，所以只能在审计侧跨表对账（拿 verifier_subject_key/claim_key 撞 label）。
     # 级别 warning：不阻断写库，但报告里必须看得见。
     _formal_keys = [str(e.get("verifier_subject_key") or e.get("claim_key") or "").lower()
@@ -1875,8 +1837,8 @@ def _check_13(rep, store) -> None:
         #
         # 真机形态（`projects/mp2` 的 `stmt:000003`）：`proof_text` 1909 字、V 的
         # `verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行
-        # 正文相符 —— 按定义这条**就是** `proof_review`，盘上却落 `heuristic`。
-        # 它不是虚报（降档是安全方向）⇒ **warning**，不是 error：这条读数要的是
+        # 正文相符 —— 按定义这条就是 `proof_review`，盘上却落 `heuristic`。
+        # 它不是虚报（降档是安全方向）⇒ warning，不是 error：这条读数要的是
         # "让降档看得见"，不是把有意降档判成缺陷。口径与上面那道闸同一处
         # （`verifications.weaker_than_evidence_gaps` 内部复用 `proof_review_gap`）。
         weaker = VR.weaker_than_evidence_gaps(getattr(store, "root", "."), statements)
@@ -1900,15 +1862,15 @@ def _check_13(rep, store) -> None:
                 "weaker_than_evidence",
                 f"{gap['why']}",
             ))
-    # ---- 概念行带 `proof_text`（2026-10-21，**存量**那条路：审计只能点名）
+    # ---- 概念行带 `proof_text`（2026-10-21，存量那条路：审计只能点名）
     #
     # 改前的分工：写入期（`conceptrows` 的闸）拒收、读侧（`proof_review_gap`）点名。
     # 审计面没有对应的一条 ⇒ 一个装满历史概念行的工作区可以"审计通过"，而
     # `proof_review_gap` 会为同一条行说"概念行不该带证明文本" —— 两处口径不一致，
     # 而"审计通过"是交付面上唯一被当成"没有问题"的那一栏。
     #
-    # 为什么是 **error**（而不是像 `weaker_than_evidence` 那样的 warning）：
-    # 这一条说的不是"降档"（安全方向），是"这一行在**有没有证明**这个问题上说了假话" ——
+    # 为什么是 error（而不是像 `weaker_than_evidence` 那样的 warning）：
+    # 这一条说的不是"降档"（安全方向），是"这一行在有没有证明这个问题上说了假话" ——
     # 哨兵 `concept:primitive` 会把依赖它的每一条读数顶高（真机 mp3：1143 条）。
     # 而它不是"来路可疑"，是"这一格本来就不该有内容"。
     #
@@ -1927,12 +1889,12 @@ def _check_13(rep, store) -> None:
 
 #: 报告面：工作区里 `reports/` 下那一层 markdown。D 的跨趟研究手稿（`reports/RESEARCH.md`）
 #: 与工作稿（`reports/<qid>-research.md`）、F 的攻坚台账（`reports/attack-<plan_id>.md`）
-#: 都住在这里 —— 它们是**自由文本**，不进 `schema.TABLES`，所以单行自洽校验管不到。
+#: 都住在这里 —— 它们是自由文本，不进 `schema.TABLES`，所以单行自洽校验管不到。
 REPORTS_DIR = "reports"
 
 #: 报告面里"引到某一行某一格"的记号：`前缀:编号.字段名`（如 `exp:000000.counterexample`）。
 #:
-#: 为什么不复用 `T.find_citations`：那一格的代号字符集里**没有点**
+#: 为什么不复用 `T.find_citations`：那一格的代号字符集里没有点
 #: （`[A-Za-z0-9][A-Za-z0-9_\-]*`），读到 `exp:000000.certificate` 会在点前停住 ——
 #: 字段那一段根本不在它的射程里。两件事、两条判据："这一行在不在"归它那一族，
 #: "这一格在不在"归这里。代号用 `schema.ID_OR_LEGACY_PATTERN`：编号宽度是
@@ -1944,35 +1906,13 @@ _FIELD_REF_RE = re.compile(
 
 
 def _check_14(rep, store) -> None:
-    """`verify_all` 的第 14 段：报告面里的**字段级引用**必须落在真有的键上。
+    """`verify_all` 的第 14 段：报告面里的字段级引用必须落在真有的键上。
 
-    守的是一类"看着可复核、实际查不到"的引用：报告里写 `exp:000000.<某一格>`，
-    而那一行里**没有这个键**（名字写错了、或者写的是上一版的字段）——
-    读者顺着它什么也找不到，而这条引用看上去仍然成立。**比不引更坏。**
-
-    为什么要有这一格，而不是只在提示词/手册里写一句"引之前先看清那一行有哪些键"：
-    那句话是**纪律**（靠作者记得），这一格是**判据**（机器每次都读一遍）。
-    两者不冲突 —— 纪律告诉作者该怎么做，判据在作者忘掉时说话。
-
-    【立这一格的直接由头要说准，别抄错的】2026-10-15 第七趟真跑里定的是**纪律 + 判据**
-    这两条腿：那句纪律（D 的声明与手册正文）当时给的理由是**读错了盘** ——
-    第六趟手稿引的 `exp:000000.certificate` 其实**真的存在**（那一行的 `certificate`
-    里就装着 `n=40`、`1681=41×41`），当时只看了 `counterexample: null` 那一格就断言
-    "那一行没有这个键"，把"我没看见"当成了"它不在"（勘误见 `draft/120` §六·补三）。
-    纪律留着、理由改正，而兜底从"靠作者记得"换成这一格 —— 这一格**不是**为那次误判立的，
-    是为"引用一个不存在的落点"这一类立的。
-
-    为什么报 warning 而不是 error（与 `dangling_citation` 那一档的分界）：`documents`
-    里的 `citations` 是**声明过的**引用（作者填了那个字段，就是声明"这是引用"）；
-    而这里扫的是自由 markdown —— 作者也可能在**描述**某一格的缺失。
-    把"提到"折成"引错"会冤枉人，而本格的用处是"让人看见"，不是"阻断收工"。
-    写入期的硬条件仍在 `Experiment.validate` 那一层（`result=refutes` 必须有反例）。
-
-    三态口径（同 `checked` 其余各键）：
-
-    - 工作区里没有 `reports/*.md` ⇒ **不写这个键**（本格不适用，不是"查过、干净"）；
-    - 有、读得出来 ⇒ 写整数（扫到几处字段级引用）；
-    - 有、读不出来 ⇒ 写 `None` 并报一条 warning（**没查成**）。
+    守的是一类"看着可复核、实际查不到"的引用：报告里写 `exp:000000.<某一格>`，而那一行里没有这个键（名字写错、或写的是上一版的字段）—— 读者顺着它什么也找不到，而这条引用看上去仍然成立，比不引更坏。
+    为什么要有这一格，而不是只在提示词/手册里写一句"引之前先看清那一行有哪些键"：那句话是纪律（靠作者记得），这一格是判据（机器每次都读一遍）；纪律告诉作者该怎么做，判据在作者忘掉时说话。
+    【立这一格的直接由头要说准】2026-10-15 第七趟真跑里定的是纪律 + 判据两条腿：那句纪律（D 的声明与手册正文）当时给的理由是读错了盘 —— 第六趟手稿引的 `exp:000000.certificate` 其实真的存在（那一行的 `certificate` 里装着 `n=40`、`1681=41×41`），当时只看了 `counterexample: null` 那一格就断言"那一行没有这个键"，把"我没看见"当成了"它不在"（勘误见 `draft/120` §六·补三）。纪律留着、理由改正，兜底从"靠作者记得"换成这一格 —— 它不是为那次误判立的，是为"引用一个不存在的落点"这一类立的。
+    为什么报 warning 而不是 error（与 `dangling_citation` 的分界）：`documents` 里的 `citations` 是声明过的引用（作者填了那个字段就是声明"这是引用"）；而这里扫的是自由 markdown —— 作者也可能在描述某一格的缺失。把"提到"折成"引错"会冤枉人，本格的用处是让人看见，不是阻断收工。写入期的硬条件仍在 `Experiment.validate` 那一层（`result=refutes` 必须有反例）。
+    三态口径（同 `checked` 其余各键）：工作区没有 `reports/*.md` ⇒ 不写这个键（不适用，不是"查过、干净"）；有、读得出来 ⇒ 写整数；有、读不出来 ⇒ 写 `None` 并报一条 warning（没查成）。
     """
     root = Path(getattr(store, "root", ".") or ".")
     reports = root / REPORTS_DIR
@@ -2067,7 +2007,7 @@ def verify_all(
 def _safe_int(value: Any, default: int = 0) -> int:
     """会计数/校验用的安全 int（子代理 store #6/#15）。
 
-    `verify_all` 会对**已经被判 schema_invalid 的行**继续取数；那些字段可能是 `"abc"`、
+    `verify_all` 会对已经被判 schema_invalid 的行继续取数；那些字段可能是 `"abc"`、
     `"one"`，裸 `int()` 就把"审计发现坏行"变成"审计自己崩了"。
     """
     try:

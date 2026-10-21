@@ -1,153 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """机械地算出 `src/agentflow/**` 里"零直接测试"的公开函数，并按风险等级分档。
-
-## 为什么需要这个脚本（而不是引用 `INVENTORY.md` 的数字）
-
-`DEVELOPMENT.md` §1.4 逐字警告：`INVENTORY.md` / `tools.json` 普查的是
-`D:\\Incubator\\test\\test1\\`（包名 `abflow`），不是 `D:\\Incubator\\agentflow\\`。
-两者口径不同，"103 个公开函数零测试"那个数字不能直接搬到本包上。
-
-所以本脚本在 `agentflow` 上重新算，并且是可复跑的：同一条命令 ⇒ 同一个数字。
-
-## 判据（"零测试"是什么意思）
-
-对 `src/agentflow/**/*.py` 里每个公开函数/方法（名字不以 `_` 开头，含类方法；
-遍历口径与 `scripts/lint_rules.py` 的 R007 完全一致 —— 同一个 `ast.walk` +
-`isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))` + `name.startswith("_")`），
-检查它的限定名或裸名是否在 `tests/**/*.py` 里作为独立标识符出现过。
-
-### 这是"按名出现算"，不是"按真被调用算"
-
-- 按名出现：可机械判定，不需要跑测试，没有动态追踪的不确定性。
-- 按真被调用：需要覆盖率/追踪，且"被调用"本身还分"被测试调用"与"被别的 src
-  调用" —— 后者不是测试。
-
-假阴性（本口径会漏报的）：
-1. 函数被间接调用（测试调 A，A 调 B）而 B 的名字从未出现在测试里
-   ⇒ B 被误报为"零测试"。规模由 `--json` 的 `indirect_only` 字段给出：
-   本脚本额外算一遍"只被 src 内部调用、名字从未出现在测试里"的函数（传递闭包），
-   那是这条误报的上界。实测（`FINAL-R7-10` 更正：原写"2026-02，559 个公开函数"，
-   2026-09-28 实测 **633 个公开函数、零直接测试 78 个**）见 `--json` 的
-   `totals.public_functions` / `totals.zero_test`（那两个数才是权威，别抄定值）。
-2. 名字出现在测试的注释或字符串里（例如 `# 这里不测 parse_work`）
-   ⇒ 被误判为"有测试"。这是反向的假阴性（漏报缺口），静态分析无法完全排除，
-   只能靠"断言存在"这条更强的判据（本脚本不做 —— 它需要解析测试函数体，
-   属于 `INVENTORY` 的"有无断言"口径，不是本脚本的口径）。
-3. 同名顶包：`register` 在 11 个模块里出现，测试里写一次 `register` 就让 11 个都
-   算"有测试"。规模可用 `--json` 里 `tested_by` 字段核（它记了每个名字的命中次数）。
-
-假阳性（本口径会误报的）：只有上面第 1 条。
-
-## 风险等级（高→低）
-
-等级不是估的，判据全在 AST 里，逐条可复跑（`--json` 的 `level_why` 逐函数记下
-命中了哪一条）：
-
-| 等级 | 名字 | 判据 |
-|---|---|---|
-| 1 | 写路径 | 1a/1b/1c/1d/1e，见下 |
-| 2 | 判据/决策 | 2a/2b/2c，见下 |
-| 3 | 只读读取 | 3a/3b，见下 |
-| 4 | 呈现/格式 | 4a/4b/4c（兜底档），见下 |
-
-等级 1（写路径）：
-- (1a) 它是 `@tool(side_effect=...)` 的 handler，且 `side_effect` ∈ `SIDE_EFFECTS_WRITE`
-  （取自 `src/agentflow/tools/__init__.py` 的单一来源，运行期 import 并断言一致
-  —— 不一致以退出码 2 报出，不另写一份名单）；
-- (1b) 函数体里出现 `*.tx(...)` 调用（写事务）；
-- (1c) 函数体里 `open(...)` 的模式含 `w`/`a`/`x`/`+`，或调用 `write_text`/`write_bytes`；
-- (1d) 函数体里出现 `subprocess.*` / `os.system` / `requests.*` / `httpx.*` /
-  `urllib.request` / `urlopen`；
-- (1e) 仅在 `--propagate` 下：函数体直接调用了一个等级 1 的函数
-  （写路径的传递：`A 调 B 写盘 ⇒ A 也是写路径`）。默认关闭 —— 理由见下。
-
-等级 2（判据/决策）：
-- (2a) 裸名含决策词缀（`decide`/`check`/`validate`/`verify`/`gate`/`judge`/`admit`/
-  `allow`/`refuse`/`reject`/`accept`/`can_`/`should_`/`is_`/`has_`/`needs_`/`must_`/
-  `resolve`/`classify`/`detect`/`select`/`pick`/`choose`）—— 词缀按名称边界切分，
-  例如 `negated` 不因含 `gate` 命中（`negated` 的 `gate` 前一个字符是字母 `e`，
-  不是词边界；这条修正来自实测误报）；
-- (2b) 函数体里 `return {...}` 的字典字面量含判定键（`verdict`/`reason`/`checked`/
-  `ok`/`approved`/`allowed`/`keep`/`insufficient`/`conflict`）；
-- (2c) 仅在 `--propagate` 下：函数体直接调用了一个等级 2 的函数。
-
-### 为什么传递判据（1e/2c）默认关闭（实测校准）
-
-第一版把 1e/2c 打开，等级 1 从 8 个涨到 13 个、等级 2 从 45 涨到 55 个。
-逐条看过之后发现大部分是假报，根因是传递用的是裸名匹配：
-
->  上面这两个数字是"`f.level <= 2` 时代"的校准结果，已过期（外部审查第二轮
-> 指出、我复核成立）：那一版把"等级 2 的函数调用了等级 1 的函数"这条边整条砍掉了，
-> 后来改成 `f.level == 1` 才把它接回来（`G-44` 第 4 条）。现在 `--propagate` 下
-> 等级 2 里那些调用等级 1 的函数也会被升到 1，所以等级 1 的增量会比 13 更大、
-> 等级 2 的更小。这两个数字在重跑校准之前不许引用；本节的结论
-> （默认关闭 1e/2c）不受影响 —— 它靠的是下面那三条"同名顶包"的假报，与增量数字无关。
-> 重跑校准的动作登记在 `G-44` 的"已知未做"里。
-
-- `ToolRegistry.register_all` 被判成写路径，因为它的函数体里有 `self.register(...)`，
-  而"注册表里有个叫 `register` 的工具函数"恰好被算成写路径 ⇒ `register_all` 被升级。
-  这是同名顶包，与 `ToolResult.to_dict` 无关的写路径毫无关系。
-- `Store.library_path` 被判成判据函数，因为 `LocalBackend.resolve`（一个 `resolve`
-  方法）是等级 2 —— 任何函数体里出现一个叫 `resolve` 的调用都会被升级。
-- `Conductor.run_plan` / `table_tools.show` 因为调用了 `*.to_dict()`（一个纯粹的
-  呈现方法，之所以被判 2 是因为它的名字里没有决策词缀、却命中了 2b 的判定键）
-  而升级成等级 2。
-
-"能因为错误原因把函数升到高风险档"的判据与"永远通过"的判据同样有害：
-它会让等级 1/2 的清单被假报淹没，而真正需要补测试的函数就藏在里面
-（这与 `lint_rules.py` R006 第一版 19 条噪音被忽略是同一个教训）。
-所以默认用只读函数自身 AST 的判据（1a–1d / 2a–2b / 3a–3b / 4a–4c），
-传递判据降级为 `--propagate` 这个探索性开关，并在报告里注明。
-
-等级 3（只读读取）：
-- (3a) 它是 `@tool(side_effect in {"read","none"})` 的 handler；
-- (3b) 函数体里出现只读原语（`store.rows`/`find`/`read_text`/`read_bytes`/`json.load`/
-  相似度计算 `similarity`/`ratio`/`jaccard`）。
-
-等级 4（呈现/格式）：
-- (4a) 裸名含呈现词缀（`render`/`format`/`to_dict`/`to_text`/`to_md`/`to_markdown`/
-  `summary`/`describe`/`catalog`/`markdown`/`explain`/`display`/`print`/`dump`）；
-- (4b) 函数体含 f-string（`JoinedStr`）拼接；
-- (4c) 兜底：以上一条都不命中。
-
-### 刻意不计入的（否则口径会假报）
-
-- 私有嵌套类的方法：`src/agentflow/agent_c.py:3112` 的 `_FakeLLM.judge_gaps` 是
-  `AgentC.selftest` 函数体内定义的测试替身。它名字不以 `_` 开头（`judge_gaps`），
-  按 R007 的遍历口径会被算成公开函数，但它不是生产代码 ——
-  给它补测试是荒谬的。本脚本排除"祖先链上有名字以 `_` 开头的类"的函数，
-  并在 `--json` 的 `excluded` 里列出被排除者（排除也要可见，不许静默）。
-
-## 三档退出码
-
-```text
-0 = 没有"等级 ≤ --level 的零测试函数"
-1 = 有（清单打印到 stdout）
-2 = 脚本自己没跑成（找不到 src/ 或 tests/、AST 解析失败、SIDE_EFFECTS_WRITE 漂移、内部异常）
-```
-
-为什么必须有退出码（`scripts/lint_rules.py` 的 R008 逐字）：
-"无法区分'检查通过'与'脚本根本没跑成'。自动化的判据必须是
-0=通过 / 1=发现问题 / 2=检查器自身失败 的三档退出码"。
-
-`--level N` 同时决定退出码的阈值：`0` 表示"等级 ≤ N 的零测试函数一个都没有"。
-
-## 用法（一条命令可复跑）
-
-```powershell
-cd D:\\Incubator\\agentflow
-$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
-python tools/coverage_zero_test.py            # 人读清单（默认 --level 2）
-python tools/coverage_zero_test.py --json     # 机器读（逐模块清单 + 假阴性上界）
-python tools/coverage_zero_test.py --level 4  # 等级 1..4 全看，含只读/呈现
-python tools/coverage_zero_test.py --quiet    # 只给汇总行
-python tools/coverage_zero_test.py --selftest # 对判据本身跑一正一反（见 --help）
-```
-
-`--selftest` 在内存里的合成源码上跑分类器，断言"每个等级各有一个已知答案的函数
-被分到正确的档"，并断言"一个永远命中等级 1 的假实现会被测出来"。
-它证明的是分类器本身不是永远返回同一档。
+`DEVELOPMENT.md` §1.4 逐字警告：`INVENTORY.md` / `tools.json` 普查的是 `D:\\Incubator\\test\\test1\\`（包名 `abflow`）而不是本包，"103 个公开函数零测试"不能直接搬 —— 本脚本在
+agentflow 上重算，同一条命令 ⇒ 同一个数字。
+口径是"名字在 tests/ 里出现过"，不是"真被调用"：遍历同 `scripts/lint_rules.py` 的 R007（同一个 `ast.walk` + `FunctionDef` / `AsyncFunctionDef` + 不以 `_` 开头）。三个假阴性：
+间接调用（上界见 `--json` 的 `indirect_only`）、名字只出现在注释或字符串里、同名顶包（`register` 出现在 11 个模块，规模可核 `tested_by`）；唯一会误报的方向是间接调用。权威读数只有
+`totals.public_functions` / `totals.zero_test`。
+等级全在 AST 里、逐条可复跑：实现是 `_classify`（判据表 `_CRITERIA` 的 1a–4c）与 `_propagate_levels`（`--propagate` 的传递闭包），`_EXONERATED` 是逐条登记的豁免，`--json` 的
+`level_why` 记下每个函数命中了哪一条。1 写路径（1a `@tool(side_effect=...)` ∈ `SIDE_EFFECTS_WRITE`，取自 `tools/__init__.py` 并在运行期断言一致；1b `*.tx(...)`；1c
+`open(...,'w')` / `write_text` / `write_bytes`；1d `subprocess.*` / `os.system` / `urlopen`）；2 判据（2a 决策词缀
+decide/check/validate/verify/gate/judge/admit/resolve/classify，按名称边界切分 —— `negated` 不因 gate 命中；2b `return {` 里的判定键 verdict/reason/checked）；3
+只读（3a `side_effect="read"`；3b `store.rows` / `read_text` / `json.load`）；4 呈现（4a render/format/to_dict/to_md；4b f-string；4c 兜底）。
+1e/2c 只在 `--propagate` 下开，默认关闭：第一版打开后等级 1 涨到 13、等级 2 涨到 55，多半是假报 —— `ToolRegistry.register_all` 因
+`self.register(...)`、`Store.library_path` 因 `LocalBackend.resolve`、`Conductor.run_plan` / `table_tools.show` 因 `*.to_dict()` 被升级（同名顶包，同 R006
+第一版 19 条噪音被忽略的教训）；那些增量数字已过期（`G-44`），重跑校准前不许引用。
+刻意不计入：祖先链上有 `_` 开头类的私有嵌套方法（如 `AgentC.selftest` 体内的 `_FakeLLM.judge_gaps`），被排除者在 `--json` 的 `excluded` 里列出 —— 排除也要可见。退出码 `0` / `1` / `2` =
+没有等级 ≤ `--level`（默认 2）的零测试函数 / 有（清单打到 stdout）/ 脚本自己没跑成（找不到 `src/`、`tests/`、AST 解析失败、`SIDE_EFFECTS_WRITE` 漂移）；同 R008 逐字：不然分不开"检查通过"与"根本没跑成"。
+用法：`python tools/coverage_zero_test.py`（人读清单）、`--json`（逐模块 + 假阴性上界）、`--level 4`、`--quiet`、`--selftest`（对判据本身跑一正一反，证明它不会永远返回同一档）。
 """
 
 from __future__ import annotations
@@ -500,29 +369,15 @@ def _is_main_block(node: ast.AST | None) -> bool:
 
 
 def _enclosing_scope(tree: ast.AST, node: ast.AST) -> tuple[str, str] | None:
-    """`node` 是否定义在另一个函数体、私有类体或 `__main__` 自检块内？
-
-    返回 (种类, 宿主限定名)。
+    """    `node` 是否定义在另一个函数体、私有类体或 `__main__` 自检块内？返回 (种类, 宿主限定名)。
 
     ## 为什么需要（三个实测的例子，不是假想）
 
-    1. `agent_e.py:758` 的 `put_script` 定义在 `main()` 体内（自检用的局部辅助）；
-    2. `agent_c.py:3112` 的 `_FakeLLM` 定义在 `AgentC.selftest` 的函数体里，
-       它的方法 `judge_gaps` 不以 `_` 开头；
-    3. `agent_c.py:2913` 的 `build_dataset` 定义在模块级的
-       `if __name__ == "__main__":`（第 2873 行）自检块里 —— 它不在任何函数里，
-       所以前两条判据都抓不到它。这个例子是"我以为已经排除干净、
-       实际漏了 1 个"的实测证据：漏掉它会让等级 1 的清单里出现一个
-       给自检写 fixture 的函数，而它的"测试"就是它自己所在的那个自检块。
-
-    按 R007 的遍历口径这三者都会被算成"公开函数"，但它们不是生产公开面。
-    给它们补测试是荒谬的，而且会稀释真正需要的测试。
-
-    排除必须可见：被排除者逐条进 `--json` 的 `excluded`，汇总行给出条数。
-    静默排除正是本项目最忌讳的失败形态。
-
-    只排除不是 `@tool` 的：`tools/graph_tools.py` 的 `register.graph_build`
-    等 8 个 handler 也是嵌套定义，但它们是货真价实的工具面（带 `side_effect` 声明），
+    1. `agent_e.py:758` 的 `put_script` 定义在 `main()` 体内（自检用的局部辅助）；2. `agent_c.py:3112` 的 `_FakeLLM` 定义在 `AgentC.selftest` 的函数体里，
+    它的方法 `judge_gaps` 不以 `_` 开头；3. `agent_c.py:2913` 的 `build_dataset` 定义在模块级的`if __name__ == "__main__":`（第 2873 行）自检块里 ——
+    它不在任何函数里，所以前两条判据都抓不到它。这个例子是"我以为已经排除干净、实际漏了 1 个"的实测证据：漏掉它会让等级 1 的清单里出现一个给自检写 fixture 的函数，而它的"测试"就是它自己所在的那个自检块。按 R007
+    的遍历口径这三者都会被算成"公开函数"，但它们不是生产公开面。给它们补测试是荒谬的，而且会稀释真正需要的测试。排除必须可见：被排除者逐条进 `--json` 的 `excluded`，汇总行给出条数。静默排除正是本项目最忌讳的失败形态。只排除不是
+    `@tool` 的：`tools/graph_tools.py` 的 `register.graph_build`等 8 个 handler 也是嵌套定义，但它们是货真价实的工具面（带 `side_effect` 声明），
     一刀切会把这些工具从清单里静默抹掉。这条例外在 `collect_src` 里落实。
     """
     parents = _parent_map(tree)
@@ -702,16 +557,16 @@ _EXONERATED: dict[tuple[str, str], tuple[tuple[str, ...], str]] = {
 
 
 def _selfcheck_exonerations(root: Path) -> None:
-    """豁免名单里的每个测试函数名必须真的存在于 tests/ 里，**且真的调用目标**。否则退出码 2。
+    """豁免名单里的每个测试函数名必须真的存在于 tests/ 里，且真的调用目标。否则退出码 2。
 
     为什么这条自检是这张表能被信的前提：豁免的语义是"我核实过它被直接测试了"。
     若被引用的测试名不存在（改名 / 被删），那份核实已经过期，
     此时继续豁免等于把缺口静默抹掉 —— 所以它必须是硬失败，不是 warning。
 
-    `FINAL-R7-07`：改前这里只核"测试函数名存在"。副本实测：**伪造一条豁免**
+    `FINAL-R7-07`：改前这里只核"测试函数名存在"。副本实测：伪造一条豁免
     （引用 5 个真实存在、但从不调用目标的测试名）可以通过自检，并把一个零测试的
     等级 1 写路径从门里摘掉（门由红转绿）。现在再加一层：
-    被引用的每个测试函数，其**函数体**里必须出现目标函数的名字（按 `_name_pattern`
+    被引用的每个测试函数，其函数体里必须出现目标函数的名字（按 `_name_pattern`
     的同一口径 —— 它与"算不算被测试"用的是同一处实现，不另立一套）。
     """
     blob = _test_text(root)
@@ -722,7 +577,7 @@ def _selfcheck_exonerations(root: Path) -> None:
         if not (root / mod).exists():
             bad.append(f"{mod} 不存在（豁免条目已失效）")
         target_name = qual.rsplit(".", 1)[-1]
-        # 体检查用**允许属性访问**的形态（`I.adjudicate_contradiction(...)` 也算调用）：
+        # 体检查用允许属性访问的形态（`I.adjudicate_contradiction(...)` 也算调用）：
         # `_name_pattern` 的左边界刻意排除了前置的 `.`（那是为全仓文本扫描服务的，
         # 那边另有 `_QUALIFIED_TMPL` 管属性访问），照搬过来会把"通过模块别名调用"
         # 整类测试误判成"没调用目标" —— 实测：本项目 7 条 test_adjudicate_* 里有 3 条
@@ -789,55 +644,24 @@ def _readable(p: Path) -> bool:
 
 
 def _name_pattern(needle: str) -> re.Pattern[str]:
-    """`needle` 作为标识符位置出现的正则。
-
-    ## 这里改过一次，改的原因是一个实测的假阴性（不是推测）
-
-    第一版判据是 `(?<![\\w.])needle(?![\\w])` —— 两侧都必须是"非词字符"。
-    它把 `parse` 与 `parse_work` 正确分开了，但同时把项目的测试命名约定
-    整类漏掉了：本项目的测试名是 `test_<函数名>_rejects_...`，
-    而 `adjudicate_contradiction` 后面紧跟的正是 `_`（一个词字符）⇒
-    `tests/test_interactions.py` 里明明直接调用了 `adjudicate_contradiction`
-    六次，第一版却把它报成"零测试"。
-
-    实测规模：修正前后等级 2 的零测试函数从 31 个降到 19 个 ——
-    也就是第一版把 12 个有直接测试的函数误报成了零测试（39% 的假报率）。
-    这正是本任务要求"实现者反驳简报"的那类问题：判据本身有假报。
-
-    ## 修正后的规则（两侧不对称，且不对称是刻意的）
-
-    - 左边界：`(?<![\\w.]*[\\w]?)` 用 `(?<![\\w.])` —— `needle` 不能是
-      某个更长标识符的尾部。所以 `needle="parse_work"` 不匹配 `_parse_work`
-      （前面是 `_`，是词字符），`needle="parse"` 也不匹配 `subparse`。
-    - 右边界：`(?![\\w]*[\\w]?)` 即 `(?![0-9A-Za-z])` —— 允许后面是 `_`。
-      于是 `def test_adjudicate_contradiction_rejects_x` 里的名字能命中。
-
-     如实写清右边界不管什么（外部审查第 2 条，我实测复核过）：因为
-    `_` 不在 `[0-9A-Za-z]` 里，`needle="parse"` 会命中 `x = parse_work()`。
-    本文件早先的注释曾逐字说"`needle="parse"` 不匹配 `parse_work`" —— 那句是假的
-    （实测 `_name_pattern("parse").search("x = parse_work()")` 命中）。
-    同一个性质在 `_TEST_NAME_TMPL`（`test_parse` 命中 `test_parse_work`）与
-    `_QUALIFIED_TMPL`（`I.parse_work(` 让 `parse` 命中）上同样成立。
-    这是刻意的欠报方向（"算它有测试"），不是 bug；但不许再写成相反的性质。
-
-    ## 但这条正则认不出"别名限定调用"（`G-34`，实测）
-
-    左边界排除 `.` 是刻意的（`parse` 不许匹配 `parse_work` 的尾巴），代价是
-    `I.adjudicate_contradiction(` / `G.gateway_main(` / `FG.evidence_of(` 这类
-    限定的成员调用一个都拿不到。本文件早先的注释曾逐字说
-    "`I.adjudicate_contradiction(` 都能命中" —— 那句是假的，实测命中 0 次。
-    它造成的不是"清单短一点"，而是发布门上的两条假红：`modelgw.gateway_main`
-    与 `formalgw.evidence_of` 明明有直接调用，却被报成"零测试"并让 `coverage` 判 `fail`。
-
-    修法是补一个 needle 形态（`_QUALIFIED_TMPL`，把证据单独记成 `via:alias_direct`），
-    而不是放宽这里的左边界 —— 放宽会牵连既有判据（`parse` vs `parse_work` 的区分）。
-
-    ## 代价（如实写清）
-
-    `needle="register"` 会命中 `register_graph_tools(` —— 那是另一个函数。
-    所以本判据仍然偏向"算它有测试"（欠报而非过报）。这个方向的偏差是刻意的：
-    本脚本的产出是"待补测试清单"，过报会让人去做无用功，欠报只会让清单更短。
-    两侧偏差的规模都由 `--json` 的 `indirect_only` 与 `tested_by` 字段给出，可人工核对。
+    """    `needle` 作为标识符位置出现的正则。这里改过一次，改的原因是一个实测的假阴性（不是推测）：第一版判据是 `(?<![\\w.])needle(?![\\w])` —— 两侧都必须是"非词字符"。它把
+    `parse` 与 `parse_work` 正确分开了，但同时把项目的测试命名约定整类漏掉了：本项目的测试名是 `test_<函数名>_rejects_...`，而
+    `adjudicate_contradiction` 后面紧跟的正是 `_`（一个词字符）⇒`tests/test_interactions.py` 里明明直接调用了
+    `adjudicate_contradiction`六次，第一版却把它报成"零测试"。实测规模：修正前后等级 2 的零测试函数从 31 个降到 19 个 ——也就是第一版把 12 个有直接测试的函数误报成了零测试（39%
+    的假报率）。这正是本任务要求"实现者反驳简报"的那类问题：判据本身有假报。修正后的规则（两侧不对称，且不对称是刻意的）：左边界：`(?<![\\w.]*[\\w]?)` 用 `(?<![\\w.])` ——
+    `needle` 不能是某个更长标识符的尾部。所以 `needle="parse_work"` 不匹配 `_parse_work`（前面是 `_`，是词字符），`needle="parse"` 也不匹配
+    `subparse`。- 右边界：`(?![\\w]*[\\w]?)` 即 `(?![0-9A-Za-z])` —— 允许后面是 `_`。于是
+    `def test_adjudicate_contradiction_rejects_x` 里的名字能命中。如实写清右边界不管什么（外部审查第 2 条，我实测复核过）：因为`_` 不在
+    `[0-9A-Za-z]` 里，`needle="parse"` 会命中 `x = parse_work()`。本文件早先的注释曾逐字说"`needle="parse"` 不匹配 `parse_work`" ——
+    那句是假的（实测 `_name_pattern("parse").search("x = parse_work()")` 命中）。同一个性质在 `_TEST_NAME_TMPL`（`test_parse` 命中
+    `test_parse_work`）与`_QUALIFIED_TMPL`（`I.parse_work(` 让 `parse` 命中）上同样成立。这是刻意的欠报方向（"算它有测试"），不是 bug；但不许再写成相反的性质。
+    但这条正则认不出"别名限定调用"（`G-34`，实测）：左边界排除 `.` 是刻意的（`parse` 不许匹配 `parse_work` 的尾巴），代价是`I.adjudicate_contradiction(` /
+    `G.gateway_main(` / `FG.evidence_of(` 这类限定的成员调用一个都拿不到。本文件早先的注释曾逐字说"`I.adjudicate_contradiction(` 都能命中" —— 那句是假的，
+    实测命中 0 次。它造成的不是"清单短一点"，而是发布门上的两条假红：`modelgw.gateway_main`与 `formalgw.evidence_of` 明明有直接调用，却被报成"零测试"并让
+    `coverage` 判 `fail`。修法是补一个 needle 形态（`_QUALIFIED_TMPL`，把证据单独记成 `via:alias_direct`），而不是放宽这里的左边界 ——
+    放宽会牵连既有判据（`parse` vs `parse_work` 的区分）。代价（如实写清）：`needle="register"` 会命中 `register_graph_tools(` —— 那是另一个函数。
+    所以本判据仍然偏向"算它有测试"（欠报而非过报）。这个方向的偏差是刻意的：本脚本的产出是"待补测试清单"，过报会让人去做无用功，欠报只会让清单更短。两侧偏差的规模都由 `--json` 的 `indirect_only` 与
+    `tested_by` 字段给出，可人工核对。
     """
     return re.compile(rf"(?<![\w.]){re.escape(needle)}(?![0-9A-Za-z])")
 
@@ -883,42 +707,16 @@ def _qualified_occurrences(blob: str, needle: str) -> int:
 
 
 def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
-    """标出每个函数是否"有测试"。
-
-    判据由三条可分辨的分量组成，三条都记进 `tested_by`（带 `via:` 前缀）：
-
-    - `via:direct` —— 裸名/限定名作为独立标识符出现在 tests/ 里
-      （`adjudicate_contradiction(` 这种）。注意 `_name_pattern` 的左边界排除 `.`，
-      所以"别名限定调用"不在这一档；
-    - `via:alias_direct` —— 以被点号限定的成员形态出现（`I.foo(`、`mod.foo(`）；
-    - `via:test_name` —— 出现在项目约定的测试名 `test_<名字>_...` 里；
-    - `via:tool_name` —— **只在测试里出现过一次这个 `@tool` 的点号名**
-      （`conductor.stop` / `fs.move`）。`L-13`（`draft/52` F7）把它从前一档
-      （`via:direct tool:…`）**拆出来单独记**：它是四个分量里最弱的一个 ——
-      "在测试里写一次工具名"与"真的构造上下文并调用它"是两件事，而等级 1
-      （写路径，最高风险档）的零测试数**全靠它**从 7 变成 0（`draft/43-D` §2.2）。
-      拆出来只加读数、**不改判据强度**（`info.tested` 照旧为真）：收紧那一半
-      必须等 `host.py:86` 的 `host-wiring` 落地之后再做（`draft/56` §4.3 的硬序）。
-
-    为什么分量必须分开记：它们的证据强度不同。`direct` 是"测试里出现了这个独立标识符"；
-    `alias_direct` 是"有人用某个前缀调用了这个名字"（前缀是谁要靠人核，本判据不做别名解析）；
-    `test_name` 是"有个测试叫这个名字"（名义覆盖，可能测的是别的东西）；
-    `tool_name` 是"测试里出现过这个工具名串"（最弱）。
-
-    ## L-13 收紧（`draft/52` F7 + J-45）：`tool_name` **单独一条不构成"有测试"**
-
-    收紧前后唯一的差别就是这一句：`info.tested` 要求至少有一条
-    `direct` / `alias_direct` / `test_name` / `exonerated` 的证据；
-    **只**在测试里写过一次点号工具名（`conductor.stop`）不算。
-
-    为什么（`draft/43-D` §2.2 逐字）：等级 1（写路径，最高风险档）的零测试数，
-    在"把工具名串算作有测试"的口径下是 **0**（发布门看到的绿灯），
-    在不算它的口径下是 **7** —— 也就是说最高风险档的绿灯是被**一个字符串**满足的。
-    J-45 的两条硬边界：① 历史那批（不可消除的）走登记基线；② 负控必须证明
-    "**新**造一个真无测试的写路径 handler 仍会被判"（红），否则收紧退化成一句口号。
-
-    三种证据分量仍**原样记进** `tested_by`（读数不许丢）：收紧改的是判据强度，
-    不是"看不见工具名串"。
+    """    标出每个函数是否"有测试"。判据由三条可分辨的分量组成，三条都记进 `tested_by`（带 `via:` 前缀）：`via:direct` —— 裸名/限定名作为独立标识符出现在 tests/ 里（`adjudicate_contradiction(` 这种）。注意
+    `_name_pattern` 的左边界排除 `.`，所以"别名限定调用"不在这一档；- `via:alias_direct` —— 以被点号限定的成员形态出现（`I.foo(`、`mod.foo(`）；- `via:test_name` —— 出现在项目约定的测试名
+    `test_<名字>_...` 里；- `via:tool_name` —— 只在测试里出现过一次这个 `@tool` 的点号名（`conductor.stop` / `fs.move`）。`L-13`（`draft/52` F7）
+    把它从前一档（`via:direct tool:…`）拆出来单独记：它是四个分量里最弱的一个 ——"在测试里写一次工具名"与"真的构造上下文并调用它"是两件事，而等级 1（写路径，最高风险档）的零测试数全靠它从 7 变成 0（`draft/43-D` §2.2）。
+    拆出来只加读数、不改判据强度（`info.tested` 照旧为真）：收紧那一半必须等 `host.py:86` 的 `host-wiring` 落地之后再做（`draft/56` §4.3 的硬序）。为什么分量必须分开记：
+    它们的证据强度不同。`direct` 是"测试里出现了这个独立标识符"；`alias_direct` 是"有人用某个前缀调用了这个名字"（前缀是谁要靠人核，本判据不做别名解析）；`test_name` 是"有个测试叫这个名字"（名义覆盖，
+    可能测的是别的东西）；`tool_name` 是"测试里出现过这个工具名串"（最弱）。L-13 收紧（`draft/52` F7 + J-45）：`tool_name` 单独一条不构成"有测试"：
+    收紧前后唯一的差别就是这一句：`info.tested` 要求至少有一条`direct` / `alias_direct` / `test_name` / `exonerated` 的证据；只在测试里写过一次点号工具名（`conductor.stop`）不算。
+    为什么（`draft/43-D` §2.2 逐字）：等级 1（写路径，最高风险档）的零测试数，在"把工具名串算作有测试"的口径下是 0（发布门看到的绿灯），在不算它的口径下是 7 —— 也就是说最高风险档的绿灯是被一个字符串满足的。J-45 的两条硬边界：①
+    历史那批（不可消除的）走登记基线；② 负控必须证明"新造一个真无测试的写路径 handler 仍会被判"（红），否则收紧退化成一句口号。三种证据分量仍原样记进 `tested_by`（读数不许丢）：收紧改的是判据强度，不是"看不见工具名串"。
     """
     blob = _test_text(root)
     for info in funcs:
@@ -943,29 +741,22 @@ def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
         if exo is not None:
             hits.append(f"via:exonerated {len(exo[0])} 条测试：{'、'.join(exo[0])}")
         info.tested_by = hits
-        # L-13 收紧：只靠 `via:tool_name` 的那一条**不算**有测试（见 docstring）。
+        # L-13 收紧：只靠 `via:tool_name` 的那一条不算有测试（见 docstring）。
         info.tested = any(not h.startswith("via:tool_name") for h in hits)
 
 
 def production_caller_reading(funcs: list[FuncInfo], zero: list[FuncInfo],
                               level: int) -> dict[str, Any]:
-    """F7 / L-13 的**读数**（`draft/52` F7；收紧已落地 ⇒ 见 `mark_tested` 的 docstring）。
-
+    """    F7 / L-13 的读数（`draft/52` F7；收紧已落地 ⇒ 见 `mark_tested` 的 docstring）。
     ## 为什么必须有这个读数（`draft/43-D` §2.2 逐字）
-
-    "发布门看到的读数是 0，而忽略'工具名串'那一条判据后是 7（等级 1，写路径，
-    最高风险档）" —— 也就是说最高风险档上那条绿灯，是被**一个字符串**满足的。
-
+    "发布门看到的读数是 0，而忽略'工具名串'那一条判据后是 7（等级 1，写路径，最高风险档）" —— 也就是说最高风险档上那条绿灯，是被一个字符串满足的。
     ## 三个口径并列（不许只选一个）
-
-    1. `tightened_zero_test` —— **本工具现在的口径**（`via:tool_name` 单独一条不算）；
-    2. `loose_zero_test` —— 收紧**之前**那个更宽的口径（把工具名串也算"有测试"）；
-       `loose_gate` 就是发布门历史上看到的那个 0；
+    1. `tightened_zero_test` —— 本工具现在的口径（`via:tool_name` 单独一条不算）；
+    2. `loose_zero_test` —— 收紧之前那个更宽的口径（把工具名串也算"有测试"）；
+    `loose_gate` 就是发布门历史上看到的那个 0；
     3. `registered_other_gauges` —— 别处登记过的两个更宽读数
-       （`41-G` 的台账口径 82、未复算的 113 / 153）。**它们是外部读数、本次未复算**。
-
-    `tool_name_only`（只靠工具名串"过关"的函数）与其按等级分布仍然报：
-    它是 ①② 两栏之差，也是"谁被这次收紧打回来"的逐条清单。
+    （`41-G` 的台账口径 82、未复算的 113 / 153）。它们是外部读数、本次未复算。
+    `tool_name_only`（只靠工具名串"过关"的函数）与其按等级分布仍然报：它是 ①② 两栏之差，也是"谁被这次收紧打回来"的逐条清单。
     """
     tool_only = [f for f in funcs
                  if f.tested_by
@@ -989,9 +780,9 @@ def production_caller_reading(funcs: list[FuncInfo], zero: list[FuncInfo],
             "未复算甲": {"value": 113, "source": "draft/52 F7 登记（本次未复算）"},
             "未复算乙": {"value": 153, "source": "draft/52 F7 登记（本次未复算）"},
         },
-        # 登记的"零生产调用者但不许删"（**不是豁免表**：有署名、依据、与守它的测试文件）
+        # 登记的"零生产调用者但不许删"（不是豁免表：有署名、依据、与守它的测试文件）
         "registered_no_production_caller": registered_no_production_caller_reading(funcs),
-        # F7 的**口径自明**（主控 2026-10-06）：两档读的不是同一件事，混读会得出相反结论。
+        # F7 的口径自明（主控 2026-10-06）：两档读的不是同一件事，混读会得出相反结论。
         "gauge": {
             "function_level": ("判据用的这一档：公开函数的**裸名/限定名**作为独立标识符"
                                "出现在 tests/ 里 ⇒ 问的是「这个函数有没有被测试碰到」"),
@@ -1012,11 +803,11 @@ def production_caller_reading(funcs: list[FuncInfo], zero: list[FuncInfo],
     }
 
 
-#: 已登记的「**零生产调用者但不许删**」的落点（`draft/48-09 §4.10` + 主控 2026-10-06 裁定）。
+#: 已登记的「零生产调用者但不许删」的落点（`draft/48-09 §4.10` + 主控 2026-10-06 裁定）。
 #:
-#: **这不是豁免表**：它出现在读数里、带署名与依据（静默豁免是本项目最忌的形态）。
+#: 这不是豁免表：它出现在读数里、带署名与依据（静默豁免是本项目最忌的形态）。
 #: 与 `_EXONERATED` 的区别：那张表管"这个函数不需要直接测试"，这张表管
-#: "这个模块被裁定保留、而它在生产面上没有调用者" —— 读者看到的是**一件事**，
+#: "这个模块被裁定保留、而它在生产面上没有调用者" —— 读者看到的是一件事，
 #: 不是一个被抹掉的空格。
 #:
 #: 为什么必须有它（F7 收紧的现成负控素材）：如果收紧后的判据对这些落点一声不响，
@@ -1035,7 +826,7 @@ REGISTERED_NO_PRODUCTION_CALLER: tuple[dict[str, str], ...] = (
 
 
 def registered_no_production_caller_reading(funcs: list[FuncInfo]) -> list[dict[str, Any]]:
-    """把 :data:`REGISTERED_NO_PRODUCTION_CALLER` 变成**带实测数**的读数（不是一句声明）。
+    """把 :data:`REGISTERED_NO_PRODUCTION_CALLER` 变成带实测数的读数（不是一句声明）。
 
     每条附上该模块在本工具口径下的公开函数数与零测试数 —— 这样读者一眼能分清
     "登记项"与"漏掉的缺陷"：登记项有署名、有依据、有守它的测试文件。

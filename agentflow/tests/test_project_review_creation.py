@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""审阅型项目的**正常创建路径**（业主 2026-10-13：「打通正常的创建项目逻辑」）。
+"""审阅型项目的正常创建路径（业主 2026-10-13：「打通正常的创建项目逻辑」）。
 
-背景（为什么要单列这一条）：`create_project` 只铺工作区骨架，**没有**任何受支持的路径把
+背景（为什么要单列这一条）：`create_project` 只铺工作区骨架，没有任何受支持的路径把
 "那篇外部论文"放进项目 —— 于是 T1 的夹具当年是手搓的，而 2026-10-13 我为了让 T1 跑起来
 手抄了一份夹具再 `init --force`（绕过"非空目录里不许凭空建 data/"那道守卫），
 建出来的文件夹没有项目卡、`project list` 与产物归属都认不出它。
@@ -10,7 +10,7 @@
 + 铺只读基线（`source/`）+ 铺可改副本（`out/paper/main.tex`）。
 
 口径三条（判据逐条对着它们）：
-① 只读基线**不许被覆盖**（它是"改没改"的分母）；② 只给 PDF 时**不替它编正文**
+① 只读基线不许被覆盖（它是"改没改"的分母）；② 只给 PDF 时不替它编正文
 （那是 G 的活，如实说"还没写"）；③ 外来目录在 `resolve` 那一层就被拒（不靠 `force` 绕）。
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _paper(tmp: pathlib.Path, *, tex: bool = True) -> pathlib.Path:
 
 
 def test_the_normal_path_builds_a_project_and_seeds_the_paper(tmp_path: pathlib.Path):
-    """正控：建出来的是**认得出来的项目**（标记 + 项目卡），而且那篇论文铺好了。"""
+    """正控：建出来的是认得出来的项目（标记 + 项目卡），而且那篇论文铺好了。"""
     ws = tmp_path / "ws"
     ws.mkdir()
     paper = _paper(tmp_path)
@@ -74,11 +74,11 @@ def test_a_pdf_without_a_tex_seeds_only_the_baseline(tmp_path: pathlib.Path):
 
 def test_a_user_made_folder_with_loose_files_is_adopted_not_refused(tmp_path: pathlib.Path):
     """口径③（业主 2026-10-13 更正）：用户自己在 `projects/` 里建文件夹、丢几个文件进去 ——
-    **这是正常用法**，系统要收编它：原有文件一个字节都不动，且逐条记进项目卡（`user_files`）。
+    这是正常用法，系统要收编它：原有文件一个字节都不动，且逐条记进项目卡（`user_files`）。
 
     改前的口径（`resolve(start="cold")` 一律拒绝非空的外来目录）正是逼出"手抄夹具 +
     `init --force`"的那条路 —— 守卫本身仍留着（`allow_nonempty=False` / `start="cold"`），
-    但**不再是默认**。
+    但不再是默认。
     """
     ws = tmp_path / "ws"
     proj = ws / "my-review"

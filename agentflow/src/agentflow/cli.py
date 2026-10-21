@@ -105,17 +105,14 @@ def cmd_submit(args) -> int:
     """把一个或一批搜索请求登记进 `search_requests`。
 
     两条纪律：
-
-    1. 取号只用 `interactions.next_prefixed_id`（全项目唯一的 `r-NNNN` 判据）。
-       本函数原先自己数 `len(rows) + i + 1` 并靠一个 `while` 撞号重试 —— 那是第二份
-       取号判据，语义与 `next_prefixed_id` 的 `max+1` 不同：表里只有 `r-0001`/`r-0003`
-       时，一个发 `r-0002`、另一个发 `r-0004`（`DEVELOPMENT.md` §3 纪律 2：
-       "ID 分配器只有一处；新增第二份 = 违规"）。旧写法还没有上限：
+    1. 取号只用 `interactions.next_prefixed_id`（全项目唯一的 `r-NNNN` 判据）。本函数原先自己数
+       `len(rows) + i + 1` 并靠 `while` 撞号重试 —— 那是第二份取号判据，语义与 `next_prefixed_id`
+       的 `max+1` 不同：表里只有 `r-0001`/`r-0003` 时，一个发 `r-0002`、另一个发 `r-0004`
+       （`DEVELOPMENT.md` §3 纪律 2："ID 分配器只有一处；新增第二份 = 违规"）。旧写法还没有上限：
        行数过万时会静默产出 `r-10000` 这种越出 4 位空间的号。
-    2. 输入不合法 ⇒ 整批不写 + 退出码 2。`row.validate()` 的 `ValueError` 原先
-       在事务中途炸出，调用方拿到的是一个 traceback；而"你给的 mode/topic 不合法"
-       是调用方错误，应当以一行说明 + 非零退出码结束。事务本身是"异常即不提交"，
-       所以这里 catch 之后可以如实说"整批未写入"。
+    2. 输入不合法 ⇒ 整批不写 + 退出码 2。`row.validate()` 的 `ValueError` 原先在事务中途炸出，
+       调用方拿到的是一个 traceback；而"你给的 mode/topic 不合法"是调用方错误，应当以一行说明 +
+       非零退出码结束。事务本身是"异常即不提交"，所以这里 catch 之后可以如实说"整批未写入"。
     """
     from . import interactions as X
 
@@ -1526,22 +1523,15 @@ KNOWN_STOP_REASONS: frozenset[str] = frozenset(EXIT_CODE_BY_STOP)
 def _run_agent_exit_code(run) -> int:
     """单趟 `run-agent` 的退出码：查 :data:`EXIT_CODE_BY_STOP` 那张表，不做 `if` 链。
 
-    业主 2026-10-19 重排后的六档（`--help` 与 `cmd_run_agent` 的 docstring 必须同口径）：
-
     - `0` 正常完成（给了 final）；
     - `1` 行为异常（只留给"真出事"）；
     - `2` 研究启动失败（连跑都没开始）；
     - `3` 等待用户（人答完 --resume 接着跑）；
     - `4` 系统行为正常且中途停止（用户叫停 —— 强停与优雅停 —— ＋ 预算耗尽）；
     - `5` 系统行为正常且自行停止，但没有 final。
-
-    为什么 4 与 5 必须分成两档：两档都不是异常，但下一步该谁动不同 —— 4 是
-    "有人把它叫停的"（人 / 父 / 钱），加预算或人答完就能 `--resume` 接着跑；5 是
-    "它自己判定这一趟该收工"（原地打转 / `escalated` 交给召唤者），下一步的决策人
-    是召唤者而不是续跑者。折成一档会把这两种人机分工读成同一件事。
-
-    为什么未登记的 `stop_reason` 一律 1：安全侧。新增一档却忘了登记，落进 1 会当场
-    被人看见；落进 0 则会把一次新故障读成"做完了"，而没有任何东西会红。
+    为什么 4 与 5 必须分成两档：都不是异常，但下一步该谁动不同（4 是"有人叫停"：人 / 父 / 钱，加预算
+    或人答完即可 `--resume`；5 是"它自己判定收工"：原地打转 / `escalated` 交给召唤者）。未登记的
+    `stop_reason` 一律 1（安全侧）：落进 1 会当场被看见，落进 0 会把新故障读成"做完了"（`--help` 与 `cmd_run_agent` 的 docstring 必须同口径；业主 2026-10-19 重排）。
     """
     return EXIT_CODE_BY_STOP.get(str(getattr(run, "stop_reason", "") or ""),
                                  EXIT_CODE_WHEN_UNKNOWN)
@@ -1569,23 +1559,15 @@ def _rounds_has_final(auto) -> bool:
 def _autonomy_exit_code(auto) -> int:
     """多轮驱动层（`--rounds N`）的退出码：查同一张表，只多"轮数用完"这一档。
 
-    业主 2026-10-19 裁定（这条是根因，不是特例）：同一件事不许在两处有两套口径。
-    改前这一层自成一条 `if` 链（`rounds`/`stop_file`/`resumed_done ⇒ 0`、`其余 ⇒ 1`），
-    于是同一个 `budget` 在单趟是 4、在多轮是 1，`stop_file` 在单趟是 4、在多轮是 0 ——
-    两种口径都会漂，而且漂了没有任何东西会红。现在：所有 `stop_reason` 一律查
-    :data:`EXIT_CODE_BY_STOP`，未登记的落进 :data:`EXIT_CODE_WHEN_UNKNOWN`。
-
-    表里没有、只有这一层有的两种形态：
-
-    - `rounds`（轮数用完）：最后那一轮产出了 final ⇒ `0`（正常完成）；
-      没有 final ⇒ `5`（系统行为正常且自行停止、但没有 final）。
-      为什么不能一律给 0：轮数用完不等于这一趟做完了 —— 没有 final 就是"没交出结论"，
-      把它读成 0 会让"跑到轮数上限但一句话没说"看起来像成功。
-    - `resumed_done`（续跑发现这一程已经跑完）⇒ `0`（见 `AUTONOMY_ONLY_EXIT_CODE`）。
-
-    判据：`tests/test_run_agent_exit_code_table.py::test_the_two_layers_read_the_same_table`
-    把同一组 `stop_reason` 分别喂给两个入口、逐条断言退出码相等；负控把这一层改回
-    写死 `budget ⇒ 1` ⇒ 当场红。
+    业主 2026-10-19 裁定（这条是根因，不是特例）：同一件事不许在两处有两套口径。改前这一层自成一条
+    `if` 链（`rounds`/`stop_file`/`resumed_done ⇒ 0`、`其余 ⇒ 1`），于是同一个 `budget` 在单趟是 4、
+    在多轮是 1，`stop_file` 在单趟是 4、在多轮是 0 —— 两种口径都会漂，而且漂了没有任何东西会红。
+    现在：所有 `stop_reason` 一律查 :data:`EXIT_CODE_BY_STOP`，未登记的落进 :data:`EXIT_CODE_WHEN_UNKNOWN`。
+    表里没有、只有这一层有的两种形态：`rounds`（轮数用完）最后那一轮产出了 final ⇒ `0`；没有 final
+    ⇒ `5`（正常且自行停止、但没有 final）—— 轮数用完不等于做完了，把它读成 0 会让"跑到上限但一句话
+    没说"看起来像成功。`resumed_done`（续跑发现这一程已跑完）⇒ `0`（见 `AUTONOMY_ONLY_EXIT_CODE`）。
+    判据：`tests/test_run_agent_exit_code_table.py::test_the_two_layers_read_the_same_table` 把同一组
+    `stop_reason` 分别喂给两个入口、逐条断言退出码相等；负控把这一层改回写死 `budget ⇒ 1` ⇒ 当场红。
     """
     reason = str(getattr(auto, "stop_reason", "") or "")
     if reason == "rounds":
@@ -1636,37 +1618,22 @@ def _waiting_notice(run, *, root: Path, sid: str | None) -> str:
 def cmd_run_agent(args) -> int:
     """真跑一次角色循环（顶层角色走它自己的循环；`--drive` 决定被召唤的子角色）。
 
-    退出码是「六档」，逐档由 :data:`EXIT_CODE_BY_STOP` 那张表定（`--help` 与
-    `_run_agent_exit_code` 的 docstring 与这里同口径；业主 2026-10-19 重排）：
-
+    退出码是「六档」，逐档由 :data:`EXIT_CODE_BY_STOP` 那张表定（`--help` 与 `_run_agent_exit_code` 的 docstring 与这里同口径；业主 2026-10-19 重排）：
     - `0` 正常完成（`stop_reason="final"`，给了结论）；
-    - `1` 行为异常（只留给"真出事"：没接线 / 模型没认 key / 没返回 / 连不上 /
-      输出吃光 / 坏 JSON 超限 / 坏参数超限 / 没 notify，以及任何没登记的新
-      `stop_reason` —— 没登记一律归 1，这是安全侧）；
-    - `2` 研究启动失败（连跑都没开始：检查点读不到 / 任务指纹不符 / 上一趟已收工 /
-      会话记录里重建不出那一步）；
-    - `3` 等待用户（`ask_user` 问了人、还停在等回答：既不是完成也不是失败 ——
-      人答完（`agentflow answer`）之后用 `--resume` 接着跑那一步之后）；
-    - `4` 系统行为正常且中途停止（用户叫停 —— 强停与优雅停都一样 —— 与预算耗尽
-      统一这一档；加预算或人答完即可 `--resume`）；
+    - `1` 行为异常（只留给"真出事"：没接线 / 模型没认 key / 没返回 / 连不上 / 输出吃光 / 坏 JSON
+      超限 / 坏参数超限 / 没 notify，以及任何没登记的新 `stop_reason` —— 没登记一律归 1，安全侧）；
+    - `2` 研究启动失败（检查点读不到 / 任务指纹不符 / 上一趟已收工 / 会话记录里重建不出那一步）；
+    - `3` 等待用户（`ask_user` 问了人、还停在等回答；人答完（`agentflow answer`）之后用 `--resume`）；
+    - `4` 系统行为正常且中途停止（用户叫停（强停与优雅停）与预算耗尽统一这一档；加预算或人答完即可 `--resume`）；
     - `5` 系统行为正常且自行停止，但没有 final（原地打转 / `escalated` 交给召唤者）。
-
-    `--rounds N` 那条多轮路径查的是同一张表（`_autonomy_exit_code`），只多两档
-    多轮特有的形态：轮数用完且最后那轮给了 final ⇒ 0、没给 final ⇒ 5；
-    续跑发现这一程已跑完（`resumed_done`）⇒ 0。
-
-    ## 三个"花钱的判断类能力"开关：默认全关，互不连带
-
-    `--semantic-review`（H 的语义判据）/ `--attack-reasoning`（F 的攻坚推理）/
-    `--experiment-reasoning`（E 的写脚本推理，S-10(a) 的 `author_script`）。
-    三条同一条纪律：环境里有 key 也不改变行为。
-
-    **`--attack-reasoning` 不连带打开 E 的缝**（两个开关各自可解释：F 想这一步怎么打、
-    E 把判据写成一份能跑的脚本）。代价必须知道：只开 F 的缝时，F 需要脚本的那一轮
-    写不出来 ⇒ 落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）。
-    改前它是静默的 `no_change`（真机 `projects/mp4` 计划 000003 的 r1/r2 逐字：
-    "子目标 sg1 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ 未推进"）——
-    "有判据没脚本"与"跑了但没结果"在读数上从此分得开。
+    `--rounds N` 那条多轮路径查的是同一张表（`_autonomy_exit_code`），只多两档多轮特有形态：轮数
+    用完且最后那轮给了 final ⇒ 0、没给 final ⇒ 5；续跑发现这一程已跑完（`resumed_done`）⇒ 0。
+    ## 三个"花钱的判断类能力"开关：默认全关，互不连带 —— `--semantic-review`（H 的语义判据）/ `--attack-reasoning`（F 的攻坚推理）/ `--experiment-reasoning`（E 的写脚本推理，S-10(a) 的 `author_script`）。三条同一条纪律：环境里有 key 也不改变行为。
+    **`--attack-reasoning` 不连带打开 E 的缝**（两个开关各自可解释：F 想这一步怎么打、E 把判据写成
+    一份能跑的脚本）。代价必须知道：只开 F 的缝时，F 需要脚本的那一轮写不出来 ⇒ 落
+    `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）。改前它是静默的 `no_change`（真机
+    `projects/mp4` 计划 000003 的 r1/r2 逐字："子目标 sg1 有判据但没有脚本，而 E 没能把它写出来
+    （no_seam）⇒ 未推进"）——"有判据没脚本"与"跑了但没结果"在读数上从此分得开。
     """
     from . import agent_loop as AL
     from . import autonomy as AU
@@ -1980,13 +1947,10 @@ def cmd_inbox(args) -> int:
 def cmd_answer(args) -> int:
     """代用户回答一个问题（写一条 `user_answer`）。
 
-    「没查成」分三种，各自的处置方向不同，所以分开报（折成一句"失败了"
-    会让人不知道该改哪一个）：
-
+    「没查成」分三种，处置方向不同，所以分开报（折成一句"失败了"会让人不知道该改哪一个）：
     - 没有这个号：列出当前待答的号（它可能在别的会话里 ⇒ 用 `--sid` 指名）；
     - 已经有回答：谁、什么时候、答了什么（不许覆盖 —— 回答是 append-only 的审计面）；
     - 写失败：原样报出失败原因。
-
     回答内容三档来源（等价于 DSH 的回答形状）：`--select <label>`（可重复，可 0/n 个）、
     `--custom <正文>`、以及 `--text` 位置参数（等价于 `--custom`，老调用方照旧）。
     退出码：0 = 写成了；2 = 没查成（上面三种，或没给回答内容）。
@@ -2098,16 +2062,14 @@ def cmd_doctor(args) -> int:
 def cmd_web(args) -> int:
     """起用户端网页（本地小服务）。退出码 0 = 正常停止（Ctrl-C），2 = 没查成。
 
-    它只是把 CLI 的参数翻成 `agentflow.webui.run()` 的 argv —— 实现在那一个模块里，
-    这里不重写第二份（`R003` 要防的正是"同一个公开名两处各有一份实现"）。
-    `cli.main` 是命令总入口，`webui.run` 是这一个子命令的实现；两者的名字因此不同。
-
-    两个开关按裁定 T1 加（`--allow-writes` 题 C2、`--no-settings-write` 题 E1）。
-    （注意）它们在本批（W0）还没有接任何判断：写面要等 W3、设置写面要等 W4，
-    所以这里只做透传 —— 给不给都不改变行为（`--help` 里也逐字这么写）。
-    `getattr` 的默认值是为了让直接构造 `Namespace` 的老调用方（
-    `tests/test_webui.py::test_the_cli_web_subcommand_forwards_to_the_module_entry`）
-    照旧能跑：缺这两个字段就当"没给"。
+    它只是把 CLI 的参数翻成 `agentflow.webui.run()` 的 argv —— 实现在那一个模块里，这里不重写第二份
+    （`R003` 防的正是"同一个公开名两处各有一份实现"）。`cli.main` 是命令总入口，`webui.run` 是这一个
+    子命令的实现；两者的名字因此不同。
+    两个开关按裁定 T1 加（`--allow-writes` 题 C2、`--no-settings-write` 题 E1）。它们在本批（W0）还
+    没接任何判断：写面要等 W3、设置写面要等 W4，所以这里只做透传 —— 给不给都不改变行为（`--help`
+    里也逐字这么写）。`getattr` 的默认值是为了让直接构造 `Namespace` 的老调用方（
+    `tests/test_webui.py::test_the_cli_web_subcommand_forwards_to_the_module_entry`）照旧能跑：
+    缺这两个字段就当"没给"。
     """
     from . import webui
 
@@ -2130,15 +2092,13 @@ def cmd_budget(args) -> int:
     """这一趟的总预算：看、设、追加（业主 2026-10-12 的预算轴）。退出码：0 做成了 / 2 没查成。
 
     三种用法（`budget` 模块是唯一实现，这里只做台面）：
-
-    - `agentflow budget` / `--status`：读一格读数 —— 总额度、已花、剩余、追加历史、三态。
-      「已花」不来自寄存器：唯一权威账是 `usage_ledger`（`tokenmeter.spent()`）。
-    - `agentflow budget --set 5` ：设一个总额度（覆盖式；第一次设预算用这个）。
-    - `agentflow budget --add 2 --note "让它跑完"`：追加（运行期生效：
-      下一次花钱之前的那个闸门就会现读到新上限 —— 不需要重启、不需要重跑）。
-
-    为什么要有这一条命令：改前"跑到一半加钱"在结构上没有入口（`Policy` 是 frozen、
-    `LlmSeam.usd_budget` 与 `TokenMeter.budget_usd` 只在构造期注入），唯一的办法是重跑一次。
+    - `agentflow budget` / `--status`：读一格读数 —— 总额度、已花、剩余、追加历史、三态。「已花」不
+      来自寄存器：唯一权威账是 `usage_ledger`（`tokenmeter.spent()`）。
+    - `agentflow budget --set 5`：设一个总额度（覆盖式；第一次设预算用这个）。
+    - `agentflow budget --add 2 --note "让它跑完"`：追加（运行期生效：下一次花钱之前的那个闸门就会
+      现读到新上限 —— 不需要重启、不需要重跑）。
+    为什么要有这一条命令：改前"跑到一半加钱"在结构上没有入口（`Policy` 是 frozen、`LlmSeam.usd_budget`
+    与 `TokenMeter.budget_usd` 只在构造期注入），唯一的办法是重跑一次。
     """
     from . import budget as B
     from .tokenmeter import TokenMeter
@@ -2187,35 +2147,22 @@ def cmd_budget(args) -> int:
 def cmd_stop(args) -> int:
     """停一趟正在跑的 `run-agent`（`draft/37` §128）。退出码：0 做成了 / 2 没查成。
 
-    两种停法（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，
-    还要写个强制停止是直接杀掉"）：
-
-    - 「缺省（优雅）」：写停机开关 `<工作区>/.agentflow-stop`。正在跑的那一趟在「步与步之间」
-      看到它 ⇒ 收工（写运行记录与 `final`）；E 正在跑的实验子进程也在 0.2 s 内被终止
-      （它们每步都看这个开关）。多轮自主跑则在「每轮之间」看到它。
-    - 「`--force`（强制）」：先落开关（`force=true`，留痕"谁在什么时候强杀"），
-      再按进程登记 `<工作区>/runs/*.pid` 把那些进程「连子孙一起」 `taskkill /T /F`
-      —— 直接杀掉。为什么必须"连子孙"：Windows 上杀父进程不带子进程
-      （实测：包装进程被杀之后 python 子进程又跑了 12 分钟）。
-
-    `--status` 只读当前状态（开关在不在、登记里哪些进程还活着、开关文件坏了没有、
-    最近几次已被消费的叫停）。
-
-    `draft/37` §140 之后：开关是一次性信号 —— 停一趟、记一笔（`runs/stop-history.jsonl`）、
-    撤走，所以"停完接着 `--resume`"这条路不再需要人工 `--clear`。
-
+    两种停法（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，还要写个强制停止是直接杀掉"）：
+    - 「缺省（优雅）」：写停机开关 `<工作区>/.agentflow-stop`。正在跑的那一趟在「步与步之间」看到它 ⇒
+      收工（写运行记录与 `final`）；E 正在跑的实验子进程也在 0.2 s 内被终止（每步都看这个开关；
+      多轮自主跑则在「每轮之间」看到它）。
+    - 「`--force`（强制）」：先落开关（`force=true`，留痕"谁在什么时候强杀"），再按进程登记
+      `<工作区>/runs/*.pid` 把那些进程「连子孙一起」 `taskkill /T /F` —— 直接杀掉。为什么必须"连子
+      孙"：Windows 上杀父进程不带子进程（实测：包装进程被杀之后 python 子进程又跑了 12 分钟）。
+    `--status` 只读当前状态（开关在不在、登记里哪些进程还活着、开关文件坏了没有、最近几次叫停）。`draft/37` §140 之后：开关是一次性信号 —— 停一趟、记一笔（`runs/stop-history.jsonl`）、撤走，所以"停完接着 `--resume`"这条路不再需要人工 `--clear`。
     退出码（`draft/39` §3.11 D25，用户裁定，2026-10-05）：
-
     | 码 | 含义 | 驱动器该怎么办 |
     |---|---|---|
     | `0` | 这次调用新写了开关（或 `--clear` 真的撤掉了一把） | 可以清（它是我写的） |
     | `3` | 盘上已有一把别人写的开关（本次只可能追加 `force` 升级） | 不许清，只能追加升级 |
     | `4` | 没有开关（`--clear` 时无可撤；无需清） | 什么都不用做 |
     | `2` | 没做成（强制停时一个进程都没杀掉 —— 受限环境的常见形态） | 读原话，别读成"停住了" |
-
-    为什么"别人的开关一律不许清"要写成一个码：驱动器此前只看"命令成没成功"，
-    于是它会把用户刚落的开关顺手撤掉（"停完就清"），而那正是"用户叫停"这件事
-    在系统里消失的形态。
+    为什么"别人的开关一律不许清"要写成一个码：驱动器此前只看"命令成没成功"，于是它会把用户刚落的开关顺手撤掉（"停完就清"），而那正是"用户叫停"这件事在系统里消失的形态。
     """
     from . import stopctl
 
@@ -2334,40 +2281,23 @@ def cmd_status_report(args) -> int:
 def cmd_closing(args) -> int:
     """跑收工门（`draft/37` §16 P3）。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
-    三态（与 `noai_gate` 同一套口径）：`unknown` 那一档绝不是通过 ——
-    "没查成"（没给项目根、报告还没写）与"查过了有问题"必须给不同的退出码，
-    否则 CI 会把两者读成同一件事。
-
-    ## 收工门之后再接一段内容级验收（`draft/37` §17.3，题 6 选 A = 接线）
-
-    这一层此前在生产面上一次都没被调用过（判据齐、测试齐、真机上没人跑它）；
-    现在它的唯一生产调用者是这里 —— 只读、零模型调用、不落任何台账。
-
-    为什么挑这个出口而不是新开一条面：收工门问的正是"这份交付能不能交"，
-    而 `reviewaccept` 问的是同一份交付的同一个问题，只是判据在内容层；
-    两者的入参（`project_dir` / `report_path` / `session_root` / `sid`）本来就是同一批，
-    而那批入参在这里已经收齐了 ⇒ 不新开面、不新开子命令（子命令数被
-    `test_user_quickstart` / `test_doc_code_consistency` 逐字钉着）。
-
-    两件事刻意分开、读数分栏打：
-
-    - 退出码仍然只由收工门定（`tri_state_exit_code`）。把内容级验收并进退出码，
-      等于偷偷把门的强度改了 —— 那是裁定题，不是接线题；
-    - `unknown` 不折平：六条各自打"通过/不通过/没查成"，辅助读数照原样打出，
-      并逐字说明"它们不构成通过"。
-
-    `--acceptance-sid` 缺省传 `closing.NO_SESSION`（"这次调用没有会话身份"），
-    于是「三态分支」那一格是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，
-    那正是 §58/§63 记过两次的假绿形态。
-
-    ## 退出码由 M 的判据定（业主 2026-10-09）
-
-    「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 这条命令的退出码
-    （0 可交付 / 1 被拦住 / 2 没查成）现在跟着 M 的判据走：运行内 M 交判据那一次
-    已经把它落到 `out/review/m-verdicts.jsonl`，这里缺省读那一份；`--goal-met` /
-    `--goal-not-met` 是"人/CI 代述 M 的说法"的显式入口。没有判据 ⇒ 2
-    （"没人判过"既不是"可以交"也不是"被拦住"）。八格照旧逐格现算并打出来，
-    但它们是读数。
+    三态（与 `noai_gate` 同一套口径）：`unknown` 那一档绝不是通过 —— "没查成"（没给项目根、报告还没写）与"查过了有问题"必须给不同的退出码，否则 CI 会把两者读成同一件事。
+    ## 收工门之后再接一段内容级验收（`draft/37` §17.3，题 6 选 A = 接线）：这一层此前在生产面上一次
+    都没被调用过；现在它的唯一生产调用者是这里（只读、零模型调用、不落任何台账）。为什么挑这个出
+    口：收工门问的正是"这份交付能不能交"，而 `reviewaccept` 问的是同一份交付的同一个问题（只是判据
+    在内容层）；两者的入参（`project_dir` / `report_path` / `session_root` / `sid`）本来就是同一批，
+    而那批入参在这里已经收齐了 ⇒ 不新开面、不新开子命令（子命令数被 `test_user_quickstart` /
+    `test_doc_code_consistency` 逐字钉着）。
+    两件事刻意分开、读数分栏打：退出码仍只由收工门定（`tri_state_exit_code`）—— 把内容级验收并进
+    退出码等于偷偷改门的强度（那是裁定题）；`unknown` 不折平：六条各自打"通过/不通过/没查成"，
+    辅助读数照原样打出，并逐字说明"它们不构成通过"。
+    `--acceptance-sid` 缺省传 `closing.NO_SESSION`（"这次调用没有会话身份"），于是「三态分支」那一格
+    是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，那正是 §58/§63 记过两次的假绿形态。
+    ## 退出码由 M 的判据定（业主 2026-10-09）：「是否收工不要用机械判据，由 M 制定的目标是否达成
+    为准」⇒ 退出码（0 可交付 / 1 被拦住 / 2 没查成）跟着 M 的判据走：运行内 M 交判据那一次已经把它
+    落到 `out/review/m-verdicts.jsonl`，这里缺省读那一份；`--goal-met` / `--goal-not-met` 是"人/CI
+    代述 M 的说法"的显式入口。没有判据 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。八格照旧
+    逐格现算并打出来，但它们是读数。
     """
     from . import closing as CL
     from .store import Store
@@ -2404,19 +2334,14 @@ def _print_review_acceptance(store, *, project: str, report: str,
                              cap_usd: float | None, sid: str) -> None:
     """把内容级验收（`draft/37` §17.3 的六条）打到人能读的地方（只读）。
 
-    `reviewaccept` 读的是同一批入参：`project_dir` / `report_path` / `session_root`
-    （不给就用 `store.root`，与 `check_closing` 同一条口径）/ `sid`。
-
-    为什么六条要逐条打而不是只打一个 `passed`：这一层的三态纪律就写在判据本身里
-    （"没查成"与"查过了没问题"必须分得开，`unknown` 会挡住 `passed`）。
-    只打一个布尔值，等于把这条纪律在出口上又折平了一次。
-
-    为什么辅助读数也要逐条打出来（哪怕它们一个都不参与判定）：§17.3 逐字禁止
-    拿它们当通过 —— 而"禁止"要能被读的人看见才有意义。它们与判据分栏给出，
-    末尾再写一句它们不构成通过。
-
-    这一段只读盘：`check_review` 走 `store.rows` / `sessions.read_session` /
-    `userio` 的读口 / `papercompile.receipt_matches_tex`，一处都不写。
+    `reviewaccept` 读的是同一批入参：`project_dir` / `report_path` / `session_root`（不给就用
+    `store.root`，与 `check_closing` 同一条口径）/ `sid`。
+    为什么六条要逐条打而不是只打一个 `passed`：这一层的三态纪律就写在判据本身里（"没查成"与"查过
+    了没问题"必须分得开，`unknown` 会挡住 `passed`）；只打一个布尔值，等于把这条纪律在出口上又折平。
+    为什么辅助读数也要逐条打（哪怕一个都不参与判定）：§17.3 逐字禁止拿它们当通过 —— 而"禁止"要能
+    被读的人看见才有意义；它们与判据分栏给出，末尾再写一句它们不构成通过。
+    这一段只读盘：`check_review` 走 `store.rows` / `sessions.read_session` / `userio` 的读口 /
+    `papercompile.receipt_matches_tex`，一处都不写。
     """
     from . import reviewaccept as RX
 

@@ -1,28 +1,18 @@
 # -*- coding: utf-8 -*-
-"""花销口径与供应商定价对齐：**三档 token**（命中 / 未命中 / 输出）各有其价。
+"""花销口径与供应商定价对齐：三档 token（命中 / 未命中 / 输出）各有其价。
 
-业主 2026-10-14：「将花销计算标准调整到与模型供应商定价吻合」。
+业主 2026-10-14：「将花销计算标准调整到与模型供应商定价吻合」。治的口径缺口：改前我们只记两个
+token 数（`tokens_in` / `tokens_out`）与两格价，而供应商的账单价目表按三种 token 分开登：命中缓存的
+输入、未命中缓存的输入、输出。于是：上游回的 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`
+被整格丢掉（`modelgw` 只读 `prompt_tokens` / `completion_tokens`）；记账把所有输入都按"未命中价"算
+⇒ 系统性偏高、且偏高得没法核对；"为什么和供应商账单对不上"在读数上无法定位（账上只有一个 `usd`）。
 
-## 这一组治的是哪一个口径缺口
+修法：`ModelReply` / `SeamCall` 各加两格（三态：`None` = 上游没报，0 = 明说零命中）、`Price` 加一档
+`usd_per_m_in_hit`、`usd_for` 按三档分别乘，`modelcost.billing_reading()` 把"按哪几档算的"留成读数。
 
-改前我们只记两个 token 数（`tokens_in` / `tokens_out`）与两格价，而供应商的账单价目表
-按**三种 token** 分开登：命中缓存的输入、未命中缓存的输入、输出。于是：
-
-- 上游回的 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 被**整格丢掉**
-  （`modelgw` 只读 `prompt_tokens` / `completion_tokens`）；
-- 记账把所有输入都按"未命中价"算 ⇒ **系统性偏高**，而且偏高得没法核对；
-- "为什么和供应商账单对不上"这件事在读数上无法定位（账上只有一个 `usd`）。
-
-修法：`ModelReply` / `SeamCall` 各加两格（三态：`None` = 上游没报，0 = 明说零命中）、
-`Price` 加一档 `usd_per_m_in_hit`、`usd_for` 按三档分别乘，
-`modelcost.billing_reading()` 把"按哪几档算的"留成读数。
-
-## 三态纪律在这一组的位置
-
-"命中价没登记"与"上游没报命中数"都会让 `usd` 偏高 —— 二者都**不许静默**：
-`billing_reading()['cache_tri']` 分别报 `price_unknown` / `not_reported`，
-而只有两样都在位时才报 `billed`。
-"""
+三态纪律在这一组的位置："命中价没登记"与"上游没报命中数"都会让 `usd` 偏高 —— 二者都不许静默：
+`billing_reading()['cache_tri']` 分别报 `price_unknown` / `not_reported`，而只有两样都在位时才报
+`billed`。"""
 
 from __future__ import annotations
 
@@ -31,7 +21,7 @@ import json
 from agentflow import modelcost as MC
 from agentflow import modelgw as G
 
-#: 一份**示例**价（不是任何厂商的登记值）—— 判据只关心算术，不关心具体数字。
+#: 一份示例价（不是任何厂商的登记值）—— 判据只关心算术，不关心具体数字。
 EXAMPLE = MC.Price(usd_per_m_in=1.0, usd_per_m_out=2.0, usd_per_m_in_hit=0.25)
 
 
@@ -60,7 +50,7 @@ def test_retries_multiply_the_three_tier_total():
 
 
 def test_a_missing_hit_price_is_conservative_and_says_so():
-    """三态之一：命中价**没登记** ⇒ 全部按未命中价算（偏保守）+ 一条 `price_unknown`。
+    """三态之一：命中价没登记 ⇒ 全部按未命中价算（偏保守）+ 一条 `price_unknown`。
 
     这条负控钉的是"不许把不知道写成一个更便宜的数字"：若实现把未登记的命中价
     当成 0，这条断言会当场红（`usd` 会掉到 0.0004）。
@@ -73,11 +63,11 @@ def test_a_missing_hit_price_is_conservative_and_says_so():
 
 
 def test_upstream_silence_is_a_third_state_not_a_zero():
-    """三态之二：上游**没回**命中数（`None`）⇒ `not_reported`，且与"明说零命中"分得开。
+    """三态之二：上游没回命中数（`None`）⇒ `not_reported`，且与"明说零命中"分得开。
 
-    注意"零命中"与"上游没报"在**金额**上可以相等（两种都按未命中价算）——
-    这条判据断言的是**读数**分得开（`cache_tri` 两档 + 命中数那一格 `0` vs `None`），
-    以及在真的命中时金额**不同**（`800×0.25` 而不是 `800×1.0`）。
+    注意"零命中"与"上游没报"在金额上可以相等（两种都按未命中价算）——
+    这条判据断言的是读数分得开（`cache_tri` 两档 + 命中数那一格 `0` vs `None`），
+    以及在真的命中时金额不同（`800×0.25` 而不是 `800×1.0`）。
     """
     silent = MC.billing_reading(_reply(hit=None, miss=None), EXAMPLE)
     assert silent["cache_tri"] == "not_reported", silent
@@ -112,7 +102,7 @@ def test_the_gateway_reads_the_vendors_cache_columns(monkeypatch):
 
 
 def test_the_price_env_override_covers_all_three_tiers():
-    """配置面：三档价都能被环境变量覆盖；命中那一档**没有默认值**（未登记就是未登记）。"""
+    """配置面：三档价都能被环境变量覆盖；命中那一档没有默认值（未登记就是未登记）。"""
     env = {"AGENTFLOW_MODEL_PRICE_IN_USD_PER_M": "3.0",
            "AGENTFLOW_MODEL_PRICE_OUT_USD_PER_M": "6.0",
            "AGENTFLOW_MODEL_PRICE_IN_HIT_USD_PER_M": "0.5"}
@@ -138,7 +128,7 @@ def _at(hour: int, *, weekday: int = 0) -> "object":
 
 
 def test_the_table_matches_the_vendors_published_numbers():
-    """价目表就是**官方定价页那六个数**（两个模型 × 三档 × 峰谷）。
+    """价目表就是官方定价页那六个数（两个模型 × 三档 × 峰谷）。
 
     口径来源：`https://api-docs.deepseek.com/quick_start/pricing`，抓取于 2026-10-14。
     官方把低谷价定义成峰值价的一半，所以这六个数互相校验：`peak == 2 × off_peak`。
@@ -159,7 +149,7 @@ def test_the_table_matches_the_vendors_published_numbers():
 def test_peak_and_off_peak_are_chosen_by_the_clock():
     """峰谷按官方口径现算：UTC 周一至周五的 01–04 与 06–10 点是峰值，其余（含周末）低谷。
 
-    这一条逐句传 `env={}`：**钟是这一格唯一被测的输入**。不传就会读到进程环境里
+    这一条逐句传 `env={}`：钟是这一格唯一被测的输入。不传就会读到进程环境里
     别人钉的 `AGENTFLOW_MODEL_PEAK` —— 而"别人"可以是另一个测试文件的导入期语句
     （实测 2026-10-14：`test_r5_orchestration_cost` 曾在导入期 setdefault 它，
     于是这条判据在全量跑里红、单跑绿）。判据自己把输入钉死，才谈得上可复现。
@@ -178,11 +168,11 @@ def test_peak_and_off_peak_are_chosen_by_the_clock():
 
 
 def test_the_two_number_price_also_knows_the_vendor_and_the_clock():
-    """`price_of`（两格那个旧口径）**也看厂商与峰谷** —— 认得出就按表算。
+    """`price_of`（两格那个旧口径）也看厂商与峰谷 —— 认得出就按表算。
 
     为什么这条要单独判（2026-10-14）：`price_of` 此前只读环境变量与缺省价，
     而 `runflow`（`agentflow run` 那条路）用它取价 ⇒ 同一个工作区里，
-    多智能体那条按厂商价目表算、单跑那条按缺省价算，**两个数字都自洽**
+    多智能体那条按厂商价目表算、单跑那条按缺省价算，两个数字都自洽
     且没有任何地方会报错。业主 ① 要的正是把这一格收成一处。
     """
     from agentflow.modelgw import ModelSpec
@@ -195,7 +185,7 @@ def test_the_two_number_price_also_knows_the_vendor_and_the_clock():
     # 显式写了厂商就用它（模型名查不到 ⇒ 回落成缺省价，读数里看得出来）
     assert MC.price_of(ModelSpec(vendor="acme", model="x"), at=at_off, env={}) == \
         (MC.DEFAULT_PRICE_IN_USD_PER_M, MC.DEFAULT_PRICE_OUT_USD_PER_M)
-    # 认不出厂商 / 不给 spec ⇒ **行为逐字不变**（既有调用点不受影响）
+    # 认不出厂商 / 不给 spec ⇒ 行为逐字不变（既有调用点不受影响）
     assert MC.price_of(None, env={}) == (MC.DEFAULT_PRICE_IN_USD_PER_M,
                                          MC.DEFAULT_PRICE_OUT_USD_PER_M)
     assert MC.price_of_full(ModelSpec(), at=at_off, env={}).usd_per_m_in_hit == 0.003
@@ -219,7 +209,7 @@ def test_the_peak_clock_accepts_an_iso_string():
 
 
 def test_an_unregistered_vendor_or_model_falls_back_and_says_so():
-    """负控：没登记的组合**不猜** —— 回落到缺省价，并把 `price_source=fallback` 记下来。"""
+    """负控：没登记的组合不猜 —— 回落到缺省价，并把 `price_source=fallback` 记下来。"""
     p, reading = MC.price_for("acme", "whatever", at=_at(12))
     assert reading["price_source"] == "fallback", reading
     assert p.usd_per_m_in == MC.DEFAULT_PRICE_IN_USD_PER_M, p
@@ -241,7 +231,7 @@ def test_the_env_override_still_beats_the_table():
 def test_the_ledger_row_note_carries_which_price_tier_was_used():
     """账本那一行自己说得清"这笔钱按哪一档价算的"（不必去翻会话事件）。
 
-    判据打在**唯一那处入账口**（`LlmSeam._charge_ledger` → `note`）：它抄的是
+    判据打在唯一那处入账口（`LlmSeam._charge_ledger` → `note`）：它抄的是
     `SeamCall.billing` 的四格，所以这条断言同时钉住"billing 真的被算过"。
     """
     from agentflow import llmseam as LS
@@ -271,7 +261,7 @@ def test_the_ledger_row_note_carries_which_price_tier_was_used():
 
 
 def test_the_seam_bills_the_configured_vendor_model():
-    """缝那一层：按**这次用的那个模型**取价（厂商 + 模型 + 峰谷），并留读数。"""
+    """缝那一层：按这次用的那个模型取价（厂商 + 模型 + 峰谷），并留读数。"""
     from agentflow import llmseam as LS
 
     seam = LS.LlmSeam(role="A", session_root=".", gateway=None, sid="t")

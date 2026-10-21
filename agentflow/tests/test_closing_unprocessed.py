@@ -1,36 +1,23 @@
 """判据（修法 4）：`literature.unprocessed > 0` 不许让「请求闭环」那一行记 `pass`。
 
-## 现场读数（三份验收表，逐字）
+现场读数（三份验收表，逐字）：`projects/mp2` R10：`literature.unprocessed` = 32 未清零却记 `pass`；
+`projects/mp3` P8：20 记 `pass`；`projects/t3d` ⑧：12 记「成立」。三份都把那个读数如实写出来了 ——
+红的原因不是"没写"，而是没有任何一行判它：`unfinished_request_rows` 数的是检索/重抽取两条队列，
+而"登记进 `literature` 但没被 B 消化"是第三条队列，收工门此前一行都没读。
 
-- `projects/mp2` R10：`literature.unprocessed` = **32 未清零** 却记 **pass**；
-- `projects/mp3` P8：`literature.unprocessed` = 20 记 **pass**；
-- `projects/t3d` ⑧：`literature.unprocessed` = 12 记 **成立**。
+修法（业主裁定：`unprocessed > 0` ⇒ 该项记 `unknown`，不是 `pass`）：① 新增受控档
+`literature_unprocessed_rows`（`closing._leg_reading`，缺省上限 0），让第三条队列有一条可复算的读数；
+② 行循环里给「请求闭环」那一行加降级判据（`kind == "unfinished_request_rows"`）：`unprocessed == 0`
+⇒ 照常判；`> 0` 且那一行写了 `unprocessed_reason` ⇒ 这一行 `state="unknown"`、整格 `unknown`；
+`> 0` 而没写理由 ⇒ `unmet`（blocker），不许静默带着队列收工；`literature` 读不到 ⇒ `unknown`
+（读不到 ≠ 清零）。
 
-三份都把那个读数**如实写出来了** —— 红的原因不是"没写"，而是**没有任何一行判它**：
-`unfinished_request_rows` 数的是检索/重抽取两条队列，而"登记进 `literature` 但没被
-B 消化"是**第三条队列**，收工门此前一行都没读。
-
-## 修法（业主裁定：`unprocessed > 0` ⇒ 该项记 `unknown`，不是 `pass`）
-
-1. 新增受控档 `literature_unprocessed_rows`（`closing._leg_reading`，缺省上限 0）——
-   让第三条队列有一条**可复算**的读数；
-2. 行循环里给「请求闭环」那一行加降级判据（`kind == "unfinished_request_rows"`）：
-   - `unprocessed == 0` ⇒ 照常判；
-   - `> 0` 且那一行写了 `unprocessed_reason` ⇒ 这一行 `state="unknown"`、整格 `unknown`；
-   - `> 0` 而没写理由 ⇒ `unmet`（blocker）—— 不许静默带着队列收工；
-   - `literature` 读不到 ⇒ `unknown`（读不到 ≠ 清零）。
-
-## 负控（每条都钉在"修好之前会绿"的那一格）
-
-- `test_a_clear_queue_still_passes`：正控（反真空）—— 队列清零时这一行照常 `pass`，
-  整格 `pass`（证明新判据不是"恒 unknown"）；
-- `test_a_dirty_queue_without_a_reason_is_a_blocker`：32 条未消化且没写理由 ⇒ 整格
-  `fail` + 点名 `acceptance_unprocessed_without_reason`（修法前这里是 `pass`）；
-- `test_a_dirty_queue_with_a_reason_downgrades_to_unknown`：写了理由 ⇒ 行 `unknown`、
-  整格 `unknown`（不是 `pass`），读数`got` 仍在；
-- `test_the_third_queue_has_its_own_leg`：`literature_unprocessed_rows` 自己算得出
-  32，且它的上限是 0（写进验收表时它自己会红）。
-"""
+负控（每条都钉在"修好之前会绿"的那一格）：`test_a_clear_queue_still_passes`：正控（反真空）——
+队列清零时这一行照常 `pass`、整格 `pass`（证明新判据不是"恒 unknown"）；
+`test_a_dirty_queue_without_a_reason_is_a_blocker`：32 条未消化且没写理由 ⇒ 整格 `fail` + 点名
+`acceptance_unprocessed_without_reason`（修法前这里是 `pass`）；
+`test_a_dirty_queue_with_a_reason_downgrades_to_unknown`：写了理由 ⇒ 行 `unknown`、整格 `unknown`
+（不是 `pass`），读数 `got` 仍在；`test_the_third_queue_has_its_own_leg`：`literature_unprocessed_rows` 自己算得出 32，且它的上限是 0（写进验收表时它自己会红）。"""
 from __future__ import annotations
 
 import json

@@ -6,24 +6,17 @@
 用户 2026-10-05 的口径：五元位快照由脚本查。理由有两层：
 
 1. 手稿是"跨角色的交接记录"，读它的场合往往不是模型在跑循环（人验收、另一个角色冷启动、
-   收工后复核）—— 那些场合没有模型上下文可用，只有盘；
+收工后复核）—— 那些场合没有模型上下文可用，只有盘；
 2. 让模型去"读一遍台账再自己算等级"，等于把派生等级这件机械事交给一个会读错的读者；
-   等级在本仓只有一个来源（`evidencebits.derive_grade`），脚本调它。
+等级在本仓只有一个来源（`evidencebits.derive_grade`），脚本调它。
 
 ## 用法
 
-```text
-python scripts/manuscripts_query.py <工作区>                 # 最近 20 份
-python scripts/manuscripts_query.py <工作区> --id 0007        # 读一份（正文全文）
-python scripts/manuscripts_query.py <工作区> --to F --since 2026-10-05
-python scripts/manuscripts_query.py <工作区> --refs 0004 --json
-python scripts/manuscripts_query.py <工作区> --bits           # 附五元位快照
-```
+```text python scripts/manuscripts_query.py <工作区>                 # 最近 20 份python scripts/manuscripts_query.py <工作区> --id 0007        # 读一份（正文全文）python scripts/manuscripts_query.py <工作区> --to F --since 2026-10-05 python scripts/manuscripts_query.py <工作区> --refs 0004 --json python scripts/manuscripts_query.py <工作区> --bits           # 附五元位快照```
 
-`--bits` 做的事：把每份手稿 `refs` 里的 `stmt:<id>` / `exp:<id>` 解析出来，去工作区
-`data/statements.json` / `data/experiments.json` 里取出对应行，用 `evidencebits` 现算
-五位与派生等级。读了但没有那两处引用的手稿，快照写"（没有可算的命题引用）"——
-"没有引用"与"引用算不出来"必须分得开（三态纪律）。
+`--bits` 做的事：把每份手稿 `refs` 里的 `stmt:<id>` / `exp:<id>` 解析出来，去工作区`data/statements.json` /
+`data/experiments.json` 里取出对应行，用 `evidencebits` 现算五位与派生等级。读了但没有那两处引用的手稿，快照写"（没有可算的命题引用）
+"——"没有引用"与"引用算不出来"必须分得开（三态纪律）。
 """
 from __future__ import annotations
 

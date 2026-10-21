@@ -155,20 +155,13 @@ def test_contract_version_is_single_sourced():
 def test_the_two_versions_come_from_two_different_sources():
     """两个版本号必须来自两个不同的来源 —— 而不是"数值恰好不相等"。
 
-    原来这条写的是
-    `assert agentflow.CONTRACT_VERSION != agentflow.__schema_version__ or True`
-    —— `or True` 让整条断言恒真（`G-33`：用例名说"必须分开"，而它在两者相等时
-    照样绿）。不能只删 `or True`：实测今天两者都等于 1，删掉之后断言立刻红，
-    而那并不是缺陷 —— docstring 自己写着"允许偶合，但不要求相等"，那句话是对的。
+    原来这条写的是 `assert agentflow.CONTRACT_VERSION != agentflow.__schema_version__ or True` —— `or True`
+    让整条断言恒真（`G-33`：用例名说"必须分开"，而它在两者相等时照样绿）。不能只删 `or True`：实测
+    今天两者都等于 1，删掉之后断言立刻红，而那并不是缺陷 —— docstring 自己写着"允许偶合，但不要求相等"。
 
-    真正要钉的是"来源单一"（这也是 `G-33` 的正解）：
-
-    - `CONTRACT_VERSION` 的权威定义在 `interactions`，`__init__` 只能 import 它
-      （`is` 判据：同一个对象，不是数值相等）；
-    - `__schema_version__` 的权威定义在 `__init__`，且必须等于 `schema.SCHEMA_VERSION`。
-
-    于是"契约变了"与"数据格式变了"才真的能各自表达 —— 这正是用例名想说的那件事。
-    """
+    真正要钉的是"来源单一"（`G-33` 的正解）：`CONTRACT_VERSION` 的权威定义在 `interactions`，`__init__`
+    只能 import 它（`is` 判据：同一个对象，不是数值相等）；`__schema_version__` 的权威定义在 `__init__`，
+    且必须等于 `schema.SCHEMA_VERSION`。于是"契约变了"与"数据格式变了"才真的能各自表达。"""
     import ast
     from pathlib import Path
 
@@ -323,23 +316,16 @@ def _eval(store, eid="0000", **kw):
 def test_eval_requires_every_scope_field():
     """FC-24 判据②：缺任一必填口径字段 ⇒ 拒。
 
-    口径不是补充说明，口径就是那个数字的一部分 —— 同一个基准的同一个数字
-    在不同口径下能差 13–30 个百分点。
+    口径不是补充说明，口径就是那个数字的一部分 —— 同一个基准的同一个数字在不同口径下能差 13–30 个
+    百分点。
 
-    ## 这条判据在 2026-09-27 被加强（不是放宽）
-
-    改前它断言消息里含「口径」二字。而实现给的是字段级消息：
-    除了六个走通用分支的字段（消息形如「评测结果缺少必填口径字段 ['benchmark']」），
-    `k` 走的是专门分支（「k 不能为空（pass@k 的 k 必填，见 EVAL_REQUIRED_FIELDS）」）——
-    那句话比通用那句更具体（它说明了为什么 `k` 必填），但它没有「口径」二字。
-
-    于是判据改成：消息必须点名缺的是哪一个字段（`re.escape(missing)`）。
-    这比"句子里有『口径』二字"更强：改前只要句子含那两个字就过，
-    改后必须写对字段名——把消息与被测字段绑在一起。
-    实测（`temp/_probe_fc05_messages.py`，读数 `temp/fc05-messages.txt`）：
-    `EVAL_REQUIRED_FIELDS` 七个字段的消息全部点名了自己（7/7），
-    所以这条加强同时满足旧的六个与 `k` 那一个。
-    """
+    这条判据在 2026-09-27 被加强（不是放宽）：改前它断言消息里含「口径」二字，而实现给的是字段级消息：
+    除了六个走通用分支的字段（消息形如「评测结果缺少必填口径字段 ['benchmark']」），`k` 走专门分支
+    （「k 不能为空（pass@k 的 k 必填，见 EVAL_REQUIRED_FIELDS）」）—— 那句比通用句更具体，但它没有
+    「口径」二字。于是判据改成：消息必须点名缺的是哪一个字段（`re.escape(missing)`）。这比"句子里有
+    『口径』二字"更强：改前只要句子含那两个字就过，改后必须写对字段名 —— 把消息与被测字段绑在一起。
+    实测（`temp/_probe_fc05_messages.py`，读数 `temp/fc05-messages.txt`）：`EVAL_REQUIRED_FIELDS` 七个
+    字段的消息全部点名了自己（7/7），所以这条加强同时满足旧的六个与 `k` 那一个。"""
     for missing in S.EVAL_REQUIRED_FIELDS:
         kw = dict(eval_id="0000", claim_key="K", benchmark="b", benchmark_version="v",
                   split="test", k=1, value=0.5, decontamination="none", date="d",

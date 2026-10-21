@@ -9,36 +9,16 @@ from ._support import Any, IX, S, _UNSPECIFIED
 class _Poll:
     def poll(self, *, relations: Any = _UNSPECIFIED) -> dict:
         """检查等待中的请求，把就绪的问题拉回 ``researching``（§4.2 + §3.2）。
-
-        为什么这一步不能靠猜：D 每轮开头能看到"库里多了几篇文献"，
-        但无法判断这些文献是不是我提的请求带回来的 —— 只有在
-        ``waiting_request_ids`` 里记过请求号的 D 才知道该等谁。
-        本方法只依据三样落盘数据判断（请求 ``done``/``outcome``、
-        文献 ``processed``），因此不需要 LLM，也不会随措辞变化而漂移。
-
+        为什么这一步不能靠猜：D 每轮开头能看到"库里多了几篇文献"，但无法判断这些文献是不是我提的请求带回来的 —— 只有在``waiting_request_ids`` 里记过请求号的
+        D 才知道该等谁。本方法只依据三样落盘数据判断（请求 ``done``/``outcome``、文献 ``processed``），因此不需要 LLM，也不会随措辞变化而漂移。
         ## §3.2：再加一层"新证据真的回答了那个问题吗"
-
-        旧判据（请求 done 且其文献都 processed）只说明"消化完了"，
-        不说明"这些新证据真的回答了那个问题"。后果是：一个查不到东西的问题
-        会反复触发同一件事的检索，把 A 的产能烧在同一个空洞上。
-        所以这里把该请求带来的新落库关系交给
-        ``interactions.evidence_relevance``：
-
-        - ``relevant`` ⇒ 就绪，按原逻辑拉回 researching 并并入新关系/文献；
-        - ``irrelevant`` ⇒ 不推进，notes 记 ``evidence_arrived_but_irrelevant``，
-          并降低该问题优先级（high→medium→low，low 不再降）；
-        - ``checked is False`` ⇒ 不推进，且只记"没检查"
-          （``evidence_relevance_unchecked``）—— 绝不写成一个看起来像结论的
-          "不相关"。
-
-        ``relations=None`` 显式表示"调用方无法提供关系快照"（三态），
-        与"提供了空列表 = 查了、这批文献没带来新关系"必须能区分。
-
+        所以这里把该请求带来的新落库关系交给``interactions.evidence_relevance``：
+        - ``relevant`` ⇒ 就绪，按原逻辑拉回 researching 并并入新关系/文献；- ``irrelevant`` ⇒ 不推进，notes 记 
+        ``evidence_arrived_but_irrelevant``，并降低该问题优先级（high→medium→low，low 不再降）；- 
+        ``checked is False`` ⇒ 不推进，且只记"没检查"（``evidence_relevance_unchecked``）—— 绝不写成一个看起来像结论的"不相关"。
+        ``relations=None`` 显式表示"调用方无法提供关系快照"（三态），与"提供了空列表 = 查了、这批文献没带来新关系"必须能区分。
         ## 为什么矛盾问题不降优先级
-
-        ``kind="contradiction"`` 的优先级来自"知识内部可能互相冲突"这一事实，
-        它不会因为一次检索落空而变得不重要；I2 的收敛靠轮数上限 + 全局配额
-        而不是靠降优先级。所以那一类只记笔记、不改 priority。
+        ``kind="contradiction"`` 的优先级来自"知识内部可能互相冲突"这一事实，它不会因为一次检索落空而变得不重要；I2 的收敛靠轮数上限 + 全局配额而不是靠降优先级。
         """
         data = self._call("research.poll_waiting")
         if data is None:

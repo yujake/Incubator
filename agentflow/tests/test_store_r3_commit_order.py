@@ -1,37 +1,21 @@
 """`F-1` / `F-2` / `F-3` 的回归判据：提交顺序、发号守卫、原子写。
 
-三处都在 `src/agentflow/store.py`（FC-27 禁改区），2026-09-26 修，改前备份在
-`temp/zone-backup-r3-src_agentflow_store.py`。
-
-## 三条各自的"改前必红"在哪
+三处都在 `src/agentflow/store.py`（FC-27 禁改区），2026-09-26 修，改前备份在`temp/zone-backup-r3-src_agentflow_store.py`。三条各自的"改前必红"在哪：
 
 | 条目 | 负控（改前必红） |
 |---|---|
-| `F-1` 提交顺序 | `test_a_half_written_batch_is_reported_not_silently_dropped`：造一条"快照里有、事件里没有提交标记"的行 ⇒ rebuild 必须报出不完整批次（改前 `batches_incomplete` 这个键根本不存在，且它会安静地丢掉那一行） |
+| `F-1` 提交顺序 | `test_a_half_written_batch_is_reported_not_silently_dropped`：造一条"快照里有、事件里没有提交标记"的行 ⇒ rebuild 必须报出不完整批次（改前
+`batches_incomplete` 这个键根本不存在，且它会安静地丢掉那一行） |
 | `F-2` 发号守卫 | `test_alloc_id_without_the_target_table_declared_raises`（在同目录的 `test_store_alloc_guard.py` 里，与本文件的 `test_alloc_id_...` 成对） |
-| `F-3` 原子写 | `test_concurrent_atomic_writers_do_not_collide`：两个真进程各写 30 次同一个文件 ⇒ 零 `OSError`、最终文件是合法 JSON、不留 `.tmp`（改前固定临时名会抛 `PermissionError [WinError 32]`） |
+| `F-3` 原子写 | `test_concurrent_atomic_writers_do_not_collide`：两个真进程各写 30 次同一个文件 ⇒ 零 `OSError`、最终文件是合法 JSON、不留 `.tmp`（改前固定临时名会抛
+`PermissionError [WinError 32]`） |
 
-## 一条容易写错的判据（我第一版就写错了）
-
-"崩在事件追加"这个注入，在新顺序下不是缺陷：事件先落、快照后落，
-事件追加失败 ⇒ 快照还是上一版、日志里什么都没有 ⇒ 磁盘状态是一致的，
-这一次提交就是"没发生"。
-真正的缺陷形态是"快照超前于日志"，而那正是旧顺序（先快照后事件）的产物。
-所以判据必须打在"快照里有、日志里没有提交标记"这个状态上，
-而不是打在"某一次注入有没有丢行"上 —— 后者会把一次正确的"提交没发生"读成缺陷。
-
-## `R3-3`：上面那句话在 2026-09-26 之前只是"一半"被判据覆盖
-
-"快照超前于日志"有两个形态：
-
-1. 日志里有一批没有提交标记的事件 —— 由 `batches_incomplete` 覆盖
-   （`test_a_half_written_batch_is_reported_not_silently_dropped`）；
-2. 快照里有一行日志里根本没有过（旧顺序崩在两者之间，或有人手工往
-   `<表>.json` 加行）—— 这一档当时没有任何判据：`rebuild` 只看 `op=commit`
-   标记，那一行被静默丢掉而计数为 0。
-   现在由 `snapshot_rows_not_in_log` / `snapshot_ahead` 覆盖
-   （`test_rebuild_reports_rows_that_are_in_the_snapshot_but_not_in_the_log`，
-   以及"半批不算偏离"的对照 `test_a_half_batch_is_not_counted_as_a_snapshot_deviation`）。
+一条容易写错的判据（我第一版就写错了）："崩在事件追加"这个注入，在新顺序下不是缺陷：事件先落、快照后落，事件追加失败 ⇒ 快照还是上一版、日志里什么都没有 ⇒ 磁盘状态是一致的，这一次提交就是"没发生"。真正的缺陷形态是"快照超前于日志"，而那正是旧顺序（先快照后事件）的产物。
+所以判据必须打在"快照里有、日志里没有提交标记"这个状态上，而不是打在"某一次注入有没有丢行"上 —— 后者会把一次正确的"提交没发生"读成缺陷。`R3-3`：上面那句话在 2026-09-26 之前只是"一半"被判据覆盖："快照超前于日志"有两个形态：
+日志里有一批没有提交标记的事件 —— 由 `batches_incomplete` 覆盖（`test_a_half_written_batch_is_reported_not_silently_dropped`）；2. 快照里有一行日志里根本没有过（旧顺序崩在两者之间，
+或有人手工往`<表>.json` 加行）—— 这一档当时没有任何判据：`rebuild` 只看 `op=commit`标记，那一行被静默丢掉而计数为 0。现在由 `snapshot_rows_not_in_log` /
+`snapshot_ahead` 覆盖（`test_rebuild_reports_rows_that_are_in_the_snapshot_but_not_in_the_log`，以及"半批不算偏离"的对照
+`test_a_half_batch_is_not_counted_as_a_snapshot_deviation`）。
 """
 from __future__ import annotations
 
@@ -222,19 +206,14 @@ def test_alloc_id_skips_the_occupied_id_when_the_table_is_declared(store: Store)
 
 
 def test_the_temp_name_is_unique_per_writer(store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
-    """行为判据（`R3-7` 的修法）：真的观察 `os.replace` 的源路径，而不是读源码找子串。
+    """    行为判据（`R3-7` 的修法）：真的观察 `os.replace` 的源路径，而不是读源码找子串。
 
-    这是 `WinError 32` 的直接来源：旧版固定名 `<file>.tmp`，两个写者互抢。
-    改前的判据是"读 `store.py` 的文本，断言里面含 `os.getpid()` 与
-    `threading.get_ident()`"——它连一行注释都能满足（重审实测：
-    把临时名换回固定名、只在注释里写上这两个子串，这条 passes，
-    而端到端那条 `test_concurrent_atomic_writers_do_not_collide` failed）。
-    一个能被注释满足的判据是判据真空：它不制造覆盖缺口（同文件有端到端判据），
+    这是 `WinError 32` 的直接来源：旧版固定名 `<file>.tmp`，两个写者互抢。改前的判据是"读 `store.py` 的文本，断言里面含
+    `os.getpid()` 与`threading.get_ident()`"——它连一行注释都能满足（重审实测：把临时名换回固定名、只在注释里写上这两个子串，这条 passes，而端到端那条
+    `test_concurrent_atomic_writers_do_not_collide` failed）。一个能被注释满足的判据是判据真空：它不制造覆盖缺口（同文件有端到端判据），
     但会让人以为"临时名唯一"这件事被测住了。
 
-    现在改成行为判据：monkeypatch `os.replace`，从两个不同的写者
-    （主线程 + 一个真线程，线程 id 不同）各写一次，断言"实际用过的临时名不同"
-    且都带 pid。固定名会让两次相同 ⇒ 这条红。
+    现在改成行为判据：monkeypatch `os.replace`，从两个不同的写者（主线程 + 一个真线程，线程 id 不同）各写一次，断言"实际用过的临时名不同"且都带 pid。固定名会让两次相同 ⇒ 这条红。
     """
     import threading
 

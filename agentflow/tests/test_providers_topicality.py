@@ -1,43 +1,20 @@
 """`X-NEW-1`（题 1 的 D 选项）的判据：检索相关性的 fail-closed 止血。
-
 ## 这条缺陷在说什么（`draft/28` §100.2 / §102.3 的第一手读数）
-
 中文题面走产品默认路径（`evidence.retrieve(topic, search_fn=None)`）时：
-
-* `providers._ascii_keywords` 只抓英文词 ⇒ 纯中文题面抽出 0 个关键词；
-* 于是 `keyword_hit` 返回 `None`（"无法判定"）⇒ `_precise_keep` 逐条弃权
-  （`filter_note = no_ascii_keywords;not_filtered`、`keep` 全 `True`）；
-* 而中文原串照样被打给英文库（`provenance.query_by_source` 记的就是它）；
-* 结果：23 条来源里 7 条与题面一个二字片段都不重合，报告里却写着"检索 ok"。
-
-D 选项只做止血，不动判据口径：`keyword_hit` 的"宁可不过滤也不能误杀"
-是刻意取舍（docstring 逐字），所以这里既不许把"弃权"改判成 `reject`，
-也不许引入阈值过滤（那是被否掉的 C 选项）。改动只有两条：
-
-1. 抽不出任何英文关键词 ⇒这一问不发给以英文文献为主的上游库，
-   落第三态 `query_not_applicable_cjk`（抛 `ProviderError` ⇒ 调用方
-   `evidence` 把它记进逐源 `sources_detail[].reason`，不再算"检索成功"）；
-2. 改前算完就丢的逐条判决（连同 `filter_note`）落成台账
-   （`TopicalityReport`：三档分列的数 + 每条一句话），"弃权"从此可见。
-
+* `providers._ascii_keywords` 只抓英文词 ⇒ 纯中文题面抽出 0 个关键词；* 于是 `keyword_hit` 返回 `None`（"无法判定"）⇒
+`_precise_keep` 逐条弃权（`filter_note = no_ascii_keywords;not_filtered`、`keep` 全 `True`）；*
+而中文原串照样被打给英文库（`provenance.query_by_source` 记的就是它）；* 结果：23 条来源里 7 条与题面一个二字片段都不重合，报告里却写着"检索 ok"。
+D 选项只做止血，不动判据口径：`keyword_hit` 的"宁可不过滤也不能误杀"是刻意取舍（docstring 逐字），所以这里既不许把"弃权"改判成 `reject`，也不许引入阈值过滤（那是被否掉的 C 选项）。改动只有两条：
+1. 抽不出任何英文关键词 ⇒这一问不发给以英文文献为主的上游库，落第三态 `query_not_applicable_cjk`（抛 `ProviderError` ⇒ 调用方`evidence` 把它记进逐源
+`sources_detail[].reason`，不再算"检索成功"）；2. 改前算完就丢的逐条判决（连同 `filter_note`）落成台账（`TopicalityReport`：三档分列的数 + 每条一句话），"弃权"从此可见。
 ## 这一份用例的读法
-
-名字前缀就是读数分类：`test_positive_*` = 正控（行为照旧的那些），
-`test_negative_control_*` = 负控（证明判据有牙、注入真的生效）。
-
-全部离线：`http_get_json` 一律换成替身，零 API 花费，不打 OpenAlex/Crossref。
-`_provider(stub)` 会把模块级 `http_get_json` 真的绑成它收到的那个替身
-（`R12-R3-2`），所以这条保证由每条用例自己的夹具兑现，不靠 fixture 顺带做的
-monkeypatch —— 后者会让"零上游调用"的断言守的其实是另一个名字。
-
+名字前缀就是读数分类：`test_positive_*` = 正控（行为照旧的那些），`test_negative_control_*` = 负控（证明判据有牙、注入真的生效）。
+全部离线：`http_get_json` 一律换成替身，零 API 花费，不打 OpenAlex/Crossref。`_provider(stub)` 会把模块级 `http_get_json` 真的绑成它收到的那个替身（`R12-R3-2`），
+所以这条保证由每条用例自己的夹具兑现，不靠 fixture 顺带做的monkeypatch —— 后者会让"零上游调用"的断言守的其实是另一个名字。
 ## `Y-1` 的追加判据（本文件的第二组正控）
-
-`MultiProvider.last_stats[*].status` 与 `PROVIDER_STAT_STATUSES` 改前仍是
-`('not_run','ok','failed')`，于是同一件"这一问根本没发出去"在 `evidence` 侧是
-第三态名（`query_not_applicable_cjk` / `query_empty`，见 `R12-R3-3`），
-在 providers 统计面上却是 `failed`（"上游坏了"）。下面
-"正控：统计面与 `evidence` 侧的第三态对齐"那一节把两个出口钉在同一个取值上，
-并同时钉住"另外两档没有跟着被吞掉"。
+`MultiProvider.last_stats[*].status` 与 `PROVIDER_STAT_STATUSES` 改前仍是`('not_run','ok','failed')`，于是同一件"这一问根本没发出去"在
+`evidence` 侧是第三态名（`query_not_applicable_cjk` / `query_empty`，见 `R12-R3-3`），在 providers 统计面上却是 `failed`（"上游坏了"）。下面"正控：统计面与
+`evidence` 侧的第三态对齐"那一节把两个出口钉在同一个取值上，并同时钉住"另外两档没有跟着被吞掉"。
 """
 
 from __future__ import annotations

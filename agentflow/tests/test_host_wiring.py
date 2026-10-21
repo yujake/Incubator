@@ -365,11 +365,11 @@ def test_semantic_review_seam_goes_only_to_h(tmp_path: Path):
     for role, action, by, parent in (("B", "run_once", "E", e1.task_id),
                                      ("E", "list_experiments", "M", None)):
         res = c.summon(role, action, {}, by=by, parent_task_id=parent, instance="probe-1")
-        # 这一组的工作区是**空的**（队列里没有待消化的文献）⇒ B 那一趟的终局是
+        # 这一组的工作区是空的（队列里没有待消化的文献）⇒ B 那一趟的终局是
         # `no_result`（"跑完了、确实没有产出"，与 A 的"检索无命中"同一档），
         # 不是 `ok`：2026-10-15 起 `B.run_once`/`B.run` 自己声明终局
         # （`agent_b._support.task_outcome`），不允许"什么都没产出"被记成成功。
-        # E 那一件是纯读，照旧 `ok`。两格都要**精确**断言：这一条判的是接线，
+        # E 那一件是纯读，照旧 `ok`。两格都要精确断言：这一条判的是接线，
         # 但"接线通了"不等于"这一趟有产出"，把它放宽成 `in ("ok","no_result")`
         # 会让下面那条 `failed` 的真缺陷从缝里漏过去。
         want = "no_result" if role == "B" else "ok"
@@ -431,28 +431,16 @@ def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     """接了线的工具层：M 的面 = 编排面 11 件 + 文件面白名单 6 件，一件领域工具都没有。
 
-    ## 这条判据改过两次，每次都是真机读数逼出来的
+    判据改过两次，都是真机读数逼出来的。2026-10-02（`draft/37` §38）：给 M 只读四件 + `fs.write` ——
+    §37 那趟 23 步里 15 步在猜"盘上有没有论文"，最后交不出报告：M 缺的不是判断力，是眼睛与笔（它
+    当时一件 `fs.*` 都没有）。2026-10-03（`draft/37` §57）：再给一件 `fs.edit` —— §56 第八趟，主控
+    试图用 `fs.write` 重写整份 26 KB 的 `main.tex`，回复被 8192 token 截断在字符串中间（步 27/30 的
+    `text_len` 是 26110 / 26134），连续三次坏 JSON ⇒ `bad_json_limit`；`fs.edit`（锚定替换、一次一处、
+    不命中就拒）输出量与改动量成正比，比 `fs.write` 更安全（"不可逆"那条理由对它不适用）。
 
- 2026-10-02（`draft/37` §38，用户裁定）：给 M 只读四件 + `fs.write`。
-    §37 那一趟 23 步里 15 步在猜"盘上到底有没有论文"，最后交不出报告 ——
-    M 缺的不是判断力，是眼睛与笔（它当时一件 `fs.*` 都没有）。
-
- 2026-10-03（`draft/37` §57，用户追加）：再给一件 `fs.edit`。
-    §56 第八趟真机：主控知道该改哪三处、也找准了逐字文本，然后试图用 `fs.write`
-    把整份 26 KB 的 `main.tex` 重写一遍 —— 回复被输出额度（8192 token）截断在字符串中间
-    （步 27/30 的 `text_len` 是 26110 / 26134），连续三次坏 JSON ⇒ `bad_json_limit`。
-    也就是说：`fs.write` 单独不足以改大文件，而"整文件覆盖"本来也是更危险的那条路。
-    `fs.edit`（锚定替换，一次一处、不命中就拒）输出量与改动量成正比，
-    因此比 `fs.write` 更安全 —— "不可逆"那条理由对它不适用。
-
-    红线仍然在，只是又换了口径：从"M 不碰盘"→「M 有眼睛和笔」→
-    「M 有眼睛、有笔、能改该改的那一处，但不碰知识表、不做检索、不删东西、不挪东西」。
-    所以这条判据现在守三件事：
-
-    1. 白名单六件必须在（`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` / `fs.edit`）；
-    2. `fs.delete` / `fs.move` 两件都不许有（一个真删、一个换位置，都是不可逆的）；
-    3. `table.*` / `prov.*` / `search.*` 一件都不许有（知识表与检索仍然是 M 的禁区）。
-    """
+    红线口径：从"M 不碰盘"→「M 有眼睛和笔」→「有眼睛、有笔、能改该改的那一处，但不碰知识表、不做
+    检索、不删东西、不挪东西」。守三件事：1. 白名单六件必须在（`fs.list` / `fs.read` / `fs.search` /
+    `fs.stat` / `fs.write` / `fs.edit`）；2. `fs.delete` / `fs.move` 不许有（真删 / 换位置，不可逆）；3. `table.*` / `prov.*` / `search.*` 一件都不许有（知识表与检索仍是 M 的禁区）。"""
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
@@ -563,17 +551,14 @@ def test_the_sources_a_returns_can_be_registered_as_a_closed_dependency(tmp_path
 def test_a_summoned_literature_search_really_lands_in_the_library(tmp_path: Path):
     """`A 通关`的集成判据：接上检索后端之后，一次带主题的召唤真的把文献查回库里。
 
-    为什么单钉这一条：`wired_llm_conductor(providers=...)` 这个参数一直存在，
-    但`run-agent` 从来没传过它 ⇒ `_Builder.status()` 把 A 判成 `no_provider`、
-    A 不进登记表 ⇒ 任何角色唤起 A 都落 `refused/not_wired`。真机实测
-    （`draft/28` §201）：G 按协议唤起了 A，拿回来的是"A 没有接线"。
-    也就是说 —— "缺文献证据就去找 A"这条最重要的协同边，在协同运行里从来没接上过。
+    为什么单钉这一条：`wired_llm_conductor(providers=...)` 这个参数一直存在，但 `run-agent` 从来没传
+    过它 ⇒ `_Builder.status()` 把 A 判成 `no_provider`、A 不进登记表 ⇒ 任何角色唤起 A 都落
+    `refused/not_wired`。真机实测（`draft/28` §201）：G 按协议唤起了 A，拿回来的是"A 没有接线"——
+    "缺文献证据就去找 A"这条最重要的协同边，在协同运行里从来没接上过。
 
-    这条判据钉两件互相独立的事：
-    ① 接了后端时，`A.search_literature(topic=…)` 可召唤、真的问到了 provider、
-       文献进了 `literature`，请求行上留着是谁提的；
-    ② 没接后端时同一句话落 `refused/not_wired` 且零写入（三态：没查成 ≠ 没有文献）。
-    """
+    判据钉两件互相独立的事：① 接了后端时，`A.search_literature(topic=…)` 可召唤、真的问到了
+    provider、文献进了 `literature`，请求行上留着是谁提的；② 没接后端时同一句话落
+    `refused/not_wired` 且零写入（三态：没查成 ≠ 没有文献）。"""
     st = _store(tmp_path)
     provider = _OneCandidateProvider()
     c = host.wired_conductor(st, providers=[provider])
@@ -700,10 +685,10 @@ def test_run_agent_wiring_exposes_the_extractor_notes(tmp_path: Path):
 # ------------------------------------------------ 各角色的 skills 落到工作区（R116）
 
 def test_the_skills_step_lands_every_manual_under_the_workspace(tmp_path):
-    """`_materialize_skills` 真的把 33 份手册落到**工作区**里（"现做现读"的落点）。
+    """`_materialize_skills` 真的把 33 份手册落到工作区里（"现做现读"的落点）。
 
     为什么这条要单独判（2026-10-14 实测）：这一段此前是 `run()` 里的内联 `try/except`，
-    **一条判据都碰不到它** —— 与本文件对面那段注释记的是同一类缺陷。
+    一条判据都碰不到它 —— 与本文件对面那段注释记的是同一类缺陷。
     它不跑，提示词里的索引就指向 33 个不存在的文件，而每一处各自自洽
     （索引有、提示词有、角色会去读），没有任何地方会报错。
     """
@@ -726,10 +711,10 @@ def test_the_skills_step_lands_every_manual_under_the_workspace(tmp_path):
 
 
 def test_without_a_workspace_the_skills_step_writes_nothing(tmp_path, monkeypatch):
-    """负控（三态 + 一条真缺陷）：没有工作区 ⇒ **不在当前目录里凭空写一个 `skills/`**。
+    """负控（三态 + 一条真缺陷）：没有工作区 ⇒ 不在当前目录里凭空写一个 `skills/`。
 
     旧写法是 `materialize(".")` —— 谁在哪跑就把 33 个 `.md` 写进那个进程的工作目录。
-    这一条把当前目录换成一个空临时目录，然后要求它**一个文件都不多**，
+    这一条把当前目录换成一个空临时目录，然后要求它一个文件都不多，
     并且留一条明说"这一格没做"的 note（"没做"不许读成"做好了"）。
     """
     monkeypatch.chdir(tmp_path)

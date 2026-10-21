@@ -1,43 +1,24 @@
 # -*- coding: utf-8 -*-
 """F 与 E 的接缝：`--experiment-reasoning` ＋ 以「玩具例子」验收这条接线。
 
-## 业主口径（这一批的验收词）
+玩具例子 = 小到能手工核对的情形上把断言跑成可复现的读数：一条最小脚本 ＋ 一次真实执行 ＋ 一个
+读得出的数（如某量在 `N <= 8` 的档位上相符/不符）；不是"再跑一遍原脚本"，也不是"把界从 n≤8 推到 n≤12"的扫描清单。
 
-**玩具例子** = 在一个小到能手工核对的情形上，把断言跑成**可复现的读数** ——
-一条最小脚本 ＋ 一次真实执行 ＋ 一个读得出的数（例如某个量在 `N <= 8` 的档位上与
-预期相符/不符）。它**不是**"再跑一遍原脚本"，也**不是**"把界从 n≤8 推到 n≤12"那种
-扫描清单（后者留下的是"扫到哪儿"，前者要的是"这一个数对不对"）。
+根因（真机读数，`projects/mp4/data/attack_plans.json` 计划 000003 的 r1/r2）：每轮逐字都是
+`no_change` —— sg1 有判据但没有脚本，E 写不出来（`no_seam`）⇒ 未推进；而 E 的缝从没接过：
+`--attack-reasoning` 只给 F 接、`--semantic-review` 只给 H 接，两个入口（`host.wired_llm_conductor`
+的 `role_llm` 与 `llmseam` 的按角色表）都没登记 `"E"` ⇒ `AgentE.llm is None` ⇒ `author_script`
+受控拒绝 `no_seam` ⇒ F 永远卡在"有判据没脚本"。
 
-## 根因（真机读数，`projects/mp4/data/attack_plans.json` 计划 000003 的 r1/r2）
-
-每一轮逐字都是 `no_change`：
-
-    子目标 sg1 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ 未推进
-    （没有脚本就没有实验可跑；这不是"跑了但没结果"）
-
-而 E 的缝从来没接过：`--attack-reasoning` 只给 F 接、`--semantic-review` 只给 H 接。
-两个入口（`host.wired_llm_conductor` 的 `role_llm` 与 `llmseam` 的按角色表）都没登记过
-`"E"` ⇒ `AgentE.llm is None` ⇒ `author_script` 受控拒绝 `no_seam` ⇒ F 永远卡在
-"有判据没脚本"。
-
-## 这一组判据（四条，含两处负控）
-
-| # | 判的是 | 位置 |
-|---|---|---|
-| ① 正控 | 缝接上 ⇒ F 建计划 → 子目标带 `testable` → E 用缝写脚本 → 脚本真跑 → `experiments` 落一行，`method`/`exit_code`/`result`/`evidence_kind` 与玩具例子标记都对 | `test_positive_control_*` |
-| ② 负控 | 同样的输入、缝关着 ⇒ E 报 `no_seam`、F 那一轮落 `dead_end` 并上报 `missing_input`（**不是**静默 `no_change`），读数里看得出缺的是缝 | `test_negative_control_*`（另含"没有主控 ⇒ 不假装上报过"） |
-| ③ 反真空 | 玩具例子**真被执行过**：脚本文件在盘上 + 执行结果行在 + 两者 sha256/路径对得上 | `_assert_toy_chain`（① 与 ④ 共用同一把尺子） |
-| ④ 第二负控 | 缝接上但模型回**空脚本** ⇒ 有缝但没产出，不许当成功；同一把尺子必须红 | `test_second_negative_control_*` |
-
-另有一条"把 ① 的形态改回静默 `no_change` ⇒ 判据红"的反向判据
-（`test_the_criterion_turns_red_*`）：它用 `monkeypatch` 把这一轮换回**改前那个返回值**
-（逐字），然后要求同一把尺子报红 —— 否则"判据能红"这句话本身没法被检验。
-
-## 离线
-
-桩一律在测试里：`_StubSeam.complete(prompt)` 返回写死的 JSON（F 的判据 / E 的脚本），
-一次真模型都不调、一分钱都不花。判据不由模型决定。
-"""
+判据四条（含两处负控）：① 正控 `test_positive_control_*`：缝接上 ⇒ F 建计划 → 子目标带
+`testable` → E 用缝写脚本 → 脚本真跑 → `experiments` 落一行，`method`/`exit_code`/`result`/
+`evidence_kind` 与玩具例子标记都对；② 负控 `test_negative_control_*`（另含"没有主控 ⇒ 不假装
+上报过"）：缝关着 ⇒ E 报 `no_seam`、F 那轮落 `dead_end` 并上报 `missing_input`（不是静默
+`no_change`）；③ 反真空：玩具例子真被执行过 —— 脚本在盘上 ＋ 执行结果行在 ＋ 两者 sha256/路径
+对得上（`_assert_toy_chain`，① 与 ④ 共用同一把尺子）；④ 第二负控 `test_second_negative_control_*`：
+缝接上但模型回空脚本 ⇒ 不许当成功，同一把尺子必须红；另有 `test_the_criterion_turns_red_*`：
+用 `monkeypatch` 把这一轮换回改前那个返回值（逐字），要求同一把尺子报红 —— "判据能红"才可检验。
+桩一律在测试里：`_StubSeam.complete(prompt)` 返回写死的 JSON，一次真模型都不调。"""
 from __future__ import annotations
 
 import json
@@ -57,10 +38,10 @@ from agentflow.tools.conductor_tools import reset_cache
 
 # ---------------------------------------------------------------- 桩（一律在测试里）
 
-#: 一份**玩具例子**脚本：n <= 6 的错排数 D(n) 逐项枚举，再与手算表对比。
+#: 一份玩具例子脚本：n <= 6 的错排数 D(n) 逐项枚举，再与手算表对比。
 #:
 #: 为什么它是玩具例子（而不是"扫描清单"）：`D(1..6) = [0, 1, 2, 9, 44, 265]` 这六个
-#: 数一个人拿纸就能核；脚本给出的读数 `D(6)=265` 是**一个可以手算核对的数**，
+#: 数一个人拿纸就能核；脚本给出的读数 `D(6)=265` 是一个可以手算核对的数，
 #: 不是"我把界推到 12 了"。规模 `n=6 <= 8`（`TOY_EXAMPLE_MAX_N`）。
 TOY_SCRIPT = (
     "import itertools\n"
@@ -95,7 +76,7 @@ TOY_PARAMS = {"toy_example": {"n": 6, "expect": 265, "quantity": "D(6)"}}
 #: F 的缝这一轮要交的产物：一次 `counterexample_request`（判据三件套）。
 #:
 #: 它走的是 `_spec_from_testable`（子目标只有 `testable` 时由 F 把那一句变成判据）——
-#: 于是这条正控覆盖的是**整条链**：`testable` → 判据 → 脚本 → 实验行。
+#: 于是这条正控覆盖的是整条链：`testable` → 判据 → 脚本 → 实验行。
 F_ROUND = json.dumps({
     "product": "counterexample_request",
     "strategy": "小情形搜索找模式",
@@ -113,7 +94,7 @@ class _StubSeam:
     """最小模型缝（`judge.judge_json` 的调用约定：`complete(prompt) -> str`）。
 
     记下每次提问（判据要能断言"提示词里真的念了判据"），回复由剧本给；
-    剧本用尽时**炸**（多问一次都不许静默通过）。
+    剧本用尽时炸（多问一次都不许静默通过）。
     """
 
     def __init__(self, *replies: str) -> None:
@@ -143,7 +124,7 @@ class _NoCall:
 
 @pytest.fixture(autouse=True)
 def _no_model_key(monkeypatch: pytest.MonkeyPatch):
-    """把模型 key 清掉：这一组判的是**开关**，不是"这台机器上有没有 key"。"""
+    """把模型 key 清掉：这一组判的是开关，不是"这台机器上有没有 key"。"""
     monkeypatch.delenv("AGENTFLOW_MODEL_API_KEY", raising=False)
     monkeypatch.delenv("AGENTFLOW_MODEL_BASE_URL", raising=False)
 
@@ -198,7 +179,7 @@ def _codes_on_disk(root: Path) -> list[str]:
 def _assert_toy_chain(store: Store, *, expect_d6: int = 265) -> dict:
     """玩具例子那条链的判据（①③ 的尺子；④ 与"改回静默"那两条负控也用它判红）。
 
-    它断言的是**链路和读数**，不是"表里有一行"：脚本在盘上且 sha256 对得上、
+    它断言的是链路和读数，不是"表里有一行"：脚本在盘上且 sha256 对得上、
     执行结果行在、玩具例子那一格成形且规模够小、那个数与预期相符。
     少任何一条，这条链就只是"写了一份脚本"或"跑了一次没读数"。
     """
@@ -283,7 +264,7 @@ def test_positive_control_e_writes_the_toy_script_runs_it_and_the_row_is_readabl
 def _missing_seam_reading(store: Store, out: dict) -> dict:
     """把「缝关着那一轮」抽成一份可判的形态（② 与"改回静默"负控共用同一份读法）。
 
-    只读台账与返回值里**已经有**的东西，不另造读数：
+    只读台账与返回值里已经有的东西，不另造读数：
     `out["reason"]`（= 这一轮的 detail）、`attack_plans.history` 的最后一条、
     子目标的 `blocked_reason` / `status`、以及"盘上有没有脚本/实验行"。
     """
@@ -298,7 +279,7 @@ def _missing_seam_reading(store: Store, out: dict) -> dict:
     return {
         "action": out.get("action"),
         "outcome": out.get("outcome"),
-        # 「静默」的定义：这一轮**没有产物**（改前那个形态）
+        # 「静默」的定义：这一轮没有产物（改前那个形态）
         "silent": not rec.get("product") and not product,
         "dead_end": rec.get("product") == "dead_end",
         "dead_end_reason": rec.get("dead_end_reason"),
@@ -312,7 +293,7 @@ def _missing_seam_reading(store: Store, out: dict) -> dict:
 
 
 def _assert_missing_seam_is_loud(reading: dict) -> None:
-    """② 的尺子：缝关着时那一轮必须是**说得清**的失败，而不是静默 `no_change`。
+    """② 的尺子：缝关着时那一轮必须是说得清的失败，而不是静默 `no_change`。
 
     三条缺一不可：① 有产物且是 `dead_end`（受控理由 `缺工具`）；② 读数里点名
     `no_seam`；③ 说出缺的那个开关（`--experiment-reasoning`）—— 只说"未推进"的
@@ -333,7 +314,7 @@ def test_negative_control_without_the_seam_f_lays_a_dead_end_and_escalates(tmp_p
     """② 负控：同样的输入、缝关着 ⇒ `no_seam` ＋ 落 `dead_end` ＋ 上报 `missing_input`。
 
     两个方向都钉：
-    - 只开 `--attack-reasoning` 时 E 仍然没有缝（**F 的开关不连带打开 E 的缝**）；
+    - 只开 `--attack-reasoning` 时 E 仍然没有缝（F 的开关不连带打开 E 的缝）；
     - 那一轮不是静默 `no_change`，而是 `dead_end(缺工具)` 且把"缺 E 的缝"上报给召唤者
       （收件箱里那条 `agent_message` 的 `escalation.kind == "missing_input"`，`evidence`
       带子目标名）。
@@ -417,7 +398,7 @@ def _old_silent_round(self, sg, *, plan, note: str, spec_line: str) -> dict:  # 
 
 def test_the_criterion_turns_red_if_the_no_seam_round_goes_back_to_a_silent_no_change(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """反向判据：把这一轮改回**静默 `no_change`** ⇒ 同一把尺子必须红。
+    """反向判据：把这一轮改回静默 `no_change` ⇒ 同一把尺子必须红。
 
     为什么要有它：否则"② 的判据能红"这句话本身没人检验过 —— 一条永远绿的判据
     与"这条链是通的"在读数上长得一样。
@@ -441,7 +422,7 @@ def test_second_negative_control_an_empty_script_is_not_a_success(tmp_path: Path
     """④ 负控：缝接上、模型只回空脚本 ⇒ "有缝但没产出"绝不当成功。
 
     两条一起断言：① 这一轮如实落 `bad_source`（与 `no_seam` 是两个码：前者要改脚本、
-    后者要去接线）；② 玩具例子那把尺子**红** —— 没有实验行、盘上没有脚本。
+    后者要去接线）；② 玩具例子那把尺子红 —— 没有实验行、盘上没有脚本。
     """
     st = _store(tmp_path)
     e_stub = _StubSeam(json.dumps({"source": "   ", "why": "我先想了想"}))
@@ -469,7 +450,7 @@ def test_second_negative_control_an_empty_script_is_not_a_success(tmp_path: Path
 # ---------------------------------------------------------------- 开关本身的形态
 
 def test_the_switch_is_opt_in_and_does_not_ride_on_attack_reasoning(tmp_path: Path):
-    """`--experiment-reasoning` 的形态：可解析、默认关、且**不被** `--attack-reasoning` 连带。
+    """`--experiment-reasoning` 的形态：可解析、默认关、且不被 `--attack-reasoning` 连带。
 
     三条各自钉一件事：
     ① argparse 认得这个开关，且默认是 False（与 `--semantic-review` 同一条纪律）；
@@ -519,7 +500,7 @@ def test_the_switch_is_opt_in_and_does_not_ride_on_attack_reasoning(tmp_path: Pa
 
 
 def test_the_toy_example_switch_is_not_a_new_declaration_surface():
-    """反发明：玩具例子的落点必须是 `experiments` 的**既有**字段，不是新列/新动作。
+    """反发明：玩具例子的落点必须是 `experiments` 的既有字段，不是新列/新动作。
 
     判据：`experiments` 的 schema 字段里没有 `toy*`（所以它不是一次声明面改动），
     而我们的落点 `observations` 本来就在那张表的字段里。
@@ -535,7 +516,7 @@ def test_the_toy_example_switch_is_not_a_new_declaration_surface():
 # ============================================================================
 # 缺陷二（2026-10-21 真机）：`experiments.observations.toy_example` 从未出现
 #
-# 真机读数（`projects/mp3/data/experiments.json`）：2 条实验、**`toy_example` 0 条**。
+# 真机读数（`projects/mp3/data/experiments.json`）：2 条实验、`toy_example` 0 条。
 # 根因写在 `_toy_example_reading` 的 docstring 里：此前只有经 `F→E` 且父把
 # `params["toy_example"]` 带下来才会标，而模型不一定会带 —— 于是 E 自己写出来的
 # "玩具读数"（mp3 第二条的 claim 逐字这么写的，`bound` 是 `D<=6 / M<=8 / n<=3`、
@@ -575,7 +556,7 @@ BIG_AUTO_SCRIPT = (
     "}))\n"
 )
 
-#: 跑完了但**没按协议打结论行**的脚本（"执行过"≠"跑成了一个读得出的数"）。
+#: 跑完了但没按协议打结论行的脚本（"执行过"≠"跑成了一个读得出的数"）。
 NO_RESULT_SCRIPT = "print('I ran, but I printed nothing usable')\n"
 
 
@@ -592,7 +573,7 @@ def _write(st: Store, rel: str, text: str) -> None:
 
 
 def _run(st: Store, rel: str, *, params: dict | None = None, key: str = "auto") -> dict:
-    """用**生产的 `run_experiment`** 跑一遍（不带任何 `toy_example` 声明 —— 真机形态）。"""
+    """用生产的 `run_experiment` 跑一遍（不带任何 `toy_example` 声明 —— 真机形态）。"""
     from agentflow.agent_e import AgentE
 
     e = AgentE(st, config={"lease_seconds": 60}, workspace_root=st.root)
@@ -644,7 +625,7 @@ def _as_int(value) -> int | None:
 
 
 def _assert_not_a_toy(row: dict, *, want_in_why: str) -> None:
-    """② 的尺子：**不**标成玩具例子，且 `why` 里写明为什么（超限 / 没真跑）。"""
+    """② 的尺子：不标成玩具例子，且 `why` 里写明为什么（超限 / 没真跑）。"""
     from agentflow.agent_e.run_experiment import is_toy_example
 
     toy = _auto_reading(row)
@@ -671,7 +652,7 @@ def test_auto_control_a_small_script_that_really_ran_is_marked_a_toy_example(tmp
 
 def test_a_big_scan_is_not_marked_a_toy_example_and_the_reason_names_the_limit(
         tmp_path: Path):
-    """② 大规模（n=20 超上限）⇒ **不标**，`why` 写明超限（"大扫描不许当玩具例子"）。"""
+    """② 大规模（n=20 超上限）⇒ 不标，`why` 写明超限（"大扫描不许当玩具例子"）。"""
     st = _auto_ws(tmp_path)
     _write(st, "code/big.py", BIG_AUTO_SCRIPT)
     row = _run(st, "code/big.py", key="big")
@@ -698,7 +679,7 @@ def test_negative_control_with_the_auto_judgement_off_the_first_criterion_turns_
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """③ 负控：把自动判定关掉（声明缺席 ⇒ 什么都不写）⇒ ① 的尺子必须红。
 
-    这一格就是**改前**的行为（`params` 里没有声明就返回 `None`）：真机 mp3 的
+    这一格就是改前的行为（`params` 里没有声明就返回 `None`）：真机 mp3 的
     `toy_example` 0 条正是它造成的。判据必须能咬住"回到改前"。
     """
     from agentflow.agent_e import run_experiment as RX

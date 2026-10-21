@@ -9,24 +9,14 @@ from ._support import AT, NO_PROGRESS_NOTE, PlanError, TERMINAL_STATUSES, _budge
 class _Step:
     def step(self, plan_id: str) -> dict:
         """推进一轮。
-
-        返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason",
-        "budget_known","budget_reading"}``。
-
-        `outcome` 取本模块的 :data:`STEP_OUTCOMES`
-        （``no_change`` / ``progress`` / ``blocked``）：它说的是这一轮推进的结果，
-        与 `schema.TASK_OUTCOMES`（一次任务的终局）是两套命名空间，不许互相赋值
-        —— 裁定依据与后果写在 `STEP_OUTCOMES` 的注释里。写入前会过一次
-        :func:`_step_outcome` 的收口，词表外的取值当场炸。
-
+        返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason","budget_known","budget_reading"}``。
+        `outcome` 取本模块的 :data:`STEP_OUTCOMES`（``no_change`` / ``progress`` / ``blocked``）：它说的是
+        这一轮推进的结果，与 `schema.TASK_OUTCOMES`（一次任务的终局）是两套命名空间，不许互相赋值—— 裁定依据与后果写在 `STEP_OUTCOMES` 的
+        注释里。写入前会过一次:func:`_step_outcome` 的收口，词表外的取值当场炸。
         流程（每一步的理由都写在旁边的注释里）：
-
-        1. 读计划 → 终结状态不再推进（不自动重入）；轮数用尽 ⇒ `stalled` + `best_partial`；
-        2. `pick_next_subgoal` 选目标（复用工具层的排序，不另写一套）；
-        3. 按 owner 分派（见模块 docstring 的表格）；
-        4. 追加一条 history，`rounds += 1`；
-        5. 判定计划状态；
-        6. 一个事务写回。
+        1. 读计划 → 终结状态不再推进（不自动重入）；轮数用尽 ⇒ `stalled` + `best_partial`； 2. `pick_next_subgoal` 选目标
+        （复用工具层的排序，不另写一套）； 3. 按 owner 分派（见模块 docstring 的表格）； 4. 追加一条 history，`rounds += 1`； 5. 
+        判定计划状态； 6. 一个事务写回。
         """
         row = self._plan_row(plan_id)
         if row is None:

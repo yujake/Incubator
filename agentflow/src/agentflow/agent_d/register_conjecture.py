@@ -10,36 +10,16 @@ from ._support import (Any, EvidenceError, KIND_CLIENT, STATE_FAILED, STATE_USED
 class _RegisterConjecture:
     def register_conjecture(self, **params: Any) -> dict:
         """登记或更新一条猜想（转发 `conjecture.register_conjecture`；依据 `draft/31` P7 第 4 张表）。
-
-        ## 为什么失败要抛，而不是像 `_call` 那样返回 `None`
-
-        D 的读路径（`_call`）把失败吃掉是合理的：一次查不到不该中断整轮研究，
-        原因落在 `self.last_tool_errors` 里。但写路径不一样：返回 `None` 会让
-        `Conductor._end_from_payload` 记成 `outcome="ok"` 而 `payload=None` ——
-        台账上看起来"这一步做成了"，而库里一行都没有。这正是本项目最忌的形态
-        （"假装跑通并返回空"）。所以这里把失败原样抛出去，让终态是 `failed`。
-
-        ## 三态
-
-        `conjecture_id` 给了但库里没有 ⇒ 抛（不许静默新建一条重复的猜想）。
-        `None` = 调用方没提这个字段 ⇒ 保留库里已有的值（更新语义见 `conjecture_tools`）。
-
-        ## 模型接在哪（`R1-A1` 裁定 2：按 `research` 那条同一形态）
-
-        `register_conjecture` 是当前树里 D 的真主力（现算 191 次召唤 / 29 条会话行），
-        所以它也在"在用动作"里，接法与 `research` 逐条同形：
-
-        - 模型只做把已有的确定性产物写得更通顺/更完整（给这条猜想写一句"可检验性复述"
-          与一条"下一步怎么验"的建议）；
-        - 登记与否、字段取什么值仍是确定性判定 —— 模型的产出不进库
-          （它只进返回值里的 `llm_reading`，随这一趟的读数出去；要引它，人/M 自己读）；
-        - 三态读数（`kind/state/reason/model/calls/task_id/spend`）与 `invented_facts`
-          校验同样适用：模型若引用了这条猜想所依据的台账里没有的编号 ⇒ 丢弃这段产出；
-        - 失败（没接线/超时/坏 JSON/空回复）⇒ fail-open：库照写，读数如实说是哪一种。
-
-        为什么不让模型的话进库：那几个字段过了 schema 校验、是知识库的一部分，
-        而"模型写得更通顺"没有资格改一条被登记的知识（这与 `_rank_min` 同一条纪律：
-        模型可以帮忙措辞，但不能改变事实面）。
+        为什么失败要抛，而不是像 `_call` 那样返回 `None`D 的读路径（`_call`）把失败吃掉是合理的：一次查不到不该中断整轮研究，原因落在 
+        `self.last_tool_errors` 里。但写路径不一样：返回 `None` 会让`Conductor._end_from_payload` 记成 `outcome="ok"` 而 
+        `payload=None` ——台账上看起来"这一步做成了"，而库里一行都没有。所以这里把失败原样抛出去，让终态是 `failed`。
+        `conjecture_id` 给了但库里没有 ⇒ 抛（不许静默新建一条重复的猜想）。`None` = 调用方没提这个字段 ⇒ 保留库里已有的值（更新语义见 `conjecture_tools`）。
+        模型接在哪（`R1-A1` 裁定 2：按 `research` 那条同一形态）`register_conjecture` 是当前树里 D 的真主力（现算 191 次召唤 / 29 条会话行），所以
+        它也在"在用动作"里，接法与 `research` 逐条同形：
+        - 登记与否、字段取什么值仍是确定性判定 —— 模型的产出不进库（它只进返回值里的 `llm_reading`，随这一趟的读数出去；- 三态读数（`kind/state/reason/model/calls/task_id/spend`）
+        与 `invented_facts`校验同样适用：模型若引用了这条猜想所依据的台账里没有的编号 ⇒ 丢弃这段产出；
+        为什么不让模型的话进库：那几个字段过了 schema 校验、是知识库的一部分，而"模型写得更通顺"没有资格改一条被登记的知识（这与 `_rank_min` 同一条纪律：模型可以帮忙措辞，但不能改变
+        事实面）。
         """
         res = self.tools.call("conjecture.register_conjecture", **params)
         if not res.ok:

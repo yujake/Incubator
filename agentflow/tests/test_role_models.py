@@ -6,12 +6,12 @@ api key）」。
 
 ## 这一组要钉住的三件事
 
-1. **梯子**：`models.<角色>` → `models.default` → `model` 段 → 环境变量 → 内置缺省。
+1. 梯子：`models.<角色>` → `models.default` → `model` 段 → 环境变量 → 内置缺省。
    逐键取（不是整段覆盖）—— "只给 A 换一把 key"是最常见的写法，整段覆盖会把
    `base_url`/`name` 一起清空，症状是"A 那一路突然按缺省端点跑"，且不报错。
-2. **秘书那把 key 真的被用上**：进了 `secretary` 档就换缝（`secretary:<本体角色>`），
+2. 秘书那把 key 真的被用上：进了 `secretary` 档就换缝（`secretary:<本体角色>`），
    没进就退回本体的缝；两条路都有读数（`Secretary.model_source`）。
-3. **key 只写不读**：`models` 的**每一个槽**、`secretary` 那一档都只回显掩码 ——
+3. key 只写不读：`models` 的每一个槽、`secretary` 那一档都只回显掩码 ——
    漏掩一个槽就等于把那把 key 回显出来了。
 """
 
@@ -73,7 +73,7 @@ def test_vendor_picks_the_endpoint_only_when_base_url_is_missing(tmp_path):
 
 
 def test_the_secretary_slot_is_shared_by_every_role(tmp_path):
-    """秘书那一档**全角色共用**：换一个本体角色，取到的还是同一把 key / 同一个模型。
+    """秘书那一档全角色共用：换一个本体角色，取到的还是同一把 key / 同一个模型。
 
     这一条是业主那句话的机器形态：秘书的模型配置与本体无关。
     """
@@ -142,7 +142,7 @@ def test_the_slot_level_merge_keeps_other_slots(tmp_path):
 
 
 def test_the_loop_gives_the_secretary_its_own_seam_when_configured(tmp_path, monkeypatch):
-    """端到端（装配那一层）：配了 `secretary` 档 ⇒ 秘书拿到的**是另一把 key** 的缝。
+    """端到端（装配那一层）：配了 `secretary` 档 ⇒ 秘书拿到的是另一把 key 的缝。
 
     判据走的是生产路径上的那个装配口 `agent_loop._secretary_seam`
     （`--root`/`AGENTFLOW_SETTINGS` 那一档不另写一份）：把设置文件指到临时文件，
@@ -167,7 +167,7 @@ def test_the_loop_gives_the_secretary_its_own_seam_when_configured(tmp_path, mon
 
 
 def test_without_the_secretary_slot_the_secretary_keeps_the_body_seam(tmp_path, monkeypatch):
-    """反负控：`secretary` 档没配 ⇒ **退回本体那一个缝**（老行为逐字不变）。"""
+    """反负控：`secretary` 档没配 ⇒ 退回本体那一个缝（老行为逐字不变）。"""
     from agentflow import agent_loop as AL
 
     p = _write(tmp_path, {"model": {"api_key": "k-body"}})
@@ -193,12 +193,12 @@ def _reading(tmp_path: pathlib.Path, monkeypatch) -> dict:
 
 def test_the_readback_carries_vendor_for_the_body_every_slot_and_the_secretary(
         tmp_path, monkeypatch):
-    """**厂商这一格必须三处都回显**：`model` / 每个 `models.<槽>` / `secretary`。
+    """厂商这一格必须三处都回显：`model` / 每个 `models.<槽>` / `secretary`。
 
     为什么这条是业主那句话的机器形态（2026-10-14 实测的缺陷）：面板上每个角色的
     `vendor` 输入框，初值取自这份读数（`Machine.tsx` 的 `roleValue` 读
-    `settings.models.<角色>.vendor`）。读数里没有这一格 ⇒ **盘上写了厂商，面板上
-    永远是空的、placeholder 还说"盘上没设过"** —— 而"不同角色用不同厂商"
+    `settings.models.<角色>.vendor`）。读数里没有这一格 ⇒ 盘上写了厂商，面板上
+    永远是空的、placeholder 还说"盘上没设过" —— 而"不同角色用不同厂商"
     正是业主 ① 要的那件事。三处少任何一处，那一处的输入框就永远读不回盘上的值。
     """
     _write(tmp_path, {
@@ -212,15 +212,15 @@ def test_the_readback_carries_vendor_for_the_body_every_slot_and_the_secretary(
     assert got["models"]["A"]["vendor"] == "deepseek", got["models"]["A"]
     assert got["models"]["default"]["vendor"] == "acme", got["models"]["default"]
     assert got["secretary"]["vendor"] == "acme", got["secretary"]
-    # 反真空：厂商不是 key，它必须**原样**回显（掩码只该落在 api_key 那一格）
+    # 反真空：厂商不是 key，它必须原样回显（掩码只该落在 api_key 那一格）
     assert got["models"]["A"]["api_key"] == SET.MASKED_KEY
 
 
 def test_each_slot_reports_its_own_key_source_not_the_model_sections(tmp_path, monkeypatch):
-    """每一档的 `key_source` 必须是**这一档自己的**来源，不是 `model` 段的。
+    """每一档的 `key_source` 必须是这一档自己的来源，不是 `model` 段的。
 
     缺陷形态（2026-10-14 实测）：这一格此前调的是全局 `key_source()` ——
-    它只读 `model` 段 ⇒ **每一档都报同一个来源**。实测形态：`model` 段没有 key、
+    它只读 `model` 段 ⇒ 每一档都报同一个来源。实测形态：`model` 段没有 key、
     而 `models.A` 有 ⇒ 全局那个报 `""`（"哪儿都没找到"），而 A 那一档实打实是从
     设置文件里取到的（`"settings"`）。读的人会据此以为"按角色配的 key 没生效"。
     """
@@ -229,14 +229,14 @@ def test_each_slot_reports_its_own_key_source_not_the_model_sections(tmp_path, m
     got = _reading(tmp_path, monkeypatch)
     assert got["models"]["A"]["key_source"] == "settings", got["models"]["A"]
     assert got["models"]["B"]["key_source"] == "", got["models"]["B"]
-    # 同一份读数里两档的**结论不同**才是这条判据在起作用（反真空）
+    # 同一份读数里两档的结论不同才是这条判据在起作用（反真空）
     assert got["models"]["A"]["key_source"] != got["models"]["B"]["key_source"]
 
 
 def test_every_model_key_on_the_write_side_shows_up_in_the_readback(tmp_path, monkeypatch):
     """写侧词表（`settings.MODEL_KEYS`）里的每一格，读侧都要有 —— 三处都不许漏。
 
-    为什么按词表判而不是抄一份名单：`MODEL_KEYS` 是"一个角色能配哪几格"的**唯一来源**
+    为什么按词表判而不是抄一份名单：`MODEL_KEYS` 是"一个角色能配哪几格"的唯一来源
     （写侧按它校验、面板按它画输入框）。读侧照抄一份名单，将来往词表里加一格
     （比如又一个厂商相关的字段）就会出现"能写、面板有输入框、但读不回盘上的值"
     —— 而那正是 `vendor` 这一格刚踩过的坑。

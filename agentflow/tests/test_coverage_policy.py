@@ -1,24 +1,15 @@
 """`policy.check_action` 的判据测试（等级 2：角色/动作存在性的判定）。
 
-## 为什么这条判据值得单独补
+为什么值得单独补：`policy.check_action` 是唯一的角色/动作存在性判据，而 `check` / `check_edge` 都先调
+它。它的 docstring 逐字给出本文件的核心判据：「两种失败必须分开：`unknown_role`（名单里没这个人）与
+`unknown_action`（人存在，但没这个本事）。合并成一句"不支持"会让"我把角色名拼错了"与"我调了一个该
+角色真的没有的动作"无法区分。」所以断言必须打在 `Refusal.reason` 上（`unknown_role` vs
+`unknown_action`；受控词表见 `schema.REFUSAL_REASONS`），而不是"返回了非 None"。`Refusal` 的字段是
+`reason` / `detail` / `limit` —— 第二、三个字段分别给出人话细节与"是哪一类上限判的"，所以断言也顺便
+核了 `limit`。
 
-`policy.check_action` 是唯一的角色/动作存在性判据，而 `check` / `check_edge`
-都先调它。它的 docstring 逐字给出本文件的核心判据：
-
-> 两种失败必须分开：`unknown_role`（名单里没这个人）与
-> `unknown_action`（人存在，但没这个本事）。合并成一句"不支持"会让
-> "我把角色名拼错了"与"我调了一个该角色真的没有的动作"无法区分。
-
-所以断言必须打在 `Refusal.reason` 上（`unknown_role` vs `unknown_action`；
-受控词表见 `schema.REFUSAL_REASONS`），而不是"返回了非 None"。
-`Refusal` 的字段是 `reason` / `detail` / `limit` —— 第二、三个字段分别给出
-人话细节与"是哪一类上限判的"，所以断言也顺便核了 `limit`。
-
-## 夹具不写死名单（§5.3）
-
-角色从 `schema.ROLES` 取，动作从 `capabilities.actions_for(role)` 取 ——
-不在这里另写一份"谁有什么动作"的表（那正是本模块要避免的第二份判据）。
-"""
+夹具不写死名单（§5.3）：角色从 `schema.ROLES` 取，动作从 `capabilities.actions_for(role)` 取 —— 不在
+这里另写一份"谁有什么动作"的表（那正是本模块要避免的第二份判据）。"""
 
 from __future__ import annotations
 
@@ -158,39 +149,16 @@ def test_check_action_does_not_consult_other_roles_actions():
 def test_capability_actions_and_check_action_agree_on_every_role():
     """`D-5` 的判据：能力表声明的动作集合 == `check_action` 认的动作集合。
 
-    ## 为什么这条断言是 `D-5` 缺的那一半
-
-    `D-5` 的实测事实是："H 有哪些动作"有两套说法 ——
-    能力表说 3 个，而工具级只读例外表 `READONLY_CALL_EXCEPTIONS['H']` 里有
-    `review.report`（它由 `agent_h._H_WRITABLE_TOOLS` 派生），
-    且 `AgentH.review_report` 真实存在、走的就是那个工具。
-    后果是 `policy.check_action('H','review_report')` 返回 `unknown_action` ——
-    主控没有办法让 H 产出审校报告。
-
-    这条断言把"两套说法"钉成一套，用两个来源各说一次：
-
-    1. 能力表声明的每个动作，`check_action` 必须放行
-       （漏放 = 声明了却调不动，正是 `D-5` 的形态；`D-5` 修完之后
-       `H.review_report` 就落在这条上）；
-    2. 能力表声明的每个动作，在工具层那一边必须有一个确定的说法：
-       要么 `matching_tool_name` 唯一对上一个工具，要么它被逐条登记进
-       `capabilities._KNOWN_UNMATCHED_ACTIONS`（"没比对成"必须留痕）。
-       这一条是"以后加动作忘登记"当场红的那道门：只在能力表里加一个动作，
-       工具层那一边不会有任何东西红，而对账面会静默缩小。
-       它不写死任何动作名 —— 集合直接从 `two_layer_reconciliation()` 与
-       `_KNOWN_UNMATCHED_ACTIONS` 现取，所以新动作会被自动覆盖到。
-
-    ## 这道门红在哪（而不是"看起来像判据"）
-
-    - 删掉 `H.review_report` 的 `ActionSpec` ⇒ 第 1 条不再覆盖它，
-      而 `assert_capabilities` 第 [7c] 条在导入期就炸（例外表要求它有个动作）；
-    - 把某动作的 `handler_name` 改成不存在的名字 ⇒ 导入期第 [2] 条炸；
-    - 把 `check_action` 换成永远放行的实现 ⇒ 导入期与第 1 条的负向样本
-      （下面最后一段）都会红。
-
-    夹具不写死任何角色名与动作名（§5.3）：全部从 `capabilities` /
-    `schema.ROLES` / 工具层现取。
-    """
+    这是 `D-5` 缺的那一半：实测事实是"H 有哪些动作"有两套说法 —— 能力表说 3 个，而工具级只读例外表
+    `READONLY_CALL_EXCEPTIONS['H']` 里有 `review.report`（由 `agent_h._H_WRITABLE_TOOLS` 派生），且
+    `AgentH.review_report` 真实存在、走的就是那个工具；后果是 `policy.check_action('H','review_report')`
+    返回 `unknown_action` —— 主控没办法让 H 产出审校报告。
+    这条断言把两套说法钉成一套，用两个来源各说一次：① 能力表声明的每个动作 `check_action` 必须放行
+    （漏放 = 声明了却调不动，正是 `D-5` 的形态）；② 工具层那一边必须有一个确定的说法：要么
+    `matching_tool_name` 唯一对上一个工具，要么逐条登记进 `capabilities._KNOWN_UNMATCHED_ACTIONS`
+    （"没比对成"必须留痕）—— 这是"以后加动作忘登记"当场红的那道门；集合从
+    `two_layer_reconciliation()` 与 `_KNOWN_UNMATCHED_ACTIONS` 现取，不写死任何动作名。
+    夹具不写死任何角色名与动作名（§5.3）：全部从 `capabilities` / `schema.ROLES` / 工具层现取。"""
     from agentflow import agent_h as H
 
     checked = 0

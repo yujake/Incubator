@@ -9,31 +9,19 @@ from ._support import CONFIDENCE_LABELS, C_NO_EVIDENCE, Mapping, Path, S, _conf_
 class _WriteReport:
     def write_report(self, out_path: str | Path | None = None) -> str:
         """汇总成较详细的初步研究报告（结构照 §4.5），返回写出的路径。
-
-        每个问题一节：``问题 → 为什么值得研究（引用 C 的证据）→ 现有证据
-        （L1/L2 的逐字引用 + 代号链）→ 缺口与已提交的查询 → 初步分析 →
-        结论与置信度 → 后续建议``。
-
-        报告末尾额外给一节审计信息（每条判据的中间值、用了真身还是降级替身、
-        工具错误），因为"结论可复核"是本系统的核心诉求 —— 一份说不出自己
-        依据的报告，读者只能选择全信或全不信。
-
+        每个问题一节：``问题 → 为什么值得研究（引用 C 的证据）→ 现有证据（L1/L2 的逐字引用 + 代号链）→ 缺口与已提交的查询 → 初步分析 →结论与置信度 → 后续建议``。
+        报告末尾额外给一节审计信息（每条判据的中间值、用了真身还是降级替身、工具错误），因为"结论可复核"是本系统的核心诉求 —— 一份说不出自己依据的报告，读者只能选择全信或全不信。
         ## `out_path` 相对谁解析（`draft/37` §118：T2 第 1 趟的真机读数）
-
-        缺省落点是 `<工作区>/<reports_subdir>/<qid>-research.md`（`reports_subdir`
-        来自配置，缺省 `reports`）。传进来的「相对」 `out_path` 一律按「工作区根」
-        解析 —— 原先是 `Path(out_path)` 直接写，于是按进程当前目录解析：
-
+        缺省落点是 `<工作区>/<reports_subdir>/<qid>-research.md`（`reports_subdir`来自配置，缺省 `reports`）。传进来的「相对」
+        `out_path` 一律按「工作区根」解析 —— 原先是 `Path(out_path)` 直接写，于是按进程当前目录解析：
         ```text
         T2 第 1 趟：主控传 out_path="out\\review\\D-analysis.md"（工作区内的合法落点）
         ⇒ 文件写到 agentflow/out/review/D-analysis.md（工作区根相对；进程 cwd）
         ⇒ 交付物静默离开工作区，而台账记的是 outcome=ok、报告里写着"执行完成"
         ```
-
-        规则与工具层的写盘同一个实现（`doc_tools.resolve_out_path`）：
-        越界（绝对路径跳出去、`..`）一律拒 —— 工作区边界是沙箱契约，不是建议。
-        返回值是「绝对」路径（与传绝对路径时的旧行为一致，`pipeline._rel_to_root`
-        等调用方照旧能用）。
+        规则与工具层的写盘同一个实现（`doc_tools.resolve_out_path`）：越界（绝对路径跳出去、`..`）一律拒 —— 工作区边界是沙箱契约，不是建议。返回值是「绝对」
+        路径（与传绝对路径时的旧行为一致，`pipeline._rel_to_root`等调用方照旧能用）。
+        
         """
         rows = sorted(self.store.rows("research_questions"), key=lambda r: str(r.get("question_id")))
         analyses = getattr(self, "last_research", {}) or {}

@@ -1,26 +1,18 @@
 """`claimanatomy.validate_claim` / `agent_g.AgentG.check_claims` /
 `tools.verify_tools.list_experiments` 的判据测试（等级 2）。
 
-## 三个函数各自的核心判据
+三个函数各自的核心判据：`validate_claim` 的 `checked` 与 `decided` 是两个独立位 ⇒ 三态可分辨
+（字段缺失 / 字段非法 / 检查器没跑成）；`AgentG.check_claims` 把 `claimanatomy` 的判据汇总（不重写）
+⇒ 汇总数字必须与逐条判定一致；`verify_tools.list_experiments` 的"没做过"必须能自证 ⇒ `total` /
+`returned` / `truncated` 三态不折叠。
 
-| 函数 | 判据 | 本文件的钉子 |
-|---|---|---|
-| `claimanatomy.validate_claim` | `checked` 与 `decided` 是两个独立位 | 三态可分辨：字段缺失 / 字段非法 / 检查器没跑成 |
-| `AgentG.check_claims` | 把 `claimanatomy` 的判据汇总（不重写） | 汇总数字必须与逐条判定一致 |
-| `verify_tools.list_experiments` | "没做过"必须能自证 | `total` / `returned` / `truncated` 三态不折叠 |
-
-## 为什么 `validate_claim` 明明被 `tests/test_claimanatomy.py` 调用过，
-## 却仍然进了"零测试"清单
-
-因为那份测试用的是 `CA.validate_claim(...)` —— 裸名两侧被 `.` 与 `(` 夹住，
-匹配到了；而 `agent_g.AgentG.check_claims` 那份没有被点名。
-不过 `validate_claim` 在本脚本里仍然出现，原因是它只被 `test_claimanatomy.py`
-以裸名调用、从未以限定名出现，而本脚本的判据是"限定名或裸名" ⇒ 它应当算有测试。
-
-所以本文件对 `validate_claim` 的测试不是为了消掉一个零测试条目，
-而是因为它是 `AgentG.check_claims` 的下游判据、且它的三态纪律值得有点名的钉子
-（§5.2：断言打在判据上）。这一点如实写在这里，不假装它是"缺口"。
-"""
+为什么 `validate_claim` 明明被 `tests/test_claimanatomy.py` 调用过、却仍然进了"零测试"清单：因为那份
+测试用的是 `CA.validate_claim(...)` —— 裸名两侧被 `.` 与 `(` 夹住，匹配到了；而
+`agent_g.AgentG.check_claims` 那份没有被点名。不过 `validate_claim` 在本脚本里仍然出现，原因是它只被
+`test_claimanatomy.py` 以裸名调用、从未以限定名出现，而本脚本的判据是"限定名或裸名" ⇒ 它应当算有
+测试。所以本文件对 `validate_claim` 的测试不是为了消掉一个零测试条目，而是因为它是
+`AgentG.check_claims` 的下游判据、且它的三态纪律值得有点名的钉子（§5.2：断言打在判据上）。这一点
+如实写在这里，不假装它是"缺口"。"""
 
 from __future__ import annotations
 

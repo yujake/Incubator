@@ -26,9 +26,9 @@ $env:PYTHONUTF8='1'; python -B tests/test_agent_surface_snapshot.py --write
 ```
 生成之后先看 diff：差在哪、为什么。
 
-⚠️ **环境要和判据同一套**（2026-10-13 实测踩到）：`tests/conftest.py` 在导入期把
+ 环境要和判据同一套（2026-10-13 实测踩到）：`tests/conftest.py` 在导入期把
 `AGENTFLOW_LEAN_ENABLED` 钉成 "1"，而 Lean 开关会改掉 D/E/F/H 四格提示词里的措辞
-（"形式化验证" vs "逐行审阅"）。直接这样重生成会写出一份**判据不认**的基线
+（"形式化验证" vs "逐行审阅"）。直接这样重生成会写出一份判据不认的基线
 （跑 pytest 时当场红，且红的位置看着像"改了声明"）。所以本文件在导入 agentflow 之前
 自己钉上同一个开关 —— 口径只许有一处，这里复现判据那一套，而不是另立一份。
 """
@@ -187,8 +187,8 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
         assert len(got["prompt"]) > 5000, f"{role} 的提示词只有 {len(got['prompt'])} 字符"
         if role in READ_ONLY_ROLES:
             # 2026-10-17（业主裁定「方案 1」）：不变量从「全只读」改成「写面钉死」——
-            # 允许的写工具只有 READONLY_CALL_EXCEPTIONS[role] 里逐条登记的**自己的落库代理**
-            # （H：review 的三件）。不许出现的是「**未登记**的写工具」——那才是放宽只读。
+            # 允许的写工具只有 READONLY_CALL_EXCEPTIONS[role] 里逐条登记的自己的落库代理
+            # （H：review 的三件）。不许出现的是「未登记的写工具」——那才是放宽只读。
             from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
 
             _allowed = {n for n, _w in _EXC.get(role, ())}

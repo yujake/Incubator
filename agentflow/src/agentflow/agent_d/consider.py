@@ -8,18 +8,15 @@ from __future__ import annotations
 class _Consider:
     def consider(self, qid: str) -> dict:
         """§4.1 状态机的 [3] 评估 → 分支 这一步，独立成可复用的方法。
-
-        - 证据足够 ⇒ 把问题推进到 ``researching``（下一步就该写结论了）；
-        - 证据不足 ⇒ 交给 :meth:`submit_gaps` 提问（它会查重与看预算）。
-
-        为什么必须单独有这个方法：早先"足够"这一支什么都不做，问题就永远停在
-        ``open`` —— 而 ``research()`` 只处理 ``researching``，于是证据充足的问题
-        永远不会被研究、也永远不会出现在报告的"现有证据"一节里，表现为
-        "D 溯源为空"。那不是工具没接上，是状态机少了一条边（§4.1 明写"足够 → [5]
-        写研究报告"）。把这一支显式实现出来，问题就再也不会卡在 open。
-
-        返回 ``{"question_id","sufficient","criteria","priority","confidence",
-        "promoted","submitted"}``，供编排层记账。
+        
+        - 证据足够 ⇒ 把问题推进到 ``researching``（下一步就该写结论了）；- 证据不足 ⇒ 交给 :meth:`submit_gaps` 提问（它会查重与看预算）。
+        
+        为什么必须单独有这个方法：早先"足够"这一支什么都不做，问题就永远停在``open`` —— 而 ``research()`` 只处理 ``researching``，于是
+        证据充足的问题永远不会被研究、也永远不会出现在报告的"现有证据"一节里，表现为"D 溯源为空"。那不是工具没接上，是状态机少了一条边（§4.1 明写"足够 → [5]写研究
+        报告"）。把这一支显式实现出来，问题就再也不会卡在 open。
+        
+        返回 ``{"question_id","sufficient","criteria","priority","confidence","promoted","submitted"}``，
+        供编排层记账。
         """
         ev = self.trace_question(qid)
         verdict = self.assess(qid, ev)

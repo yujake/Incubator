@@ -12,15 +12,10 @@
 - 七类齐全：清单覆盖 FC-27 平移后的七类（按 `category` 计数）
 - 非 git 仓库下 `--git` ⇒ `unknown`（退出码 2），不是 `clean`
 - hash 台账（批准记录）：`.noai-approvals.json` 的三态纪律
-  （台账读不到/解析不了/结构不对 ⇒ `unknown`，不是 `clean`）、
-  理由码区分 `unregistered`（从没登记）与 `stale`（登记过但批准的那一版不是现在这一版，
-  消息里必须有两个 hash）、`1 < 2` 证明门槛真的是 2、台账不能批准自己、
-  `--baseline` 绝不写 `reviewers`（登记 ≠ 批准）、`--approve` 在 hash 不一致时
-  拒绝写入并以退出码 2 结束
+（台账读不到/解析不了/结构不对 ⇒ `unknown`，不是 `clean`）、理由码区分 `unregistered`（从没登记）与 `stale`（登记过但批准的那一版不是现在这一版，消息里必须有两个
+hash）、`1 < 2` 证明门槛真的是 2、台账不能批准自己、`--baseline` 绝不写 `reviewers`（登记 ≠ 批准）、`--approve` 在 hash 不一致时拒绝写入并以退出码 2 结束
 - 归属的依据：`authored`（结论）与 `authored_basis`（结论有多强：`attested` / `inferred`）
-  必须成对出现，缺依据 ⇒ 结构不合规 ⇒ `unknown`（不给默认值：
-  "我没写依据"与"依据是推断"不是同一种东西）；`inferred` 的条目在人读的理由行里
-  必须标注"推断，非独立证据"
+必须成对出现，缺依据 ⇒ 结构不合规 ⇒ `unknown`（不给默认值："我没写依据"与"依据是推断"不是同一种东西）；`inferred` 的条目在人读的理由行里必须标注"推断，非独立证据"
 """
 
 from __future__ import annotations
@@ -547,17 +542,14 @@ def test_every_category_is_in_manifest_docstring_order() -> None:
 
 
 def test_manifest_globs_point_at_real_files() -> None:
-    """每条 glob（除 `src/agentflow/release_check.py` 这条刻意预登记外）都必须指向真实存在的文件。
+    """    每条 glob（除 `src/agentflow/release_check.py` 这条刻意预登记外）都必须指向真实存在的文件。
 
     理由：写错的 glob 不会报错，它只会永远不命中 —— 那是一个静默的假阴性。
 
     ## A11：通配行按"至少命中一个真实文件"判（2026-10-06 起）
 
-    清单此前只有逐文件的行，所以这条断言可以写成"这个路径必须是一个文件"。
-    F15 把 `tests/golden/*.json` 登记进来了（两份冻结快照的集合才是那一格的口径：
-    将来加第三份快照时不该再来改一次清单），于是这里必须能处理通配：
-    含 `*`/`?`/`[`/`` 的行按 `Path.glob` 展开，要求至少命中一个真实文件 ——
-    一个都不命中的通配与写错的逐文件行是同一种假阴性（永远不命中）。
+    清单此前只有逐文件的行，所以这条断言可以写成"这个路径必须是一个文件"。F15 把 `tests/golden/*.json` 登记进来了（两份冻结快照的集合才是那一格的口径：将来加第三份快照时不该再来改一次清单），
+    于是这里必须能处理通配：含 `*`/`?`/`[`/`` 的行按 `Path.glob` 展开，要求至少命中一个真实文件 ——一个都不命中的通配与写错的逐文件行是同一种假阴性（永远不命中）。
     逐文件的行仍按"必须是一个文件"判，一个字都没放宽。
     """
     root = REAL_MANIFEST.parent
@@ -664,19 +656,15 @@ def manifest_symbol_problems(
     target_text: str = "",
     py_files: tuple[str, ...] | None = None,
 ) -> list[str]:
-    """一条理由里的每一个反引号符号都必须有出处；返回问题清单（空 = 全都有出处）。
+    """    一条理由里的每一个反引号符号都必须有出处；返回问题清单（空 = 全都有出处）。
 
     ## 三种"有出处"
 
     1. 符号出现在本条指向的文件里（同文件符号）—— 这是改前唯一被查过的那一种；
     2. 同一句里写出了它出自哪个 `.py` 文件，且那个文件里真的有它（跨文件引用 + 出处）；
     3. 同一句里显式声明它不在这里（`本文件` 一类标记），且它在清单登记的 `.py` 里
-       唯一可解析 —— 出处不写出文件名时，至少要求它没有第二种解释。
-
-    为什么允许跨文件引用而不是一律禁掉：`interactions.py` 那条理由要说明
-    "矩阵真身不在本文件里"，`tools/vocab_census.py` 那条要说明
-    "lint 判据加载本文件当判据用" —— 两句话都必须能提到对面的符号，
-    禁掉它们等于逼着理由说半句话。代价是给出处，而这正是本判据要的。
+    唯一可解析 —— 出处不写出文件名时，至少要求它没有第二种解释。为什么允许跨文件引用而不是一律禁掉：`interactions.py` 那条理由要说明"矩阵真身不在本文件里"，`tools/vocab_census.py`
+    那条要说明"lint 判据加载本文件当判据用" —— 两句话都必须能提到对面的符号，禁掉它们等于逼着理由说半句话。代价是给出处，而这正是本判据要的。
     """
     text = target_text or (root / rule.glob).read_text(encoding="utf-8")
     files = py_files if py_files is not None else _manifest_python_files(root)
@@ -718,21 +706,16 @@ def manifest_symbol_problems(
 
 
 def test_python_manifest_referenced_symbols_exist() -> None:
-    """理由里用反引号写出的符号名，必须真的存在于对应的源文件里。
+    """    理由里用反引号写出的符号名，必须真的存在于对应的源文件里。
 
-    为什么需要这条：清单的"理由"是给人读的，写错一个函数名不会报错 ——
-    它只会把人指向一段不存在的代码，而禁改区仍然"看起来被登记了"。
-    这比行号更强：行号漂了它不响（行号本来就易失），符号没了它必响。
+    为什么需要这条：清单的"理由"是给人读的，写错一个函数名不会报错 ——它只会把人指向一段不存在的代码，而禁改区仍然"看起来被登记了"。这比行号更强：行号漂了它不响（行号本来就易失），符号没了它必响。
 
     同时它给清单加了一道真实性约束：一条 glob 不能靠"理由里随便写点什么"来通过。
 
-    只对 `.py` 条目做符号检查：`pyproject.toml` 里没有函数名；
-    发布脚本（`release_check.py` 的两种落位）是并行子任务正在写的文件，
-    本用例不替它背书 —— 它们由"存在性/预登记"用例单独覆盖。
+    只对 `.py` 条目做符号检查：`pyproject.toml` 里没有函数名；发布脚本（`release_check.py` 的两种落位）是并行子任务正在写的文件，本用例不替它背书 ——
+    它们由"存在性/预登记"用例单独覆盖。
 
-    口径（`X-96.4-1`）：核理由里的每一个反引号符号，不再只看第一个。
-    跨文件引用允许，但必须在同一句里写出它出自哪个 `.py` 文件；
-    出处只写"本文件"一类标记时，要求它在清单登记的 `.py` 里唯一可解析。
+    口径（`X-96.4-1`）：核理由里的每一个反引号符号，不再只看第一个。跨文件引用允许，但必须在同一句里写出它出自哪个 `.py` 文件；出处只写"本文件"一类标记时，要求它在清单登记的 `.py` 里唯一可解析。
     """
     root = REAL_MANIFEST.parent
     py_files = _manifest_python_files(root)
@@ -1856,23 +1839,16 @@ _REQUIRED_ENTRY_KEYS = (
 
 
 def test_real_ledger_is_readable_and_registers_the_round() -> None:
-    """真实台账：可读、结构合规、覆盖本轮命中的文件（不断言签字状态）。
+    """    真实台账：可读、结构合规、覆盖本轮命中的文件（不断言签字状态）。
 
-    `F10` 重写了这一条。改前它逐字断言两件"签字前"的形态：
-    `G.LEDGER_NAME not in paths`（台账不给自己登记）与每条
-    `authored_basis == "inferred"`。所有者 2026-09-27 完成逐行走查并签字之后，
-    这两条同时变成假的（实测第一条的原始输出：
+    `F10` 重写了这一条。改前它逐字断言两件"签字前"的形态：`G.LEDGER_NAME not in paths`（台账不给自己登记）与每条`authored_basis == "inferred"`。所有者
+    2026-09-27 完成逐行走查并签字之后，这两条同时变成假的（实测第一条的原始输出：AssertionError: 台账不该给自己登记（它永远 unapproved，登记只会制造噪音）assert
+    '.noai-approvals.json' not in {'.noai-approvals.json', ...}
 
-        AssertionError: 台账不该给自己登记（它永远 unapproved，登记只会制造噪音）
-        assert '.noai-approvals.json' not in {'.noai-approvals.json', ...}
-
-    17 条拿到了 2 名不同 reviewer、`authored_basis` 变成 `attested`、
-    台账也把自己登记了进去）。那是预期的世界变化，不是回归 —— 所以这一条现在
-    只断言"不随人签字而变"的结构性不变量：条数下界、覆盖范围、每条的必需键、
-    `sha256` 是 64 位小写 hex、`authored` / `authored_basis` 取自受控取值。
-    至于"谁签了字"，那是台账里的事实，不是这一条该背的契约
-    （未批准那一档的机器判据见下面 `test_real_ledger_registers_itself_but_can_never_approve_itself`
-    与那批 `test_approvals_*` 用例）。
+    17 条拿到了 2 名不同 reviewer、`authored_basis` 变成 `attested`、台账也把自己登记了进去）。那是预期的世界变化，不是回归 —— 所以这一条现在只断言"不随人签字而变"的结构性不变量：
+    条数下界、覆盖范围、每条的必需键、`sha256` 是 64 位小写 hex、`authored` / `authored_basis` 取自受控取值。至于"谁签了字"，那是台账里的事实，
+    不是这一条该背的契约（未批准那一档的机器判据见下面 `test_real_ledger_registers_itself_but_can_never_approve_itself`与那批
+    `test_approvals_*` 用例）。
     """
     real = REAL_MANIFEST.parent / G.LEDGER_NAME
     ledger = G.load_ledger(real)
@@ -2002,18 +1978,15 @@ def _r1c_root(tmp_path: Path) -> tuple[Path, Path, str]:
 
 def _r1c_evidence(root: Path, tag: str, *, auditor: str = "", sha256: str = "",
                   scope: str = "") -> tuple[str, str]:
-    """`(绝对路径, sha256)` —— 每条记录一份内容不同的证据。
+    """    `(绝对路径, sha256)` —— 每条记录一份内容不同的证据。
 
-    为什么必须不同：`counted_audits` 的键是 `(归一化路径, 内容 hash)`，共用一份证据会
-    被正确地折叠成一条（那正是 `c-17` 的行为）。这一节要测的是维度/身份的判据，
+    为什么必须不同：`counted_audits` 的键是 `(归一化路径, 内容 hash)`，共用一份证据会被正确地折叠成一条（那正是 `c-17` 的行为）。这一节要测的是维度/身份的判据，
     所以先让"三条记录真的是三条独立的证据"这件事成立。
 
-    证据正文里必须同时出现审计者标识与所审版本的 sha 前缀：判定侧的
-    `_check_audit_evidence` 会逐条交叉核对这两件事（`H-1b`），缺了它整条通路会判
-    `unknown`，那样这一节测的就成了"证据锚"而不是"维度/身份判据"。
+    证据正文里必须同时出现审计者标识与所审版本的 sha 前缀：判定侧的`_check_audit_evidence` 会逐条交叉核对这两件事（`H-1b`），缺了它整条通路会判`unknown`，
+    那样这一节测的就成了"证据锚"而不是"维度/身份判据"。
 
-    为什么给绝对路径：`evaluate_approval` 的默认 `repo` 是 `project_root()`
-    （`agentflow/`），相对路径在临时目录里会解析错地方。
+    为什么给绝对路径：`evaluate_approval` 的默认 `repo` 是 `project_root()`（`agentflow/`），相对路径在临时目录里会解析错地方。
     """
     ev = root / "temp" / f"r1c-ev-{tag}.txt"
     ev.parent.mkdir(parents=True, exist_ok=True)
@@ -2455,17 +2428,13 @@ def test_r1c_f5_scope_must_name_a_real_symbol(tmp_path: Path) -> None:
 
 
 def test_r1c_f6_negative_control_must_say_what_was_seen(tmp_path: Path) -> None:
-    """`R5-R1b-6`：四种空话必须被拒 —— 长度、标记词、比出来什么、不是重复填充。
+    """    `R5-R1b-6`：四种空话必须被拒 —— 长度、标记词、比出来什么、不是重复填充。
 
-    正控：写清"拿什么比 + 比出来什么"且够长的负控通过（`_R1C_NC`）。
-    负控：四种空话逐条报出问题，且 `record_audit` 拒写。
+    正控：写清"拿什么比 + 比出来什么"且够长的负控通过（`_R1C_NC`）。负控：四种空话逐条报出问题，且 `record_audit` 拒写。
 
-    注意： 口径裁决②（2026-09-27）：长度下限 `NEGCTL_MIN_CHARS = 40` 恢复为必经之路。
-    本函数一度为了让 `tests/test_noai_gate_audit_channel.py` 里那句 13 字符的夹具负控
-    （`'改前会报出 network'`）通过而移除了它 —— 那个理由不成立：那个测试文件今天已经有
-    13 条红（根因是它的写入侧夹具没给 `--audit-scope`，与负控判据无关；实测把那个文件
-    对着改前那一版 `noai_gate.py` 跑也是 13 failed）。为一个本来就在红的夹具放宽判据
-    = 拿门的强度换一个假绿。 所以这里明确断言：13 字符的短句被拒，那是预期结果；
+    注意： 口径裁决②（2026-09-27）：长度下限 `NEGCTL_MIN_CHARS = 40` 恢复为必经之路。本函数一度为了让 `tests/test_noai_gate_audit_channel.py` 里那句
+    13 字符的夹具负控（`'改前会报出 network'`）通过而移除了它 —— 那个理由不成立：那个测试文件今天已经有13 条红（根因是它的写入侧夹具没给 `--audit-scope`，与负控判据无关；
+    实测把那个文件对着改前那一版 `noai_gate.py` 跑也是 13 failed）。为一个本来就在红的夹具放宽判据= 拿门的强度换一个假绿。 所以这里明确断言：13 字符的短句被拒，那是预期结果；
     专门修那个夹具的批次会把夹具连同样例一起改成合规写法。
     """
     assert G.negative_control_problem(_R1C_NC) == ""

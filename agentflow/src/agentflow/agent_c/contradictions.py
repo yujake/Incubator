@@ -9,34 +9,16 @@ from ._support import SERVICE_MAX_CONTRADICTIONS, Sequence, _cfg_int, _service_i
 class _Contradictions:
     def contradictions(self, *, relation_ids: Sequence[str] | None = None, limit: int | None = None) -> dict:
         """矛盾检查（同步、只读、有界），判据全部来自 `interactions`。
-
-        返回
-        ----
-        ``{"checked", "scope", "scanned", "contradictions", "strong_count", "weak_count",
-           "strong_relation_id_pairs", "truncated", "limit", "method": "literal",
-           "method_note", "reason"}``
-
-        `contradictions` 里每一项保留 `interactions` 给的 `strength`
-        （`strong` = 明确对立主张；`weak` = 仅否定词出现与否不一致）。两者必须分开看：
-        实测里 `weak` 的假阳性极高，把它当矛盾呈现会让 D 去追一个不存在的问题。
-
-        范围：给了 `relation_ids` 就用这些（I2 的"只复核这两个具体的关系"靠它 ——
-        重跑整个分析既慢又会引入与本次复核无关的噪音），否则用全部关系。
-
-        `method_note` 必须存在且诚实：本方法只做可逐字核实的形态，
-        它不声称能判定一般语义矛盾；而且字面判据本身还分两档（`strong` / `weak`，
-        见 `interactions.detect_contradictions`）：只有 `strong`（一方明确肯定、另一方
-        明确否定同一对立词组）才够格当研究线索，`weak`（仅否定词出现与否不一致）
-        在真实数据上假阳性极高。把"字面检测"说成"语义分析"、或把 `weak` 线索
-        说成"发现了矛盾"，都会让 D 去追一个不存在的问题。
-
+        返回----``{"checked", "scope", "scanned", "contradictions", "strong_count", "weak_count","strong_relation_id_pairs", "truncated", "limit", "method": "literal","method_note", "reason"}``
+        `contradictions` 里每一项保留 `interactions` 给的 `strength`（`strong` = 明确对立主张；`weak` = 仅否定词出现
+        与否不一致）。两者必须分开看：实测里 `weak` 的假阳性极高，把它当矛盾呈现会让 D 去追一个不存在的问题。
+        范围：给了 `relation_ids` 就用这些（I2 的"只复核这两个具体的关系"靠它 ——重跑整个分析既慢又会引入与本次复核无关的噪音），否则用全部关系。
+        `method_note` 必须存在且诚实：本方法只做可逐字核实的形态，它不声称能判定一般语义矛盾；而且字面判据本身还分两档（`strong` / `weak`，见 
+        `interactions.detect_contradictions`）：只有 `strong`（一方明确肯定、另一方明确否定同一对立词组）才够格当研究线索，`weak`
+        （仅否定词出现与否不一致）在真实数据上假阳性极高。把"字面检测"说成"语义分析"、或把 `weak` 线索说成"发现了矛盾"，都会让 D 去追一个不存在的问题。
         自己不实现任何判据：全部委托 `interactions.detect_contradictions`。
-        两个模块各持一套判据的后果是"写入期（B 问 C）认为不矛盾、事后（C 自己扫）
-        认为矛盾"这种没有报错的静默分裂。
-
-        传进去的是原始表行（图快照里的副本），不预先注入 `concept_pair_key`：
-        那个派生字段由 `interactions` 就地推导 —— 这避免了
-        "忘了算派生态 ⇒ 静默拿到空结果"这类失效（见 `interactions.concept_pair_key` 的说明）。
+        传进去的是原始表行（图快照里的副本），不预先注入 `concept_pair_key`：那个派生字段由 `interactions` 就地推导 —— 这避免了"忘了算派生态
+        ⇒ 静默拿到空结果"这类失效（见 `interactions.concept_pair_key` 的说明）。
         """
         g = self._g()
         checked, why = self._service_checkable(g)

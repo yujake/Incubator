@@ -1,67 +1,23 @@
 # -*- coding: utf-8 -*-
-"""接线判据：内容级验收（`draft/37` §17.3）真的在生产路径上跑一次，读数落到人能读的地方。
-
-## 这一组守什么（题 6 选 A = 接线；题 13 选 B = 再接上主控的收工工具）
-
-`reviewaccept` 此前是"判据齐、测试齐、而真机上永远没人跑它"：`src/`/`tools/`/`scripts/`
-里一条 import 都到不了它，五条测试文件各自 `import reviewaccept` 直接调 ——
-测试全绿与"这条判据在生产面上存在"是两件事，而只有前者成立时，读的人会把它读成后者。
-
-生产面今天有两个只读出口，读数同形（判据名与顺序都现取自 `reviewaccept`）：
-
-1. CLI `agentflow closing`（`cli._print_review_acceptance`，题 6 选 A）；
-2. 主控的收工工具 `conductor.closing`（`tools/conductor_tools.py`，题 13 选 B）——
-   决定收工的人是主控，它做收工决定时手里不能只有收工门那八格。
-
-所以这一组的前两条是反真空，不是对拍副本：
-
-1. `test_the_production_callers_are_exactly_the_registered_readonly_exits`：把生产面的
-   调用者一个个数出来（`ast` 扫 `src/`），并逐条登记它们为什么在那儿 ——
-   零个调用者 ⇒ 红（接线没接上）；多出一个没登记的 ⇒ 红（多了一条没人解释的面）。
-   这一条不满足于"CLI 里有一行 import"：`import` 与"真的调它"是两件事。
-   （它改名前叫 `test_the_only_production_caller_is_the_readonly_closing_exit`：
-   当时只有 CLI 那一条，题 13 选 B 之后不再"只有一条"，名字跟着口径一起改，
-   判据本身（逐条登记 + 相等）一个字没放宽。）
-2. `test_every_criterion_really_runs_through_the_cli_exit` 与
-   `test_every_criterion_really_runs_through_the_conductor_tool_exit`：把五条内容级判据
-   的每一个隐藏入口逐个换成"一调就炸"，分别从 CLI 出口与工具出口进去 ⇒ 必须炸。
-   "没有真的跑到判据 ⇒ 不许算通过"就是这两条的字面实现。
-
-中间几条守"读数落到人能读到的地方"与三态不折平（两个出口各一组）：
-
-3. `test_the_six_criteria_and_the_five_auxiliary_readings_reach_the_human_output`
-   —— 六条判据 + 五种辅助读数的名字与值必须出现在 CLI 的原始输出里，
-   并且辅助读数带着"不构成通过"的那句话；
-   `test_the_tool_exit_reports_the_criteria_and_the_auxiliary_readings` ——
-   同一份读数必须出现在工具体的返回里（判据名/顺序/辅助标签逐条对上 `reviewaccept`）。
-4. `test_the_readings_are_recomputed_not_hand_copied` 与
-   `test_the_tool_readings_are_recomputed_not_hand_copied` —— 改盘上的东西 ⇒
-   输出里的数跟着变（防"把六条判据的结论手抄成一句通过"）。
-
-## 反真空那一条（辅助读数漂亮也不许通过）
-
-`test_pretty_auxiliary_readings_cannot_print_a_pass`：把五种辅助读数全部造得漂亮
-（正文改过 sha 变了 / PDF 在盘上 / 锚 consistent / 任务行与台账行都增加），
-而内容级判据不合格 ⇒ CLI 输出里的 `passed` 必须是假。
-这一条要的是"分栏在出口上也是真的"，不只是 `ReviewAcceptance` 里分了栏。
-
-## 接线不许动的东西（都在这里钉住）
-
-- 抄一遍判据：`test_the_wiring_does_not_restate_the_criteria` 与
-  `test_the_tool_wiring_does_not_restate_the_criteria` —— 两个出口上的
-  判据名、判据顺序、辅助读数标签必须来自 `reviewaccept.CRITERIA` /
-  `AUXILIARY_SIGNALS`，不许在 `cli.py` 或 `conductor_tools.py` 里另写一份
-  （另写一份就等于"同一件事两个落位"，而两处会各自漂）。
-- 动退出码 / 动 `can_close`：`test_the_exit_code_still_comes_only_from_the_closing_gate`
-  与 `test_the_tool_readings_are_recomputed_not_hand_copied`（后者的下半段钉住
-  "内容级判据红了，而收工门那八格的 `can_close` 一个字都不变"）—— 摘掉接线 /
-  让内容级验收"没查成"都不许改退出码；把内容级验收并进退出码或 `can_close`
-  等于偷偷改门的强度，那是裁定题不是接线题。
-- `cap_usd` 的三态：`test_cap_usd_absent_is_unknown_and_over_cap_is_fail`
-  与 `test_a_negative_cost_cap_is_a_usage_error_not_a_verdict` ——
-  不给上限 ⇒ 那一格"没查成"（绝不是通过）；负数上限是用法错（受控拒绝），
-  不许伪装成"判据红"。
-"""
+"""接线判据：内容级验收（`draft/37` §17.3）真的在生产路径上跑一次，读数落到人能读的地方。`reviewaccept` 此前是"判据齐、测试齐、而真机上永远没人跑它"：`src/`/`tools/`/`scripts/`里一条 import 都到不了它，
+五条测试文件各自 `import reviewaccept` 直接调 ——测试全绿与"这条判据在生产面上存在"是两件事，而只有前者成立时，读的人会把它读成后者。生产面今天有两个只读出口，读数同形（判据名与顺序都现取自 `reviewaccept`）：CLI
+`agentflow closing`（`cli._print_review_acceptance`，题 6 选 A）；2. 主控的收工工具 `conductor.closing`（`tools/conductor_tools.py`，题 13 选 B）——决定收工的人是主控，
+它做收工决定时手里不能只有收工门那八格。所以这一组的前两条是反真空，不是对拍副本：`test_the_production_callers_are_exactly_the_registered_readonly_exits`：把生产面的调用者一个个数出来（`ast` 扫
+`src/`），并逐条登记它们为什么在那儿 ——零个调用者 ⇒ 红（接线没接上）；多出一个没登记的 ⇒ 红（多了一条没人解释的面）。这一条不满足于"CLI 里有一行 import"：`import` 与"真的调它"是两件事。（它改名前叫
+`test_the_only_production_caller_is_the_readonly_closing_exit`：当时只有 CLI 那一条，题 13 选 B 之后不再"只有一条"，名字跟着口径一起改，判据本身（逐条登记 + 相等）一个字没放宽。）2.
+`test_every_criterion_really_runs_through_the_cli_exit` 与`test_every_criterion_really_runs_through_the_conductor_tool_exit`：
+把五条内容级判据的每一个隐藏入口逐个换成"一调就炸"，分别从 CLI 出口与工具出口进去 ⇒ 必须炸。"没有真的跑到判据 ⇒ 不许算通过"就是这两条的字面实现。
+中间几条守"读数落到人能读到的地方"与三态不折平（两个出口各一组）：`test_the_six_criteria_and_the_five_auxiliary_readings_reach_the_human_output`—— 六条判据 + 五种辅助读数的名字与值必须出现在
+CLI 的原始输出里，并且辅助读数带着"不构成通过"的那句话；`test_the_tool_exit_reports_the_criteria_and_the_auxiliary_readings` ——同一份读数必须出现在工具体的返回里（判据名/顺序/辅助标签逐条对上
+`reviewaccept`）。4. `test_the_readings_are_recomputed_not_hand_copied` 与`test_the_tool_readings_are_recomputed_not_hand_copied` —— 改盘上的东西
+⇒输出里的数跟着变（防"把六条判据的结论手抄成一句通过"）。`test_pretty_auxiliary_readings_cannot_print_a_pass`：把五种辅助读数全部造得漂亮（正文改过 sha 变了 / PDF 在盘上 / 锚 consistent /
+任务行与台账行都增加），而内容级判据不合格 ⇒ CLI 输出里的 `passed` 必须是假。这一条要的是"分栏在出口上也是真的"，不只是 `ReviewAcceptance` 里分了栏。
+抄一遍判据：`test_the_wiring_does_not_restate_the_criteria` 与`test_the_tool_wiring_does_not_restate_the_criteria` —— 两个出口上的判据名、判据顺序、辅助读数标签必须来自
+`reviewaccept.CRITERIA` /`AUXILIARY_SIGNALS`，不许在 `cli.py` 或 `conductor_tools.py` 里另写一份（另写一份就等于"同一件事两个落位"，而两处会各自漂）。- 动退出码 / 动
+`can_close`：`test_the_exit_code_still_comes_only_from_the_closing_gate`与
+`test_the_tool_readings_are_recomputed_not_hand_copied`（后者的下半段钉住"内容级判据红了，而收工门那八格的 `can_close` 一个字都不变"）—— 摘掉接线 /让内容级验收"没查成"都不许改退出码；
+把内容级验收并进退出码或 `can_close`等于偷偷改门的强度，那是裁定题不是接线题。- `cap_usd` 的三态：`test_cap_usd_absent_is_unknown_and_over_cap_is_fail`与
+`test_a_negative_cost_cap_is_a_usage_error_not_a_verdict` ——不给上限 ⇒ 那一格"没查成"（绝不是通过）；负数上限是用法错（受控拒绝），不许伪装成"判据红"。"""
 from __future__ import annotations
 
 import ast
@@ -267,18 +223,15 @@ def _print_review_acceptance_calls() -> list[str]:
 
 
 def test_the_production_callers_are_exactly_the_registered_readonly_exits():
-    """接线判据（正控 + 逐条登记）：生产面的调用者恰好是登记的那几个。
+    """    接线判据（正控 + 逐条登记）：生产面的调用者恰好是登记的那几个。
 
-    改前必红：这一层此前在生产面上 0 个调用者（`src/`/`tools/`/`scripts/`
-    都到不了它），于是"五条内容级判据"在真机上从来没跑过一次。
+    改前必红：这一层此前在生产面上 0 个调用者（`src/`/`tools/`/`scripts/`都到不了它），于是"五条内容级判据"在真机上从来没跑过一次。
 
-    为什么不是"CLI 里有一行 `from . import reviewaccept`"就算接线：
-    那只是声明面（import 了不等于调了）。这一条数的是调用点（`ast` 里的
-    `check_review(...)`），并且要求每个调用点都在登记表里有一行理由。
+    为什么不是"CLI 里有一行 `from . import reviewaccept`"就算接线：那只是声明面（import 了不等于调了）。这一条数的是调用点（`ast` 里的`check_review(...)`），
+    并且要求每个调用点都在登记表里有一行理由。
 
-    为什么名字从"`the_only_production_caller`"改过来：题 13 选 B 之后
-    生产面不再是"只有 CLI 那一条"。改的是名字与口径（登记表可以有多条），
-    判据本身（盘上调用点集合 == 登记表，且登记的每个函数真的调了它）没放宽。
+    为什么名字从"`the_only_production_caller`"改过来：题 13 选 B 之后生产面不再是"只有 CLI 那一条"。改的是名字与口径（登记表可以有多条），判据本身（盘上调用点集合 == 登记表，
+    且登记的每个函数真的调了它）没放宽。
     """
     callers = _check_review_callers()
     assert callers, ("生产面一个 `check_review` 调用点都没有 ⇒ 接线没接上："

@@ -1,11 +1,7 @@
 # -- coding: utf-8 --
 """趟次索引与事件的对账判据（裁定 O2；`draft/75 §3` 的判据 F）。
-
 ## 这一组守什么
-
-索引是派生数据：它可能与源不一致。所以这里的第一条纪律不是"索引读得出来"，
-而是"索引与 `sessions/*.jsonl` 的事件现算结果逐趟一致"，且不一致时报出来：
-
+索引是派生数据：它可能与源不一致。所以这里的第一条纪律不是"索引读得出来"，而是"索引与 `sessions/*.jsonl` 的事件现算结果逐趟一致"，且不一致时报出来：
 | 用例 | 正控 / 负控 | 造什么 | 该红还是该绿 |
 |---|---|---|---|
 | `test_the_index_agrees_with_the_events_run_by_run` | 正控 | 两场各两趟 ⇒ 索引逐趟 == 现算 | 绿 |
@@ -14,17 +10,11 @@
 | `test_an_absent_index_is_unreadable_not_computed` | 负控（三态） | 索引不在盘上 | `tri=unreadable`，不是 `computed` |
 | `test_an_empty_workspace_is_not_applicable` | 负控（三态） | 一场会话都没有 | `tri=not_applicable` |
 | `test_the_event_kind_constants_match_userio` | 反真空 | 字面量与 `userio` 的常量 | 相等 |
-
 ## 名字的边界（不许混用）
-
-这里的「趟次」是会话内的第几趟（一条 `agent_run_start` → `agent_run_end`）。
-`projects.py` 的 `run_index: int` 是"这个项目第几趟"（配 `out/run-<n>`）——另一个概念，
-本文件一个字都不碰它（`draft/78 §7` 的提醒）。
-
+这里的「趟次」是会话内的第几趟（一条 `agent_run_start` → `agent_run_end`）。`projects.py` 的 `run_index: int` 是"这个项目第几趟"（配 `out/run-<n>`）
+——另一个概念，本文件一个字都不碰它（`draft/78 §7` 的提醒）。
 ## 「红前绿后」是怎么做到的
-
-负控都先断言正控那一份是绿的（`usable is True` / `drift == []`），再改一个字节，
-再断言它红了。少了前面那一步，"改坏了也没红"这件事可能是因为尺子本来就没接上。
+负控都先断言正控那一份是绿的（`usable is True` / `drift == []`），再改一个字节，再断言它红了。少了前面那一步，"改坏了也没红"这件事可能是因为尺子本来就没接上。
 """
 
 from __future__ import annotations

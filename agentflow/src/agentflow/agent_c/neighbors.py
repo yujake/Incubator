@@ -9,23 +9,15 @@ from ._support import SERVICE_MAX_DEPTH, SERVICE_MAX_NODES, _cfg_int, _service_i
 class _Neighbors:
     def neighbors(self, concept_id: str, *, depth: int = 1, max_nodes: int | None = None) -> dict:
         """某概念的 `depth` 跳邻域（同步、只读、有界）。
-
-        返回
-        ----
-        ``{"checked", "concept_id", "depth", "nodes": [{concept_id, name, distance}],
-           "edges": [...], "truncated", "reason", "empty", ...}``
-
-        - `nodes` 含起点本身（`distance=0`）。不含起点的话，"查不到这个概念"
-          与"它是个孤立节点"在返回值上长得一模一样，而那两件事要求 D 做不同的事：
-          前者要改查询，后者才是"这个方向确实没人研究"。
-        - `empty` 的口径：这次查询没有找到起点之外的任何节点（孤立概念、或
-          depth 内无邻居）。它与 `checked` 正交 —— `checked=True & empty=True`
-          才是"查了、确实没有邻居"。
-        - `depth` 与 `max_nodes` 都会被夹进服务上限（`truncated=True` + `reason` 明说）；
-          触及 `max_nodes` 时只展开到边界为止并如实标截断。静默截断会让 D 以为
-          "就这些邻居"，进而得出一个口吻确定的错误结论。
-        - 概念不存在 ⇒ `checked=True`、`nodes=[]`、`reason` 说清"该代号不在概念表里"。
-          `checked=False` 只留给"概念表为空 / 图上没有任何可查代号"。
+        
+        返回----``{"checked", "concept_id", "depth", "nodes": [{concept_id, name, distance}],"edges": [...], "truncated", "reason", "empty", ...}``
+        
+        - `nodes` 含起点本身（`distance=0`）。不含起点的话，"查不到这个概念"与"它是个孤立节点"在返回值上长得一模一样，而那两件事要求 D 做不同的事：前者
+        要改查询，后者才是"这个方向确实没人研究"。- `empty` 的口径：这次查询没有找到起点之外的任何节点（孤立概念、或 depth 内无邻居）。它与 `checked` 
+        正交 —— `checked=True & empty=True`才是"查了、确实没有邻居"。- `depth` 与 `max_nodes` 都会被夹进服务上限（`truncated=True`
+        + `reason` 明说）；触及 `max_nodes` 时只展开到边界为止并如实标截断。静默截断会让 D 以为"就这些邻居"，进而得出一个口吻确定的错误结论。- 概念不
+        存在 ⇒ `checked=True`、`nodes=[]`、`reason` 说清"该代号不在概念表里"。`checked=False` 只留给"概念表为空 / 图上没有
+        任何可查代号"。
         """
         g = self._g()
         cid = str(concept_id or "")

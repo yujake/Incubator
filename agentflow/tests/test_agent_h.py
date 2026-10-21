@@ -45,18 +45,9 @@ KNOWLEDGE_FILES = ("statements.json", "relations.json", "literature.json")
 def sync_all_counters(st: Store) -> None:
     """把 counters.json 对齐到"每张表 max(已用)+1" —— 转发到 `conftest.sync_counters`。
 
-    夹具直接写行（绕过 `alloc_id`）时必须补这一步：`verify` 会检查 counters 与
-    已用 ID 的一致性，不补就会引入与本用例无关的 `counter_behind` 噪音
-    —— 而噪音比不校验更糟：它会训练人忽略告警。
+    夹具直接写行（绕过 `alloc_id`）时必须补这一步：`verify` 会检查 counters 与已用 ID 的一致性，不补就会引入与本用例无关的 `counter_behind` 噪音 —— 而噪音比不校验更糟：它会训练人忽略告警。
 
-    本函数此前在这里写死了第二份 (kind, table) 名单（`lit`/`concept`/`relation`/…）——
-    正是 `conftest.sync_counters` 的 docstring 点名的那种漂移："测试代码也是代码，
-    写死第二份名单同样会漂移"。它今天真的漂了：并表过渡期新标准那一侧（`stmt`）
-    不在名单里 ⇒ 夹具两处同号之后报 `counter_behind(stmt)`，而那条读数与本用例
-    要验的东西毫无关系（`test_agent_h.py::test_h_output_does_not_break_the_global_verify`
-    当场变红，第 125 轮的重测把它抓了出来）。所以改成转发：覆盖范围由
-    `S.ID_COUNTERS` 反查，一处定义、一处维护。
-    """
+    本函数此前在这里写死了第二份 (kind, table) 名单（`lit`/`concept`/`relation`/…）—— 正是 `conftest.sync_counters` 的 docstring 点名的那种漂移："测试代码也是代码，写死第二份名单同样会漂移"。它今天真的漂了：并表过渡期新标准那一侧（`stmt`）不在名单里 ⇒ 夹具两处同号之后报 `counter_behind(stmt)`，而那条读数与本用例要验的东西毫无关系（`test_agent_h.py::test_h_output_does_not_break_the_global_verify` 当场变红，第 125 轮的重测把它抓了出来）。所以改成转发：覆盖范围由 `S.ID_COUNTERS` 反查，一处定义、一处维护。"""
     from conftest import sync_counters as _sync
 
     _sync(st)
@@ -265,12 +256,11 @@ def test_review_reports_a_cross_check_claim_without_disclaimer(h: AgentH, h_stor
 def test_review_reports_a_disclaimer_that_is_not_the_controlled_one(h: AgentH, h_store: Store):
     """跨层：声明写了、但不是受控那一句 ⇒ `uncontrolled_disclaimer`，kind 必须语义正确。
 
-    为什么这条要单独钉（2026-10-15）：`uncontrolled_disclaimer`（2026-10-13 加）
-    漏登记进了 `review_tools._H_FINDING_KIND_OF_CA_CODE`，而那张表的兜底是
-    `garbled` ⇒ "声明不是受控那句"被**静默**读成"表述无法解析"，
-    而 `kind` 是审校分档的判据。与 G 侧同族、故障形态相反（G 侧当场抛 `KeyError`）。
-    这里断言的是 `kind` 本身，所以兜底那条路一旦复辟，这条就红。
-    """
+        为什么这条要单独钉（2026-10-15）：`uncontrolled_disclaimer`（2026-10-13 加）
+        漏登记进了 `review_tools._H_FINDING_KIND_OF_CA_CODE`，而那张表的兜底是
+        `garbled` ⇒ "声明不是受控那句"被静默读成"表述无法解析"，
+        而 `kind` 是审校分档的判据。与 G 侧同族、故障形态相反（G 侧当场抛 `KeyError`）。
+        这里断言的是 `kind` 本身，所以兜底那条路一旦复辟，这条就红。"""
     bad = clean_claim()
     # 串档：拿 `proof_review` 的受控声明去配 `cross_check`
     # （`clean_claim` 其余各栏都合规，所以这一条发现是唯一变量）。
@@ -367,7 +357,7 @@ def test_dependency_check_is_three_state(h: AgentH, h_store: Store):
     assert unchecked["dep_check"]["checked"] is False
     assert "没查" in unchecked["dep_check"]["reason"]
     assert unchecked["dep_check"]["open"] == [], "空列表是「没查」的结果，不是「都闭合」的证据"
-    # 2026-10-17（业主「通过标准和 V 一样」）：**通过**要求语义层也判过 —— 只查依赖闭合
+    # 2026-10-17（业主「通过标准和 V 一样」）：通过要求语义层也判过 —— 只查依赖闭合
     # 还不够（工具面与这条纯函数入口同口径）。这里接一个"判过且一致"的替身。
     _judge = lambda claim, document: {"verdict": "consistent"}
     checked = RV.scan_document(doc, dependencies=[], semantic_judge=_judge)
@@ -465,7 +455,7 @@ def test_review_does_not_touch_knowledge_tables_and_only_changes_status(h: Agent
         diff = sorted({k for k in set(rb) | set(ra) if rb.get(k) != ra.get(k)})
         if diff:
             changed.append((str(rb.get("doc_id")), diff))
-    # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：审校现在**同一次事务**里
+    # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：审校现在同一次事务里
     # 多写审核轴三字段（`review_verdict`/`reviewed_at`/`reviewed_by`）——
     # 这仍然是"只改这一行、不碰知识表、不碰 claims"，只是多记了"谁在什么时候判了什么"。
     _AXIS = ["review_verdict", "reviewed_at", "reviewed_by"]
@@ -505,16 +495,9 @@ def test_verify_fixes_marks_a_genuinely_fixed_finding_as_fixed(h_store: Store):
 
     ## 为什么不是"文档回归 accepted"（`R-59`，`draft/28` §161.4 / §172）
 
-    本用例原来断言 `verify_fixes` 之后 `documents[0]["status"] == "accepted"`。
-    那正是被修掉的形态：G 改稿之后内容哈希变了，而签名台账里那条钉的是旧版本 ——
-    复审把状态置回 accepted，于是留下"状态 accepted + 签名钉旧版"，
-    `verify_all` 报 `stale_signature`（"改稿之后旧审批不许沿用"）。
+    本用例原来断言 `verify_fixes` 之后 `documents[0]["status"] == "accepted"`。那正是被修掉的形态：G 改稿之后内容哈希变了，而签名台账里那条钉的是旧版本 —— 复审把状态置回 accepted，于是留下"状态 accepted + 签名钉旧版"，`verify_all` 报 `stale_signature`（"改稿之后旧审批不许沿用"）。
 
-    现在的口径：`verify_fixes` 只在"台账里有签名钉住当前这一版"时才置 accepted；
-    否则置 `in_review` 并在 reason 里点名要重新 review。所以本用例分两步断言：
-    ① 复审判 accepted、发现置 fixed、状态停在 in_review（本用例的主题没变）；
-    ② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted 且签名钉在当前这一版上。
-    """
+    现在的口径：`verify_fixes` 只在"台账里有签名钉住当前这一版"时才置 accepted；否则置 `in_review` 并在 reason 里点名要重新 review。所以本用例分两步断言：① 复审判 accepted、发现置 fixed、状态停在 `in_review`（本用例的主题没变）；② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted 且签名钉在当前这一版上。"""
     agent = AgentH(h_store, config={"max_review_rounds": 3})
     finding = _seed_overclaim_and_review(agent, h_store)
     g = AgentG(h_store)

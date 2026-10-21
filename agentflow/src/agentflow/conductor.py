@@ -134,20 +134,15 @@ def _admitted_inputs(params: Mapping[str, Any]) -> list[str]:
 class SummonResult:
     """一次召唤的结构化结果。永远不抛业务异常（设计 §2）。
 
-    `status` 回答"跑完了没有"，`outcome` 回答"跑出了什么"。
-    二者正交，六个组合都是有意义且必须能区分的：
-
+    `status` 回答"跑完了没有"，`outcome` 回答"跑出了什么"。二者正交，六个组合都是有意义且必须能区分的：
     | status | outcome | 含义 |
     |---|---|---|
     | done | ok / no_result / not_applicable / refused | 跑完了（可能"确实没有"，也可能"框架拒绝了"） |
     | failed | failed | 执行中异常 |
     | cancelled | cancelled / refused | 没跑完（被取消 / 因超预算被拒） |
-
     `refused` 不是 `failed`：拒绝是策略的决定，失败是执行的结果。
-
-    `task_id` 可以是 `None`：取消之后不产生新任务，此时没有台账行
-    （没有 start 就没有 end，这与"每个 start 有且仅有一个 end"不冲突）。
-    把它写成 `""` 或编一个 id 会让调用方以为"有一条对应的行"，那是谎报。
+    `task_id` 可以是 `None`：取消之后不产生新任务，此时没有台账行（没有 start 就没有 end，这与"每个 start 有且
+    仅有一个 end"不冲突）；把它写成 `""` 或编一个 id 会让调用方以为"有一条对应的行"，那是谎报。
     """
 
     task_id: str | None = None
@@ -273,27 +268,16 @@ class LocalBackend:
              instance: str = "", task_id: str = "") -> Any:
         """调一次 handler。
 
-        参数名对不上就拒绝，不许静默丢弃。工具的 `ToolRegistry.call`
-        是按 schema 校验后再调；这里的 handler 是角色的真实方法，
-        它的形参名就是它与调用方的契约。把多出来的参数丢掉会让
-        "我传了 `submit_requests=True` 但它被忽略了"看起来像一次成功 ——
-        于是 `gaps()` 报告里说"已提交"，而请求一条也没有。
-
-        ## `G-1`：token 不再"收下就扔"
-
-        旧版末行是 `return fn(given)` —— `token` 收了，然后一个字都没往下传，
-        于是"取消"只覆盖待启动的任务：已经在跑的 handler 照样跑完，
-        以 `done/ok` 结束（实测 `temp/auditG-probe1.txt`）。
-
-        现在的形态：调用期间把 `token` 放进一个 `ContextVar`，handler 通过
-        `cancellation.current_token()` / `raise_if_cancelled()` 读它，
-        起子进程时用 `cancellation.run_cancellable(..., token=...)`。
-        为什么用 ContextVar 而不是给实例挂属性：`resolve(role)` 按角色
-        缓存实例，两个并发召唤会共享同一个对象 ⇒ 挂实例属性会让 A 的 token
-        被 B 覆盖（静默串味：A 按了停止却停掉了 B）。ContextVar 按执行上下文隔离。
-
-        调用前先查一次 token：已经取消的召唤不该进 handler（否则会白干一轮，
-        还可能写半张表）。
+        参数名对不上就拒绝，不许静默丢弃。工具的 `ToolRegistry.call` 是按 schema 校验后再调；这里的 handler 是角色
+        的真实方法，它的形参名就是它与调用方的契约。把多出来的参数丢掉会让"我传了 `submit_requests=True` 但它被忽略
+        了"看起来像一次成功 —— 于是 `gaps()` 报告里说"已提交"，而请求一条也没有。
+        ## `G-1`：token 不再"收下就扔"：旧版末行是 `return fn(given)` —— `token` 收了，然后一个字都没往下传，于是
+        "取消"只覆盖待启动的任务：已经在跑的 handler 照样跑完、以 `done/ok` 结束（实测 `temp/auditG-probe1.txt`）。
+        现在的形态：调用期间把 `token` 放进一个 `ContextVar`，handler 通过 `cancellation.current_token()` /
+        `raise_if_cancelled()` 读它，起子进程时用 `cancellation.run_cancellable(..., token=...)`。为什么用 ContextVar
+        而不是给实例挂属性：`resolve(role)` 按角色缓存实例，两个并发召唤会共享同一个对象 ⇒ 挂实例属性会让 A 的 token
+        被 B 覆盖（静默串味：A 按了停止却停掉了 B）。ContextVar 按执行上下文隔离。调用前先查一次 token：已经取消的
+        召唤不该进 handler（否则会白干一轮，还可能写半张表）。
         """
         spec = C.find_action(role, action, registry=self._specs)
         if spec is None:  # pragma: no cover - summon 已经查过，这里是纵深防御
@@ -342,18 +326,11 @@ class LocalBackend:
 class SubagentBackend:
     """把同一次召唤交给 DSH 的 `subagent` / `workflow` 工具（本轮未接线）。
 
-    ## 为什么它必须"显式拒绝"而不是"执行成功但没结果"
-
-    设计 §6 说同一个角色规格驱动两种 backend。但本会话的 `Conductor` 是
-    进程内、确定性的东西，它没有能力去调 DSH 的工具（那需要 harness 的
-    权限面，而调用方是一个库）。于是这里只有两条诚实的路：
-
-    - 假装跑通并返回空 ⇒ 台账里会留下 `outcome="ok"` 而 `payload=None` 的行。
-      下游会把"我们没做"读成"做了但没有" —— 这正是本项目在引文校验、
-      OCR、D 溯源、C 预算截断四处踩过的同一个坑。
-    - 明确 `refused/not_wired` ⇒ 台账里留下"这里有一个尚未接线的执行面"。
-
-    选后者。`detail` 里写清由谁承担。
+    ## 为什么它必须"显式拒绝"而不是"执行成功但没结果"：设计 §6 说同一个角色规格驱动两种 backend，但本会话的
+    `Conductor` 是进程内、确定性的东西，它没有能力去调 DSH 的工具（那需要 harness 的权限面，而调用方是一个库）。
+    于是这里只有两条诚实的路：假装跑通并返回空 ⇒ 台账里会留下 `outcome="ok"` 而 `payload=None` 的行，下游会把
+    "我们没做"读成"做了但没有" —— 这正是本项目在引文校验、OCR、D 溯源、C 预算截断四处踩过的同一个坑；明确
+    `refused/not_wired` ⇒ 台账里留下"这里有一个尚未接线的执行面"。选后者。`detail` 里写清由谁承担。
     """
 
     name = "subagent"
@@ -398,21 +375,15 @@ _BUSINESS_ERROR_NAMES = frozenset({
 def _structured_payload(payload: Any) -> Any:
     """把产物投影成"能被 `json.dumps` 结构化读懂"的形状（CS-11）。
 
-    动机只有一条：`_write_task_digest` 里 `payload_keys` 与 `readings` 两格都是按
-    `Mapping` 取的，而 C 的产物是 dataclass（`AnalysisReport`）⇒ 那两格恒空、
-    预览只剩 repr 的前 2000 字（真机 `p2-review` 的 `hottest` / `gaps` 就是这一档，
-    见 `draft/108` §四 CS-11 与 `draft/41-D` §1.3 的逐字读数）。
-
-    三档投影，逐档记清"为什么是它"：
-      ① `to_dict()` 可用 ⇒ 用它（对象自己声明的机器可读视图，`AnalysisReport.to_dict()`
-         就是；`schema` 的行对象也都有这个方法）；
-      ② 是 dataclass ⇒ `dataclasses.asdict`（`AgentC` 的 `_store` 不是 dataclass 字段，
-         因此不会被带进来 —— 这是 `agent_c/_support.py:231-233` 刻意留的口子）；
-      ③ 其余原样返回（`json.dumps(default=str)` 仍然是最后的兜底）。
-
-    投影失败（`to_dict()` 抛、`asdict` 遇到坏字段）⇒ 原样返回：这条链路的既有纪律是
-    "摘要写不成不许改坏任务终态"（`_write_task_digest` 的 docstring 逐字），
-    所以这里既不吞异常去假装投影成功，也不让它穿出去。
+    动机只有一条：`_write_task_digest` 里 `payload_keys` 与 `readings` 两格都是按 `Mapping` 取的，而 C 的产物是
+    dataclass（`AnalysisReport`）⇒ 那两格恒空、预览只剩 repr 的前 2000 字（真机 `p2-review` 的 `hottest` / `gaps`
+    就是这一档，见 `draft/108` §四 CS-11 与 `draft/41-D` §1.3 的逐字读数）。三档投影：
+    ① `to_dict()` 可用 ⇒ 用它（对象自己声明的机器可读视图，`AnalysisReport.to_dict()` 就是；`schema` 的行对象
+    也都有这个方法）；② 是 dataclass ⇒ `dataclasses.asdict`（`AgentC` 的 `_store` 不是 dataclass 字段，因此不会
+    被带进来 —— 这是 `agent_c/_support.py:231-233` 刻意留的口子）；③ 其余原样返回（`json.dumps(default=str)` 仍然是
+    最后的兜底）。
+    投影失败（`to_dict()` 抛、`asdict` 遇到坏字段）⇒ 原样返回：这条链路的既有纪律是"摘要写不成不许改坏任务
+    终态"（`_write_task_digest` 的 docstring 逐字），所以这里既不吞异常去假装投影成功，也不让它穿出去。
     """
     if isinstance(payload, Mapping):
         return payload
@@ -564,17 +535,12 @@ def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
                sid: str = "") -> Iterator[None]:
     """这一小段代码以某个实例的身份跑（工具调用用）。
 
-    为什么工具调用也要带身份（S6-b）：`conductor.broadcast` 的收件人是"我名下的直接
-    子代理"，而工具的形状里没有"我是谁"这一格 —— 只有循环知道（`self.my_task_id`
-    与 `self.role`）。挂点与 `summon` 那一处同一个（`ContextVar`，不是实例属性：
-    同一角色的两个并发实例共享对象，挂在实例上会互相盖掉，见 `_CURRENT_TASK_ID` 的理由）。
-
-    `parent_task_id` / `parent_role` / `session_root` / `sid`（2026-10-19）：
-    `conductor.escalate` 要的三件事 —— 召唤者是谁（运行期 `_resolve_parent` 的
-    返回值，不是工具自己猜的）与这条留言该落进哪个会话文件。四个都有默认值：
-    不传 = "这一层不知道"，与从前逐字节同义（旧调用点一个都不用改）。
-
-    退出时复位（异常也复位）—— 于是这一小段之后谁都不知道上一个是谁。
+    为什么工具调用也要带身份（S6-b）：`conductor.broadcast` 的收件人是"我名下的直接子代理"，而工具的形状里没有
+    "我是谁"这一格 —— 只有循环知道（`self.my_task_id` 与 `self.role`）。挂点与 `summon` 那一处同一个
+    （`ContextVar`，不是实例属性：同一角色的两个并发实例共享对象，挂在实例上会互相盖掉，见 `_CURRENT_TASK_ID`
+    的理由）。`parent_task_id` / `parent_role` / `session_root` / `sid`（2026-10-19）：`conductor.escalate` 要的
+    三件事 —— 召唤者是谁（运行期 `_resolve_parent` 的返回值，不是工具自己猜的）与这条留言该落进哪个会话文件。
+    四个都有默认值：不传 = "这一层不知道"，与从前逐字节同义（旧调用点一个都不用改）。退出时复位（异常也复位）。
     """
     reset = _CURRENT_TASK_ID.set(str(task_id or ""))
     reset_role = _CURRENT_ROLE.set(str(role or ""))
@@ -612,44 +578,24 @@ def _business_refusal_code(exc: BaseException) -> str | None:
 def _occupies_fanout_slot(row: Mapping[str, Any]) -> bool:
     """这条子行算不算"曾经受理过的派活"（审计面读数）。
 
-    ## 它今天不判上限了（所有者 2026-10-08 裁定）
-
-    扇出上限的口径已改成"此刻在飞的子代理数"（`_in_flight_children_of`：
-    `status ∈ {pending, running}`；子代理返回即腾位）。这个函数保留下来只为
-    `_admitted_children_of` 那份累计读数（"这一趟总共派出去过几件"，
-    状态报告与审计要用），不再参与策略判定。
-
-    ## 口径：受理数，不是尝试数
-
-    闸门拒掉的召唤也落台账（`_refuse`：谁试过什么必须留痕），但它根本没跑，
-    所以不计入"曾经受理过"。真机读数（工作区
-    `agentflow/projects/p9-post-merge-probe` 的台账，2026-10-07）：顶趟行
-    `t-0001` 名下 10 个子行，末 5 条（`t-0007`…`t-0011`）全是
-    `refused/fanout_exceeded`，detail 里的读数从"已派生 5 个"一路涨到"已派生 9 个"
-    （那就是自我毒化的机器形态）。
-
-    ## 判据为什么是"受理标记"而不是"拒绝理由"，也不是"结算标记"
-
-    拒绝理由是受控词表（`schema.REFUSAL_REASONS`），闸门与角色共用它：角色
-    跑完之后自己拒绝也落 `invalid_params`（真机 `t-0006` 就是这一档，
-    `_business_refusal_code` 把领域错误映到这个词上）。按理由过滤会把
-    "跑过又拒了"误判成"没跑"。区分二者的是这条事实：只有走完第 [5] 步
-    （写 `running` 行）的召唤才带 `_ADMITTED_MARK`，而闸门拒绝在写 running 行
-    之前就返回了。所以：
-
-    - `outcome == "refused"` 且行上没有受理标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；
-    - 其余一切（`running` / `ok` / `failed` / `cancelled`、以及跑过又拒的）
-      ⇒ 占名额。"跑了但失败"确实消耗了一次派活，必须仍然计入（有负控咬着：
-      `tests/test_fanout_admission.py::test_ran_and_failed_child_still_counts`）。
-
-    为什么不继续用 `_SETTLED_MARK`（题 21 选 B 改的就是这一处）：那是"事后"的
-    记账写回打的标记，而记账能炸、炸了之后那一行就缺标记 ⇒ "跑了又拒"被当成
-    "没跑" ⇒ 扇出少算（名额被少占，上限被悄悄放宽）。受理标记在受理那一刻
-    就落盘，与后续收尾的成败无关。判据见
-    `tests/test_fanout_admission.py::test_a_failed_charge_writeback_still_occupies_the_slot`。
-
-    老行（本题之前落盘的）没有受理标记：它们退回读 `_SETTLED_MARK` ——
-    历史台账里"跑过又拒"的行仍然算占名额，读数与这一版之前一致。
+    ## 它今天不判上限了（所有者 2026-10-08 裁定）：扇出上限的口径已改成"此刻在飞的子代理数"
+    （`_in_flight_children_of`：`status ∈ {pending, running}`；子代理返回即腾位）。这个函数保留下来只为
+    `_admitted_children_of` 那份累计读数（"这一趟总共派出去过几件"），不再参与策略判定。
+    ## 口径：受理数，不是尝试数：闸门拒掉的召唤也落台账（`_refuse`：谁试过什么必须留痕），但它根本没跑，所以不
+    计入"曾经受理过"。真机读数（工作区 `agentflow/projects/p9-post-merge-probe` 的台账，2026-10-07）：顶趟行
+    `t-0001` 名下 10 个子行，末 5 条（`t-0007`…`t-0011`）全是 `refused/fanout_exceeded`，detail 里的读数从"已派生
+    5 个"一路涨到"已派生 9 个"（那就是自我毒化的机器形态）。
+    ## 判据为什么是"受理标记"而不是"拒绝理由"，也不是"结算标记"：拒绝理由是受控词表
+    （`schema.REFUSAL_REASONS`），闸门与角色共用它：角色跑完之后自己拒绝也落 `invalid_params`（真机 `t-0006`，
+    `_business_refusal_code` 把领域错误映到这个词上）—— 按理由过滤会把"跑过又拒了"误判成"没跑"。区分二者的是
+    这条事实：只有走完第 [5] 步（写 `running` 行）的召唤才带 `_ADMITTED_MARK`，而闸门拒绝在写 running 行之前就
+    返回了。所以：`outcome == "refused"` 且行上没有受理标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；其余一切
+    （`running` / `ok` / `failed` / `cancelled`、以及跑过又拒的）⇒ 占名额（有负控咬着：
+    `tests/test_fanout_admission.py::test_ran_and_failed_child_still_counts`）。
+    为什么不继续用 `_SETTLED_MARK`（题 21 选 B 改的就是这一处）：那是"事后"的记账写回打的标记，而记账能炸、炸了
+    之后那一行就缺标记 ⇒ "跑了又拒"被当成"没跑" ⇒ 扇出少算。受理标记在受理那一刻就落盘，与后续收尾的成败无关。
+    判据见 `tests/test_fanout_admission.py::test_a_failed_charge_writeback_still_occupies_the_slot`。老行（本题
+    之前落盘的）没有受理标记：它们退回读 `_SETTLED_MARK` —— 历史台账里"跑过又拒"的行仍然算占名额。
     """
     if row.get("outcome") != "refused":
         return True
@@ -679,17 +625,12 @@ class Conductor:
     ) -> None:
         """`secretary`（A 线）：M 的派活路径上那一个钩子（`draft/54 §2` 的第 3 个落点）。
 
-        它是可选对象（`None` = 没装配）：给了就"同 key 的既有终态行摆出来 + 一份
-        委派评估建议"，不给也照样派活 —— 秘书的失败姿态是 fail-open，
-        而"没装配"与"装配了但没判断"在读数上是两件事（前者连台账都没有）。
-
-        `fanout_wait_sec`（所有者 2026-10-08）：「当达到派活上限后，父智能体或主控
-        只可等待子智能体返回结果」⇒ 触顶时等（等到一个返回就照常派）而不是当场拒绝。
-
-        默认是 0（不等），真跑批那一处显式传 `DEFAULT_FANOUT_WAIT_SEC`
-        （`tools/conductor_tools.conductor_for`）。为什么不把"等"做成构造函数的默认值：
-        它是一个会阻塞十几分钟的副作用，库的默认值不该藏这种东西 ——
-        任何"只是想看看会不会被拒"的调用方（测试、探针、离线复算）都会被它挂住。
+        它是可选对象（`None` = 没装配）：给了就"同 key 的既有终态行摆出来 + 一份委派评估建议"，不给也照样派活 ——
+        秘书的失败姿态是 fail-open，而"没装配"与"装配了但没判断"在读数上是两件事（前者连台账都没有）。
+        `fanout_wait_sec`（所有者 2026-10-08）：「当达到派活上限后，父智能体或主控只可等待子智能体返回结果」⇒ 触顶
+        时等（等到一个返回就照常派）而不是当场拒绝。默认是 0（不等），真跑批那一处显式传 `DEFAULT_FANOUT_WAIT_SEC`
+        （`tools/conductor_tools.conductor_for`）。为什么不把"等"做成构造函数的默认值：它是一个会阻塞十几分钟的副
+        作用，库的默认值不该藏这种东西 —— 任何"只是想看看会不会被拒"的调用方都会被它挂住。
         """
         self.store = store
         self.policy = policy or P.Policy()
@@ -798,22 +739,14 @@ class Conductor:
     def _children_of(self, task_id: str) -> list[str]:
         """`task_id` 名下子代理的编号（展示面 / 审计面：谁试过什么都要看得见）。
 
-        ## 为什么必须排除板项（`kind` 非空）—— 2026-10-08 深夜 S1d 审计出来的
-
-        `tasks` 从业主 A1=甲 起装两类行：实例行（`kind == ""`）与工作项行
-        （`kind` 非空）。板项那一行的 `parent_task_id` 口径是"收件人的编号"
-        （`draft/84` §T21 附二 / D89），于是一条"某子代理已收工"的 `notice`
-        挂在父名下、一条"派给你的活"的 `delegation` 挂在子名下。
-        按 `parent_task_id` 数行而不看出身，会把这两种东西算成"子代理"：
-
-        - 交付面：`SummonResult.children` 与提示词里的"我名下的子代理台账号"
-          （`{{children}}`，业主 T21 附）会把工作项当成子代理报给模型；
-        - 实测（`temp/_probe_board_vs_fanout_and_dispose.py`）：父名下挂 20 条
-          `notice` 之后，`_in_flight_children_of(父)` 读数就是 20。
-
-        修法就是把两轴分开：本方法只数代理（实例行），工作项那一边的唯一读数是
-        `open_items_of(task_id)`（"某条边名下未消的项"）。两者一起才是
-        `draft/84` §T2 的消边谓词（实例轴 + 工作项轴），不是互相代替。
+        ## 为什么必须排除板项（`kind` 非空）—— 2026-10-08 深夜 S1d 审计出来的：`tasks` 从业主 A1=甲 起装两类行：
+        实例行（`kind == ""`）与工作项行（`kind` 非空）。板项那一行的 `parent_task_id` 口径是"收件人的编号"
+        （`draft/84` §T21 附二 / D89），于是一条"某子代理已收工"的 `notice` 挂在父名下、一条"派给你的活"的
+        `delegation` 挂在子名下。按 `parent_task_id` 数行而不看出身，会把这两种东西算成"子代理"：交付面
+        （`SummonResult.children` 与提示词里的 `{{children}}`，业主 T21 附）会把工作项当成子代理报给模型；实测
+        （`temp/_probe_board_vs_fanout_and_dispose.py`）：父名下挂 20 条 `notice` 之后，`_in_flight_children_of(父)`
+        读数就是 20。修法就是把两轴分开：本方法只数代理（实例行），工作项那一边的唯一读数是 `open_items_of(task_id)`
+        （"某条边名下未消的项"）。两者一起才是 `draft/84` §T2 的消边谓词（实例轴 + 工作项轴），不是互相代替。
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id and not str(r.get("kind") or "")]
@@ -821,27 +754,18 @@ class Conductor:
     def _admitted_children_of(self, task_id: str) -> list[str]:
         """`task_id` 受理过的子召唤（累计读数；审计面用，不再是扇出判据）。
 
-        ## 与 `_children_of` / `_in_flight_children_of` 的分工（刻意三个口径）
-
-        - `_children_of` 数"台账里有几行子行"：展示面/审计面用，含被闸门拒掉的
-          那些尝试（谁试过什么必须看得见，`SummonResult.children` 由它填）；
-        - `_admitted_children_of` 数"累计真的派出去过几件"：审计面（"这一趟用了多少
-          派活额度"），不再当判据 —— 所有者 2026-10-08 把扇出口径改成单时刻的
-          （见 `_in_flight_children_of`）；
+        ## 与 `_children_of` / `_in_flight_children_of` 的分工（刻意三个口径）：
+        - `_children_of` 数"台账里有几行子行"：展示面/审计面用，含被闸门拒掉的尝试（`SummonResult.children` 由它填）；
+        - `_admitted_children_of` 数"累计真的派出去过几件"：审计面（"这一趟用了多少派活额度"），不再当判据 ——
+          所有者 2026-10-08 把扇出口径改成单时刻的（见 `_in_flight_children_of`）；
         - `_in_flight_children_of` 数"此刻还没返回的子代理"：扇出判据的分子。
-
-        为什么不就地改 `_children_of`：它不只服务扇出（`summon` 末尾的
-        `res.children` 也用它），把它的口径改窄等于顺手改坏展示面 ——
-        那一改没有任何地方会报错，只会让"谁试过什么"从台账视图里静默消失。
-        判据见 `tests/test_fanout_admission.py::test_display_face_still_lists_attempts`。
-
-        占不占名额的判据在 `_occupies_fanout_slot`（含真机读数与"为什么不是
-        按拒绝理由过滤"）。
-
-        出身过滤（2026-10-08 深夜 S1e）：只数代理行（`kind == ""`）——
-        `tasks` 从业主 A1=甲 起装两类行，板项行（`kind` 非空）的 `parent_task_id`
-        口径是"收件人的编号"，把它们算进"派出去过几件"是两轴混算
-        （实测：父名下 20 条 `notice` ⇒ 这条读数 20，而一个代理都没有）。
+        为什么不就地改 `_children_of`：它不只服务扇出（`summon` 末尾的 `res.children` 也用它），把它的口径改窄等于顺手
+        改坏展示面 —— 那一改没有任何地方会报错，只会让"谁试过什么"从台账视图里静默消失。判据见
+        `tests/test_fanout_admission.py::test_display_face_still_lists_attempts`。占不占名额的判据在
+        `_occupies_fanout_slot`（含真机读数与"为什么不是按拒绝理由过滤"）。
+        出身过滤（2026-10-08 深夜 S1e）：`tasks` 从业主 A1=甲 起装两类行，本方法只数代理行（`kind == ""`）—— 板项行
+        （`kind` 非空）的 `parent_task_id` 口径是"收件人的编号"，把它们算进"派出去过几件"是两轴混算（实测：父名下
+        20 条 `notice` ⇒ 这条读数 20，而一个代理都没有）。
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id
@@ -851,40 +775,23 @@ class Conductor:
     def _in_flight_children_of(self, task_id: str) -> list[str]:
         """`task_id` 派出去、此刻还没返回的子代理（= 扇出判据的分子）。
 
-        ## 口径（所有者 2026-10-08 逐字裁定）
-
-        > 「我认为的"派活上限"不是累计的，是单时刻的，即 M 同时派出在后台运行的
-        > 子代理数不超过 20，各角色智能体允许同时向其它智能体派活数不超过 5，
-        > 智能体返回后腾出空间。」
-
-        所以分子 = 子行里 `status ∈ {"pending", "running"}` 的那些；子代理一返回
-        （`done` / `failed` / `cancelled` —— 三者都带 `ended_at`，互相不覆盖）就腾出
-        名额，与它返回得好不好无关（`schema.TASK_STATUSES` 是状态词表的唯一来源）。
-        闸门拒掉的召唤根本没跑、连 `running` 行都没有（`_refuse` 只落一行
-        `outcome="refused"` 的终态行）⇒ 天然不计 —— 上一版那条"不受自我毒化"的
-        防线在这一版里是自然成立的，不需要额外规则。
-
-        真机代价（累计口径）：T1 第 18/19 趟（`t1r` / `t1s`）在第 51–88 步就用完了
-        20 个累计名额，此后 `G.build_document` 与修好的 Lean 重派全部进不去 ——
-        `documents` 0 行、P8/P9 两行红。一趟 78–138 步的研究型跑批只许派 20 次活，
-        是结构性不够；而"同时在飞 20 个"在同一份 `Policy` 里被 `max_concurrency`
-        另管着（全局瞬时上限）。
-
-        ## 只数代理行（2026-10-08 深夜 S1e，业主 T22 的"两轴分开"）
-
-        分子多一个出身过滤：`kind == ""`（代理行）。理由是一条实测：
-
-        - 板项行由 `open_item` 建，`status="pending"`，而板的状态机（`_set_item`）
-          只改 `item_state`、从不改 `status` ⇒ 一条已 ack 的板项永远是
-          "在飞的子代理"；
-        - 实测（`temp/_probe_board_vs_fanout_and_dispose.py`、`..._refusal_reason.py`）：
-          父名下挂 20 条"子代理已收工"的 `notice`（零代理）⇒ 本读数 = 20 ⇒
-          同一父下派活被拒 `fanout_exceeded`（detail 逐字「此刻在飞 20 个子代理，
-          达到发起方 M 的同时在飞上限 20」）；不挂板项时同一个调用走到执行（`not_wired`）。
-          T1 重跑会在累积约 20 次交差之后开始卡住 —— 那是本批（S1e）的硬前置理由。
-
-        工作项那一边归 `open_items_of(task_id)`（纯读数，不参与任何判定）。
-        判据：`tests/test_board_does_not_eat_the_fanout_quota.py`。
+        ## 口径（所有者 2026-10-08 逐字裁定）：「我认为的"派活上限"不是累计的，是单时刻的，即 M 同时派出在后台运行
+        的子代理数不超过 20，各角色智能体允许同时向其它智能体派活数不超过 5，智能体返回后腾出空间。」
+        所以分子 = 子行里 `status ∈ {"pending", "running"}` 的那些；子代理一返回（`done` / `failed` / `cancelled` ——
+        三者都带 `ended_at`，互相不覆盖）就腾出名额，与它返回得好不好无关（`schema.TASK_STATUSES` 是状态词表的唯一
+        来源）。闸门拒掉的召唤根本没跑、连 `running` 行都没有（`_refuse` 只落一行 `outcome="refused"` 的终态行）⇒
+        天然不计 —— 上一版那条"不受自我毒化"的防线在这一版里是自然成立的，不需要额外规则。
+        真机代价（累计口径）：T1 第 18/19 趟（`t1r` / `t1s`）在第 51–88 步就用完了 20 个累计名额，此后
+        `G.build_document` 与修好的 Lean 重派全部进不去 —— `documents` 0 行、P8/P9 两行红。一趟 78–138 步的研究型跑批
+        只许派 20 次活，是结构性不够；而"同时在飞 20 个"在同一份 `Policy` 里被 `max_concurrency` 另管着。
+        ## 只数代理行（2026-10-08 深夜 S1e，业主 T22 的"两轴分开"）：分子多一个出身过滤 `kind == ""`（代理行）：
+        - 板项行由 `open_item` 建，`status="pending"`，而板的状态机（`_set_item`）只改 `item_state`、从不改 `status`
+          ⇒ 一条已 ack 的板项永远是"在飞的子代理"；
+        - 实测（`temp/_probe_board_vs_fanout_and_dispose.py`、`..._refusal_reason.py`）：父名下挂 20 条"子代理已收工"
+          的 `notice`（零代理）⇒ 本读数 = 20 ⇒ 同一父下派活被拒 `fanout_exceeded`（detail 逐字「此刻在飞 20 个子
+          代理，达到发起方 M 的同时在飞上限 20」）；不挂板项时同一个调用走到执行（`not_wired`）。
+        工作项那一边归 `open_items_of(task_id)`（纯读数，不参与任何判定）。判据：
+        `tests/test_board_does_not_eat_the_fanout_quota.py`。
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id
@@ -895,16 +802,11 @@ class Conductor:
                            token: CancelToken | None) -> dict:
         """等到这个父任务的在飞子代理少于 `limit`（所有者 2026-10-08 的"只可等待"）。
 
-        返回读数（进日志，触顶被拒时也进拒绝报文）：
-
-        - `waited=True/False`：有没有真的等过；
-        - `waited_sec`：等了多久；
-        - `in_flight_before` / `in_flight_after`；
-        - `reason`：`slot_freed`（等到了）/ `wait_timeout`（等到 `fanout_wait_sec` 仍满）
-          / `cancel_requested`（等待期间被取消）/ `wait_disabled`（`fanout_wait_sec=0`）。
-
-        三态纪律：超时与取消都不冒充"腾出了名额"—— 调用方按 `in_flight_after` 重新判，
-        于是"等到了"与"没等到"在台账上是两件事（前者继续派、后者拒并带上读数）。
+        返回读数（进日志，触顶被拒时也进拒绝报文）：`waited=True/False`（有没有真的等过）；`waited_sec`（等了多久）；
+        `in_flight_before` / `in_flight_after`；`reason`：`slot_freed`（等到了）/ `wait_timeout`（等到
+        `fanout_wait_sec` 仍满）/ `cancel_requested`（等待期间被取消）/ `wait_disabled`（`fanout_wait_sec=0`）。
+        三态纪律：超时与取消都不冒充"腾出了名额"—— 调用方按 `in_flight_after` 重新判，于是"等到了"与"没等到"在台账
+        上是两件事（前者继续派、后者拒并带上读数）。
         """
         before = len(self._in_flight_children_of(parent_task_id))
         budget = self.fanout_wait_sec
@@ -985,30 +887,18 @@ class Conductor:
     def _write_new_row(self, row: dict, *, note: str) -> str:
         """取号 + 建行在同一个临界区内完成，返回 `task_id`。
 
-        ## 为什么"先算号、再写行"是一个真实缺陷（不是防御性编程）
-
-        `interactions.next_prefixed_id` 是纯函数（取 max+1 并跳过已占用），
-        它没有计数器。所以分开做在并发下必错：
-
+        ## 为什么"先算号、再写行"是一个真实缺陷（不是防御性编程）：`interactions.next_prefixed_id` 是纯函数（取 max+1
+        并跳过已占用），它没有计数器。所以分开做在并发下必错：
         1. 线程 C 算出 `t-0003`，还没写行就出了临界区；
-        2. 线程 H 进来读 `tasks`，看不见 C 那一行（它还没被写），
-           于是也算出 `t-0003`；
+        2. 线程 H 进来读 `tasks`，看不见 C 那一行（它还没被写），于是也算出 `t-0003`；
         3. 两行按主键 upsert ⇒ 后写的静默覆盖先写的。
-
-        实测症状（`tests/test_conductor.py::test_concurrent_summons_never_share_a_task_id`
-        就是它的回归测试）：同一个 `task_id` 出现在两个不同召唤的返回值里，
-        台账里凭空少一次召唤，而没有任何地方报错。
-        它与 `store.alloc_id` docstring 里记录的那次真实缺陷同族
-        （`test_store_alloc_guard.py` 覆盖了 4 位空间那一半）。
-
-        ## 另一个细节：`task_id` 必须是行 dict 的第一个键
-
-        传入的 `row` 必须已经带 `task_id`（值先留空也行，这里会覆盖）。
-        为什么这一点重要：快照是按 dict 的键顺序序列化的，而 `rebuild()` 用
-        `Task.to_dict()`（= dataclass 字段顺序，`task_id` 在最前）重建行。
-        如果第一次落盘时 `task_id` 被排在最后，`rebuild()` 之后键顺序会变，
-        于是 `tasks.json` 逐字节不一致（I-9 直接失败）——
-        数据没错，但"可重建"这条承诺破了。
+        实测症状（`tests/test_conductor.py::test_concurrent_summons_never_share_a_task_id` 就是它的回归测试）：同一个
+        `task_id` 出现在两个不同召唤的返回值里，台账里凭空少一次召唤，而没有任何地方报错。它与 `store.alloc_id`
+        docstring 里记录的那次真实缺陷同族（`test_store_alloc_guard.py` 覆盖了 4 位空间那一半）。
+        ## 另一个细节：`task_id` 必须是行 dict 的第一个键：传入的 `row` 必须已经带 `task_id`（值先留空也行，这里会
+        覆盖）。为什么这一点重要：快照是按 dict 的键顺序序列化的，而 `rebuild()` 用 `Task.to_dict()`（= dataclass 字段
+        顺序，`task_id` 在最前）重建行。如果第一次落盘时 `task_id` 被排在最后，`rebuild()` 之后键顺序会变，于是
+        `tasks.json` 逐字节不一致（I-9 直接失败）—— 数据没错，但"可重建"这条承诺破了。
         """
         with self._id_lock:
             with self.store.tx("tasks", actor="conductor", note=note) as tx:
@@ -1146,18 +1036,12 @@ class Conductor:
     def open_items_of(self, task_id: str) -> list[dict]:
         """挂在 `task_id` 名下、还没消的工作项（板项轴）。
 
-        ## 它只是一个读数，不是判据（2026-10-08 深夜 S1e 改名 + 降级）
-
-        旧名字 `in_flight_items`，注释写成"T2 消边谓词的第二把尺" —— 那句话是
-        主控发明出来的，不是设计里的：`draft/84` §T2 的谓词只有 `open_children == 0`
-        （实例轴）。而且它建在"板项行 `status` 永远是 `pending`"的同一批行上，
-        拿它当判据会与 `E1` 犯同一个错（拿永不终态的读数当判据 ⇒ 判据永不成立）。
-
-        所以：名字改成"未消项"，语义降成纯读数，不参与任何判定；
-        业主 T22 的退役算法（`draft/90` §1.9）也不引用它 ——
-        "还有几条项没消"只作为 `roster_view` 回报里的一格（`items_open`）。
-        判据：`tests/test_board_does_not_eat_the_fanout_quota.py` 里那一条负控
-        （两轴分开：工作项轴看得到、代理轴数不到）。
+        ## 它只是一个读数，不是判据（2026-10-08 深夜 S1e 改名 + 降级）：旧名字 `in_flight_items`，注释写成"T2 消边
+        谓词的第二把尺" —— 那句话是主控发明出来的，不是设计里的：`draft/84` §T2 的谓词只有 `open_children == 0`
+        （实例轴）。而且它建在"板项行 `status` 永远是 `pending`"的同一批行上，拿它当判据会与 `E1` 犯同一个错（拿永不
+        终态的读数当判据 ⇒ 判据永不成立）。所以名字改成"未消项"，语义降成纯读数，不参与任何判定；业主 T22 的退役
+        算法（`draft/90` §1.9）也不引用它 —— "还有几条项没消"只作为 `roster_view` 回报里的一格（`items_open`）。
+        判据：`tests/test_board_does_not_eat_the_fanout_quota.py` 里那一条负控。
         """
         return [r for r in self._board_rows()
                 if str(r.get("item_state") or "") != "done"
@@ -1195,17 +1079,12 @@ class Conductor:
     def inside_subtree(self, root_task_id: str, task_id: str) -> dict[str, Any]:
         """`task_id` 是不是在 `root_task_id` 这一支下面（含它自己）。三态。
 
-        用途（S4，`draft/90` E7）：一把子树停机开关（`stopctl.stop_scope` =
-        `"subtree"`）只对那一支生效 —— 每个循环在决定"这把开关管不管我"时问这一格。
-
-        实现是纯粹的上行链（`parent_task_id` 逐级往上），不枚举子树
-        （枚举子树是另一件事：`descendants_of`；这一格只回答"我在不在里面"）。
-        到顶还没遇到 `root` ⇒ 不在里面。
-
-        三态：台账读不成 / 我这一行不在台账里 ⇒ `checked=False` + `reason`。
-        调用方据此不停（判不了 ≠ 适用）—— 这一条与 `draft/92` E9 同族：
-        把"没读成"折成"不在里面"会让一次子树叫停静默失效，折成"在里面"会让
-        一次局部叫停变成全停，两种都错。
+        用途（S4，`draft/90` E7）：一把子树停机开关（`stopctl.stop_scope` = `"subtree"`）只对那一支生效 —— 每个循环
+        在决定"这把开关管不管我"时问这一格。实现是纯粹的上行链（`parent_task_id` 逐级往上），不枚举子树（枚举子树是
+        另一件事：`descendants_of`；这一格只回答"我在不在里面"）。到顶还没遇到 `root` ⇒ 不在里面。
+        三态：台账读不成 / 我这一行不在台账里 ⇒ `checked=False` + `reason`；调用方据此不停（判不了 ≠ 适用）—— 这一
+        条与 `draft/92` E9 同族：把"没读成"折成"不在里面"会让一次子树叫停静默失效，折成"在里面"会让一次局部叫停
+        变成全停。
         """
         root_tid = str(root_task_id or "")
         me = str(task_id or "")
@@ -1330,32 +1209,20 @@ class Conductor:
         """父叫停某一个子代理的当前那一轮（S-H，裁定 14；照 DSH `interrupt_agent`）。
 
         返回 `{"ok","accepted","code","target_task_id","no_op","why","signal"}`。
-
-        ## 四条语义照抄（DSH 的几条 no-op 逐条）
-
-        1. 只停当前那一轮：信号只被精确的那一个目标读到，读到即消费
-           （`stopctl.interrupt_applies` / `consume_interrupt`）；
-        2. 队列保留：本方法一个字节都不碰收件箱与板项 —— 被中断的孩子下一次被唤醒时
-           照旧看到它排队时收到的那些消息（DSH `{keepInbox:true}` 的对应物）；
-        3. 不递归：它已 claim 的活不重排、它自己起的子代理继续跑
-           （DSH 逐字：`interrupt` 不递归）；
-        4. 不在册 / 已结束 ⇒ 静默 no-op：`accepted=True` + `no_op=True` +
-           一句读数（工具描述逐字「interrupting an agent that already finished is an
-           accepted no-op」）。
-
-        ## 授权（DSH `:853-866` 的三条）
-
-        叫停者必须是精确活着的祖先；不许停自己；目标非后代 ⇒ `UNAUTHORIZED`。
-        判据用的是已经是三态的 :meth:`inside_subtree`：`checked=False`（判不了）时
-        拒绝 —— 把"没读成"折成"不是后代"会让一次正当的叫停静默失效，
-        折成"是后代"会让越权通过，两种都错（`draft/92` E9 同族）。
-
-        ## 为什么它是新增而不是给 `cancel` 加参数
-
-        `cancel`（:meth:`Conductor.cancel`）"一个共享 token 覆盖全部在飞与待启动任务"的语义
-        被 41 处调用依赖 ⇒ 给它加一个"只停某一个"的参数等于顺手改掉全局停机的语义。
-        所以：`cancel` 一个字都不动，逐子代理的中断走这里 + `stopctl` 那份一个目标一份的
-        信号（为什么不能共用工作区那把开关：见 `stopctl` 里那段注释 —— 一个文件装不下 N 个目标）。
+        ## 四条语义照抄（DSH 的几条 no-op 逐条）：
+        1. 只停当前那一轮：信号只被精确的那一个目标读到，读到即消费（`stopctl.interrupt_applies` / `consume_interrupt`）；
+        2. 队列保留：本方法一个字节都不碰收件箱与板项 —— 被中断的孩子下一次被唤醒时照旧看到它排队时收到的那些消息
+           （DSH `{keepInbox:true}` 的对应物）；
+        3. 不递归：它已 claim 的活不重排、它自己起的子代理继续跑（DSH 逐字：`interrupt` 不递归）；
+        4. 不在册 / 已结束 ⇒ 静默 no-op：`accepted=True` + `no_op=True` + 一句读数（工具描述逐字「interrupting an agent
+           that already finished is an accepted no-op」）。
+        ## 授权（DSH `:853-866` 的三条）：叫停者必须是精确活着的祖先；不许停自己；目标非后代 ⇒ `UNAUTHORIZED`。判据
+        用的是已经是三态的 :meth:`inside_subtree`：`checked=False`（判不了）时拒绝 —— 把"没读成"折成"不是后代"会让
+        一次正当的叫停静默失效，折成"是后代"会让越权通过（`draft/92` E9 同族）。
+        ## 为什么它是新增而不是给 `cancel` 加参数：`cancel`（:meth:`Conductor.cancel`）"一个共享 token 覆盖全部在飞
+        与待启动任务"的语义被 41 处调用依赖 ⇒ 给它加一个"只停某一个"的参数等于顺手改掉全局停机的语义。所以 `cancel`
+        一个字都不动，逐子代理的中断走这里 + `stopctl` 那份一个目标一份的信号（为什么不能共用工作区那把开关：见
+        `stopctl` 里那段注释 —— 一个文件装不下 N 个目标）。
         """
         by_tid = str(parent_task_id or "")
         child = str(child_task_id or "")
@@ -1452,16 +1319,12 @@ class Conductor:
     def subtree_blocked(self, parent_task_id: str) -> dict[str, Any]:
         """这一支是不是整支卡住了（业主 2026-10-09 第四句）：三态读数。
 
-        「所有活跃子代理的状态都是 blocked」= 我名下还在飞的直接子代理每一个都声明过
-        "卡住"（父那一行上有 `blocked:<它>` 的落痕）。它是一个停机状态：委派这条路也堵死了
-        ⇒ 这一趟只能停，并把情况上报父（M 上报用户）。
-
-        返回 `{"checked","in_flight","blocked","all_blocked","details","reason"}`：
-
-        - 没有在飞的子 ⇒ `all_blocked=false` + `reason` 说清（"没有活跃子"既不是"整支卡住"，
-          也不是"都做完了"——后者是 `final` 说的话）；
-        - 有一个还在跑、或没声明卡住 ⇒ `all_blocked=false`（还留着一条路）；
-        - 台账读不成 ⇒ `checked=false`（"没读成"不许折成"都卡住了"，也不许折成"没卡"）。
+        「所有活跃子代理的状态都是 blocked」= 我名下还在飞的直接子代理每一个都声明过"卡住"（父那一行上有
+        `blocked:<它>` 的落痕）。它是一个停机状态：委派这条路也堵死了 ⇒ 这一趟只能停，并把情况上报父（M 上报用户）。
+        返回 `{"checked","in_flight","blocked","all_blocked","details","reason"}`：没有在飞的子 ⇒ `all_blocked=false` +
+        `reason` 说清（"没有活跃子"既不是"整支卡住"，也不是"都做完了"——后者是 `final` 说的话）；有一个还在跑、或没
+        声明卡住 ⇒ `all_blocked=false`（还留着一条路）；台账读不成 ⇒ `checked=false`（"没读成"不许折成"都卡住了"，
+        也不许折成"没卡"）。
         """
         mine = str(parent_task_id or "")
         if not mine:
@@ -1497,16 +1360,12 @@ class Conductor:
                                 by: str = "") -> dict[str, Any]:
         """停止沿边下发：给我还在飞的直接子代理各开一条 `notice`/`ack` 板项。
 
-        `draft/84` §2.2 的第 1、2.a 步：父把通知沿自己的出边传下去（不是"大家读同一个
-        文件"），每条边留一行读数和一条"要 ack"的板项 —— ack 才算传达到（T16）。
-
-        收件人 = `_in_flight_children_of(我)`（此刻还没返回的那几个）；已经收工的子代理
-        不必通知（它已经不在跑了，通知它只会在板上多一条永远不会被读的项）。
-        落痕写进父那一行的 `inputs`（与 `note_edge_release` 同一族，不动 `schema.py`）：
-        `stop-notified:<子代号>@<时间>|<通知项号>` —— 幂等：同一条边已经有通知 ⇒ 不写第二份。
-
-        返回 `{"checked","notified":[{child_task_id,item_id,at}],"skipped":[{child,why}],"reason"}`。
-        没有在飞的子 ⇒ `notified=[]` + `note` 说清（不许假装通知过）。
+        `draft/84` §2.2 的第 1、2.a 步：父把通知沿自己的出边传下去（不是"大家读同一个文件"），每条边留一行读数和一条
+        "要 ack"的板项 —— ack 才算传达到（T16）。收件人 = `_in_flight_children_of(我)`（此刻还没返回的那几个）；已经
+        收工的子代理不必通知。落痕写进父那一行的 `inputs`（与 `note_edge_release` 同一族，不动 `schema.py`）：
+        `stop-notified:<子代号>@<时间>|<通知项号>` —— 幂等：同一条边已经有通知 ⇒ 不写第二份。返回
+        `{"checked","notified":[{child_task_id,item_id,at}],"skipped":[{child,why}],"reason"}`。没有在飞的子 ⇒
+        `notified=[]` + `note` 说清（不许假装通知过）。
         """
         mine = str(parent_task_id or "")
         if not mine:
@@ -1655,22 +1514,14 @@ class Conductor:
                           attempt: int = 1) -> tuple[str, str]:
         """记一笔"这条边已经认过了"（幂等键 = `(子代号, 第几次)`）。返回 `(落痕, 问题)`。
 
-        ## 为什么是"标记"而不是"删一行"（`draft/92` I-12）
-
-        边是派生的读数（子行的 `parent_task_id` + 状态），没有一张可删的边表；
-        所以"删边"落到盘上是"父已经认过这条边"的落痕，写在父那一行的 `inputs`
-        （与 `_ADMITTED_MARK` / `_SETTLED_MARK` 同一族，不动 `schema.py`）。
-
-        ## 三条结构判据（判定与决定不在这里）
-
-        - 子必须真实存在、且 `parent_task_id` 就是这位父；
-        - 子必须是代理行（`kind == ""`）—— 工作项不是代理（两轴分开）；
-        - 子必须不在跑（`status ∉ {pending, running}`）—— 还在跑就记"已经消过"
-          是最坏的一种假成功（业主 §1.9 第①支：活跃 ⇒ 先把最近报告端给父，不退役）。
-
-        幂等：同一 `(子代号, 第几次)` 第二次 ⇒ 返回 `("", "已经记过")`，不写第二份。
-        谁、什么时候、依据哪几条（"工作"层面的读数）由调用方（秘书的 `retire`）写进会话事件
-        —— 这一笔只管"父侧认过"这件事本身。
+        ## 为什么是"标记"而不是"删一行"（`draft/92` I-12）：边是派生的读数（子行的 `parent_task_id` + 状态），没有一张
+        可删的边表；所以"删边"落到盘上是"父已经认过这条边"的落痕，写在父那一行的 `inputs`（与 `_ADMITTED_MARK` /
+        `_SETTLED_MARK` 同一族，不动 `schema.py`）。
+        ## 三条结构判据（判定与决定不在这里）：子必须真实存在、且 `parent_task_id` 就是这位父；子必须是代理行
+        （`kind == ""`）—— 工作项不是代理（两轴分开）；子必须不在跑（`status ∉ {pending, running}`）—— 还在跑就记
+        "已经消过"是最坏的一种假成功（业主 §1.9 第①支：活跃 ⇒ 先把最近报告端给父，不退役）。
+        幂等：同一 `(子代号, 第几次)` 第二次 ⇒ 返回 `("", "已经记过")`，不写第二份。谁、什么时候、依据哪几条（"工作"
+        层面的读数）由调用方（秘书的 `retire`）写进会话事件 —— 这一笔只管"父侧认过"这件事本身。
         """
         mark = f"{_EDGE_RELEASED_PREFIX}{child_task_id}#{int(attempt)}"
         with self.store.tx("tasks", actor="conductor", note="edge:released") as tx:
@@ -1744,20 +1595,12 @@ class Conductor:
     def keep_alive_of(self, task_id: str) -> dict[str, Any]:
         """这一项/这个代理声明的"做完还待命"（A6=丙）。`{"checked","keep_alive","reason"}`。
 
-        ## 声明落在派活项上，不在代理行上
-
-        `schema.Task.validate` 只允许 `kind == "delegation"` 的行带 `keep_alive`
-        （"只有派活项才谈得上待命"）。所以对代理行问这一格时，读的是
-        它名下最新的那条派活项（= 父最后一次派给它那件活时的声明）。
-
-        ## 判据用的是哪一半（`draft/92` §15.6 的订正）
-
-        主控先前把它读成"待命的父不许消边"——读错了：业主 §1.9 的三分支里
-        "在等待"正是可以退役的那一支，只要它自己名下没有活跃子代理。
-        所以这一格只回答"它是不是声明过待命"，不参与"能不能退役"的判定
-        （那一条由秘书的三分支说，S1k；"活跃 / 在等待"由 `active_children` 说）。
-
-        三态：没有那一行 / 读不成 ⇒ `checked=False`（不许折成"没声明过"）。
+        ## 声明落在派活项上，不在代理行上：`schema.Task.validate` 只允许 `kind == "delegation"` 的行带 `keep_alive`
+        （"只有派活项才谈得上待命"）。所以对代理行问这一格时，读的是它名下最新的那条派活项（= 父最后一次派给它那件
+        活时的声明）。## 判据用的是哪一半（`draft/92` §15.6 的订正）：主控先前把它读成"待命的父不许消边"——读错了：
+        业主 §1.9 的三分支里"在等待"正是可以退役的那一支，只要它自己名下没有活跃子代理。所以这一格只回答"它是不是
+        声明过待命"，不参与"能不能退役"的判定（那一条由秘书的三分支说，S1k；"活跃 / 在等待"由 `active_children`
+        说）。三态：没有那一行 / 读不成 ⇒ `checked=False`（不许折成"没声明过"）。
         """
         try:
             row = self._task(task_id)
@@ -1785,26 +1628,15 @@ class Conductor:
         """父名下可复用的活跃子代理（业主 "派活不一定是增"）。三态返回：
 
         `{"checked": bool, "rows": [{"task_id","role","state"}], "reason": ""}`
-
-        ## 口径（`draft/92` §3.1 与 §7-②）
-
-        - 只数代理行（`kind == ""`）：工作项不是代理（两轴分开）；
-        - `role` 给了就只看那个角色；没给 ⇒ 全给（不替调用方猜"大概想复用谁"）；
-        - 复用资格 = 那一行此刻活跃（在跑一次调用 ⇒ 可以再派一件）或 是待命
-          （无活跃调用，且 `keep_alive_of` 说它名下最新那条派活项声明过待命，A6=丙）；
-        - 已停且没声明待命 ⇒ 不许复用（要派活就新起一个）；
-        - "已退役"这一档不在这一层判（那是名册/对照表的事，S1k）——
-          本方法只回答"台账上此刻有没有可以再接一件活的子代理"。
-
-        ## 为什么它只给候选、不给"就是它"
-
-        复用必须是父点名（`reuse:"D1"`，业主 B2），而名字到代号的译码在秘书那一侧（S1k）。
-        所以这里返回候选清单；不"挑一个最合适的" —— 猜错就是把一件活派给了别人。
-
-        ## 三态
-
-        台账读不成、或某一行 `keep_alive_of` 读不成 ⇒ `checked=False` + `reason`，
-        不许折成"没有可复用的"（那会把复用静默变成新起，而新起的代价是白烧一次钱）。
+        ## 口径（`draft/92` §3.1 与 §7-②）：只数代理行（`kind == ""`）：工作项不是代理（两轴分开）；`role` 给了就只看
+        那个角色，没给 ⇒ 全给（不替调用方猜"大概想复用谁"）；复用资格 = 那一行此刻活跃（在跑一次调用 ⇒ 可以再派
+        一件）或是待命（无活跃调用，且 `keep_alive_of` 说它名下最新那条派活项声明过待命，A6=丙）；已停且没声明待命
+        ⇒ 不许复用（要派活就新起一个）；"已退役"这一档不在这一层判（那是名册/对照表的事，S1k）—— 本方法只回答"台账
+        上此刻有没有可以再接一件活的子代理"。
+        ## 为什么它只给候选、不给"就是它"：复用必须是父点名（`reuse:"D1"`，业主 B2），而名字到代号的译码在秘书那一
+        侧（S1k）。所以这里返回候选清单；不"挑一个最合适的" —— 猜错就是把一件活派给了别人。
+        ## 三态：台账读不成、或某一行 `keep_alive_of` 读不成 ⇒ `checked=False` + `reason`，不许折成"没有可复用的"
+        （那会把复用静默变成新起，而新起的代价是白烧一次钱）。
         """
         try:
             rows = self._tasks()
@@ -1841,32 +1673,17 @@ class Conductor:
         """父名下那几项现在可以退役了 —— 只报不动作（业主 T22 与 §1.9 的三分支）。
 
         `{"checked": bool, "ready": [{"task_id","role","branch","reading"}], "reason": ""}`
-
         逐项分类（与 `draft/90` §1.9 的分支逐字对齐，一处实现）：
-
-        - `branch="active"`：这一项还在跑（`status ∈ {pending, running}`）
-          ⇒ 父该做的是"先看它最近报了什么"，不许退役；
-        - `branch="waiting_no_children"`：它不在跑，且它自己名下没有活跃子代理
-          ⇒ 可以退役（业主那一句的"无活跃子代理且自身完全停止"说的是它自己，
-          不是父 —— 见 `draft/92` §15.6 的订正）；
-        - `branch="waiting_with_children"`：它不在跑，但它自己名下还有活跃子代理
-          ⇒ 不退役，父该看的是"它还在干什么活"。
-
-        `reading` 里附一格 `items_open`（它名下未消的项有几条）—— 只报不拦
-        （业主的算法里没有这一条；主控不加隐藏的拦截条件，C2 的裁定）。
-
-        ## 为什么它只报不动作
-
-        业主逐字：「子代理宣布收工后，由父代理决定是否消边」。所以框架给的是就绪读数，
-        写盘那一步在 `Secretary.retire`（S1k，父说了才做）。本方法零写入。
-
-        ## 三态与代价
-
-        读不成 ⇒ `checked=False` + `reason`（不许折成"没有可退役的"：那会让父以为
-        "还没到时候"）。整个方法只读一次台账快照（`_tasks()`），逐项判据都在这份快照上做，
-        不嵌套调用别的读侧 —— 它每步都可能被调一次。
-
-        已经记过消边的那些（`released_edges`）直接跳过：它们不再是"可退役"的候选。
+        - `branch="active"`：这一项还在跑（`status ∈ {pending, running}`）⇒ 父该做的是"先看它最近报了什么"，不许退役；
+        - `branch="waiting_no_children"`：它不在跑，且它自己名下没有活跃子代理 ⇒ 可以退役（业主那一句的"无活跃子代理
+          且自身完全停止"说的是它自己，不是父 —— 见 `draft/92` §15.6 的订正）；
+        - `branch="waiting_with_children"`：它不在跑，但它自己名下还有活跃子代理 ⇒ 不退役，父该看的是"它还在干什么活"。
+        `reading` 里附一格 `items_open`（它名下未消的项有几条）—— 只报不拦（业主的算法里没有这一条；主控不加隐藏的
+        拦截条件，C2 的裁定）。## 为什么它只报不动作：业主逐字：「子代理宣布收工后，由父代理决定是否消边」。所以框架
+        给的是就绪读数，写盘那一步在 `Secretary.retire`（S1k，父说了才做）。本方法零写入。
+        ## 三态与代价：读不成 ⇒ `checked=False` + `reason`（不许折成"没有可退役的"：那会让父以为"还没到时候"）。整个
+        方法只读一次台账快照（`_tasks()`），逐项判据都在这份快照上做，不嵌套调用别的读侧。已经记过消边的那些
+        （`released_edges`）直接跳过：它们不再是"可退役"的候选。
         """
         try:
             rows = self._tasks()
@@ -2044,17 +1861,13 @@ class Conductor:
         """一件广播能力：把一条通告投给我名下的直接子代理（业主 T20/T21）。
 
         口径（`draft/86` §14.1b，T21 之后的统一形态）：
-
-        1. 收件人 = `_children_of(我)`（实例轴，`kind == ""`）—— 没有 `scope="tree"`
-           特权档：M 与其他角色完全一样，要全树就逐层向下（级联是收件人的动作，
-           框架不代任何一层转发 ⇒ `cascade` 恒为 `children_decide`）；
-        2. 每个收件人一条板项：`kind="message"`、`expects="ack"`、
-           `parent_task_id = 收件人的编号`（"这一项挂在谁名下"）、`role = 收件人的角色`；
-           正文进 `detail`（"每句话都要有行为"：内容是 detail、行为是 ack）；
+        1. 收件人 = `_children_of(我)`（实例轴，`kind == ""`）—— 没有 `scope="tree"` 特权档：M 与其他角色完全一样，
+           要全树就逐层向下（级联是收件人的动作，框架不代任何一层转发 ⇒ `cascade` 恒为 `children_decide`）；
+        2. 每个收件人一条板项：`kind="message"`、`expects="ack"`、`parent_task_id = 收件人的编号`、
+           `role = 收件人的角色`；正文进 `detail`（"每句话都要有行为"：内容是 detail、行为是 ack）；
         3. 不知道我是谁（没给编号、调用上下文里也没有）⇒ 不广播（三态：不许猜一个父号）；
         4. 我名下没有子代理 ⇒ 如实 `recipients=[]` + `note` 说清（不是"发出去了"）；
         5. `readings` 把"开了几条 / seen 几条 / acked 几条"分开报（展开了 ≠ 读到了）。
-
         返回 `{"checked","ok","broadcast","recipients","items","cascade","readings","note"}`。
         """
         mine = str(parent_task_id or "") or current_task_id()
@@ -2101,20 +1914,12 @@ class Conductor:
                                  root: str) -> dict[str, Any]:
         """上行收件人的名册判据（与 `message` 同一份实现：`agent_loop.roster_addresses`）。
 
-        业主 2026-10-19：「代理之间的通信必须经名册」；`escalate` 发的是父，
-        但路径上必须真经过校验 —— "它本来就发给父"不是跳过校验的理由
-        （改前这一支信任调用方给的 `parent_task_id`：给一个堂兄弟的编号，
-        这条上行就写进了堂兄弟的收件箱）。
-
-        三个取舍：
-
-        - 只读名册、不另造判据：`roster_addresses` 是这件事的唯一实现
-          （`message` 那一支也用它）；这里再写一遍"是不是我的父"就是第二份判据；
-        - 按绝对编号寻址（`to=父的台账号`）：角色名在同名多实例时是歧义的，
-          而歧义在这里的代价是"这条上行投给了别人的父"；
-        - 名册读不成 ⇒ fail-open（`how="roster_unavailable"`，调用方把读数标出来）：
-          与 `message` 那一路同一条纪律 —— "说话不该被一次读失败挡住"。
-          这一档不是"校验通过"。
+        业主 2026-10-19：「代理之间的通信必须经名册」；`escalate` 发的是父，但路径上必须真经过校验 —— "它本来就发给
+        父"不是跳过校验的理由（改前这一支信任调用方给的 `parent_task_id`：给一个堂兄弟的编号，这条上行就写进了堂兄弟
+        的收件箱）。三个取舍：只读名册、不另造判据（`roster_addresses` 是这件事的唯一实现，这里再写一遍"是不是我的
+        父"就是第二份判据）；按绝对编号寻址（`to=父的台账号`）：角色名在同名多实例时是歧义的，而歧义在这里的代价是
+        "这条上行投给了别人的父"；名册读不成 ⇒ fail-open（`how="roster_unavailable"`，调用方把读数标出来）：与
+        `message` 那一路同一条纪律 —— "说话不该被一次读失败挡住"，这一档不是"校验通过"。
         """
         from . import agent_loop as AL
 
@@ -2146,30 +1951,16 @@ class Conductor:
                  ) -> dict[str, Any]:
         """把「我要召唤者做什么」写进父的收件箱（业主 2026-10-19 裁定：父子天然双向）。
 
-        ## 为什么这条通道不属于"边"
-
-        父子身份在运行期已经解析出来了（`AgentLoop._resolve_parent`：调用方给的 /
-        台账读的 / 顶层自己），而 `edges` 是权限面（谁能召唤谁）。上行不是召唤、
-        也不是新权限 —— 它就是"孩子跟召唤它的人说话"。于是这条入口不要求在
-        `edges` 里登记，收件人一律是 `_resolve_parent` 当次解析出的那一个。
-
-        真机代价（`t5-run2`）：B 想找 A 说话只能借 `B→H` 绕两跳，因为"向上"没有入口。
-        这一格补的就是那个入口。
-
-        ## 落点：父的收件箱（复用既有机制，不新造表）
-
-        `agent_message` 事件本来就是收件箱（`agent_loop.read_messages` /
-        `inbox_digest` / `mark_delivered` 三件套）：私聊按 `to == 角色` 进收件人面，
-        父下一趟进循环时会在开场提示词里看到它，读一次即由 `mark_delivered` 登记已读
-        （同一需求不会一轮又一轮地被重复处理）。所以这里没有新表、没有新文件：
-        一条 `agent_message`，外加在同一行上带一格结构化的 `escalation`（`need` /
-        `kind` / `evidence`）—— 键名写在同一条记录里，父与审计面都能机器读。
-
-        它同时落一条 `agent_escalation` 事件（可审计的"这一趟为什么停在这里"）；
-        停的那一半在循环里（`stop_reason="escalated"` ⇒ 退出码 5，见 `cli`）。
-
-        ## 三态（受控拒绝，不许静默成功）
-
+        ## 为什么这条通道不属于"边"：父子身份在运行期已经解析出来了（`AgentLoop._resolve_parent`：调用方给的 / 台账
+        读的 / 顶层自己），而 `edges` 是权限面（谁能召唤谁）。上行不是召唤、也不是新权限 —— 它就是"孩子跟召唤它的人
+        说话"。于是这条入口不要求在 `edges` 里登记，收件人一律是 `_resolve_parent` 当次解析出的那一个。真机代价
+        （`t5-run2`）：B 想找 A 说话只能借 `B→H` 绕两跳，因为"向上"没有入口 —— 这一格补的就是那个入口。
+        ## 落点：父的收件箱（复用既有机制，不新造表）：`agent_message` 事件本来就是收件箱（`agent_loop.read_messages` /
+        `inbox_digest` / `mark_delivered` 三件套）：私聊按 `to == 角色` 进收件人面，父下一趟进循环时会在开场提示词里
+        看到它，读一次即由 `mark_delivered` 登记已读。所以这里没有新表、没有新文件：一条 `agent_message`，外加在同一
+        行上带一格结构化的 `escalation`（`need` / `kind` / `evidence`）—— 键名写在同一条记录里，父与审计面都能机器读。
+        它同时落一条 `agent_escalation` 事件（可审计的"这一趟为什么停在这里"）；停的那一半在循环里
+        （`stop_reason="escalated"` ⇒ 退出码 5，见 `cli`）。## 三态（受控拒绝，不许静默成功）：
         | 情形 | `reason` | 写不写 |
         |---|---|---|
         | 没有父（顶层 M / 这一趟的父就是它自己） | `not_caller` | 一行都不写 |
@@ -2177,7 +1968,6 @@ class Conductor:
         | 没有会话身份（root/sid 都没挂上） | `no_session` | 一行都不写（写进错的会话 = 没写） |
         | `need` 空 / 超 300 字 / `kind` 不在词表里 | `invalid_params` | 一行都不写 |
         | 留言写盘失败 | `inbox_write_failed` | 写没成，如实报（不是"已上报"） |
-
         成功那一档返回 `state="escalated"`（循环据此收工），失败那一档 `state="refused"`。
         """
         from . import agent_loop as AL          # 局部导入：`agent_loop` 顶层 import 本模块
@@ -2307,23 +2097,15 @@ class Conductor:
                            input_key: str = "") -> str:
         """给一次顶趟（不是被召唤的那些）开一条 `tasks` 行，返回它的 `task_id`。
 
-        ## 为什么必须有它（F1 / `44 J-32` 的"往前走"半）
-
-        真机读数：`usage_ledger` 里 51%~66% 的行 `task_id` 为空，而
-        `agent_loop.run_role` 给顶趟传的是 `my_task_id=""` ⇒
-        `llmseam._charge_ledger` 把空串归一成 `None` ⇒ 那些钱读不出"属于哪一次召唤"。
-
-        只填 `task_id` 而不先建行是负收益（`44 J-32` 逐字）：按 `verify.py` 的
-        `dangling_usage_task`，每一行都会变成一条 error 级读数 ⇒ 一次改动制造几千行 error。
-        所以这两件事必须同批：先建行（本方法），再让这一趟的每一次 `seam.ask` 带上它。
-
-        历史不回填：盘上存量那些 null 行是历史事件（`store.rebuild` 重放同一批），
-        改代码不改写历史；而 `None` 不进 `dangling_usage_task` 的判据
-        （`verify.py` 逐字 `if tk is not None and str(tk) not in task_by_id:`）⇒
-        那是一条已知基线，不是红。
-
-        这条行不占并发/总量配额（`max_concurrency` 约束的是"同时在跑的召唤"，
-        而顶趟是那个正在派活的人本身）；它只是让"这一趟"在台账上有一个身份。
+        ## 为什么必须有它（F1 / `44 J-32` 的"往前走"半）：真机读数：`usage_ledger` 里 51%~66% 的行 `task_id` 为空，而
+        `agent_loop.run_role` 给顶趟传的是 `my_task_id=""` ⇒ `llmseam._charge_ledger` 把空串归一成 `None` ⇒ 那些钱
+        读不出"属于哪一次召唤"。只填 `task_id` 而不先建行是负收益（`44 J-32` 逐字）：按 `verify.py` 的
+        `dangling_usage_task`，每一行都会变成一条 error 级读数 ⇒ 一次改动制造几千行 error。所以这两件事必须同批：先
+        建行（本方法），再让这一趟的每一次 `seam.ask` 带上它。历史不回填：盘上存量那些 null 行是历史事件
+        （`store.rebuild` 重放同一批），改代码不改写历史；而 `None` 不进 `dangling_usage_task` 的判据（`verify.py` 逐字
+        `if tk is not None and str(tk) not in task_by_id:`）⇒ 那是一条已知基线，不是红。这条行不占并发/总量配额
+        （`max_concurrency` 约束的是"同时在跑的召唤"，而顶趟是那个正在派活的人本身）；它只是让"这一趟"在台账上有
+        一个身份。
         """
         started = S.now_iso()
         key = str(input_key or "").strip() or f"top:{role}:{abs(hash(str(task))) & 0xFFFFFFFF:08x}"
@@ -2416,47 +2198,27 @@ class Conductor:
                                         parent_task_id: str = "") -> list[Any]:
         """S-03（队列认领 · 乙形态）：把还没做完的检索请求交给 A 的 `run_once`。
 
-        ## "即"字的折扣（写在明面上，不许藏）
-
-        这里的"提交即被消费"读作"下一次 M 侧派活（`run_plan`）或 M 收尾时被消费"。
-        若 M 之后不再动，请求会留着 pending —— 让它可见的两条链：
-
+        ## "即"字的折扣（写在明面上，不许藏）：这里的"提交即被消费"读作"下一次 M 侧派活（`run_plan`）或 M 收尾时被
+        消费"。若 M 之后不再动，请求会留着 pending —— 让它可见的两条链：
         1. F-05 的消费端（`secretary.pending_inbox` / `inbox_todos`，秘书职责 3 会提醒 M）；
         2. `closing` 的研究链缺口读数（E-04b 那一档）。
-
-        所以"不可见地挂着"这个最坏形态不成立；而"即"的折扣由下面的两处计数可度量。
-
-        为什么不是"提交那一刻"就消费（`44 J-07` 之外的设计题）：那要给 C/D 塞 `conductor`
-        ⇒ 变成处理体内的递归召唤（深度/预算/并发语义现在都按"M 是唯一派活方"设计），
-        还要动 `host.py`（FC-27）。让"提交那一刻"就消费的正确做法是改派活权的归属，
-        那是另一个设计题、要人裁 —— 按现在的设计不做。
-
-        ## 幂等（"无意义/重复的委托"那一类）
-
-        同一条 `request_id` 只唤起一次：判据是 `tasks` 里已经有
-        `input_key == "consume:<rid>"` 的行（含 running —— 已经消费过就别再来一次）。
-        `input_key` 同时是幂等键的可见形态，测试与审计都按它查。
-
-        而"被拒过"不算"做过"（D80，2026-10-08）：幂等只在真的被受理过的行上成立。
-        闸门拒掉的召唤也落一行台账（`_refuse`），而那一行带着 `input_key` ——
-        改前 `seen` 收全部行，于是一趟在墙钟/预算/总量到顶那一刻扫队的跑批，
-        只要有一条 `consume:<rid>` 被拒一次，那条 `done=false` 的检索请求就永久
-        留在 `seen` 里、从此再也不会被认领（跨趟也一样：`tasks` 是追加式台账，
-        `seen` 每次都从全表重建）。判据与 `_occupies_fanout_slot` 同源：
-        只有走完第 [5] 步（写 `running` 行）的召唤才带 `_ADMITTED_MARK`，
-        闸门拒绝在写 running 行之前就返回了。
-
-        ## 父是谁（2026-10-20；根因见 `_top_task_id` 的注释）
-
-        认领出来的那个 `A` 也是派活，所以它必须有父（`draft/90` §1.1：
-        名册项 = 子代理，`tasks` 行 = 一次调用；`draft/104` §2.5：父子关系的唯一权威
-        来源是台账）。父按 `_owner_task_id` 取，优先级：显式 `parent_task_id` →
-        当前调用上下文 → 本进程顶趟。三者都没有（例如判据里裸造了一个 `Conductor`、
-        连顶趟都没开）⇒ 当场造一个真树根（`_write_new_row`，编号由台账发，
-        `parent=None` 是树根的合法形态）并把它收行 —— 宁可多一行树根，也不许再出现
-        `parent_task_id=None` 的子行（真机 t-000019 就是那一行孤儿）。
-        认领完顺手登记进那个 owner 的名册（名字与读写面都由秘书发号 —— 这一条
-        正是"名册外子代理"那个洞：改前 `conductor.summon` 直连后端，一次登记都没有）。
+        所以"不可见地挂着"这个最坏形态不成立。为什么不是"提交那一刻"就消费（`44 J-07` 之外的设计题）：那要给 C/D
+        塞 `conductor` ⇒ 变成处理体内的递归召唤（深度/预算/并发语义现在都按"M 是唯一派活方"设计），还要动 `host.py`
+        （FC-27）。让"提交那一刻"就消费的正确做法是改派活权的归属，那是另一个设计题、要人裁。
+        ## 幂等（"无意义/重复的委托"那一类）：同一条 `request_id` 只唤起一次：判据是 `tasks` 里已经有
+        `input_key == "consume:<rid>"` 的行（含 running —— 已经消费过就别再来一次）。`input_key` 同时是幂等键的可见
+        形态，测试与审计都按它查。而"被拒过"不算"做过"（D80，2026-10-08）：幂等只在真的被受理过的行上成立。闸门拒掉
+        的召唤也落一行台账（`_refuse`），而那一行带着 `input_key` —— 改前 `seen` 收全部行，于是一趟在墙钟/预算/总量
+        到顶那一刻扫队的跑批，只要有一条 `consume:<rid>` 被拒一次，那条 `done=false` 的检索请求就永久留在 `seen` 里、
+        从此再也不会被认领（跨趟也一样：`tasks` 是追加式台账，`seen` 每次都从全表重建）。判据与
+        `_occupies_fanout_slot` 同源：只有走完第 [5] 步（写 `running` 行）的召唤才带 `_ADMITTED_MARK`。
+        ## 父是谁（2026-10-20；根因见 `_top_task_id` 的注释）：认领出来的那个 `A` 也是派活，所以它必须有父
+        （`draft/90` §1.1：名册项 = 子代理，`tasks` 行 = 一次调用；`draft/104` §2.5：父子关系的唯一权威来源是台账）。
+        父按 `_owner_task_id` 取，优先级：显式 `parent_task_id` → 当前调用上下文 → 本进程顶趟。三者都没有（例如判据里
+        裸造了一个 `Conductor`、连顶趟都没开）⇒ 当场造一个真树根（`_write_new_row`，编号由台账发，`parent=None` 是
+        树根的合法形态）并把它收行 —— 宁可多一行树根，也不许再出现 `parent_task_id=None` 的子行（真机 t-000019 就是
+        那一行孤儿）。认领完顺手登记进那个 owner 的名册（名字与读写面都由秘书发号 —— 这一条正是"名册外子代理"那个
+        洞：改前 `conductor.summon` 直连后端，一次登记都没有）。
         """
         out: list[Any] = []
         owner = ""
@@ -2575,17 +2337,12 @@ class Conductor:
                              detail: str = "") -> SummonResult:
         """收一次顶趟（与 :meth:`open_top_level_run` 配对）。
 
-        三态：`stop_reason == "final"` ⇒ `ok`（它真的收了工）；其余一律 `no_result`
-        （跑完了、但没给出结论 —— 停步数/停坏 JSON 都属于这一档，不是 `failed`：
-        那是"代码崩了"，两件事的处置不同）。
-
-        ## 花销必须从账本抄回这一行（否则制造一条 `usage_task_total_mismatch`）
-
-        这一趟的账挂在这一行的 `task_id` 上（F1 的另一半），所以 `tasks.tokens/usd`
-        必须由账本派生（与 `_charge_and_settle` 同一条纪律：`tokens_for()` 抄回，
-        而不是自己累加）。实测过缺这一步的后果：库里 `tasks.tokens=0` 而账本 150
-        ⇒ `verify_all` 报一条 warning `usage_task_total_mismatch`
-        （"两处对同一次召唤的花销给出不同数字"）—— 判据见
+        三态：`stop_reason == "final"` ⇒ `ok`（它真的收了工）；其余一律 `no_result`（跑完了、但没给出结论 —— 停步数/
+        停坏 JSON 都属于这一档，不是 `failed`：那是"代码崩了"，两件事的处置不同）。
+        ## 花销必须从账本抄回这一行（否则制造一条 `usage_task_total_mismatch`）：这一趟的账挂在这一行的 `task_id` 上
+        （F1 的另一半），所以 `tasks.tokens/usd` 必须由账本派生（与 `_charge_and_settle` 同一条纪律：`tokens_for()`
+        抄回，而不是自己累加）。实测过缺这一步的后果：库里 `tasks.tokens=0` 而账本 150 ⇒ `verify_all` 报一条 warning
+        `usage_task_total_mismatch`（"两处对同一次召唤的花销给出不同数字"）—— 判据见
         `tests/test_agent_loop.py::test_f1_...`。
         """
         tokens_of_top = 0
@@ -2620,27 +2377,17 @@ class Conductor:
     def remind_closure_at_finish(self) -> dict[str, Any]:
         """秘书职责 3（闭环提醒）的生产调用点：收尾时问一次"谁没接手 / 谁没反馈"。
 
-        ## 为什么接在这里，而不是 `agent_loop` 每趟的收尾
-
-        1. 职责 3 的形态是「经 M」（`draft/53` §2）：它问的是链条级的事实 ——
-           "提交了却没人接手"、"有人接手却没有终态" —— 而顶趟收尾是唯一能看见
-           整条链的收尾点；`agent_loop` 那一层只看得到本角色这一趟。
-        2. 与 S-03 的收尾消费点同址（上面那一次
-           `consume_pending_search_requests(trigger="finish")`）：一个收尾点只做一轮扫描，
-           "认领"与"提醒"两件事落在一起 —— 读代码与读读数都是同一段。
-        3. "这一趟的读数"有现成的落点：顶趟行的 `detail`（一句话摘要）与
-           :meth:`stats` 的 `closure_reminders`（全量），每条提醒另进决定台账
-           （`secretary.remind_closure` 逐条落 duty=3）。
-
-        ## 三态与 fail-open（与其余四职责同姿态）
-
-        - 没装配秘书 ⇒ `checked=False` + 理由："没查成"不是"没有未闭环"；
-        - 秘书自己抛异常 ⇒ 记 `fail_open=True` 并照常收尾 —— 提醒绝不许打断收尾；
-        - 读成了、确实没有未闭环 ⇒ `checked=True, count=0, reminded=[]`
-          （反负控：这一格不许凭空列人）。
-
-        `by_state` 的读法：`unclaimed` = 提交了没人接手；`pending` / `running` =
-        有人接手但没有终态（没有反馈）。读数照原样给，不另造一套状态名。
+        ## 为什么接在这里，而不是 `agent_loop` 每趟的收尾：
+        1. 职责 3 的形态是「经 M」（`draft/53` §2）：它问的是链条级的事实 —— "提交了却没人接手"、"有人接手却没有终态"
+           —— 而顶趟收尾是唯一能看见整条链的收尾点；`agent_loop` 那一层只看得到本角色这一趟。
+        2. 与 S-03 的收尾消费点同址（上面那一次 `consume_pending_search_requests(trigger="finish")`）：一个收尾点只做
+           一轮扫描，"认领"与"提醒"落在一起。
+        3. "这一趟的读数"有现成的落点：顶趟行的 `detail`（一句话摘要）与 :meth:`stats` 的 `closure_reminders`（全量），
+           每条提醒另进决定台账（`secretary.remind_closure` 逐条落 duty=3）。
+        ## 三态与 fail-open（与其余四职责同姿态）：没装配秘书 ⇒ `checked=False` + 理由："没查成"不是"没有未闭环"；
+        秘书自己抛异常 ⇒ 记 `fail_open=True` 并照常收尾 —— 提醒绝不许打断收尾；读成了、确实没有未闭环 ⇒
+        `checked=True, count=0, reminded=[]`（反负控：这一格不许凭空列人）。`by_state` 的读法：`unclaimed` = 提交了没人
+        接手；`pending` / `running` = 有人接手但没有终态（没有反馈）。读数照原样给，不另造一套状态名。
         """
         sec = getattr(self, "secretary", None)
         if sec is None or not callable(getattr(sec, "remind_closure", None)):
@@ -2839,25 +2586,15 @@ class Conductor:
     def _meter_guard(self, role: str, budget: Mapping[str, Any] | None) -> Any:
         """开工前的预算守卫。返回 `tokenmeter.MeterReading`。
 
-        ## 判据只有一处：全局已花 vs 全局预算（2026-10-15 业主裁定 B2/B4）
-
-        这里此前是"双重预算"，而且第二重是坏的：
-
-        - token 那一半（`budget={"max_tokens": …}`）已随裁定 A1/A2/A3 整条删掉
-          （连同 `Policy.token_budget` 与 `Decision.tokens_left` 两格）；
-        - 钱那一半此前写成"给这一单限额"，实现却是 `TokenMeter(store,
-          budget_usd=X).guard()` —— 而那个 meter 读的是同一本全局账
-          （`usage_ledger`），于是 `X` 是拿去和全局已花比的。
-          也就是说：`max_usd` 从来不是每单限额，它只是"全局阈值的第二个落点"。
-          同一件事两处各判一次，还都不是调用方以为的那个意思 —— 这正是 B2 的形态。
-
-        现在收成一处：判的是 `self.meter`（全局账）对 `self.meter.budget_usd`
-        （全局预算，取自 `Policy.usd_budget`），也就是业主那句「只卡总花销的钱」。
-
-        `budget={"max_usd": X}` 这个参数仍然受理，但语义改成了它在字面上
-        该有的意思："这一单预计最多花 X" ⇒ 判"剩下的钱够不够 X"
-        （`X > 剩余` ⇒ 开工前拒）。它不再能绕过全局（剩余就是全局剩余），
-        也不再被误当成阈值。
+        ## 判据只有一处：全局已花 vs 全局预算（2026-10-15 业主裁定 B2/B4）：这里此前是"双重预算"，而且第二重是坏的：
+        token 那一半（`budget={"max_tokens": …}`）已随裁定 A1/A2/A3 整条删掉（连同 `Policy.token_budget` 与
+        `Decision.tokens_left` 两格）；钱那一半此前写成"给这一单限额"，实现却是 `TokenMeter(store, budget_usd=X).guard()`
+        —— 而那个 meter 读的是同一本全局账（`usage_ledger`），于是 `X` 是拿去和全局已花比的。也就是说：`max_usd` 从来
+        不是每单限额，它只是"全局阈值的第二个落点"。同一件事两处各判一次，还都不是调用方以为的那个意思 —— 这正是
+        B2 的形态。现在收成一处：判的是 `self.meter`（全局账）对 `self.meter.budget_usd`（全局预算，取自
+        `Policy.usd_budget`），也就是业主那句「只卡总花销的钱」。`budget={"max_usd": X}` 这个参数仍然受理，但语义改成
+        了它在字面上该有的意思："这一单预计最多花 X" ⇒ 判"剩下的钱够不够 X"（`X > 剩余` ⇒ 开工前拒）。它不再能绕过
+        全局（剩余就是全局剩余），也不再被误当成阈值。
         """
         grant = self.meter.guard(0, role=role, scope="summon")
         want: float | None = None
@@ -2887,36 +2624,19 @@ class Conductor:
     def _charge_and_settle(self, res: SummonResult, *, role: str) -> SummonResult:
         """把这次召唤的花销记进权威账，再把账上的累计值写回 `tasks`。
 
-        零值也记（`tokenmeter` 的设计②）：一次"跑了但没花 token"的召唤
-        必须留下一条零值行，否则"没记账"与"花了零"无法区分，而"预算还剩多少"
-        就永远答不准。`UsageEntry.validate` 要求零值必须带 `note`，所以这里
-        无条件给一个说明。
-
-        ## 幂等键同时进 `note` 与 `idem_key` 字段
-
-        键由 `modelcost.settle_key(task_id)` 生成（幂等键的唯一生成处），
-        由 `charge_once` 同时写进那一行的 `note` token 与 `idem_key` 字段。
-        少了字段那一层，`schema.validate_table` 的字段级唯一性断言与
-        `verify.duplicate_idem_key` 在真实路径上就永远没有输入 ——
-        它们会在测试里常绿而在生产上从不生效。
-
-        ## 接线各 agent 的 `_call` 时必须读这一段（否则会双记）
-
-        现在的粒度是召唤级：这一条 `Charge(scope="summon", tokens_out=res.tokens)`
-        是这一次召唤的唯一一笔。等各 agent 的 `_call` 也接上 `charge()`
-        （细到每次工具调用 / 每次重试）之后，这里必须改成"只记零值兜底"：
-
-        - `_call` 记的细账已经进了台账 ⇒ `summon` 再记一次会让
-          `usage_ledger` 的汇总变成真实花销的两倍（而 `tasks.tokens`
-          是从台账派生的，所以两边会一起虚高 —— 它们仍然"相等"，
-          但相等的是错的数，这比不等更危险）；
-        - 正确的形态：`_call` 记细账；`summon` 只在这一 task 还一条账都没有时
-          补一条零值行（`tokens_for(task_id) == 0`），理由是"零值也要记"。
-
-        记账失败不许让一次已经完成的召唤变成失败（钱已经花了、活已经干完了）：
-        这里兜住异常并写进日志。但这不是静默失败 —— 后果（`tasks.tokens`
-        与台账不等）会由 `verify.py` 的 `usage_task_total_mismatch` 报出来，
-        而那正是"两处口径不一致"该被看见的地方。
+        零值也记（`tokenmeter` 的设计②）：一次"跑了但没花 token"的召唤必须留下一条零值行，否则"没记账"与"花了零"无法
+        区分，而"预算还剩多少"就永远答不准。`UsageEntry.validate` 要求零值必须带 `note`，所以这里无条件给一个说明。
+        ## 幂等键同时进 `note` 与 `idem_key` 字段：键由 `modelcost.settle_key(task_id)` 生成（幂等键的唯一生成处），由
+        `charge_once` 同时写进那一行的 `note` token 与 `idem_key` 字段。少了字段那一层，`schema.validate_table` 的字段
+        级唯一性断言与 `verify.duplicate_idem_key` 在真实路径上就永远没有输入 —— 它们会在测试里常绿而在生产上不生效。
+        ## 接线各 agent 的 `_call` 时必须读这一段（否则会双记）：现在的粒度是召唤级：这一条
+        `Charge(scope="summon", tokens_out=res.tokens)` 是这一次召唤的唯一一笔。等各 agent 的 `_call` 也接上 `charge()`
+        之后，这里必须改成"只记零值兜底"：`_call` 记的细账已经进了台账 ⇒ `summon` 再记一次会让 `usage_ledger` 的汇总
+        变成真实花销的两倍（而 `tasks.tokens` 是从台账派生的，所以两边会一起虚高 —— 它们仍然"相等"，但相等的是错的
+        数，这比不等更危险）；正确的形态：`_call` 记细账；`summon` 只在这一 task 还一条账都没有时补一条零值行
+        （`tokens_for(task_id) == 0`），理由是"零值也要记"。记账失败不许让一次已经完成的召唤变成失败（钱已经花了、
+        活已经干完了）：这里兜住异常并写进日志。但这不是静默失败 —— 后果（`tasks.tokens` 与台账不等）会由 `verify.py`
+        的 `usage_task_total_mismatch` 报出来，而那正是"两处口径不一致"该被看见的地方。
         """
         note = f"{role}.{res.action} via {res.status}/{res.outcome}"
         spent = int(res.tokens or 0)
@@ -3030,15 +2750,12 @@ class Conductor:
 
         参数
         ----
-        lineage : 祖先链（含父自身）。`scheduler` 会带过来；直接调用时可省略，
-            此时从 `tasks` 表按 `parent_task_id` 重建。两者必须一致：
-            前者是纯调度（无 store）场景的表达，后者是正常运行时的权威来源。
-        instance : 实例标签（2026-09-30 加）。空串 = 这个角色只有那一个实例
-            （与从前逐字同义）。显式给不同的标签 ⇒ 被 `LocalBackend` 解析成
-            不同的对象，并允许同波并发（`policy.estimate_write_conflict`）。
-            它只影响"哪个实例干活"，不进 `tasks` 行 —— `tasks` 的字段是
-            schema 契约（禁改区），实例身份落在数据行的 `actor` 上（由 `host`
-            按实例造对象时写死），那才是可审计的那一份。
+        lineage : 祖先链（含父自身）。`scheduler` 会带过来；直接调用时可省略，此时从 `tasks` 表按 `parent_task_id`
+            重建。两者必须一致：前者是纯调度（无 store）场景的表达，后者是正常运行时的权威来源。
+        instance : 实例标签（2026-09-30 加）。空串 = 这个角色只有那一个实例（与从前逐字同义）。显式给不同的标签 ⇒
+            被 `LocalBackend` 解析成不同的对象，并允许同波并发（`policy.estimate_write_conflict`）。它只影响"哪个实例
+            干活"，不进 `tasks` 行 —— `tasks` 的字段是 schema 契约（禁改区），实例身份落在数据行的 `actor` 上（由
+            `host` 按实例造对象时写死），那才是可审计的那一份。
         """
         params = dict(params or {})
         token = token or self.token
@@ -3626,16 +3343,11 @@ class Conductor:
     ) -> SummonResult:
         """把任务写成终态。幂等：对已结束的任务再调 ⇒ 零变更（逐字节）。
 
-        实现上不看内存状态，而是在事务里重读那一行：
-        只有当前 `status in ("pending","running")` 才写。
-        为什么不信内存：`finish` 的调用方可能有多个（worker 正常返回、
-        dispose 的兜底、deadline 的取消），它们并发跑在不同的线程里；
-        靠一个内存标志去串行化，等于把正确性押在"锁的粒度刚好够"上。
-        重读磁盘的代价是一次文件读，收益是"终态先到先得"变成结构事实。
-
-        `status` 与 `outcome` 的合法性由 `schema.Task.validate` 保证
-        （例如 `outcome=refused` 时 status 必须是 done、cancelled 时 outcome
-        只能是 cancelled/refused）—— 本方法不替它兜底，非法就抛。
+        实现上不看内存状态，而是在事务里重读那一行：只有当前 `status in ("pending","running")` 才写。为什么不信内存：
+        `finish` 的调用方可能有多个（worker 正常返回、dispose 的兜底、deadline 的取消），它们并发跑在不同的线程里；
+        靠一个内存标志去串行化，等于把正确性押在"锁的粒度刚好够"上。重读磁盘的代价是一次文件读，收益是"终态先到
+        先得"变成结构事实。`status` 与 `outcome` 的合法性由 `schema.Task.validate` 保证（例如 `outcome=refused` 时
+        status 必须是 done、cancelled 时 outcome 只能是 cancelled/refused）—— 本方法不替它兜底，非法就抛。
         """
         if status not in TERMINAL_STATUSES:
             raise ValueError(
@@ -3817,32 +3529,17 @@ class Conductor:
     def dispose(self) -> dict:
         """幂等销毁：把仍在 `pending`/`running` 的任务合成 end 事件（`cancelled`）。
 
-        三条纪律全在这里落地：
-
-        - 每个 start 有且仅有一个 end：即使是被强杀的任务，也必须合成一个
-          `cancelled` 的 end（否则台账里会有永远"在跑"的僵尸）。
-        - 结果未知：`detail` 必须写明"因 dispose 而终止，结果未知"。
-          一个被中途砍掉的实验可能已经写了半张表，声称它"失败"是过度声称
-          （设计 §4 第 4 条）。
-        - 不自动重试：本方法只是写终态，不做任何重发。
-
-        幂等：第二次调用时已经没有任何 `pending/running` 的行（第一次全写完了），
-        于是返回 `{"disposed": ..., "closed": []}` —— 且零字节变更
-        （`finish` 的幂等分支连事件都不追加）。
-
-        ## 只收代理行，不碰板项（2026-10-08 深夜 S1e）
-
-        旧实现在这里遍历所有 `pending/running` 的行，而板项行的 `status` 恰好是
-        `pending` ⇒ 一次 dispose 会把工作项也写成 `cancelled`。实测
-        （`temp/_probe_board_vs_fanout_and_dispose.py`）：那一条板项在 dispose 之后是
-        `status=cancelled / outcome=cancelled / item_state=queued / item_close=''`，
-        而板面（`board_view` / `board_readings`）只读 `item_state` ⇒
-        读的人看不见它被取消；同时"在飞"读数从 20 掉回 0（名额被"顺带"还回来了，
-        而不是因为消边）。两套状态机在同一行上互相污染，是 A1=甲 之后必须避免的形态。
-
-        所以：板项行原样留着（它的收口只由"父决定退役"那一路发生，
-        见 `draft/90` §1.9），并在读数里补一格 `board_items_left`：
-        "进程要走了，还有几条项没被谁消掉" —— 如实说，不折成"都消了"。
+        三条纪律全在这里落地：每个 start 有且仅有一个 end —— 即使是被强杀的任务，也必须合成一个 `cancelled` 的 end
+        （否则台账里会有永远"在跑"的僵尸）；结果未知 —— `detail` 必须写明"因 dispose 而终止，结果未知"，一个被中途
+        砍掉的实验可能已经写了半张表，声称它"失败"是过度声称（设计 §4 第 4 条）；不自动重试 —— 本方法只是写终态。
+        幂等：第二次调用时已经没有任何 `pending/running` 的行（第一次全写完了），于是返回
+        `{"disposed": ..., "closed": []}` —— 且零字节变更（`finish` 的幂等分支连事件都不追加）。
+        ## 只收代理行，不碰板项（2026-10-08 深夜 S1e）：旧实现在这里遍历所有 `pending/running` 的行，而板项行的
+        `status` 恰好是 `pending` ⇒ 一次 dispose 会把工作项也写成 `cancelled`。实测
+        （`temp/_probe_board_vs_fanout_and_dispose.py`）：那一条板项在 dispose 之后是 `status=cancelled / outcome=cancelled / item_state=queued / item_close=''`，而板面（`board_view` / `board_readings`）只读 `item_state` ⇒ 读的人看不见它
+        被取消；同时"在飞"读数从 20 掉回 0（名额被"顺带"还回来了，而不是因为消边）。两套状态机在同一行上互相污染，是
+        A1=甲 之后必须避免的形态。所以板项行原样留着（它的收口只由"父决定退役"那一路发生，见 `draft/90` §1.9），并在
+        读数里补一格 `board_items_left`："进程要走了，还有几条项没被谁消掉" —— 如实说，不折成"都消了"。
         """
         first = not self._disposed
         self._disposed = True
@@ -4064,33 +3761,18 @@ _UNCALLED_ACTIONS_CALIBER = (
 def uncalled_actions_reading(store: Any) -> dict:
     """S-02 的读数：声明了、但一条召唤行都没有的动作（只读，不加闸门）。
 
-    ## 它回答的那个问题（`44 S-02`）
-
-    D 的五个核心动作（`assess`/`submit_gaps`/`adjudicate`/`trace_question`/`trace_l3`）
-    都在声明表里、各有 handler，而真机 4127 行 `tasks` 里一次都没被召唤过。
-    "声明了但没人召唤过"这件事，今天没有任何读数在说：
-    `Conductor.stats()` 只有 `by_role`/`by_status`/`by_outcome`/`by_depth`，没有
-    `by_action` —— 于是真机 0 次调用只能在临时探针里看见。
-
-    这是一条纯读数：它服务的是 #1（无意义/重复的委托）的可见性，
-    不是判决 —— "该不该派这个动作"归秘书（`J-37`/`J-40`：切勿全写死成机器判据），
-    所以这里不接 handler、不进工具面、不加任何闸门。
-
-    ## 口径（2026-10-02 主控现场更正）
-
-    数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数是
-    `sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐字写这件事 ——
-    跨口径比大小是错的用法（实测某个工作区 `tasks.json` 2 行、同目录
-    `events.jsonl` 1161 行，两者谁也不是"数据缩水"）。
-
-    ## 三态
-
-    - `checked=True`：声明表与 `tasks` 都读到了，`uncalled` 是做差的结果；
-    - `checked=False` + `reason`：读不到（`tasks` 或声明表）⇒ 不许折成"全都没被调用"。
-      （"全都没被调用"是一个很强的结论，只有真读到两边才配下。）
-
-    `called` 是"至少有一条召唤行"的那个集合（`refused` 也算 —— 它是一次真的提出过
-    的召唤，台账上留着行）；`declared_total` / `called_total` 给分母，便于看比例。
+    ## 它回答的那个问题（`44 S-02`）：D 的五个核心动作（`assess`/`submit_gaps`/`adjudicate`/`trace_question`/
+    `trace_l3`）都在声明表里、各有 handler，而真机 4127 行 `tasks` 里一次都没被召唤过。"声明了但没人召唤过"这件事
+    今天没有任何读数在说：`Conductor.stats()` 只有 `by_role`/`by_status`/`by_outcome`/`by_depth`，没有
+    `by_action` —— 于是真机 0 次调用只能在临时探针里看见。这是一条纯读数：它服务的是 #1（无意义/重复的委托）的
+    可见性，不是判决 —— "该不该派这个动作"归秘书（`J-37`/`J-40`：切勿全写死成机器判据），所以这里不接 handler、
+    不进工具面、不加任何闸门。
+    ## 口径（2026-10-02 主控现场更正）：数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数
+    是 `sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐字写这件事 —— 跨口径比大小是错的用法（实测
+    某个工作区 `tasks.json` 2 行、同目录 `events.jsonl` 1161 行，两者谁也不是"数据缩水"）。
+    ## 三态：`checked=True`（声明表与 `tasks` 都读到了，`uncalled` 是做差的结果）；`checked=False` + `reason`
+    （读不到 ⇒ 不许折成"全都没被调用"—— 那是一个很强的结论，只有真读到两边才配下）。`called` 是"至少有一条召唤
+    行"的那个集合（`refused` 也算 —— 它是一次真的提出过的召唤）；`declared_total` / `called_total` 给分母。
     """
     try:
         rows = list(store.rows("tasks"))

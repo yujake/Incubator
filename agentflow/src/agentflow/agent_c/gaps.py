@@ -9,36 +9,16 @@ from ._support import AnalysisReport, LEVELS, Mapping, _cfg_int
 class _Gaps:
     def gaps(self, limit: int = 10, request: str = "", *, submit_requests: bool = False) -> AnalysisReport:
         """完善关系图（§3.3(4)）：找频次少的概念组 + 结构洞，并给出二元结论。
-
-        需求原文是"若确实有，则报告"。这句话把责任压在了实现上：
-        - 必须能明确说出"确实有"或"证据不足"；
-        - 不允许把"没找到"包装成"找到了"（例如把一堆 low 置信度候选
-          列在 `candidate_gaps` 里，让下游误以为发现了缺口）。
-
-        所以 `candidate_gaps` 只收 `confidence >= medium` 的候选，其余进
-        `low_confidence_candidates` 并逐条带上被否决的理由；
-        `verdict` 字段给出"有"/"无"的二元答案，`conclusion` 给出人话结论。
-
-        I3（缺口直连 A）：`submit_requests=True` 时，把 `candidate_gaps` 里
-        通过 veto 且 confidence >= medium 的候选直接变成 A 的检索请求
-        （`submitted_by="agent-C"`、`priority` 按 `SUBMITTER_DEFAULT_PRIORITY`、
-        `mode="topical"`），单次最多 `max_gap_requests_per_run` 条、按净分降序、
-        与已有未完成请求主题去重、超在途上限则拒绝而不是排队。
-        默认 False（见下方那段为什么必须默认关闭）。
-
-        I5（检测侧）：payload 里另附 `structural_duplicates` 摘要
-        （结构重复概念的候选计数与少量样本；完整候选按调大 `limit` 再调一次本动作取 ——
-        不许指向 `graph.structural_duplicates`：那 9 件只注册在 C 的 CLI 自检面，
-        编排路径上调它只会拿到 `unknown_action`，见 `draft/108` 四·CS-12）。
-
-        ── 为什么 I3 的写入不构成"绕过 B 引文回验"（必须写清楚，否则下一个维护者会
-        以为这里有个权限漏洞，然后"顺手"把整条服务面也开成可写）──
-
-            C 的工具面（`register_tools`）保持全量只读 —— C 的推理链不能写任何东西。
-            I3 的 `search_requests` 写入是 `gaps()` 里的确定性代码路径，不经过 C 的
-            工具与推理，且它写的不是知识（不是概念/关系/引文），而是"请 A 去查一查"
-            的请求。因此它不构成"绕过 B 引文回验"的风险。这也是为什么它默认关闭、
-            由编排层显式开启。
+        所以 `candidate_gaps` 只收 `confidence >= medium` 的候选，其余进`low_confidence_candidates` 并逐条带上被否决的理由；`verdict` 字
+        段给出"有"/"无"的二元答案，`conclusion` 给出人话结论。
+        I3（缺口直连 A）：`submit_requests=True` 时，把 `candidate_gaps` 里通过 veto 且 confidence >= medium 的候选直接变成 A 的检索请求（`submitted_by="agent-C"`、
+        `priority` 按 `SUBMITTER_DEFAULT_PRIORITY`、`mode="topical"`），单次最多 `max_gap_requests_per_run` 条、按净分降序、与已有未
+        完成请求主题去重、超在途上限则拒绝而不是排队。
+        I5（检测侧）：payload 里另附 `structural_duplicates` 摘要（结构重复概念的候选计数与少量样本；完整候选按调大 `limit` 再调一次本动作取 ——不许指向 
+        `graph.structural_duplicates`：那 9 件只注册在 C 的 CLI 自检面，编排路径上调它只会拿到 `unknown_action`，见 `draft/108` 四·CS-12）。
+        ── 为什么 I3 的写入不构成"绕过 B 引文回验"（必须写清楚，否则下一个维护者会以为这里有个权限漏洞，然后"顺手"把整条服务面也开成可写）──
+        C 的工具面（`register_tools`）保持全量只读 —— C 的推理链不能写任何东西。 I3 的 `search_requests` 写入是 `gaps()` 里的确定性代码路径，不经过 C 的工具
+        与推理，且它写的不是知识（不是概念/关系/引文），而是"请 A 去查一查"的请求。
         """
         g = self._g()
         limit = max(0, int(limit))

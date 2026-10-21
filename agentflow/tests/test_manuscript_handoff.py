@@ -1,17 +1,13 @@
 # -*- coding: utf-8 -*-
-"""判据（`draft/37` §134 + `draft/39` §C1–C4）：交接手稿 —— 编号由脚本给、一行一份交接、
-留言带编号 + 一句描述。
+"""判据（`draft/37` §134 + `draft/39` §C1–C4）：交接手稿 —— 编号由脚本给、一行一份交接、留言带编号 + 一句描述。
 
-用户口径（逐字）：
-
-> 我觉得各智能体在互相传递信息时可以借助手稿的方式，即建一个收集手稿的文件夹，
+用户口径（逐字）：我觉得各智能体在互相传递信息时可以借助手稿的方式，即建一个收集手稿的文件夹，
 > 每个智能体要交接工作前写一份手稿放在里面，且有标号（这个标号靠脚本拿最新的，从 0000 开始顺次标），
 > 传信息时就传手稿编号。这样的话派活也有依据，溯源也很清晰。
 > 至于手稿的命名就是标号+谁to谁，特别地如果是给所有人就是谁toALL。手稿格式就用 LLM 最擅长的 markdown。
 > 当然就传个编号感觉有点尬，可以再附一句简要描述
 
-2026-10-05 用户裁定：存储从「一份一个 `.md` 文件」改成追加式 JSONL
-（`manuscripts/handoffs.jsonl`，一行一份交接），收工门那一档改成数行。
+2026-10-05 用户裁定：存储从「一份一个 `.md` 文件」改成追加式 JSONL（`manuscripts/handoffs.jsonl`，一行一份交接），收工门那一档改成数行。
 
 这一组钉七件事：
 1. 编号从 `0000` 起顺次、「由脚本分配」（不靠模型记），并发写不撞号；
@@ -313,14 +309,14 @@ def test_every_role_can_read_and_list_but_writing_is_a_loop_shape(tmp_path: path
 
 
 def test_the_reference_surface_covers_questions_and_conjectures(tmp_path: pathlib.Path):
-    """引用面认得 `q:` / `c:`（2026-10-14 真机读数），且**没有放松"引的东西必须存在"**。
+    """引用面认得 `q:` / `c:`（2026-10-14 真机读数），且没有放松"引的东西必须存在"。
 
     真机读数：一次跑里 M 派的活带着 `refs=["q:000000"]`（它要引自己派出去的那条研究问题），
     而引用面当时只有 `stmt/exp/lit/rel` ⇒ 报「前缀不认识」。后果不是"M 被拦住了"
-    （`refs` 立不住只记读数、不拒写），而是**那一份手稿退回成「框架据派活派生」的那一行**
+    （`refs` 立不住只记读数、不拒写），而是那一份手稿退回成「框架据派活派生」的那一行
     —— 模型自己写的那份留痕静默地没了。所以加 `q`（research_questions）与 `c`（conjectures）。
 
-    这条判据同时守另一半（负控）：**加了前缀不等于放宽核验** ——
+    这条判据同时守另一半（负控）：加了前缀不等于放宽核验 ——
     编号不存在时照样立不住，不认识的前缀照样被拒，被拒的理由里要能读到那张词表。
     """
     root = tmp_path / "ws"
@@ -347,7 +343,7 @@ def test_the_reference_surface_covers_questions_and_conjectures(tmp_path: pathli
 
 
 def test_the_two_new_prefixes_land_in_the_handoff_row_readings(tmp_path: pathlib.Path):
-    """落到手稿那一行上：`q:` 立得住时行里**不该**出现 `ref_problems`（三态不许折平）。"""
+    """落到手稿那一行上：`q:` 立得住时行里不该出现 `ref_problems`（三态不许折平）。"""
     root = tmp_path / "ws"
     (root / "data").mkdir(parents=True)
     qid = S.format_id(0)

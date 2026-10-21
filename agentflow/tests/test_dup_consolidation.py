@@ -1,7 +1,5 @@
 """同名不同契约的重复实现被合并后，用可判定的形式守住"判据唯一"。
 
-## 本文件守什么
-
 ``INVENTORY.md`` §4.7 点到两对"同名不同契约"的实现，且实测结果不同：
 
 | 判据 | 原来的两份 | 实测分歧 |
@@ -9,28 +7,17 @@
 | slug 文件名片段 | ``textutil.slugify`` / ``fetch.slugify`` | CJK 保留 vs 剥掉；回退 ``untitled`` vs ``download`` |
 | DOI 归一化 | ``dedup.normalize_doi`` / ``providers.normalize_doi`` | URL 前缀、尾随 ``.``、全角数字三组输入结果不同 |
 
-合并的做法是留一份、另一份转发。但"我删掉了一份"是一个无法验证的说法 ——
-三个月后有人再写一份，测试照样全绿。所以这里的断言写成可判定的形式：
+合并的做法是留一份、另一份转发。但"我删掉了一份"是一个无法验证的说法 —— 三个月后有人再写一份，
+测试照样全绿。所以断言写成可判定的形式（同一批边缘输入 ⇒ 两份实现结果完全相同）：
+这把"判据唯一性"本身变成了断言。边缘输入覆盖：空串 / 纯空白 / 只有标点 / 全 CJK / 半角+全角混合 / URL 前缀 / ``doi:`` 前缀 / 尾随 ``.`` / 超长串 / ``None`` / 非 ``str``。
 
-> 对同一批边缘输入，两份实现给出完全相同的结果。
-
-这不是"测试了一个函数"，而是把"判据唯一性"本身变成了断言。边缘输入覆盖：
-空串 / 纯空白 / 只有标点 / 全 CJK / 半角+全角混合 / URL 前缀 /
-``doi:`` 前缀 / 尾随 ``.`` / 超长串 / ``None`` / 非 ``str``。
-
-## 为什么每条修复都有负控
-
-只有正例的测试会退化成"改坏了也绿"。本文件里：
-- ``test_slug_keeps_cjk_where_stripping_it_would_collide`` 证明保留 CJK 是必要性
-  （剥掉 CJK 会让两个不同的中文标题必碰撞，而不是"风格不同"）；
-- ``test_slugify_never_returns_empty_nor_path_fragment`` 证明白名单的安全性质；
-- ``test_doi_equivalent_iff_same_normalized_form`` 证明归一化没有过度合并
-  （不同 DOI 不得被合并 —— 那是不可逆的错误）；
-- ``test_install_d_tools_rejects_bad_role_name_at_assembly_time`` 用非法角色名
-  ``("agent-X",)`` 断言装配期抛错（正是原来静默通过的那种输入）；
-- ``test_fallback_trace_tools_roles_are_legal_roles`` 断言现在那三个替身
-  真的按 ``"C"``/``"D"`` 声明，且 ``for_role`` 能拿到（负控：改回 ``"agent-C"`` 必失败）。
-"""
+为什么每条修复都有负控：只有正例的测试会退化成"改坏了也绿"。①
+``test_slug_keeps_cjk_where_stripping_it_would_collide`` 证明保留 CJK 是必要性（剥掉会让两个中文
+标题必碰撞，不是"风格不同"）；② ``test_slugify_never_returns_empty_nor_path_fragment`` 证明白名单
+安全性质；③ ``test_doi_equivalent_iff_same_normalized_form`` 证明归一化没有过度合并（不同 DOI 不得
+合并 —— 不可逆的错误）；④ ``test_install_d_tools_rejects_bad_role_name_at_assembly_time`` 用非法角色名
+``("agent-X",)`` 断言装配期抛错（正是原来静默通过的那种输入）；⑤ ``test_fallback_trace_tools_roles_are_legal_roles``
+断言现在那三个替身真的按 ``"C"``/``"D"`` 声明，且 ``for_role`` 能拿到（负控：改回 ``"agent-C"`` 必失败）。"""
 
 from __future__ import annotations
 

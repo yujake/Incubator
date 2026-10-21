@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """引文回验的两档（业主 2026-10-14）：「回验不应该是十分呆板的逐字验证，
-而是保持语义相同即可」；落点是 **B 唤起 H**。
+而是保持语义相同即可」；落点是 B 唤起 H。
 
 这一组守三件事：
 
-1. **两栏的分工**：`quote_verified` 是三态结论，`quote_mode` 是**通过的方式**
+1. 两栏的分工：`quote_verified` 是三态结论，`quote_mode` 是通过的方式
    （`verbatim` 逐字命中 / `semantic` 语义相同）。两栏互相冒充的行不许拿到学分。
-2. **历史行不许被追溯性降级**：`quote_mode` 这一栏是今天才有的，在那之前
+2. 历史行不许被追溯性降级：`quote_mode` 这一栏是今天才有的，在那之前
    `quote_verified=True` 只可能来自 `quoteverify.check_quote`（逐字那一档）⇒
    空方式按 `verbatim` 读（判据 `test_a_legacy_external_lit_row_keeps_its_citation_credit`
    也钉着这条）。
-3. **语义档不许被逐字档顶替**：H 判的"语义相同"与"结论强于引文"是两件事，
+3. 语义档不许被逐字档顶替：H 判的"语义相同"与"结论强于引文"是两件事，
    后者仍必须落 `mismatch`（判据见 `quote_state` 的表）。
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ def _stmt(**kw) -> S.Statement:
 
 
 def test_a_bare_true_is_recorded_as_verbatim_not_left_empty() -> None:
-    """只说了"通过"、没说方式的行**记实成 verbatim**（历史事实），不许留白。"""
+    """只说了"通过"、没说方式的行记实成 verbatim（历史事实），不许留白。"""
     row = _stmt(quote_verified=True)
     row.validate()
     assert row.quote_mode == "verbatim", row.to_dict()
@@ -103,10 +103,10 @@ def test_the_relation_carries_the_same_two_columns() -> None:
 
 
 def test_the_semantic_mode_demands_its_evidence() -> None:
-    """业主 2026-10-14：「语义那一档**必须留证据**」—— 缺证据的 semantic 当场拒。
+    """业主 2026-10-14：「语义那一档必须留证据」—— 缺证据的 semantic 当场拒。
 
     两样缺一不可：对着哪一段原文（`quote_span`）、哪一次判的（`quote_call_sha256`）。
-    这一条是"两栏不许互相冒充"在**内容**上的那一半：不是写个 `semantic` 就算过。
+    这一条是"两栏不许互相冒充"在内容上的那一半：不是写个 `semantic` 就算过。
     """
     with pytest.raises(ValueError) as got:
         _stmt(quote_verified=True, quote_mode="semantic").validate()
@@ -192,15 +192,15 @@ def test_the_semantic_criterion_is_registered_with_negative_controls() -> None:
 
 
 def test_the_closing_gate_counts_by_the_same_two_columns(tmp_path) -> None:
-    """收工门那一格（`quote_verified_rows`）走的是**同一个**读口径，且分方式报数。
+    """收工门那一格（`quote_verified_rows`）走的是同一个读口径，且分方式报数。
 
     为什么单列一条：这一格的旧实现直接读 `quote_verified is True`，于是"说了通过、
     却说不清怎么通过的"（`quote_mode` 空/认不出的词）照样算通过 —— 与 `quote_state`
     那条纪律分家。改成走 `quote_state` 之后，`true` = 逐字 + 语义两个数之和，
     并各自单独报一栏（前者不花钱、后者是 H 判的，混在一起就看不出钱花在哪）。
 
-    ⚠️ 真实踩过的坑：`_leg_reading` 是一个跨上千行的大 if 链，函数体里任何一处
-    `from . import evidencebits as EB` 都会让**整个函数**的 `EB` 变局部名，
+     真实踩过的坑：`_leg_reading` 是一个跨上千行的大 if 链，函数体里任何一处
+    `from . import evidencebits as EB` 都会让整个函数的 `EB` 变局部名，
     于是这一档报 `UnboundLocalError`、收工门那一格从 `pass` 悄悄退成 `unknown`
     （`test_closing_gate.py` 当场红）。这一条把"读得出来 + 口径对"一起钉住。
     """
@@ -232,7 +232,7 @@ def test_the_closing_gate_counts_by_the_same_two_columns(tmp_path) -> None:
             tx.upsert("statements", row)
 
     # ② 手改盘上那份 JSON 造一行"说了通过、方式认不出"的（写入侧本来会拒它 ——
-    #    而 `quote_state` 要挡的正是**绕过写入侧**的行：手改的、旧版本写的、别的工具写的）。
+    #    而 `quote_state` 要挡的正是绕过写入侧的行：手改的、旧版本写的、别的工具写的）。
     import json as _json
 
     data_path = root / "data" / "statements.json"
@@ -282,7 +282,7 @@ class _BadThenGood:
 
 
 def test_a_bad_first_answer_is_retried_once(tmp_path) -> None:
-    """答歪一次 ⇒ **重试一次**（真机那一档：思维链吃光预算 / 把 JSON 说成散文）。
+    """答歪一次 ⇒ 重试一次（真机那一档：思维链吃光预算 / 把 JSON 说成散文）。
 
     重试只在"模型答歪了"那两档上做，且只做一次；重试仍不成 ⇒ 三态里的"没查成"
     （`test_a_broken_answer_is_unchecked_not_a_pass` 钉着那一半）。
@@ -302,7 +302,7 @@ def test_a_bad_first_answer_is_retried_once(tmp_path) -> None:
 def test_a_rewritten_quote_passes_on_meaning_not_on_letters(tmp_path) -> None:
     """语义相同 ⇒ 通过（`quote_mode="semantic"`），并把这次调用留在证据里。
 
-    这一条就是业主那句话的正面：**改写、换记号也算通过** —— 逐字档会判它不通过，
+    这一条就是业主那句话的正面：改写、换记号也算通过 —— 逐字档会判它不通过，
     语义档必须放它过，而且要说清是谁判的（judge）、哪一次调用（prompt_sha256）。
     """
     from agentflow import judges as JG
@@ -322,7 +322,7 @@ def test_a_rewritten_quote_passes_on_meaning_not_on_letters(tmp_path) -> None:
 
 
 def test_a_stronger_quote_still_fails(tmp_path) -> None:
-    """引文把来源的结论加强了 ⇒ **不通过**（语义档不是"放宽"，是换一把尺）。"""
+    """引文把来源的结论加强了 ⇒ 不通过（语义档不是"放宽"，是换一把尺）。"""
     from agentflow import judges as JG
 
     seam, _gate = _seam(
@@ -338,7 +338,7 @@ def test_a_stronger_quote_still_fails(tmp_path) -> None:
 
 
 def test_without_a_seam_it_says_unchecked(tmp_path) -> None:
-    """没有模型缝（没有 key）⇒ **没查**（既不是通过，也不是不通过）。"""
+    """没有模型缝（没有 key）⇒ 没查（既不是通过，也不是不通过）。"""
     from agentflow import judges as JG
 
     got = JG.quote_semantics_judge_for(None)(_MATERIAL)
@@ -398,14 +398,14 @@ def test_the_h_action_refuses_incomplete_material(tmp_path) -> None:
 
 # ============================================================ 6 端到端：H 判 → B 落
 def test_h_judges_and_b_writes_it_back(tmp_path) -> None:
-    """整条链跑通一次（不花模型钱）：H 判语义 → B 用**自己的**写面回填。
+    """整条链跑通一次（不花模型钱）：H 判语义 → B 用自己的写面回填。
 
     这一条是"B 唤起 H"那件事的机器读数，三处一起量：
 
-    1. H 的判定带着**证据**回来（`quote_span` 逐字来源片段 + `quote_call_sha256` 调用记录）；
+    1. H 的判定带着证据回来（`quote_span` 逐字来源片段 + `quote_call_sha256` 调用记录）；
     2. B 用 `table.update`（B 的面里有它，H 的面里没有）把判定写回 `relations`，
        写完之后那一行的 `quote_state` 是 `semantic`；
-    3. 判与落分居两处：H 的可调用面里**没有** `table.update`。
+    3. 判与落分居两处：H 的可调用面里没有 `table.update`。
     """
     from agentflow import evidencebits
     from agentflow.agent_h import AgentH
@@ -455,7 +455,7 @@ def test_h_judges_and_b_writes_it_back(tmp_path) -> None:
 
 
 def test_b_cannot_write_a_bare_semantic_without_evidence(tmp_path) -> None:
-    """B 想写一个**没有证据**的 `semantic` ⇒ 写不进去（schema 当场拒）。
+    """B 想写一个没有证据的 `semantic` ⇒ 写不进去（schema 当场拒）。
 
     这是"两栏不许互相冒充"在写边界上的那一半：光声明"语义相同"不算过 ——
     必须带着"对着哪一段、哪一次判的"。

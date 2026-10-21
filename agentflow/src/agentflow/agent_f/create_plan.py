@@ -20,23 +20,16 @@ class _CreatePlan:
         parent_plan_id: str | None = None,
     ) -> dict:
         """为一个难题立项。
-
+        
         返回 ``{"created", "plan_id", "reason", "duplicate", "status", "budget"}``。
-
+        
         三条硬规矩：
-
-        1. 预算必须完整（`check_budget`），不完整就拒绝创建 ——
-           `budget=None` 表示"没给"，此时用本次运行的默认预算
-           （`DEFAULT_BUDGET`，可用构造 config 按维度覆盖，见 `_default_budget`）；
-           显式给了一个缺键的 dict 则是"给了但不完整"，拒绝
-           （返回 `created=False`，不写库）。这两种情况必须分开，
-           否则"我们忘了配预算"会被默认值掩盖。
-        2. 同一 `problem_key` 已有未终结的计划 ⇒ 不新建，返回已存在的
-           `plan_id`。理由：攻坚是多轮的，而"再立一个项"这个动作看起来
-           无害，实际会让同一个难题被并行地攻两遍，两边的 history 各自长，
-           谁也看不到对方已经证否的路径。
-        3. 子目标必须能被 `AttackPlan.validate` 接受 —— 所以在事务外先建行并
-           `validate()`，非法就当场抛，绝不把非法行交给事务。
+        
+        1. 预算必须完整（`check_budget`），不完整就拒绝创建 ——`budget=None` 表示"没给"，此时用本次运行的默认预算（`DEFAULT_BUDGET`，
+        可用构造 config 按维度覆盖，见 `_default_budget`）；显式给了一个缺键的 dict 则是"给了但不完整"，拒绝（返回 `created=False`，
+        不写库）。这两种情况必须分开，否则"我们忘了配预算"会被默认值掩盖。 2. 同一 `problem_key` 已有未终结的计划 ⇒ 不新建，返回已存在的`plan_id`。
+        理由：攻坚是多轮的，而"再立一个项"这个动作看起来无害，实际会让同一个难题被并行地攻两遍，两边的 history 各自长，谁也看不到对方已经证否的路径。 3. 子目标必须能
+        被 `AttackPlan.validate` 接受 —— 所以在事务外先建行并`validate()`，非法就当场抛，绝不把非法行交给事务。
         """
         default_budget = self._default_budget()
         chk = AT.check_budget(dict(budget) if budget is not None else dict(default_budget))

@@ -1,34 +1,22 @@
 """`D-1` 的回归判据：`evidence_kind="proof"` 必须有可复核的形式化证据锚。
 
-## 缺陷（2026-09-26 全面体检 · 子代理 D 发现）
+缺陷（2026-09-26 全面体检 · 子代理 D 发现）：`citations` 有存在性判据（`doc_tools.check_citations`），
+而 `evidence_kind="proof"` 一条判据都没有：`temp/auditD-proof-selfreport.txt` 里
+`proof_location="PROOF-DOES-NOT-EXIST.lean:1"` 照样写库 + 渲染，15 道门对这份稿件 G3/G1/G4 全 `pass`
+（`gate_g3` 只对 `proof_location` 做正则形态检查，不读盘）。
 
-`citations` 有存在性判据（`doc_tools.check_citations`），而
-`evidence_kind="proof"` 一条判据都没有：`temp/auditD-proof-selfreport.txt` 里
-`proof_location="PROOF-DOES-NOT-EXIST.lean:1"` 照样写库 + 渲染，15 道门对这份稿件
-G3/G1/G4 全 `pass`（`gate_g3` 只对 `proof_location` 做正则形态检查，不读盘）。
+修法前的可达性探针（`temp/r2-d1-probe.txt`）确认四种形态全部写库成功：① `proof_location` 指向一个不
+存在的文件；② 连 `proof_location` 都不给；③ 只引 `lit:`（一条 `exp:` 都没有 ⇒ 没有任何检查器参与
+过）；④ 引一条 `cross_check` 的数值实验却声称 proof。
 
-修法前的可达性探针（`temp/r2-d1-probe.txt`）确认四种形态全部写库成功：
+本文件守什么：四条判据各一组正控/负控，全部打在 `doc_tools.check_proofs` 与 `build_document` 的真实
+写入路径上（不是拿假表调函数）：负控 ①②③④ 必须整笔不写库（`documents` 表仍然为空），且报错里点名
+是哪一条断言；正控：证据锚齐备的 proof 断言必须照旧写进去（别把判据做成"proof 永远写不进去"）；
+边界：`cross_check` / `heuristic` 断言不受这套判据约束（它们没有 proof 级的义务）。
 
-  ① `proof_location` 指向一个不存在的文件；
-  ② 连 `proof_location` 都不给；
-  ③ 只引 `lit:`（一条 `exp:` 都没有 ⇒ 没有任何检查器参与过）；
-  ④ 引一条 `cross_check` 的数值实验却声称 proof。
-
-## 本文件守什么
-
-四条判据各一组正控/负控，全部打在 `doc_tools.check_proofs` 与
-`build_document` 的真实写入路径上（不是拿假表调函数）：
-
-- 负控：① ② ③ ④ 必须整笔不写库（`documents` 表仍然为空），且报错里点名是哪一条断言；
-- 正控：证据锚齐备的 proof 断言必须照旧写进去（别把判据做成"proof 永远写不进去"）；
-- 边界：`cross_check` / `heuristic` 断言不受这套判据约束（它们没有 proof 级的义务）。
-
-## 一条明确的边界（写给下一个人）
-
-`check_proofs` 证明的是"文件在盘上"，不证明"文件里有那条证明" ——
-后者是 `formalgw` 与形式化检查器的事。两者的区别被写进了那条判据自己的 docstring，
-本文件不试图把它折叠掉。
-"""
+一条明确的边界（写给下一个人）：`check_proofs` 证明的是"文件在盘上"，不证明"文件里有那条证明" ——
+后者是 `formalgw` 与形式化检查器的事。两者的区别被写进了那条判据自己的 docstring，本文件不试图把
+它折叠掉。"""
 from __future__ import annotations
 
 import json
@@ -206,17 +194,14 @@ def test_check_proofs_separates_kinds_of_problems(ws: Store):
 def test_a_claim_may_not_cite_a_refuting_experiment_as_support(ws: Store):
     """判据（2026-10-13，无 Lean T2 的真机）：引一条否证当支撑必须报出来。
 
-    真机现场（`projects/p6t2-research-20261012b`）：`exp:0002` 自己的结论是
-    `result="refutes"`（`counterexample: criterion mismatch …, mismatches: 108`），
-    而论文的 claim-2 把它列进 `citations` 当支撑，交付说明只用一句
-    "那只是脚本内部判据的问题"带过 —— `check_citations` 只问"对象在不在"，
-    于是这条一路写库，而在纸面上它与"被实验支持"长得一模一样。
+    真机现场（`projects/p6t2-research-20261012b`）：`exp:0002` 自己的结论是 `result="refutes"`
+    （`counterexample: criterion mismatch …, mismatches: 108`），而论文的 claim-2 把它列进 `citations` 当
+    支撑，交付说明只用一句"那只是脚本内部判据的问题"带过 —— `check_citations` 只问"对象在不在"，于是
+    这条一路写库，而在纸面上它与"被实验支持"长得一模一样。
 
-    两件事一起钉：
-    ① 正向断言引一条 refutes 的实验 ⇒ `claim_cites_a_refuting_experiment`；
-    ② 反负控：否定型断言（`is_negative` + `negation_kind="disproved"`）引它是对的
-       —— 那时它引的正是"我们证否了它"的那条证据。
-    """
+    两件事一起钉：① 正向断言引一条 refutes 的实验 ⇒ `claim_cites_a_refuting_experiment`；② 反负控：
+    否定型断言（`is_negative` + `negation_kind="disproved"`）引它是对的 —— 那时它引的正是"我们证否了
+    它"的那条证据。"""
     _add_experiment(ws, "0009", method="numeric", kind="cross_check")
     with ws.tx("experiments", actor="test") as tx:
         row = dict(tx.find("experiments", experiment_id="0009") or {})

@@ -1,26 +1,20 @@
 # -*- coding: utf-8 -*-
 """S1g：派活洗格式 —— 秘书的产物回到这一次派活上（`draft/90` E5 / §1.2）。
 
-业主口径（A2=乙）：秘书从"只报不改"扩成"格式面可以改写，内容面一个字不改"。
-所以这一批钉两半：
+业主口径（A2=乙）：秘书从"只报不改"扩成"格式面可以改写，内容面一个字不改"。所以这一批钉两半：
 
-① 格式面：动作错名（唯一候选）、参数键错名（唯一候选）、参数被摆在顶层
-   ⇒ 洗成受控形状，且洗前/洗后 + 逐格 `changes` 都在台账里；
-② 内容面：`params` 里的值、`brief`、`notify` 正文一个字节都不许动
-   —— 这条不是把老红线删掉，是按新口径改写它（老口径见
-   `tests/test_secretary_noise.py` 的 `problems_from_outbound`）。
+① 格式面：动作错名（唯一候选）、参数键错名（唯一候选）、参数被摆在顶层⇒ 洗成受控形状，且洗前/洗后 + 逐格 `changes` 都在台账里；②
+内容面：`params` 里的值、`brief`、`notify` 正文一个字节都不许动—— 这条不是把老红线删掉，是按新口径改写它（老口径见`tests/test_secretary_noise.py` 的
+`problems_from_outbound`）。
 
 ## 判据（正控 3 / 负控 2 / 反真空 2）
 
-正控：① 动作错名（`check_form` ⇒ `check_formal`，唯一候选）被洗成真名；
-② 声明的参数被摆在顶层 ⇒ 收进 `params`（值逐字不动）；
-③ 循环那一层真用洗过的那一份：`tasks` 里那一行的 `action`/`params` 是洗过的。
+正控：① 动作错名（`check_form` ⇒ `check_formal`，唯一候选）被洗成真名；② 声明的参数被摆在顶层 ⇒ 收进 `params`（值逐字不动）；③ 循环那一层真用洗过的那一份：`tasks` 里那一行的
+`action`/`params` 是洗过的。
 
-负控：① 内容面的值一个字节不许动（含声明外的键原样留着 —— 不静默删）；
-② 候选不唯一 / 没有候选 ⇒ 不猜（原样交给闸门拒，读数里写明"不猜"）。
+负控：① 内容面的值一个字节不许动（含声明外的键原样留着 —— 不静默删）；② 候选不唯一 / 没有候选 ⇒ 不猜（原样交给闸门拒，读数里写明"不猜"）。
 
-反真空：① `summon` 连"派给谁/做什么"都不全 ⇒ 硬拒 `invalid_params` 且一行都不落；
-② 没接秘书 ⇒ `_outbound_hook` 是 no-op（载荷原样，老行为逐字不变）。
+反真空：① `summon` 连"派给谁/做什么"都不全 ⇒ 硬拒 `invalid_params` 且一行都不落；② 没接秘书 ⇒ `_outbound_hook` 是 no-op（载荷原样，老行为逐字不变）。
 """
 from __future__ import annotations
 
@@ -210,22 +204,22 @@ def test_the_loop_sends_the_washed_payload_and_the_ledger_keeps_both(tmp_path: p
     assert run.stop_reason == "final", run.to_dict()
     step = next(s.result for s in run.steps if s.shape == "summon")
     assert step["ok"] is True, step
-    # 2026-10-16（口径 S2 最终形态）：派活**不带动作**（动作由被派者自己选）⇒
-    # 秘书那一趟**没有可洗的东西**：如实报 `washed=False`、`changes=[]`、`alarms=[]`。
+    # 2026-10-16（口径 S2 最终形态）：派活不带动作（动作由被派者自己选）⇒
+    # 秘书那一趟没有可洗的东西：如实报 `washed=False`、`changes=[]`、`alarms=[]`。
     # 旧断言要求 `washed is True`（那是"点名动作 + 参数键写错"那一档的产物）。
     wash = step["秘书"]["wash"]
     assert wash["checked"] is True, wash
-    # 这里拿到的是**摘要**（`_outbound_hook` 给的那几格：checked/washed/refused/reason）——
-    # `changes` **不在摘要里**，逐条 changes 的判据在本文件前面那些直接调 `wash_delegation` 的用例。
+    # 这里拿到的是摘要（`_outbound_hook` 给的那几格：checked/washed/refused/reason）——
+    # `changes` 不在摘要里，逐条 changes 的判据在本文件前面那些直接调 `wash_delegation` 的用例。
     assert wash["washed"] is False, wash
     assert not str(wash.get("reason") or ""), wash
     assert step["秘书"]["alarms"] == [], step["秘书"]
 
     child = [r for r in st.rows("tasks") if str(r.get("role")) == "E"]
-    # ⚠️ 2026-10-21：这一条在 HEAD（`c0da9d3`）上**已经是红的**，红的原因与洗格式无关 ——
-    # 派活那一刻框架会给收件人开一条**板项**（`action="message"`，投递那一份留痕），
-    # 于是 `role=E` 的行有两行而不是一行。判据的**强度没有降**：
-    # ① 派活行仍然**恰好一条**（多派/少派照样红）；② 另一条必须**恰好是那条投递板项**。
+    #  2026-10-21：这一条在 HEAD（`c0da9d3`）上已经是红的，红的原因与洗格式无关 ——
+    # 派活那一刻框架会给收件人开一条板项（`action="message"`，投递那一份留痕），
+    # 于是 `role=E` 的行有两行而不是一行。判据的强度没有降：
+    # ① 派活行仍然恰好一条（多派/少派照样红）；② 另一条必须恰好是那条投递板项。
     delegates = [r for r in child if str(r.get("action") or "") != "message"]
     plates = [r for r in child if str(r.get("action") or "") == "message"]
     assert len(delegates) == 1, child
@@ -233,7 +227,7 @@ def test_the_loop_sends_the_washed_payload_and_the_ledger_keeps_both(tmp_path: p
     assert str(plates[0].get("status") or "") == "pending", plates[0]
     assert str(delegates[0].get("action") or "") == "", delegates[0]   # 派活：不点动作
     assert str(delegates[0].get("outcome") or "") in ("ok", "refused", "failed"), delegates[0]
-    # 台账（秘书的）：这一趟**留下了记录**（before/after 都在），只是 changes 为空
+    # 台账（秘书的）：这一趟留下了记录（before/after 都在），只是 changes 为空
     ledgers = sorted((root / "out" / "secretary").glob("M-*.jsonl"))
     assert len(ledgers) == 1, ledgers
     rows = [json.loads(x) for x in ledgers[0].read_text(encoding="utf-8").splitlines() if x]

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""**只有元数据的文献，必须在看板上变成"该去补全文"的待办**（T5 第 2 趟驱动）。
+"""只有元数据的文献，必须在看板上变成"该去补全文"的待办（T5 第 2 趟驱动）。
 
-那趟的答案自己写着"Frey 曲线：未核到"，而**没有任何后续动作** —— 因为"缺一篇"这件事
-只活在模型的文字里，**台账上看不见**，主控也就无从派活。
+那趟的答案自己写着"Frey 曲线：未核到"，而没有任何后续动作 —— 因为"缺一篇"这件事
+只活在模型的文字里，台账上看不见，主控也就无从派活。
 
 修法：`Conductor.board_view` 把 `path` 空或 `download.status` 不是 ok 的在册文献
 亮成 `pending_search` 板项（只亮、不点名动作）。两态都钉：
@@ -35,7 +35,7 @@ def test_a_metadata_only_literature_row_shows_up(tmp_path: pathlib.Path) -> None
 
 
 def test_a_full_text_row_is_not_flagged(tmp_path: pathlib.Path) -> None:
-    """负控：有全文（`path` ＋ `status=ok`）⇒ **不许**被亮成待办（不然板会被人为放大）。"""
+    """负控：有全文（`path` ＋ `status=ok`）⇒ 不许被亮成待办（不然板会被人为放大）。"""
     st = Store(tmp_path / "ws")
     st.init()
     _row(st, "000002", "a.pdf", "ok")

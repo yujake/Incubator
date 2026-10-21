@@ -3,24 +3,19 @@
 
 ## 为什么要有这一条（真机读数）
 
-`specs/d.py:210` 与 `specs/m.py:91` 两处（D 与 M 的 policy，**逐字进提示词**）点名了
-`F.attack.step`。而 `capabilities.find_action('F', 'attack.step')` 是 `None` ——
-F 的四个动作是 `create_plan` / `step` / `status` / `list_plans`，**没有** `attack.step`
-（`attack.step` 是**工具**的名字，`F.step` 是**动作**的名字：同一实现的两种命名空间）。
-
-后果是安静的那种：D 与 M 被教着去派一件不存在的东西，派出去只会落
-`unknown_action`；而"提示词里写的动作名到底能不能派"**没有任何读数会红**
-（`test_agent_prompts.py` 那一组守的是工具名、伙伴表、三态词表，没有守这一轴）。
+`specs/d.py:210` 与 `specs/m.py:91` 两处（D 与 M 的 policy，逐字进提示词）点名了`F.attack.step`。而
+`capabilities.find_action('F', 'attack.step')` 是 `None` ——F 的四个动作是 `create_plan` / `step` / `status` / `list_plans`，
+没有 `attack.step`（`attack.step` 是工具的名字，`F.step` 是动作的名字：同一实现的两种命名空间）。后果是安静的那种：D 与 M 被教着去派一件不存在的东西，
+派出去只会落`unknown_action`；而"提示词里写的动作名到底能不能派"没有任何读数会红（`test_agent_prompts.py` 那一组守的是工具名、伙伴表、三态词表，没有守这一轴）。
 
 ## 判据的形状
 
-- 正控：把**所有角色**的提示词（`agent_prompts.system_prompt` 现渲染的那一份）扫一遍，
-  里面每一处 `角色.名字` 都必须 `find_action(角色, 名字)` 得到（F 是这一批改的对象，
-  但同一条判据对任何角色都成立 —— 只盯 F 会让"下次点错的是 C.xxx"漏掉）；
+- 正控：把所有角色的提示词（`agent_prompts.system_prompt` 现渲染的那一份）扫一遍，
+里面每一处 `角色.名字` 都必须 `find_action(角色, 名字)` 得到（F 是这一批改的对象，但同一条判据对任何角色都成立 —— 只盯 F 会让"下次点错的是 C.xxx"漏掉）；
 - 负控①（证明它会红）：把 `F.attack.step` 塞进一段真的提示词文本 ⇒ 扫描器当场吐出来；
 - 负控②（证明它不是靠白名单过的）：一个不存在的 `F.frobnicate` 同样被抓到；
-- 豁免面**只有一条**：路径里的同名片段（`notes/M.md` 的 `M.md`）不算动作引用 ——
-  豁免的依据是"前面是路径分隔符"，不是"这几个字我见过"。
+- 豁免面只有一条：路径里的同名片段（`notes/M.md` 的 `M.md`）不算动作引用 ——
+豁免的依据是"前面是路径分隔符"，不是"这几个字我见过"。
 """
 from __future__ import annotations
 
@@ -88,7 +83,7 @@ def test_every_action_named_in_a_prompt_really_exists(registry: ToolRegistry):
         "这些提示词里点名了能力表里没有的动作（模型会照着派，然后拿到 "
         f"`unknown_action`）：{bad}；F 的动作是 {[a.action for a in C.actions_for('F')]}")
 
-    # 反真空：D 与 M 两份提示词里**确实**有 F 的动作名（否则"全都在册"是空转）
+    # 反真空：D 与 M 两份提示词里确实有 F 的动作名（否则"全都在册"是空转）
     for role in ("D", "M"):
         names = [name for r, name in action_refs(_prompt(role, registry)) if r == "F"]
         assert "step" in names, (

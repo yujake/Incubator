@@ -1,60 +1,22 @@
 """智能体 F：多轮难题攻坚。
-
 设计基线：``test/test1/DESIGN-ROLES.md`` §2.2 与 `schema.AttackPlan` 的硬约束。
-
-## F 到底在做什么
-
-把一个难题变成多轮、可终止、可交接的攻坚过程：
-
-    立项（带三维预算） → 选子目标（确定性次序） → 按 owner 分派一个动作
-        → 记一轮 history → 判断是否还能继续
-            ├─ 还能 → 下一轮
-            └─ 不能 → 交出 best_partial（`stalled`）或如实收口（`resolved`）
-
-## 三条不可让步的设计
-
-### 1. 终止条件是预算，不是"看起来差不多了"（FC-18）
-
-"还没做出来"永远成立，所以一个没有预算的攻坚循环会一直跑下去 —— 而且它跑得
-越久越像在工作。因此 `rounds` 的单调上界由 `budget.max_rounds` 硬性给出，
-用尽即 `stalled`（不是失败，也不是成功，见 `ATTACK_STATUSES` 的注释）。
-
-### 2. 只做框架内真实存在的事（本模块最重要的一条）
-
+立项（带三维预算） → 选子目标（确定性次序） → 按 owner 分派一个动作→ 记一轮 history → 判断是否还能继续├─ 还能 → 下一轮└─ 不能 → 交出
+best_partial（`stalled`）或如实收口（`resolved`）
+1. 终止条件是预算，不是"看起来差不多了"（FC-18）因此 `rounds` 的单调上界由 `budget.max_rounds` 硬性给出，用尽即 `stalled`（不是失败，
+也不是成功，见 `ATTACK_STATUSES` 的注释）。
 `step` 按子目标的 `owner` 分派，而"分派"必须落在真的被接线的动作上：
-
-| owner | 动作 | 状态 |
-|---|---|---|
-| `E` | 调 `AgentE.run_experiment`（带 `script_path` 时） | 已接线 |
-| `A` | `interactions.admit_search_request` 过闸门 → 写 `search_requests` | 已接线 |
-| `B` | `interactions.admit_reprocess_request` 过闸门 → 写 `reprocess_requests` | 已接线 |
-| `C`/`D`/`F` | 没有任何自动推理可调 | 记 `outcome="no_change"` |
-
-`C`/`D`/`F` 那一行是刻意的：本框架尚未接线自动推理，所以 F 只能如实写
-"该子目标需要 C/D/F 的推理，本框架尚未接线 ⇒ 未推进"。
-
-为什么这一条必须写死：把它写成"做了但没结果"（例如
-`outcome="progress"` + 空证据）是静默失败的典型形态 —— 计划看起来在推进、
-history 里每一轮都有记录、`rounds` 在增长，而实际上什么也没发生。
-本项目最痛的教训（`11-...md` §10.4 #7：D 没接工具却把"查不到"写成一条
-听起来很合理的研究发现）就是这种形态。三态纪律在这里的具体形态是：
-
-    outcome="no_change" 且 detail 里写明"未推进"  ≠  outcome="progress" 且证据为空
-
-### 3. 数值支持不能关闭子目标（FC-22）
-
-E 返回 `evidence_kind="cross_check"` 时子目标最多标 `supported_not_proved`；
-只有 `proof` 级实验（`method="formal"` + 非空 `verifier_output`）才进
-`proof_experiment_ids`、才允许 `closed`。schema 会拒绝违规组合，
-F 的职责是不制造这种组合（而不是"写了再靠 schema 兜"）。
-
-## 与 `attack_tools` 的分工
-
-- `check_budget` / `can_round` / `pick_next_subgoal` / `can_derive` 唯一实现在
-  `tools/attack_tools.py`，本模块只转发。理由：排序与预算口径一旦有两份，
-  "F 认为该做 A、验收方认为该做 B"不会报任何错。
-- `attack.create_plan` / `attack.step` / `attack.status` / `attack.list_plans`
-  四个工具转发到本模块（见 attack_tools 的 docstring）：写入逻辑只有一份。
+| owner | 动作 | 状态 ||---|---|---|| `E` | 调 `AgentE.run_experiment`（带 `script_path` 时） | 已接线
+|| `A` | `interactions.admit_search_request` 过闸门 → 写 `search_requests` | 已接线 || `B` | 
+`interactions.admit_reprocess_request` 过闸门 → 写 `reprocess_requests` | 已接线 || `C`/`D`/`F` | 没
+有任何自动推理可调 | 记 `outcome="no_change"` |
+`C`/`D`/`F` 那一行是刻意的：本框架尚未接线自动推理，所以 F 只能如实写"该子目标需要 C/D/F 的推理，本框架尚未接线 ⇒ 未推进"。
+为什么这一条必须写死：把它写成"做了但没结果"（例如`outcome="progress"` + 空证据）是静默失败的典型形态 —— 计划看起来在推进、 history 里每一轮都有记
+录、`rounds` 在增长，而实际上什么也没发生。本项目最痛的教训（`11-...md` §10.4 #7：D 没接工具却把"查不到"写成一条听起来很合理的研究发现）就是这种形态。
+3. 数值支持不能关闭子目标（FC-22）E 返回 `evidence_kind="cross_check"` 时子目标最多标 `supported_not_proved`；只有 
+`proof` 级实验（`method="formal"` + 非空 `verifier_output`）才进`proof_experiment_ids`、才允许 `closed`。
+与 `attack_tools` 的分工- `check_budget` / `can_round` / `pick_next_subgoal` / `can_derive` 唯一实现
+在`tools/attack_tools.py`，本模块只转发。- `attack.create_plan` / `attack.step` / `attack.status` / 
+`attack.list_plans`四个工具转发到本模块（见 attack_tools 的 docstring）：写入逻辑只有一份。
 """
 from __future__ import annotations
 from pathlib import Path
@@ -69,25 +31,16 @@ from ..agentspec import AgentBrief, AgentSpec
 __all__ = ["AgentF", "PlanError", "STEP_OUTCOMES", "install_f_tools", "selftest"]
 class PlanError(ToolError):
     """攻坚计划无法创建 / 推进（预算不完整、计划不存在、子目标非法）。
-
     ## 为什么继承 `ToolError`（而不是裸 `RuntimeError`）
-
-    `attack.create_plan` / `attack.step` / `attack.status` / `attack.list_plans`
-    的处理函数直接调 `agent_f` 的方法，而 `attack_tools.py` 里没有
-    `guard_result` 之类的守卫（该文件不属于本次交付）。于是本类原先作为
-    裸 `RuntimeError` 一路穿出工具层，被 `ToolRegistry.call` 的
-    `except Exception` 兜成 `kind="unexpected"` —— 调用方只看到"出了个意外"，
-    看不到"这是攻坚计划层面的拒绝、原因是什么"。
-
-    继承 `ToolError` 之后，同一个异常在工具层被映射成
-    `kind="tool_error"` 且消息原样保留，失败类型信息不再丢失。
-    注意 `ToolError` 本身是 `RuntimeError` 的子类，所以既有
-    `except PlanError` / `except RuntimeError` 的调用点行为不变。
-
-    （`agent_e.ExperimentError` 刻意不这样改：`verify_tools` 的
-    `_run_experiment_tool` 用 `except ToolError: raise` 把 ToolError 排在
-    `except RuntimeError` 之前，改基类会让那条精心写的"实验执行失败"
-    分支永远不再命中、退化成一条泛泛的错误。两者的处置不同是有意的。）
+    `attack.create_plan` / `attack.step` / `attack.status` / `attack.list_plans`的处理函数直接调 
+    `agent_f` 的方法，而 `attack_tools.py` 里没有`guard_result` 之类的守卫（该文件不属于本次交付）。于是本类原先作为裸 
+    `RuntimeError` 一路穿出工具层，被 `ToolRegistry.call` 的`except Exception` 兜成 
+    `kind="unexpected"` —— 调用方只看到"出了个意外"，看不到"这是攻坚计划层面的拒绝、原因是什么"。
+    继承 `ToolError` 之后，同一个异常在工具层被映射成`kind="tool_error"` 且消息原样保留，失败类型信息不再丢失。注意 `ToolError` 本
+    身是 `RuntimeError` 的子类，所以既有`except PlanError` / `except RuntimeError` 的调用点行为不变。
+    （`agent_e.ExperimentError` 刻意不这样改：`verify_tools` 的`_run_experiment_tool` 用 
+    `except ToolError: raise` 把 ToolError 排在`except RuntimeError` 之前，改基类会让那条精心写的"实验执行失败"分支
+    永远不再命中、退化成一条泛泛的错误。两者的处置不同是有意的。）
     """
 TERMINAL_STATUSES = AT.TERMINAL_STATUSES
 UNWIRED_OWNERS = ("C", "D", "F")

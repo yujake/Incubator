@@ -392,20 +392,14 @@ def test_i5_peak_concurrency_within_limit(tmp_path):
 def test_i5_negative_control_limit_is_actually_reached(tmp_path):
     """I-5 负控：并发上限必须被用满，否则"≤ 上限"是废话。
 
-    ## 两个数字：为什么断言的是探针而不是 `conductor.peak_running`
+    两个数字、为什么断言的是探针而不是 `conductor.peak_running`：`scheduler.ConcurrencyProbe.peak` 数的
+    是"真的在跑的任务数"（进入执行窗口 +1、出窗口 -1），是"真并发"的判据；`conductor.peak_running` 数
+    的是"已经登记为 `running` 且还没写终态"的行数，它 ≤ 探针：一次 `summon` 在调 handler 之前还要落
+    一行 `running`（含一次 fsync 事务，实测 20~60ms），三个任务各自落行期间先落完的那个可能已经跑完
+    —— 于是同一瞬间"登记在飞"的只有 2 个，而执行窗口确实重叠了 3 个。
 
-    - `scheduler.ConcurrencyProbe.peak` 数的是"真的在跑的任务数"
-      （进入执行窗口 +1、出窗口 -1）。它是"真并发"的判据。
-    - `conductor.peak_running` 数的是"已经登记为 running 且还没写终态"的行数。
-      它≤ 探针：一次 `summon` 在调 handler 之前还要落一行 `running`
-      （含一次 fsync 事务，实测 20~60ms）。三个任务各自落行期间，先落完的那个
-      可能已经跑完了 —— 于是同一瞬间"登记在飞"的只有 2 个，而执行窗口
-      确实重叠了 3 个。
-
-    把 `peak_running == 上限` 当成判据会得到一个偶发失败的测试
-    （它与机器快慢有关），而那正是"时间断言要给足余量"要防的东西。
-    所以：峰值并发用探针判，`peak_running` 只判"≤ 上限"（I-5 的字面要求）。
-    """
+    把 `peak_running == 上限` 当成判据会得到一个偶发失败的测试（它与机器快慢有关），而那正是"时间断言
+    要给足余量"要防的东西。所以：峰值并发用探针判，`peak_running` 只判"≤ 上限"（I-5 的字面要求）。"""
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=3, max_fanout=8, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
@@ -488,8 +482,8 @@ def test_i7_budget_exhaustion_refuses_new_tasks(tmp_path):
     """I-7：钱花光 ⇒ 后续召唤 `refused/budget_exceeded`，
     而已经在跑的那个不被砍（它是"钱花光了"，不是"被预算杀死"）。
 
-    ⚠️ 2026-10-15 业主裁定 A1/A2/A3/A7 + B2/B4 之后，这条路上的"预算"**只剩钱、
-    且只有一处判据**（全局已花 vs 全局预算）。此前它传的是
+     2026-10-15 业主裁定 A1/A2/A3/A7 + B2/B4 之后，这条路上的"预算"只剩钱、
+    且只有一处判据（全局已花 vs 全局预算）。此前它传的是
     `budget={"max_tokens": 1}`（token 轴，已删）；现在判据来自
     `Policy(usd_budget=0.0)` —— "这一次运行一个子儿都不许花"。
     `usd_budget=0.0` 与 `None` 语义不同：前者是"预算为零"，后者是"没设预算"。
@@ -506,7 +500,7 @@ def test_i7_budget_exhaustion_refuses_new_tasks(tmp_path):
 
 
 def test_i7_a_running_task_is_not_killed_when_the_budget_runs_out(tmp_path):
-    """I-7 的另一半：钱花光**之后**，已经在跑的那个不许被砍。
+    """I-7 的另一半：钱花光之后，已经在跑的那个不许被砍。
 
     判据是那一行的终态仍然是它自己的结局（不是 `cancelled`）——
     "花光了预算"与"被预算杀死"是两件事。
@@ -1318,7 +1312,7 @@ def test_policy_snapshot_is_recorded_in_stats(tmp_path):
     c = _conductor(store, policy=pol)
     s = c.stats()["policy"]
     assert s["max_depth"] == 7 and s["max_tasks_per_run"] == 99
-    # 2026-10-15 业主裁定 A7：策略快照里**不许**再有 token 预算这一格
+    # 2026-10-15 业主裁定 A7：策略快照里不许再有 token 预算这一格
     # （留一格就有人会把它打开，而打开它就会把"想得久"判成过错）
     assert "token_budget" not in s
     assert s["wall_clock_sec"] == 12.5
@@ -1338,22 +1332,14 @@ def test_run_plan_empty_is_empty(tmp_path):
 def test_concurrent_summons_never_share_a_task_id(tmp_path):
     """回归：并发召唤不许拿到同一个 `task_id`。
 
-    ## 这条测试为什么存在（它抓的是一个真实缺陷）
+    这条测试为什么存在（它抓的是一个真实缺陷）：`interactions.next_prefixed_id` 是纯函数（取 max+1 并跳过
+    已占用）—— 它没有计数器。所以"先算号、再写行"在并发下必错：① 线程 A 算出 `t-0003`，还没写行；
+    ② 线程 B 读 `tasks`，看不见 A 那一行，于是也算出 `t-0003`；③ `upsert` 按主键替换 ⇒ 后写的静默覆盖
+    先写的。症状：同一个 `task_id` 出现在两次不同召唤的返回值里，台账里凭空少一次召唤，而没有任何地方
+    报错（`test_merge_order_follows_input_order` 曾以"第二个任务是第一个的副本"的形式复现它）。
 
-    `interactions.next_prefixed_id` 是纯函数（取 max+1 并跳过已占用）——
-    它没有计数器。所以"先算号、再写行"在并发下必错：
-
-    1. 线程 A 算出 `t-0003`，还没写行；
-    2. 线程 B 读 `tasks`，看不见 A 那一行，于是也算出 `t-0003`；
-    3. `upsert` 按主键替换 ⇒ 后写的静默覆盖先写的。
-
-    症状：同一个 `task_id` 出现在两次不同召唤的返回值里，台账里凭空少一次
-    召唤，而没有任何地方报错（`test_merge_order_follows_input_order`
-    曾以"第二个任务是第一个的副本"的形式复现它）。
-
-    修法：取号与建行在同一把锁 + 同一个事务里（`Conductor._write_new_row`）。
-    这条测试同时断言"号唯一"与"行数 == 召唤次数"—— 后者才是覆盖的直接证据。
-    """
+    修法：取号与建行在同一把锁 + 同一个事务里（`Conductor._write_new_row`）。这条测试同时断言"号唯一"与
+    "行数 == 召唤次数"—— 后者才是覆盖的直接证据。"""
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=32, max_fanout=5, max_tasks_per_run=500, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"C": ("object", FakeC())})
@@ -1425,17 +1411,13 @@ class _CountingE(FakeE):
 def test_fc19_guard_refuses_before_work_starts(tmp_path):
     """裁决 1(a)：超预算时 `guard` 在开工前拒绝，不是干完再拒。
 
-    判据是 handler 的调用次数 == 0。这一条不能用"`tasks.tokens` 是 0"
-    来判 —— 后者在"先跑后拒"的实现下同样成立（被拒的行不记账），
-    于是它区分不出两种实现。这正是"判据要选在能区分两种实现的地方"。
+    判据是 handler 的调用次数 == 0。这一条不能用"`tasks.tokens` 是 0"来判 —— 后者在"先跑后拒"的实现下
+    同样成立（被拒的行不记账），于是它区分不出两种实现。这正是"判据要选在能区分两种实现的地方"。
 
-    ⚠️ 2026-10-15 业主裁定 A7 + B2/B4 之后这里只剩**钱**这一轴，且判据只有一处
-    （全局已花 vs 全局预算）：第二单的拒绝来自全局预算为零
-    （`Policy(usd_budget=0.0)`），不是调用方传的每单限额 ——
-    `budget_usd=0` 与 `None` 语义不同（三态纪律）：0 是"预算为零 ⇒ 拦"，
-    None 是"没设预算 ⇒ 不限制"。第一条断言 `spent()["tokens"] == 100`
-    留着 —— 那是读数，它不是拦人的依据，但必须在。
-    """
+    2026-10-15 业主裁定 A7 + B2/B4 之后这里只剩钱这一轴，且判据只有一处（全局已花 vs 全局预算）：第二单
+    的拒绝来自全局预算为零（`Policy(usd_budget=0.0)`），不是调用方传的每单限额 —— `budget_usd=0` 与
+    `None` 语义不同（三态纪律）：0 是"预算为零 ⇒ 拦"，None 是"没设预算 ⇒ 不限制"。第一条断言
+    `spent()["tokens"] == 100` 留着 —— 那是读数，不是拦人的依据，但必须在。"""
     store = _mk_store(tmp_path)
     first = _CountingE(tokens=100)
     second = _CountingE(tokens=0)
@@ -1498,9 +1480,9 @@ def test_fc19_tasks_tokens_match_usage_ledger_exactly(tmp_path):
 
 
 def test_fc19_the_per_summon_estimate_is_checked_against_the_remaining_money(tmp_path):
-    """裁定 B2/B4：`budget={"max_usd": X}` 的语义是**"这一单预计最多花 X"**。
+    """裁定 B2/B4：`budget={"max_usd": X}` 的语义是"这一单预计最多花 X"。
 
-    判据因此是"剩下的钱够不够 X"（`X > 剩余` ⇒ 开工前拒），而**不是**
+    判据因此是"剩下的钱够不够 X"（`X > 剩余` ⇒ 开工前拒），而不是
     "拿 X 去和全局已花比" —— 后者是改前那一版做的事，它把"每单限额"
     实现成了"全局阈值的第二个落点"（同一件事两处判，两处都不是调用方以为的意思）。
 

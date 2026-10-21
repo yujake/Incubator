@@ -2,44 +2,21 @@
 
 ## 这两条判据要抓的是什么
 
-`ActionSpec.params`（能力层声明）与 `Agent<X>.<handler_name>` 的真形参是两件事；
-`ToolSpec.params`（工具层 schema）与 `ToolSpec.handler` 的真形参也是两件事。
-声明里多一个实现收不下的 property，后果是一段静默的错位：
+`ActionSpec.params`（能力层声明）与 `Agent<X>.<handler_name>` 的真形参是两件事；`ToolSpec.params`（工具层 schema）与 `ToolSpec.handler` 的真形参也是两件事。声明里多一个实现收不下的 property，后果是一段静默的错位：① 参数门放行（它读的正是那份声明）⇒ 写一行 `running`；② 执行到 handler 时才报"不认这些参数" ⇒ 台账里那一行看起来像"跑失败了"，而这次调用其实从来没被执行过（工具层那半还会被兜成 `kind='unexpected'`，一个"库内部出错"的假 bug 分类）。
 
-1. 参数门放行（它读的正是那份声明）⇒ 写一行 `running`；
-2. 执行到 handler 时才报"不认这些参数"⇒ 台账里那一行看起来像"跑失败了"，
-   而这次调用其实从来没被执行过（工具层那半还会被兜成 `kind='unexpected'`，
-   一个"库内部出错"的假 bug 分类）。
-
-所以每层各有一条机器判据：每一层都必须做到"声明的每个 property，要么被实现
-接受，要么逐条登记进这一层的接缝表并写明理由"——不许留下第三态。
+所以每层各有一条机器判据：每一层都必须做到"声明的每个 property，要么被实现接受，要么逐条登记进这一层的接缝表并写明理由"——不许留下第三态。
 
 ## 落点为什么是"导入期 / 注册期"而不是"跑一次测试"
 
-判据的价值取决于它会不会被忘记跑。能力层挂在 `import agentflow.capabilities`
-（`assert_capabilities` 第 [8] 条）；工具层挂在 `ToolRegistry.register`
-（`tools/base.py`，与既有的 `roles ⊆ schema.ROLES` 判据同一个入口与同一个理由）。
-本文件的用例是这两条判据的读数与自校，不是它们的存在形式。
+判据的价值取决于它会不会被忘记跑。能力层挂在 `import agentflow.capabilities`（`assert_capabilities` 第 [8] 条）；工具层挂在 `ToolRegistry.register`（`tools/base.py`，与既有的 `roles ⊆ schema.ROLES` 判据同一个入口与同一个理由）。本文件的用例是这两条判据的读数与自校，不是它们的存在形式。
 
 ## 三条自校（守判据自己，不是守被测对象）
 
-- `test_injected_property_is_reported_and_removing_the_seam_reports_sleep`：
-  在内存里（不动盘上一个字节）注入一个假 property、再把 `sleep` 那条接缝拿掉
-  ⇒ 判据必须报出对应的名字；
-- `test_tools_side_seam_is_the_only_way_through`：同一个坏 spec，
-  没登记时 `register` 必须抛 `ParamError`，登记后必须放行 —— 证明接缝表是
-  唯一的放行路径，而不是"判据其实恒真"；
-- `test_capabilities_assertion_still_returns_none`：`assert_capabilities()` 的
-  返回值被一条既有用例（`tests/test_r4_roles_surface.py`）钉住必须是 `None`，
-  覆盖计数走模块级 `PARAM_ASSERT_COVERAGE`。这里把这条契约钉在本窗口的测试里，
-  免得下一个人"顺手"把它改成返回值。
+- `test_injected_property_is_reported_and_removing_the_seam_reports_sleep`：在内存里（不动盘上一个字节）注入一个假 property、再把 `sleep` 那条接缝拿掉 ⇒ 判据必须报出对应的名字；
+- `test_tools_side_seam_is_the_only_way_through`：同一个坏 spec，没登记时 `register` 必须抛 `ParamError`，登记后必须放行 —— 证明接缝表是唯一的放行路径，而不是"判据其实恒真"；
+- `test_capabilities_assertion_still_returns_none`：`assert_capabilities()` 的返回值被一条既有用例（`tests/test_r4_roles_surface.py`）钉住必须是 `None`，覆盖计数走模块级 `PARAM_ASSERT_COVERAGE`；这里把这条契约钉在本窗口的测试里，免得下一个人"顺手"把它改成返回值。
 
-## 与既有测试的分工
-
-工具 schema ↔ handler 那条判据另有一份测试面实现
-（`tests/test_schema_handler_params.py`，它带自己的注入负控）。本文件不重复它，
-只在工具侧核"新那条注册期判据"这件事，以及那条判据的覆盖率读数。
-"""
+与既有测试的分工：工具 schema ↔ handler 那条判据另有一份测试面实现（`tests/test_schema_handler_params.py`，它带自己的注入负控）；本文件不重复它，只在工具侧核"新那条注册期判据"这件事，以及那条判据的覆盖率读数。"""
 
 from __future__ import annotations
 

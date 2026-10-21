@@ -4,21 +4,18 @@
 ## 每一面两半（`draft/73` §2.3 的判据口径）
 
 - 正控：夹具造出真数据（`tests/conftest.py` 的 `make_artifacts_sample`，
-  裁定 J2/K2 的样本）⇒ 读数出现在结果里，且字段名逐字对得上；
+裁定 J2/K2 的样本）⇒ 读数出现在结果里，且字段名逐字对得上；
 - 负控（这一组最重要）：数据源不可读 ⇒ 该面 `tri="unreadable"` + `reason` 非空；
-  空工作区 ⇒ `tri="not_applicable"` + 一句"还没写过"。不许折成 `0` / `[]` / `false`
-  （"没查成 vs 查到 0"这条线是本仓库最贵的纪律）。
+空工作区 ⇒ `tri="not_applicable"` + 一句"还没写过"。不许折成 `0` / `[]` / `false`（"没查成 vs 查到 0"这条线是本仓库最贵的纪律）。
 
 ## 三态词表
 
-`computed` / `unreadable` / `not_applicable`（裁定 N1：与「交付说明」那一格的
-`ok`/`missing`/`unknown` 不许互相顶替）。本文件同时钉住"哪一栏用哪一套"。
+`computed` / `unreadable` / `not_applicable`（裁定 N1：与「交付说明」那一格的`ok`/`missing`/`unknown` 不许互相顶替）。本文件同时钉住"哪一栏用哪一套"。
 
 ## 注册表
 
-`readers.CHECKED_TYPES` / `UNCHECKED_TYPES` 是契约判据 C 的两份登记，它们必须与
-`type_decls()` 自洽：一个接口要么在受核对名单里、要么在欠账名单里（且欠账那一边
-不许真读出键来）。这一半在本文件里自己先核一遍，别等 A 线的判据来报。
+`readers.CHECKED_TYPES` / `UNCHECKED_TYPES` 是契约判据 C 的两份登记，它们必须与`type_decls()` 自洽：一个接口要么在受核对名单里、
+要么在欠账名单里（且欠账那一边不许真读出键来）。这一半在本文件里自己先核一遍，别等 A 线的判据来报。
 """
 
 from __future__ import annotations
@@ -112,7 +109,7 @@ def test_run_view_reads_runs_report_and_checkpoint(artifacts_ws: pathlib.Path) -
                        "waiting_for", "spend", "prompt_cache", "at"}, sorted(ck)
     assert set(ck["spend"]) == {"calls", "tokens_in", "tokens_out", "usd",
                                 "unknown_usd_calls"}, sorted(ck["spend"])
-    # 缓存汇总的键集与 Python 侧那一份**同一个来源**（不在这里再抄一遍）。
+    # 缓存汇总的键集与 Python 侧那一份同一个来源（不在这里再抄一遍）。
     from agentflow import promptstability as PS
 
     assert set(ck["prompt_cache"]) == set(PS.CACHE_SUMMARY_KEYS), sorted(ck["prompt_cache"])

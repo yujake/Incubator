@@ -2,27 +2,19 @@
 
 ## 缺陷（2026-09-26 全面体检 · 子代理 A 发现）
 
-只读角色能写哪些表这件事有两个互相独立、可以各自漂移的落点：
-
-- 工具级：`tools.base.READONLY_CALL_EXCEPTIONS`（H → 3 个 `review.*`）；
-- 表级：`capabilities.READ_ONLY_WRITE_EXCEPTIONS`（H → `documents` + `review_findings`）。
-
-`capabilities.py` 全文不出现 `READONLY_CALL_EXCEPTIONS`，两者的对应关系只写在
-自然语言理由里 ⇒ 往工具级表加一个能写 `claims` 的工具不会触发任何断言：
-工具层会放行、表级例外不认，没有任何东西会红。这正是 FC-27 第七类理由里
-"测试全绿、上线即越权"的破口形态。
+只读角色能写哪些表这件事有两个互相独立、可以各自漂移的落点：工具级：`tools.base.READONLY_CALL_EXCEPTIONS`（H → 3 个 `review.*`）；
+- 表级：`capabilities.READ_ONLY_WRITE_EXCEPTIONS`（H → `documents` + `review_findings`）。`capabilities.py` 全文不出现
+`READONLY_CALL_EXCEPTIONS`，两者的对应关系只写在自然语言理由里 ⇒ 往工具级表加一个能写 `claims` 的工具不会触发任何断言：工具层会放行、表级例外不认，没有任何东西会红。这正是 FC-27
+第七类理由里"测试全绿、上线即越权"的破口形态。
 
 ## 修法
 
-在 `capabilities.assert_capabilities` 里加第 `[5c]` 条（导入期执行），三条判据：
-① 两表的角色键集必须对齐；② 每个例外工具必须解析到动作，比不了的要显式登记；
-③ 解析到的动作能写的表必须是表级例外的子集。外加一条反向守卫：`agent_h._H_WRITABLE_TOOLS`
-必须是从表派生的（用 AST 判，不是字符串匹配）。
+在 `capabilities.assert_capabilities` 里加第 `[5c]` 条（导入期执行），三条判据：① 两表的角色键集必须对齐；② 每个例外工具必须解析到动作，比不了的要显式登记；③
+解析到的动作能写的表必须是表级例外的子集。外加一条反向守卫：`agent_h._H_WRITABLE_TOOLS`必须是从表派生的（用 AST 判，不是字符串匹配）。
 
 ## 本文件的判据怎么"证明注入生效"
 
-`assert_capabilities()` 是导入期跑的，进程内再调一次即可重跑全部断言。
-所以负控的形态是：改掉表里的一条，再调一次 `assert_capabilities()`，必须抛。
+`assert_capabilities()` 是导入期跑的，进程内再调一次即可重跑全部断言。所以负控的形态是：改掉表里的一条，再调一次 `assert_capabilities()`，必须抛。
 每条负控都先断言"注入真的改到了那张表"（否则测的是空操作）。
 """
 from __future__ import annotations
@@ -46,22 +38,15 @@ def test_the_assertion_passes_on_the_real_tree() -> None:
 
 
 def test_adding_an_overreaching_tool_to_the_tool_level_table_is_caught() -> None:
-    """负控（核心）：例外工具的逐工具写集若越出表级例外 ⇒ 断言必须红。
+    """    负控（核心）：例外工具的逐工具写集若越出表级例外 ⇒ 断言必须红。
 
-    注入走 `assert_capabilities` 的注入形参（见它的 docstring：第 `[5c]` 条是
-    导入期判据，不注入就没法在进程内给它做负控）。
-    这里把表级例外的 H 收窄成只剩 `review_findings` ⇒ `review.verify_fixes` /
-    `review.review_document` 的写集里有 `documents` ⇒ 必须报越界。
+    注入走 `assert_capabilities` 的注入形参（见它的 docstring：第 `[5c]` 条是导入期判据，不注入就没法在进程内给它做负控）。这里把表级例外的 H 收窄成只剩
+    `review_findings` ⇒ `review.verify_fixes` /`review.review_document` 的写集里有 `documents` ⇒ 必须报越界。
 
-    措辞断言为什么放宽（`R4-4` 的修法之后）：老版本只认 `[5c]` ③ 的那句
-    "越权写表"，而那之所以成立，是因为 `[4]` 当时读的是模块全局
-    `READ_ONLY_WRITE_EXCEPTIONS` —— 注入形参在第 `[4]` 条那里根本没生效
-    （同一个值被检查两遍，第二遍才是活的，第一遍是死的全局表）。
-    `R4-4` 把 `_rowe` 接到第 `[4]` 条之后，同一个注入会先在 `[4]` 报出来
-    （"只读角色 H 的写集里出现了未登记的 ['documents']"）—— 那是更早、更准
-    的同一结论，不是漏判。所以这里断"必须抛 + 必须点名 documents + 必须来自
-    例外表这两道闸之一"，并把 `[5c]` ③ 单独钉在下面那条用例里
-    （否则放宽措辞就真的没人守 ③ 了）。
+    措辞断言为什么放宽（`R4-4` 的修法之后）：老版本只认 `[5c]` ③ 的那句"越权写表"，而那之所以成立，是因为 `[4]` 当时读的是模块全局`READ_ONLY_WRITE_EXCEPTIONS` ——
+    注入形参在第 `[4]` 条那里根本没生效（同一个值被检查两遍，第二遍才是活的，第一遍是死的全局表）。`R4-4` 把 `_rowe` 接到第 `[4]` 条之后，同一个注入会先在 `[4]` 报出来（"只读角色 H
+    的写集里出现了未登记的 ['documents']"）—— 那是更早、更准的同一结论，不是漏判。所以这里断"必须抛 + 必须点名 documents + 必须来自例外表这两道闸之一"，并把 `[5c]` ③
+    单独钉在下面那条用例里（否则放宽措辞就真的没人守 ③ 了）。
     """
     narrow = {"H": frozenset({"review_findings"}),
               "C": C.READ_ONLY_WRITE_EXCEPTIONS["C"]}
@@ -249,11 +234,11 @@ def test_the_source_scan_actually_computes_the_declared_write_sets() -> None:
     assert real["review.report"] == [], real
     for tool, tables in real.items():
         if tool in C._NO_WRITE_SET_SOURCE:
-            # ---- 2026-10-18：**显式登记的"算不出"**（`analysis.register_report`）。
+            # ---- 2026-10-18：显式登记的"算不出"（`analysis.register_report`）。
             #
             # 它的写发生在 `agent_c._support.AnalysisReport.persist()`（跨模块），
-            # 而扫描器只跟**同文件**的顶层函数链 ⇒ 算不出来。这一支不放松判据，只是把
-            # 第三态（"没查成"）与"查过了、不写表"分开，并且**两条额外约束**补上：
+            # 而扫描器只跟同文件的顶层函数链 ⇒ 算不出来。这一支不放松判据，只是把
+            # 第三态（"没查成"）与"查过了、不写表"分开，并且两条额外约束补上：
             #   ① 登记值不许为空集 —— 空集是"漏报"方向（`R4-5` 的教训），
             #      而"算不出"这种工具最容易被顺手登记成空集；
             #   ② 理由必须非空（"算不出"必须能说出为什么）。

@@ -1,43 +1,21 @@
 """`P-9` 候选 A（2026-09-27 所有者裁定）的成对正控/负控。
-
 ## 这一批落地了什么
-
-1. `schema.ReviewFinding` 补上 G10 六格里的四格：`axis` / `line` /
-   `verbatim_quote` / `maths`（外加 `line_unavailable_reason`），
-   并把"最小修法"那一格与 `suggestion` 对齐（`gates` 里 `minimal_fix` 作为历史键名继续接受）；
-2. `schema.ReviewFinding.validate()` 只判"给了值就必须给对"，刻意不判"必须给值"；
-3. `gates.gate_g10` 判完整性：四键齐不齐、行号拿不到有没有自证，
-   且只对 `created_at >= schema.REVIEW_FINDING_FORMAT_SINCE` 的行要求四键 ——
-   契约生效前的历史行按 `created_at` 豁免，不许回填。
-
+1. `schema.ReviewFinding` 补上 G10 六格里的四格：`axis` / `line` /`verbatim_quote` / `maths`（外加 `line_unavailable_reason`），
+并把"最小修法"那一格与 `suggestion` 对齐（`gates` 里 `minimal_fix` 作为历史键名继续接受）；2. `schema.ReviewFinding.validate()` 只判"给了值就必须给对"，
+刻意不判"必须给值"；3. `gates.gate_g10` 判完整性：四键齐不齐、行号拿不到有没有自证，且只对 `created_at >= schema.REVIEW_FINDING_FORMAT_SINCE` 的行要求四键
+——契约生效前的历史行按 `created_at` 豁免，不许回填。
 ## 为什么"完整性"必须在门上、不在 `validate()` 里（本文件最重要的一条）
-
-`store.rebuild()` 重放事件时逐行调 `obj.validate()`，异常被
-`except Exception: skipped += 1; continue` 吃掉。于是"在 `validate()` 里写四键必须非空"
-的直接后果是：契约生效前落盘的历史 finding 行会在下一次重建时整行消失，而且不报错 ——
-那是数据遗失，不是格式错误。本文件里 `test_p9_rebuild_...` 两条用例把这个机制
-两个方向都钉住：产出方今天写出的行（无四键）重建后必须还在；而值写错的行
-必须仍然被拒（证明判据不是被削掉了牙，只是被放对了位置）。
-
+`store.rebuild()` 重放事件时逐行调 `obj.validate()`，异常被`except Exception: skipped += 1; continue` 吃掉。于是"在
+`validate()` 里写四键必须非空"的直接后果是：契约生效前落盘的历史 finding 行会在下一次重建时整行消失，而且不报错 ——那是数据遗失，不是格式错误。本文件里
+`test_p9_rebuild_...` 两条用例把这个机制两个方向都钉住：产出方今天写出的行（无四键）重建后必须还在；而值写错的行必须仍然被拒（证明判据不是被削掉了牙，只是被放对了位置）。
 ## 第 11 轮补的守卫（A1 / A2 / A3）
-
-`gates.py` 上那三处修复（`FIX11` 修理工 a 落地）此前没有任何测试守着。
-本文件末尾的"第 11 轮守卫"一节逐条补上，并逐条给出成对读数：
-
-1. A1（零发现 ⇒ `pass`）：`_g10([])` 落 `pass`，而"唯一的行是历史行"落
-   `not_applicable`。这两条路径共用同一个 `if`，只有成对断言（差分）才能
-   把"零发现"与"没有可判定的对象"分开 —— 单断言 `pass` 一条的实现照样过；
-2. A2（截断串不再豁免）：`REVIEW_FINDING_FORMAT_SINCE` 的四个真前缀截断串
-   （`'2026-09-2'` / `'2026-09-'` / `'2026-0'` / `'2'`）在纯字典序下比常量小，
-   旧的比较口径会把它们读成"契约生效前的历史行"而豁免掉（比空串还宽松）。
-   负控逐档证明它们现在落在契约作用面内，即 `unknown` 而不是 `not_applicable`；
-3. A3（`pass` 支的 reason 带豁免档）：有豁免时追加一句、零豁免时整句不出现，
-   而 `counts` 里那个键在任何情况下都必须在（机读面不许被删）。
-
+`gates.py` 上那三处修复（`FIX11` 修理工 a 落地）此前没有任何测试守着。本文件末尾的"第 11 轮守卫"一节逐条补上，并逐条给出成对读数：
+1. A1（零发现 ⇒ `pass`）：`_g10([])` 落 `pass`，而"唯一的行是历史行"落`not_applicable`。这两条路径共用同一个 `if`，只有成对断言（差分）才能把"零发现"与"没有可判定的对象"分开
+—— 单断言 `pass` 一条的实现照样过；2. A2（截断串不再豁免）：`REVIEW_FINDING_FORMAT_SINCE` 的四个真前缀截断串（`'2026-09-2'` / `'2026-09-'` /
+`'2026-0'` / `'2'`）在纯字典序下比常量小，旧的比较口径会把它们读成"契约生效前的历史行"而豁免掉（比空串还宽松）。负控逐档证明它们现在落在契约作用面内，即 `unknown` 而不是
+`not_applicable`；3. A3（`pass` 支的 reason 带豁免档）：有豁免时追加一句、零豁免时整句不出现，而 `counts` 里那个键在任何情况下都必须在（机读面不许被删）。
 ## 负控的形态（照抄本项目已有的样板）
-
-每条负控都把违规注入到正控夹具的文本副本上，断言：
-锚点恰好命中 1 次、字节确实变了、把副本打印成 sha256，然后断言下游从绿变红。
+每条负控都把违规注入到正控夹具的文本副本上，断言：锚点恰好命中 1 次、字节确实变了、把副本打印成 sha256，然后断言下游从绿变红。
 """
 
 from __future__ import annotations
@@ -395,19 +373,16 @@ def test_p9_positive_control_zero_findings_is_pass_not_not_applicable():
 def test_p9_negative_control_a_truncated_created_at_is_in_scope(
     tmp_path: Path, created_at: str, tag: str
 ):
-    """负控（A2，第 11 轮）：生效日常量的四个真前缀截断串都不许被豁免。
+    """    负控（A2，第 11 轮）：生效日常量的四个真前缀截断串都不许被豁免。
 
-    这四档是"旧口径与修复后口径结论相反"的全部位置：`created_at` 是常量的一个
-    真前缀 ⇒ 纯字典序比较说它小于常量（⇒ 历史行 ⇒ 豁免），而契约的判据是
-    "拿不到合法创建时刻就不能主张豁免"。
+    这四档是"旧口径与修复后口径结论相反"的全部位置：`created_at` 是常量的一个真前缀 ⇒ 纯字典序比较说它小于常量（⇒ 历史行 ⇒ 豁免），而契约的判据是"拿不到合法创建时刻就不能主张豁免"。
 
     所以这条负控有两个层次，缺一不可：
 
     1. 判据层：`_finding_format_in_scope` 对这四档必须为真（进作用面）；
     2. 门层：把这条 `created_at` 注入正控夹具的文本副本、再把四键摘掉
-       （契约生效后该给而没给）⇒ `unknown` 且 `契约作用面内 == 1`。
-       若它被判成历史行，读数是 `not_applicable` 且 `豁免 == 1` —— 两者在
-       `verdict` 与那两个计数上都相反，所以这条负控不可能"因为别的原因"变绿。
+    （契约生效后该给而没给）⇒ `unknown` 且 `契约作用面内 == 1`。若它被判成历史行，读数是 `not_applicable` 且 `豁免 == 1` —— 两者在`verdict` 与那两个计数上都相反，
+    所以这条负控不可能"因为别的原因"变绿。
     """
     assert G._finding_format_in_scope({"created_at": created_at}) is True, (
         f"{created_at!r} 被豁免了：契约生效日之后的产出行不许拿 created_at 的截断串冒充历史行")

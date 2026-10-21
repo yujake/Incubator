@@ -185,17 +185,13 @@ def test_negative_control_a_status_outside_the_vocabulary_is_not_passed_through(
 def _run_agent_e_import_probe(mode: str) -> subprocess.CompletedProcess:
     """在一个新解释器里导入 `agentflow.agent_e`，把子进程结果原样返回。
 
-    `mode="clean"` 直接导入；`mode="patch"` 在导入 `agent_e` 之前给检查器词表
-    塞一个没有被收口的状态（模拟"检查器新增了状态、而映射表没跟上"）。
-    补丁必须打在导入之前：`agent_e` 的导入期断言读的是
-    `from .formalgw import STATUSES`，那是一次取属性绑定。
+    `mode="clean"` 直接导入；`mode="patch"` 在导入 `agent_e` 之前给检查器词表塞一个
+    没有被收口的状态（模拟"检查器新增了状态、而映射表没跟上"）。补丁必须打在导入之前：
+    `agent_e` 的导入期断言读的是 `from .formalgw import STATUSES`，那是一次取属性绑定。
 
-    为什么用子进程而不是 `importlib.reload`：reload 会重新创建 `ExperimentError`
-    这类异常类对象，而其他测试模块在导入时抓住的是旧对象，于是
-    `pytest.raises(ExperimentError)` 再也接不住新对象（全量跑时 `test_core_audit_efgh`
-    里那条用例会以"异常逃逸"的形态红）。一次"证明断言真的会炸"的检查不该改变全局类
-    身份；子进程没有这个问题。
-    """
+    为什么用子进程而不是 `importlib.reload`：reload 会重建 `ExperimentError` 这类异常类对象，
+    而其他模块在导入时抓的是旧对象，于是 `pytest.raises(ExperimentError)` 接不住新对象
+    （`test_core_audit_efgh` 那条会以"异常逃逸"的形态红）；子进程没有这个问题。"""
     probe = (
         "import sys\n"
         "from agentflow import formalgw as FG\n"

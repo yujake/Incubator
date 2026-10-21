@@ -169,24 +169,15 @@ class _Core:
             self.c_wiring = {"mode": "injected", "reason": f"使用调用方注入的 C 服务：{type(c).__name__}"}
     def _c_call(self, api: str, **params: Any) -> dict:
         """防御式调用 C 的服务方法（I1）。
-
         ## 为什么必须是防御式的
-
-        C 的四个只读服务方法由另一个并行开发的任务提供，D 现在既不能假定
-        它们存在，也不能假定签名与冻结契约完全一致。三种情况必须给出三种不同的
-        记录，因为它们对读者的含义完全不同：
-
-        ========================================  ==========================================
-        情况                                       记录
-        ========================================  ==========================================
-        拿不到方法（版本不匹配）                    ``checked=False`` + "C 未提供该方法"
-        方法抛异常                                  ``checked=False`` + 异常文本（报告里可见）
-        返回值不是 dict / 缺少 ``checked`` 三态位    ``checked=False`` + 理由
-        ========================================  ==========================================
-
-        绝对不允许把"没调用成功"静默当成"没有结果"。这是本项目最痛的历史
-        缺陷：D 曾因"没接工具"而静默拿到空证据，却把"查不到"写成了一条听起来
-        很合理的研究发现。失败路径在这里一律返回带 reason 的记录。
+        C 的四个只读服务方法由另一个并行开发的任务提供，D 现在既不能假定它们存在，也不能假定签名与冻结契约完全一致。三种情况必须给出三种不同的记录，因为它们对读者的含义完全不同：
+        ========================================  ==========================================情况
+        记录========================================  ==========================================
+        拿不到方法（版本不匹配）                    ``checked=False`` + "C 未提供该方法"方法抛异常
+        ``checked=False`` + 异常文本（报告里可见）返回值不是 dict / 缺少 ``checked`` 三态位    ``checked=False`` + 
+        理由========================================  ==========================================
+        绝对不允许把"没调用成功"静默当成"没有结果"。这是本项目最痛的历史缺陷：D 曾因"没接工具"而静默拿到空证据，却把"查不到"写成了一条听起来很合理的研究发现。失败路径在这
+        里一律返回带 reason 的记录。
         """
         c = getattr(self, "c", None)
         if c is None:
@@ -298,27 +289,16 @@ class _Core:
         }
     def _candidates_from(self, report: dict) -> list[dict]:
         """从 ``report.payload`` 里提取候选问题（确定性 + 可解释）。
-
         ## 假设的 payload 形状（按契约读取，全部用 ``.get`` 容错）
-
         与 ``agent_c`` 当前实现核对过（字段名以它为准，未命中的别名一并兼容）：
-
-        - ``hottest``：``payload["entries"] = [{"concept_id","name","occurrences",
-          "relation_count","group_count","degree","representative_relations":[...]}]``；
-        - ``paths``：``payload["paths"] = [{"concept_path": [...], "relation_chain": [...],
-          "hops": N, "level": "high|medium|low", "score": 3.4, "score_breakdown": {...}}]``
-          —— 注意链字段叫 relation_chain（旧别名 ``relation_path`` 也认）；
-        - ``cold``：``payload["entries"] = [{"concept_id","name","degree","undervalued": bool,
-          "relations_to_hot": [{"relation_id","weak_points": 0|1|2,"weak_score": 0.5,...}]}]``，
-          ``undervalued is True``（或 ``relations_to_hot`` 里有 ``weak_points == 0`` 的）
-          即"冷门但连接强"；
-        - ``gaps``：``payload["candidate_gaps"] = [{"concept_ids": [...],
-          "related_relation_ids": [...], "positive_signals": [...], "reason": "...",
-          "confidence": "..."}]``。
-
-        字段名不符时退化为"就地找代号数组"，不会因为形状变化而抛异常 ——
-        C 与 D 是并行开发的，D 必须能容忍对方的小幅字段改名；容错的代价是
-        可能少提几个问题（可观测：报告的"候选提炼"一节会写明 skipped 原因）。
+        - ``hottest``：``payload["entries"] = [{"concept_id","name","occurrences","relation_count","group_count","degree","representative_relations":[...]}]``；
+        - ``paths``：``payload["paths"] = [{"concept_path": [...], "relation_chain": [...],"hops": N, "level": "high|medium|low", "score": 3.4, "score_breakdown": {...}}]``
+        —— 注意链字段叫 relation_chain（旧别名 ``relation_path`` 也认）；- ``cold``：
+        ``payload["entries"] = [{"concept_id","name","degree","undervalued": bool,"relations_to_hot": [{"relation_id","weak_points": 0|1|2,"weak_score": 0.5,...}]}]``，
+        ``undervalued is True``（或 ``relations_to_hot`` 里有 ``weak_points == 0`` 的）即"冷门但连接强"；- 
+        ``gaps``：``payload["candidate_gaps"] = [{"concept_ids": [...],"related_relation_ids": [...], "positive_signals": [...], "reason": "...","confidence": "..."}]``。
+        字段名不符时退化为"就地找代号数组"，不会因为形状变化而抛异常 ——C 与 D 是并行开发的，D 必须能容忍对方的小幅字段改名；容错的代价是可能少提几个问题（可观测：报告的
+        "候选提炼"一节会写明 skipped 原因）。
         """
         kind = str(report.get("kind") or "")
         payload = report.get("payload") or {}
@@ -576,37 +556,16 @@ class _Core:
         c_contradictions: Mapping[str, Any] | None = None,
     ) -> dict:
         """把"矛盾"转成 ``kind="contradiction"`` 的候选问题（I2 的入口）。
-
-        ## 三个来源，按"最直接优先"的顺序取（且每个来源都如实记账）
-
-        1. ``payload["contradictions"]`` —— C 报告里已经算出来的矛盾（最直接）；
-        2. 调用方通过 ``ingest(..., c_contradictions=...)`` 传进来的 I1 结果
-           （D 在研究某个问题时点的那次菜，可以顺手交给 ingest 吸收）；
-        3. 否则按报告自己引用的关系（范围有界）向 C 点一次菜。
-
-        第 3 条刻意不用 ``relation_ids=None`` 扫全图：那会在每份报告
-        ingest 时引入一个与本次分析无关的全局扫描，把无关矛盾灌进 D 的台账，
-        表现是"一份 hottest 报告忽然带来十几条矛盾问题"。
-
-        ## 只有 ``strength == "strong"`` 才建问题（这是一次真实缺陷的对策）
-
-        ``interactions.detect_contradictions`` 会给出 ``strength``：
-
-        - ``strong`` —— 一方明确断言肯定式、另一方明确断言对应的否定式
-          （"A 是 B" vs "A 不是 B"）⇒ 允许建 ``kind="contradiction"`` 问题并自动追问；
-        - ``weak`` —— 只是"否定标记出现与否不一致"（"不"/"not "）⇒ 假阳性极高
-          （实测 25 条真实关系里 weak 报了 24%，且没有一条是真矛盾）。
-          这一类只记成线索（``weak_clues`` + 落进相关问题的 notes + 报告），
-          绝不触发检索请求 —— 否则 D 会把 A 的产能烧在一堆假矛盾上，
-          而 I7 的配额本来就是为保护产能而设的。
-
-        报告里的 ``strength`` 可能缺失或来自旧版，因此不信任它：缺失时就地
-        用 ``interactions.detect_contradictions`` 对这两条关系重判一次（判据仍只有
-        一份）。关系行缺失、无法判定的，保守当线索处理。
-
-        返回 ``{"candidates", "source", "checked", "reason", "skipped", "raw_count",
-        "weak_clues"}``。``checked`` 是三态：``True`` 查过、``False`` 查了但失败、
-        ``None`` 没查（没接线 / 没有可推导的范围）—— 后两者必须能被分开读。
+        1. ``payload["contradictions"]`` —— C 报告里已经算出来的矛盾（最直接）； 2. 调用方通过 ``ingest(..., c_contradictions=...)`` 传进来的 I1 结果（D 
+        在研究某个问题时点的那次菜，可以顺手交给 ingest 吸收）；
+        第 3 条刻意不用 ``relation_ids=None`` 扫全图：那会在每份报告 ingest 时引入一个与本次分析无关的全局扫描，把无关矛盾灌进 D 的台账，表现是"一份 hottest 报告忽然带来十几条矛盾问题"。
+        只有 ``strength == "strong"`` 才建问题（这是一次真实缺陷的对策）``interactions.detect_contradictions`` 会给出 ``strength``：
+        - ``strong`` —— 一方明确断言肯定式、另一方明确断言对应的否定式（"A 是 B" vs "A 不是 B"）⇒ 允许建 ``kind="contradiction"`` 问题并自动追问；- ``weak`` —— 只是"
+        否定标记出现与否不一致"（"不"/"not "）⇒ 假阳性极高（实测 25 条真实关系里 weak 报了 24%，且没有一条是真矛盾）。这一类只记成线索（``weak_clues`` + 落进相关问题的 notes + 报告），绝不
+        触发检索请求 —— 否则 D 会把 A 的产能烧在一堆假矛盾上，而 I7 的配额本来就是为保护产能而设的。
+        报告里的 ``strength`` 可能缺失或来自旧版，因此不信任它：缺失时就地用 ``interactions.detect_contradictions`` 对这两条关系重判一次（判据仍只有一份）。
+        返回 ``{"candidates", "source", "checked", "reason", "skipped", "raw_count","weak_clues"}``。``checked`` 是三态：``True`` 查
+        过、``False`` 查了但失败、``None`` 没查（没接线 / 没有可推导的范围）—— 后两者必须能被分开读。
         """
         if not self.ingest_contradictions:
             return {"candidates": [], "source": "disabled", "checked": None,
@@ -911,18 +870,14 @@ class _Core:
         return False
     def _budget(self) -> dict:
         """请求预算（§8 待决问题 3）。
-
-        两道闸：每个问题最多 2 轮、全局最多 20 个请求。
-        没有预算的话，一个措辞有问题的判据就能让 D 对着同一个问题无限提问，
-        而 A 的队列是共享资源（别的智能体也在用）。
-
-        账本来自 :meth:`_d_requests`（含矛盾闭环那些带后缀的行 —— CS-3 的另一半）。
-        从前这里按 `== self.actor` 精确过滤，于是矛盾那一支提交的请求不被计入：
-        全局上限与"每问题 2 轮"都少算一整类，而 `submit_gaps` 用的正是这两个数。
-
-        返回里另附 `by_channel`：本角色提交的请求按通道分组（缺省通道 `gap` = 缺口那一支，
-        带后缀的按后缀名）。它是纯读数，不参与任何判定 —— 存在的理由是"总额少了/多了"这句话
-        必须能一眼看出是哪条通道贡献的。
+        
+        两道闸：每个问题最多 2 轮、全局最多 20 个请求。没有预算的话，一个措辞有问题的判据就能让 D 对着同一个问题无限提问，而 A 的队列是共享资源（别的智能体也在用）。
+        
+        账本来自 :meth:`_d_requests`（含矛盾闭环那些带后缀的行 —— CS-3 的另一半）。从前这里按 `== self.actor` 精确过滤，于是矛盾那一支
+        提交的请求不被计入：全局上限与"每问题 2 轮"都少算一整类，而 `submit_gaps` 用的正是这两个数。
+        
+        返回里另附 `by_channel`：本角色提交的请求按通道分组（缺省通道 `gap` = 缺口那一支，带后缀的按后缀名）。它是纯读数，不参与任何判定 —— 存在的理由是"
+        总额少了/多了"这句话必须能一眼看出是哪条通道贡献的。
         """
         mine = self._d_requests()
         per_q: dict[str, int] = {}
@@ -954,27 +909,16 @@ class _Core:
         }
     def _d_requests(self) -> list[dict]:
         """本角色提交过的全部检索请求行（含带通道后缀的那些）。
-
-        这本账只此一处：`_budget` 与 `_contradiction_budget` 都从这里取。
-        从前两处各读一次 `search_requests`、按各自的口径过滤 ⇒ 同一件事有两套计数（CS-3）。
-
+        这本账只此一处：`_budget` 与 `_contradiction_budget` 都从这里取。从前两处各读一次 `search_requests`、按各自的口径过滤 ⇒ 同一件事有两套计数（CS-3）。
         ## 为什么必须认后缀（CS-3 的另一半）
-
-        矛盾闭环提交的行写的是 `submitted_by="agent-D:contradiction"`
-        （`agent_d/adjudicate.py` 写行那一处）。那个后缀是有意的：
-        `interactions.resolve_priority` 按它把优先级分成 high 与 medium 两档，
-        `schema.SUBMITTER_DEFAULT_PRIORITY` 里也是两个独立的键。
-        而旧的过滤是 `== self.actor` 的精确比较 ⇒ 矛盾那一支提交的请求一条都不进这本账：
-        全局上限（缺省 20）少算一整类请求，"每个问题最多 2 轮"也看不见它们 ——
-        而这两道闸门管的是共享资源（A 的产能），少算的方向恰好是"闸门看起来在、实际更松"。
-
+        矛盾闭环提交的行写的是 `submitted_by="agent-D:contradiction"`（`agent_d/adjudicate.py` 写行那一处）。那个后缀是有意的：
+        `interactions.resolve_priority` 按它把优先级分成 high 与 medium 两档，`schema.SUBMITTER_DEFAULT_PRIORITY` 里也是两
+        个独立的键。而旧的过滤是 `== self.actor` 的精确比较 ⇒ 矛盾那一支提交的请求一条都不进这本账：全局上限（缺省 20）少算一整类请求，"每个问题最多 2 轮"也看不见它们 ——而这
+        两道闸门管的是共享资源（A 的产能），少算的方向恰好是"闸门看起来在、实际更松"。
         ## 为什么只认冒号后缀，不认"以 actor 开头"
-
-        本仓的通道后缀用冒号（`agent-D:contradiction` 是登记过的键），
-        实例后缀用连字符（`agent-A-egr` 那种，见 `draft/108` 四·CS-15）。
-        `startswith(actor)` 会把 `agent-D2` 这类别的实例一起吞进来；
-        `startswith(actor + "-")` 会把实例轴也拉进这本账 —— 那是 CS-15 要裁的政策，
-        不该在这里顺手决定。所以只认冒号。
+        本仓的通道后缀用冒号（`agent-D:contradiction` 是登记过的键），实例后缀用连字符（`agent-A-egr` 那种，见 `draft/108` 四·CS-15）。
+        `startswith(actor)` 会把 `agent-D2` 这类别的实例一起吞进来；`startswith(actor + "-")` 会把实例轴也拉进这本账 —— 那是 CS-15 要裁
+        的政策，不该在这里顺手决定。所以只认冒号。
         """
         prefix = f"{self.actor}:"
         return [
@@ -1049,24 +993,15 @@ class _Core:
         return str(row["priority"])
     def _contradiction_budget(self) -> dict:
         """全局矛盾检索配额（I2 的硬上限之一）。
-
-        统计口径：所有 ``kind="contradiction"`` 问题的 ``contradiction_request_ids``
-        之和 —— 不是"本轮提交了几条"，也不是"还在途几条"。只有用"历史上提交过
-        几条"才能保证这个循环一定在有限步内停下来；用"在途条数"会在请求完成
-        之后重新腾出配额，循环又活了（这正是"看起来有闸门、实际没有"的形态）。
-
+        统计口径：所有 ``kind="contradiction"`` 问题的 ``contradiction_request_ids``之和 —— 不是"本轮提交了几条"，也不
+        是"还在途几条"。只有用"历史上提交过几条"才能保证这个循环一定在有限步内停下来；用"在途条数"会在请求完成之后重新腾出配额，循环又活了（这正是"看起来有闸门、实际没有"的
+        形态）。
         ## 读侧对账（CS-3 的另一半）
-
-        上面那本账记在问题行上（`contradiction_request_ids`），而请求行自己只记
-        `submitted_by`。两者今天由 `adjudicate` 在同一笔事务里一起写 ⇒ 必然一致，
-        但没有任何判据守这件事：一次手工补行、一次中途失败的迁移、或将来某条新路径
-        只写一边，都会让"配额统计"与"盘上到底有几条"悄悄分家，而两边的读数看起来都正常。
-        所以这里把另一个方向也数出来（:meth:`_d_requests` 里挂在矛盾问题上的那些行）：
-
-        - `used`      —— 问题行上的台账口径（判定用，不变）；
-        - `by_rows`   —— 请求行口径：本角色提交的、`for_question_id` 指向矛盾问题的行数；
-        - `reconciled` —— 两者相等。不许把它当成"配额是否用完"的判据（那是 `exhausted`），
-          它只回答"这两本账今天对不对得上"。
+        上面那本账记在问题行上（`contradiction_request_ids`），而请求行自己只记`submitted_by`。两者今天由 `adjudicate` 在同一
+        笔事务里一起写 ⇒ 必然一致，但没有任何判据守这件事：一次手工补行、一次中途失败的迁移、或将来某条新路径只写一边，都会让"配额统计"与"盘上到底有几条"悄悄分家，而两边的读
+        数看起来都正常。所以这里把另一个方向也数出来（:meth:`_d_requests` 里挂在矛盾问题上的那些行）：
+        - `used`      —— 问题行上的台账口径（判定用，不变）；- `by_rows`   —— 请求行口径：本角色提交的、`for_question_id` 指向矛
+        盾问题的行数；- `reconciled` —— 两者相等。不许把它当成"配额是否用完"的判据（那是 `exhausted`），它只回答"这两本账今天对不对得上"。
         """
         rows = self.store.rows("research_questions")
         contradiction_qids = {
@@ -1089,18 +1024,15 @@ class _Core:
         }
     def _contradiction_scope(self, rel_ids: Sequence[str]) -> list[dict]:
         """同一概念组的全部关系（重新从表里读，I2 要求"复核"而不是"回忆"）。
-
-        为什么范围是"同概念组"而不是"那两条关系本身"：裁决要判的是
-        "这一对是否还对立"，而对立的判据（``detect_contradictions``）本来就只在
-        同概念组内成立；把同组关系全带上，才能同时发现新冒出来的矛盾对 ——
-        ``new_contradiction`` 这一支的全部输入都来自这里。
-
-        这里给每行补 ``concept_pair_key`` 是为了 D 侧读起来一致：
-        `interactions.detect_contradictions` 已改成缺字段时就地推导，
-        所以它不再是正确性的前提（早先漏补这个键会让矛盾检测静默返回空）。
-
-        两条关系都已经不在表里（被删/被合并）时返回 ``[]``：那是"争议双方都已消失"
-        的证据，``adjudicate_contradiction`` 会据此判 ``side_removed``。
+        
+        为什么范围是"同概念组"而不是"那两条关系本身"：裁决要判的是"这一对是否还对立"，而对立的判据（``detect_contradictions``）本来就只在同概念组内成
+        立；把同组关系全带上，才能同时发现新冒出来的矛盾对 ——``new_contradiction`` 这一支的全部输入都来自这里。
+        
+        这里给每行补 ``concept_pair_key`` 是为了 D 侧读起来一致：`interactions.detect_contradictions` 已改成缺字段时就
+        地推导，所以它不再是正确性的前提（早先漏补这个键会让矛盾检测静默返回空）。
+        
+        两条关系都已经不在表里（被删/被合并）时返回 ``[]``：那是"争议双方都已消失"的证据，``adjudicate_contradiction`` 会据此判 
+        ``side_removed``。
         """
         rows = self.store.rows("relations")
         keys: set[str] = set()
@@ -1240,19 +1172,16 @@ class _Core:
         ]
     def _compose(self, ev: dict, verdict: dict) -> tuple[str, str, list[str], bool]:
         """产出（初步分析, 结论, 后续建议, 是否用了 LLM）。
-
-        确定性回退（``llm=None``）是基线而非残次品：它逐条罗列可核实的证据
-        （命中数、度数、quote_verified 分布、矛盾对），措辞朴素但每一句都能被
-        回到表里核对。LLM 只被允许在这之上"写得更通顺"，且结论必须能回指证据。
-
+        
+        确定性回退（``llm=None``）是基线而非残次品：它逐条罗列可核实的证据（命中数、度数、quote_verified 分布、矛盾对），措辞朴素但每一句都能被回到表里核
+        对。LLM 只被允许在这之上"写得更通顺"，且结论必须能回指证据。
+        
         ## 三态（`R1-A1`：`llm_used=False` 不许再折叠"没接线"与"接了但失败"）
-
+        
         这一次调用落在 :attr:`last_llm_reading` 里（`{kind, state, reason, model, calls}`，
-        `state ∈ {not_wired, used, failed, unknown_object}`）：
-        `False` 只是"这一趟的结论不是模型给的"，而为什么由这一格回答。
-        `except` 保留（LLM 失败绝不能打断循环），但它现在会把失败如实记进读数
-        而不是只丢一条 `last_tool_errors` —— 接口错（例如给了一个既没有 `ask_json`
-        也没有 `complete` 的对象）因此不再伪装成"没接线"。
+        `state ∈ {not_wired, used, failed, unknown_object}`）：`False` 只是"这一趟的结论不是模型给的"，而为什么由这一格
+        回答。`except` 保留（LLM 失败绝不能打断循环），但它现在会把失败如实记进读数而不是只丢一条 `last_tool_errors` —— 接口错（例如给了一个既没
+        有 `ask_json`也没有 `complete` 的对象）因此不再伪装成"没接线"。
         """
         self.last_llm_reading = {"kind": KIND_NONE, "state": STATE_NOT_WIRED,
                                  "reason": "没有接线（llm is None）", "model": "", "calls": 0}
@@ -1339,21 +1268,15 @@ class _Core:
 
     def _llm_refine(self, ev: dict, verdict: dict) -> tuple[dict | None, dict]:
         """LLM 钩子：把证据包写成更通顺的分析。返回 `(payload, reading)`。
-
-        硬规则（写在提示词里、也在代码里强制）：
-        - 只能引用证据包中出现过的 ``relation_id`` / ``quote``，不得引入新事实
-          （:func:`invented_facts` 现算，发现新事实就整份丢弃这次精修）；
-        - 置信度只能等于或低于确定性算出的那一档（``_rank_min``）——
-          这条在代码里兜底，不依赖模型守规矩。
-
+        硬规则（写在提示词里、也在代码里强制）：- 只能引用证据包中出现过的 ``relation_id`` / ``quote``，不得引入新事实（:func:
+        `invented_facts` 现算，发现新事实就整份丢弃这次精修）；- 置信度只能等于或低于确定性算出的那一档（``_rank_min``）——这条在代码里兜底，不依赖
+        模型守规矩。
         ## 模型对象只认两类，判据只有一处（`R1-A1`）
-
-        走 :func:`model_json_call`（`agent_d/_support.py`）：标准缝用它的真 API
-        `ask_json`，裸 client 走 `.complete`，两条路共用同一个 JSON 解析口径与同一个
-        三态读数。这里不再有 `hasattr(llm, "complete")` 那种猜法 ——
-        改前那一行是 `self.llm.complete(prompt) if hasattr(...) else self.llm(prompt)`，
-        而 `LlmSeam` 既没有 `complete` 也不可调用 ⇒ 拿到标准缝必然抛
-        `TypeError: 'LlmSeam' object is not callable`（读数：`temp/_r1a1_status_probe.py`）。
+        走 :func:`model_json_call`（`agent_d/_support.py`）：标准缝用它的真 API`ask_json`，裸 client 走 
+        `.complete`，两条路共用同一个 JSON 解析口径与同一个三态读数。这里不再有 `hasattr(llm, "complete")` 那种猜法 ——改前那一行是 
+        `self.llm.complete(prompt) if hasattr(...) else self.llm(prompt)`，而 `LlmSeam` 既没有 
+        `complete` 也不可调用 ⇒ 拿到标准缝必然抛`TypeError: 'LlmSeam' object is not callable`（读数：
+        `temp/_r1a1_status_probe.py`）。
         """
         prompt = json.dumps(
             {

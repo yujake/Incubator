@@ -59,7 +59,7 @@ from .base import SIDE_EFFECTS as _BASE_SIDE_EFFECTS
 #: 智能体角色。顺序无关，但保持稳定便于日志可比。
 #: A/B/C/D 是最初的文献流水线；E/F/G/H 是面向"数学研究"补上的四个角色（E 数值实验与形式化验证 / F 多轮
 #: 难题攻坚 / G 论文撰写 / H 审校），它们与 A–D 一样遵循"角色即权限面"：H 只读、C 只读，是为了让"改稿的
-#: 人"与"审稿的人"在结构上不能是同一个人。⚠️ 单一来源：角色名单定义在 `schema.ROLES`，这里只是把它引过来。
+#: 人"与"审稿的人"在结构上不能是同一个人。单一来源：角色名单定义在 `schema.ROLES`，这里只是把它引过来。
 #: 为什么不能各写一份：`schema` 需要"role 是否合法"的判据（`Task.validate`），而 `tools` 需要"按角色过滤工具
 #: 面"；两处各写一份就会出现"schema 认为合法的角色，工具层不认"这种没有报错的分裂 —— 这正是 FC-03（跨模块
 #: 字符串约定必须集中定义）要防的事。`schema` 不 import `tools`（依赖方向是 tools -> schema），所以没有循环。
@@ -193,22 +193,14 @@ def _check_param_seams_are_registered(
     groups: tuple[str, ...] = _TOOL_GROUP_PREFIXES,
 ) -> None:
     """导入期交叉断言：参数接缝表的键与理由必须是可用的（台账 `N-5` 的工具侧）。
-
     三条，缺一条就留下一个静默方向：
-
-    1. 键必须是 `组.动作` 形态，且组前缀由 `_MODULES` 里某个模块产出
-       —— 拼错的键会让那条接缝永远不命中（"登记了"与"生效了"是两件事）；
-    2. 理由串必须非空 —— 缺理由的登记与没登记在证据上一样（"写不出理由的，
-       就该改代码而不是加例外"，与 `READONLY_CALL_EXCEPTIONS` 的纪律同族）；
-    3. 一个键下的 property 名必须非空字符串。
-
-    为什么落点在导入期而不是等 `ToolRegistry.register`：`register` 只知道
-    "某个工具注册了"，看不见"接缝表里有没有指着空气的键"（工具模块是
-    `build_registry` 惰性 import 的，导入本模块时树上一个 `ToolSpec` 都还没有）。
-    参数「面」的判据在注册期（`base.check_param_seams`），接缝「表」的判据在这里。
-
-    两个形参只为让判据能被单独喂表（负控与单元测试用）；真正跑的那一次
-    在下面用默认值调用，读的就是真表。
+    1. 键必须是 `组.动作` 形态，且组前缀由 `_MODULES` 里某个模块产出—— 拼错的键会让那条接缝永远不命中（"登记了"与"生效了"是两件事）； 2. 理由串必
+    须非空 —— 缺理由的登记与没登记在证据上一样（"写不出理由的，就该改代码而不是加例外"，与 `READONLY_CALL_EXCEPTIONS` 的纪律同族）； 3. 一
+    个键下的 property 名必须非空字符串。
+    为什么落点在导入期而不是等 `ToolRegistry.register`：`register` 只知道"某个工具注册了"，看不见"接缝表里有没有指着空气的键"（工具模块是
+    `build_registry` 惰性 import 的，导入本模块时树上一个 `ToolSpec` 都还没有）。参数「面」的判据在注册期（`base.check_param_seams`），
+    接缝「表」的判据在这里。
+    两个形参只为让判据能被单独喂表（负控与单元测试用）；真正跑的那一次在下面用默认值调用，读的就是真表。
     """
     bad_shape = sorted(k for k in seams if not isinstance(k, str) or "." not in k)
     assert not bad_shape, (
@@ -339,26 +331,16 @@ def build_registry(
     sid: str | None = None,
 ) -> RegistryBuild:
     """组装工具层。
-
-    参数
-    ----
-    store : Store | None
-        数据表工具必需；为 None 时相关模块会被跳过（并记录原因）。
-    workspace_root : Path | None
-        文件工具的工作区根（沙箱边界）。为 None 时用 `<store.root>`。
-    graph : RelationGraph | None
-        C 的图对象；为 None 时 `graph_tools` 的只读查询类工具仍可注册（它们可自行构建）。
-    strict : bool
-        为 True 时，任何模块跳过都抛异常 —— 供验收脚本使用，防止"少了一半工具还以为装好了"。
-    session_root, sid : 会话身份（`draft/37` §63，修法 B）
-        这一趟运行「是谁」：会话记录的根与这一趟的会话号。装配期注入，工具层不替它猜。
-        为什么必须是装配期输入：真机实测第 11 趟（`sessions/real11.jsonl`）主控在运行内
-        调 `conductor.closing` 得到 `can_close: true`，而同一次运行外部带 `sid=real11`
-        的读数报 `failed: ['user_pending']` —— 工具体当时按 `sid=None` 读到了缺省会话
-        `sessions/<今天>.jsonl`，于是"问了还没答"被读成"没问过"。「假绿」，
-        且它只在运行内出现，外面怎么看都是对的。
-        `sid` 不给 ⇒ 传下去的是 `closing.NO_SESSION` ⇒ 那一格记 `unknown`
-        （不是 pass，也不回落成"读今天那份"：三态纪律）。
+    
+    参数----store : Store | None 数据表工具必需；为 None 时相关模块会被跳过（并记录原因）。
+    workspace_root : Path | None 文件工具的工作区根（沙箱边界）。为 None 时用 `<store.root>`。
+    graph : RelationGraph | None C 的图对象；为 None 时 `graph_tools` 的只读查询类工具仍可注册（它们可自行构建）。
+    strict : bool 为 True 时，任何模块跳过都抛异常 —— 供验收脚本使用，防止"少了一半工具还以为装好了"。 session_root, sid : 会话身
+    份（`draft/37` §63，修法 B）这一趟运行「是谁」：会话记录的根与这一趟的会话号。装配期注入，工具层不替它猜。为什么必须是装配期输入：真机实测第 11 趟（`sessions/real11.jsonl`）
+    主控在运行内调 `conductor.closing` 得到 `can_close: true`，而同一次运行外部带 `sid=real11`的读数报 
+    `failed: ['user_pending']` —— 工具体当时按 `sid=None` 读到了缺省会话`sessions/<今天>.jsonl`，于是"问了还没答"
+    被读成"没问过"。「假绿」，且它只在运行内出现，外面怎么看都是对的。`sid` 不给 ⇒ 传下去的是 `closing.NO_SESSION` ⇒ 那一格记 
+    `unknown`（不是 pass，也不回落成"读今天那份"：三态纪律）。
     """
     reg = ToolRegistry(name=name)
 
@@ -384,7 +366,7 @@ def build_registry(
     root = Path(workspace_root) if workspace_root else (Path(store.root) if store is not None else None)
     # spill 要有地方落：默认落在工作区根下的 `spill/`。没有这一句，
     # `default_budget` 生效时剪枝后的内容想落盘却没有 root（spill 那一件套走不到）。
-    # ⚠️ 必须放在 `root` 算出来之后 —— 先写的版本把它放在 `root = ...` 之前，
+    # 必须放在 `root` 算出来之后 —— 先写的版本把它放在 `root = ...` 之前，
     # 于是 `UnboundLocalError`。好在那是装配期就暴露的失败，不是潜伏到某次调用。
     reg.default_spill_root = root
     deps: dict[str, Any] = {
@@ -424,7 +406,7 @@ def build_registry(
         else:
             loaded.append(mod_name)
 
-    # ⚠️ 断言所有工具声明的角色都在 ROLES 里。
+    # 断言所有工具声明的角色都在 ROLES 里。
     #
     # 为什么必须有这一句：`roles` 是跨模块的字符串约定。曾经 `research_tools` 写的是
     # `roles=("agent-D",)` 而全项目其余地方按 `"D"` 过滤 —— 结果是
@@ -447,7 +429,7 @@ def build_registry(
             raise ToolError(msg)
         skipped.append({"module": "<roles>", "stage": "validate", "error": msg})
 
-    # ⚠️ 遗留取值 `network` 的装配期翻译检查已随 B3 收官删除。
+    # 遗留取值 `network` 的装配期翻译检查已随 B3 收官删除。
     #
     # 它曾经在这里做什么：`side_effect="network"` 的逐工具原意（它到底写不写
     # 我们的东西）写在 `base.LEGACY_EFFECTS_BY_TOOL` 里，而新加一个声明了

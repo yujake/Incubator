@@ -1,36 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """核对 `docs/ROLE-SPECS.md` 的结构完整性：A–H 八角色 + 主控 M，每节 8 个必备子节。
-
 ## 为什么这件事需要一道门，而不是"写文档时注意一下"
-
-用户对正式版的要求之一是"为 A–H 八个角色各写详细规格说明书"，并逐字点名了小节：
-职责 / 明确不负责 / 逐个工具的契约 / 状态机 / 预算与终止 / 三态与失败模式 / 不变式 / 接口。
-
-一份 2000+ 行的规格最容易的坏法不是写错，而是写漏：新增一个角色（或重构某节）时
-少写"明确不负责"或"不变式"，没有任何东西会变红 —— 文档不会报错，
-而读者会以为"这一节大概没有那些内容"。
+用户对正式版的要求之一是"为 A–H 八个角色各写详细规格说明书"，并逐字点名了小节：职责 / 明确不负责 / 逐个工具的契约 / 状态机 / 预算与终止 / 三态与失败模式 / 不变式 / 接口。
+一份 2000+ 行的规格最容易的坏法不是写错，而是写漏：新增一个角色（或重构某节）时少写"明确不负责"或"不变式"，没有任何东西会变红 —— 文档不会报错，而读者会以为"这一节大概没有那些内容"。
 "没写"与"写了但没有"必须能区分，这是本项目三态纪律在文档上的同一条要求。
-
 ## 判据（机械、可复跑）
-
 - 角色节：`^##\\s+([A-HMm])\\s*(——|--|·)?\\s*(.*)$` —— 恰好 9 个（A–H + M）。
 - 子节：`^###\\s+<角色>\\.(\\d+)\\s+(.*)$` —— 每个角色节下必须能匹配到
-  `REQUIRED` 里每一项的关键词（措辞允许出入，所以用关键词而不是精确标题）。
+`REQUIRED` 里每一项的关键词（措辞允许出入，所以用关键词而不是精确标题）。
 - 工具契约那一项额外要求：子节标题里必须能读出一个工具条数（实测数字），
-  因为"逐个工具的契约"这句话如果没有数字，就无法与 `cli tools` 的普查对账。
-
+因为"逐个工具的契约"这句话如果没有数字，就无法与 `cli tools` 的普查对账。
 ## 退出码（三档，不许只有"没报错"）
-
 - ``0`` —— 结构完整。
 - ``1`` —— 查过了，有缺失（哪一节缺哪一项，逐条打印）。
 - ``2`` —— 没查成（文档不存在 / 读不到 / 一个角色节都没匹配到）。
-  `2` 绝不是 `0`：文档被改名或路径写错时，脚本不能"因为什么都没读到所以通过"。
-
-用法：
-    python tools/verify_role_specs.py
-    python tools/verify_role_specs.py --json
-    python tools/verify_role_specs.py --roles N,O,Q --doc docs/ROLE-SPECS-DRAFT-N-O-Q.md
+`2` 绝不是 `0`：文档被改名或路径写错时，脚本不能"因为什么都没读到所以通过"。
+用法：python tools/verify_role_specs.py python tools/verify_role_specs.py --json python tools/verify_role_specs.py
+--roles N,O,Q --doc docs/ROLE-SPECS-DRAFT-N-O-Q.md
 """
 
 from __future__ import annotations
@@ -67,20 +54,16 @@ DEFAULT_ROLES: tuple[str, ...] | None = None
 
 
 def role_letters(roles: tuple[str, ...] | None = None) -> tuple[str, ...]:
-    """把角色集合解析为单个大写字母序列。
+    """    把角色集合解析为单个大写字母序列。
 
     ── 为什么必须给本门一个"角色集合可传参"的入口（FC-27 外的真实缺口）──
 
-    判据 `^##\\s+([A-HMm])` 把角色集合写死成 A–H + M。于是新增一个角色
-    （本轮草稿里的 N/O/Q）并写进新文档之后，本门在那份文档上匹配不到任何角色节，
-    报的是 `unknown`（"没查成"）—— 这是对的；但若那份草稿被改名成
-    `docs/ROLE-SPECS.md`，门会拿旧的角色集合去查它，多出来的 N/O/Q 节
-    被 `_ROLE_PAT` 直接忽略，于是门看不见它们：不报错 = 假通过。
+    判据 `^##\\s+([A-HMm])` 把角色集合写死成 A–H + M。于是新增一个角色（本轮草稿里的 N/O/Q）并写进新文档之后，本门在那份文档上匹配不到任何角色节，报的是 `unknown`（"没查成"）——
+    这是对的；但若那份草稿被改名成`docs/ROLE-SPECS.md`，门会拿旧的角色集合去查它，多出来的 N/O/Q 节被 `_ROLE_PAT` 直接忽略，于是门看不见它们：不报错 = 假通过。
 
     所以 `--roles` 让调用方把"这份文档应当有哪些角色节"说出来；不说时行为与原版相同。
 
-    非法输入一律抛 `ValueError` 而不是静默回落到默认集合 ——
-    后者会让 `--roles N;O;Q`（打错一个分隔符）变成一次"检查了别的东西"的假绿。
+    非法输入一律抛 `ValueError` 而不是静默回落到默认集合 ——后者会让 `--roles N;O;Q`（打错一个分隔符）变成一次"检查了别的东西"的假绿。
     """
     if roles is None:
         return tuple(EXPECTED_ROLES)
@@ -119,22 +102,14 @@ def project_root(start: Path | None = None) -> Path:
 
 
 def live_tool_counts(*, root: Path) -> tuple[dict[str, int] | None, str]:
-    """真的装配一次注册表，返回 `({角色: 工具数}, "")`；取不到时返回 `(None, 原因)`。
-
+    """    真的装配一次注册表，返回 `({角色: 工具数}, "")`；取不到时返回 `(None, 原因)`。
     ## `H-8`：这道门此前从来没有做过它自己声称的那个对账
-
-    实测（`draft/28` 的 `H-8`）：把副本里 `§D 工具面（37 个，实测）` 改成 `999 个`、
-    `§H 工具面（22 个，实测）` 改成 `1 个`，本门照样 `[OK] … 工具条数 [37]`
-    / `[OK] … 工具条数 [1]`、退出码 0。旧实现只检查"标题里能不能读出一个数字"，
-    而 `docs/INDEX.md:16` 与 `DEVELOPMENT.md:1119` 逐字声称
-    "文档每节标题里的工具条数必须等于真的跑一次 `python -m agentflow.cli tools` 得到的数字"。
-
+    实测（`draft/28` 的 `H-8`）：把副本里 `§D 工具面（37 个，实测）` 改成 `999 个`、`§H 工具面（22 个，实测）` 改成 `1 个`，本门照样 `[OK] … 工具条数 [37]`/
+    `[OK] … 工具条数 [1]`、退出码 0。旧实现只检查"标题里能不能读出一个数字"，而 `docs/INDEX.md:16` 与
+    `DEVELOPMENT.md:1119` 逐字声称"文档每节标题里的工具条数必须等于真的跑一次 `python -m agentflow.cli tools` 得到的数字"。
     ## 三态（与 `axes-3` 同一条纪律）
-
     - 包 import 不进来 ⇒ `unknown`（返回 `(None, 原因)`）⇒ 调用方不许判 pass。
-      这是刻意保留的：本脚本在"包烂到 import 不了"时仍然要能跑（那正是最需要它的时候），
-      所以对账只在函数内部按需 import，不 import 顶层的 `agentflow`，
-      失败时如实报"没查成"。
+    这是刻意保留的：本脚本在"包烂到 import 不了"时仍然要能跑（那正是最需要它的时候），所以对账只在函数内部按需 import，不 import 顶层的 `agentflow`，失败时如实报"没查成"。
     - 角色数一致 ⇒ 逐角色比对标题里的数字。
     """
     try:
@@ -158,18 +133,15 @@ def live_tool_counts(*, root: Path) -> tuple[dict[str, int] | None, str]:
 
 
 def live_roles(*, root: Path) -> tuple[tuple[str, ...] | None, str]:
-    """真的 import 一次包，返回 `(现场角色集合, 原因)`；取不到时 `(None, 原因)`。
+    """    真的 import 一次包，返回 `(现场角色集合, 原因)`；取不到时 `(None, 原因)`。
 
     ## `R6-6`（工具侧）：这份对账此前只在 pytest 里做过
 
-    门里那份 `EXPECTED_ROLES` 与现场角色名单（`tools.ROLES` + `schema.CONDUCTOR_ROLE`）
-    之间原本没有任何导入期/跑门期的判据 —— `tests/test_role_specs_complete.py`
-    里那条交叉断言只在跑 pytest 时红。于是"现场加了角色而门里的表没跟上"这件事
-    在跑门的时候是看不见的：门会继续用一个已经不存在的角色集合判"结构完整"。
-    这里把它搬进门本身（`check()` 拿到现场集合就当场比）。
+    门里那份 `EXPECTED_ROLES` 与现场角色名单（`tools.ROLES` + `schema.CONDUCTOR_ROLE`）之间原本没有任何导入期/跑门期的判据 ——
+    `tests/test_role_specs_complete.py`里那条交叉断言只在跑 pytest 时红。于是"现场加了角色而门里的表没跟上"这件事在跑门的时候是看不见的：
+    门会继续用一个已经不存在的角色集合判"结构完整"。这里把它搬进门本身（`check()` 拿到现场集合就当场比）。
 
-    三态：import 不进来 ⇒ `(None, 原因)`，调用方按 `unknown` 处理 ——
-    绝不判 pass（"没查成"不是"结构完整"）。
+    三态：import 不进来 ⇒ `(None, 原因)`，调用方按 `unknown` 处理 ——绝不判 pass（"没查成"不是"结构完整"）。
     """
     try:
         sys.path.insert(0, str(root / "src"))
@@ -184,18 +156,15 @@ def check(doc: Path, *, roles: tuple[str, ...] | None = None,
           live_counts: dict[str, int] | None = None,
           live_reason: str = "",
           live_role_list: tuple[str, ...] | None = None) -> dict:
-    """返回结构化结果。`verdict` ∈ ``ok`` / ``incomplete`` / ``unknown``。
+    """    返回结构化结果。`verdict` ∈ ``ok`` / ``incomplete`` / ``unknown``。
 
     `roles=None` 时用 `EXPECTED_ROLES`（默认行为与原版相同）；给了就用它当判据。
 
-    `live_counts`（`H-8`）是"真的装配一次注册表"得到的 `{角色: 工具数}`。
-    不给时不做那一步对账，并在 `verdict` 上体现为 `unknown`（如果调用方要求对账）——
-    见 `main` 的 `--no-live`。
+    `live_counts`（`H-8`）是"真的装配一次注册表"得到的 `{角色: 工具数}`。不给时不做那一步对账，并在 `verdict` 上体现为 `unknown`（如果调用方要求对账）——见 `main` 的
+    `--no-live`。
 
-    `live_role_list`（`R6-6` 工具侧）是现场角色集合（`tools.ROLES` +
-    `schema.CONDUCTOR_ROLE`）。给了就与门里那份 `EXPECTED_ROLES` 当场比 ——
-    不一致 ⇒ `incomplete`（不是 `unknown`：这是"查过了、不一致"，
-    与"没查成"是两件事）。不给则不判（`check()` 的离线调用形态不变）。
+    `live_role_list`（`R6-6` 工具侧）是现场角色集合（`tools.ROLES` +`schema.CONDUCTOR_ROLE`）。给了就与门里那份 `EXPECTED_ROLES` 当场比 ——不一致
+    ⇒ `incomplete`（不是 `unknown`：这是"查过了、不一致"，与"没查成"是两件事）。不给则不判（`check()` 的离线调用形态不变）。
     """
     try:
         letters = role_letters(roles)

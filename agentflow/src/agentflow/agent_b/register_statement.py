@@ -1,83 +1,32 @@
 """角色 B 的动作 `register_statement`（`draft/37` §46）：把一条命题登记进命题台账。
-
-## 为什么需要这个动作
-
-§44.4 的真机读数把"审阅并 polish 一篇外部论文"这条链的堵点定在动作表上：
-主控只能 `conductor.summon` 动作，而"把论文里的定理登记成 `statements` 行"原先只有
-工具（`table.create`，A–D 都能调）—— `agent_b/` 里 `statements` 一个字都没有，
-所以即使 A 把文集登记好了（§46 的另一个动作），命题台账仍然建不起来，
-G 就没有可引的 `lit:`/命题依据，H 也没有可审的对象。
-
-B 的边界里本来就写着"命题台账三件套缺一不可"（完整假设的正文 / 逐字证明摘录 / 出处），
-这个动作就是那句话的执行面。
-
-## 三个"必填"与它们各自防的是什么
-
-1. `statement_full`（含完整假设的命题正文）：省掉假设的命题会被下游当成无条件成立
-   —— 那是 FC-23 在命题级的同一种病；
-2. `proof_text`（逐字摘录）：`quote_verified` 的比对对象就是它，没有它"引文回验"无从做起；
-3. `source_lit_id`（`origin="external_lit"` 时）：出处必须真的存在 —— 本动作在写库前
- 核一次 `literature` 表，引用一个不存在的 `lit_id` 直接拒（`kind="unknown_lit_id"`），
-   与 `doc.build_document` 的 `check_citations` 同一条纪律：坏引用不许进库。
-
-## 第四个必填：出处（按来源分档，`draft/37` §68）
-
-`external_lit` 的命题要给非空的 `page_range`（`start` 或 `label` 至少一个）；
-`own_result` 的命题要给 `doc_id` 或非空的 `line_range`（`start` / `label`）。
-为什么不是"有这一栏就行"：第十三趟主控传的是 `{"start": null, "end": null}` ——
-形状在场、内容是空的 —— 六条命题因此都落成了"看着有出处、其实没有"的行，
-而审稿判据当场判它们缺页码，整条验收不及格。
-为什么按来源分档（人裁的甲档）：从文献里摘的命题才有"第几页"这件事，
-自有结果的出处是 `doc_id`/`line_range` —— 对后者要页码等于让它编一个数字。
-写入口与 `reviewaccept._c_statements` 逐条对齐。
-
-`quote_verified` 是三态：`True` 逐字通过 / `False` 比对不一致 / `None` 还没查。
-只要不是 `True` 就必须给 `quote_reason`（包括"还没查"），这条由 `Statement.validate()`
-与这里的预检双保险 —— 预检存在的理由是把 `kind` 说清楚（调用方要能分辨"参数不对"
-与"还没查"）。
-
-## 第五、第六个必填：逐字证明与 ID 形态（`draft/37` §87）
-
-上面那句"双保险"原先只保了一半：`origin="own_result"` 缺 `proof_text`、以及
-`doc_id`/`source_lit_id` 形态不对（写成 `"doc:0000"`），都只由 `Statement.validate()`
-抛 `ValueError` —— 而它抛在事务里，调用方拿到的是一个异常，不是一条带 `kind` 的
-拒绝。T1 第 2 趟真机读数：这一动作被召唤 14 次，6 次落"执行中异常"（就是这一路），
-另外 8 次返回了 `ok=False` 却被台账记成 `outcome=ok` —— 两种形态都不像"拒绝"。
-
-于是这里补齐两级预检：`missing_proof_text` 与 `bad_id`。
-纪律与其余几级相同：要求写进模型看得见的形状（`specs/b.py`），也在写入口拦下并命名。
-`Statement.validate()` 仍然是第二道保险（它保的是"绕开本动作的写库路径"）。
-
-## 第七件：拒绝要自报"这是一次拒绝"（`draft/37` §88 的根因）
-
-返回 `ok=False` 还不够。主控的终态映射原先只看"handler 有没有返回 dict"，
-于是这一动作的 10 种拒绝全被记成 `outcome=ok` —— T1 第 2 趟真机：8 次拒绝
-在台账上长得像 8 次成功，而 `statements` 是 0 行，整条链在这里静默停住。
-
-所以下面每条拒绝都走 :func:`agentflow.refusals.refuse`：它带上受控的 `refusal_reason`
-（`invalid_params` —— 词表的定义正是"参数/前置条件不满足：这次调用本身不成立"）。
-不这么写的话，终态只能落 `failed`（"执行了、没成功"），那会把
-"我参数给错了"与"代码崩了"重新混成一件事。
-
-## 第八件：五元证据位随这一行一起落（`R3` 组 9 / EE-07）
-
-`draft/39` §3.14 起"这条命题算不算定理"由五位读数派生（`evidencebits.derive_grade`），
-而 `statements.bits` 这一栏此前从来没有过产出方：真机读数 138 行命题、带 bits 0 行。
-于是所有消费方（收工门、状态报告、`closing` 的收工读数）读到的永远是"五位全空 ⇒ 猜想"，
-而盘上那 138 行到底是"确实只是猜想"还是"没人算过"，从数据面分不出来。
-
-现在在这一动作里把位算好、与命题那一行同一次事务写进去（`bits_of` 是纯函数，
-形状判据只用 `evidencebits`，不抄第二份口径）。三态：
-
-- 算得出 ⇒ 写；等级由 `derive_grade` 现算（盘上那一份只是缓存，判据不读它）；
-- 算不出（`bits_of` 自己抛了）⇒ 拒绝并如实记 `kind="bits_compute_failed"` ——
-  不许写一个空 `bits`：空 `bits` 读出来是"五位全空"，与"我们没算"长得一模一样；
-- 形状不合规 ⇒ 拒绝并如实记 `kind="bad_bits"` + 逐条 `problems`，整笔不写。
-
-谁签哪位：B 在登记这一刻能作证的只有第 2 位（有证明）与它的来源
-（引用命题的凭据是文献代号；自产命题的凭据是证明摘录）。`numeric`/`formal`（E）、
-`reviewed`（V）、`audited`（H）都不是 B 的读数，一律按"还没做"留空 —— 替别人签
-正是这套位要堵的洞（`evidencebits.BIT_OWNERS` 是那五位的 owner 表）。
+§44.4 的真机读数把"审阅并 polish 一篇外部论文"这条链的堵点定在动作表上：主控只能 `conductor.summon` 动作，而"把论文里的定理登记成 `statements` 行"原先只有工具（`table.create`，
+A–D 都能调）—— `agent_b/` 里 `statements` 一个字都没有，所以即使 A 把文集登记好了（§46 的另一个动作），命题台账仍然建不起来， G 就没有可引的 `lit:`/命题依据，H 也没有可审的对象。
+1. `statement_full`（含完整假设的命题正文）：省掉假设的命题会被下游当成无条件成立—— 那是 FC-23 在命题级的同一种病； 2. `proof_text`（逐字摘录）：`quote_verified` 的比对对象就是它，没
+有它"引文回验"无从做起； 3. `source_lit_id`（`origin="external_lit"` 时）：出处必须真的存在 —— 本动作在写库前核一次 `literature` 表，引用一个不存在的 `lit_id` 直接拒（`kind="unknown_lit_id"`），
+与 `doc.build_document` 的 `check_citations` 同一条纪律：坏引用不许进库。
+第四个必填：出处（按来源分档，`draft/37` §68）`external_lit` 的命题要给非空的 `page_range`（`start` 或 `label` 至少一个）；`own_result` 的命题要给 `doc_id` 或非空
+的 `line_range`（`start` / `label`）。为什么不是"有这一栏就行"：第十三趟主控传的是 `{"start": null, "end": null}` ——形状在场、内容是空的 —— 六条命题因此都落成了"看着有出处、
+其实没有"的行，而审稿判据当场判它们缺页码，整条验收不及格。为什么按来源分档（人裁的甲档）：从文献里摘的命题才有"第几页"这件事，自有结果的出处是 `doc_id`/`line_range` —— 对后者要页码等于让它编一个数字。写入口与 
+`reviewaccept._c_statements` 逐条对齐。
+`quote_verified` 是三态：`True` 逐字通过 / `False` 比对不一致 / `None` 还没查。只要不是 `True` 就必须给 `quote_reason`（包括"还没查"），这条由 
+`Statement.validate()`与这里的预检双保险 —— 预检存在的理由是把 `kind` 说清楚（调用方要能分辨"参数不对"与"还没查"）。
+第五、第六个必填：逐字证明与 ID 形态（`draft/37` §87）上面那句"双保险"原先只保了一半：`origin="own_result"` 缺 `proof_text`、以及`doc_id`/`source_lit_id` 形态不对（写
+成 `"doc:0000"`），都只由 `Statement.validate()`抛 `ValueError` —— 而它抛在事务里，调用方拿到的是一个异常，不是一条带 `kind` 的拒绝。T1 第 2 趟真机读数：这一动作被召唤 14 次，
+6 次落"执行中异常"（就是这一路），另外 8 次返回了 `ok=False` 却被台账记成 `outcome=ok` —— 两种形态都不像"拒绝"。
+于是这里补齐两级预检：`missing_proof_text` 与 `bad_id`。纪律与其余几级相同：要求写进模型看得见的形状（`specs/b.py`），也在写入口拦下并命名。`Statement.validate()` 仍然是第二道保险
+（它保的是"绕开本动作的写库路径"）。
+第七件：拒绝要自报"这是一次拒绝"（`draft/37` §88 的根因）返回 `ok=False` 还不够。主控的终态映射原先只看"handler 有没有返回 dict"，于是这一动作的 10 种拒绝全被记成 `outcome=ok`
+—— T1 第 2 趟真机：8 次拒绝在台账上长得像 8 次成功，而 `statements` 是 0 行，整条链在这里静默停住。
+所以下面每条拒绝都走 :func:`agentflow.refusals.refuse`：它带上受控的 `refusal_reason`（`invalid_params` —— 词表的定义正是"参数/前置条件不满足：这次调用本身不成立"）。不这
+么写的话，终态只能落 `failed`（"执行了、没成功"），那会把"我参数给错了"与"代码崩了"重新混成一件事。
+第八件：五元证据位随这一行一起落（`R3` 组 9 / EE-07）`draft/39` §3.14 起"这条命题算不算定理"由五位读数派生（`evidencebits.derive_grade`），而 `statements.bits` 这一
+栏此前从来没有过产出方：真机读数 138 行命题、带 bits 0 行。于是所有消费方（收工门、状态报告、`closing` 的收工读数）读到的永远是"五位全空 ⇒ 猜想"，而盘上那 138 行到底是"确实只是猜想"还是"没人算过"，从数据面分
+不出来。
+现在在这一动作里把位算好、与命题那一行同一次事务写进去（`bits_of` 是纯函数，形状判据只用 `evidencebits`，不抄第二份口径）。
+等级由 `derive_grade` 现算（盘上那一份只是缓存，判据不读它）；- 算不出（`bits_of` 自己抛了）⇒ 拒绝并如实记 `kind="bits_compute_failed"` ——不许写一个空 `bits`：空 `bits`
+读出来是"五位全空"，与"我们没算"长得一模一样；- 形状不合规 ⇒ 拒绝并如实记 `kind="bad_bits"` + 逐条 `problems`，整笔不写。
+`numeric`/`formal`（E）、`reviewed`（V）、`audited`（H）都不是 B 的读数，一律按"还没做"留空 —— 替别人签正是这套位要堵的洞（`evidencebits.BIT_OWNERS` 是那五位的
+owner 表）。
 """
 from __future__ import annotations
 
@@ -88,28 +37,16 @@ from ..refusals import refuse as _refuse
 
 def _normalize_range(raw: object, *, what: str) -> tuple[dict, str]:
     """把 `page_range` / `line_range` 归一化，返回 `(归一后的字典, 拒绝理由)`。
-
     ## 为什么必须有这一级（`draft/83` §7 的 D71，T1 第 18 趟真机读数）
-
-    真机：主控派 `B.register_statement` 登记 Kuchment 那一条时，把页码写成了
-    字符串（`{"start": "343", "end": "414"}`）。它在库里一路走到
-    `S.PageRange.from_dict(...)`，而 `PageRange.__post_init__` 直接拿两个值比大小
-    （`self.start < 1` / `self.start > self.end`）⇒ `TypeError: '<' not supported
-    between instances of 'str' and 'int'` 从动作里抛出去，
-    台账上那一行落成 `failed`（"执行了、没成功"），而不是一条能读懂的拒绝
-    —— 于是"参数类型写错了"与"代码崩了"又被混成一件事（这一条与本节其余七级预检
-    是同一条纪律：要求写进模型看得见的形状，也在写入口拦下并命名）。
-
-    口径（三态，不猜）：
-
-    - `int` / 纯数字串（`"343"`）⇒ 归一成 `int`；
-    - `None` / 空串 ⇒ 保持"不知道"（篇幅与行号的"未知"是合法状态，由 `label` 表达）；
-    - 其余（`"343-414"` / `"p.343"` / 浮点 / 列表 / 布尔）⇒ 拒绝并说明收件格式。
-      布尔刻意不收：`True` 会被 `int()` 读成 1，悄悄造出一个页码。
-    - 形状不是对象 ⇒ 拒绝（`dict("abc")` 会抛，那是同一类崩溃）。
-
-    范围本身的合法性（`>=1`、`start <= end`）在这里也先判一遍：留到 `schema` 里判
-    就是"从事务里抛 `ValueError`"，调用方拿不到可读的 `kind`。
+    真机：主控派 `B.register_statement` 登记 Kuchment 那一条时，把页码写成了字符串（`{"start": "343", "end": "414"}`）。它在库里一路走
+    到`S.PageRange.from_dict(...)`，而 `PageRange.__post_init__` 直接拿两个值比大小（`self.start < 1` / 
+    `self.start > self.end`）⇒ `TypeError: '<' not supported between instances of 'str' and 'int'` 从动作里
+    抛出去，台账上那一行落成 `failed`（"执行了、没成功"），而不是一条能读懂的拒绝—— 于是"参数类型写错了"与"代码崩了"又被混成一件事（这一条与本节其余七级预检是同一条纪律：要求写进模型
+    看得见的形状，也在写入口拦下并命名）。
+    - `int` / 纯数字串（`"343"`）⇒ 归一成 `int`；- `None` / 空串 ⇒ 保持"不知道"（篇幅与行号的"未知"是合法状态，由 `label` 表达）；- 其余（`"343-414"`
+    / `"p.343"` / 浮点 / 列表 / 布尔）⇒ 拒绝并说明收件格式。布尔刻意不收：`True` 会被 `int()` 读成 1，悄悄造出一个页码。- 形状不是对象 ⇒ 拒绝（`dict("abc")`
+    会抛，那是同一类崩溃）。
+    范围本身的合法性（`>=1`、`start <= end`）在这里也先判一遍：留到 `schema` 里判就是"从事务里抛 `ValueError`"，调用方拿不到可读的 `kind`。
     """
     if raw is None or raw == "":
         return {}, ""

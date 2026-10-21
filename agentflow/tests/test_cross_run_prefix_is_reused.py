@@ -1,35 +1,23 @@
 # -*- coding: utf-8 -*-
-"""判据：**跨 run** 也能命中同一段前缀（2026-10-21，事务二）。
+"""判据：跨 run 也能命中同一段前缀（2026-10-21，事务二）。
 
-## 这一组守什么
+上一批（`tests/test_prompt_stability.py`）把"每步会变"的两格（`budget_left` / `notebook`）从 system
+挪进 user 消息，换来的是"同一趟的第 2..N 步"能命中缓存。但它买到的只是"同一份前缀的第二次"：
+`AGENT_IDENTITY`（段序 0）带着 `task_id` / `depth` / `children` / `parent_task_id` / `summoned_by`，
+`TASK_FRAME`（段序 4200）带着 `task` 正文 / `inbox` / `board` / `user_replies`，`WORKSPACE_FACTS`
+（段序 10000）带着 `workspace_root` —— 换一趟活，这条前缀从第 95 个字符起就不同（改前实测，见
+`tests/fixtures/prompt_cache_warm.json` 的 `cross_run_prefix_chars`）⇒ 换一趟活的第一次调用 `hit=0`。
 
-上一批（`tests/test_prompt_stability.py`）把"每步会变"的两格（`budget_left` /
-`notebook`）从 system 挪进了 user 消息，换来的是"同一趟的第 2..N 步"能命中缓存。
-但它买到的**只是"同一份前缀的第二次"**：`AGENT_IDENTITY`（段序 0）里带着
-`task_id` / `depth` / `children` / `parent_task_id` / `summoned_by`，`TASK_FRAME`
-（段序 4200）里带着 `task` 正文 / `inbox` / `board` / `user_replies`，
-`WORKSPACE_FACTS`（段序 10000）里带着 `workspace_root` —— 换一趟活，这条前缀
-从第 **95** 个字符起就不同（改前实测，见 `tests/fixtures/prompt_cache_warm.json`
-的 `cross_run_prefix_chars`）⇒ 换一趟活的第一次调用 `hit=0`。
+三条判据（每条带负控）：1. 两趟不同的活 ⇒ 同一份 system（十个角色各一遍，逐字节）；负控：把
+`task_id` 放回 system（即绕过 `split_facts`）⇒ 必红，且报出"从第 N 个字符起不同"（N 落在
+`AGENT_IDENTITY` 那一段里，不是"反正不同"）。2. 同一角色同一趟两次渲染逐字节相同（`step_stability`
+的 `stable=True`；`test_prompt_stability.py` 已有那一条，这里再钉"跨趟也相同"的那一半）。
+3. 被挪走的事实还在 user 消息里：跑一趟真的循环，从 `agent_run_start.opening_facts` 读回十格原值，
+逐格断言它①在 user 消息里、②不在 system 里；负控：把某一格整段删掉（喂空串 ⇒ 只剩缺省句）⇒ 必红。
 
-## 三条判据（每条带负控）
-
-1. **两趟不同的活 ⇒ 同一份 system**（十个角色各一遍，逐字节）。
-   负控：把 `task_id` 放回 system（即绕过 `split_facts`）⇒ 必红，且报出
-   "从第 N 个字符起不同"（N 落在 `AGENT_IDENTITY` 那一段里，不是"反正不同"）。
-2. **同一角色同一趟两次渲染逐字节相同**（`step_stability` 的 `stable=True`；
-   `test_prompt_stability.py` 已有那一条，这里再钉一次"跨趟也相同"的那一半）。
-3. **被挪走的事实还在 user 消息里**（判据断言"还在，只是换了位置"）：
-   跑一趟真的循环，从 `agent_run_start.opening_facts` 读回十格原值，
-   逐格断言它①在 user 消息里、②不在 system 里。
-   负控：把某一格整段删掉（喂空串 ⇒ 只剩缺省句）⇒ 必红。
-
-## 读数面（真机）
-
-`cross_run_hit`（`scripts/warm_prompt_cache.py --probe-cross-run`）的两行是
-"另一趟活"的**同一份 system** 连发两次：改前 = `0 / 满`，改后 = **两次都该 ≥90%**。
-`tests/test_prompt_cache_warm.py` 与这里各判一次（那边判读数自洽，这里判比例）。
-"""
+读数面（真机）：`cross_run_hit`（`scripts/warm_prompt_cache.py --probe-cross-run`）的两行是"另一趟活"
+的同一份 system 连发两次：改前 = `0 / 满`，改后 = 两次都该 ≥90%。`tests/test_prompt_cache_warm.py`
+与这里各判一次（那边判读数自洽，这里判比例）。"""
 from __future__ import annotations
 
 import hashlib
@@ -51,7 +39,7 @@ from test_agent_loop import _wired
 _REPO = pathlib.Path(__file__).resolve().parents[1]
 _READINGS = _REPO / "tests" / "fixtures" / "prompt_cache_warm.json"
 
-#: "第一趟活"的十格事实（**全部**是跨 run 会变的那几格，一格不少）。
+#: "第一趟活"的十格事实（全部是跨 run 会变的那几格，一格不少）。
 _JOB_A: dict[str, Any] = {
     "task": "把第一件活做完：核一条 1900 年前的引文是否逐字存在",
     "summoned_by": "user",
@@ -104,7 +92,7 @@ def _sha(text: str) -> str:
 # ---------------------------------------------------------------- 1. 两趟不同的活
 
 def test_two_different_jobs_render_a_byte_identical_system(registry: Any) -> None:
-    """正控（主判据）：同一个角色、**两趟完全不同的活** ⇒ system 逐字节相同。
+    """正控（主判据）：同一个角色、两趟完全不同的活 ⇒ system 逐字节相同。
 
     十个角色各判一遍（不是只判 M）：某一段若只在某个角色的模板里插值（例如 M 才有
     的那几块），只判一个角色会漏掉它。反真空也一起判：system 必须有几万字
@@ -120,7 +108,7 @@ def test_two_different_jobs_render_a_byte_identical_system(registry: Any) -> Non
         reading = PS.step_stability(a, b)
         assert reading["stable"] is True, f"{role}：两趟不同的活 system 不同\n{reading['reason']}"
         assert _sha(a) == _sha(b), role
-        # 反真空（另一半）：这两份事实**真的**不同 —— 否则上面的"相同"什么也没证明。
+        # 反真空（另一半）：这两份事实真的不同 —— 否则上面的"相同"什么也没证明。
         assert moved_a["task"] != moved_b["task"], moved_a
         assert moved_a["task_id"] != moved_b["task_id"], moved_a
         checked.append(role)
@@ -130,10 +118,10 @@ def test_two_different_jobs_render_a_byte_identical_system(registry: Any) -> Non
 def test_putting_task_id_back_into_the_system_makes_it_red(registry: Any) -> None:
     """负控（① 的牙）：把 `task_id` 放回 system ⇒ 两趟的 system 必红，且报出位置。
 
-    怎么造"改前那个形态"：**不过** `split_facts`，把这份事实直接喂给
+    怎么造"改前那个形态"：不过 `split_facts`，把这份事实直接喂给
     `system_prompt` —— 那正是改前 `agent_loop` 的做法（它那时也过一遍渲染，
     只是登记的格子里没有 `task_id`）。红的位置也要对：差异必须落在
-    `AGENT_IDENTITY`（段序 0）那一段里，也就是**很靠前**的地方 ——
+    `AGENT_IDENTITY`（段序 0）那一段里，也就是很靠前的地方 ——
     报一个"反正不同"而位置在 5 万字之后，说明红的原因不是这一格。
     """
     victim = "task_id"
@@ -160,7 +148,7 @@ def test_putting_task_id_back_into_the_system_makes_it_red(registry: Any) -> Non
 
 
 def test_the_same_job_rendered_twice_is_byte_identical(registry: Any) -> None:
-    """判据 ②：**同一趟**的两次独立渲染逐字节相同（跨 run 相同的另一半）。
+    """判据 ②：同一趟的两次独立渲染逐字节相同（跨 run 相同的另一半）。
 
     与上面那条分工：上面换的是"哪一趟"，这一条换的是"渲染了几次"（同一个角色、
     同一份事实）。两次都过 `split_facts`、各自造一份注册表 —— 只共享静态事实。
@@ -174,7 +162,7 @@ def test_the_same_job_rendered_twice_is_byte_identical(registry: Any) -> None:
 # ---------------------------------------------------------------- 3. 事实还在，只是换了位置
 
 def test_every_cross_run_fact_is_registered_and_moved_out_of_the_system(registry: Any) -> None:
-    """判据 ③（其一）：十格**一个不少**地登记着，且 `split_facts` 真的把它们挪走了。
+    """判据 ③（其一）：十格一个不少地登记着，且 `split_facts` 真的把它们挪走了。
 
     两半都要判：
     - "登记了" —— 名字在 `STEP_VOLATILE_FACTS` 里（否则 `split_facts` 不会动它）；
@@ -190,14 +178,14 @@ def test_every_cross_run_fact_is_registered_and_moved_out_of_the_system(registry
 
 
 def test_the_opening_user_message_still_carries_every_moved_fact(tmp_path: pathlib.Path) -> None:
-    """判据 ③（其二，**最重要的一条**）：事实还在，只是换了位置。
+    """判据 ③（其二，最重要的一条）：事实还在，只是换了位置。
 
-    不靠"读源码觉得它在那儿"，而是**跑一趟真的循环**，从两个地方取读数：
+    不靠"读源码觉得它在那儿"，而是跑一趟真的循环，从两个地方取读数：
     - user 消息：`gateway.prompts[0]`（真正发给模型的第一条 user）；
     - 事实原值：`agent_run_start.opening_facts`（这一趟开始那一刻的快照）；
     - system：`gateway.systems[0]`。
 
-    逐格断言：原值在 user 里、不在 system 里。**没有这一条**，"为了命中率把信息删掉"
+    逐格断言：原值在 user 里、不在 system 里。没有这一条，"为了命中率把信息删掉"
     也能让上面那些判据全绿 —— 那正是这一批最危险的走法。
     """
     st, cond, reg, _gw, root = _wired(tmp_path, {"M": [
@@ -221,7 +209,7 @@ def test_the_opening_user_message_still_carries_every_moved_fact(tmp_path: pathl
     facts = dict(starts[-1].get("opening_facts") or {})
     assert set(facts) == set(OPENING_FACT_KEYS), (sorted(facts), sorted(OPENING_FACT_KEYS))
 
-    # 每一格：user 消息里有它（按它在对面那句话里的**原话**找），system 里没有。
+    # 每一格：user 消息里有它（按它在对面那句话里的原话找），system 里没有。
     checks = {
         "task": (f"你的任务：{facts['task']}", f"这一次的任务：\n{facts['task']}"),
         "inbox": (f"你的收件箱：{facts['inbox']}", f"你收到的留言（可能为空）：\n{facts['inbox']}"),
@@ -256,11 +244,11 @@ def test_the_opening_user_message_still_carries_every_moved_fact(tmp_path: pathl
 
 def test_deleting_one_fact_from_the_user_message_makes_the_criterion_red(
         tmp_path: pathlib.Path) -> None:
-    """负控（③ 的牙）：把某一格**整段删掉** ⇒ 同一个读法必红。
+    """负控（③ 的牙）：把某一格整段删掉 ⇒ 同一个读法必红。
 
     怎么造"删掉"：把那一格喂成空串 —— `prompt_facts` 会把它换成缺省句，于是
     原值不再出现在 user 消息里（这正是"挪走之后又悄悄删掉"的形态）。
-    这条负控必须比"信息还在"那条更强：它证明后者读的是**原值**，不是"有一句人话"。
+    这条负控必须比"信息还在"那条更强：它证明后者读的是原值，不是"有一句人话"。
     """
     facts = {
         "task": "把这一件活做完", "inbox": "（没有收到留言）", "board": "- [i-1] 一条板项",
@@ -322,12 +310,12 @@ def _render_with_config(role: str, config: Mapping[str, str], policy: Any,
 
 
 def test_two_partner_configs_render_the_same_system(registry: Any) -> None:
-    """判据 ①（主判据）：换一份**伙伴配置** ⇒ system 逐字节相同、而 user 消息不同。
+    """判据 ①（主判据）：换一份伙伴配置 ⇒ system 逐字节相同、而 user 消息不同。
 
     十个角色各判一遍（`PARTNER_AVAILABILITY` 与伙伴行的接线态标记是共享段，但 M 与 H
     还各自多几段 ⇒ 只判 M 会漏掉只在别的角色模板里出现的那一份）。
     反真空两条：①system 必须够长（不是"两边都空"的假相等）；
-    ②两份配置与两份 `Policy` **真的**不同 —— 否则"相同"什么也没证明。
+    ②两份配置与两份 `Policy` 真的不同 —— 否则"相同"什么也没证明。
     """
     for role in sorted(AP.ROLE_BRIEFS):
         system_a, prompt_a = _render_with_config(role, _CONFIG_A, _policy_a(), registry)
@@ -338,20 +326,20 @@ def test_two_partner_configs_render_the_same_system(registry: Any) -> None:
             f"{role}：换一份伙伴配置，system 就变了 ⇒ 这一份配置之后的前缀全部作废\n"
             f"{reading['reason']}")
         assert _sha(system_a) == _sha(system_b), role
-        # 反真空两半：user 消息**真的**不同（差异落在它身上），而 system 一个字没动。
+        # 反真空两半：user 消息真的不同（差异落在它身上），而 system 一个字没动。
         assert prompt_a != prompt_b, f"{role}：两份配置的 user 消息一模一样 ⇒ 信息被删了"
         assert len(prompt_a) < len(system_a), "开场消息不该比 system 还长（反真空）"
 
 
 def test_putting_the_wiring_state_back_into_the_system_makes_it_red(
         registry: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """负控（① 的牙）：把接线态塞回 system ⇒ 必红，且报出**断点位置**。
+    """负控（① 的牙）：把接线态塞回 system ⇒ 必红，且报出断点位置。
 
     怎么造"改前那个形态"：把 `PARTNER_AVAILABILITY` 那一段的静态指路语换回
-    **这一次的接线态本身**（`wiring_text(config)`）—— 那正是改前那一段的内容。
+    这一次的接线态本身（`wiring_text(config)`）—— 那正是改前那一段的内容。
     两次渲染各用自己那份配置，于是 system 从那一处起分家。
 
-    位置也要对：断点必须落在 system 的**中后段**（改前实测 ~63%），因为这条判据的
+    位置也要对：断点必须落在 system 的中后段（改前实测 ~63%），因为这条判据的
     意义就是"这一处往后的前缀全部作废"；报一个"反正不同"而位置在第 95 个字符，
     说明红的是别的东西（那由兄弟判据 `test_putting_task_id_back_...` 守）。
     """
@@ -382,8 +370,8 @@ def test_every_partner_stays_in_the_static_table_and_in_the_wiring_line(registry
     """判据 ②（信息一个字没丢）：静态伙伴表逐项仍在 system，接线态逐项仍在 user 消息。
 
     两半都要判，而且方向相反：
-    - 静态表（谁是谁、交付什么、边界）**必须**留在 system（它是可复用的前缀）；
-    - 接线态（谁当前接线了、什么状态）**必须**只在 user 消息里（它随配置变）。
+    - 静态表（谁是谁、交付什么、边界）必须留在 system（它是可复用的前缀）；
+    - 接线态（谁当前接线了、什么状态）必须只在 user 消息里（它随配置变）。
     只判第一半，"为了命中率把接线态删掉"也能全绿 —— 那是这一批最危险的走法。
     """
     for role in sorted(AP.ROLE_BRIEFS):
@@ -395,7 +383,7 @@ def test_every_partner_stays_in_the_static_table_and_in_the_wiring_line(registry
         lost = [f"- {p}：{_CONFIG_A[p]}" for p in sorted(_CONFIG_A)
                 if f"- {p}：{_CONFIG_A[p]}" not in opening]
         assert not lost, f"{role} 的 user 消息里少了接线态 {lost}（换位置而不是删）"
-        # ③ 反向：接线态**不许**再出现在 system 里（否则前缀断点还在）。
+        # ③ 反向：接线态不许再出现在 system 里（否则前缀断点还在）。
         leaked = [f"- {p}：{_CONFIG_A[p]}" for p in sorted(_CONFIG_A)
                   if f"- {p}：{_CONFIG_A[p]}" in system]
         assert not leaked, f"{role} 的 system 里还有接线态 {leaked} ⇒ 换个配置前缀就断"
@@ -448,7 +436,7 @@ def _load_warm() -> Any:
 def _cross_run_problem(cross: list[Mapping[str, Any]], *, floor: float = 0.90) -> str:
     """`cross_run_hit` 那两行合不合格（空串 = 合格）。判据本体只这一处。
 
-    口径：两行都是"**另一趟活**的 system"（不同 `task` / `task_id` / `depth` /
+    口径：两行都是"另一趟活的 system"（不同 `task` / `task_id` / `depth` /
     `workspace_root`）—— 第一行是它第一次见，第二行是同一份再发一次。
     改前：`0 / 满`；改后：两行都该 ≥ `floor`。
     """
@@ -470,10 +458,10 @@ def _cross_run_problem(cross: list[Mapping[str, Any]], *, floor: float = 0.90) -
 
 
 def test_the_recorded_cross_run_probe_reuses_the_prefix() -> None:
-    """判据 ①（读数面）：真机上"另一趟活"的 system **两次都 ≥90% 命中**。
+    """判据 ①（读数面）：真机上"另一趟活"的 system 两次都 ≥90% 命中。
 
     读数由 `scripts/warm_prompt_cache.py --probe-cross-run <角色>` 产出（它把另一份
-    事实的 system 连发两次）。这一条**只读读数**，不联网、不花钱 —— 与
+    事实的 system 连发两次）。这一条只读读数，不联网、不花钱 —— 与
     `tests/test_prompt_cache_warm.py` 的分工：那边判"读数自洽/新鲜"，
     这里判"换一趟活到底命中多少"。
     """
@@ -523,7 +511,7 @@ _REAL_MACHINE_ROLES: tuple[str, ...] = ("M", "H")
 
 
 def _latest_cross_run_by_role(runs: list[Mapping[str, Any]]) -> dict[str, list[Mapping[str, Any]]]:
-    """每个角色**最近一趟**的跨 run 探针（两行：第一次见 / 第二次见）。"""
+    """每个角色最近一趟的跨 run 探针（两行：第一次见 / 第二次见）。"""
     out: dict[str, list[Mapping[str, Any]]] = {}
     for run in runs:
         cross = list(run.get("cross_run_hit") or [])
@@ -533,12 +521,12 @@ def _latest_cross_run_by_role(runs: list[Mapping[str, Any]]) -> dict[str, list[M
 
 
 def test_two_partner_configs_hit_ninety_percent_on_the_real_machine() -> None:
-    """判据 ③（真机，M 与 H 各两次）：**换一份伙伴配置**之后仍 ≥90% 命中。
+    """判据 ③（真机，M 与 H 各两次）：换一份伙伴配置之后仍 ≥90% 命中。
 
     读数由 `scripts/warm_prompt_cache.py --roles <角色> --hit-sample <角色>
     --probe-cross-run <角色>` 产出：`pass=4/5` 那两行发的是 `OTHER_RUN_FACTS` 的
-    system —— 它既是**另一件活**（task / task_id / depth / 收件箱全不同），也是
-    **另一份伙伴配置**（`availability` 换了一份、`parent_limits` 换了一份 Policy）。
+    system —— 它既是另一件活（task / task_id / depth / 收件箱全不同），也是
+    另一份伙伴配置（`availability` 换了一份、`parent_limits` 换了一份 Policy）。
     改前：那份 system 从 63% / 88% 处就断了 ⇒ 第一次见它命中不了多少；
     改后：整份 system 都是前缀 ⇒ 两行都该接近满。
 
@@ -586,7 +574,7 @@ def test_setting_the_partner_config_hit_to_zero_makes_the_criterion_red() -> Non
 # ---------------------------------------------------------------- 夹具：记 system/user 的替身
 
 class _BytesGateway:
-    """照剧本回答、并把**两条消息**分别记下来的替身模型（不联网）。"""
+    """照剧本回答、并把两条消息分别记下来的替身模型（不联网）。"""
 
     spec = type("Spec", (), {"model": "stub", "api_key": "x"})()
 

@@ -72,22 +72,15 @@ def test_missing_literature_is_reported_as_dangling_lit(clean_store: Store) -> N
 
 
 def test_related_concepts_drift_has_no_home_in_the_new_standard(clean_store: Store) -> None:
-    """`related_concepts` 不是新标准的一格：真相由 `relations` 表派生，"没判"必须看得见。
+    """    `related_concepts` 不是新标准的一格：真相由 `relations` 表派生，"没判"必须看得见。
 
-    改写自 `test_wrong_related_concepts_is_reported_as_related_drift`（原文：把
-    `concepts.json` 里某行的 `related_concepts` 改错 → 断言 verify 报
-    `related_drift`）。并表之后那一格在新标准里没有承载点：`view(shape="legacy")`
-    对 `statements` 那一档一律投影成空列表并带 `legacy_related=False`，
-    `verify._check_4` 据它跳过这条判据 ⇒ "改一格看它报红"没有可改的对象了
-    （这不是判据被放宽，是那一格随老表退役）。
+    改写自 `test_wrong_related_concepts_is_reported_as_related_drift`（原文：把`concepts.json` 里某行的 `related_concepts` 改错 →
+    断言 verify 报`related_drift`）。并表之后那一格在新标准里没有承载点：`view(shape="legacy")`对 `statements` 那一档一律投影成空列表并带
+    `legacy_related=False`，`verify._check_4` 据它跳过这条判据 ⇒ "改一格看它报红"没有可改的对象了（这不是判据被放宽，是那一格随老表退役）。
 
-    保护意图仍在，三段都能失败：
-    ① 真相可派生：一跳邻居由 `relations` 现算 —— 这正是 `verify` 的 `related_drift`
-       拿去比的那一侧（新标准里没有"表里那一格"⇒ 派生值本身就是真相）；
-    ② 跳过可见：verify 把"这一版没有这一格 ⇒ 这一条没判"的行数记进
-       `checked["related_concepts_skipped_new_standard"]`（"没判"不许与
-       "判过没问题"同形，这是本项目最贵的教训），且不许因此冒出假红；
-    ③ 负控：①不恒真 —— 关系表一变，派生值真的会变。
+    保护意图仍在，三段都能失败：① 真相可派生：一跳邻居由 `relations` 现算 —— 这正是 `verify` 的 `related_drift`拿去比的那一侧（新标准里没有"表里那一格"⇒ 派生值本身就是真相）；②
+    跳过可见：verify 把"这一版没有这一格 ⇒ 这一条没判"的行数记进`checked["related_concepts_skipped_new_standard"]`（"没判"不许与"判过没问题"同形，
+    这是本项目最贵的教训），且不许因此冒出假红；③ 负控：①不恒真 —— 关系表一变，派生值真的会变。
     """
     relations = clean_store.rows("relations")
     assert D.derive_related_concepts("0000", relations, include_suspect=True) == ["0001"]
@@ -231,11 +224,11 @@ def test_verify_reports_id_gap_as_warning_not_error(tmp_path: Path) -> None:
 
 # ------------------------------------------------ 存量概念行的 `proof_text` 进审计
 #
-# 2026-10-21（本批缺陷三）：概念行带 `proof_text` 这件事此前**只在读侧**被点名
+# 2026-10-21（本批缺陷三）：概念行带 `proof_text` 这件事此前只在读侧被点名
 # （`verifications.proof_review_gap` 的 `why` 写着"概念行不该带证明文本"），
 # 而 `verify._check_13` 的 error 清单里没有它 —— 于是"审计通过"这句话在一个
 # 装满历史哨兵行的工作区面前是假的。下面三条把新增的那一条钉住：
-# ① 有哨兵行 ⇒ **1 条** error 且点名 `stmt_id`；② 干净库 ⇒ 0 条；
+# ① 有哨兵行 ⇒ 1 条 error 且点名 `stmt_id`；② 干净库 ⇒ 0 条；
 # ③ 负控：把判据本体摘掉 / 把那条 issue 从报告里摘掉 ⇒ 判据红。
 # 选择这组口径的理由：`verify_all` 是交付面上唯一被读成"没有问题"的那一栏，
 # 它漏掉的类别不会在任何别处变成红。
@@ -256,7 +249,7 @@ def _concept_proof_issues(report) -> list:
 
 
 def test_a_clean_library_has_no_concept_proof_text_error(clean_store: Store) -> None:
-    """② 正控（反真空）：干净库 ⇒ 这一条 **0 条**（不是"查不了"）。
+    """② 正控（反真空）：干净库 ⇒ 这一条 0 条（不是"查不了"）。
 
     只判"有哨兵行会红"而不判"干净库是绿的"，那条判据可以靠"永远报一条"通过 ——
     那是本仓最忌的假绿方向（审计天天报警，人就开始忽略它）。
@@ -267,7 +260,7 @@ def test_a_clean_library_has_no_concept_proof_text_error(clean_store: Store) -> 
 
 
 def test_a_concept_row_carrying_proof_text_is_one_named_error(clean_store: Store) -> None:
-    """① 正控：造一条带哨兵 `concept:primitive` 的概念行 ⇒ **1 条** error、点名 `stmt_id`。
+    """① 正控：造一条带哨兵 `concept:primitive` 的概念行 ⇒ 1 条 error、点名 `stmt_id`。
 
     为什么把"恰好 1 条"也写进断言：`_check_13` 里已经有一条"假 proof_review"的点名
     （`proof_review_without_verification`），两条判据若在同一行上各报一次，
@@ -300,7 +293,7 @@ def test_removing_the_scan_makes_the_concept_proof_text_criterion_red(
         clean_store: Store, monkeypatch) -> None:
     """③ 负控（判据本体被摘）：把 `concept_rows_with_proof_text` 换成"永远没有" ⇒ 红。
 
-    摘的是**判据本体**（`verify.concept_rows_with_proof_text`），不是某条断言的字符串：
+    摘的是判据本体（`verify.concept_rows_with_proof_text`），不是某条断言的字符串：
     这样"红"才说明上面那条正控真的走这条扫描，而不是碰巧读了别处的数据。
     """
     from agentflow import verify as V
@@ -319,7 +312,7 @@ def test_removing_the_scan_makes_the_concept_proof_text_criterion_red(
 def test_removing_the_issue_from_the_report_makes_the_criterion_red(clean_store: Store) -> None:
     """③ 负控（issue 被摘）：从报告里删掉那一条 ⇒ 同一个读法必须红。
 
-    与上一条负控分工：那条摘的是**扫描**（实现面），这条摘的是**报告里的那一格**
+    与上一条负控分工：那条摘的是扫描（实现面），这条摘的是报告里的那一格
     （读数面）—— 两者都能让"审计说这一行有问题"这句话消失，而后者正是
     "有人把这条 issue 从 audit 里删掉"的那种改动。
     """
@@ -339,7 +332,7 @@ def test_removing_the_issue_from_the_report_makes_the_criterion_red(clean_store:
 
 
 def test_a_concept_row_without_proof_text_is_not_flagged(clean_store: Store) -> None:
-    """反真空：把**别的**行（非概念行）塞上 `proof_text` 不许被这一条抓。
+    """反真空：把别的行（非概念行）塞上 `proof_text` 不许被这一条抓。
 
     这一条守的是"扫描只挑 `kind == 'concept'`"：不限制的话，
     "所有带 `proof_text` 的行"都会被报成概念行污染，而那正是真正需要 `proof_text` 的
@@ -357,17 +350,17 @@ def test_a_concept_row_without_proof_text_is_not_flagged(clean_store: Store) -> 
 
 # ------------------------ `active` 文献命题的逐字回验：概念行不在适用面里（2026-10-21）
 #
-# 起因（真机读数）：`real:fresh-demo` 的深验比冻结快照多出 **4 条**
+# 起因（真机读数）：`real:fresh-demo` 的深验比冻结快照多出 4 条
 # `active_stmt_quote_unverified`，4 条全是概念行（`origin=external_lit`、`status=active`、
-# `quote_verified=None`）。判断的方向不是"把 demo 数据补上逐字出处"，而是**这一条规则对
-# 概念行不适用** —— 三条依据（逐字）都写在 `verify.active_stmt_needs_quote_check` 上面：
+# `quote_verified=None`）。判断的方向不是"把 demo 数据补上逐字出处"，而是这一条规则对
+# 概念行不适用 —— 三条依据（逐字）都写在 `verify.active_stmt_needs_quote_check` 上面：
 # ① 概念行的 `source_lit_id` 是"术语从哪一篇抽出来的"，不是"定义逐字抄自那里"；
 # ② `quote_verified` 的比对对象是 `proof_text`，而概念行结构上不许带 `proof_text`
 #    （`conceptrows.concept_statement` 当场 `ValueError`）⇒ 这一条对概念行永远不可能满足；
 # ③ 读侧 `verifications.proof_review_gap` / `weaker_than_evidence_gaps` 早就显式跳过概念行
 #    （「概念不参与等级链」，`draft/97` §14.5）。
 #
-# 下面三条：① 概念行 ⇒ 不报；② 反真空 ⇒ 同一行换成**非概念**命题就照旧报；
+# 下面三条：① 概念行 ⇒ 不报；② 反真空 ⇒ 同一行换成非概念命题就照旧报；
 # ③ 负控 ⇒ 把判据本体（`active_stmt_needs_quote_check`）换成"永远不适用"⇒ ② 红。
 
 
@@ -390,7 +383,7 @@ def _quote_unverified(rep) -> list:
 
 
 def _concept_row_like_the_demo(store: Store, sid: str = "0002"):
-    """造一条**与 demo 同形**的概念行：`external_lit` + `active` + `quote_verified=None`。
+    """造一条与 demo 同形的概念行：`external_lit` + `active` + `quote_verified=None`。
 
     刻意走生产写口（`conceptrows.concept_statement`），不手搓字段：这条判据的分界线
     必须建立在"真写进来的那种行"上，否则判的是一个不存在的形状。
@@ -406,7 +399,7 @@ def _concept_row_like_the_demo(store: Store, sid: str = "0002"):
 
 
 def test_a_concept_row_is_not_an_unverified_literature_quote(clean_store: Store) -> None:
-    """① 正控：概念行（与 demo 同形）⇒ **不**报 `active_stmt_quote_unverified`。
+    """① 正控：概念行（与 demo 同形）⇒ 不报 `active_stmt_quote_unverified`。
 
     为什么这条不是"把规则放宽"：概念行既没有"原文摘录"（`source_lit_id` 记的是术语来路），
     也没有可比对的 `proof_text`（结构上不许带）⇒ 这一条对它恒不可满足，留着就是恒红。
@@ -418,7 +411,7 @@ def test_a_concept_row_is_not_an_unverified_literature_quote(clean_store: Store)
 
 
 def test_an_unsourced_non_concept_statement_still_warns(clean_store: Store) -> None:
-    """② 反真空：**非概念**命题真没逐字回验 ⇒ 这一条照旧出（证明规则没被整体摘掉）。
+    """② 反真空：非概念命题真没逐字回验 ⇒ 这一条照旧出（证明规则没被整体摘掉）。
 
     素材与上一条只差 `kind` 一格 —— 分界线就是它，所以这一对判据读的是同一个事实的两面。
     """
@@ -439,7 +432,7 @@ def test_removing_the_quote_rule_makes_the_anti_vacuum_assertion_red(
         clean_store: Store, monkeypatch) -> None:
     """③ 负控：把判据本体换成"永远不适用" ⇒ ② 那条断言必须红。
 
-    摘的是**判据本体**（`verify.active_stmt_needs_quote_check`），不是某条断言的字符串：
+    摘的是判据本体（`verify.active_stmt_needs_quote_check`），不是某条断言的字符串：
     这样"红"才说明 ② 真的走这一条判据，而不是碰巧读了别处的数据。
     """
     from agentflow import verify as V

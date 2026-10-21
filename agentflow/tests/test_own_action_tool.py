@@ -3,8 +3,8 @@
 
 ## 这一组治的是真机上的一个结构性缺口（业主 2026-10-14 裁定 ③ 的收尾）
 
-`--subagents`（`cli.py`，2026-09-30 上线）会把**所有** `(角色, 动作)` 交给 LLM 循环 ——
-包括那些带写库闸门的确定性动作。而被派的那个动作**不在任何角色的工具面上**
+`--subagents`（`cli.py`，2026-09-30 上线）会把所有 `(角色, 动作)` 交给 LLM 循环 ——
+包括那些带写库闸门的确定性动作。而被派的那个动作不在任何角色的工具面上
 （`capabilities._KNOWN_UNMATCHED_ACTIONS` 逐条登记的就是这一族）⇒ 子代理拿不到
 自己被派的活。真机读数（`p9-t1-nolean` 那一趟，父→子→孙三跳）：
 
@@ -13,7 +13,7 @@
   出处核对、页码形状、引文证据、取号与查重五道预检，`quote_verified=true` 成了自报；
 - 那一趟的 5 条孙代理活全废（3 条崩、2 条被并发上限拒）。
 
-修法：把这一趟被派的动作原样包成**一件只活在这一次循环里的工具**（名字就是动作名），
+修法：把这一趟被派的动作原样包成一件只活在这一次循环里的工具（名字就是动作名），
 handler 走内层确定性实现 —— 闸门一个不少。这一组按"正控两条 + 反负控一条"写。
 """
 
@@ -139,10 +139,10 @@ def _steps(res: dict) -> list[dict]:
 
 
 def test_the_driven_child_can_call_the_action_it_was_summoned_for(tmp_path):
-    """正控：循环里能直接调 `register_statement`，**走的是带闸门的真实现**。
+    """正控：循环里能直接调 `register_statement`，走的是带闸门的真实现。
 
     两件事一起判：① 返回是动作自己的受控拒绝（`kind=bad_page_range`）——证明它调到了
-    真实现而不是被兜成 `unknown_tool`；② 盘上 statements 一条没有 —— 证明它**没有**
+    真实现而不是被兜成 `unknown_tool`；② 盘上 statements 一条没有 —— 证明它没有
     绕道 `table.create` 手写表。
     """
     bad = dict(_GOOD_ROW, page_range="343-414")   # 真机里那个"页码写成字符串"
@@ -166,7 +166,7 @@ def test_the_driven_child_can_call_the_action_it_was_summoned_for(tmp_path):
 
 
 def test_the_injected_tool_writes_through_the_real_implementation(tmp_path):
-    """正控之二：参数合规时，行是**那套实现**写下的（出处栏与证据栏都在）。"""
+    """正控之二：参数合规时，行是那套实现写下的（出处栏与证据栏都在）。"""
     st, cond, backend, child = _world(tmp_path, [
         _tool("own.register_statement", dict(_GOOD_ROW)),
         _final("已登记"),
@@ -181,25 +181,20 @@ def test_the_injected_tool_writes_through_the_real_implementation(tmp_path):
 
 
 def test_without_the_injection_the_child_is_back_to_writing_tables_by_hand(tmp_path, monkeypatch):
-    """反负控：把注入关掉 ⇒ 这一趟两条路都断（正路没有、野路被拒）。
-
+    """    反负控：把注入关掉 ⇒ 这一趟两条路都断（正路没有、野路被拒）。
     ## 这一条的口径在 2026-10-19 晚换过（`projects/mp2` 的真机读数）
-
-    改前它断的是"关掉注入之后 `table.create` 那条路真的走得通" —— 那时野路还开着，
-    于是"绿是注入带来的"用"手写表落了库"来证明。现在野路被
-    `store.direct_write_refusal` 受控拒绝（`mp2-7.jsonl` 第 97 行就是它的真机形态），
-    所以本判据改成**更强**的那一版：
-
+    改前它断的是"关掉注入之后 `table.create` 那条路真的走得通" —— 那时野路还开着，于是"绿是注入带来的"用"手写表落了库"来证明。
+    现在野路被`store.direct_write_refusal` 受控拒绝（`mp2-7.jsonl` 第 97 行就是它的真机形态），所以本判据改成更强的那一版：
     1. `own.register_statement` 没了 ⇒ 这一步是 `unknown_tool`（正路真的断在这件工具上）；
-    2. `table.create("statements")` 也**落不了库** ⇒ `ok=False` + `direct_write_refused`，
-       且拒信把模型指回正路；
-    3. 盘上 statements **0 行** —— 于是正向用例里那一行，除了"注入真的发生了"以外
-       没有任何别的解释（改前那条"手写表也能落库"的出口已经被封掉）。
+    2. `table.create("statements")` 也落不了库 ⇒ `ok=False` + `direct_write_refused`，
+    且拒信把模型指回正路；
+    3. 盘上 statements 0 行 —— 于是正向用例里那一行，除了"注入真的发生了"以外
+    没有任何别的解释（改前那条"手写表也能落库"的出口已经被封掉）。
     """
     monkeypatch.setattr(LlmBackend, "_registry_with_own_action",
                         lambda self, base, **kw: base, raising=True)
-    # 手写表这一笔连**形状**都合规（它能过 `table.create` 的字段校验），
-    # 可它违反的是动作自己的**出处预检**（`source_lit_id=999999` 不在 literature 里）
+    # 手写表这一笔连形状都合规（它能过 `table.create` 的字段校验），
+    # 可它违反的是动作自己的出处预检（`source_lit_id=999999` 不在 literature 里）
     # 与"这两张表只经秘书"这条规矩 —— 两条都该把它挡在外面。
     bad = dict(_GOOD_ROW, source_lit_id="999999")
     st, cond, backend, child = _world(tmp_path, [
@@ -233,22 +228,15 @@ def test_without_the_injection_the_child_is_back_to_writing_tables_by_hand(tmp_p
 # 负控 = 未注册名（`own_not_registered_thing`）必须 `unknown_tool`、`aliased_from` 为空 —— 只测正控的话
 # "宽映射"与"窄映射"长得一模一样，这一条才是分辨率所在。
 def test_the_underscored_advertised_name_reaches_the_same_action_and_nothing_else(tmp_path):
-    """正控：带下划线的广告名映回同一件真实现；负控：没注册的名字必须 `unknown_tool`。
-
-    为什么两条必须写在同一条里：它们守的是**同一张表的两侧**（`face.names` 里有什么 /
-    没有什么）。分两条写时，"正控绿、负控也绿"无法排除"负控那一步其实根本没跑到"
-    —— 这里两步出自同一趟的同一个注册表，读数可以直接对起来。
+    """    正控：带下划线的广告名映回同一件真实现；负控：没注册的名字必须 `unknown_tool`。为什么两条必须写在同一条里：它们守的是同一张表的两侧（`face.names` 里有什么 /没有什么）。分两条写时，"正控绿、
+    负控也绿"无法排除"负控那一步其实根本没跑到"—— 这里两步出自同一趟的同一个注册表，读数可以直接对起来。
 
     ## 剧本为什么是三条回复（第二条会"多花"一次调用）
 
-    顺控是先负后正：负控那一步（`own_not_registered_thing`）名字不在注册表里 ⇒
-    `_statement_filing_refusal` 那一道**不触发**（它的第一句就是 `name != own.register_statement
-    ⇒ None`），所以那一步就是干净的一步。紧接着的正控会**多花一次模型调用** ——
-    入库前秘书那句"太平凡吗"（`secretary.judge_statement`）走的是同一个网关，
-    它吃掉剧本里的第 3 条（`_final`）；`_Scripted` 的"取完重复最后一条"于是让循环
-    下一步照样拿到 `_final`。反过来读这第 3 条回复：**它被吃掉本身就是读数** ——
-    带下划线的那个名字走的是**同一件** `own.register_statement`（连同它入库前的闸门），
-    不是另一条旁路。
+    顺控是先负后正：负控那一步（`own_not_registered_thing`）名字不在注册表里 ⇒`_statement_filing_refusal` 那一道不触发（它的第一句就是
+    `name != own.register_statement⇒ None`），所以那一步就是干净的一步。紧接着的正控会多花一次模型调用
+    ——入库前秘书那句"太平凡吗"（`secretary.judge_statement`）走的是同一个网关，它吃掉剧本里的第 3 条（`_final`）；`_Scripted` 的"取完重复最后一条"于是让循环下一步照样拿到
+    `_final`。反过来读这第 3 条回复：它被吃掉本身就是读数 ——带下划线的那个名字走的是同一件 `own.register_statement`（连同它入库前的闸门），不是另一条旁路。
     """
     st, cond, backend, child = _world(tmp_path, [
         _tool("own_not_registered_thing", {}),              # 负控：本趟没有这一件

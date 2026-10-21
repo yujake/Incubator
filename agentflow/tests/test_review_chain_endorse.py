@@ -63,7 +63,7 @@ def _world(tmp_path: pathlib.Path, replies: list[str]):
     st.init()
     doc = S.Document(doc_id="0001", kind="paper", title="未发表的论文", status="in_review",
                      claims=[{"claim_id": "c1", "text": "已证明定理 1.5",
-                              # 举证的那一条是**分配**出来的号（当前宽度）——
+                              # 举证的那一条是分配出来的号（当前宽度）——
                               # 这一行与 `_T3_ROW` 落库后拿到的号必须同一个。
                               "citations": [f"exp:{S.format_id(0)}"], "evidence_kind": "proof",
                               "section": "§2"}], created_at=TS)

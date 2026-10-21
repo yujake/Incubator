@@ -1,26 +1,18 @@
 """`draft/37` §46 的判据：两条可召唤的动作，把"工具层通、编排层不通"那一格补上。
 
-## 这一条判据挡的是什么（§44.4 的真机读数）
+这一条判据挡的是什么（§44.4 的真机读数）：第二趟真机（`draft/37` §44）把"审阅并 polish 一篇外部
+论文"这条链走了一遍，主控自己在交付说明里把断点定位到动作表上：A 的动作表里没有把盘上文件登记成
+`literature` 的入口，B 的动作表里没有写 `statements` 的入口 —— 而主控只能 `conductor.summon` 动作
+（它自己也不许产出领域对象）。于是盘上有论文、台账里没有它，后面每一跳（G 建我方稿件 → H 审）全部
+落空。本轮按用户裁定加了两条动作：`A.ingest_local`、`B.register_statement`。
 
-第二趟真机（`draft/37` §44）把"审阅并 polish 一篇外部论文"这条链走了一遍，
-主控自己在交付说明里把断点定位到动作表上：A 的动作表里没有把盘上文件登记成
-`literature` 的入口，B 的动作表里没有写 `statements` 的入口 ——
-而主控只能 `conductor.summon` 动作（它自己也不许产出领域对象）。
-于是盘上有论文、台账里没有它，后面每一跳（G 建我方稿件 → H 审）全部落空。
-
-本轮按用户裁定加了两条动作：`A.ingest_local`、`B.register_statement`。
-判据分三层，缺一层这件事就没修好：
-
-1. 动作自身（正控 + 三态负控）：登记成没成要看计数，不看 `ok`；
-   扩展名不支持时不许假装登记成功；
-2. 与既有工具同一口径：`A.ingest_local` 与工具 `search.ingest_local` 对同一个目录
-   必须给出同一份读数（`already_present` + 同一个 `lit_id` + 逐字相同的 provenance）——
-   两份口径漂移时读台账的人无法判断哪一份是真的；
-3. 编排层真的通（本文件最重要的一条）：主控通过 `conductor.summon` 依次走
-   `A.ingest_local → B.register_statement → G.build_document → H.review`，
-   四跳全部 `outcome=ok` 且四张表各有行。§43 证明的是工具层通，这一条证明的是
-   编排层通 —— 两者之间正是那趟真机掉下去的地方。
-"""
+判据分三层，缺一层这件事就没修好：① 动作自身（正控 + 三态负控）：登记成没成要看计数，不看 `ok`；
+扩展名不支持时不许假装登记成功；② 与既有工具同一口径：`A.ingest_local` 与工具 `search.ingest_local`
+对同一个目录必须给出同一份读数（`already_present` + 同一个 `lit_id` + 逐字相同的 provenance）—— 两份
+口径漂移时读台账的人无法判断哪一份是真的；③ 编排层真的通（本文件最重要的一条）：主控通过
+`conductor.summon` 依次走 `A.ingest_local → B.register_statement → G.build_document → H.review`，四跳
+全部 `outcome=ok` 且四张表各有行。§43 证明的是工具层通，这一条证明的是编排层通 —— 两者之间正是那趟
+真机掉下去的地方。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -278,17 +270,13 @@ def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
 def test_b_register_statement_normalizes_string_page_numbers(tmp_path: Path):
     """`draft/83` §7 的 D71（T1 第 18 趟真机）：页码写成字符串不许把动作炸掉。
 
-    真机形状：主控派 `B.register_statement` 时给了
-    `page_range={"start": "343", "end": "414"}` —— 它在库里一路走到
-    `S.PageRange.from_dict`，而 `PageRange.__post_init__` 直接比大小
-    ⇒ `TypeError: '<' not supported between instances of 'str' and 'int'`
-    从动作里抛出去，`tasks` 那一行落 `failed`（"执行了、没成功"）。
-    这与"参数写错了"是两件事，台账必须分得开。
+    真机形状：主控派 `B.register_statement` 时给了 `page_range={"start": "343", "end": "414"}` —— 它在库里
+    一路走到 `S.PageRange.from_dict`，而 `PageRange.__post_init__` 直接比大小 ⇒
+    `TypeError: '<' not supported between instances of 'str' and 'int'` 从动作里抛出去，`tasks` 那一行落
+    `failed`（"执行了、没成功"）。这与"参数写错了"是两件事，台账必须分得开。
 
-    三态（不猜）：纯数字串归一成 int；非数字串/布尔/形状不对 ⇒ 带 kind 的拒绝；
-    `None`/空串仍是"不知道"（合法状态）。范围本身的合法性（>=1、start<=end）
-    也在写库前判，避免"从事务里抛 ValueError"。
-    """
+    三态（不猜）：纯数字串归一成 int；非数字串/布尔/形状不对 ⇒ 带 kind 的拒绝；`None`/空串仍是"不知道"
+    （合法状态）。范围本身的合法性（>=1、start<=end）也在写库前判，避免"从事务里抛 ValueError"。"""
     st = _store(tmp_path)
     lit_id = _lit(st, tmp_path)
     b = AgentB(st, extractor=None, extract_text=None)
@@ -389,27 +377,21 @@ def test_the_writer_and_the_reviewer_agree_on_page_range(tmp_path: Path):
 def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
     """编排层的正控（本文件的重点）：主控逐跳 summon，四张表各有行。
 
-    §43 的判据是我以角色身份调工具，证明的是工具层通；真机掉下去的地方在
-    编排层（主控只能 summon 动作）。所以这一条每一步都走 `conductor.summon`：
+    §43 的判据是我以角色身份调工具，证明的是工具层通；真机掉下去的地方在编排层（主控只能 summon 动作）。
+    所以这一条每一步都走 `conductor.summon`：`A.ingest_local` → `literature` 1 行（拿到 `lit_id`）；
+    A → `B.register_statement` → `statements` 1 行（三件套 + 出处）；`G.build_document` → `documents` 1 行
+    （claims 引 lit:）；`H.review` → 我方稿件 status 由 draft 推成 accepted。
 
-        A.ingest_local    → literature 1 行（拿到 lit_id）
-        A → B.register_statement → statements 1 行（三件套 + 出处）
-        G.build_document  → documents 1 行（claims 引 lit:）
-        H.review          → 我方稿件 status 由 draft 推成 accepted
-
-    第二跳的召唤方是 A（业主 2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V，
-    只能间接由父代理转达）—— 这一条链顺手把"间接那一跳真的走得通"也钉住了。
-
-    每一步都断言 `outcome == "ok"`（不是"没报错"）：`refused` 是允许的失败形态，
-    但它不算走通 —— 这条链要么全 ok，要么判据红。
-    """
+    第二跳的召唤方是 A（业主 2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V，只能间接由父代理转达）
+    —— 这一条链顺手把"间接那一跳真的走得通"也钉住了。每一步都断言 `outcome == "ok"`（不是"没报错"）：
+    `refused` 是允许的失败形态，但它不算走通 —— 这条链要么全 ok，要么判据红。"""
     st = _store(tmp_path)
     c = Conductor(st, registry=_agents(st))
     reg = build_registry(store=st, conductor=c).registry
 
     hops: list[dict] = []
     # 2026-10-16（口径 S2）：工具层的派活现在一律走角色自己的循环 ⇒ 这条"链走得通"
-    # 的判据走**内部 API**（与本文件下面 A→B 那一跳同一写法）。
+    # 的判据走内部 API（与本文件下面 A→B 那一跳同一写法）。
     lit = c.summon("A", "ingest_local", {"books_dir": "source", "pattern": "*.md"},
                    by="M", input_key="hop-a")
     hops.append({"action": "ingest_local", "status": lit.status, "outcome": lit.outcome})
@@ -457,17 +439,15 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
 def test_a_proofless_register_statement_is_recorded_and_marked_not_refused(tmp_path: Path):
     """新口径（P-06 / F-05 的主控裁定）：自产命题没有证明也登记，但如实标记。
 
-    改前口径（本条原来钉的）：这一笔被 `_refuse("missing_proof_text")` 挡住、
-    `tasks` 落 `refused/invalid_params`、`statements` 一行不许多。
-    为什么改：`draft/53:181` 的消费端要的是"把待办摆出来"，而不是"把待办挡住" ——
-    挡住了就永远没有一条待办能被秘书消费（真机后果就是"证明没做完"这件事在库里查不到）。
-    硬顺序（主控点名）：本口径必须在 B 删掉 `schema.Statement.validate` 里那条
+    改前口径（本条原来钉的）：这一笔被 `_refuse("missing_proof_text")` 挡住、`tasks` 落
+    `refused/invalid_params`、`statements` 一行不许多。为什么改：`draft/53:181` 的消费端要的是"把待办
+    摆出来"，而不是"把待办挡住" —— 挡住了就永远没有一条待办能被秘书消费（真机后果就是"证明没做完"这
+    件事在库里查不到）。硬顺序（主控点名）：本口径必须在 B 删掉 `schema.Statement.validate` 里那条
     `own_result` raise 之后才能落 —— 否则这一笔会在事务里抛 `ValueError`。
 
-    新口径要六件同时成立：不拒 + 行落库 + `proof_text` 空 + `quote_verified is None` +
-    `quote_reason` 非空 + 等级现算是"猜想"（不是证明级）；并且返回值里挂着
-    `pending:[{kind:"missing_proof",…}]`（"没有静默接受"）。
-    """
+    新口径要六件同时成立：不拒 + 行落库 + `proof_text` 空 + `quote_verified is None` + `quote_reason`
+    非空 + 等级现算是"猜想"（不是证明级）；并且返回值里挂着 `pending:[{kind:"missing_proof",…}]`
+    （"没有静默接受"）。"""
     from agentflow import evidencebits as EB
 
     st = _store(tmp_path)

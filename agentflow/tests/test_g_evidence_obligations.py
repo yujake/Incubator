@@ -1,28 +1,18 @@
 """G 的两条"无机械闸"义务：反向引用 / 一证据两用（2026-10-21）。
 
-`specs/g.py` 的 policy[7] 与 policy[9] 此前只有提示词、没有任何判据。本文件钉住
-补上的两条判据本体（`verifications.opposite_direction_evidence` /
-`verifications.one_evidence_used_twice`）与它们在审计面（`verify._check_7`）
-上的接线。每条都配四件套：
+`specs/g.py` 的 policy[7] 与 policy[9] 此前只有提示词、没有任何判据。本文件钉住补上的两条判据本体
+（`verifications.opposite_direction_evidence` / `verifications.one_evidence_used_twice`）与它们在审计面
+（`verify._check_7`）上的接线。每条都配四件套：① 正控：刻意造出违规 ⇒ 报，且点名（稿件行 id + 证据
+行 id / 断言 id）；② 反真空：合规形态 ⇒ 不报（判据不许"永远报一条"）；③ 负控：把判据本体换成恒
+`None` / 恒 `[]` ⇒ 正控必须消失；④ 边界：一证据两用的作用域只在一份稿件内（跨稿件复用是正常的）。
 
-1. **正控**：刻意造出违规 ⇒ 报，且点名（稿件行 id + 证据行 id / 断言 id）；
-2. **反真空**：合规形态 ⇒ 不报（判据不许"永远报一条"）；
-3. **负控**：把判据本体换成恒 `None` / 恒 `[]` ⇒ 正控必须消失
-   （否则说明正控不是这条判据给的）；
-4. **边界**：一证据两用的作用域只在一份稿件内（跨稿件复用是正常的）。
-
-## 两条义务的机械可判性（诊断结论，判据的界写在判据本体里）
-
-- 反向引用：**可判的那一半**是 `experiments.result="refutes"` 被一条没有登记成
-  `is_negative=True` + `negation_kind="disproved"` 的断言当支撑引用 ——
-  两个字段都在 schema 里。另一半（否定型断言引 `result="supports"`）**判不了**：
-  `supports` 是相对实验行自己的 `claim` 说的，一条否定命题完全可能被一条 supports
-  实验支持；要判它需要实验行声明"它检验的命题相对这条断言的极性"（schema 改动）。
-- 一证据两用：**可判**。身份 = 同一条实验行，或同脚本（`code_hash`）+ 同
-  `observations.data`（这正是 `agent_e` 写入期 `[同一份证据]` note 用的口径，
-  两边读同一个 `evidence_identity`）。同一份稿件里 ≥ 2 条不同 `claim_id` 引用
-  同一身份 ⇒ warning（正当复用存在，硬拦会红掉合规稿件）。
-"""
+两条义务的机械可判性（诊断结论，判据的界写在判据本体里）：反向引用可判的那一半是
+`experiments.result="refutes"` 被一条没有登记成 `is_negative=True` + `negation_kind="disproved"` 的
+断言当支撑引用 —— 两个字段都在 schema 里；另一半（否定型断言引 `result="supports"`）判不了：
+`supports` 是相对实验行自己的 `claim` 说的，一条否定命题完全可能被一条 supports 实验支持。一证据
+两用可判：身份 = 同一条实验行，或同脚本（`code_hash`）+ 同 `observations.data`（这正是 `agent_e`
+写入期 `[同一份证据]` note 用的口径，两边读同一个 `evidence_identity`）；同一份稿件里 ≥ 2 条不同
+`claim_id` 引用同一身份 ⇒ warning（正当复用存在，硬拦会红掉合规稿件）。"""
 
 from __future__ import annotations
 

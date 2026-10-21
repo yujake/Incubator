@@ -4,22 +4,19 @@
 
 T2 第 1 趟（从零做一轮研究）里，主控手上一件可召唤的动作都没法把第一个研究问题立起来：
 
-- `submit_gaps(qid)` / `research(qid)` / `consider(qid)` / `assess(qid)` / `adjudicate(qid)` /
-  `trace_question(qid)` / `probe_c(qid)` —— 全部要求 qid 已经存在；
-- `run_round(report)` 要一份 C 的分析报告（那是 `pipeline` 的 C→D 路）；
-- `ingest(report)` 读的也是 C 的报告；
+- `submit_gaps(qid)` / `research(qid)` / `consider(qid)` / `assess(qid)` / 
+`adjudicate(qid)` /`trace_question(qid)` / `probe_c(qid)` —— 全部要求 qid 已经存在；- 
+`run_round(report)` 要一份 C 的分析报告（那是 `pipeline` 的 C→D 路）；- `ingest(report)` 读的也是 C 的报告；
 - `write_report(out_path=None) -> str` 只写文件、不落表。
 
-创建路径只有两条，都不在 D 的可召唤动作面上：`pipeline`（C→D）与 D 的内部工具
-`research.submit_gap` —— 而工具只能由 D 自己的模型循环调用，主控够不到。
-于是那一趟 R1（立起研究问题）永远是 0 行，而这不是"模型不干活"。
+创建路径只有两条，都不在 D 的可召唤动作面上：`pipeline`（C→D）与 D 的内部工具`research.submit_gap` —— 而工具只能由 D 自己的模
+型循环调用，主控够不到。于是那一趟 R1（立起研究问题）永远是 0 行，而这不是"模型不干活"。
 
 ## 与既有实现的关系（一份写入口）
 
-行的构造与号段分配与 `agent_d/adjudicate.py` 里那次"新建等价问题"走同一条路：
-`tx.alloc_id("question")` + `S.ResearchQuestion(...).validate()` + `tx.upsert`，
-并且同样带防重号的那段防御（`counters` 落后于表时 `alloc_id` 会发出已占用的号，
-而 `tx.upsert` 是按主键替换 ⇒ 会静默覆盖已有行）。
+行的构造与号段分配与 `agent_d/adjudicate.py` 里那次"新建等价问题"走同一条路：`tx.alloc_id("question")` + 
+`S.ResearchQuestion(...).validate()` + `tx.upsert`，并且同样带防重号的那段防御（`counters` 落后于表时 
+`alloc_id` 会发出已占用的号，而 `tx.upsert` 是按主键替换 ⇒ 会静默覆盖已有行）。
 """
 from __future__ import annotations
 

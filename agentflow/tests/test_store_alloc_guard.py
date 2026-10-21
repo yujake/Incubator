@@ -1,34 +1,19 @@
 """`Tx.alloc_id` 的防覆盖守卫（一次真实缺陷的回归）。
-
 ## 缺陷
-
-`counters.json` 是 ID 分配器的缓存，真源是各表里已用掉的号。两者漂移时
-（手工建行、从台账恢复、外部脚本写入），分配器会发出已被占用的号，
-而 `upsert` 按主键替换 ⇒ 新行静默覆盖旧行：不报重复 ID、不报错、数据凭空消失。
-
-实测证据（D 侧报告）：`adjudicate` 新建的矛盾问题 (0002,0004) 被已存在的 0000 顶掉，
-`new_question_ids` 仍返回 `["0000"]` —— 调用方看到"新建成功"，而库里少了一条问题。
-
+`counters.json` 是 ID 分配器的缓存，真源是各表里已用掉的号。两者漂移时（手工建行、从台账恢复、外部脚本写入），分配器会发出已被占用的号，而 `upsert` 按主键替换 ⇒ 新行静默覆盖旧行：不报重复 ID、
+不报错、数据凭空消失。
+实测证据（D 侧报告）：`adjudicate` 新建的矛盾问题 (0002,0004) 被已存在的 0000 顶掉，`new_question_ids` 仍返回 `["0000"]` —— 调用方看到"新建成功"，
+而库里少了一条问题。
 ## 修法
-
-`alloc_id` 在已声明的事务表里查一遍该号是否被占用，占用就往后跳，
-并把 `counters` 推到最终号 + 1（缓存自愈）。跳过而不是抛异常：
-漂移是既成事实，崩溃修不好它；这里只负责"不破坏数据"，
-失序由 `verify` 的 `counter_behind` / `id_gap` 负责报告。
-
+`alloc_id` 在已声明的事务表里查一遍该号是否被占用，占用就往后跳，并把 `counters` 推到最终号 + 1（缓存自愈）。跳过而不是抛异常：漂移是既成事实，崩溃修不好它；这里只负责"不破坏数据"，失序由
+`verify` 的 `counter_behind` / `id_gap` 负责报告。
 ## `F-2`（2026-09-26 追加）：那道守卫自己留了一个不报错的缺口
-
-上面那句"在已声明的事务表里查一遍"曾经导致：没声明目标表时整段检查被跳过，
-而发号照旧（`if table is not None and table in self.tables:`）。于是同一条数据丢失
-路径在"只声明 counters"的调用形态下原样存在。实测见
-`temp/auditF-probe1.txt` 的 [D1]，回归判据见本文件的
-`test_alloc_id_without_the_target_table_declared_raises`。
-
+上面那句"在已声明的事务表里查一遍"曾经导致：没声明目标表时整段检查被跳过，而发号照旧（`if table is not None and table in self.tables:`）。于是同一条数据丢失路径在"只声明
+counters"的调用形态下原样存在。实测见`temp/auditF-probe1.txt` 的 [D1]，回归判据见本文件
+的`test_alloc_id_without_the_target_table_declared_raises`。
 ## S1r 并表（`SCHEMA_VERSION=2`）之后的改动
-
-本文件守的是分配器判据（跳过占用号 / 自愈 / 跳号事件 / 未声明表 fail-closed /
-空间用尽），行只是标本。并表把 `concepts` 表真删 ⇒ 标本换成 `statements`
-的一行（`kind="stmt"` / 主键 `stmt_id`），断言逐条不变。
+本文件守的是分配器判据（跳过占用号 / 自愈 / 跳号事件 / 未声明表 fail-closed /空间用尽），行只是标本。并表把 `concepts` 表真删 ⇒ 标本换成
+`statements`的一行（`kind="stmt"` / 主键 `stmt_id`），断言逐条不变。
 """
 
 from __future__ import annotations
@@ -93,22 +78,16 @@ def test_alloc_id_records_a_visible_event_when_it_jumps(store):
 
 
 def test_alloc_id_without_the_target_table_declared_raises(store):
-    """`F-2` 的负控：没声明目标表就发号 ⇒ 必须抛（改前这里返回一个已被占用的号）。
+    """    `F-2` 的负控：没声明目标表就发号 ⇒ 必须抛（改前这里返回一个已被占用的号）。
 
-    旧版把占用检查写成 `if table is not None and table in self.tables:`，
-    于是"没声明表"这一支整段跳过检查、照样发号。实测（`temp/auditF-probe1.txt`
-    的 [D1]）：把 `counters.lit` 拨回 0 后，只声明 `counters` 的事务给出 `0000`
-    （已被占用），随后写回 `literature` ⇒ `['first','second']` 变成
-    `['OVERWRITER','second']`，行数不变、旧行静默消失。
-
-    并表之后标本是 `stmt` / `statements`（`concept` 那一档随表退役）：
+    旧版把占用检查写成 `if table is not None and table in self.tables:`，于是"没声明表"这一支整段跳过检查、照样发号。实测（`temp/auditF-probe1.txt`的
+    [D1]）：把 `counters.lit` 拨回 0 后，只声明 `counters` 的事务给出 `0000`（已被占用），随后写回 `literature` ⇒
+    `['first','second']` 变成`['OVERWRITER','second']`，行数不变、旧行静默消失。并表之后标本是 `stmt` / `statements`（`concept` 那一档随表退役）：
     这里只声明 `counters`，占用检查要查的 `statements` 不在声明里 ⇒ 必须抛。
 
-    所以"不能崩"这个旧口径是错的：它保住的是调用方的方便，代价是静默覆盖。
-    正确的口径是"要发这个号，就必须把那张表声明进来、让我能查占用"。
+    所以"不能崩"这个旧口径是错的：它保住的是调用方的方便，代价是静默覆盖。正确的口径是"要发这个号，就必须把那张表声明进来、让我能查占用"。
 
-    本用例同时钉住"抛的是 `StoreError`"—— 调用方（与 `tx()`）读得懂这个类型；
-    裸 `RuntimeError` 会被上游当成"未知异常"。
+    本用例同时钉住"抛的是 `StoreError`"—— 调用方（与 `tx()`）读得懂这个类型；裸 `RuntimeError` 会被上游当成"未知异常"。
     """
     store.init()
     with pytest.raises(StoreError) as ei:

@@ -2,8 +2,7 @@
 
 ## 这个文件在测什么
 
-发布门本身的行为由 `tests/test_release_check_noai.py` 覆盖（第 6 项）。这里补的是
-其余几项在 `draft/28` 里被点名的缺口，每条都带「能证明注入生效」的负控：
+发布门本身的行为由 `tests/test_release_check_noai.py` 覆盖（第 6 项）。这里补的是其余几项在 `draft/28` 里被点名的缺口，每条都带「能证明注入生效」的负控：
 
 - `c-10`：`--skip` 的重复 / 逗号 / 空格三种写法必须等价（argparse 对同名选项是「覆盖」）；
 - `c-11`：产物路径的回退分支「不许」落在仓库里（`.release-lint.json` 被 git 跟踪）；
@@ -14,10 +13,8 @@
 
 ## 为什么这些测试不去跑真的那八项
 
-真跑一次发布门要十几分钟。这里的用例只碰判据本身（`_parse_skip_values` /
-`_artifact_path` / `_read_lint_counts` / `_selftest_verdict` / `Report.overall` /
-`item_linter`），要跑子进程时也只用「桩树」（临时目录里的几行 python）或直接
-`--skip` 全部八项（等于只测记账与产物，不跑检查）。
+真跑一次发布门要十几分钟。这里的用例只碰判据本身（`_parse_skip_values` /`_artifact_path` / `_read_lint_counts` / `_selftest_verdict` /
+`Report.overall` /`item_linter`），要跑子进程时也只用「桩树」（临时目录里的几行 python）或直接`--skip` 全部八项（等于只测记账与产物，不跑检查）。
 """
 
 from __future__ import annotations
@@ -168,18 +165,14 @@ def test_artifact_path_fallback_never_lands_in_the_repo(monkeypatch):
 
 
 def test_the_old_fallback_path_is_no_longer_a_live_file_in_the_repo():
-    """负控（`c-11` / F8）的「前提」：旧回退路径已经不是一个活着的仓库文件。
+    """    负控（`c-11` / F8）的「前提」：旧回退路径已经不是一个活着的仓库文件。
 
-    改前这条要的是"它确实被 git 跟踪"—— 那是为了证明"回退到它会改仓库状态"这个缺陷
-    成立。F8（`draft/52`）把那个过期产物删掉了（`rules_run` 只列到 R010、
-    `scanned` 停在 52/79、R004/R006 已退休、R009 那条 error 今天不存在 —— 自证过期四点），
-    于是这条负控的对象换了（它自己的 docstring 就要求"对象换了就回来重新校准"）：
+    改前这条要的是"它确实被 git 跟踪"—— 那是为了证明"回退到它会改仓库状态"这个缺陷成立。F8（`draft/52`）把那个过期产物删掉了（`rules_run` 只列到 R010、`scanned` 停在
+    52/79、R004/R006 已退休、R009 那条 error 今天不存在 —— 自证过期四点），于是这条负控的对象换了（它自己的 docstring 就要求"对象换了就回来重新校准"）：
 
-    现在要证明的是"它不再能被我方写回仓库状态"：
-
-    - 盘上那个路径必须不存在（存在就说明有人把过期产物写回来了）；
+    现在要证明的是"它不再能被我方写回仓库状态"：盘上那个路径必须不存在（存在就说明有人把过期产物写回来了）；
     - git 索引里若还留着它，只可能是"删除尚未提交"（本仓库不许 AI commit）
-      ⇒ 那也要看得见，不许静默跳过。
+    ⇒ 那也要看得见，不许静默跳过。
 
     两条都断言，不是把断言删掉。
     """

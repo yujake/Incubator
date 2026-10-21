@@ -12,18 +12,15 @@ from ._support import analyze_gaps, question_keywords
 class _Assess:
     def assess(self, qid: str, evidence: dict | None = None) -> dict:
         """评估证据是否足够（§4.4 的可核实判据）。
-
-        返回 ``{"sufficient", "insufficient", "criteria", "priority", "confidence",
-        "hits", "contradictions", "degree", ...}`` —— 全部中间值都在里面，
-        因为 D 的结论必须能被逐项复核（§3.4 对 C 的同一要求适用于 D）。
-
+        
+        返回 ``{"sufficient", "insufficient", "criteria", "priority", "confidence","hits", "contradictions", "degree", ...}``
+        —— 全部中间值都在里面，因为 D 的结论必须能被逐项复核（§3.4 对 C 的同一要求适用于 D）。
+        
         ## I1：评估阶段也点一次菜
-
-        判据本身（关键词命中 / 度数 / 矛盾）只依赖 D 侧溯源，不需要 C。
-        但"这个问题的结论有没有 C 侧证据"必须在评估阶段就定下来：
-        报告要用它决定措辞（无 C 侧证据时不许给确定语气）。所以这里在
-        evidence 里还没有 ``c_queries`` 时补一次 :meth:`probe_c`；
-        已经有（research 先查过）就复用，绝不重复查。
+        
+        判据本身（关键词命中 / 度数 / 矛盾）只依赖 D 侧溯源，不需要 C。但"这个问题的结论有没有 C 侧证据"必须在评估阶段就定下来：报告要用它决定措辞（无 C 侧证据时
+        不许给确定语气）。所以这里在 evidence 里还没有 ``c_queries`` 时补一次 :meth:`probe_c`；已经有（research 先查过）就复用，绝
+        不重复查。
         """
         ev = evidence if evidence is not None else self.trace_question(qid)
         if ev.get("c_queries") is None:

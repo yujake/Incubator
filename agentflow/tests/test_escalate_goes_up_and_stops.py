@@ -1,26 +1,21 @@
 # -*- coding: utf-8 -*-
 """上行：`conductor.escalate` 把"我需要召唤者做什么"交给父，然后这一趟优雅停。
 
-## 业主 2026-10-19 的裁定
+业主 2026-10-19 的裁定：「父子天然双向」—— 父子身份逻辑本来就是通用的（`AgentLoop._resolve_parent`
+解析出这一趟的收件人、`_opening_transcript` 把它渲染给模型），但没有可调用的上行入口：子代理跑到
+一半卡住时只能靠返回值等下一轮，或者借别人的边绕（真机 `t5-run2` 里 `H` 就是借边绕去找 A 的，多花
+两跳）。
 
-「父子天然双向」——父子身份逻辑本来就是通用的（`AgentLoop._resolve_parent` 解析出
-这一趟的收件人、`_opening_transcript` 把它渲染给模型），但**没有可调用的上行入口**：
-子代理跑到一半卡住时只能靠返回值等下一轮，或者借别人的边绕（真机 `t5-run2` 里
-B 就是借 `H` 绕去找 A 的，多花两跳）。
+这一组守四件事（每条都有正控 + 负控）：① 子 escalate ⇒ 父的 `inbox` 多一条（含 `need`/`kind`/
+`evidence`），子 `stop_reason="escalated"`、退出码 5 —— 负控：把"写 inbox"那一步换成只回编号、不落盘
+的桩 ⇒ `inbox` 一条都没有；② 父下一轮读到这条，读一次即 `mark_delivered` 登记已读 ⇒ 同一需求不会
+被重复处理 —— 负控：换成 no-op ⇒ 它仍然是 fresh；③ 顶层（M 没有父）调它 ⇒ 受控拒绝 `not_caller`，
+`statements` / `inbox` 一行不写 —— 负控：守卫换成"伪造一个父" ⇒ 它照样写、照样以 escalated 收工；
+④ 一条最小链：父 summon 子、子 escalate、父再 summon 另一个角色 ⇒ 全程 `stop_reason` / 退出码都对
+—— 负控：`_resolve_parent` 换成返回空 ⇒ ③ 与 ④ 同时红。
 
-这一组守四件事（每条都有正控 ＋ 负控）：
-
-| # | 断言 | 负控（改哪一步 ⇒ 这条红） |
-|---|---|---|
-| ① | 子 escalate ⇒ 父的 inbox 多一条（含 `need`/`kind`/`evidence`），子 `stop_reason="escalated"`、退出码 **5** | 把"写 inbox"那一步换成一个只回编号、不落盘的桩 ⇒ 父的 inbox 一条都没有 |
-| ② | 父下一轮**读到**这条；读一次即 `mark_delivered` 登记已读 ⇒ 同一需求不会被重复处理 | 把 `mark_delivered` 换成 no-op ⇒ 它仍然是 fresh（同一需求会被再处理一遍） |
-| ③ | 顶层（M 没有父）调它 ⇒ 受控拒绝 `not_caller`，`statements` / `inbox` 一行不写 | 把守卫换成"伪造一个父" ⇒ 它照样写、照样以 escalated 收工 |
-| ④ | 一条最小链：父 summon 子、子 escalate、父再 summon 另一个角色 ⇒ 全程 `stop_reason` / 退出码都对 | 把 `_resolve_parent` 换成返回空 ⇒ ③ 与 ④ 同时红 |
-
-为什么"退出码"要和"`stop_reason`"一起测：`cli.EXIT_CODE_BY_STOP` 是一张表，
-而"循环真的把 `stop_reason` 落成了 escalated"是另一件事 —— 两半合起来才是
-"脚本读得到这个结局"。
-"""
+为什么"退出码"要和"`stop_reason`"一起测：`cli.EXIT_CODE_BY_STOP` 是一张表，而"循环真的把
+`stop_reason` 落成了 escalated"是另一件事 —— 两半合起来才是"脚本读得到这个结局"。"""
 from __future__ import annotations
 
 import json
@@ -104,13 +99,13 @@ def _parent_row(cond: Conductor, role: str = "M") -> str:
 
 
 def _escalations(ws: pathlib.Path, role: str, *, sid: str = SID) -> list[dict]:
-    """某个角色收件箱里**这一条**上行（按 `escalation` 那一格捞，不按正文字面）。"""
+    """某个角色收件箱里这一条上行（按 `escalation` 那一格捞，不按正文字面）。"""
     msgs, _problems = read_messages(ws, role, sid=sid)
     return [m for m in msgs if isinstance(m.get("escalation"), dict)]
 
 
 def _raw_escalations(ws: pathlib.Path, *, sid: str = SID) -> list[dict]:
-    """盘上**写过**几条上行（不看收件箱的可见面）。
+    """盘上写过几条上行（不看收件箱的可见面）。
 
     为什么 ③ 要用它而不是 `_escalations`：`read_messages` 刻意跳过"我自己说的"
     （`from == role`），而顶层那一趟若把需求写给 M，发信人与收件人是同一个角色 ——
@@ -169,7 +164,7 @@ def test_negative_control_no_inbox_write_means_the_first_criterion_goes_red(
     """负控①：把"写 inbox"那一步换成一个只回编号、不落盘的桩 ⇒ 父的 inbox 一条都没有。
 
     这一条证明 ① 的"父的 inbox 多一条"不是被别的东西带绿的：
-    写的那一步被摘掉之后，同一趟运行仍然**自称** escalated（这正是最危险的假绿形态），
+    写的那一步被摘掉之后，同一趟运行仍然自称 escalated（这正是最危险的假绿形态），
     而判据在"收件箱里有没有那一条"上当场红。
     """
     import agentflow.agent_loop as ALmod
@@ -197,7 +192,7 @@ def test_negative_control_no_inbox_write_means_the_first_criterion_goes_red(
 
 def test_the_parent_reads_it_next_round_and_consumes_it_once(
         tmp_path: pathlib.Path) -> None:
-    """正控②：父下一轮**读到**这一条；读一次即 `mark_delivered` 登记 ⇒ 不会被重复处理。"""
+    """正控②：父下一轮读到这一条；读一次即 `mark_delivered` 登记 ⇒ 不会被重复处理。"""
     st, ws = _ws(tmp_path)
     cond = _cond(st)
     pid = _parent_row(cond)
@@ -288,7 +283,7 @@ def test_negative_control_without_the_guard_it_writes_and_stops(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """负控③：把守卫换成"伪造一个父" ⇒ 它照样写、照样以 escalated 收工 ⇒ ③ 那三条全红。
 
-    2026-10-20（业主「上行也必须真过名册」之后）：`escalate` 现在有**两道**守卫 ——
+    2026-10-20（业主「上行也必须真过名册」之后）：`escalate` 现在有两道守卫 ——
     `not_caller`（没有父）与名册判据（伪造的那个父不在名册上 ⇒ `not_in_roster`）。
     "去掉守卫"因此要把两道都去掉（只去一道，这条负控会变成"另一道把它拦住了"，
     而那不是这条判据要证明的事）。名册那一格的坏实现就是"无论收件人是谁都返回父"。
@@ -297,7 +292,7 @@ def test_negative_control_without_the_guard_it_writes_and_stops(
     cond = _cond(st)
     pid = _parent_row(cond)
     real = CD.Conductor.escalate
-    # 伪造一个**别的**父（顶层 M 的那一行就是它自己 ⇒ 必须换成一条真正的别人）
+    # 伪造一个别的父（顶层 M 的那一行就是它自己 ⇒ 必须换成一条真正的别人）
     forged = _parent_row(cond)
 
     def _roster_blind(self, **kw: Any) -> dict[str, Any]:
@@ -332,7 +327,7 @@ def _chain(tmp_path: pathlib.Path) -> tuple[Store, pathlib.Path, dict]:
     st, ws = _ws(tmp_path)
     gateways = {
         "M": _Gateway([
-            # `task` 在 summon 的**顶层**（S2「M 只派活」：不点动作时的那件活），
+            # `task` 在 summon 的顶层（S2「M 只派活」：不点动作时的那件活），
             # 不在 `params` 里 —— 放进 params 会被拒（"派活必须写清是什么活"）。
             '{"summon": {"role": "B", "action": "run_once", "task": "把这条链交给父"}}',
             '{"summon": {"role": "A", "action": "run_once", "task": "取回 lit:0007 全文"}}',
@@ -391,7 +386,7 @@ def test_negative_control_without_a_resolved_parent_both_3_and_4_go_red(
       整条链的 `stop_reason` / 退出码读数就错了；
     - ① 红：同一条链里"父的收件箱多一条"不成立（下面显式再跑一次 ① 的形态，
       拿到 `stop_reason != "escalated"`）；
-    - **③ 仍然绿**（它本来就断言"没有父 ⇒ 拒绝"，而这时所有人都"没有父"）——
+    - ③ 仍然绿（它本来就断言"没有父 ⇒ 拒绝"，而这时所有人都"没有父"）——
       这一点必须写在明面上：③ 单独抓不住"父解析坏了"，抓它的是 ① 与 ④。
       把三档都测过一遍才是"这条通道真的依赖 `_resolve_parent`"的读数。
     """
@@ -437,7 +432,7 @@ def test_escalated_is_not_read_as_a_user_stop(tmp_path: pathlib.Path) -> None:
 
     为什么值得一条：`EXIT_CODE_BY_STOP` 把"有人叫停"（4）与"它自己停"（5）分成两档，
     而这条界线的机器形态就是"有没有停机开关 / 停意是谁下的"。把 `escalated` 读成
-    用户停会让父代理去等一个**不存在的人**。
+    用户停会让父代理去等一个不存在的人。
     """
     from agentflow import stopctl
 

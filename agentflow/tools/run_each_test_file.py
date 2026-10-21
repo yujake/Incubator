@@ -1,37 +1,21 @@
 #!/usr/bin/env python
 """逐文件跑测试：把"顺序依赖 / 跨文件状态泄漏"变成一条可判定的门。
-
 ## 为什么要有这条门（G-27，实测）
-
-审计期实测：`pytest tests/test_fc17_wiring.py -q` 单独跑是 6 failed / 4 passed，
-而在全量 `pytest -q` 里全过。也就是说那次的绿灯是排序给的，不是判据给的 ——
-全量绿掩盖了单文件红，而"到底哪个文件坏了"必须可判定。
-
+审计期实测：`pytest tests/test_fc17_wiring.py -q` 单独跑是 6 failed / 4 passed，而在全量 `pytest -q` 里全过。也就是说那次的绿灯是排序给的，不是判据给的
+——全量绿掩盖了单文件红，而"到底哪个文件坏了"必须可判定。
 ## 判据与退出码
-
 判据：`tests/test_*.py` 里每个文件各起一个 pytest 进程；任一文件非 0 ⇒ 本门失败。
-
 - `0` = 每个有可跑用例的文件单独跑都过（"全被配置筛掉"的文件逐条列出，不算过也不算失败）；
 - `1` = 至少一个文件单独跑失败（逐文件列出，并给出该文件自己的汇总行）；
 - `2` = 没查成（没有 tests 目录 / 空目录 / 超时 / 起不了进程 / 有文件一个用例都没有 /
-  有文件整份都是 xfail 或 xpass / 有文件整份被跳过而没豁免）。三态纪律：这些都不是"过"。
-
-`exit=5`（pytest 的 `NO_TESTS_COLLECTED`）必须按输出拆成两种：汇总行里有 `deselected`
-⇒ "用例都被配置筛掉了"（如 `-m "not network"`），没有 ⇒ "这个文件空了"。
-第一版把两者都当失败，于是发布检查多了一条假红（实测见 `classify_pytest_result`）。
-
-`exit=0` 也要按汇总行拆（`I-2` / `R6-7`）：只有 `skipped` ⇒ `all_skipped`；
-只有 `xfailed` / `xpassed` ⇒ `all_xfail`；两者都不是"过"。
-`all_xfail` 单列一档（`R6-7`）的理由：旧版把它塞进 `no_tests`，而那一档的打印是
-"文件里一个用例都没有" —— 对一个整份都是 xfail 的文件，这句话是假的
-（用例在，只是都被标成了预期失败）。桶名与措辞都必须说事实，
-否则读报告的人会去查一个不存在的问题（"文件是不是被改名了"）。
-
+有文件整份都是 xfail 或 xpass / 有文件整份被跳过而没豁免）。三态纪律：这些都不是"过"。
+`exit=5`（pytest 的 `NO_TESTS_COLLECTED`）必须按输出拆成两种：汇总行里有 `deselected`⇒ "用例都被配置筛掉了"（如 `-m "not network"`），没有 ⇒
+"这个文件空了"。第一版把两者都当失败，于是发布检查多了一条假红（实测见 `classify_pytest_result`）。
+`exit=0` 也要按汇总行拆（`I-2` / `R6-7`）：只有 `skipped` ⇒ `all_skipped`；只有 `xfailed` / `xpassed` ⇒ `all_xfail`；
+两者都不是"过"。`all_xfail` 单列一档（`R6-7`）的理由：旧版把它塞进 `no_tests`，而那一档的打印是"文件里一个用例都没有" —— 对一个整份都是 xfail 的文件，这句话是假的（用例在，
+只是都被标成了预期失败）。桶名与措辞都必须说事实，否则读报告的人会去查一个不存在的问题（"文件是不是被改名了"）。
 ## 为什么必须逐文件起进程
-
-同一个进程里连着跑多个文件，正是顺序依赖能藏身的地方。所以本脚本不许把文件合并成
-一次 pytest 调用 —— 那等于把这条门取消。`--list` 会把每条命令原样打出来，供人核对
-"确实是一个文件一条命令"。
+同一个进程里连着跑多个文件，正是顺序依赖能藏身的地方。所以本脚本不许把文件合并成一次 pytest 调用 —— 那等于把这条门取消。`--list` 会把每条命令原样打出来，供人核对"确实是一个文件一条命令"。
 """
 
 from __future__ import annotations
@@ -76,12 +60,12 @@ EXEMPT_ALL_SKIPPED: dict[str, str] = {
 #: 豁免名单的条数上限。见上面那段：它是"加一行就绿"的机器阻力。
 #:
 #: 2026-10-07 从 1 抬到 2：Web 端的浏览器判据（`tests/test_webui_browser.py`）与既有的
-#: `test_providers_online.py` **完全同构** —— 都是"整文件被默认筛掉 + 未装依赖即 skip"，
-#: 都不是缺陷。抬这个上限是一次**需要解释的编辑**（本条注释就是解释），并且：
+#: `test_providers_online.py` 完全同构 —— 都是"整文件被默认筛掉 + 未装依赖即 skip"，
+#: 都不是缺陷。抬这个上限是一次需要解释的编辑（本条注释就是解释），并且：
 #:   · 两条豁免各自的理由都过 `audit_exemptions()` 的三道机器判据（条数/存在/实质）；
 #:   · 这条改动与 G2 那两处一样落在 FC-27 的 `[category: release-deploy]` 里
 #:     ⇒ 需要人逐行走查 + 2 名 reviewer 批准，已登记在 `draft/67 §3b` 的第 3 条待签项；
-#:   · 抬上限**不放松**判定语义：名单外的一律 `unknown`，而上限本身仍是硬约束（3 条就红）。
+#:   · 抬上限不放松判定语义：名单外的一律 `unknown`，而上限本身仍是硬约束（3 条就红）。
 MAX_EXEMPT_ALL_SKIPPED: int = 2
 #: 豁免理由的最短长度（字符）。
 MIN_EXEMPT_REASON_CHARS: int = 20
@@ -166,49 +150,24 @@ def pytest_argv(test_file: Path) -> list[str]:
 
 
 def classify_pytest_result(returncode: int, output: str) -> tuple[str, str]:
-    """把一个 pytest 子进程的结果映射到本门的状态，返回 `(状态, 证据行)`。
-
-    状态取值 `ok` / `fail` / `all_skipped` / `all_xfail` / `deselected` / `no_tests`；
-    `unknown` 由调用方在超时/起不来时直接给，不经过这里。
-
+    """    把一个 pytest 子进程的结果映射到本门的状态，返回 `(状态, 证据行)`。
+    状态取值 `ok` / `fail` / `all_skipped` / `all_xfail` / `deselected` / `no_tests`；`unknown` 由调用方在超时/起不来时直接给，不经过这里。
     ## `I-2`：`exit 0` 不等于"有东西跑过且都过了"
-
-    旧版第一句是 `if returncode == 0: return "ok", summary` —— 于是
-    一个全部被 skip 的文件（汇总行是 `1 skipped in 0.01s`、一个 `passed` 都没有）
-    被判成 `ok`。实测（`draft/28` 的 `I-2`）：文件内容
-    `pytestmark = pytest.mark.skip(...)` + 一条 `assert False`，门报
-    `[ok  ] tests/test_allskip.py  1 skipped in 0.01s` 且整体退出码 0。
-    也就是说：给用例加一个 skip 就能整文件消音，而且报绿。
-    真实实例：`tests/test_agent_e_formal_path.py` 默认 `14 passed, 1 skipped`，
-    而被跳掉的那一条是全仓唯一真起 Lean 跑一遍的端到端判据 ——
-    门只知道"过 1"，不知道那一条从没在门里跑过。
-
+    旧版第一句是 `if returncode == 0: return "ok", summary` —— 于是一个全部被 skip 的文件（汇总行是 `1 skipped in 0.01s`、一个 `passed` 都没有）被判成 `ok`。
+    实测（`draft/28` 的 `I-2`）：文件内容`pytestmark = pytest.mark.skip(...)` + 一条 `assert False`，
+    门报`[ok  ] tests/test_allskip.py  1 skipped in 0.01s` 且整体退出码 0。也就是说：给用例加一个 skip 就能整文件消音，而且报绿。
+    真实实例：`tests/test_agent_e_formal_path.py` 默认 `14 passed, 1 skipped`，而被跳掉的那一条是全仓唯一真起 Lean 跑一遍的端到端判据 ——门只知道"过 1"，不知道那一条从没在门里跑过。
     所以 `exit 0` 要按汇总行再分两档：
-
-    - 有 `passed` ⇒ `ok`（真的跑了，且都过了）；
-    - 只有 `skipped`（一个 `passed` 都没有）⇒ `all_skipped`（没有对象可判）。
-
-    `all_skipped` 在 `main()` 里按 `EXEMPT_ALL_SKIPPED` 处理：名单外的一律 `unknown`
-    并影响退出码；名单内的照实打印豁免理由。
-
+    - 有 `passed` ⇒ `ok`（真的跑了，且都过了）；- 只有 `skipped`（一个 `passed` 都没有）⇒ `all_skipped`（没有对象可判）。
+    `all_skipped` 在 `main()` 里按 `EXEMPT_ALL_SKIPPED` 处理：名单外的一律 `unknown`并影响退出码；名单内的照实打印豁免理由。
     ## 为什么必须把 `exit=5` 拆成两种（实测，本门接进 release_all 第一次就抓到）
-
-    `tests/test_providers_online.py` 的用例全带 `network` 标记，而本仓库默认
-    `-m "not network"` ⇒ pytest 以 5（`NO_TESTS_COLLECTED`）结束，汇总行是
-    `8 deselected in 0.08s`。第一版把它判成"单独跑不过"，于是发布检查多了一条假红 ——
-    拿"没有可判的对象"冒充"有问题"，正是本项目反复踩的那类错误。
-
+    `tests/test_providers_online.py` 的用例全带 `network` 标记，而本仓库默认`-m "not network"` ⇒ pytest 以 5（`NO_TESTS_COLLECTED`）结束，
+    汇总行是`8 deselected in 0.08s`。第一版把它判成"单独跑不过"，于是发布检查多了一条假红 ——拿"没有可判的对象"冒充"有问题"，正是本项目反复踩的那类错误。
     所以按输出区分两件不同的事：
-
-    - `deselected`：文件里有用例，但都被配置筛掉了（汇总行里有 `deselected`）
-      ⇒ 没有对象可判；但同样必须显式豁免（否则"加一个标记"就是摘除文件的手段，
-      而那正是 `I-2` 记的第二条旁路）。
-    - `no_tests`：文件里一个用例都没有（既没 `deselected` 也没 `passed`）
-      ⇒ "这个文件空了"的信号，整体按没查成处理，绝不读成过。
-
-     判"有 `passed`"用的是计数正则而不是 `"passed" in summary`：
-    后者会被 `0 passed` 骗过去（pytest 在"全跳过"时会打 `1 skipped`，
-    但在"空收集 + 有错误"时可能打 `0 passed`）。用 `\\d+ passed` 且要求数字非 0。
+    - `deselected`：文件里有用例，但都被配置筛掉了（汇总行里有 `deselected`）⇒ 没有对象可判；但同样必须显式豁免（否则"加一个标记"就是摘除文件的手段，而那正是 `I-2` 记的第二条旁路）。- `no_tests`：
+    文件里一个用例都没有（既没 `deselected` 也没 `passed`）⇒ "这个文件空了"的信号，整体按没查成处理，绝不读成过。
+    判"有 `passed`"用的是计数正则而不是 `"passed" in summary`：后者会被 `0 passed` 骗过去（pytest 在"全跳过"时会打 `1 skipped`，但在"空收集 + 有错误"时可能打 `0 passed`）。用
+    `\\d+ passed` 且要求数字非 0。
     """
     lines = [ln for ln in (output or "").strip().splitlines() if ln.strip()]
     summary = lines[-1] if lines else "（没有输出）"

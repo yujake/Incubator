@@ -116,20 +116,15 @@ def test_the_new_table_is_visible_to_the_generic_table_tools(store):
 
 
 def test_the_schema_reflection_is_jsonable(store):
-    """只读工具的返回必须能被如实记录：`table.schema` 的 `default` 不许是行内对象。
+    """    只读工具的返回必须能被如实记录：`table.schema` 的 `default` 不许是行内对象。
 
     ## 这条判据治的是真机上的一个"三跳断在第二跳"（2026-10-13，`p9-t1-nolean`）
 
-    子代理 B 被二级唤起做 `register_statement`，它第一步读了 `table.schema`（不带
-    `table` ⇒ 反射全部表）。`statements.page_range` / `dependencies.page_range` 的
-    默认值是一个 `PageRange` **实例**，被原样放进返回里 ⇒ 这一趟循环在记步/落产出时
-    `json.dumps` 抛 `TypeError: Object of type PageRange is not JSON serializable`
-    ⇒ 整趟以 `failed` 收场（真机 t-0020 / t-0021 / t-0024 三条全废，
-    而"父→子→孙"这条链正是靠那三条活着的）。
-
-    先看负控（证明这条判据不是空转）：**反射出来的原始 `default` 确实不可 JSON 化**；
-    再看正控：`table.schema` 的返回整体可 `json.dumps`，且那一格的默认值被如实降级成
-    它的 `to_dict()`（不是丢掉、也不是编一个值）。
+    子代理 B 被二级唤起做 `register_statement`，它第一步读了 `table.schema`（不带`table` ⇒ 反射全部表）。`statements.page_range` /
+    `dependencies.page_range` 的默认值是一个 `PageRange` 实例，被原样放进返回里 ⇒ 这一趟循环在记步/落产出时`json.dumps` 抛
+    `TypeError: Object of type PageRange is not JSON serializable`⇒ 整趟以 `failed` 收场（真机 t-0020 / t-0021 / t-0024
+    三条全废，而"父→子→孙"这条链正是靠那三条活着的）。先看负控（证明这条判据不是空转）：反射出来的原始 `default` 确实不可 JSON 化；再看正控：`table.schema` 的返回整体可
+    `json.dumps`，且那一格的默认值被如实降级成它的 `to_dict()`（不是丢掉、也不是编一个值）。
     """
     import dataclasses
     import json

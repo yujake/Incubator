@@ -112,18 +112,14 @@ def test_e15_2_the_next_steps_are_derived_from_readings_not_written_by_a_model(t
 
 
 def test_ee04_the_report_carries_the_faculty_mechanics(tmp_path):
-    """EE-04：状态报告里必须有十项官能的机械半读数（给它一条不依赖 `gate` CLI 的调用者）。
+    """    EE-04：状态报告里必须有十项官能的机械半读数（给它一条不依赖 `gate` CLI 的调用者）。
 
-    改动前的调用链（`draft/48-09 §4.10`）：`faculty_checks` 的函数 ← `deliver.py:167/185/188`
-    ← `cli.py:1648 cmd_gate`（子命令注册 `cli.py:2370`）⇒ 那条 CLI 一退场，
-    `faculty_checks` 就成了孤儿模块。现在 `statusreport.collect` 直接调它的纯函数：
-    为什么不走 `deliver` —— 那个函数会写盘（`deliver.py:251-254` 落 `gates/<名字>.json`），
-    而状态报告是只读现场读数。
+    改动前的调用链（`draft/48-09 §4.10`）：`faculty_checks` 的函数 ← `deliver.py:167/185/188`← `cli.py:1648 cmd_gate`（子命令注册
+    `cli.py:2370`）⇒ 那条 CLI 一退场，`faculty_checks` 就成了孤儿模块。现在 `statusreport.collect` 直接调它的纯函数：为什么不走 `deliver` ——
+    那个函数会写盘（`deliver.py:251-254` 落 `gates/<名字>.json`），而状态报告是只读现场读数。
 
-    判据两半（缺一半就会退化成"加了一个键"）：
-    ① 报告对象里有 `faculty`，且两个读数来自真调用（`conjecture_hygiene` 的 verdict 在
-       它自己的词表里、`claim_strength` 有 `total/verdict` 这些由被调函数产出的键）；
-    ② 渲染出来的 `.md` 里看得见（只写 `.json` 等于"落盘了但没人看得见"）。
+    判据两半（缺一半就会退化成"加了一个键"）：① 报告对象里有 `faculty`，且两个读数来自真调用（`conjecture_hygiene` 的 verdict 在它自己的词表里、`claim_strength` 有
+    `total/verdict` 这些由被调函数产出的键）；② 渲染出来的 `.md` 里看得见（只写 `.json` 等于"落盘了但没人看得见"）。
     """
     ws, st, _ = _ws(tmp_path)
     report = SR.collect(st, ws)

@@ -3,26 +3,17 @@
 
 ## 它补的是什么
 
-`draft/44` S-10：F 的 `counterexample_request` 造出的 E 子目标带着判据
-（`script_spec` = criterion/params/expected_bound）却没有 `script_path`
-⇒ `_deploy_e` 只能回一句"没有给 script_path ⇒ 未推进"，那条子目标原地打转直到计划 `stalled`。
-补法是让 E 按判据把脚本写出来（`author_script`），落进工作区，然后照常跑它。
+`draft/44` S-10：F 的 `counterexample_request` 造出的 E 子目标带着判据（`script_spec` = criterion/params/expected_bound）却没有 `script_path` ⇒ `_deploy_e` 只能回一句"没有给 script_path ⇒ 未推进"，那条子目标原地打转直到计划 `stalled`。补法是让 E 按判据把脚本写出来（`author_script`），落进工作区，然后照常跑它。
 
 ## 五条硬条件（本文件逐条钉）
 
-1. 只做生成，判读一个字不改（FC-16）：`run_experiment` / `_derive` / `_parse_conclusion`
-   那一侧不许出现任何缝调用 —— 判据是"跑一次判读，缝的调用计数为 0"；
-2. 脚本必须落进工作区（`code/`），不是临时目录：落点要能被 `run_experiment(script_path=…)`
-   与 `proof_location` 认出来（`check_formal` 把源码放临时目录那次踩过这个坑）；
-3. 三态不许折成"原地打转"：`no_seam` / `bad_spec` / `bad_source` / `write_failed` / `judge_*`
-   各自出现在 `blocked_reason` 里，且都不返回 `script_path`；
-4. 反负控："没判据 ⇒ 不写脚本"：没有 `script_spec` 的 E 子目标不许被凭空生成一份脚本
-   （否则"写脚本"这件事会掩盖"根本不知道该判什么"）；
-5. 端到端：判据在、脚本不在 ⇒ 改前红（no_change、盘上无脚本、无实验行）；
-   改后：盘上有脚本 + `experiments` 有条目 + 子目标里看得见 `script_path`。
+1. 只做生成，判读一个字不改（FC-16）：`run_experiment` / `_derive` / `_parse_conclusion` 那一侧不许出现任何缝调用 —— 判据是"跑一次判读，缝的调用计数为 0"；
+2. 脚本必须落进工作区（`code/`），不是临时目录：落点要能被 `run_experiment(script_path=…)` 与 `proof_location` 认出来（`check_formal` 把源码放临时目录那次踩过这个坑）；
+3. 三态不许折成"原地打转"：`no_seam` / `bad_spec` / `bad_source` / `write_failed` / `judge_*` 各自出现在 `blocked_reason` 里，且都不返回 `script_path`；
+4. 反负控："没判据 ⇒ 不写脚本"：没有 `script_spec` 的 E 子目标不许被凭空生成一份脚本（否则"写脚本"这件事会掩盖"根本不知道该判什么"）；
+5. 端到端：判据在、脚本不在 ⇒ 改前红（no_change、盘上无脚本、无实验行）；改后：盘上有脚本 + `experiments` 有条目 + 子目标里看得见 `script_path`。
 
-离线：缝是假模型（返回写死的 JSON），判据不由真模型决定。
-"""
+离线：缝是假模型（返回写死的 JSON），判据不由真模型决定。"""
 from __future__ import annotations
 
 import json

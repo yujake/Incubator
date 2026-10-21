@@ -1,32 +1,23 @@
 """判据：每一步发给模型的是消息序列（S-C 第 ① 步 / 业主 2026-10-10 裁定 5甲）。
 
-## 这一批换的是什么（以及没换什么）
-
-搬运来源：DSH 的 messages —— assistant 带 `tool_calls`、tool 带 `tool_call_id`
+换的：`transcript: str` 不再是唯一历史载体。循环里那份历史现在是 `messages: list[dict]`
+（`role: user / assistant / tool`），assistant 那条带结构化的 `tool_calls`（`id` 由步号派生，所以
+从会话记录里重建得回来），tool 那条带 `tool_call_id`；`run.messages` 是这一趟的序列读数。搬运
+来源是 DSH 的 messages —— assistant 带 `tool_calls`、tool 带 `tool_call_id`
 （`dsh-agent-loop/lib/index.js` 的 loop 消息面；判别式那一族见 `draft/100` §3）。
 
-换的：`transcript: str` 不再是唯一历史载体。循环里那份历史现在是
-`messages: list[dict]`（`role: user / assistant / tool`），assistant 那条带结构化的
-`tool_calls`（`id` 由步号派生，所以从会话记录里重建得回来），tool 那条带
-`tool_call_id`。`run.messages` 是这一趟的序列读数。
+没换的：念出来的那份文本。`render_messages(messages) == run.transcript` 由构造保证（`_spoken_half` /
+`_result_half` 是那两个"半句"的唯一拼法，`_step_line` 也由它们拼出来）—— 于是 `run.transcript` 的
+读者（Web UI 的事件回放、续跑、`--resume`）这一步之后拿到的东西一个字没变。整序列化与
+`resume_messages`（逐条相等）是第 ② 步。
 
-没换的：念出来的那份文本。`render_messages(messages) == run.transcript`
-由构造保证（`_spoken_half` / `_result_half` 是那两个"半句"的唯一拼法，`_step_line`
-也由它们拼出来）—— 于是 `run.transcript` 的读者（Web UI 的事件回放、续跑、`--resume`）
-这一步之后拿到的东西一个字没变。整序列化与 `resume_messages`（逐条相等）是第 ② 步。
-
-## 判据（六条）
-
-1. 正控（四条的形态）：两步的循环里，第二步发给模型的是
-   `[system, user, assistant(tool_calls), tool]`，且 tool 的 `tool_call_id` 等于
-   assistant 给的 id（`system` 走 `LlmSeam` 的 `system=` 那一格，不在序列里）。
-2. 负控：把 tool 挂到错的 id ⇒ 配对判据当场红（`message_sequence_problem`）。
-3. 反真空：序列里 assistant 那条必须带工具调用（否则这条判据只测了拼接）。
-4. 正控（渲染逐字相同）：`render_messages(run.messages) == run.transcript`。
-5. 正控（插话是 user 消息）：插话进序列时是 `user` 那条 —— 它是"人对我说的"，
-   不是工具结果（改前它只是拼进字符串的一段）。
-6. 负控（角色词表）：序列里出现第四种角色 ⇒ 配对判据点名（词表只有三个）。
-"""
+判据六条：1. 正控：两步的循环里，第二步发给模型的是 `[system, user, assistant(tool_calls), tool]`，
+且 tool 的 `tool_call_id` 等于 assistant 给的 id（`system` 走 `LlmSeam` 的 `system=` 那一格，不在
+序列里）。2. 负控：把 tool 挂到错的 id ⇒ 配对判据当场红（`message_sequence_problem`）。3. 反真空：
+序列里 assistant 那条必须带工具调用（否则这条判据只测了拼接）。4. 正控（渲染逐字相同）：
+`render_messages(run.messages) == run.transcript`。5. 正控（插话是 user 消息）：插话进序列时是
+`user` 那条 —— 它是"人对我说的"，不是工具结果（改前它只是拼进字符串的一段）。6. 负控（角色词表）：
+序列里出现第四种角色 ⇒ 配对判据点名（词表只有三个）。"""
 
 from __future__ import annotations
 
@@ -209,28 +200,16 @@ def _budget_line(prompt: str) -> str:
 def test_the_changing_facts_go_to_the_user_message_not_the_system(tmp_path: pathlib.Path) -> None:
     """静态/动态分离（2026-10-19）：会变的两格走 user 消息，system 逐字节稳定。
 
-    ## 它取代的是哪一条契约（以及为什么必须换）
+    改前这里是裁定 J=乙 的判据：花销涨了 ⇒ system 必须换（`systems[0] != systems[1]`）。动机是对的（模型
+    得看见最新余额），但它把 `budget_left` / `notebook` 留在 system 里 ⇒ 几乎每步整条前缀都变 ⇒ 上游的
+    前缀缓存（`prompt_cache_hit_tokens`）结构上永不命中（实测 M 岗：54,902 字的 system 从第 35,035 个
+    字符起就不同，差异正是"已用 0.000000 → 0.001200"）。现在这两格的值在每步的 user 消息尾部现读，
+    system 里留一段静态指路语：两半都还在，只换了载体 ——「模型据以决策的数是新的」由 user 提示词守
+    （"草稿本"也在这里现读），「前缀别每步都换」由 system 逐字节相同守（旧契约允许变，新要求更强）。
 
-    改前这里是裁定 J=乙 的判据：**花销涨了 ⇒ system 必须换**（`systems[0] != systems[1]`）。
-    那一版的动机是对的（模型得看见最新余额），但它把 `budget_left` / `notebook` 留在了
-    **system** 里 ⇒ 几乎每一步整条前缀都变 ⇒ 上游的前缀缓存（`prompt_cache_hit_tokens`）
-    在结构上永不命中（实测 M 岗：54,902 字的 system 从第 35,035 个字符起就不同，
-    差异正是"已用 0.000000 → 0.001200"）。
-
-    现在这两格的**值**在每一步的 user 消息尾部现读，system 里留一段静态指路语。
-    于是这一条判据的两半都还在，只是载体换了：
-    「模型据以决策的数是新的」由 user 提示词守（②），
-    「前缀别每步都换」由 system 逐字节相同守（①）—— 后者是新的、也是更强的要求
-    （旧契约允许变，新契约要求不变）。
-
-    ## 三跳
-
-    1. 正控（前缀稳定）：非零价 ⇒ 花销每步都涨，而 system 必须**逐字节相同**；
-    2. 正控（真话没丢）：那个数字换到了这一步的 user 消息里，而且真的是**新的**
-       （第 0 步 `已用 0.000000`、第 1 步不是它）；"草稿本"也在这里现读；
-    3. 读数：两趟都不该出现"system 在步边界上变了"的红灯 ——
-       它只在有人把每步会变的东西塞回 system 时才该出现（负控在新判据文件里）。
-    """
+    三跳：1. 正控（前缀稳定）：非零价 ⇒ 花销每步都涨，而 system 必须逐字节相同；2. 正控（真话没丢）：
+    那个数字换到了这一步的 user 消息里，而且真的是新的（第 0 步 `已用 0.000000`、第 1 步不是它）；
+    3. 读数：两趟都不该出现"system 在步边界上变了"的红灯 —— 只在有人把每步会变的东西塞回 system 时才该出现（负控在新判据文件里）。"""
     run, gw, root = _two_step_run(tmp_path / "charged", sid="test-run", price=(1.0, 2.0))
     assert run.stop_reason == "final", run.to_dict()
     systems = gw["M"].systems

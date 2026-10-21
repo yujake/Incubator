@@ -16,17 +16,14 @@ from .run_script_experiment import _RunScriptExperiment
 
 def _mathlib_remedy_note(status: str, imports: "Sequence[str] | None", path: Path) -> str:
     """这一次 formal 失败能不能被「忘了传 Mathlib」解释？能就明说（现算，不猜）。
-
-    真机读数（2026-10-05 T1 第 16 趟）：4 次 formal 全部
-    `imports=（默认：不注入任何库）`，检查器原话 `failed to synthesize instance` /
-    `omega did not find a contradiction` ⇒ 全是 `compile_error`，一条 proof 行都没落成（`P8`）。
-    提示词那一侧同批改成"读数说可用就把它传进去"，但读数这一侧也要说：
-    一句话能省掉的 4 次重复尝试，不该指望模型记得住第 30 步之前读过的政策。
-
-    只在三个条件同时成立时说（否则就是替检查器编一个原因）：
-    ① 检查器状态是 `compile_error`（`uses_sorry` / `decl_mismatch` / 超时都与缺库无关）；
-    ② 本机 Mathlib 现算可用；
-    ③ 这一次确实没有要它（`imports` 里没有、源码里也没有 `import Mathlib`）。
+    
+    真机读数（2026-10-05 T1 第 16 趟）：4 次 formal 全部`imports=（默认：不注入任何库）`，检查器原话 
+    `failed to synthesize instance` /`omega did not find a contradiction` ⇒ 全是 
+    `compile_error`，一条 proof 行都没落成（`P8`）。提示词那一侧同批改成"读数说可用就把它传进去"，但读数这一侧也要说：一句话能省掉的 4 次重复尝试，
+    不该指望模型记得住第 30 步之前读过的政策。
+    
+    只在三个条件同时成立时说（否则就是替检查器编一个原因）：① 检查器状态是 `compile_error`（`uses_sorry` / `decl_mismatch` / 
+    超时都与缺库无关）；② 本机 Mathlib 现算可用；③ 这一次确实没有要它（`imports` 里没有、源码里也没有 `import Mathlib`）。
     """
     if status != "compile_error":
         return ""
@@ -290,23 +287,14 @@ class _Core:
         imports: Sequence[str] | None,
     ) -> dict:
         """形式化路径：真跑一次检查器，按检查器给的结论登记一行 `Experiment`。
-
-        这是 `P-8` 的接线：此前 `run_experiment` 只有"跑脚本 + 读脚本自报的结论"
-        一条路径，而 `build_experiment` 一个证据形状字段都不传 ⇒ 走到
-        `row.validate()` 必然抛（"evidence_kind='proof' 时必须给出 verifier_output"）
-        ⇒ E 登记不了一条 proof 级实验。这里把"一次真实的形式化检查"与
-        "一行 proof 级实验记录"接起来，判据一条都没有新发明：
-
-        - "什么算证明"只有一处定义（`formalgw`），本方法只读它的结论；
-        - 检查器说 `verified` ⇒ `evidence_kind="proof"`，`verifier_output` 是
-          检查器自己的输出，`verifier_subject_key` 逐字等于 `claim_key`；
-        - 其余一切状态（跑了没通过 / 没查成）⇒ `inconclusive` + `heuristic`，
-          一行都不许标成 proof。为什么不是 `cross_check`：那是"另一个方法旁证过"，
-          而"证明没过"给不出旁证（`formalgw.evidence_of` 的 docstring 逐字写了
-          同一条理由：把它写成 cross_check 会让一次检查失败变成正面证据）。
-
-        `imports` 直接转发：默认 `None` 表示"用工具层的默认值"，本方法不替调用方
-        决定要加载哪个库 —— 这个决定会改变结论（库不可得时 status 是
+        这是 `P-8` 的接线：此前 `run_experiment` 只有"跑脚本 + 读脚本自报的结论"一条路径，而 `build_experiment` 一个证据形状字段都
+        不传 ⇒ 走到`row.validate()` 必然抛（"evidence_kind='proof' 时必须给出 verifier_output"）⇒ E 登记不了一条
+        proof 级实验。这里把"一次真实的形式化检查"与"一行 proof 级实验记录"接起来，判据一条都没有新发明：
+        - "什么算证明"只有一处定义（`formalgw`），本方法只读它的结论；- 检查器说 `verified` ⇒ `evidence_kind="proof"`，
+        `verifier_output` 是检查器自己的输出，`verifier_subject_key` 逐字等于 `claim_key`；- 其余一切状态（跑了没通过 / 没
+        查成）⇒ `inconclusive` + `heuristic`，一行都不许标成 proof。为什么不是 `cross_check`：那是"另一个方法旁证过"，而"证明没
+        过"给不出旁证（`formalgw.evidence_of` 的 docstring 逐字写了同一条理由：把它写成 cross_check 会让一次检查失败变成正面证据）。
+        `imports` 直接转发：默认 `None` 表示"用工具层的默认值"，本方法不替调用方决定要加载哪个库 —— 这个决定会改变结论（库不可得时 status 是
         `import_unavailable`，而不是"证明没过"），所以它必须是调用方显式给的。
         """
         suffix = path.suffix.lower()
@@ -480,44 +468,16 @@ class _Core:
         return out
     def _formal_refusal(self, claim: str, reason: str, detail: str) -> dict:
         """`check_formal` 的受控拒绝形态（路径越界走这一支）。
-
-        为什么单独一个方法而不是内联一个 dict：工具层
-        `verify.check_formal` 的契约字符串是
-        ``{'checked','verified','claim','reason','detail','verifier_output',
-        'missing_imports','verifier_status','exit_code'}``，
-        而 `tests/test_tools_audit_fixes.py` 逐字核对每条分支的键集合。
-        把"拒绝"的键集合收在一处，是为了让"多了/少了一个键"在结构上不可能
-        只发生在某一条分支里 —— 顺便让下面 `tool_failed` 那一支也用它。
-
-        ## 为什么 `exit_code` 在拒绝分支上是 `None`（`E-12(a)` 的口径）
-
-        契约是「每一条分支都成立的键集合」（不是"成功分支才有的键"）——
-        所以这一支也给 `exit_code`，值是 `None`：这一支根本没起检查器
-        （路径被拒 / 工具层返回失败），"没有退出码"是诚实的值，与工具层
-        那三条早期分支（`verify_tools.py` 的 `"exit_code": None`）同一口径。
-        为什么不让它只在成功分支出现：那样"键集合"就随分支变，而
-        `set(返回) == 契约` 这条判据会在每条拒绝分支上失效 —— 判据一失效，
-        "某条分支少给了键"就再也读不出来（`E-12(a)` 之前正是这样：
-        工具层四条分支齐、agent 侧这条拒绝分支少一个）。
-
-        `verified=None`（不是 `False`）：这次没有查。"查了、没过"是
-        `checked=True, verified=False`；把两者折叠，下游会把"路径被拒"
-        读成"这个命题被证伪了"。
-
-        ## 为什么要带 `missing_imports`（`G-18` 之后的键集合一致性）
-
-        工具层 `verify.check_formal` 的声明是一个键集合，它对每一条分支都成立
-        （`tests/test_tools_audit_fixes.py` 逐字核对每条分支）。`G-18` 给成功分支加了
-        `missing_imports`（"哪个包不可得"）之后，本方法这条拒绝分支如果还是 6 个键，
-        就会出现"同一个工具的两条分支两个键集合" —— 这正是 `checks` 类契约最容易腐的地方。
-        所以这里补一个空列表（拒绝路径上没有"缺哪个包"这回事，空列表是诚实的值：
-        "我们没有因为缺包而拒绝"，而不是"我们不知道"）。
-
-        ## 为什么 `verifier_status` 是空串（`G-24①` 的透传字段）
-
-        这一支是"根本没起检查器"（路径被拒 / 工具层返回失败）⇒ 没有检查器的原话可透传，
-        空串是诚实的值："这次没有检查器状态"，而不是"我不知道它是什么"。
-        校验器原话在 `detail` 里，检查器输出在 `verifier_output` 里。
+        为什么单独一个方法而不是内联一个 dict：工具层`verify.check_formal` 的契约字符串是
+        ``{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}``，而 
+        `tests/test_tools_audit_fixes.py` 逐字核对每条分支的键集合。把"拒绝"的键集合收在一处，是为了让"多了/少了一个键"在结构上不可能只发生在某一条分支里 —— 顺便让下面 `tool_failed` 那一支也用它。
+        为什么 `exit_code` 在拒绝分支上是 `None`（`E-12(a)` 的口径）契约是「每一条分支都成立的键集合」（不是"成功分支才有的键"）——所以这一支也给 `exit_code`，值是 `None`：这一支根本没起检查器（路径被
+        拒 / 工具层返回失败），"没有退出码"是诚实的值，与工具层那三条早期分支（`verify_tools.py` 的 `"exit_code": None`）同一口径。为什么不让它只在成功分支出现：那样"键集合"就随分支变，而
+        `set(返回) == 契约` 这条判据会在每条拒绝分支上失效 —— 判据一失效，"某条分支少给了键"就再也读不出来（`E-12(a)` 之前正是这样：工具层四条分支齐、agent 侧这条拒绝分支少一个）。
+        `verified=None`（不是 `False`）：这次没有查。"查了、没过"是`checked=True, verified=False`；
+        为什么要带 `missing_imports`（`G-18` 之后的键集合一致性）工具层 `verify.check_formal` 的声明是一个键集合，它对每一条分支都成立（`tests/test_tools_audit_fixes.py` 
+        逐字核对每条分支）。`G-18` 给成功分支加了`missing_imports`（"哪个包不可得"）之后，本方法这条拒绝分支如果还是 6 个键，就会出现"同一个工具的两条分支两个键集合" —— 这正是 `checks` 类契约最容易腐的地方。
+        为什么 `verifier_status` 是空串（`G-24①` 的透传字段）校验器原话在 `detail` 里，检查器输出在 `verifier_output` 里。
         """
         return {
             "checked": False,
@@ -552,35 +512,16 @@ class AgentE(_RunExperiment, _AuthorScript, _CheckFormal, _EvidenceFor, _ListExp
 
 def selftest() -> int:
     """离线自检：不联网、不依赖仓库里的任何外部文件，返回 0（全过）/ 1（有失败）。
-
-    退出码与末尾那行汇总「同源」（F-4）：`SELF-CHECK DONE` ⇒ 0；任何一个
-    `[FAIL]`（含主体异常中断）⇒ `SELF-CHECK FAILED` ⇒ 1。汇总行无条件打印
-    （主体搬进 `_run_selftest_checks`，外面套 try/except/finally）—— 三态纪律：
-    「没查成」由 `未查 N 段` 单独说，不许折进"通过"或"失败"。
-
+    退出码与末尾那行汇总「同源」（F-4）：`SELF-CHECK DONE` ⇒ 0；任何一个`[FAIL]`（含主体异常中断）⇒ `SELF-CHECK FAILED` ⇒ 1。汇总行无条件打印（主
+    体搬进 `_run_selftest_checks`，外面套 try/except/finally）—— 三态纪律：「没查成」由 `未查 N 段` 单独说，不许折进"通过"或"失败"。
     运行方式::
-
-        cd test/test1/src        # 工作区根相对
-        $env:PYTHONIOENCODING='utf-8'; python -m agentflow.agent_e
-
+    cd test/test1/src        # 工作区根相对$env:PYTHONIOENCODING='utf-8'; python -m agentflow.agent_e
     覆盖的核心性质（每一条都对应一个"如果错了会很安静"的失败模式）：
-
-    1. 正常脚本 ⇒ 登记成功，exit_code=0，code_hash 非空；
-    2. 脚本自报 proof ⇒ 被降级为 cross_check，且 notes 里记了这件事；
-    3. 脚本崩溃 ⇒ inconclusive + no_local_evidence（崩溃不得写成支持）；
-    4. 脚本不打印 REPRO_RESULT ⇒ inconclusive + no_local_evidence；
-    5. 路径越界 ⇒ 拒绝；
-    6. 超时 ⇒ inconclusive 且原因可见；
-    7. evidence_for 三态：没查 / 查了没有 / 查到了什么；
-    8. 只写一行 experiments（事务性）；
-    9. `check_formal` 的受控理由：无后端 ⇒ `no_backend`；有后端但没给源码
-       ⇒ `no_script`（两者都是"没查成"，但理由不同，不可折叠）；
-    10. 形式化路径（`P-8`）：`.lean` 产物真的走检查器那一条 —— 检查器给
-        `verified` 时登记的行必须是 `evidence_kind="proof"` 且
-        `verifier_subject_key == claim_key`；否则一行都不许标成 proof。
-        `toolchain.lean_enabled` 关闭时（「出厂默认」）这一段走另一条判据：
-        核对"当场拒绝、不留行、理由给出 V 那条替代路线"，并把这一段记成
-        "未查"（没走检查器 ≠ 通过）。
+    1. 正常脚本 ⇒ 登记成功，exit_code=0，code_hash 非空； 2. 脚本自报 proof ⇒ 被降级为 cross_check，且 notes 里记了这件事； 3. 脚本崩溃
+    ⇒ inconclusive + no_local_evidence（崩溃不得写成支持）； 9. `check_formal` 的受控理由：无后端 ⇒ `no_backend`；有后端但没给源码
+    ⇒ `no_script`（两者都是"没查成"，但理由不同，不可折叠）； 10. 形式化路径（`P-8`）：`.lean` 产物真的走检查器那一条 —— 检查器给`verified` 时登记的行必
+    须是 `evidence_kind="proof"` 且`verifier_subject_key == claim_key`；`toolchain.lean_enabled` 关闭时（「出厂默认」）
+    这一段走另一条判据：核对"当场拒绝、不留行、理由给出 V 那条替代路线"，并把这一段记成"未查"（没走检查器 ≠ 通过）。
     """
     import sys as _sys
 
@@ -769,7 +710,7 @@ def _run_selftest_checks(check, counts: dict[str, int]) -> None:
     # 否则必须是"不是 proof"（没查成不许登记成 proof）。
     # 两个方向都不许把 `heuristic` 写成 `proof`，所以这条检查在任何环境下都有信息量。
     #
-    # ⚠️ 这一支是 F-4 的根因。`toolchain.lean_enabled` 的「出厂默认是 false」
+    # 这一支是 F-4 的根因。`toolchain.lean_enabled` 的「出厂默认是 false」
     # （`settings.py`：`DEFAULT_LEAN_ENABLED = False`，业主 2026-10-12「默认设置中
     # Lean 关闭帮用户在无严苛要求时省钱」；`tests/conftest.py` 为了让形式化那一段
     # 跑起来才把环境变量钉成 1）。旧写法无条件 `run_experiment(..., method="formal")`，

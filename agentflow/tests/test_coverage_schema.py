@@ -2,36 +2,18 @@
 
 ## 为什么单独一个文件（而不是追加到 `tests/test_schema.py`）
 
-`tests/test_schema.py` 已经存在且有 39 条既有断言。本任务的硬约束是
-"不要改既有测试文件里的既有断言"，而往一个既有文件中间插入新块，
-很容易在后续并行编辑中与别人的改动冲突（本仓库明确说 `src/` 下有别的 agent 在动）。
-`tests/test_coverage_<模块>.py` 这个命名让"哪个模块的覆盖缺口被补过"一眼可查，
-也把新增断言与既有断言物理隔离。本轮新增的 8 个 `test_coverage_*.py`
-都采用同一取舍（见 `docs/PROPOSALS.md` G-9/G-10 的口径说明）。
+`tests/test_schema.py` 已经存在且有 39 条既有断言。本任务的硬约束是"不要改既有测试文件里的既有断言"，而往一个既有文件中间插入新块，很容易在后续并行编辑中与别人的改动冲突（本仓库明确说 `src/` 下有别的 agent 在动）。`tests/test_coverage_<模块>.py` 这个命名让"哪个模块的覆盖缺口被补过"一眼可查，也把新增断言与既有断言物理隔离。本轮新增的 8 个 `test_coverage_*.py` 都采用同一取舍（见 `docs/PROPOSALS.md` G-9/G-10 的口径说明）。
 
 ## 被测函数在判据链上的位置
 
-`check_array_invariants` 是"集合字段必须升序去重"这条判据的唯一权威检查点
-（docstring 逐字：由 `validate_table` 调用）。所以这里的断言必须打在
-判据上：哪个字段、因为什么原因（类型不是数组 vs 没升序去重）被判违规，
-而不是"返回了一个非空列表"。
+`check_array_invariants` 是"集合字段必须升序去重"这条判据的唯一权威检查点（docstring 逐字：由 `validate_table` 调用）。所以这里的断言必须打在判据上：哪个字段、因为什么原因（类型不是数组 vs 没升序去重）被判违规，而不是"返回了一个非空列表"。
 
 ## S1r 并表（`SCHEMA_VERSION=2`）之后的改动（两条用例改写，判据不变）
 
-并表把 `concepts` 表从 `schema.TABLES` / `ARRAY_FIELD_KINDS` 里真删
-（概念行住 `statements`）⇒ 这两条挂在它上面的用例失去对象：
+并表把 `concepts` 表从 `schema.TABLES` / `ARRAY_FIELD_KINDS` 里真删（概念行住 `statements`）⇒ 这两条挂在它上面的用例失去对象：
 
-- `test_check_array_invariants_reports_mixed_type_elements_instead_of_raising`
-  原先拿 `concepts.related_concepts` 当混类型标本 ⇒ 换成 `relations.concept_ids`
-  （另一张仍在的表上声明为 `set` 的字段；`related_concepts` 这个名字随表退役）。
-  保护意图逐字不变：混类型数组要报"元素不是字符串"，不许让判据自己抛
-  `TypeError`（R-05），且不许被报成"未升序去重"。
-- `test_validate_table_reports_a_mixed_type_row_as_value_error`
-  原先走 `validate_table("concepts", …)` 这条真正的入口 ⇒ 换成
-  `validate_table("statements", …)` + `derived_from`（同一张表上声明为 `set`
-  的字段）。入口与判据都不变：`row_from_dict` + `obj.validate()` + 集中检查
-  这条链上任一处先比较异类型，`TypeError` 都会从 `except ValueError` 的缝里逃出去。
-"""
+- `test_check_array_invariants_reports_mixed_type_elements_instead_of_raising`：原先拿 `concepts.related_concepts` 当混类型标本 ⇒ 换成 `relations.concept_ids`（另一张仍在的表上声明为 `set` 的字段；`related_concepts` 这个名字随表退役）。保护意图逐字不变：混类型数组要报"元素不是字符串"，不许让判据自己抛 `TypeError`（R-05），且不许被报成"未升序去重"。
+- `test_validate_table_reports_a_mixed_type_row_as_value_error`：原先走 `validate_table("concepts", …)` 这条真正的入口 ⇒ 换成 `validate_table("statements", …)` + `derived_from`（同一张表上声明为 `set` 的字段）。入口与判据都不变：`row_from_dict` + `obj.validate()` + 集中检查这条链上任一处先比较异类型，`TypeError` 都会从 `except ValueError` 的缝里逃出去。"""
 
 from __future__ import annotations
 
@@ -176,18 +158,11 @@ def test_check_array_invariants_none_value_is_skipped_not_flagged():
 def test_check_array_invariants_reports_mixed_type_elements_instead_of_raising():
     """R-05 负控（改前必红）：混类型数组要报问题，不许让判据自己抛 `TypeError`。
 
-    改前形态（旧实现那一行表达式）在 `["0001", 2]` 上是
-    `TypeError: '<' not supported between instances of 'int' and 'str'` —— 那不是
-    "库里有一条坏数据"，而是判据炸了：`validate_table` 只接 `ValueError`，
-    `store.rebuild` 的灾难恢复链同样只接 `ValueError` ⇒ 一条混类型的行会以
-    `TypeError` 打断整次重建（重建不可逆）。
+    改前形态（旧实现那一行表达式）在 `["0001", 2]` 上是 `TypeError: '<' not supported between instances of 'int' and 'str'` —— 那不是"库里有一条坏数据"，而是判据炸了：`validate_table` 只接 `ValueError`，`store.rebuild` 的灾难恢复链同样只接 `ValueError` ⇒ 一条混类型的行会以 `TypeError` 打断整次重建（重建不可逆）。
 
-    三档必须分得开：这一条走"元素不是字符串"，不许被报成"未升序去重"
-    （那会让人去查一个不存在的排序问题 —— `:110` 那条同族的理由）。
+    三档必须分得开：这一条走"元素不是字符串"，不许被报成"未升序去重"（那会让人去查一个不存在的排序问题 —— `:110` 那条同族的理由）。
 
-    并表之后标本是 `relations.concept_ids`（`related_concepts` 随 `concepts`
-    表退役；本条判据本来就与该字段的名字无关，只要求它是"声明为 set 的字段"）。
-    """
+    并表之后标本是 `relations.concept_ids`（`related_concepts` 随 `concepts` 表退役；本条判据本来就与该字段的名字无关，只要求它是"声明为 set 的字段"）。"""
     obj = S.Relation.__new__(S.Relation)
     obj.concept_ids = ["0001", 2]
     bad = S.check_array_invariants("relations", obj)

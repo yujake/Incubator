@@ -43,25 +43,15 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
                 notes: list[str] | None = None) -> Any:
     """B 的抽取器 —— 「唯一装配点」（`run-agent` / `run-b` / `pipeline` 三条路共用）。
 
-    ## 为什么它必须存在（2026-10-03 的根因，见 `draft/37` §83）
-
-    `LLMExtractor` 要一个 `complete(prompt) -> str` 的 client，而「模型缝不是它」
-    （`LlmSeam` 只有 `ask`）。此前三条路各写各的，结果都一样坏：
-
-    - `run-agent` 从不给 B 任何 client ⇒ 退到 `RuleExtractor` ⇒ `B.run_once`
-      「当场拒抽」（`R-56`：规则抽取器会把碎片当概念/关系）⇒ `relations` 一行都没有
-      ⇒ 引文逐字回验这条腿在真机上「结构性不可达」（实测 `p5-run15`：`relations` 0 行、
-      `literature.processed=False`）；
-    - `run-b` / `pipeline` 把 `RuleExtractor()` 写死 ⇒ 同样永远拒抽；
-    - 而唯一正确的配方写在 `projects.py` 里：`client_from_env(scope="extract",
-      meter=TokenMeter(store), role="B")`。（那一版曾写 `max_tokens=8192`，
-      理由是"缺省 4096 会把整份 JSON 截在半句上"—— 2026-10-15 起这一栏整条删掉：
-      业主裁定「我们不卡 token，只卡总花销的钱」，而真调用对照证明不带这一栏时
-      上游给的额度反而更宽。）
-
-    这里把那个配方收成一处：「有 key ⇒ 计量过的模型 client；没有 key ⇒ 规则档」
-    （后者让 `run_once` 如实报 `no_llm_extractor`，而不是"每篇文献发一次注定失败的请求"）。
-    两种情况都往 `notes` 里记一句，于是"为什么 B 在用规则抽取器"在读数里看得见。
+    ## 为什么它必须存在（2026-10-03 的根因，见 `draft/37` §83）：`LLMExtractor` 要一个
+    `complete(prompt) -> str` 的 client，而模型缝不是它（`LlmSeam` 只有 `ask`）。三条路
+    各写各的：`run-agent` 从不给 B client ⇒ 退 `RuleExtractor` ⇒ `B.run_once` 当场拒抽
+    （`R-56`）⇒ `relations` 0 行、`literature.processed=False`（实测 `p5-run15`）；
+    `run-b` / `pipeline` 写死 `RuleExtractor()` ⇒ 同样拒抽。配方只在 `projects.py` 里对：
+    `client_from_env(scope="extract", meter=TokenMeter(store), role="B")`。那一版曾写
+    `max_tokens=8192`（缺省 4096 会截半句），2026-10-15 起整条删掉：业主裁定「不卡 token，
+    只卡总花销的钱」，对照证明不带它反而更宽。收成一处：「有 key ⇒ 计量过的模型 client；
+    没有 key ⇒ 规则档」，后者让 `run_once` 如实报 `no_llm_extractor`；两种情况都写 `notes`。
     """
     from .extract import extract_text  # noqa: F401  （保留语义：调用方仍需自查）
     from .llm import LLMExtractor, RuleExtractor
@@ -221,16 +211,14 @@ class _Builder:
         """B 的抽取器：显式给的最优先；否则按"这一路的模型 client 能不能造"选。
 
         三条分支（顺序就是优先级）：
-
         1. 调用方显式给了 `extractor=` ⇒ 用它（判据与替身走这条）；
         2. 该角色拿到的 `llm` 本身就是抽取器 client（有 `.complete`）⇒ 包成 `LLMExtractor`
-          （`tests/test_host_wiring.py` 的假 LLM 走这条）；
+           （`tests/test_host_wiring.py` 的假 LLM 走这条）；
         3. 其余情况 ⇒ :func:`b_extractor`（有 key 用模型 client，没有 key 退规则档）。
-
-        不再把模型缝塞给 `LLMExtractor`。此前那句 `LLMExtractor(role_llm)` 是个陷阱：
-        真实缝没有 `.complete` ⇒ 构造期 `TypeError`，而那个错曾被 `LocalBackend.resolve`
-        的 `except TypeError` 兜成一句误导性的"factory(B) 需要一个 store"（`__init__` 的
-        注释逐字记着这次事故）。现在缝被认出来就记一条 note、走第 3 条，不再硬塞。
+        不再把模型缝塞给 `LLMExtractor`。此前那句 `LLMExtractor(role_llm)` 是个陷阱：真实缝没有
+        `.complete` ⇒ 构造期 `TypeError`，而那个错曾被 `LocalBackend.resolve` 的 `except TypeError`
+        兜成误导性的"factory(B) 需要一个 store"（`__init__` 的注释记着这次事故）。
+        现在缝被认出来就记一条 note、走第 3 条，不再硬塞。
         """
         if self.extractor is not None:
             return self.extractor
@@ -439,8 +427,6 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                         stop_file: str | Path | None = None) -> dict[str, Any]:
     """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
 
-    ## 三个"花钱的判断类能力"开关，默认全关，且互不连带
-
     | 开关 | 给谁接缝 | 不打开时那一侧怎么如实报 |
     |---|---|---|
     | `semantic_review` | H（`claims_semantically_judged`） | 那一格记"没查" |
@@ -448,32 +434,16 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     | `experiment_reasoning` | E（`author_script` 按判据写脚本） | 落 `no_seam` |
 
     三条同一条纪律：环境里有 key 也不改变行为（`DEFAULT_LLM_LOOPS` 的注释逐字写着）。
-
     ## 为什么 `attack_reasoning` 不连带打开 `experiment_reasoning`
-
-    两个开关各自可解释：F 的推理是"想这一步该怎么打"，E 的推理是"把判据写成一份能跑的
-    脚本"。它们是两笔可以分别买账的钱 —— 有人只要 F 想、脚本由人写，那就只开前者。
-
-    代价必须说清（`projects/mp4` 的真机读数，`attack_plans.json` 计划 000003 的 r1/r2）：
-    只开 F 的缝、E 没有缝 ⇒ F 需要脚本时写不出来，那一轮落
-    `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝，不是脚本）——
-    改前它是静默的 `no_change`，于是看上去像"跑了但没结果"。要让这条链整条通，
-    三个开关里必须同时有 `attack_reasoning`（F 造判据）与
-    `experiment_reasoning`（E 写脚本、跑玩具例子）。
-
-    ## 语义（与 `LlmBackend` 的 docstring 逐字一致）
-
-    登记在 `loops` 里的 `(角色, 动作)` 由 LLM 循环执行，其余动作仍走 Python 实现 ——
-    角色的确定性动作（算图、分配号、落一行表）不该被模型取代。
-    默认 `loops` 为空 ⇒ 这个函数建出来的主控与 `wired_conductor` 行为完全一致，
-    差别只是"随时可以接线"。
-
-    ## 为什么要挑明 `conductor_for` 的缓存
-
-    `tools.conductor_tools.conductor_for` 按 `store.root` 缓存实例，而忽略后传的 `backend`：
-    先建过确定性主控、再要一个模型驱动的主控，会静默拿到旧的那个 ——
-    "我要的是模型驱动"与"实际跑的是确定性实现"在读数上长得一模一样。
-    这里显式把 `backend` 换上去并记一条 note（不静默）。
+    两个开关各自可解释：F 是"想这一步怎么打"，E 是"把判据写成一份能跑的脚本"，两笔钱可分别买账。
+    代价（`projects/mp4` 真机，`attack_plans.json` 计划 000003 的 r1/r2）：只开 F 的缝、E 没缝 ⇒
+    F 需要脚本时写不出来，那一轮落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）——
+    改前它是静默的 `no_change`，看上去像"跑了但没结果"。整条链要通，必须同时有 `attack_reasoning`
+    （F 造判据）与 `experiment_reasoning`（E 写脚本、跑玩具例子）。
+    ## 语义（与 `LlmBackend` 的 docstring 逐字一致）：登记在 `loops` 里的 `(角色, 动作)` 由 LLM
+    循环执行，其余动作仍走 Python 实现；默认 `loops` 为空 ⇒ 与 `wired_conductor` 完全一致。
+    `conductor_for` 这条缓存：`tools.conductor_tools.conductor_for` 按 `store.root` 缓存而忽略后传的 `backend`：先建确定性主控、再要模型主控会
+    静默拿到旧的那个；这里显式换上去并记一条 note（不静默）。
     """
     from .agent_loop import LlmBackend
     from .conductor import LocalBackend
@@ -676,21 +646,13 @@ def _materialize_skills(store: Any, notes: list[str]) -> list[str]:
 
     前置提示词里只给索引（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
     `<工作区>/skills/<角色>/<slug>.md`，角色用自己的 `fs.read` 现读。
-
-    ## 为什么抽成函数（2026-10-14，R116）
-
-    它此前是 `run()` 里的一段内联 `try/except`，一条判据都碰不到它 ——
-    与本文件第 594 行那段注释记的是同一类缺陷（"§185 那批测试没看见它"）。
-    "现做现读"整件事的落点就是这一段：它不跑，提示词里的索引就指向 33 个不存在的文件，
-    而每一处各自自洽（索引有、提示词有、角色会去读）—— 没有任何地方会报错。
-
-    ## 没有工作区时不写
-
-    `store is None` 时旧写法是 `materialize(".")` —— 那会把 33 个 `.md` 写进
-    进程当前目录（谁在哪跑就写哪）。改成：没有工作区 ⇒ 这一格没做，
-    并留一条明说的 note（三态：没做 ≠ 做好了）。
-
-    返回写出去的路径；一条不成也不打断这一趟（提示词里的索引仍然有效），但必须留痕。
+    ## 为什么抽成函数（2026-10-14，R116）：它此前是 `run()` 里的一段内联 `try/except`，
+    一条判据都碰不到它（与本文件第 594 行那段注释记的是同一类缺陷：§185 那批测试没看见它）。"现做现读"的落点
+    就是这一段：它不跑，提示词里的索引就指向 33 个不存在的文件，而每一处各自自洽 ——
+    没有任何地方会报错。
+    ## 没有工作区时不写：`store is None` 时旧写法是 `materialize(".")`，会把 33 个 `.md` 写进
+    进程当前目录。改成：没有工作区 ⇒ 这一格没做，并留一条明说的 note（三态：没做 ≠ 做好了）。
+    返回写出去的路径；一条不成也不打断这一趟（索引仍然有效），但必须留痕。
     """
     if store is None or getattr(store, "root", None) is None:
         notes.append("skills：这一趟没有工作区，没落盘（索引仍在提示词里，但盘上没有正文）")

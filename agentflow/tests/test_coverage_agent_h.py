@@ -1,30 +1,20 @@
 """`agent_h.AgentH.verify_fixes` 的直接判据测试（等级 2：决定 `fixed`/`open` 的转发层）。
 
-## 为什么这个函数值得一条点名的测试
+为什么这个函数值得一条点名的测试：`AgentH.verify_fixes` 是转发层 —— 它把 `max_review_rounds` 从自己的
+配置传给 `review.verify_fixes`（工具层），自己几乎没有判据，只有一条：`self.max_review_rounds` 必须
+被真的传下去。这条看起来微不足道，但它是一个真实的失败形态：`AgentH.__init__` 从
+`config["max_review_rounds"]` 读出上限（并有 `>= 1` 的装配期校验），而工具层
+`review_tools.verify_fixes` 的签名里 `max_review_rounds` 有默认值 2 —— 于是"转发时忘了传"不会报任何
+错：调用方配了 `max_review_rounds=5`，复审却在第 2 轮就判 `unresolved_review` 交人复核，上限被静默地
+改回默认值。
 
-`AgentH.verify_fixes` 是转发层：它把 `max_review_rounds` 从自己的配置传给
-`review.verify_fixes`（工具层）。它自己几乎没有判据 —— 只有一条：
+在 `tests/test_agent_h.py` 里它是被间接调用的（`h.verify_fixes("0000", round_no=2)` 那种形态，函数名
+在那份文件里从未出现），而且那 5 条测试都用 `config={"max_review_rounds": 2}` 或
+`{"max_review_rounds": 3}`、从未断言上限本身被传下去 —— 所以本文件补的是这一条。
 
-> `self.max_review_rounds` 必须被真的传下去。
-
-这条看起来微不足道，但它是一个真实的失败形态：`AgentH.__init__` 从
-`config["max_review_rounds"]` 读出上限（并有 `>= 1` 的装配期校验），
-而工具层 `review_tools.verify_fixes` 的签名里 `max_review_rounds` 有默认值 2。
-于是"转发时忘了传"不会报任何错 —— 调用方配了 `max_review_rounds=5`，
-复审却在第 2 轮就判 `unresolved_review` 交人复核，上限被静默地改回默认值。
-
-在 `tests/test_agent_h.py` 里，`AgentH.verify_fixes` 是被间接调用的
-（`h.verify_fixes("0000", round_no=2)` 那种形态，函数名在那份文件里从未出现），
-而且那 5 条测试都用 `config={"max_review_rounds": 2}` 或 `{"max_review_rounds": 3}`、
-从未断言上限本身被传下去。所以本文件补的是这一条。
-
-## 为什么用打桩而不是造真实数据
-
-`review_tools.py` 在 FC-27 禁改区，而且它要真的跑 `scan_document` 才能判
-`fixed`/`open`。本文件要测的只有"参数有没有被传下去"这一件事，
-所以把 `_writer` 打桩、断言它收到的 kwargs —— 这是对转发这件事最直接、
-也最不容易误伤的判据（造真实数据反而会把"扫描器对不对"混进来）。
-"""
+为什么用打桩而不是造真实数据：`review_tools.py` 在 FC-27 禁改区，而且它要真的跑 `scan_document` 才能
+判 `fixed`/`open`。本文件要测的只有"参数有没有被传下去"，所以把 `_writer` 打桩、断言它收到的 kwargs
+—— 这是对转发最直接、也最不容易误伤的判据（造真实数据反而会把"扫描器对不对"混进来）。"""
 
 from __future__ import annotations
 

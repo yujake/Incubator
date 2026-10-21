@@ -1,32 +1,19 @@
 """表 CRUD 工具（A/B/C/D 共用的数据面原子动作）。
-
 ## 为什么这些工具长这样
-
-`base.py` 已经把"工具"这件事的形状定下来了（名字 / JSON Schema / 副作用声明 /
-结构化返回）。本模块只负责把这些形状接上真实数据，因此有三条硬性规矩：
-
-1. 写操作一律走 `store.tx(...)`，并且显式声明它要碰的每一张表。
-   包括 `counters` —— `alloc_id` 在事务内改计数器，没声明就会 `StoreError`。
-   更要紧的是：`Tx.rows()` 只允许读已声明的表，所以"声明"实际上就是
-   "这次操作会依赖哪些表的一致性"，漏声明会在运行时报错而不是悄悄读到脏数据。
-
-2. 读操作不加锁。 `store.rows()` 是无锁快照读，只用于展示/统计。
-   C 的分析任务会对同一批数据反复组合查询；如果每次只读都去抢排他锁，
-   就会把 A/B 的写入挡在外面。写工具独占锁、读工具无锁 —— 这个分工是刻意的。
-
-3. 业务性失败返回 `fail(...)`，不抛异常。
-   "名字重复""被关系引用所以不能删""字段拼错了"这些都不是环境故障，
-   而是调用方需要看到并纠正的信息。抛异常会打断智能体的循环，
-   而它恰恰是唯一能修好这个错误的一方。
-
+`base.py` 已经把"工具"这件事的形状定下来了（名字 / JSON Schema / 副作用声明 /结构化返回）。本模块只负责把这些形状接上真实数据，因此有三条硬性
+规矩：
+1. 写操作一律走 `store.tx(...)`，并且显式声明它要碰的每一张表。包括 `counters` —— `alloc_id` 在事务内改计数器，没声明就会 
+`StoreError`。更要紧的是：`Tx.rows()` 只允许读已声明的表，所以"声明"实际上就是"这次操作会依赖哪些表的一致性"，漏声明会在运行时报错而不是悄悄读到
+脏数据。
+2. 读操作不加锁。 `store.rows()` 是无锁快照读，只用于展示/统计。 C 的分析任务会对同一批数据反复组合查询；如果每次只读都去抢排他锁，就会把 A/B 的
+写入挡在外面。写工具独占锁、读工具无锁 —— 这个分工是刻意的。
+3. 业务性失败返回 `fail(...)`，不抛异常。"名字重复""被关系引用所以不能删""字段拼错了"这些都不是环境故障，而是调用方需要看到并纠正的信息。抛异常会打断智
+能体的循环，而它恰恰是唯一能修好这个错误的一方。
 ## 派生字段：为什么工具要顺手补
-
-`relations.concept_group_key` / `quote_normalized` / `dedup_key` 都是纯派生字段
-（见 `agent_b.py` 的写入路径）。`verify` 会用 `textutil.concept_group_key(concept_ids)`
-独立复算并比对，不一致就是 `stale_group_key`（错误级）。
-工具建的行若不补这几个字段，就会造出"结构合法但 verify 报错"的行 ——
-所以 create 时字段为空就补、update 时依赖变了且调用方没显式给就重算。
-调用方显式给的值永远优先（否则"给定字段被悄悄改写"比缺字段更难排查）。
+`relations.concept_group_key` / `quote_normalized` / `dedup_key` 都是纯派生字段（见 
+`agent_b.py` 的写入路径）。`verify` 会用 `textutil.concept_group_key(concept_ids)`独立复算并比对，不一致就是
+`stale_group_key`（错误级）。工具建的行若不补这几个字段，就会造出"结构合法但 verify 报错"的行 ——所以 create 时字段为空就补、
+update 时依赖变了且调用方没显式给就重算。调用方显式给的值永远优先（否则"给定字段被悄悄改写"比缺字段更难排查）。
 """
 
 from __future__ import annotations
@@ -139,20 +126,14 @@ def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
 
 def _jsonable_default(value: Any) -> Any:
     """把反射出来的默认值转成"能落进 JSON"的形态。
-
     ## 为什么必须有这一级（2026-10-13 真机，`p9-t1-nolean` 的三跳那一趟）
-
-    `statements.page_range` / `dependencies.page_range` 的默认值是一个 「`PageRange`
-    实例」，而 `table.schema`（不带 `table` ⇒ 反射全部表）原先把它原样塞进返回里。
-    后果不是"少看一眼结构"，而是「这一趟循环在落产出时崩」：子代理 B 被二级唤起
-    做 `register_statement`，它第一步读了 `table.schema`，随后这一趟在记步/落产出时
-    `json.dumps` 抛 `TypeError: Object of type PageRange is not JSON serializable`
-    ⇒ 整趟以 `failed` 收场（实测 t-0020 / t-0021 / t-0024 三条全废）。
-
-    口径：「只读工具的返回必须能被如实记录」 —— 记录不了就等于这一趟没有产出
-    （"我查了"落不到盘上）。所以这里按对象自己的 `to_dict()`（schema 的行对象都有一份）
-    → `dataclasses.asdict` → 递归容器 的顺序降级；最后一档兜底成字符串，
-    宁可让那一格读起来粗糙，也不许让一个只读工具的返回把整趟运行弄崩。
+    `statements.page_range` / `dependencies.page_range` 的默认值是一个 「`PageRange`实例」，而 
+    `table.schema`（不带 `table` ⇒ 反射全部表）原先把它原样塞进返回里。后果不是"少看一眼结构"，而是「这一趟循环在落产出时崩」：子代理 B 被二级唤起
+    做 `register_statement`，它第一步读了 `table.schema`，随后这一趟在记步/落产出时`json.dumps` 抛 
+    `TypeError: Object of type PageRange is not JSON serializable`⇒ 整趟以 `failed` 收场（实测
+    t-0020 / t-0021 / t-0024 三条全废）。
+    口径：「只读工具的返回必须能被如实记录」 —— 记录不了就等于这一趟没有产出（"我查了"落不到盘上）。所以这里按对象自己的 `to_dict()`（schema 的行对象都
+    有一份）→ `dataclasses.asdict` → 递归容器 的顺序降级；最后一档兜底成字符串，宁可让那一格读起来粗糙，也不许让一个只读工具的返回把整趟运行弄崩。
     """
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
@@ -173,23 +154,15 @@ def _jsonable_default(value: Any) -> Any:
 
 def _probe_id(table: str) -> str:
     """建行前用来"预演校验"的占位 ID（按这张表自己的 ID 契约造）。
-
-    为什么需要预演：4 位 ID 是 `alloc_id` 在事务内发出去的，而只要发过号，
-    计数器就已经脏了 —— 哪怕这行随后校验失败、什么都没落盘，号也收不回来，
-    表现为 `verify` 的 `id_gap` 警告。所以先用一个合法占位 ID 把
-    "字段/取值有没有问题"查一遍，只有真到了发号那一步才进入事务。
-
+    为什么需要预演：4 位 ID 是 `alloc_id` 在事务内发出去的，而只要发过号，计数器就已经脏了 —— 哪怕这行随后校验失败、什么都没落盘，号也收不回来，表现为 
+    `verify` 的 `id_gap` 警告。所以先用一个合法占位 ID 把"字段/取值有没有问题"查一遍，只有真到了发号那一步才进入事务。
     ## 占位 ID 必须满足"这张表自己的 ID 契约"（`P-17`）
-
-    `schema` 的过程记录契约是 `<前缀>-NNNN`（`PROCESS_ID_PREFIXES`：
-    `search_requests` = `r`、`reprocess_requests` = `p`、`tasks` = `t`），
-    而实体表用的是裸 4 位。此前这里对所有表都返回裸 `"9999"`，于是
+    `schema` 的过程记录契约是 `<前缀>-NNNN`（`PROCESS_ID_PREFIXES`：`search_requests` = `r`、
+    `reprocess_requests` = `p`、`tasks` = `t`），而实体表用的是裸 4 位。此前这里对所有表都返回裸 `"9999"`，于是
     `schema` 把 `require_process_id` 接进 `SearchRequest.validate` 之后，
-    `table.create(table="search_requests")` 在预演那一步就被自己的校验拒掉
-    （实测原文：`search_requests 行校验失败：request 的过程记录 ID 必须是
-    「前缀 'r' + 连接号 + 恰好 4 位数字」（如 r-0001），收到 '9999'`），
-    连事务都进不去 —— 建行功能整个失效。占位值因此不能写死一种形态，
-    而要从 `schema` 的声明面读前缀：前缀只有一处定义，这里不另抄一份。
+    `table.create(table="search_requests")` 在预演那一步就被自己的校验拒掉（实测原文：
+    `search_requests 行校验失败：request 的过程记录 ID 必须是「前缀 'r' + 连接号 + 恰好 4 位数字」（如 r-0001），收到 '9999'`），
+    连事务都进不去 —— 建行功能整个失效。占位值因此不能写死一种形态，而要从 `schema` 的声明面读前缀：前缀只有一处定义，这里不另抄一份。
     """
     prefix = S.PROCESS_ID_PREFIXES.get(_spec_of(table)["id_kind"])
     return f"{prefix}-{_PROBE_ID}" if prefix else _PROBE_ID
@@ -232,32 +205,16 @@ def _fill_derived(table: str, data: dict, *, create: bool, patch: Mapping[str, A
 
 def assert_request_id_in_space(new_id: str) -> str:
     """`r-NNNN` 的编号空间守卫（全项目唯一实现）。
-
     ## 为什么"转发给 `next_prefixed_id`"还不够
-
-    `interactions.next_prefixed_id` 负责取号规则
-    （max+1、跳过已占用、前缀守卫），但它没有任何上限保护：表里已经用到
-    `r-9999` 时，它会给出 `"r-10000"`。
-
+    `interactions.next_prefixed_id` 负责取号规则（max+1、跳过已占用、前缀守卫），但它没有任何上限保护：表里已经用到`r-9999` 时，它会给出 `"r-10000"`。
     而 `r-NNNN` 是一个4 位契约，不是风格偏好：
-
-    - `store.MAX_ID`：`MAX_ID = 9999`，"4 位 ID 的上限。用满即 fail-closed
-      （DESIGN.md §0.1 C4）"——项目级的规则是宁可显式失败，也不静默升位宽；
-    - `tests/test_agent_c_service.py` 里直接断言
-      `S.is_valid_id(row["request_id"][2:])` —— `"10000"` 不是合法 4 位 ID；
-    - `SearchRequest.validate` 现在也查前缀与 4 位形态（`P-17` 的
-      `require_process_id`），但那只在落库那一刻生效，而取号发生在落库之前 ——
-      越界号必须在发出来的那一刻就挡住，否则计数器已经脏了（`id_gap`）。
-      判据在"发号"与"落库"两处都在，不是重复：一处保证不发，一处保证落了也非法。
-
-    所以这里对结果做一道契约检查：取号仍然只有一份实现，但"号必须落在
-    4 位空间内"这条判据只能有一处，且必须在写入之前生效。
-
-    # 待修：按 FC-03 的口径，这道上限最好下沉进 `interactions.next_prefixed_id`
-    # 本身（那才是取号的唯一实现，agent_c/d/f/cli/demo 都直接调它，它们现在同样
-    # 没有上限 —— 也就是说直接调它的路径仍会产出 `r-10000`）。
-    # `interactions.py` 是 FC-27 禁改区（auth-audit），我不改它，因此把守卫放在
-    # 工具层的这一个函数里，并让 `research_tools` 也调它（不是各写一份）。
+    - `store.MAX_ID`：`MAX_ID = 9999`，"4 位 ID 的上限。用满即 fail-closed （DESIGN.md §0.1 C4）"——项目级的规则是宁可显式失败，也不静默升位宽；
+    - `tests/test_agent_c_service.py` 里直接断言`S.is_valid_id(row["request_id"][2:])` —— `"10000"` 不是合法 4 位 ID；
+    - `SearchRequest.validate` 现在也查前缀与 4 位形态（`P-17` 的`require_process_id`），但那只在落库那一刻生效，而取号发生在落库之前 ——越界号必须在发出
+    来的那一刻就挡住，否则计数器已经脏了（`id_gap`）。判据在"发号"与"落库"两处都在，不是重复：一处保证不发，一处保证落了也非法。
+    # 待修：按 FC-03 的口径，这道上限最好下沉进 `interactions.next_prefixed_id`# 本身（那才是取号的唯一实现，agent_c/d/f/cli/demo 都直接调它，它们现
+    在同样# 没有上限 —— 也就是说直接调它的路径仍会产出 `r-10000`）。# `interactions.py` 是 FC-27 禁改区（auth-audit），我不改它，因此把守卫放在# 工具层的这一
+    个函数里，并让 `research_tools` 也调它（不是各写一份）。
     """
     # 判据本体在 `_assert_process_id_in_space`（过程记录通用版）：这里只把
     # "哪张表用哪个前缀"这两个参数固定成 `search_requests` 与 `r`。
@@ -308,36 +265,15 @@ def _next_process_id(rows: Sequence[Mapping[str, Any]], *, id_field: str, prefix
 
 def _next_request_id(rows: Sequence[Mapping[str, Any]]) -> str:
     """`search_requests` 的主键是 `r-NNNN`（转发给唯一实现 + 空间守卫）。
-
-    见 `schema.ID_COUNTERS` 的注释：`search_requests` 的 id_kind 是 "request"，
-    它不在 `ID_COUNTERS` 里，所以 `alloc_id("request")` 会直接报"未知 ID 类别"。
-
-    ## 这里曾经是第二份取号实现（已修）
-
-    本函数原先自己扫描行取最小可用号，而 `research_tools` 里另有一份"取 max+1"
-    的副本、`interactions.next_prefixed_id` 里还有第三份（带前缀守卫）—— 同一个
-    `search_requests` 表有三个取号器，语义互相冲突：表里只有 `r-0001`、`r-0003` 时
-    这边给 `r-0000`、那边给 `r-0004`。
-
-    "最小可用号"还有更坏的一面：它会复用已删行的号，而
-    `literature.source_request_ids` 与 `research_questions.waiting_request_ids`
-    都长期引用 `r-NNNN` —— 号一旦被复用，溯源会静默指向另一条请求。
-    这是"静默错误指向"，比崩溃危险。`interactions.next_prefixed_id` 的 docstring
-    自己写着"删除中间行不会导致撞号"。所以那个语义被放弃了（连同
-    `tests/test_tools_table_fs.py` 里断言 `"r-0000"` 的那一行一起改）——
-    那是修正一条编码了错误行为的断言，不是放宽断言。
-
-    ## `P-4` 之后：上限在 `next_prefixed_id` 里，类型在这里翻译
-
-    `interactions.next_prefixed_id` 现在自己挡越界（判据只有一份）。它抛的是
-    具名的 `IdSpaceExhausted`（继承 `ValueError`），这里把它精确翻成工具层的
-    `ToolError` —— 否则它会一路冒到 `ToolRegistry.call` 被兜成 `kind='unexpected'`，
-    于是"编号空间用尽"（已知、可处理）与"工具内部有 bug"在下游同形。
-    不把整个 `ValueError` 都翻掉：`next_prefixed_id` 也会因为"prefix 带了连接号"
-    抛 `ValueError`，那是调用方编码错误，应当保持原样冒出去。
-
-    实现只有一份：`_next_process_id`（过程记录通用），这里只固定
-    "`request_id` + `r` + `search_requests`"这三个参数。
+    见 `schema.ID_COUNTERS` 的注释：`search_requests` 的 id_kind 是 "request"，它不在 `ID_COUNTERS` 里，所以 `alloc_id("request")` 会直接报"未知
+    ID 类别"。本函数原先自己扫描行取最小可用号，而 `research_tools` 里另有一份"取 max+1"的副本、`interactions.next_prefixed_id` 里还有第三份（带前缀守卫）—— 同一个
+    `search_requests`表有三个取号器，语义互相冲突：表里只有 `r-0001`、`r-0003` 时这边给 `r-0000`、那边给 `r-0004`。"最小可用号"还有更坏的一面：它会复用已删行的号，而
+    `literature.source_request_ids` 与 `research_questions.waiting_request_ids`都长期引用 `r-NNNN` —— 号一旦被复用，溯源会静默指向另一条请求。
+    `interactions.next_prefixed_id` 的 docstring 自己写着"删除中间行不会导致撞号"。所以那个语义被放弃了（连同`tests/test_tools_table_fs.py`里断言 `"r-0000"` 的那
+    一行一起改）——那是修正一条编码了错误行为的断言，不是放宽断言。`P-4` 之后：上限在 `next_prefixed_id` 里，类型在这里翻译`interactions.next_prefixed_id` 现在自己挡越界（判据只有一份）。它
+    抛的是具名的 `IdSpaceExhausted`（继承`ValueError`），这里把它精确翻成工具层的`ToolError` —— 否则它会一路冒到 `ToolRegistry.call` 被兜成 `kind='unexpected'`，
+    于是"编号空间用尽"（已知、可处理）与"工具内部有 bug"在下游同形。不把整个 `ValueError` 都翻掉：`next_prefixed_id` 也会因为"prefix 带了连接号"抛 `ValueError`，那是调用方编码错误，应当
+    保持原样冒出去。实现只有一份：`_next_process_id`（过程记录通用），这里只固定"`request_id` + `r` + `search_requests`"这三个参数。
     """
     return _next_process_id(rows, id_field="request_id", prefix="r",
                             table="search_requests")
@@ -561,22 +497,15 @@ def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
 
 def _direct_write_refusal(table: str) -> ToolResult | None:
     """`statements` / `dependencies` / `lit_candidates` 的「通用写口直写」 ⇒ 受控拒绝。
-
     ## 为什么这一格存在（2026-10-19 晚，`projects/mp2` 的真机读数）
-
-    `mp2-7.jsonl` 第 94 行 B 调 `register_statement` ⇒ `unknown_tool`（那个名字不在它的
-    工具面上），第 97 行改走 `table.create(table="statements")`、「手写」 `bits={}` 与
-    `evidence_kind="heuristic"`。于是秘书那四件活（洗格式 / 发编号 / 查重 / 改表）
-    与五元位一件没跑，而盘上那一行看起来完全合法 —— `stmt:000003` 有 1909 字证明、
-    V 也签了「成立」，档位却停在 `heuristic`。
-
-    判据本体在 `store.direct_write_refusal`（「只有一处」：工具层与 `Store.tx` 的提交块
-    共用一个函数，所以关掉它的负控对两层同时生效）。这里只把它的读数翻成工具层的
-    受控失败 —— 模型据此能改（拒信里逐字写着该走哪条路）。
-
-    `table.delete` 不在这条限制里（删除不制造证据，它另有 `_REF_SPECS` 的引用保护）——
-    「唯一的例外是 `lit_candidates`」：那张表的"删掉"必须表现为 `withdrawn`（见
-    `_candidate_delete_refusal`），见 `table_delete` 里那一处。
+    `mp2-7.jsonl` 第 94 行 B 调 `register_statement` ⇒ `unknown_tool`（那个名字不在它的工具面上），第 97 行改走 
+    `table.create(table="statements")`、「手写」 `bits={}` 与`evidence_kind="heuristic"`。于是秘书那四件
+    活（洗格式 / 发编号 / 查重 / 改表）与五元位一件没跑，而盘上那一行看起来完全合法 —— `stmt:000003` 有 1909 字证明、 V 也签了「成立」，档位
+    却停在 `heuristic`。
+    判据本体在 `store.direct_write_refusal`（「只有一处」：工具层与 `Store.tx` 的提交块共用一个函数，所以关掉它的负控对两层同时生效）。
+    这里只把它的读数翻成工具层的受控失败 —— 模型据此能改（拒信里逐字写着该走哪条路）。
+    `table.delete` 不在这条限制里（删除不制造证据，它另有 `_REF_SPECS` 的引用保护）——「唯一的例外是 `lit_candidates`」：那张表的
+    "删掉"必须表现为 `withdrawn`（见`_candidate_delete_refusal`），见 `table_delete` 里那一处。
     """
     why = _store_mod.direct_write_refusal(table)
     if not why:
@@ -984,7 +913,7 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
                 "type": _type_name(tp),
                 "required": required,
                 "default": default,
-                # ⚠️ 「这三格每个元素都要在」，哪怕它不适用（2026-10-15 修）。
+                # 「这三格每个元素都要在」，哪怕它不适用（2026-10-15 修）。
                 #
                 # 改前它们只在适用时才 `item[...] = …`，于是同一个 `fields[]` 里
                 # 「一部分元素有、另一部分没有」 —— 而本工具的用途恰恰是"让智能体

@@ -150,18 +150,15 @@ def test_the_summary_call_is_charged_with_the_compaction_note(tmp_path: pathlib.
 
 
 def test_the_rebuild_replays_the_swap(tmp_path: pathlib.Path) -> None:
-    """正控（12-I=甲 的另一半）：`resume_messages` 按 `surface_op` 重放 ⇒ 逐条相等。
+    """    正控（12-I=甲 的另一半）：`resume_messages` 按 `surface_op` 重放 ⇒ 逐条相等。
 
-    这是 S-C 那条"逐条相等"判据在压缩之后的形态：只在内存里压（不落替换事件）
-    会让续跑那一趟看到没压过的版本。
+    这是 S-C 那条"逐条相等"判据在压缩之后的形态：只在内存里压（不落替换事件）会让续跑那一趟看到没压过的版本。
 
     ## 一处如实说清的上限（不是这一批引入的）
 
-    允许的唯一差异是"落档截断"那一档：事件里存的是截到 `RECORD_CHARS` 的审计副本
-    （`_for_record`），所以超过 2000 字的工具结果在重建那份里会带一句
-    "…（落档截断，原 N 字）"。本判据把它逐条钉住：差异必须从标记处开始、
-    被截掉的那一段必须正好是超出上限的那一段。上限本身写在 `resume_messages` 的
-    docstring 里（"重建能力的上限，不是我漏了"）；"除它之外没有别的差异"由下一条判据守。
+    允许的唯一差异是"落档截断"那一档：事件里存的是截到 `RECORD_CHARS` 的审计副本（`_for_record`），所以超过 2000 字的工具结果在重建那份里会带一句"…（落档截断，原 N 字）"。
+    本判据把它逐条钉住：差异必须从标记处开始、被截掉的那一段必须正好是超出上限的那一段。上限本身写在 `resume_messages` 的docstring 里（"重建能力的上限，不是我漏了"）；
+    "除它之外没有别的差异"由下一条判据守。
     """
     run, _gateway, root = _big_run(tmp_path, window=2000, steps=4, sid="t-replay")
     assert run.compactions >= 1, run.to_dict()

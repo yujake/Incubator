@@ -2,26 +2,11 @@
 
 （`DESIGN-INTERACTIONS.md` §1 / §4；本项目历史上最贵的三类错误都在这三条里。）
 
-三条纪律贯穿本文件，也是它存在的理由：
+三条纪律：① 三态：`True` / `False` / `None` 必须分得开 —— "没检查"不许被读成"不冲突"，"没做成"不许被写成"做过了、结论是没有"；② 只动该动的：I4 只允许改目标关系，诊断字段与计数器必须让"闸门跑了没有"从外部可见（否则"接上了"与"没接上"在数据上一模一样）；③ 负控：先构造"它不该触发的场景"，断言它确实没触发 —— 只有正向信号时，"有"和"没有"一样容易通过测试。
 
-1. 三态：`True` / `False` / `None` 必须分得开。
-   "没检查"不许被读成"不冲突"，"没做成"不许被写成"做过了、结论是没有"。
-2. 只动该动的：I4 只允许改目标关系；诊断字段与计数器必须让"闸门跑了没有"
-   从外部可见（否则"接上了"与"没接上"在数据上一模一样）。
-3. 负控：先构造"它不该触发的场景"，断言它确实没触发。
-   只有正向信号时，"有"和"没有"一样容易通过测试。
+I6 一节守住本任务期间发生的真实修复（`interactions.py` 的两处行为修正）：`detect_contradictions` 原来的 `only_a != only_b` 把"提到肯定式"与"压根没提这个词"当成对立（中文里"是"无处不在 ⇒ 实测 24% 假报警）；`concept_pair_key` 原来是直接读行里的字段，而表里存的名字是 `concept_group_key` ⇒ 对直接从表里读出来的行，函数恒返回空（完全静默）。
 
-I6 这一节还有一条本任务期间发生的真实修复要守住（`interactions.py` 的两处行为修正）：
-
-- `detect_contradictions` 原来的 `only_a != only_b` 把"提到肯定式"与
-  "压根没提这个词"当成对立（中文里"是"无处不在 ⇒ 实测 24% 假报警）；
-- `concept_pair_key` 原来是直接读行里的字段，而表里存的名字是
-  `concept_group_key` ⇒ 对直接从表里读出来的行，函数恒返回空（完全静默）。
-
-因此下面的用例既断"真实对立会被抓住"，也断"没有对立时不许报警"，
-并且一律用真实表行的形状（只有 `concept_group_key`）当输入 ——
-如果哪天又有人让闸门依赖"调用方预先算好 `concept_pair_key`"，这里会立刻红。
-"""
+因此用例既断"真实对立会被抓住"，也断"没有对立时不许报警"，并且一律用真实表行的形状（只有 `concept_group_key`）当输入 —— 若哪天又有人让闸门依赖"调用方预先算好 `concept_pair_key`"，这里会立刻红。"""
 
 from __future__ import annotations
 
@@ -143,12 +128,11 @@ def _reprocess(store, pid, relation_ids, *, reason="quote_unverifiable", status=
 
 
 def _relation(store, rid) -> dict:
-    """按关系号取行：**两种宽度都认**（夹具写的是四位、动作分配出来的是六位）。
+    """按关系号取行：两种宽度都认（夹具写的是四位、动作分配出来的是六位）。
 
     这不是"放宽判据"：取到的行仍然必须真的存在（下面那条断言照旧）。
     宽度统一成六位之后，夹具里显式写的四位号与动作新分配的六位号会同时出现在盘上，
-    而 case 想说的是"那一条关系"，不是"哪一个十进制写法"。
-    """
+    而 case 想说的是"那一条关系"，不是"哪一个十进制写法"。"""
     want = {str(rid)}
     if str(rid).isdigit():
         want.add(S.format_id(int(rid)))
@@ -578,12 +562,11 @@ def test_reprocess_over_limit_is_rejected_and_changes_nothing(store):
 
     并且要断言"拒绝"与"做过"在配额上是分开的：`reprocess_counts` 不计 rejected。
 
-    ⚠️ **2026-10-15 改（承 `draft/123` 裁定 C9）**：上限从 2 抬到 8，
-    而这条判据此前**把 2 写死在夹具里**（三条请求 + 断言第三条被拒）⇒ 它红了。
-    改法**不是**把断言翻成 `handled is True` —— 那会把判据的方向倒过来，
-    而它要证的正是"超限必须被拒"；改法是**按真身现算上限、把请求开到 `limit + 1`**，
-    于是下次抬阈值这条判据自己跟着走（同族教训见 `test_refusal_family_numbers`）。
-    """
+    2026-10-15 改（承 `draft/123` 裁定 C9）：上限从 2 抬到 8，
+    而这条判据此前把 2 写死在夹具里（三条请求 + 断言第三条被拒）⇒ 它红了。
+    改法不是把断言翻成 `handled is True` —— 那会把判据的方向倒过来，
+    而它要证的正是"超限必须被拒"；改法是按真身现算上限、把请求开到 `limit + 1`，
+    于是下次抬阈值这条判据自己跟着走（同族教训见 `test_refusal_family_numbers`）。"""
     limit = int(I.DEFAULTS["max_reprocess_per_relation"])
     _i4_store(store)
     for i in range(1, limit + 1):
@@ -775,18 +758,9 @@ def _tombs_and_relations(store) -> tuple[dict, dict]:
 def test_i5_synonymous_pair_is_merged_with_reason_and_rewritten_relations(store):
     """I5 正向：同义对 → C 提出、B 合并；墓碑有理由，边被改写，重复关系走既有判重。
 
-    并表之后墓碑的读法改了一处（判据本身没放宽）：老表的 `merged_into` /
-    `merge_reason` / `merged_at` 在新标准里都没有承载点，`_to_legacy` 把
-    `merged_into` 一律投影成 `None`（拿它断言是恒真的）⇒ 改成读新标准那一行的
-    `status="superseded"` + `quote_reason`：后者必须写明并入了谁、以及那条可被人
-    反驳的理由（"结构等价" + "名字侧证据"两路）。
+    并表之后墓碑的读法改了一处（判据本身没放宽）：老表的 `merged_into` / `merge_reason` / `merged_at` 在新标准里都没有承载点，`_to_legacy` 把 `merged_into` 一律投影成 `None`（拿它断言是恒真的）⇒ 改成读新标准那一行的 `status="superseded"` + `quote_reason`：后者必须写明并入了谁、以及那条可被人反驳的理由（"结构等价" + "名字侧证据"两路）。
 
-    两处随老表退役、这里刻意不留断言（写下来是为了让下一个人知道它们去哪了，
-    而不是让它们悄悄消失）：
-    - `merge_reason`：内容保住了（就是上面断的 `quote_reason`），但字段名换了；
-    - `merged_at`：新标准没有这一列，事件日志里也没有时刻字段 ⇒ 这次合并发生的
-      时间在盘上已经没有任何机器可读的落点（本任务的报告里已单独点名）。
-    """
+    两处随老表退役、这里刻意不留断言（写下来是为了让下一个人知道它们去哪了，而不是让它们悄悄消失）：`merge_reason` 内容保住了（就是上面断的 `quote_reason`），但字段名换了；`merged_at` 新标准没有这一列，事件日志里也没有时刻字段 ⇒ 这次合并发生的时间在盘上已经没有任何机器可读的落点（本任务的报告里已单独点名）。"""
     _i5_store(store)
     cand = _i5_candidate(store, ["0000", "0001"])
     assert cand["proposal"] == "merge"
@@ -1017,13 +991,12 @@ def test_i5_merge_evidence_survives_rebuild(store):
 
 # =========================================================================== 逐字档的材料
 def test_a_quote_verbatim_in_the_workspace_manuscript_is_verbatim(store) -> None:
-    """逐字档**先试文献 PDF，没中再试工作区那份正文**（业主那句"逐字命中不花模型钱"）。
+    """逐字档先试文献 PDF，没中再试工作区那份正文（业主那句"逐字命中不花模型钱"）。
 
     真机读数（T1-2，2026-10-14）：5 条引文逐字都在 `out/paper/main.tex` 里，而文献 PDF
     那一档因为页码是估算的没中 —— 于是"真逐字"被推到语义档去花模型钱（还可能判错）。
-    这一条钉住那一档：**PDF 里没有、工作区正文里有 ⇒ 记 `verbatim`**，并且
-    `quote_reason` 要写清命中的是哪一份文件（两种证据不许混成一种）。
-    """
+    这一条钉住那一档：PDF 里没有、工作区正文里有 ⇒ 记 `verbatim`，并且
+    `quote_reason` 要写清命中的是哪一份文件（两种证据不许混成一种）。"""
     quote = "The distance is the number of walls crossed."
     write_library_file(store, "0000/a.txt", "无关的正文，没有那一句引文。")
     add_literature(store, "0000", title="A", path="0000/a.txt", processed=False,

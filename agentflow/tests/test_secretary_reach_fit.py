@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""秘书那张"这件活做不做得成"的新一维：**能力面闭包**（业主 2026-10-14）。
+"""秘书那张"这件活做不做得成"的新一维：能力面闭包（业主 2026-10-14）。
 
-业主逐字：「秘书侧……评估派发出的任务能否由**子代理及子代理的出边**共同完成」。
-`secretary.surface_fit` 判的是**路径面**（这句话里的文件落不落在它的沙箱里）；
-`secretary.reach_fit` 判的是**能力面**：那个动作，被派人自己有没有？没有的话，
+业主逐字：「秘书侧……评估派发出的任务能否由子代理及子代理的出边共同完成」。
+`secretary.surface_fit` 判的是路径面（这句话里的文件落不落在它的沙箱里）；
+`secretary.reach_fit` 判的是能力面：那个动作，被派人自己有没有？没有的话，
 它出边上的伙伴（再由伙伴的出边……直到 `policy.Policy().max_depth`）里有谁有？走哪几跳？
 
 这一组守四件事：
 1. 四档齐全（`in_self` / `via_edges` / `unreachable` / `unknown`），且 `unknown` 不许折成"做得到"；
-2. **真表上的读数**（含本轮新加的 `B → H`：`B` 自己没有语义回验，但一跳够得到 `H`）；
-3. 闭包是**真的**按出边走（`A → B → H → G` 三跳那条就是"只看被派人自己"会漏掉的形态）；
+2. 真表上的读数（含本轮新加的 `B → H`：`B` 自己没有语义回验，但一跳够得到 `H`）；
+3. 闭包是真的按出边走（`A → B → H → G` 三跳那条就是"只看被派人自己"会漏掉的形态）；
 4. 判不了时说得出为什么（角色/动作名认不出各有一条理由）。
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ def test_an_action_the_sub_agent_has_itself_is_in_self() -> None:
 def test_an_action_reachable_through_one_edge_is_via_edges() -> None:
     """B 自己没有语义回验，但出边上的 H 有 ⇒ `via_edges`，链是 `B → H`。
 
-    这一条同时是**新设计**（2026-10-14 那条 `B→H` 边 + `H.judge_quote_semantics`）的回归守卫：
+    这一条同时是新设计（2026-10-14 那条 `B→H` 边 + `H.judge_quote_semantics`）的回归守卫：
     边或动作哪一条没了，这里当场红 —— 而"B 要把引文交给 H 判"正是这一维要看见的事。
     """
     got = S.reach_fit("B", "judge_quote_semantics")
@@ -51,7 +51,7 @@ def test_the_closure_really_walks_more_than_one_hop() -> None:
 def test_a_branch_without_that_action_is_unreachable() -> None:
     """被派人那一支闭包里没有谁有这一件 ⇒ `unreachable`（面内做不成，不许折成"做得到"）。
 
-    `C` 是只读角色、且它**没有出边**（`ALLOWED_EDGES["C"] == frozenset()`）——
+    `C` 是只读角色、且它没有出边（`ALLOWED_EDGES["C"] == frozenset()`）——
     于是它那一支只有它自己，闭包大小恒为 1。
 
     2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一条按原形态恢复

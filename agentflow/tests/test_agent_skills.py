@@ -2,23 +2,22 @@
 """skills 三条硬约束的判据（业主 2026-10-14）。
 
 业主原话：「将面对不同类型任务应唤起的协作方式写成各智能体的 skills，以防止前置大量
-提示词，**现做现读**……至少为每种智能体特地去找至少 5 个 skill 来综合考量……
-定制 skill 时需保证**描述无歧义、准确适配角色、动作都可实现**……
-**不能虚构我们系统不存在的动作**」。
+提示词，现做现读……至少为每种智能体特地去找至少 5 个 skill 来综合考量……
+定制 skill 时需保证描述无歧义、准确适配角色、动作都可实现……
+不能虚构我们系统不存在的动作」。
 
 ## 这一组守四件事
 
-1. **不虚构**：每条 skill 用到的 `角色.动作` 必须在 `capabilities` 里存在，
-   且从"拥有这条 skill 的角色"出发**够得到**（自己的动作，或它出边上的角色能做）；
+1. 不虚构：每条 skill 用到的 `角色.动作` 必须在 `capabilities` 里存在，
+   且从"拥有这条 skill 的角色"出发够得到（自己的动作，或它出边上的角色能做）；
    用到的工具必须在工具面上（`agent_skills.validate()` 逐条查）。
-2. **描述无歧义**：`summary` / `when` / `body` 三格都不许空；索引里必须有
+2. 描述无歧义：`summary` / `when` / `body` 三格都不许空；索引里必须有
    "什么时候读它"这一格（没有它，索引就退化成又一份长文档）。
-3. **现做现读**：前置提示词里**只有索引**——正文一个字都不许出现在提示词里
+3. 现做现读：前置提示词里只有索引——正文一个字都不许出现在提示词里
    （这条是本组的反负控：把某条 skill 的正文塞进 `CATALOG` 的 `summary`，
    它必须当场红）。
-4. **调研过**：`SURVEY` 每格 ≥5 条、名字都在来源清单（38 个）里 ——
-   "每种智能体至少找 5 个来综合考量"这句话唯一能被机器核的形态。
-"""
+4. 调研过：`SURVEY` 每格 ≥5 条、名字都在来源清单（38 个）里 ——
+   "每种智能体至少找 5 个来综合考量"这句话唯一能被机器核的形态。"""
 
 from __future__ import annotations
 
@@ -39,10 +38,9 @@ def test_every_action_and_tool_in_the_catalog_really_exists():
 
 
 def test_the_negative_control_catches_a_fabricated_action(monkeypatch):
-    """反负控：塞一条**不存在的动作**进去 ⇒ 判据必须当场红。
+    """反负控：塞一条不存在的动作进去 ⇒ 判据必须当场红。
 
-    没有这一条，上面那条"全绿"说明不了任何事（它可能只是没查）。
-    """
+    没有这一条，上面那条"全绿"说明不了任何事（它可能只是没查）。"""
     bad = AS.Skill(slug="假的", title="假的", summary="一句话", when="任何时候",
                    body="正文", actions=("Z.fly_to_moon",))
     monkeypatch.setitem(AS.CATALOG, "M", AS.CATALOG["M"] + (bad,))
@@ -51,12 +49,11 @@ def test_the_negative_control_catches_a_fabricated_action(monkeypatch):
 
 
 def test_the_negative_control_catches_an_unreachable_action(monkeypatch):
-    """反负控之二：动作**真实存在**但那个角色不在本角色的出边里 ⇒ 也必须红。
+    """反负控之二：动作真实存在但那个角色不在本角色的出边里 ⇒ 也必须红。
 
-    这一条挡的是"把别人的活写进我的操作手册"：M 派不动 **F** 的动作（那条边不存在；
+    这一条挡的是"把别人的活写进我的操作手册"：M 派不动 F 的动作（那条边不存在；
     V 于 2026-10-18 已由业主加回 M 的出边，所以这里拿 F 当反例 —— 判据本身没变，
-    变的是"哪条边不存在"这个事实），写进 M 的 skill 就是一句做不到的指令。
-    """
+    变的是"哪条边不存在"这个事实），写进 M 的 skill 就是一句做不到的指令。"""
     bad = AS.Skill(slug="越权", title="越权", summary="一句话", when="任何时候",
                    body="正文", actions=("F.step",))
     monkeypatch.setitem(AS.CATALOG, "M", AS.CATALOG["M"] + (bad,))
@@ -65,7 +62,7 @@ def test_the_negative_control_catches_an_unreachable_action(monkeypatch):
 
 
 def test_the_index_lists_every_skill_with_a_when_and_no_body():
-    """索引：每条 skill 一行（路径 + 一句话 + 什么时候读它），且**不含正文**。"""
+    """索引：每条 skill 一行（路径 + 一句话 + 什么时候读它），且不含正文。"""
     for role in ("M", "B", "V"):
         block = AS.index_block(role)
         assert block, role
@@ -107,18 +104,17 @@ def test_the_skills_land_on_disk_so_they_can_be_read_on_demand(tmp_path):
 
 
 def test_every_advertised_path_is_readable_through_the_fs_tool(tmp_path):
-    """"现做现读"的**闭环**：索引里印出来的路径，用真的 `fs.read` 必须读得到。
+    """"现做现读"的闭环：索引里印出来的路径，用真的 `fs.read` 必须读得到。
 
     为什么这条是这一组里唯一端到端的一条：其余各条查的都是"目录自己自洽"
     （索引列全了每条、正文没进提示词、落盘幂等、盘点路径存在）。而"现做现读"
-    这句话的落点是**三处拼在一起**才成立的：索引里那个路径、`materialize` 写的落点、
+    这句话的落点是三处拼在一起才成立的：索引里那个路径、`materialize` 写的落点、
     以及 `fs.read` 解析路径用的根。三处各自自洽而拼不上，正是本项目最忌讳的形态 ——
     索引说 `skills/M/x.md`、正文写到别处、工具的根又是第三个地方，
-    而**没有任何地方会报错**（模型只会读不到，然后把索引当摆设）。
+    而没有任何地方会报错（模型只会读不到，然后把索引当摆设）。
 
-    判据同时也是那条纪律的机器形态：提示词里那段索引是**给模型照抄的**，
-    所以必须能用它逐字去读，不能只"看起来对"。
-    """
+    判据同时也是那条纪律的机器形态：提示词里那段索引是给模型照抄的，
+    所以必须能用它逐字去读，不能只"看起来对"。"""
     import re
 
     from agentflow.tools import build_registry
@@ -129,7 +125,7 @@ def test_every_advertised_path_is_readable_through_the_fs_tool(tmp_path):
     seen: list[tuple[str, str]] = []
     for role in roles:
         block = AS.index_block(role)
-        # 只取**表格行**里那一格（行首是 `| ` 的那种）—— 索引开头那句
+        # 只取表格行里那一格（行首是 `| ` 的那种）—— 索引开头那句
         # `skills/<角色>/<名字>.md` 是给人看的占位符，不是一条真路径。
         paths = re.findall(r"^\| `(skills/[^`]+\.md)`", block, re.M)
         assert paths, f"{role} 的索引表里一条路径都没有"
@@ -161,16 +157,15 @@ def test_every_role_has_at_least_five_builtin_skills_surveyed():
 
 
 def test_the_whole_source_directory_is_surveyed_not_just_five_per_role():
-    """**并集必须覆盖全部 38 个来源**（R126 补）：只查"每格 ≥5"会漏掉整份来源。
+    """并集必须覆盖全部 38 个来源（R126 补）：只查"每格 ≥5"会漏掉整份来源。
 
-    这一条是 2026-10-15 的现场读数逼出来的：`SURVEY` 里当时只出现 **35** 个名字，
+    这一条是 2026-10-15 的现场读数逼出来的：`SURVEY` 里当时只出现 35 个名字，
     而记录（`draft/120` §三）写着"来源 38 条已逐条读完" —— 三份
     `-neural-network-functions` 变体一次都没被任何一岗记下。
-    两条口径差在**方向**上：每格 ≥5 管的是"每个角色有没有看够"，
+    两条口径差在方向上：每格 ≥5 管的是"每个角色有没有看够"，
     覆盖 38 管的是"这份来源清单有没有被看完" —— 少查一条不会让前者变红。
 
-    判据用集合（不是逐格）：一个来源被哪一岗记下由内容决定，不该由这条判据规定。
-    """
+    判据用集合（不是逐格）：一个来源被哪一岗记下由内容决定，不该由这条判据规定。"""
     covered = {n for rows in AS.SURVEY.values() for n in rows}
     missing = sorted(set(AS.builtin_sources()) - covered)
     assert not missing, (
@@ -182,8 +177,7 @@ def test_the_whole_source_directory_is_surveyed_not_just_five_per_role():
 def test_the_negative_control_catches_a_source_that_no_role_surveyed(monkeypatch):
     """反负控：把一条来源从所有格子里摘掉 ⇒ 覆盖判据必须红（否则它是真空的）。
 
-    摘的是**唯一**提到它的那一格 —— 这一支正是漏掉那 3 个来源时的形态。
-    """
+    摘的是唯一提到它的那一格 —— 这一支正是漏掉那 3 个来源时的形态。"""
     victim = "direct-proving-neural-network-functions"
     owners = [k for k, rows in AS.SURVEY.items() if victim in rows]
     assert len(owners) == 1, f"装置前提：这条来源应当只被一岗记下，实得 {owners}"
@@ -205,13 +199,12 @@ def test_the_negative_control_catches_an_empty_when(monkeypatch):
 
 
 def test_the_negative_control_catches_a_tool_named_only_in_the_body(monkeypatch):
-    """反负控之七：`tools` 那一格干净，但**正文里**点名了一件本角色没有的工具 ⇒ 红。
+    """反负控之七：`tools` 那一格干净，但正文里点名了一件本角色没有的工具 ⇒ 红。
 
     为什么这一格要单独判（2026-10-14）：声明与正文是两样东西 ——
     `tools=("fs.read",)` 可以写得很干净，而正文第一句写"用 `fs.write` 把结果落盘"。
-    声明那一格查得再严也管不到那句话，**而模型照做的对象是正文**。
-    这一条是那一格判据的负控；正控是整本目录过 `validate()`。
-    """
+    声明那一格查得再严也管不到那句话，而模型照做的对象是正文。
+    这一条是那一格判据的负控；正控是整本目录过 `validate()`。"""
     bad = AS.Skill(slug="正文点名越面工具", title="x", summary="一句话", when="任何时候",
                    body="第 1 步：用 `fs.write` 把结论落盘，然后用 `fs.read` 读回来。",
                    tools=("fs.read",))
@@ -223,14 +216,13 @@ def test_the_negative_control_catches_a_tool_named_only_in_the_body(monkeypatch)
 def test_the_body_scan_does_not_fire_on_actions_paths_or_filenames(monkeypatch):
     """反负控之八：正文里的 `F.step` / `data/x.json` / `main.tex` / `fs.read` 不报。
 
-    这一条守的是上面那条判据的**另一半**：假阳性会把判据变成噪音，
+    这一条守的是上面那条判据的另一半：假阳性会把判据变成噪音，
     于是没人再看它。工具名的形状是"全小写组名.名"，动作是"大写角色.动作"、
     路径与文件名带斜杠或以 `.json`/`.tex` 结尾 —— 三者机器分得开。
 
-    这里举的动作取 `F.step`（V 的出边就是 F）：**动作那一格也有判据**
+    这里举的动作取 `F.step`（V 的出边就是 F）：动作那一格也有判据
     （存在 + 够得到），所以"举一个不报的例子"必须同时是一个够得到的动作，
-    否则这一条会与那一条判据互相打架。
-    """
+    否则这一条会与那一条判据互相打架。"""
     good = AS.Skill(slug="正文里的非工具点号", title="x", summary="一句话", when="任何时候",
                     body=("派 `F.step` 推进，读 `data/statements.json`、"
                           "`out/paper/main.tex` 与 `fs.read`。"),
@@ -241,11 +233,10 @@ def test_the_body_scan_does_not_fire_on_actions_paths_or_filenames(monkeypatch):
 
 
 def test_the_negative_control_catches_a_fabricated_action_only_in_the_body(monkeypatch):
-    """反负控之九：**正文里**出现一个不存在的动作 ⇒ 红（业主 ④ 的正文那一半）。
+    """反负控之九：正文里出现一个不存在的动作 ⇒ 红（业主 ④ 的正文那一半）。
 
     `actions` 那一格早就有这条判据了；正文没有。而模型照做的对象是正文 ——
-    一句"然后调 `Z.fly_to_moon`"写在正文里，声明那一格永远看不见它。
-    """
+    一句"然后调 `Z.fly_to_moon`"写在正文里，声明那一格永远看不见它。"""
     bad = AS.Skill(slug="正文虚构动作", title="x", summary="一句话", when="任何时候",
                    body="第 1 步：调 `Z.fly_to_moon` 把结论搬过去。")
     monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
@@ -254,12 +245,11 @@ def test_the_negative_control_catches_a_fabricated_action_only_in_the_body(monke
 
 
 def test_the_negative_control_catches_an_unreachable_action_only_in_the_body(monkeypatch):
-    """反负控之十：正文里的动作**真实存在**、但这个角色够不到 ⇒ 红。
+    """反负控之十：正文里的动作真实存在、但这个角色够不到 ⇒ 红。
 
-    这一条挡的是"把别人的活写进我的操作手册"的**正文版**：
+    这一条挡的是"把别人的活写进我的操作手册"的正文版：
     V 的出边只有 F，正文里写"你自己去调 `A.run_once`"就是一句做不到的指令 ——
-    而动作是真动作，所以只查存在性的判据会放过它。
-    """
+    而动作是真动作，所以只查存在性的判据会放过它。"""
     bad = AS.Skill(slug="正文越权动作", title="x", summary="一句话", when="任何时候",
                    body="第 1 步：调 `A.run_once` 自己去检索一遍。")
     monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
@@ -271,10 +261,9 @@ def test_the_cross_reference_registry_cannot_rot(monkeypatch):
     """反负控之十一：`_BODY_CROSS_REFS` 里登记的"指到别人"不成立 ⇒ 红。
 
     "指到别人"（"由 H 做"这类）必须在正文判据里豁免，否则判据变成噪音
-    （实测真有这样的句子）。但豁免**具名**之后就会腐烂：那一句正文被删了、
+    （实测真有这样的句子）。但豁免具名之后就会腐烂：那一句正文被删了、
     或者出边变了让它变得够得到 —— 那时这条登记就成了"看起来还在挡着什么"。
-    所以登记本身也在判据里：不成立就报出来（与本仓 R010 那张假阳性表的纪律同源）。
-    """
+    所以登记本身也在判据里：不成立就报出来（与本仓 R010 那张假阳性表的纪律同源）。"""
     monkeypatch.setitem(AS._BODY_CROSS_REFS, ("V", "复核-三态并指到那一步", "A.run_once"),
                         "（负面夹具）这一条不成立：那一句正文里没有它")
     problems = AS.validate()
@@ -282,16 +271,15 @@ def test_the_cross_reference_registry_cannot_rot(monkeypatch):
 
 
 def test_the_manuscript_path_is_named_identically_in_the_spec_and_the_skill():
-    """业主 2026-10-14 第 1 / 2 条那两个落点：**两处必须写得一模一样**。
+    """业主 2026-10-14 第 1 / 2 条那两个落点：两处必须写得一模一样。
 
     研究手稿 `reports/RESEARCH.md`（D 的）与攻坚台账 `reports/attack-<plan_id>.md`（F 的）
-    各出现在两个地方：角色的**声明**（`specs/<角色>.py` 的 policy，进前置提示词 ——
-    因为它必须每一趟都生效）与那份**按需读**的 skill（写细节）。
+    各出现在两个地方：角色的声明（`specs/<角色>.py` 的 policy，进前置提示词 ——
+    因为它必须每一趟都生效）与那份按需读的 skill（写细节）。
 
     两处写岔的表现是最难查的那一种：提示词说 `reports/RESEARCH.md`、
-    skill 说 `reports/research.md`，而**两边都自洽**（模型读哪个都可能），
-    盘上于是出现两份手稿、各自都"像是对的"。
-    """
+    skill 说 `reports/research.md`，而两边都自洽（模型读哪个都可能），
+    盘上于是出现两份手稿、各自都"像是对的"。"""
     import re
 
     from agentflow import specs as SP
@@ -300,7 +288,7 @@ def test_the_manuscript_path_is_named_identically_in_the_spec_and_the_skill():
         ("D", "手稿-研究记忆就这一份", "reports/RESEARCH.md"),
         ("F", "推进-中间成果一处一条", "reports/attack-<plan_id>.md"),
     )
-    #: 这一族里**允许**出现的落点：手稿、攻坚台账、D 的自动渲染工作稿。
+    #: 这一族里允许出现的落点：手稿、攻坚台账、D 的自动渲染工作稿。
     #: 别的拼法（大小写不同、多了个横线）一律报 —— 那正是"盘上出现两份手稿"的开端。
     allowed = {"reports/RESEARCH.md", "reports/attack-<plan_id>.md", "reports/<qid>-research.md"}
     found_re = re.compile(r"reports/[A-Za-z0-9_<>\-]+\.md")
@@ -317,11 +305,10 @@ def test_the_manuscript_path_is_named_identically_in_the_spec_and_the_skill():
 
 
 def test_the_catalog_covers_every_role():
-    """覆盖：`shared` 与**十个角色**每一格都有内容（少一格 = 那一岗没有按需材料）。
+    """覆盖：`shared` 与十个角色每一格都有内容（少一格 = 那一岗没有按需材料）。
 
-    为什么这条要单独判：`CATALOG` 是一个字典，少写一个键**不会**让任何别的东西变红 ——
-    那一岗的索引就静默地只剩 `shared`，而"这一岗该怎么办"这件事没人发现它没写。
-    """
+    为什么这条要单独判：`CATALOG` 是一个字典，少写一个键不会让任何别的东西变红 ——
+    那一岗的索引就静默地只剩 `shared`，而"这一岗该怎么办"这件事没人发现它没写。"""
     from agentflow import schema as S
 
     want = {"shared", "M"} | set(S.ROLES)
@@ -332,12 +319,11 @@ def test_the_catalog_covers_every_role():
 
 
 def test_the_negative_control_catches_a_tool_that_exists_but_is_not_on_this_role_surface(monkeypatch):
-    """反负控之四：工具**真在注册表里**，但这个角色拿不到 ⇒ 必须红。
+    """反负控之四：工具真在注册表里，但这个角色拿不到 ⇒ 必须红。
 
     这一条挡的是判据本身的一种退化：把"注册表里有没有这个名字"当成"这个角色能不能用"。
     `fs.write` 在注册表里，而 C 是只读角色（`READ_ONLY_ROLES`），`for_role("C")` 里没有它 ——
-    一条说"C 用 fs.write 落盘"的 skill 就是一句做不到的指令，而按旧口径它会被判绿。
-    """
+    一条说"C 用 fs.write 落盘"的 skill 就是一句做不到的指令，而按旧口径它会被判绿。"""
     reg = build_registry(workspace_root=pathlib.Path(".")).registry
     names = {s.name for s in reg.for_role("C")}
     assert "fs.write" not in names, "前提反了：C 的工具面里有 fs.write（只读约束松了？）"
@@ -371,7 +357,7 @@ def test_the_negative_control_catches_a_duplicated_slug(monkeypatch):
 
 
 def test_every_role_index_is_generated_from_the_catalog():
-    """索引：每个角色的索引块只列**它自己 + shared** 的那些条，一条不多一条不少。"""
+    """索引：每个角色的索引块只列它自己 + shared 的那些条，一条不多一条不少。"""
     for role in AS.CATALOG:
         if role == AS.SHARED:
             continue
@@ -390,7 +376,7 @@ def test_every_role_index_is_generated_from_the_catalog():
 #: `M→B→V` 不含 `M→V`，所以留住那条两跳路不会被误判。
 _V_AS_DIRECT_MARKERS = ("直接派V", "V本身是直接边", "出边里已有V", "M→V")
 
-#: 撤 V 直连之后**仍然必须读得到**的义务句（反真空：不许用"整段删掉"冒充"改对"）。
+#: 撤 V 直连之后仍然必须读得到的义务句（反真空：不许用"整段删掉"冒充"改对"）。
 _HANDOVER_KEEP = ("D去核", "由D让F补签")
 
 #: 强调符号与空白：`派 **D** 去核` 与 `派 D 去核` 是同一句话（按"读到的意思"判）。
@@ -428,22 +414,13 @@ def _manual_handover_problems(body: str) -> list[str]:
 
 
 def test_the_conductor_skill_records_the_current_dispatch_routes():
-    """M 的"派给谁"那一条必须写着**现状**，而不是旧路线（2026-10-20 更正读数）。
+    """M 的"派给谁"那一条必须写着现状，而不是旧路线（2026-10-20 更正读数）。
 
-    与 `tests/test_the_conductor_does_not_directly_control_bfv.py` 同一条裁定的另一侧：
-    主控不许直接控制的**有两个** —— `F`（`M→D→F`）与 `V`（2026-10-20 业主裁定撤掉
-    `M→V`；V 只剩**经 B** 的两跳路 `M→B→V`）。`B` 于 2026-10-13 被加回、今天仍在出边里。
-    这条判据刻意不写死整段文字，只钉住五件事：
-      ① F 仍然在 M 的出边外，手册给出那条链（`M → D → F`）；
-      ② V 也**不在** M 的出边里 ⇒ 手册要写**经 B** 的 `M→B→V`，并且 V 的动作
-         不许再出现在这个条目的可派清单里（`validate()` 会把它判成做不到的指令）；
-      ③ `forbidden_edge` 这个读数仍在（被拒时换链的依据）；
-      ④ 条目里不许把 F 列成能直接派的；
-      ⑤ 反真空：义务句"让 D 去核、由 D 让 F 补签"仍读得到（不许整段删掉冒充改对）。
+    与 `tests/test_the_conductor_does_not_directly_control_bfv.py` 同一条裁定的另一侧：主控不许直接控制的有两个 —— `F`（`M→D→F`）与 `V`（2026-10-20 业主裁定撤掉 `M→V`；V 只剩经 B 的两跳路 `M→B→V`）。`B` 于 2026-10-13 被加回、今天仍在出边里。
 
-    # 2026-10-20 业主裁定：撤 M→V（改前这里是"V 是直接边 ⇒ 手册要写 M→V"；
-    # 期望值换了，判据强度没换）。
-    """
+    这条判据刻意不写死整段文字，只钉住五件事：① F 仍然在 M 的出边外，手册给出那条链（`M → D → F`）；② V 也不在 M 的出边里 ⇒ 手册要写经 B 的 `M→B→V`，并且 V 的动作不许再出现在这个条目的可派清单里（`validate()` 会把它判成做不到的指令）；③ `forbidden_edge` 这个读数仍在（被拒时换链的依据）；④ 条目里不许把 F 列成能直接派的；⑤ 反真空：义务句"让 D 去核、由 D 让 F 补签"仍读得到（不许整段删掉冒充改对）。
+
+    2026-10-20 业主裁定：撤 M→V（改前这里是"V 是直接边 ⇒ 手册要写 M→V"；期望值换了，判据强度没换）。"""
     route = next(s for s in AS.CATALOG["M"] if "按任务类型" in s.slug)
     body = route.body
     heads = {a.split(".")[0] for a in route.actions}
@@ -487,12 +464,11 @@ def test_the_negative_control_the_old_direct_v_sentence_in_the_manual_is_caught(
 
 
 def test_the_negative_control_catches_a_path_under_no_registered_root(monkeypatch):
-    """反负控之十二：正文点名一个**没人写的落点** ⇒ 红。
+    """反负控之十二：正文点名一个没人写的落点 ⇒ 红。
 
-    缺陷形态：一条 skill 说"去 `foo/report.md` 读结论"，而**没有任何东西会产出那个文件** ——
+    缺陷形态：一条 skill 说"去 `foo/report.md` 读结论"，而没有任何东西会产出那个文件 ——
     读的人找不到，写的人也没错，两边都不报错。所以落点必须落在登记过的根下
-    （`WORKSPACE_PATH_ROOTS` / `REPO_PATH_ROOTS`），加新落点时同时加进那张表。
-    """
+    （`WORKSPACE_PATH_ROOTS` / `REPO_PATH_ROOTS`），加新落点时同时加进那张表。"""
     bad = AS.Skill(slug="点名野落点", title="x", summary="一句话", when="任何时候",
                    body="第 1 步：去 `foo/report.md` 读上一趟的结论。", tools=("fs.read",))
     monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
@@ -501,13 +477,12 @@ def test_the_negative_control_catches_a_path_under_no_registered_root(monkeypatc
 
 
 def test_the_path_scan_does_not_fire_on_vocabulary_or_bare_filenames(monkeypatch):
-    """反负控之十三：`heuristic/inconclusive`（词表取值）与裸文件名**不**报。
+    """反负控之十三：`heuristic/inconclusive`（词表取值）与裸文件名不报。
 
-    这一条守的是上面那条判据的**另一半**（R120 实测踩到的假阳性）：
+    这一条守的是上面那条判据的另一半（R120 实测踩到的假阳性）：
     第一版只按"带目录"判，于是证据等级的词表取值 `heuristic/inconclusive` 被报成"野落点" ——
     而它根本不是路径。假阳性会让判据变成噪音，然后没人再看它。
-    口径因此收成"**带已知后缀**或**结尾是 `/`**"，并配这条负控守着。
-    """
+    口径因此收成"带已知后缀或结尾是 `/`"，并配这条负控守着。"""
     good = AS.Skill(slug="词表与裸名", title="x", summary="一句话", when="任何时候",
                     body=("证据等级落在 `heuristic/inconclusive` 那一档；"
                           "产物是 `out/paper/main.tex` 与同一目录下的 `main.pdf`。"),
@@ -544,17 +519,16 @@ def test_the_registered_roots_cover_the_paths_we_actually_name():
 
 
 def test_the_index_says_to_read_it_now_and_says_why():
-    """索引里必须有一句**祈使**（"对上了就现在读"）与**理由**（手册给的是步骤与反面形态）。
+    """索引里必须有一句祈使（"对上了就现在读"）与理由（手册给的是步骤与反面形态）。
 
     为什么判这一句（2026-10-14 真机读数）：两次真跑（3 次与 16 次模型调用）里，
-    索引在提示词里、`skills/` 也落了盘，而**正文一次都没被读过** ——
+    索引在提示词里、`skills/` 也落了盘，而正文一次都没被读过 ——
     模型凭提示词里的口径就把活干完了。行为判不了（那是模型的自由），
     但"有没有把这个选择讲清楚"判得了：提示词只给口径（每一格都要成立），
-    手册给的是**这一档的具体步骤与反面形态** —— 这一句就是把那个差别说出来。
+    手册给的是这一档的具体步骤与反面形态 —— 这一句就是把那个差别说出来。
 
     与它配对的那条判据（索引里不许出现正文）仍然守着另一头：
-    这一句是**祈使**，不是把正文抄进来。
-    """
+    这一句是祈使，不是把正文抄进来。"""
     block = AS.index_block("M")
     assert "对上了就现在读" in block, block[:300]
     assert "具体步骤" in block and "反面形态" in block, block[:300]
@@ -564,13 +538,12 @@ def test_the_index_says_to_read_it_now_and_says_why():
 
 
 def test_the_manuscript_sections_are_enumerated_once_and_identically():
-    """研究手稿的分节**只许有一处枚举**：D 的声明与 skill 里那七个名字必须一模一样。
+    """研究手稿的分节只许有一处枚举：D 的声明与 skill 里那七个名字必须一模一样。
 
     2026-10-14 真机读数：两趟真跑里，一趟手稿以 `## 成果概述` 开头，另一趟直接从
-    「定义与已知」开头。原因在**两处枚举不一致** —— 声明里正文写着「六个分节」并逐个列名
+    「定义与已知」开头。原因在两处枚举不一致 —— 声明里正文写着「六个分节」并逐个列名
     （不含成果概述），而「开头要有成果概述」另起一句写在后面；模型两次各采用了一个。
-    现在两处都是七节、成果概述在第一位，这条判据守着它不再分岔。
-    """
+    现在两处都是七节、成果概述在第一位，这条判据守着它不再分岔。"""
     from agentflow import specs as SP
 
     NAMES = ("成果概述", "定义与已知", "已确定的结论", "尝试与失败", "例子与反例",
@@ -586,36 +559,15 @@ def test_the_manuscript_sections_are_enumerated_once_and_identically():
 
 
 def test_the_skills_tool_surface_equals_the_surface_the_prompt_renders() -> None:
-    """**两个工具面必须是同一个**（2026-10-16 复查十个协作面时发现的一处不一致）。
+    """两个工具面必须是同一个（2026-10-16 复查十个协作面时发现的一处不一致）。
 
-    ## 发现（为什么值得单独一条判据）
+    `_role_tool_surface()` 是 `validate()` 第三条硬约束的基准面（"一条 skill 正文里点名的工具必须在本角色的工具面上"）。它原先建注册表时给了 `workspace_root` 却没给 `store` —— 而它自己的 docstring 第 1 点正引着 `secretary.py` 那条读数（"不带 `store` 出 68 件、`fs.read` 不在里面；带上出 81 件、在里面"）：文档知道 store 要紧，实现漏了它。
 
-    `_role_tool_surface()` 是 `validate()` 第三条硬约束的基准面（"一条 skill 正文里点名的工具
-    必须在本角色的工具面上"）。它原先建注册表时给了 `workspace_root` 却**没给 `store`** ——
-    而它自己的 docstring 第 1 点**正引着** `secretary.py` 那条读数（"**不带 `store`** 出 68 件、
-    `fs.read` 不在里面；带上出 81 件、在里面"）。也就是说：**文档知道 store 要紧，实现漏了它。**
+    实测差异（同一台机、同一份代码，逐角色比对）：其余九格相同；D 是 36 对 41。差的 5 件逐字是 `research.list_gaps` / `research.poll_waiting` / `research.set_status` / `research.submit_gap` / `research.write_note`（全是只有 D 用的那些）。
 
-    实测差异（同一台机、同一份代码，逐角色比对）：
+    为什么这是缺陷而不是"更严一点"：模型看到的是带 store 的那一面（`tools_lines(role, registry)` 读宿主的注册器），判据查另一个面 ⇒ 一条 D 的手册只要正经点名 `research.set_status`，就会被报成"不在你的工具面上" —— 假阳性，而假阳性会让人开始不信这份判据（与 docstring 第 1 点的论证同型）。今天没有手册提到 `research.*`，所以它是潜伏的；这条判据让它不再潜伏。
 
-    | 角色 | 技能模块的面 | 提示词渲染的面 |
-    |---|---|---|
-    | 其余九格 | 相同 | 相同 |
-    | **D** | **36** | **41** |
-
-    差的 5 件逐字是 `research.list_gaps` / `research.poll_waiting` / `research.set_status` /
-    `research.submit_gap` / `research.write_note`（全是只有 D 用的那些）。
-
-    ## 为什么这是缺陷而不是"更严一点"
-
-    模型看到的是**带 store 的那一面**（`tools_lines(role, registry)` 读宿主的注册器）。
-    判据查另一个面 ⇒ 一条 D 的手册只要正经点名 `research.set_status`，就会被报成
-    "不在你的工具面上" —— **假阳性**，而假阳性会让人开始不信这份判据（与 docstring 第 1 点
-    的论证同型）。今天没有手册提到 `research.*`，所以它是**潜伏**的；这条判据让它不再潜伏。
-
-    ## 反真空
-
-    两侧都必须非空且**件数 ≥ 10**：两个空表也会"相等"，而那是"没查成"。
-    """
+    反真空：两侧都必须非空且件数 ≥ 10 —— 两个空表也会"相等"，而那是"没查成"。"""
     from agentflow.store import Store
     from agentflow.tools import build_registry
 
@@ -652,15 +604,15 @@ def tmp_path_root():
 
 
 # --------------------------------------------------------------------------------------
-# 研究攻坚链：七跳的**名字与顺序**
+# 研究攻坚链：七跳的名字与顺序
 # --------------------------------------------------------------------------------------
 #
 # 业主给的那条链是 `A → B → C → D → F → V → B(收录证明)`，并且逐字说「顺序即语义」。
-# 所以这一格不能只判"七个名字都在"——**顺序被调换时，七个名字一个不少**，
+# 所以这一格不能只判"七个名字都在"——顺序被调换时，七个名字一个不少，
 # 而那条链的意思整个反了（先是"从图里看出更短路径再立猜想"，调换之后就成了
 # "先攻坚再分析"，而攻坚根本没有输入）。
 #
-# 判据因此按**出现位置**比（`str.find` 的位置严格递增），不按集合比。
+# 判据因此按出现位置比（`str.find` 的位置严格递增），不按集合比。
 # 为什么锚在表格第一格而不是裸字母：`B` 在链上出现两次（概念与关系 / 收录证明），
 # 裸字母分不开这两件活 —— 只有"字母 + 那一跳的名字"才是唯一锚点。
 
@@ -677,10 +629,9 @@ CHAIN_HOPS: tuple[str, ...] = (
 
 
 def chain_order_problems(body: str) -> list[str]:
-    """七跳在正文里的**出现位置**必须严格递增（空列表 = 顺序对）。
+    """七跳在正文里的出现位置必须严格递增（空列表 = 顺序对）。
 
-    纯函数（喂任意一段文本进来就能给负控做牙）：缺一跳、或两跳位置颠倒 ⇒ 都报。
-    """
+    纯函数（喂任意一段文本进来就能给负控做牙）：缺一跳、或两跳位置颠倒 ⇒ 都报。"""
     marks = [hop.split("|")[1].strip() for hop in CHAIN_HOPS]
     problems: list[str] = []
     pos: dict[str, int] = {}
@@ -703,29 +654,27 @@ def chain_order_problems(body: str) -> list[str]:
 
 
 def test_the_research_chain_skill_lists_the_seven_hops_in_order():
-    """正控：`M` 的「研究攻坚链」那一条，七跳的名字与**顺序**都在。
+    """正控：`M` 的「研究攻坚链」那一条，七跳的名字与顺序都在。
 
     业主 2026-10-19 口径逐字：「顺序即语义，不许改」。这条判据守的就是那四个字：
-    ① 七跳的名字一个不缺；② 它们在正文里的**出现位置严格递增**；
-    ③ 正文里还有那一行链本身（`A → B → C → D → F → V → B`，人能一眼读出来）。
-    """
+    ① 七跳的名字一个不缺；② 它们在正文里的出现位置严格递增；
+    ③ 正文里还有那一行链本身（`A → B → C → D → F → V → B`，人能一眼读出来）。"""
     skill = next(s for s in AS.CATALOG["M"] if s.slug == "研究攻坚链-文献到收录证明")
     assert chain_order_problems(skill.body) == [], chain_order_problems(skill.body)
     # ③ 那一行链本身也在（与表格是两处写法，任一处被改坏都该有人看一眼）
     assert "A → B → C → D → F → V → B" in skill.body, skill.body[:400]
-    # 反真空：这条判据扫的确实是**这一条** skill 的正文（不是一段空文本）
+    # 反真空：这条判据扫的确实是这一条 skill 的正文（不是一段空文本）
     assert len(skill.body) > 800, len(skill.body)
 
 
 def test_the_negative_control_catches_the_chain_out_of_order(monkeypatch):
     """负控：把 `F` 与 `V` 两行的位置调换 ⇒ 判据必须当场红。
 
-    为什么拿 F / V 这一对做负控：它们是这条链上**唯一的"先攻坚、后走查"**那一步 ——
-    调换之后七跳**一个不少、名字全对**（只判包含的判据会照绿），而意思变成了
+    为什么拿 F / V 这一对做负控：它们是这条链上唯一的"先攻坚、后走查"那一步 ——
+    调换之后七跳一个不少、名字全对（只判包含的判据会照绿），而意思变成了
     "先走查一份还不存在的证明"。这正是业主那句「顺序即语义」要挡的形态。
 
-    第二颗牙：删掉一跳（`V` 那一行）⇒ 也必须红（"缺"与"顺序错"是两件事，都要报）。
-    """
+    第二颗牙：删掉一跳（`V` 那一行）⇒ 也必须红（"缺"与"顺序错"是两件事，都要报）。"""
     base = next(s for s in AS.CATALOG["M"] if s.slug == "研究攻坚链-文献到收录证明").body
     assert chain_order_problems(base) == [], "基线就不绿 ⇒ 下面的负控没有意义"
 
@@ -735,7 +684,7 @@ def test_the_negative_control_catches_the_chain_out_of_order(monkeypatch):
     swapped = list(lines)
     swapped[f_row], swapped[v_row] = swapped[v_row], swapped[f_row]
     swapped_body = "\n".join(swapped)
-    # 装置自控：调换之后七个名字**仍然都在**（所以"绿"不能靠"缺一跳"解释）
+    # 装置自控：调换之后七个名字仍然都在（所以"绿"不能靠"缺一跳"解释）
     assert all(hop in swapped_body for hop in CHAIN_HOPS), "调换把行弄丢了 ⇒ 负控在测别的东西"
     problems = chain_order_problems(swapped_body)
     assert problems, "负控失效：把 F 与 V 调换位置，判据却放过了（它只判了包含）"

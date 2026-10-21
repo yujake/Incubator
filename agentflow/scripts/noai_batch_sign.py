@@ -1,40 +1,22 @@
 # -*- coding: utf-8 -*-
 """FC-27 批量签字驱动：把「一次逐行走查覆盖多处禁改区改动」做成一条可复核的命令。
-
 ## 它是什么、不是什么
-
-是：驱动 `scripts/noai_gate.py` 的人审通路（`--baseline` 刷新 hash → `--approve` 追加
-reviewer 记录），把 N 个文件 × 2 名 reviewer 的那一串命令收成一条，并把行级走查材料
-（改动 diff、命中清单里的理由串、台账当前 sha 与盘上 sha）先铺出来给人读。
-
+是：驱动 `scripts/noai_gate.py` 的人审通路（`--baseline` 刷新 hash → `--approve` 追加reviewer 记录），把 N 个文件 × 2 名 reviewer
+的那一串命令收成一条，并把行级走查材料（改动 diff、命中清单里的理由串、台账当前 sha 与盘上 sha）先铺出来给人读。
 不是：代签。三条硬约束写在代码里，不是写在注释里 ——
-
-1. 默认 dry-run（不带 `--write` 时一个字节都不写）；
-2. `--write` 必须同时给 `--reviewer-a` / `--reviewer-b`（两个不同的名字）与 `--attest`
-   （走查人自己的那句话，写进台账的 `note`）；
-3. 每签完一处，立刻回读台账断言 `reviewers` 里没有"刷新 hash 之前留下的旧签名"。
-   这一条是防伪：`--baseline` 只刷新 hash、绝不写 reviewers，若某一天它开始连着旧
-   reviewers 一起留，旧签名就会挂在新内容上 —— 那正是 FC-27 最怕的"假 approved"。
-   脚本一旦读到这种情况就当场中止并告诉你原因（不继续、不回滚，交给人看）。
-
+1. 默认 dry-run（不带 `--write` 时一个字节都不写）；2. `--write` 必须同时给 `--reviewer-a` / `--reviewer-b`（两个不同的名字）与
+`--attest`（走查人自己的那句话，写进台账的 `note`）；3. 每签完一处，立刻回读台账断言 `reviewers` 里没有"刷新 hash 之前留下的旧签名"。这一条是防伪：`--baseline` 只刷新 hash、
+绝不写 reviewers，若某一天它开始连着旧reviewers 一起留，旧签名就会挂在新内容上 —— 那正是 FC-27 最怕的"假 approved"。脚本一旦读到这种情况就当场中止并告诉你原因（不继续、不回滚，交给人看）。
 ## 用法
-
-    # 1) 先看材料（只读）——默认就是这一步
-    python -B scripts/noai_batch_sign.py --since HEAD~4
-
-    # 2) 人逐行走查之后（只有人能跑这一步）
-    python -B scripts/noai_batch_sign.py --since HEAD~4 --write \
-        --reviewer-a 某某甲 --reviewer-b 某某乙 \
-        --attest "逐行看过 specs/{c,f,g,h}.py 与 interactions.py 的改动，结论：与裁定一致"
-
-    # 3) 只核当前状态（不写）
-    python -B scripts/noai_batch_sign.py --since HEAD~4 --verify-only
-
-`--since <ref>` 用门自己的改动集口径（`--git --print-changed`）取路径，再按清单命中筛出
-"需要签字的那些"；也可以直接 `--paths a.py b.py` 指定。
-
-退出码：0 = 材料已铺好且（`--write` 时）全部签成并复核通过；1 = 有需要人处理的项；
-2 = 没查成（门读不到清单/台账/改动集 —— 不许读成"没问题"）。
+# 1) 先看材料（只读）——默认就是这一步
+python -B scripts/noai_batch_sign.py --since HEAD~4
+# 2) 人逐行走查之后（只有人能跑这一步）
+python -B scripts/noai_batch_sign.py --since HEAD~4 --write         --reviewer-a 某某甲 --reviewer-b 某某乙
+--attest "逐行看过 specs/{c,f,g,h}.py 与 interactions.py 的改动，结论：与裁定一致"
+# 3) 只核当前状态（不写）
+python -B scripts/noai_batch_sign.py --since HEAD~4 --verify-only
+`--since <ref>` 用门自己的改动集口径（`--git --print-changed`）取路径，再按清单命中筛出"需要签字的那些"；也可以直接 `--paths a.py b.py` 指定。
+退出码：0 = 材料已铺好且（`--write` 时）全部签成并复核通过；1 = 有需要人处理的项；2 = 没查成（门读不到清单/台账/改动集 —— 不许读成"没问题"）。
 """
 from __future__ import annotations
 

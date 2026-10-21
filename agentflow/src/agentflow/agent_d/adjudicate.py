@@ -9,63 +9,24 @@ from ._support import Any, EvidenceError, IX, S, _digest
 class _Adjudicate:
     def adjudicate(self, qid: str) -> dict:
         """矛盾裁决（I2 闭环的收敛点）。
-
-        ## verdict → 状态 的映射（这个映射是设计，不是实现细节）
-
+        ====================  ===================  ==========================  ==================================verdict               status               contradiction_verdict       
+        后续动作====================  ===================  ==========================  ==================================``resolved``
+        ``answered``         ``resolved``                清空等待集；notes 写 winner 与 code``unresolved``        ``needs_evidence``   
+        ``unresolved``              轮数 +1，并提交下一轮检索请求``new_contradiction`` ``needs_evidence``   ``new_contradiction``       为新的矛盾对新
+        建一条问题；原问题轮数 +1``persistent``        ``answered``         ``persistent``              停止自动追问，交人复核
         ====================  ===================  ==========================  ==================================
-        verdict               status               contradiction_verdict       后续动作
-        ====================  ===================  ==========================  ==================================
-        ``resolved``          ``answered``         ``resolved``                清空等待集；notes 写 winner 与 code
-        ``unresolved``        ``needs_evidence``   ``unresolved``              轮数 +1，并提交下一轮检索请求
-        ``new_contradiction`` ``needs_evidence``   ``new_contradiction``       为新的矛盾对新建一条问题；原问题轮数 +1
-        ``persistent``        ``answered``         ``persistent``              停止自动追问，交人复核
-        ====================  ===================  ==========================  ==================================
-
-        为什么 ``persistent`` 必须是 ``answered``：``schema.ResearchQuestion.validate``
-        明确拒绝"声明 persistent 却还停在 open/researching"—— 那会让循环继续把它当
-        活任务。同理，终局状态必须清空等待集，否则 ``verify`` 会报
-        ``stale_waiting``（"已完成却还挂着等待项"）。
-
-        为什么 ``contradiction_rounds`` 只在"还要继续追问"时 +1：
-        它的语义是"已经发起过几轮追问"。``resolved``/``persistent`` 是终局，
-        再加一就会让"轮数 ≤ 上限"这条验收在最后一轮上假性失败。
-
-        ## 终止条件（三条，缺一条就会变成无限循环）
-
-        1. 单条矛盾最多 ``max_rounds_per_contradiction``（默认 2）轮 ——
-           由 ``interactions.adjudicate_contradiction`` 的 ``rounds/max_rounds`` 判；
-        2. 全局最多 ``max_contradiction_requests``（默认 10）条矛盾驱动的检索请求；
-        3. 任一条预算用尽时一律走 ``persistent``，不是 ``unresolved``
-           —— 否则"还该继续"和"该停了"会被混为一谈，循环停不下来。
-        另外 I7 的在途闸门（``admit_search_request``）拒绝时也走 ``persistent``：
-        追问发不出去 = 这一轮事实上无法继续，硬撑成 ``unresolved`` 只会留下
-        一个"说要继续、却什么都没提交"的假状态。
-
-        ## 只有 ``strength == "strong"`` 才允许自动追问
-
-        证据的"对立强度"由 ``interactions.detect_contradictions`` 判定：
-
-        - ``strong``（一方明确断言肯定式、另一方明确断言否定式）⇒ 允许追问；
-        - ``weak``（只是否定标记出现与否不一致）⇒ 不追问，直接标 ``persistent``，
-          ``code="weak_only_signal"``（这是 D 侧的策略码，不在
-          ``interactions.ADJUDICATION_CODES`` 里 —— 因为"该不该拿这条线索去问 A"
-          是 D 的决策，不是判据本身的一部分；建议后续把它并入那张词表）。
-
-        理由是一次实测：25 条真实论文关系里 weak 报了 6 条（24%），没有一条是真矛盾。
-        拿 weak 驱动检索，会把 A 的产能烧在假矛盾上。
-
-        写入纪律
-        --------
-
-        全部写入（问题行 + 新请求行 + 新矛盾问题行）在一个事务里完成：
-        开两个事务就给了"问题说在等 r-0007、请求表里却没有 r-0007"这种半成品
-        状态落盘的机会，而 schema 恰恰要求这两者同生同死。
-
-        ## 只读准备的顺序
-
-        所有读（问题行、关系表、裁决）都在开事务之前完成：``adjudicate`` 会读
-        store，而 ``filelock`` 在同一进程内重入同一把锁会直接抛错。这条与 I6 给 B
-        的硬约束同源（"在事务里调用会去拿锁的东西"是最容易死锁的形态）。
+        为什么 ``persistent`` 必须是 ``answered``：``schema.ResearchQuestion.validate``明确拒绝"声明 persistent 却还停在 open/researching"—— 那会让循环继
+        续把它当活任务。同理，终局状态必须清空等待集，否则 ``verify`` 会报``stale_waiting``（"已完成却还挂着等待项"）。
+        为什么 ``contradiction_rounds`` 只在"还要继续追问"时 +1：它的语义是"已经发起过几轮追问"。``resolved``/``persistent`` 是终局，再加一就会让"轮数 ≤ 上限"这条验收在最后一轮上假性失败。
+        1. 单条矛盾最多 ``max_rounds_per_contradiction``（默认 2）轮 ——由 ``interactions.adjudicate_contradiction`` 的 ``rounds/max_rounds`` 判；
+        2. 全局最多 ``max_contradiction_requests``（默认 10）条矛盾驱动的检索请求； 3. 任一条预算用尽时一律走 ``persistent``，不是 ``unresolved``—— 否则"还该继续"和"该停了"会
+        被混为一谈，循环停不下来。另外 I7 的在途闸门（``admit_search_request``）拒绝时也走 ``persistent``：追问发不出去 = 这一轮事实上无法继续，硬撑成 ``unresolved`` 只会留下一个"说要继续、
+        却什么都没提交"的假状态。
+        只有 ``strength == "strong"`` 才允许自动追问证据的"对立强度"由 ``interactions.detect_contradictions`` 判定：
+        - ``strong``（一方明确断言肯定式、另一方明确断言否定式）⇒ 允许追问；- ``weak``（只是否定标记出现与否不一致）⇒ 不追问，直接标 ``persistent``，``code="weak_only_signal"``（这是
+        D 侧的策略码，不在``interactions.ADJUDICATION_CODES`` 里 —— 因为"该不该拿这条线索去问 A"是 D 的决策，不是判据本身的一部分；
+        所有读（问题行、关系表、裁决）都在开事务之前完成：``adjudicate`` 会读 store，而 ``filelock`` 在同一进程内重入同一把锁会直接抛错。这条与 I6 给 B 的硬约束同源（"在事务里调用会去拿锁的东西"是最容易死锁的
+        形态）。
         """
         qrow = next(
             (r for r in self.store.rows("research_questions") if str(r.get("question_id")) == str(qid)), None

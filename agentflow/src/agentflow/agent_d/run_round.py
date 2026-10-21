@@ -9,22 +9,13 @@ from ._support import Any, _as_report_dict
 class _RunRound:
     def run_round(self, report: Any, *, submit: bool = True, limit: int | None = None) -> dict:
         """一轮完整流程（§4.1 + I1/I2）：
-
         ``ingest → 矛盾裁决 → (逐问题) trace → assess → 不足则 submit_gaps → poll → research``
-
-        ``submit=False`` 表示"只评估不提问"（干跑模式），用于先看看会触发哪些判据
-        而不动 A 的队列。``poll`` 放在最后：这样上一轮提交的请求（A、B 已经
-        跑完）会在这一轮被拉回 researching，形成闭环。
-
+        ``submit=False`` 表示"只评估不提问"（干跑模式），用于先看看会触发哪些判据而不动 A 的队列。``poll`` 放在最后：这样上一轮提交的请求（A、B 已
+        经跑完）会在这一轮被拉回 researching，形成闭环。
         ## 为什么矛盾裁决排在缺口流程之前
-
-        §1 I2 的顺序是设计的一部分：矛盾比缺口更强（它说明现有知识里有东西可能是
-        错的，而不是"还不够"）。先裁决矛盾，才能保证它的 high 优先级请求在
-        这一轮更早进入 A 的队列，而不是排在若干 medium 缺口之后。
-        裁决结果写进 ``summary["adjudications"]``，让人看得到本轮裁了什么。
-
-        ``submit=False``（干跑）时不裁决：裁决的落点就是"提交下一轮追问"，
-        干跑模式下不做任何状态迁移是它存在的全部意义。
+        §1 I2 的顺序是设计的一部分：矛盾比缺口更强（它说明现有知识里有东西可能是错的，而不是"还不够"）。先裁决矛盾，才能保证它的 high 优先级请求在这一轮更早进入 A 
+        的队列，而不是排在若干 medium 缺口之后。裁决结果写进 ``summary["adjudications"]``，让人看得到本轮裁了什么。
+        ``submit=False``（干跑）时不裁决：裁决的落点就是"提交下一轮追问"，干跑模式下不做任何状态迁移是它存在的全部意义。
         """
         info = _as_report_dict(report)
         summary: dict[str, Any] = {

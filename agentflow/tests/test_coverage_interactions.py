@@ -1,15 +1,11 @@
 """`interactions.py` 里三个零直接测试函数的补强测试（等级 2：判据/决策）。
 
-## 先说清一件事：这三个函数不是"没有测试"
+本脚本（`tools/coverage_zero_test.py`）把它们报进清单，是因为它的判据是"函数名作为标识符出现在
+tests/ 里"，而它们此前只出现在测试函数名里（`test_admit_reprocess_request_...` 这类），从未被
+限定名点名。考虑到 `_TEST_NAME_TMPL` 那条判据，这个判断本身是有争议的（见脚本 docstring 的口径说明）。
 
-本脚本（`tools/coverage_zero_test.py`）把它们报进清单，是因为它的判据是
-"函数名作为标识符出现在 tests/ 里"，而它们此前只出现在测试函数名里
-（`test_admit_reprocess_request_...` 这类），从未被限定名点名。
-考虑到 `_TEST_NAME_TMPL` 那条判据，这个判断本身是有争议的（见脚本 docstring 的口径说明）。
-
-所以本文件存在的意义不是"消掉三个零测试条目"，而是给它们补上
-原文件没有断言的那几条判据（下表）。这一点如实写在这里，不假装是缺口：
-`tests/test_interactions.py` 对这三个函数有 13 条测试，覆盖得相当扎实。
+所以本文件存在的意义不是"消掉三个零测试条目"，而是给它们补上原文件没有断言的那几条判据：
+`tests/test_interactions.py` 对这三个函数有 13 条测试，覆盖得相当扎实 —— 这里如实写，不假装是缺口。
 
 | 函数 | 原文件没有断言的东西 | 本文件补的 |
 |---|---|---|
@@ -17,11 +13,8 @@
 | `admit_reprocess_request` | `counts` 是剔除 rejected 行之后的口径；`relation_ids` 去重 | 计数口径 + 去重 |
 | `evidence_relevance` | 概念集为空时的行为（`want` 为空 ⇒ 永远不相关） | 空概念集的负控 |
 
-## 夹具纪律（§5.3）
-
-`reason` 的值从 `schema.REPROCESS_REASONS` 取，`priority` 从 `schema.PRIORITIES` 取，
-不写死词表取值。
-"""
+夹具纪律（§5.3）：`reason` 的值从 `schema.REPROCESS_REASONS` 取，`priority` 从 `schema.PRIORITIES` 取，
+不写死词表取值。"""
 
 from __future__ import annotations
 
@@ -193,36 +186,16 @@ def test_admit_reprocess_request_dedupes_relation_ids():
 def test_admit_reprocess_request_rejects_blank_only_relation_ids():
     """会红的测试（已登记为 xfail-strict，缺陷 TEST-RED-2）。
 
-    ## 现象（实测，非推测）
+    现象（实测）：`I.admit_reprocess_request([], relation_ids=["", "  "], reason=<合法理由>)` 回
+    `{'admitted': True, ...}` ⇒ 期望 `admitted=False` + "全量重抽"。
 
-    ```python
-    I.admit_reprocess_request([], relation_ids=["", "  "], reason=<合法理由>)
-    # 实测 ⇒ {'admitted': True, 'reason': '未超上限 2', 'blocked': [], 'counts': {}}
-    ```
-
-    期望 ⇒ `admitted=False` + "全量重抽"。
-
-    ## 为什么这是真缺陷（而不是"输入不该这么写"）
-
-    1. 守卫的语义是"没有任何有效目标就拒绝"。`if x` 这个过滤条件的本意正是
-       "丢掉非字符串/空的元素"，于是 `["", "  "]` 与 `[]` 在语义上等价 ——
-       两者都是"零个有效目标"。但实现里只有 `[]` 走拒绝分支。
-    2. 后果与缺陷描述的一字不差：B 会拿着一个空目标集去重抽取，
-       也就是退化成全量重抽，把 A 的产能烧在整张关系表上。
-    3. `tests/test_interactions.py::test_admit_reprocess_request_negative_control_empty_target`
-       只测了 `relation_ids=[]` 这一种写法，所以这个空档至今没有测试覆盖。
-
-    ## 期望行为（修法方向）
-
-    守卫应当在归一之后判空：`rids = sorted({str(x).strip() for x in relation_ids if str(x).strip()})`，
-    再 `if not rids: return {拒绝}`。也就是把 `strip()` 提到过滤条件里，
-    让"纯空白"与"空"在归一后同形。
-
-    ## 为什么用 xfail(strict=True)
-
-    与 `test_gate_g1_rejects_a_windows_drive_absolute_proof_location`（TEST-RED-1）同一取舍：
-    套件保持绿、缺陷可见、修好后立刻 XPASS 失败提醒来删标记。
-    """
+    为什么是真缺陷：守卫的语义是"没有任何有效目标就拒绝"，`if x` 本意正是丢掉非字符串/空的元素，于是
+    `["", "  "]` 与 `[]` 语义等价（零个有效目标），但实现里只有 `[]` 走拒绝分支。后果与缺陷描述一字
+    不差：B 拿着空目标集去重抽取，退化成全量重抽，把 A 的产能烧在整张关系表上。而
+    `tests/test_interactions.py::test_admit_reprocess_request_negative_control_empty_target` 只测了 `relation_ids=[]`，
+    这个空档至今没有测试覆盖。修法：归一之后判空 —— `rids = sorted({str(x).strip() for x in relation_ids if str(x).strip()})`
+    再 `if not rids: return {拒绝}`（把 `strip()` 提到过滤条件里，让"纯空白"与"空"归一后同形）。
+    xfail(strict=True) 与 `test_gate_g1_rejects_a_windows_drive_absolute_proof_location`（TEST-RED-1）同一取舍：套件绿、缺陷可见、修好后 XPASS 提醒删标记。"""
     got = I.admit_reprocess_request([], relation_ids=["", "  "], reason=_a_reprocess_reason())
     assert got["admitted"] is False, got
     assert "全量重抽" in got["reason"], got

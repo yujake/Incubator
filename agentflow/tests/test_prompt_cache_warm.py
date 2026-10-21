@@ -1,51 +1,21 @@
-"""判据：十个角色 + 秘书的提示词前缀**真的进了上游缓存**吗（2026-10-21 真机读数）。
+"""判据：十个角色 + 秘书的提示词前缀真的进了上游缓存吗（2026-10-21 真机读数）。
 
-## 这一组为什么"读一份读数"，而不是自己去发请求
+这一组为什么"读一份读数"，而不是自己去发请求：上游的前缀缓存只有真机才有读数（`usage.prompt_cache_hit_tokens`）。让判据自己去发请求有两个后果，都会把这条判据变成贵而无用的东西：① 每次跑测试都花钱、
+还必须联网（§7.4 离线确定性）；② 上游抽风时它红，而"上游抽风"与"提示词抖了"要分开处置。所以分工是：发请求的那一侧 = `scripts/warm_prompt_cache.py`（幂等、内置 $0.10 上限、
+一次一个目标），它把读数写进 `tests/fixtures/prompt_cache_warm.json`；- 判据这一侧 = 本文件：只读那份读数，并且重算十个角色的提示词摘要
+——于是"提示词改了而读数没重跑"这一档会当场红（读数不许悄悄烂掉）。三条判据（本次任务的①②③）与它们各自的负控：每个目标都有缓存写记录（`write > 0` 或 `hit > 0`），逐角色一行；负控：把某个角色的行删掉 ⇒
+同一个检查必须点名它。2. 第二次调用命中：同一角色再调一次，`hit > 0` 且 `hit/(hit+miss) > 0`（样本只挑 2 个 —— 省钱是这条判据的一部分，不是省略）。负控：把样本那一行的 `hit` 改成 0
+⇒ 必须红。3. prompt 稳定：同一角色两次调用的 `prompt_sha256` 相同。正控用两次独立渲染（各自造一份注册表）逐字节比对；差异用`promptstability.first_difference` /
+`dynamic_sections` 报到段名一级。负控：把 `budget_left` 塞回系统提示（改前那个形态）⇒ ③ 必须红 ——这一条证明它守的真的是"提示词不许抖"，而不是"两边都不是空的"。
+一条硬口径：`write` 是推导量，`hit` 才是实证：上游没有"写"这个计数（请求体里没有 `cache_control`，也没有写缓存响应字段）。读数里的 `write` = 这一次被 miss 掉的那部分
+token（`write_source="derived:miss"`）——它说的是"这部分被送去建索引了"，不是"下一次一定能命中"。真机上这两者会分开：改前 `secretary` 那一行连发两趟都是
+`miss=175 / hit=0`（`2026-10-21` 实测，`--roles secretary --hit-sample secretary` ⇒ 退出码 1"第二次调用没命中的样本：['secretary']"，) ⇒
+它那条 175 token 的前缀没有进索引（原因：整条提示词在 user 位、而材料每问一次都变 ⇒ 前缀从第一个字符起就不同）。所以本文件除了①那条"字面判据"，还有一条实证判据：十一个目标的同一份
+`system` 必须真的被下一次命中（`hit > 0`）。
 
-上游的前缀缓存只有真机才有读数（`usage.prompt_cache_hit_tokens`）。让判据自己去发请求
-有两个后果，都会把这条判据变成贵而无用的东西：① 每次跑测试都花钱、还必须联网
-（§7.4 离线确定性）；② 上游抽风时它红，而"上游抽风"与"提示词抖了"要分开处置。
+2026-10-21 之后秘书与十个角色同形（稳定头进 `system`、材料留 user），所以它也要过实证那一档 —— 判据见 `tests/test_secretary_system_carries_the_head.py`。
 
-所以分工是：
-
-- **发请求的那一侧** = `scripts/warm_prompt_cache.py`（幂等、内置 $0.10 上限、
-  一次一个目标），它把读数写进 `tests/fixtures/prompt_cache_warm.json`；
-- **判据这一侧** = 本文件：只读那份读数，并且**重算**十个角色的提示词摘要 ——
-  于是"提示词改了而读数没重跑"这一档会当场红（读数不许悄悄烂掉）。
-
-## 三条判据（本次任务的①②③）与它们各自的负控
-
-1. **每个目标都有缓存写记录**（`write > 0` 或 `hit > 0`），逐角色一行；
-   负控：把某个角色的行删掉 ⇒ 同一个检查必须点名它。
-2. **第二次调用命中**：同一角色再调一次，`hit > 0` 且 `hit/(hit+miss) > 0`
-   （样本只挑 2 个 —— 省钱是这条判据的一部分，不是省略）。
-   负控：把样本那一行的 `hit` 改成 0 ⇒ 必须红。
-3. **prompt 稳定**：同一角色两次调用的 `prompt_sha256` 相同。
-   正控用**两次独立渲染**（各自造一份注册表）逐字节比对；差异用
-   `promptstability.first_difference` / `dynamic_sections` 报到段名一级。
-   **负控：把 `budget_left` 塞回系统提示**（改前那个形态）⇒ ③ 必须红 ——
-   这一条证明它守的真的是"提示词不许抖"，而不是"两边都不是空的"。
-
-## 一条硬口径：`write` 是推导量，`hit` 才是实证
-
-上游没有"写"这个计数（请求体里没有 `cache_control`，也没有写缓存响应字段）。
-读数里的 `write` = 这一次被 miss 掉的那部分 token（`write_source="derived:miss"`）——
-它说的是"这部分被送去建索引了"，**不是**"下一次一定能命中"。
-
-真机上这两者会分开：改前 `secretary` 那一行连发两趟都是 `miss=175 / hit=0`
-（`2026-10-21` 实测，`--roles secretary --hit-sample secretary` ⇒ 退出码 1
-"第二次调用没命中的样本：['secretary']"，) ⇒ 它那条 175 token 的前缀**没有**进索引
-（原因：整条提示词在 **user** 位、而材料每问一次都变 ⇒ 前缀从第一个字符起就不同）。
-所以本文件除了①那条"字面判据"，还有一条**实证**判据：
-十一个目标的同一份 `system` 必须**真的被下一次命中**（`hit > 0`）。
-
-2026-10-21 之后秘书与十个角色**同形**（稳定头进 `system`、材料留 user），
-所以它也要过实证那一档 —— 判据见 `tests/test_secretary_system_carries_the_head.py`。
-
-## 反真空
-
-读数里 `runs` / `rows` / 目标数 / 每行的 token 数任何一个读不出来 ⇒ 当场红
-（"没读到"与"都合格"必须分得开）。本文件第一条判据就是那一层。
+反真空：读数里 `runs` / `rows` / 目标数 / 每行的 token 数任何一个读不出来 ⇒ 当场红（"没读到"与"都合格"必须分得开）。本文件第一条判据就是那一层。
 """
 
 from __future__ import annotations
@@ -96,7 +66,7 @@ def _runs() -> list[dict[str, Any]]:
 
 
 def _rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """只取**主判据**那一档的行（`pass` 1/2）。
+    """只取主判据那一档的行（`pass` 1/2）。
 
     诊断行（3 = 去掉工具面、4/5 = 换一趟活的 system）刻意排除：
     它们回答的是别的问题，混进来会让"这个角色的两次调用"变成三次四次。
@@ -123,7 +93,7 @@ def _records_by_target(rows: Sequence[Mapping[str, Any]]) -> dict[str, list[dict
 
 def _targets_without_write_record(targets: Sequence[str],
                                   rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    """①的判据本体：这些目标里，哪些**没有**任何一行带 `write>0` 或 `hit>0`。"""
+    """①的判据本体：这些目标里，哪些没有任何一行带 `write>0` 或 `hit>0`。"""
     scored = {t: False for t in targets}
     for row in _rows(rows):
         role = str(row.get("role"))
@@ -133,7 +103,7 @@ def _targets_without_write_record(targets: Sequence[str],
 
 
 def _targets_landed(targets: Sequence[str], rows: Sequence[Mapping[str, Any]]) -> set[str]:
-    """实证：这些目标里，哪些的同一份 prompt **真的被下一次命中过**（`hit > 0`）。"""
+    """实证：这些目标里，哪些的同一份 prompt 真的被下一次命中过（`hit > 0`）。"""
     landed: set[str] = set()
     for row in _rows(rows):
         if _as_int((row.get("cache") or {}).get("hit")) > 0:
@@ -143,7 +113,7 @@ def _targets_landed(targets: Sequence[str], rows: Sequence[Mapping[str, Any]]) -
 
 def _second_call_readings(targets: Sequence[str],
                           rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
-    """②的判据本体：每个样本角色**第二次**调用那一行的 `hit` / `miss` / `hit_rate`。"""
+    """②的判据本体：每个样本角色第二次调用那一行的 `hit` / `miss` / `hit_rate`。"""
     out: dict[str, dict[str, Any]] = {}
     for row in _rows(rows):
         if int(row.get("pass") or 1) != 2:
@@ -164,7 +134,7 @@ def _second_call_readings(targets: Sequence[str],
 
 def _digest_problems(targets: Sequence[str],
                      rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    """③的判据本体（读数面）：同一角色的每一行必须挂着**同一个** `prompt_sha256`。
+    """③的判据本体（读数面）：同一角色的每一行必须挂着同一个 `prompt_sha256`。
 
     这正是"同一角色两次调用的 prompt_sha256 相同"那句话 —— 只不过它比一句话硬：
     行数可以是 1、2 或更多，每一行都得对得上。
@@ -235,12 +205,12 @@ def registry() -> Any:
 
 @pytest.fixture(scope="module", autouse=True)
 def _recorded_lean_mode() -> Any:
-    """把形式化开关钉到**读数里记着的那一档**（预热是在那一档渲染的）。
+    """把形式化开关钉到读数里记着的那一档（预热是在那一档渲染的）。
 
     为什么必须有这一步：`system_prompt` 在"形式化关着"那一档会把 Lean 相关的段
     整段换掉（`_apply_no_lean_variant`），于是同一份代码在两档下渲染出的 system
-    **不是同一段前缀**。而判据套件在 `conftest` 里把这一档钉成**开着**（那是产品缺省的
-    反面，为的是让形式化那条路有判据可测）。预热跑在**产品口径**（关着）——
+    不是同一段前缀。而判据套件在 `conftest` 里把这一档钉成开着（那是产品缺省的
+    反面，为的是让形式化那条路有判据可测）。预热跑在产品口径（关着）——
     两个口径本身都对，混在一起就变成了假的"提示词变了"。
 
     钉法与 `tests/test_lean_switch.py` 同一手：改 env + 清 `agent_prompts` 的两处
@@ -299,8 +269,8 @@ def test_the_readings_file_is_a_complete_per_role_table() -> None:
 
     # 每一趟的花费都必须在上限之内（钱的上限是判据的一部分，不是纪律口号）。
     #
-    # 口径是"**预检**"：脚本在每次调用**之前**比一次（`spent >= cap` ⇒ 干净停下），
-    # 所以最后那一次调用可能把总花费推过上限 —— 越过量**最多是一次调用的代价**。
+    # 口径是"预检"：脚本在每次调用之前比一次（`spent >= cap` ⇒ 干净停下），
+    # 所以最后那一次调用可能把总花费推过上限 —— 越过量最多是一次调用的代价。
     # 2026-10-21 实测：一趟 `--cap-usd 0.035` 跑 11 个目标，停在 0.038451
     # （末次调用 0.005813）。这不是"超支"，是预检闸的形状；真正的超支是
     # "花掉的钱比 cap + 单次代价还多"，那一条这里仍然判红。
@@ -327,7 +297,7 @@ def test_the_readings_file_is_a_complete_per_role_table() -> None:
 
 
 def test_every_target_has_a_cache_write_record() -> None:
-    """判据 ①：十个角色 + 秘书，**每个**都有 `write>0` 或 `hit>0` 的记录。
+    """判据 ①：十个角色 + 秘书，每个都有 `write>0` 或 `hit>0` 的记录。
 
     读数逐角色打一行（`role / write / hit / 是否实证 landed`）—— 这一行就是
     任务要的那张表，判据自己把它打出来，于是"表"与"判据"不会各说一套。
@@ -349,9 +319,9 @@ def test_every_target_has_a_cache_write_record() -> None:
 
 
 def test_the_ten_role_prompts_are_proven_to_land_in_the_cache() -> None:
-    """判据 ①的实证那一半：十个角色的同一份 prompt 必须**真的被下一次命中**（`hit>0`）。
+    """判据 ①的实证那一半：十个角色的同一份 prompt 必须真的被下一次命中（`hit>0`）。
 
-    为什么"有 write 记录"还不够：`write` 是从 `miss` **推导**出来的（上游没有写计数），
+    为什么"有 write 记录"还不够：`write` 是从 `miss` 推导出来的（上游没有写计数），
     它证明的是"这部分被送去建索引"，不是"索引留下了它"。真机上这两者会分开 ——
     改前秘书那一行 `write=175` 而 `hit` 恒 0（连发两趟都不中，见模块 docstring）。
 
@@ -387,7 +357,7 @@ def test_the_ten_role_prompts_are_proven_to_land_in_the_cache() -> None:
 def test_a_second_call_hits() -> None:
     """判据 ②：样本角色的第二次调用 `hit > 0` 且命中比例 > 0（样本只有 2 个）。
 
-    "只挑 2 个"是**判据的一部分**：省钱是这条设计里的取舍，不是偷懒 ——
+    "只挑 2 个"是判据的一部分：省钱是这条设计里的取舍，不是偷懒 ——
     所以这里连"样本数不许超过 2"一起判（超了就是有人把一条便宜的判据变成了贵的）。
     """
     rows = [row for run in _runs() for row in (run.get("rows") or [])]
@@ -422,7 +392,7 @@ def test_the_prompt_digest_does_not_move_between_calls() -> None:
 
     负控：把某一行的摘要改一个字符 ⇒ 必须红，且报出"有几种摘要"。
     """
-    # 2026-10-21 口径修正：这条判据问的是"**同一趟**里同一角色两次调用是不是同一段前缀"，
+    # 2026-10-21 口径修正：这条判据问的是"同一趟里同一角色两次调用是不是同一段前缀"，
     # 不是"跨趟也不许变" —— 跨趟会变正是我们要的（提示词改了、facts 挪了位置）。
     # 旧写法把所有趟的行混在一起比，于是"提示词真的改过一次"会被读成"同一角色两次调用不一致"。
     # 所以按 `at`（趟）分组；跨趟一致性由 `test_the_recorded_digests_still_match_the_rendered_prompts` 守最新一趟。
@@ -436,7 +406,7 @@ def test_the_prompt_digest_does_not_move_between_calls() -> None:
     problems = per_run
     assert not problems, "；".join(problems)
 
-    # 负控：改**一行**的摘要 ⇒ 同一个函数必须看见。
+    # 负控：改一行的摘要 ⇒ 同一个函数必须看见。
     # 只改一行（不是"把同角色同 pass 的行全改掉"）：那个角色每一趟都有一行 pass=1，
     # 全改掉之后它们仍然彼此一致 —— 负控会因此空转（第一版就是这么写错的）。
     victim = next(r for r in _rows(rows) if str(r.get("role")) in TEN_ROLES)
@@ -455,7 +425,7 @@ def test_the_prompt_digest_does_not_move_between_calls() -> None:
 
 
 def test_two_independent_renders_are_byte_identical(registry: Any) -> None:
-    """判据 ③（渲染面）：同一角色两次**独立渲染**必须逐字节相同（十个角色各判一遍）。
+    """判据 ③（渲染面）：同一角色两次独立渲染必须逐字节相同（十个角色各判一遍）。
 
     这是"同一角色两次调用的 prefix 相同"的机械前提。正控用两次独立渲染
     （两次都过 `split_facts`）—— 它们共享的只有"静态事实"，而每步会变的两格
@@ -491,11 +461,11 @@ def _with_moved(role: str, registry: Any) -> dict[str, Any]:
 
 def test_putting_budget_left_back_into_the_system_makes_the_criterion_red(
         registry: Any) -> None:
-    """负控（③ 的牙）：把 `budget_left` / `notebook` **塞回系统提示** ⇒ ③ 必须红。
+    """负控（③ 的牙）：把 `budget_left` / `notebook` 塞回系统提示 ⇒ ③ 必须红。
 
     这就是改前那个形态（`agent_loop._system_at_step` 的前身每步把这两格重算进 system）：
     花销一变，`TASK_BUDGET` 那一段的字节就变 ⇒ 整条前缀作废。它必须让同一条判据红，
-    并且**点得出**是哪一段变的、从第几个字符起不同。
+    并且点得出是哪一段变的、从第几个字符起不同。
 
     这一条是"③ 真的在守提示词不许抖"的唯一证据：没有它，③ 只是"两边都不是空的"。
     """
@@ -519,7 +489,7 @@ def test_putting_budget_left_back_into_the_system_makes_the_criterion_red(
             f"{role}：段级判据没点名 TASK_BUDGET / TASK_NOTEBOOK，而是 {changed} ⇒ "
             "红了也读不出该改哪一段")
 
-        # 分离之后（今天的实现）同一对事实必须**绿** —— 否则上面那条红就说明不了什么。
+        # 分离之后（今天的实现）同一对事实必须绿 —— 否则上面那条红就说明不了什么。
         ok_prev, ok_cur = _fact_pair(role, registry, split=True)
         assert _stability_problem(ok_prev, ok_cur) == "", (
             f"{role}：`split_facts` 之后 system 还不同 ⇒ 静态/动态分离没生效")
@@ -531,21 +501,15 @@ def test_putting_budget_left_back_into_the_system_makes_the_criterion_red(
 
 
 def test_the_recorded_digests_still_match_the_rendered_prompts() -> None:
-    """读数的新鲜度：盘上记的 `prompt_sha256` 必须等于**今天**重算的摘要。
+    """    读数的新鲜度：盘上记的 `prompt_sha256` 必须等于今天重算的摘要。这一条守的是"读数会腐烂"：提示词一改（`agent_prompts.py` / `specs/*` / 预设），以前那份预热就作废了 —— 而
+    JSON 还在，命中率读数还很好看。红的时候不要改这里：重跑一次预热（一条命令写在 `docs/DEVELOPMENT-SPEC.md` §14）。
 
-    这一条守的是"读数会腐烂"：提示词一改（`agent_prompts.py` / `specs/*` / 预设），
-    以前那份预热就作废了 —— 而 JSON 还在，命中率读数还很好看。
-    红的时候**不要**改这里：重跑一次预热（一条命令写在 `docs/DEVELOPMENT-SPEC.md` §14）。
+    ## 2026-10-21：取数口径从"最后一趟"改成"每个目标自己最近那一趟"
 
-    ## 2026-10-21：取数口径从"最后一趟"改成"**每个目标自己最近那一趟**"
-
-    读数文件是一个**容器**（`:data:`warm_prompt_cache.MAX_RUNS_KEPT` 趟都留着），
-    而 `--roles` 本来就可以只点几个目标 —— 真机省钱样本就只点 `M` 与 `H`
-    （`tests/test_cross_run_prefix_is_reused.py` 的判据 ③）。"最后一趟"这种读法只在
-    "每一趟都覆盖全 11 个目标"时才成立，否则"没点这个目标"会被读成"这个目标的读数烂了"
-    （两件事的处置方向相反：前者该去补一趟预热，后者该去查提示词）。
-    新鲜度这件事与"哪一趟"无关 —— 它问的是"这个目标**最后一次**预热时记的摘要，
-    等于今天的渲染吗"，所以逐目标往回找最近一条主行，比较的仍然是**今天现算的摘要**。
+    读数文件是一个容器（`:data:`warm_prompt_cache.MAX_RUNS_KEPT` 趟都留着），而 `-
+    -roles` 本来就可以只点几个目标 —— 真机省钱样本就只点 `M` 与 `H`（`tests/test_cross_run_prefix_is_reused.py` 的判据 ③）。
+    "最后一趟"这种读法只在"每一趟都覆盖全 11 个目标"时才成立，否则"没点这个目标"会被读成"这个目标的读数烂了"（两件事的处置方向相反：前者该去补一趟预热，后者该去查提示词）。新鲜度这件事与"哪一趟"无关 ——
+    它问的是"这个目标最后一次预热时记的摘要，等于今天的渲染吗"，所以逐目标往回找最近一条主行，比较的仍然是今天现算的摘要。
     """
     rendered = _rendered()
     runs = _runs()
@@ -568,7 +532,7 @@ def test_the_recorded_digests_still_match_the_rendered_prompts() -> None:
                             f"今天重算是 {want[:12]} ⇒ 提示词变了，读数作废（重跑预热）")
     assert not problems, "；".join(problems)
 
-    # 秘书那一档（2026-10-21 起与十个角色同形）：摘要就是它进 `system` 的**稳定头** ——
+    # 秘书那一档（2026-10-21 起与十个角色同形）：摘要就是它进 `system` 的稳定头 ——
     # 不是那条整提示词（材料在 user 位，每问一次都变）。口径不许含糊。
     prompt, _stable = W._secretary_head()
     assert rendered[W.SECRETARY]["prompt_sha256"] == _sha(prompt), (
@@ -579,18 +543,16 @@ def test_the_recorded_digests_still_match_the_rendered_prompts() -> None:
 
 
 def test_the_two_diagnostic_readings_say_what_they_measured() -> None:
-    """两条诊断读数必须与文档 §14 的两句话一致（否则改的是文档，不是读数）。
+    """    两条诊断读数必须与文档 §14 的两句话一致（否则改的是文档，不是读数）。
 
-    - **工具面不在缓存前缀里**：同一份 system，带工具面预热过之后**去掉工具面**
-      再发一次仍然命中（`tools_in_prefix=False`，实测 hit 11,904 / 12,126）；
-    - **换一趟活也命中**（2026-10-21 之后的口径）：另一份 system（不同 `task` /
-      `task_id` / `depth` / `workspace_root`）在 system 里**逐字节等于**原来那一份
-      （跨 run 会变的十格已经挪进 user 消息）⇒ `cross_run_hit` 的两行**都该 ≥90%**。
-      改前那两行是 `0 / 满`，那正是"预热只买到同一份前缀的第二次"的读数。
+    - 工具面不在缓存前缀里：同一份 system，带工具面预热过之后去掉工具面
+    再发一次仍然命中（`tools_in_prefix=False`，实测 hit 11,904 / 12,126）；
+    - 换一趟活也命中（2026-10-21 之后的口径）：另一份 system（不同 `task` /
+    `task_id` / `depth` / `workspace_root`）在 system 里逐字节等于原来那一份（跨 run 会变的十格已经挪进 user 消息）⇒ `cross_run_hit` 的两行都该
+    ≥90%。改前那两行是 `0 / 满`，那正是"预热只买到同一份前缀的第二次"的读数。
 
-    这两条决定了"预热到底买到了什么"：改前买到的是"同一份前缀的第二次调用能省"；
-    现在还包括"另一趟活能用同一段前缀"。`cross_run_prefix_chars`（离线算的字符数）
-    因此必须等于整份 system 的长度 —— 这是同一条判据的另一半。
+    这两条决定了"预热到底买到了什么"：改前买到的是"同一份前缀的第二次调用能省"；现在还包括"另一趟活能用同一段前缀"。`cross_run_prefix_chars`（离线算的字符数）因此必须等于整份 system 的长度
+    —— 这是同一条判据的另一半。
     """
     runs_with_probe = [run for run in _runs() if run.get("tools_in_prefix") is not None]
     assert runs_with_probe, (

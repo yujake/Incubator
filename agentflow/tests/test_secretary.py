@@ -1,24 +1,20 @@
 # -*- coding: utf-8 -*-
 """A 线（委托链与角色实现）的负控与判据：秘书 · 手稿写权移交 · 派活质量的机器侧。
 
-依据：`draft/53`（秘书定位 v3）· `draft/55`（秘书接口规范：知识面 / 动作面 / 工具面 /
-权限 / 交流协议）· `draft/54 §2`（不走 13 步：1 个共享模块 + 2 个钩子 + `manuscripts.revise`）·
-`draft/56 §2 主线 A`（条目 / 线内顺序 / 验收 / 不许碰）。
+依据：`draft/53`（秘书定位 v3）· `draft/55`（秘书接口规范：知识面 / 动作面 / 工具面 /权限 / 交流协议）· `draft/54 §2`（不走 13 步：1 个共享模块 + 2 个钩子 +
+`manuscripts.revise`）·`draft/56 §2 主线 A`（条目 / 线内顺序 / 验收 / 不许碰）。
 
 这份文件里的判据分四组，每一组都对着一个改前必红的负控：
 
 1. 手稿通道：`manuscripts.revise` 今天不存在（追加修订行、不改旧行）；
-   智能体的写路径关闭（只保留"查"），执笔改由本角色的秘书。
+智能体的写路径关闭（只保留"查"），执笔改由本角色的秘书。
 2. 秘书本体：四职责 + 台账（`out/secretary/<role>.jsonl`，每角色一份、追加式）+
-   fail-open（超时/出错 ⇒ 原样放行 + 留痕）；唯一例外是手稿执笔失败必须报错留痕
-   （不许静默放行，否则手稿会缺行）；不做任何统计（拒绝率/重复率/闭环率/花销告警）。
+fail-open（超时/出错 ⇒ 原样放行 + 留痕）；唯一例外是手稿执笔失败必须报错留痕（不许静默放行，否则手稿会缺行）；不做任何统计（拒绝率/重复率/闭环率/花销告警）。
 3. 派活质量的机器侧：错名并列候选（含 writers 子注册表名，不自动改写）、
-   同 `input_key` 的既有终态行摆到派活前、拒绝进叙事（`task_end` 的机器半）、
-   血缘 `lineage=()` → `None`（否则 `cycle` 判据不可达）、预算只记录不阻断。
+同 `input_key` 的既有终态行摆到派活前、拒绝进叙事（`task_end` 的机器半）、血缘 `lineage=()` → `None`（否则 `cycle` 判据不可达）、预算只记录不阻断。
 4. 停机判据：`running_loops` 按角色配平 + 排除"被拒的续跑"（`resume_refused`）。
 
-三态纪律贯穿：秘书没跑成（fail-open）与"跑成了没问题"不折平（`fail_open` 字段）；
-手稿"没写"与"写了空"不折平（写入期拒绝空手稿）。
+三态纪律贯穿：秘书没跑成（fail-open）与"跑成了没问题"不折平（`fail_open` 字段）；手稿"没写"与"写了空"不折平（写入期拒绝空手稿）。
 """
 from __future__ import annotations
 
@@ -228,19 +224,15 @@ def test_secretary_prescreens_and_only_engages_on_alarm(tmp_path: pathlib.Path):
 
 def test_secretary_tool_names_fallback_uses_the_registry_it_can_build(
         tmp_path: pathlib.Path):
-    """判据（2026-10-04 主控探针实测的缺陷）：`registry=None` 时 fallback 必须带 `store`。
+    """    判据（2026-10-04 主控探针实测的缺陷）：`registry=None` 时 fallback 必须带 `store`。
 
-    改前：没有 `registry` 时 fallback 是 `build_registry()`（不带 `store`）——
-    实测 68 件真名，而 `fs.read` 不在里面；`build_registry(store=...)` 是 81 件、
-    `fs.read` 在里面。后果是真名被判成错名：任何 `registry=None` 的调用方
-    （`for_role(..., registry=None)` 是默认）都会对 `fs.read` 报
-    `'fs.read' 不是注册表里的真名；并列候选：[…]`。假阳性比漏报更坏 ——
-    它会让本体去改一个本来对的写法。
+    改前：没有 `registry` 时 fallback 是 `build_registry()`（不带 `store`）——实测 68 件真名，而
+    `fs.read` 不在里面；`build_registry(store=...)` 是 81 件、`fs.read` 在里面。后果是真名被判成错名：任何
+    `registry=None` 的调用方（`for_role(..., registry=None)` 是默认）都会对 `fs.read` 报`'fs.read' 不是注册表里的真名；并列候选：[…]`。假阳性比漏报更坏
+    ——它会让本体去改一个本来对的写法。
 
-    三条一起判（①②是负控的两侧，③是三态）：
-    ① `registry=None` + 有 store ⇒ 真名表里有 `fs.read`，且对 `fs.read` 不报警；
-    ② 反负控：真不存在的名字仍要报警，且候选首选是 `fs.read`；
-    ③ 没有 store ⇒ 空表，且不报"不是真名"（"没读到"不许读成"没有真名"）。
+    三条一起判（①②是负控的两侧，③是三态）：① `registry=None` + 有 store ⇒ 真名表里有 `fs.read`，且对 `fs.read` 不报警；② 反负控：真不存在的名字仍要报警，且候选首选是
+    `fs.read`；③ 没有 store ⇒ 空表，且不报"不是真名"（"没读到"不许读成"没有真名"）。
     """
     sec = _sec()
     st = _mk_store(tmp_path)
@@ -1019,7 +1011,7 @@ def test_wrong_tool_name_lists_parallel_candidates_and_never_rewrites():
 def test_budget_is_recorded_and_does_not_block(tmp_path: pathlib.Path):
     """判据（F2 / E-02）：预算字段的记录（不阻断）——记录得到、判决不因此改变。
 
-    ⚠️ 2026-10-15 业主裁定 A7：读数里**只剩钱**（`usd_budget` / `usd_left`），
+     2026-10-15 业主裁定 A7：读数里只剩钱（`usd_budget` / `usd_left`），
     `token_budget` / `tokens_left` 两格已删；`spent_tokens` 留着当读数。
     """
     from agentflow import policy as P
@@ -1101,18 +1093,14 @@ def test_rework_inbound_runs_through_the_inbound_hook(tmp_path: pathlib.Path):
 
 
 def test_declarations_candidates_is_one_shared_judgement_used_by_prescreen(tmp_path):
-    """`R7-⑭` ②：`declarations_candidates` 是内部 helper —— 直接钉转发与边界。
+    """    `R7-⑭` ②：`declarations_candidates` 是内部 helper —— 直接钉转发与边界。
 
-    它给谁用（现算：三处引用全在 `secretary.py` 自己内部 `:401` / `:407` / `:624`）：
-    `Secretary.prescreen()`（动作错名 / 工具错名的并列候选）与
-    `Secretary.optimize_outbound()`（把候选交给 `judge` 做判断）。它自己不是生产入口，
-    生产路径是 `AgentLoop._outbound_hook` → `optimize_outbound` → `prescreen` ⇒
-    下面用"经 prescreen 有没有把候选说出来"给这条路径作证。
+    它给谁用（现算：三处引用全在 `secretary.py` 自己内部 `:401` / `:407` / `:624`）：`Secretary.prescreen()`（动作错名 / 工具错名的并列候选）
+    与`Secretary.optimize_outbound()`（把候选交给 `judge` 做判断）。它自己不是生产入口，生产路径是 `AgentLoop._outbound_hook` →
+    `optimize_outbound` → `prescreen` ⇒下面用"经 prescreen 有没有把候选说出来"给这条路径作证。
 
-    判据只有一份：它必须逐字等于 `tools.base.candidate_tool_names`（`secretary.py:116`
-    的 docstring 就是这条纪律）。不主张「它总能猜到真名」——它给的是并列候选
-    （排过序的近似名），真名在不在候选里由那张表说了算，所以这里只钉"真名出现在候选里"
-    这一档，加上 `limit` 与空真名表两条边界。
+    判据只有一份：它必须逐字等于 `tools.base.candidate_tool_names`（`secretary.py:116`的 docstring 就是这条纪律）。不主张「它总能猜到真名」
+    ——它给的是并列候选（排过序的近似名），真名在不在候选里由那张表说了算，所以这里只钉"真名出现在候选里"这一档，加上 `limit` 与空真名表两条边界。
     """
     from agentflow.tools import base as B
     from agentflow.tools import build_registry
@@ -1369,8 +1357,8 @@ def test_the_aesthetic_verdict_and_the_delegation_verdict_are_two_vocabularies(t
     """两根轴的词表不许互相串（`JUDGE_VERDICTS` 是唯一一处定义）。
 
     为什么这条值得单判：把「太平凡」写进派活那一栏（或反过来把「可派」写进审美那一栏），
-    下游读的是同一个 `decision` 字段而**没有任何地方会报错** ——
-    这与本仓"同一件事两个名字"的老毛病同族。所以每一类**只认自己那张词表**。
+    下游读的是同一个 `decision` 字段而没有任何地方会报错 ——
+    这与本仓"同一件事两个名字"的老毛病同族。所以每一类只认自己那张词表。
     """
     sec = _sec()
     root = tmp_path / "ws"
@@ -1395,7 +1383,7 @@ def test_the_aesthetic_verdict_and_the_delegation_verdict_are_two_vocabularies(t
 
 
 def test_the_statement_judgement_belongs_to_B_only(tmp_path):
-    """这一问**只属于 B 的秘书**：别的角色的秘书调用它 ⇒ `checked=False` + 说清为什么。
+    """这一问只属于 B 的秘书：别的角色的秘书调用它 ⇒ `checked=False` + 说清为什么。
 
     三态纪律的另一面：不是 B ⇒ 不是"合格"，是"这一格没查成"（缺理由的放行会被读成通过）。
     """
@@ -1413,7 +1401,7 @@ def test_the_statement_judgement_belongs_to_B_only(tmp_path):
 
 
 def test_the_filing_gate_refuses_only_on_too_trivial(tmp_path):
-    """入库口那一道闸：**只有**「判了 + 判的是太平凡」才拦（其余一律放行）。
+    """入库口那一道闸：只有「判了 + 判的是太平凡」才拦（其余一律放行）。
 
     六个放行档逐个过一遍：合格 / 判不了 / 没查成 / 不是 B / 不是入库那件工具 / 没秘书。
     把它们折成"拦或不拦"两种结局是这一格最容易犯的错 —— 那会让"这一格没查成"决定产出入库。
@@ -1454,7 +1442,7 @@ def test_the_filing_gate_refuses_only_on_too_trivial(tmp_path):
 
 
 def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
-    """判断炸了 ⇒ **不拦**（fail-open），但**必须留痕**：秘书台账里要有一行说清这一格没查成。
+    """判断炸了 ⇒ 不拦（fail-open），但必须留痕：秘书台账里要有一行说清这一格没查成。
 
     为什么不是"炸了就拦"：拦下来等于让"没查成"决定产出（三态纪律）；而静默放行又会让
     "秘书这趟根本没工作"永远查不出来。所以走 fail-open + 留痕这一对。
@@ -1482,14 +1470,14 @@ def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
 
 
 def test_the_judge_prompt_names_that_kinds_own_vocabulary(tmp_path):
-    """**提示词说的词表 = 校验认的词表**（2026-10-14 真机读数）。
+    """提示词说的词表 = 校验认的词表（2026-10-14 真机读数）。
 
-    真机上一次就现形：加 `statement_aesthetic` 那一类时，`judge()` 的**校验**换成了按类别取，
+    真机上一次就现形：加 `statement_aesthetic` 那一类时，`judge()` 的校验换成了按类别取，
     而 `_judge_prompt` 的抬头仍写着 `DECISIONS`（派活那一轴）。于是 B 的秘书被问
     「这条命题太平凡吗」，它照提示词答了 `建议不派`，然后被校验层判「不在词表里 ⇒ 不采信」——
-    **两处各写一份词表，提示词说的与判据认的不是同一张**，而两边都自洽。
+    两处各写一份词表，提示词说的与判据认的不是同一张，而两边都自洽。
 
-    判据要两个方向都验：这一类自己的词表**在**、另一轴的词表**不在**。
+    判据要两个方向都验：这一类自己的词表在、另一轴的词表不在。
     """
     sec = _sec()
     aesthetic = sec._judge_prompt("statement_aesthetic", {"statement_full": "x"})
@@ -1506,14 +1494,14 @@ def test_the_judge_prompt_names_that_kinds_own_vocabulary(tmp_path):
 
 
 def test_the_same_statement_is_not_judged_twice(tmp_path):
-    """同一个命题**只判一次**：第二次沿用（不花钱、结论逐字相同），换文本才再判一次。
+    """同一个命题只判一次：第二次沿用（不花钱、结论逐字相同），换文本才再判一次。
 
-    2026-10-14 第五趟真机读数：同一份 21 字的 `statement_full` 被提交了 **6 次**，
+    2026-10-14 第五趟真机读数：同一份 21 字的 `statement_full` 被提交了 6 次，
     每一次都发了一次模型调用、都得到同一个「太平凡」，一次 run 因此烧掉 26 次调用里的 20 次
-    与 $0.226，而 `statements` 仍是 0 行。判断的对象**只有那段文本**（加一句自证不平凡的说明），
+    与 $0.226，而 `statements` 仍是 0 行。判断的对象只有那段文本（加一句自证不平凡的说明），
     所以同题再问一遍不会有别的结论 —— 记下来，省掉那几次调用。
 
-    负控（三态那一条）：**没查成不许缓存** —— 把"这一次没查成"变成"以后都别查了"，
+    负控（三态那一条）：没查成不许缓存 —— 把"这一次没查成"变成"以后都别查了"，
     等于让一次超时永久关掉一道门；缝好起来之后必须还能真判。
     """
     sec = _sec()
@@ -1551,7 +1539,7 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
     assert seam.calls == 2, f"换了文本却没再问（calls={seam.calls}）"
     assert third.get("reused") is None, third
 
-    # ③ 负控（三态）：没查成的**不许**被记住
+    # ③ 负控（三态）：没查成的不许被记住
     class _Boom:
         def ask_json(self, prompt, **kw):
             raise RuntimeError("缝炸了")
@@ -1568,7 +1556,7 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
 
 
 def test_the_filing_refusal_says_the_same_statement_will_get_the_same_answer(tmp_path):
-    """拦下来的那句话必须写明**原样再交一遍不会有别的结论**（真机上一次 run 白烧 20 次调用）。"""
+    """拦下来的那句话必须写明原样再交一遍不会有别的结论（真机上一次 run 白烧 20 次调用）。"""
     import types
 
     from agentflow.agent_loop import AgentLoop
@@ -1590,12 +1578,12 @@ def test_the_filing_refusal_says_the_same_statement_will_get_the_same_answer(tmp
 
 
 def test_the_two_tables_are_named_the_same_in_both_places():
-    """"这两张表只经秘书"这句声明有两处落点，**清单必须逐字一致**（反漂移）。
+    """"这两张表只经秘书"这句声明有两处落点，清单必须逐字一致（反漂移）。
 
     为什么这条判据必须存在：`secretary.STATEMENT_WRITE_TABLES` 是"秘书的写集声明"，
     `store.STATEMENT_WRITE_TABLES` 是"通用写口的禁区"（`store.direct_write_refusal`
     读它）。`store` 在依赖图最底层、不能 import `secretary` ⇒ 清单只能有两处；
-    而两处一旦漂了，会出现最坏的那种形态：**一张表被两边都认为不归自己管**
+    而两处一旦漂了，会出现最坏的那种形态：一张表被两边都认为不归自己管
     （秘书不写它、通用写口也不拒它）—— 于是野路重新打开，而没有任何一条测试变红。
     """
     from agentflow import secretary as SEC

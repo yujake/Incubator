@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 """业主 2026-10-12 的 Lean 开关（`toolchain.lean_enabled`）：一条轴上的六处判据。
 
-## 逐字口径
-
 「由于某些用户没有 Lean 环境，再设计一个模式，在全程不做 Lean 形式化的情况下尽可能用
 审阅自然语言证明的方式推进论文审阅或课题研究。至于有没有 Lean 环境，这做一个 bool 值
 让用户设置。全流程涉及 Lean 的都要跟进这个开关的状态。」
 
-## 这条轴上的六处落点（每处一条判据，正控 + 负控）
+六处落点（每处一条判据，正控 + 负控）：
 
 | # | 落点 | 这一档的行为 |
 |---|---|---|
@@ -18,8 +16,7 @@
 | 5 | 提示词（`TOOLCHAIN_FACTS` / `TOOLCHAIN_FORMAL`） | 关掉 ⇒ 先报"已关闭"并给出替代路线（`proof_text` + V 的 `verify_proof`） |
 | 6 | 收工门（`closing` 的 `load_bearing`） | 关掉 ⇒ 记 `na` + 理由（不是 pass、也不是 fail），并给替代读数 |
 
-负控的方向一律是"开关开着时逐字不变"：没设这个键 = 与 2026-10-12 之前行为相同。
-"""
+负控的方向一律是"开关开着时逐字不变"：没设这个键 = 与 2026-10-12 之前行为相同。"""
 from __future__ import annotations
 
 import json
@@ -229,7 +226,7 @@ def test_the_prompt_blocks_follow_the_switch(monkeypatch: pytest.MonkeyPatch) ->
 # ============================================================ 5b. 关掉时的「面」
 def _unapplied_entries(table: tuple[tuple[str, str], ...],
                        text: str) -> list[tuple[int, str]]:
-    """逐条判"这一条改写真的被应用了吗"：**原句还在**、或**改写后的文本没出现** ⇒ 没应用。
+    """逐条判"这一条改写真的被应用了吗"：原句还在、或改写后的文本没出现 ⇒ 没应用。
 
     为什么两条都要判（`T-L3`，2026-10-20 修的那一处静默失效）：只判"原句不在"会被
     `old` 自己写错骗过去 —— 写错的原句当然不在任何文本里，于是"关掉时没有形式化字样"
@@ -248,7 +245,7 @@ def test_the_no_lean_variant_rewrites_every_role_face(
     四个方向都判：① 反真空（改写表/删除表的左边必须在开着时的提示词里逐字出现，
     否则它们会在某次重写之后悄悄失效，而"关掉时没有形式化字样"就成了假绿）；
     ② 关掉时十个角色里一个形式化广告面都不许剩（职责句 / 工具描述 / 伙伴表都算），
-    且每格都必须出现「系统做不了」；③ 关掉时**逐条**核这张表的每一条都真的被应用了
+    且每格都必须出现「系统做不了」；③ 关掉时逐条核这张表的每一条都真的被应用了
     （原句不剩 ＋ 改写后的文本在位 ＋ 改写文本自己不提 Lean）；④ 开着时收口逐字返回原文。
     """
     from agentflow import agent_prompts as AP
@@ -303,13 +300,13 @@ def test_the_no_lean_variant_rewrites_every_role_face(
 
 def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
         monkeypatch: pytest.MonkeyPatch) -> None:
-    """负控（③ 那把尺子）：把表里一条原句**改坏** ⇒ 必须红，并点名是哪一条。
+    """负控（③ 那把尺子）：把表里一条原句改坏 ⇒ 必须红，并点名是哪一条。
 
-    为什么这条负控必须有：工具面/动作面那两条的左边现在是**从真身读的**
+    为什么这条负控必须有：工具面/动作面那两条的左边现在是从真身读的
     （`specs/e.py` 里那两个读工具描述的辅助函数），所以"表与工具面抄漂"这种失效
     结构上不会再发生 —— 但"这张表根本没跑"仍然可能（例如收口换了匹配方式、或那一行
     被别处先删掉了）。`specs/e.py` 那一批的原始故障正是"左边对不上 ⇒ 静默不替换"，
-    它当时唯一的读数就是判据报"表失效了"，而"面还在广告"这件事**没有任何断言**。
+    它当时唯一的读数就是判据报"表失效了"，而"面还在广告"这件事没有任何断言。
     这条负控钉住的就是后者。
 
     取的是工具面那一条（`old` 以 `verify.check_formal：` 开头）：它正是当年漂掉的那一条，
@@ -346,7 +343,7 @@ def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
         assert [i for i, _old in hit] == [victim], (
             f"改坏第 {victim} 条之后尺子没有点名它（点到了 {hit!r}）")
         assert hit[0][1].endswith("（故意改坏）"), hit
-        # 反真空的另一半：被改坏的那一条在**开着**的那一档也找不到了 —— 这就是
+        # 反真空的另一半：被改坏的那一条在开着的那一档也找不到了 —— 这就是
         # "表失效"的形态本身（不是"面没被改写"）。
         monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
         AP.reset_toolchain_readings()
@@ -406,18 +403,16 @@ def test_the_wording_ceiling_follows_the_switch(monkeypatch: pytest.MonkeyPatch)
 def test_a_self_written_disclaimer_does_not_pass() -> None:
     """判据（2026-10-13，无 Lean T2 的真机）：写了的声明也必须是受控那一句。
 
-    真机现场（`projects/p6t2-research-20261012b/documents/0002.md`，无 Lean 那一趟）：
-    claim-1 的 `disclaimer` 是『文献交叉比对，不构成证明』—— 这句在全仓代码里不存在
-    （受控的只有「数值交叉验证，不构成证明」与「逐行审阅过的证明，未经机器检查」）。
-    此前这条判据只查"非空"，于是自造声明一路写库、一路渲染进 PDF。
+    真机现场（`projects/p6t2-research-20261012b/documents/0002.md`，无 Lean 那一趟）：claim-1 的
+    `disclaimer` 是『文献交叉比对，不构成证明』—— 这句在全仓代码里不存在（受控的只有「数值交叉验证，
+    不构成证明」与「逐行审阅过的证明，未经机器检查」）。此前这条判据只查"非空"，于是自造声明一路
+    写库、一路渲染进 PDF。
 
-    为什么"近义就行"不成立：那句声明是受控字符串，下游按它逐字对口径
-    （H 的采信规则、报告里的分档统计、读者看到的"这一档凭什么"）——
-    换一句作者自己愿意承担的话，等于把受控承诺换掉了，而没有任何读数会响（FC-03）。
-
-    两件事一起钉：受控那句必须干净；近义那句必须报 `uncontrolled_disclaimer`。
-    反负控：判据必须用 `doc_tools` 里那两个常量（唯一来源），不是在本判据里手打一份。
-    """
+    为什么"近义就行"不成立：那句声明是受控字符串，下游按它逐字对口径（H 的采信规则、报告里的分档
+    统计、读者看到的"这一档凭什么"）—— 换一句作者自己愿意承担的话，等于把受控承诺换掉了，而没有
+    任何读数会响（FC-03）。
+    两件事一起钉：受控那句必须干净；近义那句必须报 `uncontrolled_disclaimer`。反负控：判据必须用
+    `doc_tools` 里那两个常量（唯一来源），不是在本判据里手打一份。"""
     from agentflow import claimanatomy as CA
     from agentflow.tools import doc_tools as DT
 
@@ -452,17 +447,14 @@ def _levels_named_in(text: str) -> set[str]:
 def test_the_rendered_paper_lists_every_evidence_level() -> None:
     """判据（2026-10-13，无 Lean T2 的真机）：稿子的「阅读须知」必须列全证据等级。
 
-    真机现场（`projects/p6t2-research-20261012b/documents/0002.md`，无 Lean 那一趟）：
-    第 11 行逐字写着"证据等级只有三档"，只列了 `proof` / `cross_check` / `heuristic`；
-    而同一份稿子第 19–24 行的统计表里 `proof_review` 一行赫然在目 —— 自相矛盾，
-    而且方向恰好是最坏的那个：没有 Lean 的用户读到它，会以为"逐行审阅过的证明"
-    这一档不存在，而那一档正是他这个模式下唯一能承载「定理 / 证明」的凭据。
+    真机现场（`projects/p6t2-research-20261012b/documents/0002.md`，无 Lean 那一趟）：第 11 行逐字写着
+    "证据等级只有三档"，只列了 `proof` / `cross_check` / `heuristic`；而同一份稿子第 19–24 行的统计表
+    里 `proof_review` 一行赫然在目 —— 自相矛盾，而且方向恰好是最坏的那个：没有 Lean 的用户读到它，
+    会以为"逐行审阅过的证明"这一档不存在，而那一档正是他这个模式下唯一能承载「定理 / 证明」的凭据。
 
-    根因是渲染函数手写了"三档"与那三个名字，而统计表按 `schema.EVIDENCE_KINDS` 出行。
-    现在第 0 节也从词表现算，所以这条判据钉的是"两处同源"：
-    第 0 节点名的等级集合必须等于 `S.EVIDENCE_KINDS`，且 `proof_review` 那句声明
-    必须在读者能看到的地方（读者要读得到"这一档凭什么"）。
-    """
+    根因是渲染函数手写了"三档"与那三个名字，而统计表按 `schema.EVIDENCE_KINDS` 出行。现在第 0 节
+    也从词表现算，所以判据钉的是"两处同源"：第 0 节点名的等级集合必须等于 `S.EVIDENCE_KINDS`，且
+    `proof_review` 那句声明必须在读者能看到的地方（读者要读得到"这一档凭什么"）。"""
     from agentflow import schema as S
     from agentflow.tools import doc_tools as DT
 

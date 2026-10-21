@@ -9,24 +9,16 @@ from ._support import SERVICE_MAX_STRUCTURAL_PAIRS, _cfg_int, _service_int
 class _StructuralDuplicates:
     def structural_duplicates(self, *, limit: int | None = None) -> dict:
         """结构重复概念候选（I5 的检测侧，同步、只读、有界）。
-
-        返回
-        ----
-        ``{"checked", "candidates", "truncation_notice", "truncated", "scanned_concepts",
-           "scanned_relations", "method", "method_note", "reason"}``
-
-        判据全部来自 `interactions.structural_duplicate_pairs`（不另写一份）：
-        邻域完全相同 且 两者之间没有直接关系 且 邻域非空。
-
-        `is_truncation_notice=True` 的那条单独放进 `truncation_notice`，不混进
-        `candidates`：它是一句"枚举被上限截断"的元信息，形状却是"一个概念对"。
-        一旦混在一起，下游（尤其是不看这个字段的 LLM）会把它当成第 N 对候选，
-        去 B 那里请求合并两个代号为空的概念。
-
-        `method_note` 与 `proposal` 一起表达同一件事：结构等价 ≠ 同义。
-        两个不同的概念完全可能都连着同一批邻居，所以只有结构证据时
-        `proposal="review"`（其 `reason` 里写着"不得据此合并"），
-        合并决定权在 B，且 B 必须给出理由。
+        
+        返回----``{"checked", "candidates", "truncation_notice", "truncated", "scanned_concepts","scanned_relations", "method", "method_note", "reason"}``
+        
+        判据全部来自 `interactions.structural_duplicate_pairs`（不另写一份）：邻域完全相同 且 两者之间没有直接关系 且 邻域非空。
+        
+        `is_truncation_notice=True` 的那条单独放进 `truncation_notice`，不混进`candidates`：它是一句"枚举被上限截断"的
+        元信息，形状却是"一个概念对"。一旦混在一起，下游（尤其是不看这个字段的 LLM）会把它当成第 N 对候选，去 B 那里请求合并两个代号为空的概念。
+        
+        `method_note` 与 `proposal` 一起表达同一件事：结构等价 ≠ 同义。两个不同的概念完全可能都连着同一批邻居，所以只有结构证据时
+        `proposal="review"`（其 `reason` 里写着"不得据此合并"），合并决定权在 B，且 B 必须给出理由。
         """
         g = self._g()
         checked, why = self._service_checkable(g)

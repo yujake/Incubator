@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""**已登记但没立项的猜想，必须在主控看得见的看板上**（T5 第 2 趟真机读数驱动）。
+"""已登记但没立项的猜想，必须在主控看得见的看板上（T5 第 2 趟真机读数驱动）。
 
 ## 现场
 
-第 2 趟 T5：`conjectures` 有 1 行（D 登记，`status=proposed`），`attack_plans` **0 行**。
-查轨迹：D 那趟 7 步**只调了 `attack.list_plans`**，从没开计划；而 D 的手册**已经逐字**写着
-"登记完猜想请接着把这一腿开出去"（还自己记着上一趟也是 0）⇒ **"再补说明"这条路的无效已被证伪**。
+第 2 趟 T5：`conjectures` 有 1 行（D 登记，`status=proposed`），`attack_plans` 0 行。
+查轨迹：D 那趟 7 步只调了 `attack.list_plans`，从没开计划；而 D 的手册已经逐字写着
+"登记完猜想请接着把这一腿开出去"（还自己记着上一趟也是 0）⇒ "再补说明"这条路的无效已被证伪。
 
 ## 修法
 
-`Conductor.board_view` 把"`status=proposed` 且没有对应计划"的猜想**亮成板项**
-（`kind='pending_attack'`，`pending_attack_count`），**只亮出来、不点名动作** ——
-要不要开由**派活的那一层**决定（守"主控只派活"）。
+`Conductor.board_view` 把"`status=proposed` 且没有对应计划"的猜想亮成板项
+（`kind='pending_attack'`，`pending_attack_count`），只亮出来、不点名动作 ——
+要不要开由派活的那一层决定（守"主控只派活"）。
 
 这一组钉两态：有 ⇒ 亮；已立项 ⇒ 消失（不许长期挂着假待办）。
 """

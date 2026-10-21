@@ -66,66 +66,23 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
                    history: Sequence[str] = (), retry_note: str = "",
                    citable_ids: Sequence[str] = ()) -> str:
     """F 自己推理那一轮的提示词（D42）。
-
-    受控值从 `attackround` 现取，不在这里手抄一遍：四种产物、九招工具箱、
-    `dead_end` 的七个受控理由、`#5` 的禁用标记、引用纪律 —— 抄一遍就多一处会漂的地方，
-    而这一处的漂移形态恰好是"模型按提示词写、判据按常量拒"。
-
-    提示词只做三件事：把这个子目标已知的东西摆出来（含证据正文与上一轮发生了什么）、
-    把这一轮必须交什么说清、把"上一轮为什么不算"带回去。它不告诉模型该怎么证
-    （那是它的活），也不给它任何本题的构造。
-
-    ## 受控词表在最前面（2026-10-19，mp4-6 的真机读数）
-
-    真机原文（`projects/mp4/data/attack_plans.json`，计划 `000002` / `000001` 第 1 轮）：
-    重问 3 次仍然交 `{"outcome": "no_change"}`。根因不在判据（它每次都对），
-    而在提示词的次序：改前这一段是本函数的最后一块
-    （上下文 → 证据正文 → history → 重问原因 → 才轮到"四档之一"），
-    模型读到的顺序是"先看一堆事实、最后才被告知只能交四档之一"，
-    而重问那一段（`retry_note`）又不复述四档、也不给它看自己写了什么。
-    现在（三条一起，缺一条都不算修好）：
-
-    1. 四档与反例（"`no_change` 不是产物、`ok`/`success`/`done` 也不是"）在第 1–8 行，
-       每档的必填字段紧接其后（第 9 行起）；上下文/证据/history 全排在词表之后
-       —— 它们是事实，不是形状；
-    2. `retry_note` 由 `attackround.retry_note` 造：复述四档 + 逐字引用上一次原文
-       + "把 `<上一个非法取值>` 换成上述四个之一"；
-    3. 非法取值时 `attackround.parse_round` 的错误消息里就列着四个合法值与"你给的是 X"
-       （调用方与模型都不用猜）。
-
-    ## 引用纪律紧挨着 id 列表（R-03 的第二半，同一趟真机）
-
-    真机原文（计划 `000001` 第 1 轮）：`proof` 的一步引了 `reports/attack-000000.md §A5`
-    —— 台账里没有这条（`reports/…md` 是产物文件，不是台账 id），判据当场拒收。
-    拒收拦得住，但那句"不在册"只是 `_evidence_digest` 里的一条旁注，提示词从没把
-    "能引的 id 就这些"摆到它眼前 ⇒ 现在第 4 段就是引用纪律 + 当轮 id 列表
-    （由 `_evidence_digest` 现算，不是编的），两者紧挨着。
-
-    ## 「每轮一批（≥3 条）新事实」是嘱托，不是门（业主 2026-10-19 裁定）
-
-    第 2 段写的是"这一轮必须产出一批新事实（至少 3 条）+ 四条路 + 只整理不算推进"。
-    它只改提示词：不做解析层拦截、不改 `closing._round_advanced` 的阈值、
-    不新增判据、不去动存量验收表 —— 业主的裁定原话是"阈值保持现状，不许提到 ≥3"。
-    真机依据（mp4 那趟）：F 的轮次里有大量"复述已知 / 换个措辞 / 重排文献结论"的产物，
-    而提示词从未要求"这一轮必须带来新东西"，于是它把"整理"当成了"推进"。
-    下一批人不要把它顺手做成红灯：那是另一条口径裁定，不是这一处的形状判据。
-
-    ## 为什么证据要带正文、history 要回灌（`draft/44` 的 P2-3 / P2-4）
-
-    改前这一格只印 id 列表（`已跑实验：['000001']`）—— 模型拿不到"那条证据说了什么"，
-    于是它每一轮都在同一个盲点上重说一遍同一句话（真机 mp3 `000001`：r1/r3/r4 逐字相同）。
-    现在：证据正文（有字数上限、超出截断并写明）+ 前几轮发生了什么（outcome/产物/结论摘要）
-    + 同一招连续出现时显式要求换一招。三样都是"这一轮之前已经发生的事实"，
-    不是提示，所以它们进提示词不改变"模型该不该自己想办法"这件事。
-
-    参数
-    ----
-    evidence : 已经渲染好的证据正文行（`id（类型）：正文摘要`），由
-        `_Core._evidence_digest` 现算 —— 这一层拿不到 store。
-    history : 已经渲染好的"上一轮/前几轮"行，由 `_Core._history_digest` 现算。
-    retry_note : 上一次交的产物为什么不成形（P3-5 的重问）；为空表示这是第一次问。
-    citable_ids : 这一轮可引用的 id（同样由 `_evidence_digest` 现算）—— 它是
-        "只许引下面列出的 id"那句纪律的落点，与拒收消息里的"合法 id 有：…"同源。
+    受控值从 `attackround` 现取，不在这里手抄一遍：四种产物、九招工具箱、`dead_end` 的七个受控理由、`#5` 的禁用标记、引用纪律 —— 抄一遍就多一处会漂的地方，而这一处的漂移形态恰好是"模型按提示词写、判据按常量拒"。
+    受控词表在最前面（2026-10-19，mp4-6 的真机读数）真机原文（`projects/mp4/data/attack_plans.json`，计划 `000002` / `000001` 第 1 轮）：重问 3 次仍然交 
+    `{"outcome": "no_change"}`。根因不在判据（它每次都对），而在提示词的次序：改前这一段是本函数的最后一块（上下文 → 证据正文 → history → 重问原因 → 才轮到"四档之一"），模型读到的顺序是"先看一堆事实、
+    最后才被告知只能交四档之一"，而重问那一段（`retry_note`）又不复述四档、也不给它看自己写了什么。
+    1. 四档与反例（"`no_change` 不是产物、`ok`/`success`/`done` 也不是"）在第 1–8 行，每档的必填字段紧接其后（第 9 行起）； 2. `retry_note` 由 
+    `attackround.retry_note` 造：复述四档 + 逐字引用上一次原文+ "把 `<上一个非法取值>` 换成上述四个之一"； 3. 非法取值时 `attackround.parse_round` 的错误消息里就列着四个合法值与"
+    你给的是 X"（调用方与模型都不用猜）。
+    引用纪律紧挨着 id 列表（R-03 的第二半，同一趟真机）真机原文（计划 `000001` 第 1 轮）：`proof` 的一步引了 `reports/attack-000000.md §A5`—— 台账里没有这条（`reports/…md`
+    是产物文件，不是台账 id），判据当场拒收。拒收拦得住，但那句"不在册"只是 `_evidence_digest` 里的一条旁注，提示词从没把"能引的 id 就这些"摆到它眼前 ⇒ 现在第 4 段就是引用纪律 + 当轮 id 列表（由 
+    `_evidence_digest` 现算，不是编的），两者紧挨着。
+    「每轮一批（≥3 条）新事实」是嘱托，不是门（业主 2026-10-19 裁定）它只改提示词：不做解析层拦截、不改 `closing._round_advanced` 的阈值、不新增判据、不去动存量验收表 —— 业主的裁定原话是"阈值保持现状，
+    不许提到 ≥3"。
+    为什么证据要带正文、history 要回灌（`draft/44` 的 P2-3 / P2-4）改前这一格只印 id 列表（`已跑实验：['000001']`）—— 模型拿不到"那条证据说了什么"，于是它每一轮都在同一个盲点上重说一遍同一句话（真
+    机 mp3 `000001`：r1/r3/r4 逐字相同）。
+    参数----evidence : 已经渲染好的证据正文行（`id（类型）：正文摘要`），由`_Core._evidence_digest` 现算 —— 这一层拿不到 store。 history : 已经渲染好的"上一轮/前几轮"行，由 
+    `_Core._history_digest` 现算。 retry_note : 上一次交的产物为什么不成形（P3-5 的重问）； citable_ids : 这一轮可引用的 id（同样由 `_evidence_digest` 现算）—— 它是
+    "只许引下面列出的 id"那句纪律的落点，与拒收消息里的"合法 id 有：…"同源。
     """
     from .. import attackround as AR
 
@@ -673,24 +630,14 @@ class _Core:
     def _evidence_digest(self, sg: Mapping[str, Any],
                          plan: Mapping[str, Any]) -> tuple[list[str], list[str]]:
         """这条子目标已有的证据 ⇒ `(提示词里的正文行, 本轮可引用的 id)`。
-
-        `draft/44` 的 P2-3：改前提示词里只有 `['000001']` 这样的 id 列表，模型拿不到
-        "那条证据说了什么" ⇒ 每一轮都在同一个盲点上重说同一句话（真机 mp3 `000001`
-        的 r1/r3/r4 逐字相同）。这里的判据是：能读出正文的就读出来，读不到的
-        （表读不了 / id 不在册）如实写"读不到 / 不在册"，绝不静默丢掉。
-
-        第二个返回值是 R-03 的第二半（2026-10-19，mp4-6 计划 `000001`）：提示词里那句
-        "只许引用下面列出的 id"需要一份现算的清单，而拒收消息里那句
-        "本轮的合法 id 有：…"必须是同一份清单 —— 两处各编一份就会漂，
-        漂的后果是模型照着拒收消息改、下一轮又被拒。所以只在这里算一次。
-
-        进清单的只有"真的解析到台账行"的那几个 id：
-        - 带前缀且行在表里 ⇒ 在册，进清单；
-        - 带前缀但这一类不落 `store` 的表（例如 V 的 `v:`）⇒ 这一层判不了，仍算可引
-          （三态：判不了 ≠ 假引用）；
-        - 裸号且在某张表里解析到 ⇒ 在册，进清单；
-        - "不在册" ⇒ 不进清单（它本来就是被禁的那一档）；
-        - 子目标号（`s1` 这种）⇒ 不进清单（它不是台账 id，引它也过不了存在性判据）。
+        `draft/44` 的 P2-3：改前提示词里只有 `['000001']` 这样的 id 列表，模型拿不到"那条证据说了什么" ⇒ 每一轮都在同一个盲点上重说同一句话（真
+        机 mp3 `000001`的 r1/r3/r4 逐字相同）。这里的判据是：能读出正文的就读出来，读不到的（表读不了 / id 不在册）如实写"读不到 / 不在册"，绝不静
+        默丢掉。
+        第二个返回值是 R-03 的第二半（2026-10-19，mp4-6 计划 `000001`）：提示词里那句"只许引用下面列出的 id"需要一份现算的清单，而拒收消息里那句
+        "本轮的合法 id 有：…"必须是同一份清单 —— 两处各编一份就会漂，漂的后果是模型照着拒收消息改、下一轮又被拒。所以只在这里算一次。
+        进清单的只有"真的解析到台账行"的那几个 id：- 带前缀且行在表里 ⇒ 在册，进清单；- 带前缀但这一类不落 `store` 的表（例如 V 的 `v:`）⇒ 这一层判不
+        了，仍算可引（三态：判不了 ≠ 假引用）；- 裸号且在某张表里解析到 ⇒ 在册，进清单；- "不在册" ⇒ 不进清单（它本来就是被禁的那一档）；- 子目标号（`s1` 这种）
+        ⇒ 不进清单（它不是台账 id，引它也过不了存在性判据）。
         """
         raw_ids: list[str] = []
         for key in ("evidence_ids", "experiment_ids", "proof_experiment_ids"):
@@ -827,20 +774,14 @@ class _Core:
     def _reason_self(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
                      owner: str) -> dict:
         """owner 属于"要自己推理"的那一类、而模型缝已接线 ⇒ 真的推一轮。
-
-        `draft/39` §6.31 的 D42 修的就是这一支：此前 `self.llm` 有没有接线，
-        返回值都一样（`dead_end(缺工具)`）—— 插座插着，线没接。真机读数（T2 第 11 趟
-        `p6m`）：`F.step` 回 `no_change`，M 据此写下"F 的自动推理未接线，攻坚这条路走不通"。
-
-        三轮"先花钱之前的确定性闸门"都在这一支里落地：`pre_spend_gate`（I9）与
-        `budget_decision`（I16）在发模型调用之前判；产物一律走 `attackround`
-        的受控四档（`reduction`/`proof`/`counterexample_request`/`dead_end`），
-        不成形就如实落 `no_change` 并把原话带回给调用方。
-
-        预算读数（P-09）走一个显式注入点（见 :meth:`budget_of_round`）：
-        读得到就用它（`left_usd` 进 I9、`spent_usd` 进 I16），
-        读不到就如实标 `unknown` 并不据此否决 —— 每一条返回路径都带
-        `checks={"budget_known", "budget_reading"}`（键名固定，供调用方与台账读）。
+        `draft/39` §6.31 的 D42 修的就是这一支：此前 `self.llm` 有没有接线，返回值都一样（`dead_end(缺工具)`）—— 插座插着，线没接。
+        真机读数（T2 第 11 趟`p6m`）：`F.step` 回 `no_change`，M 据此写下"F 的自动推理未接线，攻坚这条路走不通"。
+        三轮"先花钱之前的确定性闸门"都在这一支里落地：`pre_spend_gate`（I9）与`budget_decision`（I16）在发模型调用之前判；产物一律走 
+        `attackround`的受控四档（`reduction`/`proof`/`counterexample_request`/`dead_end`），不成形就如实落 
+        `no_change` 并把原话带回给调用方。
+        预算读数（P-09）走一个显式注入点（见 :meth:`budget_of_round`）：读得到就用它（`left_usd` 进 I9、`spent_usd` 进 I16），
+        读不到就如实标 `unknown` 并不据此否决 —— 每一条返回路径都带`checks={"budget_known", "budget_reading"}`（键名固定，
+        供调用方与台账读）。
         """
         import json as _json
 
@@ -1072,30 +1013,16 @@ class _Core:
     def _missing_seam_round(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
                             note: str, spec_line: str) -> dict:
         """E 没有模型缝 ⇒ 这一轮落 `dead_end(缺工具)` 并「向召唤者上报」（不再静默 `no_change`）。
-
-        ## 改前是什么形态（真机读数，`projects/mp4/data/attack_plans.json` 计划 000003 r1/r2）
-
-        逐字：`子目标 sg1 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ 未推进`，
-        `action="script_not_authored"`、`outcome="no_change"`、「没有产物」。
-        于是这一轮在 `attack_plans.history` 上与"跑了但没结果"同形，而真正缺的东西
-        （E 的缝）只活在一句散文里 —— 没有任何上行通道把它送到召唤者手上，
-        下一轮再撞一次同一句话，直到计划 `stalled`。
-
-        ## 现在两件事一起做（都用现成工具，不发明新语义）
-
-        ① 「产物」：`attackround.dead_end_row`（四档之一，`reason="缺工具"`），
-           于是 history 上读得出来"这一轮交的是死路"，`dead_end_reason` 也在；
-        ② 「上行」：`conductor.escalate(kind="missing_input")`（业主 2026-10-19 的父子
-           双向通道）—— `need` 写"需要 E 的缝"、`evidence` 带子目标名，父代理下一趟
-           在收件箱里就看得见要动哪一处。上报的结果（成功 / 受控拒绝的理由码）逐字进
-           `detail` 与 `blocked_reason`：「"上报了"与"没上报成"必须分得开」（三态）。
-
-        ## 状态与计数
-
-        `status="blocked"`（卡住了、要人来解，必须留在表里看得见）＋ `in_flight=True`
-        （这一轮之后没有新事情可做：再选一次还是同一句话）。
-        `count_attempt=False`：`no_seam` 是环境事实，不是"对这条子目标的一次尝试"
-        —— 既有口径一个字没改。
+        改前是什么形态（真机读数，`projects/mp4/data/attack_plans.json` 计划 000003 r1/r2）逐字：
+        `子目标 sg1 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ 未推进`，`action="script_not_authored"`、
+        `outcome="no_change"`、「没有产物」。于是这一轮在 `attack_plans.history` 上与"跑了但没结果"同形，而真正缺的东西（E 的缝）只
+        活在一句散文里 —— 没有任何上行通道把它送到召唤者手上，下一轮再撞一次同一句话，直到计划 `stalled`。
+        ① 「产物」：`attackround.dead_end_row`（四档之一，`reason="缺工具"`），于是 history 上读得出来"这一轮交的是死路"，
+        `dead_end_reason` 也在；② 「上行」：`conductor.escalate(kind="missing_input")`（业主 2026-10-19 的
+        父子双向通道）—— `need` 写"需要 E 的缝"、`evidence` 带子目标名，父代理下一趟在收件箱里就看得见要动哪一处。上报的结果（成功 / 受控拒绝的理由码）
+        逐字进`detail` 与 `blocked_reason`：「"上报了"与"没上报成"必须分得开」（三态）。
+        `status="blocked"`（卡住了、要人来解，必须留在表里看得见）＋ `in_flight=True`（这一轮之后没有新事情可做：再选一次还是同一句话）。
+        `count_attempt=False`：`no_seam` 是环境事实，不是"对这条子目标的一次尝试"—— 既有口径一个字没改。
         """
         from .. import attackround as AR
 
@@ -1148,39 +1075,16 @@ class _Core:
     def _escalate_missing_seam(self, sg: Mapping[str, Any], *,
                                plan: Mapping[str, Any]) -> dict[str, Any]:
         """用既有 `Conductor.escalate` 把"缺 E 的缝"写进父的收件箱（`kind="missing_input"`）。
-
-        ## 为什么走这条通道，而不是新造一个"缺输入"事件
-
-        业主 2026-10-19 裁定"父子天然双向"：孩子跟召唤它的人说话「不是」一条权限边、
-        不需要在 `edges` 里登记。`conductor.escalate` 就是那个入口，它已经把
-        「谁是我的召唤者」「留言落进哪个会话」「收件箱怎么登记已读」三件事做完了
-        （`conductor.py` 的 docstring 逐字写着）。这里只做一件事：「把它叫对」。
-
-        ## 三件"这一层可能不知道"的事，各有一条如实的退路
-
-        | 需要什么 | 优先取 | 退路（并留痕） |
-        |---|---|---|
-        | 我的召唤号 | `conductor.current_task_id()` | 空 ⇒ 照旧传空（`escalate` 会拒 `not_caller`） |
-        | 我的父 | `conductor.current_parent()`（工具路径由 `calling_as` 挂上） | 空而我有召唤号 ⇒ 读 `tasks` 那一行的 `parent_task_id` / `called_by` |
-        | 会话根 / 会话号 | `conductor.current_session()` | 根空 ⇒ `store.root`（`run-agent` 的会话根就是工作区根）；会话号空 ⇒ 交给缺省档，读数里写明 |
-
-        为什么父要从台账读（这一条不读就没有第二条路）：「只有工具路径」会挂
-        `calling_as(parent_…)`（`AgentLoop._do_tool`）；而 F 也可能由
-        `Conductor.summon` → `LocalBackend.call` 直接跑，那条路只挂召唤号
-        （`conductor.py` 的 `LocalBackend.call`）。只认 ContextVar 的话，
-        真机里"F 被 M 召唤"这一条最常走的路永远上报不出去 —— 而读数会写成
-        "已尝试、被拒"，看上去像没人管，其实是这一层没去找。
-
-        返回 `{"attempted", "state", "reason", "why", "msg_id", "to", "need",
-        "session_root", "sid"}`（成功与否只由 `state` 表达，不用布尔 `ok` ——
-        一个布尔会把"没上报成"的几种原因折成一档）：
-
-        - `attempted=False, state="no_conductor"`：这一层没有已装配的主控；
-        - `attempted=True, state="escalated"`：留言真的写进了父的收件箱（`msg_id` 可查）；
-        - `attempted=True, state="refused"`：`escalate` 的受控拒绝（`not_caller` /
-          `no_session` / `invalid_params` / `inbox_write_failed`），理由码原样带回。
-
-        「绝不把"没上报"写成"上报了"」：三种结果在返回值里占三种 `state`。
+        业主 2026-10-19 裁定"父子天然双向"：孩子跟召唤它的人说话「不是」一条权限边、不需要在 `edges` 里登记。`conductor.escalate` 就是那个入口，它已经把「谁是我的召唤者」「留言落进哪个会话」「收件箱怎么登记已
+        读」三件事做完了（`conductor.py` 的 docstring 逐字写着）。| 需要什么 | 优先取 | 退路（并留痕） ||---|---|---|| 我的召唤号 | `conductor.current_task_id()` | 空
+        ⇒ 照旧传空（`escalate` 会拒 `not_caller`） || 我的父| `conductor.current_parent()`（工具路径由 `calling_as` 挂上） | 空而我有召唤号 ⇒ 读 `tasks` 那一行的 
+        `parent_task_id` / `called_by` || 会话根 / 会话号 | `conductor.current_session()` | 根空 ⇒ `store.root`（`run-agent` 的会话根就是工作区根）；为什
+        么父要从台账读（这一条不读就没有第二条路）：「只有工具路径」会挂`calling_as(parent_…)`（`AgentLoop._do_tool`）；而 F 也可能由`Conductor.summon` →
+        `LocalBackend.call` 直接跑，那条路只挂召唤号（`conductor.py` 的 `LocalBackend.call`）。返回 
+        `{"attempted", "state", "reason", "why", "msg_id", "to", "need","session_root", "sid"}`（成功与否只由 `state` 表达，不用布尔 `ok` ——一个布尔
+        会把"没上报成"的几种原因折成一档）：- `attempted=False, state="no_conductor"`：这一层没有已装配的主控；- `attempted=True, state="escalated"`：留言真的写进了父的收件
+        箱（`msg_id` 可查）；-`attempted=True, state="refused"`：`escalate` 的受控拒绝（`not_caller` /`no_session` / `invalid_params` / 
+        `inbox_write_failed`），理由码原样带回。「绝不把"没上报"写成"上报了"」：三种结果在返回值里占三种 `state`。
         """
         from .. import conductor as CX
 
@@ -1287,18 +1191,15 @@ class _Core:
 
     def _proof_tier(self, stmt_id: str, proof_text: str) -> dict:
         """这一行该落哪一档 —— 「按 V 那一签现算」，不许自报（2026-10-19 晚）。
-
-        改前这里写死 `evidence_kind="heuristic"`，理由是"本批没有接 V 的回路"。那句
-        理由「现在已经不成立」（`F→V` 的边在 `specs/f.py` 的 `edges` 里，M 也会按
-        `specs/m.py` 在同轮派 V 走查），而写死弱档的后果是实测到的：
-        `projects/mp2` 的 `stmt:000003`（`proof_text` 1909 字、V 的 `v-000001` 签
-        「成立」、`proof_sha256` 与现行正文相符）在盘上是 `heuristic` —— 一条够格的
-        `proof_review` 被登记成弱档，论文的强度声明随之虚低。
-
-        判据只有一处（`verifications.proof_review_gap`，与写入期那道闸同一个口径）：
-        `proof_text` 非空 ＋ 最近一签「成立」且 `unresolved_errors==0` ＋
-        `proof_sha256` 等于现文本 ⇒ 就是 `proof_review`；「否则」才退到 `heuristic`
-        （降档是安全方向，只要有理由串）。返回 `{"kind", "why", "checked", "gap"}`。
+        
+        改前这里写死 `evidence_kind="heuristic"`，理由是"本批没有接 V 的回路"。那句理由「现在已经不成立」（`F→V` 的边在 
+        `specs/f.py` 的 `edges` 里，M 也会按`specs/m.py` 在同轮派 V 走查），而写死弱档的后果是实测到的：`projects/mp2` 的 
+        `stmt:000003`（`proof_text` 1909 字、V 的 `v-000001` 签「成立」、`proof_sha256` 与现行正文相符）在盘上是 
+        `heuristic` —— 一条够格的`proof_review` 被登记成弱档，论文的强度声明随之虚低。
+        
+        判据只有一处（`verifications.proof_review_gap`，与写入期那道闸同一个口径）：`proof_text` 非空 ＋ 最近一签「成立」且 
+        `unresolved_errors==0` ＋`proof_sha256` 等于现文本 ⇒ 就是 `proof_review`；「否则」才退到 `heuristic`（降
+        档是安全方向，只要有理由串）。返回 `{"kind", "why", "checked", "gap"}`。
         """
         from .. import verifications as VR
 
@@ -1321,38 +1222,16 @@ class _Core:
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
                       plan: Mapping[str, Any]) -> dict:
         """把这一轮的 `proof` 落成可复核的一行 `statements`（P3-6 的第一半）。
-
-        ## 改前为什么是"没有出口"
-
-        `_apply_round` 的 proof 分支只写一段 `detail` 与 `history.product_detail`，
-        而 `product_detail` 的唯一出现点是 `step.py` 的写入 —— 全仓没有任何读者。
-        后果：F 交出一篇论证之后，它只活在这一次运行的会话记录里；M 读不到、V 审不到、
-        盘上也找不到（policy 第 2 条要求的 `reports/attack-<plan_id>.md` 同样没人写）。
-
-        ## 等级怎么定（2026-10-19 晚改：改前写死 `heuristic`）
-
-        改前这里逐字写 `evidence_kind="heuristic"`，理由是"本批没有接 V 的回路 ⇒
-        这一行不许自报更高等级"。那条理由今天不成立（`F→V` 的边在位、M 会按
-        `specs/m.py` 派 V），而写死的后果是真机读数：
-        `projects/mp2` 的 `stmt:000003` 凭据齐全（`proof_text` 1909 字 ＋ V 签「成立」
-        ＋ sha 相符）却落在 `heuristic`。
-
-        现在按 `_proof_tier` 现算：「V 那一签在盘上且盖的正是这一版正文 ⇒
-        `proof_review`；否则 `heuristic`」。这不是"自报"：判据读的是
-        `verifications/<命题号>.jsonl`（V 的账本），F 写不了那里一个字节。
-        `bits` 仍留空（五位里第 3 位的 owner 是 V，不替别人签）。
-
-        ## 幂等（2026-10-19 晚补：复用那一支同时负责「升档」）
-
-        同一条子目标交出逐字相同的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），
-        不再登记第二行 —— 重复登记会把 `statement_rows` / `reviewed_proof_rows` 的
-        读数虚高（与 `_deploy_e` 的"同一脚本不重跑"同一条理由）。
-
-        但"不重复登记"不等于"什么都不做"：「V 往往是在 F 交完之后才签的」（mp2 就是
-        21:06 落行、21:09 才签）。所以复用那一支顺带核一次档位 —— 盘上那一行是弱档、
-        而它现在已经够 `proof_review` ⇒ 就地升档（一行 update，走同一个写入闸；
-        凭据不够就会被闸当场拒，不会写出假档）。返回值里 `promoted=True` 让这件事
-        在台账上看得见。
+        `_apply_round` 的 proof 分支只写一段 `detail` 与 `history.product_detail`，而 `product_detail` 的唯一出现点是 `step.py` 的写入 —— 
+        全仓没有任何读者。M 读不到、V 审不到、盘上也找不到（policy 第 2 条要求的 `reports/attack-<plan_id>.md` 同样没人写）。
+        等级怎么定（2026-10-19 晚改：改前写死 `heuristic`）改前这里逐字写 `evidence_kind="heuristic"`，理由是"本批没有接 V 的回路 ⇒这一行不许自报更高等级"。那条理由今天不
+        成立（`F→V` 的边在位、M 会按`specs/m.py` 派 V），而写死的后果是真机读数：`projects/mp2` 的 `stmt:000003` 凭据齐全（`proof_text` 1909 字 ＋ V 签「成
+        立」＋ sha 相符）却落在 `heuristic`。
+        现在按 `_proof_tier` 现算：「V 那一签在盘上且盖的正是这一版正文 ⇒`proof_review`；否则 `heuristic`」。这不是"自报"：判据读的是
+        `verifications/<命题号>.jsonl`（V 的账本），F 写不了那里一个字节。`bits` 仍留空（五位里第 3 位的 owner 是 V，不替别人签）。
+        幂等（2026-10-19 晚补：复用那一支同时负责「升档」）同一条子目标交出逐字相同的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），不再登记第二行 —— 重复登记会把 
+        `statement_rows` / `reviewed_proof_rows` 的读数虚高（与 `_deploy_e` 的"同一脚本不重跑"同一条理由）。
+        所以复用那一支顺带核一次档位 —— 盘上那一行是弱档、而它现在已经够 `proof_review` ⇒ 就地升档（一行 update，走同一个写入闸；返回值里 `promoted=True` 让这件事在台账上看得见。
         """
         steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
         sid = str(sg.get("sid") or "")
@@ -1581,24 +1460,16 @@ class _Core:
     def _spec_from_testable(self, sg: Mapping[str, Any], *,
                             plan: Mapping[str, Any]) -> dict:
         """把子目标那句 `testable` 变成一次实验的三件套判据（P4-8 的第二半）。
-
         ## 改前为什么"手写的 E 子目标必然缺 `script_path`"
-
-        `create_plan` 收的子目标通常只带 `testable`（"怎么判它成立/不成立"一句话），
-        而 `_deploy_e` 只认 `script_path` / `script_spec` ⇒ 每一轮都落
-        "缺 `script_path` ⇒ 未推进"，直到计划 `stalled`。那句 `testable` 于是成了一句
-        永远没人执行的话。
-
+        `create_plan` 收的子目标通常只带 `testable`（"怎么判它成立/不成立"一句话），而 `_deploy_e` 只认 `script_path` / 
+        `script_spec` ⇒ 每一轮都落"缺 `script_path` ⇒ 未推进"，直到计划 `stalled`。那句 `testable` 于是成了一句永远没人执行
+        的话。
         ## 为什么由模型给，而不是框架按模板编
-
-        从 `testable="n<=18"` 凭空造出 `params`/`expected_bound`，等于把"不知道该判什么"
-        伪装成"有实验在跑" —— 那正是
-        `tests/test_agent_e_author_script.py::test_deploy_e_writes_nothing_without_a_spec`
-        这条反负控守的东西（它必须继续绿）。所以这里只做一件事：问 F 自己。
-        判据仍然只有一份（`attackround.parse_round` 校验三件套），本函数不抄第二份。
-
-        返回 `{"spec": {...}|{}, "why": str}`：`why` 是给人读的那句话，会进 `detail`
-        与 `blocked_reason` —— "没做成"必须说清缺什么，不是一句"未推进"。
+        从 `testable="n<=18"` 凭空造出 `params`/`expected_bound`，等于把"不知道该判什么"伪装成"有实验在跑" —— 那正是
+        `tests/test_agent_e_author_script.py::test_deploy_e_writes_nothing_without_a_spec`这条反负
+        控守的东西（它必须继续绿）。所以这里只做一件事：问 F 自己。判据仍然只有一份（`attackround.parse_round` 校验三件套），本函数不抄第二份。
+        返回 `{"spec": {...}|{}, "why": str}`：`why` 是给人读的那句话，会进 `detail`与 `blocked_reason` —— "没
+        做成"必须说清缺什么，不是一句"未推进"。
         """
         from .. import attackround as AR
         from .. import judge as J
@@ -2118,20 +1989,13 @@ class AgentF(_CreatePlan, _Step, _Status, _ListPlans, _Core):
 
 def selftest() -> int:
     """离线自检：不联网、不依赖仓库里的任何外部文件，返回失败数。
-
     运行方式::
-
-        cd test/test1/src        # 工作区根相对
-        $env:PYTHONIOENCODING='utf-8'; python -m agentflow.agent_f
-
+    cd test/test1/src        # 工作区根相对
+    $env:PYTHONIOENCODING='utf-8'; python -m agentflow.agent_f
     覆盖的核心性质（每一条都对应一个"如果错了会很安静"的失败模式）：
-
-    1. 立项：预算完整才成功；缺键不写库；
-    2. 同一 problem_key 第二次不新建（避免同一难题被并行攻两遍）；
-    3. 分派：E 真的跑实验、A 真的写检索请求、C/D/F 如实记 no_change；
-    4. 终止性：轮数用尽即 stalled + best_partial 非空，且恰好 max_rounds 轮；
-    5. FC-22：数值证据不得关闭子目标；
-    6. 工具层的 `attack.*` 与 `AgentF` 方法口径一致。
+    1. 立项：预算完整才成功；缺键不写库； 2. 同一 problem_key 第二次不新建（避免同一难题被并行攻两遍）； 3. 分派：E 真的跑实验、A 真的写检索请求、
+    C/D/F 如实记 no_change； 4. 终止性：轮数用尽即 stalled + best_partial 非空，且恰好 max_rounds 轮； 5. FC-22：
+    数值证据不得关闭子目标； 6. 工具层的 `attack.*` 与 `AgentF` 方法口径一致。
     """
     import sys as _sys
     import tempfile

@@ -1,24 +1,22 @@
 # -*- coding: utf-8 -*-
-"""业主 2026-10-20：「名册机制必须真正跑通，它是智能体之间**唯一**的合法沟通方式」。
+"""业主 2026-10-20：「名册机制必须真正跑通，它是智能体之间唯一的合法沟通方式」。
 
 ## 这一份守什么（与 `test_addressing_goes_through_the_roster.py` 的分工）
 
-那份文件守 `message` 的**寻址**（`_address_of` / `roster_addresses`）—— 那一支由
-另一条线在改。这一份守**其余通道**，也就是改前「代理发给代理却不经名册」的那几条：
+那份文件守 `message` 的寻址（`_address_of` / `roster_addresses`）—— 那一支由另一条线在改。这一份守其余通道，也就是改前「代理发给代理却不经名册」的那几条：
 
 | # | 通道 | 改前 | 这一份要它变成 |
 |---|---|---|---|
-| ① | `handoff` / 收工 `notify` | `send_message(to=…)`，名册名也照发（而收件箱按**角色**收 ⇒ 名册名那条**没人读得到**） | 名册名 / 绝对编号必须落在名册上；命中 ⇒ 投到**那个实例**的板项 |
-| ② | `conductor.escalate` | 直接 `send_message`，信调用方给的 `parent_task_id`（给堂兄弟的编号就写进堂兄弟的收件箱） | 与 `message` 同一条判据（`roster_addresses`），路径上真的过一遍 |
+| ① | `handoff` / 收工 `notify` | `send_message(to=…)`，名册名也照发（而收件箱按角色收 ⇒ 名册名那条没人读得到） | 名册名 / 绝对编号必须落在名册上；命中 ⇒
+投到那个实例的板项 |
+| ② | `conductor.escalate` | 直接 `send_message`，信调用方给的 `parent_task_id`（给堂兄弟的编号就写进堂兄弟的收件箱） | 与
+`message` 同一条判据（`roster_addresses`），路径上真的过一遍 |
 | ③ | `#public` | 「公告栏」与「对话」不分：点名某人下指令照样进角色级收件箱 | 公告栏；点名 + 指令 ⇒ `public_is_not_a_conversation` 受控拒绝 |
-| ④ | 名册登记（`summon`） | 只登记父那一侧（子那一侧靠台账换算） | `summon` 之后父与子**双向**都在 `roster_view` 里，且带绝对编号 |
-| ⑤ | 框架通报 / 用户插话 | 本来就通 | **仍然**通（反真空：收紧不许把它们一起打死） |
+| ④ | 名册登记（`summon`） | 只登记父那一侧（子那一侧靠台账换算） | `summon` 之后父与子双向都在 `roster_view` 里，且带绝对编号 |
+| ⑤ | 框架通报 / 用户插话 | 本来就通 | 仍然通（反真空：收紧不许把它们一起打死） |
 
-另加一条静态判据：`agent_loop.py` / `conductor.py` 里**每一个** `send_message` 调用点
-都必须在已登记的落点函数里，且框架通道必须显式 `by_framework=True` —— 防止
-"下一次又长出一条绕过名册的路，而没有东西会红"。
-
-每条正控都配一条负控（真跑一遍坏实现，证明同一组断言会红）。
+另加一条静态判据：`agent_loop.py` / `conductor.py` 里每一个 `send_message` 调用点都必须在已登记的落点函数里，且框架通道必须显式 `by_framework=True` ——
+防止"下一次又长出一条绕过名册的路，而没有东西会红"。每条正控都配一条负控（真跑一遍坏实现，证明同一组断言会红）。
 """
 from __future__ import annotations
 
@@ -43,8 +41,8 @@ SID = "talk"
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "agentflow"
 
-#: 这一条链是四层：`M`（顶层行）→ `A`（祖父）→ `D`（我的父）→ `B`（**我**）→ `F1`/`F2`。
-#: 四层是为了让"祖父"与"父的兄弟"都真的是**名册外**的具体实例（不是凭空编的编号）。
+#: 这一条链是四层：`M`（顶层行）→ `A`（祖父）→ `D`（我的父）→ `B`（我）→ `F1`/`F2`。
+#: 四层是为了让"祖父"与"父的兄弟"都真的是名册外的具体实例（不是凭空编的编号）。
 ME, PARENT, GRANDPARENT = "B", "D", "A"
 
 
@@ -129,7 +127,7 @@ def _no_side_effects(env: dict[str, Any], nobody: list[str]) -> None:
 
 
 def _summon_env(tmp_path: pathlib.Path) -> dict[str, Any]:
-    """一个**真跑** `summon` 的夹具：`M` 名下派一个 `D`（后端真的跑起 D 那一趟）。"""
+    """一个真跑 `summon` 的夹具：`M` 名下派一个 `D`（后端真的跑起 D 那一趟）。"""
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
@@ -157,10 +155,10 @@ def _summon_env(tmp_path: pathlib.Path) -> dict[str, Any]:
 
 
 def test_a_summon_registers_both_directions_with_absolute_ids(tmp_path: pathlib.Path):
-    """判据①：每次 `summon` 之后，父与子**双向**都能在 `roster_view` 里看到对方 + 绝对编号。
+    """判据①：每次 `summon` 之后，父与子双向都能在 `roster_view` 里看到对方 + 绝对编号。
 
-    父那一侧：`rows` 里有这个子，带 `task_id`（绝对编号）与**名册名**（`D1`，不是角色名）；
-    子那一侧：`parent` 那一格带父的 `task_id` 与 `role` —— 「我自己的父是谁」原本**一格都没有**
+    父那一侧：`rows` 里有这个子，带 `task_id`（绝对编号）与名册名（`D1`，不是角色名）；
+    子那一侧：`parent` 那一格带父的 `task_id` 与 `role` —— 「我自己的父是谁」原本一格都没有
     （只活在 `AgentLoop.parent_task_id` 这个内存字段里），于是"给父发一条"只能按角色名发。
     """
     env = _summon_env(tmp_path)
@@ -194,7 +192,7 @@ def test_negctl_skipping_the_registration_leaves_the_parent_blind(
     """负控①：跳过 `roster_add` ⇒ 父那一侧的名册里根本没有这个子 ⇒ 判据①必红。
 
     这一条证明"双向可见"不是被台账顺手带绿的：`roster_view(owner=父)` 的 `rows`
-    只来自**名册文件**（`roster_add` 写的那一份），台账里有这一行不算数。
+    只来自名册文件（`roster_add` 写的那一份），台账里有这一行不算数。
     """
     from agentflow import secretary as SEC
 
@@ -212,11 +210,11 @@ def test_negctl_skipping_the_registration_leaves_the_parent_blind(
 
 
 def test_a_handoff_to_a_roster_member_lands_on_that_instance(tmp_path: pathlib.Path):
-    """判据②（正控）：`handoff` 给父（名册名）与给子（绝对编号）⇒ 落**那个实例**的板上。
+    """判据②（正控）：`handoff` 给父（名册名）与给子（绝对编号）⇒ 落那个实例的板上。
 
     改前：手稿那一行只认角色（`secretary.handoff_add` 对非角色收件人直接抛
-    `ValueError`），而名册名/绝对编号是**看不见实例**的写法 ⇒ 名册在 handoff 这条路上
-    用不上。现在：手稿写**解析出的角色**（台账的口径不变），通知投**那个实例**的板项。
+    `ValueError`），而名册名/绝对编号是看不见实例的写法 ⇒ 名册在 handoff 这条路上
+    用不上。现在：手稿写解析出的角色（台账的口径不变），通知投那个实例的板项。
     """
     env = _env(tmp_path)
     loop, cond = env["loop"], env["cond"]
@@ -240,11 +238,11 @@ def test_a_handoff_to_a_roster_member_lands_on_that_instance(tmp_path: pathlib.P
 
 
 def test_a_handoff_without_a_collaboration_edge_is_refused(tmp_path: pathlib.Path):
-    """判据②（负向）：交给一个**没有协作边**的角色（G）⇒ 受控拒绝 `not_an_edge`，零写入。
+    """判据②（负向）：交给一个没有协作边的角色（G）⇒ 受控拒绝 `not_an_edge`，零写入。
 
-    这是 handoff 上的真漏洞：改前它**一条准入判据都没过**（`send_message` 直接写进
+    这是 handoff 上的真漏洞：改前它一条准入判据都没过（`send_message` 直接写进
     角色级收件箱）⇒ 任何角色都能把一份手稿 + 一条通知塞给任何角色。
-    现在角色级收件人面由**协作边**那一份判据（`message_admission`）守着。
+    现在角色级收件人面由协作边那一份判据（`message_admission`）守着。
     """
     env = _env(tmp_path)
     from agentflow import capabilities as CAP
@@ -266,7 +264,7 @@ def test_a_handoff_to_an_unregistered_name_is_refused_before_writing(
     """判据②（负向，受控拒绝的形状）：`to="F9"`（不存在的名册名）⇒ 可读的理由码。
 
     改前它是 `ValueError: 收件人必须是 [A…] 之一` 被包成"秘书执笔失败"——
-    读起来像 bug，而且模型不知道该改成什么。现在它是一条**判据**：
+    读起来像 bug，而且模型不知道该改成什么。现在它是一条判据：
     `handoff_is_role_addressed` + 指路（要指定实例请用 `message`）。
     """
     env = _env(tmp_path)
@@ -306,15 +304,15 @@ def _one_escalation_in_the_parents_inbox(env: dict[str, Any],
                                          got: dict[str, Any]) -> None:
     """判据①的全部断言（正控与负控同形：负控就是让同一组断言在坏实现上失败）。
 
-    ⚠️ 2026-10-20 诊断更正（原判据写错在读侧，不是写侧真的重复投递）：
+     2026-10-20 诊断更正（原判据写错在读侧，不是写侧真的重复投递）：
     这一格原先写的是 `inbox = read_messages(...)` 之后 `len(inbox) == 1` ——
-    而 `read_messages` 返回的是 `(消息, 问题)` **两元组** ⇒ `len(inbox)` 恒等于 2，
+    而 `read_messages` 返回的是 `(消息, 问题)` 两元组 ⇒ `len(inbox)` 恒等于 2，
     那个 2 是元组的两格，不是两条留言。盘上的实况（读夹具 + 打点实测）是：
-    `conductor.escalate` 里只有**一处** `send_message`，一次上行恰好落**一条**
+    `conductor.escalate` 里只有一处 `send_message`，一次上行恰好落一条
     `agent_message`；另有一条 `agent_escalation`（可审计留痕，同一个 `msg_id`），
     而 `read_messages` 只认 `kind == "agent_message"` ⇒ 它进不了收件箱。
     所以这里做两件事：① 元组解包；② 写侧与读侧各钉一次（不许只靠读侧的过滤
-    去重 —— "一次上行写了两条"必须在**盘上的留言条数**那一格就红）。
+    去重 —— "一次上行写了两条"必须在盘上的留言条数那一格就红）。
     """
     assert got.get("ok") is True and got.get("state") == "escalated", got
     addr = got.get("addressing") or {}
@@ -332,14 +330,14 @@ def _one_escalation_in_the_parents_inbox(env: dict[str, Any],
 
 
 def test_escalate_to_the_parent_goes_through_the_roster(tmp_path: pathlib.Path):
-    """判据③（正控）：上行发给**名册上的父** ⇒ 成功，且读数里带着名册的判定。"""
+    """判据③（正控）：上行发给名册上的父 ⇒ 成功，且读数里带着名册的判定。"""
     env = _env(tmp_path)
     _one_escalation_in_the_parents_inbox(env, _escalate_to_the_parent(env))
 
 
 def test_negctl_a_duplicated_escalation_would_be_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
-    """负控①：让一次上行在**写侧**落两条 ⇒ 判据① 的"恰好一条"必红。
+    """负控①：让一次上行在写侧落两条 ⇒ 判据① 的"恰好一条"必红。
 
     坏实现刻意做在写侧（把 `send_message` 调两遍），不在读侧按 `msg_id` /
     `to_task_id` 去重 —— 去重只是把读数抹平，"一次上行写两条"这件事还在。
@@ -376,7 +374,7 @@ def test_escalate_to_a_non_parent_is_refused(tmp_path: pathlib.Path):
 
 
 def test_escalate_upward_only_refuses_a_child(tmp_path: pathlib.Path):
-    """判据③（边界）：把上行发给**子**（我名册上的 F1）⇒ 拒（`not_upward`），不落盘。
+    """判据③（边界）：把上行发给子（我名册上的 F1）⇒ 拒（`not_upward`），不落盘。
 
     "上行"是向上的动作；给子发需求应当走 `message`（父 → 子那条下行通道）。
     这一条同时证明：判据不只知道"在不在名册"，还知道"方向对不对"。
@@ -394,7 +392,7 @@ def test_escalate_and_message_share_the_one_criterion(
     """判据③（"同一判据"的机器证明）：把唯一那份判据改成一律拒 ⇒ `escalate` 跟着拒。
 
     如果 `escalate` 自己另写了一份"是不是我的父"（而不是走 `roster_addresses`），
-    那么改这一份判据它**不会**变红 —— 这一条就是抓那种形态的。
+    那么改这一份判据它不会变红 —— 这一条就是抓那种形态的。
     """
     env = _env(tmp_path)
     calls: list[tuple[str, str]] = []
@@ -442,7 +440,7 @@ def _public_is_a_bulletin(env: dict[str, Any]) -> None:
     """判据④的三条断言（正控与负控同形：负控就是让它们在同一夹具上失败）。"""
     loop, ws, cond = env["loop"], env["ws"], env["cond"]
 
-    # ① 点名 + 指令 ⇒ 受控拒绝，且**一条都不落**
+    # ① 点名 + 指令 ⇒ 受控拒绝，且一条都不落
     bad = loop._do_message({"to": PUBLIC, "subject": "安排",
                             "body": "F1 请立刻把实验跑完，然后把结果回我"})
     assert bad.get("ok") is False, bad
@@ -460,7 +458,7 @@ def _public_is_a_bulletin(env: dict[str, Any]) -> None:
     recs = _messages(ws)
     assert len(recs) == 1 and recs[0].get("board_kind") == "bulletin", recs
 
-    # ③ 公告不构成对话：它**不进任何人的私聊面**（进去的每一条 `channel` 都是 public）；
+    # ③ 公告不构成对话：它不进任何人的私聊面（进去的每一条 `channel` 都是 public）；
     #    而名册外的人（叔伯）连公告栏都看不到（可见面 = 发信人的直接子代理）。
     for role, tid in ((PARENT, env["pa"]), ("F", env["f1"])):
         msgs, _ = read_messages(ws, role, sid=SID, parent_task_id=env["me"],
@@ -473,7 +471,7 @@ def _public_is_a_bulletin(env: dict[str, Any]) -> None:
 
 
 def test_the_public_channel_is_a_bulletin_not_a_conversation(tmp_path: pathlib.Path):
-    """判据④：`#public` 保留为**公告栏** —— 点名下指令被拒；不点名的公告标 `bulletin`。"""
+    """判据④：`#public` 保留为公告栏 —— 点名下指令被拒；不点名的公告标 `bulletin`。"""
     _public_is_a_bulletin(_env(tmp_path))
 
 
@@ -493,9 +491,9 @@ def test_negctl_without_the_addressee_check_the_directive_is_posted(
 
 
 def _a_framework_stop_notice_gets_through(env: dict[str, Any]) -> None:
-    """框架通报（`by_framework=True`）**点了名、带指令语气**⇒ 仍然照发、且全角色可见。
+    """框架通报（`by_framework=True`）点了名、带指令语气⇒ 仍然照发、且全角色可见。
 
-    这一格守的是公告栏判据上的**显式豁免**：叫停那一路是框架代表主控发的全树通知，
+    这一格守的是公告栏判据上的显式豁免：叫停那一路是框架代表主控发的全树通知，
     它必然点名 + 用指令语气（"F1 请立刻收工"）—— 若被"点名 + 指令 ⇒ 受控拒绝"这条
     判据当作"公告栏里的对话"拦下，听不到叫停的子孙会继续烧钱跑实验。豁免的落点是
     `_message_by_channel` 里那一句（判据本体），摘掉它这条就红（负控在同文件里）。
@@ -512,18 +510,15 @@ def _a_framework_stop_notice_gets_through(env: dict[str, Any]) -> None:
 
 
 def test_framework_notice_and_user_interjection_still_get_through(tmp_path: pathlib.Path):
-    """判据⑤（反真空）：这次收紧不许把框架通报与用户插话一起打死。
+    """    判据⑤（反真空）：这次收紧不许把框架通报与用户插话一起打死。
 
     三档各一条：
 
-    - **框架通报**（`_emit_settlement`）：这一趟停在终态、模型没写 `notify` ⇒ 框架补一条
-      `kind="notice"` 的板项，挂在**父的实例名下**（收件人由台账解析，不经名册 ——
-      它是框架代为落的一条通报，不是代理在说话）；
-    - **框架公告**（`by_framework=True`）：全角色可见（叫停那一路的形态），
-      即"不是发信人的子代理"也读得到 —— 证明公告栏的可见面判据没被这次收紧改坏；
-      另外它**走公告栏判据那一支也不受限**（点名 + 指令语气照发，见
-      `_a_framework_stop_notice_gets_through`）；
-    - **用户插话**：`user → M` 照旧可发可读（插话不是代理间通信）。
+    - 框架通报（`_emit_settlement`）：这一趟停在终态、模型没写 `notify` ⇒ 框架补一条
+    `kind="notice"` 的板项，挂在父的实例名下（收件人由台账解析，不经名册 ——它是框架代为落的一条通报，不是代理在说话）；
+    - 框架公告（`by_framework=True`）：全角色可见（叫停那一路的形态），
+    即"不是发信人的子代理"也读得到 —— 证明公告栏的可见面判据没被这次收紧改坏；另外它走公告栏判据那一支也不受限（点名 + 指令语气照发，见`_a_framework_stop_notice_gets_through`）；
+    - 用户插话：`user → M` 照旧可发可读（插话不是代理间通信）。
     """
     env = _env(tmp_path)
     loop, ws = env["loop"], env["ws"]
@@ -546,12 +541,12 @@ def test_framework_notice_and_user_interjection_still_get_through(tmp_path: path
     assert [m for m in seen if m.get("channel") == "public"], (
         "框架公告被公告栏的可见面判据挡住了", seen)
     assert all(m.get("by_framework") for m in seen if m.get("channel") == "public"), seen
-    # ②b 同一档走公告栏**判据本体**：点名 + 指令语气也照发（显式豁免，摘掉就红）
+    # ②b 同一档走公告栏判据本体：点名 + 指令语气也照发（显式豁免，摘掉就红）
     _a_framework_stop_notice_gets_through(env)
 
     # ③ 用户插话：照旧可发、可读（且只有 M 收）
     #
-    # ⚠️ 2026-10-20 诊断更正：这里原先没给 `sid` ⇒ `send_interjection` 落到**缺省会话**
+    #  2026-10-20 诊断更正：这里原先没给 `sid` ⇒ `send_interjection` 落到缺省会话
     # （`sessions.session_id()`，实测 `20261020`），而读的那一侧拿的是 `SID`（"talk"）
     # ⇒ 读到的永远是空表，与"插话通道坏了"在读数上长得一样。通道本身没坏（写读同一
     # `sid` 就对得上，见 `tests/test_agent_interjection.py`），坏的是这一格的夹具。
@@ -566,7 +561,7 @@ def test_framework_notice_and_user_interjection_still_get_through(tmp_path: path
 
 def test_negctl_without_the_framework_exemption_the_stop_notice_is_refused(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
-    """负控⑤b：把公告栏判据上的**框架豁免**摘掉 ⇒ 那条叫停通报被当成"对话"拒掉 ⇒ 红。
+    """负控⑤b：把公告栏判据上的框架豁免摘掉 ⇒ 那条叫停通报被当成"对话"拒掉 ⇒ 红。
 
     摘的就是判据本体里那一格（`_public_framework_exempt`），不是换个措辞绕过去：
     坏实现下同一条通报拿到 `public_is_not_a_conversation` 的拒信、盘上一行不落。
@@ -603,7 +598,7 @@ def test_negctl_a_vacuum_would_be_red(tmp_path: pathlib.Path,
 # ============================================================ ⑥ 静态判据：没有第二条落点
 
 
-#: `send_message` 的**已登记落点**（`agent_loop.py`）：函数名 → 它凭什么可以直写。
+#: `send_message` 的已登记落点（`agent_loop.py`）：函数名 → 它凭什么可以直写。
 #: 加一条就是加一条通道 ⇒ 这张表是"这一趟审计过哪些路"的机器形态。
 AGENT_LOOP_SEND_SITES: dict[str, str] = {
     "send_message": "本体（def）",
@@ -656,7 +651,7 @@ def test_every_send_message_call_site_is_a_registered_landing(tmp_path: pathlib.
     """判据⑥：`agent_loop.py` / `conductor.py` 的每个 `send_message` 调用点都已登记。
 
     为什么这条值得存在：这一轮补的四条缺口（handoff / escalate / relay / 步数上报）
-    在改前都是"合法地调用 `send_message`"—— 没有任何东西会红。把一个**新**的
+    在改前都是"合法地调用 `send_message`"—— 没有任何东西会红。把一个新的
     绕过点加回来，同样不会有东西会红，除非判据盯着"落点表"本身。
 
     框架通道（`autonomy.py` / `conductor_tools.py`）另有一条更严的：必须显式

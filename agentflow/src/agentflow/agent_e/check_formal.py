@@ -18,58 +18,23 @@ class _CheckFormal:
         timeout_sec: float | None = None,
     ) -> dict:
         """转发到 `tools/verify_tools.check_formal`（唯一实现）。
-
-        无后端时必须返回 ``checked=False, reason="no_backend"``。
-        它与 ``verified=False`` 是两件事：后者是"验证没过"（命题可疑），
-        前者是"我们没验证"（命题未被检验）。把两者折叠，下游就会把
-        "本环境没有证明检查器"读成"这个命题被证伪了"。
-
-        ## 参数透传（本方法此前只暴露 `claim` / `script_path`）
-
-        工具层 `verify.check_formal` 早就收 `source` / `checker_name` / `imports` /
-        `timeout_sec`（工具层的形参名是 `checker_name` 而非 `name`，理由见
-        `verify_tools.check_formal` 的 docstring；本方法自己的形参仍叫 `name`：
-        它不是经 `ToolRegistry.call` 调用的，不受那个撞名影响），
-        而本方法只转发前两个 —— 于是"给一段内存里的 Lean 源码"、
-        "指定要核对的声明名"、"换 imports"、"给这次检查一个更短的时限"这四件事
-        到不了 E：调用方写得出参数，E 收不到，而且不会报错（多给的键被
-        Python 静默吃掉或直接 TypeError）。这是一条"能力表声明了、实现没有"的
-        接线缺口，不是在补新功能。
-
-        向后兼容：旧调用方写的是 `check_formal(claim)` 或
-        `check_formal(claim, script_path=...)`。两个参数的名字、位置、默认值
-        与返回结构都未变；新增的四个一律是关键字参数且默认 None
-        ⇒ 旧调用点逐字节不受影响（既有用例
+        无后端时必须返回 ``checked=False, reason="no_backend"``。它与 ``verified=False`` 是两件事：后者是"验证没过"（命题可疑），前者是"我们没验证"（命题未被检验）。
+        参数透传（本方法此前只暴露 `claim` / `script_path`）工具层 `verify.check_formal` 早就收 `source` / `checker_name` / `imports` /`timeout_sec`（工
+        具层的形参名是 `checker_name` 而非 `name`，理由见`verify_tools.check_formal` 的 docstring；本方法自己的形参仍叫 `name`：它不是经 `ToolRegistry.call` 调用的，
+        不受那个撞名影响），而本方法只转发前两个 —— 于是"给一段内存里的 Lean 源码"、"指定要核对的声明名"、"换 imports"、"给这次检查一个更短的时限"这四件事到不了 E：调用方写得出参数，E 收不到，而且不会报错（多给的键被
+        Python 静默吃掉或直接 TypeError）。
+        向后兼容：旧调用方写的是 `check_formal(claim)` 或`check_formal(claim, script_path=...)`。新增的四个一律是关键字参数且默认 None⇒ 旧调用点逐字节不受影响（既有用例
         `test_check_formal_without_backend_is_not_checked_not_failed` 未改一字）。
-
-        ## `reason` 的收口与透传（`G-24①`）
-
-        `reason` 取本模块的局部受控词表 :data:`FORMAL_REASONS`，映射表是
-        `_FORMAL_REASON_BY_TOOL_REASON`：工具层给的每一个 `reason` 都必须在那张表里
-        被显式列出，表外的值落到 `status_unregistered`（而不是伪装成 `tool_crashed`
-        —— 那是一句具体的假话："桥接层自己出错"与"我不认识这个状态"是两件事）。
-
-        收口必须有配套的透传，否则收口就是删信息：工具层原样报的那个值逐字放进
-        `verifier_status`，检查器自己的话在 `verifier_output` 与 `detail` 里。
-        透传字段也是"多值不许压成一个模糊值"（`N-5`）在本层的落地形态。
-
-        ## `script_path` 的路径守卫（本轮补上）
-
-        工具层 `verify.check_formal` 把 `script_path` 原样交给
-        `formalgw.check_lean` 的 `source_path` 入口（它刻意不自己读文件，
-        理由是"读不到的收口方式必须与声明名核对同处"）。那个入口会
-        `open()` 调用方给的路径 ⇒ 在本方法收口之前，工具的 `script_path`
-        是一条能读工作区外任意文件的通道（`verify.run_experiment` 那条路径
-        有 `AgentE._resolve`，这条没有）。
-
-        所以这里用本模块既有的 `_resolve` 收口（与 `run_experiment`
-        第一段同一份判据，不另写一份），并且不把越界变成异常 ——
-        它返回与 `no_backend` / `no_script` 同形的受控三态 dict：
-        `checked=False, verified=None, reason="path_outside_workspace"`。
-        为什么不是抛异常：工具化调用（`registry.call`）会把异常兜成
-        `kind="unexpected"`，于是"调用方指了一个越界路径"与"E 内部有 bug"
-        在下游长得一模一样。为什么 `verified` 必须是 `None` 而不是 `False`：
-        这次没有查，不是"查了没通过"。
+        `reason` 的收口与透传（`G-24①`）`reason` 取本模块的局部受控词表 :data:`FORMAL_REASONS`，映射表是`_FORMAL_REASON_BY_TOOL_REASON`：工具层给的每一个 `reason` 
+        都必须在那张表里被显式列出，表外的值落到 `status_unregistered`（而不是伪装成 `tool_crashed`—— 那是一句具体的假话："桥接层自己出错"与"我不认识这个状态"是两件事）。
+        收口必须有配套的透传，否则收口就是删信息：工具层原样报的那个值逐字放进`verifier_status`，检查器自己的话在 `verifier_output` 与 `detail` 里。透传字段也是"多值不许压成一个模糊值"（`N-5`）在本层
+        的落地形态。
+        `script_path` 的路径守卫（本轮补上）工具层 `verify.check_formal` 把 `script_path` 原样交给`formalgw.check_lean` 的 `source_path` 入口（它刻意不自己读文件，
+        理由是"读不到的收口方式必须与声明名核对同处"）。那个入口会`open()` 调用方给的路径 ⇒ 在本方法收口之前，工具的 `script_path`是一条能读工作区外任意文件的通道（`verify.run_experiment` 那条路径有 
+        `AgentE._resolve`，这条没有）。
+        所以这里用本模块既有的 `_resolve` 收口（与 `run_experiment`第一段同一份判据，不另写一份），并且不把越界变成异常 ——它返回与 `no_backend` / `no_script` 同形的受控三态 dict：
+        `checked=False, verified=None, reason="path_outside_workspace"`。为什么不是抛异常：工具化调用（`registry.call`）会把异常兜成`kind="unexpected"`，于
+        是"调用方指了一个越界路径"与"E 内部有 bug"在下游长得一模一样。为什么 `verified` 必须是 `None` 而不是 `False`：这次没有查，不是"查了没通过"。
         """
         # ---- 路径守卫：越界即拒绝，且失败形态与本方法的其它受控状态同形
         #

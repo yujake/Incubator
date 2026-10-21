@@ -285,9 +285,7 @@ def test_invented_facts_reads_the_evidence_pack_not_a_word_list():
 # ======================================================= ⑤ 召唤号与花销（P-09 的键）
 
 def test_the_summon_number_is_reported_and_never_faked(tmp_path: pathlib.Path):
-    """`llm_task_id`（P-09 的挂点）：号在 ⇒ 读数带号且账本按号读；号不在 ⇒ 如实说"没号"。
-
-    三态（需求单第 3 条）—— 这三档必须分得开：
+    """    `llm_task_id`（P-09 的挂点）：号在 ⇒ 读数带号且账本按号读；号不在 ⇒ 如实说"没号"。三态（需求单第 3 条）—— 这三档必须分得开：
 
     | 情形 | `attached` | `usd` |
     |---|---|---|
@@ -295,8 +293,7 @@ def test_the_summon_number_is_reported_and_never_faked(tmp_path: pathlib.Path):
     | 有号、账上一条都没有 | `True` | `0.0`（"挂上了但还没记过账"） |
     | 有号、有账 | `True` | 汇总 |
 
-    粒度维持召唤级（以 `task_id` 为键，与 `tokenmeter.usd_reading` 同一算式），
-    同一个召唤内多次调用由 `calls` 标注（"这一次召唤内调用了几次"）。
+    粒度维持召唤级（以 `task_id` 为键，与 `tokenmeter.usd_reading` 同一算式），同一个召唤内多次调用由 `calls` 标注（"这一次召唤内调用了几次"）。
     """
     from agentflow.tokenmeter import Charge, TokenMeter
 

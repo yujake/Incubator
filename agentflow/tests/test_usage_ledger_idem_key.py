@@ -233,20 +233,16 @@ def test_verify_surfaces_the_old_criterion_that_cannot_see_it(store: Store):
 
 
 def test_rollback_drops_the_field_but_the_note_marker_survives(store: Store, monkeypatch) -> None:
-    """回滚陷阱（真跑一遍 `rebuild`，不是推理）：
+    """    回滚陷阱（真跑一遍 `rebuild`，不是推理）：
 
-    `row_from_dict` 按 `__dataclass_fields__` 过滤，所以回滚代码之后
-    一次 `rebuild` 会把 `idem_key` 静默丢掉；而 `note` 里的文本标记（提案 B 那一层）
+    `row_from_dict` 按 `__dataclass_fields__` 过滤，所以回滚代码之后一次 `rebuild` 会把 `idem_key` 静默丢掉；而 `note` 里的文本标记（提案 B 那一层）
     是老字段，回滚不丢 —— 这正是"两层都要留着"的操作性理由。
 
-    回滚在这里是真的换成一个不认识 `idem_key` 的旧 dataclass 来跑 rebuild：
-    只把键从 `__dataclass_fields__` 里删掉是模拟不出来的（`asdict` 另有一份字段表），
+    回滚在这里是真的换成一个不认识 `idem_key` 的旧 dataclass 来跑 rebuild：只把键从 `__dataclass_fields__` 里删掉是模拟不出来的（`asdict` 另有一份字段表），
     所以用"旧类 + 按字段过滤的 row_from_dict"逐字复刻老代码。
 
-    注意 `rebuild` 的"合并而非替换"那一行（`store.rebuild`）：若事件里本来就带着
-    `idem_key`，它会被当作"其它键"原样保留 —— 丢字段只发生在事件流里也没有它
-    的那一类行上（老版本写的事件、被清洗过的事件流、以及从快照而非事件恢复的行）。
-    下面两条断言分别覆盖这两种形态。
+    注意 `rebuild` 的"合并而非替换"那一行（`store.rebuild`）：若事件里本来就带着`idem_key`，它会被当作"其它键"原样保留 —— 丢字段只发生在事件流里也没有它的那一类行上（老版本写的事件、
+    被清洗过的事件流、以及从快照而非事件恢复的行）。下面两条断言分别覆盖这两种形态。
     """
     key = marker_of("idem", "t-rollback", 0)
     meter = TokenMeter(store)

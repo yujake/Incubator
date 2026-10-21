@@ -2,25 +2,20 @@
 
 ## 撞出来的那一处假绿（第 11 趟真机）
 
-主控在第 28 步调 `conductor.closing`，拿回来 `can_close: true, failed: []`；
-而「同一次运行」外部带 `sid=real11` 的读数报 `failed: ['user_pending']`。
-病因不在判据上：工具体此前按 `sid=None` 走到 `sessions/<今天>.jsonl`
-（`session_path` 的缺省值），而那一趟的提问落在 `sessions/real11.jsonl`。
-"没问过"与"问了还没答"于是长得一模一样 —— 而且「只在运行内」长得一样，
-外面怎么看都是对的。这正是 §62 通过之后仍然要修的那一条。
+主控在第 28 步调 `conductor.closing`，拿回来 `can_close: true, failed: []`；而「同一次运行」外部带 `sid=real11` 的读数报
+`failed: ['user_pending']`。病因不在判据上：工具体此前按 `sid=None` 走到 `sessions/<今天>.jsonl`（`session_path` 的缺省值），而那一趟的提问落在
+`sessions/real11.jsonl`。"没问过"与"问了还没答"于是长得一模一样 —— 而且「只在运行内」长得一样，外面怎么看都是对的。这正是 §62 通过之后仍然要修的那一条。
 
 ## 判据的方向（为什么是"相等"而不是"更严"）
 
-修法 B 的主张是"装配期知道这一趟是谁，就一路带到判据里"。它的可判形态是
-「两个入口、同一个读数」：运行内 `conductor.closing` 与外部
-`check_closing(sid=...)` 必须逐格相同。加上三条负控把"折叠"堵住：
+修法 B 的主张是"装配期知道这一趟是谁，就一路带到判据里"。它的可判形态是「两个入口、同一个读数」：运行内 `conductor.closing` 与外部`check_closing(sid=...)` 必须逐格相同。
+加上三条负控把"折叠"堵住：
 
 1. 装配期「没」给 sid ⇒ `user_pending` 记 `unknown` —— 而不是回落到缺省会话。
-   负控的一半是"缺省会话里真的有提问"：旧代码会读到它并报 `pass`/`fail`，
-   新代码必须报"没查成"（三态纪律：没查成不许折成查过了）。
+负控的一半是"缺省会话里真的有提问"：旧代码会读到它并报 `pass`/`fail`，新代码必须报"没查成"（三态纪律：没查成不许折成查过了）。
 2. 别的 sid 的提问不算这一趟的（``other-run`` 里的 `q0001` 不影响 `real63`）。
 3. `host.wired_llm_conductor` 这条「产品路径」必须把身份带下去；
-   没给 `sid` 时它解析成缺省会话号（老跑法不许因此漏判）。
+没给 `sid` 时它解析成缺省会话号（老跑法不许因此漏判）。
 """
 from __future__ import annotations
 

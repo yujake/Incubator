@@ -169,8 +169,7 @@ def test_r003_exempts_a_forwarder(tmp_path):
 def test_r003_exempts_forwarder_with_lazy_import(tmp_path):
     """负控（第二次校准）：转发体里有惰性 import 时仍算转发。
 
-    这是本条规则一次真实的假阳性：`fetch.slugify` / `providers.normalize_doi`
-    合并后写成
+    这是本条规则一次真实的假阳性：`fetch.slugify` / `providers.normalize_doi` 合并后写成
 
     ```python
     def slugify(text, ...):
@@ -178,9 +177,8 @@ def test_r003_exempts_forwarder_with_lazy_import(tmp_path):
         return _impl(text, ...)
     ```
 
-    旧判据要求函数体字面上只有一条 return，于是把这份转发报成了
-    "两份独立实现"。惰性 import 是实现细节，它没有重述任何判据。
-    """
+    旧判据要求函数体字面上只有一条 return，于是把这份转发报成了"两份独立实现"。
+    惰性 import 是实现细节，它没有重述任何判据。"""
     root = _tree(tmp_path, {
         "core.py": "def slugify(x):\n    a = x.strip()\n    return a\n",
         "adapter.py": (
@@ -619,17 +617,15 @@ def test_r010_reports_zero_legacy_and_no_longer_reads_any_translation_table(tmp_
 def test_network_is_no_longer_recognised_as_a_legacy_declaration(tmp_path):
     """负控：合成树里写 `side_effect="network"` ⇒ 规则不再把它翻译成 `egress`。
 
-    迁移期这一条会被翻译成 `egress` 并走进 R010-b 的判据。现在那个取值已从
-    词表里删掉，真实树上它连 `ToolSpec` 都构造不出来；这条用例锁的是
-    规则里也不再留那条旁路 —— 它只按声明说话（这里是默认的 `none`）。
+    迁移期这一条会被翻译成 `egress` 并走进 R010-b 的判据。现在那个取值已从词表里删掉，
+    真实树上它连 `ToolSpec` 都构造不出来；这条用例锁的是规则里也不再留那条旁路 ——
+    它只按声明说话（这里是默认的 `none`）。
 
-    合成树因此分两条：`sample.legacy`（`side_effect='network'`、handler 纯净）
-    用来问"没有那条翻译旁路"；`sample.notexec`（默认 `none`、handler 起进程）
-    用来问"起进程却声明不是 exec 照旧是 error"。第二块是 `R7-R6-1` 之后补的：
-    补进 R010-c 之后，一个起进程的 handler 会同时命中"起进程"与"网络标记"
-    （`subprocess` 本来就在 `_R010_NETWORK_MARKERS` 里），于是把两块分开写
-    才让这条用例继续锁它真正要锁的东西（而不是被新那一档的文案顶替掉）。
-    """
+    合成树因此分两条：`sample.legacy`（`side_effect='network'`、handler 纯净）用来问"没有那条
+    翻译旁路"；`sample.notexec`（默认 `none`、handler 起进程）用来问"起进程却声明不是 exec 照旧是
+    error"。第二块是 `R7-R6-1` 之后补的：补进 R010-c 之后，一个起进程的 handler 会同时命中"起
+    进程"与"网络标记"（`subprocess` 本来就在 `_R010_NETWORK_MARKERS` 里），所以把两块分开写才让
+    这条用例继续锁它真正要锁的东西。"""
     got = _r010(
         "import subprocess\n"
         "\n"

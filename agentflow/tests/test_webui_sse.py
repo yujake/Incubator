@@ -14,12 +14,9 @@
 
 ## 端点是怎么"接上"的（这一条要写清，否则读到 404 会以为是 SSE 坏了）
 
-`routes.py` 的第三格是 `WebHandler` 上的方法名，而 `WebHandler` 住在 A 线的
-`webui/server.py`（B 线不许碰）。所以本模块把处理器写成模块级函数，由 A 线在
-`webui/__init__.py` 里调一次 `sse.bind_handlers(WebHandler)`（一行）接上。
-绑定前 `/api/stream` 是 404（`routes.handler_names()` 里有它、类上没有它），
-绑定后是这条流 —— 本文件的 `_bound_server()` 就是这个绑定的最小演示，
-它同时也是"A 线只差这一行"的机器读数。
+`routes.py` 的第三格是 `WebHandler` 上的方法名，而 `WebHandler` 住在 A 线的`webui/server.py`（B 线不许碰）。所以本模块把处理器写成模块级函数，由 A
+线在`webui/__init__.py` 里调一次 `sse.bind_handlers(WebHandler)`（一行）接上。绑定前 `/api/stream` 是
+404（`routes.handler_names()` 里有它、类上没有它），绑定后是这条流 —— 本文件的 `_bound_server()` 就是这个绑定的最小演示，它同时也是"A 线只差这一行"的机器读数。
 """
 
 from __future__ import annotations

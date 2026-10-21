@@ -12,20 +12,16 @@ class _SearchLiterature:
                           description: str = "",
                           providers: Iterable[str] | None = None) -> dict:
         """按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方。
-
-        为什么需要它（2026-09-30；用户口径："A 的文献检索必须要通关"）：`run_once` / `run` 参数里没有
-        主题，召唤方没办法告诉 A 要查什么（实测 G 唤起 `A.run_once` 落 `refused/not_wired`）。本动作不
-        绕过既有闸门：走 `submit` 同一条入队路径（`interactions.admit_search_request` 的 I7 准入 +
-        `SearchRequest.validate` + 同一个取号口径），随后仍由 `run_once` 在既有领取/租约/退避/判重/
-        下载链路上跑。默认 mode 是 `precise` 而不是 `topical`：语义是"给我这条命题的来源"而不是领域全景
-        （实测 `topical` 15 条对题 1/15、`precise` 8 条对题 7/8，差别在 `keyword_hit` 后置过滤）。
-        三态落点：准入被拒 ⇒ `admitted=False` + 原因、零写入；零命中 ⇒ `outcome="no_results"`（有效结论）；
-        搜索失败 ⇒ `outcome="search_failed"` + `errors`（不许当"没有这篇"）；题面抽不出英文关键词 ⇒ 入队前
-        返回 `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`、零写入。
-        `providers=[…]` 也是三态（`None` / 合法源名 / 不认识的源名，后者 `kind="unknown_provider"`），
-        名字落进 `SearchRequest.providers`、领取侧按行上的名字检索、跨源合并走 `MultiProvider`。
-        三处"调用本身不成立"走 :func:`agentflow.refusals.refuse`（`draft/37` §88），三态纪律见
-        :mod:`agentflow.refusals` 的模块说明。
+        为什么需要它（2026-09-30；用户口径："A 的文献检索必须要通关"）：`run_once` / `run` 参数里没有主题，召唤方没办法告诉 A 要查什么（实测 G 唤起 
+        `A.run_once` 落 `refused/not_wired`）。本动作不绕过既有闸门：走 `submit` 同一条入队路径（`interactions.admit_search_request`
+        的 I7 准入 +`SearchRequest.validate` + 同一个取号口径），随后仍由 `run_once` 在既有领取/租约/退避/判重/下载链路上跑。默认 mode 是
+        `precise` 而不是 `topical`：语义是"给我这条命题的来源"而不是领域全景（实测 `topical` 15 条对题 1/15、`precise` 8 条对题 7/8，差
+        别在 `keyword_hit` 后置过滤）。三态落点：准入被拒 ⇒ `admitted=False` + 原因、零写入；零命中 ⇒ `outcome="no_results"`（有效
+        结论）；搜索失败 ⇒ `outcome="search_failed"` + `errors`（不许当"没有这篇"）；题面抽不出英文关键词 ⇒ 入队前返回 
+        `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`、零写入。`providers=[…]` 也是三
+        态（`None` / 合法源名 / 不认识的源名，后者 `kind="unknown_provider"`），名字落进 `SearchRequest.providers`、领取侧按行上
+        的名字检索、跨源合并走 `MultiProvider`。三处"调用本身不成立"走 :func:`agentflow.refusals.refuse`（`draft/37` §88），三
+        态纪律见:mod:`agentflow.refusals` 的模块说明。
         """
         topic = str(topic or "").strip()
         if not topic:

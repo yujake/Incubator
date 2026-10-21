@@ -3,20 +3,20 @@
 
 口径原话（两段，第二段是追加的）：
 
-> 「M 只是个派活的，对所有角色都一样，只根据它们的能力范围派活，**不指定能力**。
+> 「M 只是个派活的，对所有角色都一样，只根据它们的能力范围派活，不指定能力。
 > M 能看到的只是各角色描述，看不到具体的工具箱与动作，但可在角色描述中暗示它各角色能干什么。」
 > 「对于其它智能体派子智能体，能看到的应该是一样的（就是描述）。」
 
 落地形态：
-  * 提示词那一侧（伙伴表、画像文件、`conductor.role_spec`）只给**描述**；
-  * 派活那一侧 `summon` / `summon_many` 允许**不给 `action`** —— 那一趟由被派角色
-    **跑自己的循环**、按自己的手册与工具面选动作；此时 `task` 必填。
+  * 提示词那一侧（伙伴表、画像文件、`conductor.role_spec`）只给描述；
+  * 派活那一侧 `summon` / `summon_many` 允许不给 `action` —— 那一趟由被派角色
+    跑自己的循环、按自己的手册与工具面选动作；此时 `task` 必填。
 
 这一份守三件事（含负控与反真空）：
-  1. **边照拦**：空动作不是"绕过策略"的通行证 —— `M → F` 仍然 `forbidden_edge`；
-  2. **schema 不许再要求动作**：`summon` / `summon_many` 的必填里不许有 `action`
+  1. 边照拦：空动作不是"绕过策略"的通行证 —— `M → F` 仍然 `forbidden_edge`；
+  2. schema 不许再要求动作：`summon` / `summon_many` 的必填里不许有 `action`
      （否则模型根本写不出"只派活"那种调用）；
-  3. **后端路由**：空动作**不许**落到内层处理器（那等于替它选了一个不存在的动作），
+  3. 后端路由：空动作不许落到内层处理器（那等于替它选了一个不存在的动作），
      必须走角色自己的循环。
 """
 from __future__ import annotations
@@ -40,23 +40,18 @@ def _edge_refusal(frm: str, to: str, action: str) -> str:
 
 
 def test_a_blank_action_still_checks_the_edge() -> None:
-    """空动作**不是**绕过策略的通行证：该拦的边照拦。
+    """空动作不是绕过策略的通行证：该拦的边照拦。
 
-    若这条破了：M 只要不写动作就能派 F/V —— 2026-10-10 那条"主控不许直接控制 F/V"
-    的裁定会被一个空字符串整个架空，而**没有任何读数会报出来**。
+    若这条破了：M 只要不写动作就能派 F/V —— 2026-10-10 那条"主控不许直接控制 F/V"的裁定会被一个空
+    字符串整个架空，而没有任何读数会报出来。
 
-    ⚠️ 2026-10-16 实测更正：**`B` 在 M 的出边里**（当时 `ALLOWED_EDGES['M']`
-    = `['A','B','C','D','E','G','H']`，7 条）；2026-10-18 业主「给 M 开 V 出边」之后
-    `V` 也进过一次（8 条）。而 `partners_lines` 的注释与 `visible_partners` 的 docstring
-    写着"主控不许直接控制 **B** / F / V" —— **那两句是旧读数**（边表才是权威）。
+    2026-10-16 实测更正：`B` 在 M 的出边里（当时 `ALLOWED_EDGES['M']` = `['A','B','C','D','E','G','H']`，
+    7 条）；2026-10-18 业主「给 M 开 V 出边」之后 `V` 也进过一次（8 条）。而 `partners_lines` 的注释
+    与 `visible_partners` 的 docstring 写着"主控不许直接控制 B / F / V"—— 那两句是旧读数（边表才是权威）。
 
-    2026-10-20 业主裁定：**撤 M→V**（边表回到 7 条）⇒ 这一格的期望值跟着边表走：
-
-    - `M → V` ⇒ `forbidden_edge`（负向负控 —— V 是**该拦**的那条边）；
-    - `M → B` ⇒ 放行（正向负控 —— 反真空：总得留一条"能派的"直接边，
-      否则"空动作也查边"可以被"把所有边都拒掉"这种改法骗过去）；
-    - `M → F` ⇒ `forbidden_edge`（F 从来不在 M 的出边里）。
-    """
+    2026-10-20 业主裁定：撤 M→V（边表回到 7 条）⇒ 这一格的期望值跟着边表走：`M → V` ⇒
+    `forbidden_edge`（V 是该拦的那条边）；`M → B` ⇒ 放行（反真空：总得留一条"能派的"直接边，否则
+    "空动作也查边"可以被"把所有边都拒掉"骗过去）；`M → F` ⇒ `forbidden_edge`（F 从来不在 M 的出边里）。"""
     for to in ("F", "V"):
         assert _edge_refusal("M", to, "") == "forbidden_edge", (
             f"M 用空动作派 {to} 竟然没被拦 —— 空动作成了越权的后门"
@@ -67,7 +62,7 @@ def test_a_blank_action_still_checks_the_edge() -> None:
     # 2026-10-20 业主裁定：撤 M→V
     assert _edge_refusal("M", "V", "") == "forbidden_edge", "V 已被撤出 M 的出边"
     assert _edge_refusal("D", "F", "") == "", "D 派 F 一件活（不点动作）应当放行"
-    # 反真空：这条判据仍然**真的拦过东西**（不然"succeed 的放行"三行说明不了什么）
+    # 反真空：这条判据仍然真的拦过东西（不然"succeed 的放行"三行说明不了什么）
     assert _edge_refusal("C", "A", "") == "forbidden_edge", "C 的边是空的，空动作也拦不住"
 
 
@@ -87,15 +82,15 @@ def test_negctl_putting_v_back_into_ms_edges_would_be_red(
 
 
 def test_a_blank_action_is_not_an_unknown_action() -> None:
-    """空动作**不许**被判成 `unknown_action`。
+    """空动作不许被判成 `unknown_action`。
 
     反例形态（改坏时会看到）：`check_action("D", "")` 返回"没有动作 ''" ⇒
-    口径落地之后**每一次派活**都会被拒，而报的理由指向"你动作名写错了"，
+    口径落地之后每一次派活都会被拒，而报的理由指向"你动作名写错了"，
     与真实原因（"我不该核动作"）完全无关。
     """
     assert _edge_refusal("D", "C", "") == "", "空动作被当成 unknown_action 了"
     assert "unknown_action" not in _edge_refusal("M", "D", "")
-    # 负控：**写错的动作名**仍然要吃到 unknown_action（别把这一格改宽了）
+    # 负控：写错的动作名仍然要吃到 unknown_action（别把这一格改宽了）
     assert _edge_refusal("M", "D", "no_such_action") == "unknown_action"
 
 
@@ -113,7 +108,7 @@ def _summon_schemas() -> dict[str, dict]:
 
 
 def test_the_summon_schemas_do_not_require_an_action() -> None:
-    """`summon` / `summon_many` 的必填里**不许**有 `action`，且必须有 `task` 那一格。
+    """`summon` / `summon_many` 的必填里不许有 `action`，且必须有 `task` 那一格。
 
     这是"模型能不能写出只派活那种调用"的唯一开关：schema 说必填，模型就不会省 ——
     而它一旦写了动作，就回到了"替别人做决定"的老路上。
@@ -122,8 +117,8 @@ def test_the_summon_schemas_do_not_require_an_action() -> None:
     assert set(schemas) == {"summon", "summon_many"}, schemas.keys()
 
     one = schemas["summon"]
-    # 2026-10-16（口径 S2 **最终形态**，业主原话）：「一致改成 **task 必填，action 不填**」
-    # 「**不是忽略 action，是完全不要有填 action 的位置**」⇒ `action` 这一格**整个不在**。
+    # 2026-10-16（口径 S2 最终形态，业主原话）：「一致改成 task 必填，action 不填」
+    # 「不是忽略 action，是完全不要有填 action 的位置」⇒ `action` 这一格整个不在。
     assert one["required"] == ["role", "task"], one["required"]
     assert "task" in one["properties"], "`summon` 的 schema 里没有 `task`：写不出那件活"
     assert "action" not in one["properties"], (
@@ -141,9 +136,9 @@ def test_the_summon_schemas_do_not_require_an_action() -> None:
 
 
 class _InnerSpy:
-    """内层后端探针：**被调用就是失败**。
+    """内层后端探针：被调用就是失败。
 
-    为什么用"调用即炸"而不是断言返回值：这一格的契约是"**根本不该走到内层**" ——
+    为什么用"调用即炸"而不是断言返回值：这一格的契约是"根本不该走到内层" ——
     内层是确定性处理器，走它就是"替角色选了一个动作"，而那正是口径要禁的。
     """
 
@@ -170,11 +165,11 @@ def _backend(inner: _InnerSpy, tmp_path, loops: dict | None = None) -> Any:
 
 
 def test_a_blank_action_is_routed_to_the_roles_own_loop(tmp_path) -> None:
-    """空动作**不许**落到内层处理器。
+    """空动作不许落到内层处理器。
 
     它应该走该角色自己的循环。这里不去把循环跑起来（那要 seam/store/工具面一整套），
-    只钉**路由那一步**：内层探针一次都不许被调到。
-    循环随后因为没接线而失败 —— 那是**另一件事**，不许与"路由错了"混起来。
+    只钉路由那一步：内层探针一次都不许被调到。
+    循环随后因为没接线而失败 —— 那是另一件事，不许与"路由错了"混起来。
     """
     inner = _InnerSpy()
     backend = _backend(inner, tmp_path)
@@ -185,7 +180,7 @@ def test_a_blank_action_is_routed_to_the_roles_own_loop(tmp_path) -> None:
 
 
 def test_a_named_action_still_goes_to_the_inner_backend(tmp_path) -> None:
-    """负控（反真空）：**给了动作**的召唤照旧走内层处理器 —— 老行为逐字不变。
+    """负控（反真空）：给了动作的召唤照旧走内层处理器 —— 老行为逐字不变。
 
     没有这一条，上面那条可以被"什么都不走内层"这种改法骗过去。
     """
@@ -197,12 +192,12 @@ def test_a_named_action_still_goes_to_the_inner_backend(tmp_path) -> None:
 
 
 def test_the_summon_tool_schema_does_not_require_an_action() -> None:
-    """**工具面**那一份也要能写"不点动作"（2026-10-16，T5 第 13 趟的真机读数）。
+    """工具面那一份也要能写"不点动作"（2026-10-16，T5 第 13 趟的真机读数）。
 
-    为什么单列：循环的 `summon` **形状**与 `llmseam` 的**广告面**都改过之后，
-    M 手上那件 **`conductor.summon` 工具**漏了 —— 实测它的 `required` 里还挂着
-    `action`、键集合里**根本没有 `task`**。真机现场（`projects/p8m-…`）：M 发了
-    2 次空动作、`tasks` 表里 **0 行**（当工具调时这条入口写不出那个形状）。
+    为什么单列：循环的 `summon` 形状与 `llmseam` 的广告面都改过之后，
+    M 手上那件 `conductor.summon` 工具漏了 —— 实测它的 `required` 里还挂着
+    `action`、键集合里根本没有 `task`。真机现场（`projects/p8m-…`）：M 发了
+    2 次空动作、`tasks` 表里 0 行（当工具调时这条入口写不出那个形状）。
     """
     from agentflow.store import Store
     from agentflow.tools import build_registry
@@ -227,15 +222,15 @@ def test_the_summon_tool_schema_does_not_require_an_action() -> None:
 
 
 def test_the_secretary_prescreen_does_not_alarm_on_a_blank_action(tmp_path) -> None:
-    """**秘书预筛不许**因为"没点动作"而报警（2026-10-16，T5 第 12 趟的真机读数）。
+    """秘书预筛不许因为"没点动作"而报警（2026-10-16，T5 第 12 趟的真机读数）。
 
-    为什么单列：口径在提示词/策略门/后端/形状/schema 都改完之后，**预筛这一层漏了** ——
+    为什么单列：口径在提示词/策略门/后端/形状/schema 都改完之后，预筛这一层漏了 ——
     `secretary.prescreen` 照旧核"动作表里有没有这个动作"，空动作于是被报成
     "`{角色}` 的动作表里没有 `''`"，那条派活被吞掉。真机现场（`projects/p8l-…`）：
-    M **六次**发出 `{"role":"A","action":"","task":…}`，而 `tasks` 表里空动作的行 **= 0**
+    M 六次发出 `{"role":"A","action":"","task":…}`，而 `tasks` 表里空动作的行 = 0
     —— 六次全死在这一行；M 于是退回"点名动作 + 自己写参数"，那一趟 12 条被拒。
 
-    负控：**真写错的动作名**仍然必须报警（别把这一格改宽了）。
+    负控：真写错的动作名仍然必须报警（别把这一格改宽了）。
     """
     from agentflow.secretary import Secretary
 
@@ -252,15 +247,15 @@ def test_the_secretary_prescreen_does_not_alarm_on_a_blank_action(tmp_path) -> N
 
 
 def test_the_secretary_wash_lets_a_harmless_delegation_through(tmp_path) -> None:
-    """**无害侧**：一条"只给活、不点动作"的派活**过得了秘书的洗格式**（不许被硬拒）。
+    """无害侧：一条"只给活、不点动作"的派活过得了秘书的洗格式（不许被硬拒）。
 
     为什么必须单列（2026-10-16，真机读数）：`secretary.wash_delegation` 的硬拒那一格
-    原本判的是"没有角色 **或** 没有动作"⇒ 任何"只给 `task`"的派活**在写行之前**就被拒，
-    而且**一行都不落**。现场：T5 第 12/13 趟 M 六次/两次发出 `{"role":"A","task":…}`，
-    而 `tasks` 表里空动作的 **= 0** —— 全死在这一格，连"被拒"的证据都没留下。
-    这一格修完**此前没有任何判据**（全仓测试里 `wash_delegation` 零出现）⇒ 补在这里。
+    原本判的是"没有角色 或 没有动作"⇒ 任何"只给 `task`"的派活在写行之前就被拒，
+    而且一行都不落。现场：T5 第 12/13 趟 M 六次/两次发出 `{"role":"A","task":…}`，
+    而 `tasks` 表里空动作的 = 0 —— 全死在这一格，连"被拒"的证据都没留下。
+    这一格修完此前没有任何判据（全仓测试里 `wash_delegation` 零出现）⇒ 补在这里。
 
-    负控：**既没有动作、又没有活**的一条仍必须硬拒（别把这一格改宽了）。
+    负控：既没有动作、又没有活的一条仍必须硬拒（别把这一格改宽了）。
     """
     from agentflow.secretary import Secretary
 
@@ -273,7 +268,7 @@ def test_the_secretary_wash_lets_a_harmless_delegation_through(tmp_path) -> None
     bad = sec.wash_delegation("summon", {"role": "D"})
     assert bad.get("refused"), f"既没动作又没活，竟然放过去了：{bad}"
 
-    # 负控（第三档，**按它自己的设计**）：动作名写错**且没有活** ⇒ 洗格式**不硬拒**，
+    # 负控（第三档，按它自己的设计）：动作名写错且没有活 ⇒ 洗格式不硬拒，
     # 而是把理由记下来交给闸门（"候选不唯一/没有候选 ⇒ 不猜"是这一格刻意的窄）。
     # 我第一版把这里写成"必须硬拒"，实测读数 `{'checked': True, 'washed': False,
     # 'refused': '', 'reason': "动作表里没有 'no_such_action'（没有候选 ⇒ 不猜，留给闸门拒）"}`
@@ -284,10 +279,10 @@ def test_the_secretary_wash_lets_a_harmless_delegation_through(tmp_path) -> None
 
 
 def test_a_dispatch_without_a_task_is_refused_at_both_entries(tmp_path) -> None:
-    """**有害侧的两条**：不点动作**又不给活** ⇒ 两个入口都当场拒。
+    """有害侧的两条：不点动作又不给活 ⇒ 两个入口都当场拒。
 
-    口径原话：「一致改成 **task 必填**，action 不填」—— 活是必说的。
-    这里只做**行为侧**判据（工具入口的拒绝形态），不去 grep 源码里的字符串 ——
+    口径原话：「一致改成 task 必填，action 不填」—— 活是必说的。
+    这里只做行为侧判据（工具入口的拒绝形态），不去 grep 源码里的字符串 ——
     "某句话还在不在源码里"是机械判据，守不住行为（改个措辞它就红、而行为真坏了它可能还绿）。
     """
     from agentflow.store import Store
@@ -298,7 +293,7 @@ def test_a_dispatch_without_a_task_is_refused_at_both_entries(tmp_path) -> None:
     store.init()
     reg = build_registry(store=store, workspace_root=root).registry
 
-    # 工具层把拒绝转成 `ok=False` 的结果（**不抛给调用方**，见本仓既有的约定）
+    # 工具层把拒绝转成 `ok=False` 的结果（不抛给调用方，见本仓既有的约定）
     res = reg.call("conductor.summon", role="M", target_role="E")
     assert res.ok is False, f"不点动作又不给活，工具入口竟然放过去了：{res}"
     assert "task" in str(res.error), res.error
@@ -311,7 +306,7 @@ def test_schema_roles_are_all_covered_by_the_dispatch_faces() -> None:
     """反真空：这一份判据必须真的评在"全体角色"上（口径说的是"对所有角色都一样"）。
 
     若哪天角色表长大而这一份判据只覆盖了 M，它就变成了一句关于 M 的话，
-    而口径要的是"**其它智能体派子智能体，能看到的应该是一样的**"。
+    而口径要的是"其它智能体派子智能体，能看到的应该是一样的"。
     """
     from agentflow import capabilities as C
 

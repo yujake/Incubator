@@ -1,122 +1,44 @@
 """智能体 E：数值实验与形式化验证。
-
 设计基线：``test/test1/DESIGN-ROLES.md`` §2.1 与 `schema.Experiment` 的硬约束。
-
-## E 到底在做什么（一句话）
-
-E 产出证据，不产出结论。
-
-这个分工不是文字游戏，它是本模块每一行代码的由来。一个"能跑实验"的智能体
-最自然也最危险的越界，就是把"我算了几千个点都对"写成"已证明" ——
-数学里数值实验不构成证明（FC-22）。所以：
-
-- `Experiment.evidence_kind` 是结构化字段，不是注释里的告诫；
-- 计算类方法（numeric / symbolic / exhaustive_search）在 schema 层就拿不到
-  `evidence_kind="proof"`，写入的那一刻就炸；
-- 脚本自己声称 `proof` 会被降到 cross_check 并把这件事记进 `notes`
-  （见 :meth:`AgentE.run_experiment` 的推导规则第 4 条）。
-
-## 为什么"脚本自报 evidence_kind"必须被降级
-
-这是本模块最反直觉的一条规矩，值得写清楚：
-
-让被判定的对象自己当判官，等于没有判官。
-
-`script_path` 指向的脚本是被检验的对象（它算出了结论）。如果它同时能决定
-"这个结论算不算证明"，那么整条证据链的强度就由最不可信的一环决定 ——
-而这一环恰恰是最容易"顺手写一句 `{"evidence_kind": "proof"}`"的地方。
-更糟的是：这种越权不会报任何错，表里只会多一条看起来很漂亮的 proof。
-
-所以 E 的态度是：脚本只能报告"我观察到了什么"（result / observations /
-counterexample），证据等级由框架按 method 推导。脚本说自己是 proof，
-E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要留痕，
-否则三个月后没人能解释这条记录的等级为什么比脚本里写的低。
-
-## 推导规则（唯一权威表述，实现见 `_derive`）
-
-输入是「退出码 + 脚本 stdout 里的一行结构化结论」：
-
-1. `exit_code != 0`（崩溃 / 超时 / 启动失败）
-   ⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
-     `evidence_kind="heuristic"`。绝不允许把崩溃写成支持（FC-21/F C-25）。
-   理由：崩溃只说明"这次没跑成"，它既不是对命题的支持也不是反驳。
-2. 脚本在 stdout 打印了一行 `REPRO_RESULT: {json}`（约定格式见
-   :data:`REPRO_RESULT_PREFIX`）：
-   - `result` 必须 ∈ `EXPERIMENT_RESULTS`，否则整条结论视为格式非法，
-     按第 3 条处理（宁可不认，也不要猜）；
-   - `result="refutes"` ⇒ `negation_kind="disproved"` 且必须有 `counterexample`。
-     缺反例时 `Experiment.validate()` 会抛 —— 让它抛：那说明脚本在声称
-     一个它没给出依据的证否，这正是最该炸的地方；
-   - `result="supports"` ⇒ `negation_kind="not_proved"`
-     （数值支持只能是"未证明"，不是"已证明"）；
-   - `result="inconclusive"` ⇒ `negation_kind="no_local_evidence"`；
-   - `evidence_kind` 由 method 推导，脚本自报值只作为"它想声称什么"被记录：
-     计算类方法一律 `cross_check`（自报 proof ⇒ 降级 + 记 notes）。
-3. 脚本没有打印那行（或格式非法）
-   ⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
-     `evidence_kind="heuristic"`，`notes` 写明"脚本未给出结构化结论"。
-
-## 形式化路径（`method="formal"`）与计算类路径的分工
-
-`method="formal"` 不走上面那三条规则：它把工作区里的 `.lean` 文件交给
-`verify.check_formal`（唯一实现）真跑一次，判据全部来自检查器，而不是来自脚本的
-自我陈述。这是本模块唯一能产出 `evidence_kind="proof"` 的入口，收口规则是：
-
-1. 检查器返回 `verified` ⇒ 登记 `evidence_kind="proof"`、`result="supports"`、
-   `negation_kind="not_proved"`、`verifier_output` 是检查器自己的那句话、
-   `verifier_subject_key` 逐字等于本行的 `claim_key`（schema 硬约束 2/2b 要求）；
-2. 检查器跑了但没通过（`compile_error` / `uses_sorry` / `extra_axioms` /
-   `decl_mismatch`）⇒ `inconclusive` + `heuristic`：它给不出任何正面证据，
-   所以不许落 `cross_check`（那是"另一个方法旁证过"，见 `formalgw.evidence_of`）；
-3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /
-   `source_unreadable` / `lean_disabled` / `param_error`）⇒ 同上，且 `notes` 里写明是哪一种。
-   其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`
-   （`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` /
-   `lean_disabled` / `param_error`）
-   —— 上面这一行必须覆盖它，导入期断言与 `tests/test_agent_e.py` 各守一遍。
-   为什么必须机器守：这里此前只有四项（少了 `source_unreadable` 与 `param_error`），
-   而没有任何一条测试会因此变红（`R2-AN-3`），于是同一文件里
-   docstring 与常量互相矛盾。`import_unavailable` 不在那张常量表里：
-   它是 `formalgw` 的检查器状态（库不可得 ⇒ 那次检查没有发生），
-   见 `FORMAL_REASONS` 与 `_FORMAL_REASON_BY_TOOL_REASON`。
-   `lean_disabled`（业主 2026-10-12 的开关：`toolchain.lean_enabled=false`）
-   在那张表里：它是"本会话这条路被用户关掉了"，属于 E 自己的受控理由 ——
-   与"机器上没有 Lean"（`no_backend`）是两件事，混起来的代价是让人去查环境。
-   三态纪律：没查成绝不等于查了通过。
-4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
-   形式化路径的输入是一份检查器能读的形式化源码，"用 Python 脚本冒充形式化产物"
-   正是 FC-22 要拦的那种越权。
-
-`name` / `imports` 只对形式化路径有意义：给计算类方法传它们会被拒绝，而不是被
-静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，
-实际用的是默认 Mathlib"这种假话没有任何地方会报出来）。
-
-## 三态纪律在本模块的三处落地
-
-- `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；
-  给了参数但库里没有 ⇒ `checked=True, experiments=[], proved=False`（查了、没有）。
-- `check_formal` 无后端 ⇒ `checked=False, reason="no_backend"`，
-  不是 `verified=False`（那是"验证没过"，与"没验证"完全不同）。
-  受控理由至少要分清五种：`no_backend` / `timeout` / `tool_crashed` /
-  `source_unreadable`（环境的锅，本次没查成 —— 最后那一档是"`script_path`
-  给的源码文件读不到"，`E-3`）与 `no_script`（调用方没给源码 —— 有后端时
-  也会走到这一态，它不是"本机没有检查器"）。
-  第 6 种是 `lean_disabled`（业主 2026-10-12 的开关）：本会话这条路被用户关掉了，
-  与"本机没有检查器"是两件事 —— 前者的处置是改走自然语言逐行审阅（或在设置文件里
-  把 `toolchain.lean_enabled` 打开），后者的处置是装工具链。把"没查成"的判据写成
-  `checked is False` 就会把这几档全部折叠成第一档。
-  这六种理由都属于本模块的局部受控词表 :data:`FORMAL_REASONS`，
-  而检查器原样报的那个状态另走 `verifier_status`（见 :meth:`AgentE.check_formal`
-  的 docstring：收口与透传必须同时在，否则收口就是删信息）。
-- `proved` 只有在存在 proof 级实验时才为 True（FC-22）。
-
-## 已知边界（如实标注，不要读成缺陷）
-
-- `params` / `artifact_paths` 是信息性字段：本模块不会把它们变成命令行参数，
-  也不会去读那些产物文件。记录它们是为了"这条实验当时是怎么跑的"可被复核。
-- 判读不走 LLM（`llm` 只用于 `author_script` 写脚本，S-10(a)）：数值实验的判读必须是
-  确定性的（FC-16）—— `run_experiment` / `_derive` / `_parse_conclusion` 一条缝调用都没有，
-  判据见 `tests/test_agent_e_author_script.py::test_the_reading_path_never_calls_the_seam`。
+一个"能跑实验"的智能体最自然也最危险的越界，就是把"我算了几千个点都对"写成"已证明" ——数学里数值实验不构成证明（FC-22）。
+- `Experiment.evidence_kind` 是结构化字段，不是注释里的告诫；- 计算类方法（numeric / symbolic / exhaustive_search）在 schema 层就拿不到
+`evidence_kind="proof"`，写入的那一刻就炸；- 脚本自己声称 `proof` 会被降到 cross_check 并把这件事记进 `notes`（见 :meth:`AgentE.run_experiment` 的推导规则第
+4 条）。
+`script_path` 指向的脚本是被检验的对象（它算出了结论）。如果它同时能决定"这个结论算不算证明"，那么整条证据链的强度就由最不可信的一环决定 ——而这一环恰恰是最容易"顺手写一句 
+`{"evidence_kind": "proof"}`"的地方。
+推导规则（唯一权威表述，实现见 `_derive`）
+1. `exit_code != 0`（崩溃 / 超时 / 启动失败）⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
+`evidence_kind="heuristic"`。绝不允许把崩溃写成支持（FC-21/F C-25）。 2. 脚本在 stdout 打印了一行 `REPRO_RESULT: {json}`（约定格式见:data:
+`REPRO_RESULT_PREFIX`）：- `result` 必须 ∈ `EXPERIMENT_RESULTS`，否则整条结论视为格式非法，按第 3 条处理（宁可不认，也不要猜）；- `result="refutes"` ⇒ 
+`negation_kind="disproved"` 且必须有 `counterexample`。缺反例时 `Experiment.validate()` 会抛 —— 让它抛：那说明脚本在声称一个它没给出依据的证否，这正是最该炸的地方；- 
+`result="supports"` ⇒ `negation_kind="not_proved"`（数值支持只能是"未证明"，不是"已证明"）；- `result="inconclusive"` ⇒ 
+`negation_kind="no_local_evidence"`；- `evidence_kind` 由 method 推导，脚本自报值只作为"它想声称什么"被记录：计算类方法一律 `cross_check`（自报 proof ⇒ 降级
++ 记 notes）。 3. 脚本没有打印那行（或格式非法）⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,`evidence_kind="heuristic"`，
+`notes` 写明"脚本未给出结构化结论"。
+形式化路径（`method="formal"`）与计算类路径的分工`method="formal"` 不走上面那三条规则：它把工作区里的 `.lean` 文件交给`verify.check_formal`（唯一实现）真跑一次，判据全部来自检查器，
+而不是来自脚本的自我陈述。这是本模块唯一能产出 `evidence_kind="proof"` 的入口，收口规则是：
+1. 检查器返回 `verified` ⇒ 登记 `evidence_kind="proof"`、`result="supports"`、`negation_kind="not_proved"`、`verifier_output` 是检查器自己
+的那句话、`verifier_subject_key` 逐字等于本行的 `claim_key`（schema 硬约束 2/2b 要求）； 2. 检查器跑了但没通过（`compile_error` / `uses_sorry` / 
+`extra_axioms` /`decl_mismatch`）⇒ `inconclusive` + `heuristic`：它给不出任何正面证据，所以不许落 `cross_check`（那是"另一个方法旁证过"，见 
+`formalgw.evidence_of`）； 3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /`source_unreadable` / 
+`lean_disabled` / `param_error`）⇒ 同上，且 `notes` 里写明是哪一种。其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`（`no_backend`
+/ `timeout` / `tool_crashed` / `source_unreadable` /`lean_disabled` / `param_error`）—— 上面这一行必须覆盖它，导入期断言与 
+`tests/test_agent_e.py` 各守一遍。为什么必须机器守：这里此前只有四项（少了 `source_unreadable` 与 `param_error`），而没有任何一条测试会因此变红（`R2-AN-3`），于是同一文件里
+docstring 与常量互相矛盾。`import_unavailable` 不在那张常量表里：它是 `formalgw` 的检查器状态（库不可得 ⇒ 那次检查没有发生），见 `FORMAL_REASONS` 与 
+`_FORMAL_REASON_BY_TOOL_REASON`。`lean_disabled`（业主 2026-10-12 的开关：`toolchain.lean_enabled=false`）在那张表里：它是"本会话这条路被用户关掉了"，属于
+E 自己的受控理由 ——与"机器上没有 Lean"（`no_backend`）是两件事，混起来的代价是让人去查环境。 4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
+形式化路径的输入是一份检查器能读的形式化源码，"用 Python 脚本冒充形式化产物"正是 FC-22 要拦的那种越权。
+`name` / `imports` 只对形式化路径有意义：给计算类方法传它们会被拒绝，而不是被静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，实际用的是默认 Mathlib"这种假话没有任何地方会报出来）。
+- `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；给了参数但库里没有 ⇒ 
+`checked=True, experiments=[], proved=False`（查了、没有）。- `check_formal` 无后端 ⇒ `checked=False, reason="no_backend"`，不是 
+`verified=False`（那是"验证没过"，与"没验证"完全不同）。受控理由至少要分清五种：`no_backend` / `timeout` / `tool_crashed` /`source_unreadable`（环境的锅，本次没查
+成 —— 最后那一档是"`script_path`给的源码文件读不到"，`E-3`）与 `no_script`（调用方没给源码 —— 有后端时也会走到这一态，它不是"本机没有检查器"）。第 6 种是 `lean_disabled`（业主
+2026-10-12 的开关）：本会话这条路被用户关掉了，与"本机没有检查器"是两件事 —— 前者的处置是改走自然语言逐行审阅（或在设置文件里把 `toolchain.lean_enabled` 打开），后者的处置是装工具链。把"没查成"的判据
+写成`checked is False` 就会把这几档全部折叠成第一档。这六种理由都属于本模块的局部受控词表 :data:`FORMAL_REASONS`，而检查器原样报的那个状态另走 `verifier_status`（见 :meth:
+`AgentE.check_formal`的 docstring：收口与透传必须同时在，否则收口就是删信息）。- `proved` 只有在存在 proof 级实验时才为 True（FC-22）。
+- `params` / `artifact_paths` 是信息性字段：本模块不会把它们变成命令行参数，也不会去读那些产物文件。- 判读不走 LLM（`llm` 只用于 `author_script` 写脚本，S-10(a)）：数值实验的判读
+必须是确定性的（FC-16）—— `run_experiment` / `_derive` / `_parse_conclusion` 一条缝调用都没有，判据见 
+`tests/test_agent_e_author_script.py::test_the_reading_path_never_calls_the_seam`。
 """
 from __future__ import annotations
 import json
@@ -307,22 +229,17 @@ def _as_dict(value: Any) -> dict:
     return dict(value) if isinstance(value, Mapping) else {}
 def _json_key_form(stdout: str) -> str:
     """从「把结论当成 JSON 键」的那种打印里取出那个对象（`draft/37` §126）。
-
     为什么要有这一条（T2 第 4 趟真机，逐字）：主控写的那份 `scripts/rmk.py` stdout 是
-
-    ```json
-    { "REPRO_RESULT": { "result": "refutes", "claim": ... } }
-    ```
-
-    —— 它「给出了结论」，只是把协议写成"一个 JSON 对象里的键"，而行首形态的判据
-    （`_extract_stdout_lines`）认不出它 ⇒ 那条实验落成 `inconclusive`，
-    稿子于是拿不到这条它自己算出来的证否。这是"协议说了、形状没钉死"的典型缺口：
-    读侧必须容错，而容错「必须留下读数」（`via=json_key`），否则"它到底怎么写的"查不到。
-
-    做法：找 `"REPRO_RESULT"`（引号可有可无）后紧跟 `:` 与 `{` 的位置，
-    再从那个 `{` 起做「字符串感知」的花括号配对（pretty-print 的对象跨多行，
-    且字符串里可能有 `}`）。配不到就不认（返回空串）—— 宁可说"没读到"，
-    不许把半截 JSON 拿去 `json.loads` 猜。
+        ```json
+        { "REPRO_RESULT": { "result": "refutes", "claim": ... } }
+        ```
+    —— 它「给出了结论」，只是把协议写成"一个 JSON 对象里的键"，而行首形态的判据（`_extract_stdout_lines`）认不出它 ⇒ 那条实验落成 
+    `inconclusive`，稿子于是拿不到这条它自己算出来的证否。这是"协议说了、形状没钉死"的典型缺口：读侧必须容错，而容错「必须留下读数」（`via=json_key`），
+    否则"它到底怎么写的"查不到。
+    做法：找 `"REPRO_RESULT"`（引号可有可无）后紧跟 `:` 与 `{` 的位置，再从那个 `{` 起做「字符串感知」的花括号配对（pretty-print 的
+    对象跨多行，且字符串里可能有 `}`）。配不到就不认（返回空串）—— 宁可说"没读到"，不许把半截 JSON 拿去 `json.loads` 猜。
+    
+    
     """
     for match in re.finditer(r'"REPRO_RESULT"\s*:\s*\{', stdout[:_STDOUT_SCAN_LIMIT]):
         start = stdout.index("{", match.start())
@@ -386,23 +303,14 @@ def _extract_conclusion(stdout: str) -> tuple[list[str], str]:
 
 def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str], str]:
     """解析 stdout 里的结构化结论。
-
-    返回 ``(payload, notes, source)``：payload 为 None 表示"没有可用的结构化结论"，
-    notes 里写明是哪一种情况；`source` 是机器可读的那一档（E-11 的"缺协议独立读数"）：
-
-    ``line`` / ``json_key`` / ``multiple`` / ``missing`` / ``bad_json`` /
-    ``not_object`` / ``out_of_vocab``
-
-    改前只有 notes（人读的），于是"脚本没按协议打印"与"实验没结论"在行上同形
-    （真机 82 行 `exit=0` 却不打协议行）。现在两者各有一档可读的取值。
-
+    返回 ``(payload, notes, source)``：payload 为 None 表示"没有可用的结构化结论"， notes 里写明是哪一种情况；
+    `source` 是机器可读的那一档（E-11 的"缺协议独立读数"）：
+    ``line`` / ``json_key`` / ``multiple`` / ``missing`` / ``bad_json`` /``not_object`` / 
+    ``out_of_vocab``
+    改前只有 notes（人读的），于是"脚本没按协议打印"与"实验没结论"在行上同形（真机 82 行 `exit=0` 却不打协议行）。现在两者各有一档可读的取值。
     ## E-11（`draft/44`）：多行不再"整条不认"
-
-    改前：多于一行 ⇒ 一律拒（"挑一个就等于替脚本做决定"）。
-    现在：内容逐字相同 ⇒ 认（重复打印同一份结论不是矛盾）；内容不同 ⇒ 取最后一份
-    （脚本的终局结论通常最后打印）并逐字留痕说清"前几份与它不一致"。
-    理由：把"脚本多打了一行"折成"这一轮没有结论"太贵 —— 一次跑完的实验因为打印习惯被
-    判成没结论，而它其实给了结论。
+    改前：多于一行 ⇒ 一律拒（"挑一个就等于替脚本做决定"）。现在：内容逐字相同 ⇒ 认（重复打印同一份结论不是矛盾）；内容不同 ⇒ 取最后一份（脚本的终局结论通常最后打印）
+    并逐字留痕说清"前几份与它不一致"。理由：把"脚本多打了一行"折成"这一轮没有结论"太贵 —— 一次跑完的实验因为打印习惯被判成没结论，而它其实给了结论。
     """
     raws, via = _extract_conclusion(stdout)
     if not raws:
@@ -468,20 +376,14 @@ def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
     return kind
 def _search_facts(stdout: str, payload: Mapping[str, Any] | None) -> dict[str, Any]:
     """从脚本输出里取"这次搜索搜到哪儿、花了多少、用什么策略"（`draft/37` §133）。
-
-    为什么需要它（用户口径，2026-10-04）：「数值实验可以慢」 —— 那篇论文的团队也做了大量
-    数值实验；时间是靠「发现模式、优化枚举策略」压下去的，不是靠给实验设一个硬上限。
-    所以框架要做的不是"限时"，而是让每次实验都留下「可比较的三个读数」：
-
-    - `bound`：这次到底搜到哪个界（例如 `{"n": 12, "m": 3, "k": 3}`）；
-    - `scaling`：成本曲线（`[{"n": 10, "sec": 0.3, "objects": 123}, …]`）——
-      有它才能外推"下一个 n 要多久"，也才看得出优化有没有用；
-    - `strategy`：这次用的枚举策略名（`brute force` / `canonical form` / `iso rejection` /
-      `symmetry breaking` / `incremental + pruning` / `SAT` / `randomized + certificate` …）。
-
-    三个都从结构化结论里取（`REPRO_RESULT` 的 `bound`/`scaling`/`strategy` 键）；
-    取不到就看 `PROGRESS:` 行（脚本每完成一个 n 打一行）—— 这样「即使被超时杀掉」，
-    也留下"搜到哪儿"的读数，而不是只剩一个"超时"。
+    为什么需要它（用户口径，2026-10-04）：「数值实验可以慢」 —— 那篇论文的团队也做了大量数值实验；时间是靠「发现模式、优化枚举策略」压下去的，不是靠给实验设一个硬
+    上限。所以框架要做的不是"限时"，而是让每次实验都留下「可比较的三个读数」：
+    - `bound`：这次到底搜到哪个界（例如 `{"n": 12, "m": 3, "k": 3}`）；- `scaling`：成本曲线（`[{"n": 10, "sec": 0.3, "objects": 123}, …]`）
+    ——有它才能外推"下一个 n 要多久"，也才看得出优化有没有用；- `strategy`：这次用的枚举策略名（`brute force` / 
+    `canonical form` / `iso rejection` /`symmetry breaking` / `incremental + pruning` / 
+    `SAT` / `randomized + certificate` …）。
+    三个都从结构化结论里取（`REPRO_RESULT` 的 `bound`/`scaling`/`strategy` 键）；取不到就看 `PROGRESS:` 行（脚本每完成
+    一个 n 打一行）—— 这样「即使被超时杀掉」，也留下"搜到哪儿"的读数，而不是只剩一个"超时"。
     """
     out: dict[str, Any] = {}
     payload = payload if isinstance(payload, Mapping) else {}
@@ -676,25 +578,16 @@ def build_experiment(
     created_by: str = "agent-E",
 ) -> S.Experiment:
     """把"推导结果"装成一行 `Experiment`。纯函数（不碰 store），便于单测。
-
-    它只做装配与校验，不做任何推导 —— 推导在 `_derive`（计算类方法）或
-    :meth:`AgentE._record_formal`（形式化方法），写入在 `AgentE.run_experiment`。
-    这样"为什么这条记录长这样"可以脱离子进程被单独复现。
-
+    它只做装配与校验，不做任何推导 —— 推导在 `_derive`（计算类方法）或:meth:`AgentE._record_formal`（形式化方法），写入在 
+    `AgentE.run_experiment`。这样"为什么这条记录长这样"可以脱离子进程被单独复现。
     ## 四个"证据形状"字段为什么要在这里有位置（`P-8`）
-
     `schema.Experiment.validate` 有四条与证据形状绑定的硬约束：
-
-    - `evidence_kind="proof"` ⇒ `verifier_output` 必须非空（硬约束 2）；
-    - `evidence_kind="proof"` ⇒ `verifier_subject_key` 必须非空且等于 `claim_key`
-      （硬约束 2b：检查器输出必须绑定到它管的那个命题）；
-    - `method="exhaustive_search"` ⇒ 必须有 `certificate`（硬约束 2c）；
-    - 给了 `certificate` ⇒ 必须有 `search_bound`（证书脱离边界没有意义）。
-
-    本函数此前一个都不收 ⇒ 形式化路径上的 proof 记录在 `row.validate()` 必然抛，
-    于是"E 登记不了一条 proof 级实验"（`P-8`）。这四个参数不是新判据：
-    它们是让推导侧能把已有的硬约束所需的事实交下来的通道。
-    默认值全为空，计算类调用点逐字节不变。
+    - `evidence_kind="proof"` ⇒ `verifier_output` 必须非空（硬约束 2）；- `evidence_kind="proof"` ⇒ 
+    `verifier_subject_key` 必须非空且等于 `claim_key`（硬约束 2b：检查器输出必须绑定到它管的那个命题）；- 
+    `method="exhaustive_search"` ⇒ 必须有 `certificate`（硬约束 2c）；- 给了 `certificate` ⇒ 必须有 
+    `search_bound`（证书脱离边界没有意义）。
+    本函数此前一个都不收 ⇒ 形式化路径上的 proof 记录在 `row.validate()` 必然抛，于是"E 登记不了一条 proof 级实验"（`P-8`）。这四个参
+    数不是新判据：它们是让推导侧能把已有的硬约束所需的事实交下来的通道。默认值全为空，计算类调用点逐字节不变。
     """
     row = S.Experiment(
         experiment_id=experiment_id,

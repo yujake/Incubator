@@ -1,36 +1,24 @@
 # -*- coding: utf-8 -*-
 """D 唤起 C、C 向 D 汇报（2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C）。
 
-## 裁定与它要落的东西
+裁定与它要落的东西：上一批（2026-10-19）给 C 开了一条 `C → D` 的出边，业主现在把它改回原设定 ——
+C 没有出边，链条是 `D → C` 单向：要「候选的更短路径」由 D 自己用 `conductor.summon` 派 C；C 的
+"汇报"就是它的返回值（它没有出边、也不许给它加一条把话送回去的通道）。所以这一组守的不是"表里有
+个字符串"，而是这条单向链真的走得通、且报告真的回到了 D 的手上：
 
-上一批（2026-10-19）给 C 开了一条 `C → D` 的出边。业主现在把它**改回原设定**：
-**C 没有出边**，链条是 `D → C` 单向 —— 要「候选的更短路径」，由 **D 自己**用
-`conductor.summon` 派 C；**C 的"汇报"就是它的返回值**（它没有出边、也不许给
-它加一条把话送回去的通道）。
+① 正控：D（桩模型）走真的 `run_role` 循环，用 `summon` 形状派 C（桩 C 跑真循环，用
+`analysis.register_report` 落一份 `analysis_reports` 形态的报告）⇒ D 的下一步里拿得到那份报告
+（`summon` 返回值里带着报告号与路径，且它们出现在 D 第二步的提示词里）；`tasks` 里那条 C 任务
+`called_by == "D"`、`parent_task_id == D 的任务号`。
+② 反真空：`C.edges == ()` 且 `ALLOWED_EDGES["C"] == frozenset()`，边总数 32（2026-10-20 同日业主裁定
+「M 不再直连 V」：33 → 32）—— 不是"我没找到那条边"，是"它真的不在权限面上"。
+③ 负控：把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ ② 必须红（证明 ② 真的在读权限面）。
+④ 负控：把 D 的 `_do_summon` 改成"不读返回值直接 final" ⇒ ① 必须红（证明 ① 守的是"报告回到了 D
+手上"，不是"派出去过"）。
 
-所以这一组守的不是"表里有个字符串"，而是这条**单向链**真的走得通、且报告真的
-回到了 D 的手上：
-
-- ① **正控**：D（桩模型）走真的 `run_role` 循环，用 `summon` 形状派 C（桩 C 跑真循环，
-  用 `analysis.register_report` 落一份 `analysis_reports` 形态的报告）⇒
-  **D 的下一步里拿得到那份报告**（`summon` 返回值里带着报告号与路径，且它们出现在
-  D 第二步的提示词里）；`tasks` 里那条 C 任务 `called_by == "D"`、
-  `parent_task_id == D 的任务号`（"谁唤起谁"是台账上可读的那一格）。
-- ② **反真空**：`C.edges == ()` 且 `ALLOWED_EDGES["C"] == frozenset()`，边总数 **32**
-  （2026-10-20 同日业主裁定「M 不再直连 V」：33 → 32；这一组自身的 34 → 33 未变）
-  —— 不是"我没找到那条边"，是"它真的不在权限面上"。
-- ③ **负控**：把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ ② 必须红（证明 ② 真的在读权限面，
-  而不是在背一句写死的话）。
-- ④ **负控**：把 D 的 `_do_summon` 改成"不读返回值直接 final" ⇒ ① 必须红
-  （证明 ① 守的是"报告回到了 D 手上"，不是"派出去过"）。
-
-为什么 ④ 要改在 `_do_summon` 上而不是改在 `conductor.summon`：④ 要考的正是
-"D 把返还值用了没有"这件事本身 —— 召唤照样发生（台账那两格仍然对），只是 D 把答案
-扔了。若改在 `conductor.summon`，那条 C 任务行都不会有，红的就变成"没派"，与命题无关。
-
-判据口径与 `test_two_hop_summon.py` 同一份：真循环、真边闸门、真台账，只把模型换成
-照剧本回答的替身（不联网、不调 API）。
-"""
+为什么 ④ 改在 `_do_summon` 而不是 `conductor.summon`：④ 要考的正是"D 把返还值用了没有"这件事本身 —— 召唤照样发生（台账那两格仍然对），只是 D 把答案扔了；若改在 `conductor.summon`，那条 C 任务行
+都不会有，红的就变成"没派"，与命题无关。判据口径与 `test_two_hop_summon.py` 同一份：真循环、真边
+闸门、真台账，只把模型换成照剧本回答的替身（不联网、不调 API）。"""
 from __future__ import annotations
 
 import json
@@ -64,7 +52,7 @@ REPORT_MARKDOWN = ("## 候选的更短路径\n\n"
 class _Scripted:
     """照剧本回答的替身模型：每条回复可以是字符串，也可以是 `prompt -> str`。
 
-    为什么允许给函数：C 的"汇报"必须**带着这一趟真的分配到的报告号**走，
+    为什么允许给函数：C 的"汇报"必须带着这一趟真的分配到的报告号走，
     而号是 `analysis.register_report` 在运行期才发的 ⇒ 固定字符串做不到
     "C 的 final 里写着那份报告的号"。给函数就等于让替身模型"读到上一步的结果
     再回话"，那正是真模型做的事（提示词里带着上一步的 `框架执行结果`）。
@@ -84,7 +72,7 @@ class _Scripted:
                                   "error_detail": "", "error_kind": ""})()
 
 
-#: 观测层把工具结果的 `data` **摊平一层**成 `data.report_id` 这样的键
+#: 观测层把工具结果的 `data` 摊平一层成 `data.report_id` 这样的键
 #: （`_flatten_one_level`）；嵌套形态下前面还会有转义的反斜杠 ⇒ 两种都要认得出。
 _RID_RE = re.compile(r'report_id"?\s*:\s*"?([^",\\]+)')
 _PATH_RE = re.compile(r'markdown_path"?\s*:\s*"?([^",\\]+)')
@@ -100,9 +88,9 @@ def _report_call(prompt: str) -> str:
 
 
 def _report_final(prompt: str) -> str:
-    """C 的第二步：**汇报**就是这一句话（带着报告号与路径），随返回值交回 D。
+    """C 的第二步：汇报就是这一句话（带着报告号与路径），随返回值交回 D。
 
-    提示词里上一步的 `框架执行结果` 是**转义过的** JSON（观测层把 `data` 当字符串再
+    提示词里上一步的 `框架执行结果` 是转义过的 JSON（观测层把 `data` 当字符串再
     dump 一次 ⇒ 里面的引号前面多了反斜杠）⇒ 先把那一层转义还原，再读号。
     这正是模型在真机上做的事：读上一步的结果，再回一句话。
     """
@@ -181,7 +169,7 @@ def _assert_the_report_comes_back_to_d(tmp_path: pathlib.Path) -> None:
     assert res.get("ok") is True, res
     assert res.get("task_id"), "被受理的召唤必须落一个台账号"
 
-    # (a) **返回值里就有那份报告**：C 的 final 带着报告号与路径（"汇报 = 返回值"）
+    # (a) 返回值里就有那份报告：C 的 final 带着报告号与路径（"汇报 = 返回值"）
     path = str(res.get("llm_run_path") or "")
     assert path, f"summon 返回值里没有 C 那一趟的落点：{res}"
     assert pathlib.Path(path).exists(), f"返回值给的落点在盘上不存在：{path}"
@@ -201,11 +189,11 @@ def _assert_the_report_comes_back_to_d(tmp_path: pathlib.Path) -> None:
     rows = [r for r in st.rows("analysis_reports") if str(r.get("report_id")) == rid]
     assert len(rows) == 1, f"analysis_reports 里没有 {rid} 那一行：{st.rows('analysis_reports')}"
     assert rows[0]["kind"] == "paths" and rows[0]["summary"] == REPORT_SUMMARY, rows[0]
-    # `markdown_path` 是**工作区相对**路径（`reports/<rid>-<kind>.md`）⇒ 按工作区根解析
+    # `markdown_path` 是工作区相对路径（`reports/<rid>-<kind>.md`）⇒ 按工作区根解析
     assert (st.root / md_path).exists(), (
         f"报告正文没有真的落盘：{md_path}（工作区 {st.root}）")
 
-    # (c) **D 的下一步拿得到它**：第二步的提示词里逐字有报告号与落点那一格
+    # (c) D 的下一步拿得到它：第二步的提示词里逐字有报告号与落点那一格
     prompts = gateways["D"].prompts
     assert len(prompts) >= 2, f"D 只调了一次模型（{len(prompts)}）⇒ 没有'下一步'可考"
     assert rid in prompts[1], (
@@ -215,7 +203,7 @@ def _assert_the_report_comes_back_to_d(tmp_path: pathlib.Path) -> None:
         "D 的第二步提示词里连 C 那一趟的落点都没有 ⇒ 它拿不到能去读的那一份："
         f"{prompts[1][-800:]}")
 
-    # (d) 台账上的父子关系：这一次 C 是 **D** 唤起的
+    # (d) 台账上的父子关系：这一次 C 是 D 唤起的
     tasks = st.rows("tasks")
     d_row = next((r for r in tasks
                   if str(r.get("role")) == "D" and str(r.get("called_by")) == "user"), None)

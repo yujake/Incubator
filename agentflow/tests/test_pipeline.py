@@ -94,7 +94,7 @@ def test_l03_the_role_c_surface_is_still_read_only():
     reg = build_registry().registry
     for spec in reg.for_role("C"):
         if spec.name in allowed:
-            # 2026-10-18（业主裁定）：C 拿到**一件**登记工具，用来把分析结果写进
+            # 2026-10-18（业主裁定）：C 拿到一件登记工具，用来把分析结果写进
             # `analysis_reports`（此前它"面外操作"，报告进不了台账）。判据没有放宽：
             # 例外只能来自 `READONLY_CALL_EXCEPTIONS["C"]` 这张逐条登记的表，
             # 且登记的那件必须真是写工具（否则等于登记了一件没用的事）。

@@ -352,17 +352,9 @@ def test_broken_json_conclusion_is_inconclusive_and_attributed(store):
 def test_a_conclusion_printed_as_a_json_key_is_read_and_recorded(store):
     """回归夹具（`draft/37` §126）：把结论打印成 「JSON 键」的那种形状也要读出来。
 
-    真机读数（T2 第 4 趟）：主控写的那份 `scripts/rmk.py` stdout 逐字是
+    真机读数（T2 第 4 趟）：主控写的那份 `scripts/rmk.py` stdout 逐字是 `{ "REPRO_RESULT": { "result": "refutes", "claim": ... } }` —— 它「给出了结论」，只是写成"JSON 对象里的一个键"，而行首形态的判据认不出它 ⇒ 那条实验落成 `inconclusive`，稿子拿不到它自己算出来的证否。
 
-    ```json
-    { "REPRO_RESULT": { "result": "refutes", "claim": ... } }
-    ```
-
-    —— 它「给出了结论」，只是写成"JSON 对象里的一个键"，而行首形态的判据认不出它
-    ⇒ 那条实验落成 `inconclusive`，稿子拿不到它自己算出来的证否。
-    这条判据钉两件事：① 读得出来（`result=refutes` 且带反例）；
-    ② 「留痕」（notes 里写明这次用的是 JSON 键形态，因为协议正身是单独一行）。
-    """
+    这条判据钉两件事：① 读得出来（`result=refutes` 且带反例）；② 「留痕」（notes 里写明这次用的是 JSON 键形态，因为协议正身是单独一行）。"""
     rel = write_script(store, "probes/keyform.py",
                        "import json\n"
                        "print(json.dumps({'REPRO_RESULT': "
@@ -732,19 +724,9 @@ def test_second_run_allocates_the_next_id(store):
 def test_verify_tools_registered_with_honest_side_effects(store):
     """工具层的三个新工具必须注册，且 `side_effect` 如实声明（FC-07）。
 
-    ## 为什么 `verify.run_experiment` 的角色不含 H（这条断言后来被收紧了）
+    为什么 `verify.run_experiment` 的角色不含 `H`（这条断言后来被收紧了）：原断言写的是"三个工具的角色都是 {E,F,G,H}"，那编码的是一条更弱的规则"角色的声明只要包含需要它的人就行"；但 `H` 是只读角色（`agentflow.tools.READ_ONLY_ROLES`）：审校者若手里有"跑实验并落库"的能力，它就同时是"发现者"与"执行者"，于是"发现问题"与"掩盖问题"在结构上无法区分。
 
-    原断言写的是"三个工具的角色都是 {E,F,G,H}"。那编码的是一条更弱的规则：
-    "角色的声明只要包含需要它的人就行"。但本框架有一条更硬的约束 ——
-    `H` 是只读角色（`agentflow.tools.READ_ONLY_ROLES`）：审校者若手里有
-    "跑实验并落库"的能力，它就同时是"发现者"与"执行者"，
-    于是"发现问题"与"掩盖问题"在结构上无法区分。
-
-    实测过这个漏洞真的存在：`table.*` / `fs.*` 把 `write_local` 工具声明给了
-    全部角色，按角色装配出来的 H 工具面里出现了 `table.update`。
-    现在的防线有两道：① 工具声明本身正确（本断言守它）；
-    ② `ToolRegistry.for_role` 对只读角色结构性剥掉所有写工具（`test_tools_base.py` 守它）。
-    """
+    实测过这个漏洞真的存在：`table.*` / `fs.*` 把 `write_local` 工具声明给了全部角色，按角色装配出来的 H 工具面里出现了 `table.update`。现在的防线有两道：① 工具声明本身正确（本断言守它）；② `ToolRegistry.for_role` 对只读角色结构性剥掉所有写工具（`test_tools_base.py` 守它）。"""
     e = make_e(store)
     names = set(e.tools.names())
     assert {"verify.run_experiment", "verify.evidence_for", "verify.list_experiments"} <= names

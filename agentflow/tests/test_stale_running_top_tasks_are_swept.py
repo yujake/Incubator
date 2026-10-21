@@ -9,14 +9,14 @@ t-000005 | M | running | started 03:19:26 | ended=     ← --resume 那趟（no_
 t-000006 | M | running | started 03:21:00 | ended=     ← 真正在跑的那一趟
 ```
 
-同一角色三行同时 `running`，其中两行的**进程早已不在** ⇒「谁还没收工」「现在几个在跑」
+同一角色三行同时 `running`，其中两行的进程早已不在 ⇒「谁还没收工」「现在几个在跑」
 这类读数全部说谎，收工门与验收表都会照着假读数算。
 
 ## 现在的口径
 
-开新顶趟前，`Conductor._sweep_stale_top_running(role)` 把**同角色、`called_by=主控`** 的
+开新顶趟前，`Conductor._sweep_stale_top_running(role)` 把同角色、`called_by=主控` 的
 遗留 `running` 行标成 `failed` ＋ `outcome="abandoned"` ＋ 写明原因。
-子代理的行**不动**（它们有自己的收尾逻辑，误判会把同时在跑的子任务当成僵尸）。
+子代理的行不动（它们有自己的收尾逻辑，误判会把同时在跑的子任务当成僵尸）。
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def _status(st: Store, tid: str) -> str:
 
 
 def test_stale_top_running_rows_become_failed(st: Store):
-    """**正控**：同角色、主控开的旧 `running` 行 ⇒ 被标成 `failed`。"""
+    """正控：同角色、主控开的旧 `running` 行 ⇒ 被标成 `failed`。"""
     _add(st, "M", "running", called_by=S.CONDUCTOR_ROLE, tid="t-000001")
     _add(st, "M", "running", called_by=S.CONDUCTOR_ROLE, tid="t-000005")
     n = Conductor._sweep_stale_top_running(_Stub(st), "M")
@@ -77,7 +77,7 @@ def test_stale_top_running_rows_become_failed(st: Store):
 
 
 def test_live_child_tasks_are_not_touched(st: Store):
-    """**负控**：子代理（`called_by != 主控`）与别的角色**不许**被误清。"""
+    """负控：子代理（`called_by != 主控`）与别的角色不许被误清。"""
     _add(st, "M", "running", called_by="agent-M", tid="t-000002",
          parent="t-000001")   # 子任务（有 parent ⇒ 不是顶趟）
     _add(st, "D", "running", called_by=S.CONDUCTOR_ROLE, tid="t-000003")  # 别的角色

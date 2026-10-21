@@ -508,7 +508,7 @@ def _module_strings_with_markdown(path: pathlib.Path) -> list[str]:
 
     只扫字符串常量、且跳过程序/类/函数的第一段（docstring）：注释与 docstring
     不上屏，那里写记号是给人读源码用的（本模块自己的 docstring 里就写着 markdown），
-    不算缺陷。跳过的必须是**那一段**（按 `id()` 认），不是"文件里所有多行串"——
+    不算缺陷。跳过的必须是那一段（按 `id()` 认），不是"文件里所有多行串"——
     否则人话那几段会被顺手放过。
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -532,10 +532,10 @@ def _module_strings_with_markdown(path: pathlib.Path) -> list[str]:
 def test_no_user_facing_reason_string_carries_markdown_markers(tmp_path) -> None:
     """验收页逐字打印 `details[k]` ⇒ 这些字符串里不许有 markdown 记号（R88）。
 
-    为什么写在这一组：`reviewaccept` 是验收页那几句话的**唯一**产出方
+    为什么写在这一组：`reviewaccept` 是验收页那几句话的唯一产出方
     （`webui.readers.acceptance_face` 原样搬运 `criteria` / `details` / `auxiliary`）。
     2026-10-13 用真浏览器逐页核对时，验收页正文里出现了 2 处 `**`
-    （「该问的问了」这条**没查成**）—— 用户看到的是多出来的星号，不是强调。
+    （「该问的问了」这条没查成）—— 用户看到的是多出来的星号，不是强调。
 
     负控在同一支里：取样文件正文里的记号必须被报出来，docstring 与注释里的不许报。
     """

@@ -71,7 +71,7 @@ LOCK_ORDER: tuple[str, ...] = (
     "attack_plans",
     "documents",
     # 命题台账（`draft/37` §16 P1）：插在 documents 之后、dependencies 之前。
-    # 位置理由：命题是依赖的**锚点**（`dependencies.used_by` 的自然延伸就是 `stmt_id`），
+    # 位置理由：命题是依赖的锚点（`dependencies.used_by` 的自然延伸就是 `stmt_id`），
     # 于是"先锁锚点、再锁依赖"与读图的顺序一致；反过来（依赖先锁）在
     # "B 消化入库 + G 登记引用"这种一笔事务里会让两个事务的取锁顺序相反。
     "statements",
@@ -85,19 +85,19 @@ LOCK_ORDER: tuple[str, ...] = (
 
 #: 编号空间的上限（当前宽度下全 9）。用满即 fail-closed（DESIGN.md §0.1 C4）。
 #:
-#: 宽度**不在这里写死**：`schema.ID_DIGITS` 是唯一定义处，导入期
+#: 宽度不在这里写死：`schema.ID_DIGITS` 是唯一定义处，导入期
 #: `schema.assert_id_space_contract()` 会把这两处对账（改一边必红）。
 #: 2026-10-14 业主裁定「所有四位编号改成六位，防溢出」⇒ 上限由 9999 抬到 999999。
 MAX_ID = 10 ** S.ID_DIGITS - 1
 
-#: **已经并走的表**：名字 -> (新家, 怎么读它)。S1r 并表那一笔（`SCHEMA_VERSION=2`）
+#: 已经并走的表：名字 -> (新家, 怎么读它)。S1r 并表那一笔（`SCHEMA_VERSION=2`）
 #: 把 `concepts` 从 `schema.TABLES` 里真删了，于是 `_load("concepts")` 会走到
 #: "未知表"那一支。那一支与"这张表从来不存在"在结构上分不开，而两者的处置完全不同：
 #: 前者要去读新家（`statements` 里 `kind="concept"` 的那些行，统一入口
 #: `conceptrows.view(store, shape="legacy")`），后者要查是谁写错了表名。
-#: 所以并走的表在这里**显式留名**，报一条带指路的受控错（`StoreError`），
+#: 所以并走的表在这里显式留名，报一条带指路的受控错（`StoreError`），
 #: 而不是让它落进笼统的"未知表"里。
-#: 这张表只影响**报错措辞与指路**，不影响任何读写路径 —— 老表的行由
+#: 这张表只影响报错措辞与指路，不影响任何读写路径 —— 老表的行由
 #: `rebuild` 折进新家（见 `_rebuild_locked` 的 `_fold_moved_tables`）。
 _MOVED_TABLES: dict[str, dict[str, str]] = {
     "concepts": {
@@ -107,7 +107,7 @@ _MOVED_TABLES: dict[str, dict[str, str]] = {
         #: 它在 `counters.json` 里的类别名（并表之后这一档要摘掉）。
         "counter_kind": "concept",
         #: 老表名在文本里被引用时（`concepts/0001` 这种），新家那一侧必须是
-        #: **这一档 kind** 的行才算数 —— 不筛的话，一个已被别的行占用的号
+        #: 这一档 kind 的行才算数 —— 不筛的话，一个已被别的行占用的号
         #: 会被读成"这条引用落地了"（那是假的落地）。
         "kind": "concept",
         "how": "读 `statements` 里 `kind=\"concept\"` 的行；统一入口是 "
@@ -137,7 +137,7 @@ def _parse_iso(ts: str | None) -> datetime | None:
         dt = datetime.fromisoformat(ts)
     except (ValueError, TypeError):
         # 2026-10-17（store #12）：`lease_until` 是自由列（`Literature.validate` 不校验它），
-        # 真机里可能是 int ⇒ `fromisoformat` 抛 **TypeError**，原来只接 ValueError。
+        # 真机里可能是 int ⇒ `fromisoformat` 抛 TypeError，原来只接 ValueError。
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
@@ -154,24 +154,24 @@ def make_lease(seconds: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).replace(microsecond=0).isoformat()
 
 
-#: 事件流里**不参与重放、也不是"读不懂"**的那几种 `op`（`R-57` 把这条清单显式化）。
+#: 事件流里不参与重放、也不是"读不懂"的那几种 `op`（`R-57` 把这条清单显式化）。
 #: `rebuild()` 只重放 `upsert` 与 `delete`；下面这些是记账/边界用的：
 #:   - `commit`：批次提交标记（重放的分批依据）；
 #:   - `info`：只记日志、不改状态；
 #:   - `corrupt`：`read_events` 给坏行放的占位（半行 JSON 等）。
 #: 不在这个集合里、又不是 `upsert`/`delete` 的 `op` ⇒ 进 `rebuild()` 的 `unknown_ops`
-#: （**必须被看见**：静默忽略一个不认识的 op，等于"日志里有读不懂的东西"没有任何读数）。
+#: （必须被看见：静默忽略一个不认识的 op，等于"日志里有读不懂的东西"没有任何读数）。
 _KNOWN_NON_REPLAY_OPS: frozenset[str] = frozenset({"commit", "info", "corrupt"})
 
-#: 工作区**根目录**上属于本框架的条目（`R-32` 的守卫只看"有没有不属于我们的东西"）。
+#: 工作区根目录上属于本框架的条目（`R-32` 的守卫只看"有没有不属于我们的东西"）。
 #:
 #: 为什么 `projects/` 必须在这里：项目文件夹就住在工作区根下面
-#: （`projects.projects_dir`），所以"根目录里有个 `projects/`"是**正常部署**的样子，
+#: （`projects.projects_dir`），所以"根目录里有个 `projects/`"是正常部署的样子，
 #: 而不是"别人的目录"。第一版判据漏了它，`tests/test_conductor_tools.py` 里那个
 #: 先建 `projects/<名字>/`、再对根 `init()` 的布局被误拦（`draft/28` §176 记了这次误拦）。
 #: `.agentflow-workspace` 是 `projects.classify` 认的工作区标记，与"有 `data/`"同义。
 #:
-#: 这张表刻意只列**本框架自己会在根上放**的东西：多列一项 = 少拦一种外来目录，
+#: 这张表刻意只列本框架自己会在根上放的东西：多列一项 = 少拦一种外来目录，
 #: 少列一项 = 多拦一种正常布局。两种代价都实测过一次，所以它是逐条登记的。
 _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
     {"data", "library", "projects", ".agentflow-workspace"}
@@ -210,7 +210,7 @@ def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any], *,
     if not gaps:
         return
     first = gaps[0]
-    # 拒收消息要能让写的人**当场知道怎么改**（业主 2026-10-19：「拒收消息要能让人看懂」）：
+    # 拒收消息要能让写的人当场知道怎么改（业主 2026-10-19：「拒收消息要能让人看懂」）：
     # `first["why"]` 里已经逐字写着"最近一签是 `v-…`：verdict=…、unresolved_errors=…"、
     # 或"`verifications/<号>.jsonl` 不在盘上"；`checklist` 再给三条逐项的过关读数
     # （缺哪一项一眼可见），最后补两条出口（重派 V 再签 / 如实降档）。
@@ -237,9 +237,9 @@ def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any], *,
 
 #: 命题台账那两张表的写入口（2026-10-19 晚，`projects/mp2` 的 `stmt:000003` 带出来的）。
 #:
-#: 与 `secretary.STATEMENT_WRITE_TABLES` **同内容但不同用途**：那边是"秘书的写集声明"，
+#: 与 `secretary.STATEMENT_WRITE_TABLES` 同内容但不同用途：那边是"秘书的写集声明"，
 #: 这里是"通用写入通道的禁区"。刻意不 import `secretary`（`store` 在依赖图最底层，
-#: `secretary` 反过来 import 它）⇒ 清单有两处，**由判据守着**：
+#: `secretary` 反过来 import 它）⇒ 清单有两处，由判据守着：
 #: `tests/test_secretary.py::test_the_two_tables_are_named_the_same_in_both_places`。
 STATEMENT_WRITE_TABLES: tuple[str, str] = ("statements", "dependencies")
 
@@ -249,56 +249,34 @@ DIRECT_WRITE_REFUSED = "direct_write_refused"
 
 
 def direct_write_refusal(table: str) -> str:
-    """要直写 `table` 时返回拒信；空串 = 放行。**这条口径只有这一处**。
+    """要直写 `table` 时返回拒信；空串 = 放行。这条口径只有这一处。
 
-    ## 这一条在堵什么（活证据，`projects/mp2/sessions/mp2-7.jsonl`）
-
-    第 94 行 B 调 `register_statement` ⇒ `unknown_tool`（那个名字不在它的工具面上）；
-    第 97 行它改走 `table.create(table="statements")`，**手写** `evidence_kind="heuristic"`
-    与 `bits={}` —— 于是秘书的四件活（洗格式 / 发编号 / 查重 / 改表）与五元位
-    **一件都没跑**，而盘上那一行看起来完全合法（`stmt:000003` 有 1909 字证明、
+    ## 这一条在堵什么（活证据，`projects/mp2/sessions/mp2-7.jsonl`）：B 调 `register_statement` ⇒ `unknown_tool`
+    （那名字不在它的工具面上），于是改走 `table.create(table="statements")` 手写 `evidence_kind="heuristic"` 与
+    `bits={}` —— 秘书的四件活与五元位一件都没跑，而盘上那一行看起来完全合法（`stmt:000003` 有 1909 字证明、
     V 也签了「成立」，档位却停在 `heuristic`、`bits` 是空的）。
-
-    ## 为什么判据落在这里，而不是只落在工具层
-
-    工具层是模型的**手**（`table.create` / `table.update` 是 A–D 共用的通用写口），
-    而"这两张表不许由通用写口碰"是关于**表**的规矩，不是关于某一支工具的规矩：
-    明天谁再加一支 `table.upsert_many`，它不该因为没人记得这条而重新打开这条路。
-    所以：
-
-    - 工具层（`tools/table_tools.py`）在**进事务之前**就用本函数拒一次
-      （模型据此改参数，拒信是 `ToolResult.fail` 的可读形态）；
-    - `Store.tx` 的**提交块**对带 `tool:` 记号的事务再拒一次（那一层是所有写者的
-      必经之路，见 `tx()` 里 `_refuse_fake_proof_review` 的同一段注释）。
-
-    两处都调这一个函数 ⇒ 关掉它的负控对两层同时生效（判据见
-    `tests/test_statement_write_is_the_secretarys_only.py`）。
-
-    ## 为什么不是"凡直写就拒"
-
-    这两张表的合法写者不止秘书一个，而它们都是**人写过的代码路径**，不是模型的手：
-    `agent_b/resolve_structural_duplicate`（合并要标 `superseded`）、
-    `agent_f/core._proof_outlet`（证明结果与档位）、`conceptrows.write_concept`
-    （B 的抽取产出）、`doc_tools.register_dependency`（G 登记依赖）、
-    `paperledger`（论文台账映射）、`migrate_concepts`（迁移）。它们各有自己的判据
-    （`F.step` / `B` 的动作 / `Dependency.validate`），且都不叫 `tool:*`。
-    把闸口开在"所有写者"上等于让这些路径 fail-closed，而那是另一件事
-    （要不要让它们也走秘书，是权限面的改动，不是本条能决定的）。
-
-    ## 第二个用户：`lit_candidates`（业主 2026-10-20 的待新增文献列表）
-
-    它拒的是同一件事 —— **模型的通用写口直接改一张"每一格都带语义"的表**。
-    这张表的合法写者也全是人写过的代码路径（`agent_a/run_once` 的自动入库、
-    `tools/search_tools.py` 的四支 `lit.*` 工具），它们的 `tx` 记号都不是 `tool:*`。
-    与秘书那两张表唯一的差别是**拒信指向的路不同**（不是 `Secretary.record_statement`，
-    而是 `lit.stage_add` / `lit.stage_withdraw` / `lit.stage_reject` / `lit.admit`），
-    所以两支各写一句指路，而不是共用一句错的指路。
+    ## 为什么判据落在这里而不是只落在工具层：工具层是模型的手（`table.create` / `table.update` 是 A–D 共用的
+    通用写口），而"这两张表不许由通用写口碰"是关于表的规矩 —— 明天谁再加一支 `table.upsert_many`，它不该因为
+    没人记得这条而重新打开这条路。所以工具层（`tools/table_tools.py`）在进事务之前就用本函数拒一次（拒信是
+    `ToolResult.fail` 的可读形态），`Store.tx` 的提交块对带 `tool:` 记号的事务再拒一次（那一层是所有写者的必经
+    之路，见 `tx()` 里 `_refuse_fake_proof_review` 的注释）；两处都调这一个函数 ⇒ 关掉它的负控对两层同时生效
+    （判据见 `tests/test_statement_write_is_the_secretarys_only.py`）。
+    ## 为什么不是"凡直写就拒"：这两张表的合法写者不止秘书一个，且都是人写过的代码路径：
+    `agent_b/resolve_structural_duplicate`（合并要标 `superseded`）、`agent_f/core._proof_outlet`（证明结果与档位）、
+    `conceptrows.write_concept`（B 的抽取产出）、`doc_tools.register_dependency`（G 登记依赖）、`paperledger`（论文
+    台账映射）、`migrate_concepts`（迁移）—— 它们各有自己的判据（`F.step` / `B` 的动作 / `Dependency.validate`），
+    且都不叫 `tool:*`；把闸口开在"所有写者"上等于让这些路径 fail-closed，那是权限面的改动，不是本条能决定的。
+    ## 第二个用户：`lit_candidates`（业主 2026-10-20 的待新增文献列表）拒的是同一件事 —— 模型的通用写口直接改
+    一张"每一格都带语义"的表；合法写者也全是人写过的代码路径（`agent_a/run_once` 的自动入库、`tools/search_tools.py`
+    的四支 `lit.*` 工具），它们的 `tx` 记号都不是 `tool:*`。与秘书那两张表唯一的差别是拒信指向的路不同（不是
+    `Secretary.record_statement`，而是 `lit.stage_add` / `lit.stage_withdraw` / `lit.stage_reject` / `lit.admit`），
+    所以两支各写一句指路，而不是共用一句错的。
     """
     name = str(table or "")
     if name == "lit_candidates":
         # 待新增文献列表（业主 2026-10-20 口径）同样不许由通用写口直写。
         #
-        # 为什么它与 `statements` 那一族同形：这张表上的**每一条改动都带语义**
+        # 为什么它与 `statements` 那一族同形：这张表上的每一条改动都带语义
         # （槽位只增不复用 / 撤掉要留理由 / 入库要回填 lit_id / 条数上限 10）。
         # `table.update(table="lit_candidates", patch={"status": "admitted"})` 能一把
         # 把这些全绕过去，而盘上那一行看起来完全合法 —— 与 `mp2-7` 那一笔直写
@@ -381,10 +359,10 @@ class Tx:
         key = row.get(id_field)
         if key is None:
             raise StoreError(f"{table} 的行缺少主键 {id_field}")
-        # 2026-10-18（业主：「完美跑通 T1」/ 缺陷 ⑩）：`created_by` 缺省时用**本次写入的 actor**
+        # 2026-10-18（业主：「完美跑通 T1」/ 缺陷 ⑩）：`created_by` 缺省时用本次写入的 actor
         # 填，而不是让 `schema` 的 per-table 默认值（`agent-F` 等）冒充作者。
-        # 真机 T5：`conjectures.created_by` 全是 `agent-F`，而它其实是 **D** 写的。
-        # 显式给了 `created_by` 就**保留**（不覆盖调用方的声明）。
+        # 真机 T5：`conjectures.created_by` 全是 `agent-F`，而它其实是 D 写的。
+        # 显式给了 `created_by` 就保留（不覆盖调用方的声明）。
         _row_cls = (S.TABLES.get(table) or {}).get("row")
         if _row_cls is not None and "created_by" in getattr(_row_cls, "__dataclass_fields__", {}):
             if not str(row.get("created_by") or "").strip():
@@ -404,32 +382,20 @@ class Tx:
 
     def delete(self, table: str, key: Any, *, key_field: str | None = None,
                note: str = "") -> dict | None:
-        """按主键删一行；返回**被删的那一行**（没找到 ⇒ `None`，什么都没写）。
+        """按主键删一行；返回被删的那一行（没找到 ⇒ `None`，什么都没写）。
 
-        ## 为什么它必须存在（`R-57`）
-
-        在此之前，"删一行"只有一条路：把 `tx.rows(table)` 那个列表**就地改掉**
-        （`tools/table_tools.py::table_delete` 是这么做的），然后 `mark_dirty` 让快照落盘。
-        快照确实变了，但 **`events.jsonl` 里没有任何痕迹** —— 而重建的唯一输入是事件日志
-        ⇒ `rebuild()` 之后那一行**复活**。
-        实测形态（`draft/28` §173 的 R-57）：删掉的行在 rebuild 后回来，而 `rebuild()`
-        返回的每一个计数都"正常"（`batches_incomplete=0`、`snapshot_rows_not_in_log=0`）——
-        也就是说**没有任何读数会告诉读的人"你刚恢复的数据比删之前多"**。
-
-        ## 事件里记什么，为什么
-
-        - `op="delete"`：新的事件类型（`rebuild` 的重放认得它）；
-        - `row`：**被删的整行**。理由与"没有回收站"那条注释相反 —— 台账是审计面，
-          "谁在什么时候删了哪一行、那一行长什么样"必须留在日志里（否则删除是**不可审计**的：
-          事后只能看到"少了一行"，查不出少的是什么）；
-        - `key`：主键的字符串形式。重放**只按它删**，不去校验 `row` —— 被删的历史行
-          可能不符合**当前** schema（schema 升级过），拿它去 `row_from_dict` 会让重建
-          因为一条历史删除而整批失败。
-
-        ## 顺序语义（与 `upsert` 同一个事务里混用时）
-
-        事件按**调用顺序**追加，重放也按顺序折叠 ⇒ 同一事务里 upsert 后 delete ⇒ 删掉了；
-        delete 后 upsert ⇒ 在。这与内存里的效果一致（本方法当场改 `rows`）。
+        ## 为什么它必须存在（`R-57`）：在此之前"删一行"只有一条路 —— 把 `tx.rows(table)` 那个列表就地改掉
+        （`tools/table_tools.py::table_delete` 就是这么做的），然后 `mark_dirty` 让快照落盘。快照确实变了，但
+        `events.jsonl` 里没有任何痕迹 —— 而重建的唯一输入是事件日志 ⇒ `rebuild()` 之后那一行复活。实测形态
+        （`draft/28` §173 的 R-57）：删掉的行在 rebuild 后回来，而 `rebuild()` 返回的每一个计数都"正常"
+        （`batches_incomplete=0`、`snapshot_rows_not_in_log=0`）—— 没有任何读数会告诉读的人"你刚恢复的数据比
+        删之前多"。
+        ## 事件里记什么：`op="delete"` 是新事件类型（`rebuild` 的重放认得它）；`row` 记被删的整行 —— 台账是审计
+        面，"谁在什么时候删了哪一行、那一行长什么样"必须留在日志里（否则删除是不可审计的：事后只能看到"少了
+        一行"，查不出少的是什么）；`key` 记主键的字符串形式，重放只按它删、不去校验 `row` —— 被删的历史行可能
+        不符合当前 schema（schema 升级过），拿它去 `row_from_dict` 会让重建因为一条历史删除而整批失败。
+        ## 顺序语义（与 `upsert` 同一个事务里混用时）：事件按调用顺序追加，重放也按顺序折叠 ⇒ 同一事务里
+        `upsert` 后 delete ⇒ 删掉了；delete 后 `upsert` ⇒ 在。这与内存里的效果一致（本方法当场改 `rows`）。
         """
         if table not in self.tables:
             raise StoreError(f"事务未声明表 {table}（声明了 {self.tables}）")
@@ -446,24 +412,17 @@ class Tx:
 
     def insert_unique(self, table: str, row: dict, key_field: str, note: str = "",
                       id_kind: str | None = None) -> bool:
-        """**`INSERT … ON CONFLICT DO NOTHING`** 在本栈里的等价物。
+        """`INSERT … ON CONFLICT DO NOTHING` 在本栈里的等价物。
 
         返回 `True` = 真的插进去了；`False` = 这个键已经有一行，本次什么都没写。
-
-        ⚠️ 它不自己加锁，唯一性只在"读与写同一个临界区"内成立。
-        由 `store.tx` 持有该表排他锁来保证：`tx.rows()` 在锁内读的是
-        前一个进程刚提交的那一版，所以后到者一定看得见先到者。
-        在 `store.tx` 之外调用它 = 把"先读后写"的窗口原样搬回来，
-        而代码看起来像加了约束 —— 这是本方法唯一危险的误用方式。
-
-        为什么空键要抛而不是"当作不冲突"：空键要么让每一行都冲突
-        （唯一性变成"全表只能有一行"），要么让唯一性完全失效 ——
-        两种都不是调用方想要的，所以不给它一个静默的解释。
-
-        `id_kind` 是本实现对提案的一处最小附加（见本提案 §2.3 的
-        "冲突时不调 alloc_id ⇒ 重放不消耗号"）：给了它，主键就在判重之后
-        才分配，于是重复调用不会在计数器上留下永久空洞。不给则沿用提案原样的
-        "主键由调用方填好"语义。
+        它不自己加锁，唯一性只在"读与写同一个临界区"内成立：由 `store.tx` 持有该表排他锁来保证 —— `tx.rows()`
+        在锁内读的是前一个进程刚提交的那一版，所以后到者一定看得见先到者。在 `store.tx` 之外调用它 = 把
+        "先读后写"的窗口原样搬回来，而代码看起来像加了约束 —— 这是本方法唯一危险的误用方式。
+        为什么空键要抛而不是"当作不冲突"：空键要么让每一行都冲突（唯一性变成"全表只能有一行"），要么让唯一性
+        完全失效 —— 两种都不是调用方想要的，所以不给它一个静默的解释。
+        `id_kind` 是本实现对提案的一处最小附加（见 §2.3 的"冲突时不调 `alloc_id` ⇒ 重放不消耗号"）：给了它，
+        主键就在判重之后才分配，于是重复调用不会在计数器上留下永久空洞；不给则沿用提案原样的"主键由调用方
+        填好"语义。
         """
         if table not in self.tables:
             raise StoreError(f"事务未声明表 {table}（声明了 {self.tables}）")
@@ -514,7 +473,7 @@ class Tx:
             raise StoreError(f"未知 ID 类别：{kind}")
         if "counters" not in self.tables:
             raise StoreError("分配 ID 的事务必须声明 counters 表")
-        # ⚠️ 必须优先用本事务内已改过的 counters，而不是重新从磁盘读。
+        #  必须优先用本事务内已改过的 counters，而不是重新从磁盘读。
         # 否则同一事务里连续 alloc 会反复读到同一个初值，把同一个 ID 发出去多次
         # —— 表现为"多行拿到同一个 lit_id"，而按主键 upsert 会静默互相覆盖。
         c = self._store._dirty_counters
@@ -522,7 +481,7 @@ class Tx:
             c = self._store._load("counters")
             self._store._dirty_counters = c
         counters = c.setdefault("counters", {})
-        # 2026-10-17（store #4）：counters 是**可被手改**的 JSON；`"lit": "abc"` 会让裸
+        # 2026-10-17（store #4）：counters 是可被手改的 JSON；`"lit": "abc"` 会让裸
         # `int()` 抛 ValueError，把一次取号变成 traceback。坏值当 0（并在下面照常报冲突）。
         _raw_next = counters.get(kind, 0)
         try:
@@ -585,28 +544,19 @@ class Tx:
     def raise_counter_to(self, kind: str, used_id: str) -> int:
         """把某个 ID 类别的计数器抬到 `used_id + 1`（只抬，不发号、不烧号）。
 
-        ## 为什么需要它（`alloc_id` 的 docstring 自己点名要的形状）
-
-        `alloc_id` 的正文逐字写着："如果将来真的需要'只取号、不建行'，那必须是一个
-        显式可审计的形状（例如另开一个 `reserve_id()` 并说明为什么不需要查占用），
-        而不是默默把检查跳过"。这个方法是那个显式形状的另一支：不是"取号不建行"，
-        而是"别的地方已经用了这个号，把计数器追上去"。
-
-        现场（2026-10-09，S1r 并表过渡期）：概念行要同时写在 `concepts`（老表）与
-        `statements`（新标准，`kind="concept"`）里，两处同号，而两张表各有自己的
-        计数器。B 的 pipeline 从 `concept` 发号 ⇒ 镜像进 `statements` 的那些行让
-        `stmt` 计数器落在后面，`verify` 当场报 `counter_behind`（"继续分配会撞号"）。
-        第一版用"多调一次 `alloc_id` 把计数器顶上去"来修 —— 那是错的：它烧掉一个
-        没建行的号，于是同一张表出现 `id_gap`（"分配了 ID 但未建成行"），
-        在真机上被 `test_demo_end_to_end` 的"零问题"判据当场抓出来。
-        所以正确的形状是"把计数器设到 `max(used)+1`"，一个号都不烧。
-
-        三条边界：
-
-        - 未知类别 / 没声明 `counters` ⇒ 抛 `StoreError`（与 `alloc_id` 同一口径）；
-        - `used_id` 不是 4 位数字串 ⇒ 什么都不做，返回当前值（不猜）；
-        - 只抬不降：`used_id + 1` 不大于当前值时不写盘（降计数器是
-          `Store.set_counters` 的事，它有它自己的语义与痕迹）。
+        ## 为什么需要它（`alloc_id` 的 docstring 自己点名要的形状）：那里面逐字写着"如果将来真的需要'只取号、
+        不建行'，那必须是一个显式可审计的形状（例如另开一个 `reserve_id()` 并说明为什么不需要查占用），而不是
+        默默把检查跳过"。这个方法是那个显式形状的另一支：不是"取号不建行"，而是"别的地方已经用了这个号，把
+        计数器追上去"。
+        现场（2026-10-09，S1r 并表过渡期）：概念行要同时写在 `concepts`（老表）与 `statements`（新标准，
+        `kind="concept"`）里，两处同号而两张表各有自己的计数器。B 的 pipeline 从 `concept` 发号 ⇒ 镜像进
+        `statements` 的那些行让 `stmt` 计数器落在后面，`verify` 当场报 `counter_behind`（"继续分配会撞号"）。
+        第一版用"多调一次 `alloc_id` 把计数器顶上去"来修 —— 那是错的：它烧掉一个没建行的号，于是同一张表
+        出现 `id_gap`，在真机上被 `test_demo_end_to_end` 的"零问题"判据当场抓出来。所以正确的形状是"把计数器
+        设到 `max(used)+1`"，一个号都不烧。
+        三条边界：未知类别 / 没声明 `counters` ⇒ 抛 `StoreError`（与 `alloc_id` 同一口径）；`used_id` 不是 4 位
+        数字串 ⇒ 什么都不做，返回当前值（不猜）；只抬不降：`used_id + 1` 不大于当前值时不写盘（降计数器是
+        `Store.set_counters` 的事，它有它自己的语义与痕迹）。
         """
         if kind not in S.ID_COUNTERS:
             raise StoreError(f"未知 ID 类别：{kind}")
@@ -638,9 +588,9 @@ class Tx:
                 extra: dict | None = None) -> None:
         """把一次写追加进本事务的事件流。
 
-        **事件长什么样只在这一处定义**（`R-57` 的删除事件也走这里）：
+        事件长什么样只在这一处定义（`R-57` 的删除事件也走这里）：
         两个调用点各自拼一个 dict，迟早会拼出两种字段顺序 / 两套默认值，
-        而事件流是重建的**唯一**输入 —— 那种偏差不会有任何读数报出来。
+        而事件流是重建的唯一输入 —— 那种偏差不会有任何读数报出来。
         `extra` 的字段落在 `row` 与 `actor` 之间，既有的 `upsert` 事件因此逐字节不变。
         """
         self._events.append({
@@ -666,7 +616,7 @@ class Store:
         #: 进程内的批次序号（`F-1` 的提交标记用）—— 让同一毫秒内的两批也不撞号。
         self._batch_seq = itertools.count(1)
         #: 事件序号的水位线（`c-6`）。每次追加前都会与日志尾巴取 max，
-        #: 所以它只是"这一进程已经发到哪"，**不是**判断起点 —— 起点永远是
+        #: 所以它只是"这一进程已经发到哪"，不是判断起点 —— 起点永远是
         #: `read_events()` 的尾巴，见 `_next_seq`。声明在这里是为了让
         #: "这个属性一定存在"成为类的事实，而不是某一次调用的副作用。
         self._seq = 0
@@ -675,20 +625,14 @@ class Store:
     def _writer_lock(self, *, timeout: float = 60.0) -> FileLock:
         """全体表之外的一把写者锁（`G-12`）。
 
-        为什么在 `LOCK_ORDER` 之外还要一把：`init()` / `rebuild()` / 直接调
-        `_atomic_write` 的写者不持有任何表锁，而它们会批量重写多张表。
-        实测（`G-12`）的形态是：一个进程在 `init(force=True)` 或 `rebuild()`，
-        另一个进程在 `tx()` 里读同一张表 ⇒ 读的人会看到"表被清空到一半 / 只有一半表
-        是新版"的中间态 —— 那不是数据竞争，是可观测的中间态泄漏。
-
-        ## 加锁顺序（防死锁的唯一规则）
-
-        规则是：先拿全部表锁，再拿这把写者锁（`tx` 的提交块就是这么做的）。
-        `init` / `rebuild` 不拿表锁，所以它们只拿写者锁。任何地方都不许反过来
-        （先写者锁、再表锁），否则两个写者会互相等待。
-
-        锁文件放在 `.locks/` 下、名字以 `_` 开头 ⇒ 不会被 `LOCK_ORDER` 的表锁
-        认为是某张表（`tx` 只按 `LOCK_ORDER` 拼名字）。
+        为什么在 `LOCK_ORDER` 之外还要一把：`init()` / `rebuild()` / 直接调 `_atomic_write` 的写者不持有任何表锁，
+        而它们会批量重写多张表。实测（`G-12`）的形态是：一个进程在 `init(force=True)` 或 `rebuild()`，另一个进程
+        在 `tx()` 里读同一张表 ⇒ 读的人会看到"表被清空到一半 / 只有一半表是新版"的中间态 —— 那不是数据竞争，
+        是可观测的中间态泄漏。
+        `## 加锁顺序（防死锁的唯一规则）：先拿全部表锁，再拿这把写者锁（`tx` 的提交块就是这么做的）。`init` /
+        `rebuild` 不拿表锁，所以它们只拿写者锁。任何地方都不许反过来（先写者锁、再表锁），否则两个写者会互相
+        等待。锁文件放在 `.locks/` 下、名字以 `_` 开头 ⇒ 不会被 `LOCK_ORDER` 的表锁认为是某张表（`tx` 只按
+        `LOCK_ORDER` 拼名字）。
         """
         self.locks.mkdir(parents=True, exist_ok=True)
         return FileLock(str(self.locks / "_writer.lock"), timeout=timeout)
@@ -696,45 +640,33 @@ class Store:
     def init(self, force: bool = False) -> None:
         """建立目录与空表。
 
-        `force=True` 会覆盖已有的表 ⇒ 它是"清空这个工作区"的动作，
-        所以在写者锁内完成（`G-12`）：这把锁保证**写者之间**互斥（两个清空/事务不会互相踩），
-        它不排除并发读者在清空过程中读到中间态 —— 读侧今天不拿这把锁（`R3-1` 已裁定接受现状）。
-
-        ## `R-32`：**没有 `data/` 又不是空目录 ⇒ 拒绝**（默认 fail-closed）
-
-        实测事故（`draft/28` §136.3 事故 B）：一个复核脚本对 `projects/` 下**每个**目录跑
-        `Store(...).init()`，于是 `projects/manual-notes/`（人的文件夹，里面只有 `我的资料.txt`）
-        被补出整套 `data/`（19 个条目）+ `library/`。判态函数对它的判定自始至终是
-        `not_a_project` —— 是那个脚本**先动手、后判态**。
-
-        于是"从工具层走有守卫（`projects.ensure_project` 会拒绝外来目录）、直连 `Store`
-        没有"这件事，被修成两边都有。判据只有一条，刻意做得窄：
-
+        `force=True` 会覆盖已有的表 ⇒ 它是"清空这个工作区"的动作，所以在写者锁内完成（`G-12`）：这把锁保证写者
+        之间互斥（两个清空/事务不会互相踩），它不排除并发读者在清空过程中读到中间态 —— 读侧今天不拿这把锁
+        （`R3-1` 已裁定接受现状）。
+        `## `R-32`：没有 `data/` 又不是空目录 ⇒ 拒绝（默认 fail-closed）`：实测事故（`draft/28` §136.3 事故 B）
+        一个复核脚本对 `projects/` 下每个目录跑 `Store(...).init()`，于是 `projects/manual-notes/`（人的文件夹，
+        里面只有 `我的资料.txt`）被补出整套 `data/`（19 个条目）+ `library/`；判态函数对它的判定自始至终是
+        `not_a_project` —— 是那个脚本先动手、后判态。于是"从工具层走有守卫（`projects.ensure_project` 会拒绝外来
+        目录）、直连 `Store` 没有"被修成两边都有。判据只有一条，刻意做得窄：
         ```text
         允许 init ⇔  root 不存在
-                   ∨ data/ 已存在              （旧工作区/半成品工作区 ⇒ 只补缺失的表：T1 迁移的用法）
-                   ∨ .agentflow-workspace 在   （`projects.classify` 认的工作区标记）
-                   ∨ root 里没有不属于本框架的条目（白名单见 `_WORKSPACE_ROOT_ENTRIES`）
+                  ∨ data/ 已存在              （旧工作区/半成品工作区 ⇒ 只补缺失的表：T1 迁移的用法）
+                  ∨ .agentflow-workspace 在   （`projects.classify` 认的工作区标记）
+                  ∨ root 里没有不属于本框架的条目（白名单见 `_WORKSPACE_ROOT_ENTRIES`）
         否则 ⇒ StoreError（除非 force=True）
         ```
-
-        为什么**不**看 `data/` 里的表齐不齐：补齐缺失的表正是 `init()` 的正当用法之一
-        （`draft/30` §T1 加 `conjectures` 表时就是这么给 8 个旧项目补上的）。判据要拦的是
-        "在一个看起来不是我们的目录里凭空建库"，不是"表不齐"。
-
-        ## 白名单为什么要包含 `projects/`（`§176` 当场抓到的一次**误拦**）
-
-        本判据的第一版把"除 `data/` 与 `library/` 之外还有条目"一律当外来目录，
-        于是**工作区根目录里有 `projects/`** 这一种**正常部署**被拦下了 ——
-        项目文件夹就住在工作区根下面（`projects.projects_dir`），而
-        `tests/test_conductor_tools.py::test_ensure_project_refuses_foreign_directory`
-        造的就是这个布局（先建 `projects/<名字>/`，再对根 `init()`）：它在全量套件里当场变红。
-        这正是"守卫做宽 ⇒ 一次数据毁灭事故换成一次功能报废"的实例，所以白名单按
-        **本框架自己在工作区根上会放什么**来列，而不是按"看起来像不像我们的东西"。
+        为什么不看 `data/` 里的表齐不齐：补齐缺失的表正是 `init()` 的正当用法之一（`draft/30` §T1 加
+        `conjectures` 表时就是这么给 8 个旧项目补上的）。判据要拦的是"在一个看起来不是我们的目录里凭空建库"，
+        不是"表不齐"。
+        `## 白名单为什么要包含 `projects/`（`§176` 当场抓到的一次误拦）：第一版把"除 `data/` 与 `library/` 之外
+        还有条目"一律当外来目录，于是工作区根目录里有 `projects/` 这一种正常部署被拦下了（项目文件夹就住在
+        `projects.projects_dir`，而 `tests/test_conductor_tools.py::test_ensure_project_refuses_foreign_directory`
+        造的就是这个布局：先建 `projects/<名字>/`，再对根 `init()`，它在全量套件里当场变红）。这正是"守卫做宽
+        ⇒ 一次数据毁灭事故换成一次功能报废"的实例，所以白名单按本框架自己在工作区根上会放什么来列。
         """
-        # `R-32`：先判态、后动手（与那次事故的顺序**正好相反**）。
+        # `R-32`：先判态、后动手（与那次事故的顺序正好相反）。
         if self.root.exists() and not self.root.is_dir():
-            # 2026-10-17（store #11）：root 是个**文件**时 `iterdir()` 抛
+            # 2026-10-17（store #11）：root 是个文件时 `iterdir()` 抛
             # `NotADirectoryError`（WinError 267）；init 承诺的失败类型是 `StoreError`。
             raise StoreError(f"拒绝 init：{self.root} 存在但不是目录（是个文件）")
         if not force and self._foreign_dir_guard_should_refuse():
@@ -776,7 +708,7 @@ class Store:
     def _foreign_dir_guard_should_refuse(self) -> bool:
         """`R-32` 的判据本体（只有这一处实现）：`init()` 该不该拒绝这个目录。
 
-        返回值 `True` = **拒绝**。规则与理由见 :meth:`init` 的 docstring；
+        返回值 `True` = 拒绝。规则与理由见 :meth:`init` 的 docstring；
         这里只把它写成一段可单独调用的代码，好让测试可以直接喂各种形态
         （空目录 / 新目录 / 旧工作区 / 只放着 `projects/` 的工作区根 / 别人的文件夹）
         而不必真的去建文件。
@@ -784,7 +716,7 @@ class Store:
         if not self.root.exists():
             return False                      # 新目录：init 会连它一起建
         if not self.root.is_dir():
-            # 2026-10-17（store #11）：root 是个**文件**时 `iterdir()` 抛
+            # 2026-10-17（store #11）：root 是个文件时 `iterdir()` 抛
             # `NotADirectoryError`（WinError 267）；init 承诺的失败类型是 `StoreError`。
             return True
         if self.data.exists():
@@ -808,7 +740,7 @@ class Store:
         为什么需要这个公开入口：以前只能绕过事务调私有 `_atomic_write`（`tools/probe_gap_ledger.py`
         的 `c-7` 就是这么干的），那条路不拿写者锁、也不进事务 ⇒ 与并发 `alloc_id` 争同一份 counters
         ⇒ 漂移、严重时撞号并被 `upsert` 静默覆盖。所以给它一个公开路径（与 `init`/`rebuild`/`tx` 的
-        提交块同一把写者锁）。但**这把锁不保证上面那句"不漂移"**：分辨力在提交侧的合并。
+        提交块同一把写者锁）。但这把锁不保证上面那句"不漂移"：分辨力在提交侧的合并。
         返回值是写进去的文档。刻意不校验"计数器不得小于表里最大号"：本方法的用途之一正是故意造出
         落后状态去复现缺陷，该判据属于 `verify_all`（`counter_behind`）。"""
         kind_map = S.ID_COUNTERS
@@ -846,7 +778,7 @@ class Store:
         disk = self._load("counters")
         cache = self._dirty_counters or disk
         # 2026-10-17（store #4 的真身）：counters 是可被手改的 JSON；`int("abc")` 会把
-        # **一次正常提交**打成 traceback。坏值按 0 计（它本就不是一个有效计数）。
+        # 一次正常提交打成 traceback。坏值按 0 计（它本就不是一个有效计数）。
         def _as_int(v: Any) -> int:
             try:
                 return int(v)
@@ -902,34 +834,19 @@ class Store:
     def _atomic_write(self, path: Path, doc: dict) -> None:
         """写临时文件 → fsync → os.replace。同目录替换在 Windows 上也是原子的。
 
-        ## `F-3`：临时名必须唯一，替换必须重试
-
-        旧版临时名是固定的 `path.with_suffix(path.suffix + '.tmp')`，`os.replace`
-        不重试。实测（`temp/auditF-probe2.txt` 的 [F] 段，两个真进程并发各写同一个
-        `literature.json` 12 次）：两进程都拿到退出码 0、各自以为写进了 24 行，
-        而磁盘上只剩 8 行；`_atomic_write` 抛出 10 次 `OSError`，逐字包括
-
-            PermissionError [WinError 32] 另一个程序正在使用此文件:
-            '...literature.json.tmp' -> '...literature.json'
-
-        也就是说：模块 docstring 那句无条件的"不存在部分写入 —— 一律写临时文件→
-        os.replace"在并发写者下不成立（Windows 上 `os.replace` 会因为目标或
-        源被另一个进程打开而抛）。
-
-        现在的修法两条，都是"把冲突面缩到最小"而不是"假装没有冲突"：
-
-        1. 临时名带 `pid` 与线程 id ⇒ 两个写者不再抢同一个临时文件
-           （抢文件是 `WinError 32` 的直接来源）；
-        2. `os.replace` 包一个短重试（指数退避，`R3-10` 之后总等待 ≈0.62 秒：
-           5 次退避，最后一次失败后不再 sleep）⇒ 目标文件被
-           另一个进程短暂持有（防病毒、索引器、另一个 replace 的瞬间）时不再硬崩；
-        3. 重试耗尽才抛，且抛的是 :class:`StoreError`（**带路径与最后一次的
-           OS 错误**），不再是裸 `OSError` —— 调用方拿到的是一个本框架的错误类型，
-           而 `tx()` 也会把它翻译成"这笔事务没做成"。
-
-        ⚠️ 它不保证"并发写同一个表不丢更新"：那件事只有一把锁能保证，见
-        `_writer_lock` 与 `tx` 的提交块。这里只保证单次落盘是原子的、且不会
-        因为临时名相撞而硬崩。
+        `## `F-3`：临时名必须唯一，替换必须重试：旧版临时名是固定的 `path.with_suffix(path.suffix + '.tmp')`，`
+        `os.replace` 不重试。实测（`temp/auditF-probe2.txt` 的 [F] 段，两个真进程并发各写同一个 `literature.json`
+        12 次）：两进程都拿到退出码 0、各自以为写进了 24 行，而磁盘上只剩 8 行；`_atomic_write` 抛出 10 次
+        `OSError`，逐字包括 `PermissionError [WinError 32] ... '...literature.json.tmp' -> '...literature.json'`。
+        也就是说：模块 docstring 那句无条件的"不存在部分写入"在并发写者下不成立（Windows 上 `os.replace` 会因为
+        目标或源被另一个进程打开而抛）。修法三条，都是"把冲突面缩到最小"：
+        1. 临时名带 `pid` 与线程 id ⇒ 两个写者不再抢同一个临时文件（抢文件是 `WinError 32` 的直接来源）；
+        2. `os.replace` 包一个短重试（指数退避，`R3-10` 之后总等待 ≈0.62 秒：5 次退避，最后一次失败后不再
+           sleep）⇒ 目标文件被另一个进程短暂持有时不再硬崩；
+        3. 重试耗尽才抛，且抛的是 :class:`StoreError`（带路径与最后一次的 OS 错误），不再是裸 `OSError` ——
+           `tx()` 也会把它翻译成"这笔事务没做成"。
+        它不保证"并发写同一个表不丢更新"：那件事只有一把锁能保证，见 `_writer_lock` 与 `tx` 的提交块；这里只保证
+        单次落盘是原子的、且不会因为临时名相撞而硬崩。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident()}.tmp")
@@ -970,22 +887,17 @@ class Store:
 
     @staticmethod
     def _check_version(doc: dict, where: str) -> None:
-        """`F-7`（**人裁 = fail-closed**，观测时刻 2026-09-26 19:5x）：读期拒绝版本不符。
+        """`F-7`（人裁 = fail-closed，观测时刻 2026-09-26 19:5x）：读期拒绝版本不符。
 
-        背景（`draft/28` 的 `F-7`，实测 `temp/auditF-probe2.txt` / `temp/f7-before.txt`）：
-        版本判据此前只有 `validate_table` 一处，而它只在**提交时**被调用 ——
-        那时校验的是本进程刚合成、`schema_version` 必为当前值的 doc。
-        `_load` / `read` / `rows` / `rebuild` **从不校验版本**，
-        于是把一个旧版本号的 JSON 放进 `data/` 就能被照读不误：
-        「旧字段被按新语义解释」这件事没有任何地方会响。
-
-        现在的口径（所有者裁定）：**读期拒绝**。不符就抛 `StoreError`，
-        消息里给出**两个版本号**与这一条的处置（先 `rebuild` 或做迁移）。
-
-        - 缺 `schema_version` 字段 = 与"旧版本"同档（拒读），但不许崩成 `KeyError`；
-        - 版本相同才放行（**不是** `>=`，也不是"读不出来就放过"）。
+        背景（`draft/28` 的 `F-7`，实测 `temp/auditF-probe2.txt` / `temp/f7-before.txt`）：版本判据此前只有
+        `validate_table` 一处，而它只在提交时被调用 —— 那时校验的是本进程刚合成、`schema_version` 必为当前值
+        的 doc。`_load` / `read` / `rows` / `rebuild` 从不校验版本，于是把一个旧版本号的 JSON 放进 `data/` 就能被
+        照读不误：「旧字段被按新语义解释」这件事没有任何地方会响。
+        现在的口径（所有者裁定）：读期拒绝。不符就抛 `StoreError`，消息里给出两个版本号与这一条的处置（先
+        `rebuild` 或做迁移）。缺 `schema_version` 字段 = 与"旧版本"同档（拒读），但不许崩成 `KeyError`；版本相同
+        才放行（不是 `>=`，也不是"读不出来就放过"）。
         """
-        # 2026-10-17（store #2）：表文件被写成**顶层数组**（`[]`）时 `doc.get` 抛
+        # 2026-10-17（store #2）：表文件被写成顶层数组（`[]`）时 `doc.get` 抛
         # `AttributeError`；这里按"版本读不出来"处理，与"缺字段"同档（fail-closed）。
         if not isinstance(doc, dict):
             raise StoreError(
@@ -1010,7 +922,7 @@ class Store:
             try:
                 doc = json.loads(p.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                # 2026-10-17（store #1/#5）：counters 分支此前**没有** try —— 而表分支有。
+                # 2026-10-17（store #1/#5）：counters 分支此前没有 try —— 而表分支有。
                 # 坏 JSON / 非 UTF-8 都按"这份文件坏了"报 StoreError，不冒系统异常。
                 raise StoreError(
                     f"counters.json 读不出来（{type(e).__name__}: {e}）⇒ **拒读**；"
@@ -1022,7 +934,7 @@ class Store:
         if spec is None:
             moved = _MOVED_TABLES.get(table)
             if moved is not None:
-                # 受控错 + 指路：这张表**并走了**，不是"表名写错了"。
+                # 受控错 + 指路：这张表并走了，不是"表名写错了"。
                 # 两件事都必须能分辨，否则读的人拿到一句"未知表：concepts"
                 # 之后不知道下一步该改代码还是该查笔误。
                 raise StoreError(
@@ -1122,7 +1034,7 @@ class Store:
                     self.root, table, doc,
                     before_rows=(self._load(table).get("rows") or []))
                 # ---- 封野路（2026-10-19 晚）：`statements` / `dependencies` 不许由
-                # 通用写口的裸事务**建行/改行**。
+                # 通用写口的裸事务建行/改行。
                 #
                 # 判据只有一份（`direct_write_refusal`），工具层在进事务之前也调它一次
                 # ——那一层给模型可读的拒信，这一层是"结构性不可能"的兜底：
@@ -1130,7 +1042,7 @@ class Store:
                 # 专属记号，秘书与其余合法写者（F 的证明落点 / B 的合并 / G 的依赖 /
                 # 迁移 / 夹具）都不用它 ⇒ 这里拒的正好是"模型的手"，一条合法写者都不误伤。
                 #
-                # **删除不算直写**：它不制造证据（`table.delete` 另有 `_REF_SPECS` 的引用
+                # 删除不算直写：它不制造证据（`table.delete` 另有 `_REF_SPECS` 的引用
                 # 保护），而"建行/改行"才是绕过秘书的那件事。判据因此看这一笔事务对这张表
                 # 动了什么 `op`：只有 `delete` ⇒ 放行；有 `upsert`（或一条事件都没有 =
                 # 就地改 `tx.rows()` 再 `mark_dirty`）⇒ 拒。
@@ -1162,14 +1074,14 @@ class Store:
                 if t._events:
                     self._append_events(t._events)
                 for path, doc in to_write:
-                    # `G4-R2`（第 50 轮，判据四第 4 组带出来的新洞）：**把写盘的 `OSError` 翻成
-                    # `StoreError`**。旧版让 `_atomic_write` 的裸 `OSError`（磁盘满 errno 28 /
+                    # `G4-R2`（第 50 轮，判据四第 4 组带出来的新洞）：把写盘的 `OSError` 翻成
+                    # `StoreError`。旧版让 `_atomic_write` 的裸 `OSError`（磁盘满 errno 28 /
                     # 权限 errno 13 / WinError 32）直接穿透 `tx()` —— 而本模块的落盘层
                     # （`init` / `_atomic_write` 的重试耗尽那一支）都抛 `StoreError`。
-                    # 调用方按"`StoreError` 就是 store 报的失败"写恢复路径，会**漏掉最该恢复的那一类**
+                    # 调用方按"`StoreError` 就是 store 报的失败"写恢复路径，会漏掉最该恢复的那一类
                     # （磁盘满 / 只读盘），拿到的是一次裸 `OSError`。
                     # 实测（`temp/g4-nospace.txt`，用 monkeypatch 模拟 ENOSPC，不改盘）：
-                    # 原快照字节未变、无残留 `.tmp`、事务不生效 —— **数据是安全的**，
+                    # 原快照字节未变、无残留 `.tmp`、事务不生效 —— 数据是安全的，
                     # 唯独异常类型不对。把原始 errno 与路径带进消息，别丢诊断信息。
                     try:
                         self._atomic_write(path, doc)
@@ -1188,7 +1100,7 @@ class Store:
                 except Exception:  # noqa: BLE001
                     pass
         finally:
-            # ⚠️ 无论成功还是失败都必须清空事务内的计数器缓存。
+            #  无论成功还是失败都必须清空事务内的计数器缓存。
             # 只在提交成功时清，会让失败事务把改过的计数留在内存里：下一次
             # alloc_id 会基于一个磁盘上并不存在的值发号，轻则产生 ID 空洞，
             # 重则与另一个进程发出的号真撞号，而按主键 upsert 会静默覆盖。
@@ -1197,8 +1109,8 @@ class Store:
                 try:
                     lk.release()
                 except Exception:  # noqa: BLE001
-                    # 释放锁失败**刻意不向上抛**：这段在 `finally` 里，抛出去会**掩盖
-                    # 真正的失败原因**（事务里那个异常才是要报的）。而且 filelock 用的是
+                    # 释放锁失败刻意不向上抛：这段在 `finally` 里，抛出去会掩盖
+                    # 真正的失败原因（事务里那个异常才是要报的）。而且 filelock 用的是
                     # OS 锁，进程退出时由内核回收，锁文件可安全删除 —— 泄漏的代价是有限的，
                     # 而掩盖原始异常会让"为什么这笔事务失败"永远查不出来。
                     pass
@@ -1207,22 +1119,15 @@ class Store:
     def _append_events(self, events: list[dict]) -> None:
         """把一个事务的事件整批追加，并在末尾写一条提交标记（`F-1`）。
 
-        一批事件 = 一个 `batch` 号（时间戳 + pid + 序号，进程内单调）。
-        `rebuild()` 只重放带提交标记的批次：标记就是"这一批的每一行都已经
-        完整落到这个文件里了"的证据。没有标记的批次一律不重放 —— 那是崩在
-        追加中途留下的半批（`read_events` 早就会把半个 JSON 行读成 `corrupt`），
-        重放它会让重建结果取决于崩在第几行。
-
-        ⚠️ 兼容口径：仓库里已有的历史事件没有 `batch` 字段。它们被当作
-        "完整批次"处理（见 `rebuild` 的注释）—— 历史日志是旧版一行一 fsync 写出来的，
-        没有"半批"这个概念；把老事件一律当不完整会丢掉整个历史，那比它要防的风险
-        大得多。`rebuild` 会把这条口径连同"重放了多少批、跳过多少批"一起返回。
-
-        ⚠️ 调用点约束（`c-6`）：序号由 `_next_seq` 从**日志尾巴**取，而"读尾巴 +
-        追加"必须是一个原子段 ⇒ 本方法**只能在写者锁内调用**。`tx` 的提交块
-        与 `init` / `rebuild` 都满足这一点（它们拿的是同一把 `_writer_lock`），
-        于是两个进程不可能同时读到同一个尾巴。反过来，在锁外直接调用它
-        （探针脚本曾经这么干过，见 `c-7`）会让两边的序号互相重叠。
+        一批事件 = 一个 `batch` 号（时间戳 + pid + 序号，进程内单调）。`rebuild()` 只重放带提交标记的批次：标记
+        就是"这一批的每一行都已经完整落到这个文件里了"的证据。没有标记的批次一律不重放 —— 那是崩在追加中途
+        留下的半批（`read_events` 早就会把半个 JSON 行读成 `corrupt`），重放它会让重建结果取决于崩在第几行。
+        兼容口径：仓库里已有的历史事件没有 `batch` 字段，它们被当作"完整批次"处理（见 `rebuild` 的注释）——
+        历史日志是旧版一行一 fsync 写出来的，把老事件一律当不完整会丢掉整个历史，那比它要防的风险大得多；
+        `rebuild` 会把这条口径连同"重放了多少批、跳过多少批"一起返回。
+        调用点约束（`c-6`）：序号由 `_next_seq` 从日志尾巴取，而"读尾巴 + 追加"必须是一个原子段 ⇒ 本方法只能在
+        写者锁内调用（`tx` 的提交块与 `init` / `rebuild` 都拿同一把 `_writer_lock`），于是两个进程不可能同时读到
+        同一个尾巴。反过来，在锁外直接调用它（探针脚本曾这么干过，见 `c-7`）会让两边的序号互相重叠。
         """
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
         batch = f"{_now()}-{os.getpid()}-{next(self._batch_seq)}"
@@ -1238,30 +1143,21 @@ class Store:
             os.fsync(f.fileno())
 
     def _next_seq(self) -> int:
-        """取下一个事件序号 —— 来源是**日志里已有的最大 seq**，不是"数行数"（`c-6`）。
+        """取下一个事件序号 —— 来源是日志里已有的最大 seq，不是"数行数"（`c-6`）。
 
-        ## `c-6`：序号必须由"日志的尾巴"决定，且首次加载要落在写者锁内
-
-        `draft/28` 的 `c-6`（实测形态）说两件事，两个都在这里处置：
-
-        1. 旧版把 `len(events.jsonl 的行数)` 当序号来源（每进程只读一次）。
-           行数与 `seq` 字段**不是一回事**：`read_events` 会把任何解析不了的行
-           替换成 `{"seq": i, "op": "corrupt"}`，于是日志里出现过坏行之后，
-           "第 n 行的 seq" 与 "第 n 行" 就分家了，接着发出的号会与日志里**已有的**
-           `seq` 撞上。现在改成"日志里出现过的最大 `seq` + 1"（见 `_seq_high_water`）：
-           坏行占位的 `seq=i` 也照算，序号只会往后走，不会回退到别人用过的值上。
-        2. 旧版的惰性加载（第一次调用时数一遍行数）发生在**任意**位置；真正
-           需要原子性的是"读日志尾巴 → 写入新行"这一段。这一段由
-           `_append_events` 在 `store.tx` 的**写者锁**内调用（提交块先 `wlock.acquire()`
-           再 `_append_events`），所以读尾巴与追加是同一个临界区里的两步。
-
-        ⚠️ 由此带来一条对调用方的约束：**`_append_events` / `_next_seq` 只能在
-        写者锁内调用**。`init` / `rebuild` 走 `_writer_lock`，`tx` 在提交块里拿同一把
-        锁 ⇒ 三者互斥，没有"两个写者同时读尾巴"。这一条不是靠自觉：
-        `tests/test_store_r3_commit_order.py` 钉住提交顺序，而这里每次调用都
-        重新读一遍日志尾巴（不再缓存一个可能与盘上分家的行数），
-        代价是每次追加多读一遍 `events.jsonl` —— 相对"重复 seq 的时间线"，
-        这个代价是划算的。
+        `## `c-6`：序号必须由"日志的尾巴"决定，且首次加载要落在写者锁内（`draft/28` 的 `c-6` 说两件事）：`
+        1. 旧版把 `len(events.jsonl 的行数)` 当序号来源（每进程只读一次）。行数与 `seq` 字段不是一回事：
+        `read_events` 会把任何解析不了的行替换成 `{"seq": i, "op": "corrupt"}`，于是日志里出现过坏行之后，
+        "第 n 行的 seq"与"第 n 行"就分家了，接着发出的号会与日志里已有的 `seq` 撞上。现在改成"日志里出现过的
+        最大 `seq` + 1"（见 `_seq_high_water`）：坏行占位的 `seq=i` 也照算，序号只会往后走，不会回退到别人用过的
+        值上。
+        2. 旧版的惰性加载（第一次调用时数一遍行数）发生在任意位置；真正需要原子性的是"读日志尾巴 → 写入新行"
+        这一段，它由 `_append_events` 在 `store.tx` 的写者锁内调用（提交块先 `wlock.acquire()` 再
+        `_append_events`），所以读尾巴与追加是同一个临界区里的两步。
+        由此带来一条对调用方的约束：`_append_events` / `_next_seq` 只能在写者锁内调用。`init` / `rebuild` 走
+        `_writer_lock`，`tx` 在提交块里拿同一把锁 ⇒ 三者互斥，没有"两个写者同时读尾巴"。这一条不是靠自觉：
+        `tests/test_store_r3_commit_order.py` 钉住提交顺序，而这里每次调用都重新读一遍日志尾巴（不再缓存一个可能
+        与盘上分家的行数），代价是每次追加多读一遍 `events.jsonl` —— 相对"重复 seq 的时间线"，这个代价是划算的。
         """
         self._seq = max(self._seq, self._seq_high_water()) + 1
         return self._seq
@@ -1303,57 +1199,28 @@ class Store:
         """从 events.jsonl 重建全部快照。
 
         因为事件里存的是整行 upsert，折叠逻辑就是"按主键 last-write-wins"。
-
-        ## `F-1`：只重放完整批次，并在写者锁内整个做完
-
-        旧版逐条重放，于是"崩在快照与事件之间"的那一次提交会不报错地消失
-        （实测：快照 2 行 / counters=2 ⇒ rebuild 后 1 行 / counters=1）。
-        现在两条判据：
-
-        - 完整批次才算数：一批事件后面必须跟一条 `op="commit"` 的标记
-          （`_append_events` 写）；没有标记的那一批整批跳过，并把跳过数报出来
-          （`batches_incomplete`）。历史事件没有 `batch` 字段 ⇒ 当作完整批次
-          （理由见 `_append_events` 的兼容口径）。
-        - 整个重建在一把写者锁内（`G-12`）：这把锁只保证**写者之间**互斥
-          （两个重建/事务不会互相踩），它**不**排除并发读者在重建过程中读到中间态 ——
-          读侧今天不拿这把锁（`R3-1` 的口径裁决：接受现状，只把措辞改成事实）。
-
-        返回值新增三个计数，全是"读的人必须能看见"的东西：
-        `batches_applied` / `batches_incomplete` / `events_replayed`。
-        旧调用方只看 `applied` / `skipped` / `counters`，那三个键原样保留。
-        另有四个后来补上的、同样是"必须能看见"的键：
-
-        - `legacy_events_without_version`（`F-7`）：没有版本号的老事件条数；
-        - `corrupt_events`（`I-5` / `R3-4`）：日志里坏掉的行的条数。
-          旧版把这件事吞在 `read_events` 的 `corrupt` 占位里，返回值看不见
-          ⇒ "没抛异常"被读成"日志是好的"；
-        - `snapshot_rows_not_in_log` 与 `snapshot_ahead`（`R3-3`）：
-          快照里有、日志里从来没有过的行数与逐表明细。
-
-        ## `R3-3`：为什么必须比对快照与日志（而不只是看提交标记）
-
-        上面那两条判据（`batches_incomplete` / `corrupt_events`）都只问"日志里
-        有没有问题"。而重建的输入是日志、输出会整表覆盖快照 ⇒ 另一类偏离是
-        "快照超前于日志"：正常提交后手工往 `<表>.json` 加一行（日志无痕），
-        旧版返回 `applied=1 / batches_incomplete=0`，那一行被静默丢掉而计数为 0。
-        于是"`batches_incomplete == 0`"被读成"库里没有丢过提交"，而那是错的。
-
-        现在返回 `snapshot_rows_not_in_log`（差集行数）与 `snapshot_ahead`
-        （`{表名: [主键, …]}`）。它不会让重建失败（重建是灾难恢复手段，
-        不能因为它要修的东西而拒绝工作），但那份"这次会丢多少已有数据"从此
-        在报告里看得见。口径：只算"快照有、日志没有"这一个方向；
-        反方向（日志有、快照没有，例如删行）是正常形态，不在这里报 ——
-        删行不进事件日志是重建的已知边界，见 `F-9`。
-
-        ## `F-9`（第 3 条）：这条"不丢信息"的承诺**有边界**，边界写在这里
-
-        折叠时是"合并而非替换"：事件行里带了的非 schema 键（`_keys`、
-        `_quote_check` 这类诊断字段）会被保留下来，这一半是成立的。
-        但**重建的唯一输入是事件日志**：一个键若只存在于快照、从未进过任何事件
-        （例如有人手工往 `<表>.json` 里加了一个诊断字段），重建后它**不在了**。
-        这不是缺陷，而是"从日志重建"的定义 —— 但它必须被写下来，
-        否则"rebuild 什么都不丢"会被读成无条件的事实，而 `F-7` 那类
-        "只改快照"的偏离会因此显得无害。
+        `## `F-1`：只重放完整批次，并在写者锁内整个做完：旧版逐条重放，于是"崩在快照与事件之间"的那一次提交会`
+        不报错地消失（实测：快照 2 行 / counters=2 ⇒ rebuild 后 1 行 / counters=1）。现在两条判据：完整批次才算数
+        ——一批事件后面必须跟一条 `op="commit"` 的标记（`_append_events` 写）；没有标记的那一批整批跳过，并把跳过
+        数报出来（`batches_incomplete`）；历史事件没有 `batch` 字段 ⇒ 当作完整批次（理由见 `_append_events`）。
+        整个重建在一把写者锁内（`G-12`）：只保证写者之间互斥，它不排除并发读者读到中间态 —— 读侧今天不拿这把
+        锁（`R3-1` 的口径裁决：接受现状，只把措辞改成事实）。
+        返回值新增三个计数：`batches_applied` / `batches_incomplete` / `events_replayed`；旧调用方只看 `applied` /
+        `skipped` / `counters`，那三个键原样保留。另有四个"必须能看见"的键：`legacy_events_without_version`
+        （`F-7`，没有版本号的老事件条数）、`corrupt_events`（`I-5` / `R3-4`，日志里坏掉的行的条数 —— 旧版把这件事
+        吞在 `read_events` 的 `corrupt` 占位里，"没抛异常"被读成"日志是好的"）、`snapshot_rows_not_in_log` 与
+        `snapshot_ahead`（`R3-3`：快照里有、日志里从来没有过的行数与逐表明细）。
+        `## `R3-3`：为什么必须比对快照与日志（而不只是看提交标记）`：上面两条都只问"日志里有没有问题"，而重建的
+        输入是日志、输出会整表覆盖快照 ⇒ 另一类偏离是"快照超前于日志"：正常提交后手工往 `<表>.json` 加一行
+        （日志无痕），旧版返回 `applied=1 / batches_incomplete=0`，那一行被静默丢掉而计数为 0 —— 于是
+        "`batches_incomplete == 0`"被读成"库里没有丢过提交"，而那是错的。现在返回 `snapshot_rows_not_in_log`
+        （差集行数）与 `snapshot_ahead`（`{表名: [主键, …]}`）；它不会让重建失败（重建是灾难恢复手段，不能因为它
+        要修的东西而拒绝工作），但"这次会丢多少已有数据"从此在报告里看得见。口径：只算"快照有、日志没有"这一个方向；反方向（日志有、快照没有，例如删行）是正常形态，不在这里报 —— 删行不进事件日志是重建的已知边界，见 `F-9`。
+        `## `F-9`（第 3 条）：这条"不丢信息"的承诺有边界`：折叠时是"合并而非替换"——事件行里带了的非 schema 键
+        （`_keys`、`_quote_check` 这类诊断字段）会被保留下来，这一半是成立的。但重建的唯一输入是事件日志：一个键
+        若只存在于快照、从未进过任何事件（例如有人手工往 `<表>.json` 里加了一个诊断字段），重建后它不在了。这
+        不是缺陷，而是"从日志重建"的定义 —— 但它必须被写下来，否则"rebuild 什么都不丢"会被读成无条件的事实，
+        而 `F-7` 那类"只改快照"的偏离会因此显得无害。
         """
         try:
             with self._writer_lock(timeout=120.0):
@@ -1394,7 +1261,7 @@ class Store:
     def migration_ledger_path(self) -> Path:
         """逐条改号账（append-only，一行一件事）：`out/migrate-map.jsonl`。
 
-        为什么放在 `out/` 而不是 `data/`：它是一份**报告**（"这次迁移把哪个号改成了
+        为什么放在 `out/` 而不是 `data/`：它是一份报告（"这次迁移把哪个号改成了
         哪个号、为什么"），不是数据库的一部分 —— 放进 `data/` 会让"哪些文件是表"
         这件事多出一个例外，而 `verify` / `rebuild` / 备份三处都要认得那个例外。
         """
@@ -1415,16 +1282,12 @@ class Store:
         """把并走的表折进新家（S1r 并表那一笔的执行点）。
 
         口径（全部由 `migrate_concepts` 一处决定，这里只做"接上"）：
-
-        - **号由同一分配器重发**：从 `stmt` 计数器续着发、跳过既有命题号
-          （`counter_alloc(start, taken=既有 stmt_id)`）—— 业主 D2「同表同分配器
-          不可能撞号」；真盘实测有 22 条概念号与既有命题号撞上，不重发就会静默顶掉那些行；
-        - **关系改号**：`relations.concept_ids` 里的旧号换成新号，逐条落账；
-        - **计数器续着走**：折完之后 `stmt` 计数器必须 ≥ 新用到的号 + 1，否则
-          `verify` 的 `counter_behind` 会报"继续分配会撞号"；
-        - `counters` 里那份 `concept` 残留**删掉**（表已退役，留着就是一个没有表的
-          类别 —— 无害，但不是"并干净"）。
-
+        - 号由同一分配器重发：从 `stmt` 计数器续着发、跳过既有命题号（`counter_alloc(start, taken=既有 stmt_id)`）
+          —— 业主 D2「同表同分配器不可能撞号」；真盘实测有 22 条概念号与既有命题号撞上，不重发就会静默顶掉那些行；
+        - 关系改号：`relations.concept_ids` 里的旧号换成新号，逐条落账；
+        - 计数器续着走：折完之后 `stmt` 计数器必须 ≥ 新用到的号 + 1，否则 `verify` 的 `counter_behind` 会报
+          "继续分配会撞号"；
+        - `counters` 里那份 `concept` 残留删掉（表已退役，留着就是一个没有表的类别 —— 无害，但不是"并干净"）。
         返回读数（全部进 `rebuild` 的返回值，读的人必须看得见这次折了什么）。
         """
         rows = [moved_rows[k] for k in dict.fromkeys(moved_order) if k in moved_rows]
@@ -1449,7 +1312,7 @@ class Store:
             cur = state["relations"].get(rid)
             if cur is None:
                 continue
-            # 改号要**连带**把派生字段搬过来（`concept_group_key` / `dedup_key`）：
+            # 改号要连带把派生字段搬过来（`concept_group_key` / `dedup_key`）：
             # 只搬 `concept_ids` 的话，`verify` 的 `stale_group_key`（错误级，
             # 判的是 `concept_group_key == textutil.concept_group_key(concept_ids)`）
             # 会当场报出来 —— 迁移出来的库自己带着一条"判重会失效"。
@@ -1472,11 +1335,11 @@ class Store:
                 "notes": list(plan["notes"])}
 
     def _moved_snapshot_ids(self, table: str) -> set[str]:
-        """并走的那张表在老**快照**（`data/concepts.json`）里的主键集合。
+        """并走的那张表在老快照（`data/concepts.json`）里的主键集合。
 
         为什么必须在删老文件之前读它：`rebuild` 的唯一输入是事件日志（`F-9` 的边界），
-        于是"快照里有、日志里从来没有过"的行**不会**被折进去。对普通表，这件事由
-        `snapshot_ahead` 如实报出、数据留在原文件里；而对**并走的表**，老文件紧接着
+        于是"快照里有、日志里从来没有过"的行不会被折进去。对普通表，这件事由
+        `snapshot_ahead` 如实报出、数据留在原文件里；而对并走的表，老文件紧接着
         会被删掉 —— 如果不先把这份差集算出来，那些行就是"报都没报就没了"。
         读不出来（文件不在、坏了、版本不符）⇒ 返回空集，但要与"读到了、里面是空的"
         分得开：调用方据 `file` 那一路读数判断（见 `_remove_stale_moved_files`）。
@@ -1498,11 +1361,11 @@ class Store:
                                   snapshot_ahead: Iterable[str] = ()) -> dict[str, list[str]]:
         """删掉并走的表留下的老文件（`data/concepts.json`），返回 `{removed, kept}`。
 
-        `allow=False`（`rebuild(backup=False)`）时**不删** —— 那一支没有备份，
+        `allow=False`（`rebuild(backup=False)`）时不删 —— 那一支没有备份，
         删掉就是不可逆的数据销毁；此时如实报 `kept`（"老文件还在，它装着迁移前
         的旧值"），而不是假装干净。
 
-        `snapshot_ahead` 非空时同样**不删**：那些行只存在于老快照里、事件日志里
+        `snapshot_ahead` 非空时同样不删：那些行只存在于老快照里、事件日志里
         从来没有过（`F-9` 的已知边界）⇒ 删掉它们等于把"日志漏掉的那一段"的唯一
         副本销毁。宁可留一个"看起来还是数据库"的文件（它会被
         `conceptrows.legacy_present` 点名成 `stale_file`），也不做不可逆的事。
@@ -1544,7 +1407,7 @@ class Store:
                 src = self.data / spec["file"]
                 if src.exists():
                     shutil.copy2(src, bdir / spec["file"])
-            # 并走的表的**老文件**也必须进备份：下一步（折完之后）它会被删掉，
+            # 并走的表的老文件也必须进备份：下一步（折完之后）它会被删掉，
             # 而"删一个不在 TABLES 里的文件"如果没进备份就是不可逆的数据销毁。
             for meta in _MOVED_TABLES.values():
                 src = self.data / str(meta.get("file") or "")
@@ -1554,10 +1417,10 @@ class Store:
                 shutil.copy2(self.data / "counters.json", bdir / "counters.json")
 
         events = self.read_events()
-        # `F-7`（人裁 = fail-closed）落在**事件流**上的口径，与读快照**故意不同**，
+        # `F-7`（人裁 = fail-closed）落在事件流上的口径，与读快照故意不同，
         # 理由必须写清（否则这条判据会变成"把历史数据一律拒掉"）：
-        #   - 事件里**写了**版本号且与当前不符 ⇒ **拒**（拿旧语义重放会静默改写快照）；
-        #   - 事件里**没有**版本号 ⇒ 视作"加版本号之前写下的历史事件"，**照常重放**，
+        #   - 事件里写了版本号且与当前不符 ⇒ 拒（拿旧语义重放会静默改写快照）；
+        #   - 事件里没有版本号 ⇒ 视作"加版本号之前写下的历史事件"，照常重放，
         #     并把条数报进返回值（`legacy_events_without_version`）——
         #     这是 `_append_events` 对 `batch` 字段的同一条兼容口径，
         #     也是全部既有夹具（以及真实历史库）的形态；把它也拒掉等于
@@ -1566,12 +1429,12 @@ class Store:
                                if "schema_version" in e
                                and e.get("schema_version") != S.SCHEMA_VERSION
                                and e.get("op") != "corrupt"})
-        # S1r 并表那一笔（`SCHEMA_VERSION=2`）：**上一版**的事件不再算"版本不符"。
+        # S1r 并表那一笔（`SCHEMA_VERSION=2`）：上一版的事件不再算"版本不符"。
         # 口径与理由：v1 与 v2 的差别只有一处（`concepts` 折进 `statements`），
         # 而折叠规则是确定性的纯函数（`migrate_concepts`）⇒ 拿 v1 事件重放再折一次
         # 得到的快照与"当年就用 v2 写"应当一致。把它也拒掉的话，63 个真实工作区
         # 的灾难恢复手段（`rebuild` 是唯一的那个）会在一夜之间对历史库完全不可用 ——
-        # 那是比"迁移"更坏的形态。**读期仍然 fail-closed**（`F-7` 人裁不变）：
+        # 那是比"迁移"更坏的形态。读期仍然 fail-closed（`F-7` 人裁不变）：
         # 兼容只存在于这一条路径上，且它必须把"折了多少"报出来（`migrated_v1_events`）。
         known_old = (S.SCHEMA_VERSION - 1,)
         bad_versions = [v for v in bad_versions
@@ -1584,16 +1447,16 @@ class Store:
                 "拿旧语义的事件重放会静默改写快照。处置：确认以哪一版为准 ⇒ "
                 "必要时先做一次显式迁移，再 rebuild。"
             )
-        # S1r：这一批事件里有多少条是**上一版**写的（它们要被折叠，必须报出来）。
+        # S1r：这一批事件里有多少条是上一版写的（它们要被折叠，必须报出来）。
         migrated_v1_events = sum(1 for e in events
                                  if e.get("op") != "corrupt"
                                  and e.get("schema_version") in known_old)
         legacy_no_version = sum(1 for e in events
                                 if "schema_version" not in e and e.get("op") != "corrupt")
-        # `I-5`（登记在 `draft/28`）：坏行**必须被计数**，不能只是"没抛异常"。
+        # `I-5`（登记在 `draft/28`）：坏行必须被计数，不能只是"没抛异常"。
         # 旧返回值里有 `skipped`，但它的语义是"没进 state 的行"，而坏行根本
         # 进不了 `replay` ⇒ 一条恒真的断言（`skipped >= 0`）就能蒙混过关，
-        # 而"日志里有几行坏了"这个事实在报告里**看不见**。
+        # 而"日志里有几行坏了"这个事实在报告里看不见。
         corrupt_events = sum(1 for e in events if e.get("op") == "corrupt")
         # ---- 先算出"哪些批次是完整的"
         committed: set[str] = set()
@@ -1619,11 +1482,11 @@ class Store:
         order: dict[str, list[str]] = {t: [] for t in S.TABLES}
         counters: dict[str, int] = {}
         applied = skipped = 0
-        #: `R-06`：`skipped` 是那个整数（既有读数与三处测试直接断言它，**不许改名/改类型**），
-        #: 这里再补两份**明细** —— 只报"跳过了 3 行"读不出下一步该做什么：
+        #: `R-06`：`skipped` 是那个整数（既有读数与三处测试直接断言它，不许改名/改类型），
+        #: 这里再补两份明细 —— 只报"跳过了 3 行"读不出下一步该做什么：
         #: 是"这一行本来就不合法"（`schema_rejected`）、还是"事件行的形状坏了"
         #: （`shape_broken`）、还是"这张表我根本不认识"（`unrecognized_table`）。
-        #: 为什么**不是**收窄 `except`：`row_from_dict` 对缺必填字段的行抛的是 `TypeError`
+        #: 为什么不是收窄 `except`：`row_from_dict` 对缺必填字段的行抛的是 `TypeError`
         #: （dataclass 的形态），只接 `ValueError` 会把这类行直接炸出重建 —— 那是
         #: 比"静默跳过"更坏的中间态（`46-01 §2.2(b)` 判"收窄不可行"）。
         skipped_by_reason: dict[str, int] = {}
@@ -1631,10 +1494,10 @@ class Store:
         #: `R-57`：重放里真的删掉了几行（与 `applied` 分开报 —— `applied` 的历史含义是
         #: "写下了几行"，把删除混进去会让既有读数变味）。
         deleted_replayed = 0
-        #: 认不出的 `op`（既不重放、也不在已知的非重放集合里）。它**必须出现在返回值里**：
+        #: 认不出的 `op`（既不重放、也不在已知的非重放集合里）。它必须出现在返回值里：
         #: 静默忽略一个不认识的 op = "日志里有我读不懂的东西"这件事没有任何人看得见。
         unknown_ops: set[str] = set()
-        #: S1r：并走的表（`_MOVED_TABLES`）在 v1 事件里的原始行。它们**不在** `state` 里
+        #: S1r：并走的表（`_MOVED_TABLES`）在 v1 事件里的原始行。它们不在 `state` 里
         #: （`state` 只按当前 `TABLES` 建），所以单独收一份：这一批事件重放完之后
         #: 由 `_fold_moved_tables` 折进新家。不单独收的话，那些行会落进
         #: `unrecognized_table` 的 `skipped` —— 于是"旧库里的概念"以"跳过了 N 行"
@@ -1680,7 +1543,7 @@ class Store:
         for event_index, e in enumerate(replay):
             op = e.get("op")
             if op == "delete":
-                # `R-57`：删除也必须重放。只按 `key` 删（**不校验 `row`**）：
+                # `R-57`：删除也必须重放。只按 `key` 删（不校验 `row`）：
                 # 被删的历史行可能不符合当前 schema，拿它去 `row_from_dict` 会让
                 # 重建因为一条历史删除而整批失败 —— 而这条事件的全部语义就是"这一行没了"。
                 dtable = e.get("table")
@@ -1731,7 +1594,7 @@ class Store:
                 applied += 1
                 continue
             if table in _MOVED_TABLES:
-                # 并走的表在 v1 事件里的 upsert：收进 `moved_rows`，**不**在这里校验
+                # 并走的表在 v1 事件里的 upsert：收进 `moved_rows`，不在这里校验
                 # （老行的 schema 与当前不再是同一套 —— 它要按 `migrate_concepts`
                 # 的折叠口径变形成新行，拿新 schema 去校验它是本末倒置：
                 # 一条老概念行里没有 `kind`/`stmt_id`，校验必然失败，
@@ -1758,7 +1621,7 @@ class Store:
                 continue
             except Exception as e:
                 # 其余（`row_from_dict` 的缺参 `TypeError`、意外的形态坏）⇒ 事件行坏了。
-                # **不许**把它并进 `schema_rejected`：两者的处置不同（前者改数据、
+                # 不许把它并进 `schema_rejected`：两者的处置不同（前者改数据、
                 # 后者查是谁写坏了事件），而合并之后这条读数就再也分不出来了。
                 _skip("shape_broken", table=str(table), row=row,
                       error=f"{type(e).__name__}: {e}", event_index=event_index)
@@ -1771,10 +1634,10 @@ class Store:
             # 早先这里只存 obj，导致 rebuild 后诊断字段全部丢失 —— 虽然判重靠
             # `doi`/`dedup_key` 兜底仍然可用，但"能重建"就不该"重建出更少的信息"。
             #
-            # `F-9`（第 3 条）把这条承诺的**边界**写清，因为它原先写成了无条件的
-            # "诊断字段不丢"：保留的是**事件行里带了的**非 schema 键。
+            # `F-9`（第 3 条）把这条承诺的边界写清，因为它原先写成了无条件的
+            # "诊断字段不丢"：保留的是事件行里带了的非 schema 键。
             # 一个键若只存在于快照、而从未进过任何事件（例如有人手工往
-            # `<表>.json` 里加了一个诊断字段），重建后它**不在了** ——
+            # `<表>.json` 里加了一个诊断字段），重建后它不在了 ——
             # 重建的唯一输入是事件日志，快照里没进过日志的东西无从恢复。
             # 这不是缺陷而是"重建"的定义，但读 docstring 的人有资格知道它。
             canonical = obj.to_dict()
@@ -1787,7 +1650,7 @@ class Store:
         #
         # 这一步就是"并干净"的执行点：v1 事件里的概念行在 `moved_rows` 里等着，
         # 这里按 `migrate_concepts` 那一套确定的折叠口径把它们变成 `statements` 的行，
-        # **号由同一分配器重发**（从 `stmt` 计数器续着发、撞既有命题号往后跳），
+        # 号由同一分配器重发（从 `stmt` 计数器续着发、撞既有命题号往后跳），
         # 关系表里挂着的旧概念号同步改写，逐条改号账落到 `out/migrate-map.jsonl`。
         #
         # 为什么折叠内核在 `migrate_concepts` 而不是这里：`rebuild` 是 FC-27 禁改区
@@ -1804,7 +1667,7 @@ class Store:
                                              moved_rows=moved_rows[moved_table],
                                              moved_order=moved_order[moved_table])
             self._write_migration_ledger(folded.get("ledger_lines_data") or [])
-        #: 老**快照**里、而事件日志里从来没有过的概念号（`F-9` 的边界落在并走的表上）。
+        #: 老快照里、而事件日志里从来没有过的概念号（`F-9` 的边界落在并走的表上）。
         #: 这一份必须在删老文件之前算出来 —— 见 `_moved_snapshot_ids` 的 docstring。
         moved_snapshot_ahead: dict[str, list[str]] = {}
         for _old in _MOVED_TABLES:
@@ -1814,18 +1677,18 @@ class Store:
             ahead = sorted(snap - set(moved_rows.get(_old, {})))
             if ahead:
                 moved_snapshot_ahead[_old] = ahead
-        #: 老文件（`data/concepts.json`）在并走之后必须**消失**：留着一个"看起来还是
+        #: 老文件（`data/concepts.json`）在并走之后必须消失：留着一个"看起来还是
         #: 数据库"的老文件，下一次有人直接读它就会拿到迁移前的旧值，而这件事没有任何
         #: 自动判据看得见（`conceptrows.legacy_present` 只在读的时候点名 `stale_file`）。
         #: 备份已经在上面那一支里做过了（`_MOVED_TABLES` 的文件也进备份目录）；
-        #: `backup=False` 那一支没有备份 ⇒ **不删**，如实报 `kept`；
-        #: 事件日志里没有的那些行（`moved_snapshot_ahead`）⇒ 同样**不删**（不可逆）。
+        #: `backup=False` 那一支没有备份 ⇒ 不删，如实报 `kept`；
+        #: 事件日志里没有的那些行（`moved_snapshot_ahead`）⇒ 同样不删（不可逆）。
         stale = self._remove_stale_moved_files(
             allow=bool(backup),
             snapshot_ahead=[x for v in moved_snapshot_ahead.values() for x in v])
         folded["stale_files_removed"] = list(stale["removed"])
         folded["stale_files_kept"] = list(stale["kept"])
-        # 并走的那些**类别**也从计数器里摘掉（`_fold_moved_tables` 里摘过一次，这里再兜一次：
+        # 并走的那些类别也从计数器里摘掉（`_fold_moved_tables` 里摘过一次，这里再兜一次：
         # 事件流里一条概念 upsert 都没有、而 `counters.json` 里还留着 `concept: N` 的库
         # 也应当并干净）。表没了而类别还在不会让 `verify` 报错（它只遍历 `ID_COUNTERS`），
         # 但那是一份"指向不存在的表"的残留 —— 留着它，下一次有人按 counters 反推表结构
@@ -1838,7 +1701,7 @@ class Store:
             # `R-57`：`order` 里可能留着被删掉的键（删除只从 `state` 里摘）⇒
             # 这里过滤一次，而不是在删除时对列表做手术（保持"首次插入顺序"稳定，
             # 也避免 `del` 与 `append` 在同一轮里互相错位）。
-            # ⚠️ 还要**去重**：删掉之后又 upsert 同一个主键时，`order` 会追加第二次
+            #  还要去重：删掉之后又 upsert 同一个主键时，`order` 会追加第二次
             # （`key not in state` 成立）⇒ 不去重就会拼出两行同 ID，而 `validate_table`
             # 会以 `ValueError: 出现重复 ID` 报出来（本仓自己的测试当场抓到了这一点：
             # `tests/test_store_delete_events.py::test_order_inside_one_transaction_is_the_call_order`）。
@@ -1864,10 +1727,10 @@ class Store:
             "batches_applied": len(batches_seen - batches_incomplete),
             "batches_incomplete": len(batches_incomplete),
             "events_replayed": len(replay),
-            # `F-7`：这一批事件里有多少条**没有版本号**（加版本号之前写下的）。
+            # `F-7`：这一批事件里有多少条没有版本号（加版本号之前写下的）。
             # 它们照常重放，但读报告的人必须知道"这次重放里有 N 条是老格式"。
             "legacy_events_without_version": legacy_no_version,
-            # S1r：这一批事件里有多少条是**上一版**（`SCHEMA_VERSION-1`）写的。
+            # S1r：这一批事件里有多少条是上一版（`SCHEMA_VERSION-1`）写的。
             # 它们被折叠而不是被拒 —— "折叠了多少"必须看得见，否则"重建成功"
             # 与"重建成功但折了一堆行"在返回值里同形。
             "migrated_v1_events": migrated_v1_events,
@@ -1882,15 +1745,15 @@ class Store:
             "migration_ledger_lines": int(folded.get("ledger_lines", 0) or 0),
             "migrated_notes": list(folded.get("notes") or []),
             # 并走之后老文件的下场：`removed` 是删掉的（`backup=True`），
-            # `kept` 是**没删的**（`backup=False` 没有备份 ⇒ 不销毁数据）。
+            # `kept` 是没删的（`backup=False` 没有备份 ⇒ 不销毁数据）。
             # 两个都要报：只报 removed 的话，"老文件还在"这件事看不见。
             "moved_stale_files_removed": list(folded.get("stale_files_removed") or []),
             "moved_stale_files_kept": list(folded.get("stale_files_kept") or []),
-            # S1r：老**快照**里、而事件日志里从来没有过的概念号（逐表列出）。
-            # 非空 ⇒ 老文件**不删**（`moved_stale_files_kept` 里会看到它）：
+            # S1r：老快照里、而事件日志里从来没有过的概念号（逐表列出）。
+            # 非空 ⇒ 老文件不删（`moved_stale_files_kept` 里会看到它）：
             # 那些行只存在于那份快照里，删掉就是不可逆的数据销毁。
             "moved_snapshot_ahead": {t: v for t, v in sorted(moved_snapshot_ahead.items())},
-            # `I-5`：`events.jsonl` 里有几行**坏了**（半行 JSON / 不是 JSON）。
+            # `I-5`：`events.jsonl` 里有几行坏了（半行 JSON / 不是 JSON）。
             # 旧版把这件事吞在 `read_events` 的 `corrupt` 占位里，
             # 返回值里看不见 ⇒ "没抛异常"被误读成"日志是好的"。
             "corrupt_events": corrupt_events,
@@ -1905,11 +1768,11 @@ class Store:
             # 逐表明细（只有差集非空的表才在里面）：人排查时需要知道是哪张表，
             # 而不只是一个总数。
             "snapshot_ahead": {t: v for t, v in sorted(snapshot_ahead.items())},
-            # `R-57`：这次重放里**真的删掉**了几行（删除事件是被算进重放的）。
+            # `R-57`：这次重放里真的删掉了几行（删除事件是被算进重放的）。
             # 它与 `applied`（写下了几行）分开报：把两者混起来，"重建之后库里比删之前多"
             # 这件事就看不出来了 —— 而那正是 R-57 的原始形态。
             "deletes_replayed": deleted_replayed,
-            # 认不出的 `op`：不重放，但**必须被看见**（静默忽略一个不认识的 op
+            # 认不出的 `op`：不重放，但必须被看见（静默忽略一个不认识的 op
             # 等于"日志里有读不懂的东西"没有任何读数）。
             "unknown_ops": sorted(unknown_ops),
         }

@@ -1,36 +1,22 @@
 # -*- coding: utf-8 -*-
-"""业主裁定：**父代理必须处理子代理的产出** —— 判据（效应证据口径）与五条读数。
-
+"""业主裁定：父代理必须处理子代理的产出 —— 判据（效应证据口径）与五条读数。
 ## 真机证据（已核实，本判据的由来）
-
-`projects/mp4/data/tasks.json`：F 的所有任务 `called_by=D`（`t-000006/26/75/83`）。
-而 D 的派活任务只写"读 C 的报告立猜想"—— **D 派完 F、拿到 F 的结果、就 `final` 了**；
-F 的产出只留在台账、由 M 在下一轮读。于是"父拿到了结果却不处理"，
-整条链的推进责任被真空地转给了最上层。
-
-## 判据口径：**效应证据**，不是白名单（业主 2026-10 的修正）
-
-在这一次 summon 之后，父只要在**任何一步**留下可查的效应、且这一步**指到了那条
-子产出**（`task_id` / 产物路径 / 台账 id），就算处理了。业主点名的形态只是**举例**：
-写台账、改计划、立/改猜想、写报告、再派活、交给 H 审、用它做判断、折进 final ……
-
-"可查的效应"由 `agent_loop._is_effect_evidence` 用**负表**判：只排除只读侦察
-（`fs.list` / `status_report` 这类）与 `invalid` 步。于是**列举只活在文档里**。
-
+`projects/mp4/data/tasks.json`：F 的所有任务 `called_by=D`（`t-000006/26/75/83`）。而 D 的派活任务只写"读 C 的报告立猜想"—— D 派完 F、拿到 F 的结果、就 `final` 了；F 的产出只留在台账、由
+M 在下一轮读。于是"父拿到了结果却不处理"，整条链的推进责任被真空地转给了最上层。
+## 判据口径：效应证据，不是白名单（业主 2026-10 的修正）
+在这一次 summon 之后，父只要在任何一步留下可查的效应、且这一步指到了那条子产出（`task_id` / 产物路径 / 台账 id），就算处理了。业主点名的形态只是举例：写台账、改计划、立/改猜想、写报告、再派活、交给 H 审、用它做判断、折进 final ……
+"可查的效应"由 `agent_loop._is_effect_evidence` 用负表判：只排除只读侦察（`fs.list` / `status_report` 这类）与 `invalid` 步。于是列举只活在文档里。
 ## 这一组守什么（红/绿逐条）+ 为什么每条都要有负控
-
 | # | 场景 | 期望 |
 |---|---|---|
 | ① | 父派子 → 子回结果 → 父读它写的那份报告 | 绿：`unconsumed=0`、`consumed=1` |
 | ② | 父派子 → 父写受控的 `not_consumed` | 绿：`waived=1`、`unconsumed=0` |
-| ③ | 父派子 → 拿到结果 → **直接 final**（无具体产物指涉） | **红**：`unconsumed=1` |
-| ④ | ③ 的变体：把 `not_consumed` 的理由码换成空串 / 自造码 | **红**：`unconsumed=1` + 不成立的理由被念出来 |
+| ③ | 父派子 → 拿到结果 → 直接 final（无具体产物指涉） | 红：`unconsumed=1` |
+| ④ | ③ 的变体：把 `not_consumed` 的理由码换成空串 / 自造码 | 红：`unconsumed=1` + 不成立的理由被念出来 |
 | ⑤ | 反真空：没派过子的 run | 不红（`n/a`），但报 `summons_total=0` |
-| ⑥ | 反窄化**正控**：两种"不在原来三条里"的形态（立猜想 / 写报告） | 都必须**绿** |
-| ⑦ | 反窄化**负控**：把判据改回"只认那三条"（白名单） | ⑥ 那两条必须**红** |
-
-⑥⑦ 是同一批场景的两套判据（真判据 vs 白名单判据）：只有两套读数**不同**，
-才能证明判据读的是"效应证据"而不是"它属不属于我列举的那几类"。
+| ⑥ | 反窄化正控：两种"不在原来三条里"的形态（立猜想 / 写报告） | 都必须绿 |
+| ⑦ | 反窄化负控：把判据改回"只认那三条"（白名单） | ⑥ 那两条必须红 |
+⑥⑦ 是同一批场景的两套判据（真判据 vs 白名单判据）：只有两套读数不同，才能证明判据读的是"效应证据"而不是"它属不属于我列举的那几类"。
 """
 from __future__ import annotations
 
@@ -53,7 +39,7 @@ from agentflow.tools import build_registry
 SID = "test-run"
 
 #: 父 = D，子 = F —— 与真机证据里那条链同形（`t-000006` 等四条的 `called_by=D`）。
-#: ⚠️ 动作一栏是空串：S2 口径之后派活**不点动作**，`LlmBackend` 对空动作一律走循环
+#:  动作一栏是空串：S2 口径之后派活不点动作，`LlmBackend` 对空动作一律走循环
 #: （见 `LlmBackend.call` 的第一支），所以这里只需要把两个角色登记成"有人接"。
 LOOPS: dict[tuple[str, str], dict[str, Any]] = {("D", ""): {}, ("F", ""): {}}
 
@@ -74,7 +60,7 @@ _TID_IN_PROMPT = re.compile(r'"task_id":\s*"(t-\d{4,8})"')
 
 
 def _child_tid(prompt: str) -> str:
-    """从**父自己的观测**里读子任务的编号（照替身模型的做法：它看得见就写得出来）。"""
+    """从父自己的观测里读子任务的编号（照替身模型的做法：它看得见就写得出来）。"""
     found = _TID_IN_PROMPT.findall(prompt)
     assert found, ("父的观测里看不见子任务的 `task_id` ⇒ 这条指称它写不出来，"
                    f"演示不了『指到子产出』；提示词尾部：{prompt[-1200:]}")
@@ -84,7 +70,7 @@ def _child_tid(prompt: str) -> str:
 class _Scripted:
     """照剧本回答的替身模型：每条可以是字符串，也可以是 `prompt -> 字符串` 的函数。
 
-    为什么允许函数：有些步必须**指到上一步的产物**（`task_id`），而它只有模型在
+    为什么允许函数：有些步必须指到上一步的产物（`task_id`），而它只有模型在
     自己的观测里看得到 —— 真模型是这么做的，替身模型不该被喂一个写死的编号
     （那会变成"测试知道答案"，而判据要证明的是"模型能据此指称"）。
     """
@@ -149,7 +135,7 @@ def _ends(st) -> list[dict[str, Any]]:
 
 
 def _line(run: Any) -> str:
-    """这条判据在**这一趟**上的那一行（与收工那一行同一份读数）。"""
+    """这条判据在这一趟上的那一行（与收工那一行同一份读数）。"""
     got = run.summon_consumption
     return str(AL.summon_consumption_verdict(got)["line"])
 
@@ -212,14 +198,14 @@ def test_green_through_the_waiver_channel(tmp_path: pathlib.Path):
 # ============================================================ ③ 负控：直接 final
 
 def test_negative_the_parent_finals_right_after_the_result(tmp_path: pathlib.Path):
-    """③ 负控（最要紧）：父派子 → 拿到结果 → **直接 final**（没有具体产物指涉）⇒ 红。
+    """③ 负控（最要紧）：父派子 → 拿到结果 → 直接 final（没有具体产物指涉）⇒ 红。
 
     这就是真机里 D 的形态：把结果拿到手，然后收工。判据必须在这一格上红，
     否则"父必须处理子产出"这句话在读数上什么都不约束。
     """
     parent = [
         _parent_summon(),
-        # 只说到"F 交给了什么"，**没有**任何 `task_id` / 产物路径 / 台账 id ——
+        # 只说到"F 交给了什么"，没有任何 `task_id` / 产物路径 / 台账 id ——
         # 那正是业主说的"final 里没有具体产物指涉"。
         json.dumps({"final": "F 已经把攻击路线交上来了，收工。", "evidence": []},
                    ensure_ascii=False),
@@ -232,7 +218,7 @@ def test_negative_the_parent_finals_right_after_the_result(tmp_path: pathlib.Pat
     assert run.summons_consumed == 0 and run.summons_waived == 0, run.summon_consumption
     verdict = AL.summon_consumption_verdict(run.summon_consumption)
     assert verdict["status"] == "red", verdict
-    # 红的那一行必须**说得清**：是哪一条、为什么红
+    # 红的那一行必须说得清：是哪一条、为什么红
     assert f"unconsumed=1" in verdict["line"], verdict["line"]
     assert "没有处理" in verdict["why"], verdict
 
@@ -269,7 +255,7 @@ def test_the_criterion_shows_a_red_line_and_a_green_line(tmp_path: pathlib.Path)
 @pytest.mark.parametrize("code,label", [("", "空串"), ("because_i_said_so", "自造码")])
 def test_negative_a_bad_waiver_code_does_not_waive(tmp_path: pathlib.Path, code: str,
                                                    label: str):
-    """④ 负控：`not_consumed` 的理由码是空串 / 自造码 ⇒ **不算** waive，判据红。
+    """④ 负控：`not_consumed` 的理由码是空串 / 自造码 ⇒ 不算 waive，判据红。
 
     为什么必须逐条造红：理由码是这条通路唯一的闸门。它一放宽，"我不处理它"
     就退化成一句自我声明 —— 而声明写得漂亮与真的处理过，在读数上会变成同一件事。
@@ -300,7 +286,7 @@ def test_negative_a_bad_waiver_code_does_not_waive(tmp_path: pathlib.Path, code:
 # ============================================================ ⑤ 反真空：没有对象
 
 def test_n_a_when_the_run_never_summoned_anything(tmp_path: pathlib.Path):
-    """⑤ 反真空：`summons_total == 0` 的 run ⇒ 判据**不红**（它没有对象），但要报 0。
+    """⑤ 反真空：`summons_total == 0` 的 run ⇒ 判据不红（它没有对象），但要报 0。
 
     没有这一条，"这一趟没派过子"与"派了没处理"会共用同一个读数 —— 反真空要的
     正好是把它俩分开：前者 `n/a`、后者 `red`，而两者都不许被折成"通过"。
@@ -324,7 +310,7 @@ def test_n_a_when_the_run_never_summoned_anything(tmp_path: pathlib.Path):
 # ================================================== ⑥⑦ 反窄化：不是白名单
 
 def _form_a_replies() -> list[Any]:
-    """形态 A：**立一条猜想**（业主点名的"立/改猜想"），statement 里指到子产物。"""
+    """形态 A：立一条猜想（业主点名的"立/改猜想"），statement 里指到子产物。"""
     def register(prompt: str) -> str:
         tid = _child_tid(prompt)
         return json.dumps({"tool": "conjecture.register_conjecture",
@@ -339,7 +325,7 @@ def _form_a_replies() -> list[Any]:
 
 
 def _form_b_replies() -> list[Any]:
-    """形态 B：**写报告**（`fs.write`），正文里指到子产物。"""
+    """形态 B：写报告（`fs.write`），正文里指到子产物。"""
     def write(prompt: str) -> str:
         tid = _child_tid(prompt)
         return json.dumps({"tool": "fs.write",
@@ -356,9 +342,9 @@ def _form_b_replies() -> list[Any]:
 ])
 def test_green_for_forms_outside_the_three_routes(tmp_path: pathlib.Path, builder,
                                                   label: str, effect_tool: str):
-    """⑥ 反窄化正控：两种"不在原来三条里"的合法处理形态 ⇒ **都必须绿**。
+    """⑥ 反窄化正控：两种"不在原来三条里"的合法处理形态 ⇒ 都必须绿。
 
-    原来那三条（消费 / 拒绝并说明 / 继续派）是**举例**。这一条证明判据认的是
+    原来那三条（消费 / 拒绝并说明 / 继续派）是举例。这一条证明判据认的是
     "效应证据"：`conjecture.register_conjecture` 与 `fs.write` 都不属于"读产物/再派活"，
     但它们留下了指到子产出的效应。
     """
@@ -373,12 +359,12 @@ def test_green_for_forms_outside_the_three_routes(tmp_path: pathlib.Path, builde
 
 
 def _whitelist_effect(shape: str, payload: Any) -> bool:
-    """"只认那三条"的白名单版判据（**负控专用**，不进生产代码）。
+    """"只认那三条"的白名单版判据（负控专用，不进生产代码）。
 
     它只认两条通路：① 读产物（`fs.read`）算消费；② 再派活（summon）算继续派。
     ③ waiver 由 `_waiver_declarations` 独立判，这里不涉及 —— 于是两种"不在三条里"
     的形态（立猜想 / 写报告）在这个白名单下必然红。这正是拐杖要证明的事：
-    **判据不是白名单**。
+    判据不是白名单。
     """
     if shape in ("summon", "summon_many"):
         return True
@@ -391,9 +377,9 @@ def _whitelist_effect(shape: str, payload: Any) -> bool:
 ])
 def test_negative_a_whitelist_criterion_would_turn_those_two_red(
         tmp_path: pathlib.Path, builder, label: str, monkeypatch):
-    """⑦ 反窄化负控：把判据改回"只认那三条" ⇒ ⑥ 那两条**必须红**。
+    """⑦ 反窄化负控：把判据改回"只认那三条" ⇒ ⑥ 那两条必须红。
 
-    注入点是 `_is_effect_evidence`（判"这一步算不算效应"的**唯一**谓词）：
+    注入点是 `_is_effect_evidence`（判"这一步算不算效应"的唯一谓词）：
     换成白名单版之后，同样两趟运行必须红。若这里仍然绿，说明判据里还藏着
     别的"不看谓词也放行"的旁路 —— 那才是真正的窄化。
     """
@@ -408,7 +394,7 @@ def test_negative_a_whitelist_criterion_would_turn_those_two_red(
 # ================================================== 落点：批量与手稿（三种形状各一条）
 
 def test_a_batch_lands_one_reading_per_target_and_drops_refusals():
-    """`summon_many`：**每个 target 各一条**产出读数；被拒的那一项不进 `summons_total`。
+    """`summon_many`：每个 target 各一条产出读数；被拒的那一项不进 `summons_total`。
 
     为什么单钉这一条：批量结果是"一次调用、多个子任务"，如果只记第一条（或只记
     整批一条），"这一批里哪一条没被处理"在读数上就消失了 —— 而真机里 D 派 F 的
@@ -427,9 +413,9 @@ def test_a_batch_lands_one_reading_per_target_and_drops_refusals():
 
 
 def test_a_handoff_lands_in_productions_but_is_not_counted():
-    """`handoff`：**记一条**（业主点名要含它），但 `counted=False` —— 不进 `summons_*`。
+    """`handoff`：记一条（业主点名要含它），但 `counted=False` —— 不进 `summons_*`。
 
-    为什么不计：手稿是**对等通道**（写给同伴/M 的一份交接），没有 `task_id`、
+    为什么不计：手稿是对等通道（写给同伴/M 的一份交接），没有 `task_id`、
     也没有"子结果"可以消费；把它算成"下级产出"会让 `summons_total` 混进一类
     根本没有"处理"这个问题的东西。它进 `productions` 只是让"这次调用产生了什么"
     在一处读得到。
@@ -449,9 +435,9 @@ def test_a_handoff_lands_in_productions_but_is_not_counted():
 # ================================================== 收工门那一格：可见但不拦门
 
 def test_the_closing_gate_reads_the_reading_without_failing(tmp_path: pathlib.Path):
-    """收工门那一格：`summons_unconsumed > 0` 时**读得到**，但它不拦门（warning，不 fail）。
+    """收工门那一格：`summons_unconsumed > 0` 时读得到，但它不拦门（warning，不 fail）。
 
-    业主逐字：「`summons_unconsumed > 0` 时收工门的相应格要能读到（**不一定 fail**，
+    业主逐字：「`summons_unconsumed > 0` 时收工门的相应格要能读到（不一定 fail，
     但必须可见）」⇒ 这一格落 `readings["summon_consumption"]` + 一条 `warning`：
     `machine_pass` 只看 `blocker`，所以门的强度一点没变，而"没处理"再也不会
     从收工门的输出里消失。
@@ -476,7 +462,7 @@ def test_the_closing_gate_reads_the_reading_without_failing(tmp_path: pathlib.Pa
 
 
 def test_the_closing_gate_says_unknown_for_an_old_session(tmp_path: pathlib.Path):
-    """三态：老会话（没有任何一趟报过这一格）⇒ `checked=False`，**不是** 0。
+    """三态：老会话（没有任何一趟报过这一格）⇒ `checked=False`，不是 0。
 
     把"没有这一格"折成 0 等于给老工作区发一张"全都处理过"的假绿 ——
     这正是本仓反复登记的那条形态（"没查成"与"查过了没问题"必须分得开）。

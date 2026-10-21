@@ -1,37 +1,18 @@
 # -*- coding: utf-8 -*-
 """五元位与它们各自的台账：位上说有，表里要查得到。
-
 ## 这一组守的是业主的一条点名（2026-10-09 逐字）
-
-> 「再确认一条命题的五元状态是哪张表在维护，要做好映射（如果五元状态里说有证明，
-> 证明应该在 B 维护的表里可查）」
-
+> 「再确认一条命题的五元状态是哪张表在维护，要做好映射（如果五元状态里说有证明，> 证明应该在 B 维护的表里可查）」
 ## 为什么这需要一条判据（而不是一句注释）
-
-五元位是读数，表是凭据。在加这一条之前，"这一位是 `verified`"这句话
-在整个系统的数据面上只受一件事约束：位自己的形状（`evidencebits.bit_problems`
-要求 `verified` 带凭据）。于是下面这种形态是允许的：
-
-    位里写 proof=true（或 numeric=verified 指着一个不存在的实验号），
-    而 `statements.proof_text` 是空的 —— "位上说有证明，B 的表里却没有证明"。
-
-它在报告里与"真的做过"长得一模一样，而这正是五元位当初要堵的洞
-（`bits_from_row`：「自报不算凭据」）。所以映射必须落到判据上：`BIT_LEDGERS`
-说"哪一位去哪张表查"，`bit_evidence_gaps` 判"查得到吗"，`verify` 第 13 段
-把它翻成 issue。
-
+五元位是读数，表是凭据。在加这一条之前，"这一位是 `verified`"这句话在整个系统的数据面上只受一件事约束：位自己的形状（`evidencebits.bit_problems`要求 `verified` 带凭据）。
+于是下面这种形态是允许的：
+位里写 proof=true（或 numeric=verified 指着一个不存在的实验号），而 `statements.proof_text` 是空的 —— "位上说有证明，B 的表里却没有证明"。
+它在报告里与"真的做过"长得一模一样，而这正是五元位当初要堵的洞（`bits_from_row`：「自报不算凭据」）。
+所以映射必须落到判据上：`BIT_LEDGERS`说"哪一位去哪张表查"，`bit_evidence_gaps` 判"查得到吗"，`verify` 第 13 段把它翻成 issue。
 ## 判据的分工（三态纪律）
-
-- 正控一：映射本身全不全（五位都在、owner 与 `BIT_OWNERS` 逐位一致、
-  三栏都非空）—— 映射漏一位就等于那一位没有台账；
-- 正控二：好数据不误伤（自己证的命题 + 真实验号 ⇒ 一条 gap 都不许报）；
-- 负控：位说有、表里没有 ⇒ `bits_proof_without_evidence`（error）/
-  `bits_evidence_pointer_dangling`（error）；
-- 负控：指针指的实验存在但类别不对 ⇒ `bits_evidence_method_mismatch`（warning，
-  "查了别的东西"不是"没查"，所以看得见但不拦门）；
-- 反真空 / 三态：没有指针时不报（凭据缺失由 `bit_problems` 点名，同一件事报两次
-  会让"改哪里"变得不清楚）；引用命题不报（凭据是文献代号 + 逐字核验，
-  证明过程在别人的文献里，不在我们的台账里）。
+- 正控一：映射本身全不全（五位都在、owner 与 `BIT_OWNERS` 逐位一致、三栏都非空）—— 映射漏一位就等于那一位没有台账；- 正控二：好数据不误伤（自己证的命题 + 真实验号 ⇒ 一条 gap 都不许报）；-
+负控：位说有、表里没有 ⇒ `bits_proof_without_evidence`（error）/`bits_evidence_pointer_dangling`（error）；- 负控：指针指的实验存在但类别不对 ⇒
+`bits_evidence_method_mismatch`（warning，"查了别的东西"不是"没查"，所以看得见但不拦门）；- 反真空 / 三态：没有指针时不报（凭据缺失由 `bit_problems` 点名，
+同一件事报两次会让"改哪里"变得不清楚）；引用命题不报（凭据是文献代号 + 逐字核验，证明过程在别人的文献里，不在我们的台账里）。
 """
 
 from __future__ import annotations

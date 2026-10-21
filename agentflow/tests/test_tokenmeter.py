@@ -2,25 +2,20 @@
 
 ## 判据逐条对应
 
-FC-19 的三条判据（`test/test2/LESSONS.md` §6.5）：
-
-1. 每个子任务有**上限**，超额即降级或返回当前最好答案
-   → `TokenMeter.guard()`：`allowed=False` 时在开工前拒绝；
-   调用方（F 的攻坚 / 编排层）据此降级并交出 `best_partial`。
-   ⚠️ **2026-10-15 业主裁定 A1/A2/A3/A7 把这条的上限从 token 改成钱**
-   （「我们不卡 token，只卡总花销的钱」）：`budget_tokens` 那一格已删，
-   判据只剩 `budget_usd`。理由见 `draft/121`（卡 token 卡的正是"它想清楚"那一段）。
+FC-19 的三条判据（`test/test2/LESSONS.md` §6.5）：每个子任务有上限，超额即降级或返回当前最好答案
+→ `TokenMeter.guard()`：`allowed=False` 时在开工前拒绝；调用方（F 的攻坚 / 编排层）据此降级并交出 `best_partial`。2026-10-15 业主裁定 A1/A2/A3/A7
+把这条的上限从 token 改成钱（「我们不卡 token，只卡总花销的钱」）：`budget_tokens` 那一格已删，判据只剩 `budget_usd`。理由见 `draft/121`（卡 token
+卡的正是"它想清楚"那一段）。
 2. 重试计入预算（可判定：注入 N 次失败重试后，消耗 ≥ N × 单次成本）
-   → `Charge.attempts` 参与 `tokens`；`test_retries_are_charged_individually` 就是那条判据。
+→ `Charge.attempts` 参与 `tokens`；`test_retries_are_charged_individually` 就是那条判据。
 3. D 向 A 提问的预算必须已定值并写进配置
-   → 这一条落在"预算从配置来"，本文件由 `TokenMeter(budget_usd=...)` 的形状体现；
-   实际的配置接线在 `Policy.usd_budget` 与 `budget.limit_usd(root)`（总账）两处。
+→ 这一条落在"预算从配置来"，本文件由 `TokenMeter(budget_usd=...)` 的形状体现；实际的配置接线在 `Policy.usd_budget` 与 `budget.limit_usd(root)`（总账）
+两处。
 
 ## 为什么这一条最后才做
 
-数据结构（`UsageEntry` / `usage_ledger`）早就备好了，但没有任何东西把花销记进去、
-也没有任何东西据此说"不"。"有表、有字段、有测试"与"真的会拦"是两件事 ——
-本文件测的是后者。**token 只测"记得住"，不测"拦得住"** —— 它不拦。
+数据结构（`UsageEntry` / `usage_ledger`）早就备好了，但没有任何东西把花销记进去、也没有任何东西据此说"不"。"有表、有字段、有测试"与"真的会拦"是两件事 ——本文件测的是后者。token
+只测"记得住"，不测"拦得住" —— 它不拦。
 """
 
 from __future__ import annotations
@@ -182,8 +177,8 @@ def test_guard_is_not_limited_when_no_budget_is_configured(store):
 def test_guard_refuses_before_work_when_the_budget_is_spent(store):
     """判据①：拒绝要在开工前发生，而不是做到一半再停。
 
-    ⚠️ 2026-10-15 业主裁定 A1/A2/A3/A7 之后，这一轴**只剩钱**：
-    此前这里是 `budget_tokens=1000` + "预估 200 会超"（一条按 token 的**预计值**闸）。
+     2026-10-15 业主裁定 A1/A2/A3/A7 之后，这一轴只剩钱：
+    此前这里是 `budget_tokens=1000` + "预估 200 会超"（一条按 token 的预计值闸）。
     那条闸删掉了 —— 它拦的正是"这一步想得多一点"。现在的判据是钱：
     已经花光（`spent >= budget`）⇒ 拒绝新工作。
     """
@@ -248,7 +243,7 @@ def test_by_role_attributes_the_spend(store):
 
 # ============================================================ 与预算守卫的接缝
 #
-# 接线状态（2026-10-15 更新）：`TokenMeter` 已经是**接线过的**——
+# 接线状态（2026-10-15 更新）：`TokenMeter` 已经是接线过的——
 # `conductor._meter_guard()` 在每次召唤开工前调 `guard()`（唯一的拒绝点），
 # `conductor._charge_and_settle()` 在收尾时记一笔。
 # 仍然成立的那条纪律：token 只被记，不被判；判的只有钱。

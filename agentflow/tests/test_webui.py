@@ -1,46 +1,22 @@
 # -*- coding: utf-8 -*-
 """用户端 Web 界面：正控与负控（离线，只连本机临时端口的临时服务）。
-
 ## 这一组守什么
-
 `docs/USER-END-DSH-STYLE.md` §3.3 抄来的三条纪律，每条都要有机器可查的判据：
-
-1. 「待回答的东西必须全局可达」：面板不按会话过滤（跨会话正控），
-   每条问题要能看到会话号、问题号、谁在问、问了多久、正文、以及每个选项的
-   label 与 description（选项是 `{label, description}` 而不是裸字符串）；
-2. 「状态一律从盘上派生」（状态不进组件 state）：同一份盘上数据读两次逐字节
-   相同（投影，不是缓存），中间往盘上追加东西后再读 ⇒ 读数必须变；
-3. 「写回答的失败不许折成 200」：qid 不在待答清单 ⇒ 409（分「已经答过了」与
-   「没有这个号」两档说清），成功 ⇒ 303 PRG（刷新不重复提交）；
-   跳过 = 空的 `selected`（DSH 口径），不是「没答」。
-
+1. 「待回答的东西必须全局可达」：面板不按会话过滤（跨会话正控），每条问题要能看到会话号、问题号、谁在问、问了多久、正文、以及每个选项的label 与 description（选项是
+`{label, description}` 而不是裸字符串）；2. 「状态一律从盘上派生」（状态不进组件 state）：同一份盘上数据读两次逐字节相同（投影，不是缓存），中间往盘上追加东西后再读 ⇒ 读数必须变；3.
+「写回答的失败不许折成 200」：qid 不在待答清单 ⇒ 409（分「已经答过了」与「没有这个号」两档说清），成功 ⇒ 303 PRG（刷新不重复提交）；跳过 = 空的 `selected`（DSH 口径），不是「没答」。
 另外两条是本项目的纪律，不是 DSH 的：
-
-4. 「服务器写进 HTML 的一切文本都转义」（写路径给的 409 正文嵌进错误页时，
-   用户给的 `qid` 必须变 `&lt;script&gt;`），外加「前端源码里不许把字符串当
-   HTML 用」—— SPA 那一面的注入面只有那一种写法；
-5. 「只用令牌」（`ui/src/theme/app.css` 里不许有字面色值，且必须真的是在令牌
-   体系里写样式）。
-
+4. 「服务器写进 HTML 的一切文本都转义」（写路径给的 409 正文嵌进错误页时，用户给的 `qid` 必须变 `&lt;script&gt;`），外加「前端源码里不许把字符串当HTML 用」—— SPA
+那一面的注入面只有那一种写法；5. 「只用令牌」（`ui/src/theme/app.css` 里不许有字面色值，且必须真的是在令牌体系里写样式）。
 ## W5 清仓之后这一组查的是哪些面（2026-10-08，裁定 P1 的最后一块）
-
-旧壳 `webui/views.py` 已整件退场：`/` 与 `/run/{sid}` 都吐同一支 SPA 外壳，
-六个页面的读数一律走 `/api/*`。于是这一组里凡是被旧壳 HTML 影响的断言都换到了
-SPA 面（外壳形状 / JSON 读数 / 写路径的状态码），用例条数一条没减
-（旧壳还活着时的 17 条 + 新加的 `/run/{sid}` 外壳那一条）：每条迁移都在它自己的
-docstring 里逐句写明"原来断言什么、现在断言什么、为什么是同一件事"。
-
+旧壳 `webui/views.py` 已整件退场：`/` 与 `/run/{sid}` 都吐同一支 SPA 外壳，六个页面的读数一律走 `/api/*`。于是这一组里凡是被旧壳 HTML 影响的断言都换到了SPA 面（外壳形状 /
+JSON 读数 / 写路径的状态码），用例条数一条没减（旧壳还活着时的 17 条 + 新加的 `/run/{sid}` 外壳那一条）：每条迁移都在它自己的docstring 里逐句写明"原来断言什么、现在断言什么、
+为什么是同一件事"。
 ## 口径兼容（与并行的 `userio` 改造）
-
-回答事件有两种口径：新的 `{"qid","selected":[...],"custom":"...","by","late"}`，
-以及旧的 `{"qid","answer","by","late"}`。本文件一律用
-:func:`agentflow.webui.answer_text_of` 读回答文本（`custom` 非空取它，
-否则 `"、".join(selected)`，否则退回 `answer`），于是两种口径下判据都成立。
-
+回答事件有两种口径：新的 `{"qid","selected":[...],"custom":"...","by","late"}`，以及旧的 `{"qid","answer","by","late"}`。本文件一律用:
+func:`agentflow.webui.answer_text_of` 读回答文本（`custom` 非空取它，否则 `"、".join(selected)`，否则退回 `answer`），于是两种口径下判据都成立。
 ## 为什么不起长期服务
-
-每个用例用 `port=0` 起一个临时端口上的服务，`finally` 里 `shutdown()` +
-`server_close()`。不联网（只连本机 `127.0.0.1`），不写任何全局状态。
+每个用例用 `port=0` 起一个临时端口上的服务，`finally` 里 `shutdown()` +`server_close()`。不联网（只连本机 `127.0.0.1`），不写任何全局状态。
 """
 from __future__ import annotations
 
@@ -251,19 +227,15 @@ def _write_report(root: pathlib.Path, text: str) -> pathlib.Path:
 
 # ====================================================================== 1 正控
 def test_pending_question_shows_up_on_the_global_panel(tmp_path: pathlib.Path):
-    """正控（全局面板）：待答问题的机器读数在，而 `/` 这一格是 SPA 外壳。
+    """    正控（全局面板）：待答问题的机器读数在，而 `/` 这一格是 SPA 外壳。
 
-    迁移说明（2026-10-07，裁定 P1 的第一块）：`/` 不再服务端渲染待答面板 —— 它吐的是
-    SPA 外壳，面板由 `ui/src/pages/Home.tsx` 从 `/api/state` 渲染。于是这一条钉的
-    两件事换了面、但守的是同一件事：
-
-    - 旧：`GET /` 的 HTML 里出现 qid / 正文 / 每个选项的 label 与 description / 提交表单；
+    迁移说明（2026-10-07，裁定 P1 的第一块）：`/` 不再服务端渲染待答面板 —— 它吐的是SPA 外壳，面板由 `ui/src/pages/Home.tsx` 从 `/api/state` 渲染。
+    于是这一条钉的两件事换了面、但守的是同一件事：旧：`GET /` 的 HTML 里出现 qid / 正文 / 每个选项的 label 与 description / 提交表单；
     - 新：`GET /api/state` 里出现同四样（这是面板的唯一数据来源），且 `/` 是外壳
-      （`#app` + 注入过的 CSRF token）；
+    （`#app` + 注入过的 CSRF token）；
     - "页面真的读这些键"那一半由 `tests/test_webui_pages.py` 的
-      `test_home_page_reads_the_global_pending_panel` 守着（它逐键断言 Home.tsx
-      读了 `pending_questions` / `options` / `description` 等，并断言 Home 页里有
-      "提交回答"与空态文案）；
+    `test_home_page_reads_the_global_pending_panel` 守着（它逐键断言 Home.tsx读了 `pending_questions` / `options` /
+    `description` 等，并断言 Home 页里有"提交回答"与空态文案）；
     - "能提交回答"那一半由下面第 2 条（PRG + 落盘）与契约 A（`/answer` 在两边都有）守着。
     """
     root = tmp_path / "ws"
@@ -430,28 +402,16 @@ def test_answering_twice_is_409_and_does_not_duplicate(tmp_path: pathlib.Path):
 
 # ====================================================================== 7 负控
 def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path, monkeypatch):
-    """负控（投影而非缓存）：两次读逐字节相同；盘上新增 ⇒ 读数必须变。
-
-    W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端
-    渲染页（两趟 HTML 逐字节相同 + 追加一条事件后 HTML 变）。旧壳退场后"详情面"是
-    `GET /api/run/{sid}` 的 JSON，于是同一个意思换成三处真读盘的读数 ——
-    每一处都还是"盘上变了，面就得跟着变"，而且各自比原来更具体：
-
-    1. `/api/run/t` 两次读逐字节相同（投影，不是缓存）—— 原来断言的是渲染两次的
-       HTML 相同，同一条意思；顺带钉住这份读数里那两条事件的可读内容
-       （`task` 来自 `agent_run_start`、`last_shape` 来自 `agent_step`）；
+    """    负控（投影而非缓存）：两次读逐字节相同；盘上新增 ⇒ 读数必须变。W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端渲染页（两趟 HTML 逐字节相同 +
+    追加一条事件后 HTML 变）。旧壳退场后"详情面"是`GET /api/run/{sid}` 的 JSON，于是同一个意思换成三处真读盘的读数 ——每一处都还是"盘上变了，面就得跟着变"，
+    而且各自比原来更具体：`/api/run/t` 两次读逐字节相同（投影，不是缓存）—— 原来断言的是渲染两次的
+    HTML 相同，同一条意思；顺带钉住这份读数里那两条事件的可读内容（`task` 来自 `agent_run_start`、`last_shape` 来自 `agent_step`）；
     2. 追加一条落在轮次之外的事件（`agent_note`）⇒ `/api/state` 的 `orphans`
-       里多出它、`orphan_summary.count` +1（Run 页"轮次之外的零散事件"那一栏读的
-       就是这两栏）；而 `/api/run/t` 逐字节不动 —— 这是旧壳那条负控的加强版：
-       旧壳会把零散事件也画进详情页，今天它只进那一栏（"不许被折成一趟"由
-       `test_events_outside_a_run_never_become_a_run` 守）；
+    里多出它、`orphan_summary.count` +1（Run 页"轮次之外的零散事件"那一栏读的就是这两栏）；而 `/api/run/t` 逐字节不动 —— 这是旧壳那条负控的加强版：旧壳会把零散事件也画进详情页，
+    今天它只进那一栏（"不许被折成一趟"由`test_events_outside_a_run_never_become_a_run` 守）；
     3. 再追加一整趟 ⇒ `/api/run/t` 变了（趟数 1 → 2，起始下标递增）——
-       原来"追加事件后页面变"那一条的等价物。
-
-    为什么要把那只钟钉住：`/api/state` 有一栏 `generated_at`（`webui._now_iso()`），
-    而这一条要的是"逐字节相同"。2026-10-03 的全量里它红过一次：两次请求跨了一秒
-    ⇒ 逐字节比较失败。钉住那只钟之后，剩下的任何字节差异都只能来自盘上的数据 ——
-    判据反而更紧，而不是更松。
+    原来"追加事件后页面变"那一条的等价物。为什么要把那只钟钉住：`/api/state` 有一栏 `generated_at`（`webui._now_iso()`），而这一条要的是"逐字节相同"。2026-10-03
+    的全量里它红过一次：两次请求跨了一秒⇒ 逐字节比较失败。钉住那只钟之后，剩下的任何字节差异都只能来自盘上的数据 ——判据反而更紧，而不是更松。
     """
     monkeypatch.setattr(W, "_now_iso", lambda: "2026-10-03T00:00:00+08:00")
     root = tmp_path / "ws"
@@ -514,26 +474,16 @@ def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path, monkeypat
 
 # ====================================================================== 8 负控
 def test_model_and_user_text_is_escaped(tmp_path: pathlib.Path):
-    """负控（安全）：用户/模型产生的文本不许在页面里变成 HTML。
-
-    W5 迁移（2026-10-08，裁定 P1 的最后一块）：旧壳退场之后，服务器自己写 HTML 的
-    地方只剩错误页（`server._error_page`），盘上文本一律走 JSON。于是"转义"这件事
-    在三处真读数上钉 —— 它跟着「攻击面」搬，而不是跟着旧代码搬：
-
-    1. 用户给的串进 HTML 的那一条活路（写路径给的 409 正文，嵌在错误页里）：
-       `POST /answer` 的 `qid` 里塞 `<script>` 必须变成 `&lt;script&gt;`。
-       原来断言的是旧壳渲染问题正文时转义，这是同一件事在新落点上的形态；
+    """    负控（安全）：用户/模型产生的文本不许在页面里变成 HTML。W5 迁移（2026-10-08，裁定 P1 的最后一块）：旧壳退场之后，服务器自己写 HTML 的地方只剩错误页（`server._error_page`），
+    盘上文本一律走 JSON。于是"转义"这件事在三处真读数上钉 —— 它跟着「攻击面」搬，而不是跟着旧代码搬：用户给的串进 HTML 的那一条活路（写路径给的 409 正文，嵌在错误页里）：
+    `POST /answer` 的 `qid` 里塞 `<script>` 必须变成 `&lt;script&gt;`。原来断言的是旧壳渲染问题正文时转义，这是同一件事在新落点上的形态；
     2. 错误页的理由串也转义（静态路由那个名字是请求方给的）：`/static/<坏名字>`
-       的 404 页里不许出现原样的尖括号。这是本批新加进 HTML 的用户输入面，
-       必须一起守住（负控见下面的 `&lt;` 那一句：它证明这条断言不是恒真）；
+    的 404 页里不许出现原样的尖括号。这是本批新加进 HTML 的用户输入面，必须一起守住（负控见下面的 `&lt;` 那一句：它证明这条断言不是恒真）；
     3. SPA 那一面：数据走 JSON、由 Preact 建成文本节点，所以机器读数是
-       "前端源码里没有任何地方把字符串当 HTML 插进去"（`innerHTML` /
-       `dangerouslySetInnerHTML` / `outerHTML` / `document.write` /
-       `insertAdjacentHTML` 一个都不许出现），外加"外壳里根本没有盘上数据"、
-       而"正文确实还在（在 JSON 里原样带着）"。
+    "前端源码里没有任何地方把字符串当 HTML 插进去"（`innerHTML` /`dangerouslySetInnerHTML` / `outerHTML` /
+    `document.write` /`insertAdjacentHTML` 一个都不许出现），外加"外壳里根本没有盘上数据"、而"正文确实还在（在 JSON 里原样带着）"。
 
-    为什么第 3 条是等价的守卫：SPA 的注入面只有"把字符串当 HTML 用"这一种写法；
-    堵掉它，用户文本就只能以文本节点进 DOM —— 那是浏览器替我们转义。
+    为什么第 3 条是等价的守卫：SPA 的注入面只有"把字符串当 HTML 用"这一种写法；堵掉它，用户文本就只能以文本节点进 DOM —— 那是浏览器替我们转义。
     """
     root = tmp_path / "ws"
     root.mkdir()
@@ -582,20 +532,16 @@ def test_model_and_user_text_is_escaped(tmp_path: pathlib.Path):
 
 # ====================================================================== 9 负控
 def test_app_css_uses_only_tokens():
-    """负控（只用令牌）：`ui/src/theme/app.css` 无字面色值，且确实在令牌体系里写样式。
+    """    负控（只用令牌）：`ui/src/theme/app.css` 无字面色值，且确实在令牌体系里写样式。
 
-    W5 迁移（2026-10-08）：被检对象从旧壳内联的 `web/assets.py::APP_CSS` 换成 SPA 的
-    组件样式 `ui/src/theme/app.css` —— 旧壳退场后组件样式只剩这一份（`ui/index.html`
-    里 `<link>` 引的就是它，构建时打进 `web/static/assets/`）。断言逐条等价、强度不变：
-
-    - 原：`APP_CSS` 里不许有 `#rrggbb` / `rgb(` / `hsl(` ⇒ 新：同一套正则查 app.css；
+    W5 迁移（2026-10-08）：被检对象从旧壳内联的 `web/assets.py::APP_CSS` 换成 SPA 的组件样式 `ui/src/theme/app.css` ——
+    旧壳退场后组件样式只剩这一份（`ui/index.html`里 `<link>` 引的就是它，构建时打进 `web/static/assets/`）。断言逐条等价、强度不变：原：`APP_CSS` 里不许有
+    `#rrggbb` / `rgb(` / `hsl(` ⇒ 新：同一套正则查 app.css；
     - 原：至少 8 个不同的 `--dsw-alias-` 令牌 ⇒ 新：同一条（今天 17 个）；
     - 原：引用的令牌必须在 `THEME_CSS` 里定义过 ⇒ 新：同一份 `THEME_CSS`
-      （它没搬走，仍是令牌的唯一真身，前端那份是它的生成物）；
-    - 原：三档状态徽标 + `--ds-font-family-code` + 运动令牌要真的用上 ⇒ 新：同一条。
-
-    另外加一条反真空断言：文件不在盘上时直接红，不许因为读成空串而静默变绿
-    （`hexes == []` 对空串是恒真的）。
+    （它没搬走，仍是令牌的唯一真身，前端那份是它的生成物）；
+    - 原：三档状态徽标 + `--ds-font-family-code` + 运动令牌要真的用上 ⇒ 新：同一条。另外加一条反真空断言：文件不在盘上时直接红，
+    不许因为读成空串而静默变绿（`hexes == []` 对空串是恒真的）。
     """
     css = _ui_text("theme/app.css")
     assert css, "ui/src/theme/app.css 不在盘上 ⇒ 这条判据没有对象了（不许静默变绿）"
@@ -677,23 +623,16 @@ def test_pending_list_is_never_filtered_by_session(tmp_path: pathlib.Path):
 
 # ====================================================================== 12 正控
 def test_run_detail_replays_events_and_report(tmp_path: pathlib.Path):
-    """正控（一趟详情）：读数与交付说明都拿得到；没有这一段会话 ⇒ 如实说"没查成"。
+    """    正控（一趟详情）：读数与交付说明都拿得到；没有这一段会话 ⇒ 如实说"没查成"。
 
-    W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端
-    渲染页（事件卡片里出现四个 kind、步骤的形状与下标、报告原文在一个 `<pre>` 里、
-    不存在的 sid ⇒ 404 页）。旧壳退场后同一件事分两处、逐条等价：
-
-    - 页面入口 `/run/r1` 是 SPA 外壳（`_spa_run` 的三样机器读数 + 外壳里没有盘上数据）；
+    W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端渲染页（事件卡片里出现四个 kind、步骤的形状与下标、报告原文在一个 `<pre>` 里、不存在的 sid ⇒
+    404 页）。旧壳退场后同一件事分两处、逐条等价：页面入口 `/run/r1` 是 SPA 外壳（`_spa_run` 的三样机器读数 + 外壳里没有盘上数据）；
     - 详情读数是 `GET /api/run/r1` 的 JSON（`runs` / `report` / `checkpoint`）。
-      "事件被读到了"原来靠 HTML 里出现 `agent_run_start` / `agent_step` 两个 kind 来钉，
-      今天同两条事件的「可读内容」落在 `task`（来自 `agent_run_start` 的 payload）、
-      `last_shape` 与 `steps`（来自 `agent_step` / `agent_run_end`）上 ——
-      钉的还是"盘上的事件真被读成了读数"；
-      "报告原样显示在一个 `pre` 里"那一半移到 `Run.tsx` 的源码读数
-      （`v.report.text` 进 `class="mono pre"`）；
+    "事件被读到了"原来靠 HTML 里出现 `agent_run_start` / `agent_step` 两个 kind 来钉，今天同两条事件的「可读内容」落在 `task`（来自 `agent_run_start` 的
+    payload）、`last_shape` 与 `steps`（来自 `agent_step` / `agent_run_end`）上 ——钉的还是"盘上的事件真被读成了读数"；"报告原样显示在一个
+    `pre` 里"那一半移到 `Run.tsx` 的源码读数（`v.report.text` 进 `class="mono pre"`）；
     - "不存在的 sid ⇒ 404"换成 SPA 的口径：页面照吐外壳（前端路由对任何 sid 都要能
-      显示），否决权在数据面 —— `/api/run/nope` 的 `tri` 必须是 `unreadable`，
-      理由里点名"会话文件不在盘上"（三态：没查成，不是"这一趟 0 步"）。
+    显示），否决权在数据面 —— `/api/run/nope` 的 `tri` 必须是 `unreadable`，理由里点名"会话文件不在盘上"（三态：没查成，不是"这一趟 0 步"）。
     """
     root = tmp_path / "ws"
     root.mkdir()
@@ -771,24 +710,15 @@ def test_the_run_path_serves_the_spa_shell(tmp_path: pathlib.Path):
 
 # ====================================================================== 13 负控
 def test_events_outside_a_run_never_become_a_run(tmp_path: pathlib.Path):
-    """负控（投影不造假）：轮次之外的零散事件不许被折成一趟，`last_run` 不许被顶掉。
+    """    负控（投影不造假）：轮次之外的零散事件不许被折成一趟，`last_run` 不许被顶掉。
 
-    父在真工作区上的复现（`projects/p5-run15`）：`agent_run_end` 之后紧跟的一条
-    `user_answer`（人刚按下「提交」写进去的那条）被当成新一轮的开始，于是页头
-    「最近一趟」显示的是一个 `steps=0 / llm_calls=0 / usd=null / stop_reason=""`
-    的空壳；那个工作区里另一个会话甚至一个 `agent_run_start` 都没有，
-    却被报成「role=A 的一趟运行」。
+    父在真工作区上的复现（`projects/p5-run15`）：`agent_run_end` 之后紧跟的一条`user_answer`（人刚按下「提交」写进去的那条）被当成新一轮的开始，于是页头「最近一趟」显示的是一个
+    `steps=0 / llm_calls=0 / usd=null / stop_reason=""`的空壳；那个工作区里另一个会话甚至一个 `agent_run_start` 都没有，却被报成「role=A 的一趟运行」。
 
-    三态口径：没有开始标记的事件 = 「轮次之外的零散事件」（单独一栏、写明没有开始
-    标记），不是「一趟 0 步的运行」；整个工作区一趟都没有 ⇒ `last_run is None`，
-    SPA 的 Run 页写"这一段会话里一趟都没有"（那句空态文案由
-    `tests/test_webui_pages.py` 的 `EMPTY_WORDS` 钉住）。
-
-    P1 迁移（2026-10-07）：原来读的是首页 HTML 里「运行态 / 轮次之外的零散事件」
-    两段。`/` 改成 SPA 外壳之后，这两栏的数据面是 `/api/state`（`runs`/`last_run`
-    与 `orphans`/`orphan_summary`），所以这里逐项改成读那份 JSON —— 断言的内容
-    一条没减，只是换了面。渲染那一半（零散事件单独成栏、不并进时间线）由
-    `tests/test_webui_pages.py` 的 Run 页判据守着。
+    三态口径：没有开始标记的事件 = 「轮次之外的零散事件」（单独一栏、写明没有开始标记），不是「一趟 0 步的运行」；整个工作区一趟都没有 ⇒ `last_run is None`，SPA 的 Run
+    页写"这一段会话里一趟都没有"（那句空态文案由`tests/test_webui_pages.py` 的 `EMPTY_WORDS` 钉住）。P1 迁移（2026-10-07）：原来读的是首页 HTML 里「运行态 /
+    轮次之外的零散事件」两段。`/` 改成 SPA 外壳之后，这两栏的数据面是 `/api/state`（`runs`/`last_run`与 `orphans`/`orphan_summary`），所以这里逐项改成读那份
+    JSON —— 断言的内容一条没减，只是换了面。渲染那一半（零散事件单独成栏、不并进时间线）由`tests/test_webui_pages.py` 的 Run 页判据守着。
     """
     root = tmp_path / "ws"
     root.mkdir()
@@ -892,34 +822,16 @@ def test_unknown_paths_and_methods(tmp_path: pathlib.Path):
 # ====================================================================== 16 负控
 def test_a_client_that_hangs_up_leaves_no_traceback_on_stderr(
         tmp_path: pathlib.Path, monkeypatch):
-    """负控（客户端中途挂断）：服务端不留未处理异常，也不影响后续请求。
-
-    形态出处（W5 收工门 §8 的 stderr 读数）：那里混进过两行
-    `Exception occurred during processing of request from ('127.0.0.1', …)` +
-    `ConnectionAbortedError: [WinError 10053]`。它不影响判定，但那是一条假错误
-    信号：日志里多一条"服务器出错了"，真错误就难找了，"stderr 里有没有东西"
-    这类判据也不好写。成因在 `handle_one_request`：SSE 的响应头写着
-    `Connection: keep-alive` ⇒ handler 返回后这一层会再读一次请求行，
-    读到的正是那条已被掐断的套接字。
-
-    掐断怎么造（本机五种打法都实测过：SSE 读两帧后 close、SSE 读两帧后带 RST 关闭、
-    完整 GET 后 RST、半截请求后 RST、POST 正文没收完就 RST）：这里取"SSE 读两帧后
-    带 RST 关闭"——它最接近门里那一档（同一条 keep-alive 的流、同一条 handler 返回后
-    再读请求行的路径），而且 RST 让"对端没了"当场可见（实测 0.67 秒就冒出来）；
-    优雅 close 则要等服务端下一拍写失败才知道（实测 2 秒以上，落在等待窗口之外）——
-    判据要的是确定复现，而不是"等得够久就碰上了"。
-
-    1. `GET /api/stream` 在裸 socket 上读满两帧，然后 `SO_LINGER` 置 0 再 close；
-    2. stderr 里不许出现 `ConnectionAbortedError` / `ConnectionResetError`，
-       也不许出现 `socketserver` 那句 `Exception occurred during processing of request`；
-    3. 一次断开不许影响后续请求（紧跟着 `GET /api/state` 仍然 200）——
-       只把日志弄干净、却把连接循环弄死，是另一种坏。
-
-    心跳周期在这里必须显式注入（0.2 秒）：这条判据靠"下一帧写不出去"来暴露断开，
-    用默认的 15 秒会让判据等 15 秒（同 `test_webui_sse.py` 的理由）。
-    负控：把 `WebHandler.handle_one_request` 的覆写去掉（换回基类那一份）⇒
-    上面第 2 条必须红（做法见 `temp/w5_negctl_abort.py`：只在测试进程里重新绑定，
-    不动盘上任何一个字节；实测原文见 W5 报告）。
+    """    负控（客户端中途挂断）：服务端不留未处理异常，也不影响后续请求。形态出处（W5 收工门 §8 的 stderr 读数）：那里混进过两
+    行`Exception occurred during processing of request from ('127.0.0.1', …)` +`ConnectionAbortedError: [WinError 10053]`。它不影响判定，
+    但那是一条假错误信号：日志里多一条"服务器出错了"，真错误就难找了，"stderr 里有没有东西"这类判据也不好写。成因在 `handle_one_request`：SSE 的响应头写着`Connection: keep-alive` ⇒
+    handler 返回后这一层会再读一次请求行，读到的正是那条已被掐断的套接字。掐断怎么造（本机五种打法都实测过：SSE 读两帧后 close、SSE 读两帧后带 RST 关闭、完整 GET 后 RST、半截请求后 RST、POST 正文没收完就
+    RST）：这里取"SSE 读两帧后带 RST 关闭"——它最接近门里那一档（同一条 keep-alive 的流、同一条 handler 返回后再读请求行的路径），而且 RST 让"对端没了"当场可见（实测 0.67 秒就冒出来）；优雅 close
+    则要等服务端下一拍写失败才知道（实测 2 秒以上，落在等待窗口之外）——判据要的是确定复现，而不是"等得够久就碰上了"。`GET /api/stream` 在裸 socket 上读满两帧，然后 `SO_LINGER` 置 0 再 close；2.
+    stderr 里不许出现 `ConnectionAbortedError` / `ConnectionResetError`，也不许出现 `socketserver` 那句
+    `Exception occurred during processing of request`；3. 一次断开不许影响后续请求（紧跟着 `GET /api/state` 仍然 200）——只把日志弄干净、却把连接循环弄死，是另一种坏。
+    心跳周期在这里必须显式注入（0.2 秒）：这条判据靠"下一帧写不出去"来暴露断开，用默认的 15 秒会让判据等 15 秒（同 `test_webui_sse.py` 的理由）。负控：把
+    `WebHandler.handle_one_request` 的覆写去掉（换回基类那一份）⇒上面第 2 条必须红（做法见 `temp/w5_negctl_abort.py`：只在测试进程里重新绑定，不动盘上任何一个字节；实测原文见 W5 报告）。
     """
     root = tmp_path / "ws"
     root.mkdir()

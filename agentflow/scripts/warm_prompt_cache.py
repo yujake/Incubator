@@ -1,64 +1,21 @@
-"""把十个角色 + 秘书的提示词前缀**写进上游缓存**，并把当次读数落成可复核的 JSON。
-
-## 先说结论：本仓**没有**"写缓存"的开关
-
-上游（DeepSeek）的前缀缓存是**服务端自动**的：请求体里没有 `cache_control`，也没有
-`AGENTFLOW_*_CACHE` 这类环境变量。全仓 grep `cache_control` 命中 0 处；`modelgw.py`
-的 `_payload`（`:739-764`）只拼 `model` / `messages` / `temperature` / `stream` /
-推理强度 / `tools`，一个缓存注解都没有。
-
-于是"写缓存"这件事的唯一开关是**前缀逐字节相同**：上游自己对没命中的那部分建索引，
-下一次同前缀的请求就命中。读数那一侧才有字段：`usage.prompt_cache_hit_tokens` /
-`prompt_cache_miss_tokens`（`modelgw.py:878-888` 读进来 → `llmseam.py:477-478`
-转成 `SeamCall` 两格 → `promptstability.prompt_cache_record` 成形）。
-
-**上游没有"写"这个计数**。本脚本里的 `write` 是**推导量**：一次调用里被上游建索引的
-就是它报的 miss 那部分（`write = prompt_cache_miss_tokens`），并在读数里标
-`write_source="derived:miss"`。上游没给这两格时三者都是 `None`（unknown，绝不折成 0）。
-
-## 这个脚本发的是什么请求（为什么它和生产对得上）
-
-每个角色发的形状与 `agent_loop` 生产路径一致：
-
-    tools = llmseam.build_tool_face(role, registry)     # 原生工具面（生产也发这个）
-    system = agent_prompts.system_prompt(role, registry=..., **split_facts(facts))
-    user   = 一句话"只回 OK"                            # 生产的第 0 条 user 是开场白，
-                                                        # 它在前缀之后 ⇒ 不影响命中
-
-`facts` 用 `promptstability.split_facts` 过一遍 —— 与生产同一个函数，于是 system 里
-**会变的事实全是静态指路语**（`budget_left` / `notebook` / `task` / `task_id` / `depth` /
-`parent_task_id` / `summoned_by` / `children` / `board` / `inbox` / `user_replies` /
-`workspace_root`，见 `promptstability.STEP_VOLATILE_FACTS`）。
-
-秘书那一档（2026-10-21 起与十个角色**同形**）：`Secretary.judge` 调
-`seam.ask_json(material, system=_judge_system(kind))` —— 稳定头进 system、
-材料留在 user。所以秘书那一行的预热对象是 `_judge_system(kind)` 那一段，
-user 消息是空材料的形状（`材料：` + 一份 JSON）。改前它整条都在 user 位
-（`system=""`），实测连发两趟 `hit=0 / miss=175`。
-
-## 内置花费上限
-
-`LlmSeam(usd_budget=--cap-usd)`（默认 0.10 美元）是真闸：每发一次请求之前它自己比一次
-全局已花（`llmseam.ask` 的前两个分支），超了就返回 `judge_over_budget` 而**不发请求**。
-本脚本在它之外再预检一次（`spent >= cap` ⇒ 干净停下并说"剩下的没预热"），
-于是"超上限"不会被误读成"某一个角色预热失败"。
-
-## 幂等 / 可重复
-
-同一 scenario 再跑一遍：同样的 prompt_sha256、同样的 system/tools 摘要，第二趟的
-`hit` 会接近满、`write` 接近 0（这正是判据 ② 要的那一跳）。所以**重复跑是安全的**，
-而且它本身就是"缓存真的落了盘"的证明。
-
-## 退出码（三态，与 `noai_gate.py` / `release_check.py` 同一纪律）
-
-```text
-0 = warmed       查过了：点名的每个目标都有"写进去"的记录（write>0 或 hit>0）
-1 = incomplete   查过了：有目标**没有**那条记录（调用失败 / 预算中途停 / 上游不给读数）
-2 = unknown      **没查成**：没有模型 key、渲染不出来、写不出读数文件
-```
-
-`unknown` 绝不是 `warmed`。"没预热"与"预热了但上游没给读数"也是两件事：
-后者是本文件里 `known=false` 的那一档，它算 `incomplete`（那块缓存有没有落地**不可判定**）。
+"""把十个角色 + 秘书的提示词前缀写进上游缓存，并把当次读数落成可复核的 JSON。先说结论：本仓没有"写缓存"的开关：上游（DeepSeek）的前缀缓存是服务端自动的：请求体里没有 `cache_control`，
+也没有`AGENTFLOW_*_CACHE` 这类环境变量。全仓 grep `cache_control` 命中 0 处；`modelgw.py`的 `_payload`（`:739-764`）只拼 `model` / `messages` /
+`temperature` / `stream` /推理强度 / `tools`，一个缓存注解都没有。于是"写缓存"这件事的唯一开关是前缀逐字节相同：上游自己对没命中的那部分建索引，下一次同前缀的请求就命中。
+读数那一侧才有字段：`usage.prompt_cache_hit_tokens` /`prompt_cache_miss_tokens`（`modelgw.py:878-888` 读进来 → `llmseam.py:477-478`转成
+`SeamCall` 两格 → `promptstability.prompt_cache_record` 成形）。上游没有"写"这个计数。本脚本里的 `write` 是推导量：一次调用里被上游建索引的就是它报的 miss
+那部分（`write = prompt_cache_miss_tokens`），并在读数里标`write_source="derived:miss"`。上游没给这两格时三者都是 `None`（unknown，绝不折成 0）。
+这个脚本发的是什么请求（为什么它和生产对得上）：每个角色发的形状与 `agent_loop` 生产路径一致：tools = llmseam.build_tool_face(role, registry)     # 原生工具面（生产也发这个）system =
+agent_prompts.system_prompt(role, registry=..., split_facts(facts))user   = 一句话"只回 OK"                            # 生产的第 0 条 user
+是开场白，它在前缀之后 ⇒ 不影响命中：`facts` 用 `promptstability.split_facts` 过一遍 —— 与生产同一个函数，于是 system 里会变的事实全是静态指路语（`budget_left` / `notebook` /
+`task` / `task_id` / `depth` /`parent_task_id` / `summoned_by` / `children` / `board` / `inbox` /
+`user_replies` /`workspace_root`，见 `promptstability.STEP_VOLATILE_FACTS`）。秘书那一档（2026-10-21
+起与十个角色同形）：`Secretary.judge` 调`seam.ask_json(material, system=_judge_system(kind))` —— 稳定头进 system、材料留在 user。所以秘书那一行的预热对象是
+`_judge_system(kind)` 那一段，user 消息是空材料的形状（`材料：` + 一份 JSON）。改前它整条都在 user 位（`system=""`），实测连发两趟 `hit=0 / miss=175`。
+内置花费上限：`LlmSeam(usd_budget=--cap-usd)`（默认 0.10 美元）是真闸：每发一次请求之前它自己比一次全局已花（`llmseam.ask` 的前两个分支），超了就返回 `judge_over_budget` 而不发请求。
+本脚本在它之外再预检一次（`spent >= cap` ⇒ 干净停下并说"剩下的没预热"），于是"超上限"不会被误读成"某一个角色预热失败"。幂等 / 可重复：同一 scenario 再跑一遍：同样的 prompt_sha256、同样的
+system/tools 摘要，第二趟的`hit` 会接近满、`write` 接近 0（这正是判据 ② 要的那一跳）。所以重复跑是安全的，而且它本身就是"缓存真的落了盘"的证明。退出码（三态，与 `noai_gate.py` /
+`release_check.py` 同一纪律）：```text 0 = warmed       查过了：点名的每个目标都有"写进去"的记录（write>0 或 hit>0）1 = incomplete   查过了：有目标**没有**那条记录（调用失败 / 预算中途停 / 上游不给读数）2 = unknown      **没查成**：没有模型 key、渲染不出来、写不出读数文件````unknown`
+绝不是 `warmed`。"没预热"与"预热了但上游没给读数"也是两件事：后者是本文件里 `known=false` 的那一档，它算 `incomplete`（那块缓存有没有落地不可判定）。
 """
 
 from __future__ import annotations
@@ -107,14 +64,14 @@ DEFAULT_HIT_SAMPLE: tuple[str, ...] = ("M", "C")
 #: 稳定头的长度与类别无关，取一个确定性的即可）。
 SECRETARY_KIND = "duplicate_retry"
 
-#: 这一趟的"规范场景"。**必须逐字节确定性** —— 判据（`tests/test_prompt_cache_warm.py`）
+#: 这一趟的"规范场景"。必须逐字节确定性 —— 判据（`tests/test_prompt_cache_warm.py`）
 #: 会用同一份事实重算一遍 prompt_sha256，对不上就说明提示词改了、该重新预热。
 #:
 #: 为什么几格取空串而不是取"这台机器上的真值"（`toolchain_facts` / `parent_limits`）：
-#: 那几段读的是**这台机器的盘**（有没有 Lean、Mathlib 在哪），换机器就换个字节 ——
+#: 那几段读的是这台机器的盘（有没有 Lean、Mathlib 在哪），换机器就换个字节 ——
 #: 判据会因此变成"只在这一台机器上绿"。它们的位置在 `TOOLCHAIN_FACTS` 之后（段序 > 86），
 #: 而跨 run 能复用的前缀在第 95 个字符处就断了（见读数里的 `cross_run_prefix_chars`），
-#: 所以"取空渲染"对可复用的那一段**一个字节都不损失**，换来的是判据的确定性。
+#: 所以"取空渲染"对可复用的那一段一个字节都不损失，换来的是判据的确定性。
 CANONICAL_FACTS: Mapping[str, Any] = {
     "task": "预热：把这一份系统提示词的前缀写进上游缓存（不研究、不抓文献、只回 OK）",
     "summoned_by": "user",
@@ -142,10 +99,10 @@ USER_PROMPT = "这是前缀预热：不要做任何工作，不要调用工具�
 #: 它模拟的是"同一个角色被派去做另一件活"：任务文本、台账号、深度、收件箱、板上、
 #: 名册、用户答、工作区根全换，其余不变。
 #:
-#: 2026-10-21 之后这份事实**改变不了 system 一个字节**（上面那些格子全在
+#: 2026-10-21 之后这份事实改变不了 system 一个字节（上面那些格子全在
 #: `promptstability.STEP_VOLATILE_FACTS` 里、全被换成静态指路语）⇒
 #: `cross_run_prefix_chars` 应当等于整条 system 的长度，而真机读数里"换一趟活"的
-#: 第一次调用就该命中（`cross_run_hit` 的两行）。这份事实因此变成了**判据的探针**：
+#: 第一次调用就该命中（`cross_run_hit` 的两行）。这份事实因此变成了判据的探针：
 #: 它一变 system 就变，说明有人把跨 run 会变的东西塞回了 system。
 OTHER_RUN_FACTS: Mapping[str, Any] = {
     **dict(CANONICAL_FACTS),
@@ -158,7 +115,7 @@ OTHER_RUN_FACTS: Mapping[str, Any] = {
     "inbox": "- [m-0001] 一条留言",
     "user_replies": "- [q-0001] 问：… → 用户答（user）：…",
     "workspace_root": "/tmp/another-workspace",
-    # ---- 2026-10-21 第二批：**另一份伙伴配置**（不只是另一件活）。
+    # ---- 2026-10-21 第二批：另一份伙伴配置（不只是另一件活）。
     #
     # `availability`（`host.wiring_status` 的读数）与 `parent_limits`（`Policy` 的数字）
     # 此前住在 system 里（段序 4520 / 5210），于是"换一份伙伴配置"在这里会表现为
@@ -178,19 +135,15 @@ def _sha(text: str) -> str:
 
 
 def lean_mode() -> bool:
-    """这一趟渲染用的是哪一档形式化开关（`True` = 走 Lean 那一套提示词）。
+    """    这一趟渲染用的是哪一档形式化开关（`True` = 走 Lean 那一套提示词）。
 
-    ## 为什么必须记下来、而且必须读这**一个**来源
+    ## 为什么必须记下来、而且必须读这一个来源
 
-    `system_prompt` 会在"形式化关着"那一档把 Lean 相关的段整段换掉
-    （`_apply_no_lean_variant`），所以同一份代码在开关两档下渲染出的 system
-    **不是同一段前缀** —— 预热在关着那一档落的，判据就得在关着那一档重算，
-    否则摘要对不上，而"对不上"看起来就像"提示词被人改了"。
+    `system_prompt` 会在"形式化关着"那一档把 Lean 相关的段整段换掉（`_apply_no_lean_variant`），所以同一份代码在开关两档下渲染出的 system不是同一段前缀 ——
+    预热在关着那一档落的，判据就得在关着那一档重算，否则摘要对不上，而"对不上"看起来就像"提示词被人改了"。
 
-    来源选 `agent_prompts._lean_switch()` 而不是 `settings.lean_enabled()`：
-    前者是渲染真正读的那个闩（`lru_cache` 住的那一格），后者是它的上游 ——
-    两条路各读一次就可能各给一个答案（缓存暖着、env 又被改过时），
-    而"渲染按哪一档走的"只有一个正确答案：渲染读到的那个。
+    来源选 `agent_prompts._lean_switch()` 而不是 `settings.lean_enabled()`：前者是渲染真正读的那个闩（`lru_cache` 住的那一格），后者是它的上游
+    ——两条路各读一次就可能各给一个答案（缓存暖着、env 又被改过时），而"渲染按哪一档走的"只有一个正确答案：渲染读到的那个。
     """
     try:
         return bool(AP._lean_switch()[0])       # noqa: SLF001 —— 见 docstring：唯一真身
@@ -200,9 +153,9 @@ def lean_mode() -> bool:
 
 #: 读数文件里保留最近几趟（`{"schema": 1, "runs": [<一趟的读数>, …]}`）。
 #:
-#: ## 为什么是一个**容器**而不是"最近一次快照"
+#: ## 为什么是一个容器而不是"最近一次快照"
 #:
-#: 一次预热只能回答"写进去了"，"下次跑能命中"这个问题要**第二趟**才答得出。
+#: 一次预热只能回答"写进去了"，"下次跑能命中"这个问题要第二趟才答得出。
 #: 而"第二趟"必然把第一趟的冷写读数覆盖掉 —— 那等于用一个更弱的读数换掉一个更强的
 #: （"命中"能证明"写过"以外的更多事，但"写过"这一格就没了）。所以两趟都留着。
 #: 键集仍然只有一个来源（本文件），`MAX_RUNS_KEPT` 防止它无限长。
@@ -210,7 +163,7 @@ MAX_RUNS_KEPT = 8
 
 
 def load_readings(path: Path) -> list[dict[str, Any]]:
-    """读读数文件里的历次预热（读不到/读坏了 ⇒ 空表，**不是**"没有记录就是没问题"）。"""
+    """读读数文件里的历次预热（读不到/读坏了 ⇒ 空表，不是"没有记录就是没问题"）。"""
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -265,15 +218,15 @@ def _render_system(role: str, registry: Any, facts: Mapping[str, Any]) -> str:
 
 
 def _secretary_head() -> tuple[str, int]:
-    """秘书的**稳定头**（进 `system` 那一位的那一段）与它的长度。
+    """秘书的稳定头（进 `system` 那一位的那一段）与它的长度。
 
     2026-10-21 之前：`Secretary.judge`（`secretary.py:1325`）调的是
-    `seam.ask_json(prompt)` —— **不带 system**，抬头 + 问题 + 材料全在一条 user 消息里，
+    `seam.ask_json(prompt)` —— 不带 system，抬头 + 问题 + 材料全在一条 user 消息里，
     而材料每问一次都变。真机读数（`2026-10-21`，本脚本 `--roles secretary
     --hit-sample secretary`）：连发两趟都是 `hit=0 / miss=175`。
 
     现在：`_judge_system(kind)` 走 `system=`，`_judge_material(context)` 留在 user。
-    于是可预热的那一段就是 **system 本身**（`prefix_chars = len(system)`），
+    于是可预热的那一段就是 system 本身（`prefix_chars = len(system)`），
     而它与"这一趟问的是什么材料"无关 —— 换一份材料照样命中。
     """
     from agentflow.secretary import _judge_system
@@ -297,7 +250,7 @@ def _secretary_material() -> str:
 
 def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
                    workspace: Path | None = None) -> dict[str, dict[str, Any]]:
-    """渲染每个目标的 (system, tools, 摘要, 跨 run 可复用前缀长度) —— **不联网、不花钱**。
+    """渲染每个目标的 (system, tools, 摘要, 跨 run 可复用前缀长度) —— 不联网、不花钱。
 
     判据（`tests/test_prompt_cache_warm.py`）与真机入口共用这一份实现：两边各写一份
     就会漂，而"漂了"在读数上长得像"提示词改了、该重新预热"。
@@ -305,7 +258,7 @@ def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
     返回 `{target: {...}}`，每项含：`kind`（`system` / `judge_head`）、`system`、
     `prompt`、`system_sha256`、`prompt_sha256`、`system_chars`、`prompt_chars`、
     `tools`（`ToolFace` 的函数面或空表）、`tools_sha256`、`tools_functions`、
-    `tools_chars`、`prefix_chars`（这一次请求前缀里**确定稳定**的那部分）、
+    `tools_chars`、`prefix_chars`（这一次请求前缀里确定稳定的那部分）、
     `cross_run_prefix_chars`（换一趟活之后仍在前缀里的那部分）。
     """
     tmp = Path(workspace) if workspace is not None else Path(
@@ -370,9 +323,9 @@ def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
 
 
 def _other_facts(stamp: str) -> dict[str, Any]:
-    """`OTHER_RUN_FACTS` 的一份**这一次没用过**的实例（task_id 带时间戳）。
+    """`OTHER_RUN_FACTS` 的一份这一次没用过的实例（task_id 带时间戳）。
 
-    为什么必须每趟换一个 task_id：诊断行要回答的是"**第一次**见到这份 system 时
+    为什么必须每趟换一个 task_id：诊断行要回答的是"第一次见到这份 system 时
     能命中多少"。若沿用固定的 `t-other-0002`，第二次跑本脚本时它已经被上一次
     探针写进缓存 ⇒ 同一个读数从 0 变成 99%，而原因不是提示词变了，是"这次是第二次"。
     """
@@ -385,8 +338,8 @@ def _record_of(target: str, item: Mapping[str, Any], call: Any, *, pass_no: int,
                at: str) -> dict[str, Any]:
     """一次调用的读数行（含 `write` 的推导与三态）。
 
-    `prompt_sha256` 在这一份读数里的口径：**这一行被预热的那段提示词**的 sha256 ——
-    2026-10-21 起十一个目标**同形**：都是真正发出去的那条 `system`（秘书也是）。
+    `prompt_sha256` 在这一份读数里的口径：这一行被预热的那段提示词的 sha256 ——
+    2026-10-21 起十一个目标同形：都是真正发出去的那条 `system`（秘书也是）。
     `system_sha256` / `user_sha256` 两格分别给出真正发出去的两条消息的摘要，
     于是"预热的是哪一段"不必靠字段名猜。
     """
@@ -441,13 +394,13 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
          dry_run: bool = False, keep_session: bool = False,
          session_root: Path | None = None, tools_probe: str = "",
          cross_run_probe: str = "") -> tuple[int, dict[str, Any]]:
-    """按目标各发**一次**最小请求（再给样本各补一次），把读数写成 JSON。
+    """按目标各发一次最小请求（再给样本各补一次），把读数写成 JSON。
 
-    `effort="off"` 是省钱不是省字节：推理强度不进 `messages`，**不改变缓存前缀**，
+    `effort="off"` 是省钱不是省字节：推理强度不进 `messages`，不改变缓存前缀，
     但它决定"它想多久才回那两个字"（默认 `high` 会为一句 OK 写上千字思维链）。
 
-    `tools_probe`（可选）回答一个本脚本**必须**回答的问题：**工具面在不在缓存前缀里**？
-    做法：拿一个已经带工具面预热过的目标，把同一个 system 在**不带工具面**的情况下再发一次。
+    `tools_probe`（可选）回答一个本脚本必须回答的问题：工具面在不在缓存前缀里？
+    做法：拿一个已经带工具面预热过的目标，把同一个 system 在不带工具面的情况下再发一次。
 
     - `hit > 0` ⇒ 缓存只按 `messages` 建索引（工具面不在前缀里）；
     - `hit == 0` ⇒ 工具面在它的前缀里（去掉工具 = 换了一段前缀）。
@@ -469,7 +422,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
         return EXIT_WARMED, {"verdict": "dry_run", "rows": rows,
                              "note": "只渲染，没发请求，花费 0 美元"}
 
-    # 配置走**生产那一口** `spec_from_env()`（唯一入口：key 的取值梯子只有一份）。
+    # 配置走生产那一口 `spec_from_env()`（唯一入口：key 的取值梯子只有一份）。
     # 覆盖模型名 / 推理强度用 `dataclasses.replace` 而不是自己拼一份 env ——
     # `settings.model_settings(env=…)` 在"注入环境但没给 AGENTFLOW_SETTINGS"时
     # 读不到设置文件（真机实测：那样造出来的 spec `configured=False`，
@@ -501,14 +454,14 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
         plan: list[tuple[str, int]] = [(t, 1) for t in targets]
         plan += [(t, 2) for t in hit_sample if t in targets]
         if tools_probe in targets:
-            plan.append((tools_probe, 3))       # 诊断行：同一 system、**不带工具面**
+            plan.append((tools_probe, 3))       # 诊断行：同一 system、不带工具面
         if cross_run_probe in targets:
-            # 诊断行（两次）：**另一趟活**的 system 发两遍。
+            # 诊断行（两次）：另一趟活的 system 发两遍。
             # 为什么必须两遍：第一遍回答"换一趟活还剩多少（=0）"，第二遍回答
             # "同一份 system 再发一次会不会命中（=会）"。只发一遍的话，第二次跑本脚本时
             # 那一份 system 已经被上一次探针写进缓存了 ⇒ 读数从 0 变成 99%，
             # 而读者分不出是"这次变了"还是"这次是第二次"。`_other_facts()` 因此给
-            # 每一次调用生成一个**没被发过**的 task_id，让第一遍永远是"第一次见"。
+            # 每一次调用生成一个没被发过的 task_id，让第一遍永远是"第一次见"。
             plan.append((cross_run_probe, 4))
             plan.append((cross_run_probe, 5))
 
@@ -586,7 +539,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             "cross_run_probe": cross_run_probe,
             # "换一趟活（不同 task/task_id/depth）之后实测还能命中多少"：
             # 这一格比 `cross_run_prefix_chars`（离线算的字符数）硬 —— 那边是推理，这边是读数。
-            # 两行：`pass=4` 是**第一次见**这份 system（应当 0 命中），
+            # 两行：`pass=4` 是第一次见这份 system（应当 0 命中），
             # `pass=5` 是同一份再发一次（应当接近满命中）。两行一起才说明白
             # "命中条件是前缀逐字节相同"，而不是"缓存坏了 / 缓存很好"。
             "cross_run_hit": ([{"role": r["role"], "pass": int(r["pass"]),
@@ -596,7 +549,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
                                for r in cross_rows] if cross_rows else None),
             "note": "",
         }
-        # 先定结论、再落盘：读数文件里必须**带着结论**写下去。
+        # 先定结论、再落盘：读数文件里必须带着结论写下去。
         # 反例（本脚本第一版就是这个形态）：先写文件后判结论 ⇒ 盘上 `verdict` 恒为空串，
         # 而"没判过"与"判过了没问题"在读者眼里长得一模一样（三态纪律）。
         incomplete = bool(missing or unknown_cache or failed or sample_miss or stopped)

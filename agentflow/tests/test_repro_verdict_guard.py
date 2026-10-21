@@ -2,26 +2,20 @@
 
 ## 缺陷（2026-09-26 全面体检 · 子代理 E 发现）
 
-`test/test2/repro/repro_result.py::guard` 把任何未捕获异常写成 `result="refutes"`，
-而 `run_all.py::verdict_of` 把"退出码非零 + refutes"直接判成 `caught_the_injected_bug`；
-`caught_by()` 只用于打印、从不参与判据。于是：
-
-- 某个 `--inject-bug` 分支自己抛了 `ImportError` ⇒ 什么都没抓住 ⇒ 仍记成"负控生效"；
-- 七条负控判据整体空转，`run_all.py` 照样打印 `ALL CHECKS PASS`。
-
-这与 `run_all.py` 自己的 docstring（"the negative controls are checked for the
-right failure, not just for a non-zero exit: the JSON must name the check that
-caught the injected bug"）和 `repro_result.emit` 的契约（"An inconclusive result
-is NOT a pass"）都矛盾，方向是假绿。
+`test/test2/repro/repro_result.py::guard` 把任何未捕获异常写成 `result="refutes"`，而 `run_all.py::verdict_of` 把"退出码非零 +
+refutes"直接判成 `caught_the_injected_bug`；`caught_by()` 只用于打印、从不参与判据。于是：某个 `--inject-bug` 分支自己抛了 `ImportError` ⇒ 什么都没抓住
+⇒ 仍记成"负控生效"；
+- 七条负控判据整体空转，`run_all.py` 照样打印 `ALL CHECKS PASS`。这与 `run_all.py` 自己的 docstring（"the negative controls are checked
+for the right failure, not just for a non-zero exit: the JSON must name the check that caught the injected bug"）和
+`repro_result.emit` 的契约（"An inconclusive result is NOT a pass"）都矛盾，方向是假绿。
 
 ## 修法（两处，缺一不可）
 
 1. `guard`：未捕获异常 ⇒ `result="inconclusive"`（退出码 2），并记 `guard_error`；
 2. `verdict_of`：`refutes` 只有在点得出是哪条 check 失败时才算抓住了 bug，
-   否则判 `crashed`；`bugs_ok` 也显式要求点名。
+否则判 `crashed`；`bugs_ok` 也显式要求点名。
 
-只改 ① 不改 ② 仍会漏：任何一种"退出码非零 + refutes + 没点名"的记录都能混过去
-（本文件的 `test_a_refutes_without_a_named_check_is_crashed` 就是那一形态）。
+只改 ① 不改 ② 仍会漏：任何一种"退出码非零 + refutes + 没点名"的记录都能混过去（本文件的 `test_a_refutes_without_a_named_check_is_crashed` 就是那一形态）。
 """
 from __future__ import annotations
 

@@ -3,25 +3,19 @@
 
 ## 这一条判的是什么（旧路退场之后）
 
-业主 2026-10-13 裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，
-并选定范围 A（整条 `paper_package` 路退场：一个动作 + 五件工具 + 收工门一格 + 三个模块）。
-现在只剩一件事：正文由智能体自己写进 `out/paper/main.tex`，框架把它编成 `main.pdf`
-并留一份回执（`.docstring` 与逐条理由见 `draft/117`）。
+业主 2026-10-13 裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，并选定范围 A（整条 `paper_package` 路退场：一个动作 + 五件工具 + 收工门一格 +
+三个模块）。现在只剩一件事：正文由智能体自己写进 `out/paper/main.tex`，框架把它编成 `main.pdf`并留一份回执（`.docstring` 与逐条理由见 `draft/117`）。判据分四组：
 
-判据分四组：
+1. 三态不许折平：`not_applicable`（还没写正文）/ `unknown`（没引擎、超时、
+这一次没编出 PDF）/ `computed`（这一趟拿到 PDF）；
+2. 两栏不互相冒充：本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ 产物
+（`pages` / `pdf_bytes` / `pdf_fresh`）与引擎退出码分开读；
+3. 回执是"这份 PDF 是不是盘上这份正文编的"的唯一读数：改了正文不重编 ⇒
+`receipt_matches_tex()` 回 `False`（那不是"没编过"，也不是"没查成"）；
+4. 失败要带着为什么：引擎自己说的话（stdout / stderr 尾巴）随读数回来 ——
+旧路 `G.paper_package` 失败时只回一句"脚本不在盘上"，那一课不随旧路退场而失效（`draft/116` §4）。
 
-1. **三态不许折平**：`not_applicable`（还没写正文）/ `unknown`（没引擎、超时、
-   **这一次没编出 PDF**）/ `computed`（这一趟拿到 PDF）；
-2. **两栏不互相冒充**：本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ 产物
-   （`pages` / `pdf_bytes` / `pdf_fresh`）与引擎退出码分开读；
-3. **回执是"这份 PDF 是不是盘上这份正文编的"的唯一读数**：改了正文不重编 ⇒
-   `receipt_matches_tex()` 回 `False`（那不是"没编过"，也不是"没查成"）；
-4. **失败要带着为什么**：引擎自己说的话（stdout / stderr 尾巴）随读数回来 ——
-   旧路 `G.paper_package` 失败时只回一句"脚本不在盘上"，那一课不随旧路退场而失效
-   （`draft/116` §4）。
-
-夹具（假引擎 + 造正文）只有一处：`tests/paperfixture.py`。它**不碰 `main.tex`**
-（真机血案：生成器整份重写正文，把 G 改的那一段抹掉，`draft/37` §1.1）。
+夹具（假引擎 + 造正文）只有一处：`tests/paperfixture.py`。它不碰 `main.tex`（真机血案：生成器整份重写正文，把 G 改的那一段抹掉，`draft/37` §1.1）。
 """
 from __future__ import annotations
 
@@ -53,7 +47,7 @@ def test_the_public_helpers_read_what_they_say(tmp_path: pathlib.Path):
     tex = FX.write_paper(root)
     assert PC.package_dir(root) == root / "out" / "paper", PC.package_dir(root)
     assert PC.file_digest(tex) == hashlib.sha256(tex.read_bytes()).hexdigest()
-    # 读不到的文件**不编哈希**（空串就是"读不到"）
+    # 读不到的文件不编哈希（空串就是"读不到"）
     assert PC.file_digest(root / "nope.tex") == ""
     receipt, why = PC.read_receipt(root)
     assert receipt is None and PC.RECEIPT_NAME in why, (receipt, why)
@@ -68,7 +62,7 @@ def test_a_project_without_tex_is_not_applicable(tmp_path: pathlib.Path):
 
 
 def test_a_compile_writes_a_receipt_that_matches_the_tex(tmp_path: pathlib.Path):
-    """正控：假引擎编一遍 ⇒ `computed`，回执在盘上且**对得上盘上这份正文**。"""
+    """正控：假引擎编一遍 ⇒ `computed`，回执在盘上且对得上盘上这份正文。"""
     got = FX.compiled_project(tmp_path / "projects/p1")
     assert got["tri"] == "computed" and got["ok"] is True, got
     assert got["pdf_fresh"] is True, got
@@ -94,7 +88,7 @@ def test_editing_the_tex_makes_the_pdf_stale(tmp_path: pathlib.Path):
 
 
 def test_a_missing_receipt_is_unknown_not_stale(tmp_path: pathlib.Path):
-    """回执读不到 ⇒ `None`（判不了）。**"没查成"不许折成"漂了"，也不许折成"对得上"**。"""
+    """回执读不到 ⇒ `None`（判不了）。"没查成"不许折成"漂了"，也不许折成"对得上"。"""
     root = tmp_path / "projects/p1"
     FX.compiled_project(root)
     (PC.package_dir(root) / PC.RECEIPT_NAME).unlink()
@@ -134,8 +128,8 @@ def test_a_nonzero_exit_that_still_wrote_the_pdf_is_computed(tmp_path: pathlib.P
 def test_an_engine_that_writes_nothing_is_unknown_and_keeps_the_old_pdf(tmp_path: pathlib.Path):
     """引擎这次什么都没产 ⇒ `unknown` + `pdf_fresh=False`。
 
-    盘上那份**上一次**编的 PDF 不许当成本次读数（旧路的口径含糊处：只看文件在不在）。
-    同时**不删**旧 PDF（编译失败不该顺手毁掉上一份能看的稿子）。
+    盘上那份上一次编的 PDF 不许当成本次读数（旧路的口径含糊处：只看文件在不在）。
+    同时不删旧 PDF（编译失败不该顺手毁掉上一份能看的稿子）。
     """
     root = tmp_path / "projects/p1"
     first = FX.compiled_project(root)
@@ -169,7 +163,7 @@ def test_the_engine_tail_is_carried_when_the_compile_fails(tmp_path: pathlib.Pat
     """编不过时读数里带着引擎自己说的话（stdout / stderr 尾巴）。
 
     这一条是旧路那一课的延续：`t3e` 那趟 `G.paper_package` 只回一句"脚本不在盘上"，
-    而脚本的 stderr 当时就在手边（`draft/116` §4）。LaTeX 把错误印在 **stdout** 上
+    而脚本的 stderr 当时就在手边（`draft/116` §4）。LaTeX 把错误印在 stdout 上
     （`.log` 的转录），所以两栏都留。
     """
     root = tmp_path / "projects/p1"
@@ -266,7 +260,7 @@ def test_a_real_engine_compiles_the_minimal_paper(tmp_path: pathlib.Path,
                                                   monkeypatch: pytest.MonkeyPatch):
     """真引擎冒烟：装了 LaTeX 就真编一份出来（假引擎那一组判不了"框架内置编译真的能跑"）。
 
-    页数 >= 1 是**产物**的读数；退出码单列（MiKTeX 收尾崩溃那一档在本机真实存在）。
+    页数 >= 1 是产物的读数；退出码单列（MiKTeX 收尾崩溃那一档在本机真实存在）。
     """
     monkeypatch.delenv(PC.ENGINE_ENV, raising=False)
     root = tmp_path / "projects/p1"

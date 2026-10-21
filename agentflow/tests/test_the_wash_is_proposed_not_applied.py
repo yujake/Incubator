@@ -1,30 +1,22 @@
 # -*- coding: utf-8 -*-
-"""两段式：秘书**洗格式** → 父**确认** → 才执行（不是"直接应用"，也不是"永远只建议"）。
-
-业主裁定（2026-10-21）：派活时"委托秘书洗一遍格式"是**两段**。
-
-    第一段（洗 + 请示）：`washed == original` ⇒ 直接执行（不为"没差异"多花一轮）；
-                         `washed != original` ⇒ **不执行**，返回受控读数
-                         `outcome="wash_proposed"` + `proposal_id` + 逐字段 diff。
-    第二段（确认）      ：父带 `accept_proposal=<id>` ⇒ 用 `washed` 执行；
-                         带 `reject_proposal=<id>` ⇒ 用 `original` 执行并留痕"拒绝了格式洗"。
-
-为什么必须是两段：一段（直接应用）等于秘书替本体表态（`draft/53` §2 的两条红线：
-不替它承诺、不改结论）；而零段（永远只建议，S1g 之前的形态）让"洗一遍格式"变成摆设 ——
-派活实际发出去的仍是错名原稿，继续撞闸门（`draft/90` E5 的实测读数）。
+"""两段式：秘书洗格式 → 父确认 → 才执行（不是"直接应用"，也不是"永远只建议"）。业主裁定（2026-10-21）：派活时"委托秘书洗一遍格式"是两段。第一段（洗 + 请示）：`washed == original` ⇒
+直接执行（不为"没差异"多花一轮）；`washed != original` ⇒ 不执行，返回受控读数`outcome="wash_proposed"` + `proposal_id` + 逐字段 diff。第二段（确认）
+：父带 `accept_proposal=<id>` ⇒ 用 `washed` 执行；带 `reject_proposal=<id>` ⇒ 用 `original` 执行并留痕"拒绝了格式洗"。为什么必须是两段：一段（直接应用）
+等于秘书替本体表态（`draft/53` §2 的两条红线：不替它承诺、不改结论）；而零段（永远只建议，S1g 之前的形态）让"洗一遍格式"变成摆设 ——派活实际发出去的仍是错名原稿，继续撞闸门（`draft/90` E5
+的实测读数）。
 
 ## 判据（五条，每条带负控；负控 = 把那一格改回坏形态 ⇒ 同一个判据体必须变红）
 
 | # | 绿（本文件的正控） | 红（负控：故意改坏一处） |
 |---|---|---|
-| ① | 有差异 ⇒ 不执行：`wash_proposed` + 编号 + diff，**0 行新任务 / 0 次后端调用** | 改成"自动接受、直接执行 washed" ⇒ ① 报"派了子任务 / 没有 wash_proposed" |
+| ① | 有差异 ⇒ 不执行：`wash_proposed` + 编号 + diff，0 行新任务 / 0 次后端调用 | 改成"自动接受、直接执行 washed" ⇒ ① 报"派了子任务 / 没有 wash_proposed"
+|
 | ② | 接受 ⇒ 用 washed 执行：后端收到的那份 == washed，`accepted=true` | 接受后仍发 original（读数还谎称 washed）⇒ ② 报"发出去的是原稿" |
 | ③ | 拒绝 ⇒ 用 original 执行：后端收到的那份 == original，`accepted=false` | 拒绝后仍发 washed ⇒ ③ 报"发出去的是洗过的那份" |
 | ④ | 不越界：值逐字不变、不增删参数、`task`/`brief`/`notify` 正文逐字不变 | 把"改值"混进洗函数 ⇒ ④ 报"值被改了" |
-| ⑤ | 无差异 ⇒ 直接执行、**不产生** `wash_proposed` | 无差异也请示 ⇒ ⑤ 报"为没差异多花了一轮" |
+| ⑤ | 无差异 ⇒ 直接执行、不产生 `wash_proposed` | 无差异也请示 ⇒ ⑤ 报"为没差异多花了一轮" |
 
-判据体是**函数**（`_proposal_problems` / `_boundary_problems` / …），不是断言串 ——
-于是"绿"与"红"是同一个函数在两份代码上的两次调用（这就是负控的可演示形态）。
+判据体是函数（`_proposal_problems` / `_boundary_problems` / …），不是断言串 ——于是"绿"与"红"是同一个函数在两份代码上的两次调用（这就是负控的可演示形态）。
 """
 from __future__ import annotations
 
@@ -57,15 +49,15 @@ LOOPS: dict[tuple[str, str], dict[str, Any]] = {("B", "register_statement"): {},
 JUDGE_REPLY = json.dumps({"decision": "可派", "reason": "桩：不判", "basis": []},
                          ensure_ascii=False)
 
-#: **必须洗格式**的那份派活（判据 ④ 的现场）：
+#: 必须洗格式的那份派活（判据 ④ 的现场）：
 #: - 动作名写错：`own.register_statement`（唯一候选 `register_statement`）；
 #: - `params` 用别名键：`stmt_text` ⇒ `statement_text`（唯一候选）。
 #: 判别"唯一候选"靠的是 `declarations_candidates`：`stmt_text` 只命中 `statement_text`
 #: 一个（`statementtext` 会同时命中 `statement_full` / `statement_text` ⇒ 不猜、不洗）。
-#: 值**故意带首尾空白**：洗格式一个字都不许动它 —— 那条正是负控"改值"要咬的地方。
+#: 值故意带首尾空白：洗格式一个字都不许动它 —— 那条正是负控"改值"要咬的地方。
 #:
-#: 第三条（"必填字段被摆在顶层"）**不放在这一份里**：派活形状的解码是白名单，
-#: 而它按**写对了的动作**去查声明（`_carried_top_level_params`），所以"动作名同时写错"的
+#: 第三条（"必填字段被摆在顶层"）不放在这一份里：派活形状的解码是白名单，
+#: 而它按写对了的动作去查声明（`_carried_top_level_params`），所以"动作名同时写错"的
 #: 那份载荷根本走不到秘书面前（顶层那一格在解码时就被丢了，与洗格式无关）。
 #: 那一格由 `test_the_wash_moves_keys_and_never_touches_a_value` 的第二段直接打秘书的 API。
 BODY: dict[str, Any] = {
@@ -76,7 +68,7 @@ BODY: dict[str, Any] = {
     "why": "要一条能引的命题",
 }
 
-#: `_content_values` 与判据 ④ 的口径：这些是**协议/格式**键（可以换位置、换真名），
+#: `_content_values` 与判据 ④ 的口径：这些是协议/格式键（可以换位置、换真名），
 #: 其余顶层键（含 `task`！）是内容面 —— 值一个字节都不许变。
 _PROTOCOL_KEYS: frozenset[str] = frozenset({
     "role", "action", "params", "why", "notify", "brief", "name", "reuse",
@@ -165,7 +157,7 @@ def _run(tmp_path: pathlib.Path, *, key: str | None = None, body: Mapping[str, A
     backend.conductor = cond
     built = build_registry(store=st, conductor=cond)
     backend.registry = built.registry
-    #: 真正到主控（= 后端）那一侧的每一次召唤：判据 ②③ 看的是**这一份**，不是读数自报。
+    #: 真正到主控（= 后端）那一侧的每一次召唤：判据 ②③ 看的是这一份，不是读数自报。
     seen: list[dict[str, Any]] = []
     original_summon = cond.summon
 
@@ -175,7 +167,7 @@ def _run(tmp_path: pathlib.Path, *, key: str | None = None, body: Mapping[str, A
         return original_summon(role, action, params, **kw)
 
     cond.summon = spy          # type: ignore[method-assign]
-    # 批量那一支走 `run_plan`，而它**内部逐个调 `summon`** ⇒ 同一个 spy 同时覆盖两条路
+    # 批量那一支走 `run_plan`，而它内部逐个调 `summon` ⇒ 同一个 spy 同时覆盖两条路
     # （再包一次 `run_plan` 会把每一项记两遍：实测 2 个 target 读成 4 次）。
     run = run_role("M", "派一环", store=st, registry=built.registry, conductor=cond,
                    seam=LlmSeam(role="M", session_root=root, gateway=gates["M"],
@@ -200,7 +192,7 @@ def _same(a: Any, b: Any) -> bool:
 
 
 def _content_values(payload: Mapping[str, Any]) -> list[Any]:
-    """一份载荷里的**内容值**（`params` 里的值 + 顶层非协议键值；`task` 也算内容）。"""
+    """一份载荷里的内容值（`params` 里的值 + 顶层非协议键值；`task` 也算内容）。"""
     out: list[Any] = []
     for key, value in dict(payload or {}).items():
         if key == "params":
@@ -213,19 +205,16 @@ def _content_values(payload: Mapping[str, Any]) -> list[Any]:
 
 def _boundary_problems(original: Mapping[str, Any],
                        washed: Mapping[str, Any]) -> list[str]:
-    """判据 ④：洗格式**没有越界**（`draft/90` §1.2 + `draft/53` §2 的两条红线）。
+    """    判据 ④：洗格式没有越界（`draft/90` §1.2 + `draft/53` §2 的两条红线）。
 
-    四条，逐条对着"可以洗什么 / 一个字不许动什么"：
+    四条，逐条对着"可以洗什么 / 一个字不许动什么"：值逐字相同：内容值的多重集不变 —— 不许多出一个（"不静默补默认值"）、
+    不许少一个（"不替它删"）、不许改一个（"不改结论/证据"）；
+    2. 不增删参数：由第 1 条保证（`params` 的值一个不多一个不少 ⇒ 键也没被增删，
+    只允许"同名换位置/换真名"）；
+    3. 正文逐字相同：`task` / `brief` / `notify.body`（"派什么""怎么说"是内容面）；
+    4. 不新造顶层键：洗只许搬、只许改真名，不许无中生有。
 
-    1. **值逐字相同**：内容值的多重集不变 —— 不许多出一个（"不静默补默认值"）、
-       不许少一个（"不替它删"）、不许改一个（"不改结论/证据"）；
-    2. **不增删参数**：由第 1 条保证（`params` 的值一个不多一个不少 ⇒ 键也没被增删，
-       只允许"同名换位置/换真名"）；
-    3. **正文逐字相同**：`task` / `brief` / `notify.body`（"派什么""怎么说"是内容面）；
-    4. **不新造顶层键**：洗只许搬、只许改真名，不许无中生有。
-
-    为什么不写成"只允许这几个键变"的白名单：那是把今天的格式面钉死；
-    这一条判的是**方向**（内容面一个字节都没动），格式面变多少格另由 `changes` 逐条报。
+    为什么不写成"只允许这几个键变"的白名单：那是把今天的格式面钉死；这一条判的是方向（内容面一个字节都没动），格式面变多少格另由 `changes` 逐条报。
     """
     probs: list[str] = []
     before, after = _content_values(original), _content_values(washed)
@@ -254,7 +243,7 @@ def _boundary_problems(original: Mapping[str, Any],
 
 def _proposal_problems(step: Mapping[str, Any], seen: list[dict[str, Any]],
                        store: Any) -> list[str]:
-    """判据 ①：有差异 ⇒ **不执行**（这一条只看事实：行数与后端调用次数）。"""
+    """判据 ①：有差异 ⇒ 不执行（这一条只看事实：行数与后端调用次数）。"""
     probs: list[str] = []
     if str(step.get("outcome") or "") != OUTCOME_WASH_PROPOSED:
         probs.append(f"没有返回受控的请示读数（outcome={step.get('outcome')!r}）")
@@ -277,7 +266,7 @@ def _proposal_problems(step: Mapping[str, Any], seen: list[dict[str, Any]],
 
 def _accept_problems(step: Mapping[str, Any], seen: list[dict[str, Any]],
                      proposal: Mapping[str, Any]) -> list[str]:
-    """判据 ②：接受 ⇒ **用 washed 执行**（看后端收到的那一份，不看读数自报）。"""
+    """判据 ②：接受 ⇒ 用 washed 执行（看后端收到的那一份，不看读数自报）。"""
     probs: list[str] = []
     audit = step.get("wash") if isinstance(step.get("wash"), Mapping) else {}
     if not audit:
@@ -305,7 +294,7 @@ def _accept_problems(step: Mapping[str, Any], seen: list[dict[str, Any]],
 
 def _reject_problems(step: Mapping[str, Any], seen: list[dict[str, Any]],
                      proposal: Mapping[str, Any]) -> list[str]:
-    """判据 ③：拒绝 ⇒ **用 original 执行**（原稿里那几处格式错的键原样留着）。"""
+    """判据 ③：拒绝 ⇒ 用 original 执行（原稿里那几处格式错的键原样留着）。"""
     probs: list[str] = []
     audit = step.get("wash") if isinstance(step.get("wash"), Mapping) else {}
     if not audit:
@@ -327,7 +316,7 @@ def _reject_problems(step: Mapping[str, Any], seen: list[dict[str, Any]],
     return probs
 
 def _no_diff_problems(step: Mapping[str, Any], store: Any) -> list[str]:
-    """判据 ⑤：无差异 ⇒ 直接执行、**不产生**请示（不为"没差异"多花一轮）。"""
+    """判据 ⑤：无差异 ⇒ 直接执行、不产生请示（不为"没差异"多花一轮）。"""
     probs: list[str] = []
     if str(step.get("outcome") or "") == OUTCOME_WASH_PROPOSED or "proposal_id" in step:
         probs.append("无差异也请示了（多花了一轮）")
@@ -426,14 +415,14 @@ def _secretary(tmp_path: pathlib.Path, cls: Any = Secretary) -> Any:
 # --------------------------------------------------------------------------------------
 
 def test_a_wash_with_a_diff_does_not_dispatch_anything(tmp_path: pathlib.Path):
-    """正控①：`washed != original` ⇒ 请示 + 编号 + diff，**台账 0 行新任务、后端 0 次调用**。"""
+    """正控①：`washed != original` ⇒ 请示 + 编号 + diff，台账 0 行新任务、后端 0 次调用。"""
     got = _run(tmp_path)
     step = got["steps"][0]
     assert _proposal_problems(step, got["seen"], got["store"]) == []
     assert step["outcome"] == OUTCOME_WASH_PROPOSED, step
     # 编号由秘书发：形状是 `W-<role>-<实例>-<seq>`，不是模型/父能拼出来的
     assert step["proposal_id"].startswith("W-M-"), step["proposal_id"]
-    # diff 只列改了哪几个键，且**值一个都没变**（这一条是 ④ 在请示读数上的同一件事）
+    # diff 只列改了哪几个键，且值一个都没变（这一条是 ④ 在请示读数上的同一件事）
     assert step["changed_keys"], step
     lines = [str(x) for x in step["changes"]]
     assert any("动作名 own.register_statement → register_statement" == x for x in lines), lines
@@ -458,7 +447,7 @@ def test_negative_control_auto_accepting_the_wash_is_red(tmp_path: pathlib.Path)
 # --------------------------------------------------------------------------------------
 
 def test_accepting_the_proposal_dispatches_the_washed_payload(tmp_path: pathlib.Path):
-    """正控②：`accept_proposal=<id>` ⇒ 子任务真的派出，且**后端收到的那份就是 washed**。"""
+    """正控②：`accept_proposal=<id>` ⇒ 子任务真的派出，且后端收到的那份就是 washed。"""
     got = _run(tmp_path, key=ACCEPT_PROPOSAL)
     proposal, step = got["steps"][0], got["steps"][1]
     assert _accept_problems(step, got["seen"], proposal) == []
@@ -484,7 +473,7 @@ def test_rejecting_the_proposal_dispatches_the_original(tmp_path: pathlib.Path):
     got = _run(tmp_path, key=REJECT_PROPOSAL)
     proposal, step = got["steps"][0], got["steps"][1]
     assert _reject_problems(step, got["seen"], proposal) == []
-    # 原稿里那几处格式错的键**原样留着**（别名没被折算）—— 这就是"按原稿派出"的实证
+    # 原稿里那几处格式错的键原样留着（别名没被折算）—— 这就是"按原稿派出"的实证
     assert got["seen"][0]["params"].get("stmt_text") == " 一个短名 ", got["seen"]
     assert "statement_text" not in got["seen"][0]["params"], got["seen"]
     rows = [r for r in got["store"].rows("tasks") if str(r.get("role")) == "B"]
@@ -513,7 +502,7 @@ def test_negative_control_rejecting_but_sending_the_washed_is_red(tmp_path: path
 # --------------------------------------------------------------------------------------
 
 def test_the_wash_moves_keys_and_never_touches_a_value(tmp_path: pathlib.Path):
-    """正控④：洗出来的 `washed` 与 `original` **只有那几处格式差异**，逐条断言。"""
+    """正控④：洗出来的 `washed` 与 `original` 只有那几处格式差异，逐条断言。"""
     got = _run(tmp_path)
     plan = got["steps"][0]
     original, washed = dict(plan["original"]), dict(plan["washed"])
@@ -533,7 +522,7 @@ def test_the_wash_moves_keys_and_never_touches_a_value(tmp_path: pathlib.Path):
     assert sorted(plan["changed_keys"]) == sorted(
         ["action", "params.stmt_text"]), plan["changed_keys"]
 
-    # ---- 第二段：**顶层折叠**（必填字段被摆在顶层）—— 直接打秘书的 API。
+    # ---- 第二段：顶层折叠（必填字段被摆在顶层）—— 直接打秘书的 API。
     # 为什么不走循环：派活形状的解码按"写对了的动作"查声明，而这一份的动作名是错的
     # ⇒ 顶层那一格在解码时就被丢掉（那是解码面的既有口径，与洗格式无关）。
     root = tmp_path / "fold"
@@ -587,7 +576,7 @@ MANY_LOOPS: dict[tuple[str, str], dict[str, Any]] = {("B", "register_statement")
 
 
 def test_no_diff_executes_at_once_without_a_proposal(tmp_path: pathlib.Path):
-    """正控⑤：`washed == original` ⇒ 直接执行、**不产生** `wash_proposed`（不多花一轮）。"""
+    """正控⑤：`washed == original` ⇒ 直接执行、不产生 `wash_proposed`（不多花一轮）。"""
     got = _run(tmp_path, body=CLEAN)
     step = got["steps"][0]
     assert _no_diff_problems(step, got["store"]) == []
@@ -604,7 +593,7 @@ def test_negative_control_proposing_without_a_diff_is_red(tmp_path: pathlib.Path
 
 
 # --------------------------------------------------------------------------------------
-# 批量的那一支：两段式是**同一份**判据（`summon_many` 也要先请示、再按表态派）
+# 批量的那一支：两段式是同一份判据（`summon_many` 也要先请示、再按表态派）
 # --------------------------------------------------------------------------------------
 
 def test_a_batch_is_proposed_and_then_dispatched_washed(tmp_path: pathlib.Path):
@@ -630,7 +619,7 @@ def test_a_batch_is_proposed_and_then_dispatched_washed(tmp_path: pathlib.Path):
 # --------------------------------------------------------------------------------------
 
 def test_the_proposal_and_the_three_readings_are_on_the_session_events(tmp_path: pathlib.Path):
-    """`proposal_id` 与 original/washed/accepted 在**会话事件**里可查（`agent_step` 那一格）。"""
+    """`proposal_id` 与 original/washed/accepted 在会话事件里可查（`agent_step` 那一格）。"""
     got = _run(tmp_path, key=ACCEPT_PROPOSAL)
     proposal, step = got["steps"][0], got["steps"][1]
     events, _bad = __import__("agentflow.jsonlfile", fromlist=["read_jsonl"]).read_jsonl(

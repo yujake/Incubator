@@ -1,33 +1,22 @@
 # -*- coding: utf-8 -*-
 """工具面的冻结快照（`draft/36` 的 T-8 第 ① 条：动声明数据之前先钉住整张面）。
-
-`T-8` 要动的是 `tools/*.py::register` 里的声明数据 —— 而工具面就是权限面
-（`AGENTS.md` 把 `capabilities.py` / `tools/base.py` / `tools/__init__.py` 划进禁改区，
-理由正是"改它等于改权限面"）。所以先立尺子：把"今天这张面长什么样"钉成可比较的一份数据。
-
+`T-8` 要动的是 `tools/*.py::register` 里的声明数据 —— 而工具面就是权限面（`AGENTS.md` 把 `capabilities.py` / `tools/base.py` /
+`tools/__init__.py` 划进禁改区，理由正是"改它等于改权限面"）。所以先立尺子：把"今天这张面长什么样"钉成可比较的一份数据。
 ## 钉住的四层（`draft/36` 给的验收是"工具总数与逐角色面逐字不变"，这里把它拆细）
-
 1. 装配摘要：`build_registry().summary()` —— 工具名全集 / 总数 / 已装模块 / 跳过的模块 /
-   `params_checked`（`N-5` 的参数面覆盖率读数：它若不等于工具总数，说明"零违反"是真空的）。
+`params_checked`（`N-5` 的参数面覆盖率读数：它若不等于工具总数，说明"零违反"是真空的）。
 2. 逐工具声明：`ToolSpec.to_dict()` 全字段（名字 / 摘要 / 参数 schema / 副作用 /
-   外部性 / 是否需审批 / 角色 / 返回形状）+ 处理器签名（模型看到的就是这两个）。
+外部性 / 是否需审批 / 角色 / 返回形状）+ 处理器签名（模型看到的就是这两个）。
 3. 逐角色面：`TOOL_ROLES` 九个角色各自的工具名单（排序后）+ 只读角色 C/H 的写工具泄漏表。
 4. `tools` 子命令的 stdout：`agentflow tools` / `--json` / `--role A`…`--role H`
-   —— 这正是 `draft/36` 里 T-8 写的那条判据（"`tools --role X` 输出 diff 为空"）。
-   `--role M` 在 CLI 上不可达（argparse 的 choices 是 A–H），所以主控的面靠第 3 条钉。
-
+—— 这正是 `draft/36` 里 T-8 写的那条判据（"`tools --role X` 输出 diff 为空"）。`--role M` 在 CLI 上不可达（argparse 的 choices 是 A–H），
+所以主控的面靠第 3 条钉。
 ## 重新生成
-
-```powershell
-cd D:\\Incubator\\agentflow
-$env:PYTHONUTF8='1'; python -B tests/test_tool_surface_snapshot.py --write
-```
+```powershell cd D:\\Incubator\\agentflow$env:PYTHONUTF8='1'; python -B tests/test_tool_surface_snapshot.py --write ```
 生成之后先看 diff：差在哪、为什么。这条命令只该在"权限面确实变了"时用。
-
-⚠️ **环境要和判据同一套**（2026-10-13 实测踩到，与 `test_agent_surface_snapshot.py` 同因）：
-`tests/conftest.py` 在导入期把 `AGENTFLOW_LEAN_ENABLED` 钉成 "1"，而工具摘要里
-（例如 `verify.check_formal`）就写着形式化开/关的口径。直接重生成会写出一份判据不认的基线。
-所以本文件在导入 agentflow 之前自己钉上同一个开关。
+环境要和判据同一套（2026-10-13 实测踩到，与 `test_agent_surface_snapshot.py` 同因）：`tests/conftest.py` 在导入期把
+`AGENTFLOW_LEAN_ENABLED` 钉成 "1"，而工具摘要里（例如 `verify.check_formal`）就写着形式化开/关的口径。直接重生成会写出一份判据不认的基线。所以本文件在导入 agentflow
+之前自己钉上同一个开关。
 """
 from __future__ import annotations
 
@@ -134,7 +123,7 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
                     f"{role} / {spec.name} 的声明缺字段 ⇒ 快照钉不住东西")
         for role in READ_ONLY_ROLES:
             leaks = [s.name for s in reg.for_role(role) if s.side_effect in SIDE_EFFECTS_WRITE]
-            # 2026-10-17（业主裁定「方案 1」）：只读角色**自己的落库代理**是允许的
+            # 2026-10-17（业主裁定「方案 1」）：只读角色自己的落库代理是允许的
             from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
             _ex = {n for n, _w in _EXC.get(role, ())}
             leaks = [n for n in leaks if n not in _ex]

@@ -77,7 +77,7 @@ def test_the_boss_can_walk_it_through_conductor_summon(tmp_path: Path):
     c = Conductor(st, registry={"D": ("object", AgentD(st))})
     reg = build_registry(store=st, conductor=c).registry
 
-    # 2026-10-16（口径 S2）：工具层派活现在一律走角色自己的循环 ⇒ 走**内部 API**
+    # 2026-10-16（口径 S2）：工具层派活现在一律走角色自己的循环 ⇒ 走内部 API
     # （命题不变：确定性实现真的跑过、台账落一行）。
     res = c.summon("D", "propose_question",
                    {"question": "哪些 (m,k) 存在无限 R(m,k)-例子？",

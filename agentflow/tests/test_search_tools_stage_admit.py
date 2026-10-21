@@ -1,14 +1,14 @@
 """待新增文献列表的判据（业主 2026-10-20 口径，逐条 + 负控）。
 
-这一份守的六件事，每一条都配一个**负控**（把那条判据关掉 ⇒ 必须变绿，
+这一份守的六件事，每一条都配一个负控（把那条判据关掉 ⇒ 必须变绿，
 否则"判据真的在起作用的"这句话没有证据）：
 
-  ① 一次文献检索至多入库 10 篇（单次调用 ≤10、单委托累计 ≤10；超了**整笔拒绝**）；
-  ② 拒收必须带**受控理由码**，行上的 `reject_reason` 不许为空；
+  ① 一次文献检索至多入库 10 篇（单次调用 ≤10、单委托累计 ≤10；超了整笔拒绝）；
+  ② 拒收必须带受控理由码，行上的 `reject_reason` 不许为空；
   ③ DOI 完全相同 ⇒ 视为重复；标题词集 Jaccard ≥ 0.60 且无 `new_content` ⇒ 拒收；
-  ④ 撤掉的槽位**仍在列表里**且带理由（负控：改成物理删除 ⇒ 红）；
-  ⑤ 列表按**委托**重置（默认视图只看当前委托；负控：去掉过滤 ⇒ 红）；
-  ⑥ 一键迁移 `lit.admit_all` 之后本委托**全终态**（不物理删），并写出委托报告
+  ④ 撤掉的槽位仍在列表里且带理由（负控：改成物理删除 ⇒ 红）；
+  ⑤ 列表按委托重置（默认视图只看当前委托；负控：去掉过滤 ⇒ 红）；
+  ⑥ 一键迁移 `lit.admit_all` 之后本委托全终态（不物理删），并写出委托报告
      —— 报告里"已入库 / 未入库（含受控理由）"两块都要有（负控：去掉一块 ⇒ 红）。
 
 外加一条"野路"判据：`lit_candidates` 不许由通用写口（`table.create` / `table.update` /
@@ -67,7 +67,7 @@ def _add_local(store: Store, *, title: str, doi: str) -> str:
     return str(lit_id)
 
 
-#: 一批**互不相似**的题名：判据要测的是条数上限与重叠检查，两者都会被"题名彼此太像"
+#: 一批互不相似的题名：判据要测的是条数上限与重叠检查，两者都会被"题名彼此太像"
 #: 干扰（先入的那几条进了 literature 之后，后来的会被标题 Jaccard 判成高重叠）。
 #: 所以夹具的题名一律取不同的数学主题 —— 这是夹具该做的事，不是放宽判据。
 DISTINCT = [
@@ -99,7 +99,7 @@ def _stage(reg, titles, *, request_id: str = RID, doi_prefix: str = "10.7") -> l
 
 
 def test_at_most_ten_per_call_is_refused_as_a_whole(reg, store):
-    """① 一次要入 11 条 ⇒ **整笔拒绝**，一条都不入（不是"前 10 条先进"）。"""
+    """① 一次要入 11 条 ⇒ 整笔拒绝，一条都不入（不是"前 10 条先进"）。"""
     slots = _stage(reg, DISTINCT[:11])
     before = len(store.rows("literature"))
     res = reg.call("lit.admit", slots=slots, request_id=RID)
@@ -124,7 +124,7 @@ def test_at_most_ten_per_delegation_refuses_the_eleventh(reg, store):
 
 
 def test_negative_control_raising_the_cap_lets_eleven_through(reg, store, monkeypatch):
-    """① 的负控：把上限放开 ⇒ 同一个调用必须**能**入库 11 条（判据读的是那个常量）。"""
+    """① 的负控：把上限放开 ⇒ 同一个调用必须能入库 11 条（判据读的是那个常量）。"""
     slots = _stage(reg, [f"Cap probe topic {i}" for i in range(11)])
     monkeypatch.setattr(L, "MAX_ADMIT_PER_CALL", 99)
     monkeypatch.setattr(L, "MAX_ADMIT_PER_DELEGATION", 99)
@@ -138,7 +138,7 @@ def test_negative_control_raising_the_cap_lets_eleven_through(reg, store, monkey
 
 
 def test_reject_needs_a_registered_reason_code(reg, store):
-    """② 拒收必须带**登记表里的**理由码（空码 / 自造码一律拒）。"""
+    """② 拒收必须带登记表里的理由码（空码 / 自造码一律拒）。"""
     slots = _stage(reg, ["A paper to reject"])
     with pytest.raises(L.LitStageError) as ei:
         L.reject(store, slots[0], "")
@@ -166,7 +166,7 @@ def test_negative_control_turning_off_the_code_check_lets_an_empty_reason_throug
 ):
     """② 的负控：把"理由码受控 + 行上理由非空"两条判据同时关掉 ⇒ 空理由也写得进去。
 
-    负控必须打在**同一条判据**上（这里就是 `litstage._check_code` 与
+    负控必须打在同一条判据上（这里就是 `litstage._check_code` 与
     `schema.LitCandidate.validate`），否则证明的是别的什么东西没生效。
     """
     with store.tx("lit_candidates", "counters", actor="t", note="fixture") as tx:
@@ -228,7 +228,7 @@ def test_negative_control_disabling_overlap_check_admits_the_high_overlap_paper(
 ):
     """③ 的负控：把重叠检查换成"永远没重叠" ⇒ 高重叠那条也能入库（判据真的读它）。
 
-    用**不同 DOI** 的高重叠样本：于是"关掉判据"与"不关"的差别落在
+    用不同 DOI 的高重叠样本：于是"关掉判据"与"不关"的差别落在
     `literature` 的行数上（多出一行），而不是被现有判重分支顺手挡掉 ——
     后者是第二道防线（`dedup.literature_keys`），不能拿来当本判据的读数。
     """
@@ -268,13 +268,13 @@ def test_withdrawn_slot_stays_in_the_list_with_its_reason(reg, store):
     assert row["withdrawn_reason"] == "内容与本次检索无关"
     assert row["reason_code"] == "withdrawn_by_reviewer"
     assert row["title"] == "Withdraw me", "撤掉的槽位必须留着题名（记下删掉的是哪一篇）"
-    # 补位进的是**新序号**，旧号不复用
+    # 补位进的是新序号，旧号不复用
     new_slots = _stage(reg, ["A replacement paper"], doi_prefix="10.11")
     assert new_slots[0] > slots[2], (new_slots, slots)
 
 
 def test_negative_control_physical_delete_makes_the_slot_disappear(reg, store):
-    """④ 的负控：把那一行**物理删掉**（绕过工具、直接改表）⇒ 同一个判据立刻变红。"""
+    """④ 的负控：把那一行物理删掉（绕过工具、直接改表）⇒ 同一个判据立刻变红。"""
     slots = _stage(reg, ["Keep me", "Physically delete me"])
     reg.call("lit.stage_withdraw", slot=slots[1], reason_code="withdrawn_by_reviewer")
     assert L.list_candidates(store, request_id=RID, status="withdrawn")["count"] == 1
@@ -333,7 +333,7 @@ def test_list_defaults_to_the_current_delegation(reg, store):
     assert listing["request_id"] == RID2, listing["request_id"]
     assert listing["count"] == 1, listing["count"]
     assert [r["title"] for r in listing["rows"]] == ["Delegation two paper"]
-    # 旧委托的行**没被删**，显式查得到（这正是"查历史可以"）
+    # 旧委托的行没被删，显式查得到（这正是"查历史可以"）
     assert L.list_candidates(store, request_id=RID)["count"] == 2
     assert listing["total_all_delegations"] == 3
 
@@ -341,7 +341,7 @@ def test_list_defaults_to_the_current_delegation(reg, store):
 def test_negative_control_dropping_the_filter_shows_the_old_delegation(reg, store, monkeypatch):
     """⑤ 的负控：把过滤去掉（`current_request_id` 恒为空 ⇒ 视图退回全表）⇒ 判据变红。
 
-    这条负控打的是"默认视图按当前委托过滤"那条判据的**唯一实现**
+    这条负控打的是"默认视图按当前委托过滤"那条判据的唯一实现
     （`litstage.current_request_id`），所以它证明的是"过滤真的在起作用"。
     """
     _stage(reg, ["Delegation one paper A"])
@@ -446,7 +446,7 @@ def _cand(i: int) -> Candidate:
 
 
 def test_run_once_stages_then_admits_and_writes_the_report(store):
-    """A 的"登记文献"这一步现在是**先 stage 后 admit**：候选全进列表、入库的有回填、
+    """A 的"登记文献"这一步现在是先 stage 后 admit：候选全进列表、入库的有回填、
     并且这次委托留下报告（已入库 + 未入库两块）。"""
     from conftest import add_request
 

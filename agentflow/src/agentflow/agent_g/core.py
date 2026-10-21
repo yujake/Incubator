@@ -112,25 +112,15 @@ class _Core:
         return target
     def selftest(self) -> int:
         """就地冒烟自检：只做"构造断言 + 内存渲染"两步，不碰 store。
-
-        真正被调用的只有这两处（与实现逐条对应）：
-        1. `self.compose_claim(...)` 造一条断言 —— 覆盖断言构造那一道闸
-           （它直接转发工具层的纯函数，不走 `self._call`、不碰注册表）；
-        2. `self.render({...}, dependencies=None)` 把它渲染成 markdown
-           —— `dependencies=None` 是有意的"没查"：连依赖表都不读，
-           于是这次自检对 store 连一次读都没有，更不会写；
-           最后核对渲染结果里出现"自检断言"与 "lit:0000"。
-
-        它刻意不做的事（读的人不要以为已被覆盖）：
-        - 不调 `build_document`：稿件落盘与随之而来的 schema 校验
-          没有任何就地检查，那一路的回归只能靠测试与模块级 `_selftest()`；
-        - 不写 store：不落 `documents`，也不 `register_dependency`。
-          自检不该改用户的库 —— `Store` 是用户的数据，一次冒烟检查
-          没有资格往里写（顺带它也才能在只读工作区里被调用）。
-
-        返回 0（成功）/ 1（失败）。它与模块级 `_selftest()` 的分工：
-        后者建临时工作区跑一遍完整流程（含 build_document 与落盘）并打印，
-        前者是"就地可调用"的冒烟检查。
+        真正被调用的只有这两处（与实现逐条对应）： 1. `self.compose_claim(...)` 造一条断言 —— 覆盖断言构造那一道闸（它直接转发工具层的纯函数，不走
+        `self._call`、不碰注册表）； 2. `self.render({...}, dependencies=None)` 把它渲染成 markdown—— 
+        `dependencies=None` 是有意的"没查"：连依赖表都不读，于是这次自检对 store 连一次读都没有，更不会写；最后核对渲染结果里出现"自检断言"与
+        "lit:0000"。
+        它刻意不做的事（读的人不要以为已被覆盖）：- 不调 `build_document`：稿件落盘与随之而来的 schema 校验没有任何就地检查，那一路的回归只能靠测试与模块
+        级 `_selftest()`；- 不写 store：不落 `documents`，也不 `register_dependency`。自检不该改用户的库 —— 
+        `Store` 是用户的数据，一次冒烟检查没有资格往里写（顺带它也才能在只读工作区里被调用）。
+        返回 0（成功）/ 1（失败）。它与模块级 `_selftest()` 的分工：后者建临时工作区跑一遍完整流程（含 build_document 与落盘）并打印，前者是"就
+        地可调用"的冒烟检查。
         """
         try:
             claim = self.compose_claim(

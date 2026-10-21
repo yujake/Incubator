@@ -231,20 +231,11 @@ def test_the_shape_decoder_passes_notify_through_and_the_gate_validates_it():
 def test_the_forced_table_is_retired_in_code_and_the_prompt_half_is_bs():
     """L-05e 的代码半（提示词半归 B）：判据只钉代码侧，不再钉提示词的措辞。
 
-    改前必红：`AgentLoop.run` 里还调着 `_notify_bounce(` 且写着 `no_notify`
-    —— 那是"收工不带 notify 就打回"的两处痕迹。
+    改前必红：`AgentLoop.run` 里还调着 `_notify_bounce(` 且写着 `no_notify` —— 那是"收工不带 notify 就打回"的两处痕迹。
 
-    这一条钉的是退场之后的契约：
+    这一条钉的是退场之后的契约：① 收工侧的打回没了（源码里不再调 `_notify_bounce`）；② `no_notify` 这个停止理由没了（不可达的停止理由留着只会误导读的人）；③ 读数还在（`notify_problem`）：退场 ≠ 沉默 —— 有没有留痕仍然看得见（这是"闸门降级成读数"的全部意义）。
 
-    1. 收工侧的打回没了（源码里不再调 `_notify_bounce`）；
-    2. `no_notify` 这个停止理由没了（不可达的停止理由留着只会误导读的人）；
-    3. 读数还在（`notify_problem`）：退场 ≠ 沉默 —— 有没有留痕仍然看得见
-       （这是"闸门降级成读数"的全部意义）。
-
-    为什么不在这里断言 `agent_prompts.LOOP_PROTOCOL` 的文字：那是 B 的广告面，
-    而 `draft/45 §2` 的硬约束是"代码先接住、提示词后撤" —— 若继续钉提示词的
-    "强制/不代填"，B 撤广告的那一刻这里会红，而红的原因是分工不是回归。
-    """
+    为什么不在这里断言 `agent_prompts.LOOP_PROTOCOL` 的文字：那是 B 的广告面，而 `draft/45 §2` 的硬约束是"代码先接住、提示词后撤" —— 若继续钉提示词的"强制/不代填"，B 撤广告的那一刻这里会红，而红的原因是分工不是回归。"""
     import inspect
 
     from agentflow.agent_loop import AgentLoop
@@ -311,12 +302,12 @@ def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path
     rows = MS.rows(ws)
     assert [r["to"] for r in rows] == ["D"], rows
     assert "框架据派活派生" in rows[0]["note"], rows[0]
-    # 2026-10-16（口径 S2）：派生手稿的"一句话"现在是**那件活**（"派活：…"），
+    # 2026-10-16（口径 S2）：派生手稿的"一句话"现在是那件活（"派活：…"），
     # 不再是动作名（派活不带动作）。
     assert "派活" in rows[0]["summary"] and "猜想" in rows[0]["summary"], rows[0]
     assert "n≥3 时" in rows[0]["body"] and "把猜想立起来" in rows[0]["body"], rows[0]
     # 派活本身照常发生
-    # 同上：按**角色**数那一行（`action` 那格现在恒为 `""`）。
+    # 同上：按角色数那一行（`action` 那格现在恒为 `""`）。
     assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("role")) == "D"]) == 1, \
         _ws_rows(ws, "tasks")
     assert run.steps[0].result.get("dispatch_handoff", {}).get("ok") is True, run.steps[0]
@@ -378,8 +369,8 @@ def test_a_plain_role_does_not_need_a_notify_on_its_dispatches(tmp_path):
     assert run.notify_rejections == 0, run.to_dict()
     assert run.steps[0].shape == "summon", run.steps[0].to_dict()
     assert "dispatch_handoff" not in run.steps[0].result, run.steps[0].result
-    # 命题是"**非主控派活不产生框架派生的留痕**"（它只在收工那一刻留痕）。
-    # 原来写成"手稿恰好只有一条、且 to == M"—— 那把手稿的**条数**也钉住了，
+    # 命题是"非主控派活不产生框架派生的留痕"（它只在收工那一刻留痕）。
+    # 原来写成"手稿恰好只有一条、且 to == M"—— 那把手稿的条数也钉住了，
     # 而条数会随别的合理行为变（例如收工那条与派活那条的合并方式）。
     assert not any("框架据派活派生" in str(r.get("note") or "") for r in MS.rows(ws)), MS.rows(ws)
 

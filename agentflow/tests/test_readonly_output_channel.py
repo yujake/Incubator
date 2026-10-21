@@ -1,47 +1,21 @@
-"""判据（修法 1）：只读角色的产出必须有一条**能落盘**的登记通道。
+"""判据（修法 1）：只读角色的产出必须有一条能落盘的登记通道。
 
-## 修的是哪两条现场读数
-
-- `projects/mp3` 末节第 5 条：「`analysis_reports` = 0：C 的图读数没进登记表（**它面外操作**），
-  只在手稿 000004 与我的报告里」；
-- 同族的 H 那一侧：`review_document` / `verify_fixes` 落的发现**全部来自机械扫描**
-  （`scan_document`），H 自己读出来的那一条（例如"G8 回执没给退出码"）没有任何落点。
-
-## 根因（诊断，不是猜测）
-
-`(C, H)` 是 `READ_ONLY_ROLES`，两处过滤把它们的**写工具**剥掉：
-
-1. `tools/base.ToolRegistry._role_surface`（`for_role` 与 `call` 共用的唯一判据）：
-   只读角色的工具面上，`SIDE_EFFECTS_WRITE` 与 `external == "exec"` 的工具一律剥除；
-2. `agent_h._support.filter_readonly_h_surface`：H 的自由工具箱更窄（只留 none/read）。
-
-例外表 `tools/base.READONLY_CALL_EXCEPTIONS` 只登记了 H 的三件 `review.*`
-（它们落机械发现、报告文件），而 **C 一件都没有** —— 于是 C 的写集
-（`capabilities.READ_ONLY_WRITE_EXCEPTIONS["C"]` 里的 `analysis_reports`）在工具层
-**没有任何载体**。真机现场（`projects/mp3/runs/C-20261018-201536-001.json`）里，
-C 第 4、5 步分别调 `gaps` 与 `handle`，两次都拿到「没有名为 … 的工具」——
-它的**动作**只能由父代理 `summon` 唤起，从来不在它自己的工具面上。
-
-## 修法（业主裁定：优先复用既有表，不新增表）
-
-复用两张既有表，各开一件**只挂给那个角色**的登记工具（不新增表、不改 `for_role` 的两条过滤）：
-
-- `analysis.register_report`（roles = ("C",)）→ `analysis_reports`
-  （落盘仍走 `agent_c._support.AnalysisReport.persist`，不重写第二份"怎么存报告"）；
-- `review.record_finding`（roles = ("H",)）→ `review_findings`
-  （`tx.upsert("review_findings", …)`；**不改** `documents.status`）。
-
-两件都登记进 `READONLY_CALL_EXCEPTIONS`（FC-27：这一改动了权限面），
-并各在 `TOOL_WRITE_SETS` 里有逐工具写集。
-
-## 负控（"修好之前会红"的证据）
-
-- `test_removing_the_exception_entry_removes_the_channel`：把例外表里那一条删掉 ⇒
-  工具立刻从角色面上消失（**这正是修法前的形态**：`for_role("C")` 里 0 个写工具）；
-- `test_the_channel_is_not_reachable_by_other_roles`：`call(..., role="D")` 被拒
-  （登记通道只对那一个角色开）；
-- `test_a_kind_outside_the_vocabulary_is_refused`：`kind` 表外 ⇒ 拒，且表里不新增行；
-- `test_an_empty_evidence_is_refused`：H 那条 `evidence` 空 ⇒ 拒（审校者的判断也要有依据）。
+修的是哪两条现场读数：`projects/mp3` 末节第 5 条：「`analysis_reports` = 0：C 的图读数没进登记表（它面外操作），只在手稿 000004 与我的报告里」；- 同族的 H
+那一侧：`review_document` / `verify_fixes` 落的发现全部来自机械扫描（`scan_document`），H 自己读出来的那一条（例如"G8 回执没给退出码"）没有任何落点。根因（诊断，
+不是猜测）：`(C, H)` 是 `READ_ONLY_ROLES`，两处过滤把它们的写工具剥掉：`tools/base.ToolRegistry._role_surface`（`for_role` 与
+`call` 共用的唯一判据）：只读角色的工具面上，`SIDE_EFFECTS_WRITE` 与 `external == "exec"` 的工具一律剥除；2.
+`agent_h._support.filter_readonly_h_surface`：H 的自由工具箱更窄（只留 none/read）。例外表 `tools/base.READONLY_CALL_EXCEPTIONS` 只登记了
+H 的三件 `review.*`（它们落机械发现、报告文件），而 C 一件都没有 —— 于是 C 的写集（`capabilities.READ_ONLY_WRITE_EXCEPTIONS["C"]` 里的
+`analysis_reports`）在工具层没有任何载体。真机现场（`projects/mp3/runs/C-20261018-201536-001.json`）里，C 第 4、5 步分别调 `gaps` 与 `handle`，
+两次都拿到「没有名为 … 的工具」——它的动作只能由父代理 `summon` 唤起，从来不在它自己的工具面上。修法（业主裁定：优先复用既有表，不新增表）：复用两张既有表，各开一件只挂给那个角色的登记工具（不新增表、不改
+`for_role` 的两条过滤）：`analysis.register_report`（roles = ("C",)）→ `analysis_reports`（落盘仍走
+`agent_c._support.AnalysisReport.persist`，不重写第二份"怎么存报告"）；- `review.record_finding`（roles = ("H",)）→
+`review_findings`（`tx.upsert("review_findings", …)`；不改 `documents.status`）。两件都登记进 `READONLY_CALL_EXCEPTIONS`（FC-27：
+这一改动了权限面），并各在 `TOOL_WRITE_SETS` 里有逐工具写集。负控（"修好之前会红"的证据）：`test_removing_the_exception_entry_removes_the_channel`：
+把例外表里那一条删掉 ⇒工具立刻从角色面上消失（这正是修法前的形态：`for_role("C")` 里 0 个写工具）；-
+`test_the_channel_is_not_reachable_by_other_roles`：`call(..., role="D")` 被拒（登记通道只对那一个角色开）；-
+`test_a_kind_outside_the_vocabulary_is_refused`：`kind` 表外 ⇒ 拒，且表里不新增行；- `test_an_empty_evidence_is_refused`：H 那条
+`evidence` 空 ⇒ 拒（审校者的判断也要有依据）。
 """
 from __future__ import annotations
 
@@ -191,7 +165,7 @@ def test_h_can_record_a_finding_of_its_own(tmp_path: Path) -> None:
 def test_removing_the_exception_entry_removes_the_channel(monkeypatch, tmp_path: Path) -> None:
     """负控（核心）：把例外表里那一条删掉 ⇒ 工具立刻从角色面上消失。
 
-    这就是**修法前的形态**：`READONLY_CALL_EXCEPTIONS` 里没有 C 的条目时，
+    这就是修法前的形态：`READONLY_CALL_EXCEPTIONS` 里没有 C 的条目时，
     `for_role("C")` 里 0 个写工具 —— C 的写集在工具层没有载体，图读数只能进回复。
     """
     store = _store(tmp_path)

@@ -2,24 +2,19 @@
 
 ## 这个文件登记的是哪条边界（`R2b-AN-2-A`）
 
-`verify.verify_all` 的 `selfreported_proof` 判据读的"被检查的声明名"来自
-`notes`（写入点 `agent_e._declared_name_note`）。`notes` 是可写的自由文本，
-而判据不校验它等于本行的 `claim_key` / `verifier_subject_key`，所以这条判据
-能到的一层是"这条 proof 行的依据可以被读出来"，不是"这条依据就是本行命题的"。
+`verify.verify_all` 的 `selfreported_proof` 判据读的"被检查的声明名"来自`notes`（写入点
+`agent_e._declared_name_note`）。`notes` 是可写的自由文本，而判据不校验它等于本行的 `claim_key` / `verifier_subject_key`，所以这条判据能到的一层是"这条
+proof 行的依据可以被读出来"，不是"这条依据就是本行命题的"。
 
 本文件做两件事：
 
 1. 把判据真正管得住的形态钉住（哪些必须报、哪些不许报），
-   其中的防误伤那两条同时是"为什么不补交叉判据"的实测理由 ——
-   生产路径上声明名与 `claim_key` 可以合法地毫不相干
-   （`agent_f.py` 把子目标的 `name` 传给 E，而 `claim_key` 可能是
-   `problem_key#sid`；`.lean` 文件名也可以与命题名无关）。
-   补一条"要求 `verifier_subject_key` 也出现在输出里"的交叉判据会把这两条
-   合规输入判成"自报"，正是 §41.1 记过的"判据过窄 ⇒ 红掉合规输入"。
+其中的防误伤那两条同时是"为什么不补交叉判据"的实测理由 ——生产路径上声明名与 `claim_key` 可以合法地毫不相干（`agent_f.py` 把子目标的 `name` 传给 E，而
+`claim_key` 可能是`problem_key#sid`；`.lean` 文件名也可以与命题名无关）。补一条"要求 `verifier_subject_key` 也出现在输出里"的交叉判据会把这两条合规输入判成"自报"，正是
+§41.1 记过的"判据过窄 ⇒ 红掉合规输入"。
 
 2. 把"这条上界已经如实登记"变成一条会红的断言：上界写在判据旁边的注释里
-   （`verify.py` 的 `verify_all`），删掉那段说明就会让第 6 条用例红。
-   没有它，"如实写进注释"这句话与"注释被顺手删掉"在测试里长得一样。
+（`verify.py` 的 `verify_all`），删掉那段说明就会让第 6 条用例红。没有它，"如实写进注释"这句话与"注释被顺手删掉"在测试里长得一样。
 """
 
 from __future__ import annotations
@@ -142,18 +137,14 @@ def test_a_missing_declared_name_falls_back_to_the_subject_key(store):
 
 
 def test_the_evidence_ceiling_is_registered_next_to_the_criterion():
-    """守卫：`selfreported_proof` 的证据上界必须写在判据旁边，且写明它到不了哪一层。
+    """    守卫：`selfreported_proof` 的证据上界必须写在判据旁边，且写明它到不了哪一层。
 
-    为什么断言在源码文本上：这条修复的形态就是"如实登记边界"（`R2b-AN-2-A`
-    的两个可选方向里的第二个）。如果没有任何断言看着它，"注释被删掉"与
-    "注释还在"在测试里完全一样 —— 那正是本仓反复登记的"零断言点"形态。
+    为什么断言在源码文本上：这条修复的形态就是"如实登记边界"（`R2b-AN-2-A`的两个可选方向里的第二个）。如果没有任何断言看着它，"注释被删掉"与"注释还在"在测试里完全一样 ——
+    那正是本仓反复登记的"零断言点"形态。
 
-    判据的意图是"这段说明与判据在同一个函数里"，而不是"文件里某处有这句话"。
-    所以这里不写死函数名，而是现算判据的落点：哪个函数体里同时出现了
-    `selfreported`（判据用的读数）与 `R2b-AN-2-A`（边界登记）。
-    `draft/36` 的 T-5 把 `verify_all`（1175 行）拆成了 12 个 `_check_*`，
-    这条判据因此在拆分后当场红过一次 —— 当时它写死 `inspect.getsource(V.verify_all)`。
-    写死函数名会让每一次重排都假红；现算落点则既保住意图、又经得起搬家。
+    判据的意图是"这段说明与判据在同一个函数里"，而不是"文件里某处有这句话"。所以这里不写死函数名，而是现算判据的落点：哪个函数体里同时出现了`selfreported`（判据用的读数）与
+    `R2b-AN-2-A`（边界登记）。`draft/36` 的 T-5 把 `verify_all`（1175 行）拆成了 12 个 `_check_*`，这条判据因此在拆分后当场红过一次 —— 当时它写死
+    `inspect.getsource(V.verify_all)`。写死函数名会让每一次重排都假红；现算落点则既保住意图、又经得起搬家。
     """
     import inspect
 

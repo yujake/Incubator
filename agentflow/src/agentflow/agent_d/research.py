@@ -9,22 +9,15 @@ from ._support import C_NO_EVIDENCE, S
 class _Research:
     def research(self, qid: str) -> dict:
         """对就绪问题做初步研究，产出研究笔记（§4.1 的第 5 步）。
-
-        产出 ``{"question_id","confidence","analysis","conclusion","suggestions",
-        "evidence","llm_used","c_queries","c_evidence"}``。置信度由
-        :func:`evidence_confidence` 决定；LLM 只能把它调低（``_rank_min``）。
-
+        产出 ``{"question_id","confidence","analysis","conclusion","suggestions","evidence","llm_used","c_queries","c_evidence"}``。
+        置信度由:func:`evidence_confidence` 决定；LLM 只能把它调低（``_rank_min``）。
         ## I1：研究前必须先向 C 点一次菜
-
         ``research()`` 一定会带上 ``c_queries``（每条含
-        ``{api, params, checked, truncated, digest, reason}``），参数由该问题的
-        ``related_concept_ids`` / ``related_relation_ids`` 现场推导。这不是
-        "顺便查一下"：结论里"这两个概念之间还有没有别的链条/别的矛盾关系"这类
-        判断只能来自 C 的图查询，而报告本身是上一次分析的快照。
-
-        一条 C 查询都没成功时，结论会被 :meth:`_apply_c_evidence_caveat`
-        显式标注「无 C 侧证据」并放弃确定语气 —— 不允许把"没问到"写成
-        "查不到"，更不允许在没问到的情况下给出看起来已被核实的判断。
+        ``{api, params, checked, truncated, digest, reason}``），参数由该问题的``related_concept_ids``
+        / ``related_relation_ids`` 现场推导。这不是"顺便查一下"：结论里"这两个概念之间还有没有别的链条/别的矛盾关系"这类判断只能来自 C 的图查询，
+        而报告本身是上一次分析的快照。
+        一条 C 查询都没成功时，结论会被 :meth:`_apply_c_evidence_caveat`显式标注「无 C 侧证据」并放弃确定语气 —— 不允许把"没问到"写成"
+        查不到"，更不允许在没问到的情况下给出看起来已被核实的判断。
         """
         ev = self.trace_question(qid)
         if ev.get("c_queries") is None:

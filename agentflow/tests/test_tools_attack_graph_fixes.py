@@ -1,26 +1,20 @@
 """`attack_tools.py`（PROPOSALS G-2）与 `graph_tools.py`（G-3）的修复测试。
-
 ## 这个文件为什么单独存在
-
-G-2 / G-3 的缺陷不属于本轮任何实现者的所有权清单，所以它在两轮审计里
-被两边都跳过。本文件逐条把它们钉住，每一条都打在"修之前会失败"的那个判据上。
-
+G-2 / G-3 的缺陷不属于本轮任何实现者的所有权清单，所以它在两轮审计里被两边都跳过。本文件逐条把它们钉住，每一条都打在"修之前会失败"的那个判据上。
 对应关系：
-
 | PROPOSALS 条目 | 修的东西 | 本文件的用例 |
 |---|---|---|
-| G-2 ① | `attack.*` 的 `PlanError` / `ValueError` / `StoreError` 逃逸 | `test_attack_plan_error_*` / `test_attack_validation_error_*` / `test_attack_store_error_*` |
+| G-2 ① | `attack.*` 的 `PlanError` / `ValueError` / `StoreError` 逃逸 | `test_attack_plan_error_*` /
+`test_attack_validation_error_*` / `test_attack_store_error_*` |
 | G-2 ② | `can_derive` 用 `incomplete` 表示"没查" | `test_can_derive_*` / `test_blocked_by_*` |
 | G-2 ③ | `include_terminal` 的 `None` 反转默认值（工具层那一份） | `test_attack_list_plans_tool_*` |
 | G-3 ④ | `graph.*` 的四个 handler 的 `StoreError` 逃逸 | `test_graph_store_error_*` |
 | G-3 ⑤ | `returns=` 与实现不一致 | `test_graph_returns_declaration_matches_implementation` |
-| G-3 ⑥ | `RelationGraph.neighbors` 的不可截断裸列表被暴露成工具 | `test_graph_neighbors_*` / `test_graph_neighbors_result_is_not_prunable_by_context_budget` |
-
+| G-3 ⑥ | `RelationGraph.neighbors` 的不可截断裸列表被暴露成工具 | `test_graph_neighbors_*` /
+`test_graph_neighbors_result_is_not_prunable_by_context_budget` |
 ## 与 `test_tools_audit_fixes.py` 的分工
-
-那个文件是上一轮工具层审计的修复。本文件沿用它的两件工具（`registry_for` /
-`corrupt` / `declared_keys` 的口径），不另发明一套：同一判据只有一份实现
-在测试代码里同样成立（FC-03），所以"从 `returns=` 抽键"这件事的口径与它逐字一致。
+那个文件是上一轮工具层审计的修复。本文件沿用它的两件工具（`registry_for` /`corrupt` / `declared_keys` 的口径），不另发明一套：同一判据只有一份实现在测试代码里同样成立（FC-03），
+所以"从 `returns=` 抽键"这件事的口径与它逐字一致。
 """
 
 from __future__ import annotations
@@ -291,18 +285,16 @@ def test_attack_plan_error_keeps_its_own_kind_not_unexpected(store: Store):
 def test_attack_validation_error_names_the_offending_field(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ):
-    """核心：`ValueError` ⇒ `kind="validation_error"`，且绝不是 `"unexpected"`。
+    """    核心：`ValueError` ⇒ `kind="validation_error"`，且绝不是 `"unexpected"`。
 
     ## 为什么这一支要靠打桩才能打到（如实说明，不含糊）
 
-    `attack.create_plan` 里 schema 的 `ValueError` 已经被 `AgentF` 包成
-    `PlanError`（`agent_f.py:1080-1090`：*"`schema` 抛的 `ValueError` 在这里被换成
-    语义正确的 `PlanError`"*）。所以真跑到工具层的 schema 失败是 `plan_error`
-    （上面那条用例覆盖了它，且断言了 `"schema"` 与 `problem_key` 都在 error 里）。
+    `attack.create_plan` 里 schema 的 `ValueError` 已经被 `AgentF` 包成`PlanError`（`agent_f.py:1080-1090`：*"`schema` 抛的
+    `ValueError` 在这里被换成语义正确的 `PlanError`"*）。所以真跑到工具层的 schema 失败是 `plan_error`（上面那条用例覆盖了它，且断言了 `"schema"` 与
+    `problem_key` 都在 error 里）。
 
-    这一支要证明的是守卫本身对裸 `ValueError` 的分类 —— 打桩的形态照
-    `test_tools_audit_fixes.py::test_no_unexpected_escape_search_register_schema_failure`
-    （它同样打桩 `S.Literature.validate` 来造"schema 的 ValueError"）。
+    这一支要证明的是守卫本身对裸 `ValueError` 的分类 —— 打桩的形态照`test_tools_audit_fixes.py::test_no_unexpected_escape_search_register_schema_failure`（
+    它同样打桩 `S.Literature.validate` 来造"schema 的 ValueError"）。
     """
     reg = _attack_reg(store)
     plan_id = _make_plan(store)
@@ -472,19 +464,14 @@ def test_attack_list_plans_tool_does_not_invert_a_null_default(store: Store):
 
 
 def test_attack_status_not_found_is_not_an_error(store: Store):
-    """负控（不许"顺手修错"）：计划不存在时 `attack.status` 是
-    `ok=True` + `checked=False`，不是失败。
+    """    负控（不许"顺手修错"）：计划不存在时 `attack.status` 是`ok=True` + `checked=False`，不是失败。
 
-    这是 INVENTORY 4.3(c) 记的刻意设计：`checked=False` 表示"没查"
-    （这里的"没查"= 那个代号根本不在计划表里），调用方必须看 `checked` 而不是 `ok`
-    （`docs/ROLE-SPECS.md` R0 的那一行 + `tests/test_agent_f.py:616` 同口径）。
-    本用例的作用是上锁：`_guard` 只许改"异常怎么分类"，不许把这条
-    "查了、没有"的语义顺手改成失败。
+    这是 INVENTORY 4.3(c) 记的刻意设计：`checked=False` 表示"没查"（这里的"没查"= 那个代号根本不在计划表里），调用方必须看 `checked` 而不是
+    `ok`（`docs/ROLE-SPECS.md` R0 的那一行 + `tests/test_agent_f.py:616` 同口径）。本用例的作用是上锁：`_guard` 只许改"异常怎么分类"，不许把这条"查了、
+    没有"的语义顺手改成失败。
 
-    顺便钉住 `attack.status` 真的过守卫：把打桩的 `AgentF.status` 换成
-    "抛一个已知失败"，同一个工具必须给出受控 kind（而不是裸异常或以
-    `unexpected` 逃出去）。变异试验记录在案：只摘掉 `attack.status` 的 `_guard`
-    时，只有本用例会红（`-k status` 只选到它）—— 所以这条断言必须有。
+    顺便钉住 `attack.status` 真的过守卫：把打桩的 `AgentF.status` 换成"抛一个已知失败"，同一个工具必须给出受控 kind（而不是裸异常或以`unexpected` 逃出去）。变异试验记录在案：
+    只摘掉 `attack.status` 的 `_guard`时，只有本用例会红（`-k status` 只选到它）—— 所以这条断言必须有。
     """
     reg = _attack_reg(store)
     res = reg.call("attack.status", plan_id="9999")
@@ -548,19 +535,16 @@ def _assert_store_error(res: object, name: str) -> None:
 
 
 def test_graph_index_queries_report_store_errors_when_they_build_the_index(tmp_path: Path):
-    """核心（首次查询那一刻）：三个索引查询在自己按需建图时也要结构化失败。
+    """    核心（首次查询那一刻）：三个索引查询在自己按需建图时也要结构化失败。
 
     两个刻意的构造细节（都不是随手写的）：
 
     1. 每个用例一个全新的 store + 注册表：`_GraphHolder` 是跨调用缓存
-       （"一次构建、多次查询"就是这个设计），所以同一个注册表上第一次调用建好图之后，
-       后面几次查询根本不碰磁盘 —— 那正是它的本意，不是缺陷。
-       误以为"表坏了 ⇒ 以后每次查询都该报错"，就会把一个正确的缓存设计当成 bug 改掉
-       （反面由 `test_graph_cached_index_survives_a_later_table_corruption` 钉住）。
+    （"一次构建、多次查询"就是这个设计），所以同一个注册表上第一次调用建好图之后，后面几次查询根本不碰磁盘 —— 那正是它的本意，不是缺陷。误以为"表坏了 ⇒ 以后每次查询都该报错"，就会把一个正确的缓存设计当成 bug
+    改掉（反面由 `test_graph_cached_index_survives_a_later_table_corruption` 钉住）。
     2. 损坏的表是 `statements.json`（不是 `relations.json`）：`RelationGraph.from_store`
-       读三张表（概念行的来源是 `statements` 的 `kind="concept"` 那一档 —— S1r 并表之后
-       概念行就住那里；此前是 `concepts.json`），任何一张坏都会让建图失败，
-       而概念这一张是每一张图都要建的；挑它就不必在每个用例之间修盘。
+    读三张表（概念行的来源是 `statements` 的 `kind="concept"` 那一档 —— S1r 并表之后概念行就住那里；此前是 `concepts.json`），任何一张坏都会让建图失败，
+    而概念这一张是每一张图都要建的；挑它就不必在每个用例之间修盘。
     """
     cases = (
         ("graph.stats", {}),
@@ -767,29 +751,16 @@ def test_graph_neighbors_result_is_not_prunable_by_context_budget(store: Store):
 
 
 def test_relation_graph_neighbors_stays_a_plain_list(store: Store):
-    """证据（不改成封装的那个决定）：`RelationGraph.neighbors()` 仍是裸 `list`。
-
-    ## 为什么不改它（题目要求"若判断会破坏调用方，先用证据说明"）
-
-    `grep` 出的全部调用点（逐个判断）：
-
-    ==========================================  ==========================================
-    调用点                                        它怎么用返回值
-    ==========================================  ==========================================
-    `agent_c.py:1479`                             `set(g.neighbors(a)) & set(g.neighbors(b))`
-    `agent_c.py:1489`                             `nbrs = g.neighbors(u)` 后按下标取 `nbrs[i]`
-    `agent_c.py:3288`（自检）                      `set(g.neighbors("0000"))`
-    `trace_tools.py:305`                          `for n in g.neighbors(cid)` 当可迭代用
-    `graph_tools.py` 的 `graph.neighbors` 工具     见下
-    ==========================================  ==========================================
-
-    前四处都按 `list` / `set` 语义用它。把返回类型换成 "dict 或 list 的子类"，
-    要么改这四处（其中两处在 `agent_c`，本轮不在我的可改文件里），
-    要么让 `neighbors()` 返回一个类型随调用方式变的东西 —— 后者正是
-    "同一判据两份形状"的形态。所以有界那一层加在
-    `neighbors_bounded()` + 工具层上，`neighbors()` 原样保留。
-
-    这不是"保留缺陷"：工具层（D 真正调用的那一层）现在有界且如实回报截断。
+    """    证据（不改成封装的那个决定）：`RelationGraph.neighbors()` 仍是裸 `list`。为什么不改它（题目要求"若判断会破坏调用方，先用证据说明"）：`grep` 出的全部调用点（逐个判断）：
+    ==========================================  ==========================================调用点
+    它怎么用返回值==========================================  ==========================================`agent_c.py:1479`
+    `set(g.neighbors(a)) & set(g.neighbors(b))``agent_c.py:1489`
+    `nbrs = g.neighbors(u)` 后按下标取 `nbrs[i]``agent_c.py:3288`（自检）
+    `set(g.neighbors("0000"))``trace_tools.py:305`
+    `for n in g.neighbors(cid)` 当可迭代用`graph_tools.py` 的 `graph.neighbors` 工具
+    见下==========================================  ==========================================前四处都按 `list` /
+    `set` 语义用它。把返回类型换成 "dict 或 list 的子类"，要么改这四处（其中两处在 `agent_c`，本轮不在我的可改文件里），要么让 `neighbors()` 返回一个类型随调用方式变的东西 ——
+    后者正是"同一判据两份形状"的形态。所以有界那一层加在`neighbors_bounded()` + 工具层上，`neighbors()` 原样保留。这不是"保留缺陷"：工具层（D 真正调用的那一层）现在有界且如实回报截断。
     """
     g = _star_graph(5)
     fixed = g.neighbors("0000")
@@ -835,41 +806,16 @@ def test_graph_tools_forwards_the_one_guard_instead_of_copying_it():
 
 
 def test_attack_handlers_are_wrapped_by_the_guard(store: Store, monkeypatch: pytest.MonkeyPatch):
-    """遍历式负控：六个 `attack.*` handler 都经过 `_guard`（不是"改了五个漏一个"）。
-
-    ## 判据为什么是"看栈 / 看 kind"，而不是内省 handler 的 code object
-
-    handler 写成 `lambda ...: _guard(lambda: ...)`，而外层 lambda 引用的是内层
-    lambda 的细胞（那个细胞里才装着 `_guard`）—— 实测 `co_freevars` 与 `LOAD_DEREF`
-    都会漏报，于是内省式判据会冤枉一个正确的实现。
-
-    行为式判据也不能只认"抛"：`_guard` 的契约是"已知失败原因 ⇒ 结构化失败"
-    （它返回 `ToolResult`，只有 `ToolError` 那一支才上抛）。所以两支都算证据：
-
-    - 抛了 ⇒ traceback 里必须出现 `_guard` 帧；
-    - 没抛 ⇒ 返回值必须是有受控 `kind` 的 `ToolResult`（`plan_error` /
-      `validation_error`）—— 那不是 `ok(...)`，正是 `_guard` 的产物。
-
-    ## 为什么两支探针要打桩、两支不用（每条都是实测踩出来的）
-
-    `attack.status` 与 `attack.list_plans` 对"坏但合法"的 `plan_id` / `problem_key`
-    本身就是容错的：status 走"查了、没有"（`ok=True` + `checked=False`），
-    list_plans 只做字符串比较。它们没有任何"必然抛"的自然输入 ——
-    所以只能打桩（打桩形态照
-    `test_tools_audit_fixes.py::test_no_unexpected_escape_search_register_schema_failure`）。
-    另外两支的打桩原因不同：`check_budget` / `pick_next_subgoal` 的参数校验会先
-    拦住"形状可疑"的探针（`subgoals="abc"` ⇒ `param_error`、`budget=[]` ⇒
-    `param_error` —— 实测两次踩过），所以打桩它们调用的内层函数。
-
-    `attack.create_plan` / `attack.step` 用真数据就够：
-    缺 owner（`PlanError`）、plan_id 不存在（`PlanError`）。
-
-    `attack.create_plan` 的探针不能是"预算缺键"：那一条刻意返回
-    `ok=True` + `created=False` + 理由（"拒绝创建，而不是先用默认值把洞补上"），
-    它不抛、也不是守卫的产物。
-
-    这条用例的价值在于"新增第七个工具时会不会忘"：忘掉的那个工具不会有任何
-    别的用例变红（它的失败路径只是又变回 `unexpected`）。
+    """    遍历式负控：六个 `attack.*` handler 都经过 `_guard`（不是"改了五个漏一个"）。判据为什么是"看栈 / 看 kind"，而不是内省 handler 的 code object：handler 写成
+    `lambda ...: _guard(lambda: ...)`，而外层 lambda 引用的是内层lambda 的细胞（那个细胞里才装着 `_guard`）—— 实测 `co_freevars` 与 `LOAD_DEREF`都会漏报，
+    于是内省式判据会冤枉一个正确的实现。行为式判据也不能只认"抛"：`_guard` 的契约是"已知失败原因 ⇒ 结构化失败"（它返回 `ToolResult`，只有 `ToolError` 那一支才上抛）。所以两支都算证据：抛了 ⇒ traceback 里必须出现
+    `_guard` 帧；- 没抛 ⇒ 返回值必须是有受控 `kind` 的 `ToolResult`（`plan_error` /`validation_error`）—— 那不是 `ok(...)`，正是 `_guard` 的产物。为什么两支探针要打桩、
+    两支不用（每条都是实测踩出来的）：`attack.status` 与 `attack.list_plans` 对"坏但合法"的 `plan_id` / `problem_key`本身就是容错的：status 走"查了、没有"（`ok=True` +
+    `checked=False`），list_plans 只做字符串比较。它们没有任何"必然抛"的自然输入 ——所以只能打桩（打桩形态照`test_tools_audit_fixes.py::test_no_unexpected_escape_search_register_schema_failure`）
+    。另外两支的打桩原因不同：`check_budget` / `pick_next_subgoal` 的参数校验会先拦住"形状可疑"的探针（`subgoals="abc"` ⇒ `param_error`、`budget=[]` ⇒`param_error` ——
+    实测两次踩过），所以打桩它们调用的内层函数。`attack.create_plan` / `attack.step` 用真数据就够：缺 owner（`PlanError`）、plan_id
+    不存在（`PlanError`）。`attack.create_plan` 的探针不能是"预算缺键"：那一条刻意返回`ok=True` + `created=False` + 理由（"拒绝创建，而不是先用默认值把洞补上"），它不抛、也不是守卫的产物。
+    这条用例的价值在于"新增第七个工具时会不会忘"：忘掉的那个工具不会有任何别的用例变红（它的失败路径只是又变回 `unexpected`）。
     """
     import sys
 

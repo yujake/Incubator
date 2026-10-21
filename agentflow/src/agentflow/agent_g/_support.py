@@ -1,36 +1,19 @@
 """智能体 G：论文撰写。
-
 ## G 到底在做什么
-
-把 D（研究结论）/ F（攻坚过程）/ E（实验证据）的结论汇编成一份
-每条断言都带引用的稿件，并把它渲染成人能读的 markdown。
-
+把 D（研究结论）/ F（攻坚过程）/ E（实验证据）的结论汇编成一份每条断言都带引用的稿件，并把它渲染成人能读的 markdown。
 G 的产出被两条结构性约束钉死：
-
-1. 无引用的断言不可能进稿。这不是文风要求 —— 数学断言的价值完全取决于
-   "它来自哪里"，允许无引用断言就等于允许一份"听起来很合理"的文本。
-   `schema.Document.validate` 是最后一道闸，G 侧的第一道闸在
-   :meth:`AgentG.compose_claim` / :meth:`AgentG.build_document`：
-   在构造断言的那一刻就报错，因为那时手里还拿着"是哪一句话"。
-2. 证据等级不许被夸大。`cross_check`（数值/穷举交叉验证）的断言由结构
-   强制带上"不构成证明"的声明（FC-22），"已证明"这类措辞出现在非 proof 断言里
-   直接抛错。
-
+1. 无引用的断言不可能进稿。这不是文风要求 —— 数学断言的价值完全取决于"它来自哪里"，允许无引用断言就等于允许一份"听起来很合理"的文本。
+`schema.Document.validate` 是最后一道闸，G 侧的第一道闸在:meth:`AgentG.compose_claim` / :meth:
+`AgentG.build_document`：在构造断言的那一刻就报错，因为那时手里还拿着"是哪一句话"。 2. 证据等级不许被夸大。`cross_check`（数值/穷
+举交叉验证）的断言由结构强制带上"不构成证明"的声明（FC-22），"已证明"这类措辞出现在非 proof 断言里直接抛错。
 ## G 与 H 的分工（为什么这个分工是结构性的，而不是礼貌性的）
-
 H 提发现（`review_findings`），G 改稿（`documents`）。G 只能改自己的稿：
-
-- 改稿：`revise()` 只动 `documents.claims/status/review_rounds`；
-- 对 H 的发现，G 只能改它的 `status` 与 `resolution_note`，
-  `kind/level/target/evidence/message` 一个字都不许动 —— 那是 H 当初的判断依据；
-- 而且 G 自称"已修复"不作数：H 的 `verify_fixes` 会重跑检查，
-  仍复现就把发现重新打开（`review_tools._apply_finding_status`）。
-
+- 改稿：`revise()` 只动 `documents.claims/status/review_rounds`；- 对 H 的发现，G 只能改它的 `status` 
+与 `resolution_note`，`kind/level/target/evidence/message` 一个字都不许动 —— 那是 H 当初的判断依据；- 而且
+G 自称"已修复"不作数：H 的 `verify_fixes` 会重跑检查，仍复现就把发现重新打开（`review_tools._apply_finding_status`）。
 ## 工具面（FC-06：角色即权限面）
-
-`install_g_tools()` 按角色 `"G"` 装配。写工具（`doc.build_document` /
-`doc.register_dependency`）的角色被收窄到 `("G",)`：H 拿不到它们，
-于是"发现问题的人"与"改写稿件的人"在结构上不是同一个。
+`install_g_tools()` 按角色 `"G"` 装配。写工具（`doc.build_document` /`doc.register_dependency`）的
+角色被收窄到 `("G",)`：H 拿不到它们，于是"发现问题的人"与"改写稿件的人"在结构上不是同一个。
 """
 from __future__ import annotations
 from pathlib import Path
@@ -58,23 +41,15 @@ def install_g_tools(
     registry: ToolRegistry | None = None,
 ) -> ToolRegistry:
     """装配 G 的工具栏。
-
-    为什么按角色装配（`build_registry(...).scoped_to("G")`）而不是手工挑几个工具：
-    角色即权限面（FC-06），装配结果必须可枚举、可比对；手工挑会在"新增工具时忘了
-    给 G"这种地方静默漏水。
-
-    「注册面」与「可调用面」是两件事，混起来会多算工具（`R7-AN-2` 的教训）：
-    `scoped_to("G")` 给的是同一个注册表的视图，它仍然登记全部 spec
-    （`names()` 是全集，含 G 根本调不到的写侧工具）；"G 到底能调什么"必须问
-    `call_surface("G")` 或 `for_role("G")` —— 实测两者相等。
-    `build_for_role` 那条老路会先把 spec 裁成子表（于是 `names()` 恰好等于工具面），
-    代价是装配期的属性（FC-17 的 `default_budget` / `default_spill_root`、`P-14` 的
-    `bound_role`）静默留空 —— 所以这里走 `scoped_to`，方向是拿回那两格，
-    不是放宽权限面。
-
-    为什么还要检查 `doc.*` 是否在里面：装配会容忍模块缺失
-    （并行开发的现实），而 G 没有 doc 工具就什么也做不了。这种降级必须
-    显式补上并留痕，而不是让 G 悄悄少一只手（FC-08：不得静默降级为空）。
+    为什么按角色装配（`build_registry(...).scoped_to("G")`）而不是手工挑几个工具：角色即权限面（FC-06），装配结果必须可枚举、可比对；手
+    工挑会在"新增工具时忘了给 G"这种地方静默漏水。
+    「注册面」与「可调用面」是两件事，混起来会多算工具（`R7-AN-2` 的教训）：`scoped_to("G")` 给的是同一个注册表的视图，它仍然登记全部 spec （`names()`
+    是全集，含 G 根本调不到的写侧工具）；"G 到底能调什么"必须问`call_surface("G")` 或 `for_role("G")` —— 实测两者相等。
+    `build_for_role` 那条老路会先把 spec 裁成子表（于是 `names()` 恰好等于工具面），代价是装配期的属性（FC-17 的 
+    `default_budget` / `default_spill_root`、`P-14` 的`bound_role`）静默留空 —— 所以这里走 `scoped_to`，
+    方向是拿回那两格，不是放宽权限面。
+    为什么还要检查 `doc.*` 是否在里面：装配会容忍模块缺失（并行开发的现实），而 G 没有 doc 工具就什么也做不了。这种降级必须显式补上并留痕，而不是让 G 悄悄少
+    一只手（FC-08：不得静默降级为空）。
     """
     root = Path(workspace_root).resolve() if workspace_root else Path(store.root).resolve()
     if registry is not None:

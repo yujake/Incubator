@@ -1,95 +1,21 @@
 """智能体 D：研究循环。
-
-设计基线：``test/test1/DESIGN-TOOLS.md`` §4（D 的状态机 / 溯源三级 / 知识不足判据 /
-报告结构）与 §5（编排里 D 的位置）。
-
-## D 到底在做什么
-
-D 的核心不是"生成文本"，而是管理一个循环（§4.1）：
-
-    读 C 报告 → 提取候选问题 → 按代号溯源 → 评估证据是否足够
-        ├─ 足够 → 写研究报告
-        └─ 不足 → 向 A 提交查询请求（记入等待集）
-                    → A 检索 → B 消化 → D 复查（poll）→ 回到"评估"
-
-## [契约] 四个不可让步的设计（每一条都有具体的失败模式在背后）
-
-1. 提取问题必须是确定性 + 可解释的（``ingest``）。
-   绝不做"让 LLM 想几个问题"：那既无法复现，也无法解释"这个问题是怎么来的"。
-   改为从 ``report.payload`` 里读结构化发现（hottest 的 top 概念、paths 的
-   高信息量链条、cold 的"冷门但连接强"、gaps 的 candidate_gaps），用模板生成
-   问题文本，并把 ``origin``（如 ``"C:paths:0000->0003"``）与
-   ``related_concept_ids`` / ``related_relation_ids`` 一并记下。
-
-   为什么问题必须带代号溯源：人是靠"这条链/这个概念"去核对结论的。
-   一个不带代号的问题（"交换性是否可推广？"）在报告里无法被验证 ——
-   读者既不知道它从哪来，也无法回到关系表里看那几条原文。
-   代号把"结论"与"证据"钉在一起，这是本系统对"完全引用参考文献"这一
-   需求的直接延续。
-
-2. 知识不足的判据必须可核实（``assess`` / :func:`analyze_gaps`）。
-   只有三类判据，全部可以逐条打印出中间值：
-   (a) 关键词在现有关系的 ``quote``/``description`` 里命中数为 0；
-   (b) 相关概念度数低于阈值且没有一条 ``quote_verified=True`` 的关系；
-   (c) 两条关键关系给出互相矛盾的表述（最有价值，记 ``priority="high"``）。
-   绝不用"感觉不够"这种判据：那种判据无法被反驳，于是 D 会无限向 A 提问，
-   把 A 的队列刷爆，而且没有任何一处能说明"为什么不够"。
-
-3. "继续"靠等待集，不靠猜测（``poll``）。
-   每一轮的"能不能往下走"只依据 ``waiting_request_ids`` + 请求的 ``outcome``
-   + 文献的 ``processed``（§4.2）。没有等待集，D 就无法判断"新来的文献是不是
-   我在等的" —— 库里多几篇文献可能是因为别的需求，也可能是因为我提的请求；
-   只有等待集能把这两件事分开。这一串判断全是确定性的，不需要 LLM。
-
-4. 置信度不许拔高（``research`` / :func:`evidence_confidence`）。
-   确定性证据算出来的置信度是上限：LLM 钩子只允许把它调低，不允许调高
-   （见 ``_llm_refine`` 里的 ``_rank_min``）。报告里"低"就写"低" ——
-   一份把"低"写成"中"的报告会让人把猜想当成结论去用，那比没有报告更坏。
-
-## [为什么] LLM 的位置
-
-``llm=None`` 时全部走确定性回退（模板化措辞 + 证据罗列），因此无 API key
-也能端到端跑通（§0 的"最低可用"边界）。LLM 只用于两件事：
-把证据包写成更通顺的分析文字、以及对问题做"值得研究吗"的补充判断；
-两者的结果都必须经过确定性校验（置信度不许升、结论必须能回指证据）。
-
-## 本轮新增：I1 / I2 / §3.1 / §3.2（见 DESIGN-INTERACTIONS.md）
-
-5. I1 C 作为可调用服务（``probe_c``）：D 不再只消费 ``analysis_reports``，
-   而是在研究/评估某个问题时现场推导参数去问 C（``neighbors`` /
-   ``relations_between`` / ``contradictions``）。关键纪律是防御式适配：
-   C 的服务方法由并行开发的任务提供，拿不到方法、方法抛异常、返回值不是 dict，
-   这三种情况都必须记成 ``checked=False`` + 明确理由，绝不允许把
-   "没调用成功"静默当成"没有结果" —— 那正是上一版"D 没接工具却把查不到
-   写成一条听起来很合理的研究发现"的形态。一条 C 查询都没成功时，结论必须
-   显式标注「无 C 侧证据」并放弃确定语气。
-
-6. I2 矛盾闭环（``adjudicate`` / ``_adjudicate_ready_contradictions``）：
-   C 检测到矛盾 → D 建 ``kind="contradiction"`` 的高优先级问题 → 裁决
-   （``interactions.adjudicate_contradiction``）→ ``unresolved`` 就再问一轮、
-   ``resolved``/``persistent`` 就收口。必须有终止条件（单条矛盾轮数上限 +
-   全局矛盾检索配额），否则它是一个天然的无限循环。
-   只有 ``strength == "strong"`` 的矛盾才允许建问题与自动追问：
-   ``weak``（只是否定标记出现与否不一致）的假阳性极高（实测 24%），
-   只记录为线索 —— 拿它去问 A 等于用 A 的产能换假问题。
-
-7. §3.1 问题等价类（``ingest`` 里第三层去重）：内容键之外再用
-   ``interactions.find_equivalent_question`` 判"是不是同一个研究点"，
-   命中就把 ``origin`` 合并进已有问题的 notes，而不是新建一行。
-
-8. §3.2 证据就绪判据（``poll``）：旧的"请求 done 且文献 processed"只说明
-   消化完了，不说明这些证据真的回答了那个问题。再加一层
-   ``interactions.evidence_relevance``：不相关就不推进并降优先级，
-   没检查（``checked=False``）则既不推进也不当作"不相关"。
-
-### 判据只有一份：本模块对 ``interactions`` 的委托
-
-下面这些名字（``_contains`` / ``_negated`` / ``_opposite_flags`` /
-``detect_contradictions`` / ``_NEGATION_MARKERS`` / ``_OPPOSITE_PAIRS``）
-保留原名但函数体只做转发：唯一权威实现已经移到 ``interactions.py``。
-理由：I6 要求 B 在写入期用同一份判据问"这条新关系与已有的是否矛盾"。
-两份实现必然漂移，而漂移的后果是"写入期认为不矛盾、事后 C 认为矛盾"这种
-没有任何报错的静默分裂 —— 那比崩溃更难发现。
+设计基线：``test/test1/DESIGN-TOOLS.md`` §4（D 的状态机 / 溯源三级 / 知识不足判据 /报告结构）与 §5（编排里 D 的位置）。 D 的核心不是"生成文本"，而是管理一个循环（§4.1）：[契约] 四个不可让步的设计（每
+一条都有具体的失败模式在背后）1. 提取问题必须是确定性 + 可解释的（``ingest``）。改为从 ``report.payload`` 里读结构化发现（hottest 的 top 概念、paths 的高信息量链条、cold 的"冷门但连接强"、gaps 
+的 candidate_gaps），用模板生成问题文本，并把 ``origin``（如 ``"C:paths:0000->0003"``）与``related_concept_ids`` /``related_relation_ids`` 一并记下。 2. 知
+识不足的判据必须可核实（``assess`` / :func:`analyze_gaps`）。只有三类判据，全部可以逐条打印出中间值：(a) 关键词在现有关系的 ``quote``/``description`` 里命中数为 0；(b) 相关概念度数低于阈值且
+没有一条 ``quote_verified=True`` 的关系；(c) 两条关键关系给出互相矛盾的表述（最有价值，记 ``priority="high"``）。 3. "继续"靠等待集，不靠猜测（``poll``）。每一轮的"能不能往下走"只依据 
+``waiting_request_ids`` + 请求的 ``outcome``+ 文献的 ``processed``（§4.2）。 4. 置信度不许拔高（``research`` / :func:`evidence_confidence`）。确定性证据算出
+来的置信度是上限：LLM 钩子只允许把它调低，不允许调高（见 ``_llm_refine`` 里的``_rank_min``）。[为什么] LLM 的位置``llm=None`` 时全部走确定性回退（模板化措辞 + 证据罗列），因此无 API key 也能端到
+端跑通（§0 的"最低可用"边界）。本轮新增：I1 / I2 / §3.1 / §3.2（见 DESIGN-INTERACTIONS.md）5. I1 C 作为可调用服务（``probe_c``）：D 不再只消费 ``analysis_reports``，而是
+在研究/评估某个问题时现场推导参数去问 C（``neighbors`` /``relations_between`` / ``contradictions``）。关键纪律是防御式适配： C 的服务方法由并行开发的任务提供，拿不到方法、方法抛异常、返回值不是
+dict，这三种情况都必须记成 ``checked=False`` + 明确理由，绝不允许把"没调用成功"静默当成"没有结果" —— 那正是上一版"D 没接工具却把查不到写成一条听起来很合理的研究发现"的形态。 6. I2 矛盾闭环（``adjudicate``
+/ ``_adjudicate_ready_contradictions``）： C 检测到矛盾 → D 建 ``kind="contradiction"`` 的高优先级问题 → 裁决（``interactions.adjudicate_contradiction``）
+→ ``unresolved`` 就再问一轮、``resolved``/``persistent`` 就收口。只有 ``strength == "strong"`` 的矛盾才允许建问题与自动追问：``weak``（只是否定标记出现与否不一致）的假阳性极高（实测
+24%），只记录为线索 —— 拿它去问 A 等于用 A 的产能换假问题。 7. §3.1 问题等价类（``ingest`` 里第三层去重）：内容键之外再用``interactions.find_equivalent_question`` 判"是不是同一个研究点
+"，命中就把 ``origin`` 合并进已有问题的 notes，而不是新建一行。 8. §3.2 证据就绪判据（``poll``）：旧的"请求 done 且文献 processed"只说明消化完了，不说明这些证据真的回答了那个问题。再加一层
+``interactions.evidence_relevance``：不相关就不推进并降优先级，没检查（``checked=False``）则既不推进也不当作"不相关"。判据只有一份：本模块对 ``interactions`` 的委托下面这些名字（``_contains``
+/ ``_negated`` / ``_opposite_flags`` /``detect_contradictions`` /``_NEGATION_MARKERS`` / ``_OPPOSITE_PAIRS``）保留原名但函数体只做转发：唯一权威实现已经
+移到 ``interactions.py``。理由：I6 要求 B 在写入期用同一份判据问"这条新关系与已有的是否矛盾"。
 """
 from __future__ import annotations
 
@@ -272,20 +198,13 @@ def analyze_gaps(
     concept_count: int = 0,
 ) -> dict:
     """按 §4.4 的三条可核实判据评估"知识是否不足"。
-
-    返回 ``{"insufficient": bool, "criteria": [...], "priority": str, "confidence": str}``
-    以及全部中间值（命中数、度数、已验证条数、矛盾对数），使结论可以被逐项复核。
-
+    返回 ``{"insufficient": bool, "criteria": [...], "priority": str, "confidence": str}``以及
+    全部中间值（命中数、度数、已验证条数、矛盾对数），使结论可以被逐项复核。
     判据与优先级：
-
-    | 判据 | 条件 | 优先级 | 理由 |
-    |---|---|---|---|
-    | a 关键词零命中 | 命中关键词数 == 0 | high | 库里完全没谈过这件事，不是"谈得少" |
-    | b 度数低且无核验 | degree < 阈值 且 无 ``quote_verified=True`` | medium | 谈过，但既冷门又没原文支撑 |
-    | c 内在矛盾 | 存在矛盾关系对 | high | 文献之间真实分歧，最值得研究 |
-
-    ``insufficient`` 只要任一条成立。没有"感觉不够"这一条，
-    也没有"关系太少就说不够"这种看上去合理、实则无法反驳的软判据。
+    | 判据 | 条件 | 优先级 | 理由 ||---|---|---|---|| a 关键词零命中 | 命中关键词数 == 0 | high | 库里完全没谈过这件事，不是
+    "谈得少" || b 度数低且无核验 | degree < 阈值 且 无 ``quote_verified=True`` | medium | 谈过，但既冷门又没原文支撑
+    || c 内在矛盾 | 存在矛盾关系对 | high | 文献之间真实分歧，最值得研究 |
+    ``insufficient`` 只要任一条成立。没有"感觉不够"这一条，也没有"关系太少就说不够"这种看上去合理、实则无法反驳的软判据。
     """
     verified = [r for r in relations if r.get("quote_verified") is True]
     hits = keyword_hits(keywords, relations)
@@ -397,21 +316,16 @@ def _rank_min(a: str, b: str) -> str:
     return a if _rank(a) <= _rank(b) else b
 def _fallback_trace_tools(store: Any) -> list[Any]:
     """内置的最小替身：只在 ``tools.trace_tools`` 缺失/注册失败时才被注册。
-
-    这不是"重新实现别人的模块"，而是降级路径：
-    - 外部 ``trace_tools`` 缺失或注册失败时，本函数产出的工具才会被注册
-      （判断在 :func:`install_d_tools`：注册表里一个 ``trace.*`` 都没有 ⇒ 走降级）；
-    - 外部存在且注册成功时，D 走的是真正的溯源工具，本函数的产物一个都不注册；
-    - 降级时，D 至少要能把"关系 → 引文/陈述 → 文献"这条 L1/L2 链路走完，
-      否则整个 D 循环都无法自检。它返回的数据形状与 DESIGN-TOOLS.md §4.3
-      描述的 L1/L2 一致（关系行 + 概念行 + 文献行），不做任何额外推断。
-
-    两条形态上的硬要求（都踩过坑）：
-    1. ``roles`` 必须是 ``("C", "D")`` —— 与 ``schema.ROLES`` 逐字一致。
-       这三个 spec 原先写的是 ``("agent-C", "agent-D")``，而 ``install_d_tools``
-       绕过 ``build_registry`` 的角色断言，于是它们装上了却永远过滤不出来。
-    2. 读表失败必须转成 ``ToolError``（见内部 ``_table``）：否则 ``StoreError``
-       会逃逸成 ``kind="unexpected"``，"表读不出来"与"表里没有这一行"就分不清了。
+    
+    这不是"重新实现别人的模块"，而是降级路径：- 外部 ``trace_tools`` 缺失或注册失败时，本函数产出的工具才会被注册（判断在 :func:
+    `install_d_tools`：注册表里一个 ``trace.*`` 都没有 ⇒ 走降级）；- 外部存在且注册成功时，D 走的是真正的溯源工具，本函数的产物一个都不注册；
+    - 降级时，D 至少要能把"关系 → 引文/陈述 → 文献"这条 L1/L2 链路走完，否则整个 D 循环都无法自检。它返回的数据形状与
+    DESIGN-TOOLS.md §4.3 描述的 L1/L2 一致（关系行 + 概念行 + 文献行），不做任何额外推断。
+    
+    两条形态上的硬要求（都踩过坑）： 1. ``roles`` 必须是 ``("C", "D")`` —— 与 ``schema.ROLES`` 逐字一致。这三个 spec 原
+    先写的是 ``("agent-C", "agent-D")``，而 ``install_d_tools``绕过 ``build_registry`` 的角色断言，于是它们装
+    上了却永远过滤不出来。 2. 读表失败必须转成 ``ToolError``（见内部 ``_table``）：否则 ``StoreError``会逃逸成 
+    ``kind="unexpected"``，"表读不出来"与"表里没有这一行"就分不清了。
     """
     from ..tools.base import spec_from_dataclass_fields, tool
 
@@ -549,38 +463,16 @@ def load_trace_tools() -> Any | None:
     return _tt
 def validate_tool_roles(reg: ToolRegistry) -> None:
     """装配期断言：注册表里每个 spec 声明的角色都必须在 :data:`ROLES` 里。
-
     ## 为什么要把这段校验复制到 D 的装配路径上（而不是"再写一份判据"）
-
-    判据本身只有一份，就是 :data:`ROLES`（定义在 ``schema.ROLES``，
-    ``tools/__init__.py`` 里那句 ``from ..schema import ROLES`` 只是把它引过来）。
-    本函数做的是用同一份判据在第二个装配入口上执行同一条断言：
-
-    ``tools/__init__.py`` 的 ``build_registry`` 已经做过这件事，
-    但 :func:`install_d_tools` 不走 ``build_registry``（它自己
-    ``ToolRegistry(name="agent-D")`` + ``register_function``），于是那段断言
-    在这里完全缺席。后果是实测过的：``_fallback_trace_tools`` 的三个 spec
-    写成 ``roles=("agent-C", "agent-D")``，角色名非法却一路注册成功，
-    ``for_role("C")/("D")`` 永远拿不到它们 —— 静默少工具，
-    正是 ``build_registry`` 里那段历史 bug 注释（``tools/__init__.py``，
-    后来由 ``tools.base.ToolRegistry._reject_unknown_roles`` 把判据前移到注册期）
-    记的同型复发。
-
-    这里刻意只写符号名、不写行号：行号在本仓库的并行开发下几十分钟就会漂，
-    而符号名可被断言存在（``.noai-paths`` 的维护纪律：
-    理由里用反引号写符号名、刻意不写 ``文件:行号``）。
-
-    为什么不能"什么都不做、只改对角色名"：那样只是修好了这一次的拼写。
-    判据必须在每个装配入口都执行，否则下一个改这里的会重犯。
-    为什么不能改 ``tools/__init__.py`` 把这段抽成公开函数：该文件不在本次
-    可改范围内（见报告"要改但不能改"一节）。因此这里直接复用
-    ``ROLES`` 这一唯一判据 + ``ToolError`` 这一唯一异常类型，
-    错误文案与 ``build_registry`` 保持一致（同一个判据、同一句话）。
-
-    Raises
-    ------
-    ToolError
-        存在角色名不在 ``ROLES`` 里的工具；错误里逐条列出"工具名 → 非法角色"。
+    判据本身只有一份，就是 :data:`ROLES`（定义在 ``schema.ROLES``，``tools/__init__.py`` 里那句 ``from ..schema import ROLES`` 只是把它引过来）。
+    ``tools/__init__.py`` 的 ``build_registry`` 已经做过这件事，但 :func:`install_d_tools` 不走 ``build_registry``（它自己
+    ``ToolRegistry(name="agent-D")`` + ``register_function``），于是那段断言在这里完全缺席。后果是实测过的：``_fallback_trace_tools`` 的三个 spec 写
+    成 ``roles=("agent-C", "agent-D")``，角色名非法却一路注册成功，``for_role("C")/("D")`` 永远拿不到它们 —— 静默少工具，正是 ``build_registry`` 里那段历史
+    bug 注释（``tools/__init__.py``，后来由 ``tools.base.ToolRegistry._reject_unknown_roles`` 把判据前移到注册期）记的同型复发。
+    这里刻意只写符号名、不写行号：行号在本仓库的并行开发下几十分钟就会漂，而符号名可被断言存在（``.noai-paths`` 的维护纪律：理由里用反引号写符号名、刻意不写 ``文件:行号``）。
+    为什么不能"什么都不做、只改对角色名"：那样只是修好了这一次的拼写。判据必须在每个装配入口都执行，否则下一个改这里的会重犯。为什么不能改 ``tools/__init__.py`` 把这段抽成公开函数：该文件不在本次可改范围内（见报
+    告"要改但不能改"一节）。因此这里直接复用``ROLES`` 这一唯一判据 + ``ToolError`` 这一唯一异常类型，错误文案与 ``build_registry`` 保持一致（同一个判据、同一句话）。
+    Raises------ToolError 存在角色名不在 ``ROLES`` 里的工具；错误里逐条列出"工具名 → 非法角色"。
     """
     bad_roles: dict[str, list[str]] = {}
     for spec in reg._specs.values():
@@ -599,20 +491,14 @@ def install_d_tools(
     trace_tools: Any | None = None,
 ) -> ToolRegistry:
     """装配 D 的工具栏：研究工具 + 溯源工具（外部优先，缺失时用内置替身）。
-
-    返回装配好的 ``ToolRegistry``。D 只通过 ``registry.call(...)`` 使用这些
-    工具（而不是直接 import 函数），因此：
-    - 外部工具还没写好时，D 不会 ImportError；
-    - 未来把工具换成 LLM 可调用的形态时，D 一行都不用改。
-
-    装配完成后必经 :func:`validate_tool_roles`：角色名拼错必须在装配期炸，
-    不能变成"装是装上了，按角色过滤时静默少几个"。注意这条校验也覆盖
+    
+    返回装配好的 ``ToolRegistry``。D 只通过 ``registry.call(...)`` 使用这些工具（而不是直接 import 函数），因此：- 外部工具
+    还没写好时，D 不会 ImportError；- 未来把工具换成 LLM 可调用的形态时，D 一行都不用改。
+    
+    装配完成后必经 :func:`validate_tool_roles`：角色名拼错必须在装配期炸，不能变成"装是装上了，按角色过滤时静默少几个"。注意这条校验也覆盖
     ``registry=`` 注入的注册表（那正是外部 ``trace_tools`` 的入口）。
-
-    Raises
-    ------
-    ToolError
-        任一已注册工具声明了非法角色名（见 :func:`validate_tool_roles`）。
+    
+    Raises------ToolError 任一已注册工具声明了非法角色名（见 :func:`validate_tool_roles`）。
     """
     reg = registry if registry is not None else ToolRegistry(name="agent-D")
     RT.install(reg, store)
@@ -682,28 +568,16 @@ _REPORT_LANDING_CALIBER = (
 
 def report_landing_reading(store) -> dict:
     """S-07 的读数：D 的 `write_report` "有调用、但台账里没有落点"（只读）。
-
     ## 为什么只做读数（`44 J-01` 的裁定，逐字的意思）
-
-    D 的研究报告落不进 `analysis_reports`：`schema.REPORT_KINDS` 只收
-    `hottest/paths/cold/gaps` 四档（那是 C 的报告），而 `WRITE_SETS["D"]` 里也没有那张表
-    ⇒ 给 D 的报告"找个落点"要么扩 `REPORT_KINDS`、要么新开一张表，两件都是"改硬契约"
-    （前者是禁改区字段、后者要人裁）。裁定的处置因此是只加读数：
-
-    - 有调用：`tasks` 里 `role="D"` 且 `action="write_report"` 的终态行数（真的被调过几次）；
-    - 无落点：能给这份报告当落点的台账表 —— 按 `capabilities.WRITE_SETS["D"]` 与
-      `schema.REPORT_KINDS` 现算，结构性为 0（不是"这次没写"，是"没有那张表"）；
-    - 三态：`checked=False` + `reason` = 这一格没读成（表读不出来）。
-
-    "没有落点"这件事必须看得见：真机读数（`44 S-07`）是 45 次 `write_report`
-    只落磁盘、表 0 行 —— 而那在今天的读数面上没有任何地方会说（下游以为
-    "D 没产报告"）。
-
+    D 的研究报告落不进 `analysis_reports`：`schema.REPORT_KINDS` 只收`hottest/paths/cold/gaps` 四档（那是 C 的报告），而 
+    `WRITE_SETS["D"]` 里也没有那张表⇒ 给 D 的报告"找个落点"要么扩 `REPORT_KINDS`、要么新开一张表，两件都是"改硬契约"（前者是禁改区字段、后者要人裁）。
+    - 有调用：`tasks` 里 `role="D"` 且 `action="write_report"` 的终态行数（真的被调过几次）；- 无落点：能给这份报告当落点的台账表 —— 按 
+    `capabilities.WRITE_SETS["D"]` 与`schema.REPORT_KINDS` 现算，结构性为 0（不是"这次没写"，是"没有那张表"）；- 三态：
+    `checked=False` + `reason` = 这一格没读成（表读不出来）。
+    "没有落点"这件事必须看得见：真机读数（`44 S-07`）是 45 次 `write_report`只落磁盘、表 0 行 —— 而那在今天的读数面上没有任何地方会说（下游以为"D 没产报告"）。
     ## 口径（2026-10-02 主控现场更正）
-
-    数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数是
-    `sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐字写这件事 ——
-    跨口径比大小是错的用法。
+    数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数是`sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐
+    字写这件事 ——跨口径比大小是错的用法。
     """
     try:
         rows = list(store.rows("tasks"))
@@ -756,22 +630,14 @@ _HEDGE_MARKERS = ("也许", "可能", "推测", "不确定", "尚不清楚", "�
 
 def conclusion_consistency_reading(*, conclusion: str, confidence: float | None) -> dict:
     """S-09 的判据（非 LLM 半）：`conclusion` 的措辞与 `confidence` 数字一致吗？
-
     ## 为什么这是一条判据而不是"让 LLM 自己注意"（`44 S-09`）
-
-    真机缺陷形态：`_llm_refine` 只夹数字、文本原样采用 ⇒ 数字 0.3 而措辞写"证明了"。
-    那是报告层面的夸大：读报告的人（与下游的引用者）看的是措辞，不是那个小数。
-    LLM 接线那一半属残余集 R1（E5 给 D 接 LLM），这一半不需要模型：
-
-    | 输出 | 什么时候 |
-    |---|---|
-    | `"overstated"` | 数字 < 0.5 而措辞里有"说满了"的词（`_OVERCLAIM_MARKERS`） |
-    | `"understated"` | 数字 >= 0.8 而措辞里有"留余地"的词（`_HEDGE_MARKERS`） |
-    | `"consistent"` | 其余（含"数字高、措辞也硬"与"数字低、措辞也软"） |
-    | `checked=False` | `confidence is None`（没给数字 ⇒ 这一格没查成，不是"一致"） |
-
-    三态纪律：`confidence=None` 不许折成 `"consistent"` —— 那会把"没有数字可比"
-    读成"比过了、一致"。
+    真机缺陷形态：`_llm_refine` 只夹数字、文本原样采用 ⇒ 数字 0.3 而措辞写"证明了"。那是报告层面的夸大：读报告的人（与下游的引用者）看的是措辞，不是那个
+    小数。 LLM 接线那一半属残余集 R1（E5 给 D 接 LLM），这一半不需要模型：
+    | 输出 | 什么时候 ||---|---|| `"overstated"` | 数字 < 0.5 而措辞里有"说满了"的词（`_OVERCLAIM_MARKERS`）
+    || `"understated"` | 数字 >= 0.8 而措辞里有"留余地"的词（`_HEDGE_MARKERS`） || `"consistent"` | 其余（含
+    "数字高、措辞也硬"与"数字低、措辞也软"） || `checked=False` | `confidence is None`（没给数字 ⇒ 这一格没查成，不是"一致"）
+    |
+    三态纪律：`confidence=None` 不许折成 `"consistent"` —— 那会把"没有数字可比"读成"比过了、一致"。
     """
     text = str(conclusion or "")
     if confidence is None:
@@ -816,18 +682,15 @@ STATE_UNKNOWN_OBJECT = "unknown_object"
 
 def model_kind(llm: Any) -> str:
     """这个对象是哪一类模型（唯一判据）。
-
-    - `seam`：标准缝（`llmseam.LlmSeam` 一族）⇒ 走它的真 API `ask_json`；
-    - `client`：裸 client（`llm.Client` 那一族）⇒ 走 `.complete` 并自行解析 JSON；
-    - `none`：没接线（`None`）；
-    - `unknown`：认不出。
-
+    
+    - `seam`：标准缝（`llmseam.LlmSeam` 一族）⇒ 走它的真 API `ask_json`；- `client`：裸 client（`llm.Client`
+    那一族）⇒ 走 `.complete` 并自行解析 JSON；- `none`：没接线（`None`）；- `unknown`：认不出。
+    
     ## 为什么必须收成一处
-
-    `agent_loop` / `agent_f` / `agent_d` 三条路此前各写各的 `hasattr(llm, "complete")`，
-    而 `host.py:59` 的注释自己写着"（`LlmSeam` 只有 `ask`）。此前三条路各写各的，
-    结果都一样坏"。同一个对象在三处可以判出不同结果、而"哪一处写对了"没有任何
-    判据看得见 —— 所以这里收成一处，三条路（以及新写的路）都调它。
+    
+    `agent_loop` / `agent_f` / `agent_d` 三条路此前各写各的 `hasattr(llm, "complete")`，而 
+    `host.py:59` 的注释自己写着"（`LlmSeam` 只有 `ask`）。此前三条路各写各的，结果都一样坏"。同一个对象在三处可以判出不同结果、而"哪一处写对了"
+    没有任何判据看得见 —— 所以这里收成一处，三条路（以及新写的路）都调它。
     """
     if llm is None:
         return KIND_NONE
@@ -853,18 +716,16 @@ def _json_object(text: str) -> dict[str, Any] | None:
 def model_json_call(llm: Any, prompt: str, *, task_id: str = "", note: str = ""
                     ) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
     """要一份 JSON，并同时给出三态读数。返回 `(payload, text, reading)`。
-
-    - `payload`：解析出来的 JSON 对象（拿不到就是 `None`）；
-    - `text`：模型原文（失败时一般为空，坏 JSON 那一档仍有原文）；
-    - `reading`：`{"kind", "state", "reason", "model", "calls"}` ——
-      `state ∈ {not_wired, used, failed, unknown_object}`，四档分开，不许折叠。
-
+    
+    - `payload`：解析出来的 JSON 对象（拿不到就是 `None`）；- `text`：模型原文（失败时一般为空，坏 JSON 那一档仍有原文）；- 
+    `reading`：`{"kind", "state", "reason", "model", "calls"}` ——
+    `state ∈ {not_wired, used, failed, unknown_object}`，四档分开，不许折叠。
+    
     ## 两条路的差别写在唯一一处
-
-    缝那一路用 `ask_json`：它已经把"失败"细分成 `judge_not_wired` / `judge_over_budget` /
-    `judge_timeout` / `judge_bad_json` / `judge_failed:*`（于是"哪一种失败"在读数里可读，
-    不必自己再解析自由文本）；裸 client 那一路没有这些码，只能把异常与空回复如实记下。
-    两条路都走同一个 `_json_object` 解析口径。
+    
+    缝那一路用 `ask_json`：它已经把"失败"细分成 `judge_not_wired` / `judge_over_budget` /`judge_timeout`
+    / `judge_bad_json` / `judge_failed:*`（于是"哪一种失败"在读数里可读，不必自己再解析自由文本）；裸 client 那一路没有这些码，只
+    能把异常与空回复如实记下。两条路都走同一个 `_json_object` 解析口径。
     """
     kind = model_kind(llm)
     reading: dict[str, Any] = {"kind": kind, "state": STATE_NOT_WIRED, "reason": "",
@@ -958,22 +819,15 @@ def invented_facts(text: str, *, known_relation_ids: Sequence[str] = (),
 
 def current_summon_task_id() -> str:
     """这一趟召唤的号（装配层挂点）。今天没有这个 ContextVar ⇒ 如实返回空串。
-
     ## 为什么必须是 ContextVar，不是实例属性
-
-    `conductor.LocalBackend._call` 的注释（`conductor.py:247-249`）自己写了理由：
-    `resolve(role)` 按角色缓存实例，两个并发召唤会共享同一个对象 ⇒ 把号挂在实例上，
-    A 的号会被 B 覆盖（静默串味：读出来的成本挂到了别人的单子上）。
-    所以号必须按执行上下文传，与取消令牌（`cancellation._CURRENT_TOKEN`）同一条纪律。
-
+    `conductor.LocalBackend._call` 的注释（`conductor.py:247-249`）自己写了理由：`resolve(role)` 按角色缓存
+    实例，两个并发召唤会共享同一个对象 ⇒ 把号挂在实例上， A 的号会被 B 覆盖（静默串味：读出来的成本挂到了别人的单子上）。所以号必须按执行上下文传，与取消令牌（`cancellation._CURRENT_TOKEN`）
+    同一条纪律。
     ## 读数（`R1-A1-a` 之后）
-
-    挂点已在 `conductor.py` 落地（`current_task_id()` + 调用期 ContextVar，与取消令牌同构）
-    ⇒ 在召唤里读得到真号；不在召唤里（离线夹具、裸构造）读到的仍是空串。
-    空串不是零号：读数把它写成"没有挂点"（`spend.attached=False`），绝不当成 0 花销。
-
-    这里对两支都做兼容：`conductor.current_task_id()`（现行）优先，
-    `cancellation.current_task_id`（若将来挪到那一支）兜底，都没有就空串（不抛）。
+    挂点已在 `conductor.py` 落地（`current_task_id()` + 调用期 ContextVar，与取消令牌同构）⇒ 在召唤里读得到真号；不在召唤里（离
+    线夹具、裸构造）读到的仍是空串。空串不是零号：读数把它写成"没有挂点"（`spend.attached=False`），绝不当成 0 花销。
+    这里对两支都做兼容：`conductor.current_task_id()`（现行）优先，`cancellation.current_task_id`（若将来挪到那一支）
+    兜底，都没有就空串（不抛）。
     """
     try:
         from ..conductor import current_task_id as _fn
@@ -990,23 +844,15 @@ def current_summon_task_id() -> str:
 
 def spend_reading(store: Any, task_id: str) -> dict:
     """这一趟召唤花了多少（召唤级，以 `task_id` 为键；三态不许折叠）。
-
     读数直接取 `tokenmeter.usd_reading` 的口径（与 P-09 的粒度同一条）：
-
-    | 情形 | `attached` | `usd` |
-    |---|---|---|
-    | 没有召唤号 | `False` | `None`（"这笔钱没有挂点"，不是花了零） |
-    | 有号、账上一条都没有 | `True` | `0.0`（"挂上了但还没记过账"，也不是花了零） |
-    | 有号、有账 | `True` | 汇总（与 `usd_for` 同一算式） |
-
+    | 情形 | `attached` | `usd` ||---|---|---|| 没有召唤号 | `False` | `None`（"这笔钱没有挂点"，不是花了零）
+    || 有号、账上一条都没有 | `True` | `0.0`（"挂上了但还没记过账"，也不是花了零） || 有号、有账 | `True` | 汇总（与 `usd_for` 
+    同一算式） |
     账本本身读不出来时给 `checked=False` + 理由（"没查成"不许折成"没花钱"）。
-
     ## 时点：这一格是「调用时」读的（真机回放 `R1-A2` 的口径差）
-
-    摘要里的 `spend` 是调用时读的；账本随后还会多一条 `scope=summon` 的 settle 行
-    （`usd=0`，note 写着 `… via done/ok；settle-…`）⇒ `entries` 可能比账本行数少 1，
-    而 `usd` 不变（真机那一趟：读数 `entries=1`、账本 2 行，`usd` 两侧都是 0.000241）。
-    这不是缺陷，是"读数要带时点"：判据只钉 `usd` 逐位相等，`entries` 只用于看"记过账没有"。
+    摘要里的 `spend` 是调用时读的；账本随后还会多一条 `scope=summon` 的 settle 行（`usd=0`，note 写着 
+    `… via done/ok；settle-…`）⇒ `entries` 可能比账本行数少 1，而 `usd` 不变（真机那一趟：读数 `entries=1`、账本 2 行，
+    `usd` 两侧都是 0.000241）。这不是缺陷，是"读数要带时点"：判据只钉 `usd` 逐位相等，`entries` 只用于看"记过账没有"。
     """
     try:
         from ..tokenmeter import TokenMeter

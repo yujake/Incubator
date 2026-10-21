@@ -1,41 +1,22 @@
 """代号溯源：把"代号"还原成"表述"，再按需还原成"文献正文"（纯读）。
-
 ## 为什么要分三级（DESIGN-TOOLS.md §4.3）
-
-D 拿到的是 C 报告里的代号（`relation_id` / `concept_id` / `lit_id`）。
-它必须先看到"这条关系到底说了什么"才能判断值不值得研究。而"看到什么"的成本
-差别极大：
-
-| 层级 | 从 | 到 | 成本 |
-|---|---|---|---|
-| L1 `trace.relation` | 关系代号 | 引文 / 描述 / 陈述 / 页码 / 校验状态 + 概念名 + 文献元数据 | 极低（读内存行） |
-| L2 `trace.concept` | 概念代号 | 概念定义 + 它参与的全部关系的表述 | 低（读内存行） |
-| L3 `trace.literature` | 文献代号 | 元数据 + 本地文件 + 正文片段（可能触发 PDF 抽取/OCR） | 贵 |
-
+D 拿到的是 C 报告里的代号（`relation_id` / `concept_id` / `lit_id`）。它必须先看到"这条关系到底说了什么"才能判断值不值得研究。
+而"看到什么"的成本差别极大：
+| 层级 | 从 | 到 | 成本 ||---|---|---|---|| L1 `trace.relation` | 关系代号 | 引文 / 描述 / 陈述 / 页码
+/ 校验状态 + 概念名 + 文献元数据 | 极低（读内存行） || L2 `trace.concept` | 概念代号 | 概念定义 + 它参与的全部关系的表述 | 低（读
+内存行） || L3 `trace.literature` | 文献代号 | 元数据 + 本地文件 + 正文片段（可能触发 PDF 抽取/OCR） | 贵 |
 ## 为什么 L3 必须"按需"，绝不能默认调用
-
-L3 要真的去读文件：`extract.extract_text` 打开 PDF、逐页抽文本，几十页的
-文献就是几百毫秒到几秒，还可能要拉起 OCR（easyocr 首次使用要下载上百 MB 模型）。
-如果每溯源一条关系就顺手带上正文，那么 D 每轮分析几十条关系 = 几十次全文抽取，
-其中 90% 的结果根本不会被用到。更糟的是它会掩盖 L1 的信息：D 应该先读
-"这条关系说了什么"，不够用了才下钻 —— 直接喂正文会让它跳过判断这一步。
-
-所以：`L1`/`L2` 永不读文件；`L3` 只在 D 显式调用时才读，且如实报告读取结果
-（文件不存在 / 无文本层 / 抽取失败，三件事分得清清楚楚）。
-
+L3 要真的去读文件：`extract.extract_text` 打开 PDF、逐页抽文本，几十页的文献就是几百毫秒到几秒，还可能要拉起 OCR（easyocr 首次使用
+要下载上百 MB 模型）。如果每溯源一条关系就顺手带上正文，那么 D 每轮分析几十条关系 = 几十次全文抽取，其中 90% 的结果根本不会被用到。更糟的是它会掩盖 L1 的
+信息：D 应该先读"这条关系说了什么"，不够用了才下钻 —— 直接喂正文会让它跳过判断这一步。
+所以：`L1`/`L2` 永不读文件；`L3` 只在 D 显式调用时才读，且如实报告读取结果（文件不存在 / 无文本层 / 抽取失败，三件事分得清清楚楚）。
 ## "没做"和"做了但没结果"是两件事（与 quoteverify.py 同一精神）
-
-`quote_verified` 是三态：`True` 校验通过 / `False` 校验失败 / `None` 无法校验
-（例如扫描版无文本层）。本模块把这个三态原样透出并附上中文标签，
-绝不在展示层把它压成布尔 —— 那正是 `DESIGN.md` §6.3 反复强调要避免的。
-同理，L3 读不到正文时返回 `status="no_text_layer"` 而不是"空字符串"：
-后者会被下游读成"这篇文献没有内容"，前者才说明"需要 OCR"。
-
+`quote_verified` 是三态：`True` 校验通过 / `False` 校验失败 / `None` 无法校验（例如扫描版无文本层）。本模块把这个三态原样透出并
+附上中文标签，绝不在展示层把它压成布尔 —— 那正是 `DESIGN.md` §6.3 反复强调要避免的。同理，L3 读不到正文时返回 
+`status="no_text_layer"` 而不是"空字符串"：后者会被下游读成"这篇文献没有内容"，前者才说明"需要 OCR"。
 ## 确定性
-
-所有输出字段都来自表里的行与文件系统事实，没有一处猜测：
-`concept_names` 是查概念表得到的，`file_exists` 是 `Path.exists()` 得到的，
-`text` 是抽取器返回的。因此本模块可以被断言测试（见文件末尾自检）。
+所有输出字段都来自表里的行与文件系统事实，没有一处猜测：`concept_names` 是查概念表得到的，`file_exists` 是 `Path.exists()` 得
+到的，`text` 是抽取器返回的。因此本模块可以被断言测试（见文件末尾自检）。
 """
 
 from __future__ import annotations
@@ -545,38 +526,26 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
 
 def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) -> list[str]:
     """注册溯源工具，返回工具名列表。
-
     数据源三态（不要把它读成布尔）：
-
-    | 装配情况 | 行为 |
-    |---|---|
-    | 显式传入 `graph` | 四个工具都从这张图回答 |
-    | 没传 graph，但传了 `store` | 每次调用用 `RelationGraph.from_store(store)` 现建 |
-    | 两者都没有 | 四个工具一律 `fail(kind="no_graph", checked=False)` —— 没查 |
-
-    最后一行是本模块曾经的缺陷：那时 `_g()` 会用一张空图兜底，于是
-    "没有图可查"被显示成"查过了，这些代号都不存在"。现在宁可明确失败。
-
-    `L3` 还需要 `store` 才能把文献表里的相对路径解析成磁盘上的绝对路径
-    （`store.library_path` 还会做一次"不许越出 library/"的检查）。
+    | 装配情况 | 行为 ||---|---|| 显式传入 `graph` | 四个工具都从这张图回答 || 没传 graph，但传了 `store` | 每次调用用 
+    `RelationGraph.from_store(store)` 现建 || 两者都没有 | 四个工具一律 
+    `fail(kind="no_graph", checked=False)` —— 没查 |
+    最后一行是本模块曾经的缺陷：那时 `_g()` 会用一张空图兜底，于是"没有图可查"被显示成"查过了，这些代号都不存在"。现在宁可明确失败。
+    `L3` 还需要 `store` 才能把文献表里的相对路径解析成磁盘上的绝对路径（`store.library_path` 还会做一次"不许越出 library/"的检查）。
     只有 graph、没有 store 时 L1/L2 照常可用，L3 会明确失败而不是假装读过文件。
     """
     holder_graph: RelationGraph | None = graph if isinstance(graph, RelationGraph) else None
 
     def _g(tool: str) -> tuple[RelationGraph | None, ToolResult | None]:
         """取关系图。三态 —— (图, None) / (None, 结构化失败)：
-
-        | 情形 | 返回 |
-        |---|---|
-        | 显式给了 graph，或 store 能建出图 | `(graph, None)` |
-        | 没有图可查（既没给 graph 也没给 store） | `(None, fail(kind="no_graph", checked=False))` |
-        | 有 store 但建图失败（表坏了 / 锁超时） | `(None, fail(kind="store_error", checked=False))` |
-
-        这里不能再用"空图"兜底（本函数曾经的缺陷）：空图会让每个代号都落进
-        `missing`，`known_relations`/`known_concepts`/`known_literature` 全是 `[]`，
-        于是调用方读到的是"查过了，确实没有这条代号" —— 而真相是
-        "根本没有图可查"。这正是本模块第 26-32 行立的规矩（「没做」与
-        「做了但没结果」是两件事）所禁止的折叠：它会让调用方以为自己的代号错了。
+        
+        | 情形 | 返回 ||---|---|| 显式给了 graph，或 store 能建出图 | `(graph, None)` || 没有图可查（既没给 graph 也没给
+        store） | `(None, fail(kind="no_graph", checked=False))` || 有 store 但建图失败（表坏了 / 锁超时） | 
+        `(None, fail(kind="store_error", checked=False))` |
+        
+        这里不能再用"空图"兜底（本函数曾经的缺陷）：空图会让每个代号都落进`missing`，`known_relations`/`known_concepts`/
+        `known_literature` 全是 `[]`，于是调用方读到的是"查过了，确实没有这条代号" —— 而真相是"根本没有图可查"。这正是本模块第 26-32 行立的规
+        矩（「没做」与「做了但没结果」是两件事）所禁止的折叠：它会让调用方以为自己的代号错了。
         """
         if holder_graph is not None:
             return holder_graph, None

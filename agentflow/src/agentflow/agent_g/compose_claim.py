@@ -30,24 +30,14 @@ class _ComposeClaim:
         errata_ids: Sequence[str] | None = None,
     ) -> dict:
         """构造一条合规断言（转发 `doc_tools.compose_claim`）。
-
-        判据只有一份：这里不重新实现检查，直接复用工具层的纯函数 ——
-        两套判据必然漂移，而漂移的后果是"G 认为合规、H 认为违规"这种
-        没有任何报错的静默分裂。
-
-        委托给工具层而不是直接 import 一个私有实现，也让"G 与 LLM 用同一套构造入口"
-        成为事实：`doc.compose_claim` 工具最终调的就是这个函数。
-
+        判据只有一份：这里不重新实现检查，直接复用工具层的纯函数 ——两套判据必然漂移，而漂移的后果是"G 认为合规、H 认为违规"这种没有任何报错的静默分裂。
+        委托给工具层而不是直接 import 一个私有实现，也让"G 与 LLM 用同一套构造入口"成为事实：`doc.compose_claim` 工具最终调的就是这个函数。
         ## §8.3 的生命周期字段（本轮新增，全部可选）
-
-        `kind` / `status` / `proof_location` / `numeric_evidence` /
-        `counterexamples` / `frozen`+`freeze_reason` / `allowed_use` /
-        `scope_caveat` / `revision_hash` / `errata_ids`。
-
-        不给就是不写（不是写一个假默认）：`status='验'` 与"没有 `status`"
-        是两件事，前者是"这条断言当前只被数值验过"，后者是"这条断言的生命周期
-        还没被登记" —— 把后者悄悄当成前者，正是 `DEVELOPMENT.md` §3 纪律 1
-        说的那个坑（"下游把'我们没查'读成了'查了没有'"）。
+        `kind` / `status` / `proof_location` / `numeric_evidence` /`counterexamples` / 
+        `frozen`+`freeze_reason` / `allowed_use` /`scope_caveat` / `revision_hash` / 
+        `errata_ids`。
+        不给就是不写（不是写一个假默认）：`status='验'` 与"没有 `status`"是两件事，前者是"这条断言当前只被数值验过"，后者是"这条断言的生命周期还没被登记
+        " —— 把后者悄悄当成前者，正是 `DEVELOPMENT.md` §3 纪律 1 说的那个坑（"下游把'我们没查'读成了'查了没有'"）。
         """
         return DT.compose_claim(
             text,

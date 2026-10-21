@@ -1,30 +1,19 @@
 """猜想台账的产出面（依据 `draft/29` §7.4/§7.5 的状态机、`draft/30` §T1 的数据面）。
-
 ## 为什么需要这个模块（T1 留下的那一格）
-
-`conjectures` 表、`CONJECTURE_STATUSES` 词表、以及"跨对象不变量"（`verify.verify_all`
-的 `dangling_experiment` / `refuted_without_counterexample` / `proved_without_formal_proof` …）
-在 T1 就落了地，而没有任何角色代码写得出这一行 —— T1 的条目逐字写着
-"提出 / 检验 / 否证 / 升格这些语义动作在 T3 接线"。于是验收 P7 的第 4 张表
-（猜想表：提出→检验→支持/否证/升格）没有任何数据可渲染。
-
+`conjectures` 表、`CONJECTURE_STATUSES` 词表、以及"跨对象不变量"（`verify.verify_all`的 
+`dangling_experiment` / `refuted_without_counterexample` / 
+`proved_without_formal_proof` …）在 T1 就落了地，而没有任何角色代码写得出这一行 —— T1 的条目逐字写着"提出 / 检验 / 否证
+/ 升格这些语义动作在 T3 接线"。于是验收 P7 的第 4 张表（猜想表：提出→检验→支持/否证/升格）没有任何数据可渲染。
 本模块把那半件事接上：一个动作，两个语义（新建 / 更新）。
-
 ## 为什么只有一个动作而不是"propose + assess"两个
-
-两个动作会让"第一次写"和"以后改"走两条代码路径，而这两条路径要维护同一组
-单行内判据（`schema.Conjecture.validate` 的九条）。合成一个"登记/更新"动作之后：
-
-- 判据只有一份：无论新建还是更新，最后都过 `S.Conjecture(...).validate()`；
-- 状态机的"从哪到哪"不需要在这一层再写一遍 —— `validate()` 已经把
-  "每条状态必须带什么"写死了（`refuted` 必须有反例实验、`proved` 必须有形式化证明…），
-  跨对象那一半在 `verify.verify_all`。
-
+两个动作会让"第一次写"和"以后改"走两条代码路径，而这两条路径要维护同一组单行内判据（`schema.Conjecture.validate` 的九条）。合成一个"登记/
+更新"动作之后：
+- 判据只有一份：无论新建还是更新，最后都过 `S.Conjecture(...).validate()`；- 状态机的"从哪到哪"不需要在这一层再写一遍 —— 
+`validate()` 已经把"每条状态必须带什么"写死了（`refuted` 必须有反例实验、`proved` 必须有形式化证明…），跨对象那一半在 
+`verify.verify_all`。
 ## 三态
-
-`conjecture_id` 省略 ⇒ 新建（编号由 `store.alloc_id("conjecture")` 分配）；
-给了它而库里没有这一行 ⇒ 抛（不许把"更新一条不存在的猜想"静默变成新建 ——
-那会让一次笔误产生一条重复的猜想，而两条都看起来正常）。
+`conjecture_id` 省略 ⇒ 新建（编号由 `store.alloc_id("conjecture")` 分配）；给了它而库里没有这一行 ⇒ 抛（不许把"更新一
+条不存在的猜想"静默变成新建 ——那会让一次笔误产生一条重复的猜想，而两条都看起来正常）。
 """
 
 from __future__ import annotations
@@ -89,28 +78,16 @@ def register_conjecture(
     actor: str = "agent-D",
 ) -> dict:
     """新建或更新一条猜想。返回落库后的 `conjectures` 行。
-
     ## 三态在这里的落点：`None` = "调用方没提这件事"
-
-    所有可选参数的默认值都是 `None`（不是 `""` / `"proposed"`）。这一个选择决定了
-    更新语义：`None` ⇒ 保留库里已有的值；给了值（哪怕是空串）⇒ 就用给的值。
-    若默认写成 `status="proposed"`，一次"只改 notes"的调用会把一条
-    `supported_not_proved` 的猜想静默退回 `proposed` —— 那是把
-    "我没提状态"读成了"状态是 proposed"。
-
+    所有可选参数的默认值都是 `None`（不是 `""` / `"proposed"`）。这一个选择决定了更新语义：`None` ⇒ 保留库里已有的值；若默认写成 `status="proposed"`，一次"
+    只改 notes"的调用会把一条`supported_not_proved` 的猜想静默退回 `proposed` —— 那是把"我没提状态"读成了"状态是 proposed"。
     新建（没有库里那一份）时兜默认值：`status="proposed"`、`form="universal"`。
-
-    `origin` 必填（防"凭空出现的猜想"，`Conjecture.validate` 逐字要求），
-    它的取值就是"这条猜想是从哪来的"——本项目里是 `doc:0000#<label>`
-    （被审论文的那一条定理类环境）。
-
+    `origin` 必填（防"凭空出现的猜想"，`Conjecture.validate` 逐字要求），它的取值就是"这条猜想是从哪来的"——本项目里是 `doc:0000#<label>`（被审论文的那一条定
+    理类环境）。
     ## D13：没给 `conjecture_id` 时先按规范化 `statement` 判重（`draft/39` §3.9）
-
-    真机读数（p6e 对 `D.register_conjecture` 的 25 次派活）：5 次成功落了 5 行，其中
-    `0001/0003/0004` 的规范化 `statement` sha 完全相同、`0002` 只差标点 ——
-    原因是"重试即新建" + "想更新却没带 id"。修法：没给 id 时先找同一条（规范化后相等）
-    ⇒ 命中就返回既有行并把本次给的状态/证据合并进去（结果里记 `duplicate=true` 与命中 id）；
-    真要新建必须显式 `force_new=true`（那是调用方的决定，不是默认行为）。
+    真机读数（p6e 对 `D.register_conjecture` 的 25 次派活）：5 次成功落了 5 行，其中`0001/0003/0004` 的规范化 `statement` sha 完全相同、
+    `0002` 只差标点 ——原因是"重试即新建" + "想更新却没带 id"。修法：没给 id 时先找同一条（规范化后相等）⇒ 命中就返回既有行并把本次给的状态/证据合并进去（结果里记 
+    `duplicate=true` 与命中 id）；真要新建必须显式 `force_new=true`（那是调用方的决定，不是默认行为）。
     """
     if not _text(statement):
         raise ConjectureError("statement 不能为空：猜想必须是一条可判真假的陈述句",

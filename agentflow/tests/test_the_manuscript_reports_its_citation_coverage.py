@@ -3,23 +3,20 @@
 
 ## 守的是什么（T2 第 24 趟 `t2s` 的真机形态）
 
-那一趟：检索 2 条全 `ok`、17 篇文献全部消化、`relations` 73 条、C 跑了 3 次、
-2 条实验 —— 而三份稿件的 9 条断言全引 `exp:0001`：`lit:` 0 条、`rel:` 0 条，
-交付面上"文献"与"C 的产物"一条都没进（T2 的四号判据因此红）。
-收工门那一档读得出这个 0，但它只在 M 把那一行写进验收表时才进报告；
-写稿那一刻没有任何数字。这一格把读数放进 `doc.build_document` 的
-`meta.citation_coverage`（`agent_loop` 把 `meta` 一并给模型看）。
+那一趟：检索 2 条全 `ok`、17 篇文献全部消化、`relations` 73 条、C 跑了 3 次、2 条实验 —— 而三份稿件的 9 条断言全引 `exp:0001`：`lit:` 0 条、`rel:` 0 条，
+交付面上"文献"与"C 的产物"一条都没进（T2 的四号判据因此红）。收工门那一档读得出这个 0，但它只在 M 把那一行写进验收表时才进报告；写稿那一刻没有任何数字。这一格把读数放进
+`doc.build_document` 的`meta.citation_coverage`（`agent_loop` 把 `meta` 一并给模型看）。
 
 ## 红/绿成对 + 反真空
 
 * 正控：稿子只引 `exp:` 而库里有已消化文献 + 关系 ⇒ `gaps` 两句都非空、
-  `suggest_lit` / `suggest_rel` 点名到号，且读数在 meta 里、不在 data（落库那一行）里；
+`suggest_lit` / `suggest_rel` 点名到号，且读数在 meta 里、不在 data（落库那一行）里；
 * 负控：稿子引了 `lit:` 与 `rel:` ⇒ `gaps` 空（做对了不许再念叨）；
 * 反真空①：库里一篇已消化文献都没有 ⇒ `gaps` 里不出现"你没引文献"那一句
-  （"没东西可引"与"你没引"是两件事）；
+（"没东西可引"与"你没引"是两件事）；
 * 反真空②：库读不到 ⇒ `readable=False`、`available` 是 -1（三态，不编 0）；
 * 负控③：`check_citations` 拦下那笔写入时（悬空引用）⇒ 没有 `citation_coverage`
-  （失败语义一个字不变）。
+（失败语义一个字不变）。
 """
 from __future__ import annotations
 

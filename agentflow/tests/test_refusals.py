@@ -1,38 +1,22 @@
 # -*- coding: utf-8 -*-
 """「拒绝」只有一个形态，且它必须自报理由（`draft/37` §88）。
-
 ## 这一组守的是什么
-
-T1 第 2 趟真机（2026-10-04）：`B.register_statement` 被召唤 14 次，其中 8 次返回
-`{"ok": False, "kind": ..., "error": ...}`，而 `tasks` 台账把它们全记成 `outcome=ok`
-（detail 还写着"按有产出处理"）—— 主控以为命题登记好了，于是不再改参数，
-而 `statements` 是 0 行，整条链在这一步静默停住。同一趟里另外 6 次抛异常的调用
-反倒记成 `failed`："拒绝"与"崩溃"同形，"成功"与"什么都没写"也同形。
-
+T1 第 2 趟真机（2026-10-04）：`B.register_statement` 被召唤 14 次，其中 8 次返回`{"ok": False, "kind": ..., "error": ...}`，而
+`tasks` 台账把它们全记成 `outcome=ok`（detail 还写着"按有产出处理"）—— 主控以为命题登记好了，于是不再改参数，而 `statements` 是 0 行，整条链在这一步静默停住。同一趟里另外 6
+次抛异常的调用反倒记成 `failed`："拒绝"与"崩溃"同形，"成功"与"什么都没写"也同形。
 修法分两处，判据也分两处：
-
 1. 终态映射（`Conductor._end_from_payload`）不再把 `ok=False` 折叠成 `ok`
-   —— 判据在 `tests/test_conductor_payload_outcomes.py`；
+—— 判据在 `tests/test_conductor_payload_outcomes.py`；
 2. 角色动作的拒绝走同一个落点 :func:`agentflow.refusals.refuse`，并带上受控的
-   `refusal_reason` —— 判据在本文件。
-
-第 2 条为什么要机器守：它是一条形态纪律（"拒绝要自报理由"），而形态纪律
-只能靠"新写的代码会被当场抓住"来维持。所以本文件用一个 AST 扫描盯住角色动作模块：
-凡是手写的 `{"ok": False, ...}` 都必须逐条登记在下面的表里并写明理由
-（那些是"执行了、没成功"的真失败，不是拒绝），扫描结果与表双向比对 ——
-表里多一条（豁免腐烂）与少一条（新写的漏网）都会红。
-
+`refusal_reason` —— 判据在本文件。
+第 2 条为什么要机器守：它是一条形态纪律（"拒绝要自报理由"），而形态纪律只能靠"新写的代码会被当场抓住"来维持。所以本文件用一个 AST 扫描盯住角色动作模块：凡是手写的
+`{"ok": False, ...}` 都必须逐条登记在下面的表里并写明理由（那些是"执行了、没成功"的真失败，不是拒绝），扫描结果与表双向比对 ——表里多一条（豁免腐烂）与少一条（新写的漏网）都会红。
 ## 2026-10-13：登记表里 `agent_g/paper_package.py` 那三档随旧路退场
-
-业主裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，
-范围 A（整条 `paper_package` 路退场）⇒ 那个模块连同它的三档手写失败
-（`package_build_failed` / `state_failed` / `anchor_script_failed`）一起删除
-（退场面与逐条理由见 `draft/117`）。这一条判据的对象是"模块里手写的 `ok=False`"，
-模块不在了就**没有对象可判** —— 所以这里删掉那三行，而不是给一个不存在的机制编新判据。
-它留下的那一课是**失败要把外部工具自己说的话带回来**（旧路只回一句"脚本不在盘上"，
-而脚本的 stderr 当时就在手边，`draft/116` §4）；接手的判据在
-`tests/test_papercompile.py`：`test_the_engine_tail_is_carried_when_the_compile_fails`
-与 `test_the_receipt_on_disk_carries_the_engine_tail`。
+业主裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，范围 A（整条 `paper_package` 路退场）⇒ 那个模块连同它的三档手写失败（`package_build_failed` /
+`state_failed` / `anchor_script_failed`）一起删除（退场面与逐条理由见 `draft/117`）。这一条判据的对象是"模块里手写的 `ok=False`"，模块不在了就没有对象可判 ——
+所以这里删掉那三行，而不是给一个不存在的机制编新判据。它留下的那一课是失败要把外部工具自己说的话带回来（旧路只回一句"脚本不在盘上"，而脚本的 stderr 当时就在手边，`draft/116` §4）；
+接手的判据在`tests/test_papercompile.py`：`test_the_engine_tail_is_carried_when_the_compile_fails`与
+`test_the_receipt_on_disk_carries_the_engine_tail`。
 """
 from __future__ import annotations
 
@@ -70,7 +54,7 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "不成立 ⇒ 执行失败（同族的还有工具层的 `paper_compile_failed`：编不出来只是"
         "没编成，不是调用方参数写错了）",
     # `agent_f/core.py` 的两处（P3-6 / F 闭环那批新增的两个产物出口的内部返回值）：
-    # 都是**子结果**，不是动作的终态 payload —— `_apply_round` 只把 `ok` / `why` / `path`
+    # 都是子结果，不是动作的终态 payload —— `_apply_round` 只把 `ok` / `why` / `path`
     # 折进 `detail` 与 `history`，`ok=False` 从不冒充一次"拒绝"（判据守的那个坑
     # 是"拒绝被台账记成 ok"，这里根本没有拒绝可记）。所以按登记走，不改道
     # `refusals.refuse`：走它会给这两笔盖上 `refusal_reason=invalid_params`，

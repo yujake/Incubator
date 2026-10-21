@@ -1,26 +1,18 @@
-"""动作面复核（能力面第二片）：**61 个动作，61 个实现落点，零悬空**。
+"""动作面复核（能力面第二片）：61 个动作，61 个实现落点，零悬空。
 
 ## 这一条守的是什么
 
-业主的经验文档要求定期复核"动作面多余项"。2026-10-21 现读（`specs.builtin_specs()`）：
+业主的经验文档要求定期复核"动作面多余项"。2026-10-21 现读 `specs.builtin_specs()`：动作总数 61（每角色 A 6 / B 7 / C 10 / D 15 / E 5 / F 4 / G 6 / H 5 / V 3 / M 0），悬空动作（`handler_name` 在实现类上不存在）0 个。
 
-```
-动作总数 61   ｜ 每角色：A 6 / B 7 / C 10 / D 15 / E 5 / F 4 / G 6 / H 5 / V 3 / M 0
-悬空动作（`handler_name` 在实现类上不存在）**0 个**
-```
-
-`M` 的 0 个不是缺陷：主控的工具面是 `conductor.*`（编排面），召唤别的角色靠 `conductor.summon`，
-不需要自己声明"动作"。这条判据把"M 没有动作"与"某人漏了实现"分开。
+`M` 的 0 个不是缺陷：主控的工具面是 `conductor.*`（编排面），召唤别的角色靠 `conductor.summon`，不需要自己声明"动作"——这条判据把"M 没有动作"与"某人漏了实现"分开。
 
 ## 判据（含负控）
 
-① 每个动作都在**实现类**上有落点（`handler_name` 的最后一段能在 `spec.cls()` 上 `hasattr`）——
-   这是"声明了却没人实现"的机器读数；
+① 每个动作都在实现类上有落点（`handler_name` 的最后一段能在 `spec.cls()` 上 `hasattr`）——"声明了却没人实现"的机器读数；
 ② 每个动作的 `summary` 非空（提示词里那一行就靠它，空 summary 会让模型看到一行光头）；
-③ `M` 的动作面**必须是 0**（编排面不许混进研究侧动作；反过来，若哪天给 M 加了动作，这条会提醒先想清楚）；
+③ `M` 的动作面必须是 0（编排面不许混进研究侧动作；反过来，若哪天给 M 加了动作，这条会提醒先想清楚）；
 ④ 负控：给某个角色临时塞一个 `handler_name="…nonexistent"` 的动作 ⇒ ① 必须红；
-⑤ 反真空：其余九个角色的动作面都非空，且总数 = 61。
-"""
+⑤ 反真空：其余九个角色的动作面都非空，且总数 = 61。"""
 
 from __future__ import annotations
 
@@ -83,9 +75,8 @@ def test_the_negative_control_a_dangling_handler_is_caught(
 ) -> None:
     """④ 负控：临时给 A 塞一个指向不存在方法的动作 ⇒ ① 必须红。
 
-    负控打 `SPEC`（不是模块级 `ACTIONS`）：`builtin_specs()` 每次现取 `mod.SPEC`，
-    只改 `ACTIONS` 的负控会**假绿**。
-    """
+        负控打 `SPEC`（不是模块级 `ACTIONS`）：`builtin_specs()` 每次现取 `mod.SPEC`，
+        只改 `ACTIONS` 的负控会假绿。"""
     mod = __import__("agentflow.specs.a", fromlist=["SPEC"])
     spec = mod.SPEC
     ghost = AS.ActionSpec(

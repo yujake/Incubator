@@ -1,17 +1,13 @@
 """`roles-1` / `roles-3` / `roles-4` 的回归判据（都在 `tools/base.py`，FC-27 禁改区）。
-
-改前备份：`temp/zone-backup-r4-src_agentflow_tools_base.py`
-（sha256 `256D231F1B6415FCBDF834654A0CED0852CF2681225EB80C74AE4C52F20E7043`）。
-
+改前备份：`temp/zone-backup-r4-src_agentflow_tools_base.py`（sha256 `256D231F1B6415FCBDF834654A0CED0852CF2681225EB80C74AE4C52F20E7043`）。
 | 条目 | 缺陷 | 本文件里"改前必红"的那条 |
 |---|---|---|
-| `roles-1` | `_callable_for` 的 docstring 声称 `for_role` 也走它；`include_registered_writers=False` 那一支是死代码 | `test_the_dead_branch_is_gone_and_the_docstring_says_who_calls_this` |
-| `roles-3` | `role` 消歧用 `setdefault` + 置空 ⇒ 位置映射里的 `role` 被 `None` 反向覆盖（参数静默丢失），且拒因与事实相反 | `test_a_role_in_the_position_map_reaches_the_tool` |
+| `roles-1` | `_callable_for` 的 docstring 声称 `for_role` 也走它；`include_registered_writers=False` 那一支是死代码 |
+`test_the_dead_branch_is_gone_and_the_docstring_says_who_calls_this` |
+| `roles-3` | `role` 消歧用 `setdefault` + 置空 ⇒ 位置映射里的 `role` 被 `None` 反向覆盖（参数静默丢失），且拒因与事实相反 |
+`test_a_role_in_the_position_map_reaches_the_tool` |
 | `roles-4` | `for_role` 每次调用都往 `role_filter_notes` 追加 ⇒ 留痕自相矛盾且线性膨胀 | `test_for_role_notes_are_idempotent` |
-
-第 6 轮修复批（`F4`）在这一批上补了 5 条第 6 轮重审 finding 的回归判据
-（本文件是本批的测试落点，备份在 `temp/FIX6-F4-before_tests_test_r4_roles_surface.py`）：
-
+第 6 轮修复批（`F4`）在这一批上补了 5 条第 6 轮重审 finding 的回归判据（本文件是本批的测试落点，备份在 `temp/FIX6-F4-before_tests_test_r4_roles_surface.py`）：
 | finding | 缺陷 | 本文件里守着它的那条 |
 |---|---|---|
 | `R4-AN-4`（medium = `N-5`） | 写等级登记表 × 第一根轴词表没有导入期交叉断言 | `test_the_write_level_register_is_cross_checked_at_import` |
@@ -209,21 +205,16 @@ def _surface_probe(name: str, *, side_effect: str = "read", external: str = "non
 
 
 def test_for_role_notes_follow_the_current_state(monkeypatch) -> None:
-    """负控 2：状态变了 ⇒ 留痕只保留与当前状态一致的那一条。
+    """    负控 2：状态变了 ⇒ 留痕只保留与当前状态一致的那一条。
 
-    审计者 A 的实测：`SANDBOX_AVAILABLE` 从 `None` 改成 `True` 之后再调一次，
-    旧实现里 `notes['H']` 同时留着"剥掉了含 `probe.exec_read` 的 2 个工具"
-    与"放行了 `probe.exec_read`" —— 前一条与当前状态相反。
-
-    `R4-AN-5`：改前这条用例有两重空转，本版两处都修掉（否则它是恒真断言）：
+    审计者 A 的实测：`SANDBOX_AVAILABLE` 从 `None` 改成 `True` 之后再调一次，旧实现里 `notes['H']` 同时留着"剥掉了含 `probe.exec_read` 的 2
+    个工具"与"放行了 `probe.exec_read`" —— 前一条与当前状态相反。`R4-AN-5`：改前这条用例有两重空转，本版两处都修掉（否则它是恒真断言）：
 
     1. `monkeypatch.setattr(T, 'SANDBOX_AVAILABLE', True)` 打在 `agentflow.tools`
-       包命名空间上，而 `_role_surface` 读的是 `tools/base.py` 的模块全局
-       ⇒ 打不打都一样（实测两次 `for_role('H')` 逐字相同）。现在打在 `base` 上。
+    包命名空间上，而 `_role_surface` 读的是 `tools/base.py` 的模块全局⇒ 打不打都一样（实测两次 `for_role('H')` 逐字相同）。现在打在 `base` 上。
     2. 真表的 H 工具面里一个 `external=exec` 的工具都没有
-       （`verify.check_formal` / `run_experiment` 的 roles 是 ('E','F','G')）
-       ⇒ "放行了"那一句永远不会出现，两条断言恒真。现在用一张真的含
-       `read + exec` 探针的合成注册表，并按工具名核对两句话，而不是"有没有这两句话"。
+    （`verify.check_formal` / `run_experiment` 的 roles 是 ('E','F','G')）⇒ "放行了"那一句永远不会出现，两条断言恒真。
+    现在用一张真的含`read + exec` 探针的合成注册表，并按工具名核对两句话，而不是"有没有这两句话"。
     """
     from agentflow.tools import base as B
 
@@ -261,24 +252,16 @@ def test_for_role_notes_follow_the_current_state(monkeypatch) -> None:
 
 
 def test_the_sandbox_monkeypatch_is_pinned_to_the_base_module_namespace(monkeypatch) -> None:
-    """`N-2` 的反空转指纹：那个 monkeypatch 必须打在 `tools/base.py` 的模块全局上。
+    """    `N-2` 的反空转指纹：那个 monkeypatch 必须打在 `tools/base.py` 的模块全局上。
 
-    批 C（观测 2026-09-26，证据 `temp/batchC-axes5-vacuous-monkeypatch.txt`）实测的原始缺陷：
-    `monkeypatch.setattr(T, "SANDBOX_AVAILABLE", True)`（`T` = `agentflow.tools` 包对象）
-    打在没人读的命名空间上 —— `_role_surface` 读的是 `base` 模块自己的全局，所以那一次
-    patch 不改变任何判据：整条负控恒真，而它看上去在跑（"判据看起来在跑、实际没接上"）。
-
-    `F4`（第 6 轮重审 finding `R4-AN-5` 的第一半）把注入点改成了 `base`，
-    上面那条用例因此真的在咬。本用例把这件事钉成断言，而不是"碰巧打对了"：
-
-    1. 包对象上确实有这个属性（`tools/__init__.py` 的再导出）⇒ 打错命名空间时
-       既不报 `AttributeError`、也不改变判据 —— 这正是最容易被读成"负控跑了"的形态；
+    批 C（观测 2026-09-26，证据 `temp/batchC-axes5-vacuous-monkeypatch.txt`）
+    实测的原始缺陷：`monkeypatch.setattr(T, "SANDBOX_AVAILABLE", True)`（`T` = `agentflow.tools` 包对象）打在没人读的命名空间上 ——
+    `_role_surface` 读的是 `base` 模块自己的全局，所以那一次patch 不改变任何判据：整条负控恒真，而它看上去在跑（"判据看起来在跑、实际没接上"）。`F4`（第 6 轮重审 finding
+    `R4-AN-5` 的第一半）把注入点改成了 `base`，上面那条用例因此真的在咬。本用例把这件事钉成断言，而不是"碰巧打对了"：包对象上确实有这个属性（`tools/__init__.py` 的再导出）⇒ 打错命名空间时
+    既不报 `AttributeError`、也不改变判据 —— 这正是最容易被读成"负控跑了"的形态；
     2. 把包对象上那个属性改成 `True`（也就是改前那一版做的事）⇒ `for_role("H")`
-       仍然剥掉 exec 探针。这一条一旦不成立，说明判据读了另一处名字（`N-2` 的形态变了），
-       必须回头看上面那条用例的注入点与 `tools/__init__.py` 的再导出注释。
-
-    负控（整树副本注入：把 `_role_surface` 的读取点改成从包对象取同名属性
-    ⇒ 本用例必须红）见交付报告；仓内不落那种注入。
+    仍然剥掉 exec 探针。这一条一旦不成立，说明判据读了另一处名字（`N-2` 的形态变了），必须回头看上面那条用例的注入点与 `tools/__init__.py` 的再导出注释。负控（整树副本注入：把
+    `_role_surface` 的读取点改成从包对象取同名属性⇒ 本用例必须红）见交付报告；仓内不落那种注入。
     """
     from agentflow import tools as T
     from agentflow.tools import base as B
@@ -360,18 +343,14 @@ def test_the_dead_branch_is_gone_and_the_docstring_says_who_calls_this() -> None
 
 
 def test_the_parameter_is_still_load_bearing() -> None:
-    """正控：`include_registered_writers` 这个参数不能一起删掉。
+    """    正控：`include_registered_writers` 这个参数不能一起删掉。
 
-    它真正的作用在 `_role_surface(..., call_surface=include_registered_writers)` 那一句里
-    （可调用面是否含已登记的落库代理）。删掉它会静默改变 `call` 的行为 ——
-    而"删死代码时顺手删掉一个活参数"正是这类清理最容易犯的错。
+    它真正的作用在 `_role_surface(..., call_surface=include_registered_writers)` 那一句里（可调用面是否含已登记的落库代理）。删掉它会静默改变 `call` 的行为
+    ——而"删死代码时顺手删掉一个活参数"正是这类清理最容易犯的错。
 
-    `FINAL-R4-02`：这一条改前是文本级断言（在 `base.py` 全文里找子串
-    `call_surface=include_registered_writers`），而那个子串在文件里出现两处
-    （活跃调用点 + 一条注释）⇒ 只把活跃调用点改成 `call_surface=False` 时它不响
-    （实测：只改活跃点 ⇒ 111 passed / 0 failed）。现在改成 AST 级：解析
-    `_callable_for`（或 `call`）里那次 `_role_surface(...)` 调用，
-    断言它的 `call_surface` 关键字实参就是那个形参名。
+    `FINAL-R4-02`：这一条改前是文本级断言（在 `base.py` 全文里找子串`call_surface=include_registered_writers`），而那个子串在文件里出现两处（活跃调用点 +
+    一条注释）⇒ 只把活跃调用点改成 `call_surface=False` 时它不响（实测：只改活跃点 ⇒ 111 passed / 0 failed）。现在改成 AST 级：解析`_callable_for`（或
+    `call`）里那次 `_role_surface(...)` 调用，断言它的 `call_surface` 关键字实参就是那个形参名。
     """
     tree = ast.parse(BASE.read_text(encoding="utf-8"))
     hits: list[str] = []
@@ -404,18 +383,14 @@ def test_the_parameter_is_still_load_bearing() -> None:
 
 
 def test_the_write_level_register_is_cross_checked_at_import() -> None:
-    """写等级登记表与第一根轴的词表必须互相穷举（`R4-AN-4` / 台账 `N-5`）。
+    """    写等级登记表与第一根轴的词表必须互相穷举（`R4-AN-4` / 台账 `N-5`）。
 
-    缺陷：`tools/base.SIDE_EFFECTS` 与 `tools/__init__.SIDE_EFFECTS_WRITE` 之间
-    此前没有任何导入期判据。只读角色的结构性剥离读的是 `SIDE_EFFECTS_WRITE`
-    （`for_role` / `call` / `_callable_for` 三处共用 `_role_surface`），
-    于是"往词表加一个写等级、忘了登记进这张表"的后果是静默的：
+    缺陷：`tools/base.SIDE_EFFECTS` 与 `tools/__init__.SIDE_EFFECTS_WRITE` 之间此前没有任何导入期判据。只读角色的结构性剥离读的是
+    `SIDE_EFFECTS_WRITE`（`for_role` / `call` / `_callable_for` 三处共用 `_role_surface`），于是"往词表加一个写等级、忘了登记进这张表"的后果是静默的：
     只读角色 C/H 拿到那个写工具，而导入成功、测试全绿。
 
-    正控：真表上这条判据不抛（`agentflow.tools` 一被导入就已经跑过一次模块级调用）。
-    负控（本用例，内存注入）：往词表加一个没登记的假轴 ⇒ 同一条判据必须抛。
-    更强的负控（副本注入：两处 `SIDE_EFFECTS` 同步加 `write_remote` ⇒ 导入即抛，
-    带副本 sha256 指纹与改前副本的对照读数）在 `temp/FIX6-F4.md` 的探针读数里。
+    正控：真表上这条判据不抛（`agentflow.tools` 一被导入就已经跑过一次模块级调用）。负控（本用例，内存注入）：往词表加一个没登记的假轴 ⇒ 同一条判据必须抛。更强的负控（副本注入：两处
+    `SIDE_EFFECTS` 同步加 `write_remote` ⇒ 导入即抛，带副本 sha256 指纹与改前副本的对照读数）在 `temp/FIX6-F4.md` 的探针读数里。
     """
     from agentflow.tools import SIDE_EFFECTS_WRITE, _check_write_levels_are_registered
     from agentflow.tools.base import SIDE_EFFECTS

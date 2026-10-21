@@ -104,15 +104,15 @@ def test_e8_every_family_has_a_name_rule_and_example():
 def test_e8_every_known_code_maps_to_a_family_and_an_example():
     """反真空（判据接上了没有）：每个在用的 code 都要有族号，且族号能渲染出正例。
 
-    ⚠️ **2026-10-15 改：这份清单不再手写，直接迭代 `CLAIM_FAMILY_BY_CODE`。**
+     2026-10-15 改：这份清单不再手写，直接迭代 `CLAIM_FAMILY_BY_CODE`。
     它此前是 12 个字符串的字面量，而 2026-10-13 新加的 `uncontrolled_disclaimer`
-    **没有**被补进那份字面量 ⇒ 这条"反真空"判据对它一个字都没查。
+    没有被补进那份字面量 ⇒ 这条"反真空"判据对它一个字都没查。
     手写清单做反真空是自相矛盾的：漏登记的那个 code 正是字面量里也没有的那个，
     于是"每个 code 都查过"这句话永远为真（同族：`test_lean_switch` 只断言到
     `claimanatomy` 那一层，没人跨到落据那一步）。
 
     现在真身只有一个（`claimanatomy.CLAIM_FAMILY_BY_CODE`），
-    末两行是**负控**：证明这个循环真的会失败，而不是恒真。
+    末两行是负控：证明这个循环真的会失败，而不是恒真。
     """
     known = CA.CLAIM_FAMILY_BY_CODE
     assert known, "族表是空的 —— 反真空判据会退化成恒真"

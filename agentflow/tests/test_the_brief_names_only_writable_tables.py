@@ -3,18 +3,12 @@
 
 ## 这条判据守的是什么（T4 第 6 趟 `t4f` 的真机读数）
 
-`t4f` 里 M 报了一条 `cannot`，逐字是：
-
-> D.write_report 落 `analysis_reports` | D 调用 write_report 6 次均返回 ok，
-> 但台账里没有一张表收得下它（`WRITE_SETS["D"]` 无 `analysis_reports`），属框架口径问题
-
-M 说得对：`analysis_reports` 是 C 的报告通道（`schema.REPORT_KINDS` 只收
-`hottest/paths/cold/gaps` 四档），D 的写集里没有它，`AgentD.write_report` 也只写
-`reports/<qid>-research.md` 那份 markdown、一张表都不写。而 D 的 `deliverable`
-当时逐字写着"analysis_reports 里的分析、结论、建议三层…" ⇒ 声明与权限面打架，
-M 照着声明去找那张表，找不到，只能记一条 `cannot`。代码那一层早就知道这件事
-（`agent_d/_support.py` 的 `report_landing_reading`，S-07 的裁定是"只加读数、不改硬契约"），
-但声明那一层没跟上。
+`t4f` 里 M 报了一条 `cannot`，逐字是：D.write_report 落 `analysis_reports` | D 调用 write_report 6 次均返回 ok，
+> 但台账里没有一张表收得下它（`WRITE_SETS["D"]` 无 `analysis_reports`），属框架口径问题M 说得对：`analysis_reports` 是 C
+的报告通道（`schema.REPORT_KINDS` 只收`hottest/paths/cold/gaps` 四档），D
+的写集里没有它，`AgentD.write_report` 也只写`reports/<qid>-research.md` 那份 markdown、一张表都不写。而 D 的
+`deliverable`当时逐字写着"analysis_reports 里的分析、结论、建议三层…" ⇒ 声明与权限面打架，M 照着声明去找那张表，找不到，只能记一条 `cannot`。
+代码那一层早就知道这件事（`agent_d/_support.py` 的 `report_landing_reading`，S-07 的裁定是"只加读数、不改硬契约"），但声明那一层没跟上。
 
 ## 判据的形状（全角色扫，成对）
 
@@ -22,7 +16,7 @@ M 照着声明去找那张表，找不到，只能记一条 `cannot`。代码那
 * 反真空①：扫到的表名总数必须足够（否则"没命中"只是因为扫描器没读到东西）；
 * 反真空②（对着判据本体做的负控）：拿一份故意越界的假声明喂给同一个函数 ⇒ 必须报出来；
 * 反真空③：`brief` 里别的字段（`duty`/`policy`/`stance`）不在这条判据的范围内 ——
-  它们谈的是做法，不是交付落点；判据只扫 `deliverable` 一格（免得读成"整份 brief 不许提别的表"）。
+它们谈的是做法，不是交付落点；判据只扫 `deliverable` 一格（免得读成"整份 brief 不许提别的表"）。
 """
 from __future__ import annotations
 

@@ -1,27 +1,18 @@
 """`P-8`：形式化路径真的能登记一条 `proof` 级实验（正控 + 三条负控）。
 
-## 这个文件补的是哪一段缺口
+补的是哪一段缺口：`AgentE.run_experiment` 此前只有"跑脚本 + 读脚本自报的结论"一条路径，而
+`build_experiment` 一个证据形状字段都不传 ⇒ 走到 `schema.Experiment.validate()` 必然抛
+（"evidence_kind='proof' 时必须给出 verifier_output"）⇒ E 登记不了一条 proof 级实验，与本机有没有
+Lean 无关。这里锁住的正是这条接线：`method="formal"` + .lean 产物 → `formalgw.check_lean` /
+`verify.check_formal`（唯一判据处）→ `verified=True` ⇒ `evidence_kind="proof"` +
+`verifier_subject_key == claim_key`；`verified!=True` ⇒ 一行都不许标成 proof（三态纪律）。
 
-`AgentE.run_experiment` 此前只有"跑脚本 + 读脚本自报的结论"一条路径，而
-`build_experiment` 一个证据形状字段都不传 ⇒ 走到 `schema.Experiment.validate()`
-必然抛（"evidence_kind='proof' 时必须给出 verifier_output"）⇒ E 登记不了
-一条 proof 级实验，与本机有没有 Lean 无关。这里锁住的正是这条接线：
+为什么每条负控都要有：数值脚本走同一条 `run_experiment` ⇒ 必须仍是 `cross_check`（FC-22 不许放松）；
+检查器没查成 / 没通过 ⇒ 不许登记成 proof（"没查成"与"查了通过"是两件事）；`verifier_output` 为空 /
+`verifier_subject_key` 不等于 `claim_key` ⇒ schema 仍然抛（证明那两条硬约束没有被这次修法放松）。
 
-    method="formal" + .lean 产物 → verify.check_formal（唯一判据处）
-        verified=True  ⇒ evidence_kind="proof" + verifier_subject_key == claim_key
-        verified!=True ⇒ 一行都不许标成 proof（三态纪律）
-
-## 为什么每条负控都要有
-
-- 数值脚本走同一条 `run_experiment` ⇒ 必须仍是 `cross_check`（FC-22 不许放松）；
-- 检查器没查成 / 没通过 ⇒ 不许登记成 proof（"没查成"与"查了通过"是两件事）；
-- `verifier_output` 为空 / `verifier_subject_key` 不等于 `claim_key` ⇒ schema 仍然抛
-  （证明那两条硬约束没有被这次修法放松）。
-
-离线用例把检查器后端整体替换成桩（`formalgw.check_lean` 是唯一的运行接缝），
-真跑 Lean 的那一条在没有 `lean` 的环境里 skip —— 它证明的是"这条路径在本机
-真的能产出 proof"，而不是"桩能产出 proof"。
-"""
+离线用例把检查器后端整体替换成桩（`formalgw.check_lean` 是唯一的运行接缝），真跑 `lean` 的那一条
+在没有它的环境里 skip —— 它证明的是"这条路径在本机真的能产出 proof"，而不是"桩能产出 proof"。"""
 
 from __future__ import annotations
 
@@ -197,17 +188,14 @@ def test_the_proof_row_the_formal_path_writes_passes_the_selfreported_audit(
 ):
     """正控（`R2-AN-2`）：生产写入点写出的那条 proof 行必须通过事后审计。
 
-    为什么必须跑生产路径、而不是手搓一行：审计（`verify.selfreported_proof`）按
-    `notes` 里"声明名 <X>；"那一段认"检查器实际检查的是哪个声明"，
-    而那一段的唯一写入点是 `agent_e._declared_name_note`。
-    手搓一行只能证明"审计认得我拼的那段文本"；只有真跑一遍 `run_experiment`
-    才能证明写入点与读法确实对得上（这正是本仓踩过的
-    "把自检夹具算成生产写入点"那一类假绿的反面）。
+    为什么必须跑生产路径、而不是手搓一行：审计（`verify.selfreported_proof`）按 `notes` 里
+    "声明名 <X>；"那一段认"检查器实际检查的是哪个声明"，而那一段的唯一写入点是
+    `agent_e._declared_name_note`。手搓一行只能证明"审计认得我拼的那段文本"；只有真跑一遍
+    `run_experiment` 才能证明写入点与读法确实对得上（这正是本仓踩过的"把自检夹具算成生产写入点"
+    那一类假绿的反面）。
 
-    本行同时是 §41.1 那条陷阱的正控：`claim_key='probe-eq'` 而 Lean 声明是
-    `probe_eq`（Lean 标识符不许带连字符）—— 把判据绑到 `claim_key` 上，
-    这条完全合规的行会被判成"自报的 proof"。
-    """
+    本行同时是 §41.1 那条陷阱的正控：`claim_key='probe-eq'` 而 Lean 声明是 `probe_eq`（Lean 标识符
+    不许带连字符）—— 把判据绑到 `claim_key` 上，这条完全合规的行会被判成"自报的 proof"。"""
     from agentflow.agent_e import declared_name_of_notes
     from agentflow.verify import verify_all
 
@@ -465,7 +453,7 @@ def test_e12_formal_failure_tri_state_is_recovered_from_the_checker(
     noback = _run("noback", "no_backend")             # 本机起不了这次检查
 
     def _tri(tag: str) -> str:
-        """`tri_state` 是**行上**的读数（返回值里没有 `observations`）⇒ 读落库的那一行。"""
+        """`tri_state` 是行上的读数（返回值里没有 `observations`）⇒ 读落库的那一行。"""
         rows = [r for r in store.rows("experiments") if r.get("claim_key") == f"probe-{tag}"]
         assert rows, tag
         return str((rows[-1].get("observations") or {}).get("tri_state") or "")

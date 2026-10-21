@@ -1,39 +1,13 @@
 # -*- coding: utf-8 -*-
 """三处「LLM 的工作结果到不了账本」的结构性缺口：判据 + 负控（2026-10-08）。
 
-这个文件是新加的判据，不改任何既有的判据，也不重冻快照。每一处都写清
-"改前必红"的形态与"改后断言什么"，并给一条负控（证明判据不是恒真）。
+这个文件是新加的判据，不改任何既有的判据，也不重冻快照。每一处都写清"改前必红"的形态与"改后断言什么"，并给一条负控（证明判据不是恒真）。
 
-## 缺口 1（真丢）：原生工具面下 `framework_final` 的 `notify` 到不了循环
+缺口 1（真丢）：原生工具面下 `framework_final` 的 `notify` 到不了循环。`llmseam.META_FUNCTIONS` 里 `framework_final` 的参数 schema 先前只有 `final` / `evidence`，而 `ToolFace.to_shape` 翻这个形状时只重建这两个键、其余参数静默丢弃 ⇒ 提示词（`agent_prompts.py` §7）要求非 M 角色收工填的 `notify`（交接手稿那一栏）在原生工具面下结构上给不出来。改法：schema 补 `notify`（字段表与 `agent_loop.NOTIFY_FIELDS` 同源），`to_shape` 原样透传（缺省时不凭空造一个空表）。
 
-`llmseam.META_FUNCTIONS` 里 `framework_final` 的参数 schema 先前只有
-`final` / `evidence`，而 `ToolFace.to_shape` 翻这个形状时只重建这两个键、
-其余参数静默丢弃 ⇒ 提示词（`agent_prompts.py` §7）要求非 M 角色收工填的
-`notify`（交接手稿那一栏）在原生工具面下结构上给不出来。
+缺口 2（真丢）：收工那一步不落 `agent_step` ⇒ notify / evidence / 读数不落盘。`agent_loop.AgentLoop.run` 的 `shape == "final"` 那一支在 `break` 之前只 append 到内存 `run.steps`，而 `agent_step` 事件落在 `break` 之后的公共尾段落 ⇒ 收工这一步的事件一条都没有（`tests/test_status_report.py` 那条 `len(steps) == 2 and len(run.steps) == 3` 把这个形态逐字钉着）。实测后果：`agent_run_end` 的键集里没有 `evidence` / `notes` / 收工那一步的载荷，模型填的 `notify` 只活在内存里。改法：不走"给 final 补一条 `agent_step`"（那会让 `resume_transcript` 重建的简报多一行、与当时那一份不再逐字相等 —— 代价更大），而是把 `evidence` / `notes` / `final_payload` 三个键落进 `agent_run_end`。
 
-改法：schema 补 `notify`（字段表与 `agent_loop.NOTIFY_FIELDS` 同源），
-`to_shape` 原样透传（缺省时不凭空造一个空表）。
-
-## 缺口 2（真丢）：收工那一步不落 `agent_step` ⇒ notify / evidence / 读数不落盘
-
-`agent_loop.AgentLoop.run` 的 `shape == "final"` 那一支在 `break` 之前只 append
-到内存 `run.steps`，而 `agent_step` 事件落在 `break` 之后的公共尾段落 ⇒
-收工这一步的事件一条都没有（`tests/test_status_report.py` 那条
-`len(steps) == 2 and len(run.steps) == 3` 把这个形态逐字钉着）。
-实测后果：`agent_run_end` 的键集里没有 `evidence` / `notes` / 收工那一步的载荷，
-模型填的 `notify` 只活在内存里。
-
-改法：不走"给 final 补一条 `agent_step`"（那会让 `resume_transcript` 重建的简报
-多一行、与当时那一份不再逐字相等 —— 代价更大），而是把 `evidence` / `notes` /
-`final_payload` 三个键落进 `agent_run_end`。
-
-## 缺口 3（真会丢）：`except Exception: secretary = None` 无日志无事件
-
-`run_role` 里秘书装配失败是 fail-open（这一趟照跑），但那一支此前不留任何痕迹：
-之后每次 `handoff` 都返回 `ok is False`，而盘上读不出"哪一步、因为什么没装配"。
-
-改法：与既有风格一致 —— 落一条 `agent_note` 事件 + 把同一句话并进 `run.notes`。
-"""
+缺口 3（真会丢）：`except Exception: secretary = None` 无日志无事件。`run_role` 里秘书装配失败是 fail-open（这一趟照跑），但那一支此前不留任何痕迹：之后每次 `handoff` 都返回 `ok is False`，而盘上读不出"哪一步、因为什么没装配"。改法：与既有风格一致 —— 落一条 `agent_note` 事件 + 把同一句话并进 `run.notes`。"""
 from __future__ import annotations
 
 import json
@@ -208,18 +182,12 @@ def _run(tmp_path: pathlib.Path, replies: list[dict], *, role: str = "D",
 
 def test_the_closing_notify_and_conclusion_reach_the_ledger(tmp_path: pathlib.Path):
     """正控（缺口 2 的主判据）：`stop_reason == "final"` 的一趟跑完之后，
+
     盘上（`agent_run_end` 事件里）找得到模型那一步的 `notify` 与最终结论。
 
-    改前必红（实测）：`agent_run_end` 的键集是
-    `{elapsed_sec, final, final_chars, final_sha256, handoffs, kind, messages,
-      notify_rejections, role, spend, steps, stop_reason, summons, ts, waiting_for}`
-    —— 没有 `evidence` / `notes` / 收工那一步的载荷；盘上 `agent_step` 0 条。
-    `notify` 那句话只能从"框架代发的留言"里读到，而"模型自己填了什么"读不到。
+    改前必红（实测）：`agent_run_end` 的键集是 `{elapsed_sec, final, final_chars, final_sha256, handoffs, kind, messages, notify_rejections, role, spend, steps, stop_reason, summons, ts, waiting_for}` —— 没有 `evidence` / `notes` / 收工那一步的载荷；盘上 `agent_step` 0 条。`notify` 那句话只能从"框架代发的留言"里读到，而"模型自己填了什么"读不到。
 
-    反负控（"不是随便哪个地方出现过就算"）：命中的那一条事件必须是
-    `agent_run_end`，且原文在它的 `final_payload.notify` 里 —— 不是从手稿账本或
-    留言里捞出来的。
-    """
+    反负控（"不是随便哪个地方出现过就算"）：命中的那一条事件必须是 `agent_run_end`，且原文在它的 `final_payload.notify` 里 —— 不是从手稿账本或留言里捞出来的。"""
     ws, run = _run(tmp_path, [{"text": json.dumps(
         {"final": "模型给的收工结论：这三条断言证据最弱", "evidence": ["exp:0007"],
          "notify": NOTIFY}, ensure_ascii=False)}])

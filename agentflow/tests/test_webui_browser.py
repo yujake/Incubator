@@ -1,39 +1,22 @@
 # -*- coding: utf-8 -*-
 """浏览器端到端判据（裁定 F1：Playwright，opt-in）。
-
 ## 怎么跑（默认不跑）
-
-    pip install -e ".[browser]"     # pyproject 的 optional-dependencies: browser
-    playwright install chromium     # 浏览器装在用户目录，不进仓
-    python -m pytest -q -m browser tests/test_webui_browser.py
-
-默认排除由 `pyproject.toml` 的 `addopts = "-m 'not network and not browser'"` 那一行
-负责（`draft/79` 的 T1 那条不一致已由主控落地修掉）。这个文件自己再挂一次
-`pytestmark`，是为了"单独点这个文件跑"时也走同一条口径。
-
+pip install -e ".[browser]"     # pyproject 的 optional-dependencies: browser playwright install chromium     #
+浏览器装在用户目录，不进仓python -m pytest -q -m browser tests/test_webui_browser.py
+默认排除由 `pyproject.toml` 的 `addopts = "-m 'not network and not browser'"` 那一行负责（`draft/79` 的 T1 那条不一致已由主控落地修掉）。
+这个文件自己再挂一次`pytestmark`，是为了"单独点这个文件跑"时也走同一条口径。
 ## 没装就是 `unknown` 不是 `pass`
-
-`playwright` 没装 ⇒ 整个模块 `skip`，理由逐字写明这是 unknown 不是 pass
-（与 `-m network`、发布门 `unknown` 的处置同一条纪律：没查成不许记成通过）。
-本文件第一版写的时候一次都没跑过（当时本机既没 playwright 也没浏览器），
-这一点当时写在报告里，没有假装它绿过。
-
-2026-10-13（R88）起本机能真跑了：`pip install playwright` + 本机自带的
-Microsoft Edge（`_launch()` 的第二条路，`channel="msedge"`）。这一天真跑过
-`python -m pytest -q -m browser tests/test_webui_browser.py`，读数记在那一轮的报告里。
-没装浏览器的机器上它照旧 `skip`（unknown，不是 pass）。
-
+`playwright` 没装 ⇒ 整个模块 `skip`，理由逐字写明这是 unknown 不是 pass（与 `-m network`、发布门 `unknown` 的处置同一条纪律：没查成不许记成通过）。
+本文件第一版写的时候一次都没跑过（当时本机既没 playwright 也没浏览器），这一点当时写在报告里，没有假装它绿过。
+2026-10-13（R88）起本机能真跑了：`pip install playwright` + 本机自带的Microsoft Edge（`_launch()` 的第二条路，`channel="msedge"`）。
+这一天真跑过`python -m pytest -q -m browser tests/test_webui_browser.py`，读数记在那一轮的报告里。没装浏览器的机器上它照旧 `skip`（unknown，不是 pass）。
 ## 三条实况（写判据时量到的，决定了下面哪些格是 skip）
-
 1. `GET /` 现在由 SPA 外壳提供（裁定 P1 的第一块，2026-10-07 落地）；`views.py` 已整件退场，
-   所以浏览器里 `#app` 那一层只在 SPA 回退路径（`/machine` 这类客户端路由，
-   请求头带 `Accept: text/html`）上才挂得起来。
-2. Machine 页的"写设置表单"与 Run 页的"叫停按钮"**已经不是空壳了**（R81 起）：
-   下面那两条原先 `skip` 的判据已经换成真断言 —— 设置表单永不回填 key、且 key 那一格
-   是 `type=password`；叫停按钮第一次点击只"上膛"，盘上零改动。
+所以浏览器里 `#app` 那一层只在 SPA 回退路径（`/machine` 这类客户端路由，请求头带 `Accept: text/html`）上才挂得起来。
+2. Machine 页的"写设置表单"与 Run 页的"叫停按钮"已经不是空壳了（R81 起）：
+下面那两条原先 `skip` 的判据已经换成真断言 —— 设置表单永不回填 key、且 key 那一格是 `type=password`；叫停按钮第一次点击只"上膛"，盘上零改动。
 3. 九页的逐页核对（R88）走真浏览器：每页都要挂起来、控制台不许有 error、
-   正文里不许出现 markdown 记号（`**`；密钥掩码 `***` 不算）。
-   写面本身的浏览器侧读数（真浏览器来源去打那几个端点）见下面第 4/5/6 条。
+正文里不许出现 markdown 记号（`**`；密钥掩码 `***` 不算）。写面本身的浏览器侧读数（真浏览器来源去打那几个端点）见下面第 4/5/6 条。
 """
 
 from __future__ import annotations
@@ -73,7 +56,7 @@ def _workspace(tmp_path: pathlib.Path) -> Iterator[pathlib.Path]:
     R88 修正：这一支原先写的是 `return root`，可是它挂着 `@contextmanager` ——
     生成器函数里 `return` 等于立刻收工，`contextlib` 拿到的是一个 `WindowsPath`
     而不是迭代器，于是每一条用例都在 `with` 那一行炸 `TypeError`。
-    这个错误之所以能一直躺在这里，是因为本模块**从来没有被跑过**（没装 playwright
+    这个错误之所以能一直躺在这里，是因为本模块从来没有被跑过（没装 playwright
     就整模块 skip）。2026-10-13 装上 playwright 真跑，第一条就露了。
     """
     root = tmp_path / "ws"
@@ -87,7 +70,7 @@ EDGE = pathlib.Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.e
 
 
 def _launch_kwargs() -> dict[str, str]:
-    """挑一条起浏览器的路：**先看盘上有什么**，而不是"先起一次、失败再换一条"。
+    """挑一条起浏览器的路：先看盘上有什么，而不是"先起一次、失败再换一条"。
 
     为什么必须先在盘上判（2026-10-13 实测）：在同一个 `sync_playwright()` 上下文里
     让 `launch()` 失败一次，驱动的事件循环就废了 —— 后面每一次 `page.goto` 都报
@@ -131,7 +114,7 @@ def _live(root: pathlib.Path, *, allow_writes: bool = True,
     R88 修正（同一处"没跑过所以没露"的坑）：收工顺序必须由我们自己定 ——
     `sync_playwright()` 用 `with` 写在这里的话，生成器一 `yield` 就出了那个 `with`，
     等用例跑完再恢复时驱动已经 `stop()`，`browser.close()` 于是报
-    `Event loop is closed!`，**每条用例都在收尾时炸**（看上去像产品缺陷）。
+    `Event loop is closed!`，每条用例都在收尾时炸（看上去像产品缺陷）。
     所以改成显式 `start()/stop()`：先关浏览器、再停驱动、最后关服务。
     """
     srv = W.serve(root, host="127.0.0.1", port=0, allow_writes=allow_writes,
@@ -319,7 +302,7 @@ def test_the_settings_form_is_never_prefilled_with_the_key(
 
     这一条原先 `skip`（Machine 页当时还是 W0 空壳）。R81 起设置表单落地，
     于是把它换成真断言，量三件事：
-    1. 后端读了设置文件之后，那一格仍然是**空的** —— 读数是 `***`，回填等于把
+    1. 后端读了设置文件之后，那一格仍然是空的 —— 读数是 `***`，回填等于把
        `***` 写回文件（`ui/src/pages/Machine.tsx` 的 `presetOf` 特意把这一格排除）；
     2. 那一格的 `type` 是 `password`（输入时不上屏）；
     3. 盘上那份真 key 在整页 HTML 里一个字都不出现。
@@ -356,7 +339,7 @@ def test_the_lean_switch_really_flips_it(
     业主 2026-10-13 的原话是「lean 开关网页上没法真的开关」。取证结论：后端一直是好的
     （`POST /api/settings` 写 `toolchain.lean_enabled=true` 之后 `settings.lean_enabled()`
     立刻回 `(True, "settings")`），缺的是台面 —— 这一页原先只画 `lean_ready`
-    （机器装没装）与 `can_do_formal`，**不画也不给**那个开关。
+    （机器装没装）与 `can_do_formal`，不画也不给那个开关。
 
     这一条从页面上点下去，一路量到三处：盘上那份设置文件、`settings.lean_enabled()`
     这个唯一口径、以及页面刷新后的读数（按钮的可用态就是读数的镜子）。
@@ -364,7 +347,7 @@ def test_the_lean_switch_really_flips_it(
     target = tmp_path / "settings.json"
     monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
     monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
-    # 盘上先有一份**没有** `lean_enabled` 那一格的设置文件：这正是最常见的情形
+    # 盘上先有一份没有 `lean_enabled` 那一格的设置文件：这正是最常见的情形
     # （开关缺省 = 关），也正是"盘上没写"与"没读到"必须分得开的那一格。
     target.write_text(json.dumps({"toolchain": {"lean_bin": "_env/lean/bin"}}),
                       encoding="utf-8")
@@ -404,11 +387,11 @@ def test_the_page_says_when_the_env_var_overrides_the_lean_switch(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """环境变量压着设置文件时，页面必须说出来（R90）。
 
-    `settings.lean_enabled()` 的取值梯子是 **环境变量 > 设置文件 > 缺省**（唯一口径）。
-    带着 `AGENTFLOW_LEAN_ENABLED=1` 起服务时，网页上写设置文件**不会**改变这一档 ——
+    `settings.lean_enabled()` 的取值梯子是 环境变量 > 设置文件 > 缺省（唯一口径）。
+    带着 `AGENTFLOW_LEAN_ENABLED=1` 起服务时，网页上写设置文件不会改变这一档 ——
     这正是"我改了，它不动"最容易发生的地方，所以页面上必须写清，而不是让用户以为开关坏了。
 
-    两处读数一起量：页面上那句提醒在，且**写完之后**唯一口径仍然回 `env`。
+    两处读数一起量：页面上那句提醒在，且写完之后唯一口径仍然回 `env`。
     """
     target = tmp_path / "settings.json"
     monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
@@ -434,18 +417,14 @@ def test_the_page_says_when_the_env_var_overrides_the_lean_switch(
 
 def test_no_settings_input_is_prefilled_with_the_word_unknown(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """设置窗口那几格不许被填上字面量 `unknown`（R90，这一条是业主报的那件事的真身）。
+    """    设置窗口那几格不许被填上字面量 `unknown`（R90，这一条是业主报的那件事的真身）。
 
-    取证（本机 2026-10-13，真浏览器读输入框的 `value`）：盘上没写的四格
-    —— `toolchain.coq_bin` / `toolchain.isabelle_bin` / `toolchain.lean_enabled` /
-    `workspace.projects_dir` —— **全被填上了 `unknown`**。原因是输入框初值走了
-    `currentOf()` → `field()` → `cell()`，而 `cell("")` 的口径是 `unknown`
-    （那一套是给读数表用的）。用户一按「写这些设置」，盘上就多出
-    `lean_enabled: "unknown"` 这类值：`settings.lean_enabled()` 对词表外的值**抛错**，
-    开关从此读不出来 —— 「lean 开关网页上没法真的开关」正是这一条。
+    取证（本机 2026-10-13，真浏览器读输入框的 `value`）：盘上没写的四格—— `toolchain.coq_bin` / `toolchain.isabelle_bin` /
+    `toolchain.lean_enabled` /`workspace.projects_dir` —— 全被填上了 `unknown`。原因是输入框初值走了`currentOf()` → `field()` →
+    `cell()`，而 `cell("")` 的口径是 `unknown`（那一套是给读数表用的）。用户一按「写这些设置」，
+    盘上就多出`lean_enabled: "unknown"` 这类值：`settings.lean_enabled()` 对词表外的值抛错，开关从此读不出来 —— 「lean 开关网页上没法真的开关」正是这一条。
 
-    这一条量两处：每一格的 `value` 只能是"盘上真有的值"或空串；按一次「写这些设置」
-    之后，盘上那份文件里**只多出用户真填的那一格**，一个 `unknown` 都不许落盘。
+    这一条量两处：每一格的 `value` 只能是"盘上真有的值"或空串；按一次「写这些设置」之后，盘上那份文件里只多出用户真填的那一格，一个 `unknown` 都不许落盘。
     """
     target = tmp_path / "settings.json"
     monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
@@ -519,7 +498,7 @@ def test_the_stop_button_asks_for_confirmation_before_calling_stop(
 
     这一条原先 `skip`（当时没有可点的叫停按钮）。R88 起 Run 页的「停机」卡片有
     真按钮（`POST /api/stop`），于是量真行为：第一次点击只"上膛"（页面上出现
-    「确认叫停这一趟」并把影响写出来），盘上**零改动**；第二次点击才落停机开关，
+    「确认叫停这一趟」并把影响写出来），盘上零改动；第二次点击才落停机开关，
     并且写台账多一行。
     """
     with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
@@ -544,7 +523,7 @@ def test_the_budget_set_button_really_writes_the_register(tmp_path: pathlib.Path
     （`POST /api/budget` 的 `action=set` 实测 200），坏的是前端：原先靠一个原生
     `select` 切动作，选完再按同一个按钮 —— 那一下在浏览器里切不过去。R81 改成两个
     各自带 action 的 `ConfirmButton`。这条判据就从页面上点，一路量到盘上那份
-    `budget.json`，并且**顺带量"追加"那一支**（两条路子都通才算修好了）。
+    `budget.json`，并且顺带量"追加"那一支（两条路子都通才算修好了）。
 
     这一条不需要拦网络：改预算是纯本地写，不花钱、不起进程。
     """
@@ -581,21 +560,16 @@ def test_the_budget_set_button_really_writes_the_register(tmp_path: pathlib.Path
 
 # ============================================================ 6 两处"跟系统说话"的入口
 def test_the_chat_box_routes_the_message_by_state(tmp_path: pathlib.Path) -> None:
-    """对话框（R94，业主：「要把前端做成对话框」）：同一个输入框按当刻状态走对的那条路。
+    """    对话框（R94，业主：「要把前端做成对话框」）：同一个输入框按当刻状态走对的那条路。
 
-    量四条路，逐条对应一条真端点：
+    量四条路，逐条对应一条真端点：还没有会话 ⇒ 这一句起一趟（`POST /api/run`，`task=` 就是这句话）；
+    2. 这一段收过工、闲着 ⇒ 先把话记进收件箱（`POST /api/task`），再用
+    同一句话任务唤醒它（`POST /api/run` 带 `sid` + `resume=1`）——任务原文必须逐字相同（`resume_messages` 按它挑重建窗口，换了就是另一趟）；
+    3. M 在飞（会话里一条没配对的 `agent_run_start`）⇒ 只插话，不许顺手又起一趟；
+    4. 有提问在等回答 ⇒ `POST /answer`（带那一条自己的 qid + sid），
+    而且这一下真的落盘 —— 这一段不拦网络（回答不花钱）。
 
-    1. **还没有会话** ⇒ 这一句**起一趟**（`POST /api/run`，`task=` 就是这句话）；
-    2. **这一段收过工、闲着** ⇒ 先把话记进收件箱（`POST /api/task`），再用
-       **同一句话任务**唤醒它（`POST /api/run` 带 `sid` + `resume=1`）——
-       任务原文必须逐字相同（`resume_messages` 按它挑重建窗口，换了就是另一趟）；
-    3. **M 在飞**（会话里一条没配对的 `agent_run_start`）⇒ 只插话，不许顺手又起一趟；
-    4. **有提问在等回答** ⇒ `POST /answer`（带**那一条自己的** qid + sid），
-       而且这一下真的落盘 —— 这一段不拦网络（回答不花钱）。
-
-    ⚠️ `POST /api/run` 真打下去会**真起一趟**（花预算）：前三条把 `/api/run` 在页面里
-    拦下来喂一份真实形状的回执。拦的是**网络**，不是按钮 —— 按钮、两次确认、取数、
-    渲染走的还是页面自己那一条路。
+    `POST /api/run` 真打下去会真起一趟（花预算）：前三条把 `/api/run` 在页面里拦下来喂一份真实形状的回执。拦的是网络，不是按钮 —— 按钮、两次确认、取数、渲染走的还是页面自己那一条路。
     """
     import urllib.parse
 
@@ -625,7 +599,7 @@ def test_the_chat_box_routes_the_message_by_state(tmp_path: pathlib.Path) -> Non
 
     with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
         page = live["page"]
-        # 两条写端点都拦下来：`/api/run` 会**真起一趟**（花预算），`/api/task` 会**真写**
+        # 两条写端点都拦下来：`/api/run` 会真起一趟（花预算），`/api/task` 会真写
         # 一条插话 —— 它们在 `test_webui_writes.py` 里各有真读数的判据，这一条只量
         # "同一个框在四种状态下把话送到哪一条端点"。拦的是网络，不是按钮：
         # 按钮、两次确认、取数、渲染走的还是页面自己那一条路。
@@ -708,7 +682,7 @@ def test_every_page_mounts_clean_and_prints_no_markdown_markers(
         tmp_path: pathlib.Path) -> None:
     """逐页核对（R88）：九页都要挂起来、控制台不許有 error、正文里不許有 markdown 记号。
 
-    为什么这一条必须在真浏览器里：`**` 这类记号是**上屏之后**才看得见的缺陷 ——
+    为什么这一条必须在真浏览器里：`**` 这类记号是上屏之后才看得见的缺陷 ——
     本机 2026-10-13 就是这样逮到验收页那两处的（`reviewaccept` 的话被逐字打印）。
     静态扫源码只能守住前端那一半，后端产出的话只有渲染出来才知道。
 

@@ -190,21 +190,11 @@ def test_b9_a_refusal_does_not_leak_a_reservation(tmp_path, monkeypatch):
 def test_b12_the_digest_write_stays_inside_the_winner_transaction(tmp_path):
     """B12 的读数（"为什么它挪不出事务"）：输掉终态竞争的那一次不许改写摘要。
 
-    `finish` 在 `store.tx("tasks")` 体内调 `_write_task_digest`（写
-    `out/tasks/<id>.json`）。主控给的思路是"摘要内容进事务前就已知 ⇒ 可以挪到事务外"，
-    但挪出去会丢掉一件事：现在这次写是被事务内的读-判结果门住的
-    （`if row.get("status") in TERMINAL_STATUSES: return` —— 只有抢到终态的那一次
-    才走到写摘要那一行）。挪到事务外之后，幂等分支（后到的写者）也会写一遍，
-    于是输家可以覆盖赢家的摘要（同一个 task_id、两份不同的 payload）。
+    `finish` 在 `store.tx("tasks")` 体内调 `_write_task_digest`（写 `out/tasks/<id>.json`）。主控给的思路是"摘要内容进事务前就已知 ⇒ 可以挪到事务外"，但挪出去会丢掉一件事：现在这次写是被事务内的读-判结果门住的（`if row.get("status") in TERMINAL_STATUSES: return` —— 只有抢到终态的那一次才走到写摘要那一行）。挪到事务外之后，幂等分支（后到的写者）也会写一遍，于是输家可以覆盖赢家的摘要（同一个 task_id、两份不同的 payload）。
 
-    这一条钉的就是那个性质：对已结束的任务再调一次 `finish`（带不同 payload）⇒
-    盘上那份摘要逐字不变。它同时是"已决定的例外"的依据 ——
-    这条 I/O 不是"与台账无关的文件 I/O"，它的内容取决于事务内的那个判定。
+    这一条钉的就是那个性质：对已结束的任务再调一次 `finish`（带不同 payload）⇒ 盘上那份摘要逐字不变。它同时是"已决定的例外"的依据 —— 这条 I/O 不是"与台账无关的文件 I/O"，它的内容取决于事务内的那个判定。
 
-    顺带核实（主控要求）：`closing` 第八格 `artifact_ledger` 只数台账行
-    （`missing` / `unreadable` / `changed` 都相对"登记过的产物"算），不扫盘上多出来的
-    文件 ⇒ 这条例外不会在那一格里造出 `missing` / `changed` 读数。
-    """
+    顺带核实（主控要求）：`closing` 第八格 `artifact_ledger` 只数台账行（`missing` / `unreadable` / `changed` 都相对"登记过的产物"算），不扫盘上多出来的文件 ⇒ 这条例外不会在那一格里造出 `missing` / `changed` 读数。"""
     cond = _conductor_with(tmp_path, _BlockingBackend(1), max_concurrency=2)
     # 造一条还在 running 的行（走 `summon` 的话它当场就落终态了，测不到 `finish`）
     from agentflow import schema as S

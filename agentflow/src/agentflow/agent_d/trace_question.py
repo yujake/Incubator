@@ -9,25 +9,14 @@ from ._support import EvidenceError, Mapping
 class _TraceQuestion:
     def trace_question(self, qid: str) -> dict:
         """L1→L2（按需 L3）溯源，返回证据包（§4.3）。
-
-        - L1：``relation_id`` → ``quote`` / ``description`` / ``page_range``；
-        - L2：``concept_id`` → 概念定义 + 它参与的全部关系的表述；
-        - L3：``lit_id`` → 文献元数据 + 本地文件 + 正文片段。
-
-        L3 是按需的（贵）：只有当"证据互相矛盾"或"要写结论却没有一条
-        ``quote_verified=True`` 的关系"时才下钻。这两个条件都是可核实的，
-        不做"感觉需要更多细节"这种判断。
-
-        工具调用一律走 ``self.tools.call``：如果 ``trace_tools`` 还没写好，
-        本方法用的是内置降级替身（``trace_mode="fallback"``），返回的证据形状
-        与真身一致，因此 D 的后续步骤不需要分支。
-
-        Raises
-        ------
-        EvidenceError
-            研究问题 ``qid`` 不在 ``research_questions`` 表里。显式列出
-            而不是让它隐式逃逸：调用方（``pipeline``/``cli``）要能区分
-            "问题号写错了"（调用方 bug，应立刻停）与"证据不足"（业务状态）。
+        - L1：``relation_id`` → ``quote`` / ``description`` / ``page_range``；- L2：
+        ``concept_id`` → 概念定义 + 它参与的全部关系的表述；- L3：``lit_id`` → 文献元数据 + 本地文件 + 正文片段。
+        L3 是按需的（贵）：只有当"证据互相矛盾"或"要写结论却没有一条``quote_verified=True`` 的关系"时才下钻。这两个条件都是可核实的，不做"感觉需要更
+        多细节"这种判断。
+        工具调用一律走 ``self.tools.call``：如果 ``trace_tools`` 还没写好，本方法用的是内置降级替身（``trace_mode="fallback"``），
+        返回的证据形状与真身一致，因此 D 的后续步骤不需要分支。
+        Raises------EvidenceError 研究问题 ``qid`` 不在 ``research_questions`` 表里。显式列出而不是让它隐式逃逸：调用方（``pipeline``
+        /``cli``）要能区分"问题号写错了"（调用方 bug，应立刻停）与"证据不足"（业务状态）。
         """
         qrow = next((r for r in self.store.rows("research_questions") if r.get("question_id") == qid), None)
         if qrow is None:

@@ -1,17 +1,9 @@
 # -*- coding: utf-8 -*-
-"""`statements` / `dependencies` 只经秘书：正路接通了、野路被封了（带负控）。
-
-## 这一份在治什么（`projects/mp2/sessions/mp2-7.jsonl` 的活证据）
-
-- 第 94 行：B 调 `register_statement` ⇒ `{"ok": false, "meta": {"kind": "unknown_tool"}}`
-  —— 那个名字**不在它的工具面上**。原因是装配漏了一格：`LlmBackend` 只在"派活点了动作"
-  时把动作包成工具（`agent_loop.py` 的 `if str(action):`），而真机的派活是 S2 口径的
-  「只派活、不指定能力」（`tasks.action=""`）⇒ 注入一次都没发生。
-- 第 97 行：B 改走 `table.create(table="statements")`，**手写** `evidence_kind="heuristic"`
-  与 `bits={}`。于是秘书那四件活（洗格式 / 发编号 / 查重 / 改表）与五元位一件没跑，
-  而 `stmt:000003` 明明有 1909 字证明、V 也签了「成立」，档位却停在 `heuristic`。
-
-## 三条判据（每条都带负控 —— 没有负控的绿证明不了任何事）
+"""`statements` / `dependencies` 只经秘书：正路接通了、野路被封了（带负控）。这一份在治什么（`projects/mp2/sessions/mp2-7.jsonl` 的活证据）：第 94 行：B 调
+`register_statement` ⇒ `{"ok": false, "meta": {"kind": "unknown_tool"}}`—— 那个名字不在它的工具面上。
+原因是装配漏了一格：`LlmBackend` 只在"派活点了动作"时把动作包成工具（`agent_loop.py` 的 `if str(action):`），而真机的派活是 S2 口径的「只派活、不指定能力」（`tasks.action=""`）⇒
+注入一次都没发生。- 第 97 行：B 改走 `table.create(table="statements")`，手写 `evidence_kind="heuristic"`与 `bits={}`。于是秘书那四件活（洗格式 / 发编号 / 查重 / 改表）
+与五元位一件没跑，而 `stmt:000003` 明明有 1909 字证明、V 也签了「成立」，档位却停在 `heuristic`。三条判据（每条都带负控 —— 没有负控的绿证明不了任何事）：
 
 | 判据 | 它要的红 |
 |---|---|
@@ -21,16 +13,10 @@
 | ③b 负控：把正路 patch 回"模型手写字段" | ① 的读数必须红（同一组断言，换一条路就判不过） |
 | ③c 负控（升档那一格）：把秘书的升档 patch 掉 | ① 的 `evidence_kind` 必须退回 `heuristic` |
 
-## 为什么 ① 要走"两趟"（先 heuristic、V 签完再交一次）
-
-真机里不可能"先有签名再落行"：`verifications/<命题号>.jsonl` 的键就是**落盘时才分配**
-的那个号。所以诚实的顺序是：① 落一行（那时没有签名 ⇒ 如实降档 `heuristic`）→
-② V 走查签名（`verifications.record_verification` 就是 `verify.verify_proof` 的写入口）→
-③ B 把同一份内容再交一次并把 `evidence_kind` 写强 ⇒ 秘书**改那一行**（不新建）。
-
-第三步就是"升档唯一的正路"：通用写口 `table.update("statements")` 被
-`store.direct_write_refusal` 拒了，而这条升档路不给出来，`evidence_kind` 在结构上
-永远到不了 `proof_review`（mp2 的那一行就是这么僵死的）。
+为什么 ① 要走"两趟"（先 heuristic、V 签完再交一次）：真机里不可能"先有签名再落行"：`verifications/<命题号>.jsonl` 的键就是落盘时才分配的那个号。所以诚实的顺序是：① 落一行（那时没有签名 ⇒ 如实降档
+`heuristic`）→② V 走查签名（`verifications.record_verification` 就是 `verify.verify_proof` 的写入口）→③ B 把同一份内容再交一次并把 `evidence_kind` 写强 ⇒
+秘书改那一行（不新建）。第三步就是"升档唯一的正路"：通用写口 `table.update("statements")` 被`store.direct_write_refusal` 拒了，而这条升档路不给出来，`evidence_kind` 在结构上永远到不了
+`proof_review`（mp2 的那一行就是这么僵死的）。
 """
 from __future__ import annotations
 
@@ -92,7 +78,7 @@ class _Scripted:
 
 
 def _world(tmp_path: pathlib.Path):
-    """一个工作区 + 一张**把 B 的真实现接在内层**的工具面（真机那条路的缩小版）。"""
+    """一个工作区 + 一张把 B 的真实现接在内层的工具面（真机那条路的缩小版）。"""
     st = Store(tmp_path / "ws")
     st.init()
     add_literature(st, S.format_id(0), title="Brown 1971")
@@ -107,7 +93,7 @@ def _world(tmp_path: pathlib.Path):
 
 
 def _drive(st, backend, *replies: str) -> dict[str, Any]:
-    """跑一趟「只派活、不点动作」的 B 循环（**空动作** = 真机的形状），返回结果。"""
+    """跑一趟「只派活、不点动作」的 B 循环（空动作 = 真机的形状），返回结果。"""
     gw = _Scripted(list(replies) + [json.dumps({"final": "done", "evidence": []},
                                                ensure_ascii=False)])
     backend.seam_factory = lambda role: LlmSeam(
@@ -128,7 +114,7 @@ def _landed(st: Store) -> dict[str, Any]:
 
 
 def _honest_problems(row: dict[str, Any]) -> list[str]:
-    """一条落盘行**作为"正路产出"**缺了什么（空列表 = 它确实是正路的产出）。
+    """一条落盘行作为"正路产出"缺了什么（空列表 = 它确实是正路的产出）。
 
     这三条就是判据 ①：`proof_text` 非空 + 有 V 的「成立」这一签之后，
     行上应当是 `evidence_kind="proof_review"`、`bits` 非空（五元位算出来了）、
@@ -170,16 +156,16 @@ def test_the_tool_call_lands_through_the_secretary(tmp_path):
     # 号来自唯一分配器（第一行 ⇒ 最小号），留痕是秘书 —— B 自己一次写工具都没调。
     assert row["stmt_id"] == S.format_id(0), row["stmt_id"]
     assert row["created_by"] == "secretary-B", row["created_by"]
-    # 五元位是**动作**现算的那一份（手写表那条路给的是 `{}`，见 ③b）
+    # 五元位是动作现算的那一份（手写表那条路给的是 `{}`，见 ③b）
     assert dict(row["bits"]), row["bits"]
     assert row["bits"].get("proof") is True, row["bits"]
     assert row["bits"].get("evidence", {}).get("proof_process"), row["bits"]
-    # 那一趟的真实事实：没有 V 的签名 ⇒ **弱档**（动作的默认档 `cross_check`；
+    # 那一趟的真实事实：没有 V 的签名 ⇒ 弱档（动作的默认档 `cross_check`；
     # 这一格不是失败，是"还没有那一签"的如实登记 —— 判据 ① 只管"签完之后它是不是
     # 变成 proof_review"）
     assert row["evidence_kind"] in ("heuristic", "cross_check"), row["evidence_kind"]
 
-    # ---- 第二段：V 签完之后把同一份内容再交一次 ⇒ 秘书**改那一行**（不新建）
+    # ---- 第二段：V 签完之后把同一份内容再交一次 ⇒ 秘书改那一行（不新建）
     _sign_off(st, row["stmt_id"], PROOF)
     again = _drive(st, backend,
                    _tool("own.register_statement", _payload(evidence_kind="proof_review")))
@@ -197,14 +183,14 @@ def test_the_tool_call_lands_through_the_secretary(tmp_path):
 
 
 def test_the_bare_action_name_also_reaches_the_route(tmp_path):
-    """正控之二（真机第 94 行那个形态）：模型按手册喊**短名**也能走通。
+    """正控之二（真机第 94 行那个形态）：模型按手册喊短名也能走通。
 
     `mp2-7.jsonl` 第 94 行模型喊的是 `register_statement`（它手册里的动作名），
     而工具面上那一件叫 `own.register_statement`（本仓工具名必须带点）⇒ 旧读数
-    `unknown_tool`。`agent_loop._do_tool` 现在把短名映到 `own.<短名>`（**只映到
-    这一趟注册表里已经有的那一件**，不打开任何权限），并留下 `aliased_from`。
+    `unknown_tool`。`agent_loop._do_tool` 现在把短名映到 `own.<短名>`（只映到
+    这一趟注册表里已经有的那一件，不打开任何权限），并留下 `aliased_from`。
 
-    这一条与上一条成对：上一条走真名、这一条走短名，落下来的必须是**同一条正路**
+    这一条与上一条成对：上一条走真名、这一条走短名，落下来的必须是同一条正路
     （秘书落盘、`bits` 由动作算、号由分配器给）。
     """
     st, cond, reg, backend = _world(tmp_path)
@@ -225,7 +211,7 @@ def test_the_bare_action_name_also_reaches_the_route(tmp_path):
 def test_the_wild_road_is_refused_with_the_route_spelled_out(tmp_path):
     """② 封路正控：`table.create("statements")` 直写 ⇒ 被拒，拒信逐字写出该走哪条路。
 
-    参数用的是 `mp2-7.jsonl` 第 97 行**逐字**那一份（手写 `evidence_kind` + `bits`）：
+    参数用的是 `mp2-7.jsonl` 第 97 行逐字那一份（手写 `evidence_kind` + `bits`）：
     判据要挡的正是那个形态，而不是一个抽象的表名。
     """
     st, cond, reg, backend = _world(tmp_path)
@@ -256,7 +242,7 @@ def test_the_store_commit_gate_is_the_second_lock(tmp_path, monkeypatch):
     """②b 结构性的那一半：不经过工具层、直接开一笔 `tool:` 事务 ⇒ 提交时同样被拒。
 
     为什么这一条必须单独在：工具层那一道只在"模型的手"上生效，而"明天有人新加一支
-    通用写工具"这件事工具层拦不住。`Store.tx` 的提交块是**所有写者的必经之路**
+    通用写工具"这件事工具层拦不住。`Store.tx` 的提交块是所有写者的必经之路
     （与 `_refuse_fake_proof_review` 同一段注释），所以判据也落在那里。
     """
     st = Store(tmp_path / "ws")
@@ -269,7 +255,7 @@ def test_the_store_commit_gate_is_the_second_lock(tmp_path, monkeypatch):
     assert "direct_write_refused" in str(exc.value), str(exc.value)
     assert st.rows("statements") == [], "提交期拒绝 ⇒ 一行都不落（不是落了一半）"
 
-    # 反真空：**删除**不受这条限制（它不制造证据）—— 别的 `tool:` 事务照旧能提交。
+    # 反真空：删除不受这条限制（它不制造证据）—— 别的 `tool:` 事务照旧能提交。
     with st.tx("literature", actor="tool", note="tool:table.delete:literature") as tx:
         tx.upsert("literature", S.Literature(lit_id=S.format_id(0), title="T", type="J",
                                              summary="s", path=None, added_at=TS).to_dict())
@@ -282,7 +268,7 @@ def test_the_store_commit_gate_is_the_second_lock(tmp_path, monkeypatch):
 def test_negative_control_patching_the_gate_reopens_the_wild_road(tmp_path, monkeypatch):
     """③a 负控：把封路钩子 patch 掉 ⇒ ② 变红（直写又通了，落下来的正是 mp2 那一行）。
 
-    它证明 ② 的绿是**这道钩子**带来的，不是"table.create 本来就写不进 statements"。
+    它证明 ② 的绿是这道钩子带来的，不是"table.create 本来就写不进 statements"。
     `direct_write_refusal` 是唯一口径（工具层与 `Store.tx` 提交块都调它），
     所以一处 patch 同时关掉两层 —— 这也是那条判据"只有一处"的用处。
     """
@@ -307,7 +293,7 @@ def test_negative_control_hand_written_fields_cannot_satisfy_the_positive_readin
     """③b 负控：把正路 patch 回"模型手写字段" ⇒ ① 的那组断言必须红。
 
     形态与 `mp2-7.jsonl` 第 97 行逐字相同：模型自己写 `evidence_kind` / `bits`。
-    绿的 ① 与红的这里用的是**同一个** `_honest_problems`（判据不经两套口径），
+    绿的 ① 与红的这里用的是同一个 `_honest_problems`（判据不经两套口径），
     所以"①绿"这件事除了"走的是正路"以外没有别的解释。
     """
     st, cond, reg, backend = _world(tmp_path)
@@ -336,7 +322,7 @@ def test_negative_control_without_the_upgrade_the_kind_stays_heuristic(tmp_path,
 
     这一格守的是"封了 `table.update` 之后，升档还有一条正路"这件事：
     少了它，`evidence_kind` 在结构上永远到不了 `proof_review`（mp2 的 `stmt:000003`
-    就是这么僵死的），而 ① 会在一个**看起来跑通了**的流程上变红。
+    就是这么僵死的），而 ① 会在一个看起来跑通了的流程上变红。
     """
     st, cond, reg, backend = _world(tmp_path)
     out = _drive(st, backend, _tool("own.register_statement", _payload()))

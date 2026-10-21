@@ -102,19 +102,15 @@ def _keys_to_run(keys: str, *, run_e2e: bool) -> tuple[str, list[str]]:
 
 
 def only_examples(doc: str) -> list[str]:
-    """抽出 docstring 里命令行示例中的 `--only` 取值（`R6-AN-1` 后半条）。
+    """    抽出 docstring 里命令行示例中的 `--only` 取值（`R6-AN-1` 后半条）。
 
-    旧口径有三个漏检面（都是实测出来的，不是推演）：它逐行扫、要求同一行里同时出现
-    字面 `release_all.py` 与 `--only`，于是 ① 续行写法抽不到；② `--only=role-specs`
-    （等号）抽不到；③ `python -m tools.release_all --only …`（不带 `.py`）抽不到。
-    抽不到就等于那个示例没人真跑，等于不查。
-
-    现在的口径把整段扫成命令行文本再正则取（只留命令行那些行）：
+    旧口径有三个漏检面（都是实测出来的，不是推演）：它逐行扫、要求同一行里同时出现字面 `release_all.py` 与 `--only`，于是 ① 续行写法抽不到；② `--only=role-specs`（等号）抽不到；
+    ③ `python -m tools.release_all --only …`（不带 `.py`）抽不到。抽不到就等于那个示例没人真跑，等于不查。现在的口径把整段扫成命令行文本再正则取（只留命令行那些行）：
 
     * 命令行行 = 含 `release_all` 的行、或顶格以 `--` 开头的行、或上一行以反斜杠续行的行
-      —— 于是 `release_all.py` 与 `--only` 不必在同一行；
+    —— 于是 `release_all.py` 与 `--only` 不必在同一行；
     * 散文一律排除在外：docstring 里那句"旧版这里举的例子是 `--only lint,role-specs`"
-      是引用，不是示例。把它当示例真跑会造出假红（本用例第一版就这么错过一次）。
+    是引用，不是示例。把它当示例真跑会造出假红（本用例第一版就这么错过一次）。
     """
     cmd_lines: list[str] = []
     cont = False
@@ -676,18 +672,14 @@ def test_cli_only_role_specs_passes_and_leaves_the_rest_unknown(tmp_path):
 
 
 def test_release_all_unknown_verdict_print_format_is_pinned():
-    """格式契约（`R6-AN-1`，`draft/28` §86.2）：`unknown` 这一档的打印形态必须被钉住。
+    """    格式契约（`R6-AN-1`，`draft/28` §86.2）：`unknown` 这一档的打印形态必须被钉住。
 
-    为什么这条要单独存在：下面那条 docstring 用例的判据 2/3 认的是字面
-    `[unknown] <key>`（它来自 `main()` 的小结行 `f"  [{r.verdict:7s}] {r.step.key:14s} …"`）。
-    在没有本条之前，那个字面量没有任何判据看着 —— 格式一改，判据 2/3 会静默变真空。
-    所以顺序是"先钉格式，后依赖格式"：本用例红 = 有人动了 `release_all` 的打印形态，
-    此时必须同步改 `UNKNOWN_LINE_FMT` 与那两条断言，而不是让它们悄悄空掉。
+    为什么这条要单独存在：下面那条 docstring 用例的判据 2/3 认的是字面`[unknown] <key>`（它来自 `main()` 的小结行
+    `f"  [{r.verdict:7s}] {r.step.key:14s} …"`）。在没有本条之前，那个字面量没有任何判据看着 —— 格式一改，判据 2/3 会静默变真空。所以顺序是"先钉格式，后依赖格式"：本用例红 =
+    有人动了 `release_all` 的打印形态，此时必须同步改 `UNKNOWN_LINE_FMT` 与那两条断言，而不是让它们悄悄空掉。
 
-    夹具：`--only role-specs --skip role-specs` 让六个步骤一个都不跑 ⇒ 小结行里
-    六个 key 全是 `unknown`（这是真的"没跑成"这一档，不是人造的字符串）。
-    跑的是进程内的 `R.main(...)`，不受子进程开销影响；被测的仍是
-    `tools/release_all.py` 里那段真正的打印代码。
+    夹具：`--only role-specs --skip role-specs` 让六个步骤一个都不跑 ⇒ 小结行里六个 key 全是 `unknown`（这是真的"没跑成"这一档，不是人造的字符串）。跑的是进程内的
+    `R.main(...)`，不受子进程开销影响；被测的仍是`tools/release_all.py` 里那段真正的打印代码。
     """
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -711,42 +703,24 @@ def test_release_all_unknown_verdict_print_format_is_pinned():
 
 
 def test_every_only_example_in_the_docstring_is_a_real_step_key():
-    """正控（`D3`）：模块 docstring 里出现的每个 `--only <keys>` 示例都必须真能跑。
+    """    正控（`D3`）：模块 docstring 里出现的每个 `--only <keys>` 示例都必须真能跑。
 
-    改前 docstring 里「唯一」的那个例子是 `--only lint,role-specs`，而 `lint`
-    不是步骤 key（它是 `release-check` 这一步里的第 5 项）⇒ 使用者照抄就直接
-    以退出码 2 失败，然后去猜键名。
+    改前 docstring 里「唯一」的那个例子是 `--only lint,role-specs`，而 `lint`不是步骤 key（它是 `release-check` 这一步里的第 5 项）⇒ 使用者照抄就直接以退出码
+    2 失败，然后去猜键名。这里把 docstring 逐个例子抽出来「真跑一遍」，判据是两条实质条件（不是退出码）：stderr 里不得出现 "未知的步骤 key"，且被点名的每个 key 都不得记成 unknown。判据
+    2/3 认的字面量是 `UNKNOWN_LINE_FMT`（`[unknown] <key>`），它是`release_all` 的打印形态 ——
+    那个形态由格式契约用例`test_release_all_unknown_verdict_print_format_is_pinned` 先钉住（`R6-AN-1`的处置顺序：先钉格式，后依赖格式），所以"打印排版一改，
+    这两条断言静默变真空"这条路是堵住的。这个用例里不再写第二份字面量。抽取口径见 `only_examples()`：不要求 `release_all.py` 与 `--only` 同行，容忍
+    `--only=role-specs` 与不带 `.py` 的 `python -m tools.release_all`（旧口径这三类都漏，而漏掉就等于不查）。为什么不能拿「退出码 != 2」
+    当判据：`--only` 是子集运行，未选中的步骤按 `H-5`记 `unknown`，而 `unknown` 就是退出码 2（三态 0/1/2）—— 2 在这条命令里既能表示"用法错误"、又能表示"跑通了但有步骤未知"，
+    拿它判别用法错误是两种含义混成一种。反面教材就在本文件下面那段注释里（2026-09-27 修）：旧判据`assert p.returncode != 2` 曾长期为真，原因是当时 `coverage` 那一关红着、
+    整体退出码是 1 —— 一条靠另一个门红了才通过的判据，`coverage` 修好后立刻暴露。用法错误的唯一判据是那句话本身（
+    见`test_cli_unknown_step_key_is_rejected_with_exit_two`）。
 
-    这里把 docstring 逐个例子抽出来「真跑一遍」，判据是两条实质条件（不是退出码）：
-    stderr 里不得出现 "未知的步骤 key"，且被点名的每个 key 都不得记成 unknown。
+    常规全量与端到端的分档（2026-10-07，所有者裁定"全量不该替别的门把它自己的工作重跑"）：示例点名的 key 凡落在 `HEAVY_STEP_KEYS` 里的，按 `SLOW_E2E_KEYS` 登记后常规不真跑，
+    只保留两条更便宜的判断 —— 它仍是合法步骤 key，以及"示例点名的重活恰好等于被摘出的那些"。想在本套件里端到端验一次，置 `AGENTFLOW_RUN_RELEASE_GATE_E2E=1`。
 
-    判据 2/3 认的字面量是 `UNKNOWN_LINE_FMT`（`[unknown] <key>`），它是
-    `release_all` 的打印形态 —— 那个形态由格式契约用例
-    `test_release_all_unknown_verdict_print_format_is_pinned` 先钉住（`R6-AN-1`
-    的处置顺序：先钉格式，后依赖格式），所以"打印排版一改，这两条断言静默变真空"
-    这条路是堵住的。这个用例里不再写第二份字面量。
-
-    抽取口径见 `only_examples()`：不要求 `release_all.py` 与 `--only` 同行，
-    容忍 `--only=role-specs` 与不带 `.py` 的 `python -m tools.release_all`
-    （旧口径这三类都漏，而漏掉就等于不查）。
-
-    为什么不能拿「退出码 != 2」当判据：`--only` 是子集运行，未选中的步骤按 `H-5`
-    记 `unknown`，而 `unknown` 就是退出码 2（三态 0/1/2）—— 2 在这条命令里既能表示
-    "用法错误"、又能表示"跑通了但有步骤未知"，拿它判别用法错误是两种含义混成一种。
-    反面教材就在本文件下面那段注释里（2026-09-27 修）：旧判据
-    `assert p.returncode != 2` 曾长期为真，原因是当时 `coverage` 那一关红着、
-    整体退出码是 1 —— 一条靠另一个门红了才通过的判据，`coverage` 修好后立刻暴露。
-    用法错误的唯一判据是那句话本身（见
-    `test_cli_unknown_step_key_is_rejected_with_exit_two`）。
-
-    常规全量与端到端的分档（2026-10-07，所有者裁定"全量不该替别的门把它自己的工作重跑"）：
-    示例点名的 key 凡落在 `HEAVY_STEP_KEYS` 里的，按 `SLOW_E2E_KEYS` 登记后常规不真跑，
-    只保留两条更便宜的判断 —— 它仍是合法步骤 key，以及"示例点名的重活恰好等于被摘出的那些"。
-    想在本套件里端到端验一次，置 `AGENTFLOW_RUN_RELEASE_GATE_E2E=1`。
-
-    摘出的代价如实写下：常规全量不再覆盖"发布门 coverage 步端到端跑得通"这一格。
-    它的覆盖落点是发布门自身（收工/发布时跑 `release_all.py` 的 coverage 步）与该判据
-    本体的自检文件。换来的是常规全量少一次 584 s 到 928.6 s 的重算（约占旧全量两成）。
+    摘出的代价如实写下：常规全量不再覆盖"发布门 coverage 步端到端跑得通"这一格。它的覆盖落点是发布门自身（收工/发布时跑 `release_all.py` 的 coverage 步）与该判据本体的自检文件。
+    换来的是常规全量少一次 584 s 到 928.6 s 的重算（约占旧全量两成）。
     """
     doc = R.__doc__ or ""
     examples = only_examples(doc)
@@ -979,21 +953,16 @@ _PER_FILE_EXPECT_SECONDS_OLD = 420
 
 
 def test_per_file_step_declares_the_measured_duration():
-    """判据（`PERF-02` / F11 同族）：per-file 步的耗时声明不得低于带时刻的实测。
+    """    判据（`PERF-02` / F11 同族）：per-file 步的耗时声明不得低于带时刻的实测。
 
-    为什么有这条（`PERF-02` 的纪律：不许用一个新的定值换旧的，也不许留一句假声明）：
-    `expect_seconds` 只用于打印、不参与判定，所以一句假声明留在表里没有任何门会红
-    —— 而读发布报告的人会以为这一步一两分钟就跑完。旧值 420 s 与实测 1082.0 s
-    差 2.6 倍：那不是"估算不准"，那是一句与事实不符的话。
+    为什么有这条（`PERF-02` 的纪律：不许用一个新的定值换旧的，也不许留一句假声明）：`expect_seconds` 只用于打印、不参与判定，所以一句假声明留在表里没有任何门会红——
+    而读发布报告的人会以为这一步一两分钟就跑完。旧值 420 s 与实测 1082.0 s差 2.6 倍：那不是"估算不准"，那是一句与事实不符的话。
 
-    来源（逐字，`agentflow/docs/NOAI-SUSPENSION-2026-09-28.md:139-140`，128 个文件）：
-    `3a) 逐文件（默认） exit=0 1082.0s` / `3b) 逐文件（Lean） exit=0 1115.7s`；
-    观察窗口在同一文件 `:132-133`（`2026-09-28T19:50:47` 起、`21:42:32` 止）。
-    改值由所有者授权、主控代改（1200 s，同量级；`tools/release_all.py` 在禁改区）,
-    判据这一侧由本文件补。
+    来源（逐字，`agentflow/docs/NOAI-SUSPENSION-2026-09-28.md:139-140`，128 个文件）：`3a) 逐文件（默认） exit=0 1082.0s` /
+    `3b) 逐文件（Lean） exit=0 1115.7s`；观察窗口在同一文件 `:132-133`（`2026-09-28T19:50:47` 起、`21:42:32` 止）。改值由所有者授权、主控代改（1200 s，
+    同量级；`tools/release_all.py` 在禁改区）,判据这一侧由本文件补。
 
-    负控是活体的：同一个 `_duration_claim_ok` 拿旧值 420 必须判否 ——
-    若有人把下限放宽到 420 以下，那条负控先红。
+    负控是活体的：同一个 `_duration_claim_ok` 拿旧值 420 必须判否 ——若有人把下限放宽到 420 以下，那条负控先红。
     """
     steps = {s.key: s for s in R.build_steps(REPO)}
     assert "per-file" in steps, sorted(steps)
@@ -1024,22 +993,16 @@ _ACCEPTANCE_EXPECT_SECONDS_OLD = 60
 
 
 def test_acceptance_step_declaration_is_not_below_the_known_readings():
-    """判据（F11 同族，弱档）：acceptance 的声明不得低于仓库里已有的读数。
+    """    判据（F11 同族，弱档）：acceptance 的声明不得低于仓库里已有的读数。
 
-    这一条与 coverage / per-file 那两条不同档，理由必须写清（否则就是拿弱证据
-    冒充强证据）：
-
-    - per-file：有带时刻的实测（`docs/NOAI-SUSPENSION-2026-09-28.md:139-140`，窗口
-      `2026-09-28T19:50:47–21:42:32`）⇒ 那两条是强判据，且逼出了 420 → 1200 的改值；
+    这一条与 coverage / per-file 那两条不同档，理由必须写清（否则就是拿弱证据冒充强证据）：per-file：
+    有带时刻的实测（`docs/NOAI-SUSPENSION-2026-09-28.md:139-140`，窗口
+    `2026-09-28T19:50:47–21:42:32`）⇒ 那两条是强判据，且逼出了 420 → 1200 的改值；
     - coverage：有 `draft/43-D` §0.3 的 928.6 s ⇒ 同样是强判据；
     - acceptance：只有两条没有观测时刻的运行读数（135.2 s / 132.7 s，
-      `draft/22` §12.19.1 与 §12.22.1 的 `release_all` 输出块，同引于
-      `docs/PROPOSALS.md:2984/3011`）⇒ 按主控 2026-10-02 的口径，这一步的声明值
-      未核实：不凭感觉调大、也不调小，`420` 原样保留。
-
-    于是这条判据只断言它能断言的那一件事：声明不得低于已有的读数（谁把它改成 60
-    这种"看起来很快"的数，这里必红）。它不声称 420 有实测背书 —— 那要等一条
-    带时刻的 acceptance 实测读数落进仓库。
+    `draft/22` §12.19.1 与 §12.22.1 的 `release_all` 输出块，同引于`docs/PROPOSALS.md:2984/3011`）⇒ 按主控 2026-10-02 的口径，
+    这一步的声明值未核实：不凭感觉调大、也不调小，`420` 原样保留。于是这条判据只断言它能断言的那一件事：声明不得低于已有的读数（谁把它改成 60这种"看起来很快"的数，这里必红）。它不声称 420 有实测背书 ——
+    那要等一条带时刻的 acceptance 实测读数落进仓库。
     """
     steps = {s.key: s for s in R.build_steps(REPO)}
     assert "acceptance" in steps, sorted(steps)
@@ -1054,18 +1017,13 @@ def test_acceptance_step_declaration_is_not_below_the_known_readings():
 
 
 def test_step_cancelled_is_a_base_exception_carrying_a_result():
-    """正控（`D5`）：`StepCancelled` 的「契约」是"带着三态结论的中断信号"。
+    """    正控（`D5`）：`StepCancelled` 的「契约」是"带着三态结论的中断信号"。
 
-    为什么这里只测契约、不试图让 `run_step` 真的抛它：「造不出来」（实测）。
-    在 Windows 上让子进程 `raise KeyboardInterrupt`，父进程拿到的只是
-    `rc=3221225786`（`0xC000013A` = `STATUS_CONTROL_C_EXIT`）—— 父进程的
-    `subprocess.run` 「不抛」 `KeyboardInterrupt`，于是 `run_step` 走的是
-    `classify(1, ...)` 那条路。也就是说 `except KeyboardInterrupt` 那一支
-    在真跑一个子进程时几乎到不了；它到得了的地方是"父进程自己被 Ctrl-C"
-    （`Popen.wait` 里抛上来）。所以这里分两条：
-    ① 本用例测「契约」（类层次 + 带 `Result`）；②
-    `test_main_records_keyboard_interrupt_with_a_tri_state_exit_code` 在进程内
-    注入它，测「记账」（`main()` 记 `unknown`、退出码 2）。
+    为什么这里只测契约、不试图让 `run_step` 真的抛它：「造不出来」（实测）。在 Windows 上让子进程 `raise KeyboardInterrupt`，
+    父进程拿到的只是`rc=3221225786`（`0xC000013A` = `STATUS_CONTROL_C_EXIT`）—— 父进程的`subprocess.run` 「不抛」 `KeyboardInterrupt`，
+    于是 `run_step` 走的是`classify(1, ...)` 那条路。也就是说 `except KeyboardInterrupt` 那一支在真跑一个子进程时几乎到不了；它到得了的地方是"父进程自己被
+    Ctrl-C"（`Popen.wait` 里抛上来）。所以这里分两条：① 本用例测「契约」（类层次 + 带 `Result`）；
+    ②`test_main_records_keyboard_interrupt_with_a_tri_state_exit_code` 在进程内注入它，测「记账」（`main()` 记 `unknown`、退出码 2）。
     """
     st = R.Step("s", "t", [sys.executable, "-c", "pass"], cwd=REPO,
                 exit_map=R.TRI_STATE_EXIT)
@@ -1138,18 +1096,14 @@ def test_main_records_keyboard_interrupt_with_a_tri_state_exit_code(tmp_path, mo
 
 
 def test_step_table_covers_exactly_the_six_named_checks():
-    """正向：用户点名的那六项都必须在步骤表里被覆盖，且步骤表不许悄悄多出步骤。
+    """    正向：用户点名的那六项都必须在步骤表里被覆盖，且步骤表不许悄悄多出步骤。
 
-    用户逐字要求的是"全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter"。
-    `scripts/release_check.py` 一次覆盖其中五项，唯独没有验收测试 ——
-    这正是本脚本存在的理由。
+    用户逐字要求的是"全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter"。`scripts/release_check.py` 一次覆盖其中五项，唯独没有验收测试
+    ——这正是本脚本存在的理由。
 
-    `T1`/`I-6`（登记在 `draft/28`）：旧版本这条只断言 `{...} <= keys`（子集），
-    而用例名说的是 `exactly` —— 往 `build_steps` 里加任意一个步骤，它完全无感。
-    现在两处都收紧：核心五项 + 三个结构性门（`role-specs` / `coverage` / `per-file`）
-    必须恰好是这八个；多一个少一个都红（`repro` 是论文独立复现，也在表里）。
-    之后又加了第九个 `frontend`（裁定 G2：前端产物新鲜度）—— 同样"恰好"，
-    所以往表里加步骤必须同步这一行（否则"加一步"变成静默行为）。
+    `T1`/`I-6`（登记在 `draft/28`）：旧版本这条只断言 `{...} <= keys`（子集），而用例名说的是 `exactly` —— 往 `build_steps` 里加任意一个步骤，它完全无感。
+    现在两处都收紧：核心五项 + 三个结构性门（`role-specs` / `coverage` / `per-file`）必须恰好是这八个；多一个少一个都红（`repro` 是论文独立复现，也在表里）。之后又加了第九个
+    `frontend`（裁定 G2：前端产物新鲜度）—— 同样"恰好"，所以往表里加步骤必须同步这一行（否则"加一步"变成静默行为）。
     """
     steps = R.build_steps(REPO)
     keys = [s.key for s in steps]
@@ -1593,22 +1547,16 @@ _MANIFEST_TABLE_RES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 
 def manifest_claim_problems(text: str, measured: dict[str, int]) -> list[str]:
-    """`DEVELOPMENT.md` 里每一处 `.noai-paths` 计数都必须等于实测（`R7-R6-2`）。
+    """    `DEVELOPMENT.md` 里每一处 `.noai-paths` 计数都必须等于实测（`R7-R6-2`）。
 
-    缺陷形态：同一个数在同一份文件里有两种值（`:933`/`:1200` 写 18/21+18，而
-    `:70`/`:264` 写 23/20），读者按错的那一处去数就会得出"台账漏了"的结论 ——
-    而这两个数正是判据五（禁改区台账）的输入口径。处置就是"同一口径只写一处，
-    其余各处由这条判据对账"：任何一处写了别的数，这里立刻点名。
+    缺陷形态：同一个数在同一份文件里有两种值（`:933`/`:1200` 写 18/21+18，而`:70`/`:264` 写 23/20），读者按错的那一处去数就会得出"台账漏了"的结论
+    ——而这两个数正是判据五（禁改区台账）的输入口径。处置就是"同一口径只写一处，其余各处由这条判据对账"：任何一处写了别的数，这里立刻点名。
 
-    覆盖面（如实写清边界）：带单位的写法（`N 条条目` / `N 条 glob` / `N 条唯一路径` /
-    `N 个分组` / `N 个类别`）与 §1.5 那张"三个数"表的三行都在判据里；
-    "台账条目数 / 欠签"两格刻意不在这里钉（它们量的是台账，不是清单，另一条口径）——
-    `G3` 的处置是：仍然不钉，但文档里那两处（`DEVELOPMENT.md` §1.5 / §0.1 与
-    `README.md` §6.2 / 文件树）都改成了"命令 + 观测时刻"，让读者能判它是不是当次值。
-    "要不要给台账计数也配一条判据"是口径决定（每签一个字就变），留给人裁决。
+    覆盖面（如实写清边界）：带单位的写法（`N 条条目` / `N 条 glob` / `N 条唯一路径` /`N 个分组` / `N 个类别`）与 §1.5 那张"三个数"表的三行都在判据里；"台账条目数 /
+    欠签"两格刻意不在这里钉（它们量的是台账，不是清单，另一条口径）——`G3` 的处置是：仍然不钉，但文档里那两处（`DEVELOPMENT.md` §1.5 / §0.1 与`README.md` §6.2 / 文件树）
+    都改成了"命令 + 观测时刻"，让读者能判它是不是当次值。"要不要给台账计数也配一条判据"是口径决定（每签一个字就变），留给人裁决。
 
-    另一条与它配套的判据是 `historical_marker_leak_problems`：本函数对带历史记号的行
-    整行跳过，所以"当前值 + 句尾一句更正说明"会把自己整行豁免掉 ⇒ 静默漂（`G3` 修的漏口）。
+    另一条与它配套的判据是 `historical_marker_leak_problems`：本函数对带历史记号的行整行跳过，所以"当前值 + 句尾一句更正说明"会把自己整行豁免掉 ⇒ 静默漂（`G3` 修的漏口）。
     """
     problems: list[str] = []
     hits = 0
@@ -1733,24 +1681,16 @@ _CURRENT_VALUE_ANCHORS: tuple[str, ...] = (
 
 
 def historical_marker_leak_problems(text: str) -> list[str]:
-    """当前值行被历史记号整行豁免 ⇒ 问题清单（`G3` 修的那个结构性漏口）。
+    """    当前值行被历史记号整行豁免 ⇒ 问题清单（`G3` 修的那个结构性漏口）。
 
-    为什么需要单独一条：`manifest_claim_problems`（以及 `rule_claim_problems` /
-    `tally_claim_problems`）对带 `_HISTORICAL_MARKERS` 的行整行跳过；而
-    "当前值 + 句尾一句更正说明"这种写法会把自己整行豁免掉 ——
-    于是数字漂了也没有任何东西会红。`G3` 实测到的形态就是这一条：
-    `DEVELOPMENT.md` §0.1 的 `.noai-paths` 那一行写了当前值 23/20/16/32，
-    句尾又带了「本条原写…」⇒ 整行退出对账 ⇒ 清单从 23 加到 26 时只有别处报红，这一处静默漂。
+    为什么需要单独一条：`manifest_claim_problems`（以及 `rule_claim_problems` /`tally_claim_problems`）对带
+    `_HISTORICAL_MARKERS` 的行整行跳过；而"当前值 + 句尾一句更正说明"这种写法会把自己整行豁免掉
+    ——于是数字漂了也没有任何东西会红。`G3` 实测到的形态就是这一条：`DEVELOPMENT.md` §0.1 的 `.noai-paths` 那一行写了当前值 23/20/16/32，句尾又带了「本条原写…」⇒
+    整行退出对账 ⇒ 清单从 23 加到 26 时只有别处报红，这一处静默漂。处置（两步，缺一不可）：① 把更正说明拆到另一段（当前值那一句不许带历史标记）；② 留一条判据看着"它没有被搬回去" ——
+    否则同一个漏口可以静默复发。本条就是第 ② 步。它与"判据变软"相反：它把判据的覆盖面从"行"精确到"当前值那一行"。
 
-    处置（两步，缺一不可）：
-     ① 把更正说明拆到另一段（当前值那一句不许带历史标记）；
-     ② 留一条判据看着"它没有被搬回去" —— 否则同一个漏口可以静默复发。
-    本条就是第 ② 步。它与"判据变软"相反：它把判据的覆盖面从"行"精确到"当前值那一行"。
-
-    口径：一行只要含 `_CURRENT_VALUE_ANCHORS` 里任一特征，就不许含任何一个历史记号。
-    一条锚点都没命中 ⇒ 报"失去对象"（删掉这些行不等于它们的数字是对的）。
-    单条锚点在文档里找不到 ⇒ 也报出来：锚点必须是那一行的「逐字副本」，
-    锚点自己漂了（例如把成对星号写成别的括号）就等于那一行的数字脱管。
+    口径：一行只要含 `_CURRENT_VALUE_ANCHORS` 里任一特征，就不许含任何一个历史记号。一条锚点都没命中 ⇒ 报"失去对象"（删掉这些行不等于它们的数字是对的）。单条锚点在文档里找不到 ⇒ 也报出来：
+    锚点必须是那一行的「逐字副本」，锚点自己漂了（例如把成对星号写成别的括号）就等于那一行的数字脱管。
     """
     problems: list[str] = []
     hits = 0
@@ -1853,22 +1793,16 @@ def _tests_index() -> dict[str, set[str]]:
 
 
 def doc_test_reference_problems(docs: dict[str, str]) -> list[str]:
-    """文档里点名的测试对象 vs 盘上事实 ⇒ 问题清单（`R7-R6-4`）。
+    """    文档里点名的测试对象 vs 盘上事实 ⇒ 问题清单（`R7-R6-4`）。
 
-    缺陷形态（`R7-R6-4` 实测）：`DEVELOPMENT.md` 的 `LIVE-READINGS` 导语点名
-    `test_documented_live_readings_match_the_repo`，而全仓没有这个名字 ——
-    判据其实在（真名见那一行），只是文档指不到 ⇒ 照着核对的人会得出相反的结论。
-    这与 `R6-AN-3`（文档指一个不存在的工具名）同族，所以处置也一样：让文档的每个
-    指路都被一条判据核过。
+    缺陷形态（`R7-R6-4` 实测）：`DEVELOPMENT.md` 的 `LIVE-READINGS` 导语点名`test_documented_live_readings_match_the_repo`，
+    而全仓没有这个名字 ——判据其实在（真名见那一行），只是文档指不到 ⇒ 照着核对的人会得出相反的结论。这与 `R6-AN-3`（文档指一个不存在的工具名）同族，所以处置也一样：让文档的每个指路都被一条判据核过。
 
-    口径：`tests/xxx.py::test_yyy` 要求文件与函数都在；裸 `test_xxx` 要求它至少能
-    解析成 `tests/test_xxx.py` 文件、或某个测试文件里的 `def test_xxx(`；裸名字若出现在
-    路径形态里（`tests/test_xxx.py`）而文件不在盘上，报的就是"点名的文件不存在" ——
-    读者照它去跑命令，跑不到是最直接的那一种坏。
-    一段文字里一个测试对象都没点名 ⇒ 报"失去对象"（空输入不许读成通过）。
+    口径：`tests/xxx.py::test_yyy` 要求文件与函数都在；裸 `test_xxx` 要求它至少能解析成 `tests/test_xxx.py` 文件、或某个测试文件里的 `def test_xxx(`；
+    裸名字若出现在路径形态里（`tests/test_xxx.py`）而文件不在盘上，报的就是"点名的文件不存在" ——读者照它去跑命令，跑不到是最直接的那一种坏。一段文字里一个测试对象都没点名 ⇒
+    报"失去对象"（空输入不许读成通过）。
 
-    `R6-AN-2` 的配套把 `NOAI-REVIEW-REGISTER.md` 加进了调用面的文档集合：它是一份历史档案
-    （见 `_DOC_TEST_REF_DOCS`），但那不表示它点名的命令可以指到不存在的东西。
+    `R6-AN-2` 的配套把 `NOAI-REVIEW-REGISTER.md` 加进了调用面的文档集合：它是一份历史档案（见 `_DOC_TEST_REF_DOCS`），但那不表示它点名的命令可以指到不存在的东西。
     """
     index = _tests_index()
     problems: list[str] = []
@@ -2121,36 +2055,24 @@ def _ledger_units(name: str, text: str) -> list[list[tuple[int, str]]]:
 
 
 def ledger_derived_claim_problems(docs: dict[str, str], ledger: dict[str, object]) -> list[str]:
-    """台账派生量 vs "有没有观测时刻 / 历史记号" ⇒ 问题清单（`R11-R6-1` 的根因判据）。
-
-    口径（逐句对应下面每一处 `continue`）：
-      * 当前值文档（`README.md` / `DEVELOPMENT.md`）逐行判：一行就是一条独立声明，
-        它必须自带历史记号（`_HISTORICAL_MARKERS`）或"观测时刻（`YYYY-MM-DD HH:MM`）+
-        复算命令"，否则命中即报问题。这两个文件的块就是"一行"，所以它们的合规形态比
-        `docs/*.md` 严一档：同一行自证（"紧邻行"那一档在单行块里没有意义）；
-      * `docs/*.md` 里不带现时词（`_LEDGER_LIVE_WORDS`）的行 ⇒ 成立：登记册 / 历史档案
-        的正文算"当时的读数"，块带不带日期都放过（这条是"块级豁免"的真身 —— 放行的是
-        "行内没有现时词"，不是"块里有日期"）；
-      * `docs/*.md` 里自称当次的行（行内有现时词 + 有台账派生量）是"当前值声明"：
-        该行自己、或同块里的紧邻行（上一行 / 下一行）必须带历史记号（`_HISTORICAL_MARKERS`），
-        或同时具备观测时刻（`YYYY-MM-DD HH:MM`，见 `_LEDGER_TS_RE`）与复算命令
-        （`_LEDGER_CMD_RE`），否则报问题 —— 块里带日期不能替它作证（`R11B-R6-1`：旧口径在逐行判
-        之前就按块里的日期把整块 `continue` 掉，于是"自称当次 + 只带日期"这一档从来没被咬过）；
-      * 裸 `HH:MM`（无日期、无命令）在这一档不算"有据"：它与当前值文档那一档口径一致 ——
-        只认可复算的观测时刻 + 复算命令（`R11C-R6-1`：`FIX13` 曾把这一档实现成认裸 `HH:MM`，
-        于是 `「回写（观测 17:20）」` 这种写法把过期读数放行成了"当前值"）；
-      * 复算命令（`_LEDGER_CMD_RE`）在 `docs/*.md` 这一档是观测时刻的连体条件（不是独立
-        通行证）：紧邻行只写命令、只写裸时刻、或块里别处写了命令，都不算数。它同时是当前值文档
-        那一档的必需项（第 1 条："`YYYY-MM-DD HH:MM` + 复算命令"），也是本判据推荐的
-        "量它的命令"写法。
-      * `docs/*.md` 的抬头（前 30 行）写明观测时刻 ⇒ 整份文件按那个时刻读（`NOAI-SUSPENSION-2026-09-25.md`
-        就是这种：抬头逐字写着"生效时刻（观测）：2026-09-25（…本地时间 2026-09-25 22:37 起）"）。
-        这一档是文件级的，对自称当次的行同样成立 —— 抬头那个时刻就是这份记录里每一行的时刻。
-    其余命中一律报问题，并附上当次台账的三个派生量。
-
-    反真空不写成"一处都读不到就报失去对象"：这一族的合规终态就是不写定值
-    （`R11-R6-1` 的首选修法），所以"读不到"可能是对的。咬人的证明由
-    `test_the_ledger_derived_claim_criterion_is_not_vacuous` 的注入负控承担。
+    """    台账派生量 vs "有没有观测时刻 / 历史记号" ⇒ 问题清单（`R11-R6-1` 的根因判据）。口径（逐句对应下面每一处 `continue`）：
+    * 当前值文档（`README.md` / `DEVELOPMENT.md`）逐行判：一行就是一条独立声明，
+    它必须自带历史记号（`_HISTORICAL_MARKERS`）或"观测时刻（`YYYY-MM-DD HH:MM`）+复算命令"，否则命中即报问题。这两个文件的块就是"一行"，
+    所以它们的合规形态比`docs/*.md` 严一档：同一行自证（"紧邻行"那一档在单行块里没有意义）；
+    * `docs/*.md` 里不带现时词（`_LEDGER_LIVE_WORDS`）的行 ⇒ 成立：登记册 / 历史档案
+    的正文算"当时的读数"，块带不带日期都放过（这条是"块级豁免"的真身 —— 放行的是"行内没有现时词"，不是"块里有日期"）；
+    * `docs/*.md` 里自称当次的行（行内有现时词 + 有台账派生量）是"当前值声明"：
+    该行自己、或同块里的紧邻行（上一行 / 下一行）必须带历史记号（`_HISTORICAL_MARKERS`），或同时具备观测时刻（`YYYY-MM-DD HH:MM`，见 `_LEDGER_TS_RE`）
+    与复算命令（`_LEDGER_CMD_RE`），否则报问题 —— 块里带日期不能替它作证（`R11B-R6-1`：旧口径在逐行判之前就按块里的日期把整块 `continue` 掉，于是"自称当次 +
+    只带日期"这一档从来没被咬过）；
+    * 裸 `HH:MM`（无日期、无命令）在这一档不算"有据"：它与当前值文档那一档口径一致 ——
+    只认可复算的观测时刻 + 复算命令（`R11C-R6-1`：`FIX13` 曾把这一档实现成认裸 `HH:MM`，于是 `「回写（观测 17:20）」` 这种写法把过期读数放行成了"当前值"）；
+    * 复算命令（`_LEDGER_CMD_RE`）在 `docs/*.md` 这一档是观测时刻的连体条件（不是独立
+    通行证）：紧邻行只写命令、只写裸时刻、或块里别处写了命令，都不算数。它同时是当前值文档那一档的必需项（第 1 条："`YYYY-MM-DD HH:MM` + 复算命令"），也是本判据推荐的"量它的命令"写法。
+    * `docs/*.md` 的抬头（前 30 行）写明观测时刻 ⇒ 整份文件按那个时刻读（`NOAI-SUSPENSION-2026-09-25.md`
+    就是这种：抬头逐字写着"生效时刻（观测）：2026-09-25（…本地时间 2026-09-25 22:37 起）"）。这一档是文件级的，对自称当次的行同样成立 —— 抬头那个时刻就是这份记录里每一行的时刻。
+    其余命中一律报问题，并附上当次台账的三个派生量。反真空不写成"一处都读不到就报失去对象"：这一族的合规终态就是不写定值（`R11-R6-1` 的首选修法），所以"读不到"可能是对的。
+    咬人的证明由`test_the_ledger_derived_claim_criterion_is_not_vacuous` 的注入负控承担。
     """
     problems: list[str] = []
     for name, text in docs.items():
@@ -2214,24 +2136,16 @@ def test_doc_ledger_derived_claims_carry_time_or_history():
 
 
 def test_the_ledger_derived_claim_criterion_is_not_vacuous():
-    """负控（`R11-R6-1` 的验收）：把不带时刻/历史记号的定值塞回去 ⇒ 判据必须红。
+    """    负控（`R11-R6-1` 的验收）：把不带时刻/历史记号的定值塞回去 ⇒ 判据必须红。
 
-    八档（在内存里改文本，不碰盘上那三份文档；离仓整树副本上的同型控制读数由
-    temp/FIX12B-negctl.py、temp/fix13-negctl.py 与 temp/fix14-negctl.py 产出 —— 刻意不加
-    反引号：它们在 temp/ 下、属 scratch、会被清理，而反引号里的 temp 路径会被存在性判据当真）：
-      ① 负控 A：`README.md` 里塞回 `reviewers_total` 40（审计者点名的形态）⇒ 必须红；
-      ② 负控 B：`docs/*.md` 的无日期块里塞一条"当次"读数 ⇒ 必须红（docs 那一档也有牙）；
-      ③ 正控：同一句话带观测时刻 + 复算命令 ⇒ 不红；
-      ④ 正控：同一句话带历史记号（`当时`）⇒ 不红；
-      ⑤ 负控 C（`R11B-R6-1`）：`docs/*.md` 的带日期块里塞一条"当次"读数、块内没有任何
-         时分/历史记号 ⇒ 必须红（旧口径在这里整块放行 —— 这一档是这一轮修的那个洞）；
-      ⑥ 正控：同句的紧邻行带「`YYYY-MM-DD HH:MM` + 复算命令」⇒ 不红；紧邻行带历史记号 ⇒ 不红；
-      ⑦ 负控 D（`R11C-R6-1`）：同句的紧邻行只带裸 `HH:MM`（无日期、无命令）⇒ 必须红；
-         换成 `17:2`（不构成 `HH:MM`）⇒ 同样必须红；同一句写进 `README.md` ⇒ 同样必须红
-         （两档对齐）。`FIX13` 把这一档实现成放行（裸 `HH:MM` 就算"有据"）而成绿，而那时这条
-         夹具只有 ⑥ 档 —— ⑥ 的紧邻行还带着日期与命令，所以那次变宽没被自己的夹具发现；
-      ⑧ 正控：带日期的块里不带现时词的历史行（有数字、带"当时"）⇒ 不红
-         （口径是"行内没有现时词就放过"，不是"块里有日期就放过"；别把整本登记册判红）。
+    八档（在内存里改文本，不碰盘上那三份文档；离仓整树副本上的同型控制读数由temp/FIX12B-negctl.py、temp/fix13-negctl.py 与 temp/fix14-negctl.py 产出 ——
+    刻意不加反引号：它们在 temp/ 下、属 scratch、会被清理，而反引号里的 temp 路径会被存在性判据当真）：① 负控 A：`README.md` 里塞回
+    `reviewers_total` 40（审计者点名的形态）⇒ 必须红；② 负控 B：`docs/*.md` 的无日期块里塞一条"当次"读数 ⇒ 必须红（docs 那一档也有牙）；③ 正控：同一句话带观测时刻 + 复算命令
+    ⇒ 不红；④ 正控：同一句话带历史记号（`当时`）⇒ 不红；⑤ 负控 C（`R11B-R6-1`）：`docs/*.md` 的带日期块里塞一条"当次"读数、块内没有任何时分/历史记号 ⇒ 必须红（旧口径在这里整块放行 ——
+    这一档是这一轮修的那个洞）；⑥ 正控：同句的紧邻行带「`YYYY-MM-DD HH:MM` + 复算命令」⇒ 不红；紧邻行带历史记号 ⇒ 不红；⑦ 负控 D（`R11C-R6-1`）：同句的紧邻行只带裸
+    `HH:MM`（无日期、无命令）⇒ 必须红；换成 `17:2`（不构成 `HH:MM`）⇒ 同样必须红；同一句写进 `README.md` ⇒ 同样必须红（两档对齐）。`FIX13` 把这一档实现成放行（裸
+    `HH:MM` 就算"有据"）而成绿，而那时这条夹具只有 ⑥ 档 —— ⑥ 的紧邻行还带着日期与命令，所以那次变宽没被自己的夹具发现；⑧ 正控：带日期的块里不带现时词的历史行（有数字、带"当时"）⇒
+    不红（口径是"行内没有现时词就放过"，不是"块里有日期就放过"；别把整本登记册判红）。
     """
     docs = ledger_docs()
     ledger = ledger_counts()

@@ -1,40 +1,22 @@
 # -*- coding: utf-8 -*-
-"""自检入口的退出码契约（`SELF-CHECK-FINDINGS.md` 的 **F-7** / **F-4**）。
-
+"""自检入口的退出码契约（`SELF-CHECK-FINDINGS.md` 的 F-7 / F-4）。
 ## 这条判据守的是什么
-
-"失败没有退出码"比失败本身更贵：任何基于退出码的门（CI / 发布检查 /
-`release_all` / `python -m agentflow.agent_c` 的手工复跑）都会把一次真实的失败
-读成"通过"，而**折平成通过的那一档不会有人再来修**。所以这里只钉一件事：
-
-- 输出里有 `SELF-CHECK FAILED` / `FAILED:` / `[FAIL]` ⇒ 退出码 **必须非零**；
-- 输出里有 `SELF-CHECK DONE`（或整段全 `[PASS]`）⇒ 退出码 **必须为零**；
-- 两样都没有 ⇒ 这条判据**没量成**（判红，不当作通过 —— 三态纪律：
-  "没量到"既不是"通过"也不是"失败"）。
-
+"失败没有退出码"比失败本身更贵：任何基于退出码的门（CI / 发布检查 /`release_all` / `python -m agentflow.agent_c` 的手工复跑）都会把一次真实的失败读成"通过"，
+而折平成通过的那一档不会有人再来修。所以这里只钉一件事：
+- 输出里有 `SELF-CHECK FAILED` / `FAILED:` / `[FAIL]` ⇒ 退出码 必须非零；- 输出里有 `SELF-CHECK DONE`（或整段全 `[PASS]`）⇒ 退出码 必须为零；-
+两样都没有 ⇒ 这条判据没量成（判红，不当作通过 —— 三态纪律："没量到"既不是"通过"也不是"失败"）。
 ## 为什么必须起子进程
-
-退出码是**进程级**读数，而这三个自检都住在 `if __name__ == "__main__":` 里
-（`agent_c/__main__.py`、`agent_e/__main__.py`、`agent_v/__main__.py`）：
-import 期它们根本不存在。进程内 `runpy` 也不行 —— `SystemExit` 会被 pytest
-当成"测试自己退出了"，量到的不是被测代码的退出码。
-
+退出码是进程级读数，而这三个自检都住在 `if __name__ == "__main__":` 里（`agent_c/__main__.py`、`agent_e/__main__.py`、`agent_v/__main__.py`）
+：import 期它们根本不存在。进程内 `runpy` 也不行 —— `SystemExit` 会被 pytest当成"测试自己退出了"，量到的不是被测代码的退出码。
 ## 负控：为什么每条契约都配一次"注入失败"
-
-真自检今天是绿的，于是"`DONE` ⇒ 0"在绿的那一侧永远成立 —— 它证明不了
-"红了会怎样"（F-7 的现场正是"红着、退出码却是 0"）。所以每条契约都另起一次
-子进程，先把自检读到的一个方法换成恒错的替身，再 `runpy.run_module(...,
-run_name="__main__")`：
-
+真自检今天是绿的，于是"`DONE` ⇒ 0"在绿的那一侧永远成立 —— 它证明不了"红了会怎样"（F-7 的现场正是"红着、退出码却是 0"）。所以每条契约都另起一次子进程，先把自检读到的一个方法换成恒错的替身，再
+`runpy.run_module(..., run_name="__main__")`：
 | 角色 | 注入点 | 注入后必然失败的检查 |
 |---|---|---|
 | C | `AgentC.neighbors` 恒返回空邻居 | `[15]` 的 4 条邻居判据 |
 | E | `AgentE.evidence_for` 恒说"查过了、没有" | `[7]` 的三态判据 |
 | V | `AgentV.list_verifications` 恒返回 0 行 | 追加式编号 / 全量两条判据 |
-
-**没有一行生产代码为测试让路**：注入点是子进程内的模块全局，产品路径不知道它
-存在，也不接受任何"测试模式"开关。修好前这条判据红（`FAILED` + 退出码 0），
-修好后绿 —— 同一个断言在两个方向上都被量过。
+没有一行生产代码为测试让路：注入点是子进程内的模块全局，产品路径不知道它存在，也不接受任何"测试模式"开关。修好前这条判据红（`FAILED` + 退出码 0），修好后绿 —— 同一个断言在两个方向上都被量过。
 """
 from __future__ import annotations
 
@@ -56,7 +38,7 @@ _ENV = {
     "PYTHONPATH": str(REPO / "src"),
     # `settings.py` 的出厂默认是 `lean_enabled=false`（业主 2026-10-12 的
     # "默认关闭省下形式化那笔钱"），而 `tests/conftest.py` 为了让形式化那一段
-    # 能跑，把环境变量钉成了 `1`。这里量的是**出厂默认**那条路（F-4 的现场
+    # 能跑，把环境变量钉成了 `1`。这里量的是出厂默认那条路（F-4 的现场
     # 就是它），所以显式写回 `0`，不吃 pytest 会话的那一份。
     "AGENTFLOW_LEAN_ENABLED": "0",
 }
@@ -165,7 +147,7 @@ def test_selfcheck_exit_code_agrees_with_the_printed_summary(module: str) -> Non
 def test_selfcheck_negative_control_an_injected_failure_must_go_red(module: str) -> None:
     """负控：注入一个"形状合法、结论错"的替身 ⇒ `FAILED` + 非零退出码。
 
-    这一条证明上面那条判据**真的会红**：它不是"读一遍代码觉得对"，
+    这一条证明上面那条判据真的会红：它不是"读一遍代码觉得对"，
     而是把失败造出来、看退出码是不是跟着变。
     """
     proc = _run(module, inject=True)

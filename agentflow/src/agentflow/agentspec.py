@@ -41,7 +41,7 @@ class AgentBrief:
 class BuilderDeps:
     """装配期能交给工厂的东西（`host._Builder` 的公开面）。
 
-    工厂（`AgentSpec.build`）**只吃这个对象**，不碰 `_Builder`：这样"一个角色要什么依赖"
+    工厂（`AgentSpec.build`）只吃这个对象，不碰 `_Builder`：这样"一个角色要什么依赖"
     写在它自己的声明里（`needs` / `peers`），而"这些依赖怎么造"留在接线层（`host`）——
     两件事分开之后，"新建一个 agent"不需要在 `host` 里加分支（`goal-7f5116c1` M4）。
     """
@@ -51,7 +51,7 @@ class BuilderDeps:
     instance: str = ""
     #: 该角色用的模型缝（`_llm_for(role)` 已算好）
     llm: Any = None
-    #: 该角色的配置段（G/H 的那一份**已经带 `actor`**，与今天逐字一致）
+    #: 该角色的配置段（G/H 的那一份已经带 `actor`，与今天逐字一致）
     config: Mapping[str, Any] = field(default_factory=dict)
     #: 检索后端（声明里 `needs=("providers",)` 时才给）
     providers: tuple[Any, ...] = ()
@@ -190,7 +190,7 @@ def builtin_registry() -> AgentRegistry:
 # ---------------------------------------------------------------- 从 capabilities.py 搬来的
 #
 # 下面这四块原本在 `capabilities.py`（禁改区）。M3 把"角色动作表"的真身搬进
-# `specs/<角色>.py` 之后，`capabilities` 变成**从它派生** —— 于是"声明类型"与
+# `specs/<角色>.py` 之后，`capabilities` 变成从它派生 —— 于是"声明类型"与
 # "声明词表"必须待在更低的一层（叶子），否则 `specs` 反过来 import `capabilities` 会成环。
 #
 # 搬移方式：逐字（含注释），判据见 `tests/test_agent_spec_reconciliation.py` 与
@@ -317,10 +317,10 @@ _ARR_S = {"type": "array", "items": {"type": "string"}}
 #: 为什么必须新列一个：这里原来写的是 `_ARR_S`，而工具层
 #: （`doc_tools` 的 `doc.register_dependency`）写的是
 #: `{"type": "array", "items": {"type": "integer"}, "minItems": 1, "maxItems": 2}` ——
-#: 于是**没有任何一种取值能同时过两道门**（实测 2026-09-29）：
+#: 于是没有任何一种取值能同时过两道门（实测 2026-09-29）：
 #: `[45, 46]` 能力层拒（"必须是 string"）工具层放行；`["45", "46"]` 能力层放行
 #: 工具层拒（"必须是 integer"）。实现本体 `doc_tools._coerce_page_range` 两种都收，
-#: 但"两层各自判死一半"意味着这条链路上**没有**合法形状。
+#: 但"两层各自判死一半"意味着这条链路上没有合法形状。
 #: 取 `array<integer>` 而不是 `array<string>`：工具层的校验是真身，
 #: 而 `_coerce_page_range` 的规范形态就是 `[start, end]`（`minItems/maxItems` 也对得上）。
 _ARR_I = {"type": "array", "items": {"type": "integer"}}
@@ -347,26 +347,15 @@ _ARR_OBJ = {"type": "array", "items": {"type": "object"}}
 def audit_registry(registry: AgentRegistry) -> list[str]:
     """一张注册表"够不够格被装配/召唤/审计"的判据（`goal-7f5116c1` M5）。
 
-    返回人话列表（空 = 通过）。它问的是**声明自己的完整性**，不是行为：
-    一个新的角色只要写一份 `AgentSpec`，就必须先过这一关 —— 这正是"一个模块 + 一次登记"
-    这句话里"一份 spec"要满足的契约。
-
-    逐条：
+    返回人话列表（空 = 通过）。它问的是声明自己的完整性，不是行为：一份 `AgentSpec` 先过这一关，才是"一个模块 + 一次登记"里那份 spec 要满足的契约。逐条：
     1. `role` 与注册键一致、`brief.duty` / `emphasis` / `local_notes` 非空（门面齐全）；
-    2. 每条 `ActionSpec` 的 `role` 是本角色、`action` 与 `handler_name` 非空，
-       且 `handler_name` **能在实现上取到**（给了 `class_path` 就查类，没给就跳过 ——
-       `class_path` 是可选的信息，构造由 `build` 负责）；
-    3. `edges` / `peers` 指向的角色必须在同一张注册表里（打错一个字母在这里就红，
-       而不是等到某次召唤被拒时才发现）；
+    2. 每条 `ActionSpec` 的 `role` 是本角色、`action` 与 `handler_name` 非空，且 `handler_name` 能在实现上取到（`class_path` 可选，给了就查类，构造由 `build` 负责）；
+    3. `edges` / `peers` 指向的角色必须在同一张注册表里（打错一个字母在这里就红，而不是等到某次召唤被拒时才发现）；
     4. `needs` 里每个名字都是 `BuilderDeps` 的字段、`build` 可调用。
-
-    刻意**不**在这里查"只读角色的动作不许写"：这条第一版写了，当场把内置注册表判红 ——
-    `H` 的三个动作（`review` / `verify_fixes` / `review_report`）都声明 `write_local`。
-    那不是缺陷，是设计：`read_only` 说的是**工具面**（H 拿不到写工具，见
-    `tools/base._role_surface` 与 `tests/test_tools_readonly_roles.py`），
-    而 H 的落库走的是逐条登记在 `READONLY_CALL_EXCEPTIONS` 里的代理。
-    把"工具面只读"误读成"动作不许写"，会让一条**编造的不变量**去否决既有设计 ——
-    这类"自己发明一条判据然后被真相反驳"的经历，正是判据要先在已知对象上跑一遍的理由。
+    刻意不查"只读角色的动作不许写"：`H` 的 `review` / `verify_fixes` / `review_report` 都声明
+    `write_local`，而 `read_only` 说的是工具面（`tools/base._role_surface`、`tests/test_tools_readonly_roles.py`），
+    落库走 `READONLY_CALL_EXCEPTIONS` 的代理 —— 那不是缺陷，是设计。
+    把"工具面只读"误读成"动作不许写"，是编造不变量去否决既有设计；判据要先在已知对象上跑一遍。
     """
     fields = set(BuilderDeps.__dataclass_fields__)
     known = set(registry.roles())

@@ -1,26 +1,20 @@
 """写作期探针：把一个 D 问题推进到 needs_evidence，观察台账的产生与 verify 检查。
 
-流程：造数据集 → 跑 pipeline（C+D）→ 再让 D 从全部已登记报告 ingest（含 cold）
-→ 那个"完全孤立概念"的问题必然证据不足 → 提交 gap → 台账产生。
-随后跑 verify，观察 ledger_* 检查项是否生效。
+流程：造数据集 → 跑 pipeline（C+D）→ 再让 D 从全部已登记报告 ingest（含 cold）→ 那个"完全孤立概念"的问题必然证据不足 → 提交 gap → 台账产生。随后跑 verify，观察 ledger_*
+检查项是否生效。
 
 用法：python tools/probe_gap_ledger.py [目标工作区]
 
 ## 默认落点不在仓库里（`R3` 的副作用，`draft/28` 83.5 第 1 条）
 
-改前这里是 `dest = ... else ROOT / "gapprobe"` —— 不带参数跑一次就往仓库里写
-16 个产物文件，把"谁在写被审对象"这件事搅浑（实测：一次窗口污染，16 个
-`gapprobe/data/*.json`）。现在照抄 `scripts/release_check.py::_artifact_path()`
-的口径：主落点仓外（`ROOT.parent / "temp"`，仓库根是 `agentflow/`，所以它落在
-工作区根下的 `temp/`），建不出来就退到 `tempfile.mkdtemp()`。落点会打印出来，
-产物在哪仍然找得到。
+改前这里是 `dest = ... else ROOT / "gapprobe"` —— 不带参数跑一次就往仓库里写16 个产物文件，把"谁在写被审对象"这件事搅浑（实测：一次窗口污染，16
+个`gapprobe/data/*.json`）。现在照抄 `scripts/release_check.py::_artifact_path()`的口径：主落点仓外（`ROOT.parent / "temp"`，仓库根是
+`agentflow/`，所以它落在工作区根下的 `temp/`），建不出来就退到 `tempfile.mkdtemp()`。落点会打印出来，产物在哪仍然找得到。
 
 ## 缺输入以清晰消息 + 非零退出码收场（`draft/28` 83.5 第 2 条）
 
-"源数据不存在"是可预期的输入缺失（三态纪律：这是 `unknown`，不是 `fail`，
-更不是崩溃）。改前它在 `src / "concepts.json"` 那一行抛 `FileNotFoundError`
-traceback；现在开跑前先逐张核源表，缺哪张就指名道姓地报出来并以退出码 2 收场
-（2 = 没查成；0 = 跑通；1 = 跑通了但结论出乎预期 —— 本探针今天不用 1）。
+"源数据不存在"是可预期的输入缺失（三态纪律：这是 `unknown`，不是 `fail`，更不是崩溃）。改前它在 `src / "concepts.json"` 那一行抛 `FileNotFoundError`traceback；
+现在开跑前先逐张核源表，缺哪张就指名道姓地报出来并以退出码 2 收场（2 = 没查成；0 = 跑通；1 = 跑通了但结论出乎预期 —— 本探针今天不用 1）。
 """
 
 from __future__ import annotations

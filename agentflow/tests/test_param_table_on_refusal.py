@@ -50,12 +50,12 @@ def test_a_tool_refused_for_params_gets_its_declared_table_back(tmp_path: pathli
 
 
 def test_a_dispatch_without_an_action_carries_no_param_table(tmp_path: pathlib.Path):
-    """负控（新口径，2026-10-16）：**派活那一步不带任何参数表**。
+    """负控（新口径，2026-10-16）：派活那一步不带任何参数表。
 
     为什么改了：原命题是"唤起的动作缺必填参数 ⇒ 那一步带那个动作的参数表"，而业主口径的
-    最终形态是「**action 完全不用父代理填**」⇒ 派活**不带动作** ⇒ 没有动作的参数声明可查
-    ⇒ `invalid_params` 这一档在**派活路径上不可达**（它现在只可能来自**工具路径**，
-    由本文件上面那条正控覆盖）。这一条改成钉住新事实：那一步**不出现 `参数表`** ——
+    最终形态是「action 完全不用父代理填」⇒ 派活不带动作 ⇒ 没有动作的参数声明可查
+    ⇒ `invalid_params` 这一档在派活路径上不可达（它现在只可能来自工具路径，
+    由本文件上面那条正控覆盖）。这一条改成钉住新事实：那一步不出现 `参数表` ——
     出现了就说明框架又替它选了一个动作。
     """
     payload = {"summon": {"role": "F", "task": "给这个问题立一份攻坚计划",
@@ -65,8 +65,8 @@ def test_a_dispatch_without_an_action_carries_no_param_table(tmp_path: pathlib.P
 
     first = run.steps[0]
     assert first.shape == "summon", first.to_dict()
-    # 真命题两条：① 这一档**不是**"参数不合法"（派活没有动作 ⇒ 没有参数声明可违）；
-    # ② 那一步**不带参数表**（带了就说明框架又替被派者选了一个动作）。
+    # 真命题两条：① 这一档不是"参数不合法"（派活没有动作 ⇒ 没有参数声明可违）；
+    # ② 那一步不带参数表（带了就说明框架又替被派者选了一个动作）。
     assert str(first.result.get("refusal_reason") or "") != "invalid_params", first.result
     assert not first.result.get("参数表"), (
         "派活那一步带了参数表 ⇒ 说明这一趟又替被派者选了一个动作", first.result

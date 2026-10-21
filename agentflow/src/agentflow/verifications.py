@@ -322,36 +322,21 @@ PROOF_REVIEW_KIND = "proof_review"
 def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]:
     """一条 `evidence_kind="proof_review"` 的命题有没有凭据 —— 纯读，不写任何东西。
 
-    判据逐字来自 `schema.EVIDENCE_KINDS` 上面那段定义（2026-10-19 之前它只是注释，
-    没有任何代码强制）：
-
-        `proof_review` —— 证明经逐行审阅（`statements` 表的 `proof_text` 非空
-        ＋ V 的 `verifications` 里那一条签「成立」）。
-
-    三条都要成立（缺哪一条就报哪一条，`why` 里逐字说清）：
-
+    判据逐字来自 `schema.EVIDENCE_KINDS` 上面那段定义（2026-10-19 之前它只是注释，没有代码
+    强制）：`proof_review` —— 证明经逐行审阅（`statements` 表的 `proof_text` 非空 + V 的
+    `verifications` 里那一条签「成立」）。三条都要成立（缺哪条就报哪条，`why` 里说清）：
     1. `proof_text` 非空 —— 没有被审的那份证明，"审过"无从谈起；
-    2. `verifications/<命题号>.jsonl` 里有一行，且最后那一行签得住第 3 位
-       （`signs_bit3`：`verdict="成立"` 且 `unresolved_errors == 0`）——
-       取最后一行而不是"任意一行"：台账是追加式的，后面若有一条「有毛病」，
-       那一版就已经不是"成立"了；
-    3. 那一行记的 `proof_sha256` 就是现在这一版 `proof_text` 的 sha256 ——
-       台账记 sha 的唯一用途就是这个。不查它，"V 审过"就退化成"V 审过某个东西"，
-       而这句话没法被任何读数证伪（改完证明不再送审，签名照样成立）。
-
-    三态：读不到台账 / 台账有坏行 ⇒ `ok=False` 且 `checked=False`（那是没查成，
-    不是"通过"也不是"有毛病"）；两者在调用方那里都不许放行（写入期拒收、
-    审计期点名）——"查不到凭据"与"凭据不合格"对这条命题是同一件事。
-
-    返回 `{"ok", "checked", "why", "statement_id", "verification_id", "verdict",
-    "resolved_errors"…}` 的确切键：`{"ok", "checked", "why", "statement_id",
-    "verification_id", "verdict", "round", "unresolved_errors", "sha_matches",
-    "ledger", "rows", "problems", "checklist"}`。
-
-    `checklist` 是逐项过关读数（`[{"item", "ok", "detail"}]`，三条与上面一一对应）。
-    它只为拒信存在：业主 2026-10-19 的口径是"拒收消息要让人/模型一眼看出该补哪一项"——
-    只给一段 `why` 时，读的人得在散文里自己找缺的是哪一格。它不参与判据
-    （判据仍只看 `ok`），所以它写错不改判据、只改可读性。
+    2. `verifications/<命题号>.jsonl` 里有一行，且最后那一行签得住第 3 位（`signs_bit3`：
+       `verdict="成立"` 且 `unresolved_errors == 0`）—— 取最后一行而不是"任意一行"：台账是
+       追加式的，后面若有一条「有毛病」，那一版就已经不是"成立"了；
+    3. 那一行记的 `proof_sha256` 就是现在这一版 `proof_text` 的 sha256 —— 台账记 sha 的唯一
+       用途就是这个；不查它，"V 审过"就退化成"V 审过某个东西"（改完证明不再送审，签名照样成立）。
+    三态：读不到台账 / 坏行 ⇒ `ok=False` 且 `checked=False`（没查成，不是"通过"）；调用方都不许
+    放行 ——"查不到凭据"与"凭据不合格"对这条命题是同一件事。返回键：`ok` / `checked` / `why` /
+    `statement_id` / `verification_id` / `verdict` / `round` / `unresolved_errors` /
+    `sha_matches` / `ledger` / `rows` / `problems` / `checklist`；`checklist` 是逐项过关读数
+    （`[{"item", "ok", "detail"}]`，三条与上面一一对应），只为拒信存在（业主 2026-10-19 的口径：
+    "拒收消息要让人/模型一眼看出该补哪一项"），不参与判据 —— 写错只改可读性。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
     out: dict[str, Any] = {
@@ -503,29 +488,18 @@ def weaker_than_evidence_gaps(root: str | Path,
     """一组 `statements` 行里够格 `proof_review` 却登记成更弱档的那些 —— 纯读。
 
     ## 这条读数在说什么（2026-10-19，接 `proof_review_gap` 的反方向）
-
-    `proof_review_gap` 管的是"自称审过、其实没签"（虚报，安全方向的反面）。
-    这里是它的镜像：凭据齐全、档位却写低了（`heuristic` / `cross_check`）。
-    真机形态（`projects/mp2` 的 `stmt:000003`）：`proof_text` 1909 字、V 的
-    `verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行
-    正文相符 —— 按 `schema.EVIDENCE_KINDS` 的定义这条就是 `proof_review`，
-    而盘上落的是 `heuristic`。
-
-    它不是虚报，所以不是 error：降档是安全方向，可以是有意的选择（例如
-    "这份证明的范围比命题窄"）。但它必须是看得见的选择，不是默认值 ——
-    长期把强结果写成弱档，代价是论文的强度声明系统性地偏低，而没有任何读数
-    会指出这一点。
-
-    ## 判据（只三条，与 `proof_review_gap` 同一处口径）
-
+    `proof_review_gap` 管"自称审过、其实没签"（虚报）；这里是它的镜像：凭据齐全、档位却写低了
+    （`heuristic` / `cross_check`）。真机形态（`projects/mp2` 的 `stmt:000003`）：`proof_text`
+    1909 字、`verifications/000003.jsonl` 里 `v-000001` 签「成立」、`proof_sha256` 与现行正文
+    相符 ⇒ 按 `schema.EVIDENCE_KINDS` 的定义这条就是 `proof_review`，而盘上落的是 `heuristic`。
+    它不是虚报，所以不是 error：降档是安全方向，可以是有意的选择；但它必须是看得见的选择，不是
+    默认值 —— 长期把强结果写成弱档，论文的强度声明会系统性偏低，而没有任何读数会指出这一点。
+    判据只三条（与 `proof_review_gap` 同一处口径）：
     1. `evidence_kind` 在 :data:`WEAKER_THAN_PROOF_REVIEW` 里；
     2. `proof_text` 非空（没有证明就谈不上"这份证明被审过"）；
-    3. `proof_review_gap(...)` 判 `ok=True`（把那一行按 `proof_review` 重判一遍：
-       V 最近一签是「成立」且 `proof_sha256` 等于现行正文）。
-
-    概念行（`kind="concept"`）跳过：概念不参与等级链（见
-    `evidencebits.derive_grade` 的 `not_applicable`），把它的 `proof_text`
-    （"为什么这个概念良定义"）读成"一份被审过的证明"是另一种口径错误。
+    3. `proof_review_gap(...)` 判 `ok=True`（把那一行按 `proof_review` 重判一遍：V 最近一签是
+       「成立」且 `proof_sha256` 等于现行正文）。
+    概念行（`kind="concept"`）跳过：概念不参与等级链（`evidencebits.derive_grade` 的 `not_applicable`）。
     """
     out: list[dict[str, Any]] = []
     for row in rows:
@@ -583,24 +557,14 @@ def unverified_statement_refs(root: str | Path,
     """攻坚计划的 `history` 里点名了哪些 `statement_id`、而 `verifications` 里没有对应行。
 
     ## 为什么这一条落在「攻」那一格（2026-10-19，接 V 的回路的收工侧）
-
-    F 把那一轮的论证落成 `statements` 的一行之后，`statement_id` 会进
-    `attack_plans.history`（`agent_f/step.py` 的 P3-6 落点），M 在 `attack.status`
-    里看得见它。看得见不等于有人去审：真机里那一栏可以一直是"F 交了、没人签"，
-    而收工门那一格照样绿 —— 因为「攻」此前只问"计划推进了没有"，不问"交出来的那一条
-    后来有没有人看"。
-
-    这一条把两件事接上：history 里有 `statement_id` ⇒ `verifications` 里必须有它的一行
-    （`verify_proof` 的产物）。没有 ⇒ 调用方（`closing._check_acceptance`）把那一格记
-    `unknown`（不是 `pass`）—— "没签"与"签了"在读数上必须分得开。
-
-    三态：`checked=False` ⇒ 这一格没查成（读不到 `verifications/` 目录或坏行），
-    不是"一条都没缺"。`missing` 里逐条给出 `plan_id` / `round` / `statement_id` /
-    `why`（0 行 / 读不到 / 编号形态不对）。
-
-    `signed` 是"那一行签住了第 3 位"（`signs_bit3`）—— 它不决定这一条的红绿
-    （`有毛病` 也是一条"有对应行"），红绿由 `missing` 决定；这个读数留着是因为
-    "有行但没签"与"有行且签了"是给人看的两种不同状态。
+    F 把论证落成 `statements` 一行后，`statement_id` 进 `attack_plans.history`（`agent_f/step.py`
+    的 P3-6 落点），M 在 `attack.status` 里看得见；但看得见不等于有人审 —— 那一栏可以一直是
+    "F 交了、没人签"而收工门照样绿（「攻」只问计划推进了没有）。这一条把两件事接上：history 里
+    有 `statement_id` ⇒ `verifications` 里必须有它的一行（`verify_proof` 的产物）；没有 ⇒
+    `closing._check_acceptance` 记 `unknown`（不是 `pass`）——"没签"与"签了"必须分得开。
+    三态：`checked=False` ⇒ 没查成（读不到 `verifications/` 目录或坏行），不是"一条都没缺"；
+    `missing` 逐条给 `plan_id` / `round` / `statement_id` / `why`。`signed` 是"那一行签住了第 3 位"
+    （`signs_bit3`），不决定红绿（由 `missing` 定），留着是因为"有行但没签"与"有行且签了"是两种不同状态（`有毛病` 也是一条"有对应行"）。
     """
     refs: list[dict[str, Any]] = []
     problems: list[str] = []
@@ -679,35 +643,22 @@ def opposite_direction_evidence(claim: Mapping[str, Any],
     """这条断言引用这条实验时，方向是不是反的 —— 判据本体（纯读，`None` = 不反）。
 
     ## 判的是什么（可机械化的那一半）
-
-    一条实验行自己的结论是 `result="refutes"`（连同 `negation_kind="disproved"`，
-    这是 `schema.Experiment.validate` 强制的），意思是"它检验的那条命题被证否了"。
-    一条正文断言把它列进 `citations` 当支撑时，台账上必须能读出"这条断言正是在说
-    「我们证否了它」" —— 机械读法就是 `is_negative=True` 且
-    `negation_kind="disproved"`（`doc_tools.check_proofs` 2026-10-13 的口径，
-    真机现场：`projects/p6t2-research-20261012b` 的 claim-2 把 `exp:0002`
-    （`result="refutes"`）列进 `citations` 当支撑，一路写库）。
-
-    判据只需要两个字段：证据行的 `result` / `negation_kind`，断言的
-    `is_negative` / `negation_kind`。这两组字段都在 schema 里，不需要新字段。
-
+    一条实验行自己的结论是 `result="refutes"`（连同 `negation_kind="disproved"`，这是
+    `schema.Experiment.validate` 强制的），意思是"它检验的那条命题被证否了"。一条正文断言
+    把它列进 `citations` 当支撑时，台账上必须能读出"这条断言正是在说「我们证否了它」"——
+    机械读法就是 `is_negative=True` 且 `negation_kind="disproved"`（`doc_tools.check_proofs`
+    2026-10-13 的口径，真机现场：`projects/p6t2-research-20261012b` 的 claim-2 把 `exp:0002`
+    （`result="refutes"`）列进 `citations` 当支撑，一路写库）。判据只需要两个字段：证据行的
+    `result` / `negation_kind`，断言的 `is_negative` / `negation_kind` —— 都在 schema 里。
     ## 哪一半判不了（如实登记，不硬造）
-
-    反方向的那一支 —— 断言登记成"已证否"、却引一条 `result="supports"` 的实验 ——
-    不归本判据管。理由不是"懒得写"，而是它判不了：`supports` 是相对于实验行
-    自己的 `claim` 说的，而一条否定型断言（例如「不存在这样的图」）完全可能由一条
-    `supports` 的实验支持（实验检验的命题本身就是那句否定命题）。更常见的是
-    `supports` 只是 `cross_check`（数值支持）——「我们未能证明 P」引一条数值支持 P 的
-    实验并不矛盾，"数值支持"本来就不构成证明。要判它，必须让实验行
-    声明"它检验的命题相对于这条正文断言的正负极性"（例如 `tests_claim_id` +
-    `direction` 两格），那是 schema 改动，不是审计侧能单方面补的。
-    同理，`result="refutes"` 引一条正面断言也只有在"实验检验的就是这条断言所说的命题"
-    时才是真相反 —— 本判据把"引用关系"当成那个链接（与写入期、收工门同一口径）。
-
-    ## 返回值
-
-    不反 ⇒ `None`。反 ⇒ 一个 dict（`experiment_id` / `result` / 断言侧字段 / `why`），
-    写入期与审计期各自决定怎么呈现（`problem` / `Issue`），判定本身不重复。
+    反方向的那一支 —— 断言登记成"已证否"、却引一条 `result="supports"` 的实验 —— 不归本判据管：
+    `supports` 是相对于实验行自己的 `claim` 说的，而一条否定型断言（例如「不存在这样的图」）完全
+    可能由一条 `supports` 的实验支持；更常见的是 `supports` 只是 `cross_check`（数值支持）。要判
+    它，必须让实验行声明"它检验的命题相对于这条正文断言的正负极性"（例如 `tests_claim_id` +
+    `direction` 两格），那是 schema 改动，不是审计侧能单方面补的。同理，`result="refutes"` 引一条
+    正面断言也只有在"实验检验的就是这条断言所说的命题"时才是真相反 —— 本判据把"引用关系"当成
+    那个链接（与写入期、收工门同一口径）。
+    ## 返回值：不反 ⇒ `None`；反 ⇒ 一个 dict（`experiment_id` / `result` / 断言侧字段 / `why`），写入期与审计期各自决定怎么呈现（`problem` / `Issue`），判定本身不重复。
     """
     if str(experiment.get("result") or "") != REFUTES:
         return None
@@ -745,22 +696,14 @@ def evidence_identity(row: Mapping[str, Any]) -> tuple[Any, ...]:
     """一条实验行的"证据身份"：同一份读数只该算一份证据。
 
     ## 为什么身份不能只是 `experiment_id`
-
-    真机读数（`draft/39` §6.27 的 D39，T2 第 9 趟 `p6k`）：一个脚本被派了 9 次，
-    claim 分别是 W(2)/W(3)/W(4)…，而每次都打印逐字相同的 `data`（30 顶点 / 度 3）
-    —— 那始终是同一个图。台账上于是有 9 条 `result="supports"`，手稿把它们当
-    9 份独立证据引：同一份读数被当成了九份。这 9 条的 `experiment_id` 各不相同，
-    所以"按 `experiment_id` 判重"看不见它。
-
-    ## 身份的定义（与 E 写入期那条 note 同一处）
-
-    - 有 `observations.data`（非空）⇒ 同脚本（`code_hash`）+ 同 `data` 即同一份证据
-      （`code_hash` 为空也照比：历史行没有哈希时，"同 data" 仍是唯一可比的读数）；
-    - 没有 `data` ⇒ 退回到 `experiment_id`（同一行被引两次是同一份证据；
-      两行都没有 data 时不合并 —— 那会靠猜）。
-
-    这条定义此前只在 `agent_e.run_experiment._reused_evidence_note` 里，
-    现在两边都读这一个函数（FC-03：同一件事不许有两份定义）。
+    真机读数（`draft/39` §6.27 的 D39，T2 第 9 趟 `p6k`）：一个脚本被派了 9 次，claim 分别是
+    W(2)/W(3)/W(4)…，每次都打印逐字相同的 `data`（30 顶点 / 度 3）—— 始终是同一个图。台账上于是
+    有 9 条 `result="supports"`，手稿把它们当 9 份独立证据引：同一份读数被当成了九份。这 9 条的
+    `experiment_id` 各不相同，所以"按 `experiment_id` 判重"看不见它。
+    ## 身份的定义（与 E 写入期那条 note 同一处）：有 `observations.data`（非空）⇒ 同脚本
+    （`code_hash`）+ 同 `data` 即同一份证据（`code_hash` 为空也照比：历史行没有哈希时，"同 data" 仍是唯一可比的读数）；没有 `data` ⇒ 退回
+    `experiment_id`（同一行被引两次是同一份证据；两行都没有 data 时不合并 —— 那会靠猜）。
+    此前它只在 `agent_e.run_experiment._reused_evidence_note` 里，现在两边都读这一个函数（FC-03：同一件事不许有两份定义）。
     """
     obs = row.get("observations")
     data = dict(obs.get("data") or {}) if isinstance(obs, Mapping) else {}
@@ -773,26 +716,15 @@ def one_evidence_used_twice(documents: Iterable[Mapping[str, Any]],
                             experiments: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """同一份证据被同一份稿件里的两条不同断言当独立证据用 —— 纯读。
 
-    ## 判据（一条）
-
-    把每份稿件的 `claims[].citations` 里的 `exp:` 引用按 :func:`evidence_identity`
-    归组；同一组里出现 ≥ 2 个不同的 `claim_id` ⇒ 报一条。
-
-    为什么是 warning 而不是 error（与 `opposite_direction_evidence` 的 error 不同）：
-    同一份证据被两条断言引用可以是正当的 —— 定理与它的推论、综述里复述同一条读数、
-    两条不同表述压在同一次计算上。台账分不出"两条独立支撑"与"一份支撑被数了两遍"，
-    所以它必须是看得见的读数，不是硬拦。硬拦会红掉合规稿件（本项目最忌的
-    "判据过窄 ⇒ 红掉合规输入"），而完全不说又正是 D39 的形态。
-    处置写进 `why`：是复现就在正文与实验行 `notes` 里说清，否则换一条真正独立的证据。
-
-    ## 范围只在一份稿件内
-
-    跨稿件复用同一份证据是正常的（综述与论文引同一条实验）。判据只在同一份 `documents`
-    行内部比较 —— 那是"一条断言引一条实验行"这句话的作用域。
-
-    ## 返回值
-
-    `[{doc_id, claim_ids, experiment_ids, why}]`；空列表 = 不报（正常形态）。
+    ## 判据（一条）：把每份稿件的 `claims[].citations` 里的 `exp:` 引用按 :func:
+    `evidence_identity` 归组；同一组里出现 ≥ 2 个不同的 `claim_id` ⇒ 报一条。
+    为什么 warning 不是 error（与 `opposite_direction_evidence` 的 error 不同）：同一份证据被两条
+    断言引用可以是正当的（定理与推论、综述复述同一条读数、两条表述压在同一次计算上）。台账分不出
+    "两条独立支撑"与"一份支撑被数了两遍"，所以它必须是看得见的读数，不是硬拦（会红掉合规稿件），
+    而完全不说又正是 D39 的形态。处置写进 `why`：是复现就在正文与实验行 `notes` 里说清。
+    ## 范围只在一份稿件内：跨稿件复用同一份证据是正常的（综述与论文引同一条实验）；判据只在
+    同一份 `documents` 行内部比较 —— 返回值 `[{doc_id, claim_ids, experiment_ids, why}]`；
+    空列表 = 不报（正常形态）。
     """
     exp_by_id: dict[str, Mapping[str, Any]] = {}
     for row in experiments:

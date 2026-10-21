@@ -1,37 +1,20 @@
 """B 智能体：文献整理。
-
-职责（需求原文）：处理 A 新搜到的文献 → 维护概念表与关系表 → 处理完一篇就把文献表的
-处理情况置 1；每条关系录入前检查是否已有相同或几乎相同的表述。
-
+职责（需求原文）：处理 A 新搜到的文献 → 维护概念表与关系表 → 处理完一篇就把文献表的处理情况置 1；每条关系录入前检查是否已有相同或几乎相同的表述。
 四个刻意的设计选择：
-
-1. 概念名 → 概念代号 的解析在锁内做。否则两个 B 实例可能各自为"群"新建一个概念，
-   产生两个概念代号指向同一概念。这与"判重"是两回事：判重是业务规则，解析唯一性是
-   数据结构约束，必须靠锁。
-2. `related_concepts` 由关系表整体派生，不做增量 append（DESIGN.md §6.2）。
-   需求说"每次 append 时保持升序"—— 整体重算的结果与"append+排序+去重"一致，
-   但多了一个性质：漏更新会自愈，不需要靠人记得同步。
-3. 引文校验失败的条目仍然落库，但置 `status="suspect"`。丢掉它等于隐藏证据；
-   落库并标黄，才能让人看到"模型在哪些地方引不出原文"。
-4. 抽取失败不置 `processed`。`processed` 的语义是"B 处理完了"，
-   处理抛异常就不是处理完了；靠租约到期重试，超过次数才显式记错。
-
+1. 概念名 → 概念代号 的解析在锁内做。否则两个 B 实例可能各自为"群"新建一个概念，产生两个概念代号指向同一概念。这与"判重"是两回事：判重是业务规则，解析唯一性是
+数据结构约束，必须靠锁。 2. `related_concepts` 由关系表整体派生，不做增量 append（DESIGN.md §6.2）。需求说"每次 append 
+时保持升序"—— 整体重算的结果与"append+排序+去重"一致，但多了一个性质：漏更新会自愈，不需要靠人记得同步。 3. 引文校验失败的条目仍然落库，但置 
+`status="suspect"`。丢掉它等于隐藏证据；落库并标黄，才能让人看到"模型在哪些地方引不出原文"。 4. 抽取失败不置 `processed`。
+`processed` 的语义是"B 处理完了"，处理抛异常就不是处理完了；靠租约到期重试，超过次数才显式记错。
 DESIGN-INTERACTIONS.md §1 新增的三件事（I6 / I4 / I5 的决定侧）：
-
-5. 写入期一致性闸门（I6）：关系落库前问一句"这条与图里已有的矛盾吗"。
-   这个闸门必须是纯函数（`interactions.check_conflict`，签名里没有 store）：
-   B 在自己的事务内调用它，若它去查 store 就是同一进程内 `filelock` 重入
-   （轻则抛错、重则死锁）。已有关系由 B 用 `tx.rows("relations")` 读好传进去，
-   唯一入口是 :meth:`AgentB._conflict_scope`。
-   闸门是三态的：`True` 矛盾 / `False` 不矛盾 / `None`+`checked=False` 没检查；
-   "没检查"绝不允许被压成"不冲突"（见 `_conflict_check` 字段与两个计数器）。
-6. 定向重抽取（I4）：处理 `reprocess_requests` 里 `status="pending"` 的行，
-   只动目标关系。重抽取事务里刻意不声明 `literature` 表 ——
-   把 `processed` 置回 `False` 会触发全量重抽，这是 I4 明写的幂等陷阱，
-   不声明该表就是"结构上不可能犯这个错"。
-7. 结构重复的合并决定权（I5）：C 只提候选，B 复核两路独立证据
-   （结构等价 + 名字侧）才合并，且合并必须留下可被人反驳的理由。
-   宁可漏合并（少省一点空间）也不错误合并（把两条知识并成一条，不可逆）。
+5. 写入期一致性闸门（I6）：关系落库前问一句"这条与图里已有的矛盾吗"。这个闸门必须是纯函数（`interactions.check_conflict`，签名里没有
+store）： B 在自己的事务内调用它，若它去查 store 就是同一进程内 `filelock` 重入（轻则抛错、重则死锁）。已有关系由 B 用 
+`tx.rows("relations")` 读好传进去，唯一入口是 :meth:`AgentB._conflict_scope`。闸门是三态的：`True` 矛盾 / 
+`False` 不矛盾 / `None`+`checked=False` 没检查；"没检查"绝不允许被压成"不冲突"（见 `_conflict_check` 字段与两个计数
+器）。 6. 定向重抽取（I4）：处理 `reprocess_requests` 里 `status="pending"` 的行，只动目标关系。重抽取事务里刻意不声明 
+`literature` 表 ——把 `processed` 置回 `False` 会触发全量重抽，这是 I4 明写的幂等陷阱，不声明该表就是"结构上不可能犯这个错"。
+7. 结构重复的合并决定权（I5）：C 只提候选，B 复核两路独立证据（结构等价 + 名字侧）才合并，且合并必须留下可被人反驳的理由。宁可漏合并（少省一点空间）也不错误合并
+（把两条知识并成一条，不可逆）。
 """
 from __future__ import annotations
 import re
@@ -175,23 +158,14 @@ class BRunResult:
 
 def task_outcome(res: "BRunResult") -> tuple[str, str]:
     """B 的抽取这一趟「该报什么终局」 —— 唯一一处判据（动作自己声明，不由框架猜）。
-
-    为什么必须由动作声明（2026-10-15 T5 第 8 趟 `t5h`）：框架那边只看得见"handler 返回了
-    一个 dict 而没写 `outcome`"，于是按"有产出"记 `ok`（`conductor._end_from_payload`）。
-    那一趟 11 次 `B.run` 全部 `outcome=ok`、`detail="执行完成（handler 未声明 outcome，
-    按有产出处理）"`，而新建概念 0、新增关系 0 —— 主控据此以为"文献消化过了"，
-    继续派同一种活。「"什么都没做成"被报成了成功。」
-
+    为什么必须由动作声明（2026-10-15 T5 第 8 趟 `t5h`）：框架那边只看得见"handler 返回了一个 dict 而没写 `outcome`"，于是按"有
+    产出"记 `ok`（`conductor._end_from_payload`）。那一趟 11 次 `B.run` 全部 `outcome=ok`、
+    `detail="执行完成（handler 未声明 outcome，按有产出处理）"`，而新建概念 0、新增关系 0 —— 主控据此以为"文献消化过了"，继续派同一种活。「"
+    什么都没做成"被报成了成功。」
     规则（三态，与 `TASK_OUTCOMES` 同口径）：
-
-    | 这一趟发生了什么 | outcome |
-    |---|---|
-    | 真消化过 ≥1 篇（`digested > 0`） | `ok` |
-    | 一篇都没真动（全是"没全文 / 缺抽取器 / 放弃 / 队列空"） | 「`no_result`」 |
-    | 有失败、且一篇都没真消化 | `failed` |
-
-    `no_result` 是「有效结论」（"跑完了，确实没有产出"），不是错误 —— 它存在的意义正是
-    让主控「看得见」"这一趟白跑了"，从而不再原样重派。
+    | 这一趟发生了什么 | outcome ||---|---|| 真消化过 ≥1 篇（`digested > 0`） | `ok` || 一篇都没真动（全是"没全文 / 缺
+    抽取器 / 放弃 / 队列空"） | 「`no_result`」 || 有失败、且一篇都没真消化 | `failed` |
+    `no_result` 是「有效结论」（"跑完了，确实没有产出"），不是错误 —— 它存在的意义正是让主控「看得见」"这一趟白跑了"，从而不再原样重派。
     """
     worked = res.digested > 0
     produced = bool(res.concepts_created or res.concepts_reused or res.relations_added
@@ -212,25 +186,16 @@ def task_outcome(res: "BRunResult") -> tuple[str, str]:
 @dataclass
 class BClaimOutcome:
     """`_claim()` 的结果：取文献这件事本身的结果，而不只是"取到的那一行"。
-
-    为什么不让 `_claim()` 只返回 `dict | None`：一个 `None` 会把三件处置完全不同的事
-    压成同一个值，而它们的下一步动作完全相反 ——
-
-    - ``pending == 0``                 —— 队列里确实没有未处理文献（可以停）
-    - ``skipped_lease_active > 0``     —— 有活，但都在别人手里（该等，或换实例跑）
-    - ``skipped_lease_backoff > 0``    —— 有活，但都在我们自己的退避租约里（到点自然重试）
+    为什么不让 `_claim()` 只返回 `dict | None`：一个 `None` 会把三件处置完全不同的事压成同一个值，而它们的下一步动作完全相反 ——
+    - ``pending == 0``                 —— 队列里确实没有未处理文献（可以停）- ``skipped_lease_active > 0``
+    —— 有活，但都在别人手里（该等，或换实例跑）- ``skipped_lease_backoff > 0``    —— 有活，但都在我们自己的退避租约里（到点自然重试）
     - ``gave_up > 0``                  —— 有活，但都超了重试上限（终局，别再等）
-
-    压成一个 `None` 的后果不是"少一点信息"而是误导运维：`run_once()` 原先无论
-    哪种情况都写 `skipped_reason="no_unprocessed_literature"`，于是"全都被人持着有效
-    租约"被报成"队列空了"—— 看到的人会以为没事可做，而事实是有活压着。
-    `agent_a.ClaimOutcome` 的 docstring 已经把这条纪律写透，这里只是把它原样搬到 B
-    （不另立判据：字段名、含义、三态划分与 A 保持一致，唯一区别是被领的东西叫
-    literature 而不是 request）。
-
-    另外注意"放弃"与"被租"的顺序：先判租约、再判 attempts。一条正被别人跑着的
-    文献不该由我们来"放弃" —— 两个人各有各的 `mine_attempts` 计数，单方面判死会
-    把别人手上的活一起毁掉。
+    压成一个 `None` 的后果不是"少一点信息"而是误导运维：`run_once()` 原先无论哪种情况都写 
+    `skipped_reason="no_unprocessed_literature"`，于是"全都被人持着有效租约"被报成"队列空了"—— 看到的人会以为没事可做，而事实
+    是有活压着。`agent_a.ClaimOutcome` 的 docstring 已经把这条纪律写透，这里只是把它原样搬到 B （不另立判据：字段名、含义、三态划分与 A 
+    保持一致，唯一区别是被领的东西叫 literature 而不是 request）。
+    另外注意"放弃"与"被租"的顺序：先判租约、再判 attempts。一条正被别人跑着的文献不该由我们来"放弃" —— 两个人各有各的 `mine_attempts` 计数，
+    单方面判死会把别人手上的活一起毁掉。
     """
 
     #: 取到的文献行（已置 claimed_by / lease_until）；没取到时为 `None`。

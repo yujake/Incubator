@@ -1,55 +1,22 @@
 # -*- coding: utf-8 -*-
-"""孤儿节点：`tasks.parent_task_id` 不许为 `None`（顶层那一行除外），名册 `owner` 必须等于它。
+"""孤儿节点：`tasks.parent_task_id` 不许为 `None`（顶层那一行除外），名册 `owner` 必须等于它。真机证据（只读取证：`projects/tree-check/data/tasks.json`）：
+```text t-000019 | role A | action run_once | called_by M | parent_task_id None | depth 1
+| input_key consume:r-000001
+```同一份台账里其它行都正常（`t-000002 D <- M t-000001`、`t-000003 C <- D t-000002`、`t-000004 D <- C t-000002` 那种"回信型"板项的父是收件人，也正常）。`t-000019` 是唯一一行 `parent_task_id=None` 的非顶层行 —— 它不在任何名册里（`projects/tree-check/out/roster/t-000001.jsonl` 只有 `D1`），也不占任何父的扇出。根因（文件:行）：`conductor.py:2453`（改前）：```python res = self.summon("A", "run_once", {}, by=by, input_key=key)``
+``parent_task_id` 没传 ⇒ 走默认值 `None` ⇒ `_depth_of(None)` 给 `depth=1`。这条路是 `consume_pending_search_requests`（S-03
+队列认领），它由`finish_top_level_run`（`conductor.py:2500`）与 `run_plan`（`conductor.py:3694`）各调一次 ——两处都没把"我是哪一趟"传下来。
+于是框架自己发起的一次派活在台账上是树根形态的孤儿。第二条同类（批量那条）：`tools/conductor_tools.py:386-394` 的 `TaskCall` 也没带`parent_task_id` ⇒ 经
+`conductor.summon_many` 工具派出去的整批子代理都是孤儿。第三处（单个派活）：`agent_loop._do_summon` /
+`_do_summon_many` 原先写的是`parent_task_id=self.my_task_id or None` —— 号一空就把 `None` 落进台账。今天那两处改成"号空 ⇒
+受控拒绝（`refused=no_owner`）"，宁可这一件派不出去，也不许造一行孤儿。修法（编号不自己拼）：父的号只用三个来源，按权威性取：
+调用方显式给的（`finish_top_level_run` 给它自己那一行、`_do_summon_many` 给 `self.my_task_id`）→ 当前调用上下文（`calling_as` 挂的 `task_id`，
+工具路径走这一格）→ 本进程顶趟（`open_top_level_run` 记下的 `_top_task_id`）。- 三者都没有（判据里裸造 `Conductor`、连顶趟都没开）⇒
+当场开一条真树根（`_write_new_row`，号由台账发；`parent=None` 只在树根上合法）并把它收行。- 认领出来的那个子代理顺手登记进 `owner` 的名册 ——
+名字与读写面都由秘书发号（`Secretary.roster_add` 内部的 `next_name` / `surface_alloc`），这里一个号都不拼。判据（红/绿成对）：
 
-## 真机证据（只读取证：`projects/tree-check/data/tasks.json`）
-
-```text
-t-000019 | role A | action run_once | called_by M | parent_task_id None | depth 1
-         | input_key consume:r-000001
-```
-
-同一份台账里其它行都正常（`t-000002 D <- M t-000001`、`t-000003 C <- D t-000002`、
-`t-000004 D <- C t-000002` 那种"回信型"板项的父是收件人，也正常）。
-`t-000019` 是**唯一**一行 `parent_task_id=None` 的非顶层行 —— 它不在任何名册里
-（`projects/tree-check/out/roster/t-000001.jsonl` 只有 `D1`），也不占任何父的扇出。
-
-## 根因（文件:行）
-
-`conductor.py:2453`（改前）：
-
-```python
-res = self.summon("A", "run_once", {}, by=by, input_key=key)
-```
-
-`parent_task_id` 没传 ⇒ 走默认值 `None` ⇒ `_depth_of(None)` 给 `depth=1`。
-这条路是 `consume_pending_search_requests`（S-03 队列认领），它由
-`finish_top_level_run`（`conductor.py:2500`）与 `run_plan`（`conductor.py:3694`）各调一次 ——
-两处都没把"我是哪一趟"传下来。于是框架自己发起的一次派活在台账上是**树根形态的孤儿**。
-
-第二条同类（批量那条）：`tools/conductor_tools.py:386-394` 的 `TaskCall` 也没带
-`parent_task_id` ⇒ 经 `conductor.summon_many` 工具派出去的整批子代理都是孤儿。
-
-第三处（单个派活）：`agent_loop._do_summon` / `_do_summon_many` 原先写的是
-`parent_task_id=self.my_task_id or None` —— 号一空就把 `None` 落进台账。今天那两处改成
-"号空 ⇒ 受控拒绝（`refused=no_owner`）"，宁可这一件派不出去，也不许造一行孤儿。
-
-## 修法（编号不自己拼）
-
-- 父的号只用三个来源，按权威性取：调用方显式给的（`finish_top_level_run` 给它自己那一行、
-  `_do_summon_many` 给 `self.my_task_id`）→ 当前调用上下文（`calling_as` 挂的 `task_id`，
-  工具路径走这一格）→ 本进程顶趟（`open_top_level_run` 记下的 `_top_task_id`）。
-- 三者都没有（判据里裸造 `Conductor`、连顶趟都没开）⇒ 当场开一条**真树根**
-  （`_write_new_row`，号由台账发；`parent=None` 只在树根上合法）并把它收行。
-- 认领出来的那个子代理顺手登记进 `owner` 的名册 —— 名字与读写面都由秘书发号
-  （`Secretary.roster_add` 内部的 `next_name` / `surface_alloc`），这里一个号都不拼。
-
-## 判据（红/绿成对）
-
-1. 真跑 `_do_summon` / `_do_summon_many`（桩后端）⇒ 每个子 `parent_task_id` 非空且
-   **等于父的绝对编号**，名册 `owner` 与它一致；队列认领那一路同样（`parent == 顶趟编号`）；
-2. 反真空：顶趟那一行 `parent=None` 仍然合法（它是树根），`_depth_of(None) == (1, "M")`；
-3. 负控：把 `owner` 改回 `""`（改前那一版的形态）⇒ ① 的判据必须红，并且要认出
-   "名册落到隐藏文件 `out/roster/.jsonl`"这一形态。
+1. 真跑 `_do_summon` / `_do_summon_many`（桩后端）⇒ 每个子 `parent_task_id` 非空且等于父的绝对编号，名册 `owner` 与它一致；
+队列认领那一路同样（`parent == 顶趟编号`）；2. 反真空：顶趟那一行 `parent=None` 仍然合法（它是树根），`_depth_of(None) == (1, "M")`；3. 负控：把 `owner` 改回
+`""`（改前那一版的形态）⇒ ① 的判据必须红，并且要认出"名册落到隐藏文件 `out/roster/.jsonl`"这一形态。
 """
 from __future__ import annotations
 
@@ -161,7 +128,7 @@ def _owner_problems(root: pathlib.Path, st: Store, parent: str,
     """孤儿 / 名册 owner 不一致 / 名册落到隐藏文件 —— 这三类的全部问题（空 = 全对）。
 
     三个分量分开报，因为它们坏起来是三件事：子行没有父（孤儿）、名册挂在别的 owner
-    名下（登记了但父看不见）、名册落到了 `owner=""` 的隐藏文件（**父的名册里一条都没有**）。
+    名下（登记了但父看不见）、名册落到了 `owner=""` 的隐藏文件（父的名册里一条都没有）。
     """
     out: list[str] = []
     rows = {str(r.get("task_id") or ""): r for r in st.rows("tasks")}
@@ -188,7 +155,7 @@ def _owner_problems(root: pathlib.Path, st: Store, parent: str,
 
 
 def _stub_summon(cond: Conductor, parent_box: dict[str, Any], *, n: dict[str, int]):
-    """`Conductor.summon` 的替身：**真的**落台账行（号是真的），把收到的父记下来。"""
+    """`Conductor.summon` 的替身：真的落台账行（号是真的），把收到的父记下来。"""
     def summon(role, action, params=None, *, by="M", parent_task_id=None, **kw):
         parent_box["parent"] = parent_task_id
         n["i"] += 1
@@ -318,7 +285,7 @@ def test_negctl_an_empty_owner_is_caught_and_the_hidden_roster_is_named(
     assert any("parent_task_id 是空的" in p for p in problems), problems
     assert any("隐藏文件" in p for p in problems), problems
     assert any("名册外子代理" in p for p in problems), problems
-    # 对照：同一套判据在**修好之后**的那一行上必须绿（否则上面那条只是恒红）
+    # 对照：同一套判据在修好之后的那一行上必须绿（否则上面那条只是恒红）
     fixed = _row(env["cond"], env["me"], CHILD_ROLE, key="fixed@1")
     env["sec"].roster_add(owner=env["me"], role=CHILD_ROLE, task_id=fixed, brief="修好的那一件")
     hidden[0].unlink()
@@ -326,7 +293,7 @@ def test_negctl_an_empty_owner_is_caught_and_the_hidden_roster_is_named(
 
 
 def test_negctl_a_loop_without_a_task_id_refuses_instead_of_orphaning(tmp_path: pathlib.Path):
-    """判据③（负控之二）：号一空 ⇒ **受控拒绝**，一行子行都不许落（不许降级成孤儿）。
+    """判据③（负控之二）：号一空 ⇒ 受控拒绝，一行子行都不许落（不许降级成孤儿）。
 
     改前那条 `or None` 把"我没有台账编号"这件事故意折成了一次合法的派活；
     现在它是一条可处置的拒绝（`refused=no_owner`），盘上不出现任何子行 ——

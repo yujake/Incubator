@@ -235,20 +235,15 @@ def test_scope_travels_with_the_reply_and_into_to_dict():
 
 
 def test_every_vocabulary_scope_is_accepted_but_other_is_not():
-    """词表里的每一档都被接受；`other` 不是词表里的一档，所以必须被拒（`G-6`）。
+    """    词表里的每一档都被接受；`other` 不是词表里的一档，所以必须被拒（`G-6`）。
 
     ## 为什么这条要单独写（改前的形态是错的）
 
-    改前这里是 `for scope in G.USAGE_SCOPES: ... complete("hi", scope=scope)`，
-    而当时 `"other"` 在词表里 —— 于是这条用例逐字要求 `complete(scope="other")`
-    被接受。它断的是一个真实存在的旧形态（"什么都不是"的档在词表里），
-    而不是一条应当成立的契约：`modelgw.complete` 的 docstring 自己写着
-    "缺省也不许是「其它」：一个「其他」档会把「有人忘了写」伪装成一个正常的分类"。
-    数据侧（`modelcost.charge_reply` / `tokenmeter.Charge`）也共用这张词表。
+    改前这里是 `for scope in G.USAGE_SCOPES: ... complete("hi", scope=scope)`，而当时 `"other"` 在词表里 —— 于是这条用例逐字要求
+    `complete(scope="other")`被接受。它断的是一个真实存在的旧形态（"什么都不是"的档在词表里），而不是一条应当成立的契约：`modelgw.complete` 的 docstring
+    自己写着"缺省也不许是「其它」：一个「其他」档会把「有人忘了写」伪装成一个正常的分类"。数据侧（`modelcost.charge_reply` / `tokenmeter.Charge`）也共用这张词表。
 
-    所以改的是断言：断言"词表里每一档都被接受"这件事仍然成立，
-    但不许再把 `other` 算进词表；`other` 改为显式断言被拒。
-    这样"词表 ⊆ 被接受"与"词表外 ⊄ 被接受"两侧都有判据。
+    所以改的是断言：断言"词表里每一档都被接受"这件事仍然成立，但不许再把 `other` 算进词表；`other` 改为显式断言被拒。这样"词表 ⊆ 被接受"与"词表外 ⊄ 被接受"两侧都有判据。
     """
     for scope in G.USAGE_SCOPES:
         r = _gw(200, _ok_body()).complete("hi", scope=scope)

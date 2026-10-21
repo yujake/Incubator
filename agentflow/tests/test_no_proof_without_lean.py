@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-"""无 Lean 时**绝不允许**出现 `proof` 级证据（T2 场景的硬约束）。
+"""无 Lean 时绝不允许出现 `proof` 级证据（T2 场景的硬约束）。
 
 ## 为什么这条必须是判据而不是"每次我看一眼"
 
-T2 是"无 Lean"路线。真机上我确实没看到 `proof`，但那是**这一次**的读数；
+T2 是"无 Lean"路线。真机上我确实没看到 `proof`，但那是这一次的读数；
 它背后的机制有三层（`settings.lean_enabled` 先判 → `formalgw.check_lean` ② 不编译 →
 `run_experiment` 把非 `verified` 一律落 `inconclusive`+`heuristic`），任何一层被改宽，
-`proof` 就会在没有检查器的机器上出现 —— 而**报告照样打印**，那正是 FC-27 里
+`proof` 就会在没有检查器的机器上出现 —— 而报告照样打印，那正是 FC-27 里
 「桥接层说谎 ⇒ proof 级证据是假的」那条最怕的形态。
 
-这条判据把三层一起钉住（全部在 Lean **关**的模式下跑）：
+这条判据把三层一起钉住（全部在 Lean 关的模式下跑）：
 
 1. `settings.lean_enabled()` 为 False（本判据自己设的环境：清掉变量 ＋ 空设置文件）；
-2. `check_formal` **受控拒绝**：`ok=True`、`reason="lean_disabled"`、`verified=None`
+2. `check_formal` 受控拒绝：`ok=True`、`reason="lean_disabled"`、`verified=None`
    （是"用户关掉了"，不是"机器上没有"，也不是"证明没过"）；
 3. `run_experiment(method="formal")` 的结论只能是 `inconclusive` ＋ `heuristic`，
-   **`evidence_kind != "proof"`**、`result != "supports"`。
+   `evidence_kind != "proof"`、`result != "supports"`。
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def test_the_switch_really_reads_off(lean_off):
 
 
 def test_check_formal_is_a_controlled_refusal(lean_off):
-    """`check_formal` 必须**受控拒绝**：`lean_disabled`、`verified=None`、不抛异常。"""
+    """`check_formal` 必须受控拒绝：`lean_disabled`、`verified=None`、不抛异常。"""
     from agentflow.tools import verify_tools as V
 
     r = V.check_formal("1+1=2", source="theorem t_v : (1:Nat)+1=2 := rfl",
@@ -59,11 +59,11 @@ def test_check_formal_is_a_controlled_refusal(lean_off):
 
 
 def test_a_formal_experiment_is_refused_outright(lean_off, tmp_path):
-    """**核心**：无 Lean 时 `method="formal"` **直接拒绝**，且**一行都不落**。
+    """核心：无 Lean 时 `method="formal"` 直接拒绝，且一行都不落。
 
     我原来以为它会落一行 `inconclusive`+`heuristic`；实测比那更硬 ——
     `agent_e/run_experiment.py:113` 抛 `ExperimentError`（「不登记 method='formal' 的实验，
-    也不起检查器」）。这更好：**根本没有机会**产出一行带 `proof` 的记录。
+    也不起检查器」）。这更好：根本没有机会产出一行带 `proof` 的记录。
     判据钉住这个更强的口径，并额外断言"台账里没多出实验行"。
     """
     from agentflow.agent_e._support import ExperimentError

@@ -1,34 +1,20 @@
 # -*- coding: utf-8 -*-
 """六页面接线的判据（裁定 W1 A3）：每页一条 —— 真读数出现 + 空态 + 三态。
-
 ## 这一组守的是什么
-
-契约判据 A–D（`tests/test_webui_contracts.py`）守的是「名字层」（端点集合、事件
-集合、类型键集合、路由集合）。它们全都可能绿着，而页面照样是空壳 —— 只要页面
-"声明了正确的端点却不读它的任何一栏"。这一组补的正是那一条：页面真的读到了
-那一栏，而且空态与三态都分得开。
-
+契约判据 A–D（`tests/test_webui_contracts.py`）守的是「名字层」（端点集合、事件集合、类型键集合、路由集合）。它们全都可能绿着，而页面照样是空壳 ——
+只要页面"声明了正确的端点却不读它的任何一栏"。这一组补的正是那一条：页面真的读到了那一栏，而且空态与三态都分得开。
 每页一条用例，每条断言三件事（`draft/74 §3` 的矩阵逐行落）：
-
 1. 「真读数出现」：页面声明的端点，在夹具工作区（`tests/conftest.py` 的
-   `make_artifacts_sample`，裁定 J2/K2）上真的读出东西来，而且页面源码里读的正是
-   那些键（`_page_reads` 把页面源码里出现的契约键集合抓出来）；
+`make_artifacts_sample`，裁定 J2/K2）上真的读出东西来，而且页面源码里读的正是那些键（`_page_reads` 把页面源码里出现的契约键集合抓出来）；
 2. 「空态」：换一份"合法但空"的工作区，读数仍是"读到了，里面是 0 行"，
-   页面里有一句空态文案（`EMPTY_WORDS` 逐页登记）；
+页面里有一句空态文案（`EMPTY_WORDS` 逐页登记）；
 3. 「三态」：把那一面的源改坏（写一行坏 JSON / 不给 `cap_usd` / 索引没建），
-   三态必须不是"算出来了"，而页面里必须把那个三态交给 `TriState`。
-
+三态必须不是"算出来了"，而页面里必须把那个三态交给 `TriState`。
 ## 为什么"页面源码 + 后端读数"两头都验
-
-只验后端：页面可以一个字都不读它（本批之前的空壳就是那样）。
-只验源码：源码里可以写着一个后端不存在的键（`tsc` 抓不到 —— 后端给的是 JSON）。
-两头一起验，中间那条链（端点 → 键 → 页面读的那一栏）才是通的。
-
+只验后端：页面可以一个字都不读它（本批之前的空壳就是那样）。只验源码：源码里可以写着一个后端不存在的键（`tsc` 抓不到 —— 后端给的是 JSON）。两头一起验，中间那条链（端点 → 键 → 页面读的那一栏）才是通的。
 ## 负控
-
-每一条判据的检查逻辑都抽成纯函数（`_page_reads` / `_empty_state_problems` /
-`_tri_state_problems`），负控喂改坏的输入字符串 ⇒ 当场报出来；另外每条用例都带
-一个"真机负控"（`test_*_negative_control_*` 里的那几条），证明这个函数真的会红。
+每一条判据的检查逻辑都抽成纯函数（`_page_reads` / `_empty_state_problems` /`_tri_state_problems`），负控喂改坏的输入字符串 ⇒ 当场报出来；
+另外每条用例都带一个"真机负控"（`test_*_negative_control_*` 里的那几条），证明这个函数真的会红。
 """
 from __future__ import annotations
 
@@ -643,7 +629,7 @@ def test_every_page_is_registered_and_every_page_source_exists() -> None:
             f"{name} 页自己 fetch 了 —— 端点必须只从 api.ts 走")
 
 
-#: 渲染正文里的 markdown 强调记号：JSX 不解析 markdown，写进去就**原样印在网页上**。
+#: 渲染正文里的 markdown 强调记号：JSX 不解析 markdown，写进去就原样印在网页上。
 _MD_BOLD = re.compile(r"\*\*[^*\n]+\*\*")
 
 
@@ -657,7 +643,7 @@ def _markdown_marker_problems(label: str, text: str) -> list[str]:
 def test_no_page_prints_markdown_markers_to_the_screen() -> None:
     """九页与各组件的渲染正文里不许有 markdown 记号（`**粗**` 会被原样印出来）。
 
-    为什么单列一条：这一批实测漏过两处 —— Help 页的「**验收**」、预算页重设按钮的
+    为什么单列一条：这一批实测漏过两处 —— Help 页的「验收」、预算页重设按钮的
     `impact`（`会把总额**覆盖**成 $…`）。两处都不是 JSX 能消化的语法，用户看到的是
     多出来的星号。注释里的记号不算（注释不上屏），所以先剥注释再扫。
 
@@ -837,7 +823,7 @@ def test_the_budget_page_has_two_explicit_buttons_and_no_dead_select() -> None:
     业主 2026-10-13 报的是「预算页『重设金额』用不了」。取证结论：坏在前端 ——
     原先只有一个按钮、动作靠原生 `select` 切换，选完再按那一下在浏览器里切不过去。
     R81 改成两个各自带 action 的 `ConfirmButton`，R89 把那个 `select` 彻底删掉：
-    它已经**不接任何线**（改它什么也不会发生），留着就是一个会骗人的控件。
+    它已经不接任何线（改它什么也不会发生），留着就是一个会骗人的控件。
 
     这一条钉三件事：两个动作各有一个按钮（`onConfirm` 里分别 `submit("add")` /
     `submit("set")`）、页面上不再有 `select`、追加历史里"没写说明"的那一格显
@@ -853,23 +839,16 @@ def test_the_budget_page_has_two_explicit_buttons_and_no_dead_select() -> None:
 
 
 def test_the_machine_page_really_has_a_lean_switch() -> None:
-    """判据（业主 2026-10-13：「lean 开关网页上没法真的开关」）：这一页要能看、能翻。
-
-    取证（本机实测）：后端一直在给这一格 —— `GET /api/machine` 有
-    `lean_enabled`（开关）= `false`、`lean_enabled_source`（谁定的 = 缺省）、
-    `formal_mode`（走了哪一档 = `prose_review`）；`POST /api/settings` 写
-    `toolchain.lean_enabled=true` 也一直是好的（写完 `settings.lean_enabled()`
-    立刻回 `(True, "settings")`）。缺的是**台面**：这一页原先只画 `lean_ready`
-    （这台机器装没装 Lean）与 `can_do_formal`，既不画开关本身，也没有一个能按的
-    开关 —— 改它只能去「设置窗口」那个自由文本框里手打 `true` / `false`。
-
-    所以这一条钉三件事：
+    """    判据（业主 2026-10-13：「lean 开关网页上没法真的开关」）：这一页要能看、能翻。取证（本机实测）：后端一直在给这一格 —— `GET /api/machine` 有`lean_enabled`（开关）=
+    `false`、`lean_enabled_source`（谁定的 = 缺省）、`formal_mode`（走了哪一档 = `prose_review`）；`POST /api/settings`
+    写`toolchain.lean_enabled=true` 也一直是好的（写完 `settings.lean_enabled()`立刻回 `(True, "settings")`）。缺的是台面：这一页原先只画 `lean_ready`（这台机器装没装
+    Lean）与 `can_do_formal`，既不画开关本身，也没有一个能按的开关 —— 改它只能去「设置窗口」那个自由文本框里手打 `true` / `false`。所以这一条钉三件事：
     - 开关那一格真的读了（`lean_enabled` / `lean_enabled_source` / `formal_mode`，
-      见 `PAGE_KEYS["Machine"]`）；
+    见 `PAGE_KEYS["Machine"]`）；
     - 有两个各自带动作的按钮（「打开形式化」/「关闭形式化」），确认里写的是
-      `toolchain.lean_enabled` 那一格；
+    `toolchain.lean_enabled` 那一格；
     - 环境变量压着设置文件时（`lean_enabled_source === "env"`）页面上要说出来 ——
-      否则用户改了设置文件、读数不动，只会以为开关坏了。
+    否则用户改了设置文件、读数不动，只会以为开关坏了。
     """
     src = _page_text("Machine")
     assert "SWITCH_SOURCES" in src, "开关的来源没有词表（'谁定的'会显成一串机器字）"
@@ -880,25 +859,16 @@ def test_the_machine_page_really_has_a_lean_switch() -> None:
 
 
 def test_the_evidence_and_artifacts_pages_drop_the_dead_readings() -> None:
-    """R93 体检（业主逐条点出来的那几格）：该拿的拿、该撤的撤、该改档的改档。
+    """    R93 体检（业主逐条点出来的那几格）：该拿的拿、该撤的撤、该改档的改档。
 
-    业主 2026-10-13 在跑着的 T1 上逐页看了一遍，点名六处"永远是 unknown / 不适用"。
-    逐条对着盘上真数据定过性（读数记在那一轮的提交信息里），这一条把结论钉在源码上：
+    业主 2026-10-13 在跑着的 T1 上逐页看了一遍，点名六处"永远是 unknown / 不适用"。逐条对着盘上真数据定过性（读数记在那一轮的提交信息里），这一条把结论钉在源码上：
 
-    1. 命题台账「正文」：盘上 `statement_text`（短版）常为空，而 `statement_full`
-       （含假设的全文）有字 ⇒ 短版优先、缺席退回全文（旧版整列 `unknown`）；
-    2. 「引文回验」：`quote_verified` 的比对对象是 `proof_text`，而概念行结构上
-       没有逐字摘录 ⇒ 那一档是**不适用**，不是「未查」（旧版把两者印成同一个词）；
-    3. 秘书决策「判据」：盘上它是整份判定记录（对象）或 `null` ⇒ 只读"经不经判据、
-       判过没有"，不把对象 `cell()` 出去、也不把 `null` 印成 `unknown`；
-    4. 产物台账「退出码」：格式里有这一栏，但真机登记的 `out/tasks/*.json` 没有退出码
-       ⇒ 整列恒 `unknown`，撤掉（真落点在「证据链 → 实验」那张表）；
-    5. 「验收表的机器可判行」/「报告体例兑现」：没有那份文件时一句话说清它是谁写的、
-       什么时候会有，不铺一屏"不适用"；
-    6. 「六件产物」：那是 `project run` 那条流水线的产物面，审阅型项目里恒 `不适用`
-       ⇒ 整卡换成一句导引（真有 `out/run-N/` 时照旧画表）；
-    7. 叫停按钮：`Live` 与 `Run` 两页共用同一份实现（此前只长在 Run 页，
-       而人要叫停时待的是「在飞」）。
+    1. 命题台账「正文」：盘上 `statement_text`（短版）常为空，而 `statement_full`（含假设的全文）有字 ⇒ 短版优先、缺席退回全文（旧版整列 `unknown`）；2.
+    「引文回验」：`quote_verified` 的比对对象是 `proof_text`，而概念行结构上没有逐字摘录 ⇒ 那一档是不适用，不是「未查」（旧版把两者印成同一个词）；3. 秘书决策「判据」：
+    盘上它是整份判定记录（对象）或 `null` ⇒ 只读"经不经判据、判过没有"，不把对象 `cell()` 出去、也不把 `null` 印成 `unknown`；4. 产物台账「退出码」：格式里有这一栏，但真机登记的
+    `out/tasks/*.json` 没有退出码⇒ 整列恒 `unknown`，撤掉（真落点在「证据链 → 实验」那张表）；5. 「验收表的机器可判行」/「报告体例兑现」：没有那份文件时一句话说清它是谁写的、什么时候会有，
+    不铺一屏"不适用"；6. 「六件产物」：那是 `project run` 那条流水线的产物面，审阅型项目里恒 `不适用`⇒ 整卡换成一句导引（真有 `out/run-N/` 时照旧画表）；7. 叫停按钮：`Live` 与
+    `Run` 两页共用同一份实现（此前只长在 Run 页，而人要叫停时待的是「在飞」）。
     """
     ev = _page_text("Evidence")
     art = _page_text("Artifacts")
@@ -922,8 +892,8 @@ def test_no_rendered_text_carries_a_stray_block_comment_opener() -> None:
 
     为什么这是一条真判据：本文件（以及契约判据）读前端源码靠
     `_strip_js_comments()` —— 它是 `re.compile(r"/\\*.*?\\*/", re.S)`，
-    **不认 JSX 文本**。于是页面正文里只要有一个 `/*`（本机实测：产物页那行
-    `out/secretary/*.jsonl`），它就会和**后面任意一个** `*/` 配成一对，把中间
+    不认 JSX 文本。于是页面正文里只要有一个 `/*`（本机实测：产物页那行
+    `out/secretary/*.jsonl`），它就会和后面任意一个 `*/` 配成一对，把中间
     整段代码当成注释吃掉 —— 判据随之以"这一页什么都没读"的形态假红（本次实测：
     产物台账、台账对账、交接手稿三张卡一起消失）。注释里的 `/*` 不算（那是真注释）。
 
@@ -964,19 +934,15 @@ def test_the_home_page_is_a_chat_box_that_picks_the_right_endpoint() -> None:
 
 
 def test_the_settings_panel_prefills_from_the_reading() -> None:
-    """判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥
-    都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。
+    """    判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。
 
-    按源码读（与这一组其余判据同一条路）：页面是客户端渲染的，Python 判据看不到 DOM，
-    但这件事实在源码里是**结构可见**的 —— 输入框的 `value` 必须落到"读数 ⊕ 用户输入"
-    这个表达式上，而不是恒为空串。
+    按源码读（与这一组其余判据同一条路）：页面是客户端渲染的，Python 判据看不到 DOM，但这件事实在源码里是结构可见的 —— 输入框的 `value` 必须落到"读数 ⊕ 用户输入"这个表达式上，而不是恒为空串。
 
     两向都钉：
     - 正向：`value` 用 `presetOf(settings, …)`（读数为底）、存在 `currentOf` 取现值；
-    - 反向：`model.api_key` **不许**回填（读数恒为 `***`，回填等于把 `***` 写回文件）。
+    - 反向：`model.api_key` 不许回填（读数恒为 `***`，回填等于把 `***` 写回文件）。
 
-    2026-10-13（R88）再加一条：key 那一格必须是 `type=password`（输入时不上屏）。
-    这是同一条"key 只写不读"纪律的另一半 —— 不回填不等于不上屏。
+    2026-10-13（R88）再加一条：key 那一格必须是 `type=password`（输入时不上屏）。这是同一条"key 只写不读"纪律的另一半 —— 不回填不等于不上屏。
     """
     src = _page_text("Machine")
     assert "presetOf(settings, field.key)" in src, "设置窗口的输入框没有按读数回填"

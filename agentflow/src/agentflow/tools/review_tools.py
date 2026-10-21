@@ -1,54 +1,22 @@
 """H 的工具：审校。
-
 ## 这个模块存在的最重要理由
-
 审校者的判断也需要证据。
-
-这是本项目上一阶段最刺痛的一条教训：评审方提出的一条「缺陷」
-（「medium 置信度泄漏进了正文」）是错的，是实现方拿证据顶回来才纠正的。
-如果审校记录可以只写「这里有问题」而不给依据，审校就会变成
-另一种幻觉的来源 —— 而且因为审校者站在更高的位置，它更难被纠正。
-
-因此：
-
-1. `schema.ReviewFinding.evidence` 必填非空（写入时硬约束）；
-2. 本模块的每个检查都给出 `evidence` 字段，内容是触发该发现的实际值
-   （例如 `citations=[]`、`evidence_kind='cross_check' 且 disclaimer 为空`），
-   而不是一句「看起来不对」；
-3. H 只读：它提发现，不改稿。改稿由 G 做。这不是分工洁癖 ——
-   若审校者能直接改，它就同时是「发现者」与「修正者」，
-   于是「发现问题」与「掩盖问题」在结构上无法区分。
-
+1. `schema.ReviewFinding.evidence` 必填非空（写入时硬约束）； 2. 本模块的每个检查都给出 `evidence` 字段，内容是触发该发现的实际值（例
+如 `citations=[]`、`evidence_kind='cross_check' 且 disclaimer 为空`），而不是一句「看起来不对」；
 ## 「H 只读」在本模块里的落地形态（两条，缺一不可）
-
-- 默认注册面只读：`register()` 只注册 `review.scan_document`（`none`）
-  与 `review.list_findings`（`read`）。会写盘的两个入口
-  （`review.review_document` / `review.verify_fixes`，均为 `write_local`）
-  必须显式 `include_writers=True` 才会被装配 —— 于是「H 的工具面」
-  （默认装配结果）在结构上不含任何写工具。
-- 它们是 H 的代理步骤，不是 H 的刀：这两个写工具的落点被钉死在
-  `review_findings`（新增/改状态）与 `documents.status` 上，
-  一个字都不改 `claims` / `knowledge tables`。改稿这件事在 H 侧根本没有入口。
-
+- 默认注册面只读：`register()` 只注册 `review.scan_document`（`none`）与 `review.list_findings`（`read`）。会写
+盘的两个入口（`review.review_document` / `review.verify_fixes`，均为 `write_local`）必须显式 
+`include_writers=True` 才会被装配 —— 于是「H 的工具面」（默认装配结果）在结构上不含任何写工具。- 它们是 H 的代理步骤，不是 H 的刀：这两个写工具的落
+点被钉死在`review_findings`（新增/改状态）与 `documents.status` 上，一个字都不改 `claims` / `knowledge tables`。
 ## 判据只有一份（已修，历史见下）
-
-`scan_document` 与 G 侧的 `doc_tools.scan_claim` 同词表（`schema.FINDING_KINDS`），
-逐条检查项必须一致：引用是否为空、`evidence_kind` 是否合法、
-`cross_check` 是否缺 disclaimer、正文是否过度声称、否定型断言的 `negation_kind`
-是否合法/是否该有。
-
-这里曾经是假的：本模块 docstring 声称"不另写一套检查"，而
-`scan_document` 把 `scan_claim` 的检查复制了一份且已经漂移 ——
-H 侧当时不检查非法 `evidence_kind`、不检查 `negation_kind` 是否在受控词表里、
-也不检查"非否定断言却带了 negation_kind"。漂移的后果不是崩溃，而是
-"G 认为合规、H 认为通过"这种没有任何报错的静默分裂。
-现在这三条已在 `scan_document` 里补齐（与 `scan_claim` 同等级、同判据）。
-
-本轮把根因也去掉了：字段级判据现在归 `claimanatomy`（`CLAIM_FIELDS` 是
-唯一声明表），`doc_tools.scan_claim` 只是它的适配层。`scan_document` 仍保留
-自己的循环，但它必须产出同一批 finding kind（`schema.FINDING_KINDS`），
-且不许比 G 侧轻 —— 这一约束由 `tests/test_tools_audit_fixes.py` 的
-双向对照用例钉住，由 `tests/test_gates.py` 的 G10/G14 用例补充。
+`scan_document` 与 G 侧的 `doc_tools.scan_claim` 同词表（`schema.FINDING_KINDS`），逐条检查项必须一致：引用是否为空、
+`evidence_kind` 是否合法、`cross_check` 是否缺 disclaimer、正文是否过度声称、否定型断言的 `negation_kind`是否合法/是否该有。
+这里曾经是假的：本模块 docstring 声称"不另写一套检查"，而`scan_document` 把 `scan_claim` 的检查复制了一份且已经漂移 ——H 侧当时不检查非法
+`evidence_kind`、不检查 `negation_kind` 是否在受控词表里、也不检查"非否定断言却带了 negation_kind"。现在这三条已在 
+`scan_document` 里补齐（与 `scan_claim` 同等级、同判据）。
+本轮把根因也去掉了：字段级判据现在归 `claimanatomy`（`CLAIM_FIELDS` 是唯一声明表），`doc_tools.scan_claim` 只是它的适配层。
+`scan_document` 仍保留自己的循环，但它必须产出同一批 finding kind（`schema.FINDING_KINDS`），且不许比 G 侧轻 —— 这一约束由 
+`tests/test_tools_audit_fixes.py` 的双向对照用例钉住，由 `tests/test_gates.py` 的 G10/G14 用例补充。
 """
 
 from __future__ import annotations
@@ -111,7 +79,7 @@ _H_FINDING_KIND_OF_CA_CODE: dict[str, str] = {
     # 一个查生命周期闭合）⇒ 它们要按语义落 kind，不能落 `garbled`。
     "incomplete_numeric_evidence": "unsupported_claim",
     "lifecycle_incomplete": "inconsistent_number",
-    # ⚠️ 「2026-10-15 补登记」：`uncontrolled_disclaimer`（2026-10-13 加）同样漏了这里。
+    # 「2026-10-15 补登记」：`uncontrolled_disclaimer`（2026-10-13 加）同样漏了这里。
     # 本表的兜底是 `garbled`（见上面那句"不在表里的 code 落到 `garbled`"），
     # 所以它不像 `doc_tools` 那张表那样当场炸 —— 它「静默地」把
     # "声明不是受控那一句"读成"表述无法解析"，而 kind 是审校分档的判据。
@@ -214,18 +182,15 @@ _LINE_UNAVAILABLE_REASON = (
 
 def _verbatim_quote(seed: Any) -> str:
     """把触发这条发现的正文截成 ≤20 词的逐字引文（`X-96.3-1`）。
-
+    
     两条口径都不在本文件另造：
-
-    * 词数口径 = `gates._quote_word_count`（中文按字、英文按空白切词）。
-      `schema.ReviewFinding.validate()` 读的也是它 —— 各写一份必然漂移，
-      而漂移的表现是"写入期说 20 词、门说 21 词"。惰性引用私有名与
-      `schema.py` 里那处 `from .gates import AXES, _quote_word_count` 同形。
-    * 上限 = `draft/17` §8.4 的"≤20 词逐字引文"。
-
-    截口用省略号标出：不重写、不概括 —— 引文一旦被改写就不再是"逐字"，
-    而 G10 要的正是"你看到的那句话长什么样"。
-    空种子返回空串（调用方保证非空；真为空说明这一行里连定位符都没有）。
+    
+    * 词数口径 = `gates._quote_word_count`（中文按字、英文按空白切词）。`schema.ReviewFinding.validate()` 读的也
+    是它 —— 各写一份必然漂移，而漂移的表现是"写入期说 20 词、门说 21 词"。惰性引用私有名与`schema.py` 里那处 
+    `from .gates import AXES, _quote_word_count` 同形。* 上限 = `draft/17` §8.4 的"≤20 词逐字引文"。
+    
+    截口用省略号标出：不重写、不概括 —— 引文一旦被改写就不再是"逐字"，而 G10 要的正是"你看到的那句话长什么样"。空种子返回空串（调用方保证非空；真为空说明这一行里连
+    定位符都没有）。
     """
     text = " ".join(str(seed or "").split())
     if not text:
@@ -252,17 +217,14 @@ def _finding(
     line_reason: str = "",
 ) -> dict:
     """造一条 H 的发现：既有六格不变，另按声明表补齐 `P-9` 的四键 + 最小修法。
-
-    这个构造函数存在的唯一理由是只有一处补齐逻辑（FC-03）：四键写在十几个
-    `findings.append` 里，下一次改声明表就会漏掉其中几处，而漏掉的表现是
-    G10 对部分发现报 `unknown` —— 比全缺更难发现。
-
-    `quote` 是"这条发现指向的那段正文"（逐字取自本次输入；断言 → 它的正文，
-    依赖 → 它的标签，拿不到就退到 `target` 一类逐字存在的定位符）。
-
-    `line` / `line_reason`（`FINAL-R5-05`）：行号只有产出方拿得到带行号的正文时
-    才给得出；`scan_document` 的输入是结构化的 `claims`/`dependencies`，
-    正常没有正文，所以默认 `line=None` + 受控理由串。给了 `line` 时理由串留空。
+    
+    这个构造函数存在的唯一理由是只有一处补齐逻辑（FC-03）：四键写在十几个`findings.append` 里，下一次改声明表就会漏掉其中几处，而漏掉的表现是 G10 对
+    部分发现报 `unknown` —— 比全缺更难发现。
+    
+    `quote` 是"这条发现指向的那段正文"（逐字取自本次输入；断言 → 它的正文，依赖 → 它的标签，拿不到就退到 `target` 一类逐字存在的定位符）。
+    
+    `line` / `line_reason`（`FINAL-R5-05`）：行号只有产出方拿得到带行号的正文时才给得出；`scan_document` 的输入是结构化的 
+    `claims`/`dependencies`，正常没有正文，所以默认 `line=None` + 受控理由串。给了 `line` 时理由串留空。
     """
     axis, maths, suggestion = _FOUR_GATE_KEYS_OF_KIND.get(kind, _FOUR_GATE_KEYS_FALLBACK)
     return {
@@ -308,39 +270,16 @@ def scan_document(
     semantic_judge: SemanticJudge | None = None,
 ) -> dict:
     """对一份稿件做全量机械审校。纯函数，不碰存储。
-
-    检查项（每一项都可判定，且都给出 evidence）：
-
-    - `unsupported_claim` —— 断言无引用；
-    - `overclaim` —— `evidence_kind != "proof"` 却出现证明性措辞，或
-      `cross_check` 缺 disclaimer；
-    - `missing_negation_kind` —— 否定型断言未分类；
-    - `dangling_dep` —— 该稿件登记的依赖里有 `dangling` / `external_unavailable` 的
-      （这是 FC-23 的落地：引用了拿不到的定理，必须是一条可见的发现，而不是
-      藏在引文角标里）；
-    - `inconsistent_number` —— 同一份稿件里同一个 claim_key 出现互相矛盾的数字
-      （当前版本只检查「同一 claim_id 重复出现且 text 不同」，这是可判定的那一层）。
-
-    本函数不判断数学对不对。 它判的是「稿件有没有把自己说清楚」：
-    有没有引用、证据等级有没有被夸大、依赖有没有闭合。把这两件事分清，
-    是审校可被信任的前提 —— 一个声称「我检查了证明」的自动审校器是危险的。
-
-    三态：`dependencies=None` ⇒ `dep_check.checked=False`（没查），
-    与「查了、依赖都闭合」（`checked=True, findings=[]`）严格区分。
-    `semantic_judge=None` ⇒ `semantic_check["checked"] is False`（没接线，同样是没查），
-    与「判过、都说一致」严格区分（`R-42`：措辞级判据抓不住"措辞干净但结论强于引文"）。
-
+    - `unsupported_claim` —— 断言无引用；- `overclaim` —— `evidence_kind != "proof"` 却出现证明性措辞，或`cross_check` 缺 disclaimer；- 
+    `missing_negation_kind` —— 否定型断言未分类；- `dangling_dep` —— 该稿件登记的依赖里有 `dangling` / `external_unavailable` 的（这是 FC-23 的落
+    地：引用了拿不到的定理，必须是一条可见的发现，而不是藏在引文角标里）；- `inconsistent_number` —— 同一份稿件里同一个 claim_key 出现互相矛盾的数字（当前版本只检查「同一 claim_id 重复出现
+    且 text 不同」，这是可判定的那一层）。
+    三态：`dependencies=None` ⇒ `dep_check.checked=False`（没查），与「查了、依赖都闭合」（`checked=True, findings=[]`）严格区分。
+    `semantic_judge=None` ⇒ `semantic_check["checked"] is False`（没接线，同样是没查），与「判过、都说一致」严格区分（`R-42`：措辞级判据抓不住"措辞干净但结论强于引文"）。
     `verdict` 的受控词与分档顺序（必须与写入路径 `review_document` 完全一致）：
-
-    | 条件 | verdict |
-    |---|---|
-    | 有 error 级发现 | `rejected` |
-    | 无 error，但 `dep_check.checked is False` | `unverified`（不是 accepted） |
-    | 无 error、依赖查过、有 warning | `accepted_with_warnings` |
-    | 无 error、依赖查过、无 warning | `accepted` |
-
-    为什么"没查依赖"要单独占一档：把它并进 `accepted` 会让"我们从未检查"
-    伪装成"检查通过"；并进 `rejected` 又会把"没做"说成"做失败了"。
+    | 条件 | verdict ||---|---|| 有 error 级发现 | `rejected` || 无 error，但 `dep_check.checked is False` | `unverified`（不是
+    accepted） || 无 error、依赖查过、有 warning | `accepted_with_warnings` || 无 error、依赖查过、无 warning | `accepted` |
+    为什么"没查依赖"要单独占一档：把它并进 `accepted` 会让"我们从未检查"伪装成"检查通过"；并进 `rejected` 又会把"没做"说成"做失败了"。
     """
     findings: list[dict] = []
     doc_id = str(doc.get("doc_id") or "?")
@@ -842,19 +781,16 @@ def _resolve_deps(store: Any, doc_id: str, dependencies: Any) -> tuple[Any, bool
 
 def _set_doc_status(store: Any, doc_id: str, target: str, *, actor: str) -> tuple[bool, str | None, str]:
     """只改 `documents` 行的 `status` 字段。返回 (是否写成, 错误, 当前状态)。
-
+    
     ## 为什么只改 status，连 `updated_at` 都不碰
-
-    "H 只读"必须有一个可核对的形式：调用前后逐字节比对 `documents.json`，
-    变化点应当有且只有 status。顺手更新 `updated_at` 看起来无害，
+    
+    "H 只读"必须有一个可核对的形式：调用前后逐字节比对 `documents.json`，变化点应当有且只有 status。顺手更新 `updated_at` 看起来无害，
     但它会让"H 到底动了什么"从"一眼看清"退化成"要逐字段 diff 才知道"。
-
+    
     ## 为什么这个写会失败（而且必须如实报告）
-
-    `Document.validate` 会在提交时校验整张 documents 表。若盘上这份稿件
-    本身不合 schema（例如是手工改坏的、或旧版本写的），那么连"把它的状态改成
-    in_review"都写不进去。这不是可以掩盖的细节：发现照样落库，状态更新失败
-    这件事本身也要出现在返回值里，否则调用方会以为"审校流程正常结束了"。
+    
+    `Document.validate` 会在提交时校验整张 documents 表。若盘上这份稿件本身不合 schema（例如是手工改坏的、或旧版本写的），那么连"把它的状
+    态改成 in_review"都写不进去。这不是可以掩盖的细节：发现照样落库，状态更新失败这件事本身也要出现在返回值里，否则调用方会以为"审校流程正常结束了"。
     """
     cur = next(
         (str(r.get("status")) for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)),
@@ -942,24 +878,15 @@ def record_finding(
     actor: str = "agent-H",
 ) -> dict:
     """把「H 自己读出来的」一条发现落成 `review_findings` 行（业主 2026-10-18 裁定）。
-
     ## 这是哪一条洞的修法（读数先于修法）
-
-    `projects/mp3` 末节第 5 条那一类「面外操作」在 H 这一侧的同族形态是：
-    `review_document` / `verify_fixes` 落的发现「全部来自机械扫描」（`scan_document`），
-    而 H 自己读出来的那一条（「G8 回执没给退出码」「正文引用的那份材料盘上没有」）
-    「没有任何落点」 —— 它只能写在回复或报告文件里。于是
-    `review_findings` 里有的永远是机器算得出的那几类，人（角色）的判断进不了台账。
-
+    `projects/mp3` 末节第 5 条那一类「面外操作」在 H 这一侧的同族形态是：`review_document` / `verify_fixes` 落的发现「全
+    部来自机械扫描」（`scan_document`），而 H 自己读出来的那一条（「G8 回执没给退出码」「正文引用的那份材料盘上没有」）「没有任何落点」 —— 它只能写在回
+    复或报告文件里。于是`review_findings` 里有的永远是机器算得出的那几类，人（角色）的判断进不了台账。
     ## 三条边界（与 `review_document` 同一套口径）
-
-    1. 只写 `review_findings`：不改 `documents.status`（那是裁决那一档的事）、
-       不碰任何知识表。改「稿件状态」需要走 `review_document` 的裁决路径 ——
-       一审一判，不许用"补一条发现"顺手把状态挪一格。
-    2. 去重键仍是 `(kind, target, message)`（`_dedup_key`，全仓唯一一份）：
-       同一条发现重复登记返回既有 `finding_id`（`created=False`），不制造重复行。
-    3. `evidence` 必填且非空：审校者的判断也要有依据（`schema.ReviewFinding` 的
-       设计核心）。空 evidence 由 `validate()` 拒，这里不写第二份判据。
+    1. 只写 `review_findings`：不改 `documents.status`（那是裁决那一档的事）、不碰任何知识表。改「稿件状态」需要走 
+    `review_document` 的裁决路径 ——一审一判，不许用"补一条发现"顺手把状态挪一格。 2. 去重键仍是 `(kind, target, message)`（`_dedup_key`，
+    全仓唯一一份）：同一条发现重复登记返回既有 `finding_id`（`created=False`），不制造重复行。 3. `evidence` 必填且非空：审校者的判断
+    也要有依据（`schema.ReviewFinding` 的设计核心）。空 evidence 由 `validate()` 拒，这里不写第二份判据。
     """
     doc_id = str(doc_id or "")
     _doc_of(store, doc_id)  # 稿件不存在 ⇒  ValueError（不能给不存在的稿件落发现）
@@ -1024,25 +951,14 @@ def review_document(
     semantic_judge: Any = None,
 ) -> dict:
     """审一份稿件：把机械发现落成 `ReviewFinding` 行，并更新 `documents.status`。
-
-    返回 ``{"doc_id","checked","round","new_findings","duplicate_skipped","reopened",
-    "error_count","warning_count","info_count","dep_check","status","status_updated",
-    "status_error","verdict","reason"}``。
-
+    返回 ``{"doc_id","checked","round","new_findings","duplicate_skipped","reopened","error_count","warning_count","info_count","dep_check","status","status_updated","status_error","verdict","reason"}``。
     ## 三段式（为什么是三个事务而不是一个）
-
-    1. 落发现（`review_findings`）：发现是审校的产出，必须落库 ——
-       "发现了但没记下来"等于没发现。
-    2. 重开谎报（`review_findings`）：G 把一条 finding 标成 `fixed` 之后，
-       如果重跑检查仍然复现，这条 finding 会被重新打开。没有这一步，
-       G 只要点一下"已修复"，审校就只看状态、成了盖章机。
-    3. 改状态（`documents`，独立事务）：稿件可能本身不合 schema，
-       于是这一步会失败。把它与落发现分开，失败时才不会连发现一起丢掉。
-
+    1. 落发现（`review_findings`）：发现是审校的产出，必须落库 ——"发现了但没记下来"等于没发现。 2. 重开谎报（`review_findings`）：
+    G 把一条 finding 标成 `fixed` 之后，如果重跑检查仍然复现，这条 finding 会被重新打开。没有这一步， G 只要点一下"已修复"，审校就只看状态、成
+    了盖章机。 3. 改状态（`documents`，独立事务）：稿件可能本身不合 schema，于是这一步会失败。把它与落发现分开，失败时才不会连发现一起丢掉。
     ## 三态：`dependencies` 没查 ⇒ 不许判 accepted
-
-    `dep_check.checked is False` 时 verdict 是 `"unverified"`，文档状态停在
-    `in_review` —— 「依赖都闭合」这句话在没有查过的情况下不许说出口。
+    `dep_check.checked is False` 时 verdict 是 `"unverified"`，文档状态停在`in_review` —— 「依赖都闭合」这句
+    话在没有查过的情况下不许说出口。
     """
     doc_id = str(doc_id)
     doc = _doc_of(store, doc_id)
@@ -1302,37 +1218,16 @@ def verify_fixes(
     semantic_judge: SemanticJudge | None = None,
 ) -> dict:
     """复审：对上一轮的每条 finding 重跑对应检查，判定 `fixed` / 仍 `open`。
-
-    返回 ``{"doc_id","round","resolved","still_open","unresolved_findings","verdict",
-    "reason",...}``。
-
-    ## 终止性（FC-18 的同族要求）
-
-    `error` 级发现一直不修、且已经到 `max_review_rounds` ⇒ 文档状态置
-    `unresolved_review`，并且必须把未解决的 finding 明确列出来
-    （`unresolved_findings` 非空）。「跑了 N 轮还是红」如果只体现在一个状态字符串上，
-    接手的人就无从知道到底卡在哪一条 —— 不许隐藏。
-
-    ## 判定口径
-
-    判据不是 G 自称修好了，而是"重跑检查还复现吗"：
-    复现 ⇒ `open`（即使 G 已经把它标成 `fixed`，也会被重新打开）；
-    不复现 ⇒ `fixed`。此外当前扫描里新出现的问题会以 `source="new_issue"`
-    出现在 `still_open` 里（复审不是"只看旧账"）。
-
-    ## `R-04`（`draft/44` / `draft/52` D 族）：两半
-
-    R-04-a（语义判据的注入面）：复审复扫与 `review_document` 走同一个
-    `scan_document(..., semantic_judge=...)`。此前 `verify_fixes` 的复扫不带判据，
-    于是"上一轮由语义判据产生的 `overclaim`"在这一轮结构上不可能复现 ⇒
-    必然落进 `resolved` ⇒ 写成 `status="fixed"`（真机 `p8d` 的 claim-3/claim-4
-    就是这样被"修好"的：库里是 `fixed`，而现行版内容上它们仍被判"结论强于引文"）。
-
-    R-04-b（没查 ≠ 修好）：`resolved` 里凡是语义那一支的 finding，
-    只有"这一轮真的重跑了语义判据、且它没有复现"才允许落 `fixed`；
-    判据没接线（`semantic_judge is None`）或这一轮答不上来 / 判据报错
-    （`claims_unknown` / `checker_errors`）⇒ 留在 `open` 并标
-    `source="not_rechecked"`（返回值取值，不落表）。
+    返回 ``{"doc_id","round","resolved","still_open","unresolved_findings","verdict","reason",...}``。
+    终止性（FC-18 的同族要求）`error` 级发现一直不修、且已经到 `max_review_rounds` ⇒ 文档状态置`unresolved_review`，并且必须把未解决的 finding 明确列出来（`unresolved_findings`
+    非空）。
+    判据不是 G 自称修好了，而是"重跑检查还复现吗"：复现 ⇒ `open`（即使 G 已经把它标成 `fixed`，也会被重新打开）；不复现 ⇒ `fixed`。此外当前扫描里新出现的问题会以 
+    `source="new_issue"`出现在 `still_open` 里（复审不是"只看旧账"）。
+    `R-04`（`draft/44` / `draft/52` D 族）：两半R-04-a（语义判据的注入面）：复审复扫与 `review_document` 走同一个
+    `scan_document(..., semantic_judge=...)`。此前 `verify_fixes` 的复扫不带判据，于是"上一轮由语义判据产生的 `overclaim`"在这一轮结构上不可能复现 ⇒必然
+    落进 `resolved` ⇒ 写成 `status="fixed"`（真机 `p8d` 的 claim-3/claim-4 就是这样被"修好"的：库里是 `fixed`，而现行版内容上它们仍被判"结论强于引文"）。
+    R-04-b（没查 ≠ 修好）：`resolved` 里凡是语义那一支的 finding，只有"这一轮真的重跑了语义判据、且它没有复现"才允许落 `fixed`；判据没接线（`semantic_judge is None`）
+    或这一轮答不上来 / 判据报错（`claims_unknown` / `checker_errors`）⇒ 留在 `open` 并标`source="not_rechecked"`（返回值取值，不落表）。
     """
     doc_id = str(doc_id)
     round_no = int(round_no)
@@ -1641,25 +1536,14 @@ def review_report(
     semantic_judge: Any = None,
 ) -> dict:
     """产出 G1–G15 的完整审校报告（markdown 落盘）—— §8.4 的落地入口。
-
     ## 三件被结构强制的事（缺一件就抛，见 `gates.gate_report`）
-
-    1. 钉住被审版本 hash（G11）：报告头写 `revision_hash`
-       （`claimanatomy.revision_hash`，算法逐字写进报告）。
-    2. 『我这一轮犯的错』一节（G15）：`own_errors` 是必填参数；
-       `None` ⇒ 抛（"没写"不等于"没犯错"），`[]` ⇒ 合法（显式声明零错误）。
-    3. 零发现自证（G13）：每道报"零发现"的门都必须带"我用了什么过程、
-       数出了什么数字" —— 由 `gates.GateResult` 的构造期校验保证，
-       G13 再独立复核一遍。
-
+    1. 钉住被审版本 hash（G11）：报告头写 `revision_hash`（`claimanatomy.revision_hash`，算法逐字写进报告）。 2. 『我
+    这一轮犯的错』一节（G15）：`own_errors` 是必填参数；`None` ⇒ 抛（"没写"不等于"没犯错"），`[]` ⇒ 合法（显式声明零错误）。 3. 零发现自
+    证（G13）：每道报"零发现"的门都必须带"我用了什么过程、数出了什么数字" —— 由 `gates.GateResult` 的构造期校验保证， G13 再独立复核一遍。
     ## 它写哪里、写什么
-
-    只写一个 markdown 文件（默认 `<workspace>/out/review/<doc_id>-review.md`），
-    不碰任何数据表、不碰 `claims`。这是 `AgentH` 落库代理的一个入口，
-    因此它属于"能被显式拒绝的写工具"那一类（`include_writers=True` 才装配）。
-
-    三态：`dependencies` 省略 = 从库里读该稿件的依赖（查过）；
-    显式 `None` = 没查（`dep_check.checked=False`）。
+    只写一个 markdown 文件（默认 `<workspace>/out/review/<doc_id>-review.md`），不碰任何数据表、不碰 `claims`。这
+    是 `AgentH` 落库代理的一个入口，因此它属于"能被显式拒绝的写工具"那一类（`include_writers=True` 才装配）。
+    三态：`dependencies` 省略 = 从库里读该稿件的依赖（查过）；显式 `None` = 没查（`dep_check.checked=False`）。
     """
     if own_errors is None:
         raise ValueError(

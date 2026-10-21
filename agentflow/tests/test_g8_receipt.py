@@ -1,38 +1,23 @@
-"""判据（修法 2）：`G8` 在 H 参与的一趟里**不可能只因权限而恒为 `unknown`**。
+"""判据（修法 2）：`G8` 在 H 参与的一趟里不可能只因权限而恒为 `unknown`。
 
-## 这一条修的是哪一个现场读数
+现场读数：`projects/mp3` 末节第 4 条逐字「H 的 G8 未知：没人（H 只读、拿不到执行工具）在审校轮
+里重跑那四个脚本，可复跑门只能记 unknown」；`projects/t3d` 三·4 逐字「H 第五轮 G8/G11 为
+unknown：H 只读、无执行面」。两次的成因相同：H 的工具面里没有任何 `external == "exec"` 的入口
+（这是"只读"的结构定义，不该改），而旧实现里 `run_evidence` 只能由 H 自己造 ⇒ "H 参与的一趟"里
+G8 的结构上限就是 unknown。
 
-- `projects/mp3` 末节第 4 条逐字：「**H 的 G8 未知**：没人（H 只读、拿不到执行工具）
-  在审校轮里重跑那四个脚本，可复跑门只能记 unknown」；
-- `projects/t3d` 三·4 逐字：「H 第五轮 **G8/G11 为 unknown**：H 只读、无执行面」。/
+修法选 (b)：M 代跑、H 判回执 —— `run_evidence` 本来就是 `review.report` 的调用方参数（M 派活时
+给），M 有 `M→E` 的边，E 的 `verify.run_experiment` 会返回 `exit_code` 与 stdout ⇒ 回执可以从
+"已经在手上的动作返回值"里凑出来。(a) 要给 H 受控执行面就得动权限面（`tools/base._role_surface` 的
+`external == "exec"` 剥除、`READONLY_CALL_EXCEPTIONS`、`specs/h.py` 的边界）＝ FC-27 auth-audit 的整片改动，代价大，不选。
 
-两次 unknown 的成因完全相同：H 的工具面里没有任何 `external == "exec"` 的入口
-（这是"只读"的结构定义，不该改），而旧实现里 `run_evidence` **只能由 H 自己造**
-——于是"H 参与的一趟"里 G8 的结构上限就是 unknown。
+所以这一趟修的是判据，不是权限：G8 现在跑过且绿 ⇒ `pass`；跑过且红（`exit_code != 0`）⇒ `fail`；
+没跑 ⇒ `unknown`，并把"为什么没跑"写成必填（不写 ⇒ 那一条 unknown 自带一条 finding）；回执读不懂
+（不是数组 / 缺 `exit_code` / 缺 `output_tail`）⇒ `unknown`（不是 pass）。
 
-## 修法（选的是 (b)：M 代跑、H 判回执 —— 实现代价小的那一条）
-
-(a) 给 H 一个受控执行面要新开一层"只允许跑 ACCEPTANCE-CHECKS.json 里登记过的命令"
-的沙箱闸，动的是权限面（`tools/base._role_surface` 的 `external == "exec"` 剥除、
-`READONLY_CALL_EXCEPTIONS`、`specs/h.py` 的边界）—— 那是 FC-27 auth-audit 的整片改动。
-(b) 不需要新的执行面：`run_evidence` 本来就是 `review.report` 的**调用方参数**
-（M 派活时给），M 有 `M→E` 的边，E 的 `verify.run_experiment` 会返回 `exit_code`
-与 stdout ⇒ 回执可以从"已经在手上的动作返回值"里凑出来。
-
-所以这一趟修的是**判据**，不是权限：G8 现在会
-  * 跑过且绿 ⇒ `pass`；
-  * 跑过且红（`exit_code != 0`）⇒ `fail`；
-  * 没跑 ⇒ `unknown`，**并把"为什么没跑"写成必填**（不写 ⇒ 那一条 unknown 自带一条 finding）；
-  * 回执读不懂（不是数组 / 缺 `exit_code` / 缺 `output_tail`）⇒ `unknown`（不是 pass）。
-
-## 负控（每条都证明"修好之前会红"）
-
-本文件每条断言都钉在一个**具体的坏输入**上，而那些坏输入在修好之前的行为是：
-  * `commands` 是空白字符串 ⇒ 旧实现读成 `[]`，`numeric=0` ⇒ `pass`（`mp3` round 2 现场）；
-  * `checked=true` + `commands=[]` ⇒ 旧实现 `pass`（空回执被读成"覆盖了"）；
-  * `exit_code != 0` ⇒ 旧实现根本不读退出码 ⇒ `pass`（红被读成绿）；
-  * `checked=false` 不给理由 ⇒ 旧实现 `unknown` 但理由里只有一句"未给"。
-"""
+负控：每条断言都钉在一个具体的坏输入上，而那些坏输入在修好之前是：`commands` 是空白字符串 ⇒ 旧
+实现读成 `[]`，`numeric=0` ⇒ `pass`（`mp3` round 2 现场）；`checked=true` + `commands=[]` ⇒ 旧实现
+`pass`；`exit_code != 0` ⇒ 旧实现根本不读退出码 ⇒ `pass`；`checked=false` 不给理由 ⇒ `unknown` 但理由只有"未给"。"""
 from __future__ import annotations
 
 import json
@@ -123,7 +108,7 @@ def _green_receipt() -> dict:
 def test_h_structurally_has_no_exec_surface(tmp_path: Path) -> None:
     """正控（结构事实）：H 的工具面里没有任何 `exec` 入口 —— 这是"只读"的定义。
 
-    这一条**不许**为了修 G8 而放松：放松它等于给审校者一把能跑任意程序的刀
+    这一条不许为了修 G8 而放松：放松它等于给审校者一把能跑任意程序的刀
     （`tools/base._role_surface` 对只读角色剥的就是"写"与"exec"两类）。
     G8 的修法必须建立在"这条事实不变"的前提上。
     """
@@ -138,7 +123,7 @@ def test_h_structurally_has_no_exec_surface(tmp_path: Path) -> None:
     assert e_exec, "E 的工具面里没有任何 exec —— 这条判据退化成真空"
 
     # 回执通道的结构前提：`review.report`（唯一接 `run_evidence` 的工具）在 H 的
-    # 可调用面里，而它的 `run_evidence` 是**调用方参数**（M 派活时给）。
+    # 可调用面里，而它的 `run_evidence` 是调用方参数（M 派活时给）。
     assert "review.report" in {s.name for s in h}
     props = next(s for s in h if s.name == "review.report").params["properties"]
     assert "run_evidence" in props, props
@@ -183,7 +168,7 @@ def test_g8_is_unknown_when_the_receipt_is_a_blank_string(ws: Path) -> None:
 
     `projects/mp3` round 2 的 H 就是这么传的：
     `{"checked": true, "commands": "     "}`。旧实现遍历那个字符串（每个字符都不是
-    Mapping）得到 `[]`，而那一轮 `numeric = 0` ⇒ **G8 = pass**，报告里写着
+    Mapping）得到 `[]`，而那一轮 `numeric = 0` ⇒ G8 = pass，报告里写着
     "0 条实跑记录覆盖全部数值断言"。
     """
     r = G.gate_g8(_ctx(ws, run_evidence={"checked": True, "commands": "     "}))
@@ -194,7 +179,7 @@ def test_g8_is_unknown_when_the_receipt_is_a_blank_string(ws: Path) -> None:
 def test_g8_is_unknown_on_an_empty_receipt(ws: Path) -> None:
     """负控：`checked=true` 而 `commands=[]` ⇒ `unknown`（空回执不是"覆盖了全部"）。
 
-    用一份**没有数值断言**的稿件：旧实现在这一格上是 `pass`（"0 条实跑记录覆盖
+    用一份没有数值断言的稿件：旧实现在这一格上是 `pass`（"0 条实跑记录覆盖
     全部数值断言"—— 真空通过）。有数值断言时同一条输入应当 `fail`（差集非空），
     那是另一条判据（见下面 `test_g8_still_fails_when_a_numeric_claim_is_missing`）。
     """

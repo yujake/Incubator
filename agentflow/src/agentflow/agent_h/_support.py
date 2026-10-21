@@ -1,30 +1,17 @@
 """智能体 H：审校（只读）。
-
 ## 为什么 H 必须是只读的
-
-若审校者能直接改稿，它就同时是"发现者"与"修正者"，于是
-"发现问题"与"掩盖问题"在结构上无法区分 —— 这不是分工洁癖，
-而是"审校记录能不能被信任"的前提。把这条做成结构约束（而不是写在提示词里），
-是它唯一可靠的落地方式。
-
+若审校者能直接改稿，它就同时是"发现者"与"修正者"，于是"发现问题"与"掩盖问题"在结构上无法区分 —— 这不是分工洁癖，而是"审校记录能不能被信任"的前提。把这条做成结
+构约束（而不是写在提示词里），是它唯一可靠的落地方式。
 ## "H 只读"在这里由三件事共同保证（缺一条就只剩口号）
-
-1. 工具面只读：`install_h_tools()` 只把 `side_effect in ("none","read")`
-   的工具放进 H 的自由工具箱，并在构造时断言这一点（拿到不合规的注册表
-   就 fail-closed 拒绝启动）。被拒的写工具会记进 `registry.refused_write_tools`，
-   不静默丢弃。
-2. 落库代理被钉死：H 唯一会写盘的动作（写 `review_findings`、
-   改 `documents.status`）走的是显式的"代理注册表"（`self.writers`，
-   `include_writers=True`），而这两个工具的落点固定：不碰 `claims`，
-   不碰任何知识表。
-3. 可核对的运行期断言：审校前后 `concepts/relations/literature` 逐字节不变；
-   `documents.json` 的唯一变化点是 `status`（连 `updated_at` 都不碰）。
-
+1. 工具面只读：`install_h_tools()` 只把 `side_effect in ("none","read")`的工具放进 H 的自由工具箱，并在构造时断言
+这一点（拿到不合规的注册表就 fail-closed 拒绝启动）。被拒的写工具会记进 `registry.refused_write_tools`，不静默丢弃。 2. 落库
+代理被钉死：H 唯一会写盘的动作（写 `review_findings`、改 `documents.status`）走的是显式的"代理注册表"（`self.writers`，
+`include_writers=True`），而这两个工具的落点固定：不碰 `claims`，不碰任何知识表。 3. 可核对的运行期断言：审校前后 
+`concepts/relations/literature` 逐字节不变；`documents.json` 的唯一变化点是 `status`（连 `updated_at`
+都不碰）。
 ## H 的三态纪律
-
-`dependencies` 没查（显式 `None`）与"查了、依赖都闭合"是两件事：
-前者必须报 `dep_check.checked is False` 且不许判 `accepted`。
-AgentD 的 `_UNSPECIFIED` 哨兵在这里沿用同一种语义。
+`dependencies` 没查（显式 `None`）与"查了、依赖都闭合"是两件事：前者必须报 `dep_check.checked is False` 且不许判 
+`accepted`。 AgentD 的 `_UNSPECIFIED` 哨兵在这里沿用同一种语义。
 """
 from __future__ import annotations
 from pathlib import Path
@@ -48,28 +35,16 @@ def filter_readonly_h_surface(
     specs: Iterable[ToolSpec],
 ) -> tuple[list[ToolSpec], list[dict]]:
     """把 H 的角色面裁成"只读面"，并把被拒的写工具记录下来。
-
     ## 这一层与工具层那一层的关系（`roles-7`：两处注释此前互相否认）
-
-    工具层已经有一道只读过滤：`tools/base.ToolRegistry._role_surface` 在角色命中
-    `READ_ONLY_ROLES` 时剥掉"写副作用 或 `external == "exec"`"的工具 —— 它看两根轴。
-    本函数是 H 装配路径上的第二道，判据更窄：只看 `side_effect` 属不属于
-    `_H_READONLY_SIDE_EFFECTS`（`none` / `read`）—— 它不看 `external`，也不认 `unknown`。
-    于是在"写"这根轴上本层不会比工具层更宽；子集关系由下面那条可执行的断言钉住
-    （不是只写在注释里），并写明它唯一可能不成立的那一格
-    （`side_effect` 属 none/read 加 `external == "exec"` 加 roles 含 H）。
-
-    两处判据不同这件事本身无害，有害的是"两处注释互相否认对方存在"：读代码的人会得出
-    "工具层没有只读过滤"而另行加固（制造第三份判据），或者反过来把本层删掉。
-
-    本层仍然必须保留，理由不是"它今天拦到了什么"，而是两个报告字段只在它这里有：
-    `refused_write_tools`（显式拒绝清单）与 `raw_surface_size`（裁剪前的面有多大）。
-    有了它们，"静默丢弃"与"显式拒绝"在报告里才是两件事（FC-08）。
-
-    历史留痕：本函数写在工具层的只读过滤之前，当时 `table.create` / `table.update` /
-    `table.delete` / `fs.write` / `fs.delete` / `fs.move` 这些 `write_local` 工具确实会
-    出现在按角色过滤得到的 H 工具面里；工具层补上 `_role_surface` 之后，本层实测
-    拒不到东西（`refused` 为空），它的价值从"拦刀"变成"留痕"（见 `D-6`）。
+    工具层已经有一道只读过滤：`tools/base.ToolRegistry._role_surface` 在角色命中`READ_ONLY_ROLES` 时剥掉"写副作用 或 
+    `external == "exec"`"的工具 —— 它看两根轴。本函数是 H 装配路径上的第二道，判据更窄：只看 `side_effect` 属不属于`_H_READONLY_SIDE_EFFECTS`（`none`
+    / `read`）—— 它不看 `external`，也不认 `unknown`。于是在"写"这根轴上本层不会比工具层更宽；子集关系由下面那条可执行的断言钉住（不是只写在注释里），并写明它唯一可能不成立的那一
+    格（`side_effect` 属 none/read 加 `external == "exec"` 加 roles 含 H）。
+    本层仍然必须保留，理由不是"它今天拦到了什么"，而是两个报告字段只在它这里有：`refused_write_tools`（显式拒绝清单）与 `raw_surface_size`（裁剪前的面有多大）。有了它们，
+    "静默丢弃"与"显式拒绝"在报告里才是两件事（FC-08）。
+    历史留痕：本函数写在工具层的只读过滤之前，当时 `table.create` / `table.update` /`table.delete` / `fs.write` / `fs.delete` / 
+    `fs.move` 这些 `write_local` 工具确实会出现在按角色过滤得到的 H 工具面里；工具层补上 `_role_surface` 之后，本层实测拒不到东西（`refused` 为空），它的价值
+    从"拦刀"变成"留痕"（见 `D-6`）。
     """
     # 先物化成一份列表：下面要用同一批 specs 跑两遍（本层过滤 + 工具层判据的交叉断言），
     # 而 `specs` 的形参类型是 `Iterable` —— 生成器在第一遍之后就走空了。

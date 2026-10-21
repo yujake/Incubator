@@ -1,28 +1,8 @@
 """`E-1` 的回归判据：一句"不依赖公理"不许再清空整份公理表。
 
-## 缺陷（2026-09-26 全面体检 · 子代理 E 发现，主控已复现）
+缺陷（2026-09-26 全面体检 · 子代理 E 发现，主控已复现）：`formalgw._axioms_of` 旧实现第一句是 `if _NO_AXIOMS.search(text): return []`（text = 检查器 stdout + stderr 全文）⇒ 被检查的源码里任何一处带出 `does not depend on any axioms`（一句 `#eval IO.println "..."` 就够）就丢弃整份公理表 ⇒ `axiom e_ax : P` + `theorem bad : P := e_ax`（假设结论再宣布结论）被判成 `status=verified` + `proved=True` + `evidence_kind="proof"`。同一条短路也吃掉 `"sorryAx" in axioms` 那道 sorry 判据（两者读同一个列表）。
 
-`formalgw._axioms_of` 旧实现第一句是：
-
-```python
-if _NO_AXIOMS.search(text):   # text = 检查器 stdout + stderr 全文
-    return []
-```
-
-于是被检查的源码里任何一处带出 `does not depend on any axioms`
-（一句 `#eval IO.println "..."` 就够）就丢弃整份公理表 ⇒
-`axiom e_ax : P` + `theorem bad : P := e_ax`（假设结论再宣布结论）被判成
-`status=verified` + `proved=True` + `evidence_kind="proof"`。
-同一条短路也吃掉 `"sorryAx" in axioms` 那道 sorry 判据（两者读同一个列表）。
-
-## 本文件守什么
-
-离线（不依赖 Lean，用假的 `run_fn`）：公理列表优先 —— 输出里同时出现"不依赖"与
-"依赖 [...]"时，必须返回那份列表（fail-closed）。
-在线（Lean 在 PATH 时）：真跑一遍 `axiom` 那段源码，必须是 `extra_axioms`；
-不在 PATH 时 `skip`（"不许因为环境不同就红"，与 `test_agent_e_formal_path.py` 同口径），
-但离线那两条仍会跑，所以判据不会因为没有 Lean 就消失。
-"""
+本文件守什么：离线（不依赖 Lean，用假的 `run_fn`）公理列表优先 —— 输出里同时出现"不依赖"与"依赖 [...]"时，必须返回那份列表（fail-closed）。在线（Lean 在 PATH 时）真跑一遍 `axiom` 那段源码，必须是 `extra_axioms`；不在 PATH 时 `skip`（"不许因为环境不同就红"，与 `test_agent_e_formal_path.py` 同口径），但离线那两条仍会跑，所以判据不会因为没有 Lean 就消失。"""
 from __future__ import annotations
 
 import shutil

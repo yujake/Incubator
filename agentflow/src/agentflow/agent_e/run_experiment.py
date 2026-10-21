@@ -94,46 +94,19 @@ class _RunExperiment:
         search_bound: Mapping[str, Any] | None = None,
     ) -> dict:
         """跑一个实验脚本并登记一条 `Experiment` 行。
-
-        推导规则见模块 docstring（唯一权威表述）：计算类方法在 :func:`_derive`，
-        形式化方法在 :meth:`_record_formal`。
-
-        返回 ``{"experiment_id", "recorded", "result", "evidence_kind",
-        "negation_kind", "exit_code", "reason"}``。
-
-        schema 校验失败必须让异常冒出来（本方法不做 try/except 兜底）：
-        那说明上面的推导规则与 `Experiment.validate` 不一致，
-        而"推导规则与 schema 打架"正是本项目最该炸的地方。
-
-        ## 形式化路径（`P-8`）
-
-        `method="formal"` 时登记的不是"这个脚本说了什么"，而是"检查器核了什么"：
-
-        - 产物必须是工作区里的 `.lean` 文件（别的后缀当场拒绝，见模块 docstring）；
-        - `name` / `imports` 只对这条路径有意义，它们是给检查器的参数
-          （`name` 不给时由工具层按其声明取文件名词干，本方法不另猜一次）；
-        - 只有检查器给出 `verified` 才登记 `evidence_kind="proof"`，
-          `verifier_output` 与 `verifier_subject_key` 都来自那一次真实检查。
-
-        计算类方法给了 `name` / `imports` 会被拒绝（不是静默忽略）：
-        静默忽略会让调用方以为自己指定了检查条件，而实际用的是默认值 ——
-        这种假话没有任何地方会报出来。
-
-        ## 这里没有 `sleep` 形参，这是刻意的（`D-2`）
-
-        `capabilities.CAPABILITIES["E"].run_experiment` 的 params 里声明了 `sleep`，
-        而它不在本方法的形参表里，本方法也不收 `inspect.Parameter.VAR_KEYWORD`。
-        这不是漏了一个参数，也不是"反正 kwargs 收得住"：`sleep` 只服务替身夹具
-        （`tests/test_conductor.py` / `tests/test_scheduler.py` 的 `FakeE` 按同一份
-        schema 传它来控制"这次实验跑多久"），已逐条登记在 `capabilities.PARAM_SEAMS`
-        里（键含理由串），并由 `capabilities.assert_capabilities()` 第 [8] 条在
-        `import agentflow.capabilities` 时核过：声明了而实现不收、又不登记 ⇒ 导入失败。
-
-        两条不许做的改动：① 把 `sleep` 从能力表里删掉 —— 那会让替身无法按 schema
-        传参，被测的就不再是那条真实链路；② 在这里补一个具名的 `sleep`，或让它收
-        `inspect.Parameter.VAR_KEYWORD` —— 前者是没人读的假承诺，后者把
-        "我传了但它没看"变成静默成功，而 `conductor.LocalBackend.call` 的 docstring
-        逐字拒绝的正是这个形态。参数门的口径（声明 ∩ 实现签名）见
+        推导规则见模块 docstring（唯一权威表述）：计算类方法在 :func:`_derive`，形式化方法在 :meth:`_record_formal`。
+        返回 ``{"experiment_id", "recorded", "result", "evidence_kind","negation_kind", "exit_code", "reason"}``。
+        schema 校验失败必须让异常冒出来（本方法不做 try/except 兜底）：那说明上面的推导规则与 `Experiment.validate` 不一致，而"推导规则与 schema 打架"正是本项目最该炸的地方。
+        形式化路径（`P-8`）`method="formal"` 时登记的不是"这个脚本说了什么"，而是"检查器核了什么"：
+        - 产物必须是工作区里的 `.lean` 文件（别的后缀当场拒绝，见模块 docstring）；- `name` / `imports` 只对这条路径有意义，它们是给检查器的参数（`name` 不给时由工具层按其声明取文件名词干，本方法不另猜一
+        次）；- 只有检查器给出 `verified` 才登记 `evidence_kind="proof"`，`verifier_output` 与 `verifier_subject_key` 都来自那一次真实检查。
+        计算类方法给了 `name` / `imports` 会被拒绝（不是静默忽略）：静默忽略会让调用方以为自己指定了检查条件，而实际用的是默认值 ——这种假话没有任何地方会报出来。
+        这里没有 `sleep` 形参，这是刻意的（`D-2`）`capabilities.CAPABILITIES["E"].run_experiment` 的 params 里声明了 `sleep`，而它不在本方法的形参表里，本方法也不收 
+        `inspect.Parameter.VAR_KEYWORD`。这不是漏了一个参数，也不是"反正 kwargs 收得住"：`sleep` 只服务替身夹具（`tests/test_conductor.py` / 
+        `tests/test_scheduler.py` 的 `FakeE` 按同一份 schema 传它来控制"这次实验跑多久"），已逐条登记在 `capabilities.PARAM_SEAMS`里（键含理由串），并由 
+        `capabilities.assert_capabilities()` 第 [8] 条在`import agentflow.capabilities` 时核过：声明了而实现不收、又不登记 ⇒ 导入失败。
+        两条不许做的改动：① 把 `sleep` 从能力表里删掉 —— 那会让替身无法按 schema 传参，被测的就不再是那条真实链路；② 在这里补一个具名的 `sleep`，或让它收`inspect.Parameter.VAR_KEYWORD`
+        —— 前者是没人读的假承诺，后者把"我传了但它没看"变成静默成功，而 `conductor.LocalBackend.call` 的 docstring 逐字拒绝的正是这个形态。参数门的口径（声明 ∩ 实现签名）见
         `capabilities.gate_params` / `capabilities.check_params`。
         """
         if not str(claim).strip():
@@ -463,51 +436,27 @@ def _toy_example_reading(*, params: Mapping[str, Any] | None,
                          exit_code: Any,
                          code_path: str, code_hash: str) -> dict | None:
     """把「这一次跑的是一个玩具例子」落成一格可查的读数（`observations["toy_example"]`）。
-
-    ## 一个玩具例子在台账上长什么样（这正是验收判据读的那一格）
-
-    ```python
-    {"declared": {"n": 6, "expect": 265, "quantity": "D(6)"},   # 调用方声明，原样
-     "checked": True, "within_limit": True, "n": 6, "limit": 8,   # 规模够小
-     "executed": True, "exit_code": 0,                            # 真跑过
-     "script_path": "code/attack_s1.py",                          # 跑的是哪一份
-     "script_sha256": "e86a6c9a16d7d4cf",                          # 与 code_hash 同一份文件
-     "why": ""}
-    ```
-
-    没声明时 `declared` 那一格由「自动判定」填（`{"auto": True, "source": …}`，
-    `why` 里写清"由规模自动判定"）—— 见 :func:`_auto_toy_example_reading`。
-
-    ## 谁声明、谁算（两边都不许越界）
-
-    「这是一个玩具例子」的第一顺位仍是「调用方」的声明：`run_experiment(params=...)`
-    里的 `toy_example` 那一格（F 把子目标的 `params` 原样带下来，一个字不改）。
-    声明在时本函数只做三件「机械的」事 —— 不替调用方判断"这算不算玩具"，也不相信
-    「脚本的」自我陈述（脚本能自报的只有 `REPRO_RESULT`，它决定不了"这次实验的规模够不够小"）：
-
-    ① 核对声明的规模 `n` 不超过 :data:`TOY_EXAMPLE_MAX_N`：超过 ⇒ `within_limit=False`
-       并把上限写在同一格里（"标了玩具但其实是个扫描清单"是读得出来的，不是被吞掉）；
-    ② 贴上"真跑过"的事实：`executed`（有没有退出码）、`exit_code`、`script_path`、
-       `script_sha256` —— 于是"只写了脚本"与"真的跑过一次"在行上分得开（反真空）；
-    ③ 把声明原样留在 `declared` 里（不改写、不解释、不替它补字段）。
-
-    ## 声明缺席：E 自己按规模判（本批缺陷二）
-
-    真机（`projects/mp3/data/experiments.json`）：两条实验，`params` 都是 `{}`，
-    而第二条的 claim 逐字写着"玩具读数"、`bound` 是 `D<=6 / M_max<=8 / n<=3`、
-    `exit_code=0` —— `observations` 里 `toy_example` 「0 条」。根因是"只有经 `F→E`
-    且父把 `params["toy_example"]` 带下来才会标"，而模型不一定会带。
-    于是这一档改成：声明缺席时由 E 在「落库那一刻」按规模与可手算性自动判定
-    （:func:`_auto_toy_example_reading`），并且「不许」把大扫描标成玩具例子。
-
-    ## 三态（`checked`）
-
-    - `checked=True, within_limit=True/False`：声明/规模成形、判过了；
-    - `checked=False, within_limit=None`：判不了（声明不是对象 / 没有数值 `n` /
-      自动判定找不到任何规模读数）—— 「判不了 ≠ 合格」，`why` 里写清缺什么。
-      这一档照旧落行（实验本身跑完了），但读数不会假装它是个合格的玩具例子。
-
+        ```python
+        {"declared": {"n": 6, "expect": 265, "quantity": "D(6)"},   # 调用方声明，原样
+         "checked": True, "within_limit": True, "n": 6, "limit": 8,   # 规模够小
+         "executed": True, "exit_code": 0,                            # 真跑过
+         "script_path": "code/attack_s1.py",                          # 跑的是哪一份
+         "script_sha256": "e86a6c9a16d7d4cf",                          # 与 code_hash 同一份文件
+         "why": ""}
+        ```
+    没声明时 `declared` 那一格由「自动判定」填（`{"auto": True, "source": …}`，`why` 里写清"由规模自动判定"）—— 见 :func:`_auto_toy_example_reading`。
+    「这是一个玩具例子」的第一顺位仍是「调用方」的声明：`run_experiment(params=...)`里的 `toy_example` 那一格（F 把子目标的 `params` 原样带下来，一个字不改）。声明在时本函数只做三件「机械的」事
+    —— 不替调用方判断"这算不算玩具"，也不相信「脚本的」自我陈述（脚本能自报的只有 `REPRO_RESULT`，它决定不了"这次实验的规模够不够小"）：
+    ① 核对声明的规模 `n` 不超过 :data:`TOY_EXAMPLE_MAX_N`：超过 ⇒ `within_limit=False`并把上限写在同一格里（"标了玩具但其实是个扫描清单"是读得出来的，不是被吞掉）；② 贴上"真跑过"的事实：
+    `executed`（有没有退出码）、`exit_code`、`script_path`、`script_sha256` —— 于是"只写了脚本"与"真的跑过一次"在行上分得开（反真空）；③ 把声明原样留在 `declared` 里（不改写、不
+    解释、不替它补字段）。
+    真机（`projects/mp3/data/experiments.json`）：两条实验，`params` 都是 `{}`，而第二条的 claim 逐字写着"玩具读数"、`bound` 是 `D<=6 / M_max<=8 / n<=3`、
+    `exit_code=0` —— `observations` 里 `toy_example` 「0 条」。根因是"只有经 `F→E`且父把 `params["toy_example"]` 带下来才会标"，而模型不一定会带。于是这一档改成：声明
+    缺席时由 E 在「落库那一刻」按规模与可手算性自动判定（:func:`_auto_toy_example_reading`），并且「不许」把大扫描标成玩具例子。
+    三态（`checked`）- `checked=True, within_limit=True/False`：声明/规模成形、判过了；- `checked=False, within_limit=None`：判不了（声明不是对象 / 没有数值 
+    `n` /自动判定找不到任何规模读数）—— 「判不了 ≠ 合格」，`why` 里写清缺什么。
     "标没标"的唯一口径是 :func:`is_toy_example`（三条同时成立），不是单独看某一位。
+    
     """
     params = dict(params) if isinstance(params, Mapping) else {}
     declared = params.get(TOY_EXAMPLE_KEY)
@@ -549,19 +498,14 @@ def _toy_example_reading(*, params: Mapping[str, Any] | None,
 
 def _scale_numbers(value: Any, *, max_depth: int = 3) -> tuple[float | None, float | None, str]:
     """从一个自由形状的读数里挑出 `(最大 n, 最大搜索空间, 出处)`。
-
-    `observations` / `bound` / `data` / `scaling` 都是「自由格」（脚本自己写的键），
-    形状没有契约，所以这里按「白名单键名」递归找（:data:`TOY_EXAMPLE_SCALE_KEYS` 等），
-    并且只认"数值"（布尔、字符串、`None` 一律不认 —— `True` 会被 `float()` 读成 1，
-    悄悄造出一个规模）。
-
+    `observations` / `bound` / `data` / `scaling` 都是「自由格」（脚本自己写的键），形状没有契约，所以这里按「白名单键名」递归找（:data:
+    `TOY_EXAMPLE_SCALE_KEYS` 等），并且只认"数值"（布尔、字符串、`None` 一律不认 —— `True` 会被 `float()` 读成 1，悄悄
+    造出一个规模）。
     两件事刻意定死：
-
-    1. 「取最大值」（不是第一个命中）：规模由"这一趟算到多大的那一格"决定 ——
-       一个脚本先算了 n=3 再扫到 n=14，它是扫描清单，不是玩具例子；
-    2. 「递归到有限深度」（默认 3 层）：`bound` / `data` / `scaling[]` 都是嵌套形态
-       （真机：`bound={"A": {"D_max": 6}, "B": {"n_values": [1,2,3]}}`）。
-       再深就不是"规模声明"，而是数据本身了 —— 那里面任何数字都不该被读成规模。
+    1. 「取最大值」（不是第一个命中）：规模由"这一趟算到多大的那一格"决定 ——一个脚本先算了 n=3 再扫到 n=14，它是扫描清单，不是玩具例子； 2. 「递归到有限深
+    度」（默认 3 层）：`bound` / `data` / `scaling[]` 都是嵌套形态（真机：
+    `bound={"A": {"D_max": 6}, "B": {"n_values": [1,2,3]}}`）。再深就不是"规模声明"，而是数据本身了 —— 那里面任何数
+    字都不该被读成规模。
     """
     best_n: float | None = None
     best_space: float | None = None
@@ -611,17 +555,14 @@ def _scale_numbers(value: Any, *, max_depth: int = 3) -> tuple[float | None, flo
 def _toy_example_executed(*, exit_code: Any,
                           observations: Mapping[str, Any] | None) -> bool:
     """这一趟算不算"「真跑过」"（玩具例子的第 3 条，唯一判据）。
-
+    
     两个条件同时成立：
-
-    1. 有退出码（`exit_code is not None`）—— 超时 / 起不来都没有；
-    2. 有「结构化结论行」（`observations["conclusion_source"]` 是
-       :data:`TOY_EXAMPLE_RESULT_SOURCES` 之一）—— 脚本跑完却没按协议打出结论，
-       就只是"执行过"，不是"把断言跑成了一个读得出的数"。
-
-    为什么单独抽出来：读写两侧都必须问同一个问题（写侧决定标不标，读侧
-    `is_toy_example` 决定算不算），而"没真跑"这一档的负控要能单独注射 ——
-    判据自己的可注射性也是它的一部分（不然"这条判据能红"没法被检验）。
+    
+    1. 有退出码（`exit_code is not None`）—— 超时 / 起不来都没有； 2. 有「结构化结论行」（`observations["conclusion_source"]`
+    是:data:`TOY_EXAMPLE_RESULT_SOURCES` 之一）—— 脚本跑完却没按协议打出结论，就只是"执行过"，不是"把断言跑成了一个读得出的数"。
+    
+    为什么单独抽出来：读写两侧都必须问同一个问题（写侧决定标不标，读侧`is_toy_example` 决定算不算），而"没真跑"这一档的负控要能单独注射 ——判据自己的可注射
+    性也是它的一部分（不然"这条判据能红"没法被检验）。
     """
     if exit_code is None:
         return False
@@ -634,35 +575,16 @@ def _auto_toy_example_reading(*, params: Mapping[str, Any] | None,
                               exit_code: Any, code_path: str,
                               code_hash: str) -> dict | None:
     """调用方没带 `toy_example` 声明时，由 E 「按规模与可手算性」自己判（本批缺陷二）。
-
-    真机（`projects/mp3/data/experiments.json` 的第二条）：claim 逐字写着"玩具读数"、
-    `bound` 里是 `D_max=6 / generator_width_M_max=8 / n_values=[1,2,3]`、`exit_code=0`，
-    而 `observations` 里 `toy_example` 「0 条」 —— 因为只有父把声明带下来才会标。
-    这个函数就是那条断掉的接缝：「E 自己判，不依赖模型记得带参数」。
-
-    ## 判据（三条同时成立才算"标了"；唯一读法是 :func:`is_toy_example`）
-
-    1. 「规模小」：从 `params` ＋ 脚本自报的 `observations`（含 `bound` / `data` /
-       `scaling`）里按白名单键名找规模读数 —— 有 `n` 类读数就要求
-       `n <= TOY_EXAMPLE_MAX_N`；有搜索空间读数就要求
-       `<= TOY_EXAMPLE_MAX_SEARCH_SPACE`（两者都有则都要满足）；
-    2. 「可手算」：就是第 1 条的上限本身（超过上限的不是"一个能手算的数"，
-       是"扫到哪儿"）；
-    3. 「真跑过」：`exit_code` 非空 「且」 有结构化结果行
-       （`observations["conclusion_source"]` ∈ :data:`TOY_EXAMPLE_RESULT_SOURCES`）。
-       只写了脚本、或跑了但没打出结论行 ⇒ `executed=False`，读数照落但「不算」玩具例子。
-
-    ## 三种结局（都不许静默）
-
-    | 结局 | 返回 |
-    |---|---|
-    | 找不到任何规模读数 | `None`（这一趟没东西可判，行与从前逐字节相同） |
-    | 找到规模读数 | 一格读数：`checked=True`，`within_limit` 按上面三条算，`why` 写清"由规模自动判定"+ 依据 |
-    | 有规模、但没真跑 | 同一格读数 + `executed=False` + `why` 点名"没真跑"（「不标」，但看得见） |
-
+    真机（`projects/mp3/data/experiments.json` 的第二条）：claim 逐字写着"玩具读数"、`bound` 里是 
+    `D_max=6 / generator_width_M_max=8 / n_values=[1,2,3]`、`exit_code=0`，而 `observations` 里 `toy_example` 「0 条」
+    —— 因为只有父把声明带下来才会标。
+    判据（三条同时成立才算"标了"；唯一读法是 :func:`is_toy_example`）1. 「规模小」：从 `params` ＋ 脚本自报的 `observations`（含 `bound` / `data` /
+    `scaling`）里按白名单键名找规模读数 —— 有 `n` 类读数就要求`n <= TOY_EXAMPLE_MAX_N`；有搜索空间读数就要求`<= TOY_EXAMPLE_MAX_SEARCH_SPACE`（两者都
+    有则都要满足）； 3. 「真跑过」：`exit_code` 非空 「且」 有结构化结果行（`observations["conclusion_source"]` ∈ :data:
+    `TOY_EXAMPLE_RESULT_SOURCES`）。只写了脚本、或跑了但没打出结论行 ⇒ `executed=False`，读数照落但「不算」玩具例子。
+    | 结局 | 返回 ||---|---|| 找不到任何规模读数 | `None`（这一趟没东西可判，行与从前逐字节相同） || 找到规模读数 | 一格读数：`checked=True`，`within_limit` 按上
+    面三条算，`why` 写清"由规模自动判定"+ 依据 || 有规模、但没真跑 | 同一格读数 + `executed=False` + `why` 点名"没真跑"（「不标」，但看得见） |
     为什么"没真跑"也照落一格：`executed` 与"规模判没判成"是两件事（声明那一支也这么分）。
-    把没跑的整格吞掉，读的人就只能看到"没有玩具例子"，分不清是"规模太大"还是
-    "脚本没跑"—— 而这两种的处置完全不同。
     """
     params = dict(params) if isinstance(params, Mapping) else {}
     obs = dict(observations) if isinstance(observations, Mapping) else {}

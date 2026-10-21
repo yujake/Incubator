@@ -3,25 +3,19 @@
 
 ## 这一组守什么
 
-P2 的改动全在提示词里（三条总原则的第①条：提示词优先，动作表尽量不动）。
-提示词的判据天生容易写成"喊口号"（"提示词里要有 X"），所以这份文件的判据是两面的：
+P2 的改动全在提示词里（三条总原则的第①条：提示词优先，动作表尽量不动）。提示词的判据天生容易写成"喊口号"（"提示词里要有 X"），所以这份文件的判据是两面的：
 
 - 正面：这六条口径里每一条的可判定关键词必须真的出现在该角色的系统提示词里；
 - 反面（反真空）：把同一个检查函数喂给一份被抽掉那句话的提示词，
-  它必须点名报出来；喂给空串时，它必须把全部事实都报成缺失。
-
-没有反面那两条，"提示词里有 X"与"检查函数永远返回空"长得一模一样 ——
-而后者是本项目最忌的形态（假绿）。同样地，`PROMPT_VERSION` 必须随段一起前进：
+它必须点名报出来；喂给空串时，它必须把全部事实都报成缺失。没有反面那两条，"提示词里有 X"与"检查函数永远返回空"长得一模一样 ——而后者是本项目最忌的形态（假绿）。同样地，`PROMPT_VERSION` 必须随段一起前进：
 段变了而版本没动，事后就分不清"这句话是哪个版本的提示词说的"。
 
 ## 为什么关键词取这些
 
-取的是能被下游判定的那句话，不是整段原文：例如 A 的 `mismatch`（文献行的命中校验
-第三态，§2 R1b）、`exact / partial / none`（文内定位三态，§2 R14）、
-`none 不许交给 B`（R14 负控①的处置）；B 的 `statement_full` / `proof_text` /
-`quote_reason` / `origin=own_result`（P1 那张表的四件套）；C 的 `submit_requests=true`
-（缺口→检索请求的闭环）；D 的 `初步数学审阅` + `可挽救性评估`；H 的 `逐字一致` +
-`evidence_kind=proof`（采信规则的两条）；M 的 `每一跳都要写清提示词` + `ask_user`。
+取的是能被下游判定的那句话，不是整段原文：例如 A 的 `mismatch`（文献行的命中校验第三态，§2 R1b）、`exact / partial / none`（文内定位三态，§2 R14）、`none 不许交给 B`（R14
+负控①的处置）；B 的 `statement_full` / `proof_text` /`quote_reason` / `origin=own_result`（P1 那张表的四件套）；C 的
+`submit_requests=true`（缺口→检索请求的闭环）；D 的 `初步数学审阅` + `可挽救性评估`；H 的 `逐字一致` +`evidence_kind=proof`（采信规则的两条）；M 的
+`每一跳都要写清提示词` + `ask_user`。
 """
 from __future__ import annotations
 
@@ -129,20 +123,16 @@ def test_the_facts_table_covers_exactly_the_six_roles_of_this_phase() -> None:
 
 @pytest.mark.parametrize("role", ["A", "B", "C", "D", "H", "M"])
 def test_the_role_brief_and_the_spec_are_the_same_object(role: str) -> None:
-    """这六条口径必须落在 `boundary` 或 `policy` 里，不许只落在 `stance` 里。
+    """    这六条口径必须落在 `boundary` 或 `policy` 里，不许只落在 `stance` 里。
 
     ## 唯一化之后（业主 2026-10-11）
 
-    本用例原名"`ROLE_BRIEFS` 与 `specs/<角色>.py` 是同一个对象"，里面比过
-    `tuple(spec_brief.boundary) == tuple(brief.boundary)` 与 `policy` 那两行。
-    业主裁定「I 保证文本唯一性」+「I-1 `specs/<role>.py::SPEC.brief` 是唯一真身；
-    `agent_prompts.ROLE_BRIEFS` 改成它的视图」之后，那两行比的是同一个对象
-    ⇒ 恒真的假绿，按裁定删掉；用例名的"same object"因此只对了一半，留在这里是因为
-    改名会牵动 `draft/107` 的清单编号，改动本身留到提示词施工那一批一起做。
+    本用例原名"`ROLE_BRIEFS` 与 `specs/<角色>.py` 是同一个对象"，里面比过`tuple(spec_brief.boundary) == tuple(brief.boundary)` 与
+    `policy` 那两行。业主裁定「I 保证文本唯一性」+「I-1 `specs/<role>.py::SPEC.brief` 是唯一真身；`agent_prompts.ROLE_BRIEFS` 改成它的视图」之后，
+    那两行比的是同一个对象⇒ 恒真的假绿，按裁定删掉；用例名的"same object"因此只对了一半，留在这里是因为改名会牵动 `draft/107` 的清单编号，改动本身留到提示词施工那一批一起做。
 
-    它守什么（与唯一性无关，所以保留）：`stance` 受官能轻重（`FACULTY_EMPHASIS`）影响 ——
-    某一档被改成 `denied` 时它就不再渲染，于是"口径还在"与"口径进不了提示词"会分家。
-    （H 的 `policy` 本来就是空的：只读角色的政策写在边界里。这条判据不要求每格都非空。）
+    它守什么（与唯一性无关，所以保留）：`stance` 受官能轻重（`FACULTY_EMPHASIS`）影响 ——某一档被改成 `denied` 时它就不再渲染，于是"口径还在"与"口径进不了提示词"会分家。（H 的
+    `policy` 本来就是空的：只读角色的政策写在边界里。这条判据不要求每格都非空。）
     """
     brief = AP.ROLE_BRIEFS[role]
     always_rendered = "\n".join(brief.boundary) + "\n" + "\n".join(brief.policy)

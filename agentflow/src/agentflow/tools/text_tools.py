@@ -1,29 +1,19 @@
 # -*- coding: utf-8 -*-
 """文字层抽取的工具面（`text.extract`）：把盘上已有的 PDF/文本抽成 `out/texts/<名>.txt`。
-
 ## 为什么有这一件（2026-10-17 真机读数驱动，`draft/136`）
-
 T5 那趟（`projects/t5pdfs`）「最大的卡点」就是这一格：
-
-- A 侧：`extract.run` → `unknown_tool`（并列候选只有 `ocr.run`）；`ocr.run` → 「`role_denied`」
-  （"角色 'A' 拿不到工具 'ocr.run'"）；
-- B 侧：`fs.read(library/*.pdf)` → `binary`（"需要它的内容请走抽取链（extract/OCR）"）；
-  B 能调 `ocr.run` 但 `any_ocr_backend_available=false`（easyocr 的 torch/numpy ABI 断裂、
-  tesseract 不在 PATH）。
-
-⇒ 「"把 PDF 变成正文"没有任何角色的可达能力」，最后是 「M 自己写脚本 ＋ 派 E 跑」才解开
-（`out/texts/extract_pdfs.py`）—— 也就是说：「知识的入口靠主控越权动手」，这与
-"M 只派活、不指定能力"的口径直接冲突。
-
-⇒ 这一件把它接成 「A/B 可达的能力」。要点：「四份 PDF 全都 `has_text_layer=true`」 ——
-缺的从来不是 OCR，而是「抽取链本身」；扫描件才需要 `ocr.run`（分工见两边说明）。
-
+- A 侧：`extract.run` → `unknown_tool`（并列候选只有 `ocr.run`）；`ocr.run` → 「`role_denied`」（"角色
+'A' 拿不到工具 'ocr.run'"）；- B 侧：`fs.read(library/*.pdf)` → `binary`（"需要它的内容请走抽取链（extract/OCR）
+"）； B 能调 `ocr.run` 但 `any_ocr_backend_available=false`（easyocr 的 torch/numpy ABI 断裂、
+tesseract 不在 PATH）。
+⇒ 「"把 PDF 变成正文"没有任何角色的可达能力」，最后是 「M 自己写脚本 ＋ 派 E 跑」才解开（`out/texts/extract_pdfs.py`）—— 也就
+是说：「知识的入口靠主控越权动手」，这与"M 只派活、不指定能力"的口径直接冲突。
+⇒ 这一件把它接成 「A/B 可达的能力」。要点：「四份 PDF 全都 `has_text_layer=true`」 ——缺的从来不是 OCR，而是「抽取链本身」；扫描件才
+需要 `ocr.run`（分工见两边说明）。
 ## 与 `ocr.run` 的分工（别混）
-
-| 工具 | 用什么 | 什么时候 |
-|---|---|---|
-| `text.extract`（本模块） | PDF 「自带的文字层」（`extract.extract_text`） | 电子排版 PDF（绝大多数）—— 「不联网、不需要后端」 |
-| `ocr.run`（`ocr_tools`） | 真 OCR 后端（easyocr/pytesseract） | 「扫描件/图片」：没有文字层，只能识别 |
+| 工具 | 用什么 | 什么时候 ||---|---|---|| `text.extract`（本模块） | PDF 「自带的文字层」（`extract.extract_text`）
+| 电子排版 PDF（绝大多数）—— 「不联网、不需要后端」 || `ocr.run`（`ocr_tools`） | 真 OCR 后端（easyocr/pytesseract）
+| 「扫描件/图片」：没有文字层，只能识别 |
 """
 from __future__ import annotations
 
@@ -48,7 +38,7 @@ DEFAULT_OUT_DIR = ""          # 空 = 落在 library/（"入库"）
 def _safe_stem(raw: str, fallback: str = "text") -> str:
     """把 `lit_id`/文件名净化成「能当文件名」的形态。
 
-    ⚠️ 「2026-10-17 真机读数驱动（T5 第 2 趟）」：A 传的是 `lit_id="lit:000000"`，
+    「2026-10-17 真机读数驱动（T5 第 2 趟）」：A 传的是 `lit_id="lit:000000"`，
     而原实现写 `f"{lit_id}.txt"` ⇒ 文件名里带「冒号」 ⇒ 在 Windows 上
     `lit:000000.txt` 被解释成 「NTFS 备用数据流」，结果盘上留下一个 「0 字节的 `library/lit`」
     （一个看不出所以然的幽灵文件）。这里统一：取冒号后的「裸编号」、再把
@@ -107,7 +97,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
     if not p.is_file():
         return fail(f"不是普通文件：{p}", kind="not_a_file", path=str(p))
 
-    # ⚠️ 2026-10-17：「纯文本文件直接当正文」（幂等）—— 对 `.txt` 来说"抽成纯文本"就是它自己；
+    # 2026-10-17：「纯文本文件直接当正文」（幂等）—— 对 `.txt` 来说"抽成纯文本"就是它自己；
     # 这也让声明判据的探针（夹具给的是一份 `.txt`）真跑得成，而不是靠"键名读自源码"打补丁。
     if p.suffix.casefold() in (".txt", ".md", ".text", ".rst"):
         try:
