@@ -224,31 +224,14 @@ def test_without_the_injection_the_child_is_back_to_writing_tables_by_hand(tmp_p
 
 
 # ---------------------------------------------------------------------------
-# 名字那一格：带下划线的广告名 vs 本趟没注册的动作名（`own_register_statement` 的真机形态）
-#
-# ## 这一条对的是真机读数（`projects/fb-cover/sessions/fb-1.jsonl`，只读核对）
-#
-# 那一趟的工具名计数里同时有 `own.register_statement`（6 次）与 `own_register_statement`（1 次）。
-# 查根因（2026-10-20）：接住那一次的是 `AgentLoop._do_tool` 的**广告名**那一格
-# （`agent_loop.py`：`if raw not in known and face is not None:` → `face.names.get(raw)`），
-# **不是**「短名 → `own.<动作名>`」那一格 —— 后者拿 `own_register_statement` 会拼出
-# `own.own_register_statement`，这一趟的注册表里没有它，接不住。
-# 广告名是 `llmseam.build_tool_face` 按**这一趟真在注册表里的那张面**算出来的
-# （`_sanitize`：除 `[A-Za-z0-9_-]` 之外全换 `_`），而 `_do_tool` 还要求解析出的真名
-# `in known` ⇒ 这张表里有的名字一定映得回一件**本趟已注册**的工具，它不打开任何权限。
-#
-# ## 判据（正控一条 / 负控一条，反过来各有一条反负控）
-#
-# - **正控**：本趟已注册的动作，它广告名的"带下划线变体"**映到同一件** ——
-#   结果里 `tool` 是点号真名、`aliased_from` 是模型写的那个名字，且跑的仍是那套带闸门的
-#   真实现（盘上那一行的出处/页码栏不是模型自己编的）。
-#   （另一种同样合法的口径是"明确 `unknown_tool`"；本仓选的是"映回同一件"，两个名字都
-#   是我们广告出去的，"多认一个写法比让整趟作废便宜"—— 见 `_do_tool` 的 docstring。）
-# - **负控**：本趟**没有**注册的动作名（`own_not_registered_thing`）必须 `unknown_tool`，
-#   且结果里 `aliased_from` 必须为空 —— 任何"把 `.`/`_` 互转"的宽映射都不许接住它。
-#   这一条是这条判据的分辨率所在：只测正控的话，"宽映射"与"窄映射"长得一模一样。
-# ---------------------------------------------------------------------------
-
+# 名字那一格：带下划线的广告名 vs 本趟没注册的动作名（`own_register_statement` 的真机形态）。真机读数：
+# `projects/fb-cover/sessions/fb-1.jsonl` 那次同时有 `own.register_statement`（6 次）与 `own_register_statement`（1 次）。
+# 根因（2026-10-20）：接住它的是 `AgentLoop._do_tool` 的广告名那一格（`face.names.get(raw)`），不是「短名 →
+# `own.<动作名>`」那一格（后者拼出 `own.own_register_statement`，本趟注册表里没有它）。广告名由
+# `llmseam.build_tool_face` 按本趟真在注册表里的那张面算出（`_sanitize` 把 `[A-Za-z0-9_-]` 之外全换 `_`），
+# 且 `_do_tool` 要求解析出的真名 `in known` ⇒ 不打开任何权限。判据：正控 = 带下划线变体映到同一件；
+# 负控 = 未注册名（`own_not_registered_thing`）必须 `unknown_tool`、`aliased_from` 为空 —— 只测正控的话
+# "宽映射"与"窄映射"长得一模一样，这一条才是分辨率所在。
 def test_the_underscored_advertised_name_reaches_the_same_action_and_nothing_else(tmp_path):
     """正控：带下划线的广告名映回同一件真实现；负控：没注册的名字必须 `unknown_tool`。
 

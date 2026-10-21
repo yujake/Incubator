@@ -384,11 +384,11 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     print("[13] persist()：reports/<id>-<kind>.md + analysis_reports 登记行")
     info = pr.persist()
     print(f"    {info}")
-    # 取**这一次** persist 拿到的号对应的登记行，不能取 `rows[0]`：
+    # 取「这一次」 persist 拿到的号对应的登记行，不能取 `rows[0]`：
     # 2026-10-12 业主裁定 CS-10 ②（"直接调分析器也落库"）之后，`AgentC._report`
     # 在 `ok` 且 kind 在受控词表里时会收口一次 `persist()`（`core.py` 的那段
     # "产出即登记"）。于是走到本段时 `analysis_reports` 里已经有本文件前面几个
-    # 分析器各自落的行，`rows[0]` 是**第一份**报告而不是这一份 —— 旧断言
+    # 分析器各自落的行，`rows[0]` 是「第一份」报告而不是这一份 —— 旧断言
     # (`rows[0]`) 是"产出即登记"之前的写法，它过期了，不是这里该变绿。
     matched = [r for r in st.rows("analysis_reports") if r["report_id"] == info["report_id"]]
     row = matched[0] if matched else {}
@@ -538,7 +538,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     st5 = make_store("i3")
 
     def _i3_fixture(target: Store) -> None:
-        # 概念号与关系里的 concept_ids 必须**同一套**：2026-10-14 业主裁定
+        # 概念号与关系里的 concept_ids 必须「同一套」：2026-10-14 业主裁定
         # "所有四位编号改成六位"之后 `S.format_id` 发的是 `000000…`，而这里
         # 原先概念行用 `S.format_id(i)`、关系行却写死 `"0000"…` ⇒ 图里每个
         # 概念代号都查不到名字，候选全被 `_looks_like_non_concept` 否决，
@@ -565,7 +565,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     rows5 = st5.rows("search_requests")
     topics5 = {"、".join(x["concept_names"]) for x in rep_on.payload["candidate_gaps"]}
     # 单轮上限是 `interactions.DEFAULTS["max_gap_requests_per_run"]`（裁定 C9：3 → 30）。
-    # 旧断言把它写死成 `<= 3`：那是 2026-10-12 之前的口径，**过期的是这个数字**，
+    # 旧断言把它写死成 `<= 3`：那是 2026-10-12 之前的口径，「过期的是这个数字」，
     # 不是闸门被放宽了。断言改成"新增条数 == min(候选数, 当次上限)"，比原来更紧：
     # 它同时钉住"候选真的被提交"与"每轮上限真的生效"。
     max_per_run = int(interactions.DEFAULTS["max_gap_requests_per_run"])
@@ -586,7 +586,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
           and all(r["submitted_by"] == "agent-C" and r["priority"] == "medium"
                   and r["mode"] == "topical" and r["topic"] in topics5 and not r["done"] for r in rows5))
 
-    # 闸门用例要**把在途填到当次上限**（`interactions.DEFAULTS["max_inflight_requests"]`，
+    # 闸门用例要「把在途填到当次上限」（`interactions.DEFAULTS["max_inflight_requests"]`，
     # 裁定 C9：20 → 200）。旧夹具固定填 20 行并称"20/20 上限"——上限改成 200 之后
     # 那 20 行只是"在途 20/200"，闸门当然放行。过期的是夹具里的数字。
     inflight_limit = int(interactions.DEFAULTS["max_inflight_requests"])
@@ -617,7 +617,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     if failed:
         for lbl in failed:
             print(f"  FAILED: {lbl}")
-    # 汇总行与退出码同源（F-7）：README/`release_check.py`/CI 读的都是**退出码**，
+    # 汇总行与退出码同源（F-7）：README/`release_check.py`/CI 读的都是「退出码」，
     # 所以"打印 FAILED 却退 0"等于把三态折平（FAILED 降级成 pass）。
     passed = len(CHECKS) - len(failed)
     print(f"SELF-CHECK {'DONE' if not failed else 'FAILED'}（agent_c）："

@@ -444,21 +444,13 @@ def test_e12_formal_failure_tri_state_is_recovered_from_the_checker(
 ):
     """E-12（draft/44）："检查器判了不通过"与"根本没查成"必须在行上分得开。
 
-    改前：
-egation_kind 一律 
-o_local_evidence（core.py 那一行），
-    而真机 50 条 formal 里 41 条 exit_code=None ⇒ compile_error（判了、不通过）
-    与 	imeout/
-o_backend（没查成）在行上完全同形 —— "没查成"被读成"没通过"。
-    现在按 ormalgw.evidence_of 自己的 checked 位分三态（不另立一套口径）：
-    checked_failed ⇒ 
-ot_proved；	imeout/	ool_crashed ⇒ 
-o_local_evidence
-    （跑过、没裁决）；
-o_backend/import_unavailable ⇒ 
-ot_searched_here（本机起不了这次检查）。
-    反负控：三个 
-egation_kind 必须两两不同（否则又折回同一个值）。
+    改前：negation_kind 一律 no_local_evidence（core.py 那一行），而真机 50 条 formal 里
+    41 条 exit_code=None ⇒ compile_error（判了、不通过）与 timeout / no_backend（没查成）
+    在行上完全同形 —— "没查成"被读成"没通过"。
+    现在按 formalgw.evidence_of 自己的 checked 位分三态（不另立一套口径）：checked_failed ⇒
+    not_proved；timeout / tool_crashed ⇒ no_local_evidence（跑过、没裁决）；
+    no_backend / import_unavailable ⇒ not_searched_here（本机起不了这次检查）。
+    反负控：三个 negation_kind 必须两两不同（否则又折回同一个值）。
     """
     monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
     rel = write_lean(store, "proofs/probe_eq.lean")

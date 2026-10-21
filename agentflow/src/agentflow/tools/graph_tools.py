@@ -1015,7 +1015,7 @@ def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) ->
     """
     holder = _coerce_holder(graph, store)
 
-    # T-8：声明与工具体都在模块级（@tool 写进 n.__tool_spec__），
+    # T-8：声明与工具体都在模块级（@tool 写进 fn.__tool_spec__），
     # 这里只把装配期算出来的 holder 按位置绑上去（partial）。
     _bound: dict[str, Any] = {}
     _bound['holder'] = holder

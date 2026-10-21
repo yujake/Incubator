@@ -34,10 +34,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "method": {"type": "string", "enum": list(S.EXPERIMENT_METHODS)},
               "for_question_id": _S, "timeout": _I,
               # `T0-13`：formal 路径的两个参数（要核对的声明名、要加载的库）。
-              # 名字用**方法层**的（`name`/`imports`）：动作的参数直接进
+              # 名字用「方法层」的（`name`/`imports`）：动作的参数直接进
               # `AgentE.run_experiment`，不经 `ToolRegistry.call`，所以不撞
               # `call` 的第一个形参 `name`（工具层那边叫 `run_name`，是另一条理由）。
-              # 没有这两格时，**派活这条路根本传不进 formal 的参数**（实测：
+              # 没有这两格时，「派活这条路根本传不进 formal 的参数」（实测：
               # 闸门如实拒绝 `未声明的参数 ['imports','name']`），于是
               # "E 能形式化"与"M 能派形式化"变成两件事 —— 而 P6/P10 要的是后者。
               "name": {"type": "string", "description": "仅 method='formal'：要核对的声明名"},
@@ -54,7 +54,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # 声明了而实现不收、又不登记 ⇒ `import agentflow.capabilities` 直接失败。
               "sleep": _N,
               # `draft/37` §84 的 D1：`certificate` / `search_bound` 是
-              # `schema.Experiment` 硬约束 2c/2d 要求的事实，而**此前这一层没声明它们**
+              # `schema.Experiment` 硬约束 2c/2d 要求的事实，而「此前这一层没声明它们」
               # ⇒ 模型看不见、也就永远满足不了（实测 T1：method='exhaustive_search'
               # 三次 failed，报「必须给出 certificate」）。方法层与工具层同轮接上。
               "certificate": _OBJ,
@@ -100,28 +100,15 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "name": _S,
               "imports": _ARR_S, "timeout_sec": _N}, ("claim",)),
         "dict（checked=False + reason 表示『没法做』）",
-        # 本条此前是 `side_effect="unknown"`（"我读不出它写不写"），随后
-        # 改成过 `side_effect="network"`。现在按下面三条事实把它落到
-        # 两根轴上的确定值：`read` + `external="exec"`。
-        #
-        # 判据（逐条从代码读出，不是推测）：
-        # (1) 无后端时它只读：`verify_tools.check_formal` 在 `detect_verifier()`
-        #     探不到检查器时立刻返回 `no_backend`，不起进程、不写盘（见该函数开头）；
-        # (2) 有后端时它起外部进程：桥接层 `formalgw.check_lean` 真的执行
-        #     `lean`/`coqc`/`isabelle`（`formalgw._default_run` 是 `subprocess.run`），
-        #     而那个子进程继承本进程的环境与工作目录 ⇒ 它的读写面不由本框架决定；
-        # (3) 它不写工作区：源码走内存时 `formalgw._materialize` 建的是
-        #     `tempfile.TemporaryDirectory`（`workdir=None` ⇒ 临时目录），跑完即删。
-        #     所以它不是 `write_local`（工作区字节不变）；代价是它也不是纯内存计算。
-        #
-        # 为什么不是 `network`：那个遗留取值把"出网"与"起进程"压成一档，
-        # 而这里的事实只有后者 —— 它执行的是调用方给内容的检查器，
-        # 所以第二根轴的确定值是 `exec`。B3 收官把这个取值从词表里删掉之后，
-        # 这条注释曾经援引的那一档已经不存在了（P7 的处置也随之收敛：
-        # "执行进程"有了自己的档，不再需要借 network 来说）。
-        # 代价（如实登记）：它因为 `external != "none"` 而进入沙箱面，
-        # 并且在沙箱未声明时需要审批（工具层 `verify.check_formal`
-        # 因此从 `_ROLES` 改成 `_ROLES_WRITE`，H 不再拥有它）。
+        # 本条此前是 `side_effect="unknown"`，随后改成过 `side_effect="network"`；现在按三条事实落到
+        # 两根轴的确定值：`read` + `external="exec"`。(1) 无后端时只读：`verify_tools.check_formal` 在
+        # `detect_verifier()` 探不到检查器时立刻返回 `no_backend`，不起进程、不写盘；(2) 有后端时起外部
+        # 进程：`formalgw.check_lean` 真的执行 `lean`/`coqc`/`isabelle`（`formalgw._default_run` 是
+        # `subprocess.run`），子进程继承本进程环境与工作目录 ⇒ 读写面不由本框架决定；(3) 不写工作区：
+        # 源码走内存时 `formalgw._materialize` 建 `tempfile.TemporaryDirectory`，跑完即删。为什么不是
+        # `network`：那取值把"出网"与"起进程"压成一档，而这里的事实只有后者（B3 收官已删该取值）。
+        # 代价：`external != "none"` ⇒ 进沙箱面、未声明沙箱时需审批（`verify.check_formal` 因此从
+        # `_ROLES` 改成 `_ROLES_WRITE`，H 不再拥有它）。
         side_effect="read", handler_name="check_formal",
         external="exec",
     ),
@@ -302,43 +289,16 @@ def _tool_summary(tool_name: str) -> str:
     raise LookupError(f"工具面上没有 {tool_name!r} ⇒ 改写表的左边没有出处")
 
 
-#: 关掉 Lean 之后，E 的「面」按业主 2026-10-12 的口径改写（逐字）：
-#: 「负责 Lean 的智能体 E 在开关关掉时可不载入有关形式化验证的提示词，全体成员关于 E 的
-#: 印象也可以没有『负责形式化验证』这个说法，一旦提到形式化验证所有人的第一反应是
-#: 系统做不了」。
-#:
-#: ## 为什么是一张"渲染出来的文本 → 改写文本"的表，而不是改声明本身
-#:
-#: 声明（`SPEC.duty` / `policy` / 官能、`ACTIONS` 的 `summary`）是**权限面与面的唯一来源**，
-#: `capabilities` 那四张表由它派生，`tests/golden/*_snapshot.json` 钉着它 ——
-#: 按开关改声明等于让"权限面"随一台机器的设置漂移，那是另一种更坏的错。
-#: 所以：**声明不动**，动的只是"渲染给模型看的那份文本"；改写表跟声明住在同一个文件里
-#: （同一个事实只有一个落点），由 `agent_prompts` 在渲染之后按开关应用。
-#:
-#: ## 为什么"左边"不许手抄（同源）
-#:
-#: 左边如果是从工具面**手抄**来的一句，它就多了一份会漂的副本 —— 实测漂过一次：
-#: `verify.check_formal` 的描述改成了「把一条命题（Lean 源码，给 `source` 或 `script_path`）
-#: 交给检查器**真跑**一次。」，而本表左边还写着旧句「（Lean 源码）交给检查器真跑一次：」。
-#: 后果不是报错，是**静默失效**：关掉形式化那一档里这一条什么都没替换，模型照样读到
-#: "把 Lean 源码交给检查器真跑一次"，而"关掉时没有形式化字样"这句话就成了假绿
-#: （唯一会响的是判据的"反真空"那一条：它报的是"表失效了"，不是"面广告了"）。
-#:
-#: 所以工具面与动作面这两条的左边**从真身读**：`_tool_summary()` 读
-#: `tools.verify_tools` 里 `ToolSpec.summary`，`_action_summary()` 读本文件的 `ACTIONS`
-#: —— 都是那条面在提示词里的原样前缀（`agent_prompts.tools_lines` / `actions_lines`
-#: 印的就是 `- {名字}：{摘要}…`）。工具描述再改一次，这一条自动跟着改；改到对不上
-#: 就是"提示词里根本没有这一行"，那由判据的反真空那一半当场报出来。
-#:
-#: 刻意**整段**替换（不只替换第一句）：摘要是"这件工具怎么用、哪些状态算通过"，
-#: 关掉之后整段都不该再教（它的后半句还提着 Lean 源码与 `.lean` 文件）。
-#:
-#: ## 判据（`tests/test_lean_switch.py`）
-#:
-#: ① 开关开着时：每一条的左边必须在**整份提示词里逐字出现**（反真空 —— 否则这张表
-#:    会在某次重写之后悄悄失效，而"关掉时没有形式化字样"这句话就成了假绿）；
-#: ② 开关关掉时：左边一条都不许再出现、每一条的右边必须出现（= 这一条真的被应用了），
-#:    且提示词里必须出现"系统做不了形式化验证"。
+#: 关掉 Lean 之后，E 的「面」按业主 2026-10-12 的口径改写（逐字）：「负责 Lean 的智能体 E 在开关
+#: 关掉时可不载入有关形式化验证的提示词，全体成员关于 E 的印象也可以没有『负责形式化验证』这个说法，
+#: 一旦提到形式化验证所有人的第一反应是系统做不了」。
+#: 为什么是"渲染文本 → 改写文本"的表而不是改声明本身：声明（`SPEC.duty` / `policy` / 官能、`ACTIONS`
+#: 的 `summary`）是权限面的唯一来源，`capabilities` 四张表由它派生、`tests/golden/*_snapshot.json` 钉着
+#: 它 ⇒ 按开关改声明等于让权限面随机器设置漂移。所以「声明不动」，动的只是渲染给模型看的那份文本。
+#: 左边不许手抄（实测漂过一次，后果是静默失效 ⇒ "关掉时没有形式化字样"成了假绿）：`_tool_summary()`
+#: 读 `tools.verify_tools` 的 `ToolSpec.summary`，`_action_summary()` 读本文件的 `ACTIONS`；整段替换。
+#: 判据（`tests/test_lean_switch.py`）：① 开着时左边逐字出现（反真空）；② 关掉时左边不出现、右边出现，
+#: 且提示词里必须出现"系统做不了形式化验证"。
 NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     # 职责句（E 自己的开头 + 全体角色的伙伴表里那一行都是这一句）
     ('数值实验与形式化验证：把一条断言变成可复现的实验或可检查的形式化代码',
@@ -362,15 +322,11 @@ NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (f"check_formal：{_action_summary('check_formal')}",
      'check_formal：本会话形式化已关闭 —— 系统做不了形式化验证（reason=lean_disabled），'
      '别派它。'),
-    # ⚠️ **2026-10-16 退场一条**（业主口径 S1「M 只派活」）：这里原本还有一条
-    #   ('check_formal（必填 claim）——转发到形式化检查器；没有后端时如实回答『没做』。', …)
-    # 注的是"**伙伴表动作行**（全体角色都看得见的那一行）"。口径改成"伙伴表只给描述、
-    # 不印动作与参数"之后，那一行在任何角色的提示词里都不再出现 ⇒ 这条改写永远匹配不到
-    # （判据 `test_the_no_lean_variant_rewrites_every_role_face` 的"改写表的左边在开着时的
-    # 提示词里找不到（表失效了）"当场报了出来）。E 自己提示词里的形式化面仍由上面那两条守
-    # （`verify.check_formal` 的 tools 行、`check_formal：…` 的短名行，两条的左边现在都
-    # 从真身读）—— 覆盖面没有丢，去掉的是一个**已经不存在的面**。
-    # 别人的口径里"要不要形式化"的两处（D 的"初步审阅"与"可挽救性评估"）
+    # 2026-10-16 退场一条（业主口径 S1「M 只派活」）：这里原本还有一条注的是「伙伴表动作行」
+    # （全体角色都看得见的那一行）。口径改成"伙伴表只给描述、不印动作与参数"之后，那一行在任何角色的
+    # 提示词里都不再出现 ⇒ 这条改写永远匹配不到（判据 `test_the_no_lean_variant_rewrites_every_role_face`
+    # 当场报出"左边在开着时的提示词里找不到（表失效了）"）。E 自己的形式化面仍由上面那两条守
+    # （`verify.check_formal` 的 tools 行、`check_formal：…` 的短名行，左边都从真身读）。
     ('数学对错的最终背书在形式化（E）或人', '数学对错的最终背书在逐行审阅（E / V）或人'),
     ('要多少预算（大概几步、要不要形式化）', '要多少预算（大概几步）'),
     # H 去找 E 的那件事
@@ -379,24 +335,24 @@ NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ('数值 / 形式化 E、证明 F、审过 V、正式审查 H', '数值 E、证明 F、审过 V、正式审查 H'),
 )
 
-#: 关掉 Lean 时**整行删掉**的那些行（按"这一行里包含这个标记"定位）。
+#: 关掉 Lean 时「整行删掉」的那些行（按"这一行里包含这个标记"定位）。
 #:
-#: 为什么与上面的替换表分开：有些段落**整段**都在讲怎么写 Lean（那一行里没有一句
+#: 为什么与上面的替换表分开：有些段落「整段」都在讲怎么写 Lean（那一行里没有一句
 #: 在关掉之后还成立），逐句改写只会得到一段自相矛盾的话 —— 那种段落该整行删掉。
-#: 位置口径：`specs` 的 policy / boundary / 工具描述在提示词里**各占一行**
+#: 位置口径：`specs` 的 policy / boundary / 工具描述在提示词里「各占一行」
 #: （每条是单个字符串，内部没有换行），所以"按行删"是安全的；
-#: 判据同样要求每一条标记在**开着时**的提示词里出现（反真空）。
+#: 判据同样要求每一条标记在「开着时」的提示词里出现（反真空）。
 NO_LEAN_DROP_LINE_MARKERS: tuple[str, ...] = (
     # E 的政策第 5 条：整条是"Mathlib 可用/不可用时怎么写 Lean 源码"
     '`verify.check_formal` 的 `imports` 默认不注入任何库',
 )
 
-#: 关掉 Lean 时**整块删掉**的那些块：`(起点标记, 保留下来的第一行标记)`。
+#: 关掉 Lean 时「整块删掉」的那些块：`(起点标记, 保留下来的第一行标记)`。
 #:
 #: 为什么还要有这一档（单行删不够）：纸包六的"核验证明分两步"是一条跨好几行的项目，
 #: 而"里面每一行都在讲形式化"这件事只有整块一起删才成立 —— 删一半会留下一句没有主语的
 #: 半句话（真机概率不低：那一块的第一行与第二行之间没有空行）。
-#: 块尾刻意选在**开关分支那一条**（`但先看 TOOLCHAIN_FACTS 的第一行`）：它正是删掉之后
+#: 块尾刻意选在「开关分支那一条」（`但先看 TOOLCHAIN_FACTS 的第一行`）：它正是删掉之后
 #: 该走的那条路，所以"删到它之前"＝"留下替代路线"。
 NO_LEAN_DROP_BLOCKS: tuple[tuple[str, str], ...] = (
     ('**"核验证明"分两步，两步都要走**', '- **但先看 TOOLCHAIN_FACTS 的第一行**'),

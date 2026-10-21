@@ -95,22 +95,22 @@ assert EFFECT == SIDE_EFFECTS, (
 #: - `egress`：出网；
 #: - `exec`：在宿主上执行一个由调用方决定内容的程序。
 #:
-#: ## `axes-1`：取值清单**有两份字面量**，不是一份（这句话此前是错的）
+#: ## `axes-1`：取值清单「有两份字面量」，不是一份（这句话此前是错的）
 #:
 #: 旧docstring 逐字写着"取值清单只有这一份（FC-03）。`capabilities.py` 不再写第二份
-#: 字面量，而是 import 这里" —— 实测与代码事实**相反**：`capabilities.py` 在
+#: 字面量，而是 import 这里" —— 实测与代码事实「相反」：`capabilities.py` 在
 #: 模块层各写了一份 `SIDE_EFFECTS` / `EFFECT` / `EXTERNAL` 字面量
-#: （**刻意不写行号**：那三行在本轮里就漂过一次 —— 行号会给人一个**会过期**的指引，
+#: （「刻意不写行号」：那三行在本轮里就漂过一次 —— 行号会给人一个「会过期」的指引，
 #: 而本仓的禁改区清单理由守的正是同一条纪律：写符号名，不写 `文件:行号`），
-#: 且它自己的注释逐字写了**为什么刻意不 import**（它是更底层的声明层，
+#: 且它自己的注释逐字写了「为什么刻意不 import」（它是更底层的声明层，
 #: 要能被 `verify` 与 CLI 单独读，拖上工具层会改变依赖方向）。
 #:
-#: 所以准确的说法是：**两处各有一份字面量，由导入期断言钉住它们不许分叉**
+#: 所以准确的说法是：「两处各有一份字面量，由导入期断言钉住它们不许分叉」
 #: （`capabilities.assert_capabilities` 的交叉断言；新增一根轴沿用同一种形态，
-#: 而不是发明第二套机制）。**落点也必须知道有两个**：
+#: 而不是发明第二套机制）。「落点也必须知道有两个」：
 #:
 #: - 本文件（`tools/base.py`）—— 在禁改区清单里；
-#: - `capabilities.py` —— **不在**清单里。
+#: - `capabilities.py` —— 「不在」清单里。
 #:
 #: 后者是这条登记的影响面：放宽词表这件事可以只改不受保护的那一份，
 #: 而只改一处会在导入期炸、两处改法不一致则两处描述的是不同的轴。
@@ -152,23 +152,23 @@ REQUIRED_NON_EMPTY_FIELDS: tuple[str, ...] = ("name", "summary", "params")
 #: - `None`：未声明（默认）。它与 `False` 等价地保守（需要审批），
 #:   但在报告里必须能分开：一个是"我们查过，没有沙箱"，一个是"我们没说过"。
 #:
-#: ## `axes-3`：`True` 这一档在**当前环境里不可达**（如实登记，不是"三种取值都在用"）
+#: ## `axes-3`：`True` 这一档在「当前环境里不可达」（如实登记，不是"三种取值都在用"）
 #:
 #: 实测：全仓库对 `SANDBOX_AVAILABLE` 的出现只有四类 —— 上面这个定义（值恒为 `None`）、
 #: `tools/__init__.py` 里一个从未被使用的导入、下面的读取点、以及测试里的 `monkeypatch`。
-#: **没有任何配置或装配入口**（`build_registry` / CLI / config 都不接受它）。
+#: 「没有任何配置或装配入口」（`build_registry` / CLI / config 都不接受它）。
 #:
 #: 后果必须写清，否则读文档的人会以为三档都活着：
 #:
 #: - `_role_surface` 的 `external == "exec"` 放行分支、`allowed_by_sandbox` 留痕，
-#:   在生产里**永不发生**；
+#:   在生产里「永不发生」；
 #: - `needs_approval` 里"沙箱可用所以 exec/egress 被承接"那一支同理恒假；
-#: - 于是**任何 `external != "none"` 的工具在任何环境下都需要审批**，
+#: - 于是「任何 `external != "none"` 的工具在任何环境下都需要审批」，
 #:   而 `for_role` 对只读角色永远剥掉 `exec` 工具。
 #:
-#: 这是**如实登记**而不是"现在就该补齐入口"：补齐的代价见 `draft/28` 的 `axes-3`
+#: 这是「如实登记」而不是"现在就该补齐入口"：补齐的代价见 `draft/28` 的 `axes-3`
 #: （模块级可变全局会让同一进程里两张注册表的审批面不同，该值应挪进 `ToolRegistry`
-#: 实例，改动面更大）。两条口径都需要人裁 —— 在裁定之前，**这一档只由测试覆盖**。
+#: 实例，改动面更大）。两条口径都需要人裁 —— 在裁定之前，「这一档只由测试覆盖」。
 SANDBOX_AVAILABLE: bool | None = None
 
 
@@ -217,15 +217,15 @@ class ParamError(ToolError):
 #: 每条理由必须逐字说清"为什么这个只读角色能调这个写工具"；写不出理由的，
 #: 就该改代码而不是加例外（与 `role_filter_notes` 的纪律同族）。
 #:
-#: `R4-2`：`role_filter_notes` 里的条目有**两个来源**（重算 / 装配期），
+#: `R4-2`：`role_filter_notes` 里的条目有「两个来源」（重算 / 装配期），
 #: 所以重算来源的那些带一个标记前缀 —— 重算时只清带标记的，装配期那几条留着。
 #: 为什么用前缀而不是另开一个字典：留痕的消费方（`scripts/release_check.py` 的
-#: fail 说明、`docs/ROLE-SPECS.md` 的说明）读的是**一个列表**；
-#: 把它拆成两个会让每一个消费点都要记得"两边都读"，而漏读一边是**静默**的。
+#: fail 说明、`docs/ROLE-SPECS.md` 的说明）读的是「一个列表」；
+#: 把它拆成两个会让每一个消费点都要记得"两边都读"，而漏读一边是「静默」的。
 _SURFACE_NOTE_TAG = "［工具面重算］"
 READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     # C（业主 2026-10-18 裁定「只读角色的产出要能进台账」）：一个写入面。
-    #   `analysis.register_report` 是 C 自己的**产出登记通道**：把这一趟它算出来的
+    #   `analysis.register_report` 是 C 自己的「产出登记通道」：把这一趟它算出来的
     #   图读数 / 结构洞 / 候选缺口登记进 `analysis_reports`（复用
     #   `agent_c._support.AnalysisReport.persist`，不另写一份落盘实现）。
     #   为什么必须有这一条：C 的动作（`gaps` / `handle` / `paths` / …）不在 C 自己的
@@ -234,9 +234,9 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     #   C 的图读数只活在回复与手稿里；同趟 run 记录里它两次尝试（`gaps` / `handle`）
     #   都拿到「没有名为 … 的工具」。表级例外
     #   （`capabilities.READ_ONLY_WRITE_EXCEPTIONS["C"]`）早就登记了 `analysis_reports`
-    #   —— 缺的正是这一件**工具**（`for_role` / `_role_surface` 把只读角色的写工具全剥掉）。
+    #   —— 缺的正是这一件「工具」（`for_role` / `_role_surface` 把只读角色的写工具全剥掉）。
     #   判据三条：(1) 工具面仍然全量只读 ✓（这一件是全工具面上唯一的写，`roles=("C",)`）；
-    #   (2) 写的是**成品报告的登记行**，不是知识表（`claims`/`literature`/`relations`
+    #   (2) 写的是「成品报告的登记行」，不是知识表（`claims`/`literature`/`relations`
     #   零写入点，由 `tests/test_readonly_output_channel.py` 用"全表行数前后不变"守）；
     #   (3) 每一行都带 `kind`（受控词表）与 summary —— D 的读取端不会拿到表外取值。
     "C": (
@@ -293,12 +293,12 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
 #:   （判据在 `capabilities.assert_capabilities` 第 [8] 条，导入期 fail-closed）；
 #: - 工具层：`ToolSpec.params` 的 properties ↔ `ToolSpec.handler` 的真形参
 #:   （判据在下面 :func:`param_seam_violations`，由 :meth:`ToolRegistry.register`
-#:   在**注册那一刻**核 —— 见该方法的 docstring：`roles ⊆ schema.ROLES` 的判据
+#:   在「注册那一刻」核 —— 见该方法的 docstring：`roles ⊆ schema.ROLES` 的判据
 #:   正是从装配期搬到这里来的，理由逐字相同：绕过 `build_registry` 的入口
 #:   （`agent_d.install_d_tools` / `agent_e.install_e_tools` …）也必须被核到）。
 #:
 #: 为什么落点是注册期而不是 `import agentflow.tools`：工具模块的 `register()`
-#: 是**装配时才跑**的（`build_registry` 惰性 import 各模块），导入 `agentflow.tools`
+#: 是「装配时才跑」的（`build_registry` 惰性 import 各模块），导入 `agentflow.tools`
 #: 的那一刻树上一个 `ToolSpec` 都还没有 —— 在导入期能核的只有"这张表自己的形态"
 #: （工具名的组前缀是否由 `_MODULES` 产生、理由串是否非空），
 #: 那一条在 `tools/__init__.py` 的 `_check_param_seams_are_registered()` 里。
@@ -309,7 +309,7 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
 #: 收不下的（`tests/test_schema_handler_params.py` 的正控在测试面重复了同一条读数）。
 #: 空表不等于没判据 —— 判据是否真的走遍了声明由 `param_seam_violations` 的
 #: 调用方核覆盖率（`build_registry` 把 `inspected` 计数留在 `RegistryBuild` 里，
-#: 测试断言它 ≥ 注册的工具数）。**不许**为了让这一格"看起来有东西"而凭空
+#: 测试断言它 ≥ 注册的工具数）。「不许」为了让这一格"看起来有东西"而凭空
 #: 登记一条不需要的接缝：`assert` 会把"已经不需要了"的登记当缺陷报出来
 #: （`stale_param_seam_violations`）。
 PARAM_SEAMS: dict[str, dict[str, str]] = {}
@@ -490,7 +490,7 @@ def _type_name(v: Any) -> str:
 
 
 def _schema_allows_null(sub: Any) -> bool:
-    """这个参数**显式传 null** 是否合法（2026-10-17）。
+    """这个参数「显式传 null」 是否合法（2026-10-17）。
 
     两档放行：子 schema 自己写了 `"nullable": True`；或 `type` 是列表且含 `"null"`。
     其余一律不放行 —— `null` 不是"没提供"，见 `validate_params` 里那段理由。
@@ -815,17 +815,17 @@ def tool(
 
 
 def candidate_tool_names(name: str, names: Iterable[str], *, limit: int = 3) -> list[str]:
-    """错名的**并列候选**（`draft/56` §2 主线 A 的 L-05h 机器半）。
+    """错名的「并列候选」（`draft/56` §2 主线 A 的 L-05h 机器半）。
 
-    只回答"看起来像哪一个"，**绝不自动挑一个**（挑是判断，归出错方的秘书）。
+    只回答"看起来像哪一个"，「绝不自动挑一个」（挑是判断，归出错方的秘书）。
     三条判据按序取并集，去重后截到 `limit`：
 
-    1. **同尾名**：`fs.read` 与 `table.read` 的尾名都是 `read` ⇒ 给 `read` 时并列出来
+    1. 「同尾名」：`fs.read` 与 `table.read` 的尾名都是 `read` ⇒ 给 `read` 时并列出来
        （广告名与真名共用尾名是模型最常走的错法）；
-    2. **尾名近似**：`fs.raed` ⇒ `fs.read`（`difflib` 的近似匹配，阈值 0.6）；
-    3. **全名近似**：`review.reportt` ⇒ `review.report`。
+    2. 「尾名近似」：`fs.raed` ⇒ `fs.read`（`difflib` 的近似匹配，阈值 0.6）；
+    3. 「全名近似」：`review.reportt` ⇒ `review.report`。
 
-    `names` 传的是**本注册表**里的名字。`ToolRegistry.scoped_to(..., deps=...)`
+    `names` 传的是「本注册表」里的名字。`ToolRegistry.scoped_to(..., deps=...)`
     会把 writers 子注册表里那批落库代理（`review.*`）装进同一张表，
     于是它们与工具面上的名字一样能被命中（"含 writers 子注册表名"这一条由结构保证，
     不是另写一份名单）。
@@ -905,7 +905,7 @@ class ToolRegistry:
         `errors-7`（2026-09-26 全面体检 · 子代理 A，实测）：同一条注册路径上
         有两种失败类型 —— 重名抛裸 `ValueError`，而同方法里的
         `_reject_unknown_roles` 抛 `ToolError`。后果是"按 `ToolError` 分类处理
-        装配失败"的调用方会**静默漏掉工具名重复**这一类；今天只有
+        装配失败"的调用方会「静默漏掉工具名重复」这一类；今天只有
         `build_registry` 捕 `Exception` 才把影响掩盖住。
         所以重名这一支也统一成 `ToolError`（工具层的公共契约就是只捕这一个类型，
         见 `ToolError` 的 docstring），并把工具名放进 `tool=` 元信息里，
@@ -970,7 +970,7 @@ class ToolRegistry:
     def get(self, name: str) -> ToolSpec:
         """取一个工具的声明；不认识这个名字时抛 `ToolError`。
 
-        ## 错名给的是**并列候选**，不是"一次自动纠正"（`draft/56` §2 主线 A）
+        ## 错名给的是「并列候选」，不是"一次自动纠正"（`draft/56` §2 主线 A）
 
         原来这一格的提示是 `[n for n in self._specs if name.split(".")[-1] in n]`
         —— 一个子串包含判据：它对 `fs.raed`（调换两个字母）给不出任何候选，
@@ -978,20 +978,20 @@ class ToolRegistry:
 
         新口径（`draft/53` §10 / `draft/55` §3.2 的 L-05h）：
 
-        - 机器**只把候选并列出来**（含 writers 子注册表里的那批名字 ——
+        - 机器「只把候选并列出来」（含 writers 子注册表里的那批名字 ——
           `scoped_to(..., deps=...)` 把 `review.*` 这类落库代理装进本表，
           于是它们和工具面上的名字一样能被候选命中）；
-        - 机器**不自动改写**：选哪个名字是判断，归出错方的秘书（职责 1/2），
+        - 机器「不自动改写」：选哪个名字是判断，归出错方的秘书（职责 1/2），
           机器只留 fail-closed 的 `unknown_tool` 与这份候选读数。
 
         真机读数（`draft/44` 的 L-05h）：`review`7 / `review_report`6 /
-        `review.report`5 / `doc.revise`2 次调用**全失败且无回映** —— 白烧步数。
+        `review.report`5 / `doc.revise`2 次调用「全失败且无回映」 —— 白烧步数。
         """
         try:
             return self._specs[name]
         except (KeyError, TypeError):
             # 2026-10-17（子代理 tools 甲类 #2）：`name` 不可哈希（如传了个 list）时
-            # `self._specs[name]` 抛 **TypeError**，原来只捕 KeyError ⇒ 冒泡出 `call`。
+            # `self._specs[name]` 抛 「TypeError」，原来只捕 KeyError ⇒ 冒泡出 `call`。
             # 现在并进"查不到"这一条路：下面照旧给候选名与提示，不冒泡。
             close = candidate_tool_names(name, self._specs)
             hint = ""
@@ -1163,31 +1163,31 @@ class ToolRegistry:
         而把工具面收窄成"可调用面"会把 H 的落库能力一起砍掉。
         本方法的行为不因 `P-14` 改变任何一个字节。
 
-        ## `roles-4`：留痕必须**幂等**（每次重算，不是每次追加）
+        ## `roles-4`：留痕必须「幂等」（每次重算，不是每次追加）
 
         旧实现是 `self.role_filter_notes.setdefault(role, []).append(message)` ——
-        于是**每调一次就多一条**。实测：把 `SANDBOX_AVAILABLE` 从 `None` 改成 `True`
+        于是「每调一次就多一条」。实测：把 `SANDBOX_AVAILABLE` 从 `None` 改成 `True`
         再调一次之后，`notes['H']` 里同时留着"剥掉了 2 个工具（含 `probe.exec_read`）"
-        与"放行了 `probe.exec_read`"两条 —— **前一条与当前状态相反**。
+        与"放行了 `probe.exec_read`"两条 —— 「前一条与当前状态相反」。
         按这份留痕写报告的人会把当前工具面写错，而工具面本身是对的、错的是叙述，
         没有第二处能纠正它；条目还会随调用次数线性膨胀。
 
-        现在的口径：**先清掉本角色上一次的留痕，再写当次结果**。
+        现在的口径：「先清掉本角色上一次的留痕，再写当次结果」。
         清的是 `role_filter_notes[role]` 整个列表 —— 那些条目全部来自本方法的同一次重算
         （`_role_surface` 的拒绝/放行，加上装配期那几条"代理没装进来"），
         所以重算一次就是它们的完整答案；留着旧的只会自相矛盾。
         """
         # `roles-4`：重算而不是追加。放在调用 `_role_surface` 之前。
         #
-        # `R4-2`（第一次重审实测的修法）：**只清掉本方法自己上一次写的那几条**。
-        # 留痕有**两个来源**：
+        # `R4-2`（第一次重审实测的修法）：「只清掉本方法自己上一次写的那几条」。
+        # 留痕有「两个来源」：
         #   - `_role_surface` 的重算（本方法写的）—— 每次清掉重写，这是 `roles-4` 的幂等要求；
-        #   - **装配期** `scoped_to` + `_attach_registered_writers`（"已登记的落库代理没有
-        #     装配进这张表"那几条）—— 它们描述的是**装配事实**，不是本方法的重算结果。
+        #   - 「装配期」 `scoped_to` + `_attach_registered_writers`（"已登记的落库代理没有
+        #     装配进这张表"那几条）—— 它们描述的是「装配事实」，不是本方法的重算结果。
         # 旧版一句 `self.role_filter_notes.pop(role, None)` 把整个列表清空，
-        # 于是先 `scoped_to("H")` 再 `for_role("H")` 时那几条**被抹掉**：
+        # 于是先 `scoped_to("H")` 再 `for_role("H")` 时那几条「被抹掉」：
         # 事实没有变（代理仍然没装进来），记录却没了。而 docstring 当时那句
-        # "那些条目全部来自本方法的同一次重算"是**假的**（重审逐字点名）。
+        # "那些条目全部来自本方法的同一次重算"是「假的」（重审逐字点名）。
         self._drop_own_role_notes(role)
         surface, notes = self._role_surface(role, filter_readonly=True, call_surface=False)
         for message in notes.get(role, []):
@@ -1195,7 +1195,7 @@ class ToolRegistry:
         return surface
 
     def _drop_own_role_notes(self, role: str) -> None:
-        """清掉本表**上一次由 `_role_surface` 重算写入**的留痕；装配期那几条留着。"""
+        """清掉本表「上一次由 `_role_surface` 重算写入」的留痕；装配期那几条留着。"""
         kept = [m for m in self.role_filter_notes.get(role, []) if not m.startswith(_SURFACE_NOTE_TAG)]
         if kept:
             self.role_filter_notes[role] = kept
@@ -1203,7 +1203,7 @@ class ToolRegistry:
             self.role_filter_notes.pop(role, None)
 
     def _add_surface_note(self, role: str, message: str) -> None:
-        """写一条**重算来源**的留痕（带标记，便于 `_drop_own_role_notes` 精确清理）。"""
+        """写一条「重算来源」的留痕（带标记，便于 `_drop_own_role_notes` 精确清理）。"""
         self.role_filter_notes.setdefault(role, []).append(_SURFACE_NOTE_TAG + message)
 
     def _role_surface(
@@ -1229,7 +1229,7 @@ class ToolRegistry:
             if role not in s.roles:
                 continue
             if filter_readonly and role in READ_ONLY_ROLES:
-                # 2026-10-17（业主裁定「方案 1」）：**该角色自己的落库代理放行**。
+                # 2026-10-17（业主裁定「方案 1」）：「该角色自己的落库代理放行」。
                 # 写面钉死在 `READONLY_CALL_EXCEPTIONS[role]` 那张逐条登记的表里
                 # —— 它不是"放宽只读"，而是"只读角色的写只允许这几个落点"。
                 _exempt = {_n for _n, _w in READONLY_CALL_EXCEPTIONS.get(role, ())}
@@ -1287,10 +1287,10 @@ class ToolRegistry:
 
         ## 谁走这里（`roles-1`：这句话此前是错的）
 
-        **只有 `call` 走这里。** `for_role` 直接调 `_role_surface(..., call_surface=False)`，
+        「只有 `call` 走这里。」 `for_role` 直接调 `_role_surface(..., call_surface=False)`，
         从不经过本函数。旧 docstring 逐字写着"`for_role` 与 `call` 都走这里"，
         而全仓库唯一的真调用点（`call` 里那一处）传的是 `include_registered_writers=True`
-        ⇒ 本函数里 `include_registered_writers=False` 那一支是**死代码**
+        ⇒ 本函数里 `include_registered_writers=False` 那一支是「死代码」
         （没有调用方，也没有测试），而按那句文档去理解两个面的差别，
         恰好是 `P-14` 之后最容易搞错的地方。
 
@@ -1336,11 +1336,11 @@ class ToolRegistry:
                 f"但这张注册表里没有注册它 —— 例外只对显式装配了落库代理的注册表生效"
             )
         # `roles-1`：这里曾经还有一支 `if not include_registered_writers ...` 的拒绝理由。
-        # 它是**死代码** —— 全仓库唯一调用点传的是 `True`，没有测试覆盖它，
+        # 它是「死代码」 —— 全仓库唯一调用点传的是 `True`，没有测试覆盖它，
         # 而留着它会让人以为 `for_role` 也受这个开关影响（`for_role` 根本不走本函数）。
         # 删掉而不是留着：一条永不执行的判据分支，读起来与"有第二条判据"没有区别。
         #
-        # 参数 `include_registered_writers` 保留：它真正的作用在**上面**那句
+        # 参数 `include_registered_writers` 保留：它真正的作用在「上面」那句
         # `_role_surface(..., call_surface=include_registered_writers)` 里
         # （可调用面是否包含已登记的落库代理），那一句是活的。
         return f"角色 {eff!r} 拿不到工具 {spec.name!r}：它不在这个角色的可调用面里"
@@ -1423,17 +1423,17 @@ class ToolRegistry:
 
         工具是 LLM 手写 JSON 的落点，参数名由工具作者定。若某个工具的 schema 里
         真的声明了 `role` 或 `args` 属性，调用方按名传入的那一份必须原样落到工具上
-        （`role` 只从位置**上被本方法占用，`args` 在本方法里就地合并、没有单独的绑定步骤）——
+        （`role` 只从位置「上被本方法占用，`args` 在本方法里就地合并、没有单独的绑定步骤）——
         本仓库今天没有任何工具这么做，有测试钉着这一点。
 
         ## `roles-3`：`role` 这一格的优先级与"身份声明"的关系
 
-        规则一句话：**显式关键字 > 位置映射 > `bound_role`**。
+        规则一句话：「显式关键字 > 位置映射 > `bound_role`」。
 
         - 工具声明了 `role` ⇒ 它收下 `role=<显式关键字>`，没给才用位置映射里的那一份；
           身份声明回退到 `self.bound_role`（它本来就该按绑定值判，而不是按 `None`）。
         - 旧实现用 `params.setdefault("role", role)` + `role = None`，于是
-          **位置映射里给的 `role` 会被 `params` 里那个 `None` 反向覆盖**（参数静默丢失），
+          「位置映射里给的 `role` 会被 `params` 里那个 `None` 反向覆盖」（参数静默丢失），
           而拒因还会写成"调用方没有声明角色"（与事实相反：调用方声明了，只是被工具收下了）。
         这两件事都必须留痕：调用日志里会记 `role_consumed_as_param` 与 `identity_role`。
         """
@@ -1447,25 +1447,25 @@ class ToolRegistry:
         props = spec.params.get("properties") or {}
         # ---- 同名参数的消歧（规则与 `budget` 同族：schema 说了算）
         #
-        # 优先级（`roles-3` 的判据，此前是错的）：**显式关键字 > 位置映射 > bound_role**。
+        # 优先级（`roles-3` 的判据，此前是错的）：「显式关键字 > 位置映射 > bound_role」。
         # 旧实现是两句：
         #     params.setdefault("role", role)   # role=None 时它什么也不写
         #     role = None                       # 然后把身份声明丢掉
         # 于是 `call(name, {"role": "X"})`（位置映射里给了 X、关键字没给）落到
-        # `merged.update(params)` 时被 `params` 里那个 `role=None` **反向覆盖** ——
-        # 工具收到 `None`，参数**静默丢失**。而它紧接着又把身份声明置空，
+        # `merged.update(params)` 时被 `params` 里那个 `role=None` 「反向覆盖」 ——
+        # 工具收到 `None`，参数「静默丢失」。而它紧接着又把身份声明置空，
         # 导致拒因写成"调用方没有声明角色"，与事实相反（调用方明明声明了）。
         #
         # 现在三件事分开写清：谁被工具收下、身份声明取哪一个、拒因说哪一句话。
         #
         # ⚠️ `R4-1`（第一次重审实测的修法）：位置映射里的 `role` 必须与关键字形态
-        # **走同一套判据**。旧版只在 `role is not None`（关键字）时才看它，
+        # 「走同一套判据」。旧版只在 `role is not None`（关键字）时才看它，
         # 于是同一个 `role="H"` 有两种结局：
         #   `call(name, role="H")`      ⇒ `role_denied`（身份判据生效）
-        #   `call(name, {"role": "H"})` ⇒ **身份判据被整格跳过**，而且工具真的收到
+        #   `call(name, {"role": "H"})` ⇒ 「身份判据被整格跳过」，而且工具真的收到
         #                                 `{'n': 1, 'role': 'H'}` 并返回 ok（宽 schema 下）
-        # 改前这两种形态**都**判 `role_denied`，所以这是 `roles-3` 那次修复引入的分叉。
-        # 修法：先把位置映射里的 `role` **提升**成一次身份声明（它是同一个语义位置），
+        # 改前这两种形态「都」判 `role_denied`，所以这是 `roles-3` 那次修复引入的分叉。
+        # 修法：先把位置映射里的 `role` 「提升」成一次身份声明（它是同一个语义位置），
         # 再让下面那段唯一的分流去决定"工具收下"还是"当作身份"。
         role_from_args = None
         if args is not None and isinstance(args, Mapping) and "role" in args:
@@ -1490,7 +1490,7 @@ class ToolRegistry:
         # 被置空时 `_callable_for` 会回退到 `self.bound_role`（它自己那一行 `eff = ...`）。
         denial = self._callable_for(spec, role, include_registered_writers=True)
         if denial is not None:
-            # 被拒的调用**也要留痕**：拒绝理由里会出现"调用方没有声明角色"这句话，
+            # 被拒的调用「也要留痕」：拒绝理由里会出现"调用方没有声明角色"这句话，
             # 而在"role 被工具收下"的形态下那句话只有靠 `role_consumed_as_param` /
             # `identity_role` 两个字段才能自证。不留痕 ⇒ 读日志的人无法判断
             # 这句话是对的还是在冤枉调用方（`roles-3` 的第二形态就出在这里）。
@@ -1529,7 +1529,7 @@ class ToolRegistry:
 
         try:
             # 2026-10-17（真机 T1/T4/T5 共 8 次以上）：模型习惯在参数里带 `why`（"我为什么这么调"）。
-            # 参数集是封闭的 ⇒ 整份调用被拒，一次真实的写入/检索就白费了。它**不是**工具参数，
+            # 参数集是封闭的 ⇒ 整份调用被拒，一次真实的写入/检索就白费了。它「不是」工具参数，
             # 但它是审计线索 —— 从参数面剥掉、记进留痕（下面 `entry` 里），不当参数也不丢。
             _why = None
             _props = (spec.params or {}).get("properties") or {}
@@ -1563,10 +1563,10 @@ class ToolRegistry:
         except ToolError as e:
             out = fail(str(e), tool=name, kind="tool_error", detail=e.detail)
         except (TypeError, AttributeError) as e:
-            # 2026-10-17（子代理 tools 根因 A，17 个站点）：可选参数**显式传 null** 时校验器
+            # 2026-10-17（子代理 tools 根因 A，17 个站点）：可选参数「显式传 null」 时校验器
             # 把它当"没提供"放行，而 handler 按"一定有值"写 ⇒ 崩成 `kind="unexpected"`
-            # （读账的人只看到"库内部出错"）。这里把"有 null 且崩了"翻成**可行动的拒信**，
-            # 而**不改**校验语义 —— 于是 `attack.list_plans` / `review.scan_document`
+            # （读账的人只看到"库内部出错"）。这里把"有 null 且崩了"翻成「可行动的拒信」，
+            # 而「不改」校验语义 —— 于是 `attack.list_plans` / `review.scan_document`
             # 这类"null 本身有意义"的参数不受影响（它们不崩）。
             _nulls = sorted(k for k, v in (merged or {}).items() if v is None)
             if _nulls:
@@ -1595,15 +1595,15 @@ class ToolRegistry:
             res = res.pruned(eff_budget, spill_root=eff_spill)
         # `default_budget=None` ⇒ 什么都不做 ⇒ 与加 FC-17 之前逐字节一致。
         if self.log_calls:
-            # `roles-3` 要求"身份声明被让给工具"这件事**留痕**：否则只读拒因无法自证
+            # `roles-3` 要求"身份声明被让给工具"这件事「留痕」：否则只读拒因无法自证
             # （调用方看到"你没有声明角色"，而它其实声明了，只是被工具的参数收下了）。
             entry = {"tool": name, "params": _safe(merged), "ok": res.ok, "error": res.error}
-            # 2026-10-18（缺陷 ⑬，根因）：这一段原来**掉在 `if self.log_calls:` 外面** ——
-            # `entry` 只在上面那一支里赋值，于是**生产默认 `log_calls=False` 时，
-            # 任何带 `why` 的调用都会 UnboundLocalError**。真机三处报错全是它：
+            # 2026-10-18（缺陷 ⑬，根因）：这一段原来「掉在 `if self.log_calls:` 外面」 ——
+            # `entry` 只在上面那一支里赋值，于是「生产默认 `log_calls=False` 时，
+            # 任何带 `why` 的调用都会 UnboundLocalError」。真机三处报错全是它：
             # `table.create`（D 写 research_questions，idx 5/6/8）、`review.verify_fixes`
             # （H 复审）、以及 M 在验收表里误记成 `search.download` 的那一条。
-            # 现在 `entry` 的**全部**使用都在同一支里，`log_calls=False` 时什么都不碰。
+            # 现在 `entry` 的「全部」使用都在同一支里，`log_calls=False` 时什么都不碰。
             if _why:
                 entry["why"] = str(_why)[:400]
             if role_consumed_as_param:

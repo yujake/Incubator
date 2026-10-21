@@ -90,20 +90,13 @@ class BRunResult:
     quotes_failed: int = 0
     quotes_unknown: int = 0
     #: `E-11`：引文逐字存在、但不在关系声明的页码范围内（落在 ±widen 的扩展窗口里）。
-    #:
-    #: 为什么要单独一档：这一档在 `quoteverify.check_quote` 里是
-    #: `verified=True + reason='substring_match_outside_declared_range'` —— 于是
-    #: 它既被计进 `quotes_verified`（"逐字可达"是真的），又不会把关系降为
-    #: `suspect`（`quote_failed` 判的是 `verified is not True`）。结果是
-    #: "全部引文逐字可达"这条判据在所有页码都记错时照样通过，而聚合计数器里
-    #: 也看不出"页码不符"有几条 —— 这个信号原先只留在每行的 `_quote_check` 字典里，
-    #: 全仓库没有任何检查器消费它。
-    #:
-    #: 这一档不改 `verified`（逐字存在是事实，把它抹成 False 会让"真引文被记成
-    #: 幻觉"，那是 FC-02 最贵的一档），也不改 suspect 口径（那需要人裁，
-    #: `draft/28` 的 `E-11` 修法里写明了）。它做的是把这一档从"折进 verified"
-    #: 变成"可判定的独立档"：这里单独计数，`verify --deep` 另有一条
-    #: `page_range_mismatch` 的 warning（见 `verify.verify_all`）。
+    #: 为什么要单独一档：这一档在 `quoteverify.check_quote` 里是 `verified=True` +
+    #: `reason='substring_match_outside_declared_range'` ⇒ 既被计进 `quotes_verified`（"逐字可达"是真的），
+    #: 又不会把关系降为 `suspect`（`quote_failed` 判的是 `verified is not True`）⇒ "全部引文逐字可达"这条
+    #: 判据在所有页码都记错时照样通过；这个信号原先只留在每行的 `_quote_check` 字典里，全仓没有消费者。
+    #: 它不改 `verified`（抹成 False 会让"真引文被记成幻觉"，那是 FC-02 最贵的一档），也不改 suspect 口径
+    #: （需人裁，`draft/28` 的 `E-11` 修法里写明了）：把这一档变成可判定的独立档 —— 这里单独计数，
+    #: `verify --deep` 另有一条 `page_range_mismatch` 的 warning。
     quotes_out_of_declared_range: int = 0
     unreadable: int = 0
     #: `R-56`：有文件但没有够格的抽取器（框架的规则回退）⇒ 拒抽，不置 `processed`。
@@ -132,7 +125,7 @@ class BRunResult:
     conflict_checks_skipped: int = 0  # checked=False（没检查）
     # ---- 概念配额（2026-10-21，本批缺陷一的第三处：一轮灌进 1143 条）
     #:
-    #: `concepts_refused`：这一趟因"配额用完"被**受控拒绝**的新概念条数；
+    #: `concepts_refused`：这一趟因"配额用完"被「受控拒绝」的新概念条数；
     #: `relations_deferred`：因为要用的概念被拒、这一趟写不了的关系条数。
     #: 两个数都必须从外部可观察 —— 否则"少写了 N 条"与"本来就只有这么多"在台账上
     #: 长得一样（静默丢弃那一档要堵的就是它）。
@@ -144,23 +137,23 @@ class BRunResult:
     skipped_reason: str | None = None
     details: list[dict] = field(default_factory=list)
 
-    #: **真消化**过几篇 = `processed` − `unreadable`（2026-10-15 加，T5 第 8 趟的真机读数）。
+    #: 「真消化」过几篇 = `processed` − `unreadable`（2026-10-15 加，T5 第 8 趟的真机读数）。
     #:
-    #: 为什么这一格非有不可：`run_once` 在"没有本地全文 / 内容类型不符"那两支里**也**把
+    #: 为什么这一格非有不可：`run_once` 在"没有本地全文 / 内容类型不符"那两支里「也」把
     #: `processed` 置 True（那两支本身是对的 —— 不置 True，那些行会永远堵在队首、
-    #: 每一轮都被重领）。于是 `processed` 这一个布尔同时装着两件**处置相反**的事：
+    #: 每一轮都被重领）。于是 `processed` 这一个布尔同时装着两件「处置相反」的事：
     #: 「我读过并抽了」与「我连文件都没有、跳过了」。下游读的全是 `processed`，
     #: 于是台账上写着"34 条已消化"，而真相是"10 条有全文、24 条只是被标了一下"。
     #: T5 那一趟的后果：M 连着派了 11 次同一种活（每次都拿到 `ok`），`relations` 始终 0 行，
-    #: 一整轮预算花在"读不到的东西"上。**这就是"三态被折成一个布尔"的代价。**
+    #: 一整轮预算花在"读不到的东西"上。「这就是"三态被折成一个布尔"的代价。」
     #:
-    #: 它只数**真的调过抽取器**的那些，所以 `unreadable` / `skipped_no_extractor` 都不进
+    #: 它只数「真的调过抽取器」的那些，所以 `unreadable` / `skipped_no_extractor` 都不进
     #: （后者本来就不置 `processed`，列出来只为把话说完）。
     @property
     def digested(self) -> int:
         return max(0, int(self.processed) - int(self.unreadable))
 
-    #: 这一趟的**任务级终局**（`TASK_OUTCOMES` 里的一个）。由 :func:`task_outcome` 一处算。
+    #: 这一趟的「任务级终局」（`TASK_OUTCOMES` 里的一个）。由 :func:`task_outcome` 一处算。
     @property
     def outcome(self) -> str:
         return task_outcome(self)[0]
@@ -173,7 +166,7 @@ class BRunResult:
         d = {k: v for k, v in self.__dict__.items() if k != "details"}
         d["details"] = self.details[:20]
         # 三格一起进返回值（`digested` / `outcome` / `detail`）：主控读的是这份 dict，
-        # 而"这一趟到底有没有产出"必须**在这一层就说实话** —— 不能留给下游去猜
+        # 而"这一趟到底有没有产出"必须「在这一层就说实话」 —— 不能留给下游去猜
         # （下发现在 `processed` 上猜错过一次，见 `digested` 的说明）。
         d["digested"] = self.digested
         d["outcome"], d["detail"] = task_outcome(self)
@@ -181,24 +174,24 @@ class BRunResult:
 
 
 def task_outcome(res: "BRunResult") -> tuple[str, str]:
-    """B 的抽取这一趟**该报什么终局** —— 唯一一处判据（动作自己声明，不由框架猜）。
+    """B 的抽取这一趟「该报什么终局」 —— 唯一一处判据（动作自己声明，不由框架猜）。
 
     为什么必须由动作声明（2026-10-15 T5 第 8 趟 `t5h`）：框架那边只看得见"handler 返回了
     一个 dict 而没写 `outcome`"，于是按"有产出"记 `ok`（`conductor._end_from_payload`）。
     那一趟 11 次 `B.run` 全部 `outcome=ok`、`detail="执行完成（handler 未声明 outcome，
     按有产出处理）"`，而新建概念 0、新增关系 0 —— 主控据此以为"文献消化过了"，
-    继续派同一种活。**"什么都没做成"被报成了成功。**
+    继续派同一种活。「"什么都没做成"被报成了成功。」
 
     规则（三态，与 `TASK_OUTCOMES` 同口径）：
 
     | 这一趟发生了什么 | outcome |
     |---|---|
     | 真消化过 ≥1 篇（`digested > 0`） | `ok` |
-    | 一篇都没真动（全是"没全文 / 缺抽取器 / 放弃 / 队列空"） | **`no_result`** |
+    | 一篇都没真动（全是"没全文 / 缺抽取器 / 放弃 / 队列空"） | 「`no_result`」 |
     | 有失败、且一篇都没真消化 | `failed` |
 
-    `no_result` 是**有效结论**（"跑完了，确实没有产出"），不是错误 —— 它存在的意义正是
-    让主控**看得见**"这一趟白跑了"，从而不再原样重派。
+    `no_result` 是「有效结论」（"跑完了，确实没有产出"），不是错误 —— 它存在的意义正是
+    让主控「看得见」"这一趟白跑了"，从而不再原样重派。
     """
     worked = res.digested > 0
     produced = bool(res.concepts_created or res.concepts_reused or res.relations_added

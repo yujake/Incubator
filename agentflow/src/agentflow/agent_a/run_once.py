@@ -2,10 +2,10 @@
 
 拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
 
-⚠️ 2026-10-20 业主口径（待新增文献列表）之后，上面那句"逐字未改"**不再成立**：
+⚠️ 2026-10-20 业主口径（待新增文献列表）之后，上面那句"逐字未改"「不再成立」：
 本方法多了一段"先暂存、后入库"的接线（见 `agentflow/litstage.py` 的模块 docstring
 与 `stage_entries` / `admission_plan` 的说明）。原来那条判据是迁移期的临时锚点，
-它守的是"拆文件没有顺手改行为"；本轮是**业主明确要求的行为变更**，
+它守的是"拆文件没有顺手改行为"；本轮是「业主明确要求的行为变更」，
 所以锚点让位给新判据（`tests/test_agent_a*.py` 与新判据文件）。
 """
 from __future__ import annotations
@@ -17,34 +17,14 @@ class _RunOnce:
     def run_once(self) -> ARunResult:
         """处理至多一条待办请求，返回本轮的完整审计结果。
 
-        三态纪律在这里的落点：取不到请求时不返回一个"看起来正常的空结果"，
-        而是把"没做"的原因原样带出来（`skipped_reason` 四选一，取值与优先级见 `_claim`）。
-        `processed/registered/...` 全是计数（"做了多少"），`skipped_reason` 是
-        "为什么没做" —— 两者正交，调用方必须分别看。
-
-        ## 2026-10-20 接线：登记文献这一步改成「先 stage 后 admit」
-
-        业主口径（逐字）：
-
-        > 把 A 的 `search_literature`（或它对应的动作）在"登记文献"那一步改为先 stage
-        > 后 admit：广搜结果先进待新增列表，A（或它的审内容步骤）筛完再入库。
-
-        落点就是这个方法的阶段 1/2 之间，具体三道：
-
-        1. **暂存**（`litstage.stage_entries`）：本轮的每个候选先落一行
-           `lit_candidates`（`request_id` = 这一次委托、`batch=1`、槽位号只增不复用）。
-           这一步**不设条数上限** —— 广搜可以超过 10 篇；
-        2. **入库判断**（`litstage.admission_plan`，`on_over_cap="truncate"`）：
-           本委托的入库配额（`MAX_ADMIT_PER_DELEGATION=10`）与重叠检查都在那一处判，
-           本文件不重写一份。通过的才下载、才登记；被重叠挡掉的落
-           `rejected(overlap_without_new_content)`；超配额的落 `cleared(over_cap)`；
-        3. **结算 + 报告**（`litstage.apply_settlement` / `write_report`）：
-           候选行回到终态，并写 `reports/lit-<request_id>.md`（已入库 + 未入库两块）。
-
-        为什么用 `duplicate_branch_ok=True`：本轮的"重叠"里有一档是**同一篇**（DOI 完全相同）。
-        那一档的正确处置不是"拒收"，而是走**现有的判重分支** —— 只把
-        `source_request_ids` 追加到既有行，不新建行（`dedup.literature_keys` 的口径）。
-        两件事（"同一篇只留一个 lit_id" 与 "内容重叠要不要新内容"）因此各归各的判据。
+        三态纪律的落点：取不到请求时不返回"看起来正常的空结果"，而是把"没做"的原因原样带出来
+        （`skipped_reason` 四选一，取值与优先级见 `_claim`）；计数（"做了多少"）与它正交，必须分别看。
+        2026-10-20 接线改成「先 stage 后 admit」（业主口径：广搜结果先进待新增列表，A 筛完再入库）：
+        ① `litstage.stage_entries` 暂存每个候选（`batch=1`、槽位号只增不复用，不设条数上限）；
+        ② `litstage.admission_plan`（`on_over_cap="truncate"`）判库配额与重叠 —— 本文件不重写一份；
+        ③ `litstage.apply_settlement` / `write_report` 结算并写报告。
+        `duplicate_branch_ok=True` 的理由："重叠"里有一档是同一篇（DOI 相同），正确处置是走现有判重分支
+        —— 只把 `source_request_ids` 追加到既有行、不新建行（`dedup.literature_keys` 的口径）。
         """
         result = ARunResult()
         claim = self._claim()
@@ -77,7 +57,7 @@ class _RunOnce:
 
         staging = Path(tempfile.mkdtemp(prefix="agentflow-stage-", dir=str(self.store.library)))
         try:
-            # ---- 阶段 0（无锁、只写候选表）：候选先规范化，再**暂存进待新增列表**。
+            # ---- 阶段 0（无锁、只写候选表）：候选先规范化，再「暂存进待新增列表」。
             # 这里不分配 lit_id、不写 literature，因此失败/崩溃都不会留下半成品文献行。
             prepared: list[dict] = []
             for cand in candidates:
@@ -120,7 +100,7 @@ class _RunOnce:
                 )
             admit_slots = [str(it["slot"]) for it in (plan or {}).get("admitted") or []]
 
-            # ---- 阶段 1（无锁）：只给**要入库的那些**下载到 staging。
+            # ---- 阶段 1（无锁）：只给「要入库的那些」下载到 staging。
             # 没通过入库判断的候选不下载：它们是"待审/已挡"的行，下载一份不会带来
             # 任何新信息，只会让 staging 里多出一堆永远不会被引用的字节。
             downloads = 0
@@ -244,7 +224,7 @@ class _RunOnce:
                     result.registered += 1
 
                 # ---- 结算候选行：入库成功的落 admitted；被重叠/登记挡掉的落 rejected；
-                # 超配额的落 cleared(over_cap)。**绝不物理删**（可追）。
+                # 超配额的落 cleared(over_cap)。「绝不物理删」（可追）。
                 if plan is not None:
                     for slot in admit_slots:
                         if slot not in lit_id_by_slot:
@@ -321,7 +301,7 @@ class _RunOnce:
                 # 因此恒为 0，把 `_claim()` 里真正数到的放弃条数覆盖成 0：
                 # 字段存在、名字合理、永远是 0 —— 典型的"看起来在统计、实际恒为假"。
 
-            # ---- 阶段 3（锁外）：写**委托报告**（业主 2026-10-20 第 3 条：这是交付物）。
+            # ---- 阶段 3（锁外）：写「委托报告」（业主 2026-10-20 第 3 条：这是交付物）。
             # 放在事务之后：报告写的是"这一轮结束时盘上的样子"，而盘上的样子由事务定。
             # 写失败不许吞掉整轮结果（文献已经落库了）—— 但它必须可见：
             # `ARunResult.note` 里有它，`reports/lit-<request_id>.md` 不在盘上也能查出来。

@@ -383,20 +383,14 @@ class _Core:
                 notes.append(remedy)
 
         # ---- E-12（`draft/44`）：形式化失败的三态必须恢复出来。
-        #
-        # 改前：`exit_code = 0 if verified else None`、`negation_kind` 一律
-        # `no_local_evidence`，而真机 50 条 formal 里 41 条 `exit_code=None`
-        # ⇒ "检查器跑了、判这条命题不通过（`compile_error`）"与"根本没查成
-        # （`timeout` / `import_unavailable` / `no_backend` / `tool_crashed`）"
-        # 在行上完全同形（都 None、都 inconclusive、都同一个 negation_kind）——
+        # 改前：`exit_code = 0 if verified else None`、`negation_kind` 一律 `no_local_evidence`，而真机
+        # 50 条 formal 里 41 条 `exit_code=None` ⇒ "检查器跑了、判这条不通过（`compile_error`）"与"根本
+        # 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed`）"在行上完全同形 ——
         # "没查成"被读成"没通过"。
-        #
-        # 三态按 `formalgw` 自己的口径分（不另立一套）：
-        # - `verified`：检查器认了（结果见 `evidence_kind=proof`）；
-        # - `checked_failed`：检查器给了结论、结论是"不通过"（`compile_error` 等收敛档）
-        #   ⇒ `negation_kind="not_proved"`，退出码记检查器真实那个（非零）；
-        # - `not_checked`：没查成 ⇒ `negation_kind` 再分两档（跑过但没裁决 ⇒
-        #   `no_local_evidence`；本机起不了这次检查 ⇒ `not_searched_here`），退出码为 None。
+        # 三态按 `formalgw` 自己的口径分（不另立一套）：`verified` = 检查器认了（`evidence_kind=proof`）；
+        # `checked_failed` = 给了结论且结论是"不通过"（`compile_error` 等收敛档）⇒ `negation_kind="not_proved"`、
+        # 退出码记检查器真实那个（非零）；`not_checked` = 没查成 ⇒ `negation_kind` 再分两档（跑过但没裁决 ⇒
+        # `no_local_evidence`；本机起不了这次检查 ⇒ `not_searched_here`），退出码为 None。
         checker_exit = data.get("exit_code")
         if verified:
             tri_state = "verified"
@@ -424,7 +418,7 @@ class _Core:
                 # （"检查器判了不通过"与"没查成"从此在行上分得开）。
                 "tri_state": tri_state,
                 "missing_imports": [str(x) for x in (data.get("missing_imports") or [])],
-                # 2026-10-18（缺陷 ③）：回执要能回答"**哪个 Lean 版本核的哪一版源码**"。
+                # 2026-10-18（缺陷 ③）：回执要能回答"「哪个 Lean 版本核的哪一版源码」"。
                 # 走 `observations` 而不是 `check_formal` 的 `returns=` —— 后者有多条 fail()
                 # 路径，每一条都得补格才满足"声明了的键任何分支都要有"，成本高且易漏。
                 "lean_version": str((data.get("meta") or {}).get("backend_version")
@@ -559,10 +553,10 @@ class AgentE(_RunExperiment, _AuthorScript, _CheckFormal, _EvidenceFor, _ListExp
 def selftest() -> int:
     """离线自检：不联网、不依赖仓库里的任何外部文件，返回 0（全过）/ 1（有失败）。
 
-    退出码与末尾那行汇总**同源**（F-4）：`SELF-CHECK DONE` ⇒ 0；任何一个
+    退出码与末尾那行汇总「同源」（F-4）：`SELF-CHECK DONE` ⇒ 0；任何一个
     `[FAIL]`（含主体异常中断）⇒ `SELF-CHECK FAILED` ⇒ 1。汇总行无条件打印
     （主体搬进 `_run_selftest_checks`，外面套 try/except/finally）—— 三态纪律：
-    **没查成**由 `未查 N 段` 单独说，不许折进"通过"或"失败"。
+    「没查成」由 `未查 N 段` 单独说，不许折进"通过"或"失败"。
 
     运行方式::
 
@@ -584,7 +578,7 @@ def selftest() -> int:
     10. 形式化路径（`P-8`）：`.lean` 产物真的走检查器那一条 —— 检查器给
         `verified` 时登记的行必须是 `evidence_kind="proof"` 且
         `verifier_subject_key == claim_key`；否则一行都不许标成 proof。
-        `toolchain.lean_enabled` 关闭时（**出厂默认**）这一段走另一条判据：
+        `toolchain.lean_enabled` 关闭时（「出厂默认」）这一段走另一条判据：
         核对"当场拒绝、不留行、理由给出 V 那条替代路线"，并把这一段记成
         "未查"（没走检查器 ≠ 通过）。
     """
@@ -596,7 +590,7 @@ def selftest() -> int:
         pass
 
     #: 三个计数器（不是两态）：`skipped` 留给"环境把这一段关着" —— 三态纪律：
-    #: **没查**不许写成"通过"，也不许写成"失败"（与 `_NOT_CHECKED_REASONS` 同一口径）。
+    #: 「没查」不许写成"通过"，也不许写成"失败"（与 `_NOT_CHECKED_REASONS` 同一口径）。
     counts: dict[str, int] = {"passed": 0, "failed": 0, "skipped": 0}
 
     def check(label: str, cond: bool, extra: str = "") -> None:
@@ -604,12 +598,12 @@ def selftest() -> int:
         counts["passed" if okk else "failed"] += 1
         print(f"    [{'PASS' if okk else 'FAIL'}] {label}" + (f"  {extra}" if extra else ""))
 
-    # 汇总行**无条件**打印 + 退出码与汇总同源（F-4）。两件事都是刻意的：
+    # 汇总行「无条件」打印 + 退出码与汇总同源（F-4）。两件事都是刻意的：
     #   ① 原先汇总行在函数末尾，而第 11 段（形式化路径）在 Lean 关闭时会抛
     #      `ExperimentError`（那是对的：关掉的路不许登记 formal 行）——
     #      自检把它当"不该发生"⇒ 进程崩在汇总行之前，输出止于 `[9]`、退出码 1，
     #      而"0 项失败"这句话根本没被打印过。读它的人拿到一对自相矛盾的读数。
-    #   ② 于是主体搬进 `_run_selftest_checks`，用 try/except/finally 保证**任何**
+    #   ② 于是主体搬进 `_run_selftest_checks`，用 try/except/finally 保证「任何」
     #      路径都走到汇总行；主体自己炸了也记成一条"失败"，不冒充"没结论"。
     try:
         _run_selftest_checks(check, counts)
@@ -629,7 +623,7 @@ def selftest() -> int:
 
 
 def _run_selftest_checks(check, counts: dict[str, int]) -> None:
-    """自检主体（第 0–12 段）：只打印与计数，**汇总行与退出码在 `selftest()` 里**。
+    """自检主体（第 0–12 段）：只打印与计数，「汇总行与退出码在 `selftest()` 里」。
 
     把它拆成独立函数的唯一理由就是"汇总行无条件"：只要主体里有一处会抛
     （Lean 关闭时第 11 段就会），留在 `selftest` 末尾的汇总行就永远走不到。
@@ -775,11 +769,11 @@ def _run_selftest_checks(check, counts: dict[str, int]) -> None:
     # 否则必须是"不是 proof"（没查成不许登记成 proof）。
     # 两个方向都不许把 `heuristic` 写成 `proof`，所以这条检查在任何环境下都有信息量。
     #
-    # ⚠️ 这一支是 F-4 的根因。`toolchain.lean_enabled` 的**出厂默认是 false**
+    # ⚠️ 这一支是 F-4 的根因。`toolchain.lean_enabled` 的「出厂默认是 false」
     # （`settings.py`：`DEFAULT_LEAN_ENABLED = False`，业主 2026-10-12「默认设置中
     # Lean 关闭帮用户在无严苛要求时省钱」；`tests/conftest.py` 为了让形式化那一段
     # 跑起来才把环境变量钉成 1）。旧写法无条件 `run_experiment(..., method="formal")`，
-    # 在默认设置下它按设计**当场抛** `ExperimentError`（这条拒绝是对的：关掉的路
+    # 在默认设置下它按设计「当场抛」 `ExperimentError`（这条拒绝是对的：关掉的路
     # 不许登记 formal 行），而自检把它当"不该发生"⇒ 崩在汇总行之前。
     # 于是按三态写：开关开着 ⇒ 核对 proof 三件套；开关关着 ⇒ 核对"拒绝而不是
     # 静默登记"，并明确记一段"未查"（没查 ≠ 通过 ≠ 失败）。

@@ -11,19 +11,19 @@ from pathlib import Path as _Path
 
 
 class _RunOnce:
-    #: 工作区里那份**正文**的候选落点（审阅型项目：`out/paper/main.tex` 是可改稿，
+    #: 工作区里那份「正文」的候选落点（审阅型项目：`out/paper/main.tex` 是可改稿，
     #: `source/main.tex` 是只读基线）。逐字档先试它 —— 理由见 `_manuscript_doc`。
     MANUSCRIPT_RELS: tuple[str, ...] = ("out/paper/main.tex", "source/main.tex")
 
     def _manuscript_doc(self) -> tuple[object | None, str, str]:
         """工作区那份正文的文本视图：返回 `(doc, 用的是哪一份, 读不出来的原因)`。
 
-        为什么要它（业主 2026-10-14 的两档口径）：**逐字命中是第一档、且不花模型钱**，
+        为什么要它（业主 2026-10-14 的两档口径）：「逐字命中是第一档、且不花模型钱」，
         而审阅型项目里的引文常常逐字取自工作区那份 LaTeX 正文（作者自己的稿子）——
         文献 PDF 却因为页码是估算的、或者正文在 LaTeX 源里而不在 PDF 的可抽层里，
         于是"真逐字"的引文落到第二档去问模型（既有判错的风险，又白花钱）。
 
-        这一档**不另写判据**：仍然把材料交给 `quoteverify.check_quote` 那一个实现，
+        这一档「不另写判据」：仍然把材料交给 `quoteverify.check_quote` 那一个实现，
         只换一份材料（`DocumentText(pages=[全文])`），并把"命中的是哪一份文件"
         写进关系的 `quote_reason` —— 读数不说清来路，就等于把两种证据混成一种。
         """
@@ -49,14 +49,14 @@ class _RunOnce:
 
         ## 概念配额（2026-10-21，本批缺陷一第三处：一轮灌进 1143 条）
 
-        配额是**轮**预算，挂在实例上（`self._concept_quota`）：`B.run` 在轮首建一个、
+        配额是「轮」预算，挂在实例上（`self._concept_quota`）：`B.run` 在轮首建一个、
         逐篇共用；单独调 `run_once()` 时这一调用自己建一个
         （上限 `conceptrows.CONCEPTS_PER_ROUND_MAX`）—— 于是"每轮几十条以内"这条口径
         在两条入口上都成立，而不会因为"没人传"就变成无限。
 
         为什么挂在实例上而不是加一个形参：`run_once` 的方法签名在
         `tests/golden/agent_surface_snapshot.json` 里被冻结（禁改区），
-        改签名等于重冻那份快照 —— 而"这一轮建了多少概念"是**轮**状态，
+        改签名等于重冻那份快照 —— 而"这一轮建了多少概念"是「轮」状态，
         本来也不该出现在动作的调用面上（模型不该能传一个配额进来）。
 
         三态纪律在这里有两个落点：
@@ -166,7 +166,7 @@ class _RunOnce:
             return res
 
         # ---- 引文校验（无锁；只依赖文档）
-        # 逐字那一档先试文献 PDF；**没中再试工作区那份正文**（同一份 `check_quote`，
+        # 逐字那一档先试文献 PDF；「没中再试工作区那份正文」（同一份 `check_quote`，
         # 只换材料）—— 审阅型项目的引文常常逐字取自 `out/paper/main.tex` 那份 LaTeX，
         # 而 PDF 的页码是估算的，于是"真逐字"被推到第二档去花模型钱（还可能判错）。
         mdoc, mrel, mwhy = self._manuscript_doc()
@@ -228,7 +228,7 @@ class _RunOnce:
                                                  note="alias_merge")
                     res.concepts_reused += 1
                     return existing["concept_id"]
-                # ---- 概念配额（2026-10-21，本批缺陷一第三处）：超上限**受控拒绝**，
+                # ---- 概念配额（2026-10-21，本批缺陷一第三处）：超上限「受控拒绝」，
                 # 不静默丢。拒绝时返回空串，调用方（关系那一段）据此跳过这一条关系，
                 # 并把"因为配额被推迟"写进 details —— 于是"这一轮写了多少、还差多少"
                 # 在读数上看得见（`res.concepts_refused` / `quota.reading()`）。
@@ -251,7 +251,7 @@ class _RunOnce:
                     normalized_name=T.normalize(name),
                     aliases=[a for a in S.sorted_unique(list(aliases or [])) if T.normalize(a) != T.normalize(name)],
                     # 这一格记的是"这个术语是从哪一篇抽出来的"（概念行的出处），
-                    # 不是"定义逐字抄自那里"。所以**一律**给这一篇：即使定义还没抽到，
+                    # 不是"定义逐字抄自那里"。所以「一律」给这一篇：即使定义还没抽到，
                     # 术语的来路也是清楚的 —— 而 `origin` 的正确口径就靠它
                     # （`conceptrows.resolve_concept_origin`：有出处 ⇒ external_lit）。
                     definition_source_lit_id=lit_id,
@@ -285,10 +285,10 @@ class _RunOnce:
                     continue
                 resolved = [resolve_concept(n) for n in names]
                 if any(not cid for cid in resolved):
-                    # 有概念被配额拒了 ⇒ 这条关系**这一轮**写不了（它要指着一个不存在的号）。
+                    # 有概念被配额拒了 ⇒ 这条关系「这一轮」写不了（它要指着一个不存在的号）。
                     # 不许静默丢：逐条点名 + 计数。剩下的按业主的口径"下一轮或写进报告"——
                     # 这一轮的 literature 行照常标 processed（理由见下面那一格），
-                    # 所以它的可见形态是**这一趟的结果**，不是"下一轮自己会回来"。
+                    # 所以它的可见形态是「这一趟的结果」，不是"下一轮自己会回来"。
                     res.relations_deferred += 1
                     res.details.append({
                         "lit_id": lit_id, "stage": "relation", "skipped": "concept_quota",
@@ -384,11 +384,11 @@ class _RunOnce:
                     quote=quote,
                     quote_normalized=T.normalize_for_quote(quote),
                     quote_verified=chk.verified,
-                    # 这一档是**逐字**回验（`quoteverify.check_quote`）—— 业主 2026-10-14
+                    # 这一档是「逐字」回验（`quoteverify.check_quote`）—— 业主 2026-10-14
                     # 之后"通过"还多一档"语义相同（H 判）"，所以方式必须写实：
                     # 逐字命中记 `verbatim`，其余（不一致 / 没查）归空串。
                     quote_mode="verbatim" if chk.verified is True else "",
-                    # 逐字命中**工作区正文**那一档要把来路写实（`item["note"]`）：
+                    # 逐字命中「工作区正文」那一档要把来路写实（`item["note"]`）：
                     # 命中的是 PDF 还是我们手上那份 LaTeX，是两种不同的证据。
                     quote_reason=str(item.get("note") or ""),
                     statement=description,
@@ -451,14 +451,14 @@ class _RunOnce:
             lit_row["processed"] = True
             lit_row["claimed_by"] = None
             lit_row["lease_until"] = None
-            # 配额拒过东西时**不动** `last_mine_error`：那一格是"这一篇为什么没抽成"
+            # 配额拒过东西时「不动」 `last_mine_error`：那一格是"这一篇为什么没抽成"
             # （`no_local_file` / 抽取异常），不是"抽成了但概念配额满了"。
             # 把配额写进去会让两种完全不同的处置读成同一件事。
             #
             # 为什么仍然标 `processed=True`（而不是"留到下一轮"）：这篇文献的概念是按
-            # 抽取顺序产出的，下一轮重领它还会按**同一个顺序**撞同一个配额（前 30 条照旧、
+            # 抽取顺序产出的，下一轮重领它还会按「同一个顺序」撞同一个配额（前 30 条照旧、
             # 后面的照旧被拒）—— 要真"留到下一轮"就得新增一份持久游标，那是新的磁盘契约。
-            # 业主给的口径是"剩下的下一轮**或写进报告**"：所以这一点落在**本轮的结果**里
+            # 业主给的口径是"剩下的下一轮「或写进报告」"：所以这一点落在「本轮的结果」里
             # （`res.concept_quota` / `res.concepts_refused` / `res.relations_deferred` /
             # `res.details[*stage=concept_quota]`），它随这一趟的 task 结果进台账 ——
             # "不许静默丢弃"要的是它出现在读数里，而不是它被塞进一个语义不符的字段。

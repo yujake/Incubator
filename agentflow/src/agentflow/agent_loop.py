@@ -1101,21 +1101,13 @@ class LoopRun:
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
     #: 「收工那一步」的原始载荷（模型给的 `final` / `evidence` / `notify` 逐字一份）。
-    #:
-    #: 为什么要有这一格（2026-10-08 真机读数，三处缺口之一）：`shape == "final"` 那一支在
-    #: 步循环里 `break`（见 `run()` 里那段），而 `agent_step` 事件是在 `break` 之后的
-    #: 公共尾段落的 ⇒ 收工这一步的事件从来没落过盘（`tests/test_status_report.py` 那条
-    #: `len(steps) == 2 and len(run.steps) == 3` 把这个形态逐字钉着）。后果是模型填的
-    #: `notify`（收工手稿的输入）与 `evidence` 只活在内存里：`agent_run_end` 只留
-    #: `final` 的文本与哈希。真机现场：`projects/p5-review-t17/sessions/t1q.jsonl` 的
-    #: `agent_run_end` 里有模型 2058 字的结论，而全仓 17.3MB 会话里没有任何一条
-    #: `agent_step` payload 带 `notify`。
-    #:
-    #: 为什么不改走"给 final 补一条 `agent_step`"：那会把收工那一步塞进
-    #: `resume_transcript` 重建的简报里（它按 `agent_step` 逐条重拼），于是"重建的那一段"
-    #: 与"当时拼的那一段"不再逐字相等 —— 那是续跑正确性的判据
-    #: （`tests/test_user_channel_stop_and_resume.py::test_resume_messages_is_item_equal_to_the_live_sequence`），
-    #: 代价比多三个字段大得多。所以这一格与 `agent_run_end` 一起落盘。
+    #: 为什么要加这一格（2026-10-08 真机读数）：`shape == "final"` 那一支在 `run()` 里 `break`，
+    #: 而 `agent_step` 事件在 break 之后的公共尾段落 ⇒ 收工这一步的事件从不落盘（`tests/test_status_report.py`
+    #: 的 `len(steps) == 2 and len(run.steps) == 3` 钉着它），于是 `notify` 与 `evidence` 只活在内存里
+    #: （现场 `projects/p5-review-t17/sessions/t1q.jsonl`：`agent_run_end` 只留结论文本与哈希 —— 全仓 17.3MB
+    #: 会话里没有一条 `agent_step` payload 带 `notify`）。不改成"给 final 补一条 `agent_step`"：那会把收工那一步
+    #: 塞进 `resume_transcript` 重拼的简报，"重建的那一段"与"当时拼的那一段"不再逐字相等 —— 而那正是续跑判据
+    #: `tests/test_user_channel_stop_and_resume.py::test_resume_messages_is_item_equal_to_the_live_sequence` 守的东西。
     final_payload: dict[str, Any] = field(default_factory=dict)
     #: 这一趟停在等哪个问题（`stop_reason="waiting_for_user"` 时非空）。
     #:
@@ -1877,22 +1869,14 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         if not isinstance(value, Mapping):
             return "", {}, "message 必须是一个对象"
         to = str(value.get("to") or "")
-        # `to` 的合法集合 = 八个角色 ∪ 主控 M ∪ 公共频道。
-        #
-        # 为什么 M 必须在内（2026-09-30 真机修）：框架自己的代唤通道
-        # `_request_relay` 就是用 `to=S.CONDUCTOR_ROLE`（= "M"）发的私聊，
-        # 而这里原来只认 `S.ROLES`（A–H，不含 M）⇒ 提示词教角色"直接用 message
-        # 发给 M"、角色照做、却被这一行判成 `invalid`。实测（场景 G）G 因此白扔一步：
-        # `[5] invalid ⇒ 收件人 'M' 既不是角色也不是 #public`，下一步它改发 #public 才成。
-        # 那一步的代价是"一条本来只该主控看到的申请被广播给所有人"，
-        # 外加一次纠正 —— 而 `read_messages(role="M")` 本来就收 `to="M"` 的留言。
-        #
-        # `ALL` 也认（2026-10-05 真机修）：手稿那条通道的约定是"给所有人写 `to="ALL"`"
-        # （用户口径：文件名 `…toALL.md`），而这里原来只认 `#public`。实测 T2 第 5 趟：
-        # M 写了 `{"message": {"to": "ALL", …}}` ⇒ 被判形状不合法、连着三次
-        # ⇒ 那一整段以 `bad_json_limit` 收场（60 秒、一步有效的活都没干）。
-        # `ALL` / `#public` 的等价关系只在 `_is_all_recipient` 一处定义，三条通道
-        # （`message` / `handoff` / `notify`）都从那里取 —— 不许各写一份。
+        # `to` 的合法集合 = 八个角色 ∪ 主控 M ∪ 公共频道。M 必须在内（2026-09-30 真机修）：框架自己的
+        # 代唤通道 `_request_relay` 就用 `to=S.CONDUCTOR_ROLE`（= "M"），而这里原来只认 `S.ROLES`（A–H，
+        # 不含 M）⇒ 提示词教角色"直接发给 M"、角色照做却被判 `invalid`（场景 G 白扔一步：那条只该主控看到的
+        # 申请被广播），而 `read_messages(role="M")` 本来就收 `to="M"` 的留言。`ALL` 也认（2026-10-05）：
+        # 手稿通道约定"给所有人写 `to="ALL"`"（文件名 `…toALL.md`），原来只认 `#public` ⇒ M 写
+        # `{"message": {"to": "ALL", …}}` 被判不合法、连三次 ⇒ `bad_json_limit` 收场（60 秒、一步有效的活都没干）。
+        # `ALL` / `#public` 的等价只在 `_is_all_recipient` 一处定义，`message` / `handoff` / `notify` 三条通道
+        # 都从那里取 —— 不许各写一份。
         to = _recipient_for_channel(to)      # 留言通道的"给所有人"规范形是 `#public`
         if not _known_recipient(to):
             return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
@@ -2445,31 +2429,13 @@ def _summon_key(action: str, params: Mapping[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------ 子产出的处理
-#
-# 业主裁定（真机证据，已核实）：**父代理必须处理子代理的产出**。
-#
-# 现场是 `projects/mp4/data/tasks.json`：F 的所有任务 `called_by=D`，而 D 的派活
-# 任务只写"读 C 的报告立猜想"—— D 派完 F、拿到 F 的结果、就 `final` 了；F 的产出
-# 只留在台账、由 M 在下一轮读。于是"父拿到了结果却不处理"，整条链的推进责任被
-# 真空地转给了最上层。
-#
-# 这一节把它做成可判读的三样东西（`summon_consumption` 是唯一的判据实现）：
-#   ① 一次调用**产生了哪些子产出**（`_call_productions` → `LoopRun.productions`，
-#      会话事件的落点是 `agent_step.productions`）；
-#   ② 每条子产出的**处置**（`consumed` / `waived` / `unconsumed`）；
-#   ③ 四个汇总读数（`LoopRun.summons_total` 等，落进 `agent_run_end` = 收工那一行）。
-#
-# ⚠️ 判据口径（业主 2026-10 的修正）：**"处理"不是一张白名单**。
-# 业主原来的三条（消费 / 拒绝并说明 / 继续派）只是**举例**。真实形态还有
-# 把子产出写进台账、改计划、立/改猜想、写报告、据以改派别的角色、用它的读数
-# 做一次判断、把它交给 H 审 …… 一张**正**表会把没被列举到的合法形态全判红，
-# 而且每加一种形态就要改一次判据。所以判据落成**效应证据**口径：
-#
-#     在这一次 summon 之后，父只要在**任何一步**留下可查的效应、且这一步
-#     **指到了那条子产出**（`task_id` / 产物路径 / 台账 id），就算处理了。
-#
-# "可查的效应"用**负表**判（`_is_effect_evidence`）：只排除只读侦察与无效步，
-# 其余一律算候选。于是"列举"只出现在文档里，不出现在判据里。
+# 业主裁定（真机证据已核实）：父代理必须处理子代理的产出 —— 现场 `projects/mp4/data/tasks.json` 里 F 的任务
+# 都是 `called_by=D`，而 D 派完 F、拿到结果就 `final` 了，F 的产出只留给 M 下一轮读，推进责任被真空地转给最上层。
+# 判读三样（唯一实现 `summon_consumption`）：`_call_productions` → `LoopRun.productions`（落点
+# `agent_step.productions`）、处置 `consumed` / `waived` / `unconsumed`、汇总读数 `LoopRun.summons_total` 等（落进
+# `agent_run_end`）。判据口径（业主 2026-10 修正）：「处理」不是白名单（那三条只是举例，正表会误杀没列举到的
+# 合法形态），而是效应证据 —— 这次 summon 之后父在任何一步留下可查的效应、且指到那条子产出（`task_id` /
+# 产物路径 / 台账 id）即算处理；"可查"用负表判（`_is_effect_evidence` 只排除只读侦察与无效步）⇒「列举」只在文档里。
 
 #: 一条子产出的处置（受控词表）。`unconsumed` 就是这条规矩要抓的那一格。
 #:
@@ -3170,20 +3136,13 @@ class AgentLoop:
                          "若仍回一行 JSON，`tool` 字段要写真名（工具清册里那个，"
                          "例如 `fs.read`），不是函数名里的下划线写法。两种都可以。）\n")
         # ---- 每步会变的两格挪到 user 消息里（2026-10-19，前缀缓存那一轴）
-        #
-        # 改前它们在 **system** 里（改前那个每步重算 system 的实现，今为 `_system_at_step` 的前身），于是几乎每一步
-        # system 都变 ⇒ 上游的前缀缓存永不命中（实测：第 0 步 54,902 字 / 第 1 步
-        # 从第 35,035 个字符起就不同，差异正是"剩余预算 … 已用 0.000000 → 0.001200"）。
-        # 现在 system 里那两格是静态指路语（`promptstability.SYSTEM_PLACEHOLDERS`），
-        # 而**数字/内容**在这里现读 —— 模型照样每一步看得见最新的，但它落在
-        # 这条消息的尾部：追加在末尾只动最新那几个 token，前面的前缀逐字节不变。
-        #
-        # 2026-10-21 补的另一半（"跨 run 也会变"那十格）**不在**这条尾部：它们一趟之内
-        # 不变，念在开场那一条 user 消息里就够了（`_opening_transcript`）—— 每步重念
-        # 一遍只会把同一段字重复付 N 次钱。
-        #
-        # 为什么不是"就把 system 里那份冻在开局"：那会让 system 说一句假话
-        # （模型据以决策的余额是旧的），而循环协议里逐字写着"预算耗尽时必须收工"。
+        # 改前它们在「system」里（那个每步重算 system 的实现今为 `_system_at_step` 的前身），于是几乎每一步
+        # system 都变 ⇒ 上游前缀缓存永不命中（实测：第 0 步 54,902 字 / 第 1 步从第 35,035 个字符起就不同，
+        # 差异正是"剩余预算 … 已用 0.000000 → 0.001200"）。现在 system 里那两格是静态指路语
+        # （`promptstability.SYSTEM_PLACEHOLDERS`），数字在这里现读、追加在消息尾部 ⇒ 前面的前缀逐字节不变。
+        # 2026-10-21 补的"跨 run 也会变"那十格不在这条尾部：它们一趟内不变，念在开场那条 user 消息里就够
+        # （`_opening_transcript`）。不把 system 里那份冻在开局：那会让 system 说假话（余额是旧的），
+        # 而循环协议里逐字写着"预算耗尽时必须收工"。
         notebook = notebook_digest(self.session_root, self.role)
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（步数没有硬上限；"
                 f"每满 {self.max_steps} 步会向父代理报一次账，由它决定继续放行还是刹停）。{tail}\n"
@@ -3708,21 +3667,14 @@ class AgentLoop:
                      parent_limits=AP.parent_limits_text(
                          getattr(self.conductor, "policy", None) or P.Policy(), self.role,
                          depth=depth))
-        # ---- 静态/动态分离（2026-10-19；2026-10-21 扩到"跨 run 也会变"的十格）：
-        # system 只拿"任何两趟都逐字不变"的事实。
-        #
-        # 根因（先是每步会变，再是跨趟会变）：`budget_left` / `notebook` 是这一步现算的，
-        # `task` / `task_id` / `depth` / `parent_task_id` / `summoned_by` / `children` /
-        # `board` / `inbox` / `user_replies` / `workspace_root` 是**这一趟**的事实 ——
-        # 它们在 system 里时，前者让"同一趟的第 2 步"命中不了、后者让"另一趟的第一步"
-        # 命中不了（实测：两份不同的活的 system 从第 95 个字符起就不同）。
-        # 上游前缀缓存要求前缀逐字节相同 ⇒ 命中率结构性为 0。
-        # 现在它们的**值**走 user 消息（每步会变的两格在 `_prompt` 尾部现读；
-        # 其余十二格在开场那一条 `_opening_transcript` 里），system 里留一段静态指路语
-        # （`promptstability.SYSTEM_PLACEHOLDERS`）。
-        #
-        # `moved`（被判定为"会变"的键）落进 `agent_run_start`：于是"这一趟哪些事实
-        # 被挪出了 system"在盘上是可复核的，而不是靠读这段代码才知道。
+        # ---- 静态/动态分离（2026-10-19；2026-10-21 扩到"跨 run 也会变"的十格）：system 只拿"任何两趟
+        # 都逐字不变"的事实。根因：`budget_left` / `notebook` 是这一步现算的，`task` / `task_id` / `depth` /
+        # `parent_task_id` / `summoned_by` / `children` / `board` / `inbox` / `user_replies` /
+        # `workspace_root` 是这一趟的事实 —— 前者让"同一趟第 2 步"命中不了、后者让"另一趟第一步"命中不了
+        # （实测：两份不同的活从第 95 个字符起就不同），而上游前缀缓存要求前缀逐字节相同。现在这些值走
+        # user 消息（每步会变的两格在 `_prompt` 尾部现读，其余十二格在 `_opening_transcript` 里），system 只留
+        # 静态指路语（`promptstability.SYSTEM_PLACEHOLDERS`）；`moved`（判为"会变"的键）落进
+        # `agent_run_start` ⇒"哪些事实被挪出了 system"在盘上可复核，不用读这段代码。
         system_facts, moved_facts = PSTAB.split_facts(facts)
         # `prompt_audit` 用同一份 system 事实：它的 `prompt_sha256` 从此**等于**
         # 真正发出去的那版 system 的哈希（改前它等于"开局带实时预算那一版"）。
@@ -4155,24 +4107,14 @@ class AgentLoop:
             run.bad_args_streak = 0
             run.no_reply_streak = 0
             if shape == "final":
-                # ---- 强制 notify 表（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）
-                #
-                # 口径三句：① 除主控外的角色收工必须填这张表（`to`/`summary`/`body`）；
-                # ② 填错/没填 ⇒ 打回重填（不代填），附"四件事"的详细格式说明；
-                # ③ 连续打回两次，警告里再加"先说明你上一次为什么没按格式填"。
-                # 主控 M 的 `final` 是给用户的回复，不在这套里（用户原话：
-                # "M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）。
-                # ---- L-05e（`draft/52` F 组 / P-10）：强制闸门降级成读数
-                #
-                # 旧形态：收工不带 `notify` ⇒ 打回重填，连续 3 次 ⇒ `stop_reason="no_notify"`。
-                # 真机读数把它的收益证伪了：5269 个 `agent_step` 里 shape 无 `final`、
-                # `no_notify` 收场 0 次 ⇒ 这道闸门一次都没触发过，只贡献提示词篇幅与
-                # "表格化"的负担。裁定的新口径是只留一条："要交接就写手稿" ——
-                #   · 填了 `notify`（且形状对）⇒ 秘书照旧执笔一行手稿（写权已移交）；
-                #   · 没填 / 填错 ⇒ 不打回：这一趟照常收工，只是没有手稿，
-                #     而"为什么没有"如实落进这一步的读数（`notify_problem`）。
-                # 于是它从"闸门"变成"读数"：留痕与否仍然是可见的事实，但不再拿它
-                # 卡住一次已经做完的活（阻塞一条委托比放行更贵 —— 那就是 #1）。
+                # ---- 强制 notify 表（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）：除主控外收工必须填这张表
+                # （`to`/`summary`/`body`），填错/没填就打回并附格式说明；主控 M 的 `final` 是给用户的回复，
+                # 不在这套里（用户原话："向用户回复时不搞这种操作"）。
+                # ---- L-05e（`draft/52` F 组 / P-10）：强制闸门降级成读数。收益被真机证伪：5269 个
+                # `agent_step` 里 shape 无 `final`、`no_notify` 收场 0 次 ⇒ 旧闸门（不带 `notify` 打回、连续
+                # 3 次 ⇒ `stop_reason="no_notify"`）一次都没触发过，只贡献提示词篇幅。新口径只留"要交接就写
+                # 手稿"：形状对 ⇒ 秘书照旧执笔一行手稿；没填/填错 ⇒ 不打回、照常收工，只把原因落进这一步
+                # 的读数（`notify_problem`）—— 阻塞一条委托比放行更贵。
                 notify_problem = self.notify_reading(payload)
                 notify = payload.get("notify")
                 step_result: dict[str, Any] = {}
@@ -4505,22 +4447,14 @@ class AgentLoop:
                     run.final = (f"第 {step + 1} 步问用户时被取消（{qid}）：这一趟停在这里。"
                                  f"问题还在待答清单里 —— 取消不等于用户答过了")
                 break
-            # ---- 上报召唤者（`conductor.escalate`，业主 2026-10-19「父子天然双向」）
-            #
-            # 这一支与上面 `ask_user` 那一支同形、同理由：需求已经写进父的收件箱了，
-            # 这一趟就不该再替父往下做（那正是"上报"与"继续自己猜"的分界）。
-            # 为什么必须**优雅停**而不是抛错：它不是失败 —— 需求送到了、台账有留痕、
-            # `--resume` 能接着跑，所以它有自己的退出码 5（与 3/4 同族「成功的中断」）。
-            #
-            # 判据读 `data.state` 而不是"工具名对不对"：工具名会被别名改写
-            # （`_do_tool` 的 `aliased_from`），而 `state="escalated"` 只有真的走通了
-            # 那条上行通道才会有 —— 受控拒绝（`not_caller`）那一档 `ok=False`、`data=None`，
-            # 于是它继续跑（顶层 M 调它不该把 M 自己停掉）。
-            #
-            # ⚠️ `shape` 在工具调用这一档是 `"tool"`（`_decode_shape` 返回的是 SHAPES 的
-            # 键），工具真名在 `payload["name"]` —— 写成 `shape == "conductor.escalate"`
-            # 会永远不成立，于是模型每步都重发一次（每次一个新 msg_id、读数不同 ⇒
-            # 连"原地打转"都抓不住），跑成一条 O(n²) 的死循环。这一句是那一版的修法。
+            # ---- 上报召唤者（`conductor.escalate`，业主 2026-10-19「父子天然双向」）：与上面 `ask_user`
+            # 那一支同形、同理由 —— 需求已经写进父的收件箱，这一趟就不该再替父往下做。必须优雅停而不是
+            # 抛错：它不是失败（需求送到了、台账有留痕、`--resume` 能接着跑），所以它有自己的退出码 5
+            # （与 3/4 同族「成功的中断」）。判据读 `data.state` 而不是工具名（名字会被 `_do_tool` 的
+            # `aliased_from` 改写）：`state="escalated"` 只有真走通上行通道才有，受控拒绝（`not_caller`）
+            # 那一档 `ok=False`、`data=None` ⇒ 继续跑（顶层 M 调它不该停掉自己）。`shape` 在这一档是
+            # `"tool"`（`_decode_shape` 返回 SHAPES 的键），工具真名在 `payload["name"]` —— 写成
+            # `shape == "conductor.escalate"` 永远不成立，模型每步重发 ⇒ 跑成 O(n²) 死循环。
             _esc = result.get("data") if isinstance(result.get("data"), dict) else {}
             if (shape == "tool" and str(payload.get("name") or "") == "conductor.escalate"
                     and _esc.get("state") == "escalated"):
@@ -5567,24 +5501,15 @@ class AgentLoop:
             "results": items,
             "ok": True,
         }
-        # ---- 名册登记（S1k-2 的**批量**那一支；业主 T22：「名册的增、删都由秘书做」）
-        #
-        # 改前这一整条路上一次登记都没有：`roster_add(` 全仓只有定义与单个 summon 那一个
-        # 调用点，于是批量派出去的子代理在名册上根本不存在 —— 生产读数批量步 1006 次、
-        # 派出 2822 个子代理，名册只登记 413 个（`p6e`/`p7e` 那种 108/119 个批量子代理、
-        # 名册 0 行）。名册是"代理之间的通信必须经名册"那条纪律的地址面，缺了这一支，
-        # 批量派出去的子代理谁都找不到。
-        #
-        # 三条口径（与 `_do_summon` 同一处，不另造一份）：
-        #   · 只登记**真的受理了**的那一项（`refused` 不登记：它没跑）；
-        #   · `owner` = 父的绝对编号、`task_id` = 这一项的绝对编号、`brief` = 这一项自己的
-        #     那一句，同一项的 `task` 一并交给秘书 —— 简介没写时**由秘书代写并留痕**
-        #     （2026-10-20 业主裁定「简介没写，则秘书帮忙写」；这里不写 `brief or task`：
-        #     业主选的是"秘书写"，不是"任务原文顶替"）；
-        #   · **一项失败不许带走整批**：失败只写进 `roster_problems`，`ok` 照旧。
-        #
-        # 三态不折平：`failed` / `cancelled` 的那一项也不许静默跳过 —— 它没进名册这件事
-        # 必须读得出来（与下面单个 summon 那条 `elif` 同一句话）。
+        # ---- 名册登记（S1k-2 的批量那一支；业主 T22：「名册的增、删都由秘书做」）
+        # 改前这条路上一次登记都没有（`roster_add(` 全仓只有定义与单个 summon 那一个调用点）：批量派出去的子代理在
+        # 名册上根本不存在 —— 生产读数批量步 1006 次、派出 2822 个子代理，名册只登记 413 个（`p6e`/`p7e` 那种
+        # 108/119 个批量子代理、名册 0 行）。名册是"代理之间的通信必须经名册"那条纪律的地址面，缺这一支谁都找不到
+        # 那些子代理。三条口径（与 `_do_summon` 同一处，不另造一份）：只登记真的受理了的那一项（`refused` 不登记，
+        # 它没跑）；`owner` = 父的绝对编号、`task_id` = 这一项的绝对编号、`brief` = 这一项自己那句、`task` 一并交给
+        # 秘书（简介没写时由秘书代写并留痕 —— 2026-10-20 业主裁定，所以这里不写 `brief or task`）；一项失败只进
+        # `roster_problems`、`ok` 照旧。三态不折平（与下面单个 summon 那条 `elif` 同一句话）：`failed` /
+        # `cancelled` 的那一项没进名册也必须读得出来。
         if self.secretary is not None:
             names: list[str] = []
             problems: list[str] = []
@@ -7277,24 +7202,15 @@ class LlmBackend:
             except Exception:  # noqa: BLE001 —— 造不出来就退回共用（并在结果里留痕）
                 child_registry = self.registry
         # ---- 「做我这一趟被派的那个动作」这一件工具（2026-10-14，业主裁定 ③ 的收尾）
-        #
-        # 真机形态（p9-t1-nolean 那一趟，`--subagents`）：`B.register_statement` 被交给
-        # 模型驱动，而**这个动作不在工具面上** ⇒ 模型拿到 `unknown_tool`，改去
-        # `table.create(table="statements")` 手写行 —— 于是绕过 `register_statement`
-        # 的全部写库前预检（出处、页码形状、引文证据、取号、查重）。
-        # 修法：把这一趟被派的那个动作**原样包成一件工具**交给它，handler 走内层
-        # 确定性实现（闸门一个不少），名字就是动作名（模型第一反应也是那么叫的）。
-        # 只在这一趟的循环里存在，不进任何角色的常规工具面。
-        #
-        # 2026-10-19 晚（`projects/mp2` 的 `mp2-7.jsonl`，本任务的真机读数）：这一格
-        # 原先只在**点了动作**时注入（`if str(action):`）。而真机的派活是 S2 口径的
-        # 「只派活、不指定能力」（`tasks.action=""`，M 只写一件活）⇒ 注入**一次都没发生**，
-        # 于是 B 拿到 32 件常规工具、没有 `register_statement`，第 94 行撞 `unknown_tool`、
-        # 第 97 行改走 `table.create` 手写 `bits={}`。也就是说：那段注释说的病因，在
-        # 「只派活」成为常态之后又回来了一次 —— 因为**中间层只在另一条路上装**。
-        # 现在两种派活都装（见 `_own_actions_to_expose`）：空动作时把本角色
-        # 「没有同名工具」的那些动作各包一件（`capabilities.unmapped_actions` 是那件事
-        # 的现成判据），点了动作时仍然只包那一个（老行为逐字不变）。
+        # 真机形态（p9-t1-nolean，`--subagents`）：`B.register_statement` 被交给模型驱动，而它不在工具面上 ⇒ 模型拿到
+        # `unknown_tool`，改去 `table.create(table="statements")` 手写行，绕过 `register_statement` 的全部写库前
+        # 预检（出处、页码形状、引文证据、取号、查重）。修法：把这一趟被派的那个动作原样包成一件工具（handler 走内层
+        # 确定性实现，名字就是动作名），只在这一趟的循环里存在。2026-10-19 晚（`projects/mp2` 的 `mp2-7.jsonl`）：
+        # 这一格原先只在点了动作时注入（`if str(action):`），而真机派活是 S2 口径的「只派活、不指定能力」
+        # （`tasks.action=""`）⇒ 注入一次都没发生，B 拿到 32 件常规工具、第 94 行撞 `unknown_tool`、第 97 行改走
+        # `table.create` 手写 `bits={}` —— 病因在"只派活"成为常态后又回来了一次（中间层只在另一条路上装）。
+        # 现在两种派活都装（`_own_actions_to_expose`）：空动作时把本角色「没有同名工具」的动作各包一件
+        # （`capabilities.unmapped_actions` 是那件事的现成判据）。
         child_registry = self._registry_with_own_action(
             child_registry, role=role, action=action, token=token, instance=instance,
             task_id=str(row.get("task_id") or params.get("_task_id") or ""))

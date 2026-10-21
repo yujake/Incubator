@@ -124,7 +124,7 @@ def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
         raise ToolError(f"{table} 缺少必填字段（{e}）") from e
     except ValueError as e:
         # 2026-10-17（子代理 tools 根因 B）：`schema.PageRange.__post_init__` 抛的是
-        # **ValueError**（"页码必须 >= 1" / "start 不能大于 end"），原来只捕 TypeError
+        # 「ValueError」（"页码必须 >= 1" / "start 不能大于 end"），原来只捕 TypeError
         # ⇒ 本该是 `validation` 的可读拒绝，被 `call` 兜成 "库内部出错"（`kind=unexpected`）。
         raise ToolError(f"{table} 行校验失败：{e}") from e
     try:
@@ -142,14 +142,14 @@ def _jsonable_default(value: Any) -> Any:
 
     ## 为什么必须有这一级（2026-10-13 真机，`p9-t1-nolean` 的三跳那一趟）
 
-    `statements.page_range` / `dependencies.page_range` 的默认值是一个 **`PageRange`
-    实例**，而 `table.schema`（不带 `table` ⇒ 反射全部表）原先把它原样塞进返回里。
-    后果不是"少看一眼结构"，而是**这一趟循环在落产出时崩**：子代理 B 被二级唤起
+    `statements.page_range` / `dependencies.page_range` 的默认值是一个 「`PageRange`
+    实例」，而 `table.schema`（不带 `table` ⇒ 反射全部表）原先把它原样塞进返回里。
+    后果不是"少看一眼结构"，而是「这一趟循环在落产出时崩」：子代理 B 被二级唤起
     做 `register_statement`，它第一步读了 `table.schema`，随后这一趟在记步/落产出时
     `json.dumps` 抛 `TypeError: Object of type PageRange is not JSON serializable`
     ⇒ 整趟以 `failed` 收场（实测 t-0020 / t-0021 / t-0024 三条全废）。
 
-    口径：**只读工具的返回必须能被如实记录** —— 记录不了就等于这一趟没有产出
+    口径：「只读工具的返回必须能被如实记录」 —— 记录不了就等于这一趟没有产出
     （"我查了"落不到盘上）。所以这里按对象自己的 `to_dict()`（schema 的行对象都有一份）
     → `dataclasses.asdict` → 递归容器 的顺序降级；最后一档兜底成字符串，
     宁可让那一格读起来粗糙，也不许让一个只读工具的返回把整趟运行弄崩。
@@ -560,22 +560,22 @@ def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
 
 
 def _direct_write_refusal(table: str) -> ToolResult | None:
-    """`statements` / `dependencies` / `lit_candidates` 的**通用写口直写** ⇒ 受控拒绝。
+    """`statements` / `dependencies` / `lit_candidates` 的「通用写口直写」 ⇒ 受控拒绝。
 
     ## 为什么这一格存在（2026-10-19 晚，`projects/mp2` 的真机读数）
 
     `mp2-7.jsonl` 第 94 行 B 调 `register_statement` ⇒ `unknown_tool`（那个名字不在它的
-    工具面上），第 97 行改走 `table.create(table="statements")`、**手写** `bits={}` 与
+    工具面上），第 97 行改走 `table.create(table="statements")`、「手写」 `bits={}` 与
     `evidence_kind="heuristic"`。于是秘书那四件活（洗格式 / 发编号 / 查重 / 改表）
     与五元位一件没跑，而盘上那一行看起来完全合法 —— `stmt:000003` 有 1909 字证明、
     V 也签了「成立」，档位却停在 `heuristic`。
 
-    判据本体在 `store.direct_write_refusal`（**只有一处**：工具层与 `Store.tx` 的提交块
+    判据本体在 `store.direct_write_refusal`（「只有一处」：工具层与 `Store.tx` 的提交块
     共用一个函数，所以关掉它的负控对两层同时生效）。这里只把它的读数翻成工具层的
     受控失败 —— 模型据此能改（拒信里逐字写着该走哪条路）。
 
     `table.delete` 不在这条限制里（删除不制造证据，它另有 `_REF_SPECS` 的引用保护）——
-    **唯一的例外是 `lit_candidates`**：那张表的"删掉"必须表现为 `withdrawn`（见
+    「唯一的例外是 `lit_candidates`」：那张表的"删掉"必须表现为 `withdrawn`（见
     `_candidate_delete_refusal`），见 `table_delete` 里那一处。
     """
     why = _store_mod.direct_write_refusal(table)
@@ -591,9 +591,9 @@ def _direct_write_refusal(table: str) -> ToolResult | None:
 
 
 def _candidate_delete_refusal(table: str, slot: str) -> ToolResult | None:
-    """`lit_candidates` 的行**不许物理删** ⇒ 受控拒绝（业主 2026-10-20 第 2 条）。
+    """`lit_candidates` 的行「不许物理删」 ⇒ 受控拒绝（业主 2026-10-20 第 2 条）。
 
-    为什么删除也要挡：撤掉 = 槽位置空 + 写理由，而**序号不复用**这件事只有在
+    为什么删除也要挡：撤掉 = 槽位置空 + 写理由，而「序号不复用」这件事只有在
     "那一行还在盘上"时才成立。`table.delete` 掉一行之后，"第 3 号被撤了哪一篇、为什么"
     就永久消失了，而 `lit_candidates` 的序号计数器仍然停在那里 —— 于是列表上出现
     一个谁也解释不了的缺口（`verify` 的 `id_gap` 会报，但报的是"某次事务分配了号却没建行"，
@@ -959,7 +959,7 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
     vocabs = _vocabularies()
     tables: dict[str, Any] = {}
     # 2026-10-18（缺陷 ⑤）：`table="statements"` 只回一张表。真机（T4/T5）里模型要的是
-    # **一张表**的字段，而无参调用返回全部 17 张（47KB）⇒ 被上下文预算截断，于是它们改用
+    # 「一张表」的字段，而无参调用返回全部 17 张（47KB）⇒ 被上下文预算截断，于是它们改用
     # 「故意写错换字段名」那种笨办法（33 次失败调用里 15 次是 table.create）。
     _only = str(table or "").strip()
     for tname, spec in S.TABLES.items():
@@ -984,17 +984,17 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
                 "type": _type_name(tp),
                 "required": required,
                 "default": default,
-                # ⚠️ **这三格每个元素都要在**，哪怕它不适用（2026-10-15 修）。
+                # ⚠️ 「这三格每个元素都要在」，哪怕它不适用（2026-10-15 修）。
                 #
                 # 改前它们只在适用时才 `item[...] = …`，于是同一个 `fields[]` 里
-                # **一部分元素有、另一部分没有** —— 而本工具的用途恰恰是"让智能体
+                # 「一部分元素有、另一部分没有」 —— 而本工具的用途恰恰是"让智能体
                 # 读受控词表"：调用方按自己在别的字段上看到的形状去读 `field["enum"]`，
-                # 在不带这三格的那些字段上会拿到 **KeyError**，而不是"这个字段没有词表"。
+                # 在不带这三格的那些字段上会拿到 「KeyError」，而不是"这个字段没有词表"。
                 # 实测（`test_tools_returns_declaration.py` 的逐元素判据）：
-                # 全 79 个工具里只有这一件有这个形态，而它有 **132 处**。
+                # 全 79 个工具里只有这一件有这个形态，而它有 「132 处」。
                 #
                 # 为什么给"如实空值"而不是干脆不声明：三态纪律 ——
-                # **空集是有效读数**（"这个字段确实没有候选值"），
+                # 「空集是有效读数」（"这个字段确实没有候选值"），
                 # `None` 是"没有词表这件事本身"；两者都不等于"我没读到"。
                 "literal_values": [],
                 "vocabulary": None,
@@ -1021,7 +1021,7 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
             "vocabularies": table_vocabs,
         }
     if _only and not tables:
-        # 未知表 ⇒ **可读拒信**（带在册表名），别让调用方读成"这张表没有字段"。
+        # 未知表 ⇒ 「可读拒信」（带在册表名），别让调用方读成"这张表没有字段"。
         return fail(
             f"没有名为 {_only!r} 的表；在册的是 {sorted(S.TABLES)}",
             kind="unknown_table", table=_only)
@@ -1274,12 +1274,12 @@ def _selftest() -> int:
         lit_id = r.data
         check("literature 分配最小号", r.ok and lit_id == S.format_id(0),
               f"id={r.data} err={r.error}")
-        # ---- 概念行（`statements` 里 `kind="concept"`）**走正路**：B 交内容、秘书落盘。
+        # ---- 概念行（`statements` 里 `kind="concept"`）「走正路」：B 交内容、秘书落盘。
         #
         # 2026-10-19 晚：这一节原先用 `table.create(table="statements")` 铺样品，而那条路
         # 现在被 `store.direct_write_refusal` 受控拒绝（真机形态：`projects/mp2/sessions/
         # mp2-7.jsonl` 第 97 行 —— 手写 `bits={}` + `evidence_kind="heuristic"`）。
-        # 自检的职责是"真走一遍生产路径"，所以这里改成**生产路径本身**：秘书落盘；
+        # 自检的职责是"真走一遍生产路径"，所以这里改成「生产路径本身」：秘书落盘；
         # 而"直写被拒"这件事在 [4] 里单独判一次（否则这一节会变成一条恒真断言的集合）。
         from ..secretary import Secretary
 
@@ -1316,7 +1316,7 @@ def _selftest() -> int:
 
         # ---- (2) create → get → update → get，确认未给字段被保留
         # 样品从 `statements` 换成 `research_questions`：那两张表已不由通用写口直写
-        # （见 [4]），而本节判的是**部分更新**这条机制，与样品挂在哪张表无关。
+        # （见 [4]），而本节判的是「部分更新」这条机制，与样品挂在哪张表无关。
         print("\n[3] create → get → update → get（未给字段必须保留）")
         r = reg.call(
             "table.create",

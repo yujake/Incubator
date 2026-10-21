@@ -104,7 +104,7 @@ TOOL_ROLES: tuple[str, ...] = tuple(ROLES) + (CONDUCTOR_ROLE,)
 #:
 #: V（验证者）在这里的理由与 C/H 同族、但落点不同：它不写任何「表」
 #: （`capabilities.WRITE_SETS["V"]` 是空集），唯一的产物是
-#: `verifications/<命题号>.jsonl` 这个**文件**（自己的台账）。
+#: `verifications/<命题号>.jsonl` 这个「文件」（自己的台账）。
 #: 它必须在这里：只靠"约定只读"的话，`for_role("V")` 会照旧把写工具发给它，
 #: 而"V 只改证明"这条路会在没有任何报错的情况下被打开。
 READ_ONLY_ROLES = ("C", "H", "V")

@@ -1071,24 +1071,24 @@ class _Core:
 
     def _missing_seam_round(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
                             note: str, spec_line: str) -> dict:
-        """E 没有模型缝 ⇒ 这一轮落 `dead_end(缺工具)` 并**向召唤者上报**（不再静默 `no_change`）。
+        """E 没有模型缝 ⇒ 这一轮落 `dead_end(缺工具)` 并「向召唤者上报」（不再静默 `no_change`）。
 
         ## 改前是什么形态（真机读数，`projects/mp4/data/attack_plans.json` 计划 000003 r1/r2）
 
         逐字：`子目标 sg1 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ 未推进`，
-        `action="script_not_authored"`、`outcome="no_change"`、**没有产物**。
+        `action="script_not_authored"`、`outcome="no_change"`、「没有产物」。
         于是这一轮在 `attack_plans.history` 上与"跑了但没结果"同形，而真正缺的东西
         （E 的缝）只活在一句散文里 —— 没有任何上行通道把它送到召唤者手上，
         下一轮再撞一次同一句话，直到计划 `stalled`。
 
         ## 现在两件事一起做（都用现成工具，不发明新语义）
 
-        ① **产物**：`attackround.dead_end_row`（四档之一，`reason="缺工具"`），
+        ① 「产物」：`attackround.dead_end_row`（四档之一，`reason="缺工具"`），
            于是 history 上读得出来"这一轮交的是死路"，`dead_end_reason` 也在；
-        ② **上行**：`conductor.escalate(kind="missing_input")`（业主 2026-10-19 的父子
+        ② 「上行」：`conductor.escalate(kind="missing_input")`（业主 2026-10-19 的父子
            双向通道）—— `need` 写"需要 E 的缝"、`evidence` 带子目标名，父代理下一趟
            在收件箱里就看得见要动哪一处。上报的结果（成功 / 受控拒绝的理由码）逐字进
-           `detail` 与 `blocked_reason`：**"上报了"与"没上报成"必须分得开**（三态）。
+           `detail` 与 `blocked_reason`：「"上报了"与"没上报成"必须分得开」（三态）。
 
         ## 状态与计数
 
@@ -1151,10 +1151,10 @@ class _Core:
 
         ## 为什么走这条通道，而不是新造一个"缺输入"事件
 
-        业主 2026-10-19 裁定"父子天然双向"：孩子跟召唤它的人说话**不是**一条权限边、
+        业主 2026-10-19 裁定"父子天然双向"：孩子跟召唤它的人说话「不是」一条权限边、
         不需要在 `edges` 里登记。`conductor.escalate` 就是那个入口，它已经把
         「谁是我的召唤者」「留言落进哪个会话」「收件箱怎么登记已读」三件事做完了
-        （`conductor.py` 的 docstring 逐字写着）。这里只做一件事：**把它叫对**。
+        （`conductor.py` 的 docstring 逐字写着）。这里只做一件事：「把它叫对」。
 
         ## 三件"这一层可能不知道"的事，各有一条如实的退路
 
@@ -1164,7 +1164,7 @@ class _Core:
         | 我的父 | `conductor.current_parent()`（工具路径由 `calling_as` 挂上） | 空而我有召唤号 ⇒ 读 `tasks` 那一行的 `parent_task_id` / `called_by` |
         | 会话根 / 会话号 | `conductor.current_session()` | 根空 ⇒ `store.root`（`run-agent` 的会话根就是工作区根）；会话号空 ⇒ 交给缺省档，读数里写明 |
 
-        为什么父要从台账读（这一条不读就没有第二条路）：**只有工具路径**会挂
+        为什么父要从台账读（这一条不读就没有第二条路）：「只有工具路径」会挂
         `calling_as(parent_…)`（`AgentLoop._do_tool`）；而 F 也可能由
         `Conductor.summon` → `LocalBackend.call` 直接跑，那条路只挂召唤号
         （`conductor.py` 的 `LocalBackend.call`）。只认 ContextVar 的话，
@@ -1180,7 +1180,7 @@ class _Core:
         - `attempted=True, state="refused"`：`escalate` 的受控拒绝（`not_caller` /
           `no_session` / `invalid_params` / `inbox_write_failed`），理由码原样带回。
 
-        **绝不把"没上报"写成"上报了"**：三种结果在返回值里占三种 `state`。
+        「绝不把"没上报"写成"上报了"」：三种结果在返回值里占三种 `state`。
         """
         from .. import conductor as CX
 
@@ -1286,10 +1286,10 @@ class _Core:
         return {"ok": True, "path": rel, "why": ""}
 
     def _proof_tier(self, stmt_id: str, proof_text: str) -> dict:
-        """这一行该落哪一档 —— **按 V 那一签现算**，不许自报（2026-10-19 晚）。
+        """这一行该落哪一档 —— 「按 V 那一签现算」，不许自报（2026-10-19 晚）。
 
         改前这里写死 `evidence_kind="heuristic"`，理由是"本批没有接 V 的回路"。那句
-        理由**现在已经不成立**（`F→V` 的边在 `specs/f.py` 的 `edges` 里，M 也会按
+        理由「现在已经不成立」（`F→V` 的边在 `specs/f.py` 的 `edges` 里，M 也会按
         `specs/m.py` 在同轮派 V 走查），而写死弱档的后果是实测到的：
         `projects/mp2` 的 `stmt:000003`（`proof_text` 1909 字、V 的 `v-000001` 签
         「成立」、`proof_sha256` 与现行正文相符）在盘上是 `heuristic` —— 一条够格的
@@ -1297,7 +1297,7 @@ class _Core:
 
         判据只有一处（`verifications.proof_review_gap`，与写入期那道闸同一个口径）：
         `proof_text` 非空 ＋ 最近一签「成立」且 `unresolved_errors==0` ＋
-        `proof_sha256` 等于现文本 ⇒ 就是 `proof_review`；**否则**才退到 `heuristic`
+        `proof_sha256` 等于现文本 ⇒ 就是 `proof_review`；「否则」才退到 `heuristic`
         （降档是安全方向，只要有理由串）。返回 `{"kind", "why", "checked", "gap"}`。
         """
         from .. import verifications as VR
@@ -1337,18 +1337,18 @@ class _Core:
         `projects/mp2` 的 `stmt:000003` 凭据齐全（`proof_text` 1909 字 ＋ V 签「成立」
         ＋ sha 相符）却落在 `heuristic`。
 
-        现在按 `_proof_tier` 现算：**V 那一签在盘上且盖的正是这一版正文 ⇒
-        `proof_review`；否则 `heuristic`**。这不是"自报"：判据读的是
+        现在按 `_proof_tier` 现算：「V 那一签在盘上且盖的正是这一版正文 ⇒
+        `proof_review`；否则 `heuristic`」。这不是"自报"：判据读的是
         `verifications/<命题号>.jsonl`（V 的账本），F 写不了那里一个字节。
         `bits` 仍留空（五位里第 3 位的 owner 是 V，不替别人签）。
 
-        ## 幂等（2026-10-19 晚补：复用那一支同时负责**升档**）
+        ## 幂等（2026-10-19 晚补：复用那一支同时负责「升档」）
 
         同一条子目标交出逐字相同的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），
         不再登记第二行 —— 重复登记会把 `statement_rows` / `reviewed_proof_rows` 的
         读数虚高（与 `_deploy_e` 的"同一脚本不重跑"同一条理由）。
 
-        但"不重复登记"不等于"什么都不做"：**V 往往是在 F 交完之后才签的**（mp2 就是
+        但"不重复登记"不等于"什么都不做"：「V 往往是在 F 交完之后才签的」（mp2 就是
         21:06 落行、21:09 才签）。所以复用那一支顺带核一次档位 —— 盘上那一行是弱档、
         而它现在已经够 `proof_review` ⇒ 就地升档（一行 update，走同一个写入闸；
         凭据不够就会被闸当场拒，不会写出假档）。返回值里 `promoted=True` 让这件事
@@ -1420,10 +1420,10 @@ class _Core:
                                 sid: str, cites: list[str], got_id: str) -> dict:
         """复用既有那一行时顺带核档位：够 `proof_review` 却登记成弱档 ⇒ 就地升档。
 
-        为什么这条路径必要：V 的那一签**几乎总是晚于 F 落行**（mp2：21:06 落行、
+        为什么这条路径必要：V 的那一签「几乎总是晚于 F 落行」（mp2：21:06 落行、
         21:09 才签）。没有这一支，一条已经够格的强结果会永远停在 `heuristic` ——
         那也是"证明齐全、V 也签了，却只落 heuristic"这个缺陷的下半截。
-        写的是**同一行**（不是第二行），走的是**同一个写入闸**：凭据不够时闸会当场
+        写的是「同一行」（不是第二行），走的是「同一个写入闸」：凭据不够时闸会当场
         拒收，所以这一支写不出假档。升档失败（例如闸拒了）如实返回 `promoted=False`
         ＋理由，绝不静默当作升过了。
         """

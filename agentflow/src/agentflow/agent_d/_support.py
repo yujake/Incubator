@@ -174,7 +174,7 @@ def _as_report_dict(report: Any) -> dict:
         "request": _report_field(report, "request", "") or "",
         # 2026-10-17（子代理 agents #1）：`report` 的声明只有 `{"type":"object"}`，
         # 所以内层可能是 list/str/int —— `dict("abc")` / `dict(["a"])` 都会抛。
-        # 脏值按"没有这一格"处理：**不崩，也不假装读到了**。
+        # 脏值按"没有这一格"处理：「不崩，也不假装读到了」。
         "params": _as_mapping(_report_field(report, "params", {})),
         "summary": _report_field(report, "summary", "") or "",
         "payload": _as_mapping(_report_field(report, "payload", {})),

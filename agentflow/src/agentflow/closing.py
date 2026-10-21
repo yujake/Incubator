@@ -354,23 +354,13 @@ INFORMATIONAL_KINDS: frozenset[str] = frozenset({"attack_plan_rows"})
 REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
 
 #: 「研究链的六个环节」——从零做研究时，验收表每个环节至少要有一行（`draft/37` §137）。
-#:
-#: ## 为什么需要这一条（T2 四趟的真机读数，`draft/37` §133）
-#:
-#: 那一趟的验收表是人（主控 M）自己写的，于是它写的是最容易满足的那几行：
-#: 立了问题、检索过、跑过实验、报告更新了 —— 而研究链上真正决定"有没有往前走"的
-#: 四件事（猜想、计划推进、文献进稿、留下界）一行都没有。结果：`can_close=true`、
-#: 七格全绿，而 `conjectures`/`statements` 0 行、`attack_plans` 0 推进、手稿一条文献没引。
-#:
-#: 这份覆盖面判据只做一件事：让"没看那一格"变成不可能。它不要求那些读数是正数
-#: （0 也是读数：那一行照样要写出来）—— 它要求的是那一行存在。
-#: 一个把"猜想 0 条（没有可检验形式）"写进验收表的交付，与一个根本没提猜想的交付，
-#: 是完全不同的两件事；后者在这条判据之前没有任何读数能区分。
-#: （注意覆盖面与阈值是两件事：写着 0 的那一行仍会按它自己那一档的阈值判不成立 ——
-#: 两者都红，但前者留下读数、后者留下一个空环节。）
-#:
-#: 触发条件只有一条：这个项目里有 `research_questions` 行（= 它是个"研究型"项目）。
-#: review 型（T1）不触发 —— 那些项目的验收表是任务书给的 P1–P11，与本判据无关。
+#: 为什么需要（T2 四趟真机读数，`draft/37` §133）：那张表是 M 自己写的，于是写的是最容易满足的几行，而真正
+#: 决定"有没有往前走"的四件事（猜想、计划推进、文献进稿、留下界）一行都没有 ⇒ `can_close=true`、七格全绿，
+#: 而 `conjectures`/`statements` 0 行、`attack_plans` 0 推进、手稿零引文。它只做一件事：让"没看那一格"变成
+#: 不可能 —— 不要求读数为正（0 也是读数，那一行照样要写出来），要求的是那一行存在：写着"猜想 0 条"的交付与
+#: 根本没提猜想的交付是两件事，后者此前没有任何读数能区分（覆盖面与阈值是两件事：写着 0 的那行仍按它自己那一档
+#: 判不成立 —— 两者都红，但前者留下读数、后者留下一个空环节）。
+#: 触发条件只有一条：这个项目里有 `research_questions` 行（= 研究型项目）；review 型（T1）不触发。
 RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # 第一环节拆成两环（`draft/39` §6.47 的 D60）：此前它在验收表里的成员是
     # 「research_question_rows 或 retrieval_attempts」——任一条成立就算这一环覆盖了。
@@ -396,23 +386,15 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # （T5 第 1/2 趟：`tasks` 里 role=C 的行是 0，七格全绿）。把它做成覆盖面的一环之后，
     # 「用没用 C」与其它几环一样要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
     ("看（关系分析）", ("c_analysis_runs",)),
-    # 「攻（攻坚推进）」那一环（D59；2026-10-19 收窄成员）：从原来的
-    # 「交（文献进稿、计划推进）」里分出来。动机是真机读数（T5 第 6 趟 `p8f`）：那一趟
-    # 任务原文是"交付进展手稿与说明"，而盘上 `documents` 0 行——一次稿子都没写；M 把
-    # `plan_progress_rows`（F 的计划推进）填进了"交"那一环，于是收工门七格全绿、
-    # `can_close=true`，而 M 自己在报告的"未决问题"第 5 条里逐字写着「`documents` 0 行：
-    # 没有稿件」。根因是那一环的成员里混进了与交付物无关的档：F 的推进是"攻"，不是"交"。
-    #
-    # 2026-10-19 再收一次（同一族错，方向相反）：`attack_plan_rows`（**立项计数**）
-    # 此前与 `plan_progress_rows`（**真推进计数**）同列，于是「只凭立过项」就能让这一格
-    # pass（验收表写 `attack_plan_rows: min 1`）。现在这一格的**通过只由
-    # `plan_progress_rows` 决定**：
-    #   - `attack_plan_rows` 的**非 `na`** 行一律记 `informational`（只报数）⇒
-    #     它不进阈值判定、也不进研究链覆盖面 ⇒ 只写立项那一行等于这一环「一行都没有」⇒ 整格红；
-    #   - `attack_plan_rows` 的 **`na` 行**（`{"na": true, "note": "…为什么没有攻坚计划"}`）
-    #     仍按 D49 的第三态算「这一环被如实标注过」—— `na` 从来不是"通过"，它是
-    #     "这一档对这个项目不适用"的出口，换一档写（`plan_progress_rows: na`）也成立。
-    #     存量里 12 份调查型项目的表就是这种写法，这一档不许把它们读成"缺一行"。
+    # 「攻（攻坚推进）」那一环（D59；2026-10-19 收窄成员）：从原来的「交（文献进稿、计划推进）」里分出来。
+    # 动机是真机读数（T5 第 6 趟 `p8f`）：任务原文是"交付进展手稿与说明"，而盘上 `documents` 0 行 —— M 把
+    # `plan_progress_rows`（F 的计划推进）填进"交"那一环 ⇒ 七格全绿、`can_close=true`，而 M 自己在报告里写着
+    # 「`documents` 0 行：没有稿件」。根因：那一环的成员混进了与交付物无关的档 —— F 的推进是"攻"，不是"交"。
+    # 2026-10-19 再收一次（同族错、方向相反）：`attack_plan_rows`（立项计数）此前与 `plan_progress_rows`（真推进
+    # 计数）同列，于是"只凭立过项"（验收表写 `attack_plan_rows: min 1`）就能让这一格 pass ⇒ 现在通过只由 `plan_progress_rows` 决定：非 `na` 行一律记
+    # `informational`（只报数，不进阈值判定、不进研究链覆盖面 ⇒ 只写立项那行等于这一环"一行都没有"）；`na` 行仍按
+    # D49 第三态算「这一环被如实标注过」（`na` 不是"通过"，是"这一档不适用"的出口；存量 12 份调查型项目就这样写，
+    # 它们的表里 `{"na": true, "note": "…为什么没有攻坚计划"}` 这一档不许读成"缺一行"）。
     ("攻（攻坚推进）", ("attack_plan_rows", "plan_progress_rows")),
     # 「交（手稿落盘）」（D59）：这一环现在只认"盘上真的有一份交付物"的读数 ——
     # `document_rows`（documents 行数）或那些必须在稿件里才成立的档
@@ -1285,21 +1267,14 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "semantic": sum(1 for r in rows if EB.quote_state(r) == "semantic"),
         }
     if kind == "manuscript_rows":
-        # 交接手稿那一档（`draft/37` §134/§140；`draft/39` §C1 起存储改成追加式 JSONL）：
-        # 数 `manuscripts/handoffs.jsonl` 的行数（一份交接一行）。为什么从"数文件"改成
-        # "数行"（用户 2026-10-05 裁）：旧口径要求文件名能被 `<编号>-<谁>to<谁>.md` 认出来，
-        # 于是改个名或少个字段就读成 0 —— 读数被文件名的形状绑住；而账本是追加写的，
-        # 撞号与覆盖在结构上不可能发生（这正是 D16/D17 的终结判据）。
-        # 旧格式（`.md` 文件）不计入这一档，但在明细里另列一栏：既不假装没有，
-        # 也不让它冒充新格式。
-        #
-        # `draft/39` §6.49 的 D64（用户 2026-10-06 裁）：口径再收紧成只数自写的。
-        # 真机读数（T1–T5 五趟的账本逐行分类）：92 / 96 / 118 / 62 / 94 行里
-        # 100% 是框架派生的模板（`note` 写着「框架据动作结果派生」/「框架据派活派生」），
-        # 而且每一行的 `refs` 都是空的，正文是"从/到/一句话/时间/引用"的填空。
-        # 用户的原话：「handoffs 里面没有几条有效信息全在强调纪律」。
-        # 一个被模板灌满的读数会替噪声背书 ⇒ 这一档只数"模型自己写的"那些，
-        # 框架派生的另列一栏（不假装没有，也不让它冒充交接）。
+        # 交接手稿那一档（`draft/37` §134/§140；`draft/39` §C1 起存储改成追加式 JSONL）：数
+        # `manuscripts/handoffs.jsonl` 的行数（一份交接一行）。为什么从"数文件"改成"数行"（用户 2026-10-05 裁）：
+        # 旧口径要求文件名能被 `<编号>-<谁>to<谁>.md` 认出来，于是改个名或少个字段就读成 0 —— 读数被文件名的形状
+        # 绑住；而账本是追加写的，撞号与覆盖在结构上不可能发生（这正是 D16/D17 的终结判据）。旧格式 `.md` 不计入
+        # 这一档，但在明细里另列一栏：既不假装没有，也不让它冒充新格式。`draft/39` §6.49 的 D64（用户 2026-10-06
+        # 裁）：口径再收紧成只数自写的 —— 真机读数（T1–T5 五趟逐行分类）92 / 96 / 118 / 62 / 94 行里 100% 是框架
+        # 派生的模板（`note` 写着「框架据动作结果派生」/「框架据派活派生」），且每行 `refs` 都是空的；用户原话
+        # 「handoffs 里面没有几条有效信息全在强调纪律」。被模板灌满的读数会替噪声背书 ⇒ 只数模型自写的那些。
         from . import manuscripts as MS
 
         all_rows, bad_lines = MS.read_rows(project_root)
@@ -1617,22 +1592,14 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                               "reports 数；若写者用的是别的子目录，这一档的读数会偏低")
         return len(files), detail
     if kind == "reviewed_proof_rows":
-        # 「造判决性证据」那一档（`draft/39` §3.17 A5 + §3.14 五元位）：我方命题里
-        # 五元位派生出「预备定理级」（有证明过程 + 审过）或「正式定理」（有证明过程 +
-        # 形式化通过）的行数。等级一律现算（`evidencebits.bits_from_row` ⇒
-        # `derive_grade`），不读盘上存的等级 —— 自报的等级不算数。
-        # 引用命题（`origin=external_lit`）不算：它的第 2 位凭据是文献代号，
-        # 混进来就等于"引一篇别人的定理"满足了"我们自己造了判决性证据"。
-        #
-        # 三态（`draft/57` 组 9 的 R3 读侧；主控 2026-10-07 派单）：这一段的读数必须分得开
-        # ① 这条命题「根本没有位记录」（产出方没走过 / 老数据）· ② 有记录、但等级只到
-        # `conjecture`（算出来了、就是低档）· ③ 有记录、且到 `pre_theorem`/`theorem`
-        # （这一档要数的）。①与②在旧读数里同形（都表现为"没被计入"），
-        # 而"没算过"与"算了、不够档"是两件事（三态纪律：没查成 ≠ 没通过）。
-        # 这里的局部导入已删（2026-10-14）：`_leg_reading` 是一个跨上千行的大 if 链，
-        # 函数里任何一处 `import EB` 都会让**整个函数**里的 `EB` 变成局部名 ——
-        # 于是上面 `quote_verified_rows` 那一档用模块级那个导入时会报
-        # `UnboundLocalError`（真实症状：收工门那一格从 pass 变成 unknown）。
+        # 「造判决性证据」那一档（`draft/39` §3.17 A5 + §3.14 五元位）：我方命题里五元位派生出「预备定理级」
+        # （有证明过程 + 审过）或「正式定理」（有证明过程 + 形式化通过）的行数。等级一律现算
+        # （`evidencebits.bits_from_row` ⇒ `derive_grade`），不读盘上存的等级 —— 自报的等级不算数。引用命题
+        # （`origin=external_lit`）不算：它的第 2 位凭据是文献代号，混进来就等于"引一篇别人的定理"满足了"我们
+        # 自己造了判决性证据"。三态（`draft/57` 组 9 的 R3 读侧；主控 2026-10-07 派单）：① 这条命题根本没有位记录
+        # （产出方没走过 / 老数据）· ② 有记录、但等级只到 `conjecture` · ③ 有记录、且到 `pre_theorem`/`theorem`
+        # （这一档要数的）—— ①与②在旧读数里同形，而"没算过"与"算了、不够档"是两件事。局部导入已删
+        # （2026-10-14）：`_leg_reading` 是跨上千行的大 if 链，函数里任何一处 `import EB` 都会让整个函数里的 `EB`变成局部名 ⇒ 上面 `quote_verified_rows` 那一档用模块级导入时报 `UnboundLocalError`（那一格 pass 变 unknown）。
         rows = list(store.rows("statements"))
         counted: list[dict[str, Any]] = []
         grades: dict[str, int] = {}
@@ -1975,29 +1942,17 @@ def _acceptance_unknown(rep: ClosingReport, code: str, detail: str, *,
     rep.findings.append(Finding("acceptance", code, "warning", detail))
 
 
-#: 一行验收读数在读表这一层的状态（`draft/52` CC-02 裁定 (a)）。
-#:
-#: 只有这一处定义：行循环产出 `state`，四条自动分支的守卫（E-04a）与覆盖率
-#: 各档的集合都消费它 —— "改一次，两处同时正确"（分别写两份 = 各修一半）。
-#:
-#: - `computed` —— 真的按台账算出了 `got`（唯一算"这一档被算过"的状态）；
-#: - `na` —— 写表的人标了 `na` + 理由（D49 的第三态出口，只豁免这一行）；
-#: - `not_applicable` —— 这一档在这个工作区算不出来（缺只读基线，CC-05 第四态）；
-#: - `unreadable` —— 这一行读不懂（不是对象 / 词表外 `kind` / `na` 无理由 /
-#:   `na` 非布尔 / `min`·`max` 非整数 / 台账读不到 / `id` 缺失或重复）；
-#: - `unknown` —— 这一行**算得出来、但按口径不许判 pass**（业主 2026-10-18：
-#:   `literature.unprocessed > 0` 时「请求闭环」那一行记 `unknown` 而不是 `pass`；
-#:   2026-10-19 起同一档也接「攻」那一格：计划 `history` 里有 `statement_id` 而
-#:   `verifications` 里没有对应的那一行）。
-#:   它与 `computed` 的区别是"读数有了、结论却判不了"：那一行照样带 `got` 与 `detail`，
-#:   但它不进 `rows_read`（"算过"≠"通过了"），整格也由它落 `unknown`。
-#: - `informational` —— 这一档**只报数、不判 pass/fail**（`INFORMATIONAL_KINDS`：
-#:   `attack_plan_rows` 的立项计数）。它带 `got` 与 `detail`（读数照给人看），
-#:   但不进 `unmet`、不进 `computed_kinds`、**不进研究链覆盖面** ——
-#:   所以"只写立项那一行"不会让「攻」那一格变绿（那一环算「一行都没有」）。
-#:
-#: 三态纪律：`unreadable` 既不是通过、也不进 `unmet`，整格由调用方落 `unknown`
-#: （绝不 `pass`）—— "没查成"不许读成"没问题"，同时不再因为一行坏就把好行的读数一起丢掉。
+#: 一行验收读数在读表这一层的状态（`draft/52` CC-02 裁定 (a)）。只有这一处定义：行循环产出 `state`，四条
+#: 自动分支的守卫（E-04a）与覆盖率各档的集合都消费它 —— "改一次，两处同时正确"（分别写两份 = 各修一半）。
+#: `computed` 真的按台账算出了 `got`（唯一算"这一档被算过"的状态）；`na` 标了 `na` + 理由（D49 第三态出口，只
+#: 豁免这一行）；`not_applicable` 这一档在这个工作区算不出来（缺只读基线，CC-05 第四态）；`unreadable` 这一行
+#: 读不懂（不是对象 / 词表外 `kind` / `na` 无理由 / `na` 非布尔 / `min`·`max` 非整数 / 台账读不到 / `id` 缺失或
+#: 重复）。`unknown` 算得出来、但按口径不许判 pass（业主 2026-10-18：`literature.unprocessed > 0` 时「请求闭环」记
+#: `unknown`；2026-10-19 起同档也接「攻」：计划 `history` 里有 `statement_id` 而 `verifications` 里无对应行）——
+#: 与 `computed` 的区别是"读数有了、结论判不了"：照样带 `got` 与 `detail`，但不进 `rows_read`，整格落 `unknown`。
+#: `informational` 只报数、不判 pass/fail（`INFORMATIONAL_KINDS`：`attack_plan_rows` 的立项计数），不进
+#: `unmet`/`computed_kinds`、也不进研究链覆盖面。三态纪律：`unreadable` 既不是通过、也不进 `unmet`，整格由调用方
+#: 落 `unknown`（绝不 `pass`）。
 ROW_STATES: tuple[str, ...] = ("computed", "na", "not_applicable", "unreadable", "unknown",
                                "informational")
 
@@ -2663,64 +2618,35 @@ VERDICT_NOTE = (
     "『判过能交』）。"
 )
 
-#: 报告体例由 M 裁定（R9 / `draft/52` 裁决 1 = C''）—— 门不再自带任何节名清单。
-#:
-#: ## 为什么删掉了九节（`REPORT_SECTIONS`）与分栏标记（`SPLIT_MARKERS`）
-#:
-#: 那两样出自 `draft/37` §14.4，是review 线的交付规格（"审稿报告该有哪九节"
-#: 是那一条线的排版约定）。它被塞进通用收工门的 `report_shape` 档之后，
-#: 每一个研究型工作区都被按审稿报告的排版来判 —— 那是"只为某一条线建的标准"
-#: （用户 2026-10-06 口径：直接废除，不是降为读数）。
-#: 真机读数也说明它判错了对象：46 份报告里 45 份"九节齐全"，而缺附件三件套的有 9 份
-#: —— 门在排版上一分不让，在"这条结论是不是我们自己做的、依据在哪、文件有没有被换过"
-#: 上却一个字都没判（"算了不判 = 假读数"）。
-#:
-#: 现在的口径：体例归 M。门只核对两件事：
-#:
-#: ① 附件三件套（`ATTACHMENT_FIELDS`）—— 它是来源与完整性，不是排版，保留判实；
-#: ② M 声明的体例有没有兑现 —— M 若在工作区里落下 `REPORT-STYLE.json`
-#:    （`{"sections": [...]}`，见 :data:`REPORT_STYLE_NAME`），门就逐节核它在不在报告里；
-#:    没声明 ⇒ 不判体例（不是"通过"，是"这一趟没有体例声明"，读数里如实写 `none`）。
+#: 报告体例由 M 裁定（R9 / `draft/52` 裁决 1 = C''）—— 门不再自带任何节名清单。删掉九节（`REPORT_SECTIONS`）
+#: 与分栏标记（`SPLIT_MARKERS`）的理由：那两样出自 `draft/37` §14.4，是 review 线的交付规格，被塞进通用收工门的
+#: `report_shape` 档之后，每个研究型工作区都被按审稿报告的排版来判 —— 那是"只为某一条线建的标准"（用户
+#: 2026-10-06 口径：直接废除，不是降为读数）。真机读数也说明它判错了对象：46 份报告里 45 份"九节齐全"，而缺
+#: 附件三件套的有 9 份 —— 门在排版上一分不让，在"这条结论是不是我们自己做的、依据在哪、文件有没有被换过"上
+#: 却一个字都没判。现在的口径：体例归 M，门只核两件事 ① 附件三件套（`ATTACHMENT_FIELDS`）—— 来源与完整性，
+#: 不是排版，保留判实；② M 声明的体例有没有兑现 —— M 若落下 `REPORT-STYLE.json`（`{"sections": [...]}`，见
+#: :data:`REPORT_STYLE_NAME`），门就逐节核它在不在报告里；没声明 ⇒ 不判体例（读数里如实写 `none`，不是"通过"）。
 REPORT_STYLE_NAME = "out/review/REPORT-STYLE.json"
 
 #: 附件三件套（§16 P3 报告行逐字要求）。
 ATTACHMENT_FIELDS: tuple[str, ...] = ("origin=own_result", "依据", "sha")
 
-#: 验收读数的口径版本（`draft/46-04` §6.4 第 1 条：每改一次口径必须能说清
-#: "从哪一趟起口径变了"）。`readings["acceptance"]["reading_version"]` 直接读它。
-#:
-#: 为什么必须有：33 份历史表 / 204 行今天读出的 `got` 是旧口径下的数。
-#: 同一份表、同一个工作区、不同趟次读出的数不同时，没有版本号就无从判断
-#: 差异来自"研究对象变了"还是"门的口径变了"。口径锚点取 `p8g`
-#: （唯一覆盖面 8/8 齐的工作区）。
-#:
-#: 版本沿革：
-#: - `"2026-10-06-C"`：E-05（`min` 与 `implicit_min` 取大 + 引文分母改用只读基线
-#:   `source/main.tex` + `manuscript_edited` 去空白后比）、CC-05（缺基线 ⇒ 该行
-#:   `not_applicable` 而不是整格 `unknown`）、E-04a（四条自动分支的守卫改看
-#:   真算过的 kind，`na` 只豁免它自己那一行）、E-04b（整环只有 `na` 行时
-#:   如实报出来，判断归 M/秘书）、R9（九节与分栏判据废除）。
-#: - `"2026-10-06-C2"`（`draft/52` CC-02 裁定 (a)）：结构级 / 行级分界 ——
-#:   一行读不懂只废那一行（`state="unreadable"`，整格 `unknown`、绝不 `pass`），
-#:   好行的读数不再被一起丢掉；行状态判据收进 `acceptance_row_state` 一处
-#:   （行循环与四条自动分支的守卫共用）；读数新增 `rows_unreadable` /
-#:   `unreadable_rows` / `duplicate_ids`。
-#: - `"2026-10-06-C3"`（`draft/39` §6.49 八；用户 2026-10-06 裁「产出太保守」）：
-#:   五条内容判据（`content_leg_unmet`）与一处读数换口径 ——
-#:   ①`numeric_experiment_rows` 从「跑过多少次数值实验」改成「跑出过几个结论」
-#:   （结论 + 界/证书；形式化那一支看检查器输出）；②「算」那一环在研究型项目里
-#:   全 `inconclusive` ⇒ 门自己报；③「造」那一环声明的项目要求有 `origin=own_result`
-#:   且写清来路（`derived_from` / `source_lit_id`）的命题；④C 的关系分析跑过而
-#:   产物没进交付面（手稿/文档里 0 条 `rel:`、`analysis_reports` 0 行）⇒ 门报；
-#:   ⑤只读基线有 `\bibitem` 而台账里一条 `quote_verified=True` 都没有 ⇒ 门报（T1 口径）；
-#:   ⑥有论文主稿时：`\bibitem` < 2、或本轮 `stmt:`/`exp:`/`rel:` 引用只出现在
-#:   核查章节里 ⇒ 门报（T3 口径）。读数新增 `readings["acceptance"]["content_branches"]`。
-#: - `"2026-10-19-C5"`（业主 2026-10-19：「只凭立过项」不许让「攻」变绿）：
-#:   `attack_plan_rows` 从「攻（攻坚推进）」那一格的成员降为**立项计数（informational）**
-#:   （`INFORMATIONAL_KINDS`）—— 读数照出（`rows_informational` / 那一行的 `got` 就是
-#:   立项数），但不参与阈值判定、不进 `computed_kinds`、**不进研究链覆盖面**；
-#:   那一格的通过只由 `plan_progress_rows` 决定 ⇒ 只写立项那一行 ⇒
-#:   「攻」那一环算「一行都没有」⇒ 整格 `fail`。行状态词表新增 `informational`。
+#: 验收读数的口径版本（`draft/46-04` §6.4 第 1 条：每改一次口径必须能说清"从哪一趟起口径变了"）。
+#: `readings["acceptance"]["reading_version"]` 直接读它。必须有：33 份历史表 / 204 行今天读出的 `got` 是旧口径下的
+#: 数，没有版本号就无从判断差异来自"研究对象变了"还是"门的口径变了"（口径锚点 `p8g`）。沿革（每档一句，判据
+#: 细节在各档自身的实现与 `draft/46-04`，这里不复述）：
+#: `"2026-10-06-C"`：E-05（`min` 与 `implicit_min` 取大 + 引文分母改用只读基线 `source/main.tex` +
+#: `manuscript_edited` 去空白后比）、CC-05（缺基线 ⇒ 该行 `not_applicable`）、E-04a（`na` 只豁免自己那行）、
+#: E-04b、R9（九节与分栏判据废除）。`"2026-10-06-C2"`（`draft/52` CC-02 裁定 (a)）：行级分界 —— 一行读不懂只废
+#: 那行（`state="unreadable"`，整格 `unknown`、绝不 `pass`），判据收进 `acceptance_row_state` 一处；读数新增
+#: `unreadable_rows` / `rows_unreadable` / `duplicate_ids`。`"2026-10-06-C3"`（`draft/39` §6.49 八；用户 2026-10-06 「产出太保守」）：
+#: 五条内容判据（`content_leg_unmet`）—— `numeric_experiment_rows` 改成数"跑出过几个结论"、「算」那一环全
+#: `inconclusive` ⇒ 门自己报、「造」要求 `origin=own_result` 且写清来路（`derived_from` / `source_lit_id`）、
+#: C 的关系分析跑过而产物没进交付面（`analysis_reports` 0 行）⇒ 门报、有 `\bibitem` 而零 `quote_verified=True`
+#: ⇒ 门报、有主稿时 `stmt:`/`exp:`/`rel:` 只出现在核查章节 ⇒ 门报；读数新增 `content_branches`。
+#: `"2026-10-19-C5"`（业主 2026-10-19）：`attack_plan_rows` 降为立项计数 `INFORMATIONAL_KINDS`（读数
+#: `rows_informational`，不进 `computed_kinds` 与研究链覆盖面，「攻」的通过只由 `plan_progress_rows` 决定 ⇒ 只写
+#: 立项那行 ⇒ 整格 `fail`；行状态词表新增 `informational`）。
 ACCEPTANCE_READING_VERSION = "2026-10-19-C5"
 
 

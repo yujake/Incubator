@@ -111,12 +111,12 @@ _H_FINDING_KIND_OF_CA_CODE: dict[str, str] = {
     # 一个查生命周期闭合）⇒ 它们要按语义落 kind，不能落 `garbled`。
     "incomplete_numeric_evidence": "unsupported_claim",
     "lifecycle_incomplete": "inconsistent_number",
-    # ⚠️ **2026-10-15 补登记**：`uncontrolled_disclaimer`（2026-10-13 加）同样漏了这里。
+    # ⚠️ 「2026-10-15 补登记」：`uncontrolled_disclaimer`（2026-10-13 加）同样漏了这里。
     # 本表的兜底是 `garbled`（见上面那句"不在表里的 code 落到 `garbled`"），
-    # 所以它不像 `doc_tools` 那张表那样当场炸 —— 它**静默地**把
+    # 所以它不像 `doc_tools` 那张表那样当场炸 —— 它「静默地」把
     # "声明不是受控那一句"读成"表述无法解析"，而 kind 是审校分档的判据。
     # 两条漏登记是同一个根因（新 code 只登记进了 `claimanatomy` 的表，
-    # 没往两张落据表同步），但**故障形态相反**：G 侧炸、H 侧错。
+    # 没往两张落据表同步），但「故障形态相反」：G 侧炸、H 侧错。
     #
     # 为什么落 `unsupported_claim`：与 `missing_disclaimer`（H 自己那条
     # "disclaimer 为空"的检查，在 `_H_OWN_CODES` 里）同族同义 ——
@@ -761,7 +761,7 @@ def scan_document(
     elif not dep_checked:
         verdict = "unverified"
     elif not bool(semantic_check.get("checked")):
-        # 2026-10-17（业主：「通过标准和 V 一样」）：**语义层没查 ⇒ 不许判通过**。
+        # 2026-10-17（业主：「通过标准和 V 一样」）：「语义层没查 ⇒ 不许判通过」。
         # 真机 t5e（`t5e-5`）现场：`semantic_check.checked=false`（没接线）却落了
         # `verdict=accepted`，于是审核轴被写成「成立」—— 把"没查"说成了"通过"。
         # 这一档与"依赖闭合没查"是同族，统一记 `unverified`（三态里的"看不出来"）。
@@ -892,14 +892,14 @@ def _set_doc_status(store: Any, doc_id: str, target: str, *, actor: str) -> tupl
             if row is None:
                 return False, f"稿件 {doc_id} 在事务内不存在", cur
             row["status"] = target
-            # 2026-10-17（业主：「**H 审过和通过是完全不同的状态**」）：状态被审校推到某一档时，
-            # 同一次事务里把**审核轴**写上 —— 于是两件事分得开：
+            # 2026-10-17（业主：「「H 审过和通过是完全不同的状态」」）：状态被审校推到某一档时，
+            # 同一次事务里把「审核轴」写上 —— 于是两件事分得开：
             #   审过 = `review_verdict != ""`；通过 = `review_verdict == "成立"`（与 V 的裁决同形）。
             # 这一笔是 `closing.accepted_documents` 唯一的数据来源。
             from datetime import datetime as _dt
 
             # 三态映射（与 V 同形）：通过 ⇒ 成立；判成有毛病 ⇒ 有毛病；
-            # **没查成/没结论** ⇒ 看不出来 —— 不许把"没查"折成"有毛病"或"成立"。
+            # 「没查成/没结论」 ⇒ 看不出来 —— 不许把"没查"折成"有毛病"或"成立"。
             if target in ("accepted", "accepted_with_warnings"):
                 row["review_verdict"] = "成立"
             elif target in ("rejected", "in_review"):
@@ -965,14 +965,14 @@ def record_finding(
     line_unavailable_reason: str = "",
     actor: str = "agent-H",
 ) -> dict:
-    """把**H 自己读出来的**一条发现落成 `review_findings` 行（业主 2026-10-18 裁定）。
+    """把「H 自己读出来的」一条发现落成 `review_findings` 行（业主 2026-10-18 裁定）。
 
     ## 这是哪一条洞的修法（读数先于修法）
 
     `projects/mp3` 末节第 5 条那一类「面外操作」在 H 这一侧的同族形态是：
-    `review_document` / `verify_fixes` 落的发现**全部来自机械扫描**（`scan_document`），
+    `review_document` / `verify_fixes` 落的发现「全部来自机械扫描」（`scan_document`），
     而 H 自己读出来的那一条（「G8 回执没给退出码」「正文引用的那份材料盘上没有」）
-    **没有任何落点** —— 它只能写在回复或报告文件里。于是
+    「没有任何落点」 —— 它只能写在回复或报告文件里。于是
     `review_findings` 里有的永远是机器算得出的那几类，人（角色）的判断进不了台账。
 
     ## 三条边界（与 `review_document` 同一套口径）
@@ -1642,7 +1642,7 @@ def list_findings(
 #: 咋产出中稳定产出 review 文件夹呢？」）：`out/review/` 已经是 M 的交付说明
 #: （`REPORT.md`）、体例声明（`REPORT-STYLE.json`）、状态报告（`STATUS-*`）与
 #: M 判据（`m-verdicts.jsonl`）的落点 —— 审校报告住进同一个目录，"这一趟审过什么"
-#: 就有**一个**可数的面（收工门那一档 `review_files` 数的就是它）。
+#: 就有「一个」可数的面（收工门那一档 `review_files` 数的就是它）。
 #: 落点由框架定、不由模型挑：模型挑路径时，"稳定产出"这件事就只能靠运气。
 DEFAULT_REPORT_SUBDIR = "out/review"
 

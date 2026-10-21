@@ -45,31 +45,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
-    # ---- `search_literature`（2026-09-30 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
-    #
-    # 为什么必须有它：上面两个动作的参数里**没有主题** —— 它们只认"队列里已经有什么"，
-    # 而队列今天只有 CLI `submit` / D 的 `research.submit_gap`（要求先有研究问题）/
-    # C 的 gap 分支能写。于是"角色缺文献证据 ⇒ 唤起 A"这条路上，召唤方**没有办法
-    # 告诉 A 要查什么**：它只能唤一个对着空队列空转的 A。用户口径是
-    # "A 的文献检索必须要通关"，指的就是这一格。
-    #
-    # 名字为什么不叫 `search`：两层对账按"工具名最后一段 == handler_name"配对，
-    # 而 A 的工具组里有 `fs.search` 与 `table.search` ⇒ 叫 `search` 会落进
-    # `ambiguous`（两个候选都算对上），而导入期第 [7b] 条要求 `ambiguous` 为空。
-    # 实测：`stale` 断言先报 `['A.search']`（它没进 unmatched），换成
-    # `search_literature` 之后没有任何工具同名 ⇒ 诚实地进 unmatched。
-    #
-    # 两根轴逐条读出（不是照抄工具层）：
-    #   - 效果轴 `write_local`：实现（`AgentA.search_literature`）在一个事务里写
-    #     `search_requests` 一行，随后走既有的 `run_once` 链路再写 `search_requests`
-    #     + `literature` —— 与 `run_once` 是同一组表（`WRITE_SETS["A"]` 登记了这两张）。
-    #   - 外部轴 `egress`：它真的发 HTTP（检索 + 下载都在这条链上），且不执行
-    #     调用方给的程序 ⇒ 不是 `exec`。
-    #
-    # 为什么不改成"给 `run_once` 加一个 topic 参数"：那会把"领任务"与"提交任务"
-    # 合成一个动作，而它们的权限面不同 —— `run_once` 是**消费队列**（谁都能调），
-    # `search_literature` 是**生产队列**（受在途上限这个准入闸门约束）。合成之后，
-    # 想要"只消费"的调用方也会被迫接受"可能新建请求"的副作用。
+    # ---- `search_literature`（2026-09-30 加；本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审）
+    # 为什么必须有它：上面两个动作的参数里没有主题（只认队列里已有什么），召唤方没办法告诉 A 要查什么。
+    # 名字不叫 `search`：两层对账按"工具名最后一段 == handler_name"配对，`fs.search` / `table.search`
+    # 会让它落进 `ambiguous`，而导入期第 [7b] 条要求 `ambiguous` 为空。
+    # 两根轴：效果轴 `write_local`（一个事务写 `search_requests`，随后 `run_once` 链路再写
+    # `search_requests` + `literature`，与 `WRITE_SETS["A"]` 同一组表）；外部轴 `egress`（真发 HTTP）。
+    # 不给 `run_once` 加 topic 参数：那会把"消费队列"（谁都能调）与"生产队列"（受在途上限约束）合成
+    # 一个动作，想要"只消费"的调用方也会被迫接受"可能新建请求"的副作用。
     ActionSpec(
         "A", "search_literature",
         "按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方",
@@ -82,29 +65,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 要领域全景就显式传 `broad` / `topical`。
                 "mode": {"type": "string", "enum": list(S.SEARCH_MODES)},
                 "description": _S,
-                # 题 3（2026-10-07 所有者授权补 `providers`）：
-                # 这一格由所有者批准、主控代改（本文件是 FC-27 禁改区
-                # [auth-audit]，改动处逐字写明授权来源）。它补的是一条声明面缺口：
-                # 工具面 `search.literature` 早就有 `providers`（一次问多源），
-                # 而动作面没有 —— 编排层（主控按动作参数表派活）因此看不见这个入口。
-                #
-                # 只搬形状、不搬名单：工具面那一格还带 `enum`（可用源名）与
-                # `minItems` / `maxItems`，这里刻意一格都不抄。可用源的真身是
-                # 检索后端注册表（`providers.build_providers` 的名单 + 调用方注入的
-                # 实例），抄一份就等于造出第二个要同步的地方，而它漂了不会报错。
-                # 所以这里只声明 array<string>：type=array、items.type=string，
-                # 与工具面那一格同形。
-                #
-                # 这一对的形状一致没有任何导入期判据看着：两层类型对账
-                # （`capabilities.param_type_divergences_for`）按"工具名最后一段 ==
-                # handler_name"配对，而工具名最后一段是 literature、本动作是
-                # `search_literature` ⇒ 它落进 `_KNOWN_UNMATCHED_ACTIONS`，
-                # 那条对账看不见这一对。所以形状一致由新增的判据钉住
-                # （`tests/test_agent_a_search_providers.py` 里两条：声明面形状，
-                # 以及"只改声明不改实现"必须被 `param_seam_violations` 报出来）。
-                #
-                # "这个源名认不认识"由实现侧在入队之前逐个核（不认识就如实拒绝，
-                # 并把可用名单一起给出来）—— 声明面不替实现面造第二份名单。
+                # 题 3（2026-10-07 所有者授权补 `providers`）：工具面 `search.literature` 早有
+                # `providers`（一次问多源），动作面没有 ⇒ 编排层看不见这个入口。只搬形状、不搬名单：
+                # 工具面那格还带 `enum` / `minItems` / `maxItems`，这里一格都不抄（可用源的真身是
+                # `providers.build_providers` 的名单 + 调用方注入的实例，抄一份就是第二个要同步的地方），
+                # 所以只声明 array<string>。这一对的形状一致没有导入期判据看着（两层类型对账落进
+                # `_KNOWN_UNMATCHED_ACTIONS`）⇒ 由 `tests/test_agent_a_search_providers.py` 两条钉住
+                # （声明面形状 + `param_seam_violations`）。"源名认不认识"由实现侧入队前逐个核，
+                # 声明面不造第二份名单。
                 "providers": _ARR_S,
             },
             required=("topic",),
@@ -130,34 +98,21 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
-    # ---- `walk_citations`（2026-10-15 加；**本文件是 FC-27 禁改区 [auth-audit]**，
-    #      业主裁定逐字：「引文图是用新动作的方式落」；按业主同日口径
-    #      「如果你认为有道理，就允许改，事后签字即可」登记，待 2 名人审。）
-    #
-    # 为什么必须有它（施工记录在 `draft/124` §10.6）：到这一轮之前，我们向 OpenAlex
-    # **只取被引计数**（`cited_by_count` / `referenced_works_count`，用来排序），
-    # **没取** `referenced_works`（这一篇**引了谁**）与 `cited_by_api_url`（**谁引了它**）
-    # ⇒ "顺着引文往下/往上走"这件事**结构上做不了**。而业主点名的那个任务
-    # （"更短证明路径"）恰恰是**引文图上的**问题：更短的路线通常在奠基论文的参考文献里，
-    # 或者在后续引用里（谁后来简化了某一步）。纯关键词检索拿不到这个结构。
-    # 实测（`temp/_probe_citation_walk.py`，$0）：源论文 `10.1098/rsos.181055`
-    # 自己引了 **123** 篇，`cites:W2883591297` 前推 **29** 条，
-    # 而且前推那 5 条**全是 `is_oa=True` 且带 `best_oa_location`** ——
-    # 引文图这一侧"顺手把全文也拿到"的比例比关键词检索高得多。
-    #
-    # 两根轴逐条读出（不是照抄工具层）：
-    #   - 效果轴 `read`：实现只**读**（取一次源记录 + 一次 works 查询），一行都不落。
-    #     要不要登记由调用方走既有的 `search.dedup_check` / `search.register` ——
-    #     **刻意不给它写集**：登记是判断，判断要留痕，而本动作不做那个判断
-    #     （判重在本模块只有一处实现，见 `tools/search_tools.py` 里那条注释）。
-    #   - 外部轴 `egress`：两个方向各发一次 OpenAlex 请求。
+    # ---- `walk_citations`（2026-10-15 加；本文件是 FC-27 禁改区 [auth-audit]，业主裁定逐字
+    #      「引文图是用新动作的方式落」，按「有道理就允许改、事后签字」登记，待 2 名人审）
+    # 为什么必须有它（`draft/124` §10.6）：这一轮之前只取 `cited_by_count` / `referenced_works_count`
+    # （排序用），没取 `referenced_works` 与 `cited_by_api_url` ⇒ "顺着引文走"结构上做不了，而业主点名的
+    # "更短证明路径"正是引文图上的问题（更短的路线通常在奠基论文的参考文献里或后续引用里）。实测
+    # （`temp/_probe_citation_walk.py`，$0）：源论文 `10.1098/rsos.181055` 引了 123 篇、前推 29 条。
+    # 两根轴：效果轴 `read`（只读、一行都不落；登记走既有 `search.dedup_check` / `search.register`，
+    # 判重只有一处实现）；外部轴 `egress`（两个方向各发一次 OpenAlex 请求）。
     ActionSpec(
         "A", "walk_citations",
         "由一篇已登记的文献出发走一步引文图：回溯=它引了谁，前推=谁引了它",
         _obj(
             {
                 "lit_id": {**_S, "minLength": 1, "maxLength": 40},
-                # 只声明**形状**、不抄**词表**（与同文件 `search_literature` 的
+                # 只声明「形状」、不抄「词表」（与同文件 `search_literature` 的
                 # `providers` 那一条同一个理由）：可用取值是 `backward` / `forward`，
                 # 真身在实现与工具面（`tools/search_tools.py` 的 `ToolSpec`）——
                 # 在这里再抄一份就是造出第二个要同步的地方，而它漂了不会报错。
@@ -178,21 +133,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
-    # ---- `ingest_local`（2026-10-02 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
-    #
-    # 为什么必须有它（`draft/37` §44.4 的真机读数，不是设计洁癖）：主控只能
-    # `conductor.summon` **动作**，而"把盘上这个目录里的论文登记进台账"原先只有
-    # **工具**（`search.ingest_local`）—— 于是盘上有论文、台账里没有它，
-    # 后面每一跳（B 登记命题 → G 建我方稿件 → H 审）都因为没有 `lit_id` 而落空。
-    # 那趟真机的断点被主控自己定位到这一格上，逐字写在它的交付说明里。
-    #
-    # 两根轴逐条读出（不是照抄工具层）：
-    #   - 效果轴 `write_local`：实现（`AgentA.ingest_local`）走
-    #     `locallib.ingest_directory`，在一个事务里写 `literature`（+ 需要时写
-    #     `search_requests` 的登记行）—— 与 `WRITE_SETS["A"]` 登记的两张表同一组。
-    #   - 外部轴 `none`：**不联网**（与上面两个 `egress` 的动作不同）。
-    #     这一格是刻意分开的：把这件本地下载的活算成"要出网"，
-    #     会让只读/离线场景把它整条划掉 —— 而它恰恰是离线场景最需要的那一件。
+    # ---- `ingest_local`（2026-10-02 加；本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审）
+    # 为什么必须有它（`draft/37` §44.4 的真机读数）：主控只能 `conductor.summon` 「动作」，而登记盘上
+    # 已有文件原先只有工具（`search.ingest_local`）⇒ 盘上有论文、台账里没有它，后面每一跳（B 登记
+    # 命题 → G 建我方稿件 → H 审）都因为没有 `lit_id` 而落空。
+    # 两根轴：效果轴 `write_local`（走 `locallib.ingest_directory`，一个事务写 `literature`，需要时写
+    # `search_requests` 的登记行）；外部轴 `none`（不联网 —— 刻意与那两个 `egress` 动作分开：算成"要
+    # 出网"会让只读/离线场景把它整条划掉，而它恰恰是离线场景最需要的那一件）。
     ActionSpec(
         "A", "ingest_local",
         "把一个本地目录里的文件登记成 literature 行（按内容 sha256 幂等；不联网）",
@@ -211,28 +158,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="none",
     ),
 
-    # ---- `shelf_search`（2026-10-06 加，J-53 / 裁决 2 族 1；**本文件是 FC-27 禁改区，
-    # 本次改动已登记基线待 2 名人审**）
-    #
-    # 为什么必须有它：`search.shelf` 与 `search.local` 两件工具在 A/C/H 的工具面上，
-    # 而动作面里一个都没有 —— 主控只能 `conductor.summon` 动作，于是"在本地书架上找一找"
-    # 没有可派的入口（与上面 `ingest_local` 同一格病：工具层通、编排层不通 ⇒
-    # 盘上有全文，编排层却看不见它）。它服务的是**不联网也能推进**的那条路：
-    # 全文已经在盘上的文献本身就是可引用的来源（`#1` 那一类"无意义/重复的外出"的正解之一）。
-    #
-    # 两根轴逐条读出（不是照抄工具层）：
-    #   - 效果轴 `read`：实现（`AgentA.shelf_search`）只调 `search.shelf`（必调）与
-    #     `search.local`（给了 `query` 才调）这两件**只读**工具，自己不写任何表
-    #     —— 所以它是一条真只读的动作（与上面三条 `write_local` 不同）。
-    #   - 外部轴 `none`：两件工具都**不联网**（与 `run_once`/`run`/`search_literature`
-    #     那三条 `egress` 刻意分开）：离线场景最需要的那一件，不该被"要出网"整条划掉。
-    #
-    # 两层对账：工具名的最后一段是 `shelf` / `local`，与本动作的 `handler_name`
-    # （`shelf_search`）对不上 ⇒ 按唯一性约定它诚实地落进 `unmatched`，
-    # 已登记进 `capabilities._KNOWN_UNMATCHED_ACTIONS`（与 `search_literature` 同族）。
-    # 为什么不给它凑一个同名工具：那两件工具是**通用只读检索**（A/C/H 都能调），
-    # 而本动作是"先列书架清单、再按需取逐字摘录"的一次编排 —— 把两者配成一对
-    # 会让两层类型对账去比两件不同的事（比 `search.local` 的 `max_books` 与本动作的参数）。
+    # ---- `shelf_search`（2026-10-06 加，J-53 / 裁决 2 族 1；本文件是 FC-27 禁改区，本次改动已登记
+    #      基线待 2 名人审）
+    # 为什么必须有它：`search.shelf` 与 `search.local` 在 A/C/H 的工具面上，动作面里一个都没有 ⇒ 主控
+    # 派不出"在本地书架上找一找"（与 `ingest_local` 同一格病：工具层通、编排层不通）。它服务的是
+    # 「不联网也能推进」那条路（`#1` 那一类"无意义/重复的外出"的正解之一）。
+    # 两根轴：效果轴 `read`（只调那两件只读工具，自己不写表）；外部轴 `none`（都不联网）。
+    # 两层对账：工具名最后一段 `shelf` / `local` 与 `handler_name`（`shelf_search`）对不上 ⇒ 诚实地落进
+    # `unmatched`，已登记进 `capabilities._KNOWN_UNMATCHED_ACTIONS`（与 `search_literature` 同族）。
     ActionSpec(
         "A", "shelf_search",
         "在本地书架上找文献（不联网）：列出全文在盘的（`search.shelf`），"
@@ -280,7 +213,7 @@ SPEC = AgentSpec(
             # 【FC-27 禁改区 · 2026-10-20 业主口径，待 2 名人审】待新增文献列表：
             # 一次检索至多入库 10 篇 / 每委托从空开始 / 可撤可补可追加 / 重叠高无新内容拒收 /
             # 只拿到 3 篇也逐篇审 / 一键迁移后清空 / 报告两块都要写。
-            # 刻意写进**既有条目**（boundary）而不是新开一节：它与上面几条是同一种东西
+            # 刻意写进「既有条目」（boundary）而不是新开一节：它与上面几条是同一种东西
             # （A 在登记文献这件事上不许做的事），分散到别处会让"登记"的口径裂成两处。
             # 长度 97 字（业主口径 ≤100 字）；"不写步骤与命令"同样按口径办。
             "一次检索至多入库10篇，要精选：候选先进待新增列表（每委托从空开始），"
@@ -294,9 +227,9 @@ SPEC = AgentSpec(
             "取回的这批如果**要被引用成断言**（报告里「这条结论凭什么」要追到出处），**派 B 整理**：概念行与关系行"
             "（`relations` 的 `kind`/`quote`）；你自己不建概念网，也别把一批文献直接扔给下一环。",
             # 2026-10-21 复核：判不了（缺「文内定位结论」字段），故保留。
-            #   这一句说的是 R14 的**定位轴**（matched ∈ exact / partial / none ＋ 页码 ＋ 片段 ＋
-            #   「最接近的三段」），而台账里**没有这一格**：`schema.py:200` 逐字写它「由 A 在回报里
-            #   给出…**不落本栏**」。`literature.matched` 是**另一根轴**（身份：exact/partial/mismatch），
+            #   这一句说的是 R14 的「定位轴」（matched ∈ exact / partial / none ＋ 页码 ＋ 片段 ＋
+            #   「最接近的三段」），而台账里「没有这一格」：`schema.py:200` 逐字写它「由 A 在回报里
+            #   给出…「不落本栏」」。`literature.matched` 是「另一根轴」（身份：exact/partial/mismatch），
             #   往它写 `none` 会被 `Literature.validate()` 拒（实测 ValueError）。
             #   ⇒ 没有任何写入期闸能拿「报了 none」去比「写了候选」（实测：`outcome="no_results"`
             #   而 `result_lit_ids` 非空的 `search_requests` 行照样通过校验）。
@@ -339,8 +272,8 @@ SPEC = AgentSpec(
         '眼睛': '读的来源包括元数据与落地页：同一篇文献在不同库里不一致时，先记差异再决定采信谁。',
         '手': '登记文献行、把下载落在本地、把失败写进请求行的错误字段；不抽概念（那是 B）。',
         '脑子': "把'我要找的是哪一类东西'想清楚，再决定查什么、怎么判相关、什么时候收手。",
-        # 2026-10-21：原来那句是**劝告**（「你是把外部材料搬进来的人，不是替它们下定义的人」），
-        # 现改成**陈述结构**：这条义务有结构性闸（A 的动作面没有 register_statement/register_conjecture、
+        # 2026-10-21：原来那句是「劝告」（「你是把外部材料搬进来的人，不是替它们下定义的人」），
+        # 现改成「陈述结构」：这条义务有结构性闸（A 的动作面没有 register_statement/register_conjecture、
         # 写面只有 literature/search_requests ⇒ 想造概念会得到 unknown_action）。
         # 这一行本身删不掉：判据 test_core_faculties_..._denied_ones_are_written_as_forbidden 要求
         # 「denied 的官能必须写明理由，并落在『结构上不许』那一列」。

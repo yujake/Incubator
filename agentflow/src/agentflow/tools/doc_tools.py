@@ -345,9 +345,9 @@ _FINDING_KIND_OF_CODE: dict[str, str] = {
     "incomplete_numeric_evidence": "unsupported_claim",
     "missing_disclaimer": "unsupported_claim",
     "lifecycle_incomplete": "inconsistent_number",
-    # ⚠️ **2026-10-15 补登记**：`uncontrolled_disclaimer` 是 `claimanatomy` 在
+    # ⚠️ 「2026-10-15 补登记」：`uncontrolled_disclaimer` 是 `claimanatomy` 在
     # 2026-10-13（无 Lean T2 的真机）新加的 code，它登记进了 `CLAIM_FAMILY_BY_CODE`
-    # （族 5）与 `test_lean_switch`，却**漏了这里** ⇒ 落据那一步抛 `KeyError`，
+    # （族 5）与 `test_lean_switch`，却「漏了这里」 ⇒ 落据那一步抛 `KeyError`，
     # 于是 `build_document` 整条失败（G 渲染不出稿件），而它在盘上看起来
     # 只是"G 拒绝了这次调用"。
     #
@@ -358,7 +358,7 @@ _FINDING_KIND_OF_CODE: dict[str, str] = {
     # "声明不对"读成"读不懂"，而下游按 kind 分档 ⇒ 分错档。
     #
     # 为什么这条注释要写这么长：这张表的设计是"未登记就当场炸"，
-    # 所以它的每一次漏登记都是一次**可观测的故障**；而这次的教训是
+    # 所以它的每一次漏登记都是一次「可观测的故障」；而这次的教训是
     # "炸在谁身上"—— 它炸在 G 的渲染上，不在判据自己身上。
     # 现在的防线是 `tests/test_claimanatomy.py` 里那条按 `CLAIM_FAMILY_BY_CODE`
     # 逐 code 对账的判据（不再靠人记得同步两张表）。
@@ -2132,9 +2132,9 @@ def guard_result(fn: Any) -> Any:
     # ⚠️ 2026-10-15 补齐：这五格实跑都在返回里，而声明里没有。
     # 为什么这件事要紧（`draft/124` §15.2 的更正）：`returns` 会拼进
     # function-calling 的 `description`（`tools/base.py:721`：`summary + "\n返回：" + returns`）
-    # ⇒ **模型看得到**。而它此前看不到 `status_axis` / `undecided_reason` ——
-    # 那两格**正是三态**（"这条没查成"与"这条查过没问题"靠它们分开）。
-    # 模型不知道存在的字段，它不会用；那样三态纪律在**模型这一侧**又折回去了。
+    # ⇒ 「模型看得到」。而它此前看不到 `status_axis` / `undecided_reason` ——
+    # 那两格「正是三态」（"这条没查成"与"这条查过没问题"靠它们分开）。
+    # 模型不知道存在的字段，它不会用；那样三态纪律在「模型这一侧」又折回去了。
     returns="{'checked','claim_id','ok','findings','error_count','warning_count',"
             "'checked_fields','decided','revision_hash','status_axis','undecided_reason'}",
     tags=("document", "gate"),
@@ -2271,14 +2271,14 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
                     },
                 },
             },
-            # ⚠️ **2026-10-15 补**：这一格此前是光秃秃的 `{"type":"array","items":{"type":"object"}}`
-    # —— 没有说明、没有 `properties`。后果是**形状不可达**：
+            # ⚠️ 「2026-10-15 补」：这一格此前是光秃秃的 `{"type":"array","items":{"type":"object"}}`
+    # —— 没有说明、没有 `properties`。后果是「形状不可达」：
     #   · 模型照它填，只能猜每个元素是什么；
     #   · 被拒之后框架会给"完整参数表"（`agent_loop._param_table`），
-    #     而那张表**也是照 schema 打的** ⇒ 它同样只会说 "sections: array"。
-    # 真机读数（九趟 T5 的 `events.jsonl`）：因它的形状被拒 **11 次**
+    #     而那张表「也是照 schema 打的」 ⇒ 它同样只会说 "sections: array"。
+    # 真机读数（九趟 T5 的 `events.jsonl`）：因它的形状被拒 「11 次」
     # （"`sections.[N]` 必须是对象，收到 string" 6 次 ＋ "`sections[N]` 必须是含 `heading` 的对象" 5 次）。
-    # 紧邻的 `claims` 那一格**有**详尽说明（还记着"T1 实测在这里连拒 7 次"）⇒ 这里当年是**漏了**。
+    # 紧邻的 `claims` 那一格「有」详尽说明（还记着"T1 实测在这里连拒 7 次"）⇒ 这里当年是「漏了」。
     "sections": {
         "type": "array",
         "description": ("正文分节：**每个元素是一个对象** `{heading, body}`"
@@ -2391,7 +2391,7 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
     roles=_WRITER_ROLES,
     # 键名从一个真实调用读出（`register_dependency`）：落库后的 dependencies 行
     # （`S.Dependency` 全字段，2026-10-09 加 `source_stmt_id` 与 `path_group` 后 14 个；
-    # 2026-10-15 补 `source_claim_id` / `source_doc_id` —— 它们是"这条依赖的**来源**"
+    # 2026-10-15 补 `source_claim_id` / `source_doc_id` —— 它们是"这条依赖的「来源」"
     # 那一族的两格，此前只写在声明之外，而 `returns` 会进模型看得到的 `description`）。
     returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','source_stmt_id','source_claim_id','source_doc_id','path_group','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
     tags=("document", "dependency", "write"),
@@ -2481,7 +2481,7 @@ def _resolve_project_root(workspace: Path | None, project: str) -> tuple[Path | 
     if workspace is None:
         return None, "没接线：装配时既没给 workspace_root 也没给 store ⇒ 不知道该相对谁解析 project"
     root = workspace.resolve()
-    # 2026-10-17（复跑 T1 暴露的缺陷 61）：**工作区本身就是项目根**时，角色只知道项目叫
+    # 2026-10-17（复跑 T1 暴露的缺陷 61）：「工作区本身就是项目根」时，角色只知道项目叫
     # `t1s`，会传 `project="t1s"`；原来拼成 `projects/t1s/t1s` ⇒ "项目目录不在盘上"。
     # 接受三种写法：`.`、工作区自己的名字、以及相对 `projects/` 的路径。
     if raw in (".", root.name):
@@ -2506,7 +2506,7 @@ def _paper_root(workspace: Path | None, project: str) -> Any:
 def _paper_compile(workspace: Path | None, project: str, timeout_sec: float) -> Any:
     """`doc.paper_compile`：把 `<项目根>/out/paper/main.tex` 编成 `main.pdf`（框架内置编译）。
 
-    它**不跑项目脚本**。旧路那一整套（`paper_render` / `paper_anchor` / `paper_build` /
+    它「不跑项目脚本」。旧路那一整套（`paper_render` / `paper_anchor` / `paper_build` /
     `paper_state` 四条工具 + `G.paper_package` 动作）随业主 2026-10-13 的裁定退场：
     「paper_package 里那些东西都是古早废案了，我们要智能体写文章」——
     正文由智能体自己写进 `out/paper/main.tex`，框架只负责把它编成 PDF 并留下回执

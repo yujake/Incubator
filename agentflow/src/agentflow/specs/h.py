@@ -63,22 +63,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         side_effect="read", handler_name="list_findings",
     ),
 
-    # `D-5`：这个方法此前不在能力表里，而它在工具层与只读例外表里都被承认：
-    # `tools/base.READONLY_CALL_EXCEPTIONS['H']` 有 `review.report`，
-    # `agent_h._H_WRITABLE_TOOLS` 由那张表派生，`agent_h.py::AgentH.review_report`
-    # 的实现是 `self._writer("review.report", ...)`。后果实测过：
-    # `policy.check_action('H','review_report')` 返回 `unknown_action` ——
-    # 主控没有办法让 H 产出审校报告，而 `draft/17` §8.4 把它列为 H 的必产项。
-    #
-    # 为什么 `side_effect="write_local"` 而不是 `read`：它转发的是
-    # `review.report`，那个工具把 markdown 报告落盘（`TOOL_WRITE_SETS["review.report"]`
-    # 是空集 —— 它不碰任何数据表，但它确实写文件）。能力层的这一格描述的是
-    # "会不会改我们拥有的东西"，落盘算写。`external` 保持 `none`：
-    # 它不出网、不起进程。
-    #
-    # 为什么 `handler_name="review_report"` 与 `params` 逐字抄方法签名：
-    # `assert_capabilities` 第 [2] 条会 `getattr` 核它真的存在（编造动作名
-    # 在导入期就炸），而参数表是主控构造调用时唯一机器可读的依据。
+    # `D-5`：这个方法此前不在能力表里，而工具层与只读例外表都承认它：
+    # `tools/base.READONLY_CALL_EXCEPTIONS['H']` 有 `review.report`，`agent_h._H_WRITABLE_TOOLS` 由那张表
+    # 派生。后果实测过：`policy.check_action('H','review_report')` 返回 `unknown_action` —— 主控没法让 H
+    # 产出审校报告，而 `draft/17` §8.4 把它列为 H 的必产项。
+    # 为什么 `side_effect="write_local"` 而不是 `read`：它转发 `review.report`，那个工具把 markdown 报告
+    # 落盘（`TOOL_WRITE_SETS["review.report"]` 是空集 —— 不碰数据表，但确实写文件）；`external` 保持
+    # `none`。`handler_name` 与 `params` 逐字抄方法签名：`assert_capabilities` 第 [2] 条会 `getattr` 核它
+    # 真的存在，而参数表是主控构造调用时唯一机器可读的依据。
     ActionSpec(
         "H", "judge_quote_semantics",
         "判一条引文与来源**是不是说同一件事**（业主 2026-10-14：「回验不应该是十分呆板的"
@@ -127,7 +119,7 @@ SPEC = AgentSpec(
             "审校不通过时要给出可操作的修订点，而不是笼统地说质量不行。",
             "采信规则（§16 P2）：你采信一条命题的标准只有两条 —— 正文与 B 的台账**逐字一致**（quote_verified 为 true 且文本可比对），以及 E 给过背书（experiments 行 evidence_kind=proof）。两条都不在，你只能说「这条我采信不了」，不许自己读一遍证明就判它对。**例外只有一档，且必须先看 TOOLCHAIN_FACTS 第一行**（业主 2026-10-12 的开关）：那一行说「Lean 形式化：已关闭」时，`evidence_kind=proof` 这一档本会话结构上产不出来，于是第二条背书换成 **V 逐行走查过的证明**（`statements` 表的 `proof_text` 列 非空 且 `verifications` 表里有这条命题的行）—— 那时你采信的是「有人逐行读过并签了字」，不是「检查器核过」；两者在强度上不同，你在结论与 findings 里必须写清用的是哪一档。",
             # 2026-10-17（Lean 审计 S5）：采信规则原来只有两档（关了 → 采信 V；开着 → 要 proof），
-            # 但「开关开着、机器上却没有检查器」这一档**无路可走**。补上第三档。
+            # 但「开关开着、机器上却没有检查器」这一档「无路可走」。补上第三档。
             "**「开着但没有检查器」这一档**：先看 `TOOLCHAIN_FACTS` 第一行的开关状态；"
             "开关**开着**而那一段报「没有任何受支持的检查器」或「探测没做成」时，按**「没查」**处置 —— "
             "采信 V 的逐行签字，并在 findings 里写一条**环境缺口**（`no_backend` / `tool_crashed`）；"
@@ -138,7 +130,7 @@ SPEC = AgentSpec(
         # 2026-10-18（业主逐条定的「论文体例」）：H 的审稿判据从"只判说清楚没有"扩到
         # "按体例逐条打勾"。此前 `policy=()`，于是 G 交出一份台账稿（内部编号铺满、
         # 没有定理环境、长度靠清单撑）时，H 手上没有任何一条判据说它不合格 ——
-        # 机器可判的四条与正文禁令全部缺失。这五条只管**论文**这一档（`out/paper/main.tex`），
+        # 机器可判的四条与正文禁令全部缺失。这五条只管「论文」这一档（`out/paper/main.tex`），
         # 不改上面边界里那些台账侧的采信规则。
         policy=(
             "**审稿清单（机器可判四条，逐条打勾；答不上就是没审）**：① **proof 环境数 ≥ 6** —— 数 `\\begin{proof}…\\end{proof}` 的个数，"
@@ -194,7 +186,7 @@ SPEC = AgentSpec(
     local_notes={
         '能思辨': '强度与证据相称、论证不留跳步：把不确定的话写成确定的话是你最该抓的。',
         '有品味': "用'一个不在场的人能不能读懂'来判：记号有定义、指代明确、体例一致。",
-        # 2026-10-21 减负：这一条**想删但没删** —— 与 C 那一条同源
+        # 2026-10-21 减负：这一条「想删但没删」 —— 与 C 那一条同源
         # （`tests/test_agent_prompts.py::test_read_only_roles_do_not_advertise_hands_on_the_data_plane`
         # 守的就是这句话本身）。
         '手': '数据面写是结构禁止的；发现问题落 findings，再按性质找 A（引文）/ E（形式化或实验）核实或请 G 修订。',

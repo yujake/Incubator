@@ -30,7 +30,7 @@ import json
 from ._support import Any, Mapping, S, Sequence, _cfg_int, tool  # noqa: F401
 # 历史概念行上那个哨兵（唯一出处是 `migrate_concepts.PRIMITIVE_PROOF`）。
 # 读侧仍认它（不动历史）：迁移折出来的老概念、以及 2026-10-21 之前写进来的那些行，
-# `proof_text` 就是这一个值。而**写入侧**已经不再写它
+# `proof_text` 就是这一个值。而「写入侧」已经不再写它
 # （`conceptrows.concept_statement` 那一格永远是空的）—— 所以新概念"是不是根"
 # 改按"定义在不在"判。
 from ..migrate_concepts import PRIMITIVE_PROOF as CONCEPT_PRIMITIVE_MARKER  # noqa: E402
@@ -96,9 +96,9 @@ class _ProofChain:
             warnings.append("有 " + str(sum(1 for g in groups_out if not g["reached"]))
                             + " 组没走到根（悬空边 / 超深度 / 依赖没写，逐组见 payload）")
         truncated = any(g.get("truncated") for g in groups_out)
-        # ⚠️ **2026-10-17**：**无依赖的 target 自己也要判一次根** ——
+        # ⚠️ 「2026-10-17」：「无依赖的 target 自己也要判一次根」 ——
         # 原实现只 walk 依赖组 ⇒ 一条"无前提自证定理/原始概念"被读成
-        # "0 组可选路径，没有一组走到根"，而按本仓口径它**本来就是根**（链闭合）。
+        # "0 组可选路径，没有一组走到根"，而按本仓口径它「本来就是根」（链闭合）。
         target_is_root, target_why = graph.is_root(f"stmt:{node['stmt_id']}")
         if not groups_out:
             if target_is_root:
@@ -217,10 +217,10 @@ class _DepGraph:
         return "", ""
 
     def _verified_ok(self, stmt_id: str) -> bool:
-        """这条命题的**审核台账**里有没有"成立"。
+        """这条命题的「审核台账」里有没有"成立"。
 
         台账是 `verifications/<命题号>.jsonl`（V 每次审核追加一行，见
-        `agentflow/verifications.py`）。读不到 ⇒ **False**（"没读到"不等于"审过了"）；
+        `agentflow/verifications.py`）。读不到 ⇒ 「False」（"没读到"不等于"审过了"）；
         解析不动 ⇒ 也在 False 这一侧 —— 三态纪律：宁可说"没审核"，也不许放一条
         没审过的命题进定理库当根。
         """
@@ -253,10 +253,10 @@ class _DepGraph:
             return False, "被依赖的那条命题不在册"
         if not self.groups_of(bare):
             if str(row.get("kind") or "") == "concept":
-                # 概念是**定义性的根**（2026-10-21，本批缺陷一的读侧）：它的"证明"那一格
+                # 概念是「定义性的根」（2026-10-21，本批缺陷一的读侧）：它的"证明"那一格
                 # 本来就不该有东西。此前这里要求 `proof_text == "concept:primitive"`
                 # 才算根 —— 那个哨兵正是 mp3 那 1143 条污染行的来源（写入侧现已不写它），
-                # 于是新写的概念会**不再是根**，经概念的依赖链一律读成"依赖没写"。
+                # 于是新写的概念会「不再是根」，经概念的依赖链一律读成"依赖没写"。
                 # 现在的口径与写入侧一致：概念行有定义 ⇒ 根；历史行带哨兵 ⇒ 照旧是根
                 # （不动历史）；定义还没到的待补行（`pending_definition`）⇒ 不是根，
                 # 理由说明"定义还没到"，而不是"缺证明"。
@@ -266,10 +266,10 @@ class _DepGraph:
                 return False, "概念的定义还没到（pending_definition）⇒ 这一条还不是根"
             if str(row.get("evidence_kind") or "") in _PROOF_KINDS:
                 return True, ""
-            # ⚠️ **2026-10-17 业主口径**：*"自证定理在审核后要能进定理证明库"* ⇒
-            # 一条 `own_result` 的命题，只要**审核台账里记着"成立"**，它就已经是
-            # 本库里的**已证定理** ⇒ 它**可以当根**（后面的定理能引它）。
-            # 没审核过的同形命题**不许**当根（三态不许折平）。
+            # ⚠️ 「2026-10-17 业主口径」：*"自证定理在审核后要能进定理证明库"* ⇒
+            # 一条 `own_result` 的命题，只要「审核台账里记着"成立"」，它就已经是
+            # 本库里的「已证定理」 ⇒ 它「可以当根」（后面的定理能引它）。
+            # 没审核过的同形命题「不许」当根（三态不许折平）。
             if str(row.get("origin") or "") == "own_result" and self._verified_ok(bare):
                 return True, ""
             return False, "依赖没写（没有边，也没有 proof 证据；也不是经审核的自证定理）"

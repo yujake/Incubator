@@ -201,11 +201,11 @@ class _RegisterStatement:
         evidence_kind: str = "cross_check",
         quote_verified: bool | None = None,
         quote_reason: str = "",
-        #: 这条引文是**怎么**回验通过的（`schema.QUOTE_MODES`：`verbatim` 逐字命中 /
+        #: 这条引文是「怎么」回验通过的（`schema.QUOTE_MODES`：`verbatim` 逐字命中 /
         #: `semantic` 语义相同 —— 业主 2026-10-14：「回验……保持语义相同即可」）。
-        #: 不给就按历史行读（`True` ⇒ 逐字那一档），但**新写方应当说清方式**。
+        #: 不给就按历史行读（`True` ⇒ 逐字那一档），但「新写方应当说清方式」。
         quote_mode: str = "",
-        #: 语义那一档的**证据**（业主 2026-10-14：「语义那一档必须留证据」）：
+        #: 语义那一档的「证据」（业主 2026-10-14：「语义那一档必须留证据」）：
         #: `quote_span` 是来源里那一段逐字正文，`quote_call_sha256` 是那次语义判定的
         #: 调用记录（H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`）。
         #: 标了 `quote_mode="semantic"` 而缺这两样 ⇒ `Statement.validate()` 当场拒。
@@ -234,13 +234,13 @@ class _RegisterStatement:
                            f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，收到 {origin!r}")
         # ---- 概念行的两处口径（2026-10-21，本批缺陷一的写入侧） --------------------
         #
-        # 真机读数（`projects/mp3/data/statements.json`）：1143 条概念行、**1142 条带
-        # `source_lit_id`**（术语确实出自文献），而 `origin` 一律 `own_result` ——
+        # 真机读数（`projects/mp3/data/statements.json`）：1143 条概念行、「1142 条带
+        # `source_lit_id`」（术语确实出自文献），而 `origin` 一律 `own_result` ——
         # 文献里来的术语被记成了"我们自己的结果"；同时每一条都带着
         # `proof_text="concept:primitive"`，把"有没有证明"的读数全顶高。
         #
         # 两件事各有一个出口，都不许静默：
-        # ② `origin`：概念行走**受控集合**，`own_result` 在这条动作上直接拒 ——
+        # ② `origin`：概念行走「受控集合」，`own_result` 在这条动作上直接拒 ——
         #    这条动作没有"声明自己造"的参数（`specs/b.py` 的声明面是冻结的），
         #    所以"确实是自己定义的新概念"走秘书载荷的 `self_authored` 那一档，
         #    而不是在这里把文献术语标成自己的结果；
@@ -272,10 +272,10 @@ class _RegisterStatement:
             return _refuse("bad_evidence_kind",
                            f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
                            "（它是证据**强度**，不是来源；来源走 source_lit_id）")
-        # ---- 2026-10-16（亲测 B 时加的）：**把缺的出处字段一次说齐** --------------
+        # ---- 2026-10-16（亲测 B 时加的）：「把缺的出处字段一次说齐」 --------------
         # 这一格原本是"一次只点名一条"（实测要走 bad_origin → missing_quote_reason →
-        # missing_page_range **三轮**才凑齐）。业主口径："真实智能体也会在这里困惑并
-        # 浪费 token" ⇒ 保留每条的 kind 与原文案不动，只在拒信里补一行**整份清单**。
+        # missing_page_range 「三轮」才凑齐）。业主口径："真实智能体也会在这里困惑并
+        # 浪费 token" ⇒ 保留每条的 kind 与原文案不动，只在拒信里补一行「整份清单」。
         _page_now = dict(page_norm)
         _missing: list[str] = []
         if str(origin) == "external_lit" and not str(source_lit_id or "").strip():
@@ -406,7 +406,7 @@ class _RegisterStatement:
         }
         written = sec.record_statement(payload, role="B")
         if written.get("upgraded") and not written.get("created"):
-            # 同一份内容再交一次、这一回带了 `proof_review` 的凭据 ⇒ 秘书**改那一行**
+            # 同一份内容再交一次、这一回带了 `proof_review` 的凭据 ⇒ 秘书「改那一行」
             # （不新建）。这是 `evidence_kind` 从弱档走到 `proof_review` 的唯一一条正路：
             # 通用写口 `table.update("statements")` 已被 `store.direct_write_refusal` 拒
             # （它能同时改 bits / proof_text / quote_verified，而没有任何东西核过那些字段）。
@@ -459,7 +459,7 @@ class _RegisterStatement:
                 "deps_unmappable": list(written.get("deps_unmappable") or []),
                 "pending_definitions": pending_defs,
                 #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
-                #: 空串 = 没丢过。**留痕**是必须的 —— 静默丢会让调用方以为
+                #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为
                 #: "概念也能带证明"，下一次还这么交。
                 "proof_text_dropped": proof_text_dropped,
                 # F-05：缺证明这一档不再拒收，但绝不静默接受 ——

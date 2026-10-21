@@ -88,68 +88,14 @@ VOCAB_DEFINITION_FILES: tuple[str, ...] = ("agentflow/schema.py", "agentflow/cla
 MIN_VOCABS = 3
 MIN_PRODUCER_LINES = 50
 
-#: 已登记为"预留"的取值：`{(词表名, 取值): 理由}`。
-#:
-#: ## 为什么这张表存在
-#:
-#: `P-23` 要求审计输出分两栏（"已登记为预留" / "无人认领"）并且不许合并 ——
-#: 合并等于静默豁免：一个"没人认领的死取值"与一个"写明为什么留着"的取值会被读成同一件事。
-#:
-#: 往这张表里加一条是人的动作：它的语义是"我知道这个取值现在没有产出点，我决定留着，
-#: 理由是这个"。所以本工具只提供位置（登记表 + 两栏输出），不替谁填 ——
-#: 与"只出 info 不做成红灯"是同一条纪律：不替人做口径裁定。
-#:
-#: ## `P-22` / `P-23` 的裁定（选项 c：登记为预留）
-#:
-#: 登记表只能有一处，就是这里。 不许在 `schema.py` 里另写一份"预留"标记：
-#: 同一件事两个落点必然漂移，而漂移的表现是"审计说预留、schema 说没有"（FC-03）。
-#:
-#: 为什么选 c 而不是另外两条路（原裁定理由照抄，`P-23` 自己推荐 c）：
-#:
-#: - 最便宜且不撒谎。删词表值（选项 b）要动 `schema.py` 且带"追溯性"争议；
-#:   补产出（选项 a）对 `quote_mismatch` 不是接线而是新能力 ——
-#:   实测：`quoteverify.check_quote` 的 `reason` 取值只有 `no_text_layer` / `empty_quote` /
-#:   `substring_match` / `substring_match_outside_declared_range` / `substring_match_fulltext` /
-#:   `not_found` / `not_found_page_unknown` / `empty_page_range`（末一档是 `R-08` = B1 候选 C
-#:   加的：声明的窗口是空的 ⇒ 判"没法判"，不许折成 `not_found`）—— 根本没有
-#:   "找到了但不一样"这一档。
-#:   所以 (a) 会正好撞上 `P-22` 自己的负控（"只写了名字、没有 code 能算出它 ⇒
-#:   审计必须仍然报死取值"）。
-#:
-#: ## 登记：`closing` 验收读数的**行级码**（`draft/52` CC-02 裁定 (a)）
-#:
-#: 它们不是词表常量，而是 `closing._check_acceptance` 里 `Finding("acceptance", <code>, …)`
-#: 的取值 —— 列在这里，是因为 CC-02 把"一行读不懂"从"整表 unknown"改成**行级**记账，
-#: 新增了两个码（旧的那些一个字没改，历史读数照旧能对）：
-#:
-#: - `acceptance_row_unreadable` —— 这一行形状/字段类型读不懂（非对象 / `na` 非布尔 /
-#:   `min`·`max` 非整数 / `id` 缺失或重复）；
-#: - `acceptance_rows_unreadable` —— 汇总读数（有几行读不懂 ⇒ 整格 `unknown`）。
-#:
-#: 与它们同族的旧码（**未改**）：`acceptance_unreadable`（结构级：顶层不是 JSON/数组）、
-#: `acceptance_leg_unreadable`（台账读不到）、`acceptance_unknown_kind`、
-#: `acceptance_na_without_reason`、`acceptance_chain_unreadable`、`acceptance_all_na`。
-#: 这些码共用一个纪律：**`unknown` 不许读成 `pass`**（见 `closing.acceptance_row_state`）。
-#:
-#: ## 一处推翻：`FINDING_KINDS.quote_mismatch` 改走 (b)（`E-10` 裁定，2026-09-27）
-#:
-#: 上面那条"最便宜且不撒谎"的取舍对其余取值仍然成立，但
-#: `FINDING_KINDS.quote_mismatch` 这一条被单独重裁为 (b) 删词表值：
-#: 它描述的是一个做不到的承诺（词表说会报"引文不符"，实现只给 `not_found`），
-#: 而"登记为预留"对一条假承诺不是最便宜的处置 —— 假承诺留在词表里，
-#: 读者照样会以为系统会报"引文不符"。所以那个取值已从
-#: `schema.FINDING_KINDS` 删除，本登记表里的那一条同时删除
-#: （登记一个不存在的取值就是"登记已过期"，会被 `R011` 打进栏一附）。
-#: 想恢复这个能力，请作为新条目提出（附阈值标定方案）—— 不许把值加回来。
-#:
-#: `reserved` 不是"通过"。它必须照样打印（含理由），因为它回答的是
-#: "这个取值为什么还留着" —— 静默豁免是本项目最忌的形态（`G-13`/`N-5` 同族）。
-#:
-#: 本表的键不要求出现在 `dead` 里 —— 有些被点名的取值"同形不同义"，
-#: 普查看得见字面量却看不见那是死取值。这类条目会打印在栏一附里，
-#: 于是它们既不会静默消失，也不会伪装成"已确认无产出"。
-#: `UNKNOWN_SIDE_EFFECT` 是唯一不进本表的被点名项：它不是任何词表里的取值，
-#: 而是 `capabilities.py` 的一个模块级常量（见模块 docstring 那一节）。
+#: 已登记为"预留"的取值：`{(词表名, 取值): 理由}`（`P-23` 的"选项 c：登记为预留"）。为什么有这张表：
+#: `P-23` 要求审计输出分两栏（"已登记为预留" / "无人认领"）且不许合并 —— 合并等于静默豁免（"没人认领的死
+#: 取值"与"写明为什么留着"被读成同一件事）。往表里加一条是人的动作（"我知道它现在没有产出点、决定留着，
+#: 理由是这个"）；本工具只提供位置，不替谁填。登记表只能有一处：不许在 `schema.py` 里另写一份"预留"标记
+#: （两个落点必然漂移，FC-03）。同批登记的是 `closing` 验收读数的行级码（`draft/52` CC-02 裁定 (a)；
+#: 旧码未改），纪律 `unknown` 不许读成 `pass`（`closing.acceptance_row_state`）。一处推翻（`E-10`，
+#: 2026-09-27）：`FINDING_KINDS.quote_mismatch` 改走 (b) 删词表值 —— 它承诺的"引文不符"实现做不到（只给
+#: `not_found`），已从 `schema.FINDING_KINDS` 删除、本表那一条同时删（登记不存在的取值 = 登记过期）。 `reserved` 不是"通过"：必须照样打印（含理由）—— 静默豁免是本项目最忌的形态（`G-13`/`N-5` 同族）； 表里的键不要求出现在 `dead` 里；`UNKNOWN_SIDE_EFFECT` 是唯一不进本表的被点名项（`capabilities.py` 的 模块级常量，不是词表取值）。
 RESERVED_VALUES: dict[tuple[str, str], str] = {
     # 这里曾经有一条 `("FINDING_KINDS", "quote_mismatch")` 的登记。
     # `E-10` 裁定 (b)（2026-09-27）把那个取值从 `schema.FINDING_KINDS` 删掉了

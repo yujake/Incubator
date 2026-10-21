@@ -137,27 +137,14 @@ def unmapped_actions() -> list[tuple[str, str]]:
     return sorted(unmapped)
 
 
-#: 角色 -> 它可能借由工具层落地的工具组。
-#:
-#: 为什么必须显式写下来：动作与工具的对应关系只有一条结构性约定
-#: （工具的最后一个名字段 == 动作的 `handler_name`），而这条约定在短名上必然
-#: 撞车 —— 实测 `run` 在能力层有两个动作（`A.run` / `B.run`），在工具层有一个
-#: 工具（`ocr.run`）。不加这张表，两条动作会被同一个工具"对上"，
-#: 于是报告里出现一条纯属拼写巧合的"不一致"（这是本项目最反对的假报警：
-#: 它会让整条判据失去可信度）。
-#:
-#: 表里的每一组都写上了理由，因为"这个角色会不会经由这一组工具落地"
-#: 是一条设计判断，不是可以从名字推出来的事实：
-#:   - `B` 有 `ocr`：`AgentB.run` 会调 OCR 读 PDF（`ocr.run` 声明 `network`），
-#:     所以"B 的动作可能与 ocr 工具同名"是真实存在的对应，不是巧合；
-#:   - `A` / `D` 有 `search` / `research`：检索与研究的落地工具；
-#:   - `E` / `F` 有 `verify` / `attack`：实验与攻坚的落地工具；
-#:   - `G` / `H` 有 `doc` / `review`：撰写与审校的落地工具；
-#:   - 通用组（`fs` / `table` / `graph` / `trace`）任何角色都可能用到，
-#:     但只在唯一命中时才认为对上了。
-#:
-#: 表里没有的角色组合 ⇒ 报成"两层声明没有比对"（info，三态里的 unknown），
-#: 不猜映射。
+#: 角色 -> 它可能借由工具层落地的工具组。为什么必须显式写下来：动作与工具的对应只有一条结构性
+#: 约定（工具的最后一个名字段 == 动作的 `handler_name`），而它在短名上必然撞车 —— 实测 `run` 在
+#: 能力层有两个动作（`A.run` / `B.run`），工具层有一个工具（`ocr.run`）；不加这张表两条动作会被
+#: 同一个工具"对上"，于是报告里出现一条纯属拼写巧合的"不一致"（最反对的那种假报警）。
+#: 每组都写理由是因为"这个角色会不会经由这一组工具落地"是设计判断、推不出来：`B`/`ocr`（`AgentB.run`
+#: 调 OCR 读 PDF，声明 `network`）· `A`/`D` = `search`/`research` · `E`/`F` = `verify`/`attack` ·
+#: `G`/`H` = `doc`/`review` · 通用组（`fs`/`table`/`graph`/`trace`）任何角色都可能用到、只在唯一命中
+#: 时才算对上。表里没有的角色组合 ⇒ 报"两层声明没有比对"（info，三态里的 unknown），不猜映射。
 _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
     "A": ("search", "table", "fs", "research", "trace", "graph"),
     "B": ("ocr", "table", "fs", "trace", "graph"),
@@ -532,23 +519,13 @@ def _divergences(
 
 
 # ---------------------------------------------------------------- 两层参数类型对账（R-36）
-#
-# R-36（`draft/28` §150.5）：`_divergences` 只比 property 名与两根轴，不比类型。
-# 于是"声明的类型与真交下去的值不是一回事"这一整类缺陷看不见 —— §150 那批里三处
-# （`H.review` / `H.verify_fixes` 的 `dependencies` 声明成 `_OBJ`、`H.review_report`
-# 声明成 `_ARR_S`，而工具层四条一直是 array-of-objects）就是它漏的：参数门照能力表
-# 判，把一条合法的派活判成 `dependencies. 必须是对象，收到 array`。
-#
-# 为什么不是往 `_divergences` 里加一条：那个函数的输入是 `tools: Mapping[str, tuple[str, str, bool]]`
-# （只有两根轴），要带类型就得改它的形状；而 `declaration_divergences_for` 是公开的
-# 纯函数形态，`tests/test_policy.py` 用合成的两层表喂它 —— 改形状会连带改那些用例的
-# 语义。判据多一条不等于判据要长在同一个函数里：这里另起一格，两种形态都给
-# （读全局的 `param_type_divergences()` + 可喂表的 `param_type_divergences_for()`）。
-#
-# 为什么类型也要读源码（AST）而不是装配工具层：理由与 `_tool_side_effects` 逐字相同
-# （`ToolSpec(...)` 现造于 `reset()/register()` 里，装配一次会在导入期碰文件系统）。
-# 差别是这里要读的是嵌套结构（`properties.<名>.type` 与 `.items.type`），
-# 所以只认字符串字面量的 `type`：读不出来就记成"没有比对"（unknown），不折成通过。
+# R-36（`draft/28` §150.5）：`_divergences` 只比 property 名与两根轴、不比类型，于是"声明的类型与真
+# 交下去的值不是一回事"这一整类缺陷看不见（实测形态：合法派活被参数门判成"dependencies. 必须是对象，收到 array"）。
+# 为什么不并进 `_divergences`：它的输入只有两根轴，带类型就得改形状，而 `declaration_divergences_for`
+# 是公开纯函数、`tests/test_policy.py` 用合成表喂它 ⇒ 另起一格，两种形态都给（读全局的
+# `param_type_divergences()` + 可喂表的 `param_type_divergences_for()`）。
+# 类型读源码 AST（同 `_tool_side_effects`：装配一次会在导入期碰文件系统），只认字符串字面量的
+# `type`（`properties.<名>.type` / `.items.type`），读不出就记 unknown、不折成通过。
 
 
 def _dict_value(node: ast.AST | None, key: str) -> ast.AST | None:
@@ -765,21 +742,13 @@ def param_type_coverage() -> dict:
 
 
 #: 实测的"工具面声明了、动作面没声明"的 property（`two_layer_param_missing_in_action`）。
-#:
-#: 为什么要有这一格（残项 ㉓；2026-10-07 所有者授权 5b"补反向 + 新计数并入读数"）：
-#: 正反两处既有判据都管不到这个方向 —— `param_type_divergences_for` 由动作面驱动
-#: （动作没声明的 property 它根本看不见），`param_seam_violations` 管的是"动作声明了、
-#: 实现不收" ⇒ "工具面加了参数、忘了加动作面"这条裂缝全树没有读数会报。
-#: 它为什么有代价：编排层（主控）按动作参数表派活 ⇒ 工具面新加的入口在派活侧看不见。
-#:
-#: 形态：按 (角色, 动作) 登记确切的那几个 property + 理由（不逐 property 登记，
-#: 也不写成"这个动作以后随便缺"）。这样三种变化都会红：
-#:   ① 出现新的一对（新动作或新匹配上的工具）· ② 已登记那对又多缺一个 property
-#:   · ③ 登记里某个 property 不再缺了（登记过期 ⇒ 必须删掉，否则这张表会烂成噪音）。
-#: 判据本体在 `tests/test_capabilities_reverse_param_gaps.py`（刻意不放进导入期：
-#: 所有者 5b 授权的形态是"补反向 + 新计数并入读数"，把导入期改成硬失败会超出那次授权）。
-#: 注意这张表是可见性登记，不是"认可"：改哪一层由人定（与 `param_type_divergences_for`
-#: 末尾那句处置口径一致）。
+#: 为什么要有这一格（残项 ㉓；2026-10-07 所有者授权 5b"补反向 + 新计数并入读数"）：正反两处既有
+#: 判据都管不到这个方向 —— `param_type_divergences_for` 由动作面驱动（动作没声明的 property 它根本
+#: 看不见），`param_seam_violations` 管的是"动作声明了、实现不收" ⇒ "工具面加了参数、忘了加动作面"
+#: 这条裂缝全树没有读数会报。形态：按 (角色, 动作) 登记确切的那几个 property + 理由。三种变化都会红：① 出现新的一对 ·
+#: ② 已登记那对又多缺一个 · ③ 登记里某个不再缺了（登记过期 ⇒ 必须删掉，否则会烂成噪音）。
+#: 判据本体在 `tests/test_capabilities_reverse_param_gaps.py`（刻意不进导入期）；这是可见性登记、
+#: 不是"认可"：改哪一层由人定。
 _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
     ("B", "run"): (
         frozenset({"backend", "dpi", "languages", "max_pages", "pages", "path", "lit_id"}),
@@ -930,32 +899,12 @@ def _tool_axes(declared: tuple[str, str, bool]) -> tuple[str, str, bool]:
 
 # ---------------------------------------------------------------- 动作表
 #
-# `D-8`（更正，观测时刻 2026-09-26 19:0x）：这里原来是一大片 `文件:行号`
-# （形如 `<模块>.py:<行> <方法名>`）。那些行号全部过期了，
-# 而且这与 `.noai-paths` 里已经立过的纪律相反 —— 那份清单第 35-45 行逐字论证过
-# "理由里刻意写符号名不写行号"，理由是行号易失（实测 `normalize_doi` 在几十分钟内
-# 就从 26 行漂到 44 行）。
-#
-# 所以这里改成只写符号名（`<Class>.<method>`），并由
-# `tests/test_capabilities_two_layer.py::test_action_handler_names_exist_as_class_methods`
-# 逐个断言"这个名字真的存在于对应模块的那个类里" —— 符号名比行号强：
-# 改行号它不响，删了/改了那个方法它必响。
-#
-#   模块            类            方法
-#   agent_a.py      AgentA        run_once / run
-#   agent_b.py      AgentB        run_once / reprocess_once / run_reprocess /
-#                                 decide_structural_duplicate / resolve_structural_duplicate / run
-#   agent_c.py      AgentC        hottest / paths / cold / gaps / neighbors /
-#                                 relations_between / contradictions / structural_duplicates / handle
-#   agent_d.py      AgentD        probe_c / ingest / ingest_detailed / trace_question / trace_l3 /
-#                                 assess / submit_gaps / consider / poll / adjudicate /
-#                                 research / run_round / write_report
-#   agent_e.py      AgentE        run_experiment / check_formal / evidence_for /
-#                                 list_experiments / run_script_experiment
-#   agent_f.py      AgentF        create_plan / step / status / list_plans
-#   agent_g.py      AgentG        compose_claim / register_dependency / build_document /
-#                                 render / refresh_markdown / revise
-#   agent_h.py      AgentH        review / verify_fixes / list_findings
+# `D-8`（更正，观测时刻 2026-09-26 19:0x）：这里原来是一大片 `文件:行号`，那些行号全部过期了，
+# 而且与 `.noai-paths` 第 35-45 行逐字论证过的纪律相反（"理由里刻意写符号名不写行号"：行号易失，
+# 实测 `normalize_doi` 在几十分钟内就从 26 行漂到 44 行）。所以这里只写符号名（`<Class>.<method>`），
+# 由 `tests/test_capabilities_two_layer.py::test_action_handler_names_exist_as_class_methods` 逐个
+# 断言"这个名字真的存在于对应模块的那个类里"（符号名比行号强：改行号它不响，删了那个方法它必响）。
+# 动作声明的真身是 `specs/<角色>.py` 的 `ACTIONS`（M3 起），本表只做派生。
 
 #: 角色 -> 该角色的动作元组。不在表里的角色没有任何动作（`M` 就是如此：
 #: 主控的"动作"是 `summon()` 本身，它由 `Conductor` 实现，不是一个 Agent 方法）。
@@ -969,35 +918,13 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = _specs.action_table()
 
 
 # ---------------------------------------------------------------- 参数接缝（声明 ↔ 实现签名）
-#
-# ## 这一段补的是哪一个洞（`D-2` / `R2-AN-1` 的 capabilities 半边）
-#
-# `ActionSpec.params` 是声明，handler 的 `inspect.signature` 是实现。
-# 两者此前没有任何机器判据相连：`Conductor._check_params` 只看声明
-# （`tools.base.validate_params(spec.params, …)`），而声明里多一个 property
-# 不会有任何地方报出来 —— 主控放行 ⇒ 写 `running` 行 ⇒ 执行期才发现这个参数
-# 没人接（`E.run_experiment` 的 `sleep` 就是这一格）。诊断台账里那一行看起来像
-# "实验跑失败了"，其实这次调用从来没被执行过。
-#
-# 判据的形态（三态，缺一条就会退化成真空断言）：
-#   ① 每个 property 要么被 handler 的签名接受（具名形参，或 handler 收
-#      `inspect.Parameter.VAR_KEYWORD` —— 后者按定义真的收得下这个键），
-#      要么逐条登记在下面这张接缝表里；
-#   ② 不满足 ⇒ 导入即失败（`assert_capabilities` 第 [8] 条），
-#      错误信息逐字给出 角色 / 能力 / property，并说清两条出路
-#      （改实现，或登记 + 写理由）；
-#   ③ 登记表不许烂成噪音：接缝表里"现在已经不需要了"的条目也要报出来
-#      （形态照抄 `_KNOWN_UNMATCHED_ACTIONS` 的 stale 那一条）。
-#
-# ## 为什么这张表存在，而不是"直接把 sleep 删了"
-#
-# 删声明（被否掉的 B 选项）会让替身/夹具无法按同一份 schema 声明参数：
-# `tests/test_conductor.py` / `tests/test_scheduler.py` 的 `FakeE.run_experiment`
-# 靠 `sleep=` 控制"这次实验跑多久"，那些用例测的正是并发/取消/串行的时序。
-# 给 `AgentE.run_experiment` 加一个没人读的具名 `sleep` 或让它收
-# `inspect.Parameter.VAR_KEYWORD`（被否掉的 C 选项）是更坏的一种：
-# 它把"我传了但它没看"变成静默成功 —— 那正是 `LocalBackend.call` 的
-# docstring 逐字拒绝的形态。所以接缝留在声明这一层，并且必须登记 + 写理由。
+# `ActionSpec.params` 是声明，handler 的 `inspect.signature` 是实现；此前两者没有任何机器判据相连
+# （`Conductor._check_params` 只看声明）⇒ 声明里多一个 property 不会有地方报（`E.run_experiment` 的
+# `sleep` 就是这一格：主控放行、写 `running` 行、执行期才发现没人接）。判据（缺一条就退化成真空断言）：① 每个 property 要么被 handler 签名接受（具名形参或
+# `inspect.Parameter.VAR_KEYWORD`），要么逐条登记在下面的接缝表里；② 不满足 ⇒ 导入即失败
+# （`assert_capabilities` 第 [8] 条）；③ 接缝表里"现在不需要了"的条目也要报（同 `_KNOWN_UNMATCHED_ACTIONS` 的 stale）。
+# 不删 `sleep`：删声明会让 `FakeE.run_experiment` 无法按同一份 schema 声明（`tests/test_conductor.py` /
+# `tests/test_scheduler.py` 靠它控时序）；加没人读的具名 `sleep` 更坏 —— 把"传了但没看"变成静默成功。
 
 #: 参数接缝表：`(角色, 动作, property 名)` -> 一行理由串。
 #:
@@ -1260,28 +1187,13 @@ def check_params(spec: ActionSpec, params: Mapping[str, Any]) -> str | None:
 #    只登记写的表面（`tx("A","B")` ⇒ A 与 B），读的表不进写集。
 
 #: 角色 -> 它可能写的表（表级粒度；见 DESIGN-CONDUCTOR.md §8 待决问题 3）。
-#:
-#: ## 两条口径说的是两件事（主控裁决 3）
-#:
-#: - 工具层的 `ToolSpec.side_effect` 描述"默认调用"的副作用
-#:   （`agent_c.gaps` 的 `submit_requests` 默认 `False` ⇒ 默认是纯读，
-#:   所以 `graph_tools` 里那条声明是对的）；
-#: - 能力层的 `WRITE_SETS` 描述"可能写"的表 —— 条件性写也算可能写。
-#:
-#: 这解释了为什么 `WRITE_SETS["C"]` 必须包含 `search_requests`，而
-#: `graph.gaps` 的 `side_effect` 不该被改成 `write_local`：后者会让
-#: `ToolRegistry.for_role` 把这个工具从 C 的工具面里过滤掉（只读角色拿不到
-#: 写工具）—— 于是"修一个措辞"会砍掉 C 的核心能力。这是"照字面修反而更坏"
-#: 的情形，所以修的是登记（`READ_ONLY_WRITE_EXCEPTIONS`），不是声明。
-#:
-#: ## 关于"第二个只读角色照抄这个模式"的隐患：它已经被结构挡住了
-#:
-#: 失效点不在 `for_role` 的过滤（那里只按 `side_effect` 过滤工具面），
-#: 而在 `READ_ONLY_WRITE_EXCEPTIONS` —— 新角色若照抄 I3 这个模式却不登记，
-#: `assert_capabilities()` 会当场抛（"只读角色的写集里出现了未登记的 …"）。
-#: 所以这条隐患不需要额外机制：登记表 + 装配期断言就是它的闸门。
-#: 真身是 `src/agentflow/specs/<角色>.py`（M3 起）。这一行只做派生 —— 
-#: 也就是说改权限面要改 `specs/`，而 `specs/` 在 `.noai-paths` 里受保护。
+#: 两条口径说的是两件事（主控裁决 3）：工具层的 `ToolSpec.side_effect` 描述"默认调用"的副作用
+#: （`agent_c.gaps` 的 `submit_requests` 默认 `False` ⇒ 默认是纯读）；能力层的 `WRITE_SETS` 描述
+#: "可能写"—— 条件性写也算可能写。所以 `WRITE_SETS["C"]` 必须包含 `search_requests`，而
+#: `graph.gaps` 的 `side_effect` 不该改成 `write_local`（那会让 `ToolRegistry.for_role` 把这个工具
+#: 从只读角色 C 的工具面里过滤掉）：修的是登记（`READ_ONLY_WRITE_EXCEPTIONS`），不是声明。
+#: "第二个只读角色照抄这个模式"的隐患已被结构挡住：不登记 ⇒ `assert_capabilities()` 当场抛。
+#: 真身是 `src/agentflow/specs/<角色>.py`（M3 起），这一行只做派生；`specs/` 在 `.noai-paths` 里受保护。
 WRITE_SETS: dict[str, frozenset[str]] = _specs.write_sets()
 
 #: 编排器自己写的表。与角色写集分开，因为它的语义不同：
@@ -1320,28 +1232,13 @@ READ_ONLY_WRITE_EXCEPTIONS: dict[str, frozenset[str]] = {
 }
 
 #: 逐工具写集：只读例外里每个工具会写哪几张表（`roles-2` 判据 ② / ③ 的输入）。
-#:
-#: ## 为什么需要它（以及它为什么不是"第二份名单"）
-#:
-#: `WRITE_SETS` 是角色级的，`READ_ONLY_WRITE_EXCEPTIONS` 是表级的，
-#: 而 `READONLY_CALL_EXCEPTIONS` 是工具级的 —— 三者之间原本没有任何机器判据相连：
-#: 往工具级表加一个能写 `claims` 的工具，工具层会放行、表级例外不认，什么都不红。
-#:
-#: 第一版修法我试过"角色级写集 ∩ 该工具源码里字面出现过的表名"，实测接近真空：
-#: 对 `review.verify_fixes` 只算出 `{review_findings}`（`documents` 是它调用的下层写的，
-#: 它的函数体里没有那个字面量）⇒ 永远算不出 `documents` ⇒ 永远报不出"越权写 documents"。
-#: 一个永远不报的判据与没有判据在证据上是一回事。
-#:
-#: 现在是显式逐工具登记 + 三条机器判据（全部在 `assert_capabilities` 的 `[5c]` 里）：
-#:   ① 本表覆盖 `READONLY_CALL_EXCEPTIONS` 里的每个工具（漏一个 ⇒ 导入期红）；
-#:   ② 本表[tool] 必须等于 `_tool_write_set_from_source(tool)` 从工具实现里
-#:      算出来的写集（写多/写少都红）—— 这一条是 `R4-5` 补的：
-#:      此前 ② 只保证"能解析到一个动作"，登记值写错没有任何判据看得见；
-#:   ③ 本表[tool] ⊆ `READ_ONLY_WRITE_EXCEPTIONS[role]`（写越界 ⇒ 导入期红）；
-#:      外加"本表里没有已经不存在的工具"（登记表要自我清理）。
-#: 四条一起把"漏登记 / 多登记 / 登记值与实现不符 / 写越界"四个方向都堵住。
-#:
-#: 证据栏用符号名（与 `WRITE_SETS` 同一个口径）：写不出证据的行不许留在这里。
+#: 为什么需要它（以及为什么它不是"第二份名单"）：`WRITE_SETS` 是角色级、`READ_ONLY_WRITE_EXCEPTIONS`
+#: 是表级、`READONLY_CALL_EXCEPTIONS` 是工具级，三者原本没有任何机器判据相连 ⇒ 往工具级表加一个
+#: 能写 `claims` 的工具，工具层会放行、表级例外不认，什么都不红。
+#: 现在是显式逐工具登记 + 三条机器判据（全部在 `assert_capabilities` 的 `[5c]` 里）：① 本表覆盖
+#: `READONLY_CALL_EXCEPTIONS` 里的每个工具 · ② 本表[tool] == `_tool_write_set_from_source(tool)`
+#: （`R4-5` 补：登记值写错必须看得见）· ③ 本表[tool] ⊆ `READ_ONLY_WRITE_EXCEPTIONS[role]`；外加
+#: "本表里没有已经不存在的工具"。四个方向（漏登记/多登记/值与实现不符/写越界）都堵住；证据栏用符号名，写不出证据的行不许留。
 TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
     "review.review_document": frozenset({"review_findings", "documents"}),
     #   ↑ `review_tools.review_document`：`tx.upsert("review_findings", …)` 落 finding，
@@ -1633,25 +1530,14 @@ class EmptyWriteSet:
     why: str
 
 
-#: 空写集的两种含义（CS-14：这一格此前是折平的）。
-#:
-#: `WRITE_SETS[role] == frozenset()` 有两个完全不同的来源：
-#:   · M：它的召唤本身会写 `tasks`，而且它派生的子任务可能写任何东西
-#:     ⇒ 并发上必须与任何人串行（这一条的理由逐字写在 `specs/m.py` 的写集声明里）；
-#:   · V：它的台账是一个文件（`verifications/<4 位>.jsonl`，见
-#:     `agent_v` 的说明与 `verifications.py`）、也没有子代理 ⇒ 与任何人的表写集都不冲突，
-#:     是一个真·空集。
-#:
-#: 折平的后果（本批现算）：`write_set_of("V")` 返回全部 16 张表 —— 与"完全不认识的
-#: 执行单元"（`write_set_of("Z")`）返回的东西一模一样，也与 M 一模一样。
-#: 于是 V 一旦真跑起来，写集轴（`write_sets_intersect` / `policy` 的波次 / `scheduler`
-#: 的 `write_set` 读数）会把它当成"能写全部表"的角色；更糟的是读返回值的人无法分辨
-#: 这三种情形（"没有表写集" / "不写任何表" / "不认识"），而那正是本仓反复禁止的折平。
-#:
-#: 为什么这张表在这里而不是各角色的 spec 里：写集轴的口径只有一处（`write_set_of`），
-#: 含义表必须与它同址。spec 里那个空元组只说明"没有表写集"，说明不了并发含义。
-#: 反真空由 `assert_capabilities` 的 [6b] 段守着：空写集角色必须在这里登记、
-#: 且这里不许留下已经不是空写集的名字。
+#: 空写集的两种含义（CS-14：这一格此前是折平的）。`WRITE_SETS[role] == frozenset()` 有两个完全不同的来源：M（它的召唤本身会写 `tasks`，而且派生的
+#: 子任务可能写任何东西 ⇒ 并发上必须与任何人串行，理由逐字写在 `specs/m.py` 的写集声明里）；V（它的
+#: 台账是一个文件 `verifications/<4 位>.jsonl`、也没有子代理 ⇒ 与任何人的表写集都不冲突，是真·空集）。
+#: 折平的后果（本批现算）：`write_set_of("V")` 返回全部 16 张表 —— 与"完全不认识的执行单元"
+#: （`write_set_of("Z")`）和 M 一模一样 ⇒ V 真跑起来，写集轴（`write_sets_intersect` / `policy` 的波次 /
+#: `scheduler` 的 `write_set` 读数）把它当成"能写全部表"的角色。
+#: 为什么在这里而不在各角色 spec 里：写集轴的口径只有一处（`write_set_of`），含义表必须与它同址；
+#: 反真空由 `assert_capabilities` 的 [6b] 段守着：空写集角色必须登记、且不许留下过期名字。
 EMPTY_WRITE_SETS: dict[str, "EmptyWriteSet"] = {
     "M": EmptyWriteSet(
         concurrent=False,
@@ -1719,24 +1605,14 @@ class TaskIssue:
                 "task_id": self.task_id, "message": self.message}
 
 
-#: 台账审计里用到的码。与 `verify.verify_all` 里 tasks 那段逐字一致（见
-#: `tests/test_conductor.py::test_task_ledger_audit_critical_codes_match_verify_all`），
-#: 加四个本模块特有的码（`task_terminal_without_end` / `task_running_without_start`
-#: / `task_terminal_rewritten` / `task_refused_without_reason` /
-#: `task_refusal_reason_on_non_refusal` / `task_root_depth_not_one` —— 见下面的清单）。
-#:
-#: ## 为什么这份实现放在这里（而不是各写一份）
-#
-#: `verify_all`（全库离线审计，CLI 跑）与 `Conductor.verify_tasks`（刚跑完
-#: 一次 run 的即时自检）问的是同一个问题："这批 tasks 行自洽吗？"
-#: 两处各写一份判据必然漂移，而漂移的形态是"其中一处永远说没问题"——
-#: 那是审计最坏的失效方式。
-#:
-#: 处置（`DEVELOPMENT.md` §10 点名的那条，本轮选方案 (b)，理由见报告）：
-#: `Conductor.verify_tasks` 改成调用这一份（`Conductor.task_issues()`），
-#: 而 `verify.py` 是禁改区（`AGENTS.md` 的 auth-audit 清单），保留它自己的
-#: `Issue` 包装；由一致性测试钉住两者的码集合相等 —— 这正是方案 (b) 的
-#: 要求（"不许只写注释说两处应一致"：注释不会变红，测试会）。
+#: 台账审计里用到的码。与 `verify.verify_all` 里 tasks 那段逐字一致（判据
+#: `tests/test_conductor.py::test_task_ledger_audit_critical_codes_match_verify_all`），外加本模块
+#: 特有的码：`task_terminal_without_end` / `task_running_without_start` / `task_terminal_rewritten` /
+#: `task_refused_without_reason` / `task_refusal_reason_on_non_refusal` / `task_root_depth_not_one`。
+#: 实现放在这里是因为 `verify_all`（全库离线审计）与 `Conductor.verify_tasks`（即时自检）问的是同一个
+#: 问题"这批 tasks 行自洽吗"，各写一份必然漂移，而漂移的形态是"其中一处永远说没问题"—— 审计最坏
+#: 的失效方式。`verify_tasks` 调这一份（`Conductor.task_issues()`）；`verify.py` 是禁改区、保留自己的
+#: `Issue` 包装，码集合相等由一致性测试钉住（"不许只写注释说两处应一致"：注释不会变红，测试会）。
 TASK_AUDIT_CODES: tuple[str, ...] = (
     "dangling_parent_task",
     "task_depth_discontinuous",
@@ -1973,22 +1849,14 @@ def assert_capabilities(
         f"少 {sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE} - set(_ws))}"
     )
     assert set(ALLOWED_EDGES) >= set(S.ROLES), f"ALLOWED_EDGES 缺少角色 {sorted(set(S.ROLES) - set(ALLOWED_EDGES))}"
-    # `FINAL-R4-01`：上面那一条只核键集（"每个角色都有出边条目"），不核值 ——
-    # 漏掉一个角色时它照样过。这里守住"主控到底能不能够到每一个角色"，
-    # 判据形态在 2026-10-10（第 146 轮第 4 条裁定）换过一次：
-    #
-    #   改前：`ALLOWED_EDGES["M"] == frozenset(S.ROLES)`（恰好等于全部角色）。
-    #   改后：业主裁定逐字「M 的出边设限（不许直接控制 B、F、V，只可间接由父代理转达）」
-    #         ⇒ 那条等式按定义不再成立。换成的判据有三条，见下面 `_INDIRECT_FROM_M` 那段。
-    #
-    # 为什么不是"把等式右边改成 `set(S.ROLES) - {B,F,V}`"：那等于把裁定抄成第二份字面量，
-    # 声明层（`specs/m.py`）一改它就跟着漂，而它自己说不出"少了哪条链就不对"。
-    #
-    # 位置刻意放在下面那个逐条循环之后：先让"含非角色目标"那条判据对
-    # `{"agent-A"}` 这类拼错说话（`test_unknown_edge_target_is_rejected` 逐字匹配
-    # 那句消息），本条只在"目标都是合法角色名、但漏了一个"时才承担判据。
-    # 边表里的目标也必须是合法角色名：写成 "agent-A" 这类拼法会让
-    # 每一次 `M → A` 都被判 forbidden_edge，而"策略拒绝了"看起来像正常工作。
+    # `FINAL-R4-01`：上面那一条只核键集（"每个角色都有出边条目"），不核值 —— 漏掉一个角色时它照样过。
+    # 这里守住"主控到底能不能够到每一个角色"。判据形态在 2026-10-10（第 146 轮第 4 条裁定）换过一次：
+    # 改前是 `ALLOWED_EDGES["M"] == frozenset(S.ROLES)`；改后按业主裁定「M 的出边设限（不许直接控制
+    # B、F、V，只可间接由父代理转达）」⇒ 那条等式按定义不再成立，换成下面 `_INDIRECT_FROM_M` 那段的三条判据。
+    # 为什么不是"把等式右边改成 `set(S.ROLES) - {B,F,V}`"：那等于把裁定抄成第二份字面量，声明层
+    # （`specs/m.py`）一改它就跟着漂，而它自己说不出"少了哪条链就不对"。
+    # 位置刻意放在下面那个逐条循环之后：先让"含非角色目标"那条判据对 `{"agent-A"}` 这类拼错说话
+    # （`test_unknown_edge_target_is_rejected` 逐字匹配那句消息），本条只在"目标都是合法角色名、但漏了一个"时承担判据。
     for frm, tos in ALLOWED_EDGES.items():
         bad_targets = sorted(set(tos) - set(S.ROLES))
         assert not bad_targets, f"ALLOWED_EDGES[{frm!r}] 含非角色目标 {bad_targets}（拼法必须与 schema.ROLES 一致）"
@@ -2002,28 +1870,13 @@ def assert_capabilities(
             "没有『召唤主控』这件事，它只能由用户/调用方驱动"
         )
     # ---- [1b] 主控的出边：三条判据（2026-10-10 第 146 轮第 4 条裁定）
-    #
-    # 裁定的内容是一条"间接"要求：主控不许直接控制 B / F / V，只可间接由父代理转达。
-    # 它有三处可判的地方，缺一条就有一种坏法看不见：
-    #
-    #   ① 直接边不许含 {F, V} ⇒ 裁定本身（把边偷偷加回去会被这里抓住）；
-    #   ② 这三个各自要有**别的**进路 ⇒ 否则它们成了孤儿（"间接转达"根本没有路，
-    #      而那三个角色从此谁也召唤不到，键集判据与 ① 都看不见）；
-    #   ③ 从主控出发在边图上可达每一个角色 ⇒ 换掉旧等式之后，"够不到某个角色"
-    #      这件事仍然有人守（旧的等式守的就是这个，只是它顺带把"必须直接"也写死了）。
-    #
-    # 三个角色名在这里是判据的一部分（判据必须能独立说出"哪一条不对"）；
-    # 它们**不是**边表的第二份定义 —— 边表的真身是 `specs/m.py` 的 `edges`。
-    # 2026-10-13 业主裁定逐字「补 M 到 B」⇒ 受限集合从 {B, F, V} 收成 {F, V}。
-    # 真机读数（无 Lean 的 T1，`projects/p9-t1-nolean-20261013-1848`）：采信链的第一环是 B
-    # （命题与逐字出处），而 V 只由 F 唤起 —— M 够不着 B 时那一趟报「硬要求 B 不可达」，
-    # `verifications` 目录压根没被创建（`reviewed_proof_rows = 0`，阈值 7）。
-    # 加回 M→B 之后 **M→B→V** 两跳就够得着逐条走查；F / V 仍只走间接（② 与 ③ 两条判据照旧守它们）。
-    # 2026-10-18 业主裁定「给 M 开 V 出边」（`projects/t3d` 三·1：`reviewed_proof_rows = 0`，
-    # V 只能经 `F→V`、那一趟没走那条链）⇒ 受限集合从 {F, V} 再收成 {F}：
-    # `M→V` 是业主明确要开的那条边，② 仍守着 F（它必须还有 `M→D→F` 这条别的进路），
-    # ③ 守着"从 M 出发到得了每一个角色"。
-        # 2026-10-20 业主裁定：撤掉 M→V ⇒ V 也成为"只能间接走"的角色（M→B→V）。
+    # 裁定的内容是一条"间接"要求：主控不许直接控制的角色只可间接由父代理转达。三处可判，缺一条就有
+    # 一种坏法看不见：① 直接边不许含受限集合（`_INDIRECT_FROM_M`）⇒ 裁定本身；② 这些角色各自要有别的
+    # 进路 ⇒ 否则成孤儿（键集判据与 ① 都看不见）；③ 从主控出发在边图上可达每一个角色 ⇒ 换掉旧等式
+    # （`ALLOWED_EDGES["M"] == frozenset(S.ROLES)`）之后"够不到某个角色"仍有人守。
+    # 角色名在这里是判据的一部分（判据必须能独立说出"哪一条不对"），它们不是边表的第二份定义 —— 边表
+    # 真身是 `specs/m.py` 的 `edges`。历次业主裁定：2026-10-13「补 M 到 B」· 2026-10-18「给 M 开 V 出边」·
+    # 2026-10-20「撤掉 M→V」⇒ 今天的受限集合是 {F, V}（V 走 `M→B→V` 两跳）。
     _INDIRECT_FROM_M = frozenset({"F", "V"})
     _m_edges = frozenset(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ())
     assert not (_m_edges & _INDIRECT_FROM_M), (
@@ -2105,29 +1958,13 @@ def assert_capabilities(
     )
 
     # ---- [5c] 只读例外的两张表必须由机器判据相连（`roles-2`）
-    #
-    # 缺陷（2026-09-26 全面体检 · 子代理 A，实测）：只读角色能写哪些表这件事有两个
-    # 互相独立、可以各自漂移的落点 —— 工具级 `tools.base.READONLY_CALL_EXCEPTIONS`
-    # （H 到 3 个 `review.*`）与表级本模块的 `READ_ONLY_WRITE_EXCEPTIONS`
-    # （H 到 `documents` 与 `review_findings`）。`capabilities.py` 全文不出现
-    # `READONLY_CALL_EXCEPTIONS`，两者的对应关系只写在自然语言理由里。
-    # ⇒ 往工具级表加一个能写 `claims` 的工具不会触发任何断言：
-    # 工具层会放行、表级例外不认，没有任何东西会红。
-    #
-    # 这正是 `.noai-paths` 给 FC-27 第七类写的那句"测试全绿、上线即越权"的破口形态。
-    #
-    # 判据（三条，缺一条就会退化成真空断言）：
-    #   ① 两个例外表的键集必须相同（有工具级例外却没人登记表级 ⇒ 直接红）；
-    #   ② 每个例外工具必须能在能力表里解析到一个动作（`matching_tool_name`），
-    #      否则"比不了"这件事必须显式登记 —— 不许静默跳过（`P16`：真空通过 = 缺陷）；
-    #   ③ 解析到的动作能写哪些表，必须是表级例外的子集。
-    #
-    #  已知边界（如实登记，不许读成"已完全闭合"）：`review.review_document`
-    # 今天在能力表里没有对应的 `ActionSpec`（H 的 action 只有 `review` / `verify_fixes`
-    # / `list_findings`），所以它比不了，走 ② 的显式登记那一支。
-    # 也就是说："review_document 只写这两张表"这件事今天仍然只由人写的理由保证。
-    # 把它变成机器判据需要给 `ActionSpec` 加逐动作写集（今天 `WRITE_SETS` 是角色级），
-    # 那是另一条改动，登记在 `draft/28` 的 `roles-2`。
+    # 缺陷：只读角色能写哪些表有两个可各自漂移的落点 —— 工具级 `tools.base.READONLY_CALL_EXCEPTIONS` 与
+    # 表级本模块的 `READ_ONLY_WRITE_EXCEPTIONS`；`capabilities.py` 全文不出现前者，对应关系只写在自然
+    # 语言理由里 ⇒ 往工具级表加一个能写 `claims` 的工具不会触发任何断言（这正是 `.noai-paths` 给 FC-27
+    # 第七类写的"测试全绿、上线即越权"的破口形态）。判据（三条）：① 两个例外表的键集必须相同；② 每个例外工具必须能在能力表里解析到一个动作
+    # （`matching_tool_name`），否则"比不了"必须显式登记 —— 不许静默跳过（`P16`：真空通过 = 缺陷）；
+    # ③ 解析到的动作能写哪些表必须是表级例外的子集。已知边界：`review.review_document` 无对应
+    # `ActionSpec`，走 ② 的登记支 ⇒ "它只写这两张表"仍只由人写的理由保证（`draft/28` 的 `roles-2`）。
     from .tools import READ_ONLY_ROLES
     from .tools.base import READONLY_CALL_EXCEPTIONS
 
@@ -2325,27 +2162,14 @@ def assert_capabilities(
             + "；".join(f"{d.where}: {d.message}" for d in soft)
         )
 
-    # 实测的窟窿（`D-9` 更正，观测时刻 2026-09-26 18:5x）：33 条不一致，全部是"没有比对"
-    # （`two_layer_name_unmatched`，两个层的名字对不上 ⇒ 三态里的 unknown），
-    # warning 0、error 0。于是上面那道 error 断言今天是真空的 ——
-    # 门看起来接上了，实际上只比对了 1 个动作。这不是"再严一点"能解决的：
-    # 那些动作本来就不是工具调用（`C.hottest` / `D.ingest` 是角色级方法），
-    # 两层没有可比对的对象。
-    #
-    # 这个数字怎么来的（不许手抄）：`collections.Counter((x.level, x.code)
-    # for x in capabilities.declaration_divergences())` ⇒ 今天全部落在
-    # `('info', 'two_layer_name_unmatched')` 这一格，总条数等于
-    # `len(two_layer_reconciliation()['unmatched'])`，也等于 `_KNOWN_UNMATCHED_ACTIONS`
-    # 的条数 —— 下面第 [7] 条的两条断言（new_unmatched 与 stale 都为空）
-    # 钉着这个相等，所以这里不再写死具体数字。
-    # 它此前写的是 32，而 `D-5` 给 `CAPABILITIES['H']` 加了一个动作之后就漂了
-    # （第 6 轮重审 `R4-AN-2` 实测到 33）：手抄的数字会过期，等式不会。
-    # 旧版这里写"33 条里 32 条 + 1 条 warning"，而那条 warning
-    # （`two_layer_external_imprecise`）在 B3 收官后已经不存在了。
-    #
-    # 所以这里钉的是对账面不许静默缩小（P16 族：真空通过 = 缺陷）：
-    #   ① 新出现的"没比对"必须显式登记（否则导入失败）；
-    #   ② 登记表里"已经对上了"的必须删掉（否则登记表变成噪音，慢慢就没人看）。
+    # 实测的窟窿（`D-9` 更正，观测时刻 2026-09-26 18:5x）：33 条不一致全部是"没有比对"
+    # （`two_layer_name_unmatched`，两个层的名字对不上 ⇒ 三态里的 unknown），warning 0、error 0 ⇒ 上面
+    # 那道 error 断言今天是真空的，门看起来接上了、实际只比对了 1 个动作。这不是"再严一点"能解决的：
+    # 那些动作本来就不是工具调用（`C.hottest` / `D.ingest` 是角色级方法），两层没有可比对的对象。
+    # 这个数字怎么来的（不许手抄）：`len(two_layer_reconciliation()['unmatched'])` 等于
+    # `_KNOWN_UNMATCHED_ACTIONS` 的条数，第 [7] 条的两条断言（new_unmatched 与 stale 都为空）钉着这个
+    # 相等 —— 手抄的数字会过期（此前写 32，`D-5` 加一个动作后漂到 33），等式不会。
+    # 所以这里钉的是对账面不许静默缩小（P16 族）：① 新出现的"没比对"必须显式登记（否则导入失败）；② 登记表里"已经对上了"的必须删掉（否则登记表变成噪音，慢慢就没人看）。
     unmatched = {d.where for d in divergences if d.code == "two_layer_name_unmatched"}
     new_unmatched = sorted(unmatched - _KNOWN_UNMATCHED_ACTIONS)
     assert not new_unmatched, (
@@ -2389,28 +2213,13 @@ def assert_capabilities(
     )
 
     # ---- [7c] 撤回的判据（记在这里，免得下一个人再写一遍）
-    #
-    # 我原本在这里加了一条"反方向"断言：只读例外表里的每个工具，要么在能力表里
-    # 解析到一个动作，要么在 `_NO_ACTION_YET` 里登记。写完自己负控时发现它是
-    # 真空的 —— 上面第 [5c] 条的 ② 已经在同一个循环、同一张表上做了同一件事    # （`if not _matched: assert _tool in _NO_ACTION_YET`），而且它先跑。
-    # 于是 [7c] 的 `_excepted = {...} - set(_NO_ACTION_YET)` 里剩下的那一格
-    # 永远满足断言前提：能走到这里的工具必然"解析不到但不在登记表里"，
-    # 而那正是 [5c] 已经判红的形态 —— 我再也构造不出一个只有 [7c] 能抓的输入
-    # （实测：把例外表里一个工具改名成解析不到的写工具，[5c] 先炸；
-    # 把它登记进 `_NO_ACTION_YET`，[7c] 就看不见它了）。
-    #
-    # 一条抓不到任何东西的断言比没有断言更坏：它会让读的人以为这一格被守住了。
-    # 所以撤掉它，不留"看起来在工作"的门。
-    #
-    # `D-5` 的根除靠的是另外两件真的会红的事，两处都有负控（`temp/batchM-verify.py`）：
-    #   ① `H.review_report` 补进 `CAPABILITIES['H']` + `_KNOWN_UNMATCHED_ACTIONS`
-    #      ⇒ `check_action('H','review_report')` 不再是 `unknown_action`；
-    #   ② 第 [7] 条的 `new_unmatched` 断言：将来加一个动作而忘了同步登记，
-    #      `import agentflow.capabilities` 当场炸（负控实测：删掉
-    #      `_KNOWN_UNMATCHED_ACTIONS` 里那行 ⇒ `AssertionError: 出现了新的
-    #      『两层没有比对』的动作 ... ['H.review_report']`）。
-    #      这就是 `D-5` 当初漏掉的那一步（那时它悄悄多了一条 info，
-    #      对账面静默缩小）。
+    # 原本这里有一条"反方向"断言：只读例外表里的每个工具，要么在能力表里解析到一个动作，要么在
+    # `_NO_ACTION_YET` 里登记。负控证明它是真空的 —— 第 [5c] 条的 ② 已经在同一个循环、同一张表上做了
+    # 同一件事而且先跑 ⇒ 能走到这里的工具必然"解析不到但不在登记表里"，而那正是 [5c] 已判红的形态，
+    # 构造不出只有 [7c] 能抓的输入。一条抓不到任何东西的断言比没有断言更坏：它会让读的人以为这一格被守住了。
+    # `D-5` 的根除靠两件真的会红的事：① `H.review_report` 补进 `CAPABILITIES['H']` +
+    # `_KNOWN_UNMATCHED_ACTIONS`；② 第 [7] 条的 `new_unmatched` 断言 —— 加了动作却忘了同步登记 ⇒
+    # `import agentflow.capabilities` 当场炸（负控 `temp/batchM-verify.py`）。
 
     # ---- [8] 参数门：声明 ∩ 实现签名（`D-2` / `R2-AN-1` 的 capabilities 半边）
     #
@@ -2496,22 +2305,14 @@ def assert_capabilities(
     PARAM_MISSING_IN_ACTION_COVERAGE.update(reverse_coverage)
 
 
-#: 实测的"两层没有可比对对象"的动作（`two_layer_name_unmatched`）。
-#:
-#: 注意：这张表只管 `unmatched` 这一格（`handler_name` 在角色工具组里对应 0 个工具）。
-#: 另一格 `ambiguous`（对应 ≥2 个工具 ⇒ 拒绝猜）不由它管，而由
-#: `assert_capabilities` 第 [7b] 条的分区断言管：那一格今天实测是 0，
-#: 但正因为它不在任何登记表里，"它悄悄长大"就没有任何地方会报 —— 分区断言
-#: （三格互斥且穷尽 + `ambiguous` 必须为空）才是它的闸门。
-#:
-#: 为什么必须显式登记而不是"允许 info 级不管"：不加这张表时，`assert_capabilities`
-#: 第 [7] 条只过滤 `level == "error"`，而真实树上 error 数为 0
-#: ⇒ 那道断言恒真（`G-19`：门接上了，但只比对了 1 个动作）。
-#: 有了这张表，对账面就不能静默缩小：新加一个对不上的动作会让
+#: 实测的"两层没有可比对对象"的动作（`two_layer_name_unmatched`）。这张表只管 `unmatched` 这一格
+#: （`handler_name` 在角色工具组里对应 0 个工具）；另一格 `ambiguous`（对应 ≥2 个工具 ⇒ 拒绝猜）不由
+#: 它管，而由第 [7b] 条的分区断言管（三格互斥且穷尽 + `ambiguous` 必须为空）—— 那一格今天实测是 0，正因为它不在任何登记表里，"它悄悄长大"就没有任何地方会报。
+#: 为什么必须显式登记：不加这张表时第 [7] 条只过滤 `level == "error"`，而真实树上 error 数为 0 ⇒
+#: 那道断言恒真（`G-19`：门接上了，但只比对了 1 个动作）。有了它，新加一个对不上的动作会让
 #: `import agentflow.capabilities` 失败，而不是悄悄多一条 info。
-#:
-#: 这些动作绝大多数是角色级方法（`C.hottest` / `D.ingest` / `H.review`），
-#: 不是工具调用，因此两层本来就无可比对 —— 这一栏记录的是"没查成"，不是"查过了没问题"。
+#: 这些动作绝大多数是角色级方法（`C.hottest` / `D.ingest` / `H.review`），不是工具调用 ⇒ 两层本来
+#: 就无可比对 —— 这一栏记录的是"没查成"，不是"查过了没问题"。
 _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     "A.run_once", "A.run",
     "B.run_once", "B.reprocess_once", "B.run_reprocess",
@@ -2590,23 +2391,14 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
 STRICT_DECLARATIONS: bool = False
 
 
-#: 导入期自检。为什么放在导入期：能力表是策略判据的输入（写集相交 ⇒ 串行、
-#: 边表 ⇒ 越权拒绝）。它一旦与实现漂移，症状不是崩溃而是静默的越权/并发损坏。
-#: 让它 import 时就炸，是唯一"不可能忘记跑"的校验点。
-#:
-#: ## 代价与"为什么仍然值得"（主控裁决 2）
-#:
-#: 代价是实测的：`import agentflow.capabilities` 会拉起全部 `agent_*` 与它们的
-#: import 图（约 167ms、约 159 个模块）。这与 `agentflow/__init__.py` 刻意不
-#: import 子模块的取向有张力，但保留，理由是那句话本身：
-#: "一个没人运行的校验"与"没有校验"在结果上不可区分 —— 而能力表漂移的
-#: 症状是静默的越权/并发损坏，不是崩溃。167ms 换"不可能忘记跑"是划算的。
-#:
-#: 但不许只靠导入期：`agentflow/__init__.py` 不 import 子模块，所以
-#: 只有"真的 import 到本模块"的人才会触发它。待办（给主控）：
-#: `scripts/release_check.py` 里应显式跑一次 `import agentflow.capabilities`
-#: 并断言退出码 0，让这个自检有一个明确的触发者，而不是靠"总会有人 import 到"。
-#: （`release_check.py` 是禁改区，本模块不自行改动它。）
+#: 导入期自检。为什么放在导入期：能力表是策略判据的输入（写集相交 ⇒ 串行、边表 ⇒ 越权拒绝），
+#: 它一旦与实现漂移，症状不是崩溃而是静默的越权/并发损坏 ⇒ 让它 import 时就炸，是唯一"不可能
+#: 忘记跑"的校验点。
+#: 代价（主控裁决 2）：`import agentflow.capabilities` 会拉起全部 `agent_*` 与它们的 import 图
+#: （约 167ms、约 159 个模块），与 `agentflow/__init__.py` 刻意不 import 子模块的取向有张力 ——
+#: 保留的理由是"一个没人运行的校验"与"没有校验"在结果上不可区分，167ms 换"不可能忘记跑"划算。
+#: 但不许只靠导入期：`__init__.py` 不 import 子模块 ⇒ 只有真的 import 到本模块的人才触发它。
+#: 待办（给主控）：`scripts/release_check.py` 应显式跑一次 `import agentflow.capabilities` 并断言退出码 0。
 assert_capabilities()
 
 #: 导入期的覆盖读数。为什么要有这一行：第 [8] 条那种"零违反"的断言，

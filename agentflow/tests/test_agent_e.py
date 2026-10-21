@@ -555,7 +555,7 @@ def test_evidence_for_three_states(store):
     assert not_checked["checked"] is False
     assert not_checked["experiments"] == []
     assert not_checked["best_evidence_kind"] is None
-    # rrors-1（登记在 draft/28）：三态里 proved 在"没查"这一支必须是 None，
+    # errors-1（登记在 draft/28）：三态里 proved 在"没查"这一支必须是 None，
     # 不是 False —— 否则只读 proved 的调用方分不清"没查"与"查了没有 proof 级证据"。
     assert not_checked["proved"] is None, not_checked
     assert "没查" in not_checked["reason"]

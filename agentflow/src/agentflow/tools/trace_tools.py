@@ -605,7 +605,7 @@ def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) ->
 
 
 
-    # \T-8\：声明与工具体都在模块级（\@tool\ 写进 \n.__tool_spec__\），
+    # \T-8\：声明与工具体都在模块级（\@tool\ 写进 \fn.__tool_spec__\），
     # 这里只把装配期算出来的值按位置绑上去（\partial\）。
     _bound: dict[str, Any] = {}
     _bound['_g'] = _g

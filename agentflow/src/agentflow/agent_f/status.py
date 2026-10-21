@@ -24,24 +24,14 @@ class _Status:
         budget = dict(row.get("budget") or {})
         rounds = int(row.get("rounds") or 0)
         tail_n = int(self.cfg.get("history_tail", 5))
-        # ---- `R-53`（`draft/28` §158）：查出陈话卡点。
-        #
-        # F 的推进是拉取式的：子目标在 A 的回答落地后要再派一次 `F.step` 才推进。
-        # M 一停手，子目标就永久停在 `in_flight`，而 `blocked_reason` 还写着
-        # "等 A 完成检索请求 r-0019" —— 实测那两个请求早已 `done/ok`（§154 的 A5）。
-        # 这里在只读视图里对当前状态重算一次：请求已终结 ⇒ 把这句"等"标成已过期，
-        # 并逐条列进 `stale_blocked`（不隐藏、也不改写盘上那一行 —— 历史不改写）。
-        # ---- `R-61`（`draft/28` §163）：陈话还得分新旧 —— 只读地从 `history` 反推
-        #
-        # `stale_blocked` 原来只答"是不是陈话"，不答"陈了多久"，于是读者分不出
-        # "我刚停手 1 分钟"与"这个卡点停了 3 天" —— 而在拉取式推进下，"停了多久"
-        # 恰恰是唯一能用来排队的量。
-        #
-        # 前置查证（`temp/_r61_recon.py`，只读 p2-review）：`history` 的条目里记了 `sid`
-        # （键并集 = `action/at/detail/evidence/outcome/round/sid`）⇒ 这条只读路成立，
-        # 不必给子目标加 `last_pushed_at`（那是 schema 变更，属禁改区）。
-        # 取"该 sid 的最后一次触碰"：按 `at` 最大，`at` 缺省时退回最大 `round`；
-        # 一条都没有 ⇒ 如实留空（不编一个时间出来）。
+        # ---- `R-53`（`draft/28` §158）：查出陈话卡点。F 的推进是拉取式的：子目标在 A 的回答落地后
+        # 要再派一次 `F.step` 才推进 ⇒ M 一停手，子目标永久停在 `in_flight`，而 `blocked_reason` 还写着
+        # "等 A 完成检索请求 r-0019"（实测那两个请求早已 `done/ok`，§154 的 A5）。这里在只读视图里对当前
+        # 状态重算一次：请求已终结 ⇒ 把这句"等"标成已过期并逐条列进 `stale_blocked`（不改写盘上那一行）。
+        # ---- `R-61`（`draft/28` §163）：陈话还得分新旧 —— 只读地从 `history` 反推。`stale_blocked` 原来
+        # 只答"是不是陈话"、不答"陈了多久"，而拉取式推进下"停了多久"恰恰是唯一能用来排队的量。前置查证
+        # （`temp/_r61_recon.py`）：`history` 条目里记了 `sid` ⇒ 不必加 `last_pushed_at`（schema 变更属禁改
+        # 区）；取"该 sid 最后一次触碰"按 `at` 最大，`at` 缺省退回最大 `round`，一条都没有 ⇒ 如实留空。
         last_touch: dict[str, dict] = {}
         for entry in (row.get("history") or []):
             sid = str(entry.get("sid") or "")

@@ -43,24 +43,12 @@ from .store import MAX_ID, Store
 
 #: 引用前缀的受控词表 —— `documents.*.claims[].citations` 里允许出现的那几档。
 #:
-#: `D10`：它此前只以字面量的形式各写两份（判据里一份 `("rel","lit","exp","eval")`、
-#: 拒绝消息里一份 `"（应为 rel:/lit:/exp:）"`），而两份不等 —— 消息漏了 `eval:`，
-#: 而 `eval:` 正是上面刚被单独判过的那一档。调用方按消息去改写法，会把一个
-#: 合法的 `eval:` 引用当成非法。所以词表只留这一个来源，判据与消息都从它派生
-#: （`FC-03`：同一件事不许有两份定义）。
-#:
-#: 【FC-27 禁改区 · 本次改动所有者授权、主控代改】本文件登记在 `.noai-paths` 的
-#: `[category: auth-audit]` 里（登记理由：`verify_all` 的一致性审计判据本身）。
-#: 题 18 选 A（2026-10-07 所有者裁定）：本常量此前是前缀的
-#: 第二份字面量抄件 —— 前缀的唯一声明面是 `schema.CITATION_PREFIXES`，而这里把
-#: 那几个前缀又逐字列了一遍。那时 `tests/test_stmt_citation_prefix.py` 只能把两边
-#: 钉成"集合相等"，而"集合相等"对"两处各抄一份、恰好抄得一样"是恒真的
-#: （把 `stmt` 从两处同时删掉，那条判据照样绿）。本次只改本常量的来源
-#: （搬一处，不改口径）：取值、类型、次序，以及它的两个引用点 ——
-#: 判据分支（`kind not in CITATION_KINDS`）与那条拒绝消息
-#: （`'/'.join(k + ':' for k in CITATION_KINDS)`）—— 逐字不变。
-#: 次序也因此一字未动：声明面的次序刻意沿用了本处历史上的次序
-#: （见 `schema.CITATION_PREFIXES` 的说明），所以同一条拒绝消息的字节也不变。
+#: `D10`：它此前各写两份字面量（判据里一份 `("rel","lit","exp","eval")`、拒绝消息里一份
+#: `"（应为 rel:/lit:/exp:）"`），而两份不等 —— 消息漏了 `eval:`，调用方按消息改写法就会把合法
+#: 引用当成非法。所以词表只留这一个来源，判据与消息都从它派生（`FC-03`：同一件事不许有两份定义）。
+#: 前缀的唯一声明面是 `schema.CITATION_PREFIXES`（`tests/test_stmt_citation_prefix.py` 钉住）。题 18
+#: 选 A（2026-10-07 所有者裁定）只把本常量的来源搬过去：取值/类型/次序与两个引用点逐字不变。
+#: 【FC-27 禁改区 · 本次改动所有者授权、主控代改】本文件登记在 `.noai-paths` 的 `[category: auth-audit]`。
 CITATION_KINDS: tuple[str, ...] = tuple(S.CITATION_PREFIXES)
 #: 逐档判据分支里各写了哪些 kind。它与 `CITATION_KINDS` 必须同轮改 ——
 #: 这个常量是"分支那一侧"的声明，为的是让漂移在导入期就可见（见下面的断言）。
@@ -323,21 +311,14 @@ def _check_2(rep, lit_by_id, literature, requests, store):
                     Issue("error", "search_requests", rid, "dangling_lit_ref",
                           f"result_lit_ids 含不存在的文献 {lid}")
                 )
-        # ⚠️ 这条检查必须与 schema 的规则一致，否则它就是一个假警报源。
+        # 这条检查必须与 schema 的规则一致，否则它就是一个假警报源。
         #
-        # 原实现是"`done=true` 且既无 `result_lit_ids` 也无 `last_error` ⇒ error"。
-        # 但 `outcome="no_results"`（搜索正常执行、确实没有命中）**本来就是一个
-        # 有效的终局**：它没有文献、也没有错误，而 `schema.SearchRequest.validate`
-        # 明确允许这种组合（见 `SEARCH_OUTCOMES` 的说明："no_results —— 搜索正常
-        # 执行但确实没有命中（这是一个有效结论）"）。
-        #
-        # 后果实测：一条 `outcome="no_results"` 的请求（A 在无检索后端时如实登记）
-        # 让 `verify` 报 error —— 而"假报警比不校验更糟，因为它会训练人忽略告警"。
-        # 这正是 FC-11（校验器与写入方必须共享同一份规则）的教科书形态。
-        #
-        # 修法：只在 schema 判不出语义的那一种情况下报——`outcome` 缺失
-        # （历史数据）且既无文献也无错误，此时"跑过了"与"空转"确实无法区分。
-        # 其余情形交由 `schema.SearchRequest.validate` 负责（它在写表时已经跑过）。
+        # 原实现是"`done=true` 且既无 `result_lit_ids` 也无 `last_error` ⇒ error"。但 `outcome="no_results"`
+        # （搜索正常执行、确实没有命中）本来就是一个有效的终局，而 `schema.SearchRequest.validate` 明确允许
+        # 这种组合（见 `SEARCH_OUTCOMES` 的说明）。后果实测：一条 `outcome="no_results"` 的请求让 `verify`
+        # 报 error —— 而"假报警比不校验更糟，因为它会训练人忽略告警"（FC-11：校验器与写入方必须共享同一份规则）。
+        # 修法：只在 schema 判不出语义的那一种情况下报 —— `outcome` 缺失（历史数据）且既无文献也无错误，
+        # 此时"跑过了"与"空转"确实无法区分；其余情形交由 `schema.SearchRequest.validate`。
         if r.get("done") and r.get("outcome") is None \
                 and not (r.get("result_lit_ids") or r.get("last_error")):
             rep.issues.append(
@@ -862,53 +843,14 @@ def _check_6(rep, dependencies, documents, exp_by_id, experiments):
             f"evidence_kind={exp_kind!r} ⇒ **断言不能强于它的依据**（FC-22）",
         ))
 
-    # ---- `E-2`（人裁 = verify 侧事后加严，观测时刻 2026-09-26 20:5x）
-    #
-    # 背景：proof 只锚在自报字段上 —— 手写一行 `method='formal'` +
-    # `evidence_kind='proof'` + 任意 `verifier_output` 就能进库，而 `verify` 与 gates
-    # 都不会响（重审实测，登记为 `draft/28` 的 `E-2`）。
-    # 所有者裁定走 (b)：在 verify 里事后加严（不动 schema、不做迁移）。
-    #
-    # 两条硬检查（都 fail-closed，报 error）：
-    #   1. proof 级实验行的 `verifier_output` 里必须有绑在被检查声明名上的
-    #      结构化诊断（`R2-AN-2`，见下面的实现与它的注释）。
-    #   2. proof 级 claim 不能只引 `lit:` —— 它必须至少引一条 `exp:`。
-    #      （"引了 exp: 但那条实验较弱"由上面那条 `weaker` 判据负责，两条互补。）
-    #
-    # ## 判据 1 为什么从"子串"改成"绑名诊断"（`R2-AN-2`，2026-09-27）
-    #
-    # 旧判据是 `verifier_subject_key in verifier_output`，两个方向都不严：
-    # ① 太宽：`claim_key='L'` 是 `'Lean4: no goals'` 的子串 ⇒ 一条完全自报的 proof 不报；
-    #    名字只出现在一句与结论无关的告警里（`unused variable 'foo'`）也算"检查器管过它"；
-    # ② 太窄（更危险）：把判据绑到 `claim_key` 上本身就是错的 —— 生产路径上 `claim_key` 与
-    #    Lean 声明名可以合法地不同（`tests/test_agent_e_formal_path.py` 的正控：
-    #    `claim_key='probe-eq'` 而 Lean 声明是 `probe_eq`，Lean 标识符不许带连字符）。
-    #    所以判据绑定的是检查器实际检查的那个声明名，它写在 `notes` 里
-    #    （写入点：`agent_e` 的 `_declared_name_note`，读法：`declared_name_of_notes`），
-    #    读不到时才退回 `verifier_subject_key`（"本行声称检查器管的就是它"）。
-    #    命名诊断的读法只有一处实现：`formalgw.concluded_names`（`FC-03`）。
-    #    写入期（`formalgw.check_lean` 的 `nm in blob`）比这里宽是刻意的，
-    #    不是判据漂移：写入期要保"真跑过检查器"，审计期要保"依据能被读出来"。
-    #
-    # ## 这条判据的证据上界（`R2b-AN-2-A`，2026-09-27 如实登记）
-    #
-    # 上面那个"被检查的声明名"取自 `notes` —— 一个可写的自由文本字段，
-    # 而本判据不校验 `notes` 里的名字等于本行的 `claim_key` / `verifier_subject_key`
-    # （后两者由 `schema.Experiment.validate` 强制相等，前者没有任何约束）。
-    # 所以这条判据能到的一层是"这条 proof 行的依据可以被读出来"，
-    # 不是"这条依据就是本行命题的"：手工改写 `notes` 里那一段声明名
-    # （写成另一条输出里真有的名字），可以让一条 claim 与另一命题的 proof 行
-    # 一起通过本判据。`R2b` 的 F 段夹具就是这个形态的实测。
-    #
-    # 为什么不补一条交叉判据（例如要求 `verifier_subject_key` 也出现在输出里）：
-    # 生产路径上"被检查的声明名"与 `claim_key` 可以合法地毫不相干 ——
-    # `agent_f.py` 把子目标的 `name` 直接传给 E（`:874`），而 `claim_key` 可能是
-    # `problem_key#sid`（`:864`）；`.lean` 文件名同样可以与命题名无关
-    # （`agent_e.py` 的 `str(name or path.stem)`）。那种合规行会被判成"自报"，
-    # 正是 §41.1 记过的"判据过窄 ⇒ 红掉合规输入"（那一族已经犯过 12 次）。
-    # 要真把这一层补上，得先在写入期把"声明名"与"本行命题"的对应关系
-    # 变成受约束的事实（那要改 schema 与工具层的参数面），不是审计侧能单方面加的。
-    # 因此这里不改判据，只把上界写清楚：不许再把这条判据读成"绑死了声明名"。
+    # ---- `E-2`（人裁 = verify 侧事后加严，观测时刻 2026-09-26 20:5x）：proof 只锚在自报字段上 —— 手写一行
+    # `method='formal'` + `evidence_kind='proof'` + 任意 `verifier_output` 就能进库（`draft/28` 的 `E-2`），
+    # 所有者裁定走 (b)：在 verify 里事后加严。两条硬检查（都 fail-closed、报 error）：① proof 级实验行的
+    # `verifier_output` 里必须有绑在被检查声明名上的结构化诊断（`R2-AN-2`：绑的是检查器实际检查的那个声明
+    # 名，写在 `notes` 里 —— 写入 `agent_e._declared_name_note`、读法 `formalgw.concluded_names`（只一处
+    # 实现），读不到才退回 `verifier_subject_key`）；② proof 级 claim 不能只引 `lit:`，必须至少引一条
+    # `exp:`（"那条实验较弱"由下面 `weaker` 判据负责，两条互补）。证据上界（`R2b-AN-2-A`）：`notes` 是
+    # 可写自由文本、不校验它等于本行 `claim_key` ⇒ 只到"依据可以被读出来"，不是"依据就是本行命题的"。
     selfreported: list[tuple[str, str, str, str]] = []
     for e in experiments:
         if str(e.get("evidence_kind")) != "proof":
@@ -1087,28 +1029,14 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                     rep.issues.append(Issue("error", "documents", docid, "dangling_citation",
                                             f"断言 {cid} 引用了不存在的命题 {ref}"))
                 elif kind == "doc":
-                    # 内部引用（`draft/30` §T4-A）：`doc:<稿件>#<断言>@<哈希前 16 位>`。
-                    # 三段判据（稿件在 / 那条断言在 / 钉的哈希就是目标稿件当前这一版）
-                    # 的唯一实现是 `signatures.doc_ref_verdict` —— 题 5/5a 把写入期
-                    # （`doc_tools._doc_citation_problem`）与这里原先各自那一份合成了一份：
-                    # 两份各对同一个字符串判一次，漂了没有任何地方会报（写入期那份的注释
-                    # 写着"与 `verify.py:923-961` 同口径"，而注释不是门，行号还会漂）。
-                    # 本支现在只做「判定码 → 审计期文案」的翻译，外加一条审计期独有的档：
-                    # 目标稿件必须 accepted（它不在三段里，写入期不查 —— 那是写入期与
-                    # 审计期刻意的口径差，本次一字未动）。
-                    #
-                    # 【FC-27 禁改区 · 本次改动所有者授权、主控代改】本文件登记在
-                    # `.noai-paths` 的 `[category: auth-audit]` 里。本次只改这一支的
-                    # 判据来源（搬一处，不改口径）：判据码、报案顺序、报文、短路时机
-                    # 逐字不变（改前/改后的差分读数在本次交付报告里；常驻判据见
-                    # `tests/test_internal_citations.py` 第 ⑤ 节：结构级 + 行为级 + 负控）。
-                    # 【FC-27 禁改区 · 本次改动业主授权（2026-10-09：「禁改区允许你在仔细
-                    # 考虑后先进行改动和测试，后面我再审」），待人审】本次只加一档：
-                    # 正式论文（`kind="paper"`）里直接引我方手稿 ⇒ `paper_cites_manuscript`。
-                    # 口径与写入期同源（`doc_tools.check_citations(citing_kind=)` 的那一支），
-                    # 业主逐字：「正式论文阶段只能引用真实论文，正式论文中手稿内容不可直接
-                    # 引用，必须重建」。写入期已经 fail-closed；审计期这一档管的是**历史行与
-                    # 手工写入**（`.noai-approvals.json` 未动，未跑 `noai_gate --approve`）。
+                    # 内部引用（`draft/30` §T4-A）：`doc:<稿件>#<断言>@<哈希前 16 位>`。三段判据（稿件在 / 那条断言在 /
+                    # 钉的哈希就是目标稿件当前这一版）的唯一实现是 `signatures.doc_ref_verdict` —— 题 5/5a 把写入期
+                    # （`doc_tools._doc_citation_problem`）与这里原先各自那一份合成了一份：两份各对同一个字符串判一次，
+                    # 漂了没有任何地方会报。本支现在只做「判定码 → 审计期文案」的翻译，外加一条审计期独有的档：目标
+                    # 稿件必须 accepted（它不在三段里，写入期不查 —— 那是写入期与审计期刻意的口径差）。
+                    # 【FC-27 禁改区 · 所有者授权（2026-10-09「允许你先改后审」），待人审】本档：正式论文（`kind="paper"`）
+                    # 直接引我方手稿 ⇒ `paper_cites_manuscript`（口径与写入期同源 `doc_tools.check_citations(citing_kind=)`；
+                    # 业主逐字：「正式论文中手稿内容不可直接引用，必须重建」）。这一档管历史行与手工写入；`--approve` 未跑。
                     citing = doc_by_id.get(docid) or {}
                     if str(citing.get("kind") or "") == "paper":
                         rep.issues.append(Issue(
@@ -1379,20 +1307,13 @@ def _check_9(rep, documents, questions, req_ids, store):
     泄漏语义（后面的段确实读到了它们）。
     """
     # ---- FC-24 的渲染层 gate：报告里的数字必须能追到一条带完整口径的评测结果
-    #
-    # 为什么这条检查必须有：FC-24 的判据②是"缺任一字段的数字不得进入对外报告"。
-    # 而 `EvalResult.validate` 只能在登记时保证字段齐全 —— 它管不到
-    # 正文里写了一个数字却没引用任何评测记录这种情况。
-    # 而后者才是真正会流出去的形态：报告里一句"pass@1 达到 97%"，
-    # 读者无法知道那是 LLM judge 分、还是端到端精确值、还是别人论文的数字。
-    #
-    # 同一个 miniF2F 数字可以是四件完全不同的事，同对模型在两口径下差 13–30 个百分点
-    # （`08-…md` §A.5.5）。所以"没带口径的数字"与"没有出处的断言"是同一类错误。
-    #
-    # 判据写成"出现了基准数字的形态 且 没有任何 `eval:` 引用" ⇒ warning。
-    # 分级为 warning 而不是 error：正则识别"基准数字"必然有假阳性
-    # （正文里的年份、章节号、页码都可能是数字），所以它交付的是指针，
-    # 而不是缺陷判定 —— 与 linter 的 R006 同一取舍。
+    # 为什么这条检查必须有：FC-24 的判据②是"缺任一字段的数字不得进入对外报告"，而
+    # `EvalResult.validate` 只能在登记时保证字段齐全 —— 它管不到"正文里写了一个数字却没引用任何评测
+    # 记录"这种情况，而后者才真正会流出去：一句"pass@1 达到 97%"，读者不知道那是 LLM judge 分、端到端精确值，还是别人论文的数字。
+    # 同一个 miniF2F 数字可以是四件完全不同的事，同对模型在两口径下差 13–30 个百分点（`08-…md` §A.5.5）
+    # ⇒ "没带口径的数字"与"没有出处的断言"是同一类错误。
+    # 判据写成"出现了基准数字的形态 且 没有任何 `eval:` 引用" ⇒ warning：正则识别"基准数字"必然有假
+    # 阳性（正文里的年份、章节号、页码都可能是数字），所以它交付的是指针而不是缺陷判定（同 R006 的取舍）。
     _bench_number = re.compile(r"(pass@\s*\d+|\d+(?:\.\d+)?\s*%|\bSOTA\b|\bstate[- ]of[- ]the[- ]art\b)")
     for doc in documents:
         docid = doc.get("doc_id")
@@ -1791,36 +1712,14 @@ def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]]) -> list[dict
     return sorted(out, key=lambda item: item["stmt_id"])
 
 
-#: 「`active` 的文献命题必须逐字回验」这一条判据的**判据本体**（一处口径）。
-#:
-#: ## 为什么概念行不在这一条的适用面里
-#:
-#: （2026-10-21，`demo/run` 深验实测 4 条 `active_stmt_quote_unverified`，全部是概念行）
-#:
-#: ① 概念行的 `source_lit_id` **不是**"定义逐字抄自那里"：`agent_b/run_once.py` 写这一格时
-#:    逐字注明「这一格记的是"这个术语是从哪一篇抽出来的"（概念行的出处），不是"定义逐字
-#:    抄自那里"」。而 `origin` 正是从这一格推出来的（`conceptrows.resolve_concept_origin`：
-#:    有出处 ⇒ `external_lit`）⇒ 概念行上的 `origin="external_lit"` 只说"术语的来路是
-#:    某篇文献"，**不构成**"这里有一段原文摘录等着被逐字回验"。
-#: ② `quote_verified` 的比对对象是 `Statement.proof_text`（`schema.Statement` 的 docstring：
-#:    「`proof_text`（逐字摘录）：`quote_verified` 的比对对象就是它。没有逐字原文，
-#:    "引文回验"这件事无从做起」），而概念行**结构上不许**带 `proof_text`
-#:    （`conceptrows.concept_statement` 收到非空 `proof_text` 当场 `ValueError`；那唯一写口
-#:    写死 `proof_text=""` + `quote_verified=None`）。⇒ 这一条对概念行**永远不可能被满足**，
-#:    留着它就是把审计变成一台恒红的机器（"审计天天报警，人就开始忽略它"）。
-#: ③ 读侧早就是这么判的，两处都**显式**跳过概念行，理由串都援引「概念不参与等级链」
-#:    （`draft/97` §14.5；`evidencebits.derive_grade` 对 `kind="concept"` 短路成
-#:    `not_applicable`）：`verifications.proof_review_gap` 写"这一格对它**不适用**"、
-#:    `weaker_than_evidence_gaps` 直接 `continue`。`draft/83` 的真机读数也是同一形态
-#:    （「`statements` 344 条是概念行，`quote_verified` 全 `None` 且带受控理由」——那是
-#:    **正常**，不是欠账）。审计面单独把它们算成 warning 就是两处口径不一致。
-#:
-#: ## 反真空不许省
-#:
-#: 把概念行排除**不是**把这一条摘掉：真的有一条"没出处"的**非概念**命题（`active` +
-#: `external_lit` + `quote_verified is not True`），这一条照旧出 —— 由
-#: `tests/test_verify.py::test_an_unsourced_non_concept_statement_still_warns` 钉住，
-#: 并用"把判据本体换成永远 False"的负控证明那条断言不是真空的。
+#: 「`active` 的文献命题必须逐字回验」这一条判据的判据本体（一处口径）。概念行不在这一条的适用面里（2026-10-21，`demo/run` 深验实测 4 条 `active_stmt_quote_unverified` 全是
+#: 概念行）：① 概念行的 `source_lit_id` 不是"定义逐字抄自那里"（`agent_b/run_once.py` 逐字注明它记的
+#: 是术语的出处，`origin` 由它推出，见 `conceptrows.resolve_concept_origin`）；② `quote_verified` 的
+#: 比对对象是 `proof_text`（见 `schema.Statement` 的 docstring），而概念行结构上不许带 `proof_text`
+#: （`conceptrows.concept_statement` 收到非空当场 `ValueError`）⇒ 这一条对概念行永远不可能被满足，留着它就是把审计变成一台恒红的机器；③ 读侧早就是这么判的（`draft/97` §14.5；
+#: `verifications.weaker_than_evidence_gaps` 直接 `continue`）⇒ 审计面单独算 warning 就是两处口径不一致。
+#: 反真空不许省：没出处的非概念命题（`active` + `external_lit` + `quote_verified is not True`）照旧出 ——
+#: `tests/test_verify.py::test_an_unsourced_non_concept_statement_still_warns` 钉住，负控是"把判据本体换成永远 False"。
 def active_stmt_needs_quote_check(row: Mapping[str, Any]) -> bool:
     """这一行适不适用"`active` 的文献命题必须逐字回验"（`_check_13` 第 4 条的**唯一口径**）。
 
@@ -1962,28 +1861,14 @@ def _check_13(rep, store) -> None:
             usable += 1
     rep.checked["statements_usable"] = usable
     rep.checked["bit_ledger_gaps"] = bit_gaps
-    # ---- 假 `proof_review`（2026-10-19）：definition 早就写了，**没有任何代码核过它**。
-    #
-    # 活证据（`projects/mp1` 现算）：10 条 `evidence_kind="proof_review"` 的命题，
-    # `verification_id` / `reviewed_by` 全是 null、`bits` 是 `{}`；盘上 10 个
-    # `verifications/<命题号>.jsonl`（各 1 行）里 **7 条**签「成立」、**3 条**
-    # （`000031`/`000032`/`000036`）签「有毛病」—— 那 3 条就是这一格点名的那 3 条。
-    # `schema.EVIDENCE_KINDS` 上面那段定义逐字要求「`proof_text` 非空 ＋ V 的
-    # `verifications` 里那一条签「成立」」，2026-10-19 之前没有任何代码问过它。
-    #
-    # 为什么是 **error** 级（与同一段里 `proof_stmt_without_formal_backing` 的 warning
-    # 不同）：那一条说的是"来路可疑"（可能真跑过、只是没记），这一条说的是"这句话
-    # 本身没有对象"—— 一条查不到签的 `proof_review` 在交付面上会被读成
-    # "这一条已被逐行审阅"，而它连"谁审的"都指不出来。写入期现在当场拒收
-    # （`store._refuse_fake_proof_review`），这一格管的是**存量**（改前写进去的那些）。
-    #
-    # 判据本体在 `verifications.proof_review_gap`（写入期 / 收工门读同一处）。
-    #
-    # 为什么**不**往 `rep.checked` 里加一个计数键（`proof_review_unbacked`）：那张
-    # 冻结快照（`tests/golden/verify_all_snapshot.json`）逐键对拍 —— 加一个键就是
-    # 改一次口径读数，须由人重冻；本批按"判据立项、读数不改面"处置：够不够的证据是
-    # 逐条的 `error` Issue（下面这一档），"没查成"是 `proof_review_unchecked` 那条
-    # warning。这样审计的**强度**变了、`checked` 的**形状**没变（快照仍逐字可比）。
+    # ---- 假 `proof_review`（2026-10-19）：definition 早就写了，没有任何代码核过它。
+    # 活证据（`projects/mp1` 现算）：10 条 `evidence_kind="proof_review"` 的命题，`verification_id` /
+    # `reviewed_by` 全是 null、`bits` 是 `{}`；盘上 10 个 `verifications/<命题号>.jsonl` 里 7 条签「成立」、
+    # 3 条（`000031`/`000032`/`000036`）签「有毛病」—— 那 3 条就是这一格点名的那 3 条。
+    # 为什么是 error 级（与 `proof_stmt_without_formal_backing` 的 warning 不同）：那一条说"来路可疑"，
+    # 这一条说"这句话本身没有对象" —— 查不到签的 `proof_review` 会被读成"已被逐行审阅"，而它连"谁审的"
+    # 都指不出来。写入期当场拒收（`store._refuse_fake_proof_review`），本格管存量；判据本体在
+    # `verifications.proof_review_gap`。不加 `rep.checked` 键：`tests/golden/verify_all_snapshot.json` 逐键对拍，加键须由人重冻。
     try:
         gaps = VR.proof_review_gaps(getattr(store, "root", "."), statements)
         # ---- 反方向那一格（2026-10-19）：凭据够了却登记成更弱的档。

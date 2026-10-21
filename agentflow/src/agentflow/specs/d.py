@@ -108,9 +108,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "D", "run_round",
         "把 ingest ->…-> research 串成一轮（有界：limit）",
         # ⚠️ 2026-10-16 补说明（第 10 趟 T5 实测：`report` 传字符串 ⇒ `invalid_params`）。
-        # 与下面 `propose_question` 那条注记**同一个坑**（`draft/37` §130 的真机读数：
-        # **声明不写、handler 拒收 ⇒ 主控只能猜**）：`_OBJ` 只说"是个对象"，没说里面是什么。
-        # 这里要的是**一份 C 的分析报告**（`analysis_reports` 那行的形状 ——
+        # 与下面 `propose_question` 那条注记「同一个坑」（`draft/37` §130 的真机读数：
+        # 「声明不写、handler 拒收 ⇒ 主控只能猜」）：`_OBJ` 只说"是个对象"，没说里面是什么。
+        # 这里要的是「一份 C 的分析报告」（`analysis_reports` 那行的形状 ——
         # `agent_d/propose_question.py` 里记的 `pipeline` C→D 路就是这么传的）。
         _obj({"report": {"type": "object",
                          "description": "一份 **C 的分析报告**（`analysis_reports` 那行的对象；"
@@ -199,10 +199,10 @@ SPEC = AgentSpec(
             "猜想的九个状态各自必须带什么（schema 的硬条件，缺一样就当场拒收）：`proposed` 要给非空 `testable`（给不出一律落 `needs_evidence`）；`supported_not_proved` 要至少一条 `experiment_ids`；`refuted` 要 `counterexample_experiment_id`；`proved` 要 `proof_experiment_id`；`promoted` 要 `promoted_to`；`known_in_literature` 要 `known_lit_id`；`withdrawn` 要 `withdraw_reason`。",
         ),
         policy=(
-            # 2026-10-20 业主裁定（逐字：「**F 和 E 都是 D 的研究侧直属，M 的职责是统筹协调，
-            # D 是真正主导研究**……请**加强 D 侧研究的积极性，压低 M 自主操纵研究的积极性**」）
+            # 2026-10-20 业主裁定（逐字：「「F 和 E 都是 D 的研究侧直属，M 的职责是统筹协调，
+            # D 是真正主导研究」……请「加强 D 侧研究的积极性，压低 M 自主操纵研究的积极性」」）
             # ⇒ 头一条就是"你主导研究"：派 C/E/F、让 F 带 V 的签字，都由 D 自己决定。
-            # 它**不新增任何边**（D 的出边仍是 A/B/C/E/F，`D→V` 那条已叫停）—— 只是把
+            # 它「不新增任何边」（D 的出边仍是 A/B/C/E/F，`D→V` 那条已叫停）—— 只是把
             # 已有的授权写成"由你决定、不必等 M 批准"，否则 D 每走一步都要先问主控。
             "**研究侧由你主导**：下一步做什么、派 C（要候选路径）、派 E（写脚本/玩具例子）、"
             "派 F（攻坚）、让 F 带 V 的签字，都由你决定，不必等 M 批准；M 只做统筹与搭桥。",
@@ -221,14 +221,14 @@ SPEC = AgentSpec(
             "`counterexample_experiment_id`），并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。"
             "**这一轮逐条点名新增的东西**（有模型缝时 ≥3 条：新猜想、新问题或一步新归约、新读数，可组合；缝没接时如实报 "
             "`not_wired`，不硬凑三条）；只整理已有成果不算推进。",
-            # 2026-10-21 减负：原来这是**两条**（"猜想写出来交给 F"＋"立了猜想必须派 F"），
+            # 2026-10-21 减负：原来这是「两条」（"猜想写出来交给 F"＋"立了猜想必须派 F"），
             # 前者的机制细节并进后者、重复的说理删掉；三处关键事实（D→F 边通 / summon 形状 / problem_key 用 conjecture_id）逐字保留，
             # 判据：tests/test_d_summons_c_and_c_reports_back::… 与 closing 的 attack 那一格。
             "**立了猜想就必须在同一趟里派 F**（硬义务，`D→F` 的边是通的、用循环的 `summon` 形状唤起 `F.create_plan`，"
             "`problem_key` 就用猜想的 `conjecture_id`、`subgoals` 给一到三个可判定的子目标）：`register_conjecture` 成功之后的下一步就派 "
             "`F.create_plan`，并至少推进一步 "
             "`F.step`（按别的名字派只会拿到 `unknown_action`）。**派了 F 就要在同一趟里读回它的结果**：推得动就让 F 继续"
-            # 2026-10-20 业主裁定（逐字："我们自己经 F 产出的证明天生带 V 签字"）：D **不派 V**
+            # 2026-10-20 业主裁定（逐字："我们自己经 F 产出的证明天生带 V 签字"）：D 「不派 V」
             # —— V 的签字由 F 在交出证明时一并办好（F 是唯一能派 V 的人），D 只核"带没带签"。
             "（F 交回的证明要带 V 的签字：没有就让 F 去补签 —— F 会派 V，你不要自己派 V；签不了就让 B 如实降档），"
             "要实验就派 E，推不动就上报召唤者。判定是可读的：这一趟收工时 `attack_plans` 里必须有本趟新立的那条、且它**至少有一轮真推进**"
@@ -318,7 +318,7 @@ SPEC = AgentSpec(
     summonable=True,
     # 2026-10-20 业主裁定（逐字："F 产出的证明带 V 签字后不该反复要求签字，所以最早版本
     # 只有 F 能派 V；B 负责定理及证明入库时可让 V 审核签字，这是对文献侧引入的内容需要看的"）：
-    # **D 不派 V** ⇒ 这一格刻意没有 `V`（边总数因此仍是 33）。D 的义务是「确认 F 交回的证明
+    # 「D 不派 V」 ⇒ 这一格刻意没有 `V`（边总数因此仍是 33）。D 的义务是「确认 F 交回的证明
     # 带 V 的签字，没有就让 F 去补签（F 会派 V）」，见 `brief.policy` 里「立了猜想就必须在
     # 同一趟里派 F」那一条。`specs/m.py` 里那两条"要有人走查"的文句同样转交到 D 名下
     # （D 再让 F 去办）—— 判据见 `tests/test_v_signing_belongs_to_f_and_b.py`。

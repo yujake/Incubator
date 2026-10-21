@@ -56,17 +56,12 @@ class _Core:
                         providers: Iterable[str] | None = None) -> dict:
         """把一条按主题的检索请求入队（过 I7 准入闸门 + 取号 + 落行）。
 
-        与 CLI `submit` 同一套口径：同一个事务、同一个取号函数
-        （`interactions.next_prefixed_id`）、同一份行校验。
-        差别只有一处、且是有意的：这里先过准入闸门。CLI 那条人工路径不闸
-        （人自己知道自己在提交什么），而角色在循环里提问必须受在途上限约束 ——
-        否则"知识不足就提问"会退化成"每轮都问"，把所有请求一起拖慢
-        （`admit_search_request` 的 docstring 逐字写了这件事）。
-
-        `providers` 原样落进 `SearchRequest.providers`：空 = 没点名源
-        （按角色级接线查，与加这一格之前的行为一致）；非空 = 这一行只问这几个源。
-        它是请求行上的属性，不改角色级接线 —— 一条请求点名的源不许影响
-        下一条请求（那会让"谁提的"这件事在链路上丢失）。
+        与 CLI `submit` 同一套口径：同一个事务、同一个取号函数（`interactions.next_prefixed_id`）、
+        同一份行校验。差别只有一处且是有意的：这里先过准入闸门（`admit_search_request` 的 docstring
+        逐字写了理由 —— 人在 CLI 上知道自己在提交什么，角色在循环里提问必须受在途上限约束）。
+        `providers` 原样落进 `SearchRequest.providers`：空 = 按角色级接线查（与加这一格之前一致）；
+        非空 = 这一行只问这几个源。它是行上的属性，不改角色级接线 —— 一条请求点名的源不许影响
+        下一条请求（那会让"谁提的"在链路上丢失）。
         """
         with self.store.tx("search_requests", actor=self.actor, note="a.search") as tx:
             rows = tx.rows("search_requests")
@@ -115,61 +110,15 @@ class _Core:
     def _claim(self) -> ClaimOutcome:
         """在锁内按 I7 优先级领取一条待办请求：置 claimed_by / lease_until / attempts+=1。
 
-        排序键全权由 `interactions.order_pending_requests` 决定
-        （优先级 → 租约是否过期 → 提交时间 → request_id）。这里不另写排序：
-        见模块 docstring 第 4 条 —— 两套判据必然漂移，而漂移的表现是
-        "高优先级静默沉底"，不会报错。
-
-        A 只排队，不抢占。 已经有一条请求在跑时，即使此刻来了更高的优先级，
-        也要等它跑完 —— 正在跑的那条已经付掉了检索与下载的成本，打断它会让
-        两条都变慢，还会在 staging 里留下半成品。高优先级请求在下一轮
-        `_claim()` 时自然排到队首，这一点由 `order_pending_requests` 保证。
-
-        保留的租约语义（唯一判据是"租约是否仍在有效期内"）：`lease_until` 在未来
-        ⇒ 不得被取走（哪怕它是 high）；`lease_until` 为空或已过期 ⇒ 可以抢
-        （空 = 无人持有；已过期 = 之前有人拿到却没做完，收回沉没成本比重新开一条更便宜）。
-        `claimed_by` 不参与"要不要跳过"的判断，它只用来解释为什么被跳过
-        （落进 `skipped_lease_active` 还是 `skipped_lease_backoff`）。
-        租约判据用 `store.lease_expired`，与 `order_pending_requests` 内部用的是同一个
-        函数，不在这里自己比较时间字符串。
-
-        为什么判据必须是这样（它曾经少读了一半）：搜索失败时 `run_once` 写下的退避租约
-        是 ``claimed_by=None`` + 未来的 `lease_until`；若这里额外要求 `claimed_by` 非空，
-        那条租约就永远不会被读到 —— 同一个 A 实例下一轮立刻再领同一条，连打同一个
-        API（最多到 `max_attempts` 才 `gave_up`）。写进存储的约束不等于被执行的约束，
-        所以自检里既断言"租约被写了"，也断言"再领一次领不到"。
-
-        两个计数分开数，因为它们对应两件不同的事（处置也不同）：
-
-        - ``skipped_lease_active``  —— 租约有效 且 `claimed_by` 非空（别人正在做）
-        - ``skipped_lease_backoff`` —— 租约有效 且 `claimed_by` 为空（我们自己上次失败
-          留下的退避，要等到期才允许重试）
-
-        实测提醒（别被"过期优先"的措辞误导）：`order_pending_requests` 把
-        "租约为空（无人持有）"与"租约已过期"放进同一个排序桶，两者都排在
-        "租约仍在走"的前面。因此过期租约不会插全新请求的队，但也不会被饿死
-        （同桶内按 FIFO 轮到）。排序与跳过是两件事，不要混在一句话里：
-        退避租约是靠本条跳过判据生效的；`order_pending_requests` 的分桶只负责
-        让它在排序上不抢占（不排到全新请求前面）。按"过期优先"去改分桶，改坏的是排序；
-        把跳过判据收紧回 ``claimed_by`` 非空，改坏的才是退避本身。
-
-        没取到请求时给出的 `skipped_reason`（不许压成一个 None）：
-
-        - ``"no_pending_request"``              —— 队列里没有未完成的请求（真没事可做）
-        - ``"pending_requests_all_leased"``     —— 有未完成的，但全部被别人持着有效租约
-        - ``"pending_requests_all_in_backoff"`` —— 有未完成的，但全部在自己的退避租约里
-          （`claimed_by` 为空 + `lease_until` 在未来）。它与上一条必须分开：那句诊断
-          说的是"别人持着"，而这里的活其实是我们自己上次失败留下的 —— 读成"别人在跑"
-          会让运维去找一个不存在的另一个 A 实例（而换个实例照样领不到：租约写在行上，不认人）。
-        - ``"no_claimable_request"``            —— 有未完成的，但剩下的全在本次被放弃
-          （attempts 用尽 ⇒ done=true），或既有被别人持着的、又有在退避中的
-          （"有活但都领不到"—— 最诚实的说法，不替调用方猜该等别人还是等自己），
-          或其它任何未能归入上面某一类的情形
-
-        优先级（判据只有这一处，顺序即优先级）：队列空 → 全被别人持着 → 全在退避中 →
-        其余一律 ``no_claimable_request``。中间两类各自要求整队都是这一种情形
-        （该计数 == `pending`），所以"一部分被别人持着、一部分在退避"这种混合情形
-        自然落进最后一个，不会被谎报成其中任何一类。
+        排序键全权由 `interactions.order_pending_requests` 决定，这里不另写排序（两套判据必然漂移，
+        而漂移的表现是"高优先级静默沉底"，不会报错）；A 只排队、不抢占，高优先级请求在下一轮
+        `_claim()` 时自然排到队首。租约唯一判据是"是否仍在有效期内"（用 `store.lease_expired`）：
+        在未来 ⇒ 不得被取走（哪怕 high）；为空或已过期 ⇒ 可以抢。`claimed_by` 不参与"要不要跳过"，
+        只用来把两种跳过分开：`skipped_lease_active`（别人在做）/ `skipped_lease_backoff`（我们自己的
+        退避）。这一格曾少读一半：退避租约是 ``claimed_by=None`` + 未来的 `lease_until`，若额外要求
+        `claimed_by` 非空，那条租约永远读不到 ⇒ 同一实例下一轮再领同一条、连打同一个 API。
+        没取到时 `skipped_reason` 逐个命名：``"no_pending_request"`` / ``"pending_requests_all_leased"`` /
+        ``"pending_requests_all_in_backoff"`` / ``"no_claimable_request"``（优先级即这个顺序）。
         """
         with self.store.tx("search_requests", actor=self.actor, note="claim") as tx:
             rows = tx.rows("search_requests")
@@ -247,25 +196,15 @@ class _Core:
     def _query_description(topic: str, description: str) -> str:
         """挑"能进查询串的那一份 description"：只留英文关键词，非 ASCII 的部分丢掉。
 
-        真机实测（2026-09-30，`temp/_probe_precise_desc.py`）：G 很自然地写了一段中文
-        description（"论文包引言 used_by=main.tex:introduction 需要一条外部文献支撑：…"），
-        而 `precise` 模式把它拼进查询串：
-        `论文包引言 … 分支布朗运动极值过程的 Poisson 点过程 OR <英文词>` ⇒ OpenAlex 0 条；
-        同一句 topic、description 换成英文短语 ⇒ 8 条里 7 条对题。
-        中文描述不是"信息少"，而是把检索带偏（它在以英文为主的库里成了主导词）；
-        而两层闸门都不拦它 —— `providers` 只对纯中文题面 fail-closed
-        （抛 `query_not_applicable_cjk`，落第三态"没问"），题面+中文描述混排走的是
-        `applicable_as_is`，于是静默清零。这正是"没报错、也没结果"的形态。
-
-        判据（不是"含不含 ASCII 字母"—— 第一版就是这条，被 `used_by=main.tex:introduction`
-        这种"中文里夹一个英文路径"的描述骗过）：把非 ASCII 字符全部丢成空格之后，
-        至少还剩两个英文词才拿它当查询描述；否则传空串（provider 于是只用题面
-        构造查询 —— 实测那一档 8 条里 7 条对题）。这样 "需要 Poisson point process 的支撑"
-        留下 `Poisson point process`，而 "论文包引言 used_by=main.tex:introduction …"
-        只剩一个词 ⇒ 判为不可用。
-
-        留痕不受影响：`content_description` 在请求行上原样保留，审计仍看得到角色写了什么；
-        `search_literature` 的返回里另给 `query_description`，让调用方知道实际用了什么。
+        真机实测（2026-09-30，`temp/_probe_precise_desc.py`）：G 写了一段中文 description，`precise`
+        把它拼进查询串 ⇒ OpenAlex 0 条；同一句 topic 换成英文短语 ⇒ 8 条里 7 条对题。中文描述不是
+        "信息少"，而是把检索带偏；而两层闸门都不拦它 —— `providers` 只对纯中文题面 fail-closed
+        （抛 `query_not_applicable_cjk`），题面+中文描述混排走 `applicable_as_is`，于是静默清零。
+        判据不是"含不含 ASCII 字母"（第一版就是这条，被 `used_by=main.tex:introduction` 这种"中文里
+        夹一个英文路径"骗过）：丢掉非 ASCII 后至少还剩两个英文词才拿它当查询描述，否则传空串
+        （provider 只用题面构造查询）。
+        留痕不受影响：`content_description` 在请求行上原样保留；`search_literature` 的返回里另给
+        `query_description`，让调用方知道实际用了什么。
         """
         raw = str(description or "")
         ascii_only = "".join(ch if ch.isascii() else " " for ch in raw)
@@ -354,23 +293,13 @@ class _Core:
     def _search(self, req: dict) -> tuple[list[Any], list[str], dict]:
         """按这一行请求检索，并把"这一次问得怎么样"的读数一起交回。
 
-        ## `providers` 这一格是唯一的开关（三态）
-
-        - 行上没点名源（空数组）⇒ 走 `_search_along_wiring`：按角色级接线查，
-          与加这一格之前逐字相同的行为（候选只拼接，跨源判重仍归提交阶段）；
-        - 行上点名了源 ⇒ 只问点名的那些源，跨源去重与逐源三态全部交给
-          `providers.MultiProvider` —— 与工具面 `search.literature` 的多源分支
-          是同一份实现，这里不另写一套合并口径；
-        - 点名了接线里没有的源 ⇒ 如实进 `errors`（并列出可用名单），
-          不静默丢掉那个名字。
-
-        第三个返回值是读数（`providers_requested` / `role_providers` /
-        `sources` / `cost`），键名与形状照工具面的同名读数。
-
-        为什么领取侧还要再核一遍名：入队之前动作层已经核过了（第三态在那里
-        就被拒了），但队列里的行还可以由别的手写路径建出来（CLI `submit`、
-        别的角色的 gap 分支），也可能在"换了接线重启"之后才被领到 ——
-        那时名单已经变了。领取侧只认这一行写的名字，不替它改。
+        `providers` 这一格是唯一的开关（三态）：行上没点名源（空数组）⇒ 走 `_search_along_wiring`，
+        按角色级接线查，与加这一格之前逐字相同；点名了源 ⇒ 只问点名的那些，跨源去重与逐源三态
+        全部交给 `providers.MultiProvider`（与工具面 `search.literature` 的多源分支是同一份实现）；
+        点名了接线里没有的源 ⇒ 如实进 `errors`（并列出可用名单），不静默丢掉那个名字。
+        第三个返回值是读数（`providers_requested` / `role_providers` / `sources` / `cost`），键名与形状
+        照工具面的同名读数。领取侧还再核一遍名的理由：队列里的行还可以由别的手写路径建出来
+        （CLI `submit`、别的角色的 gap 分支），也可能在"换了接线重启"之后才被领到。
         """
         mode = req["mode"]
         limit = int(self.limits.get(mode, 10))
@@ -548,20 +477,13 @@ class AgentA(_RunOnce, _Run, _SearchLiterature, _IngestLocal, _ShelfSearch, _Wal
 def _selftest() -> int:
     """`python -m agentflow.agent_a` 的自检：跑通主路径并断言关键不变量。
 
-    ## 为什么这个函数必须存在（它修的是一个静默空成功）
-
-    `scripts/release_check.py` 第 2 项会逐个 `python -m agentflow.agent_<role>` 并看退出码。
-    在本次修复之前，`agent_a` 没有 `__main__` 块，于是那条命令输出 0 行、退出码 0
-    —— 旧判据会把它记成"自检通过"，而它其实什么都没检查。这正是本项目最忌讳的形态：
-    "没做"被读成"通过"（`DEVELOPMENT.md` §10-D5 与附录 C 第 4 条都记着这件事；
-    现在 `release_check.item_selftests` 也专门加了 `has_selftest` 判据把它报成 `unknown`）。
-
-    自检覆盖的是主路径与三条降级路径，全部离线、确定性：
-    取任务的 I7 优先级、落库（含下载证据）、判重幂等、队列空/全被租/全在退避/全被放弃的
-    四态、搜索失败不置 done 且退避租约被遵守（"写了"必须升级成"写了且被读"）、
-    下载失败仍然登记。
-
-    退出码：`0` = 全部通过；`1` = 有失败项（退出码是这份自检唯一的机器可读结论）。
+    为什么必须存在（它修的是一个静默空成功）：`scripts/release_check.py` 第 2 项逐个
+    `python -m agentflow.agent_<role>` 并看退出码，而 `agent_a` 曾没有 `__main__` 块 ⇒ 那条命令输出
+    0 行、退出码 0，旧判据把它记成"自检通过"，其实什么都没检查（`DEVELOPMENT.md` §10-D5 与附录 C
+    第 4 条都记着这件事；现在 `release_check.item_selftests` 用 `has_selftest` 判据把它报成 `unknown`）。
+    自检覆盖主路径与三条降级路径，全部离线、确定性：I7 优先级、落库（含下载证据）、判重幂等、
+    队列空/全被租/全在退避/全被放弃四态、搜索失败不置 done 且退避租约被遵守（"写了"必须升级成
+    "写了且被读"）、下载失败仍然登记。退出码：`0` = 全部通过；`1` = 有失败项。
     """
     import hashlib
     import shutil

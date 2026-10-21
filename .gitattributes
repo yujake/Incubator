@@ -1,1 +1,42 @@
 * -text
+
+# 2026-10-21 换行符策略（业主提示：文本模式写文件会把 \n 变成 CRLF；git 可用 eol 自动统一）
+#
+# 背景实测：仓库里 629 个文件 index/worktree 都是 LF，但 93 个 index 里存的是 CRLF
+# （工作区已被改成 LF、还没提交），16 个两头都是 CRLF，2 个是 mixed。根因有两个：
+#   ① `core.autocrlf=false` + 本文件此前只有 `* -text` ⇒ git 完全不做归一化；
+#   ② Python 文本模式写文件（`open(..., "w")` / `Path.write_text`）在 Windows 上会把 `\n` 写成 CRLF
+#      ⇒ 谁用默认模式改一次文件，LF 就被"修"回 CRLF（这解释了 CRLF 为什么反复出现）。
+#
+# 现在口径：
+#   · 源码与文档**在仓库里一律存 LF**（`text eol=lf`：入库归一成 LF、checkout 出来也是 LF，
+#     不再依赖各人的 `core.autocrlf`）；
+#   · **冻结快照与二进制一律不动**（`-text`）：`tests/golden/**` 与 `tests/fixtures/**`
+#     是按字节 sha256 冻结的，git 一旦替它换行，哈希就变，那批判据会红成一片；
+#   · 未列出的类型沿用顶部 `* -text`（即"git 别碰"）。
+#
+# 配套两条纪律（写进 DEVELOPMENT.md）：
+#   1. 写文件时**显式指定换行**：`open(..., "w", encoding="utf-8", newline="\n")`，
+#      或直接用 `write_bytes`（`Path.write_text` 在 Windows 上默认写 CRLF）；
+#   2. 收口时用 `git ls-files --eol` 复核"**存进去的**是哪一种"，别只看工作区。
+
+*.py     text eol=lf
+*.pyi    text eol=lf
+*.md     text eol=lf
+*.txt    text eol=lf
+*.toml   text eol=lf
+*.cfg    text eol=lf
+*.ini    text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.ps1    text eol=lf
+*.sh     text eol=lf
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+.gitignore       text eol=lf
+.gitattributes   text eol=lf
+agentflow/.noai-paths  text eol=lf
+
+# 冻结快照与夹具：按字节 sha256 冻结，git 不许替它换行（与 `* -text` 同效，显式写出来是为了让人看得见）
+agentflow/tests/golden/**    -text
+agentflow/tests/fixtures/**  -text

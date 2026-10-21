@@ -170,7 +170,7 @@ SPEC = AgentSpec(
                      # 现在 F 自己落一行（`evidence_kind` 由 `verifications/<命题号>.jsonl` 里
                      # 的签名现算：有那一签 ⇒ `proof_review`，没有才 `heuristic`；`bits` 留空
                      # —— 五位里第 3 位的 owner 是 V，不替别人签），可复核的那一份因此存在了。
-                     # ⚠️ 这是**写集扩容**（F 从此会写 `statements`）⇒ 落在 FC-27 的
+                     # ⚠️ 这是「写集扩容」（F 从此会写 `statements`）⇒ 落在 FC-27 的
                      # 人工复核面里：本批只做、不签。
                      'statements',
                  )),

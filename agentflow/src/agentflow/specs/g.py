@@ -171,11 +171,11 @@ SPEC = AgentSpec(
             "**断言只能声称它所引实验的 `result` 支持的东西**：引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）"
             "的实验时，这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），或者先去让 E 跑出一个真给出 "
             "`REPRO_RESULT:` 的实验。",
-            # 2026-10-21：原「**引用一个与断言相反的证据行，比没有引用更坏**：读者会以为它被核过。」
+            # 2026-10-21：原「「引用一个与断言相反的证据行，比没有引用更坏」：读者会以为它被核过。」
             # 已压成下面一行 —— 判据守得住的那一半（`result=refutes` 被当支撑）由判据点名；
             # 另一半（否定断言引 `supports`）判不了：`supports` 是相对实验行自己的 `claim`
             # 说的，要判它得让实验行声明"它检验的命题相对这条断言的极性"（schema 改动），
-            # 所以那一半**留着**，不删。
+            # 所以那一半「留着」，不删。
             "**引用一条与断言方向相反的实验行，比不引更坏**：`result=refutes` 被当支撑由判据报 error；"
             "反向（否定断言引 `supports`）判不了，写正文时自己说清。",
             # 判据：tests/test_g_evidence_obligations.py::test_a_claim_may_not_cite_an_experiment_that_refutes_it
@@ -188,7 +188,7 @@ SPEC = AgentSpec(
             '后来被证否时，压在它上面的正文断言会被逐条点名（`pollution_assertions`）；没写 `stmt:` 的引用指不到任何命题。反过来说：'
             '引了 `stmt:XXXX` 而 `statements` 里没有 `XXXX` 就是悬空引用，写入期与审计期都会判成 error。**2026-10-18 起** `stmt:` 只'
             '活在断言台账与附录 A 里，**论文正文一个字都不写** —— 正文引自己的结果是「由 Theorem 3.2 得」。',
-            # 2026-10-21：原「**同一份证据不能当第二份用**：一条断言引一条实验行；若你的论据是
+            # 2026-10-21：原「「同一份证据不能当第二份用」：一条断言引一条实验行；若你的论据是
             # 「同一个对象被核了两次」，那要说清是复现而不是新证据（实验行的 `notes` 会点名
             # 「同一份 data 已经支持过 exp:XXXX」）。」一条已删（判据守住了才删）。
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims

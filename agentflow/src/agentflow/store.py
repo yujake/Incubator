@@ -1260,21 +1260,11 @@ class Store:
 
             # ---- 提交：先全部校验，再在写者锁内落盘与追加事件。任一失败 => 什么都不写。
             #
-            # `F-1`：这一段曾经是"先落盘全部快照、再追加事件"，两者之间崩一次就留下
-            # "快照里有、事件里没有"的行，而 `rebuild()` 会不报错地丢掉最后一次
-            # 提交（实测：快照 2 行 / counters=2，rebuild 后 1 行 / counters=1）。
-            # 现在的顺序与形状：
-            #
-            #   ① 校验（全在内存里，失败 ⇒ 一行都不写）；
-            #   ② 追加事件 + 提交标记（先落事件：崩在这里 ⇒ 快照还是旧的，
-            #      而那一批事件没有提交标记 ⇒ 重建时不会重放它）；
-            #   ③ 逐张落盘快照（崩在这里 ⇒ 事件有、快照可能只写了一半 ——
-            #      但重建会把那一批完整地重放一遍，于是结果是一致的）。
-            #
-            # 为什么"先落事件"是安全的方向：`rebuild()` 按主键 last-write-wins 折叠
-            # 整行 upsert，重放一批完整的事件得到的就是提交时的那个状态；
-            # 反过来（先快照后事件）丢掉的是事件，而重建的唯一输入就是事件 ⇒
-            # 那一次提交在重建后消失，且没有任何东西会报告这件事。
+            # `F-1`：顺序必须是「① 校验 → ② 追加事件+提交标记 → ③ 逐张落盘快照」。先快照后事件时崩一次
+            # 会留下"快照里有、事件里没有"的行，而 `rebuild()` 不报错地丢掉那次提交（实测：快照 2 行 /
+            # counters=2 ⇒ 重建后 1 行 / counters=1）。先落事件是安全方向：`rebuild()` 按主键 last-wins
+            # 整行 upsert 折叠，重放一批完整事件得到的就是提交时的状态；反过来丢掉的是事件，而重建的
+            # 唯一输入就是事件 ⇒ 那一次提交在重建后消失，且没有任何东西会报告这件事。
             to_write: list[tuple[Path, dict]] = []
             counters_pending = False
             for table in sorted(t._dirty, key=LOCK_ORDER.index):
@@ -1294,24 +1284,13 @@ class Store:
                 doc = {"schema_version": S.SCHEMA_VERSION, "rows": t.rows(table)}
                 S.validate_table(table, doc)
                 # ---- 写入期闸：`evidence_kind="proof_review"` 必须有 V 那一签。
-                #
-                # 为什么落在**这一层**（`tx` 的提交块）而不是 `schema.Statement.validate`：
-                # 那条判据要读的是 `verifications/<命题号>.jsonl`（盘上的账本，不是表），
-                # 而 `Statement.validate` 是字段级、手上没有工作区根。`Store` 有 `self.root`
-                # ⇒ 只有这一层既拿得到根、又是**所有写者**的必经之路
-                # （`agent_b.register_statement` / F 的 `_proof_outlet` / 通用的
-                # `table.create`·`table.update` 全都落在这里）。
-                # 落在某一条动作里就只能管住那一条动作：`table.create(table="statements")`
-                # 一样能写 —— 而"绕开那一条动作"正是本仓已经踩过的形态。
-                #
-                # `rebuild` 刻意**不**走这里（它读事件重放历史，见下面的 `rebuild()`）：
-                # 存量里已有的假 `proof_review` 由审计期那一档点名
-                # （`verify._check_13` 的 `proof_review_without_verification`），
-                # 而不是让重建在历史数据上当场炸掉（那会把"读历史"变成"改历史"）。
-                #
-                # `before_rows` 是**盘上那一份**（不是本事务的缓存）：闸只核这一笔
-                # 真改到的行，别的行的历史缺陷由审计期点名 —— 否则在 `projects/mp1`
-                # 那种存量上，连"如实降档"都写不进去（见闸的 docstring）。
+                # 为什么落在这一层（`tx` 的提交块）而不是 `schema.Statement.validate`：那条判据要读盘上的
+                # `verifications/<命题号>.jsonl`，而 `validate` 是字段级、手上没有工作区根；只有 `Store` 既有
+                # `self.root`、又是所有写者的必经之路（`agent_b.register_statement` / F 的 `_proof_outlet` /
+                # `table.create`·`table.update` 全落在这里）。落在某一条动作里只能管住那一条动作，而"绕开那条
+                # 动作"正是本仓踩过的形态。`rebuild` 刻意不走这里（读历史不是改历史）：存量里已有的假
+                # `proof_review` 由审计期 `verify._check_13` 的 `proof_review_without_verification` 点名。
+                # `before_rows` 是盘上那一份（不是本事务缓存）：闸只核这一笔真改到的行，别的行的历史缺陷由审计期点名。
                 _refuse_fake_proof_review(
                     self.root, table, doc,
                     before_rows=(self._load(table).get("rows") or []))

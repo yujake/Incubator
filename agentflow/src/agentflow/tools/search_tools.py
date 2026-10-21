@@ -260,10 +260,10 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
 
     books: list[dict] = []
     missing = 0
-    # ⚠️ **2026-10-16（亲测 A 的工具面时加的）**：这一件叫 `search.shelf`，可它的参数里
-    # **没有 `query`** —— 我第一次凭感觉敲的就是 `query=`，吃了一个"未声明的参数"。
-    # 按业主口径（"第一次凭感觉敲红的，真实智能体也会在这里困惑"）⇒ 让**第一猜能 work**：
-    # 可选 `query`，按**题名/路径**做子串过滤（大小写不敏感）。它不读全文
+    # ⚠️ 「2026-10-16（亲测 A 的工具面时加的）」：这一件叫 `search.shelf`，可它的参数里
+    # 「没有 `query`」 —— 我第一次凭感觉敲的就是 `query=`，吃了一个"未声明的参数"。
+    # 按业主口径（"第一次凭感觉敲红的，真实智能体也会在这里困惑"）⇒ 让「第一猜能 work」：
+    # 可选 `query`，按「题名/路径」做子串过滤（大小写不敏感）。它不读全文
     # （全文按主题取片段是 `search.local` 的事，两者的分工在说明里写清）。
     needle = str(query or "").strip().lower()
     matched = 0
@@ -921,10 +921,10 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         return fail(f"下载异常：{type(exc).__name__}: {exc}", kind="download_error", url=url)
 
     if not res.ok:
-        # ⚠️ **2026-10-16（把 A 做成会应变的智能体）**：这里要把**下载层那一档**
+        # ⚠️ 「2026-10-16（把 A 做成会应变的智能体）」：这里要把「下载层那一档」
         # 原样带出去（`fetch_kind`）。改前只给一个笼统的 `download_failed`，
         # 细分类（`tls_cert` / `tls_timeout` / `http_403` / `network_error` …）只剩在
-        # 自由文本里 ⇒ **A 读不到"为什么没下到"，也就没法决定"换源还是重试"**。
+        # 自由文本里 ⇒ 「A 读不到"为什么没下到"，也就没法决定"换源还是重试"」。
         # 现场读数（我亲自下的那一轮）：`tls_cert` 类同一个 URL 每次要 122 秒才判死
         # （本机证书/吊销检查），而 `http_403` 是明确不给脚本 ⇒ 两者的正确处置相反
         # （前者换源/改客户端开关，后者直接换源），不看类别就只能在原地耗时间。
@@ -1640,7 +1640,7 @@ def _search_register(ctx, title, type_code, summary, path=None, doi=None, year=N
 #      序号不复用、记录不物理删除；拒收走 `lit.stage_reject`；
 #   ④ 与本地库重叠度高的：只有给了 `new_content` 才许入库（`lit.overlap_check` 的读数）；
 #   ⑤ 待新增列表支持增/删/查、可多次追加（第 2 批序号接着第 1 批）；
-#   ⑥ 列表按**委托**重置（默认视图只看当前委托）+ 一键迁移 `lit.admit_all`（迁移后清空、
+#   ⑥ 列表按「委托」重置（默认视图只看当前委托）+ 一键迁移 `lit.admit_all`（迁移后清空、
 #      写委托报告 `reports/lit-<request_id>.md`：已入库一块 + 未入库（含受控理由）一块）。
 #
 # 判据的真身全在 `agentflow/litstage.py`（上限、阈值、状态机、报告结构只有那一处）；
@@ -1660,17 +1660,17 @@ def _stage_fail(exc: Exception) -> Any:
 
 
 def _h_lit_overlap_check(ctx: _Ctx, title: str, doi: str | None = None) -> Any:
-    """``lit.overlap_check``：**不联网**，说明"这一条与本地库重叠多少、要不要 new_content"。
+    """``lit.overlap_check``：「不联网」，说明"这一条与本地库重叠多少、要不要 new_content"。
 
-    口径（与 `litstage.overlap_check` **同一份实现**，这里只补两句读数）：
+    口径（与 `litstage.overlap_check` 「同一份实现」，这里只补两句读数）：
 
-    - **DOI 完全相同 ⇒ 视为重复**（`duplicate=True`）：同一篇文献说不出"新内容"，
+    - 「DOI 完全相同 ⇒ 视为重复」（`duplicate=True`）：同一篇文献说不出"新内容"，
       所以给不给 `new_content` 都不入库；
-    - 否则按**标题词集 Jaccard** 算重叠度，阈值 ``OVERLAP_HIGH_JACCARD = 0.60``
+    - 否则按「标题词集 Jaccard」 算重叠度，阈值 ``OVERLAP_HIGH_JACCARD = 0.60``
       （取值依据见 `litstage.OVERLAP_HIGH_JACCARD` 的 docstring）：
       ≥ 0.60 ⇒ `requires_new_content=True`，调用方必须给 `new_content`。
 
-    三态：未配置 store ⇒ `fail(kind="no_store")` + `checked=False`（**不是**"没有重叠"）；
+    三态：未配置 store ⇒ `fail(kind="no_store")` + `checked=False`（「不是」"没有重叠"）；
     表读不出来 ⇒ `fail(kind="store_error")`（同样不是"没有重叠"）。
     """
     from ..litstage import overlap_check
@@ -1707,15 +1707,15 @@ def _h_lit_stage_add(
     entries: Iterable[Mapping[str, Any]],
     batch: int | None = None,
 ) -> Any:
-    """``lit.stage_add``：把候选**追加**进本次委托的待新增列表（一次可追加任意条，>10 也允许）。
+    """``lit.stage_add``：把候选「追加」进本次委托的待新增列表（一次可追加任意条，>10 也允许）。
 
-    为什么暂存不设 10 的上限：上限管的是**入库**（业主口径 ①）；"广搜 30 条、精选 8 条入库"
+    为什么暂存不设 10 的上限：上限管的是「入库」（业主口径 ①）；"广搜 30 条、精选 8 条入库"
     是正路，把上限提前到暂存这一档会让它直接走不通。
 
-    槽位号由 `store.alloc_id("candidate")` 发：**只增不复用**。所以第 2 批的序号接着
+    槽位号由 `store.alloc_id("candidate")` 发：「只增不复用」。所以第 2 批的序号接着
     第 1 批往下排（12 条 + 3 条 = 1..15；中间被撤掉的号空着，不会被再发一次）。
 
-    `request_id` **必须给**（业主 2026-10-20 第 1 条：列表按委托重置）—— 换一个
+    `request_id` 「必须给」（业主 2026-10-20 第 1 条：列表按委托重置）—— 换一个
     `request_id` 就是"从空列表开始下一次委托"，旧委托的行不删、也不参与本次筛选。
     """
     from ..litstage import stage_entries
@@ -1739,9 +1739,9 @@ def _h_lit_stage_list(
     batch: int | None = None,
     status: str | None = None,
 ) -> Any:
-    """``lit.stage_list``：按委托 / batch / status 查待新增列表（**空槽位照样在列表里**）。
+    """``lit.stage_list``：按委托 / batch / status 查待新增列表（「空槽位照样在列表里」）。
 
-    **默认视图只看当前委托**（业主 2026-10-20 第 1 条）：`request_id` 不给 ⇒ 取
+    「默认视图只看当前委托」（业主 2026-10-20 第 1 条）：`request_id` 不给 ⇒ 取
     "最近一次暂存的那次委托"；要看旧委托请显式给号，`request_id="*"` 表示全查。
 
     `status` 五选一：`pending` / `withdrawn` / `rejected` / `admitted` / `cleared`（不传 = 全查）。
@@ -1769,11 +1769,11 @@ def _h_lit_stage_list(
 
 
 def _h_lit_stage_withdraw(ctx: _Ctx, slot: str, reason_code: str, note: str = "") -> Any:
-    """``lit.stage_withdraw``：撤掉某一槽 —— **不改序号、不物理删除**，写理由。
+    """``lit.stage_withdraw``：撤掉某一槽 —— 「不改序号、不物理删除」，写理由。
 
     `reason_code` 必须是受控取值（`schema.CANDIDATE_REASON_CODES`：例如
     `withdrawn_by_reviewer`）；`note` 是给人看的那一句（可空，空则用理由码的标签顶上）。
-    撤掉之后可以再 `lit.stage_add` 补位，但新条进的是**新序号**（旧号不复用）。
+    撤掉之后可以再 `lit.stage_add` 补位，但新条进的是「新序号」（旧号不复用）。
     """
     from ..litstage import withdraw
 
@@ -1824,9 +1824,9 @@ def _h_lit_admit(
     new_content: str = "",
     overlap_ok: bool | None = None,
 ) -> Any:
-    """``lit.admit``：正式入库（逐条）—— **条数上限 + 重叠检查**都过了才走现有登记路径。
+    """``lit.admit``：正式入库（逐条）—— 「条数上限 + 重叠检查」都过了才走现有登记路径。
 
-    ## 两个上限（业主口径 ①，超了**整笔拒绝**）
+    ## 两个上限（业主口径 ①，超了「整笔拒绝」）
 
     - 本次调用 ≤ ``MAX_ADMIT_PER_CALL = 10`` 条；
     - 该委托累计已入库 + 本次 ≤ ``MAX_ADMIT_PER_DELEGATION = 10`` 条。
@@ -1837,11 +1837,11 @@ def _h_lit_admit(
     ## 逐条拒收（业主口径 ②④）
 
     - `status != "pending"`（已撤 / 已拒 / 已入库 / 已清空）⇒ 拒；
-    - DOI 与本地库某一行**完全相同** ⇒ 视为重复，拒（这一档 `new_content` 救不了）；
-    - 标题词集 Jaccard ≥ 0.60 且**没有** `new_content` ⇒ 拒
+    - DOI 与本地库某一行「完全相同」 ⇒ 视为重复，拒（这一档 `new_content` 救不了）；
+    - 标题词集 Jaccard ≥ 0.60 且「没有」 `new_content` ⇒ 拒
       （行上写的 `new_content` 优先，`items[].new_content` / 调用级 `new_content` 兜底）。
 
-    `overlap_ok=True` **不替代** `new_content`：它只如实记下"调用方表过态"，
+    `overlap_ok=True` 「不替代」 `new_content`：它只如实记下"调用方表过态"，
     真正的放行仍要有那句新内容。`overlap_ok=False` 则直接拒这一条。
 
     ## 入库走的是现有路径
@@ -1850,7 +1850,7 @@ def _h_lit_admit(
     → 落 `literature` 行 → 收编文件）。本工具里没有一处直接写 `literature` ——
     "绕开登记路径"在结构上做不到（判据见 `tests/test_search_tools_stage_admit.py`）。
 
-    **它不清空列表**：清空是一次委托的收尾动作，属于 `lit.admit_all`。
+    「它不清空列表」：清空是一次委托的收尾动作，属于 `lit.admit_all`。
     """
     from ..litstage import LitStageError, admit as _admit
 
@@ -1952,17 +1952,17 @@ def _h_lit_admit_all(
     request_id: str | None = None,
     new_content: str = "",
 ) -> Any:
-    """``lit.admit_all``：**一键迁移** —— 把本委托待审且过筛的行一次迁进 literature，然后清空。
+    """``lit.admit_all``：「一键迁移」 —— 把本委托待审且过筛的行一次迁进 literature，然后清空。
 
     业主 2026-10-20 第 2 条，四件事顺序固定（实现见 `litstage.admit_all`）：
 
-    1. 取本委托所有 `pending` 行，逐条过**重叠检查**（DOI 重复 / 高重叠无 `new_content`
+    1. 取本委托所有 `pending` 行，逐条过「重叠检查」（DOI 重复 / 高重叠无 `new_content`
        ⇒ 拒收；超配额 ⇒ 这一条不入库）；
-    2. 通过的走**现有登记路径**（与 `search.register` 同一条）；
-    3. **结算清空本委托**：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
+    2. 通过的走「现有登记路径」（与 `search.register` 同一条）；
+    3. 「结算清空本委托」：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
        `cleared(over_cap / not_screened)` + `cleared_at` ⇒ 迁移后本委托没有 `pending` 残留，
-       下一次委托看不到本委托的行（`request_id` 已经换了）。**不物理删**；
-    4. 写**委托报告** `reports/lit-<request_id>.md`：已入库一块（含一句相关性）+
+       下一次委托看不到本委托的行（`request_id` 已经换了）。「不物理删」；
+    4. 写「委托报告」 `reports/lit-<request_id>.md`：已入库一块（含一句相关性）+
        未入库一块（含受控理由）—— 这是交付物，不是可选（业主第 3 条）。
 
     它仍守"一次委托至多入库 10 篇"与"重叠高需 `new_content`"两条。
@@ -2014,7 +2014,7 @@ def _h_lit_admit_all(
     })
 
 
-#: 待新增文献列表那七件的**声明**（`@tool` 写进 `fn.__tool_spec__`，`register` 时绑定 ctx）。
+#: 待新增文献列表那七件的「声明」（`@tool` 写进 `fn.__tool_spec__`，`register` 时绑定 ctx）。
 #: 键名逐个从 `litstage` 的实现里读出（`ok(...)` 的数据字典 / `report_markdown` 的两块）。
 _LIT_PARAMS_ADMIT_ITEM = {
     "type": "object",
@@ -2295,23 +2295,23 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
 def _h_walk_citations(
     ctx: _Ctx, lit_id: str, direction: str = "backward", limit: int = 20
 ) -> Any:
-    """``search.walk_citations``：由一篇**已登记的**文献出发，在引文图上走一步。
+    """``search.walk_citations``：由一篇「已登记的」文献出发，在引文图上走一步。
 
-    业主 2026-10-15 裁定：引文图**用新动作的方式落** —— 本函数是那件动作的工具面。
+    业主 2026-10-15 裁定：引文图「用新动作的方式落」 —— 本函数是那件动作的工具面。
 
-    - ``backward``（**回溯**）：这一篇**引了谁** —— 读它的 ``referenced_works`` 再批量解析；
-    - ``forward``（**前推**）：**谁引了这一篇** —— ``filter=cites:<W…>``。
+    - ``backward``（「回溯」）：这一篇「引了谁」 —— 读它的 ``referenced_works`` 再批量解析；
+    - ``forward``（「前推」）：「谁引了这一篇」 —— ``filter=cites:<W…>``。
 
-    ## 为什么这里**不**替判重（与 ``search.literature`` 的差别是刻意的）
+    ## 为什么这里「不」替判重（与 ``search.literature`` 的差别是刻意的）
 
     ``search.literature`` 会给每条候选标 ``is_new``，好让 A 少跑一次判重工具。
-    本工具**不做这件事**：判重（``dedup_key`` / ``existing`` / ``is_new``）在本模块里
+    本工具「不做这件事」：判重（``dedup_key`` / ``existing`` / ``is_new``）在本模块里
     只有 ``_h_literature`` 那一处内联实现，在这里再写一份就是"同一件事两处实现" ——
     而"同一篇文献只留一个键"正是本仓划进禁改区的那条纪律（``dedup.py``）。
-    所以这里只交**书目字段**；要不要登记、怎么登记，走既有的
+    所以这里只交「书目字段」；要不要登记、怎么登记，走既有的
     ``search.dedup_check`` → ``search.register`` 那条路。
 
-    ## 为什么源必须是**盘上已登记**的那一篇
+    ## 为什么源必须是「盘上已登记」的那一篇
 
     引文走查要从"我们手上的这一篇"出发（拿它的 DOI / OpenAlex id）。
     不接受任意 DOI：那样它就成了第二个检索入口，而"检索"这件事的账
@@ -2324,7 +2324,7 @@ def _h_walk_citations(
                     kind="no_store", **fail_meta)
     rows, read_error = _literature_rows(ctx)
     if read_error:
-        # 三态：表坏了**不是**"这一篇不在表里"（后者是有效结论）
+        # 三态：表坏了「不是」"这一篇不在表里"（后者是有效结论）
         return fail(f"{read_error} ⇒ 引文走查**没做成**（不是「它没有引文邻居」）",
                     kind="table_unreadable", **fail_meta)
     row = next((r for r in rows if str(r.get("lit_id")) == str(lit_id)), None)
@@ -2363,7 +2363,7 @@ def _h_walk_citations(
             "pdf_url": c.pdf_url,
             "landing_url": c.landing_url,
             "provider": c.provider,
-            # 这一条是怎么被找到的：引文图上的**方向**与它的 OA 位置来源。
+            # 这一条是怎么被找到的：引文图上的「方向」与它的 OA 位置来源。
             # `oa_source` 直接决定"这篇的全文取不取得到"（`_pdf_url_rank` 用同一格）。
             "is_oa": (c.raw or {}).get("is_oa"),
             "oa_source": (c.raw or {}).get("pdf_url_source"),
@@ -2371,14 +2371,14 @@ def _h_walk_citations(
         }
         for c in cands
     ]
-    # ⚠️ 成功也要走 `ok(...)`，**不许直接 return 一个普通 dict**。
+    # ⚠️ 成功也要走 `ok(...)`，「不许直接 return 一个普通 dict」。
     #
     # 为什么（这是实测踩出来的）：注册表两种都收（普通 dict 会被它包成 `ToolResult`），
-    # 所以"直接 return dict"在**工具调用**那一侧看不出问题。但**动作层**是直接调
+    # 所以"直接 return dict"在「工具调用」那一侧看不出问题。但「动作层」是直接调
     # 这个处理器的（`agent_a/walk_citations.py` 走 `_h_walk_citations`），它按
-    # `ToolResult` 读 `ok` / `data` —— 于是普通 dict 会让它把一次**成功**读成
+    # `ToolResult` 读 `ok` / `data` —— 于是普通 dict 会让它把一次「成功」读成
     # `ok=False`、`kind=''`（"没做成"却没有理由），而那正是本仓最忌讳的形状：
-    # **读数与事实不符**。本文件其余处理器一律 `ok(...)` / `fail(...)`，照它办。
+    # 「读数与事实不符」。本文件其余处理器一律 `ok(...)` / `fail(...)`，照它办。
     return ok({
         "lit_id": lit_id,
         "doi": doi,

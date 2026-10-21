@@ -507,15 +507,15 @@ def _h_backends(ctx: _Ctx, refresh: bool = False) -> Any:
 
 
 def _target_path(ctx: "_Ctx", path: str, lit_id: str) -> tuple[str, dict | None]:
-    """把"给路径"或"给**文献编号**"归一成一个路径。返回 `(path, fail_payload)`。
+    """把"给路径"或"给「文献编号」"归一成一个路径。返回 `(path, fail_payload)`。
 
-    ⚠️ **2026-10-16（亲测 B 时加的）**：这两件工具的必填键是 `path`，而 B 整个域都按
+    ⚠️ 「2026-10-16（亲测 B 时加的）」：这两件工具的必填键是 `path`，而 B 整个域都按
     `lit_id` 说话（`literature` 行）—— 我第一次凭感觉敲的就是编号，吃了一个"缺少必填参数"。
-    按业主口径（"第一次凭感觉敲红的，真实智能体也会困惑"）⇒ 让**第一猜能 work**：
+    按业主口径（"第一次凭感觉敲红的，真实智能体也会困惑"）⇒ 让「第一猜能 work」：
     给编号时去 `literature` 行里找回它那一份全文（`store.library_path` 优先，退回工作区相对路径）。
 
-    三态：**两者都没给** ⇒ 可读拒绝（"这一格判不了"，不是"文件没问题"）；
-    编号不认得 ⇒ 拒绝并列出**盘上有哪些编号**（照 `search.walk_citations` 那件好样板）。
+    三态：「两者都没给」 ⇒ 可读拒绝（"这一格判不了"，不是"文件没问题"）；
+    编号不认得 ⇒ 拒绝并列出「盘上有哪些编号」（照 `search.walk_citations` 那件好样板）。
     """
     if str(path or "").strip():
         return str(path), None

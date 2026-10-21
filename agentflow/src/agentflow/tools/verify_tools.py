@@ -1,18 +1,18 @@
-"""E 的工具：**数值实验与形式化验证**。
+"""E 的工具：「数值实验与形式化验证」。
 
 ## 这一层要解决的根本问题
 
 数学里"算对了"与"证完了"是天壤之别。一个能跑数值实验的系统，最大的危险
-不是算错，而是把**算对了**说成**证明了** —— 因为这两句话在自然语言里
+不是算错，而是把「算对了」说成「证明了」 —— 因为这两句话在自然语言里
 只差几个字，而在数学上是两个世界。
 
 因此本模块的所有产出都强制带 :data:`agentflow.schema.EVIDENCE_KINDS` 等级，
-并且计算类方法**在 schema 层就拿不到 `proof`**（见 `Experiment.validate`）。
+并且计算类方法「在 schema 层就拿不到 `proof`」（见 `Experiment.validate`）。
 这不是注释里的告诫，是写入时的硬约束。
 
 ## 为什么 "没有后端" 是一个必须显式表达的状态
 
-`formal.check` 在环境里没有 Lean/Coq 时**必须**返回
+`formal.check` 在环境里没有 Lean/Coq 时「必须」返回
 `checked=False, reason="no_backend"`，而不是 `ok=False, verified=False`。
 理由是本项目反复踩过的三态纪律：把"没做"和"做了但没成"折叠成同一个
 `False`，下游就会把"我们没验证"读成"验证没过"，或者更糟——
@@ -21,12 +21,12 @@
 ## 工具与智能体的分工（读了会少走弯路）
 
 本模块的 `verify.run_experiment` / `verify.evidence_for` / `verify.list_experiments`
-是本文件里**已有的三个纯函数**（`:func:`check_formal` 与另外两条查询）的薄封装：
+是本文件里「已有的三个纯函数」（`:func:`check_formal` 与另外两条查询）的薄封装：
 
-- `run_experiment` 是一个**有副作用的动作**（跑子进程 + 写 experiments 表），
-  它必须与 `AgentE.run_experiment` 是同一条实现。所以工具 handler 用**惰性
-  导入**去调 `agentflow.agent_e`，而不是在这里再写一份。理由同 `agent_d` 对
-  `interactions` 的委托：同一份判据写在两处必然漂移，而漂移是**静默**的
+- `run_experiment` 是一个「有副作用的动作」（跑子进程 + 写 experiments 表），
+  它必须与 `AgentE.run_experiment` 是同一条实现。所以工具 handler 用「惰性
+  导入」去调 `agentflow.agent_e`，而不是在这里再写一份。理由同 `agent_d` 对
+  `interactions` 的委托：同一份判据写在两处必然漂移，而漂移是「静默」的
   —— "工具写进去的记录"与"AgentE 写进去的记录"字段口径不同，没有任何地方会报错。
 - `evidence_for` / `list_experiments` 是纯查询，直接在这里实现，`AgentE` 转发过来。
 """
@@ -45,27 +45,27 @@ from .base import ParamError, ToolError, ToolResult, ToolRegistry, ToolSpec, fai
 
 #: 本模块声明的角色。E 做实验，F 需要读实验结果来推进子目标，
 #: G 需要引用实验作为证据，H 需要核对"证据等级有没有被夸大"。
-#: **A/B/C/D 不在其中**：它们关心的是文献与关系，不是数值证据。
+#: 「A/B/C/D 不在其中」：它们关心的是文献与关系，不是数值证据。
 _ROLES = ("E", "F", "G", "H")
 
-#: **写工具**（会跑子进程 + 写 `experiments` 表）单独声明角色：H 只读，
+#: 「写工具」（会跑子进程 + 写 `experiments` 表）单独声明角色：H 只读，
 #: 不能拥有"跑实验并落库"的能力。声明正确 + `for_role` 的结构性拦截，
 #: 两道一起上 —— 只靠其中一道都会在后续维护里被绕过。
 _ROLES_WRITE = ("E", "F", "G")
 
-#: 形式化检查器的候选与查找口径**只有一处定义**：`agentflow.toolchain`
+#: 形式化检查器的候选与查找口径「只有一处定义」：`agentflow.toolchain`
 #: （`CHECKERS` 名单 + `VERSION_COMMANDS` + 查找顺序：显式配置 → `AGENTFLOW_PROVER_PATH` → PATH）。
 #: 本模块此前自己维护一份候选表并只 `shutil.which`，而 `formalgw.find_lean` 又自己看一遍 PATH
-#: —— 两处口径独立 ⇒ "探测说没有、调用却能跑"是可能的，而且形式化那一条腿会**静默降级**成
+#: —— 两处口径独立 ⇒ "探测说没有、调用却能跑"是可能的，而且形式化那一条腿会「静默降级」成
 #: cross_check（2026-10-03 实测：Lean 就装在机器上，`available` 却是空的）。
 #: 现在探测只是转发（与 `check_formal` 转发到 `formalgw.check_lean` 同一条纪律）。
 
 #: 证据力排序（弱 → 强）。用于 `best_evidence_kind`。
 #:
-#: ⚠️ **它不是"从 schema 推导出来的"**，而是本模块对 `EVIDENCE_KINDS` 的**运行期
-#: 断言**：顺序一旦与 schema 的声明不符，导入期就炸。理由：`best_evidence_kind`
+#: ⚠️ 「它不是"从 schema 推导出来的"」，而是本模块对 `EVIDENCE_KINDS` 的「运行期
+#: 断言」：顺序一旦与 schema 的声明不符，导入期就炸。理由：`best_evidence_kind`
 #: 的取值口径（"最强的那个"）如果与 schema 对证据等级的排序不一致，
-#: 就会出现"报告说 proof、实验记录里只有 cross_check"这种**无人报错**的分歧。
+#: 就会出现"报告说 proof、实验记录里只有 cross_check"这种「无人报错」的分歧。
 #: 宁可在这里 fail-closed，也不要靠"两个地方恰好写对了"。
 #:
 #: `proof_review`（业主 2026-10-12：逐行审阅过的证明，见 `doc_tools.PROOF_REVIEW_DISCLAIMER`）
@@ -76,7 +76,7 @@ assert set(_EVIDENCE_ORDER) == set(S.EVIDENCE_KINDS), (
     f"_EVIDENCE_ORDER={_EVIDENCE_ORDER} 与 schema.EVIDENCE_KINDS={S.EVIDENCE_KINDS} 不一致 —— "
     "证据等级的排序口径必须只有一处定义"
 )
-#: 最强的证据等级。**从上面的排序里取末位**，而不是再写一遍字面量 "proof"。
+#: 最强的证据等级。「从上面的排序里取末位」，而不是再写一遍字面量 "proof"。
 _TOP_EVIDENCE = _EVIDENCE_ORDER[-1]
 
 
@@ -84,7 +84,7 @@ def code_hash(path: str | Path) -> str:
     """脚本内容的 sha256（前 16 位十六进制）。
 
     为什么实验记录里必须有它：`code_path` 只说明"当时跑的是哪个文件"，
-    而文件**是可以被改的**。没有哈希，三个月后那条"可复现"的记录就指向了
+    而文件「是可以被改的」。没有哈希，三个月后那条"可复现"的记录就指向了
     另一段代码 —— 而复现失败时你无法判断是结论错了还是脚本变了。
     """
     p = Path(path)
@@ -98,12 +98,12 @@ def code_hash(path: str | Path) -> str:
 
 
 def detect_verifier() -> dict:
-    """探测环境里有哪些证明检查器 —— **转发**到 `agentflow.toolchain.probe_checkers`。
+    """探测环境里有哪些证明检查器 —— 「转发」到 `agentflow.toolchain.probe_checkers`。
 
     返回 ``{"available": [...], "available_names": [...], "checked": True/False,
     "reason": str, "probe_errors": [...]}``（外加给人读的 ``looked_in`` / ``sources``）。
 
-    **`checked=False` 只表示"探测本身没做成"**（例如 PATH 不可读、`shutil.which`
+    「`checked=False` 只表示"探测本身没做成"」（例如 PATH 不可读、`shutil.which`
     抛异常、二进制在但版本探测起不来、或者显式配置指了一个不存在的路径），
     `available=[]` 才是"探测了，确实没有"。两者不能合并 —— 合并会把
     "我们不知道环境里有没有 Lean"读成"环境里确定没有 Lean"，而后者会让一条本该走
@@ -123,8 +123,8 @@ def detect_verifier() -> dict:
     from .. import toolchain as TC
 
     out = dict(TC.probe_checkers())
-    # 2026-10-17（Lean 审计 #4）：本函数原来**完全不看开关** ⇒ 关掉 Lean 的机器上它仍报
-    # `available=[...]`，读者会把"装了"读成"能用"。这里**不改环境探测语义**，只把许可
+    # 2026-10-17（Lean 审计 #4）：本函数原来「完全不看开关」 ⇒ 关掉 Lean 的机器上它仍报
+    # `available=[...]`，读者会把"装了"读成"能用"。这里「不改环境探测语义」，只把许可
     # 一起报出来（新增键，不动老键），并把"能不能做形式化"按 `装了 且 开关开着` 给一个。
     try:
         from ..settings import lean_enabled as _le
@@ -135,7 +135,7 @@ def detect_verifier() -> dict:
     out["lean_enabled"] = bool(_on)
     out["lean_enabled_source"] = str(_src)
     out["can_do_formal"] = bool(_on) and bool(out.get("available"))
-    # 两种模式都带 `note`（开着时为空串）：声明了 `returns` 就**恒有那一格**，
+    # 两种模式都带 `note`（开着时为空串）：声明了 `returns` 就「恒有那一格」，
     # 否则"声明一套、返回另一套"的判据会红（真机 r61 的教训）。
     out["note"] = ("" if _on else
                    "开关关着 ⇒ 即使 `available` 非空，这一趟也不走形式化"
@@ -157,7 +157,7 @@ def check_formal(
 
     ## 参数名是 `checker_name` 而不是 `name`（`C3`：撞名的代价是 TypeError）
 
-    本工具层调用入口是 `ToolRegistry.call`，而它的**第一个形参就叫 `name`**
+    本工具层调用入口是 `ToolRegistry.call`，而它的「第一个形参就叫 `name`」
     （`tools/base.py` 的 `def call(self, name: str, args=None, *, role=None, ...)`）。
     调用方按名传参时，`name=` 会被 `call` 那一格吃掉，`spec.handler(**merged)`
     再把它交给 handler 的第二个 `name` ⇒ `TypeError: got multiple values for
@@ -166,7 +166,7 @@ def check_formal(
 
     所以本函数的声明名参数叫 `checker_name`。`ToolRegistry.call` 与它的
     docstring 一起点名了三个"会吞参数"的名字（`role` / `args` / `budget`），
-    而 `name` 是这三个之外**真实存在的第四个**：工具自己声明 `name` 参数时
+    而 `name` 是这三个之外「真实存在的第四个」：工具自己声明 `name` 参数时
     无法按名传入。改调用方写法比改注册表便宜，也不会动 `tools/base.py`。
 
     残留（已于 F6a 处置，不再是残留）：`verify.check_formal` /
@@ -178,9 +178,9 @@ def check_formal(
 
     ## 能力表的参数集与工具 schema 的参数集：既非相等也非包含（`R2b-AN-1-C`）
 
-    这里把两套参数集**逐字**写出来（口径差别不许含糊过去）。参照三个层面：
-    能力表（`capabilities.py`）、工具 schema（本节所在文件）、以及**方法层的
-    真形参表**（`inspect.signature` 实测）。
+    这里把两套参数集「逐字」写出来（口径差别不许含糊过去）。参照三个层面：
+    能力表（`capabilities.py`）、工具 schema（本节所在文件）、以及「方法层的
+    真形参表」（`inspect.signature` 实测）。
 
     - `verify.check_formal`：能力表 `{claim, script_path, source, name, imports,
       timeout_sec}`；工具 schema `{claim, script_path, source, checker_name,
@@ -194,12 +194,12 @@ def check_formal(
       for_question_id, timeout, name, imports}`。能力表有而工具 schema 没有的
       只有 `sleep`；工具 schema 有而能力表没有的是 `run_name` 与 `imports`。
     - 三处口径差别的性质各不相同，不许压成一句"能力表漂了"：
-      `checker_name` 是**避撞名**（`ToolRegistry.call` 的第一个形参就叫 `name`，
+      `checker_name` 是「避撞名」（`ToolRegistry.call` 的第一个形参就叫 `name`，
       工具层再声明 `name` 就永远无法按名传入；`agent_e.py` 里逐字做了一次
-      `checker_name=name` 的翻译，所以工具层与能力表的名字不同、而**接线是通的**）；
-      `name` 在方法层与能力表上**是对的**（`AgentE.check_formal` 的形参就叫
+      `checker_name=name` 的翻译，所以工具层与能力表的名字不同、而「接线是通的」）；
+      `name` 在方法层与能力表上「是对的」（`AgentE.check_formal` 的形参就叫
       `name`，它不经 `ToolRegistry.call`）；`sleep` 只活在能力表与替身夹具之间
-      —— 实测 `AgentE.run_experiment` 的形参表里**没有** `sleep`，它**也不收**
+      —— 实测 `AgentE.run_experiment` 的形参表里「没有」 `sleep`，它「也不收」
       `**kw`，所以不许写成"方法层收得住它"（`capabilities.py` 的
       `E.run_experiment` 逐字登记了它为什么存在，那是另一回事）。
       `D-2` 之后这一格不再只由注释担保：它逐条登记在 `capabilities.PARAM_SEAMS`
@@ -213,7 +213,7 @@ def check_formal(
     工具 schema 的参数集 ↔ handler 真形参由 `tools.base.check_param_seams` 在
     注册期核（`ToolRegistry.register`，台账 `N-5` 的工具侧落点）。
 
-    仍然没有机器判据的是那个**跨层**的问题：能力表参数集与工具 schema 参数集
+    仍然没有机器判据的是那个「跨层」的问题：能力表参数集与工具 schema 参数集
     既非相等、也非包含（上面逐字列出的两个差集）。这不是待补的洞，而是一个
     有意的取舍：把两者判成"必须相等或互为子集"会把上面两处合法形态
     （`checker_name` 的避撞名、`sleep` 的替身接缝）判红，于是那条判据的第一次
@@ -267,7 +267,7 @@ def check_formal(
     ==========================  =========  ==========  ==================================
 
     `import_unavailable` 与 `compile_error` 的分界是这一层的三态纪律里最容易错的一处：
-    库没装时检查器回 `unknown package 'X'`，编译**根本没开始**，所以它是"没查成"；
+    库没装时检查器回 `unknown package 'X'`，编译「根本没开始」，所以它是"没查成"；
     把它读成"查了、没通过"会让一次环境配置问题看起来像一次数学结论。
 
     只有 `verified` 才给 `verified=True`：`checked=True + verified=False` 表示
@@ -310,7 +310,7 @@ def check_formal(
     不再依赖调用进程的 CWD。`root` 由装配层（`register` 的 handler）与
     `AgentE` 显式给；不给时行为与接线前逐字相同（原样转发相对路径）。
 
-    ## 副作用与**审批面**（`axes-4`：这三处说法此前互相矛盾）
+    ## 副作用与「审批面」（`axes-4`：这三处说法此前互相矛盾）
 
     `source` 给的是内存里的源码时，`formalgw` 会写一份临时 `.lean` 文件（跑完即删）；
     `workdir` 为 None 时它建的是临时目录。脚本路径存在时源码仍从文件读。因此
@@ -318,31 +318,31 @@ def check_formal(
     （执行本地只读命令）—— 这与 `verify.detect_verifier` 同一口径：`none` 表示
     "什么都不做"，而它显然不是。
 
-    **但"都不需要审批"只对 `detect_verifier` 成立**：
+    「但"都不需要审批"只对 `detect_verifier` 成立」：
 
     | 工具 | 声明 | 沙箱未声明可用时 `needs_approval` |
     |---|---|---|
     | `verify.detect_verifier` | `read` + `external="none"` | `False`（不需要审批） |
-    | `verify.check_formal` | `read` + `external="exec"` | **`True`（需要审批）** |
+    | `verify.check_formal` | `read` + `external="exec"` | 「`True`（需要审批）」 |
 
     `check_formal` 的第二根轴是 `exec`，因为"执行一个由调用方决定内容的程序"这件事
-    **确实**发生在它身上（源码来自调用方）—— 而那正是 `NEEDS_APPROVAL` 的判据。
+    「确实」发生在它身上（源码来自调用方）—— 而那正是 `NEEDS_APPROVAL` 的判据。
     旧版这段 docstring 逐字写着"两者都不需要审批，所以审批面没有变化"，
     与同一个文件的声明（`:751-752` 的注释也写了"它从此需要审批"）
-    **给出两个相反结论**。按 docstring 读的人（含写审批面报告、
+    「给出两个相反结论」。按 docstring 读的人（含写审批面报告、
     写 `docs/ROLE-SPECS.md` 审批列的人）会把 `check_formal` 记成不需要审批。
 
-    ⚠️ **不要为了让这句话成真去改声明**：把 `declared_external` 从 `exec` 改成 `none`
+    ⚠️ 「不要为了让这句话成真去改声明」：把 `declared_external` 从 `exec` 改成 `none`
     会把"执行调用方给的程序"这件事从第二根轴上抹掉，回到"两根轴压成一档"的老形态。
     `.noai-paths` 给这个文件的登记理由逐字是"桥接层说谎 ⇒ proof 级证据是假的"。
     """
     # ---- 开关（业主 2026-10-12，`toolchain` 段的 `lean_enabled`）：用户把这条路关掉时，
-    # 判据是**那个开关**，不是"环境里有没有检查器" —— 所以这一步必须排在探测**之前**：
+    # 判据是「那个开关」，不是"环境里有没有检查器" —— 所以这一步必须排在探测「之前」：
     # ① 关掉时连探测都不做（探测会起 `lean --version` 子进程）；
     # ② 理由码必须报 `lean_disabled`（"用户关掉了"），不许报 `no_backend`
     #    （"机器上没有"）—— 两者处置相反：前者去改设置文件，后者去装工具链。
     # 这一条与 `formalgw.check_lean` 里那一道是同一个判据的两层：
-    # 那一层保证"编译不会发生"，这一层保证"**用户看到的理由**是开关"。
+    # 那一层保证"编译不会发生"，这一层保证"「用户看到的理由」是开关"。
     from .. import settings as _SET
 
     if not _SET.lean_enabled()[0]:
@@ -388,7 +388,7 @@ def check_formal(
                     ),
                     "verifier_output": "",
                     "missing_imports": [],
-                    # E-12(a)：这一支**没跑成** ⇒ `exit_code` 必须是 None
+                    # E-12(a)：这一支「没跑成」 ⇒ `exit_code` 必须是 None
                     # （绝不用 0 冒充"跑过" —— 那是把"没做"写成"做了"）。
                     "exit_code": None,
                     # 探测都没做成 ⇒ 没有任何检查器状态可透传（空串是诚实的值）。
@@ -465,9 +465,9 @@ def check_formal(
                     "—— 读工作区外的文件不在这个工具的语义里"
                 ) from None
         path_arg = str(cand)
-        # 刻意**不**回退成 `cand.stem`（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：
+        # 刻意「不」回退成 `cand.stem`（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：
         # 拿文件名词干当声明名，会让"源码里没有这个名字"报成 `decl_mismatch`
-        # （机器可读位是"查了、没通过"），而真原因是**调用方没点名**。
+        # （机器可读位是"查了、没通过"），而真原因是「调用方没点名」。
         # 现在把空名字原样交给 `check_lean`：源码里恰好一条具名声明就自动用它，
         # 0 条或多条则抛 `DeclarationNameError`（ValueError 子类）⇒ 下面的
         # `except ValueError` 折成 `param_error`，并列出候选名。
@@ -521,18 +521,18 @@ def check_formal(
             "verifier_output": (
                 (str(raw.get("stdout") or "") + "\n" + str(raw.get("stderr") or "")).strip()
             ),
-            # 哪个库不可得。空列表 = 没有这种抱怨（**不是**"库都在"：
+            # 哪个库不可得。空列表 = 没有这种抱怨（「不是」"库都在"：
             # 库都在的证据是 `verified`，而这个键只说"检查器没有抱怨找不到包"）。
             # 为什么它必须在这里有位置：`reason` 只回答"哪一类结局"，
             # 而 `import_unavailable` 的处置（装哪个库）要求知道包名。
             "missing_imports": [str(x) for x in (raw.get("missing_imports") or [])],
             # `G-24①` 的透传字段：检查器原样报的那个状态，逐字（不做归一）。
-            # 它与 `reason` 今天逐字相同是**刻意**的 —— 收口与透传是两个不同的
+            # 它与 `reason` 今天逐字相同是「刻意」的 —— 收口与透传是两个不同的
             # 承诺：`reason` 承诺"值在受控词表里"（调用方可以穷举它），
             # `verifier_status` 承诺"这就是检查器说的那一个值"（哪怕上游换了名字）。
             # 把多值压成一个模糊值（`N-5`）在这两栏里都是禁止的。
             "verifier_status": status,
-            # ---- E-12(a)（`draft/44`）：**检查器进程的真实退出码**。
+            # ---- E-12(a)（`draft/44`）：「检查器进程的真实退出码」。
             #
             # 这一格分的是退出码，`agent_e` 那边的 `observations.tri_state` 分的是三态
             # （`verified`/`checked_failed`/`not_checked`）—— 两处都要能读。
@@ -559,7 +559,7 @@ def check_formal(
 
 # ---------------------------------------------------------------- 证据查询（纯函数）
 #
-# 这两个函数**不接收 store 实例以外的东西**，也不做任何写入：它们是 E 的"读侧"，
+# 这两个函数「不接收 store 实例以外的东西」，也不做任何写入：它们是 E 的"读侧"，
 # 被 AgentE 的方法与工具层同时使用（同一份实现）。
 
 
@@ -577,20 +577,20 @@ def evidence_for(
     调用方式                            返回
     ================================  ==========================================
     给了 claim_key / for_question_id    ``checked=True``，experiments 可能为空
-    两个都不给                          ``checked=False``（**没查**）
+    两个都不给                          ``checked=False``（「没查」）
     ================================  ==========================================
 
     "没查"与"查了、没有"必须分开：前者是调用方的问题（它不知道该查什么），
-    后者是一个**有效结论**（"这条命题本地没有任何实验证据"）。
+    后者是一个「有效结论」（"这条命题本地没有任何实验证据"）。
 
     ``proved`` 是三态（`errors-1`，登记在 `draft/28`）：
-    **没查**时它是 ``None``，**查了**时才是 ``True``/``False``。
+    「没查」时它是 ``None``，「查了」时才是 ``True``/``False``。
     旧版在"没查"那一支写 ``False`` —— 而那正是本文件 213-215 行明令禁止的折叠：
     "没查成时该位写 None、绝不写成 False"（`check_formal` 的 `verified` 就是这么做的）。
     只读 `proved` 的调用方旧版无法区分"没查"与"查了没有 proof 级证据"。
     """
     if claim_key is None and for_question_id is None:
-        # 形状与"查了"那一支**完全一致**（含分档计数的零值）：调用方可以无条件地读
+        # 形状与"查了"那一支「完全一致」（含分档计数的零值）：调用方可以无条件地读
         # `result_counts`，而"这一支少了几个键"正是 4.5 类缺陷的温床 ——
         # 声明一套键、某些分支给另一套，会让调用方按 `.get()` 一路写下去，
         # 把结构性缺失读成"计数为零"。
@@ -601,7 +601,7 @@ def evidence_for(
             "result_counts": {k: 0 for k in S.EXPERIMENT_RESULTS},
             "negation_counts": {k: 0 for k in S.NEGATION_KINDS},
             "best_evidence_kind": None,
-            # 三态：**没查** ⇒ None（不是 False）。`checked=False` 与它一起表达同一件事。
+            # 三态：「没查」 ⇒ None（不是 False）。`checked=False` 与它一起表达同一件事。
             "proved": None,
             "reason": (
                 "既没有 claim_key 也没有 for_question_id ⇒ **没查**"
@@ -642,7 +642,7 @@ def evidence_for(
     known = [k for k in kinds if k in _EVIDENCE_ORDER]
     best = max(known, key=_EVIDENCE_ORDER.index) if known else None
     proved = best == _TOP_EVIDENCE
-    # FC-10：结果必须**分档计数**，不许只给一个"有证据/没证据"的布尔。
+    # FC-10：结果必须「分档计数」，不许只给一个"有证据/没证据"的布尔。
     # 只有布尔时，"算出来支持"与"脚本崩了"在调用方眼里长得一样。
     result_counts = {k: 0 for k in S.EXPERIMENT_RESULTS}
     negation_counts = {k: 0 for k in S.NEGATION_KINDS}
@@ -672,7 +672,7 @@ def list_experiments(store: Any, *, claim_key: str | None = None, limit: int | N
     """按登记顺序列出实验记录（只读）。
 
     与 `evidence_for` 的分工：`evidence_for` 回答"这条命题被证明了吗"，
-    本函数回答"E 到底做过哪些实验"。**少了后者，"没做过"就无法自证**。
+    本函数回答"E 到底做过哪些实验"。「少了后者，"没做过"就无法自证」。
     """
     lim = None if limit is None else max(0, int(limit))
     rows = [r for r in store.rows("experiments") if claim_key is None or r.get("claim_key") == claim_key]
@@ -711,7 +711,7 @@ def _resolve_root(root: str | Path | None) -> Path:
 
 
 def _agent_for(store: Any, root: str | Path | None):
-    """构造一个 AgentE。**惰性导入**：本模块被 agent_e 反向引用，模块级导入会成环。"""
+    """构造一个 AgentE。「惰性导入」：本模块被 agent_e 反向引用，模块级导入会成环。"""
     from ..agent_e import AgentE  # 惰性：避免 tools ↔ agent 的循环导入
 
     return AgentE(store, workspace_root=_resolve_root(root))
@@ -748,13 +748,13 @@ def _verify_code_hash(_hash_of, path):
     "verify.detect_verifier",
     "探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。",
     {"type": "object", "properties": {}, "additionalProperties": False},
-    # read（**不是 none**）：它要 `shutil.which` + `subprocess.run` 起外部二进制
+    # read（「不是 none」）：它要 `shutil.which` + `subprocess.run` 起外部二进制
     # （`detect_verifier` 里逐条 `--version`）。声明 `none` 等于说"这个工具
     # 什么都不做" —— 而"不起进程"与"起了进程但只读"是两件不同的事。
     side_effect="read",
     roles=_ROLES,
-    # ⚠️ **2026-10-15 补齐**（`draft/124` §17，**本文件是 FC-27 禁改区 [prover-bridge]**，
-    # 按业主"先改后签"口径登记，待 2 名人审）：`looked_in` 是"我**去哪几处找过**"、
+    # ⚠️ 「2026-10-15 补齐」（`draft/124` §17，「本文件是 FC-27 禁改区 [prover-bridge]」，
+    # 按业主"先改后签"口径登记，待 2 名人审）：`looked_in` 是"我「去哪几处找过」"、
     # `sources` 是逐处结果 —— 它们承载三态（没找到 / 没查）里"查过哪几处"那一半，
     # 而 `returns` 会拼进 function-calling 的 `description`（模型看得到）。
     returns="{'checked','available','available_names','reason','probe_errors','looked_in','sources','lean_enabled','lean_enabled_source','can_do_formal','note'}",
@@ -816,11 +816,11 @@ def _verify_detect_verifier():
     # 必须解析到它，而不是解析到进程 CWD（见 `check_formal` 的 docstring）。
     # read + exec：它真的起检查器子进程（命令内容由调用方给），
     # 并可能写临时 .lean 文件；两者都如实声明，各占一根轴。
-    # ⚠️ 字段名是 `declared_external`（**不是** `external` —— 后者是属性名，
+    # ⚠️ 字段名是 `declared_external`（「不是」 `external` —— 后者是属性名，
     # 写进构造器会 `TypeError`，G-45 已登记）。
     #
     # `roles` 从 `_ROLES` 改成 `_ROLES_WRITE`，理由与 `verify.run_experiment`
-    # 同族但更值得写下来：**声明本身必须正确**，不能靠 `for_role` 兜底。
+    # 同族但更值得写下来：「声明本身必须正确」，不能靠 `for_role` 兜底。
     # `role_filter_notes` 的语义是"声明写错"的留痕，靠过滤兜底会让留痕
     # 变成常态噪音 —— 而噪音里会藏着真正的错误。
     # 行为变化（如实登记）：它从此需要审批（沙箱未声明时 `egress`/`exec`
@@ -845,7 +845,7 @@ def _verify_detect_verifier():
     # `verifier_status`（`G-24①`）是第 8 个键：它是检查器原样报的那个状态
     # 的透传栏，与 `reason`（受控词表）成对存在。
     #
-    # `exit_code`（E-12(a)，`draft/44`）是第 9 个键：**检查器进程的真实退出码**。
+    # `exit_code`（E-12(a)，`draft/44`）是第 9 个键：「检查器进程的真实退出码」。
     # 它分的是退出码（`agent_e` 那边的 `observations.tri_state` 分的是三态），
     # 没跑成时是 `None`（绝不用 0 冒充"跑过"）。
     returns=(
@@ -912,7 +912,7 @@ def _verify_check_formal(base, claim, script_path=None, source=None, checker_nam
                 "items": {"type": "string"},
                 "description": "formal：这次检查要加载的库（不给时用检查器的默认值）",
             },
-    # `draft/37` §84 的 D1：这两格此前**不在任何 schema 里**，而
+    # `draft/37` §84 的 D1：这两格此前「不在任何 schema 里」，而
     # `schema.Experiment` 的硬约束 2c 要求「method='exhaustive_search' 必须给
     # certificate」⇒ 模型无论怎么调都必然失败（实测 T1：三次 failed）。现在广告出来。
             "certificate": {
@@ -940,18 +940,18 @@ def _verify_check_formal(base, claim, script_path=None, source=None, checker_nam
     # 它与 `write_local` 一样需要审批（`NEEDS_APPROVAL`），而只读角色本来就拿不到它
     # （它是写工具）。所以这一次改的是声明的精度，不是权限面。
     # 必须与能力层同轮改（`capabilities.py` 的 `E.run_experiment` 也给了 `exec`）。
-    # ⚠️ 字段名是 `declared_external`（`ToolSpec` 的字段），**不是** `external` ——
+    # ⚠️ 字段名是 `declared_external`（`ToolSpec` 的字段），「不是」 `external` ——
     # 后者是属性名，写进构造器会 `TypeError`（我实测踩过：30 个用例直接挂）。
     roles=_ROLES_WRITE,  # H 只读：不能拥有"跑实验并落库"的能力,
-    # 键名从一个**真实跑通**的调用读出（`tests/test_tools_returns_declaration.py`
+    # 键名从一个「真实跑通」的调用读出（`tests/test_tools_returns_declaration.py`
     # 用 `probes/honest.py` 探针脚本走的就是这一支）：观察到的 10 个键是
     # experiment_id/recorded/result/evidence_kind/negation_kind/exit_code/
-    # reason/code_hash/runtime_sec/notes；后三个是**可选键**（取决于脚本与计时），
+    # reason/code_hash/runtime_sec/notes；后三个是「可选键」（取决于脚本与计时），
     # 所以键集合只写前 7 个。
-    # ⚠️ **2026-10-15 补齐**（同上，**禁改区**）：那三个"可选键"此前只写在**散文**里，
+    # ⚠️ 「2026-10-15 补齐」（同上，「禁改区」）：那三个"可选键"此前只写在「散文」里，
     # 而可机读的键集合里没有 ⇒ 探针核不到它们、模型也只在散文里瞥见。
     # 现在把它们并进键集合：`code_hash`（跑的是哪一版代码）/ `runtime_sec`
-    # / `notes` —— 三个都是**来源读数**（可复现性的凭据）。
+    # / `notes` —— 三个都是「来源读数」（可复现性的凭据）。
     returns=(
             "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason',"
             "'code_hash','runtime_sec','notes'}"
@@ -1086,7 +1086,7 @@ _ROLES_V = ("V",)
     side_effect="read",
     roles=_ROLES_V,
     # 三条返回路径的键集合完全相同（与 verify.evidence_for 同一纪律）：
-    # `checked=False` 是"没查成"（没接线 / 结论不合法）而**不是**工具失败 ——
+    # `checked=False` 是"没查成"（没接线 / 结论不合法）而「不是」工具失败 ——
     # 与 verify.check_formal 的 no_backend 同一档。少给键会让下游把"没有读数"读成"是零"。
     returns=(
             "{'checked','kind','statement_id','verification_id','verdict','defect_step','findings',"
@@ -1193,13 +1193,13 @@ def register(
     """装配 E/F/G/H 可见的实验工具。
 
     ⚠️ ``store`` 为 None 时 `verify.run_experiment` / `evidence_for` /
-    `list_experiments` **照样注册**，调用时返回 ``ok=False, kind="not_wired"``
-    （FC-08：未接线必须显式失败，**不得静默降级为空**）。
+    `list_experiments` 「照样注册」，调用时返回 ``ok=False, kind="not_wired"``
+    （FC-08：未接线必须显式失败，「不得静默降级为空」）。
     """
     base = _resolve_root(root)
 
     def _resolve(rel: str) -> Path:
-        """把工具参数里的相对路径解析到工作区内，并**拒绝**越界。
+        """把工具参数里的相对路径解析到工作区内，并「拒绝」越界。
 
         与 `Store.library_path` 同样的思路：路径穿越的最后一道闸必须在
         真正 open 文件之前，而不是靠调用方自觉。
@@ -1212,7 +1212,7 @@ def register(
         return p
 
     def _need_store(tool: str) -> ToolResult | None:
-        """未接线时返回**结构化失败**（不是空数据）。"""
+        """未接线时返回「结构化失败」（不是空数据）。"""
         if store is None:
             return fail(
                 f"{tool} 未接线：装配时没有提供 store。"
@@ -1222,16 +1222,16 @@ def register(
         return None
 
     def _hash_of(rel: str) -> ToolResult:
-        """`verify.code_hash` 的实现。**任何一步失败都要变成结构化失败**。
+        """`verify.code_hash` 的实现。「任何一步失败都要变成结构化失败」。
 
         ⚠️ 这里此前是 `lambda path: ok({...: code_hash(_resolve(path))})`：
         `code_hash` 只保证"不是普通文件就抛 ParamError"，而 `open(p,"rb")` 的
         `OSError`/`PermissionError`（文件被占用、ACL 拒绝、路径是设备）会
-        **逃出工具层**，被 `base.ToolRegistry.call` 的 `except Exception` 兜底
+        「逃出工具层」，被 `base.ToolRegistry.call` 的 `except Exception` 兜底
         折成没有类型信息的 `kind="unexpected"`。
         "读不了这个文件"与"工具内部出了 bug"必须能分开。
 
-        这里刻意只写**符号名**、不写行号：行号在本仓库的并行开发下几十分钟就会漂
+        这里刻意只写「符号名」、不写行号：行号在本仓库的并行开发下几十分钟就会漂
         （`.noai-paths` 的理由栏自己写了这条纪律），而符号名不会。
         `D1` 登记的正是这处：旧写法引的那个 `base.py` 行号在改动之后指向的是
         `ToolSpec.__post_init__` 的 `side_effect` 词表校验，差了六百多行 ——
@@ -1242,10 +1242,10 @@ def register(
         声明写的是 ``kind(io_error/param_error)``，而 `code_hash` 与 `_resolve`
         抛的都是 `ParamError`（`ToolError` 的子类）⇒ 走到 `base.ToolRegistry.call`
         的 `except ToolError` 那一支，调用方实测拿到的是泛化的
-        `kind="tool_error"`：**声明里那两个 kind 一个都不会出现**，而这两个分支
+        `kind="tool_error"`：「声明里那两个 kind 一个都不会出现」，而这两个分支
         恰恰是"最可能的失败"（路径越界、工作区内文件不存在）。所以这里把两类
         失败各自显式收成声明里的那一档（越界 ⇒ `param_error`，读不到文件 ⇒
-        `io_error`），让**实现产出的就是声明承诺的那两个 kind**。
+        `io_error`），让「实现产出的就是声明承诺的那两个 kind」。
         交叉断言见 `tests/test_tools_audit_fixes.py` 的
         `test_code_hash_failure_kinds_match_its_declaration_every_branch`：
         它逐分支把实测 kind 与 `returns=` 抽出的词表对齐，任一侧漂了就红。
@@ -1277,7 +1277,7 @@ def register(
     def _run_experiment_tool(**kw: Any) -> ToolResult:
         """`verify.run_experiment` 的实现。把子进程/实验侧的异常变成结构化失败。
 
-        ⚠️ 这条路径**从不**抛 `ToolError`：`AgentE.run_experiment` 会抛
+        ⚠️ 这条路径「从不」抛 `ToolError`：`AgentE.run_experiment` 会抛
         `ExperimentError`（`RuntimeError`，如脚本越界、超时、脚本自报非法等级）
         与 `Experiment.validate` 的 `ValueError`。它们此前直接逃出工具层，
         于是"脚本路径越界"和"工具层有 bug"在下游长得一模一样。

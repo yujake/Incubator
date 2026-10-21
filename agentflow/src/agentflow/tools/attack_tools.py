@@ -95,7 +95,7 @@ _REQUIRED_BUDGET_KEYS = ("max_rounds", "max_parallel_subgoals", "max_persist_att
 #: 而 `agent_f` 会真的写它。后果是一个已达终态的计划被当成活计划重新拾起。
 #: 两处名单的存在本身就是缺陷（FC-03）：同一个"终态"概念不可能有两个定义。
 from ..schema import ATTACK_TERMINAL_STATUSES as TERMINAL_STATUSES  # noqa: E402
-#: 子目标状态的**词表**（`pick_next_subgoal` 要在给结论之前拿它校验：
+#: 子目标状态的「词表」（`pick_next_subgoal` 要在给结论之前拿它校验：
 #: 状态写错时若直接回"没有可推进的子目标"，就把输入写错读成了"确实没有待办"）。
 from ..schema import SUBGOAL_STATUSES as SUBGOAL_STATUSES  # noqa: E402
 
@@ -250,7 +250,7 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
 
     次序（每一步都是"为什么它更该先做"）：
 
-    0. **不在等子目标的**先选（见下面那一段 P4-7）；
+    0. 「不在等子目标的」先选（见下面那一段 P4-7）；
     1. `in_progress` —— 已经开始的最先接着做（避免半途而废的子目标永远烂在那里）；
     2. `todo` 且 `owner` 有明确归属 —— 可执行的优先；
     3. `blocked` —— 排在最后（它需要先解决卡点，而不是重试）。
@@ -262,16 +262,16 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
     ## 0. `waiting_on`：父目标不许永远压住它派出去的子目标（`draft/44` 的 P4-7）
 
     改前的次序是"`in_progress` 最先"，而 `counterexample_request` / `reduction` 造出新
-    子目标之后**父目标仍是 `in_progress`** ⇒ 每一轮都重新选中父目标，新子目标永远停在
+    子目标之后「父目标仍是 `in_progress`」 ⇒ 每一轮都重新选中父目标，新子目标永远停在
     `todo`（真机：`s1/s5/s6` 一直 `todo`，计划一轮一轮地在父目标上打转）。
 
     现在父目标身上会写一个 `waiting_on: [子目标号…]`（`agent_f._apply_round` 那一跳），
-    这里按它排序：**只要它等的那几条里还有能干的（`todo`/`in_progress`），父目标就排到
-    最后**。两条边界写清：
+    这里按它排序：「只要它等的那几条里还有能干的（`todo`/`in_progress`），父目标就排到
+    最后」。两条边界写清：
 
     - 等的那几条全都做完了 / 都被卡住了 ⇒ 父目标立刻恢复可选的次序首位
       （否则"等"会变成死锁）；
-    - 全部子目标都在等（互相等）⇒ 仍然按原次序选一个（**不许返回"没有可推进的"** ——
+    - 全部子目标都在等（互相等）⇒ 仍然按原次序选一个（「不许返回"没有可推进的"」 ——
       那会把死锁读成"计划已经没事可做"）。
 
     全部不可选时返回 ``{"picked": False, "reason": ...}`` ——
@@ -282,10 +282,10 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
         order = {"in_progress": 0, "todo": 1, "blocked": 2}
         return (order.get(st, 9), str(sg.get("sid") or ""))
 
-    # ⚠️ **2026-10-16（亲测 D 的 `attack.*` 时抓到的）**：这里原本直接过滤，
-    # 于是**状态写错**（我用 `pending`/`done`，而词表是
+    # ⚠️ 2026-10-16（亲测 D 的 `attack.*` 时抓到的）：这里原本直接过滤，于是状态写错
+    # （我用 `pending`/`done`，而词表是
     # `("todo","in_progress","supported_not_proved","closed","blocked","dropped")`）
-    # 会掉进下面那条"没有可推进的子目标" ⇒ 把"**输入写错了**"读成"**确实没有待办**"，
+    # 会掉进下面那条"没有可推进的子目标" ⇒ 把「输入写错了」读成「确实没有待办」，
     # 正是本仓最在意的"没查成写成查了没有"。先校验词表，如实说清是输入的问题。
     unknown = sorted({str(s.get("status") or "") for s in subgoals
                       if str(s.get("status") or "")} - set(SUBGOAL_STATUSES))
@@ -483,7 +483,7 @@ def _plan_error_type() -> type:
     side_effect="none",
     roles=_READ_ROLES,
     # ⚠️ 2026-10-15 补齐（`draft/124` §17）：`returns` 会拼进 function-calling 的
-    # `description`（`tools/base.py:721`）⇒ **模型看得到**；缺的键模型就不知道它存在。
+    # `description`（`tools/base.py:721`）⇒ 「模型看得到」；缺的键模型就不知道它存在。
     # `blocked_by` 是"被谁挡住的"（预算不完整 / 已终结 / 该换下一层）。
     returns="{'checked','complete','missing','allowed','reason','blocked_by'}",
     tags=("attack", "budget"),

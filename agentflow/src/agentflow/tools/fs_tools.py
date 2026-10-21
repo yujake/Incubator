@@ -78,10 +78,10 @@ MAX_READ_BYTES = 5 * 1024 * 1024
 #: 单次写的硬上限（字节）。
 #:
 #: ⚠️ 2026-10-15 业主裁定 D5：5 MB → 32 MB。理由不是"5 MB 太小"（模型的单次回复
-#: 根本到不了 5 MB），而是**这一格曾经是错的工具用在错的场合时的挡箭牌**：
+#: 根本到不了 5 MB），而是「这一格曾经是错的工具用在错的场合时的挡箭牌」：
 #: 第八趟主控想改 `main.tex` 里三处，却试图整文件重写 26 KB —— 真正卡住它的是
-#: **输出额度**（8192 token 截在字符串中间 ⇒ 三次坏 JSON ⇒ 整趟作废），不是这一格。
-#: 把这一格抬高到 32 MB，"内容过大"就回到它该有的语义：**挡住一次编程事故**
+#: 「输出额度」（8192 token 截在字符串中间 ⇒ 三次坏 JSON ⇒ 整趟作废），不是这一格。
+#: 把这一格抬高到 32 MB，"内容过大"就回到它该有的语义：「挡住一次编程事故」
 #: （比如把一个数组序列化成几千万字符塞进来），而不是挡住正常写作。
 #: 大文件的正确改法仍然是 `fs.edit`（改动量与输出量成正比），下面那条拒绝报文里写清了。
 MAX_WRITE_BYTES = 32 * 1024 * 1024
@@ -519,10 +519,10 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
     if not is_bin and suffix in _BINARY_SUFFIXES:
         is_bin, why = True, f"扩展名 {suffix} 属于二进制格式"
     if is_bin:
-        # ⚠️ **2026-10-17 业主口径**：*"把其它智能体要消费论文的请求**自动路由到同名纯文字稿**，
+        # ⚠️ 「2026-10-17 业主口径」：*"把其它智能体要消费论文的请求「自动路由到同名纯文字稿」，
         # 其它智能体不必再做 OCR 等操作。"* ⇒ 这里不再一律拒：若这一份旁边有
-        # **同名纯文字稿**（A 用 `text.extract` 转好的那份，落在同一层），**直接把稿子给它**，
-        # 并在读数里**说清"你要的是 PDF、我改读的是同名稿"**（不许静默替换来源）。
+        # 「同名纯文字稿」（A 用 `text.extract` 转好的那份，落在同一层），「直接把稿子给它」，
+        # 并在读数里「说清"你要的是 PDF、我改读的是同名稿"」（不许静默替换来源）。
         sibling = target.with_suffix(".txt")
         if target.suffix.casefold() == ".pdf" and sibling.is_file():
             try:
@@ -533,7 +533,7 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
                     "这一格没读成，不是「没有纯文字稿」；可让 **A** 重跑 `text.extract`。",
                     path=_rel(ctx, sibling), kind="route_unreadable", size=size,
                 )
-            # 形状与正常读取**逐字同形**：`data` 是标量文本，其余进 `meta`
+            # 形状与正常读取「逐字同形」：`data` 是标量文本，其余进 `meta`
             # （`fs.read` 在声明判据里是"data 无键集合"的豁免成员 —— 自造 data 键会破那条豁免）。
             routed_lines = routed_text.splitlines(keepends=True)
             return ok(

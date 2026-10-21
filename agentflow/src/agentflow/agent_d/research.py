@@ -46,22 +46,13 @@ class _Research:
                 if row is not None:
                     row["evidence_lit_ids"] = S.sorted_unique(list(row.get("evidence_lit_ids") or []) + lit_ids)
                     # ---- 状态由判据现算，不由调用顺序决定（CS-5）
-                    #
-                    # `verdict["sufficient"]` = `analyze_gaps` 的三条可核实判据一条都没触发
-                    # ⇒ 这一问已经有结论 ⇒ `answered`（终态）。
-                    # 仍然不足 ⇒ 留在 `researching`（"证据就绪、正在研究"；下一步回到
-                    # `submit_gaps`，由它把状态与等待集一起写成 `needs_evidence`）。
-                    #
-                    # 为什么这一格必须在这里写：`researching → answered` 这条边早就
-                    # `research_tools.LEGAL_TRANSITIONS` 里，但缺口这条路上没有任何代码走它 ——
-                    # 于是 `pipeline.py:428` 与 `agent_d/core.py`（`_adjudicate_ready_contradictions`）
-                    # 那两道"已下结论就跳过"的过滤永远不生效，同一个问题每一轮都被重新研究、
-                    # 重新评估（真机 118 行 `research_questions` 里 `answered` 0 行）。
-                    # 提示词当初只能补一句"回答完要自己推状态"去绕开它 —— 现在那句话会恒真，
-                    # 同一个批次里已把它改成"读代码"的那一句。
-                    #
-                    # 不用 `confidence` 当门槛：置信度衡量证据强度，`sufficient` 衡量"有没有
-                    # 触发'不足'的判据"，两者不是一回事（证据够但置信度 low 是常见的一档）。
+                    # `verdict["sufficient"]` = `analyze_gaps` 的三条可核实判据一条都没触发 ⇒ `answered`
+                    # （终态）；仍不足 ⇒ 留 `researching`（下一步回到 `submit_gaps`，由它写成 `needs_evidence`）。
+                    # 为什么必须在这里写：`researching → answered` 这条边早在
+                    # `research_tools.LEGAL_TRANSITIONS` 里，但缺口这条路上没有代码走它 ⇒ `pipeline.py:428`
+                    # 与 `agent_d/core.py`（`_adjudicate_ready_contradictions`）那两道"已下结论就跳过"的过滤
+                    # 永远不生效（真机 118 行 `research_questions` 里 `answered` 0 行）。不用 `confidence`
+                    # 当门槛：置信度衡量证据强度，`sufficient` 衡量"有没有触发'不足'的判据"，两者不是一回事。
                     if verdict["sufficient"]:
                         row["status"] = "answered"
                         # 终态必须清空等待集：不清的话 `verify` 会报 `stale_waiting` ——

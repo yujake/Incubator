@@ -82,25 +82,14 @@ LIT_TYPES = ("J", "M", "C", "D", "R", "S", "P", "N", "EB", "Z")
 #: 关系/概念的复核状态。suspect 是"几乎相同"判定的中间态，保留可审计性。
 RELATION_STATUS = ("active", "suspect", "rejected")
 
-#: 一次搜索请求的终局类型。它回答的是"这一行是怎么结束的"，
-#: 而不是"有没有出错" —— 二者必须分开，否则"搜索了但没有结果"会被当成故障，
-#: 而"所有 provider 都失败"又会被当成正常完成。
-#:   ok            —— 至少登记了一篇文献
-#:   no_results    —— 搜索正常执行但确实没有命中（这是一个有效结论）
-#:   search_failed —— 所有 provider 都失败，且已用尽重试
-#:   gave_up       —— 超过最大尝试次数被放弃
+#: 一次搜索请求的终局类型：回答"这一行是怎么结束的"，不是"有没有出错" —— 二者必须分开，
+#: 否则"搜索了但没有结果"会被当成故障，而"所有 provider 都失败"会被当成正常完成。
+#:   ok —— 至少登记了一篇文献；no_results —— 搜索正常执行但确实没有命中（这是一个有效结论）；
+#:   search_failed —— 所有 provider 都失败且已用尽重试；gave_up —— 超过最大尝试次数被放弃。
 #:
-#: 别与 `TASK_OUTCOMES` 串了（两套命名空间只差一个字母）：
-#: 本词表（`search_requests.outcome`，搜索请求那一行）用的是复数 `no_results`；
-#: 而 `TASK_OUTCOMES`（`tasks.outcome`，一次召唤的终局）用的是单数 `no_result`。
-#: 两者字面像、含义也不同：这里是"这一次搜索没有命中"，那里是"这次召唤完成了但没产出"。
-#:
-#: 这一条必须靠注释说出来，因为错一个字母不会有任何东西变红：
-#: `SearchRequest.validate` 只查"在不在 `SEARCH_OUTCOMES` 里"，所以写 `no_result`
-#: 会被拒绝（那是好事），但反过来 —— 有人在读 `tasks` 的报错提示时照抄
-#: `no_results` —— `Task.validate` 同样会拒绝，只是没人知道自己串了哪一套。
-#: 登记册里曾经有一条提案（`P-21`）正是把这两个词表读串了，以为
-#: `SEARCH_OUTCOMES` 登记的是单数、要改 `verify.py` 的文案；已撤回（前提不成立）。
+#: 别与 `TASK_OUTCOMES` 串了（两套命名空间只差一个字母）：本词表（`search_requests.outcome`）
+#: 用复数 `no_results`，`TASK_OUTCOMES`（`tasks.outcome`）用单数 `no_result`。错一个字母不会
+#: 有任何东西变红 —— 两处 `validate` 都只说"不在词表里"，不会告诉你串了哪一套（见 `P-21`）。
 SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 
 #: `literature.download.status` 的受控词表。
@@ -116,40 +105,22 @@ SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 #:   skipped           —— 未尝试下载（无 pdf_url / 关闭下载 / 达到单请求上限）
 DOWNLOAD_STATUSES = ("ok", "content_mismatch", "failed", "skipped")
 
-#: 「待新增文献列表」（`lit_candidates`）的槽位状态词表。
-#:
-#: 为什么它是**五态**而不是"在/不在"两态：业主口径（2026-10-20）要求"撤掉 = 该槽位置空、
-#: 并记录删掉了哪一篇、为什么"，"审内容后拒收"要写理由，"正式的入库"要能回填 `lit_id`，
-#: 且"一键迁移之后清空该委托的列表（可追、不许物理删）"。
-#: 把它们折成一个布尔（`deleted`）会让四种完全不同的处置在盘上同形 ——
-#: 「撤掉（等下一批补位）」/「拒收（审过了，内容不行）」/「入库（成了 literature 的一行）」/
-#: 「清空（迁移结算时按配额或未审完而收尾）」的下一步动作相反，折起来之后谁也读不出当初是哪一种。
-#:
-#:   pending    —— 在列表里等着被审（唯一可以被 stage_withdraw / stage_reject / admit 的态）
-#:   withdrawn  —— 被撤掉：槽位**仍然在列表里**（序号不复用），`withdrawn_reason` 必须非空
+#: 「待新增文献列表」(`lit_candidates`) 的槽位状态词表：五态，不是"在/不在"两态（业主口径
+#: 2026-10-20）。折成一个布尔会让四种处置在盘上同形，而它们的下一步动作相反。
+#:   pending    —— 在列表里等着被审（唯一可被 stage_withdraw / stage_reject / admit 的态）
+#:   withdrawn  —— 被撤掉：槽位仍在列表里（序号不复用），`withdrawn_reason` 必须非空
 #:   rejected   —— 审内容后拒收：`reject_reason` 必须非空（重叠检查没通过也走这一档）
 #:   admitted   —— 已正式入库：`lit_id` 必须非空（就是 literature 里那一行）
-#:   cleared    —— 迁移结算时被清空的残留（超配额 / 未审完）：`cleared_at` 与 `clear_reason`
-#:                 必须非空 —— 它让"本委托的列表已经清空"是一条可判定的事实，而不是"应该清了吧"
+#:   cleared    —— 迁移结算时被清空的残留（超配额/未审完）：`cleared_at` 与 `clear_reason` 必须非空
 CANDIDATE_STATUSES: tuple[str, ...] = ("pending", "withdrawn", "rejected", "admitted", "cleared")
 
-#: 「待新增文献列表」的**筛选理由**受控词表（业主 2026-10-20 第 3 条：
-#: "理由用登记表里的受控取值，不要自由发挥"）。
-#:
-#: 为什么要受控：这些理由会进**委托报告**的"未入库"那一块，而报告是交给下一次委托的
-#: D/H 读的交付物。自由文本的理由没法按类统计（"这一轮到底挡了几篇重复、几篇低质"），
-#: 也没法被机器判据检查 —— 而"报告里两块都在不在"正是这次的判据之一。
-#:
-#: 每一档都是**一个可判定的情形**，不是一句评价：
-#:   withdrawn_by_reviewer     —— 审的时候自己撤掉（内容与本次检索无关/不够好，转去找别的）
-#:   rejected_off_topic        —— 审内容后拒收：与本次检索无关
-#:   rejected_low_quality      —— 审内容后拒收：内容质量不足（无摘要/无正文/非学术）
-#:   duplicate_doi             —— DOI 与本地库某一行完全相同（同一篇，视为重复）
-#:   overlap_without_new_content —— 与本地库标题高度重叠且调用方没给 new_content
-#:   overlap_ok_false          —— 调用方显式标了 overlap_ok=False
-#:   registration_failed       —— 过了筛，但现有登记路径没给出 lit_id（入库失败，不是成功）
-#:   over_cap                  —— 本次委托的入库配额已满（≤10 篇）
-#:   not_screened              —— 一键迁移结算时仍未审完，随委托一并清空
+#: 「待新增文献列表」的筛选理由受控词表（业主 2026-10-20 第 3 条：理由用受控取值，不许自由发挥）。
+#: 为什么要受控：这些理由会进委托报告的"未入库"一块，而报告交给下一次委托的 D/H 读 —— 自由
+#: 文本没法按类统计（这一轮挡了几篇重复、几篇低质），也没法被机器判据检查。每一档都是一个
+#: 可判定的情形：`withdrawn_by_reviewer` / `rejected_off_topic` / `rejected_low_quality` /
+#: `duplicate_doi` / `overlap_without_new_content` / `overlap_ok_false` / `registration_failed`
+#: （过了筛但没给出 `lit_id`，入库失败不是成功）/ `over_cap`（本次委托配额已满，≤10 篇）/
+#: `not_screened`（一键迁移结算时仍未审完，随委托一并清空）。
 CANDIDATE_REASON_CODES: tuple[str, ...] = (
     "withdrawn_by_reviewer",
     "rejected_off_topic",
@@ -184,24 +155,13 @@ assert set(CANDIDATE_REASON_LABELS) == set(CANDIDATE_REASON_CODES), (
 )
 
 #: `literature.matched` 的受控词表（`draft/37` §2 R1b）：检索回来的到底是不是这一篇。
-#:
-#:   exact     —— 题名/年份/DOI 都对得上派活时点名的那一篇
-#:   partial   —— 是同一篇，但元数据有出入（年份差一年、题名少一个副标题这类）
-#:   mismatch  —— 不是同一篇（实测反例：要 Brown 1971，下回来的是 2022 年另一篇 CLT 论文，
-#:                569,776 字节的真 PDF、登记成功、下载成功，没有任何地方报出来）
-#:
-#: 空串是第四态，不是缺席："" = 还没做命中校验（三态纪律的老规矩 ——
-#: "没查"不能折成"查过了没问题"，所以它既不等于 `exact` 也不等于 `mismatch`）。
-#:
-#: 别与 §5.2 / §16 P2 的另一个 `matched` 串了（同 `SEARCH_OUTCOMES` vs
-#: `TASK_OUTCOMES` 那一族的形态）：登记册里有两个同名但不同问的"三态"——
-#:   - 本栏（§2 R1b）：问"这一篇是不是我要的那一篇"（文献身份）⇒ `mismatch`；
-#:   - §5.2 / §16 P2 / §2 R14：问"这条定理在不在这篇里"（文内定位）⇒ 第三态叫 `none`，
-#:     由 A 在回报里给出（`matched` + 页码 + 片段 + "最接近的三段"），不落本栏。
-#: 两者的第三态名字不同（`mismatch` vs `none`）是故意的：一个是"拿错了文献"、
-#: 一个是"这篇里没有它"，处置方向相反（重取 vs 换关键词/如实回报）。把它们折成一个
-#: 字段会让"我下错了论文"与"论文里没有这条定理"在台账上同形 —— 而这两件事
-#: 在真机里各自都发生过一次（§1.1 与 §2 R14 的负控①）。
+#:   exact —— 题名/年份/DOI 都对得上派活时点名的那一篇；partial —— 同一篇但元数据有出入；
+#:   mismatch —— 不是同一篇（实测反例：要 Brown 1971，下回来 2022 年另一篇 CLT 论文，真 PDF、
+#:                 登记成功，没有任何地方报出来）。
+#: 空串是第四态、不是缺席："" = 还没做命中校验（三态纪律："没查"不能折成"查过了没问题"）。
+#: 别与 §5.2 / §16 P2 的另一个 `matched` 串了（同 `SEARCH_OUTCOMES` 那一族的形态）：本栏问
+#: "这一篇是不是我要的那一篇"（文献身份）⇒ 第三态叫 `mismatch`；那处问"这条定理在不在这篇
+#: 里"（文内定位）⇒ 第三态叫 `none`。处置方向相反（重取 vs 换关键词/如实回报），折平即同形。
 LIT_MATCH_STATUSES = ("exact", "partial", "mismatch")
 
 #: 编号宽度的**唯一定义处**（业主 2026-10-14：「**所有四位编号改成六位**（`0000`→`000000`，防溢出）」）。
@@ -357,24 +317,13 @@ class SearchRequest:
     #: 提交来源的自由文本说明（人可读；机器判定只看 `submitted_by`）。
     submit_note: str = ""
     #: 这一次检索点名要问哪几个源（一次问多源）。
-    #:
-    #: [契约] 空数组是「没有点名源 ⇒ 按角色级接线查」这一态，不是缺省值；
-    #: 非空数组是「只问这几个源，次序就是问的次序」。两态必须分得开，
-    #: 所以这里不用 `None` 也不用空串。
-    #:
-    #: [为什么] 默认值必须是空数组（而不是必填）：盘上已有的行里没有这个键，
-    #: `row_from_dict` 按 `__dataclass_fields__` 过滤之后会把缺的键交给默认值
-    #: ⇒ 老行照样读得进来（向后兼容）。这也是本次改动不抬 `SCHEMA_VERSION`
-    #: 的理由：字段是追加的、默认值让两种行都合法，盘上的格式契约没有被改坏。
-    #:
-    #: [为什么] 这里刻意不校验「源名认不认识」：可用源的真身是检索后端注册表
-    #: （`providers.build_providers` 的那张名单加上调用方注入的实例），把它抄进
-    #: schema 就是造出第二个要同步的地方，而它漂了不会报错。认识的判据在动作层
-    #: （`AgentA.search_literature` 在入队之前逐个核名，不认识就如实拒绝并把
-    #: 可用名单一起给出来），本字段只做形状校验（非空字符串、元素是字符串）。
-    #:
-    #: [契约] 本次改动由所有者批准、主控代改：本文件是 FC-27 禁改区
-    #: （[schema-migration] + [eval-criteria]），这次只加这一个字段。
+    #: [契约] 空数组是「没有点名源 ⇒ 按角色级接线查」这一态，不是缺省值（所以不用 `None`/空串）；
+    #: 非空数组是「只问这几个源，次序就是问的次序」。
+    #: [为什么] 默认值必须是空数组：盘上已有的行没有这个键，`row_from_dict` 按 `__dataclass_fields__`
+    #: 过滤后缺的键交给默认值 ⇒ 老行照样读得进来；这也是本次不抬 `SCHEMA_VERSION` 的理由。
+    #: [为什么] 这里刻意不校验「源名认不认识」：可用源的真身是 `providers.build_providers` 那张名单
+    #: 加调用方注入的实例，抄进 schema 就是造出第二个要同步的地方。认识的判据在动作层
+    #: （`AgentA.search_literature` 入队前逐个核名），本字段只做形状校验（非空字符串、元素是字符串）。
     providers: list[str] = field(default_factory=list)
 
     def validate(self) -> None:
@@ -1279,50 +1228,14 @@ class AnalysisReport:
 #:   formal             —— 交给证明检查器（Lean/Coq/…）核验
 EXPERIMENT_METHODS = ("numeric", "symbolic", "exhaustive_search", "formal")
 
-#: 证据等级（FC-22 的落地核心）。
-#:
-#:   proof        —— 由形式化检查器核验过的证明（只有 `method="formal"` 才可能拿到）
-#:   proof_review —— **证明经逐行审阅**（`statements` 表的 `proof_text` 非空 + V 的
-#:                   `verifications` 里那一条签「成立」）。它不是机器检查：读者必须
-#:                   看到那句声明，所以它和 `cross_check` 一样**必须自带 disclaimer**。
-#:                   这一档是"没有 Lean 也要能写论文"的落点（业主 2026-10-12：
-#:                   「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，
-#:                   但也要能写」）—— 用词上限（「定理/证明」）在 Lean 关掉时从 `proof`
-#:                   换成它；Lean 开着时它仍然低于 `proof`（老套路一个字不变）。
-#:
-#:                   **这一档的凭据由谁强制**（2026-10-19 补：在此之前上面那句话
-#:                   只是一句注释，没有任何代码核过它 —— `projects/mp1` 因此留下 10 条
-#:                   `evidence_kind="proof_review"` 而 `verification_id`/`reviewed_by`
-#:                   全空、`bits={}` 的行）：
-#:                     - 判据本体：`verifications.proof_review_gap`
-#:                       （`proof_text` 非空 ＋ 最后那一签是「成立」且 `proof_sha256`
-#:                       等于现在这一版）；
-#:                     - 写入期：`store.tx` 提交时 `_refuse_fake_proof_review` **当场拒收**
-#:                       （错误码 `proof_review_without_evidence`；落在 store 层而不是
-#:                       这里，因为这一档要读盘上的 `verifications/`，而
-#:                       `Statement.validate` 是字段级、手上没有工作区根，且它被
-#:                       `rebuild` 重放与 `verify` 读侧共用 —— 把这条判据塞进去会让
-#:                       "读历史"变成"改历史"）；
-#:                     - 审计期：`verify._check_13` 报
-#:                       `proof_review_without_verification`（**error** 级，逐条点名存量）。
-#:
-#:                   **反方向也是缺陷**（2026-10-19 晚补）：凭据已经够这一档、却把
-#:                   `evidence_kind` 写得更弱（`heuristic` / `cross_check`）——
-#:                   降档是安全方向，所以它不是 error，但必须看得见：
-#:                   `verify._check_13` 报 `weaker_than_evidence`（**warning**），
-#:                   判据本体 `verifications.weaker_than_evidence_gaps`。真机形态是
-#:                   `projects/mp2` 的 `stmt:000003`（`proof_text` 1909 字 ＋ V 签
-#:                   「成立」 ＋ sha 相符，盘上落 `heuristic`）：一条够格的强结果被
-#:                   长期登记成弱档，论文的强度声明因此系统性偏低，而此前没有任何
-#:                   读数会指出它。**有 `proof_text` 且有那一签 ⇒ 就该落这一档；
-#:                   只有真没有签名时才退到 `heuristic`。**
-#:   cross_check  —— 数值/穷举的交叉验证。它不是证明，且在任何报告里都必须
-#:                   自动附加"不构成证明"的字样。
-#:   heuristic    —— 启发式观察（例如"看起来像"），证据力最弱。
-#:
-#: 为什么把它做成 schema 字段而不是靠人记得标注：数学里"数值对了"与"证完了"
-#: 是天壤之别，而人一定会忘。把它变成字段，并让 schema 拒绝
-#: "method=numeric 却声称 evidence_kind=proof"，这条错误就在写入时炸掉。
+#: 证据等级（FC-22 落地核心）：proof（形式化检查器核验过，只有 `method="formal"` 才可能拿到）·
+#: proof_review（`proof_text` 非空 ＋ V 签「成立」；不是机器检查 ⇒ 必须自带 disclaimer，是"没有 Lean 也要能写
+#: 论文"的落点）· cross_check（数值/穷举交叉验证，不构成证明，报告必须自动附这句话）· heuristic（最弱）。
+#: 强制三处：`verifications.proof_review_gap`（判据本体：最后一签「成立」且 `proof_sha256` 对得上现在这一版）·
+#: `store._refuse_fake_proof_review`（写入期当场拒收，`proof_review_without_evidence`）· `verify._check_13` 的
+#: `proof_review_without_verification`（审计期 error，逐条点名存量）。
+#: 反方向也是缺陷：够这一档却把 `evidence_kind` 写得更弱 ⇒ `_check_13` 报 `weaker_than_evidence`（warning，
+#: 判据本体 `verifications.weaker_than_evidence_gaps`）；有 `proof_text` 且有那一签 ⇒ 就该落这一档。
 EVIDENCE_KINDS = ("proof", "proof_review", "cross_check", "heuristic")
 
 #: `experiments` 表能用的证据等级（比 `EVIDENCE_KINDS` 少 `proof_review`）。
@@ -1413,25 +1326,13 @@ DEP_STATUSES = ("closed", "dangling", "external_unavailable", "refuted", "disput
 #: 而"分栏"这件事靠推导是推不出来的。
 STATEMENT_ORIGINS = ("external_lit", "own_result")
 
-#: 命题台账的状态（`draft/37` §16 P1，与 §8/§9 的裁决闭环配套）。
-#:
-#:   active     —— 在册、可用作依据
-#:   disputed   —— 有争议、尚未裁决（不许当依据用，见 verify 的不变量）
-#:   refuted    —— 被证否（可能是我们证否的，也可能是文献本身错了）
-#:   superseded —— 被后来的一条取代（例如我们把它重写成了更强的形式）
-#:   pending_definition —— 概念行：行已经登记、定义还没到（`D12` 已裁，2026-10-09）
-#:
-#: 最后一档的来历与边界（`draft/93·续` D12，业主 2026-10-09 选甲）：业主裁定
-#: 「抽不到定义的概念就让A去网上搜，写入时定义内容留空，等A返回后写入」——
-#: "行已经写了、内容还没到"这件事必须先有一个可读的落点，否则那一笔只能
-#: 落成 `active` + 空定义（`Statement.validate` 当场拒）或干脆不落（94 行概念在并表后
-#: 查不到）。所以加这一档，两条配套纪律一起落：
-#:   ① 它不是"可用依据"（与 `disputed`/`refuted`/`superseded` 同列，
-#:      见 `STATEMENT_UNUSABLE_STATUSES`）——定义还没到，下游不许拿它当依据；
-#:   ② 必须带待补标记（`quote_reason` 里的 `concept:pending_search` /
-#:      `concept:self_authored`，唯一出处是 `migrate_concepts`）⇒
-#:      "为什么空着"与"谁来补"在盘上读得到（`pending_inbox` 扫的就是它）。
-#: 取证：`src/agentflow/schema.py` 本条；题面与裁定见 `draft/93·续` D12（甲）。
+#: 命题台账的状态（`draft/37` §16 P1，与 §8/§9 的裁决闭环配套）：active（在册、可用作依据）·
+#: disputed（有争议、尚未裁决，不许当依据用，见 verify 的不变量）· refuted（被证否）·
+#: superseded（被后来的一条取代）· pending_definition（概念行：行已登记、定义还没到）。
+#: 最后一档的边界（`draft/93·续` D12，业主 2026-10-09 选甲）：① 它不是"可用依据"（与
+#: `disputed`/`refuted`/`superseded` 同列，见 `STATEMENT_UNUSABLE_STATUSES`）；② 必须带待补标记
+#: （`quote_reason` 里的 `concept:pending_search` / `concept:self_authored`，唯一出处是
+#: `migrate_concepts`）⇒ "为什么空着"与"谁来补"在盘上读得到（`pending_inbox` 扫的就是它）。
 STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded", "pending_definition")
 
 #: 命题台账里不许再被当作依据的状态。`verify` 的不变量读的就是这一份名单 ——
@@ -1485,34 +1386,14 @@ CLAIM_SOURCE_KINDS: tuple[str, ...] = ("自证", "文献", "未决")
 CLAIM_CHECK_KINDS: tuple[str, ...] = ("证明", "数值", "只读了陈述")
 
 
-#: H 的审校发现类型。每一类都必须能机械判定，否则审校会退化成"我感觉"。
-#:   unsupported_claim       —— 断言没有引用（可判定：citations 为空）
-#:   dangling_dep            —— 依赖悬空 / 外部不可得（可判定：dependencies 表）
-#:   overclaim               —— 把 cross_check 写成 proved（可判定：evidence_kind）
-#:   missing_negation_kind   —— 否定型结论没分类（可判定：is_negative + negation_kind）
-#:   scope_drift             —— 把假设当公理、结论范围被放大
-#:   garbled                 —— 表述错误 / 自相矛盾
-#:   inconsistent_number     —— 同一个数字在不同处不一致
-#:
-#: ## 这里曾经有一个引文档，`E-10`（2026-09-27 裁定 (b)）把它删掉了
-#:
-#: 旧词表里有一条 `` `quote` + `_mismatch` ``（"引文与原文不符"），注释还写着
-#: "可判定：回到原文比对"。那句话是假的：`quoteverify.check_quote` 的 reason
-#: 取值里从来没有"找到了但不一样"这一档（只有 `substring_match*` / `not_found*` /
-#: `no_text_layer` / `empty_quote` / `page_unreadable` / `page_status_unknown`），
-#: 而 `doc_tools` / `review_tools` 两张 code→kind 映射表里也都没有它 ——
-#: 没有任何生产路径能产出它。于是"引文被改写"与"整句编造"在本系统里
-#: 给出的判决逐字相同（都是 `not_found`）。
-#:
-#: 处置选了 (b) 而不是 (a)（给回验加一档近似匹配）：把"逐字不在"细分成"被改写"，
-#: 会把一次编造软化成一档更轻的指控，而两者的处置方向相反（改写 ⇒ 去改引文；
-#: 编造 ⇒ 去查幻觉）—— 证据链上往轻判是最危险的方向；而且近似匹配需要一个
-#: 今天无法标定的阈值（token 覆盖率），那是发明数字，本仓库的纪律不许。
-#: ⇒ 删掉假承诺，并让边界可见：本系统只能判"逐字不在"，不能判"被改写/拼接"
-#: （边界写在 :func:`agentflow.quoteverify.check_quote` 的 docstring 里）。
-#:
-#: 为什么删它不必担心追溯性：它从未被任何路径产出过 ⇒ 历史 `findings` 行里
-#: 不可能有这个取值，删它不改写任何历史报告的含义。
+#: H 的审校发现类型。每一类都必须能机械判定，否则审校会退化成"我感觉"：unsupported_claim
+#: （citations 为空）· dangling_dep（依赖悬空/外部不可得）· overclaim（把 cross_check 写成 proved）·
+#: missing_negation_kind（否定型结论没分类）· scope_drift（把假设当公理、结论范围被放大）·
+#: garbled（表述错误/自相矛盾）· inconsistent_number（同一数字在不同处不一致）。
+#: 这里曾经有一个引文档 `E-10`（2026-09-27 裁定 (b) 删掉）：`quoteverify.check_quote` 的 reason
+#: 取值里从来没有"找到了但不一样"这一档，也没有任何生产路径能产出它 ⇒ 那句"可判定"是假承诺。
+#: 系统只能判"逐字不在"，不能判"被改写/拼接"（边界写在 :func:`agentflow.quoteverify.check_quote`
+#: 的 docstring 里）；删它不改写历史（从未被产出过 ⇒ 历史 `findings` 行里不可能有这个取值）。
 FINDING_KINDS = (
     "unsupported_claim", "dangling_dep", "overclaim",
     "missing_negation_kind", "scope_drift", "garbled", "inconsistent_number",
@@ -2279,25 +2160,14 @@ class Statement:
             require_id(self.source_lit_id, "source_lit_id")
         if self.doc_id is not None:
             require_id(self.doc_id, "doc_id")
-        # ---- 自产结果缺 `proof_text`：不拒（P-06 / 裁决 1 的"降级 + 待办"）
-        #
-        # 这里此前是一条 `raise`（"origin='own_result' 必须给 proof_text"）。删掉它的理由
-        # 不是"放宽门槛"，而是那条硬要求把一件已经能被结构表达的事做成了拒收：
-        #
-        #   - "降级"是现算的：缺第 2 位 ⇒ `evidencebits.derive_grade` 直接给"猜想"
-        #     （`bits` 与等级都不需要新字段，等级本来就不落盘）；
-        #   - "待办"有既有载体：`quote_verified` 的三态（`None` = 还没查）+ `quote_reason`，
-        #     以及消费端（各角色秘书的派生收件箱）扫的就是"该有而没有"的既有标记。
-        #
-        # 所以这一笔现在能落库：它落成一条等级最低的行，而不是被拒在门外。
-        # 反过来（拒收）的代价是实测过的：13 条 `own_result` 全带 `proof_text` 而现算等级
-        # 13/13 全是 `conjecture` —— 那条 raise 一条真猜想都没挡住，只挡住了"如实登记"。
-        #
-        # 边界（不许顺手做）：不加字段、不造新表 ——
-        # 放宽 `STATEMENT_STATUSES` 是"改历史读数口径"那一类，只走人裁。
-        # 2026-10-09：`pending_definition` 这一档就是人裁过的（`draft/93·续` D12 选甲，
-        # 业主逐字见 `STATEMENT_STATUSES` 上面那一段）。除此之外不许再加值。
-        # ---- 负控（§16 P1 逐字要求的那一条）：缺完整假设的行不许进 active
+        # ---- 自产结果缺 `proof_text`：不拒（P-06 / 裁决 1 的"降级 + 待办"）。
+        # 这里此前是一条 `raise`。删它不是放宽门槛：降级是现算的（缺第 2 位 ⇒ `evidencebits.derive_grade`
+        # 直接给"猜想"，`bits` 与等级都不需要新字段、等级本来就不落盘）；待办有既有载体（`quote_verified`
+        # 的三态 + `quote_reason`，消费端扫的就是"该有而没有"）。反过来（拒收）的代价是实测过的：13 条
+        # `own_result` 全带 `proof_text` 而现算等级 13/13 全是 `conjecture` ⇒ 那条 raise 一条真猜想都没
+        # 挡住，只挡住了"如实登记"。
+        # 边界（不许顺手做）：不加字段、不造新表；`STATEMENT_STATUSES` 加值只走人裁（`pending_definition`
+        # 就是人裁过的，见 `draft/93·续` D12）· 负控（§16 P1 逐字要求）：缺完整假设的行不许进 active。
         if self.status == "active" and not self.statement_full.strip():
             raise ValueError(
                 "status='active' 必须有 statement_full（含完整假设）："
@@ -2439,21 +2309,13 @@ class ReviewFinding:
     #: 轴。取值域 = `gates.AXES`（数学 / 体例 / 工程 / 证据）。
     #: 不在本模块重抄一份词表（FC-03）：`validate()` 里按 `gates.AXES` 判。
     axis: str = ""
-    #: 1 起的行号，指向 `doc_id` 那一行。`None` = "这一次拿不到行号"，
-    #: 此时必须给 `line_unavailable_reason`（否则"拿不到"是一个没有结论的空白）。
-    #: 为什么行号是有条件的：行号只有在版本冻结（G11）之后才有意义 ——
-    #: 未冻结时记下的行号在改稿之后就是错的，而它看起来一样精确
-    #: （`.noai-paths` 里"理由里刻意不写行号"那条纪律是同一件事的另一面）。
-    #:
-    #: `X-96.3-2`：上面那句"G11 通过后必填"此前没接线 ——
-    #: `gates.GateContext` 里 `findings` 与 `observed_hash` 互不相干，于是
-    #: 一条带行号的发现可以在一份没钉版本 hash 的输入里通过 G10。接线落在
-    #: `gates` 侧（`GateContext.findings_version_pinned` + `gate_g10`，
-    #: 判据 `draft/28` §96.3 第 2 条）；本表不加非空断言，理由同上一条注释
-    #: 第 1 点：`store.rebuild()` 会把任何 `validate()` 抛异常的行静默丢掉，
-    #: 所以"必填"这件事由门判、不由写入期契约判。这里只把口径写清楚：
-    #: 版本已冻结（G11 通过）时 `line_unavailable_reason` 不是合规的第三态
-    #: ——"行号拿不到"与"版本已冻住"是互相矛盾的，G10 会按缺字段打回。
+    #: 1 起的行号，指向 `doc_id` 那一行。`None` = "这一次拿不到行号"，此时必须给
+    #: `line_unavailable_reason`（否则"拿不到"是一个没有结论的空白）。行号只有在版本冻结（G11）之后
+    #: 才有意义 —— 未冻结时记下的行号在改稿之后就是错的，而它看起来一样精确。
+    #: `X-96.3-2`：接线落在 `gates` 侧（`GateContext.findings_version_pinned` + `gate_g10`，判据
+    #: `draft/28` §96.3 第 2 条）；本表不加非空断言 —— `store.rebuild()` 会把任何 `validate()` 抛异常
+    #: 的行静默丢掉，所以"必填"这件事由门判、不由写入期契约判。口径：版本已冻结（G11 通过）时
+    #: `line_unavailable_reason` 不是合规的第三态（"行号拿不到"与"版本已冻住"互相矛盾），G10 按缺字段打回。
     line: int | None = None
     #: 逐字引文（≤20 词；中文按字、英文按空白切词）。词数口径只有一份实现：
     #: `gates._quote_word_count`，由 `validate()` 复用，不另造一套。
@@ -2538,26 +2400,14 @@ ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V")
 #: 而特权路径正是权限模型最容易漏的地方。
 CONDUCTOR_ROLE = "M"
 
-#: 一次召唤（summon）的任务状态。
-#:
-#:   pending     —— 已立项，尚未开始
-#:   running     —— 正在跑
-#:   done        —— 正常结束（结果可能是"没做成"，那看 outcome）
-#:   cancelled   —— 被取消（含超时 / 预算耗尽导致的取消）
-#:   failed      —— 异常终止（错误写进 error）
-#:
-#: `done` 与 `failed`/`cancelled` 必须分开：前者的语义是"这个任务跑完了"，
-#: 后者的语义是"它没跑完"。三者合并成"结束"之后，就无法回答
-#: "这条结论是在一次成功完成的召唤里产出的、还是在一次崩溃里被顺手写下的"。
-# ---------------------------------------------------------------- 工作项板（`draft/85` §2.1；业主 2026-10-08 裁 A1=甲）
-#
-# 为什么这四条词表定义在 `schema.py`（业主 2026-10-08 晚对"词表落点"的答复是
-# "定义在 `manuscripts.py`、`schema.py` 引用"，但那一版实现不了，已如实回报）：
-# `manuscripts.py:50` 就 `from . import schema as S`（它要用 `S.TABLES` / `S.ROLES`）
-# ⇒ 反过来 import 会成环。而本仓既有裁定（`draft/68` 题 2 选 B，判据
+#: 一次召唤（summon）的任务状态：pending（已立项，尚未开始）· running（正在跑）· done（正常结束，
+#: 结果可能是"没做成"，那看 outcome）· cancelled（被取消，含超时/预算耗尽）· failed（异常终止）。
+#: `done` 与 `failed`/`cancelled` 必须分开：前者的语义是"这个任务跑完了"，后者是"它没跑完"；三者合并成"结束"之后就答不出"这条结论是在一次成功完成的召唤里产出的、还是在崩溃里被顺手写下的"。
+# ---- 工作项板（`draft/85` §2.1；业主 2026-10-08 裁 A1=甲）
+# 为什么这四条词表定义在 `schema.py`：`manuscripts.py:50` 就 `from . import schema as S`（它要用
+# `S.TABLES` / `S.ROLES`）⇒ 反过来 import 会成环；而本仓既有裁定（`draft/68` 题 2 选 B，判据
 # `tests/test_claimanatomy.py::test_the_six_claim_vocabularies_have_exactly_one_definition_in_schema`）
-# 是"受控词表的真身在 `schema.py`，工具侧只引用不内联"。所以四条落在这里，
-# `manuscripts.py` 用它已经有的 `S.` 引用（与它用 `S.TABLES` 一模一样）。
+# 是"受控词表的真身在 `schema.py`，工具侧只引用不内联"。
 
 #: 板上一行的四种 `kind`（`draft/85` §2.1）。空串 = 老行 / 纯实例行（不进板）。
 #: 为什么"空串"也算合法取值：真机 59 个工作区共 2276 行老行（实测 `draft/89` §1.2），
@@ -2582,24 +2432,14 @@ ITEM_CLOSES: tuple[str, ...] = ("acked", "completed")
 #: 于是"停的时候手上还剩什么"在台账上有主人、有理由（`detail` 必填）、有时间（`ended_at`）。
 TASK_STATUSES = ("pending", "running", "done", "cancelled", "failed", "block")
 
-#: 召唤的终局类型（回答"这次召唤到底给出了什么"）。
-#:
-#:   ok             —— 完成并产出了预期产出
-#:   no_result      —— 完成但确实没有结果（这是一个有效结论，如"检索无命中"）
-#:   not_applicable —— 完成，但该动作在当前状态下不适用（如"没有待办"）
-#:   refused        —— 框架拒绝执行（越权 / 超预算 / 超深度 / 检测到循环）
-#:   failed         —— 执行中异常
-#:   cancelled      —— 被取消
-#:
-#: `refused` 单列是刻意的："我们没做"与"做了没成"是最容易被混为一谈的一对
-#: （本项目在引文校验、OCR、D 溯源、C 预算截断四处都踩过）。拒绝是策略的决定，
-#: 失败是执行的结果，二者需要完全不同的处置。
-#:
-#: 别与 `SEARCH_OUTCOMES` 串了（两套命名空间只差一个字母）：
-#: 本词表（`tasks.outcome`，一次召唤的终局）用的是单数 `no_result`；
-#: 而 `SEARCH_OUTCOMES`（`search_requests.outcome`，一次搜索请求的终局）
-#: 用的是复数 `no_results`。见 `SEARCH_OUTCOMES` 上面那段 —— 两处必须成对读，
-#: 因为"错一个字母"在两边都只会得到一句"不在词表里"，而不会告诉你串了哪一套。
+#: 召唤的终局类型（回答"这次召唤到底给出了什么"）：ok（完成并产出了预期产出）· no_result（完成
+#: 但确实没有结果，如"检索无命中"，这是一个有效结论）· not_applicable（完成，但该动作在当前状态
+#: 下不适用）· refused（框架拒绝执行：越权/超预算/超深度/检测到循环）· failed（执行中异常）·
+#: cancelled（被取消）。`refused` 单列是刻意的："我们没做"与"做了没成"是最容易被混为一谈的一对
+#: （引文校验、OCR、D 溯源、C 预算截断四处都踩过），拒绝是策略的决定、失败是执行的结果。
+#: 别与 `SEARCH_OUTCOMES` 串了（两套命名空间只差一个字母）：本词表（`tasks.outcome`）用单数
+#: `no_result`，那里（`search_requests.outcome`）用复数 `no_results`。两处必须成对读 —— "错一个
+#: 字母"在两边都只会得到一句"不在词表里"，而不会告诉你串了哪一套（见 `SEARCH_OUTCOMES` 上面那段）。
 TASK_OUTCOMES = ("ok", "no_result", "not_applicable", "refused", "failed", "cancelled")
 
 #: 框架拒绝执行的具体理由（受控词表）。`outcome="refused"` 必须带其中之一。
@@ -2717,21 +2557,14 @@ class Task:
         require_process_id(self.task_id, "task")
         if self.role not in (*ROLES, CONDUCTOR_ROLE):
             raise ValueError(f"role 必须是 {(*ROLES, CONDUCTOR_ROLE)} 之一，收到 {self.role!r}")
-        # ⚠️ **2026-10-16（业主口径 S2「M 只派活」；本文件在 FC-27 禁改区，按"先改后签"
-        # 登记待 2 名人审）**：这一格**放开空动作**。
-        #
-        # 原话逐字：「M 只是个派活的……**不指定能力**」「一致改成 task 必填，action 不填」
-        # 「**不是忽略 action，完全不要有填 action 的位置**」。
-        # ⇒ 一次派活完全可以**没有动作**（动作由被派者自己选），此时那句"空话"是
-        # **`task`（活）**，而 `task` 必填由**派活那四个入口**逐处守：
-        #   `agent_loop._do_summon` / `_do_summon_many`、`tools/conductor_tools.py` 的
-        #   `conductor.summon` / `conductor.summon_many`（`required` 里都有 `task`，
-        #   且处理器在不点时当场拒）。
-        #
-        # 为什么这一格**必须**放开（真机读数）：T5 第 12/13 趟 M 六次/两次发出
-        # `{"role":"A","task":…}`，而 `tasks` 表里空动作的行 **= 0** —— 那几次全部
-        # **死在写行这一刻**（本行），所以连"派活被拒"的证据都没留下。
-        # 放开之后，判据改成"**由派活入口保证带活**"，而不是由台账这一格兜着。
+        # 2026-10-16（业主口径 S2「M 只派活」；本文件在 FC-27 禁改区，按"先改后签"登记待 2 名人审）：
+        # 这一格放开空动作。原话逐字：「M 只是个派活的……不指定能力」「不是忽略 action，完全不要有填
+        # action 的位置」。⇒ 一次派活可以没有动作（动作由被派者自己选），此时那句"空话"是 `task`（活），
+        # 而 `task` 必填由派活四个入口逐处守：`agent_loop._do_summon` / `_do_summon_many`、
+        # `tools/conductor_tools.py` 的 `conductor.summon` / `conductor.summon_many`（`required` 里都有
+        # `task`，处理器在不点时当场拒）。
+        # 为什么必须放开（真机读数）：T5 第 12/13 趟 M 六次/两次发出 `{"role":"A","task":…}`，而 `tasks`
+        # 表里空动作的行 = 0 —— 那几次死在写行这一刻，连"派活被拒"的证据都没留下。放开之后判据改成"由派活入口保证带活"。
         if self.status not in TASK_STATUSES:
             raise ValueError(f"status 必须是 {TASK_STATUSES} 之一，收到 {self.status!r}")
         if self.outcome is not None and self.outcome not in TASK_OUTCOMES:
@@ -3156,25 +2989,14 @@ class EvalResult:
 
 # ---------------------------------------------------------------- FC-05 顺序与集合分离
 
-#: 每一个数组字段都必须在这里声明它是"集合"还是"序列"。
-#:
-#: FC-05 的由来（`test/test2/LESSONS.md` §6.1）：
-#: 本项目为满足"升序"不变量，丢掉了关系链的跳序，只能从 `origin` 字符串反解
-#: （`11-…md` §6.3、§13 第 6 条）。根因是数组字段的语义没有被显式声明 ——
-#: 于是所有数组都被默认当成集合（升序去重），而"顺序本身携带信息"的那些
-#: 就被静默破坏了。
-#:
-#: ## 三种取值
-#:
-#: - ``"set"`` —— 集合：必须升序且去重。`validate_table` 会集中检查这一点，
-#:   所以新增一个集合字段时不需要（也不应该）在自己的 `validate()` 里再手写一遍
-#:   `if x != sorted(set(x))` —— 那种手写就是"同一判据有两处实现"。
-#: - ``"seq"`` —— 序列：保序，不许排序去重。必须有 round-trip 测试
-#:   （写→读→逐元素相等），否则"保序"只是一句声明。
-#: - 未声明 —— 不允许：`verify` 会报 `undeclared_array_field`。
-#:
-#: 为什么用"未声明即报错"而不是"默认按集合处理"：
-#: 默认值会静默把序列当集合。而"静默破坏顺序"正是 FC-05 要修的那个缺陷。
+#: 每一个数组字段都必须在这里声明它是"集合"还是"序列"（FC-05 的由来，`test/test2/LESSONS.md` §6.1）。
+#: 根因：数组字段的语义没被显式声明 ⇒ 所有数组都被默认当成集合（升序去重），而"顺序本身携带信息"
+#: 的那些被静默破坏（本项目因此丢掉了关系链的跳序，只能从 `origin` 字符串反解）。
+#: - "set" —— 集合：必须升序且去重。`validate_table` 会集中检查，所以新增集合字段时不需要（也不
+#:   应该）在自己的 `validate()` 里再手写一遍 `if x != sorted(set(x))` —— 那就是同一判据两处实现。
+#: - "seq" —— 序列：保序、不许排序去重。必须有 round-trip 测试（写→读→逐元素相等），否则"保序"
+#:   只是一句声明。- 未声明 —— 不允许：`verify` 会报 `undeclared_array_field`。
+#: 为什么用"未声明即报错"而不是"默认按集合处理"：默认值会静默把序列当集合，而那正是 FC-05 要修的缺陷。
 ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     "search_requests": {
         "result_lit_ids": "set",
@@ -3392,25 +3214,14 @@ PROCESS_ID_PREFIXES: dict[str, str] = {
 
 # ---------------------------------------------------------------- 引用前缀（`draft/68` 题 1）
 
-#: 引用前缀 -> 它指向哪张表（`documents.claims[].citations` 的受控前缀表）。
-#:
-#: `citations` 的元素是 `前缀:代号`（`lit:0003#p.4` 这种带页码/锚点的写法按同一个
-#: 代号算，见 `textutil.citation_ref_parts`）。"这个前缀认不认、指向哪张表"必须有
-#: 一处真身 —— 它此前散在三个落位：`verify.CITATION_KINDS`（一张元组）、
-#: `tools/doc_tools._CITATION_TABLES`（一张 dict）、`gates.gate_g2` 内联的四个前缀。
-#: 三处各自自洽，于是同一个字符串"写入期认、审计期不认"不会有任何东西会红。
-#:
-#: 本表与 `PROCESS_ID_PREFIXES` 同一个范式：声明面（本表）+ 从 `TABLES` 派生的
-#: 对账（`assert_citation_prefix_contract()`，导入期自动跑一次）。
-#:
-#: `stmt` 是 2026-10-07 所有者裁定 `draft/68` 题 1 选 A 的落点（本次改动由所有者
-#: 授权、主控代改）：正文断言可以引命题 ⇒ `closing` 的污染面从"命题之间"扩到
-#: "哪几条正文断言压在这条命题上"。此前 `stmt` 在 `verify` / `doc_tools` 侧已被
-#: 认（`E1/R-03` 那次代改），而 `gates.gate_g2` 的解析种类表与 `closing` 的读数
-#: 仍把它当"不可解析/判不了" ⇒ 同一个前缀两个结论。本表把这一格补齐。
-#:
-#: 顺序刻意沿用历史上第一个落位的顺序（`verify.CITATION_KINDS`），
-#: 于是"两边只是同一个集合的不同排列"在 diff 里一眼可见。
+#: 引用前缀 -> 它指向哪张表（`documents.claims[].citations` 的受控前缀表）。元素是 `前缀:代号`
+#: （`lit:0003#p.4` 这种带页码/锚点的写法按同一个代号算，见 `textutil.citation_ref_parts`）。
+#: "这个前缀认不认、指向哪张表"必须有一处真身：它此前散在三个落位（`verify.CITATION_KINDS`、
+#: `tools/doc_tools._CITATION_TABLES`、`gates.gate_g2` 内联的四个前缀），三处各自自洽 ⇒ 同一个
+#: 字符串"写入期认、审计期不认"不会有任何东西会红。同范式的对账：`assert_citation_prefix_contract()`（导入期自动跑一次）。
+#: `stmt` 是 2026-10-07 所有者裁定 `draft/68` 题 1 选 A 的落点（所有者授权、主控代改）：正文断言可以
+#: 引命题 ⇒ `closing` 的污染面从"命题之间"扩到"哪几条正文断言压在这条命题上"。
+#: 顺序刻意沿用历史上第一个落位的顺序（`verify.CITATION_KINDS`），于是"同一个集合的不同排列"在 diff 里一眼可见。
 CITATION_PREFIXES: dict[str, str] = {
     "rel": "relations",
     "lit": "literature",

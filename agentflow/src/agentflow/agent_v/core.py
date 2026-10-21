@@ -224,12 +224,12 @@ class AgentV:
             except (StoreError, AttributeError, TypeError):
                 hit = None
             if hit is None:
-                # ⚠️ **2026-10-17 补**（业主 2026-10-17 授权动禁改区；亲测抓到的缺口）：
-                # 命题**不在册**时不许给 verdict。原实现接着用"（命题 … 的正文没读到）"
+                # ⚠️ 「2026-10-17 补」（业主 2026-10-17 授权动禁改区；亲测抓到的缺口）：
+                # 命题「不在册」时不许给 verdict。原实现接着用"（命题 … 的正文没读到）"
                 # 当占位把证明审下去 ⇒ 返回 `checked=True` ＋ 一个 verdict，调用方读起来
-                # 像"**命题与证明都审过了**"，而"这个命题在不在册"没有任何一处说过。
-                # 按本模块**既有纪律**（`checked=False` ⇒ **不落台账行**，见上面
-                # `no_proof_text` / `problem` 两处）在这一格**拒判**并给出路。
+                # 像"「命题与证明都审过了」"，而"这个命题在不在册"没有任何一处说过。
+                # 按本模块「既有纪律」（`checked=False` ⇒ 「不落台账行」，见上面
+                # `no_proof_text` / `problem` 两处）在这一格「拒判」并给出路。
                 out["kind"] = "statement_missing"
                 out["reason"] = "statement_missing"
                 out["detail"] = (f"命题 {sid} 不在 statements 里 ⇒ **没审**"
@@ -391,11 +391,11 @@ def selftest() -> int:
 
     clean = agent.verify_proof("0007", proof_text="1. 由定义直接得到。")
     checks.append(("干净证明签成立", clean["checked"] and clean["verdict"] == "成立"))
-    # 编号宽度**不许写死**：2026-10-14 业主裁定「所有四位编号改成六位」
+    # 编号宽度「不许写死」：2026-10-14 业主裁定「所有四位编号改成六位」
     # （`schema.ID_DIGITS = 6`），发号点是 `verifications.next_verification_id`
     # 的 `f"v-{S.format_id(...)}"`；读侧仍认旧四位号（`schema.LEGACY_ID_PATTERN`）。
     # 旧断言把 `"v-0001"` 写死在两处 ⇒ 宽度一改它就红，而"红了"这件事没有任何
-    # 东西看得见（自检只在手工敲命令时跑）。这是**断言过期**，不是行为退化：
+    # 东西看得见（自检只在手工敲命令时跑）。这是「断言过期」，不是行为退化：
     # 台账发的号是正确的六位（见下一条与 `tests/test_id_width.py`）。
     checks.append((f"编号从 v-{S.format_id(1)} 起（六位；旧四位号读侧兼容）",
                    clean["verification_id"] == f"v-{S.format_id(1)}"))
@@ -451,13 +451,13 @@ def selftest() -> int:
     bad_id = noproof.verify_proof("7", proof_text="x")
     # 标签写错过一次（"命题号必须 4 位"而 `schema.ID_DIGITS == 6`）：标签也是判据的
     # 一部分 —— 读者照着它去改数据，会得到"越改越不对"。所以除了 `reason` 码，
-    # 这里还核一句**细节里报出的宽度**与 `schema.ID_DIGITS` 逐字一致。
+    # 这里还核一句「细节里报出的宽度」与 `schema.ID_DIGITS` 逐字一致。
     checks.append((f"命题号必须 {S.ID_DIGITS} 位（旧数据里的 4 位号仍可读）",
                    bad_id["reason"] == "bad_statement_id"
                    and f"{S.ID_DIGITS} 位" in bad_id["detail"]
                    and "4 位号仍可读" in bad_id["detail"]))
     # 反真空：上面那条只证明"坏号被拒"。若发号/收号两侧一起把六位号也拒了，
-    # 它照样绿 ⇒ 这里正控地把一个**六位**命题号喂进去，必须被当成合法号。
+    # 它照样绿 ⇒ 这里正控地把一个「六位」命题号喂进去，必须被当成合法号。
     six_ok = noproof.verify_proof(S.format_id(7), proof_text="")
     checks.append((f"六位命题号被接受（{S.format_id(7)}；写侧的新形态）",
                    six_ok["reason"] == "no_proof_text"))

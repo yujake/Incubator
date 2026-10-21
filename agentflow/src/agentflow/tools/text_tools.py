@@ -3,27 +3,27 @@
 
 ## 为什么有这一件（2026-10-17 真机读数驱动，`draft/136`）
 
-T5 那趟（`projects/t5pdfs`）**最大的卡点**就是这一格：
+T5 那趟（`projects/t5pdfs`）「最大的卡点」就是这一格：
 
-- A 侧：`extract.run` → `unknown_tool`（并列候选只有 `ocr.run`）；`ocr.run` → **`role_denied`**
+- A 侧：`extract.run` → `unknown_tool`（并列候选只有 `ocr.run`）；`ocr.run` → 「`role_denied`」
   （"角色 'A' 拿不到工具 'ocr.run'"）；
 - B 侧：`fs.read(library/*.pdf)` → `binary`（"需要它的内容请走抽取链（extract/OCR）"）；
   B 能调 `ocr.run` 但 `any_ocr_backend_available=false`（easyocr 的 torch/numpy ABI 断裂、
   tesseract 不在 PATH）。
 
-⇒ **"把 PDF 变成正文"没有任何角色的可达能力**，最后是 **M 自己写脚本 ＋ 派 E 跑**才解开
-（`out/texts/extract_pdfs.py`）—— 也就是说：**知识的入口靠主控越权动手**，这与
+⇒ 「"把 PDF 变成正文"没有任何角色的可达能力」，最后是 「M 自己写脚本 ＋ 派 E 跑」才解开
+（`out/texts/extract_pdfs.py`）—— 也就是说：「知识的入口靠主控越权动手」，这与
 "M 只派活、不指定能力"的口径直接冲突。
 
-⇒ 这一件把它接成 **A/B 可达的能力**。要点：**四份 PDF 全都 `has_text_layer=true`** ——
-缺的从来不是 OCR，而是**抽取链本身**；扫描件才需要 `ocr.run`（分工见两边说明）。
+⇒ 这一件把它接成 「A/B 可达的能力」。要点：「四份 PDF 全都 `has_text_layer=true`」 ——
+缺的从来不是 OCR，而是「抽取链本身」；扫描件才需要 `ocr.run`（分工见两边说明）。
 
 ## 与 `ocr.run` 的分工（别混）
 
 | 工具 | 用什么 | 什么时候 |
 |---|---|---|
-| `text.extract`（本模块） | PDF **自带的文字层**（`extract.extract_text`） | 电子排版 PDF（绝大多数）—— **不联网、不需要后端** |
-| `ocr.run`（`ocr_tools`） | 真 OCR 后端（easyocr/pytesseract） | **扫描件/图片**：没有文字层，只能识别 |
+| `text.extract`（本模块） | PDF 「自带的文字层」（`extract.extract_text`） | 电子排版 PDF（绝大多数）—— 「不联网、不需要后端」 |
+| `ocr.run`（`ocr_tools`） | 真 OCR 后端（easyocr/pytesseract） | 「扫描件/图片」：没有文字层，只能识别 |
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from typing import Any, Callable, Mapping, Sequence
 from ..extract import extract_text
 from ..store import Store
 from . import ToolResult, ToolSpec, fail, ok, tool
-# 复用 OCR 那件**第一猜**归一器（`path` 或**文献编号**都收，三态齐全）
+# 复用 OCR 那件「第一猜」归一器（`path` 或「文献编号」都收，三态齐全）
 from .ocr_tools import _Ctx as _OcrCtx, _pick_workspace, _target_path
 
 PAGE_MARKER = "===== page {n} ====="
@@ -46,12 +46,12 @@ DEFAULT_OUT_DIR = ""          # 空 = 落在 library/（"入库"）
 
 
 def _safe_stem(raw: str, fallback: str = "text") -> str:
-    """把 `lit_id`/文件名净化成**能当文件名**的形态。
+    """把 `lit_id`/文件名净化成「能当文件名」的形态。
 
-    ⚠️ **2026-10-17 真机读数驱动（T5 第 2 趟）**：A 传的是 `lit_id="lit:000000"`，
-    而原实现写 `f"{lit_id}.txt"` ⇒ 文件名里带**冒号** ⇒ 在 Windows 上
-    `lit:000000.txt` 被解释成 **NTFS 备用数据流**，结果盘上留下一个 **0 字节的 `library/lit`**
-    （一个看不出所以然的幽灵文件）。这里统一：取冒号后的**裸编号**、再把
+    ⚠️ 「2026-10-17 真机读数驱动（T5 第 2 趟）」：A 传的是 `lit_id="lit:000000"`，
+    而原实现写 `f"{lit_id}.txt"` ⇒ 文件名里带「冒号」 ⇒ 在 Windows 上
+    `lit:000000.txt` 被解释成 「NTFS 备用数据流」，结果盘上留下一个 「0 字节的 `library/lit`」
+    （一个看不出所以然的幽灵文件）。这里统一：取冒号后的「裸编号」、再把
     Windows 非法字符替换成 `_`；空则用 fallback。
     """
     body = str(raw or "").strip()
@@ -107,7 +107,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
     if not p.is_file():
         return fail(f"不是普通文件：{p}", kind="not_a_file", path=str(p))
 
-    # ⚠️ 2026-10-17：**纯文本文件直接当正文**（幂等）—— 对 `.txt` 来说"抽成纯文本"就是它自己；
+    # ⚠️ 2026-10-17：「纯文本文件直接当正文」（幂等）—— 对 `.txt` 来说"抽成纯文本"就是它自己；
     # 这也让声明判据的探针（夹具给的是一份 `.txt`）真跑得成，而不是靠"键名读自源码"打补丁。
     if p.suffix.casefold() in (".txt", ".md", ".text", ".rst"):
         try:
@@ -165,7 +165,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
             "用 `ocr.detect_text_layer` 确认，再按扫描件走 `ocr.run`（本机无 OCR 后端时会如实说）",
             kind="no_text_layer", path=str(p), lit_id=str(lit_id or ""))
 
-    # 口径：**转成纯文字稿入库** ⇒ 直接落在 `library/` 里（与那份 PDF 同处一层），
+    # 口径：「转成纯文字稿入库」 ⇒ 直接落在 `library/` 里（与那份 PDF 同处一层），
     # 下游角色 `fs.read library/<名>.txt` 就能读 —— 不必再碰 PDF（PDF 是二进制，读不了）。
     garbled, q = _quality(body)
     if garbled:
@@ -198,9 +198,9 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
 
 
 
-#: 判定"疑似乱码"的阈值（业主 2026-10-17 口径：**A 要保证转出来的纯文字稿不是乱码**）。
-#: 三条独立信号，**任何一条**命中就拒（宁可说"这份转不出干净文本"，也不把乱码写进 library/）：
-#:   · NUL 字节：PDF 文字层正常**不含** NUL；出现即错位解码；
+#: 判定"疑似乱码"的阈值（业主 2026-10-17 口径：「A 要保证转出来的纯文字稿不是乱码」）。
+#: 三条独立信号，「任何一条」命中就拒（宁可说"这份转不出干净文本"，也不把乱码写进 library/）：
+#:   · NUL 字节：PDF 文字层正常「不含」 NUL；出现即错位解码；
 #:   · 替换字符 U+FFFD：解码器自己都认不出那个字节 ⇒ 乱码；
 #:   · 控制字符占比：正常正文里控制字符几乎为 0（换行/制表除外）。
 GARBLED_REPLACEMENT_MAX = 0
@@ -243,8 +243,8 @@ def _quality(text: str) -> tuple[bool, dict[str, Any]]:
         "additionalProperties": False,
     },
     side_effect="write_local",
-    # 业主口径（2026-10-17）：**A 负责**搜索/下载/**转成纯文字稿入库**；
-    # 其它智能体消费这些文献时**直接读纯文字稿** ⇒ 这一件只给 A。
+    # 业主口径（2026-10-17）：「A 负责」搜索/下载/「转成纯文字稿入库」；
+    # 其它智能体消费这些文献时「直接读纯文字稿」 ⇒ 这一件只给 A。
     roles=("A",),
     returns=(
         "{'path','abs_path','lit_id','pages','chars','sha256','quality','max_pages',"
@@ -278,7 +278,7 @@ def register(
 ) -> list[ToolSpec]:
     """把文字层抽取注册进 ``registry``，返回注册的 ``ToolSpec`` 列表。
 
-    `store` 只用来解析路径与把**文献编号**换成那一份全文（抽取本身不读也不写任何表）；
+    `store` 只用来解析路径与把「文献编号」换成那一份全文（抽取本身不读也不写任何表）；
     `workspace` 的别名 `workspace_root` / `root` 也接受（装配器用这两个名字注入）。
     """
     ws = _pick_workspace(workspace, workspace_root, root, store)

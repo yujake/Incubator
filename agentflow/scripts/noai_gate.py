@@ -1947,7 +1947,7 @@ def _reviewer_identity_problem(name: str) -> str:
     为什么是"至少要有一个字母或数字"而不是"只允许 ASCII"：`.noai-approvals.json`
     里的 `reviewers` 姓名是人写的，中文姓名是正常形态。要求 ASCII 会把真姓名
     判成非法（比它要挡的东西更坏）。这两个字符里任意一个不是 `Mn`/`Me`/`Cf`/空白/
-    控制字符就够 —— 名字写成 `'​'`（只有一个零宽空格）那种形态仍然被拒。
+    控制字符就够 —— 名字写成 `'\u200b'`（只有一个零宽空格）那种形态仍然被拒。
     """
     key = normalize_subject(name)
     if not key:

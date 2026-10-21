@@ -87,33 +87,14 @@ TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled", "failed")
 #: 标记必须在同一事务内可读，所以它落在行上而不是内存里。
 _SETTLED_MARK = "tokenmeter:settled"
 
-#: 标记"这一行是受理过的召唤"（写进 `tasks.inputs`，与 `running` 行同一个事务写下）。
-#:
-#: 它今天的用途是审计面（"这一趟累计派出去过几件"），不再是扇出判据 ——
-#: 所有者 2026-10-08 把扇出口径改成了"单时刻在飞"（见 `_in_flight_children_of`），
-#: 于是"跑过没跑过"这件事对上限不再有影响（返回即腾位）。
-#:
-#: 为什么还留着它（题 21 选 B，2026-10-07 所有者裁定）：区分"闸门拒掉、根本没跑"与
-#: "跑过又拒"的那条判据，上一轮的最小修法挂在了 `_SETTLED_MARK` 上 —— 那是
-#: `_charge_and_settle` 末尾 `_set_usage` 写的东西，属于"事后的记账写回"。它能炸：
-#: `_charge_and_settle` 刻意兜住记账异常（钱已经花了、活已经干完了，不许让它翻转一次
-#: 完成的召唤），兜住之后这一行就缺 `tokenmeter:settled` ⇒ 被 `_occupies_fanout_slot`
-#: 当成"没跑" ⇒ 累计读数少算 1（审计面上"这一趟用了多少派活额度"就会偏低）。
-#:
-#: 所以标记必须打在"受理那一刻"、且与 `running` 行同一笔事务落盘：只有走过
-#: `summon` 第 [5] 步（"写 running 行"）的召唤才带它 —— 闸门拒绝在写 running 行
-#: 之前就 `_refuse` 返回了（`_refuse` 的行 `inputs=[]`，连调用方给的输入都不带），
-#: 它拿不到这个标记。此后无论角色自己拒、记账写回炸、还是进程崩，标记都已经在盘上。
-#:
-#: 为什么落在 `inputs` 而不是给 `schema.Task` 加字段：与 `_SETTLED_MARK` 同一条理由
-#: （见 `_set_usage` 的说明）—— `inputs` 是既有的 `set` 类数组字段，加一个元素不改变
-#: 语义（它记的是"这次召唤与哪些东西打过交道"，受理标记正是其中之一），
-#: 也不需要动 `schema.py`（禁改区）。老行（这一版之前落盘的）没有这个元素，
-#: `_occupies_fanout_slot` 对它们退回读 `_SETTLED_MARK` —— 历史读数因此不变
-#: （见那个函数）。
-#: 派活**不点动作**时，任务行 `detail` 那一格写什么（2026-10-16，业主口径 S2）。
-#: 为什么要有它：`detail` 原先逐字取 `spec.summary`，而空动作没有 spec ——
-#: 不留这一格，读台账的人会把"派活"与"没写清"混起来。
+#: 标记"这一行是受理过的召唤"（写进 `tasks.inputs`，与 `running` 行同一个事务写下）。它今天的用途是审计面（"这一趟累计派出去过几件"），不再是扇出判据 —— 所有者 2026-10-08 把扇出
+#: 口径改成"单时刻在飞"（见 `_in_flight_children_of`），"跑过没跑过"对上限不再有影响。为什么还留着它（题 21 选 B，2026-10-07 所有者裁定）：区分"闸门拒掉、根本没跑"与"跑过又拒"。
+#: 标记必须打在"受理那一刻"、且与 `running` 行同一笔事务：只有走过 `summon` 第 [5] 步的召唤才带
+#: 它 —— 闸门拒绝在写 running 行之前就 `_refuse` 返回了（`inputs=[]`）；此后无论角色自己拒、记账
+#: 写回炸、还是进程崩，标记都已经在盘上（挂在 `_SETTLED_MARK` 上会漏算，见 `_occupies_fanout_slot`）。
+#: 落在 `inputs` 而不是给 `schema.Task` 加字段：`inputs` 是既有的 set 类数组字段，加一个元素不改变语义。
+#: 派活不点动作时 `detail` 写什么（2026-10-16 业主口径 S2）：`detail` 原先逐字取 `spec.summary`，而
+#: 空动作没有 spec —— 不留这一格，读台账的人会把"派活"与"没写清"混起来。
 _DISPATCH_ONLY_SUMMARY = "派活（不点动作）：由该角色按自己的能力范围自己选动作"
 
 #: ⚠️ **2026-10-17（真机 t5e 实测）**：派 **H** 空动作时，它只会在只读工具面上打转，审出的发现**落不了台账**（`review_findings` 一行都没有）。原因不是它不干，而是"写"只发生在
@@ -3446,19 +3427,12 @@ class Conductor:
             if status == "done" and (outcome is None or raw.get("ok") is False):
                 if raw.get("ok") is False:
                     # ---- §88：handler 自己说了"这次没做成"，就不许记成 ok。
-                    #
-                    # T1 第 2 趟真机的根因：`B.register_statement` 有 8 次返回
-                    # `{"ok": False, "kind": "missing_quote_reason"…}`，而台账把它们
-                    # 全记成 `outcome=ok`（detail 还写着"按有产出处理"）⇒ 主控以为
-                    # 命题登记好了，而 `statements` 是 0 行；它因此不再改参数，
-                    # 那条链就在这一步静默停住。同一趟里另外 6 次抛异常反倒记成了
-                    # `failed` —— "拒绝"与"崩溃"同形，"成功"与"什么都没写"也同形。
-                    #
-                    # 分档：handler 声明了受控的 `refusal_reason` ⇒ `refused`
-                    # （词表的定义就是"这次调用本身不成立"）；只说 `ok=False` 而
-                    # 没分类 ⇒ `failed`（那是"执行了、没成功"，理由合成在 error 上）。
-                    # 声明的 `outcome` 无论是不是任务级词表，都不许把 `ok=False`
-                    # 洗成 ok —— 那正是下面那条"外来判定折叠成 ok"的规则会做的事，
+                    # T1 第 2 趟真机的根因：`B.register_statement` 有 8 次返回 `{"ok": False, "kind":
+                    # "missing_quote_reason"…}`，而台账把它们全记成 `outcome=ok`（detail 还写着"按有产出处理"）⇒ 主控
+                    # 以为命题登记好了，而 `statements` 是 0 行，那条链就在这一步静默停住。
+                    # 分档：handler 声明了受控的 `refusal_reason` ⇒ `refused`（词表定义就是"这次调用本身不成立"）；只说
+                    # `ok=False` 而没分类 ⇒ `failed`（"执行了、没成功"，理由合成在 error 上）。声明的 `outcome` 无论
+                    # 是不是任务级词表，都不许把 `ok=False` 洗成 ok —— 那正是下面那条"外来判定折叠成 ok"会做的事，
                     # 所以这里必须先接住（判据：自相矛盾与外来判定两条负控）。
                     kind = str(raw.get("kind") or "")
                     declared = str(outcome or "")
@@ -3719,39 +3693,14 @@ class Conductor:
             row["ended_at"] = ended
             row["tokens"] = int(tokens or 0)
             row["usd"] = float(usd or 0.0)
-            # ---- R-47：把这次调用的返回值摘要落成产物，并把路径记进 `artifacts`。
-            # 为什么必须落：`tasks` 表不存 payload ⇒ `outcome=ok` 无法自证有产出
-            # （实测 83 行 detail 是"handler 未声明 outcome，按有产出处理"，
-            # 读台账的人判不出这一步到底产出了什么，见 `draft/28` §154 的 S3/R-47）。
-            # 摘要落 `<workspace>/out/tasks/<task_id>.json`（键集 + 规范化哈希 + 截断预览），
-            # 表里只多一个 artifacts 引用 —— `tasks` 表结构不动（它在 FC-27 禁改区）。
-            #
-            # ---- B12（`draft/41-A` 的 B12）：这一处是已决定的例外
-            #
-            # 它是"锁内写盘"（持 `tasks`+`counters` 文件锁期间写 `out/tasks/<id>.json`），
-            # 而 `summon` 的注释明确写过"事务绝不包 handler"。但这一处挪不出去：
-            # 这次 I/O 的内容不是"与台账无关"的 —— 它被本事务体内的一次读-判门住
-            # （上面那两行 `if row.get("status") in TERMINAL_STATUSES: return`）：
-            # 只有抢到终态的那一次才走到这里。把写文件挪到事务之前会把这个门去掉，
-            # 于是后到的写者也能改这份摘要（同一个 task_id、两份 payload，输家覆盖赢家）。
-            # 判据：`tests/test_e13_concurrency.py::`
-            # `test_b12_the_digest_write_stays_inside_the_winner_transaction`。
-            #
-            # 规则那句话按此精确化：事务体内不做 I/O 的例外是"这次 I/O 的内容取决于
-            # 事务内的读-判结果" —— 那时把 I/O 挪出去等于换掉判据本身。
-            # 顺带核实（主控要求）：`closing` 第八格 `artifact_ledger` 只数台账行
-            # （`missing`/`unreadable`/`changed` 都相对"登记过的产物"算），
-            # 不扫盘上多出来的文件。
-            #
-            # 这句话的后半段在第 21 趟真机上被证伪了（2026-10-09，T1 `t1u`）：
-            # 它原写"本例外不会在那一格里造出 `missing`/`changed` 读数"，而实测是
-            # 23 条 `changed`，全是 `out/tasks/*.json` —— 同一条边第二次 `finish`
-            # （幂等路径）会重写同一份摘要，而台账是 append-only（每一次登记一行）
-            # ⇒ 历史行的 sha 与盘上当前版必然不等 ⇒ 第八格记 `unknown` ⇒
-            # `can_close` 永远为假（那一格自己的注释却写着"改写在研究流程里是常态"）。
-            # 处置：不改门的强度，把这一处口径作为选择题提交（`draft/83` §8 的 T1c）。
-            # 这一行留在这里是为了让"曾被当成已核实、后来被真机推翻"这件事看得见 ——
-            # 而不是把注释改得更含糊。
+            # ---- R-47：把这次调用的返回值摘要落成产物，并把路径记进 `artifacts`（`tasks` 表不存 payload ⇒
+            # `outcome=ok` 无法自证有产出，见 `draft/28` §154 的 S3/R-47）。摘要落
+            # `<workspace>/out/tasks/<task_id>.json`（键集 + 规范化哈希 + 截断预览），表里只多一个 artifacts 引用。
+            # ---- B12（`draft/41-A`）：已决定的"锁内写盘"例外 —— 这次 I/O 被本事务体内的一次读-判门住
+            # （`if row.get("status") in TERMINAL_STATUSES: return`），挪到事务之前会把这个门去掉（后到的写者也能改摘要）。
+            # 规则精确化：事务体内不做 I/O 的例外是"这次 I/O 的内容取决于事务内的读-判结果"，判据
+            # `tests/test_e13_concurrency.py::test_b12_the_digest_write_stays_inside_the_winner_transaction`
+            # （幂等 `finish` 重写摘要 + 台账 append-only ⇒ `closing` 第八格记 unknown、`can_close` 为假，`draft/83` §8 的 T1c）。
             digest_rel = self._write_task_digest(row, payload=payload, status=status,
                                                  outcome=str(outcome) if outcome else None,
                                                  detail=detail)

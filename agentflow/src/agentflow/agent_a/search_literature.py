@@ -13,80 +13,19 @@ class _SearchLiterature:
                           providers: Iterable[str] | None = None) -> dict:
         """按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方。
 
-        ## 为什么需要这个动作（2026-09-30；用户口径："A 的文献检索必须要通关"）
-
-        A 原有的两个动作（`run_once` / `run`）的参数里没有主题 —— 它们只认
-        "队列里已经有什么"。而队列今天只有三处能写：CLI `submit`、D 的
-        `research.submit_gap`（还要求先有一条研究问题）、C 的 gap 分支。
-        于是"角色缺文献证据 ⇒ 唤起 A"这条路上，召唤方没有办法告诉 A 要查什么：
-        它只能唤一个对着空队列空转的 A（实测：G 唤起 `A.run_once`，落
-        `refused/not_wired`；即使接上线，队列空时也只会得到 `no_pending_request`）。
-        这个动作补的就是那一句"去查这个主题"，并且不绕过任何既有闸门：
-        它走的是与 `submit` 同一条入队路径（`interactions.admit_search_request` 的
-        I7 准入 + `SearchRequest.validate` + 同一个取号口径），随后仍由 `run_once`
-        在既有的领取/租约/退避/判重/下载链路上跑。
-
-        ## 默认 mode 为什么是 `precise` 而不是 `topical`（2026-09-30 实测）
-
-        这个动作的语义是"给我这条命题的来源"，不是"给我这个领域的全景"。
-        实测（同一个 topic，真机打 OpenAlex，`temp/live-a-search-*.txt` 与
-        `temp/_probe_openalex_mode.py` 的读数）：
-
-        | mode | 回来 | 对题 |
-        |---|---|---|
-        | `topical`（原默认） | 15 条 | 1/15（异常扩散 / 分子演化速率 / 神经形态自旋电子学…） |
-        | `precise` | 8 条 | 7/8（The extremal process of BBM、Poissonian statistics…） |
-
-        差别在 `precise` 那一档带 `keyword_hit` 后置过滤，而 `topical` 把长题面拆成
-        词袋去打全文检索 —— 词袋越长，OpenAlex 的相关度排序越差。
-        要"领域全景"就显式传 `mode="broad"` / `"topical"`；默认这一档服务的是
-        "缺哪条证据就去找哪一条"。
-
-        ## 三态纪律的落点（这是它与"返回一个空列表"的分界）
-
-        - 准入被拒（在途请求已达上限）：`admitted=False` + 原因，零写入；
-        - 查了但零命中：`outcome="no_results"`（有效结论，不是错误）；
-        - 搜索失败：`outcome="search_failed"` + `errors`（这条请求没结束，
-          会按既有退避规则重试，不许当"没有这篇文献"）；
-        - 领到的是队列里更早的那条：`claimed_request_id != request_id` 如实报出来，
-          绝不把它冒充成"你这条的结果"；
-        - 这一问发不出去（题面里抽不出英文关键词）：入队之前就返回
-          `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`，
-          零写入 —— 不许留一条注定查不动的请求在队列里（那会让调用方读成"检索失败"）。
-
-        ## `topic` 要短（2026-10-04 演练的真机读数）
-
-        `precise` 那一档带 `keyword_hit` 后置过滤：词袋越长，候选越容易被整批滤掉。
-        实测同一篇文献：`An overview of periodic elliptic operators` 命中 9 条；
-        而把作者与关键词串成长句（`Kuchment overview of periodic elliptic operators
-        Floquet Bloch`）—— 5 次里 4 次 `no_results`。按题名找原文就给题名（可带年份）。
-
-        三处"这次调用本身不成立"（空主题 / 模式不认识 / 一个后端都没接）走
-        :func:`agentflow.refusals.refuse`（`draft/37` §88）：带上受控的
-        `refusal_reason`，主控的台账才会把它们记成 `refused` 而不是 `ok`。
-        这一条是被真机咬出来的 —— 见 :mod:`agentflow.refusals` 的模块说明。
-
-        ## `providers=[…]`：这一次问哪几个源（所有者 2026-10-07 授权补的这一格）
-
-        加这一格之前，"一次问多源"只有工具面有（`search.literature`），动作面
-        没有 —— 而主控派活读的是动作参数表，于是这个入口在编排层根本看不见。
-        它是三态，三态必须分得开：
-
-        1. 不给这一格（`None`）：按角色级接线查，今天的行为一个字不变。
-           读数上 `providers_requested=None` + `role_providers=[接线上的源名]`。
-        2. 给了合法源名：名字落进请求行（`SearchRequest.providers`），
-           领取那一侧按这一行点名的源去检索（不是只看角色级配置）；
-           逐源成败落在 `sources[]`、成本落在 `cost`，形状与工具面的同名读数一致，
-           跨源合并走检索层的 `MultiProvider`（同一份实现，不在这里另写一套）。
-        3. 给了不认识的源名：如实拒绝（`kind="unknown_provider"`）并把可用源
-           名单一起给出来，零写入。不许静默忽略：忽略会让"我要问两个源"
-           悄悄变成"只问了一个"，而调用方从读数上看不出差别。
-           `providers=[]`（显式空列表）同样拒绝（`kind="bad_providers"`）：
-           它既不是"按角色配置"也不是一个可用的源，只会让"这次到底问了谁"没法读。
-
-        可用源名单取自角色级接线上的实例名，这里不另立一张表：工具面那一格
-        带 `enum`（可用源名），动作面刻意不抄 —— 抄一份就是第二个要改的地方，
-        而它漂了不会报错。
+        为什么需要它（2026-09-30；用户口径："A 的文献检索必须要通关"）：`run_once` / `run` 参数里没有
+        主题，召唤方没办法告诉 A 要查什么（实测 G 唤起 `A.run_once` 落 `refused/not_wired`）。本动作不
+        绕过既有闸门：走 `submit` 同一条入队路径（`interactions.admit_search_request` 的 I7 准入 +
+        `SearchRequest.validate` + 同一个取号口径），随后仍由 `run_once` 在既有领取/租约/退避/判重/
+        下载链路上跑。默认 mode 是 `precise` 而不是 `topical`：语义是"给我这条命题的来源"而不是领域全景
+        （实测 `topical` 15 条对题 1/15、`precise` 8 条对题 7/8，差别在 `keyword_hit` 后置过滤）。
+        三态落点：准入被拒 ⇒ `admitted=False` + 原因、零写入；零命中 ⇒ `outcome="no_results"`（有效结论）；
+        搜索失败 ⇒ `outcome="search_failed"` + `errors`（不许当"没有这篇"）；题面抽不出英文关键词 ⇒ 入队前
+        返回 `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`、零写入。
+        `providers=[…]` 也是三态（`None` / 合法源名 / 不认识的源名，后者 `kind="unknown_provider"`），
+        名字落进 `SearchRequest.providers`、领取侧按行上的名字检索、跨源合并走 `MultiProvider`。
+        三处"调用本身不成立"走 :func:`agentflow.refusals.refuse`（`draft/37` §88），三态纪律见
+        :mod:`agentflow.refusals` 的模块说明。
         """
         topic = str(topic or "").strip()
         if not topic:

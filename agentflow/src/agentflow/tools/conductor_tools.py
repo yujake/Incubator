@@ -82,7 +82,7 @@ def reset_cache() -> None:
 
 
 def cached_conductor(store: Any) -> Conductor | None:
-    """这个工作区**已经存在**的主控实例；没有就返回 `None`（**绝不顺手建一个**）。
+    """这个工作区「已经存在」的主控实例；没有就返回 `None`（「绝不顺手建一个」）。
 
     ## 为什么要与 `conductor_for` 分开
 
@@ -93,7 +93,7 @@ def cached_conductor(store: Any) -> Conductor | None:
     `conductor_for` 自己也写着）。
 
     所以"只想借用一下这一趟的主控身份说句话"的调用方（今天只有一个：F 上报缺缝，
-    见 `agent_f/core.py::_escalate_missing_seam`）只能借用**已经存在**的那一个；
+    见 `agent_f/core.py::_escalate_missing_seam`）只能借用「已经存在」的那一个；
     不存在时它必须如实说"这一层没接到主控"，而不是为了发一条消息把会话的主控建歪。
     """
     return _CONDUCTORS.get(str(Path(getattr(store, "root", ".")).resolve()))
@@ -243,7 +243,7 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
         "type": "object",
         "properties": {
             "target_role": {"type": "string", "description": "被召唤的角色（A–H）"},
-            # ⚠️ **2026-10-16（业主口径 S2 最终形态）**：`action` **整个摘掉** ——
+            # ⚠️ 「2026-10-16（业主口径 S2 最终形态）」：`action` 「整个摘掉」 ——
             # 「一致改成 task 必填，action 不填」「action 完全不用父代理填」。
             # 派活只有 `target_role` + `task`；点哪个动作是被派者自己的事。
             "task": {"type": "string", "description":
@@ -251,7 +251,7 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
             "params": {"type": "object", "description": "动作参数（按参数的 schema 校验）"},
             "input_key": {"type": "string", "description": "同一祖先链上去重用的键（防活锁）"},
         },
-        # 2026-10-16（口径 S2）：**`task` 进必填、`action` 可选**（与形状面／广告面一致）。
+        # 2026-10-16（口径 S2）：「`task` 进必填、`action` 可选」（与形状面／广告面一致）。
         "required": ["target_role", "task"],
         "additionalProperties": False,
     },
@@ -265,7 +265,7 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
                      input_key: str = "") -> ToolResult:
     """工具体：一次派活。闸门全在 `Conductor.summon` 内部；被拒也落台账。
 
-    2026-10-16（口径 S2「M 只派活」）：`action` 可以为空 —— 那就是**只派活**，
+    2026-10-16（口径 S2「M 只派活」）：`action` 可以为空 —— 那就是「只派活」，
     由被召唤的角色跑自己的循环、按自己的能力范围选动作；此时 `task` 必填
     （"接活的人得知道自己该干什么"）。与 `_do_summon` 同一套，不另立规矩。
     """
@@ -283,10 +283,10 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
     if not str(task or "").strip():
         raise ToolError("派活必须写清是什么活：`task` 必填"
                         "（否则接活的人不知道自己该干什么）")
-    # 2026-10-16（口径 S2 最终形态）：「**不是忽略 action，是完全不要有填 action 的位置**」
-    # ⇒ 形参里没有 `action`、条目里不读它；这一行那个 `""` 是**内部 API 的实参**
+    # 2026-10-16（口径 S2 最终形态）：「「不是忽略 action，是完全不要有填 action 的位置」」
+    # ⇒ 形参里没有 `action`、条目里不读它；这一行那个 `""` 是「内部 API 的实参」
     # （`Conductor.summon(role, action, params)` 是 `pipeline`/`scheduler`/`deliver`
-    # 也在用的内部接口，它保留动作那一格），**不是留给模型填的位置**。
+    # 也在用的内部接口，它保留动作那一格），「不是留给模型填的位置」。
     params = {**dict(params or {}), "task": str(task)}
     res = _conductor().summon(target_role, "", params or {}, by=S.CONDUCTOR_ROLE,
                               input_key=input_key)
@@ -372,7 +372,7 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
         if not isinstance(item, Mapping):
             raise ToolError(f"targets[{i}] 必须是对象（收到 {type(item).__name__}）")
         target_role = str(item.get("target_role") or "")
-        # 2026-10-16（口径 S2 最终形态）：条目里**不读 `action`**（模型没有那个位置可填）。
+        # 2026-10-16（口径 S2 最终形态）：条目里「不读 `action`」（模型没有那个位置可填）。
         if not target_role:
             raise ToolError(f"targets[{i}] 缺 target_role")
         work = str(item.get("task") or "").strip()
@@ -384,12 +384,12 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
             used[target_role] = used.get(target_role, 0) + 1
             instance = auto[target_role][used[target_role] - 1]
         calls.append(SC.TaskCall(
-            # 2026-10-16（口径 S2 最终形态）：这里那个 `""` 是**内部 API 的实参**，
+            # 2026-10-16（口径 S2 最终形态）：这里那个 `""` 是「内部 API 的实参」，
             # 不是留给模型填的位置（条目里没有 `action` 可读）。
             role=target_role, action="",
             params=dict(item.get("params") or {}),
             by=S.CONDUCTOR_ROLE,
-            # 2026-10-20：父必须是**发起这一批的那一趟的绝对编号**（改前这一格缺 ⇒
+            # 2026-10-20：父必须是「发起这一批的那一趟的绝对编号」（改前这一格缺 ⇒
             # `TaskCall.parent_task_id` 走默认 `None` ⇒ 批量派出去的子代理在台账上
             # 全是孤儿，名册 owner 也落成空串/隐藏文件）。号从调用上下文读，
             # 不在这里拼（`calling_as` 挂上的就是这一趟的 `task_id`）。
@@ -601,7 +601,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
         killed = stopctl.kill_registered(root, exclude_pid=os.getpid())
     brief = _write_resume_brief(c)
     # 业主 2026-10-13：「优雅停止就是主控用这个操作…」+「接收到停的时候，剩余任务委托状态
-    # 自动变成 block」—— 这一条是 M 的优雅停止操作，所以**整趟**还没终态的任务与委托
+    # 自动变成 block」—— 这一条是 M 的优雅停止操作，所以「整趟」还没终态的任务与委托
     # 在这里由框架翻成 `block`（不留"谁该收尾"的模糊），读数随结果回去，M 汇总进交付说明。
     try:
         blocked_remaining = stopctl.block_remaining_tasks(
@@ -908,11 +908,11 @@ def conductor_state(_conductor, ) -> ToolResult:
     # ⚠️ 2026-10-15 补齐：这把工具体返回的是那个角色的整份 brief（六个字段），
     # 而声明里只列了 `{role, actions, tools, summonable}` ⇒ 模型看不到
     # `duty` / `boundary` / `policy` / `stance` / `signature_error` / `deliverable` ——
-    # 而这件的用途**恰恰是**"让一个角色读到另一个角色的口径"。
+    # 而这件的用途「恰恰是」"让一个角色读到另一个角色的口径"。
     # `returns` 会拼进 function-calling 的 `description`（模型看得到）。
-    # ⚠️ **2026-10-16（业主口径）**：这里**不再返回 `actions` / `tools`**。
-    # 原话逐字：「M 只是个派活的……**不指定能力**。M 能看到的只是各角色描述，
-    # **看不到具体的工具箱与动作**，但可在角色描述中暗示它各角色能干什么。」
+    # ⚠️ 「2026-10-16（业主口径）」：这里「不再返回 `actions` / `tools`」。
+    # 原话逐字：「M 只是个派活的……「不指定能力」。M 能看到的只是各角色描述，
+    # 「看不到具体的工具箱与动作」，但可在角色描述中暗示它各角色能干什么。」
     # 所以这一格从"查它的动作面与工具面"改成"读它的描述"（`role` + `summonable`
     # + brief 六格）。留着 `actions`/`tools` 等于把刚在伙伴表上关掉的门又开半扇 ——
     # M 只要逐个角色查一遍，就能重新拿到每个角色的动作与必填参数。
@@ -920,7 +920,7 @@ def conductor_state(_conductor, ) -> ToolResult:
             "'duty','boundary','policy','signature_error','deliverable','stance'}",
 )
 def conductor_role_spec(store, role_name: str) -> ToolResult:
-    """工具体：某角色的**描述**（职责/交付物/边界/立场；不再给动作面与工具面）。"""
+    """工具体：某角色的「描述」（职责/交付物/边界/立场；不再给动作面与工具面）。"""
     from .. import capabilities as C
 
     data = {"role": role_name,
@@ -1399,9 +1399,9 @@ def conductor_broadcast(_conductor: Any, subject: str, body: str = "") -> ToolRe
      "required": ["need", "kind"], "additionalProperties": False},
     side_effect="read",
     # 所有角色 + 主控（业主 2026-10-19：亲子天然双向，上行不是权限面的一条边）。
-    # 只读角色（C/H/V）**也**要拿到它 —— 这一点由 `side_effect="read"` 保证：
+    # 只读角色（C/H/V）「也」要拿到它 —— 这一点由 `side_effect="read"` 保证：
     # `write_local` 会在 `for_role` 里被结构性剥掉。为什么"声明 read"是如实的而不是取巧：
-    # 它不写任何数据表、也不改工作区里任何产物，只把一条**通信记录**追加进会话
+    # 它不写任何数据表、也不改工作区里任何产物，只把一条「通信记录」追加进会话
     # （与 `message` / `note` / `ask_user` 三个循环形态同一个平面 —— 那三个 C/H/V 本来就有）。
     # 同一口径的既有先例：`verify.verify_proof` 也写 `verifications/<命题号>.jsonl`
     # 却声明 `read`，理由逐字是"V 不写表"。
@@ -1419,13 +1419,13 @@ def conductor_escalate(_conductor: Any, need: str, kind: str,
 
     成功 ⇒ `ok(state="escalated")`：循环见到 `data.state` 就把这一趟收成
     `stop_reason="escalated"`（退出码 5）。受控拒绝 ⇒ `fail(kind=<理由码>)`：
-    `not_caller`（没有父）**不会**停掉这一趟 —— 顶层 M 调错一次不该把自己停掉。
+    `not_caller`（没有父）「不会」停掉这一趟 —— 顶层 M 调错一次不该把自己停掉。
     """
     got = _conductor().escalate(
         need=need, kind=kind, evidence=list(evidence or ()),
         my_task_id=current_task_id(), by=current_caller_role())
     if not got.get("ok"):
-        # 受控拒绝这一档的**理由码**放在 `meta.kind`（工具层统一的读法），
+        # 受控拒绝这一档的「理由码」放在 `meta.kind`（工具层统一的读法），
         # 而"哪一类需求"那一格改名成 `escalate_kind` 一并带回去。
         # 为什么不直接把 `got` 整个塞进 `fail(**got)`：`got` 里已经有 `error` 这个键，
         # `fail(error, **meta)` 会当场 TypeError（"got multiple values for argument"），
@@ -1464,7 +1464,7 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # 只读角色（C/H/V）由 `write_local` 在 `for_role` 里结构性剥离。
     (conductor_broadcast, ('_conductor',)),
     # 上行（业主 2026-10-19「父子天然双向」）：孩子的需求写进父的收件箱，本趟以
-    # `stop_reason="escalated"` 收工。收件人是运行期解析出的召唤者，**不**在 `edges` 里登记。
+    # `stop_reason="escalated"` 收工。收件人是运行期解析出的召唤者，「不」在 `edges` 里登记。
     (conductor_escalate, ('_conductor',)),
 )
 
@@ -1500,7 +1500,7 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
             )
         return conductor_for(store, policy=policy, role_registry=role_registry, backend=backend)
 
-    # \T-8\：声明与工具体都在模块级（\@tool\ 写进 \n.__tool_spec__\），
+    # \T-8\：声明与工具体都在模块级（\@tool\ 写进 \fn.__tool_spec__\），
     # 这里只把装配期算出来的值按位置绑上去（\partial\）。
     _bound: dict[str, Any] = {}
     _bound['_conductor'] = _conductor
@@ -1681,7 +1681,7 @@ def selftest() -> int:
             problems.append(f"{spec.name} 的 roles 里没有主控")
     for spec in reg.for_role("C"):
         # 2026-10-19（业主裁定「父子天然双向」）：`conductor.escalate` 不是主控工具，
-        # 它是**上行通道**（孩子跟召唤它的人说话），只读角色必须有 —— 见 `register`
+        # 它是「上行通道」（孩子跟召唤它的人说话），只读角色必须有 —— 见 `register`
         # 那一行的 `roles=` 与 `side_effect="read"` 的理由。除了它，一件都不许漏过去。
         if spec.name == "conductor.escalate":
             continue

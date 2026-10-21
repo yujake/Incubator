@@ -81,7 +81,7 @@ class _Revise:
             try:
                 normalized = DT.normalize_claims(merged)
             except ValueError as exc:
-                # 2026-10-17（子代理 agents #11）：`normalize_claims` 是**纯函数校验**，抛裸
+                # 2026-10-17（子代理 agents #11）：`normalize_claims` 是「纯函数校验」，抛裸
                 # `ValueError` ⇒ 绕过工具层的包装穿出动作，被记成 `failed/执行中异常`，
                 # 模型拿不到"哪一条断言、缺什么字段"。翻成 `DocumentError`（在
                 # `_BUSINESS_ERROR_NAMES` 里）⇒ 落 `refused/invalid_params`，可自救。

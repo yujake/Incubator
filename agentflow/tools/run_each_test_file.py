@@ -48,35 +48,14 @@ from pathlib import Path
 #: 共享 `.pytest_cache` 会产生互相干扰的写，而这条门本身不该引入新的不确定性。
 PYTEST_ARGS: tuple[str, ...] = ("-q", "-p", "no:cacheprovider")
 
-#: 允许整文件被跳过/筛掉的显式名单（`I-2` 的豁免面）。
-#:
-#: 为什么要有它：`classify_pytest_result` 把"exit 0 且只有 skipped"判成
-#: 没有对象可判（`all_skipped`），而 `deselected` 同样不进退出码 ——
-#: 于是"给一个文件所有用例加 `@pytest.mark.skip` 或 `network` 标记"就能把它整文件
-#: 从门里摘掉，而门报绿（实测见 `draft/28` 的 `I-2`）。
-#:
-#: 修法是"必须显式豁免"：名单外的整文件跳过/筛掉一律按 `unknown` 处理并影响退出码。
-#: 这与 `_KNOWN_UNMATCHED_ACTIONS`（`capabilities.assert_capabilities` 里那张
-#: 同族登记表）是同一条纪律：豁免要写下来，而且写不出理由的就该去修。
-#:
-#: 每条都必须写清"为什么它被允许不出现在默认环境里"。
-#:
-#: 注意 `R6-1`（第一次重审实测）：这张表曾经是"加个名字就绿"的豁免口 ——
-#: 唯一的机器约束是"理由长度 ≥ 20 字符"。
-#: `FINAL-R7-04` 更正：这段注释此前写"本文件不在 FC-27 清单里" —— **与清单相反**。
-#: `.noai-paths` 第 112 行已经把本文件登记为 `[category: release-deploy]`，
-#: 本轮的禁 AI 区门也判它 approved ⇒ 改本文件需要人逐行走查 + 2 名 reviewer 批准。
-#: 那次绕过成立的**真实**原因是"唯一的机器约束是理由长度"：
-#: 往这里加一行 `"tests/x.py": "随便凑够二十个字符的理由……"` 就能把一个整文件
-#: 被跳过的目录从 `exit 2` 变回 `exit 0`（重审在 `temp/` 副本上实测复现）。
-#: 现在加三道机器判据（见 `audit_exemptions()`，由 `main()` 启动时先跑）：
-#:   1. 上限：条目数不得超过 `MAX_EXEMPT_ALL_SKIPPED`（默认 1）。要加第二条，
-#:      必须同时改这个上限 —— 那是一次需要解释的编辑，不是顺手加一行。
-#:   2. 文件必须真的存在（打错路径的"豁免"等于没有豁免对象）。
-#:   3. 理由必须有实质：长度 ≥ `MIN_EXEMPT_REASON_CHARS` 且提到
-#:      `network` / `skip` / `deselect` 之一（说明"它为什么会被整文件筛掉"）。
-#: 这三条都不等于"这个豁免是对的"（那是人的判断），但它们让"加一行就绿"
-#: 这件事必须经过一次可见的编辑，而不是一次静默的追加。
+#: 允许整文件被跳过/筛掉的显式名单（`I-2` 的豁免面）。名单外的整文件跳过/筛掉一律按 `unknown` 处理并影响
+#: 退出码 —— 否则"给一个文件所有用例加 `@pytest.mark.skip` 或 `network` 标记"就能把它整文件从门里摘掉而
+#: 门报绿（`classify_pytest_result` 把"exit 0 且只有 skipped"判成 `all_skipped`，`deselected` 同样不进
+#: 退出码）。与 `_KNOWN_UNMATCHED_ACTIONS` 同一条纪律：豁免要写下来，写不出理由的就该去修。本文件在
+#: FC-27 清单里（`.noai-paths` 的 `[category: release-deploy]`）：改它要人逐行走查 + 2 名 reviewer 批准
+#: （`FINAL-R7-04` 更正过此处"本文件不在清单里"的错说法）。`R6-1` 的绕过根因是"唯一的机器约束是理由长度
+#: ≥ 20 字符"，所以 `audit_exemptions()`（`main()` 启动时先跑）加三道判据：① 条目数 ≤
+#: `MAX_EXEMPT_ALL_SKIPPED`（默认 1，加第二条必须同时改上限）；② 文件必须真的存在；③ 理由 ≥ `MIN_EXEMPT_REASON_CHARS` 且提到 `network`/`skip`/`deselect` 之一。三条都不等于"这个豁免是对的"， 但"加一行就绿"必须经过一次可见的编辑。
 EXEMPT_ALL_SKIPPED: dict[str, str] = {
     "tests/test_providers_online.py": (
         "整文件 `pytestmark = pytest.mark.network`，而 `pyproject.toml` 的 "

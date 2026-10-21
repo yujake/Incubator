@@ -62,12 +62,12 @@ def manuscripts_read(store, id: str) -> ToolResult:
         raise ToolError("manuscripts.read 需要一个带 root 的 store")
     got = M.read(root, id)
     if got is None:
-        # ⚠️ **2026-10-16（亲测 A 的工具面时当场撞出来的真 bug）**：这里原写成
+        # ⚠️ 2026-10-16（亲测 A 的工具面时当场撞出来的真 bug）：这里原写成
         # `raise ToolError(msg, kind="manuscript_not_found")` —— 而 `ToolError.__init__`
-        # **不收 `kind`**（只有 `message/tool/detail`）⇒ 本该是"没有这份手稿，去看
-        # `manuscripts.list`"的可读拒绝，**变成了 `TypeError: ToolError.__init__() got an
-        # unexpected keyword argument 'kind'`**。第一次凭感觉调 `manuscripts.read` 的智能体
-        # 会拿到一个 Python 异常，既看不懂也学不到下一步 —— 正是业主说的"会困惑并浪费 token"。
+        # 不收 `kind`（只有 `message/tool/detail`）⇒ 本该是"没有这份手稿，去看
+        # `manuscripts.list`"的可读拒绝，「变成了 `TypeError: ToolError.__init__() got an
+        # unexpected keyword argument 'kind'`」。第一次凭感觉调 `manuscripts.read` 的智能体
+        # 会拿到一个 Python 异常，既看不懂也学不到下一步（业主说的"会困惑并浪费 token"）；
         # 类别要交给工具层的统一出口 `fail(...)`，不要塞给 `ToolError`。
         return fail(
             f"没有编号 {id!r} 的手稿（`manuscripts.list` 看现有的编号）",

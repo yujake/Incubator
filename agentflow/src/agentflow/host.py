@@ -552,22 +552,13 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
         _AF.set_default_llm(None)
     # ---- E 的写脚本推理（`--experiment-reasoning`，业主裁定：「把 F 与 E 的接缝做好」）
-    #
-    # ## 缝在哪被 gate（这一处就是根因，2026-10 的真机读数）
-    #
-    # E 的缝一直只有"插座"没有"线"：`agent_e/author_script.py` 在 `self.llm is None`
-    # 时受控拒绝 `no_seam`，而 `self.llm` 的来源只有两个入口 ——
-    #   ① `specs/e.py::_build` 的 `llm=d.llm`（`d.llm` 由 `_Builder._llm_for("E")` 给，
-    #      而 `role_llm` 里从来没有登记过 `"E"`）；
-    #   ② `agent_f/core.py` 的 `e` 属性里的 `llm=role_seam("E")`（`llmseam` 的按角色表）。
-    # 两个入口的开关都在这几行：`role_llm["E"]` 与 `set_role_seam("E", …)`。
-    # 于是 F 每轮都撞同一句"子目标有判据但没有脚本（no_seam）"。
-    #
-    # ## 两条路都要接（与 F 那一处同一条理由）
-    #
-    # 真机里 M 派 `F.step` 走的是工具层（`attack_tools._agent_for` → `AgentF(store)`），
-    # 那条路拿不到这里的装配上下文 ⇒ 只登记 `role_llm["E"]` 的话，工具路径上 E 仍是
-    # `llm=None`。所以两处都写：角色工厂一处、`llmseam` 的按角色表一处（同一份缝对象）。
+    # 缝在哪被 gate（这一处就是根因，2026-10 的真机读数）：E 的缝一直只有"插座"没有"线" ——
+    # `agent_e/author_script.py` 在 `self.llm is None` 时受控拒绝 `no_seam`，而 `self.llm` 的来源只有两个
+    # 入口：① `specs/e.py::_build` 的 `llm=d.llm`（`_Builder._llm_for("E")`，而 `role_llm` 里从没登记过 `"E"`）；
+    # ② `agent_f/core.py` 的 `e` 属性里的 `llm=role_seam("E")`（`llmseam` 的按角色表）。开关就是
+    # `role_llm["E"]` 与 `set_role_seam("E", …)` ⇒ F 每轮都撞同一句"子目标有判据但没有脚本（no_seam）"。
+    # 两条路都要接：真机里 M 派 `F.step` 走工具层（`attack_tools._agent_for` → `AgentF(store)`），那条路拿
+    # 不到这里的装配上下文 ⇒ 只登记 `role_llm["E"]` 时工具路径上 E 仍是 `llm=None`，所以角色工厂与`llmseam` 按角色表两处都写（同一份缝对象）。
     e_llm = None
     from .llmseam import set_role_seam as _set_role_seam
 
@@ -585,20 +576,13 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
             "F 那一轮如实落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是缝）；"
             "要真写脚本就加 `--experiment-reasoning` —— 只开 `--attack-reasoning` 不连带打开它")
     # ---- D 的模型精修（`R1-B-x` 裁定 3）：缝不由角色开关决定，由"这次运行有没有模型"决定。
-    #
-    # 裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 那样等一个
-    # `--attack-reasoning` 才拿得到缝。三条硬要求（裁定 3 逐字）：
-    #   ① 有模型就接上（`_model_key_present()`：环境里配了 key）；
-    #   ② 三态读数：接上之后 `_llm_refine` 的 `reading.state` 会落
-    #      `used`/`failed`/`not_wired`/`unknown_object`（`agent_d/_support.model_json_call`），
-    #      于是"这次到底问没问模型、问成没问成"是读得出来的；
-    #   ③ fail-open：这一层拿不到模型就退回确定性分析（`_llm_refine` 本来就返回
-    #      `(None, reading)`，调用方保留确定性结果），绝不因为模型不可用而中断研究。
-    # 成本靠读数看见：缝自己带 `TokenMeter`（与 H/F 同一个 `usd_budget`）。
-    #
-    # 为什么不是无条件建缝：没有 key 时建出来的缝只会在每次调用时落 `not_wired`
-    # —— 那不是"接上了"，而把"没接线"写成"接上了但没答"正是本项目反复防的那种假话。
-    # 所以没有模型 ⇒ 不建缝，并把这件事写进 notes（"为什么 D 没接缝"要读得出来）。
+    # 裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 那样等一个 `--attack-reasoning`。
+    # 三条硬要求（裁定 3 逐字）：① 有模型就接上（`_model_key_present()`：环境里配了 key）；② 三态读数：
+    # 接上之后 `_llm_refine` 的 `reading.state` 会落 `used`/`failed`/`not_wired`/`unknown_object`
+    # （`agent_d/_support.model_json_call`），于是"这次到底问没问模型、问成没问成"是读得出来的；
+    # ③ fail-open：这一层拿不到模型就退回确定性分析（`_llm_refine` 本来就返回 `(None, reading)`），
+    # 绝不因为模型不可用而中断研究。成本靠读数看见：缝自己带 `TokenMeter`（与 H/F 同一个 `usd_budget`）。
+    # 为什么不是无条件建缝：没有 key 时建出来的缝每次调用只落 `not_wired` —— 那不是"接上了"，而把"没接线"写成"接上了但没答"正是本项目反复防的那种假话；所以没有模型 ⇒ 不建缝，并把这件事写进 notes。
     d_llm = None
     if _model_key_present():
         d_llm = _seam("D")

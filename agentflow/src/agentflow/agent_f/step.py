@@ -251,7 +251,7 @@ class _Step:
 
         # ---- P4-8（`draft/44`）：`tried_strategies` 写回
         #
-        # 改前 `tried_strategies` **只读不写**（`core.py` 的 `_reason_self` 里那一处是
+        # 改前 `tried_strategies` 「只读不写」（`core.py` 的 `_reason_self` 里那一处是
         # 全仓唯一出现点）⇒ 它是一个永远为空的读数：`pre_spend_gate` 的
         # `strategies_tried`（"九招里试过几招、还剩几招"）每一轮都读到 0，
         # 提示词里的"已试过的招"永远是"（无）"—— 于是模型每一轮都可以合法地重挑同一招。
@@ -264,8 +264,8 @@ class _Step:
         # ---- P4-7（`draft/44`）：父目标让位给刚派出去的子目标
         #
         # `counterexample_request` / `reduction` 造出新子目标之后，父目标原先仍是
-        # `in_progress`，而 `pick_next_subgoal` 的次序是 `in_progress` 最先 ⇒ **每一轮都
-        # 重新选中父目标**，新子目标永远停在 `todo`（真机：`s1/s5/s6` 一直 `todo`）。
+        # `in_progress`，而 `pick_next_subgoal` 的次序是 `in_progress` 最先 ⇒ 「每一轮都
+        # 重新选中父目标」，新子目标永远停在 `todo`（真机：`s1/s5/s6` 一直 `todo`）。
         # `waiting_on` 是这一件事的显式读数（"我在等这几条"），由
         # `attack_tools.pick_next_subgoal` 消费 —— 不靠改状态来暗示。
         if deploy.get("waiting_on"):
@@ -315,7 +315,7 @@ class _Step:
             # `product_detail["reason"]` 里（整份产物照旧进 history）。
             if str(product.get("product") or "") == "dead_end" and product.get("reason"):
                 history_row["dead_end_reason"] = str(product["reason"])
-        # ---- P3-6（`draft/44`）：产物的**落点**进 history（M 读 `attack.status` 就看得见）
+        # ---- P3-6（`draft/44`）：产物的「落点」进 history（M 读 `attack.status` 就看得见）
         #
         # 改前 `product_detail` 只写不读（本文件的那一行是全仓唯一出现点）⇒ F 交出的论证
         # 在盘上与台账上都没有第二个读者。现在：`statement_id`（可复核的那一份）与
