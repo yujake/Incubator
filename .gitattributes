@@ -40,3 +40,9 @@ agentflow/.noai-paths  text eol=lf
 # 冻结快照与夹具：按字节 sha256 冻结，git 不许替它换行（与 `* -text` 同效，显式写出来是为了让人看得见）
 agentflow/tests/golden/**    -text
 agentflow/tests/fixtures/**  -text
+*.tsx    text eol=lf
+*.ts     text eol=lf
+*.js     text eol=lf
+*.jsx    text eol=lf
+*.css    text eol=lf
+*.html   text eol=lf
