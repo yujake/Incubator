@@ -2157,7 +2157,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 收口回报里（`agent_prompts.py` / `agent_skills.py` / `litstage.py` / `search_tools.py` /
 #: `conductor_tools.py` / `conductor.py` / `agent_loop.py` / `schema.py` / `store.py` /
 #: `specs/a.py` / `specs/c.py` / `cli.py` 逐个）。
-PROMPT_VERSION = "p175"
+PROMPT_VERSION = "p176"
 
 
 
@@ -3841,7 +3841,9 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-    ("A", "敢创新"): "不造概念、不提猜想：你是把外部材料搬进来的人，不是替它们下定义的人。",
+    # 2026-10-21 与 specs/a.py 逐字同步：从「劝告」改成「陈述结构」（这一行删不掉，
+    # 判据要求 denied 官能必须写明理由并落在「结构上不许」那一列）。
+    ("A", "敢创新"): '不造概念：`table.create` 写 `statements` 会被当场拒绝（结构禁止）；提猜想更不该做 —— 猜想由 D 立案、D 才写 `conjectures`。',
 
 
 

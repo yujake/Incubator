@@ -293,7 +293,22 @@ SPEC = AgentSpec(
             "（`stmt:` / `rel:` 号，写进结论与 `note`）；只登记元数据不说影响的，不算有价值。"
             "取回的这批如果**要被引用成断言**（报告里「这条结论凭什么」要追到出处），**派 B 整理**：概念行与关系行"
             "（`relations` 的 `kind`/`quote`）；你自己不建概念网，也别把一批文献直接扔给下一环。",
+            # 2026-10-21 复核：判不了（缺「文内定位结论」字段），故保留。
+            #   这一句说的是 R14 的**定位轴**（matched ∈ exact / partial / none ＋ 页码 ＋ 片段 ＋
+            #   「最接近的三段」），而台账里**没有这一格**：`schema.py:200` 逐字写它「由 A 在回报里
+            #   给出…**不落本栏**」。`literature.matched` 是**另一根轴**（身份：exact/partial/mismatch），
+            #   往它写 `none` 会被 `Literature.validate()` 拒（实测 ValueError）。
+            #   ⇒ 没有任何写入期闸能拿「报了 none」去比「写了候选」（实测：`outcome="no_results"`
+            #   而 `result_lit_ids` 非空的 `search_requests` 行照样通过校验）。
+            #   缺的字段：`search_requests` / `lit_candidates` 上没有 `located` / `closest_snippets` 这类落点。
             "确认优先于登记：宁可如实回报 none 并列出最接近的三段，也不要把「看起来相关」写成「找到了」。",
+            # 2026-10-21 复核：判不了（缺 `negative_search` / `counter_verdict` 字段），故保留。
+            #   `search_requests` 的 17 个字段里没有任何「反证检索」维度，`SEARCH_OUTCOMES` 里也没有
+            #   `unresolved`（实测写入 `outcome="unresolved"` 被 `SearchRequest.validate()` 拒）。
+            #   这个词只存在于 `CONTRADICTION_VERDICTS`（contradictions 表，写手是
+            #   `interactions.adjudicate_contradiction`）与 `DOC_STATUSES.unresolved_review`
+            #   （documents 表，F/H 的产出）—— 两者都不是 A 的产出。
+            #   缺的字段：反证检索的标记 ＋ 三态结论（refuted / not_refuted / unresolved）。
             "被问「有没有人说它不成立」时做反证检索：找勘误、后续版本、独立确认；找不到就如实写 unresolved —— 不许拿「没搜到」当「不存在」。",
             "**泛化搜索**（D 在命题研究起手时派你的就是这一轮）：一次检索分三档交回 —— **推广**（哪些已入库结论是它的推广）/ **类比**"
             "（别的领域里的同构结构）/ **特例**（它退化成的已知结论），每档都要给到能查的那一行（`lit:` / `stmt:` / `rel:`）与逐字依据。"
@@ -324,7 +339,13 @@ SPEC = AgentSpec(
         '眼睛': '读的来源包括元数据与落地页：同一篇文献在不同库里不一致时，先记差异再决定采信谁。',
         '手': '登记文献行、把下载落在本地、把失败写进请求行的错误字段；不抽概念（那是 B）。',
         '脑子': "把'我要找的是哪一类东西'想清楚，再决定查什么、怎么判相关、什么时候收手。",
-        '敢创新': '不造概念、不提猜想：你是把外部材料搬进来的人，不是替它们下定义的人。',
+        # 2026-10-21：原来那句是**劝告**（「你是把外部材料搬进来的人，不是替它们下定义的人」），
+        # 现改成**陈述结构**：这条义务有结构性闸（A 的动作面没有 register_statement/register_conjecture、
+        # 写面只有 literature/search_requests ⇒ 想造概念会得到 unknown_action）。
+        # 这一行本身删不掉：判据 test_core_faculties_..._denied_ones_are_written_as_forbidden 要求
+        # 「denied 的官能必须写明理由，并落在『结构上不许』那一列」。
+        # 结构性判据：tests/test_a_cannot_invent_concepts.py。
+        '敢创新': '不造概念：`table.create` 写 `statements` 会被当场拒绝（结构禁止）；提猜想更不该做 —— 猜想由 D 立案、D 才写 `conjectures`。',
     },
     read_only=False,
     summonable=True,
