@@ -26,8 +26,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow import verify as VY
