@@ -4188,6 +4188,16 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # 落 `readings`、在 `summary()` 里加半句话；不进 `status`、不产生 `Finding`
     # ⇒ 它不改变门的强度，只让"名册 0 行"与"名册都写上了"在收工输出上分得开。
     rep.readings["roster_registration"] = roster_registration_reading(root, sid=sid)
+    # ---- 非平凡性那一格（S3：只说、不拦）
+    rep.readings["nontriviality"] = nontriviality_reading(root, sid=sid)
+    _nt = rep.readings["nontriviality"]
+    if _nt.get("high_tier_total"):
+        _ids = [f"{x['stmt_id']}(T{x['level']})" for x in _nt["high_tier"]][:6]
+        rep.findings.append(Finding(
+            "nontriviality", "high_tier_without_ladder", "warning",
+            f"本篇有 {_nt['high_tier_total']} 条 T3/T4 的命题（{_ids}）—— 它们的价值在于"
+            "逼研究侧造梯子把非平凡性降下来（造出来后要重新判档，正文改成"
+            "工具在前、结果作推论）；**这一格不拦门**，它是读数"))
     return rep
 
 
@@ -4323,7 +4333,7 @@ def _paper_text(root: str | Path) -> str:
 
 
 def _paper_statement_rows(root: str | Path) -> list[dict[str, Any]]:
-    """读论文侧要用的台账行（**自成一路**：不改既有的 `_statement_rows(root, store)`）。"""
+    """读论文侧要用的台账行（自成一路：不改既有的 `_statement_rows(root, store)`）。"""
     path = Path(root) / "data" / "statements.json"
     if not path.is_file():
         return []
@@ -4416,3 +4426,38 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
                 f"{name}: 档位 T{tier} 的框架被整段移进附录（正文只剩 {len(in_body)} 字符的指针）"
                 " —— T3/T4 的框架与动机必须留在正文")
     return problems
+
+def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
+    """收工读数：本篇的非平凡性分布 ＋ T3/T4 清单 ＋ 论文侧的缺铺垫点名。
+
+    S3 口径（业主 2026-10-21）：先说、不拦。 落 `readings`，最坏只产生
+    `level="warning"` 的 finding —— 不改变门的强度，只让"这一篇有没有 T4、
+    T4 有没有被塞进附录、有没有造过梯子"在收工输出上分得开。
+
+    为什么不做成拦门的判据：档位是秘书的判断（B 类），"该不该降档""铺垫够不够"
+    是研究判断；把判断硬拦成门，就会重演"用不可判的东西卡人"。
+    """
+    rows = _paper_statement_rows(root)
+    from . import secretary as _SEC
+    high: list[dict[str, Any]] = []
+    counts = {f"T{level}": 0 for level in _SEC.NONTRIVIALITY_LEVELS}
+    counts["unjudged"] = 0
+    for row in rows:
+        text = str(row.get("statement_full") or row.get("statement_text") or "")
+        got = _SEC.nontriviality_of(root, text)
+        level = int(got.get("level") or 0)
+        counts["unjudged" if not level else f"T{level}"] += 1
+        if level >= 3:
+            high.append({"stmt_id": str(row.get("stmt_id") or ""), "level": level,
+                         "basis": str(got.get("basis") or ""),
+                         "tri": str(got.get("tri") or "unknown")})
+    return {
+        "checked": bool(rows),
+        "statements_total": len(rows),
+        "counts": counts,
+        "high_tier": high,
+        "high_tier_total": len(high),
+        "paper_scaffolding_problems": paper_proof_scaffolding_problems(root),
+        "sid": str(sid or ""),
+        "reason": "" if rows else "`statements` 一行都没有 ⇒ 这一格没读到（不是\"全是 T1\"）",
+    }
