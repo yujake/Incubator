@@ -1510,11 +1510,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 写文章」）：纸包那一段整轮改写 —— 交付物从"修订后的外部论文 + 渲染锚"改成"**由智能体自己
+#: 写文章」）：纸包那一段整轮改写 —— 交付物从"修订后的外部论文 + 渲染锚"改成"由智能体自己
 
 
 
-#: 写出来的正文**"，工作循环三步（改 `out/paper/main.tex` → `doc.paper_compile` → 回执核
+#: 写出来的正文"，工作循环三步（改 `out/paper/main.tex` → `doc.paper_compile` → 回执核
 
 
 
@@ -1550,11 +1550,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 作用域：M/D/F/V 四格的索引变长，其余六格**逐字未动**（索引按角色现算）。
+#: 作用域：M/D/F/V 四格的索引变长，其余六格逐字未动（索引按角色现算）。
 
 
 
-#: `p109`（2026-10-14，业主 12 条裁决逐条落地，见 `draft/120` §五）：六岗的**声明**各加一段 ——
+#: `p109`（2026-10-14，业主 12 条裁决逐条落地，见 `draft/120` §五）：六岗的声明各加一段 ——
 
 
 
@@ -1570,7 +1570,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: `p110`（2026-10-14，业主裁决第 12 条**前半**落地）：B 的入库审美有了机器形态 —— 秘书在
+#: `p110`（2026-10-14，业主裁决第 12 条前半落地）：B 的入库审美有了机器形态 —— 秘书在
 
 
 
@@ -1578,11 +1578,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 这次入库当场拦下（`kind=statement_too_trivial`）；判不了与没查成**不拦**（三态纪律）。
+#: 这次入库当场拦下（`kind=statement_too_trivial`）；判不了与没查成不拦（三态纪律）。
 
 
 
-#: 作用域：只有 **B** 一格换值（那一句只发给 B）。
+#: 作用域：只有 B 一格换值（那一句只发给 B）。
 
 
 
@@ -1598,11 +1598,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 作用域：只有 **D** 一格换值（E 改的是正文，它的索引行没动）。
+#: 作用域：只有 D 一格换值（E 改的是正文，它的索引行没动）。
 
 
 
-#: `p112`（2026-10-14，真机读数驱动）：索引那一段加一句**祈使 + 理由** ——
+#: `p112`（2026-10-14，真机读数驱动）：索引那一段加一句祈使 + 理由 ——
 
 
 
@@ -1614,7 +1614,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 而正文**一次都没被读过**。作用域：十格**全动**（那一句在所有角色的索引里）。
+#: 而正文一次都没被读过。作用域：十格全动（那一句在所有角色的索引里）。
 
 
 
@@ -1622,7 +1622,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: ① 秘书判断的**提示词抬头**改成按类别取词表（`JUDGE_VERDICTS`）：此前它仍写派活那一轴，
+#: ① 秘书判断的提示词抬头改成按类别取词表（`JUDGE_VERDICTS`）：此前它仍写派活那一轴，
 
 
 
@@ -1634,11 +1634,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: （六位编号那一批漏了它，真机上正当调用被拒两次）；③ D 的手稿分节**只留一处枚举**（七节）。
+#: （六位编号那一批漏了它，真机上正当调用被拒两次）；③ D 的手稿分节只留一处枚举（七节）。
 
 
 
-#: `p114`（2026-10-14，**第三轮真机读数驱动**，第六趟）：① E：反例只有一个合法落法
+#: `p114`（2026-10-14，第三轮真机读数驱动，第六趟）：① E：反例只有一个合法落法
 
 
 
@@ -1654,7 +1654,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: ② D：引落点前先看清那一行有哪些键（**这一条当时给的理由是读错了盘 —— 见 `p115`**；
+#: ② D：引落点前先看清那一行有哪些键（这一条当时给的理由是读错了盘 —— 见 `p115`；
 
 
 
@@ -1662,11 +1662,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: `p115`（2026-10-15，**勘误**）：`p114` 的 ② 是**误判** —— 第六趟那份手稿引的
+#: `p115`（2026-10-15，勘误）：`p114` 的 ② 是误判 —— 第六趟那份手稿引的
 
 
 
-#: `exp:000000.certificate` **真的存在**（那一行的 `certificate` 里就装着 `n=40`、
+#: `exp:000000.certificate` 真的存在（那一行的 `certificate` 里就装着 `n=40`、
 
 
 
@@ -1690,7 +1690,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: `p116`（2026-10-15，**T5 第 8 趟真机读数驱动**）：失败词表加两格 ——
+#: `p116`（2026-10-15，T5 第 8 趟真机读数驱动）：失败词表加两格 ——
 
 
 
@@ -1710,7 +1710,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: **作用域：十格全部换值** —— `judge.JUDGE_PROBLEMS` 被逐项拼进"三态词表"那一段
+#: 作用域：十格全部换值 —— `judge.JUDGE_PROBLEMS` 被逐项拼进"三态词表"那一段
 
 
 
@@ -1718,11 +1718,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: `p117`（2026-10-15，**T5 第 8 趟按"错误行为"重读之后**）：共享段的 `2b)` 那一段
+#: `p117`（2026-10-15，T5 第 8 趟按"错误行为"重读之后）：共享段的 `2b)` 那一段
 
 
 
-#: 补上**召回的 `outcome` 该怎么读** —— `ok` / `no_result` / `refused` / `failed` 四档
+#: 补上召回的 `outcome` 该怎么读 —— `ok` / `no_result` / `refused` / `failed` 四档
 
 
 
@@ -1734,11 +1734,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: M 据此以为文献消化过了、继续派同一种活 —— **读数是预防的一半，另一半是让看读数的人
+#: M 据此以为文献消化过了、继续派同一种活 —— 读数是预防的一半，另一半是让看读数的人
 
 
 
-#: 知道该拿它做什么**。这一次读数本身已经改对（`agent_b._support.task_outcome`），
+#: 知道该拿它做什么。这一次读数本身已经改对（`agent_b._support.task_outcome`），
 
 
 
@@ -1746,7 +1746,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 作用域读数：**九格换值，C 不换**（C 没有任何协作边，`2b)` 那一段对它是残桩）——
+#: 作用域读数：九格换值，C 不换（C 没有任何协作边，`2b)` 那一段对它是残桩）——
 
 
 
@@ -1754,7 +1754,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: p117 → p118（2026-10-15，**A 的技能增强**）：A 多一条 skill
+#: p117 → p118（2026-10-15，A 的技能增强）：A 多一条 skill
 
 
 
@@ -1762,43 +1762,43 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 它进的是 `index_block("A")` 那段索引（每条 skill 一行），所以**只有 A 那一格换值**。
+#: 它进的是 `index_block("A")` 那段索引（每条 skill 一行），所以只有 A 那一格换值。
 
 
 
-#: 为什么要补这一条：`draft/120` §五 只裁了「不新增综述类 documents」（**产物**那一面），
+#: 为什么要补这一条：`draft/120` §五 只裁了「不新增综述类 documents」（产物那一面），
 
 
 
-#: 而 `literature-survey` 的**方法面**（检索式、纳入/排除、缺口表）从没翻译成本系统的东西 ——
+#: 而 `literature-survey` 的方法面（检索式、纳入/排除、缺口表）从没翻译成本系统的东西 ——
 
 
 
-#: A 原有三条技能讲的是**顺序 / 判重 / 泛化分档**，没有一条讲「查不到时换什么」。
+#: A 原有三条技能讲的是顺序 / 判重 / 泛化分档，没有一条讲「查不到时换什么」。
 
 
 
-#: p118 → p119（2026-10-15，**引文图按新动作落**的第 ① 步）：新工具 `search.walk_citations`
+#: p118 → p119（2026-10-15，引文图按新动作落的第 ① 步）：新工具 `search.walk_citations`
 
 
 
-#: 进了 A 的工具面（**工具面也在前置提示词里** ⇒ 加一件工具就是改 A 的段，与加技能同一条纪律）。
+#: 进了 A 的工具面（工具面也在前置提示词里 ⇒ 加一件工具就是改 A 的段，与加技能同一条纪律）。
 
 
 
-#: 还是**只有 A 那一格换值**。
+#: 还是只有 A 那一格换值。
 
 
 
-#: p119 → p120（2026-10-15，**引文图第 ③ 步：动作面**）：`A.walk_citations` 进了能力表 ⇒
+#: p119 → p120（2026-10-15，引文图第 ③ 步：动作面）：`A.walk_citations` 进了能力表 ⇒
 
 
 
-#: ① A 自己的段多一条动作；② **伙伴表里那一行**（"A：…可调用动作：…"）也跟着变
+#: ① A 自己的段多一条动作；② 伙伴表里那一行（"A：…可调用动作：…"）也跟着变
 
 
 
-#: ⇒ 凡是以 A 为伙伴的角色（D/F/G/H/M）那一格**一起**换值。实测 **6 格换值、4 格不动**
+#: ⇒ 凡是以 A 为伙伴的角色（D/F/G/H/M）那一格一起换值。实测 6 格换值、4 格不动
 
 
 
@@ -1806,31 +1806,31 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: p120 → p121（2026-10-15，**引文图第 ④ 步：技能触发条件**）：A 那条 `找文献-换招法而不是换说法`
+#: p120 → p121（2026-10-15，引文图第 ④ 步：技能触发条件）：A 那条 `找文献-换招法而不是换说法`
 
 
 
-#: 的 **title / summary / when** 改了（正文改了**不**进提示词 —— 只有索引进，所以正文那一次没抬版本；
+#: 的 title / summary / when 改了（正文改了不进提示词 —— 只有索引进，所以正文那一次没抬版本；
 
 
 
-#: 这次改的是索引里那三格）。为什么必须改 `when`：一份手册要在**对的时候**被读到 ——
+#: 这次改的是索引里那三格）。为什么必须改 `when`：一份手册要在对的时候被读到 ——
 
 
 
-#: 原来那条 when 只覆盖"查不到"，而引文图的用武之地是"**已经攥住一篇关键文献**"。
+#: 原来那条 when 只覆盖"查不到"，而引文图的用武之地是"已经攥住一篇关键文献"。
 
 
 
-#: 又是**只有 A 那一格**换值。
+#: 又是只有 A 那一格换值。
 
 
 
-#: p121 → p122（2026-10-15，**C 的技能增强**）：审计里那条最硬的缺口 —— C 是十个角色里
+#: p121 → p122（2026-10-15，C 的技能增强）：审计里那条最硬的缺口 —— C 是十个角色里
 
 
 
-#: 提示词最薄的那个（899 字符），而且它**自己的四个图/溯源工具**
+#: 提示词最薄的那个（899 字符），而且它自己的四个图/溯源工具
 
 
 
@@ -1838,15 +1838,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 在**任何**手册里都没出现过（机械审计：10 个动作里 9 个有手册，唯独这几个没有）。
+#: 在任何手册里都没出现过（机械审计：10 个动作里 9 个有手册，唯独这几个没有）。
 
 
 
-#: 新技能 `溯源-三档下钻与孤立概念` 补上那一面。⇒ **只有 C 那一格**换值。
+#: 新技能 `溯源-三档下钻与孤立概念` 补上那一面。⇒ 只有 C 那一格换值。
 
 
 
-#: p122 → p123（2026-10-15，**B 的技能增强**）：审计里 B 那条缺口 ——
+#: p122 → p123（2026-10-15，B 的技能增强）：审计里 B 那条缺口 ——
 
 
 
@@ -1854,7 +1854,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 两个动作**没有任何手册**（B 的 7 个动作里 4 个有手册）。新技能
+#: 两个动作没有任何手册（B 的 7 个动作里 4 个有手册）。新技能
 
 
 
@@ -1862,15 +1862,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 走查：**只有 B 多一行技能索引**，其余九格逐字相同。
+#: 走查：只有 B 多一行技能索引，其余九格逐字相同。
 
 
 
-#: p123 → p124（2026-10-15，**D 的技能增强**）：审计里剩下最大的一块 —— D 的 15 个动作里
+#: p123 → p124（2026-10-15，D 的技能增强）：审计里剩下最大的一块 —— D 的 15 个动作里
 
 
 
-#: **6 个没手册**（`ingest` / `consider` / `poll` / `trace_question` / `trace_l3` / `adjudicate`）。
+#: 6 个没手册（`ingest` / `consider` / `poll` / `trace_question` / `trace_l3` / `adjudicate`）。
 
 
 
@@ -1878,7 +1878,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: `溯源-问题到L1L2L3与矛盾裁决`（溯源三档 ＋ I2 闭环）。⇒ **只有 D 那一格**换值（两行）。
+#: `溯源-问题到L1L2L3与矛盾裁决`（溯源三档 ＋ I2 闭环）。⇒ 只有 D 那一格换值（两行）。
 
 
 
@@ -1886,7 +1886,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 它是 `shared` ⇒ 进**每一个**角色的索引 ⇒ **十格全换**（与 p117 那次"只有 A 换"对照着看，
+#: 它是 `shared` ⇒ 进每一个角色的索引 ⇒ 十格全换（与 p117 那次"只有 A 换"对照着看，
 
 
 
@@ -1894,7 +1894,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 九趟 T5 的 `events.jsonl` 里，"拿一个**不存在**的编号去调动作"这一类改法前后都出现过
+#: 九趟 T5 的 `events.jsonl` 里，"拿一个不存在的编号去调动作"这一类改法前后都出现过
 
 
 
@@ -1910,7 +1910,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 当场红（"两边不等额…不许自动跟着变"）。改法：**名字留在正文（不进提示词），`when` 只写情形**。
+#: 当场红（"两边不等额…不许自动跟着变"）。改法：名字留在正文（不进提示词），`when` 只写情形。
 
 
 
@@ -1922,15 +1922,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: "D 交猜想给 F 攻坚"那句原文点名了**主控手上的那件召唤工具**（不在 D 的面上）⇒ 改成
+#: "D 交猜想给 F 攻坚"那句原文点名了主控手上的那件召唤工具（不在 D 的面上）⇒ 改成
 
 
 
-#: **循环的 `summon` 形状**（与提示词里已记的另外两处同类先例一样：口径点了本角色没有的工具）；
+#: 循环的 `summon` 形状（与提示词里已记的另外两处同类先例一样：口径点了本角色没有的工具）；
 
 
 
-#: ② 同一句里补上"创建计划的动作在 F 手上、不在 D 的动作表里"。**只有 D 那一格换值**
+#: ② 同一句里补上"创建计划的动作在 F 手上、不在 D 的动作表里"。只有 D 那一格换值
 
 
 
@@ -1946,7 +1946,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 「写清**要它干什么**，**怎么写是它的事**」（原句里有"不要指定它用哪个动作"——
+#: 「写清要它干什么，怎么写是它的事」（原句里有"不要指定它用哪个动作"——
 
 
 
@@ -1958,27 +1958,27 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 两件工具的**说明与 schema**改了（可以不点动作、新增 `task`），而工具说明逐字进 M 的
+#: 两件工具的说明与 schema改了（可以不点动作、新增 `task`），而工具说明逐字进 M 的
 
 
 
-#: 提示词 ⇒ **只有 M 那一格**换值（这两件工具 `roles=("M",)`）。
+#: 提示词 ⇒ 只有 M 那一格换值（这两件工具 `roles=("M",)`）。
 
 
 
-#: p127 → p128（2026-10-16，**业主口径 S1「M 只派活」**）：伙伴表**不再印
+#: p127 → p128（2026-10-16，业主口径 S1「M 只派活」）：伙伴表不再印
 
 
 
-#: "可调用动作（必填…）"** —— 原话逐字「M 只是个派活的，对所有角色都一样，
+#: "可调用动作（必填…）" —— 原话逐字「M 只是个派活的，对所有角色都一样，
 
 
 
-#: 只根据它们的能力范围派活，**不指定能力**。M 能看到的只是各角色描述，
+#: 只根据它们的能力范围派活，不指定能力。M 能看到的只是各角色描述，
 
 
 
-#: **看不到具体的工具箱与动作**，但可在角色描述中暗示它各角色能干什么」。
+#: 看不到具体的工具箱与动作，但可在角色描述中暗示它各角色能干什么」。
 
 
 
@@ -1986,7 +1986,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 这是**共用段**（十格都渲它）⇒ **十格全换**。同时 `conductor.role_spec` 也跟着
+#: 这是共用段（十格都渲它）⇒ 十格全换。同时 `conductor.role_spec` 也跟着
 
 
 
@@ -1997,7 +1997,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: p157 → p158（2026-10-18，业主的三条裁定一起落进提示词）：
 #:   ① 「给 M 开 V 出边」⇒ M 的 policy 从「F / V 只能间接」改成「只剩 F 只能间接」，
 #:      伙伴表里 V 那一行同时从"唤不起"翻成"直接出边"（`partners_lines` 现算，故 M 那一格必换）；
-#:   ② G8 由 **M 代跑、H 判回执**（`run_evidence` 的四个键与"没跑要写理由"）；
+#:   ② G8 由 M 代跑、H 判回执（`run_evidence` 的四个键与"没跑要写理由"）；
 #:   ③ C / H 的产出登记通道（`analysis.register_report` / `record_finding`）+ 第三条队列
 #:      （`literature.unprocessed > 0` ⇒ 那一行记 `unknown`）。
 #:      走查读数：A / B / C / D / E / F / G / H / M / V 十格中，M 至少必换
@@ -2013,13 +2013,13 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:      + 落成研究报告时不许 `accepted` + 每条要指得到行）。
 #:   走查读数：只有 G / H 两格换值（伙伴表印的是每个伙伴的 duty 与 boundary，不含 policy），
 #:   其余八格逐字不动 —— 现算读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`。
-#: p159 → p160（2026-10-18，**业主改口径：导言区从"唯一模板"降成推荐、语言改成硬线**）：
+#: p159 → p160（2026-10-18，业主改口径：导言区从"唯一模板"降成推荐、语言改成硬线）：
 #:   只动 G 的 policy —— 追加一条「导言区是配方，语言是硬线」（mp3 那份作推荐配方，
 #:   宏包与定理环境名可调；硬线只有"全文英文、CJK = 0，注释里也不留中文"）。
-#:   走查读数：只有 **G** 一格换值，其余九格逐字不动（改的是 `policy`，而伙伴表只印
+#:   走查读数：只有 G 一格换值，其余九格逐字不动（改的是 `policy`，而伙伴表只印
 #:   `duty` / `boundary`）—— 现算读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`。
-#: p160 → p161（2026-10-19，**F 的闭环八处缺口**那一批：`draft/44` 的 P1-2 / P1-1 口径进提示词）：
-#:   ① D 的 policy：`F.attack.step` → `F.step`（那个动作**根本不存在**，
+#: p160 → p161（2026-10-19，F 的闭环八处缺口那一批：`draft/44` 的 P1-2 / P1-1 口径进提示词）：
+#:   ① D 的 policy：`F.attack.step` → `F.step`（那个动作根本不存在，
 #:      `find_action('F','attack.step')` 是 `None`），并把"判 F 有没有推进"的口径
 #:      从"`history` 非空"改成"至少有一轮真推进"；
 #:   ② M 的 policy：同一处错名改成 `F.step`，`plan_progress_rows` 的口径同步改
@@ -2027,87 +2027,87 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   ③ F 的 `write_set` 加了 `statements`（`proof` 的产物出口）—— 写集不进提示词正文，
 #:      但 `agent_surface_snapshot.json` 会跟着换一格。
 #:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
-#: p161 → p162（2026-10-19，**堵「假 proof_review」+ 接 V 回路 + 「攻」只认真推进**那一批）：
+#: p161 → p162（2026-10-19，堵「假 proof_review」+ 接 V 回路 + 「攻」只认真推进那一批）：
 #:   ① M 的 policy 加一条明确路径：`attack.status`（派 `F.status` 拿回来的那份读数）的
-#:      `history_tail` 里看到某份计划的 `statement_id` ⇒ **同一轮**里派 `V.verify_proof`
+#:      `history_tail` 里看到某份计划的 `statement_id` ⇒ 同一轮里派 `V.verify_proof`
 #:      去走查那一条，产物必须落 `verifications/<命题号>.jsonl`；并写清"不许让 F/B 自己
 #:      把等级写成 `proof_review`（写入期会当场拒收 `proof_review_without_evidence`）"；
-#:   ② M 的 policy 里「攻（攻坚推进）」那一环**只认 `plan_progress_rows`** ——
-#:      `attack_plan_rows` 降为**立项计数（informational）**（两处逐字：第⑥环那一句、
+#:   ② M 的 policy 里「攻（攻坚推进）」那一环只认 `plan_progress_rows` ——
+#:      `attack_plan_rows` 降为立项计数（informational）（两处逐字：第⑥环那一句、
 #:      以及「猜想要交给 F 攻坚」那一句），与 `closing.RESEARCH_CHAIN_GROUPS` 同一口径。
 #:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
-#: p162 → p163（2026-10-19，**只改措辞、不改口径**：G 的「导言区是配方」那条去掉具体工作区路径）：
+#: p162 → p163（2026-10-19，只改措辞、不改口径：G 的「导言区是配方」那条去掉具体工作区路径）：
 #:   G 的 policy 原文写着「照 mp3 那一篇写（`projects/mp3/out/paper/main.tex`，业主看着最
 #:   舒服的一份）」。那个字面量把两条判据一起撞红了 —— `agent_skills._path_problems`
 #:   扫声明（`tests/test_agent_skills.py` 的三条）时，`projects/` 不在
 #:   `WORKSPACE_PATH_ROOTS`/`REPO_PATH_ROOTS` 里 ⇒ 它被读成"点了没人写的落点"，
 #:   而 `test_the_registered_roots_cover_the_paths_we_actually_name` 又要求"点名的落点
 #:   都在根表里" ⇒ 两条判据只能二选一地红。事实是：那只是"照这一份的样子写"的指路，
-#:   **不是**要谁往 `projects/` 下写东西。所以改成「照本仓 mp3 那一篇论文的导言区写
+#:   不是要谁往 `projects/` 下写东西。所以改成「照本仓 mp3 那一篇论文的导言区写
 #:   （六位编号、三层定理风格）」：推荐的配方（`ctexart` + 那九个 `\newtheorem`）一个字没删，
-#:   删掉的只是那个不该出现在提示词里的绝对落点；roots 表**不动**（把只读的参考位置
+#:   删掉的只是那个不该出现在提示词里的绝对落点；roots 表不动（把只读的参考位置
 #:   塞进写落点表，等于让判据以为那儿有人写东西 —— 那是改事实，不是更新判据）。
 #:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
-#: p163 → p164（2026-10-19，**十个角色各补一条「产出标准」**：不只强调工作纪律，也强调
-#:   "好的产出"长什么样）。**十条全部并进既有的某一条 policy（没有新开第 N 条）**，
+#: p163 → p164（2026-10-19，十个角色各补一条「产出标准」：不只强调工作纪律，也强调
+#:   "好的产出"长什么样）。十条全部并进既有的某一条 policy（没有新开第 N 条），
 #:   条目数一格没变（A4 / B7 / C3 / D13 / E19 / F10 / G11 / H5 / M49 / V9），净增
 #:   88–113 字/角色（合计 +1008 字符；每角色提示词 2.1万–5.4万字符）。
-#:   **每条都带能力锚点**（靠这个角色手上真有的动作/工具才做得到，见括号）：
-#:   ① **A** 并进「继续搜还是收手」—— 检索的价值在找到能改变判断的那几篇：命中后要写清
+#:   每条都带能力锚点（靠这个角色手上真有的动作/工具才做得到，见括号）：
+#:   ① A 并进「继续搜还是收手」—— 检索的价值在找到能改变判断的那几篇：命中后要写清
 #:      它支撑/推翻了台账里的哪一条（`stmt:` / `rel:` 号，写进结论与 `note`）；只登记元数据
 #:      不说影响的不算有价值。（锚点：`search.register` + `table.*` 读册子 + `note` 形状）
-#:   ② **B** 并进「一次抽取的产出有上限」—— 关系的价值在信息量（要能回答"是什么关系、凭哪
+#:   ② B 并进「一次抽取的产出有上限」—— 关系的价值在信息量（要能回答"是什么关系、凭哪
 #:      一句原文 `quote`"，`kind` 要是说得出的关系名；「相关」这类空边不许产出）。（锚点：
 #:      `B.run_once` 写出的 `relations` 行的 `kind` / `quote` / `quote_verified`）
-#:   ③ **C** 并进「缺口不许只写在报告里」—— 读数要能改变判断：在 `analysis.register_report`
+#:   ③ C 并进「缺口不许只写在报告里」—— 读数要能改变判断：在 `analysis.register_report`
 #:      的 `summary` 里写清这个数让哪个缺口成立或不成立。（锚点：`C.gaps` +
 #:      `analysis.register_report`，都在 C 的工具面上）
-#:   ④ **D** 并进「从数据里找模式」—— 这一轮逐条点名新增的东西（**有模型缝时** ≥3 条：
+#:   ④ D 并进「从数据里找模式」—— 这一轮逐条点名新增的东西（有模型缝时 ≥3 条：
 #:      新猜想 / 新问题或一步新归约 / 新读数）；缝没接时如实报 `not_wired`、不硬凑三条。
 #:      （锚点：`D.register_conjecture` / `D.propose_question` / `D.write_report`；「缝」由
 #:      运行期模型决定，读数在三态 `_llm_refine`）
-#:   ⑤ **E** 并进「脚本要会说结论」—— 实验的价值在于能判：每条落库时写清它支持/反驳了哪条
+#:   ⑤ E 并进「脚本要会说结论」—— 实验的价值在于能判：每条落库时写清它支持/反驳了哪条
 #:      `claim`、读数是多少（`result` / `search_bound`）。（锚点：`E.run_experiment` 写的
 #:      `experiments` 行就是这几个字段）
-#:   ⑥ **F** 并进「每一轮先挑一个可判定的子目标」—— 每轮留下一批新事实（**有推理缝时** ≥3 条：
+#:   ⑥ F 并进「每一轮先挑一个可判定的子目标」—— 每轮留下一批新事实（有推理缝时 ≥3 条：
 #:      `reduction` / `proof` / `counterexample_request` 可组合）；缝没接时 `step` 只会落
 #:      `dead_end(缺工具)`，如实报、不硬凑。（锚点：`F.step` 的四种产物；缝的开关是
 #:      `--attack-reasoning`，未接时的读数逐字见 `host.py` 的 `notes_attack`）
-#:   ⑦ **G** 并进「论文体例」—— 没有新增结论的稿子不许投：要么不写，要么用 `build_document`
+#:   ⑦ G 并进「论文体例」—— 没有新增结论的稿子不许投：要么不写，要么用 `build_document`
 #:      如实写成综述（`kind="survey"`）并在摘要首句标明。（锚点：`G.build_document` 的
 #:      `kind` 枚举里有 `survey`）
-#:   ⑧ **H** 并进「稿子落成研究报告时的裁决」—— 还要判「相对台账新增了什么」：把
+#:   ⑧ H 并进「稿子落成研究报告时的裁决」—— 还要判「相对台账新增了什么」：把
 #:      `documents.claims` 与 `statements` 逐条对，每条断言都要能指到册子上有没有对应行。
 #:      （锚点：`doc.scan_claim` / `doc.list_documents` / `table.list` 读，`review.record_finding`
 #:      落 error 级 finding —— H 是只读角色，不比它读不到的东西）
-#:   ⑨ **M** 并进「先窄后宽」—— 每派一步，在 `conductor.summon` 的 task 里写明这一步要动哪条
+#:   ⑨ M 并进「先窄后宽」—— 每派一步，在 `conductor.summon` 的 task 里写明这一步要动哪条
 #:      结论（哪条猜想 / 断言 / 验收档）；收工前用 `conductor.ledger` 核它动没动。
-#:      （锚点：`conductor.summon` 的 task 文本 + `conductor.ledger`；**不要求预测结果**）
-#:   ⑩ **V** 并进「每条问题都要指到那一步」—— 先判哪一步承重，并在 `verify_proof` 的 findings
-#:      里写出它的**步号与原句**。（锚点：`V.verify_proof` 的 findings 带步号 + `read_proof`）
-#:   本批**只做加法**：130 条旧条目逐字一条没删；十格摘要全部换值。
+#:      （锚点：`conductor.summon` 的 task 文本 + `conductor.ledger`；不要求预测结果）
+#:   ⑩ V 并进「每条问题都要指到那一步」—— 先判哪一步承重，并在 `verify_proof` 的 findings
+#:      里写出它的步号与原句。（锚点：`V.verify_proof` 的 findings 带步号 + `read_proof`）
+#:   本批只做加法：130 条旧条目逐字一条没删；十格摘要全部换值。
 #:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
 #:
 #: `p165`（2026-10-19 晚，业主：「证明齐全、V 也签了，却只落 heuristic」）：
 #: 证据档那条口径从"拿不准就写弱一档"改成"凭据齐全就该到它该在的那一档"。
 #: 三格换值（现算，其余七格逐字未动）：
-#:   - **B** 的 policy 加一条「证据档按『有什么凭据』定，不按『怕不怕』定」：
+#:   - B 的 policy 加一条「证据档按『有什么凭据』定，不按『怕不怕』定」：
 #:     `proof_text` 非空 ＋ V 最近一签「成立」＋ `proof_sha256` 与现行正文相符 ⇒
 #:     就是 `proof_review`；只有真没有那一签才退 `heuristic`/`cross_check`，
 #:     两条出口（请 V 走查 / 如实降档）写清。`register_statement` 的 `evidence_kind`
 #:     参数也补了同一句话（那一段不进提示词，走 `conductor.role_spec` 与拒信里的
 #:     参数表时才被读到）。
-#:   - **F** 的 policy 加一条「V 签过之后这一行的档位就该是 `proof_review`」：
+#:   - F 的 policy 加一条「V 签过之后这一行的档位就该是 `proof_review`」：
 #:     档位按 `verifications/<命题号>.jsonl` 现算（`_proof_outlet` 的实测落点），
 #:     没签才落 `heuristic`；够格却写弱档会被 `verify` 的 `weaker_than_evidence`
 #:     点出来。（改前 `_proof_outlet` 把 `evidence_kind="heuristic"` 写死在代码里，
 #:     理由是"本批没有接 V 的回路"——那条理由随 `F→V` 的边与 `M` 的同轮派活失效了。）
-#:   - **M** 的第 ② 条纪律补了反方向：那一签**已经在盘上**却还写着弱档 ⇒
+#:   - M 的第 ② 条纪律补了反方向：那一签已经在盘上却还写着弱档 ⇒
 #:     该升就升（`verify` 报 `weaker_than_evidence` warning）；原文只写了
 #:     "不许在没有那一签时写成 `proof_review`"，读起来像是"别写强档"。
 #:
 #: p165 这一版还并入了同一轮的另一件事（业主：「前置提示词稍微压一下，但必要的提示词不能删」）：
-#: **十格的前置提示词压缩**。只动 `specs/*.py` 的 `policy`（`ACTIONS` / `edges` / `write_set` /
+#: 十格的前置提示词压缩。只动 `specs/*.py` 的 `policy`（`ACTIONS` / `edges` / `write_set` /
 #: `emphasis` / `local_notes` / `boundary` / `duty` / `deliverable` / `stance` 一个字没动），
 #: 三把动作按优先级：① 合并同义重复（同一件事被写成两三条的合成一条）；② 压缩措辞
 #: （长句、重复的限定语、可删的客套与来历注）；③ 不改"该做什么 / 什么算好"这一层。
@@ -2115,45 +2115,45 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: A 26113 / B 25487 / C 21629 / D 31815 / E 28449 / F 27981 / G 37751 / H 36850 /
 #: M 54209 / V 22705 = 312,989）→ 压缩后合计见 `_FROZEN_PROMPT_DIGESTS` 那一轮现算；
 #: 每一格的降幅都远小于 20%（最大的 M 一格 -5.8%）。
-#: **保留了全部 needle**：`tests/` 里被断言的字面量 1008 条、十格提示词里的具体字面量
+#: 保留了全部 needle：`tests/` 里被断言的字面量 1008 条、十格提示词里的具体字面量
 #: （反引号 code span 与裸路径）2459 条、`specs/e.NO_LEAN_REPLACEMENTS` 的 13 个左边，
 #: 逐条核过"改后仍在"（探针不进仓库，读数写在 `NOAI-REVIEW-REGISTER.md` 的批注里）。
 #:
-#: p168 → p169（2026-10-20 14:20，**三条并行线同一刻落在一棵树上 ⇒ 只抬这一格**）：
+#: p168 → p169（2026-10-20 14:20，三条并行线同一刻落在一棵树上 ⇒ 只抬这一格）：
 #: 抬版本的动作由主控那一趟「收口」统一做（三条线各自都只拿到一次抬版本的机会，
-#: 合并时按 `p41` 那次「两条线各自抬到 p40 ⇒ 合并再抬一格」的同一条纪律记在**新的一格**上）。
-#:   ① **M 的第 12 条 skill**：`agent_skills.CATALOG` 给 M 新增
+#: 合并时按 `p41` 那次「两条线各自抬到 p40 ⇒ 合并再抬一格」的同一条纪律记在新的一格上）。
+#:   ① M 的第 12 条 skill：`agent_skills.CATALOG` 给 M 新增
 #:      `研究攻坚链-文献到收录证明`（七跳定序 A→B→C→D→F→V→B(收录证明)）⇒
-#:      M 那格提示词**多 148 字**（skill 索引行是它自己的段，别处不印）。锚点都是 M 手上
+#:      M 那格提示词多 148 字（skill 索引行是它自己的段，别处不印）。锚点都是 M 手上
 #:      真有的东西：`conductor.summon` / `conductor.ledger` / `fs.read` + 链上各角色的动作名。
-#:   ② **`lit.*` 七件工具那一批**：`litstage.py`（新建）＋ `tools/search_tools.py`
+#:   ② `lit.*` 七件工具那一批：`litstage.py`（新建）＋ `tools/search_tools.py`
 #:      注册七件 `lit.*`（检索台账的候选面）＋ `schema.py` 新表 `lit_candidates` ＋
 #:      `store.py` 接线 ＋ `specs/a.py` 的 `boundary` 换 97 字 ⇒
-#:      **工具面 86 → 93**、**A 的工具面 29 → 36**。提示词这一侧变的是 A 的 `boundary`：
-#:      伙伴表逐格印每个伙伴的 `duty` / `boundary` ⇒ 那段 97 字换掉之后**十格**都跟着换
-#:      （A 自己那一格也印），所以这一批与 `p164`「十条产出标准」同形：**十格全换值**。
-#:   ③ **第三条线在冻结前也落了进来**（`tools/conductor_tools.py` 的 `conductor.escalate`，
+#:      工具面 86 → 93、A 的工具面 29 → 36。提示词这一侧变的是 A 的 `boundary`：
+#:      伙伴表逐格印每个伙伴的 `duty` / `boundary` ⇒ 那段 97 字换掉之后十格都跟着换
+#:      （A 自己那一格也印），所以这一批与 `p164`「十条产出标准」同形：十格全换值。
+#:   ③ 第三条线在冻结前也落了进来（`tools/conductor_tools.py` 的 `conductor.escalate`，
 #:      14:14:46；它的 `roles=` 是 A–H + V + M 全十个）⇒ 十格的工具面各 +1 件、共用段多一句
 #:      "卡住就往上抛、不借别人的边绕"。同一条线的 `specs/c.py` 的 `edges=("D",)` 与
-#:      `cli.py` 的退出码 6 档**不进提示词正文**（伙伴表只印 `duty` / `boundary`，退出码与
+#:      `cli.py` 的退出码 6 档不进提示词正文（伙伴表只印 `duty` / `boundary`，退出码与
 #:      提示词无关）⇒ 它们只换快照那两格（`agent_surface_snapshot.json` 的 `edges` /
 #:      `tool_surface_snapshot.json` 的 `cli`），不换这里的摘要。
-#:   ④ **C 的两句假话**（`specs/c.py` 的 `boundary` + `local_notes` / `agent_prompts._FACULTY_LOCAL`
+#:   ④ C 的两句假话（`specs/c.py` 的 `boundary` + `local_notes` / `agent_prompts._FACULTY_LOCAL`
 #:      逐字同步的那一句）：`edges=("D",)` 落地后"你的可召唤边是空的""你自己不发请求（边是空的）"
 #:      都成了假话 ⇒ 只删掉"边是空的"那个断言（"你只能把候选交给 D" / "要有人往下做就走 D
-#:      （你只发这一种请求）"），其余一字不动。换值的格是 **C 自己 + 它的可见伙伴那几格**
+#:      （你只发这一种请求）"），其余一字不动。换值的格是 C 自己 + 它的可见伙伴那几格
 #:      （B / C / D / F / M），A / E / G / H / V 逐字未动。
-#:      于是工具面在这一刻的读数是 **94**（86 + 7 件 `lit.*` + 1 件 `conductor.escalate`）、
-#:      A 的工具面 **37** —— 比这一批开工时的计划（93 / 36）多一格，因为那条线先落地了。
-#:      这一格号钉的是**冻结那一刻的树**：逐文件 sha256 记在本次收口回报里，事后要判
+#:      于是工具面在这一刻的读数是 94（86 + 7 件 `lit.*` + 1 件 `conductor.escalate`）、
+#:      A 的工具面 37 —— 比这一批开工时的计划（93 / 36）多一格，因为那条线先落地了。
+#:      这一格号钉的是冻结那一刻的树：逐文件 sha256 记在本次收口回报里，事后要判
 #:      "这一版号说的是哪一份提示词"，以那组 sha256 为准，不以日期为准。
-#: 走查口径与 `p164` 那一格相同：**`_FROZEN_PROMPT_DIGESTS` 是逐格现算的，这里不预先猜**
+#: 走查口径与 `p164` 那一格相同：`_FROZEN_PROMPT_DIGESTS` 是逐格现算的，这里不预先猜
 #: （本批的现算读数是十格全换值，见 `tests/test_agent_prompts.py` 那张表的批注）。
-#: ⏱ **冻结时刻（三跳，写清是因为树一直在动）**：十格摘要首冻 **2026-10-20 14:20**；
+#: ⏱ 冻结时刻（三跳，写清是因为树一直在动）：十格摘要首冻 2026-10-20 14:20；
 #: 那之后第三条线在 14:36 又改了 `conductor.escalate` 的 `returns` 声明（只动快照那一格，
-#: 不动任何提示词正文）⇒ 两份 golden 在 **14:40 复冻一次**；再之后主控裁定补上 ④（C 的两句
-#: 假话，14:57）⇒ 十格表按新树重算、两份 golden 在 **15:00 第三跳复冻**。
-#: 所以这一格号对应的是 **2026-10-20 15:00 那一刻的树**：那一刻逐文件的 sha256 记在本次
+#: 不动任何提示词正文）⇒ 两份 golden 在 14:40 复冻一次；再之后主控裁定补上 ④（C 的两句
+#: 假话，14:57）⇒ 十格表按新树重算、两份 golden 在 15:00 第三跳复冻。
+#: 所以这一格号对应的是 2026-10-20 15:00 那一刻的树：那一刻逐文件的 sha256 记在本次
 #: 收口回报里（`agent_prompts.py` / `agent_skills.py` / `litstage.py` / `search_tools.py` /
 #: `conductor_tools.py` / `conductor.py` / `agent_loop.py` / `schema.py` / `store.py` /
 #: `specs/a.py` / `specs/c.py` / `cli.py` 逐个）。
@@ -4269,7 +4269,7 @@ EVIDENCE_CONTRACT = """\
 
 
 
-#: 锚漂移的句子都换掉了；**块数与切块位置一字不动**（`_PAPER_BLOCK_NAMES` 按空行切 10 块，
+#: 锚漂移的句子都换掉了；块数与切块位置一字不动（`_PAPER_BLOCK_NAMES` 按空行切 10 块，
 
 
 
@@ -5841,15 +5841,15 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-                       # ⚠️ 2026-10-16 更正：这里原写"主控不许直接控制 **B** / F / V"，
+                       # 2026-10-16 更正：这里原写"主控不许直接控制 B / F / V"，
 
 
 
-                       # 而**边表实测** `ALLOWED_EDGES['M'] = ['A','B','C','D','E','G','H']`
+                       # 而边表实测 `ALLOWED_EDGES['M'] = ['A','B','C','D','E','G','H']`
 
 
 
-                       # —— **B 在 M 的出边里**（7 条）。那句话是旧读数，按边表改掉。
+                       # —— B 在 M 的出边里（7 条）。那句话是旧读数，按边表改掉。
 
 
 
@@ -5877,7 +5877,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-        # ⚠️ **2026-10-16（业主口径）**：这里**不再印"可调用动作（必填…）"**。
+        # 2026-10-16（业主口径）：这里不再印"可调用动作（必填…）"。
 
 
 
@@ -5885,7 +5885,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-        # **不指定能力**。M 能看到的只是各角色描述，看不到具体的工具箱与动作，
+        # 不指定能力。M 能看到的只是各角色描述，看不到具体的工具箱与动作，
 
 
 
@@ -5893,7 +5893,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-        # 所以伙伴行只剩：**职责 ＋ 它交付什么 ＋ 它自己的边界 ＋ 立场暗示 ＋ 唤不唤得起**。
+        # 所以伙伴行只剩：职责 ＋ 它交付什么 ＋ 它自己的边界 ＋ 立场暗示 ＋ 唤不唤得起。
 
 
 
@@ -5925,7 +5925,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-            # 第十一趟 T5 的 8 条被拒**全是 M 写的别人家参数**（`claims` / `testable` /
+            # 第十一趟 T5 的 8 条被拒全是 M 写的别人家参数（`claims` / `testable` /
 
 
 
@@ -6885,9 +6885,9 @@ def _lean_switch() -> tuple[bool, str]:
 
 
 
-        # 2026-10-17（Lean 审计 S4）：原来这里 `return True, "unreadable"` —— **读不懂按"开着"走**，
+        # 2026-10-17（Lean 审计 S4）：原来这里 `return True, "unreadable"` —— 读不懂按"开着"走，
         # 与 settings 的 fail-closed 方向相反，而且 `where` 表里 "unreadable" 那格只挂在关分支
-        # ⇒ 那一格是**死分支**。现在统一成 fail-closed：读不懂 = 当关，文案里点名。
+        # ⇒ 那一格是死分支。现在统一成 fail-closed：读不懂 = 当关，文案里点名。
         return False, "unreadable"
 
 
@@ -7248,7 +7248,7 @@ def toolchain_facts_text() -> str:
 
 
 
-    # 2026-10-17（Lean 审计 S1）：**第一行必须是开关状态** —— 六处提示词都写"看第一行"，
+    # 2026-10-17（Lean 审计 S1）：第一行必须是开关状态 —— 六处提示词都写"看第一行"，
     # 而原来第一行是标题、状态在第二行；开分支还全篇没有"已开启"三个字。
     lines = ["- Lean 形式化：**已开启**（`lean_enabled = true`）⇒ 本会话**可以**走形式化这条路",
              "这台机器上的证明工具链（现算读数，不是记忆）：", f"- 检查器：{found}"]
@@ -7695,16 +7695,16 @@ _NO_PARENT_LIMITS = ("这一次没有读到策略读数 ⇒ 派活按最保守�
 
 
 
-#: 开场那条 user 消息里「现在的接线态」那一栏的**唯一渲染口**（2026-10-21 从 system 挪出来）。
+#: 开场那条 user 消息里「现在的接线态」那一栏的唯一渲染口（2026-10-21 从 system 挪出来）。
 #:
-#: 为什么挪：`host.wiring_status` 的读数随**伙伴配置**变（谁配了 provider / key），而它此前
+#: 为什么挪：`host.wiring_status` 的读数随伙伴配置变（谁配了 provider / key），而它此前
 #: 就是 system 里 `PARTNER_AVAILABILITY`（段序 4520）那一段的全部内容 —— 换一次配置，
 #: M 的 system 从第 31,8xx / 50,1xx 字符（63%）处就分家（本机实测，判据
 #: `tests/test_cross_run_prefix_is_reused.py::test_two_partner_configs_render_the_same_system`）
 #: ⇒ 那 37% 的前缀一个 token 都复用不了。它现在只出现在开场那一条 user 消息里
 #: （消息不是前缀：换一趟活换的是消息）。
 #:
-#: 三态照旧：`None` = 这一次**没读到**读数 —— 它不等于"全都接线了"，所以这一栏写
+#: 三态照旧：`None` = 这一次没读到读数 —— 它不等于"全都接线了"，所以这一栏写
 #: "（没有读数…）"，而不是把所有伙伴都写成 wired（那会把两件处置方向相反的事混成一件）。
 def wiring_text(availability: Mapping[str, str] | None) -> str:
     """这一次的接线态（`- 伙伴：状态` 逐行 + 一句"派活前先看它"）。"""
@@ -7718,7 +7718,7 @@ def wiring_text(availability: Mapping[str, str] | None) -> str:
         "不如改派能做的，或如实说明缺什么。" if unusable else "")
 
 
-#: `PARTNER_AVAILABILITY` 在 system 里剩下的那一句指路语（**逐字节静态**）。
+#: `PARTNER_AVAILABILITY` 在 system 里剩下的那一句指路语（逐字节静态）。
 #:
 #: 两条纪律与 `promptstability.SYSTEM_PLACEHOLDERS` 同源：①不写状态（写进去就等于把这一段
 #: 前缀绑在这一份伙伴配置上）；②指得出真值在哪（开场那条 user 消息的第一栏）。
@@ -7730,10 +7730,10 @@ PARTNER_WIRING_POINTER = (
     "写进段里，换个配置之后这一处往后的前缀就一个 token 都复用不了。）"
 )
 
-#: `PARENT_LIMITS` 在 system 里剩下的那一半：口径与处置（**没有一个数字**）。
+#: `PARENT_LIMITS` 在 system 里剩下的那一半：口径与处置（没有一个数字）。
 #:
 #: 另一半（四类上限的具体数字 + 墙钟 + 你现在在深度几）按同一口径挪进了开场那条 user
-#: 消息的「派活上限」：数字由 `Policy` 现算，而 `Policy` 是**每一趟 run 的**
+#: 消息的「派活上限」：数字由 `Policy` 现算，而 `Policy` 是每一趟 run 的
 #: （`cli.py` 用 `Policy(wall_clock_sec=…, usd_budget=…)` 现造）⇒ 换一次 run 的配置就
 #: 换一段字节，而这一段此前在 M 的 system 里位于第 ~88% 处（第二个断点）。
 #: 留在这里的两条"怎么处置"与数字无关，任何一趟都该读到 —— 它们正是这一段存在的理由。
@@ -7869,7 +7869,7 @@ def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> s
 
 
     #: 深度那一句里的"你现在在深度 X"：system 那一侧走 `{{depth}}` 变量插值，
-    #: 而这一段现在念在**开场 user 消息**里（不经过 `promptkit`），所以由调用方把
+    #: 而这一段现在念在开场 user 消息里（不经过 `promptkit`），所以由调用方把
     #: 现成的数字递进来；不递（审计/判据直呼）就原样留 `{{depth}}` —— 两种读法各答
     #: 各的问题，谁也不冒充谁。
     depth_text = "{{depth}}" if depth is None else str(int(depth))
@@ -8166,7 +8166,7 @@ def profiles_markdown(*, registry: Any = None,
 
 
 
-    ⚠️ **2026-10-16（业主口径）**：这份文件**不再印任何角色的动作与政策**。
+    2026-10-16（业主口径）：这份文件不再印任何角色的动作与政策。
 
 
 
@@ -8278,7 +8278,7 @@ def profiles_markdown(*, registry: Any = None,
 
 
 
-        # ⚠️ **2026-10-16（业主口径 S1/S2）**：这里**删掉了两段**，它们都会把
+        # 2026-10-16（业主口径 S1/S2）：这里删掉了两段，它们都会把
 
 
 
@@ -8286,11 +8286,11 @@ def profiles_markdown(*, registry: Any = None,
 
 
 
-        #   ① "**对外可被调用的动作**" + `_params_hint(a)` —— 逐条印动作名与必填参数；
+        #   ① "对外可被调用的动作" + `_params_hint(a)` —— 逐条印动作名与必填参数；
 
 
 
-        #   ② "**政策**" —— policy 原文里点着动作名（例如 D 那条写着 `F.create_plan`）。
+        #   ② "政策" —— policy 原文里点着动作名（例如 D 那条写着 `F.create_plan`）。
 
 
 
@@ -8298,7 +8298,7 @@ def profiles_markdown(*, registry: Any = None,
 
 
 
-        # 看不到具体的工具箱与动作」；**2026-10-16 追加**：「对于其它智能体派子智能体，
+        # 看不到具体的工具箱与动作」；2026-10-16 追加：「对于其它智能体派子智能体，
 
 
 
@@ -8306,7 +8306,7 @@ def profiles_markdown(*, registry: Any = None,
 
 
 
-        # 留在文件里，动作与政策**只在角色自己的提示词里**（那才是它自己要看的那一份）。
+        # 留在文件里，动作与政策只在角色自己的提示词里（那才是它自己要看的那一份）。
 
 
 
@@ -8314,7 +8314,7 @@ def profiles_markdown(*, registry: Any = None,
 
 
 
-    # 2026-10-17（Lean 审计 S6）：本函数原来**完全不看开关** —— 真机 `projects/t2r/AGENT-PROFILES.md:56`
+    # 2026-10-17（Lean 审计 S6）：本函数原来完全不看开关 —— 真机 `projects/t2r/AGENT-PROFILES.md:56`
     # 在关掉 Lean 的机器上仍印着「E：数值实验与形式化验证…」。同一套"无 Lean"改写在这里套一次，
     # 于是角色画像与角色提示词不会再自相矛盾（改写是幂等的：开着时逐字返回原文）。
     return _apply_no_lean_variant("\n".join(out).rstrip() + "\n")
@@ -8393,16 +8393,16 @@ def write_profiles(root: str | Path, *, registry: Any = None,
 
 
 
-#: 「这一次运行的事实」那十四格的值与缺省句（**唯一来源**）。
+#: 「这一次运行的事实」那十四格的值与缺省句（唯一来源）。
 #:
 #: 为什么抽成函数（2026-10-21）：这些事实从 system 挪进了 user 消息，于是它们的值有
-#: **两个**读者 —— `role_prompt_registry`（system 模板里的变量，经
+#: 两个读者 —— `role_prompt_registry`（system 模板里的变量，经
 #: `promptstability.split_facts` 换成 `SYSTEM_PLACEHOLDERS` 那段指路语）与
-#: `agent_loop._opening_transcript`（user 消息里**真正**念出来的原值）。
+#: `agent_loop._opening_transcript`（user 消息里真正念出来的原值）。
 #: 两处各写一份缺省句，"留空时说什么"迟早会漂，而漂了没有任何判据会红 ——
 #: 模型会在同一个问题上读到两种说法。
 #:
-#: 缺省**必须是一句人话**（不是空串）：`promptkit` 的严格插值把空值当失败，
+#: 缺省必须是一句人话（不是空串）：`promptkit` 的严格插值把空值当失败，
 #: 而"留空"与"没有"在模型眼里长得一样（业主 T21 附逐字要求过这一点）。
 def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
                  depth: int = 1, parent_task_id: str = "", children: str = "",
@@ -8410,7 +8410,7 @@ def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
                  notebook: str = "", user_replies: str = "",
                  workspace_root: str = "",
                  availability: Any = None, parent_limits: str = "") -> dict[str, str]:
-    """这十四格事实的字符串值（**缺省句也在这里**，一处定义、两个读者）。
+    """这十四格事实的字符串值（缺省句也在这里，一处定义、两个读者）。
 
     键序与改前那张字面量逐格一致（`prompt_audit["variables"]` 是排序过的，
     但"顺序只在能读出来的地方才有意义"）：
@@ -8446,11 +8446,11 @@ def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
         # 换一次配置 ⇒ system 里那两段（段序 4520 / 5210，M 岗实测断点 63% 与 88%）之后
         # 的前缀全部作废。现在它们的真值只在这里念一遍（`_opening_transcript`）。
         #
-        # `availability` 收三种形态（**各有真实调用方**，不是一个宽松的入口）：
+        # `availability` 收三种形态（各有真实调用方，不是一个宽松的入口）：
         #   - `Mapping`：直呼渲染 API 的调用方（`host.write_profiles` / 判据夹具）给的就是它；
         #   - `str`：`promptstability.split_facts` 把 `{{availability}}` 换成静态替身之后
         #     的那一份（system 那一侧读到的是它，而它不该再被渲染一次）；
-        #   - `None`：这一次没读到读数（三态里的第三态，**不是**"全都接线了"）。
+        #   - `None`：这一次没读到读数（三态里的第三态，不是"全都接线了"）。
         "availability": (availability.strip() if isinstance(availability, str)
                          else wiring_text(availability)) or wiring_text(None),
         "parent_limits": parent_limits or _NO_PARENT_LIMITS,
@@ -8669,7 +8669,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
         #: 这十二格是「这一趟的事实」—— 值与缺省句由 `prompt_facts` 一处给（2026-10-21）：
-        #: 它们从 system 挪进了 user 消息，于是有**两个**读者 —— 这里的 system 模板
+        #: 它们从 system 挪进了 user 消息，于是有两个读者 —— 这里的 system 模板
         #: （经 `promptstability.split_facts` 换成静态指路语），与
         #: `agent_loop._opening_transcript`（user 消息里念出来的原值）。
         #: 两处各写一份缺省句，"留空时说什么"就会漂，而漂了没有任何判据会红。
@@ -8709,21 +8709,21 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
         reg.variable(name, value)
 
-    #: **未收编的本地材料**（业主 2026-10-16 的 T5 口径："直接建工作区、把 PDF 丢进去，
+    #: 未收编的本地材料（业主 2026-10-16 的 T5 口径："直接建工作区、把 PDF 丢进去，
     #: 看 M 一上来会不会注意到它们并让 A 收编"）。
     #:
     #: 为什么要有这一格：`WORKSPACE_FACTS` 此前只报"根目录 / 表清单 / 提示词版本"
-    #: ⇒ **提示词里根本没有这件事**，M 只能碰运气想起来 `fs.list source/`。
-    #: 与 `toolchain_facts` 同一条既有裁定：**事实必须进模型看得见的地方**。
+    #: ⇒ 提示词里根本没有这件事，M 只能碰运气想起来 `fs.list source/`。
+    #: 与 `toolchain_facts` 同一条既有裁定：事实必须进模型看得见的地方。
     #:
-    #: 三态：读得到 `data/literature.json` 才说话；读不到 ⇒ 返回空串（不说），**不编一个 0**。
-    # 它是**动态段**（返回空串 = 这一段这次不存在）—— 不能用 `{{变量}}`：
+    #: 三态：读得到 `data/literature.json` 才说话；读不到 ⇒ 返回空串（不说），不编一个 0。
+    # 它是动态段（返回空串 = 这一段这次不存在）—— 不能用 `{{变量}}`：
     # `promptkit._interpolate` 把"空值"当失败（"空值与缺失是两件事"），
     # 而这里最常见的正是"没有未收编的材料"。
     _ws_root = str(facts.get("workspace_root") or "")
     reg.section(Section(
         "LOCAL_MATERIALS", SECTION_ORDERS["WORKSPACE_FACTS"] + 10,
-        # 闭包捕获 `workspace_root`：它是**全局变量**，`Scope.facts` 这一路是空的
+        # 闭包捕获 `workspace_root`：它是全局变量，`Scope.facts` 这一路是空的
         # （`system_prompt` 里是 `render(Scope(role=role))`）—— 我第一次就栽在这里，
         # 段注册了却永远返回空串（"没有这一行"）。
         lambda _scope, _root=_ws_root: _pending_local_materials(_root)))
@@ -9010,7 +9010,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-    # 2026-10-21：伙伴行里**不再**带"（现在没接线：X）"那个标记 —— 它在 system 里，
+    # 2026-10-21：伙伴行里不再带"（现在没接线：X）"那个标记 —— 它在 system 里，
     # 换一次伙伴配置就把这一段前缀劈成两半（`partners_lines` 仍认 `availability`：
     # 落盘的 `PROFILES_FILE` 画像要用它，而那份文件不是前缀，信息一个字不丢）。
     partners = partners_lines(role)
@@ -9025,7 +9025,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-    # 2026-10-21：这一段从「这一次的接线态」换成**静态指路语**（逐字节静态）。
+    # 2026-10-21：这一段从「这一次的接线态」换成静态指路语（逐字节静态）。
     #
     # 根因：`host.wiring_status` 随伙伴配置变 ⇒ 这一段一变，它后面那 37% 的前缀
     # 全部作废（M 岗实测断点 31,8xx / 50,1xx = 63%，判据
@@ -9136,7 +9136,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-    # 这一岗的 skills：**只放索引**（slug + 一句话 + 什么时候读它 + 盘上路径）。
+    # 这一岗的 skills：只放索引（slug + 一句话 + 什么时候读它 + 盘上路径）。
 
 
 
@@ -10020,10 +10020,10 @@ def _pending_local_materials(root: str) -> str:
 
     业主 2026-10-16 的 T5 口径：「直接建工作区，把我下好的 PDF 丢在工作区，启动系统，
     看 M 一上来会不会注意到它们并提醒 A 收编」。而 `WORKSPACE_FACTS` 此前只报
-    根目录/表清单/版本 ⇒ **提示词里没有这件事**，M 只能碰运气想起来 `fs.list`。
-    与 `toolchain_facts` 同一条既有裁定：**事实必须进模型看得见的地方**。
+    根目录/表清单/版本 ⇒ 提示词里没有这件事，M 只能碰运气想起来 `fs.list`。
+    与 `toolchain_facts` 同一条既有裁定：事实必须进模型看得见的地方。
 
-    三态纪律：**读不到 `data/literature.json` 就返回空串（不说）**，绝不编一个 `0` ——
+    三态纪律：读不到 `data/literature.json` 就返回空串（不说），绝不编一个 `0` ——
     "没读成"与"都收编了"是两件事。
     """
     root = str(root or "").strip()

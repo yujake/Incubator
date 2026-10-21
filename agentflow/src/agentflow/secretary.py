@@ -87,6 +87,18 @@ DECISION_REJECTED = "拒绝了秘书的格式洗"
 #: 三态：判不了是正经结论之一（没缝 / 开关关着 / 模型没回），不是"先收了再说"。
 STATEMENT_VERDICTS = ("合格", "太平凡", "判不了")
 
+#: 非平凡性的四档（业主 2026-10-21）：**它回答"多不平凡"，与 `STATEMENT_VERDICTS`（"收不收"）是两根轴**。
+#:
+#: | 档 | 语义（业主原话） |
+#: |---|---|
+#: | 1 | 刚过 B 侧的收录门槛，结论有价值 |
+#: | 2 | 证明方法都是平凡的，但工作量较大 |
+#: | 3 | 需要用较多的技巧或跨领域工具 |
+#: | 4 | 需要天才般的洞察力，或思维链极长，或是偏离主流研究方向的神奇构造 |
+#:
+#: `0` 不是一档，是"判不了"（与三态纪律一致：没查成不许读成第 1 档）。
+NONTRIVIALITY_LEVELS: tuple[int, ...] = (1, 2, 3, 4)
+
 #: 判断类别 → 它允许的结论词表（唯一一处把"哪类判断有哪些结论"写下来的地方）。
 #:
 #: 加一类判断时只加一行：`Secretary.JUDGE_KINDS` 与 `judge()` 的校验都从这张表派生，
@@ -1376,6 +1388,20 @@ class Secretary:
                     "cost": {"ledger": "", "reason": "没发调用（沿用本趟第一次的结论）"}}
         got = self.judge("statement_aesthetic", context, task_id=task_id)
         if got.get("checked"):
+            # 2026-10-21：同一趟判断的第二个输出 —— 非平凡性档位（1–4；0 = 判不了）。
+            # 三态纪律：0 不许被下游读成"第 1 档"，所以它同时带 tri="unjudged"。
+            level = _nontriviality_level(got.get("nontriviality"))
+            got = {**got, "nontriviality": level,
+                   "nontriviality_basis": str(got.get("nontriviality_basis") or ""),
+                   "nontriviality_tri": "computed" if level else "unjudged"}
+            root = getattr(self, "root", None)
+            if root is not None:
+                try:
+                    append_nontriviality(root, statement_full=str(context.get("statement_full") or ""),
+                                         level=level, basis=got["nontriviality_basis"],
+                                         role=str(self.role or ""), task_id=str(task_id or ""))
+                except Exception as exc:  # noqa: BLE001 - 落盘失败不影响判断本身
+                    got["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
             # 只记判过的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
             self._statement_verdicts[key] = dict(got)
         return got
@@ -4086,6 +4112,82 @@ class Secretary:
             pass
 
 
+#: 非平凡性档位的旁支台账（**不新增表、不改 schema**）：一行 = 一次判断。
+#: 为什么用旁支而不是 `statements` 的列：档位会随研究进展变（T4 造出梯子后要降到 T2/T3），
+#: 它是**时间序列**不是记录属性；append-only 的旁支天然保留"降档发生过"的完整历史。
+#: 键用 `statement_sha256` 而不是 `stmt_id`：判断发生在入库**之前**，那时还没有编号。
+NONTRIVIALITY_LEDGER = "nontriviality.jsonl"
+
+
+def nontriviality_path(root: str | Path) -> Path:
+    """档位旁支台账的路径：`out/secretary/nontriviality.jsonl`。"""
+    return Path(root) / "out" / "secretary" / NONTRIVIALITY_LEDGER
+
+
+def _statement_sha(statement_full: str) -> str:
+    return hashlib.sha256(str(statement_full or "").strip().encode("utf-8")).hexdigest()
+
+
+def _nontriviality_level(value: Any) -> int:
+    """把模型给的档位收敛到 `0|1|2|3|4`（别的一律当 0 = 判不了，**不许当 1**）。
+
+    只认**整数**（或纯数字字符串）：`1.9` 这种不是"第 1 档"，它是坏输入 —— 四舍五入会把
+    坏输入变成一个合法档位，那正是"静默降级"的形态。
+    """
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        got = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        got = int(value.strip())
+    else:
+        return 0
+    return got if got in NONTRIVIALITY_LEVELS else 0
+
+
+def append_nontriviality(root: str | Path, *, statement_full: str, level: int,
+                         basis: str = "", role: str = "", task_id: str = "") -> None:
+    """追加一行档位读数（append-only；显式 LF，Windows 上不留 CRLF）。"""
+    path = nontriviality_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"at": _now_iso(), "statement_sha256": _statement_sha(statement_full),
+           "statement_chars": len(str(statement_full or "")),
+           "nontriviality": _nontriviality_level(level), "basis": str(basis or ""),
+           "role": str(role or ""), "task_id": str(task_id or "")}
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:
+    """这条命题**当前**的非平凡性档位（折叠旁支台账里同一个 sha 的最后一行）。
+
+    三态：读到 ⇒ `{"tri": "computed", "level": 1..4, "basis": …}`；
+    没有记录 / 全是 0 ⇒ `{"tri": "unknown", "level": 0, …}`（**不是 1**）。
+    """
+    path = nontriviality_path(root)
+    sha = _statement_sha(statement_full)
+    if not path.is_file():
+        return {"tri": "unknown", "level": 0, "basis": "", "at": "",
+                "reason": f"{path} 不在盘上 ⇒ 这条命题还没有档位读数"}
+    last: dict[str, Any] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if str(row.get("statement_sha256") or "") == sha:
+            last = row
+    if not last:
+        return {"tri": "unknown", "level": 0, "basis": "", "at": "",
+                "reason": "台账里没有这条命题的档位读数"}
+    level = _nontriviality_level(last.get("nontriviality"))
+    return {"tri": "computed" if level else "unknown", "level": level,
+            "basis": str(last.get("basis") or ""), "at": str(last.get("at") or "")}
+
+
 def _judge_system(kind: str) -> str:
     """判断类的稳定头（进 `system` 那一位）：契约三句 + 这一类自己的问题。
 
@@ -4121,7 +4223,12 @@ def _judge_system(kind: str) -> str:
                "判『合格』时 basis 里必须给出那两条依据。"
                "判『判不了』= 材料不足（例如只有一句转述、没有逐字证明文本）——"
                "**不许因为「看起来像个定理」就判合格**（业主原话：这张收录表比综述好太多，"
-               "前提是里面不留平凡的）。")
+               "前提是里面不留平凡的）。"
+               "**另加两个字段（同一趟判断的第二个输出，不另发调用）**："
+               "nontriviality（整数 1-4：1=刚过收录门槛、结论有价值；2=方法都平凡但工作量大；"
+               "3=需要较多技巧或跨领域工具；4=需要天才般洞察/极长思维链/偏离主流的神奇构造；"
+               "判不了就给 0，**不许拿 1 冒充「没判」**）、"
+               "nontriviality_basis（一句话：凭什么判这一档）。")
     else:
         ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"
                "该重排成什么？判『建议重排』并在 reason 里给出重排后的说法；"

@@ -142,7 +142,7 @@ def write_initial(root: str | Path, total_usd: float, *, by: str = "user",
        于是它不是"静默覆盖"。
     """
     # 2026-10-17（store #10）：`add_usd` 有类型闸、`write_initial` 没有。`_coerce_usd`
-    # 读不出时返回 `None` —— 直接用它会让"总额度"静默写成 null，所以这里**明确拒绝**。
+    # 读不出时返回 `None` —— 直接用它会让"总额度"静默写成 null，所以这里明确拒绝。
     _usd = _coerce_usd(total_usd)
     if _usd is None:
         raise ValueError(f"总额度必须是**非负数字**，收到 {total_usd!r}；拒写（不写 null）")
