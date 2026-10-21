@@ -1,25 +1,21 @@
 """LLM 驱动的角色循环：模型决定调哪个工具、唤起谁、给谁留言，框架负责执行与留痕。
 
-`draft/28` §178 的实测：A-H 里六个角色一份提示词都没有（C 两处、D 一处钩子）；更根本的是，角色之间
-没有一条"由模型决定"的协作路径 —— `Conductor.summon` 是给编排层用的（`run_plan` 拿一份写死的计划去
-跑），于是"互相唤起"只发生在脚本里。这一层把三件事接起来：提示词（`agent_prompts`）、模型缝
-（`llmseam`，每次调用带版本与哈希落档）、工具与召唤（`ToolRegistry.call` 与 `Conductor.summon`，被拒的
-理由原样回到模型手里）。
+`draft/28` §178 的实测：A-H 里六个角色一份提示词都没有（C 两处、D 一处钩子）；更根本的是，角色之间没有一条"
+由模型决定"的协作路径 —— `Conductor.summon` 是给编排层用的（`run_plan` 拿一份写死的计划去跑），于是"互相唤起
+"只发生在脚本里。这一层把三件事接起来：提示词（`agent_prompts`）、模型缝（`llmseam`，每次调用带版本与哈希落
+档）、工具与召唤（`ToolRegistry.call` 与 `Conductor.summon`，被拒的理由原样回到模型手里）。
 
-循环形状（正典清单与条数只在 `SHAPES` 一处定义）：`{"tool": ...}` → `ToolRegistry.call(name, role=...)`，
-角色面不对就 `role_denied`；`{"summon": ...}` → `Conductor.summon(..., by=<本角色>)`；`{"message": ...}` →
-追加一条 `agent_message` 事件（持久，收件人下次运行时在收件箱里看到）；`{"final": ...}` → 收工，带它自报
-的证据 id。
+循环形状（正典清单与条数只在 `SHAPES` 一处定义）：`{"tool": ...}` → `ToolRegistry.call(name, role=...)`，角
+色面不对就 `role_denied`；`{"summon": ...}` → `Conductor.summon(..., by=<本角色>)`；`{"message": ...}` → 一
+条 `agent_message` 事件（持久，收件人下次运行时在收件箱里看到）；`{"final": ...}` → 收工，带自报证据 id。
 
-三态与"不许静默"：没接线 ⇒ 不发请求 + `stop_reason="not_wired"` 并落一条记录；坏 JSON ⇒ `bad_json_limit`
-（总数 `run.bad_json` 与连击 `run.bad_json_streak` 分开记，判据是连击，§68）；参数不是合法 JSON
-（`judge_bad_args`）另计 `run.bad_args` ⇒ `bad_args_limit`（§65）；没拿到可用回复（`judge_timeout` /
-`judge_output_limit` / `judge_no_reply:<kind>`）另计 `run.no_reply` ⇒ `model_timeout` /
-`model_output_limit`（判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`，读数见 2026-10-12 T2）；工具/
-召唤被拒带原因码并原样回给模型；步数或预算耗尽则停，`stop_reason` 如实写进运行记录。
-
-消息落进项目会话记录（`sessions.append`，不新增表）；"读过哪些"用 append-only 的 `agent_inbox` 事件登记
-⇒ "投递"可复算，而不是靠内存里的一个集合。
+三态与"不许静默"：没接线 ⇒ 不发请求 + `stop_reason="not_wired"` 并落一条记录；坏 JSON ⇒ `bad_json_limit`（总
+数 `run.bad_json` 与连击 `run.bad_json_streak` 分开记，判据是连击，§68）；参数不是合法 JSON（
+`judge_bad_args`）另计 `run.bad_args` ⇒ `bad_args_limit`（§65）；没拿到可用回复（`judge_timeout` /
+`judge_output_limit` / `judge_no_reply:<kind>`）另计 `run.no_reply` ⇒ `model_timeout` / `model_output_limit`
+（判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`，读数见 2026-10-12 T2）；工具/召唤被拒带原因码并原样回
+给模型；步数或预算耗尽则停，`stop_reason` 如实写进运行记录。消息落进项目会话记录（`sessions.append`，不新增
+表），"读过哪些"用 append-only 的 `agent_inbox` 事件登记 ⇒ "投递"可复算。
 """
 from __future__ import annotations
 
@@ -815,12 +811,12 @@ def _no_reply_line(step: int, problem: str, detail: str) -> str:
     """这一次没拿到可用的回复（`judge_timeout` / `judge_output_limit` / `judge_no_reply:*`）
     要回给它的那一句。
 
-    为什么不复用"坏 JSON"那一行（2026-10-12 T2 真机读数）：那一行纠正的是"它说错了"，而这里它什么都
-    没说；可行动的那句话是"把这一步拆小"—— 上限固定时，唯一由它控制的就是这一步要产出多少（单次请求
-    的耗时与这一步要产出的长度成正比）。
+    为什么不复用"坏 JSON"那一行（2026-10-12 T2 真机读数）：那一行纠正的是"它说错了"，而这里它什么都没说；可
+    行动的那句话是"把这一步拆小"—— 上限固定时，唯一由它控制的就是这一步要产出多少（单次请求的耗时与这一步要
+    产出的长度成正比）。
 
-    第三档（2026-10-15 T5 第 8 趟）：`judge_no_reply:<kind>` 是"我们根本没连上"（那一趟是 DNS），这一档
-    里它没有任何可改的地方 ⇒ 那一行不许写"把这一步拆小"，只如实说明并把同样的请求再发一次。
+    第三档（2026-10-15 T5 第 8 趟）：`judge_no_reply:<kind>` 是"我们根本没连上"（那一趟是 DNS），这一档里它
+    没有任何可改的地方 ⇒ 那一行不许写"把这一步拆小"，只如实说明并把同样的请求再发一次。
     """
     why = f"：{_clip(detail, 200)}" if detail else ""
     if problem == "judge_output_limit":
@@ -902,17 +898,15 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
                         parent_limits: str = "") -> str:
     """一趟循环开头的简报（任务 / 收件箱 / 板 / 父与子 / 用户回答 / 处境）。
 
-    单独抽出来是为了让 `resume_transcript` 能重建同一段开头（事实在 `agent_run_start` 事件里，收件箱那
-    一段按当前盘上的状态现读 —— 续跑本就该听到新到的留言）。
-
-    2026-10-21 起这十格从 system 搬来（跨 run 也命中缓存）：`AGENT_IDENTITY`（段序 0）的 `task_id` /
-    `depth` / `children` / `parent_task_id` / `summoned_by`、`TASK_FRAME`（4200）的 `task` / `inbox` /
-    `board` / `user_replies`、`WORKSPACE_FACTS`（10000）的 `workspace_root` 都是"这一趟的事实"（实测两份
-    不同的活从第 95 个字符起就不同 ⇒ 换一趟活第一次调用 `hit=0`）；现在它们只在这条消息里念一遍（缺省句
-    的唯一来源仍是 `agent_prompts.prompt_facts`），system（前缀）逐字节不变。放在开场而非每步尾部：它们
-    一趟之内不变，增量另有通道（`AgentLoop._hear`）。第二批 `availability` / `parent_limits` 同搬（属
-    "这一次 run 的配置"，原住 `PARTNER_AVAILABILITY` 4520 / `PARENT_LIMITS` 5210，换配置在 63% / 88% 处
-    断开），system 只剩静态指路语（`PARTNER_WIRING_POINTER` / `PARENT_LIMITS_RULES`）。
+    单独抽出来是为了让 `resume_transcript` 能重建同一段开头（事实在 `agent_run_start` 事件里，收件箱那一段按当前盘上的
+    状态现读 —— 续跑本就该听到新到的留言）。
+    2026-10-21 起这十格从 system 搬来（跨 run 也命中缓存）：`AGENT_IDENTITY`（段序 0）的 `task_id` / `depth` /
+    `children` / `parent_task_id` / `summoned_by`、`TASK_FRAME`（4200）的 `task` / `inbox` / `board` / `user_replies`、
+    `WORKSPACE_FACTS`（10000）的 `workspace_root` 都是"这一趟的事实"（实测两份不同的活从第 95 个字符起就不同 ⇒ 换一趟
+    活第一次调用 `hit=0`）；现在只在这条消息里念一遍（缺省句唯一来源仍是 `agent_prompts.prompt_facts`），system（前缀）
+    逐字节不变 —— 放在开场而非每步尾部，因为它们一趟之内不变，增量另有通道（`AgentLoop._hear`）。第二批 `availability`
+    / `parent_limits` 同搬（属"这一次 run 的配置"，原住 `PARTNER_AVAILABILITY` 4520 / `PARENT_LIMITS` 5210，换配置在
+    63% / 88% 处断开），system 只剩静态指路语（`PARTNER_WIRING_POINTER` / `PARENT_LIMITS_RULES`）。
     """
     defaulted = AP.prompt_facts(task=task, summoned_by=summoned_by, task_id=task_id,
                                depth=depth, parent_task_id=parent_task_id,
@@ -1200,14 +1194,14 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
                       to: str = "ALL", sid: str | None = None) -> tuple[str, str]:
     """写一条插话：只有用户能发，只有主控 M 会收到（所有者 2026-10-08 裁定）。返回 `(编号, 问题)`。
 
-    逐字：「插话只有 M 可能受到用户的插话，处理学 dsh。」⇒ 这条通道收窄成用户 → M 一条，对应 DSH 里
-    "人在中途说话、在最近步边界被 steer"那一档（`draft/84` §8.3）；同伴之间传话走留言/交接手稿
-    （`draft/85` §2.1 的工作项）。权限判据落在这一层：拒绝时零写入并给一条可执行的说明。
+    逐字：「插话只有 M 可能受到用户的插话，处理学 dsh。」⇒ 这条通道收窄成用户 → M 一条，对应 DSH 里"人在中途
+    说话、在最近步边界被 steer"那一档（`draft/84` §8.3）；同伴之间传话走留言/交接手稿（`draft/85` §2.1 的工
+    作项）。权限判据落在这一层：拒绝时零写入并给一条可执行的说明。
 
-    历史（免得后人以为这条通道一直这么窄）：`draft/39` §3.11 二 D07，用户 2026-10-05 的口径是"广播改成
-    集体插话发送"；T18 收窄它之后 `conductor.stop(notify=True)` 的叫停广播改回留言（见
-    `conductor_tools`）。插话的送达方式（下一步开头单列一段【插话】、不打断当前步）一个字没改。编号由
-    脚本按会话内顺序发（`i-0001`…），模型不许自己编号。
+    历史（免得后人以为这条通道一直这么窄）：`draft/39` §3.11 二 D07，用户 2026-10-05 的口径是"广播改成集体插
+    话发送"；T18 收窄它之后 `conductor.stop(notify=True)` 的叫停广播改回留言（见 `conductor_tools`）。插话的
+    送达方式（下一步开头单列一段【插话】、不打断当前步）一个字没改。编号由脚本按会话内顺序发（`i-0001`…），
+    模型不许自己编号。
     """
     who = str(sender or "").strip()
     if who != U.USER:
@@ -1295,17 +1289,14 @@ def public_visibility(msg: Mapping[str, Any], *, parent_task_id: str = "",
     """一条公共频道留言对"我"可不可见（S6-a，业主 T20/T21 + 乙）。返回 `(可见, 读数)`。
 
     口径（`draft/86` §14.6 乙，逐条）：
-
     - `by_framework=True`（框架通报）⇒ 所有角色，读数 `framework`；
     - 带 `from_task_id` ⇒ 它的直接子级（`from_task_id == 我的父实例号`），读数 `instance`；
     - 带 `from_task_id` 但我不是它的子级 ⇒ 谁也（除它自己）看不到，读数 `not_my_parent`；
     - 老消息（没有 `from_task_id`）⇒ 按角色级回退 `from == 我父的角色`，读数 `role_fallback`；
-    - 老消息、而我连父角色都不知道 ⇒ 看不到（不许当成"全角色可见"，也不许一律丢掉历史），
-      读数 `unknown_parent`。
-
-    框架那一档必须留（T21 之后唯一的例外，`draft/86` §14.6 写了理由）：叫停是框架代表主控发的全树通知，
-    而工具层手上没有实例号、全树叫停又是安全件（听不到叫停的子孙会继续烧钱）；S4 的"沿边逐层下发"落地
-    后这一档退休。代理自己发的 public 必须带 `from_task_id`（`_do_message` 那一层受控拒绝）。
+    - 老消息、而我连父角色都不知道 ⇒ 看不到（不许当成"全角色可见"，也不许一律丢掉历史），读数 `unknown_parent`。
+    框架那一档必须留（T21 之后唯一的例外，`draft/86` §14.6 写了理由）：叫停是框架代表主控发的全树通知，而工具层手上没
+    有实例号、全树叫停又是安全件（听不到叫停的子孙会继续烧钱）；S4 的"沿边逐层下发"落地后这一档退休。代理自己发的
+    public 必须带 `from_task_id`（`_do_message` 那一层受控拒绝）。
     """
     if msg.get("by_framework"):
         return True, "framework"
@@ -1369,13 +1360,13 @@ def pending_wake(session_root: Path | str, role: str, *, sid: str | None = None,
 
     `{"checked", "pending", "count", "why"}`
 
-    只认"还没投递过的"留言：`inbox_digest` 的 `fresh` 是这一轮新渲染、且还没投递的 id，而
-    `mark_delivered` 刻意推迟到"模型真的被问过一次"才写 ⇒ 读过的旧留言不会一轮又一轮地开循环（那会把
-    "轮次已用尽"的停止变成死循环，而且烧钱）；三态：会话读不成 ⇒ `checked=False`，不许折成"没有新消息"
-    （折过去会把一次真的唤醒吞掉，而"有人叫我"在盘上是有痕迹的）。
+    只认"还没投递过的"留言：`inbox_digest` 的 `fresh` 是这一轮新渲染、且还没投递的 id，而 `mark_delivered`
+    刻意推迟到"模型真的被问过一次"才写 ⇒ 读过的旧留言不会一轮又一轮地开循环（那会把"轮次已用尽"的停止变成死
+    循环，而且烧钱）；三态：会话读不成 ⇒ `checked=False`，不许折成"没有新消息"（折过去会把一次真的唤醒吞掉，
+    而"有人叫我"在盘上是有痕迹的）。
 
-    不做"父代理循环里 sleep N 秒再看一次"（施工单 S-G 第 3 条逐字禁的形态）：那是 DSH 明确没有的东西，
-    而且会把墙钟吃掉；唤醒是事件驱动的 —— 事件就是"收件箱里有新的、还没投递的留言"。
+    不做"父代理循环里 sleep N 秒再看一次"（施工单 S-G 第 3 条逐字禁的形态）：那是 DSH 明确没有的东西，而且会
+    把墙钟吃掉；唤醒是事件驱动的 —— 事件就是"收件箱里有新的、还没投递的留言"。
     """
     text, fresh, problems = inbox_digest(session_root, role, sid=sid, window=None,
                                         parent_task_id=parent_task_id,
@@ -1390,13 +1381,13 @@ def pending_wake(session_root: Path | str, role: str, *, sid: str | None = None,
 def message_source(record: Mapping[str, Any]) -> dict[str, str]:
     """一条留言的来源读数（S-G）：`{kind, form, summary}` —— DSH 的 `source` 那一格。
 
-    为什么必须搬（施工单 S-G 逐字）：DSH 的通知是带 `source{kind, form:"notice", summary}` 的消息
-    （`dsh-subagent:663-680`），而我们的 `heard` 是裸 dict ⇒ "这条是子代理结算 / 插话 / 广播"在读数上分
-    不开；分开之后，"父收到的哪一条是孩子的交差通报"就有了机器可判的答案。
+    为什么必须搬（施工单 S-G 逐字）：DSH 的通知是带 `source{kind, form:"notice", summary}` 的消息（
+    `dsh-subagent:663-680`），而我们的 `heard` 是裸 dict ⇒ "这条是子代理结算 / 插话 / 广播"在读数上分不开；
+    分开之后，"父收到的哪一条是孩子的交差通报"就有了机器可判的答案。
 
-    四种 kind（取值刻意少而稳，且都是盘上已有的字面量）：`subagent-settled`（框架投递的通报，
-    `by_framework` 为真，即 `_emit_settlement` 那一类）、`broadcast`（`channel == "public"`）、`user`
-    （发信人是用户/主控以外的用户频道）、`message`（其余：角色之间的一条普通留言）。
+    四种 kind（取值刻意少而稳，且都是盘上已有的字面量）：`subagent-settled`（框架投递的通报，`by_framework`
+    为真，即 `_emit_settlement` 那一类）、`broadcast`（`channel == "public"`）、`user`（发信人是用户/主控以
+    外的用户频道）、`message`（其余：角色之间的一条普通留言）。
     """
     channel = str(record.get("channel") or "")
     sender = str(record.get("from") or "")
@@ -1418,14 +1409,14 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
     """发一条消息（append-only）。`to=PUBLIC` 是公共频道。返回 `(msg_id, 问题)`。
 
     编号口径：取现有最大号 + 1（`draft/83` D79）。旧写法"数一数有多少条 `agent_message` 再加一"在正常
-    append-only 会话里与 max+1 恰好相等，但只要一条坏行占号、或将来做了删除/搬迁就会撞上已用过的号 ——
-    而 `msg_id` 正是投递登记与消费判定的键（撞号 = 两条消息共享一个身份）。
+    append-only 会话里与 max+1 恰好相等，但只要一条坏行占号、或将来做了删除/搬迁就会撞上已用过的号 ——而
+    `msg_id` 正是投递登记与消费判定的键（撞号 = 两条消息共享一个身份）。
 
-    `from_task_id` / `by_framework`（S6-a）：公共频道的可见面靠这两格判（见 :func:`public_visibility`），
-    只在给了的时候写 —— 恒为假的键会让"谁都没写"与"框架特意写了假"长得一样。`extra`（2026-10-19）：
-    附加结构化键，并进同一条记录（不给 ⇒ 与从前逐字节相同），今天只有 `conductor.escalate` 用它带
-    `escalation{need,kind,evidence}`；不另发一条事件，因为收件箱是按 `agent_message` 收的
-    （:func:`read_messages` 只认这一种 kind），"父收到了"与"父拿到细节"必须是同一条。
+    `from_task_id` / `by_framework`（S6-a）：公共频道的可见面靠这两格判（见 :func:`public_visibility`），只
+    在给了的时候写 —— 恒为假的键会让"谁都没写"与"框架特意写了假"长得一样。`extra`（2026-10-19）：附加结构化
+    键，并进同一条记录（不给 ⇒ 与从前逐字节相同），今天只有 `conductor.escalate` 用它带
+    `escalation{need,kind,evidence}`；不另发一条事件，因为收件箱是按 `agent_message` 收的（:func:
+    `read_messages` 只认这一种 kind），"父收到了"与"父拿到细节"必须是同一条。
     """
     events, _problems = SS.read_session(session_root, sid=sid)
     used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
@@ -1499,15 +1490,14 @@ def inbox_digest(session_root: Path, role: str, *, sid: str | None = None,
                  parent_role: str = "") -> tuple[str, list[str], list[str]]:
     """收件箱摘要：`(文本, 这一轮新渲染出来、且还没投递的 id, 读会话时的问题)`。
 
-    `parent_task_id` / `parent_role` 转给 :func:`read_messages`（公共频道的可见面，S6-a）：谁读就得以谁
-    的身份读 —— 缺了这两格，公聊会按"老消息回退"那一档要么读不到、要么读成别人的（两种都是静默错）。
+    `parent_task_id` / `parent_role` 转给 :func:`read_messages`（公共频道的可见面，S6-a）：谁读就得以谁的身
+    份读 —— 缺了这两格，公聊会按"老消息回退"那一档要么读不到、要么读成别人的（两种都是静默错）。
 
-    第二个返回值是"渲染过的"而不是"全部未投递的"（`draft/83` §11 的 D75）：旧实现渲染 `messages[-8:]`
-    却把全部未投递的 id 交给调用方去 `mark_delivered` ⇒ 第 9 条及更早的留言既不进提示词、也不再是
-    fresh，永久静默丢失（真机：128 个会话 579 条留言里只有 8 条被标记读过）。现在两个集合只有一个来源：
-    这里返回什么，调用方就标什么。未投递优先（时间升序，老的先读），装得下再补最近的已投递项当背景，
-    装不下就在末尾写明"还有 K 条没渲染，下一步继续"；`window=None` = 不限窗口（`_hear` 那条路渲染多少
-    就标多少）。
+    第二个返回值是"渲染过的"而不是"全部未投递的"（`draft/83` §11 的 D75）：旧实现渲染 `messages[-8:]` 却把全
+    部未投递的 id 交给调用方去 `mark_delivered` ⇒ 第 9 条及更早的留言既不进提示词、也不再是 fresh，永久静默
+    丢失（真机：128 个会话 579 条留言里只有 8 条被标记读过）。现在两个集合只有一个来源：这里返回什么，调用方
+    就标什么。未投递优先（时间升序，老的先读），装得下再补最近的已投递项当背景，装不下就在末尾写明"还有 K 条
+    没渲染，下一步继续"；`window=None` = 不限窗口（`_hear` 那条路渲染多少就标多少）。
     """
     messages, problems = read_messages(session_root, role, sid=sid,
                                        parent_task_id=parent_task_id,
@@ -1540,16 +1530,15 @@ def board_digest(conductor: Any, *, my_task_id: str,
                  window: int | None = 8) -> tuple[str, list[str], list[str]]:
     """板摘要（挂在我名下的工作项进上下文）：`(文本, 这一轮渲染出来的项 id, 问题)`。
 
-    口径与 `inbox_digest` 同源（`draft/83` §11 的 D75）：渲染集合 = 标记集合 —— 返回什么 id 就
-    `mark_item_seen` 什么；"渲染 8 条却把全部未读标掉"同样会让第 9 项永久静默丢失。
+    口径与 `inbox_digest` 同源（`draft/83` §11 的 D75）：渲染集合 = 标记集合 —— 返回什么 id 就 `mark_item_seen` 什么；
+    "渲染 8 条却把全部未读标掉"同样会让第 9 项永久静默丢失。
 
-    "渲染即 seen"（业主 A3=甲）：板项的"已投递"标记就是它自己的状态机 —— `queued`/`claimed` ⇒ 还没被谁
-    读进任何一步；`seen` 由这一步写（`seen_by` = 我的台账号、`seen_step` = 第几步）；未 seen 的项才算
-    "新"，渲染了就标 seen，标了才不再进下一轮的窗口。
-
-    三态（不许把"没读成"折成"板上没事"）：没有 conductor / 没有台账号 / 读失败 —— 三种都返回一句带括号
-    的问题并进第三个返回值（`run.notes`），最后一种绝不返回"（板上没有要你处理的事）"；`window=None` =
-    不限窗口（与 `inbox_digest` 的 `_hear` 那一档同义）。
+    "渲染即 seen"（业主 A3=甲）：板项的"已投递"标记就是它自己的状态机 —— `queued`/`claimed` ⇒ 还没被谁读进任何一步；
+    `seen` 由这一步写（`seen_by` = 我的台账号、`seen_step` = 第几步）；未 seen 的项才算"新"，渲染了就标 seen，标了才不
+    再进下一轮的窗口。
+    三态（不许把"没读成"折成"板上没事"）：没有 conductor / 没有台账号 / 读失败 —— 三种都返回一句带括号的问题并进第三个
+    返回值（`run.notes`），最后一种绝不返回"（板上没有要你处理的事）"；`window=None` = 不限窗口（与 `inbox_digest` 的
+    `_hear` 那一档同义）。
     """
     if conductor is None:
         return "（读不到工作项板：这一趟没有 conductor 句柄）", [], []
@@ -1598,16 +1587,14 @@ def _sha(text: str) -> str:
 def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
     """把模型的一句输出判成一个形状。判不出来时返回 `("", {}, 原因)`。
 
-    两个「别名形态」（都只改"从哪取键"，不放宽任何校验）：① `{"name": …, "args": …}` 是
-    `{"tool": …}` 的别名（2026-10-03，§61）：真机（第八、十趟）模型有时这么写工具调用，此前被判"认不
-    出的形状"计进 `bad_json`、第 3 次就 `bad_json_limit`（第十趟的步 8/12/35；与 §65 的 `judge_bad_args`
-    是两件事：这里坏「形状」，那里坏「参数」）；② 扁平形态（2026-10-03，§68 的第十二趟读数）：
-    `{"role": …, "action": …, "params": {…}}` 是 `framework_summon` 的签名（第 13 步就这么死的），键集
-    只有一种含义（见 `FLAT_SHAPE_ALIASES`），拒收的代价是整趟作废。
+    两个「别名形态」（都只改"从哪取键"，不放宽任何校验）：① `{"name": …, "args": …}` 是 `{"tool": …}` 的别名（
+    2026-10-03，§61）：真机（第八、十趟）模型有时这么写工具调用，此前被判"认不出的形状"计进 `bad_json`、第 3 次就
+    `bad_json_limit`（第十趟的步 8/12/35；与 §65 的 `judge_bad_args` 是两件事：这里坏「形状」，那里坏「参数」）；
+    ② 扁平形态（2026-10-03，§68 的第十二趟读数）：`{"role": …, "action": …, "params": {…}}` 是 `framework_summon`
+    的签名（第 13 步就这么死的），键集只有一种含义（见 `FLAT_SHAPE_ALIASES`），拒收的代价是整趟作废。
 
-    理由：这些键集没有第二种含义，而"名字/签名"这一层本来就有歧义空间（带点的真名 vs 广告名，见
-    `_do_tool`）—— 多认一个写法比让整趟作废便宜；留痕照旧：payload 带 `shape_alias`（与 `_do_tool` 的
-    `aliased_from` 同一套做法）。
+    理由：这些键集没有第二种含义，而"名字/签名"这一层本来就有歧义空间（带点的真名 vs 广告名，见 `_do_tool`）—— 多
+    认一个写法比让整趟作废便宜；留痕照旧：payload 带 `shape_alias`（与 `_do_tool` 的 `aliased_from` 同一套做法）。
     """
     rewritten, alias = _unwrap_alias(data)
     if rewritten is not None:
@@ -2026,17 +2013,15 @@ def _callable_members(secretary: Any, *, owner: str
                       ) -> tuple[list[dict[str, Any]], str]:
     """我「能通话的人」 = 我的父 + 我的子（业主 2026-10-19，逐字：「只有这些编号能通话」）。
 
-    返回 `(成员, 问题)`；问题非空 ⇒ 名册这一格没读成（调用方按 `roster_unavailable` 处理 —— 不许当成
-    "名册里一个人都没有"，那会把一次读失败变成一次静默的按角色名投递）。
+    返回 `(成员, 问题)`；问题非空 ⇒ 名册这一格没读成（调用方按 `roster_unavailable` 处理 —— 不许当成"名册里一个人都
+    没有"，那会把一次读失败变成一次静默的按角色名投递）。每个成员：
+    `{"kind": "parent"|"child", "name", "task_id", "role", "brief", "retired"}`，`task_id` 是「绝对编号」（业主的要
+    求），`name` 是名册名（父的名册名记在祖父的名册里，由 `roster_view` 的 `parent` 那一格换算好；读不到就是空串）。
 
-    每个成员：`{"kind": "parent"|"child", "name", "task_id", "role", "brief", "retired"}`，`task_id` 是
-    「绝对编号」（业主的要求），`name` 是名册名（父的名册名记在祖父的名册里，由 `roster_view` 的 `parent`
-    那一格换算好；读不到就是空串）。
-
-    三件刻意的事：只读 `roster_view(owner=我自己)` 这一份（父在 `parent`、子在 `rows`，不另造视图）；
-    `limit` 给到极大（默认只回 20 行，用默认值数匹配会在第 21 个子代理上悄悄数错，`more` 是读数不是
-    判据）；父的 `checked` 为假（台账读不成 / 我这一行不在台账里）⇒ 集合「不完整」⇒ 报问题而不是"没有
-    父"（少一个成员会变成一次「误拒」，与"多放进来一个"一样错）。
+    三件刻意的事：只读 `roster_view(owner=我自己)` 这一份（父在 `parent`、子在 `rows`，不另造视图）；`limit` 给到极
+    大（默认只回 20 行，用默认值数匹配会在第 21 个子代理上悄悄数错，`more` 是读数不是判据）；父的 `checked` 为假（台
+    账读不成 / 我这一行不在台账里）⇒ 集合「不完整」⇒ 报问题而不是"没有父"（少一个成员会变成一次「误拒」，与"多放进来
+    一个"一样错）。
     """
     try:
         view = secretary.roster_view(owner=str(owner or ""), limit=1_000_000)
@@ -2081,24 +2066,18 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
                      my_task_id: str = "", sender: str = "") -> dict[str, Any]:
     """把收件人写法 `to` 解析成"名册上的那个成员"（业主 2026-10-19 的裁定）。
 
-    口径（业主逐字）：名册 = 自己的父与子（含绝对编号），「只有这些编号能通话」，其余 `to` 一律拒收
-    （不许按角色名随便发）。可接受的写法三种，且三种都必须落在"父 ∪ 子"里：①绝对编号（`task_id`，
-    业主点名的第一公民）；②名册名（`F1` / `D1`）；③角色名（`F`，只作便利写法 —— 名册内唯一匹配才算，
-    匹配到 0 个或多个都拒）。
-
-    返回三态（不许折平）：`checked`（名册读成了没有，`False` 不等于"名册里没有这个人"）、`how`（这一条
-    为什么这么投）、`kind`/`name`/`task_id`/`role`（解析到的成员）、`candidates`（同名多匹配时全部的候选
-    名册名）、`callable`（「你能通话的是：…」，每一张拒信都带它）、`refused`（受控拒绝的理由码，空串 =
-    没拒）、`error`（给人/给模型读的那句拒信）。
-
-    `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `#public` / `ALL` —— 公共频道
-    有自己那一套可见面判据，业主 T20/T21；②用户；③主控 M —— 代唤协议逐字要求任何角色都能把申请发给它；
-    外加主控当发信人时按角色名派活/通知那一档）、`roster_unavailable`（没有秘书 / 没有台账号 / 名册读
-    不成 ⇒ 退回现状按原来的那条路投递，调用方「必须」标出来 —— 这「不是」"名册校验通过"）、`parent` /
-    `child`（解析到了 ⇒「只投那一个」）、`member_retired`（已退役 ⇒ 受控拒绝，业主 B1：名字永久不复用）、
-    `not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名匹配到多个 ⇒ 受控拒绝 +
-    列候选，「不替你挑一个」）。
-
+    口径（业主逐字）：名册 = 自己的父与子（含绝对编号），「只有这些编号能通话」，其余 `to` 一律拒收（不许按角色名随便
+    发）。可接受的写法三种，且三种都必须落在"父 ∪ 子"里：①绝对编号（`task_id`，业主点名的第一公民）；②名册名（`F1` /
+    `D1`）；③角色名（`F`，只作便利写法 —— 名册内唯一匹配才算，匹配到 0 个或多个都拒）。
+    返回三态（不许折平）：`checked`（名册读成了没有，`False` 不等于"名册里没有这个人"）、`how`（这一条为什么这么投）、
+    `kind`/`name`/`task_id`/`role`（解析到的成员）、`candidates`（同名多匹配时全部的候选名册名）、`callable`（「你能通
+    话的是：…」，每一张拒信都带它）、`refused`（受控拒绝的理由码，空串 = 没拒）、`error`（给人/给模型读的那句拒信）。
+    `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `#public` / `ALL` —— 公共频道有自己那一套可
+    见面判据，业主 T20/T21；②用户；③主控 M —— 代唤协议逐字要求任何角色都能把申请发给它；外加主控当发信人时按角色名派活
+    /通知那一档）、`roster_unavailable`（没有秘书 / 没有台账号 / 名册读不成 ⇒ 退回现状按原来的路投递，调用方「必须」标
+    出来 —— 这「不是」"名册校验通过"）、`parent` / `child`（解析到了 ⇒「只投那一个」）、`member_retired`（已退役 ⇒ 受
+    控拒绝，业主 B1：名字永久不复用）、`not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名匹
+    配到多个 ⇒ 受控拒绝 + 列候选，「不替你挑一个」）。
     这一格「只判"发给谁"」，不判"能不能发"：协作边准入仍是 `message_admission` 那一份唯一实现。
     """
     out: dict[str, Any] = {
@@ -2354,13 +2333,13 @@ def child_outputs_of(result: Mapping[str, Any], *, own_task_id: str = "",
                      limit: int = 40) -> list[str]:
     """这次调用留下的、**可以被别人指到**的子产出（台账 id + 产物路径）。
 
-    为什么判据落在"字面量"上（而不是"语义上有没有用到"）：机器读数只能读出一行参数里出现了什么。
-    `t-000006` 这种台账号与 `reports/attack-1.md` 这种产物路径正是父子之间已经在用的指称（业主的措辞
-    逐字就是这两类）；"语义上有没有用到"要人来读，不是判据能回答的问题。
+    为什么判据落在"字面量"上（而不是"语义上有没有用到"）：机器读数只能读出一行参数里出现了什么。`t-000006`
+    这种台账号与 `reports/attack-1.md` 这种产物路径正是父子之间已经在用的指称（业主的措辞逐字就是这两类）；"
+    语义上有没有用到"要人来读，不是判据能回答的问题。
 
-    父自己的台账号被剔掉（`own_task_id`）：否则父在后续任何一句里提到自己，都会把所有子产出判成"处理过
-    了"—— 那是这条判据最容易被凑绿的一条路。三态：抽不到任何字面量 ⇒ 空列表，这不等于"没有产出"：
-    `task_id` 一定在（由 `_production_item` 补上），它是业主逐字允许的指称。
+    父自己的台账号被剔掉（`own_task_id`）：否则父在后续任何一句里提到自己，都会把所有子产出判成"处理过了"——
+    那是这条判据最容易被凑绿的一条路。三态：抽不到任何字面量 ⇒ 空列表，这不等于"没有产出"：`task_id` 一定在
+    （由 `_production_item` 补上），它是业主逐字允许的指称。
     """
     text = json.dumps(result, ensure_ascii=False, default=str)
     raw: list[str] = [m.group(0) for m in _CHILD_OUTPUT_ID.finditer(text)]
@@ -2398,14 +2377,14 @@ def _call_productions(shape: str, payload: Mapping[str, Any], result: Mapping[st
     """把一次 `summon` / `summon_many` / `handoff` 折成"这次调用产生了哪些子产出"。
 
     三种形状的落点不一样：`summon` ⇒ 一个 `task_id` + 它带回来的结果（`status` / `outcome` / 产物路径与
-    `final` 里出现的台账 id）；`summon_many` ⇒ 每个 target 各一条，批量结果没有逐项 `final`/路径的形状
-    （见 `_do_summon_many` 的 `results` 条目），于是产出字面量只有 `task_id` —— 而业主的判据逐字允许用
-    `task_id` 指称；`handoff` ⇒ 手稿是对等通道，不是"下级产出"（没有 `task_id`、也没有子结果可以消费）
-    ⇒ 记一条 `counted=False`，不进 `summons_*` 四个读数，进 `productions` 只是因为业主点名要"这次调用产生
-    了哪些子产出"在一处读得到。
+    `final` 里出现的台账 id）；`summon_many` ⇒ 每个 target 各一条，批量结果没有逐项 `final`/路径的形状（见
+    `_do_summon_many` 的 `results` 条目），于是产出字面量只有 `task_id` —— 而业主的判据逐字允许用 `task_id`
+    指称；`handoff` ⇒ 手稿是对等通道，不是"下级产出"（没有 `task_id`、也没有子结果可以消费）⇒ 记一条
+    `counted=False`，不进 `summons_*` 四个读数，进 `productions` 只是因为业主点名要"这次调用产生了哪些子产出
+    "在一处读得到。
 
-    被拒的调用（`outcome="refused"`）没有子产出 ⇒ 一条都不记（于是判据对它没有对象，而不是把它算成"父没
-    处理"）。
+    被拒的调用（`outcome="refused"`）没有子产出 ⇒ 一条都不记（于是判据对它没有对象，而不是把它算成"父没处理"）
+    。
     """
     out: list[dict[str, Any]] = []
     if shape == "summon":
@@ -2485,13 +2464,13 @@ def _waiver_declarations(run: "LoopRun",
 def _is_effect_evidence(shape: str, payload: Mapping[str, Any]) -> bool:
     """这一步有没有留下**可查的效应** —— 判据是负表，不是白名单。
 
-    为什么是负表（业主 2026-10 的修正，逐字）："处理"的真实形态远不止三条 —— 写进台账、改计划、立/改
-    猜想、写报告、据以改派别的角色、用它的读数做判断、把它交给 H 审、把它折进收工结论……一张正表（"只有
-    这三种算"）会把没被列举到的合法形态全判红，而且每加一种形态就要改一次判据。
+    为什么是负表（业主 2026-10 的修正，逐字）："处理"的真实形态远不止三条 —— 写进台账、改计划、立/改猜想、写
+    报告、据以改派别的角色、用它的读数做判断、把它交给 H 审、把它折进收工结论……一张正表（"只有这三种算"）会
+    把没被列举到的合法形态全判红，而且每加一种形态就要改一次判据。
 
-    所以这里只排除两档：「只读侦察」（`RECON_ONLY_TOOLS`，业主逐字「`fs.list`/`status_report` 这类只读
-    侦察不算」—— 它没有改变任何东西，不是效应）；`invalid` 步（它连一次真的调用都不是）。其余一律算
-    「效应候选」，真正的判据落在那句"它有没有指到那条子产出"上 ⇒ "列举"只活在文档里，不活在判据里。
+    所以这里只排除两档：「只读侦察」（`RECON_ONLY_TOOLS`，业主逐字「`fs.list`/`status_report` 这类只读侦察不
+    算」—— 它没有改变任何东西，不是效应）；`invalid` 步（它连一次真的调用都不是）。其余一律算「效应候选」，
+    真正的判据落在那句"它有没有指到那条子产出"上 ⇒ "列举"只活在文档里，不活在判据里。
     """
     if shape == "invalid":
         return False
@@ -2524,20 +2503,16 @@ def _effect_label(shape: str, payload: Mapping[str, Any]) -> str:
 def summon_consumption(run: "LoopRun") -> dict[str, Any]:
     """父代理**处理了**它派出去的子产出没有 —— 一趟运行结束时的现算读数。
 
-    判据（效应证据口径，不是白名单）：在这一次 summon 之后，父只要在任何一步留下了可查的效应、且这一步
-    指到了那条子产出（`task_id` / 产物路径 / 台账 id）就算处理了（`disposition="consumed"`）。业主点名的
-    形态只是举例：写进台账（`table.create/update`、`register_*`）、改计划、立/改猜想、写报告（`fs.write`）、
-    再派活（task 里带该子产物的指涉）、交给 H 审、用它做判断、折进 final ……任何一条都算；效应由
-    `_is_effect_evidence` 用负表判（只排除只读侦察与 `invalid` 步）。
-
-    两端：如实声明不处理（`disposition="waived"`）—— 显式写一条 `not_consumed`（`{"task_id": …, "code":
-    <受控理由码>, "why": "<一句话理由>"}`），理由码必须在 `NOT_CONSUMED_CODES` 里、理由不许是空串（自造码
-    / 空码 / 空理由都不算，负控 ④）；没处理（`disposition="unconsumed"`）—— 既没留下指到它的效应也没
-    声明，判据要抓的就是这一格。
-
-    三态与反真空：`summons_total == 0` ⇒ 判据没有对象（不红，但仍报 `summons_total=0`）；被拒的调用
-    （`outcome="refused"`）不进 `summons_total`；只读侦察指到了产物（`recon_only`）既不算处理也不静默，
-    逐条留在那一条产出的明细里（"我看了但没做"与"我根本没看"分得开）。
+    判据（效应证据口径，不是白名单）：在这一次 `summon` 之后，父只要在任何一步留下了可查的效应、且这一步指到了那条子产
+    出（`task_id` / 产物路径 / 台账 id）就算处理了（`disposition="consumed"`）。业主点名的形态只是举例：写进台账（
+    `table.create/update`、`register_*`）、改计划、立/改猜想、写报告（`fs.write`）、再派活、交给 H 审、用它做判断、折
+    进 final ……任何一条都算；效应由 `_is_effect_evidence` 用负表判（只排除只读侦察（`fs.list` / `status_report` 这类）
+    与 `invalid` 步）。
+    两端：如实声明不处理（`disposition="waived"`）—— 显式写一条 `not_consumed`（
+    `{"task_id": …, "code": <受控理由码>, "why": "<一句话理由>"}`），理由码必须在 `NOT_CONSUMED_CODES` 里、理由不许是
+    空串（自造码 / 空码 / 空理由都不算，负控 ④）；没处理（`disposition="unconsumed"`）—— 既没留下指到它的效应也没声明。
+    三态与反真空：`summons_total == 0` ⇒ 判据没有对象（不红，但仍报 0）；被拒的调用（`outcome="refused"`）不进
+    `summons_total`；只读侦察指到了产物（`recon_only`）既不算处理也不静默，逐条留在明细里。
     """
     productions = [dict(p) for p in (getattr(run, "productions", None) or [])]
     counted = [p for p in productions
@@ -2882,17 +2857,15 @@ class AgentLoop:
     def _resolve_parent(self, given: str, summoned_by: str) -> tuple[str, str, str]:
         """定这一趟的收件人：`(父的台账号, 父的角色, 问题)`。三条分支，逐条都有理由。
 
-        1. 调用方给了 `given`（`LlmBackend.call` 从它那一行读出来的）⇒ 用它，并把 `summoned_by`（同一个
-           来源的 `called_by`）当父的角色；2. 没给 ⇒ 从台账读（`_parent_of_mine`），这是 D89 的修法：子报
-           给父，板项的 `parent_task_id` 必须是父的台账号；3. 两个来源都没有 ⇒ 顶层发起：收件人 = `(我的
-           台账号, 主控的角色)`，也就是"回报挂在这一趟自己名下"——这一支与改前的行为逐字相同。
+        1. 调用方给了 `given`（`LlmBackend.call` 从它那一行读出来的）⇒ 用它，并把 `summoned_by`（同一个来源
+           的 `called_by`）当父的角色；2. 没给 ⇒ 从台账读（`_parent_of_mine`），这是 D89 的修法：子报给父，
+           板项的 `parent_task_id` 必须是父的台账号；3. 两个来源都没有 ⇒ 顶层发起：收件人 =
+           `(我的台账号, 主控的角色)`，与改前的行为逐字相同。角色为什么落回主控：顶趟那一行的 `called_by` 写
+           的是 `"user"`（`open_top_level_run` 的 `by="user"`），而 `"user"` 不是角色名（`schema.ROLES` 里没
+           有它）⇒ 按角色归队时只能落到读板的那个人（主控）。
 
-        角色为什么落回主控：顶趟那一行的 `called_by` 写的是 `"user"`（`open_top_level_run` 的 `by="user"`），
-        而 `"user"` 不是角色名（`schema.ROLES` 里没有它）⇒ 按角色归队时只能落到读板的那个人（主控）。
-
-        但"没读成"不是这一支：台账读不成时返回 `pid=""` 并把理由放进第三个返回值 —— 谁都不许把"读不成"
-        当成"顶层发起"（前者会让提示词里那一格凭空写一个父编号，拿自己的编号冒充父的编号，模型会照它去
-        沟通）。
+        但"没读成"不是这一支：台账读不成时返回 `pid=""` 并把理由放进第三个返回值 —— 谁都不许把"读不成"当成"
+        顶层发起"（前者会让提示词里那一格凭空写一个父编号，拿自己的编号冒充父的编号，模型会照它去沟通）。
         """
         pid, prole, problem = str(given or ""), str(summoned_by or ""), ""
         if not pid:
@@ -3029,14 +3002,14 @@ class AgentLoop:
     def _availability(self) -> dict[str, str] | None:
         """现在的接线态（哪个伙伴真的能被唤起）。拿不到就返回 None 并留一条 note。
 
-        2026-10-04 修正（`draft/37` §106）：这一栏此前会说谎 —— 它原先只调
-        `host.wiring_status(store, ...)`，那个读数不带 providers，于是 A 被报成 `no_provider`，哪怕这一趟
-        明明接了 openalex。真机后果（T1 第 14 趟）：M 的提示词里那栏写着"接线态（这一栏是事实）"
-        `A -> no_provider`，它在第 22 步据此写下「A 未接线（no_provider）⇒ 盘外引文放弃检索」，整趟没派过
-        一次 A（而 A 的检索是通的：离线探针一次查询就登记了 9 行文献、含 Kuchment 那篇 DOI）。
+        2026-10-04 修正（`draft/37` §106）：这一栏此前会说谎 —— 它原先只调 `host.wiring_status(store, ...)`，
+        那个读数不带 providers，于是 A 被报成 `no_provider`，哪怕这一趟明明接了 openalex。真机后果（T1 第
+        14 趟）：M 的提示词里那栏写着"接线态（这一栏是事实）"`A -> no_provider`，它在第 22 步据此写下「A 未
+        接线（no_provider）⇒ 盘外引文放弃检索」，整趟没派过一次 A（而 A 的检索是通的：离线探针一次查询就登记
+        了 9 行文献、含 Kuchment 那篇 DOI）。
 
-        修法：先问真身（后端登记表里有哪些角色 ⇒ 它们真的能被唤起），再用主机读数补上其余角色（没接线的
-        仍然如实报 —— 不是把这一栏变成永远"wired"）。
+        修法：先问真身（后端登记表里有哪些角色 ⇒ 它们真的能被唤起），再用主机读数补上其余角色（没接线的仍然
+        如实报 —— 不是把这一栏变成永远"wired"）。
         """
         reg: dict[str, str] = {}
         if self.store is not None:
@@ -3162,16 +3135,15 @@ class AgentLoop:
                        run: "AgentLoop.LoopRun") -> list[dict[str, Any]]:
         """步边界上的压缩判定（S-B / 裁定 7乙 + 8乙 + 12-I=甲）。返回（可能被替换过的）序列。
 
-        四件事按顺序，每一件都有它自己的读数：1. 没配预算（`registry.default_budget is None`）⇒ 什么都不
-        做 —— 那是"没启用"，不是"没查成"（三态的第一档，所以不落任何"没压"的噪声）；2. 走
-        `compact_by_pressure`；3. 没压（未到阈值 / 容量读不到 / 没有可遮蔽的条目 / 摘要更大）⇒ 不替换历史，
-        其中"读不到容量"每趟只警告一次（照 DSH `CB:803-808` 的去重）；4. 压了 ⇒ 事件三件套
-        （`compaction_start` / `compaction_summary` / `compaction_end`）+ 一条带 `surface_op` 的替换事件
-        （闭区间两端都含），并把 `[start, end]` 换成一条摘要消息。
+        四件事按顺序，每一件都有它自己的读数：1. 没配预算（`registry.default_budget is None`）⇒ 什么都不做
+        ——那是"没启用"，不是"没查成"（三态的第一档，所以不落任何"没压"的噪声）；2. 走 `compact_by_pressure`；
+        3. 没压（未到阈值 / 容量读不到 / 没有可遮蔽的条目 / 摘要更大）⇒ 不替换历史，其中"读不到容量"每趟只警
+        告一次（照 DSH `CB:803-808` 的去重）；4. 压了 ⇒ 事件三件套（`compaction_start` /
+        `compaction_summary` / `compaction_end`）+ 一条带 `surface_op` 的替换事件（闭区间两端都含），并把
+        `[start, end]` 换成一条摘要消息。
 
-        为什么把替换消息也写进事件（施工单 §2 逐字）：只在内存里压会让续跑那一趟看到没压过的版本 —— 而
-        "续跑看到的正是当时那份对话"是本仓最强的一条判据（`resume_messages` 读这些事件按序重放，两处逐条
-        相等）。
+        为什么把替换消息也写进事件（施工单 §2 逐字）：只在内存里压会让续跑那一趟看到没压过的版本 —— 而"续跑
+        看到的正是当时那份对话"是本仓最强的一条判据（`resume_messages` 读这些事件按序重放，两处逐条相等）。
         """
         budget = getattr(self.registry, "default_budget", None)
         if budget is None:
@@ -3259,20 +3231,17 @@ class AgentLoop:
 
     def _prune_result(self, result: Any, *, step: int, run: "AgentLoop.LoopRun",
                       messages: Sequence[Mapping[str, Any]]) -> Any:
-        """把这一步的工具结果按 DSH 的形状剪一遍（S-B ③ / 施工单 §2 的甲方案）。没剪就原样返回。
+        """把这一步的工具结果按 DSH 的形状剪一遍（S-B ③ / 施工单 §2 的甲方案）。
 
-        为什么剪的是原始结果结构、而不是渲染后的那段文本：这是"假开"那条读数的病根 —— 工具层那次剪枝
-        （禁改区 `tools/base.py`）剪的是已经渲染过的字符串，而观测层把单字段压到 `RESULT_CHARS=6000` ⇒ 那
-        条分支在当前配置下永远不触发（"剪枝开着"是一句空话）；原始结构没有逐字段上限（`{"a": 3000字,
-        "b": 3000字, …}` 就是 15000），所以"跨块一条字符流"这个形状在这里才真的剪得掉东西。
-
-        触发时机（照 DSH，不是"每次都剪"）：DSH 只在压缩触发成立之后剪一次（`CB:887-890`、`:901-904`，
-        README:89「低于压力绝不动」），而工具层是每次调用都剪；这里用同一个 `pressure_reading` 问一次压力门
-        —— 剪枝与摘要因此共用一道门，不会出现"门说没超、剪枝却动了"。
-
-        不需要"替换事件"来保证可重放：剪发生在这一步的结果落档之前 ⇒ `agent_step` 事件里存的就是剪过的那
-        一份，`resume_messages` 重建时天然拿到它（压缩那条替换动的是更早的节点，才必须靠 `surface_op` 重放）。
-        `compaction_prune` 这条事件仍然要落 —— 它是"这一趟剪过、省了多少"的唯一读数。
+        返回剪过的结果（没剪就原样返回）。为什么剪的是原始结果结构、而不是渲染后的那段文本：这是"假开"那条读数的病根
+        —— 工具层那次剪枝（禁改区 `tools/base.py`）剪的是已经渲染过的字符串，而观测层把单字段压到 `RESULT_CHARS=6000`
+        ⇒ 那条分支在当前配置下永远不触发（"剪枝开着"是一句空话）；原始结构没有逐字段上限（
+        `{"a": 3000字, "b": 3000字, …}` 就是 15000），所以"跨块一条字符流"这个形状在这里才真的剪得掉东西。
+        触发时机（照 DSH，不是"每次都剪"）：DSH 只在压缩触发成立之后剪一次（`CB:887-890`、`:901-904`，README:89「低于
+        压力绝不动」），而工具层是每次调用都剪；这里用同一个 `pressure_reading` 问一次压力门 —— 剪枝与摘要因此共用一道
+        门，不会出现"门说没超、剪枝却动了"。不需要"替换事件"来保证可重放：剪发生在这���步的结果落档之前 ⇒ `agent_step`
+        事件里存的就是剪过的那一份，`resume_messages` 重建时天然拿到它（压缩那条替换动的是更早的节点，才必须靠
+        `surface_op` 重放）；`compaction_prune` 仍要落 —— 它是"这一趟剪过、省了多少"的唯一读数。
         """
         budget = getattr(self.registry, "default_budget", None)
         if budget is None or not isinstance(result, (Mapping, list, tuple, str)):
@@ -3356,21 +3325,17 @@ class AgentLoop:
     def _system_at_step(self, facts: Mapping[str, Any], system: str, *, step: int) -> str:
         """步边界上**确认** system 逐字节没变（静态/动态分离之后的守门读数）。
 
-        改前它是"重算会变的那两格、变了就换 system"（业主裁定 J=乙）：动机是对的（`budget_left` 是模型据以
-        决定"还能不能继续"的数，花销每步在涨），代价是几乎每一步 system 都变 —— 而上游的前缀缓存要求前缀
-        逐字节相同 ⇒ 命中率结构性地是 0。实测（2026-10-19 本机，M 岗，非零价）：第 0 步 system 54,902 字，
-        第 1 步 54,902 字，但从第 35,035 个字符起就不同，差异是 `剩余预算：5.000000 美元（…已用 0.000000…）`
-        → `…已用 0.001200…`。
-
-        现在这两格在**这一步的 user 消息**里（`_prompt` 的尾部，现读数字）：system 逐字节稳定，而模型每步
-        照样看得见最新余额与草稿本 —— 真话没丢，只是换了载体（`promptstability.SYSTEM_PLACEHOLDERS` 在
-        system 里那一格写的是"见每步消息末尾"的指路语）。
-
-        为什么还要每步渲染一次：因为"逐字节稳定"必须是结构上被检查的。这里每步用静态事实重算一次并逐字
-        比：相同就复用旧串，不同就如实发新的并落一条带 diff 读数的 `agent_note` ——
-        `promptstability.first_difference` 给出"从第几个字符起不同 + 前后各 80 字"。那一条出现 = 有人往
-        system 里塞回了每步会变的东西（`DYNAMIC_SECTION_WHITELIST` 那一份登记表就是为这件事存在的）。
-        渲染成本实测 11.5 ms（`AP.system_prompt` 一次），比一次模型调用便宜五个数量级。
+        改前它是"重算会变的那两格、变了就换 system"（业主裁定 J=乙）：动机是对的（`budget_left` 是模型据以决定"还能不
+        能继续"的数，花销每步在涨），代价是几乎每步 system 都变 —— 而前缀缓存要求前缀逐字节相同 ⇒ 命中率结构性地是 0。
+        实测（2026-10-19 本机，M 岗，非零价）：第 0 步 system 54,902 字，第 1 步 54,902 字，但从第 35,035 个字符起就不
+        同（`剩余预算：5.000000 美元（…已用 0.000000…）` → `…已用 0.001200…`）。
+        现在这两格在这一步的 user 消息里（`_prompt` 的尾部，现读数字）：system 逐字节稳定，而模型每步照样看得见最新余
+        额与草稿本 —— 真话没丢，只是换了载体（`promptstability.SYSTEM_PLACEHOLDERS` 在 system 里那一格写的是"见每步消
+        息末尾"的指路语）。
+        为什么还要每步渲染一次："逐字节稳定"必须是结构上被检查的。这里每步用静态事实重算一次并逐字比：相同就复用旧串，
+        不同就如实发新的并落一条带 diff 读数的 `agent_note` —— `promptstability.first_difference` 给出"从第几个字符起
+        不同 + 前后各 80 字"；那一条出现 = 有人往 system 里塞回了每步会变的东西（`DYNAMIC_SECTION_WHITELIST` 就是为这
+        件事存在的）。渲染成本实测 11.5 ms（`AP.system_prompt` 一次）。
         """
         cand = AP.system_prompt(self.role, registry=self.registry, **dict(facts))
         if cand == system:
@@ -4563,18 +4528,16 @@ class AgentLoop:
     def _note_blocked_declaration(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """子代理在收工那句话里声明"我在等上级指导" ⇒ 落痕到父那一行（业主 2026-10-09）。
 
-        业主对 `blocked` 的窄定义（第四句 + 第六句，逐字）：「所有活跃子代理的状态都是 blocked」是一种停机
-        状态；而「如果被委托的任务单纯是在职责之外，则应该将自己能力内的做完后上报情况就 over 了；如果是
+        业主对 `blocked` 的窄定义（第四句 + 第六句，逐字）：「上述层层上报困难也会带来一种停机状态，即所有活跃子代理的
+        状态都是 blocked」；而「如果被委托的任务单纯是在职责之外，则应该将自己能力内的做完后上报情况就 over 了；如果是
         需要请示上级指导任务实施细则，才会 block」⇒ 两件事必须分得开：
-
-        - 职责之外：做完自己能力内的、上报情况、正常收工（`final`）—— 这条路上不写 `blocked`（机器判据：
-          那一条上报会让 `escalation_gaps` 归零，不需要 blocked）；
-        - 等上级指导实施细则：才是 `blocked`，载体是 `{"final": "...", "blocked": {"what": …, "why": …,
-          "needs": "请上级定 X"}}`，其中 `needs` 必填：说不出要请示什么，那多半不是 blocked，而是"职责
-          之外"那一档。
-
-        只在给了 `blocked` 的时候处理（没声明 ⇒ 老行为逐字不变）。三态都如实报：没有父 / 没有 conductor /
-        落痕失败 ⇒ 一句读数，不打断收工。
+        - 职责之外：做完自己能力内的、上报情况、正常收工（`final`）—— 这条路上不写 `blocked`（机器判据：那一条上报会让
+          `escalation_gaps` 归零，不需要 blocked）；
+        - 等上级指导实施细则：才是 `blocked`，载体是
+          `{"final": "...", "blocked": {"what": …, "why": …, "needs": "请上级定 X"}}`，其中 `needs` 必填：说不出要请示
+          什么，那多半不是 blocked，而是"职责之外"那一档。
+        只在给了 `blocked` 的时候处理（没声明 ⇒ 老行为逐字不变）。三态都如实报：没有父 / 没有 conductor / 落痕失败 ⇒
+        一句读数，不打断收工。
         """
         decl = payload.get("blocked")
         if not isinstance(decl, Mapping):
@@ -4617,18 +4580,15 @@ class AgentLoop:
     def _is_tree_root(self) -> bool:
         """这一趟是不是「这棵树」的根（业主裁定：全工作区开关 = M 把整棵树停了）。
 
-        业主的口径：一个停机开关落下后，M 那一趟以及它派出去的所有子孙循环都必须停；"谁是第一个读到的"
-        不许决定别人停不停。所以撤开关这件事只能落在树根身上 —— 任何成员撤它，都会让还没读到的那一支静默
-        继续跑（方向正好相反的那个 §140 bug）。
-
-        判据三档（取第一个成立的）：1. 这一趟没有台账号（`my_task_id` 空）⇒ 它就是树的起点（没落台账的
-        顶趟、没接主控的那条路都没有别人可挂在下面）；2. 没有父任务（`parent_task_id` 空）⇒ 树根；3.
-        `parent_task_id == my_task_id` ⇒ 也是没有父：`_resolve_parent` 的第三条分支把"顶层发起"的收件人
-        落回自己（那一行 `parent_task_id` 是空时，它逐字 `return str(self.my_task_id or ""), …`）。
-
-        其余一律是成员。"没有台账号"也算树根而不是判不了：台账号是被召唤那一刻由调用方给的
-        （`LlmBackend.call` 从它那一行读出来），没有台账号的循环不可能是别人派出来的 —— 这一档不是"不知
-        道"，而是"确定没有父"。
+        业主的口径：一个停机开关落下后，M 那一趟以及它派出去的所有子孙循环都必须停；"谁是第一个读到的"不许决定别人停不
+        停。所以撤开关这件事只能落在树根身上 —— 任何成员撤它，都会让还没读到的那一支静默继续跑（方向正好相反的那个
+        §140 bug）。
+        判据三档（取第一个成立的）：1. 这一趟没有台账号（`my_task_id` 空）⇒ 它就是树的起点（没落台账的顶趟、没接主控的
+        那条路都没有别人可挂在下面）；2. 没有父任务（`parent_task_id` 空）⇒ 树根；3. `parent_task_id == my_task_id` ⇒
+        也是没有父：`_resolve_parent` 的第三条分支把"顶层发起"的收件人落回自己（`parent_task_id` 是空时，它逐字
+        `return str(self.my_task_id or ""), …`）。
+        其余一律是成员。"没有台账号"也算树根而不是判不了：台账号是被召唤那一刻由调用方给的（`LlmBackend.call` 从它那一
+        行读出来），没有台账号的循环不可能是别人派出来的 —— 这一档不是"不知道"，而是"确定没有父"。
         """
         mine = str(self.my_task_id or "")
         if not mine:
@@ -4640,7 +4600,6 @@ class AgentLoop:
         """盘上这把停机开关管不管我（S4，`draft/90` E7 / `draft/84` §2.2）。
 
         返回 `{"stop","remove","why"}`；全工作区那一档多一格 `consume_at_end`：
-
         | 开关 | 我 | 结论 |
         |---|---|---|
         | 全工作区（没有 `root_task_id`） | 树根 | 停，读时不撤；`consume_at_end=True` ⇒ 由我收尾时撤 |
@@ -4649,19 +4608,14 @@ class AgentLoop:
         | 子树 | 我在那一支里、是成员 | 停，但不撤（`remove=False`）—— 同支别的循环还要读到它 |
         | 子树 | 我不在那一支里 | 不停（"停 D 那一支"不许停到 E 那一支） |
         | 子树 | 判不了（台账读不成 / 我没编号） | 不停 + 一句读数（判不了 ≠ 适用） |
-
-        为什么全工作区那一档是"读时不删、收工时树根才删"：改前它是"读到的第一个撤掉它"（§140 的一次性
-        信号），可是并行的子孙循环各有各的步边界 —— 谁先读到谁把开关撤了，其余的人下一刻读到的就是"没人
-        叫停"，它们静默继续跑。第一次修（"只有树根撤"）只挡住了一半：树根在自己的步边界读到那一刻就删了
-        文件，还没走到步边界的兄弟/子孙下一刻同样读不到 —— 真机读数：第 1 趟 `s1 stop_reason='stop_file'
-        … 开关还在=False`，第 2 趟 `s2 stop_reason='final'` ⇒ 静默继续跑。现在把删除从"读到时"推迟到
-        "这一趟收工时"：谁读到都 `stop=True`，但谁都不在这一刻删；只有树根带着 `consume_at_end=True` 走到
-        收尾（`run()` 末尾、`agent_run_end` 落盘之后）才由 `_consume_stop_at_teardown` 调
+        为什么"读时不删、收工时树根才删"：改前是"读到的第一个撤掉它"（§140 一次性信号），可并行子孙各有各的步边界 ——
+        谁先读到谁撤了开关，其余人下一刻读到"没人叫停"，静默继续跑。第一次修（"只有树根撤"）只挡住一半：树根读到时即删，
+        兄弟下一刻同样读不到。真机读数：第 1 趟 `s1 stop_reason='stop_file' … 开关还在=False`，第 2 趟
+        `s2 stop_reason='final'`。现在把删除推迟到这一趟收工时：谁读到都 `stop=True`，但谁都不在这一刻删；只有树根带着
+        `consume_at_end=True` 走到收尾（`run()` 末尾、`agent_run_end` 落盘之后）才由 `_consume_stop_at_teardown` 调
         `consume_stop(remove=True)`。成员一律 `remove=False`、`consume_at_end=False`，只把这一笔记进
-        `runs/stop-history.jsonl`（`removed=False`）—— "谁读到过、谁撤的"事后分得开。子树那一档的语义一个
-        字没动（`stop_scope="subtree"` 时仍按 `inside_subtree` 的四档判）：本支根读时即撤、成员不撤、不在
-        本支不停、判不了不停。`force` 与 `stop_file` 两种 level 走同一条判据（`_user_stop_reason` 只在理由
-        码上分岔）。
+        `runs/stop-history.jsonl`（`removed=False`）。子树那一档语义一个字没动（`stop_scope="subtree"` 仍按
+        `inside_subtree` 四档判）；`force` 与 `stop_file` 走同一条判据（`_user_stop_reason` 只在理由码上分岔）。
         """
         try:
             from . import stopctl
@@ -4716,19 +4670,15 @@ class AgentLoop:
     def _consume_stop_at_teardown(self) -> str:
         """树根收工时撤掉那把全工作区开关；返回一句读数（空串 = 没什么要报的）。
 
-        为什么删除落在这里、不在"读到时"：读的那一刻删 ⇒ 还没走到步边界的兄弟/子孙下一刻读不到文件 ⇒
-        静默继续跑。真机读数（前代理实测）：第 1 趟 `s1 stop_reason='stop_file' … 开关还在=False`，第 2 趟
-        `s2 stop_reason='final'` —— 继续跑。所以读只记录"该停"与"该由我撤"（`_arm_stop_teardown`），删除
-        统一落到这一趟自己的收尾。
-
-        为什么只有树根：成员删它等于替整棵树做了决定（同树别的循环还没读到），`_stop_applies` 只在
-        `_is_tree_root()` 为真时给 `consume_at_end=True`。顺序：先写 final/台账，再删开关 —— 调用点在
-        `run()` 末尾、`agent_run_end`（含 `final` 与这一趟的台账读数）落盘之后；反过来一旦写台账失败，盘上
-        就只剩"开关没了"、没有任何东西说明"该停"，停的意图凭空消失。
-
-        三态（不许把"没撤成"读成"没叫停"）：撤成功 ⇒ 空串；走到收尾时开关已经不在盘上（别处 `--clear` 或
-        另一个进程撤走）⇒ 一句读数（这一笔不是我撤的）；历史记了但文件还在（被别的进程占着）⇒ 一句读数。
-        三者都不改变"这一趟已停"这个事实（`stop_reason` 早已是 `stop_file`/`force_stop`）。
+        为什么删除落在这里、不在"读到时"：读的那一刻删 ⇒ 还没走到步边界的兄弟/子孙下一刻读不到文件 ⇒ 静默继续跑。真机
+        读数（前代理实测）：第 1 趟 `s1 stop_reason='stop_file' … 开关还在=False`，第 2 趟 `s2 stop_reason='final'`
+        —— 继续跑。所以读只记录"该停"与"该由我撤"（`_arm_stop_teardown`），删除统一落到这一趟自己的收尾。
+        为什么只有树根：成员删它等于替整棵树做了决定（同树别的循环还没读到），`_stop_applies` 只在 `_is_tree_root()`
+        为真时给 `consume_at_end=True`。顺序：先写 final/台账，再删开关 —— 调用点在 `run()` 末尾、`agent_run_end`（含
+        `final` 与这一趟的台账读数）落盘之后；反过来一旦写台账失败，盘上就只剩"开关没了"、没有任何东西说明"该停"。
+        三态（不许把"没撤成"读成"没叫停"）：撤成功 ⇒ 空串；走到收尾时开关已经不在盘上（别处 `--clear` 或另一个进程撤走）
+        ⇒ 一句读数（这一笔不是我撤的）；历史记了但文件还在（被别的进程占着）⇒ 一句读数。三者都不改变"这一趟已停"这个事
+        实（`stop_reason` 早已是 `stop_file`/`force_stop`）。
         """
         pending = self._stop_to_consume_at_end
         self._stop_to_consume_at_end = {}
@@ -4768,28 +4718,23 @@ class AgentLoop:
     def _user_stop_reason(self, run: "AgentLoop.LoopRun") -> str:
         """人叫停了吗（`draft/37` §125）。返回停止原因（空串 = 没叫停，继续跑）。
 
-        两处来源，与 `autonomy._stop_before_round` 用「同一套词」：`stop_file`（`--stop-file` 或这里给的路径
-        指向的文件存在于盘上）；`user_stop` 已删除（业主口径 2026-10-17「删掉旁路」：停意由主控理解意思后调
-        `conductor.stop` 完成，不靠单词匹配 —— 字面匹配漏中文「停」「收工」）。
-
-        `escalated` 不在这张表里（业主 2026-10-19「父子天然双向」）：`conductor.escalate` 收工那一趟的
-        `stop_reason` 是 `"escalated"`，而它不是用户叫停 —— 停意不是任何人从外面下的，是这一趟自己判定"这
-        件事该交回召唤者"，所以本方法只给 `stop_file` / `force_stop` / `interrupted_by_parent`；
-        `cli.EXIT_CODE_BY_STOP` 把它归 5（自行停止），归 4 的是 `stop_file` / `force_stop` / `budget` /
-        `interrupted_by_parent`。判据：`tests/test_escalate_goes_up_and_stops.py` 的
-        `test_escalated_is_not_read_as_a_user_stop`（两向都钉）。
-
-        为什么要在步循环里查：`autonomy` 那套只在「每轮之间」跑，单趟 `run-agent`（不 `--rounds`）根本不走
-        那条路 —— 真机实测（2026-10-04）用户叫停后那一趟继续跑了 60 多个任务、烧掉 $0.98 才被强杀（不留
-        痕：没有 `agent_run_end`）；`user_stop` 要比时间戳：翻到「上一次」的 STOP 就停会把之后每一趟都判死。
-
-        第三个来源（`draft/37` §128）：「工作区的停机开关」（`.agentflow-stop`，`stopctl`）—— M 的
-        `conductor.stop` 与 `agentflow stop` 写下的那一份，也是「唯一」能打断在飞工作的通道（广播做不到）；
-        `force=true` ⇒ 走 `force_stop`。§140：开关是「一次性信号」（停一趟 → 记一笔 → 撤走）—— 实测
-        （`temp/_stop_probe.py`）：`conductor.stop` 停一趟后开关留在盘上、紧接着的 `--resume` 在第 0 步就被它
-        停掉 ⇒ 判定生效就调 `stopctl.consume_stop(...)`（审计进 `runs/stop-history.jsonl`）。全工作区那一档
-        的删除再往后挪一格（业主裁定「M 停整棵树」）：树根的删除推迟到这一趟收尾
-        （`_consume_stop_at_teardown`，排在 `agent_run_end` 之后）。
+        两处来源，与 `autonomy._stop_before_round` 用「同一套词」：`stop_file`（`--stop-file` 或这里给的路径指向的文件
+        存在于盘上）；`user_stop` 已删除（业主口径 2026-10-17「删掉旁路」：停意由主控理解意思后调 `conductor.stop` 完
+        成，不靠单词匹配 —— 字面匹配漏中文「停」「收工」）。
+        `escalated` 不在这张表里（业主 2026-10-19「父子天然双向」）：`conductor.escalate` 收工那一趟的 `stop_reason`
+        是 `"escalated"`，而它不是用户叫停 —— 停意不是任何人从外面下的，是这一趟自己判定"这件事该交回召唤者"，所以本方
+        法只给 `stop_file` / `force_stop` / `interrupted_by_parent`；`cli.EXIT_CODE_BY_STOP` 把它归 5（自行停止），归
+        4 的是 `stop_file` / `force_stop` / `budget` / `interrupted_by_parent`。判据：
+        `tests/test_escalate_goes_up_and_stops.py` 的 `test_escalated_is_not_read_as_a_user_stop`（两向都钉）。
+        为什么要在步循环里查：`autonomy` 那套只在「每轮之间」跑，单趟 `run-agent`（不 `--rounds`）根本不走那条路—— 真
+        机实测（2026-10-04）用户叫停后那一趟继续跑了 60 多个任务、烧掉 $0.98 才被强杀（不留痕：没有 `agent_run_end`）；
+        `user_stop` 要比时间戳：翻到「上一次」的 STOP 就停会把之后每一趟都判死。
+        第三个来源（`draft/37` §128）：「工作区的停机开关」（`.agentflow-stop`，`stopctl`）—— M 的 `conductor.stop` 与
+        `agentflow stop` 写下的那一份，也是「唯一」能打断在飞工作的通道（广播做不到：收件箱是 `run()` 开头读一次的）；
+        `force=true` ⇒ 走 `force_stop`。§140：开关是「一次性信号」（停一趟 → 记一笔 → 撤走）—— 实测（
+        `temp/_stop_probe.py`）：`conductor.stop` 停一趟后开关留在盘上、紧接着的 `--resume` 在第 0 步就被它停掉 ⇒ 判定
+        生效就调 `stopctl.consume_stop(...)`（审计进 `runs/stop-history.jsonl`）。全工作区那一档的删除再往后挪一格（业
+        主裁定「M 停整棵树」）：树根的删除推迟到这一趟收尾（`_consume_stop_at_teardown`，排在 `agent_run_end` 之后）。
         """
         # ---- S-H（裁定 14）：父叫停某一个孩子当前那一轮的那一份信号。
         #
@@ -4922,8 +4867,8 @@ class AgentLoop:
 
         为什么形状不对也退回派生（L-05e）：旧口径是"填错就打回、那一次派活不发生"，但真机 5269 个
         `agent_step` 里这道闸门一次都没触发（`no_notify` 收场 0 次），而"因为一张表的格式让一次真的要发生的
-        派活停下来"正是 #1 的形态。现在：派活照常发生，形状问题落进 `run.notes`，留痕退回派生那一份（"谁是
-        派生、谁是执笔"两个标记仍然分得开）。`to` 的缺省是被派的那个角色（多目标 ⇒ `ALL`）。
+        派活停下来"正是 #1 的形态。现在：派活照常发生，形状问题落进 `run.notes`，留痕退回派生那一份（"谁是派
+        生、谁是执笔"两个标记仍然分得开）。`to` 的缺省是被派的那个角色（多目标 ⇒ `ALL`）。
         """
         notify = payload.get("notify")
         targets = self._dispatch_targets(payload)
@@ -4989,11 +4934,11 @@ class AgentLoop:
         顶级教训之一是"名字在说一件事、断言在说另一件"）。改名时全树 8 处引用，`tests/test_agent_prompts.py`
         里还有 2 处注释提到旧名，刻意留到那条线收工后再改（已登记在主控记录里）。
 
-        三条判断（顺序就是"先看该不该填，再看填得对不对"）：1. 主控 M 免填（它的 `final` 是给用户的回复，
-        用户 2026-10-05 原话："M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）；2. 没填 / 填错
-        形状 ⇒ 这一格没有可用读数（形状判据只有一份：`notify_shape_problem`）；3. 填了但 refs 悬空 ⇒ 同一格
-        也没有可用读数（`manuscripts.ref_problem` 是写入期同一份判据）。返回空串只有一个含义：读成了、可以
-        照着写手稿。
+        三条判断（顺序就是"先看该不该填，再看填得对不对"）：1. 主控 M 免填（它的 `final` 是给用户的回复，用
+        户 2026-10-05 原话："M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）；2. 没填 / 填错形状
+        ⇒ 这一格没有可用读数（形状判据只有一份：`notify_shape_problem`）；3. 填了但 refs 悬空 ⇒ 同一格也没有
+        可用读数（`manuscripts.ref_problem` 是写入期同一份判据）。返回空串只有一个含义：读成了、可以照着写手
+        稿。
         """
         if self.role == S.CONDUCTOR_ROLE:
             return ""
@@ -5317,14 +5262,14 @@ class AgentLoop:
     def _statement_filing_refusal(self, name: str, args: Mapping[str, Any]) -> dict[str, Any] | None:
         """B 要入库一条命题时，先问它自己的秘书"这条太平凡吗"；太平凡就拦下。
 
-        业主 2026-10-14 裁决第 12 条前半逐字：「作为 B 的秘书的任务，判断一个待入库的命题是否太平凡有没有
-        资格入库」。条件三个同时成立才拦：本角色是 B、工具是它这一趟被派的那件入库动作
-        （`own.register_statement`）、秘书判了且判的是「太平凡」；三者缺一 ⇒ 返回 `None`（照旧入库）。
+        业主 2026-10-14 裁决第 12 条前半逐字：「作为 B 的秘书的任务，判断一个待入库的命题是否太平凡有没有资
+        格入库」。条件三个同时成立才拦：本角色是 B、工具是它这一趟被派的那件入库动作（
+        `own.register_statement`）、秘书判了且判的是「太平凡」；三者缺一 ⇒ 返回 `None`（照旧入库）。
 
-        秘书没装配 / 没缝 / 开关关着 / 超时 / 坏 JSON ⇒ `checked=False` ⇒ 不拦（"没查成"不等于"太平凡"，
-        否则等于让"没查"决定产出入库；台账里那一行仍会落，见 `_record_judge`）；`判不了` 也不拦。为什么在这
-        里：B 手上没有"问秘书"这个形状，而"入库前判一下"恰恰是那种忘了就静默发生的事。返回值与别的工具拒绝
-        同形（`ok=False` + `error`），模型据此能改（换一条命题、或写清"后面哪一步会用到它"再交一次）。
+        秘书没装配 / 没缝 / 开关关着 / 超时 / 坏 JSON ⇒ `checked=False` ⇒ 不拦（"没查成"不等于"太平凡"，否则
+        等于让"没查"决定产出入库；台账里那一行仍会落，见 `judge` 的 `_record_judge`）；`判不了` 也不拦。为什
+        么在这里：B 手上没有"问秘书"这个形状，而"入库前判一下"恰恰是那种忘了就静默发生的事。返回值与别的工具
+        拒绝同形（`ok=False` + `error`），模型据此能改（换一条命题、或写清"后面哪一步会用到它"再交一次）。
         """
         if str(getattr(self, "role", "")) != "B" or str(name) != "own.register_statement":
             return None
@@ -5376,8 +5321,8 @@ class AgentLoop:
         """执行一步工具调用。
 
         `draft/37` §52 的真机读数（第四趟）：本岗同时开着原生工具面（`tools` 里有 `fs_list` 这样的函数名 ——
-        带点的真名 `fs.list` 不符合 function name 的字符集，广告时被归一化成下划线），而模型仍按文本协议回
-        了一行 JSON、把广告名 `fs_list` 写进 `tool` 字段 ⇒ 执行层报 `unknown_tool`，29 步全白花。
+        带点的真名 `fs.list` 不符合 function name 的字符集，广告时被归一化成下划线），而模型仍按文本协议回了
+        一行 JSON、把广告名 `fs_list` 写进 `tool` 字段 ⇒ 执行层报 `unknown_tool`，29 步全白花。
 
         这不是模型的错：它看到的两个名字都是我们给的。所以这一层逐次把广告名映回真名，并在结果里留一句
         `aliased_from` —— 认账，但不静默：谁在用别名、用了几次，读数上看得见。
@@ -5523,23 +5468,19 @@ class AgentLoop:
     def _surface_refusal(self, name: str, args: Mapping[str, Any]) -> str:
         """这一句工具调用越出读写面了吗？返回拒信（空串 = 放行）。
 
-        口径（业主 T23）：`fs.*` 的路径参数按工作区根解析（与 `fs_tools` 同一基准），结果必须落在
-        `self.surface` 里；面内的新文件允许（判的是落在哪儿，不是"文件存在不存在"）；没设面
-        （`self.surface == ""`）⇒ 直接放行（老行为不变）。三态：面目录不在盘上 ⇒ 拒绝（不许当"整工作区可
-        写"）。
-
-        哪些参数算"路径"：`draft/90` §2 的 E22 —— 先前这里只看 `args["path"]`，而 `fs.move` 的参数叫
-        `src`/`dst`（没有 `path`）⇒ 可以用它把面外的文件搬进面、或把面内的搬出去，这一步不被任何判据拦。
-        现在参数名从 `secretary.surface_path_args()` 取（默认 `path`，例外逐条登记），与
-        `Secretary.surface_fit` 共用同一张表，免得"预看说越界、硬拦放过去"。
-
-        面是工作区里的一个子目录（过渡语义）：`fs.*` 的根焊死在注册表里（`build_registry(workspace_root=…)`
-        就定死了），所以"从面里看 `x.md`"要等每实例一个注册表（`draft/92` §3.6），那是装配点的改动、另立
-        一批。基准已收口（D8 / E23，2026-10-10 校）：`host.py` 装配时把 `backend.registry_factory` 接上，子
-        代理那一趟由 `registry_factory(face)` 按面造注册表（同一个面复用同一个，见 `child_registry`）⇒ 判据
-        的基准与执行的基准终于是同一个目录；判据 `tests/test_the_surface_is_also_the_tools_root.py`（正控①装
-        配点可调用、正控② `fs` 根 == 面、负控无面时共用注册表逐字不变）。没有面时两者都退回老行为（路径要
-        写全、且必须落在面内）—— 那一条不是"收口前的将就"，而是"没有面就没有面"的正当语义。
+        口径（业主 T23）：`fs.*` 的路径参数按工作区根解析（与 `fs_tools` 同一基准），结果必须落在 `self.surface` 里；
+        面内的新文件允许（判的是落在哪儿，不是"文件存在不存在"）；没设面（`self.surface == ""`）⇒ 直接放行（老行为不变）
+        。三态：面目录不在盘上 ⇒ 拒绝（不许当"整工作区可写"）。
+        哪些参数算"路径"：`draft/90` §2 的 E22 —— 先前这里只看 `args["path"]`，而 `fs.move` 的参数叫 `src`/`dst`（没有
+        `path`）⇒ 可以用它把面外的文件搬进面、或把面内的搬出去，这一步不被任何判据拦。现在参数名从
+        `secretary.surface_path_args()` 取（默认 `path`，例外逐条登记），与 `Secretary.surface_fit` 共用同一张表，免得
+        "预看说越界、硬拦放过去"。
+        面是工作区里的一个子目录（过渡语义）：`fs.*` 的根焊死在注册表里（`build_registry(workspace_root=…)` 就定死了），
+        所以"从面里看 `x.md`"要等每实例一个注册表（`draft/92` §3.6），那是装配点的改动、另立一批。基准已收口（D8 / E23，
+        2026-10-10 校）：`host.py` 装配时把 `backend.registry_factory` 接上，子代理那一趟由 `registry_factory(face)`
+        按面造注册表（同一个面复用同一个，见 `child_registry`）⇒ 判据的基准与执行的基准终于是同一个目录；判据
+        `tests/test_the_surface_is_also_the_tools_root.py`（正控①装配点可调用、正控② `fs` 根 == 面、负控无面时共用注册
+        表逐字不变）。没有面时两者都退回老行为（路径要写全、且必须落在面内）。
         """
         if not str(self.surface or ""):
             return ""
@@ -5730,12 +5671,12 @@ class AgentLoop:
 
         两档要转：`forbidden_edge` / `depth_exceeded`（这条路今天不通，而重试不会让它通）；以及
         `invalid_params` 且目标不在我的伙伴表里 —— 我看不到他的动作表，所以我给的参数必然是在猜，而
-        `Conductor.summon` 的顺序是"先查参数、再查边"⇒ 我会拿到 `invalid_params`，真相却是"我根本不该直接
-        找他"。把这一档也算进来，代唤才不会因为"参数猜错"而永远发不出去（本轮实测：第一次写这条判据时，真实
-        场景恰恰落在这档上）。
+        `Conductor.summon` 的顺序是"先查参数、再查边"⇒ 我会拿到 `invalid_params`，真相却是"我根本不该直接找
+        他"。把这一档也算进来，代唤才不会因为"参数猜错"而永远发不出去（本轮实测：第一次写这条判据时，真实场
+        景恰恰落在这档上）。
 
-        反过来，目标在我能唤起的伙伴里时 `invalid_params` 就只是"参数写错了"：该由模型自己改参数，不该占用
-        主控的注意力。
+        反过来，目标在我能唤起的伙伴里时 `invalid_params` 就只是"参数写错了"：该由模型自己改参数，不该占用主
+        控的注意力。
         """
         if reason in RELAY_REFUSALS:
             return True
@@ -5816,14 +5757,15 @@ class AgentLoop:
                                    escalate: bool = False, stuck: str = "") -> dict[str, Any]:
         """定义抽不到时的向上报文（`draft/97` §15.4 的载体那一半）。
 
-        业主逐字：「最常见的定义不明极可能是A查论文要B消化时遇到生僻定义，这时和父代理A交流即可」⇒ 补法
-        优先级定死：①问直接父（原文在它手里）→ ②A 上网搜（`pending_search`）→ ③B 自撰（`self_authored`，只
-        对基本概念）。这一格做①，以及"父也办不了 ⇒ 才向上爬到 M，并逐级留痕"（`escalate=True` + `stuck` 写明
-        哪一级卡住、为什么）；它不替父做判断，所以"爬上去"必须由调用方显式传。
+        业主逐字：「最常见的定义不明极可能是A查论文要B消化时遇到生僻定义，这时和父代理A交流即可」⇒ 补法优先
+        级定死：①问直接父（原文在它手里）→ ②A 上网搜（`pending_search`）→ ③B 自撰（`self_authored`，只对基本
+        概念）。这一格做①，以及"父也办不了 ⇒ 才向上爬到 M，并逐级留痕"（`escalate=True` + `stuck` 写明哪一级
+        卡住、为什么）；它不替父做判断，所以"爬上去"必须由调用方显式传。
 
-        三态（要能分辨"没问"与"问了"）：`pending` 空 ⇒ `{"checked": False, "reason": "没有待补定义 ⇒ 没有发报
-        文"}`（一条留言都不落）；报文落了 ⇒ `{"checked": True, "to": …, "message_id": …, "ask_why": …}`；落不
-        成 ⇒ `checked=True` + `problem`（报文那一格没成要说出来，不许当成已发出）。
+        三态（要能分辨"没问"与"问了"）：`pending` 空 ⇒
+        `{"checked": False, "reason": "没有待补定义 ⇒ 没有发报文"}`（一条留言都不落）；报文落了 ⇒
+        `{"checked": True, "to": …, "message_id": …, "ask_why": …}`；落不成 ⇒ `checked=True` + `problem`（报
+        文那一格没成要说出来，不许当成已发出）。
         """
         items = [dict(p) for p in (pending or []) if isinstance(p, Mapping)]
         if not items:
@@ -5934,11 +5876,9 @@ class AgentLoop:
     def _handoff_address(self, to: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """交接手稿的收件人（`handoff` / 收工 `notify` 共用）：`(addr, gate)`。
 
-        为什么不能照抄 `message` 那一格：手稿通道的收件人面本来就是角色（`manuscripts/handoffs.jsonl` 的
-        `to` 是角色或 `ALL`：`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它），名册上没有"手稿收件
-        人"这个地址面（`secretary.handoff_add` 写的时候就把非角色收件人拒掉：
-        `ValueError: 收件人必须是 [A…M, V] 之一`）。
-
+        为什么不能照抄 `message` 那一格：手稿通道的收件人面本来就是角色（`manuscripts/handoffs.jsonl` 的 `to` 是角色或
+        `ALL`：`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它），名册上没有"手稿收件人"这个地址面（
+        `secretary.handoff_add` 写的时候就把非角色收件人拒掉：`ValueError: 收件人必须是 [A…M, V] 之一`）。
         | `to` 的写法 | 判据 |
         |---|---|
         | 名册名 / 绝对编号（解析成父或子） | 手稿写它的角色，通知投那个实例的板项 |
@@ -5946,10 +5886,9 @@ class AgentLoop:
         | 角色名 = 我自己 | 自记一笔（不是代理之间的通信）⇒ 放行 |
         | `ALL` / `#public` / 用户 / 主控 | `outside_roster`（公告栏与频道外读者，不归名册管） |
         | 解析不到的名册名 / 编号 | 受控拒绝 `handoff_is_role_addressed`（台账没有实例地址面） |
-
-        为什么角色名那一档用协作边而不是名册：`notify`（每个终态都要有）正是靠它把"手稿编号 + 一句话"交给
-        下一个角色；按名册拒掉会把整条交付链掐死，而"按角色名随便发"由协作边那份判据守着。这一档也不是
-        "名册校验通过"：读数里 `how="outside_roster"`，且 `delivery="role"`。
+        为什么角色名那一档用协作边而不是名册：`notify`（每个终态都要有）正是靠它把"手稿编号 + 一句话"交给下一个角色；
+        按名册拒掉会把整条交付链掐死，而"按角色名随便发"由协作边那份判据（`_address_of` / `message_admission`）守着。
+        这一档也不是"名册校验通过"：读数里 `how="outside_roster"`，且 `delivery="role"`。
         """
         token = str(to or "").strip()
         base: dict[str, Any] = {"checked": True, "how": "", "to": token, "kind": "",
@@ -6004,8 +5943,8 @@ class AgentLoop:
         （`roster_addresses`，不是第二份实现）。
 
         返回 `(addr, gate)`：`gate` 为空 dict = 放行；非空 = 受控拒绝那三格（`refused` / `error` /
-        `addressing`）。三态照旧：`roster_unavailable`（名册读不成 ⇒ 放行，由调用方标出读数）不是拒绝，也
-        「不是」"名册校验通过"。`to_task_id` 给了就按绝对编号寻址（同名多实例时不会歧义）。
+        `addressing`）。三态照旧：`roster_unavailable`（名册读不成 ⇒ 放行，由调用方标出读数）不是拒绝，也「
+        不是」"名册校验通过"。`to_task_id` 给了就按绝对编号寻址（同名多实例时不会歧义）。
         """
         addr = self._address_of(str(to_task_id or to))
         if str(addr.get("refused") or "") and str(to_task_id or "") \
@@ -6028,11 +5967,11 @@ class AgentLoop:
     def _all_recipient_refusal(self, to: str = "ALL") -> dict[str, Any]:
         """`to="ALL"` 走到**内部直调**那一支时的受控拒绝（那个按名册逐项开板项的旧实现已删）。
 
-        为什么是拒绝而不是补回那个方法：广播的语义今天由 `conductor.broadcast`（名下直接子代理，每人一条 ack
-        板项）与 `public_visibility`（公共频道的可见面）承担；`to="ALL"` 在解码层已经归一成 `#public`
-        （`_decode_shape` → `_recipient_for_channel`）⇒ 能走到这里只剩内部直调。改前这两支各调一次一个全仓
-        没有 def 的方法 ⇒ `AttributeError`："没发出去"看起来像"框架坏了"，而它不是一种可处置的拒绝。补回那个
-        方法更糟：它会把"按角色名逐项展开"的老语义复活，与 `conductor.broadcast` 分叉。
+        为什么是拒绝而不是补回那个方法：广播的语义今天由 `conductor.broadcast`（名下直接子代理，每人一条
+        ack 板项）与 `public_visibility`（公共频道的可见面）承担；`to="ALL"` 在解码层已经归一成 `#public`（
+        `_decode_shape` → `_recipient_for_channel`）⇒ 能走到这里只剩内部直调。改前这两支各调一次一个全仓没有
+        def 的方法 ⇒ `AttributeError`："没发出去"看起来像"框架坏了"，而它不是一种可处置的拒绝。补回那个方法
+        更糟：它会把"按角色名逐项展开"的老语义复活，与 `conductor.broadcast` 分叉。
 
         所以这里如实拒：理由码 `broadcast_only` + 一句话指路（拒信里带工具名）。
         """
@@ -6175,17 +6114,15 @@ class AgentLoop:
                             reply_to: str) -> dict[str, Any]:
         """`#public` / 用户 / `ALL` 那一档：留言落 `send_message`（append-only），准入逐字不动。
 
-        S6-a（业主 T20/T21 附二 乙）：公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，
-        没有编号就受控拒绝（不许退回"全角色可见"—— 那正是 T20 要治的形态）。谁能走到这一支：只有 `#public` /
-        `ALL` / 用户，以及"名册读不成"那一档的回退；给某个代理的私聊走 `roster_addresses` +
+        S6-a（业主 T20/T21 附二 乙）：公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，没有编号就受
+        控拒绝（不许退回"全角色可见"—— 那正是 T20 要治的形态：随手 `to=#public` 就等于全树广播）。谁能走到这一支：只有
+        `#public` / `ALL` / 用户，以及"名册读不成"那一档的回退；给某个代理的私聊走 `roster_addresses` +
         `_message_to_member`。这一支刻意不加名册校验：公共频道不是"给某个代理发消息"。
-
-        公告栏（业主 2026-10-19 第 5 条："若保留，必须写成公告栏，不是对话"）：`#public` 保留，但它**是**公告
-        栏 —— 一条公聊里若点名了名册上的某个成员（名册名 / 绝对编号）并且带指令语气
-        （`PUBLIC_DIRECTIVE_MARKS`）或显式收件人写法（`@F1` / `F1：` / `to=F1` / `给 F1`），它实际上就是"对某个
-        具体代理下指令" ⇒ 受控拒绝 `public_is_not_a_conversation`，并由拒信指路（用名册编号发私聊）；其余公聊
-        照发，但记录上带 `board_kind="bulletin"`。为什么必须机械可判：公聊进的是角色级收件箱，所以"公告栏里
-        点名某人"会被那个角色的所有实例读到 —— 那正是名册要挡的形态。
+        公告栏（业主 2026-10-19 第 5 条："若保留，必须写成公告栏，不是对话"）：`#public` 保留，但它是公告栏—— 一条公聊
+        里若点名了名册上的某个成员（名册名 / 绝对编号）并且带指令语气（`PUBLIC_DIRECTIVE_MARKS`）或显式收件人写法（
+        `@F1` / `F1：` / `to=F1` / `给 F1`），它就是"对某个具体代理下指令" ⇒ 受控拒绝 `public_is_not_a_conversation`；
+        其余公聊照发，但记录上带 `board_kind="bulletin"`。为什么必须机械可判：公聊进的是角色级收件箱（`to == role` 才
+        进），所以"公告栏里点名某人"会被那个角色的所有实例读到。
         """
         # 准入判据只有一份（模块级 `message_admission`）：这里与秘书那一侧都调它。
         not_allowed = message_admission(self.role, to, reply_to)
@@ -6471,9 +6408,9 @@ class AgentLoop:
 
         为什么必须有这一格（T1 第 18 趟实测）：`draft/38` §7 第三组判据里"M 的状态报告落盘"是一格过程判据，
         而并表之后重跑的 T1 两趟（`t1w`/`t1x`）实测：M 派了活、也收了工，却一次都没调
-        `conductor.status_report` —— 工具在它的面上（注册表 83 件含它）、提示词里也写着，只是那句原先只说
-        "用户问『现在什么情况』时用"；补一句"收工前也落一份"之后仍然没调（收尾序列被 `conductor.closing`
-        占满）。所以这一格与 `_emit_settlement` 同族：框架保证"有"，模型保证"内容"。
+        `conductor.status_report` —— 工具在它的面上（注册表 83 件含它）、提示词里也写着，只是那句原先只说"用
+        户问『现在什么情况』时用"；补一句"收工前也落一份"之后仍然没调（收尾序列被 `conductor.closing` 占满）。
+        所以这一格与 `_emit_settlement` 同族：框架保证"有"，模型保证"内容"。
 
         三态（要能分辨"模型落的"与"框架补的"）：模型这一趟调过（盘上有本趟产生的 `STATUS-*`）⇒ `""`（一个字
         都不动）；没调 ⇒ 框架补落一份 + 一句读数（`written_by=framework` + 两份文件名）；补落失败 ⇒ 一句读数
@@ -6502,18 +6439,15 @@ class AgentLoop:
     def _emit_settlement(self, run: LoopRun) -> str:
         """终态回报：每个任务跑完都必须有一条回报（业主 2026-10-08 T17）。返回一句读数。
 
-        两层必须分开（DSH 的教训，`draft/85` §5.4）：通报由框架保证 —— 模型没写 `notify`（`run.handoffs`
-        为空）时，框架开一条 `kind="notice"` 的板项、body 逐字写「（它没有留下结论）」（对齐 DSH 的
-        `It left no closing message.`）；内容由模型给 —— 模型写了就不补第二条（负控见
-        `tests/test_report_is_mandatory.py` 的"模型填了 ⇒ 恰好一条"）。
-
-        三种"没做成"都如实返回一句读数，不静默：不是终态 / 没有 conductor 句柄 / 开项抛异常。收件人是谁
-        （D89，2026-10-08 深夜修）：板项的 `parent_task_id` 口径是"收件人的编号"，所以子报给父时它必须是父的
-        台账号、`role` 写父的角色 —— 改前写的是 `parent_task_id=self.my_task_id`（挂在自己名下、角色记成 M），
-        后果是父的待办视图 `open_items_of(父的编号)` 里永远看不到"哪个子向我交差了"；现在用 `run` 里现算的
-        `parent_task_id` / `parent_role`（顶层发起时它们落回"这一趟自己"）。判据：
-        `tests/test_report_is_mandatory.py` / `tests/test_children_and_parent_are_visible.py`（负控：换成自己
-        的编号 ⇒ 红）。
+        两层必须分开（DSH 的教训，`draft/85` §5.4）：通报由框架保证 —— 模型没写 `notify`（`run.handoffs` 为空）时，框
+        架开一条 `kind="notice"` 的板项、body 逐字写「（它没有留下结论）」（对齐 DSH 的 `It left no closing message.`）
+        ；内容由模型给 —— 模型写了就不补第二条（负控见 `tests/test_report_is_mandatory.py` 的"模型填了 ⇒ 恰好一条"）。
+        三种"没做成"都如实返回一句读数，不静默：不是终态 / 没有 conductor 句柄 / 开项抛异常。
+        收件人是谁（D89，2026-10-08 深夜修）：板项的 `parent_task_id` 口径是"收件人的编号"，所以子报给父时它必须是父的
+        台账号、`role` 写父的角色 —— 改前写的是 `parent_task_id=self.my_task_id`（挂在自己名下），后果是父的
+        `open_items_of(父的编号)` 里永远看不到"哪个子向我交差了"；现在用 `run` 里现算的 `parent_task_id` /
+        `parent_role`。判据：`tests/test_report_is_mandatory.py` / `tests/test_children_and_parent_are_visible.py`（负
+        控：换成自己的编号 ⇒ 红）。
         """
         #: 三档"不停在终态"都在这一行里：正在等用户（`waiting_for_user`）、
         #: 以及还没定论就让出（空串）。改前这里还有 `"max_steps"` 一格 ——
@@ -6564,16 +6498,15 @@ class AgentLoop:
     def _do_handoff(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """写一份交接手稿 + 把"编号 + 一句简要描述"发给收件人（`draft/37` §134）。
 
-        两件事一起做，因为它们是同一件事的两半：手稿是「内容」，留言是「通知」；让模型分两步做就会出现"写了
-        手稿但对方不知道"（或反过来）的半截状态，而且用户点过名："就传个编号感觉有点尬，可以再附一句简要描
-        述"。`to="ALL"` ⇒ 走公共频道；存储是追加式账本 `manuscripts/handoffs.jsonl` 的一行（`draft/39` §C1：
-        编号与那一行在同一把锁里分配）。
+        两件事一起做，因为它们是同一件事的两半：手稿是「内容」，留言是「通知」；让模型分两步做就会出现"写了手稿但对方
+        不知道"（或反过来）的半截状态，而且用户点过名："就传个编号感觉有点尬，可以再附一句简要描述"。`to="ALL"` ⇒ 走公
+        共频道；存储是追加式账本 `manuscripts/handoffs.jsonl` 的一行（`draft/39` §C1：编号与那一行在同一把锁里分配）。
 
-        A 线：执笔权已经移交给本角色的秘书（`draft/53` §2.1 / `draft/55` §3.2）。用户口径（2026-10-06）：
-        "由于所有信息交互都由秘书过一遍手，所以 handoffs 的增改查能力都该给秘书，智能体只保留『查』的能
-        力。"落法：循环形状 `handoff` 保留；写这一行的是 `self.secretary.handoff_add(...)`（`sender` 仍是本
-        角色）；没装配秘书 ⇒ 不写并如实报错（"形状保留、写路径关闭"的判据就在这一支）。`manuscripts.read` /
-        `manuscripts.list` 工具保留（这就是"智能体只保留查"）。
+        A 线：执笔权已经移交给本角色的秘书（`draft/53` §2.1 / `draft/55` §3.2）。用户口径（2026-10-06）："由于所有信息
+        交互都由秘书过一遍手，所以 handoffs 的增改查能力都该给秘书，智能体只保留『查』的能力。"落法：循环形状
+        `handoff` 保留；写这一行的是 `self.secretary.handoff_add(...)`（`sender` 仍是本角色）；没装配秘书 ⇒ 不写并如实
+        报错（"形状保留、写路径关闭"的判据就在这一支）。`manuscripts.read` / `manuscripts.list` 工具保留（这就是"智能
+        体只保留查"）。
         """
         to = str(payload.get("to") or "")
         channel = PUBLIC if to == "ALL" else to
@@ -6702,10 +6635,8 @@ class AgentLoop:
         | `pending` | 还停在等（`user_no_answer` 的含义变了） | 停：`stop_reason="waiting_for_user"` |
         | `cancelled` | 等待被当前轮次的取消信号中止 | 停：`stop_reason="ask_cancelled"` |
         | `""`（问题没落档） | 通道没通 | 继续（没有 qid 就没有人能答） |
-
-        为什么 `refused` 不许停：它是"这次运行按无人值守的姿态跑"这个设定本身的结论，而不是"有人在等回答"；
-        停了就等于把一个确定性的拒绝变成停机，而 CI 里没人会来续跑。为什么 `pending` 必须停且不许再发模型请
-        求：提问的全部意义是"这个取舍只有人能定"，继续往下跑等于替人定了，而停下来不花钱。
+        为什么 `refused` 不许停：它是无人值守这个设定本身的结论，不是"有人在等回答"（停了 CI 里没人续跑）。为什么
+        `pending` 必须停且不许再发请求：提问的意义是"这个取舍只有人能定"，继续跑等于替人定了。
         """
         if self.role != S.CONDUCTOR_ROLE:
             # 人机通道归主控 —— 这是「运行时」协作纪律，出处是我们自己的设计：
@@ -6905,17 +6836,15 @@ class LlmBackend:
     def _own_actions_to_expose(self, role: str, *, action: str) -> list[str]:
         """这一趟该把**本角色的哪几个动作**包成工具交过去。
 
-        两种派活，同一件事（2026-10-19 晚）：点了动作（`--drive B.register_statement` /
-        `conductor.summon(action=…)`）⇒ 就那一个，老行为逐字不变；只派活、不点动作（S2 业主口径；真机
-        `tasks.action=""`）⇒ 把本角色「声明了但没有同名工具」的那些动作各包一件，判据用
-        `capabilities._KNOWN_UNMATCHED_ACTIONS`（导入期 `assert_capabilities()` 第 [7] 条把它与现算的
-        `unmapped_actions()` 逐条对过，判据在 `tests/test_capabilities_two_layer.py`）—— 不另抄一份清单，也不
-        每次召唤现算（`unmapped_actions()` 要装配完整工具面，实测 270ms/次）。
-
-        为什么空动作也要装（真机读数，`projects/mp2/sessions/mp2-7.jsonl`）：这一格此前是 `if str(action):`，于
-        是「只派活」那一路上一次都没装过 ⇒ B 的工具面里没有 `register_statement`，它第 94 行撞
-        `unknown_tool`、第 97 行改走 `table.create(table="statements")` 手写 `bits={}`。业主 S2 的"不指定能力"
-        说的是派活的人不越俎代庖，不是让被派的人够不着自己的动作。
+        两种派活，同一件事（2026-10-19 晚）：点了动作（`--drive B.register_statement` / `conductor.summon(action=…)`）
+        ⇒ 就那一个，老行为逐字不变；只派活、不点动作（S2 业主口径；真机 `tasks.action=""`）⇒ 把本角色「声明了但没有同
+        名工具」的那些动作各包一件，判据用 `capabilities._KNOWN_UNMATCHED_ACTIONS`（导入期 `assert_capabilities()` 第
+        [7] 条把它与现算的 `unmapped_actions()` 逐条对过，判据在 `tests/test_capabilities_two_layer.py`）—— 不另抄一份
+        清单，也不每次召唤现算（`unmapped_actions()` 要装配完整工具面，实测 270ms/次）。
+        为什么空动作也要装（真机读数，`projects/mp2/sessions/mp2-7.jsonl`）：这一格此前是 `if str(action):`，于是「只
+        派活」那一路上一次都没装过 ⇒ B 的工具面里没有 `register_statement`，它第 94 行撞 `unknown_tool`、第 97 行改走
+        `table.create(table="statements")` 手写 `bits={}`。业主 S2 的"不指定能力"说的是派活的人不越俎代庖，不是让被派
+        的人够不着自己的动作。
         """
         if str(action):
             return [str(action)]
@@ -6937,19 +6866,17 @@ class LlmBackend:
                                   task_id: str = "") -> Any:
         """把「我这一趟能做的动作」包成工具，挂到这一趟循环的注册表上。
 
-        为什么必须有它（业主 2026-10-14 裁定 ③ 的收尾，真机 p9-t1-nolean）：`--subagents` / `--drive 角色.动作`
-        会把 `(角色, 动作)` 交给 LLM 循环执行，于是那份确定性实现这一趟不会被调用；而角色的动作不在工具面上
-        （`capabilities.unmapped_actions()` 逐条报的就是这一族）⇒ 被派的子代理拿不到自己被派的活，只能改用
-        `table.create` / `table.update` 手写表：真机里 B 就是这么写 statements 的，绕过了出处、页码形状、引文
-        证据、取号与查重五道预检，`quote_verified=true` 变成它自报的。
-
-        这里把动作按声明面（`capabilities.find_action` 的 `params` / `side_effect`）原样包成一件工具，handler 走
-        内层后端（`self.inner.call`）—— 也就是那套带闸门的确定性实现。工具名是 `own.<动作名>`（不带点的名字
-        `ToolSpec.__post_init__` 当场拒），只活在这一趟循环的注册表里；模型若按手册里的短名
-        （`register_statement`）来叫，`_do_tool` 的别名那一格会映射到 `own.register_statement` 并留
-        `aliased_from`。不注入的两种情况（绝不给一件调不通的工具）：内层后端没有这个角色的实现
-        （`role not in self.inner.known_roles()`）⇒ 那本来就该由模型自己用工具做；这个动作的声明读不到
-        （`capabilities.find_action` 返回 `None`）。
+        为什么必须有它（业主 2026-10-14 裁定 ③ 的收尾，真机 p9-t1-nolean）：`--subagents` / `--drive 角色.动作` 会把
+        `(角色, 动作)` 交给 LLM 循环执行，于是那份确定性实现这一趟不会被调用；而角色的动作不在工具面上（
+        `capabilities.unmapped_actions()` 逐条报的就是这一族）⇒ 被派的子代理拿不到自己被派的活，只能改用
+        `table.create` / `table.update` 手写表：真机里 B 就是这么写 statements 的，绕过了出处、页码形状、引文证据、取
+        号与查重五道预检，`quote_verified=true` 变成它自报的。
+        这里把动作按声明面（`capabilities.find_action` 的 `params` / `side_effect`）原样包成一件工具，handler 走内层后
+        端（`self.inner.call`）—— 那套带闸门的确定性实现。工具名是 `own.<动作名>`（本仓约定是 `组.动作`，不带点的名字
+        `ToolSpec.__post_init__` 当场拒），只活在这一趟循环的注册表里；模型若按手册里的短名（`register_statement`）来
+        叫，`_do_tool` 的别名那一格会映射到 `own.register_statement` 并留 `aliased_from`。不注入的两种情况（绝不给一件
+        调不通的工具）：内层后端没有这个角色的实现（`role not in self.inner.known_roles()`）⇒ 那本来就该由模型自己用工
+        具做；这个动作的声明读不到（`capabilities.find_action` 返回 `None`）。
         """
         if self.inner is None or not hasattr(self.inner, "known_roles"):
             return base
@@ -7053,13 +6980,14 @@ class LlmBackend:
         """把这次循环的完整记录写成文件，返回路径（失败就返回空串并留 note）。
 
         B11（`draft/41-A` 的 B11）：唯一性靠 `O_EXCL`，不靠"先数后写"。旧实现是
-        `n = len(list(d.glob(f"{role}-*.json"))) + 1`，然后按这个名字写 —— 没有锁、也不是 `O_EXCL`：同一角色同秒
-        的两个并发循环会算出同一个 `n`，后写覆盖先写，于是两个召唤返回同一个 `llm_run_path`（一份产出凭空消
-        失，而两个调用方都以为自己的产出在盘上）。`conductor._write_new_row` 为同类问题专门加了 `_id_lock`；
-        这里用更省事也更彻底的一条：`open(..., "x")`（`O_EXCL`）—— 它同时挡住同进程的两个线程与两个进程。
+        `n = len(list(d.glob(f"{role}-*.json"))) + 1`，然后按这个名字写 —— 没有锁、也不是 `O_EXCL`：同一角色
+        同秒的两个并发循环会算出同一个 `n`，后写覆盖先写，于是两个召唤返回同一个 `llm_run_path`（一份产出凭
+        空消失，而两个调用方都以为自己的产出在盘上）。`conductor._write_new_row` 为同类问题专门加了
+        `_id_lock`；这里用更省事也更彻底的一条：`open(..., "x")`（`O_EXCL`）—— 它同时挡住同进程的两个线程与
+        两个进程。
 
-        失败不用"猜一个名字"兜底：撞名就 +1 重试（时间戳不变，序号递增），重试到上限仍撞 ⇒ 如实留 note 并返回
-        空串（"没写成"与"写成了"要分得开）。
+        失败不用"猜一个名字"兜底：撞名就 +1 重试（时间戳不变，序号递增），重试到上限仍撞 ⇒ 如实留 note 并返
+        回空串（"没写成"与"写成了"要分得开）。
         """
         try:
             d = self.session_root / RUNS_DIR_NAME
@@ -7085,17 +7013,16 @@ class LlmBackend:
     def _running_row(self, role: str, task_id: str = "") -> dict[str, Any]:
         """找出"这次召唤那条 running 行"，整行返回。
 
-        两条取材路径，按可靠性排序：1. 给了 `task_id`（`Conductor.summon` 现在会传，见 `conductor.py` 第 [6]
-        步）⇒ 直接按号取那一行（并发多实例下这是唯一可靠的做法，按角色找会同时找到 N 条）；2. 没给号（旧调用
-        方 / 直接建 `LlmBackend` 的单测）⇒ 退回"按角色找恰好一条"。
-
-        为什么找而不是让调用方传：`Conductor.summon` 先写 running 行、再调后端，所以后端天然不知道自己的台账
-        号；三种"没拿到"必须分得开（没有台账 / 读台账失败 / 恰好不是一条），所以返回值带 `checked` 与
-        `reason`。为什么返回整行而不是只返回 `task_id`（2026-09-30 修的 bug）：子循环的 `summoned_by` /
-        `depth` 以前读 `params["_summoned_by"]` / `params["_depth"]`，而全仓没有任何地方生产这两个键 ⇒ 每一次
-        被同伴唤起的角色都以为"是主控直接派的、深度 1"（实测读数摘录 `temp/t0260-evidence`：台账里 `t-0260
-        E.run_experiment called_by=F parent=t-0259 depth=2`，而 E 自己的 `agent_run_start` 记的是
-        `summoned_by=M, depth=1`）—— 协同链在孩子自己的认知里断掉。权威来源本来就是台账那一行。
+        两条取材路径，按可靠性排序：1. 给了 `task_id`（`Conductor.summon` 现在会传，见 `conductor.py` 第 [6] 步）⇒ 直
+        接按号取那一行（并发多实例下唯一可靠，按角色找会同时找到 N 条）；2. 没给号（旧调用方 / 直接建 `LlmBackend` 的
+        单测）⇒ 退回"按角色找恰好一条"。
+        为什么找而不是让调用方传：`Conductor.summon` 先写 running 行、再调后端，所以后端天然不知道自己的台账号；三种"
+        没拿到"必须分得开（没有台账 / 读台账失败 / 恰好不是一条），所以返回值带 `checked` 与 `reason`。为什么返回整行
+        而不是只返回 `task_id`（2026-09-30 修的 bug）：子循环的 `summoned_by` / `depth` 以前读
+        `params["_summoned_by"]` / `params["_depth"]`，而全仓没有任何地方生产这两个键 ⇒ 每一次被同伴唤起的角色都以为"
+        是主控直接派的、深度 1"（实测读数摘录 `temp/t0260-evidence`：
+        `t-0260 E.run_experiment called_by=F parent=t-0259 depth=2`，而 E 自己的 `agent_run_start` 记的是
+        `summoned_by=M, depth=1`）。
         """
         store = self.store
         if store is None:
@@ -7166,17 +7093,15 @@ def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
                         prompt_cache: Mapping[str, Any] | None = None) -> str:
     """写这一趟的步检查点，返回问题串（空 = 写成了）。写入失败不许静默。
 
-    指纹用 `autonomy.task_fingerprint(role, task)`（同一条口径，不另立一份）：续跑之前必须比对它 —— 拿 A 任务
-    的检查点去续 B 任务，会把两件事的进度混成一条，而那条记录看起来完全正常。
-
-    为什么这里也要 `prompt_cache`（2026-10-19 的真机缺口）：这一份文件是顶趟唯一落在 `runs/` 下的"这一趟干
-    了什么"的记录（产出文件 `runs/<角色>-<时间戳>-<序号>.json` 只在被召唤那条路上写，见
-    `_write_run_artifact`；`run_role` 收工时不写它），于是 `agent_run_end` 的 `prompt_cache` 汇总在盘上只活
-    在一处，而这一格此前只有 `spend` —— 同一笔钱的两面只落了前一面。
-
-    三态（与 `LoopStep.to_dict()` 同一套）：算过、上游给了读数 ⇒ 11 格汇总（`hit` / `miss` 是数）；算过、上游
-    一次都没给 ⇒ 汇总在，`unknown_calls > 0`、`hit_rate is None`（绝不折成 0%）、`why` 里写明原因；没算过
-    ⇒ `{}` —— "没有汇总"与"算过但上游没给"必须分得开，所以这一格永远在。
+    指纹用 `autonomy.task_fingerprint(role, task)`（同一条口径，不另立一份）：续跑之前必须比对它 —— 拿 A 任务的检查点
+    去续 B 任务，会把两件事的进度混成一条，而那条记录看起来完全正常。
+    为什么这里也要 `prompt_cache`（2026-10-19 的真机缺口）：这一份文件是顶趟唯一落在 `runs/` 下的"这一趟干了什么"的记
+    录（产出文件 `runs/<角色>-<时间戳>-<序号>.json` 只在被召唤那条路上写（`_summon` 收尾，见 `_write_run_artifact`）；
+    `run_role` 收工时不写它），于是 `agent_run_end` 的 `prompt_cache` 汇总在盘上只活在一处，而这一格此前只有 `spend`
+    —— 同一笔钱的两面只落了前一面。
+    三态（与 `LoopStep.to_dict()` 同一套）：算过、上游给了读数 ⇒ 11 格汇总（`hit` / `miss` 是数）；算过、上游一次都没
+    给 ⇒ 汇总在，`unknown_calls > 0`、`hit_rate is None`（绝不折成 0%）、`why` 里写明原因；没算过 ⇒ `{}` ——"没有汇总"
+    与"算过但上游没给"必须分得开，所以这一格永远在。
     """
     from . import autonomy as AU
 
@@ -7242,24 +7167,20 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
                     *, task: str) -> tuple[list[dict[str, Any]], int]:
     """从会话记录重建"本趟"的消息序列，返回 `(messages, 下一个 step)`（S-C 第 ② 步）。
 
-    判据：与循环里那份逐条相等（含思维链那一格）。重建只认两样东西：本趟的起点（最后一条"全新开始"的
-    `agent_run_start`，它带着任务 / 发起者 / 深度 / 台账号）与它之后逐条落盘的 `agent_step` 事件；每一条消息
-    都走 `agent_loop` 里那几个模块级函数（`_opening_transcript` / `_spoken_half` / `_result_half` / `*_line` /
-    `assistant_message` / `tool_message`）—— 循环里也是它们，"两处拼法"因此结构上不成立。思维链（12-A=乙）：
-    事件里那一格 `reasoning` 就是当时进消息的那一份（`_recorded_reasoning` 与落档同一把尺）⇒ 重建出来的
-    `reasoning_content` 与当时逐字相同。
-
+    判据：与循环里那份逐条相等（含思维链那一格）。重建只认两样东西：本趟的起点（最后一条"全新开始"的 `agent_run_start`，
+    它带着任务 / 发起者 / 深度 / 台账号）与它之后逐条落盘的 `agent_step` 事件；每一条消息都走 `agent_loop` 里那几个模
+    块级函数（`_opening_transcript` / `_spoken_half` / `_result_half` / `*_line` / `assistant_message` /
+    `tool_message`）—— 循环里也是它们，"两处拼法"因此结构上不成立。思维链（12-A=乙）：事件里那一格 `reasoning` 就是当
+    时进消息的那一份（`_recorded_reasoning` 与落档同一把尺）⇒ 重建出来的 `reasoning_content` 与当时逐字相同。
     窗口：起点 = 最后一条 `role` 相同、`task` 原文相同、且 `_is_fresh_run_start` 为真的 run_start（续跑写下的
-    `resumed_from>0` 与「被拒的续跑」`resume_refused` 都不是起点 —— 后者没有步，若被当成起点，重建就会变成
-    空的那一段）；终点 = 该角色下一条"全新开始"的 run_start（任何任务），它挡住"同一任务被从头重跑"与"同角
-    色另一个任务的步混进来"（`agent_step` 里没有任务号，窗口是唯一能把两趟分开的东西）；窗口里的续跑段照收
-    （步号全趟单调，续跑从 `resumed_from` 接着编）。
-
-    三条边界（不假装比实际更强）：1. 开头的收件箱用 `inbox_digest` 按当前盘上的状态重算 ⇒ 原趟开头若带
-    "（新）"标记，重建出来的那几行会不同（变的只会是收件箱那一段，而且只会变新）；2. 单字段超过落档上限的
-    那一步存的是截到 `RECORD_CHARS` 的审计副本 ⇒ 那一行末尾会比当时短（这是重建能力的上限，不是漏了）；
-    3. 找不到本趟的起点 ⇒ 返回 `("", 0)`，不猜、不退回"把所有步都收进来"，调用方（`run_role`）据此判"没查
-    成"，而不是从第 1 步重跑一遍。
+    `resumed_from>0` 与「被拒的续跑」`resume_refused` 都不是起点 —— 后者没有步，若被当成起点，重建就会变成空的那一段）；
+    终点 = 该角色下一条"全新开始"的 run_start（任何任务），它挡住"同一任务被从头重跑"与"同角色另一个任务的步混进来"（
+    `agent_step` 里没有任务号，窗口是唯一能把两趟分开的东西）；窗口里的续跑段照收（步号全趟单调，续跑从 `resumed_from`
+    接着编）。
+    三条边界（不假装比实际更强）：1. 开头的收件箱用 `inbox_digest` 按当前盘上的状态重算 ⇒ 原趟开头若带"（新）"标记，重
+    建出来的那几行会不同（变的只会是收件箱那一段，而且只会变新）；2. 单字段超过落档上限的那一步存的是截到
+    `RECORD_CHARS` 的审计副本 ⇒ 那一行末尾会比当时短（这是重建能力的上限，不是漏了）；3. 找不到本趟的起点 ⇒ 返回
+    `("", 0)`，不猜、不退回"把所有步都收进来"，调用方（`run_role`）据此判"没查成"，而不是从第 1 步重跑一遍。
     """
     root = Path(session_root)
     events, _problems = SS.read_session(root, sid=sid)
@@ -7371,9 +7292,9 @@ def _note_resume_refusal(root: Path, role: str, task: str, sid: str | None, why:
                          *, attempted_from: int = 0) -> None:
     """续跑被拒时也落一条 `agent_run_start`：为什么拒必须留在会话记录里。
 
-    为什么不静默返回：`--resume` 被拒的那一趟在盘上什么都没留下，读会话记录的人只会看到"上一趟到此为止"，
-    而"它被人要求续过、被拒了"没有任何痕迹。这一条与 `AgentLoop.run` 里那条同名事件的区别有两个，都是刻意
-    的：它带 `resume_refused` 这个码，且没有后续的 `agent_step`（一步都没跑）；它不写 `resumed_from`，而写
+    为什么不静默返回：`--resume` 被拒的那一趟在盘上什么都没留下，读会话记录的人只会看到"上一趟到此为止"，而"
+    它被人要求续过、被拒了"没有任何痕迹。这一条与 `AgentLoop.run` 里那条同名事件的区别有两个，都是刻意的：它
+    带 `resume_refused` 这个码，且没有后续的 `agent_step`（一步都没跑）；它不写 `resumed_from`，而写
     `resume_attempted_from` —— 因为 `resumed_from` 的口径是"这一趟真的从第几步接着跑"（0 = 全新开始），被拒
     的续跑一步都没跑，写 0 会被读成"它从第 0 步续的"。"它想从第几步续"是另一件事，就得有另一个名字。
     """
@@ -7386,15 +7307,14 @@ def _secretary_for(role: str, *, root: Path | str, store: Any, registry: Any,
                    seam: Any, sid: str | None = None) -> Any:
     """给这一趟装配本角色自己的秘书（生产路径的唯一落点）。
 
-    主控裁定 A5（2026-10-06）：打开秘书的模型判断。三个条件写在这一个函数里：1. 秘书自己那一档模型（业主
-    2026-10-14：「所有智能体的秘书另外共用一个 api key」）—— 设置文件里有 `secretary` 段（或它回落到的某一
-    档）配了 key 时走 `LlmSeam.for_secretary`（同一把 key、同一个模型，全角色的秘书共用），没配时退回本体的
-    缝（老行为逐字不变），两条路都写进 `Secretary.model_source` 留痕；2. `enable_model=True` —— 关着的时候三
-    条判断在生产里等于不存在，而"把该不该派的判断全写死成确定性规则"正是用户点名不要的形态，花销由
-    `Secretary.should_engage` 绑在问题量上（干净的派活 0 次调用）；3. 可归因 —— 每次判断的 `usage_id`（取不
-    到就 `call_index`）由 `Secretary.last_judge_cost` 从缝自己落的 `llm_call` 事件读回来、进决定台账，秘书那
-    一档的账记在 `by_role="secretary:<本体角色>"` 上（共用一把 key 仍然分得清是哪个角色的秘书花的钱）。
-
+    主控裁定 A5（2026-10-06）：打开秘书的模型判断。三个条件写在这一个函数里：1. 秘书自己那一档模型（业主 2026-10-14：
+    「所有智能体的秘书另外共用一个 api key」）—— 设置文件里有 `secretary` 段（或它回落到的某一档）配了 key 时走
+    `LlmSeam.for_secretary`（同一把 key、同一个模型，全角色的秘书共用），没配时退回本体的缝（老行为逐字不变），两条路
+    都写进 `Secretary.model_source` 留痕；2. `enable_model=True` —— 关着的时候三条判断在生产里等于不存在，而"把该不该
+    派的判断全写死成确定性规则"正是用户点名不要的形态，花销由 `Secretary.should_engage` 绑在问题量上（干净的派活 0 次
+    调用）；3. 可归因 —— 每次判断的 `usage_id`（取不到就 `call_index`）由 `Secretary.last_judge_cost` 从缝自己落的
+    `llm_call` 事件读回来、进决定台账，秘书那一档的账记在 `by_role="secretary:<本体角色>"` 上（共用一把 key 仍然分得清
+    是哪个角色的秘书花的钱）。
     装配失败不抛（fail-open）：`run_role` 那一层兜住异常 ⇒ 不装配秘书（写路径关闭、判断不发生），这一趟照跑。
     """
     from . import secretary as _SEC
@@ -7452,14 +7372,15 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
              stop_file: str = "", secretary: Any = None) -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。
 
-    `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，两处分开写迟早会出现"审计记录落在别
-    处"的静默错位。
+    `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，两处分开写迟早会出现"审计记录落在别处"
+    的静默错位。
 
-    `resume=True`（`agentflow run-agent --resume`）先读步检查点，四种结局分开（不许把"没读到"折成"重跑一
-    遍"）：读不到 ⇒ `no_checkpoint`；任务指纹不符 ⇒ `checkpoint_mismatch`（拿 A 的进度续 B = 把两件事混成一
-    条）；上一趟已收工（`final`）⇒ `already_finished`；停在等用户 / 其它 ⇒ 从 `resume_transcript` 重建的那一
-    段接着跑。无论哪条路，跑完都写一次步检查点（停在等用户时带 `waiting_for=<qid>`）；被拒的那几条路也各写
-    一条 `agent_run_start`（带 `resume_refused` 与 `resume_attempted_from`）。
+    `resume=True`（`agentflow run-agent --resume`，即 `--resume`）先读步检查点，四种结局分开（不许把"没读到"
+    折成"重跑一遍"）：读不到 ⇒ `no_checkpoint`；任务指纹不符 ⇒ `checkpoint_mismatch`（拿 A 的进度续 B = 把两
+    件事混成一条）；上一趟已收工（`final`）⇒ `already_finished`；停在等用户 / 其它 ⇒ 从 `resume_transcript`
+    重建的那一段接着跑。无论哪条路，跑完都写一次步检查点（停在等用户时带 `waiting_for=<qid>`）；被拒的那几条
+    路也各写一条 `agent_run_start`（带 `resume_refused` 与 `resume_attempted_from`；`resumed_from` 只在真的
+    接着跑时才写）。
     """
     root = Path(session_root) if session_root is not None else Path(str(getattr(store, "root", "")))
     if not str(root):
