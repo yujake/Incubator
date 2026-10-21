@@ -83,7 +83,7 @@ from ..jsonlfile import read_jsonl_state
 __all__ = [
     "CHECKED_TYPES", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX", "HANDLERS",
     "LEDGER_EVENT_SCAN_BYTES", "LEDGER_EVENT_SCAN_KINDS", "LEDGER_EVENT_SCAN_SESSIONS",
-    "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
+    "LEDGER_ROLE_FIELDS", "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
     "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES", "ROSTER_INBOX_ITEMS",
     "ROSTER_NODES_MAX",
     "RUN_ROW_KEYS", "UNCHECKED_TYPES", "acceptance_face", "artifacts_face",
@@ -607,7 +607,9 @@ LEDGER_TASK_TRI_MISSING = "missing"
 #:
 #: 不在本表里的栏一律 `not_applicable`（这一栏的行不是"某条写入"）。已经定死的几类：
 #: - `conjectures` / `review_findings`：`schema.CITATION_PREFIXES` 里没有它们的引用前缀，
-#:   于是事件正文里没有一个能唯一定位的写法（裸六位号会误命中）；
+#:   于是事件正文里没有一个能唯一定位的写法（裸六位号会误命中）。要让这两栏也有编号，
+#:   必须先在 `schema.CITATION_PREFIXES` 里登记 `conj:` / `find:` —— 那在禁改区
+#:   （`schema.py`，FC-27 人审），本批刻意不动；
 #: - `handoffs`：手稿号是裸号（编号空间就是账本行号），同一个问题；
 #: - `secretary` / `checks` / `products`：秘书台账没有稳定的行编号，验收表是配置行
 #:   （`C1`–`C8`），六件产物是文件清单 —— 它们都不是"某一条写入"。
@@ -620,6 +622,22 @@ _LEDGER_ROW_TOKENS: dict[str, tuple[str, str]] = {
     "ledger_verify": ("path", ""),
     "tasks": ("task_id", ""),
 }
+
+#: `by_role` 的有序取值来源（第一个非空的赢）与它同时公开的 `by_role_source`。
+#:
+#: 为什么允许回退：严格只认 `created_by` 时产物面每一行都是空串（`ARTIFACTS.jsonl`、
+#: `handoffs.jsonl`、`tasks` 都没有那一栏，它们的角色写在 `producer` / `sender` /
+#: `role` 里），而业主的原话是"台账里也要看到角色和编号" —— 整面全是"（未记录角色）"
+#: 等于没做到。回退仍然可复核，因为"这一格是从哪个字段来的"同时公开在
+#: `by_role_source` 里：读的人知道它是原始字段还是派生结论，判据也据此断言。
+#:
+#: 次序按"这个字段离'谁写的'最近"排：`created_by` 是写入者自己的署名；`role` 是这一行
+#: 归属的角色；`producer` 是产出这件东西的程序/角色；`sender` 是发件人；`verifier` 是
+#: 签字的人；`author` 是作者。六格全空 ⇒ `by_role=""`、`by_role_source=""`
+#: （页面显示"（未记录角色）"），不退到 `task_id` / `path` 这类非角色字段上。
+LEDGER_ROLE_FIELDS: tuple[str, ...] = (
+    "created_by", "role", "producer", "sender", "verifier", "author",
+)
 
 
 def _recent_session_files(root_p: Path,
@@ -725,17 +743,36 @@ def _ledger_by_task_id(root_p: Path, tokens: Sequence[str]) -> dict[str, str]:
     return found
 
 
+def _ledger_role(row: Mapping[str, Any]) -> tuple[str, str]:
+    """这一行是谁写的：返回 `(角色, 这一格取自哪个字段)`；六格全空 ⇒ `("", "")`。
+
+    有序回退的口径与理由写在 :data:`LEDGER_ROLE_FIELDS` 上。这里只做一件事：按那个次序
+    取第一个非空值，并把"取到了哪一格"一起返回 —— 于是"派生的角色"永远带着它的出处，
+    读的人与判据都不必猜。
+
+    只认角色字段：`task_id` / `path` / `kind` 这些即使非空也不算角色（"这一行属于哪一趟"
+    与"这一行是谁写的"是两根轴，混一根轴会让两个读数同时失真）。
+    """
+    for field_name in LEDGER_ROLE_FIELDS:
+        got = str(row.get(field_name) or "").strip()
+        if got:
+            return got, field_name
+    return "", ""
+
+
 def _annotate_ledger_row(column: str, row: Mapping[str, Any],
                          index: Mapping[str, str]) -> dict[str, Any]:
-    """把一行台账补上 `by_role` / `by_task_id` / `by_task_id_tri` 三格。
+    """把一行台账补上 `by_role` / `by_role_source` / `by_task_id` / `by_task_id_tri`。
 
-    `by_role` 只认行里的 `created_by`（业主的口径）：没有就是空串，页面显示
-    "（未记录角色）"。为什么不退到 `producer` / `role` / `sender` 那些格子 —— 它们各自
-    说的是另一件事（谁产出了这个文件 / 这一行属于哪个角色 / 谁发的这条留言），拿它们顶上
-    会让"没有记录"看起来像"记录得很清楚"，而这一格的全部价值就是让那个缺口看得见。
+    `by_role` 走 `LEDGER_ROLE_FIELDS` 那六格的有序回退，`by_role_source` 说清它取自哪一格
+    （全空则两格都是空串）。为什么必须公开来源：回退一旦不给出来源，"这一行确实记录了角色"
+    与"我们从一个邻近字段推出来的"在读的人眼里长得一样 —— 而那正是这一格最容易变假话的
+    地方（三态纪律在"角色"这一轴上的落点）。
     """
     got = dict(row)
-    got["by_role"] = str(row.get("created_by") or "")
+    role, role_source = _ledger_role(row)
+    got["by_role"] = role
+    got["by_role_source"] = role_source
     spec = _LEDGER_ROW_TOKENS.get(column)
     if spec is None:
         got["by_task_id"] = ""
@@ -751,7 +788,7 @@ def _annotate_ledger_row(column: str, row: Mapping[str, Any],
 def _annotate_ledger_rows(root_p: Path,
                           columns: Mapping[str, Sequence[Mapping[str, Any]]]
                           ) -> dict[str, list[dict[str, Any]]]:
-    """一整面里每一栏台账行都补上那三格（反查只做一遍：一次请求一次有界扫描）。
+    """一整面里每一栏台账行都补上那四格（反查只做一遍：一次请求一次有界扫描）。
 
     为什么按"面"而不是按"栏"：一面上有五到七栏，每栏各扫一遍事件流就是五到七次全文件
     读。口令先收集齐、扫一遍、再回填 —— 于是"这一面一次请求一次扫描"是结构上的事实，
@@ -1116,16 +1153,18 @@ def artifacts_face(root: str | Path, store: Any = None, *,
 # ====================================================================== 5 收工门
 def _acceptance_rows(criteria: Mapping[str, str],
                      details: Mapping[str, str]) -> list[dict[str, Any]]:
-    """验收面的逐条行：一条判据一行，另带"谁 / 哪一趟"那三格（编号不适用）。
+    """验收面的逐条行：一条判据一行，另带"谁 / 哪一趟"那四格（编号不适用）。
 
     为什么这一面也要有"行"：业主那句"台账面每一行都带角色加编号"里，收工门是最像台账
     的一面（C1–C8 那几条读数是人一条条看的）。它每一条判据都带 `by_role` /
-    `by_task_id` / `by_task_id_tri` 三格，三档的处置于是与另外两面同一套。
+    `by_role_source` / `by_task_id` / `by_task_id_tri`，三档的处置于是与另外两面同一套。
 
     这一面的行不是"某条写入"：判据是现算的，不落任何台账行，所以 `by_task_id` 恒为空串、
     `by_task_id_tri` 恒为 `not_applicable`。把它们写成 `missing` 会让每一行永远挂着一个
-    假红的缺口（"查过了没找到"），而这里事实上是"编号用不着"。`by_role` 也是空串：
-    验收判据不属于任何一个角色。三态不折平的另一半在这三格的定义里，不在这句注释里。
+    假红的缺口（"查过了没找到"），而这里事实上是"编号用不着"。`by_role` 与
+    `by_role_source` 也恒为空串：验收判据不属于任何一个角色，也没有一个角色字段可退
+    （这一行本来就没有那六格里的任何一格）。三态不折平的另一半在这四格的定义里，
+    不在这句注释里。
     """
     from ..reviewaccept import CRITERIA
 
@@ -1135,7 +1174,8 @@ def _acceptance_rows(criteria: Mapping[str, str],
             "key": str(key), "title": str(title),
             "value": str(criteria.get(str(key), "unknown")),
             "detail": str(details.get(str(key), "")),
-            "by_role": "", "by_task_id": "", "by_task_id_tri": TRI_NOT_APPLICABLE,
+            "by_role": "", "by_role_source": "",
+            "by_task_id": "", "by_task_id_tri": TRI_NOT_APPLICABLE,
         })
     return out
 
@@ -2378,7 +2418,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("tri", "Tri"),
       # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：六件产物是文件清单、不是某条
       # 写入 ⇒ 编号那一格恒为 `not_applicable`，但三格照样在每一行上（页面处置同一套）。
-      ("by_role", "string"), ("by_task_id", "string"), ("by_task_id_tri", "string"))),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"), ("by_task_id_tri", "string"))),
     ("CheckpointSpendView",
      "检查点的花销子树（`llmseam.SeamSpend.to_dict()`：calls/tokens_in/tokens_out/usd/"
      "unknown_usd_calls）",
@@ -2462,7 +2503,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "acceptance_face() 的 rows[] —— 一条验收判据一行（键名来自 reviewaccept.CRITERIA；"
      "编号那一格恒为 not_applicable：判据是现算的、不落任何台账行）",
      (("key", "string"), ("title", "string"), ("value", "string"), ("detail", "string"),
-      ("by_role", "string"), ("by_task_id", "string"), ("by_task_id_tri", "string"))),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"), ("by_task_id_tri", "string"))),
     ("SettingsReading",
      "machine_face() 的 `settings` —— 设置文件的各段（key 只给掩码后的那一份）",
      (("path", "string"), ("exists", "boolean"),
@@ -2571,7 +2613,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("line_range", "string"), ("created_at", "string"), ("created_by", "string"),
       # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：后三格是读模型的 join
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
-      ("by_role", "string"), ("by_task_id", "string"), ("by_task_id_tri", "string"))),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"), ("by_task_id_tri", "string"))),
     ("ReviewFindingRow",
      "store.rows(\"review_findings\")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）",
      (("finding_id", "string"), ("doc_id", "string"), ("kind", "string"),
@@ -2581,7 +2624,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("created_by", "string"), ("axis", "string"), ("line", "number | null"),
       ("verbatim_quote", "string"), ("maths", "string"),
       ("line_unavailable_reason", "string"),
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("RelationRow",
      "store.rows(\"relations\")（无真机样本 ⇒ 权威来源是 `schema.Relation`）",
@@ -2592,7 +2636,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("concept_group_key", "string"), ("dedup_key", "string"), ("status", "string"),
       ("duplicate_of", "string"), ("created_at", "string"),
       ("supporting_lit_ids", "string[]"),
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("VerificationRow",
      "verifications.list_verifications()（裁定 K2：无真机样本 ⇒ 夹具造一行）",
@@ -2602,7 +2647,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("unresolved_errors", "number"), ("proof_sha256", "string"),
       ("proof_chars", "number"), ("round", "number"), ("used_faces", "string[]"),
       ("submission_id", "string"), ("at", "string"),
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("ArtifactRow",
      "artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）",
@@ -2611,13 +2657,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("exit_code", "number | null"), ("note", "string"),
       # 台账行没有 `created_by`（`artifacts.FIELDS` 里没有那一栏）⇒ `by_role` 是空串。
       # `by_task_id` 按 `path` 反查（`agent_run_artifact` 事件同时带 path 与编号）。
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("LedgerVerifyRow",
      "artifacts.verify_entries() 的行 —— 台账钉的 sha 与盘上现在这一版是不是同一版",
      (("path", "string"), ("sha256", "string"), ("producer", "string"),
       ("at", "string"), ("sha256_now", "string"), ("status", "string"),
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("HandoffRow",
      "manuscripts.read_rows() 的行（`manuscripts.write` 写的 14 个键；"
@@ -2630,7 +2678,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("ref_problems?", "Record<string, string>"),
       # 手稿号是裸号（编号空间就是账本行号）⇒ 拿它当事件口令会误命中，
       # 所以这一栏的 `by_task_id_tri` 是 `not_applicable`（见 `_LEDGER_ROW_TOKENS`）。
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("SecretaryDecision",
      "out/secretary/<角色>.jsonl（老文件）与 out/secretary/<角色>-<实例号>.jsonl（S1m 起的分片）"
@@ -2645,7 +2694,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("target?", "string"),
       # 这一栏没有稳定的行编号（分片之后 `seq` 只在一个文件内唯一）⇒ 编号那一格
       # 是 `not_applicable`；角色也照业主的口径只认 `created_by`（这一栏没有它）。
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("AcceptanceCheck",
      "out/paper/ACCEPTANCE-CHECKS.json 的一行（真机 8 行 C1–C8；"
@@ -2653,7 +2703,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("id", "string"), ("kind", "string"), ("min", "number"), ("name", "string"),
       ("note", "string"),
       # 验收表是配置行（`C1`–`C8`），不是某条写入 ⇒ 编号那一格是 `not_applicable`。
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("ReportStyle",
      "out/review/REPORT-STYLE.json 的 `sections`（真机四节名字）",
@@ -2674,7 +2725,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("keep_alive", "boolean"),
       # 任务行的编号就是它自己的 `task_id`（按它反查，命中的是这一趟自己的收尾事件）。
       # 角色这一格照业主的口径只认 `created_by`（Task 没有那一栏）⇒ 空串。
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("ConjectureRow",
      "store.rows(\"conjectures\")（真机 p9b/data/conjectures.json；无样本时以 "
@@ -2689,7 +2741,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("withdraw_reason", "string"), ("duplicate", "boolean | null"),
       # `conj:` 不是 `schema.CITATION_PREFIXES` 登记的前缀，裸六位号又会误命中
       # ⇒ 这一栏的编号那一格是 `not_applicable`（见 `_LEDGER_ROW_TOKENS`）。
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("ExperimentRow",
      "store.rows(\"experiments\")（真机 p9b/data/experiments.json；无样本时以 "
@@ -2706,7 +2759,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("created_at", "string"), ("created_by", "string"),
       ("for_question_id", "string"),
       # `exp:` 是 `schema.CITATION_PREFIXES` 登记的前缀 ⇒ 这一栏的编号真反查得出来。
-      ("by_role", "string"), ("by_task_id", "string"),
+      ("by_role", "string"), ("by_role_source", "string"),
+      ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("UsageRow",
      "store.rows(\"usage_ledger\")（真机 p9b/data/usage_ledger.json 37 行）",

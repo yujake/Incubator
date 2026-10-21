@@ -6,8 +6,11 @@
 三个只读台账面（证据链 / 产物 / 收工门）的每一行，除了表里原本就有的字段之外，
 还要能回答两个问题：
 
-- `by_role`：这一行是谁写的（取自行里的 `created_by`；没有就是空串，页面显示
-  "（未记录角色）"）；
+- `by_role`：这一行是谁写的。按 `readers.LEDGER_ROLE_FIELDS` 的有序回退取第一个非空的
+  那一格（`created_by` → `role` → `producer` → `sender` → `verifier` → `author`），
+  六格全空就是空串（页面显示"（未记录角色）"，不许编）；
+- `by_role_source`：上面那一格**取自哪个字段**。派生的角色必须带着它的出处，否则
+  "这一行确实记录了角色"与"我们从一个邻近字段推出来的"在读的人眼里长得一样；
 - `by_task_id`：这一行是哪一个绝对编号的那一趟写的（从事件流反查；找不到就是空串，
   不许编）。
 
@@ -35,6 +38,8 @@
 - 只有"事件自己带 `task_id`"才算 `event`：`agent_step` 那一类事件带着工具结果
   （写入的真身）却不带编号，于是它只能落到 `missing` —— 那正是这一格在等
   写侧补 `task_id` 的地方，不许拿"相邻那条 llm_call 的编号"顶上。
+- `by_role` 的回退只认角色字段：`task_id` / `path` / `kind` 那些即使非空也不算角色
+  （"这一行属于哪一趟"与"这一行是谁写的"是两根轴）。
 """
 
 from __future__ import annotations
@@ -132,22 +137,25 @@ def test_the_evidence_rows_carry_a_role_and_the_run(tmp_path: pathlib.Path) -> N
 
     assert first["created_by"] == "B", first
     assert first["by_role"] == "B", first
+    # 角色取自哪一格必须公开：这一行走的是回退链的第一格
+    assert first["by_role_source"] == "created_by", first
     assert first["by_task_id"] == "t-000009", first
     assert first["by_task_id_tri"] == "event", first
 
     assert second["created_by"] == "V", second
     assert second["by_role"] == "V", second
+    assert second["by_role_source"] == "created_by", second
     assert second["by_task_id"] == "", second
     assert second["by_task_id_tri"] == "missing", second
 
-    # 多出来的三格必须同时出现在生成的类型声明里（契约 C 是双向的）。
+    # 多出来的四格必须同时出现在生成的类型声明里（契约 C 是双向的）。
     # 逐键相等这一条不适用于这一栏：夹具写的是两行"只有主键 + 谁写的"的最小行，
     # `schema.Statement` 的其余字段没有值可写（`store.rows` 不补默认值）。
-    # 这里钉的是契约 C 真正问的两件事：后端给的键都在声明里、三格两边都在。
+    # 这里钉的是契约 C 真正问的两件事：后端给的键都在声明里、四格两边都在。
     for row in got["statements"]:
         assert set(row) <= set(FIELDS["StatementRow"]), (
             sorted(set(row) - set(FIELDS["StatementRow"])))
-        for key in ("by_role", "by_task_id", "by_task_id_tri"):
+        for key in ("by_role", "by_role_source", "by_task_id", "by_task_id_tri"):
             assert key in FIELDS["StatementRow"], key
             assert key in row, (key, sorted(row))
 
@@ -165,12 +173,15 @@ def test_the_artifact_ledger_rows_carry_the_run_that_recorded_them(
     one = rows["out/experiments/e-0001.log"]
     assert one["by_task_id"] == "t-000009", one
     assert one["by_task_id_tri"] == "event", one
-    # ARTIFACTS.jsonl 的行没有 created_by ⇒ 角色这一格是空串（不是编一个 producer）
-    assert one["by_role"] == "", one
+    # 台账行没有 created_by ⇒ 回退到 producer。这一条就是"产物面不再整面空角色"的
+    # 回归钉：改回"只认 created_by"时它会当场红。
+    assert one["by_role"] == one["producer"] == "agent-e", one
+    assert one["by_role_source"] == "producer", one
 
     two = rows["out/experiments/e-0002.log"]
     assert two["by_task_id"] == "", two
     assert two["by_task_id_tri"] == "missing", two
+    assert two["by_role_source"] == "producer", two
 
     for row in got["ledger"]:
         assert set(row) == set(FIELDS["ArtifactRow"]), sorted(row)
@@ -194,6 +205,7 @@ def test_the_acceptance_rows_carry_a_role_slot_and_say_the_number_does_not_apply
     for row in rows:
         assert set(row) == set(FIELDS["AcceptanceRow"]), sorted(row)
         assert row["by_role"] == "", row
+        assert row["by_role_source"] == "", row
         assert row["by_task_id"] == "", row
         assert row["by_task_id_tri"] == "not_applicable", row
     # 值那一格照旧是原样的三档读数（注解层不许改动它）
@@ -293,3 +305,80 @@ def test_the_reverse_lookup_only_scans_the_recent_sessions(tmp_path: pathlib.Pat
     assert after == before, (before, after)
     # 一条宽松的墙钟界：它只证明"没有整盘扫"，不冒充性能判据
     assert elapsed < 30.0, elapsed
+
+
+# ====================================================================== 判据六：角色回退
+def test_the_role_falls_back_in_order_and_says_which_field_it_came_from(
+        tmp_path: pathlib.Path) -> None:
+    """正控（有序回退）＋负控（全空不编）：`by_role` 走 `LEDGER_ROLE_FIELDS`，来源公开。
+
+    这一条钉四件事：
+
+    1. 那六格的有序回退每一档都取得到，而 `by_role_source` 说的是**真的那一格**
+       （`created_by` / `role` / `producer` / `sender` / `verifier`）；
+    2. 优先级是"先到先得"，不是"哪个更像角色"：一行同时有 `created_by` 与 `role` 时
+       取 `created_by`；
+    3. 负控（不许编）：六个角色字段全空 ⇒ `by_role=""`、`by_role_source=""`
+       （页面显示"（未记录角色）"），**不退到** `task_id` / `path` / `kind` 这类
+       非角色字段 —— "这一行属于哪一趟"与"这一行是谁写的"是两根轴；
+    4. 声明同步：`by_role` / `by_role_source` 在那 14 个行接口的声明里都真的有。
+    """
+    from agentflow import manuscripts as MS
+    from agentflow import verifications as V
+
+    root = tmp_path / "ws"
+    # 第一档 created_by / 优先级 / 第三档负控：statements 三行
+    _write_table(root, "statements", [
+        {"stmt_id": "000001", "created_by": "B", "created_at": TS},
+        {"stmt_id": "000002", "created_by": "B", "role": "X", "created_at": TS},
+        {"stmt_id": "000003", "created_at": TS},
+    ])
+    # 第二档 role；以及负控二：只有 task_id、一个角色字段都没有
+    _write_table(root, "tasks", [
+        {"task_id": "t-000001", "role": "M", "status": "done"},
+        {"task_id": "t-000002", "status": "done"},
+    ])
+    # 第三档 producer（台账行没有 created_by，这一档就是产物面不再整面空角色的原因）
+    _write_jsonl(root / "ARTIFACTS.jsonl", [
+        {"at": TS, "path": "out/x.log", "sha256": "0" * 64, "bytes": 1,
+         "producer": "agent-e", "kind": "log", "task_id": "", "exit_code": 0, "note": ""},
+    ])
+    # 第四档 sender（走 manuscripts.write 这一个写入口）
+    MS.write(root, sender="M", recipient="E", summary="夹具：回退到 sender",
+             body="夹具正文：这一条交接是判据输入。", task_id="t-000001", sid="s1")
+    # 第五档 verifier（走 verifications.record_verification 这一个写入口）
+    V.record_verification(root, statement_id="0001", proof_text="夹具证明正文",
+                          verdict={"verdict": "成立"}, verifier="V")
+
+    ev = R.evidence_chain(root)
+    st = {str(r["stmt_id"]): r for r in ev["statements"]}
+    assert (st["000001"]["by_role"], st["000001"]["by_role_source"]) == ("B", "created_by")
+    # 2. 优先级：两格都有时取回退链里靠前的那一格
+    assert (st["000002"]["by_role"], st["000002"]["by_role_source"]) == ("B", "created_by")
+    # 3. 负控：六格全空 ⇒ 两格都空
+    assert (st["000003"]["by_role"], st["000003"]["by_role_source"]) == ("", "")
+    ver = ev["verifications"]
+    assert ver, "夹具没造出验证台账那一行"
+    assert (ver[0]["by_role"], ver[0]["by_role_source"]) == ("V", "verifier"), ver[0]
+
+    art = R.artifacts_face(root)
+    tasks = {str(r["task_id"]): r for r in art["tasks"]}
+    assert (tasks["t-000001"]["by_role"],
+            tasks["t-000001"]["by_role_source"]) == ("M", "role"), tasks["t-000001"]
+    # 负控二：行里有 task_id 但没有一个角色字段 ⇒ 不许拿 task_id 顶成角色
+    assert (tasks["t-000002"]["by_role"],
+            tasks["t-000002"]["by_role_source"]) == ("", ""), tasks["t-000002"]
+    led = art["ledger"][0]
+    assert (led["by_role"], led["by_role_source"]) == ("agent-e", "producer"), led
+    hand = art["handoffs"][0]
+    assert (hand["by_role"], hand["by_role_source"]) == ("M", "sender"), hand
+
+    # 4. 声明同步（生成的类型声明里那 14 个行接口都要有这两格）
+    for name in ("StatementRow", "ReviewFindingRow", "RelationRow", "ConjectureRow",
+                 "ExperimentRow", "VerificationRow", "ArtifactRow", "LedgerVerifyRow",
+                 "HandoffRow", "SecretaryDecision", "AcceptanceCheck", "TaskRow",
+                 "RunProduct", "AcceptanceRow"):
+        assert "by_role" in FIELDS[name], name
+        assert "by_role_source" in FIELDS[name], name
+    assert R.LEDGER_ROLE_FIELDS == ("created_by", "role", "producer", "sender",
+                                    "verifier", "author"), R.LEDGER_ROLE_FIELDS

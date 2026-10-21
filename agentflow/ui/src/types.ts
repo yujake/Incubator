@@ -163,6 +163,7 @@ export interface RunProduct {
   sha256: string;
   tri: Tri;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -316,6 +317,7 @@ export interface AcceptanceRow {
   value: string;
   detail: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -503,6 +505,7 @@ export interface StatementRow {
   created_at: string;
   created_by: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -528,6 +531,7 @@ export interface ReviewFindingRow {
   maths: string;
   line_unavailable_reason: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -550,6 +554,7 @@ export interface RelationRow {
   created_at: string;
   supporting_lit_ids: string[];
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -572,6 +577,7 @@ export interface VerificationRow {
   submission_id: string;
   at: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -588,6 +594,7 @@ export interface ArtifactRow {
   exit_code: number | null;
   note: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -601,6 +608,7 @@ export interface LedgerVerifyRow {
   sha256_now: string;
   status: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -625,6 +633,7 @@ export interface HandoffRow {
   kind?: string;
   ref_problems?: Record<string, string>;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -646,6 +655,7 @@ export interface SecretaryDecision {
   before?: string;
   target?: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -658,6 +668,7 @@ export interface AcceptanceCheck {
   name: string;
   note: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -696,6 +707,7 @@ export interface TaskRow {
   seen_step: number | null;
   keep_alive: boolean;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -721,6 +733,7 @@ export interface ConjectureRow {
   withdraw_reason: string;
   duplicate: boolean | null;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
@@ -751,6 +764,7 @@ export interface ExperimentRow {
   created_by: string;
   for_question_id: string;
   by_role: string;
+  by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
