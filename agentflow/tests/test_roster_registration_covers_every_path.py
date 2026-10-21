@@ -317,7 +317,7 @@ def test_no_secretary_is_a_named_problem_not_an_exception(tmp_path: pathlib.Path
     assert "没有秘书" in problem or "名册不在手上" in problem, out
     assert _adds(env["ws"], env["me"]) == [], "没有秘书时名册不许出现半行"
     res = env["cond"].summon(CHILD, "", {"task": "conductor 那一层"}, by=MY_ROLE,
-                             parent_task_id=env["me"], roster={"task": "conductor 那一层"})
+                             parent_task_id=env["me"])
     assert getattr(res, "roster_considered", False) is True, res
     assert "名册" in str(getattr(res, "roster_problem", "")), res
 
