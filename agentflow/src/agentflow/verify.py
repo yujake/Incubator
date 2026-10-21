@@ -966,6 +966,14 @@ def _check_6(rep, dependencies, documents, exp_by_id, experiments):
 
 
 
+#: 两条"断言与所引证据"义务的判据码（受控 kind 名；测试从这里读，不另抄字面量）。
+#: 本体在 `verifications.opposite_direction_evidence` / `one_evidence_used_twice`
+#: —— `_check_7` 只负责把判定翻译成 `Issue`（写入期 `doc_tools.check_proofs`
+#: 读的是同一个本体，见 `verifications` 那一节的说明）。
+OPPOSITE_DIRECTION_EVIDENCE_CODE = "opposite_direction_evidence"
+ONE_EVIDENCE_USED_TWICE_CODE = "one_evidence_used_twice"
+
+
 def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations,
              stmt_by_id):
     """`verify_all` 的第 7 段（行 718–864）。
@@ -1162,6 +1170,22 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                     rep.issues.append(Issue("warning", "documents", docid, "unknown_citation_kind",
                                             f"断言 {cid} 的引用 {x!r} 前缀无法识别"
                                             f"（应为 {'/'.join(k + ':' for k in CITATION_KINDS)}）"))
+                # ---- policy[7]：引用一条与断言方向相反的证据行（**error**）
+                #
+                # 这是"比没有引用更坏"的那一形态：读者会以为它被核过，而它自己的
+                # `result` 正是否证。判据本体只有一份
+                # （`verifications.opposite_direction_evidence`）：写入期
+                # `doc_tools.check_proofs` 读同一个函数，两处不可能分家。
+                # 悬空引用（`ref not in exp_by_id`）由上面的 `dangling_citation` 报，
+                # 这里传空行 ⇒ 判据不适用，不重复报。
+                if kind == "exp":
+                    hit = VR.opposite_direction_evidence(c, exp_by_id.get(ref) or {})
+                    if hit is not None:
+                        rep.issues.append(Issue(
+                            "error", "documents", docid,
+                            OPPOSITE_DIRECTION_EVIDENCE_CODE,
+                            f"断言 {cid}：{hit['why']}",
+                        ))
                 # ---- 撤回级联：引用了已被否决的关系 ⇒ 结论失去依据
                 if kind == "rel" and ref in rejected_by_id:
                     row = rejected_by_id[ref]
@@ -1187,6 +1211,18 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                 rep.issues.append(Issue(
                     "error", "documents", docid, "overclaim",
                     f"断言 {cid} 是 {c.get('evidence_kind')} 却没有 disclaimer（FC-22）"))
+
+    # ---- policy[9]：同一份证据不能当第二份用（`draft/39` §6.27 的 D39）
+    #
+    # **warning 而不是 error**：同一份证据被两条断言引用可以是正当的 —— 定理与它的
+    # 推论、综述复述同一条读数、两条不同表述压在同一次计算上。台账分不出"两条独立
+    # 支撑"与"一份支撑被数了两遍"，所以它必须是看得见的读数而不是硬拦；硬拦会红掉
+    # 合规稿件（"判据过窄 ⇒ 红掉合规输入"），完全不说又正是 D39 的形态。
+    # 判据本体见 `verifications.one_evidence_used_twice`（同一身份定义也供 E 那条
+    # `[同一份证据]` note 使用）。
+    for hit in VR.one_evidence_used_twice(documents, exp_by_id.values()):
+        rep.issues.append(Issue(
+            "warning", "documents", hit["doc_id"], ONE_EVIDENCE_USED_TWICE_CODE, hit["why"]))
 
     return rejected_by_id
 

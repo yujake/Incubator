@@ -42,6 +42,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import jsonlfile as JF
 from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
+from . import textutil as T  # 引用解析的唯一实现（`citation_ref_parts`，`P-5`）
 
 #: 验证台账目录（工作区根下）。
 VERIFICATIONS_DIR = "verifications"
@@ -665,6 +666,201 @@ def unverified_statement_refs(root: str | Path,
                  "「攻（攻坚推进）」那一格记 `unknown`（不是 `pass`）；`signed` 只是读数："
                  "「有行但没签」由审计期那一档（`proof_review_without_verification`）点名"),
     }
+
+
+# ============================================================ 断言与所引证据：方向 / 同一份证据复用
+#
+# 这一节是 `specs/g.py` policy[7]（「引用一个与断言相反的证据行，比没有引用更坏」）
+# 与 policy[9]（「同一份证据不能当第二份用」）两条义务的**机械判据本体**。
+#
+# 为什么落在 `verifications`（而不是在 `verify._check_7` 里直接写一份）：
+# 同一条口径在写入期（`doc_tools.check_proofs`，2026-10-13 起就有一条"引否证当支撑"）
+# 与审计期（`verify._check_7`）各读一次 —— 两处各写一份判据必然漂移，而漂移的形态是
+# "写入期拦下的，审计期照样说没问题"（FC-03 禁止的形态）。落法与
+# `weaker_than_evidence_gaps` 同源：判据本体只此一份，两个出口都调它。
+
+#: `experiments.result` 里"方向"只有两档有值；`inconclusive` 没有方向。
+#: 真身是 `schema.EXPERIMENT_RESULTS`，这里只把"相反"那一个取值点名。
+REFUTES = "refutes"
+#: `negation_kind` 里"已证否"那一档（受控词表真身是 `schema.NEGATION_KINDS`）。
+DISPROVED = "disproved"
+
+
+def opposite_direction_evidence(claim: Mapping[str, Any],
+                                experiment: Mapping[str, Any]) -> dict[str, Any] | None:
+    """这条断言引用这条实验时，方向是不是反的 —— 判据本体（纯读，`None` = 不反）。
+
+    ## 判的是什么（可机械化的那一半）
+
+    一条实验行自己的结论是 `result="refutes"`（连同 `negation_kind="disproved"`，
+    这是 `schema.Experiment.validate` 强制的），意思是**"它检验的那条命题被证否了"**。
+    一条正文断言把它列进 `citations` 当支撑时，台账上必须能读出"这条断言正是在说
+    「我们证否了它」" —— 机械读法就是 `is_negative=True` 且
+    `negation_kind="disproved"`（`doc_tools.check_proofs` 2026-10-13 的口径，
+    真机现场：`projects/p6t2-research-20261012b` 的 claim-2 把 `exp:0002`
+    （`result="refutes"`）列进 `citations` 当支撑，一路写库）。
+
+    判据只需要两个字段：证据行的 `result` / `negation_kind`，断言的
+    `is_negative` / `negation_kind`。**这两组字段都在 schema 里**，不需要新字段。
+
+    ## 哪一半判不了（如实登记，不硬造）
+
+    反方向的那一支 —— **断言登记成"已证否"、却引一条 `result="supports"` 的实验** ——
+    **不归本判据管**。理由不是"懒得写"，而是它判不了：`supports` 是相对于**实验行
+    自己的 `claim`** 说的，而一条否定型断言（例如「不存在这样的图」）完全可能由一条
+    `supports` 的实验支持（实验检验的命题本身就是那句否定命题）。更常见的是
+    `supports` 只是 `cross_check`（数值支持）——「我们未能证明 P」引一条数值支持 P 的
+    实验并不矛盾，"数值支持"本来就不构成证明。要判它，必须让实验行
+    声明"它检验的命题相对于这条正文断言的正负极性"（例如 `tests_claim_id` +
+    `direction` 两格），那是 schema 改动，不是审计侧能单方面补的。
+    同理，`result="refutes"` 引一条正面断言也只有在"实验检验的就是这条断言所说的命题"
+    时才是真相反 —— 本判据把"引用关系"当成那个链接（与写入期、收工门同一口径）。
+
+    ## 返回值
+
+    不反 ⇒ `None`。反 ⇒ 一个 dict（`experiment_id` / `result` / 断言侧字段 / `why`），
+    写入期与审计期各自决定怎么呈现（`problem` / `Issue`），**判定本身不重复**。
+    """
+    if str(experiment.get("result") or "") != REFUTES:
+        return None
+    if bool(claim.get("is_negative")) and str(claim.get("negation_kind") or "") == DISPROVED:
+        return None
+    eid = str(experiment.get("experiment_id") or "")
+    return {
+        "experiment_id": eid,
+        "result": REFUTES,
+        "claim_is_negative": bool(claim.get("is_negative")),
+        "claim_negation_kind": str(claim.get("negation_kind") or ""),
+        "why": (
+            f"它引了 {('exp:' + eid) if eid else '这条实验'} 当支撑，而那条实验自己的结论是 "
+            f"`result={REFUTES!r}`（否证）⇒ 一条否证被当成支撑用了。"
+            "要么把这条断言改成否定型并写 `is_negative=True` + "
+            f"`negation_kind={DISPROVED!r}`（「我们证否了它」），"
+            "要么换一条真正支持它的证据；只在正文里解释「那只是脚本内部判据的问题」不算数 —— "
+            "台账上它仍然是 refutes。"
+        ),
+    }
+
+
+def _freeze(value: Any) -> Any:
+    """把 `observations.data` 变成可比较的规范形（dict 的键序不参与同一性）。"""
+    if isinstance(value, Mapping):
+        return tuple(sorted((str(k), _freeze(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return repr(value)
+
+
+def evidence_identity(row: Mapping[str, Any]) -> tuple[Any, ...]:
+    """一条实验行的"证据身份"：同一份读数只该算一份证据。
+
+    ## 为什么身份不能只是 `experiment_id`
+
+    真机读数（`draft/39` §6.27 的 D39，T2 第 9 趟 `p6k`）：一个脚本被派了 9 次，
+    claim 分别是 W(2)/W(3)/W(4)…，而每次都打印**逐字相同**的 `data`（30 顶点 / 度 3）
+    —— 那始终是同一个图。台账上于是有 9 条 `result="supports"`，手稿把它们当
+    9 份独立证据引：同一份读数被当成了九份。这 9 条的 `experiment_id` 各不相同，
+    所以"按 `experiment_id` 判重"看不见它。
+
+    ## 身份的定义（与 E 写入期那条 note 同一处）
+
+    - 有 `observations.data`（非空）⇒ 同脚本（`code_hash`）+ 同 `data` 即同一份证据
+      （`code_hash` 为空也照比：历史行没有哈希时，"同 data" 仍是唯一可比的读数）；
+    - 没有 `data` ⇒ 退回到 `experiment_id`（同一行被引两次是同一份证据；
+      两行都没有 data 时**不**合并 —— 那会靠猜）。
+
+    这条定义此前只在 `agent_e.run_experiment._reused_evidence_note` 里，
+    现在两边都读这一个函数（FC-03：同一件事不许有两份定义）。
+    """
+    obs = row.get("observations")
+    data = dict(obs.get("data") or {}) if isinstance(obs, Mapping) else {}
+    if data:
+        return ("data", str(row.get("code_hash") or ""), _freeze(data))
+    return ("row", str(row.get("experiment_id") or ""))
+
+
+def one_evidence_used_twice(documents: Iterable[Mapping[str, Any]],
+                            experiments: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """同一份证据被**同一份稿件**里的两条不同断言当独立证据用 —— 纯读。
+
+    ## 判据（一条）
+
+    把每份稿件的 `claims[].citations` 里的 `exp:` 引用按 :func:`evidence_identity`
+    归组；同一组里出现 ≥ 2 个**不同的 `claim_id`** ⇒ 报一条。
+
+    为什么是 warning 而不是 error（与 `opposite_direction_evidence` 的 error 不同）：
+    同一份证据被两条断言引用**可以是正当的** —— 定理与它的推论、综述里复述同一条读数、
+    两条不同表述压在同一次计算上。台账分不出"两条独立支撑"与"一份支撑被数了两遍"，
+    所以它必须是**看得见的读数**，不是硬拦。硬拦会红掉合规稿件（本项目最忌的
+    "判据过窄 ⇒ 红掉合规输入"），而完全不说又正是 D39 的形态。
+    处置写进 `why`：是复现就在正文与实验行 `notes` 里说清，否则换一条真正独立的证据。
+
+    ## 范围只在一份稿件内
+
+    跨稿件复用同一份证据是正常的（综述与论文引同一条实验）。判据只在同一份 `documents`
+    行内部比较 —— 那是"一条断言引一条实验行"这句话的作用域。
+
+    ## 返回值
+
+    `[{doc_id, claim_ids, experiment_ids, why}]`；空列表 = 不报（正常形态）。
+    """
+    exp_by_id: dict[str, Mapping[str, Any]] = {}
+    for row in experiments:
+        if not isinstance(row, Mapping):
+            continue
+        eid = str(row.get("experiment_id") or "")
+        if eid:
+            exp_by_id[eid] = row
+    out: list[dict[str, Any]] = []
+    for doc in documents:
+        if not isinstance(doc, Mapping):
+            continue
+        doc_id = str(doc.get("doc_id") or "")
+        groups: dict[tuple[Any, ...], dict[str, list[str]]] = {}
+        for claim in doc.get("claims") or []:
+            if not isinstance(claim, Mapping):
+                continue
+            cid = str(claim.get("claim_id") or "")
+            if not cid:
+                continue
+            for cite in claim.get("citations") or []:
+                kind, ref = T.citation_ref_parts(cite)
+                if kind != "exp":
+                    continue
+                row = exp_by_id.get(ref)
+                if row is None:
+                    continue          # 悬空引用由 `dangling_citation` 报，不在这里重复
+                group = groups.setdefault(evidence_identity(row),
+                                          {"claim_ids": [], "experiment_ids": []})
+                if cid not in group["claim_ids"]:
+                    group["claim_ids"].append(cid)
+                if ref not in group["experiment_ids"]:
+                    group["experiment_ids"].append(ref)
+        for group in groups.values():
+            claim_ids = sorted(group["claim_ids"])
+            if len(claim_ids) < 2:
+                continue
+            experiment_ids = sorted(group["experiment_ids"])
+            evidence = " / ".join(f"exp:{eid}" for eid in experiment_ids)
+            if len(experiment_ids) == 1:
+                same = f"同一条实验行（{evidence}）"
+            else:
+                same = (f"{evidence} 是同脚本 + 同 `data` 的两次运行"
+                        "（`observations.data` 逐字相同）")
+            out.append({
+                "doc_id": doc_id,
+                "claim_ids": claim_ids,
+                "experiment_ids": experiment_ids,
+                "why": (
+                    f"稿件 {doc_id} 的断言 {'、'.join(claim_ids)} 都把 {evidence} 当独立证据用，"
+                    f"而它是同一份证据（{same}）⇒ 一条证据被算成了两份。"
+                    "若这是复现（同一个对象被核了两次），请在正文与实验行的 `notes` 里"
+                    "说清「这不是第二份独立证据」；否则换一条真正独立的证据。"
+                ),
+            })
+    return out
 
 
 def selftest() -> int:

@@ -434,6 +434,9 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p174", "count": 14,
      "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
      "note": "抬版本 p174（2026-10-21）：其它角色减负 + availability/parent_limits 迁移记账；键集未变"},
+    {"version": "p175", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p175（2026-10-21）：G 的两条义务补上机械闸后压/删提示词；键集未变"},
 )
 
 

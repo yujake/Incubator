@@ -47,6 +47,7 @@ from .. import claimanatomy as CA
 from .. import papercompile as PC
 from .. import schema as S
 from .. import textutil as T
+from .. import verifications as VR
 from ..store import StoreError
 from .base import ToolRegistry, ToolSpec, fail, ok, tool
 
@@ -1077,26 +1078,27 @@ def check_proofs(
         # 判据：引了 `result="refutes"` 的实验 ⇒ 这条断言必须是否定型里"已证否"那一档
         # （`is_negative` 且 `negation_kind="disproved"`）。别的组合都报 —— 因为
         # "实验否证了 P"与"P 成立"是两件相反的事，不许靠读正文才分得出来。
+        # 2026-10-21：判定本体搬进 `verifications.opposite_direction_evidence`
+        # （FC-03：同一句话在写入期与审计期各写一份必然漂移）。本处只保留
+        # "problem 的 kind / detail"这一层翻译；判据本身、以及"哪一半判不了"的
+        # 上界，都写在那个函数里。行为逐字不变（同一组字段、同一条报文）。
         for ref in exp_refs:
             row = exp_by_id.get(ref)
             if row is None:
                 continue
-            if str(row.get("result") or "") != "refutes":
+            if VR.opposite_direction_evidence(c, row) is None:
                 continue
-            disproved = bool(c.get("is_negative")) \
-                and str(c.get("negation_kind") or "") == "disproved"
-            if not disproved:
-                problems.append({
-                    "claim_id": cid,
-                    "kind": "claim_cites_a_refuting_experiment",
-                    "detail": (
-                        f"这条断言引了 {ref} 当支撑，而 {ref} 自己的结论是 "
-                        f"`result={str(row.get('result'))!r}`（否证）⇒ 引一条否证当支撑。"
-                        "要么把这条断言改成否定型并写 `negation_kind='disproved'`"
-                        "（'我们证否了它'），要么换一条支持它的证据；"
-                        "只在正文里解释'那只是脚本内部判据的问题'不算数 —— 台账上它仍是 refutes"
-                    ),
-                })
+            problems.append({
+                "claim_id": cid,
+                "kind": "claim_cites_a_refuting_experiment",
+                "detail": (
+                    f"这条断言引了 {ref} 当支撑，而 {ref} 自己的结论是 "
+                    f"`result={str(row.get('result'))!r}`（否证）⇒ 引一条否证当支撑。"
+                    "要么把这条断言改成否定型并写 `negation_kind='disproved'`"
+                    "（'我们证否了它'），要么换一条支持它的证据；"
+                    "只在正文里解释'那只是脚本内部判据的问题'不算数 —— 台账上它仍是 refutes"
+                ),
+            })
         if str(c.get("evidence_kind") or "") != "proof":
             continue
         if not exp_refs:

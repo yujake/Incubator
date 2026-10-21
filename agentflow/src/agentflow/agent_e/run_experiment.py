@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ._support import Any, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
+from .. import verifications as VR
 
 #: 「玩具例子」在台账上的落点：`experiments.observations[TOY_EXAMPLE_KEY]`。
 #:
@@ -420,17 +421,20 @@ class _RunExperiment:
             if str(row.get("claim_key") or "") == str(claim_key):
                 # 这条断言已经有自己的证据行 ⇒ 这一次是复现（正当），不是"另一条断言拿了同一份证据"。
                 return ""
+        # "同一份证据"的身份只有一处定义（`verifications.evidence_identity`）：
+        # 审计期那条判据（`one_evidence_used_twice`）读的是同一个函数 ⇒
+        # "E 在 notes 里点了名"与"审计会报"不会给出两套答案（FC-03）。
+        ident = VR.evidence_identity({"code_hash": code_hash,
+                                      "observations": {"data": now_data}})
         for row in self.store.rows("experiments"):
-            if str(row.get("code_hash") or "") != str(code_hash):
+            if VR.evidence_identity(row) != ident:
                 continue
-            old_data = dict((row.get("observations") or {}).get("data") or {})
-            if old_data and old_data == now_data:
-                return (f"[同一份证据] 这个脚本（sha256 前 16 位 {str(code_hash)[:16]}）"
-                        f"在 `exp:{row.get('experiment_id')}` 上给过**逐字相同**的 `data`"
-                        f"（{_digest(str(now_data), 160)}），"
-                        f"而那一条的断言是另一条（`{row.get('claim_key')}`）⇒ 先确认这次真的换了参数"
-                        f"（把参数写进 `params`、把核的对象写进 `data` 的键里），"
-                        f"否则这不是第二份独立证据，是同一份读数被算了两次")
+            return (f"[同一份证据] 这个脚本（sha256 前 16 位 {str(code_hash)[:16]}）"
+                    f"在 `exp:{row.get('experiment_id')}` 上给过**逐字相同**的 `data`"
+                    f"（{_digest(str(now_data), 160)}），"
+                    f"而那一条的断言是另一条（`{row.get('claim_key')}`）⇒ 先确认这次真的换了参数"
+                    f"（把参数写进 `params`、把核的对象写进 `data` 的键里），"
+                    f"否则这不是第二份独立证据，是同一份读数被算了两次")
         return ""
 
 

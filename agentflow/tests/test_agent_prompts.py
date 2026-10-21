@@ -2689,7 +2689,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: ⚠️ 这一格号钉的是**冻结那一刻的树**，不是日期：那一刻逐文件记了 sha256（见本次收口回报）；
 #:    哪一份文件在冻完之后又动了，`test_the_prompt_version_moves` 会当场红 —— 那时**先看
 #:    是不是别人的线又落了东西**，再决定是重算这张表（同版本号、新时刻）还是抬下一格。
-_FROZEN_PROMPT_VERSION = "p174"
+_FROZEN_PROMPT_VERSION = "p175"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2711,7 +2711,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "d695c795cfa7c923db03a889e6c215b11d22c22866bfee85e041bc018da09eac",
     "E": "de2a1679040e7a22af14f376edd38666ac2a4f67f74b418e838ad430dfee6765",
     "F": "49f9f4310d8172904c53b39d5766b370964fcc5847333beb070540ec5acee71c",
-    "G": "f75a840a75a4f6bc94e86813b5cd4a1259bba036fc659854bddd09acf165fa28",
+    "G": "91a7e7ac9dcd0134baba11037586a9cf0498bceecf87c2f0e30826ef2e1dbd6c",
     "H": "e8e05e0dd925be7e902b1f0a64651448b9c74a03fa20d12dd08566aff83726ce",
     "V": "97ca671168ac54d1ee986f02b2c6e0942c4aee23f4fb4c84e0b0f1b2da05008c",
     "M": "b0d04c64d9396bb27f8b1363b7edeb02fed74f9bfa678e551e1c92f70987babc",
