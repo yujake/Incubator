@@ -167,12 +167,19 @@ PROOFS_KEY = "proofs"
 
 
 def as_proof_no(value: Any) -> int:
-    """把一个证明号归一成正整数（`2` / `"2"` / `"p2"` / `"#p2"` 都认）；认不出 ⇒ 0。
+    """把一个证明号归一成正整数（`2` / `"2"` / `"p2"` / `"#p2"` / `"stmt:000004#p2"` 都认）；认不出 ⇒ 0。
 
     0 表示"这不是一个证明号"。写入口用它把调用方给的 `proof_no` 归一，读侧用它判
     "这一格有没有写证明号"；两处用同一个函数，免得一边认 `p2` 一边不认。
+    带 `#pN` 尾巴的写法交给 `proofloc`（全仓拆这个尾巴的唯一解析点，业主 2026-10-22）：
+    两份解析意味着"台账上是第 2 条、读出来是第 1 条"这种错没有任何东西会报。
     """
-    text = str(value or "").strip().lstrip("#").lstrip("pP")
+    text = str(value or "").strip()
+    if "#p" in text:
+        from . import proofloc as _PL   # 惰性：`proofloc` 只被这一处与依赖读侧用到
+
+        return _PL.parse_used_by(text)[1]
+    text = text.lstrip("#").lstrip("pP")
     try:
         got = int(text)
     except (TypeError, ValueError):
@@ -336,6 +343,12 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     }
     if store is None:
         _append_verification(path, row)
+        return row
+    if not signs_bit3(row):
+        # 签不住的结论也要落台账（它是"看过、结论是没过"的证据），但它不翻任何位。
+        _append_verification(path, row)
+        row["statement_writeback"] = sign_statement(store, row=row, proof_text=proof_text,
+                                                    path=path, proof_no=no)
         return row
     row["statement_writeback"] = sign_statement(store, row=row, proof_text=proof_text,
                                                 path=path, proof_no=no)
@@ -610,6 +623,11 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
                         "第 3 位没查成（不是「没签过」，也不是「签过过期」）"))
         return out
     out["checked"] = True
+    if not str(proof_text or "").strip():
+        # 空正文不是"签过过期"：没有被审的对象，「签没签过」这件事无从谈起。
+        out.update(why=(f"{proof_label(sid, no)} 的正文是空的 ⇒ 没有被审的那一份，"
+                        "这一格既不是「签过」也不是「签过过期」"))
+        return out
     mine = [r for r in rows if (as_proof_no(r.get("proof_no")) or 1) == no]
     out["proof_rows"] = len(mine)
     if not mine:
@@ -787,15 +805,17 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]
     强制）：`proof_review` —— 证明经逐行审阅（`statements` 表的 `proof_text` 非空 + V 的
     `verifications` 里那一条签「成立」）。三条都要成立（缺哪条就报哪条，`why` 里说清）：
     1. `proof_text` 非空 —— 没有被审的那份证明，"审过"无从谈起；
-    2. `verifications/<命题号>.jsonl` 里有一行，且最后那一行签得住第 3 位（`signs_bit3`：
-       `verdict="成立"` 且 `unresolved_errors == 0`）—— 取最后一行而不是"任意一行"：台账是
-       追加式的，后面若有一条「有毛病」，那一版就已经不是"成立"了；
-    3. 那一行记的 `proof_sha256` 就是现在这一版 `proof_text` 的 sha256 —— 台账记 sha 的唯一
-       用途就是这个；不查它，"V 审过"就退化成"V 审过某个东西"（改完证明不再送审，签名照样成立）。
-    三态：读不到台账 / 坏行 ⇒ `ok=False` 且 `checked=False`（没查成，不是"通过"）；调用方都不许
-    放行 ——"查不到凭据"与"凭据不合格"对这条命题是同一件事。返回键：`ok` / `checked` / `why` /
-    `statement_id` / `verification_id` / `verdict` / `round` / `unresolved_errors` /
-    `sha_matches` / `ledger` / `rows` / `problems` / `checklist`；`checklist` 是逐项过关读数
+    2. `verifications/<命题号>.jsonl` 里有一条盖住现行这一份正文的签（判定只走
+       `review_standing`：那一份证明现在的 sha 有 `signs_bit3` 的签）；
+    3. 那一签带着这一份正文的 `proof_sha256` —— 哈希回答"这份稿在你签完之后有没有被改过"。
+    2026-10-22 口径（业主）：第 3 条是读数，不是授权凭证。所以 `ok=False` 有两种完全
+    不同的来路，`state` 把它们分开：`stale`（签的是旧版 ⇒ 待复核）与 `rejected`
+    （签的就是这一份、结论不是「成立」）。写入期闸只拒后者与"一次都没签"，见
+    :func:`proof_review_gaps` —— "正文改过了"不许成为拒收理由。
+    三态：读不到台账 / 坏行 ⇒ `ok=False` 且 `checked=False`（没查成，不是"通过"）。返回键：
+    `ok` / `checked` / `why` / `state` / `proof_no` / `statement_id` / `verification_id` /
+    `verdict` / `round` / `unresolved_errors` / `sha_matches` / `ledger` / `rows` /
+    `problems` / `checklist`；`checklist` 是逐项过关读数
     （`[{"item", "ok", "detail"}]`，三条与上面一一对应），只为拒信存在（业主 2026-10-19 的口径：
     "拒收消息要让人/模型一眼看出该补哪一项"），不参与判据 —— 写错只改可读性。
     """

@@ -2369,6 +2369,12 @@ def test_the_design_tools_criterion_is_not_vacuous():
 #:   * 「新增模块要在这里登记」，连同"它为什么必须是一个顶层模块"的一行理由；
 #:     删模块要同时删掉它那一行理由（登记过期与漏登记同样危险：前者让人以为"有人看过了"）。
 _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
+    # 2026-10-22（多证明模型 S1）：`used_by` 里那个 `#pN` 尾巴的唯一解析点 ——
+    # 一条定理可以有多条证明，每条证明各有一条自己的依赖链；两份解析就会让
+    # 台账上是第 2 条、读出来是第 1 条这种错静默发生。
+    "proofloc.py": "证明定位的唯一解析点：DEFAULT_PROOF_NO / used_by_of / parse_used_by / "
+                   "parse_used_by_checked / proof_nos_of / is_canonical —— 不带 #pN 等价 #p1，"
+                   "坏后缀不抛、按 canonical 读并留 problem",
     # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
     # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
     "promptstability.py": "系统提示的步间稳定性与 prompt 缓存读数：split_facts（把每步会变的事实键移出 system）、"

@@ -4,6 +4,13 @@
 不带 `#pN` 一律等价于 `#p1`（canonical），所以老数据与老判据的读数逐字不变。
 全仓别的模块要拆这个尾巴就调这里，不许自己 split —— 两份解析意味着"台账上是第 2 条、
 读出来是第 1 条"这种错没有任何东西会报。
+
+口径（由 `tests/test_proofloc_parses_proof_positions.py` 逐条钉住）：
+
+- 干净：`stmt:000004`（老写法）、`stmt:000004#p1`（显式 canonical）、`stmt:000004#p2`；
+- 坏尾巴（读成 canonical，坏尾巴原文交回 `problem`）：`#p0` / `#p-1` / `#p` / `#pabc` /
+  `#` 结尾 / 多段 `#p2#p3` / 没有命题号的 `#p2`；
+- 空串 = "没有这条依赖"，不是坏尾巴。
 """
 
 from __future__ import annotations
@@ -13,8 +20,9 @@ from collections.abc import Iterable
 
 #: 缺省证明号（1 = canonical，也就是老数据里那条唯一的证明）。
 DEFAULT_PROOF_NO = 1
-#: 尾巴的形状：`#p` 后面必须是正整数（`#p0` / `#p` / `#pabc` 都不算）。
-_TAIL = re.compile(r"^(?P<head>.*?)#p(?P<num>[0-9]+)$")
+#: 干净尾巴的形状：恰好一段 `#p` + 正整数，且它前面必须还有命题号（`head` 非空）。
+#: 多段 / `#` 结尾 / 没有命题号那一类不靠这一条正则兜，由 `parse_used_by_checked` 先判。
+_TAIL = re.compile(r"^(?P<head>.+)#p(?P<num>[0-9]+)$")
 
 
 def used_by_of(stmt_id: str, proof_no: int = DEFAULT_PROOF_NO) -> str:
@@ -36,22 +44,25 @@ def parse_used_by(used_by: str) -> tuple[str, int]:
 
 
 def parse_used_by_checked(used_by: str) -> tuple[str, int, str]:
-    """同 :func:`parse_used_by`，多返回一项 problem：空串 = 干净，非空 = 坏后缀原文。
+    """同 :func:`parse_used_by`，多返回一项 problem：空串 = 干净，非空 = 坏尾巴原文。
 
-    三态在这一格上：`#p2` 是干净的第 2 条；`#p0` / `#p` / `#pabc` 是坏后缀（读成 canonical
-    并留痕），没有尾巴则是老数据的 canonical（也算干净 —— "没写"与"写坏了"要分得开）。
+    干净 = 恰好一段 `#p<正整数>`，且它前面还有命题号（`stmt:000004#p1` 与不带尾巴同样干净）。
+    其余一律不猜：读成 canonical 并把坏尾巴原文交回 problem —— `#p0` / `#p-1` / `#p` /
+    `#pabc` / `#` 结尾 / 多段 `#p2#p3` / 没有命题号的 `#p2`。空串是"没有这条依赖"，算干净。
+    绝不 raise：这颗函数会被所有读侧调用，而"读侧拿不到答案"比"读成 canonical 并留痕"更坏。
     """
     text = str(used_by or "")
+    if "#" not in text:
+        return text, DEFAULT_PROOF_NO, ""
+    if text.count("#p") != 1:
+        return text, DEFAULT_PROOF_NO, text
     match = _TAIL.match(text)
     if match is None:
-        if "#p" in text:
-            return text, DEFAULT_PROOF_NO, text
-        return text, DEFAULT_PROOF_NO, ""
-    number = int(match.group("num"))
-    head = match.group("head")
-    if number < DEFAULT_PROOF_NO or not head:
         return text, DEFAULT_PROOF_NO, text
-    return head, number, ""
+    number = int(match.group("num"))
+    if number < DEFAULT_PROOF_NO:
+        return text, DEFAULT_PROOF_NO, text
+    return match.group("head"), number, ""
 
 
 def proof_nos_of(used_bys: Iterable[str]) -> list[int]:
