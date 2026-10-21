@@ -749,7 +749,7 @@ def _verify_quotes(run_dir: Path, ev: Mapping, rows: list[tuple[str, str, str]])
     if not claims_path.is_file():
         return rows
     try:
-        # 2026-10-17（IO #9）：`claims.json` 顶层可能是**数组**（手写/半途写坏）——
+        # 2026-10-17（IO #9）：`claims.json` 顶层可能是数组（手写/半途写坏）——
         # `.get` 会抛 AttributeError，而这一支只接 OSError/ValueError。
         _doc = json.loads(claims_path.read_text(encoding="utf-8"))
         claims = (_doc.get("claims") if isinstance(_doc, dict) else None) or []
@@ -1752,12 +1752,12 @@ def cmd_run_agent(args) -> int:
     from .policy import Policy
 
     wall = getattr(args, "wall_clock_sec", None)
-    # 2026-10-18（缺陷 ⑳，业主口径「墙钟可以干脆不设」）：`--wall-clock-sec 0` ⇒ **不设上限**。
-    # 真机证据（`projects/t2y`，T2）：我**没有**传这个参数，于是用了 `default=3600.0`，
+    # 2026-10-18（缺陷 ⑳，业主口径「墙钟可以干脆不设」）：`--wall-clock-sec 0` ⇒ 不设上限。
+    # 真机证据（`projects/t2y`，T2）：我没有传这个参数，于是用了 `default=3600.0`，
     # 1 小时整被切断 —— 而切断的那一刻 M 正要派 B 去登记命题：
     #   t-000009 E ← refused「墙钟截止已过（wall_clock_sec=3600.0）」
-    #   t-000010 **B** ← refused 同上
-    # 结果就是 `conjectures 3 / statements 0`：研究工作做完了，**收尾那一步被墙钟砍掉**。
+    #   t-000010 B ← refused 同上
+    # 结果就是 `conjectures 3 / statements 0`：研究工作做完了，收尾那一步被墙钟砍掉。
     # 0（或负数）显式表示"不设上限"，与"我没传"区分开（后者仍走缺省 3600）。
     if wall is not None and float(wall) <= 0:
         wall = None
@@ -2701,7 +2701,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="每满几步向父代理报一次步数账（不设步数闸：超了不强制收工）")
     #: 墙钟（`policy.wall_clock_sec`）默认 900 秒：真机里第 8 次派活就是被它挡下的（`deadline_exceeded`）。
     #: 放成可配而不是写死：长任务（审一篇论文）该给一小时量级，短任务仍可以压到几分钟。
-    # 2026-10-18（业主口径，逐字）：「**不传就是无限制，传多少时间就是多少**」。
+    # 2026-10-18（业主口径，逐字）：「不传就是无限制，传多少时间就是多少」。
     # 所以 default 从 3600.0 改成 None（不设上限）。真机代价（`projects/t2y`）：
     # 我没传这个参数 ⇒ 用了缺省 3600 ⇒ 1 小时整切断，而那一刻 M 正要派 B 登记命题
     # （`t-000010 B refused：墙钟截止已过（wall_clock_sec=3600.0）`）⇒ `conjectures 3 / statements 0`。

@@ -55,7 +55,7 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
     - `run-b` / `pipeline` 把 `RuleExtractor()` 写死 ⇒ 同样永远拒抽；
     - 而唯一正确的配方写在 `projects.py` 里：`client_from_env(scope="extract",
       meter=TokenMeter(store), role="B")`。（那一版曾写 `max_tokens=8192`，
-      理由是"缺省 4096 会把整份 JSON 截在半句上"—— **2026-10-15 起这一栏整条删掉**：
+      理由是"缺省 4096 会把整份 JSON 截在半句上"—— 2026-10-15 起这一栏整条删掉：
       业主裁定「我们不卡 token，只卡总花销的钱」，而真调用对照证明不带这一栏时
       上游给的额度反而更宽。）
 
@@ -439,7 +439,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                         stop_file: str | Path | None = None) -> dict[str, Any]:
     """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
 
-    ## 三个"花钱的判断类能力"开关，默认全关，且**互不连带**
+    ## 三个"花钱的判断类能力"开关，默认全关，且互不连带
 
     | 开关 | 给谁接缝 | 不打开时那一侧怎么如实报 |
     |---|---|---|
@@ -449,13 +449,13 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
     三条同一条纪律：环境里有 key 也不改变行为（`DEFAULT_LLM_LOOPS` 的注释逐字写着）。
 
-    ## 为什么 `attack_reasoning` **不**连带打开 `experiment_reasoning`
+    ## 为什么 `attack_reasoning` 不连带打开 `experiment_reasoning`
 
     两个开关各自可解释：F 的推理是"想这一步该怎么打"，E 的推理是"把判据写成一份能跑的
     脚本"。它们是两笔可以分别买账的钱 —— 有人只要 F 想、脚本由人写，那就只开前者。
 
     代价必须说清（`projects/mp4` 的真机读数，`attack_plans.json` 计划 000003 的 r1/r2）：
-    **只开 F 的缝、E 没有缝 ⇒ F 需要脚本时写不出来**，那一轮落
+    只开 F 的缝、E 没有缝 ⇒ F 需要脚本时写不出来，那一轮落
     `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝，不是脚本）——
     改前它是静默的 `no_change`，于是看上去像"跑了但没结果"。要让这条链整条通，
     三个开关里必须同时有 `attack_reasoning`（F 造判据）与
@@ -672,29 +672,29 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
 
 def _materialize_skills(store: Any, notes: list[str]) -> list[str]:
-    """把各角色的 skills 落到**工作区**（业主 2026-10-14：「现做现读」）。
+    """把各角色的 skills 落到工作区（业主 2026-10-14：「现做现读」）。
 
-    前置提示词里只给**索引**（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
+    前置提示词里只给索引（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
     `<工作区>/skills/<角色>/<slug>.md`，角色用自己的 `fs.read` 现读。
 
     ## 为什么抽成函数（2026-10-14，R116）
 
-    它此前是 `run()` 里的一段内联 `try/except`，**一条判据都碰不到它** ——
+    它此前是 `run()` 里的一段内联 `try/except`，一条判据都碰不到它 ——
     与本文件第 594 行那段注释记的是同一类缺陷（"§185 那批测试没看见它"）。
     "现做现读"整件事的落点就是这一段：它不跑，提示词里的索引就指向 33 个不存在的文件，
     而每一处各自自洽（索引有、提示词有、角色会去读）—— 没有任何地方会报错。
 
-    ## 没有工作区时**不写**
+    ## 没有工作区时不写
 
     `store is None` 时旧写法是 `materialize(".")` —— 那会把 33 个 `.md` 写进
-    **进程当前目录**（谁在哪跑就写哪）。改成：没有工作区 ⇒ **这一格没做**，
+    进程当前目录（谁在哪跑就写哪）。改成：没有工作区 ⇒ 这一格没做，
     并留一条明说的 note（三态：没做 ≠ 做好了）。
 
     返回写出去的路径；一条不成也不打断这一趟（提示词里的索引仍然有效），但必须留痕。
     """
     if store is None or getattr(store, "root", None) is None:
         notes.append("skills：这一趟没有工作区，没落盘（索引仍在提示词里，但盘上没有正文）")
-        # 这一格**没做**，不是"空输入得空输出"：没有工作区就没有落点，
+        # 这一格没做，不是"空输入得空输出"：没有工作区就没有落点，
         # 所以"没写"这件事只能从 note 里读（`return []` 只表示"没写出任何路径"）。
         return []
     try:

@@ -74,8 +74,8 @@ _SETTLED_MARK = "tokenmeter:settled"
 #: 空动作没有 spec —— 不留这一格，读台账的人会把"派活"与"没写清"混起来。
 _DISPATCH_ONLY_SUMMARY = "派活（不点动作）：由该角色按自己的能力范围自己选动作"
 
-#: ⚠️ **2026-10-17（真机 t5e 实测）**：派 **H** 空动作时，它只会在只读工具面上打转，审出的发现**落不了台账**（`review_findings` 一行都没有）。原因不是它不干，而是"写"只发生在
-#: `action=review` 那一次固定流程里。所以派 H 不点动作时，把这件事**直接送回给派活的人**，而不是让它自己去猜。
+#: 2026-10-17（真机 t5e 实测）：派 H 空动作时，它只会在只读工具面上打转，审出的发现落不了台账（`review_findings` 一行都没有）。原因不是它不干，而是"写"只发生在
+#: `action=review` 那一次固定流程里。所以派 H 不点动作时，把这件事直接送回给派活的人，而不是让它自己去猜。
 _DISPATCH_ONLY_NUDGE = {
     "H": ("**要 H 落库，就再派一次并点名动作 `review`（带 `doc_id`）** —— "
           "派空动作时它只能读，审出来的发现只会留在回复里，不会进 `review_findings`。"),
@@ -388,9 +388,9 @@ _BUSINESS_ERROR_NAMES = frozenset({
     "ExperimentError", "DocumentError", "PlanError", "ReviewError",
     "EvidenceError", "ConjectureError", "ToolError",
     #: 2026-10-17（子代理 agents #10）：`ParamError` 是 `ToolError` 的子类，可这张表按
-    #: **类名字符串**比对 ⇒ 参数类拒信（"我不认这些参数"）落成 `failed/执行中异常`，
+    #: 类名字符串比对 ⇒ 参数类拒信（"我不认这些参数"）落成 `failed/执行中异常`，
     #: 模型拿不到 kind/reason 自救。补进来；`_business_refusal_code` 同时按 MRO 判，
-    #: 于是**任何** `ToolError` 子类都自动算业务拒信。
+    #: 于是任何 `ToolError` 子类都自动算业务拒信。
     "ParamError",
 })
 
@@ -486,11 +486,11 @@ def current_caller_role() -> str:
     return _CURRENT_ROLE.get()
 
 
-#: 这一趟的**召唤者**（父）的编号与角色 —— 由 `AgentLoop._do_tool` 从
+#: 这一趟的召唤者（父）的编号与角色 —— 由 `AgentLoop._do_tool` 从
 #: `_resolve_parent(...)` 那一次的返回值挂上（业主 2026-10-19 裁定：
 #: 「父子天然双向」⇒ 上行不需要在 `edges` 里登记，它跟着"谁召唤了我"走）。
 #:
-#: 为什么另起两个 ContextVar 而不是让工具自己去读台账：父是**运行期**解析出来的
+#: 为什么另起两个 ContextVar 而不是让工具自己去读台账：父是运行期解析出来的
 #: 那一个（`_resolve_parent` 有三条分支：调用方给的 / 台账读的 / 顶层自己），
 #: 工具层拿不到前三者的差别。挂上来的就是那一次解析的结果，逐字一致。
 #: 空串 = 没挂点或这一趟没有父（顶层）—— 两者都由调用方分得清（`state` 不折平）。
@@ -500,7 +500,7 @@ _CURRENT_PARENT_ROLE: contextvars.ContextVar[str] = contextvars.ContextVar(
     "agentflow_parent_role", default="")
 
 #: 这一趟的会话身份（`{"root", "sid"}` 两格，由同一个挂点带下来）。
-#: 为什么工具层需要它：上行的那一条留言必须落进**父读的那个会话文件**里 ——
+#: 为什么工具层需要它：上行的那一条留言必须落进父读的那个会话文件里 ——
 #: 按缺省会话写会让"上报了"与"父没读到"在盘上长得一样（`draft/37` §63 的假绿同族）。
 _CURRENT_SESSION_ROOT: contextvars.ContextVar[str] = contextvars.ContextVar(
     "agentflow_session_root", default="")
@@ -534,10 +534,10 @@ def consuming_as(parent_task_id: str):
         _CURRENT_OWNER_HINT.reset(tok)
 
 
-#: 上行（`conductor.escalate`）的受控取值：**要父代理做的那件事属于哪一类**。
+#: 上行（`conductor.escalate`）的受控取值：要父代理做的那件事属于哪一类。
 #:
 #: 为什么是受控词表而不是自由文本（业主 2026-10-19 裁定：父子天然双向）：
-#: 父下一轮读到的是一条**待办**，它得能按类分派 —— 五个取值正好对应父的五个动作面
+#: 父下一轮读到的是一条待办，它得能按类分派 —— 五个取值正好对应父的五个动作面
 #: （去取原文 / 去审一遍 / 重新路由给别的角色 / 补一份缺失输入 / 其余）。
 #: 加取值等于放宽这一整根轴，所以它写在模块级常量里、由 `tool` 的 schema `enum`
 #: 与 `Conductor.escalate` 各读一次（同一个对象，不是两份字面量）。
@@ -570,7 +570,7 @@ def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
     同一角色的两个并发实例共享对象，挂在实例上会互相盖掉，见 `_CURRENT_TASK_ID` 的理由）。
 
     `parent_task_id` / `parent_role` / `session_root` / `sid`（2026-10-19）：
-    `conductor.escalate` 要的三件事 —— 召唤者是谁（**运行期** `_resolve_parent` 的
+    `conductor.escalate` 要的三件事 —— 召唤者是谁（运行期 `_resolve_parent` 的
     返回值，不是工具自己猜的）与这条留言该落进哪个会话文件。四个都有默认值：
     不传 = "这一层不知道"，与从前逐字节同义（旧调用点一个都不用改）。
 
@@ -734,7 +734,7 @@ class Conductor:
         #: 而不是"两处各算一遍但愿它们相等"。
         #:
         #: 预算上限取自 `Policy`：策略是判据的单一来源，这里只是把它交给守卫
-        #: （不另写第二份上限）。**只有钱这一轴**（2026-10-15 业主裁定
+        #: （不另写第二份上限）。只有钱这一轴（2026-10-15 业主裁定
         #: 「我们不卡 token，只卡总花销的钱」）；token 那一轴连字段一起删了。
         self.meter = TokenMeter(
             store,
@@ -1936,15 +1936,15 @@ class Conductor:
             return {"checked": False, "reason": f"{type(exc).__name__}: {exc}",
                     "open_items": [], "open_count": 0}
         open_items = [r for r in rows if str(r.get("item_state") or "") != "done"]
-        # ⚠️ **2026-10-17（T5 第 2 趟真机读数驱动）**：把**"登记了但没人立项"的猜想**
-        # 变成板上的待办。为什么放在这里：D 的手册**已经逐字**写了"登记完猜想请接着把
-        # 这一腿开出去"（且自己记着"第 10 趟 T5 这一环整环为 0"），可**第 2 趟 T5 又是 0**
-        # —— 说明"再补一句说明"这条路无效。改成：**让它在主控看得见的地方挂着**，
-        # 由**派活的那一层**决定要不要开（这里只亮出来、**不点名动作**，守"主控只派活"）。
+        # 2026-10-17（T5 第 2 趟真机读数驱动）：把"登记了但没人立项"的猜想
+        # 变成板上的待办。为什么放在这里：D 的手册已经逐字写了"登记完猜想请接着把
+        # 这一腿开出去"（且自己记着"第 10 趟 T5 这一环整环为 0"），可第 2 趟 T5 又是 0
+        # —— 说明"再补一句说明"这条路无效。改成：让它在主控看得见的地方挂着，
+        # 由派活的那一层决定要不要开（这里只亮出来、不点名动作，守"主控只派活"）。
         pending = self._pending_attack_items()
-        # ⚠️ **2026-10-17（T5 第 2 趟）**：文献**缺口**也亮出来（#3 的同一机制）。
-        # 那趟的答案自己写着"Frey 曲线：未核到"，而它**没有任何后续动作** —— 因为
-        # "缺一篇"这件事当时只存在于模型的文字里，**台账上看不见**。现在变成板项：
+        # 2026-10-17（T5 第 2 趟）：文献缺口也亮出来（#3 的同一机制）。
+        # 那趟的答案自己写着"Frey 曲线：未核到"，而它没有任何后续动作 —— 因为
+        # "缺一篇"这件事当时只存在于模型的文字里，台账上看不见。现在变成板项：
         # `path` 空（只有元数据）或 `download.status` 不是 ok ⇒ 一条 `pending_search`。
         gaps = self._pending_search_items()
         open_items = open_items + pending + gaps
@@ -1963,7 +1963,7 @@ class Conductor:
         return out
 
     def _pending_search_items(self) -> list[dict[str, Any]]:
-        """文献缺口：在册但**没有全文**（`path` 空或 `download.status` 不是 ok）⇒ 板项。
+        """文献缺口：在册但没有全文（`path` 空或 `download.status` 不是 ok）⇒ 板项。
 
         读不成 ⇒ 空（宁可少一条待办，也不编造）。
         """
@@ -1995,18 +1995,18 @@ class Conductor:
         try:
             cons = [dict(r) for r in self.store.rows("conjectures")]
             plans = [dict(r) for r in self.store.rows("attack_plans")]
-        except Exception:  # noqa: BLE001 —— 读不成时**不编造待办**（宁可少一条）
+        except Exception:  # noqa: BLE001 —— 读不成时不编造待办（宁可少一条）
             return []
         planned = {str(p.get("problem_key") or "") for p in plans} | \
                   {str(p.get("conjecture_id") or "") for p in plans}
         items: list[dict[str, Any]] = []
         for c in cons:
             cid = str(c.get("conjecture_id") or "")
-            # ⚠️ 2026-10-17（T2b 真机读数）：状态机是
+            # 2026-10-17（T2b 真机读数）：状态机是
             # `proposed → testing → (supported_not_proved | refuted | proved) → promoted`。
-            # 原先只认 `proposed`，而 T2b 里那条猜想停在 **`testing` 且没有任何计划** ——
+            # 原先只认 `proposed`，而 T2b 里那条猜想停在 `testing` 且没有任何计划 ——
             # 那同样是"该有人攻它却没有计划"，看板却一声不响。所以改成：
-            # **未终态**（没被证伪/证成/升格）且无计划 ⇒ 亮出来。
+            # 未终态（没被证伪/证成/升格）且无计划 ⇒ 亮出来。
             if not cid or str(c.get("status") or "") in ("refuted", "proved", "promoted"):
                 continue
             if cid in planned:
@@ -2102,19 +2102,19 @@ class Conductor:
         """上行收件人的名册判据（与 `message` 同一份实现：`agent_loop.roster_addresses`）。
 
         业主 2026-10-19：「代理之间的通信必须经名册」；`escalate` 发的是父，
-        但**路径上必须真经过校验** —— "它本来就发给父"不是跳过校验的理由
+        但路径上必须真经过校验 —— "它本来就发给父"不是跳过校验的理由
         （改前这一支信任调用方给的 `parent_task_id`：给一个堂兄弟的编号，
         这条上行就写进了堂兄弟的收件箱）。
 
         三个取舍：
 
-        - **只读名册、不另造判据**：`roster_addresses` 是这件事的唯一实现
+        - 只读名册、不另造判据：`roster_addresses` 是这件事的唯一实现
           （`message` 那一支也用它）；这里再写一遍"是不是我的父"就是第二份判据；
-        - **按绝对编号寻址**（`to=父的台账号`）：角色名在同名多实例时是歧义的，
+        - 按绝对编号寻址（`to=父的台账号`）：角色名在同名多实例时是歧义的，
           而歧义在这里的代价是"这条上行投给了别人的父"；
-        - **名册读不成 ⇒ fail-open**（`how="roster_unavailable"`，调用方把读数标出来）：
+        - 名册读不成 ⇒ fail-open（`how="roster_unavailable"`，调用方把读数标出来）：
           与 `message` 那一路同一条纪律 —— "说话不该被一次读失败挡住"。
-          这一档**不是**"校验通过"。
+          这一档不是"校验通过"。
         """
         from . import agent_loop as AL
 
@@ -2144,14 +2144,14 @@ class Conductor:
                  by: str = "", my_task_id: str = "", parent_task_id: str = "",
                  parent_role: str = "", session_root: str = "", sid: str = "",
                  ) -> dict[str, Any]:
-        """把「我要召唤者做什么」写进**父的收件箱**（业主 2026-10-19 裁定：父子天然双向）。
+        """把「我要召唤者做什么」写进父的收件箱（业主 2026-10-19 裁定：父子天然双向）。
 
         ## 为什么这条通道不属于"边"
 
         父子身份在运行期已经解析出来了（`AgentLoop._resolve_parent`：调用方给的 /
-        台账读的 / 顶层自己），而 `edges` 是**权限面**（谁能召唤谁）。上行不是召唤、
-        也不是新权限 —— 它就是"孩子跟召唤它的人说话"。于是这条入口**不要求在
-        `edges` 里登记**，收件人一律是 `_resolve_parent` 当次解析出的那一个。
+        台账读的 / 顶层自己），而 `edges` 是权限面（谁能召唤谁）。上行不是召唤、
+        也不是新权限 —— 它就是"孩子跟召唤它的人说话"。于是这条入口不要求在
+        `edges` 里登记，收件人一律是 `_resolve_parent` 当次解析出的那一个。
 
         真机代价（`t5-run2`）：B 想找 A 说话只能借 `B→H` 绕两跳，因为"向上"没有入口。
         这一格补的就是那个入口。
@@ -2161,7 +2161,7 @@ class Conductor:
         `agent_message` 事件本来就是收件箱（`agent_loop.read_messages` /
         `inbox_digest` / `mark_delivered` 三件套）：私聊按 `to == 角色` 进收件人面，
         父下一趟进循环时会在开场提示词里看到它，读一次即由 `mark_delivered` 登记已读
-        （同一需求不会一轮又一轮地被重复处理）。所以这里**没有新表、没有新文件**：
+        （同一需求不会一轮又一轮地被重复处理）。所以这里没有新表、没有新文件：
         一条 `agent_message`，外加在同一行上带一格结构化的 `escalation`（`need` /
         `kind` / `evidence`）—— 键名写在同一条记录里，父与审计面都能机器读。
 
@@ -2172,7 +2172,7 @@ class Conductor:
 
         | 情形 | `reason` | 写不写 |
         |---|---|---|
-        | 没有父（顶层 M / 这一趟的父就是它自己） | `not_caller` | **一行都不写** |
+        | 没有父（顶层 M / 这一趟的父就是它自己） | `not_caller` | 一行都不写 |
         | 父的编号有、角色读不出来 | `parent_unknown` | 一行都不写（不猜一个收件人） |
         | 没有会话身份（root/sid 都没挂上） | `no_session` | 一行都不写（写进错的会话 = 没写） |
         | `need` 空 / 超 300 字 / `kind` 不在词表里 | `invalid_params` | 一行都不写 |
@@ -2239,7 +2239,7 @@ class Conductor:
                            "按缺省会话写等于把这条上报丢进一个父不会读的文件")
 
         # ---- 名册校验（业主 2026-10-19：上行与 `message` 同一条判据）。
-        # 收件人是"运行期解析出的父"，但**路径上**必须真的过一遍名册：
+        # 收件人是"运行期解析出的父"，但路径上必须真的过一遍名册：
         # `not_in_roster`（给了不是父的编号）/ `member_retired` / `not_upward`（给了子）
         # 一律受控拒绝、一行都不写；`roster_unavailable` 是 fail-open（读数标出来）。
         addr = self._escalation_roster_check(mine=mine, to=pid, who=who, root=root)
@@ -2336,11 +2336,11 @@ class Conductor:
             "started_at": started, "ended_at": None, "tokens": 0, "usd": 0.0,
             "artifacts": [], "inputs": [],
         }
-        # 2026-10-18（缺陷 ⑫）：上一趟若被 kill/崩溃，它的 `running` 行会**永远**停在
+        # 2026-10-18（缺陷 ⑫）：上一趟若被 kill/崩溃，它的 `running` 行会永远停在
         # running ⇒「谁还没收工」「running 有几个」这类读数全部说谎。
         # 真机 `projects/t2s`：`t-000001`（03:01）与 `t-000005`（03:19）是我 kill 掉的两趟
         # 留下的僵尸，而 `t-000006` 才是真正在跑的那一趟 —— 三行同角色同时 running。
-        # 同一工作区里同一角色的**顶趟**是互斥的（一个进程一趟），所以开新行前把同角色
+        # 同一工作区里同一角色的顶趟是互斥的（一个进程一趟），所以开新行前把同角色
         # 遗留的 running 顶趟标成 `failed`（带原因）是安全的：它们的进程已经不在。
         self._sweep_stale_top_running(role)
         tid = self._write_new_row(row, note=f"top:{role}")
@@ -2350,7 +2350,7 @@ class Conductor:
         return tid
 
     def _sweep_stale_top_running(self, role: str) -> int:
-        """把**同一角色**遗留的 `running` 顶趟行标成 `failed`（缺陷 ⑫）。
+        """把同一角色遗留的 `running` 顶趟行标成 `failed`（缺陷 ⑫）。
 
         返回清掉的行数（读数用）。只碰 `called_by == 主控` 的顶趟行：子代理的行由
         它们自己的收尾逻辑负责，这里不动，免得把"同时在跑的子任务"误判成僵尸。
@@ -2359,9 +2359,9 @@ class Conductor:
         with self.store.tx("tasks", actor=S.CONDUCTOR_ROLE, note="sweep-stale-top-running") as tx:
             for r in tx.rows("tasks"):
                 # 2026-10-18（⑫ 的补丁，真机 `projects/t3a` 抓到）：顶趟行的 `called_by`
-                # 是 **用户**（`by=user`），不是我原先筛的「主控」⇒ 旧条件永远匹配不到，
+                # 是 用户（`by=user`），不是我原先筛的「主控」⇒ 旧条件永远匹配不到，
                 # 于是 `running` 里能同时躺着三个 M（两次 kill + 一次 resume）。
-                # 改成按**拓扑**判顶趟：没有 parent 的那一行就是顶趟（子代理行都不动）。
+                # 改成按拓扑判顶趟：没有 parent 的那一行就是顶趟（子代理行都不动）。
                 if (str(r.get("role")) != role
                         or str(r.get("status")) != "running"
                         or r.get("parent_task_id")):
@@ -2384,22 +2384,22 @@ class Conductor:
     #: 队列认领那一路的名册登记问题（非空 ⇒ 有名册外子代理的候选，读侧可查）。
     _consume_roster_problems: list[str]
 
-    #: 最近一次 `open_top_level_run` 拿到的**绝对编号**（台账发的，不是这里拼的）。
+    #: 最近一次 `open_top_level_run` 拿到的绝对编号（台账发的，不是这里拼的）。
     #:
     #: 为什么需要它（2026-10-20，真机 `projects/tree-check` 的 t-000019）：框架自己
     #: 发起的那几条派活（队列认领 `consume_pending_search_requests`）不属于任何
     #: 代理调用的调用栈，于是 `summon` 的 `parent_task_id` 走到了默认值 `None`
-    #: ⇒ 台账里出现一行 `role=A / called_by=M / parent_task_id=None / depth=1` 的**孤儿**：
+    #: ⇒ 台账里出现一行 `role=A / called_by=M / parent_task_id=None / depth=1` 的孤儿：
     #: 它不在任何名册里（`roster_view(owner=任一父)` 都读不到它），也不占任何父的扇出。
     #: 口径（`draft/90` §1.1 / `draft/104` §2.5「父子关系的唯一权威来源是台账」）：
-    #: 子行的父亲必须是**父的绝对编号**；顶层（M 自己那一趟）就用**顶趟编号**，
+    #: 子行的父亲必须是父的绝对编号；顶层（M 自己那一趟）就用顶趟编号，
     #: 只有顶趟那一行才允许 `parent=None`（它是树根）。
     _top_task_id: str = ""
 
     def _owner_task_id(self, given: str = "") -> str:
         """这一笔派活的父的绝对编号（空串 = 连顶趟都没有 ⇒ 调用方要自己造一个树根）。
 
-        三个来源，**按权威性排序**（都是台账/上下文里已有的值，没有一处是自己拼的）：
+        三个来源，按权威性排序（都是台账/上下文里已有的值，没有一处是自己拼的）：
         ① 调用方显式给的（`finish_top_level_run` 给它自己那一行）；② `consuming_as`
            挂上的 owner 提示（`_do_summon_many` 那一支）与当前调用上下文
            （`calling_as` 挂的 `task_id`，工具路径走这一格）；③ 本进程最近一次顶趟
@@ -2448,11 +2448,11 @@ class Conductor:
 
         ## 父是谁（2026-10-20；根因见 `_top_task_id` 的注释）
 
-        认领出来的那个 `A` 也是**派活**，所以它必须有父（`draft/90` §1.1：
+        认领出来的那个 `A` 也是派活，所以它必须有父（`draft/90` §1.1：
         名册项 = 子代理，`tasks` 行 = 一次调用；`draft/104` §2.5：父子关系的唯一权威
         来源是台账）。父按 `_owner_task_id` 取，优先级：显式 `parent_task_id` →
         当前调用上下文 → 本进程顶趟。三者都没有（例如判据里裸造了一个 `Conductor`、
-        连顶趟都没开）⇒ **当场造一个真树根**（`_write_new_row`，编号由台账发，
+        连顶趟都没开）⇒ 当场造一个真树根（`_write_new_row`，编号由台账发，
         `parent=None` 是树根的合法形态）并把它收行 —— 宁可多一行树根，也不许再出现
         `parent_task_id=None` 的子行（真机 t-000019 就是那一行孤儿）。
         认领完顺手登记进那个 owner 的名册（名字与读写面都由秘书发号 —— 这一条
@@ -2483,7 +2483,7 @@ class Conductor:
                 continue                      # 幂等：这一条已经消费过（含正在跑的那一次）
             if not owner:
                 # 父的绝对编号（见本方法 docstring 最后一段）。真的连顶趟都没有 ⇒
-                # 造一个树根：`parent=None` 只在**树根**上是合法的。
+                # 造一个树根：`parent=None` 只在树根上是合法的。
                 owner = self._owner_task_id(parent_task_id)
                 if not owner:
                     owner = self._open_consume_root(trigger)
@@ -2516,11 +2516,11 @@ class Conductor:
         return out
 
     def _open_consume_root(self, trigger: str) -> str:
-        """给"没有任何父在场"的队列认领造一个**真树根**行（编号由台账发）。
+        """给"没有任何父在场"的队列认领造一个真树根行（编号由台账发）。
 
-        为什么不用 `open_top_level_run`：它会顺手把**同角色**遗留的 running 顶趟标成
+        为什么不用 `open_top_level_run`：它会顺手把同角色遗留的 running 顶趟标成
         `failed`（`_sweep_stale_top_running`）。队列认领跑在 M 那一趟的内部，
-        用 M 这个角色去开行会把**正在跑的那一趟 M** 标死 —— 那是比孤儿更坏的错。
+        用 M 这个角色去开行会把正在跑的那一趟 M 标死 —— 那是比孤儿更坏的错。
         所以这里直接走 `_write_new_row`（与 `summon` 同一个建行临界区），
         角色记框架（`M`）、`called_by="conductor"`（不是冒充某个角色发起的）。
         """
@@ -2839,23 +2839,23 @@ class Conductor:
     def _meter_guard(self, role: str, budget: Mapping[str, Any] | None) -> Any:
         """开工前的预算守卫。返回 `tokenmeter.MeterReading`。
 
-        ## 判据只有一处：**全局已花 vs 全局预算**（2026-10-15 业主裁定 B2/B4）
+        ## 判据只有一处：全局已花 vs 全局预算（2026-10-15 业主裁定 B2/B4）
 
-        ⚠️ 这里此前是"双重预算"，而且第二重是**坏的**：
+        这里此前是"双重预算"，而且第二重是坏的：
 
         - token 那一半（`budget={"max_tokens": …}`）已随裁定 A1/A2/A3 整条删掉
           （连同 `Policy.token_budget` 与 `Decision.tokens_left` 两格）；
-        - 钱那一半此前写成"给**这一单**限额"，实现却是 `TokenMeter(store,
-          budget_usd=X).guard()` —— 而那个 meter 读的是**同一本全局账**
-          （`usage_ledger`），于是 `X` 是拿去和**全局已花**比的。
+        - 钱那一半此前写成"给这一单限额"，实现却是 `TokenMeter(store,
+          budget_usd=X).guard()` —— 而那个 meter 读的是同一本全局账
+          （`usage_ledger`），于是 `X` 是拿去和全局已花比的。
           也就是说：`max_usd` 从来不是每单限额，它只是"全局阈值的第二个落点"。
           同一件事两处各判一次，还都不是调用方以为的那个意思 —— 这正是 B2 的形态。
 
         现在收成一处：判的是 `self.meter`（全局账）对 `self.meter.budget_usd`
-        （全局预算，取自 `Policy.usd_budget`），也就是业主那句「只卡**总花销**的钱」。
+        （全局预算，取自 `Policy.usd_budget`），也就是业主那句「只卡总花销的钱」。
 
-        `budget={"max_usd": X}` 这个参数**仍然受理**，但语义改成了它在字面上
-        该有的意思：**"这一单预计最多花 X"** ⇒ 判"剩下的钱够不够 X"
+        `budget={"max_usd": X}` 这个参数仍然受理，但语义改成了它在字面上
+        该有的意思："这一单预计最多花 X" ⇒ 判"剩下的钱够不够 X"
         （`X > 剩余` ⇒ 开工前拒）。它不再能绕过全局（剩余就是全局剩余），
         也不再被误当成阈值。
         """
@@ -3083,11 +3083,11 @@ class Conductor:
                 by=by, parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
                 instance=instance,
             )
-        # ⚠️ **2026-10-16（业主口径 S2「M 只派活」）**：`action` 为空时**跳过这一格** ——
-        # 「一致改成 task 必填，action 不填」「**action 完全不用父代理填**」⇒ 没有动作名可核。
-        # **这一处是那条链上最后一个漏网的闸门**：`policy.check` 的第 [1] 步我早改了，
-        # 而这里**直接调** `P.check_action` ⇒ 空动作被判 `unknown_action`
-        # （"{{role}} 没有动作 ''"），于是"派活"在**落行之前**就被拒。
+        # 2026-10-16（业主口径 S2「M 只派活」）：`action` 为空时跳过这一格 ——
+        # 「一致改成 task 必填，action 不填」「action 完全不用父代理填」⇒ 没有动作名可核。
+        # 这一处是那条链上最后一个漏网的闸门：`policy.check` 的第 [1] 步我早改了，
+        # 而这里直接调 `P.check_action` ⇒ 空动作被判 `unknown_action`
+        # （"{{role}} 没有动作 ''"），于是"派活"在落行之前就被拒。
         # 真机/判据现场：批量派活两项的理由码正是 `unknown_action`（不是边的 `forbidden_edge`），
         # 所以连"越权 ⇒ 代唤"那条路都走不到。角色存在性与边由下面的 `P.check` 照旧把关。
         if str(action):
@@ -3102,7 +3102,7 @@ class Conductor:
         # ---- [2] 参数（结构问题在写 running 行之前判掉：跑一个注定炸的
         #          参数会让台账里多一条 failed，而它其实从来没被执行过）
         #
-        # 2026-10-16（S2「M 只派活」）：`action` 为空 = **派活而不点动作** ——
+        # 2026-10-16（S2「M 只派活」）：`action` 为空 = 派活而不点动作 ——
         # 没有动作的 schema 可核（`find_action("", …)` 当然是 None），所以这一格跳过；
         # 交给接活的那个角色自己的循环按它自己的工具面校验。
         spec = C.find_action(role, action, registry=self.specs) if str(action) else None
@@ -3339,7 +3339,7 @@ class Conductor:
         # 现在的写法让相等由构造保证。
         res = self._charge_and_settle(res, role=role)
         if res.tokens:
-            # ⚠️ 这里只是**记读数**（2026-10-15 业主裁定 A1/A2/A3：「我们不卡 token，
+            # 这里只是记读数（2026-10-15 业主裁定 A1/A2/A3：「我们不卡 token，
             # 只卡总花销的钱」）。此前它写着"共享取消信号也吃 token 预算"——
             # 那条路（`CancelToken(budget_tokens=…)` ⇒ `cancelled` 变 True ⇒
             # 在跑的 handler 被掀掉）连同那一格一起删了。
@@ -3463,7 +3463,7 @@ class Conductor:
                 tokens=int(raw.get("tokens") or 0),
                 usd=float(raw.get("usd") or 0.0),
             )
-        # 返回值不是 Mapping 时，也认**它自己声明的** `outcome` / `detail`
+        # 返回值不是 Mapping 时，也认它自己声明的 `outcome` / `detail`
         # （2026-10-15 加，T5 第 8 趟的真机读数）：`BRunResult` 这一类结果对象本来就带着
         # `outcome` / `detail` 两个属性，而这一支此前一律记 `ok` —— 于是"这一趟什么都没
         # 产出"与"干得漂亮"在台账上同形。只认受控词表里的取值（角色自己的判定词表，
@@ -3754,7 +3754,7 @@ class Conductor:
         返回列表长度恒等于 `len(plan)` 且顺序与 plan 一致（I-10）。
         并发度不改变结果顺序 —— 这是"可复现"的判据本身。
 
-        父是谁（2026-10-20）：plan 里那些 call **自己**带着 `parent_task_id`（一件一件
+        父是谁（2026-10-20）：plan 里那些 call 自己带着 `parent_task_id`（一件一件
         各归各的父）；而"派活时顺手认领队列"那一步的父不在这里传 —— 它由调用方用
         :func:`consuming_as` 挂上（工具路径已经有 `calling_as`，shape 路径由
         `_do_summon_many` 挂），见 `consume_pending_search_requests` 的最后一段。
