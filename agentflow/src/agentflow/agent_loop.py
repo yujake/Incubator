@@ -940,6 +940,43 @@ def _is_role_name(value: str) -> bool:
     return value in (*S.ROLES, S.CONDUCTOR_ROLE)
 
 
+def _message_landed(result: Mapping[str, Any]) -> bool:
+    """这一步的留言真的落成了没有（`LoopRun.messages_sent` / `messages_refused` 的唯一判据）。
+
+    为什么不能只看 `shape == "message"`（2026-10-22 查实的那条缺陷）：受控拒绝
+    （`not_in_roster` / `not_an_edge` / `member_retired` / `public_is_not_a_conversation`
+    / `no_task_id` / `broadcast_only`）同样产出一行 `shape == "message"` 的步，而它
+    一条都没落盘。旧实现按形状数，于是 D 发给 E 的那一条被 `not_in_roster` 拒掉时，
+    回执照报 `messages_sent == ["E"]`，而 E 的收件箱是空的 —— 回执把"尝试过"读成了
+    "发成了"（`tests/test_a_message_receipt_never_lies.py` 守这一条）。
+
+    判据两条，缺一不可：
+    1. 没有受控拒绝理由码（`refused` 为空）：被拒的那一步没有落点；
+    2. 有落点，且回执态说得过去：`message_sent`（会话里那条 `agent_message` 的编号）
+       或 `item_id`（收件人名下的板项编号）任一非空 —— 这两个编号是"真的落成了"唯一
+       能事后核的东西；同时回执态要么是 `ok` 真，要么是 `receipt="no_reader"`
+       （"落盘了，但此刻没有任何进程会读它"）。
+
+    为什么第 2 条不写成"`ok` 为真"：`ok` 在角色通道与公共频道上量的是"收件人有没有
+    读者"（见 `_message_by_channel` 的 `receipt` 三态），`ok=False` + `receipt="no_reader"`
+    的那一步留言确实落盘了、收件人的收件箱或板上读得到，只是没有进程会主动去读它 ——
+    那是"没人读"，不是"没发出"。把这一档折成"没发出"，`messages_sent` 就会反过来少报
+    （三条已登记的判据量的正是"落盘了"：`test_agent_loop.py::
+    test_messages_are_durable_and_reach_only_the_recipient` /
+    `test_a_role_can_send_a_private_message_to_the_conductor` 与
+    `test_shape_vs_value_errors.py::test_to_all_is_the_public_channel`；
+    `test_inbox_delivery.py` 另有一条把 `ok is False` 钉在 `no_reader` 这一档上）。
+    """
+    if not isinstance(result, Mapping):
+        return False
+    if str(result.get("refused") or ""):
+        return False
+    landed = str(result.get("message_sent") or "") or str(result.get("item_id") or "")
+    if not landed:
+        return False
+    return result.get("ok") is True or str(result.get("receipt") or "") == "no_reader"
+
+
 @dataclass(frozen=True)
 class LoopStep:
     """循环里的一步：模型说了什么、框架做了什么、结果是什么。"""
@@ -1137,11 +1174,67 @@ class LoopRun:
 
     @property
     def messages_sent(self) -> list[str]:
-        """这次运行给谁发过留言（按发生顺序，可重复）。"""
-        return [str(s.payload.get("to") or "") for s in self.steps if s.shape == "message"]
+        """这次运行真的发出去的留言（按发生顺序，可重复）。
+
+        判据是 :func:`_message_landed`（看那一步的结果有没有落点），不是 `shape == "message"`。
+        被受控拒掉的那一步也是 `shape == "message"`，把它数进来就是回执说谎（2026-10-22
+        查实：D 发给 E 的那一条被 `not_in_roster` 拒掉，旧实现仍报 `["E"]`，而 E 的收件箱
+        是空的）。没落成的那些逐条进 :attr:`messages_refused`。
+        """
+        return [str(s.payload.get("to") or "") for s in self.steps
+                if s.shape == "message" and _message_landed(s.result)]
+
+    @property
+    def messages_refused(self) -> list[dict[str, Any]]:
+        """这次运行里"尝试过但没落成"的留言，逐条点名（按发生顺序）。
+
+        每一条 `{to, refused, receipt, error, how}`：
+        - `to`：模型写下的收件人（与 `messages_sent` 同一格口径，便于对账）；
+        - `refused`：受控拒绝的理由码（`not_in_roster` / `not_an_edge` / `member_retired` /
+          `public_is_not_a_conversation` / `no_task_id` / `broadcast_only` …）；空串表示
+          那一步没有理由码，此时看 `error` 里那句说明（它照样没落成）；
+        - `receipt`：那一步的回执态（没落成时通常是 `unknown`，不许读成"送到了"）；
+        - `error`：那一步给模型/人读的那句话（没有 `error` 时取 `note`）；
+        - `how`：寻址判据的结论（`addressing.how`）—— `not_in_roster`（不在父∪子里）与
+          `not_an_edge`（没有协作边）在读数上就靠它分开。
+
+        为什么它与 `messages_sent` 是一对：只报"发出去的那几条"会让"被拒"在回执上消失
+        （同一个缺陷的另一半：回执不能说谎，也不能只说好消息）。
+        """
+        out: list[dict[str, Any]] = []
+        for s in self.steps:
+            if s.shape != "message" or _message_landed(s.result):
+                continue
+            result = s.result if isinstance(s.result, Mapping) else {}
+            addressing = result.get("addressing")
+            addr = addressing if isinstance(addressing, Mapping) else {}
+            out.append({"to": str(s.payload.get("to") or ""),
+                        "refused": str(result.get("refused") or ""),
+                        "receipt": str(result.get("receipt") or ""),
+                        "error": str(result.get("error") or result.get("note") or ""),
+                        "how": str(addr.get("how") or "")})
+        return out
 
     def to_dict(self) -> dict[str, Any]:
-        """一次运行的完整记录（每一步 + 提示词审计 + 用量 + 停止原因）。"""
+        """一次运行的完整记录（每一步 + 提示词审计 + 用量 + 停止原因）。
+
+        顶层键集合（逐格，顺序即声明序）：
+        `role` / `task` / `steps` / `final` / `evidence` / `stop_reason` / `bad_json` /
+        `blocked_remaining` / `bad_json_streak` / `bad_args` / `bad_args_streak` /
+        `no_reply` / `no_reply_streak` / `dead_loop_max` / `same_call_max` /
+        `stalled_max` / `dead_loop_nudges` / `stalled_nudges` / `dead_loop_stopped` /
+        `counters_reset_at` / `compactions` / `waiting_for` / `resumed_from` /
+        `notify_rejections` / `handoffs` / `summons` / `messages_sent` /
+        `messages_refused` / `productions` / `summons_total` / `summons_consumed` /
+        `summons_continued` / `summons_waived` / `summons_unconsumed` /
+        `summon_consumption` / `prompt_audit` / `spend` / `prompt_cache` /
+        `elapsed_sec` / `notes` / `final_payload`。
+
+        `messages_sent` 与 `messages_refused` 是同一件事的两半，判据都在
+        :func:`_message_landed`：前者只记真的落成的收件人，后者逐条点名"尝试过但没落成"
+        的那几条（`to` / 理由码 / 回执态）。只报前者会让"被拒"在回执上消失 —— 那正是
+        2026-10-22 查实的那条缺陷（D 发给 E 被 `not_in_roster` 拒掉，回执照报 `["E"]`）。
+        """
         return {
             "role": self.role, "task": self.task,
             "steps": [s.to_dict() for s in self.steps],
@@ -1163,6 +1256,9 @@ class LoopRun:
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons, "messages_sent": self.messages_sent,
+            # 回执的另一半（2026-10-22）：尝试过但没落成的那几条逐条点名，
+            # 与 `messages_sent` 同一份判据（`_message_landed`）。
+            "messages_refused": self.messages_refused,
             # 子产出处理读数（业主裁定：父必须处理子产出）：四个数 + 那份明细。
             # 与 `agent_run_end` 的那一格同源（同一份 `summon_consumption`）。
             "productions": [dict(p) for p in self.productions],

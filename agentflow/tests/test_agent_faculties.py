@@ -130,8 +130,21 @@ def test_private_message_needs_a_collaboration_edge(tmp_path: pathlib.Path):
     assert not leaked, leaked
 
 
-def test_private_message_between_partners_is_allowed(tmp_path: pathlib.Path):
-    """正控：有协作边的伙伴之间可以私聊（`密切配合` 的那一半）。"""
+def test_a_partner_private_message_is_refused_by_the_roster(tmp_path: pathlib.Path):
+    """负控（名册先于协作边）：D 与 E 有协作边，但 E 不在 D 的名册上 ⇒ 受控拒绝，且回执照实说。
+
+    两条事实同时成立，判据量的是"哪一条先落地"：
+    - D 与 E 之间确实有协作边（`capabilities.ALLOWED_EDGES`）；
+    - 业主 2026-10-19 的名册口径是"只有父与子能通话"，而这一趟 D 名下没有 E 这个实例
+      （没派活 ⇒ 名册是空的）⇒ `message.to="E"` 被 `not_in_roster` 拒掉，一条都没落盘。
+
+    改名与改期望的由来（旧名 `test_private_message_between_partners_is_allowed`）：
+    旧期望是"`messages_sent == ["E"]` 且 E 读得到"。旧期望把尝试当成功（2026-10-22 查实）：
+    改前它只有第一个断言"通过"，通过的原因正是那条缺陷 —— `messages_sent` 只数
+    `shape == "message"` 的步，不看那一步的 `result`，于是"被拒"被读成"发成了"，而
+    E 的收件箱一直是空的。现在断言真实发生的事：一条被拒、E 的收件箱仍为空、
+    回执上 `messages_sent` 为空而 `messages_refused` 点名收件人与理由码。
+    """
     st, registry, cond, root = _ws(tmp_path)
     assert "E" in C.ALLOWED_EDGES["D"] and "D" in C.ALLOWED_EDGES["E"]
     gw = ScriptedGateway([json.dumps({"message": {"to": "E", "subject": "约束",
@@ -141,9 +154,20 @@ def test_private_message_between_partners_is_allowed(tmp_path: pathlib.Path):
     run = run_role("D", "把约束告诉 E", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="D", session_root=root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", from_env=False)
-    assert run.messages_sent == ["E"], run.to_dict()
-    msgs, _ = read_messages(root, "E", sid="t")
-    assert msgs and msgs[0]["channel"] == "private" and "n<=5" in msgs[0]["body"]
+    step = run.steps[0]
+    assert step.shape == "message" and step.result.get("ok") is False, step.result
+    assert step.result.get("refused") == "not_in_roster", step.result
+
+    # 回执不许把"尝试过"读成"发成了"：没落成就一个字都不进 `messages_sent`
+    assert run.messages_sent == [], run.to_dict()
+    refused = run.messages_refused
+    assert len(refused) == 1, refused
+    assert refused[0]["to"] == "E" and refused[0]["refused"] == "not_in_roster", refused
+    assert refused[0]["receipt"] == "unknown", refused
+
+    # 现场：E 的收件箱一直是空的（改前那条断言反的是这件事真的发生了）
+    msgs, problems = read_messages(root, "E", sid="t")
+    assert msgs == [] and not problems, (msgs, problems)
 
 
 def test_a_message_arriving_mid_run_is_heard_in_the_next_step(tmp_path: pathlib.Path):
