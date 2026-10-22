@@ -3,6 +3,19 @@
 # 所有阈值都在这里，不在代码里。理由：判重阈值（dup_strong / dup_review）是
 # **业务判断**而非技术参数，不同学科领域的合适取值差别很大，必须能不改代码就调。
 
+# Lean 解释器（lean.exe）或它所在的目录 —— 「这台工作区用哪一个 lean」记在这里，
+# 于是"同一条链在别的机器上也复现得出来"。
+#
+# 生效位置唯一：`agentflow/src/agentflow/leantoolchain.py` 的 `_resolve`，它是
+# 开机自检（`selfcheck`）解析解释器的第 ④ 档。整条梯子是：
+#     --lean 显式 > 环境变量 AGENTFLOW_LEAN_BIN > settings.json 的 toolchain.lean_bin
+#     > 本行 config.yaml 的 lean_path > PATH 缺省探测
+# 留空 = 按 --lean/env/settings 缺省探测（本行不生效，与没写等价）。
+# 相对路径相对**工作区根**解析（与 `store.root` 之外那几个落点键同一条口径）。
+# 它只管"用哪个 lean"；"这一趟要不要走形式化"是另一个开关
+# （settings.json 的 toolchain.lean_enabled，业主 2026-10-12 的口径）。
+lean_path: ""
+
 store:
   # ⚠️ 这一块**当前不被正式版代码读取**（2026-09-30 更正）：全仓没有一处
   # `cfg["store"]` / `cfg.get("store")`。工作区根由 `--root` 决定

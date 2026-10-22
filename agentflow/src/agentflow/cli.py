@@ -91,6 +91,141 @@ def make_store(root: Path | None = None) -> Store:
     return Store(root)
 
 
+# ---------------------------------------------------------------- Lean 工具链开机自检
+#
+# 业主 2026-10-22 的原话：「开机自检可以做，防止用户提供虚构的lean环境」。
+# 自检本体在 `leantoolchain`（纯函数四步自检 + 一份四档读数）；这一节只做两件事：
+# 把它打到第一屏，并把"自检不是 usable"变成摘要里那一格 unknown。
+#
+# 为什么接线集中在这一个文件里：`tools/verify_tools.py` 是 FC-27 禁改区
+# （`scripts/noai_gate.py --paths` 对它是 requires_human），自检因此不往桥接层里塞，
+# 而是从 `leantoolchain.lean_selfcheck_reading()` 这一个只读读数交出去。
+
+
+def _lean_cell(value) -> str:
+    """把读数里的一格翻成人能读的一行（空串/None 都写清楚，不留空白）。"""
+    if value is None:
+        return "None"
+    if isinstance(value, str):
+        return value if value.strip() else "（空）"
+    return str(value)
+
+
+def _lean_reading_text(sc: Mapping) -> str:
+    """自检读数的一行摘要：state + 开关值 + 来源 + 解释器路径。"""
+    src = _lean_cell(sc.get("source"))
+    if not str(sc.get("source") or ""):
+        src = "五档都没找到"
+    return (f"state={_lean_cell(sc.get('state'))}；"
+            f"开关={'开' if sc.get('enabled') else '关'}"
+            f"（来源 {_lean_cell(sc.get('enabled_source'))}）；"
+            f"来源={src}；解释器={_lean_cell(sc.get('lean_path'))}；"
+            f"版本={_lean_cell(sc.get('version'))}"
+            f"（{'符合期望' if sc.get('version_ok') else '不符或没读出来'}）")
+
+
+def _lean_first_screen(root: Path, *, stream=None) -> dict:
+    """第一屏：打印 Lean 工具链的三件事，开关开着时真跑一次自检。返回那份读数。
+
+    三件事是业主点名要露出来的：开关值 / 来源 / 解释器路径。之后是四步自检的结论
+    （版本、sha256、正样例退出码、反控退出码）与逐条 `problems` —— "没通过"必须带原因，
+    一句"失败"不算读数。
+
+    `stream` 只在 `--json` 那一档给 `sys.stderr`：机器读的那一份 stdout 必须保持
+    可解析（一条人话混进 JSON 流里，下游拿到的是解析错误而不是结论）。
+    """
+    from . import leantoolchain as LT
+
+    out = stream if stream is not None else sys.stdout
+    sc = LT.lean_selfcheck_reading(root=root)
+
+    def emit(line: str) -> None:
+        print(line, file=out)
+
+    emit(tty.paint("[开机自检] Lean 工具链", "bold"))
+    emit(tty.bullet(f"开关：{'开' if sc.get('enabled') else '关'}"
+                    f"（来源 {_lean_cell(sc.get('enabled_source'))}）"))
+    emit(tty.bullet(f"来源：{_lean_cell(sc.get('source'))}"
+                    "（--lean > 环境变量 AGENTFLOW_LEAN_BIN > settings.json 的 "
+                    "toolchain.lean_bin > config.yaml 的 lean_path > PATH）"))
+    emit(tty.bullet(f"解释器：{_lean_cell(sc.get('lean_path'))}"))
+    if sc.get("state") == "off":
+        emit(tty.bullet("自检：没跑（开关关着 —— 不起子进程、不写临时文件）"))
+    else:
+        pos = sc.get("positive") or {}
+        neg = sc.get("negative") or {}
+        sha = str(sc.get("sha256") or "")
+        emit(tty.bullet(
+            f"自检：{_lean_cell(sc.get('state'))}（checked={sc.get('checked')}；"
+            f"ok={sc.get('ok')}）｜版本 {_lean_cell(sc.get('version'))}，期望 "
+            f"{_lean_cell(sc.get('expected_version')) or '4.x'}｜"
+            f"sha256 {sha[:12] + '…' if sha else '（没算出来）'}｜"
+            f"正样例退出 {_lean_cell(pos.get('exit_code'))}｜"
+            f"反控退出 {_lean_cell(neg.get('exit_code'))}（必须非 0）"))
+    for problem in sc.get("problems") or []:
+        emit(tty.bullet(tty.paint(f"没通过：{problem}", "yellow")))
+    problem = LT.evidence_state_problem(sc)
+    if problem:
+        # 这是"防虚构环境"的落点：自检没给出 usable ⇒ 形式化证据一律 unknown。
+        emit(tty.bullet(tty.paint(problem, "yellow")))
+    return sc
+
+
+def _lean_evidence_text(lean: Mapping, reading: Mapping) -> str:
+    """摘要里 Lean 那一格：自检不是 usable 时，形式化证据一律记 unknown。
+
+    「记成 verified」这件事的前提是"我们有一个会拒绝假命题的检查器"。
+    自检没给出 `usable` 的时候，这一趟声称的 proof 级证据不记成 verified ——
+    它记 `unknown`，并把原因点名在这同一格里（业主口径：不许把没跑自检写成 usable）。
+    """
+    from . import leantoolchain as LT
+
+    head = (f"开启={'是' if lean.get('enabled') else '否'}；"
+            f"跑过={'是' if lean.get('ran') else '否'}")
+    if not lean.get("enabled"):
+        return head + f"；proof 级证据 {lean.get('proved', 0)} 条 —— {lean.get('reason')}"
+    evidence_state, why = LT.formal_evidence_state(reading)
+    if evidence_state != "verified":
+        return (head + "；形式化证据记 unknown（不是 verified）："
+                f"Lean 工具链自检 {_lean_cell((reading or {}).get('state'))} —— {why}"
+                f"；这一趟得到的 {lean.get('proved', 0)} 条声称的 proof 级证据不记成 verified")
+    return (head + f"；proof 级证据 {lean.get('proved', 0)} 条 —— {lean.get('reason')}"
+            f"（开机自检 usable：版本 {_lean_cell((reading or {}).get('version'))}，"
+            "反控（假命题 1 = 2）被拒绝）")
+
+
+def _print_lean_selfcheck(sc: Mapping) -> None:
+    """把自检读数的每一格打到台面上（`doctor` 那一档）。
+
+    逐键打印的理由：出问题时要能回答"是哪一步没过、那个解释器是哪个二进制"。
+    只打一句"自检失败"等于把排查方向藏起来（`state` 与 `problems` 是业主点名要的）。
+    """
+    print(tty.rule("Lean 工具链（开机自检）"))
+    print(tty.bullet(f"checked={sc.get('checked')}；ok={sc.get('ok')}；"
+                     f"state={_lean_cell(sc.get('state'))}；"
+                     f"开关={'开' if sc.get('enabled') else '关'}"
+                     f"（来源 {_lean_cell(sc.get('enabled_source'))}）"))
+    print(tty.bullet(f"source={_lean_cell(sc.get('source'))}"
+                     + ("" if str(sc.get("source") or "")
+                        else "（空串 = 五档都找过、都没找到）")))
+    print(tty.bullet(f"lean_path={_lean_cell(sc.get('lean_path'))}"))
+    print(tty.bullet(f"version={_lean_cell(sc.get('version'))}；"
+                     f"version_ok={sc.get('version_ok')}；"
+                     f"期望={_lean_cell(sc.get('expected_version')) or '4.x'}"))
+    print(tty.bullet(f"sha256={_lean_cell(sc.get('sha256'))}"))
+    for name in ("positive", "negative"):
+        row = dict(sc.get(name) or {})
+        head = "；".join(f"{k}={_lean_cell(v)}" for k, v in row.items()
+                         if k != "output_head")
+        print(tty.bullet(f"{name}：{head}"))
+        print(f"    输出开头：{_lean_cell(row.get('output_head'))}")
+    problems = list(sc.get("problems") or [])
+    print(tty.bullet("problems：" + ("（无）" if not problems else f"{len(problems)} 条")))
+    for problem in problems:
+        print(f"  - {problem}")
+    print(tty.bullet(f"note：{_lean_cell(sc.get('note'))}"))
+
+
 # ---------------------------------------------------------------- 子命令
 
 
@@ -626,6 +761,10 @@ def cmd_run(args) -> int:
         spec = replace(spec, model=args.model)
     st = make_store(root)
     st.init()
+    # ---- 第一屏：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
+    # 它回答的是"这一趟能不能信形式化证据"，所以必须在跑之前就露出来，
+    # 而不是等报告里出现一条 proof 行之后才去怀疑环境。
+    lean_reading = _lean_first_screen(root)
     res = run_topic(
         st,
         topic=args.topic,
@@ -667,9 +806,7 @@ def cmd_run(args) -> int:
          ("检索", f"{res['retrieval_status']}；断言 {counts['total']} 条"
                   f"（逐字通过 {counts['verified']}：摘要级 {counts.get('verified_abstract', 0)}、"
                   f"全文级 {counts.get('verified_fulltext', 0)}；未验证 {counts['unverified']}）"),
-         ("Lean", f"开启={'是' if lean.get('enabled') else '否'}；"
-                  f"跑过={'是' if lean.get('ran') else '否'}；"
-                  f"proof 级证据 {lean.get('proved', 0)} 条 —— {lean.get('reason')}"),
+         ("Lean", _lean_evidence_text(lean, lean_reading)),
          ("六件产物", "、".join(res["artifacts"]))],
         # 路径放进 `verbatim`：它是要被抄下来 `cd` 进去的，截断了就等于没打印。
         verbatim=[("工作区：", str(root)), ("产物目录：", res["out_dir"])],
@@ -1104,6 +1241,8 @@ def cmd_project(args) -> int:
                 print(line)
             return 0
 
+        # ---- 第一屏：Lean 工具链开机自检（与 `run-agent` / `run` 同一档，业主 2026-10-22）。
+        lean_reading = _lean_first_screen(root)
         res = P.run_project(
             root, name=args.name, start=args.start, topic=args.topic or "",
             books_dir=args.books, books_limit=args.books_limit,
@@ -1211,10 +1350,7 @@ def cmd_project(args) -> int:
             "这一跑的结果",
             [("退出码", f"{_exit_badge(result.get('exit_code'))}（{result.get('reason')!r}）"),
              ("模型调用", f"{result.get('calls')} 次 / 本次花费 {result.get('spent_usd_this_run')} USD"),
-             ("Lean", (lambda ln: f"开启={'是' if ln.get('enabled') else '否'}；"
-                                 f"跑过={'是' if ln.get('ran') else '否'}；"
-                                 f"proof 级证据 {ln.get('proved', 0)} 条"
-                                 f"（片段 {ln.get('snippets', 0)} 个）")(result.get("lean") or {})),
+             ("Lean", _lean_evidence_text(result.get("lean") or {}, lean_reading)),
              ("六件产物", ", ".join(result.get("artifacts") or []) or "(无)")],
             verbatim=[("产物目录：", run.get("out_dir") or "(无)")],
             tone="green" if result.get("exit_code") == 0 else "yellow",
@@ -1666,6 +1802,10 @@ def cmd_run_agent(args) -> int:
     root = Path(args.root or DEFAULT_ROOT).resolve()
     st = make_store(root)
     st.init()
+    # ---- 第一屏：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
+    # `--json` 那一档把它打到 stderr：机器读的 stdout 必须保持可解析
+    # （一条人话混进 JSON 流里，下游拿到的是解析错误而不是结论）。
+    _lean_first_screen(root, stream=(sys.stderr if bool(getattr(args, "json", False)) else None))
 
     # ---- 会话身份在这一刻定下，之后整趟不再漂移（`draft/37` §63，修法 B）
     #
@@ -2016,9 +2156,17 @@ def cmd_doctor(args) -> int:
     或者没找到证明检查器 —— 缺什么就少做什么，不是"跑不成"）；`2` 没查成
     （探测本身不成立：`checked=False`，例如显式配置指了一个不存在的路径）。
     """
+    from . import leantoolchain as LT
     from . import toolchain as TC
 
     rep = TC.toolchain_report()
+    # ---- 新增的一档：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
+    # 它与上面 `provers` 那一档问的不是同一件事：`provers` 回答"盘上有没有它、从哪一档找到的"，
+    # 这一档回答"找到的那个会不会拒绝假命题"—— 一个只打印版本、永远 0 退出的回显器
+    # 在前一档里是"可用"，在这一档里必须是 `unusable`（反控没失败）。
+    # 读数只从 `leantoolchain` 的只读那一口取（不在本地再造一次自检）。
+    sc = LT.lean_selfcheck_reading(root=Path(getattr(args, "root", None) or DEFAULT_ROOT))
+    rep["lean_selfcheck"] = sc
     if args.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
     else:
@@ -2051,6 +2199,10 @@ def cmd_doctor(args) -> int:
             # 上面那一行照样写"可用"。
             print(tty.bullet("Mathlib 实测（真编译一次 `import Mathlib`）："
                              + str(ml.get("import_mathlib_measured"))))
+        # ---- 新增的一档：Lean 工具链开机自检（业主 2026-10-22）。
+        # 逐键打出来（含 state 与逐条 problems）：这一档的用途正是"把虚构环境挡在跑之前"，
+        # 而"哪一步没过、那个解释器是哪个二进制"是唯一的排查线索。
+        _print_lean_selfcheck(sc)
         print(tty.bullet("结论：" + ("这一趟能做形式化核验（proof 级证据可达）"
                                      if rep["can_do_formal"] else
                                      "这一趟做不了形式化核验（会如实报没核到）")))
@@ -2301,6 +2453,7 @@ def cmd_closing(args) -> int:
     逐格现算并打出来，但它们是读数。
     """
     from . import closing as CL
+    from . import leantoolchain as LT
     from .store import Store
 
     root = Path(args.root or DEFAULT_ROOT).resolve()
@@ -2336,6 +2489,15 @@ def cmd_closing(args) -> int:
             for _problem in (_nt.get(_key) or []):
                 print(f"  [warning] nontriviality：{_label} —— {_problem}")
     print(rep.summary())
+    # ---- Lean 工具链那一格（业主 2026-10-22「防止用户提供虚构的lean环境」）。
+    # 收工门问的是"这份交付能不能交"，而"这一趟的 proof 级证据可不可信"是同一个问题的前提：
+    # 自检没给出 usable 时，本格把形式化证据的档位明写成 unknown，
+    # 不让一份靠回显器撑起来的 proof 行混过"可交付"。
+    _lean_sc = LT.lean_selfcheck_reading(root=root)
+    print(tty.bullet("Lean 工具链自检：" + _lean_reading_text(_lean_sc)))
+    _lean_problem = LT.evidence_state_problem(_lean_sc)
+    if _lean_problem:
+        print(tty.bullet(tty.paint(_lean_problem, "yellow")))
     if getattr(args, "no_review_acceptance", False):
         # 关掉是显式的：它让"零调用的那段历史"仍可复现，也方便对拍接线前后的读数。
         print("[review-acceptance] 这一次没跑（`--no-review-acceptance`）—— "
