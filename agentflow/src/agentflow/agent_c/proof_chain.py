@@ -23,7 +23,10 @@
 不影响另一条走到根），`cycle` / `truncated` 只描述真正挡住这条路的那些；跨组汇总按节点
 去重（多写一组路径不许把"牵动多少节点"吹大）；- 坏尾巴（`used_by` 的 `#pN` 读不懂）且
 没有可用分支 ⇒ 这一趟没查成（`unknown` + `ok=False` + `closed=False`），不许读成
-"已经是根"；- 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。
+"已经是根"；- 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。- 形状（业主 2026-10-22）：payload 另带 `path_shapes` 一列 —— 每条候选路径
+（`(证明号, 组)` 一行）的跳数 / 大步骤数 / 无依赖跳变 / 旁挂节点 / 承重边 /
+同目标还有几条别的路径（口径逐条写在 `path_shape.py`）。这一列只摆形状、不给分数：
+"哪一条更自然"由模型判（`agent_skills.py` 里 C 那一岗的「最自然路径」）。
 """
 from __future__ import annotations
 from pathlib import Path
@@ -40,6 +43,9 @@ from .. import proofloc as _PL  # noqa: E402
 # （`conceptrows.concept_statement` 那一格永远是空的）—— 所以新概念"是不是根"
 # 改按"定义在不在"判。
 from ..migrate_concepts import PRIMITIVE_PROOF as CONCEPT_PRIMITIVE_MARKER  # noqa: E402
+# 候选路径的"形状"读数（业主 2026-10-22）：只在这一层之上补形状，改不动
+# 下面任何一个 OR / AND 判据（`_or_holds` / `_and_length` 那一族一个字都不碰）。
+from .path_shape import path_shapes  # noqa: E402
 
 #: 走到根就算完的两种 `kind`（第三种是 `lit:` 行本身，见 `_DepGraph.is_root`）。
 _PROOF_KINDS = ("proof",)
@@ -81,6 +87,19 @@ def _bad_tail_warnings(graph: "_DepGraph") -> list[str]:
     return [f"有 {len(bad)} 条依赖的 `used_by` 尾巴读不懂（{shown}{more}）"
             "⇒ 这些边没有进依赖索引（不会出现在任何一组路径里，也没有被折成 `#p1`）；"
             "原串逐条见 payload 的 `bad_used_by`"]
+
+
+def _shape_keys(checked: bool, rows: Sequence[Mapping[str, Any]] = (),
+                note: str = "") -> dict[str, Any]:
+    """形状读数那三格（`path_shapes` / `_checked` / `_note`）的落法只有这一处。
+
+    为什么要一个函数：五个返回点各写一份字面量，迟早会有一处漏掉 `checked`
+    —— 那时"没算成"与"没有候选路径"在同一份 payload 上长得一样，
+    而下游读到的是一句口吻确定的"就这么几条"。
+    """
+    return {"path_shapes": [dict(r) for r in rows],
+            "path_shapes_checked": bool(checked),
+            "path_shapes_note": str(note or "")}
 
 
 # ------------------------------------------------------------------ 组合规则
@@ -140,7 +159,9 @@ class _ProofChain:
                 summary=(f"依赖图读不成（{type(exc).__name__}: {exc}）⇒ 这一趟没查成"
                          "（不是『这条成果没有依赖』）"),
                 payload={"checked": False, "target": str(target), "groups": [],
-                         "best_group": None, "groups_total": 0},
+                         "best_group": None, "groups_total": 0,
+                         **_shape_keys(False, (), "依赖图没读成 ⇒ 形状没算成"
+                                                    "（不是『没有候选路径』）")},
                 ok_=False, error=f"{type(exc).__name__}: {exc}")
 
         # ---- 目标解析（号 / 别名）—— 业主："别名按乙，毕竟定理也可能有别名"
@@ -152,7 +173,9 @@ class _ProofChain:
                          "（不是『它没有依赖』）"),
                 payload={"checked": False, "target": str(target), "groups": [],
                          "best_group": None, "groups_total": 0,
-                         "matched_by": ""},
+                         "matched_by": "",
+                         **_shape_keys(False, (), "目标找不到 ⇒ 形状没算成"
+                                                   "（不是『没有候选路径』）")},
                 ok_=False, error="target_not_found")
 
         graph = _DepGraph(stmts=stmts, deps=deps, exps=exps, lits=lits,
@@ -189,6 +212,10 @@ class _ProofChain:
         target_is_root, target_why = graph.is_root(f"stmt:{node['stmt_id']}")
         bad_used = list(graph.bad_used_by)
         label = node.get("label") or node["stmt_id"]
+        # 候选路径的形状读数（业主 2026-10-22）：每条候选路径一行，摆形状、不打分。
+        # 它只在 `groups_out` 之上算，改不动上面任何一条 AND / OR 判据。
+        shapes = path_shapes(graph, node["stmt_id"], groups_out, max_depth=max_depth)
+        shape_keys = _shape_keys(shapes["checked"], shapes["rows"], shapes["note"])
         if not groups_out and bad_used:
             # 三态（2026-10-22 审计缺陷 11）：坏尾巴是唯一那条依赖时，改前这里读成
             # "没有依赖 ⇒ 已经是根 ⇒ 闭合"。事实是"那条依赖读不懂" —— 既不能说它到根了，
@@ -202,6 +229,8 @@ class _ProofChain:
                          "groups_total": 0, "best_proof_no": None, "proof_nos": [],
                          "closed": False, "roots": [],
                          "bad_used_by": bad_used,
+                         **_shape_keys(False, (), "依赖读不懂（坏尾巴）⇒ 形状没算成"
+                                                   "（这一趟没查成）"),
                          "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
                                   "label": node.get("label")}},
                 ok_=False, error="dependency_unreadable",
@@ -220,6 +249,7 @@ class _ProofChain:
                              "best_proof_no": None, "proof_nos": [],
                              "closed": True, "roots": [node["stmt_id"]],
                              "bad_used_by": list(graph.bad_used_by),
+                             **shape_keys,
                              "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
                                       "label": node.get("label")}},
                     warnings=_bad_tail_warnings(graph),
@@ -233,6 +263,7 @@ class _ProofChain:
                          "best_proof_no": None, "proof_nos": [],
                          "closed": False, "roots": [], "unwritten": [node["stmt_id"]],
                          "bad_used_by": list(graph.bad_used_by),
+                         **shape_keys,
                          "why": target_why},
                 ok_=False, error="unwritten_dependencies",
                 warnings=_bad_tail_warnings(graph),
@@ -269,6 +300,10 @@ class _ProofChain:
             # 跨组汇总按节点去重（多写一组路径不许把规模读数吹大）
             "unique_nodes": len({h["node"] for g in groups_out for h in g["hops"]}),
             "truncated": truncated,
+            # 形状读数（2026-10-22）：每条候选路径一行 —— 跳数 / 大步骤数 /
+            # 无依赖跳变 / 旁挂节点 / 承重边 / 同目标还有几条别的路径。
+            # 读哪一条"更自然"由模型判，这里不给分数。
+            **shape_keys,
         }
         return self._report(
             "proof_chain", str(target),

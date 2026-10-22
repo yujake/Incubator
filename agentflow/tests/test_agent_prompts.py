@@ -2090,7 +2090,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p181"
+_FROZEN_PROMPT_VERSION = "p182"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2106,9 +2106,13 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     #  `p169` 十格全换值（理由逐条见上面那一段：A 的 boundary → 十格的伙伴表；
     #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
     #    C 的两句假话 → B / C / D / F / M 这五格）。
+    #  `p182`（2026-10-22）只换 C 那一格：C 的 skills 多一条「最自然路径」
+    #    （业主新要求：分析最自然的关系路径而不只是最短依赖链），它的索引行只印在
+    #    C 那一格。`C.proof_chain` 的 payload 多一列 `path_shapes` 不进提示词正文
+    #    （动作面与工具面都没变，所以这里只有一格换值）。
     "A": "5cf5bf89198c506203b4b389769199eedd2852003804a84af2c86e7612ae360c",
     "B": "94509219e9d680897a3785efc6417f7c94f978b572c02e97a973ead399a96f27",
-    "C": "f2d234521d58c3e7b22ce68fcb5dba781f42323dc9c1ab99064d267690fac52c",
+    "C": "22301c572b85109f979509b137374a93b24f53a4d92569e4888654870baf7afc",
     "D": "10fff18dfc267c507181f46c4b1594d2e6d5a8235ff61db0a2711b298ca0fc9c",
     "E": "486305b098b3421560dd738dcb0e60913de8347848cd35a6f9b449c4dd65bc0f",
     "F": "f7046c8befab285e3185ca56b0e32f59c9fe4ddd8daa5b053feb665013f55724",

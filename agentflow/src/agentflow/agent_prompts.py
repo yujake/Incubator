@@ -2157,7 +2157,12 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 收口回报里（`agent_prompts.py` / `agent_skills.py` / `litstage.py` / `search_tools.py` /
 #: `conductor_tools.py` / `conductor.py` / `agent_loop.py` / `schema.py` / `store.py` /
 #: `specs/a.py` / `specs/c.py` / `cli.py` 逐个）。
-PROMPT_VERSION = "p181"
+#: `p182`（2026-10-22）：业主新要求「C 要能分析最自然、最直接的关系路径（不只是看最短
+#: 依赖链）」⇒ C 的 skills 多一条「最自然路径」（`agent_skills.CATALOG["C"]` 的第 4 条），
+#: 它的索引行只印在 C 那一格 ⇒ 只有 C 那一格的摘要换了值，另九格逐字未动（这本身就是
+#: "改动作用域"的读数）。读数那一侧（`C.proof_chain` 的 payload 多一列 `path_shapes`）
+#: 不进提示词正文：工具面的形状没变（没有新动作、没有新工具）。
+PROMPT_VERSION = "p182"
 
 
 

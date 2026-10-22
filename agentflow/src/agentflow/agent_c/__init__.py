@@ -25,6 +25,9 @@ from ._support import (ANALYZERS, AgentBrief, AgentSpec, AnalysisReport, Any, D,
     interactions, json, ok, os, re, relation_sort_key, tool,
 )
 from ..specs.c import SPEC
+#: 候选路径的形状读数（业主 2026-10-22）：`proof_chain` 的 payload 里那一列
+#: (`path_shapes`) 就是它算的，单独导出是为了让判据能直接喂图进去复核口径。
+from .path_shape import path_shapes
 
 __all__ = [
     "AgentC",
@@ -36,5 +39,6 @@ __all__ = [
     "SERVICE_MAX_STRUCTURAL_PAIRS",
     "SUBMITTER",
     "check_conflict",
+    "path_shapes",
     "SPEC",
 ]
