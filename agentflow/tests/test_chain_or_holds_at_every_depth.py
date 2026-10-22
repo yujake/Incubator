@@ -183,7 +183,7 @@ def _sub_reading(rep) -> None:
     best = by[(2, 1)]
     assert best["reached"] is True, (
         "子命题 0002 的 #p2 到根、#p1 悬空，这条路却读成没到根："
-        f"{ {k: best[k] for k in ('reached', 'length', 'why')} }")
+        f"{ {k: best.get(k) for k in ('reached', 'length', 'why')} }")
     assert best["length"] == 2, (
         "length 不是那条 2 跳的可行路径（0001 → 0002 → lit:0009），而是取了所有分支里"
         f"最深的那条：{best['length']}")
@@ -260,6 +260,22 @@ def test_a_sub_proposition_with_one_dead_proof_still_reaches_the_root(
     """
     _sub_reading(AgentC(_tree_sub(tmp_path)).proof_chain("0001"))
 
+    # 审计现场那一棵（目标只有一条证明、孩子有两条）：改前读数逐字是
+    # "命题 0004：1 组可选路径，没有一组走到根（见 warnings）"，而孩子那条 `#p2` 到根。
+    st = _store(tmp_path / "audit")
+    _stmt(st, "0004")
+    _stmt(st, "0002")
+    _lit(st, "0009")
+    _dep(st, "0001", "stmt:0004", stmt="0002")
+    _dep(st, "0002", "stmt:0002", lit="0007")
+    _dep(st, "0003", "stmt:0002#p2", lit="0009")
+    rep = AgentC(st).proof_chain("0004")
+    p = rep.payload
+    assert p["groups_total"] == 1 and p["best_proof_no"] == 1, p
+    g = p["groups"][0]
+    assert g["reached"] is True and g["length"] == 2, g
+    assert "没有一组走到根" not in rep.summary, rep.summary
+
 
 # ------------------------------------------------------------------ ② 顶层与子层同一条规则
 
@@ -287,7 +303,7 @@ def test_the_and_inside_a_group_and_the_or_across_groups_both_hold(
     `reached=False`；前半（组内一条边悬空 ⇒ 那一组不可行）改前也绿，留作反真空的
     另一半（判据⑥ 把 AND 换成 OR，这一半必须红）。
     """
-    _and_reading(AgentC(_tree_and_one_edge_dangling(tmp_path / "and")).proof_chain("0001"))
+    # 先验"组间 OR"那一半（改前红的就是它）：组 1 被组内 AND 挡住，组 2 到根。
     rep = AgentC(_tree_or_across_groups(tmp_path / "or")).proof_chain("0001")
     p = rep.payload
     assert rep.ok is True, rep.error
@@ -295,12 +311,14 @@ def test_the_and_inside_a_group_and_the_or_across_groups_both_hold(
     g = p["groups"][0]
     assert g["reached"] is True, (
         "子命题的组 2 到根，整体却读成没到根（组间 OR 没成立）："
-        f"{ {k: g[k] for k in ('reached', 'length', 'why')} }")
+        f"{ {k: g.get(k) for k in ('reached', 'length', 'why')} }")
     assert g["length"] == 2, g["length"]
     assert g["why"] == "", g["why"]
     dangling = [item for item in g["failures"] if item["status"] == "dangling"]
     assert dangling and dangling[0]["path_group"] == 1, g["failures"]
     assert dangling[0]["blocking"] is False, dangling[0]
+    # 再验"组内 AND"那一半：只有组 1 的一条到根 + 一条悬空 ⇒ 这一组不可行。
+    _and_reading(AgentC(_tree_and_one_edge_dangling(tmp_path / "and")).proof_chain("0001"))
 
 
 # ------------------------------------------------------------------ ④ 全不可行
