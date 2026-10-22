@@ -42,7 +42,10 @@ from . import textutil as T
 #: 正则一次吃下全部组合，且**要求结尾必须有 ``/``** —— 否则裸域名
 #: ``doi.org`` 会被当成前缀整体删掉，把 ``doi.org`` 这种（畸形但真实的）输入
 #: 变成空串。
-_DOI_URL_PREFIX_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/")
+_DOI_URL_PREFIX_RE = re.compile(r"^(?:https?://)?(?:(?:dx|www)\.)?doi\.org/")
+# 2026-10-22（业主批「禁改区允许谨慎地动」）：原正则只吃 `dx.`，与上面那段注释
+# "带不带 `dx.` / 带不带 `www.` 的组合"不符 ⇒ `https://www.doi.org/10.1000/x` 与
+# `10.1000/x` 拿到两个主键（同一篇文献两行）。补一个 `www` 分支即可，其余不动。
 _DOI_SCHEME_PREFIX_RE = re.compile(r"^doi:\s*")
 _FULLWIDTH_RE = re.compile(r"[\uff01-\uff5e]")
 
@@ -107,7 +110,7 @@ def normalize_doi(doi: str | None) -> str | None:
     1. 先去 **NFKC**：DOI 从网页/PDF 里复制出来常带全角数字与全角斜杠
        （``１０.１０００／ｘ``），不折平就会与半角形态分叉；
     2. 折小写（DOI 大小写不敏感）；
-    3. 去 ``https?://`` + 可选 ``dx.`` + ``doi.org/`` 前缀；
+    3. 去 ``https?://`` + 可选 ``dx.`` / ``www.`` + ``doi.org/`` 前缀；
     4. 去 ``doi:`` / ``doi: `` 前缀；
     5. 去首尾空白与**尾随标点**（句末标点被一起复制进 DOI 是常见脏数据）。
        用 ``rstrip`` 而不是 ``strip``：前导标点不是已知的脏数据形态
