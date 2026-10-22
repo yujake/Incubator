@@ -54,7 +54,7 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 6 / warning 15 / info 49`（复跑 `python -B scripts/lint_rules.py`；
+**linter 的当次三栏（日常档）**：`error 0 / warning 14 / info 49`（复跑 `python -B scripts/lint_rules.py`；
 `error` 那一栏刻意不钉 —— 它由发布门第 5 项按"必须为 0"强制；**严格档的两个数只写进块里的
 `lint_rules_strict_*` 两行**，正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
@@ -70,9 +70,9 @@ LIVE-READINGS:BEGIN
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 15   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
+lint_rules_warning      = 14   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 49   # 同一档的 info 栏
-lint_rules_strict_warning = 75 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 74 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
 noai_paths_glob         = 43   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 40   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`

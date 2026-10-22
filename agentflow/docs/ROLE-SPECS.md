@@ -1127,7 +1127,7 @@ C 的产出有两类，状态语义完全不同。
 
 > **2026-10-18 起**：论文正文的体例（骨架 / 第 3 节证明线 / 正文禁令 / 附录 A 落点）不再只活在 G 的手感里 —— 它是 `specs/g.py::SPEC.brief.policy` 的四条硬条目，并由 H 的审稿清单逐条对拍（H-8）。G 原有的六条动作职责（G-1…G-6）不变。
 
-> **2026-10-22 起**：G 的第 7 个动作 `write_mapping`（G-8）把"先出对应表、再写正文"那条顺序变成主控能按动作名派的一件。它只加动作面：写集（`documents` / `dependencies` / `review_findings`）、边、`emphasis`、`local_notes` 与 `policy` 一个字都没动；两格参数（`project` / `rows`）与工具面逐字一致 ⇒ 反向参数缺口表（`capabilities._KNOWN_TOOL_ONLY_PARAMS`）不需要新增登记。
+> **2026-10-22 起**：G 的第 7 个动作 `write_mapping`（G-8）把"先出对应表、再写正文"那条顺序变成主控能按动作名派的一件。它只加动作面：写集（`documents` / `dependencies` / `review_findings`）、边、`emphasis`、`local_notes` 与 `policy` 一个字都没动；两格参数（`project` / `rows`）的真身在工具层（`tools/doc_tools.py` 的 `doc.write_mapping`：`project.minLength=1 / maxLength=300`、`rows.minItems=1` 且每行必填 `kind/label/env_no/ledger_id/proof_no/file`），动作面只镜像它的约束键，由 `capabilities.assert_capabilities()` 逐键对拍 —— 改工具层的 `minItems` 而不改动作面 ⇒ 导入期当场红（不是「两份抄得一样」，是「一份派生自另一份」）⇒ 反向参数缺口表（`_KNOWN_TOOL_ONLY_PARAMS`）与动作面独有参数表（`_KNOWN_ACTION_ONLY_PARAMS`）都不需要新增登记。
 
 ### G.3 明确不负责
 
