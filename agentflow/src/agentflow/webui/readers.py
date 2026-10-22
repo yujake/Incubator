@@ -2651,7 +2651,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("label", "string"), ("statement_text", "string"), ("statement_full", "string"),
       ("proof_text", "string"), ("source_lit_id", "string"),
       ("page_range", "string"), ("quote_verified", "boolean | null"),
-      ("quote_reason", "string"), ("evidence_kind", "string"), ("bits", "number"),
+      ("quote_reason", "string"), ("evidence_kind", "string"),
+      # `bits` 是五元证据位那一份对象（`evidencebits.bits_from_row` 的读数：
+      # numeric / proof / reviewed / formal / audited + evidence / grade …），
+      # 不是数字。此前声明成 `number` ⇒ 类型面读不出 `bits.reviewed`（运行时能读，
+      # 于是这条错误只在 `tsc` 那一侧沉默）。
+      ("bits", "Record<string, unknown>"),
       ("status", "string"), ("derived_from", "string"), ("doc_id", "string"),
       ("line_range", "string"), ("created_at", "string"), ("created_by", "string"),
       # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：后三格是读模型的 join
@@ -2684,7 +2689,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("by_task_id_tri", "string"))),
     ("VerificationRow",
      "verifications.list_verifications()（裁定 K2：无真机样本 ⇒ 夹具造一行）",
-     (("verification_id", "string"), ("statement_id", "string"), ("verifier", "string"),
+     (("verification_id", "string"), ("statement_id", "string"),
+      # 2026-10-22（多证明模型）：签名行多了两格 —— `stmt_id`（被审的那条命题，
+      # 与 `statement_id` 同值）与 `proof_no`（第几条证明）。读侧真的读得到它们
+      # （C 条拿夹具那一行逐键比），所以这里必须声明，否则类型面读不出证明号。
+      ("stmt_id", "string"), ("proof_no", "number"),
+      ("verifier", "string"),
       ("verdict", "string"), ("defect_step", "string"), ("quote", "string"),
       ("why", "string"), ("findings", "Record<string, unknown>[]"),
       ("unresolved_errors", "number"), ("proof_sha256", "string"),

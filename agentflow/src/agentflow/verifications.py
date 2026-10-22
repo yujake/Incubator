@@ -31,7 +31,9 @@ sha 不符而拒收（`proof_review_gaps` 明确把 `stale` 当成"待复核"这
 签名落盘之后「同一次写」把那条证明的 `reviewed` 翻上去（:func:`sign_statement`）：
 先追加台账那一行、再在 `statements` 的事务里改那一行；事务没成就把刚追加的那一行撤回。
 逐条证明的第 3 位落在命题行的 `bits.evidence.reviewed_by_proof`（`{"1": true, "2": false}`），
-而 `bits.reviewed` 仍是"任一份成立即为 True"的汇总位（老读者只认它）。
+而 `bits.reviewed` 仍是"任一份成立即为 True"的汇总位（老读者只认它）。汇总位要按"任一份
+仍 in-sync"读，就必须知道每一签盖住的是哪一份正文 ⇒ 同一次写还落一张 `bits.evidence.
+reviewed_sha_by_proof`（`{"1": "<sha256>", "2": ""}`，见 `evidencebits.REVIEWED_SHA_BY_PROOF_KEY`）。
 ## 老键与老行（兼容，不迁移）
 签名行记的三格是 `stmt_id` / `proof_no` / `proof_sha256`。更早的真机行只有
 `statement_id`（没有 `stmt_id`），更早的写法还可能把证明号写成 `rev`。读侧认这三对写法：
@@ -515,9 +517,10 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
                            *, proof_text: str, proof_no: int = 1) -> dict[str, Any]:
     """命题那一行改成"那一份证明的第 3 位已签"的样子。
 
-    只动三处：那一份证明的 `reviewed`（#p1 = `bits.reviewed` 的汇总位；#p2+ 另外把
+    只动四处：那一份证明的 `reviewed`（#p1 = `bits.reviewed` 的汇总位；#p2+ 另外把
     `proofs` 清单里对应项标上）、逐条证明的那张表
-    （`bits.evidence.reviewed_by_proof = {"1": true, "2": false, ...}`）与凭据
+    （`bits.evidence.reviewed_by_proof = {"1": true, "2": false, ...}`）、逐条证明的
+    "那一签盖住哪一份正文"那张表（`bits.evidence.reviewed_sha_by_proof`）与凭据
     `reviewed_by`；别的一格不碰。等级必须现算
     （`evidencebits.normalize_raw` 的唯一入口）：盘上那份 `grade` 只是缓存，写下去的
     必须与现算逐字相同，否则提交期 `bits_shape_problems` 会拒收这一笔。
@@ -528,6 +531,11 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
     缺省是 False，后者是直接读出来的结论。所以这里把 `proof_list` 里每一份都列出来，
     被签的那一份为 True，其余按原来的值（没有再按 False）。汇总位
     `bits.reviewed` 的语义不变：任一份为 True 即 True。
+
+    ## 第二张表为什么也整表写（sha 那一格）
+    汇总位要回答"还有没有一份证明仍盖着现在这一份正文"。`reviewed_by` 只留最近那一签，
+    只核它会让"签过 #p1、之后改了 #p2"读成没审过。所以逐条记下每一签的 sha：被签的
+    那一份换成这一签的 `proof_sha256`，其余保留原值（没有就写空串 = 这一份判不了）。
     """
     from . import evidencebits as _EB   # 惰性：只在真写这一行时需要（不新增模块级依赖边）
 
@@ -543,6 +551,13 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
     per = {str(n): bool(per.get(str(n), False)) for n, _ in proof_list(new)}
     per[str(no)] = True
     ev[_EB.REVIEWED_BY_PROOF_KEY] = per
+    # 逐条证明的"那一签盖住的是哪一份正文"：`{证明号: sha256}`（没签过 / 判不了的写空串）。
+    # 汇总位按"任一条仍 in-sync ⇒ True"读，靠的就是这一格（见 `_stale_review_cleared`）。
+    sha_by_proof = {str(n): str(v) for n, v in
+                    (_EB.reviewed_sha_by_proof(new) or {}).items()}
+    sha_by_proof = {str(n): str(sha_by_proof.get(str(n), "")) for n, _ in proof_list(new)}
+    sha_by_proof[str(no)] = str(verification_row.get("proof_sha256") or "")
+    ev[_EB.REVIEWED_SHA_BY_PROOF_KEY] = sha_by_proof
     # 命题那一行的 `bits.reviewed` 是"这条命题至少有一份证明被审过"的汇总位（老读者
     # 只认它）；真正的凭据按证明记：`reviewed_by` 里带 `proof_no` 与 `proof_sha256`，
     # 于是"这一位说的是哪一份"不再靠猜。

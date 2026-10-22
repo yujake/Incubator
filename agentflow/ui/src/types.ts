@@ -498,7 +498,7 @@ export interface StatementRow {
   quote_verified: boolean | null;
   quote_reason: string;
   evidence_kind: string;
-  bits: number;
+  bits: Record<string, unknown>;
   status: string;
   derived_from: string;
   doc_id: string;
@@ -564,6 +564,8 @@ export interface RelationRow {
 export interface VerificationRow {
   verification_id: string;
   statement_id: string;
+  stmt_id: string;
+  proof_no: number;
   verifier: string;
   verdict: string;
   defect_step: string;

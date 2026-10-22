@@ -2031,7 +2031,7 @@ def _g_skills() -> tuple[Skill, ...]:
             summary="散文体正文 fs.write 到 out/paper/main.tex，再 paper_compile",
             when="任务说「整理成论文 / 交付论文 / 稿件」，或要一份可编译的正文时",
             actions=("G.build_document", "G.register_dependency", "G.compose_claim"),
-            tools=("fs.write", "doc.paper_compile", "doc.scan_claim"),
+            tools=("fs.write", "doc.paper_compile", "doc.write_mapping", "doc.scan_claim"),
             body="""# 成稿
 
 ## 业主 2026-10-13 裁定（逐条落地）
@@ -2042,13 +2042,17 @@ def _g_skills() -> tuple[Skill, ...]:
 - **编译**：`doc.paper_compile` 出 `out/paper/main.pdf`。
   本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ **产物与退出码分两栏读**，
   别只看退出码判成败。
-- **先有对应表，再写正文**（业主 2026-10-22）：`out/paper/MAPPING.json` 是提纲的一部分 ——
-  正文里每条定理/引理/命题/推论/例子/实验各占一行（`kind` / `label` / `env_no` /
-  `ledger_id` / `proof_no` / `file`），再由它渲染出 `out/paper/MAPPING.md` 与正文附录
-  「附录：产出对应表」。正文里每个定理类环境都要能在表里找到一行，表里每一行也要在正文里
+- **先有对应表，再写正文**（业主 2026-10-22）：对应表用 `doc.write_mapping` 一次写三份 ——
+  你只给行（正文里每条定理/引理/命题/推论/例子/实验各占一行：`kind` / `label` / `env_no` /
+  `ledger_id` / `proof_no` / `file`），它调 `papermapping.write_package` 渲染出
+  `out/paper/MAPPING.json`、`out/paper/MAPPING.md` 与正文附录「附录：产出对应表」，并把
+  `\\input{mapping-appendix}` 放进正文。**md 与附录不许手写**：判据要的是"与渲染器逐字相同"
+  （`md_drifted` / `mapping_paper_mismatch`），手抄一遍就对不上。
+  正文里每个定理类环境都要能在表里找到一行，表里每一行也要在正文里
   有一个环境 —— 两个方向都不许有孤儿。多证明时每条证明各占一行（`#p1` / `#p2`）。
   `file` 写**论文包内的相对路径**（绝对路径在别人机器上等于不存在）。
-  顺序是死的：先写 json → 由 json 渲染 md 与附录 → 再编 PDF（改完正文必须重编一次）。
+  顺序是死的：先 `doc.write_mapping` → 再写/改正文 → 再 `doc.paper_compile`（改完正文
+  必须重编一次）。
 
 ## 引用与断言
 

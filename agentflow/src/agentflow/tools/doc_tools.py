@@ -13,6 +13,7 @@
 || `register_dependency` | 登记外部依赖（FC-23 第一道闸） | `closed` 必须用真实数据核到已入库来源 || 
 `render_markdown` | 人可读渲染（FC-10 / FC-22 / FC-23 / FC-25 的呈现层） | 三分档计数、否定分类、依赖表都必须出现
 || `list_documents` | 只读列举 | 供 H / F / D 消费 |
+|| `write_mapping` | 论文对应表的三份写口（json / md / 正文附录） | 内部只调 `papermapping.write_package`：不自己渲染任何一段，手抄就与渲染器逐字对不上 |
 ## 为什么"在构造时就抛"比"写库时才抛"重要
 `schema.Document.validate` 已经拦得住无引用断言，但它的报错形如"claims[3] 没有 citations" —— 读者得自己回去数"第 3 
 条到底是哪句话"，而构造现场（手里正拿着那句话、那段引用）才是信息最全的地方。写库时的 schema 是最后一道闸，不是唯一一道。
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
 from .. import papercompile as PC
+from .. import papermapping as PM
 from .. import proofloc as _PL
 from .. import schema as S
 from .. import textutil as T
@@ -2370,12 +2372,97 @@ def _paper_compile(workspace: Path | None, project: str, timeout_sec: float) -> 
     })
 
 
+# ---------------------------------------------------------------- 论文对应表（`doc.write_mapping`）
+
+
+#: 对应表一行的必填字段（与 `papermapping.ROW_FIELDS` 同源：那边的 schema 也不在这里
+#: 另写一份）。行的解析与校验一律走 `papermapping.parse_rows`。
+_MAPPING_ROW_PARAMS: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "kind": {"type": "string", "enum": list(PM.ENV_KINDS),
+                 "description": "正文里的环境种类（与那个 \\begin{...} 一致）"},
+        "label": {"type": "string", "description": "正文里 \\label{...} 的值（不带花括号）"},
+        "env_no": {"type": "integer", "minimum": 1,
+                   "description": "正文里第几个该环境（按类计数，1 起）"},
+        "ledger_id": {"type": "string",
+                      "description": "stmt:NNNNNN / exp:NNNNNN；多证明带 #pN（stmt:000004#p2）"},
+        "proof_no": {"type": "integer", "minimum": 1,
+                     "description": "第几号证明：1 = canonical（行上的 proof_text）"},
+        "file": {"type": "string",
+                 "description": "该条完整证明/实验所在的文件（论文包内的相对路径）"},
+        "page_or_section": {"type": "string", "description": "给人看的定位（可缺省）"},
+        "citation_loc": {"type": "object",
+                         "description": "引文的本地位置 {file, page_range|line_range|char_range}"},
+        "citation_loc_reason": {"type": "string",
+                                "description": "不给 citation_loc 时那句理由"},
+    },
+    "required": ["kind", "label", "env_no", "ledger_id", "proof_no", "file"],
+}
+
+
+def _doc_write_mapping(workspace: Path | None, project: str,
+                       rows: Sequence[Mapping[str, Any]]) -> Any:
+    """`doc.write_mapping`：把对应表交给 `papermapping.write_package`（唯一写口）。
+
+    三份产物（`MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`，外加正文里那一行
+    `\\input`）全部由 `write_package` 从同一批行渲染 —— 这一层不自己拼任何一段文本。
+    手抄 md 或附录就是第二份渲染口径，而判据要的是"与渲染器逐字相同"
+    （`md_drifted` / `mapping_paper_mismatch`）。
+
+    行的形状也走读侧同一份判据（`papermapping.parse_rows`）：坏行逐条带回、一行都不写。
+    半张表比没有表更坏 —— 它会让人以为"表交过了"。
+    """
+    root = _paper_root(workspace, project)
+    if not isinstance(root, Path):
+        return root
+    payload = {"rows": [dict(r) for r in (rows or [])]}
+    parsed, problems = PM.parse_rows(payload)
+    if problems:
+        return fail(f"对应表有 {len(problems)} 处读不懂 ⇒ 没有写盘（逐条见 problems）",
+                    kind="mapping_unresolvable", written=False, problems=problems)
+    if not parsed:
+        return fail("对应表是空的 ⇒ 没有写盘（正文里每个定理类环境都该有一行）",
+                    kind="mapping_empty", written=False)
+    try:
+        json_path, md_path, frag = PM.write_package(root, parsed)
+    except OSError as exc:
+        return fail(f"写论文包失败：{type(exc).__name__}: {exc}",
+                    kind="io_error", written=False)
+    # 写完立刻按读侧那份判据读一遍：三份在不在、与正文对不对得上，都由它回答
+    # （工具这一层不另立一套"写成功了"的说辞）。
+    reading = PM.mapping_reading(root, workspace_root=workspace)
+    state = str(reading.get("state") or "")
+    body = {
+        "project": str(root), "json": str(json_path), "md": str(md_path),
+        "appendix": str(frag), "rows": len(parsed), "state": state,
+        "md_state": str(reading.get("md_state") or ""),
+        "appendix_state": str(reading.get("appendix_state") or ""),
+        "problems": list(reading.get("problems") or []),
+        "reason": str(reading.get("reason") or ""),
+    }
+    if state != "pass":
+        return fail(f"三份写出了，但这张表现在读不过（{state}）：{body['reason']}",
+                    kind="mapping_not_clean", written=True, **body)
+    return ok({
+        "project": body["project"], "json": body["json"], "md": body["md"],
+        "appendix": body["appendix"], "rows": body["rows"],
+        "state": body["state"], "md_state": body["md_state"],
+        "appendix_state": body["appendix_state"],
+        "problems": body["problems"], "reason": body["reason"],
+    })
+
+
 def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> None:
-    """把"把写好的正文编成 PDF"注册成 G 的工具（旧路四条已退场，见 `draft/117`）。
+    """把论文这一层的两条工具注册进 G 的工具面。
 
     一条工具、一件事：`doc.paper_compile`。它 `declared_external="exec"` 是刻意的 ——
     它真的起 LaTeX 引擎（`pdflatex` / `xelatex` / `lualatex` 取第一个在 PATH 上的），
     所以执行面必须如实声明；声明成 `none` 等于说"这条工具不执行任何东西"。
+
+    `doc.write_mapping` 是"先有对应表，再写正文"那条顺序的写入口（业主 2026-10-22）：
+    `papermapping` 的三份产物此前没有任何调用方，而判据要求 md 与附录与渲染器逐字相同
+    ⇒ 手抄不可达。它只写 `out/paper/` 下的三份（`write_local`），不起子进程。
     """
     registry.register(
         ToolSpec(
@@ -2409,5 +2496,39 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
                 "paper_compile_failed（编译没成）"
             ),
             tags=("document", "paper", "exec"),
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="doc.write_mapping",
+            summary="写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，"
+            "并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；"
+            "md 与附录由 json 渲染，别手写。",
+            params={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "rows": {"type": "array", "minItems": 1,
+                             "description": "对应表的行：正文里每个定理/引理/命题/推论/例子/实验"
+                                            "各占一行；多证明时每条证明各占一行",
+                             "items": _MAPPING_ROW_PARAMS},
+                },
+                "required": ["project", "rows"],
+                "additionalProperties": False,
+            },
+            handler=lambda project, rows: _doc_write_mapping(workspace, project, rows),
+            side_effect="write_local",
+            roles=("G",),
+            returns=(
+                "{'project','json','md','appendix','rows','state','md_state',"
+                "'appendix_state','problems','reason'}；"
+                "state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/"
+                "unknown（没有正文，表没有可对的东西）；"
+                "json / md / appendix 是三个落点的绝对路径；"
+                "失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ "
+                "mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ "
+                "io_error（写盘失败）/ bad_project（项目根不在工作区里）"
+            ),
+            tags=("document", "paper", "write"),
         )
     )

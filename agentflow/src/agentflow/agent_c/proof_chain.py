@@ -7,7 +7,9 @@
 设计（`draft/97` §12.2 / §14.4d / §15.0）：
 
 - 图：节点 = `statements`（定理/定义/引理/命题/概念）+ `experiments` + `literature`；边 = `dependencies`
-（有向：`used_by` → 被依赖的那一端）；- 组：同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：都要）；不同组 = 可选
+（有向：`used_by` → 被依赖的那一端）；- 坏尾巴：`used_by` 里的 `#pN` 读不懂（`#pabc` / `#p0` / 多段 …）时那条边不进索引（不折成
+`#p1`，也不折成任何证明号），原串落在 payload 的 `bad_used_by` 并给一条 warning —— 不留痕的
+话它会静默消失：链照样 `ok=True`，而一条承重边不在任何一组里；- 组：同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：都要）；不同组 = 可选
 路径（组间 OR：任一） ⇒ 结果给每组一条链并挑最短那组（`best_group`）；- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
 `evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 2026-10-21 之前要求 
 `proof_text == "concept:primitive"`，那个哨兵正是 mp3 那 1143 条污染行的来源，现在按"定义在不在"判，历史行带哨兵照旧是根）。
@@ -55,6 +57,24 @@ def _split_used_by(used_by: str) -> tuple[str, int, str]:
     return head, number, problem
 
 
+def _bad_tail_warnings(graph: "_DepGraph") -> list[str]:
+    """坏尾巴的留痕：一条 warning 点名它们不在依赖索引里（原串见 `payload.bad_used_by`）。
+
+    为什么必须有这一条：坏尾巴那条边的索引键是原样串（`000000#pabc`），而
+    `groups_of("000000")` 只查得到命题号那一层 —— 于是那条边不会出现在任何一组路径里。
+    没有留痕时，一条承重边"消失了"和"本来就没有这条边"在读侧长得一模一样
+    （链照样 `ok=True`、没有 warning），而前者会让一条没闭合的证明读成闭合的。
+    """
+    bad = list(graph.bad_used_by)
+    if not bad:
+        return []
+    shown = "、".join(bad[:3])
+    more = "" if len(bad) <= 3 else f" 等 {len(bad)} 条"
+    return [f"有 {len(bad)} 条依赖的 `used_by` 尾巴读不懂（{shown}{more}）"
+            "⇒ 这些边没有进依赖索引（不会出现在任何一组路径里，也没有被折成 `#p1`）；"
+            "原串逐条见 payload 的 `bad_used_by`"]
+
+
 class _ProofChain:
     def proof_chain(self, target: str, *, max_depth: int = 4, k: int = 1,
                     weights: Mapping[str, float] | None = None):
@@ -96,6 +116,9 @@ class _ProofChain:
 
         graph = _DepGraph(stmts=stmts, deps=deps, exps=exps, lits=lits,
                           root=getattr(getattr(self, "store", None), "root", None))
+        # 坏尾巴留痕（2026-10-22）：读不懂的 `used_by` 尾巴不进 `groups_of`，于是那条边
+        # 不在任何一组里 —— 必须在读数里点名它，否则它静默消失。
+        warnings.extend(_bad_tail_warnings(graph))
         # 二维展开：每个 `(证明号, 组号)` 是一条候选路径。证明号那一维是"第几条证明"，
         # 组号那一维是"第几条路径"（语义未改：组内 AND / 组间 OR）。
         by_proof = graph.groups_of(node["stmt_id"])
@@ -135,8 +158,10 @@ class _ProofChain:
                              "groups": [], "best_group": None, "groups_total": 0,
                              "best_proof_no": None, "proof_nos": [],
                              "closed": True, "roots": [node["stmt_id"]],
+                             "bad_used_by": list(graph.bad_used_by),
                              "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
                                       "label": node.get("label")}},
+                    warnings=_bad_tail_warnings(graph),
                 )
             return self._report(
                 "proof_chain", str(target), {"max_depth": max_depth, "k": k},
@@ -146,8 +171,10 @@ class _ProofChain:
                          "groups": [], "best_group": None, "groups_total": 0,
                          "best_proof_no": None, "proof_nos": [],
                          "closed": False, "roots": [], "unwritten": [node["stmt_id"]],
+                         "bad_used_by": list(graph.bad_used_by),
                          "why": target_why},
                 ok_=False, error="unwritten_dependencies",
+                warnings=_bad_tail_warnings(graph),
             )
         if best is None:
             where = "没有一组走到根（见 warnings）"
@@ -167,6 +194,8 @@ class _ProofChain:
             "best_proof_no": (best.get("proof_no") or 1) if best else None,
             #: 这条命题的依赖按哪几条证明分的（升序；老数据恒为 `[1]`）
             "proof_nos": proof_nos,
+            # 读不懂的 `used_by` 尾巴原串（这些边没有进索引、也没折成任何证明号）
+            "bad_used_by": list(graph.bad_used_by),
             # 跨组汇总按节点去重（多写一组路径不许把规模读数吹大）
             "unique_nodes": len({h["node"] for g in groups_out for h in g["hops"]}),
             "truncated": truncated,
@@ -211,13 +240,19 @@ class _DepGraph:
         #: 第一层是"这条命题的第几条证明"（`#pN`，不带尾巴 = canonical #p1），
         #: 第二层是"第几条路径"（`path_group`）。
         self.edges: dict[str, dict[int, dict[int, list[dict[str, Any]]]]] = {}
+        #: 读不懂的 `used_by` 尾巴（`#pabc` / `#p0` / 多段 …）的原串，按出现顺序去重。
+        #: 这些边的索引键是原样串 ⇒ `groups_of(命题号)` 查不到它们（索引口径不变：
+        #: 坏尾巴不折成 `#p1`）；留这一格是为了让它们"消失"变成一条可读的读数。
+        self.bad_used_by: list[str] = []
         for d in deps:
             used = str(d.get("used_by") or "")
             if not used:
                 continue
             # `used_by` 的两种写法都要认：`stmt:0007`（台账里推荐的那种）与裸号 `0007`
             # —— 索引一律按裸号存，查询也按裸号查（一处口径，不分叉）。
-            head, proof_no, _problem = _split_used_by(used)
+            head, proof_no, problem = _split_used_by(used)
+            if problem and used not in self.bad_used_by:
+                self.bad_used_by.append(used)
             key = head[5:] if head.startswith("stmt:") else head
             try:
                 group = int(d.get("path_group") or 1)

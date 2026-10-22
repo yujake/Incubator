@@ -202,6 +202,13 @@ def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
       ⇒ 判不了，原样返回（不许把判不了的读成"过期"）；
     - 那一份证明的正文取不到（行里没有 `proof_text`，也没有对应证明号的清单项）
       ⇒ 判不了，原样返回。
+
+    ## 多证明：汇总位是"任一条仍 in-sync"，不是"最近那一签仍 in-sync"
+    `reviewed_by` 只有一格（它记的是最近那一签），只核它会让"签过 #p1、之后改了 #p2"
+    这一类读成没审过 —— 而 #p1 那一签明明还盖着现在这一份。所以写侧另外落一张
+    逐条证明的 sha 表（:data:`REVIEWED_SHA_BY_PROOF_KEY`），这里按 `proof_list`
+    逐条核"这一份证明签过、而且签的就是现在这一份正文"，任一条成立 ⇒ 位仍成立；
+    全部对不上 ⇒ 这一位过期（上面那三档"判不了"照旧原样返回）。
     """
     if not bits.get("reviewed"):
         return bits
@@ -212,6 +219,17 @@ def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
         return bits
     from . import verifications as _VR   # 惰性：证明号与 sha 的口径各只有一处
 
+    signed_sha = reviewed_sha_by_proof(bits)
+    if signed_sha and "proof_text" in row:
+        # 逐条核（`proof_list` 是"这条命题有哪几份证明"的唯一读法）
+        current = dict(_VR.proof_list(row))
+        for no in sorted(signed_sha):
+            text = current.get(no)
+            if text is None:
+                continue
+            if _VR.proof_sha(text) == signed_sha[no]:
+                return bits          # 至少这一份还盖着现在这一份正文
+        return _reviewed_cleared(bits, kind)
     proof_no = _VR.as_proof_no(reviewed_by.get("proof_no")) or 1
     text = _VR.proof_text_of(row, proof_no)
     if proof_no == 1 and "proof_text" not in row:
@@ -219,6 +237,11 @@ def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
     got = _VR.proof_sha(text)
     if got == want:
         return bits
+    return _reviewed_cleared(bits, kind)
+
+
+def _reviewed_cleared(bits: dict[str, Any], kind: str) -> dict[str, Any]:
+    """第 3 位读成"签过、过期了"之后的那一份读数（等级必须现算）。"""
     out = dict(bits)
     out["reviewed"] = False
     out["grade"] = derive_grade(out, kind=kind)
@@ -237,6 +260,14 @@ BIT_META_KEYS: tuple[str, ...] = ("evidence", "voided_by", "origin", "grade", "a
 #: 拒收；`evidence` 是它明确留白的凭据口袋（`normalize_raw` 原样保留整份 dict），
 #: 所以"不新增 schema 字段"与"把逐条读数放在这一栏"在这里是同一句话。
 REVIEWED_BY_PROOF_KEY = "reviewed_by_proof"
+
+#: 逐条证明「那一签盖住的是哪一份正文」：`{"1": "<sha256>", "2": ""}`。
+#:
+#: 为什么要第二张表：`reviewed_by` 只有一格（最近那一签），而汇总位 `bits.reviewed`
+#: 的语义是"任一条证明 in-sync 即成立"。只拿最近那一签核 sha 时，签过 `#p1` 之后
+#: 改了 `#p2`（或反过来）会让整条命题读成没审过 —— 那是一条承重读数被一格凭据压掉。
+#: 空串 = 这一份签过、但没记下 sha（历史行）⇒ 读侧判不了，不拿它当依据。
+REVIEWED_SHA_BY_PROOF_KEY = "reviewed_sha_by_proof"
 
 
 def reviewed_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
@@ -269,6 +300,38 @@ def reviewed_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
         if no < 1:
             continue
         out[no] = bool(value)
+    return out
+
+
+def reviewed_sha_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
+    """按证明看「那一签盖住的是哪一份正文」：`{证明号: sha256}`（写侧签下的第二张表）。
+
+    ## 它回答什么
+    与 :func:`reviewed_by_proof` 同一格口袋（`bits.evidence`）：那张表说"这一份签过"，
+    这张表说"签的是这一份正文"。于是汇总位 `bits.reviewed` 能按"任一条仍 in-sync"
+    读出来，而不是被 `reviewed_by` 里最近那一签压成一条。
+    ## 边界
+    空串 / 拿不出 sha 的条目直接跳过（历史行没这一格 ⇒ 返回空表，读侧退回老的单凭据
+    判法，绝不把"判不了"读成"过期"）。键按证明号归一（与 `reviewed_by_proof` 同一口径）；
+    收 statements 行或一份 `bits` dict 都可以。
+    """
+    outer = row if isinstance(row, Mapping) else {}
+    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
+    pocket = bits.get(REVIEWED_SHA_BY_PROOF_KEY)
+    if not isinstance(pocket, Mapping):
+        pocket = dict(bits.get("evidence") or {}).get(REVIEWED_SHA_BY_PROOF_KEY)
+    if not isinstance(pocket, Mapping):
+        return {}
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    out: dict[int, str] = {}
+    for raw_no, value in pocket.items():
+        no = _VR.as_proof_no(raw_no)
+        if no < 1:
+            continue
+        sha = str(value or "").strip()
+        if sha:
+            out[no] = sha
     return out
 
 
