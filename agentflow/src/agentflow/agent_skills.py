@@ -791,6 +791,19 @@ def _h_skills() -> tuple[Skill, ...]:
 ## 复核修法
 
 别人说"改了"，用 `H.verify_fixes` 逐条核**改没改对**，而不是重头再审一遍。
+
+## 论文对应表：逐行核，别只看"有没有"
+
+拿到论文稿先读 `out/paper/MAPPING.json`（人读那份 `out/paper/MAPPING.md` 由它生成），
+再**逐行**核：正文里每个定理类环境在表里有没有一行、表里每一行在正文里有没有那个环境
+（label 与 `env_no` 都要对）、`ledger_id` 与 `proof_no` 能不能在台账里解析到、`file`
+指向的那份文件在不在论文包里、正文附录「附录：产出对应表」与 json 渲染出来的是否逐字一致。
+这一档是**客观问题（可拦）**：判出来就写成 error 级发现，kind 用
+`mapping_package_missing` / `mapping_missing` / `mapping_orphan` / `mapping_unresolvable` /
+`mapping_file_missing` / `mapping_citation_loc_missing` / `mapping_citation_file_missing` /
+`md_missing` / `md_drifted` / `mapping_not_in_paper` / `mapping_paper_mismatch` 之一。
+**逻辑颠倒、缺铺垫、术语没定义、承诺未回应、交叉引用错这一档是主观问题：点名到句，
+不拦门**——别把品味判成 error。
 """,
         ),
         Skill(
@@ -2029,6 +2042,13 @@ def _g_skills() -> tuple[Skill, ...]:
 - **编译**：`doc.paper_compile` 出 `out/paper/main.pdf`。
   本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ **产物与退出码分两栏读**，
   别只看退出码判成败。
+- **先有对应表，再写正文**（业主 2026-10-22）：`out/paper/MAPPING.json` 是提纲的一部分 ——
+  正文里每条定理/引理/命题/推论/例子/实验各占一行（`kind` / `label` / `env_no` /
+  `ledger_id` / `proof_no` / `file`），再由它渲染出 `out/paper/MAPPING.md` 与正文附录
+  「附录：产出对应表」。正文里每个定理类环境都要能在表里找到一行，表里每一行也要在正文里
+  有一个环境 —— 两个方向都不许有孤儿。多证明时每条证明各占一行（`#p1` / `#p2`）。
+  `file` 写**论文包内的相对路径**（绝对路径在别人机器上等于不存在）。
+  顺序是死的：先写 json → 由 json 渲染 md 与附录 → 再编 PDF（改完正文必须重编一次）。
 
 ## 引用与断言
 

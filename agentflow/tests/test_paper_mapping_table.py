@@ -347,10 +347,10 @@ def test_multi_proof_rows_do_not_stand_in_for_each_other(tmp_path: pathlib.Path)
     (PM.package_dir(root) / "proofs" / "thm-main-p2.tex").write_bytes(b"second proof\n")
     got = PM.mapping_reading(root)
     assert got["state"] == "pass", _details(got)
-    ledger = PM.read_ledger(root)
+    ledger = PM.read_ledger_tables(root)
     assert PM.resolve_ledger_id("stmt:000004#p1", ledger)["proof_no"] == 1
     assert PM.resolve_ledger_id("stmt:000004#p2", ledger)["proof_no"] == 2
-    assert PM.proof_nos_of(ledger["statements"][0]) == [1, 2]
+    assert PM.proof_nos_for_statement(ledger["statements"][0]) == [1, 2]
 
     # 负控：第二行也写成 `#p1` => 两行指同一条证明，必须红（不许互相顶替）
     clash = [dict(r) for r in rows]
@@ -469,7 +469,7 @@ def test_one_writer_generates_the_json_and_the_markdown(tmp_path: pathlib.Path) 
     json_path, md_path = PM.mapping_paths(root)
     rows, problems = PM.parse_rows(json.loads(json_path.read_text(encoding="utf-8")))
     assert problems == []
-    assert md_path.read_text(encoding="utf-8") == PM.render_markdown(rows)
+    assert md_path.read_text(encoding="utf-8") == PM.render_mapping_markdown(rows)
     before = md_path.read_bytes()
     PM.sync_markdown(root)
     assert md_path.read_bytes() == before, "重生成不是幂等的"
@@ -611,12 +611,17 @@ def test_the_closing_reading_has_all_three_states(tmp_path: pathlib.Path) -> Non
 
 
 def test_the_closing_reading_without_a_project_root_is_unknown() -> None:
-    """没给项目根 => 这一格 unknown（不是 pass）：没查成不许当通过。"""
+    """没给项目根 => 这一格 unknown（不是 pass）：没查成不许当通过。
+
+    这一档刻意不额外刷一条 finding（`paper` 那一格已经有一条 `paper_not_checked`
+    在说同一件事）——读数里那句理由必须自己说清楚。
+    """
     rep = CL.ClosingReport()
     CL._check_mapping(rep, "", object())
     assert rep.readings["mapping"]["state"] == "unknown"
-    assert rep.readings["mapping"]["reason"].strip()
-    assert [f.code for f in rep.findings] == ["mapping_missing"]
+    assert rep.readings["mapping"]["checked"] is False
+    assert "没给项目根" in rep.readings["mapping"]["reason"]
+    assert [f for f in rep.findings if f.check == "mapping"] == []
 
 
 # ---------------------------------------------------------------- 13 反真空

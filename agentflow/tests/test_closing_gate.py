@@ -28,6 +28,7 @@ import paperfixture as FX
 from conftest import TS, sync_counters
 from agentflow import closing as CL
 from agentflow import papercompile as PC
+from agentflow import papermapping as PM
 from agentflow import schema as S
 from agentflow import userio as U
 from agentflow.store import Store
@@ -49,12 +50,19 @@ def _seal(root: pathlib.Path, st: Store) -> None:
 
 
 def _project(root: pathlib.Path, *, seed=None) -> Store:
-    """造一个项目：写台账行（seed）→ 写正文并把它编一遍（`_seal`）。"""
+    """造一个项目：写台账行（seed）→ 写正文并把它编一遍（`_seal`）。
+
+    正文之后、编译之前还要写一次论文对应表（业主 2026-10-22）：夹具里那份正文
+    没有定理类环境，所以表是 0 行 —— 但三份（json / md / 正文附录）必须由
+    `papermapping.write_package` 生成，且必须在 `_seal` 之前写（附录那一行
+    `\\input{mapping-appendix}` 会让 `main.tex` 变长；先封后写 = 回执过期）。
+    """
     out = root / "out" / "paper"
     out.mkdir(parents=True, exist_ok=True)
     st = Store(root)
     st.init(force=True)
     (out / "main.tex").write_text("\\date{2026-01-01}\nbody\n", encoding="utf-8")
+    PM.write_package(root, [])
     (out / "main.pdf").write_bytes(b"%PDF-1.4 fake")
     if seed is not None:
         seed(st)
@@ -400,6 +408,12 @@ def test_the_manuscript_edited_leg_compares_the_draft_with_the_read_only_baselin
         _paper_with_claim(s)
 
     st = _project(tmp_path, seed=seed)           # out/paper/main.tex 与基线逐字相同
+    # 论文对应表那一格（业主 2026-10-22）会让 `_project` 往正文末尾追加一行
+    # `\input{mapping-appendix}`；这一条判据比的是"主稿与基线是否逐字相同"，
+    # 所以先把那一行去掉 —— 它测的是手稿那一腿，不是对应表那一格。
+    _draft = tmp_path / "out" / "paper" / "main.tex"
+    _draft.write_text(_draft.read_text(encoding="utf-8").replace(PM.APPENDIX_INPUT, ""),
+                      encoding="utf-8")
     report = _write_report(tmp_path)
     rows = [{"id": "P2", "name": "正文实质改动", "kind": "manuscript_edited", "min": 1}]
 
@@ -894,7 +908,10 @@ def test_the_paper_check_goes_red_alone(tmp_path: pathlib.Path):
     但 M 说"达成"时 `overrode` 必须逐格点名它 —— 判据归 M ≠ 机器读数可以被盖掉。
     """
     st, report = _good(tmp_path)
-    (tmp_path / "out" / "paper" / "main.tex").write_text("改过了\n", encoding="utf-8")
+    # 改正文时保留那一行 `\input{mapping-appendix}`（业主 2026-10-22）：这一条只测
+    # "封好之后改正文 ⇒ PDF 过期"，不该顺带把论文对应表那一格弄红。
+    (tmp_path / "out" / "paper" / "main.tex").write_text(
+        "改过了\n" + PM.APPENDIX_INPUT + "\n", encoding="utf-8")
     rep = _gate(st, report)
     assert rep.status["paper"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["paper_pdf_is_stale"], rep.to_dict()
@@ -3284,3 +3301,48 @@ def test_a_statement_named_by_a_plan_must_be_signed_before_the_attack_cell_passe
     # 这条命题是 `heuristic` ⇒ 不归 `proof_review` 那条审计判据管（反真空）
     assert [i for i in rep_v.issues if i.code == VR.CODE_AUDIT] == [], rep_v.issues
 
+
+# ============================================================ 论文对应表那一格（业主 2026-10-22）
+#
+# 这一格是一格读数（不进 `DEFAULT_CHECKS`：八格的语义与退出码一个都不动），
+# 但它的三态必须能单独造红，而且"没交表"必须是 blocker —— 否则上面那些
+# "就绪工作区"的夹具顺手把这条闸门废掉了也没人知道。
+
+def test_the_mapping_cell_is_green_only_when_the_table_travels_with_the_paper(
+        tmp_path: pathlib.Path):
+    """正控：夹具写出合法三份 ⇒ `readings["mapping"]["state"]=="pass"`、无 mapping 发现。"""
+    st, report = _good(tmp_path)
+    rep = _gate(st, report)
+    got = rep.readings["mapping"]
+    assert got["state"] == "pass", got
+    assert got["rows"] == 0 and got["envs"] == 0, got
+    assert [f for f in rep.findings if f.check == "mapping"] == []
+    assert "mapping" not in rep.status, "这一格是读数，不是第九格"
+
+
+def test_a_paper_without_a_mapping_table_blocks_the_gate(tmp_path: pathlib.Path):
+    """负控：有正文、论文包里没有对应表 ⇒ `fail` + `mapping_package_missing`（blocker）。"""
+    st, report = _good(tmp_path)
+    for name in (PM.MAPPING_JSON_NAME, PM.MAPPING_MD_NAME, PM.APPENDIX_FILE_NAME):
+        (st.root / "out" / "paper" / name).unlink()
+    rep = _gate(st, report)
+    got = rep.readings["mapping"]
+    assert got["state"] == "fail", got
+    assert [p["kind"] for p in got["problems"]] == ["mapping_package_missing"], got["problems"]
+    mine = [f for f in rep.findings if f.check == "mapping"]
+    assert [f.code for f in mine] == ["mapping_package_missing"], mine
+    assert mine[0].level == "blocker", mine[0]
+    assert rep.machine_pass is False
+
+
+def test_no_paper_and_no_table_is_unknown_not_a_pass(tmp_path: pathlib.Path):
+    """三态：没有正文也没有表 ⇒ `unknown`（不适用），不是 pass，也不产生 blocker。"""
+    root = tmp_path / "empty-project"
+    root.mkdir(parents=True, exist_ok=True)
+    st = Store(root)
+    st.init(force=True)
+    rep = _gate(st, None, project_dir=root)
+    got = rep.readings["mapping"]
+    assert got["state"] == "unknown", got
+    assert got["reason"].strip(), "没查成的那一档必须说明为什么"
+    assert [f for f in rep.findings if f.check == "mapping"] == []

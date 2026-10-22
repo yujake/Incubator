@@ -10,7 +10,7 @@
 `out/paper/`）。下面三份都住在包里，包外那一份不算数：
 
 - `<论文包>/MAPPING.json`：机器读，唯一真身。本模块是它唯一的读侧（解析 + 校验）；
-- `<论文包>/MAPPING.md`：人读，由 json 生成（`render_markdown`）。不许手写第二份；
+- `<论文包>/MAPPING.md`：人读，由 json 生成（`render_mapping_markdown`）。不许手写第二份；
 - `<论文包>/mapping-appendix.tex`：正文附录（`附录：产出对应表`），由 json 生成
   （`render_appendix`），`main.tex` 用 `\\input{mapping-appendix}` 把它印进 PDF。
 
@@ -316,7 +316,7 @@ def body_envs(tex: str) -> list[BodyEnv]:
     return out
 
 
-def read_ledger(workspace_root: str | Path) -> dict[str, list[Mapping[str, Any]]]:
+def read_ledger_tables(workspace_root: str | Path) -> dict[str, list[Mapping[str, Any]]]:
     """从盘上读三张台账表（`<工作区>/data/<表文件>`）。
 
     为什么读盘而不是读 store：这一格要在收工门里跑，而收工门有"运行外"的出口
@@ -370,7 +370,7 @@ def ledger_row(ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
     return None
 
 
-def proof_nos_of(row: Mapping[str, Any] | None) -> list[int]:
+def proof_nos_for_statement(row: Mapping[str, Any] | None) -> list[int]:
     """一条命题名下到底有哪几号证明（`#p1` 恒在；其余来自 `verifications.proof_list`）。"""
     if not isinstance(row, Mapping):
         return []
@@ -688,7 +688,7 @@ def render_appendix(rows: Iterable[Row]) -> str:
     return "\n".join(lines)
 
 
-def render_markdown(rows: Iterable[Row]) -> str:
+def render_mapping_markdown(rows: Iterable[Row]) -> str:
     """把行渲染成人读的那一份（表格列顺序固定，任何人都能用同一段代码重生成）。"""
     items = list(rows)
     lines = [
@@ -747,7 +747,7 @@ def write_mapping(project_root: str | Path, rows: Iterable[Row]) -> tuple[Path, 
     payload = {"rows": [row.to_dict() for row in items]}
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_bytes((json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
-    md_path.write_bytes(render_markdown(items).encode("utf-8"))
+    md_path.write_bytes(render_mapping_markdown(items).encode("utf-8"))
     return json_path, md_path
 
 
@@ -757,7 +757,7 @@ def sync_markdown(project_root: str | Path) -> Path:
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     rows, _problems = parse_rows(payload)
     md_path.parent.mkdir(parents=True, exist_ok=True)
-    md_path.write_bytes(render_markdown(rows).encode("utf-8"))
+    md_path.write_bytes(render_mapping_markdown(rows).encode("utf-8"))
     return md_path
 
 
@@ -782,9 +782,11 @@ def write_appendix(project_root: str | Path) -> Path:
         if APPENDIX_INPUT not in text:
             end = text.rfind("\\end{document}")
             if end < 0:
-                raise ValueError(
-                    f"{tex} 里没有 \\end{{document}} ⇒ 附录插不进去（正文不是一份完整的 LaTeX 稿）")
-            text = text[:end] + APPENDIX_INPUT + "\n" + text[end:]
+                # 正文还没有 `\end{document}`（半成品稿）：追加到末尾，不猜它该在哪结束。
+                # 这样"先写正文、再补附录"与"一次写完"两条路都能走通。
+                text = text.rstrip("\n") + "\n" + APPENDIX_INPUT + "\n"
+            else:
+                text = text[:end] + APPENDIX_INPUT + "\n" + text[end:]
             tex.write_bytes(text.encode("utf-8"))
     return frag
 
@@ -813,7 +815,7 @@ def _md_reading(project_root: Path, rows: Sequence[Row]) -> tuple[str, list[dict
         problems.append(_problem(
             "md_drifted", f"人读那一份读不出来：{md_path}（{type(exc).__name__}: {exc}）"))
         return "unreadable", problems
-    if _norm_text(got) != _norm_text(render_markdown(rows)):
+    if _norm_text(got) != _norm_text(render_mapping_markdown(rows)):
         problems.append(_problem(
             "md_drifted",
             f"{md_path.name} 与 {MAPPING_JSON_NAME} 生成出来的内容不一致 —— "
@@ -979,7 +981,7 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
                         "证明号只对 `stmt:` 有意义",
                         label=row.label, where=MAPPING_JSON_NAME)
         else:
-            known = proof_nos_of(target)
+            known = proof_nos_for_statement(target)
             if int(row.proof_no) not in known:
                 got.add("mapping_unresolvable",
                         f"表里 label={row.label!r} 的 `proof_no` = {row.proof_no}，"
@@ -1099,7 +1101,7 @@ def mapping_reading(project_root: str | Path, *,
     problems += appendix_problems
 
     problems += _orphan_problems(envs, rows)
-    known = ledger if ledger is not None else read_ledger(workspace)
+    known = ledger if ledger is not None else read_ledger_tables(workspace)
     seen_targets: dict[tuple[str, int], Row] = {}
     for row in rows:
         got = _row_checks(row, known, package)
