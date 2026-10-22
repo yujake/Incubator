@@ -68,6 +68,19 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "论证落 `statements` 失败（`_proof_outlet` 的事务里抛了，含 store 写入期那道"
         "「假 proof_review 拒收」）：这是「写不进表」，不是「这次调用不成立」——"
         "同一条纪律：F 的论证没有出口要如实说，而不是把参数问题推给调用方",
+    # `agent_c/path_shape.py` 的 `_no_spine()`（2026-10-22 登记）：它是子结果，
+    # 不是动作的终态 payload —— `{"ok": False, "nodes": [], "edges": [], "length": 0}`
+    # 在那一支里的意思逐字是"这条候选路径没算出一条承重脊"（没走到根 / 成环 / 超深度 /
+    # 分支超上限），调用方 `_shape_of` 只把它折进该行的 `spine_found=False` 与前沿读数；
+    # `path_shapes()` 交出去的 payload 是 `checked` / `rows` / `frontier`，没有 `ok` 这一格
+    # ⇒ 这里根本没有"拒绝"可记。不走 `refusals.refuse`：走它会给一条正常的读数盖上
+    # `refusal_reason=invalid_params`，那正是 `agent_e/author_script.py` 那三条登记
+    # 在防的错贴标签（"没算出脊"被记成"你参数写错了"）。
+    ("agent_c/path_shape.py", ""):
+        "子结果读数，不是拒绝：`_no_spine()` 表示「这条候选路径没有算出承重脊」"
+        "（没走到根 / 成环 / 超深度 / 分支超上限），只被 `_shape_of` 折进该行的"
+        "`spine_found=False` 与前沿读数，从不出现在动作的终态 payload 里 ⇒ "
+        "「执行了、没成功」与「这次调用不成立」都不是它要表达的东西",
     # 注：同一方法里 `bad_spec` / `no_seam` 两档不在这里 —— 它们是"这次调用本身
     # 不成立"（判据不全 / 没接缝），走 `refusals.refuse`（先例：`A.search_literature`
     # 的 `no_provider` 与 `A.ingest_local` 的 `bad_books_dir`）。所以 `author_script`

@@ -9,6 +9,16 @@
 `axes-1` 说词表只有一份（实际两份）、`axes-3` 把不可达的 `True` 档写成活的三种取值、
 `axes-4` 说 `check_formal` 不需要审批（实测需要）。所以判据分两半：
 行为断言（读声明，不读文档）+ 文本断言（文档不再说反话）。
+
+## 2026-10-22：文本断言不再钉强调记号（星号对 / 「」）
+
+三处"改后的口径说明"断言原先逐字钉着星号对那种强调写法。2026-10 的代码清洁批
+（`ffd910c`「长注释/docstring 压缩 + 意外字符」）把这几句的强调记号换成了 「」，
+句子本身一字未少 —— 于是三条判据从"文档在说反话"变成"文档换了标点"，判据红了而
+被守的东西没坏。旧期望错在哪：它把呈现形式当成了被守的对象，而这三条要守的是
+"那句口径说明还在、且旧错话不许作为结论出现"。所以现在两侧都先去掉装饰记号
+（``_undecorated``）再比，句子仍须逐字在那里，反向守卫（旧错话不许作为结论出现、
+`capabilities.py` 必须被点名）一条都没放松。
 """
 from __future__ import annotations
 
@@ -22,6 +32,16 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
 BASE_PY = SRC / "tools" / "base.py"
 VERIFY_TOOLS_PY = SRC / "tools" / "verify_tools.py"
 CAPABILITIES_PY = SRC / "capabilities.py"
+
+
+def _undecorated(text: str) -> str:
+    """去掉强调装饰记号（星号对与 「」），只留句子本身。
+
+    为什么不干脆把星号对写进断言：它会与"docstring 里不许装饰"的清洁纪律
+    （`scripts/lint_rules.py` 的 R009 一族）互相拉扯 —— 一方要求去掉记号，
+    另一方要求记号在场，谁先跑谁赢。判据要守的是句子，不是记号。
+    """
+    return text.replace("**", "").replace("「", "").replace("」", "")
 
 
 @pytest.fixture
@@ -65,7 +85,8 @@ def test_the_approval_claim_in_the_docstring_matches_the_declaration() -> None:
     bad = [ln.strip() for ln in text.splitlines()
            if "两者都不需要审批" in ln and "旧版" not in ln and '"' not in ln]
     assert bad == [], f"这句错话仍作为结论出现：{bad}"
-    assert '**但"都不需要审批"只对 `detect_verifier` 成立**' in text, \
+    plain = _undecorated(text)
+    assert '但"都不需要审批"只对 `detect_verifier` 成立' in plain, \
         "改后的口径说明不见了（判据的落点变了，请更新本用例）"
     # 反向守卫：不许有人"为了这句话成真"去把 exec 的声明抹掉
     assert '"exec"' in text, "check_formal 的第二根轴声明不见了 —— 那是把两根轴压回一档"
@@ -98,7 +119,7 @@ def test_the_docstring_no_longer_claims_a_single_source() -> None:
     bad = [ln.strip() for ln in text.splitlines()
            if "取值清单只有这一份" in ln and "旧docstring" not in ln and '"' not in ln]
     assert bad == [], f"这句错话仍作为结论出现：{bad}"
-    assert "取值清单**有两份字面量**" in text, "改后的口径说明不见了"
+    assert "取值清单有两份字面量" in _undecorated(text), "改后的口径说明不见了"
     assert "`capabilities.py`" in text, "必须点名第二个落点"
 
 
@@ -152,6 +173,6 @@ def test_the_unreachable_true_branch_is_documented_as_unreachable() -> None:
     旧版把它与 `None` / `False` 并列写成"三种有意义的取值"，读者会以为三档都活着。
     """
     text = BASE_PY.read_text(encoding="utf-8")
-    assert "`True` 这一档在**当前环境里不可达**" in text, \
+    assert "`True` 这一档在当前环境里不可达" in _undecorated(text), \
         "docstring 没有登记这一档不可达（读者会以为三档都在用）"
     assert "没有任何配置或装配入口" in text, "没有写清'没有入口'这个事实"

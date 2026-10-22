@@ -106,15 +106,30 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
 
     它此前是本条点名的那批"已登记为预留"里的一个。裁定 (b) 的处置是删掉假承诺（它对一条做不到的承诺做预留）⇒ 它既不该出现在 `reserved`，也不该出现在 `unclaimed`，更不该还在词表里。
     本条因此多一条断言：那个取值必须已经不在词表里（"删掉了"本身要有机器判据，否则"登记表撤了一条"与"词表删了一个值"分不开）。
+
+    ## 2026-10-22：`DEP_KINDS.proposition` 从 `reserved` 挪进 `registered_not_dead`
+
+    旧期望错在哪：它把 `proposition` 钉在 `reserved`（"普查看得见它是死取值"）。
+    普查判"死"看的是字面量有没有出现在 `src/` —— 这一批新增的
+    `agent_b/register_statement.py:855` 的 `_CONTEXT_EDGE_KINDS`（严格规矩 B 的
+    "上下文定理认哪几种 kind"）里就有 `"proposition"` 这个字面量。那一处是读侧
+    （拿它去比 `Dependency.kind`），不是产出点，但普查的字面量判据分不出读写 ⇒
+    它按 `lemma` / `dataset` 那两条同样的口径落进 `registered_not_dead`（栏一附），
+    仍然打印、仍然带理由，只是不再算"死取值"。
+    所以本条现在按「两栏都算登记过」来判（`reserved` 或 `registered_not_dead` 之一），
+    另把 `reserved` 栏非真空这件事钉在 `reproduction_report` / `prior_art` 上 ——
+    这不是放宽判据：`unclaimed` 那一条（真正要红的那一档）一条都没放松。
     """
     result = V.census(REPO)
     assert result["checked"] is True, result
-    # 普查看得见它是死取值、且已登记 ⇒ 必须在 `reserved` 栏。
+    # 普查看得见它们是死取值、且已登记 ⇒ 必须在 `reserved` 栏。
+    # （`reserved` 栏非真空的钉子就在这三条里的两条上：它们今天仍是死取值。）
     for vocab, value in (("DOC_KINDS", "reproduction_report"),
-                         ("DEP_KINDS", "proposition"),
                          ("DEP_KINDS", "prior_art")):
         assert value in result["reserved"].get(vocab, []), (vocab, value, result["reserved"])
         assert value not in result["unclaimed"].get(vocab, []), (vocab, value, result["unclaimed"])
+    # 已登记、而普查今天看不见它是死取值的那几条（同形不同义 / 读侧字面量）⇒
+    # 落 `registered_not_dead`（栏一附），照样打印、照样带理由 —— 不许静默。见下面那一圈。
     # `E-10` 裁定 (b)：`FINDING_KINDS` 里没有这个取值了 —— 词表、登记表、
     # 三栏输出里都不许再有它（"删掉了"要有判据，不能靠人记得）。
     _removed = "quote" + "_mismatch"
@@ -125,10 +140,10 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
         assert _removed not in values, (column, values)
     assert (("FINDING_KINDS", _removed)) not in V.RESERVED_VALUES, (
         "词表值已经删了，登记表里却还留着它 —— 那是一条『登记已过期』")
-    # "同形不同义"的三条：普查看不见它们是死取值（字面量在别的命名空间里命中），
-    # 所以它们落在 `registered_not_dead` 里 —— 但必须照样打印，不许静默。
+    # "同形不同义 / 读侧字面量"的四条：普查看不见它们是死取值（字面量在别的命名空间
+    # 或读侧命中），所以它们落在 `registered_not_dead` 里 —— 但必须照样打印，不许静默。
     for vocab, value in (("DOC_KINDS", "survey"), ("DEP_KINDS", "lemma"),
-                         ("DEP_KINDS", "dataset")):
+                         ("DEP_KINDS", "dataset"), ("DEP_KINDS", "proposition")):
         assert value in result["registered_not_dead"].get(vocab, []), (vocab, value, result["registered_not_dead"])
         assert value not in result["unclaimed"].get(vocab, []), (vocab, value, result["unclaimed"])
     # 两栏的合计必须仍然等于"死取值"总数 —— 分栏不许把取值漏掉一个，

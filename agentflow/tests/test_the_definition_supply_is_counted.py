@@ -41,18 +41,33 @@ def _concept(stmt_id: str, *, label: str, definition: str = "", reason: str = ""
 
 
 def test_a_real_library_counts_each_supply_way_separately(store):
-    """正控：定义来自文献 / B 自撰 / 等着 A 搜 —— 三档各归各的桶。"""
+    """正控：定义来自文献 / B 自撰 / 等着 A 搜 —— 三档各归各的桶。
+
+    ## 2026-10-22：三行夹具改成"合法写法"（口径是 mp3 那次真机缺陷定的）
+
+    改前这三行都写 `origin="own_result"`。`conceptrows.concept_origin_problem`
+    现在逐字要求（真机 mp3：1142 条带文献出处的术语被标成了 own_result）：
+    `external_lit` 必须给 `source_lit_id`、`own_result` 必须显式声明
+    `self_authored=True`。旧写法里第一条同时给了 `source_lit_id` 与
+    `own_result`（自相矛盾），第二条缺 `self_authored` —— 两条都当场被拒，
+    于是这一条判据量到的是"写入被拒之后剩几行"（`rows=1`），不是它要量的
+    "三档各归各的桶"。旧期望错在哪：它把"没声明"当成了"声明了自己写的"。
+    现在夹具按受控口径写，断言一条没放松（六个桶、`unmarked_empty=0` 都还在）。
+    那条口径本身由 `tests/test_agent_b_concepts.py::test_a_self_authored_concept_is_allowed_only_when_declared`
+    守着，这里不重复判它。
+    """
     sec = SEC.Secretary("B", root=store.root, store=store)
     with store.tx("literature", actor="test") as tx:
         tx.upsert("literature", {"lit_id": "0003", "title": "群论", "type": "J", "summary": "",
                                  "path": None, "processed": True,
                                  "added_at": "2026-01-01T00:00:00+00:00"})
-    sec.record_statement({"kind": "concept", "label": "谱", "origin": "own_result",
+    sec.record_statement({"kind": "concept", "label": "谱", "origin": "external_lit",
                           "statement_full": "算子的谱是……", "source_lit_id": "0003",
                           "proof_text": "良定义性：略。"})
     sec.record_statement({"kind": "concept", "label": "群", "origin": "own_result",
+                          "self_authored": True,
                           "statement_full": "群是……", "proof_text": "良定义性：基本概念。"})
-    sec.record_statement({"kind": "concept", "label": "生僻概念 X", "origin": "own_result"})
+    sec.record_statement({"kind": "concept", "label": "生僻概念 X"})
     got = CR.definition_supply(store)
     assert got["checked"] and got["rows"] == 3, got
     assert got["from_lit"] == 1 and got["self_authored"] == 1, got

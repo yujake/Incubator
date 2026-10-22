@@ -77,6 +77,12 @@ def _setup(tmp_path: pathlib.Path, *, with_factory: bool = True):
                   "task_id": child, "at": "2026-10-08T22:00:01+08:00"})
     surface = surface_dir(ws, owner, reg["surface"])
     surface.mkdir(parents=True, exist_ok=True)
+    # 面里先放一样东西：2026-10-22 的真机口径是「空面不算切面」
+    # （`agent_loop._surface_root_decision`，判据 `tests/test_an_empty_surface_is_not_a_cut.py`）——
+    # 切一个空目录进去等于把这一趟的手脚绑住（真机上 G 因此读不到 `out/paper/main.tex`），
+    # 于是 `LlmBackend.call` 会如实退回共用注册表。本文件要判的是"面内的裸相对路径落在哪"，
+    # 所以夹具必须交出一个真的被切了的面（非空）；空面那一档由上面那条判据单独守。
+    (surface / "面内已有.md").write_text("这一趟要用的那一块\n", encoding="utf-8", newline="\n")
 
     def factory(path: str) -> Any:
         return build_registry(store=st, conductor=cond, workspace_root=path).registry

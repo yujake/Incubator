@@ -4292,6 +4292,22 @@
      "item": "lit_candidates"
     }
    ]
+  },
+  {
+   "tools": [
+    "verify.verify_proof"
+   ],
+   "key": "returns",
+   "reason": "多证明模型（业主 2026-10-22）：`verify_proof` 的 `checked=False` 理由码从 4 个扩到 9 个 —— 新增 `bad_proof_no` / `no_such_proof` / `proof_text_mismatch` / `ledger_unwritable` / `ledger_row_lost`（证明号越界 / 那一号证明不在台账行上 / 签名钉的正文与当前 `proof_text` 不符 / 台账写不进去 / 写完又读丢了）。这五档都必须与 `unparsable` 分开：合成一档会让「没查成」的处置全部变成同一个动作。声明面的这一次演进此前只改了实现，没在基线里记账 ⇒ 契约判据红了（判据是对的）。",
+   "date": "2026-10-22",
+   "edits": [
+    {
+     "op": "set_scalar",
+     "path": "returns",
+     "from": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
+     "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）"
+    }
+   ]
   }
  ],
  "summary_lens_before": {

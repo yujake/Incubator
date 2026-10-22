@@ -57,13 +57,29 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     已经随词表值一起删除 —— 它此前是"给一条做不到的承诺做预留"。
     所以正控现在点名的是仍然存在的那几条；删掉的那条另有一条"必须彻底消失"
     的断言（见本文件末尾的 `test_r011_has_no_trace_of_the_deleted_finding_kind`）。
+
+    ## 2026-10-22：`proposition` 从栏一 `reserved` 挪进栏一附 `registered_not_dead`
+
+    旧期望错在哪：它把 `proposition` 钉在 `reserved` 栏。栏一附的语义逐字是
+    "登记为预留、而本次普查看不见它是死取值" —— 这一批新增的
+    `agent_b/register_statement.py:855`（`_CONTEXT_EDGE_KINDS`，严格规矩 B 的
+    "上下文定理认哪几种 kind"）里出现了 `"proposition"` 这个字面量。那一处是读侧
+    （拿它比 `Dependency.kind`），不是产出点，但普查的字面量判据分不出读写 ⇒
+    它按 `lemma` / `dataset` 同样的口径落进栏一附。
+    所以本条现在分两半判：`reserved` 栏非真空由 `reproduction_report` / `prior_art`
+    钉住；`proposition` 必须出现在栏一附里（照样打印、照样带理由），且两栏都不许
+    出现 `unclaimed`（那一档才是要变红的那一档，一条都没放松）。
     """
     got = L.rule_R011_dead_vocab(ROOT)
     reserved = " ".join(f.message for f in got if "[栏一 reserved]" in f.message)
+    registered = " ".join(f.message for f in got if "[栏一附]" in f.message)
     unclaimed = " ".join(f.message for f in got if "[栏二 unclaimed]" in f.message)
-    for name in ("reproduction_report", "proposition", "prior_art"):
+    for name in ("reproduction_report", "prior_art"):
         assert name in reserved, f"{name} 不在 reserved 栏：{reserved}"
         assert name not in unclaimed, f"{name} 被挪进了 unclaimed 栏：{unclaimed}"
+    # `proposition` 今天落栏一附（同形不同义的读侧字面量）：仍然必须在报告里被点名。
+    assert "proposition" in registered, f"proposition 不在栏一附里：{registered}"
+    assert "proposition" not in unclaimed, f"proposition 被挪进了 unclaimed 栏：{unclaimed}"
 
 
 def test_r011_has_no_trace_of_the_deleted_finding_kind() -> None:

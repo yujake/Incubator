@@ -1125,7 +1125,14 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_KINDS",                     # 命名约定举例（schema 的注释在说"别这样起名"）
     "_STATUSES",                  # 同上
     "_OUTCOMES",                  # 同上
-    "_FORMS",                     # 同上（`draft/28` §168 的 R-30 把 `_FORMS` 加进 `VOCAB_SUFFIXES`，两处注释在说这个后缀，不是符号）
+    # —— 2026-10-22：`_FORMS` 从本表退出（同一条等额纪律，登记过期）——
+    # 它原登记为"命名约定举例（`draft/28` §168 的 R-30 把 `_FORMS` 加进 `VOCAB_SUFFIXES`，
+    # 两处注释在说这个后缀，不是符号）"。这一批新增的 `tests/test_doi_prefix_has_one_key.py`
+    # 里有一个同名真符号（`_FORMS = (...)` 一处定义 + 一处使用 ⇒ 真符号计数 2），
+    # 按判据自己的口径（真符号出现 > 1 次 ⇒ 不再是"只有文本提及"）它已经不需要豁免。
+    # 读数：`tokenize` 在该文件数到 NAME 记号 2 个（第 27、38 行）。
+    # 这不是放宽判据：口径仍是"真符号出现 ≤ 1 次的提及要逐条登记"，变的是那个 token 的
+    # 真符号读数；留着它反而会被第二条断言的反向等额规则判成"登记过期"。
     # —— 只有一个真符号出现点的（自指定义 / 别名 / 被删函数的残留）——
     "_ROLE_PAT",                  # 赋值处一次（`tools/verify_role_specs.py`）
     "_ConcurrencyProbe",          # 兼容旧名 `_ConcurrencyProbe = ConcurrencyProbe`

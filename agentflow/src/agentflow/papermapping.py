@@ -1343,7 +1343,12 @@ def write_mapping(project_root: str | Path, rows: Iterable[Row]) -> tuple[Path, 
     json_path, md_path = mapping_paths(project_root)
     payload = {"rows": [row.to_dict() for row in items]}
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_bytes((json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    # `default=str`：载荷里一旦有非 JSON 值（Path / 时间戳 / dataclass 之外的壳对象），
+    # 这一行会抛 `TypeError: Object of type … is not JSON serializable` —— 它崩在"写对应表"
+    # 这一步，而对应表是收工门 paper 那一格的输入，错误信息也不指向这里。
+    # 对纯 JSON 载荷这个参数不改变任何字节（判据 `tests/test_json_dumps_has_a_default.py`）。
+    json_path.write_bytes(
+        (json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n").encode("utf-8"))
     md_path.write_bytes(render_mapping_markdown(items).encode("utf-8"))
     return json_path, md_path
 

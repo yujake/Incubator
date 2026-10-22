@@ -6160,7 +6160,7 @@ class AgentLoop:
         body = "\n".join(body_lines)
         # `from_task_id`（业主 2026-10-21「全面接入」第二步）：这条留言也是"某个
         # 编号的某一岗在说话"，与别处那三条 `send_message` 同一口径（`_do_message` /
-        # `_do_notify` / 收工 `notify` 都带）。漏了它的后果只在线上一格可见：
+        # `_do_handoff` / 收工 `notify` 都带）。漏了它的后果只在线上一格可见：
         # `readers._chat_line` 给这条线判 `missing`，而说话的人自己有绝对编号。
         msg_id, problem = send_message(self.session_root, sender=self.role, to=to_role,
                                        subject=RELAY_SUBJECT, body=body, sid=self.sid,

@@ -4683,12 +4683,23 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
 
     为什么不做成拦门的判据：档位是秘书的判断（B 类），"该不该降档""铺垫够不够"
     是研究判断；把判断硬拦成门，就会重演"用不可判的东西卡人"。
+
+    三态（`checked=False` 绝不是"全是 T1"）：没有工作区根 ⇒ `checked=False` + 理由。
+    同族的两格（`summon_consumption_reading` / `roster_registration_reading`）早就
+    这么写了；这一格此前没有这一支，于是 `check_closing(None, …)`（"没有工作区"这个
+    合法调用形态）在 `Path(None)` 上抛 `TypeError` —— 一格读不到把整份收工报告打掉，
+    读的人拿到的是崩溃而不是"这一格没读到"。
     """
-    rows = _paper_statement_rows(root)
     from . import secretary as _SEC
-    high: list[dict[str, Any]] = []
     counts = {f"T{level}": 0 for level in _SEC.NONTRIVIALITY_LEVELS}
     counts["unjudged"] = 0
+    if not str(root or "").strip():
+        return {"checked": False, "statements_total": 0, "counts": counts, "high_tier": [],
+                "high_tier_total": 0, "paper_scaffolding_problems": [],
+                "t4_ladder_problems": [], "sid": str(sid or ""),
+                "reason": "没有工作区根 ⇒ 非平凡性这一格没读到（不是\"全是 T1\"）"}
+    rows = _paper_statement_rows(root)
+    high: list[dict[str, Any]] = []
     for row in rows:
         text = str(row.get("statement_full") or row.get("statement_text") or "")
         got = _SEC.nontriviality_of(root, text)

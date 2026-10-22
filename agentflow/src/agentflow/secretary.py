@@ -4177,7 +4177,9 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: int,
            "nontriviality": _nontriviality_level(level), "basis": str(basis or ""),
            "role": str(role or ""), "task_id": str(task_id or "")}
     with path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）：这一行是
+        # append-only 档位台账的唯一写口，它抛出去会丢一行读数而调用方看不出来。
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
 
 
 def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:

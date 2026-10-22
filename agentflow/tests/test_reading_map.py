@@ -58,6 +58,12 @@ _RUNTIME_PRODUCTS = frozenset({
     # 又把 `.jsonl` 切成 `.json` ⇒ 得到 `-index.json` / `-retired.json` 两个 token。
     # 与 handoffs/ARTIFACTS 同一个已知切词行为，登记而不是把真名改成占位写法。
     "-index.json", "-retired.json",
+    # 论文对应表的两份（`papermapping`，业主 2026-10-22）：落点是论文包
+    # （`<工作区>/out/paper/`），仓库这一层永远没有它们 —— 跑完 G 的写作与
+    # `doc.paper_compile` 才会出现。与 `ARTIFACTS.jsonl` 同一条道理：读图里写的是真名
+    # （`MAPPING.json` 是那份唯一真身、`MAPPING.md` 由它渲染），把它们降级成占位写法
+    # 等于让图不再指到真名。
+    "MAPPING.json", "MAPPING.md",
 })
 
 
