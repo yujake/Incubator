@@ -24,6 +24,11 @@ import pytest
 from agentflow import capabilities as C
 
 #: `D-8`：角色 -> (模块名, 类名)；用来断言动作表里的符号名真的存在。
+#:
+#: 审计 D-7：这张表原来只有 A–H 八个角色，而能力表有九个（V 的 `verify_proof` /
+#: `list_verifications` / `read_proof` 三条动作因此从来没被这条判据看过：实测覆盖 59/62）。
+#: 现在补上 V，并由 `test_every_handler_name_exists_as_a_class_method` 亲自断言
+#: "覆盖数 == 对账面的动作总数"—— 少一个角色时它会红，而不是悄悄少看三条。
 ROLE_MODULE: dict[str, tuple[str, str]] = {
     "A": ("agentflow.agent_a", "AgentA"),
     "B": ("agentflow.agent_b", "AgentB"),
@@ -33,6 +38,7 @@ ROLE_MODULE: dict[str, tuple[str, str]] = {
     "F": ("agentflow.agent_f", "AgentF"),
     "G": ("agentflow.agent_g", "AgentG"),
     "H": ("agentflow.agent_h", "AgentH"),
+    "V": ("agentflow.agent_v", "AgentV"),
 }
 _STALE_REF = re.compile(r"agent_[a-h]\.py:\d+")
 _CAPS = Path(__file__).resolve().parents[1] / "src" / "agentflow" / "capabilities.py"
@@ -51,7 +57,12 @@ def test_the_action_table_no_longer_uses_file_line_references() -> None:
 
 
 def test_every_handler_name_exists_as_a_class_method() -> None:
-    """`D-8` 正控（核心）：每个动作的 `handler_name` 必须真的是那个类的方法。"""
+    """`D-8` 正控（核心）：每个动作的 `handler_name` 必须真的是那个类的方法。
+
+    覆盖数不写死（手抄的数字会过期）：它必须等于 `two_layer_reconciliation()['total']` ——
+    也就是对账面里的动作总数。审计 D-7 实测这里是 59/62：`ROLE_MODULE` 少了 V，
+    而 `if role not in ROLE_MODULE: continue` 把少掉的三条静默跳过了。
+    """
     missing: dict[str, list[str]] = {}
     checked = 0
     for role, specs in C.CAPABILITIES.items():
@@ -67,6 +78,14 @@ def test_every_handler_name_exists_as_a_class_method() -> None:
                 missing.setdefault(role, []).append(str(name))
     assert checked > 0, "一个动作都没查到（夹具/表结构变了）"
     assert missing == {}, f"这些 handler_name 在对应类里找不到：{missing}"
+    # 反真空（审计 D-7 的牙）：覆盖数必须等于对账面的动作总数 —— 少登记一个角色就会红。
+    total = C.two_layer_reconciliation()["total"]
+    roles_with_actions = sorted(r for r, specs in C.CAPABILITIES.items() if specs)
+    assert checked == total, (
+        f"只核了 {checked} / {total} 个动作 —— `ROLE_MODULE` 少登记了角色："
+        f"{sorted(set(roles_with_actions) - set(ROLE_MODULE))}。"
+        "少掉的那几个角色的动作从来没被这条判据看过（审计 D-7 实测 59/62）"
+    )
 
 
 def test_a_wrong_handler_name_is_caught() -> None:

@@ -514,7 +514,7 @@ def _resolve_const(node: ast.AST | None, consts: Mapping[str, ast.AST]) -> ast.A
     审计 D-1 的另一半：原来只有一个 `resolve()` 作用在 `params=` 那一层，于是
     `"items": _MAPPING_ROW_PARAMS`（`doc_tools` 里 `rows` 那一行恰恰这么写）永远解析不出来 ——
     症状是 `items.type` 两侧都读成 `None`，那条 array 的比对就被"一侧只写 `{type:array}`"的
-    豁免吞掉了。**嵌套位置上的 Name 与顶层是同一件事**，必须在同一个解析器里走到。
+    豁免吞掉了。「嵌套位置上的 Name 与顶层是同一件事」，必须在同一个解析器里走到。
     """
     seen = 0
     while isinstance(node, ast.Name) and node.id in consts and seen < 10:
@@ -717,7 +717,7 @@ def _tool_param_faces(
 ) -> dict[str, dict[str, Any]]:
     """全仓工具名 -> 约束面（读源码声明，不装配工具层）。
 
-    `params` 读不出来的工具**不写进表**：调用方按"这条工具没有比对"处理（unknown），
+    `params` 读不出来的工具不写进表：调用方按"这条工具没有比对"处理（unknown），
     而不是给它一条空 schema —— 后者的症状是"零分歧"，与真相无关。
     """
     base = Path(__file__).resolve().parent / "tools"
@@ -804,7 +804,7 @@ def tool_only_constraints(
     capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
     tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[tuple[str, str], frozenset[str]]:
-    """工具面声明了、动作面没声明的**约束键**（`"<property>.<键>"` 形态）。
+    """工具面声明了、动作面没声明的约束键（`"<property>.<键>"` 形态）。
 
     ## 为什么它与 `param_missing_in_actions` 是两件事
     那一格管的是"工具面有、动作面没有这个 property"；这一格管的是"两层都有这个 property，
@@ -846,7 +846,7 @@ def tool_only_constraints(
 #: 已登记的"工具面独有约束"：`(角色, 动作)` -> (确定的那几个 `<property>.<键>`, 理由)。
 #:
 #: 为什么需要这一格：扩表之后（2026-10-22）对账一次性咬出 13 对、21 个键的不对称 ——
-#: 其中 `specs/g.py` / `specs/v.py` 里的六对**本次直接补齐**（工具层是校验的真身），
+#: 其中 `specs/g.py` / `specs/v.py` 里的六对本次直接补齐（工具层是校验的真身），
 #: 剩下七对落在 `specs/c.py` / `e.py` / `f.py` / `h.py`（本轮授权的改动面不含它们）。
 #: 处置与 `_KNOWN_UNMATCHED_ACTIONS` 同一条纪律：登记 = 让它可见，不是认可；
 #: 两个方向都由判据钉住（`unregistered_tool_only_constraints` 管"新长出来的"，
@@ -1021,7 +1021,7 @@ def param_type_coverage() -> dict:
     - `compared` / `keys_compared`：逐对看过的 (动作, property) 对数与 (动作, property, 键) 个数；
     - `unread`：对上了唯一工具、但那条工具的约束面读不出来（unknown）；
     - `tool_only_constraints` / `registered_tool_only_constraints`：工具面独有约束的实测数与登记数；
-    - `keys_not_compared`：扩表时**刻意没比**的键（`enum` 等）—— 不写的键不会自己变红。
+    - `keys_not_compared`：扩表时刻意没比的键（`enum` 等）—— 不写的键不会自己变红。
 
     为什么要 `tools_in_registry_modules` + `tools_unread` + `tools_read_but_not_registered` 三个数：
     只报一个 `tools_read` 时，"77" 与 "95" 之间的 18 件没有出处，读的人只能猜（审计 D-6）。
@@ -1101,7 +1101,7 @@ def action_params_from_tool(
     """一条动作的参数真身：它唯一匹配到的工具的约束面（`{property: {约束键: 值}}`）。
 
     `None` = 没有唯一匹配的工具 / 那条工具的 `params` 读不出来 / 动作不存在 ——
-    三态里的 unknown，**不是**"两层一致"（`B.register_statement` 就是这一档：它没有同名工具）。
+    三态里的 unknown，不是"两层一致"（`B.register_statement` 就是这一档：它没有同名工具）。
     """
     faces = _tool_param_faces() if tool_faces is None else tool_faces
     spec = find_action(role, action)
@@ -1207,7 +1207,7 @@ def _tool_param_schemas() -> dict[str, dict[str, tuple[str | None, str | None]]]
 
     为什么留着它：`param_missing_in_actions` 那一族（工具面有、动作面没有的 property）只需要
     property 名与类型，而 `tests/test_capabilities_reverse_param_gaps.py` 是拿这个形状喂替身表的
-    （`{p: (None, None)}`）。让两处各有各的形状而**读源码只有一处**（`_tool_param_faces`），
+    （`{p: (None, None)}`）。让两处各有各的形状而读源码只有一处（`_tool_param_faces`），
     比为了统一形状去改一张已登记的替身表安全。
     """
     return {
@@ -1304,16 +1304,16 @@ def stale_missing_in_action_entries(
 
 # ------------------------------------------------- 动作面独有参数（反向的另一半，审计 D-4）
 #
-# 上面那一族管"工具面有、动作面没有"；这一族管"动作面有、工具面没有"。两者的**计算范围不同**，
+# 上面那一族管"工具面有、动作面没有"；这一族管"动作面有、工具面没有"。两者的计算范围不同，
 # 口径必须写死（2026-10-22 业主裁定，甲方案）：
 #
 # - 有工具面的动作（唯一匹配到某件工具）⇒ 逐 property 算：动作面声明了、工具面没有的那些就是
 #   动作面独有参数。今天 23 对里 6 对有缺口（9 个 property）。
-# - 没有工具面的动作（`B.register_statement` 这类：整条动作没有同名工具）⇒ **不**逐 property 算。
+# - 没有工具面的动作（`B.register_statement` 这类：整条动作没有同名工具）⇒ 不逐 property 算。
 #   把"没有工具层"一律当成"每个 property 都独有"，实测会得到 42 对、111 个 property 的清单，
 #   而那与 `_KNOWN_UNMATCHED_ACTIONS`（同样那 39 条动作）是同一个事实的第二份登记 ——
 #   同一个事实记在两处必然漂。这一档进下面那张表的第二栏：按 (角色, 动作) 登记，
-#   且登记的 property 集合必须**等于**动作面声明的集合（多一个少一个都红）。
+#   且登记的 property 集合必须等于动作面声明的集合（多一个少一个都红）。
 #
 # 判据本体在 `tests/test_two_layer_constraints_really_match.py`（与 `_KNOWN_TOOL_ONLY_PARAMS`
 # 同一条纪律：登记是可见性，不是认可；改哪一层由人定）。
@@ -1321,7 +1321,7 @@ def stale_missing_in_action_entries(
 #: 动作面独有参数登记：`(角色, 动作)` -> (那一对的全部动作面独有 property, 理由)。
 #:
 #: 第一栏（有工具面）：值就是"工具面没有的那些 property"。
-#: 第二栏（没有工具面）：值是动作面声明的**全部** property —— 因为那时"工具面"是空集，
+#: 第二栏（没有工具面）：值是动作面声明的全部 property —— 因为那时"工具面"是空集，
 #: 动作面的每一个 property 都只活在动作面。第二栏的意义正是"这条动作没有工具层"这件事，
 #: 而不是逐格挑刺：所以判据要求"登记集合 == 动作面声明的集合"，删掉任何一个都红。
 _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
@@ -1458,7 +1458,7 @@ def unregistered_missing_in_tools(
     """未登记 / 登记不全的动作面独有参数（三条判据，缺一条就有一种坏法看不见）。
 
     ① 有工具面的对：计算出来的缺口必须在登记表里，且不许比登记的多；
-    ② 第二栏（没有工具面的对）：登记的 property 集合必须**等于**动作面声明的集合 ——
+    ② 第二栏（没有工具面的对）：登记的 property 集合必须等于动作面声明的集合 ——
        动作面新加一格而没登记 ⇒ 这里红（这是本判据的牙：删掉登记里的 `proofs` 也走这一条）；
     ③ 登记过期由 :func:`stale_action_only_entries` 管（两个方向分开报，修法不同）。
     """
