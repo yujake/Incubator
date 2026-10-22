@@ -2012,8 +2012,9 @@ class Conductor:
         父"不是跳过校验的理由（改前这一支信任调用方给的 `parent_task_id`：给一个堂兄弟的编号，这条上行就写进了堂兄弟
         的收件箱）。三个取舍：只读名册、不另造判据（`roster_addresses` 是这件事的唯一实现，这里再写一遍"是不是我的
         父"就是第二份判据）；按绝对编号寻址（`to=父的台账号`）：角色名在同名多实例时是歧义的，而歧义在这里的代价是
-        "这条上行投给了别人的父"；名册读不成 ⇒ fail-open（`how="roster_unavailable"`，调用方把读数标出来）：与
-        `message` 那一路同一条纪律 —— "说话不该被一次读失败挡住"，这一档不是"校验通过"。
+        "这条上行投给了别人的父"；名册读不成 ⇒ 返回 `how="roster_unavailable"` 并把读数原样带出来（2026-10-22 起
+        `roster_addresses` 在那一档给 `refused="roster_unavailable"`：私聊按它是受控拒绝，而上行在 `escalate` 里被
+        显式放行 —— 见那里的注释。这一档不是"校验通过"，读数标着它）。
         """
         from . import agent_loop as AL
 
@@ -2125,9 +2126,15 @@ class Conductor:
         # ---- 名册校验（业主 2026-10-19：上行与 `message` 同一条判据）。
         # 收件人是"运行期解析出的父"，但路径上必须真的过一遍名册：
         # `not_in_roster`（给了不是父的编号）/ `member_retired` / `not_upward`（给了子）
-        # 一律受控拒绝、一行都不写；`roster_unavailable` 是 fail-open（读数标出来）。
+        # 一律受控拒绝、一行都不写；`roster_unavailable` 不是这一条上行的拒绝（见下一段）。
         addr = self._escalation_roster_check(mine=mine, to=pid, who=who, root=root)
         refused = str(addr.get("refused") or "")
+        if refused == "roster_unavailable":
+            # 2026-10-22（fail-closed 的边界）：私聊在名册不可用时一律受控拒绝，上行不跟着停 ——
+            # 收件人在结构上就是运行期解析出来的父（`pid`），名册这一趟没读成不改变"发给谁"；
+            # 而父子是唯一的结构性通道，停掉它等于把整条链掐死（业主口径：这一条保留）。
+            # 读数照旧标出来：`roster_unavailable` 那一格与 `addressing.roster_probe`。
+            refused = ""
         if refused:
             bad = _refuse(refused, f"上行收件人不在名册上（{addr.get('error') or refused}）"
                                    "⇒ 这一条一行都没写")
@@ -2178,7 +2185,9 @@ class Conductor:
         out.update({"ok": True, "state": "escalated", "to": role, "to_task_id": pid,
                     "need": text, "kind": kind_name, "evidence": ev, "msg_id": msg_id,
                     "reason": "", "error": "",
-                    "addressing": addr,
+                    # 成功那一档只讲"这条上行落进了谁的收件箱"；名册探针的 refused / error
+                    # 挪进 `roster_probe`（缺陷 1 的同一条纪律：成功的一步里不许留着"被拒"）。
+                    "addressing": AL.delivery_addressing({}, addr),
                     "roster_unavailable": str(addr.get("how") or "") == "roster_unavailable",
                     "note": (f"已写进 {role} 的收件箱（msg_id={msg_id}）⇒ 这一趟以 "
                              "stop_reason=escalated 收工，等父处理"

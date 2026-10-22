@@ -2370,6 +2370,41 @@ def _callable_line(members: Sequence[Mapping[str, Any]]) -> str:
     return "、".join(parts)
 
 
+#: 探针读数里「这一条按名册投得成投不成」的那几格（成功的一档挪进 `addressing.roster_probe`）。
+_ROSTER_PROBE_KEYS: tuple[str, ...] = ("checked", "how", "refused", "error", "why")
+
+#: 名册不可用时私聊的拒信（理由码沿用读数取值 `roster_unavailable`，不新造词）。
+#:
+#: 为什么写死一句而不是每个分支各写一句：这一档的判据是同一个（名册读不出来 ⇒ 不校验就不许
+#: 开私聊），拒信要回答的也是同一个问题「那我该怎么办」。分支只补"为什么读不出来"。
+_ROSTER_UNAVAILABLE_REFUSAL = (
+    "名册不可用 ⇒ 私聊不投递（fail-closed：读不出名册时不许按角色名开私聊 —— "
+    "那是「没校验」，不是「校验通过」）。上行给父（escalate / 步数上报 / 请代唤）"
+    "与手稿的角色级通道不受影响：它们的收件人不是按名册挑出来的")
+
+
+def delivery_addressing(base: Mapping[str, Any], addr: Mapping[str, Any]) -> dict[str, Any]:
+    """成功那一档的 `addressing`：只讲「这一条实际怎么投的」，名册探针另起一格。
+
+    为什么不能把 `addr` 原样合进成功的结果（2026-10-22 查实的缺陷）：`to` 写角色名、
+    而那个角色不在我的名册上时，探针给的是 `refused="not_in_roster"` 加一句拒信；
+    角色级那一支（按协作边）本来就能把这一条发出去 —— 于是同一个 `addressing` 里
+    `ok=true` 与 `refused="not_in_roster"` 并存。走 `ok` 的判据不会因此误判，但事后
+    按 `addressing.refused` 统计「被拒几条」的人会把成功的一步算进被拒。
+
+    两种修法（清空 / 另起一格）里选后者：`refused` 与 `error` 从 `addressing` 移出，
+    探针的整份读数原样进 `addressing.roster_probe` —— 「为什么这次能发给非名册收件人」
+    这句话必须还读得到（收紧规则不等于把理由抹掉）。探针没有拒绝时那一格不出现
+    （成功的一步不为空读数长出一个键）。
+    """
+    merged = {**base, **addr}
+    out = {k: v for k, v in merged.items() if k not in ("refused", "error")}
+    probe = {k: merged.get(k, "") for k in _ROSTER_PROBE_KEYS}
+    if str(probe.get("refused") or "") or str(probe.get("error") or ""):
+        out["roster_probe"] = probe
+    return out
+
+
 def roster_addresses(secretary: Any, *, to: str, owner: str = "",
                      my_task_id: str = "", sender: str = "") -> dict[str, Any]:
     """把收件人写法 `to` 解析成"名册上的那个成员"（业主 2026-10-19 的裁定）。
@@ -2382,8 +2417,10 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     话的是：…」，每一张拒信都带它）、`refused`（受控拒绝的理由码，空串 = 没拒）、`error`（给人/给模型读的那句拒信）。
     `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `#public` / `ALL` —— 公共频道有自己那一套可
     见面判据，业主 T20/T21；②用户；③主控 M —— 代唤协议逐字要求任何角色都能把申请发给它；外加主控当发信人时按角色名派活
-    /通知那一档）、`roster_unavailable`（没有秘书 / 没有台账号 / 名册读不成 ⇒ 退回现状按原来的路投递，调用方「必须」标
-    出来 —— 这「不是」"名册校验通过"）、`parent` / `child`（解析到了 ⇒「只投那一个」）、`member_retired`（已退役 ⇒ 受
+    /通知那一档）、`roster_unavailable`（没有秘书 / 没有台账号 / 名册读不成 ⇒ 私聊「不投递」：
+    这一档带 `refused="roster_unavailable"` 与一句拒信，调用方按受控拒绝处理 —— 2026-10-22 按业主
+    口径从 fail-open 改成 fail-closed，那之前它是"退回原来的路照发，读数标出来"）、`parent` / `child`
+    （解析到了 ⇒「只投那一个」）、`member_retired`（已退役 ⇒ 受
     控拒绝，业主 B1：名字永久不复用）、`not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名匹
     配到多个 ⇒ 受控拒绝 + 列候选，「不替你挑一个」）。
     这一格「只判"发给谁"」，不判"能不能发"：协作边准入仍是 `message_admission` 那一份唯一实现。
@@ -2402,16 +2439,21 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
                         "任何角色都能把申请发给它"))
         return out
     if secretary is None:
-        out.update(how="roster_unavailable",
-                   why="这一趟没有秘书 ⇒ 名册不在手上（退回原来的路，读数标 roster_unavailable）")
+        out.update(how="roster_unavailable", refused="roster_unavailable",
+                   error=_ROSTER_UNAVAILABLE_REFUSAL,
+                   why=("这一趟没有秘书 ⇒ 名册不在手上（私聊不投递；"
+                        "读数仍标 roster_unavailable，但它不是「名册校验通过」）"))
         return out
     if not str(owner or ""):
-        out.update(how="roster_unavailable",
-                   why="这一趟没有台账号 ⇒ 不知道读谁的名册（退回原来的路）")
+        out.update(how="roster_unavailable", refused="roster_unavailable",
+                   error=_ROSTER_UNAVAILABLE_REFUSAL,
+                   why="这一趟没有台账号 ⇒ 不知道读谁的名册（私聊不投递）")
         return out
     members, problem = _callable_members(secretary, owner=str(owner))
     if problem:
-        out.update(how="roster_unavailable", why=f"{problem} ⇒ 退回原来的路")
+        out.update(how="roster_unavailable", refused="roster_unavailable",
+                   error=f"{problem} ⇒ {_ROSTER_UNAVAILABLE_REFUSAL}",
+                   why=f"{problem} ⇒ 私聊不投递")
         return out
     out["callable"] = _callable_line(members)
     mine = str(my_task_id or "")
@@ -6239,23 +6281,26 @@ class AgentLoop:
     def _address_of(self, to: str) -> dict[str, Any]:
         """这一条该发给谁（「名册 ⊆ 通话面」）：把 `roster_addresses` 接到本实例的上下文上。
 
-        fail-open：名册读坏 / 寻址那一格自己抛异常 ⇒ 退回原来那条路并把读数标成
-        `roster_unavailable`。为什么不在这儿拦：「说话不该被一次读失败挡住」
-        （与秘书那一侧的 fail-open 同一条纪律：`_outbound_hook` 的 `draft/53` §9.7）。
-        但"退回去了"这件事必须看得见 —— 折成"解析成功"就是本仓最忌的那种静默错
-        （业主 2026-10-19 第 ⑦ 条要的就是这一格）。
+        fail-closed（2026-10-22 按业主口径改的）：名册读坏 / 寻址那一格自己抛异常 ⇒ 与
+        「没有秘书 / 没有台账号」同一档 —— 读数标 `roster_unavailable` 并给出 `refused`，
+        私聊因此受控拒绝。改前这里是 fail-open（"说话不该被一次读失败挡住"），代价是
+        「读不出名册」等于「不校验名册」，而名册规则的收紧方向恰好相反。读数仍然照旧可见：
+        `how="roster_unavailable"` 与 `why` 说明为什么没读成 —— 折成"解析成功"才是本仓最忌的
+        那种静默错（业主 2026-10-19 第 ⑦ 条要的就是这一格）。
         """
         try:
             return roster_addresses(self.secretary, to=to,
                                     owner=str(self.my_task_id or ""),
                                     my_task_id=str(self.my_task_id or ""),
                                     sender=str(self.role or ""))
-        except Exception as exc:  # noqa: BLE001 —— fail-open，但读数要如实
+        except Exception as exc:  # noqa: BLE001 —— 判据自己坏了也是"没查成"
             return {"to": str(to or ""), "checked": False, "how": "roster_unavailable",
                     "kind": "", "name": "", "task_id": "", "role": "", "brief": "",
-                    "candidates": [], "callable": "", "refused": "", "error": "",
+                    "candidates": [], "callable": "", "refused": "roster_unavailable",
+                    "error": (f"名册寻址没跑成（{type(exc).__name__}: {exc}）"
+                              f"⇒ {_ROSTER_UNAVAILABLE_REFUSAL}"),
                     "why": (f"名册寻址没跑成（{type(exc).__name__}: {exc}）"
-                            "⇒ 退回原来的路（这不是'名册校验通过'）")}
+                            "⇒ 私聊不投递（这不是'名册校验通过'）")}
 
     def _handoff_address(self, to: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """交接手稿的收件人（`handoff` / 收工 `notify` 共用）：`(addr, gate)`。
@@ -6273,6 +6318,10 @@ class AgentLoop:
         为什么角色名那一档用协作边而不是名册：`notify`（每个终态都要有）正是靠它把"手稿编号 + 一句话"交给下一个角色；
         按名册拒掉会把整条交付链掐死，而"按角色名随便发"由协作边那份判据（`_address_of` / `message_admission`）守着。
         这一档也不是"名册校验通过"：读数里 `how="outside_roster"`，且 `delivery="role"`。
+
+        成功的那几支一律经 `delivery_addressing`：名册探针的 `refused` / `error` 不进
+        `addressing`（挪进 `roster_probe`）—— 缺陷 1 就是这一支把"B 不在你的名册里 ⇒ 受控拒绝"
+        与 `ok=true` 留在同一个字典里。失败那几支不经过它：那两条拒信本来就该带着理由码。
         """
         token = str(to or "").strip()
         base: dict[str, Any] = {"checked": True, "how": "", "to": token, "kind": "",
@@ -6286,17 +6335,20 @@ class AgentLoop:
                     "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）"}, {}
         addr = self._address_of(token)
         how = str(addr.get("how") or "")
+        probe_refused = str(addr.get("refused") or "")
         if how in ("parent", "child"):
             role = str(addr.get("role") or "")
             if not role:
-                return {**base, **addr, "how": "roster_unavailable",
+                return {**delivery_addressing(base, addr), "how": "roster_unavailable",
                         "why": "名册成员的角色读不出来 ⇒ 手稿那一行没有收件人面"}, {}
-            return {**base, **addr, "delivery": "roster", "manuscript_to": role,
+            return {**delivery_addressing(base, addr), "delivery": "roster",
+                    "manuscript_to": role,
                     "why": f"名册成员（{how}）⇒ 手稿写角色 {role}，通知投实例 {token}"}, {}
         if str(token).upper() in S.ROLES:
             role = str(token).upper()
             if role == str(self.role or "").upper():
-                return {**base, **addr, "how": "outside_roster", "manuscript_to": role,
+                return {**delivery_addressing(base, addr), "how": "outside_roster",
+                        "manuscript_to": role,
                         "why": "交接给'我自己'是自记一笔（不是代理之间的通信）"}, {}
             reason = message_admission(self.role, role)
             if reason:
@@ -6304,12 +6356,17 @@ class AgentLoop:
                         "addressing": {**base, **addr, "how": "not_an_edge",
                                        "manuscript_to": role}}
                 return {**base, **addr, "how": "not_an_edge", "manuscript_to": role}, gate
-            return {**base, **addr, "how": "outside_roster", "manuscript_to": role,
-                    "why": "角色级收件人面（手稿台账的口径）+ 协作边成立"}, {}
+            return {**delivery_addressing(base, addr), "how": "outside_roster",
+                    "manuscript_to": role,
+                    "why": ("角色级收件人面（手稿台账的口径）+ 协作边成立"
+                            + (f"；名册上没有 {role}（{probe_refused}）⇒ 这一条按角色投，"
+                               "不靠名册（名册探针的读数见 roster_probe）"
+                               if probe_refused else ""))}, {}
         if how == "roster_unavailable":
-            # 名册读不成 ⇒ 不回退成"按名字发"（那会写进一个没人读的收件箱），
-            # 也不把一次读失败说成"这个名字不存在"：让调用方按三态处理。
-            return {**base, **addr, "how": "roster_unavailable"}, {}
+            # 名册不可用 ⇒ 不回退成"按名字发"（那会写进一个没人读的收件箱），
+            # 也不把一次读失败说成"这个名字不存在"：让调用方按三态处理。角色级那一档
+            # 在上面已经放行了 —— 手稿通道不靠名册（这是业主 2026-10-22 明确保留的那条）。
+            return {**delivery_addressing(base, addr), "how": "roster_unavailable"}, {}
         gate = {"refused": "handoff_is_role_addressed",
                 "error": (f"手稿的收件人只认角色或 ALL（台账的主键面），收到 {token!r} ⇒ 受控拒绝："
                           "要给**某个实例**说话请用 `message`（`to` 写名册名或绝对编号）；"
@@ -6327,10 +6384,18 @@ class AgentLoop:
         （`roster_addresses`，不是第二份实现）。
 
         返回 `(addr, gate)`：`gate` 为空 dict = 放行；非空 = 受控拒绝那三格（`refused` / `error` /
-        `addressing`）。三态照旧：`roster_unavailable`（名册读不成 ⇒ 放行，由调用方标出读数）不是拒绝，也「
-        不是」"名册校验通过"。`to_task_id` 给了就按绝对编号寻址（同名多实例时不会歧义）。
+        `addressing`）。三态照旧：`roster_unavailable`（名册读不成）不是「这一条投给谁」的拒绝，也
+        「不是」"名册校验通过"。`to_task_id` 给了就按绝对编号寻址（同名多实例时不会歧义）。
+
+        2026-10-22（fail-closed 的边界）：名册不可用时这几条通道照旧放行 —— 请代唤 / 定义报文 /
+        步数上报的收件人是运行期解析出来的父（结构上只有那一个），手稿的角色级收件人靠协作边；
+        它们不靠名册挑人，掐死它们等于把整条通信一起停掉（业主明说保留）。私聊那一档才受控拒绝
+        （`_do_message` 只看 `refused`）。放行时读数经 `delivery_addressing` 收拾过：
+        `refused` / `error` 挪进 `roster_probe`，成功的一步里不许留着「被拒」。
         """
         addr = self._address_of(str(to_task_id or to))
+        if str(addr.get("refused") or "") == "roster_unavailable":
+            return delivery_addressing({}, addr), {}
         if str(addr.get("refused") or "") and str(to_task_id or "") \
                 and str(to_task_id) != str(to):
             # 绝对编号没落在名册上 ⇒ 退回按「写法本身」再判一次（三态：这一步不吞问题）。
@@ -6369,10 +6434,12 @@ class AgentLoop:
 
     def _message_legacy(self, payload: Mapping[str, Any], to: str,
                         reply_to: str) -> dict[str, Any]:
-        """没有名册时的那条老路（「逐字照旧」）：名字类写法走板项，其余走角色通道。
+        """按名字发的那条老路（`_do_message` 已不再回退到这里：名册不可用是受控拒绝）。
 
-        单独抽出来是因为它是"名册读不成"那一档的回退 —— 回退必须是「逐字」的旧行为，
-        否则"名册坏了"与"改坏了寻址"在读数上会分不开。
+        改前它是"名册读不成"那一档的回退 —— 2026-10-22 按业主口径改成 fail-closed 之后，
+        那一档不再投放（见 `roster_addresses` 的 `roster_unavailable`）。函数与它逐字保留
+        旧行为，因为「回退必须是逐字的老行为」这条纪律仍然成立：判据要能拿它对照
+        （`tests/test_roster_registration_holes.py` 直接打它，量 `to="ALL"` 那一支）。
         """
         if to and to != PUBLIC and to != "ALL" and to not in (*S.ROLES, S.CONDUCTOR_ROLE,
                                                              "user", "用户"):
@@ -6437,12 +6504,11 @@ class AgentLoop:
                     "addressing": addr, "error": str(addr.get("error") or ""),
                     "note": (f"{addr.get('error')}（这一条没有落盘：`send_message` 没调、"
                              "板项没开 —— 受控拒绝不是「稍后再试」）")}
-        if how == "roster_unavailable":
-            # 无秘书 / 名册读不成 ⇒ 退回原来的路，但「读数必须标出来」（业主第 ⑦ 条）
-            out = self._message_legacy(payload, to, reply_to)
-            out["roster_unavailable"] = True
-            out["addressing"] = addr
-            return out
+        # 名册不可用那一档不再有回退（2026-10-22 按业主口径从 fail-open 改成 fail-closed）：
+        # 它由上面那条 `refused` 拦下（`roster_addresses` / `_address_of` 给的是
+        # `refused="roster_unavailable"`）。改前这里有一支 `_message_legacy` 的回退 ——
+        # 那句"说话不该被一次读失败挡住"在私聊上恰好是"不校验名册"，而名册规则的方向是收紧：
+        # 已经有双边通话（父/子）、上行与手稿角色级通道，私聊没有非开不可的场合。
         if how in ("parent", "child") and via_roster:
             # 名册名 / 绝对编号已翻成角色 ⇒ 落角色收件箱（见本方法 docstring）。
             out = self._message_by_channel(payload, to, reply_to)
@@ -6501,12 +6567,13 @@ class AgentLoop:
                          "父不许代读（T20）。若它此刻没有在跑，板项会等着它下次进循环。")}
 
     def _message_by_name(self, payload: Mapping[str, Any], name: str) -> dict[str, Any]:
-        """按名册名发一条（「名册读不成那一档的老路」）：译码 → 落到收件人名下的板项。
+        """按名册名发一条（译码 → 落到收件人名下的板项）。
 
-        `_do_message` 在名册可读时不再走这里（判据在 `roster_addresses`）；
-        这里保留给两条路：① `roster_unavailable` 的回退（逐字旧行为）；
-        ② `to="ALL"` 的内部直调 —— 那一支已改成受控拒绝（见 `_all_recipient_refusal`，
-        那个按名册逐项开板项的旧实现已删，语义由 `conductor.broadcast` 承担）。
+        `_do_message` 不走这里（判据在 `roster_addresses`）；它今天只有两个调用点：
+        `_message_legacy`（判据拿来逐字对照旧行为的那条路）与判据文件对这条实现本身的
+        直接调用（`tests/test_the_name_face_is_wired.py`）。`to="ALL"` 的内部直调已改成
+        受控拒绝（见 `_all_recipient_refusal`，那个按名册逐项开板项的旧实现已删，
+        语义由 `conductor.broadcast` 承担）。
         """
         if self.secretary is None or self.conductor is None:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
@@ -6529,8 +6596,9 @@ class AgentLoop:
 
         S6-a（业主 T20/T21 附二 乙）：公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，没有编号就受
         控拒绝（不许退回"全角色可见"—— 那正是 T20 要治的形态：随手 `to=#public` 就等于全树广播）。谁能走到这一支：只有
-        `#public` / `ALL` / 用户，以及"名册读不成"那一档的回退；给某个代理的私聊走 `roster_addresses` +
-        `_message_to_member`。这一支刻意不加名册校验：公共频道不是"给某个代理发消息"。
+        `#public` / `ALL` / 用户（以及名册名已翻成角色的 `via_roster` 那一档）；给某个代理的私聊走 `roster_addresses` +
+        `_message_to_member`。名册不可用那一档已经不再回退到这里（2026-10-22：fail-closed，私聊受控拒绝）。
+        这一支刻意不加名册校验：公共频道不是"给某个代理发消息" —— 它有自己的可见面判据（我名下的直接子代理）。
         公告栏（业主 2026-10-19 第 5 条："若保留，必须写成公告栏，不是对话"）：`#public` 保留，但它是公告栏—— 一条公聊
         里若点名了名册上的某个成员（名册名 / 绝对编号）并且带指令语气（`PUBLIC_DIRECTIVE_MARKS`）或显式收件人写法（
         `@F1` / `F1：` / `to=F1` / `给 F1`），它就是"对某个具体代理下指令" ⇒ 受控拒绝 `public_is_not_a_conversation`；

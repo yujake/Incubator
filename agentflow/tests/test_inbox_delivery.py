@@ -45,6 +45,10 @@ def test_a_message_to_a_role_without_a_reader_says_so(tmp_path: pathlib.Path):
 
     真机读数（`draft/89` §2）：579 条留言只有 8 条被读过，12 次投递登记全由 M 写 ——
     生产形态下只有 M 有循环。旧回执写的是 `ok: True` + "收件人下次运行时会看到它"，那是假话。
+
+    2026-10-22 起这一条要给这一趟一个台账号（顶层那一行）：名册不可用（没有台账号 / 没有
+    秘书）时私聊已是受控拒绝（fail-closed，业主口径），而"回执三态"是角色通道那一档的读数。
+    主控按角色名派活/通知是名册上的 `outside_roster` 那一档，所以这里的判据一个字没变。
     """
     from agentflow.agent_loop import AgentLoop, PUBLIC
     from agentflow.conductor import Conductor, LocalBackend
@@ -57,30 +61,38 @@ def test_a_message_to_a_role_without_a_reader_says_so(tmp_path: pathlib.Path):
     cond = Conductor(st, backend=LocalBackend({}))
     cond.backend = backend                     # 让 loop 看得见接线表
     loop = AgentLoop(role="M", session_root=ws, registry=None, seam=None,
-                     conductor=cond, store=st, sid="rcpt", auto_secretary=False)
+                     conductor=cond, store=st, sid="rcpt")
+    loop.my_task_id = cond.open_top_level_run("M", "收件回执那一趟")
     got_a = loop._do_message({"to": "A", "subject": "s", "body": "b"})
     assert got_a["receipt"] == "no_reader" and got_a["ok"] is False, got_a
     assert "不会有任何进程读它" in got_a["note"], got_a
     got_d = loop._do_message({"to": "D", "subject": "s", "body": "b"})
     assert got_d["receipt"] == "queued" and got_d["ok"] is True, got_d
-    got_pub = loop._do_message({"to": PUBLIC, "subject": "s", "body": "b"})
-    # S6-a（业主 T20/T21 附二 乙）：公聊的可见面是"发信人的直接子代理" ⇒ 这一趟
-    # 没有台账号时受控拒绝（`no_task_id`），不再回一个"queue 了"的乐观回执 ——
-    # 那种回执正是"谁都能看的广播"的旧形态。有台账号时怎么判，见
-    # `tests/test_the_public_channel_is_the_senders_children.py`。
+    # 公聊那一档与名册无关：没有台账号 ⇒ 受控拒绝 `no_task_id`（在另一条裸 loop 上量，
+    # 与改前逐字相同）。S6-a（业主 T20/T21 附二 乙）：公聊的可见面 = 发信人的直接子代理。
+    bare = AgentLoop(role="M", session_root=ws, registry=None, seam=None,
+                     conductor=cond, store=st, sid="rcpt", auto_secretary=False)
+    got_pub = bare._do_message({"to": PUBLIC, "subject": "s", "body": "b"})
     assert got_pub["ok"] is False and got_pub["refused"] == "no_task_id", got_pub
     assert "可见面" in got_pub["error"], got_pub
 
 
-def test_the_receipt_is_unknown_when_the_wiring_table_is_invisible(tmp_path: pathlib.Path):
-    """负控（三态）：看不见接线表 ⇒ `unknown`，不许按乐观猜成 `queued`。"""
-    from agentflow.agent_loop import AgentLoop
+def test_an_invisible_wiring_table_never_becomes_an_optimistic_receipt(tmp_path: pathlib.Path):
+    """负控（三态）：看不见接线表 ⇒ `unknown`，不许按乐观猜成 `queued`。
+
+    名册不可用那一档（没有秘书 / 没有台账号）的私聊已经改成受控拒绝（fail-closed），
+    所以"看不见接线表"这一条读数从公共频道那一档量：给 `#public` 发一条，而看不见我名下
+    有多少直接子代理 ⇒ 回执 `unknown`。判据本体没换（`_receipt_for` 的三态），只换了入口。
+    """
+    from agentflow.agent_loop import AgentLoop, PUBLIC
 
     ws = _ws(tmp_path)
     st = Store(ws)
     loop = AgentLoop(role="M", session_root=ws, registry=None, seam=None,
                      conductor=None, store=st, sid="rcpt2", auto_secretary=False)
-    got = loop._do_message({"to": "A", "subject": "s", "body": "b"})
+    # 台账号只需要"有"：这一条量的是回执，不是名册（名册那一档另有判据）。
+    loop.my_task_id = "t-invisible"
+    got = loop._do_message({"to": PUBLIC, "subject": "s", "body": "b"})
     assert got["receipt"] == "unknown", got
     assert "不许折成" in got["note"], got
 

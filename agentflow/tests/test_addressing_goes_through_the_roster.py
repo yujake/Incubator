@@ -7,9 +7,10 @@
 
 判据：正控 ① 给「父」发 ⇒ 收件人 `task_id` == 名册里的父编号（编号与名册名两种写法）② 给「子」发 ⇒ 收件人是那个子 ③ 名册外的角色（"E"）⇒ `not_in_roster` ＋列出可通话名单
 ④ 退役的子 ⇒ `member_retired` ⑤ 祖父（父的上线）⇒ 拒收 ⑥ `escalate` 上行链路仍绿（`tests/test_escalate_goes_up_and_stops.py` 的
-test_escalate_goes_up_and_stops）⑦ 无秘书 ⇒ 退回原路并标 `roster_unavailable`，且这一档不是"名册校验通过"（名册外的角色照样发得出去）。
+test_escalate_goes_up_and_stops）⑦ 名册不可用（无秘书）⇒ 私聊受控拒绝 `roster_unavailable`（2026-10-22 从 fail-open 改成
+fail-closed：改前那一档退回原路照发，只把读数标出来 —— 而读数标着"没校验"并不等于"不发"，那是安全上的 fail-open）。
 
-负控（每条都真跑"坏实现"）：去掉 `roster_view` 的父那一格 / 父解析成随便一个成员 / 守卫去掉（`not_in_roster` 放行成老通道）/ 退役当还活着 / 祖父放行 / 无秘书当解析成功 ⇒
+负控（每条都真跑"坏实现"）：去掉 `roster_view` 的父那一格 / 父解析成随便一个成员 / 守卫去掉（`not_in_roster` 放行成老通道）/ 退役当还活着 / 祖父放行 / 名册不可用当解析成功 ⇒
 均红。
 
 边界：按绝对编号 / 名册名发消息不需要召唤边（"派活要许可，说话不需要"）。"""
@@ -219,16 +220,23 @@ def _grandparent_is_refused(env: dict[str, Any]) -> dict[str, Any]:
     return got
 
 
-def _unavailable_is_flagged(bare: AgentLoop, ws: pathlib.Path) -> dict[str, Any]:
-    """判据⑦：无秘书 ⇒ 退回原来的路，读数 `roster_unavailable=True`。
+def _unavailable_is_fail_closed(bare: AgentLoop, ws: pathlib.Path) -> dict[str, Any]:
+    """判据⑦（2026-10-22 改口径）：名册不可用 ⇒ 私聊受控拒绝，一条都不许落。
 
-    并且这一档不是"名册校验通过"：名册外的角色照样发得出去（见调用方那条断言）。"""
+    改前这一档是 fail-open：退回老路照发，只把读数标成 `roster_unavailable=True`。
+    业主口径是名册规则只会收紧（「我们已经双边通话畅通了，就没什么特别的必要要有私聊了」）
+    ⇒ 读不出名册就不许开私聊；读数仍标 `roster_unavailable`，拒信说清"名册不可用 ⇒ 不投递"。
+    """
     got = bare._do_message({"to": OUTSIDE_ROLE, "subject": "题", "body": "文"})
-    assert got.get("roster_unavailable") is True, got
+    assert got.get("ok") is False, got
+    assert str(got.get("refused") or "") == "roster_unavailable", got
+    assert "名册" in str(got.get("error") or ""), got
+    assert not got.get("message_sent"), ("受控拒绝：一条都不许落盘", got)
     addr = got.get("addressing") or {}
     assert addr.get("checked") is False, addr
     assert str(addr.get("how") or "") == "roster_unavailable", addr
-    assert got.get("message_sent"), ("退回的是老路：留言照发", got)
+    assert got.get("roster_unavailable") is not True, ("fail-open 的旧读数不许再出现", got)
+    assert _messages(ws) == [], ("这一档一条留言都不许落", _messages(ws))
     return got
 
 
@@ -286,19 +294,15 @@ def test_the_grandparent_is_not_callable(tmp_path: pathlib.Path):
     _grandparent_is_refused(_env(tmp_path))
 
 
-def test_no_secretary_is_a_fallback_not_a_roster_check(tmp_path: pathlib.Path):
-    """正控⑦：无秘书 ⇒ 退回原来的路并标 `roster_unavailable`；它不是名册校验通过。"""
+def test_no_secretary_means_no_private_chat(tmp_path: pathlib.Path):
+    """判据⑦：名册不可用（没有秘书）⇒ 私聊受控拒绝（fail-closed），不是"退回原路照发"。"""
     env = _env(tmp_path)
     bare = AgentLoop(role=ME_ROLE, session_root=env["ws"], registry=env["loop"].registry,
                      conductor=env["cond"], seam=env["loop"].seam, store=env["st"],
                      sid=SID, auto_secretary=False)
     bare.my_task_id = env["me"]
     assert bare.secretary is None, "这一条判据要的就是'秘书不在手上'那一档"
-    _unavailable_is_flagged(bare, env["ws"])
-    # 「这不是名册校验通过」的那一条判据：名册外（甚至根本不是名册上任何人）的
-    # 角色，在这一档照样发得出去 —— 因为它压根没查名册。
-    assert _messages(env["ws"]) and str(_messages(env["ws"])[0].get("to")) == OUTSIDE_ROLE, \
-        ("无秘书那一档必须露出'没查名册'这件事", _messages(env["ws"]))
+    _unavailable_is_fail_closed(bare, env["ws"])
 
 
 # ---------------------------------------------------------------- 负控（每个都真跑一遍坏实现）
@@ -388,7 +392,10 @@ def test_negctl_letting_the_grandparent_through_is_red(tmp_path: pathlib.Path,
 
 def test_negctl_calling_the_fallback_a_successful_resolution_is_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
-    """负控⑦：把"无秘书"当成解析成功（不标 `roster_unavailable`）⇒ 判据⑦必红。"""
+    """负控⑦：把"名册不可用"当成解析成功（不标 `roster_unavailable`）⇒ 判据⑦必红。
+
+    那个坏实现等价于改前的 fail-open：名册没读成，而这一条照样落进角色通道。
+    """
     env = _env(tmp_path)
     bare = AgentLoop(role=ME_ROLE, session_root=env["ws"], registry=env["loop"].registry,
                      conductor=env["cond"], seam=env["loop"].seam, store=env["st"],
@@ -401,7 +408,7 @@ def test_negctl_calling_the_fallback_a_successful_resolution_is_red(
                           "brief": "", "candidates": [], "callable": "",
                           "refused": "", "error": "", "why": "（坏实现：当成了解析成功）"})
     with pytest.raises(AssertionError):
-        _unavailable_is_flagged(bare, env["ws"])
+        _unavailable_is_fail_closed(bare, env["ws"])
 
 
 # ---------------------------------------------------------------- 边界（防误伤）
