@@ -1622,6 +1622,86 @@ def _stage_fail(exc: Exception) -> Any:
     return fail(f"{type(exc).__name__}: {exc}", kind="unexpected")
 
 
+#: "本次没有全文"这一档的标记值（写进 `literature.download.fulltext`，不新增列）。
+#:
+#: 为什么它必须是一个受控取值而不是一句散文：B 的读侧要按它把"这一篇有定位符、
+#: 只是这次没下字节"与"这一篇从哪来都不知道"分开（见 `agent_b.run_once`
+#: 的 acquire 段）。散文只能被人读，机器读不出两档的差别。
+NO_FULLTEXT_THIS_TIME = "no_fulltext_this_time"
+
+
+def _mark_candidate_locator(ctx: _Ctx, lit_id: str, row: Mapping[str, Any]) -> bool:
+    """把候选行的 url 写进 literature 行的 download 栏，并标明"本次无全文"。
+
+    为什么必须做（审计读数）：一键迁移原来这样登记 —— `_h_register(..., path=None)`，
+    于是 literature 行上 `path=null`、`download={"status":"skipped",
+    "error":"no_local_path"}`。B 领取到这样一行只能写 `no_local_file`：这一篇
+    从哪来、还能去哪取，盘上一个字都没有。候选行上本来就有 `url`（provider
+    给的检索/落地链接），它是"这篇在哪"的唯一证据，不落下来就等于丢掉了。
+
+    为什么写 download 栏而不是新加一列：`download` 是既有字段（`schema` 是禁改区，
+    列不许加），它本来就是"这一篇的字节从哪来、到了没有"的落点。写入的键：
+    `url`（定位符）、`fulltext`（本次没拿到全文的标记）、`error`、`note`。
+
+    已登记行如果真的有本地全文（`path` 非空），一律不碰："本次无全文"不许
+    覆盖一个真的有字节的行。返回是否真的写了（幂等：同一个 url 且已标过就不写）。
+    """
+    url = str(row.get("url") or "").strip()
+    if not url or not lit_id or ctx.store is None:
+        return False
+    with ctx.store.tx("literature", actor=ctx.actor, note="search.register.locate") as tx:
+        got = tx.find("literature", lit_id=lit_id)
+        if got is None or got.get("path"):
+            return False
+        dl = dict(got.get("download") or {})
+        if dl.get("url") == url and dl.get("fulltext") == NO_FULLTEXT_THIS_TIME:
+            return False
+        dl.setdefault("status", "skipped")
+        have = str(dl.get("url") or "").strip()
+        if have and have != url:
+            # 行上已经有一个不同的定位符（同一篇由另一个源登记过）：不丢它 ——
+            # 两个 url 都是真的，覆盖等于让"上一次登记的是哪个"不可查。
+            dl["url_previous"] = have
+        dl["url"] = url
+        dl["fulltext"] = NO_FULLTEXT_THIS_TIME
+        dl["error"] = dl.get("error") or NO_FULLTEXT_THIS_TIME
+        dl["note"] = ("本次无全文：只登记了候选源给出的定位链接（url 这一格），"
+                      "没有下载字节；要全文请按它重取")
+        got["download"] = dl
+        S.Literature(**{k: got[k] for k in got
+                        if k in S.Literature.__dataclass_fields__}).validate()
+        tx.upsert("literature", got, note="search.register.locate")
+    return True
+
+
+def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
+    """把一条待新增候选走现有的 `search.register` 登记路径落成 literature 行。
+
+    两条入口（`lit.admit` 逐条入库与 `lit.admit_all` 一键迁移）共用这一份。
+    它们原来各有一段逐字相同的闭包：改一处漏一处，"一键迁移出来的行没有
+    定位栏、B 一用就是 unreadable"就会在原地复发。
+
+    登记之后补写定位栏（`_mark_candidate_locator`）：登记路径自己只认
+    `path`（library 下的相对路径），而候选行手上只有 url —— 两件事分开写，
+    谁也不冒充谁。
+    """
+    res = _h_register(
+        ctx,
+        title=str(row.get("title") or ""),
+        type_code=str(row.get("type_code") or "Z"),
+        summary=str(row.get("summary") or ""),
+        path=None,
+        doi=row.get("doi"),
+        year=row.get("year"),
+        request_id=None,
+    )
+    if not res.ok:
+        return {"lit_id": None, "reason": res.error}
+    data = dict(res.data or {})
+    _mark_candidate_locator(ctx, str(data.get("lit_id") or ""), row)
+    return data
+
+
 def _h_lit_overlap_check(ctx: _Ctx, title: str, doi: str | None = None) -> Any:
     """``lit.overlap_check``：「不联网」，说明"这一条与本地库重叠多少、要不要 new_content"。
     
@@ -1846,19 +1926,9 @@ def _h_lit_admit(
             return _stage_fail(exc)
 
     def _registrar(row: Mapping[str, Any]) -> dict:
-        res = _h_register(
-            ctx,
-            title=str(row.get("title") or ""),
-            type_code=str(row.get("type_code") or "Z"),
-            summary=str(row.get("summary") or ""),
-            path=None,
-            doi=row.get("doi"),
-            year=row.get("year"),
-            request_id=None,
-        )
-        if not res.ok:
-            return {"lit_id": None, "reason": res.error}
-        return dict(res.data or {})
+        # 判据只有一份：与 `lit.admit_all` 共用 `_registrar_from_candidate`
+        # （那里也补写定位栏，于是"逐条入库"与"一键迁移"落出来的行同形）。
+        return _registrar_from_candidate(ctx, row)
 
     try:
         got = _admit(ctx.store, registrar=_registrar, request_id=request_id, slots=wanted,
@@ -1916,19 +1986,9 @@ def _h_lit_admit_all(
         return fail("未配置 store：入不了库（不是「都重复了」）", kind="no_store")
 
     def _registrar(row: Mapping[str, Any]) -> dict:
-        res = _h_register(
-            ctx,
-            title=str(row.get("title") or ""),
-            type_code=str(row.get("type_code") or "Z"),
-            summary=str(row.get("summary") or ""),
-            path=None,
-            doi=row.get("doi"),
-            year=row.get("year"),
-            request_id=None,
-        )
-        if not res.ok:
-            return {"lit_id": None, "reason": res.error}
-        return dict(res.data or {})
+        # 判据只有一份：与 `lit.admit_all` 共用 `_registrar_from_candidate`
+        # （那里也补写定位栏，于是"逐条入库"与"一键迁移"落出来的行同形）。
+        return _registrar_from_candidate(ctx, row)
 
     try:
         got = _admit_all(ctx.store, registrar=_registrar, request_id=request_id,

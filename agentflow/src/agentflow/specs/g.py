@@ -30,7 +30,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "G", "compose_claim",
         "构造一条合规断言（转发工具层，判据只有一份）",
-        _obj({"text": _S, "citations": _ARR_S, "evidence_kind": _S, "section": _S,
+        _obj({"text": _S,
+              # 工具层（`doc.compose_claim`）的 `citations` 有 `minItems: 1`：一条断言至少要
+              # 引一份证据。动作面原来只写 `_ARR_S` ⇒ 派活面放行"零引用的断言"，
+              # 而工具层必然拒收（判据：`capabilities.param_type_divergences()`）。
+              "citations": {**_ARR_S, "minItems": 1},
+              "evidence_kind": _S, "section": _S,
               "is_negative": _B, "negation_kind": _S, "claim_id": _S},
              ("text", "citations", "evidence_kind", "section")),
         "claim dict", side_effect="none", handler_name="compose_claim",
@@ -50,7 +55,11 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # 对账判据：`tests/test_role_specs_action_table.py` +
               # `capabilities.param_type_divergences()`（类型按 AST 比）。
               "source_stmt_id": _S, "path_group": _I,
-              "page_range": _ARR_I, "quote": _S,
+              # 工具层（`doc.register_dependency`）的 `page_range` 是
+              # `{"type":"array","items":{"type":"integer"},"minItems":1,"maxItems":2}`
+              # —— `[start, end]` 两格、至少一格。动作面原来只写 `_ARR_I`，边界只在工具面
+              # （`_coerce_page_range` 也按 `[start, end]` 读），判据同 `citations` 那一行。
+              "page_range": {**_ARR_I, "minItems": 1, "maxItems": 2}, "quote": _S,
               "status": {"type": "string", "enum": list(S.DEP_STATUSES)},
               "status_reason": _S},
              ("used_by", "kind", "label")),
@@ -61,7 +70,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "G", "build_document",
         "写一行 documents 并渲染 markdown（无条件渲染）",
         _obj({"kind": {"type": "string", "enum": list(S.DOC_KINDS)}, "title": _S,
-              "claims": {"type": "array", "items": _OBJ},
+              "claims": {"type": "array", "items": _OBJ, "minItems": 1},
               "sections": {"type": "array", "items": _OBJ},
               "open_problems": _ARR_S,
               # `draft/37` §91：这一格原先是个光秃秃的 `_S`（只声明类型、没有描述），
@@ -105,11 +114,25 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "G", "write_mapping",
         "写论文对应表三份（json / md / 正文附录）：先出表、再写正文",
         _obj({
-            # 两格与工具层逐字对齐（`doc_tools` 里 `doc.write_mapping` 的 `@tool` 声明）；
-            # 对账判据：`capabilities.param_type_divergences()`（类型按 AST 比）与
-            # `tests/test_capabilities_reverse_param_gaps.py`（反向：工具面有、动作面没有）。
-            "project": _S,
-            "rows": _ARR_OBJ,
+            # ## 这两格参数的「真身」在工具层（2026-10-22 业主裁定：同一件事只有一个真身）
+            #
+            # 真身是 `tools/doc_tools.py` 里 `doc.write_mapping` 的 `@tool` 声明 —— 它是
+            # `papermapping.parse_rows` 之前真正跑 `validate_params` 的那一份：
+            # `project` 有 `minLength=1 / maxLength=300`，`rows` 有 `minItems=1`，
+            # 且每一行必填六格（kind / label / env_no / ledger_id / proof_no / file）。
+            # 动作面原来只有 `_S` 与 `_ARR_OBJ` ⇒ 动作门 PASS、工具门 REJECT，
+            # 而三层对账返回 `[]`（审计 D-2）。这里只镜像工具层的那几个约束键，
+            # 漂移由 `capabilities.assert_capabilities()` 第 [9c] 条逐键对拍
+            # （`_PARAMS_DERIVED_FROM_TOOL`）：改工具层的 `minItems` 而不改这里 ⇒ 导入期当场红。
+            "project": {**_S, "minLength": 1, "maxLength": 300},
+            "rows": {
+                "type": "array",
+                "minItems": 1,
+                # 一行一条（正文里每个定理类环境各占一行、多证明每条各占一行）；
+                # 六格与 `doc_tools._MAPPING_ROW_PARAMS["required"]` 同一份口径。
+                "items": {**_OBJ, "required": ["kind", "label", "env_no", "ledger_id",
+                                              "proof_no", "file"]},
+            },
         }, ("project", "rows")),
         "mapping json", side_effect="write_local", handler_name="write_mapping",
     ),

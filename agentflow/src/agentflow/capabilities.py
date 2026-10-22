@@ -250,28 +250,37 @@ def _declared_side_effects(tree: ast.AST) -> list[tuple[str, str, str, bool]]:
     return found
 
 
-#: 工具模块名单（与 `tools._MODULES` 同源，这里只用于"读声明"）。
-_TOOL_MODULES: tuple[str, ...] = (
-    "table_tools",
-    "fs_tools",
-    "search_tools",
-    "ocr_tools",
-    "graph_tools",
-    "trace_tools",
-    "research_tools",
-    "verify_tools",
-    "attack_tools",
-    "doc_tools",
-    "review_tools",
-    "conductor_tools",
-    # `draft/30` §T3-P3：猜想台账的产出面（T1 只落了数据面与判据）。
-    # 这张名单是"两层声明对账"的输入：模块不在名单里，它声明的工具就比对不上，
-    # 症状是导入期断言报 `D.register_conjecture` 属于"新的没比对"。
-    "conjecture_tools",
-    # 2026-10-18（业主裁定「只读角色的产出要能进台账」）：C 的产出登记通道
-    # （`analysis.register_report`）。它是一件只挂给 C 的写工具，且由工具级例外表
-    # 逐条登记 —— 名单里没有它，这条工具就落在"两层声明对账"之外（比对不上）。
-    "analysis_tools",
+#: 读声明时要多读的模块（`tools._MODULES` 之外的那一个，逐条写理由）。
+#:
+#: ## 为什么这张表必须存在（审计 D-6 的治本）
+#: 本文件原来手抄了一份 14 项模块名单，并写着「与 `tools._MODULES` 同源」—— 那是一句假话：
+#: 实测差三个模块（少 `text_tools` / `manuscript_tools`、多 `conjecture_tools`），于是
+#: `param_type_coverage()['tools_read']` 只肯说「读到 77 个工具的 schema」，而工具层有 95 件，
+#: 读数说不出这 18 件的差从哪来。同一件事（工具模块有哪些）只允许有一个真身：
+#: `tools._MODULES`（装配期真正注册工具的那张表）。这里只登记「为什么还要多读一个模块」。
+_TOOL_MODULE_EXTRAS: dict[str, str] = {
+    "conjecture_tools": (
+        "`D.register_conjecture` 的落地工具（`conjecture.register_conjecture`）住在这个文件里，"
+        "而它不在 `tools._MODULES` 里 —— `build_registry` 不装配它（D 走 `agent_d._support` "
+        "里的直接 import）。两层参数对账要看得见这条工具，所以显式多读一个模块；"
+        "但「读进来」不等于「它是工具面的一件」，所以读数把它单列成 "
+        "`tools_read_but_not_registered`（读到了、不注册 ≠ 注册了）"
+    ),
+}
+
+
+def _tool_modules() -> tuple[str, ...]:
+    """读声明用的模块名单 = `tools._MODULES`（真身）＋ 显式登记的额外模块。"""
+    from .tools import _MODULES
+
+    return (*_MODULES, *_TOOL_MODULE_EXTRAS)
+
+
+#: 工具模块名单（只用于「读声明」）。派生自 :func:`_tool_modules`，不是第二份名单。
+_TOOL_MODULES: tuple[str, ...] = _tool_modules()
+assert len(set(_TOOL_MODULES)) == len(_TOOL_MODULES), (
+    f"工具模块名单里出现了重复项：{_TOOL_MODULES} —— `_TOOL_MODULE_EXTRAS` 与 "
+    "`tools._MODULES` 撞了，那会让读数里的工具计数重复（计数重复比没有计数更坏：它会看起来对得上）"
 )
 
 
@@ -445,6 +454,45 @@ def _divergences(
 # `type`（`properties.<名>.type` / `.items.type`），读不出就记 unknown、不折成通过。
 
 
+#: 两层参数对账里真的逐个比过的约束键（`R-36` 起只有 `type` / `items.type`，2026-10-22 扩表）。
+#:
+#: 为什么是这十格：每一格都是「派活面（能力表）」与「校验面（工具表）」必须说同一句话的口径。
+#: 判错的后果不是崩溃而是判错：`Conductor._check_params` 读能力表、`validate_params` 读工具表，
+#: 一处更松就放行一次必然被拒的派活，一处更紧就把一次合法派活判死（§150 的 `dependencies` 形态）。
+#: 不在表里的键（`enum` / `description` / `default` / `additionalProperties` / `pattern` /
+#: `items.properties.*` 的逐格约束）今天没有比对 —— 那是三态里的 unknown，读数在
+#: `param_type_coverage()['keys_not_compared']` 里（不写的键不会自己变红）。
+_PARAM_CONSTRAINT_KEYS: tuple[str, ...] = (
+    "type",
+    "minItems",
+    "maxItems",
+    "minLength",
+    "maxLength",
+    "minimum",
+    "maximum",
+    "required",
+    "items.type",
+    "items.required",
+)
+
+#: 上面那十个键里"不参与比对"的对立面（只为让读数能把 unknown 说出来，不是第二份真身）。
+_PARAM_KEYS_NOT_COMPARED: tuple[str, ...] = (
+    "enum",
+    "description",
+    "default",
+    "additionalProperties",
+    "pattern",
+    "items.properties.*",
+)
+
+#: 根级 `required` 在差值报告里的伪 property 名（它不是某个参数，而是 `params.required` 本身）。
+_ROOT_REQUIRED = "<root>"
+
+#: 读不出来的取值。与 `None` 必须分开：`None` = 读出来了、确认没有这个键；
+#: `_UNRESOLVED` = 这个键写了、但写的是变量/表达式，读不出来（三态里的 unknown）。
+_UNRESOLVED: Any = object()
+
+
 def _dict_value(node: ast.AST | None, key: str) -> ast.AST | None:
     """从一棵 `ast.Dict` 里取某个字符串字面量键对应的值节点；不是字典就返回 `None`。"""
     if not isinstance(node, ast.Dict):
@@ -460,27 +508,120 @@ def _str_value(node: ast.AST | None) -> str | None:
     return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
 
 
-def _props_of(params_node: ast.AST | None) -> dict[str, tuple[str | None, str | None]] | None:
-    """`params` 字面量里的 `{property: (type, items.type)}`。
+def _resolve_const(node: ast.AST | None, consts: Mapping[str, ast.AST]) -> ast.AST | None:
+    """沿模块级常量名往下解析，直到拿到一个不是"已知常量名"的节点。
 
-    返回 `None` = 读不出来（`params` 不是字典字面量，例如 `params=spec.params`）；
-    返回 `{}` = 读出来了、确认没有 `properties`。两者必须分开 —— 合成一态就会把
-    "这条工具的 schema 我看不见"读成"它没有参数，所以没问题"（P16 族的真空通过）。
+    审计 D-1 的另一半：原来只有一个 `resolve()` 作用在 `params=` 那一层，于是
+    `"items": _MAPPING_ROW_PARAMS`（`doc_tools` 里 `rows` 那一行恰恰这么写）永远解析不出来 ——
+    症状是 `items.type` 两侧都读成 `None`，那条 array 的比对就被"一侧只写 `{type:array}`"的
+    豁免吞掉了。**嵌套位置上的 Name 与顶层是同一件事**，必须在同一个解析器里走到。
     """
-    if not isinstance(params_node, ast.Dict):
-        return None
-    props = _dict_value(params_node, "properties")
-    if props is None:
-        return {}
-    if not isinstance(props, ast.Dict):
-        return None
-    out: dict[str, tuple[str | None, str | None]] = {}
-    for k, v in zip(props.keys, props.values):
-        name = _str_value(k)
-        if name is None:
+    seen = 0
+    while isinstance(node, ast.Name) and node.id in consts and seen < 10:
+        node = consts[node.id]
+        seen += 1
+    return node
+
+
+def _module_aliases(tree: ast.AST) -> dict[str, str]:
+    """模块里 `from .. import schema as S` 这类别名 -> 绝对模块名（`S` -> `agentflow.schema`）。
+
+    为什么需要它：工具源码里的边界常写成 `S.ID_DIGITS`（而不是字面量 6）。比的必须是
+    "两层说的数是不是同一个"，不是"两层写的表达式是不是同一个" —— 只认字面量会把
+    `S.ID_DIGITS` 与 `6` 判成分歧（假报警），而假报警会训练人忽略告警（P15）。
+    """
+    out: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom) or not node.level:
             continue
-        items = _dict_value(v, "items")
-        out[name] = (_str_value(_dict_value(v, "type")), _str_value(_dict_value(items, "type")))
+        package = "agentflow" if node.level >= 2 else "agentflow.tools"
+        if node.module:
+            base = f"{package}.{node.module}"
+            for alias in node.names:
+                out[alias.asname or alias.name] = f"{base}.{alias.name}"
+        else:
+            for alias in node.names:
+                out[alias.asname or alias.name] = f"{package}.{alias.name}"
+    return out
+
+
+#: `<模块>.<属性>` 常量名 -> 取值（含 `_UNRESOLVED` 的缓存）。
+_ALIAS_CONSTANTS: dict[tuple[str, str], Any] = {}
+
+
+def _attr_constant(module: str, attr: str) -> Any:
+    """`<module>.<attr>` 的取值。读不到（没有这个模块/属性）⇒ `_UNRESOLVED`。"""
+    key = (module, attr)
+    if key not in _ALIAS_CONSTANTS:
+        try:
+            value = getattr(importlib.import_module(module), attr)
+        except (ImportError, AttributeError):
+            value = _UNRESOLVED
+        _ALIAS_CONSTANTS[key] = value
+    return _ALIAS_CONSTANTS[key]
+
+
+def _literal(
+    node: ast.AST | None,
+    consts: Mapping[str, ast.AST],
+    aliases: Mapping[str, str],
+    depth: int = 0,
+) -> Any:
+    """把一棵表达式节点解析成 Python 值；解析不了 ⇒ `_UNRESOLVED`（不是 `None`）。
+
+    认四种形态：字面量、模块级常量名（任意深度，见 :func:`_resolve_const`）、
+    `<别名>.<常量>`（见 :func:`_module_aliases`）、以及字典/列表的递归。
+    刻意不认函数调用：`list(PM.ENV_KINDS)` 这类写法落在 `_UNRESOLVED` 上 ——
+    它没有"读错了"的风险，只有"没读出来"这一档。
+    """
+    if node is None or depth > 8:
+        return _UNRESOLVED
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        resolved = _resolve_const(node, consts)
+        if resolved is node:
+            return _UNRESOLVED
+        return _literal(resolved, consts, aliases, depth + 1)
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        module = aliases.get(node.value.id)
+        return _attr_constant(module, node.attr) if module else _UNRESOLVED
+    if isinstance(node, ast.Dict):
+        out: dict[str, Any] = {}
+        for k, v in zip(node.keys, node.values):
+            key = _literal(k, consts, aliases, depth + 1)
+            if not isinstance(key, str):
+                return _UNRESOLVED
+            out[key] = _literal(v, consts, aliases, depth + 1)
+        return out
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return [_literal(x, consts, aliases, depth + 1) for x in node.elts]
+    return _UNRESOLVED
+
+
+def _constraint_face(prop: Any) -> dict[str, Any]:
+    """一个 property 的约束面：只留 :data:`_PARAM_CONSTRAINT_KEYS` 里读得出来的那些键。
+
+    返回 `{}` 不是错误：一个只写 `{"type": "string"}` 的 property 约束面就是"只有 type"。
+    """
+    if not isinstance(prop, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    for key in ("type", "minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum"):
+        value = prop.get(key, _UNRESOLVED)
+        if value is not _UNRESOLVED and value is not None:
+            out[key] = value
+    required = prop.get("required", _UNRESOLVED)
+    if isinstance(required, (list, tuple)):
+        out["required"] = sorted(str(x) for x in required)
+    items = prop.get("items", _UNRESOLVED)
+    if isinstance(items, Mapping):
+        item_type = items.get("type", _UNRESOLVED)
+        if item_type is not _UNRESOLVED and item_type is not None:
+            out["items.type"] = item_type
+        item_required = items.get("required", _UNRESOLVED)
+        if isinstance(item_required, (list, tuple)):
+            out["items.required"] = sorted(str(x) for x in item_required)
     return out
 
 
@@ -497,27 +638,21 @@ def _module_constants(tree: ast.AST) -> dict[str, ast.AST]:
     return out
 
 
-def _declared_param_schemas(
-    tree: ast.AST,
-) -> list[tuple[str, dict[str, tuple[str | None, str | None]]]]:
-    """从一棵模块 AST 里读出 `(工具名, {property: (type, items.type)})`。
+def _declared_param_faces(tree: ast.AST) -> list[tuple[str, dict[str, Any] | None]]:
+    """从一棵模块 AST 里读出 `(工具名, 约束面)`；约束面是 `{property: 约束键}`。
+
+    约束面的形状是 `{"properties": {名: {...}}, "required": [根级必填]}`。
+    `None` = 这条工具的 `params` 读不出来（不是"没有参数"）：两者合成一态就会把
+    "这条工具的 schema 我看不见"读成"它没有参数，所以没问题"（P16 族的真空通过）。
 
     认三种声明形态（与 `_declared_side_effects` 同一套认名规则，多认一个 `params`）：
       - `ToolSpec(name="a.b", params={...})` / `ToolSpec("a.b", "...", {...})`；
       - `@tool("a.b", "...", params={...})` / `@tool("a.b", "...", {...})`；
-      - `params=<模块级常量名>`（解析一层，见 `_module_constants`）。
-
-    `params` 读不出来的工具不写进表（调用方按"这条工具没有比对"处理），
-    而不是写一条空 schema —— 后者的症状是"零分歧"，与真相无关。
+      - `params=<模块级常量名>`（任意深度解析，见 `_resolve_const`）。
     """
     consts = _module_constants(tree)
-    found: list[tuple[str, dict[str, tuple[str | None, str | None]]]] = []
-
-    def resolve(node: ast.AST | None) -> ast.AST | None:
-        if isinstance(node, ast.Name):
-            return consts.get(node.id, node)
-        return node
-
+    aliases = _module_aliases(tree)
+    found: list[tuple[str, dict[str, Any] | None]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -539,119 +674,478 @@ def _declared_param_schemas(
                 params_node = kw.value
         if not name:
             continue
-        props = _props_of(resolve(params_node))
-        if props is not None:
-            found.append((name, props))
+        resolved = _resolve_const(params_node, consts)
+        if not isinstance(resolved, ast.Dict):
+            found.append((name, None))
+            continue
+        props_node = _resolve_const(_dict_value(resolved, "properties"), consts)
+        if props_node is None:
+            found.append((name, {"properties": {}, "required": []}))
+            continue
+        props_literal = _literal(props_node, consts, aliases)
+        if not isinstance(props_literal, Mapping):
+            found.append((name, None))
+            continue
+        props = {str(k): _constraint_face(v) for k, v in props_literal.items()}
+        required_literal = _literal(_dict_value(resolved, "required"), consts, aliases)
+        required = (sorted(str(x) for x in required_literal)
+                    if isinstance(required_literal, (list, tuple)) else [])
+        found.append((name, {"properties": props, "required": required}))
     return found
 
 
-def _tool_param_schemas() -> dict[str, dict[str, tuple[str | None, str | None]]]:
-    """全仓工具名 -> `{property: (type, items.type)}`（读源码声明，不装配工具层）。"""
-    out: dict[str, dict[str, tuple[str | None, str | None]]] = {}
+def _tool_declared_names(modules: tuple[str, ...] | None = None) -> list[str]:
+    """这些模块里声明的工具名（不管 `params` 读不读得出来）。
+
+    为什么它必须与 `_tool_param_faces` 分开数：读数要能回答"工具层有 N 件，其中几件
+    读不出约束面" —— 只数读得出来的那些，`tools_read` 会把"读不出"悄悄折成"不存在"。
+    """
     base = Path(__file__).resolve().parent / "tools"
-    for mod_name in _TOOL_MODULES:
+    names: list[str] = []
+    for mod_name in (_TOOL_MODULES if modules is None else modules):
         path = base / f"{mod_name}.py"
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except (OSError, SyntaxError, ValueError):
             continue
-        for name, props in _declared_param_schemas(tree):
-            out[name] = props
+        names.extend(name for name, _face in _declared_param_faces(tree))
+    return names
+
+
+def _tool_param_faces(
+    modules: tuple[str, ...] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """全仓工具名 -> 约束面（读源码声明，不装配工具层）。
+
+    `params` 读不出来的工具**不写进表**：调用方按"这条工具没有比对"处理（unknown），
+    而不是给它一条空 schema —— 后者的症状是"零分歧"，与真相无关。
+    """
+    base = Path(__file__).resolve().parent / "tools"
+    out: dict[str, dict[str, Any]] = {}
+    for mod_name in (_TOOL_MODULES if modules is None else modules):
+        path = base / f"{mod_name}.py"
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, ValueError):
+            continue
+        for name, face in _declared_param_faces(tree):
+            if face is not None:
+                out[name] = face
     return out
 
 
-def _shape(declared: tuple[str | None, str | None]) -> str:
-    """把 `(type, items.type)` 渲染成人能读的一小段（只用于报错信息）。"""
-    t, it = declared
-    if t is None:
-        return "（读不出类型）"
-    return f"array<{it}>" if t == "array" and it else t
+def _face_text(face: Mapping[str, Any]) -> str:
+    """把约束面渲染成人能读的一小段（只用于报错信息）。"""
+    type_text = face.get("type")
+    item_type = face.get("items.type")
+    if type_text is None:
+        parts = ["（读不出类型）"]
+    elif type_text == "array" and item_type:
+        parts = [f"array<{item_type}>"]
+    else:
+        parts = [str(type_text)]
+    for key in ("minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum"):
+        if key in face:
+            parts.append(f"{key}={face[key]}")
+    if "required" in face:
+        parts.append(f"required={list(face['required'])}")
+    if "items.required" in face:
+        parts.append(f"items.required={list(face['items.required'])}")
+    return "，".join(parts)
+
+
+def _norm_constraint(value: Any) -> Any:
+    """约束值归一：列表按排序比（`required` 的顺序不是语义），其余原样。"""
+    if isinstance(value, (list, tuple)):
+        return sorted(str(x) for x in value)
+    return value
+
+
+def _face_diff(
+    cap_face: Mapping[str, Any],
+    tool_face: Mapping[str, Any],
+) -> dict[str, list[str]]:
+    """两层约束面的差：`{property: [取值不同的约束键]}`。
+
+    根级 `required` 用 :data:`_ROOT_REQUIRED` 当伪 property 名。
+    只比"两层都声明了这个 property"的那些（缺 property 由 `param_missing_in_actions` /
+    `param_missing_in_tools` 管，两件事不混）。一侧没声明某个键、另一侧声明了 ⇒ 也是差：
+    "未声明"是第三种取值，不是"相等"。
+    """
+    out: dict[str, list[str]] = {}
+    cap_props = cap_face.get("properties") or {}
+    tool_props = tool_face.get("properties") or {}
+    for prop in sorted(set(cap_props) & set(tool_props)):
+        cap_declared, tool_declared = cap_props[prop], tool_props[prop]
+        keys = [
+            key for key in _PARAM_CONSTRAINT_KEYS
+            if _norm_constraint(cap_declared.get(key)) != _norm_constraint(tool_declared.get(key))
+            and (key in cap_declared or key in tool_declared)
+        ]
+        if keys:
+            out[prop] = keys
+    if _norm_constraint(cap_face.get("required")) != _norm_constraint(tool_face.get("required")):
+        out[_ROOT_REQUIRED] = ["required"]
+    return out
+
+
+def _action_face(spec: ActionSpec) -> dict[str, Any]:
+    """动作声明的约束面（形状与读工具源码得到的约束面逐字相同，见 :func:`_face_diff`）。"""
+    params = spec.params or {}
+    props = {
+        str(name): _constraint_face(declared)
+        for name, declared in (params.get("properties") or {}).items()
+    }
+    required = sorted(str(x) for x in (params.get("required") or []))
+    return {"properties": props, "required": required}
+
+
+def tool_only_constraints(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[tuple[str, str], frozenset[str]]:
+    """工具面声明了、动作面没声明的**约束键**（`"<property>.<键>"` 形态）。
+
+    ## 为什么它与 `param_missing_in_actions` 是两件事
+    那一格管的是"工具面有、动作面没有这个 property"；这一格管的是"两层都有这个 property，
+    而工具面给它加了边界（`minLength` / `minimum` / `minItems` / 根级 `required`…），动作面只写了类型"。
+    审计 D-1 / D-2 / D-3 的真实形态全在这一格里：`doc.write_mapping` 的 `project` 有
+    `minLength=1/maxLength=300`、`rows` 有 `minItems=1` 与每行必填六格，动作面只写了
+    `_S` / `_ARR_OBJ` ⇒ 派活面比校验面松，而三层对账当时返回 `[]`。
+
+    只对"唯一匹配到工具、且那条工具的约束面读得出来"的对算（与类型对账同一档口径）。
+    """
+    table = CAPABILITIES if capabilities is None else capabilities
+    faces = _tool_param_faces() if tool_faces is None else tool_faces
+    out: dict[tuple[str, str], frozenset[str]] = {}
+    for role, specs in table.items():
+        for spec in specs:
+            cands = _candidates(spec, faces)
+            if len(cands) != 1:
+                continue
+            tool_face = faces.get(cands[0])
+            if tool_face is None:
+                continue
+            cap_face = _action_face(spec)
+            keys: set[str] = set()
+            tool_props = tool_face.get("properties") or {}
+            cap_props = cap_face.get("properties") or {}
+            for prop in sorted(set(cap_props) & set(tool_props)):
+                cap_declared, tool_declared = cap_props[prop], tool_props[prop]
+                for key in _PARAM_CONSTRAINT_KEYS:
+                    if key in tool_declared and key not in cap_declared:
+                        keys.add(f"{prop}.{key}")
+            missing_root = set(tool_face.get("required") or []) - set(cap_face.get("required") or [])
+            if missing_root:
+                keys.add(f"{_ROOT_REQUIRED}.required")
+            if keys:
+                out[(role, spec.action)] = frozenset(keys)
+    return out
+
+
+#: 已登记的"工具面独有约束"：`(角色, 动作)` -> (确定的那几个 `<property>.<键>`, 理由)。
+#:
+#: 为什么需要这一格：扩表之后（2026-10-22）对账一次性咬出 13 对、21 个键的不对称 ——
+#: 其中 `specs/g.py` / `specs/v.py` 里的六对**本次直接补齐**（工具层是校验的真身），
+#: 剩下七对落在 `specs/c.py` / `e.py` / `f.py` / `h.py`（本轮授权的改动面不含它们）。
+#: 处置与 `_KNOWN_UNMATCHED_ACTIONS` 同一条纪律：登记 = 让它可见，不是认可；
+#: 两个方向都由判据钉住（`unregistered_tool_only_constraints` 管"新长出来的"，
+#: `stale_tool_only_constraint_entries` 管"补齐了却没删的"），所以这张表只增不减会红。
+_KNOWN_TOOL_ONLY_CONSTRAINTS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
+    ("C", "neighbors"): (
+        frozenset({"concept_id.minLength", "concept_id.maxLength"}),
+        "`graph.neighbors` 的 `concept_id` 写了 `minLength=4` 与 `maxLength=S.ID_DIGITS`"
+        "（与 `C.relations_between` 的 `a`/`b` 同一套编号口径），动作面只写了 `_S`。"
+        "补齐它要改 `specs/c.py` —— 不在本轮授权的改动面里。"
+        "危害方向：派活面放行一个工具层必然拒收的编号，或反过来把一次合法派活判死。",
+    ),
+    ("C", "relations_between"): (
+        frozenset({"a.minLength", "a.maxLength", "b.minLength", "b.maxLength"}),
+        "`graph.relations_between` 的两个端点 `a` / `b` 同样带编号长度上下界，动作面只写了 `_S`。"
+        "与上一条同一处修法（`specs/c.py`），同一批人审一起改。",
+    ),
+    ("E", "check_formal"): (
+        frozenset({"timeout_sec.minimum"}),
+        "`verify.check_formal` 的 `timeout_sec` 有 `minimum=1`（零或负数会被校验拒），动作面只写了 `_N`。"
+        "改它在 `specs/e.py`。",
+    ),
+    ("E", "list_experiments"): (
+        frozenset({"limit.minimum"}),
+        "`verify.list_experiments` 的 `limit` 有 `minimum=0`，动作面只写了 `_I`。改它在 `specs/e.py`。",
+    ),
+    ("E", "run_experiment"): (
+        frozenset({"timeout.minimum"}),
+        "`verify.run_experiment` 的 `timeout` 有 `minimum=1`，动作面只写了 `_N`。改它在 `specs/e.py`。",
+    ),
+    ("F", "create_plan"): (
+        frozenset({"depth.minimum"}),
+        "`attack.create_plan` 的 `depth` 有 `minimum=0`，动作面只写了 `_I`。改它在 `specs/f.py`。",
+    ),
+    ("H", "verify_fixes"): (
+        frozenset({"round_no.minimum"}),
+        "`review.verify_fixes` 的 `round_no` 有 `minimum=1`（轮次从 1 起），动作面只写了 `_I`。"
+        "改它在 `specs/h.py`。",
+    ),
+}
+
+
+def unregistered_tool_only_constraints(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[str]:
+    """没登记的工具面独有约束（新的一对、或已登记那对又多出一个键）⇒ 判据报这个。"""
+    found = tool_only_constraints(capabilities, tool_faces)
+    bad: list[str] = []
+    for key, keys in sorted(found.items()):
+        known = _KNOWN_TOOL_ONLY_CONSTRAINTS.get(key)
+        if known is None:
+            bad.append(f"{key[0]}.{key[1]}：未登记的工具面独有约束 {sorted(keys)}")
+            continue
+        extra = sorted(set(keys) - set(known[0]))
+        if extra:
+            bad.append(f"{key[0]}.{key[1]}：已登记之外又多出 {extra}")
+    return bad
+
+
+def stale_tool_only_constraint_entries(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[str]:
+    """登记过期的条目（那个约束键不再独有了 / 那一对不再匹配）⇒ 判据也报这个。
+
+    与 `stale_missing_in_action_entries` 同一条道理：只增不减的登记表会烂成噪音，
+    而噪音里的真缺口就没人看了。
+    """
+    found = tool_only_constraints(capabilities, tool_faces)
+    stale: list[str] = []
+    for (role, action), (keys, _why) in sorted(_KNOWN_TOOL_ONLY_CONSTRAINTS.items()):
+        live = set(found.get((role, action), frozenset()))
+        gone = sorted(set(keys) - live)
+        if gone:
+            stale.append(
+                f"{role}.{action}：登记里的 {gone} 已经不再独有（动作面补齐了 / 工具面删了 / 那一对不匹配了）"
+                " ⇒ 删掉这几条登记"
+            )
+    return stale
 
 
 def param_type_divergences_for(
     capabilities: Mapping[str, tuple[ActionSpec, ...]],
-    tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]],
+    tool_faces: Mapping[str, Mapping[str, Any]],
 ) -> list[DeclarationDivergence]:
-    """判据本体（两张表都由调用方给）：两层对同一个 property 声明的类型不一致。
+    """判据本体（两张表都由调用方给）：两层对同一个 property 的约束面不一致。
 
-    只在"两层都声明了这个 property、且两层的 `type` 都是字面量"时判 —— 其余一律不判（那是"没有
-    比对"，不是"比对通过"；缺属性由 `param_seam_violations` 管）。
-    `array` 要连 `items.type` 一起比：`_ARR_S`（array<string>）与 `_ARR_OBJ`（array<object>）的
-    `type` 都是 `"array"` —— 只比 `type` 的话，§150 那三处缺陷一个都抓不到（`review_report` 那处
-    正是 `_ARR_S` vs array<object>）。
-    一处刻意不判（写下来免得下一个人以为漏了）：一侧给了 `items.type`、另一侧只写了 `{"type": "array"}` ⇒ 不报：`validate_params` 对没有 `items` 的 array 不施加形状约束，此时两层并不矛盾，只是其中一层说得更细。
+    比的是 :data:`_PARAM_CONSTRAINT_KEYS` 里那十格，不是只有 `type`。三层口径：
+
+    1. 只比"两层都声明了这个 property"的那些（缺 property 由 `param_missing_in_actions`
+       / `param_missing_in_tools` 管）—— 两件事不混；
+    2. 一侧声明了某个键、另一侧没声明 ⇒ 也算差："未声明"是第三种取值，不是"相等"；
+       原来那条"一侧只写 `{type: array}` 就不报"的豁免已经删掉 —— 它正是把
+       `doc.write_mapping.rows` 吞掉的那一条（`items` 写成模块常量名时两侧都读成 `None`，
+       于是"一侧有 items.type"这个前提根本不成立，豁免连判都没判就放过了）；
+    3. `_KNOWN_TOOL_ONLY_CONSTRAINTS` 里登记的"工具面独有约束"不在本函数里报（它们在
+       `tool_only_constraints()` 的读数与第 [9b] 条的两个方向断言里），所以本函数返回 `[]`
+       的含义是"没有未登记的约束不对称"，不是"两层逐字相同"。
+
+    `tool_faces` 的形状是 `{工具名: {"properties": {property: {约束键: 值}}, "required": [...]}}`
+    （见 :func:`_tool_param_faces`）；`_PARAMS_DERIVED_FROM_TOOL` 里登记的那几对，"真身"
+    就是它的来源 —— 判据消费的是派生结果，不是自己另比一遍。
     """
     out: list[DeclarationDivergence] = []
     for role, specs in capabilities.items():
         for spec in specs:
-            cands = _candidates(spec, tool_params)
+            cands = _candidates(spec, tool_faces)
             if len(cands) != 1:
                 continue
             tool_name = cands[0]
-            tool_props = tool_params.get(tool_name)
-            if tool_props is None:
+            tool_face = tool_faces.get(tool_name)
+            if tool_face is None:
                 continue
-            cap_props = (spec.params or {}).get("properties") or {}
-            for prop, cap_declared in cap_props.items():
-                if prop not in tool_props or not isinstance(cap_declared, Mapping):
+            cap_face = _action_face(spec)
+            known = _KNOWN_TOOL_ONLY_CONSTRAINTS.get((role, spec.action), (frozenset(), ""))[0]
+            cap_props = cap_face.get("properties") or {}
+            tool_props = tool_face.get("properties") or {}
+            for prop, keys in sorted(_face_diff(cap_face, tool_face).items()):
+                kept: list[str] = []
+                for key in keys:
+                    cap_declared = cap_props.get(prop, {})
+                    tool_declared = tool_props.get(prop, {})
+                    tool_only = key in tool_declared and key not in cap_declared
+                    if tool_only and f"{prop}.{key}" in known:
+                        continue
+                    kept.append(key)
+                if not kept:
                     continue
-                tool_declared = tool_props[prop]
-                cap_type, cap_items = cap_declared.get("type"), (cap_declared.get("items") or {}).get("type")
-                tool_type, tool_items = tool_declared
-                if cap_type is None or tool_type is None:
-                    continue
-                if cap_type == tool_type and not (cap_type == "array" and cap_items and tool_items
-                                                  and cap_items != tool_items):
-                    continue
+                if prop == _ROOT_REQUIRED:
+                    detail = (
+                        f"根级 required：能力层 {list(cap_face.get('required') or [])}，"
+                        f"工具层 {list(tool_face.get('required') or [])}"
+                    )
+                else:
+                    detail = (
+                        f"property {prop!r} 的约束键 {kept}：能力层声明 "
+                        f"{_face_text(cap_props.get(prop, {}))}，工具层声明 "
+                        f"{_face_text(tool_props.get(prop, {}))}"
+                    )
                 out.append(DeclarationDivergence(
                     "two_layer_param_type_divergence", "error",
                     f"{role}.{spec.action} <-> {tool_name}",
-                    f"property {prop!r}：能力层声明 {_shape((cap_type, cap_items))}，"
-                    f"工具层声明 {_shape((tool_type, tool_items))} —— 两层对"
-                    "『这个参数是什么形状』有两个答案。危害不是报错而是**判错**："
+                    detail
+                    + " —— 两层对『这个参数的边界』有两个答案。危害不是报错而是判错："
                     "参数门（`Conductor._check_params`）读的是能力表，而 `ToolRegistry.call` "
                     "第一步 `validate_params` 读的是工具表 ⇒ 一条合法派活会被能力表判死"
                     "（§150 的 `dependencies` 就是这样：能力层 `_OBJ` vs 工具层 array<object>），"
                     "或者反过来放行一个工具层必然拒收的形状。"
-                    "**改哪一层由人定**：工具层是校验的真身，能力层是派活的契约，"
+                    "改哪一层由人定：工具层是校验的真身，能力层是派活的契约，"
                     "两者对不上时先问『谁在说谎』，不许让判据替你选。",
                 ))
     return out
 
 
 def param_type_divergences() -> list[DeclarationDivergence]:
-    """真实树上的类型对账读数（`param_type_divergences_for` 读全局版本）。"""
-    return param_type_divergences_for(CAPABILITIES, _tool_param_schemas())
+    """真实树上的参数对账读数（`param_type_divergences_for` 读全局版本）。"""
+    return param_type_divergences_for(CAPABILITIES, _tool_param_faces())
 
 
 def param_type_coverage() -> dict:
-    """类型对账的覆盖率读数：判据看进去多少（P16：零分歧必须配上覆盖读数）。
+    """参数对账的覆盖率读数：判据看进去多少（P16：零分歧必须配上覆盖读数）。
 
-    - `tools_read`：`params` schema 读出来的工具数；
-    - `compared`：两层都声明了类型、真的逐对比过的 (动作, property) 对数；
-    - `unread`：对上了唯一工具、但那条工具的 `params` 读不出来（三态里的 unknown）。
+    键与它们的用途：
+    - `tools_read`：读出了约束面的工具数；
+    - `tools_in_registry_modules`：`tools._MODULES`（工具面的真身）声明的工具数；
+    - `tools_unread`：那些工具里 `params` 读不出来的（`table_tools` / `fs_tools` 把
+      `params` 写成 `_obj(...)` 调用，不是字典字面量 ⇒ unknown，不是"没有参数"）；
+    - `tools_read_but_not_registered`：读到了、但不在 `tools._MODULES` 里的（今天只有
+      `conjecture.register_conjecture`，理由见 `_TOOL_MODULE_EXTRAS`）；
+    - `modules_missing`：名单里有、盘上没有的模块（unknown）；
+    - `compared` / `keys_compared`：逐对看过的 (动作, property) 对数与 (动作, property, 键) 个数；
+    - `unread`：对上了唯一工具、但那条工具的约束面读不出来（unknown）；
+    - `tool_only_constraints` / `registered_tool_only_constraints`：工具面独有约束的实测数与登记数；
+    - `keys_not_compared`：扩表时**刻意没比**的键（`enum` 等）—— 不写的键不会自己变红。
 
-    刻意不给"应该达到多少"的硬编码下限：工具增删会让它漂。导入期断言用的是
-    "`compared` 不许为 0 而 `unread` 一大堆"（见 `assert_capabilities` 第 [9] 条）。
+    为什么要 `tools_in_registry_modules` + `tools_unread` + `tools_read_but_not_registered` 三个数：
+    只报一个 `tools_read` 时，"77" 与 "95" 之间的 18 件没有出处，读的人只能猜（审计 D-6）。
+    三个数一起写，等式是 `tools_in_registry_modules = tools_read + len(tools_unread)
+    - len(tools_read_but_not_registered)`，导入期打在 stderr 上。
     """
-    schemas = _tool_param_schemas()
+    from .tools import _MODULES as REGISTRY_MODULES
+
+    faces = _tool_param_faces()
+    registry_faces = _tool_param_faces(REGISTRY_MODULES)
+    registry_names = _tool_declared_names(REGISTRY_MODULES)
+    base = Path(__file__).resolve().parent / "tools"
     compared = 0
+    keys_compared = 0
     unread: list[str] = []
     for role, specs in CAPABILITIES.items():
         for spec in specs:
-            cands = _candidates(spec, schemas)
+            cands = _candidates(spec, faces)
             if len(cands) != 1:
                 continue
-            tool_props = schemas.get(cands[0])
-            if tool_props is None:
+            tool_face = faces.get(cands[0])
+            if tool_face is None:
                 unread.append(f"{role}.{spec.action} <-> {cands[0]}")
                 continue
-            for prop, declared in ((spec.params or {}).get("properties") or {}).items():
-                if not isinstance(declared, Mapping):
-                    continue
-                if prop in tool_props and declared.get("type") and tool_props[prop][0]:
-                    compared += 1
-    return {"tools_read": len(schemas), "compared": compared, "unread": sorted(unread)}
+            cap_props = _action_face(spec).get("properties") or {}
+            tool_props = tool_face.get("properties") or {}
+            for prop in sorted(set(cap_props) & set(tool_props)):
+                compared += 1
+                keys_compared += len(set(cap_props[prop]) | set(tool_props[prop]))
+    return {
+        "tools_read": len(faces),
+        "tools_in_registry_modules": len(registry_names),
+        "tools_unread": sorted(set(registry_names) - set(registry_faces)),
+        "tools_read_but_not_registered": sorted(set(faces) - set(registry_names)),
+        "modules_missing": sorted(
+            m for m in _TOOL_MODULES if not (base / f"{m}.py").is_file()
+        ),
+        "compared": compared,
+        "keys_compared": keys_compared,
+        "unread": sorted(unread),
+        "tool_only_constraints": len(tool_only_constraints(tool_faces=faces)),
+        "registered_tool_only_constraints": len(_KNOWN_TOOL_ONLY_CONSTRAINTS),
+        "keys_not_compared": list(_PARAM_KEYS_NOT_COMPARED),
+    }
+
+
+#: "动作面参数的真身在工具层"的对：`(角色, 动作)` -> 理由。
+#:
+#: 2026-10-22 业主裁定（治本口径）：同一件事只有一个真身，另一层必须派生自它 ——
+#: `G.write_mapping` 的 `project` / `rows` 与 `V.verify_proof` 的 `proof_no` 就是被点名的三处。
+#: 真身是工具层（`tools/doc_tools.py` / `tools/verify_tools.py` 里 `validate_params` 真正读的那一份），
+#: 动作面只镜像它的约束键；漂移由第 [9c] 条逐键对拍（`param_derivation_violations()`）。
+#: 为什么不直接把动作面写成 `action_params_from_tool(...)` 的调用：`specs/` 是声明层，
+#: 让它 import `capabilities` 会造出 `capabilities -> specs -> capabilities` 的循环导入；
+#: 所以"派生"落在断言上（改工具层 ⇒ 导入期当场红），而不是落在运行期取值上。
+_PARAMS_DERIVED_FROM_TOOL: dict[tuple[str, str], str] = {
+    ("G", "write_mapping"): (
+        "审计 D-2：动作面原来只有 `project: _S` 与 `rows: _ARR_OBJ`，而工具面"
+        "（`doc.write_mapping`）有 `project.minLength=1/maxLength=300`、"
+        "`rows.minItems=1` 与每行必填六格（kind/label/env_no/ledger_id/proof_no/file）"
+        " ⇒ 动作门 PASS、工具门 REJECT，而三层对账返回 `[]`。"
+        "真身是工具层：它是 `papermapping.parse_rows` 之前真正校验的那一份。"
+    ),
+    ("V", "verify_proof"): (
+        "审计 D-3：动作面的 `proof_no` 只有 `_I`，工具面有 `minimum=1`"
+        "（第几条证明，1 = canonical）。真身是工具层 —— 给工具面放宽不算修，"
+        "把动作面补到与工具面同界才算。"
+    ),
+}
+
+
+def action_params_from_tool(
+    role: str,
+    action: str,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """一条动作的参数真身：它唯一匹配到的工具的约束面（`{property: {约束键: 值}}`）。
+
+    `None` = 没有唯一匹配的工具 / 那条工具的 `params` 读不出来 / 动作不存在 ——
+    三态里的 unknown，**不是**"两层一致"（`B.register_statement` 就是这一档：它没有同名工具）。
+    """
+    faces = _tool_param_faces() if tool_faces is None else tool_faces
+    spec = find_action(role, action)
+    if spec is None:
+        return None
+    cands = _candidates(spec, faces)
+    if len(cands) != 1:
+        return None
+    return faces.get(cands[0])
+
+
+def param_derivation_violations(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[str]:
+    """`_PARAMS_DERIVED_FROM_TOOL` 里那几对的逐键对拍（导入期第 [9c] 条读它）。
+
+    它比 :func:`param_type_divergences` 窄（只看登记的那几对），但更强：派生面读不出来
+    （unknown）在这里也是红 —— 而在 `param_type_divergences` 里那只是"没比对"。
+    返回人话列表（空 = 通过）；每一条都点名 (角色, 动作) 与差异的 property/键。
+    """
+    table = CAPABILITIES if capabilities is None else capabilities
+    faces = _tool_param_faces() if tool_faces is None else tool_faces
+    out: list[str] = []
+    for (role, action), why in sorted(_PARAMS_DERIVED_FROM_TOOL.items()):
+        spec = next((s for s in table.get(role, ()) if s.action == action), None)
+        if spec is None:
+            out.append(f"{role}.{action}：登记说它的参数真身在工具层，而动作面里没有这条动作（登记过期）")
+            continue
+        derived = action_params_from_tool(role, action, faces)
+        if derived is None:
+            out.append(
+                f"{role}.{action}：派生面读不出来（没有唯一匹配的工具 / 那条工具的 `params` 不是字面量）"
+                f" ⇒ 这一格是 unknown，不是一致。登记的理由：{why}"
+            )
+            continue
+        for prop, keys in sorted(_face_diff(_action_face(spec), derived).items()):
+            cap_props = _action_face(spec).get("properties") or {}
+            out.append(
+                f"{role}.{action}：{prop} 的 {keys} 与工具层（真身）不一致 —— 动作面声明 "
+                f"{_face_text(cap_props.get(prop, {}))}，工具层声明 "
+                f"{_face_text((derived.get('properties') or {}).get(prop, {}))}"
+            )
+    return out
 
 
 #: 实测的"工具面声明了、动作面没声明"的 property（`two_layer_param_missing_in_action`）。
@@ -706,6 +1200,23 @@ _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "`review.verify_fixes` 有 `max_review_rounds`，动作面没声明。",
     ),
 }
+
+
+def _tool_param_schemas() -> dict[str, dict[str, tuple[str | None, str | None]]]:
+    """工具名 -> `{property: (type, items.type)}` 的旧视图（从约束面派生，不是第二次读源码）。
+
+    为什么留着它：`param_missing_in_actions` 那一族（工具面有、动作面没有的 property）只需要
+    property 名与类型，而 `tests/test_capabilities_reverse_param_gaps.py` 是拿这个形状喂替身表的
+    （`{p: (None, None)}`）。让两处各有各的形状而**读源码只有一处**（`_tool_param_faces`），
+    比为了统一形状去改一张已登记的替身表安全。
+    """
+    return {
+        name: {
+            prop: (face.get("type"), face.get("items.type"))
+            for prop, face in (face_of_tool.get("properties") or {}).items()
+        }
+        for name, face_of_tool in _tool_param_faces().items()
+    }
 
 
 def param_missing_in_actions(
@@ -791,6 +1302,228 @@ def stale_missing_in_action_entries(
     return stale
 
 
+# ------------------------------------------------- 动作面独有参数（反向的另一半，审计 D-4）
+#
+# 上面那一族管"工具面有、动作面没有"；这一族管"动作面有、工具面没有"。两者的**计算范围不同**，
+# 口径必须写死（2026-10-22 业主裁定，甲方案）：
+#
+# - 有工具面的动作（唯一匹配到某件工具）⇒ 逐 property 算：动作面声明了、工具面没有的那些就是
+#   动作面独有参数。今天 23 对里 6 对有缺口（9 个 property）。
+# - 没有工具面的动作（`B.register_statement` 这类：整条动作没有同名工具）⇒ **不**逐 property 算。
+#   把"没有工具层"一律当成"每个 property 都独有"，实测会得到 42 对、111 个 property 的清单，
+#   而那与 `_KNOWN_UNMATCHED_ACTIONS`（同样那 39 条动作）是同一个事实的第二份登记 ——
+#   同一个事实记在两处必然漂。这一档进下面那张表的第二栏：按 (角色, 动作) 登记，
+#   且登记的 property 集合必须**等于**动作面声明的集合（多一个少一个都红）。
+#
+# 判据本体在 `tests/test_two_layer_constraints_really_match.py`（与 `_KNOWN_TOOL_ONLY_PARAMS`
+# 同一条纪律：登记是可见性，不是认可；改哪一层由人定）。
+
+#: 动作面独有参数登记：`(角色, 动作)` -> (那一对的全部动作面独有 property, 理由)。
+#:
+#: 第一栏（有工具面）：值就是"工具面没有的那些 property"。
+#: 第二栏（没有工具面）：值是动作面声明的**全部** property —— 因为那时"工具面"是空集，
+#: 动作面的每一个 property 都只活在动作面。第二栏的意义正是"这条动作没有工具层"这件事，
+#: 而不是逐格挑刺：所以判据要求"登记集合 == 动作面声明的集合"，删掉任何一个都红。
+_KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
+    ("B", "run"): (
+        frozenset({"max_docs"}),
+        "`B.run` 的落地工具是 `ocr.run`（⑫ 的接线），而 `ocr.run` 一次只读一份 PDF；"
+        "`max_docs` 是 `B.run` 自己的有界连续抽取上限（循环在角色级实现里）⇒ 工具面没有它。"
+        "补一个同名工具会把两件事压成一件（一次 OCR 与一轮有界抽取），所以登记。",
+    ),
+    ("C", "neighbors"): (
+        frozenset({"depth", "max_nodes"}),
+        "`graph.neighbors` 的图上参数叫 `max_neighbors`；`depth` / `max_nodes` 是 C 角色级"
+        "遍历的上限（BFS 深度与节点数），工具面没有这两个名字 ⇒ 动作面独有。"
+        "要不要把它们暴露成工具参数是 C 的算法口径问题，未见裁定。",
+    ),
+    ("C", "relations_between"): (
+        frozenset({"include_inactive"}),
+        "`graph.relations_between` 只列现行关系；`include_inactive` 是动作面多出来的"
+        "「算不算已失效关系」开关 ⇒ 工具面没有（它今天恒按现行算）。",
+    ),
+    ("E", "run_experiment"): (
+        frozenset({"name", "sleep"}),
+        "`name` 只在 `method=\"formal\"` 时有意义（工具面同一件事叫 `run_name`）；"
+        "`sleep` 只服务替身夹具、实现侧刻意不收（逐条理由在 `PARAM_SEAMS`）⇒ 两者都没有"
+        "同名工具参数。",
+    ),
+    ("E", "check_formal"): (
+        frozenset({"name"}),
+        "`verify.check_formal` 指定检查器的那一格叫 `checker_name`，动作面叫 `name` ⇒"
+        "名字对不上；改哪一边会同时动工具面与能力面，先登记。",
+    ),
+    ("H", "list_findings"): (
+        frozenset({"kind"}),
+        "`review.list_findings` 按 `level` / `status` 过滤，而动作面按 `kind` 过滤 ⇒"
+        "动作面独有；`kind` 是 H 的发现分类，工具面今天不认这个名字。",
+    ),
+    ("B", "register_statement"): (
+        frozenset({
+            "statement_full", "source_lit_id", "proof_text", "proofs", "kind", "label",
+            "statement_text", "origin", "page_range", "evidence_kind", "quote_verified",
+            "quote_mode", "quote_reason", "doc_id", "line_range", "derived_from",
+        }),
+        "这条动作没有同名工具：`proofs`（以及其余十五格）由 `AgentB.register_statement(proofs=...)`"
+        "直接收 —— 整条动作的 schema 就是动作声明本身（`table.create` 那条通用写口被"
+        "`store.direct_write_refusal` 挡住，拒信里指的 `own.register_statement` 路由没有"
+        "独立的工具 schema，它取的就是这份动作声明）。所以这里的 property 不是"
+        "「工具面漏了」，而是「唯一落点」；登记它是为了让"
+        "「B 的 proofs 没有工具层」这件事实可见 —— 不登记时它落在 unknown，"
+        "而 unknown 与「两层一致」在读数上长得一样（审计 D-4）。"
+        "判据：登记集合必须等于动作面声明的集合（`unregistered_missing_in_tools` 第 ③ 条）。",
+    ),
+}
+
+
+def _action_props(spec: ActionSpec) -> frozenset[str]:
+    """一条动作声明的 property 名集合。"""
+    return frozenset(str(p) for p in ((spec.params or {}).get("properties") or {}))
+
+
+def param_missing_in_tools(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[tuple[str, str], list[str]]:
+    """动作面声明了、它唯一匹配到的工具面没有的 property（第一栏）。
+
+    只对"唯一匹配到工具、且那条工具的约束面读得出来"的对算 —— 与 `param_missing_in_actions`
+    同一档口径（多义与读不出来的都不猜）。没有工具面的对（`B.register_statement` 这类）
+    不在这里，它们进 `_KNOWN_ACTION_ONLY_PARAMS` 的第二栏，由
+    :func:`unregistered_missing_in_tools` 的第 ③ 条判。
+    """
+    table = CAPABILITIES if capabilities is None else capabilities
+    faces = _tool_param_faces() if tool_faces is None else tool_faces
+    out: dict[tuple[str, str], list[str]] = {}
+    for role, specs in table.items():
+        for spec in specs:
+            cands = _candidates(spec, faces)
+            if len(cands) != 1:
+                continue
+            tool_face = faces.get(cands[0])
+            if tool_face is None:
+                continue
+            tool_props = set(tool_face.get("properties") or {})
+            missing = sorted(_action_props(spec) - tool_props)
+            if missing:
+                out[(role, spec.action)] = missing
+    return out
+
+
+def param_missing_in_tools_coverage(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict:
+    """动作面独有参数的覆盖读数（P16：空集永远是子集，所以必须配"比过多少对"）。
+
+    三格分开数，因为它们的"没有缺口"说的不是同一句话：`pairs_with_tool`（真的逐 property
+    比过）、`unmatched`（动作对应 0 个工具 ⇒ 整条动作没有工具层）、`unreadable`
+    （对应唯一工具但它的 `params` 读不出来 ⇒ unknown）。把后两格并进第一格，
+    "6 对没有缺口"就会被读成"两层都对齐了"。
+    """
+    table = CAPABILITIES if capabilities is None else capabilities
+    faces = _tool_param_faces() if tool_faces is None else tool_faces
+    pairs_with_tool = 0
+    unmatched: list[str] = []
+    unreadable: list[str] = []
+    ambiguous: list[str] = []
+    for role, specs in table.items():
+        for spec in specs:
+            cands = _candidates(spec, faces)
+            where = f"{role}.{spec.action}"
+            if not cands:
+                unmatched.append(where)
+                continue
+            if len(cands) > 1:
+                ambiguous.append(where)
+                continue
+            if faces.get(cands[0]) is None:
+                unreadable.append(where)
+                continue
+            pairs_with_tool += 1
+    return {
+        "pairs_with_tool": pairs_with_tool,
+        "unmatched": sorted(unmatched),
+        "ambiguous": sorted(ambiguous),
+        "unreadable": sorted(unreadable),
+        "gaps": len(param_missing_in_tools(table, faces)),
+        "registered": len(_KNOWN_ACTION_ONLY_PARAMS),
+    }
+
+
+def unregistered_missing_in_tools(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[str]:
+    """未登记 / 登记不全的动作面独有参数（三条判据，缺一条就有一种坏法看不见）。
+
+    ① 有工具面的对：计算出来的缺口必须在登记表里，且不许比登记的多；
+    ② 第二栏（没有工具面的对）：登记的 property 集合必须**等于**动作面声明的集合 ——
+       动作面新加一格而没登记 ⇒ 这里红（这是本判据的牙：删掉登记里的 `proofs` 也走这一条）；
+    ③ 登记过期由 :func:`stale_action_only_entries` 管（两个方向分开报，修法不同）。
+    """
+    table = CAPABILITIES if capabilities is None else capabilities
+    faces = _tool_param_faces() if tool_faces is None else tool_faces
+    found = param_missing_in_tools(table, faces)
+    bad: list[str] = []
+    for key, missing in sorted(found.items()):
+        known = _KNOWN_ACTION_ONLY_PARAMS.get(key)
+        if known is None:
+            bad.append(f"{key[0]}.{key[1]}：未登记的动作面独有参数 {missing}")
+            continue
+        extra = sorted(set(missing) - set(known[0]))
+        if extra:
+            bad.append(f"{key[0]}.{key[1]}：已登记之外又多出 {extra}")
+    for (role, action), (props, _why) in sorted(_KNOWN_ACTION_ONLY_PARAMS.items()):
+        spec = next((s for s in table.get(role, ()) if s.action == action), None)
+        if spec is None:
+            continue  # 由 stale 管（动作已经不在了）
+        cands = _candidates(spec, faces)
+        if len(cands) == 1 and faces.get(cands[0]) is not None:
+            continue  # 有工具面 ⇒ 由上面的 ① 与 stale 管
+        unregistered = sorted(_action_props(spec) - set(props))
+        if unregistered:
+            bad.append(
+                f"{role}.{action}：动作面声明了 {unregistered}，而登记表里没有它们 ——"
+                "这条动作没有工具层，所以它的每个 property 都只活在动作面；"
+                "没登记的那几格在读数里等于不存在（unknown 被读成「一致」）"
+            )
+    return bad
+
+
+def stale_action_only_entries(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_faces: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[str]:
+    """登记过期：登记的 property 不再独有、或那一对的"没有工具层"前提已经变了。
+
+    与 `stale_missing_in_action_entries` 同一条道理：只增不减的登记表会烂成噪音。
+    """
+    table = CAPABILITIES if capabilities is None else capabilities
+    faces = _tool_param_faces() if tool_faces is None else tool_faces
+    found = param_missing_in_tools(table, faces)
+    stale: list[str] = []
+    for (role, action), (props, _why) in sorted(_KNOWN_ACTION_ONLY_PARAMS.items()):
+        spec = next((s for s in table.get(role, ()) if s.action == action), None)
+        if spec is None:
+            stale.append(f"{role}.{action}：能力表里已经没有这条动作 ⇒ 删掉这条登记")
+            continue
+        cands = _candidates(spec, faces)
+        if len(cands) == 1 and faces.get(cands[0]) is not None:
+            live = set(found.get((role, action), []))
+            gone = sorted(set(props) - live)
+            if gone:
+                stale.append(
+                    f"{role}.{action}：这条动作现在有工具面了，而登记里的 {gone} 工具面已经有了 ⇒"
+                    " 删掉这几条登记（它不再是「动作面独有」）"
+                )
+            continue
+        gone = sorted(set(props) - _action_props(spec))
+        if gone:
+            stale.append(f"{role}.{action}：动作面已经没有 {gone} ⇒ 删掉这几条登记")
+    return stale
+
+
 def _tool_axes(declared: tuple[str, str, bool]) -> tuple[str, str, bool]:
     """工具层一个声明在两根轴上的取值，以及"external 是不是精确声明"。
 
@@ -869,10 +1602,13 @@ PARAM_SEAMS: dict[tuple[str, str, str], str] = {
 #: 键：`roles` / `actions` / `declared` / `checked` / `seams`。
 PARAM_ASSERT_COVERAGE: dict[str, int] = {}
 
-#: 两层参数类型对账上一次的覆盖计数（由 :func:`assert_capabilities` 第 [9] 条就地写）。
-#: 键：`tools_read` / `compared` / `unread`（`unread` 是列表，另存一份计数时用 `len`）。
+#: 两层参数约束面对账上一次的覆盖计数（由 :func:`assert_capabilities` 第 [9] 条就地写）。
+#: 键：`tools_read` / `tools_in_registry_modules` / `tools_unread` / `tools_read_but_not_registered` /
+#: `modules_missing` / `compared` / `keys_compared` / `unread` / `tool_only_constraints` /
+#: `registered_tool_only_constraints` / `keys_not_compared`。读它：
+#: `python -c "import agentflow.capabilities as c; print(c.PARAM_TYPE_COVERAGE)"`。
 #: 与 `PARAM_ASSERT_COVERAGE` 分开放：两条断言的覆盖率不是一回事
-#: （那条数 property 名与实现签名，这条数"两层都给了类型的 (动作, property) 对"）。
+#: （那条数 property 名与实现签名，这条数"两层都给了约束的 (动作, property, 键) 三元组"）。
 PARAM_TYPE_COVERAGE: dict[str, Any] = {}
 
 #: 反向那一格（工具面有、动作面没有）的覆盖读数：与 `PARAM_TYPE_COVERAGE` 同一条理由 ——
@@ -881,6 +1617,12 @@ PARAM_TYPE_COVERAGE: dict[str, Any] = {}
 #: 这里刻意不放导入期断言（所有者 5b 授权的形态是"补反向 + 新计数并入读数"）；
 #: 判据本体与登记表对账在 `tests/test_capabilities_reverse_param_gaps.py`。
 PARAM_MISSING_IN_ACTION_COVERAGE: dict[str, Any] = {}
+
+#: 反向的另一半（动作面有、工具面没有）的覆盖读数，由第 [10] 条就地写。
+#: 键：`pairs_with_tool` / `unmatched` / `ambiguous` / `unreadable` / `gaps` / `registered`。
+#: 三格分开数：只有 `pairs_with_tool` 那一格真的逐 property 比过；`unmatched`（整条动作
+#: 没有工具层）与 `unreadable`（工具面读不出来）是 unknown，不许并进第一格。
+PARAM_ACTION_ONLY_COVERAGE: dict[str, Any] = {}
 
 
 def handler_accepted(role: str, action: str) -> tuple[frozenset[str], bool]:
@@ -2097,30 +2839,34 @@ def assert_capabilities(
         "两条的修法完全不同，报出来要能一眼分开"
     )
 
-    # ---- [9] 两层参数类型对账（`R-36`）
+    # ---- [9] 两层参数对账（`R-36`；2026-10-22 扩表：比的是约束面，不是只有 type）
     #
     # R-36（`draft/28` §150.5）：上面的 [8] 只比 property 名与实现签名，不比类型；
-    # [7] 只比两根轴。于是"两层对同一个参数声明的类型不一致"这一整类缺陷
+    # [7] 只比两根轴。于是"两层对同一个参数声明的边界不一致"这一整类缺陷
     # 没有任何机器判据 —— §150 那三处（`H.review` / `H.verify_fixes` 的
     # `dependencies` 声明成 `_OBJ`、`H.review_report` 声明成 `_ARR_S`，工具层四条
-    # 一直是 array-of-objects）就是它漏的。当时的判据是一条注释 + 一条单测；
-    # 本批把它变成导入期断言，并当场咬出第四处（`G.register_dependency.page_range`）。
+    # 一直是 array-of-objects）就是它漏的。
+    # 2026-10-22（审计 D-1/2/3/6/7）：只比 `type` / `items.type` 仍然漏一整族 ——
+    # `G.write_mapping` 的 `rows`（工具面 `minItems=1` ＋ 每行必填六格）、`project`
+    # （`minLength=1/maxLength=300`）、`V.verify_proof` 的 `proof_no`（`minimum=1`）
+    # 三处真实分歧，`param_type_divergences()` 当时返回 `[]`。现在比
+    # `_PARAM_CONSTRAINT_KEYS` 那十格，并且 `_module_constants` 会解析嵌套 `items` 里的
+    # 常量名（`doc_tools._MAPPING_ROW_PARAMS`）—— 那条 array 以前连"两侧都有 items.type"
+    # 这个前提都不成立，于是被"一侧只写 `{type:array}`"的豁免连判都没判就放过。
     #
-    # 为什么类型不一致是 error 而不是 warning：参数门读能力表、工具层校验读工具表，
+    # 为什么不一致是 error 而不是 warning：参数门读能力表、工具层校验读工具表，
     # 两层不一致的后果不是崩溃而是判错（合法派活被判死，或必然被拒的形状被放行），
     # 与 [7] 的"能力层低估风险轴"同一档：错了不吵，静默地错。
-    #
-    # 三条断言的顺序与 [8] 逐条同形，理由也同形：先报"表里有问题"，再报"判据自己没走遍"。
     type_coverage = param_type_coverage()
     PARAM_TYPE_COVERAGE.clear()
     PARAM_TYPE_COVERAGE.update(type_coverage)
     type_divergences = param_type_divergences()
     assert not type_divergences, (
-        "两层对同一个参数声明的类型不一致："
+        "两层对同一个参数声明的边界不一致（能力层是派活的契约、工具层是校验的真身）："
         + "；".join(f"[{d.code}] {d.where}: {d.message}" for d in type_divergences)
     )
     assert not type_coverage["unread"], (
-        "这些动作的唯一匹配工具，其 `params` schema **读不出来**（不是字面量，例如 "
+        "这些动作的唯一匹配工具，其 `params` 约束面读不出来（不是字面量，例如 "
         f"`params=some_variable`）：{type_coverage['unread']}。"
         "读不出来的工具在这条判据里是 unknown，而 unknown 多了以后『零分歧』"
         "就不再是证据（P16 真空通过）。两条出路：① 把 `params` 写成字面量 "
@@ -2128,19 +2874,57 @@ def assert_capabilities(
         "② 若确实做不到，请把这条动作登记进一张显式表并写明理由 —— "
         "不许让它静默地落在判据外。"
     )
-    assert type_coverage["compared"] > 0, (
-        "两层参数类型对账**一对都没比过**（compared=0）—— 这不可能来自'两层都没声明类型'"
+    assert type_coverage["compared"] > 0 and type_coverage["keys_compared"] > 0, (
+        "两层参数对账一对都没比过（compared / keys_compared 至少一个为 0）——"
+        "这不可能来自'两层都没声明约束'"
         "（能力表声明了 "
         f"{PARAM_ASSERT_COVERAGE.get('declared', 0)} 个 property，工具表也有各自的 schema），"
-        "只可能来自判据自身失效（例如 `_tool_param_schemas()` 读不到任何工具模块）。"
+        "只可能来自判据自身失效（例如 `_tool_param_faces()` 读不到任何工具模块）。"
         "零分歧此时不构成证据"
+    )
+    # [9b] 工具面独有约束的两向对拍（`_KNOWN_TOOL_ONLY_CONSTRAINTS`）。
+    #
+    # 扩表之后一次咬出 13 对 21 个键：`specs/g.py` / `specs/v.py` 里的六对本次直接补齐
+    # （工具层是真身），剩下七对落在 `specs/c.py` / `e.py` / `f.py` / `h.py`，逐条登记。
+    # 两个方向都要断言：新长出来的不对称 ⇒ 红（否则登记表会变成万能豁免）；
+    # 补齐了却没删登记 ⇒ 也红（否则登记表会烂成噪音，而噪音里的真缺口没人看）。
+    unregistered_constraints = unregistered_tool_only_constraints()
+    assert not unregistered_constraints, (
+        "出现了没登记的工具面独有约束（工具面给了边界、动作面只写了类型）⇒ 派活面比校验面松："
+        + "；".join(unregistered_constraints)
+        + "。两条出路：① 把动作面补齐到与工具面同界（`specs/*.py`，禁改区、要人审）；"
+        "② 登记进 `_KNOWN_TOOL_ONLY_CONSTRAINTS` 并写明为什么不改"
+    )
+    stale_constraints = stale_tool_only_constraint_entries()
+    assert not stale_constraints, (
+        f"这些约束不对称已经不在了，登记却没有删：{stale_constraints} —— 登记表必须自我清理，"
+        "否则它会烂成噪音，而噪音里的真缺口就没人看了"
+    )
+    # [9c] "参数真身在工具层"的那几对：逐键对拍（`_PARAMS_DERIVED_FROM_TOOL`）。
+    #
+    # 为什么它必须与 [9] 分开： [9] 只看"未登记的约束不对称"，而这一条管的是
+    # "这几对的真身被点名写在工具层" —— 派生面读不出来（unknown）在这里也是红，
+    # 而在 [9] 里那只是"没比对"。2026-10-22 业主裁定：这三处的真身在工具层，
+    # 改工具层的 `minItems` / `minimum` 而不改动作面 ⇒ 这里当场红（不是两份手抄碰巧相同）。
+    derivation_violations = param_derivation_violations()
+    assert not derivation_violations, (
+        "登记为『参数真身在工具层』的那几对，动作面与工具层不再逐键相等："
+        + "；".join(derivation_violations)
+        + "。处置：改动作面去跟工具层（真身），不许反过来把工具面放宽 ——"
+        "工具面是 `validate_params` 真正读的那一份"
     )
 
     # [10] 反向那一格的读数（工具面有、动作面没有）。只读数、不断言 —— 所有者 5b 授权的
     # 就是这一形状；牙在那条测试里（`_KNOWN_TOOL_ONLY_PARAMS` 与实测逐条对账 + 过期检测）。
+    # `_KNOWN_ACTION_ONLY_PARAMS`（动作面独有参数）同样只在这里留读数，牙在
+    # `tests/test_two_layer_constraints_really_match.py`：它的第 ③ 条要求
+    # "没有工具层的那一对，登记集合 == 动作面声明的集合"，那是这一族唯一的牙。
     reverse_coverage = param_missing_in_action_coverage()
     PARAM_MISSING_IN_ACTION_COVERAGE.clear()
     PARAM_MISSING_IN_ACTION_COVERAGE.update(reverse_coverage)
+    action_only_coverage = param_missing_in_tools_coverage()
+    PARAM_ACTION_ONLY_COVERAGE.clear()
+    PARAM_ACTION_ONLY_COVERAGE.update(action_only_coverage)
 
 
 #: 实测的"两层没有可比对对象"的动作（`two_layer_name_unmatched`）。这张表只管 `unmatched` 这一格
@@ -2258,12 +3042,34 @@ print(_PRINT_COVERAGE, file=sys.stderr)
 
 #: `R-36` 的覆盖读数（与上行同一个理由：只在失败时说话的断言，成功时与"没跑"同形）。
 #: 读它：`python -c "import agentflow.capabilities as c; print(c.PARAM_TYPE_COVERAGE)"`。
+#:
+#: 为什么这一行要写出 `80 + 16 − 1 = 95` 这条等式（审计 D-6）：只报一个 `tools_read` 时，
+#: "77" 与工具层的 "95" 之间的 18 件没有出处，读的人只能猜。三个数一起写，等式自己会说话：
+#: - `tools_in_registry_modules` = `tools._MODULES`（工具面真身）里声明的工具数；
+#: - `tools_unread` = 那些工具里 `params` 不是字典字面量的（`table_tools` / `fs_tools` 用
+#:   `_obj(...)` 调用装配 schema ⇒ 读不出，unknown）；
+#: - `tools_read_but_not_registered` = 读得到、但不在 `tools._MODULES` 里的（今天只有
+#:   `conjecture.register_conjecture`，理由见 `_TOOL_MODULE_EXTRAS`）。
 _PRINT_TYPE_COVERAGE = (
-    f"[capabilities] 两层参数类型对账：比较 {PARAM_TYPE_COVERAGE.get('compared', 0)} 对"
-    f"（动作, property），读到 {PARAM_TYPE_COVERAGE.get('tools_read', 0)} 个工具的 schema，"
-    f"没比对 {len(PARAM_TYPE_COVERAGE.get('unread', []))} 个；"
+    f"[capabilities] 两层参数对账：比较 {PARAM_TYPE_COVERAGE.get('compared', 0)} 对"
+    f"（动作, property）/ {PARAM_TYPE_COVERAGE.get('keys_compared', 0)} 个约束键三元组；"
+    "工具面读数 "
+    f"{PARAM_TYPE_COVERAGE.get('tools_read', 0)} 个工具的约束面 = "
+    f"{PARAM_TYPE_COVERAGE.get('tools_in_registry_modules', 0)} 件（`tools._MODULES`）"
+    f" − {len(PARAM_TYPE_COVERAGE.get('tools_unread', []))} 件读不出"
+    "（`params` 是 `_obj(...)` 调用而不是字典字面量："
+    f"{PARAM_TYPE_COVERAGE.get('tools_unread', [])}）"
+    f" + {len(PARAM_TYPE_COVERAGE.get('tools_read_but_not_registered', []))} 件读到但不注册"
+    f"（{PARAM_TYPE_COVERAGE.get('tools_read_but_not_registered', [])}）；"
+    f"没比对 {len(PARAM_TYPE_COVERAGE.get('unread', []))} 个动作；"
+    f"工具面独有约束 {PARAM_TYPE_COVERAGE.get('tool_only_constraints', 0)} 对"
+    f"（已登记 {PARAM_TYPE_COVERAGE.get('registered_tool_only_constraints', 0)} 对）；"
     f"反向（工具面有/动作面没有）：比过 {PARAM_MISSING_IN_ACTION_COVERAGE.get('pairs', 0)} 个动作，"
     f"缺口 {PARAM_MISSING_IN_ACTION_COVERAGE.get('gaps', 0)} 处"
-    f"（已登记 {len(_KNOWN_TOOL_ONLY_PARAMS)} 个动作）"
+    f"（已登记 {len(_KNOWN_TOOL_ONLY_PARAMS)} 个动作）；"
+    f"动作面独有参数：逐 property 比过 {PARAM_ACTION_ONLY_COVERAGE.get('pairs_with_tool', 0)} 个动作，"
+    f"缺口 {PARAM_ACTION_ONLY_COVERAGE.get('gaps', 0)} 处"
+    f"（已登记 {PARAM_ACTION_ONLY_COVERAGE.get('registered', 0)} 个动作），"
+    f"没有工具层的动作 {len(PARAM_ACTION_ONLY_COVERAGE.get('unmatched', []))} 个"
 )
 print(_PRINT_TYPE_COVERAGE, file=sys.stderr)

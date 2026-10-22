@@ -462,7 +462,12 @@ def test_run_once_stages_then_admits_and_writes_the_report(store):
     assert res.report_path and Path(res.report_path).is_file(), res.report_path
     assert res.report_admitted == 2, res.to_dict()
     text = Path(res.report_path).read_text(encoding="utf-8")
-    assert L.report_violations(text) == [], L.report_violations(text)
+    # 候选没有 relevance（A 的自动链路暂存时不带它）⇒ 报告判据会记一条
+    # "relevance 全空"的读数（只记读数、不拦门，见 litstage._relevance_violations）；
+    # 除它之外不许有别的违规。
+    assert [v for v in L.report_violations(text) if "relevance" not in v] == [], \
+        L.report_violations(text)
+    assert len(L.report_violations(text)) == 1, L.report_violations(text)
 
 
 def test_run_once_registers_at_most_ten_and_clears_the_rest(store):

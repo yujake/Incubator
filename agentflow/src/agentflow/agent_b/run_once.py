@@ -86,7 +86,15 @@ class _RunOnce:
         if dl_status == "content_mismatch":
             unreadable_reason = f"content_type_mismatch: {path.name if path else '?'}"
         elif path is None:
-            unreadable_reason = "no_local_file"
+            # 行上没有本地字节，但可能带着定位符（一键迁移登记的行会把候选 url
+            # 写进 `download.url`，并标 `fulltext=no_fulltext_this_time`）。
+            # 那种情形的原因必须点到定位符：一句说不出位置的原因，在读数上与
+            # "这一篇从哪来都不知道"同形 —— 而两者的处置相反（前者可以按 url
+            # 重取，后者要人去补来源）。
+            dl_row = dict(lit.get("download") or {})
+            locator = str(dl_row.get("url") or "").strip()
+            unreadable_reason = (f"no_fulltext_this_time: {locator}" if locator
+                                 else "no_local_file")
         elif not path.exists():
             unreadable_reason = f"file_missing:{path}"
 

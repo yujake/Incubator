@@ -23,7 +23,7 @@
 |---|---|---|
 | `kind` | 是 | 受控词表 `ENV_KINDS`（theorem / lemma / proposition / corollary / example / experiment） |
 | `label` | 是 | 正文里那个 `\\label{...}` 的值（不带花括号） |
-| `env_no` | 是 | 正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数） |
+| `env_no` | 是 | 正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数；分节 `\\input` 进来的按内联顺序算） |
 | `ledger_id` | 是 | `stmt:NNNNNN` / `exp:NNNNNN` / `rel:NNNNNN`；多证明带 `#pN`（`stmt:000004#p2`） |
 | `proof_no` | 是 | 这条定理名下第几号证明：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份 |
 | `file` | 是 | 该条完整证明或实验所在的真实文件，论文包内的相对路径（`proofs/000004-p1.md`） |
@@ -76,6 +76,15 @@
 `mapping_lean_missing`：填了就是声称，声称就得能复核。
 
 ## 双向都不许有孤儿
+
+正文是"`main.tex` ＋ 它递归 `\\input` / `\\include` 进来的那些文件"（相对路径按被包含
+文件所在目录解析；环与深度上限见 `MAX_TEX_INPUT_DEPTH`），不是 `main.tex` 一个文件：
+分节写正文的论文与一次写完的论文必须由同一套读法读，否则前者要么全红、要么全绿。
+扫描之前先做词法剥离（`strip_tex_comments`）：行尾 `%` 注释、`\\iffalse … \\fi`、
+`comment` 环境、`\\verb` 里的字节都不算正文 —— 否则"注释掉一条定理"会让正文侧凭空
+多一条，或者让 `env_no` 被一个幽灵环境顶位（报出来的孤儿指向根本没写错的那一行）。
+`\\begin {theorem}`（控制词后带空格）是合法 TeX，按同一个环境读；嵌套环境用栈式
+扫描，内外层各占一条、各自的 `env_no` 互不挪位。
 
 正文里每个定理类环境都必须在表里有一行，表里每一行也必须在正文里有一个环境。
 两个方向的成因不同：前者是"写了正文没登记"，后者是"登记了但正文里没有它"，
@@ -258,19 +267,29 @@ STATES: tuple[str, ...] = ("pass", "fail", "unknown")
 #: `file` 的五个状态（`present` 之外的四个各自有判据）。
 FILE_STATES: tuple[str, ...] = ("present", "empty", "missing", "directory", "outside")
 
-#: 正文里的一类环境：`\\begin{theorem}`（允许带星号，`end` 必须同名同星号）。
-_ENV_RE = re.compile(
-    r"\\begin\{(?P<kind>" + "|".join(ENV_KINDS) + r")(?P<star>\*?)\}"
-    r"(?P<body>.*?)"
-    r"\\end\{(?P=kind)(?P=star)\}",
-    re.S,
+#: 正文里定理类环境的开 / 闭标记（允许带星号，`end` 必须同名同星号）。
+#:
+#: 控制词与花括号之间的空格是合法 TeX（控制词后面的空格会被吞掉，
+#: `\\begin {theorem}` 与 `\\begin{theorem}` 是同一件事），所以这里写 `\\s*`。
+#: 硬要求 `\\begin\\{` 的后果不是"少读一个环境"而是"整条环境静默消失"（缺陷 1）。
+_ENV_TOKEN_RE = re.compile(
+    r"\\(?P<which>begin|end)\s*\{(?P<kind>" + "|".join(ENV_KINDS) + r")(?P<star>\*?)\}"
+)
+
+#: 只找"再开一个环境"：算外层的 label 时要在第一个内层环境处截断，
+#: 否则外层会把内层的 `\\label` 认成自己的。
+_ENV_OPEN_RE = re.compile(
+    r"\\begin\s*\{(?:" + "|".join(ENV_KINDS) + r")(?:\*?)\}"
 )
 
 #: 环境里的标签（取第一个）。
 _LABEL_RE = re.compile(r"\\label\{([^{}]*)\}")
 
-#: `main.tex` 里的 `\\input{...}`（附录可以被 `\\input` 进来）。
-_INPUT_RE = re.compile(r"\\input\{([^{}]+)\}")
+#: `\\input{...}` / `\\include{...}`（附录与分节写法的正文都靠它接进来）。
+_INPUT_RE = re.compile(r"\\(?:input|include)\s*\{\s*([^{}]+?)\s*\}")
+
+#: 正文里引用附录那一行（注释剥离之后精确匹配；`\\input {mapping-appendix.tex}` 也算）。
+_APPENDIX_INPUT_RE = re.compile(r"\\input\s*\{\s*mapping-appendix(?:\.tex)?\s*\}")
 
 #: 台账代号必须是纯数字（宽度由 `schema.ID_DIGITS` 定，这里只判"是数字"）。
 _DIGITS_RE = re.compile(r"^[0-9]+$")
@@ -281,6 +300,112 @@ _TEX_SPECIALS: dict[str, str] = {
     "_": "\\_", "{": "\\{", "}": "\\}", "~": "\\textasciitilde{}",
     "^": "\\textasciicircum{}",
 }
+
+#: `\input` / `\include` 的递归深度上限（TeX 自己不设上限，环会一路展开到内存耗尽）。
+#:
+#: 8 是"比任何真实论文的分节嵌套都深、又足够小到不会挂死"的取值：到 8 层还没到底就
+#: 不再展开，并在 `problems` 里报一条 `mapping_unresolvable` —— 没跟完的正文不能
+#: 读成"这里没有环境"（那会让正文侧全空，或者反过来把登记过的行全判成孤儿）。
+MAX_TEX_INPUT_DEPTH = 8
+
+#: `\begin{comment}` … `\end{comment}`（`comment` 宏包）整段不参与扫描。
+_COMMENT_ENV_BEGIN_RE = re.compile(r"\\begin\s*\{comment\}")
+_COMMENT_ENV_END_RE = re.compile(r"\\end\s*\{comment\}")
+
+#: `\iffalse` 那一支的开头（TeX 会一直跳到配对的 `\fi`）。
+_IFFALSE_RE = re.compile(r"\\iffalse(?![A-Za-z])")
+
+#: `\if…` / `\fi` 的配对（找 `\iffalse` 的收尾用；`\else` 不影响层级）。
+_COND_TOKEN_RE = re.compile(r"\\(?:if[A-Za-z]*|fi(?![A-Za-z]))")
+
+#: `\verb<d>…<d>`：`\verb` 后面那个字符是分隔符，里面的 `%` / `\begin` 都不是正文。
+_VERB_RE = re.compile(r"\\verb\*?(?P<delim>[^A-Za-z\s])")
+
+
+def _is_escaped_percent(text: str, at: int) -> bool:
+    """`text[at]` 是 `%`：前面有奇数个反斜杠就是被转义的 `\\%`（不是注释）。
+
+    偶数个（`\\\\%`）是"换行命令 + 一条注释"，仍然是注释 —— 这一格按 TeX 的
+    "反斜杠成对读"判，而不是看"前面有没有反斜杠"。
+    """
+    count = 0
+    i = at - 1
+    while i >= 0 and text[i] == "\\":
+        count += 1
+        i -= 1
+    return count % 2 == 1
+
+
+def _cond_skip_end(text: str, at: int) -> int:
+    """从 `\\iffalse` 之后找到与它配对的 `\\fi` 的末尾（找不到 => 文本末尾）。"""
+    depth = 1
+    for m in _COND_TOKEN_RE.finditer(text, at):
+        if m.group(0).startswith("\\fi"):
+            depth -= 1
+            if depth <= 0:
+                return m.end()
+            continue
+        depth += 1
+    return len(text)
+
+
+def _blank_but_keep_lines(chunk: str) -> str:
+    """把被剥掉的一段换成空格、换行保留（行号与列号因此仍然对得上原文件）。"""
+    return "".join(ch if ch in "\r\n" else " " for ch in chunk)
+
+
+def strip_tex_comments(tex: str) -> str:
+    """剥掉 TeX 里不参与排版的字节，只留真正会被排出来的那部分。
+
+    处理规则（与 TeX 自己一致的那几条）：
+
+    - `%` 到行尾是注释；`\\%` 是转义出来的百分号，不是注释；`\\\\%` 是换行命令
+      后面跟一条注释（反斜杠按成对读，所以它仍然是注释）；
+    - `\\iffalse … \\fi` 整段（含套在里面的 `\\if…`）不参与；
+    - `\\begin{comment} … \\end{comment}` 整段不参与；
+    - `\\verb<d> … <d>` 里的内容不参与（分隔符之后的 `%` 不是注释）。
+
+    剥掉的字节用空格顶替、换行保留：行号与列号与原文一致，报出来的"第 N 行"
+    仍然指得回原文件。只有正文扫描（`body_envs`）与附录定位（`_appendix_block`）
+    用得到它 —— 两处必须是同一套剥离规则，否则"什么算正文"就有了两份口径。
+    """
+    text = str(tex or "")
+    out: list[str] = []
+    i = 0
+    end = len(text)
+    while i < end:
+        ch = text[i]
+        if ch == "%" and not _is_escaped_percent(text, i):
+            stop = text.find("\n", i)
+            stop = end if stop < 0 else stop
+            out.append(_blank_but_keep_lines(text[i:stop]))
+            i = stop
+            continue
+        if ch == "\\":
+            m = _COMMENT_ENV_BEGIN_RE.match(text, i)
+            if m is not None:
+                close = _COMMENT_ENV_END_RE.search(text, m.end())
+                stop = end if close is None else close.end()
+                out.append(_blank_but_keep_lines(text[i:stop]))
+                i = stop
+                continue
+            m = _IFFALSE_RE.match(text, i)
+            if m is not None:
+                stop = _cond_skip_end(text, m.end())
+                out.append(_blank_but_keep_lines(text[i:stop]))
+                i = stop
+                continue
+            m = _VERB_RE.match(text, i)
+            if m is not None:
+                delim = str(m.group("delim"))
+                stop = text.find(delim, m.end())
+                stop = end if stop < 0 else stop + 1
+                out.append(_blank_but_keep_lines(text[i:stop]))
+                i = stop
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def _problem(kind: str, detail: str, *, label: str = "", where: str = "") -> dict[str, Any]:
@@ -343,12 +468,18 @@ class Row:
 
 @dataclass(frozen=True)
 class BodyEnv:
-    """正文里的一个定理类环境（`line` 是 1 起的行号）。"""
+    """正文里的一个定理类环境（`line` 是 1 起的行号）。
+
+    `file` 是它所在那一份 tex 相对论文包的名字（`main.tex` 或 `sections/body.tex`）：
+    跟了 `\\input` 之后，"第 12 行"必须说得清是哪个文件的第 12 行，否则报出来的
+    位置指不回原文件。
+    """
 
     kind: str
     label: str
     env_no: int
     line: int
+    file: str = ""
 
 
 @dataclass
@@ -379,18 +510,185 @@ def appendix_path(project_root: str | Path) -> Path:
     return package_dir(project_root) / APPENDIX_FILE_NAME
 
 
-def body_envs(tex: str) -> list[BodyEnv]:
-    """正文里全部定理类环境（按出现顺序，`env_no` 按同类计数、1 起）。"""
-    text = str(tex or "")
-    counts: dict[str, int] = {}
-    out: list[BodyEnv] = []
-    for m in _ENV_RE.finditer(text):
+def _scan_envs(text: str, counts: dict[str, int], *, where_file: str = "",
+               line_offset: int = 0) -> list[BodyEnv]:
+    """在已经剥离注释的正文里栈式扫环境（嵌套时内外层各自产出一条）。
+
+    为什么用栈而不是一条非贪婪正则：非贪婪会一路匹配到最内层那个 `end` 之后，
+    `finditer` 再从外层末尾往下扫，夹在中间的内层环境就整条消失（缺陷 5）。
+    这里遇到 `\\begin{X}` 压栈、遇到配对的 `\\end{X}` 弹栈，栈里每个环境各自一条；
+    `env_no` 在压栈时按同类计数，所以外层的序号不因内层而偏移。
+
+    `counts` 由调用方跨文件 / 跨片段传进来：`env_no` 是"读完所有 `\\input` 之后的
+    整体出现顺序"，每份文件各自从头数会让序号与正文对不上。
+    """
+    found: list[tuple[int, BodyEnv]] = []
+    opens: list[dict[str, Any]] = []
+    for m in _ENV_TOKEN_RE.finditer(text):
         kind = str(m.group("kind"))
-        counts[kind] = counts.get(kind, 0) + 1
-        label = _LABEL_RE.search(m.group("body"))
-        out.append(BodyEnv(kind=kind, label=(label.group(1).strip() if label else ""),
-                           env_no=counts[kind], line=text.count("\n", 0, m.start()) + 1))
-    return out
+        star = str(m.group("star"))
+        if m.group("which") == "begin":
+            counts[kind] = counts.get(kind, 0) + 1
+            opens.append({"kind": kind, "star": star, "start": m.start(),
+                          "body": m.end(), "env_no": counts[kind]})
+            continue
+        if not opens:
+            continue
+        top = opens[-1]
+        if (top["kind"], top["star"]) != (kind, star):
+            # 不配对的 `\\end`：TeX 自己也会报错，这里不弹栈（弹了会把外层错配掉）。
+            continue
+        opens.pop()
+        body = text[int(top["body"]):m.start()]
+        inner = _ENV_OPEN_RE.search(body)
+        if inner is not None:
+            body = body[:inner.start()]
+        label = _LABEL_RE.search(body)
+        found.append((int(top["start"]), BodyEnv(
+            kind=kind, label=(label.group(1).strip() if label else ""),
+            env_no=int(top["env_no"]),
+            line=line_offset + text.count("\n", 0, int(top["start"])) + 1,
+            file=where_file)))
+    found.sort(key=lambda item: item[0])
+    return [env for _pos, env in found]
+
+
+def body_envs(tex: str) -> list[BodyEnv]:
+    """单份正文里的全部定理类环境（按出现顺序，`env_no` 按同类计数、1 起）。
+
+    先剥离注释再扫（`strip_tex_comments`）：注释掉 / `\\iffalse` 包住 / `\\verb`
+    里的 `\\begin{...}` 不是正文环境。跨 `\\input` 的读法见 `_body_envs_of_package`。
+    """
+    counts: dict[str, int] = {}
+    return _scan_envs(strip_tex_comments(str(tex or "")), counts)
+
+
+def _env_where(env: BodyEnv) -> str:
+    """一个环境该被点名的位置（`文件:行`；`main.tex` 之外的按读入时的相对路径写）。"""
+    return f"{env.file or PC.TEX_NAME}:{env.line}"
+
+
+def _tex_input_names(tex: str) -> list[str]:
+    """剥离注释后，按出现顺序给出 `\\input` / `\\include` 的文件名。"""
+    return [m.group(1).strip() for m in _INPUT_RE.finditer(strip_tex_comments(str(tex or "")))]
+
+
+def _input_target(base: Path, name: str) -> Path | None:
+    """`\\input{name}`（相对 `base`）指向的文件；没有后缀时也试 `.tex`；读不到 => None。"""
+    raw = Path(str(name or "").strip())
+    if not str(raw) or not raw.name:
+        return None
+    candidates = [base / raw]
+    if not raw.suffix:
+        candidates.append((base / raw).with_suffix(".tex"))
+    for cand in candidates:
+        try:
+            if cand.is_file():
+                return cand.resolve()
+        except OSError:
+            continue
+    return None
+
+
+def _rel_to(package: Path, path: Path) -> str:
+    """一个 tex 相对论文包的名字（包外给文件名本身，便于人读）。"""
+    try:
+        return path.resolve().relative_to(package.resolve()).as_posix()
+    except (OSError, ValueError):
+        return path.name
+
+
+def _collect_tex_segments(package: Path, main_path: Path, main_text: str
+                          ) -> tuple[list[tuple[str, str, int]], list[str],
+                                     list[dict[str, Any]]]:
+    """按 TeX 的内联顺序把正文切成"片段"，跟完 `\\input` / `\\include`。
+
+    返回 `([(相对名, 片段, 起始行偏移), …], [读过的文件（读入顺序）, …], 问题)`。
+    为什么要切片段而不是"每个文件整段扫"：`main.tex` 里 `\\input` 之后的定理，
+    在 TeX 眼里排在分节文件之后；整份文件先扫会让 `env_no` 整体错位（表里写的
+    序号与正文对不上，报出来的是 `mapping_orphan`，而正文侧其实没错）。
+
+    环用"当前这一支已经展开过的绝对路径"判；长度用 `MAX_TEX_INPUT_DEPTH` 兜底。
+    两条都报 `mapping_unresolvable` 并停止展开（不报就等于把"没读到"读成"没有"）。
+    一个环境不能横跨 `\\input` 边界（片段是分开扫的）—— 真实论文里没有这种写法。
+    """
+    segments: list[tuple[str, str, int]] = []
+    files: list[str] = []
+    problems: list[dict[str, Any]] = []
+    stack: list[Path] = []
+    chain: list[str] = []
+
+    def visit(path: Path, text: str, depth: int) -> None:
+        rel = _rel_to(package, path)
+        if rel not in files:
+            files.append(rel)
+        # 环判据比的是解析后的绝对路径：相对路径写法不同（`main.tex` / `./main.tex`）
+        # 不能让同一个文件被当成两个。
+        stack.append(path.resolve())
+        chain.append(rel)
+        try:
+            clean = strip_tex_comments(text)
+            names = _tex_input_names(text)
+            if names and depth >= MAX_TEX_INPUT_DEPTH:
+                problems.append(_problem(
+                    "mapping_unresolvable",
+                    f"正文 \\input 递归到第 {depth} 层（上限 {MAX_TEX_INPUT_DEPTH}）还没到底："
+                    f"{' -> '.join(chain + [names[0]])} —— 这一支不再展开；"
+                    "没跟完的正文不能读成「这里没有环境」",
+                    where=rel))
+                segments.append((rel, clean, 0))
+                return
+            pos = 0
+            for m in _INPUT_RE.finditer(clean):
+                if m.start() > pos:
+                    segments.append((rel, clean[pos:m.start()],
+                                     text.count("\n", 0, pos)))
+                name = m.group(1).strip()
+                target = _input_target(path.parent, name)
+                if target is None:
+                    problems.append(_problem(
+                        "mapping_unresolvable",
+                        f"正文 {rel} 里的 \\input{{{name}}} 指的文件读不到"
+                        f"（按 {path.parent} 解析，原名与 .tex 都试过）—— "
+                        "这一支的定理类环境没有进表，别把「没读到」读成「没有」",
+                        where=rel))
+                elif target in stack:
+                    problems.append(_problem(
+                        "mapping_unresolvable",
+                        f"正文 \\input 成环：{' -> '.join(chain + [name])} —— "
+                        "这一支不再展开（不是「这里没有环境」）",
+                        where=rel))
+                else:
+                    try:
+                        sub = target.read_text(encoding="utf-8")
+                    except OSError as exc:
+                        problems.append(_problem(
+                            "mapping_unresolvable",
+                            f"正文 {rel} 里的 \\input{{{name}}} 读不出来"
+                            f"（{type(exc).__name__}: {exc}）—— 这一支没有进表",
+                            where=rel))
+                    else:
+                        visit(target, sub, depth + 1)
+                pos = m.end()
+            if pos < len(clean):
+                segments.append((rel, clean[pos:], text.count("\n", 0, pos)))
+        finally:
+            stack.pop()
+            chain.pop()
+
+    visit(main_path, main_text, 0)
+    return segments, files, problems
+
+
+def _body_envs_of_package(package: Path, main_path: Path, main_text: str
+                          ) -> tuple[list[BodyEnv], list[str], list[dict[str, Any]]]:
+    """正文那一侧的完整读数：环境、这次读了哪几个文件（读入顺序）、读不完的问题。"""
+    segments, files, problems = _collect_tex_segments(package, main_path, main_text)
+    counts: dict[str, int] = {}
+    envs: list[BodyEnv] = []
+    for rel, segment, line_offset in segments:
+        envs.extend(_scan_envs(segment, counts, where_file=rel, line_offset=line_offset))
+    return envs, files, problems
 
 
 def read_ledger_tables(workspace_root: str | Path) -> dict[str, list[Mapping[str, Any]]]:
@@ -1060,13 +1358,28 @@ def sync_markdown(project_root: str | Path) -> Path:
     return md_path
 
 
+def _appendix_input_present(tex: str) -> bool:
+    """正文里有没有一条真的会被排版的 `\\input{mapping-appendix}`（注释里不算）。
+
+    写侧与读侧共用这一条判据。只做字面子串搜索的话，`% \\input{mapping-appendix}`
+    会让写侧以为"已经有了"而永不补插，于是附录永久挡在 PDF 外（缺陷 3）——
+    注释里出现过不算数，必须真的补一行进去。
+    """
+    return bool(_APPENDIX_INPUT_RE.search(strip_tex_comments(str(tex or ""))))
+
+
 def write_appendix(project_root: str | Path) -> Path:
     """按盘上的 json 渲染附录，并保证 `main.tex` 里有那一行 `\\input`。
 
     写的是两份东西：`<论文包>/mapping-appendix.tex`（附录正文）与 `main.tex` 里
-    那一行 `\\input{mapping-appendix}`（已存在就不重复插）。正文因此变长 =>
-    必须重编一次（`doc.paper_compile`），否则 `closing` 的 `paper` 那一格会报
-    "PDF 是旧正文编的"——那是既有判据，不因本模块而放宽。
+    那一行 `\\input{mapping-appendix}`（已存在就不重复插）。"存在"按
+    `_appendix_input_present` 判：被注释掉的那一行不算 —— 那时要补插真正的一行，
+    否则读侧永远读不到、写侧也永远不自愈。
+
+    `\\input{mapping-appendix.tex}`（带后缀）算同一行，不再插第二行：附录在 PDF 里
+    印两遍是另一种静默错。正文变长 => 必须重编一次（`doc.paper_compile`），
+    否则 `closing` 的 `paper` 那一格会报"PDF 是旧正文编的"——那是既有判据，
+    不因本模块而放宽。
     """
     root = Path(project_root)
     json_path, _md_path = mapping_paths(root)
@@ -1078,7 +1391,7 @@ def write_appendix(project_root: str | Path) -> Path:
     tex = package_dir(root) / PC.TEX_NAME
     if tex.is_file():
         text = tex.read_text(encoding="utf-8")
-        if APPENDIX_INPUT not in text:
+        if not _appendix_input_present(text):
             end = text.rfind("\\end{document}")
             if end < 0:
                 # 正文还没有 `\end{document}`（半成品稿）：追加到末尾，不猜它该在哪结束。
@@ -1124,14 +1437,21 @@ def _md_reading(project_root: Path, rows: Sequence[Row]) -> tuple[str, list[dict
 
 
 def _appendix_block(project_root: Path, tex: str) -> str:
-    """正文里那一段附录的字节（找不到 => 空串）。"""
-    if APPENDIX_BEGIN in tex:
-        start = tex.find(APPENDIX_BEGIN)
-        end = tex.find(APPENDIX_END, start)
-        if end >= 0:
-            return tex[start:end + len(APPENDIX_END)]
-        return tex[start:]
-    for name in _INPUT_RE.findall(tex or ""):
+    """正文里那一段附录的字节（找不到 => 空串）。
+
+    两种形态都认：界标直接写在正文里，或由一条真的会被排版的 `\\input` 接进来。
+    `\\input{...}` 必须先剥离注释再找 —— 否则"被注释掉的那一行"会被当成
+    "附录已经印进正文"，读侧从此永不报 `mapping_not_in_paper`（缺陷 3）。
+
+    界标本身是一行注释（渲染器写的 `% ==== MAPPING-APPENDIX BEGIN …`），所以那一步
+    只能在原文里找：不能先剥离注释再找界标，否则合法的附录也一起消失。
+    """
+    text = str(tex or "")
+    start = text.find(APPENDIX_BEGIN)
+    if start >= 0:
+        end = text.find(APPENDIX_END, start)
+        return text[start:end + len(APPENDIX_END)] if end >= 0 else text[start:]
+    for name in _tex_input_names(text):
         candidate = package_dir(project_root) / str(name).strip()
         paths = [candidate] if candidate.suffix else [candidate, candidate.with_suffix(".tex")]
         for path in paths:
@@ -1140,10 +1460,10 @@ def _appendix_block(project_root: Path, tex: str) -> str:
                     got = path.read_text(encoding="utf-8")
                 except OSError:
                     continue
-                if APPENDIX_BEGIN in got:
-                    start = got.find(APPENDIX_BEGIN)
-                    end = got.find(APPENDIX_END, start)
-                    return got[start:end + len(APPENDIX_END)] if end >= 0 else got[start:]
+                at = got.find(APPENDIX_BEGIN)
+                if at >= 0:
+                    end = got.find(APPENDIX_END, at)
+                    return got[at:end + len(APPENDIX_END)] if end >= 0 else got[at:]
     return ""
 
 
@@ -1189,14 +1509,14 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
                     "mapping_orphan",
                     f"正文第 {env.line} 行的 {kind} 环境没有 \\label —— 没有 label 就无法在表里"
                     "指到它（先给它一个 label，再在表里登记一行）",
-                    where=f"{PC.TEX_NAME}:{env.line}"))
+                    where=_env_where(env)))
             continue
         if len(got) > 1:
             problems.append(_problem(
                 "mapping_orphan",
                 f"正文里 label={label!r} 的 {kind} 出现了 {len(got)} 次"
                 f"（第 {[e.line for e in got]} 行）—— 重复的 label 无法与表行一一对应",
-                label=label, where=f"{PC.TEX_NAME}:{got[0].line}"))
+                label=label, where=_env_where(got[0])))
             continue
         env_by_key[key] = got[0]
 
@@ -1211,7 +1531,7 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
             "mapping_orphan",
             f"正文第 {env.line} 行的 {kind}（label={label!r}，第 {env.env_no} 个 {kind}）"
             "在表里没有对应行 —— 正文有、表里没有，就是一个孤儿环境",
-            label=label, where=f"{PC.TEX_NAME}:{env.line}"))
+            label=label, where=_env_where(env)))
     for key, got in rows_by_key.items():
         kind, label = key
         env = env_by_key.get(key)
@@ -1238,7 +1558,7 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
                     f"表里 label={label!r} 那行写的是第 {row.env_no} 个 {kind}，"
                     f"而正文里它是第 {env.env_no} 个（正文第 {env.line} 行）—— "
                     "同一行对不上同一个环境",
-                    label=label, where=f"{PC.TEX_NAME}:{env.line}"))
+                    label=label, where=_env_where(env)))
             prev = seen.get(row.ledger_id)
             if prev is not None:
                 problems.append(_problem(
@@ -1319,18 +1639,28 @@ def mapping_reading(project_root: str | Path, *,
     `problems` 里每条都带 `kind`（取值在 `ALL_PROBLEM_KINDS` 里），拦不拦门由
     `agent_h.mapping_judge.level_of` 决定；`warnings` 里是只进读数、不改 `state` 的那一档
     （`LEAN_WARN_KINDS`），`lean` 那一格给出这一趟的 Lean 开关与盘上的产物。
+
+    正文按"`main.tex` ＋ 它递归 `\\input` 进来的文件"读（见 `_body_envs_of_package`）：
+    `tex_files` 是这次真的读到的文件（读入顺序），读不完（成环 / 超深 / 指的文件
+    读不到）会落一条 `mapping_unresolvable` —— 没读完不许判 pass。
     """
     project = Path(project_root)
     workspace = Path(workspace_root) if workspace_root is not None else project
     package = package_dir(project)
     json_path, md_path = mapping_paths(project)
+    body_problems: list[dict[str, Any]] = []
+    tex_files: list[str] = []
     if tex is None:
         tex_path = package / PC.TEX_NAME
         tex_text = tex_path.read_text(encoding="utf-8") if tex_path.is_file() else ""
     else:
         tex_text = str(tex)
     has_paper = bool(str(tex_text or "").strip())
-    envs = body_envs(tex_text)
+    if tex is None and has_paper:
+        envs, tex_files, body_problems = _body_envs_of_package(package, tex_path, tex_text)
+    else:
+        # 调用方直接给了正文文本（没有文件可跟）：只扫这一份，`tex_files` 是空的。
+        envs = body_envs(tex_text)
     lean_on, lean_source = lean_switch()
     artifacts = lean_artifacts(project)
     if not lean_on:
@@ -1357,6 +1687,7 @@ def mapping_reading(project_root: str | Path, *,
         "mapping_md": str(md_path),
         "rows": 0,
         "envs": len(envs),
+        "tex_files": list(tex_files),
         "md_state": "",
         "appendix_state": "",
         "lean_state": lean_state,
@@ -1413,6 +1744,9 @@ def mapping_reading(project_root: str | Path, *,
     rows, problems = parse_rows(payload)
     reading["rows"] = len(rows)
     reading["checked"] = True
+    # 正文读不完（成环 / 超深 / \\input 指的文件读不到）与表无关，但它决定了
+    # "正文里有没有这个环境"这一格能不能信 —— 所以它与表的问题一起进 problems。
+    problems += body_problems
 
     md_state, md_problems = _md_reading(project, rows)
     reading["md_state"] = md_state

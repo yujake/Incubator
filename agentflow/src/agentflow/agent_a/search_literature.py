@@ -181,8 +181,9 @@ class _SearchLiterature:
             "note": (
                 "这一条已经入队并跑过；`outcome=no_results` 是有效结论（查了、没有），"
                 "`search_failed` 不是结论（这条请求还没结束，会按退避规则重试）。"
-                "`sources[]` 是这一行点名的那些源的逐源三态，取自 `sources_round` "
-                "那一轮；没点名源时它是空的（那说明这次按角色级接线查，"
-                "接线上的源名见 `role_providers`）。"
+                "`sources[]` 是这一轮的逐源三态，取自 `sources_round` 那一轮；"
+                "点名源的那一态与按角色接线查的那一态都逐源报（改前第一态是空数组，"
+                "于是「两个源被限流」与「都 0 命中」同形）。"
+                "`providers_requested=None` 才是「没点名」，不许用 `sources` 空不空去推断。"
             ),
         }

@@ -346,10 +346,11 @@ def test_proof_two_cannot_borrow_proof_ones_signature(tmp_path: pathlib.Path):
 def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Path):
     """⑧ 向后兼容：不带 `proof_no` 的签名行 / 没有证明清单的命题行，读数逐字不变。
 
-    三种老形态都要照旧：
+    老形态：
     (a) 老签名行（只有 `statement_id` + `proof_sha256`，没有 `stmt_id` / `proof_no`）；
     (b) 老判据（`verifications.proof_review_gap` 对同一行仍判 `ok=True`、sha 相符）；
-    (c) 只有第 3 位、台账里一次都没有的老命题行 —— 仍按位读，不由新读侧折成 0。
+    (c) 只有第 3 位、台账里一次都没有的老命题行：位说审过，而凭据里没有任何可定位的
+    签名（无 `verification_id`、无 `proof_sha256`）⇒ 判不了 ⇒ 不计入 R10。
     """
     st = _ws(tmp_path)
     _put(st)
@@ -371,13 +372,18 @@ def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Pat
     # 没有证明清单 ⇒ 只有 #p1 一条，编号与正文都不变
     assert VR.proof_list(_row(st)) == [(1, PROOF1)], VR.proof_list(_row(st))
 
-    # (c) 只有第 3 位、台账里一次都没有：老读法照旧（那一行就是它的唯一读数）
+    # (c) 只有第 3 位、台账里一次都没有：位说审过，而没有任何可定位的签名
+    # （无 verification_id、无 sha）⇒ 判不了 ⇒ 不计入 R10。
+    # 这条是 2026-10-22 审计后的口径，旧期望值（n2 == 1）把缺陷冻成了契约：
+    # 位说审过、台账一次没签时 R10 也亮绿，而同一行在 `statement_review_reading`
+    # 那边读成 unsigned / conjecture。
     st2 = _ws(tmp_path / "b")
     legacy = EB.bits_of(proof=True, proof_process=PROOF1, reviewed=True,
                         reviewed_by={"round": "V-0001", "verdict": "no_defect"},
                         kind="theorem")
     _put(st2, bits=legacy)
     n2, d2 = _r10(st2)
-    assert n2 == 1, d2
+    assert n2 == 0, d2
     assert d2["review_ledger_rows"] == 0, d2
+    assert d2["review_without_locator_ids"] == [SID], d2
     assert d2["stale_ids"] == [], d2

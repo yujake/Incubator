@@ -67,7 +67,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # statement_id. 长度最多 4`（B 试了两次都被拒，一次真跑因此白等一轮）。
                 "statement_id": {**_S, "minLength": 4, "maxLength": S.ID_DIGITS},
                 "proof_text": _S,
-                "proof_no": _I,
+                # 业主 2026-10-22（多证明模型）：签的是"第几条证明"，1 = canonical。
+                # 下界 1 的真身在工具层（`verify.verify_proof` 的 `proof_no.minimum=1`，
+                # 它是 `validate_params` 真正读的那一份）；动作面原来只写 `_I` ⇒
+                # 派活面放行 `proof_no=0`，而工具层必然拒收。判据：
+                # `capabilities.assert_capabilities()` 第 [9c] 条（`_PARAMS_DERIVED_FROM_TOOL`）。
+                "proof_no": {**_I, "minimum": 1},
                 # 只读读数（命题现状 / 文献与实验台账摘要）由调用方取好传进来：
                 # 传字符串而不是传 store，是为了让"它能碰什么"在接口上就固定下来
                 # （I12 的结构形态，见 `verifications.cold_start_prompt`）。
@@ -81,7 +86,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "V", "list_verifications",
         "列验证台账（可按命题过滤）",
-        _obj({"statement_id": _S, "limit": _I}),
+        # `limit` 的下界 0 与工具层（`verify.list_verifications`）同界：负数没有语义，
+        # 工具层会拒收 ⇒ 动作面必须说同一句话（判据同上）。
+        _obj({"statement_id": _S, "limit": {**_I, "minimum": 0}}),
         "dict（items/problems）",
         side_effect="read", handler_name="list_verifications",
     ),

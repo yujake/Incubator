@@ -9,13 +9,21 @@
 - 图：节点 = `statements`（定理/定义/引理/命题/概念）+ `experiments` + `literature`；边 = `dependencies`
 （有向：`used_by` → 被依赖的那一端）；- 坏尾巴：`used_by` 里的 `#pN` 读不懂（`#pabc` / `#p0` / 多段 …）时那条边不进索引（不折成
 `#p1`，也不折成任何证明号），原串落在 payload 的 `bad_used_by` 并给一条 warning —— 不留痕的
-话它会静默消失：链照样 `ok=True`，而一条承重边不在任何一组里；- 组：同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：都要）；不同组 = 可选
-路径（组间 OR：任一） ⇒ 结果给每组一条链并挑最短那组（`best_group`）；- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
+话它会静默消失：链照样 `ok=True`，而一条承重边不在任何一组里；- 组与证明：一条 `used_by` 的依赖图里，同一 `(证明号, path_group)` 内的多条边 = AND
+（都要走到根）；不同 `(证明号, path_group)` = OR（任一条走到根即算到根）；不同
+`proof_no` 也是 OR。这条规则在每一层都成立（业主 2026-10-22 批准改语义：改前它只在
+顶层成立，子命题那一层退化成"全都要"）。读数给每个 `(证明号, 组)` 一条链并挑最短的
+那一条（`best_proof_no` / `best_group`）；- 长度：`length` 报这条候选路径的最短可行分支
+（组内取最长的边、分支间取最短的分支）；只有全不可行时才报"最深的那条已走前缀"并在
+`why` 里写明没有可行分支；- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
 `evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 2026-10-21 之前要求 
 `proof_text == "concept:primitive"`，那个哨兵正是 mp3 那 1143 条污染行的来源，现在按"定义在不在"判，历史行带哨兵照旧是根）。
-"没有边又没有证明证据" ⇒ 依赖没写（`unknown`），不是根；- 边界：环 ⇒ 那一组报 `cycle` 并跳过（不牵连别的组）；`dangling` 边 ⇒ 那一
-组不完整；超 `max_depth` ⇒ `truncated=True`（给已走到的前缀）；跨组汇总按节点去重（多写一组路径不许把"牵动多少节点"吹大）；- 别名：
-`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。
+"没有边又没有证明证据" ⇒ 依赖没写（`unknown`），不是根；- 边界：环 / 超 `max_depth` / 悬空边 / 依赖没写，都按"哪条分支、为什么不可行"
+逐条进那一组的 `failures`（`blocking` 说明它是不是那一组不可行的原因；备选分支断了
+不影响另一条走到根），`cycle` / `truncated` 只描述真正挡住这条路的那些；跨组汇总按节点
+去重（多写一组路径不许把"牵动多少节点"吹大）；- 坏尾巴（`used_by` 的 `#pN` 读不懂）且
+没有可用分支 ⇒ 这一趟没查成（`unknown` + `ok=False` + `closed=False`），不许读成
+"已经是根"；- 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。
 """
 from __future__ import annotations
 from pathlib import Path
@@ -73,6 +81,39 @@ def _bad_tail_warnings(graph: "_DepGraph") -> list[str]:
     return [f"有 {len(bad)} 条依赖的 `used_by` 尾巴读不懂（{shown}{more}）"
             "⇒ 这些边没有进依赖索引（不会出现在任何一组路径里，也没有被折成 `#p1`）；"
             "原串逐条见 payload 的 `bad_used_by`"]
+
+
+# ------------------------------------------------------------------ 组合规则
+#
+# 依赖图的语义（业主 2026-10-22 批准改语义后的唯一真身）：
+#   · 同一个 (证明号, path_group) 内的多条边 = AND（都要走到根）；
+#   · 不同 (证明号, path_group) = OR（任一条走到根即算到根）；
+#   · 不同 proof_no 也是 OR。
+# "到根" = 存在一条 (证明号, path_group) 分支，其组内每条边都到根。
+#
+# 为什么把这两条规则抬到模块级而不是内联在 `_grow` 里：判据要能把它们
+# monkeypatch 成相反的规则，用来证明"顶层与子层用的是同一条规则"不是 docstring 里的
+# 一句话（反真空）。内联的 any / all 没法被替换，那种判据只会是空的。
+
+
+def _or_holds(viables: Sequence[bool]) -> bool:
+    """分支之间取 OR：任一条分支可行 ⇒ 这个节点可行。"""
+    return any(viables)
+
+
+def _or_length(lengths: Sequence[int]) -> int:
+    """分支之间取 OR：长度取最短那条分支（"最短依赖链"的口径）。"""
+    return min(lengths)
+
+
+def _and_holds(viables: Sequence[bool]) -> bool:
+    """同一 (证明号, path_group) 内的多条边取 AND：每条边都要可行。"""
+    return all(viables)
+
+
+def _and_length(lengths: Sequence[int]) -> int:
+    """AND 的长度取组内最长的那条边（组里最深的那个前提决定这条路的长度）。"""
+    return max(lengths)
 
 
 class _ProofChain:
@@ -146,6 +187,26 @@ class _ProofChain:
         # 原实现只 walk 依赖组 ⇒ 一条"无前提自证定理/原始概念"被读成
         # "0 组可选路径，没有一组走到根"，而按本仓口径它「本来就是根」（链闭合）。
         target_is_root, target_why = graph.is_root(f"stmt:{node['stmt_id']}")
+        bad_used = list(graph.bad_used_by)
+        label = node.get("label") or node["stmt_id"]
+        if not groups_out and bad_used:
+            # 三态（2026-10-22 审计缺陷 11）：坏尾巴是唯一那条依赖时，改前这里读成
+            # "没有依赖 ⇒ 已经是根 ⇒ 闭合"。事实是"那条依赖读不懂" —— 既不能说它到根了，
+            # 也不能说它没有依赖。没有可用分支 + 读不懂 ⇒ unknown（读数与 ok 一起降级）。
+            return self._report(
+                "proof_chain", str(target), {"max_depth": max_depth, "k": k},
+                summary=(f"{label}：依赖读不懂（{len(bad_used)} 条 `used_by` 尾巴解析不了，"
+                         "逐条见 payload 的 `bad_used_by`）⇒ 这一趟没查成（unknown）"),
+                payload={"checked": True, "unknown": True, "target": str(target),
+                         "matched_by": matched_by, "groups": [], "best_group": None,
+                         "groups_total": 0, "best_proof_no": None, "proof_nos": [],
+                         "closed": False, "roots": [],
+                         "bad_used_by": bad_used,
+                         "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
+                                  "label": node.get("label")}},
+                ok_=False, error="dependency_unreadable",
+                warnings=_bad_tail_warnings(graph),
+            )
         if not groups_out:
             if target_is_root:
                 summary = (f"{node.get('label') or node['stmt_id']}：**已经是根**"
@@ -177,13 +238,18 @@ class _ProofChain:
                 warnings=_bad_tail_warnings(graph),
             )
         if best is None:
-            where = "没有一组走到根（见 warnings）"
+            if bad_used:
+                where = (f"全都没有可行分支，而且有 {len(bad_used)} 条 `used_by` 尾巴读不懂"
+                         " ⇒ 这一趟没查成（unknown）")
+            else:
+                where = ("没有一组走到根（没有可行分支；哪条分支、为什么，逐条见 payload "
+                         "里每一组的 `failures`）")
         elif len(proof_nos) > 1:
             where = (f"最短是第 {best.get('proof_no') or 1} 条证明的第 {best['group']} 组"
                      f"（{best['length']} 跳）")
         else:
             where = f"最短是第 {best['group']} 组（{best['length']} 跳）"
-        summary = (f"{node.get('label') or node['stmt_id']}："
+        summary = (f"{label}："
                    f"{len(groups_out)} 组可选路径，{where}")
         payload = {
             "checked": True, "target": str(target), "matched_by": matched_by,
@@ -192,10 +258,14 @@ class _ProofChain:
             "groups": groups_out, "groups_total": len(groups_out),
             "best_group": best["group"] if best else None,
             "best_proof_no": (best.get("proof_no") or 1) if best else None,
+            # 三态：`closed` 只在一组可行分支真的走到根时为 True；`unknown` 是
+            # "读不懂的边还在，答案不成立"（坏尾巴 + 没有可用分支）。
+            "closed": best is not None,
+            "unknown": best is None and bool(bad_used),
             #: 这条命题的依赖按哪几条证明分的（升序；老数据恒为 `[1]`）
             "proof_nos": proof_nos,
             # 读不懂的 `used_by` 尾巴原串（这些边没有进索引、也没折成任何证明号）
-            "bad_used_by": list(graph.bad_used_by),
+            "bad_used_by": bad_used,
             # 跨组汇总按节点去重（多写一组路径不许把规模读数吹大）
             "unique_nodes": len({h["node"] for g in groups_out for h in g["hops"]}),
             "truncated": truncated,
@@ -203,7 +273,9 @@ class _ProofChain:
         return self._report(
             "proof_chain", str(target),
             {"max_depth": max_depth, "k": k, "weights": dict(weights or {})},
-            summary=summary, payload=payload, warnings=warnings, truncated=truncated)
+            summary=summary, payload=payload, warnings=warnings, truncated=truncated,
+            ok_=not (best is None and bool(bad_used)),
+            error="dependency_unreadable" if (best is None and bool(bad_used)) else None)
 
     # ------------------------------------------------------------ 内部
 
@@ -357,93 +429,166 @@ class _DepGraph:
 
     def walk(self, start: str, *, group: int, edges, max_depth: int,
              proof_no: int = _PL.DEFAULT_PROOF_NO) -> dict[str, Any]:
-        """从 `start` 沿这一组的边走到根；组内 AND：每条边都要走到根才算到。
+        """从 `start` 沿这一条 `(证明号, path_group)` 候选路径走到根 ⇒ 这一组的读数。
 
-        `proof_no` 是"这是第几条证明的路径"：它只标在读数上（每一跳带 `proof_no`），
-        不在这一层改变 `path_group` 的语义 —— 组内 AND、组间 OR 一个字没动。
-        子命题那一层有自己的证明维度（`groups_of` 返回的两层键），这里逐条证明、
-        逐组展开，与改前"逐组展开"的形状同构。
+        语义（"组内 AND / 组间 OR"在每一层都成立，不只顶层）：
 
-        `length`（这一条路径的长度）= 链上最深的跳数（1 + 子节点那条链的长度）——
-        不是"这一层的边数"（那是第一步的宽度，会把长链读成短链，与"最短依赖链"的
-        口径直接冲突；判据当场抓出来过）。
+        - 同一条 `(证明号, path_group)` 内的多条边 = AND：每条都要走到根；
+        - 不同的 `(证明号, path_group)` = OR：任一条走到根就算到根；
+        - 到根 = 存在一条分支，其组内每条边都到根。
+
+        `length` 的口径：这条候选路径的最短可行分支长度 —— 组内取最长的边（AND）、
+        分支间取最短的分支（OR）。整条候选路径都不可行时才报"最深的那条已走前缀"，
+        并在 `why` 里写明没有可行分支：那个数字不是一条可行的链，不许被当成链长
+        （改前它读的是"所有分支里最深的那条"，于是一条 2 跳的链会被报成 3 跳）。
+
+        失败逐条带出（`failures`）：每一条不可行分支一棵
+        `{node, proof_no, path_group, status, why, blocking}`。`blocking` 说的是
+        "它是不是这条候选路径不可行的原因" —— 备选分支断了不影响另一条走到根，那种
+        失败留在读数里，但不许把整条路读成没到根（2026-10-22 审计缺陷 1）。
         """
         hops: list[dict[str, Any]] = []
-        reached = True
-        truncated = False
-        cycle = False
         unwritten: list[str] = []
+        failures: list[dict[str, Any]] = []
+
+        # 环判据按"节点号"比：`proof_chain` 传进来的是裸号（`0001`），而每一条边
+        # 的被依赖端是 `stmt:0001` 这种带前缀的写法。两边不归一，环就看不见 ——
+        # 一条绕回自己的路径会从"另一条分支"逃出去，读成到根了（判据当场抓住过）。
+        start_node = start if ":" in start else f"stmt:{start}"
+
+        def _note_failure(node: str, *, via_proof: int, via_group: int,
+                          status: str, why: str) -> None:
+            """记一条"哪条分支、为什么不可行"（`blocking` 在最后统一落）。"""
+            failures.append({"node": node, "proof_no": via_proof,
+                             "path_group": via_group, "status": status, "why": why})
 
         def _grow(node: str, depth: int, path: Sequence[str],
-                  via_proof: int = _PL.DEFAULT_PROOF_NO) -> int:
-            """返回 `node` 到根还有几跳（本身是根 ⇒ 0）。`depth` 只用于超深判定。
+                  via_proof: int = _PL.DEFAULT_PROOF_NO,
+                  via_group: int = _PL.DEFAULT_PROOF_NO) -> tuple[bool, int, dict[str, Any]]:
+            """`node` 还能不能走到根 ⇒ `(可行, 这条分支的长度, 说明)`。
 
-            `via_proof` 是"从这个节点被走到的那一层证明号"：结构性的那几跳（超深度 /
-            环 / 依赖没写）挂在它上面 —— 它们说的是"在第几条证明的这条路上出的问题"。
+            `via_proof` / `via_group` 是"从这个节点被走到的那一层 `(证明号, 组)`"：结构性
+            的那几跳（超深度 / 环 / 依赖没写）挂在它们上面。这三样不再用全局 flag 表达 ——
+            每个分支把"为什么不可行"带回去，由父层按 AND / OR 组合（改前是一个全局
+            `reached`，于是子命题层退化成"任一条分支断了就整组断"）。
             """
-            nonlocal reached, truncated, cycle
             if depth > max_depth:
-                truncated, reached = True, False
-                hops.append({"node": node, "via_dep_id": "", "path_group": group,
-                             "proof_no": via_proof,
-                             "kind": "", "status": "depth", "why": "超过 max_depth"})
-                return 0
+                hops.append({"node": node, "via_dep_id": "", "path_group": via_group,
+                             "proof_no": via_proof, "kind": "", "status": "depth",
+                             "why": "超过 max_depth"})
+                _note_failure(node, via_proof=via_proof, via_group=via_group,
+                              status="depth", why=f"超过 max_depth（{max_depth}）")
+                return False, 0, {"status": "depth", "why": "超过 max_depth"}
             ok, why = self.is_root(node)
             if ok:
-                return 0
+                return True, 0, {"status": "root", "why": ""}
             if node in path:
-                cycle = True
-                reached = False
-                hops.append({"node": node, "via_dep_id": "", "path_group": group,
-                             "proof_no": via_proof,
-                             "kind": "", "status": "cycle", "why": "依赖里出现环"})
-                return 0
+                hops.append({"node": node, "via_dep_id": "", "path_group": via_group,
+                             "proof_no": via_proof, "kind": "", "status": "cycle",
+                             "why": "依赖里出现环"})
+                _note_failure(node, via_proof=via_proof, via_group=via_group,
+                              status="cycle", why="依赖里出现环")
+                return False, 0, {"status": "cycle", "why": "依赖里出现环"}
             sub = self.groups_of(node)
             if not sub:
-                reached = False
                 unwritten.append(node)
-                hops.append({"node": node, "via_dep_id": "", "path_group": group,
-                             "proof_no": via_proof,
-                             "kind": "", "status": "unwritten", "why": why})
-                return 0
-            best = 0
-            # 子命题的二维展开：逐条证明（`sub_no`）、逐组（`g`），与改前"逐组"同构 ——
-            # 组内 AND / 组间 OR 的语义没动，只是每条证明各走各的边（不跨证明合并）。
+                hops.append({"node": node, "via_dep_id": "", "path_group": via_group,
+                             "proof_no": via_proof, "kind": "", "status": "unwritten",
+                             "why": why})
+                _note_failure(node, via_proof=via_proof, via_group=via_group,
+                              status="unwritten", why=why)
+                return False, 0, {"status": "unwritten", "why": why}
+            # 子命题那一层的二维展开：一条分支 = 一个 `(证明号, path_group)`。
+            # 分支之间取 OR（任一条到根即算到根）；改前这里是"全走一遍、任一失败即
+            # 整组失败"，顶层与子层因此不是同一条规则。
+            branches: list[dict[str, Any]] = []
             for sub_no in sorted(sub):
-                for g in sorted(sub[sub_no]):
-                    for dep in sub[sub_no][g]:
-                        tgt, kind = self.target_of(dep)
-                        status = str(dep.get("status") or "")
-                        hops.append({"node": tgt or node,
-                                     "via_dep_id": str(dep.get("dep_id") or ""),
-                                     "path_group": g, "proof_no": sub_no,
-                                     "kind": kind, "status": status,
-                                     "why": str(dep.get("status_reason") or "")})
-                        if not tgt or status == "dangling":
-                            reached = False
-                            continue
-                        best = max(best, 1 + _grow(tgt, depth + 1,
-                                                   list(path) + [node], sub_no))
-            return best
+                for sub_group in sorted(sub[sub_no]):
+                    viable, length, detail = _along(
+                        node, depth, path, sub_group=sub_group,
+                        edges=sub[sub_no][sub_group], via_proof=sub_no)
+                    branches.append({"proof_no": sub_no, "path_group": sub_group,
+                                     "viable": viable, "length": length,
+                                     "why": detail.get("why", "")})
+            if _or_holds([item["viable"] for item in branches]):
+                viable_lengths = [item["length"] for item in branches if item["viable"]]
+                return (True, _or_length(viable_lengths),
+                        {"status": "branch", "why": "", "branches": branches})
+            return (False, max(item["length"] for item in branches),
+                    {"status": "branch", "why": "没有可行分支", "branches": branches})
 
-        deepest = 0
-        for dep in edges:
-            tgt, kind = self.target_of(dep)
-            status = str(dep.get("status") or "")
-            hops.append({"node": tgt or start, "via_dep_id": str(dep.get("dep_id") or ""),
-                         "path_group": group, "proof_no": proof_no,
-                         "kind": kind, "status": status,
-                         "why": str(dep.get("status_reason") or "")})
-            if not tgt:
-                reached = False
-                continue
-            if status == "dangling":
-                reached = False
-                continue
-            deepest = max(deepest, 1 + _grow(tgt, 1, [start], proof_no))
+        def _along(node: str, depth: int, path: Sequence[str], *, sub_group: int,
+                   edges: Sequence[Mapping[str, Any]],
+                   via_proof: int) -> tuple[bool, int, dict[str, Any]]:
+            """同一个 `(证明号, path_group)` 内的多条边 ⇒ AND：每条都要走到根。
+
+            组内 AND 与分支间 OR 是两次不同的组合：这里只做组内那一层（`_and_holds` /
+            `_and_length`），分支之间的选择在 `_grow` 里做（`_or_holds` / `_or_length`）。
+            """
+            flags: list[bool] = []
+            lengths: list[int] = []
+            whys: list[str] = []
+            for dep in edges:
+                tgt, kind = self.target_of(dep)
+                status = str(dep.get("status") or "")
+                hops.append({"node": tgt or node,
+                             "via_dep_id": str(dep.get("dep_id") or ""),
+                             "path_group": sub_group, "proof_no": via_proof,
+                             "kind": kind, "status": status,
+                             "why": str(dep.get("status_reason") or "")})
+                if status == "dangling":
+                    flags.append(False)
+                    lengths.append(1)
+                    whys.append(f"{tgt or node} 悬空")
+                    _note_failure(tgt or node, via_proof=via_proof, via_group=sub_group,
+                                  status="dangling",
+                                  why=str(dep.get("status_reason") or "这条边悬空"))
+                    continue
+                if not tgt:
+                    flags.append(False)
+                    lengths.append(1)
+                    whys.append("这条边没有指向任何节点")
+                    _note_failure(node, via_proof=via_proof, via_group=sub_group,
+                                  status="no_target",
+                                  why="这条边没有指向任何节点（三个 source_* 都是空的）")
+                    continue
+                viable, length, _detail = _grow(tgt, depth + 1, list(path) + [node],
+                                                via_proof=via_proof,
+                                                via_group=sub_group)
+                flags.append(viable)
+                lengths.append(1 + length)
+            if not flags:
+                return True, 0, {"status": "empty", "why": ""}
+            return (_and_holds(flags), _and_length(lengths),
+                    {"status": "edge", "why": "；".join(whys)})
+
+        viable, length, _detail = _along(start_node, 0, [start_node], sub_group=group,
+                                         edges=list(edges), via_proof=proof_no)
+        for item in failures:
+            item["blocking"] = not viable
         return {"group": group, "proof_no": proof_no, "hops": hops,
-                "length": deepest, "reached": bool(reached),
-                "truncated": truncated, "cycle": cycle,
+                "length": int(length), "reached": bool(viable),
+                "truncated": any(item["status"] == "depth" and item["blocking"]
+                                 for item in failures),
+                "cycle": any(item["status"] == "cycle" and item["blocking"]
+                             for item in failures),
                 "unwritten": unwritten,
+                "failures": failures,
+                "why": "" if viable else self._why_not_viable(failures),
                 "leaves": sorted({h["node"] for h in hops
                                   if h["status"] not in ("dangling", "depth")})}
+
+    @staticmethod
+    def _why_not_viable(failures: Sequence[Mapping[str, Any]]) -> str:
+        """把"哪条分支、为什么不可行"拼成一句话（那一组读数与 summary 都用它）。"""
+        parts: list[str] = []
+        for item in failures:
+            if not item.get("blocking"):
+                continue
+            text = (f"第 {item['proof_no']} 条证明 · 第 {item['path_group']} 组 · "
+                    f"{item['node']}：{item['why']}")
+            if text not in parts:
+                parts.append(text)
+        if not parts:
+            return "没有可行分支（这一组里没有边）"
+        return "没有可行分支：" + "；".join(parts)

@@ -207,14 +207,16 @@ def test_a_duplicate_proof_no_refuses_the_whole_call(tmp_path):
 
 
 def test_a_later_proof_is_appended_and_an_existing_one_is_never_overwritten(tmp_path):
-    """③ 的同族（既有行这一侧）：后补的证明追加，同号不同正文一律不覆盖。
+    """③ 的同族（既有行这一侧）：后补的证明追加，同号不同正文不覆盖（canonical 除外）。
 
-    分三步，每一步都判"盘上到底变了什么"：
+    分四步，每一步都判"盘上到底变了什么"：
     1. 先登记（#p1 + #p2）；
     2. 再交同一条定理、带 #p3 ⇒ 不新建行，清单追加 #p3（这是"一条定理多条证明"的常态：
        证明不是一次交齐的）；
     3. 再交同号 #p2、正文不同 ⇒ `proof_no_taken`，整笔不写（#p2 还是原来那一份，
-       而它的签名可能还挂着）。
+       而它的签名可能还挂着）；
+    4. 再交 canonical 正文、与盘上不同 ⇒ 写入成功，旧正文进 `proof_history`
+       （2026-10-22 审计后：签名是读数，不是门锁）。
     """
     st = _ws(tmp_path)
     b = _agent(st)
@@ -239,10 +241,16 @@ def test_a_later_proof_is_appended_and_an_existing_one_is_never_overwritten(tmp_
     assert VR.proof_text_of(_row(st), 2) == P2, "既有 #p2 的正文不许被覆盖"
     assert [no for no, _ in VR.proof_list(_row(st))] == [1, 2, 3], VR.proof_list(_row(st))
 
-    # #p1 也一样：同一条定理再交一次、canonical 正文不同 ⇒ 不覆盖（签名正挂在它上面）。
+    # #p1 不同：2026-10-22 审计后 canonical 正文允许覆盖（签名是读数，不是门锁）——
+    # 写入成功，旧正文整段留进行的 `proof_history`。改前的期望值是 `proof_text_taken`
+    # 拒收，那条口径让 canonical 永远改不动，已作废。
     canon = b.register_statement(**OWN, proof_text=P1 + "\n（换了一个版本）")
-    assert canon["ok"] is False and canon["kind"] == "proof_text_taken", canon
-    assert _row(st)["proof_text"] == P1, _row(st)["proof_text"]
+    assert canon["ok"] is True and canon.get("canonical_written") is True, canon
+    row_now = _row(st)
+    assert row_now["proof_text"] == P1 + "\n（换了一个版本）", row_now["proof_text"]
+    history = row_now["proof_history"]
+    assert len(history) == 1 and history[0]["text"] == P1, history
+    assert history[0]["sha"] == VR.proof_sha(P1), history
 
 
 # ============================================================ ④ 签名带对象

@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import dedup as D
 from . import interactions as I
 from . import schema as S
 from .extract import extract_text
@@ -269,28 +270,37 @@ def ingest_directory(
                     submit_note=note or f"本地文献目录登记（locallib.ingest_directory，actor={actor}）",
                 ).to_dict(),
             )
-            tx.upsert(
-                "literature",
-                S.Literature(
-                    lit_id=lit_id,
-                    title=title,
-                    type="M",
-                    summary=f"本地书架上的专著/教材（{name}，{plan.pages} 页）",
-                    path=name,
-                    processed=False,
-                    source_request_ids=[req_id],
-                    added_at=S.now_iso(),
-                    download={
-                        "status": "ok",
-                        "note": "本地文件（不是网络下载）；内容类型按扩展名与解析结果判定",
-                        "pages": plan.pages,
-                        "has_text_layer": plan.has_text_layer,
-                        "bytes": size,
-                        "sha256": sha,
-                        "source_path": str(src),
-                    },
-                ).to_dict(),
-            )
+            # 落库键：与 `dedup._row_keys` 读的是同一族（它读 `dedup_key` 与 `_keys`
+            # 两处），所以这里直接调 `dedup.literature_keys` 生成，不另写一份
+            # `title:...|*` 的口径 —— 抄第二份必然漂，而漂的形式是"同一本书两个
+            # 主键"：判重的键读侧看不见这一行，同一本书会被再登记一次。
+            # 本地藏书没有 DOI 与年份，所以键集只有标题那一档；标题规范化成空串
+            # 时键集为空，那就如实留空（不编一个匹配不到任何东西的假键）。
+            keys = D.literature_keys(title, None, None)
+            lit_row = S.Literature(
+                lit_id=lit_id,
+                title=title,
+                type="M",
+                summary=f"本地书架上的专著/教材（{name}，{plan.pages} 页）",
+                path=name,
+                processed=False,
+                source_request_ids=[req_id],
+                dedup_key=keys[0] if keys else "",
+                added_at=S.now_iso(),
+                download={
+                    "status": "ok",
+                    "note": "本地文件（不是网络下载）；内容类型按扩展名与解析结果判定",
+                    "pages": plan.pages,
+                    "has_text_layer": plan.has_text_layer,
+                    "bytes": size,
+                    "sha256": sha,
+                    "source_path": str(src),
+                },
+            ).to_dict()
+            # `_keys` 是"这一行携带的全部去重键"（与 agent_a 写 literature 行时
+            # 同一个诊断字段）；不落它，`dedup._row_keys` 就只能看到一个主键。
+            lit_row["_keys"] = keys
+            tx.upsert("literature", lit_row)
         plan.lit_id = lit_id
         plan.request_id = req_id
         known[sha] = lit_id

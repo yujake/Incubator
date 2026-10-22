@@ -169,17 +169,35 @@ class AgentV:
     # ------------------------------------------------------------------ 三个动作
 
     def verify_proof(self, statement_id: str, proof_text: str = "",
-                     readonly_facts: str = "", proof_no: int = 1,
+                     readonly_facts: str = "", proof_no: Any = 1,
                      **kw: Any) -> dict[str, Any]:
         """把一份证明整体重读一遍，落一行验证台账（`v-NNNN`）。
-        
-        `proof_text` 不给时从 `statements.proof_text` 取（那是 F 交回来的那一份）；两处都没有 ⇒ 如实报 `no_proof_text`（不
-        许拿空证明去问模型，那只会换来一句"信息不足"的 `看不出来`，而它会被读成一次真实审校）。`readonly_facts` 不给时由本方法从前面的只读面现算（见 
-        `_read_only_facts`）。
-        
+
+        ## 证明号与正文必须绑在一起（2026-10-22 审计第 2 条）
+
+        `proof_no` 说"审的是第几份"，送进提示词的正文必须是那一份的正文：
+        参数没给正文 ⇒ 取 `verifications.proof_text_of(该行, proof_no)`；参数给了正文 ⇒
+        它必须与盘上那一份是同一份（sha 相同），否则拒（`proof_text_mismatch`）——
+        记到 `#pN` 上会把 sha 与证明号错配。改前这里是 `if not text: text =
+        hit["proof_text"]`：说"审 #p2"却把 #p1 的正文送进提示词，而 sha 记在 #p2 头上，
+        于是"#p1 没被牵连"与"#p2 真的审过"两句话同时是假的。
+        不给证明号 ⇒ canonical（`#p1`）；给了但认不出（`0` / `'abc'` / `2.0`）⇒
+        `checked=False, reason="bad_proof_no"`（改前 `or 1` 静默折成 `#p1`：签错一份
+        证明，台账上照样写着 `verdict=成立`）；命题的证明清单里没有 `#pN` ⇒
+        `checked=False, reason="no_such_proof"`；那一份在、正文空 ⇒ `no_proof_text`。
+        以上四条都不落台账行。
+
+        ## 台账那一行有没有落地（2026-10-22 审计第 1 条）
+
+        写位失败可能整笔回滚，而回滚（`verifications._rollback_append`）会把台账那一行
+        一起抹掉。改前返回值只看 `verdict` ⇒ 台账 0 字节而返回说"签住了第 3 位"。
+        现在只看 `record_verification` 返回行上的 `checked`：没落地 ⇒ 本方法
+        `checked=False`、`signed_bit3=False`、`reason` 逐字写明"台账那一行被撤回 /
+        没写成"，调用方据此知道必须重签（`review_write.re_sign_required`）。
+
         ## 键集合在三条返回路径上完全相同（与 `verify.evidence_for` 同一纪律）
-        
-        "没查成"（`checked=False`）不是工具失败（同 `verify.check_formal` 的`no_backend`：那是没查成，不是查了没过）⇒ 照样 
+
+        "没查成"（`checked=False`）不是工具失败（同 `verify.check_formal` 的`no_backend`：那是没查成，不是查了没过）⇒ 照样
         `ok` 返回、键一个不少，由 `checked` / `reason` 说出真相。少给键会让下游把"这一格没有读数"读成"这一格是零"。
         """
         del kw  # 声明层没有别的参数；多给的键在这里不静默生效
@@ -208,6 +226,16 @@ class AgentV:
             out["detail"] = (f"命题号必须是 {S.ID_DIGITS} 位十进制（旧数据里的 4 位号仍可读），"
                              f"收到 {statement_id!r}")
             return out
+        # 证明号先判：没给（`None` 或缺省）⇒ canonical；给了但认不出 ⇒ 拒。
+        # 改前 `proof_no=0` 一路被 `or 1` 折成 #p1，"号给错了"没有任何读数。
+        try:
+            no = VR.proof_no_strict(proof_no)
+        except VR.VerificationError as exc:
+            out["reason"] = "bad_proof_no"
+            out["detail"] = f"{exc}；这一格没查成，台账里不留行"
+            self._emit(f"verify_proof({sid})：{exc} —— 没查，不落台账行")
+            return out
+        out["proof_no"] = no
         text = str(proof_text or "")
         statement_full = ""
         if self.store is not None:
@@ -232,8 +260,29 @@ class AgentV:
                 self._emit(f"verify_proof({sid})：命题不在册 ⇒ 没审，不落台账行")
                 return out
             statement_full = str(hit.get("statement_full") or hit.get("statement_text") or "")
+            # 正文只从"证明号指定的那一份"取（2026-10-22 审计第 2 条）：
+            # 改前不看号，一律读 canonical ⇒ "审 #p2"拿的是 #p1 的正文。
+            listed = {int(n) for n, _ in VR.proof_list(hit)}
+            if no not in listed:
+                out["reason"] = "no_such_proof"
+                out["detail"] = (f"命题 {sid} 的证明清单里没有 #{no}"
+                                 f"（有：{sorted(listed)}）⇒ 没审、台账里不留行；"
+                                 "不许拿别的证明的正文顶替")
+                self._emit(f"verify_proof({sid})：没有 #{no} 那一份证明 —— 没审，不落台账行")
+                return out
+            on_disk = VR.proof_text_of(hit, no)
             if not text:
-                text = str(hit.get("proof_text") or "")
+                text = on_disk
+            elif on_disk.strip() and VR.proof_sha(on_disk) != VR.proof_sha(text):
+                # 给了正文、但那一份证明现在不是这一串字 ⇒ 拒。记到 #pN 上会让台账那一行
+                # 的 `proof_sha256` 与它记的 `proof_no` 各说一件事（审计第 2 条的后半）。
+                out["reason"] = "proof_text_mismatch"
+                out["detail"] = (f"参数给的正文与命题 {sid} 上 #{no} 那一份不是同一份"
+                                 f"（参数 sha {VR.proof_sha(text)[:12]}…，盘上 #{no} 的 sha "
+                                 f"{VR.proof_sha(on_disk)[:12]}…）⇒ 拒绝：记到 #{no} 会把 sha "
+                                 "与证明号错配；要么给那一份的正文，要么给对 proof_no")
+                self._emit(f"verify_proof({sid})：正文与 #{no} 不符 —— 没审，不落台账行")
+                return out
         if not text.strip():
             out["reason"] = "no_proof_text"
             out["detail"] = ("没有可审的证明全文（参数里没给，statements 里也没有）"
@@ -259,12 +308,36 @@ class AgentV:
             out["detail"] = f"模型输出不是合法结论：{exc}"
             return out
 
-        row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
-                                     verdict=verdict, verifier=self.actor,
-                                     submission_id=str(self.cfg.get("submission_id") or ""),
-                                     store=self.store, proof_no=proof_no)
-        payload = VR.bit3_payload(row)
+        try:
+            row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
+                                         verdict=verdict, verifier=self.actor,
+                                         submission_id=str(self.cfg.get("submission_id") or ""),
+                                         store=self.store, proof_no=no)
+        except (VR.VerificationError, OSError) as exc:
+            # 台账写不进去（坏行 / 权限 / 磁盘 / 目录）⇒ 这是"没查成"，不是"签住了"。
+            # 不接住它会让异常穿透到工具层，而那一层读不到"这一签没落地"这句话。
+            self._emit(f"verify_proof({sid})：台账写不进去（{type(exc).__name__}: {exc}）—— 没查成")
+            out["reason"] = "ledger_unwritable"
+            out["detail"] = (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+                             "（不落台账、不改位、必须重签）")
+            return out
         writeback = dict(row.get("statement_writeback") or {})
+        if row.get("checked") is False:
+            # 台账那一行没落地（被撤回 / 追加失败）：不许报"签住了第 3 位"。
+            # 改前这里照样 `checked=True, signed_bit3=True`，而盘上 0 字节（审计第 1 条）。
+            out.update({
+                "checked": False,
+                "review_write": writeback,
+                "reason": f"ledger_row_lost：{row.get('reason') or '台账那一行没写成'}",
+                "detail": (f"V 的结论是 {row.get('verdict')!r}，但台账那一行"
+                           + ("被撤回" if writeback.get("rolled_back") else "没写成")
+                           + " ⇒ 这一签没有落地、命题行的第 3 位也没改；"
+                             "必须重签（重新走一次 verify.verify_proof），"
+                             "不许把它当成「审过了」"),
+            })
+            self._emit(f"verify_proof({sid})：{out['reason']} —— 台账里没有这一签")
+            return out
+        payload = VR.bit3_payload(row)
         bits: dict[str, Any] = {}
         try:
             from .. import evidencebits as EB
@@ -275,12 +348,12 @@ class AgentV:
         self._emit(f"verify_proof({sid})：{row['verification_id']} verdict={row['verdict']} "
                    f"signed_bit3={bool(payload)}")
         if writeback and writeback.get("written"):
-            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, proof_no)} 的 reviewed 已写回"
+            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, no)} 的 reviewed 已写回"
                        f"（grade={writeback.get('grade') or '（没算出等级）'}）")
         elif writeback and not writeback.get("written"):
             # 写位失败不许静默：台账那一行已经在盘上，而"位没翻上去"必须能读出来
             # （读侧按台账现算，所以它不是断链，但它是一处要修的失败）。
-            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, proof_no)} 没写成 —— "
+            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, no)} 没写成 —— "
                        f"{writeback.get('reason') or ''}")
         out.update({
             "checked": True,

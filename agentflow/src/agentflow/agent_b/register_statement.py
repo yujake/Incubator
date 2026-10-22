@@ -181,6 +181,49 @@ def _normalize_range(raw: object, *, what: str) -> tuple[dict, str]:
     return out, ""
 
 
+def _canonical_history_entry(old_text: str, new_text: str) -> dict:
+    """被覆盖的旧 canonical 正文留痕的那一条（`proof_history` 列表的元素）。
+
+    形状逐字是 `{"text": 旧正文, "sha": 旧正文 sha256, "at": 覆盖时刻,
+    "replaced_by": 新正文 sha256}`：`sha` 让这一条能被签名台账里的 `proof_sha256`
+    直接对上（"签的是这一版"），`replaced_by` 让"被哪一版换掉的"不必去别处查。
+    时间只做记录，不参与判据（时序判据在台账行序上）。
+    """
+    old = str(old_text)
+    new = str(new_text)
+    return {"text": old, "sha": _VR.proof_sha(old), "at": S.now_iso(),
+            "replaced_by": _VR.proof_sha(new)}
+
+
+def _bits_after_canonical_write(row: Mapping, fresh: Mapping | None) -> dict:
+    """canonical 正文被覆盖之后那一行的 `bits`：只同步第 2 位与它的正文。
+
+    不能整份换成 `fresh`：`fresh` 是这一笔登记时现算的（第 3 位按"没审过"留空），
+    而盘上那一行可能已经带着 V 的签名凭据（`reviewed_by` / `reviewed_by_proof` /
+    `reviewed_sha_by_proof`）。整份换掉等于把"签过旧稿"这件事一起抹掉，读侧就只剩
+    "没签过"，"签的是旧稿"这一档读数（stale）反而看不见了。
+
+    所以这里只动两格：第 2 位换成这一笔的读数，证据里的 `proof_process` 与
+    `proof_source` 换成这一笔的正文来源；签名那几格原样保留，由读侧的
+    `evidencebits._stale_review_cleared` 按"记下来的 sha 与现行正文不符"判过期。
+    """
+    old = dict(row.get("bits") or {})
+    new = dict(fresh or {})
+    if not old:
+        return new
+    if not new:
+        return old
+    out = dict(old)
+    out["proof"] = bool(new.get("proof"))
+    ev = dict(old.get("evidence") or {})
+    fresh_ev = dict(new.get("evidence") or {})
+    ev["proof_process"] = str(fresh_ev.get("proof_process") or "")
+    ev["proof_source"] = str(fresh_ev.get("proof_source") or "")
+    out["evidence"] = ev
+    return _EB.normalize_raw(out, origin=str(row.get("origin") or "own_result"),
+                             kind=str(row.get("kind") or ""))
+
+
 class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None,
@@ -228,31 +271,50 @@ class _RegisterStatement:
         return bits, None
 
     def _attach_proofs(self, stmt_id: str, entries: list[dict],
-                       canonical: str = "") -> dict:
-        """把证明清单挂到既有那一行（同一把 `statements` 锁里读-改-写）。
+                       canonical: str = "", bits: Mapping | None = None) -> dict:
+        """把证明清单与 canonical 正文写回既有那一行（同一把 `statements` 锁）。
 
         为什么不能交给秘书：秘书的白名单（`Secretary._statement_from`）只认 `Statement` 的
         字段，`proofs` 不在 schema 里（业主口径：不加 schema 字段），所以它到不了盘上。
-        这一格因此是 B 的写侧里唯一一处"直接改那一行"的地方，改动面严格限定为：
-        往行 JSON 的 `proofs` 键追加条目，其余键原样保留。
+        这一格因此是 B 的写侧里唯一一处"直接改那一行"的地方。
 
-        三态：`written=True` 表示清单真的多了一条以上；`already` 是"号在册、正文逐字相同"
-        （重复交同一份证明不算失败，也不改写既有的 `created_at`）；`refused` 是"号在册、
-        正文不同"—— 整笔不写（不许静默覆盖既有的一条证明：那是把一份已经存在的证明换掉，
-        而签名可能仍然挂在其上）。
+        ## canonical 正文可以覆盖（2026-10-22 审计后的口径）
+        改前这里把"与盘上不同"当成拒收理由（`proof_text_taken`），理由是覆盖它等于把 V
+        挂在上面的签名一起作废。那条口径与"任何写入路径都不因 sha 不符拒收"相反：签名是
+        读数，不是门锁。改稿是正常动作，代价只是那一签从 `signed` 变成 `stale`（待复核），
+        由读侧 `verifications.review_standing` 现算，不是拒写。
 
-        `canonical` 是这一笔带来的 #p1 正文（`proof_text`）。行已经在册时它若与盘上那一份
-        不同，同样整笔不写并把 `canonical_differs` 置真：那等于要把 canonical 那一份换掉，
-        而 V 的签名正挂在它上面 —— 静默忽略（看起来"交上去了"）比拒绝更坏。
+        旧正文不许静默丢：覆盖之前先把旧正文整段记进行 JSON 的 `proof_history` 列表，
+        每条逐字是 `{"text": 旧正文, "sha": 旧正文字节 sha256, "at": 覆盖时刻,
+        "replaced_by": 新正文字节 sha256}`。读的人因此能回答"这一版之前是哪一版、被哪一版
+        换掉的"，而不需要去别处找归档。
+
+        ## 清单仍不覆盖
+        #p2 及以后是追加式的：同号不同正文仍整笔不写（`proof_no_taken`）。那是"一份已经
+        存在的证明被换掉"，与 canonical 这一格（同一份证明的改稿）不是同一件事。
+
+        ## 三态与返回值
+        `written=True` 表示这一笔真的落盘了（挂了新证明，或覆盖了 canonical）；
+        `already` 是"号在册、正文逐字相同"；`canonical_written` 是"canonical 真被覆盖"；
+        `canonical_pending` 是"这一笔要写 canonical，但没有可写的 store / 行" —— 调用方
+        据此给 `canonical_not_written`，不许折成 `duplicate_statement`（那会让正文静默消失）。
         """
         out: dict = {"written": False, "attached": [], "already": [],
-                     "refused": "", "reason": "", "canonical_differs": False}
-        if not entries and not str(canonical or "").strip():
+                     "refused": "", "reason": "", "canonical_differs": False,
+                     "canonical_written": False, "canonical_pending": False,
+                     "canonical_history": []}
+        want = str(canonical or "").strip()
+        if not entries and not want:
             return out
+        #: 写进 `proof_text` 的是调用方交来的原样正文（`raw_want`），不是比较用的
+        #: `want`（去掉了首尾空白）：`bits.evidence.proof_process` 记的是原样正文，
+        #: 写一份去空白的进盘就会让"正文的 sha"与"位里记的正文"分家。
+        raw_want = str(canonical or "")
         store = getattr(self, "store", None)
         if store is None:
             out["reason"] = ("这一趟没有 store ⇒ 证明清单挂不上去（第 1 份已由秘书落行，"
                              "第 2 份起无处可写）")
+            out["canonical_pending"] = bool(want)
             return out
         with store.tx("statements", actor=str(getattr(self, "actor", "agent-B") or "agent-B"),
                       note=f"agent_b.register_statement:proofs:{stmt_id}") as tx:
@@ -260,19 +322,31 @@ class _RegisterStatement:
             if found is None:
                 out["reason"] = (f"`statements` 里没有 {stmt_id} ⇒ 证明清单无处可挂"
                                  "（行没落成，清单也就没有落点）")
+                out["canonical_pending"] = bool(want)
                 return out
             row = dict(found)
-            want = str(canonical or "").strip()
-            have_canon = str(row.get("proof_text") or "").strip()
-            if want and have_canon and want != have_canon:
-                out["canonical_differs"] = True
-                out["refused"] = "proof_text_taken"
-                out["reason"] = (
-                    "这一条命题已在册，而这一笔交来的 #p1（proof_text）与盘上那一份正文"
-                    "不同 ⇒ 整笔不写：canonical 只有一份，覆盖它等于把 V 挂在上面的签名"
-                    "一起作废（而这里没有任何东西核过那一签）。要换 canonical 那一份："
-                    "另起一个证明号，或者先由人处置旧的那一份与它的签名")
-                return out
+            have_raw = str(row.get("proof_text") or "")
+            have_canon = have_raw.strip()
+            # 逐字比，不按去空白比：只改了首尾空白的稿也是一次改稿，静默不写会让
+            # 调用方以为交上去了，而盘上那一份的 sha 没变（签名也不会转 stale）。
+            canonical_changed = bool(want) and raw_want != have_raw
+            if canonical_changed:
+                if have_canon:
+                    # 旧正文先留痕，再换：顺序反了就会出现"新正文已落、旧正文已经丢了"
+                    # 的窗口（事务失败时内存里那一份改动的可见性没法靠调用方保证）。
+                    raw_history = row.get("proof_history")
+                    history = ([dict(h) if isinstance(h, Mapping) else h
+                                for h in raw_history]
+                               if isinstance(raw_history, (list, tuple)) else [])
+                    entry = _canonical_history_entry(have_raw, raw_want)
+                    history.append(entry)
+                    out["canonical_history"].append(dict(entry))
+                    out["canonical_differs"] = True
+                    row["proof_history"] = history
+                row["proof_text"] = raw_want
+                merged = _bits_after_canonical_write(row, bits)
+                if merged:
+                    row["bits"] = merged
             have = {no: text for no, text in _VR.proof_list(row)}
             listed = [dict(p) if isinstance(p, Mapping) else p
                       for p in (row.get(_VR.PROOFS_KEY) or [])]
@@ -293,12 +367,14 @@ class _RegisterStatement:
                 listed.append({"proof_no": no, "text": text,
                                "created_at": str(entry.get("created_at") or S.now_iso())})
                 out["attached"].append(no)
-            if not out["attached"]:
+            if not out["attached"] and not canonical_changed:
                 return out
-            row[_VR.PROOFS_KEY] = listed
+            if out["attached"]:
+                row[_VR.PROOFS_KEY] = listed
             tx.upsert("statements", row,
                       note=f"agent_b.register_statement:proofs:{stmt_id}")
             out["written"] = True
+            out["canonical_written"] = bool(canonical_changed)
         return out
 
     @staticmethod
@@ -583,7 +659,8 @@ class _RegisterStatement:
             # 对调用方来说这是"成功了"（那一行的档位变了），不是重复读数。
             stmt_now = str(written.get("stmt_id") or "")
             attach = self._attach_proofs(stmt_now, proofs_listed,
-                                         canonical=str(proof_text or ""))
+                                         canonical=str(proof_text or ""),
+                                         bits=bits)
             out = {"ok": True, "stmt_id": stmt_now,
                    "source_lit_id": lit_id or None,
                    "quote_verified": quote_verified, "origin": origin,
@@ -591,12 +668,19 @@ class _RegisterStatement:
                    "evidence_kind": evidence_kind, "upgraded": True,
                    "row": dict(written.get("row") or {}),
                    "changes": list(written.get("changes") or []),
-                   "note": ("这一条**没有新建行**：同一条 statement_full 已在册，而这一笔"
+                   "note": ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
                             f"（{written.get('reason') or ''}）。"
                             "内容面一个字没动；要改内容请另起一条（force_new）并写清为什么。")}
             if proofs_listed:
                 out.update(self._proofs_reading(attach))
+            if attach.get("canonical_written"):
+                out["canonical_written"] = True
+                out["canonical_history"] = list(attach.get("canonical_history") or [])
+                out["note"] += ("这一笔还覆盖了 canonical 正文（`proof_text`）：旧正文整段"
+                                "留在行的 `proof_history` 里（sha / at / replaced_by 逐条"
+                                "可查）；盖在旧正文上的那一签读侧转 `stale`（待复核），"
+                                "写入不因 sha 不符被拒。")
             if proofs_dropped:
                 out["proofs_dropped"] = proofs_dropped
             if attach.get("refused"):
@@ -612,11 +696,26 @@ class _RegisterStatement:
             #
             # 多证明模型下这条分支多了一个合法用途：这条定理已经在册，而这一笔带来的是
             # 它的一条新证明（#p2 及以后）⇒ 行不新建，证明挂到既有那一行上。
+            #
+            # 2026-10-22 审计后这条分支还要接住第三种合法用途：这一笔带来的是 canonical
+            # 正文（`proof_text`），既可能是"登记时还没有证明、现在补上了"，也可能是
+            # 改稿。两者都要真写进去；后者还负责把旧正文留进 `proof_history`。
             stmt_dup = str(written.get("stmt_id") or "")
             attach = self._attach_proofs(stmt_dup, proofs_listed,
-                                         canonical=str(proof_text or ""))
+                                         canonical=str(proof_text or ""),
+                                         bits=bits)
             if attach.get("refused"):
                 return _refuse(str(attach["refused"]), str(attach.get("reason") or ""),
+                               stmt_id=stmt_dup)
+            if attach.get("canonical_pending"):
+                # 这一笔要写 canonical 而写不进去（没有 store / 行不在）⇒ 必须给一条
+                # 明确的拒绝码。折成 duplicate_statement 会让"正文一行没落"看起来
+                # 像"这条定理早就登记过了"，而正文去哪了没有任何一格说得出来。
+                return _refuse("canonical_not_written",
+                               ("这一笔带来的 canonical 正文没有写进库："
+                                + str(attach.get("reason") or "没有可写的行")
+                                + " ⇒ 盘上那一份 `proof_text` 没有被改动。"
+                                "这不是「重复登记」：正文确实交上来了，只是落点不可用"),
                                stmt_id=stmt_dup)
             if attach.get("written"):
                 out = {"ok": True, "stmt_id": stmt_dup,
@@ -624,9 +723,19 @@ class _RegisterStatement:
                        "quote_verified": quote_verified, "origin": origin,
                        "quote_mode": str(quote_mode or ""),
                        "evidence_kind": evidence_kind, "new_row": False,
-                       "note": ("这一条**没有新建行**（同一条命题已在册），但这一笔带来的"
-                                "证明挂上去了：清单是追加式的，#p1 仍是那一行原来的 "
-                                "`proof_text`。")}
+                       "note": ("这一条没有新建行（同一条命题已在册）。")}
+                if attach.get("canonical_written"):
+                    out["canonical_written"] = True
+                    out["canonical_history"] = list(attach.get("canonical_history") or [])
+                    out["note"] += (
+                        "这一笔带来的 canonical 正文已经写进 `proof_text`：旧正文整段留在"
+                        "行的 `proof_history` 里（每条 `{text, sha, at, replaced_by}`，"
+                        "`sha` 能与签名台账的 `proof_sha256` 直接对上）；盖在旧正文上的"
+                        "那一签读侧转 `stale`（待复核），写入不因 sha 不符被拒。")
+                if proofs_listed:
+                    out["note"] += ("这一笔带来的证明清单也挂上去了：清单是追加式的，"
+                                    "#p1 是行上的 `proof_text`，其余在 "
+                                    f"`{_VR.PROOFS_KEY}` 里。")
                 out.update(self._proofs_reading(attach))
                 return out
             if proofs_listed and not attach.get("already"):
@@ -652,7 +761,8 @@ class _RegisterStatement:
         stmt_id = str(written["stmt_id"])
         data = dict(written.get("row") or {})
         attach = self._attach_proofs(stmt_id, proofs_listed,
-                                     canonical=str(proof_text or ""))
+                                     canonical=str(proof_text or ""),
+                                     bits=bits)
         if proofs_listed and not attach.get("written"):
             # 行已经由秘书落好了（#p1 在盘上），而清单没挂上 —— 不许当成功返回：
             # 调用方会以为"这条定理的第二份证明交上去了"。如实报，并给出 stmt_id。
@@ -693,6 +803,11 @@ class _RegisterStatement:
                 #: 的返回值因此与今天逐字相同。
                 **({"proofs": [{"proof_no": int(e["proof_no"])} for e in proofs_listed]}
                    if proofs_listed else {}),
+                #: canonical 正文在"新建行"这一支上被 `_attach_proofs` 覆盖时（少见：
+                #: 秘书落下的 `proof_text` 与这一笔交来的不同），旧正文的留痕也一并给出来。
+                **({"canonical_written": True,
+                    "canonical_history": list(attach.get("canonical_history") or [])}
+                   if attach.get("canonical_written") else {}),
                 # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
                 # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
                 # 也能扫到它；这里再给一次是为了让调用方当场就知道）。

@@ -991,6 +991,30 @@ r["history"]]`）⇒ 两轮全 `no_change` 与四轮全 `progress` 的计划在�
                    "（派出去的请求不算攻坚推进 —— 那是「闭」那一档的事）")
 
 
+def _review_locator(bits: Mapping[str, Any]) -> str:
+    """无台账按位读时，这条"审过"能不能定位到一次具体的签名（空串 = 判不了）。
+
+    ## 为什么需要这一格（2026-10-22 审计的第 4 条）
+    `bits.reviewed=True` 是写侧留下的一个布尔，它本身不说明"谁在哪一版上签的"。
+    有台账的行由台账现算（`verifications.review_standing`）；没有台账的历史行改前一律
+    按位读，于是"位说审过、台账一次没签、凭据里也没有任何可定位的东西"也会被算进 R10 ——
+    同一行在 `statement_review_reading` 那边读成 `unsigned` / `conjecture`，两条读侧
+    对同一行给出两个等级。
+
+    可定位 = `bits.evidence.reviewed_by` 里至少有 `verification_id` 或 `proof_sha256`
+    之一（前者指向台账的一行，后者指向被签的那一版正文）。两者都没有 ⇒ 判不了 ⇒
+    不判 `pre_theorem`、不计入 R10（三态纪律：判不了不是通过）。
+    """
+    by = dict(dict(bits.get("evidence") or {}).get("reviewed_by") or {})
+    vid = str(by.get("verification_id") or "").strip()
+    if vid:
+        return f"verification_id={vid}"
+    sha = str(by.get("proof_sha256") or "").strip()
+    if sha:
+        return f"proof_sha256={sha[:12]}"
+    return ""
+
+
 def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
     """按受控档位现算一行验收读数 ⇒ `(条数, 明细)`。
 
@@ -1586,13 +1610,16 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         #   · 有台账（`verifications/<号>.jsonl` 在盘上）=> 以台账为准：只有至少一条
         #     证明 `signed` 才算审过；`stale` / `rejected` / `unsigned` 不计；
         #     `unreadable` 记成"没查成"（不折成任何一种通过）；
-        #   · 没台账 => 仍按位读（历史行 / 夹具：那一位就是它们的唯一读数）。
+        #   · 没台账 => 只有这一位能定位到一次具体签名（`reviewed_by` 里有
+        #     `verification_id` 或 `proof_sha256`）时才按位读；两者都没有 ⇒ 判不了、
+        #     不判 pre_theorem、不计入（见 `review_without_locator_ids`）。
         # 这不是新增一档门，是让这一档数的是"现在这一份被审过"，而不是"曾经审过"。
         review_states: dict[str, int] = {s: 0 for s in _VR_R10.REVIEW_STATES}
         stale_ids: list[str] = []
         rejected_ids: list[str] = []
         unreadable_ids: list[str] = []
         unsigned_ids: list[str] = []
+        without_locator_ids: list[str] = []
         proofs_stale: list[str] = []
         proofs_unreviewed: list[str] = []
         ledger_rows = 0
@@ -1630,6 +1657,18 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                     bits = dict(bits)
                     bits["reviewed"] = reviewed_now
                     grade = str(EB.derive_grade(bits, kind=str(r.get("kind") or "")))
+            elif (str(r.get("kind") or "") != "concept"
+                  and str(bits.get("origin") or "") != "external_lit"
+                  and bool(bits.get("reviewed"))
+                  and not _review_locator(bits)):
+                # 没有台账（历史行 / 夹具），位说审过，而凭据里没有任何可定位的签名
+                # （无 verification_id、无 proof_sha256）⇒ 判不了。位本身不是凭据：
+                # 同一行在 `statement_review_reading` 那边读成 unsigned / conjecture，
+                # 这里若照旧按位算 pre_theorem，两条读侧就会对同一行给出两个等级。
+                bits = dict(bits)
+                bits["reviewed"] = False
+                grade = str(EB.derive_grade(bits, kind=str(r.get("kind") or "")))
+                without_locator_ids.append(sid)
             grades[grade] = grades.get(grade, 0) + 1
             if has_bits:
                 grades_with_bits[grade] = grades_with_bits.get(grade, 0) + 1
@@ -1699,6 +1738,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "rejected_ids": rejected_ids[:8],
             "unsigned_ids": unsigned_ids[:8],
             "unreadable_ids": unreadable_ids[:8],
+            #: 无台账、位说审过、而凭据里没有任何可定位的签名（无 `verification_id`、
+            #: 无 `proof_sha256`）的行：判不了 ⇒ 不判 pre_theorem、不计入 R10。
+            "review_without_locator_ids": without_locator_ids[:8],
+            "review_without_locator_total": len(without_locator_ids),
             #: 逐条证明的两档读数（写法人人是 `000004#p2`；不带 `#pN` 等价 `#p1`）。
             #: 它们是"待复核"与"还没审"这两件事，不折进"没有证明"。
             "proofs_stale": proofs_stale[:8],
@@ -1711,7 +1754,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "旧版 ⇒ 待复核、不计入（见 `stale_ids` / `proofs_stale`）；`rejected` = 现在"
                 "这一份被签过、结论不是「成立」；`unsigned` = 一次都没签（见 "
                 "`proofs_unreviewed`）；`unreadable` = 台账读不出来（没查成）。"
-                "没有台账的行（历史行 / 夹具）仍按 `bits.reviewed` 读。"
+                "没有台账的行（历史行 / 夹具）只有 `reviewed_by` 里至少有 "
+                "`verification_id` 或 `proof_sha256`（能定位到一次具体签名）时才按 "
+                "`bits.reviewed` 读；两者都没有 ⇒ 判不了、不计数"
+                "（见 `review_without_locator_ids`）。"
                 "哈希是读数不是授权：`stale` 只影响这一格计不计，不拦任何写入；"
                 "定理档 = 在 in-sync 的证明里取最高（`verifications.statement_grade`）"),
             "cited_skipped": cited_skipped,

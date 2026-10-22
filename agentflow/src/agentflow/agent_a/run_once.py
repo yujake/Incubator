@@ -10,8 +10,84 @@
 """
 from __future__ import annotations
 
+from typing import Any, Iterable, Sequence
+
 from ._support import ARunResult, D, Path, S, T, X, make_lease, shutil, tempfile
 from .. import litstage as L
+
+
+def _candidate_identity(title: Any, doi: Any) -> tuple[str, str | None]:
+    """一条候选在"同一次委托"里的身份：(规范化标题, 规范化 DOI)。
+
+    为什么两格都要规范化：候选行上存的是原始字符串，而同一次检索里同一个源
+    可能把同一篇交回两次（大小写、URL 前缀、句末标点不同）。直接比原串会让
+    "同一篇"又多堆一行，而堆出来的行在读数上与"真的又检索到一篇"同形。
+    """
+    return T.normalize(str(title or "")), D.normalize_doi(doi)
+
+
+def _declined_reason_counts(rows: Iterable[dict]) -> dict[str, int]:
+    """本次委托里没入库的候选行，按受控理由码分组计数（没给码的按状态记）。
+
+    只数没入库的那些：`admitted` 的行没有"为什么没入库"这一格，把它们混进
+    分布会让理由分布里出现一个不存在的理由。
+    """
+    out: dict[str, int] = {}
+    for row in rows:
+        status = str(row.get("status") or "")
+        if status == "admitted":
+            continue
+        key = str(row.get("reason_code") or "") or f"status={status}"
+        out[key] = out.get(key, 0) + 1
+    return out
+
+
+def _hits_reading(hits: int, rows: Sequence[dict], *, registered: int) -> str:
+    """「检索到几条、入库几条、其余为什么没入」的一句话读数。
+
+    为什么它必须进 `last_error`：`search_requests.outcome` 的词表是禁改区契约
+    （`schema.SEARCH_OUTCOMES`），里面没有"找到了但一条都没入库"这一档 ——
+    那种情形只能落在 `no_results` 上。不补一句读数的话，它与"一条都没检索到"
+    在盘上完全同形：审计读数就是 `registered=0` / `outcome=no_results`，
+    而同一次的三条候选其实全被本地重叠闸拒收（`overlap_without_new_content`）。
+
+    读数里必须有"命中数"与"理由码分布"两格：只给一个总数答不出"是被挡了
+    还是丢了"，只给理由分布答不出"一共找回几条"。
+    """
+    declined = _declined_reason_counts(rows)
+    distribution = ("、".join(f"{code}={n}" for code, n in sorted(declined.items()))
+                    or "无（候选行还停在 pending）")
+    return (f"检索命中 {int(hits)} 条、入库 {int(registered)} 条；"
+            f"未入库理由分布：{distribution}")[:480]
+
+
+def _source_failure_reading(errors: Sequence[str], sources: Sequence[dict]) -> str:
+    """「哪几个源失败了」的一句话读数（没有源失败时返回空串）。
+
+    为什么有命中也要写：`outcome=ok` 只说"至少登记了一篇"，它答不出
+    "这一问是不是还有源没交货"。改前这一档把 `last_error` 写成 `None`，
+    于是"两个源被限流、第三个源交回 1 篇"与"三个源都正常、其中两个 0 命中"
+    在盘上同形，而前者意味着这篇文献的证据面可能少了一半来源。
+    """
+    failed = [str(s.get("name") or "") for s in sources
+              if str(s.get("status") or "") == "failed"]
+    refused = [str(s.get("name") or "") for s in sources
+               if bool(s.get("refused"))]
+    failed = [name for name in failed if name]
+    refused = [name for name in refused if name]
+    parts: list[str] = []
+    if failed:
+        parts.append(f"{len(failed)} 个源失败：{'、'.join(failed)}")
+    if refused:
+        parts.append(f"{len(refused)} 个源没把这一问发出去：{'、'.join(refused)}")
+    if parts:
+        return ("本次检索有 " + "；".join(parts)
+                + "；其余源交回的结果已登记（这一条不是「检索正常」）")[:480]
+    if errors:
+        return ("本次检索有源级报错（逐源读数里没有失败行）："
+                + "; ".join(str(e) for e in errors))[:480]
+    return ""
+
 
 class _RunOnce:
     def run_once(self) -> ARunResult:
@@ -75,27 +151,45 @@ class _RunOnce:
                     "language": getattr(cand, "language", None),
                     "provider": getattr(cand, "provider", "?"),
                     "raw": getattr(cand, "raw", {}) or {},
+                    # 下载要的是"这一条候选"本身（`pdf_url` 只活在它上面）。
+                    # 以前按下标去 `candidates[i]` 取，而 `prepared` 会跳过空题名的
+                    # 候选 ⇒ 下标一错位就下错文件；挂在这里之后映射只有一份。
+                    "cand": cand,
                 })
 
             # ---- 阶段 1a：暂存（`lit_candidates`，按委托）+ 入库判断（上限 + 重叠）。
+            # 暂存之前先做一次"本次委托已有哪些 pending"的 find：同一委托重跑
+            # （崩溃后重领、或调用方重复驱动同一行请求）时，同一篇候选不许再追加
+            # 一个槽位。审计读数：同一个主题的两次委托把 `lit_candidates` 从 4 行
+            # 堆到 8 行，第二组 4 行的标题与 DOI 与第一组逐字相同。
+            # 身份口径是 `_candidate_identity`（规范化标题 + 规范化 DOI），
+            # 不是原字符串：同一篇换个大小写/URL 前缀不该换行。
+            pending_identity = {
+                _candidate_identity(row.get("title"), row.get("doi"))
+                for row in self.store.rows("lit_candidates")
+                if str(row.get("request_id")) == req["request_id"]
+                and str(row.get("status")) == "pending"
+            }
+            fresh_entries = [e for e in prepared
+                             if _candidate_identity(e["title"], e["doi"]) not in pending_identity]
             # `plan["admitted"]` 才是这一轮"可以进 literature"的那些；
             # 它不是 `prepared` 的同义词：超配额的、被重叠挡掉的都在另外两栏里。
             plan = None
-            slot_of_index: list[str] = []
+            slots: list[str] = []
             entry_by_slot: dict[str, dict] = {}
-            if prepared:
+            if fresh_entries:
                 staged = L.stage_entries(
                     self.store,
                     [{"title": e["title"], "doi": e["doi"], "provider": e["provider"],
                       "year": e["year"], "type_code": e["type"], "summary": e["summary"],
                       "url": str(getattr(e["raw"], "get", lambda *_: None)("pdf_url") or "")}
-                     for e in prepared],
+                     for e in fresh_entries],
                     request_id=req["request_id"], actor=self.actor, note="a.run_once.stage",
                 )
-                slot_of_index = [s["slot"] for s in staged["staged"]]
-                entry_by_slot = {slot: prepared[i] for i, slot in enumerate(slot_of_index)}
+                slots = [s["slot"] for s in staged["staged"]]
+                entry_by_slot = dict(zip(slots, fresh_entries))
                 plan = L.admission_plan(
-                    self.store, request_id=req["request_id"], slots=slot_of_index,
+                    self.store, request_id=req["request_id"], slots=slots,
                     on_over_cap="truncate", duplicate_branch_ok=True,
                 )
             admit_slots = [str(it["slot"]) for it in (plan or {}).get("admitted") or []]
@@ -104,14 +198,13 @@ class _RunOnce:
             # 没通过入库判断的候选不下载：它们是"待审/已挡"的行，下载一份不会带来
             # 任何新信息，只会让 staging 里多出一堆永远不会被引用的字节。
             downloads = 0
-            for i, entry in enumerate(prepared):
-                slot = slot_of_index[i] if i < len(slot_of_index) else ""
+            for entry, slot in zip(fresh_entries, slots):
                 if slot not in admit_slots:
                     entry["download"] = {"status": "skipped", "error": "not_admitted",
                                          "http_status": None, "bytes": 0, "sha256": None}
                     continue
                 if downloads < self.max_downloads:
-                    dl = self._stage_download(candidates[i], staging)
+                    dl = self._stage_download(entry["cand"], staging)
                     downloads += 1 if dl.get("status") != "skipped" else 0
                     entry["download"] = dl
                 else:
@@ -241,7 +334,11 @@ class _RunOnce:
                     fresh["done"] = True
                     fresh["outcome"] = "ok"
                     fresh["lease_until"] = None
-                    fresh["last_error"] = None
+                    # 有命中不等于"每个源都正常"：只要有一个源失败（或这一问没
+                    # 发出去），`last_error` 就不许写 null —— 否则"两个源被限流、
+                    # 第三个源交回一篇"与"三个源都正常"在盘上同形。
+                    fresh["last_error"] = _source_failure_reading(
+                        search_errors, result.sources) or None
                 elif search_errors:
                     # DESIGN.md §5.3：搜索失败不等于这条请求结束。
                     # 如果这里就置 done，那么"租约到期重试"和"超过 max_attempts 才放弃"
@@ -281,11 +378,25 @@ class _RunOnce:
                         fresh["lease_until"] = make_lease(self.retry_backoff_seconds)
                         fresh["last_error"] = "; ".join(search_errors)
                 else:
-                    # 搜索正常执行但零命中 —— 这是一个有效结论，不是错误
+                    # 搜索正常执行但零命中 —— 这是一个有效结论，不是错误。
+                    # 但"零命中"只在真的没有候选时才成立：有候选、只是全被本地
+                    # 重叠闸/配额挡掉，`outcome` 词表里没有对应的一档（它是禁改区
+                    # 契约），所以读数的区别必须落在 `last_error` 上：
+                    # 命中数 / 入库数 / 理由码分布。否则"找到了、全被拒"与
+                    # "什么都没找到"在盘上同形（审计读数：registered=0、
+                    # outcome=no_results，而同一次三条候选全是
+                    # overlap_without_new_content）。
                     fresh["done"] = True
                     fresh["outcome"] = "no_results"
                     fresh["lease_until"] = None
-                    fresh["last_error"] = None
+                    cand_rows = [
+                        dict(row) for row in tx.rows("lit_candidates")
+                        if str(row.get("request_id")) == req["request_id"]
+                    ]
+                    fresh["last_error"] = (
+                        _hits_reading(len(prepared), cand_rows, registered=len(new_ids))
+                        if prepared else None
+                    )
 
                 if search_errors:
                     tx.info("search_errors", request_id=req["request_id"], errors=search_errors)

@@ -1415,7 +1415,7 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
                    bits={"proof": True, "reviewed": True,
                          "evidence": {"proof_source": "own",
                                       "proof_process": "（逐步论证）",
-                                      "reviewed_by": {"round": "V-0001",
+                                      "reviewed_by": {"verification_id": "v-000001", "round": "V-0001",
                                                       "verdict": "no_defect"}}})
         # ③ 引用命题：凭文献代号进第 2+3 位 ⇒ 等级一样是预备定理级，但不算我方产出
         _statement(s, "0002", origin="external_lit", source_lit_id="0042",
@@ -1523,7 +1523,7 @@ def test_the_reviewed_proof_leg_separates_never_computed_from_low_grade(
         _statement(s, "0002", bits={"proof": True, "reviewed": True,
                                     "evidence": {"proof_source": "own",
                                                  "proof_process": "（逐步论证）",
-                                                 "reviewed_by": {"round": "V-0001",
+                                                 "reviewed_by": {"verification_id": "v-000001", "round": "V-0001",
                                                                  "verdict": "no_defect"}}})
 
     st = _project(tmp_path, seed=seed)
@@ -1560,7 +1560,7 @@ def test_the_external_lit_grade_carries_a_readable_reason(tmp_path: pathlib.Path
         _statement(s, "0001", bits={"proof": True, "reviewed": True,
                                     "evidence": {"proof_source": "own",
                                                  "proof_process": "（逐步论证）",
-                                                 "reviewed_by": {"round": "V-0001",
+                                                 "reviewed_by": {"verification_id": "v-000001", "round": "V-0001",
                                                                  "verdict": "no_defect"}}})
 
     st = _project(tmp_path, seed=seed)
@@ -1612,7 +1612,7 @@ def test_the_non_numeric_leg_satisfies_the_calculate_or_construct_stage(
         _statement(s, "0000", bits={"proof": True, "reviewed": True,
                                     "evidence": {"proof_source": "own",
                                                  "proof_process": "（逐步论证）",
-                                                 "reviewed_by": {"round": "V-0001"}}})
+                                                 "reviewed_by": {"verification_id": "v-000001", "round": "V-0001"}}})
 
     st = _project(tmp_path, seed=seed)
     report = _write_report(tmp_path)
@@ -3087,7 +3087,7 @@ def test_the_construct_stage_needs_an_own_derived_statement(tmp_path: pathlib.Pa
     st, report, ws = _research_ready(tmp_path, cover=cover)
     bits = {"proof": True, "reviewed": True,
             "evidence": {"proof_source": "own", "proof_process": "（逐步论证）",
-                         "reviewed_by": {"round": "V-0001", "verdict": "no_defect"}}}
+                         "reviewed_by": {"verification_id": "v-000001", "round": "V-0001", "verdict": "no_defect"}}}
     _valid_statement(st, "0003", bits=bits)
     _seal(ws, st)
     red = _gate(st, report)

@@ -181,7 +181,11 @@ def test_state_one_no_providers_uses_the_role_wiring_and_says_so(store):
     # 这一格会变成 ["alpha","beta"]，这条立即红（折平三态的那条路被钉住）。
     assert out["providers_requested"] is None, out["providers_requested"]
     assert out["role_providers"] == ["alpha", "beta"], out["role_providers"]
-    assert out["sources"] == [], "第一态没有跨源合并，编一份逐源读数出来就是假读数"
+    # 第一态也逐源报状态（2026-10-20 审计 A 的缺陷 6）：不报的话，"被限流"与
+    # "0 命中"在读数上同形。这里两个源都交货了一条，逐源读数必须如实说这件事；
+    # "没点名"这件事仍由 `providers_requested=None` 回答，不许混进这一格。
+    assert [s["name"] for s in out["sources"]] == ["alpha", "beta"], out["sources"]
+    assert all(s["status"] == "ok" and s["count"] == 1 for s in out["sources"]), out["sources"]
     # 反真空：真的问了接线上的每一个源（不是"读数全 0"混过去）。
     assert len(alpha.calls) == 1 and len(beta.calls) == 1, (alpha.calls, beta.calls)
     assert out["cost"]["provider_calls"] == 2, out["cost"]
@@ -396,7 +400,11 @@ def test_the_claim_side_still_walks_the_whole_wiring_when_the_row_names_nothing(
     assert len(alpha.calls) == 1 and len(beta.calls) == 1, (alpha.calls, beta.calls)
     assert res.providers_requested == [], res.providers_requested
     assert res.role_providers == ["alpha", "beta"], res.role_providers
-    assert res.sources == [], res.sources
+    # 第一态也逐源报状态（2026-10-20 审计 A 的缺陷 6）：改前这里是空数组，
+    # 于是"两个源被限流"与"两个源都 0 命中"在读数上同形。现在两个源都在，
+    # 且各自带状态 —— 这一条断言的正是"接线上的每一个源都被问过、都有读数"。
+    assert [s["name"] for s in res.sources] == ["alpha", "beta"], res.sources
+    assert all(s["status"] == "ok" and s["count"] == 1 for s in res.sources), res.sources
     assert res.cost["provider_calls"] == 2, res.cost
 
 

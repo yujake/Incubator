@@ -69,8 +69,11 @@ class ARunResult:
     #: 角色级接线上有哪些源（第一态用它说明"这一次用的是哪些源"）。
     role_providers: list[str] = field(default_factory=list)
     #: 逐源读数（形态照工具面 `search.literature` 的 `sources[]`）。
-    #: 只在请求行点名了源的那一态非空 —— 第一态按角色配置查，跨源合并归提交阶段，
-    #: 那里没有"逐源三态"这件事，编一份出来就是假读数。
+    #: 两态都有：点名了源的那一态来自 `MultiProvider` 的逐源统计，没点名的
+    #: 第一态来自 `_search_along_wiring` 的逐源读数 —— 第一态不报的话，
+    #: "某个源被限流"与"接线上的源全都 0 命中"在动作读数上同形（2026-10-20
+    #: 审计 A 的缺陷 6）。"这一次有没有点名源"仍由 `providers_requested` 回答
+    #: （`None` = 没点名），不许用 `sources` 是否为空去推断。
     sources: list[dict] = field(default_factory=list)
     #: 成本读数（形态照工具面的 `cost`）：`provider_calls` 是这一轮向上游发了几次。
     cost: dict = field(default_factory=dict)

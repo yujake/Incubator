@@ -309,13 +309,19 @@ class _Core:
         named = [str(x) for x in (req.get("providers") or [])]
         t0 = time.monotonic()
         if not named:
-            out, errors = self._search_along_wiring(req["topic"], mode, query_desc, limit)
+            out, errors, stats = self._search_along_wiring(
+                req["topic"], mode, query_desc, limit)
             return out, errors, {
                 # 第一态：`providers_requested=None` 才是"没点名"的读数。
                 # 写成空数组会与"点名了、但一个都没接上"同形。
                 "providers_requested": None,
                 "role_providers": self._wired_provider_names(),
-                "sources": [],
+                # 第一态也逐源报状态：改前这里是空数组，于是"两个源被限流"
+                # 与"接线上的源全都 0 命中"在读数上完全同形（都只剩
+                # `outcome=no_results`）。逐源读数由 `_search_along_wiring`
+                # 产生，形状与点名那一态、与工具面 `search.literature` 的
+                # `sources[]` 逐键相同。
+                "sources": self._source_rows(stats),
                 "cost": {"provider_calls": len(self.providers),
                          "elapsed_s": round(time.monotonic() - t0, 3)},
             }
@@ -361,23 +367,58 @@ class _Core:
         }
 
     def _search_along_wiring(self, topic: str, mode: str, query_desc: str,
-                             limit: int) -> tuple[list[Any], list[str]]:
-        """第一态（请求行没点名源）：串行问角色级接线上每一个源。
+                             limit: int) -> tuple[list[Any], list[str], dict]:
+        """第一态（请求行没点名源）：串行问角色级接线上每一个源，并留下逐源读数。
 
         并发度故意为 1（串行 provider）——避免同时打多个 API 触发限流。
         候选只做拼接、不在这里跨源去重：判重在提交阶段统一做
         （`dedup.find_existing_literature` + 锁内重判），这里是加 `providers`
         这一格之前逐字相同的那条路。
+
+        ## 第三个返回值为什么必须有（逐源三态）
+
+        改前这一态不产出 `sources`，于是"两个源被限流"与"接线上的源全都 0 命中"
+        在动作读数上同形：两者都只剩 `outcome=no_results` 与一个空的 errors。
+        区分它们靠的是 `providers.ProviderStat` 那一套受控状态，本方法只负责
+        按源把事实填进去 —— 分类的真身仍在 `providers`（`provider_error_kind` /
+        `_refusal_state_of_message` / `_provider_refusal`），这里不另写一份
+        "限流还是被墙"的判据，否则两处一漂，"限流"就会在动作面上重新变成一个
+        普通失败（FC-03 的老形态）。
+
+        三档在读数上如何分开：跑成了（`status="ok"`，`count` 可能是 0）、
+        上游抛了（`status="failed"` + `error_kind`，其中 `error_kind=rate_limited`
+        就是限流那一档）、这一问根本没发出去（第三态状态名，`error_kind` 留空）。
         """
+        from .. import providers as P
+
         out: list[Any] = []
         errors: list[str] = []
+        stats: dict[str, Any] = {}
         for p in self.providers:
+            name = str(getattr(p, "name", type(p).__name__))
             try:
-                got = p.search(topic, mode, query_desc, limit)
-                out.extend(got or [])
+                got = list(p.search(topic, mode, query_desc, limit) or [])
             except Exception as e:  # provider 失败不应让整个请求失败
-                errors.append(f"{getattr(p, 'name', type(p).__name__)}: {type(e).__name__}: {e}")
-        return out, errors
+                errors.append(f"{name}: {type(e).__name__}: {e}")
+                refusal_state = P._refusal_state_of_message(str(e))
+                stats[name] = P.ProviderStat(
+                    status=refusal_state or "failed", count=0,
+                    error_kind="" if refusal_state else P.provider_error_kind(e),
+                    error=str(e),
+                )
+                continue
+            # 有的 provider 对"这一问不适用"刻意不抛（`Y-1`）：统计面只能从它
+            # 自己的台账上读。读法与 `MultiProvider` 是同一处实现。
+            undispatched, why = P._provider_refusal(p, got)
+            if undispatched:
+                stats[name] = P.ProviderStat(
+                    status=undispatched, count=0, error_kind="",
+                    error=why or undispatched,
+                )
+                continue
+            out.extend(got)
+            stats[name] = P.ProviderStat(status="ok", count=len(got))
+        return out, errors, stats
     def _stage_download(self, cand: Any, staging: Path) -> dict:
         """把候选的 PDF 下到 staging 目录（无锁，慢操作）。
 

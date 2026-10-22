@@ -42,6 +42,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
@@ -998,6 +999,10 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
     stamp = generated_at or S.now_iso()
     admitted = [r for r in rows if str(r.get("status")) == "admitted"]
     other = [r for r in rows if str(r.get("status")) in ("withdrawn", "rejected", "cleared")]
+    # 已入库的篇数按去重后的 lit_id 计数，不是按行数：两条候选行都可能判重命中
+    # 同一个 literature 行（`source_request_ids` 累积到同一行），按行数报
+    # "已入库 2 篇"而库里只多了一篇，那是假读数。lit_id 才是"库里多了几篇"的单位。
+    admitted_ids = sorted({str(r.get("lit_id") or "") for r in admitted} - {""})
     lines: list[str] = [
         f"# 文献检索委托 {request_id} 的入库报告",
         "",
@@ -1007,18 +1012,33 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
             f"{s}={sum(1 for r in rows if str(r.get('status')) == s)}"
             for s in S.CANDIDATE_STATUSES),
         "",
-        f"## 已入库（{len(admitted)} 篇）",
+        f"## 已入库（{len(admitted_ids)} 篇）",
         "",
     ]
     if not admitted:
         lines.append("（无）")
+    missing_relevance: list[str] = []
     for r in admitted:
         doi = r.get("doi") or f"provider={r.get('provider') or '?'}"
+        lit_id = str(r.get("lit_id") or "?")
         lines.append(f"- `lit:{r.get('lit_id')}` 《{r.get('title')}》"
                      f"（{r.get('year') if r.get('year') is not None else '年份不详'}）"
                      f" {doi}")
         why = str(r.get("relevance") or r.get("new_content") or "").strip()
-        lines.append(f"  相关性：{why or '（A 未写相关性说明）'}")
+        if why:
+            lines.append(f"  相关性：{why}")
+        else:
+            # 兜底不许是一句"谁都对得上"的话（改前是「A 未写相关性说明」）：
+            # 那样读者看不出缺的是哪几条，也没法回头去要那一句。
+            lines.append(f"  相关性：未写（缺的是 `lit:{lit_id}` 这一条的 "
+                         "relevance / new_content）")
+            missing_relevance.append(lit_id)
+    if missing_relevance:
+        # 一行点名缺哪几条（同时是 `report_violations` 的机器读数入口：
+        # 已入库的行全缺相关性说明时它记一条 violation，只记读数、不拦门）。
+        lines.append("- 缺相关性说明的条目（" + str(len(missing_relevance)) + " 篇）："
+                     + "、".join(f"`lit:{lit_id}`" for lit_id in missing_relevance)
+                     + " —— 只记读数，不拦门")
     lines += ["", f"## 未入库（{len(other)} 篇）", ""]
     if not other:
         lines.append("（无）")
@@ -1048,7 +1068,9 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
     path = report_path(store, rid)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="")
-    admitted = sum(1 for r in body_rows if str(r.get("status")) == "admitted")
+    # 与报告标题同一口径：去重后的 lit_id（两条候选命中同一行时只算一篇）。
+    admitted = len({str(r.get("lit_id") or "") for r in body_rows
+                    if str(r.get("status")) == "admitted"} - {""})
     other = sum(1 for r in body_rows if str(r.get("status")) in ("withdrawn", "rejected", "cleared"))
     return {
         "path": path.as_posix(),
@@ -1102,4 +1124,45 @@ def report_violations(text: str) -> list[str]:
     for line in admitted_text.splitlines():
         if line.strip().startswith("- ") and "`lit:" not in line:
             bad.append(f"已入库的这一条没有 lit_id：{line.strip()[:60]}")
+    bad.extend(_relevance_violations(admitted_text))
     return bad
+
+
+#: 报告「已入库」一块里一条条目的开头形态：`- `lit:000000` 《题名》…`。
+#:
+#: 判据要按条目读回紧跟其后的那行 `相关性：`，就必须能认出"新条目从这里开始"。
+#: 不用"所有以 `- ` 开头的行"：缺相关性时报告里还有一行汇总条目
+#: （`- 缺相关性说明的条目（N 篇）：…`），它也以 `- ` 开头。
+_REPORT_ADMITTED_ROW = re.compile(r"^-\s*`lit:([^`]+)`\s*《")
+
+
+def _relevance_violations(admitted_text: str) -> list[str]:
+    """已入库的条目 relevance 全空 ⇒ 一条违规读数（只记读数，不拦门）。
+
+    为什么要这一档：`relevance` 是业主 2026-10-20 口径里"它为什么与本次检索
+    相关"的那一句，报告「已入库」一块要用它；而 A 的自动链路暂存候选时一次
+    都没带过 relevance，于是这一格永远空着 —— 报告照常写出，没有任何一处会
+    因此变红，那一句就永远缺着。
+
+    它只进 `report_violations` 的返回值，不改变任何一档的放行/拒绝：
+    派生的报告、已入库的文献、委托的终局都与它无关。全部条目都有说明时
+    不报；只有一部分缺时不报（那一档由报告正文逐条点名）。
+    """
+    entries: list[str] = []
+    missing: list[str] = []
+    current = ""
+    for raw in str(admitted_text or "").splitlines():
+        line = raw.strip()
+        hit = _REPORT_ADMITTED_ROW.match(line)
+        if hit:
+            current = hit.group(1)
+            entries.append(current)
+            continue
+        if current and line.startswith("相关性：") and "未写" in line:
+            missing.append(current)
+    if entries and len(missing) == len(entries):
+        return [
+            f"已入库 {len(entries)} 篇的 relevance 全空（A 没写「为什么与本次检索相关」）；"
+            "这一条只记读数，不拦门"
+        ]
+    return []

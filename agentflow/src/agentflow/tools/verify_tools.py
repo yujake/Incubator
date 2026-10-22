@@ -936,13 +936,14 @@ _ROLES_V = ("V",)
             "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings',"
             "'unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits',"
             "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
-            "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— "
+            "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
+            "no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— "
             "此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）"
             ),
     tags=("verification", "proof"),
 )
 def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, readonly_facts=None,
-                        proof_no: int = 1):
+                        proof_no=None):
     """verify.verify_proof 的工具体。
 
     注入值（_need_store, _agent_v）由装配期用 `partial` 绑定，
@@ -952,7 +953,7 @@ def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, r
     _need_store("verify.verify_proof")
                or ok(_agent_v().verify_proof(statement_id=statement_id,
                                              proof_text=proof_text or "",
-                                             proof_no=int(proof_no or 1),
+                                             proof_no=proof_no,
                                              readonly_facts=readonly_facts or ""))
     )
 
