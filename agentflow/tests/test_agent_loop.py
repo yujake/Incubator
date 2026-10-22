@@ -203,6 +203,7 @@ def test_a_flat_summon_written_as_text_still_runs(tmp_path: pathlib.Path):
     """
     scripts = {
         "M": [json.dumps({"role": "E", "action": "list_experiments", "params": {},
+                          "task": "列一遍实验台账",
                           "why": "扁平形态：直接写了 framework_summon 的实参"},
                          ensure_ascii=False),
               json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)],
@@ -216,7 +217,13 @@ def test_a_flat_summon_written_as_text_still_runs(tmp_path: pathlib.Path):
     assert run.stop_reason == "final", run.to_dict()
     assert [s.shape for s in run.steps] == ["summon", "final"], run.to_dict()
     assert run.steps[0].payload["shape_alias"] == "role", run.steps[0].payload
+    # 旧期望把尝试当成功（2026-10-22 查实）：这一份剧本原来不带 `task`，而
+    # 2026-10-16 起派活契约就是 `task` 必填 ⇒ `_do_summon` 当场拒绝（"派活必须写清
+    # 是什么活"），台账里一行子任务都没有，而旧 `summons` 只看 `shape == "summon"`
+    # 仍报 `["E"]` —— 判据的"末态是一环真的召唤"那句话当时是假的。现在把 `task`
+    # 补齐（形状别名仍然是这一条要测的东西），于是这一环真的派出去。
     assert run.summons == ["E"], run.summons
+    assert run.summons_refused == [], run.summons_refused
 
 
 def test_model_decides_the_chain_and_the_ledger_records_each_hop(tmp_path: pathlib.Path):

@@ -977,6 +977,54 @@ def _message_landed(result: Mapping[str, Any]) -> bool:
     return result.get("ok") is True or str(result.get("receipt") or "") == "no_reader"
 
 
+#: 这一步的结局里"没有派出去"的那几档（`_summon_landed` 判据 1 的取值表）。
+#:
+#: `refused`：策略/闸门说的"不"（`Conductor._refuse` 会为它写一行台账，所以那一行
+#: 也有 `task_id` —— 光看编号会把被拒读成"派出去了"）；`cancelled`：取消之后不产生
+#: 新任务；`wash_proposed`：两段式的第一段，结果自己写着"这一趟没有派活"。
+SUMMON_NOT_DISPATCHED: tuple[str, ...] = ("refused", "cancelled", "wash_proposed")
+
+
+def _summon_landed(result: Mapping[str, Any]) -> bool:
+    """这一步的召唤真的派出去了没有（`LoopRun.summons` / `summons_refused` 的唯一判据）。
+
+    为什么不能只看 `shape == "summon"`（2026-10-22 查实的那条缺陷）：两种"形状对、
+    什么也没派出去"的步同样产出一行 `shape == "summon"`：
+
+    1. 受控拒绝（`forbidden_edge` / `depth_exceeded` / `invalid_params` / `no_owner` …）
+       —— `Conductor._refuse` 会为被拒的那一次写一行 `outcome="refused"` 的台账行，
+       于是 `task_id` 非空、看起来像"有落点"，但一个子代理都没有被唤起
+       （现场：C 想唤 A，被 `forbidden_edge` 拒，而回执照报 `summons == ["A"]`）；
+    2. 两段式洗格式请示（`outcome="wash_proposed"`、`executed=False`）—— 结果自己
+       写着"这一趟没有派活（0 行新任务、0 次子任务调用）"（现场：D 的回执照报 `["D"]`）。
+
+    判据三条，缺一不可：
+
+    1. 没有受控拒绝：`refused` 与 `refusal_reason` 都空，且 `outcome` 不在
+       :data:`SUMMON_NOT_DISPATCHED` 里、`status` 不是 `cancelled`；
+    2. 不是"请示/没执行"：`executed` 不许是 `False`（两段式第一段显式写这一格）；
+    3. 有落点，且那一步说得出"派出去了"：`task_id` 非空 —— 被拒的那一行也有编号，
+       所以第 1 条必须先判；派出去之后失败的（`status="failed"`）算派出去了
+       （子代理真的跑过，只是跑坏了），回执不许把"派了没成"折成"没派"。
+
+    为什么第 3 条不写成"`ok` 为真"：`SummonResult.ok` 的判据是
+    `status == "done" and outcome == "ok"`，于是 `no_result` / `not_applicable`
+    这些"跑完了、只是没东西"的召唤会被读成"没派出去"—— 那是反过来少报，与这边要治的
+    缺陷同形（同一个取舍见 :func:`_message_landed` 的 docstring）。
+    """
+    if not isinstance(result, Mapping):
+        return False
+    if result.get("executed") is False:
+        return False
+    if str(result.get("refused") or "") or str(result.get("refusal_reason") or ""):
+        return False
+    if str(result.get("outcome") or "") in SUMMON_NOT_DISPATCHED:
+        return False
+    if str(result.get("status") or "") == "cancelled":
+        return False
+    return bool(str(result.get("task_id") or ""))
+
+
 @dataclass(frozen=True)
 class LoopStep:
     """循环里的一步：模型说了什么、框架做了什么、结果是什么。"""
@@ -1169,8 +1217,46 @@ class LoopRun:
 
     @property
     def summons(self) -> list[str]:
-        """这次运行真的唤起过哪些角色（按发生顺序，可重复）。"""
-        return [str(s.payload.get("role") or "") for s in self.steps if s.shape == "summon"]
+        """这次运行真的派出去的召唤（按发生顺序，可重复）。
+
+        判据是 :func:`_summon_landed`（看那一步的结果有没有真的开出一行子任务），
+        不是 `shape == "summon"`。受控拒绝（`forbidden_edge` 之类）与两段式请示
+        （`wash_proposed`）也是 `shape == "summon"` 的步，把它们数进来就是回执说谎
+        （2026-10-22 查实：C 想唤 A 被 `forbidden_edge` 拒掉、D 的两段式请示 0 行新任务，
+        旧实现仍分别报 `["A"]` / `["D"]`）。没派出去的那些逐条进 :attr:`summons_refused`。
+        """
+        return [str(s.payload.get("role") or "") for s in self.steps
+                if s.shape == "summon" and _summon_landed(s.result)]
+
+    @property
+    def summons_refused(self) -> list[dict[str, Any]]:
+        """这次运行里"尝试过但没派出去"的召唤，逐条点名（按发生顺序）。
+
+        每一条 `{to, refused, outcome, error}`：
+        - `to`：模型写下的角色（与 `summons` 同一格口径，便于对账）；
+        - `refused`：受控拒绝的理由码（`forbidden_edge` / `depth_exceeded` /
+          `invalid_params` / `no_owner` / `member_retired` …；那一格在派活结果里叫
+          `refusal_reason`，这里与 `refused` 合并成同一格）；空串表示那一步没有理由码，
+          此时看 `outcome`（例如两段式的 `wash_proposed`：不是被拒，是在等父表态）；
+        - `outcome`：那一步的结局（`refused` / `wash_proposed` / …）——「被拒」与
+          「等你表态」在读数上就靠它分开；
+        - `error`：那一步给模型/人读的那句话（没有 `error` 时取 `detail`，再退到 `note`）。
+
+        为什么它与 `summons` 是一对：只报"真派出去的"会让"被拒/在请示"在回执上消失
+        （同一个缺陷的另一半，与 `messages_sent` / `messages_refused` 同形）。
+        """
+        out: list[dict[str, Any]] = []
+        for s in self.steps:
+            if s.shape != "summon" or _summon_landed(s.result):
+                continue
+            result = s.result if isinstance(s.result, Mapping) else {}
+            out.append({"to": str(s.payload.get("role") or ""),
+                        "refused": str(result.get("refused")
+                                       or result.get("refusal_reason") or ""),
+                        "outcome": str(result.get("outcome") or ""),
+                        "error": str(result.get("error") or result.get("detail")
+                                     or result.get("note") or "")})
+        return out
 
     @property
     def messages_sent(self) -> list[str]:
@@ -1224,11 +1310,17 @@ class LoopRun:
         `no_reply` / `no_reply_streak` / `dead_loop_max` / `same_call_max` /
         `stalled_max` / `dead_loop_nudges` / `stalled_nudges` / `dead_loop_stopped` /
         `counters_reset_at` / `compactions` / `waiting_for` / `resumed_from` /
-        `notify_rejections` / `handoffs` / `summons` / `messages_sent` /
-        `messages_refused` / `productions` / `summons_total` / `summons_consumed` /
-        `summons_continued` / `summons_waived` / `summons_unconsumed` /
-        `summon_consumption` / `prompt_audit` / `spend` / `prompt_cache` /
-        `elapsed_sec` / `notes` / `final_payload`。
+        `notify_rejections` / `handoffs` / `summons` / `summons_refused` /
+        `messages_sent` / `messages_refused` / `productions` / `summons_total` /
+        `summons_consumed` / `summons_continued` / `summons_waived` /
+        `summons_unconsumed` / `summon_consumption` / `prompt_audit` / `spend` /
+        `prompt_cache` / `elapsed_sec` / `notes` / `final_payload`。
+
+        `summons` 与 `summons_refused` 是同一件事的两半，判据都在
+        :func:`_summon_landed`：前者只记真的开出了子任务的召唤，后者逐条点名"尝试过但
+        没派出去"的那几条（`to` / 理由码 / 结局）。只报前者会让"被拒 / 在请示"在回执上
+        消失 —— 那正是 2026-10-22 查实的那条缺陷（C 唤 A 被 `forbidden_edge` 拒掉仍报
+        `["A"]`；D 的两段式请示 0 行新任务仍报 `["D"]`）。
 
         `messages_sent` 与 `messages_refused` 是同一件事的两半，判据都在
         :func:`_message_landed`：前者只记真的落成的收件人，后者逐条点名"尝试过但没落成"
@@ -1255,7 +1347,11 @@ class LoopRun:
             "compactions": self.compactions,
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
-            "summons": self.summons, "messages_sent": self.messages_sent,
+            "summons": self.summons,
+            # 召回收执的另一半（2026-10-22）：尝试过但没派出去的那几条逐条点名，
+            # 与 `summons` 同一份判据（`_summon_landed`）。
+            "summons_refused": self.summons_refused,
+            "messages_sent": self.messages_sent,
             # 回执的另一半（2026-10-22）：尝试过但没落成的那几条逐条点名，
             # 与 `messages_sent` 同一份判据（`_message_landed`）。
             "messages_refused": self.messages_refused,
@@ -1680,7 +1776,8 @@ def _sha(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
-def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
+def _shape_of(data: Mapping[str, Any], *,
+              roster: Any = None) -> tuple[str, Mapping[str, Any], str]:
     """把模型的一句输出判成一个形状。判不出来时返回 `("", {}, 原因)`。
 
     两个「别名形态」（都只改"从哪取键"，不放宽任何校验）：① `{"name": …, "args": …}` 是 `{"tool": …}` 的别名（
@@ -1691,14 +1788,19 @@ def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
 
     理由：这些键集没有第二种含义，而"名字/签名"这一层本来就有歧义空间（带点的真名 vs 广告名，见 `_do_tool`）—— 多
     认一个写法比让整趟作废便宜；留痕照旧：payload 带 `shape_alias`（与 `_do_tool` 的 `aliased_from` 同一套做法）。
+
+    `roster`（2026-10-22）：给 `message.to` 用的名册寻址（一个"写法 → 名册成员"的函数，
+    真身是 `AgentLoop._address_of` → `roster_addresses`）。不给 ⇒ 判据与改前逐字相同
+    （模块级单测直接调本函数的那一档）；给了 ⇒ 名册名 / 绝对编号也能寻址，见
+    `_decode_shape` 的 `message` 那一支。
     """
     rewritten, alias = _unwrap_alias(data)
     if rewritten is not None:
-        shape, payload, problem = _decode_shape(rewritten)
+        shape, payload, problem = _decode_shape(rewritten, roster=roster)
         if problem or not shape:
             return shape, payload, problem
         return shape, {**payload, "shape_alias": alias}, ""
-    return _decode_shape(data)
+    return _decode_shape(data, roster=roster)
 
 
 def _unwrap_alias(data: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str]:
@@ -1734,7 +1836,85 @@ def _proposal_fields() -> tuple[str, str]:
     return ACCEPT_PROPOSAL, REJECT_PROPOSAL
 
 
-def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
+#: 解码层把"名册上的一个地址"翻成"哪个角色"时用的两个理由码。
+#:
+#: 它们只在解码这一步出现，与 `roster_addresses` 自己的码不是同义词也不合并：
+#: `not_in_roster` 说的是"不在父∪子里"（名册判据那一层的口径），而解码这一步面对的
+#: 是模型写下的一个地址写法 —— 名册上根本没有这个名字/编号，就叫 `unknown_roster_name`
+#: （业主 2026-10-22：模型侧「按编号沟通」走不到时，回执要能分开"名字不认识"与
+#: "名册说不行"）。
+DECODE_UNKNOWN_ROSTER_NAME = "unknown_roster_name"
+#: 名册上确实有这一行、但它的角色读不出来（或读出来的不是收件箱认得的角色）⇒
+#: 翻不成"谁收" —— 原样投递只会落进一个没人读的收件箱，所以受控拒绝。
+DECODE_MEMBER_WITHOUT_ROLE = "member_has_no_role"
+
+
+def _decode_roster_recipient(written: str, roster: Any) -> dict[str, Any] | None:
+    """把模型写下的名册名 / 绝对编号解析成"这个地址对应哪个角色"（解码层的唯一实现）。
+
+    口径只有一处：直接调调用方给的 `roster`（真身是 :func:`roster_addresses` —— 循环把
+    `AgentLoop._address_of` 传进来）。本函数不认任何形状（点号名、绝对编号、大小写都
+    不自己判），因此"点名册名"这条路只有一份解析实现。
+
+    返回解析结果（`roster_addresses` 的那份 dict）或 `None`：`None` 表示这一次解码
+    没有名册上下文（模块级单测直接调 `_decode_shape` / `_shape_of` 的那一档）⇒ 调用方
+    按改前逐字相同的那条判据拒收。解析自己抛异常 ⇒ 返回 `roster_unavailable` 那一档
+    （读不成不等于"没有这个人"，也不等于"名册校验通过"）。
+    """
+    if roster is None:
+        return None
+    try:
+        got = roster(str(written or ""))
+    except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，不许折成"查过了没问题"
+        return {"checked": False, "how": "roster_unavailable", "name": "", "task_id": "",
+                "role": "", "candidates": [], "callable": "",
+                "refused": "roster_unavailable",
+                "error": f"名册寻址没跑成（{type(exc).__name__}: {exc}）"}
+    return dict(got) if isinstance(got, Mapping) else None
+
+
+def _decode_roster_problem(addr: Mapping[str, Any],
+                           written: str) -> tuple[str, list[str], str]:
+    """名册解析结果能不能翻成"收件箱认得的角色"：`(理由码, 候选, 那句话)`，码空 = 能。
+
+    三档，各有各的码（处置方向不同，不许折平）：
+    - 名册这一趟读不成（`roster_unavailable`）⇒ 同一码：不猜"没有这个人"，也不退回
+      把编号原样写进 `to`（那会写进一个没人读的收件箱）；
+    - 名册上没有这个地址（`not_in_roster`）⇒ `unknown_roster_name`；
+      名册自己给的 `ambiguous_in_roster` / `member_retired` 原样带过来 —— "同名多匹配"
+      与"已退役"是两种不同的事实，合并会让回执读不出处置方向；
+    - 解析到了成员、但角色读不出来 / 不是收件箱认得的角色 ⇒ `member_has_no_role`。
+
+    候选点名：歧义那一档是匹配到的那几个名册名（`candidates`），认不出那一档是
+    "你能通话的是"（`callable`）—— 两处都写进那句话里，不许静默。
+    """
+    how = str(addr.get("how") or "")
+    refused = str(addr.get("refused") or "")
+    candidates = [str(x) for x in (addr.get("candidates") or [])]
+    callable_line = str(addr.get("callable") or "")
+    error = str(addr.get("error") or "")
+    if refused == "roster_unavailable" or how == "roster_unavailable":
+        return ("roster_unavailable", candidates,
+                (f"名册这一趟不在手上（{str(addr.get('why') or addr.get('error') or '未给理由')}）"
+                 f"⇒ 解析不了 {written or '（空）'} 指向谁；要么把收件人写成角色名，"
+                 "要么等名册可读再发（名册没读成不等于'没有这个人'）"))
+    if refused == "not_in_roster" or how == "not_in_roster":
+        return (DECODE_UNKNOWN_ROSTER_NAME, candidates,
+                (f"名册上没有 {written or '（空）'} 这个名字/编号 ⇒ 受控拒绝：不许按名字瞎发。"
+                 f"你能通话的是：{callable_line or '（名册上没有人可通话）'}"))
+    if refused:
+        return refused, candidates, error or f"{written} 的名册解析受控拒绝（{refused}）"
+    role = str(addr.get("role") or "")
+    if not role or not _known_recipient(role):
+        return (DECODE_MEMBER_WITHOUT_ROLE, candidates,
+                (f"名册上 {written} 这一行读不出一个收件箱认得的角色（role={role!r}）⇒ "
+                 "受控拒绝：原样投递会写进一个没人读得到的收件箱"
+                 f"（你能通话的是：{callable_line or '（名册上没有人可通话）'}）"))
+    return "", candidates, ""
+
+
+def _decode_shape(data: Mapping[str, Any], *,
+                  roster: Any = None) -> tuple[str, Mapping[str, Any], str]:
     """规范形态的解码：一次只说一件事，取的那个键必须是 `SHAPES` 里的一种。
 
     清单与条数以 `SHAPES` 为唯一来源，本处不重抄第二份 —— 这里原先手抄的形状条数
@@ -1746,6 +1926,12 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
     由这一步的解码带过去 —— 解码是白名单，漏带就等于"父说了接受、框架没听见"，
     而那在读数上与"父还没表态"完全一样。两个名字的真身只在 `secretary`（唯一来源，
     本处延迟导入）：这里不解码它们的内容，只保证它们活得过去。
+
+    `roster`（2026-10-22，业主「按编号沟通」）：`message.to` 除了角色名 / M / `#public`
+    之外还认名册名（`B1`）与绝对台账号 —— 判据与解析都走调用方给的 `roster`
+    （真身是 `roster_addresses`，本处不另写一份形状判断），解析出来的角色才进 `to`
+    （收件箱按角色收），原写法与解析结果留在 `roster_addressing` 里供回执对账。
+    认不出 / 有歧义 / 名册读不成 ⇒ 受控拒绝码 + 候选点名（见 `_decode_roster_problem`）。
     """
     accept_field, reject_field = _proposal_fields()
 
@@ -1865,7 +2051,7 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
     if key == "message":
         if not isinstance(value, Mapping):
             return "", {}, "message 必须是一个对象"
-        to = str(value.get("to") or "")
+        written = str(value.get("to") or "")
         # `to` 的合法集合 = 八个角色 ∪ 主控 M ∪ 公共频道。M 必须在内（2026-09-30 真机修）：框架自己的
         # 代唤通道 `_request_relay` 就用 `to=S.CONDUCTOR_ROLE`（= "M"），而这里原来只认 `S.ROLES`（A–H，
         # 不含 M）⇒ 提示词教角色"直接发给 M"、角色照做却被判 `invalid`（场景 G 白扔一步：那条只该主控看到的
@@ -1874,8 +2060,34 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # `{"message": {"to": "ALL", …}}` 被判不合法、连三次 ⇒ `bad_json_limit` 收场（60 秒、一步有效的活都没干）。
         # `ALL` / `#public` 的等价只在 `_is_all_recipient` 一处定义，`message` / `handoff` / `notify` 三条通道
         # 都从那里取 —— 不许各写一份。
-        to = _recipient_for_channel(to)      # 留言通道的"给所有人"规范形是 `#public`
+        to = _recipient_for_channel(written)      # 留言通道的"给所有人"规范形是 `#public`
         if not _known_recipient(to):
+            # 2026-10-22（业主「按编号沟通」）：`_known_recipient` 之外还认名册名与
+            # 绝对台账号 —— 判据与解析都在 `roster_addresses`（经 `roster` 传进来），
+            # 这里只负责"翻成谁"与受控拒绝码。改前这些写法一律被判 invalid / bad_args
+            # ⇒ 模型照提示词写 `to="B1"` 一步也发不出去，而名册那一层明明支持它。
+            addr = _decode_roster_recipient(written, roster)
+            if addr is not None:
+                code, candidates, error = _decode_roster_problem(addr, written)
+                if code:
+                    return key, {"to": written, "refused": code,
+                                 "candidates": candidates,
+                                 "callable": str(addr.get("callable") or ""),
+                                 "error": error}, (f"{code}：{error}")
+                role = str(addr.get("role") or "")
+                return key, {"to": role,
+                             "subject": str(value.get("subject") or "（无标题）"),
+                             "body": str(value.get("body") or ""),
+                             "reply_to": str(value.get("reply_to") or ""),
+                             # 原写法 + 解析结果（读数要能对回原稿）。`to` 已经是收件箱
+                             # 认得的角色：收件箱按角色收，把 B1 原样写进 `to` 只会得到
+                             # 一条没有进程读得到的留言（业主 2026-10-22 的原话）。
+                             "roster_addressing": {
+                                 "written": written,
+                                 "name": str(addr.get("name") or ""),
+                                 "task_id": str(addr.get("task_id") or ""),
+                                 "role": role,
+                                 "how": str(addr.get("how") or "")}}, ""
             return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
                             f"{S.CONDUCTOR_ROLE}、也不是公共频道 {PUBLIC}（写 ALL 也认）")
         return key, {"to": to, "subject": str(value.get("subject") or "（无标题）"),
@@ -3948,7 +4160,10 @@ class AgentLoop:
                 messages.append(tool_message(
                     step, _bad_json_line(step, call.problem, str(bad_result["detail"]))))
                 continue
-            shape, payload, problem = _shape_of(data)
+            # `roster=self._address_of`（2026-10-22）：名册名 / 绝对编号也能寻址 ——
+            # 解码这一步就要把它们翻成"哪个角色"（收件箱按角色收），判据只有
+            # `roster_addresses` 那一份（`_address_of` 只是把它的上下文接上）。
+            shape, payload, problem = _shape_of(data, roster=self._address_of)
             if problem:
                 # 「形状认得出来、只是某个值写错了」与「形状认不出来」分开计
                 # （`draft/37` §140 的真机读数）：前者交回模型改那个值就该能救活
@@ -6167,9 +6382,27 @@ class AgentLoop:
         return self._message_by_channel(payload, to, reply_to)
 
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """`message` 形状的寻址与投递（业主 2026-10-19：「只有名册上的编号能通话」）。"""
+        """`message` 形状的寻址与投递（业主 2026-10-19：「只有名册上的编号能通话」）。
+
+        2026-10-22（业主「按编号沟通」）：`to` 由解码层按名册名 / 绝对编号解析过时
+        （payload 带 `roster_addressing`，见 `_decode_shape` 的 `message` 那一支），
+        `to` 已经是那个成员的角色、原写法留在 `roster_addressing["written"]` 里。
+        这一档「按原写法再问一次名册」（同一份判据、同一份上下文 ⇒ 读数就是那条地址的
+        读数），然后投角色收件箱：收件箱是按角色收的，把 `B1` 原样当 `to` 写进去
+        会得到一条没有任何进程读得到的留言。读数仍然带 `how=parent/child`
+        （名册判据通过），所以"按名册名发的角色留言"在盘上看得出来是哪一种落点。
+
+        这一档的判据链与"按角色名发"逐字相同（先协作边、再回执）：`to` 已经是收件箱
+        认得的角色，闸门就是那道闸。名册只回答"这个写法是哪个角色"，不另开一条投递
+        通道 —— 两种落点（角色收件箱 / 实例板项）的区别在读数上看得见：
+        `addressing.how` 都是 parent/child（名册判据通过），而这一档的 `channel`
+        是角色通道。`via_roster` 只认那一次现读的名册：payload 里的 `written` 只是
+        "原写法"的指针，它自称的东西不算数。
+        """
         to = str(payload.get("to"))
         reply_to = str(payload.get("reply_to") or "")
+        marker = payload.get("roster_addressing")
+        written = str(marker.get("written") or "") if isinstance(marker, Mapping) else ""
         # ---- 寻址：先问名册
         #
         # 改前这里是"`to` 像不像角色名"的字符串启发式：不在 `S.ROLES` 里就当名册名。
@@ -6177,11 +6410,20 @@ class AgentLoop:
         # ①名册名在发消息这条路上用不上、②同名多实例时行为未定义（谁都能读到）、
         # ③退役的名字仍可被寻址。现在判据只有一处（`roster_addresses`），
         # 而"发给谁"的结论进读数 `addressing`（三态：读成了 / 不在名册 / 读不成）。
-        addr = self._address_of(to)
+        addr = self._address_of(written or to)
+        how = str(addr.get("how") or "")
+        via_roster = (bool(written) and how in ("parent", "child")
+                      and str(addr.get("role") or "") == to)
+        if written and not via_roster:
+            # 原写法没有解析成 `to` 这个角色（载荷被改过 / 名册在两步之间变了）⇒
+            # 按 `to` 重新问一次名册：不拿一个对不上的地址去投递。
+            addr = self._address_of(to)
+            how = str(addr.get("how") or "")
         # 权限先于路由（业主 2026-10-19 之后仍然如此）：`to` 写成「角色名」时，
         # 那句拒信必须先说"没有协作边"，而不是"你要发给谁" —— 否则同一个越权会被
         # 读成一次寻址问题，而准入判据的唯一实现仍只有 `message_admission` 那一份。
-        # 名册名 / 绝对编号不吃这一条（与改前 `_message_by_name` 同口径）。
+        # 名册名 / 绝对编号不被解码层翻成角色之前不吃这一条（`_message_to_member`
+        # 那条实例板项的路）；翻成角色之后它走的就是角色通道，与按角色名发同一条闸。
         if to.upper() in S.ROLES:
             not_allowed = message_admission(self.role, to, reply_to)
             if not_allowed:
@@ -6195,14 +6437,16 @@ class AgentLoop:
                     "addressing": addr, "error": str(addr.get("error") or ""),
                     "note": (f"{addr.get('error')}（这一条没有落盘：`send_message` 没调、"
                              "板项没开 —— 受控拒绝不是「稍后再试」）")}
-        how = str(addr.get("how") or "")
         if how == "roster_unavailable":
             # 无秘书 / 名册读不成 ⇒ 退回原来的路，但「读数必须标出来」（业主第 ⑦ 条）
             out = self._message_legacy(payload, to, reply_to)
             out["roster_unavailable"] = True
             out["addressing"] = addr
             return out
-        if how in ("parent", "child"):
+        if how in ("parent", "child") and via_roster:
+            # 名册名 / 绝对编号已翻成角色 ⇒ 落角色收件箱（见本方法 docstring）。
+            out = self._message_by_channel(payload, to, reply_to)
+        elif how in ("parent", "child"):
             # 名册成员 ⇒ 落成"挂在收件人名下的板项"（只有它自己读得到，父不代读 T20）
             out = self._message_to_member(payload, addr)
         elif to == "ALL" and self.secretary is not None and str(self.my_task_id or ""):

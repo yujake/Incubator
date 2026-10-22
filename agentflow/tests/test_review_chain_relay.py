@@ -97,9 +97,14 @@ def test_a_forbidden_summon_becomes_a_relay_request_to_the_conductor(tmp_path):
     st, cond, reg, gw = _world(tmp_path, gw_replies)
     run = _run_b(st, cond, reg, gw)
     assert run.stop_reason == "final", run.to_dict()
-    # `run.summons` 记的是尝试，不是成功 —— 被边表拒的那一次也在里面
-    # （这一条是本判据第一次跑时咬出来的：它记 attempts，refused 也有台账行）。
-    assert run.summons == ["E"], run.summons
+    # 旧期望把尝试当成功（2026-10-22 查实）：原来这里钉的是"`run.summons` 记的是尝试，
+    # 不是成功"—— 被边表拒的那一次也算在里面（`assert run.summons == ["E"]`）。
+    # 那句口径正是回执说谎本身：台账里这一行是 `outcome=refused`，E 一个子代理都没被
+    # 唤起，而回执照报"唤起过 E"。现在 `summons` 只记真派出去的，被拒的逐条进
+    # `summons_refused`（"被拒过"这件事照样在回执上，只是不再冒充"派成了"）。
+    assert run.summons == [], run.summons
+    assert [(r["to"], r["refused"]) for r in run.summons_refused] == \
+        [("E", "forbidden_edge")], run.summons_refused
     e_rows = [r for r in st.rows("tasks") if str(r.get("role")) == "E"]
     assert len(e_rows) == 1 and str(e_rows[0]["outcome"]) == "refused", e_rows
     assert str(e_rows[0]["refusal_reason"]) == "forbidden_edge", e_rows[0]
