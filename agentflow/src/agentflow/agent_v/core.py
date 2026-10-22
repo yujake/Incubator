@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .. import schema as S   # 命题号形态的唯一来源（当前宽度 + 旧四位读侧兼容）
+from .. import statementbody as _SB   # D2：命题正文的唯一读口
 from .. import verifications as VR
 from ..store import Store, StoreError
 
@@ -259,7 +260,7 @@ class AgentV:
                                  "先把这条命题登记了（B 的 register_statement）再来审。")
                 self._emit(f"verify_proof({sid})：命题不在册 ⇒ 没审，不落台账行")
                 return out
-            statement_full = str(hit.get("statement_full") or hit.get("statement_text") or "")
+            statement_full = _SB.body_of(hit)
             # 正文只从"证明号指定的那一份"取（2026-10-22 审计第 2 条）：
             # 改前不看号，一律读 canonical ⇒ "审 #p2"拿的是 #p1 的正文。
             listed = {int(n) for n, _ in VR.proof_list(hit)}

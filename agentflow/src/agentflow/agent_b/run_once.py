@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
+from .. import quoteevidence as _QE   # D1：三态判决 ⇒ 可复核的区间/理由/调用指纹
 from ..extract import DocumentText as _DT
 from pathlib import Path as _Path
 
@@ -176,12 +177,17 @@ class _RunOnce:
                 allow_fulltext_fallback=self.allow_fulltext_fallback,
             )
             hit_note = ""
+            # 命中的是哪一份材料必须跟着判决走：`quoteevidence.enforce_quote_evidence`
+            # 要拿"判它的那一份文档"去定位区间（PDF 与工作区 LaTeX 是两种证据，
+            # 拿错那一份定位出来的页码是另一个坐标系里的数字）。
+            hit_doc = doc
             if chk.verified is not True and mdoc is not None:
                 mchk = check_quote(mdoc, quote, None,
                                    widen=self.widen_pages,
                                    allow_fulltext_fallback=True)
                 if mchk.verified is True:
                     chk = mchk
+                    hit_doc = mdoc
                     hit_note = f"逐字命中工作区正文 {mrel}"
                     res.details.append({"lit_id": lit_id, "stage": "quote_manuscript",
                                         "rel": getattr(rel, "description", "")[:80],
@@ -197,7 +203,8 @@ class _RunOnce:
                 res.quotes_failed += 1
             else:
                 res.quotes_unknown += 1
-            verified_rels.append({"rel": rel, "check": chk, "note": hit_note})
+            verified_rels.append({"rel": rel, "check": chk, "note": hit_note,
+                                  "doc": hit_doc})
 
         # ---- 提交（锁内，短）
         # 声明哪几张表由过渡层决定（`concepts` 落刀之后不再存在 ⇒ 声明它会以"未知表"失败）。
@@ -332,6 +339,18 @@ class _RunOnce:
                 pr = getattr(rel, "page_range", None)
                 if not isinstance(pr, S.PageRange):
                     pr = S.PageRange.from_dict(pr if isinstance(pr, dict) else None)
+                # ---- D1（2026-10-22）：逐字那一档必须留下"核了哪一段、在第几页"。
+                #
+                # 真机读数：`relations` 这一侧的判决本来是对的（`check_quote` 会回
+                # `matched_page` / `window` / `reason`），而落盘只写了 `quote_reason`
+                # 一格 —— `quote_span` 与 `quote_call_sha256` 从来没写过。于是"逐字命中"
+                # 在盘上只剩一句人话，复核的人找不到那一页的哪一段。
+                # 判决不从这一格改：这里只把 `QuoteCheck` 的三态翻成四栏（唯一实现
+                # 在 `quoteevidence.evidence_fields`；`semantic` 那一档由 H 判，不走这里）。
+                evidence = _QE.evidence_fields(
+                    chk, doc=item.get("doc"), quote=quote, page_range=pr,
+                    field=f"relations.quote（lit:{lit_id}）",
+                    note=str(item.get("note") or ""))
 
                 # ---- I6 写入期一致性闸门 ----
                 # 已有关系必须在同一个 tx 内读（`_conflict_scope`），再交给纯函数：
@@ -382,10 +401,16 @@ class _RunOnce:
                     # 这一档是「逐字」回验（`quoteverify.check_quote`）—— 业主 2026-10-14
                     # 之后"通过"还多一档"语义相同（H 判）"，所以方式必须写实：
                     # 逐字命中记 `verbatim`，其余（不一致 / 没查）归空串。
-                    quote_mode="verbatim" if chk.verified is True else "",
+                    quote_mode=str(evidence.get("quote_mode") or ""),
                     # 逐字命中「工作区正文」那一档要把来路写实（`item["note"]`）：
                     # 命中的是 PDF 还是我们手上那份 LaTeX，是两种不同的证据。
-                    quote_reason=str(item.get("note") or ""),
+                    # 理由由 `evidence_fields` 拼：来路 + 试过的窗口 + 区间 +
+                    # "没有模型调用"（D1：空栏不说明时，"没调用"与"忘了记"分不开）。
+                    quote_reason=str(evidence.get("quote_reason") or ""),
+                    # D1 的两栏证据：区间（`p{页}:norm[{起}:{止}]`，该页归一化文本的
+                    # 字符偏移）与调用指纹（逐字档恒空 —— 确实没有模型调用）。
+                    quote_span=str(evidence.get("quote_span") or ""),
+                    quote_call_sha256=str(evidence.get("quote_call_sha256") or ""),
                     statement=description,
                     concept_group_key=group_key,
                     dedup_key=D.relation_dedup_key(group_key, quote),

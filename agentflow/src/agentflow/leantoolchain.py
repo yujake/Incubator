@@ -75,6 +75,8 @@
 """
 from __future__ import annotations
 
+import random
+
 import copy
 import hashlib
 import os
@@ -126,10 +128,16 @@ POSITIVE_NAME = "dsh_selfcheck"
 #: 反控的声明名（与被检的那条真命题同一个文件族，只是命题是假的）。
 NEGATIVE_NAME = "dsh_selfcheck_bad"
 #: 正样例源码（「必须」是一个真命题：`1 = 1` 在 Lean 4 里 `rfl` 就能证）。
-POSITIVE_SOURCE = f"theorem {POSITIVE_NAME} : 1 = 1 := rfl\n"
+# 反控的命题每趟随机（业主 2026-10-22 口径：防虚构 lean 环境）：常量化的 `1 = 2` 会被
+# 一个"源码里含 1=2 就 exit 1"的假 lean 认出来。这里随机两个不同的自然数 n != m，
+# 正样例用 n = n，反控用 n = m ⇒ 假 lean 没法靠字面量或文件名蒙混。
+_N = random.randint(2, 9999)
+_M = _N + random.randint(1, 9999)
+POSITIVE_SOURCE = f"theorem {POSITIVE_NAME} : {_N} = {_N} := rfl\n"
+NEGATIVE_SOURCE = f"theorem {NEGATIVE_NAME} : {_N} = {_M} := rfl\n"
 #: 反控源码（「必须」是假的：`1 = 2` 在 Lean 4 里 `rfl` 一定过不了；
 #: 任何说它过了的东西都不是检查器）。
-NEGATIVE_SOURCE = f"theorem {NEGATIVE_NAME} : 1 = 2 := rfl\n"
+
 
 #: 版本行里那个版本号（`Lean (version 4.7.0, x86_64-w64-windows-gnu, commit ...)`）。
 _VERSION_RE = re.compile(r"version\s+(\d+\.\d+\.\d+)", re.IGNORECASE)

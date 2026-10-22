@@ -27,6 +27,7 @@ from typing import Any, Iterable, Mapping
 
 from . import papercompile as PC
 from . import schema as S
+from . import statementbody as _SB   # D2：命题正文的唯一读口（真身 statement_full）
 from . import textutil as T
 from . import userio as U
 # 引文回验的两档口径（业主 2026-10-14）：`quote_state` 是唯一读口径 ——
@@ -4609,15 +4610,20 @@ def _env_bodies(tex: str, tail: int = 400) -> list[tuple[str, str, str]]:
 
 
 def _provable_in_ledger(tex_statement: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """在台账里找这条定理对应的行（按去掉空白/大小写后的子串匹配）。"""
+    """在台账里找这条定理对应的行（按去掉空白/大小写后的子串匹配）。
+
+    D2（2026-10-22）：正文只从一个读口取（`statementbody.body_of`：真身
+    `statement_full` 优先，空则退回历史行的 `statement_text`）。此前这里轮询两个字段 ——
+    同一份正文两个字段、一个空一个满时，先读到哪个就按哪个判，而"读到哪个"取决于
+    写入侧那天填了哪个（真机上 13 条全填 full、text 全空）。
+    """
     want = _norm(tex_statement)
     if not want:
         return None
     for row in rows:
-        for field in ("statement_text", "statement_full"):
-            got = _norm(row.get(field) or "")
-            if got and (got in want or want in got):
-                return row
+        got = _norm(_SB.body_of(row))
+        if got and (got in want or want in got):
+            return row
     return None
 
 
@@ -4701,7 +4707,9 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     rows = _paper_statement_rows(root)
     high: list[dict[str, Any]] = []
     for row in rows:
-        text = str(row.get("statement_full") or row.get("statement_text") or "")
+        # D2：正文只有一个读口（`statementbody.body_of`：真身 `statement_full` 优先，
+        # 空则退回历史行的 `statement_text`）。
+        text = _SB.body_of(row)
         got = _SEC.nontriviality_of(root, text)
         level = int(got.get("level") or 0)
         counts["unjudged" if not level else f"T{level}"] += 1
@@ -4749,7 +4757,7 @@ def t4_ladder_problems(root: str | Path) -> list[str]:
     haystack = " ".join(json.dumps(r, ensure_ascii=False, default=str) for r in questions + plans)
     problems: list[str] = []
     for row in rows:
-        text = str(row.get("statement_full") or row.get("statement_text") or "")
+        text = _SB.body_of(row)
         if not text.strip():
             continue
         level = int(_SEC.nontriviality_of(root, text).get("level") or 0)

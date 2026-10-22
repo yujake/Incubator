@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from ._support import Any, BClaimOutcome, D, I, Mapping, NOTE_LIMIT, NO_EXTRACTOR_ERROR, REPROCESS_RESULTS, S, Sequence, Store, T, _passages, check_quote, lease_expired, make_lease
+from .. import quoteevidence as _QE   # D1：区间只有一个产出点
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 from ..store import StoreError      # 视图判不了时"再抛一次"（种子读失败必须被看见）
 from .run_once import _RunOnce
@@ -638,6 +639,11 @@ class _Core:
                 "quote_verified": True,
                 # 这一档走的是 `quoteverify.check_quote`（逐字）⇒ 方式写实（R95）
                 "quote_mode": "verbatim",
+                # D1（2026-10-22）：说"逐字通过"就必须留下核了哪一段、在第几页。
+                # 这里拿的就是判它的那一份文档与那一页，所以区间当场能算出来；
+                # 算不出来就给空串（宁可没有，也不编一个页码 —— 区间只有一个产出点：
+                # `quoteevidence.locate_span`）。
+                "quote_span": _QE.locate_span(doc, seg, page=page),
                 "_quote_check": chk.to_dict(),
             },
         )

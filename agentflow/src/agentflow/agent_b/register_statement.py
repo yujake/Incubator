@@ -53,6 +53,7 @@ from typing import Mapping
 
 from ._support import S
 from .. import evidencebits as _EB
+from .. import quoteevidence as QE
 from .. import verifications as _VR
 from ..refusals import refuse as _refuse
 
@@ -624,6 +625,38 @@ class _RegisterStatement:
                     "（既有词表没有第二个能表达这件事的档，而新增状态词要改 schema.py，"
                     "那是禁改区）")
 
+        # ---- D1（2026-10-22）：写侧断言 —— 说"通过"就必须给得出可复核的证据。
+        #
+        # 真机读数（`saxl-ws/data/statements.json`，修复前）：8 条命题
+        # `quote_verified=true` / `quote_mode=verbatim`，而 `quote_span` /
+        # `quote_reason` / `quote_call_sha256` 三栏全空 —— "逐字回验通过"这句话
+        # 在盘上没有任何读数（核了哪一段、在第几页、有没有花模型钱，一条都读不出来）。
+        #
+        # 位置为什么在这里：三态定稿在上一格（`needs_proof` 会把自产命题的
+        # `quote_reason` 写实），而五元位要按定稿后的 `quote_verified` 现算 ——
+        # 断言必须排在 `_statement_bits` 之前，否则位会把一句"通过了"当真。
+        #
+        # 三档（`quoteevidence.enforce_quote_evidence` 是唯一实现）：
+        # - 拿得出 `quote_span` ⇒ 写实（`semantic` 还要求调用指纹）；
+        # - 说逐字通过、却拿不出区间也定位不到 ⇒ 降成 `None` + 原因（unknown 档）；
+        # - 说语义相同、却缺区间或调用指纹 ⇒ 整笔不写（具名拒绝）。
+        evidence, evidence_reading = QE.enforce_quote_evidence(
+            {"quote_verified": quote_verified, "quote_mode": quote_mode,
+             "quote_span": quote_span, "quote_call_sha256": quote_call_sha256,
+             "quote_reason": quote_reason},
+            # 比对对象是 `proof_text`（本模块 docstring 第 2 条：逐字摘录）——
+            # 这一趟没有文档可查（B 交的是文本），所以它只在"要当场定位区间"时用得上。
+            quote=str(proof_text or ""), page_range=page_norm,
+            field="statements.proof_text")
+        if not evidence_reading.get("ok"):
+            return _refuse("quote_evidence_missing",
+                           str(evidence_reading.get("why") or "") + _all_missing)
+        quote_verified = evidence["quote_verified"]
+        quote_mode = str(evidence["quote_mode"])
+        quote_span = str(evidence["quote_span"])
+        quote_call_sha256 = str(evidence["quote_call_sha256"])
+        quote_reason = str(evidence["quote_reason"])
+
         # ---- 业主 2026-10-09：「B 不直接用增工具，秘书实际操作增、改、查工具，
         # B 纯粹负责消化理解」⇒ 上面那些是内容的判据（B 的判断），写盘这一段交给秘书。
         bits, bits_bad = self._statement_bits(
@@ -786,6 +819,11 @@ class _RegisterStatement:
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 "quote_verified": quote_verified, "origin": origin,
                 "quote_mode": str(quote_mode or ""),
+                "quote_span": str(quote_span or ""),
+                #: 写侧断言（D1）的读数：`action` 只有 `keep` 与 `downgrade` 两档
+                #: （`refuse` 那一档走 `_refuse` 返回，到不了这里）。降档必须看得见 ——
+                #: 静默把一句"通过了"改成 unknown 与静默放过它同样是坏。
+                "quote_evidence": evidence_reading,
                 "evidence_kind": evidence_kind, "row": data,
                 "deps_state": str(written.get("deps_state") or ""),
                 "deps_written": int(written.get("deps_written") or 0),

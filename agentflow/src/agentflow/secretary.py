@@ -32,6 +32,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from . import manuscripts as MS
 from . import proofloc as _PL
 from . import schema as S
+from . import statementbody as _SB
 
 #: 台账落点：`<工作区>/out/secretary/<role>.jsonl`（追加式、脚本发号，`draft/53` §11.2）。
 SECRETARY_DIR = ("out", "secretary")
@@ -1031,13 +1032,19 @@ class Secretary:
         """
         briefs: dict[str, dict[str, Any]] = {}
         emphasis: dict[str, Any] = {}
-        for role in S.ROLES:
+        # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这份事实表是读数面，
+        # 开关关着时不存在的角色不许在这里留一行（"存在但没用到"正是要去掉的噪音）。
+        # 判定读 `leanscope`（唯一入口），这里只过滤。
+        from . import leanscope as _LEANSCOPE
+
+        _visible = _LEANSCOPE.visible_roles(S.ROLES)
+        for role in _visible:
             one = self._role_brief(role)
             if one:
                 briefs[role] = dict(one)
         actions = self._action_table()
         return {
-            "roles": sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE}),
+            "roles": sorted(set(_visible) | {S.CONDUCTOR_ROLE}),
             "briefs": briefs,
             "emphasis": emphasis,
             "actions": actions,
@@ -2939,6 +2946,25 @@ class Secretary:
                        reason=("statement_full 是空的 ⇒ 不写（只有短版不算数：省掉假设的"
                                "命题会被下游当成无条件成立）"))
             return out
+        # ---- D1（2026-10-22）：语义那一档的证据缺了就不写，并给具名理由。
+        #
+        # 这一格此前落到 `Statement.validate()` 里抛 `ValueError`（"标了 semantic 而缺
+        # span/call"），而它抛在事务内 ⇒ 调用方拿到的是 `write_failed` 这个通用码，
+        # 分不清"参数没给齐"与"盘坏了"。判据仍是同一处（`_normalize_quote_mode`），
+        # 这里只是把它提前成一条写库前的可读拒绝。
+        _mode = str(body.get("quote_mode") or "")
+        if _mode == "semantic":
+            _span = str(body.get("quote_span") or "").strip()
+            _call = str(body.get("quote_call_sha256") or "").strip()
+            if not _span or not _call:
+                _miss = "quote_span（来源那一段逐字正文）" if not _span else \
+                    "quote_call_sha256（那次语义判定的调用记录）"
+                out.update(refused="quote_evidence_missing",
+                           reason=(f"标了 quote_mode='semantic' 但缺 {_miss} —— 语义那一档"
+                                   "必须留证据：说不出对着哪一段、哪一次判的，就不算通过。"
+                                   "补上这两栏，或把 quote_verified 改成 None/False 并写明"
+                                   "为什么（三态纪律：没查不许折成查过了没问题）"))
+                return out
         try:
             return self._record_statement_tx(body, full=full, kind=kind,
                                              force_new=bool(force_new), out=out)
@@ -3427,10 +3453,32 @@ class Secretary:
                       "证明过程在 proof_text 里，采信与否由审校（H）与验证（V）那一档判")
         return S.Statement(
             stmt_id=stmt_id, origin=origin, kind=kind,
-            label=_s("label"), statement_text=_s("statement_text"), statement_full=full,
+            label=_s("label"),
+            # ---- D2（2026-10-22）：正文只有一个真身，短版是派生值。
+            #
+            # 真机读数（`saxl-ws/data/statements.json`）：13 条命题的
+            # `statement_text` 长度全是 0，而 `statement_full` 有正文 —— 同一份正文
+            # 两个字段、一个空一个满，读侧读哪个都能给出另一种答案。真身定在
+            # `statement_full`（schema 对它才是硬要求、下游都靠它），短版在这里由它
+            # 派生（逐字复制，不截断：截断出来的"短版"是另一条命题）。派生规则只有
+            # 这一处实现（`statementbody.derive_text`），读侧的唯一入口是
+            # `statementbody.body_of`。
+            statement_text=_SB.derive_text(full, _s("statement_text")),
+            statement_full=full,
             proof_text=_s("proof_text"), source_lit_id=_s("source_lit_id") or None,
             page_range=_rng("page_range"), quote_verified=body.get("quote_verified"),
             quote_reason=reason,
+            # ---- D1（2026-10-22）：回验的三栏证据必须能过这一层。
+            #
+            # 它们此前被 `STATEMENT_PARAM_KEYS` 收下、却没搬进 `Statement` ⇒ 静默丢掉。
+            # 后果是实测出来的：H 的语义判定明明给了 `quote_span` 与调用指纹，盘上
+            # 两栏全空，而 `schema._normalize_quote_mode` 把"只说了通过"的行记实成
+            # `verbatim` —— 于是"逐字回验通过"这句话在盘上没有任何读数（D1）。
+            # 这里只搬，不判：缺证据那一档由 `quoteevidence.enforce_quote_evidence`
+            # 在写库前处理（`register_statement` 的写侧断言），读侧判据是
+            # `quoteevidence.scan_quote_evidence`。
+            quote_mode=_s("quote_mode"), quote_span=_s("quote_span"),
+            quote_call_sha256=_s("quote_call_sha256"),
             evidence_kind=_s("evidence_kind") or "heuristic", status="active",
             derived_from=S.sorted_unique([str(x) for x in (body.get("derived_from") or [])]),
             aliases=[str(a) for a in (body.get("aliases") or []) if str(a).strip()],
