@@ -406,6 +406,11 @@ class Literature:
     language: str | None = None
     added_at: str = ""
     download: dict = field(default_factory=dict)
+    #: 期刊/文集里的页码范围（GB/T 7714 的"页码"那一栏）。
+    #: 空串 = 还没记（不是"这篇没有页码"：整本专著、预印本确实可以没有）。
+    #: 为什么是字符串而不是 PageRange：row_from_dict 对 literature 只按 __dataclass_fields__ 过滤、
+    #: 不做 PageRange.from_dict（对照 relations 那一支），直接放 PageRange 字段会让盘上的 dict 原样贴进来。
+    pages: str = ""
     #: 命中校验结论（`draft/37` §2 R1b）：`exact` / `partial` / `mismatch` / `""`（= 还没核）。
     #: 词表与"为什么它和 §5.2 的另一个 matched 不是一回事"见 `LIT_MATCH_STATUSES`。
     matched: str = ""
