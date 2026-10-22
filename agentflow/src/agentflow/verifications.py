@@ -160,7 +160,7 @@ def proof_sha(proof_text: str) -> str:
 #:
 #: 顺序是"从查清了到没查成"：`signed`（现行版有「成立」那一签）/ `stale`（签的是旧版，
 #: 待复核）/ `rejected`（现行版被签过，结论不是「成立」）/ `unsigned`（一次都没签）/
-#: `unreadable`（台账读不出来 —— 没查成，不是通过、也不是没签过）。
+#: `unreadable`（台账读不出来 / 证明号认不出 —— 没查成，不是通过、也不是没签过）。
 #:
 #: 为什么 stale 与 rejected 必须分开（三态纪律）：前者是"签过、但签的不是现在这一份"，
 #: 后者是"签的就是这一份、结论是没过"。把两者折成同一个"不算"会让"改完稿还没送审"
@@ -256,6 +256,28 @@ def proof_no_of(row: Mapping[str, Any]) -> int:
     return DEFAULT_PROOF_NO
 
 
+def _read_proof_no(value: Any) -> int:
+    """读侧收一个"要看哪一份证明"的号：没给 ⇒ canonical（1）；给了但认不出 ⇒ 0。
+
+    ## 三档不许折平（业主 2026-10-22 裁定）
+    - :func:`proof_no_of` 问的是"这一行属于哪一份证明"—— 答案永远有一个（老行没写就是
+      `#p1`），所以它把认不出的值也读成 1；
+    - :func:`proof_no_strict` 是写侧"调用方说要签哪一份"—— 认不出就抛错，一个字节都不写；
+    - 本函数是读侧的"调用方点名要看哪一份"—— 它必须能回答"没有这一份"：字段/参数缺失
+      才是 canonical，给了但认不出就是 0，不许折成 `#p1`。
+
+    改前三处读口都写 `as_proof_no(x) or 1`：于是 `'abc'` / `0` / `2.0` 这类"这不是一个
+    证明号"的值被静默读成 canonical —— 读数里看不出"号给错了"，而 `proof_text_of` 还会
+    把 `#p1` 的正文端出来当作"你要的那一份"。折平在这里不是"读数粗一点"，是张冠李戴。
+
+    空串与 `None` 同一档（都算"没写"）：老行可能把这一格写成空串，它与"键不存在"在读侧
+    没有区别（`proof_no_of` 也是这么读的，见那里的 `if str(value or "").strip()`）。
+    """
+    if value is None or not str(value).strip():
+        return DEFAULT_PROOF_NO
+    return as_proof_no(value)
+
+
 def proof_list(row: Mapping[str, Any]) -> list[tuple[int, str]]:
     """这条命题的证明清单 `[(proof_no, 正文), ...]`，`#p1` 恒在且排第一。
 
@@ -283,8 +305,16 @@ def proof_list(row: Mapping[str, Any]) -> list[tuple[int, str]]:
 
 
 def proof_text_of(row: Mapping[str, Any], proof_no: int = 1) -> str:
-    """这条命题的某一份证明现在长什么样（找不到那一份 ⇒ 空串）。"""
-    want = as_proof_no(proof_no) or 1
+    """这条命题的某一份证明现在长什么样（找不到那一份 ⇒ 空串）。
+
+    证明号走 :func:`_read_proof_no`：没给 ⇒ `#p1`；给了但认不出（`'abc'` / `0` …）⇒
+    空串，不端出 `#p1` 的正文。改前是 `as_proof_no(proof_no) or 1`，于是
+    `proof_text_of(row, 'abc')` 读到的就是 canonical 那一份 —— 一个坏号得到的答案与
+    "我要 #p1"逐字相同，而调用方无从分辨。
+    """
+    want = _read_proof_no(proof_no)
+    if want < 1:
+        return ""
     for no, text in proof_list(row):
         if no == want:
             return text
@@ -292,8 +322,17 @@ def proof_text_of(row: Mapping[str, Any], proof_no: int = 1) -> str:
 
 
 def proof_label(statement_id: str, proof_no: int = 1) -> str:
-    """读数里的写法：`000004#p2`（不带 `#pN` 的老写法等价于 `#p1`）。"""
-    return f"{str(statement_id or '')}#p{as_proof_no(proof_no) or 1}"
+    """读数里的写法：`000004#p2`（不带 `#pN` 的老写法等价于 `#p1`）。
+
+    证明号认不出时写法里点名（`000004#p？（证明号认不出：'abc'）`），不折成 `#p1`：
+    这个串会进 `why` / `detail` / 逐条计数项（`proofs_unreviewed` 等），折平会让一条
+    坏号以 canonical 的身份出现在读数里，读的人只会看到"#p1 怎么样"，看不到"号给错了"。
+    """
+    sid = str(statement_id or "")
+    no = _read_proof_no(proof_no)
+    if no < 1:
+        return f"{sid}#p？（证明号认不出：{proof_no!r}）"
+    return f"{sid}#p{no}"
 
 
 def parse_verdict(text: str) -> dict[str, Any]:
@@ -821,9 +860,17 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     `ledger_present` / `statement_id` / `proof_no` / `sha` / `verification_id` / `verdict` /
     `round` / `unresolved_errors` / `rows`（这条命题的台账总行数）/ `proof_rows`（本份
     证明的行数）/ `superseded` / `superseded_total` / `problems` / `ledger` / `why`。
+
+    ## 证明号认不出 ⇒ `unreadable`，不折成 `#p1`（2026-10-22 收尾）
+    `proof_no` 问的是"要看哪一份证明"，所以没给（`None` / 空串）才是 canonical；给了但
+    :func:`as_proof_no` 认不出（`0` / `'abc'` / `2.0`）⇒ 返回 `checked=False`、
+    `state="unreadable"`、`proof_no=0`，`why` 逐字点名"证明号认不出"。改前是
+    `as_proof_no(proof_no) or 1`：一个坏号拿到的是 `#p1` 的读数，而读的人看不出号给错了
+    （同样的折平还在 :func:`proof_text_of` / :func:`proof_label` 里，三处一起改的）。
+    这一档是"没查成"（问的是哪一份都没有答案），不是"查过了、没签过"。
     """
     sid = str(statement_id or "").strip()
-    no = as_proof_no(proof_no) or 1
+    no = _read_proof_no(proof_no)
     sha = proof_sha(proof_text)
     out: dict[str, Any] = {
         "checked": False, "state": "unsigned", "ok": False, "in_sync": None,
@@ -833,6 +880,16 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         "superseded": [], "superseded_total": 0,
         "ledger": "", "why": "",
     }
+    if no < 1:
+        # 证明号认不出 ⇒ "问的是哪一份"没有答案。这是"没查成"，不是"没签过"（三态纪律），
+        # 也不许悄悄按 canonical 读：改前 `as_proof_no(proof_no) or 1` 会把它读成 `#p1`，
+        # 于是"号给错了"的读数与"我要 #p1"逐字相同。
+        out.update(
+            checked=False, state="unreadable",
+            why=(f"证明号认不出：收到 {proof_no!r}（合法写法是 1、2、3 … 或 "
+                 "'2' / 'p2' / '#p2'）⇒ 不知道问的是哪一份证明，这一格**没查成**"
+                 "（不是「没签过」，也不是「签过过期」）；读侧不把它折成 canonical（#p1）"))
+        return out
     if not sid:
         out.update(checked=True, why="没有命题号 ⇒ 查不到台账（不是没签过）")
         return out

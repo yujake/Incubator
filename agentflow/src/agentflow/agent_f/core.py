@@ -1200,15 +1200,43 @@ class _Core:
         判据只有一处（`verifications.proof_review_gap`，与写入期那道闸同一个口径）：`proof_text` 非空 ＋ 最近一签「成立」且 
         `unresolved_errors==0` ＋`proof_sha256` 等于现文本 ⇒ 就是 `proof_review`；「否则」才退到 `heuristic`（降
         档是安全方向，只要有理由串）。返回 `{"kind", "why", "checked", "gap"}`。
+
+        ## 判的是整行，不是三格探针（2026-10-22 审计的最后一处小账）
+        改前交给 `proof_review_gap` 的是一张只有 `stmt_id` / `proof_text` / `evidence_kind`
+        的探针行：它没有行 JSON 里的 `proofs` 清单一格，于是读侧只看得见 canonical 那一份。
+        结果是"canonical 未签、#p2 已签"这一形态在 F 这一侧仍然只落 `heuristic` —— 而
+        `proof_review_gaps` 的命题级判据、收工门 R10、逐条读数早就按"任一份 signed"算
+        （见 `verifications.proof_review_gap` 的"任一份证明签住即放行"）。同一条命题于是
+        有两个答案，而差的那一个正好是"论文的强度声明"那一格。
+        现在从 `store` 取整行再判，判据仍然只有那一处："任一份 signed"的读法住在
+        `verifications.statement_review_reading`，F 这里不复制第二份判定。
+        正文仍用调用方给的那一份（问的是"要落盘 / 要升档的这一版"），清单用盘上那一行的。
         """
         from .. import verifications as VR
 
+        probe: dict[str, Any] = {
+            "stmt_id": str(stmt_id or ""),
+            "proof_text": str(proof_text or ""),
+            "evidence_kind": VR.PROOF_REVIEW_KIND,
+        }
+        # 盘上那一行的整份（`proofs` 清单在它身上）。读不到就当"还没有这一行"
+        # （新行那一支：`_proof_outlet` 在事务里刚取的号，盘上确实还没有），
+        # 但读失败要说出来 —— 静默退回"只看 canonical"正是这一条缺陷本身。
+        note = ""
         try:
-            gap = VR.proof_review_gap(self.store.root, {
-                "stmt_id": str(stmt_id or ""),
-                "proof_text": str(proof_text or ""),
-                "evidence_kind": VR.PROOF_REVIEW_KIND,
-            })
+            stored = next((r for r in self.store.rows("statements")
+                           if str(r.get("stmt_id") or "") == probe["stmt_id"]), None)
+        except Exception as exc:  # noqa: BLE001 - 读不到整行不该让这一步崩掉，但必须如实说
+            stored = None
+            note = (f"；`statements` 读不到整行（{type(exc).__name__}: {exc}）⇒ "
+                    "按探针行判（只看 canonical 那一份）")
+        if isinstance(stored, Mapping):
+            probe = dict(stored)
+            probe["stmt_id"] = str(stmt_id or "")
+            probe["proof_text"] = str(proof_text or "")
+            probe["evidence_kind"] = VR.PROOF_REVIEW_KIND
+        try:
+            gap = VR.proof_review_gap(self.store.root, probe)
         except Exception as exc:  # noqa: BLE001 —— 查不成 ⇒ 不许自报强档（fail-closed）
             return {"kind": "heuristic", "checked": False, "gap": {},
                     "why": f"凭据查不成（{type(exc).__name__}: {exc}）⇒ 只落 heuristic"}
@@ -1217,7 +1245,7 @@ class _Core:
                     "why": (f"{gap.get('verification_id')} 签「成立」且 proof_sha256 与现行正文相符"
                             f"（{gap.get('ledger')}）")}
         return {"kind": "heuristic", "checked": bool(gap.get("checked")), "gap": gap,
-                "why": str(gap.get("why") or "凭据不足 ⇒ heuristic")}
+                "why": str(gap.get("why") or "凭据不足 ⇒ heuristic") + note}
 
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
                       plan: Mapping[str, Any]) -> dict:
