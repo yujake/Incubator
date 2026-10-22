@@ -13,7 +13,7 @@
 ⇒ 结论：没有"看得见却调不动"或明显多余的项。这一条把它钉住，免得以后有人凭"看着不像他的"删掉一件别人真需要的工具。
 ## 判据（含负控）
 ① `conductor.escalate` 在十个角色面上都有（通用上行，少一个就有人上不了报）；② `conductor.broadcast` 只出现在有子代理的角色面上（A/B/D/E/F/G）；③ M 的面是纯编排面：
-不许出现 `attack.*` / `doc.*` / `verify.*` / `lit.*` / `analysis.*`（M 的活是统筹与搭桥，研究侧的执行归 D）；④ 反真空：十个角色面都非空、并集 = 全库工具数（94）
+不许出现 `attack.*` / `doc.*` / `verify.*` / `lit.*` / `analysis.*`（M 的活是统筹与搭桥，研究侧的执行归 D）；④ 反真空：十个角色面都非空、并集 = 全库工具数（95）
 ——否则"没有多余项"可能是"面是空的"。
 """
 
@@ -79,4 +79,4 @@ def test_no_face_is_empty_and_the_union_is_the_whole_library(
     assert not empty, f"这些角色的工具面是空的：{empty}"
     union = {n for names in faces.values() for n in names}
     # 全库工具数从模板快照读（`tests/golden/tool_surface_snapshot.json` 是那张的权威读数）
-    assert len(union) == 94, f"角色面并集是 {len(union)} 件（期望 94）—— 有人被摘掉了工具，或新工具没挂上"
+    assert len(union) == 95, f"角色面并集是 {len(union)} 件（期望 95）—— 有人被摘掉了工具，或新工具没挂上"

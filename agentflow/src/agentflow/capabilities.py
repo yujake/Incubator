@@ -317,7 +317,7 @@ def two_layer_reconciliation() -> dict:
     ## 为什么这个函数必须存在（它补的是一条真的缝）：`declaration_divergences` 答"两层在哪里不一致"，
     而"对账面有没有真的在做"有三个不同答案，必须分开数：`compared`（动作与工具唯一对上了）、
     `unmatched`（`handler_name` 在角色工具组里对应 0 个 ⇒ 没比成，unknown）、`ambiguous`（对应 ≥2 个 ⇒ 按唯一性约定拒绝猜，unknown）。
-    实测（2026-10-15 现算）：61 个动作 = 22 compared + 39 unmatched + 0 ambiguous（`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 工具名最后一段正是 `walk_citations`，与 `handler_name` 逐字相同；对照 `search_literature` 落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，所以"两层形状一致"对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
+    实测（2026-10-15 现算）：62 个动作 = 23 compared + 39 unmatched + 0 ambiguous（`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 工具名最后一段正是 `walk_citations`，与 `handler_name` 逐字相同；对照 `search_literature` 落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，所以"两层形状一致"对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
     此前各次（数字逐次可复算，每次只增不改）：（2026-10-14）60 = 21 + 39 + 0（退场前：`paper_package` 那一条本来也进 `unmatched`）；（2026-10-06）59 = 21 + 38 + 0（加角色 V 的三条动作 `verify.verify_proof` / `verify.list_verifications` / `verify.read_proof` 全部对上，`_TOOL_GROUPS_BY_ROLE["V"]` 只登记 `verify` 一组）；（2026-10-03）55 = 18 + 37 + 0（加 `G.paper_package`，2026-10-13 退场）；（2026-10-02）53 = 18 + 35 + 0（加 `A.ingest_local` 与 `B.register_statement`）；（2026-09-30）51 = 17 + 34 + 0（加 `A.search_literature`）。
     `C.proof_chain` 与 C 的其余八条同族：`handler_name` 在 `_TOOL_GROUPS_BY_ROLE["C"]` 里对不上工具组 ⇒ 进 `unmatched`，并逐条登记在 `_KNOWN_UNMATCHED_ACTIONS`。
     `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）—— 于是 `ambiguous` 那一格可以静默长大：它今天恰好是 0，所以那条缝从没被看见。本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。

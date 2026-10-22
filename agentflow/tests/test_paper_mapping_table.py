@@ -98,6 +98,33 @@ CLEAN_LEDGER: dict[str, list[dict]] = {
 FILES = ("proofs/thm-main.tex", "proofs/thm-tail.tex", "experiments/scan/run.py",
          "sources/own-notes.txt", "sources/paper-0000.txt")
 
+#: Lean 那两格（业主 2026-10-22 追加）的夹具源码。
+#:
+#: 只在本文件最后那条"逐 kind 覆盖"的用例里用；这一批的完整判据在
+#: `tests/test_mapping_names_the_lean_artifact.py`（八条，逐条对应业主口径）。
+#:
+#: 声明写成带点的全名：判据认的是"这个名字真的出现在文件里"（词边界匹配），
+#: 而 `namespace X` + `theorem 短名` 那种写法里字面全名并不出现。
+LEAN_SOURCE = (
+    "import Mathlib\n"
+    "\n"
+    "theorem FreeGroupFactor.isII1 : True := trivial\n"
+    "\n"
+    "theorem FreeGroupFactor.isSimple : True := trivial\n"
+    "\n"
+    "theorem FreeGroupFactor.fooBar : True := trivial\n"
+)
+
+
+def _lean_rows() -> list[dict]:
+    """`CLEAN_ROWS` 的两条定理行各带两格（`lean_file` 指包里那份 `.lean`）。"""
+    rows = [dict(r) for r in CLEAN_ROWS]
+    rows[0].update({"lean_file": "formal/000004.lean",
+                    "lean_target": "FreeGroupFactor.isII1"})
+    rows[1].update({"lean_file": "formal/000004.lean",
+                    "lean_target": "FreeGroupFactor.isSimple"})
+    return rows
+
 
 def _dump(path: pathlib.Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -632,12 +659,16 @@ def test_every_problem_kind_is_reachable() -> None:
     assert len(set(PM.ALL_PROBLEM_KINDS)) == len(PM.ALL_PROBLEM_KINDS)
     assert set(PM.ALL_PROBLEM_KINDS) == (
         set(PM.MAPPING_KINDS) | set(PM.CITATION_KINDS) | set(PM.MD_KINDS)
-        | set(PM.PAPER_KINDS)
+        | set(PM.PAPER_KINDS) | set(PM.LEAN_KINDS)
     )
+    # Lean 那两格的四条（业主 2026-10-22 追加）也在这张总表里：它们拦门，所以与
+    # `LEAN_WARN_KINDS`（只进读数的那一档）必须是两回事。
+    assert set(PM.LEAN_KINDS) & set(PM.LEAN_WARN_KINDS) == set()
+    assert PM.LEAN_WARN_KINDS, "警告那一档不许是空的（否则'没有 Lean 产物'就没有落点）"
 
 
 def test_every_problem_kind_is_produced_by_some_broken_workspace(tmp_path: pathlib.Path) -> None:
-    """逐个造一次坏，把 10 个 kind 全产出来（每一类都有产出路径）。"""
+    """逐个造一次坏，把全部 kind 都产出来（每一类都有产出路径）。"""
     seen: set[str] = set()
 
     # 包里没表 + 包外有一份
@@ -673,8 +704,32 @@ def test_every_problem_kind_is_produced_by_some_broken_workspace(tmp_path: pathl
     md.write_bytes(md.read_bytes() + b"x\n")
     seen |= set(_kinds(PM.mapping_reading(md_drift)))
 
-    missing = sorted(set(PM.ALL_PROBLEM_KINDS) - seen)
-    assert not missing, f"这些 kind 一次都没被产出来过：{missing}"
+    # Lean 那两格的四条（业主 2026-10-22 追加）：开关开（套件钉着开着，见
+    # `tests/conftest.py`）、包里有 `.lean`，才要求定理行给两格；四种坏法各来一次。
+    lean = _workspace(tmp_path / "f", rows=_lean_rows())
+    artifact = PM.package_dir(lean) / "formal" / "000004.lean"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(LEAN_SOURCE.encode("utf-8"))
+
+    def _lean_broken(rows2: list[dict]) -> None:
+        PM.write_package(lean, [PM.Row(**dict(r)) for r in rows2])
+        seen.update(_kinds(PM.mapping_reading(lean)))
+
+    missing = _lean_rows()
+    missing[0].pop("lean_target")
+    _lean_broken(missing)
+    nowhere = _lean_rows()
+    nowhere[0]["lean_file"] = "formal/not-there.lean"
+    _lean_broken(nowhere)
+    wrong = _lean_rows()
+    wrong[0]["lean_target"] = "FreeGroupFactor.foo"
+    _lean_broken(wrong)
+    twice = _lean_rows()
+    twice[1]["lean_target"] = twice[0]["lean_target"]
+    _lean_broken(twice)
+
+    missing_kinds = sorted(set(PM.ALL_PROBLEM_KINDS) - seen)
+    assert not missing_kinds, f"这些 kind 一次都没被产出来过：{missing_kinds}"
 
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用

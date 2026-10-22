@@ -101,6 +101,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "dict", side_effect="write_local", handler_name="revise",
     ),
 
+    ActionSpec(
+        "G", "write_mapping",
+        "写论文对应表三份（json / md / 正文附录）：先出表、再写正文",
+        _obj({
+            # 两格与工具层逐字对齐（`doc_tools` 里 `doc.write_mapping` 的 `@tool` 声明）；
+            # 对账判据：`capabilities.param_type_divergences()`（类型按 AST 比）与
+            # `tests/test_capabilities_reverse_param_gaps.py`（反向：工具面有、动作面没有）。
+            "project": _S,
+            "rows": _ARR_OBJ,
+        }, ("project", "rows")),
+        "mapping json", side_effect="write_local", handler_name="write_mapping",
+    ),
+
     # ---- `paper_package` 已退场（2026-10-13，业主裁定逐字：「paper_package 里那些东西都是
     # 古早废案了，我们要智能体写文章」）。原先是 G 的角色级动作"重渲染 → 重编译 → 核锚"，
     # 它要求项目里自带一对渲染/编译脚本（`code/make_paper.py` / `code/compile_paper.py`），
@@ -192,6 +205,7 @@ SPEC = AgentSpec(
             # 「同一个对象被核了两次」，那要说清是复现而不是新证据（实验行的 `notes` 会点名
             # 「同一份 data 已经支持过 exp:XXXX」）。」一条已删（判据守住了才删）。
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
+            "先出对应表，再写正文：`out/paper/MAPPING.json` 是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；`file` 写包内相对路径；有 Lean 产出时每行还要写 `lean_file`（验它的那份源码在论文包内的相对路径，如 `formal/000004.lean`）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；空着不算验过；顺序是 json → MD 与附录 → 编 PDF。",
         ),
         signature_error="把'有一条数值/交叉验证支持'说成'这条断言已经成立'。",
         deliverable="documents 里的稿件与每条断言的来路字段。",

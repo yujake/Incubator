@@ -72,7 +72,7 @@ LIVE-READINGS:BEGIN
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
 lint_rules_warning      = 15   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 49   # 同一档的 info 栏
-lint_rules_strict_warning = 74 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 75 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
 noai_paths_glob         = 43   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 40   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
@@ -80,7 +80,7 @@ noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组�
 tools_star_tools_py     = 16   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total         = 94   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
+cli_tools_total         = 95   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
 cli_tools_modules       = 15   # 同一行"已装模块 N"
 cli_tools_role_a        = 37   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
 cli_tools_role_b        = 23
@@ -88,7 +88,7 @@ cli_tools_role_c        = 23
 cli_tools_role_d        = 42
 cli_tools_role_e        = 26
 cli_tools_role_f        = 37
-cli_tools_role_g        = 38
+cli_tools_role_g        = 39
 cli_tools_role_h        = 31
 cli_tools_role_v        = 15
 cli_tools_role_m        = 21
@@ -185,8 +185,8 @@ LIVE-READINGS:END
 
 | 字面量 | 量法（复跑命令） |
 |---|---|
-| 动作总数 **61** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
-| 可召唤动作数 **54** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-10-20 撤 `M→V` ⇒ 57 → 54） |
+| 动作总数 **62** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
+| 可召唤动作数 **55** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；此前 2026-10-20 撤 `M→V` ⇒ 57 → 54） |
 | 子命令数 **25** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices） |
 
 **两条使用规矩**（与 §1.1 同源）：

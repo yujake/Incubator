@@ -226,19 +226,19 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## G.4 [附录·实测] 工具面明细（38 件）
+## G.4 [附录·实测] 工具面明细（39 件）
 
-**现读**：`python -m agentflow.cli tools --role G`（2026-10-21）
+**现读**：`python -m agentflow.cli tools --role G`（2026-10-22）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **38** |
-| `side_effect` | `read 21 / write_local 12 / none 5` |
-| `external` | `none 35 / exec 3`（`doc.paper_compile` 真的起 LaTeX 引擎，是 G 独有的第三件 `exec`） |
-| 需审批 | **13** |
+| 总数 | **39** |
+| `side_effect` | `read 21 / write_local 13 / none 5` |
+| `external` | `none 36 / exec 3`（`doc.paper_compile` 真的起 LaTeX 引擎，是 G 独有的第三件 `exec`） |
+| 需审批 | **14** |
 
-**逐件清单（共 38）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `attack.*` 4 ·
-`doc.*` 6（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim`）·
+**逐件清单（共 39）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `attack.*` 4 ·
+`doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`）·
 `review.*` 2 · `verify.*` 6 · `conductor.broadcast` / `conductor.escalate` 2。
 
 **G 拿不到**：`attack.create_plan`/`attack.step`、`graph.*`/`trace.*`、`research.*`、`search.*`、

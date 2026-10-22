@@ -916,6 +916,9 @@ _ROLES_V = ("V",)
                 "description": f"命题号（{S.ID_DIGITS} 位十进制，与 statements.stmt_id 同一套；旧数据里的 4 位号仍可读）",
             },
             "proof_text": {"type": "string", "description": "待审的证明全文；不给时从 statements 取"},
+            # 业主 2026-10-22（多证明模型）：签的是"第几条证明"。缺省 1 = canonical（行上的 proof_text）。
+            # 不加它，V 在"只派活不点名动作"的召唤下只能签 #p1，而 #p2 永远签不了 —— 且没有任何判据会报。
+            "proof_no": {"type": "integer", "minimum": 1, "description": "第几条证明（1 = canonical，缺省 1）"},
     # 只读读数由调用方现取现传（`verifications.cold_start_prompt` 只收字符串）：
     # 这是 I12 冷启动在接口上的那一半 —— 传字符串而不是传 store，
     # "它能碰什么"就被固定在签名里，而不是靠一句"它会守规矩"。
@@ -930,7 +933,7 @@ _ROLES_V = ("V",)
     # `checked=False` 是"没查成"（没接线 / 结论不合法）而「不是」工具失败 ——
     # 与 verify.check_formal 的 no_backend 同一档。少给键会让下游把"没有读数"读成"是零"。
     returns=(
-            "{'checked','kind','statement_id','verification_id','verdict','defect_step','findings',"
+            "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings',"
             "'unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits',"
             "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— "
@@ -938,7 +941,8 @@ _ROLES_V = ("V",)
             ),
     tags=("verification", "proof"),
 )
-def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, readonly_facts=None):
+def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, readonly_facts=None,
+                        proof_no: int = 1):
     """verify.verify_proof 的工具体。
 
     注入值（_need_store, _agent_v）由装配期用 `partial` 绑定，
@@ -948,6 +952,7 @@ def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, r
     _need_store("verify.verify_proof")
                or ok(_agent_v().verify_proof(statement_id=statement_id,
                                              proof_text=proof_text or "",
+                                             proof_no=int(proof_no or 1),
                                              readonly_facts=readonly_facts or ""))
     )
 

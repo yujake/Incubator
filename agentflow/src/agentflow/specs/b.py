@@ -113,6 +113,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                "缺它 ⇒ 第 2 位空 ⇒ 现算等级降到「猜想」并进待办，"
                                "**不拒收** —— 那条硬要求实测一条真猜想都没挡住，"
                                "只挡住了如实登记"},
+                "proofs": {"type": "array", "items": {"type": "object"}},
                 "kind": _S,
                 "label": _S,
                 "statement_text": _S,

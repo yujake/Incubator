@@ -1,9 +1,9 @@
-"""动作面复核（能力面第二片）：61 个动作，61 个实现落点，零悬空。
+"""动作面复核（能力面第二片）：62 个动作，62 个实现落点，零悬空。
 
 ## 这一条守的是什么
 
-业主的经验文档要求定期复核"动作面多余项"。2026-10-21 现读 `specs.builtin_specs()`：动作总数 61（每角色 A 6 / B 7 / C 10 / D 15 / E 5 / F 4 /
-G 6 / H 5 / V 3 / M 0），悬空动作（`handler_name` 在实现类上不存在）0 个。
+业主的经验文档要求定期复核"动作面多余项"。2026-10-22 现读 `specs.builtin_specs()`：动作总数 62（每角色 A 6 / B 7 / C 10 / D 15 / E 5 / F 4 /
+G 7 / H 5 / V 3 / M 0），悬空动作（`handler_name` 在实现类上不存在）0 个。
 
 `M` 的 0 个不是缺陷：主控的工具面是 `conductor.*`（编排面），召唤别的角色靠 `conductor.summon`，不需要自己声明"动作"——这条判据把"M 没有动作"与"某人漏了实现"分开。
 
@@ -13,7 +13,7 @@ G 6 / H 5 / V 3 / M 0），悬空动作（`handler_name` 在实现类上不存�
 ② 每个动作的 `summary` 非空（提示词里那一行就靠它，空 summary 会让模型看到一行光头）；
 ③ `M` 的动作面必须是 0（编排面不许混进研究侧动作；反过来，若哪天给 M 加了动作，这条会提醒先想清楚）；
 ④ 负控：给某个角色临时塞一个 `handler_name="…nonexistent"` 的动作 ⇒ ① 必须红；
-⑤ 反真空：其余九个角色的动作面都非空，且总数 = 61。"""
+⑤ 反真空：其余九个角色的动作面都非空，且总数 = 62。"""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from agentflow import specs
 from agentflow import agentspec as AS
 
 ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M")
-EXPECTED_TOTAL = 61
+EXPECTED_TOTAL = 62
 
 
 def _rows() -> dict[str, Any]:
@@ -50,7 +50,7 @@ def _dangling(built: dict[str, Any]) -> list[str]:
 
 
 def test_every_declared_action_has_an_implementation() -> None:
-    """① 声明与实现对齐：61 个动作一个悬空的都不许有。"""
+    """① 声明与实现对齐：62 个动作一个悬空的都不许有。"""
     problems = _dangling(_rows())
     assert not problems, "；".join(problems)
 
@@ -92,8 +92,8 @@ def test_the_negative_control_a_dangling_handler_is_caught(
     assert "ghost_action" in " ".join(problems)
 
 
-def test_no_role_face_is_empty_and_the_total_is_61() -> None:
-    """⑤ 反真空：除 M 之外的九个角色都有动作，总数 61。"""
+def test_no_role_face_is_empty_and_the_total_is_62() -> None:
+    """⑤ 反真空：除 M 之外的九个角色都有动作，总数 62。"""
     built = _rows()
     empty = [r for r in ROLES if r != "M" and not list(getattr(built[r], "actions", ()) or ())]
     assert not empty, f"这些角色的动作面是空的：{empty}"

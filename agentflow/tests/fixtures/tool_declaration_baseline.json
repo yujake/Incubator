@@ -1,7 +1,7 @@
 {
  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 86 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。",
- "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 94 件工具（与 tests/test_tool_summary_readings.py 同一口径）",
- "n_tools": 94,
+ "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 95 件工具（与 tests/test_tool_summary_readings.py 同一口径）",
+ "n_tools": 95,
  "n_cohort": 86,
  "baseline_summary_chars": 8932,
  "max_ratio": 0.75,
@@ -94,9 +94,10 @@
   "verify.verify_proof"
  ],
  "added_after_compression": {
-  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`），不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们**必须**在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 8 件不该进比例。",
+  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。",
   "tools": [
    "conductor.escalate",
+   "doc.write_mapping",
    "lit.admit",
    "lit.admit_all",
    "lit.overlap_check",
@@ -838,7 +839,7 @@
     ],
     "additionalProperties": false
    },
-   "returns": "{'task_id','role','action','status','outcome','refusal_reason','detail','error','tokens','usd','depth','elapsed_sec','children','checked','payload_preview','payload_bytes','payload_keys','payload_truncated','artifacts'}",
+   "returns": "{'task_id','role','action','status','outcome','refusal_reason','detail','error','tokens','usd','depth','elapsed_sec','children','checked','roster_name','roster_problem','roster_considered','payload_preview','payload_bytes','payload_keys','payload_truncated','artifacts'}",
    "side_effect": "write_local",
    "external": "none",
    "roles": [
@@ -897,7 +898,7 @@
     ],
     "additionalProperties": false
    },
-   "returns": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children'}",
+   "returns": "{'count','ok_count','refused_count','failed_count','waves','max_wave','concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 {'role','action','instance','auto_instance','task_id','status','outcome','refusal_reason','detail','error','tokens','usd','elapsed_sec','checked','children','roster_name','roster_problem','roster_considered'}",
    "side_effect": "write_local",
    "external": "none",
    "roles": [
@@ -1316,6 +1317,108 @@
     "gate"
    ],
    "handler_name": "functools.partial"
+  },
+  "doc.write_mapping": {
+   "params": {
+    "type": "object",
+    "properties": {
+     "project": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+     },
+     "rows": {
+      "type": "array",
+      "minItems": 1,
+      "description": "对应表的行：正文里每个定理/引理/命题/推论/例子/实验各占一行；多证明时每条证明各占一行",
+      "items": {
+       "type": "object",
+       "properties": {
+        "kind": {
+         "type": "string",
+         "enum": [
+          "theorem",
+          "lemma",
+          "proposition",
+          "corollary",
+          "example",
+          "experiment"
+         ],
+         "description": "正文里的环境种类（与那个 \\begin{...} 一致）"
+        },
+        "label": {
+         "type": "string",
+         "description": "正文里 \\label{...} 的值（不带花括号）"
+        },
+        "env_no": {
+         "type": "integer",
+         "minimum": 1,
+         "description": "正文里第几个该环境（按类计数，1 起）"
+        },
+        "ledger_id": {
+         "type": "string",
+         "description": "stmt:NNNNNN / exp:NNNNNN；多证明带 #pN（stmt:000004#p2）"
+        },
+        "proof_no": {
+         "type": "integer",
+         "minimum": 1,
+         "description": "第几号证明：1 = canonical（行上的 proof_text）"
+        },
+        "file": {
+         "type": "string",
+         "description": "该条完整证明/实验所在的文件（论文包内的相对路径）"
+        },
+        "lean_file": {
+         "type": "string",
+         "description": "验它的那份 Lean 源码在论文包里的相对路径（如 formal/000004.lean）。盘上有 Lean 产出时，定理/引理/命题/推论这几行必填"
+        },
+        "lean_target": {
+         "type": "string",
+         "description": "那份源码里哪个声明验了它（写源码里字面出现的名字，如 FreeGroupFactor.isII1；不是正文里的 LaTeX label）。与 lean_file 成对：有 Lean 产出时同样必填"
+        },
+        "page_or_section": {
+         "type": "string",
+         "description": "给人看的定位（可缺省）"
+        },
+        "citation_loc": {
+         "type": "object",
+         "description": "引文的本地位置 {file, page_range|line_range|char_range}"
+        },
+        "citation_loc_reason": {
+         "type": "string",
+         "description": "不给 citation_loc 时那句理由"
+        }
+       },
+       "required": [
+        "kind",
+        "label",
+        "env_no",
+        "ledger_id",
+        "proof_no",
+        "file"
+       ]
+      }
+     }
+    },
+    "required": [
+     "project",
+     "rows"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'project','json','md','appendix','rows','state','md_state','appendix_state','lean_state','lean','warnings','problems','reason'}；state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/unknown（没有正文，表没有可对的东西）；lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；json / md / appendix 是三个落点的绝对路径；失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ io_error（写盘失败）/ bad_project（项目根不在工作区里）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "G"
+   ],
+   "tags": [
+    "document",
+    "paper",
+    "write"
+   ],
+   "handler_name": "agentflow.tools.doc_tools._register_paper_tools.<locals>.<lambda>",
+   "added_after_compression": true
   },
   "fs.delete": {
    "params": {
@@ -4133,6 +4236,11 @@
       "type": "string",
       "description": "待审的证明全文；不给时从 statements 取"
      },
+     "proof_no": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "第几条证明（1 = canonical，缺省 1）"
+     },
      "readonly_facts": {
       "type": "string",
       "description": "只读读数（命题现状 / 台账条数）"
@@ -4144,7 +4252,7 @@
     ],
     "additionalProperties": false
    },
-   "returns": "{'checked','kind','statement_id','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
+   "returns": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
    "side_effect": "read",
    "external": "none",
    "roles": [

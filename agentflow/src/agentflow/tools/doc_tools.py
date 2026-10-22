@@ -2391,6 +2391,14 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
                      "description": "第几号证明：1 = canonical（行上的 proof_text）"},
         "file": {"type": "string",
                  "description": "该条完整证明/实验所在的文件（论文包内的相对路径）"},
+        "lean_file": {"type": "string",
+                      "description": "验它的那份 Lean 源码在论文包里的相对路径"
+                                     "（如 formal/000004.lean）。盘上有 Lean 产出时，"
+                                     "定理/引理/命题/推论这几行必填"},
+        "lean_target": {"type": "string",
+                        "description": "那份源码里哪个声明验了它（写源码里字面出现的名字，"
+                                       "如 FreeGroupFactor.isII1；不是正文里的 LaTeX label）。"
+                                       "与 lean_file 成对：有 Lean 产出时同样必填"},
         "page_or_section": {"type": "string", "description": "给人看的定位（可缺省）"},
         "citation_loc": {"type": "object",
                          "description": "引文的本地位置 {file, page_range|line_range|char_range}"},
@@ -2438,6 +2446,11 @@ def _doc_write_mapping(workspace: Path | None, project: str,
         "appendix": str(frag), "rows": len(parsed), "state": state,
         "md_state": str(reading.get("md_state") or ""),
         "appendix_state": str(reading.get("appendix_state") or ""),
+        # Lean 那两格的读数（业主 2026-10-22 追加）：`lean_state` 把"没开 Lean"与
+        # "开关开着却没有产物"分成两档，`warnings` 里是只进读数、不拦门的那一档。
+        "lean_state": str(reading.get("lean_state") or ""),
+        "lean": dict(reading.get("lean") or {}),
+        "warnings": list(reading.get("warnings") or []),
         "problems": list(reading.get("problems") or []),
         "reason": str(reading.get("reason") or ""),
     }
@@ -2449,6 +2462,8 @@ def _doc_write_mapping(workspace: Path | None, project: str,
         "appendix": body["appendix"], "rows": body["rows"],
         "state": body["state"], "md_state": body["md_state"],
         "appendix_state": body["appendix_state"],
+        "lean_state": body["lean_state"], "lean": body["lean"],
+        "warnings": body["warnings"],
         "problems": body["problems"], "reason": body["reason"],
     })
 
@@ -2503,7 +2518,8 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
             name="doc.write_mapping",
             summary="写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，"
             "并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；"
-            "md 与附录由 json 渲染，别手写。",
+            "md 与附录由 json 渲染，别手写。有 Lean 产出时每行还要写 lean_file 与 "
+            "lean_target（验它的源码在哪、验的是哪个声明）。",
             params={
                 "type": "object",
                 "properties": {
@@ -2521,9 +2537,12 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
             roles=("G",),
             returns=(
                 "{'project','json','md','appendix','rows','state','md_state',"
-                "'appendix_state','problems','reason'}；"
+                "'appendix_state','lean_state','lean','warnings','problems','reason'}；"
                 "state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/"
                 "unknown（没有正文，表没有可对的东西）；"
+                "lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ "
+                "on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ "
+                "on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；"
                 "json / md / appendix 是三个落点的绝对路径；"
                 "失败：ok=False + kind=mapping_unresolvable（行读不懂，一行都没写）/ "
                 "mapping_empty（给了一张空表）/ mapping_not_clean（写了，但现读判不过）/ "

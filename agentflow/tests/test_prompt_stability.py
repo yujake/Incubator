@@ -428,6 +428,9 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p180", "count": 14,
      "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
      "note": "抬版本 p180（2026-10-21）：B/D/G/H 四角色的 stance 各加一条（非平凡性分档写作 / 研究生视角六类困惑 / 入库给素材不判档 / T4 先问缺哪个工具）；键集未变"},
+    {"version": "p181", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p181（2026-10-22）：多证明模型与论文对应表落地 —— B 的 register_statement 广告 proofs、V 的 verify_proof 广告 proof_no、G 加 write_mapping 动作与「先出对应表再写正文」政策、H 加「按对应表逐行核」政策；键集未变"},
 )
 
 

@@ -30,6 +30,8 @@
 | `page_or_section` | 否 | 给人看的定位（`3` / `p.7`） |
 | `citation_loc` | 视来源 | 引文的本地位置：`{"file": 包内相对路径, "page_range"|"line_range"|"char_range": [起点, 终点]}` |
 | `citation_loc_reason` | 视来源 | 不给 `citation_loc` 时那句理由 |
+| `lean_file` | 有 Lean 产出时 | Lean 程序的真实位置：论文包内相对路径（`formal/000004.lean`）。绝对路径与包外路径都红 |
+| `lean_target` | 有 Lean 产出时 | 它验的是哪一条：Lean 里那个声明的名字（`FreeGroupFactor.isII1`），必须真的出现在 `lean_file` 里 |
 
 `file` 与 `citation_loc.file` 都是包内相对路径：绝对路径在别人的机器上等于不存在，
 而指向包外的相对路径同样过不了"换一台机器也能复核"这一关（两者都判红）。
@@ -52,6 +54,27 @@
 区间三种任选其一（至少一种），值写成 `[起点, 终点]` 或 `{"start": ..., "end": ...}`，
 两者都必须是正整数且起点不大于终点。
 
+### Lean 那两格的三态（业主 2026-10-22 追加）
+
+业主原话：「有 Lean 产出时，还要写明 Lean 程序的位置与它验的是哪条定理/哪条证明」。五档：
+
+- Lean 开关关（读 `settings.lean_enabled`，与 `closing` 那一处是同一个口径）=> 两格允许为空，
+  读数里写「未开 Lean」；空绝不等于验过 —— 这一趟的证明走 `proof_text` 与 V 的逐行审校；
+- 开关开、且盘上有 Lean 产物（论文包内任意 `*.lean`，或 `<项目根>/out/formal/` 下的产物）
+  => 每条 theorem / lemma / proposition / corollary 行必须给这两格，缺就是
+  `mapping_lean_missing`；
+- `lean_file` 不是 `.lean`、或不在论文包里 => `mapping_lean_file_missing`；
+- `lean_target` 在那一份 `.lean` 里找不到（做词边界匹配，`foo` 不算命中 `foobar`）
+  => `mapping_lean_target_missing`；
+- 同一个 `lean_target` 出现在两行 => `mapping_lean_target_ambiguous`。一条命题有多条证明时，
+  允许两行共用一个 `lean_file`，但那两行的 `lean_target` 必须各自不同（各自那份 `.lean`
+  里验它的声明名）。
+
+开关开、却一个 Lean 产物都没有 => 读数里有一档 `lean_on_but_no_artifact`（`warnings`，
+不拦门；见 `LEAN_WARN_KINDS`）：两格无从填起这件事必须看得见，但它说的不是
+"表与正文对不上"。两格里只要填了一格（哪怕开关关着），就要当真核 —— 只填一半同样是
+`mapping_lean_missing`：填了就是声称，声称就得能复核。
+
 ## 双向都不许有孤儿
 
 正文里每个定理类环境都必须在表里有一行，表里每一行也必须在正文里有一个环境。
@@ -71,7 +94,9 @@
   （G 产出论文却没交表：这是没产出，不是没查成）；
 - 没有正文、也没有表 => `state="unknown"`（不适用，不是通过）；
 - 表在、但有 `ALL_PROBLEM_KINDS` 里的问题 => `state="fail"`，逐条列；
-- 表在且干净 => `state="pass"`。
+- 表在且干净 => `state="pass"`（`warnings` 非空也还是 `pass`：`warnings` 说的是读数，
+  不是表与正文对不上 —— 但那一档必须打印、并在 `reason` 里点名，不许静默；
+  目前 `warnings` 里只有 `lean_on_but_no_artifact` 一档，见 `LEAN_WARN_KINDS`）。
 
 "路径不存在"与"内容为空"必须分得开（`file_state` 的 `missing` 与 `empty`）：
 前者是这一行指错了地方，后者是那个文件真的还没写内容。
@@ -119,13 +144,35 @@ APPENDIX_BEGIN = ("% ==== MAPPING-APPENDIX BEGIN"
                   "（由 out/paper/MAPPING.json 渲染，不许手改）====")
 APPENDIX_END = "% ==== MAPPING-APPENDIX END ===="
 
-#: 附录里每一行的机器可读注释（`% MAPPING-ROW kind|env_no|label|ledger_id|proof_no|file`）。
+#: 附录里每一行的机器可读注释
+#: （`% MAPPING-ROW kind|env_no|label|ledger_id|proof_no|file|lean_file|lean_target`）。
 APPENDIX_ROW_PREFIX = "% MAPPING-ROW "
 
 #: 正文里要进对应表的六类环境（顺序就是 md 与附录里 kind 的推荐顺序）。
 ENV_KINDS: tuple[str, ...] = (
     "theorem", "lemma", "proposition", "corollary", "example", "experiment",
 )
+
+#: 有 Lean 产出时必须给 `lean_file` + `lean_target` 的那几类环境（业主 2026-10-22 追加）。
+#:
+#: 为什么不是全部六类：例子与实验不是"被 Lean 验的命题"，它们没有声明名可写。
+LEAN_TARGETED_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary")
+
+#: Lean 那两格（`lean_file` / `lean_target`）：有 Lean 产出时必填，其余时候允许为空。
+LEAN_ROW_FIELDS: tuple[str, ...] = ("lean_file", "lean_target")
+
+#: Lean 产物的后缀（`lean_file` 必须是它结尾）。
+LEAN_SUFFIX = ".lean"
+
+#: 除论文包之外，Lean 产物还落在哪（项目根相对；业主口径里有 `out/formal/` 这一处）。
+LEAN_ARTIFACT_DIRS: tuple[str, ...] = ("out/formal",)
+
+#: 扫 Lean 产物时不进的目录（`.lake` 里是整份 Mathlib 的源码与编译产物）。
+LEAN_SKIP_DIRS: tuple[str, ...] = (".lake", ".git", ".hg", "node_modules", "__pycache__")
+
+#: Lean 那两格的三种占位写法（空着时按开关状态印出来，不印空白）。
+LEAN_OFF_CELL = "（未开 Lean）"
+LEAN_UNFILLED_CELL = "（没填）"
 
 #: 每一行的必填字段（其余见 `OPTIONAL_ROW_FIELDS` 与 `CONDITIONAL_ROW_FIELDS`）。
 ROW_FIELDS: tuple[str, ...] = (
@@ -178,8 +225,32 @@ PAPER_KINDS: tuple[str, ...] = (
     "mapping_package_missing", "mapping_not_in_paper", "mapping_paper_mismatch",
 )
 
+#: Lean 那两格的四条（业主 2026-10-22 追加；口径见模块 docstring 的 Lean 三态）。
+#:
+#: `mapping_lean_missing`：开关开、有 Lean 产出，而某条定理/引理/命题/推论行没给两格
+#: （或只给了一格 —— 填了就是声称，声称就得能复核）；
+#: `mapping_lean_file_missing`：`lean_file` 不是 `.lean`，或不在论文包里；
+#: `mapping_lean_target_missing`：`lean_target` 在那一份 `.lean` 里找不到（词边界匹配）；
+#: `mapping_lean_target_ambiguous`：同一个 `lean_target` 被两行共用（谁验的哪一条就说不清了）。
+LEAN_KINDS: tuple[str, ...] = (
+    "mapping_lean_missing", "mapping_lean_file_missing",
+    "mapping_lean_target_missing", "mapping_lean_target_ambiguous",
+)
+
+#: 只进读数、不拦门的一档：Lean 开关开着，而盘上一个 Lean 产物都没有。
+#:
+#: 为什么是 warning 而不是 blocker：这一档说的是"形式化一个文件都没落"，不是
+#: "表与正文对不上"。把它拦成 blocker 会让每一份不使用形式化的论文都交不了表，
+#: 而承重结论没有形式化背书那件事已经由收工门的 `load_bearing` 与形式化门在管；
+#: 但"两格无从填起"这件事必须看得见（空着与"验过了"要分得开），所以它在 `warnings` 里。
+LEAN_WARN_KINDS: tuple[str, ...] = ("lean_on_but_no_artifact",)
+
 #: 本模块会产出的全部问题类别（判据要逐类覆盖它，见 `tests/test_paper_mapping_table.py`）。
-ALL_PROBLEM_KINDS: tuple[str, ...] = MAPPING_KINDS + CITATION_KINDS + MD_KINDS + PAPER_KINDS
+#:
+#: 只收拦门的那几组：`LEAN_WARN_KINDS` 不进这里（它在 `warnings` 里，不改 `state`）。
+ALL_PROBLEM_KINDS: tuple[str, ...] = (
+    MAPPING_KINDS + CITATION_KINDS + MD_KINDS + PAPER_KINDS + LEAN_KINDS
+)
 
 #: 三态取值。
 STATES: tuple[str, ...] = ("pass", "fail", "unknown")
@@ -246,6 +317,8 @@ class Row:
     ledger_id: str
     proof_no: int
     file: str
+    lean_file: str = ""
+    lean_target: str = ""
     page_or_section: str = ""
     citation_loc: Mapping[str, Any] | None = None
     citation_loc_reason: str = ""
@@ -255,6 +328,10 @@ class Row:
         out: dict[str, Any] = {"kind": self.kind, "label": self.label,
                                "env_no": int(self.env_no), "ledger_id": self.ledger_id,
                                "proof_no": int(self.proof_no), "file": self.file}
+        if self.lean_file:
+            out["lean_file"] = self.lean_file
+        if self.lean_target:
+            out["lean_target"] = self.lean_target
         if self.page_or_section:
             out["page_or_section"] = self.page_or_section
         if self.citation_loc is not None:
@@ -476,6 +553,97 @@ def file_state(package_root: str | Path, rel: Any) -> dict[str, Any]:
     return out
 
 
+def lean_switch() -> tuple[bool, str]:
+    """这一趟走不走 Lean 形式化（业主 2026-10-12 的开关）。返回 `(值, 来源)`。
+
+    口径只有一处：`settings.lean_enabled`（环境变量 `AGENTFLOW_LEAN_ENABLED` >
+    设置文件 `toolchain` 段的 `LEAN_ENABLED_KEY` > `DEFAULT_LEAN_ENABLED`）。这里照抄
+    `closing._check_load_bearing` 那一处调用（`_SET.lean_enabled()[0]`）—— 不另写第三份判定，
+    也不把结果缓存在模块常量里：环境变量可以在 import 之后才设，缓存就会让"我关掉了"
+    与"这一格以为还开着"分家。
+
+    为什么惰性 import：本模块要在收工门的"运行外"出口里被读（没有 store、只有工作区目录），
+    不想在 import 期就把设置层与它牵连的东西全拉起来。
+    """
+    from . import settings as SET
+
+    return SET.lean_enabled()
+
+
+def _lean_sources(base: Path) -> list[Path]:
+    """`base` 下所有 `.lean` 文件（不跟符号链接；`LEAN_SKIP_DIRS` 与点目录不进）。"""
+    if not base.is_dir():
+        return []
+    out: list[Path] = []
+    stack: list[Path] = [base]
+    while stack:
+        current = stack.pop()
+        try:
+            entries = sorted(current.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                is_dir = entry.is_dir()
+            except OSError:
+                continue
+            if is_dir:
+                name = entry.name
+                if name.startswith(".") or name in LEAN_SKIP_DIRS:
+                    continue
+                stack.append(entry)
+            elif entry.name.lower().endswith(LEAN_SUFFIX):
+                out.append(entry)
+    return out
+
+
+def lean_artifacts(project_root: str | Path) -> list[str]:
+    """盘上已有的 Lean 产物（排序、去重；包内的记成包内相对路径）。
+
+    两处都扫：论文包内任意 `*.lean`（`lean_file` 只认包内相对路径，所以这是能填的那一处），
+    以及 `<项目根>/out/formal/` 下的产物（业主 2026-10-22 口径里点名的另一处）。
+    返回的是给人看的写法：包内的是 `formal/000004.lean`，`out/formal/` 的是
+    `out/formal/000004.lean` —— 后者填不进 `lean_file`（那会指到包外），
+    它的用处是"盘上到底有没有 Lean 产出"这个事实。
+    """
+    project = Path(project_root)
+    package = package_dir(project)
+    found: list[str] = []
+    for path in _lean_sources(package):
+        try:
+            found.append(path.relative_to(package).as_posix())
+        except ValueError:
+            continue
+    for rel_dir in LEAN_ARTIFACT_DIRS:
+        for path in _lean_sources(project / rel_dir):
+            try:
+                found.append(path.relative_to(project).as_posix())
+            except ValueError:
+                continue
+    out: list[str] = []
+    for rel in sorted(found):
+        if rel not in out:
+            out.append(rel)
+    return out
+
+
+def _declaration_re(name: Any) -> re.Pattern[str]:
+    """声明名的词边界正则：`foo` 不许命中 `foobar`、`foo'`、`Foo.foo`。
+
+    为什么边界里带 `.`：Lean 的名字是点分的，`FreeGroupFactor.isII1` 与
+    `My.FreeGroupFactor.isII1` 是两条不同的声明 —— 左边允许 `.` 就会把后者读成前者。
+    """
+    return re.compile(r"(?<![\w.'])" + re.escape(str(name or "")) + r"(?![\w.'])")
+
+
+def lean_declares(text: str, name: Any) -> bool:
+    """`name` 是不是真的出现在这段 Lean 源码里（词边界匹配，不是子串）。"""
+    raw = str(name or "")
+    if not raw:
+        return False
+    return bool(_declaration_re(raw).search(str(text or "")))
+
+
 def _range_problem(value: Any) -> str:
     """一个区间的形态问题（空串 = 合法：两个正整数、起点不大于终点）。"""
     if isinstance(value, Mapping):
@@ -556,6 +724,94 @@ def _citation_problems(row: Row, package_root: Path,
     return problems
 
 
+def _lean_problems(rows: Sequence[Row], package_root: Path, lean_on: bool,
+                   artifacts: Sequence[str]) -> list[dict[str, Any]]:
+    """Lean 那两格（业主 2026-10-22 追加）：什么时候必填、填了要真。
+
+    三件事分开报，一条坏不遮蔽另一条：
+    1. 必填而缺（或只填了一半）=> `mapping_lean_missing`；
+    2. `lean_file` 不是 `.lean` / 不在包里 => `mapping_lean_file_missing`；
+    3. `lean_target` 在那一份 `.lean` 里找不到 => `mapping_lean_target_missing`；
+    外加一条横向的：同一个 `lean_target` 被两行共用 => `mapping_lean_target_ambiguous`。
+
+    "必填"的口径见模块 docstring：开关开、且盘上真有 Lean 产物，才要求定理类那四行给两格。
+    这一条只在 `LEAN_KINDS` 非空时才被调用（见 `mapping_reading`）：清空那一组就是关掉这一档，
+    反真空用例靠它证明"这些红真的靠那组 kind"。
+    """
+    problems: list[dict[str, Any]] = []
+    required = bool(lean_on) and bool(artifacts)
+    seen_targets: dict[str, Row] = {}
+    for row in rows:
+        lean_file = str(row.lean_file or "").strip()
+        lean_target = str(row.lean_target or "").strip()
+        missing = [name for name, value in (("lean_file", lean_file),
+                                            ("lean_target", lean_target)) if not value]
+        need = required and row.kind in LEAN_TARGETED_KINDS
+        half = bool(lean_file) != bool(lean_target)
+        if missing and (need or half):
+            why = (f"盘上已经有 {len(artifacts)} 份 Lean 产物（{list(artifacts[:3])}），"
+                   "这一行必须说清验它的是哪一份 `.lean` 里的哪一个声明名"
+                   if need else
+                   "两格是一对：只填一格时，另一格没有任何东西可以复核它")
+            problems.append(_problem(
+                "mapping_lean_missing",
+                f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）缺 {missing} —— "
+                f"{why}。`lean_file` 写论文包内的相对路径（如 formal/000004.lean），"
+                "`lean_target` 写 Lean 里那个声明的名字（如 FreeGroupFactor.isII1）",
+                label=row.label, where=MAPPING_JSON_NAME))
+        file_ok = False
+        if lean_file:
+            state = file_state(package_root, lean_file)
+            if not lean_file.lower().endswith(LEAN_SUFFIX):
+                problems.append(_problem(
+                    "mapping_lean_file_missing",
+                    f"表里 label={row.label!r} 的 `lean_file` = {lean_file!r} 不是 Lean 源码"
+                    f"（要以 {LEAN_SUFFIX} 结尾）—— 它指的是那份真的被检查器读过的文件",
+                    label=row.label, where=MAPPING_JSON_NAME))
+            elif state["state"] in ("missing", "directory", "outside"):
+                problems.append(_problem(
+                    "mapping_lean_file_missing",
+                    f"表里 label={row.label!r} 的 `lean_file` 读不到：{state['reason']} —— "
+                    "它必须是论文包内的相对路径（绝对路径在别人的机器上等于不存在），"
+                    "`out/formal/` 下的产物要先放进包里（如 formal/000004.lean）",
+                    label=row.label, where=MAPPING_JSON_NAME))
+            else:
+                file_ok = True
+        if lean_target and lean_file and file_ok:
+            absolute = Path(package_root) / lean_file
+            try:
+                text = absolute.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                problems.append(_problem(
+                    "mapping_lean_target_missing",
+                    f"表里 label={row.label!r} 的 `lean_file` = {lean_file!r} 读不出文本"
+                    f"（{type(exc).__name__}: {exc}）—— 名字没核过，不算命中",
+                    label=row.label, where=MAPPING_JSON_NAME))
+                text = None
+            if text is not None and not lean_declares(text, lean_target):
+                problems.append(_problem(
+                    "mapping_lean_target_missing",
+                    f"表里 label={row.label!r} 的 `lean_target` = {lean_target!r} 在 "
+                    f"{lean_file!r} 里找不到这个名字（做的是词边界匹配：`foo` 不算命中 "
+                    "`foobar`）—— 要写那份源码里字面出现的声明名：源码是 "
+                    "`namespace X` 里写短名，就写短名；写全名，就与源码逐字一致。"
+                    "正文里的 LaTeX label 不是它",
+                    label=row.label, where=MAPPING_JSON_NAME))
+        if lean_target:
+            prev = seen_targets.get(lean_target)
+            if prev is not None:
+                problems.append(_problem(
+                    "mapping_lean_target_ambiguous",
+                    f"`lean_target` = {lean_target!r} 被两行共用"
+                    f"（label={prev.label!r} 与 label={row.label!r}）—— 同一个声明只验得了一条；"
+                    "一条命题有多条证明时，两行可以共用一个 `lean_file`，"
+                    "但 `lean_target` 必须是各自那份证明里的声明名",
+                    label=row.label, where=MAPPING_JSON_NAME))
+            else:
+                seen_targets[lean_target] = row
+    return problems
+
+
 def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
     """把 json 的载荷读成行（读不懂的行落一条 `mapping_unresolvable`，不静默丢）。
 
@@ -614,10 +870,21 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 f"第 {i} 行的 `citation_loc` 必须是对象，收到 {type(loc).__name__}",
                 label=label))
             continue
+        bad_lean = [f for f in LEAN_ROW_FIELDS
+                    if item.get(f) is not None and not isinstance(item.get(f), str)]
+        if bad_lean:
+            problems.append(_problem(
+                "mapping_unresolvable",
+                f"第 {i} 行的 {bad_lean} 必须是字符串（`lean_file` 是包内相对路径、"
+                "`lean_target` 是 Lean 里那个声明的名字）",
+                label=label))
+            continue
         rows.append(Row(kind=kind, label=label, env_no=env_no,
                         ledger_id=str(item.get("ledger_id") or "").strip(),
                         proof_no=proof_no,
                         file=str(item.get("file") or "").strip(),
+                        lean_file=str(item.get("lean_file") or "").strip(),
+                        lean_target=str(item.get("lean_target") or "").strip(),
                         page_or_section=str(item.get("page_or_section") or "").strip(),
                         citation_loc=dict(loc) if isinstance(loc, Mapping) else None,
                         citation_loc_reason=str(item.get("citation_loc_reason") or "").strip()))
@@ -641,10 +908,22 @@ def _loc_text(row: Row) -> str:
     return " · ".join(p for p in parts if p)
 
 
+def _lean_cell(value: str, lean_on: bool) -> str:
+    """Lean 那两格在表格里的一格：空着时按开关状态写占位，不印空白。
+
+    "空"与"验过了"必须分得开：开关关时印「未开 Lean」（这一趟没走形式化，不是没写），
+    开关开而没填就印「没填」——它是不是红的由 `mapping_lean_*` 那几档判，
+    这一格只负责不让读者把空白读成"没问题"。
+    """
+    if value:
+        return value
+    return LEAN_UNFILLED_CELL if lean_on else LEAN_OFF_CELL
+
+
 def _row_key_text(row: Row) -> str:
     """附录里那条机器可读注释的内容（`|` 分隔，判据靠它数行与比 label）。"""
     return "|".join([row.kind, str(int(row.env_no)), row.label, row.ledger_id,
-                     str(int(row.proof_no)), row.file])
+                     str(int(row.proof_no)), row.file, row.lean_file, row.lean_target])
 
 
 def appendix_row_keys(block: str) -> list[tuple[str, str]]:
@@ -660,18 +939,26 @@ def appendix_row_keys(block: str) -> list[tuple[str, str]]:
     return out
 
 
-def render_appendix(rows: Iterable[Row]) -> str:
-    """把行渲染成正文附录（唯一渲染函数；手抄的那一段过不了逐字比对）。"""
+def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None) -> str:
+    """把行渲染成正文附录（唯一渲染函数；手抄的那一段过不了逐字比对）。
+
+    `lean_enabled` 不给时按 `lean_switch()` 的当次读数（读盘那一侧也走同一个默认）：
+    Lean 那两列因此印的是这一趟的真实状态，而不是一段永远一样的空白。
+    """
     items = list(rows)
+    lean_on = lean_switch()[0] if lean_enabled is None else bool(lean_enabled)
     lines = [
         APPENDIX_BEGIN,
         "\\section*{" + APPENDIX_TITLE + "}",
         "",
         "本表由 \\texttt{" + MAPPING_JSON_NAME + "} 渲染（\\texttt{agentflow.papermapping.render\\_appendix}），"
-        "不许手抄第二份。\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件。",
+        "不许手抄第二份。\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件。"
+        "Lean 那两列是「验它的那份源码在哪」与「验的是哪个声明」：有 Lean 产出时这两列必填，"
+        "开关关时它们印「" + LEAN_OFF_CELL + "」（空不等于验过）。",
         "",
-        "\\begin{tabular}{llllp{0.24\\textwidth}p{0.24\\textwidth}}",
-        "环境 & label & 台账序号 & 证明号 & 真实文件 & 引文位置 \\\\",
+        "\\begin{tabular}{llllp{0.15\\textwidth}p{0.15\\textwidth}p{0.15\\textwidth}"
+        "p{0.15\\textwidth}}",
+        "环境 & label & 台账序号 & 证明号 & 真实文件 & Lean 文件 & Lean 声明 & 引文位置 \\\\",
         "\\hline",
     ]
     for row in items:
@@ -682,15 +969,21 @@ def render_appendix(rows: Iterable[Row]) -> str:
             "\\texttt{" + _tex_escape(row.ledger_id) + "}",
             str(int(row.proof_no)),
             "\\texttt{" + _tex_escape(row.file) + "}",
+            _tex_escape(_lean_cell(row.lean_file, lean_on)),
+            _tex_escape(_lean_cell(row.lean_target, lean_on)),
             _tex_escape(_loc_text(row) or row.citation_loc_reason or ""),
         ]) + " \\\\")
     lines += ["\\hline", "\\end{tabular}", "", APPENDIX_END, ""]
     return "\n".join(lines)
 
 
-def render_mapping_markdown(rows: Iterable[Row]) -> str:
-    """把行渲染成人读的那一份（表格列顺序固定，任何人都能用同一段代码重生成）。"""
+def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = None) -> str:
+    """把行渲染成人读的那一份（表格列顺序固定，任何人都能用同一段代码重生成）。
+
+    `lean_enabled` 的口径与 `render_appendix` 相同（不给就按当次开关读数）。
+    """
     items = list(rows)
+    lean_on = lean_switch()[0] if lean_enabled is None else bool(lean_enabled)
     lines = [
         "# 论文对应表（`" + MAPPING_JSON_NAME + "` 的人读版）",
         "",
@@ -707,18 +1000,24 @@ def render_mapping_markdown(rows: Iterable[Row]) -> str:
         "等于不存在，指到包外的相对路径同样过不了复核。",
         "`file` 的指向：`proof_no` = 1 指台账行本身或附录里那一段正文；2 及以上指那一份"
         "证明自己的文件。",
+        "`lean_file` 与 `lean_target`：有 Lean 产出时，每条定理/引理/命题/推论还要说清"
+        "验它的是论文包内哪一份 `.lean`、以及那份源码里的哪个声明名。开关关时这两列印"
+        "「" + LEAN_OFF_CELL + "」—— 空不等于验过。",
         "",
-        "| # | kind | label | env_no | ledger_id | proof_no | file | citation_loc "
-        "| citation_loc_reason | page_or_section |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| # | kind | label | env_no | ledger_id | proof_no | file | lean_file | lean_target "
+        "| citation_loc | citation_loc_reason | page_or_section |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for i, row in enumerate(items, start=1):
         lines.append(
-            "| {i} | {kind} | {label} | {no} | {ledger} | {proof} | {file} | {loc} "
-            "| {reason} | {where} |".format(
+            "| {i} | {kind} | {label} | {no} | {ledger} | {proof} | {file} | {lean_file} "
+            "| {lean_target} | {loc} | {reason} | {where} |".format(
                 i=i, kind=row.kind, label=row.label or "（没有 label）", no=int(row.env_no),
                 ledger=row.ledger_id, proof=int(row.proof_no),
-                file=row.file or "（空）", loc=_loc_text(row) or "",
+                file=row.file or "（空）",
+                lean_file=_lean_cell(row.lean_file, lean_on),
+                lean_target=_lean_cell(row.lean_target, lean_on),
+                loc=_loc_text(row) or "",
                 reason=row.citation_loc_reason or "",
                 where=row.page_or_section or ""))
     lines.append("")
@@ -1018,7 +1317,8 @@ def mapping_reading(project_root: str | Path, *,
 
     三态：`pass` / `fail` / `unknown`（`unknown` 是"没查成 / 不适用"，绝不是通过）。
     `problems` 里每条都带 `kind`（取值在 `ALL_PROBLEM_KINDS` 里），拦不拦门由
-    `agent_h.mapping_judge.level_of` 决定。
+    `agent_h.mapping_judge.level_of` 决定；`warnings` 里是只进读数、不改 `state` 的那一档
+    （`LEAN_WARN_KINDS`），`lean` 那一格给出这一趟的 Lean 开关与盘上的产物。
     """
     project = Path(project_root)
     workspace = Path(workspace_root) if workspace_root is not None else project
@@ -1031,6 +1331,22 @@ def mapping_reading(project_root: str | Path, *,
         tex_text = str(tex)
     has_paper = bool(str(tex_text or "").strip())
     envs = body_envs(tex_text)
+    lean_on, lean_source = lean_switch()
+    artifacts = lean_artifacts(project)
+    if not lean_on:
+        lean_state = "off"
+        lean_reason = ("未开 Lean（`toolchain.lean_enabled` 为假，来源："
+                       + (lean_source or "缺省") + "）⇒ `lean_file` / `lean_target` 允许为空；"
+                       "空不等于验过 —— 这一趟的证明走 `proof_text` 与 V 的逐行审校")
+    elif artifacts:
+        lean_state = "on"
+        lean_reason = (f"Lean 开关开着、盘上有 {len(artifacts)} 份 Lean 产物（{list(artifacts[:3])}）"
+                       "⇒ 定理/引理/命题/推论那几行必须写 `lean_file` 与 `lean_target`")
+    else:
+        lean_state = "on_no_artifact"
+        lean_reason = ("Lean 开关开着，但盘上一个 Lean 产物都没有（找过论文包内的 `"
+                       + LEAN_SUFFIX + "` 与 `<项目根>/" + "`, `<项目根>/".join(LEAN_ARTIFACT_DIRS)
+                       + "`）⇒ 这两格无从填起：说它是「没开 Lean」不真，说它是「验过了」更不真")
     reading: dict[str, Any] = {
         "checked": False,
         "state": "unknown",
@@ -1043,10 +1359,23 @@ def mapping_reading(project_root: str | Path, *,
         "envs": len(envs),
         "md_state": "",
         "appendix_state": "",
+        "lean_state": lean_state,
+        "lean": {"enabled": bool(lean_on), "source": lean_source, "state": lean_state,
+                 "artifacts": list(artifacts[:20]), "artifact_count": len(artifacts),
+                 "target_kinds": list(LEAN_TARGETED_KINDS), "reason": lean_reason},
         "empty_files": [],
         "problems": [],
+        "warnings": [],
         "reason": "",
     }
+    if lean_state == "on_no_artifact":
+        reading["warnings"].append(_problem(
+            "lean_on_but_no_artifact",
+            "Lean 开关开着（来源：" + (lean_source or "缺省") + "），而盘上一个 Lean 产物都没有"
+            "（找过论文包内的 `" + LEAN_SUFFIX + "` 与 `<项目根>/"
+            + "`, `<项目根>/".join(LEAN_ARTIFACT_DIRS) + "`）—— 这一档不拦门（它说的不是"
+            "「表与正文对不上」，而是「这一趟的形式化一个文件都没落」），但它必须看得见："
+            "否则两格空白会被读成「验过了」"))
 
     if not json_path.is_file():
         if not has_paper:
@@ -1101,6 +1430,10 @@ def mapping_reading(project_root: str | Path, *,
     problems += appendix_problems
 
     problems += _orphan_problems(envs, rows)
+    # Lean 那四类只在 `LEAN_KINDS` 非空时才判（见 `_lean_problems` 的 docstring：
+    # 清空那一组就是关掉这一档，反真空用例靠它）。
+    if LEAN_KINDS:
+        problems += _lean_problems(rows, package, lean_on, artifacts)
     known = ledger if ledger is not None else read_ledger_tables(workspace)
     seen_targets: dict[tuple[str, int], Row] = {}
     for row in rows:
@@ -1139,4 +1472,10 @@ def mapping_reading(project_root: str | Path, *,
         reading["state"] = "pass"
         reading["reason"] = (f"{len(rows)} 行与正文 {len(envs)} 个环境逐一对上，附录逐字一致，"
                              "`ledger_id` 与 `proof_no` 都能在台账里解析到，`file` 都在包里")
+    # 两档都写进 reason：`pass` 不等于"什么都没剩"，`warnings` 与 Lean 那一格必须被看见
+    # （三态纪律：把"没开 Lean / 没有 Lean 产出"与"验过了"折成同一个沉默是本项目最忌的形态）。
+    reading["reason"] += "；Lean：" + lean_reason
+    if reading["warnings"]:
+        reading["reason"] += "；另有警告 " + "、".join(
+            sorted({str(w.get("kind") or "") for w in reading["warnings"]}))
     return reading

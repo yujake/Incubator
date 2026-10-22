@@ -24,18 +24,18 @@
 判据（`schema.reason` FC-01）：`reason` 必须来自受控枚举，
 且枚举里必须至少有一个"未执行"值。
 
-### 0.2 工具面的三条公共事实（现读，2026-10-20）
+### 0.2 工具面的三条公共事实（现读，2026-10-22）
 
 > ⚠️ 本节只有**读数**，没有"历史快照"。旧版本在这里手抄过一次装配结果（55 个工具），
 > 那份读数早已过期且**没有判据盯着它**；现已改成"命令 + 当次读数"的形态。
 
 | 事实 | 现读数 | 复跑命令 |
 |---|---|---|
-| 工具总数（完整装配 = 含 `store`） | **94**，已装模块 15 个 | `python -m agentflow.cli tools`（首行"工具总数"） |
+| 工具总数（完整装配 = 含 `store`） | **95**，已装模块 15 个 | `python -m agentflow.cli tools`（首行"工具总数"） |
 | 全部 8 个角色（A–H）**共有**的工具 | **12** 件：`conductor.escalate` `fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` `manuscripts.list` `manuscripts.read` | 见下方"交集"命令 |
 | 只读角色（C/H/V）工具面里的写工具 | **5** 件：`C` 1 件（`analysis.register_report`，业主 2026-10-18 的产出登记通道）+ `H` 4 件（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）；`V` 0 件 | `python -m agentflow.cli tools`（末段"只读角色写工具泄漏"） |
-| `side_effect` 分布（94 口径） | `read 51 / write_local 38 / none 5` | 同上 |
-| 第二根轴 `external`（94 口径） | `none 86 / egress 5 / exec 3` ⇒ 非 `none` 共 **8** 件 | 同上 |
+| `side_effect` 分布（95 口径） | `read 51 / write_local 39 / none 5` | 同上 |
+| 第二根轴 `external`（95 口径） | `none 87 / egress 5 / exec 3` ⇒ 非 `none` 共 **8** 件 | 同上 |
 
 **交集那一条的复跑命令**（A–H 十件里的头八个角色取交集）：
 
@@ -220,7 +220,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 > **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，61 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，62 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
@@ -230,7 +230,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | F | 4 | `create_plan` `step` `status` `list_plans` |
-| G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
+| G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `write_mapping` |
 | H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |
 | V | 3 | `verify_proof` `list_verifications` `read_proof` |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
@@ -257,12 +257,12 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 ---
 
-## R0. 全局工具总表（94 个，逐条）
+## R0. 全局工具总表（95 个，逐条）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
 > `#` 列是**历史行号**（`paper_package` 退场与 `search.walk_citations` 落地都刻意**不补位**：
-> 本文别处按行号引用过旧号，补位会让那些引用静默指到别的工具上）⇒ `#` 不连续，行数按实际行数算 = 94。
+> 本文别处按行号引用过旧号，补位会让那些引用静默指到别的工具上）⇒ `#` 不连续，行数按实际行数算 = 95。
 
 | # | 工具 | summary | `side_effect` | 审批 | roles | 参数 | 返回结构 | 测试 | 已知问题 |
 |---:|---|---|---|---|---|---|---|---|---|
@@ -360,18 +360,19 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 95 | `lit.admit` | 正式入库（逐条）：条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查都过了才走现有登记路径；超限**整笔拒绝**。**不清空列表**（清空属于 `lit.admit_all`） | `write_local` | **是** | A | slots, items；request_id, batch, new_content, overlap_ok | `{ok,kind,whole_call_refused,reason,request_id,batch,call_size,call_limit,delegation_admitted,delegation_limit,admitted,refused,cleared,registered,report,report_path}` | `tests/test_search_tools_stage_admit.py` | 同上；"整笔拒绝"与"逐条拒收"是两个读数（`whole_call_refused` vs `refused[]`） |
 | 96 | `lit.admit_all` | **一键迁移**：本委托待审且过筛（重叠检查）的行一次性迁进 `literature`（≤10 条），然后结算清空本委托的列表（全终态、不物理删），并写委托报告 `reports/lit-<request_id>.md`（**已入库 + 未入库含受控理由，两块都要有**） | `write_local` | **是** | A | request_id, new_content | `{ok,kind,whole_call_refused,reason,request_id,call_size,call_limit,delegation_admitted,delegation_limit,admitted,refused,cleared,registered,report,report_path}` | `tests/test_search_tools_stage_admit.py` | 同上；这是 `specs/a.py` 的 `boundary` 那条 97 字口径（"一次检索至多入库10篇 … 筛完一键迁移并清空列表；报告写清已入库与未入库"）的机器落点 |
 | 97 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 `stop_reason=escalated` 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）；收件人 = 运行期解析出的**召唤者**，**不要求**在 `edges` 里登记；顶层（没有召唤者）受控拒绝 `not_caller`，一行都不写 | `read` | 否 | A B C D E F G H V M | **need**,**kind**；evidence | `{to,to_task_id,need,kind,evidence,msg_id,state,note}`；受控拒绝：`ok=False` + `kind`（`not_caller` / …） | `tests/test_escalate_goes_up_and_stops.py` | 2026-10-20 新增（业主裁定「子代理卡住要能往上抛」）：它的 `roles` 是**十个角色全体** ⇒ 它同时进了 §0.2 那张"共有工具"表；`side_effect=read` 是刻意的（它只写一条给**父代理**的消息，不写任何表）；`external=none`（不进网络） |
+| 98 | `doc.write_mapping` | 写论文对应表三份（`out/paper/MAPPING.json` + `MAPPING.md` + `mapping-appendix.tex`，并把 `\input` 一行放进正文）：三份全由 `papermapping.write_package` 从同一批行渲染，**不许手抄**；行读不懂时一行都不写（半张表比没有表更坏），写完立刻按读侧判据 `mapping_reading` 现读一遍 | `write_local` | **是** | G | **project**,**rows** | `{project,json,md,appendix,rows,state,md_state,appendix_state,problems,reason}`；`state` ∈ `pass` / `fail` / `unknown`；失败 kind ∈ `mapping_unresolvable` / `mapping_empty` / `mapping_not_clean` / `io_error` / `bad_project` | `tests/test_the_three_half_breaks_are_fixed.py` | 2026-10-22 新增（业主逐字「G加动作」）：`papermapping.write_package` 此前在 `src/` 下零调用方 ⇒ 手抄的 md 与附录必然与渲染器逐字对不上（`md_drifted`）；`external=none`（不起子进程）；只写论文包、不入库 |
 
-### R0.1 94 个工具的公共事实（现读）
+### R0.1 95 个工具的公共事实（现读）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑 `validate_params`，非法即 `fail(kind="param_error")`，**不会进 handler**。
 - `roles_consistent_with_side_effect = true`：**写工具声明 C 或 V 会被剥掉**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。今天的登记例外只有两处：`READONLY_CALL_EXCEPTIONS['C']`（1 件：`analysis.register_report`）与 `READONLY_CALL_EXCEPTIONS['H']`（4 件落库代理，见 §H.4）；**V 一件没有**。
-- handler 形态（94）：`functools.partial` **91** / `lambda` **3** / 具名闭包 **0** ⇒ 那 3 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
-- 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools`（**94**）少"需要 store 才能注册"的那一族；**本文一律用 B 口径**。
+- handler 形态（95）：`functools.partial` **91** / `lambda` **4** / 具名闭包 **0** ⇒ 那 4 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
+- 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools`（**95**）少"需要 store 才能注册"的那一族；**本文一律用 B 口径**。
 - **V 的 12 件公共只读**（`conductor.escalate` 1 + `fs.*` 4 + `table.*` 5 + `manuscripts.*` 2）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。
 
 复跑：`python -m agentflow.cli tools`（条数 + 两根轴）与 `python tools/verify_role_specs.py`（逐角色对账）。
 
-### R0.2 不在 `build_registry` 那 94 里的 **9** 个工具（**必须单列**）
+### R0.2 不在 `build_registry` 那 95 里的 **9** 个工具（**必须单列**）
 
 | 来源 | 数量 | 工具 | `side_effect` | 是否过角色校验 |
 |---|---:|---|---|---|
@@ -1122,8 +1123,11 @@ C 的产出有两类，状态语义完全不同。
 | G-5 | 按库里当前数据重画 markdown（**不改数据行，只改文件**） | `agent_g.refresh_markdown` |
 | G-6 | 按 H 的发现修订稿件 | `agent_g.revise`；`review_rounds+1`、`status=revised` |
 | G-7 | **按体例写正文**（2026-10-18 起）：骨架顺序固定、第 3 节 ≥6 个定理/引理/命题且每个带分步 `proof`、正文禁令六项、内部编号与计算证据只进附录 A | `specs/g.py::SPEC.brief.policy` 里 2026-10-18 那四条；`tests/test_agent_prompts.py` 的冻结摘要 |
+| G-8 | **写论文对应表三份**（2026-10-22 业主逐字「G加动作」）：`MAPPING.json` + `MAPPING.md` + 正文附录，先出表、再写正文。参数：`project`（必填，项目根）与 `rows`（必填，对应表的行，正文里每个定理类环境各占一行、多证明每条各占一行）；返回：那一次"写完再读"的读数（`state` / `md_state` / `appendix_state` / `problems`）；副作用：`write_local`（只写 `<项目根>/out/paper/` 下三份并把 `\input` 一行放进正文，不入库、不起子进程） | `agent_g/write_mapping.py`；工具 `doc.write_mapping`（内部只调 `papermapping.parse_rows` + `write_package`，写完再 `mapping_reading` 现读） |
 
 > **2026-10-18 起**：论文正文的体例（骨架 / 第 3 节证明线 / 正文禁令 / 附录 A 落点）不再只活在 G 的手感里 —— 它是 `specs/g.py::SPEC.brief.policy` 的四条硬条目，并由 H 的审稿清单逐条对拍（H-8）。G 原有的六条动作职责（G-1…G-6）不变。
+
+> **2026-10-22 起**：G 的第 7 个动作 `write_mapping`（G-8）把"先出对应表、再写正文"那条顺序变成主控能按动作名派的一件。它只加动作面：写集（`documents` / `dependencies` / `review_findings`）、边、`emphasis`、`local_notes` 与 `policy` 一个字都没动；两格参数（`project` / `rows`）与工具面逐字一致 ⇒ 反向参数缺口表（`capabilities._KNOWN_TOOL_ONLY_PARAMS`）不需要新增登记。
 
 ### G.3 明确不负责
 
@@ -1137,9 +1141,23 @@ C 的产出有两类，状态语义完全不同。
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（38 个，实测）
+### G.4 工具面（39 个，实测）
 
-**现读**：`python -m agentflow.cli tools --role G` ⇒ `side_effect` read 21 / write_local 12 / none 5；`external` none 35 / exec 3；需审批 13 件。逐件明细（分组清单 + 拿不到什么）见附录 §G.4。
+**现读**（2026-10-22）：`python -m agentflow.cli tools --role G` ⇒ `side_effect` read 21 / write_local 13 / none 5；`external` none 36 / exec 3；需审批 14 件。逐件明细（分组清单 + 拿不到什么）见附录 §G.4。
+
+**逐个工具的契约（本批新增的那一件，按实跑如实写）**
+
+- **`doc.write_mapping`**（2026-10-22 新增；`side_effect=write_local`；`external=none`；`roles=G`；需审批）
+  - **参数**：`project`（必填，项目根，必须落在工作区内，否则 `bad_project`）与
+    `rows`（必填，`minItems=1`；每行必填 `kind` / `label` / `env_no` / `ledger_id` / `proof_no` / `file`，
+    可选 `page_or_section` / `citation_loc` / `citation_loc_reason`）。
+  - **返回**：`{project,json,md,appendix,rows,state,md_state,appendix_state,problems,reason}`；
+    `state` ∈ `pass`（三份与正文逐一对上）/ `fail`（写出了，但逐条 `problems`）/ `unknown`（没有正文，
+    表没有可对的东西）。失败：`ok=False` + `kind ∈ mapping_unresolvable`（行读不懂，一行都没写）/
+    `mapping_empty`（空表）/ `mapping_not_clean`（写了但现读判不过）/ `io_error` / `bad_project`。
+  - **副作用**：只写 `<项目根>/out/paper/` 下三份（`MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`），
+    并把 `\input{mapping-appendix}` 一行放进正文；三份全由 `papermapping.write_package` 从同一批行渲染
+    （手抄的 md 与附录必然与渲染器逐字对不上）；不入库、不起子进程。
 
 ### G.5 状态机（**只留主转移表**；其余约束表/反例表/第二三个状态机见附录 §G.5）
 
@@ -1495,7 +1513,7 @@ C 的产出有两类，状态语义完全不同。
 
 **现读**：`python -m agentflow.cli tools --role M` ⇒ `side_effect` read 13 / write_local 8 / none 0；`external` none 21；需审批 8 件。逐件明细（分组清单 + 拿不到什么）见附录 §M.4。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（54 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（55 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。
@@ -1514,7 +1532,7 @@ C 的产出有两类，状态语义完全不同。
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
-| G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
+| G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `write_mapping` |
 | H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |
 
 > **`M.4.2`（召唤面的 9 道策略判定）与 `M.4.3`（写集相交 ⇒ 串行的并发判据）已移入附录**，

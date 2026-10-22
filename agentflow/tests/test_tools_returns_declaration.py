@@ -73,7 +73,8 @@ TS = "2026-01-01T00:00:00+00:00"
 #: `lit.admit` / `lit.admit_all` 七件）。
 #: 2026-10-19 业主裁定「父子天然双向」：93 → 94
 #: （`conductor.escalate` —— 子代理把卡住的那件事写进父的收件箱）。
-TOOL_COUNT = 94
+#: 2026-10-22：94 → 95（业主逐字「G加动作」—— `doc.write_mapping` 是论文对应表唯一的写口）。
+TOOL_COUNT = 95
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -160,6 +161,22 @@ SOURCE_REL = "library/0000/source.txt"
 #: （默认那一条走的是"编成了"那一支，声明里的键集合就是它给的）。
 PAPER_PROJECT = "projects/p2"
 SOURCE_TEXT = "An abelian group is a group in which the commutative law holds.\n"
+
+#: `doc.write_mapping` 的探针正文：正文里必须真有一个定理类环境，表里那一行才有对应物
+#: （`papermapping` 双向查孤儿：正文有表里没有、表里有正文没有都算问题）。
+#: 这里用实验类环境，对应 `_seed` 已经铺好的 `exp:0000` 那一行 ⇒ 行的三条轴
+#: （台账代号码 / 证明号 / 文件）都能真的走通，而不是靠"没有可对的东西"蒙过去。
+MAPPING_TEX = (
+    "\\documentclass{article}\n"
+    "\\begin{document}\n"
+    "\\begin{experiment}\\label{exp:fixture}\n"
+    "The probe enumerates the first 64 periods.\n"
+    "\\end{experiment}\n"
+    "\\end{document}\n"
+)
+#: 表里那一行指向的包内相对路径（`papermapping` 按包根 `<项目根>/out/paper` 解析它；
+#: 缺了会判 `mapping_file_missing`）。
+MAPPING_ROW_FILE = "proofs/experiment.md"
 
 #: `ocr.run` 的输入：它只收 PDF 与图片（`.txt` 会以 `kind=unsupported_format` 失败 ——
 #: 那是实现的有意设计，不是缺陷）。所以这里造一张真的 8x8 PNG。
@@ -287,6 +304,20 @@ def tool_params() -> dict[str, dict]:
         },
         "doc.scan_claim": {"claim": dict(CLAIM)},
         "doc.paper_compile": {"project": PAPER_PROJECT, "timeout_sec": 60},
+        # 论文对应表（2026-10-22）：一行实验类环境，指向夹具里真有的 `exp:0000`。
+        # 走的是成功支（三份写出来、现读 `state="pass"`）—— 声明里的键集合就是它给的。
+        "doc.write_mapping": {
+            "project": PAPER_PROJECT,
+            "rows": [{
+                "kind": "experiment",
+                "label": "exp:fixture",
+                "env_no": 1,
+                "ledger_id": "exp:0000",
+                "proof_no": 1,
+                "file": MAPPING_ROW_FILE,
+                "citation_loc_reason": "探针实验，没有外部引文位置",
+            }],
+        },
         "fs.delete": {"path": "out/new.txt"},
         "fs.list": {},
         "fs.move": {"src": SOURCE_REL, "dst": "library/0000/moved.txt"},
@@ -416,6 +447,8 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "doc.build_document", "doc.compose_claim", "doc.list_documents", "doc.register_dependency",
         "doc.scan_claim",
         "doc.paper_compile",
+        # 论文对应表（2026-10-22）：探针真跑到了成功支（三份写出来、现读 pass）⇒ 键名读自实跑观测。
+        "doc.write_mapping",
         "fs.delete", "fs.edit", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
         "graph.build", "graph.neighbors", "graph.relations_between", "graph.stats",
         "manuscripts.list", "manuscripts.read",
@@ -873,7 +906,12 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     # 为什么必须真的编一遍：`MAX_SKIPPED = 0` 的依据是"每个工具都走到成功支"，
     # 而走不到成功支的探针压根没回答"实现到底给不给这些键"（同 `_seed` 那条纪律）。
     _paper_root = store.root / PAPER_PROJECT
-    FX.write_paper(_paper_root)
+    FX.write_paper(_paper_root, MAPPING_TEX)
+    # `doc.write_mapping` 那一行指向的包内文件（`file` 的相对根就是论文包）：
+    # 它必须真的在盘上，否则判据会是 `mapping_file_missing`（"没查成"，不是成功支）。
+    _row_file = (_paper_root / "out" / "paper" / MAPPING_ROW_FILE)
+    _row_file.parent.mkdir(parents=True, exist_ok=True)
+    _row_file.write_text("The probe enumerates the first 64 periods.\n", encoding="utf-8")
     monkeypatch.setenv(PC.ENGINE_ENV, str(FX.fake_engine(_paper_root / "_engine")))
 
     # 检索侧：provider 构造与探测函数都换成桩，下载器也不联网。

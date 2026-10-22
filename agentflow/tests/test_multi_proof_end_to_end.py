@@ -543,8 +543,10 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
         "L7", "mapping 格 pass 却挂着 blocker", [(f.code, f.level) for f in closing.findings])
 
     # ------------------------------------------------------------ L8 H 分档
-    assert len(MJ.BLOCKING_KINDS) == 11, _broken(
-        "L8", "客观档不是 11 个 kind", MJ.BLOCKING_KINDS)
+    # 15 = 四类客观 kind + 引文两格 + 人读那份两格 + 论文侧三条 + Lean 那两格四条
+    # （业主 2026-10-22 追加：有 Lean 产出时 `lean_file` / `lean_target` 必填）。
+    assert len(MJ.BLOCKING_KINDS) == 15, _broken(
+        "L8", "客观档不是 15 个 kind", MJ.BLOCKING_KINDS)
     assert set(MJ.BLOCKING_KINDS) == set(PM.ALL_PROBLEM_KINDS), _broken(
         "L8", "客观档与 papermapping 会产出的 kind 不一致",
         sorted(set(PM.ALL_PROBLEM_KINDS) ^ set(MJ.BLOCKING_KINDS)))

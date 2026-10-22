@@ -67,6 +67,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # statement_id. 长度最多 4`（B 试了两次都被拒，一次真跑因此白等一轮）。
                 "statement_id": {**_S, "minLength": 4, "maxLength": S.ID_DIGITS},
                 "proof_text": _S,
+                "proof_no": _I,
                 # 只读读数（命题现状 / 文献与实验台账摘要）由调用方取好传进来：
                 # 传字符串而不是传 store，是为了让"它能碰什么"在接口上就固定下来
                 # （I12 的结构形态，见 `verifications.cold_start_prompt`）。
