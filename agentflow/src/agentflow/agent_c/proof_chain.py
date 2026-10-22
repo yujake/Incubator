@@ -26,7 +26,14 @@
 "已经是根"；- 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。- 形状（业主 2026-10-22）：payload 另带 `path_shapes` 一列 —— 每条候选路径
 （`(证明号, 组)` 一行）的跳数 / 大步骤数 / 无依赖跳变 / 旁挂节点 / 承重边 /
 同目标还有几条别的路径（口径逐条写在 `path_shape.py`）。这一列只摆形状、不给分数：
-"哪一条更自然"由模型判（`agent_skills.py` 里 C 那一岗的「最自然路径」）。
+"哪一条更自然"由模型判（`agent_skills.py` 里 C 那一岗的「最自然路径」）。- 前沿（业主 2026-10-22 第二批）：
+`max_depth` 是"一批能往回搜多深"，不是"这条路最多几跳"。所以因深度用尽而停下的
+那几个节点必须如实交出来：payload 另带 `frontier` / `frontier_checked` /
+`frontier_note` 三格，每条给 `{node, from, via_dep_id, proof_no, path_group,
+depth_reached, why, next_hint}`，`why` 只取 `depth_limit`。下一批把 `target` 换成
+`frontier` 里的节点接着搜，两批的形状交给 `path_shape.join_segments` 核对接缝
+（那是核对材料，不是"框架替模型拼链"）。没有前沿时给空列表而不是省略这一格；
+三态（没有前沿 / 有前沿 / 没查成）由 `frontier_checked` 分开。
 """
 from __future__ import annotations
 from pathlib import Path
@@ -90,16 +97,26 @@ def _bad_tail_warnings(graph: "_DepGraph") -> list[str]:
 
 
 def _shape_keys(checked: bool, rows: Sequence[Mapping[str, Any]] = (),
-                note: str = "") -> dict[str, Any]:
-    """形状读数那三格（`path_shapes` / `_checked` / `_note`）的落法只有这一处。
+                note: str = "", frontier: Sequence[Mapping[str, Any]] = (),
+                frontier_note: str = "") -> dict[str, Any]:
+    """形状与前沿那几格（`path_shapes*` / `frontier*`）的落法只有这一处。
 
     为什么要一个函数：五个返回点各写一份字面量，迟早会有一处漏掉 `checked`
     —— 那时"没算成"与"没有候选路径"在同一份 payload 上长得一样，
     而下游读到的是一句口吻确定的"就这么几条"。
+
+    前沿那三格（`frontier` / `frontier_checked` / `frontier_note`）同理：三态
+    （没有前沿 / 有前沿 / 没查成）不许折平 —— `frontier=[]` 本身只是"没有"，
+    要有 `frontier_checked` 才分得开它是不是"没查"。
     """
+    if not checked and not frontier_note:
+        frontier_note = f"前沿没算成：{str(note or '这一趟没查成')}"
     return {"path_shapes": [dict(r) for r in rows],
             "path_shapes_checked": bool(checked),
-            "path_shapes_note": str(note or "")}
+            "path_shapes_note": str(note or ""),
+            "frontier": [dict(f) for f in frontier],
+            "frontier_checked": bool(checked),
+            "frontier_note": str(frontier_note or "")}
 
 
 # ------------------------------------------------------------------ 组合规则
@@ -136,7 +153,7 @@ def _and_length(lengths: Sequence[int]) -> int:
 
 
 class _ProofChain:
-    def proof_chain(self, target: str, *, max_depth: int = 4, k: int = 1,
+    def proof_chain(self, target: str, *, max_depth: int = 6, k: int = 1,
                     weights: Mapping[str, float] | None = None):
         """`target` 的最短证明依赖链（按 `path_group` 分组；返回每组一条 + 挑最短那组）。
 
@@ -215,7 +232,15 @@ class _ProofChain:
         # 候选路径的形状读数（业主 2026-10-22）：每条候选路径一行，摆形状、不打分。
         # 它只在 `groups_out` 之上算，改不动上面任何一条 AND / OR 判据。
         shapes = path_shapes(graph, node["stmt_id"], groups_out, max_depth=max_depth)
-        shape_keys = _shape_keys(shapes["checked"], shapes["rows"], shapes["note"])
+        # 形状与前沿都走 `.get`：这一层只消费 `path_shapes` 的读数，不许假定它一定
+        # 带全那几格 —— 判据里那个"只给最短那条"的替身（反真空）就只交 rows。
+        # 没交 `frontier` 那一格时按"没交前沿读数"落（`frontier_checked=False`）：
+        # 少了这一格不许被读成"查过了、没有前沿"（那是三态被折平）。
+        shape_keys = _shape_keys(bool(shapes.get("checked")) and "frontier" in shapes,
+                                 shapes.get("rows") or [],
+                                 shapes.get("note") or "",
+                                 shapes.get("frontier") or [],
+                                 shapes.get("frontier_note") or "")
         if not groups_out and bad_used:
             # 三态（2026-10-22 审计缺陷 11）：坏尾巴是唯一那条依赖时，改前这里读成
             # "没有依赖 ⇒ 已经是根 ⇒ 闭合"。事实是"那条依赖读不懂" —— 既不能说它到根了，
@@ -315,11 +340,21 @@ class _ProofChain:
     # ------------------------------------------------------------ 内部
 
     def _resolve_target(self, target: str, stmts: Sequence[Mapping[str, Any]]):
-        """号优先、别名兜底；返回 `(行, matched_by)`（找不到 ⇒ `(None, "")`）。"""
+        """号优先、别名兜底；返回 `(行, matched_by)`（找不到 ⇒ `(None, "")`）。
+
+        `target` 认两种写法：裸号（`0008`）与带前缀（`stmt:0008`）。带前缀那一支
+        是 2026-10-22 第二批补的：`frontier` 交出来的 `node` 就是 `stmt:0008` 这种写法
+        （它与 `path_shapes` 的 `start`、`support_edges` 的 `from`/`to` 同一种口径），
+        而技能文本写着"下一批把 `target` 换成前沿节点" —— 那一支读不动时，模型照着
+        读数做就会得到"目标找不到"，而这条链本来是接得上的。
+        """
         t = str(target or "").strip()
         if not t:
             return None, ""
-        bare = t[4:] if t.startswith("stmt:") else t
+        # `stmt:` 是 5 个字符（s-t-m-t-:）。改前写的是 `t[4:]`，于是 `stmt:0008`
+        # 被切成 `:0008` —— 带前缀的目标一律找不到，而"找不到"与"没有依赖"在读数里
+        # 长得不一样，却都让下一批接不上。
+        bare = t[5:] if t.startswith("stmt:") else t
         for row in stmts:
             if str(row.get("stmt_id") or "") == bare:
                 return dict(row), "label" if not t.startswith("stmt:") else "stmt_id"

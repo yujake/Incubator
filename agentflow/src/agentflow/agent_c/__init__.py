@@ -27,7 +27,9 @@ from ._support import (ANALYZERS, AgentBrief, AgentSpec, AnalysisReport, Any, D,
 from ..specs.c import SPEC
 #: 候选路径的形状读数（业主 2026-10-22）：`proof_chain` 的 payload 里那一列
 #: (`path_shapes`) 就是它算的，单独导出是为了让判据能直接喂图进去复核口径。
-from .path_shape import path_shapes
+#: `join_segments` 是同一份口径的另一面：把两批读数按前沿接起来，给 C 核对接缝用
+#: （核对材料，不是自动拼链器 —— 要不要接着搜由模型定）。
+from .path_shape import join_segments, path_shapes
 
 __all__ = [
     "AgentC",
@@ -39,6 +41,7 @@ __all__ = [
     "SERVICE_MAX_STRUCTURAL_PAIRS",
     "SUBMITTER",
     "check_conflict",
+    "join_segments",
     "path_shapes",
     "SPEC",
 ]

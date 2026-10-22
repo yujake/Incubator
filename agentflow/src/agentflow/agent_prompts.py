@@ -2162,7 +2162,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 它的索引行只印在 C 那一格 ⇒ 只有 C 那一格的摘要换了值，另九格逐字未动（这本身就是
 #: "改动作用域"的读数）。读数那一侧（`C.proof_chain` 的 payload 多一列 `path_shapes`）
 #: 不进提示词正文：工具面的形状没变（没有新动作、没有新工具）。
-PROMPT_VERSION = "p182"
+#: `p183`（2026-10-22 第二批）：业主澄清「这里 max 的意思是一批分析能搜到多深，不妨碍
+#: 如果有个证明有几十个大步骤，可以一批一批往回搜，再拼起来」⇒ C 那一格的「最自然路径」
+#: 索引行（`summary` / `when`）扩成"长链按 max_depth 一批一批往回搜、前沿是下一批的起点、
+#: 拼起来要交代接缝"，技能正文多一节动作循环（6 步）。换值的仍然只有 C 那一格：另九格
+#: 逐字未动 —— 技能正文不进提示词（索引行只印 slug + 一句话 + 什么时候读它），所以这张
+#: 表能看见的那一格就是那一行；只改正文、不改索引行时它一格都不会变。
+#: 读数那一侧（`C.proof_chain` 的 payload 多 `frontier` / `frontier_checked` /
+#: `frontier_note` 三格）同样不进提示词正文：动作面与工具面都没变。
+PROMPT_VERSION = "p183"
 
 
 

@@ -2090,7 +2090,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p182"
+_FROZEN_PROMPT_VERSION = "p183"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
     # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
@@ -2110,9 +2110,16 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     #    （业主新要求：分析最自然的关系路径而不只是最短依赖链），它的索引行只印在
     #    C 那一格。`C.proof_chain` 的 payload 多一列 `path_shapes` 不进提示词正文
     #    （动作面与工具面都没变，所以这里只有一格换值）。
+    #  `p183`（2026-10-22 第二批）也只换 C 那一格：业主澄清「这里 max 的意思是一批分析
+    #    能搜到多深，不妨碍如果有个证明有几十个大步骤，可以一批一批往回搜，再拼起来」
+    #    ⇒ C 那条「最自然路径」的索引行（`summary` / `when`）扩成"长链按 max_depth 一批
+    #    一批往回搜、前沿是下一批的起点、拼起来要交代接缝"，技能正文多一节动作循环。
+    #    技能正文不进提示词（索引行只印 slug + 一句话 + 什么时候读它），所以这一格里
+    #    变的就是那一行；`C.proof_chain` 的 payload 多 `frontier` / `frontier_checked` /
+    #    `frontier_note` 三格同样不进正文（动作面与工具面都没变）。
     "A": "5cf5bf89198c506203b4b389769199eedd2852003804a84af2c86e7612ae360c",
     "B": "94509219e9d680897a3785efc6417f7c94f978b572c02e97a973ead399a96f27",
-    "C": "22301c572b85109f979509b137374a93b24f53a4d92569e4888654870baf7afc",
+    "C": "c4375699e091a09dba527522e2d75f7c582a4436088978d6aadc9e72637453b4",
     "D": "10fff18dfc267c507181f46c4b1594d2e6d5a8235ff61db0a2711b298ca0fc9c",
     "E": "486305b098b3421560dd738dcb0e60913de8347848cd35a6f9b449c4dd65bc0f",
     "F": "f7046c8befab285e3185ca56b0e32f59c9fe4ddd8daa5b053feb665013f55724",
