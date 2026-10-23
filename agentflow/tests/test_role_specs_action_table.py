@@ -3,14 +3,14 @@
 
 ## 为什么需要它
 
-这张文档里有两处手抄 `capabilities.CAPABILITIES` 的逐角色动作表：§0.7「动作表」（全角色 A–H + 主控 M）；
+这张文档里有两处手抄 `capabilities.CAPABILITIES` 的逐角色动作表：§0.7「动作表」（全角色 A–H,V,L + 主控 M）；
 - §M.4.1「M 能召唤的 8 个角色 × 它们的动作」（可召唤面）。`capabilities.py` 内部的同类手抄数字有断言看着，但这两处没有 —— 于是它们静默漂了：2026-09-30 加
 `A.search_literature` 时表头还写着"48 个动作"；本次（T-3）加判据时又发现两处表都比能力表少 2 个动作（`D.register_conjecture`、`H.review_report`），
 而且两处的表头数字（51 / 48）与各自的明细之和（49 / 46）都对不上。两次都不是"打错一个数"，而是"加动作的人不知道有这张表" —— 所以判据钉的是表与能力表逐角色逐动作相等这个结构，而不是某个数字。
 
 ## 判据的四条（缺一条就会退化成真空断言）
 
-1. 每张动作表的角色集合都必须是合法角色（⊆ A–H + M）且非空；§0.7 那张必须恰好覆盖全部；
+1. 每张动作表的角色集合都必须是合法角色（⊆ A–H,V,L + M）且非空；§0.7 那张必须恰好覆盖全部；
 2. 每张表里每个角色的动作名集合与动作数都要与 `capabilities.actions_for(role)` 一致；
 3. 每张表标题里的数字（"N 个动作" / "N 个可召唤动作"）必须等于该表逐角色动作数之和
 —— 读者第一眼看到的是标题，它不能是唯一没人管的那一格；
@@ -33,7 +33,10 @@ DOC = REPO / "docs" / "ROLE-SPECS.md"
 #: 表里那一行：`| A | 3 | `run_once` `run` |`
 #: 角色字符类含 `V`（F-02 起）：文档里 §0.7 与 §M.4.1 两张表都要有 V 那一行，
 #: 而解析器不认 `V` 时它会静默地少一行 —— 判据 1/2/3 全都看不见这件事。
-_ROW_RE = re.compile(r"^\|\s*([A-HMV])\s*\|\s*\*{0,2}(\d+)\*{0,2}\s*\|(.*)\|\s*$")
+#: 2026-10-23：再补 `L`。§0.7 里 L 那一行（`formalize` `check_formal` `record`）一直在，
+#: 字符类写成 `[A-HMV]` 时它解析不出来 —— 于是标题的"65 个动作"与逐行之和（62）
+#: 对不上。旧写法记录的是 L 立项前的角色数；补上 L 之后标题与明细同源，不是放宽判据。
+_ROW_RE = re.compile(r"^\|\s*([A-HMVL])\s*\|\s*\*{0,2}(\d+)\*{0,2}\s*\|(.*)\|\s*$")
 #: 标题里的读数：`…，51 个动作）` / `（48 个可召唤动作）`
 _COUNT_IN_TITLE_RE = re.compile(r"(\d+)\s*个(?:可召唤)?动作")
 _BACKTICK_RE = re.compile(r"`([^`]+)`")
@@ -91,7 +94,7 @@ def test_the_document_really_has_more_than_one_action_table() -> None:
 
 
 def test_every_action_table_lists_only_real_roles() -> None:
-    """判据 1：表里的角色必须是合法角色（⊆ A–H + M）且非空。"""
+    """判据 1：表里的角色必须是合法角色（⊆ A–H,V,L + M）且非空。"""
     allowed = set(S.ROLES) | {S.CONDUCTOR_ROLE}
     for title, _body, rows in _action_tables():
         assert rows, f"{title!r} 那张表一行都没解析出来"
@@ -100,7 +103,7 @@ def test_every_action_table_lists_only_real_roles() -> None:
 
 
 def test_the_main_action_table_covers_every_role() -> None:
-    """判据 1（§0.7 那一张）：必须恰好覆盖 A–H + 主控 M。"""
+    """判据 1（§0.7 那一张）：必须恰好覆盖 A–H,V,L + 主控 M。"""
     for title, _body, rows in _action_tables():
         if "0.7" not in title:
             continue

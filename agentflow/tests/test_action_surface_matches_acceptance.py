@@ -165,10 +165,14 @@ def _b_instance(tmp_path: pathlib.Path):
 
 
 #: 一条"除了被测的那一格之外都齐"的自产命题。
+#:
+#: 2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：`kind` 从
+#: lemma 改成 conjecture。这一条要测的是四级条件阶梯（出处 / 证明 / 理由 / ID 形态），
+#: 与 kind 无关；而自产 + 无出处 + 引文不是 true 的一笔从这一批起只许按猜想登记。
 _OWN = dict(
     statement_full="本文的引理：对周期图 K(m)，稳定范数取整数值",
     statement_text="稳定范数取整数值",
-    origin="own_result", kind="lemma", evidence_kind="heuristic",
+    origin="own_result", kind="conjecture", evidence_kind="heuristic",
     quote_reason="本轮还没做逐字比对（引文那一栏待核）",
 )
 _OWN_SOURCE = dict(doc_id="0000", proof_text="证明：由定义直接得到。")

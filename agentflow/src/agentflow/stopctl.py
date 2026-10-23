@@ -199,6 +199,19 @@ INTERRUPT_HISTORY_NAME = "interrupt-history.jsonl"
 #: 逐子代理中断的理由码：它就是循环里那条停止理由的逐字同一个词（`agent_loop` 读它）。
 INTERRUPT_REASON = "interrupted_by_parent"
 
+#: 「停意是外面的人下的」那一族理由码（D19 的单一真身；`cli.EXIT_CODE_BY_STOP` 把它们
+#: 全归 4，与 `budget` 同档但不同族 —— `budget` 是钱到顶，不是有人叫停）。
+#:
+#: 为什么要有一份显式的族表，而不是各处写 `== "stop_file"`：多轮驱动层在「下一轮开跑前」
+#: 要判"上一轮是不是被用户叫停的"，而它此前只认 `waiting_for_user` / `escalated` 两档 ——
+#: 于是上一轮以 `stop_file` 收工之后，第二轮照开（D19 的最深那一层）。三档分散在
+#: `agent_loop._user_stop_reason`、`cli.EXIT_CODE_BY_STOP` 与这里各写一遍时，
+#: 少写一档不会有任何东西变红；现在它们读同一份。
+#:
+#: 强停与父叫停为什么在同一族：对"这一趟还要不要往下跑"这个问题，三者的答案是同一个
+#: （有一个比这一层更大的意思说"停"），区别只在审计面的理由码与是否杀进程树。
+USER_STOP_REASONS: tuple[str, ...] = ("stop_file", "force_stop", INTERRUPT_REASON)
+
 
 def interrupt_dir(root: str | Path) -> Path:
     """中断信号目录。"""
@@ -359,6 +372,21 @@ def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[s
     data.setdefault("force", False)
     data.setdefault("path", str(path))
     return data
+
+
+def stop_reason_of(state: Mapping[str, Any] | None) -> str:
+    """开关负载 → 循环的停止理由码（`force_stop` / `stop_file`；没开关 = 空串）。
+
+    为什么把它收成一处：这个三行判断此前在 `agent_loop._user_stop_reason` 里写了两遍、
+    在 `autonomy` 与 `cli` 又要各写一遍。四处各写一份时，"强制那一档被少写一次"不会
+    有任何东西变红，而它正是"用户要它立刻停、它却按优雅停收工"的那种错。
+
+    三态：`state` 不是 Mapping ⇒ 空串（判不了 ⇒ 不当成叫停，由调用方自己的读数承担）；
+    盘上有开关且 `force=true` ⇒ `force_stop`；否则 `stop_file`。
+    """
+    if not isinstance(state, Mapping) or not state:
+        return ""
+    return "force_stop" if bool(state.get("force")) else "stop_file"
 
 
 def history_path(root: str | Path) -> Path:

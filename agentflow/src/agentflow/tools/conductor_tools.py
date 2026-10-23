@@ -893,6 +893,14 @@ def conductor_state(_conductor, ) -> ToolResult:
 def conductor_role_spec(store, role_name: str) -> ToolResult:
     """工具体：某角色的「描述」（职责/交付物/边界/立场；不再给动作面与工具面）。"""
     from .. import capabilities as C
+    from .. import leanscope as _LEANSCOPE
+
+    # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：按名取一个"这一档下不存在"的角色
+    # 不给描述，也不给空壳（给空壳等于告诉模型"这个人存在、只是没内容"）。拒绝形状是
+    # 受控的：`ok=False` + 理由码（`lean_off` / `lean_unreadable`）+ 开关读数六格。
+    if _LEANSCOPE.is_hidden(role_name):
+        payload = _LEANSCOPE.hidden_refusal(role_name, surface="conductor.role_spec")
+        return ToolResult(False, payload, str(payload["error"]), payload)
 
     data = {"role": role_name,
             "summonable": role_name in C.ALLOWED_EDGES.get(S.CONDUCTOR_ROLE, frozenset()),

@@ -116,15 +116,25 @@ def test_an_unreadable_switch_falls_back_to_off(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------- 6. 三个角色的义务句
-def test_e_and_m_carry_the_formal_obligation_and_h_the_third_tier():
-    """S2/S5 的文本面：E/M 有"开时义务"，H 有"开着但无检查器"这一档。"""
-    from agentflow.specs.e import SPEC as E
+def test_m_and_l_carry_the_formal_obligation_and_h_the_third_tier():
+    """S2/S5 的文本面：M/L 有"开时义务"，H 有"开着但无检查器"这一档。
+
+    旧期望把"开时义务"算在 E 头上（2026-10-22 改指向 L）：那时判的是
+    `specs/e.py::SPEC.brief.policy` 里有「至少要真的试一次」与 `verifier_output`/`exit_code`。
+    业主 2026-10-22 第四批之后形式化只由 L 做 ⇒ 这两样落在 L 那一侧：
+    「至少要真的试一次」写进 L 的技能手册（`agent_skills.CATALOG["L"]`），
+    `verifier_output` / `exit_code` 写进 L 的声明边界。M 那一半（"只做数值实验不算完成"）
+    一个字没变 —— 它本来就是派活方的义务。
+    """
+    from agentflow import agent_skills as AS
     from agentflow.specs.h import SPEC as H
+    from agentflow.specs.l import SPEC as L
     from agentflow.specs.m import SPEC as M
 
-    e_txt = "\n".join(E.brief.policy)
-    assert "至少要真的试一次" in e_txt
-    assert "verifier_output" in e_txt and "exit_code" in e_txt
+    l_txt = "\n".join(L.brief.boundary) + "\n" + "\n".join(L.brief.policy)
+    assert "verifier_output" in l_txt and "exit_code" in l_txt
+    l_manual = "\n".join(s.body for s in AS.CATALOG["L"])
+    assert "至少要真的试一次" in l_manual, "L 的手册里没有那条「开时义务」"
 
     m_txt = "\n".join(M.brief.policy)
     assert "只做数值实验不算完成" in m_txt
@@ -151,23 +161,40 @@ def test_profiles_markdown_keeps_formal_wording_when_on(lean_on):
     assert "形式化验证" in text
 
 # ---------------------------------------------------------------- 8. 技能索引（S6）
-def test_the_skills_index_says_formal_is_off_when_off(lean_off):
+def test_the_skills_index_points_at_l_when_on(lean_on):
+    """开着时索引末尾补的那一句"形式化见 L"（旧期望是"关掉时补一句做不了"，2026-10-22 翻面）。"""
     from agentflow import agent_skills as S
 
     block = S.index_block("E")
-    assert "本会话 Lean 形式化关闭" in block
+    assert "形式化见 L" in block, block[-400:]
+    # L 自己的索引不加这一句（它不需要被告知"交给谁"）
+    assert "形式化见 L" not in S.index_block("L")
 
 
-def test_the_skills_index_has_no_such_note_when_on(lean_on):
+def test_the_skills_index_has_no_trace_of_l_when_off(lean_off):
+    """关着时索引里一个字都不许留 L（旧期望是那一刻补一句"Lean 形式化关闭"，2026-10-22 改成零痕迹）。"""
+    import re
+
     from agentflow import agent_skills as S
 
-    assert "本会话 Lean 形式化关闭" not in S.index_block("E")
+    block = S.index_block("E")
+    assert "本会话 Lean 形式化关闭" not in block
+    assert not re.search(r"(?<![A-Za-z0-9_])L(?![A-Za-z0-9_])", block), block[-400:]
 
 
 # ---------------------------------------------------------------- 9. H 的措辞中性
 def test_h_faculty_wording_is_mode_neutral():
+    """H 的"手"那条注解：形式化不许再被写死成 E 的活（2026-10-22 的指向批）。
+
+    旧期望是"形式化或实验"（把形式化算在 E 头上）。那一批先改成"或走形式化那一岗
+    （形式化那一岗是 L）"，随后并行的声明对账批把这一句整个收短（H 的手只留"找谁核实"，
+    形式化那一路由技能索引那一句统一指）⇒ 这里守的东西收成两条：
+    ① 注解里点着 E 的是"实验"，不是"形式化"；② 注解与 `specs/h.py` 的 local_notes 逐字同一份
+    （那一半由 `tests/test_agent_spec_reconciliation.py` 守，这里只钉措辞方向）。
+    """
     from agentflow import agent_prompts as AP
 
     notes = AP.FACULTY_LOCAL[("H", "手")]
-    assert "形式化或实验" in notes
+    assert "E（实验）" in notes, notes
+    assert "E（形式化" not in notes, notes
 

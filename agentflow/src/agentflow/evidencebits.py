@@ -8,7 +8,7 @@
 | 1 | 数值验证 `numeric` | E | 四态：`verified` / `failed` / `na`（不适用，必须写理由）/ `pending`（还没做）；`verified`/`failed` 要记被哪个脚本测的（script + sha + 实验号） |
 | 2 | 有证明 `proof` | F | 证明过程（逐步论证，每步引到的 id 在册） |
 | 3 | 审过 `reviewed` | V（自己产出的命题）／引用（引用命题：凭据是文献代号） | 自己产出 ⇒ V 的三态结论；引用 ⇒ `lit:`/`known_lit_id` + 逐字核验 |
-| 4 | 形式化通过 `formal` | E | 四态，同第 1 位；`verified` 才算过 |
+| 4 | 形式化通过 `formal` | E | 二维 `{证明号: 四态}`（一份证明一行）；任一路径 `verified` 即算过，而"验的是哪一条路径"逐条可读 |
 | 5 | 正式审查 `audited` | H（G 申请） | H 的审校轮次与结论（H 只看证据是否确凿 + 引用是否得当，不读证明判数学） |
 
 ## 位与台账的映射（业主 2026-10-09：五元状态是哪张表在维护，要做好映射）
@@ -18,12 +18,32 @@
 `experiments`（`method` 要对得上）、`reviewed`/`audited` 去稿件上的 V/H 结论。
 判据（`bit_evidence_gaps`）只做一件业主点名的事：位上说有，表里要查得到。
 
+## 第 4 位是二维的（业主 2026-10-22 的裁定，逐字）
+
+> 「一个定理有多种证明路径，lean 形式化需指明对哪个路径做了形式化验证，即五元判据有关
+>   形式化的那一位也要改成二维列表。但关于一个定理的正确性，但凡任意一个路径通过核验，
+>   它就是对的」
+
+于是这一位有两层读法，两层都必须在（缺一层就会出现下面两种坏法之一）：
+
+- 汇总（:func:`_bit_state`）：按 `BIT_STATES` 的顺序取最强那一档 —— 即"任一路径通过
+  就算通过"（裁定的第二句）。等级派生只读这一层，定理的正确性判定就是它；
+- 逐路径（:func:`formal_by_proof`）：`{证明号: 状态}`，一份证明一行。它是"这一位说的
+  是哪一条路径"的唯一读法 —— 折成汇总就等于让 `#p2` 借 `#p1` 的光，而那正是多证明
+  模型要堵的东西。
+
+键只能是证明号（`proof_no`）：`path_id` 是 C 的显示名（`p<证明号>g<组号>`，见
+`agent_c.path_shape`），同一份证明的路径会按组分裂成好几条 —— 拿它当键就是把"组"
+混进"证明"里，于是读数里的路径数比证明数多，而没有任何东西会报。
+
+写侧只写四态（见 `FORMAL_PATH_STATES` 的注释）；`stale` 是读侧产物。
+
 ## 等级机械派生（不许任何角色自报等级）
 
 - 全空/false ⇒ 猜想；
 - 第 1 位 `verified` ⇒ 强猜想（封顶：数值堆再多也不能变成定理 —— 用户口径"数值验证不构成证明"）；
 - 第 2 位 + 第 3 位 ⇒ 预备定理级；
-- 第 2 位 + 第 4 位 ⇒ 正式定理；
+- 第 2 位 + 第 4 位（二维里任一路径 `verified`）⇒ 正式定理；
 - 第 5 位 ⇒ 追加"已过正式审查"（并列，不覆盖）。
 
 ## 作废（`draft/39` §3.15/§3.18）
@@ -37,7 +57,35 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 #: 引文"通过"的两档（`schema.QUOTE_MODES` 的唯一来源就是它，这里只转发一次引用）。
+from . import quoteevidence as _QE
 from .schema import QUOTE_MODES
+
+#: 引文状态的第五档（D1，2026-10-22 第二版）：说"通过"，而盘上拿不出可复核的区间。
+#:
+#: ## 为什么不折进已有的两档
+#:
+#: 折进 `unchecked`（"还没查"）：那会把"它说通过了、却指不出核的是哪一段"印成
+#: "还没人查过"。两者欠的东西不同 —— 前者欠一次重核（把它降回 None 再查），
+#: 后者欠一次回验。一个词盖住两件事，读的人就会去补一条不存在的工序。
+#:
+#: 折进 `verbatim`：那正是 D1 的现场。真机 `saxl-ws/data/statements.json`（2026-10-22
+#: 修复前）13 行全是 `quote_verified=true` / `quote_mode=verbatim` / `quote_span=""`，
+#: 而读侧把它们读成"逐字通过" —— 于是"核了哪一段、在第几页"这条读数在盘上根本不存在，
+#: 而引用学分（`clean_statement_ids`）照发。
+#:
+#: ## 判据
+#:
+#: `quote_verified is True` 且 `quote_span` 为空 ⇒ 这一档（逐字与语义都一样：
+#: 区间是"核的是哪一段"的唯一载子）；语义档另外还要求 `quote_call_sha256`
+#: （"哪一次判的"）。两件都在 ⇒ 才回到 `QUOTE_MODES` 里那两档。
+QUOTE_NO_EVIDENCE = "no_evidence"
+
+#: 引文状态的全部取值（读侧的唯一词表；判据与报告都按它点名）。
+#:
+#: 刻意不进 `QUOTE_MODES`：那是"方式"的词表（逐字/语义），而这一档说的是
+#: "没有证据"，它不是一种方式。混进同一个词表会让 `quote_explains_itself`
+#: 把它读成"说清了怎么通过的"。
+QUOTE_STATES: tuple[str, ...] = (*QUOTE_MODES, "mismatch", "unchecked", QUOTE_NO_EVIDENCE)
 
 #: 第 1/4 位的四态（顺序就是"从没做到做到了"的强弱）。
 BIT_STATES: tuple[str, ...] = ("pending", "na", "failed", "verified")
@@ -57,13 +105,49 @@ GRADE_LABELS: dict[str, str] = {
 #: 五位的名字（对外读数、台账字段都用这一套）。
 BIT_NAMES: tuple[str, ...] = ("numeric", "proof", "reviewed", "formal", "audited")
 #: 每一位的 owner（引用命题的第 3 位 owner 是"引用"，不是 V）。
+#:
+#: 2026-10-23：第 4 位的 owner 从 E 改成 L。业主 2026-10-22 晚裁定「E 的 Lean 侧开关
+#: 全写死成关闭」之后，`formal` 那一行只由 `formal.record` 落（`recorded_by="agent-L"`），
+#: 而 E 的 formal 那一支一律回受控拒绝 `formal_moved_to_l` ⇒ 改前那句「formal 归 E 签」
+#: 是假话（`agent_prompts.collab_fivebits_text` 会把它印进全部十一个角色的提示词）。
+#: 第 1 位仍是 E：数值实验那一位确实归 E，那一句是真话、不许跟着改。
 BIT_OWNERS: dict[str, str] = {
-    "numeric": "E", "proof": "F", "reviewed": "V", "formal": "E", "audited": "H",
+    "numeric": "E", "proof": "F", "reviewed": "V", "formal": "L", "audited": "H",
 }
+
+#: 第 4 位在本模块里的名字（二维那一格的读点不少，写成一个常量免得某处漏改）。
+FORMAL_BIT = "formal"
+
+#: 第 4 位逐路径的读侧取值：四态 + `stale`。
+#:
+#: `stale`（验过、但现行那一份证明已经不是当时那一份）只在读侧产生，写侧从不写它：
+#: 写侧记下的是"哪一份正文的 sha256 被哪一次形式化验过"，读侧拿它与现行正文比
+#: （:func:`_stale_formal_cleared`）。它是第三种状态，不许折进另外两档 ——
+#: 折进 `pending` 会让"验过、过期了"与"没验过"长得一样；折进 `verified` 就是拿旧稿
+#: 的结论给新稿背书。刻意不进 `BIT_STATES`：那是写侧的词表。
+FORMAL_PATH_STATES: tuple[str, ...] = (*BIT_STATES, "stale")
+
+#: 汇总（OR）时用的强弱顺序：`stale` 夹在 `pending` 与 `na` 之间。
+#:
+#: 为什么夹在这里：它比 `pending` 强（确实验过一次），比其余三档弱（那一次验的不是
+#: 现在这一份）。`BIT_STATES` 的四个取值在这一条序列里的相对顺序逐字不变 ——
+#: 所以"按 `BIT_STATES` 顺序取 max"对四态的行为与这一条改前逐字相同。
+_BIT_OR_ORDER: tuple[str, ...] = ("pending", "stale", "na", "failed", "verified")
 
 
 def _state(value: Any) -> str:
-    """把一个位的取值规范化成四态之一；`None`/空 ⇒ `pending`（还没做）。"""
+    """把一个位的取值规范化成四态之一；`None`/空 ⇒ `pending`（还没做）。
+
+    只收标量。二维位（第 4 位）是 `{证明号: 状态}`，它落到这里会被 `str()` 成一个
+    认不出的串、再静默折成 `pending`（改前正是这样：二维 dict 喂进来读成"还没做"，
+    而盘上明明写着某个路径 verified）—— 所以这里对 Mapping 直接抛错，
+    把"该走 :func:`_bit_state`"这件事变成一次响亮的失败，而不是一条假读数。
+    """
+    if isinstance(value, Mapping):
+        raise ValueError(
+            "这个位的取值是一个 Mapping（二维位：{证明号: 状态}）⇒ 它不是标量，"
+            "不能用 _state 归一（那会静默折成 pending）；读数请走 _bit_state / "
+            "formal_by_proof")
     text = str(value or "").strip().lower()
     if text in ("", "none", "null", "pending", "todo"):
         return "pending"
@@ -74,6 +158,52 @@ def _state(value: Any) -> str:
     if text in ("verified", "true", "yes", "passed", "supports"):
         return "verified"
     return "pending"
+
+
+def _path_state(value: Any) -> str:
+    """逐路径状态的归一：`stale` 原样保留，其余走 :func:`_state`。
+
+    为什么 `stale` 不交给 `_state`：它是读侧的第四档（见 :data:`FORMAL_PATH_STATES`），
+    而 `_state` 只认写侧的四态 —— 让它把 `stale` 折成 `pending` 就等于把
+    "验过、过期了"读成"还没做"。
+    """
+    if str(value or "").strip().lower() == "stale":
+        return "stale"
+    return _state(value)
+
+
+def _bit_value(value: Any) -> Any:
+    """一个位的取值归一：字符串照旧（四态）；Mapping ⇒ 逐路径表（二维位）。
+
+    形状刻意原样保留（标量仍是标量、二维仍是二维）：`bits["formal"]` 是盘上那一栏的
+    逐字读数，把它统一成二维会让 62 行存量行在第一次读的时候就被当成"迁移过"，
+    而迁移是要有写者、有凭据的（业主口径：零迁移）。
+    """
+    if isinstance(value, Mapping):
+        return {str(key): _path_state(item) for key, item in value.items()}
+    return _state(value)
+
+
+def _bit_state(bits: Mapping[str, Any], name: str) -> str:
+    """一个位现在的状态（唯一读口；标量与二维都从这里读）。
+
+    判据只有一句：标量 ⇒ :func:`_state`；Mapping（二维位）⇒ 按 :data:`_BIT_OR_ORDER`
+    取最强那一档，也就是"任一路径通过就算通过"（业主 2026-10-22 裁定的第二句）。
+    空 Mapping 与"没有这一格"同档（`pending`）：一条路径都没写，就是还没做。
+
+    为什么必须有一个唯一读口：二维 dict 落进 `_state` 会被静默折成 `pending`
+    （`str({...})` 认不出），于是"某个路径 verified"与"还没做"在读数上长得一样，
+    而等级永远派生不出定理。四个读点（`derive_grade` / `bit_problems` /
+    `bit_evidence_gaps` / 收工门的等级现算）全部走这里。
+    """
+    raw = bits.get(name) if isinstance(bits, Mapping) else None
+    if not isinstance(raw, Mapping):
+        return _state(raw)
+    states = [_path_state(item) for item in raw.values()]
+    if not states:
+        return "pending"
+    return max(states, key=lambda item: _BIT_OR_ORDER.index(item)
+               if item in _BIT_OR_ORDER else 0)
 
 
 def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None = None,
@@ -98,7 +228,8 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
         "numeric": _state(numeric),
         "proof": bool(proof) or cited or bool(proof_process.strip()),
         "reviewed": bool(reviewed) or cited,
-        "formal": _state(formal),
+        # 第 4 位可以是二维的（`{证明号: 状态}`）：形状原样保留，见 `_bit_value`。
+        "formal": _bit_value(formal),
         "audited": bool(audited),
         "origin": str(origin or "own_result"),
         "evidence": {
@@ -126,24 +257,32 @@ def quote_state(row: Mapping[str, Any]) -> str:
     """一条引文现在的状态（引文回验的唯一读口径，2026-10-14 业主裁定之后）。
 
     业主那句话：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。
-    于是"通过"这件事分两档，四态字面量：
+    于是"通过"这件事分两档，五个取值：
 
     - `"verbatim"`：逐字命中（`quoteverify.check_quote` 那一档，不花模型钱）；
     - `"semantic"`：语义相同（H 判的；允许改写、换记号、跨语言）；
     - `"mismatch"`：查过了、不一致（`quote_verified is False`）——语义档也救不了它：
       H 的判据是"引文与来源说同一件事"，"结论强于引文"照样落这一档；
     - `"unchecked"`：还没查（`None`），或者方式那一栏是认不出的词
-      （词表外的值 ⇒ 说不出怎么通过的 ⇒ 按没查算）。
+      （词表外的值 ⇒ 说不出怎么通过的 ⇒ 按没查算）；
+    - `"no_evidence"`：说通过了，而盘上拿不出可复核的区间（见 :data:`QUOTE_NO_EVIDENCE`）
+      —— 逐字与语义两档都要求 `quote_span` 非空（语义还要 `quote_call_sha256`）。
 
-    空 `quote_mode` 按 `verbatim` 读（历史事实，不是默认值）：这一栏是 2026-10-14
-    才有的，在那之前 `quote_verified=True` 只可能来自 `quoteverify.check_quote`
-    （逐字那一档）—— 判据 `test_a_legacy_external_lit_row_keeps_its_citation_credit`
-    钉着这条读法。新的写入方必须说明方式：`schema` 拒绝词表外的值，B 的语义档要
-    显式写 `semantic`（那条链的判据在 `tests/test_quote_semantics.py`）。
+    ## 空 `quote_mode` 那一条（历史事实，2026-10-22 起多一个前提）
+
+    这一栏是 2026-10-14 才有的，在那之前 `quote_verified=True` 只可能来自
+    `quoteverify.check_quote`（逐字那一档）—— 所以"空方式 + 有区间"按 `verbatim` 读，
+    判据 `test_a_legacy_external_lit_row_keeps_its_citation_credit` 钉着这条读法。
+
+    但"空方式"本身不再够：区间才是"核过"的证据。没有区间时，无论方式那一栏
+    写着 `verbatim` 还是空着，读侧一律给 `no_evidence` —— 这不是追溯性降级，
+    而是把一直缺的那一格补上：真机 13 行正是"空方式/verbatim + 空区间"，
+    它们此前被读成逐字通过，于是引用学分（`clean_statement_ids`）与收工门的
+    `quote_verified_rows` 都被这 13 行顶高。
 
     为什么读侧还要再判一次（写侧 `schema._normalize_quote_mode` 已经归一过）：盘上是
     JSON —— 手改的行、旧版本写的行、别的工具写的行都可能绕过构造器。这一条是"读的人
-    永远看到自洽的一对"的兜底，`bits_from_row` 与收工门都走它。
+    永远看到自洽的一对（结论 + 证据）"的兜底，`bits_from_row` 与收工门都走它。
     """
     verified = row.get("quote_verified")
     if verified is None:
@@ -151,13 +290,22 @@ def quote_state(row: Mapping[str, Any]) -> str:
     if verified is not True:
         return "mismatch"
     mode = str(row.get("quote_mode") or "")
-    if mode == "":
-        return "verbatim"          # 历史行：唯一可能的来路（见上面那段）
-    return mode if mode in QUOTE_MODES else "unchecked"
+    if mode != "" and mode not in QUOTE_MODES:
+        return "unchecked"
+    if not _QE.span_of(row):
+        return QUOTE_NO_EVIDENCE
+    if mode == "semantic" and not _QE.call_of(row):
+        return QUOTE_NO_EVIDENCE
+    return mode or "verbatim"
 
 
 def quote_explains_itself(row: Mapping[str, Any]) -> bool:
-    """这一行的"通过"有没有说出方式（`True` 且方式在两档词表里）。"""
+    """这一行的"通过"有没有说清方式并拿得出位置（`quote_state` 落在两档里）。
+
+    两件缺一不可：方式（`quote_mode` ∩ `QUOTE_MODES`）与位置（`quote_span` 非空，
+    语义档还要 `quote_call_sha256`）。只有方式没有位置的行走 `no_evidence`
+    —— 它的"通过"复现不出来，所以本函数给 `False`（引用学分因此不给它）。
+    """
     return quote_state(row) in QUOTE_MODES
 
 
@@ -183,7 +331,66 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
                        quote_verified=quote_explains_itself(row), kind=kind)
     bits = normalize_raw(raw, origin=origin, kind=kind,
                          voided_by=dict(raw.get("voided_by") or row.get("refuted_by") or {}))
-    return _stale_review_cleared(bits, row, kind=kind)
+    bits = _stale_review_cleared(bits, row, kind=kind)
+    return _stale_formal_cleared(bits, row, kind=kind)
+
+
+def _stale_formal_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
+                          kind: str = "") -> dict[str, Any]:
+    """第 4 位记的「验的是哪一份证明」与现行正文不是同一份 ⇒ 那条路径读成 stale。
+
+    ## 为什么读侧要判这一条（与第 3 位同一条口径：哈希是读数，不是授权凭证）
+    形式化验的是"这一份证明"（`:data:`FORMAL_BY_PROOF_KEY` 的凭据里记着那一份正文的
+    `proof_sha256`）。此后 B 改稿是正常动作（不许拒写），而位还停在 `verified` 上 ——
+    于是"某个路径验过"这个读数会过期。读侧的判据就一句：记下来的 sha 与它现在这一份
+    不同 ⇒ 那条路径不是"验过"，而是"验过、过期了"（`stale`）。
+
+    ## 边界（三态：判不了就不判）
+    - 位是标量（老行 / 单路径且没记 sha）⇒ 什么都不做：没有逐路径的凭据可核；
+    - 那一条路径没有 `proof_sha256`（手写的行 / 别的写者）⇒ 判不了，原样返回；
+    - 那一份证明的正文取不到（行里没有 `proof_text`、清单里也没有那个号）⇒ 判不了；
+    - 没有任何一条路径是 `verified` ⇒ 什么都不做（`failed` / `na` / `pending` 与
+      "过的期"无关）。
+
+    ## 只改那一条路径
+    汇总位是"任一路径通过就算通过"（:func:`_bit_state`），所以只把过期的那条压成
+    `stale`、别的路径一个字不动 —— 另一条路径验的可能就是现在这一份。
+    """
+    raw = bits.get(FORMAL_BIT)
+    if not isinstance(raw, Mapping) or not raw:
+        return bits
+    per = formal_by_proof(bits)
+    if "verified" not in per.values():
+        return bits
+    evidence = formal_evidence_by_proof(bits)
+    if not evidence or not isinstance(row, Mapping) or "proof_text" not in row:
+        return bits
+    from . import verifications as _VR   # 惰性：证明号、正文与 sha 的口径各只有一处
+
+    current = dict(_VR.proof_list(row))
+    cleared: dict[str, str] | None = None
+    for no, state in sorted(per.items()):
+        if state != "verified":
+            continue
+        want = str((evidence.get(no) or {}).get("proof_sha256") or "")
+        if not want:
+            continue
+        text = current.get(no)
+        if text is None:
+            continue
+        if _VR.proof_sha(text) == want:
+            continue
+        if cleared is None:
+            cleared = {str(key): _path_state(value) for key, value in raw.items()}
+        cleared[str(no)] = "stale"
+    if cleared is None:
+        return bits
+    out = dict(bits)
+    out[FORMAL_BIT] = cleared
+    out["grade"] = derive_grade(out, kind=kind)
+    out["audited_badge"] = (bool(out.get("audited"))
+                            and out["grade"] not in ("conjecture", GRADE_NOT_APPLICABLE))
+    return out
 
 
 def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
@@ -335,6 +542,98 @@ def reviewed_sha_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
     return out
 
 
+#: 逐条证明的第 4 位凭据记在 `bits.evidence` 里的这一格（写侧是 B 的登记那条路）。
+#:
+#: 结构是"证明号 ⇒ 那一份的凭据"：`{"1": {"checker": "lean4", "experiment_id": "0007",
+#: "proof_sha256": "…", "path_source": "B"}, "2": {…}}`。与 `REVIEWED_BY_PROOF_KEY`
+#: 同一族：`bits` 顶层只认位名与 `BIT_META_KEYS`，所以逐条凭据住在 `evidence` 这个
+#: 明确留白的口袋里；`bits.evidence.formal` 仍然保留（它是"最近那一次"的单格载荷，
+#: 老读者只认它），逐条的那一份在这张表里。
+FORMAL_BY_PROOF_KEY = "formal_by_proof"
+
+
+def formal_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
+    """按证明看第 4 位：`{证明号: 状态}`（二维位的唯一逐路径读法）。
+
+    ## 它回答什么
+    "哪一条路径被形式化验过、验成了什么"。状态取 :data:`FORMAL_PATH_STATES` 的五档
+    （四态 + 读侧产生的 `stale`）。汇总位（:func:`_bit_state`）是它的 OR；两者都要，
+    缺了逐条这一层就会让 `#p2` 借 `#p1` 的光。
+    ## 标量位怎么读
+    老行 / 单路径行把这一位写成标量（`"pending"` / `"verified"`）：那是 canonical 那一份
+    证明的读数（`#p1`），所以读成 `{1: 那个四态}`。空 Mapping 读成 `{}`（一条路径都
+    没写），不读成 `{1: "pending"}` —— "没有这一格"与"写了 #p1 还没做"是两件事。
+    ## 键
+    只认证明号（`verifications.as_proof_no` 归一）：认不出的键跳过。盘上 JSON 的键是
+    字符串，所以 `{"1": …}` 与 `{1: …}` 在这里是同一件事。
+    ## 过期判定（这里也做，不只是 `bits_from_row` 做）
+    收一份完整的命题行（有 `bits` 键、也有 `proof_text`）时，先过一遍
+    :func:`bits_from_row`：那一层会把"验的不是现在这一份正文"的通路压成 `stale`。
+    这一格必须自己也判，否则任何直接调本函数的读者都会拿到一个"看起来还 verified"
+    的旧读数 —— 同一个函数给两种答案，比多一个读口更坏。传进来的已经是一份 `bits`
+    dict（没有 `bits` 键）时不重判（避免自递归，也避免把 `stale` 再折一次）。
+    """
+    outer = row if isinstance(row, Mapping) else {}
+    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
+    if bits is not outer and "proof_text" in outer:
+        bits = bits_from_row(outer)
+    raw = bits.get(FORMAL_BIT)
+    if not isinstance(raw, Mapping):
+        return {1: _path_state(raw)}
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    out: dict[int, str] = {}
+    for raw_no, value in raw.items():
+        no = _VR.as_proof_no(raw_no)
+        if no < 1:
+            continue
+        out[no] = _path_state(value)
+    return out
+
+
+def formal_evidence_by_proof(row: Mapping[str, Any]) -> dict[int, dict[str, Any]]:
+    """按证明看第 4 位的凭据：`{证明号: {checker / experiment_id / proof_sha256 / …}}`。
+
+    两处来源，按优先级：
+
+    1. `bits.evidence.formal_by_proof`（写侧逐条落的那张表，:data:`FORMAL_BY_PROOF_KEY`）；
+    2. `bits.evidence.formal`（单格载荷，老形态）⇒ 它说的是 canonical 那一份，读成 `{1: …}`。
+
+    第 2 条为什么必须留着：`bits.evidence.formal` 是这一格改前唯一的落点（`bits_of`
+    的 `formal_evidence` 参数写的就是它），历史行与手写行都只有它。丢掉它等于让所有
+    历史行的 `formal=verified` 变成"没有凭据"（判据会当场报错，而错的是读侧）。
+    空载荷与"没有这一格"同档：返回空表，由 `bit_problems` 决定该不该报。
+    """
+    outer = row if isinstance(row, Mapping) else {}
+    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
+    ev = dict(bits.get("evidence") or {})
+    from . import verifications as _VR   # 惰性：与 `formal_by_proof` 同一处口径
+
+    out: dict[int, dict[str, Any]] = {}
+    pocket = ev.get(FORMAL_BY_PROOF_KEY)
+    if isinstance(pocket, Mapping):
+        for raw_no, value in pocket.items():
+            no = _VR.as_proof_no(raw_no)
+            if no < 1 or not isinstance(value, Mapping):
+                continue
+            out[no] = dict(value)
+    if out:
+        return out
+    flat = ev.get(FORMAL_BIT)
+    if not isinstance(flat, Mapping) or not flat:
+        return {}
+    # `bits.evidence.formal` 自己也可能是二维的（`bits_of(formal_evidence={证明号: 载荷})`
+    # 原样把它写进去）：全部键都是证明号、值都是对象时按逐条读；否则按单格载荷读，
+    # 那是 canonical 那一份（`#p1`）。两件都认，是为了不让"凭据写在哪一格"决定它读不读得出来。
+    per: dict[int, dict[str, Any]] = {}
+    for raw_no, value in flat.items():
+        no = _VR.as_proof_no(raw_no)
+        if no < 1 or not isinstance(value, Mapping):
+            return {1: dict(flat)}
+        per[no] = dict(value)
+    return per or {1: dict(flat)}
+
+
 def normalize_raw(raw: Mapping[str, Any], *, origin: str = "own_result",
                   voided_by: Mapping[str, Any] | None = None,
                   kind: str = "") -> dict[str, Any]:
@@ -342,12 +641,16 @@ def normalize_raw(raw: Mapping[str, Any], *, origin: str = "own_result",
 
     读与写共用这一份：`bits_from_row`（读）与 `bits_shape_problems`（写之前把形状关）
     若各归一一次，就会出现"写进去判合规、读出来是另一个意思"的分家。
+
+    第 4 位走 :func:`_bit_value`（标量仍是四态、二维仍是逐路径表）：它不是"一个状态"，
+    它是"每个证明号一个状态"—— 把它统一压成一档，改前那条"二维 dict 被静默读成
+    pending"的路就会在这一格里复活。
     """
     bits: dict[str, Any] = {
         "numeric": _state(raw.get("numeric")),
         "proof": bool(raw.get("proof")),
         "reviewed": bool(raw.get("reviewed")),
-        "formal": _state(raw.get("formal")),
+        "formal": _bit_value(raw.get("formal")),
         "audited": bool(raw.get("audited")),
         "origin": origin,
         "evidence": dict(raw.get("evidence") or {}),
@@ -380,6 +683,24 @@ def bits_shape_problems(raw: Mapping[str, Any] | None, *,
             f"（另加 {'/'.join(BIT_META_KEYS)}）—— 拼错的键会被静默忽略，"
             "于是它与「这一位还没填」长得一模一样")
     bits = normalize_raw(raw, origin=str(raw.get("origin") or "own_result"), kind=kind)
+    formal_raw = raw.get(FORMAL_BIT)
+    if isinstance(formal_raw, Mapping):
+        from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+        bad_keys = sorted(str(key) for key in formal_raw if _VR.as_proof_no(key) < 1)
+        if bad_keys:
+            problems.append(
+                f"bits.formal 是二维的（{{证明号: 状态}}），而有键不是证明号：{bad_keys}"
+                " —— 键只能是证明号（1、2、3 …）；`path_id` 是 C 的显示名，"
+                "混进来会把「组」当成「证明」，路径数会凭空变多而没有东西报")
+        read_only = sorted(str(key) for key, value in formal_raw.items()
+                           if str(value or "").strip().lower() == "stale")
+        if read_only:
+            problems.append(
+                f"bits.formal 里写了 {read_only} 的 `stale` —— 它不是写侧的词表"
+                f"（写侧只写 {list(BIT_STATES)}）：`stale` 由读侧按「记下来的"
+                " proof_sha256 与现行正文不符」现算（`_stale_formal_cleared`），"
+                "写进盘上就等于让一份旧稿的结论自己给自己背书")
     claimed = raw.get("grade")
     if claimed is not None and str(claimed) != bits["grade"]:
         problems.append(
@@ -408,12 +729,15 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
         return "conjecture"          # 作废之后等级清零（历史留在 voided_by 里）
     has_proof = bool(bits.get("proof"))
     reviewed = bool(bits.get("reviewed"))
-    formal = _state(bits.get("formal")) == "verified"
+    # 第 4 位是二维的：这里读的是汇总（任一路径通过即通过，业主 2026-10-22 裁定的第二句）。
+    # 逐条路径各自的等级由 `verifications.statement_review_reading` 的 `proofs[*]` 给 ——
+    # 函数级只回答"这条命题到不到定理"，不回答"是哪一条路径撑起来的"。
+    formal = _bit_state(bits, FORMAL_BIT) == "verified"
     if has_proof and formal:
         return "theorem"
     if has_proof and reviewed:
         return "pre_theorem"
-    if _state(bits.get("numeric")) == "verified":
+    if _bit_state(bits, "numeric") == "verified":
         return "strong_conjecture"
     return "conjecture"
 
@@ -431,19 +755,25 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
     两条 `method=formal` 实验，而没有任何命题指向它们 ⇒ "形式化做过"在位上是不可见的。
     位的凭据里若不写"是哪一次实验/哪一个检查器"，同一件事会以"看起来做过"与"查不出来"
     两种形态并存，而这两种在报告里长得一样。
+
+    第 4 位是二维的：状态读汇总（任一路径通过即通过），凭据读逐条 —— 所以
+    `formal=verified` 的凭据可以落在 `bits.evidence.formal`（单格，老形态）或
+    `bits.evidence.formal_by_proof`（逐条）里，两处都认。
     """
     problems: list[str] = []
     ev = dict(bits.get("evidence") or {})
+    formal_per = formal_evidence_by_proof(bits) if isinstance(bits.get(FORMAL_BIT), Mapping) else {}
     for name, key in (("numeric", "numeric"), ("formal", "formal")):
-        state = _state(bits.get(name))
+        state = _bit_state(bits, name)
+        carried = ev.get(key) or (formal_per if name == "formal" else None)
         if state == "na" and not str(ev.get(f"{key}_reason") or "").strip():
             problems.append(f"{name}=na 必须写理由（为什么这条命题不适合{'数值验证' if name == 'numeric' else '形式化'}）")
         if state == "failed" and not (str(ev.get(f"{key}_reason") or "").strip()
-                                      or ev.get(key)):
+                                      or carried):
             problems.append(f"{name}=failed 必须带原文（脚本/检查器输出）")
-        if state == "verified" and not ev.get(key):
+        if state == "verified" and not carried:
             problems.append(f"{name}=verified 必须带凭据（脚本 + sha，或检查器输出）")
-    if _state(bits.get("numeric")) == "verified":
+    if _bit_state(bits, "numeric") == "verified":
         num = dict(ev.get("numeric") or {})
         # 只在"有凭据但凭据没指针"时报这一条：凭据为空时上面那条已经点过名了，
         # 同一件事报两次会让"改哪里"变得不清楚（一条缺陷只留一条可行动的话）。
@@ -451,10 +781,16 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
                         or num.get("script") or num.get("scripts")):
             problems.append("numeric=verified 必须写明是哪条实验/哪个脚本测的"
                             "（experiments / experiment_id / script）—— 没有指针的凭据复跑不了")
-    if _state(bits.get("formal")) == "verified":
-        formal = dict(ev.get("formal") or {})
-        if formal and not str(formal.get("checker") or "").strip():
-            problems.append("formal=verified 必须写明是哪个检查器（checker：lean4 / coq / isabelle…）")
+    if _bit_state(bits, FORMAL_BIT) == "verified":
+        # 逐条读：一条路径说 verified，就要有它自己那一格凭据（不许拿别条路径的顶）。
+        # 单格形态（老行）读成 `{1: …}`（见 `formal_evidence_by_proof`），所以老行的
+        # 行为与改前逐字相同。
+        checked = [dict(item) for item in formal_per.values()] or [
+            dict(ev.get("formal") or {})]
+        for payload in checked:
+            if payload and not str(payload.get("checker") or "").strip():
+                problems.append("formal=verified 必须写明是哪个检查器（checker：lean4 / coq / isabelle…）")
+                break
     if (bits.get("proof") and not str(ev.get("proof_process") or "").strip()
             and ev.get("proof_source") != "citation"):
         problems.append("proof=true 必须带证明过程（逐步论证）")
@@ -502,10 +838,20 @@ BIT_LEDGERS: dict[str, dict[str, str]] = {
                     "（由 dangling_doc_ref 守）；没有 doc_id ⇒ 判不了，不报",
     },
     "formal": {
-        "owner": "E",
+        # 2026-10-23：owner 与 `BIT_OWNERS` 那一格同步改成 L（两处必须逐位一致，
+        # 判据 `test_the_five_bits_name_their_table` 按位比对它们）。渲染点先读这一栏，
+        # 所以「把 E 改成 L」这件事真正的落点在这里；`BIT_OWNERS` 是位表的读数那一栏。
+        "owner": "L",
         "ledger": "experiments（method='formal'）",
-        "pointer": "bits.evidence.formal 里的 experiment_id / checker",
-        "criteria": "位说 verified ⇒ 指针指的那条实验行必须在 experiments 表里，且 method='formal'",
+        "pointer": "bits.formal 的证明号键 + bits.evidence.formal_by_proof[证明号] 里的 "
+                   "experiment_id / checker；单格形态读 bits.evidence.formal",
+        # 逐路径口径（业主 2026-10-22：「要指明对哪个路径做了形式化验证」）：这一位
+        # 一格管一条证明，凭据也按那一条查。汇总那一层（`_bit_state` 的 OR）只回答
+        # "这条命题算不算通过"，它不提供凭据 —— 所以 criteria 必须按路径写。
+        "criteria": "第 4 位是二维的（{证明号: 状态}）：某个证明号说 verified ⇒ "
+                    "那一格凭据（experiment_id / checker）指的实验行必须在 experiments 表里，"
+                    "且 method='formal'；汇总按任一路径通过就算通过（等级派生读汇总），"
+                    "逐条路径各自独立、不许互相借光",
     },
     "audited": {
         "owner": "H",
@@ -519,6 +865,87 @@ BIT_LEDGERS: dict[str, dict[str, str]] = {
 def bit_ledger(bit: str) -> dict[str, str]:
     """取某一位的台账映射（未知位 ⇒ 空 dict，调用方按"没查成"处理，不按"查过了没问题"）。"""
     return dict(BIT_LEDGERS.get(str(bit), {}))
+
+
+def formal_ledger_reading(row: Mapping[str, Any], experiments: Iterable[Mapping[str, Any]]
+                          ) -> dict[int, dict[str, Any]]:
+    """从 `experiments` 台账读第 4 位（写侧唯一的派生点：B 的登记那条路用它）。
+
+    ## 为什么写侧要一个派生函数（D28）
+    改前这一位没有任何写者：`bits_of` 把它留成 `pending`，而 L 的 `record` 只写
+    `experiments` 那一行（L 的写集里没有 `statements`，那是对的）—— 于是第 4 位恒
+    `pending`、等级 `theorem` 从未可达。这一格就是"L 验过什么"与"命题那一行说第 4 位
+    是什么"之间的唯一连接：它只读台账，不写任何东西，写盘由 B 的那一笔登记完成
+    （规矩与第 3 位一致：位与台账同一次写、逐条落、L 自己不碰 `statements`）。
+
+    ## 判据（一条实验行怎么变成一条路径的状态）
+    - 只认 `method="formal"` 且绑到这条命题上的行（`params.statement_id` /
+      `observations.statement_id` / `claim_key="stmt:<命题号>"` 三处任一）；
+    - 证明号取那一行的 `proof_no`（`observations` 优先，`params` 次之），没写就是
+      `#p1`（老行的读法与 `prooflib` 一致）；
+    - 状态只认两种：`evidence_kind="proof"`（检查器说通过）⇒ `verified`；
+      `tri_state="checked_failed"`（检查器说了不通过）⇒ `failed`。
+      其余（unknown：超时 / 没有后端 / 自检不过）一律不写 —— 那是"没查成"，
+      写成 `failed` 就把"命题可疑"与"我们没验"折成一件事；
+    - 同一路径有多行时后写的盖前面的（台账是追加式的，后一行是更新的读数）。
+
+    ## 返回值
+    `{证明号: {"state": …, "payload": {…}}}`，只含台账里真有读数的那几条路径。
+    `payload` 是那一格的凭据（checker / experiment_id / proof_sha256 / path_id /
+    path_source / code_path / code_hash / tri_state / recorded_by），
+    落点是 `bits.evidence.formal_by_proof[证明号]`（见 :data:`FORMAL_BY_PROOF_KEY`）。
+    `payload.proof_sha256` 是"这次形式化验的是哪一份证明正文"的指纹：读侧拿它与现行正文
+    比，不符就是 `stale`（见 :func:`_stale_formal_cleared`）。
+    """
+    sid = str(row.get("stmt_id") or row.get("id") or "").strip()
+    if not sid:
+        return {}
+    try:
+        from .agent_l._support import STATEMENT_CLAIM_KEY_PREFIX as _PREFIX   # 惰性：口径只有一处
+    except Exception:   # noqa: BLE001 - 读不到词表就按正名比（拒写比猜错好，见下面的三道绑定点）
+        _PREFIX = "stmt:"
+    wanted = f"{_PREFIX}{sid}"
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    found: dict[int, dict[str, Any]] = {}
+    for experiment in experiments:
+        if not isinstance(experiment, Mapping):
+            continue
+        if str(experiment.get("method") or "") != "formal":
+            continue
+        obs = dict(experiment.get("observations") or {})
+        params = dict(experiment.get("params") or {})
+        bound = {str(obs.get("statement_id") or ""), str(params.get("statement_id") or ""),
+                 str(experiment.get("claim_key") or ""),
+                 str(experiment.get("verifier_subject_key") or "")}
+        if sid not in bound and wanted not in bound:
+            continue
+        no = _VR.as_proof_no(obs.get("proof_no") or params.get("proof_no")) or 1
+        if str(experiment.get("evidence_kind") or "") == "proof":
+            state = "verified"
+        elif str(obs.get("tri_state") or "") == "checked_failed":
+            state = "failed"
+        else:
+            continue
+        found[no] = {
+            "state": state,
+            "payload": {
+                "checker": str(obs.get("checker") or params.get("checker") or ""),
+                "experiment_id": str(experiment.get("experiment_id") or ""),
+                "proof_no": no,
+                "proof_sha256": str(obs.get("proof_sha256")
+                                    or params.get("proof_sha256") or ""),
+                "path_id": str(obs.get("path_id") or params.get("path_id") or ""),
+                "path_source": str(obs.get("path_source")
+                                   or params.get("path_source") or ""),
+                "code_path": str(experiment.get("code_path") or ""),
+                "code_hash": str(experiment.get("code_hash") or ""),
+                "tri_state": str(obs.get("tri_state") or ""),
+                "recorded_by": str(obs.get("recorded_by") or ""),
+                "verified": state == "verified",
+            },
+        }
+    return found
 
 
 def bit_evidence_gaps(row: Mapping[str, Any], *,
@@ -545,6 +972,12 @@ def bit_evidence_gaps(row: Mapping[str, Any], *,
     边界（三态）：没有指针时不报（`bit_problems` 已经报过"凭据要指名道姓"，
     同一件事报两次会让"改哪里"变得不清楚）；experiments 表读不到时由调用方给空序列，
     此时指针行必然"不存在" —— 所以调用方必须先确认表读到了再判第 2/3 条。
+
+    ## 第 4 位是二维的（逐条路径各自核）
+    第 4 位说 `verified` 的是某一条证明（`{证明号: 状态}`）：凭据也要按那一条读
+    （`bits.evidence.formal_by_proof[证明号]`），否则一条路径的 `experiment_id` 会被
+    拿去给另一条路径背书。汇总那一层（:func:`_bit_state`）只决定"这一位算不算通过"，
+    它不提供凭据 —— 所以这一格按路径逐条判，理由串里点名是哪个号。
     """
     bits = bits_from_row(row)
     ev = dict(bits.get("evidence") or {})
@@ -562,10 +995,21 @@ def bit_evidence_gaps(row: Mapping[str, Any], *,
                            "要么把证明过程写进 proof_text，要么把这一位降下来"),
             })
 
-    for bit, method, key in (("numeric", "numeric", "numeric"), ("formal", "formal", "formal")):
-        if _state(bits.get(bit)) != "verified":
+    #: 每一位要核的 `(凭据载荷, 路径标签)` 清单：第 1 位一格，第 4 位逐路径。
+    formal_evidence = formal_evidence_by_proof(bits)
+    formal_states = formal_by_proof(bits) if isinstance(bits.get(FORMAL_BIT), Mapping) else {}
+    payloads: list[tuple[str, str, str, dict[str, Any]]] = [
+        ("numeric", "numeric", "numeric", dict(ev.get("numeric") or {}))]
+    for no in sorted(formal_states):
+        if formal_states[no] != "verified":
             continue
-        payload = dict(ev.get(key) or {})
+        payloads.append(("formal", "formal", f"#{no}", dict(formal_evidence.get(no) or {})))
+    if not formal_states:
+        payloads.append(("formal", "formal", "formal", dict(ev.get("formal") or {})))
+
+    for bit, method, where, payload in payloads:
+        if _bit_state(bits, bit) != "verified":
+            continue
         # 指针可能写成单个号（`experiment_id`）或一列号（`experiments`）—— 两种都要认，
         # 而且列要摊平：把整列 `str()` 成一个号，报出来的就是一条查不到的假指针
         # （"0001,0002" 这种号永远不会在表里，负控会以"表里没有"的形态假绿）。
@@ -627,6 +1071,13 @@ def clean_statement_ids(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
                 clean.append(sid)
                 how = "逐字核过" if state == "verbatim" else "语义核过（H 判：与来源说同一件事）"
                 reasons[sid] = f"引用命题：{how}（凭据 lit:{row.get('source_lit_id')}）"
+            elif state == QUOTE_NO_EVIDENCE:
+                # D1：说通了不算数，盘上要指得出"核的是哪一段"。这一档不给学分 ——
+                # 它的"通过"没有位置，复核的人无从下手（真机那 13 行就是这一档）。
+                # 两件证据各说一句：逐字档只欠区间，语义档还欠"哪一次判的"。
+                reasons[sid] = ("引用命题自称通过，而盘上拿不出可复核的证据（quote_span 为空"
+                                "说不出核了哪一段、在第几页；语义档还要求 quote_call_sha256"
+                                "说出是哪一次判的）⇒ 不许当依据（D1：证据不在盘上就等于没核）")
             else:
                 reasons[sid] = ("引用命题但没核过（逐字与语义两档都没有）"
                                 "⇒ 不许当依据（I4 的边界）")

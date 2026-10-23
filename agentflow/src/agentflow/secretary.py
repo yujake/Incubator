@@ -2328,7 +2328,14 @@ class Secretary:
             for bit in bit_names:
                 state = (bits or {}).get(bit)
                 if isinstance(state, Mapping):
-                    state = state.get("state", state.get("value"))
+                    # 二维位（第 4 位：`{证明号: 状态}`，业主 2026-10-22）。判据是
+                    # "任一条路径有结论 ⇒ 这一位问过了 ⇒ 不待办；全都 pending ⇒ 待办"。
+                    # 改前这里读 `state.get("state", state.get("value"))` —— 那是给
+                    # 另一种形状留的口子，对 `{证明号: 状态}` 只会取到空 ⇒ 二维位一律
+                    # 被读成待办（而它可能已经验过了）。
+                    settled = [EB._path_state(item) for item in state.values()]
+                    settled = [one for one in settled if one != "pending"]
+                    state = settled[0] if settled else "pending"
                 if str(state or "") in resolved:
                     continue
                 who = _who("statements", bit)
@@ -2670,8 +2677,35 @@ class Secretary:
                 "brief": text, "brief_written": source == "secretary",
                 "surface": str(got_surface.get("slot") or ""), "problem": ""}
 
-    # ---- 读写面与槽位池（S1n）
+    def open_solo_entry(self, *, task_id: str, task: str = "", brief: str = "") -> dict[str, Any]:
+        """给"用户指定单条执行"开一条名册行与一个读写面槽位（`owner` = 它自己的任务号）。
 
+        ## 为什么需要这一格（业主 2026-10-22 的 B-5 裁定）
+
+        B-5：「L 的形式化验证成本极高 ⇒ 在全部研究和论文落定之后，用户指定有形式化验证
+        需求时，要一条才做一条」。B-5 之后业主 2026-10-22 晚的最终裁定又给了它一条入口
+        （「只有 B 可以派 L」），所以这一格今天不只在 `run-agent L` 上用到：被 B 派的那一趟
+        走父的秘书登记，而用户指定单条起的那一趟没有父，走本方法。而业主要求"单条执行时
+        同样有台账号、名册行、读写面" —— 那三样在"被父派活"那一档是由父的秘书在
+        `Conductor._register_roster` 里落的，单条执行时没有父，于是没有任何人落它们。
+
+        这里补的就是那一个缺失：把"这一趟"登记进它自己名下的名册（`owner` 与
+        `task_id` 都是这一趟的绝对编号），并从池里取一个槽位。语义上它不是"父子关系"，
+        而是"这一趟的名册里只有我一个"—— 退役、寻址、读写面切割读的都是同一份行，
+        与派活那一档逐字同形（键集由 `roster_add` 决定，本方法不另写一份）。
+
+        fail-open：拿不到面 / 登记被拒 ⇒ 返回 `problem`，不抛（少一份名册不许带走这一趟）。
+        """
+        owner = str(task_id or "").strip()
+        if not owner:
+            return {"name": "", "surface": "", "problem": "没有任务号 ⇒ 名册上没地方登记"}
+        got = self.roster_add(owner=owner, role=str(self.role), task_id=owner,
+                              brief=str(brief or ""), task=str(task or ""))
+        return {"name": str(got.get("name") or ""),
+                "surface": str(got.get("surface") or ""),
+                "problem": str(got.get("problem") or "")}
+
+    # ---- 读写面与槽位池（S1n）
     def surface_rows(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
         """池的折叠视图（`(槽位列表, 坏行)`）。"""
         from . import jsonlfile as JF

@@ -26,6 +26,10 @@ from typing import Any, Callable, Mapping
 
 from . import schema as S
 
+#: 角色可见性的唯一判定入口（业主 2026-10-22：「在Lean开关没开时隔绝L」）。
+#: 本文件读它两处：接线态读数（`status`）与按声明取角色（`_build` 的 `get` 会拒绝）。
+from . import leanscope as _LEANSCOPE
+
 #: 角色的接线态。刻意只有两格：`wired` 与"需要一个我没拿到的东西"。
 WIRING_STATES: tuple[str, ...] = ("wired", "no_provider")
 
@@ -195,6 +199,19 @@ class _Builder:
         return self._build("V", store, instance)
 
 
+    def agent_l(self, store: Any, instance: str = "") -> Any:
+        """L（Lean 形式化者；构造在 `specs/l.py::build`：要工作区根）。
+
+        2026-10-22 新设。这里的薄壳不是重复：`_Builder.get` 按 `agent_<角色小写>`
+        取构造器，而 `build_role_registry` 的工厂又调它 —— 少这一行时
+        `AgentRegistry` 里看得到 L、`host` 却造不出来（判据
+        `tests/test_agent_spec_reconciliation.py::test_the_class_path_is_what_host_actually_builds`
+        当场报 `'_Builder' object has no attribute 'agent_l'`）。
+        协作面仍然不搭：L 不可召唤、也没有出边，本方法只让"用户直接起 L"这条路通。
+        """
+        return self._build("L", store, instance)
+
+
     def _cfg_with_actor(self, role: str, instance: str) -> dict[str, Any]:
         """G/H 从 config 读 `actor`：实例标签就写在这里（它们没有 `actor=` 形参）。"""
         cfg = self._cfg_for(role)
@@ -306,9 +323,14 @@ class _Builder:
         return self._made[key]
 
     def status(self) -> dict[str, str]:
-        """逐角色的接线态（`WIRING_STATES` 之一）。"""
+        """逐角色的接线态（`WIRING_STATES` 之一）。
+
+        业主 2026-10-22（「在Lean开关没开时隔绝L」）：由 Lean 开关决定存在性的角色在
+        开关关着时不出现在这份读数里 —— 否则它会被读成"这个角色接了线、只是没用到"，
+        而业主点名要去掉的正是那一类噪音。判定由 `leanscope.is_hidden` 做，这一行只读。
+        """
         out: dict[str, str] = {}
-        for role in S.ROLES:
+        for role in _LEANSCOPE.visible_roles(S.ROLES):
             if role == "A" and not self.providers:
                 out[role] = "no_provider"      # A 的检索后端没给 ⇒ 不假装它接了线
             else:

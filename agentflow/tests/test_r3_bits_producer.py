@@ -19,6 +19,7 @@ import json
 from agentflow import evidencebits as EB
 from agentflow import schema as S
 from agentflow.agent_b import AgentB
+from agentflow.extract import extract_text
 
 from conftest import add_literature, write_library_file
 
@@ -26,11 +27,14 @@ CREATED = "2026-01-01T00:00:00+08:00"
 
 
 def _agent(store) -> AgentB:
-    return AgentB(store, extractor=None, extract_text=None, config={})
+    # D1（2026-10-22 第二版）：写侧会把那一篇重新打开、在全文里定位引文 ——
+    # 所以这一组的 B 给真的 `extract_text`（改前给 None，比对那一步根本不会跑）。
+    return AgentB(store, extractor=None, extract_text=extract_text, config={})
 
 
 def _lit(store, lid: str = "0000") -> str:
-    write_library_file(store, f"{lid}/a.txt", "正文")
+    # 内容就是 `_external()` 的那句 `proof_text`：逐字核过的那一档要真的可核。
+    write_library_file(store, f"{lid}/a.txt", "Proof. 逐字摘录。")
     add_literature(store, lid, title="A", path=f"{lid}/a.txt")
     return lid
 
@@ -87,11 +91,17 @@ def test_external_lit_with_verbatim_quote_lands_bits_in_the_same_transaction(sto
 
 
 def test_own_result_proof_text_lights_bit_two_but_decides_no_grade(store):
-    """自产命题写了证明摘录 ⇒ 第 2 位为真；但第 3 位（V 的审）不在这一跳 ⇒ 仍是猜想。"""
+    """自产命题写了证明摘录 ⇒ 第 2 位为真；但第 3 位（V 的审）不在这一跳 ⇒ 仍是猜想。
+
+    2026-10-22 起这一笔按 `kind="conjecture"` 登记（业主裁定 B-2：「没有引文 / 自己编的
+    命题必须从『猜想』注册」）。这一条的主题是五元位（第 2 位亮不亮、现算等级是什么），
+    与声明成哪一种 kind 无关 —— 而入口档从这一批起只有猜想。
+    """
     _lit(store)
     res = _agent(store).register_statement(
         statement_full="对每个 m ≥ 5，k = 3 都有无穷多个例子。",
-        origin="own_result", doc_id="0000", proof_text="证明：逐步论证。",
+        origin="own_result", kind="conjecture", doc_id="0000",
+        proof_text="证明：逐步论证。",
         quote_reason="自有结果，没有引文可比对（三态里的那一句『为什么』）")
 
     assert res["ok"] is True, res
@@ -107,7 +117,7 @@ def test_own_result_without_proof_is_an_honest_conjecture_with_bits(store):
     _lit(store)
     b = _agent(store)
     res = b.register_statement(statement_full="我们猜：对每个素数 p 都有 …。",
-                               origin="own_result", doc_id="0000",
+                               origin="own_result", kind="conjecture", doc_id="0000",
                                quote_reason="证明还没做完 / 未核到")
 
     assert res["ok"] is True, res
@@ -159,7 +169,8 @@ def test_negative_control_the_read_side_is_not_the_producer(store):
     lid = _lit(store)
     old = S.Statement(stmt_id="0000", origin="external_lit", statement_full="旧行：设 G 是有限群。",
                       proof_text="Proof. 旧行的逐字摘录。", source_lit_id=lid,
-                      quote_verified=True, created_at=CREATED, created_by="legacy")
+                      quote_verified=True, quote_span="p1:norm[0:18]",
+                      created_at=CREATED, created_by="legacy")
     old.validate()
     with store.tx("statements", actor="legacy") as tx:
         tx.upsert("statements", old.to_dict(), note="legacy_row")

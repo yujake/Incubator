@@ -40,6 +40,24 @@ _VERIFIER = {
 _LEAN_SRC = "theorem probe_eq : 1 + 1 = 2 := rfl\n"
 
 
+@pytest.fixture(autouse=True)
+def _lean_side_hard_off_is_lifted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """本文件测的是「被保留的形式化实现」，不是 E 的动作面。
+
+    业主 2026-10-22 晚裁定把 E 的 Lean 侧写死关闭（`agent_e._support.E_LEAN_SIDE_HARD_OFF`）：
+    `run_experiment(method='formal')` 与 `check_formal` 在动作面第一句就回
+    `formal_moved_to_l`（判据见 `tests/test_e_lean_side_is_hard_off.py`）。
+
+    而裁定同时说「代码先不删（等 L 被证实后再删）」：本文件守的正是那份被保留的实现
+    —— `.lean` 产物真的走检查器、`verified=True` 才落 `proof`、没查成不许标 proof。
+    L 的 `_CheckFormalL` 与 `formal_tools` 走的都是同一条实现，所以这些判据仍然承重。
+    放开是显式的：每个用例结束后 monkeypatch 自动还原。
+    """
+    from agentflow.agent_e import _support as SUP
+
+    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
+
+
 def make_e(store: Store) -> AgentE:
     return AgentE(store, workspace_root=store.root)
 

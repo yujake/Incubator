@@ -114,8 +114,14 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
     live = SC.live_pids(root)
     loops = SC.running_loops(root)
     tasks = _rows(store, "tasks")
+    # 只数实例行（`kind == ""`）：`tasks` 从业主 A1=甲 起同时装板项行（`kind` 非空：
+    # message/notice/report/delegation），而板项行的 `status` 永远是 `pending`。
+    # 不看出身地按 status 数（D14 的实测：28 行里 26 行是板项）会把报告写成"在飞 19"，
+    # 而真在飞只有 2。三个同族读侧（`conductor._children_of` / `active_children` /
+    # `stats`）都带这一条过滤，这一处此前漏了。
     running_tasks = [str(t.get("task_id") or "") for t in tasks
-                     if str(t.get("status") or "") in ("pending", "running")]
+                     if not str(t.get("kind") or "")
+                     and str(t.get("status") or "") in ("pending", "running")]
     # ---- 顶趟行（F1）：`tasks` 里多出来的那一类行（`role=M` / `action="run"` /
     # `called_by="user"`，由 `conductor.open_top_level_run` 开）。
     #
@@ -133,10 +139,19 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
     history = SC.stop_history(root, limit=3)
 
     pending_questions = 0
+    pending_sids: list[str] = []
     try:
         from . import userio as U
 
-        pending_questions = len(U.pending_questions(root))
+        # 与网页同源（D14）：`workspace_pending_view` 是"不挑会话的那一份"待答清单，
+        # 「在飞」页那张待答面板读的就是它（`webui/state.py` 的 `build_snapshot`）。
+        # 改前这里调 `pending_questions(root)`（不带 sid ⇒ 只读默认会话），于是同一时刻
+        # 报告说"待答 0"、网页说"待答 1"，而两处都自称是"全局待答"。
+        # 现在整份报告都按全工作区算，并把涉及的 sid 写出来 —— 报告是离线文件，
+        # 读它的人必须能看出"这是哪几段会话里的问题"。
+        pending_all = U.workspace_pending_view(root)
+        pending_sids = sorted({str(q.get("sid") or "") for q in pending_all})
+        pending_questions = len(pending_all)
     except Exception:  # noqa: BLE001 —— 读不到待答问题 ⇒ 这一格判不了（下面 note 里说）
         pending_questions = -1
 
@@ -152,10 +167,14 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
             # 不写清就会变成"同一屏里两个读数各说一件事"（`conductor.stats()` 的同一条纪律）。
             "calibers": {
                 "running_tasks":
-                    "tasks 里 status ∈ {pending, running} 的行（含顶趟行 action=run）",
+                    "tasks 里 status ∈ {pending, running} 的实例行（kind 为空；含顶趟行 "
+                    "action=run，不含板项行 message/notice/report/delegation）",
                 "top_level_runs":
                     "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；"
                     "召唤看 conductor.stats() 的 started_total）",
+                "pending_questions":
+                    "全工作区的待答（`userio.workspace_pending_view`，与「在飞」页同一来源；"
+                    "不是只读默认会话）",
             },
             "top_level_runs": len(top_runs),
             "live_pids": [{"role": str(p.get("role") or ""), "pid": p.get("pid")} for p in live],
@@ -166,6 +185,9 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
             "last_stop_history": history,
         },
         "pending_questions": pending_questions,
+        # 待答涉及哪几段会话：报告是离线文件，"这几条是谁的"必须写在读数里
+        # （D14 的第二个口径：`pending_questions` 与网页同源之后，sid 是它的坐标）。
+        "pending_questions_sids": pending_sids,
         "refusals": {"total": len(refused), "by_reason": by_reason,
                      "recent": [{"task_id": str(t.get("task_id") or ""),
                                  "role": str(t.get("role") or ""),
@@ -195,6 +217,20 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         # —— 把会写盘的东西并进只读路径，等于让"看一眼现在什么情况"这个动作改盘。
         # 所以直接调 `faculty_checks` 的纯函数（它们只读 store 与文本）。
     }
+    # ---- D1 / D2 的两格读数（2026-10-22，与收工门同一份实现）
+    #
+    # 为什么并进这一屏：「说通过而无区间」与「真身有正文而短版为空」都是随时该被看见的
+    # 欠账，而它们此前只在收工那一刻才露面（`closing` 那两格）。判据只有一份实现
+    # （`closing.quote_evidence_reading` → `quoteevidence.scan_quote_evidence`；
+    # `closing.statement_body_reading` → `statementbody.text_gaps`），这里只转发 ——
+    # 第二份口径会让"有几行说通过而无区间"在两个屏幕上给出两个数。
+    #
+    # 惰性 import：`closing` 会拉 papercompile / userio 一串，而状态报告是"随时看一眼"
+    # 的轻入口，不该为它付那笔导入代价（同 `_report_landing` / `_uncalled_actions` 的做法）。
+    from . import closing as CL
+
+    report["quote_evidence"] = dict(CL.quote_evidence_reading(store))
+    report["statement_body"] = dict(CL.statement_body_reading(store))
     report["next_steps"] = _next_steps(report)
     return report
 
@@ -349,6 +385,17 @@ def _next_steps(report: Mapping[str, Any]) -> list[str]:
     if (report.get("five_bit") or {}).get("problems"):
         out.append(f"有五元位自身不合规的命题 {report['five_bit']['problems']} 条"
                    "（缺凭据/缺理由）⇒ 那是台账质量问题，先补齐再谈等级")
+    # ---- D1：说通过而无区间的那几行（与收工门那一格同一份读数）
+    qe = report.get("quote_evidence") or {}
+    if qe and not qe.get("checked"):
+        out.append("引文证据那一格**没查成**（" + str(qe.get("reason") or "读不到")
+                   + "）⇒ 那是「没读成」，不是「都核过了」")
+    elif qe.get("dirty"):
+        ids = "、".join(str(x.get("id") or "") for x in (qe.get("dirty") or [])[:4])
+        out.append(f"有 {len(qe['dirty'])} 行写着「逐字回验通过」而盘上没有 quote_span"
+                   f"（{ids}）⇒ 收工门会因此拦门：要么重核一次并把区间写实"
+                   "（走 `B.register_statement` 且给 `source_lit_id`），"
+                   "要么把那一行的 quote_verified 改成 None 并写清为什么还没核")
     if (report.get("in_flight") or {}).get("running_tasks"):
         out.append(f"有 {report['in_flight']['running_tasks']} 条任务还在飞 ⇒ 现在别改口径，"
                    "等它们收工（这份报告本身不打断它们）")
@@ -480,7 +527,9 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
         f"- 停机开关：{'在' if infl.get('stop_switch') else '不在'}"
         + (f"；最近一次叫停：{infl['last_stop_history'][-1].get('reason')}"
            if infl.get("last_stop_history") else ""),
-        f"- 待答问题：{'（读不到 ⇒ 这一格没查成）' if report.get('pending_questions') == -1 else report.get('pending_questions', 0)}",
+        f"- 待答问题：{'（读不到 ⇒ 这一格没查成）' if report.get('pending_questions') == -1 else report.get('pending_questions', 0)}"
+        + ("（全工作区口径，会话 " + "、".join(report.get("pending_questions_sids") or []) + "）"
+           if report.get("pending_questions_sids") else ""),
         f"- 被拒动作：**{ref.get('total', 0)}** 次"
         + ("（" + "、".join(f"{k}×{v}" for k, v in sorted((ref.get('by_reason') or {}).items(),
                                                           key=lambda kv: -kv[1])[:4]) + "）"
@@ -488,6 +537,16 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
         f"- 五元位现状：{('、'.join(f'{k} {v} 条' for k, v in (five.get('grades') or {}).items()) or '（还没有命题行）')}"
         + (f"；其中 {five.get('problems')} 条自身不合规（缺凭据/缺理由）"
            if five.get("problems") else ""),
+        # D1（2026-10-22）：说通过而无区间的那几行（与收工门那一格同一份读数）。
+        # 三态：没查成 / 干净 / 有欠账，三种都印出来（"没查成"不许读成"干净"）。
+        (lambda qe: (
+            "- 引文证据：**没查成**（" + str(qe.get("reason") or "") + "）—— 那是「没读成」，不是「都核过了」"
+            if not qe.get("checked") else
+            f"- 引文证据：{qe.get('verified_rows', 0)} 行自称通过，"
+            f"**{len(qe.get('dirty') or [])} 行拿不出 quote_span**"
+            + ("（" + "、".join(str(x.get("id") or "") for x in (qe.get("dirty") or [])[:6]) + "）"
+               if qe.get("dirty") else "（每一条都指得出核的是哪一段）")
+        ))(report.get("quote_evidence") or {}),
         f"- 攻坚轮次的产物：{('、'.join(f'{k} {v}' for k, v in (report.get('attack_rounds') or {}).get('products', {}).items()) or '（还没有轮次）')}"
         + (f"；**没有产物的轮次 {report['attack_rounds']['no_product_count']} 条**"
            f"（{report['attack_rounds']['no_product_rounds']}）"

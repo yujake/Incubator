@@ -28,11 +28,16 @@ from agentflow import capabilities as C
 from agentflow import schema as S
 from agentflow.tools import ToolRegistry, build_registry
 
-#: 要扫的角色：可被召唤的 A-H 加主控（与 `test_agent_prompts.ALL_ROLES` 同一份口径）。
+#: 要扫的角色：可被召唤的 A-H（F-02 起 +V，2026-10-23 起 +L）加主控（与 `test_agent_prompts.ALL_ROLES` 同一份口径）。
 ALL_ROLES: tuple[str, ...] = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
 
 #: `角色.动作`（动作名可带一段点号，例如 `F.attack.step`）。
-_ROLE_REF = re.compile(r"\b([A-HMV])\.([a-z][a-z_]*(?:\.[a-z][a-z_]*)?)\b")
+#: 2026-10-23：字符类补 `L`。字母类写成 `[A-HMV]` 时，`L.check_formal` 这种
+#: 写法在这条判据下根本不会被扫到（G / H / M 三份提示词里各有一处）—— 全部
+#: 在册于是一句空话。旧写法记录的是 L 立项前的角色数；补上之后实测仍然 0 条未知
+#: （`capabilities.find_action("L", "check_formal")` 在册），所以这是把覆盖面
+#: 补回来，不是放宽。
+_ROLE_REF = re.compile(r"\b([A-HMVL])\.([a-z][a-z_]*(?:\.[a-z][a-z_]*)?)\b")
 
 #: 路径分隔符：`notes/M.md` 里的 `M.md` 是文件名，不是"角色 M 的动作 md"。
 _PATH_SEP = ("/", "\\")

@@ -122,8 +122,14 @@ def _row(store: Store, stmt_id: str = SID) -> dict:
 
 
 def _own(full: str, short: str) -> dict:
-    """自产命题的必填件：`doc_id` + `quote_reason`（`origin="own_result"` 那一档）。"""
+    """自产命题的必填件：`doc_id` + `quote_reason`（`origin="own_result"` 那一档）。
+
+    2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：`kind` 写成
+    `conjecture`。这一组测的是多证明的端到端链路（写口 → 签名 → 收工读数），升档由
+    `evidencebits.derive_grade` 按五元位现算，与入口这一栏无关。
+    """
     return {"statement_full": full, "statement_text": short, "origin": "own_result",
+            "kind": "conjecture",
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对",
             "label": short}
 

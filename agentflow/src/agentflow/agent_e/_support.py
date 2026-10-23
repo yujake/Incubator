@@ -22,11 +22,13 @@
 `extra_axioms` /`decl_mismatch`）⇒ `inconclusive` + `heuristic`：它给不出任何正面证据，所以不许落 `cross_check`（那是"另一个方法旁证过"，见 
 `formalgw.evidence_of`）； 3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /`source_unreadable` / 
 `lean_disabled` / `param_error`）⇒ 同上，且 `notes` 里写明是哪一种。其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`（`no_backend`
-/ `timeout` / `tool_crashed` / `source_unreadable` /`lean_disabled` / `param_error`）—— 上面这一行必须覆盖它，导入期断言与 
+/ `timeout` / `tool_crashed` / `source_unreadable` /`lean_disabled` / `param_error` / `formal_moved_to_l`）—— 上面这一行必须覆盖它，导入期断言与 
 `tests/test_agent_e.py` 各守一遍。为什么必须机器守：这里此前只有四项（少了 `source_unreadable` 与 `param_error`），而没有任何一条测试会因此变红（`R2-AN-3`），于是同一文件里
 docstring 与常量互相矛盾。`import_unavailable` 不在那张常量表里：它是 `formalgw` 的检查器状态（库不可得 ⇒ 那次检查没有发生），见 `FORMAL_REASONS` 与 
 `_FORMAL_REASON_BY_TOOL_REASON`。`lean_disabled`（业主 2026-10-12 的开关：`toolchain.lean_enabled=false`）在那张表里：它是"本会话这条路被用户关掉了"，属于
-E 自己的受控理由 ——与"机器上没有 Lean"（`no_backend`）是两件事，混起来的代价是让人去查环境。 4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
+E 自己的受控理由 ——与"机器上没有 Lean"（`no_backend`）是两件事，混起来的代价是让人去查环境。`formal_moved_to_l` 是业主 2026-10-22 晚裁定的那一档（「E 的
+Lean 侧开关全写死成关闭」）：E 这一侧不再读那个开关，形式化那一支在动作面第一句就给这个受控理由码、并把形式化指向 L —— 它必须与 `lean_disabled` 分开，
+否则模型会去翻设置文件找一个对这条路根本不存在的开关。 4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
 形式化路径的输入是一份检查器能读的形式化源码，"用 Python 脚本冒充形式化产物"正是 FC-22 要拦的那种越权。
 `name` / `imports` 只对形式化路径有意义：给计算类方法传它们会被拒绝，而不是被静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，实际用的是默认 Mathlib"这种假话没有任何地方会报出来）。
 - `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；给了参数但库里没有 ⇒ 
@@ -58,12 +60,17 @@ from ..tools.base import ToolError, ToolRegistry
 from ..agentspec import AgentBrief, AgentSpec
 __all__ = [
     "AgentE",
+    "E_LEAN_SIDE_HARD_OFF",
+    "E_LEAN_SIDE_NOTE",
+    "E_LEAN_SIDE_REASON",
     "ExperimentError",
     "FORMAL_REASONS",
     "REPRO_RESULT_PREFIX",
     "build_experiment",
     "declared_name_of_notes",
+    "e_lean_side_hard_off",
     "install_e_tools",
+    "lean_side_reading",
     "selftest",
 ]
 REPRO_RESULT_PREFIX = "REPRO_RESULT:"
@@ -79,7 +86,7 @@ _NO_EVIDENCE_KIND = "heuristic"
 _STDOUT_SCAN_LIMIT = 4 * 1024 * 1024
 _OUTPUT_DIGEST_WIDTH = 300
 _NOT_CHECKED_REASONS = ("no_backend", "timeout", "tool_crashed", "source_unreadable",
-                        "lean_disabled", "param_error")
+                        "lean_disabled", "param_error", "formal_moved_to_l")
 FORMAL_REASONS: tuple[str, ...] = (
     "verified",
     "compile_error",
@@ -100,7 +107,61 @@ FORMAL_REASONS: tuple[str, ...] = (
     "path_outside_workspace",
     "tool_failed",
     "status_unregistered",
+    #: 业主 2026-10-22 晚裁定（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时
+    #: 发生错乱。当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计。」
+    #: 这一档与 `lean_disabled` 刻意分开：后者是「用户把开关关掉了」（可行动：去设置里
+    #: 打开），而这一条是「这条路已经不在 E 身上了」（可行动：走 L 的那三件工具）。
+    #: 把它折进 `lean_disabled` 会让模型去翻设置文件找一个根本不存在的开关。
+    "formal_moved_to_l",
 )
+
+
+#: E 的 Lean 侧写死关闭（业主 2026-10-22 晚裁定）。这是唯一判据：
+#: `run_experiment(method='formal')` 与 `check_formal` 都在第一句读它。
+#:
+#: 为什么是一个模块级字面量而不是设置项：裁定要的是「写死」—— 没有环境变量、
+#: 没有设置文件键、没有构造函数参数能把它打开。判据
+#: `tests/test_e_lean_side_is_hard_off.py` 的第 5 条直接把它改成 False，用来证明
+#: 第 2 条不是真空的（改了它，那一条必须变红）。
+E_LEAN_SIDE_HARD_OFF: bool = True
+
+#: 写死关闭时那个受控拒绝码（`FORMAL_REASONS` 里的取值，别处不许再写字面量）。
+E_LEAN_SIDE_REASON: str = "formal_moved_to_l"
+
+#: 「E 的 Lean 侧已停用」那一句读数（拒绝回执、自检、`lean_side_reading()` 共用一份）。
+#: 这句话刻意不在 `specs/e.py` 的提示词里：提示词里点名 L 会让「开关关着时一个字都
+#: 不提 L」那条判据变红（L 在那一档不存在），所以「这一侧停用了、形式化归谁」这件事
+#: 由读数说，不由提示词说。
+E_LEAN_SIDE_NOTE: str = (
+    "E 的 Lean 侧已停用（写死关闭，不再看 toolchain.lean_enabled 开关）："
+    "形式化由 L 承担（formal.formalize / formal.check_formal / formal.record）。"
+)
+
+
+def e_lean_side_hard_off() -> bool:
+    """E 的 Lean 侧是不是写死关闭（唯一判据，见 :data:`E_LEAN_SIDE_HARD_OFF`）。
+
+    刻意写成函数而不是让调用方直接读常量：这样判据只要改一处，
+    而"还有一个地方自己读了一遍常量"这种分叉结构上不可能发生。
+    """
+    return bool(E_LEAN_SIDE_HARD_OFF)
+
+
+def lean_side_reading() -> dict[str, Any]:
+    """E 的 Lean 侧这一档的读数（业主裁定要求的「在读数里明确」那一格）。
+
+    五格分工：`engine` 是这条路的归属（`"off_hard_coded"`：写死关闭，不是开关档位）、
+    `formal_owner` 是形式化现在的承担者、`reason` 是受控拒绝码、`note` 是一句人话、
+    `reads_lean_switch` 回答「这一侧还读不读那个开关」（裁定的要点：不读了）。
+    """
+    return {
+        "role": "E",
+        "engine": "off_hard_coded" if e_lean_side_hard_off() else "switch_driven",
+        "formal_owner": "L",
+        "reason": E_LEAN_SIDE_REASON,
+        "reads_lean_switch": False,
+        "note": E_LEAN_SIDE_NOTE,
+    }
 _FORMAL_REASON_BY_TOOL_REASON: dict[str, str] = {
     "verified": "verified",
     "compile_error": "compile_error",

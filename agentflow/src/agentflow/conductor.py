@@ -55,6 +55,31 @@ from .agentspec import AgentBrief, AgentSpec
 #: 一次召唤的终局状态（`status`），与 `schema.TASK_STATUSES` 一致。
 TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled", "failed")
 
+#: 检查器那一族动作写在 `status` 里的结论三态（与 `agent_l._support.THREE_STATES` 同一组词）。
+#:
+#: 它们不是任务终态：`verified` 说"检查器说通过"，`failed` 说"检查器说不通过"，
+#: `unknown` 说"没查成"；而任务那一层问的是"这次召唤跑成了什么"。两者折叠的代价见
+#: `Conductor._end_from_payload` 的分档表（`draft/146` D25）。
+_TRI_STATE_WORDS: tuple[str, ...] = ("verified", "failed", "unknown")
+
+
+def _tri_state_of(raw: Mapping[str, Any]) -> str:
+    """角色返回里的结论三态（取不到给空串）。
+
+    两处来源，显式键 `tri_state` 优先，其次 `status` —— E 与 L 的 `check_formal` /
+    `formalize` / `record` 都把结论写在 `status` 里，而那个词表恰好就是这三格。
+
+    为什么只认这三个词、而不是"凡 `status` 都是三态"：别的角色也在 `status` 里写自己的
+    状态词（A 的 `content_mismatch`、F 的 `blocked`、H 的 `draft`），把它们读成三态会把
+    一次成功的动作记成"没查成"。这三个词是"检查器说话了"那一族的专属词。
+    """
+    for key in ("tri_state", "status"):
+        value = str(raw.get(key) or "").strip()
+        if value in _TRI_STATE_WORDS:
+            return value
+    return ""
+
+
 #: 标记"这一行已经结过账"（写进 `tasks.inputs`）。
 #:
 #: 为什么需要它：`finish()` 是幂等的（终态先到先得），而记账发生在 `finish`
@@ -1137,9 +1162,22 @@ class Conductor:
         算法（`draft/90` §1.9）也不引用它 —— "还有几条项没消"只作为 `roster_view` 回报里的一格（`items_open`）。
         判据：`tests/test_board_does_not_eat_the_fanout_quota.py` 里那一条负控。
         """
-        return [r for r in self._board_rows()
-                if str(r.get("item_state") or "") != "done"
-                and str(r.get("parent_task_id") or "") == str(task_id)]
+        return list(self.open_items_by_parent().get(str(task_id or ""), ()))
+
+    def open_items_by_parent(self) -> dict[str, list[dict]]:
+        """「父 → 名下未消的板项」一次算完（`open_items_of` 与 `tree()` 共用这一份判据）。
+
+        为什么要有这个方法：`tree()` 要给每一行带一格"我名下还有几条没消"，
+        逐行调 `open_items_of` 会把同一张表扫 N 遍；而两处各写一遍过滤条件，
+        迟早一处改了另一处没改。判据本身只有这里一处：`kind` 非空、`item_state != "done"`、
+        按 `parent_task_id` 归到收件人。
+        """
+        out: dict[str, list[dict]] = {}
+        for row in self._board_rows():
+            if str(row.get("item_state") or "") == "done":
+                continue
+            out.setdefault(str(row.get("parent_task_id") or ""), []).append(row)
+        return out
 
     # ---------------------------------------------------------------- 三态与幂等（S1h）
     def active_children(self, task_id: str) -> dict[str, Any]:
@@ -3238,52 +3276,118 @@ class Conductor:
         `None` 不许映射成 `ok`：那正是"把『没做』与『做了没结果』
         折叠成同一个值"—— 本项目在引文校验、OCR、D 溯源、C 预算截断四处
         踩过它，每一次的后果都是下游把"我们没查"读成了"查了没有"。
+
+        ## D25（`draft/146` D25）：角色返回的 `status` 不是任务终态
+
+        检查器那一族动作（E / L 的 `check_formal` / `formalize` / `record`）把 `status`
+        写成三态词（`verified` / `failed` / `unknown`）—— 那是"检查器说了什么"，不是
+        "这次召唤跑成了什么"。原来把 `raw["status"]` 直接当终态，落出两个真机缺陷：
+
+        - `status="failed"` ⇒ 任务 failed，而 `schema.Task.validate` 要求 failed 必须写
+          `error`；角色把检查器原话写在 `detail` 里（L 的键就叫 `detail`）⇒ 写台账那一刻
+          抛 `ValueError` ⇒ 整步落 `failed / 执行中异常` 且 payload 丢失（真机原文：
+          `L.formalize 执行中异常（ValueError: status=failed 时必须写 error…）`，
+          `payload=None`）。一次有证据的"命题没核过"被记成"框架崩了"，证据全丢；
+        - `status="unknown"`（受控拒绝 / 漏步 / 自检不过）一律折成 `done/ok` ⇒ 动作日志
+          （`out/tasks/<id>.json`）上"拒绝 / 没查成 / 成功"三者同形。
+
+        现在的分档按"有没有异常 / 有没有产出 / 有没有结论"排，不按 `status` 这个词排：
+
+        | 角色返回 | 任务终态 | 为什么 |
+        |---|---|---|
+        | `refused=True` / `status="refused"` / 受控 `refusal_reason` | done/`refused` | 角色自报"这次调用不成立"：拒绝是策略的决定 |
+        | `ok is False`（`draft/37` §88） | `refused` 或 `failed` | 见下面那一段 |
+        | `failed`（`status` 或 `tri_state`） | failed/`failed` | 检查器说不行 ⇒ 这一趟没干成；`error` 从 `detail` 兜底 |
+        | `unknown` | done/`no_result` + `[handler_not_checked …]` | 没查成：跑完了，但没给出结论 |
+        | `verified` / 其它 | done/`ok` | 跑完了且给出了结论 |
+
+        三档在动作日志上的机器可读位是 `outcome`（`ok` / `refused` / `no_result`）——
+        不是三处都印 `status=done`。`refusal_reason` 只收受控词表里的取值（角色自己的
+        理由码留在 `detail`），`tri_state` 与 `refused` 各自决定上面哪一行。
         """
         if raw is None:
             return self._end(tid, status="done", outcome="no_result",
                              detail="执行完成，本动作没有产出（no_result）")
         if isinstance(raw, Mapping):
-            status = str(raw.get("status") or "done")
-            # 角色返回的 status 只认终态词表；中间的 pending/running 在这里没有意义
-            if status not in TERMINAL_STATUSES:
-                status = "done"
+            tri = _tri_state_of(raw)
+            declared_status = str(raw.get("status") or "done")
+            # 角色返回的 status 只认终态词表；三态词（verified/failed/unknown）与角色
+            # 自己的状态词（A 的 content_mismatch、F 的 blocked）都不是任务终态。
+            status = declared_status if declared_status in TERMINAL_STATUSES else "done"
             outcome = raw.get("outcome")
             detail = str(raw.get("detail") or raw.get("summary") or "")
             error = str(raw["error"]) if raw.get("error") else None
             refusal = str(raw["refusal_reason"]) if raw.get("refusal_reason") else None
+            # 角色自己那个理由码（`reason` / `kind`）：自由文本，只进 detail 点名，
+            # 不进受控词表 —— 行上的 `refusal_reason` 只接受 REFUSAL_REASONS 里的取值。
+            handler_reason = refusal or str(raw.get("reason") or raw.get("kind") or "")
             if refusal is not None and refusal not in S.REFUSAL_REASONS:
                 # 自由文本当拒绝理由：不许进受控词表。原来的写法是把它透传给
                 # `Task.validate` ⇒ 那里抛 `ValueError` ⇒ 整步落 failed
                 # —— 一次"拒绝"被记成"崩溃"，理由反而看不见了。
                 detail = f"[handler_refusal_reason={refusal!r} 不在受控词表] {detail}".strip()
                 refusal = None
-            if status == "done" and (outcome is None or raw.get("ok") is False):
-                if raw.get("ok") is False:
-                    # ---- §88：handler 自己说了"这次没做成"，就不许记成 ok。
-                    # T1 第 2 趟真机的根因：`B.register_statement` 有 8 次返回 `{"ok": False, "kind":
-                    # "missing_quote_reason"…}`，而台账把它们全记成 `outcome=ok`（detail 还写着"按有产出处理"）⇒ 主控
-                    # 以为命题登记好了，而 `statements` 是 0 行，那条链就在这一步静默停住。
-                    # 分档：handler 声明了受控的 `refusal_reason` ⇒ `refused`（词表定义就是"这次调用本身不成立"）；只说
-                    # `ok=False` 而没分类 ⇒ `failed`（"执行了、没成功"，理由合成在 error 上）。声明的 `outcome` 无论
-                    # 是不是任务级词表，都不许把 `ok=False` 洗成 ok —— 那正是下面那条"外来判定折叠成 ok"会做的事，
-                    # 所以这里必须先接住（判据：自相矛盾与外来判定两条负控）。
-                    kind = str(raw.get("kind") or "")
-                    declared = str(outcome or "")
-                    stamp = f"[handler_ok=False kind={kind or '未声明'}]"
-                    if declared == "ok":
-                        stamp += "[同时声明 outcome=ok：自相矛盾，按没做成分档]"
-                    elif declared:
-                        stamp += f"[同时声明 outcome={declared}：不是任务级词表，按没做成分档]"
-                    detail = f"{stamp} {detail or error or ''}".strip()
-                    if refusal is not None:
-                        outcome = "refused"
-                    else:
-                        status = "failed"
-                        outcome = "failed"
-                        error = error or f"{stamp} handler 返回 ok=False，未声明受控的 refusal_reason"
-                elif outcome is None:
-                    outcome = "ok"
-                    detail = detail or "执行完成（handler 未声明 outcome，按有产出处理）"
+            # 角色声明"拒绝"的三处口子（`refused=True` / `status="refused"` / 受控
+            # `refusal_reason`）。三态纪律里"拒绝"是第三态位（`agent_l._support` 的
+            # `RECORD_REASONS` 逐字论证过）：它既不是 unknown（没查成），也不是 failed（崩了）。
+            #
+            # 为什么只认角色自己声明的那三处、不替它从别的键里猜：与"取不到唯一声明名
+            # 就拒绝"同一条纪律 —— 框架不替角色判断"这一趟算不算拒绝"。只写
+            # `status="unknown"` 而没声明拒绝的，一律落"没查成"。
+            declared_refusal = (raw.get("refused") is True or declared_status == "refused"
+                                or refusal is not None)
+            if status == "done" and raw.get("ok") is False:
+                # ---- §88：handler 自己说了"这次没做成"，就不许记成 ok。
+                # T1 第 2 趟真机的根因：`B.register_statement` 有 8 次返回 `{"ok": False, "kind":
+                # "missing_quote_reason"…}`，而台账把它们全记成 `outcome=ok`（detail 还写着"按有产出处理"）⇒ 主控
+                # 以为命题登记好了，而 `statements` 是 0 行，那条链就在这一步静默停住。
+                # 分档：handler 声明了受控的 `refusal_reason` ⇒ `refused`（词表定义就是"这次调用本身不成立"）；只说
+                # `ok=False` 而没分类 ⇒ `failed`（"执行了、没成功"，理由合成在 error 上）。声明的 `outcome` 无论
+                # 是不是任务级词表，都不许把 `ok=False` 洗成 ok —— 那正是下面那条"外来判定折叠成 ok"会做的事，
+                # 所以这里必须先接住（判据：自相矛盾与外来判定两条负控）。
+                kind = str(raw.get("kind") or "")
+                declared = str(outcome or "")
+                stamp = f"[handler_ok=False kind={kind or '未声明'}]"
+                if declared == "ok":
+                    stamp += "[同时声明 outcome=ok：自相矛盾，按没做成分档]"
+                elif declared:
+                    stamp += f"[同时声明 outcome={declared}：不是任务级词表，按没做成分档]"
+                detail = f"{stamp} {detail or error or ''}".strip()
+                if refusal is not None:
+                    outcome = "refused"
+                else:
+                    status = "failed"
+                    outcome = "failed"
+                    error = error or f"{stamp} handler 返回 ok=False，未声明受控的 refusal_reason"
+            elif status == "done" and declared_refusal:
+                # ---- D25 ③：角色声明了"拒绝"⇒ 必须落 `refused`，且行上的理由在受控词表里。
+                # L 的 `formalize` / `record` 拒绝时给的是 `refused=True` + 它自己的理由码
+                # （`statement_not_found` / `reading_mismatch` …），那些不在 `REFUSAL_REASONS`
+                # 里：框架不替它再造一套词表 —— 行上落 `invalid_params`（词表定义正是
+                # "参数/前置条件不满足：这次调用本身不成立"），L 的原话留在 detail 里。
+                stamp = f"[handler_refused reason={handler_reason or '未声明'}]"
+                detail = f"{stamp} {detail or error or '角色拒绝了这次调用（没给说明）'}".strip()
+                status, outcome = "done", "refused"
+                refusal = refusal or "invalid_params"
+            elif status == "done" and tri == "failed":
+                # ---- D25 ①：三态说"检查器说不行"⇒ 这一趟没干成。结论与把 `status`
+                # 直接当终态的那一版相同，区别只在 `error` 有来源、payload 不丢。
+                status = "failed"
+            elif status == "done" and tri == "unknown":
+                # ---- D25 ②：`unknown` 是"没查成"，不是 ok（受控拒绝走上面那一支）。
+                # 落 `done/no_result` 而不是新造一个 `tasks.outcome` 取值：`TASK_OUTCOMES`
+                # 是被 `cycles.outcome` / `audits.outcome` 复用的受控词表（`schema.py`
+                # 还是禁改区），为一次映射把它改宽是把整张词表改宽。`no_result` 说的是
+                # "跑完了、没给出结论"，而"没查成"由这个 stamp 与 payload 里的
+                # `checked` / `status` / `reason` 三格承担（不是只靠一句自然语言）。
+                stamp = (f"[handler_not_checked tri_state=unknown "
+                         f"reason={handler_reason or '未声明'}]")
+                detail = f"{stamp} 没查成：{detail or error or '角色没给说明'}".strip()
+                status, outcome = "done", "no_result"
+            # ---- 收口：下面三条对每一条分支都成立，顺序是有意的
+            if status == "done" and outcome is None:
+                outcome = "ok"
+                detail = detail or "执行完成（handler 未声明 outcome，按有产出处理）"
             if outcome is not None and str(outcome) not in S.TASK_OUTCOMES:
                 # ---- 两套词表不许折叠（实测缺陷，2026-09-29 验收 P1）
                 #
@@ -3302,8 +3406,16 @@ class Conductor:
                 outcome = "ok"
             if status == "failed":
                 outcome = "failed"
+                # ---- D25 第一面：`status=failed` 必须写 `error`（`Task.validate` 逐字
+                # 要求"失败的原因不能是空白"），而角色把检查器的原话写在 `detail` 里
+                # （L/E 的键名就叫 `detail`）⇒ 从这里兜底。原来只认 `raw["error"]`，
+                # 于是 L 的每一次真失败都在写台账那一刻抛 ValueError，payload 一起丢。
+                error = error or detail or (
+                    "handler 声明 status=failed 但没写原因（框架按无理由失败记录）")
+                detail = detail or error
             if status == "cancelled":
                 outcome = outcome if outcome in ("cancelled", "refused") else "cancelled"
+
             return self._end(
                 tid, status=status, outcome=str(outcome) if outcome else None,
                 detail=detail or "执行完成",
@@ -3715,12 +3827,33 @@ class Conductor:
         为什么从表读：跨会话恢复之后内存里什么都没有，而表才是权威。
         返回的是扁平的行列表（每行带 `children`），而不是嵌套结构 ——
         台账天然是扁平的，"嵌套"只是展示层的事，库不应该替展示层做决定。
+
+        ## 两轴分家（D9）：`children` 只数实例行，`items` 才是我名下未消的板项
+        `tasks` 从业主 A1=甲 起装两类行：实例行（`kind == ""`，一个 agent 一行）与
+        板项行（`kind` 非空：`message` / `notice` / `report` / `delegation`）。板项行的
+        `parent_task_id` 口径是"收件人的编号"（`draft/84` §T21 附二 / D89），于是按
+        `parent_task_id` 建树而不看出身，一条"某子代理已收工"的 `notice` 就会被当成
+        一个子代理（实测：父名下 20 条 `notice` ⇒ 父的 `children` 报 20，而它一个子
+        代理都没有）。同仓另外三处权威读侧（`_children_of` / `active_children` /
+        `stats`）都带这一条出身过滤，只有本方法漏了 —— 这里补上。
+
+        "我名下还有几条没消"这个读数因此另立一格 `items`（条数）+ `item_ids`（点名），
+        判据与 `open_items_of` 同一处（`open_items_by_parent`）。为什么不把它折进
+        `children`：那是两轴（实例轴 + 工作项轴），`draft/84` §T2 的消边谓词要两者
+        一起看，合成一格就再也分不开"没子代理"与"有 20 条没消的通报"。
         """
-        rows = self._tasks()
+        # 只拿实例行建树：板项行的 `parent_task_id` 是收件人，不是父代理（D9）。
+        rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+        open_by_parent = self.open_items_by_parent()
         by_parent: dict[str | None, list[dict]] = {}
         for r in rows:
             by_parent.setdefault(r.get("parent_task_id"), []).append(r)
         out: list[dict] = []
+
+        def items_cell(tid: Any) -> dict[str, Any]:
+            open_rows = open_by_parent.get(str(tid or ""), [])
+            return {"items": len(open_rows),
+                    "item_ids": sorted(str(x.get("task_id") or "") for x in open_rows)}
 
         def walk(tid: str | None, level: int) -> None:
             for r in sorted(by_parent.get(tid, []), key=lambda x: str(x.get("task_id"))):
@@ -3731,6 +3864,7 @@ class Conductor:
                     "depth": r.get("depth"), "level": level,
                     "called_by": r.get("called_by"), "parent_task_id": r.get("parent_task_id"),
                     "children": [k.get("task_id") for k in kids],
+                    **items_cell(r.get("task_id")),
                     "detail": r.get("detail"),
                 })
                 walk(r.get("task_id"), level + 1)
@@ -3746,6 +3880,7 @@ class Conductor:
                 "depth": root.get("depth"), "level": 0, "called_by": root.get("called_by"),
                 "parent_task_id": root.get("parent_task_id"),
                 "children": [k.get("task_id") for k in by_parent.get(root_task_id, [])],
+                **items_cell(root_task_id),
                 "detail": root.get("detail"),
             })
             walk(root_task_id, 1)

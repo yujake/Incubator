@@ -979,11 +979,15 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
     一份被审过的证明"，所以它是逐条读数的汇总，而逐条读数各自独立。
 
     返回键：
-    - `proofs`: `[{proof_no, state, ok, in_sync, reviewed, grade, verification_id,
-      proof_sha256, why}]`（每条证明一条，按 `proof_no` 升序）；
+    - `proofs`: `[{proof_no, state, ok, in_sync, reviewed, grade, formal,
+      proof_sha256, verification_id, why}]`（每条证明一条，按 `proof_no` 升序）；
+      其中 `formal` 是这一条证明自己的第 4 位（`{证明号: 状态}` 里的那一格，
+      四态 + 读侧产生的 `stale`）：`#p1` 形式化通过不等于 `#p2` 形式化通过，
+      所以它必须逐条给，并且与 `grade` 成对读；
     - `reviewed`: 命题级 —— 至少一条证明 `signed`（定理档取"最高"就落在这一格）；
-    - `grade`: 由 `evidencebits.derive_grade` 现算（`proof` 位共用，`reviewed` 取上面
-      那一格）；一条 in-sync 都没有 ⇒ `conjecture`；
+    - `grade`: 逐条证明各自的档里最高的那一档（`_highest_grade`）：一条 in-sync 都没有
+      ⇒ `conjecture`；两条各缺一半（一条有形式化、另一条有签名）⇒ 不许凑出定理
+      （借光由逐条派生挡掉，见 `proofs[*]["grade"]`）；
     - `state`: 命题级五态（有 signed 就 `signed`；否则有 stale 就 `stale`；否则有
       rejected 就 `rejected`；否则 `unsigned`；有 unreadable 且没别的 ⇒ `unreadable`）；
     - `proofs_unreviewed` / `proofs_stale` / `proofs_rejected`: 逐条证明的编号写法
@@ -1044,12 +1048,18 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
     superseded_labels: list[str] = []
     problems: list[str] = []
     ledger_present = False
+    #: 第 4 位（形式化）在逐条证明上的读数：`{证明号: 状态}`。汇总那一层是 OR
+    #: （业主 2026-10-22：「但凡任意一个路径通过核验，它就是对的」），而逐条这一层是
+    #: "哪一条路径验过" —— 两条都要：只读汇总会让 `#p2` 借 `#p1` 的光。
+    formal_states = _EB.formal_by_proof(bits)
     for no, text in proof_list(row):
         st = review_standing(root, statement_id=sid, proof_text=text, proof_no=no)
         ledger_present = ledger_present or bool(st.get("ledger_present"))
         problems.extend(str(p) for p in (st.get("problems") or []))
         per = dict(bits)
         per["reviewed"] = bool(st.get("ok"))
+        # 逐条证明的第 4 位：只有这一条自己被验过才算（不许拿别条的顶）。
+        per[_EB.FORMAL_BIT] = formal_states.get(no, "pending")
         grade = _EB.derive_grade(per, kind=kind)
         state = str(st.get("state") or "unsigned")
         old = [dict(x) for x in (st.get("superseded") or [])]
@@ -1060,6 +1070,10 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             "proof_no": no, "label": proof_label(sid, no), "state": state,
             "ok": bool(st.get("ok")), "in_sync": st.get("in_sync"),
             "reviewed": bool(st.get("ok")), "grade": grade,
+            #: 这一条证明自己的第 4 位（`evidencebits.FORMAL_PATH_STATES` 的取值：
+            #: 四态 + 读侧产生的 `stale`）。它与 `grade` 成对："这条证明到什么档"
+            #: 只有这两格合起来才说得清（#p1 形式化通过、#p2 没验 ⇒ 两条各自的档不同）。
+            "formal": per[_EB.FORMAL_BIT],
             "proof_sha256": str(st.get("sha") or ""),
             "verification_id": str(st.get("verification_id") or ""),
             #: 被最近那一签盖过去的旧签（仍可见、不参与判定）。`review_standing`
@@ -1087,7 +1101,14 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
         state = "unsigned"
     out_bits = dict(bits)
     out_bits["reviewed"] = reviewed
-    grade = _EB.derive_grade(out_bits, kind=kind)
+    #: 命题级的档 = 逐条证明里最高的那一档（`draft/39` §3.14 的"在 in-sync 的证明里取最高"）。
+    #:
+    #: 改前这里先把第 3 位取 OR、第 4 位取 OR，再派生一次：多证明模型下那会让
+    #: `#p1` 的形式化通过 + `#p2` 的 V 签名凑出一档 —— 两条各缺一半，凑出来的档
+    #: 谁也没有（借光）。现在每一档都由一条证明自己撑起来，命题级只是取最高的那条。
+    grade = _highest_grade([str(e.get("grade") or "") for e in entries])
+    if not grade:
+        grade = _EB.derive_grade(out_bits, kind=kind)
     why = ""
     if not reviewed:
         if state == "stale":
@@ -1119,6 +1140,21 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
         "problems": problems,
         "why": why,
     }
+
+
+def _highest_grade(grades: Sequence[str]) -> str:
+    """几条证明各自的档 ⇒ 命题级那一档（`GRADES` 里最靠后的那个）。
+
+    空清单 / 只有认不出的取值 ⇒ 空串（调用方退回"按汇总位现算"那一条路，不猜）。
+    `not_applicable`（概念行）不在 `GRADES` 里，所以它到不了这里：概念行在
+    `statement_review_reading` 里是短路的一支。
+    """
+    from . import evidencebits as _EB   # 惰性：与 `statement_review_reading` 同一处依赖
+
+    known = [str(g) for g in grades if str(g) in _EB.GRADES]
+    if not known:
+        return ""
+    return max(known, key=_EB.GRADES.index)
 
 
 def statement_grade(root: str | Path, row: Mapping[str, Any]) -> str:

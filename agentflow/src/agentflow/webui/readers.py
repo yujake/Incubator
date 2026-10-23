@@ -135,7 +135,8 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     # 业主 2026-10-13 的对话框：一段会话里"用户 ↔ 主控"的来回（对话页那一面）。
     ("GET", "/api/chat", "handle_chat"),
     # 2026-10-21（业主的「名册监视」）：当前工作区的整棵名册树 —— 父是谁、子有哪些、
-    # 每个成员的绝对编号／名册名／角色／深度，外加"收件箱积压"那一格。
+    # 每个成员的绝对编号／名册名／角色／深度，外加收件箱那三格（未读 / 已读未 ack /
+    # 未消总数，见 `_roster_inbox`）。
     # 只读一条：这个端点的消费者是只读面板，写面为零（表里没有与它配对的 POST，
     # 判据 `tests/test_webui_roster_panel.py` 的第三条就钉着这一条）。
     ("GET", "/api/roster", "handle_roster"),
@@ -2092,34 +2093,55 @@ ROSTER_INBOX_CLIP = 160
 #: 秘书决定台账那一面）。
 _ROSTER_DIR: tuple[str, ...] = ("out", "roster")
 
-#: 名册目录里的三个旁支文件（与 `<父>.jsonl` 同目录、同后缀，但不是"某个父名下的
-#: 子代理"）：电话簿 `-index` / 槽位池事件 `-surfaces` / 销号名单 `-retired`。
+#: 名册目录里的两个旁支文件（与 `<父>.jsonl` 同目录、同后缀，但不是"某个父名下的
+#: 子代理"）：槽位池事件 `-surfaces` / 销号名单 `-retired`。
 #: 折叠这一棵树时不许把它们混进去 —— 混进去一个名字就会变成两个节点。
-_ROSTER_SIDE_SUFFIX: tuple[str, ...] = ("-index.jsonl", "-surfaces.jsonl",
-                                        "-retired.jsonl")
+#:
+#: 2026-10-22（D15）：对照表 `-index.jsonl` 从这张表里移出去了。它不是旁支，它是
+#: "这个父名下有哪些子"的第二份盘上事实：`secretary.roster_add` 的 reuse 支只往
+#: 对照表写一行 bind（不往 `<父>.jsonl` 写 add），所以把它当旁支读掉的后果是
+#: "复用过的那个名字的新实例在树里根本不存在"——而台账里有它那一行、还挂着父，
+#: 于是同一份读数里两栏互相打脸：`coverage.unrostered` 点名它，树又把它画成树根
+#: （它有自己的名册 ⇒ 出现在"有名人"那一侧，却不在任何人的子名单里）。
+_ROSTER_SIDE_SUFFIX: tuple[str, ...] = ("-surfaces.jsonl", "-retired.jsonl")
+
+#: 对照表的后缀：`<父>-index.jsonl`。每一行是"某个名字此刻的编号"（`kind="bind"`，
+#: 带 `first` 的那一行是第一次绑定）。它和 `<父>.jsonl` 一起折叠出"这个父名下有哪些子"。
+_ROSTER_INDEX_SUFFIX = "-index.jsonl"
 
 
-def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], str]:
-    """名册目录里"哪个父有哪一份名册"：`([(父的绝对编号, 路径)], 问题)`。
+def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, Path]], str]:
+    """名册目录里"哪个父有哪一份名册 / 对照表"：`([(父, 名册)], [(父, 对照表)], 问题)`。
 
-    文件名就是父的绝对编号（`t-000001.jsonl`），文件里每一行是一个子（`task_id`
-    是子的绝对编号）。这条布局是 `secretary.roster_path()` 定的，这里只按它读 ——
-    不另立第二份命名约定（两处命名漂移的后果是"名册在盘上、页面说没有"）。
+    文件名就是父的绝对编号（`t-000001.jsonl` / `t-000001-index.jsonl`），文件里每一行
+    是一个子（`task_id` 是子的绝对编号）。这条布局是 `secretary.roster_path()` 与
+    `secretary.roster_index_path()` 定的，这里只按它读 —— 不另立第二份命名约定
+    （两处命名漂移的后果是"名册在盘上、页面说没有"）。
+
+    为什么两份都要读回来（D15）：名册给"名字 + 简介 + 槽位"，对照表给"这个名字此刻的
+    编号"。reuse 只写对照表，所以只读名册就会漏掉复用出来的那个实例。
     """
     try:
         entries = sorted(dir_p.glob("*.jsonl"))
     except OSError as exc:  # noqa: BLE001 - 列不出来是"没查成"，不是"没有名册"
-        return [], f"{dir_p} 列不出来：{type(exc).__name__}: {exc}"
+        return [], [], f"{dir_p} 列不出来：{type(exc).__name__}: {exc}"
     found: list[tuple[str, Path]] = []
+    index_found: list[tuple[str, Path]] = []
     for path in entries:
         name = path.name
         if name.endswith(_ROSTER_SIDE_SUFFIX):
             continue
+        if name.endswith(_ROSTER_INDEX_SUFFIX):
+            owner = name[: -len(_ROSTER_INDEX_SUFFIX)]
+            if not owner:
+                return [], [], f"{name} 的文件名里读不出父的绝对编号"
+            index_found.append((owner, path))
+            continue
         owner = name[: -len(".jsonl")]
         if not owner:
-            return [], f"{name} 的文件名里读不出父的绝对编号"
+            return [], [], f"{name} 的文件名里读不出父的绝对编号"
         found.append((owner, path))
-    return found, ""
+    return found, index_found, ""
 
 
 def _roster_clip(text: str, limit: int = ROSTER_INBOX_CLIP) -> str:
@@ -2132,7 +2154,7 @@ def _roster_clip(text: str, limit: int = ROSTER_INBOX_CLIP) -> str:
 
 def _roster_inbox(rows: list[dict[str, Any]], *, tasks_tri: str,
                   limit: int = ROSTER_INBOX_ITEMS) -> dict[str, Any]:
-    """一个节点的「收件箱积压」：它名下还没消的板项（`{tri, open, by_state, ...}`）。
+    """一个节点的收件箱：它名下还没消的板项（`{tri, unread, seen_not_acked, ...}`）。
 
     ## 收件箱的盘上真身
     `data/tasks.json` 里有两类行：实例行（`kind == ""`，一个 agent 一行）与
@@ -2142,19 +2164,37 @@ def _roster_inbox(rows: list[dict[str, Any]], *, tasks_tri: str,
     东西。这与 `conductor.open_items_of()` 是同一条判据（那一处 docstring 逐字写了
     板项行与实例行是两轴，不许混算）。
 
+    ## 拆三格（D13）：`seen` 不是"没人读"，它是"读了、还没 ack"
+    改前这一格只有一个 `open`（= 全部 `item_state != "done"` 的行），而页面上那句
+    文案把它叫「积压」。问题出在写侧：`close_item`（唯一能把板项推到 `done` 的
+    入口）在全仓只有一个调用者，而那一条只 ack 停止通知 —— 于是正常流程下板项从
+    `queued` 走到 `seen` 就停住了。"积压"这个数因此单调增长、永不回落，而
+    "他还没看"与"他看了但框架没让他 ack"是两件完全不同的事：
+    - `unread` = `queued + claimed`（还没被读进任何一步的提示词）；
+    - `seen_not_acked` = `seen`（读过了，缺的是那个 ack）；
+    - `open_total` = 三者之和（原来那个数，保留成读数）；
+    - `other` = `open_total - unread - seen_not_acked`（`item_state` 是空串或词表外的
+      行：改前落的行。单列而不是并进上面两格 —— 那会把"不知道"折成"没读"）。
+
+    为什么不在读侧替父 ack（把 `seen` 当 `done` 消下去）：那会让台账说一件没发生的
+    事（老板 2026-10-08 A5：「只记读数、不拒写」），而且 `done` 之前的 `seen` 是
+    `close_item` 的前置条件，读侧替它消，等于把状态机从后面掏空。读数分格就够了。
+
     ## 三态
-    台账读不出来 ⇒ `tri="unreadable"` + `open=None`，不是 0 条（把"没查成"读成
+    台账读不出来 ⇒ `tri="unreadable"` + 三格都是 `None`，不是 0 条（把"没查成"读成
     "收件箱是空的"会让监控面板在真出事时最安静）；台账还没写过 ⇒ `not_applicable`
-    + `open=None`（合法初态）；读到了 ⇒ `computed`，`open` 是真数字（可以是 0）。
+    + 三格都是 `None`（合法初态）；读到了 ⇒ `computed`，三格都是真数字（可以是 0）。
     """
     if tasks_tri == TRI_UNREADABLE:
-        return {"tri": TRI_UNREADABLE, "open": None, "by_state": {}, "by_kind": {},
+        return {"tri": TRI_UNREADABLE, "unread": None, "seen_not_acked": None,
+                "open_total": None, "other": None, "by_state": {}, "by_kind": {},
                 "items": [], "more": 0,
-                "reason": "tasks 台账读不出来 ⇒ 这个人的收件箱积压读不到（不是 0 条）"}
+                "reason": "tasks 台账读不出来 ⇒ 这个人的收件箱读不到（不是 0 条）"}
     if tasks_tri != TRI_COMPUTED:
-        return {"tri": TRI_NOT_APPLICABLE, "open": None, "by_state": {}, "by_kind": {},
+        return {"tri": TRI_NOT_APPLICABLE, "unread": None, "seen_not_acked": None,
+                "open_total": None, "other": None, "by_state": {}, "by_kind": {},
                 "items": [], "more": 0,
-                "reason": "tasks 台账还没写过（合法初态）⇒ 收件箱积压未读到"}
+                "reason": "tasks 台账还没写过（合法初态）⇒ 收件箱未读到"}
     by_state: dict[str, int] = {}
     by_kind: dict[str, int] = {}
     for row in rows:
@@ -2162,8 +2202,12 @@ def _roster_inbox(rows: list[dict[str, Any]], *, tasks_tri: str,
         kind = str(row.get("kind") or "")
         by_state[state] = int(by_state.get(state) or 0) + 1
         by_kind[kind] = int(by_kind.get(kind) or 0) + 1
+    unread = sum(int(by_state.get(k) or 0) for k in ("queued", "claimed"))
+    seen_not_acked = int(by_state.get("seen") or 0)
     shown = rows[:max(0, int(limit))]
-    return {"tri": TRI_COMPUTED, "open": len(rows), "by_state": by_state,
+    return {"tri": TRI_COMPUTED, "unread": unread, "seen_not_acked": seen_not_acked,
+            "open_total": len(rows), "other": len(rows) - unread - seen_not_acked,
+            "by_state": by_state,
             "by_kind": by_kind, "more": max(0, len(rows) - len(shown)),
             "items": [{"task_id": str(r.get("task_id") or ""),
                        "kind": str(r.get("kind") or ""),
@@ -2188,12 +2232,24 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     | `role` | 同一行的 `role`（读不到 ⇒ 台账 `tasks` 的 `role`） |
     | `parent_task_id` | 名册文件名（`secretary.roster_path` 的 `<owner>.jsonl`） |
     | `parent_name` | 祖父那份名册里父那一行的 `name`（现算，不另存） |
-    | `children[]` | 它自己那份 `<task_id>.jsonl` 的每一行（`task_id` + `name` + `role` + `retired`） |
+    | `children[]` | 它自己那份 `<task_id>.jsonl` 的每一行 + `-index.jsonl` 的 bind 行（各带 `task_id` + `name` + `role` + `retired`） |
     | `retired` / `retired_branch` | 折叠后的 `retired` / 那一行的 `branch` |
     | `brief` / `brief_source` / `surface` | 同一行的 `brief` / `brief_source` / `surface` |
     | `status` / `task_found` / `in_flight` | `data/tasks.json` 里它自己那一行（`status`；在飞 = `pending`/`running`） |
     | `inbox` | `data/tasks.json` 的板项行（见 :func:`_roster_inbox`） |
     | `depth` | 名册链现算：根 = 1（口径写在下面） |
+
+    ## 什么算"这个父名下的一个子"（D15）
+    两份盘上事实的并集：`out/roster/<父>.jsonl` 的 `add` 行（名字、简介、槽位）与
+    `out/roster/<父>-index.jsonl` 的 `bind` 行（名字此刻的编号）。为什么必须并上后者：
+    `secretary.roster_add` 的 reuse 支只写对照表 —— 只读名册的话，"复用过的名字派出去
+    的那个新实例"在树里不存在，而它在台账里明明挂着这个父，于是同一份读数里
+    `coverage.unrostered` 点名它、`roots` 又把它当成树根（它自己的名册让它出现在
+    "有名人"那一侧）。修法只在读侧：`roots` 的规则一个字没动。
+
+    同一名字的"老实例 + 新实例"会以两个子出现（`t-000002` 与 `t-000022` 都叫 `D1`）。
+    这是事实，不是重复：两只在台账里都是真行，老实例可能还有自己的名册与子树 ——
+    把它从父子索引里抹掉，它就会变成"父缺失 ⇒ 根"，同一个缺陷换一层再来。
 
     ## 深度：`depth` 是"这一棵树里的距离"，不是 `tasks.depth`
     `tasks.depth` 是全局召唤深度（主控发起 = 1，`schema.Task.depth` 的 docstring
@@ -2224,8 +2280,9 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     一个节点的收件箱只列 `inbox_items` 条（`inbox.more` 报剩下几条）。`nodes` 是
     前序遍历（父一定在子前面）—— 前端按 `depth` 缩进就能画出树，不必自己递归。
     """
-    from ..secretary import _fold_roster      # noqa: PLC0415 - 折叠口径的唯一实现
-    from ..store import Store                 # noqa: PLC0415 - 台账那一栏
+    from ..secretary import _fold_index     # noqa: PLC0415 - 折叠口径的唯一实现
+    from ..secretary import _fold_roster    # noqa: PLC0415 - 折叠口径的唯一实现
+    from ..store import Store               # noqa: PLC0415 - 台账那一栏
 
     root_p = Path(str(root))
     dir_p = root_p.joinpath(*_ROSTER_DIR)
@@ -2254,7 +2311,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         out["reason"] = f"{dir_p} 不是目录（同名的文件在盘上）⇒ 名册读不出来"
         return out
 
-    found, why = _roster_files(dir_p)
+    found, index_found, why = _roster_files(dir_p)
     if why:
         out["tri"] = TRI_UNREADABLE
         out["reason"] = why
@@ -2292,19 +2349,70 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         out["tri"] = TRI_UNREADABLE if problems else TRI_NOT_APPLICABLE
         out["reason"] = ("；".join(problems) if problems else
                          f"{dir_p} 下的名册文件里一条子代理记录都没有 ⇒ answer=unknown")
+        if index_found:
+            out["reason"] += ("（有对照表 `<父>-index.jsonl`，却没有 `<父>.jsonl` ⇒ 半份登记，"
+                              "不拿对照表冒充一棵树）")
         out["diagnostics"] = diagnostics
         return out
 
-    # ---- 父 → 子 索引（一个子只认先读到的那一份；同一编号挂两个父是坏链，如实报）
+    # ---- 对照表：`<父>-index.jsonl` 的 bind 行（D15 的修法）
+    #
+    # 为什么它必须折叠进来：`secretary.roster_add` 的 reuse 支只写这里（名册那一行是
+    # 首次登记时写的），所以"复用过的名字的新实例"只在这张表里有。折叠出来的每个
+    # `task_id`（第一次绑定的那个 + 此刻绑定的那个）都是这个父名下的子。
+    index_by_owner: dict[str, list[dict[str, Any]]] = {}
+    for owner, path in index_found:
+        rows, bad, state = read_jsonl_state(path)
+        if state == "unreadable":
+            problems.append(f"{path.name} 读不出来：{bad[0] if bad else '未知原因'}")
+            continue
+        folded_index = _fold_index(rows)
+        if bad:
+            problems.append(f"{path.name} 有 {len(bad)} 行读不出来（{bad[0]}）")
+        if not folded_index:
+            diagnostics.append(f"{path.name} 里一条对照表记录都没有（文件在、读成了 0 行）")
+            continue
+        index_by_owner[owner] = folded_index
+        out["files"].append(path.name)
+    half = sorted(set(index_by_owner) - set(children_by_owner))
+    if half:
+        diagnostics.append("、".join(half)
+                           + " 只有对照表 `<父>-index.jsonl`、没有名册 `<父>.jsonl`"
+                           "（半份登记：先写对照表再写名册，名册那一笔没落成）")
+
+    # ---- 父 → 子 索引（两份盘上事实的并集：名册的 add 行 + 对照表的 bind 行）
+    #
+    # 一个子只认先读到的那一份；同一编号挂两个父是坏链，如实报。
+    #
+    # 同一名字的"老实例 + 新实例"两个子都留着（不合并）：两只在台账里都是真行，
+    # 老实例可能还有它自己的名册与子树 —— 把它从 `parent_of_child` 里抹掉，它就
+    # 会变成"父缺失 ⇒ 根"，那正是 D15 要修的那个缺陷换一层再来；而且
+    # `coverage.unrostered` 会立刻改口去点名它。所以这一层只做"补登记"，不做"改历史"。
     parent_of_child: dict[str, str] = {}
     row_of_child: dict[str, dict[str, Any]] = {}
-    for owner in sorted(children_by_owner):
-        for row in children_by_owner[owner]:
+    kids_of: dict[str, list[dict[str, Any]]] = {}
+    for owner in sorted(set(children_by_owner) | set(index_by_owner)):
+        merged: list[dict[str, Any]] = []
+        taken: set[str] = set()
+        for row in children_by_owner.get(owner) or []:
             tid = str(row.get("task_id") or "")
             if not tid:
                 diagnostics.append(f"{owner} 的名册里有一行没有 task_id"
                                    f"（名册名 {row.get('name')!r}）")
                 continue
+            taken.add(tid)
+            merged.append(row)
+        for item in index_by_owner.get(owner) or []:
+            for tid in (str(item.get("first_task_id") or ""), str(item.get("task_id") or "")):
+                if not tid or tid in taken:
+                    continue
+                taken.add(tid)
+                merged.append({"task_id": tid, "name": str(item.get("name") or ""),
+                               "role": str(item.get("role") or ""),
+                               "retired": bool(item.get("retired"))})
+        kids_of[owner] = merged
+        for row in merged:
+            tid = str(row.get("task_id") or "")
             if tid in row_of_child:
                 diagnostics.append(f"{tid} 同时挂在 {parent_of_child[tid]} 与 {owner} "
                                    "两份名册上（只认先读到的那一份）")
@@ -2357,7 +2465,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         row = row_of_child.get(tid) or {}
         trow = tasks_by_tid.get(tid) or {}
         parent_row = row_of_child.get(parent_tid) or {}
-        kids = [k for k in (children_by_owner.get(tid) or [])
+        kids = [k for k in (kids_of.get(tid) or [])
                 if str(k.get("task_id") or "")]
         node: dict[str, Any] = {
             "task_id": tid,
@@ -2856,9 +2964,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("task_id", "string"), ("name", "string"), ("role", "string"),
       ("retired", "boolean"))),
     ("RosterInbox",
-     "roster_face() 的 nodes[].inbox —— 收件箱积压（板项：`kind` 非空、"
-     "`parent_task_id` = 收件人、`item_state != \"done\"` 的那些行）",
-     (("tri", "Tri"), ("open", "number | null"),
+     "roster_face() 的 nodes[].inbox —— 收件箱（板项：`kind` 非空、"
+     "`parent_task_id` = 收件人、`item_state != \"done\"` 的那些行）；"
+     "`unread` 是还没被读进任何一步的（queued/claimed），"
+     "`seen_not_acked` 是读了但还缺 ack 的，`open_total` 是 `len(rows)` = "
+     "`unread` + `seen_not_acked` + `other`（`other` 是状态读不出来的那些："
+     "`item_state` 是空串或词表外的行）",
+     (("tri", "Tri"), ("unread", "number | null"), ("seen_not_acked", "number | null"),
+      ("open_total", "number | null"), ("other", "number | null"),
       ("by_state", "Record<string, number>"), ("by_kind", "Record<string, number>"),
       ("items", "RosterInboxItem[]"), ("more", "number"), ("reason", "string"))),
     ("RosterInboxItem",
@@ -2988,7 +3101,8 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
             "brief": "", "brief_source": "", "surface": "",
             "status": status, "task_found": True,
             "in_flight": 1 if status in ("pending", "running") else 0,
-            "inbox": {"tri": "not_applicable", "open": None, "by_state": {}, "by_kind": {},
+            "inbox": {"tri": "not_applicable", "unread": None, "seen_not_acked": None,
+                      "open_total": None, "other": None, "by_state": {}, "by_kind": {},
                       "items": [], "more": 0,
                       "reason": "名册没读到 ⇒ 这一档按台账兜底，收件箱未查"},
             "depth": depth(tid), "registered": False,

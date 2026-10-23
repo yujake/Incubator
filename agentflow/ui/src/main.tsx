@@ -15,6 +15,7 @@ import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
 import { ConnectionBanner, LiveProvider, useLive } from "./live";
+import { CacheBanner } from "./components/PromptCache";
 import { Acceptance } from "./pages/Acceptance";
 import { Artifacts } from "./pages/Artifacts";
 import { Budget } from "./pages/Budget";
@@ -100,6 +101,12 @@ function Body() {
 
   return (
     <main class="wrap">
+      {/*
+        换 key 的提醒（2026-10-23）：挂在全站最上面 —— 它说的是"整个工作区的提示词
+        缓存作废了"，与在哪一页无关。可关掉；换 key 之后它会自己再出现一次
+        （`reminder.dismiss_key` 带 key 指纹）。
+      */}
+      <CacheBanner />
       <ConnectionBanner />
       {renderPage(where.route, where.sid)}
     </main>

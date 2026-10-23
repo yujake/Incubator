@@ -200,13 +200,17 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     业主 `draft/97` §15.4 的补法优先级是①先问直接父 → ②A 上网搜 → ③B 自撰；
     循环那一层才是"知道自己的父是谁"的地方，所以这一格的职责只有一个：
     把给谁写清楚（`who="direct_parent"`），别让上面那一层去猜。
+
+    2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：两条自产
+    命题的入口档写成 `conjecture` —— 这一条测的是"依赖是扫出来的"与"定义待补问谁"，
+    与声明成哪一种 kind 无关。
     """
     from agentflow.agent_b import AgentB
 
     add_literature(store, "0003", title="群论引理", processed=True)
     b = AgentB(store, extractor=None, extract_text=None)
     out = b.register_statement(
-        origin="own_result", kind="theorem", label="T1",
+        origin="own_result", kind="conjecture", label="T1",
         statement_full="定理：对任意群 G，命题 ph 成立。",
         proof_text="证明：由 lit:0003 的引理推出，并用 stmt:0777（还没进库）。",
         quote_reason="自产：没有第二份文本可比（证明过程见 proof_text）",
@@ -218,7 +222,7 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     # `own_result` 也要给 `quote_reason`（三态纪律不按 origin 放宽：本轮试过，被
     # `test_action_surface_matches_acceptance` 的"每一级缺失都被拒"判红）⇒ 给一个理由就落得下
     out1b = b.register_statement(
-        origin="own_result", kind="theorem", label="T2",
+        origin="own_result", kind="conjecture", label="T2",
         statement_full="定理：另一条自产命题。", proof_text="证明：由定义直接得到。",
         quote_reason="自产：没有第二份文本可比，所以这一格是'还没核'",
         line_range={"start": 12, "end": 20})

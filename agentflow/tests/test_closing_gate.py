@@ -296,7 +296,8 @@ def test_the_acceptance_cell_passes_once_each_leg_has_a_ledger_row(tmp_path: pat
                 "statement_full": "设 G 是任意有限群；则 c(G) ≤ 1。",
                 "proof_text": "Proof. 见第 3 节（逐字摘录）。",
                 "source_lit_id": "0000", "page_range": {"start": 1, "end": 2},
-                "quote_verified": True, "quote_reason": "逐字比对通过（第 1 页）",
+                "quote_verified": True, "quote_span": "p1:norm[4:40]",
+                "quote_reason": "逐字比对通过（第 1 页）",
                 "evidence_kind": "cross_check", "status": "active",
                 "created_at": TS, "created_by": "test"})
 
@@ -322,7 +323,8 @@ def test_the_acceptance_cell_only_excuses_the_row_that_is_really_met(tmp_path: p
                 "statement_full": "设 G 是任意有限群；则 c(G) ≤ 1。",
                 "proof_text": "Proof. 见第 3 节（逐字摘录）。",
                 "source_lit_id": "0000", "page_range": {"start": 1, "end": 2},
-                "quote_verified": True, "quote_reason": "逐字比对通过（第 1 页）",
+                "quote_verified": True, "quote_span": "p1:norm[4:40]",
+                "quote_reason": "逐字比对通过（第 1 页）",
                 "evidence_kind": "cross_check", "status": "active",
                 "created_at": TS, "created_by": "test"})
 
@@ -530,7 +532,11 @@ def test_the_per_citation_leg_counts_against_the_read_only_baseline(
         if i == 2:
             # T1 口径（`draft/39` §6.49 八 第四条）：这一条是核到了的那一条 ——
             # 三条记录要有非空的 `true` 读数，否则这一档在 T1 那条判据下会被整格否掉。
+            # D1（2026-10-22）：说"逐字核到"必须带区间 —— 没有区间的那一行落
+            # `no_evidence`，在 `quote_state` 里不算 true（这一档的 `true` 计数
+            # 因此会掉到 0）。
             row["quote_verified"] = True
+            row["quote_span"] = "p1:norm[4:40]"
             row["quote_reason"] = "逐字比对通过（第 1 页）"
         else:
             row["quote_reason"] = "原文不在盘上 ⇒ 未查"
@@ -1417,9 +1423,11 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
                                       "proof_process": "（逐步论证）",
                                       "reviewed_by": {"verification_id": "v-000001", "round": "V-0001",
                                                       "verdict": "no_defect"}}})
-        # ③ 引用命题：凭文献代号进第 2+3 位 ⇒ 等级一样是预备定理级，但不算我方产出
+        # ③ 引用命题：凭文献代号进第 2+3 位 ⇒ 等级一样是预备定理级，但不算我方产出。
+        #    D1（2026-10-22）：引用命题要拿到学分，必须带得出区间（空区间落
+        #    `no_evidence`，等级就只剩"猜想"）—— 这里给一个真形状的区间。
         _statement(s, "0002", origin="external_lit", source_lit_id="0042",
-                   quote_verified=True)
+                   quote_verified=True, quote_span="p1:norm[4:40]")
         # ④ 只有老字段（`evidence_kind=proof` + `proof_text`，schema 本来就逼着 `own_result`
         #    写证明文字），没有位记录 ⇒ 按五位全空算（自报不算凭据）—— 这正是这个模型
         #    要防的那一类假绿
@@ -1555,8 +1563,11 @@ def test_the_external_lit_grade_carries_a_readable_reason(tmp_path: pathlib.Path
     归 `load_bearing` 那一格 —— 理由串必须把这两件事说清。
     """
     def seed(s: Store) -> None:
+        # D1（2026-10-22）：引用命题要真的到「预备定理级」（这一档要跳过它），
+        # 就得带得出区间 —— 空区间落 `no_evidence`，等级只剩"猜想"，于是它连
+        # 「被跳过的引用命题」都算不上（那是另一种绿）。
         _statement(s, "0000", origin="external_lit", source_lit_id="0042",
-                   quote_verified=True, proof_text="")
+                   quote_verified=True, quote_span="p1:norm[4:40]", proof_text="")
         _statement(s, "0001", bits={"proof": True, "reviewed": True,
                                     "evidence": {"proof_source": "own",
                                                  "proof_process": "（逐步论证）",
@@ -3179,9 +3190,11 @@ def test_unretrieved_quotes_alone_do_not_satisfy_the_citation_leg(tmp_path: path
     assert "paper_leg" not in red.readings["acceptance"]["content_branches"], \
         red.readings["acceptance"]["content_branches"]
 
-    # 绿：留一条真的核到的（逐字比对通过）
+    # 绿：留一条真的核到的（逐字比对通过）。D1（2026-10-22）：核到的那一条必须带
+    # 区间 —— 只说"通过"而给不出区间的行落 `no_evidence`，这一档的 `verified` 仍是 0。
     _valid_statement(st, "0003", origin="external_lit", source_lit_id="0000",
-                     quote_verified=True, quote_reason="逐字比对通过（第 1 页）")
+                     quote_verified=True, quote_span="p1:norm[4:40]",
+                     quote_reason="逐字比对通过（第 1 页）")
     _seal(ws, st)
     green = _gate(st, report)
     assert green.status["acceptance"] == "pass", green.to_dict()

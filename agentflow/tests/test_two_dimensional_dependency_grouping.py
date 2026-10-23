@@ -17,7 +17,7 @@
 
 | 判据 | 改前红在哪里 |
 |---|---|
-| ① 向后兼容（`projects/p3-verify2` 真实 8 行） | `groups_of` 返回 `dict[int, list]`，`two_d[1]` 取不到"证明号那一层" |
+| ① 向后兼容（真机那 8 行，现读 `tests/fixtures/p3-verify2-dependencies-8rows.json`） | `groups_of` 返回 `dict[int, list]`，`two_d[1]` 取不到"证明号那一层" |
 | ② 二维：`#p2` + 两组路径 | 同上；且 `groups_of("000004")` 查不到 `stmt:000004#p2` 挂的边 |
 | ③ 负控：`#p1` 与 `#p2` 不许合并 | 旧索引按整条 `used_by` 建键，`#p2` 的边落到 `"000004#p2"` 这个键上，查询 `000004` 读不到它（静默丢边） |
 | ④ 负控：`doc:0001#claim-3` 走 `doc:` 分支 | 没有分流函数；直接送进 `proofloc` ⇒ `problem` 非空（正常 claim 引用被记成坏尾巴） |
@@ -31,6 +31,8 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
+
+import pytest
 
 # 与 `tests/conftest.py` 同一个注入方式（这一份也要能在一棵临时源码树上单独跑：
 # "改前红"就是把 `git archive HEAD` 的整树铺到临时目录、再把这一份放进去跑）。
@@ -54,16 +56,26 @@ PROOF2 = "另一条路线：\n1. 先证引理。\n2. 由引理得结论。"
 STATEMENT = "设 G 是 3-正则群；则弦长函数不是常值。"
 STATEMENT_TEXT = "弦长函数不是常值"
 
-#: 业主点名的那份真机读数：8 行、不带 `#pN`、全在 `path_group 1`（只读）。
-_REAL_DEPENDENCIES = (pathlib.Path(__file__).resolve().parents[1]
-                      / "projects" / "p3-verify2" / "data" / "dependencies.json")
+#: 那一份真机读数的夹具：8 行、不带 `#pN`、全在 `path_group 1`。
+#:
+#: 为什么从 `projects/p3-verify2/data/dependencies.json` 搬成夹具（D7，2026-10-22 读数）：
+#: 那份活数据被 `.gitignore` 了，且在真机上又写进了 5 行（13 行 vs 这里的 8 行断言），
+#: 于是这条判据在干净树上只能靠"那个项目恰好还在盘上、且恰好还是 8 行"才绿 ——
+#: 它读的是现场，不是契约。夹具是这 8 行逐字节的搬移（`schema_version` 一起搬），
+#: 行数断言一个字没动：契约就是"这 8 行怎么分组"，不是"盘上现在有几行"。
+FIXTURE_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
+#: 真机读数搬过来的那一份（8 行）。判据只读它；`projects/` 下那份活数据不再是输入。
+_REAL_DEPENDENCIES = FIXTURE_DIR / "p3-verify2-dependencies-8rows.json"
 
 
 # ------------------------------------------------------------------ 小工具
 
-def _real_rows() -> list[dict]:
-    """`projects/p3-verify2` 的真实依赖行（只读；不是夹具，是现场读数）。"""
-    data = json.loads(_REAL_DEPENDENCIES.read_text(encoding="utf-8"))
+def _real_rows(path: pathlib.Path | None = None) -> list[dict]:
+    """那 8 行（缺省读夹具；`path` 只给"这条判据真的在读夹具"那条负控用）。
+
+    行数断言（`== 8`）刻意不动：判据要的是"这 8 行怎么分组"，不是"盘上现在有几行"。
+    """
+    data = json.loads((path or _REAL_DEPENDENCIES).read_text(encoding="utf-8"))
     rows = data["rows"]
     assert isinstance(rows, list) and len(rows) == 8, rows
     return [dict(r) for r in rows]
@@ -176,7 +188,30 @@ def _r10(store: Store) -> tuple[int, dict]:
     return CL._leg_reading(store, "reviewed_proof_rows", store.root)
 
 
-# ================================================== ① 向后兼容（真实 8 行）
+# ================================================== ① 向后兼容（真机那 8 行，读夹具）
+
+def test_the_eight_rows_come_from_the_fixture_and_nine_rows_turn_the_reading_red(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """负控（D7）：判据读的是夹具，不是 `projects/` 下那份活数据；夹具 9 行 ⇒ 必须红。
+
+    这条是 ① 的反真空：把输入换成"另一份 9 行"之后，① 的行数断言必须照样响。
+    没有这一条，"判据读夹具"就只是注释里的一句话 —— 它可能读的是盘上那份活数据，
+    而活数据今天恰好不是 8 行（实测 13 行 ⇒ ① 在干净树上红）。
+    """
+    assert _REAL_DEPENDENCIES.parent == FIXTURE_DIR, _REAL_DEPENDENCIES
+    assert "projects" not in _REAL_DEPENDENCIES.parts, (
+        f"判据还在读 `projects/` 下的活数据：{_REAL_DEPENDENCIES}")
+    doc = json.loads(_REAL_DEPENDENCIES.read_text(encoding="utf-8"))
+    assert len(doc["rows"]) == 8, len(doc["rows"])
+
+    nine = tmp_path / "p3-verify2-dependencies-9rows.json"
+    doc["rows"].append(dict(doc["rows"][-1], dep_id="000008", used_by="stmt:000005"))
+    nine.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n",
+                    encoding="utf-8", newline="\n")
+    monkeypatch.setattr(sys.modules[__name__], "_REAL_DEPENDENCIES", nine)
+    with pytest.raises(AssertionError):
+        _real_rows()
+
 
 def test_the_real_eight_rows_group_exactly_as_the_one_dimensional_reading():
     """判据 ①：真机那 8 行（不带 `#pN`、全在 `path_group 1`）分组读数逐字不变。

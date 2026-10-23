@@ -797,3 +797,17 @@ def answer(root: Path, form: Mapping[str, Sequence[str]]) -> tuple[int, str, str
             f"（问题号 <span class=\"mono\">{_e(qid)}</span>，"
             f"会话 <span class=\"mono\">{_e(sid)}</span>）</div></div>"))
     return done(303, "/", "")
+
+# ====================================================================== 两档提示词缓存的写端点
+# 业主 2026-10-23：「换 key 时自动提醒重落受影响智能体的缓存」这一条要能在网页上按下去，
+# 所以缓存预热也走写面。两条端点（`GET /api/cache` 只读 + `POST /api/cache/warm` 写）的
+# 实现落在 `cacheface.py`，这里只是把它的子表并进本模块那两张表 —— 于是写面的授权矩阵
+# （回环来源 → CSRF → `--allow-writes`）与审计台账对它逐条生效，不是因为"它长得像写端点"。
+# 为什么并进写面子表而不是新开一段：`routes.compose` 的拼接公式是
+# `自有 + READER_ROUTES + WRITE_ROUTES`，改公式要同时改判据（`test_a_the_subtables_really
+# _reach_the_composed_route_table` 那条负控逐字比三个参数）。把两条端点并进写面子表，
+# 拼接公式一个字都不用动，而"谁实现它们"仍然只有一处可读（`cacheface.py`）。
+from .cacheface import HANDLERS as _CACHE_HANDLERS, ROUTES as _CACHE_ROUTES  # noqa: E402
+
+ROUTES = ROUTES + _CACHE_ROUTES
+HANDLERS.update(_CACHE_HANDLERS)

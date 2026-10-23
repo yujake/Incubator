@@ -1819,6 +1819,25 @@ def _check_13(rep, store) -> None:
             rep.issues.append(Issue(
                 str(gap["level"]), "statements", sid, str(gap["code"]), str(gap["reason"]),
             ))
+        # ---- 第 4 位是二维的（业主 2026-10-22：「要指明对哪个路径做了形式化验证」）。
+        #
+        # 这一条守的是"号不在册"的那一半：`evidencebits.formal_ledger_reading` 只把
+        # 号在册的读数交给写侧（B 的登记），于是"绑到这条命题、却指着一个不在册的
+        # 证明号"的实验行会被静默丢掉 —— 那条形式化到底验了什么，盘上再没有别的读数。
+        # warning，不拦门：它是"这一行的绑定坏了"，不是"这条命题可疑"（同一族：
+        # `bits_evidence_method_mismatch` 也是 warning）。
+        _formal_reading = EB.formal_ledger_reading(s, experiments)
+        if _formal_reading:
+            _known = {no for no, _text in VR.proof_list(s)}
+            _stray = sorted(no for no in _formal_reading if no not in _known)
+            if _stray:
+                rep.issues.append(Issue(
+                    "warning", "statements", sid, "formal_path_not_registered",
+                    (f"命题 {sid} 有绑到它的形式化实验行，证明号是 {_stray}，而它的证明清单里"
+                     f"只有 {sorted(_known)} ⇒ 那几条读数进不了第 4 位（写侧只认在册的号），"
+                     "于是「验了哪一份」在盘上无从查起。要么请 B 把那一份证明登记上"
+                     f"（`register_statement` 的 proofs），要么把那几行的 `proof_no` 改对"),
+                ))
         if str(s.get("status") or "") == "active":
             usable += 1
     rep.checked["statements_usable"] = usable

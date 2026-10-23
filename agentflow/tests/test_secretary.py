@@ -879,8 +879,11 @@ def test_register_statement_marks_a_missing_proof_instead_of_refusing(tmp_path: 
             return [], []
 
     b = AgentB(st, extractor=_NoExtract(), extract_text=lambda *a, **k: "", config={})
+    # 2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：入口档从
+    # theorem 改成 conjecture —— 这一条测的是"缺证明不拒收、落库并如实标记"，而
+    # 自产 + 无出处 + 引文不是 true 的一笔从这一批起只许按猜想登记。
     out = b.register_statement(
-        statement_full="设 G 是有限连通图，则 X_n 的极限是正态", kind="theorem",
+        statement_full="设 G 是有限连通图，则 X_n 的极限是正态", kind="conjecture",
         label="Conjecture 1.1", statement_text="X_n 的极限是正态",
         origin="own_result", doc_id="0000", proof_text="",
         quote_verified=None, quote_reason="证明还没做完（推到第 3 步卡住）",

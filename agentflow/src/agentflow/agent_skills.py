@@ -217,8 +217,10 @@ def _m_skills() -> tuple[Skill, ...]:
 
 ## 卡在哪一档
 
-- 缺**证据** ⇒ 派能出证据的角色（数值 `E.run_experiment`、形式化 `E.check_formal`、
-  逐条走查 `B → V`、稿件级审校 `H.review`）；别把"缺证据"写成"结论成立"。
+- 缺**证据** ⇒ 派能出证据的角色（数值 `E.run_experiment`、逐条走查 `B → V`、
+  稿件级审校 `H.review`）；形式化那一档由 L 做，它**成本极高**：B 可以派 L
+  （`B → L` 是唯一的入边），L 只派 C（梳理证明链），用户也可以用 `run-agent L` 直接起一条；
+  只有用户指定要验某一条时才对那一条执行，平时不派；别把"缺证据"写成"结论成立"。
 - 缺**稿件** ⇒ `G.build_document`（正文与引用一起落，引用要能查到那一行）。
 - 缺**用户口径** ⇒ `ask_user`（问出去就停在原地等，见协议第 6 条）。
 
@@ -246,8 +248,9 @@ def _m_skills() -> tuple[Skill, ...]:
         ),
         Skill(
             slug="指派-按任务类型选收件人",
-            title="按任务类型选收件人（含两条只能间接走的链：F 走 D、V 走 B）",
-            summary="这类活收件人是 X；要 F 走 D→F、要 V 签字走经 B 的 M→B→V（V 不在 M 的出边里，2026-10-20 业主裁定）",
+            title="按任务类型选收件人（要多跳的活逐格看伙伴表：路线只有一个真身）",
+            summary=("这类活收件人是 X；要多跳的活（F、V）逐格看伙伴表 —— 路线只有一个真身"
+                     "（`capabilities.ALLOWED_EDGES`），别照这一节的旧写法猜"),
             when="拿到一件活、要决定「这该派给谁」的时候（尤其是想派 F 或 V 的时候）",
             actions=("A.search_literature", "B.run_once", "C.neighbors", "D.propose_question",
                      "E.run_experiment", "G.build_document", "H.review",
@@ -289,15 +292,18 @@ def _m_skills() -> tuple[Skill, ...]:
 | 要**消化一手材料**成台账（抽取/重抽取） | B |
 | 要**盘上/结构读数**（哪里薄、谁挨着谁） | C |
 | 要**把一件模糊的事立成研究问题**、或推进一条研究 | D |
-| 要**一条硬的数**或形式化裁决 | E |
+| 要**一条硬的数**（数值实验、反例） | E |
+| 用户**指定**要验某一条（研究与论文都落定之后） | L（形式化那一岗；成本极高、不主动召唤，不指定就不派。派 L 的唯一入口是 B（`B → L`），L 只派 C；用户也可以 `run-agent L` 直接起一条） |
 | 要**一份稿件/论文** | G |
 | 要**稿件级审校** | H |
 
 按**描述**选人：上面伙伴表逐条给了它们的职责、交付物与边界（完整画像在工作区根的
 `AGENT-PROFILES.md`，`fs.read` 可查）。
 
-上表每一行都是**直接边**（`M → {A,B,C,D,E,G,H}` —— 2026-10-20 业主裁定撤掉 M 直连 V 那条边之后，
-V 也不在里面了）。**不在**你直接出边里的有两个：
+上表每一行对应的收件人是你的哪一类出边，**逐格以伙伴表为准**（伙伴表是
+`capabilities.ALLOWED_EDGES` 现算渲染出来的）—— 这一节不再抄第二份边表：
+抄一份就多一个真身，改一处另外两处不会跟着变，而不会有任何判据变红。
+**不在**你直接出边里的有三个：
 
 - **F（攻坚）**：走 `M → D → F` —— 把"要证哪一条、卡在哪一步"写进**给 D 的派活**；
   开这一腿是**D 自己的事**（它的政策写着：登记完猜想之后自己把它交给 F）。
@@ -305,17 +311,24 @@ V 也不在里面了）。**不在**你直接出边里的有两个：
   然后**看它交回来的读数**：计划建了没有（`attack_plans` 有没有行），没建就问 D 卡在哪。
   （**第 10 趟 T5 实测**：主控在这里猜了一个 D 上的"建计划"动词 ⇒ `unknown_action`，
   攻坚那一环最后整环为 0。那次教训就是这一节要挡住的事。）
-- **V（逐行走查）**：**V 不在你的出边里**（2026-10-20 业主裁定：M 不再直连 V；派 V 只有 F 与 B
-  两个入口）—— 要 V 签字只走**经 B** 的 `M→B→V`（B 入库文献侧内容时请 V 签）；
+- **V（逐行走查）**：**V 不在你的出边里**（2026-10-20 业主裁定：M 不再直连 V）——
+  **你（M）**要 V 签字只能走**经 B** 的 `M→B→V`（B 入库文献侧内容时请 V 签），
+  那是两跳、不是你直连 V；**F 与 B 各有直连 V 的边**（谁直连谁、几条边，逐格看伙伴表 ——
+  真身是 `capabilities.ALLOWED_EDGES`，这一条不再抄第二份路线）。
   证明级的签字不归你派：
   **让 D 去核、由 D 让 F 补签**（那一签由 F 去办）。
-  `M → D → F → V` 那条三跳路也不必再绕。研究型项目里有证明级断言而
+  研究型项目里有证明级断言而
   `reviewed_proof_rows` 记 0 时，必须在验收表上写清为什么，以及这条缺口转给了谁去办。
+- **L（形式化）**：**L 也不在你的出边里**（派 L 的唯一入口是 B —— `B → L` 是那条唯一的入边；
+  L 自己只派 C 梳理证明链，用户也可以用 `run-agent L` 直接起一条）。它**不是流水线上的一环**
+  —— 成本极高，平时不启用、不主动召唤。只有研究与论文都落定之后、**用户指定**要验某一条时，
+  才为那一条走一次（把"哪一条命题、B 登记的编号、要核什么"写进派活）；在那之前，把"这里未核到"
+  如实写进交付说明。你自己不要写 Lean 源码，也不要把检查器的裁决读成"形式化做完了"。
 
 ## 被拒之后的处置（别换名字重试）
 
-`forbidden_edge` 是"这条边不存在"，不是故障：换一条链。替代链是
-**M→D→F**（F 唯一的进路）与 **M→B→V**（V 的两跳路，**经 B**；V 不在你的出边里）。
+`forbidden_edge` 是"这条边不存在"，不是故障：换一条链 —— 可走的那几条**逐格看伙伴表**
+（那里印着谁是你的直接出边、谁要两跳；真身是 `capabilities.ALLOWED_EDGES`）。
 收到别的拒绝就读**它给的理由** —— 那是在说"这件事要换个说法、或换个收件人"。
 
 ## 一次派几件
@@ -903,8 +916,8 @@ def _v_skills() -> tuple[Skill, ...]:
 
 ## 与形式化那一档的关系
 
-能机器核的（`E.check_formal` 过的那几条）不是免除这一档：形式化证的可能是
-**被加强过的假设**，而那正是这一轴要抓的。
+能机器核的（`L.check_formal` 过的那几条，形式化那一岗是 L）不是免除这一档：形式化证的
+可能是**被加强过的假设**，而那正是这一轴要抓的。
 """,
         ),
         Skill(
@@ -951,11 +964,16 @@ def _v_skills() -> tuple[Skill, ...]:
 
 
 def _e_skills() -> tuple[Skill, ...]:
-    """E（实验与形式化）。
+    """E（实验与攻坚）。
 
     来源：`construct-counterexamples`（造反例）、`construct-toy-examples`（玩具例）、
     `verify-correctness-computation`（算得对不对）、
     `examination-of-special-cases-*`（特例审查）。
+
+    2026-10-22 第四批（业主「所有受 Lean 开关控制的提示词/工具/动作全部指向 L」）：
+    这里原来还有一条「形式化-能机器核的才算数」（写 Lean 源码的落点、检查器原话、三态）。
+    那一份搬到 `_l_skills()` 的「形式化-忠实复述B的证明链路」去了 —— 形式化只由 L 做，
+    E 这一侧不再教怎么写 Lean；E 的实现与工具面一个字没动（实验、反例、查询照旧）。
     """
     return (
         Skill(
@@ -1055,36 +1073,6 @@ def _e_skills() -> tuple[Skill, ...]:
 既没有检验结论、也没有留下线索 —— 那一趟等于没做这个特例。
 """,
         ),
-        Skill(
-            slug="形式化-能机器核的才算数",
-            title="形式化：能机器核的才签 formal，且要写清核的是什么",
-            summary="check_formal 过的那几条才算 formal 位；假设被加强过的不算",
-            when="一条结论要用形式化背书（proof/formal 位），或有人问「这个 Lean 文件算不算数」时",
-            actions=("E.check_formal", "E.evidence_for"),
-            tools=("fs.write", "fs.list"),
-            body="""# 形式化
-
-## 只有"检查器原话"才算数
-
-- 形式化那一档要留下**检查器的原话**（`verifier_output`），
-  而不是"我写完了、编译过了"；
-- 假设被**加强**过的定理：机器核过也不等于原文那条成立 ——
-  这一类要如实写成 `stronger_than_source` 那一档的缺陷，别拿它当原文的背书；
-- 检查器没装 / 开关关着 ⇒ 如实回 `lean_disabled` / `not_wired`，
-  这条路的替代是 V 的自然语言逐行走查（三态结论），**不是**"证明通过了"。
-
-## 写 Lean 代码的落点
-
-- 文件落到工作区 `code/lean/`（`fs.write`），实验行里写 `code_path` + `code_hash`；
-- 每次跑完记 `exit_code` 与那句可复跑的命令 —— 别人要能一键重跑；
-- 一条定理一个文件比一个大文件好：**哪一条没过**要一眼看得出来。
-
-## 一条纪律
-
-形式化不是"更严格所以更可信"的自动挡：它核的是**你写下的那条**。
-写窄了（少一个假设）、写偏了（换了定义），机器都会高高兴兴地报通过。
-""",
-        ),
     )
 
 
@@ -1157,7 +1145,7 @@ def _f_skills() -> tuple[Skill, ...]:
             summary="proof 由 V 签才算数；自报 proof 会被降级；要复核就派 V（F 才有到 V 的边）",
             when="一份证明写完了要交出去，或被 V 退回来要改的时候",
             actions=("F.step", "V.verify_proof", "B.register_statement"),
-            tools=("table.get", "verify.check_formal", "fs.write"),
+            tools=("table.get", "fs.write"),
             body="""# 交付一份证明
 
 ## 谁签那个字
@@ -1177,10 +1165,14 @@ V 的结论只有三个：**成立 / 有毛病（指到那一步）/ 看不出�
   别把"看不出来"读成"通过了"；
 - 改完**再派一次 V**：复核结论是**逐次**的读数，上一轮签过的字不覆盖这一轮的新文本。
 
-## 形式化那一档
+## 形式化那一档（不是你的活，也不要主动去要）
 
-要用机器核（`verify.check_formal`）就**把源码也落进工作区**
-（`code/lean/<名字>.lean`，`fs.write`）：裁决与落库之间差的就是这一份可复跑的文件。
+形式化由 **L** 承担：你**不**自己写 Lean 源码，也不把检查器的裁决当成你签的字。
+派 L 的入口只有两条：B 可以派 L（`B → L` 是唯一的入边），用户也可以用 `run-agent L`
+直接起一条（L 自己只派 C 梳理证明链）。
+**L 不是流水线上的一环** —— 它的成本极高，平时不启用、不主动召唤：只有研究与论文都落定
+之后、用户指定要验某一条时，才对那一条走一次。在那之前，把"这一条值得机器核"写进缺口
+（如实说未核到），不要自己开这条流水线。
 检查器没装 / 开关关着 ⇒ 如实回 `lean_disabled` / `not_wired`，替代路是 V 的逐行走查，
 **不是**"证明通过了"。
 """,
@@ -1202,7 +1194,7 @@ V 的结论只有三个：**成立 / 有毛病（指到那一步）/ 看不出�
    （用乙证甲、又用甲证乙，是最常见的隐性空转：两面都"在推进"，其实一步没动）。
 3. **中间结论一般且可复用**：优先"对同类问题都成立"的中间结论；只对这一支成立的窄事实
    在台账里值不了几个钱。
-4. **仍是数学上可控的**：每个子目标都要在现有工具（`E` 的数值/形式化、`V` 的逐行走查）
+4. **仍是数学上可控的**：每个子目标都要在现有工具（`E` 的数值实验与反例、`L` 的形式化、`V` 的逐行走查）
    的射程之内 —— 拆出一个谁也做不了的子目标，等于把难题换了个名字。
 5. **覆盖原问题的核心难点**：拆完要能回答"原题难在哪里，这个拆解在哪一步上碰它"。
 6. **每份计划带"第一个筛选测试"**：先用最小代价试哪一步、试成什么样算通过。
@@ -2204,7 +2196,7 @@ def _g_skills() -> tuple[Skill, ...]:
 
 - 每一条断言用 `G.compose_claim` 构造（判据只有一份，在工具层）；
 - 外部依赖用 `G.register_dependency` 登记 —— `closed` 时必须核到**已入库**的来源（FC-23）；
-- 稿件级审校由 **H** 做（`H.review`），它的判据是"正文与台账逐字一致 + E 的 proof 或 V 的签名"。
+- 稿件级审校由 **H** 做（`H.review`），它的判据是"正文与台账逐字一致 + L 的形式化（`formal` 位那一行）或 V 的签名"。
 
 ### 四个键最容易写错（2026-10-16 亲测，各撞了一次）
 
@@ -2296,6 +2288,74 @@ def _g_skills() -> tuple[Skill, ...]:
     )
 
 
+def _l_skills() -> tuple[Skill, ...]:
+    """L（Lean 形式化者，2026-10-22 新设）。
+
+    只有一条：它这一岗的全部工作就是"忠实复述 + 交给检查器真跑 + 如实报三态"。
+    这一份是从 E 的 Lean 段改写过来的（2026-10-22 第四批之后 E 名下那条已撤：形式化只由
+    L 做，E 不再教怎么写 Lean），两处差别是业主施工单直接要求的：
+
+    1. 落点 `code/formal/`："这个 .lean 是谁写的"要一眼看得出来；
+    2. 步骤从"自己去写、自己去跑"改成"先把 B 的证明链路逐步对上，再用
+       `L.formalize` 一次成型（写盘 + 检查 + 三态）" —— 因为 L 有那一格动作。
+    """
+    return (
+        Skill(
+            slug="形式化-忠实复述B的证明链路",
+            title="形式化：忠实复述 B 的证明链路，能机器核的才算数",
+            summary="先逐步对上 B 的 proof_text，再用 formalize 写盘并真跑检查器；接不上的那一步记缺口",
+            when=("有人把一条已登记的命题交给你形式化时（B 派你 —— `B → L` 是唯一入边 —— "
+                  "或用户用 `run-agent L` 直接起一条；或要你说「这个 Lean 文件算不算数」时）"),
+            actions=("L.formalize", "L.check_formal"),
+            tools=("formal.formalize", "formal.check_formal", "fs.read"),
+            body="""# 形式化：忠实复述 B 的证明链路
+
+## 顺序不许颠倒：先读、再对、最后才写
+
+1. **读 B 登记的那一条**：命题原文（`statement_full`，含全部假设）与证明摘录
+   （`proof_text`，逐字）。这两样是你的输入，不是你的灵感 —— 没有它们就不要动手；
+2. **逐步对上**：B 的每一步在你打算写的 Lean 里落在哪儿？一行、一个策略、还是一个
+   被显式命名的中间引理？**先把这张对照表写出来**（可以先落在草稿本），再写源码；
+3. **写盘 + 检查一次成型**：把源码交给 `L.formalize`（它写到 `code/formal/<声明名>.lean`、
+   算 sha256、再交给检查器真跑），别用零散的两步去拼 —— 拼出来的那一路没有
+   "写没写盘"的机器读数。
+
+## 三种"对不上"，各自有合法落法
+
+- **条件是隐含的**：补成显式假设，并在回报里点名这一处（原文没写、你补了）；
+- **定义是私有的**：改成自足定义，并写清它与原文定义的差异（差在哪一条等式上）；
+- **步骤被跳过**：记成缺口，结论标 `unknown`，把"哪一步接不上"写清楚。
+
+**不许**用 `sorry` / `admit` 把它堵住：含 sorry 的文件在 Lean 里会正常编译通过
+（退出码 0），而框架会逐字判「这不是证明」。也不许把假设写强 —— 写强了机器核过
+也不是原文那条。
+
+## 三态怎么读（这是 L 的唯一交付口径）
+
+- `verified`：检查器说了通过，且你的源码就是原文那条。回报要带 `verifier_output`
+  与 `exit_code`（真实退出码，没跑成时它是 `null`，绝不用 0 冒充跑过）；
+- `failed`：检查器说了不通过（`compile_error` / `uses_sorry` / `extra_axioms` /
+  `decl_mismatch`）。这是**有用**的信息，原话照抄，别改写；
+- `unknown`：**没查成** —— 开关关着（`lean_selfcheck_off`）、自检不过
+  （`lean_selfcheck_unusable`）、没有检查器、超时、缺库。它既不是通过、也不是
+  "命题可疑"：把原因写清，然后收手（同一条失败别重试第二遍）。
+
+## 开关开着时的那条义务（业主 2026-10-12 的开关；2026-10-22 起归 L）
+
+任务里凡出现「能机器验证的定理」「形式化验证」这类要求，你**至少要真的试一次**：
+把命题写成源码、落盘、交给检查器真跑一次。拿不到 `verified` 就如实落 `unknown` 并写清
+失败分类（`no_backend` / `compile_error` / `timeout`…）——**「一次都不试」不算完成这一条**。
+开关第一行说「已关闭」时，这条义务整条不适用（那一档不做形式化验证）。
+
+## 一条纪律
+
+形式化不是"更严格所以更可信"的自动挡：它核的是**你写下的那条**。
+写窄了（少一个假设）、写偏了（换了定义），机器都会高高兴兴地报通过。
+""",
+        ),
+    )
+
+
 def _shared_skills() -> tuple[Skill, ...]:
     """协作链层面的 skill（每个角色都读得到）。
 
@@ -2320,7 +2380,7 @@ def _shared_skills() -> tuple[Skill, ...]:
 2. **尝试**：一次只推进一步（一个引理、一个反例、一组参数）。
    落点：`F.create_plan` / `F.step`（攻坚计划）或 `E.run_experiment`（数值）。
 3. **核验**：用**独立**的一条路验它 —— 数值复用同一份代码、形式化复用同一个假设，
-   都不算独立。落点：`E.check_formal` / `V.verify_proof`（`verifications/*.jsonl`）。
+   都不算独立。落点：`L.formalize`（形式化那一档归 L）/ `V.verify_proof`（`verifications/*.jsonl`）。
 4. **改进**：把这一轮学到的东西写成**下一条**要试的东西（不是"再想想"）。
    落点：回到第 1 步，或写进 `handoff`（交接手稿）让下一趟接上。
 
@@ -2358,7 +2418,7 @@ def _shared_skills() -> tuple[Skill, ...]:
 
 ## 三层证据（强度不同，别混）
 
-- `numeric`（E 签）/ `formal`（E 签）：可复现的算与机器核验；
+- `numeric`（E 签）/ `formal`（L 签）：可复现的算与机器核验；
 - `proof`（F 写、V 核）：证明过程在 `statements.proof_text`，审过由 V 的三态结论签；
 - `cross_check` / `heuristic`：交叉比对与经验判断 —— 它们**不是**定理级证据。
 
@@ -2531,6 +2591,10 @@ CATALOG: dict[str, tuple[Skill, ...]] = {
     "G": _g_skills(),
     "H": _h_skills(),
     "V": _v_skills(),
+    # L（Lean 形式化者，2026-10-22 新设）：那一份手册从 E 的 Lean 段改写而来
+    # （2026-10-22 第四批之后形式化只由 L 做，E 名下那条已撤），
+    # 落点 `code/formal/`、入口是 L 自己的 `formalize`。
+    "L": _l_skills(),
 }
 
 
@@ -2572,16 +2636,21 @@ def index_block(role: str) -> str:
         lines.append(f"| `{skill_path(owner, s.slug)}` | {s.summary} | {s.when} |")
     lines.append("")
     lines.append("读了之后按它做；做了什么要落台账（**没有台账的那一步等于没发生**）。")
-    # 2026-10-17（Lean 审计 S6）：技能正文里仍有一条讲形式化，而关掉 Lean 时它读来也做不了 ——
-    # 在索引末尾补一句指向（开着时不加），别让读者以为"有这条技能 ⇒ 能做形式化"。
-    try:
-        from .settings import lean_enabled as _le
+    # 2026-10-22 第四批（业主「所有受 Lean 开关控制的提示词/工具/动作全部指向 L」）：
+    # 这一格原来是"本会话 Lean 形式化关闭 + 上面若有一条讲形式化的技能它读来也做不了"
+    # （2026-10-17 的 Lean 审计 S6 加的）。那一句同时犯两种错：它把形式化讲成"做不了"
+    # （业主点名要去掉的那一类叙述），而且它在关着那一档里往每一份提示词都塞了一行
+    # Lean 字样 —— 关着时 L 在这一档不存在，该留的是零痕迹。现在反过来：
+    # 开着时补一句"形式化见 L"（"谁做形式化"只有这一个答案），关着时一个字都不加
+    # （`TOOLCHAIN_FACTS` 第一行已经说清这一档不做形式化）。
+    from . import leanscope as _LEANSCOPE
 
-        _lean_on = bool(_le()[0])
-    except Exception:  # noqa: BLE001
-        _lean_on = False
-    if not _lean_on:
-        lines.append("**本会话 Lean 形式化关闭**：上面若有一条讲形式化的技能，它读来也做不了（以 `TOOLCHAIN_FACTS` 第一行为准）。")
+    if _LEANSCOPE.lean_on() and role not in _LEANSCOPE.LEAN_ONLY_ROLES:
+        lines.append("**形式化见 L**：`formal.*`（写 Lean 源码、检查器原话、三态结论）只挂在 L 身上，"
+                     "别自己写 Lean 源码；**但它不是流水线上的一环**（成本极高）：平时不启用、"
+                     "不主动召唤，只有用户指定之后才对**指定的那一条**走一次 —— "
+                     "它的入口只有两条：B 可以派 L（`B → L` 是唯一的入边），"
+                     "用户也可以用 `run-agent L` 直接起一条（L 自己只派 C 梳理证明链）。")
     return "\n".join(lines)
 
 
@@ -2589,10 +2658,18 @@ def materialize(root: str | pathlib.Path) -> list[str]:
     """把目录里的每条 skill 写到 `<root>/skills/<角色>/<slug>.md`；返回新写或改写的路径。
 
     幂等：内容与盘上逐字节相同就不写（免得每次开跑都把工作区搅一遍）。
+
+    业主 2026-10-22（「在Lean开关没开时隔绝L」）：由 Lean 开关决定存在性的角色，开关
+    关着时一份都不落盘 —— 落在 `<工作区>/skills/<角色>/` 里的手册是用户看得见的东西，
+    那里出现 `skills/L/…` 就等于"L 今天存在、只是没派活"。
     """
+    from . import leanscope as _LEANSCOPE
+
     base = pathlib.Path(root)
     written: list[str] = []
     for owner, rows in CATALOG.items():
+        if _LEANSCOPE.is_hidden(owner):
+            continue
         for s in rows:
             path = base / SKILLS_DIR / owner / f"{s.slug}.md"
             text = _render(owner, s)
@@ -2622,7 +2699,13 @@ def validate() -> list[str]:
     """逐条查"这条 skill 用到的动作/工具真的存在、且从拥有它的角色出发够得到"。
 
     三态纪律：查不成的（工具注册表读不出来）也要报出来 —— 不许把它读成"没问题"。
+
+    业主 2026-10-22（「在Lean开关没开时隔绝L」）：开关关着时由它决定存在性的角色
+    （`leanscope` 那份名单）这一趟不存在 ⇒ 不对它的 skills 下结论。这不是"查过了没问题"：
+    那一档下它本来就不该出现在任何面上，落盘也被跳过（见 `materialize`）。
     """
+    from . import leanscope as _LEANSCOPE
+
     problems: list[str] = []
     try:
         from . import capabilities as C
@@ -2633,6 +2716,8 @@ def validate() -> list[str]:
     problems.extend(_body_action_problems())
     problems.extend(_path_problems())
     for owner, rows in CATALOG.items():
+        if _LEANSCOPE.is_hidden(owner):
+            continue
         for s in rows:
             if not s.summary.strip() or not s.when.strip() or not s.body.strip():
                 problems.append(f"{owner}/{s.slug}：summary / when / body 三格都不许空")
@@ -2738,8 +2823,11 @@ _BODY_CROSS_REFS: dict[tuple[str, str, str], str] = {
         "「C 只判、不改：矛盾问题的闭环由 D 的 `D.adjudicate` 收口（I2）」—— 指到别人",
     ("G", "成稿-正文自己写", "H.review"):
         "「稿件级审校由 **H** 做（`H.review`）」—— 指到别人",
-    ("V", "假设轴-前提是否真被满足", "E.check_formal"):
-        "「能机器核的（`E.check_formal` 过的那几条）」—— 指到别人产出的证据",
+    # 2026-10-22 第四批：这句里的动作从 `E.check_formal` 改成 `L.check_formal`
+    # （形式化那一岗从 E 划到 L），登记跟着换键 —— 换键之后它仍然"够不到"（V 没有到 L 的边），
+    # 所以它仍然是"指到别人"那一档，不是该删的腐烂条目。
+    ("V", "假设轴-前提是否真被满足", "L.check_formal"):
+        "「能机器核的（`L.check_formal` 过的那几条）」—— 指到别人（形式化那一岗）产出的证据",
 }
 
 
@@ -2837,7 +2925,7 @@ def _looks_like_a_path(tok: str) -> bool:
 
     口径因此收成两条之一：带已知后缀（`.md` / `.json` / …）或结尾是 `/`（目录）。
     `heuristic/inconclusive` 两条都不占 ⇒ 出局；而真的落点（`out/paper/main.tex`、
-    `code/lean/`）两条各占其一 ⇒ 照判。
+    `code/formal/`）两条各占其一 ⇒ 照判。
     """
     t = tok.rstrip("/")
     return tok.endswith("/") or t.lower().endswith(_PATH_SUFFIXES)
@@ -2975,7 +3063,14 @@ def _role_tool_surface(problems: list[str]) -> dict[str, set[str]]:
         store = Store(root)
         store.init()
         reg = build_registry(store=store, workspace_root=root).registry
-        return {str(r): {s.name for s in reg.for_role(str(r))} for r in TOOL_ROLES}
+        # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这是判据读的工具面，而
+        # `TOOL_ROLES` 是声明词表（刻意完整）。开关关着时不存在的角色不进这张面
+        # —— 它与 `validate()` 里"跳过那几格"是同一条口径（否则会对着一个不存在的
+        # 角色报"你的手册点名了不存在的工具"）。
+        from . import leanscope as _LEANSCOPE
+
+        return {str(r): {s.name for s in reg.for_role(str(r))}
+                for r in _LEANSCOPE.visible_roles(TOOL_ROLES)}
     except Exception as exc:  # noqa: BLE001
         problems.append(f"读不到按角色的工具面（这一格没查成）：{type(exc).__name__}: {exc}")
         return {}

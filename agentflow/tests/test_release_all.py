@@ -2418,6 +2418,15 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 进 `.noai-paths`）。A 线不改它的任何内容，只是不让"包目录里凭空多出一个模块"
     # 这条判据在合并树上误报 —— 见 `R6-AN-1` 的原始形态。
     "agent_v/": "智能体 V：验证者（F-02 接线：只读 + 写自己的 `verifications/<命题号>.jsonl`）",
+    # 2026-10-22（业主：「在Lean开关没开时隔绝L」）：L 是照 E 的 Lean 面复制出来的
+    # 一个可运行角色（三个动作 `formalize` / `check_formal` / `record` 各一个文件 +
+    # `report.py`（L→B 的受控汇报）+ core + _support + __main__）。它与 V 同族登记在
+    # 这里：盘上确实多了这个包，该不该存在由 Lean 线那一批施工单负责，A 线只是不让
+    # "包目录里凭空多出一个目录"这条判据在合并树上误报（`R6-AN-1` 的原始形态）。
+    "agent_l/": "智能体 L：Lean 形式化者（2026-10-22 新设；拆包：`formalize` / `check_formal` / "
+                "`record` 三个动作各一个文件 + `report.py` + core + _support + __main__；"
+                "复用 E 的 `_CheckFormal` 与 `verify.check_formal` 桥接层，只在前者前加一道 "
+                "Lean 自检闸；入边恰好 `B → L`、出边恰好 `L → C`，声明在 `specs/l.py`）",
     "specs/": "每个角色一份**声明真身**（`goal-7f5116c1` M3）：`ACTIONS`（动作表）与 `SPEC` —— "
               "`capabilities.py` 的四张表由它派生；它在 `.noai-paths` 里逐文件受保护",
     "agentspec.py": "一个 agent 的声明与注册表（`AgentSpec`/`AgentBrief`：职责与门面、官能轻重、只读与否、能召唤谁、写集、实现类）——`goal-7f5116c1` 的 M2，每个角色在自己模块里写一份 `SPEC`，装配面逐步改成从这里读",
@@ -2429,6 +2438,47 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "claimanatomy.py": "断言解剖学：`documents.claims` 每个元素的唯一判据来源",
     "claims.py": "原子断言拆分：把一段答复切成一堆可逐条回验的断言",
     "cli.py": "命令行入口",
+    # 2026-10-23（业主：「把两档缓存落地为用户使用系统时可调用的工具」）：两档提示词
+    # 缓存的用户面（状态读数 / 预热计划 / 真预热 + key 指纹）。它不属于任何角色，
+    # 而是"用户使用系统"的那一面：命令行 `cache status|warm` 与网页上那两个按钮都
+    # 从这一个模块取数，所以它必须是一个能被 cli / webui / 工具层同时 import 的顶层模块
+    # （挂进 `webui/` 会让命令行反向依赖网页；挂进某个角色包里则两处都不是它的家）。
+    "cachectl.py": "两档提示词缓存的用户面（业主 2026-10-23）：status（两档 × 四格：落地 / "
+                   "新鲜 / 覆盖 / 缺谁，三态带理由）、plan（要预热几个目标 / 预计花费 / "
+                   "已新鲜可跳过）、warm（真预热；发请求前打印 key 来源与模型）、"
+                   "fingerprint / key_reading（sha256(key)[:16] + 模型 + base_url，不存 key）、"
+                   "annotate_run（把指纹补进刚写下的那一趟读数）；渲染与读数的真身仍是 "
+                   "`scripts/warm_prompt_cache.py`（按路径加载），本模块不另渲染一份",
+    # 2026-10-22 的 Lean 线（L 角色）新增的五个支撑模块。与 `cachectl.py` 同一口径登记：
+    # 它们都不属于任何既有角色包，而是"L 这条路"的实现真身 —— 每一个都只有一份实现，
+    # 拆开写第二份就会让"开关关着时 L 到底存不存在""这个 lean 是不是真检查器"这类问题
+    # 两个答案。事实登记，不是"批准它存在"。
+    "leanscope.py": "Lean 开关下 L 的可见性**唯一判定入口**（业主 2026-10-22：「在Lean开关没开时"
+                    "隔绝L」）：`lean_reading`（读 `settings.lean_enabled()`）、`lean_on`、"
+                    "`is_hidden` / `visible_roles` / `require_visible` / `hidden_refusal`、"
+                    "`LEAN_ONLY_ROLES` / `LEAN_ONLY_TOOL_MODULES` —— 角色表 / 工具装配 / 提示词 / "
+                    "按名取角色都调它，不再各判一遍（每处自己判的失效形态是静默的）",
+    "leantoolchain.py": "Lean 的**开机自检**（业主 2026-10-22：「开机自检可以做，防止用户提供虚构的"
+                        "lean环境」）：四步 —— 解析落点（`--lean` > 环境变量 > 设置文件 > 工作区 "
+                        "`config.yaml` > PATH，记 `source`）、版本（主版本 4 + 与 `expected_version` 一致）、"
+                        "最小正样例、反样例（`selfcheck` / `lean_selfcheck_reading` / "
+                        "`formal_evidence_state`，三态 `off`/`usable`/`unusable`/`unknown`）—— "
+                        "回显式的假 lean 能骗过 `probe_checkers`，骗不过这一条",
+    "proofreport.py": "形式化困难的**受控汇报形态**（业主 2026-10-22 晚的协作面裁定）：L→B 的汇报与 "
+                       "B→D 的升级，落点都是既有的 `agent_message` 收件箱；`FAILURE_TYPES`（受控词表）/"
+                       "`SEVERITIES`（`normal`/`research` 两档）/ `SUGGESTIONS`（失败类型 → B 该补什么）/ "
+                       "`payload` / `violations` / `severity_for` / `deliver` —— 自由文本没法被下游按类分派，"
+                       "而「漏了一步」与「命题本身不对」该做的事完全不同",
+    "quoteevidence.py": "引文回验的**证据叶子**（D1 的落点）：`verify_quote_evidence` 用禁改区那一个 "
+                        "`quoteverify.check_quote` 判，再把 `quote_mode` / `quote_span` / "
+                        "`quote_reason` / `quote_call_sha256` 逐栏落到命题行上 —— 改前 8 条命题写着"
+                        "「逐字回验通过」而三栏全是空串（核了哪一段、在第几页、花没花模型钱一条都读不出来）；"
+                        "本模块补的是「调动方」那一半，判决本身仍只有 `quoteverify` 一份",
+    "statementbody.py": "命题正文的**唯一真身**（D2）：`statement_full` 是真身、`statement_text` 是派生的"
+                        "短版 —— 改前 13 条命题的 `statement_text` 全是 0 长度而 `statement_full` 有正文，"
+                        "读侧谁先读哪一个就给出哪一种答案（`closing` / `agent_v` / `webui` 三处反着读）；"
+                        "取值理由（判据要求它 / 写入侧只有它必填 / 下游靠它做事 / 老数据只有它）写在"
+                        "模块 docstring 里，本模块是「读哪一格」这一句话的唯一定义点",
     # 接线批 C1（`draft/103` §4.1b）：预设组装 → 角色提示词的接线层。
     # 它不发明机制：发现/优先级/挂载/创作在 `presets.py`（DSH 端口批 3），
     # `composition.py` 只回答"组装文件里那一行名字落到哪个注册函数上"。

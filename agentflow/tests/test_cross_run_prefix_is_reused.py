@@ -8,7 +8,7 @@
 （段序 10000）带着 `workspace_root` —— 换一趟活，这条前缀从第 95 个字符起就不同（改前实测，见
 `tests/fixtures/prompt_cache_warm.json` 的 `cross_run_prefix_chars`）⇒ 换一趟活的第一次调用 `hit=0`。
 
-三条判据（每条带负控）：1. 两趟不同的活 ⇒ 同一份 system（十个角色各一遍，逐字节）；负控：把
+三条判据（每条带负控）：1. 两趟不同的活 ⇒ 同一份 system（十一个角色各一遍，逐字节）；负控：把
 `task_id` 放回 system（即绕过 `split_facts`）⇒ 必红，且报出"从第 N 个字符起不同"（N 落在
 `AGENT_IDENTITY` 那一段里，不是"反正不同"）。2. 同一角色同一趟两次渲染逐字节相同（`step_stability`
 的 `stable=True`；`test_prompt_stability.py` 已有那一条，这里再钉"跨趟也相同"的那一半）。
@@ -94,7 +94,7 @@ def _sha(text: str) -> str:
 def test_two_different_jobs_render_a_byte_identical_system(registry: Any) -> None:
     """正控（主判据）：同一个角色、两趟完全不同的活 ⇒ system 逐字节相同。
 
-    十个角色各判一遍（不是只判 M）：某一段若只在某个角色的模板里插值（例如 M 才有
+    十一个角色各判一遍（不是只判 M）：某一段若只在某个角色的模板里插值（例如 M 才有
     的那几块），只判一个角色会漏掉它。反真空也一起判：system 必须有几万字
     （"两边都是空串"那种假相等不许过）。
     """
@@ -112,7 +112,9 @@ def test_two_different_jobs_render_a_byte_identical_system(registry: Any) -> Non
         assert moved_a["task"] != moved_b["task"], moved_a
         assert moved_a["task_id"] != moved_b["task_id"], moved_a
         checked.append(role)
-    assert len(checked) == len(AP.ROLE_BRIEFS) == 10, checked
+    # 2026-10-22：ROLE_BRIEFS 从十个角色变成十一个（新设 L）。这一格钉的是"每一个都判过"，
+    # 数字跟着声明走 —— `== 10` 是加 L 之前的读数，留着它会让这条判据在正确的代码上红。
+    assert len(checked) == len(AP.ROLE_BRIEFS) == 11, checked
 
 
 def test_putting_task_id_back_into_the_system_makes_it_red(registry: Any) -> None:
@@ -304,6 +306,10 @@ def _render_with_config(role: str, config: Mapping[str, str], policy: Any,
     facts: dict[str, Any] = dict(_JOB_A)
     facts["availability"] = dict(config)
     facts["parent_limits"] = AP.parent_limits_text(policy, role, depth=facts["depth"])
+    # 2026-10-22（业主 B-3）：开场事实多了 `v_rejections` 一格（我名下被 V 判
+    # 「有毛病」的证明明细）。`opening_facts` 对缺格是严格点名（KeyError）——
+    # 那是对的：它守的是"循环忘了算这一格"。所以夹具把这一格补齐。
+    facts["v_rejections"] = "（判据夹具：名下没有被 V 判「有毛病」的证明）"
     system_facts, _moved = PS.split_facts(facts)
     return (AP.system_prompt(role, registry=registry, **system_facts),
             _opening_transcript(**opening_facts(facts)))
@@ -312,7 +318,7 @@ def _render_with_config(role: str, config: Mapping[str, str], policy: Any,
 def test_two_partner_configs_render_the_same_system(registry: Any) -> None:
     """判据 ①（主判据）：换一份伙伴配置 ⇒ system 逐字节相同、而 user 消息不同。
 
-    十个角色各判一遍（`PARTNER_AVAILABILITY` 与伙伴行的接线态标记是共享段，但 M 与 H
+    十一个角色各判一遍（`PARTNER_AVAILABILITY` 与伙伴行的接线态标记是共享段，但 M 与 H
     还各自多几段 ⇒ 只判 M 会漏掉只在别的角色模板里出现的那一份）。
     反真空两条：①system 必须够长（不是"两边都空"的假相等）；
     ②两份配置与两份 `Policy` 真的不同 —— 否则"相同"什么也没证明。
@@ -414,7 +420,9 @@ def test_deleting_one_partner_makes_the_information_criterion_red(
 
     thin = {k: v for k, v in _CONFIG_A.items() if k != "V"}
     facts = dict(_JOB_A, availability=thin,
-                 parent_limits=AP.parent_limits_text(_policy_a(), "M", depth=1))
+                 parent_limits=AP.parent_limits_text(_policy_a(), "M", depth=1),
+                 # 2026-10-22（业主 B-3）：`opening_facts` 对缺格是严格点名，夹具补齐。
+                 v_rejections="（判据夹具：名下没有被 V 判「有毛病」的证明）")
     opening_thin = _opening_transcript(**opening_facts(facts))
     assert "- V：wired" not in opening_thin, (
         "喂进去的读数里没有 V，user 消息里却还有它 ⇒ 那几行不是现读的")

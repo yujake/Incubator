@@ -46,6 +46,21 @@ kind、status=closed、带 source_lit_id 或 source_stmt_id、page_range 非空�
 逐条点出缺的是哪一件。三态：依赖图读不到 ⇒ 同样拒绝并说明"没查成"，绝不当成通过。
 不新增状态词、不新增字段（`schema.py` 在禁改区）—— 这一档用的正是 `Dependency` 类
 docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
+第十一件：B-2 与 B-3 两条拒收码的分工（业主 2026-10-22 两个裁定，同一批落地）
+两条都管"自产的东西能不能一进门就叫定理"，但它们问的不是同一个问题，所以码是两条：
+
+- `must_start_as_conjecture`（B-2）：「没有引文 / 自己编的命题必须从『猜想』注册」。
+  判据：`origin="own_result"` + 没有 `source_lit_id` + `quote_verified` 不是 True
+  + `kind` 不是 conjecture/concept ⇒ 整笔不写。它管的是入口：这一笔还没有任何
+  外部出处，凭什么第一步就声明成 theorem / lemma / proposition。
+- `self_authored_needs_v`（B-3）：「B 侧自己杜撰定理和证明时，也必须给 V 看才能落，
+  否则就按瞎编处理」。判据见 `_self_authored_gate`：自产（或没有出处）的定理级
+  命题，在 V 的台账里必须有一份盖住这一份正文的「成立」签。它管的是升级：
+  这一笔已经交了证明，而"这份证明有人看过"是它与"瞎编"之间唯一的分界。
+
+两条同时成立时优先报 `must_start_as_conjecture`：裁定 B-2 的入口判据比 B-3 的升级
+判据更靠前（还没立成猜想的东西，谈不上升级）。V 已经签住的那一笔给 B-2 让路 ——
+那一签本身就是"它先立过猜想、走过复核"的证据（`_self_authored_gate` 的 `signed`）。
 """
 from __future__ import annotations
 
@@ -56,6 +71,47 @@ from .. import evidencebits as _EB
 from .. import quoteevidence as QE
 from .. import verifications as _VR
 from ..refusals import refuse as _refuse
+
+#: 一条命题一开始允许声明成的那几个 kind（业主 2026-10-22 裁定 B-2）。
+#:
+#: 裁定原文：「没有引文 / 自己编的命题必须从『猜想』注册」。于是
+#: `origin="own_result"` + 没有 `source_lit_id` + `quote_verified` 不是 True 的那一笔，
+#: 只允许以 `conjecture`（猜想）或 `concept`（概念行不参与等级链）登记；写成
+#: theorem / lemma / proposition 一律受控拒绝 `must_start_as_conjecture`。
+#:
+#: 为什么是一张白名单而不是"拒掉 theorem/lemma/proposition"：等级链的词表会变
+#: （`schema.KINDS` 加一个取值就是加一种"强于猜想"的说法），黑名单会在那种时候
+#: 静默放行 —— 白名单不会。
+CONJECTURE_START_KINDS: tuple[str, ...] = ("conjecture", "concept")
+
+#: B-2 的拒收码（写侧与读侧共用这一个字面量，免得两处措辞分家）。
+#:
+#: 与 `_self_authored_gate` 的 `self_authored_needs_v` 分工逐字见模块 docstring
+#: 的"第十一件"：前者管入口（还不许叫定理），后者管升级（交了证明但没人看过）。
+MUST_START_AS_CONJECTURE = "must_start_as_conjecture"
+
+
+def _must_start_as_conjecture_refusal(*, kind_now: str, origin: str) -> dict:
+    """B-2 的那一条拒收（两处调用点共用一份文案：`_self_authored_gate` 之前与之后）。
+
+    为什么两处都要：B-3 的闸（自产定理级要先过 V）与 B-2 这一条覆盖同一类输入
+    （自产、无出处、定理级、没有 V 的签）。裁定 B-2 管的是"它一开始可以叫什么"，
+    比 B-3 的"能不能升成定理"更靠前 ⇒ 这一档的拒收码用 B-2 的那个；而 B-3 的
+    `self_authored_needs_v` 仍然管它自己的射程（例如这一笔自称引文回验通过、
+    而 B-2 的三件不成立时）。
+    """
+    return _refuse(
+        MUST_START_AS_CONJECTURE,
+        "这一笔是 origin='own_result'、没有 source_lit_id、quote_verified 也不是 true "
+        "⇒ 没有引文 / 自己编的命题必须从「猜想」注册（业主 2026-10-22 裁定 B-2），"
+        f"不能一进门就声明成 {kind_now!r}。两条正路（都不必改这一行的内容）："
+        "① 把 kind 改成 \"conjecture\" 再交一次（升档不用你报：等级由 "
+        "evidencebits.derive_grade 按五元位现算 —— 有证明过程且 V 签过就自己抬）；"
+        "② 走猜想登记那条路：D 的 register_conjecture 动作（工具面 "
+        "`conjecture.register_conjecture`）先把这条立成猜想，再拿证据回来。"
+        "如果你本来就有外部出处：给 source_lit_id + page_range 并按 "
+        "origin='external_lit' 重交。",
+        statement_kind=kind_now, declared_origin=str(origin))
 
 
 def _normalize_proofs(raw: object, *, proof_text: str) -> tuple[list[dict], str, dict | None]:
@@ -196,6 +252,69 @@ def _canonical_history_entry(old_text: str, new_text: str) -> dict:
             "replaced_by": _VR.proof_sha(new)}
 
 
+#: 第 4 位（形式化通过）从 L 的台账同步进命题那一行（D28 的写侧）。
+#:
+#: 业主 2026-10-22 的裁定（逐字）：「一个定理有多种证明路径，lean 形式化需指明对哪个路径
+#: 做了形式化验证，即五元判据有关形式化的那一位也要改成二维列表。但关于一个定理的正确性，
+#: 但凡任意一个路径通过核验，它就是对的」。
+#:
+#: ## 为什么写者是 B 的这一条路
+#: L 的写集只有 `experiments`（`specs/l.py::SPEC.write_set`）：它登记"我验了哪一份证明、
+#: 检查器说了什么"，但它不许碰 `statements`。第 4 位住在 `statements.bits` 里，所以
+#: 把"验过"翻译成"这一位是什么"必须由能写那一行的角色做 —— 与第 3 位同一条规矩
+#: （V 签台账，位由同一笔写落），只是这一位的那一笔落在 B 的登记里。
+#:
+#: ## 它读什么、写什么
+#: 读 `experiments`（`evidencebits.formal_ledger_reading` 是唯一派生点：只认绑到这条
+#: 命题的 `method="formal"` 行），写出两格：
+#:
+#: - `bits.formal`：二维 `{证明号: 状态}`，把这条命题在册的每一条证明都列出来
+#:   （没验过的写 `pending`）—— 整表写，与第 3 位的 `reviewed_by_proof` 同一个理由：
+#:   缺一格要靠调用方记得"缺省是 pending"，而写出来是直接读出来的结论；
+#: - `bits.evidence.formal_by_proof`：逐条凭据（checker / experiment_id / proof_sha256 /
+#:   path_id / path_source），外加单格的 `bits.evidence.formal`（老读者只认它）。
+#:
+#: 号不在册的读数不落位（那条实验绑到了一条不存在的证明上）。台账里一条读数都没有时
+#: 原样返回（不改已有那一位）：没验过不等于"把以前验过的擦掉"。
+def _bits_with_formal(bits: Mapping | None, row: Mapping,
+                      experiments: list[Mapping]) -> dict:
+    """`(bits, 读数)` 里的第二格换成"把台账里的第 4 位同步进去"之后的那一份。"""
+    out: dict = dict(bits or {})
+    reading = _EB.formal_ledger_reading(row, experiments)
+    registered = {no for no, _text in _VR.proof_list(row)}
+    states: dict[str, str] = {}
+    payloads: dict[str, dict] = {}
+    for no, item in reading.items():
+        if no not in registered:
+            continue
+        states[str(no)] = str(item.get("state") or "pending")
+        payloads[str(no)] = dict(item.get("payload") or {})
+    if not states:
+        return {"changed": False, "bits": out, "paths": {},
+                "note": ("L 的台账里没有绑到这条命题、且号在册的形式化读数 ⇒ "
+                         "第 4 位一个字不动（没验过不是「把验过的擦掉」）")}
+    # 整表写：在册的每一条证明都列出来，没读数的那几条是 `pending`。
+    full = {str(no): "pending" for no in sorted(registered)}
+    full.update(states)
+    ev = dict(out.get("evidence") or {})
+    ev[_EB.FORMAL_BY_PROOF_KEY] = payloads
+    # 单格那一份（老形态）取第一条 verified，没有就取最小的号 —— 它只是"最近那一次"
+    # 的读数，逐条判定一律读 `formal_by_proof`。
+    order = sorted(payloads)
+    pick = next((no for no in order if states.get(no) == "verified"), order[0] if order else "")
+    if pick:
+        ev["formal"] = dict(payloads[pick])
+    out[_EB.FORMAL_BIT] = full
+    out["evidence"] = ev
+    merged = _EB.normalize_raw(out, origin=str(row.get("origin") or "own_result"),
+                               kind=str(row.get("kind") or ""))
+    changed = (dict(bits or {}).get(_EB.FORMAL_BIT) != merged.get(_EB.FORMAL_BIT)
+               or dict((bits or {}).get("evidence") or {}).get(_EB.FORMAL_BY_PROOF_KEY)
+               != merged.get("evidence", {}).get(_EB.FORMAL_BY_PROOF_KEY)
+               or dict(bits or {}).get("grade") != merged.get("grade"))
+    return {"changed": bool(changed), "bits": merged, "paths": dict(full), "note": ""}
+
+
 def _bits_after_canonical_write(row: Mapping, fresh: Mapping | None) -> dict:
     """canonical 正文被覆盖之后那一行的 `bits`：只同步第 2 位与它的正文。
 
@@ -303,24 +422,49 @@ class _RegisterStatement:
         out: dict = {"written": False, "attached": [], "already": [],
                      "refused": "", "reason": "", "canonical_differs": False,
                      "canonical_written": False, "canonical_pending": False,
-                     "canonical_history": []}
+                     "canonical_history": [],
+                     #: 第 4 位这一笔同步过没有（见 `_bits_with_formal`）：它与
+                     #: "写了什么"分开报，因为"没验过"与"验过没变化"都是 `False`，
+                     #: 而两者该给调用方的话不同（前者不用再登记一次）。
+                     "formal_synced": False, "formal_paths": {}}
         want = str(canonical or "").strip()
-        if not entries and not want:
-            return out
+        #: 这一笔交来的东西（证明清单 `entries` / canonical 正文 `want`）两样都没有。
+        #:
+        #: ## 两样都没有不等于"没有活要干"（D-2）
+        #: 第 4 位（形式化）不是从这一笔的入参算出来的，是从 L 的 `experiments` 台账同步
+        #: 进盘上那一行的 `proof_text` / `proofs` 的。于是一条 `proof_text` 空、证明
+        #: 只挂在 `proofs` 列表里的命题，L 验过之后再登记一次（什么都不带）正是它进第 4 位
+        #: 的那一笔；改前这里直接 `return out`，那一笔在到达 `_bits_with_formal` 之前就结束
+        #: 了 ⇒ 验过的形式化永远进不了第 4 位，而且不报错（"没验过"与"验过了但没同步"在
+        #: 读数上同形）。所以这里只记一个标记、不早退：后面照常走一次 `_bits_with_formal`，
+        #: 有变化就写回（`formal_synced=True`），没变化则一个字都不写 —— "不写新行、不动
+        #: canonical"这两条保持不变。
+        nothing_to_attach = not entries and not want
         #: 写进 `proof_text` 的是调用方交来的原样正文（`raw_want`），不是比较用的
         #: `want`（去掉了首尾空白）：`bits.evidence.proof_process` 记的是原样正文，
         #: 写一份去空白的进盘就会让"正文的 sha"与"位里记的正文"分家。
         raw_want = str(canonical or "")
         store = getattr(self, "store", None)
         if store is None:
+            if nothing_to_attach:
+                # 没有要挂的东西、也没有 store：第 4 位同步要写盘，这里做不了；而这一笔
+                # 本来就不写任何东西（不编一句"清单挂不上去"挡在上面那条路上）。
+                return out
             out["reason"] = ("这一趟没有 store ⇒ 证明清单挂不上去（第 1 份已由秘书落行，"
                              "第 2 份起无处可写）")
             out["canonical_pending"] = bool(want)
             return out
+        #: 第 4 位的台账（L 的 `record` 落的那张表）。在事务外先读好：它只被
+        #: `_bits_with_formal` 用来算"这一位现在是什么"，不参与这一笔的内容判据。
+        experiments = [dict(r) for r in store.rows("experiments")]
         with store.tx("statements", actor=str(getattr(self, "actor", "agent-B") or "agent-B"),
                       note=f"agent_b.register_statement:proofs:{stmt_id}") as tx:
             found = tx.find("statements", stmt_id=stmt_id)
             if found is None:
+                if nothing_to_attach:
+                    # 这一笔本来就不带东西（只为第 4 位同步而来），行不在就没什么可同步：
+                    # 不编一句"清单无处可挂"（那会把"没东西可挂"说成"挂失败了"）。
+                    return out
                 out["reason"] = (f"`statements` 里没有 {stmt_id} ⇒ 证明清单无处可挂"
                                  "（行没落成，清单也就没有落点）")
                 out["canonical_pending"] = bool(want)
@@ -368,7 +512,18 @@ class _RegisterStatement:
                 listed.append({"proof_no": no, "text": text,
                                "created_at": str(entry.get("created_at") or S.now_iso())})
                 out["attached"].append(no)
-            if not out["attached"] and not canonical_changed:
+            # ---- 第 4 位（形式化，二维）从 L 的 experiments 台账同步（D28 的写侧）。
+            #
+            # 位置在"挂证明"之后：证明清单变了，这一位在册的路径也就变了。这一笔只
+            # 有在这里才读得到最终的 `proof_text` / `proofs`（canonical 可能刚被覆盖）。
+            synced = _bits_with_formal(row.get("bits"), row, experiments)
+            if synced.get("changed"):
+                row["bits"] = synced["bits"]
+                out["formal_synced"] = True
+                out["formal_paths"] = dict(synced.get("paths") or {})
+            #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
+            #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
+            if not out["attached"] and not canonical_changed and not out["formal_synced"]:
                 return out
             if out["attached"]:
                 row[_VR.PROOFS_KEY] = listed
@@ -386,6 +541,76 @@ class _RegisterStatement:
             "proofs_already": [int(n) for n in (attach.get("already") or [])],
             "proofs_refused": str(attach.get("refused") or ""),
         }
+
+    # ------------------------------------------------------------ D1：写侧真比对
+    def _quote_doc(self, lit_id: str) -> tuple[object | None, str]:
+        """把 `source_lit_id` 那一篇重新打开当可比对的文档 ⇒ `(doc, 取不到的理由)`。
+
+        ## 为什么必须真的把全文取出来
+        D1 的第二版现场（2026-10-22）：这一格此前传的是 `doc=None`（旧注释自认
+        "这一趟没有文档可查"），而 `quoteevidence.locate_span` 只在 doc 非空时才跑
+        ⇒ 一次比对都没有发生，"逐字回验通过"全是模型自报的（真机 13 行全是 true +
+        空 span）。所以这一格改为：按 `lit_id` 找到 literature 那一行，重新打开它。
+
+        ## 打开它只有一处实现
+        `_Core._load_doc_for` 已经是"把一篇文献重新读成 doc、读不成给出可读原因"的唯一
+        落点（reprocess 那条链也走它：路径非法 / 文件不在 / 抽取失败 / 无文本层要试 OCR，
+        四档各有各的话）。这里只做"按 lit_id 找行"这一件本层的事，读文件的规则一个字都
+        不重写 —— 第二份实现会让"这篇有没有全文"在两处读成两个答案。
+
+        三态：读不成返回 `None` + 理由，调用方据此落 unknown（不是 false：没读到不等于
+        原文里没有）。理由必须点名是哪一篇的哪一档，否则读的人只会去重试。
+        """
+        lid = str(lit_id or "").strip()
+        if not lid:
+            return None, ("这一行没有 source_lit_id（外部命题没有出处，就没有可比对的全文；"
+                          "自产命题的出处是我方稿件，不走这一条）")
+        store = getattr(self, "store", None)
+        if store is None:
+            return None, "这一趟没有 store（读不到 literature 表）"
+        try:
+            rows = [dict(r) for r in store.rows("literature")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成"没有全文"
+            return None, f"literature 表读不出来（{type(exc).__name__}: {exc}）"
+        row = next((r for r in rows if str(r.get("lit_id") or "") == lid), None)
+        if row is None:
+            return None, f"literature 表里没有 {lid} 这一行（出处在库里查不到）"
+        load = getattr(self, "_load_doc_for", None)
+        if not callable(load):
+            return None, ("这一趟的 B 没有 `_load_doc_for`（读全文的唯一实现），"
+                          "所以拿不到这一篇的文档 ⇒ 一次比对都没发生")
+        doc, why = load(row)
+        if doc is None:
+            return None, f"文献 {lid} 的全文读不了：{why or '原因不明'}"
+        if not list(getattr(doc, "pages", None) or []):
+            return None, f"文献 {lid} 抽出来是 0 页（没有可比的文本）"
+        return doc, ""
+
+    @staticmethod
+    def _quote_probe(doc: object | None, *, quote_span: str,
+                     proof_text: str) -> tuple[str, int, str]:
+        """选出"真要核的那一段" ⇒ `(片段, 页码提示, 读数说明)`。
+
+        优先 `quote_span` 指向的片段。这一栏两种写法都要认：
+
+        - 逐字档的定位（`p{页}:norm[起:止]`）⇒ 拿文档切一次，切出来的那段就是"该核的
+          那一段"，页码那么来的命中页提示；
+        - 语义档的原文（H 判时对着的那一段）⇒ 切不出来（格式认不出），就把这一栏本身
+          当片段核 —— 认不出定位格式不等于"这一栏是垃圾"。
+
+        都没有 ⇒ 用 `proof_text`（模块 docstring 第 2 条：它是逐字摘录，也是
+        `quote_verified` 原本的比对对象）。三者都空 ⇒ 空串（调用方据此降 unknown）。
+        """
+        span = str(quote_span or "").strip()
+        if span:
+            slab, page = QE.span_slice(doc, span)
+            if slab:
+                return slab, int(page or 0), f"按 quote_span {span} 取到的那一段"
+            return span, 0, "quote_span 本身（认不出定位格式，按原文片段核）"
+        text = str(proof_text or "")
+        if text.strip():
+            return text, 0, "proof_text"
+        return "", 0, "没有可比的那一段（quote_span 与 proof_text 都是空的）"
 
     def register_statement(
         self,
@@ -412,6 +637,11 @@ class _RegisterStatement:
         #: `quote_span` 是来源里那一段逐字正文，`quote_call_sha256` 是那次语义判定的
         #: 调用记录（H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`）。
         #: 标了 `quote_mode="semantic"` 而缺这两样 ⇒ `Statement.validate()` 当场拒。
+        #:
+        #: D1（2026-10-22）起这两栏还有第二层用法：逐字档把 `quote_span` 写成定位
+        #: （`p{页}:norm[起:止]`，见 `quoteevidence.SPAN_SCHEME`），写侧会拿它指向的
+        #: 片段（或 `proof_text`）去这一篇的全文里真比对，落盘的区间是重算出来的那个
+        #: （自报的区间只是线索）。核不出区间 ⇒ 这一笔降成 unknown，理由说清为什么要补。
         quote_span: str = "",
         quote_call_sha256: str = "",
         derived_from: list | None = None,
@@ -420,7 +650,15 @@ class _RegisterStatement:
     ) -> dict:
         """登记一条命题，返回 `{"ok": True, "stmt_id": ..., "row": {...}}`；不合规就零写入。"""
         full = str(statement_full or "").strip()
-        if not full and str(kind or "").strip() != "concept":
+        #: 这一笔的 `kind` 只在这里派生一次（B-2 的判据与落库用的必须是同一个值）。
+        #:
+        #: 为什么强调"只一处"：改前这个缺省值在动作里出现过两遍 —— 概念行那一支写
+        #: `str(kind or "").strip() == "concept"`，载荷那一格写 `str(kind or "theorem")`。
+        #: 两处各算一次，谁加一个 `.strip()` 或改一次缺省值，"判据读的那个 kind"与
+        #: "落库的那个 kind"就会分家 —— 而它们分家的形态是静默的：判据放过的行，
+        #: 落下去以后换了个 kind，没有任何读数会说这两者不是同一个。
+        kind_now = str(kind or "theorem").strip()
+        if not full and kind_now != "concept":
             # 命题没有"内容待补"这一档：省掉假设的命题会被下游当成无条件成立。
             # 概念有（业主 `draft/97` §14.13 逐字：「抽不到定义的概念就让A去网上搜，
             # 写入时定义内容留空，等A返回后写入」）⇒ 空定义的概念要落行并带待补标记，
@@ -450,7 +688,7 @@ class _RegisterStatement:
         # ① `proof_text`：概念行不许带它 ⇒ 不写，但把"丢了什么"写进返回值（留痕）。
         proof_text_dropped = ""
         proofs_dropped: list = []
-        if str(kind or "").strip() == "concept":
+        if kind_now == "concept":
             if origin == "own_result":
                 return _refuse(
                     "concept_origin_refused",
@@ -583,6 +821,35 @@ class _RegisterStatement:
                 # 差别只在"这里不再拒收，而是替它把理由写实"）。
                 quote_reason = "证明还没做完 / 未核到 ⇒ 这一行按待办挂着（等级现算是『猜想』）"
 
+        # ---- 业主 2026-10-22 的 B-3（后半）：自产的定理级命题要先过 V。
+        #
+        # 位置为什么在这里：来源 / 正文 / 证明清单 / 三态都定稿了（上面那几级会把
+        # `needs_proof` 的 `quote_reason` 写实），而任何写入都还没发生 —— 闸要么
+        # 放行、要么零写入。判定顺序（与 B-2「无引文的必须从猜想注册」共存）：
+        # 概念短路 → 猜想放行 → 自产要签 → 有签放行。逐字写在 `_self_authored_gate`。
+        self_authored = self._self_authored_gate(
+            # `kind` 传的是上面那唯一一处派生出来的值（不是再算一次 `str(kind or "theorem")`）：
+            # 闸判的那个 kind 与落库的那个 kind 必须是同一个字符串，否则"判据放过了、
+            # 落下去的却是另一个 kind"这件事在读数上完全看不见。
+            origin=str(origin), kind=kind_now, lit_id=lit_id,
+            statement_full=full, proof_text=str(proof_text or ""))
+        if self_authored.get("refused"):
+            # 两条裁定的分工按"阶段"分，拒收码也跟着阶段走（同一件事的两种说法：
+            # 一个说"你一开始就不该叫定理"，一个说"现在欠的是 V 的一签"）：
+            #   - 册上还没有同一条命题 ⇒ 这是首次登记 ⇒ B-2 的码 `must_start_as_conjecture`
+            #     （另一路已落地的那张白名单；`_must_start_as_conjecture_refusal` 是它的文案）；
+            #   - 册上已经有同一条命题（先立成猜想、现在来声明定理级）⇒ 这正是业主
+            #     B-3 点名的"从猜想升成 theorem/lemma 的那一步" ⇒ `self_authored_needs_v`：
+            #     此刻缺的不是"换个 kind"，是 V 的那一签。
+            _b2_hits = (str(origin) == "own_result" and not lit_id
+                        and quote_verified is not True
+                        and kind_now not in CONJECTURE_START_KINDS)
+            if _b2_hits and not bool((self_authored.get("reading") or {}).get("in_ledger")):
+                return _must_start_as_conjecture_refusal(kind_now=kind_now,
+                                                         origin=str(origin))
+            return _refuse(str(self_authored["refused"]),
+                           str(self_authored.get("reason") or ""))
+
         # 第六级（§87）：ID 形态。`source_lit_id`/`doc_id` 的形态由 `schema.require_id`
         # 定义（当前宽度六位；旧四位读侧兼容），这里在写库前用同一个谓词核，拒绝时带上 `kind` ——
         # "写成 doc:0000" 于是是一条可读的拒绝，而不是事务里抛出的 `ValueError`。
@@ -625,37 +892,78 @@ class _RegisterStatement:
                     "（既有词表没有第二个能表达这件事的档，而新增状态词要改 schema.py，"
                     "那是禁改区）")
 
-        # ---- D1（2026-10-22）：写侧断言 —— 说"通过"就必须给得出可复核的证据。
+        # ---- D1（2026-10-22，第二版）：写侧断言 —— 说"逐字通过"就必须当场核一次。
         #
-        # 真机读数（`saxl-ws/data/statements.json`，修复前）：8 条命题
+        # 真机读数（`saxl-ws/data/statements.json`，修复前）：13 条命题全写着
         # `quote_verified=true` / `quote_mode=verbatim`，而 `quote_span` /
-        # `quote_reason` / `quote_call_sha256` 三栏全空 —— "逐字回验通过"这句话
-        # 在盘上没有任何读数（核了哪一段、在第几页、有没有花模型钱，一条都读不出来）。
+        # `quote_reason` / `quote_call_sha256` 三栏全空。追下去是这一格的写法问题：
+        # 断言里传的是 `doc=None`（旧注释自认"这一趟没有文档可查"），而
+        # `quoteevidence.locate_span` 只在 doc 非空时跑 ⇒ 一次比对都没发生，
+        # "逐字回验通过"只是模型自报的入参。
+        #
+        # 现在这一格真的去核，三件事：
+        # ① 给了 `source_lit_id` ⇒ 把那一篇的全文取出来当 doc（`_quote_doc`）；
+        # ② `quote=` 传真要核的那一段 —— 优先 `quote_span` 指向的片段，否则
+        #    `proof_text`（`_quote_probe`）；
+        # ③ 交给 `enforce_quote_evidence`（区间只由 `locate_span` 产出）：
+        #    算得出区间 ⇒ 落 True + 区间；有全文而整份里都没有那一段 ⇒ 落 False
+        #    （查过、不一致）；没有可比的全文 ⇒ 降 unknown + 可操作理由；
+        #    语义档缺区间或调用指纹 ⇒ 整笔不写（具名拒绝）。
         #
         # 位置为什么在这里：三态定稿在上一格（`needs_proof` 会把自产命题的
         # `quote_reason` 写实），而五元位要按定稿后的 `quote_verified` 现算 ——
         # 断言必须排在 `_statement_bits` 之前，否则位会把一句"通过了"当真。
         #
-        # 三档（`quoteevidence.enforce_quote_evidence` 是唯一实现）：
-        # - 拿得出 `quote_span` ⇒ 写实（`semantic` 还要求调用指纹）；
-        # - 说逐字通过、却拿不出区间也定位不到 ⇒ 降成 `None` + 原因（unknown 档）；
-        # - 说语义相同、却缺区间或调用指纹 ⇒ 整笔不写（具名拒绝）。
+        # 只有"说通过"才去读全文：没有这一句就没有东西要核，而重新打开一篇文献
+        # （可能还要 OCR）是这一笔最重的 I/O —— 不该为一次注定要写 unknown 的登记付它。
+        if quote_verified is True:
+            _quote_doc, _quote_doc_problem = self._quote_doc(lit_id)
+        else:
+            _quote_doc, _quote_doc_problem = None, ""
+        _probe_quote, _probe_page, _probe_note = self._quote_probe(
+            _quote_doc, quote_span=quote_span, proof_text=str(proof_text or ""))
         evidence, evidence_reading = QE.enforce_quote_evidence(
             {"quote_verified": quote_verified, "quote_mode": quote_mode,
              "quote_span": quote_span, "quote_call_sha256": quote_call_sha256,
              "quote_reason": quote_reason},
-            # 比对对象是 `proof_text`（本模块 docstring 第 2 条：逐字摘录）——
-            # 这一趟没有文档可查（B 交的是文本），所以它只在"要当场定位区间"时用得上。
-            quote=str(proof_text or ""), page_range=page_norm,
-            field="statements.proof_text")
+            quote=_probe_quote, doc=_quote_doc, page_range=page_norm,
+            field="statements.proof_text", doc_problem=_quote_doc_problem,
+            hint_page=_probe_page, note=_probe_note)
         if not evidence_reading.get("ok"):
-            return _refuse("quote_evidence_missing",
+            # 拒绝码跟着判据走：`no_source_without_backing`（B-4）与其余几档分开命名 ——
+            # 前者是"理由里承认了没有来源可核、却没有我方手稿的背书"，后者是"该给的
+            # 证据栏没给齐"。两种欠账的处置不同（补背书 / 补 span 或理由），读数就必须
+            # 能分辨，否则调用方只会看到同一个 `quote_evidence_missing` 然后再试一次。
+            return _refuse(str(evidence_reading.get("code") or "quote_evidence_missing"),
                            str(evidence_reading.get("why") or "") + _all_missing)
         quote_verified = evidence["quote_verified"]
         quote_mode = str(evidence["quote_mode"])
         quote_span = str(evidence["quote_span"])
         quote_call_sha256 = str(evidence["quote_call_sha256"])
         quote_reason = str(evidence["quote_reason"])
+
+        # ---- B-2（业主 2026-10-22 裁定 D18）：没有引文 / 自己编的命题必须从"猜想"注册。
+        #
+        # 判据三件一齐成立才算这一档：`origin="own_result"`（是我们自己的）+ 没有
+        # `source_lit_id`（没有外部出处）+ `quote_verified` 不是 True（没有一条回验
+        # 通过的引文）。这时它凭什么一进门就叫 theorem / lemma / proposition？等级是
+        # 五元位现算的（`evidencebits`），但 `kind` 是声明：一条还没被任何证据撑起来的
+        # 声明按强档登记，下游（G 写正文、H 审校、收工门）读到的就是一句"这是定理"，
+        # 而没有任何一格会说它的门第先于证据。
+        #
+        # 位置为什么排在 `enforce_quote_evidence` 之后：判据读的必须是定稿后的三相值 ——
+        # 那种"模型说 true、其实查不成"的行会被降成 None，它在证据面与 None 是同一件事，
+        # 按入参判就会放过它。
+        #
+        # `concept` 在这一档之外：概念行不参与等级链（见 `evidencebits.derive_grade` 的
+        # 短路那一支），它没有"强于猜想"这回事。V 已经签住的那些行也让路（共存口径见
+        # 上面 B-3 那一闸的注释：那一签本身就是"它先立过猜想、走过复核"的证据）。
+        if (str(origin) == "own_result" and not lit_id
+                and quote_verified is not True
+                and kind_now not in CONJECTURE_START_KINDS
+                and not bool((self_authored.get("reading") or {}).get("signed"))):
+            return _must_start_as_conjecture_refusal(kind_now=kind_now,
+                                                     origin=str(origin))
 
         # ---- 业主 2026-10-09：「B 不直接用增工具，秘书实际操作增、改、查工具，
         # B 纯粹负责消化理解」⇒ 上面那些是内容的判据（B 的判断），写盘这一段交给秘书。
@@ -672,7 +980,7 @@ class _RegisterStatement:
                            "`Secretary.record_statement`。不许退回'B 自己写'那条后备路）"
                            + (f"；{self.secretary_problem}" if self.secretary_problem else ""))
         payload = {
-            "origin": origin, "kind": str(kind or "theorem"), "label": str(label or ""),
+            "origin": origin, "kind": kind_now, "label": str(label or ""),
             "statement_text": str(statement_text or ""), "statement_full": full,
             "proof_text": str(proof_text or ""), "source_lit_id": lit_id,
             "page_range": dict(page_norm), "quote_verified": quote_verified,
@@ -695,6 +1003,7 @@ class _RegisterStatement:
                                          canonical=str(proof_text or ""),
                                          bits=bits)
             out = {"ok": True, "stmt_id": stmt_now,
+                   "self_authored_review": self._self_authored_reading(self_authored),
                    "source_lit_id": lit_id or None,
                    "quote_verified": quote_verified, "origin": origin,
                    "quote_mode": str(quote_mode or ""),
@@ -752,6 +1061,7 @@ class _RegisterStatement:
                                stmt_id=stmt_dup)
             if attach.get("written"):
                 out = {"ok": True, "stmt_id": stmt_dup,
+                       "self_authored_review": self._self_authored_reading(self_authored),
                        "source_lit_id": lit_id or None,
                        "quote_verified": quote_verified, "origin": origin,
                        "quote_mode": str(quote_mode or ""),
@@ -769,6 +1079,15 @@ class _RegisterStatement:
                     out["note"] += ("这一笔带来的证明清单也挂上去了：清单是追加式的，"
                                     "#p1 是行上的 `proof_text`，其余在 "
                                     f"`{_VR.PROOFS_KEY}` 里。")
+                if attach.get("formal_synced"):
+                    # 第 4 位（二维）这一笔真的变了：说清它现在是哪几条路径、各是什么。
+                    # 这是 D28 的可见面 —— 改前这一位没有任何写者，L 验过之后再登记
+                    # 一次也不会让它变。
+                    out["formal_paths"] = dict(attach.get("formal_paths") or {})
+                    out["note"] += (
+                        "第 4 位（形式化通过）按 L 的 `experiments` 台账同步了："
+                        f"逐条证明的状态 {out['formal_paths']}（键是证明号；"
+                        "汇总按任一路径通过就算通过，逐条路径各自独立）。")
                 out.update(self._proofs_reading(attach))
                 return out
             if proofs_listed and not attach.get("already"):
@@ -807,6 +1126,11 @@ class _RegisterStatement:
         if attach.get("written"):
             data = next((dict(r) for r in self.store.rows("statements")
                          if str(r.get("stmt_id") or "") == stmt_id), data)
+        #: note 里报的那一档等级以盘上那一行为准：这一笔可能把第 4 位（形式化，二维）
+        #: 同步进去了，而 `bits` 是同步之前算的。
+        written_grade = str(bits.get("grade") or "")
+        if attach.get("formal_synced"):
+            written_grade = str(_EB.bits_from_row(data).get("grade") or written_grade)
         # 定义待补那一档要看得见（`draft/97` §15.4 的补法优先级）：
         # 抽不到定义 ⇒ ①先问直接父（它手里有原文，就地能给）→ ②A 上网搜 → ③B 自撰。
         # 这里只把"要给谁"写进读数（载体那一步在循环那一层：它才知道自己的父是谁）。
@@ -817,6 +1141,8 @@ class _RegisterStatement:
                         if (str(data.get("status") or "") == "pending_definition"
                             or int(written.get("pending_concepts") or 0)) else [])
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
+                #: B-3 的写侧读数：这一笔要不要 V 的签、有没有拿到（见 `_self_authored_gate`）。
+                "self_authored_review": self._self_authored_reading(self_authored),
                 "quote_verified": quote_verified, "origin": origin,
                 "quote_mode": str(quote_mode or ""),
                 "quote_span": str(quote_span or ""),
@@ -856,7 +1182,7 @@ class _RegisterStatement:
                 "note": ("登记 ≠ 核对：quote_verified 是三态（True/False/None），"
                          "它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。"
                          "五元位已随这一行落库（现算等级 "
-                         f"{bits.get('grade')}；第 2 位来源 "
+                         f"{written_grade}；第 2 位来源 "
                          f"{bits.get('evidence', {}).get('proof_source') or '（空）'}）——"
                          "等级不许自报，判据永远现算。"
                          "这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），"
@@ -874,7 +1200,11 @@ class _RegisterStatement:
                             f"`{_VR.PROOFS_KEY}` 清单（追加式，各带 `created_at`）。"
                             "每一份的第 3 位（审过）各自独立，由 V 逐份签 —— "
                             "登记不等于审过。"
-                            if proofs_listed else ""))}
+                            if proofs_listed else "")
+                         + ("第 4 位（形式化通过）按 L 的 `experiments` 台账同步了："
+                            f"逐条证明的状态 {attach.get('formal_paths')}"
+                            "（键是证明号；汇总按任一路径通过就算通过）。"
+                            if attach.get("formal_synced") else ""))}
 
     # ---------------------------------------------------------------- 规矩 B
     #
@@ -1000,3 +1330,210 @@ class _RegisterStatement:
                 continue
             missing.append({"ref": key, "in_ledger": key in known})
         return missing, ""
+
+    # ---------------------------------------------------------------- 业主 B-3（2026-10-22）
+    #
+    # 裁定逐字：「B 侧自己杜撰定理与证明时，也必须给 V 看才能落库，否则按瞎编处理。」
+    #
+    # 为什么落在写入口而不是收工门：收工门 R10 是事后读数（它只把结论记成 rejected），
+    # 运行期零后果 —— 一条自己编的「定理」在盘上照样 status=active、grade=conjecture，
+    # 而下游（G 的正文、H 的审稿、D 的手稿）读的是那一行。闸必须在「进库之前」。
+    #
+    # 与 B-2（「无引文的必须从猜想注册」）的分工写在一处（判定顺序）：
+    #   1. `kind="concept"` ⇒ 概念行先短路（来源分档那一套在更上面）；
+    #   2. `kind="conjecture"` ⇒ 猜想放行（猜想本来就要先落库才审得动：V 只审在册的命题）；
+    #   3. `origin=own_result` 或 `source_lit_id` 空 ⇒ 判「杜撰」，要 V 的签；
+    #   4. 有签 ⇒ 放行（读数进返回值）；没有 ⇒ `self_authored_needs_v`。
+    # 于是「从猜想升成 theorem/lemma 的那一步」才是要签的那一步，而「按猜想注册」不受阻。
+
+    #: 不受这条闸管束的两种 kind：猜想（先落库才审得动）与概念（不走等级链）。
+    _NON_THEOREM_KINDS: tuple[str, ...] = ("conjecture", "concept")
+
+    #: 这条闸的受控拒绝码（调用方据它分辨「参数不对」与「还欠 V 一签」）。
+    SELF_AUTHORED_NEEDS_V = "self_authored_needs_v"
+
+    def _v_signature_for(self, *, statement_full: str, proof_text: str) -> dict:
+        """这一条自产命题有没有「V 签成立、且盖的正是这一份正文」的签（纯读）。
+
+        ## 判据只有一处
+        `verifications.statement_review_reading`（与收工门 R10、`closing` 的收工读数
+        同一个函数）：它逐条证明回答「现在这一份正文最近那一签是什么」。这里只做两件
+        事 —— 先按正文认出「同一条命题在册的那一行」，再在它的逐条读数里找
+        `reviewed=True` 且 `proof_sha256` 等于这一份正文的那些。
+
+        ## 为什么按正文认命题（而不是按编号）
+        `register_statement` 在写库之前没有号（号是秘书在事务里现发的），而 V 只审在册
+        的命题（`AgentV.verify_proof` 对不在册的命题直接 `statement_missing`）。所以
+        「这一条有没有签」只能问「册上那条同文的命题有没有签」—— 按号问的话，第一次
+        登记永远问不到，闸就变成了不可能通过的死闸。
+
+        ## 不许借光
+        sha 必须与这一份正文相符：别的命题的签、同一命题另一份证明的签、盖在改稿前
+        旧版上的签，一律不算（`statement_review_reading` 的 `stale` 那一档正是这个）。
+
+        ## 三态
+        `checked=False` = 没查成（没有 store / 表读不出来 / 台账读不出来）——
+        它不等于「没有签」，而调用方对两者的处理都是「不许落成定理级」，但拒信不同。
+        """
+        from .. import statementbody as _SB
+        from .. import textutil as _T
+        from .. import verifications as VR
+
+        out: dict = {"checked": False, "signed": False, "stmt_id": "",
+                     "verification_id": "", "proof_sha256": "", "in_ledger": False,
+                     "why": ""}
+        store = getattr(self, "store", None)
+        if store is None:
+            out["why"] = ("没查成：这一趟没有 store，读不到本工作区的 statements / "
+                          "verifications ⇒ 判不了这一条有没有 V 的签（不许当成签过）")
+            return out
+        want = str(proof_text or "")
+        if not want.strip():
+            out.update(checked=True,
+                       why=("这一条没有证明正文 ⇒ 不可能有盖住它的签："
+                            "V 审的是证明，不是命题标题"))
+            return out
+        root = getattr(store, "root", None)
+        key = _T.normalize(statement_full)
+        try:
+            rows = [dict(r) for r in store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
+            out["why"] = (f"没查成：statements 读不出来（{type(exc).__name__}: {exc}）"
+                          "⇒ 判不了这一条有没有 V 的签")
+            return out
+        sha = VR.proof_sha(want)
+        out["proof_sha256"] = sha
+        same = [r for r in rows
+                if str(r.get("kind") or "") != "concept"
+                and _T.normalize(_SB.body_of(r)) == key]
+        out["in_ledger"] = bool(same)
+        if not same:
+            out.update(checked=True,
+                       why=("命题台账里没有同一条命题 ⇒ 它还没登记过，V 也就没处签它："
+                            "先按猜想注册（kind=\"conjecture\"），再把它交给 V"))
+            return out
+        out["checked"] = True
+        for row in same:
+            sid = str(row.get("stmt_id") or "")
+            try:
+                reading = VR.statement_review_reading(root, row)
+            except Exception as exc:  # noqa: BLE001
+                out.update(checked=False,
+                           why=(f"{sid} 的第 3 位读数没读成（{type(exc).__name__}: {exc}）"
+                                "⇒ 没查成，不是「没有签」"))
+                continue
+            if not reading.get("checked"):
+                out.update(checked=False,
+                           why=(f"{sid} 的验证台账读不出来 ⇒ 第 3 位没查成"
+                                f"（{str(reading.get('why') or '')[:160]}）"))
+                continue
+            for item in reading.get("proofs") or []:
+                if not bool(item.get("reviewed")):
+                    continue
+                if str(item.get("proof_sha256") or "") != sha:
+                    continue
+                out.update(signed=True, stmt_id=sid,
+                           verification_id=str(item.get("verification_id") or ""),
+                           why=(f"{item.get('verification_id')} 签「成立」、且 proof_sha256 "
+                                f"与这一份正文相符（verifications/{sid}.jsonl）"))
+                return out
+            out["why"] = (f"在册的那一条（{sid}）没有盖住这一份正文的「成立」签："
+                          f"{str(reading.get('why') or '')[:200]}")
+        return out
+
+    def _self_authored_gate(self, *, origin: str, kind: str, lit_id: str,
+                            statement_full: str, proof_text: str) -> dict:
+        """业主 B-3 的写侧闸：自产的定理级命题要么有 V 的签，要么受控拒绝。
+
+        返回 `{"needs_v": bool, "refused": str, "reason": str, "reading": {...}}`：
+        - `needs_v=False` + `refused=""` ⇒ 这一条不在闸的射程里（概念 / 猜想 / 有文献出处），
+          `reading` 里写清为什么（别让调用方以为「查了、通过了」）；
+        - `needs_v=True` + `refused=""` ⇒ 在射程里、而且真有一份 V 的签（正控）；
+        - `needs_v=True` + `refused=self_authored_needs_v` ⇒ 在射程里、没有签（拒收）。
+
+        「杜撰」的判定口径逐字来自裁定：`origin="own_result"`（我方自产）或
+        `source_lit_id` 空。后者在本动作里与前者等价（`external_lit` 缺出处更上面就被
+        拒了），但两件都判 —— 判据要读的是「有没有出处」，不是「调用方有没有声明」。
+
+        ## 与 B-2（「无引文的必须从猜想注册」）的判定顺序（六档，逐条如此）
+
+        两条裁定覆盖同一类输入（自产 / 无出处 / 定理级 / 没有 V 的签），所以顺序就是
+        口径本身。按下面的次序判，先命中哪一档就按哪一档处置：
+
+        1. `kind="concept"` ⇒ 概念行短路（概念不参与等级链，
+           `evidencebits.derive_grade` 对它短路）；
+        2. `kind="conjecture"` ⇒ 这一闸不管，猜想照常注册（猜想本来就要先落库才审得动：
+           V 的 `verify_proof` 对不在册的命题直接报 `statement_missing`）；
+        3. 自产（`origin="own_result"` 或 `source_lit_id` 空）+ 定理级 + 册上还没有
+           同一条命题 ⇒ 这一档的拒收码用 B-2 的那个 `must_start_as_conjecture`
+           （调用点在 `register_statement` 里：B-2 的白名单与拒信函数先返回）；
+        4. 同上、但册上已经有同一条命题（先立成猜想、现在来声明 theorem / lemma）⇒
+           `self_authored_needs_v`：这一刻缺的不是「换个 kind」，是 V 的那一签；
+        5. 有 V 的「成立」签、且 `proof_sha256` 与这一份正文相符 ⇒ 两闸都放行，
+           B-2 那道无状态的闸也一并让路（判据是 `reviewed` 为真且 sha 相符）；
+        6. `origin="external_lit"` 且 `source_lit_id` 非空 ⇒ 不在射程（那不是我们杜撰的）。
+
+        一句话：猜想注册不受阻；「从猜想升成定理」的那一步才要 V 签，而这一步的拒收码
+        就是 `self_authored_needs_v`。第 3 与第 4 档的分界是「册上有没有同一条命题」
+        （`_v_signature_for` 的 `in_ledger`），不是 `kind` 的另一种写法 —— 同一个
+        theorem 在「首次登记」和「升档」两个阶段欠的东西不一样。
+        """
+        kind_now = str(kind or "theorem").strip()
+        reading: dict = {"checked": True, "needs_v": False, "signed": False,
+                         "in_ledger": False,
+                         "kind": kind_now, "origin": str(origin or ""),
+                         "source_lit_id": str(lit_id or ""), "stmt_id": "",
+                         "verification_id": "", "why": ""}
+        if kind_now in self._NON_THEOREM_KINDS:
+            reading["why"] = (
+                f"kind={kind_now!r} 不在这一条闸的射程里："
+                + ("猜想本来就要先落库才审得动（V 只审在册的命题）⇒ 按猜想注册不受阻，"
+                   "从猜想升成 theorem/lemma 的那一步才要 V 的签"
+                   if kind_now == "conjecture" else
+                   "概念不走等级链（`evidencebits.derive_grade` 对它短路）"))
+            return {"needs_v": False, "refused": "", "reason": "", "reading": reading}
+        self_authored = (str(origin) == "own_result") or not str(lit_id or "").strip()
+        if not self_authored:
+            reading["why"] = ("有文献出处（origin=external_lit 且 source_lit_id 非空）⇒ "
+                              "这一条不是我们杜撰的，闸不拦它")
+            return {"needs_v": False, "refused": "", "reason": "", "reading": reading}
+        sig = self._v_signature_for(statement_full=statement_full, proof_text=proof_text)
+        reading.update(
+            checked=bool(sig.get("checked")),
+            needs_v=True,
+            signed=bool(sig.get("signed")),
+            in_ledger=bool(sig.get("in_ledger")),
+            stmt_id=str(sig.get("stmt_id") or ""),
+            verification_id=str(sig.get("verification_id") or ""),
+            proof_sha256=str(sig.get("proof_sha256") or ""),
+            why=str(sig.get("why") or ""))
+        if sig.get("signed"):
+            return {"needs_v": True, "refused": "", "reason": "", "reading": reading}
+        reason = (
+            f"自产的定理级命题（kind={kind_now!r}、origin={str(origin)!r}、"
+            f"source_lit_id={str(lit_id or '')!r}）在 V 的台账里没有一份「成立」的签盖住"
+            f"这一份正文（proof_sha256={str(sig.get('proof_sha256') or '')[:12]}…）⇒ 整笔不写"
+            f"（业主 2026-10-22 B-3：「B 侧自己杜撰定理与证明时，也必须给 V 看才能落库，"
+            f"否则按瞎编处理」）。查的结果：{str(sig.get('why') or '（没有读数）')}。"
+            "两条路都不堵：① 按猜想注册：把 kind 改成 \"conjecture\"（证明正文照交）—— "
+            "猜想不受这条闸管，落库之后它才审得动；② 先送 V：唤起 V 的 `verify.verify_proof` "
+            "走查这一份，V 签「成立」之后把同一份内容再交一次、kind 改回定理级"
+            "（档位给 evidence_kind=\"proof_review\"），那时这条闸会放行。"
+            "不许拿别的命题的签来顶（sha 必须与这一份正文相符），也不许绕开 V 直接当定理用。")
+        return {"needs_v": True, "refused": self.SELF_AUTHORED_NEEDS_V,
+                "reason": reason, "reading": reading}
+
+    def _self_authored_reading(self, gate: Mapping) -> dict:
+        """把闸的读数摊成返回值里的一格（`self_authored_review`）。
+
+        为什么成功路径也要给：这一笔能落库，可能因为「它不在射程里」（猜想 / 有出处），
+        也可能因为「它真有一份 V 的签」。两种情况在盘上长得不一样，而调用方（B 自己的
+        下一轮）需要知道自己是哪一种 —— 只给一个 `ok=True` 就等于让它去猜。
+        """
+        got = dict(gate or {})
+        return {"needs_v": bool(got.get("needs_v")),
+                "signed": bool((got.get("reading") or {}).get("signed")),
+                "in_ledger": bool((got.get("reading") or {}).get("in_ledger")),
+                "checked": bool((got.get("reading") or {}).get("checked")),
+                "verification_id": str((got.get("reading") or {}).get("verification_id") or ""),
+                "why": str((got.get("reading") or {}).get("why") or "")}

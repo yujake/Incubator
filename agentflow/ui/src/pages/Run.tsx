@@ -446,12 +446,19 @@ export function Run(props: RunProps) {
         ) : (
           <>
             <div class="readings">
-              事件{" "}
-              <span class="mono">{ledger.events === null ? "unknown" : ledger.events}</span> 条 ·
+              {/* D21（与 Home 的「台账」卡同一个口径）：`events` 不再是 events.jsonl
+                  的总行数，它是写入笔数（`upserts`）；其中的 commit 标记行数单列。 */}
+              台账写入{" "}
+              <span class="mono">{ledger.upserts === null ? "unknown" : ledger.upserts}</span> 笔
+              （其中 commit 标记{" "}
+              <span class="mono">{ledger.commit_markers === null ? "unknown" : ledger.commit_markers}</span> 行）·
               tasks 行数{" "}
               <span class="mono">{ledger.tables === null ? "unknown" : ledger.tables}</span> · 落点{" "}
               <span class="mono">{ledger.path}</span>
             </div>
+            {ledger.events_note === "" ? null : (
+              <div class="readings">{ledger.events_note}</div>
+            )}
             <div class="readings">{ledger.tables_note}</div>
             {ledger.note === "" ? null : <div class="readings">{ledger.note}</div>}
           </>

@@ -29,6 +29,7 @@ from typing import Any, Mapping, Sequence
 
 from . import agent_prompts as AP
 from . import capabilities as C
+from . import leanscope as _LEANSCOPE
 from . import policy as P
 from . import schema as S
 from . import sessions as SS
@@ -872,11 +873,15 @@ OPENING_FACT_KEYS: tuple[str, ...] = (
     "task", "inbox", "board", "children", "user_replies",
     "summoned_by", "task_id", "depth", "parent_task_id", "workspace_root",
     "availability", "parent_limits",
+    # 2026-10-22（业主 B-3）：我名下被 V 判「有毛病」的证明明细。它与上面十二格同一个
+    # 落点（开场那条 user 消息），因为它是"这一趟要补哪几条"的活账 —— 换一趟活/V 多签
+    # 一签，它就不同；放进 system 会让前缀在每一签之后作废。
+    "v_rejections",
 )
 
 
 def opening_facts(facts: Mapping[str, Any]) -> dict[str, Any]:
-    """开场那条消息里真的念出来的那十二格（缺省句已代入）—— 落事件用这一份。
+    """开场那条消息里真的念出来的那十三格（缺省句已代入）—— 落事件用这一份。
 
     为什么要代入缺省（而不是落原始值）：`agent_run_start.opening_facts` 的读者是
     "这一趟的模型到底读到了什么"。原始值里的空串在消息里会被 `prompt_facts` 换成
@@ -895,7 +900,7 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
                         depth: int, parent_task_id: str = "", children: str = "",
                         board: str = "", user_replies: str = "",
                         workspace_root: str = "", availability: str = "",
-                        parent_limits: str = "") -> str:
+                        parent_limits: str = "", v_rejections: str = "") -> str:
     """一趟循环开头的简报（任务 / 收件箱 / 板 / 父与子 / 用户回答 / 处境）。
 
     单独抽出来是为了让 `resume_transcript` 能重建同一段开头（事实在 `agent_run_start` 事件里，收件箱那一段按当前盘上的
@@ -912,10 +917,16 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
                                depth=depth, parent_task_id=parent_task_id,
                                children=children, board=board, inbox=inbox,
                                user_replies=user_replies, workspace_root=workspace_root,
-                               availability=availability, parent_limits=parent_limits)
+                               availability=availability, parent_limits=parent_limits,
+                               v_rejections=v_rejections)
     return (f"你的任务：{defaulted['task']}\n\n"
             f"你的收件箱：{defaulted['inbox']}\n\n"
             f"挂在你名下的工作项（板；可能为空）：{defaulted['board']}\n\n"
+            # 业主 2026-10-22 的 B-3：「V 的判决必须递到 F（让 F 去修）」。这一栏与上面
+            # 那栏分开，因为读的地方不同：板是"要你处理的事"，这一栏是"V 已经判过、
+            # 判的是有毛病"的逐条读数（数据源只有 V 的台账）。
+            f"我名下被 V 判「有毛病」的证明（逐条读 V 的台账）："
+            f"{defaulted['v_rejections']}\n\n"
             f"你名下的子代理（名册摘要：名字 · 一句简介 · 状态；"
             f"这是这一趟开始那一刻的快照）：{defaulted['children']}\n\n"
             f"用户回答过的问题（含迟到送达的回答）：{defaulted['user_replies']}\n\n"
@@ -1191,6 +1202,21 @@ class LoopRun:
     summons_unconsumed: int = 0
     #: 那份明细（`summon_consumption()` 的完整返回：逐条处置 + 不成立的拒绝说明）。
     summon_consumption: dict[str, Any] = field(default_factory=dict)
+    #: 收工那一刻"名下还有几条证明没有 V 的签字"（D12 的读数）：
+    #: `{checked, total, unsigned, stmt_ids, unreadable, reason}`。
+    #:
+    #: 为什么要有这一格（业主 2026-10-22「final 无未了义务读数」）：`shape == "final"` 那一支
+    #: 在收到就 `break` —— 模型说"做完了"，框架就把这句话当结论落盘，而"还有两条证明没送
+    #: V、或送了被判定有毛病"这件事在收工那一行上一个字都没有。读者（人 / 父代理 / Web UI）
+    #: 于是拿到一份看起来完整的交付，欠账只在事后翻 `verifications` 时才发现。
+    #:
+    #: 只做读数：不打回、不拦、不改 `stop_reason`、不改退出码 —— 这一格的用处是让"它说做完了"
+    #: 与"它名下还有没签住的证明"在同一行上并排出现，由读的人决定怎么办。
+    #: 口径与 `v_rejections_digest` / 收工门 R10 同一处判据（`verifications.statement_review_reading`）：
+    #: `unsigned` 数的是"`proof_text` 非空、而最近那一签不是 `signed`"的那些命题
+    #: （`rejected` / `stale` / `unsigned` / `unreadable` 都算未了 —— 读不出来的不许折成签过了）。
+    #: 刻意不进 `to_dict()`：那是交付面（`runs/*.json`），这一格是读数，落在 `agent_run_end` 上。
+    final_gaps: dict[str, Any] = field(default_factory=dict)
     #: 这一趟是什么时候开始的（`S.now_iso()` 的形态）。
     #:
     #: 为什么要有它（`draft/37` §125）：`user_stop` 那条判据要的是"本次运行「开始之后」
@@ -1765,6 +1791,217 @@ def board_digest(conductor: Any, *, my_task_id: str,
             [str(r["task_id"]) for r in pick
              if str(r.get("item_state") or "") in ("queued", "claimed")],
             [])
+
+
+
+#: V 的「有毛病」那一档的逐字取值（词表真身是 `verifications.parse_verdict`）。
+V_VERDICT_REJECTED = "有毛病"
+
+#: 「V 判决项」在板上的 `input_key` 前缀 —— 幂等投递的唯一键（同一条判决只开一项）。
+V_VERDICT_ITEM_PREFIX = "v-verdict@"
+
+
+def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
+                        *, limit: int = 8) -> tuple[str, list[dict[str, Any]], list[str]]:
+    """我名下被 V 判「有毛病」的证明明细：`(文本, 明细, 问题)`。
+
+    ## 这一格为什么存在（业主 2026-10-22 的 B-3 裁定，逐字）
+
+    「V 的判决必须递到 F（让 F 去修），否则瞎写的证明不能用」。
+
+    改前的现场：V 的 `有毛病` 只落 `verifications/<命题号>.jsonl`，而 `agent_loop`
+    全文 0 处读 `verifications` ⇒ 运行期 F 看不到「V 判过、判的是有毛病」；真机
+    `t-000026` 里 V 逐条走查 `000000–000003`，四条全判「有毛病」（`unresolved_errors`
+    1/1/2/3），而 `statements` 仍 `status=active`、`bits.reviewed=false`、
+    `grade=conjecture` —— 数据诚实，但没有任何人看得见、也没有人去修；只有收工门 R10
+    事后把它记成 rejected，运行期零后果。这一格就是那条判决的读侧落点。
+
+    ## 唯一判据不在这里（两处各写一份就会漂）
+
+    逐条证明的结论一律读 `verifications.statement_review_reading`（与 `closing` 的
+    收工门 R10 同一个函数）：它答「这一份正文最近那一签是什么」。这里只做两件事 ——
+    把 `state="rejected"` 的那些挑出来，再把那一签整行上的步号与 findings 读出来
+    （`statement_review_reading` 只回编号，不回 `defect_step`）。
+
+    ## 三态（不许把「没读成」折成「没有毛病」）
+
+    - 「名下没有被 V 判有毛病的证明」是一句有内容的读数（每条都签过成立 / 一条都没签过）；
+    - 读不出来（台账坏行 / 表读不到）⇒ 那一条进 `problems`，文本里明写「这一条没读成」；
+    - `rows` 是调用方现读的 `statements`，本函数不读表（一处读表、一处判据）。
+
+    ## 渲染集合 = 投递集合（与 `board_digest` / `inbox_digest` 同一条纪律）
+
+    返回的 `明细` 是全量（投递那一侧要用），但 `文本` 只渲染前 `limit` 条并把
+    「还有几条没渲染」写出来 —— 静默截断会让第 9 条永远不进任何人的视野。
+    """
+    from . import verifications as VR      # 惰性：本模块的运行期只在这一格读台账
+
+    details: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for row in rows:
+        sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+        if not sid or str(row.get("kind") or "") == "concept":
+            continue
+        # 没有可审的证明 ⇒ 它是「还没送 V」，不是「V 判过有毛病」（两条读数必须分开）。
+        if not VR.proof_list(row):
+            continue
+        try:
+            reading = VR.statement_review_reading(root, row)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是「没查成」，不是「没有毛病」
+            problems.append(f"{sid}：第 3 位读数没读成（{type(exc).__name__}: {exc}）")
+            continue
+        problems.extend(f"{sid}：{p}" for p in (reading.get("problems") or []))
+        rejected = [e for e in (reading.get("proofs") or [])
+                    if str(e.get("state") or "") == "rejected"]
+        if not rejected:
+            continue
+        # 那一签的整行（步号 / findings）：唯一的读口是台账文件本身，不复制第二份。
+        signed: dict[str, dict[str, Any]] = {}
+        try:
+            led_rows, _bad = VR.list_verifications(root, statement_id=sid, limit=None)
+        except Exception as exc:  # noqa: BLE001
+            led_rows = []
+            problems.append(f"{sid}：台账读不成（{type(exc).__name__}: {exc}）⇒ "
+                            "步号这一格没读出来")
+        for r in led_rows:
+            signed[str(r.get("verification_id") or "")] = dict(r)
+        for e in rejected:
+            vid = str(e.get("verification_id") or "")
+            sign = signed.get(vid, {})
+            steps = [int(f.get("step")) for f in (sign.get("findings") or [])
+                     if isinstance(f.get("step"), int)]
+            defect = sign.get("defect_step")
+            if isinstance(defect, int) and defect not in steps:
+                steps.insert(0, defect)
+            first = next((dict(f) for f in (sign.get("findings") or [])
+                          if isinstance(f, Mapping)
+                          and isinstance(f.get("step"), int)), {})
+            details.append({
+                "stmt_id": sid,
+                "proof_no": int(e.get("proof_no") or 1),
+                "label": str(e.get("label") or f"{sid}#p{int(e.get('proof_no') or 1)}"),
+                "verdict": str(sign.get("verdict") or V_VERDICT_REJECTED),
+                "unresolved_errors": int(e.get("unresolved_errors")
+                                         or sign.get("unresolved_errors") or 0),
+                "verification_id": vid,
+                "ledger": f"verifications/{sid}.jsonl",
+                "steps": sorted(set(steps)),
+                "defect_step": (int(defect) if isinstance(defect, int) else
+                                (steps[0] if steps else None)),
+                "finding": {"step": first.get("step"), "kind": str(first.get("kind") or ""),
+                            "detail": str(first.get("detail") or "")} if first else {},
+                # 「它的 proof_text 是否与现文一致」：`in_sync=True` 且 state=rejected
+                # 就是「这一签盖的正是现在这一份、结论不是成立」。
+                "in_sync": bool(e.get("in_sync")),
+                "proof_sha256": str(e.get("proof_sha256") or ""),
+            })
+    details.sort(key=lambda d: (d["stmt_id"], int(d["proof_no"])))
+    if not details and not problems:
+        return ("（名下没有被 V 判「有毛病」的证明：要么每条都签过成立，"
+                "要么一次都还没送 V）"), [], []
+    lines: list[str] = []
+    if details:
+        lines.append(f"被 V 判「有毛病」的证明共 {len(details)} 条"
+                     f"（数据源 `verifications/*.jsonl` 逐条读；步号就是 V 指的那一步）：")
+        for d in details[:max(1, int(limit))]:
+            step = ("第 %s 步" % d["defect_step"]) if d.get("defect_step") else "步号没读到"
+            what = str((d.get("finding") or {}).get("detail") or "")
+            lines.append(
+                f"- {d['label']}：verdict={d['verdict']}、"
+                f"unresolved_errors={d['unresolved_errors']}、最近一签 "
+                f"{d['verification_id'] or '（没读到编号）'}（{d['ledger']}）；"
+                f"错在{step}" + (f"（{what}）" if what else "") + "；"
+                f"这一签盖的就是现在这一份（proof_text 与现文一致）："
+                f"{'True' if d['in_sync'] else 'False'}；"
+                f"下一步：补齐{step}之后把这一份重新送 V（`verify.verify_proof`）重签，不许绕开")
+        backlog = len(details) - len(details[:max(1, int(limit))])
+        if backlog > 0:
+            lines.append(f"- （还有 {backlog} 条没渲染 —— 板上另有判决项，"
+                         "`attack.status` 之外没有别的读法）")
+    if problems:
+        lines.append("- 没读成的：" + "；".join(problems[:4])
+                     + (f"（另 {len(problems) - 4} 条）" if len(problems) > 4 else ""))
+    return "\n".join(lines), details, problems
+
+
+def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = "F",
+                       details: Sequence[Mapping[str, Any]] = (),
+                       called_by: str = "V") -> dict[str, Any]:
+    """把 V 的「有毛病」判决写进收件人的收件板（业主 B-3：递到人，不只加读数）。
+
+    ## 用的就是既有通道（不新造机制）
+
+    `conductor.open_item` + `set_item_detail` —— 与留言 / 通报 / 终态回报同一条路
+    （板项 = 收件人名下的一行 `tasks`；`board_digest` 下一趟就会把它渲染给收件人）。
+    框架不替 F 改证明：这一项里只有「哪一条、错在第几步、下一步该补什么」，
+    正文一个字都不动。
+
+    ## 幂等：同一条判决只开一项
+
+    去重键是板项的 `input_key`（`v-verdict@<命题号>#p<号>@<verification_id>`）。
+    没有它，F 每进一次循环就会多一条同样的话，而"板上 N 条"这个读数会随时间失真。
+
+    ## 三态
+
+    - 没有 conductor / 没有台账号 ⇒ `checked=False` + `reason`（不是「送过了」）；
+    - 开项抛异常 ⇒ 那一条进 `problems`，其余照开（一条坏不许带走整批）；
+    - 已经在了 ⇒ 进 `existing`（不重开，但读得出来它早就在那儿）。
+    """
+    out: dict[str, Any] = {"checked": False, "role": role, "task_id": str(task_id or ""),
+                           "opened": [], "existing": [], "problems": [], "reason": ""}
+    if conductor is None:
+        out["reason"] = "这一趟没有 conductor 句柄 ⇒ 判决递不到任何板上（不是「已经送到」）"
+        return out
+    if not str(task_id or ""):
+        out["reason"] = "这一趟还没落台账（没有台账号）⇒ 板项挂不到任何人名下"
+        return out
+    if not callable(getattr(conductor, "open_item", None)):
+        out["reason"] = "这个 conductor 没有 `open_item` ⇒ 开不了板项"
+        return out
+    # 去重口径：优先读整块板（含已经 done 的项），读不到再退回"我名下未消的"。
+    try:
+        look = getattr(conductor, "_board_rows", None)
+        board = [dict(r) for r in (look() if callable(look)
+                                   else conductor.open_items_of(task_id))]
+    except Exception as exc:  # noqa: BLE001 —— 去重读不成 ⇒ 不静默重开一遍
+        out["reason"] = (f"板读不成（{type(exc).__name__}: {exc}）⇒ 为了不重复开项，"
+                         "这一批判决没有投递")
+        return out
+    have = {str(r.get("input_key") or "") for r in board if str(r.get("input_key") or "")}
+    for d in details:
+        key = (f"{V_VERDICT_ITEM_PREFIX}{d['label']}"
+               f"@{str(d.get('verification_id') or '')}")
+        if key in have:
+            out["existing"].append(key)
+            continue
+        step = (f"第 {d['defect_step']} 步" if d.get("defect_step") else "步号没读到")
+        what = str((d.get("finding") or {}).get("detail") or "")
+        body = (f"V 判「有毛病」：{d['label']}（最近一签 "
+                f"{d.get('verification_id') or '（没读到编号）'}，"
+                f"unresolved_errors={d.get('unresolved_errors')}）\n"
+                f"错在{step}" + (f"：{what}" if what else "") + "\n"
+                f"下一步该补的就是{step}；补完把这一份重新送 V"
+                f"（`verify.verify_proof`）重签 —— 不许绕开 V 直接当定理用。\n"
+                f"这一签盖的就是现在这一份（proof_text 与现文一致）："
+                f"{'True' if d.get('in_sync') else 'False'}")
+        try:
+            item_id = conductor.open_item(
+                kind="notice", role=role, expects="ack", action="notice",
+                summary=f"V 判「有毛病」：{d['label']}（错在{step}）",
+                called_by=called_by, parent_task_id=task_id,
+                # 板项是收件人的子行 ⇒ 深度 = 收件人深度 + 1（`verify` 的
+                # `task_depth_discontinuous` 判这一条，挂在自己名下也一样）。
+                depth=int(depth or 1) + 1, input_key=key)
+            conductor.set_item_detail(item_id, body[:400])
+        except Exception as exc:  # noqa: BLE001 —— 一条开不成不许带走整批
+            out["problems"].append(f"{d['label']}：板项没开成（{type(exc).__name__}: {exc}）")
+            continue
+        out["opened"].append(item_id)
+        have.add(key)
+    out["checked"] = True
+    out["reason"] = (f"投递 {len(out['opened'])} 条（已在板上 {len(out['existing'])} 条）"
+                     + (f"；{len(out['problems'])} 条没开成" if out["problems"] else ""))
+    return out
 
 
 
@@ -3619,6 +3856,76 @@ class AgentLoop:
         run.notes.append(f"剪枝（第 {step + 1} 步的结果）：{reading.reason}")
         return pruned
 
+    def _final_gaps_reading(self) -> dict[str, Any]:
+        """收工那一刻"我名下还有几条证明没有 V 的签字"（D12 的读数，不打回、不拦）。
+
+        业主 2026-10-22 的口径：`final` 一到就 `break` 是这个缺陷的形态 ——
+        模型说"做完了"，框架就把这句话当结论，而"名下还有两条证明没送 V / 送了被判有毛病"
+        在收工那一行上一个字都没有。这一格把那件事变成 `agent_run_end` 上的一个数。
+
+        ## 判据只有一处
+
+        `verifications.statement_review_reading`（与 `v_rejections_digest`、收工门 R10 同一个
+        函数）：它答"这一份正文最近那一签是什么"。这里只挑 `state != "signed"` 的：
+        `rejected`（签过、结论不是成立）/ `stale`（签过、签的是旧版）/ `unsigned`（一次都没签）/
+        `unreadable`（台账读不出来 —— 不许折成"签过了"，所以也算未了）。
+
+        ## "名下"的口径
+
+        `statements` 表没有"这一趟/这一个台账号"的列（只有 `created_by` 的岗位名），
+        所以这一格与 `v_rejections_digest` 用同一个口径：盘上带 `proof_text` 的命题行
+        （`kind="concept"` 不算 —— 概念不参与证明与审校）。它是"这一岗现在名下欠着的"，
+        不是"这一趟新写的那几条"；后者没有任何数据面可判，硬造一个会比不报更坏。
+
+        ## 三态
+
+        - 没有 `store` ⇒ `checked=False` + 理由（不是 0 条）；
+        - `statements` 读不出来 ⇒ `checked=False` + 理由（同上）；
+        - 单条读不出来 ⇒ 那一条算未了（`unreadable` 计数 + 进 `problems`），
+          于是"读数不完整"这件事在 `unsigned` 上体现为"至少这么多条没签住"。
+        """
+        if self.store is None:
+            return {"checked": False, "total": 0, "unsigned": None, "stmt_ids": [],
+                    "unreadable": 0, "problems": [],
+                    "reason": "这一趟没有 store ⇒ 未了义务读不了（不是 0 条）"}
+        try:
+            rows = [dict(r) for r in self.store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"
+            return {"checked": False, "total": 0, "unsigned": None, "stmt_ids": [],
+                    "unreadable": 0, "problems": [],
+                    "reason": (f"statements 读不出来（{type(exc).__name__}: {exc}）"
+                               " ⇒ 未了义务读不了（不是 0 条）")}
+        from . import verifications as VR      # 惰性：运行期只在这一格读台账
+
+        root = getattr(self.store, "root", None) or self.workspace_root
+        total = 0
+        gaps: list[str] = []
+        unreadable = 0
+        problems: list[str] = []
+        for row in rows:
+            sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+            if not sid or str(row.get("kind") or "") == "concept":
+                continue
+            if not str(row.get("proof_text") or "").strip():
+                continue
+            total += 1
+            try:
+                reading = VR.statement_review_reading(root, row)
+            except Exception as exc:  # noqa: BLE001 —— 读不成不许折成签过了
+                unreadable += 1
+                gaps.append(sid)
+                problems.append(f"{sid}：{type(exc).__name__}: {exc}")
+                continue
+            problems.extend(f"{sid}：{p}" for p in (reading.get("problems") or []))
+            if str(reading.get("state") or "") != "signed":
+                if str(reading.get("state") or "") == "unreadable":
+                    unreadable += 1
+                gaps.append(sid)
+        return {"checked": True, "total": total, "unsigned": len(gaps),
+                "stmt_ids": gaps[:8], "unreadable": unreadable,
+                "problems": problems[:4],
+                "reason": ("查过了：名下还欠 V 的签字" if gaps else "查过了：名下每一条都已签住")}
+
     def _in_flight_reading(self) -> str:
         """收工那一刻"我名下还有几条在飞"（S-G，裁定 15；读数，不拦）。
 
@@ -3741,6 +4048,32 @@ class AgentLoop:
         inbox, fresh_ids, inbox_problems = inbox_digest(self.session_root, self.role, sid=self.sid,
                                                         parent_task_id=self.parent_task_id,
                                                         parent_role=self.parent_role)
+        # ---- 业主 2026-10-22 的 B-3：「V 的判决必须递到 F（让 F 去修）」。
+        #
+        # 两件事在同一处算，但它们是两条独立的路（判据就是这么分工的）：
+        # ① 读侧 `v_rejections` 进开场事实 —— 只读 V 的台账，与板项无关；
+        # ② 递送 `deliver_v_verdicts` 走既有 `open_item` 通道把判决写成 F 名下的一项。
+        # 把 ② monkeypatch 掉 ⇒ ① 照旧有读数、② 板上没有项（反真空，见
+        # `tests/test_v_verdict_reaches_f.py`）。框架不替 F 改证明：两项里只有
+        # 「哪一条 / 错在第几步 / 下一步该补什么」，正文一个字都不动。
+        #
+        # 为什么在 `board_digest` 之前：板摘要是"这一刻盘上的板"，投递要在同一步里
+        # 就被看见（否则 F 这一趟读到的板永远是上一趟的样子）。
+        v_text, v_details, v_problems = "", [], []
+        v_delivery: dict[str, Any] = {}
+        if self.role == "F" and self.store is not None:
+            _v_root = getattr(self.store, "root", None) or self.workspace_root
+            try:
+                _stmt_rows = [dict(r) for r in self.store.rows("statements")]
+            except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                v_text = (f"（这一格没读成：`statements` 读不出来"
+                          f"（{type(exc).__name__}: {exc}）⇒ 不是「没有毛病」）")
+                v_problems = [f"statements 读不出来：{type(exc).__name__}: {exc}"]
+            else:
+                v_text, v_details, v_problems = v_rejections_digest(_v_root, _stmt_rows)
+                v_delivery = deliver_v_verdicts(
+                    self.conductor, task_id=my_task_id, depth=depth,
+                    role=self.role, details=v_details)
         # 板项（业主 A3=甲 "渲染即 seen"）：与我名下的未消项同一处现读；
         # `board_ids` 会在第一次成功的模型调用之后标成 `seen`（下面与投递标记同址）。
         board, board_ids, board_problems = board_digest(self.conductor, my_task_id=my_task_id)
@@ -3764,6 +4097,12 @@ class AgentLoop:
             }, sid=self.sid)
         run.notes.extend(f"收件箱读取：{p}" for p in inbox_problems)
         run.notes.extend(f"工作项板读取：{p}" for p in board_problems)
+        # V 判决那两条路的读数都进 notes：读侧没读成 / 递送没投成，都不许静默 ——
+        # "F 这一趟没看到判决"与"V 没判过"在盘上是两件事。
+        run.notes.extend(f"V 判决读取：{p}" for p in v_problems)
+        if v_delivery:
+            run.notes.append(f"V 判决递送：{v_delivery.get('reason') or '（没有读数）'}")
+            run.notes.extend(f"V 判决递送：{p}" for p in (v_delivery.get("problems") or []))
         # 投递标记推迟到第一次成功模型调用之后（`draft/86` §4.1 的 D75 后半）。
         #
         # 为什么不能在这里就标：旧写法在任何模型调用之前落 `mark_delivered`，于是
@@ -3792,6 +4131,9 @@ class AgentLoop:
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
                      parent_task_id=parent_fact, children=children_text,
                      board=board,
+                     # 2026-10-22（业主 B-3）：我名下被 V 判「有毛病」的证明明细
+                     # （读侧那一格；递送那一条走 `deliver_v_verdicts` 的板项）。
+                     v_rejections=v_text,
                      budget_left=self._budget_text(), inbox=inbox,
                      workspace_root=self.workspace_root, availability=availability,
                      notebook=notebook, user_replies=replies,
@@ -3799,7 +4141,8 @@ class AgentLoop:
                      # E 在 T1 第 3 趟把 6 次 check_formal 花在 `import Mathlib` 上，
                      # 而框架早就知道本机没装 Mathlib —— 事实必须进模型看得见的地方。
                      # `toolchain_formal` 是同一批读数的第二种用法（怎么写），
-                     # 只发给手上真有 `verify.check_formal` 的角色（业主裁定 G）。
+                     # 只发给手上真有 `formal.*` 的角色（业主裁定 G；2026-10-22 之后
+                     # 受众由 `agent_prompts._FORMAL_ENTRY_TOOLS` 现算，今天只有 L）。
                      toolchain_facts=AP.toolchain_facts_text(),
                      toolchain_formal=AP.toolchain_formal_text(),
                      # 派活上限（业主裁定 A）：数字从这一次 run 的 Policy 现算，
@@ -3814,7 +4157,7 @@ class AgentLoop:
         # `parent_task_id` / `summoned_by` / `children` / `board` / `inbox` / `user_replies` /
         # `workspace_root` 是这一趟的事实 —— 前者让"同一趟第 2 步"命中不了、后者让"另一趟第一步"命中不了
         # （实测：两份不同的活从第 95 个字符起就不同），而上游前缀缓存要求前缀逐字节相同。现在这些值走
-        # user 消息（每步会变的两格在 `_prompt` 尾部现读，其余十二格在 `_opening_transcript` 里），system 只留
+        # user 消息（每步会变的两格在 `_prompt` 尾部现读，其余十三格在 `_opening_transcript` 里），system 只留
         # 静态指路语（`promptstability.SYSTEM_PLACEHOLDERS`）；`moved`（判为"会变"的键）落进
         # `agent_run_start` ⇒"哪些事实被挪出了 system"在盘上可复核，不用读这段代码。
         system_facts, moved_facts = PSTAB.split_facts(facts)
@@ -4276,6 +4619,23 @@ class AgentLoop:
                         run.handoffs.append(str(hand.get("id") or ""))
                 run.final = str(payload.get("final") or "")
                 run.evidence = list(payload.get("evidence") or [])
+                # ---- D12：收工之前读一次"未了义务"（只做读数，不打回、不拦）。
+                #
+                # 为什么就在这一支里读、而不是收工之后统一算：这一支是唯一一条"模型说做完了"
+                # 的路径，而这一格要回答的正是"它说做完了的那一刻，名下还欠几条 V 的签字"。
+                # 结算点跟着这句话走，读数才与那句话同一时刻（收工之后统一算会把
+                # 收工过程中别的写入也算进来）。
+                # 失败不许带走这一趟：读数抛异常就落一条 note，`final` 照旧收工。
+                try:
+                    run.final_gaps = self._final_gaps_reading()
+                except Exception as exc:  # noqa: BLE001 —— 读数坏了不许拦住收工
+                    run.final_gaps = {"checked": False, "unsigned": None, "stmt_ids": [],
+                                      "reason": (f"未了义务读数抛了异常"
+                                                 f"（{type(exc).__name__}: {exc}）")}
+                if run.final_gaps.get("unsigned"):
+                    run.notes.append(
+                        f"收工时名下还有 {run.final_gaps['unsigned']} 条证明没有 V 的签字"
+                        f"（读数，不拦收工；明细：{'、'.join(run.final_gaps.get('stmt_ids') or [])}）")
                 # 收工那一步的原始载荷进 `LoopRun`（`run()` 末尾把它落进 `agent_run_end`）：
                 # 这是"模型填的 notify 到得了盘"的唯一通路 —— 见 `LoopRun.final_payload`。
                 run.final_payload = dict(_for_record(payload))
@@ -4755,6 +5115,15 @@ class AgentLoop:
             # `summon_consumption()` 的完整返回，四个数就在里面 —— 同一件事两份落点
             # 迟早会分叉，而分叉的形态是"事件说处理了、明细说没处理"。
             "summon_consumption": dict(run.summon_consumption),
+            # ---- 未了义务（D12）：收工那一刻名下还有几条证明没有 V 的签字。
+            #
+            # 两个键并排落，是因为它们答的不是同一个问题：
+            # `final_gaps` 是那个数（`None` = 没读成 —— 不是 0，三态纪律），
+            # `final_gaps_reading` 是它的明细（逐条命题号 + 哪一条读不成 + 理由）。
+            # 只报数会让"读不成"与"0 条"在读数上同形，而这两件事下一步该做的事相反。
+            "final_gaps": (None if run.final_gaps.get("unsigned") is None
+                           else int(run.final_gaps.get("unsigned") or 0)),
+            "final_gaps_reading": dict(run.final_gaps),
         }, sid=self.sid)
         # ---- 业主裁定（「M 停整棵树」的删除半）：全工作区开关的删除推迟到这一趟收尾，
         # 且只有树根删（`_stop_to_consume_at_end` 只由树根挂上）。位置必须在这里 ——
@@ -7944,6 +8313,23 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
             log = getattr(conductor, "_log", None)
             if callable(log):
                 log(f"顶趟开行失败（这一趟的账会读不出归属）：{type(exc).__name__}: {exc}")
+    # ---- 用户指定单条执行的角色：自己给自己开名册行 + 读写面（业主 B-5）
+    #
+    # 为什么落在这里：B-5 之后 L 没有入边（没有任何角色能派它），于是"父的秘书
+    # 在 `Conductor._register_roster` 里登记"这条路永远走不到 —— 而业主明确要求
+    # 单条执行时同样有名册行与读写面。判定不在这里写死角色名：读
+    # `leanscope.LEAN_ONLY_ROLES`（"由 Lean 开关决定存在性、只能由用户起"的那一批），
+    # 于是将来若多一个同类角色，它自动得到同一份台账。
+    # 失败姿态是 fail-open：拿不到名册/面 ⇒ 这一趟照跑，只在 `notes` 里留一句。
+    solo_problem: str = ""
+    if (secretary is not None and str(top_tid or "")
+            and str(role) in _LEANSCOPE.LEAN_ONLY_ROLES):
+        try:
+            got = secretary.open_solo_entry(task_id=str(top_tid), task=str(task))
+        except Exception as exc:  # noqa: BLE001 - 少一份名册不许带走这一趟
+            solo_problem = f"单条执行的名册没登记（{type(exc).__name__}: {exc}）"
+        else:
+            solo_problem = str(got.get("problem") or "")
     if resume:
         cp = load_run_checkpoint(root, role, sid)
         if cp is None:

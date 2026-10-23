@@ -1,4 +1,4 @@
-"""把十个角色 + 秘书的提示词前缀写进上游缓存，并把当次读数落成可复核的 JSON。先说结论：本仓没有"写缓存"的开关：上游（DeepSeek）的前缀缓存是服务端自动的：请求体里没有 `cache_control`，
+"""把十一个角色 + 秘书的提示词前缀写进上游缓存，并把当次读数落成可复核的 JSON。先说结论：本仓没有"写缓存"的开关：上游（DeepSeek）的前缀缓存是服务端自动的：请求体里没有 `cache_control`，
 也没有`AGENTFLOW_*_CACHE` 这类环境变量。全仓 grep `cache_control` 命中 0 处；`modelgw.py`的 `_payload`（`:739-764`）只拼 `model` / `messages` /
 `temperature` / `stream` /推理强度 / `tools`，一个缓存注解都没有。于是"写缓存"这件事的唯一开关是前缀逐字节相同：上游自己对没命中的那部分建索引，下一次同前缀的请求就命中。
 读数那一侧才有字段：`usage.prompt_cache_hit_tokens` /`prompt_cache_miss_tokens`（`modelgw.py:878-888` 读进来 → `llmseam.py:477-478`转成
@@ -24,6 +24,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -36,21 +37,32 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import agent_prompts as AP  # noqa: E402
+from agentflow import leanscope as LEANSCOPE  # noqa: E402
 from agentflow import modelgw as MG  # noqa: E402
 from agentflow import promptstability as PSTAB  # noqa: E402
+from agentflow import settings as SET  # noqa: E402
+from agentflow.leanscope import RoleHidden as _RoleHidden  # noqa: E402
 from agentflow.llmseam import LlmSeam, build_tool_face  # noqa: E402
 
 EXIT_WARMED = 0
 EXIT_INCOMPLETE = 1
 EXIT_UNKNOWN = 2
 
-#: 十个角色（`agent_prompts.ROLE_BRIEFS` 的键；与 `tools.ROLES` 同源）。
-ROLES: tuple[str, ...] = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M")
+#: 十一个角色（`agent_prompts.ROLE_BRIEFS` 的键；与 `tools.ROLES` 同源，外加 Lean 打开时才
+#: 存在的 L —— L 在 `ROLE_BRIEFS` 里始终有一格，可见性由 `leanscope.require_visible` 在渲染那
+#: 一刻判，所以它必须在这张表里，否则 Lean 打开时 `system_prompt("L")` 会在查职责时炸）。
+ROLES: tuple[str, ...] = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M", "L")
 
 #: 秘书那一档在读数里的名字（它不是 `ROLE_BRIEFS` 的键：秘书没有 system 提示词）。
 SECRETARY = "secretary"
 
 #: 要预热的目标全集 —— `--roles` 的缺省值，也是文档里那条命令的写法。
+#:
+#: 十二个名字，但"这一档真的能渲染几个"随 Lean 开关变：`leanscope.LEAN_ONLY_ROLES` 里的角色
+#: （今天是 L）在开关关着时不存在，`system_prompt` 会按产品规则抛 `RoleHidden`。预热不去绕过
+#: 那条规则：它照常去渲染，把拒绝如实落成一条 `kind="absent"` 的受控缺席行（见 `_absent_item`）。
+#: 于是同一份读数里既能看到"这一档量了什么"，也能看到"这一档按设计没有这一段"，而不会把
+#: "不存在"读成"忘了量"。
 WARM_TARGETS: tuple[str, ...] = ROLES + (SECRETARY,)
 
 #: 内置花费上限（美元）。超了自停，不是"跑完再说"。
@@ -134,6 +146,20 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def lean_reading() -> tuple[bool, str]:
+    """这一档形式化开关的读数：`(开着吗, 来源)`（来源是 `"env"` / `"settings"` / `""`）。
+
+    唯一来源同 `lean_mode`：`agent_prompts._lean_switch()`（渲染真正读的那个闩）。
+    两格一起返回是因为读数文件要记第一格、而打印要告诉人"这个值是哪一档给的" ——
+    两者必须来自同一次读，分成两次就可能给出"记的是开、说的是关"。
+    """
+    try:
+        enabled, source = AP._lean_switch()       # noqa: SLF001 —— 见上：唯一真身
+        return bool(enabled), str(source or "")
+    except Exception:                              # noqa: BLE001 —— 读不到就当"关着"（产品缺省）
+        return False, ""
+
+
 def lean_mode() -> bool:
     """这一趟渲染用的是哪一档形式化开关（`True` = 走 Lean 那一套提示词）。
 
@@ -145,10 +171,7 @@ def lean_mode() -> bool:
     来源选 `agent_prompts._lean_switch()` 而不是 `settings.lean_enabled()`：前者是渲染真正读的那个闩（`lru_cache` 住的那一格），后者是它的上游
     ——两条路各读一次就可能各给一个答案（缓存暖着、env 又被改过时），而"渲染按哪一档走的"只有一个正确答案：渲染读到的那个。
     """
-    try:
-        return bool(AP._lean_switch()[0])       # noqa: SLF001 —— 见 docstring：唯一真身
-    except Exception:                            # noqa: BLE001 —— 读不到就当"关着"（产品缺省）
-        return False
+    return lean_reading()[0]
 
 
 #: 读数文件里保留最近几趟（`{"schema": 1, "runs": [<一趟的读数>, …]}`）。
@@ -159,7 +182,13 @@ def lean_mode() -> bool:
 #: 而"第二趟"必然把第一趟的冷写读数覆盖掉 —— 那等于用一个更弱的读数换掉一个更强的
 #: （"命中"能证明"写过"以外的更多事，但"写过"这一格就没了）。所以两趟都留着。
 #: 键集仍然只有一个来源（本文件），`MAX_RUNS_KEPT` 防止它无限长。
-MAX_RUNS_KEPT = 8
+#:
+#: 2026-10-22 从 8 提到 16：8 只是"一档 + 一趟重落 + 一条诊断"刚好够用的窗口。现在要
+#: 同时留两档（Lean 关 / 开），而诊断读数（带 `tools_in_prefix` 的那一趟、跨 run 探针、
+#: 秘书的第二次调用）本来就是更早跑出来的 —— 两趟新预热就会把仅有的那条诊断读数挤出
+#: 窗口，届时 `test_cross_run_prefix_is_reused.py` 会以"没有探针 ⇒ 这次没量"变红。
+#: 加 8 格不是"多留点历史"，是为了让"两档 + 诊断"同时待在窗口里。
+MAX_RUNS_KEPT = 16
 
 
 def load_readings(path: Path) -> list[dict[str, Any]]:
@@ -183,6 +212,90 @@ def save_readings(path: Path, runs: list[dict[str, Any]]) -> None:
     doc = {"schema": 1, "runs": runs[-MAX_RUNS_KEPT:]}
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8", newline="\n")
+
+
+#: 读数文件的缺省落点（写入方与装载方共用这一个常量）。
+DEFAULT_READINGS = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "prompt_cache_warm.json"
+
+#: 装载三态的两种 unknown 理由（`""` = 找到了）。
+CACHE_MISSING_FOR_LEAN_STATE = "cache_missing_for_lean_state"
+CACHE_READINGS_UNREADABLE = "cache_readings_unreadable"
+
+
+def cache_readings(lean: bool | None = None, *,
+                   path: Path | None = None) -> dict[str, Any]:
+    """缓存读数的唯一装载入口：按 Lean 档选最近一趟，逐 target 记"量过 / 缺席 / 缺行"。
+
+    ## 为什么必须有这一个入口
+
+    读数文件里现在同时躺着两档的预热（`lean_enabled=false` 与 `true`），而两档的摘要
+    本来就不同。谁要是自己从 `runs` 里挑"最近一趟"，开关一换就会读到另一档的摘要 ——
+    那种错不会报错，它只会让"关档读到了开档的摘要"看起来像一份合格的读数（假绿）。
+    所以选哪一趟这件事只有一个实现，判据与读者都从这里取。
+
+    ## 选择规则（逐字）
+
+    - `lean` 不给 ⇒ 现读 `leanscope.lean_on()`（当前开关）。给布尔 ⇒ 按给的档选。
+    - 在 `runs` 里取 `lean_enabled` 与目标档相等、且文件序最靠后的那一趟。
+    - 找不到 ⇒ `tri="unknown"`、`reason="cache_missing_for_lean_state"`、`run=None`。
+      绝不回落到另一档：那会让"这一档没有读数"变成"读到了另一档的读数"。
+    - 文件读不到 / 一趟都没有 ⇒ `reason="cache_readings_unreadable"`（也是 unknown）。
+
+    ## 逐 target 的三态
+
+    `targets[target]["state"]` 取 `"measured"`（有真的调用行）/ `"absent"`
+    （这一档按产品设计不存在，例如 Lean 关时的 L）/ `"missing"`（这一趟没点到它）。
+    后两者不是一回事：缺席是产品规则，缺行是这一趟没量到。
+
+    返回的 `run` 是选中的那一趟原文（读者要别的格子时不必再读一次文件）。
+    """
+    target_path = Path(path) if path is not None else DEFAULT_READINGS
+    want = bool(LEANSCOPE.lean_on()) if lean is None else bool(lean)
+    empty_targets = {t: {"state": "missing", "passes": [], "write": 0, "hit": 0,
+                         "prompt_sha256": "", "absent_reason": ""}
+                     for t in WARM_TARGETS}
+    runs = load_readings(target_path)
+    if not runs:
+        return {"tri": "unknown", "lean_enabled": want,
+                "reason": CACHE_READINGS_UNREADABLE, "at": "", "prompt_version": "",
+                "run": None, "targets": empty_targets}
+    chosen: dict[str, Any] | None = None
+    for run in reversed(runs):
+        value = run.get("lean_enabled")
+        if value is not None and bool(value) == want:
+            chosen = run
+            break
+    if chosen is None:
+        return {"tri": "unknown", "lean_enabled": want,
+                "reason": CACHE_MISSING_FOR_LEAN_STATE, "at": "", "prompt_version": "",
+                "run": None, "targets": empty_targets}
+
+    per_target: dict[str, dict[str, Any]] = {}
+    for target in WARM_TARGETS:
+        rows = [dict(r) for r in (chosen.get("rows") or [])
+                if str(r.get("role")) == target and int(r.get("pass") or 1) <= 2]
+        measured = [r for r in rows if str(r.get("kind")) != "absent"]
+        absent = [r for r in rows if str(r.get("kind")) == "absent"]
+        state = "measured" if measured else ("absent" if absent else "missing")
+        per_target[target] = {
+            "state": state,
+            "passes": sorted({int(r.get("pass") or 1) for r in rows}),
+            "write": max((int((r.get("cache") or {}).get("write") or 0)
+                          for r in measured), default=0),
+            "hit": max((int((r.get("cache") or {}).get("hit") or 0)
+                        for r in measured), default=0),
+            "prompt_sha256": (str(measured[0].get("prompt_sha256") or "") if measured else ""),
+            "absent_reason": (str(absent[0].get("detail") or "") if absent else ""),
+        }
+    return {
+        "tri": "found",
+        "lean_enabled": want,
+        "reason": "",
+        "at": str(chosen.get("at") or ""),
+        "prompt_version": str(chosen.get("prompt_version") or ""),
+        "run": chosen,
+        "targets": per_target,
+    }
 
 
 def _ensure_utf8_stdout() -> None:
@@ -248,6 +361,35 @@ def _secretary_material() -> str:
     return _judge_material({})
 
 
+def _absent_item(target: str, exc: BaseException) -> dict[str, Any]:
+    """一个"这一档下按产品设计不存在"的目标的渲染结果（受控缺席，不是失败）。
+
+    怎么会走到这里：`leanscope.require_visible` 在 `role_prompt_registry` 的入口拒绝
+    `LEAN_ONLY_ROLES` 里那些"只在开关打开时存在"的角色（今天是 L）。预热不去绕过它 ——
+    绕过就会去预热一段产品永远不会发出的前缀，读数好看，但买到的是一段不存在的前缀。
+
+    形状与正常项同键（下游不必分两套读法），只是每一格都如实是"没有"：
+    `kind="absent"`、`absent="lean_off"`，摘要是空串而不是某个假的哈希。
+    """
+    return {
+        "kind": "absent",
+        "absent": "lean_off",
+        "absent_reason": str(exc),
+        "system": "",
+        "prompt": "",
+        "system_sha256": "",
+        "prompt_sha256": "",
+        "system_chars": 0,
+        "prompt_chars": 0,
+        "tools": (),
+        "tools_sha256": "",
+        "tools_functions": 0,
+        "tools_chars": 0,
+        "prefix_chars": 0,
+        "cross_run_prefix_chars": 0,
+    }
+
+
 def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
                    workspace: Path | None = None) -> dict[str, dict[str, Any]]:
     """渲染每个目标的 (system, tools, 摘要, 跨 run 可复用前缀长度) —— 不联网、不花钱。
@@ -255,11 +397,14 @@ def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
     判据（`tests/test_prompt_cache_warm.py`）与真机入口共用这一份实现：两边各写一份
     就会漂，而"漂了"在读数上长得像"提示词改了、该重新预热"。
 
-    返回 `{target: {...}}`，每项含：`kind`（`system` / `judge_head`）、`system`、
+    返回 `{target: {...}}`，每项含：`kind`（`system` / `judge_system` / `absent`）、`system`、
     `prompt`、`system_sha256`、`prompt_sha256`、`system_chars`、`prompt_chars`、
     `tools`（`ToolFace` 的函数面或空表）、`tools_sha256`、`tools_functions`、
     `tools_chars`、`prefix_chars`（这一次请求前缀里确定稳定的那部分）、
     `cross_run_prefix_chars`（换一趟活之后仍在前缀里的那部分）。
+
+    Lean 关着时 L 会按产品规则被 `RoleHidden` 拒绝：这里把它落成 `kind="absent"` 的
+    一项（见 `_absent_item`），让"这一档没有它"成为一条可复核的读数，而不是少一个键。
     """
     tmp = Path(workspace) if workspace is not None else Path(
         tempfile.mkdtemp(prefix="warm-render-"))
@@ -290,9 +435,13 @@ def render_prompts(*, targets: tuple[str, ...] = WARM_TARGETS,
                     "cross_run_prefix_chars": cross,
                 }
                 continue
-            face = build_tool_face(target, registry)
-            system = _render_system(target, registry, CANONICAL_FACTS)
-            other = _render_system(target, registry, OTHER_RUN_FACTS)
+            try:
+                face = build_tool_face(target, registry)
+                system = _render_system(target, registry, CANONICAL_FACTS)
+                other = _render_system(target, registry, OTHER_RUN_FACTS)
+            except _RoleHidden as exc:
+                out[target] = _absent_item(target, exc)
+                continue
             diff = PSTAB.first_difference(system, other)
             tools_text = json.dumps(list(face.functions), ensure_ascii=False,
                                     sort_keys=True, default=str)
@@ -388,16 +537,70 @@ def _record_of(target: str, item: Mapping[str, Any], call: Any, *, pass_no: int,
     }
 
 
+def _absent_record_of(target: str, item: Mapping[str, Any], *, at: str) -> dict[str, Any]:
+    """一条"按产品设计不在这一档"的读数行（不是一次调用，也不假装是）。
+
+    为什么它必须进 `rows`：读数文件是"这一趟点了哪些目标"的唯一凭证。少了这一行，
+    Lean 关那一趟就只剩 11 个目标，"L 没量"与"L 在这一档不存在"就分不开了 ——
+    前者该去补一趟，后者是产品规则。`cache` 三格给 `None`（unknown）而不是 0：
+    这一趟没有发请求，也就没有"上游报了 0"这件事。
+    """
+    return {
+        "role": target,
+        "kind": "absent",
+        "pass": 1,
+        "at": at,
+        "ok": True,
+        "problem": "",
+        "detail": str(item.get("absent_reason") or "")[:300],
+        "requested": False,
+        "model": "",
+        "system_sha256": "",
+        "user_sha256": "",
+        "prompt_sha256": "",
+        "system_chars": 0,
+        "prompt_chars": 0,
+        "tools_sha256": "",
+        "tools_functions": 0,
+        "tools_chars": 0,
+        "prefix_chars": 0,
+        "cross_run_prefix_chars": 0,
+        "cache": {
+            "known": False,
+            "hit": None,
+            "miss": None,
+            "write": None,
+            "write_source": "absent:lean_off",
+            "tokens_in": None,
+            "tokens_out": None,
+            "hit_rate": None,
+            "cache_tri": "absent",
+            "usd_per_m_in": None,
+            "usd_per_m_in_hit": None,
+            "usd_per_m_out": None,
+        },
+        "usd": None,
+        "elapsed_sec": 0.0,
+        "absent": "lean_off",
+    }
+
+
 def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CAP_USD,
          hit_sample: tuple[str, ...] = DEFAULT_HIT_SAMPLE, model: str = "",
          effort: str = "off", out_path: Path | None = None,
          dry_run: bool = False, keep_session: bool = False,
          session_root: Path | None = None, tools_probe: str = "",
-         cross_run_probe: str = "") -> tuple[int, dict[str, Any]]:
+         cross_run_probe: str = "", lean: str = "auto") -> tuple[int, dict[str, Any]]:
     """按目标各发一次最小请求（再给样本各补一次），把读数写成 JSON。
 
     `effort="off"` 是省钱不是省字节：推理强度不进 `messages`，不改变缓存前缀，
     但它决定"它想多久才回那两个字"（默认 `high` 会为一句 OK 写上千字思维链）。
+
+    `lean` 是这一趟要落哪一档形式化开关：`"auto"` 沿用当前环境（缺省）、`"on"` / `"off"`
+    显式钉住。为什么要有显式档：两档落进同一个读数文件，靠"跑之前记得 export 一下"
+    迟早会漏；而漏了不会报错，只会把同一档落两遍（判据里那条"两档摘要必须不同"就是
+    为这个形态准备的）。设完 env 之后必须清 `agent_prompts` 的 `lru_cache`，
+    否则渲染还读着上一档的开关。
 
     `tools_probe`（可选）回答一个本脚本必须回答的问题：工具面在不在缓存前缀里？
     做法：拿一个已经带工具面预热过的目标，把同一个 system 在不带工具面的情况下再发一次。
@@ -405,9 +608,18 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
     - `hit > 0` ⇒ 缓存只按 `messages` 建索引（工具面不在前缀里）；
     - `hit == 0` ⇒ 工具面在它的前缀里（去掉工具 = 换了一段前缀）。
     """
+    if lean not in ("auto", "on", "off"):
+        return EXIT_UNKNOWN, {"verdict": "unknown",
+                              "error": f"--lean 只认 auto / on / off，收到 {lean!r}"}
+    if lean in ("on", "off"):
+        os.environ["AGENTFLOW_LEAN_ENABLED"] = "1" if lean == "on" else "0"
+        AP.reset_toolchain_readings()
+
     at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     rendered = render_prompts(targets=targets)
-    empty = [t for t in targets if not (rendered[t]["system"] or rendered[t]["prompt"])]
+    absent = [t for t in targets if str(rendered[t]["kind"]) == "absent"]
+    present = [t for t in targets if t not in absent]
+    empty = [t for t in present if not (rendered[t]["system"] or rendered[t]["prompt"])]
     if empty:
         return EXIT_UNKNOWN, {"verdict": "unknown",
                               "error": f"这些目标渲染不出提示词（空串）：{empty}"}
@@ -420,6 +632,8 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
                  "cross_run_prefix_chars": rendered[t]["cross_run_prefix_chars"]}
                 for t in targets]
         return EXIT_WARMED, {"verdict": "dry_run", "rows": rows,
+                             "lean_enabled": lean_mode(),
+                             "hidden": absent,
                              "note": "只渲染，没发请求，花费 0 美元"}
 
     # 配置走生产那一口 `spec_from_env()`（唯一入口：key 的取值梯子只有一份）。
@@ -432,6 +646,16 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
         spec = dataclasses.replace(spec, model=str(model))
     if effort:
         spec = dataclasses.replace(spec, reasoning_effort=str(effort))
+    # 发第一发之前先把这三格打出来：这一趟要花谁的钱、读的是哪一档提示词。
+    # 不能只打"有没有配"：`key_source` 是"环境变量"还是"设置文件"决定这笔钱记在
+    # 谁头上，而两者都 `configured=True`，从读数上分不出来（见 `ModelSpec.key_source`）。
+    lean_now, lean_src = lean_reading()
+    print(f"[key] configured={spec.configured} source={spec.key_source or 'none'} "
+          f"key={'***' if spec.api_key else '(none)'} "
+          f"{MG.ENV_KEY}={'已设' if os.environ.get(MG.ENV_KEY) else '未设'} "
+          f"settings={SET.settings_path()}", flush=True)
+    print(f"[lean] enabled={lean_now} source={lean_src or '(默认)'} "
+          f"（--lean {lean}）", flush=True)
     if not spec.configured:
         return EXIT_UNKNOWN, {
             "verdict": "unknown",
@@ -445,17 +669,19 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
     tmp_registry = Path(tempfile.mkdtemp(prefix="warm-registry-"))
     try:
         registry = _registry(tmp_registry)
-        faces = {t: build_tool_face(t, registry) for t in targets if rendered[t]["tools"]}
+        faces = {t: build_tool_face(t, registry) for t in present if rendered[t]["tools"]}
         seam = LlmSeam(role="cache-warm", session_root=root,
                        gateway=MG.ModelGateway(spec), usd_budget=float(cap_usd),
                        scope="reason", sid="prompt-cache-warm")
-        rows: list[dict[str, Any]] = []
+        rows: list[dict[str, Any]] = [_absent_record_of(t, rendered[t], at=at)
+                                      for t in absent]
         stopped = ""
-        plan: list[tuple[str, int]] = [(t, 1) for t in targets]
-        plan += [(t, 2) for t in hit_sample if t in targets]
-        if tools_probe in targets:
+        sample = tuple(t for t in hit_sample if t in present)
+        plan: list[tuple[str, int]] = [(t, 1) for t in present]
+        plan += [(t, 2) for t in sample]
+        if tools_probe in present:
             plan.append((tools_probe, 3))       # 诊断行：同一 system、不带工具面
-        if cross_run_probe in targets:
+        if cross_run_probe in present:
             # 诊断行（两次）：另一趟活的 system 发两遍。
             # 为什么必须两遍：第一遍回答"换一趟活还剩多少（=0）"，第二遍回答
             # "同一份 system 再发一次会不会命中（=会）"。只发一遍的话，第二次跑本脚本时
@@ -469,7 +695,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             spent, source = seam.spent_usd()
             if spent >= float(cap_usd):
                 stopped = (f"已花 {spent:.6f} / 上限 {cap_usd:.6f}（读数来自 {source}）"
-                           f"⇒ 剩下的 {len(plan) - len(rows)} 次调用**没有发**")
+                           f"⇒ 剩下的 {len(plan) - (len(rows) - len(absent))} 次调用没有发")
                 break
             item = rendered[target]
             if pass_no in (4, 5):
@@ -495,13 +721,13 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             if int(row["pass"]) > 2:       # 诊断行不参与"这个目标预热了吗"
                 continue
             by_role.setdefault(str(row["role"]), []).append(row)
-        missing = [t for t in targets
+        missing = [t for t in present
                    if not any((r["cache"]["write"] or 0) > 0 or (r["cache"]["hit"] or 0) > 0
                               for r in by_role.get(t, []))]
-        unknown_cache = [t for t in targets
+        unknown_cache = [t for t in present
                          if any(not r["cache"]["known"] for r in by_role.get(t, []))]
         failed = [f"{r['role']}#{r['pass']}: {r['problem']}" for r in rows if not r["ok"]]
-        samples = {t: [r for r in by_role.get(t, []) if r["pass"] == 2] for t in hit_sample}
+        samples = {t: [r for r in by_role.get(t, []) if r["pass"] == 2] for t in sample}
         sample_miss = [t for t, rs in samples.items()
                        if not rs or not (rs[0]["cache"]["hit"] or 0) > 0]
         probe_rows = [r for r in rows if int(r["pass"]) == 3]
@@ -520,13 +746,25 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             "spent_source": source,
             "model": str(getattr(spec, "model", "") or ""),
             "base_url": str(getattr(spec, "base_url", "") or ""),
+            "key_source": str(getattr(spec, "key_source", "") or ""),
+            # 这一趟是拿哪一把 key 预热的：`cachectl.annotate_run` 按这三格判"换过 key 没有"
+            # （`sha256(key)[:16]` + 模型 + base_url，key 本身不落盘）。直跑本脚本
+            # 与走 `cachectl.warm` 写的是同一份读数 —— 少这三格，那一路会落成
+            # `key_fingerprint_missing`（"换没换过不可判定"），而两份读数看起来一样。
+            "key_fingerprint": hashlib.sha256(
+                str(getattr(spec, "api_key", "") or "").encode("utf-8")).hexdigest()[:16],
+            "key_model": str(getattr(spec, "model", "") or ""),
+            "key_base_url": str(getattr(spec, "base_url", "") or ""),
             "reasoning_effort": str(getattr(spec, "reasoning_effort", "") or ""),
             "prompt_version": AP.PROMPT_VERSION,
             # 这一趟的提示词是哪一档形式化开关下渲染的（见 `lean_mode`）：
             # 判据要按同一档重算摘要，否则"对不上"会被误读成"提示词改了"。
             "lean_enabled": lean_mode(),
             "roles": list(targets),
-            "hit_sample": list(hit_sample),
+            # 这一档下按产品设计不存在、因此没有预热的目标（今天是 Lean 关时的 L）。
+            # 它与"没量到"是两回事：前者是 `leanscope.LEAN_ONLY_ROLES` 的规则。
+            "hidden": absent,
+            "hit_sample": list(sample),
             "stopped": stopped,
             "rows": rows,
             "missing": missing,
@@ -566,8 +804,9 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             bits.append(stopped)
         result["verdict"] = "incomplete" if incomplete else "warmed"
         result["note"] = ("；".join(bits) if incomplete else
-                          f"{len(targets)} 个目标都有缓存落地记录；"
-                          f"二调样本 {list(hit_sample)} 命中；花费 {spent:.6f} 美元")
+                          f"{len(present)} 个目标都有缓存落地记录"
+                          f"（{len(absent)} 个按设计不在这一档：{absent}）；"
+                          f"二调样本 {list(sample)} 命中；花费 {spent:.6f} 美元")
 
         if out_path is not None:
             runs = load_readings(out_path)
@@ -584,19 +823,26 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
 
 def _table(rows: list[dict[str, Any]]) -> str:
     """人读的那张表（一行一个目标；逐格对齐，Windows 控制台下也不花）。"""
+    def cell(value: Any, *, absent: bool = False) -> str:
+        if value is None:
+            return "absent" if absent else "unknown"
+        return str(value)
+
     head = (f"{'role':<10}{'pass':>4}{'sys_chars':>10}{'tools':>7}"
             f"{'tokens_in':>10}{'write':>8}{'hit':>8}{'hit_rate':>10}{'usd':>10}")
     lines = [head, "-" * len(head)]
     for row in rows:
         cache = row["cache"]
         rate = cache["hit_rate"]
+        is_absent = str(row.get("kind")) == "absent"
         lines.append(
             f"{row['role']:<10}{row['pass']:>4}{row['system_chars']:>10}"
-            f"{row['tools_functions']:>7}{cache['tokens_in']:>10}"
-            f"{(cache['write'] if cache['write'] is not None else 'unknown'):>8}"
-            f"{(cache['hit'] if cache['hit'] is not None else 'unknown'):>8}"
+            f"{row['tools_functions']:>7}"
+            f"{cell(cache['tokens_in'], absent=is_absent):>10}"
+            f"{cell(cache['write'], absent=is_absent):>8}"
+            f"{cell(cache['hit'], absent=is_absent):>8}"
             f"{('unknown' if rate is None else f'{rate * 100:.1f}%'):>10}"
-            f"{(row['usd'] if row['usd'] is not None else 'unknown'):>10}")
+            f"{cell(row['usd'], absent=is_absent):>10}")
     return "\n".join(lines)
 
 
@@ -606,7 +852,7 @@ def _table(rows: list[dict[str, Any]]) -> str:
 def main(argv: list[str] | None = None) -> int:
     _ensure_utf8_stdout()
     parser = argparse.ArgumentParser(
-        description="把十个角色 + 秘书的提示词前缀写进上游缓存（幂等、内置花费上限）",
+        description="把十一个角色 + 秘书的提示词前缀写进上游缓存（幂等、内置花费上限）",
     )
     parser.add_argument("--roles", default=",".join(WARM_TARGETS),
                         help=f"要预热的目标，逗号分隔（缺省 {','.join(WARM_TARGETS)}）")
@@ -614,11 +860,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="再调一次、验证命中的样本（缺省 2 个：省钱的取舍）")
     parser.add_argument("--cap-usd", type=float, default=DEFAULT_CAP_USD,
                         help=f"总花费上限（美元，缺省 {DEFAULT_CAP_USD}）")
+    parser.add_argument("--lean", choices=("auto", "on", "off"), default="auto",
+                        help="这一趟落哪一档形式化开关（缺省 auto：沿用当前环境）")
     parser.add_argument("--model", default="", help=f"覆盖模型名（缺省取 {MG.ENV_NAME} / 设置文件）")
     parser.add_argument("--effort", default="off",
                         help="推理强度（缺省 off：它不改变缓存前缀，只省输出 token）")
-    parser.add_argument("--out", default=str(Path(__file__).resolve().parents[1]
-                                            / "tests" / "fixtures" / "prompt_cache_warm.json"),
+    parser.add_argument("--out", default=str(DEFAULT_READINGS),
                         help="读数 JSON 的落点")
     parser.add_argument("--dry-run", action="store_true",
                         help="只渲染、不发请求（花费 0 美元）")
@@ -657,7 +904,7 @@ def main(argv: list[str] | None = None) -> int:
                             model=str(args.model), effort=str(args.effort),
                             out_path=Path(args.out), dry_run=bool(args.dry_run),
                             keep_session=bool(args.keep_session), tools_probe=probe,
-                            cross_run_probe=cross)
+                            cross_run_probe=cross, lean=str(args.lean))
     except Exception as exc:  # noqa: BLE001 —— 渲染/写盘炸了属于"没查成"
         print(f"[unknown] 预热没跑起来：{type(exc).__name__}: {exc}")
         return EXIT_UNKNOWN
@@ -669,7 +916,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[{result['verdict']}] 花费 {result.get('spent_usd', 0.0):.6f} / 上限 "
           f"{result.get('cap_usd', args.cap_usd):.2f} 美元"
           f"（模型 {result.get('model') or '（没发请求）'}，"
-          f"推理强度 {result.get('reasoning_effort') or 'n/a'}）")
+          f"推理强度 {result.get('reasoning_effort') or 'n/a'}，"
+          f"Lean {result.get('lean_enabled')}）")
+    if result.get("hidden"):
+        print(f"按产品设计不在这一档的目标：{result['hidden']}"
+              f"（Lean 关着时 L 不存在：leanscope.LEAN_ONLY_ROLES）"
+              "—— 读数里各留了一条 kind=absent 的记录，不是漏量")
     if result["verdict"] == "dry_run":
         print(f"{'role':<10}{'kind':<12}{'sys_chars':>10}{'tools':>8}"
               f"{'cross_run':>10}  prompt_sha256")
@@ -695,8 +947,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"读数已写入 {result['out']}")
     if result.get("note"):
         print(result["note"])
-    print("再落一次：python scripts/warm_prompt_cache.py "
-          "--roles A,B,C,D,E,F,G,H,V,M,secretary")
+    print("再落一次（两档各一条，顺序固定：先关后开）：")
+    print("  python scripts/warm_prompt_cache.py "
+          "--roles A,B,C,D,E,F,G,H,V,M,L,secretary")
+    print("  python scripts/warm_prompt_cache.py --lean on "
+          "--hit-sample M,C,L --roles A,B,C,D,E,F,G,H,V,M,L,secretary")
     return code
 
 

@@ -138,7 +138,7 @@ DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 #: - 值那一侧在 `agent_loop.run` 的 `facts = dict(...)`（`agent_loop.py:3610`）算一次，
 #:   凡"这一次运行的事实"都在这张表里被重新算 ⇒ 它们都是"另一段前缀"。
 #: - 现在的载体：每步会变的两格仍在 `_prompt` 尾部现读（`agent_loop.py:3106-3112`）；
-#:   其余十二格在开场那一条 user 消息里（`agent_loop._opening_transcript`，
+#:   其余十三格在开场那一条 user 消息里（`agent_loop._opening_transcript`，
 #:   `agent_loop.py:886`）—— 那是消息，不是前缀：换一趟活换的是消息，前缀照旧。
 #:
 #: 加一格之前先问：换一趟活它会不会变？ 会 ⇒ 登记在这里（并在 user 消息里
@@ -215,6 +215,17 @@ STEP_VOLATILE_FACTS: Mapping[str, str] = {
         "墙钟 / 预算 / 四类上限换一次 run 就可能换一份数字，而这一段在 M 的 system 里"
         "位于第 ~88% 处（第二个断点）。"
     ),
+    # 2026-10-22（业主 B-3：「V 的判决必须递到 F」）：这一格的读数来自
+    # `verifications/<命题号>.jsonl`（V 的台账）+ `statements` 的现行正文 ⇒ 换一趟活、
+    # V 多签一签、F 改一次证明，它都会变。它是"这一趟要补哪几条"的事实，
+    # 不是静态指路语 —— 所以登记在这里，真值念在开场那条 user 消息里
+    # （`agent_loop._opening_transcript` 的「被 V 判有毛病的证明」那一栏）。
+    "v_rejections": (
+        "`agent_loop.v_rejections_digest(root, rows)`：逐条读 "
+        "`verifications.statement_review_reading`（唯一判据，与收工门 R10 同一个函数）"
+        "⇒ V 签一签、F 改一次证明，这一格就不同；它是「这一趟要补哪几条」的活账，"
+        "跨 run 必变。"
+    ),
 }
 
 #: 每一格进 system 时用的静态替身（同一个角色 / 任务 / registry 下逐字节相同）。
@@ -283,6 +294,11 @@ SYSTEM_PLACEHOLDERS: Mapping[str, str] = {
         "见本次对话第一条消息的「派活上限」（四类上限与墙钟都是这一趟 run 的 Policy 现算的；"
         "这一格刻意不写数字 —— 换个 run 的配置就换一段前缀）"
     ),
+    "v_rejections": (
+        "见本次对话第一条消息的「被 V 判有毛病的证明」（那是 V 台账的活账：哪一条、错在第几步、"
+        "下一步该补什么都在那里；这一格刻意不抄明细 —— 抄进来就等于把这一趟的前缀绑死在"
+        "当下的台账上）"
+    ),
 }
 
 
@@ -296,7 +312,7 @@ def split_facts(facts: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any
     （:func:`step_stability` 钉前一条，`tests/test_cross_run_prefix_is_reused.py` 钉后一条）。
 
     进 user 的那一份逐字保留原值（调用方负责把它念进 user 消息里：
-    每步会变的两格在 `agent_loop._prompt` 尾部，其余十二格在开场的
+    每步会变的两格在 `agent_loop._prompt` 尾部，其余十三格在开场的
     `agent_loop._opening_transcript`）。
     用 `dict(...)` 复制而不是原地改：调用方手上的那份 `facts` 还要给别处用
     （`prompt_audit` 之类），改它会制造"两个读者看到两份事实"。

@@ -147,6 +147,12 @@ _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
     # 主控拿的是编排面工具（派活 / 台账 / 停止 / 状态 / 角色规格）：它不产出领域对象，
     # 所以这里只有 conductor 一组，且 CAPABILITIES["M"] 一个字都没变。
     "M": ("conductor",),
+    # L（Lean 形式化者，2026-10-22 新设）：它自己的两件工具在 `formal` 组
+    # （`tools/formal_tools.py`），加上任何角色都可能用到的 `fs`（读写 .lean）。
+    # 刻意不写 "verify"：L 不到 `verify.*` 的工具面上去 —— 它由 Agent 层直接调
+    # `verify.check_formal` 那个函数（与 `AgentE.check_formal` 同一条路），
+    # 这样"自检闸 + 三态形状"这两处差别才是看得见的。
+    "L": ("formal", "fs"),
 }
 
 
@@ -1362,17 +1368,26 @@ _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({
             "statement_full", "source_lit_id", "proof_text", "proofs", "kind", "label",
             "statement_text", "origin", "page_range", "evidence_kind", "quote_verified",
-            "quote_mode", "quote_reason", "doc_id", "line_range", "derived_from",
+            "quote_mode", "quote_reason", "quote_span", "quote_call_sha256", "doc_id",
+            "line_range", "derived_from",
         }),
-        "这条动作没有同名工具：`proofs`（以及其余十五格）由 `AgentB.register_statement(proofs=...)`"
+        "这条动作没有同名工具：`proofs`（以及其余十七格）由 `AgentB.register_statement(proofs=...)`"
         "直接收 —— 整条动作的 schema 就是动作声明本身（`table.create` 那条通用写口被"
         "`store.direct_write_refusal` 挡住，拒信里指的 `own.register_statement` 路由没有"
         "独立的工具 schema，它取的就是这份动作声明）。所以这里的 property 不是"
         "「工具面漏了」，而是「唯一落点」；登记它是为了让"
         "「B 的 proofs 没有工具层」这件事实可见 —— 不登记时它落在 unknown，"
         "而 unknown 与「两层一致」在读数上长得一样（审计 D-4）。"
+        "2026-10-22（D1）：`quote_span` / `quote_call_sha256` 两格同日加进动作面"
+        "（引文回验的证据栏，此前 `additionalProperties=false` 让模型连参数名都传不进来），"
+        "它们同样只活在动作面 ⇒ 一并登记（登记集合必须等于动作面集合，缺一个就红）。"
         "判据：登记集合必须等于动作面声明的集合（`unregistered_missing_in_tools` 第 ③ 条）。",
     ),
+    # 2026-10-22 第二班曾在这里登记 `("L", "formalize"): {"statement_id"}`
+    # （动作面有、工具面没有）。第三班把 `statement_id` 补进工具面
+    # `formal.formalize` 的 params 与 handler 之后，这一对不再有缺口 ——
+    # 按 `stale_action_only_entries` 的纪律（登记表不许留过期名字）删掉这一条，
+    # 否则读的人会以为"显式编号走不通"，而它已经通了。
 }
 
 
@@ -2170,6 +2185,12 @@ EMPTY_WRITE_SETS: dict[str, "EmptyWriteSet"] = {
         why="台账是文件（verifications/<4 位>.jsonl）、没有子代理 ⇒ 真·空集，"
             "与任何人的表写集都不冲突",
     ),
+    # 2026-10-22 第二批：L 从这张表里删除（它此前在这里，理由是"一张表都不写"）。
+    # 业主第二句施工单给了它一格写集（`experiments`：`formal.record` 落一行形式化
+    # 实验行）⇒ 它的写集不再是空集，本表里的那一行按 [6b] 的"登记不许留过期名字"
+    # 必须同时删掉（否则 `import agentflow.capabilities` 当场炸，而那正是 [6b] 想挡的：
+    # 读的人会以为 L 仍是真空集）。并发含义随之由 `WRITE_SETS["L"]` 现算：
+    # 只与同样写 `experiments` 的角色（E）相交 ⇒ 与 E 串行，与其余角色可并发。
 }
 
 
@@ -2472,16 +2493,24 @@ def assert_capabilities(
             f"{_role} 既不能被主控直接召唤、又没有别的父代理进路 ⇒ 这个角色成了孤儿"
             "（裁定要的是『间接转达』，不是『谁都派不动』）"
         )
+    # 2026-10-22（业主施工单：新设 L，且明确要求"协作面不搭"）：可召唤性在这里
+    # 第一次与可达性分开。`NON_SUMMONABLE` 里的角色按定义就不该被召唤 ——
+    # 要求它从主控出发可达，等价于要求"每一个不可召唤的角色都必须有一条进路"，
+    # 而那是一个自相矛盾的要求；L 正是第一个合法地"不可召唤且没有边"的角色
+    # （它只能由用户直接用 `run-agent L` 起，与主控 M 的处境相同）。
+    # 判据强度不放：可召唤的角色仍然必须全部可达（`_unreachable` 那一行原样保留）。
     _reachable = set(_m_edges)
     while True:
         _grew = {t for frm in _reachable for t in ALLOWED_EDGES.get(frm, ())} - _reachable
         if not _grew:
             break
         _reachable |= _grew
-    _unreachable = sorted(set(S.ROLES) - _reachable)
+    _unreachable = sorted((set(S.ROLES) - set(NON_SUMMONABLE)) - _reachable)
     assert not _unreachable, (
-        f"从 {S.CONDUCTOR_ROLE} 出发在边图上到不了这些角色：{_unreachable} —— "
-        "它们永远不会被召唤（改前那条『出边恰好等于 schema.ROLES』守的就是这件事）"
+        f"从 {S.CONDUCTOR_ROLE} 出发在边图上到不了这些角色（可召唤的那一批）：{_unreachable} —— "
+        "它们永远不会被召唤（改前那条『出边恰好等于 schema.ROLES』守的就是这件事）。"
+        f"不可召唤的 {sorted(set(NON_SUMMONABLE))} 不在这条判据的射程里："
+        "它们按定义就不该被召唤，要求它们可达是自相矛盾的"
     )
 
     # ---- [2] handler 真的存在

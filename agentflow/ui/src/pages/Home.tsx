@@ -29,6 +29,7 @@ import type { WriteOutcome } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
+import { CachePanel } from "../components/PromptCache";
 import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -314,6 +315,9 @@ export function Home() {
 
   return (
     <>
+      {/* 两档提示词缓存的面板（2026-10-23）：落在首页最上面 —— 用户一进来就看得到
+          "两档落没落地、新不新鲜、缺谁"，两个按钮就在下面（真预热要二次确认）。 */}
+      <CachePanel />
       <Card
         title="对话"
         subtitle={
@@ -378,7 +382,7 @@ export function Home() {
 
       <Card
         title="说一句"
-        subtitle={`M ${running ? "在飞" : "闲着"} · ${pending.length} 条待回答`}
+        subtitle={`M ${running ? "在飞" : "闲着"} · ${pending.length} 条待回答（全局待答清单）`}
       >
         {pending.length === 0 ? (
           <span class="empty">暂无待回答的问题（合法初态）。</span>
@@ -490,7 +494,7 @@ export function Home() {
                     <span class="mono">0</span>
                   ),
               },
-              { key: "pending", title: "待答" },
+              { key: "pending", title: "待答（全局待答清单）" },
               { key: "runs", title: "趟数" },
               { key: "orphans", title: "轮次之外" },
               { key: "last_kind", title: "盘上最后一条" },
@@ -501,13 +505,23 @@ export function Home() {
       </Card>
 
       <Card title="台账">
+        {/* D21（2026-10-22 读数）：这一格此前数的是 `data/events.jsonl` 的总行数 ——
+            每次写入占两行（一行事件 + 一行 commit 标记），于是它把"写了多少笔"
+            翻倍地回答，标题还写成"事件 N 条"。现在读的是 `upserts`（写入笔数），
+            并把其中的 commit 标记行数一并写出来。口径的字在 `ledger.events_note` 里，
+            这一句只是把它摆到数字旁边。 */}
         <div class="readings">
-          台账事件{" "}
-          <span class="mono">{snapshot.ledger.events === null ? "unknown" : snapshot.ledger.events}</span>{" "}
-          条 · tasks 行数{" "}
+          台账写入{" "}
+          <span class="mono">{snapshot.ledger.upserts === null ? "unknown" : snapshot.ledger.upserts}</span>{" "}
+          笔（其中 commit 标记{" "}
+          <span class="mono">{snapshot.ledger.commit_markers === null ? "unknown" : snapshot.ledger.commit_markers}</span>{" "}
+          行）· tasks 行数{" "}
           <span class="mono">{snapshot.ledger.tables === null ? "unknown" : snapshot.ledger.tables}</span>{" "}
           · 落点 <span class="mono">{snapshot.ledger.path}</span>
         </div>
+        {snapshot.ledger.events_note === "" ? null : (
+          <div class="readings">{snapshot.ledger.events_note}</div>
+        )}
         {snapshot.ledger.tables_note === "" ? null : (
           <div class="readings">{snapshot.ledger.tables_note}</div>
         )}

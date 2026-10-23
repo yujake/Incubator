@@ -183,20 +183,26 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## E.4 [附录·实测] 工具面明细（26 件）
+## E.4 [附录·实测] 工具面明细（25 件）
 
-**现读**：`python -m agentflow.cli tools --role E`（2026-10-21）
+**现读**：`python -m agentflow.cli tools --role E`（2026-10-23 复跑；此前记 26 件是因为
+`verify.check_formal` 还挂在 E 的 `roles` 里 —— 2026-10-22 起那一格归 L，见 §L.4）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **26** |
-| `side_effect` | `read 17 / write_local 9 / none 0` |
-| `external` | `none 24 / exec 2`（`verify.check_formal` / `verify.run_experiment`） |
-| 需审批 | **10** |
+| 总数 | **25** |
+| `side_effect` | `read 16 / write_local 9 / none 0` |
+| `external` | `none 24 / exec 1`（`verify.run_experiment`） |
+| 需审批 | **9** |
 
-**逐件清单（共 26）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
-`verify.*` 6（`check_formal` `code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）·
+**逐件清单（共 25）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
+`verify.*` 5（`code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment`）·
 `conductor.broadcast` / `conductor.escalate` 2。
+
+> **`verify.check_formal` 不在 E 的工具面里了**：它的 `roles` 现读是**空集**
+> （形式化入口归 L：`formal.check_formal`），E 自己的 Lean 侧写死关闭
+> （`agent_e._support.E_LEAN_SIDE_HARD_OFF`，受控拒绝码 `formal_moved_to_l`）。
+> 复跑：`python -c "import sys;sys.path.insert(0,'src');from agentflow.tools import build_registry;import tempfile,pathlib;from agentflow.store import Store;d=pathlib.Path(tempfile.mkdtemp());s=Store(d);s.init();print(build_registry(store=s,workspace_root=d).registry.get('verify.check_formal').roles)"` ⇒ `()`。
 
 **E 拿不到**：`graph.*` / `trace.*`（C/D 的图面）、`research.*`（D 的问题台账）、
 `attack.*`（F 的攻坚）、`doc.*`/`review.*`（G/H 的写稿与审校）、`search.*`/`ocr.*`/`text.extract`（A/B 的取材与解析）、
@@ -204,20 +210,21 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## F.4 [附录·实测] 工具面明细（37 件）
+## F.4 [附录·实测] 工具面明细（36 件）
 
-**现读**：`python -m agentflow.cli tools --role F`（2026-10-21）
+**现读**：`python -m agentflow.cli tools --role F`（2026-10-23 复跑；此前记 37 件是因为
+`verify.check_formal` 还挂在 F 的 `roles` 里 —— 那一格现读是空集，见 §E.4 末那段）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **37** |
-| `side_effect` | `read 21 / write_local 11 / none 5` |
-| `external` | `none 35 / exec 2` |
-| 需审批 | **12** |
+| 总数 | **36** |
+| `side_effect` | `read 20 / write_local 11 / none 5` |
+| `external` | `none 35 / exec 1`（`verify.run_experiment`） |
+| 需审批 | **11** |
 
-**逐件清单（共 37）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
+**逐件清单（共 36）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 ·
 `attack.*` 6（`check_budget` `create_plan` `list_plans` `pick_next_subgoal` `status` `step`）·
-`doc.*` 3 · `review.*` 2 · `verify.*` 6 · `conductor.broadcast` / `conductor.escalate` 2。
+`doc.*` 3 · `review.*` 2 · `verify.*` 5 · `conductor.broadcast` / `conductor.escalate` 2。
 
 > **F 自己的写面只有 2 件**（`attack.create_plan` / `attack.step`）；其余写工具是
 > `fs.*` 4 件（`write` `edit` `delete` `move`）+ `table.*` 3 件（`create` `update` `delete`）
@@ -226,20 +233,21 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 
 ---
 
-## G.4 [附录·实测] 工具面明细（39 件）
+## G.4 [附录·实测] 工具面明细（38 件）
 
-**现读**：`python -m agentflow.cli tools --role G`（2026-10-22）
+**现读**：`python -m agentflow.cli tools --role G`（2026-10-23 复跑；此前记 39 件是因为
+`verify.check_formal` 还挂在 G 的 `roles` 里 —— 那一格现读是空集，见 §E.4 末那段）
 
 | 维度 | 读数 |
 |---|---|
-| 总数 | **39** |
-| `side_effect` | `read 21 / write_local 13 / none 5` |
-| `external` | `none 36 / exec 3`（`doc.paper_compile` 真的起 LaTeX 引擎，是 G 独有的第三件 `exec`） |
-| 需审批 | **14** |
+| 总数 | **38** |
+| `side_effect` | `read 20 / write_local 13 / none 5` |
+| `external` | `none 36 / exec 2`（`doc.paper_compile` 真的起 LaTeX 引擎；另一件是 `verify.run_experiment`） |
+| 需审批 | **13** |
 
-**逐件清单（共 39）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `attack.*` 4 ·
+**逐件清单（共 38）**：`fs.*` 8 · `table.*` 8 · `manuscripts.*` 2 · `attack.*` 4 ·
 `doc.*` 7（`build_document` `compose_claim` `list_documents` `paper_compile` `register_dependency` `scan_claim` `write_mapping`）·
-`review.*` 2 · `verify.*` 6 · `conductor.broadcast` / `conductor.escalate` 2。
+`review.*` 2 · `verify.*` 5 · `conductor.broadcast` / `conductor.escalate` 2。
 
 **G 拿不到**：`attack.create_plan`/`attack.step`、`graph.*`/`trace.*`、`research.*`、`search.*`、
 `ocr.*`、`text.extract`、`review.report`/`review.review_document`/`review.verify_fixes`/`review.record_finding`

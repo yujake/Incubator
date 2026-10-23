@@ -310,7 +310,7 @@ export function Help() {
         </div>
       </Card>
 
-      <Card title="名册怎么读（树 / 绝对编号 / 深度 / 收件箱积压）">
+      <Card title="名册怎么读（树 / 绝对编号 / 深度 / 收件箱三格）">
         <div class="readings">
           真身在盘上：<span class="mono">out/roster/&lt;父编号&gt;.jsonl</span> ——
           一个父一份名册，文件里每一行是一个子；文件名就是父的绝对编号。
@@ -327,10 +327,15 @@ export function Help() {
           根不在任何人的名册里 ⇒ 它的名字是空串（面板写"顶层·无名册名"）。
         </div>
         <div class="readings">
-          <b>收件箱积压</b>：<span class="mono">data/tasks.json</span> 里
+          <b>收件箱</b>：<span class="mono">data/tasks.json</span> 里
           <span class="mono">parent_task_id</span> 指向这个节点、且
           <span class="mono">item_state</span> 不是 <span class="mono">done</span> 的板项。
-          一格里给三档徽标：未读到 / 没有积压 / 积压 N。点开节点能看按状态与按种类的分布，
+          三格分开给：<span class="mono">unread</span>（queued + claimed：还没被读进任何一步）、
+          <span class="mono">seen_not_acked</span>（seen：读了、还缺一个 ack）、
+          <span class="mono">open_total</span>（未消总数 = 未读 + 已读未 ack + 状态读不出来的那些）。
+          徽标写「未读 N · 已读未 ack M」——「他还没看」与「他看了但框架没让他 ack」
+          是两件事，合成一个"积压"数会让它在正常流程下只涨不落。
+          点开节点能看按状态与按种类的分布，
           一个节点最多列 10 条（<span class="mono">ROSTER_INBOX_ITEMS</span>），正文截到 160 字，
           剩下几条写在 <span class="mono">inbox.more</span> 里。
         </div>
@@ -340,6 +345,47 @@ export function Help() {
           节点上限 500（<span class="mono">ROSTER_NODES_MAX</span>），超了置
           <span class="mono">truncated=true</span>。面板底下那一行「对账」把台账里的代理行、名册上的节点、
           以及"有父但不在任何名册里"的行（名册机制上线之前落的）三个数摆在一起。
+        </div>
+      </Card>
+
+      <Card title="四格读数怎么读（未读 / 待答 / 台账写入 / 宿主进程 pid）">
+        <div class="readings">
+          <b>收件箱徽标</b>：写 <span class="mono">未读 N · 已读未 ack M</span>
+          （没有未消条目时写「收件箱：没有未消的条目」；读不到时写「收件箱：未读到」）。
+          <span class="mono">unread</span> 是还没被读进任何一步的（<span class="mono">queued</span> +
+          <span class="mono">claimed</span>），<span class="mono">seen_not_acked</span> 是读了、
+          缺的是那个 ack。点开节点另给三格：未读 / 已读未 ack / 未消（<span class="mono">open_total</span>），
+          外加「其中状态读不出来 N 条」（词表外的行单列，不并进前两格）。
+        </div>
+        <div class="readings">
+          <b>板项与在飞是两条轴</b>：板项行是 <span class="mono">kind</span> 非空、
+          <span class="mono">item_state</span> 不是 <span class="mono">done</span> 的那些行；
+          「在飞」看的是实例行（<span class="mono">kind</span> 为空、<span class="mono">status</span>
+          是 <span class="mono">pending</span> / <span class="mono">running</span>）。
+          状态报告那一栏的「在飞」只数实例行：不分开数会把「板上有十几条要消的项」写成「在飞十几」。
+        </div>
+        <div class="readings">
+          <b>待答两处同一个数</b>：首页会话概览那一列与「说一句」那张卡的副标题都写
+          <span class="mono">（全局待答清单）</span>，取的是同一份清单
+          （<span class="mono">/api/state</span> 的 <span class="mono">pending_questions</span>），
+          不按当前选中的会话过滤 —— 别的会话在等人回答也是事实，而且 <span class="mono">qid</span>
+          只在会话内唯一，所以每一条各自带着自己的会话号提交。
+        </div>
+        <div class="readings">
+          <b>台账写入笔数 ≠ 事件文件行数</b>：首页那张台账卡写
+          <span class="mono">台账写入 N 笔（其中 commit 标记 M 行）</span>。
+          每提交一次事务写两行（一行事件 + 一行 <span class="mono">op=commit</span> 的提交标记），
+          所以 <span class="mono">N + M</span> 才是 <span class="mono">data/events.jsonl</span>
+          的总行数；<span class="mono">N</span> 回答的是「写了多少笔」。读不成 JSON 的坏行按行计入
+          <span class="mono">N</span>，并在下面那句说明里单独点名；台账文件不在盘上时两格都是
+          <span class="mono">unknown</span>（不是 0 笔）。
+        </div>
+        <div class="readings">
+          <b>进程面那一列是宿主进程的 pid</b>：「在飞」页进程面的列名逐字是
+          <span class="mono">宿主进程 pid</span>，表头上方那句说明写的是同一件事 ——
+          同一趟 run 里所有角色共用同一个宿主进程，所以多行会印出同一个号。
+          要分辨「这一行是谁」看角色与会话号；绝对的 <span class="mono">task_id</span>
+          在名册那张卡里。
         </div>
       </Card>
 

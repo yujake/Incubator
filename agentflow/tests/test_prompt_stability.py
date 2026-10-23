@@ -131,7 +131,11 @@ def test_every_role_renders_a_stable_system_across_steps(tmp_path: pathlib.Path)
                  parent_task_id="", children="", board="", budget_left="1.000000 美元",
                  inbox="（没有收到留言）", workspace_root=str(root), availability=None,
                  notebook="（草稿本还是空的）", user_replies="", toolchain_facts="",
-                 toolchain_formal="", parent_limits="")
+                 toolchain_formal="", parent_limits="",
+                 # 2026-10-22（业主 B-3）：我名下被 V 判「有毛病」的证明明细也登记在
+                 # `STEP_VOLATILE_FACTS` 里 ⇒ 这一份探针事实必须给齐它，否则下面
+                 # "一格不少、一格不多"那条会读到"登记表里有一格没喂进来"。
+                 v_rejections="（名下没有被 V 判「有毛病」的证明）")
     for role in sorted(AP.ROLE_BRIEFS):
         loop = AL.AgentLoop(role=role, session_root=root, registry=registry,
                             conductor=cond,
@@ -437,6 +441,30 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p183", "count": 14,
      "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
      "note": "抬版本 p183（2026-10-22 第二批）：C 的「最自然路径」索引行与正文补上「max_depth 是一批能搜多深、长链一批一批往回搜、前沿是下一批起点、拼起来要交代接缝」；只有 C 那一格的段变了，另九格逐字未动；键集未变"},
+    {"version": "p184", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p184（2026-10-22 第三批）：业主施工单「照着 E 的方式新设角色 L（Lean 形式化者）」—— 新增 L 那一格、M 的伙伴表多一行 L、工具面新增 formal.* 两件（只挂给 L）；facts 键集未变（14 格），L 没有边所以另十格逐字未动"},
+    {"version": "p185", "count": 14,
+     "keys_sha256": "7b586f9861027114136160fccdc954f8b75979405466bfc809a2c42f737f4a37",
+     "note": "抬版本 p185（2026-10-22 第四批）：业主口径「所有受 Lean 开关控制的提示词/工具/动作全部指向 L」—— TOOLCHAIN_FORMAL 的受众收成 formal.*（只有 L），那一段正文改成 L 的口径（statement_full/proof_text/逐步/code/formal/三态），facts 开档补一行「形式化由 L 承担」，技能索引那句翻成「开着时形式化见 L、关着时零痕迹」，specs/{e,d,g,h,m}.py 里形式化指向逐条改成 L；facts 键集未变（14 格）"},
+    # 本批（业主 B-3「V 的判决必须递到 F」）：键集第一次真正动了（14 → 15）。
+    # `count` / `keys_sha256` 是 `PS.volatile_facts_digest()` 的现算值，不手抄。
+    {"version": "p186", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p186（2026-10-22 第五批）：业主 B-3「V 的判决必须递到 F（让 F 去修）」—— facts 键集 14 → 15，新增 v_rejections（F 名下被 V 判「有毛病」的证明明细：命题号 / 最近一签 / unresolved_errors / 错在第几步 / 那一签盖的是不是现在这一份；数据源是 verifications.statement_review_reading，念在开场那条 user 消息里）；另 F 的 policy 补一条「按它给的步号补那一步、补完重新送 V、不许绕开」⇒ 段的角色摘要只有 F 那一格变，另十格逐字未动。同一版号里并进来的第二笔（业主 B-1，2026-10-22 晚）：「被指认无可信度 / 待审核的文献不可当引文入库，只可当研究参考」写进 specs/a.py 与 specs/b.py 的 policy ⇒ A / B 两格的摘要也换了值（_FROZEN_PROMPT_DIGESTS 里那两格就是含这一句的现算值）；这一笔不做任何机械闸，lit_candidates / literature 的写入路径一个字没动"},
+    # 本批（2026-10-23 收口）：L 的协作面落地。键集未变（15 格仍是那 15 格），
+    # `count` / `keys_sha256` 仍是 `PS.volatile_facts_digest()` 的现算值。
+    {"version": "p187", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p187（2026-10-23 收口）：L 的协作面落地 —— 入边只有 B（B → L）、出边只有 C（L → C，只派 C 梳理证明链），L 从「不可召唤」变可召唤；形式化那一格从 formal.* 两件长成三件（多出 formal.record），verify.check_formal 的角色面从三格（E/F/G）收成空。事实键集一格未动（15 格还是那 15 格）：这一批换的是「谁拿得到哪些工具」与共用段那句「形式化见 L」的正文，所以这一格记的仍是 21314a39…；那一边的读数在 _FROZEN_PROMPT_DIGESTS（共用段 SKILLS_INDEX 改了 ⇒ 十一格摘要全换），这一格只记 facts 键集，不重复记段的变化"},
+    # 本批（2026-10-23 审计收口，业主「其它角色关于 E 的 Lean 侧记忆可以全面清除」最后一刀）：
+    # 五元位那一段里 formal 的 owner 从 E 改成 L（`evidencebits.BIT_OWNERS` /
+    # `BIT_LEDGERS`）⇒ 共用段换了值、十一格摘要全换（那一侧记在 `_FROZEN_PROMPT_DIGESTS`
+    # 的 p188 那一格）。facts 键集一格未动（15 格），`count` / `keys_sha256` 仍是
+    # `PS.volatile_facts_digest()` 的现算值、不手抄；这一格与 p187 唯一的区别是版本号。
+    {"version": "p188", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p188（2026-10-23 审计收口）：E 的 Lean 侧记忆最后四处残留（① evidencebits 的 formal owner E→L、② 五元位渲染跟着改成「formal：L 签」、③ closing 那条 load_bearing blocker 改指 formal.check_formal/formal.formalize、④ specs/m.py 与 agent_skills.py 里 H 的采信规则那句改指「L 的形式化（formal.record 那一行）」）；另加两条 specs/e.py 的 NO_LEAN_REPLACEMENTS 把关档的 formal 那行改成不点 L 的写法（只在关档生效 ⇒ 开档摘要不受影响，见 test_l_is_isolated_when_lean_is_off 的 0 处 L 判据）。facts 键集一格未动（15 格）：这一批换的是段正文，不涉及任何一格事实的落点"},
 )
 
 
@@ -526,6 +554,8 @@ def test_the_dynamic_section_whitelist_is_registered_and_small() -> None:
         "children", "board", "inbox", "user_replies", "workspace_root",
         # 随这一趟的配置变（也是开场那条 user 消息里现读，2026-10-21 第二批）
         "availability", "parent_limits",
+        # 随 V 的台账与 F 的改稿变（开场那条 user 消息里现读，2026-10-22 业主 B-3）
+        "v_rejections",
     }, sorted(PS.STEP_VOLATILE_FACTS)
     # 每一格都必须有静态替身（空串会被 `promptkit` 的严格插值拒掉，
     # 而那正是"挪出去但没留指路语"的形态）。

@@ -306,12 +306,18 @@ def lean_enabled(path: str | Path | None = None, *,
                  env: Mapping[str, str] | None = None) -> tuple[bool, str]:
     """这一趟走不走 Lean 形式化 —— 一个布尔，按唯一梯子取。返回 `(值, 来源)`。
 
-    来源取值 `"env"` / `"settings"` / `""`（= 用了缺省 `True`）——
+    来源取值 `"env"` / `"settings"` / `""`（= 用了缺省 `False`）——
     与 :func:`env_or_setting` 同一条口径："这个值是用户设的还是缺省给的"
     必须能被读出来，否则"我明明关了"与"我没设过"在读数上长得一样。
 
     取值梯子（唯一口径，见模块 docstring）：环境变量 `AGENTFLOW_LEAN_ENABLED`
-    > 设置文件 `toolchain` 段的 `lean_enabled` > :data:`DEFAULT_LEAN_ENABLED`（`True`）。
+    > 设置文件 `toolchain` 段的 `lean_enabled` > :data:`DEFAULT_LEAN_ENABLED`（`False`）。
+
+    （2026-10-22 更正：这一行原写"缺省 `True`" —— 那是 2026-10-12 之前的缺省值。业主
+    当天的口径是"默认设置中 Lean 关闭帮用户在无严苛要求时省钱"，真身
+    `DEFAULT_LEAN_ENABLED = False`，而判据
+    `tests/test_lean_switch.py::test_the_product_default_is_lean_off` 钉的正是它。
+    docstring 与真身不一致时，读文档的人会以为"没设就是开"，而实际每一趟都关着。）
 
     ## 读不懂的值必须当场报错（fail-closed）
 

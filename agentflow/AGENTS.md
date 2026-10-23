@@ -64,7 +64,7 @@ src/agentflow/extract.py         [category: solver-core] 文本抽取主通道 `
 
 [category: prover-bridge] 二、证明检查器的桥接层（与外部检查器交互的部分）
 
-src/agentflow/tools/verify_tools.py  [category: prover-bridge] `detect_verifier` 与 `check_formal`：探测 Lean/Coq/Isabelle 并解释其输出 —— 桥接层说谎 ⇒ proof 级证据是假的，而报告照样打印
+src/agentflow/tools/verify_tools.py  [category: prover-bridge] `detect_verifier` 与 `check_formal`：探测 Lean/Coq/Isabelle 并解释其输出 —— 桥接层说谎 ⇒ proof 级证据是假的，而报告照样打印。2026-10-22 起它是桥接层的真身、不再是形式化的门面：形式化入口归 L（工具面 formal.* / 动作 formalize 与 record），E 与 L 都经它取检查器原话
 src/agentflow/quoteverify.py         [category: prover-bridge] `check_quote` 引文级回验：把一条断言与来源文本逐字比对 —— 它是"外部证据"与"我们自己的断言"之间的桥，错判即幻觉引文进报告
 
 [category: provenance-dedup] 三、来源解析与去重键（同一篇文献必须只有一个键）
@@ -105,12 +105,14 @@ src/agentflow/specs/a.py    [category: auth-audit] 角色 A 的声明真身（M3
 src/agentflow/specs/b.py    [category: auth-audit] 角色 B 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/c.py    [category: auth-audit] 角色 C 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/d.py    [category: auth-audit] 角色 D 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
-src/agentflow/specs/e.py    [category: auth-audit] 角色 E 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
+src/agentflow/specs/e.py    [category: auth-audit] 角色 E 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」。2026-10-22 划线：形式化那一路归 L（本文件的形式化动作与代码不删、仍是函数级复用的来源），「形式化交给谁」那一层文案归 L 承担
+src/agentflow/specs/l.py    [category: auth-audit] 角色 L（Lean 形式化者，2026-10-22 新设）的声明真身：`ACTIONS`（`formalize` / `check_formal` / `record`）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身。2026-10-22 晚的协作面口径（业主最终裁定）：入边只有 `B`、出边只有 `C`（`summonable` 为真）；B 可派 L 做形式化、L 只派 C 梳理证明链；「用户指定单条执行」是入口（`run-agent L`）而不是边，所以它不进 `ALLOWED_EDGES`（给它加边就等于把形式化挂成流水线的一环）；`write_set` 只有 experiments 一格（`record` 落一行形式化实验行；刻意不含 statements ⇒ 「L 绕过 V 签给命题升档」在结构上不可能）。改这三格任何一个都是改「谁能让 L 干活、L 能改什么」；判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/f.py    [category: auth-audit] 角色 F 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/g.py    [category: auth-audit] 角色 G 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/h.py    [category: auth-audit] 角色 H 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/m.py    [category: auth-audit] 角色 M 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/v.py    [category: auth-audit] 角色 V（验证者）的声明真身（F-02 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
+src/agentflow/tools/formal_tools.py [category: auth-audit] L 的三件工具（`formal.formalize` / `formal.check_formal` / `formal.record`）与它们的装配入口 `register`：`roles` 只有 L（`_ROLES_L`），三件的副作用与外部性两根轴逐条声明 —— `role` 表少一个字母就等于把形式化入口漏给别的角色，而工具层不会报错，它只会「成功」；`record` 会写 experiments 表，所以本文件是 L 的写权限面的落点之一
 src/agentflow/agentspec.py    [category: auth-audit] 声明类型与声明词表：`ActionSpec`（动作声明的唯一类型）、`AgentSpec` / `AgentBrief`（一个 agent 的声明）、`AgentRegistry` / `builtin_registry`（装配面从这里读）、以及 `SIDE_EFFECTS` / `EFFECT` / `EXTERNAL` / `UNKNOWN_SIDE_EFFECT` 四个受控词表 —— 词表加一个取值就是放宽一整根轴（`tools/base.py` 与它是逐字对齐的两份），而 `assert_capabilities` 的交叉断言只保证'两处一致'，不保证'这次放宽该不该发生'
 src/agentflow/capabilities.py    [category: auth-audit] A–H 调用矩阵的**权威定义**：`ALLOWED_EDGES` / `CAPABILITIES` / `WRITE_SETS` / `NON_SUMMONABLE` —— interactions.py 的理由串自己承认「矩阵真身在这里」，而它此前**不在清单里** ⇒ 改「哪个角色调得到什么」不需要任何人审（P-18 / H-4 的同族）；verify.py 的一致性审计把它当真身读 ⇒ 改它等于改权限面本身
 .noai-approvals.json             [category: auth-audit] 批准台账：`sha256` 钉住「被批准的那一版」、`reviewers` 记「谁逐行走查过」—— 改它等于改审计记录本身；台账**不能批准自己**（理由码 `ledger_self_approval`），且 `--baseline` 永远不写 `reviewers`（登记 ≠ 批准）

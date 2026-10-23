@@ -39,6 +39,11 @@ ROLE_MODULE: dict[str, tuple[str, str]] = {
     "G": ("agentflow.agent_g", "AgentG"),
     "H": ("agentflow.agent_h", "AgentH"),
     "V": ("agentflow.agent_v", "AgentV"),
+    # 2026-10-22（新设 L）：这张表登记的是"每个角色的动作真的落在哪个类上"。
+    # 少一个角色 ⇒ `test_every_handler_name_exists_as_a_class_method` 当场报
+    # "只核了多少 / 总数"（审计 D-7 的同一条判据）—— 所以加 L 不是把判据改宽，
+    # 而是让那两条判据真的看到 L 的两个动作（`formalize` / `check_formal`）。
+    "L": ("agentflow.agent_l", "AgentL"),
 }
 _STALE_REF = re.compile(r"agent_[a-h]\.py:\d+")
 _CAPS = Path(__file__).resolve().parents[1] / "src" / "agentflow" / "capabilities.py"

@@ -260,12 +260,23 @@ def test_a_legacy_row_without_bits_credits_nothing():
         ["pending", False, False, "pending", False], bits
 
 
-def test_a_legacy_external_lit_row_keeps_its_citation_credit():
-    """旧行里唯一保留的读法：逐字核过的引用命题（凭据是文献代号）。"""
-    row = {"stmt_id": "stmt-0002", "origin": "external_lit", "source_lit_id": "lit-0042",
-           "quote_verified": True, "status": "active"}
-    bits = EB.bits_from_row(row)
-    assert bits["grade"] == "pre_theorem", bits
+def test_a_legacy_external_lit_row_keeps_its_citation_credit_only_with_a_span():
+    """旧行里唯一保留的读法：逐字核过的引用命题（凭据是文献代号 + 区间）。
+
+    D1（2026-10-22 第二版）：空 `quote_mode` 仍按逐字读，但前提是有区间 ——
+    区间是"核了哪一段、在第几页"的唯一载子。改前这一条断言的是"只要 quote_verified
+    为真就给学分"，真机 13 行（true + verbatim + 空 span）正是靠那条读法拿到了学分。
+    """
+    with_span = {"stmt_id": "stmt-0002", "origin": "external_lit",
+                 "source_lit_id": "lit-0042", "quote_verified": True,
+                 "quote_span": "p2:norm[4:44]", "status": "active"}
+    assert EB.bits_from_row(with_span)["grade"] == "pre_theorem", EB.bits_from_row(with_span)
+
+    legacy = dict(with_span, quote_span="")
+    bits = EB.bits_from_row(legacy)
+    assert bits["grade"] == "conjecture", (
+        "说通过而拿不出区间 ⇒ 不给引用学分（D1 的读侧那一半）", bits)
+    assert EB.quote_state(legacy) == EB.QUOTE_NO_EVIDENCE, EB.quote_state(legacy)
 
 
 def test_a_new_row_with_bits_is_re_normalised_and_the_grade_is_recomputed():

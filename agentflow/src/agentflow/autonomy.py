@@ -18,13 +18,18 @@
 ## 停止判据与三态
 
 每一轮开跑前按固定顺序判一次，命中就停，并把命中哪一条如实写进
-`AutonomyRun.stop_reason`（`waiting_for_user` / `escalated` / `rounds` / `budget` /
-`stop_file`；`user_stop` 已按业主口径删除）
+`AutonomyRun.stop_reason`（`waiting_for_user` / `escalated` / 用户叫停三档 / `rounds` /
+`budget` / `stop_file`；`user_stop` 已按业主口径删除）
 —— 顺序写死是为了"多条同时成立"时也有一个确定的答案，而不是看谁先被读到：
 
 - `waiting_for_user`：上一轮停在等人答、而那个问题至今还挂着（唯一一条不能靠继续跑绕过去的）；
 - `escalated`：上一轮用 `conductor.escalate` 把卡住的那件事交给了召唤者（业主 2026-10-19
   「父子天然双向」）—— 再开一轮就是替父把判断定了，所以停在这里等父；
+- 用户叫停三档（`stopctl.USER_STOP_REASONS`：`stop_file` / `force_stop` /
+  `interrupted_by_parent`，D19）：上一轮就是被一个比这一层更大的意思叫停的 ——
+  再开一轮等于把它按下去的那只手改写掉。判据只看上一轮的理由码，不看盘：读到它的
+  那一趟在收尾时已经把开关撤走了（`agent_loop` 的 `_consume_stop_at_teardown`），
+  "盘上还在"反而是少数形态；
 - `rounds`：轮次用尽（这是唯一的正常终点，"跑完了"就是它）；
 - `budget`：花销预算已到（有共享的模型缝就问缝，没有就把各轮的用量加起来）；
 - `stop_file`：磁盘上出现了那个开关文件（人不用等着发指令就能叫停）；
@@ -62,6 +67,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from . import sessions as SS
+from . import stopctl
 from .agent_loop import PUBLIC, LoopRun, run_role, send_message
 from .llmseam import LlmSeam
 
@@ -109,8 +115,16 @@ def load_checkpoint(session_root: Path | str, role: str) -> dict[str, Any] | Non
 def save_checkpoint(session_root: Path | str, role: str, *, fingerprint: str,
                     completed_rounds: int, rounds: int, task: str,
                     spend: Mapping[str, Any], stop_reason: str = "",
-                    last_final: str = "") -> str:
-    """写检查点，返回问题串（空 = 写成了）。写入失败不许静默。"""
+                    last_final: str = "",
+                    stop_switch: Mapping[str, Any] | None = None) -> str:
+    """写检查点，返回问题串（空 = 写成了）。写入失败不许静默。
+
+    `stop_switch`（D19）：收工原因是用户叫停时，把那把开关上写着的东西（谁在什么时候
+    为什么按的、是不是强制）一并落进 `runs/autonomy-<角色>.json`。
+    为什么检查点里要留这一份：`stop_reason="stop_file"` 只答"为什么停的这一档"，
+    而"是谁按的 / 是不是用户"只能从开关那份负载里读到 —— 开关随后就被消费掉了，
+    不在检查点里留一份，事后就只剩 `runs/stop-history.jsonl` 那一条可查。
+    """
     path = checkpoint_path(session_root, role)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,6 +133,10 @@ def save_checkpoint(session_root: Path | str, role: str, *, fingerprint: str,
                    "spend": dict(spend), "stop_reason": stop_reason,
                    "last_final": str(last_final)[:FINAL_CHARS],
                    "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        if stop_switch is not None:
+            # 恒为空的键会让"没人叫停"与"叫停了但没读到是谁"在盘上长得一样
+            # （与 `stopctl.request_stop_detail` 只在给了 `root_task_id` 时才写那一格同一条纪律）。
+            payload["stop_switch"] = dict(stop_switch)
         with path.open("w", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n")
     except OSError as exc:
@@ -276,12 +294,15 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
                        usd_budget: float | None, stop_path: Path | None,
                        user_answer: str, last_stop_reason: str = "",
                        pending_qids: tuple[str, ...] = (),
-                       wake_pending: int = 0, woke: int = 0) -> str:
+                       wake_pending: int = 0, woke: int = 0,
+                       stop_latch_reason: str = "") -> str:
     """下一轮开跑前的停止判据；返回停止原因（空串 = 继续跑）。
 
-    顺序是 `waiting_for_user` → `escalated` → `rounds` → `budget` → `stop_file`：
+    顺序是 `waiting_for_user` → `escalated` → 用户叫停 → `rounds` → `budget` →
+    `stop_file`：
     先看"上一轮停在等用户回答、而「那个回答到现在还没来」"（唯一一条不能靠继续跑绕过去的），
     再看"上一轮已经把卡住的那件事交给召唤者了"（同一族：等的是别人，不是钱也不是轮次），
+    再看"上一轮是被外面的人叫停的"（D19，见下），
     再耗尽轮次，再看钱，再看磁盘上那个人工开关，最后看用户最新那句话。
     多条同时成立时按这个顺序给一个确定的答案 —— 否则"为什么停"这件事会取决于读取顺序，
     而那是不可复现的。
@@ -297,6 +318,23 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
     所以判据是两件事同时成立：上一轮停在等用户 「且」 那个问题至今还挂在待答清单里
     （`pending_qids` 非空）。只看前者会把"答了之后续跑"一起拦掉 —— 实测撞过：
     `tests/test_resume_runs_and_consumes_answer.py` 两条判据当场红（续跑一次模型都没调）。
+
+    ## 用户叫停为什么单独成一档，而不是并进下面那一格（D19，2026-10-22）
+
+    改前这里只有 `waiting_for_user` 与 `escalated` 两档"看理由码"的判据，用户叫停那一族
+    完全没有：上一轮以 `stop_file` 收工之后，这一层照开第 2 轮。三层叠加的现场是：
+    ① 多轮那一档的 `stop_file` 曾经一路传成 `None`（`stop_path is not None` 整条短路，
+    从头没读过盘）；② 就算给了路径，读到它的那一趟树根在收尾时把开关撤掉了
+    （`agent_loop._consume_stop_at_teardown`），下一轮再问"盘上还有没有"必然得到"没有了"；
+    ③ 于是只有"上一轮的理由码"能回答这件事，而它当时不在判据里。
+
+    所以这一档只看 `last_stop_reason`（`stopctl.USER_STOP_REASONS` 三档，单一真身），
+    不看盘。强停（`force_stop`）与父叫停（`interrupted_by_parent`）同一档：
+    对"这一趟还要不要往下跑"这个问题，三者给的是同一个答案。
+
+    `stop_latch_reason` 是闩式那一半：调用方开跑前在盘上读到过开关、或某一轮边界上读到过
+    （之后又被别人撤走），也算"用户叫停过"。它与上一轮的理由码互为补充 ——
+    前者答"这一趟见过没有"，后者答"上一轮是不是被它叫停的"。
     """
     if last_stop_reason == "waiting_for_user" and tuple(pending_qids):
         return "waiting_for_user"
@@ -311,6 +349,20 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
     # 决定交出去 —— 判据 `tests/test_escalate_goes_up_and_stops.py` 两向都钉着。
     if last_stop_reason == "escalated":
         return "escalated"
+    # ---- 用户叫停（D19）：上一轮就是被一个比这一层更大的意思按下去的。
+    #
+    # 为什么排在 `rounds` 之前：轮次用尽说的是"这一趟跑满了"，而这一条说的是
+    # "人不让它跑满" —— 把它折进 `rounds` 会把"用户摁停"报成"轮数用完"，
+    # 而那个读数会让下一次 `--resume` 以为还有得跑。
+    # 前面那两条为什么仍在它之前：等用户回答 / 已上报召唤者也同样是"必须等别人"，
+    # 而且它们各自带了自己那一份更具体的读数（待答清单 / 父的收件箱）。
+    if last_stop_reason in stopctl.USER_STOP_REASONS:
+        return last_stop_reason
+    if stop_latch_reason:
+        # 闩式那一半：这一趟见过那把开关（开跑前就在盘上 / 某个轮次边界上读到过）。
+        # 即使它现在不在盘上也照停 —— "见过一次"是发生过的事实，不会因为别人撤走了
+        # 文件而消失；而只看盘的判断在这里必然得到"没有人叫停"（见 docstring）。
+        return stop_latch_reason
     if index > rounds:
         # ---- S-G（裁定 15；DSH 的 `next-turn` + `wakeDriver`）：轮次用尽之后，
         # 收件箱里还有没投递过的留言 ⇒ 再开一轮（那是"有人在等我"这件事的机器可判形态）。
@@ -421,7 +473,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                    from_env: bool = True,
                    min_usd_between_reports: float = 0.0,
                    user_timeout_sec: float | None = None,
-                   resume: bool = False) -> AutonomyRun:
+                   resume: bool = False,
+                   stop_latch: Mapping[str, Any] | None = None) -> AutonomyRun:
     """把 `role` 的这件事跑成最多 `rounds` 轮，并按节拍向公共频道发阶段汇报。
 
     每一轮都是一次完整的 `run_role(...)`：工具面、权限面、审计面与单轮运行完全一样，
@@ -441,7 +494,13 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         汇报节拍：每 `report_every` 轮一次；两次汇报之间花销不到
         `min_usd_between_reports` 时跳过（最后一轮不受这条限制 —— 收工要有交代）。
     stop_file
-        磁盘上的停止开关：每一轮开跑前看一眼，存在就以 `stop_file` 停。
+        磁盘上的停止开关。不给时就是工作区根下那个 `.agentflow-stop`
+        （`stopctl.stop_path`：`agentflow stop` 与 `conductor.stop` 写的就是它）——
+        这个参数不再允许"没有路径"（D19：`None` 会让下面每一处"盘上有没有"整条短路）。
+    stop_latch
+        调用方在开跑之前取的那一份闩式快照（`stopctl.read_stop` 的负载，没有就传 `None`）。
+        它与"每一轮开跑前现读一次盘"合起来回答"这一趟见过那把开关没有"：
+        开关是一次性信号，读到它的那一趟收尾时会撤走，于是"用户摁过停"在盘上不留痕。
     """
     notes: list[str] = []
     root = _root_of(store, session_root)
@@ -451,10 +510,24 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         notes.append(f"report_every={report_every} 不是一个有效的节拍（至少 1）：按每轮都报处理")
         every = 1
     min_usd = max(0.0, float(min_usd_between_reports))
-    stop_path = Path(stop_file) if stop_file is not None else None
-    if stop_path is not None and not stop_path.parent.is_dir():
+    # ---- 停止开关的路径（D19 的第一层）
+    #
+    # 改前是 `Path(stop_file) if stop_file is not None else None`，而 cli 的多轮那一档
+    # 传的正是 `None`（它以为"轮间不叠加步内那一处"就是"轮间不用看"）⇒ 下面每一处
+    # `stop_path is not None and ...` 全部短路，这一层从头没读过盘。
+    # 现在路径永远有：显式给的用它，否则就是工作区那把手动开关（与 `agentflow stop`
+    # 写下的那一份同一个文件）。多轮与单趟读的是同一个开关，不是两份。
+    stop_path = stopctl.stop_path(root, explicit=stop_file)
+    if stop_file is not None and not stop_path.parent.is_dir():
         notes.append(f"stop_file 的父目录不存在（{stop_path.parent}）：按这个路径，"
                      "停止开关永远不会出现（路径写错了，不是'还没按'）")
+    # ---- 闩式快照（D19 的第三层）：这一趟"见过"那把开关没有。
+    #
+    # 两个来源：调用方开跑前取的那一份（`stop_latch`），以及每一轮开跑前自己现读一次盘
+    # （`_user_stop_reading`：读到就闩住，之后不再依赖文件还在不在）。
+    # 为什么必须"闩"：读到开关的那一趟在收尾时把它撤走（`agent_loop._consume_stop_at_teardown`），
+    # 于是"用户摁过停"这件事在盘上不留痕。只问"文件在不在"的判断永远读不到"刚刚有人叫停"。
+    latched_stop = stopctl.stop_reason_of(stop_latch)
 
     shared = seam
     if shared is None and gateway is not None:
@@ -524,6 +597,29 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
             return float(baseline["usd"] + shared.spend.usd)
         return float(baseline["usd"] + total["usd"])
 
+    def _user_stop_reading() -> str:
+        """这一轮开跑前读一次手动开关；读到就闩住（返回闩住的那一档，空串 = 没见过）。
+
+        为什么要现读一次盘：调用方那份快照是"开跑之前"的读数，而用户完全可以在第 2 轮
+        开跑之前才摁停 —— 那一份快照看不见它。
+
+        三态（与别处同一条纪律）：读不成（异常）不折成"没人叫停" —— 留一条 note，
+        并返回已经闩住的那一份（没有就是空串，由调用方自己那一轮里的停机判据兜底）。
+        """
+        nonlocal latched_stop
+        try:
+            state = stopctl.read_stop(root, explicit=stop_file)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没人叫停"
+            notes.append(f"停机开关没读成（{type(exc).__name__}: {exc}）"
+                         "⇒ 这一格的读数不完整（不折成「没人叫停」）")
+            return latched_stop
+        now = stopctl.stop_reason_of(state)
+        if now and not latched_stop:
+            latched_stop = now
+            notes.append(f"停机开关在盘上（{stop_path}）⇒ 记下这一档：{now}；"
+                         "它是一次性信号，之后即使文件被别人撤走也照停")
+        return latched_stop
+
     def _stop_reason_for(next_index: int, last_stop_reason: str = "",
                          woke: int = 0) -> tuple[str, list[str], str]:
         """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道（返回 `(原因, 说明, 回答)`）。
@@ -532,7 +628,7 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         不要在别处再读一遍 —— 两处各读一次会造出"停的判据用旧回答、任务用新回答"的错位。
 
         `last_stop_reason` 是「上一轮」的停止理由（`draft/37` §72）：上一轮停在等用户回答时，
-        这里必须停，不许开下一轮。
+        这里必须停，不许开下一轮。用户叫停那一族同理（D19，见 `_stop_before_round`）。
         """
         answer, answer_notes = _latest_user_answer(root, role, sid=sid)
         # 还挂在待答清单里的问题（`draft/37` §72）：它非空且上一轮停在等用户 ⇒ 不许开下一轮。
@@ -555,12 +651,86 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                                     usd_budget=_round_budget(session_root, usd_budget),
                                     stop_path=stop_path,
                                     user_answer=answer, last_stop_reason=last_stop_reason,
-                                    pending_qids=pending, wake_pending=wake_pending, woke=woke)
+                                    pending_qids=pending, wake_pending=wake_pending, woke=woke,
+                                    stop_latch_reason=_user_stop_reading())
         return reason, answer_notes, answer
+
+    def _bank_user_stop(why: str) -> dict[str, Any]:
+        """用户叫停那一档的收尾：开关还在盘上就记进 `runs/stop-history.jsonl` 并撤走。
+
+        为什么要在这里消费：`agent_loop` 那一趟读到开关时会自己消费（树根的删除落在
+        它的收尾，见 `_consume_stop_at_teardown`），但"开关是在两轮之间出现的"这一档
+        它根本没有机会读到（轮间判据在这一层）—— 不消费就等于把这把开关留在盘上，
+        下一趟在第 0 轮被它再停一次（`draft/37` §140 的同一个 bug，方向反过来）。
+
+        子树开关不撤：`stop_scope` 说它只管某一支时，撤掉它等于替那一支把"停"吃掉；
+        这一层只停自己这一趟（`remove=False` 也不记，免得在历史里造一条不是这一趟的账）。
+
+        三态：读不成 ⇒ `checked=False` + 理由；盘上没有 ⇒ 说明"已经被消费过"
+        （不是"没人叫停"——`why` 已经把这一档说清楚了）。
+        """
+        try:
+            state = stopctl.read_stop(root, explicit=stop_file)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return {"checked": False, "on_disk": None,
+                    "reason": f"停机开关读不成（{type(exc).__name__}: {exc}）"}
+        if state is None:
+            # 开关已经不在盘上了（读到它的那一趟收尾时撤走）：去 `runs/stop-history.jsonl`
+            # 找最近一笔同族的叫停，把它的负载带回来 —— 否则"按用户要求停"这句结论在检查点里
+            # 只剩一个理由码，"谁按的、什么时候按的、是不是强制"三个读数全丢了。
+            # 这不是"猜"：带回来的那一笔同时带着 `consumed_by_sid` / `consumed_at`，
+            # 读的人分得清它是哪一趟消费的（可能是更早的某一趟）。
+            recent: dict[str, Any] = {}
+            try:
+                for row in reversed(stopctl.stop_history(root, limit=20)):
+                    if str(row.get("level") or "") in stopctl.USER_STOP_REASONS:
+                        recent = dict(row)
+                        break
+            except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没人叫停"
+                recent = {}
+                bank_note = f"（stop-history 没读成：{type(exc).__name__}: {exc}）"
+            else:
+                bank_note = ""
+            keep = ("reason", "by", "force", "at", "level", "consumed_at",
+                    "consumed_by_sid", "removed", "path")
+            return {"checked": True, "on_disk": False, "consumed": False, "why": why,
+                    "switch": ({k: recent[k] for k in keep if k in recent} if recent else None),
+                    "reason": ("开关已经不在盘上了：读到它的那一趟收尾时把它撤走了"
+                               "（审计在 runs/stop-history.jsonl 里）" + bank_note)}
+        scope = stopctl.stop_scope(state)
+        if not scope.get("checked") or scope.get("scope") != "all":
+            return {"checked": True, "on_disk": True, "consumed": False, "why": why,
+                    "scope": scope,
+                    "reason": ("这把开关的作用面不是全工作区（或判不了）⇒ 这一层不撤："
+                               "撤了会把别人那一支的一停吃掉")}
+        try:
+            record = stopctl.consume_stop(root, sid=sid, level=why,
+                                          explicit=stop_file, remove=True)
+        except Exception as exc:  # noqa: BLE001 —— 记账失败不许让"已经停下"这件事失效
+            return {"checked": True, "on_disk": True, "consumed": False, "why": why,
+                    "reason": f"记进 stop-history 失败（{type(exc).__name__}: {exc}）"}
+        return {"checked": True, "on_disk": True, "consumed": bool(record), "why": why,
+                "switch": dict(record),
+                "reason": ("开关还在盘上 ⇒ 已记进 runs/stop-history.jsonl 并撤走"
+                           if record else "开关在盘上但读不出负载 ⇒ 按这一档停下")}
 
     # 上一轮的停止理由（续跑时来自上一段的最后一轮）：`waiting_for_user` 会让这一次
     # 在开跑下一轮之前就停 —— 见 `_stop_before_round` 的 docstring。
     last_round_stop = prev_report.stop_reason if prev_report is not None else ""
+    # ---- 续跑：上一段那一停已经兑付（D19 的第二层）
+    #
+    # 上一段以用户叫停收工（`stop_file` / `force_stop` / `interrupted_by_parent`）时，
+    # 那份停意是针对「上一段」的，而且那把开关已经被消费掉了。这一趟是用户显式
+    # `--resume` 重新叫起来的 —— 把上一段的理由码原样喂给 `_stop_before_round`，
+    # 会让续跑在第 1 轮就当场停下（一次模型都不调），而 `--resume` 的整个意义就是"接着跑"
+    # （退出码 4 那句话写的就是"可 --resume"）。
+    # 判据与 D19 是同一句话：开关出现过、或仍在盘上 ⇒ 停；两者都不成立 ⇒ 那一停已经兑付。
+    if (resume and last_round_stop in stopctl.USER_STOP_REASONS
+            and not latched_stop and not stop_path.is_file()):
+        notes.append(f"上一段以 {last_round_stop} 收工（用户叫停）：开关已经被消费、"
+                     f"盘上没有（{stop_path}），这一趟是 --resume 重新叫起来的 ⇒ "
+                     "按续跑继续，不把上一段那一停算到这一段头上")
+        last_round_stop = ""
     #: 被唤醒多开的轮数（S-G，裁定 15）：只在超过 `total_rounds` 的那几轮上加一。
     woke_rounds = 0
     while True:
@@ -651,11 +821,29 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
 
     cumulative_end = _spend_view(total)
     cumulative_end["usd"] = round(float(baseline["usd"] + total["usd"]), 6)
+    # ---- 收工时把"按用户要求停"那件事落成可读的账（D19 的收尾）
+    #
+    # 两处落点，各答一个问题：
+    #   · `runs/stop-history.jsonl`（`stopctl.consume_stop`）：这把开关被哪一趟用掉、理由是什么；
+    #   · `runs/autonomy-<角色>.json` 的 `stop_switch`：开关上写着谁在什么时候为什么按的。
+    # 只在用户叫停那一族里做：别的停止理由（轮数用完 / 预算 / 等用户）没有开关可言。
+    stop_switch: dict[str, Any] | None = None
+    if (stop_reason or "rounds") in stopctl.USER_STOP_REASONS:
+        bank = _bank_user_stop(stop_reason)
+        if not bank.get("checked", False) or bank.get("reason"):
+            notes.append(f"停机开关：{bank.get('reason')}")
+        stop_switch = bank.get("switch") or (bank.get("scope") and {"scope": bank["scope"]})
+        if stop_switch is None:
+            # 盘上没有开关了（被消费掉）也留一份"这一趟是按用户要求停的"，而不是留空：
+            # 留空与"没有用户叫停"在盘上长得一样，而这两种读数必须分得开。
+            stop_switch = {"reason": "（开关已被消费，负载见 runs/stop-history.jsonl）",
+                           "level": stop_reason}
     final_cp = save_checkpoint(root, role, fingerprint=fingerprint,
                                completed_rounds=resumed_from + len(reports),
                                rounds=total_rounds, task=task, spend=cumulative_end,
                                stop_reason=stop_reason or "rounds",
-                               last_final=reports[-1].final if reports else prev_report.final)
+                               last_final=reports[-1].final if reports else prev_report.final,
+                               stop_switch=stop_switch)
     if final_cp:
         notes.append(f"收工时的检查点没写成：{final_cp}")
     view = _spend_view(total)
@@ -667,7 +855,7 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
 
 # ------------------------------------------------------------------ 自检
 def selftest() -> int:
-    """自检：三轮跑完 + 阶段汇报 + 预算为零不碰模型 + 用户一句 STOP 就停 + 没接线如实停。
+    """自检：三轮跑完 + 阶段汇报 + 预算为零不碰模型 + 回答不算停 + 没接线如实停。
 
     不需要网络也不需要真工作区：替身模型照剧本回答，工作区是临时目录。
     """
@@ -751,18 +939,27 @@ def selftest() -> int:
               f"预算为零没有拦住：{broke.to_dict()}")
         check(idle.calls == 0, f"预算耗尽却发起了 {idle.calls} 次模型调用")
 
-        # 负控：用户说 STOP ⇒ 一轮都不跑（answer 走 userio 那条路）。
+        # 负控：回答里写「停」不再让这一程停（业主 2026-10-17「删掉旁路」）。
+        #
+        # 这一格改前验的是"用户说 STOP ⇒ 一轮都不跑"，而那条字面匹配已经按业主口径删掉了
+        # （停意由主控理解意思后调 `conductor.stop` 完成）—— 于是这一格从删旁路那天起
+        # 就一直是红的（在 HEAD 版上重跑同一段可得 `rounds_done=3`）。现在它验的是现状：
+        # 一句不含状态信号的回答（「先停一停吧」）不是停机判据；真停机走
+        # `stopctl.USER_STOP_REASONS` 那三档（`stop_file` / `force_stop` /
+        # `interrupted_by_parent`），判据见 `tests/test_autonomy.py` 的
+        # `test_a_user_answer_with_stop_addressed_to_the_role_stops_the_run`。
         from . import userio
 
         SS.append(root, {"kind": "user_question", "qid": "q0001", "role": "D",
                          "text": "还要继续吗？"}, sid="self3")
         userio.answer_question(root, qid="q0001", answer="先停一停吧", sid="self3")
-        idle2 = Idle()
-        stopped = run_autonomous("D", "接着做", store=store, registry=registry, gateway=idle2,
-                                 rounds=3, sid="self3")
-        check(stopped.rounds_done == 0 and stopped.stop_reason in ("", "rounds", "budget", "stop_file"),
-              f"用户说停却还在跑：{stopped.to_dict()}")
-        check(idle2.calls == 0, "用户说停却发起了模型调用")
+        answered = Scripted([json.dumps({"final": "照回答做完了"}, ensure_ascii=False,
+                                        default=str)])
+        stopped = run_autonomous("D", "接着做", store=store, registry=registry,
+                                 gateway=answered, rounds=3, sid="self3")
+        check(stopped.rounds_done >= 1 and stopped.stop_reason != "user_stop",
+              f"回答里写「停」被当成了停机判据（那条旁路已按业主 2026-10-17 删掉）："
+              f"{stopped.to_dict()}")
 
         # 三态：没接线 ⇒ 停成 not_wired，也算跑过一轮（不是"零轮、静默收工"）。
         unwired = run_autonomous("D", "没人接线", store=store, registry=registry,
@@ -775,7 +972,7 @@ def selftest() -> int:
         for p in problems:
             print("  -", p)
         return 1
-    print("SELF-CHECK DONE（三轮与阶段汇报 / 预算 / 用户 STOP / 没接线四条路）")
+    print("SELF-CHECK DONE（三轮与阶段汇报 / 预算 / 回答不算停 / 没接线四条路）")
     return 0
 
 

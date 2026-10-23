@@ -56,6 +56,16 @@ def _declared_contract_keys() -> set[str]:
 #: 名字与 `ToolSpec.returns` 逐字一致的保证由 `_declared_contract_keys` 本身承担。
 CONTRACT_KEYS = _declared_contract_keys()
 
+#: `draft/146` D30（2026-10-23）：E 的拒绝体在工具层那九格之外多给的三格 ——
+#: 派发层（`conductor._end_from_payload`）按它们判"这次是受控拒绝"。
+#:
+#: 旧的 `assert set(res) == CONTRACT_KEYS`（负控①那条越界拒绝）记录的是改前缺陷形态：
+#: 拒绝体只有九格，派发层读不到 `refused` / `refusal_reason` / `status` ⇒ 一次受控
+#: 拒绝被记成 `done/ok`。所以拒绝分支的键集合按 `CONTRACT_KEYS | REFUSAL_EXTRA_KEYS`
+#: 核；反真空 `test_negative_control_the_nine_key_body_turns_this_reading_red` 把
+#: `agent_e/core.py` 那处修复退回去，这条判据当场红。
+REFUSAL_EXTRA_KEYS = frozenset({"refused", "refusal_reason", "status"})
+
 #: 检查器探测结果：假装环境里有 lean。
 _VERIFIER = {
     "checked": True,
@@ -64,6 +74,22 @@ _VERIFIER = {
     "probe_errors": [],
     "reason": "（桩）探测到 lean",
 }
+
+
+@pytest.fixture(autouse=True)
+def _lean_side_hard_off_is_lifted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """本文件测的是「被保留的接线」，不是 E 的动作面。
+
+    业主 2026-10-22 晚裁定把 E 的 Lean 侧写死关闭：`AgentE.check_formal` 在动作面第一句
+    就回受控拒绝 `formal_moved_to_l`（判据见 `tests/test_e_lean_side_is_hard_off.py`）。
+
+    而这一批判据量的是参数接线（`source` / `name` / `imports` / `timeout_sec` 真的到得了
+    桥接层、`script_path` 的归一与越界守卫）—— 那份实现在裁定之后按「代码先不删」保留，
+    L 的 `_CheckFormalL` 继承的就是它。所以这里把那个字面量显式放开。
+    """
+    from agentflow.agent_e import _support as SUP
+
+    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
 
 
 def make_e(store: Store) -> AgentE:
@@ -276,13 +302,55 @@ def test_negative_control_out_of_workspace_script_path_is_refused(
     assert res["reason"] == "path_outside_workspace"
     assert touched == [], "越界路径不许走到工具层（那是'真的去读了那个文件'）"
     assert outside.read_bytes() == before
-    assert set(res) == CONTRACT_KEYS
+    # `draft/146` D30（2026-10-23）：这一支的键集合从九格加宽到九格 + 派发层认的三格。
+    # 旧断言 `set(res) == CONTRACT_KEYS` 记录的是改前缺陷形态（拒绝被读成 done/ok），
+    # 反真空见 `test_negative_control_the_nine_key_body_turns_this_reading_red`。
+    assert set(res) == CONTRACT_KEYS | REFUSAL_EXTRA_KEYS
+    assert res["refused"] is True and res["refusal_reason"] == "invalid_params", res
+    assert res["status"] == "unknown", res
 
     # 相对穿越的两种拼法都要拦（Windows 上 `..\\..` 与 `../../` 是两条路径）
     for bad in ("../../outside_secret.txt", r"..\..\outside_secret.txt"):
         assert make_e(store).check_formal("负控①b", script_path=bad)["reason"] == (
             "path_outside_workspace"
         ), bad
+
+
+def _old_nine_key_refusal(self, claim, reason, detail):  # noqa: ANN001 - 与真方法同签名
+    """改前那一版拒绝体（`draft/146` D30 之前逐字：只有工具层那九格）。"""
+    return {
+        "checked": False, "verified": None, "claim": claim, "reason": reason,
+        "detail": detail, "verifier_output": "", "missing_imports": [],
+        "verifier_status": "", "exit_code": None,
+    }
+
+
+def test_negative_control_the_nine_key_body_turns_this_reading_red(
+    store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """反真空（`draft/146` D30，2026-10-23）：退回九格 ⇒ 上面那条键集合判据必红。
+
+    为什么必须有这一条：负控①现在核的是 `CONTRACT_KEYS | REFUSAL_EXTRA_KEYS`。
+    没有负控的话，"多出来的正好是那三格"可以只是照着实现写的。这里把
+    `agent_e/core.py::_formal_refusal` 换回九格（改前缺陷形态：派发层读不到
+    `refused` / `refusal_reason` / `status` ⇒ 受控拒绝被记成 `done/ok`），
+    同一个读数必须与那条判据不等。
+    """
+    owner = next(cls for cls in AgentE.__mro__ if "_formal_refusal" in vars(cls))
+    monkeypatch.setattr(owner, "_formal_refusal", _old_nine_key_refusal, raising=True)
+
+    touched: list = []
+    monkeypatch.setattr(VT, "check_formal",
+                        lambda *a, **k: touched.append((a, k)) or VT.ok({}))
+    outside = tmp_path / "outside_secret_d30.txt"
+    outside.write_text("这段内容不该被任何框架代码读到\n", encoding="utf-8")
+
+    res = make_e(store).check_formal("负控①（D30 反真空）", script_path=str(outside))
+    assert res["reason"] == "path_outside_workspace"
+    assert touched == []
+    assert set(res) != CONTRACT_KEYS | REFUSAL_EXTRA_KEYS, (
+        "把 E 的拒绝体退回九格，这条键集合判据居然还是绿的 ⇒ 它是真空的")
+    assert "refused" not in res and "refusal_reason" not in res and "status" not in res, res
 
 
 def test_negative_control_validate_params_rejects_bad_timeout_and_imports(store: Store):

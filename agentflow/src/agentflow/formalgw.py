@@ -89,6 +89,7 @@ __all__ = [
     "detect_backend",
     "declaration_name",
     "declaration_names",
+    "qualified_declaration_names",
     "sole_declaration_name",
     "DeclarationNameError",
     "lean_snippets",
@@ -212,6 +213,24 @@ _MODIFIERS = ("private", "protected", "noncomputable", "partial", "unsafe", "sco
 _DECL_KEYWORDS = ("theorem", "lemma", "def", "abbrev", "opaque", "axiom", "instance",
                   "structure", "class", "inductive", "example")
 _NAMED_DECL_KEYWORDS = tuple(k for k in _DECL_KEYWORDS if k != "example")
+
+#: 命名空间栈的三条行形态（`namespace X` / `section X` / `end X`）。
+#:
+#: 为什么必须认它们（`draft/146` D26 的缺陷本体）：Lean 4 里 `namespace LProbe` 之内的
+#: 定理在文件作用域叫 `LProbe.<短名>`，而 `#print axioms <短名>` 在那时是一条未知
+#: 常量 —— 检查器照实报 `error: unknown constant 'add_zero_probe'`，于是一条真定理被
+#: 记成 `compile_error`（真机读数，2026-10-22 / 2026-10-23 两次）。
+#: 这三条正则刻意不做语法分析：只认独占一行的三种形态，别的行一概不看（少认一种的
+#: 后果是退回短名，而短名的行为与加这一段之前逐字相同 —— 收敛而不是冒险）。
+_NAMESPACE_LINE = re.compile(r"^[ \t]*namespace[ \t]+([A-Za-z_][A-Za-z0-9_'.]*)[ \t]*$")
+_SECTION_LINE = re.compile(r"^[ \t]*section(?:[ \t]+[A-Za-z_][A-Za-z0-9_'.]*)?[ \t]*$")
+_END_LINE = re.compile(r"^[ \t]*end(?:[ \t]+[A-Za-z_][A-Za-z0-9_'.]*)?[ \t]*$")
+#: 声明行（带可选属性与修饰符），捕获短名。与 `declaration_names` 的口径同一份关键字表。
+_DECL_LINE = re.compile(
+    r"^[ \t]*(?:@\[[^\]]*\][ \t]*)*"
+    r"(?:(?:" + "|".join(_MODIFIERS) + r")[ \t]+)*"
+    r"(?:" + "|".join(_NAMED_DECL_KEYWORDS) + r")[ \t]+([^\s:{(]+)"
+)
 
 #: Lean 注释与字符串（去噪用）。块注释不递归匹配：注释里出现 `sorry`
 #: 与"真的用了 sorry"是两件事，非嵌套匹配足以区分它们。
@@ -846,7 +865,7 @@ def _sorry_count(source: str) -> int:
 
 
 def declaration_names(source: str) -> list[str]:
-    """源码里全部具名声明的名字（按出现顺序去重）。
+    """源码里全部具名声明的短名（按出现顺序去重；不拼命名空间前缀）。
 
     为什么要"全部"而不只是第一条（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：
     调用方只想给一份 `.lean` 文件、不想再报一遍声明名时，唯一的两种诚实做法是
@@ -855,6 +874,11 @@ def declaration_names(source: str) -> list[str]:
     与 `verify_tools.check_formal` 各有一处），于是"源码里没有这个名字"被报成
     `decl_mismatch`（`checked=True`，读起来像"查了没通过"），而它其实是
     "调用方写错了参数" —— 两者的处置完全相反（见本模块 docstring 的判定顺序一节）。
+
+    这一条只回答"解析层面出现了哪些短名"。要交给检查器（`#print axioms <名字>`）
+    的名字不许从这里取：`namespace` 之内的声明在文件作用域是限定名，
+    取短名会把一条真定理判成 `compile_error`（`draft/146` D26）。
+    "该交给检查器哪个名字"的唯一答案是 :func:`qualified_declaration_names`。
     """
     body = _strip_lean_noise(str(source or ""))
     pat = re.compile(
@@ -874,13 +898,63 @@ class DeclarationNameError(ValueError):
     """
 
 
-def sole_declaration_name(source: str) -> str:
-    """源码里恰好一条具名声明的名字；0 条或多条都抛 `DeclarationNameError`。
+def qualified_declaration_names(source: str) -> list[str]:
+    """源码里全部具名声明的限定名（按出现顺序去重；命名空间栈在这里拼前缀）。
 
-    多条时把候选名列进消息里（"请显式给名字，并告诉我是哪一个"），
-    而不是替调用方挑第一条 —— 挑错了就等于把"声明名核对"这条判据悄悄关掉。
+    ## 为什么短名不够（`draft/146` D26）
+    桥接层会往源码尾部追加一条 `#print axioms <名字>`，而 Lean 4 里
+    `namespace LProbe` 之内的定理在文件作用域叫 `LProbe.<短名>` —— 只给短名时
+    检查器报 `error: unknown constant`，一条真定理被记成 `compile_error`
+    （真机读数，2026-10-22 / 2026-10-23 两次）。`declaration_names` 回答的是
+    "文件里出现了哪些短名"（那是解析层面的事实），这一条回答的是"交给检查器时
+    该写哪个名字"（那是语义层面的事实）。两个问题分开，因为它们的答案本来就不同。
+
+    ## 与 `agent_l/formalize.py::declaration_name_in` 的关系
+    那一份是 L 在二维改造里自己算同一个前缀的实现。这一份是桥接层的落点
+    （`check_lean` 走它），于是"不给声明名时拼全名"这件事不再依赖 L 把名字先算好；
+    L 那一侧看到的是同一个结果，不是第二套口径。
+
+    栈按"一条 `namespace` / `section` 行 = 一层"压，而不是按名字段压：Lean 里
+    `namespace A.B` 由一条 `end A.B` 关闭（不是两条），按段压会让 `A` 留在栈里、
+    把后面那条声明的前缀拼错。`section` 不改名字空间（`section Foo` 里的定理仍按外层
+    命名空间命名），但它与 `end` 成对，所以也压一层空层。
+
+    不认的行一律忽略（少认一种的后果是退回短名），刻意不做 Lean 语法分析。
     """
-    found = declaration_names(source)
+    body = _strip_lean_noise(str(source or ""))
+    stack: list[list[str]] = []
+    found: list[str] = []
+    for line in body.split("\n"):
+        match = _NAMESPACE_LINE.match(line)
+        if match:
+            stack.append([part for part in match.group(1).split(".") if part])
+            continue
+        if _SECTION_LINE.match(line):
+            stack.append([])
+            continue
+        if _END_LINE.match(line):
+            if stack:
+                stack.pop()
+            continue
+        decl = _DECL_LINE.match(line)
+        if decl:
+            prefix = [part for frame in stack for part in frame]
+            full = ".".join([*prefix, decl.group(1).strip()])
+            if full not in found:
+                found.append(full)
+    return found
+
+
+def sole_declaration_name(source: str) -> str:
+    """源码里恰好一条具名声明的限定名；0 条或多条都抛 `DeclarationNameError`。
+
+    多条时把候选名（限定名，可以直接拿去点名）列进消息里（"请显式给名字，并告诉我是
+    哪一个"），而不是替调用方挑第一条 —— 挑错了就等于把"声明名核对"这条判据悄悄关掉。
+
+    为什么返回限定名而不是短名：见 :func:`qualified_declaration_names`。短名在函数体
+    里是能用的，但 `#print axioms <短名>` 写在文件作用域里就指向另一条（不存在的）常量。
+    """
+    found = qualified_declaration_names(source)
     if len(found) == 1:
         return found[0]
     if not found:
@@ -898,18 +972,22 @@ def sole_declaration_name(source: str) -> str:
 
 
 def declaration_name(source: str) -> str:
-    """取出源码里第一条具名声明（`theorem` / `lemma` / `def` ...）的名字。
+    """取出源码里第一条具名声明的限定名（`theorem` / `lemma` / `def` ...）。
 
     为什么需要它：模型给的 Lean 片段是自由文本，而"这条片段声称证了什么"
     必须有一个机器可读的答案 —— 公理审计（`#print axioms <name>`）与
     声明名核对都要求这个名字。`example` 没有名字，返回空串表示"取不到"，
     调用方不得把它当成"证了某个东西"。
 
+    为什么是限定名而不是短名：这个返回值会被原样拼进 `#print axioms <name>`，
+    而那一行写在文件作用域里 —— `namespace LProbe` 之内的定理在那里叫
+    `LProbe.<短名>`，短名是一条未知常量（`draft/146` D26 的缺陷本体）。
+
     与 `sole_declaration_name` 的分工：这一条回答"第一条是谁"（给 `lean_snippets`
     这类"一段文本里可能有多个片段"的场景用），那一条回答"这一段只有一个候选吗"
     （给 `check_lean` / `_record_formal` 这类"必须点名核哪一条"的场景用）。
     """
-    found = declaration_names(source)
+    found = qualified_declaration_names(source)
     return found[0] if found else ""
 
 

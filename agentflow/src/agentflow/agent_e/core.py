@@ -6,12 +6,25 @@
 from __future__ import annotations
 
 from ._support import Any, DeclarationNameError, ExperimentError, Mapping, Path, Sequence, Store, ToolRegistry, _NOT_CHECKED_REASONS, _NO_EVIDENCE_KIND, _declared_name_note, _decode, _digest, _kill_child, _relpath, _result_reason, _stop_requested, _which, build_experiment, install_e_tools, os, sole_declaration_name, subprocess, sys, time
+# 业主 2026-10-22 晚裁定（E 的 Lean 侧写死关闭）：判定、理由码、那句读数都从
+# `_support` 取 —— 那一侧是唯一出处，本文件不另写字面量。
+from ._support import E_LEAN_SIDE_NOTE as _LEAN_SIDE_NOTE
+from ._support import E_LEAN_SIDE_REASON as _LEAN_SIDE_REASON
+from ._support import e_lean_side_hard_off as _lean_side_hard_off
+from .. import schema as S
 from .run_experiment import _RunExperiment
 from .author_script import _AuthorScript
 from .check_formal import _CheckFormal
 from .evidence_for import _EvidenceFor
 from .list_experiments import _ListExperiments
 from .run_script_experiment import _RunScriptExperiment
+
+#: 受控拒绝的理由码：派发层只认 `schema.REFUSAL_REASONS` 里的取值（`draft/146` D30）。
+#: E 自己的理由码（`formal_moved_to_l` / `path_outside_workspace` / `tool_failed`）留在
+#: `reason` 与 `detail` 里，不进这一格 —— 两套词表不许折叠。
+_REFUSAL_REASON_FOR_FORMAL = "invalid_params"
+assert _REFUSAL_REASON_FOR_FORMAL in S.REFUSAL_REASONS, (
+    "受控拒绝的理由码必须来自 schema.REFUSAL_REASONS")
 
 
 def _mathlib_remedy_note(status: str, imports: "Sequence[str] | None", path: Path) -> str:
@@ -478,6 +491,18 @@ class _Core:
         为什么要带 `missing_imports`（`G-18` 之后的键集合一致性）工具层 `verify.check_formal` 的声明是一个键集合，它对每一条分支都成立（`tests/test_tools_audit_fixes.py` 
         逐字核对每条分支）。`G-18` 给成功分支加了`missing_imports`（"哪个包不可得"）之后，本方法这条拒绝分支如果还是 6 个键，就会出现"同一个工具的两条分支两个键集合" —— 这正是 `checks` 类契约最容易腐的地方。
         为什么 `verifier_status` 是空串（`G-24①` 的透传字段）校验器原话在 `detail` 里，检查器输出在 `verifier_output` 里。
+
+        为什么拒绝体还要带 `refused` / `refusal_reason` / `status` 三格（`draft/146` D30）
+        上面那九格是给工具层与 `set(返回) == 契约` 那条判据看的，而派发层
+        （`conductor._end_from_payload`，D25 之后）按角色返回值里的三处口子判终态：
+        `refused=True` / `status="refused"` / 受控的 `refusal_reason`。缺这三格时，
+        "E 的 Lean 侧写死关闭 ⇒ 受控拒绝"在台账上落 `done/ok` —— 一次框架正确地说了不，
+        与"这一趟干成了"同形。所以补进来，形状与 L 的拒绝体（`agent_l/core.py`
+        的 `_formal_refusal`）逐格相同：`status="unknown"` 说"这一趟没有结论"，
+        `refused=True` 是第三态位，`refusal_reason` 取受控词表里的 `invalid_params`
+        （它正是"参数/前置条件不满足：这次调用本身不成立"那一档）；E 自己的理由码
+        （`formal_moved_to_l` / `path_outside_workspace` / `tool_failed`）仍留在
+        `reason` 与 `detail` 里 —— 两套词表不许折叠，派发层把角色的原话写进 `detail`。
         """
         return {
             "checked": False,
@@ -491,6 +516,10 @@ class _Core:
             # `E-12(a)`：检查器进程的真实退出码。这一支没起检查器 ⇒ `None`
             # （不是 0：0 会被读成"检查器跑完了、退出码 0"）。
             "exit_code": None,
+            # `draft/146` D30：派发层认的三格（见上面那段 docstring）。
+            "refused": True,
+            "refusal_reason": _REFUSAL_REASON_FOR_FORMAL,
+            "status": "unknown",
         }
 
 
@@ -500,13 +529,48 @@ class AgentE(_RunExperiment, _AuthorScript, _CheckFormal, _EvidenceFor, _ListExp
     每个方法都可以被独立调用与单测：
 
     - :meth:`run_experiment` —— 执行脚本 + 登记一行 Experiment；
-    - :meth:`check_formal` —— 转发到形式化检查器（无后端时如实返回"没做"）；
+    - :meth:`check_formal` —— 本类把这一支写死关闭（业主 2026-10-22 晚裁定，见方法
+      docstring）：E 不再被授予形式化能力，形式化由 L 承担；实现体仍然留在
+      :class:`_CheckFormal` 里，L 的 `_CheckFormalL` 就是继承它；
     - :meth:`evidence_for` —— 三态查询：没查 / 查了没有 / 查到了什么；
     - :meth:`list_experiments` —— 只读列表。
 
     LLM：没有。数值实验的判读必须是确定性的（FC-16）。构造签名保留 `llm`
     位置参数只是为了与 A–D 的构造习惯一致。
     """
+
+    def check_formal(
+        self,
+        claim: str,
+        *,
+        script_path: str | None = None,
+        source: str | None = None,
+        name: str | None = None,
+        imports: Any = None,
+        timeout_sec: float | None = None,
+    ) -> dict:
+        """E 的动作面：Lean 侧写死关闭 ⇒ 受控拒绝 `formal_moved_to_l`（不抛栈）。
+
+        业主 2026-10-22 晚裁定（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L
+        行为时发生错乱。当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计；
+        其它角色关于 E 的 Lean 侧记忆可以全面清除。」
+
+        三个刻意的做法：
+
+        1. 判定读 :func:`_support.e_lean_side_hard_off`（唯一判据），不读任何开关 ——
+           改前这一支在开关关着时回 `lean_disabled`、开着时真的去问检查器，于是同一个
+           调用在两档下给两种答案；
+        2. 拒绝走 :meth:`_formal_refusal`（九个键的受控形状），不是抛异常：查询类动作的
+           契约是"回执"，抛栈会让调用方把一个可读的拒绝读成一次崩溃；
+        3. 实现体一个字没删（业主：「代码先不删」）：本方法在
+           :data:`_support.E_LEAN_SIDE_HARD_OFF` 为假时逐字转发给
+           :class:`_CheckFormal` 那一份，L 与判据都还在用它。
+        """
+        if _lean_side_hard_off():
+            return self._formal_refusal(claim, _LEAN_SIDE_REASON, _LEAN_SIDE_NOTE)
+        return _CheckFormal.check_formal(
+            self, claim, script_path=script_path, source=source, name=name,
+            imports=imports, timeout_sec=timeout_sec)
 
 
 
@@ -519,9 +583,10 @@ def selftest() -> int:
     覆盖的核心性质（每一条都对应一个"如果错了会很安静"的失败模式）：
     1. 正常脚本 ⇒ 登记成功，exit_code=0，code_hash 非空； 2. 脚本自报 proof ⇒ 被降级为 cross_check，且 notes 里记了这件事； 3. 脚本崩溃
     ⇒ inconclusive + no_local_evidence（崩溃不得写成支持）； 9. `check_formal` 的受控理由：无后端 ⇒ `no_backend`；有后端但没给源码
-    ⇒ `no_script`（两者都是"没查成"，但理由不同，不可折叠）； 10. 形式化路径（`P-8`）：`.lean` 产物真的走检查器那一条 —— 检查器给`verified` 时登记的行必
-    须是 `evidence_kind="proof"` 且`verifier_subject_key == claim_key`；`toolchain.lean_enabled` 关闭时（「出厂默认」）
-    这一段走另一条判据：核对"当场拒绝、不留行、理由给出 V 那条替代路线"，并把这一段记成"未查"（没走检查器 ≠ 通过）。
+    ⇒ `no_script`（两者都是"没查成"，但理由不同，不可折叠）； 10. 形式化路径：E 的 Lean 侧写死关闭（业主 2026-10-22 晚裁定）
+    之后，这一段核的是"当场受控拒绝（`formal_moved_to_l`）、不留行、理由给出 V 那条替代路线"，并把它记成"未查"（没走检查器 ≠ 通过）；
+    `E_LEAN_SIDE_HARD_OFF` 被显式放开时（判据这么干）这一段改核被保留的那条路：检查器给 `verified` ⇒ `evidence_kind="proof"`
+    且 `verifier_subject_key == claim_key`。
     """
     import sys as _sys
 
@@ -704,29 +769,26 @@ def _run_selftest_checks(check, counts: dict[str, int]) -> None:
               and cf2.get("verifier_status") == cf2.get("reason"),
               f"verifier_status={cf2.get('verifier_status')!r}")
 
-    # ---- 10. 形式化路径（P-8）：`.lean` 产物真的走检查器那一条
+    # ---- 10. 形式化路径：E 这一侧的 Lean 侧写死关闭（业主 2026-10-22 晚裁定）
     #
-    # 判据与"本机有没有 Lean"解耦：有检查器且命题为真 ⇒ 必须是 proof；
-    # 否则必须是"不是 proof"（没查成不许登记成 proof）。
-    # 两个方向都不许把 `heuristic` 写成 `proof`，所以这条检查在任何环境下都有信息量。
+    # 改前这一段按 `toolchain.lean_enabled` 分两支：开着就真的跑一次 `.lean` 产物、核
+    # proof 三件套；关着就核"当场拒绝、不留行、给替代路线"。裁定之后 E 不再被授予这条路
+    # （「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时发生错乱」）⇒ 生产这一档只有
+    # 一支可判：不论开关哪一档都回受控拒绝 `formal_moved_to_l`，且一行都不落。
     #
-    # 这一支是 F-4 的根因。`toolchain.lean_enabled` 的「出厂默认是 false」
-    # （`settings.py`：`DEFAULT_LEAN_ENABLED = False`，业主 2026-10-12「默认设置中
-    # Lean 关闭帮用户在无严苛要求时省钱」；`tests/conftest.py` 为了让形式化那一段
-    # 跑起来才把环境变量钉成 1）。旧写法无条件 `run_experiment(..., method="formal")`，
-    # 在默认设置下它按设计「当场抛」 `ExperimentError`（这条拒绝是对的：关掉的路
-    # 不许登记 formal 行），而自检把它当"不该发生"⇒ 崩在汇总行之前。
-    # 于是按三态写：开关开着 ⇒ 核对 proof 三件套；开关关着 ⇒ 核对"拒绝而不是
-    # 静默登记"，并明确记一段"未查"（没查 ≠ 通过 ≠ 失败）。
+    # 为什么仍然留着"真跑一次"那一支（在 `_lean_side_hard_off()` 为假时）：被保留的实现
+    # （`_record_formal` / `_CheckFormal`）是 L 与判据共用的那一份（业主：「代码先不删」），
+    # 自检要能对它照样给读数 —— `tests/test_agent_e.py` 正是把那个字面量显式放开之后跑
+    # 这一段的。两个方向都不许把 `heuristic` 写成 `proof`，所以两支都有信息量。
+    #
+    # 记一段"未查"（`skipped`）的是写死关闭那一支：这一档没有走检查器 ——
+    # 没查 ≠ 通过 ≠ 失败（三态纪律）。
     lean_src = (
         "theorem selfcheck_formal_proof : 1 + 1 = 2 := rfl\n"
     )
     s10 = put_script("selfcheck_formal_proof.lean", lean_src)
-    from .. import settings as _SET
-
-    lean_on, lean_switch = _SET.lean_enabled()
-    if not lean_on:
-        before10 = len(st.rows("experiments"))
+    before10 = len(st.rows("experiments"))
+    if _lean_side_hard_off():
         refused10 = ""
         try:
             e.run_experiment(
@@ -736,10 +798,10 @@ def _run_selftest_checks(check, counts: dict[str, int]) -> None:
         except ExperimentError as exc:
             refused10 = str(exc)
         counts["skipped"] += 1
-        print(f"[11] formal 路径：Lean 形式化关闭（{lean_switch}）⇒ 这一段**没走检查器**"
+        print("[11] formal 路径：E 的 Lean 侧写死关闭 ⇒ 这一段没走检查器"
               "（记 1 段未查：不是'通过'，也不是'失败'）")
-        check("Lean 关闭时 method='formal' 当场拒绝（不是静默登记一条 inconclusive）",
-              "Lean 形式化已关闭" in refused10)
+        check("写死关闭之后 method='formal' 当场拒绝（不是静默登记一条 inconclusive）",
+              _LEAN_SIDE_REASON in refused10)
         check("拒绝理由给出替代路线（V 的 verify.verify_proof 逐行走查）",
               "verify.verify_proof" in refused10)
         check("被拒绝的形式化实验一行都不许落（没查成 ≠ 登记成 inconclusive）",
@@ -765,6 +827,10 @@ def _run_selftest_checks(check, counts: dict[str, int]) -> None:
                   "检查器状态" in r10["reason"] or "检查器状态" in r10["notes"])
 
     # ---- 11. 形式化路径的负控：非 .lean 产物当场拒绝（不留半条记录）
+    #
+    # 写死关闭之后这一档的拒绝发生在更前面（`method='formal'` 一进门就拒），所以"非 .lean
+    # 产物"这件事到不了后缀判据 —— 这条判据保留的是"仍然被拒、仍然不留行"，理由码由
+    # 第 10 段核。
     before11 = len(st.rows("experiments"))
     refused = False
     try:

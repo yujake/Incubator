@@ -7,6 +7,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ._support import Any, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
+# 业主 2026-10-22 晚裁定：E 的 Lean 侧写死关闭。三个名字都从 `_support` 取（那一侧是
+# 唯一出处：判定、理由码、那句读数各一份），这里不另写字面量。
+from ._support import E_LEAN_SIDE_NOTE as _LEAN_SIDE_NOTE
+from ._support import E_LEAN_SIDE_REASON as _LEAN_SIDE_REASON
+from ._support import e_lean_side_hard_off as _lean_side_hard_off
 from .. import verifications as VR
 
 #: 「玩具例子」在台账上的落点：`experiments.observations[TOY_EXAMPLE_KEY]`。
@@ -138,28 +143,30 @@ class _RunExperiment:
                 "静默忽略会让调用方以为自己指定了检查条件（说明了 imports，实际用的是默认值）"
             )
 
-        # ---- [0] 开关（业主 2026-10-12）：`toolchain.lean_enabled=false` 时
-        # 形式化这条路整条不走 —— 在跑脚本之前就拒，理由与上面 R-01 那一段同族
-        # （形式化实验的产物是一份 `.lean`，它跑起来要起检查器；既然这条路关着，
-        # 连脚本都不该被跑）。
+        # ---- [0] 业主 2026-10-22 晚裁定：E 的 Lean 侧写死关闭。
         #
-        # 为什么在这里拒，而不是只靠 `formalgw.check_lean` 那一层兜：
-        # 那一层拒的是"编译"这一步，而这里拒的是"登记一条 method='formal' 的实验"
-        # 这件事本身。只靠下游兜的表现是：台账里多一条 inconclusive 的 formal 行、
-        # 模型多花一步、而用户看到的是"实验失败"而不是"这条路我关了"。
-        # 三态纪律：拒绝要可行动 —— 消息里既说清是哪个开关，也说清替代路线。
-        if method == "formal":
-            from .. import settings as SET
-
-            if not SET.lean_enabled()[0]:
-                raise ExperimentError(
-                    "本会话的 Lean 形式化已关闭（`toolchain.lean_enabled=false` 或 "
-                    "`AGENTFLOW_LEAN_ENABLED=0`）⇒ 不登记 method='formal' 的实验，"
-                    "也不起检查器。改走自然语言证明审阅这条路：把证明过程写进 "
-                    "`statements` 的 `proof_text`，再请 V 用 `verify.verify_proof` 逐行走查"
-                    "（它的结论进 `verifications` 表，是这条路唯一的'审过'凭据）；"
-                    "确需形式化时把设置文件里的 `toolchain.lean_enabled` 改成 true 再重来"
-                )
+        # 裁定原文（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时发生错乱。
+        # 当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计。」
+        #
+        # 改前这里读的是 `settings.lean_enabled()`：开关关着才拒，开着就一路走到
+        # `_record_formal`。那让 E 的行为跟着一个与它无关的开关跳 —— 而裁定要的正是
+        # 「别让测 L 的那一趟被 E 这一侧的状态干扰」：现在不论开关哪一档，这一支都拒，
+        # 同一句话、同一个理由码。
+        #
+        # 为什么仍在跑脚本之前拒：形式化实验的产物是一份 `.lean`，它跑起来要起检查器。
+        # 只靠下游（`formalgw.check_lean`）兜的表现是：台账里多一条 inconclusive 的
+        # formal 行、模型多花一步、而用户看到的是"实验失败"而不是"这条路不在 E 身上"。
+        # 三态纪律：拒绝要可行动 —— 消息里既说清这一侧停用了，也说清现在归谁。
+        #
+        # 代码保留（业主：「代码先不删」）：`_record_formal` 与本函数下面那条分支一个字
+        # 没改，`E_LEAN_SIDE_HARD_OFF` 为 False 时它们照旧可走（L 与判据都用得着）。
+        if method == "formal" and _lean_side_hard_off():
+            raise ExperimentError(
+                f"{_LEAN_SIDE_NOTE}（理由码 {_LEAN_SIDE_REASON}）⇒ 不登记 method='formal' "
+                "的实验，也不起检查器。不需要形式化时改走自然语言证明审阅这条路：把证明"
+                "过程写进 `statements` 的 `proof_text`，再请 V 用 `verify.verify_proof` "
+                "逐行走查（它的结论进 `verifications` 表，是这条路唯一的'审过'凭据）"
+            )
 
         # ---- R-01（`draft/44`）：这四条不用跑脚本就能判 ⇒ 在起子进程之前判掉。
         #

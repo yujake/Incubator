@@ -117,7 +117,7 @@ def _roster_workspace(tmp: pathlib.Path) -> pathlib.Path:
                                 status="done"), note="已交差")
         tx.upsert("tasks", _row("t-000005", role="F", parent="t-000002", depth=3,
                                 status="done"), note="已交差")
-        # 一条还没消的消息挂给 D1（t-000002）⇒ 它的收件箱积压 = 1。
+        # 一条还没消的消息挂给 D1（t-000002）⇒ 它的收件箱里 unread = 1。
         tx.upsert("tasks", _board_row("t-000004", parent="t-000002", kind="message",
                                       state="queued", called_by="C1",
                                       detail="手稿 000000：gaps 确定性结果"),
@@ -235,7 +235,7 @@ def _tree_problems(payload: Mapping[str, Any]) -> list[str]:
         tri = str(inbox.get("tri") or "")
         if tri not in (R.TRI_COMPUTED, R.TRI_UNREADABLE, R.TRI_NOT_APPLICABLE):
             problems.append(f"{tid} 的 inbox.tri 不在三态词表里：{tri!r}")
-        elif tri == R.TRI_COMPUTED and not isinstance(inbox.get("open"), int):
+        elif tri == R.TRI_COMPUTED and not isinstance(inbox.get("open_total"), int):
             problems.append(f"{tid} 的 inbox 读成了（computed）却没有数字 open："
                             f"{inbox.get('open')!r}")
     roots = [n for n in by_id.values() if str(n.get("parent_task_id") or "") == ""]
@@ -249,7 +249,7 @@ def test_the_endpoint_returns_the_whole_tree_with_parents_and_absolute_ids(
     """判据①：有真名册的工作区 ⇒ 整棵树（父/子/绝对编号/深度/收件箱）都读得出来。
 
     正控读的是端点（HTTP）：`GET /api/roster` 必须给出 4 个节点（M/D1/C1/F1）、
-    两处父子互指、D1 的收件箱积压 1 条、D1 在飞而 C1 不在飞。负控读的是
+    两处父子互指、D1 的收件箱未读 1 条、D1 在飞而 C1 不在飞。负控读的是
     `_tree_problems` 的输入：把任何一格改坏都必须当场报出来。
     """
     root = _roster_workspace(tmp_path)
@@ -272,12 +272,14 @@ def test_the_endpoint_returns_the_whole_tree_with_parents_and_absolute_ids(
     assert nodes["t-000002"]["role"] == "D" and nodes["t-000002"]["status"] == "running"
     assert nodes["t-000002"]["in_flight"] == 1, nodes["t-000002"]["in_flight"]
     assert nodes["t-000003"]["in_flight"] == 0, nodes["t-000003"]["in_flight"]
-    # 收件箱积压：那一条 `queued` 的 message 挂在 D1 名下 ⇒ 1 条，且明细给得出。
+    # 收件箱：那一条 `queued` 的 message 挂在 D1 名下 ⇒ 未读 1 条，且明细给得出。
+    # （D13 起这一格拆成 unread / seen_not_acked / open_total：`queued` 进 unread。）
     inbox = nodes["t-000002"]["inbox"]
-    assert inbox["tri"] == R.TRI_COMPUTED and inbox["open"] == 1, inbox
+    assert inbox["tri"] == R.TRI_COMPUTED and inbox["open_total"] == 1, inbox
+    assert inbox["unread"] == 1 and inbox["seen_not_acked"] == 0, inbox
     assert inbox["by_kind"] == {"message": 1} and inbox["by_state"] == {"queued": 1}, inbox
     assert [i["task_id"] for i in inbox["items"]] == ["t-000004"], inbox["items"]
-    assert nodes["t-000001"]["inbox"]["open"] == 0, "M 名下没有未消的板项（读到的是 0）"
+    assert nodes["t-000001"]["inbox"]["open_total"] == 0, "M 名下没有未消的板项（读到的是 0）"
     # 台账那一栏真读到了（不是"未读到"）。
     assert body["tasks_tri"] == R.TRI_COMPUTED, body["tasks_tri"]
     assert body["coverage"]["unrostered"] == 0, body["coverage"]
@@ -295,14 +297,14 @@ def test_the_tree_judgment_is_not_vacuous() -> None:
          "children": [{"task_id": "t-2", "name": "D1", "role": "D", "retired": False}],
          "retired": False, "retired_branch": "", "brief": "", "brief_source": "",
          "surface": "", "status": "done", "task_found": True, "in_flight": 0,
-         "inbox": {"tri": "computed", "open": 0, "by_state": {}, "by_kind": {},
+         "inbox": {"tri": "computed", "open_total": 0, "by_state": {}, "by_kind": {},
                    "items": [], "more": 0, "reason": ""}},
         {"task_id": "t-2", "name": "D1", "role": "D", "depth": 2,
          "parent_task_id": "t-1", "parent_name": "",
          "children": [], "retired": False, "retired_branch": "", "brief": "甲",
          "brief_source": "parent", "surface": "S01", "status": "done",
          "task_found": True, "in_flight": 0,
-         "inbox": {"tri": "computed", "open": 0, "by_state": {}, "by_kind": {},
+         "inbox": {"tri": "computed", "open_total": 0, "by_state": {}, "by_kind": {},
                    "items": [], "more": 0, "reason": ""}},
     ]}
     assert _tree_problems(good) == []
@@ -316,7 +318,7 @@ def test_the_tree_judgment_is_not_vacuous() -> None:
     assert any("depth" in p for p in _tree_problems(wrong_depth)), _tree_problems(wrong_depth)
 
     no_inbox = json.loads(json.dumps(good))
-    no_inbox["nodes"][1]["inbox"] = {"tri": "computed", "open": None}
+    no_inbox["nodes"][1]["inbox"] = {"tri": "computed", "open_total": None}
     assert any("inbox" in p for p in _tree_problems(no_inbox)), _tree_problems(no_inbox)
 
 

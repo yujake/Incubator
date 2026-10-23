@@ -48,10 +48,15 @@ STATEMENT = "设 G 是 3-正则群；则弦长函数不是常值。"
 STATEMENT_TEXT = "弦长函数不是常值"
 #: 自产命题的两件式（定理内容 + 证明过程）：`doc_id` 与 `quote_reason` 是本动作的硬要求
 #: （`origin="own_result"` 的出处那一档在 `register_statement` 的预检里）。
+#:
+#: 2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：加了
+#: `kind="conjecture"` —— 这一组测的是多证明清单的写侧（`proofs` 的号 / 正文 / 追加），
+#: 与声明成哪一种 kind 无关，而自产且无出处的一笔从这一批起只许按猜想登记。
 OWN = {
     "statement_full": STATEMENT,
     "statement_text": STATEMENT_TEXT,
     "origin": "own_result",
+    "kind": "conjecture",
     "doc_id": S.format_id(0),
     "quote_reason": "我方自产命题，没有外部引文要比对",
 }

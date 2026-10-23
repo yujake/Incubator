@@ -84,6 +84,24 @@ def write_script(store: Store, rel: str, body: str) -> str:
     return rel
 
 
+@pytest.fixture(autouse=True)
+def _lean_side_hard_off_is_lifted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """本文件测的是「被保留的实现」，不是 E 的动作面。
+
+    业主 2026-10-22 晚裁定把 E 的 Lean 侧写死关闭（`agent_e._support.E_LEAN_SIDE_HARD_OFF`）：
+    动作面在 `run_experiment(method='formal')` 与 `check_formal` 的第一句就回
+    `formal_moved_to_l`。那一层由 `tests/test_e_lean_side_is_hard_off.py` 的五条判据守。
+
+    而本文件里这一批用例要守的是「代码先不删」那一半：`_record_formal` 与
+    `_CheckFormal` 的实现体仍然逐字有用（L 的 `_CheckFormalL` 继承的就是它，
+    `formal_tools` 也直接调同一份函数）。所以这里把那个字面量临时放开，让它们继续量
+    被保留的那条路 —— 放开是显式的、每个用例结束后由 monkeypatch 还原。
+    """
+    from agentflow.agent_e import _support as SUP
+
+    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
+
+
 def make_e(store: Store, **cfg) -> AgentE:
     return AgentE(store, config=dict(cfg), workspace_root=store.root)
 

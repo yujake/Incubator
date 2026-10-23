@@ -74,7 +74,10 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-19 业主裁定「父子天然双向」：93 → 94
 #: （`conductor.escalate` —— 子代理把卡住的那件事写进父的收件箱）。
 #: 2026-10-22：94 → 95（业主逐字「G加动作」—— `doc.write_mapping` 是论文对应表唯一的写口）。
-TOOL_COUNT = 95
+#: 2026-10-23：95 → 98（147 收口第 6 步：L 的形式化入口三件 —— `formal.formalize` /
+#: `formal.check_formal` / `formal.record`；同一批里 `verify.check_formal` 的角色面收成空，
+#: 但它仍在册，所以总数只加不减）。
+TOOL_COUNT = 98
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -423,6 +426,37 @@ def tool_params() -> dict[str, dict]:
         "verify.verify_proof": {"statement_id": "0007", "proof_text": "1. 由定义直接得到。"},
         "verify.list_verifications": {"statement_id": "0007"},
         "verify.read_proof": {"statement_id": "0007"},
+        # ---- L 的三件形式化工具（2026-10-23，147 收口第 6 步）----
+        # `formal.check_formal` 的探针打的是受控拒绝那一支（路径越界）：它声明的 15 格
+        # （E 的九个 + L 的四格 + `refused` / `refusal_reason`）正是这一支的键集
+        # （`agent_l/core.py` 的 `_formal_refusal`）。真跑检查器那一支另给 8 格未声明
+        # （`state` / `enabled` / `enabled_source` / `source` / `sha256` / `version` /
+        # `note` / `negative_exit_code`，来自 `_finalize` 原样转发桥接层）——
+        # 那是 `tools/formal_tools.py` 里那条 `returns=` 的契约缺口（禁改区，留给人审），
+        # 不是这条探针该替它抹平的：打在可用支上会让"声明 == 实跑"两个方向都不成立。
+        "formal.check_formal": {
+            "claim": "探针：两份具名声明 ⇒ 受控拒绝",
+            "source": "theorem probe_a : True := trivial\ntheorem probe_b : True := trivial\n",
+        },
+        # `formalize` 写盘到 `code/formal/<声明名>.lean` 再跑一次检查器 ⇒ 声明里的
+        # `path` / `sha256` / `bytes` / `exit_code` 只在这一支上才拿得到。本机 Lean 4.7.0
+        # 已在 `settings.json` 的 `toolchain.lean_bin` 登记，`tests/conftest.py` 又把
+        # `AGENTFLOW_LEAN_ENABLED` 钉成 "1" ⇒ 探针真的起了一次检查器（秒级返回，
+        # 源码是 `theorem … := by decide`，不加载任何库）。
+        "formal.formalize": {
+            "claim": "探针：1 + 0 = 1",
+            "source": "theorem probe_formalize : 1 + 0 = 1 := by decide\n",
+            "declaration_name": "probe_formalize",
+        },
+        # `record` 绑的是"命题 x 产物"两样。夹具里没有 `statements` 行 ⇒ 它走受控拒绝
+        # 那一支（`statement_not_found`），而这一支的键集合与成功支逐字相同
+        # （`agent_l/record.py` 的 `_RECORD_KEYS`：每一条分支上都成立）⇒ 这条探针照样
+        # 验得了"声明 == 实现"。真跑一支需要夹具先铺一条命题，那是另一条判据的事。
+        "formal.record": {
+            "statement_id": "0000",
+            "code_path": "code/formal/probe_formalize.lean",
+            "declaration_name": "probe_formalize",
+        },
     }
 
 
@@ -483,6 +517,12 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # ⇒ 键名读自实跑观测，而不是读源码。
         "lit.overlap_check", "lit.stage_add", "lit.stage_list", "lit.stage_withdraw",
         "lit.stage_reject", "lit.admit", "lit.admit_all",
+        # L 的两件（2026-10-23，147 收口第 6 步）：探针真跑到了带数据的返回支
+        # （`formal.formalize` 起了一次真检查器；`formal.check_formal` 那条探针也拿到了
+        # 一份带键的 data）⇒ 键名读自实跑观测。两条声明与实跑都对不齐（见下面那条
+        # 判据的读数：`returns=` 少了实跑给的格），那是 `tools/formal_tools.py`
+        # 里那两条 `returns=` 的缺口，不在本文件的射程内。
+        "formal.check_formal", "formal.formalize",
     }
 )
 
@@ -500,6 +540,12 @@ CODE_ONLY_KEY_SOURCE: dict[str, str] = {
     "no_text_layer/其他失败档，键名逐字读自 `_h_extract` 的 `ok({...})`。",
     "ocr.run": "需要真的 OCR 后端（easyocr/pytesseract）。本机 torchvision↔numpy ABI 冲突会先炸；"
     "即使注入桩后端也只验证到「编排层」。data 字典的键名逐字读自 `_h_run`。",
+    # L 的第三件（2026-10-23，147 收口第 6 步）：探针跑的是受控拒绝那一支
+    # （夹具里没有 `statements` 命题行 ⇒ `statement_not_found`），没走到"登记成一行"的
+    # 成功支 ⇒ 按本表的分类判据它属于"没真跑通过"，键名读自实现
+    # （`agent_l/record.py` 的 `_RECORD_KEYS`：每一条分支上都成立）。
+    "formal.record": "成功支要求夹具先有一条 `statements` 命题行（探针只走到受控拒绝"
+    "`statement_not_found`）⇒ 键名读自 `agent_l/record.py` 的 `_RECORD_KEYS`。",
 }
 
 #: `EXECUTED` 里带保留的那一条：真跑过，但那一次用的是桩 provider。
@@ -867,9 +913,23 @@ class _RoleGateBypassedRegistry(ToolRegistry):
         return None
 
 
+#: 刻意"不属于任何角色"的工具（`roles=()`）。
+#:
+#: 为什么需要这张表：`roles=()` 是一个真实声明（"这个工具不属于任何角色"），不是
+#: "声明缺失"（见 `tools/base.py::ToolSpec.__post_init__` 的那一段：只核"是元组"）。
+#: 而"每个工具都该挂给某个角色"仍然是一条值得守的纪律 —— 所以加一条豁免必须写在这里，
+#: 与 `KNOWN_EXEC_TOOLS` 同一条口径（谁动了这件事谁就得改这一行）。
+#:
+#: 2026-10-22 晚裁定（业主逐字：「E 的 Lean 侧开关全写死成关闭」）之后，
+#: `verify.check_formal` 的 `roles` 收成 `()`：工具仍装配着、函数本体一行没删，
+#: 但它不再属于任何角色（判据见 `tests/test_e_lean_side_is_hard_off.py` 第 1 条）。
+NO_ROLE_BY_DESIGN = frozenset({"verify.check_formal"})
+
+
 def _every_tool_has_a_role(reg: ToolRegistry) -> list[str]:
-    """返回"一个角色都拿不到"的工具名（空列表 = 每个工具都真的挂给了某个角色）。"""
-    return sorted(s.name for s in reg._specs.values() if not s.roles)
+    """返回"一个角色都拿不到、又不是刻意如此"的工具名（空列表 = 都真的挂给了某个角色）。"""
+    return sorted(s.name for s in reg._specs.values()
+                  if not s.roles and s.name not in NO_ROLE_BY_DESIGN)
 
 
 @pytest.fixture

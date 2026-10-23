@@ -63,6 +63,9 @@ AGENT_CLASSES: dict[str, tuple[str, str]] = {
     "H": ("agentflow.agent_h", "AgentH"),
     # V（F-02 起）：证明级验证（只读）。它是第 9 个角色包，2026-10-06 落地。
     "V": ("agentflow.agent_v", "AgentV"),
+    # L（2026-10-22 新设）：Lean 形式化者。第 10 个角色包；协作面 2026-10-22 晚落地
+    # （入边只有 B、出边只有 C），此后它可召唤。
+    "L": ("agentflow.agent_l", "AgentL"),
     "M": ("agentflow.conductor", "Conductor"),
 }
 
@@ -165,8 +168,10 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
     with tempfile.TemporaryDirectory(prefix="agent-surface-") as td:
         snap = _snapshot(pathlib.Path(td))
 
-    assert snap["role_count"] == 10, snap["role_count"]
-    assert snap["schema_roles"] == list(S.ROLES) == list("ABCDEFGHV")
+    # 2026-10-23（147 收口第 5 步）：角色数从 10 抬到 11（L 入册），且角色表不再写死
+    # 字面量 —— 真身是 `schema.ROLES`，写死一个会随角色表漂的字面量只会让判据变成陈旧计数。
+    assert snap["role_count"] == 11, snap["role_count"]
+    assert snap["schema_roles"] == list(S.ROLES), snap["schema_roles"]
     total_actions = sum(len(v["actions"]) for v in snap["roles"].values())
     live_actions = sum(len(v) for v in C.CAPABILITIES.values())
     assert total_actions == live_actions, (

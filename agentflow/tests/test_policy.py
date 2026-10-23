@@ -155,7 +155,16 @@ def test_allowed_edges_match_design_table():
     # 改了 ——「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。逐字那一档 B
     # 自己走（`check_quote`，不花钱）；逐字不中而语义相同的由 H 判，B 拿判定回填
     # `quote_verified` + `quote_mode="semantic"`。H 的只读面与它的落库代理一个字未动。
-    assert C.ALLOWED_EDGES["B"] == frozenset({"C", "H", "V"})
+    # 2026-10-22 晚（业主的最终协作面裁定）：「只有 B 可以派 L，L 允许派 C 来梳理证明链，
+    # 消费 B 的定理证明库，可向 B 汇报形式化过程中遇到的困难、要求 B 完善证明并重新得到
+    # V 签，若缺陷严重，B 应通知 D 开展研究处理证明难点。」
+    # 这一次给 B 加了两条边，各自只承担那一句里的一件事：
+    #   L = 形式化的唯一入口（B 是 statements 的唯一登记方，所以"只让 B 派 L"结构上
+    #       就是"L 形式化的东西一定出自 B 的库"）；
+    #   D = 缺陷严重时的升级出口（B 判断路线本身不成立时交给 D 开展研究，
+    #       实现在 agent_b/proof_research.py，落点是 D 的收件箱）。
+    # 这两条之外没有放宽任何别的边（A / E / F / G 仍然不在 B 的出边里）。
+    assert C.ALLOWED_EDGES["B"] == frozenset({"C", "D", "H", "L", "V"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
     assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D"})
     assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E", "V"})

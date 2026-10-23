@@ -114,13 +114,16 @@ export interface OrphanRow {
   role: string;
 }
 
-/** 出处：snapshot() 的 `ledger` —— 台账（第二个独立读数）。 */
+/** 出处：snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数。 */
 export interface LedgerReading {
   path: string;
   events: number | null;
+  upserts: number | null;
+  commit_markers: number | null;
   tables: number | null;
   note: string;
   tables_note: string;
+  events_note: string;
 }
 
 /** 出处：_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）。 */
@@ -856,10 +859,13 @@ export interface RosterChild {
   retired: boolean;
 }
 
-/** 出处：roster_face() 的 nodes[].inbox —— 收件箱积压（板项：`kind` 非空、`parent_task_id` = 收件人、`item_state != "done"` 的那些行）。 */
+/** 出处：roster_face() 的 nodes[].inbox —— 收件箱（板项：`kind` 非空、`parent_task_id` = 收件人、`item_state != "done"` 的那些行）；`unread` 是还没被读进任何一步的（queued/claimed），`seen_not_acked` 是读了但还缺 ack 的，`open_total` 是 `len(rows)` = `unread` + `seen_not_acked` + `other`（`other` 是状态读不出来的那些：`item_state` 是空串或词表外的行）。 */
 export interface RosterInbox {
   tri: Tri;
-  open: number | null;
+  unread: number | null;
+  seen_not_acked: number | null;
+  open_total: number | null;
+  other: number | null;
   by_state: Record<string, number>;
   by_kind: Record<string, number>;
   items: RosterInboxItem[];

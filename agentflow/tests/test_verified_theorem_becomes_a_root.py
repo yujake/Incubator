@@ -51,9 +51,12 @@ def _store(tmp_path: pathlib.Path) -> Store:
 
 def _own_result_statement(st: Store) -> str:
     b = AgentB(st, extractor=None, extract_text=None)
+    #: 2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：入口按
+    #: `kind="conjecture"` 登记。这一组的主题是"V 审过之后它能不能当根、链闭没闭合"，
+    #: 而等级由 `evidencebits.derive_grade` 按五元位现算 —— 与入口这一栏无关。
     got = b.register_statement(origin="own_result",
                                statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
-                               kind="theorem", proof_text=PROOF,
+                               kind="conjecture", proof_text=PROOF,
                                line_range={"start": 1}, doc_id="000000",
                                quote_verified=False, quote_reason="自证：无外部引文")
     row = got if isinstance(got, dict) else got.to_dict()

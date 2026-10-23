@@ -1,4 +1,19 @@
-"""E 的工具：「数值实验与形式化验证」。
+"""证明检查器的桥接层工具面（`detect_verifier` / `check_formal` / 实验与查询那几条）。
+## 这个模块今天是什么（2026-10-22 划线：形式化入口归 L）
+
+本模块是**桥接层的真身**，不再是"形式化的门面"：把 Lean/Coq 源码交给检查器并把它的
+原话解释出来（`check_formal` → `verify.check_formal` / `formalgw`），这一件事仍然只有
+一份实现，E 与 L 都经它取读数。**形式化的入口是 L 的 `formal.*`**（`formal.formalize` /
+`formal.check_formal` / `formal.record`）：模型要"把一条命题写成 Lean 并核一遍、再登记
+一行实验"时走那三件。
+2026-10-22 晚裁定（业主逐字：「E 的 Lean 侧开关全写死成关闭」）之后，本模块这件
+`verify.check_formal` 的 `roles` 收成了 `()`：它仍然装配着、函数本体一行没删
+（`agent_l._CheckFormalL` 继承 `AgentE` 的 `check_formal` 走的就是它，`formal_tools`
+直接调同一个函数），但它不再属于任何角色 ⇒ 谁的 `for_role` 里都没有它，也不能经
+`ToolRegistry.call` 调到（第一句就是角色判据）。动作面那一条由
+`AgentE.check_formal` / `AgentE.run_experiment(method='formal')` 的受控拒绝
+（`formal_moved_to_l`）承担，判据见 `tests/test_e_lean_side_is_hard_off.py`。
+
 ## 这一层要解决的根本问题
 数学里"算对了"与"证完了"是天壤之别。一个能跑数值实验的系统，最大的危险不是算错，而是把「算对了」说成「证明了」 —— 因为这两句话在自然语言里只差几个字，而在数学上是两
 个世界。
@@ -678,7 +693,20 @@ def _verify_detect_verifier():
     # 兜底会让留痕变成常态噪音，而噪音里会藏着真正的错误。行为变化（如实登记）：它从此需要审批，H 的工具面
     # 因此从 23 条变 22 条。
     side_effect="read",
-    roles=_ROLES_WRITE,
+    # 业主 2026-10-22 晚裁定（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时
+    # 发生错乱。当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计。」
+    #
+    # 于是这一件的 `roles` 从 `_ROLES_WRITE`（`('E','F','G')`）收成 `()`：工具仍然装配在
+    # 注册表里（代码一行没删，函数级复用照旧 —— `agent_l._CheckFormalL` 继承的是
+    # `agent_e` 的那一份实现，`formal_tools` 也直接调本模块的函数），但它不再属于任何
+    # 角色 ⇒ 谁的 `for_role` 里都没有它，形如"某个角色手上还有形式化入口"这件事在工具面
+    # 上结构性地不可能。`roles=()` 是一个真实声明（"这个工具不属于任何角色"），不是缺字段：
+    # `ToolSpec.__post_init__` 只要求它是元组（见 `tools/base.py` 的那一段）。
+    #
+    # 为什么改 `roles` 而不是删工具、也不在 `for_role` 里加一条过滤：删工具会带走 L 与
+    # 判据共用的实现与函数级复用；在 `for_role` 里加过滤等于在权限面上写第二份实现
+    # （`P-14` 的形态）。判据见 `tests/test_e_lean_side_is_hard_off.py` 第 1 条。
+    roles=(),
     # `records` 声明的是 ok 分支的键集合（与同模块 `verify.code_hash` 同一种写法：分号后面写失败分支的形态）。
     # 分号是刻意的：`C2` 之前这里写的是一个无条件的 8 键集合，而本工具有 3 条 `return fail(...)` 分支（拿不到
     # 声明名 / 声明名参数不合法 / 桥接层抛异常）走 `ok=False` + `data=None`、一个键都不给 —— 声明逐字描述的是

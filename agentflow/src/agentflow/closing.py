@@ -30,6 +30,11 @@ from . import schema as S
 from . import statementbody as _SB   # D2：命题正文的唯一读口（真身 statement_full）
 from . import textutil as T
 from . import userio as U
+# 引文回验的四态读数（B-4）：`no_source_backed` / `no_source_unbacked` /
+# `no_source_absent` / `not_applicable` 的唯一判据在 `quoteevidence.no_source_state`。
+# 模块级导入：本文件里有一处函数内的 `import EB` 会把 `EB` 变成局部名（历史坑，
+# 见 `_leg_reading` 上方那段注释）—— 同一族的问题不必再踩一次。
+from . import quoteevidence as QE
 # 引文回验的两档口径（业主 2026-10-14）：`quote_state` 是唯一读口径 ——
 # "true 而说不清怎么通过的"按没查算，收工门这一格必须跟着它走（见 `quote_verified_rows`）。
 from . import evidencebits as EB
@@ -1036,6 +1041,21 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         for r in rows:
             states[EB.quote_state(r)] = states.get(EB.quote_state(r), 0) + 1
         judged = states["verbatim"] + states["semantic"] + states["mismatch"]
+        # B-4（业主 2026-10-22）：四态另立一栏。
+        #
+        # 为什么不能只留上面三态：「无来源可核」的行与概念行落在这两个数里会被读成
+        # "假"（mismatch）或"未查"（unchecked）—— 前者说这一行查过、对不上，后者说
+        # 这一行欠一次回验。而它们的实情是：一行有背书（该去看手稿）、一行根本没有
+        # 引文这回事（概念）。三件事混成两个数，追欠账的人会去追一条不存在的。
+        no_source = QE.no_source_reading(rows)
+        # `unchecked` 这一栏因此只数"真正的未查"：把落在四态里的那几行摘出去
+        # （它们各自的数就在下面四栏里，不丢）。三态纪律在这里是"一个行只归一次账"：
+        # 同一行既算"未查"又算"概念行不适用"，两个数的和就会大于行数。
+        family = (QE.NO_SOURCE_BACKED, QE.NO_SOURCE_UNBACKED, QE.NO_SOURCE_ABSENT,
+                  QE.NOT_APPLICABLE)
+        unchecked_plain = sum(
+            1 for r in rows
+            if EB.quote_state(r) == "unchecked" and QE.no_source_state(r) not in family)
         return judged, {
             "statements": sum(1 for r in st
                               if EB.quote_state(r) in ("verbatim", "semantic", "mismatch")),
@@ -1043,9 +1063,20 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                              if EB.quote_state(r) in ("verbatim", "semantic", "mismatch")),
             "true": states["verbatim"] + states["semantic"],
             "false": states["mismatch"],
-            "unchecked": states["unchecked"],
+            "unchecked": unchecked_plain,
             # 新增的两栏（方式）：`true` 那两个数各自是怎么来的
             "verbatim": states["verbatim"], "semantic": states["semantic"],
+            # D1（2026-10-22）：说通过而拿不出区间的行（`evidencebits.QUOTE_NO_EVIDENCE`）。
+            # 单列一栏而不是折进 `unchecked`：那一档说的是"还没查"（欠一次回验），
+            # 这一档说的是"它说通过了、却指不出核的是哪一段"（欠的是证据本身）——
+            # 折在一起，读的人会去补一条不存在的工序。它不计入 `judged`：
+            # 没有区间的"通过"没有可复核的读数，不该给这一档的分母加分。
+            "no_evidence": int(states.get(EB.QUOTE_NO_EVIDENCE, 0)),
+            # 四态（B-4）：`no_source` 那一族三档 + 概念行的"不适用"。
+            "no_source_backed": no_source[QE.NO_SOURCE_BACKED],
+            "no_source_unbacked": no_source[QE.NO_SOURCE_UNBACKED],
+            "no_source_absent": no_source[QE.NO_SOURCE_ABSENT],
+            "not_applicable": no_source[QE.NOT_APPLICABLE],
         }
     if kind == "reviewed_then_digested_rows":
         # 「审过之后有没有被逐条消化」（业主 2026-10-09；口径与判据见 `draft/97` §9.4）。
@@ -1088,10 +1119,34 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                           "并把 `deps` 一起给）"),
         }
     if kind == "proof_experiment_rows":
+        # 「形式化验过几条」那一档。键是 `(命题号, 证明号)`：第 4 位是二维的（每条证明
+        # 一格，业主 2026-10-22），所以同一份证明被登记了两次只算一条，而同一命题的
+        # 两条证明各算一条 —— 折成"一行实验算一条"会让重跑把读数顶高，
+        # 折成"一条命题算一条"会让 #p2 的那份验证消失。
+        from . import verifications as _VR_PX
         rows = [r for r in store.rows("experiments")
                 if str(r.get("method") or "") == "formal"
                 and str(r.get("evidence_kind") or "") == "proof"]
-        return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
+        counted: dict[tuple[str, int], str] = {}
+        for r in rows:
+            obs = r.get("observations") if isinstance(r.get("observations"), Mapping) else {}
+            params = r.get("params") if isinstance(r.get("params"), Mapping) else {}
+            sid = str((obs or {}).get("statement_id")
+                      or (params or {}).get("statement_id")
+                      or str(r.get("claim_key") or "").split(":", 1)[-1] or "")
+            no = _VR_PX.as_proof_no((obs or {}).get("proof_no")
+                                    or (params or {}).get("proof_no")) or 1
+            counted.setdefault((sid, no), str(r.get("experiment_id") or ""))
+        return len(counted), {
+            "experiments": [eid for eid in list(counted.values())[:8] if eid],
+            #: 这一档真的数过的键（`(命题号, 证明号)`）：读数与分母并列，好让
+            #: "数了几条"与"台账里有多少行"分得开（重跑不让读数虚高）。
+            "counted_pairs": [{"stmt_id": sid, "proof_no": no}
+                              for sid, no in sorted(counted)][:8],
+            "rows": len(rows),
+            "note": ("键是 `(命题号, 证明号)`：第 4 位是二维的（每条证明一格），"
+                     "同一份证明重复登记只算一条，同一命题的两条证明各算一条"),
+        }
     if kind in ("reviewed_documents", "accepted_documents"):
         # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：
         # 审过读 `review_verdict != ""`；通过才读 `review_verdict == "成立"`
@@ -1252,6 +1307,13 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "false": sum(1 for r in verdict if EB.quote_state(r) == "mismatch"),
             "verbatim": sum(1 for r in rows if EB.quote_state(r) == "verbatim"),
             "semantic": sum(1 for r in rows if EB.quote_state(r) == "semantic"),
+            # D1（2026-10-22）：说通过而拿不出区间的行既不进"有结论"也不进"未查+理由"
+            # （它不是未查，也不是结论）—— 单独一栏，别让它们从读数里消失。
+            "no_evidence": sum(1 for r in rows if EB.quote_state(r) == EB.QUOTE_NO_EVIDENCE),
+            # 四态（B-4，与 `quote_verified_rows` 同一口径）：这一档的分母只数"有结论"
+            # 与"有理由"两类，而"无来源可核"/概念行在这两个数里既不是假也不是未查 ——
+            # 单独给出来，读的人才知道那几条去哪了（不是被静默丢掉）。
+            **{name: count for name, count in QE.no_source_reading(rows).items()},
         }
     if kind == "manuscript_rows":
         # 交接手稿那一档（`draft/37` §134/§140；`draft/39` §C1 起存储改成追加式 JSONL）：数
@@ -1618,6 +1680,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         review_states: dict[str, int] = {s: 0 for s in _VR_R10.REVIEW_STATES}
         stale_ids: list[str] = []
         rejected_ids: list[str] = []
+        #: V 判「有毛病」而这一条今天仍然 `active` 的那些（D10 的那一格原因）。
+        #: 为什么要单列：`rejected` 是"这一份被签过、结论不是成立"，而"这一行还挂着"
+        #: 才是"框架里还有人该去修"的那一半 —— 判定的那一半 V 已经做了，缺的是 F 去补那几步。
+        rejected_active_ids: list[str] = []
         unreadable_ids: list[str] = []
         unsigned_ids: list[str] = []
         without_locator_ids: list[str] = []
@@ -1646,6 +1712,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                     stale_ids.append(sid)
                 elif state == "rejected":
                     rejected_ids.append(sid)
+                    if str(r.get("status") or "active") == "active":
+                        rejected_active_ids.append(sid)
                 elif state == "unsigned":
                     unsigned_ids.append(sid)
                 elif state == "unreadable":
@@ -1700,6 +1768,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                         # （等级只许来自 `bits_from_row` / `derive_grade`）。
                         one = dict(bits)
                         one["reviewed"] = bool(p.get("reviewed"))
+                        # 第 4 位（形式化，二维）也按逐条证明喂：`bits.formal` 是汇总
+                        # （OR），拿它给每一条路径记同一档就等于让 `#p2` 借 `#p1` 的光 ——
+                        # 而这一格的键是 `(stmt_id, proof_no)`，借光会直接改读数。
+                        one[EB.FORMAL_BIT] = str(p.get("formal") or "pending")
                         per_proof.append(
                             (no, str(EB.derive_grade(one, kind=str(r.get("kind") or "")))))
                 for no, proof_grade in per_proof:
@@ -1737,6 +1809,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "stale_ids": stale_ids[:8],
             "stale_total": len(stale_ids),
             "rejected_ids": rejected_ids[:8],
+            #: V 判「有毛病」而这一行仍然 `active` 的那些（D10）：判定那一半 V 已经做了，
+            #: 缺的是"有人去补 V 指的那几步" —— 它与 `rejected_ids` 的差就是"还挂着"。
+            "rejected_active_ids": rejected_active_ids[:8],
+            "rejected_active_total": len(rejected_active_ids),
             "unsigned_ids": unsigned_ids[:8],
             "unreadable_ids": unreadable_ids[:8],
             #: 无台账、位说审过、而凭据里没有任何可定位的签名（无 `verification_id`、
@@ -1777,10 +1853,43 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "「没算过」不等于「算了、不够档」，所以这两件事的分母必须分开给"),
         }
         if rows and not counted:
-            detail["note"] += ("；本趟一条都没走到「预备定理级」—— 要么没有证明过程，"
-                               "要么没审过（五位里第 2/3 位为空）；自报的 `status=proved` / "
-                               "`evidence_kind=proof` 不算凭据（先看 `statements_without_bits` "
-                               "是不是等于 `statements`：若是，说明产出方这一趟没写过位记录）")
+            # ---- 「0 条高档」是哪一种 0（D10）：四种原因分开给，不折成一句"没审过"。
+            #
+            # 改前这一格只有一句"要么没有证明过程、要么没审过"，而这两种的下一步完全不同
+            # （前者要产出方写证明、后者要 V 去签），第三种（V 判了「有毛病」而这一行还
+            # 挂着 active）当时连提都没提 —— 而那恰恰是"V 的判决到达不了 F"在收工门上的形态。
+            low_grade = sum(int(n) for g, n in grades_with_bits.items()
+                            if g not in ("pre_theorem", "theorem"))
+            detail["zero_causes"] = {
+                # ① 产出方这一趟没写过位记录（老数据 / 没走过产出通道）
+                "without_bits": len(without_bits_ids),
+                # ② 有记录、但现算等级只到 conjecture（算出来了、就是低档）
+                "low_grade_with_bits": low_grade,
+                # ③ V 判过「有毛病」而这一条仍 active（要补的是 V 指的那几步，不是再签一次）
+                "rejected_still_active": len(rejected_active_ids),
+                "rejected_active_ids": rejected_active_ids[:8],
+                # ④ 签过但签的是旧版 / 一次都没签 / 台账读不出来
+                "stale": review_states.get("stale", 0),
+                "unsigned": review_states.get("unsigned", 0),
+                "unreadable": review_states.get("unreadable", 0),
+                # 不计入的那一档（引用外部文献得来的高档）：不是"0 条"的原因，是分母之外的
+                "cited_skipped": cited_skipped,
+                "rows": len(rows),
+            }
+            detail["note"] += (
+                "；本趟一条都没走到「预备定理级」—— 这是四种原因里的一种，"
+                "逐档读数并列给出（`zero_causes`），别把它们读成同一件事："
+                f"①没有位记录的行 {len(without_bits_ids)} 条（产出方没走过 / 老数据）；"
+                f"②有记录但现算只到 conjecture 及以下 {low_grade} 条（算出来了、就是低档）；"
+                f"③V 判「有毛病」而这一条仍 active 的 {len(rejected_active_ids)} 条"
+                f"（{'、'.join(rejected_active_ids[:8]) or '无'}）—— 这些要补的是 V 指的那几步，"
+                f"不是再签一次字；④签过但签的是旧版 / 一次都没签 / 台账读不出来的 "
+                f"{review_states.get('stale', 0) + review_states.get('unsigned', 0) + review_states.get('unreadable', 0)} 条"
+                f"（stale {review_states.get('stale', 0)} / unsigned {review_states.get('unsigned', 0)}"
+                f" / unreadable {review_states.get('unreadable', 0)}）。"
+                "自报的 `status=proved` / `evidence_kind=proof` 不算凭据（先看 "
+                "`statements_without_bits` 是不是等于 `statements`：若是，说明产出方这一趟"
+                "没写过位记录）")
         # 腿的读数是定理级汇总数（按命题去重）：一条命题三条证明都审过仍只算一条 ——
         # "造了几条判决性证据"问的是命题，不是证明的份数。逐条证明的明细在 `counted`
         # （键 `(stmt_id, proof_no)`）与 `counted_total` 里。
@@ -3461,6 +3570,140 @@ def proposition_level_pollution(store: Any) -> dict[str, Any]:
     return out
 
 
+#: B-2 读侧判据认的那几个 kind（业主 2026-10-22：「没有引文 / 自己编的命题必须从
+#: 『猜想』注册」的读侧那一半）。`conjecture` 不在这里（它本来就该是猜想），
+#: `concept` 也不在（概念不参与等级链，`evidencebits.derive_grade` 对它短路）。
+TYPE_AHEAD_OF_GRADE_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition")
+
+#: 那一档的受控名字（读的人按它去查这一条判据，报告里也印它）。
+TYPE_AHEAD_OF_GRADE_CODE = "type_ahead_of_grade"
+
+
+def type_ahead_of_grade_rows(store: Any) -> dict[str, Any]:
+    """读侧判据（B-2 的另一半）：声明成定理/引理/命题，而现算等级只是猜想的那些行。
+
+    判据三件：`kind ∈ TYPE_AHEAD_OF_GRADE_KINDS`、`evidencebits.derive_grade` 现算出来
+    是 `"conjecture"`、且这一行不是作废的（作废行的等级本来就清零，那不是这一档要
+    点名的事 —— 它由 `voided_by` 自己说）。命中就逐条点名（`stmt_id` / `kind` /
+    `grade` / `why`），`class` 一律是 `TYPE_AHEAD_OF_GRADE_CODE`。
+
+    为什么读侧还要再判一次（写入期已经有 `must_start_as_conjecture` 那道闸）：闸只
+    管"从这一条路进来的新行"，而盘上还有三样东西它管不着 —— 历史行（闸落地之前写的）、
+    别的写入路径（秘书直写、迁移脚本）、以及"登记时是猜想、后来证据位被清掉"的行。
+    写入期判据与读侧判据不是重复，是两件事：前者拦新的，后者让旧的在报告上现形。
+
+    三态（与这个模块其余读数同一条纪律）：`state="computed"` = 查过了（`rows` 空
+    就是真的没有）；`state="unreadable"` = `statements` 读不出来 ⇒ 这一格没查成，
+    不是"一条都没有"。
+    """
+    rows, why = _statement_rows(store)
+    if rows is None:
+        return {"state": "unreadable", "reason": why, "checked": 0,
+                "rows": [], "checked_from": "statements"}
+    flagged: list[dict[str, Any]] = []
+    for sid, row in sorted(rows.items()):
+        kind = str(row.get("kind") or "")
+        if kind not in TYPE_AHEAD_OF_GRADE_KINDS:
+            continue
+        try:
+            bits = EB.bits_from_row(dict(row))
+            grade = EB.derive_grade(bits, kind=kind)
+        except Exception as exc:  # noqa: BLE001 - 算不出来要如实说，不许当成"没命中"
+            flagged.append({"stmt_id": sid, "kind": kind, "grade": "",
+                            "class": TYPE_AHEAD_OF_GRADE_CODE,
+                            "why": ("这一行的五元位算不出来"
+                                    f"（{type(exc).__name__}: {exc}）⇒ 等级没判成。"
+                                    "没判成不是合格：把 bits 补齐再读")})
+            continue
+        if grade != "conjecture":
+            continue
+        flagged.append({
+            "stmt_id": sid, "kind": kind, "grade": grade,
+            "class": TYPE_AHEAD_OF_GRADE_CODE,
+            "why": (f"{kind} 是声明，而五元位现算出来只是 {grade}"
+                    f"（proof={bool(bits.get('proof'))}、"
+                    f"reviewed={bool(bits.get('reviewed'))}、"
+                    f"formal={(bits.get('evidence') or {}).get('formal_reason') or ''}"
+                    f"{'…' if (bits.get('evidence') or {}).get('formal_reason') else ''}）⇒ "
+                    "门第先于证据：要么补上撑起它的那几位（证明过程 + V 的签名 / 形式化），"
+                    "要么按现算的档位改 kind（从 conjecture 长起来）"),
+        })
+    return {
+        "state": "computed",
+        "reason": ("查过了："
+                   + (f"{len(flagged)} 条声明的档位高于现算等级" if flagged
+                      else "没有「声明强于证据」的行")),
+        "checked": len(rows), "rows": flagged, "checked_from": "statements",
+        "kinds": list(TYPE_AHEAD_OF_GRADE_KINDS),
+    }
+
+
+def quote_evidence_reading(store: Any) -> dict[str, Any]:
+    """D1 的收工读数：盘上"说通过"的行里，哪些拿不出可复核的区间（逐条点名）。
+
+    判据本体在 `quoteevidence.scan_quote_evidence`（唯一实现）。这里只做三件本层的事：
+    读两张表、把三态原样透传、把缺口翻成一句可操作的话。
+
+    ## 为什么这一格要拦门（而不是只当读数）
+    "quote_verified=true 而 quote_span 为空"在盘上就是一句"我记得我核过"——
+    核了哪一段、在第几页，一条都读不出来，复核的人无从下手。真机
+    `saxl-ws/data/statements.json`（2026-10-22 修复前）13 行全是这个形态，而收工门
+    当时八格全过 —— 于是"逐字回验通过"靠一句自述就能拿到。
+
+    ## 三态
+    `checked=False` = `statements` / `relations` 读不出来（这一格没查成，不是
+    "一条都没有"）。调用方据此落 warning（不当成通过、也不冤枉它）。
+    """
+    rows: list[dict[str, Any]] = []
+    for table in ("statements", "relations"):
+        try:
+            rows.extend(dict(r) for r in store.rows(table))
+        except Exception as exc:  # noqa: BLE001 - 读不到要如实说，不许当成"没有"
+            return {"checked": False, "scanned": 0, "verified_rows": 0, "dirty": [],
+                    "clean": False, "clean_rows": 0,
+                    "reason": (f"{table} 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                               "这一格没查成；没查成不是「一条都没有」"),
+                    "checked_from": "statements+relations"}
+    got = QE.scan_quote_evidence(rows)
+    dirty = list(got.get("dirty") or [])
+    verified = int(got.get("verified_rows") or 0)
+    return {
+        "checked": True, "scanned": int(got.get("checked") or 0),
+        "verified_rows": verified,
+        "clean_rows": verified - len(dirty),
+        "dirty": dirty, "clean": not dirty,
+        "reason": ("查过了：" + (f"{len(dirty)} 行说通过而拿不出区间（共 {verified} 行自称通过）"
+                                 if dirty else
+                                 f"{verified} 行自称通过，全都带区间")),
+        "checked_from": "statements+relations",
+    }
+
+
+def statement_body_reading(store: Any) -> dict[str, Any]:
+    """D2 的收工读数（残留）：`statement_full` 有正文而 `statement_text` 为空的行。
+
+    判据本体在 `statementbody.text_gaps`（唯一实现）。读侧有回退（`body_of` 先读真身
+    `statement_full`），所以正文不会因为这一格丢了 —— 但"同一份正文两个字段、一个空
+    一个满"仍要被点名：谁读哪个字段都能给出另一种答案。
+
+    三态：`statements` 读不出来 ⇒ `checked=False`（没查成）。
+    """
+    try:
+        rows = [dict(r) for r in store.rows("statements")]
+    except Exception as exc:  # noqa: BLE001
+        return {"checked": False, "scanned": 0, "gaps": [],
+                "reason": (f"statements 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                           "这一格没查成"),
+                "checked_from": "statements"}
+    gaps = _SB.text_gaps(rows)
+    return {
+        "checked": True, "scanned": len(rows), "gaps": gaps,
+        "reason": ("查过了：" + (f"{len(gaps)} 行有真身而没有短版（读侧靠回退兜住）"
+                                 if gaps else "每一行的真身与短版都在")),
+        "checked_from": "statements",
+    }
+
+
 def assertion_level_pollution(store: Any) -> dict[str, Any]:
     """正文断言层的污染面：多少条正文断言引了命题 + 每条命题被几条断言压着。
 
@@ -3811,7 +4054,14 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
             "load_bearing", "load_bearing_without_t3", "blocker",
             f"有 {len(bad)} 条承重结论（正文里 evidence_kind='proof'）没有 T3 背书："
             + "；".join(bad[:5])
-            + "。要么补形式化（E 的 check_formal，检查器原话进 verifier_output），"
+            # 2026-10-23：这一句原来指向「E 的 check_formal」。业主 2026-10-22 晚裁定
+            # 「E 的 Lean 侧开关全写死成关闭」之后，E 那一支一律回受控拒绝
+            # `formal_moved_to_l`，形式化只剩 L 那两件（`formal.formalize` 写源码、
+            # `formal.check_formal` 核一遍）。本 finding 会经 `conductor.closing` 的回执
+            # 进 M 的上下文，所以它一旦指错，M 就会去派一个必然被拒的活。
+            + "。要么补形式化（L 的 `formal.check_formal`，"
+            "新写源码走 `formal.formalize`，检查器原话进 verifier_output；"
+            "E 的 Lean 侧已停用，受控理由码 `formal_moved_to_l`），"
             "要么如实降档成 cross_check/heuristic 并改稿件的措辞（§10.2："
             "措辞不许出现「已证明/定理/必然」）",
         ))
@@ -4438,6 +4688,60 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     rep.readings["roster_registration"] = roster_registration_reading(root, sid=sid)
     # ---- 非平凡性那一格（S3：只说、不拦）
     rep.readings["nontriviality"] = nontriviality_reading(root, sid=sid)
+    # ---- 命题档位那一格（B-2 的读侧：只说、不拦）
+    #
+    # 与上面两格（`summon_consumption` / `nontriviality`）同一套纪律：只落 `readings`
+    # （`to_dict()` 与服务端都能读到）、不产生 `Finding`、不动 `status` 与退出码
+    # ⇒ 门的强度一格没改，而"声明成定理、现算只是猜想"的那些行在收工输出上现形。
+    # 逐条点名在 `type_ahead_of_grade_rows` 的 `rows` 里（每条带 `stmt_id` / `kind` /
+    # `grade` / `class=TYPE_AHEAD_OF_GRADE_CODE`）。
+    rep.readings["statement_grade"] = type_ahead_of_grade_rows(store)
+    # ---- 引文证据那一格（D1，2026-10-22 第二版）：说"通过"就必须拿得出区间。
+    #
+    # 这一格拦门（`blocker`），与上面那几格"只说、不拦"的读数不同。理由：
+    # "quote_verified=true 而 quote_span 为空"不是一条弱读数，而是一句没有载体的断言 ——
+    # 核了哪一段、在第几页，盘上一条都读不出来，复核的人无从下手。真机
+    # `saxl-ws/data/statements.json` 13 行全是这个形态，而当时的收工门八格全过。
+    # 所以这一格的存在意义与 `contradictions` / `load_bearing` 同族：它证明不了的东西
+    # 不许被当成证明过。判据本体在 `quoteevidence.scan_quote_evidence`（唯一实现），
+    # 这里只读表、点名、给一句可操作的话。
+    rep.readings["quote_evidence"] = quote_evidence_reading(store)
+    _qe = rep.readings["quote_evidence"]
+    if not _qe.get("checked"):
+        # 没查成不是通过，也不是"一条都没有"：warning 级（不冤枉这个工作区），
+        # 但读数里 `checked=False` 与理由都在（不会被读成"干净"）。
+        rep.findings.append(Finding("quote_evidence", "quote_evidence_unreadable", "warning",
+                                    str(_qe.get("reason") or "这一格没查成")))
+    elif not _qe.get("clean"):
+        _bad = _qe.get("dirty") or []
+        _ids = [str(x.get("id") or "") for x in _bad][:13]
+        _classes = sorted({str(x.get("class") or "") for x in _bad})
+        rep.findings.append(Finding(
+            "quote_evidence", "quote_verified_without_span", "blocker",
+            f"{len(_bad)} 行写着 quote_verified=true，而盘上拿不出可复核的区间"
+            f"（共 {_qe.get('verified_rows')} 行自称通过；类别 {_classes}；"
+            f"被点到的是 {_ids}{'…' if len(_bad) > len(_ids) else ''}）⇒ "
+            "『逐字回验通过』这句话在盘上没有载体：核了哪一段、在第几页都读不出来，"
+            "复核的人无从下手。补齐（二选一）：① 重核一次并把区间写实 —— 走 "
+            "`B.register_statement` 且给 `source_lit_id`（B 会拿那一篇的全文真比对，"
+            "把 `quote_span`（`p{页}:norm[起:止]`）落盘）；② 如实降档 —— 把那一行的 "
+            "`quote_verified` 改成 None 并写清为什么还没核（三态：unknown 不是通过）。"
+            "逐条读数见 `readings.quote_evidence.dirty`"))
+    # ---- 命题正文那一格（D2 的残留）：真身有正文、短版为空 ⇒ 点名（不拦门）。
+    #
+    # 为什么不拦门：读侧有唯一回退（`statementbody.body_of` 先读真身 `statement_full`），
+    # 正文不会丢；这一格要的是"同一份正文两个字段、一个空一个满"这件事可见。
+    # 写入侧已经派生短版（`statementbody.derive_text`），盘上剩下的只可能是历史行。
+    rep.readings["statement_body"] = statement_body_reading(store)
+    _sb = rep.readings["statement_body"]
+    if _sb.get("checked") and _sb.get("gaps"):
+        _gids = [str(x.get("id") or "") for x in (_sb.get("gaps") or [])][:13]
+        rep.findings.append(Finding(
+            "statement_body", "statement_text_missing", "warning",
+            f"{len(_sb['gaps'])} 行有 statement_full 而没有 statement_text"
+            f"（被点到的是 {_gids}）⇒ 同一份正文两个字段、一个空一个满："
+            "读侧走 `statementbody.body_of` 的回退（读得出正文），但『哪个是真身』"
+            "靠的不是这一行的数据。这一格不拦门，它是读数"))
     _nt = rep.readings["nontriviality"]
     if _nt.get("high_tier_total"):
         _ids = [f"{x['stmt_id']}(T{x['level']})" for x in _nt["high_tier"]][:6]

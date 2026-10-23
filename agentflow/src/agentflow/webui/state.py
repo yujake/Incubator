@@ -402,7 +402,8 @@ def snapshot(root: str | Path) -> dict[str, Any]:
             "last_ts": _text(item.get("last_ts")),
             "last_kind": got["last_kind"] or "unknown",
             "last_seq": got["last_seq"],
-            "pending": len(got["pending"]),
+            # 先占位：这一格在下面从全局那份待答清单里数出来（`D20`，见循环之后那段）。
+            "pending": 0,
             "runs": len(got["runs"]),
             "orphans": len(got["orphans"]),
         })
@@ -410,6 +411,19 @@ def snapshot(root: str | Path) -> dict[str, Any]:
         runs.extend(got["runs"])
         orphans.extend(got["orphans"])
         problems.extend(f"{sid}: {p}" for p in bad)
+    # ---- 会话概览那一格的「待答」：与面板那份清单（`pending_questions`）数同一份列表。
+    #
+    # `D20`（2026-10-22）：这两处在改前是"各算一遍"—— 每一段会话把自己那一片的
+    # `len()` 写进 `SessionRow.pending`，全局清单再把各片拼起来。两处恰好相等，
+    # 所以没有任何判据会红；而"概览说 3 条、面板列出 2 条"这种漂移一旦出现，
+    # 它也只会在用户眼里出现，不在测试里出现。现在只有一个来源：
+    # 会话行那一格是从这份列表数出来的（不是从它自己那片算的）。
+    per_sid: dict[str, int] = {}
+    for q in pending:
+        key = _text(q.get("sid"))
+        per_sid[key] = per_sid.get(key, 0) + 1
+    for row in sessions:
+        row["pending"] = per_sid.get(_text(row.get("sid")), 0)
     pending.sort(key=lambda q: (q["sid"], q["index"]))
     runs.sort(key=lambda r: (r["sid"], r["start_index"]))
     orphans.sort(key=lambda o: (o["sid"], o["index"]))
@@ -458,24 +472,61 @@ def _orphan_summary(orphans: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
-    """读台账（`Store`）做第二个独立读数：读不到就报「没查成」，不折成 0。"""
-    out: dict[str, Any] = {"path": str(root / "data" / "events.jsonl"), "events": None,
-                           "tables": None, "note": ""}
+    """读台账（`Store`）做第二个独立读数：读不到就报「没查成」，不折成 0。
+
+    ## `D21`（2026-10-22）：这里曾经把 `events.jsonl` 的总行数叫作「台账事件 N 条」
+
+    `Store._append_events` 每提交一次事务写 `rows + 1` 行：N 行事件，末尾再补一行
+    `op="commit"` 的提交标记（重放靠它分批，见那边的 docstring）。所以"文件行数"
+    与"写了多少笔"是两个数（一次写入占两行），而这一格此前读的是前者、名字叫后者，
+    并且与旁边那格「会话 N 段」并排 —— 一个翻倍地回答"写了多少笔"的数，页面上
+    没有任何字提示这件事。
+
+    现在拆成三格（`upserts` / `commit_markers` / `events_note`）：
+
+    - `upserts`：写入笔数（= 非 commit 标记的行数）；
+    - `commit_markers`：提交标记的行数；
+    - `events`：保留这个名字（`types.ts` 与既有读者都认它），口径从 D21 起
+      与 `upserts` 逐字相同 —— 它不再等于文件总行数。
+
+    守恒：`upserts + commit_markers == events.jsonl 的总行数`（一行都不丢，也不重复
+    计数）。读不成 JSON 的坏行（`op="corrupt"` 的占位行）按行计入 `upserts` ——
+    合计仍是总行数，坏行条数写进 `events_note`，不静默吞。
+    """
+    out: dict[str, Any] = {"path": str(root / "data" / "events.jsonl"),
+                           "events": None, "upserts": None, "commit_markers": None,
+                           "tables": None, "note": "", "tables_note": "", "events_note": ""}
     try:
         from ..store import Store
 
         st = Store(root)
         if not st.events_path.exists():
             out["note"] = "台账还没有（合法初态）"
+            # 三态：文件不在 ⇒ 笔数与标记都是 unknown（不是 0 笔）。
+            out["events_note"] = ("台账文件不在盘上 ⇒ 写入笔数与 commit 标记都记 unknown"
+                                  "（不是「一笔都没写」）")
             return out
-        out["events"] = len(st.read_events())
+        rows = st.read_events()
+        commits = sum(1 for r in rows if str(r.get("op") or "") == "commit")
+        corrupt = sum(1 for r in rows if str(r.get("op") or "") == "corrupt")
+        upserts = len(rows) - commits
+        out["upserts"] = upserts
+        out["commit_markers"] = commits
+        # 同一个口径的另一个名字（见 docstring：`events` 不再等于文件总行数）。
+        out["events"] = upserts
         out["tables"] = len(st.rows("tasks")) if hasattr(st, "rows") else None
+        note = (f"台账写入 {upserts} 笔（其中 commit 标记 {commits} 行）：每提交一次事务占两行"
+                "（一行事件 + 一行 commit 标记），所以两数相加 = events.jsonl 的总行数")
+        if corrupt:
+            note += f"；另有 {corrupt} 行读不成 JSON（坏行，按行计入「写入」这一格）"
+        out["events_note"] = note
         # `R4` ⑨：只写口径，不改语义 —— 这个数就是 `tasks` 台账的全量行数
         # （不筛选、不减一）。它含顶趟行（`role=M` / `action=run` / `called_by=user`），
         # 所以它比"子任务条数"大；读数旁边不写这句，读的人会把它当成子任务数。
         out["tables_note"] = "含顶趟行；为 tasks 全量行数，非子任务条数"
     except Exception as exc:  # noqa: BLE001 - 读数而已，读不到就如实说没查成
         out["note"] = f"台账没查成：{type(exc).__name__}: {exc}"
+        out["events_note"] = "台账没查成 ⇒ 写入笔数与 commit 标记都记 unknown（不是 0）"
         problems.append(out["note"])
     return out
 
@@ -581,9 +632,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("sid", "string"), ("index", "number"), ("kind", "string"),
       ("ts", "string"), ("role", "string"))),
     ("LedgerReading",
-     "snapshot() 的 `ledger` —— 台账（第二个独立读数）",
-     (("path", "string"), ("events", "number | null"), ("tables", "number | null"),
-      ("note", "string"), ("tables_note", "string"))),
+     "snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径"
+     "（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数",
+     (("path", "string"), ("events", "number | null"), ("upserts", "number | null"),
+      ("commit_markers", "number | null"), ("tables", "number | null"),
+      ("note", "string"), ("tables_note", "string"), ("events_note", "string"))),
     ("ReportReading",
      "_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）",
      (("status", "ReportTri"), ("text", "string"))),

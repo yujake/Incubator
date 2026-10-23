@@ -54,7 +54,7 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 14 / info 49`（复跑 `python -B scripts/lint_rules.py`；
+**linter 的当次三栏（日常档）**：`error 0 / warning 20 / info 49`（复跑 `python -B scripts/lint_rules.py`；
 `error` 那一栏刻意不钉 —— 它由发布门第 5 项按"必须为 0"强制；**严格档的两个数只写进块里的
 `lint_rules_strict_*` 两行**，正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
@@ -66,43 +66,45 @@ $env:PYTHONPATH='src'   # 只有跑 `python -m agentflow.*` / `python -c "...imp
 
 ```text
 LIVE-READINGS:BEGIN
+# 本块按判据口径量（`tests/conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）；CLI 缺省 shell 是 95/15
 # 名字 = 数字        # 含义 + 复跑命令 + 观测时刻
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 14   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
+lint_rules_warning      = 20   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 49   # 同一档的 info 栏
-lint_rules_strict_warning = 74 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 80 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
-noai_paths_glob         = 43   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
-noai_paths_unique       = 40   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
+noai_paths_glob         = 45   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
+noai_paths_unique       = 42   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
-tools_star_tools_py     = 16   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
+tools_star_tools_py     = 18   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total         = 95   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
-cli_tools_modules       = 15   # 同一行"已装模块 N"
+cli_tools_total         = 98   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
+cli_tools_modules       = 16   # 同一行"已装模块 N"
 cli_tools_role_a        = 37   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
 cli_tools_role_b        = 23
 cli_tools_role_c        = 23
 cli_tools_role_d        = 42
-cli_tools_role_e        = 26
-cli_tools_role_f        = 37
-cli_tools_role_g        = 39
+cli_tools_role_e        = 25
+cli_tools_role_f        = 36
+cli_tools_role_g        = 38
 cli_tools_role_h        = 31
 cli_tools_role_v        = 15
+cli_tools_role_l        = 23
 cli_tools_role_m        = 21
-webui_modules           = 9    # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
-webui_routes            = 26   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
-webui_routes_get        = 19   # 同上，按 `x[0] == 'GET'` 计数
-webui_routes_post       = 7    # 同上，按 `x[0] == 'POST'` 计数
+webui_modules           = 10   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
+webui_routes            = 28   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
+webui_routes_get        = 20   # 同上，按 `x[0] == 'GET'` 计数
+webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 11    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
+webui_test_files        = 14    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
 LIVE-READINGS:END
 ```
 
 **`cli tools` 的三个数是三个口径，不许互换**（详见 §3.5 与 §4.2）：
-`cli tools`（含 store）给出上表那 10 个逐角色数；`build_registry(store=None, workspace_root='.')`
+`cli tools`（含 store）给出上表那 11 个逐角色数；`build_registry(store=None, workspace_root='.')`
 与 `build_registry(store=None)` 各自再给一组**不同的**数。**把一个口径的数搬到另一个口径下，
 比写错一个数字更贵** —— 它看起来是精确的。
 
@@ -185,9 +187,9 @@ LIVE-READINGS:END
 
 | 字面量 | 量法（复跑命令） |
 |---|---|
-| 动作总数 **62** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
+| 动作总数 **65** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-10-23 加 L 的三件形式化动作 ⇒ 62 → 65） |
 | 可召唤动作数 **55** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；此前 2026-10-20 撤 `M→V` ⇒ 57 → 54） |
-| 子命令数 **25** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices） |
+| 子命令数 **27** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices） |
 
 **两条使用规矩**（与 §1.1 同源）：
 1. **引用任何计数前先在这张表里找它**：找到"有判据"⇒ 可以信当次值；
@@ -388,9 +390,10 @@ LIVE-READINGS:END
   - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
     `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
     **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
-  - 判据文件共 **11** 个：`test_webui{,_contracts,_help_is_current,_pages,_readers,_roster_panel,_settings_write,_sse,_static,_writes,_browser}.py`；
-    复跑 `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`（2026-10-21 实测：11；
-    这一格随并行施工变 —— 本节第一次量到的是 10，`test_webui_help_is_current.py` 落地后变 11）。
+  - 判据文件共 **14** 个：`test_webui{,_contracts,_help_is_current,_pages,_readers,_roster_panel,_settings_write,_sse,_static,_writes,_browser,_ledger_counts_writes,_live_names_the_host_process,_pending_is_one_list}.py`；
+    复跑 `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`（2026-10-23 实测：14；
+    这一格随并行施工变 —— 本节第一次量到的是 10，`test_webui_help_is_current.py` 落地后变 11，
+    2026-10-22 的三条（台账写入计数 / 直播点名宿主进程 / 待答只有一张清单）落地后变 14）。
 - **已知边界**（照实写，**不许写成"已解决"**）：
   1. `draft/35` 的七层里**没有这一层**（整份文件里 `webui` / `web/` / `Web 端` **0 命中**，
      复跑 `Select-String -Path 'draft\35-… .md' -Pattern 'webui|web/|Web 端'`）——
@@ -496,8 +499,8 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 
 | 数 | 量的是什么 | 当次值 |
 |---|---|---:|
-| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **43** |
-| **唯一路径数** | 上述 glob 去重后的路径数 | **40** |
+| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **45** |
+| **唯一路径数** | 上述 glob 去重后的路径数 | **42** |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数 = **需要签字的行数** | **不写定值**（每签一个字就变） |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** |
 | **欠签** | 台账条目 × 2 名 reviewer（`REQUIRED_APPROVALS_ON_HIT = 2`） | **不写定值**（每签一个字就变） |
@@ -1221,7 +1224,7 @@ required_approvals: 2（尚未取得）
 
 | 事项 | 去向 |
 |---|---|
-| 哪些路径是禁 AI 区（当次 **43** 条条目 / **40** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
+| 哪些路径是禁 AI 区（当次 **45** 条条目 / **42** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
 | 命中之后要做什么（停 / 人编写或人逐行走查 / 2 名 reviewer / 机器执行） | **`AGENTS.md`** 的"命中之后要做什么" |
 | 退出码语义（`0=clean` / `1=requires_human` / `2=unknown`，**`unknown ≠ clean`**） | **`AGENTS.md`** 的"退出码"节 + `scripts/noai_gate.py` |
 | 实际判定 | `python scripts/noai_gate.py --paths <改动的文件…>`（或 `--git`、`--stdin`、`--json`、`-q`） |
@@ -1350,7 +1353,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 
 | FC | 约束（简写） | 落地位置 | 可判定判据 | 状态 |
 |---|---|---|---|---|
-| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **43** 条条目 / **40** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
+| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **45** 条条目 / **42** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
 
 ---
 
@@ -1445,16 +1448,29 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 
 ### §14.3 实测读数（十个角色 + 秘书，`2026-10-21 05:31–05:41 +08:00`）
 
-命令（`$env:PYTHONPATH='src'`，下同）：
+命令（`$env:PYTHONPATH='src'`，下同；2026-10-22 起两档各一趟，顺序固定：先关后开）：
 
 ```powershell
-python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,secretary `
-  --hit-sample M,C --probe-no-tools C --probe-cross-run C --cap-usd 0.10
+# ① Lean 关（产品缺省：不设 AGENTFLOW_LEAN_ENABLED）
+python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,L,secretary `
+  --hit-sample M,C --cap-usd 0.10
+# ② Lean 开（同一份读数文件里落第二档）
+python scripts/warm_prompt_cache.py --lean on `
+  --roles A,B,C,D,E,F,G,H,V,M,L,secretary --hit-sample M,C,L --cap-usd 0.10
 ```
 
-读数落在 `tests/fixtures/prompt_cache_warm.json`（**一个容器，保留最近 8 趟**：
+两档的读数落在同一个容器里，按 `lean_enabled` 区分；唯一装载入口是
+`scripts/warm_prompt_cache.cache_readings(lean)`（`lean` 不给就现读
+`leanscope.lean_on()`）：匹配不到这一档就返回 `tri="unknown"` 与
+`reason="cache_missing_for_lean_state"`，**不回落到另一档**。L 在 Lean 关那一档
+按产品规则不存在（`leanscope.LEAN_ONLY_ROLES`）：装载结果里它是
+`state="absent"`（受控缺席），不是缺行。
+
+读数落在 `tests/fixtures/prompt_cache_warm.json`（**一个容器，保留最近 16 趟**：
 第一趟是"冷写"，后面每一趟都是"重落一次"；两趟都要留，因为
-"写进去了"与"下次能命中"是两件事）。
+"写进去了"与"下次能命中"是两件事。2026-10-22 从 8 提到 16：要同时留两档，
+而诊断读数（带 `tools_in_prefix` / `cross_run_hit` 的那几趟）本来就是更早跑出来的，
+8 趟的窗口会被两趟新预热挤掉）。
 
 | 角色 | system 字符 | 工具函数 | 冷写 `write`（第一趟 pass1，= miss） | 重落一次命中（最新趟 pass1） | 命中率 | 二调样本命中（pass2） | 跨 run 可复用前缀（字符） |
 |---|---|---|---|---|---|---|---|
@@ -1524,12 +1540,26 @@ python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,secretary `
 `③` 的负控是这一节最要紧的一条：它证明这条判据守的是**"提示词不许抖"**，
 而不是"两边都不是空的"。§13.4 那条纪律（每步会变的东西不许进 system）就靠它咬人。
 
-### §14.5 再落一次（一条命令）
+### §14.5 再落一次（两档两条命令）
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='src'
-python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,secretary
+# ① Lean 关（不设 AGENTFLOW_LEAN_ENABLED，产品缺省）
+python scripts/warm_prompt_cache.py --roles A,B,C,D,E,F,G,H,V,M,L,secretary
+# ② Lean 开（同一份读数文件里落第二档；顺序固定：先关后开）
+python scripts/warm_prompt_cache.py --lean on `
+  --roles A,B,C,D,E,F,G,H,V,M,L,secretary --hit-sample M,C,L
 ```
+
+- **两档都要在**：`system_prompt` 在 Lean 开关两档下渲染出的不是同一段前缀，只落一档
+  回答不了"开关有没有影响渲染"。判据 `tests/test_prompt_cache_warm.py` 逐档重算摘要，
+  两档缺一档、或两档摘要相同，都会红。
+- **装载侧**：`scripts/warm_prompt_cache.cache_readings(lean)` 是唯一入口；它按
+  `lean_enabled` 选那一档最近一趟，逐 target 给 `measured` / `absent` / `missing`
+  三态。匹配不到就 `unknown`（`cache_missing_for_lean_state`），不回落另一档。
+- **L 在关档是缺席**：`leanscope.LEAN_ONLY_ROLES` 只有 `L`，Lean 关着时
+  `system_prompt("L")` 按产品规则抛 `RoleHidden`。所以关档那一趟 L 记 `kind=absent`，
+  不伪造一段预热；开档那一趟 L 真预热，并用 `--hit-sample M,C,L` 拿到第二次命中。
 
 - **幂等**：同一 scenario 再跑一遍，`prompt_sha256` 不变、`hit` 接近满、`write` 接近 0
   （读数文件里多一趟，前一趟不动）。

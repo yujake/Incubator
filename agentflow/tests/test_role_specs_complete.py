@@ -378,7 +378,7 @@ def test_gate_exit_codes_are_three_valued(tmp_path):
 
 
 def test_default_role_set_is_unchanged_and_blind_to_n_o_q():
-    """默认行为一字不变：不传 `--roles` 时判据是 A–H（+V）+ M。
+    """默认行为一字不变：不传 `--roles` 时判据是 A–H（+V,L）+ M。
 
     这条同时是缺口本身的记录：草稿里的 N/O/Q 节在默认判据下一个都匹配不到，
     于是门报 `unknown`（"没查成"）而不是"发现三个新角色缺规格"。
@@ -388,7 +388,10 @@ def test_default_role_set_is_unchanged_and_blind_to_n_o_q():
     它是登记进默认集合的新角色，与 N/O/Q 那种"草稿通道里的角色"不是一回事：
     本用例守的仍然是"默认判据看不见 N/O/Q"（下面那条 `default["sections"] == []`）。
     """
-    assert G.EXPECTED_ROLES == ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M")
+    # 2026-10-23：`L`（Lean 形式化者）立项后，默认角色集合是 A–H + V + L + M。
+    # 这一行原先漏了 `L`，那份字面量记录的是 L 立项前的角色数 —— 补上不是放宽，
+    # 而是让这条字面量与 `verify_role_specs.EXPECTED_ROLES`（= 现场名单 + 主控）同源。
+    assert G.EXPECTED_ROLES == ("A", "B", "C", "D", "E", "F", "G", "H", "V", "L", "M")
     assert G.DEFAULT_ROLES is None
     default = G.check(DRAFT_NOQ)
     assert default["verdict"] == "unknown"
@@ -834,13 +837,26 @@ def rows_to_check(reg, rows: list[dict[str, str]]) -> list[dict[str, str]]:
         doc_says_approval = "是" in r["needs_approval"]
         if doc_says_approval != bool(spec.needs_approval):
             problems.append(f"审批 文档={r['needs_approval']!r} 实际={spec.needs_approval}")
-        # 角色字母表要含主控 `M`：工具层的角色词汇是 `TOOL_ROLES` = 可被召唤的 A–H(+V) + 主控 M
+        # 角色字母表要含主控 `M`：工具层的角色词汇是 `TOOL_ROLES` = 可被召唤的 A–H(+V,L) + 主控 M
         # （主控不可被召唤，但它拿编排面工具）。只认 A–H 会让主控那 8 行的 roles 列
         # 永远解析成空，于是"文档与注册表不一致"这条判据对它们永远报红（实测撞过）。
         # 2026-10-06（F-02）：`V` 也要在里面 —— 只读角色 V 拿到 11 件 `fs.*`/`table.*`/
         # `manuscripts.*` 的读工具，那些工具的 roles 列现在含 V；解析器漏掉 V 时
         # 这一条会报"文档少了 V"（假红）或者更糟：文档真漏了 V 也不报（假绿）。
-        doc_roles = [x for x in re.findall(r"\b([A-HMV])\b", r["roles"])]
+        # 2026-10-23：`L` 同理 —— L 的三件工具（`formal.*`）的 roles 列只有 L；
+        # 这个字母类原先只写到 `[A-HMV]`，那份写法记录的是 L 立项前的角色数。
+        # 补上 L 不是放宽：漏掉它时 L 那一格会被解析成空集，于是"文档写了 L"与
+        # "文档漏了 L"在这一条判据下长得一模一样。
+        #
+        # 但补上 L 之后有一格要先认标记再扫字母：`（无角色）` 是这一列里"谁都调不到"
+        # 的显式写法（今天只有 `verify.check_formal` 一行）。那一格的解释串里写着
+        # "形式化入口归 L 的 `formal.*`" —— 裸扫字母会把散文里的 L 读成"这一行只给
+        # L 用"，而文档与注册表实际上是一致的（都没有角色）。红的原因是解析器把散文
+        # 当成了名单，所以这里认标记、不认散文字母。
+        if "无角色" in r["roles"]:
+            doc_roles: list[str] = []
+        else:
+            doc_roles = [x for x in re.findall(r"\b([A-HMVL])\b", r["roles"])]
         if sorted(doc_roles) != sorted(spec.roles):
             problems.append(f"roles 文档={sorted(doc_roles)} 实际={sorted(spec.roles)}")
         if problems:

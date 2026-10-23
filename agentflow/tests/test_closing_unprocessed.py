@@ -72,7 +72,8 @@ def _seed_legs(s: Store) -> None:
             "statement_full": "设 G 是任意有限群；则 c(G) ≤ 1。",
             "proof_text": "Proof. 见第 3 节（逐字摘录）。",
             "source_lit_id": "0000", "page_range": {"start": 1, "end": 2},
-            "quote_verified": True, "quote_reason": "逐字比对通过（第 1 页）",
+            "quote_verified": True, "quote_span": "p1:norm[4:40]",
+            "quote_reason": "逐字比对通过（第 1 页）",
             "evidence_kind": "cross_check", "status": "active",
             "created_at": TS, "created_by": "test"})
 

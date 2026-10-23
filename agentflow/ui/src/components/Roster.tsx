@@ -3,8 +3,9 @@
  *
  * ## 它读的那一条端点
  * `GET /api/roster`（`readers.roster_face`）—— 父是谁、子有哪些、每个成员的绝对编号
- * （`task_id`）/ 名册名 / 角色 / 深度，外加「收件箱积压」那一格。数据源是盘上的
- * `out/roster/<父编号>.jsonl`（秘书写的 append-only 名册）与 `data/tasks.json`
+ * （`task_id`）/ 名册名 / 角色 / 深度，外加收件箱那三格（未读 / 已读未 ack / 未消总数）。
+ * 数据源是盘上的 `out/roster/<父编号>.jsonl`（秘书写的 append-only 名册）、
+ * `out/roster/<父编号>-index.jsonl`（对照表：复用过的名字此刻的编号）与 `data/tasks.json`
  * （状态与板项）。**只读**：这个端点在路由表里只有一条 GET，面板上也就没有写操作。
  *
  * ## 为什么是一个面板而不是第十页
@@ -51,15 +52,27 @@ function childText(children: RosterChild[]): string {
     .join("、");
 }
 
-/** 收件箱积压那一格：读不到就是"未读到"（不是 0 条）。 */
+/** 收件箱那一格：读不到就是"未读到"（不是 0 条）。
+ *
+ * 三格分开（D13）：`unread` = 还没被读进任何一步（queued/claimed）；
+ * `seen_not_acked` = 读了、还缺 ack。改前只有一个数，而它把 `seen` 也算成"积压"——
+ * 那个数因此在正常流程下只涨不落（`close_item` 全仓只有一个调用者）。
+ */
 function inboxBadge(inbox: RosterInbox) {
-  if (inbox.tri !== "computed" || inbox.open === null) {
+  if (inbox.tri !== "computed" || inbox.open_total === null) {
     return <Badge kind="badge-unknown" text="收件箱：未读到" />;
   }
-  if (inbox.open === 0) {
-    return <Badge kind="badge-pass" text="收件箱：没有积压" />;
+  if (inbox.open_total === 0) {
+    return <Badge kind="badge-pass" text="收件箱：没有未消的条目" />;
   }
-  return <Badge kind="badge-fail" text={`收件箱积压 ${inbox.open}`} />;
+  const unread = inbox.unread ?? 0;
+  const seen = inbox.seen_not_acked ?? 0;
+  return (
+    <Badge
+      kind={unread > 0 ? "badge-fail" : "badge-pending"}
+      text={`未读 ${unread} · 已读未 ack ${seen}`}
+    />
+  );
 }
 
 /** 收件箱明细（点开节点之后那一块）。 */
@@ -86,7 +99,10 @@ function InboxBlock(props: { inbox: RosterInbox }) {
   return (
     <>
       <div class="row">
-        收件箱：{inbox.open === null ? "未读到" : `${inbox.open} 条未消`}
+        收件箱：未读 {inbox.unread === null ? "未读到" : inbox.unread} · 已读未 ack{" "}
+        {inbox.seen_not_acked === null ? "未读到" : inbox.seen_not_acked} · 未消{" "}
+        {inbox.open_total === null ? "未读到" : inbox.open_total}
+        {(inbox.other ?? 0) > 0 ? `（其中状态读不出来 ${inbox.other} 条）` : ""}
         <span class="readings">
           按状态 {dictText(inbox.by_state)} · 按种类 {dictText(inbox.by_kind)}
           {inbox.more > 0 ? ` · 只列前 ${inbox.items.length} 条，还有 ${inbox.more} 条` : ""}
@@ -195,7 +211,7 @@ export function RosterPanel() {
   const subtitle =
     data === null
       ? ""
-      : `节点 ${cell(data.count)} 个 · 最深 ${cell(data.max_depth)} 层 · 名册文件 ${data.files.length} 份`;
+      : `节点 ${cell(data.count)} 个 · 最深 ${cell(data.max_depth)} 层 · 读到的名册/对照表文件 ${data.files.length} 份`;
   return (
     <Card
       title="名册（roster）"

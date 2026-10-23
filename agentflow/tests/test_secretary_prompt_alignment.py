@@ -61,10 +61,13 @@ DUTIES: dict[str, dict[str, object]] = {
         #
         # ⇒ 探针里那个裸 `assess` 一并删掉：它今天命中的是 `D.assess`（错的东西），
         # 而它把"动作名"与"结果键"混成一条探针，正是上一版看不见缺口的原因。
-        "roles": ("A", "B", "C", "D", "E", "F", "G", "H", "M", "V"),
+        # 2026-10-23：`L` 立项后，`roles` 由十格补到十一格 —— 旧名单记录的是
+        # L 立项前的角色数。L 是普通角色（出边有 C，它会派活），`_outbound_hook`
+        # 同样把 `assessment` 塞进它的那一步 ⇒ 它的提示词里也必须认得这个键。
+        "roles": ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M", "V"),
         "probe": ("该不该派", "建议你换", "评估这次派活"),
         "why": "委派评估：'该不该派这一件'（`DECISIONS` 那张词表）+ 同 key 是否重复。"
-               "可见性是**十角色**，理由见上面那两条 ⚠️：收窄针对动作名，"
+               "可见性是**十一角色**，理由见上面那两条 ⚠️：收窄针对动作名，"
                "而这条认领的是**结果键**（谁派活谁就收到它）。"
                "⚠️ 探针是**登记**的不是推导的：多一个/少一个都要人来裁",
     },
@@ -278,7 +281,7 @@ READING_INTERNAL: dict[str, str] = {
 
 
 def _roles_and_prompts() -> dict[str, str]:
-    """渲染十角色的提示词（口径 = `tests/test_agent_surface_snapshot.py::_build/_snapshot`）。"""
+    """渲染十一个角色的提示词（A–H,V,L 十个可召唤 + 主控 M；口径 = `tests/test_agent_surface_snapshot.py::_build/_snapshot`）。"""
     from agentflow.store import Store
     from agentflow.tools import ROLES, build_registry
     from agentflow.agent_prompts import system_prompt
@@ -376,7 +379,9 @@ def test_every_secretary_duty_is_either_visible_to_roles_or_registered_internal(
                     f"{key}：登记为'框架内部、角色无需知情'，可是 {list(hit)} 的提示词里出现了"
                     f"{PROBE_INTERNAL} 这类出口词 ⇒ 提示词在承诺一件角色看不见的事")
 
-    assert reading["roles"] == 10, f"只渲染到 {reading['roles']} 个角色 ⇒ 这一格没查成"
+    # 2026-10-23：L 立项后是十一个角色（A–H,V,L 十个可召唤 + 主控 M）。
+    # 旧断言写 10，记录的是 L 立项前的角色数 —— 这里不是放宽，是把渲染面跟上真身。
+    assert reading["roles"] == 11, f"只渲染到 {reading['roles']} 个角色 ⇒ 这一格没查成"
     assert reading["duties"] >= 5, reading
     assert not problems, ("秘书职责与提示词**没有双向对齐**：\n  - " + "\n  - ".join(problems))
 
@@ -567,8 +572,10 @@ def test_every_secretary_mention_is_claimed_by_a_duty_that_role_may_know() -> No
     # 反真空：一句"秘书"都抽不到 ⇒ 抽取面坏了，不是"没问题"。
     mentions = {r: [s for s in _sentences(t) if "秘书" in s] for r, t in prompts.items()}
     total = sum(len(v) for v in mentions.values())
-    assert total > 0, "十角色提示词里一句'秘书'都没抽到 ⇒ 抽取面坏了（不是没问题）"
-    assert len(prompts) == 10, f"只渲染到 {len(prompts)} 个角色 ⇒ 这一格没查成"
+    assert total > 0, "十一个角色提示词里一句'秘书'都没抽到 ⇒ 抽取面坏了（不是没问题）"
+    # 2026-10-23：L 立项后是十一个角色（A–H,V,L 十个可召唤 + 主控 M）；
+    # 旧断言写 10，记录的是 L 立项前的角色数 —— 不是放宽，是跟上真身。
+    assert len(prompts) == 11, f"只渲染到 {len(prompts)} 个角色 ⇒ 这一格没查成"
 
     assert not unclaimed, (
         "这些句子在提示词里对角色承诺'秘书会做某事'，而 `DUTIES` 里没有任何一条"
@@ -713,7 +720,9 @@ def test_every_outbound_reading_is_either_told_to_roles_or_registered() -> None:
 
     # 反真空：扫不到键 ⇒ 扫描面坏了（不是"没有问题"）。
     assert len(keys) >= 10, f"只从 `_outbound_hook` 扫到 {len(keys)} 个键 ⇒ 扫描面坏了：{keys}"
-    assert len(prompts) == 10, f"只渲染到 {len(prompts)} 个角色 ⇒ 这一格没查成"
+    # 2026-10-23：L 立项后是十一个角色（A–H,V,L 十个可召唤 + 主控 M）；
+    # 旧断言写 10，记录的是 L 立项前的角色数 —— 不是放宽，是跟上真身。
+    assert len(prompts) == 11, f"只渲染到 {len(prompts)} 个角色 ⇒ 这一格没查成"
 
     problems = _reading_registry_problems(prompts, keys)
     assert not problems, ("`_outbound_hook` 的读数与提示词没有对齐：\n  - " + "\n  - ".join(problems))

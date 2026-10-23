@@ -647,9 +647,15 @@ class Concept:
 #:
 #: 两栏不许互相冒充：`quote_verified is True` 而 `quote_mode` 说不出方式的行按没查算
 #: （`evidencebits.quote_state()` 是这条口径的唯一实现）。`validate()` 会把
-#: "只说了通过、没说方式"的行记实成 `verbatim` —— 这条通路存在之前，`True`
-#: 只可能来自逐字那一档，所以那是历史事实、不是猜测；反过来，没通过/还没查的行，
+#: "只说了通过、没说方式而给了区间"的行记实成 `verbatim` —— 这条通路存在之前，
+#: `True` 只可能来自逐字那一档，所以那是历史事实、不是猜测；反过来，没通过/还没查的行，
 #: 方式一律归空串（方式对它没有意义）。
+#:
+#: 2026-10-22（D1 第二版）：「只说了通过、没说方式」不再是记实成 `verbatim` 的理由 ——
+#: 还要求 `quote_span` 非空。理由：区间是"核了哪一段、在第几页"的唯一载子，没有它，
+#: `verbatim` 这个字在盘上只是一句自我描述（真机 13 行：`true` + `verbatim` + 空区间，
+#: 读侧当成逐字通过）。区间为空 ⇒ 方式记空串，由读侧 `evidencebits.quote_state` 读成
+#: `no_evidence`，由 `closing` 那一格点名。
 QUOTE_MODES: tuple[str, ...] = ("verbatim", "semantic")
 
 
@@ -658,8 +664,8 @@ def _normalize_quote_mode(obj: Any, *, what: str) -> None:
 
     三条，逐条对应 `QUOTE_MODES` 那段 docstring 的口径：
 
-    1. `quote_verified is True` 而 `quote_mode` 空 ⇒ 记实成 `verbatim`
-       （这条通路存在之前，`True` 只可能来自 `check_quote` 那一档 —— 是事实，不是默认值）；
+    1. `quote_verified is True` 而 `quote_mode` 空 ⇒ 有区间才记实成 `verbatim`；
+       区间为空就记空串（不许盖成 `verbatim`，见上面 D1 那一段）；
     2. 不是 `True`（`False` / `None`）⇒ 方式一律归空串：方式对"没通过/还没查"没有意义，
        留着会让人误读成"用某种方式查过了"；
     3. 认不出的词 ⇒ 抛错（词表外的值不许进库；两栏不许互相冒充这条靠它兜住）。
@@ -667,7 +673,11 @@ def _normalize_quote_mode(obj: Any, *, what: str) -> None:
     verified = getattr(obj, "quote_verified", None)
     mode = str(getattr(obj, "quote_mode", "") or "")
     if verified is True and mode == "":
-        mode = "verbatim"
+        # D1（2026-10-22）：空方式只在拿得出区间时才记实成逐字档。
+        # 这一格是"写侧唯一会给 mode 补值的地方"，补错了就是把一句自报升成结论：
+        # 区间为空时保持空串，让读侧按 no_evidence 读（而不是读成正好在那一档的 verbatim）。
+        span_now = str(getattr(obj, "quote_span", "") or "").strip()
+        mode = "verbatim" if span_now else ""
     if verified is not True and mode != "":
         mode = ""
     if mode != "" and mode not in QUOTE_MODES:
@@ -2057,6 +2067,12 @@ class Statement:
     #: 五元证据位（`draft/39` §3.14）：`numeric` / `proof` / `reviewed` / `formal` / `audited`。
     #:
     #: 空对象 = 这一行还没有任何位记录（旧行）⇒ 一律按"五位全空"读（等级 = 猜想）。
+    #: 第 4 位（`formal`）的形状与另外四位不同：它是二维的 `{证明号: 四态}`
+    #: （业主 2026-10-22 的裁定：「lean 形式化需指明对哪个路径做了形式化验证……但关于一个
+    #: 定理的正确性，但凡任意一个路径通过核验，它就是对的」）。键只能是证明号
+    #: （`verifications.as_proof_no` 归一，1 = canonical），值只能是 `BIT_STATES` 的四态
+    #: —— `stale` 是读侧按"记下来的 proof_sha256 与现行正文不符"现算出来的，不许写进盘上。
+    #: 标量形态仍然合法（老行 / 单路径：等价 `{1: 那个四态}`），所以存量零迁移。
     #: 形状与四态纪律的唯一判据来源是 `evidencebits`（这里只转发它的 `bit_problems`，
     #: 不抄第二份口径）；等级不落盘，由 `evidencebits.derive_grade` 现算
     #: （盘上存一份缓存就等于给出"自报等级"的口子，而那正是这套位要堵的洞）。
@@ -2178,6 +2194,9 @@ class Statement:
         #
         # 判据本体在 `evidencebits`（唯一来源）：这里只转发，不抄第二份口径 ——
         # 两份口径一旦分家，"没做过"与"做过没通过"就会在某一处被压平，而门照样亮绿。
+        # 第 4 位是二维的（`{证明号: 四态}`，业主 2026-10-22 的裁定）：键是不是证明号、
+        # 值是不是写侧那四态、逐条凭据有没有落在 `evidence.formal_by_proof` 里，
+        # 都由 `bits_shape_problems` 逐条判 —— 这一格只负责"写库之前必须过它"。
         # 为什么必须在数据面把这一关：盘上写进一个形状不对的 `bits`，下游（收工门、
         # 状态报告）读到的就是一条半成品读数，而没有任何一处会响。
         if self.bits:
@@ -2323,7 +2342,13 @@ class ReviewFinding:
 #: 的判据时只能自己再写一份 —— 那就是"跨模块字符串约定有两处定义"。
 #: 现在 `tools.ROLES` 就是这一个对象（它 import 这里），
 #: 所以改角色名单只需要改一行，也不可能不一致。
-ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V")
+#:
+#: `L`（Lean 形式化者，2026-10-22 新设）：照 E 的 Lean 面复制出来的一个可运行角色。
+#: 协作面（2026-10-22 晚的最终裁定）：入边恰好 `B → L`、出边恰好 `L → C`、可召唤
+#: （`specs/l.py` 与 `specs/b.py` 的 `edges`/`summonable`）—— 这两件事都由声明派生，
+#: 本行的加一个字不构成任何一条边。判据见
+#: `tests/test_l_collab_surface_is_exactly_this.py`。
+ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "L")
 
 #: 主控（编排者）的角色标识。
 #:

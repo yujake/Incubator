@@ -57,9 +57,14 @@ export const ENDPOINTS = {
   usage: "/api/usage",
   statusReports: "/api/status-reports",
   chat: "/api/chat",
-  // 2026-10-21（业主的「名册监视」）：整棵名册树（父/子/绝对编号/角色/深度/收件箱积压）。
+  // 2026-10-21（业主的「名册监视」）：整棵名册树（父/子/绝对编号/角色/深度/收件箱三格）。
   // 只读一条 —— 这个端点在路由表里没有配对的 POST，前端也不该有写它的函数。
   roster: "/api/roster",
+  // 2026-10-23（业主：「把两档缓存落地为用户使用系统时可调用的工具」）：
+  // 两档提示词缓存的状态读数（只读）与预热（写，会花钱）。两条的形状与
+  // `webui/cacheface.py` 的两个处理器逐字对应。
+  cache: "/api/cache",
+  cacheWarm: "/api/cache/warm",
   stream: "/api/stream",
 } as const;
 
@@ -343,13 +348,20 @@ export const api = {
    * 名册那一棵树（`GET /api/roster`，2026-10-21）。
    *
    * 一个 agent 一个节点：父是谁、子有哪些、每个成员的绝对编号／名册名／角色／深度，
-   * 外加"收件箱积压"那一格。**只读**：这个端点在路由表里没有配对的 POST，所以这里
+   * 外加收件箱那三格（未读 / 已读未 ack / 未消总数）。**只读**：这个端点在路由表里没有配对的 POST，所以这里
    * 只有取数函数，没有写函数。
    *
    * 三态：`answer === "unknown"` 是"这份读数没拿到"（名册目录不在、或读不出来），
    * **不是**"这个工作区没有子代理"—— 面板必须把这两档画成两句话。
    */
   getRoster: (): Promise<RosterView> => getJSON<RosterView>(ENDPOINTS.roster),
+  /**
+   * 两档提示词缓存的状态（`GET /api/cache`，2026-10-23）。
+   *
+   * 两档 × 四格（落地 / 新鲜 / 覆盖几个 / 缺谁）加换 key 那条提醒。三态：某一档
+   * `tri !== "found"` 时那一档的四格全是 `unknown`（附 `reason`），**不是**"没预热"。
+   */
+  getCache: (): Promise<CacheView> => getJSON<CacheView>(ENDPOINTS.cache),
 };
 
 /**
@@ -418,3 +430,145 @@ export async function postInterject(body: {
   });
 }
 
+
+/**
+ * 两档提示词缓存的状态读数（`GET /api/cache` 的返回形状）。
+ *
+ * 为什么这几个接口写在这里而不是 `types.ts`：`types.ts` 是生成物（`agentflow/web/emit_types.py`
+ * 拼三条零交线各自的 `type_decls()`，判据逐字节比对），本轮的判据只核对生成物里那些接口，
+ * 所以它们不进生成物；而这一面的唯一消费者就是 `components/PromptCache.tsx`。形状与
+ * `agentflow/cachectl.py::status()` 的键逐字相同（改名会让页面画出 `undefined`）。
+ */
+export interface CacheTargetCell {
+  state: string;
+  fresh: boolean | null;
+  recorded_sha256: string;
+  now_sha256: string;
+  absent_reason: string;
+}
+
+/** 一档里 key 那一格：`same` / `stale` / `unknown`（旧读数没记指纹）。 */
+export interface CacheKeyCell {
+  tri: string;
+  reason: string;
+  changed: string[];
+  affected: string[];
+  affected_why: string;
+  text: string;
+  recorded: { fingerprint: string; model: string; base_url: string };
+}
+
+/** 一档的四格读数（`cachectl.tier_reading()` 的键逐字）。 */
+export interface CacheTier {
+  tier: string;
+  label: string;
+  lean_enabled: boolean;
+  tri: string;
+  reason: string;
+  warmed: boolean;
+  fresh: boolean | null;
+  fresh_reason: string;
+  not_fresh: string[];
+  version_mismatch: boolean;
+  covered: number;
+  covered_fresh: number;
+  total: number;
+  missing: string[];
+  absent: string[];
+  absent_reason: Record<string, string>;
+  at: string;
+  prompt_version: string;
+  readings_prompt_version: string;
+  spent_usd: number | null;
+  model: string;
+  per_target: Record<string, CacheTargetCell>;
+  key: CacheKeyCell;
+}
+
+/**
+ * 当前这一趟会用哪一档（`cachectl.active_reading()` 的键逐字）。
+ *
+ * 为什么单独一格：`tiers` 回答"两档各自落没落地"，回答不了"我现在打开的这一档用的是
+ * 哪一份缓存"。`tri` 是三态（`found` / `unknown`）：读不出来时 `why` 说理由、`text`
+ * 是"当前没有可用缓存"那一句；这时 `fresh` 是 `false`，但它的意思是"这一趟不能当
+ * 新鲜用"，不是"量过了发现变了" —— 先看 `tri`，再看 `fresh`。
+ *
+ * `text` 是给人看的那一行，命令行 `cache status` 印的是同一个字符串（同一个函数出）；
+ * 页面只把里面的加粗标记画成粗体，不另拼文案。
+ */
+export interface CacheActive {
+  tier: string;
+  label: string;
+  lean: boolean;
+  strategy: string;
+  run_at: string;
+  prompt_version: string;
+  readings_prompt_version: string;
+  covered: string;
+  covered_count: number;
+  total: number;
+  missing: string[];
+  absent: string[];
+  fresh: boolean;
+  tri: string;
+  why: string;
+  text: string;
+}
+
+/** 网页顶部那条提醒（`cachectl.status()["reminder"]`）。 */
+export interface CacheReminder {
+  active: boolean;
+  tri: string;
+  tiers: string[];
+  text: string;
+  affected: string[];
+  /** 这个提醒属于哪一片缓存（指纹 + 模型）：换 key 之后它变了，被关掉的横幅会再现。 */
+  dismiss_key: string;
+}
+
+/** `GET /api/cache` 的整份读数。 */
+export interface CacheView {
+  schema: number;
+  at: string;
+  readings: string;
+  lean_now: boolean;
+  prompt_version: string;
+  key: {
+    configured: boolean;
+    source: string;
+    model: string;
+    base_url: string;
+    key_chars: number;
+    fingerprint: string;
+  };
+  tiers: Record<string, CacheTier>;
+  /** 按当前开关，这一趟会命中哪一档（顶部横幅与面板都先画这一行）。 */
+  active: CacheActive;
+  reminder: CacheReminder;
+  verdict: {
+    tri: string;
+    unknown_tiers: string[];
+    stale_tiers: string[];
+    key_unknown_tiers: string[];
+  };
+}
+
+/**
+ * 预热一档（`POST /api/cache/warm`）：真发请求、真的花钱。
+ *
+ * `confirm: "1"` 由后端当硬要求（缺它一律 400，盘上零改动），前端不许替用户默认填上 ——
+ * 按钮上的二次确认（`ConfirmButton`）就是那一步。
+ *
+ * `dryRun: true` 只算计划（零花费、同步返回，`extra.plan` 里是完整的计划）；
+ * 不给它才是真预热：后端起 detached 子进程，回执里给 `pid` 与日志路径。
+ */
+export async function postCacheWarm(body: {
+  lean: "on" | "off";
+  dryRun?: boolean;
+}): Promise<WriteResult> {
+  return await postJSON<WriteResult>(ENDPOINTS.cacheWarm, {
+    lean: body.lean,
+    dry_run: body.dryRun === true ? "1" : "",
+    confirm: "1",
+  });
+}

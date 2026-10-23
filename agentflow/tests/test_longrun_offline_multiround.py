@@ -118,8 +118,10 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
     steps.append("E.run_experiment")
 
     # ⑥ B 登记一条自证命题（零文献依赖）＋ V 审核（桩模型稳定判"成立"）
+    #    2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从『猜想』注册」）：入口档
+    #    写成 conjecture；"它是不是定理"由 V 签完之后 `evidencebits.derive_grade` 现算。
     req = dict(origin="own_result", statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
-               kind="theorem", proof_text=PROOF, line_range={"start": 1},
+               kind="conjecture", proof_text=PROOF, line_range={"start": 1},
                doc_id="000000", quote_verified=False, quote_reason="自证：无外部引文")
     row = _as_dict(b.register_statement(**req))
     assert row.get("ok"), row

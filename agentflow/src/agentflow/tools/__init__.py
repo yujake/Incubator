@@ -65,6 +65,11 @@ from .base import SIDE_EFFECTS as _BASE_SIDE_EFFECTS
 #: 字符串约定必须集中定义）要防的事。`schema` 不 import `tools`（依赖方向是 tools -> schema），所以没有循环。
 from ..schema import ROLES, CONDUCTOR_ROLE  # noqa: E402  (放在这里是为了让上面的说明紧贴定义)
 
+#: 角色可见性的唯一判定入口（业主 2026-10-22：「在Lean开关没开时隔绝L」）。
+#: 本文件读它两次：`TOOL_ROLES` 与装配期"Lean 专属模块要不要装"。两次都不自己再判
+#: 一遍开关 —— 判定真身在 `leanscope.lean_reading()`，改开关立刻跟着变（没有缓存）。
+from .. import leanscope as _LEANSCOPE  # noqa: E402
+
 #: 能持有工具的角色名 = 可被召唤的 A–H + 主控 M。
 #:
 #: 为什么主控也要在工具词汇里：`schema.ROLES` 回答的是"谁可以被召唤"（主控不在里面，
@@ -73,6 +78,17 @@ from ..schema import ROLES, CONDUCTOR_ROLE  # noqa: E402  (放在这里是为了
 #: 于是"派活"这件事在它手上没有动作可用（一句需求要落地只能靠调用方替它拼 plan）。
 #: 把主控加进工具词汇不会让它变得可被召唤：可召唤性只由
 #: `capabilities.ALLOWED_EDGES` / `NON_SUMMONABLE` 决定。
+#:
+#: 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这份名单刻意仍然完整（含 L）。
+#: 理由是它有两个不同的用途，而混成一个是会松掉一道真门：
+#:   - 它是**声明词表**：`ToolSpec.roles` 里能出现哪些角色名由它判（`P-1` 的
+#:     "拼错了名字"闸门）。把 L 从这里删掉，等于让 `roles=tuple(S.ROLES)` 这种
+#:     "全体角色"的写法变成拼写错误 ⇒ `table_tools` / `conductor_tools` /
+#:     `manuscript_tools` 会整模块装不上（实测），而那与业主的要求毫无关系；
+#:   - 它是**读数来源**：`cli tools` 的逐角色计数与 skills 的工具面普查都从它派生。
+#:     这些读数是面向人的，所以它们逐个过 `leanscope.visible_roles`（见那两处）。
+#: "L 在开关关着时不存在"这件事落在更下面一层：`ToolRegistry._role_surface` 对
+#: `leanscope.is_hidden` 的角色直接返回空面（工具面与可调用面都是空）。
 TOOL_ROLES: tuple[str, ...] = tuple(ROLES) + (CONDUCTOR_ROLE,)
 
 #: 只读角色：它们的工具面里不允许出现任何写工具，无论 `ToolSpec.roles` 怎么声明。
@@ -173,6 +189,10 @@ _MODULES: tuple[str, ...] = (
     # （`analysis.register_report`）。组前缀 `analysis` 由模块名机械派生
     # （`_TOOL_GROUP_PREFIXES`），所以这一行也等于给那件工具一个可核的组前缀。
     "analysis_tools",
+    # 2026-10-22（业主施工单：新设 L 这个 Lean 形式化者）：L 的两件工具
+    # （`formal.formalize` / `formal.check_formal`）。组前缀 `formal` 由模块名
+    # 机械派生；工具只挂给 L（`roles=("L",)`），所以 E 的工具面一个字都没变。
+    "formal_tools",
 )
 
 #: `_MODULES` 里每个模块产出的工具名组前缀（`verify_tools` ⇒ `verify`）。
@@ -233,6 +253,13 @@ class RegistryBuild:
     registry: ToolRegistry
     loaded: list[str] = field(default_factory=list)
     skipped: list[dict] = field(default_factory=list)
+    #: 这一趟「按下开关」没有装配的 Lean 专属模块（`leanscope.LEAN_ONLY_TOOL_MODULES`）。
+    #:
+    #: 为什么单列一格、而不是塞进 `skipped`：`skipped` 的语义是"该装上却没装上"
+    #: （装配缺陷，`ok` 为假、`strict=True` 时直接抛），而这里是"按用户设的开关
+    #: 本来就不该装"—— 折进 `skipped` 会让"关掉 Lean"变成"装配出错"，
+    #: 而且 `strict=True` 的验收会因此炸，逼人把一个正确的行为当成故障去关掉。
+    lean_off: list[str] = field(default_factory=list)
     #: 装配期"参数面"判据真的走过了几个工具（`N-5` 的工具侧覆盖率读数）。
     #:
     #: 为什么要有这个数字：`register` 里那条判据的结论是"零违反"，而
@@ -250,6 +277,8 @@ class RegistryBuild:
             "count": len(self.registry),
             "loaded_modules": self.loaded,
             "skipped_modules": self.skipped,
+            # 按开关不装的模块（不是缺陷：见 `lean_off` 字段的注释）。
+            "lean_off_modules": list(self.lean_off),
             # `N-5` 的覆盖率读数：参数面判据走过了几个工具（见字段注释）。
             "params_checked": self.params_checked,
             # FC-17 的接线状态：可打印的事实，不是"去看源码猜"。
@@ -389,7 +418,14 @@ def build_registry(
 
     loaded: list[str] = []
     skipped: list[dict] = []
+    lean_off: list[str] = []
     for mod_name in _MODULES:
+        # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：Lean 专属模块在开关关着时
+        # 一件都不装配 —— 谁的工具面里都没有 `formal.*`，连 L 自己的也没有。
+        # 判定读 `leanscope`（唯一入口），这里只做"跳过并如实记一笔"。
+        if mod_name in _LEANSCOPE.LEAN_ONLY_TOOL_MODULES and not _LEANSCOPE.lean_on():
+            lean_off.append(mod_name)
+            continue
         try:
             mod = __import__(f"{__name__}.{mod_name}", fromlist=[mod_name])
         except Exception as e:  # noqa: BLE001
@@ -469,7 +505,8 @@ def build_registry(
 
     if strict and skipped:
         raise ToolError(f"严格模式下不允许模块被跳过：{skipped}")
-    return RegistryBuild(registry=reg, loaded=loaded, skipped=skipped, params_checked=params_checked)
+    return RegistryBuild(registry=reg, loaded=loaded, skipped=skipped, params_checked=params_checked,
+                         lean_off=lean_off)
 
 
 def build_for_role(role: str, **kwargs: Any) -> RegistryBuild:
@@ -479,7 +516,7 @@ def build_for_role(role: str, **kwargs: Any) -> RegistryBuild:
     for spec in build.registry.for_role(role):
         filtered.register(spec)
     return RegistryBuild(registry=filtered, loaded=build.loaded, skipped=build.skipped,
-                         params_checked=build.params_checked)
+                         params_checked=build.params_checked, lean_off=build.lean_off)
 
 
 __all__ = [

@@ -40,7 +40,12 @@ PAPER_MD = """# 外部论文（他人写的）
 
 STATEMENT = {
     "statement_full": "设 G 是任意有限群，且 c 是某量；则 c(G) ≤ 1。",
-    "proof_text": "Proof. 见第 3 节（外部论文逐字摘录）。",
+    # D1（2026-10-22 第二版）：`proof_text` 是"引文回验要比对的那一段"，而这一条现在
+    # 真的去 `source/external.md` 里比（写侧会把那一篇重新打开、`locate_span` 算区间）。
+    # 改前这里是一句 "Proof. 见第 3 节（外部论文逐字摘录）。" —— 那段字不在那篇论文里，
+    # 于是"逐字比对通过"从来没有人核过；现在它会被判 false（查过、不一致）。
+    # 夹具改成真正逐字出现在 PAPER_MD 里的那一句，让"合规登记"这条路照旧走得通。
+    "proof_text": "设 G 是任意有限群，且 c 是某量；则 c(G) ≤ 1。",
     "kind": "theorem",
     "label": "主定理",
     "statement_text": "对任意有限群 G，c(G) ≤ 1",
@@ -151,10 +156,18 @@ def _lit(st: Store, tmp_path: Path) -> str:
 
 
 def test_b_register_statement_writes_a_complete_row(tmp_path: Path):
-    """正控：一条合规命题写进 `statements`，三件套与三态那一栏都读得回来。"""
+    """正控：一条合规命题写进 `statements`，三件套与三态那一栏都读得回来。
+
+    D1（2026-10-22 第二版）：这一条现在给 B 真的 `extract_text` —— 写侧会重新打开
+    `source/external.md`、在那篇的全文里定位 `proof_text`，并把算出来的区间写进
+    `quote_span`。所以这里的 `quote_verified is True` 是一条核过的读数，
+    而不再是入参的回声。
+    """
+    from agentflow.extract import extract_text
+
     st = _store(tmp_path)
     lit_id = _lit(st, tmp_path)
-    b = AgentB(st, extractor=None, extract_text=LL.extract_text if hasattr(LL, "extract_text") else None)
+    b = AgentB(st, extractor=None, extract_text=extract_text)
     res = b.register_statement(source_lit_id=lit_id, **STATEMENT)
     assert res["ok"] is True, res
     rows = st.rows("statements")
@@ -165,6 +178,9 @@ def test_b_register_statement_writes_a_complete_row(tmp_path: Path):
     assert got.statement_full == STATEMENT["statement_full"]
     assert got.proof_text == STATEMENT["proof_text"]
     assert got.quote_verified is True and got.origin == "external_lit"
+    assert str(rows[0].get("quote_span") or ""), (
+        "逐字通过必须留下区间（D1）：这一笔是拿那一篇的全文真比对出来的", rows[0])
+    assert "命中区间" in str(rows[0].get("quote_reason") or ""), rows[0]
 
 
 def test_b_register_statement_refuses_bad_input_without_writing(tmp_path: Path):
@@ -252,8 +268,11 @@ def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
                                        "source_lit_id": "", "page_range": None})
     assert own_bare["ok"] is False and own_bare["kind"] == "missing_own_source", own_bare
     own_stmt = {**STATEMENT, "statement_full": STATEMENT["statement_full"] + "（我们自己证的版本）"}
+    # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：这一条量的是
+    # 出处那一栏（doc_id / line_range），与 kind 无关 ⇒ 按猜想注册。
     own = b.register_statement(**{**own_stmt, "origin": "own_result", "source_lit_id": "",
-                                  "page_range": None, "doc_id": "0000"})
+                                  "page_range": None, "doc_id": "0000",
+                                  "kind": "conjecture"})
     assert own["ok"] is True, own
     rows = st.rows("statements")
     assert len(rows) == 2, rows
@@ -306,8 +325,11 @@ def test_b_register_statement_normalizes_string_page_numbers(tmp_path: Path):
     # 内容给成另一条命题：同一 `statement_full` 再交一次是"重复读数"（秘书查重），
     # 而这一条判的是行号归一 —— 两件事混在一起会让红的时候分不清是谁坏了。
     own_stmt = {**STATEMENT, "statement_full": STATEMENT["statement_full"] + "（行号归一那一条）"}
+    # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：这一条量的是
+    # 出处那一栏（doc_id / line_range），与 kind 无关 ⇒ 按猜想注册。
     own = b.register_statement(**{**own_stmt, "origin": "own_result", "source_lit_id": "",
                                   "page_range": None, "doc_id": "0000",
+                                  "kind": "conjecture",
                                   "line_range": {"start": "120", "end": "148"}})
     assert own["ok"] is True, own
     own_row = [r for r in st.rows("statements") if r["origin"] == "own_result"][0]
@@ -331,8 +353,11 @@ def test_own_result_and_external_lit_want_different_source_fields(tmp_path: Path
         return acc.criteria["statements_have_assumptions_and_source"]
 
     # 正控：自有结果给 doc_id ⇒ 通过（页空缺不扣分）
+        # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：这一条量的是
+    # 出处那一栏（doc_id / line_range），与 kind 无关 ⇒ 按猜想注册。
     b.register_statement(**{**STATEMENT, "origin": "own_result", "source_lit_id": "",
-                            "page_range": None, "doc_id": "0000"})
+                            "page_range": None, "doc_id": "0000",
+                            "kind": "conjecture"})
     assert _crit() == "pass", st.rows("statements")
 
     # 负控：自有结果什么都不给 ⇒ fail（判据与写入口同一条规则）
@@ -454,8 +479,10 @@ def test_a_proofless_register_statement_is_recorded_and_marked_not_refused(tmp_p
     c = Conductor(st, registry=_agents(st))
     reg = build_registry(store=st, conductor=c).registry
 
+    # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：没有证明的这一档
+    # 本来就是猜想（F-05：落库 + 挂待办）⇒ 按猜想注册。
     own = {**STATEMENT, "origin": "own_result", "source_lit_id": "",
-           "page_range": None, "doc_id": "0000",
+           "page_range": None, "doc_id": "0000", "kind": "conjecture",
            "quote_verified": None, "quote_reason": "证明还没做完（推到第 3 步卡住）"}
     own.pop("proof_text")  # 自产命题、证明还没做完 ⇒ 登记 + 标记（不再拒绝）
     # 召唤方是 A（2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V）。

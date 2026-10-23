@@ -236,6 +236,16 @@ class ProjectNotAWorkspace(RuntimeError):
     """目标文件夹存在，但它既不是空的、也不是本框架的工作区。"""
 
 
+class BudgetNotLandable(RuntimeError):
+    """显式给的额度写不进 `budget.json` ⇒ 这一次不跑。
+
+    为什么不"拿旧额度接着跑"：`budget.limit_usd()` 的取值口径是"寄存器优先"，
+    于是旧寄存器会静默压过用户刚给的数（实测形态：`budget.json` 里是 0.5，用户给
+    `--budget-usd 10`，闸门照旧按 0.5 停，而输出里一个字都不提）。那一格是
+    "用户以为给了 10"与"闸门按 0.5 停"同时成立的形态，必须在开跑之前停下来。
+    """
+
+
 @dataclass
 class RunRecord:
     """一次项目运行的记账（写进 `project.json`，也是打印给用户的那份读数）。"""
@@ -485,6 +495,23 @@ def plan(root: Path | str, name: str | None = None, *, start: str = "auto",
     }
 
 
+def _land_budget_register(path: Path, usd: float) -> dict[str, Any]:
+    """把这一趟显式给的额度写进 `<项目根>/budget.json`，返回一份可打印的回执。
+
+    回执里带 `before_usd` 与 `after_usd` 两格：那一行读数要能回答"寄存器原来是多少、
+    现在是多少" —— 只报新值时，"用户以为给了 10、而寄存器原先就是 0.5"这件事在输出里
+    看不见（C4 的第二半就是它）。
+    """
+    from . import budget as B
+
+    before = B.read_register(path)
+    got = B.write_initial(path, usd, by="cli", note="agentflow project run --budget-usd")
+    return {"ok": bool(got.get("ok")), "reason": str(got.get("reason") or ""),
+            "path": str(got.get("path") or B.register_path(path)),
+            "before_usd": before["total_usd"], "after_usd": float(usd),
+            "added_count": got.get("added_count")}
+
+
 def list_projects(root: Path | str) -> list[dict[str, Any]]:
     """列出现有项目（名字 / 状态 / 冷暖次数 / 上次模式）。只读。"""
     base = Path(root)
@@ -707,11 +734,19 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
                 extract: bool = False, extract_rounds: int = 1, lean: bool = False,
                 now: str | None = None, transport: Any = None,
                 text_store_dir: str | Path | None = None,
+                budget_usd_explicit: bool = False,
                 run_topic_fn: Any = None) -> dict:
     """跑一个项目：解析工作区 → （冷启动则建）→ 登记本地书 → 端到端一次 → 记项目卡。
 
+    `budget_usd_explicit=True` 表示这个额度是调用方（CLI 的 `--budget-usd`）显式给的：
+    这一趟会把它落进 `<项目根>/budget.json`（C4，见 :func:`_land_budget_register`）。
+    为什么落盘点在这里而不是调用方：冷启动的工作区是在本函数里 `create_project` 出来的，
+    在那之前往那个文件夹里写 `budget.json` 会让 `Store.init()` 的外来条目守卫判它不干净
+    （实测：新目录上先写寄存器，`run --budget-usd` 直接以 store 错误退出）；而写晚了，
+    这一趟就已经花过钱了。所以"工作区已存在、还没花钱"那个时刻只在这个函数里。
+
     `run_topic_fn` 是给测试用的接缝（不传就用真的 `runflow.run_topic`）。
-    返回 `{"project", "run", "result"}`；`result` 就是 `run_topic` 的那份字典
+    返回 `{"project", "run", "result", "budget"}`；`result` 就是 `run_topic` 的那份字典
     （含 `exit_code` / `reason` / `artifacts` / `spent_usd_this_run`）。
     """
     from . import schema as S
@@ -727,6 +762,15 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
         if card.get("card_unreadable"):
             notes.append("project.json 读不了（内容坏了）⇒ 本次运行不会覆盖它，请人看一眼")
     card = _load_card(ref.path)
+
+    # ---- 显式额度落盘（C4）：工作区已经存在、第一次模型调用还没发生。
+    budget_landing: dict[str, Any] = {}
+    if budget_usd_explicit:
+        budget_landing = _land_budget_register(ref.path, float(budget_usd))
+        if not budget_landing.get("ok"):
+            raise BudgetNotLandable(
+                f"{budget_landing.get('path')} 写不进去（{budget_landing.get('reason')}）"
+                "⇒ 这一次不跑：拿寄存器里的旧额度接着跑，等于让它静默压过这次给的额度")
 
     store = Store(ref.path)
     ingest: dict[str, Any] = {}
@@ -837,7 +881,8 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     (ref.path / "project.json").write_text(
         json.dumps(card, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
 
-    return {"project": ref.to_dict(), "run": record.to_dict(), "result": result}
+    return {"project": ref.to_dict(), "run": record.to_dict(), "result": result,
+            "budget": budget_landing}
 
 
 # --------------------------------------------------------------------------- #

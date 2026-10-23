@@ -4,16 +4,28 @@
 一次性脚本正是这类系统后来无法复现的根源。
 
     python -m agentflow init / submit / run-a / run-b / status / verify / rebuild / repair / demo
+    python -m agentflow start --task "..." --project p3 --mode research --dry-run   # 统一入口
     python -m agentflow run --topic "..." --budget-usd 5 --out DIR   # 端到端一条命令
+    python -m agentflow doctor --selfcheck                          # 包内源码自检（不花钱）
 """
+
+# 2026-10-22（`draft/145-CLI升级方案.md`，业主「到时候我们会花一整段时间慢慢看的，
+# 务必该怎么改就怎么改」）：这一批只动 CLI 的形状 —— 一个入口（`start`）讲清
+# "干什么 / 在哪干 / 花多少钱 / 开不开 Lean"，四条老命令（`run` / `run-agent` /
+# `project run` / `web`）保留为别名并共用同一个执行体 `_run_spec`。
+# 角色行为、工具层、读数口径都不在这一次的范围里。
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import textwrap
+import time
 from collections.abc import Mapping
-from dataclasses import replace
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from . import schema as S
@@ -226,12 +238,95 @@ def _print_lean_selfcheck(sc: Mapping) -> None:
     print(tty.bullet(f"note：{_lean_cell(sc.get('note'))}"))
 
 
+# ---------------------------------------------------------------- 工作区初始化（R-32 的第四条出路）
+
+#: 工作区标记文件名：`store._foreign_dir_guard_should_refuse` 的白名单出口之一
+#: （`projects.classify` 也认它）。
+WORKSPACE_MARKER = ".agentflow-workspace"
+
+#: 「这个目录里已经有用户的投料，仍然按工作区初始化」那条开关。
+#: 拒绝文案里教的就是它（`init_workspace` 的 except 分支）。
+ALLOW_FOREIGN_FLAG = "--allow-foreign-entries"
+
+
+def _foreign_entries(root: Path) -> list[str]:
+    """root 里不属于本框架的条目名。
+
+    白名单从 `store._WORKSPACE_ROOT_ENTRIES` 读（唯一一份），不在这里再抄一遍 ——
+    两份白名单的漂移形态是"CLI 认为可以、`Store.init()` 认为不可以"，
+    而判据只会照着其中一份红。
+    """
+    from .store import _WORKSPACE_ROOT_ENTRIES
+
+    if not root.is_dir():
+        return []
+    return sorted(p.name for p in root.iterdir() if p.name not in _WORKSPACE_ROOT_ENTRIES)
+
+
+def _marker_text(root: Path, *, by: str) -> str:
+    """标记文件的内容：谁落的、什么时候落的、认了几个外来条目。"""
+    foreign = _foreign_entries(root)
+    lines = ["agentflow workspace",
+             f"created_at={S.now_iso()}",
+             f"created_by={by}",
+             f"accepted_foreign_entries={len(foreign)}"]
+    if foreign:
+        head = ", ".join(foreign[:10]) + (" ..." if len(foreign) > 10 else "")
+        lines.append(f"accepted_entries={head}")
+    return "\n".join(lines) + "\n"
+
+
+def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
+                   cmd: str, force: bool = False) -> int:
+    """`Store.init()` 的 CLI 外壳：把 `R-32` 那一档的拒绝翻成「照着改」的话。
+
+    为什么要有这一层（业主原文：「里面有 2 个不属于我们的条目」）：`R-32` 的判据本身
+    是对的（它挡的是"在别人的目录里凭空建库"，`draft/28` §136.3 事故 B），缺的是一条
+    「我认这个目录，里面那些文件是我自己投的料」的出口。`--force` 不是那条出口：
+    它是"清空重建"。所以这里补第四条路 —— 带 `allow_foreign_entries` 时先落
+    `.agentflow-workspace`（`store.init` 自己明写的白名单出口），再照常 init；
+    判据本体一个字没改（它在禁改区 `schema-migration` 里）。
+
+    返回退出码：0 = 建成了；2 = 拒绝了（文案里教那条开关）或没查成。
+    两个值都有调用方（`main` 的 StoreError 那一档也是 2），所以不许折成布尔。
+    """
+    if allow_foreign_entries:
+        marker = Path(root) / WORKSPACE_MARKER
+        if not marker.exists():
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(_marker_text(Path(root), by=f"cli {cmd} {ALLOW_FOREIGN_FLAG}"),
+                              encoding="utf-8", newline="\n")
+    try:
+        st.init(force=force)
+    except StoreError as e:
+        # 原样打出判据的话（它是"为什么拒"的唯一出处），再补一句"照着改"。
+        # 那句只在"拒绝的理由确实是外来条目"时才打：root 是个文件、或者写者锁超时
+        # 那些形态教这条开关会把人教错方向。
+        print(f"[{cmd}] {e}", file=sys.stderr)
+        foreign = _foreign_entries(Path(root))
+        if foreign:
+            print(tty.paint(
+                f"[{cmd}] {Path(root)} 里那 {len(foreign)} 个条目要么是用户自己投的料"
+                f"（例如一篇 PDF）、要么是这个目录本来就不干净。若它就是要用的工作区："
+                f"加 {ALLOW_FOREIGN_FLAG} 再跑一次 —— 它会先落 "
+                f"{WORKSPACE_MARKER}（`store` 的白名单出口），再按工作区初始化；"
+                f"那些文件不删、不改，只是从此算这个工作区的条目。",
+                "grey"), file=sys.stderr)
+        return 2
+    return 0
+
+
 # ---------------------------------------------------------------- 子命令
 
 
 def cmd_init(args) -> int:
-    st = make_store(args.root)
-    st.init(force=args.force)
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    st = make_store(root)
+    code = init_workspace(st, root,
+                          allow_foreign_entries=bool(getattr(args, "allow_foreign_entries", False)),
+                          cmd="init", force=bool(args.force))
+    if code != 0:
+        return code
     print(f"[init] 已初始化：{st.data}")
     return 0
 
@@ -568,12 +663,22 @@ def cmd_tools(args) -> int:
         print(json.dumps(build.summary(), ensure_ascii=False, indent=2, default=str))
         return 0
     print(f"工具总数：{len(build.registry)}（已装模块 {len(build.loaded)}：{', '.join(build.loaded) or '无'}）")
+    if build.lean_off:
+        # 业主 2026-10-22：按开关不装的模块要能看见（不然读者会去查"为什么少了两个工具"）。
+        print(f"按 Lean 开关不装的模块（不是缺陷）：{', '.join(build.lean_off)}")
     if build.skipped:
         print("未装上的模块（并行开发中属正常）：")
         for s in build.skipped:
             print(f"  - {s['module']} [{s['stage']}] {s['error'][:80]}")
     role = args.role
     if role:
+        from agentflow import leanscope as _LEANSCOPE
+
+        if _LEANSCOPE.is_hidden(role):
+            # 按名取一个"这一档下不存在"的角色：说清理由，不打印一张空清单。
+            payload = _LEANSCOPE.hidden_refusal(role, surface="agentflow tools --role")
+            print(payload["error"], file=sys.stderr)
+            return 2
         specs = build.registry.for_role(role)
         print(f"\n角色 {role} 可用工具（{len(specs)} 个）：")
         for s in sorted(specs, key=lambda x: x.name):
@@ -583,7 +688,13 @@ def cmd_tools(args) -> int:
         # 只读角色的写工具泄漏必须一眼可见：它是"审校者手里有没有刀"的直接答案。
         from agentflow.tools import READ_ONLY_ROLES, SIDE_EFFECTS_WRITE
 
-        by_role = {r: len(build.registry.for_role(r)) for r in TOOL_ROLES}
+        from agentflow import leanscope as _LEANSCOPE
+
+        # 业主 2026-10-22：`TOOL_ROLES` 是声明词表（刻意完整，见 `tools/__init__` 的
+        # 注释）；这一行是读数，所以按可见性过滤 —— 开关关着时不存在的角色不许在这里
+        # 留一个 "L: 0 个工具" 的格子。
+        by_role = {r: len(build.registry.for_role(r))
+                   for r in _LEANSCOPE.visible_roles(TOOL_ROLES)}
         print(f"\n各角色工具数：{by_role}")
         leaks = {
             r: [s.name for s in build.registry.for_role(r) if s.side_effect in SIDE_EFFECTS_WRITE]
@@ -736,6 +847,715 @@ def cmd_demo(args) -> int:
     return run_demo(Path(args.root or DEFAULT_ROOT).resolve(), reset=not args.keep)
 
 
+# ---------------------------------------------------------------- 统一执行体（RunSpec）
+#
+# 业主 2026-10-22 口径（`draft/145-CLI升级方案.md` §2）：一个入口讲清"干什么 / 在哪干 /
+# 花多少钱 / 开不开 Lean"，其余都是它的子模式；老命令全部保留为别名，不许破坏脚本。
+#
+# 这一节就是那句话的落点：五条入口（`start` 与四条老命令）各自只做一件事 —— 把自己
+# 那一套旗标翻成一个 `RunSpec`，然后交给同一个 `_run_spec`。旗标在那一层归一，于是
+# 「同一个概念三个旗标」（`draft/145` 的 F3）不会再变成三处各自解释一遍。
+#
+# 为什么是"共用执行体"而不是把老命令改写成 argv 重排（把 `run --topic T` 改排成
+# `start --task T`）：argv 重排会把三条老命令的用法错、`--help` 与缺省值全部换一套，
+# 而 C2 的字面要求是"行为与今天逐字一致"。所以解析层一个字不动，只在执行层收口。
+
+#: `RunSpec.mode` 的四个取值。它们回答"这一趟走哪条路"，不回答"敲的是哪个子命令"。
+MODE_TOPIC = "topic"
+MODE_ROLE = "role"
+MODE_PROJECT = "project"
+MODE_WEB = "web"
+
+#: 各模式在"没显式给 `--budget-usd`"时的缺省额度。
+#:
+#: 三个数不一样是刻意的：`run` 那一趟是单次作答（1.0），`project run` 是带登记的一趟
+#: （0.5），角色循环没有缺省上限（None = 不限，由墙钟与步数管）。它们现在只在这张表里
+#: 写一遍 —— 老命令 parser 上的 default 由 `tests/test_cli_upgrade_c1_c8.py` 与本表对拍。
+MODE_DEFAULT_BUDGET: Mapping[str, float | None] = {
+    MODE_TOPIC: 1.0,
+    MODE_PROJECT: 0.5,
+    MODE_ROLE: None,
+    MODE_WEB: None,
+}
+
+#: `--lean` 的三档（业主口径：auto 先跑自检，usable 才开）。
+LEAN_CHOICES: tuple[str, ...] = ("on", "off", "auto")
+
+#: `start --mode` 认得的值。`auto` 是"按目录状态推断"，其余是显式指定。
+#: `research` 不是第五条路：它是 role 那一档的 flavor（原 `run-agent M --subagents`）。
+START_MODES: tuple[str, ...] = ("auto", "topic", "role", "research",
+                               "project", "cold", "warm")
+
+#: `start --dry-run --json` 那一份的键集合。
+#:
+#: 写在这里是为了让它只有一个真身：判据
+#: `tests/test_cli_upgrade_c1_c8.py::test_c1_dry_run_json_carries_exactly_the_documented_keys`
+#: 断言当次输出的键集合逐字等于这一份 —— "口径写在 docstring 里"只有配上那条判据才是
+#: 可执行的。
+START_PLAN_KEYS: tuple[str, ...] = ("mode", "task", "workspace", "project", "model",
+                                    "budget", "lean", "summons", "writes", "spend")
+
+#: help 首屏的分组（`draft/145` 的 F5：二十多个子命令分两页才看全，且没有分组）。
+#:
+#: 为什么是一张表而不是给 `add_parser` 加 group：argparse 的 subparsers 没有分组能力
+#: （`_SubParsersAction` 只认一张 `choices` 字典），而三处既有判据正是靠"唯一一个
+#: subparsers action"取 `choices` 的。所以分组只能发生在呈现层
+#: （`_GroupedHelpFormatter`），这张表就是那份呈现的唯一真身。
+#:
+#: 每个子命令都必须落在某一组里：漏登记的不会静默消失 —— 格式化时落到"未分组"那一栏
+#: 并照样印出来，判据也断言并集等于全部子命令。
+SUBCOMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("研究（跑一次研究）", (
+        "start", "run", "run-agent", "run-a", "run-b", "submit",
+        "analyze", "pipeline", "closing")),
+    ("项目（工作区与产物）", (
+        "project", "evidence", "artifacts", "status-report", "answer", "inbox")),
+    ("诊断（看清这台机器与这一趟）", (
+        "status", "verify", "tools", "doctor", "budget", "stop", "cache")),
+    ("运维（数据维护与界面）", (
+        "init", "rebuild", "repair", "demo", "web")),
+)
+
+
+@dataclass(frozen=True)
+class RunSpec:
+    """这一趟要做什么 —— 五条入口唯一的交汇形状。
+
+    它只装"每条入口都说得上话"的那几格（干什么 / 在哪干 / 用什么模型 / 花多少钱 /
+    开不开 Lean / 要不要盯 / 是不是试运行），剩下的旗标仍然留在 `args` 上原样透传：
+    把 `--extract-rounds` 这种只属于一条路的开关也搬进来，只会让这个对象长成第二个
+    `Namespace`，而"归一"就白做了。
+    """
+
+    mode: str
+    task: str = ""
+    role: str = ""
+    root: Path | None = None
+    out: Path | None = None
+    project_name: str | None = None
+    project_start: str = "auto"
+    model: str | None = None
+    budget_usd: float | None = None
+    budget_usd_given: bool = False
+    lean: str = "off"
+    lean_given: bool = False
+    research: bool = False
+    watch: bool = False
+    dry_run: bool = False
+    as_json: bool = False
+    origin: str = ""
+
+
+@dataclass(frozen=True)
+class _LeanPlan:
+    """Lean 三档归一之后的结论：开不开、要不要动环境变量、读数里那一句话。"""
+
+    enabled: bool
+    env_value: str | None
+    note: str = ""
+
+
+class _BudgetUsdAction(argparse.Action):
+    """`--budget-usd` 的落点：除了值，还要记下"这个数是不是用户显式给的"。
+
+    为什么必须记：`run` 的缺省是 1.0、`project run` 是 0.5、`run-agent` 是不限 ——
+    只看 `args.budget_usd` 的分不开"用户给了 1.0"与"用户什么都没给、走了缺省"。
+    而这两件事在 C4 上是相反的结论：前者要把 1.0 落进寄存器，后者一个字节都不该写。
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        setattr(namespace, self.dest, values)
+        setattr(namespace, "budget_usd_given", True)
+
+
+def _spec_from(args, *, mode: str, origin: str, task: str | None = None,
+               role: str | None = None, research: bool | None = None,
+               project_name: str | None = None, project_start: str | None = None,
+               watch: bool | None = None, dry_run: bool | None = None) -> RunSpec:
+    """把一条入口的旗标翻成 `RunSpec`；只给这条入口才知道的那几格传 `overrides`。
+
+    所有取值都走 `getattr`：判据里有手搭 `Namespace` 的老调用方（`tests/test_agent_cli.py`
+    的 `_args`），缺一格就让整条 `run-agent` 崩在属性上，是这次升级不该付的代价。
+    """
+    budget = getattr(args, "budget_usd", None)
+    if budget is None:
+        budget = MODE_DEFAULT_BUDGET.get(mode)
+    raw_lean = getattr(args, "lean", None)
+    if isinstance(raw_lean, bool):
+        # 手搭 Namespace 的老调用方可能直接把 bool 塞进这一格：按它本来的意思读。
+        lean, lean_given = ("on" if raw_lean else "off"), True
+    else:
+        lean = str(raw_lean or "off")
+        lean_given = raw_lean is not None
+    if lean not in LEAN_CHOICES:
+        lean, lean_given = "off", True
+    root_raw = getattr(args, "root", None)
+    out_raw = getattr(args, "out", None)
+    return RunSpec(
+        mode=mode,
+        task=str(task if task is not None
+                 else (getattr(args, "task", "") or getattr(args, "topic", "") or "")),
+        role=str(role if role is not None else (getattr(args, "role", "") or "")),
+        # 工作区根不在这里 mkdir：`run` 的缺省落点是一个临时目录，那件事归 `_exec_topic`
+        # 自己办（它在真的要走模型时才建），否则试运行会先建出一个空目录。
+        root=Path(root_raw) if root_raw else None,
+        out=Path(out_raw) if out_raw else None,
+        project_name=project_name if project_name is not None
+        else getattr(args, "name", None),
+        project_start=str(project_start if project_start is not None
+                          else (getattr(args, "start", "auto") or "auto")),
+        model=getattr(args, "model", None),
+        budget_usd=float(budget) if budget is not None else None,
+        budget_usd_given=bool(getattr(args, "budget_usd_given", False)),
+        lean=lean,
+        lean_given=lean_given,
+        research=bool(research if research is not None
+                      else getattr(args, "research", False)),
+        watch=bool(watch if watch is not None else getattr(args, "watch", False)),
+        dry_run=bool(dry_run if dry_run is not None else getattr(args, "dry_run", False)),
+        as_json=bool(getattr(args, "json", False)),
+        origin=origin,
+    )
+
+
+def _resolve_lean(spec: RunSpec) -> _LeanPlan:
+    """把 `--lean on|off|auto` 归一到"这一趟开不开"。
+
+    - `off`：关。只有在用户显式写了 `--lean off` 时才注入
+      `AGENTFLOW_LEAN_ENABLED=0`；不显式给就一个字都不动 —— "这条命令从不提 Lean"与
+      "这条命令要求关掉 Lean"是两件事（改前 `run` / `project run` 都不碰这条开关，
+      C2 要求逐字不变；判据 `tests/test_projects.py` 那条透传用例也钉着这一格）。
+    - `on`：开，注入 `=1` 并清掉提示词侧的读数缓存。
+    - `auto`：先跑一次真自检（`refresh=True`，不吃旧缓存），`usable` 才当 on；其余三档
+      一律当 off，并把原因写进 `note` —— 于是形式化结论记 unknown 而不是 verified。
+    """
+    if spec.mode == MODE_WEB:
+        return _LeanPlan(False, None)
+    choice = str(spec.lean or "off")
+    if choice == "on":
+        return _LeanPlan(True, "1")
+    if choice == "auto":
+        from . import leantoolchain as LT
+        from . import settings as SET
+
+        # `auto` 问的是"如果把它打开，这台机器可用吗" —— 所以自检必须按"开着"跑一次。
+        # 只改开关、不传 `lean=`：那个参数是"解释器在哪"的提示，传 `"on"` 会被当成一个
+        # 文件路径去解析（实测读数逐字是 `--lean=on 不存在（解析成 D:\Incubator\on）`）。
+        reading = LT.lean_selfcheck_reading(
+            root=spec.root, refresh=True,
+            env={**os.environ, SET.ENV_LEAN_ENABLED: "1"})
+        state, why = LT.formal_evidence_state(reading)
+        if state == "verified":
+            return _LeanPlan(True, "1")
+        return _LeanPlan(
+            False, "0",
+            note=("[lean] --lean auto：自检没给出 usable（"
+                  f"{_lean_cell((reading or {}).get('state'))}）⇒ 这一趟照常跑，"
+                  f"但一切形式化结论记 unknown。原因：{why}"))
+    return _LeanPlan(False, "0" if spec.lean_given else None)
+
+
+@contextmanager
+def _lean_scope(plan: _LeanPlan):
+    """在这一趟运行期间把 Lean 开关钉在 `plan.env_value` 上，跑完原样还原。
+
+    为什么要还原而不是直接改：环境变量是进程级的，而 `cli.main` 在判据里只是一个函数
+    调用（同一进程里会连着跑几十趟）。不还原的话，"这一趟 `--lean off`"会静默地把后面
+    每一趟都关掉 —— 那种漂移在输出里完全看不见。
+    """
+    if plan.env_value is None:
+        yield
+        return
+    from . import agent_prompts as AP
+    from . import settings as SET
+
+    before = os.environ.get(SET.ENV_LEAN_ENABLED)
+    os.environ[SET.ENV_LEAN_ENABLED] = plan.env_value
+    # 提示词侧把"开关值 + 工具链读数 + 两段文案"缓存在一起（`agent_prompts` 的那几个
+    # `lru_cache`）⇒ 换了开关必须一起清，否则模型读到的还是上一档的角色面。
+    AP.reset_toolchain_readings()
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop(SET.ENV_LEAN_ENABLED, None)
+        else:
+            os.environ[SET.ENV_LEAN_ENABLED] = before
+        AP.reset_toolchain_readings()
+
+
+def _budget_notice(before_usd, after_usd, path: str, *, stream=None) -> None:
+    """预算那一行读数：把"原来多少 → 现在多少"点名出来（C4 的第二半）。
+
+    为什么非点名不可（改前的现场）：`budget.json` 里留着 0.5 时，
+    `limit_usd(fallback=10.0)` 返回 0.5 且一声不响 —— 于是"我给了 10"与"闸门按 0.5 停"
+    同时成立，而输出里一个字都没提。
+    """
+    out = stream if stream is not None else sys.stdout
+    new = float(after_usd)
+    if before_usd is None:
+        print(tty.bullet(f"预算：{new:g} 美元（已落盘 {path}）"), file=out)
+    elif abs(float(before_usd) - new) > 1e-9:
+        print(tty.bullet(
+            f"预算：{float(before_usd):g} → {new:g} 美元（寄存器里原来是 {float(before_usd):g}，"
+            f"命令行给了 {new:g}；已按命令行落盘，旧的那一笔留在追加史里）"), file=out)
+    else:
+        print(tty.bullet(f"预算：{new:g} 美元（与寄存器一致）"), file=out)
+
+
+def _land_budget(spec: RunSpec, root: Path, *, stream=None) -> int:
+    """显式给了 `--budget-usd` 就落盘（C4）。返回 0 = 没给或写成了，2 = 没查成。
+
+    改前的两处错（同一批查出来的）：
+
+    1. 三条 run 命令一次都没调 `budget.write_initial` —— 传了不写，下次查看仍是旧值，
+       于是用户只能先 `budget --set 10` 绕过；
+    2. 寄存器压过 flag —— `budget.json` 里留着 0.5 时，`limit_usd(fallback=10.0)`
+       返回 0.5 且一声不响。
+
+    落盘同时把第 2 条也修掉了：写完之后寄存器里就是那个显式值，闸门读到的正是它。
+    写不成（只读盘 / 坏寄存器被拒）时必须停下 —— 拿旧额度接着跑，等于把第 2 条换个
+    形状复现一遍。
+
+    调用点必须在"工作区已经存在、还没花钱"这一刻：不是在这个函数里顺手 init，
+    因为空目录里先落一个 `budget.json` 会让 `Store.init()` 的外来条目守卫判它不干净
+    （实测：新目录上 `run --budget-usd 0.5` 直接以 store 错误退出）。
+    """
+    if not spec.budget_usd_given or spec.budget_usd is None:
+        return 0
+    from . import budget as B
+
+    before = B.read_register(root)
+    got = B.write_initial(root, spec.budget_usd, by="cli",
+                          note=f"agentflow {spec.origin} --budget-usd")
+    if not got.get("ok"):
+        print(tty.paint(f"[budget] 没查成：{got.get('reason')}", "yellow"), file=sys.stderr)
+        print(tty.paint(
+            "[budget] 显式给的额度没落进寄存器 ⇒ 这一次不跑（拿旧额度接着跑，"
+            "等于让寄存器静默压过 --budget-usd）", "yellow"), file=sys.stderr)
+        return 2
+    _budget_notice(before["total_usd"], spec.budget_usd,
+                   str(got.get("path") or ""), stream=stream)
+    return 0
+
+
+def _has_ledger(path: Path) -> tuple[bool, str]:
+    """这个项目里有没有跑过的台账（决定 `--mode auto` 该落 research 还是 warm）。
+
+    判据刻意取"`data/tasks.jsonl` 里有几行"而不是"文件夹在不在"：一个刚 `plan` 过、
+    还没跑过的项目当然没有 DAG，把它当成"有台账"会让 `--mode auto` 一上手就跑研究循环。
+    """
+    tasks = Path(path) / "data" / "tasks.jsonl"
+    if not tasks.is_file():
+        return False, "没有 data/tasks.jsonl"
+    try:
+        rows = sum(1 for line in tasks.read_text(encoding="utf-8").splitlines()
+                   if line.strip())
+    except OSError as exc:
+        return False, f"data/tasks.jsonl 读不出来（{type(exc).__name__}）"
+    return rows > 0, f"data/tasks.jsonl {rows} 行"
+
+
+def _target_workspace(spec: RunSpec, args) -> tuple[Path, dict | None]:
+    """这一趟真正的落点：项目模式给项目文件夹，其余给工作区根。
+
+    "在哪干"这一格只在这里答一次。`web` 那一档也走它，所以 `start --watch --project P`
+    开出来的网页读的正是 P 的盘 —— 而不是"用户以为的工作区"（F6 那条现场：
+    `web` 不含"当前项目"，监督一次还得自己拼 `--root projects/p3-verify2`）。
+
+    这里一律按 `start="auto"` 解析：它回答的是"落点在哪"，不回答"要不要新建" ——
+    后者归 `project_start`，而试运行那一档要的正是"别替我把新建这一步办了"。
+    """
+    root = Path(spec.root or DEFAULT_ROOT).resolve()
+    if spec.mode not in (MODE_PROJECT, MODE_WEB) or not spec.project_name:
+        return root, None
+    from . import projects as P
+
+    base = P.projects_dir(getattr(args, "projects_dir", None))
+    try:
+        ref = P.resolve(base, spec.project_name, start="auto")
+    except P.ProjectNotAWorkspace as exc:
+        print(tty.paint(f"[start] {exc}", "yellow"), file=sys.stderr)
+        return root, None
+    return ref.path, ref.to_dict()
+
+
+def _summons_text(spec: RunSpec) -> str:
+    """预检里的"会召唤谁"：这一趟会不会起角色、起哪些。
+
+    为什么这一格非有不可（`draft/145` 的 F1）：三个入口长得像、语义完全不同 ——
+    `run` 是单趟作答、不召唤任何角色，`run-agent` 才是真跑某个角色的循环。今天先跑了
+    `run` 的人会以为"角色都起来了"，白花一次钱才发现什么角色都没起。
+    """
+    if spec.mode == MODE_WEB:
+        return "不起任何角色（只开网页）"
+    if spec.mode == MODE_TOPIC:
+        return "不召唤任何角色（端到端跑主题：检索 / 作答 / 逐字回验都不经角色循环）"
+    if spec.mode == MODE_PROJECT:
+        return "不召唤任何角色（项目工作区那一步是端到端主题跑）；要角色循环请 --mode research"
+    from . import capabilities as _C
+    from . import leanscope as _LS
+    from . import schema as _S
+
+    top = spec.role or _S.CONDUCTOR_ROLE
+    kids = tuple(_C.ALLOWED_EDGES.get(top, ()))
+    visible = _LS.visible_roles([top, *kids])
+    if spec.research:
+        return (f"{top} 起十角色循环（--subagents）：{top} 可以召唤 "
+                + "、".join(r for r in visible if r != top))
+    return (f"只跑 {top} 这一个循环；它按边可以召唤 "
+            + ("、".join(r for r in visible if r != top) or "（没有出边）"))
+
+
+def _print_plan(spec: RunSpec, args) -> int:
+    """`--dry-run`：把将要发生的一切打出来，一个字节都不写、一次模型都不调（C1）。
+
+    两处刻意的绕行：
+
+    1. 不复用 `_lean_first_screen` —— 它会真的起一次 Lean 自检子进程（分钟级，而且
+       会往临时目录写 .lean 采样）。预检要回答的是"开不开"，读数从开关那一层取，自检
+       那一格如实写"没跑"。
+    2. 项目那一档复用 `projects.plan`（它自己的 docstring 就是"不建目录、不写字节"），
+       而不是 `projects.run_project` 再 dry-run —— 后者第一件事就是 `create_project`。
+    """
+    from . import projects as P
+    from .modelgw import spec_from_env
+    from . import settings as SET
+
+    workspace, project = _target_workspace(spec, args)
+    model_spec = spec_from_env()
+    if spec.model:
+        model_spec = replace(model_spec, model=spec.model)
+    project_note = ""
+    if spec.mode == MODE_PROJECT or (spec.mode == MODE_WEB and spec.project_name):
+        base = P.projects_dir(getattr(args, "projects_dir", None))
+        start = "auto" if spec.mode == MODE_WEB else spec.project_start
+        try:
+            # 名字不给就由 `projects.plan` 取下一个号：预检要回答"会落在哪个文件夹"。
+            plan = P.plan(base, spec.project_name, start=start)
+        except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
+            # 试运行要说清"你要求的冷/热启动会撞上什么"，而不是替你把文件夹处理掉。
+            print(tty.paint(f"[start] {exc}", "yellow"), file=sys.stderr)
+            plan = P.plan(base, spec.project_name, start="auto")
+        project = plan["project"]
+        project["will_create"] = plan["will_create"]
+        project["run_index"] = plan["run_index"]
+        project_note = str(plan.get("note") or "")
+        workspace = Path(plan["project"]["path"])
+    _has_rows, ledger_why = _has_ledger(workspace)
+    if project:
+        note = project_note
+    else:
+        note = (f"这一趟的落点还没有台账（{ledger_why}）" if not _has_rows
+                else f"这一趟的落点已有台账（{ledger_why}）")
+    try:
+        lean_on, lean_src = SET.lean_enabled()
+    except (ValueError, OSError) as exc:
+        lean_on, lean_src = False, f"读不懂（{type(exc).__name__}）"
+    plan_out = {
+        "mode": spec.mode,
+        "task": spec.task,
+        "workspace": str(workspace),
+        "project": project or {},
+        "model": {"name": model_spec.model, "base_url": model_spec.base_url},
+        "budget": {"usd": spec.budget_usd, "given": spec.budget_usd_given,
+                   "register": str(_register_path(workspace))},
+        "lean": {"choice": spec.lean, "now_on": bool(lean_on),
+                 "now_source": str(lean_src),
+                 "selfcheck": "没跑（试运行不启动检查器）"},
+        "summons": _summons_text(spec),
+        "writes": [] if spec.mode == MODE_WEB else [
+            f"工作区 {workspace}" + ("（会新建）" if project and project.get("will_create")
+                                     else ""),
+            "out/run-N 六件产物" if spec.mode in (MODE_TOPIC, MODE_PROJECT) else "运行记录与会话事件",
+        ] + ([f"预算寄存器 budget.json（{spec.budget_usd:g}）"] if spec.budget_usd_given else []),
+        "spend": "不花钱（试运行一次模型都不调）",
+    }
+    if spec.as_json:
+        print(json.dumps(plan_out, ensure_ascii=False, default=str))
+        return 0
+    budget_cell = ("不限量（没给 --budget-usd，这个模式也没有缺省上限）"
+                   if plan_out["budget"]["usd"] is None
+                   else f"{plan_out['budget']['usd']:g} 美元"
+                        + ("（命令行显式给的，会落盘）" if spec.budget_usd_given
+                           else "（该模式的缺省值，不落盘）"))
+    lean_cell = (f"开关现在{'开' if lean_on else '关'}（来源 {lean_src or '缺省'}）；"
+                 f"这一趟 --lean {spec.lean}；自检没跑（试运行不启动检查器）")
+    print("")
+    for line in tty.panel(
+        "试运行：将要发生的一切（一个字节都不写、一次模型都不调）",
+        [("模式", ("research（十角色循环）" if spec.research else spec.mode)),
+         ("模型", f"{model_spec.model}（base={model_spec.base_url}）"),
+         ("预算", budget_cell),
+         ("Lean", lean_cell),
+         ("会召唤", plan_out["summons"]),
+         ("会写这些", "；".join(plan_out["writes"]) or "（不写任何东西）")],
+        body=[("任务：" + spec.task) if spec.task else "任务：（没给 —— 只起网页）",
+              *([note] if note else [])],
+        verbatim=[("工作区：", str(workspace))],
+        tone="cyan",
+    ):
+        print(line)
+    print(tty.bullet(tty.paint(plan_out["spend"], "bold")))
+    return 0
+
+
+def _register_path(workspace: Path) -> Path:
+    """预算寄存器的落点（与 `budget.register_path` 同一个名字，不另造一份口径）。"""
+    from . import budget as B
+
+    return B.register_path(workspace)
+
+
+def _current_round(root: Path, sid: str) -> int:
+    """这一段会话现在跑到第几轮（读会话事件里的轮号；读不到就是 0）。
+
+    为什么是 0 而不是 1：网页打开的那一刻可能什么都还没跑过，写 1 会让"还没开始"
+    与"正在第 1 轮"长得一样。
+    """
+    try:
+        from . import sessions as SS
+
+        events, _problems = SS.read_session(root, sid=sid)
+    except Exception:  # noqa: BLE001 —— 读不到轮号是"没读到"，不是 0 轮
+        return 0
+    best = 0
+    for event in events:
+        for key in ("round", "rounds", "round_index"):
+            value = event.get(key)
+            if isinstance(value, int) and value > best:
+                best = value
+    return best
+
+
+def _with_watch(spec: RunSpec, args) -> int:
+    """`--watch`：起网页、把 URL / 工作区 / sid / 当前轮打出来，再决定跑不跑。
+
+    两条路（口径写在 `start` 的 help 里）：
+
+    - 不带任务 ⇒ 只起网页（等价于 `web` 加三格读数），服务一直开着，Ctrl-C 停；
+    - 带任务 ⇒ 服务在后台线程里，边跑边可监督；这一趟跑完就收工（要继续看就再 `web`）。
+
+    为什么不用 `webui.run(argv)`：它只印 URL，而这里要印的是四格（URL / 工作区 / sid /
+    当前轮）。`web` 那条老命令仍然逐字转发 `webui.run`（C2）。
+    """
+    import threading
+
+    from .webui import server as _WS
+
+    root, _project = _target_workspace(spec, args)
+    root.mkdir(parents=True, exist_ok=True)
+    srv = _WS.serve(
+        root,
+        host=str(getattr(args, "host", "127.0.0.1") or "127.0.0.1"),
+        port=int(getattr(args, "port", _WS.DEFAULT_PORT) or 0),
+        token=str(getattr(args, "token", "") or os.environ.get("AGENTFLOW_WEB_TOKEN", "")),
+        allow_writes=bool(getattr(args, "allow_writes", False)),
+        settings_write=not bool(getattr(args, "no_settings_write", False)),
+    )
+    host, port = srv.server_address[0], srv.server_address[1]
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    url = f"http://{shown}:{port}/"
+    sid = str(getattr(args, "sid", "") or _session_id())
+    round_no = _current_round(root, sid)
+    if spec.as_json:
+        print(json.dumps({"url": url, "root": str(root), "sid": sid, "round": round_no},
+                         ensure_ascii=False, default=str), flush=True)
+    else:
+        print(tty.paint(f"网页：{url}", "bold"), flush=True)
+        print(tty.bullet(f"工作区：{root}"))
+        print(tty.bullet(f"会话：{sid}；当前轮：{round_no}"))
+        if not spec.task:
+            print("Ctrl-C 停。", flush=True)
+    try:
+        if not spec.task or spec.mode == MODE_WEB:
+            srv.serve_forever()
+            return 0
+        thread = threading.Thread(target=srv.serve_forever, daemon=True)
+        thread.start()
+        return _dispatch(spec, args)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        try:
+            srv.shutdown()
+        except Exception:  # noqa: BLE001 —— 收尾失败不该盖掉这一趟的退出码
+            pass
+        srv.server_close()
+
+
+def _session_id() -> str:
+    """这一趟的会话号（与 `run-agent` 同一口径：环境变量优先，否则当天）。"""
+    from . import sessions as SS
+
+    return SS.session_id()
+
+
+def _dispatch(spec: RunSpec, args) -> int:
+    """把归一后的 `RunSpec` 交给对应那条路的执行体。"""
+    if spec.mode == MODE_WEB:
+        return _exec_web(spec, args)
+    if spec.mode == MODE_TOPIC:
+        return _exec_topic(spec, args)
+    if spec.mode == MODE_ROLE:
+        return _exec_role(spec, args)
+    if spec.mode == MODE_PROJECT:
+        return _exec_project(spec, args)
+    raise SystemExit(f"[start] 没查成：认不出的模式 {spec.mode!r}（"
+                     f"{'/'.join(START_MODES)}）")
+
+
+def _announce_cache_line(spec: RunSpec) -> None:
+    """起跑前打一行缓存读数（只加读数：读不到 / 不新鲜都不拦跑、不改退出码）。
+
+    为什么在这里、而不是在三条执行体各写一遍：`_run_spec` 是五条入口（`start` /
+    `run` / `run-agent` / `project run` / `web`）唯一的执行体，Lean 开关也已经归一
+    好了 —— 这一行说的"这一趟用哪一档"与真正发请求时读的开关是同一个值。
+
+    读的一方是 `cachectl.run_reading()`（它自己接住所有异常）：本函数因此只负责
+    "印出来 + 选流"。`--json` 那一档走 stderr，免得一行人话把 stdout 的 JSON 弄坏。
+    """
+    from . import cachectl as CC
+
+    got = CC.run_reading()
+    text = str(got.get("text") or "")
+    if not text:
+        return
+    stream = sys.stderr if spec.as_json else sys.stdout
+    if str(got.get("level")) == CC.RUN_WARNING:
+        print(tty.paint(text, "yellow"), file=stream, flush=True)
+    else:
+        print(text, file=stream, flush=True)
+
+
+def _run_spec(spec: RunSpec, args) -> int:
+    """唯一执行体：五条入口（`start` / `run` / `run-agent` / `project run` / `web`）都到这里。
+
+    它按固定顺序办四件共有的关口，再分派给那条路：
+
+    1. 试运行 ⇒ 只说、不做（连 Lean 自检都不起子进程）；
+    2. Lean 三档归一（`on` / `off` / `auto`），并把结果钉在环境变量上；
+    3. 显式 `--budget-usd` 落盘（C4）；
+    4. `--watch` 起网页并打印四格读数（C7）；
+    5. 分派。
+
+    归一后的值会写回 `args`（`topic` / `task` / `budget_usd` / `lean_enabled`）：三条执行体
+    仍然照原样读 `args`，于是"执行层收口"不会顺手改掉它们的行为（C2）。
+
+    起跑前多了一行缓存读数（:func:`_announce_cache_line`）：它只印一行、不返回任何值，
+    也不参与下面任何一个关口 —— 不新鲜照跑，退出码由执行体自己给。
+    """
+    args.topic = spec.task
+    args.task = spec.task
+    if spec.role:
+        args.role = spec.role
+    if spec.budget_usd is not None:
+        args.budget_usd = spec.budget_usd
+    if spec.dry_run:
+        return _print_plan(spec, args)
+    lean_plan = _resolve_lean(spec)
+    if lean_plan.note:
+        print(tty.paint(lean_plan.note, "yellow"),
+              file=(sys.stderr if spec.as_json else sys.stdout))
+    with _lean_scope(lean_plan):
+        args.lean_enabled = lean_plan.enabled
+        _announce_cache_line(spec)
+        if spec.watch:
+            return _with_watch(spec, args)
+        return _dispatch(spec, args)
+
+
+def _missing_task() -> str:
+    """`start` 缺 `--task` 时的"人话"（C3：要说清该给哪个旗标，不许是 argparse 原文）。"""
+    return ('[start] 缺一样要跑的东西：给 --task "这次要做的事"（研究 / 项目 / 主题三档都要它）。'
+            "只想开网页监督就加 --watch；只想跑某一条角色的循环就 --mode role --role <角色>；"
+            "想先看看会发生什么就再加 --dry-run")
+
+
+def _spec_of_start(args) -> tuple[RunSpec | None, str]:
+    """把 `start` 的旗标推断成 `RunSpec`；推断不出来就返回一句人话（第二格非空）。"""
+    mode = str(getattr(args, "mode", "auto") or "auto")
+    task = str(getattr(args, "task", "") or "").strip()
+    role = str(getattr(args, "role", "") or "")
+    watch = bool(getattr(args, "watch", False))
+    name = getattr(args, "name", None)
+    root_raw = getattr(args, "root", None)
+    if root_raw and not getattr(args, "projects_dir", None):
+        # `--project` 的落点跟着 `--root` 走。老命令 `project run` 这一格保持原样
+        # （它从来不看 `--root`）—— C2 要求它的行为逐字不变，所以这条只写在 `start` 里。
+        args.projects_dir = str(Path(root_raw).resolve() / "projects")
+    if mode == "role":
+        if not role:
+            return None, ("[start] 缺一个要跑的角色：--mode role 要给 --role <角色>"
+                          f"（可选 {'/'.join([*S.ROLES, S.CONDUCTOR_ROLE])}）。"
+                          "想跑十角色循环就 --mode research（那时角色缺省 M）")
+        return _spec_from(args, mode=MODE_ROLE, origin="start", role=role), ""
+    if not task:
+        if mode == "auto" and watch:
+            return _spec_from(args, mode=MODE_WEB, origin="start", watch=True), ""
+        return None, _missing_task()
+    if mode == "research":
+        return _spec_from(args, mode=MODE_ROLE, origin="start",
+                          role=role or S.CONDUCTOR_ROLE, research=True), ""
+    if mode == "topic":
+        return _spec_from(args, mode=MODE_TOPIC, origin="start"), ""
+    if mode in ("cold", "warm"):
+        return _spec_from(args, mode=MODE_PROJECT, origin="start",
+                          project_start=mode, task=task), ""
+    if mode == "project":
+        return _spec_from(args, mode=MODE_PROJECT, origin="start", task=task), ""
+    # ---- auto：按目录状态推断（`draft/145` §3.1）
+    from . import projects as P
+
+    base = P.projects_dir(getattr(args, "projects_dir", None))
+    try:
+        ref = P.resolve(base, name, start="auto")
+    except P.ProjectNotAWorkspace as exc:
+        return None, f"[start] 没查成：{exc}"
+    if name:
+        # 项目给出来了 ⇒ 这一趟就在那个项目里干（研究循环也一样）。不这么做的话，
+        # `--mode research --project p` 会把十角色循环跑在工作区根上、产物落在项目外面。
+        args.root = str(ref.path)
+    if ref.mode == "cold":
+        return _spec_from(args, mode=MODE_PROJECT, origin="start",
+                          project_start="cold", task=task), ""
+    has_ledger, _why = _has_ledger(ref.path)
+    if has_ledger:
+        return _spec_from(args, mode=MODE_ROLE, origin="start",
+                          project_start="warm", role=role or S.CONDUCTOR_ROLE,
+                          research=True), ""
+    return _spec_from(args, mode=MODE_PROJECT, origin="start",
+                      project_start="warm", task=task), ""
+
+
+def cmd_start(args) -> int:
+    """统一入口（`draft/145` §3.1）：一个入口讲清"干什么 / 在哪干 / 花多少钱 / 开不开 Lean"。
+
+    ## `--mode` 怎么推断（不写就是 auto）
+
+    1. 没给 `--task`：给了 `--watch` ⇒ 只开网页（`web` 的别名）；没给 ⇒ 人话报错并点名
+       `--task`（C3）；
+    2. 项目文件夹不存在或为空 ⇒ cold；
+    3. 项目文件夹已初始化、且 `data/tasks.jsonl` 有行 ⇒ research（十角色循环，角色缺省 M）；
+    4. 项目文件夹已初始化、但没有台账 ⇒ warm。
+
+    ## 三条"人话"
+
+    - 缺 `--task` 且没 `--watch`：说清"要么给任务、要么只开网页"；
+    - `--mode role` 少 `--role`：点名 `--role` 与可选值；
+    - `--mode research` 不用给角色：角色缺省 M（`draft/145` 的 F2 正是位置参数缺失时
+      argparse 那句原文 —— 用户从"缺什么"里读不出"该给哪个旗标"）。
+
+    退出码：0 做成了 / 1 查过了、有问题 / 2 没查成（用法错或前提不满足）。
+    """
+    spec, problem = _spec_of_start(args)
+    if problem:
+        print(tty.paint(problem, "yellow"), file=sys.stderr)
+        return 2
+    assert spec is not None
+    return _run_spec(spec, args)
+
+
 def cmd_run(args) -> int:
     """端到端跑一个主题：`run_topic` 的退出码就是这个进程的退出码。
 
@@ -746,21 +1566,34 @@ def cmd_run(args) -> int:
 
     `--model` 只覆盖模型名：key / base_url / 超时 / 重试一律来自环境变量
     （`spec_from_env`），命令行不许传 key —— argv 会进 shell 历史与进程列表。
+
+    这一层只剩"翻成 `RunSpec` 再交给 `_run_spec`"（`draft/145` §3.2 的别名形态：
+    解析层不动、执行层收口）；真正的执行体是 :func:`_exec_topic`。
     """
+    return _run_spec(_spec_from(args, mode=MODE_TOPIC, origin="run"), args)
+
+
+def _exec_topic(spec: RunSpec, args) -> int:
+    """原 `cmd_run` 的执行体（形状逐字保留；差异只有三处：root / out / lean 改从
+    `RunSpec` 取，`budget_usd` 已经是归一后的值）。"""
     import tempfile
 
     from .modelgw import spec_from_env
     from .runflow import run_topic
 
     # 顶层参数 `--root` 必须写在子命令之前（argparse 的位置规则），
-    # 缺省时给一个临时工作区（理由见上面的 docstring）。
-    root = Path(args.root) if args.root else Path(tempfile.mkdtemp(prefix="agentflow-run-"))
-    out = Path(args.out) if args.out else Path(tempfile.mkdtemp(prefix="agentflow-run-out-"))
-    spec = spec_from_env()
-    if args.model:
-        spec = replace(spec, model=args.model)
+    # 缺省时给一个临时工作区（理由见 `cmd_run` 的 docstring）。
+    root = Path(spec.root) if spec.root else Path(tempfile.mkdtemp(prefix="agentflow-run-"))
+    out = Path(spec.out) if spec.out else Path(tempfile.mkdtemp(prefix="agentflow-run-out-"))
+    model_spec = spec_from_env()
+    if spec.model:
+        model_spec = replace(model_spec, model=spec.model)
     st = make_store(root)
     st.init()
+    # 显式额度在这里落盘：工作区已经存在、还没花一分钱（见 `_land_budget` 的注释）。
+    code = _land_budget(spec, root)
+    if code:
+        return code
     # ---- 第一屏：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
     # 它回答的是"这一趟能不能信形式化证据"，所以必须在跑之前就露出来，
     # 而不是等报告里出现一条 proof 行之后才去怀疑环境。
@@ -770,7 +1603,7 @@ def cmd_run(args) -> int:
         topic=args.topic,
         budget_usd=args.budget_usd,
         out_dir=out,
-        spec=spec,
+        spec=model_spec,
         max_calls=args.max_calls,
         prompt_version=args.prompt_version,
         now=args.now,
@@ -778,10 +1611,10 @@ def cmd_run(args) -> int:
         # 必须由调用方显式要。关闭时产物里会如实写"没有发起全文获取"，
         # 而不是让读者以为"取了、但没有开放全文"。
         fulltext=bool(args.fulltext),
-        # `--lean` 缺省关闭：它会真的起 Lean 检查器（先装、再跑，可能是分钟级）。
-        # 关闭时"没有形式化验证证据"这件事照样写进未接线清单 ——
-        # 少写它会让读者把"没有 proof 级证据"读成"证明了但没写下来"。
-        lean=bool(args.lean),
+        # `--lean` 三档（`on` / `off` / `auto`）已经在 `_run_spec` 里归一成
+        # `lean_enabled` 这一格：改前这里写的是 `bool(args.lean)`，而 `--lean off`
+        # 会让 `bool("off")` 为真 —— 关不掉的开关比没有开关更坏。
+        lean=bool(getattr(args, "lean_enabled", False)),
         # 裸 `run` 没有项目根，所以逐页正文默认内联；要"同一本书只存一份"
         # 就显式给一个落点（依据 `draft/30` §T0-7）。
         text_store_dir=getattr(args, "text_store_dir", None),
@@ -1241,23 +2074,58 @@ def cmd_project(args) -> int:
                 print(line)
             return 0
 
-        # ---- 第一屏：Lean 工具链开机自检（与 `run-agent` / `run` 同一档，业主 2026-10-22）。
-        lean_reading = _lean_first_screen(root)
-        res = P.run_project(
-            root, name=args.name, start=args.start, topic=args.topic or "",
-            books_dir=args.books, books_limit=args.books_limit,
-            budget_usd=args.budget_usd, max_calls=args.max_calls,
-            retrieval_limit=args.retrieval_limit, fulltext=not args.no_fulltext,
-            extract=bool(args.extract), extract_rounds=args.extract_rounds,
-            lean=bool(args.lean),
-            now=args.now,
-            # 不给就由 `run_project` 用项目根下的 `.fulltext/`（T0-6 的默认）
-            text_store_dir=getattr(args, "text_store_dir", None),
-        )
+        # ---- run 那一档走统一执行体（`draft/145` §3.2）：旗标归一、预检、预算落盘、
+        # Lean 三档这几个关口都在 `_run_spec` 里，这里只剩"交给它"。
+        return _run_spec(_spec_from(args, mode=MODE_PROJECT, origin="project run"), args)
     except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
         # 三态：这三条都是"这一步没做成"（用法/前提不满足），不是"跑过了、结论是失败"。
         print(f"[project] 没查成：{exc}", file=sys.stderr)
         return 2
+
+
+def _exec_project(spec: RunSpec, args) -> int:
+    """原 `cmd_project` 的 run 那一档（形状逐字保留；差异只有 `--lean` 改从
+    `RunSpec` 取，以及项目落点由 `RunSpec` 归一后的 `--projects-dir` 决定）。"""
+    from . import projects as P
+
+    root = P.projects_dir(getattr(args, "projects_dir", None))
+    try:
+        # ---- 第一屏：Lean 工具链开机自检（与 `run-agent` / `run` 同一档，业主 2026-10-22）。
+        lean_reading = _lean_first_screen(root)
+        res = P.run_project(
+            root, name=spec.project_name, start=spec.project_start, topic=spec.task or "",
+            books_dir=getattr(args, "books", None),
+            books_limit=getattr(args, "books_limit", None),
+            budget_usd=getattr(args, "budget_usd", None),
+            max_calls=getattr(args, "max_calls", 2),
+            retrieval_limit=getattr(args, "retrieval_limit", 7),
+            fulltext=not bool(getattr(args, "no_fulltext", False)),
+            extract=bool(getattr(args, "extract", False)),
+            extract_rounds=getattr(args, "extract_rounds", 1),
+            # `--lean` 三档已经在 `_run_spec` 里归一成 `lean_enabled` 这一格：改前这里
+            # 写的是 `bool(args.lean)`，而 `--lean off` 会让 `bool("off")` 为真。
+            lean=bool(getattr(args, "lean_enabled", False)),
+            # 显式额度这一格：`run_project` 在"建好工作区、还没花钱"那一刻把它落盘
+            # （那里是唯一正确的时刻 —— 见 `_land_budget` 的注释）。
+            budget_usd_explicit=spec.budget_usd_given,
+            now=getattr(args, "now", None),
+            # 不给就由 `run_project` 用项目根下的 `.fulltext/`（T0-6 的默认）
+            text_store_dir=getattr(args, "text_store_dir", None),
+        )
+    except P.BudgetNotLandable as exc:
+        # 显式额度没落进寄存器 ⇒ 一个字节都不往下走（拿旧额度接着跑等于让它静默压过 flag）。
+        print(f"[project] 没查成：{exc}", file=sys.stderr)
+        return 2
+    except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
+        # 三态：这三条都是"这一步没做成"（用法/前提不满足），不是"跑过了、结论是失败"。
+        print(f"[project] 没查成：{exc}", file=sys.stderr)
+        return 2
+
+    landing = res.get("budget") or {}
+    if landing.get("ok"):
+        _budget_notice(landing.get("before_usd"), landing.get("after_usd"),
+                       str(landing.get("path") or ""),
+                       stream=(sys.stderr if bool(getattr(args, "json", False)) else None))
 
     pj, run, result = res["project"], res["run"], res["result"]
     emit = print
@@ -1466,7 +2334,11 @@ def _shell_tools(ask, out) -> int:
     out("")
     for line in tty.rule("角色工具面"):
         out(line)
-    out(tty.paint("  可用角色：" + " ".join(S.ROLES), "grey"))
+    # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这一行是用户看得见的角色名单，
+    # 开关关着时不存在的角色不许出现（它会让读者以为"这个角色今天没派活"）。
+    from agentflow import leanscope as _LEANSCOPE
+
+    out(tty.paint("  可用角色：" + " ".join(_LEANSCOPE.visible_roles(S.ROLES)), "grey"))
     role = _ask_text(ask, "  角色", "H")
     out("")
     return main(["tools", "--role", role])
@@ -1770,7 +2642,16 @@ def cmd_run_agent(args) -> int:
     `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）。改前它是静默的 `no_change`（真机
     `projects/mp4` 计划 000003 的 r1/r2 逐字："子目标 sg1 有判据但没有脚本，而 E 没能把它写出来
     （no_seam）⇒ 未推进"）——"有判据没脚本"与"跑了但没结果"在读数上从此分得开。
+
+    这一层与 `run` / `project run` / `web` 一样只剩"翻成 `RunSpec` 再交给 `_run_spec`"
+    （`draft/145` §3.2 的别名形态）；真正的执行体是 :func:`_exec_role`。
     """
+    return _run_spec(_spec_from(args, mode=MODE_ROLE, origin="run-agent"), args)
+
+
+def _exec_role(spec: RunSpec, args) -> int:
+    """原 `cmd_run_agent` 的执行体（形状逐字保留；差异只有 `--subagents` 那一处：
+    `start --mode research` 归一成的 `spec.research` 与它同义）。"""
     from . import agent_loop as AL
     from . import autonomy as AU
     from . import host as H
@@ -1779,7 +2660,26 @@ def cmd_run_agent(args) -> int:
     if why:
         print(f"[run-agent] 用法错：{why}", file=sys.stderr)
         return 2
-    if bool(getattr(args, "subagents", False)):
+    # ---- 业主 2026-10-22（「在Lean开关没开时隔绝L」）：开关关着时没有这个角色。
+    #
+    # 为什么在这里挡而不是让它自己撞进装配：`host._build` 那一刻抛的是受控的
+    # `leanscope.RoleHidden`，而 `run-agent` 是一个人手动敲的命令 —— 它该拿到的是一句
+    # 能照着改的话 + 一个明确的退出码（2 = 用法错，与上面那条同档），不是一个栈。
+    # 判定读 `leanscope`（唯一入口），关/开/读不出三档的话都由它的读数给。
+    from . import leanscope as _LEANSCOPE
+    from . import settings as _SET
+
+    if _LEANSCOPE.is_hidden(str(getattr(args, "role", ""))):
+        _rd = _LEANSCOPE.lean_reading()
+        print(tty.paint(
+            f"[run-agent] 角色 {args.role} 只在 Lean 形式化开关打开时存在："
+            f"reason={_rd.reason}；{_rd.detail}。", "yellow"), file=sys.stderr)
+        print(tty.paint(
+            f"[run-agent] 要用它就把开关打开（{_SET.ENV_LEAN_ENABLED}=1 或设置文件 "
+            f"toolchain.{_SET.LEAN_ENABLED_KEY} = true）；否则改派别的角色。", "grey"),
+            file=sys.stderr)
+        return 2
+    if bool(getattr(args, "subagents", False)) or spec.research:
         # `--subagents`（2026-09-30）：把所有已声明的角色动作都交给模型驱动 ——
         # "各角色像主控的 subagent"这句话的部署开关。
         #
@@ -1792,20 +2692,64 @@ def cmd_run_agent(args) -> int:
         # 7–8 步、以 bad_json_limit 收场、概念与关系一条没涨。批量消化这类活应当
         # 让角色跑确定性动作（并发由实例轴给），只把"判断类"动作交给模型。
         from . import capabilities as _C
+        from . import leanscope as _LEANSCOPE
         from . import schema as _S
 
-        for _role in _S.ROLES:
+        # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这一串会变成"交给模型驱动"的
+        # (角色, 动作) 清单 ⇒ 开关关着时不存在的角色不进这张表（否则模型会去派一个
+        # 没有工具面、也没有提示词的角色）。
+        for _role in _LEANSCOPE.visible_roles(_S.ROLES):
             for _spec in _C.actions_for(_role):
                 table.setdefault((_role, _spec.action), {"max_steps": args.max_steps})
         print(tty.paint(f"[run-agent] --subagents：已把 {len(table)} 个 (角色,动作) 交给模型驱动"
                         "（含确定性动作 —— 那会被 LLM 循环替换，见 --help 的说明）", "bold"))
     root = Path(args.root or DEFAULT_ROOT).resolve()
     st = make_store(root)
-    st.init()
+    # `D5`：这条命令也会 init，所以它带的开关与 `init` 逐字相同（同一个助手、同一个名字）。
+    if init_workspace(st, root,
+                      allow_foreign_entries=bool(getattr(args, "allow_foreign_entries", False)),
+                      cmd="run-agent") != 0:
+        return 2
+    # 显式额度在这里落盘：工作区已经存在、还没花一分钱（见 `_land_budget` 的注释）。
+    # `--json` 那一档把它打到 stderr，理由与下面那句第一屏相同（stdout 必须可解析）。
+    _budget_code = _land_budget(spec, root,
+                                stream=(sys.stderr if bool(getattr(args, "json", False)) else None))
+    if _budget_code:
+        return _budget_code
     # ---- 第一屏：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
     # `--json` 那一档把它打到 stderr：机器读的 stdout 必须保持可解析
     # （一条人话混进 JSON 流里，下游拿到的是解析错误而不是结论）。
     _lean_first_screen(root, stream=(sys.stderr if bool(getattr(args, "json", False)) else None))
+
+    # ---- 停机开关的闩式快照（D19，业主 2026-10-22「用户摁停后仍开下一轮」）
+    #
+    # 为什么要在开跑之前读一次、而不是等轮间那一段自己读：开关是一次性信号 ——
+    # 读到它的那一趟在收尾时把它撤走（`agent_loop._consume_stop_at_teardown`），
+    # 于是"用户摁过停"这件事在盘上不留痕。多轮驱动层要是只在轮与轮之间问一句
+    # "文件还在不在"，那么"第 1 轮读到并撤走、第 2 轮问了个空"就是必然的形态。
+    #
+    # 这里取到的是一份闩式快照（at / reason / force 原样带着）：它回答"开跑之前它就在"，
+    # 与 autonomy 在轮间现读一次盘得到的读数合起来回答"这一趟见过那把开关没有"。
+    # 三态：读不成不折成"没人叫停" —— 打到 stderr 并如实传 None（那一格的读数不完整）。
+    stop_latch: dict[str, Any] = {}
+    from . import stopctl as _STOPCTL
+
+    try:
+        _switch = _STOPCTL.read_stop(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 没人叫停
+        _switch = None
+        print(tty.paint(f"[run-agent] 停机开关没读成（{type(exc).__name__}: {exc}）⇒ "
+                        "这一趟不知道自己开跑前有没有被叫停（不折成「没人叫停」）", "yellow"),
+              file=sys.stderr)
+    if _switch:
+        # 只带这几个键：负载里还有 `path` / `unreadable`，而这一层要的是
+        # "谁在什么时候为什么按的"（`stop_reason_of` 只读 `force`）。
+        stop_latch = {key: _switch.get(key)
+                      for key in ("reason", "by", "force", "at", "path") if key in _switch}
+        print(tty.paint(
+            f"[run-agent] 停机开关在盘上：reason={stop_latch.get('reason')}、"
+            f"by={stop_latch.get('by')}、force={stop_latch.get('force')}、"
+            f"at={stop_latch.get('at')} ⇒ 这一趟按『按用户要求停』办", "yellow"))
 
     # ---- 会话身份在这一刻定下，之后整趟不再漂移（`draft/37` §63，修法 B）
     #
@@ -1905,6 +2849,9 @@ def cmd_run_agent(args) -> int:
                                  usd_budget=args.budget_usd, max_steps=args.max_steps,
                                  sid=args.sid, from_env=False, resume=bool(args.resume),
                                  stop_file=args.stop_file,
+                                 # D19：开跑之前那一份闩式快照（开关是一次性信号，
+                                 # 读到它的那一趟收尾时会把它撤走 —— 只看盘必然读漏）。
+                                 stop_latch=(stop_latch or None),
                                  user_timeout_sec=getattr(args, "user_wait_sec", None))
         print(tty.paint(f"角色 {args.role} 自主跑完 {auto.rounds_done} 轮"
                         + (f"（其中 {auto.resumed_from} 轮是上一段做过的）"
@@ -1922,6 +2869,27 @@ def cmd_run_agent(args) -> int:
         # `checkpoint_mismatch`（拿 A 的进度续 B）同样查表 ⇒ 2 研究启动失败，
         # 不是"跑过了有问题" —— 它不再需要一条自己的分支。
         code = _autonomy_exit_code(auto)
+        # ---- 按用户要求停（D19）：这一档在改前根本走不到 —— 多轮那一层从「读盘」到
+        # 「上一轮的理由码」三层都断了，于是用户摁停之后第 2 轮照开。现在它停在这里，
+        # 并且这一行的三个读数就是那条判据的可见面：停在第几轮、开关上写着谁按的、
+        # `runs/stop-history.jsonl` 记了没有。
+        if auto.stop_reason in _STOPCTL.USER_STOP_REASONS:
+            last = auto.reports[-1] if auto.reports else None
+            switch = {}
+            try:
+                cp = json.loads(AU.checkpoint_path(root, args.role).read_text(encoding="utf-8"))
+                switch = dict(cp.get("stop_switch") or {})
+            except (OSError, ValueError):
+                switch = {}
+            print(tty.paint(
+                f"[run-agent] 按用户要求停（{auto.stop_reason}）：跑完第 "
+                f"{last.index if last else 0}/{args.rounds} 轮之后没有再开下一轮。"
+                f"开关：reason={switch.get('reason')}、by={switch.get('by')}、"
+                f"force={switch.get('force')}、at={switch.get('at')}；"
+                f"审计：{root / 'runs' / 'stop-history.jsonl'}（level={auto.stop_reason}）。"
+                "要继续做就 `--resume` 接着跑（那一停是上面那一趟的，不会带到下一趟）；"
+                "要撤掉盘上可能残留的那把开关用 `agentflow stop --clear`。", "bold"))
+            return code
         # 停在等用户（`draft/37` §72）：自主多轮那一层的停止判据现在有这一档了 ——
         # 上一轮停在等用户、而那个问题「还挂着」时，它不会开下一轮（`autonomy.py`
         # 的 `_stop_before_round`，判据在 `tests/test_resume_after_answer.py`）。
@@ -2144,6 +3112,125 @@ def cmd_answer(args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- 启动自检（包内源码）
+#
+# 业主 2026-10-22 记下的 F8：一次误伤就能把整条 CLI 打掉 —— 批量替换把
+# `{**q.to_dict(), …}` 变成 `{「q.to_dict(), …}`，于是所有子命令一起 SyntaxError。
+#
+# 两级，因为两级的代价差三个数量级：
+#   1. `main()` 那一级（`_broken_source_notice`）：只捕 SyntaxError / ImportError，
+#      0 ms。它接住的是"某个模块在运行时才 import"的那一类坏法 —— 真机里 `run` 的第一
+#      件事就是 import `runflow`，所以坏在那一层时用户看到的是一条栈；
+#   2. `doctor --selfcheck` 那一级（`selfcheck_package`）：显式全扫（实测
+#      1078–1188 ms / 238 个文件），按 (路径, mtime_ns, size) 缓存。`compile()` 要读全文
+#      再解析，而 stat 只是一次 syscall —— 这就是"想查就查、不想查就不查"的那一档。
+
+#: 全扫的 stat 缓存：`(路径, mtime_ns, size) -> 该文件的问题清单（空 = 干净）`。
+#:
+#: 为什么放在内存里而不是盘上：`doctor` 是只读体检，一个"为了加速而写一个缓存文件"的
+#: 体检会带来它自己的一类问题（缓存文件坏了 / 缓存属于另一个用户 / 缓存骗了人）。
+#: 进程内已经够用：同一次体检里重复调用、以及判据里连着扫两次，都命得中。
+_SELFCHECK_CACHE: dict[tuple[str, int, int], list[dict]] = {}
+
+
+def selfcheck_package(package_dir: str | Path | None = None) -> dict:
+    """全扫一个包里的每个 .py 文件，返回一份三态读数。
+
+    返回 `{checked, files, scanned, reused, problems, ms, root, unreadable}`：
+
+    - `problems` 非空 ⇒ 查过了、有坏文件（每条形如
+      `{"file": 路径, "line": 行号, "column": 列号, "error": 原话}`）；
+    - `checked=False` ⇒ 没查成（包目录都找不到）。它绝不是"干净"。
+    """
+    root = Path(package_dir) if package_dir is not None else Path(__file__).resolve().parent
+    if not root.is_dir():
+        return {"checked": False, "files": 0, "scanned": 0, "reused": 0,
+                "problems": [], "ms": 0.0, "root": str(root), "unreadable": [],
+                "reason": f"{root} 不是一个文件夹（连扫都没扫成）"}
+    started = time.monotonic()
+    problems: list[dict] = []
+    unreadable: list[str] = []
+    files = scanned = reused = 0
+    for path in sorted(root.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        files += 1
+        try:
+            stat = path.stat()
+        except OSError as exc:
+            unreadable.append(f"{path}（{type(exc).__name__}: {exc}）")
+            continue
+        key = (str(path), int(stat.st_mtime_ns), int(stat.st_size))
+        cached = _SELFCHECK_CACHE.get(key)
+        if cached is None:
+            scanned += 1
+            try:
+                source = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                unreadable.append(f"{path}（{type(exc).__name__}）")
+                continue
+            cached = []
+            try:
+                compile(source, str(path), "exec")
+            except SyntaxError as exc:
+                cached = [{"file": str(path), "line": int(exc.lineno or 0),
+                           "column": int(exc.offset or 0),
+                           "error": f"{type(exc).__name__}: {exc.msg}"}]
+            _SELFCHECK_CACHE[key] = cached
+        else:
+            reused += 1
+        problems.extend(cached)
+    return {"checked": True, "files": files, "scanned": scanned, "reused": reused,
+            "problems": problems, "ms": round((time.monotonic() - started) * 1000.0, 1),
+            "root": str(root), "unreadable": unreadable}
+
+
+def format_selfcheck(rep: Mapping) -> str:
+    """把自检读数翻成几行：坏文件逐条报 `文件:行:列 + 错误`，干净就报扫了几个。
+
+    格式刻意写成 `路径:行号`：那是编辑器与终端都能点开的形态，也是 C6 那句话的字面
+    （"报文件:行 + 错误，而不是栈"）。
+    """
+    if not rep.get("checked"):
+        return f"[自检] 没查成：{rep.get('reason') or '包目录不存在'}"
+    lines = [f"[自检] 包内源码：{rep.get('files', 0)} 个文件"
+             f"（本次真扫 {rep.get('scanned', 0)}、命中 stat 缓存 {rep.get('reused', 0)}；"
+             f"{rep.get('ms', 0)} ms）"]
+    for path in rep.get("unreadable") or []:
+        lines.append(f"[自检] 读不了（这是没查成，不是干净）：{path}")
+    for one in rep.get("problems") or []:
+        lines.append(f"[自检] 语法错误（会在这一行炸，不在栈里）："
+                     f"{one['file']}:{one['line']}:{one['column']}: {one['error']}")
+    if rep.get("problems"):
+        lines.append(f"[自检] 结论：有 {len(rep['problems'])} 个坏文件 ⇒ 退出码 1"
+                     "（查过了、有问题）；修好之前任何 import 到它的子命令都会一起坏")
+    else:
+        lines.append("[自检] 结论：语法错误 0 个"
+                     + ("（但有读不了的文件，见上面）" if rep.get("unreadable") else ""))
+    return "\n".join(lines)
+
+
+def _broken_source_notice(exc: BaseException) -> str:
+    """把一个 SyntaxError / ImportError 翻成"文件:行 + 错误"那一句话。
+
+    为什么这一级值得单独存在（`draft/145` 的 F8）：某个模块被写成语法错误之后，任何一条
+    子命令都会在第一次 import 它时炸，而栈里那三十行对用户毫无信息量 —— 他要的是
+    "哪个文件第几行"。这一句在 0 ms 内给出来；`doctor --selfcheck` 才是慢的那一档。
+    """
+    if isinstance(exc, SyntaxError):
+        name = exc.filename or "（不知道哪个文件）"
+        out = f"[自检] 语法错误：{name}:{int(exc.lineno or 0)}: {exc.msg}"
+        text = (exc.text or "").strip()
+        if text:
+            out += f"\n[自检] 那一行：{text}"
+        out += "\n[自检] 这是一次启动自检的结论（退出码 2 = 没查成），不是程序跑出来的栈。"
+        return out
+    name = getattr(exc, "name", None) or str(exc)
+    return (f"[自检] 有模块 import 不进来：{name} —— {type(exc).__name__}: {exc}\n"
+            "[自检] 这一趟没查成（退出码 2）。要逐文件点名就跑 "
+            "`agentflow doctor --selfcheck`")
+
+
 def cmd_doctor(args) -> int:
     """体检：这台机器现在能做哪些事（「不发起任何模型调用」，不花钱）。
 
@@ -2155,7 +3242,21 @@ def cmd_doctor(args) -> int:
     退出码三态：`0` 都齐（能跑，且形式化也能做）；`1` 查过了、有缺（例如没有模型 key、
     或者没找到证明检查器 —— 缺什么就少做什么，不是"跑不成"）；`2` 没查成
     （探测本身不成立：`checked=False`，例如显式配置指了一个不存在的路径）。
+
+    `--selfcheck` 是另一个问题、也是另一档代价：它只扫包内源码（逐文件 `compile`），
+    不探测工具链、不编译 Mathlib。分出来的理由见 `selfcheck_package` 的注释 —— 那一档
+    实测 1 秒量级，而体检本身可能分钟级（Mathlib 那一步真的编译一次）。
     """
+    if bool(getattr(args, "selfcheck", False)):
+        rep = selfcheck_package()
+        if getattr(args, "json", False):
+            print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(format_selfcheck(rep))
+        if not rep.get("checked"):
+            return 2
+        return 1 if (rep.get("problems") or rep.get("unreadable")) else 0
+
     from . import leantoolchain as LT
     from . import toolchain as TC
 
@@ -2223,7 +3324,16 @@ def cmd_web(args) -> int:
     直接构造 `Namespace` 的老调用方（
     `tests/test_webui.py::test_the_cli_web_subcommand_forwards_to_the_module_entry`）照旧能跑：
     缺这两个字段就当"没给"。
+
+    这一层与 `run` / `run-agent` / `project run` 一样先翻 `RunSpec`（`draft/145` §3.2）；
+    区别只有一处：`web` 这条老命令仍然逐字转发给 `webui.run(argv)`，多印一个字都不行
+    （C2）。要"URL / 工作区 / sid / 当前轮"那四格读数的是 `start --watch`。
     """
+    return _run_spec(_spec_from(args, mode=MODE_WEB, origin="web", watch=False), args)
+
+
+def _exec_web(spec: RunSpec, args) -> int:
+    """原 `cmd_web` 的执行体（逐字转发）。"""
     from . import webui
 
     root = Path(args.root or DEFAULT_ROOT).resolve()
@@ -2548,9 +3658,56 @@ def _print_review_acceptance(store, *, project: str, report: str,
     print(f"  {acc.summary()}")
 
 
+class _GroupedHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """首屏按 `SUBCOMMAND_GROUPS` 分组印子命令。
+
+    为什么只能在这一层做（`draft/145` 的 F5）：argparse 没有给 subparsers 分组的能力
+    （`_SubParsersAction` 只认一张 `choices` 字典），而三处既有判据正是靠"唯一一个
+    subparsers action"读 `choices` 的 —— 拆成多个会一起红。所以分组只发生在呈现层：
+    这里只拦 subparsers 那一种 action，其余一律照 argparse 原样走，于是每个子命令自己的
+    `--help` 一个字都不变（C2 要求老命令的输出逐字一致）。
+    """
+
+    #: 子命令名那一列占多宽（够放 `status-report` 这种最长的名字再加两格）。
+    _NAME_COL = 18
+
+    def _format_action(self, action):
+        if not isinstance(action, argparse._SubParsersAction):
+            return super()._format_action(action)
+        helps = {str(getattr(choice, "dest", "")): str(getattr(choice, "help", "") or "")
+                 for choice in (getattr(action, "_choices_actions", None) or [])}
+        names = list(action.choices)
+        lines: list[str] = []
+        placed: set[str] = set()
+        for title, group in SUBCOMMAND_GROUPS:
+            rows = [name for name in group if name in names]
+            if not rows:
+                continue
+            lines.append(f"  {title}")
+            for name in rows:
+                placed.add(name)
+                lines.extend(self._command_lines(name, helps.get(name, "")))
+        rest = [name for name in names if name not in placed]
+        if rest:
+            # 漏登记不静默消失：落在这一栏里，判据也断言并集等于全部子命令。
+            lines.append("  未分组（SUBCOMMAND_GROUPS 漏登记了，请补进去）")
+            for name in rest:
+                lines.extend(self._command_lines(name, helps.get(name, "")))
+        return "\n".join(lines) + "\n\n"
+
+    def _command_lines(self, name: str, help_text: str) -> list[str]:
+        """一行 `名字 + 一小句`（太长就折行，续行与那一列对齐）。"""
+        indent = " " * (self._NAME_COL + 4)
+        width = max(40, self._width - self._NAME_COL - 4)
+        parts = textwrap.wrap(help_text, width=width) or [""]
+        return [f"    {name:<{self._NAME_COL}}{parts[0]}",
+                *(indent + part for part in parts[1:])]
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="agentflow",
-                                description="面向数学研究的多智能体协同框架（正式版；A–H + 主控 M）")
+                                description="面向数学研究的多智能体协同框架（正式版；A–H + 主控 M）",
+                                formatter_class=_GroupedHelpFormatter)
     p.add_argument("--root", default=None,
                    help="工作区根（不给就用 DEFAULT_ROOT = 本仓库的 `agentflow/`）")
     p.add_argument("--config", default=None, help="配置文件路径（默认 <root>/config.yaml）")
@@ -2562,10 +3719,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--plain", action="store_true",
                    help="纯 ASCII 输出（制表符/勾号都不画；老终端或想粘到邮件里时用）")
     p.add_argument("--compact", action="store_true", help="少画框、少空行")
-    sub = p.add_subparsers(dest="cmd")
+    #: `metavar` 是"首屏能读"的一半：二十多个名字全塞进 usage 行会折成三行，
+    #: 而真正想让人看的是下面那四组。子命令清单仍在 `choices` 里（判据读的就是它）。
+    sub = p.add_subparsers(dest="cmd", metavar="<命令>")
 
     sp = sub.add_parser("init", help="初始化数据目录与空表")
     sp.add_argument("--force", action="store_true", help="覆盖已有数据（危险）")
+    sp.add_argument(ALLOW_FOREIGN_FLAG, action="store_true",
+                    help="这个目录里已经有用户的投料（例如一篇 PDF），仍然按工作区初始化："
+                         f"先落 {WORKSPACE_MARKER}（`store` 的白名单出口）再 init；"
+                         "用户的文件不删不改。不给这个开关时，'有外来条目'那一档照旧拒绝")
     sp.set_defaults(func=cmd_init)
 
     sp = sub.add_parser("submit", help="提交搜索请求")
@@ -2638,12 +3801,126 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-search", action="store_true", help="不跑 A/B（只做静态分析）")
     sp.set_defaults(func=cmd_pipeline)
 
+    # ---- 统一入口（`draft/145` §3.1）：一个入口讲清"干什么 / 在哪干 / 花多少钱 /
+    # 开不开 Lean"。四条老命令（run / run-agent / project run / web）都是它的别名：
+    # 解析层一个字不动、执行层收口（见 `_run_spec`）。
+    sp = sub.add_parser(
+        "start",
+        help="统一入口：给一句话就开始干（研究循环 / 端到端主题 / 项目工作区 / 只开网页）",
+        description=(
+            "统一入口。`--mode` 不写就按目录状态推断：没给 --task 且给了 --watch ⇒ 只开网页；"
+            "项目文件夹不存在或为空 ⇒ cold；已有台账（data/tasks.jsonl 有行）⇒ research；"
+            "存在但没有台账 ⇒ warm。`--mode research` 时角色缺省 M，不再要位置参数。\n\n"
+            "缺参数时报的是人话并点名该给哪个旗标（不是 argparse 那句 "
+            "the following arguments are required）。\n\n"
+            "--dry-run 只打印将要发生的一切：不建目录、不写字节、一次模型都不调、"
+            "也不起 Lean 自检子进程。\n\n"
+            "--watch 起网页并打印 URL / 工作区 / sid / 当前轮；不带 --task 时只开网页"
+            "（一直开着，Ctrl-C 停），带 --task 时边跑边可监督、跑完收工。\n\n"
+            "--json 的键集合：--dry-run 那一档逐字等于 cli.START_PLAN_KEYS"
+            "（mode / task / workspace / project / model / budget / lean / summons / "
+            "writes / spend）；--watch 不带任务那一档是 {url, root, sid, round}；"
+            "其余档透传给对应那条路自己的 JSON（run 的运行记录 / run-agent 的运行记录）。"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _what = sp.add_argument_group("要跑什么")
+    _what.add_argument("--task", default=None,
+                       help="这次要做的事（一句话）。不给就得给 --watch（只开网页）")
+    _what.add_argument("--mode", default="auto", choices=list(START_MODES),
+                       help="auto（缺省，按目录状态推断）/ research（十角色循环，角色缺省 M）"
+                            "/ topic（端到端主题跑）/ role（只跑一个角色循环）"
+                            "/ project / cold / warm（项目工作区）")
+    _what.add_argument("--role", default="",
+                       choices=[*S.ROLES, S.CONDUCTOR_ROLE],
+                       help="角色（--mode role 必填；--mode research 缺省 M）")
+    _what.add_argument("--project", dest="name", default=None,
+                       help="项目名（落在 <projects-dir>/<名字>；不给就自动取下一个 projectN）")
+    _where = sp.add_argument_group("在哪干")
+    # 顶层已经有 `--root`：这里再给一次，`default=SUPPRESS` 是关键 —— 否则子 parser 的
+    # 缺省 None 会把用户写在子命令前面的 `--root` 覆盖掉（argparse 的已知形态）。
+    _where.add_argument("--root", default=argparse.SUPPRESS, help="工作区根（与顶层 --root 同义）")
+    _where.add_argument("--projects-dir", default=None,
+                        help="projects 落点（缺省：<root>/projects）")
+    _where.add_argument("--start", default="auto", choices=["auto", "cold", "warm"],
+                        help="项目冷/热启动（--mode cold/warm 也表达同一件事）")
+    _where.add_argument("--out", default=None, help="产物目录（只对 topic 那一档有意义）")
+    _where.add_argument("--books", default=None, help="本地书架目录（项目那一档：里面的 PDF 会被登记）")
+    _where.add_argument("--books-limit", type=_non_negative_int, default=None,
+                        help="本次最多登记几本")
+    _where.add_argument("--text-store-dir", default=None,
+                        help="逐页正文的内容寻址落点（不给就按各模式的缺省）")
+    _cost = sp.add_argument_group("花多少钱 / 开不开 Lean / 要不要盯")
+    _cost.add_argument("--budget-usd", type=float, default=None, action=_BudgetUsdAction,
+                       help="美元上限。显式给了就落盘到 <工作区>/budget.json（C4）；"
+                            "不给就按各模式的缺省（topic 1.0 / project 0.5 / role 不限）")
+    _cost.add_argument("--lean", nargs="?", const="on", default=None,
+                       choices=list(LEAN_CHOICES),
+                       help="on / off / auto（裸写 --lean 等于 --lean on）。"
+                            "auto = 先跑一次自检，usable 才开；不是 usable 就照常跑，"
+                            "但一切形式化结论记 unknown 并在读数里点名原因")
+    _cost.add_argument("--watch", action="store_true",
+                       help="起网页并打印 URL / 工作区 / sid / 当前轮")
+    _cost.add_argument("--dry-run", dest="dry_run", action="store_true",
+                       help="只说、不做：打印将要发生的一切，不写字节、不调模型")
+    _cost.add_argument("--json", action="store_true", help="机器可读的那一份（见 description）")
+    _cost.add_argument("--host", default="127.0.0.1", help="--watch 的监听地址")
+    _cost.add_argument("--port", type=int, default=8788, help="--watch 的端口（0 = 让系统挑）")
+    _cost.add_argument("--open", action="store_true", help="--watch 起来之后用浏览器打开")
+    _cost.add_argument("--token", default="", help="--watch 的访问口令")
+    _cost.add_argument("--allow-writes", action="store_true",
+                       help="--watch 允许写面（起一趟 / 插话 / 答问 / 叫停 / 改设置 / 改预算）")
+    _cost.add_argument("--no-settings-write", action="store_true",
+                       help="--watch 关掉设置写面（只关 POST /api/settings）")
+    _more = sp.add_argument_group("透传下去的老旗标（与同名子命令同义）")
+    _more.add_argument("--max-calls", type=_non_negative_int, default=3,
+                       help="最多调用几次模型（topic / project 两档用）")
+    # 与 `run` 那个动词同一个缺省与同一份 choices：`None` 穿到 `run_topic` 会抛
+    # "未知 prompt 版本"，那是用法错却以退出码 1 的形式出现（本项目的三态里 1 = 查过了有问题）。
+    from .runflow import PROMPT_VERSIONS as _START_PROMPT_VERSIONS
+
+    _more.add_argument("--prompt-version", default="v1",
+                       choices=list(_START_PROMPT_VERSIONS),
+                       help="prompt 模板版本（缺省 v1，与 run 同口径）")
+    _more.add_argument("--fulltext", action="store_true", help="取开放全文（topic 那一档）")
+    _more.add_argument("--no-fulltext", action="store_true", help="不取全文（project 那一档）")
+    _more.add_argument("--retrieval-limit", type=_non_negative_int, default=7,
+                       help="最多取几条本地来源进材料段（project 那一档）")
+    _more.add_argument("--extract", action="store_true", help="先让模型把库里没抽过的书读一遍")
+    _more.add_argument("--extract-rounds", type=_non_negative_int, default=1,
+                       help="模型抽取最多跑几轮（一轮至多一本书）")
+    _more.add_argument("--model", default=None, help="只覆盖模型名（key/base_url 一律来自环境变量）")
+    _more.add_argument("--drive", action="append", default=[],
+                       help="把某个 (角色.动作) 交给模型驱动（role 那一档，可重复）")
+    _more.add_argument("--subagents", action="store_true",
+                       help="把所有已声明的角色动作都交给模型驱动（research 缺省就是它）")
+    _more.add_argument("--semantic-review", action="store_true", help="给 H 接上语义判据")
+    _more.add_argument("--attack-reasoning", action="store_true", help="给 F 接上攻坚推理")
+    _more.add_argument("--experiment-reasoning", action="store_true", help="给 E 接上写脚本的推理")
+    _more.add_argument(ALLOW_FOREIGN_FLAG, action="store_true",
+                       help="这个目录里已经有用户的投料也照样按工作区初始化")
+    _more.add_argument("--provider", default=None, help="A 的检索后端（逗号分隔）")
+    _more.add_argument("--max-steps", type=_non_negative_int, default=30,
+                       help="每满几步向父代理报一次步数账（不是闸）")
+    _more.add_argument("--wall-clock-sec", type=float, default=None,
+                       help="墙钟上限（秒）；不给 = 不设上限")
+    _more.add_argument("--rounds", type=_non_negative_int, default=1, help="跑几轮")
+    _more.add_argument("--report-every", type=_non_negative_int, default=1,
+                       help="每几轮汇报一次")
+    _more.add_argument("--sid", default=None, help="会话号（缺省当天）")
+    _more.add_argument("--resume", action="store_true", help="从检查点续跑")
+    _more.add_argument("--user-wait-sec", type=float, default=None, help="问用户时等多久（秒）")
+    _more.add_argument("--no-ask", action="store_true", help="无人值守档：问用户被确定性拒绝")
+    _more.add_argument("--stop-file", default=None, help="停止开关文件")
+    _more.add_argument("--now", default=None, help=argparse.SUPPRESS)
+    sp.set_defaults(func=cmd_start, budget_usd_given=False)
+
     # 端到端一条命令。退出码即 `run_topic` 的三态：0 / 1 / 2。
     sp = sub.add_parser("run", help="端到端跑一个主题（检索→作答→逐字回验→记账→熔断→六件产物）")
     sp.add_argument("--topic", required=True, help="研究主题")
-    sp.add_argument("--budget-usd", type=float, default=1.0,
+    sp.add_argument("--budget-usd", type=float, default=1.0, action=_BudgetUsdAction,
                     help="美元上限（每次调用之前检查，达线即停 —— 单跑可能超出至多一次调用，"
-                         "超出量写在 cost.json 的 budget_overshoot_usd 里）")
+                         "超出量写在 cost.json 的 budget_overshoot_usd 里）；"
+                         "显式给了就同时落盘到 <工作区>/budget.json")
     sp.add_argument("--out", default=None, help="产物目录（默认新建临时目录并打印路径）")
     sp.add_argument("--max-calls", type=_non_negative_int, default=3,
                     help="最多调用几次模型（库层拒绝负数；这里让它在用法错阶段就以退出码 2 结束）")
@@ -2657,20 +3934,22 @@ def build_parser() -> argparse.ArgumentParser:
                     help="prompt 模板版本（写进清单）")
     sp.add_argument("--fulltext", action="store_true",
                     help="获取开放全文（逐条下载；回验因此可能到达全文级）")
-    sp.add_argument("--lean", action="store_true",
-                    help="对答复里的 Lean 代码块真跑证明检查器（需要环境里已装 Lean；"
-                         "只有 verified 才算 proof 级证据）")
+    sp.add_argument("--lean", nargs="?", const="on", default=None, choices=list(LEAN_CHOICES),
+                    help="on / off / auto（裸写 --lean 等于 --lean on；缺省 off）。"
+                         "对答复里的 Lean 代码块真跑证明检查器（需要环境里已装 Lean；"
+                         "只有 verified 才算 proof 级证据）。"
+                         "auto = 先跑一次自检，usable 才开")
     # `--now` 只为自动化测试注入固定时间戳：产物里的时间戳可复现，断言才稳得住。
     sp.add_argument("--now", default=None, help=argparse.SUPPRESS)
     sp.add_argument("--text-store-dir", default=None,
                     help="逐页正文的内容寻址落点（不给就内联在产物里；给了同一本书只存一份，"
                          "依据 draft/30 §T0-7）")
-    sp.set_defaults(func=cmd_run)
+    sp.set_defaults(func=cmd_run, budget_usd_given=False)
 
     # 项目式用法：`projects/<名字>` 一个项目一个文件夹，冷/热启动按文件夹在不在。
     sp = sub.add_parser(
         "project",
-        help="项目工作区：list / plan / run（一个项目一个文件夹，冷启动还是热启动看文件夹在不在）",
+        help="项目工作区：list / plan / run / create（一个项目一个文件夹，冷启动还是热启动看文件夹在不在）",
     )
     sp.add_argument("action", choices=["list", "plan", "run", "create"],
                     help="list 列出现有项目；plan 只说明这次会怎么跑（不写字节）；"
@@ -2691,8 +3970,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="审阅型项目要铺进去的那篇外部论文（.pdf；同目录有同名 .tex 就一并铺成"
                          "只读基线与可改正文）—— 只对 `project create` 有意义")
     sp.add_argument("--topic", default=None, help="研究主题（给了才会调模型；缺省只做登记）")
-    sp.add_argument("--budget-usd", type=float, default=0.5,
-                    help="这一次运行的美元额度（每次调用之前检查）")
+    sp.add_argument("--budget-usd", type=float, default=0.5, action=_BudgetUsdAction,
+                    help="这一次运行的美元额度（每次调用之前检查）；"
+                         "显式给了就同时落盘到 <项目根>/budget.json")
     sp.add_argument("--max-calls", type=_non_negative_int, default=2, help="最多调用几次模型")
     sp.add_argument("--retrieval-limit", type=_non_negative_int, default=7,
                     help="最多取几条本地来源进材料段（一本书算一条）")
@@ -2700,9 +3980,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="不取全文（引文只会在 1200 字符的摘要窗口里比对，回验强度更低）")
     # `--lean` 与 `run` 那个动词同一口径：默认关；关着时"没有任何形式化验证证据"
     # 照样写进未接线清单。没有这个开关时，本地书架这条主路径上永远拿不到 proof 级证据。
-    sp.add_argument("--lean", action="store_true",
-                    help="对答复里的 Lean 代码块真跑证明检查器（需要环境里已装 Lean；"
-                         "只有 verified 才算 proof 级证据）")
+    # 2026-10-22 起是三档（`on` / `off` / `auto`）：裸写 `--lean` 仍等于 `--lean on`，
+    # 而 `--lean off` 真的关 —— 改前 `bool("off")` 为真，关不掉的开关比没有开关更坏。
+    sp.add_argument("--lean", nargs="?", const="on", default=None, choices=list(LEAN_CHOICES),
+                    help="on / off / auto（裸写 --lean 等于 --lean on；缺省 off）。"
+                         "对答复里的 Lean 代码块真跑证明检查器（需要环境里已装 Lean；"
+                         "只有 verified 才算 proof 级证据）。"
+                         "auto = 先跑一次自检，usable 才开")
     sp.add_argument("--extract", action="store_true",
                     help="先让模型把库里还没抽过的书读一遍（概念/关系；每条关系的引文"
                          "逐字回验，找不到的当场剔除并计数）")
@@ -2712,7 +3996,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--now", default=None, help=argparse.SUPPRESS)
     sp.add_argument("--text-store-dir", default=None,
                     help="覆盖逐页正文的落点（不给就用 <项目根>/.fulltext，见 T0-6 的默认）")
-    sp.set_defaults(func=cmd_project)
+    sp.set_defaults(func=cmd_project, budget_usd_given=False)
 
     # 证据面工具：核引用、盘 store、把历史内联产物迁成引用形态（依据 draft/30 §T0-7）。
     sp = sub.add_parser(
@@ -2793,6 +4077,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "F 需要脚本时必然因 E 无缝而卡住（真机读数：`projects/mp4` 计划 "
                          "000003 的 r1/r2 全是 `no_change`，原因逐字是 `no_seam`）。"
                          "默认关（与 `--semantic-review` / `--attack-reasoning` 同一条纪律）")
+    sp.add_argument(ALLOW_FOREIGN_FLAG, action="store_true",
+                    help="这个目录里已经有用户的投料（例如一篇 PDF），仍然按工作区初始化："
+                         f"先落 {WORKSPACE_MARKER} 再 init（与 `init` 的开关逐字同一个）；"
+                         "不给这个开关时，'有外来条目'那一档照旧拒绝")
     sp.add_argument("--provider", default=None,
                     help="A 的检索后端，逗号分隔（openalex/crossref/doaj/europepmc/fixture）；"
                          "缺省按配置 `agent_a.providers`，再缺省 openalex —— 与 `run-a` 同口径。"
@@ -2816,7 +4104,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--rounds", type=_non_negative_int, default=1,
                     help="跑几轮（>1 走自主轮：按 --report-every 向公共频道汇报）")
     sp.add_argument("--report-every", type=_non_negative_int, default=1, help="每几轮汇报一次")
-    sp.add_argument("--budget-usd", type=float, default=None, help="美元上限（在每次请求之前检查）")
+    sp.add_argument("--budget-usd", type=float, default=None, action=_BudgetUsdAction,
+                    help="美元上限（在每次请求之前检查）；"
+                         "显式给了就同时落盘到 <工作区>/budget.json")
     sp.add_argument("--sid", default=None, help="会话号（默认当天）")
     sp.add_argument("--resume", action="store_true",
                     help="从检查点续跑：`--rounds >1` 时只跑没做过的轮（任务指纹不一致会被拒）；"
@@ -2835,7 +4125,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "**步与步之间**查（做完当前这一步再收工，留步检查点与运行记录）；"
                          "`--rounds > 1` 时在**每轮之间**查（当前这一轮跑完再停）")
     sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")
-    sp.set_defaults(func=cmd_run_agent)
+    sp.set_defaults(func=cmd_run_agent, budget_usd_given=False)
 
     sp = sub.add_parser("budget",
                         help="这一趟的总预算：看 / 设 / 追加（业主 2026-10-12：不限制步数只限预算，"
@@ -2951,7 +4241,18 @@ def build_parser() -> argparse.ArgumentParser:
     # 它不发起任何模型调用 —— 于是"形式化能不能做"这件事在花钱之前就有一个可读的三态读数。
     sp = sub.add_parser("doctor", help="体检：这台机器能做哪些事（不花钱；0 齐 / 1 有缺 / 2 没查成）")
     sp.add_argument("--json", action="store_true", help="把体检结果打成 JSON")
+    sp.add_argument("--selfcheck", action="store_true",
+                    help="只做包内源码自检：逐文件 compile，坏文件报『文件:行:列 + 错误』"
+                         "（不探测工具链、不编译 Mathlib、不花钱；0 干净 / 1 有坏文件 / 2 没查成）")
     sp.set_defaults(func=cmd_doctor)
+
+    # 两档提示词缓存（业主 2026-10-23：「把两档缓存落地为用户使用系统时可调用的工具」）。
+    # 两条子命令的形状（`status` 只读 / `warm --lean on|off|both [--dry-run]` 会花钱）
+    # 定在 `cachectl.add_subcommands` 里，本文件只负责把它挂到这一张子命令表上 —— 于是
+    # "缓存怎么读"只有一个真身，命令行与网页按钮读的是同一份实现。
+    from .cachectl import add_subcommands as _add_cache_subcommands
+
+    _add_cache_subcommands(sub)
     return p
 
 
@@ -2973,6 +4274,12 @@ def main(argv: list[str] | None = None) -> int:
         return shell()
     try:
         return args.func(args)
+    except (SyntaxError, ImportError) as e:
+        # 启动自检的第一级（`draft/145` 的 C6）：某个模块在运行时才 import 到它时坏了 ⇒
+        # 报"文件:行 + 错误"，不许把三十行栈甩给用户。`IndentationError` 是
+        # `SyntaxError` 的子类，所以它也在这一档里。
+        print(_broken_source_notice(e), file=sys.stderr)
+        return 2
     except StoreError as e:
         print(f"[store 错误] {e}", file=sys.stderr)
         return 2

@@ -24,6 +24,13 @@ import importlib
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
+#: 角色可见性的唯一判定入口（业主 2026-10-22：「在Lean开关没开时隔绝L」）。
+#:
+#: 为什么把"哪个角色由 Lean 开关决定存在性"放在 `leanscope` 而不是本文件：本文件是
+#: 声明类型与注册表的落点（禁改区），而"今天谁是 Lean 只角色"是随施工单变的读数；
+#: 两件事分开之后，本文件只留一行"读它"，判定本身只有一处。
+from . import leanscope
+
 
 @dataclass(frozen=True)
 class AgentBrief:
@@ -129,23 +136,44 @@ class AgentRegistry:
         return spec
 
     def get(self, role: str) -> AgentSpec:
-        """取某个角色的声明；没有就抛（不返回 None：那会把"没登记"与"登记成空"混起来）。"""
+        """取某个角色的声明；没有就抛（不返回 None：那会把"没登记"与"登记成空"混起来）。
+
+        业主 2026-10-22（「在Lean开关没开时隔绝L」）：由开关决定存在性的角色
+        （`leanscope.LEAN_ONLY_ROLES`）在开关关着时按"不存在"处理，抛
+        `leanscope.RoleHidden`（带 `reason="lean_off"` 的受控值）而不是把它的
+        声明交出去 —— 否则"按名取 L"这条路会绕过角色表的隔绝。
+        """
+        if leanscope.is_hidden(role):
+            leanscope.require_visible(role, surface="agentspec.AgentRegistry.get")
         try:
             return self._specs[role]
         except KeyError:
             raise KeyError(f"没有登记角色 {role!r}；已登记：{sorted(self._specs)}") from None
 
     def roles(self) -> tuple[str, ...]:
-        """已登记的角色（按登记顺序）。"""
-        return tuple(self._specs)
+        """已登记的角色（按登记顺序）。
+
+        业主 2026-10-22：由开关决定存在性的角色（`leanscope.LEAN_ONLY_ROLES`）
+        在开关关着时不出现在这份读数里 —— 它是"角色表读数"的唯一来源，
+        装配面、提示词、名册与判据都读它。判定本身不在这里：`leanscope.is_hidden`
+        是唯一入口，这一行只是它的读者（所以改开关立刻跟着变，没有缓存）。
+        """
+        return leanscope.visible_roles(self._specs)
 
     def read_only_roles(self) -> tuple[str, ...]:
         """只读角色（它们拿不到写工具，见 `tools/base._role_surface`）。"""
         return tuple(r for r, s in self._specs.items() if s.read_only)
 
     def summonable_roles(self) -> tuple[str, ...]:
-        """可被召唤的角色（主控 M 不在其中）。"""
-        return tuple(r for r, s in self._specs.items() if s.summonable)
+        """可被召唤的角色（主控 M 不在其中）。
+
+        2026-10-22 第三班：与 :meth:`roles` 读同一个可见性判据。改前的写法直接遍历
+        `self._specs`，于是开关关着时它照样返回 L —— 而那一档 L "不存在"（`roles()`
+        里没有它），两份读数就自相矛盾：判据读到的"可召唤名单里有 L"与"角色表里没有 L"
+        只能有一句是真的。判定仍不在本方法里（`leanscope.is_hidden` 是唯一入口）。
+        """
+        return leanscope.visible_roles(
+            r for r, s in self._specs.items() if s.summonable)
 
     def edges(self) -> dict[str, tuple[str, ...]]:
         """角色 ⇒ 它能召唤谁（对账 `capabilities.ALLOWED_EDGES`）。"""

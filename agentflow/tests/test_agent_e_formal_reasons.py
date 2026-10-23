@@ -41,6 +41,22 @@ _VERIFIER = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _lean_side_hard_off_is_lifted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """本文件测的是「被保留的收口与透传」，不是 E 的动作面。
+
+    业主 2026-10-22 晚裁定把 E 的 Lean 侧写死关闭：`AgentE.check_formal` 在动作面第一句
+    就回受控拒绝 `formal_moved_to_l`（判据见 `tests/test_e_lean_side_is_hard_off.py`）。
+
+    而 `_CheckFormal` 的实现体按裁定保留下来（L 的 `_CheckFormalL` 继承它）：检查器状态
+    的收口（`FORMAL_REASONS`）与透传（`verifier_status`）仍然要逐档可判，所以这里把那个
+    字面量显式放开，量被保留的那条路。
+    """
+    from agentflow.agent_e import _support as SUP
+
+    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
+
+
 def make_e(store: Store) -> AgentE:
     return AgentE(store, workspace_root=store.root)
 

@@ -81,11 +81,20 @@ class _Scripted:
 
 
 def _world(tmp_path: pathlib.Path):
+    from agentflow.extract import extract_text
+
     st = Store(tmp_path / "ws")
     st.init()
+    # D1（2026-10-22 第二版）：`quote_verified=True` 现在真的去那一篇的全文里比对。
+    # 所以夹具必须真的有一份全文、而且 `proof_text` 逐字出现在里面 —— 改前这一行
+    # 的 lit 是 `path=None` + 一句"companion book"的假摘录，"逐字核过"从来没人核过。
+    (st.root / "library").mkdir(parents=True, exist_ok=True)
+    (st.root / "library" / "brown.txt").write_text(
+        _ROW["proof_text"] + "\n", encoding="utf-8", newline="\n")
     with st.tx("literature", actor="test") as tx:
         tx.upsert("literature", S.Literature(lit_id="0000", title="Brown 1971", type="J",
-                                             summary="室图", path=None, added_at=TS).to_dict())
+                                             summary="室图", path="brown.txt",
+                                             added_at=TS).to_dict())
     sync_counters(st)
     gw = _Scripted([
         json.dumps({"tool": "own.register_statement", "args": dict(_ROW),
@@ -101,7 +110,7 @@ def _world(tmp_path: pathlib.Path):
     # 内层后端里放真实现：`own.register_statement` 的 handler 走 `self.inner.call`，
     # 于是闸门一个不少（出处核对 / 页码形状 / 五元位 / 秘书落盘）。
     inner = LocalBackend({"A": ("object", _StubA()),
-                          "B": ("object", AgentB(st, extractor=None, extract_text=None))})
+                          "B": ("object", AgentB(st, extractor=None, extract_text=extract_text))})
     backend = LlmBackend(inner=inner, loops=LOOPS, session_root=st.root,
                          seam_factory=lambda role: LlmSeam(role=role, session_root=st.root,
                                                            gateway=gw, price=(0.0, 0.0),

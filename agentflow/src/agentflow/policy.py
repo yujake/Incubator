@@ -351,6 +351,21 @@ def check_edge(policy: Policy, frm: str, to: str, *, registry: Any = None,
     return check(policy, d)
 
 
+def _lean_hidden(role: str) -> bool:
+    """这个角色是不是"由 Lean 开关决定存在性、而这一档它不存在"。
+
+    判定真身只有一处（`leanscope.is_hidden`）：这里不自己读设置文件，
+    只把它折成"要不要换一句拒绝理由"。延迟 import 是为了让 `policy` 的导入图
+    保持叶子（`leanscope` 只依赖 `settings`，不会成环）。
+    """
+    try:
+        from . import leanscope as _LS
+
+        return bool(_LS.is_hidden(role))
+    except Exception:  # noqa: BLE001 —— 判定读不成 ⇒ 不改变既有行为（保守：走原路）
+        return False
+
+
 def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | None:
     """按 :class:`Decision` 做全部判定。见 :func:`check_edge` 的顺序说明。"""
     policy.validate()
@@ -380,7 +395,35 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
         if r is not None:
             return r
 
-    # ---- [2] 边：不可召唤 / 角色存在性 / 边是否允许
+    # ---- [2] 边：Lean 关着时的 L / 不可召唤 / 角色存在性 / 边是否允许
+    #
+    # 2026-10-22 第三班（业主「在Lean开关没开时隔绝L」+「F → L 成为合法边」两条同批）：
+    # 开关关着时 L 不是这一档的角色（`leanscope.is_hidden`），于是它连 `known` 都进不去
+    # ⇒ 原来会落到下面那句 `unknown_role`（"角色 'L' 不存在"）。那句话对读者是误导：
+    # 角色名没拼错，是用户关掉了这条路。这一支把拒绝理由换成可行动的那一档
+    # （`forbidden_edge` + `lean_off`），而结论档位不变（仍然是"这条边不许走"）。
+    # 顺序仍是"不可召唤 → 存在性 → 边"，只是把"由开关决定存在性"那一类插在存在性之前。
+    if _lean_hidden(d.to):
+        return Refusal(
+            "forbidden_edge",
+            (f"{d.to} 只在 Lean 形式化开关打开时存在（reason=lean_off / lean_unreadable）："
+             f"这一档没有『召唤 {d.to}』这件事 —— 要用它就把开关打开，"
+             "否则改派别的角色（这一档下不要为形式化花钱）"),
+            "edge",
+        )
+    # 2026-10-22 晚（业主最终协作面裁定接线时实测的那条缝）：开关关着时隐藏的角色
+    # 不只是"不能被召唤"，它也不能发起召唤。L 现在有出边（`L → C`，"梳理证明链"），
+    # 而改前这一支只判 `d.to`，于是关着时 `L → C` 会一路走到"边表里有没有这条边"
+    # 并顺利通过 —— L 早就不存在了，它发起的召唤却照走。
+    # 结论档位与上面那一支逐字相同（这一档下没有这条边），只是对象换成召唤方。
+    if _lean_hidden(d.frm):
+        return Refusal(
+            "forbidden_edge",
+            (f"{d.frm} 只在 Lean 形式化开关打开时存在（reason=lean_off / lean_unreadable）："
+             f"这一档没有『{d.frm} 召唤 {d.to}』这件事 —— 要用它就把开关打开，"
+             "否则改派别的角色（这一档下不要为形式化花钱）"),
+            "edge",
+        )
     if d.to in (C.NON_SUMMONABLE if registry is None
                 else frozenset(r for r in registry.roles()
                                 if not registry.get(r).summonable)):

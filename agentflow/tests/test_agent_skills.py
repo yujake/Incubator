@@ -305,7 +305,7 @@ def test_the_manuscript_path_is_named_identically_in_the_spec_and_the_skill():
 
 
 def test_the_catalog_covers_every_role():
-    """覆盖：`shared` 与十个角色每一格都有内容（少一格 = 那一岗没有按需材料）。
+    """覆盖：`shared` 与十一个角色（A–H,V,L 与主控 M）每一格都有内容（少一格 = 那一岗没有按需材料）。
 
     为什么这条要单独判：`CATALOG` 是一个字典，少写一个键不会让任何别的东西变红 ——
     那一岗的索引就静默地只剩 `shared`，而"这一岗该怎么办"这件事没人发现它没写。"""
@@ -315,7 +315,12 @@ def test_the_catalog_covers_every_role():
     assert set(AS.CATALOG) == want, f"少了 {sorted(want - set(AS.CATALOG))}，多了 {sorted(set(AS.CATALOG) - want)}"
     for owner, rows in AS.CATALOG.items():
         assert rows, f"{owner} 一格都没有"
-    assert len(set(S.ROLES)) == 9, f"角色表变了：{sorted(S.ROLES)}"
+    # 角色表变了就要有人看一眼：2026-10-23 起可召唤角色是 A–H,V,L 共 10 个
+    # （M 是主控、不可被召唤，所以它单列在上面那个 want 里，不在 S.ROLES 里）。
+    # 旧断言写的是 9，记录的是 L 立项前的角色数 —— 这里不是放宽，是把读数跟上真身：
+    # 数目和名单两条都钉住，少一个或多一个都会红。
+    assert len(set(S.ROLES)) == 10, f"角色表变了：{sorted(S.ROLES)}"
+    assert set(S.ROLES) == {"A", "B", "C", "D", "E", "F", "G", "H", "V", "L"}, sorted(S.ROLES)
 
 
 def test_the_negative_control_catches_a_tool_that_exists_but_is_not_on_this_role_surface(monkeypatch):

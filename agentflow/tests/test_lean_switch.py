@@ -169,7 +169,13 @@ def test_the_switch_on_does_not_change_the_bridge(monkeypatch: pytest.MonkeyPatc
 # ============================================================ 4. 实现层（E）
 def test_e_refuses_a_formal_experiment_before_running_anything(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """实现层：关掉 ⇒ `method='formal'` 在跑脚本之前就被拒，理由里带上替代路线。"""
+    """实现层：`method='formal'` 在跑脚本之前就被拒，理由里带上替代路线。
+
+    2026-10-22 晚裁定之后这一条不再是"关掉时才拒"：业主逐字「E 的 Lean 侧开关全写死成
+    关闭」⇒ 两档都拒，理由码 `formal_moved_to_l`。开关关着这一档仍然要有这条判据（它是
+    裁定前后的公共行为），而"两档逐字相同"由
+    `tests/test_e_lean_side_is_hard_off.py` 第 4 条单独守。
+    """
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     ws = tmp_path / "ws"
     st = Store(ws)
@@ -181,7 +187,8 @@ def test_e_refuses_a_formal_experiment_before_running_anything(
     with pytest.raises(ExperimentError) as exc:
         e.run_experiment("命题", "k1", str(script), method="formal")
     msg = str(exc.value)
-    assert "已关闭" in msg and "verify_proof" in msg, msg
+    assert "已停用" in msg and "verify_proof" in msg, msg
+    assert "formal_moved_to_l" in msg, "拒绝要给可行动的受控理由码"
     # 负控：非形式化那条路照常（关掉 Lean 不该把数值实验也关掉）
     num = ws / "code" / "y.py"
     num.write_text('print("REPRO_RESULT: {\\"result\\": \\"supports\\"}")\n', encoding="utf-8")
@@ -191,7 +198,16 @@ def test_e_refuses_a_formal_experiment_before_running_anything(
 
 def test_e_check_formal_reports_lean_disabled_not_no_backend(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """实现层：`check_formal` 的受控理由要把"用户关掉了"与"机器上没有"分开。"""
+    """实现层（被保留的那一份）：受控理由要把"用户关掉了"与"机器上没有"分开。
+
+    2026-10-22 晚裁定之后 E 的动作面已经不读开关（`formal_moved_to_l`，见
+    `tests/test_e_lean_side_is_hard_off.py` 第 2/4 条），但 `_CheckFormal` 的实现体按裁定
+    保留（「代码先不删」；L 的 `_CheckFormalL` 继承它）⇒ 这一档的三态区分仍然要可判。
+    所以这里显式放开那个写死字面量，量的是被保留的实现。
+    """
+    from agentflow.agent_e import _support as SUP
+
+    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     ws = tmp_path / "ws"
     st = Store(ws)
@@ -274,9 +290,18 @@ def test_the_no_lean_variant_rewrites_every_role_face(
     AP.reset_toolchain_readings()
     try:
         facts = AP.toolchain_facts_text()
+        # 2026-10-22（业主「在Lean开关没开时隔绝L」）：关着时 L 不是这一档的角色 ——
+        # 它的存在性由同一个开关决定（`leanscope`），提示词一栏都不生成。所以"关掉时
+        # 十个角色的面都要被改写"这条判据，射程是「这一档仍然存在的那些角色」；
+        # L 自己的面在那一档不存在（判据见 `test_l_is_isolated_when_lean_is_off.py`）。
+        from agentflow import leanscope as _LSCOPE
+
+        off_roles = tuple(_LSCOPE.visible_roles(roles))
+        assert "L" not in off_roles, off_roles
+        assert set(off_roles) == set(roles) - {"L"}, off_roles
         off_text = "\n".join(
-            AP.system_prompt(role, registry=reg, toolchain_facts=facts) for role in roles)
-        for role in roles:
+            AP.system_prompt(role, registry=reg, toolchain_facts=facts) for role in off_roles)
+        for role in off_roles:
             text = AP.system_prompt(role, registry=reg, toolchain_facts=facts)
             for face in ("数值实验与形式化验证", "转发到形式化检查器",
                          "你这一岗怎么写形式化", "默认不注入任何库",
@@ -310,8 +335,11 @@ def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
     它当时唯一的读数就是判据报"表失效了"，而"面还在广告"这件事没有任何断言。
     这条负控钉住的就是后者。
 
-    取的是工具面那一条（`old` 以 `verify.check_formal：` 开头）：它正是当年漂掉的那一条，
-    改坏它 ⇒ 关掉时那一行照旧读作"把 Lean 源码交给检查器真跑一次"。
+    取的是动作面那一条（`old` 以 `check_formal：` 开头）：它正是当年漂掉的那一类——
+    左边从真身（`specs/e.py` 的 `ACTIONS`）现读，改坏它 ⇒ 关掉时那一行照旧读作
+    "删掉形式化那一岗的本事"。2026-10-22 晚裁定之后工具面那一条退场了
+    （`verify.check_formal` 不再属于任何角色 ⇒ 它不再出现在任何角色的提示词里，
+    左边无处可指），所以这一条负控换成同一张表里仍然承重的动作面那一行。
     """
     from agentflow import agent_prompts as AP
     from agentflow import schema as S
@@ -321,16 +349,22 @@ def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
     roles = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
     reg = build_registry().registry
     victim = next(i for i, (old, _n) in enumerate(E.NO_LEAN_REPLACEMENTS)
-                  if old.startswith("verify.check_formal："))
+                  if old.startswith("check_formal："))
 
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     AP.reset_toolchain_readings()
     try:
         facts = AP.toolchain_facts_text()
+        # 2026-10-22（业主「在Lean开关没开时隔绝L」）：关着时 L 不是这一档的角色，
+        # 它的提示词不生成 ⇒ 这一档只拼仍然存在的那些角色的面（同一条口径见
+        # `test_the_no_lean_variant_rewrites_every_role_face`）。
+        from agentflow import leanscope as _LSCOPE
+
+        off_roles = tuple(_LSCOPE.visible_roles(roles))
 
         def _off_text() -> str:
             return "\n".join(
-                AP.system_prompt(r, registry=reg, toolchain_facts=facts) for r in roles)
+                AP.system_prompt(r, registry=reg, toolchain_facts=facts) for r in off_roles)
 
         # 正控：原表条条都应用得上（否则负控的"改坏"就分不清是谁的问题）
         assert _unapplied_entries(E.NO_LEAN_REPLACEMENTS, _off_text()) == []

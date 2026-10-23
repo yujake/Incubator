@@ -1,4 +1,4 @@
-# ROLE-SPECS —— 十个角色的规格（A B C D E F G H V + 主控 M）
+# ROLE-SPECS —— 十一个角色的规格（A B C D E F G H V L + 主控 M）
 
 > 🧭 **导航 1/6 —— 本文件只放规格**：谁是哪个角色、职责与"明确不负责"、状态机、预算与终止、三态、不变式、接口。它是**判据**。
 > 🧭 **导航 2/6 —— 实测附录** → [`ROLE-SPECS-APPENDIX.md`](ROLE-SPECS-APPENDIX.md)：§R0.1–R0.3、各角色 `.4` 工具面明细、全部 `.10` 自检实测、`M.4.2`/`M.4.3`、`M.8` 补核、S1–S3。**读数带日期、不构成判据**。
@@ -31,11 +31,11 @@
 
 | 事实 | 现读数 | 复跑命令 |
 |---|---|---|
-| 工具总数（完整装配 = 含 `store`） | **95**，已装模块 15 个 | `python -m agentflow.cli tools`（首行"工具总数"） |
-| 全部 8 个角色（A–H）**共有**的工具 | **12** 件：`conductor.escalate` `fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` `manuscripts.list` `manuscripts.read` | 见下方"交集"命令 |
+| 工具总数（完整装配 = 含 `store`） | **98**（Lean 开：已装模块 16 个）/ **95**（Lean 关：15 个 —— `formal_tools` 一件都不装） | `python -m agentflow.cli tools`（首行"工具总数"） |
+| 全部 8 个角色（A–H）**共有**的工具 | **12** 件：`conductor.escalate` `fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` `manuscripts.list` `manuscripts.read`（**L 也恰好拿到这同一批 12 件**；它另外多 11 件，见 §L.4） | 见下方"交集"命令 |
 | 只读角色（C/H/V）工具面里的写工具 | **5** 件：`C` 1 件（`analysis.register_report`，业主 2026-10-18 的产出登记通道）+ `H` 4 件（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）；`V` 0 件 | `python -m agentflow.cli tools`（末段"只读角色写工具泄漏"） |
-| `side_effect` 分布（95 口径） | `read 51 / write_local 39 / none 5` | 同上 |
-| 第二根轴 `external`（95 口径） | `none 87 / egress 5 / exec 3` ⇒ 非 `none` 共 **8** 件 | 同上 |
+| `side_effect` 分布（98 口径 = Lean 开） | `read 52 / write_local 41 / none 5`（Lean 关、95 口径：`read 51 / write_local 39 / none 5`） | 同上 |
+| 第二根轴 `external`（98 口径 = Lean 开） | `none 87 / egress 5 / exec 6` ⇒ 非 `none` 共 **11** 件（Lean 关、95 口径：`none 87 / egress 5 / exec 3` ⇒ **8** 件；差的那 3 件是 L 的 `formal.*`） | 同上 |
 
 **交集那一条的复跑命令**（A–H 十件里的头八个角色取交集）：
 
@@ -64,16 +64,21 @@ python -m agentflow.cli tools              # 全部角色的条数 + 两根轴�
 python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 ```
 
-**现读输出（2026-10-20，尾部逐字）**：
+**现读输出（2026-10-23，`AGENTFLOW_LEAN_ENABLED=1` 下复跑，尾部逐字）**：
 
 ```
-工具总数：94（已装模块 15：table_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools,
+工具总数：98（已装模块 16：table_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools,
         trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools,
-        conductor_tools, manuscript_tools, analysis_tools）
+        conductor_tools, manuscript_tools, analysis_tools, formal_tools）
 
-各角色工具数：{'A': 37, 'B': 23, 'C': 23, 'D': 42, 'E': 26, 'F': 37, 'G': 38, 'H': 31, 'V': 15, 'M': 21}
+各角色工具数：{'A': 37, 'B': 23, 'C': 23, 'D': 42, 'E': 25, 'F': 36, 'G': 38, 'H': 31, 'V': 15, 'L': 23, 'M': 21}
 只读角色写工具泄漏：{'C': ['analysis.register_report'], 'H': ['review.review_document', 'review.verify_fixes', 'review.report', 'review.record_finding'], 'V': []}（!! 有泄漏）
 ```
+
+> **同一个命令在 Lean 关着时**（`AGENTFLOW_LEAN_ENABLED` 未设 / 设为 0）：`工具总数：95`
+> （模块 15 个，`formal_tools` 不装配），`各角色工具数` 里没有 `L` 这一格（不是 0，
+> 是**不存在** —— `leanscope.LEAN_ONLY_ROLES` 决定它的存在性）。
+> 两个读数都要能复跑：本文件凡写"98"的地方都指 Lean 开，凡写"95"的地方都指 Lean 关。
 
 > **行尾（实测，不是约定）**：本文件与附录都是 **LF** ——
 > `python -c "import pathlib;print(pathlib.Path('docs/ROLE-SPECS.md').read_bytes().count(b'\r\n'))"` ⇒ `0`。
@@ -84,7 +89,7 @@ python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 > | 口径 | 命令 | 工具数 |
 > |---|---|---:|
 > | **A 口径（不含 store）** | `build_registry(store=None, workspace_root='.', roles=schema.ROLES)` | 见 `cli tools` 的注释；**本文一律用 B 口径** |
-> | **B 口径（含 store 的完整装配）** | `python -m agentflow.cli tools`（= `build_registry(store=Store(ws), workspace_root=ws, roles=ROLES)`） | **94** |
+> | **B 口径（含 store 的完整装配）** | `python -m agentflow.cli tools`（= `build_registry(store=Store(ws), workspace_root=ws, roles=ROLES)`） | **98**（Lean 开）/ **95**（Lean 关） |
 >
 > **引用工具条数时若不写口径，这个数字就是噪声**（`X-5` 同族）。
 > 逐角色的 `.4` 小节不再手抄"29/41/22…"这类会变的分份数 —— 每节给出的都是
@@ -148,7 +153,7 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 |---|---|
 | `M`（主控） | `A B C D E G H` —— **只剩 `F` 与 `V` 不许直接控制**（2026-10-10 裁定要间接转达 B / F / V；`M→B` 2026-10-13「补 M 到 B」加回；`M→V` 2026-10-18 开、**2026-10-20 撤**：「派 V 只有 F（自产证明）与 B（文献侧内容）两个入口；M 不再直连 V」；F 走 `M→D→F`，V 走 `M→B→V` / `M→D→F→V`） |
 | `A` | `B` |
-| `B` | `C H V`（`H` 是 2026-10-14 加的：语义档的引文回验由 H 判） |
+| `B` | `C D H L V`（`H` 是 2026-10-14 加的：语义档的引文回验由 H 判；`L` 与 `D` 是 2026-10-22 同日加的：`B→L` 是 L 的唯一入口，`B→D` 是"形式化暴露的缺陷严重时 B 通知 D 开展研究"那条路） |
 | `C` | **（无出边）** —— 2026-10-19 曾按「C 要能把"候选的更短路径"交给 D」加过一条 `C→D`，**2026-10-20 业主裁定撤回**（逐字：「把协作改成『D 唤起 C、C 向 D 汇报』，并保留 C 无出边的原始设定」）⇒ 今天 `ALLOWED_EDGES["C"] == frozenset()`；C 的"汇报"就是它的返回值。`read_only` / `write_set` 一个字没动 |
 | `D` | `A B C E F` |
 | `E` | `B D` |
@@ -156,8 +161,9 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 | `G` | `A D E F` |
 | `H` | `A E G` |
 | `V` | `F` |
+| `L`（Lean 形式化者，**只在 Lean 开关打开时存在**） | **`C`**（唯一出边，用途只有一件：梳理证明链）。L 的唯一入边是 `B→L`；`M` 的出边里没有它 |
 
-**边总数 = 32**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；下面是每一次加减
+**边总数 = 35**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；下面是每一次加减
 的读数，最后一条就是今天的数。V 落地前是 29 —— 新增的三条是 `M→V`、`F→V`、`V→F`。
 观测 2026-10-06（角色 V 落地）。
 **2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
@@ -179,7 +185,9 @@ B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍�
 撤回，链条是 **`D → C` 单向**：D 用 `conductor.summon` 派 C，**C 的"汇报"就是它的返回值**
 （C 没有出边、也不许给它加一条把话送回去的通道）。复跑 ⇒ `33`。
 判据：`tests/test_d_summons_c_and_c_reports_back.py`（正控：D 派 C、报告随返回值交回且
-D 的下一步读得到它；反真空：`ALLOWED_EDGES["C"] == frozenset()`、边总数 32；两条负控：
+D 的下一步读得到它；反真空：`ALLOWED_EDGES["C"] == frozenset()`、边总数（**那一条判据里
+写的是当次读数 32** —— 今天全表的读数是 35，见本节最后一条；判据里那个字面量要跟着改，
+否则它会红）；两条负控：
 把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ 反真空红；把 D 的 `_do_summon` 改成"不读返回值
 直接 final" ⇒ 正控红）。
 **2026-10-20 再撤 `M→V`，回到 32**：业主裁定逐字「派 V 只有 F（自产证明）与 B（文献侧内容）
@@ -188,6 +196,30 @@ D 的下一步读得到它；反真空：`ALLOWED_EDGES["C"] == frozenset()`、�
 判据：`tests/test_v_signing_belongs_to_f_and_b.py`（M 不含 V、V 的入口集合恰是 {F,B}、
 M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加回 M ⇒ 红）＋
 `tests/test_policy.py`（M 的出边集合与 `forbidden_edge` 的指路）。
+**2026-10-22 加三条（`B→L` / `L→C` / `B→D`），边总数 32 → 35**：业主当晚的最终裁定逐字
+「只有 B 可以派 L，L 允许派 C 来梳理证明链，消费 B 的定理证明库，可向 B 汇报形式化过程中
+遇到的困难、要求 B 完善证明并重新得到 V 签，若缺陷严重，B 应通知 D 开展研究处理证明难点」。
+三条各自的落点：
+
+- `B→L`：L 的**唯一**入口（`specs/b.py::SPEC.edges` 里有 `L`；`specs/l.py` 的
+  `summonable=True` 只说"它可以被召唤"，**是谁**能召唤由 B 那一行的出边决定）；
+- `L→C`：L 的**唯一**出口（`specs/l.py::SPEC.edges == ('C',)`），用途写进 L 的 `policy`
+  （逐步摆成依赖链：谁依赖谁 / 哪一步是旁挂 / 哪一步是跳变 / 缺口在哪）—— C 只读分析，
+  所以这条边不改任何写权限；
+- `B→D`：形式化暴露的缺陷**在路线本身**时，由 B 通知 D 开展研究。它不是 `D→L`，也不是
+  `L→D`：L 不自作主张找 D（`forbidden_edge`），D 也不直接派 L。
+
+**「用户指定单条执行」是入口，不是边**：`run-agent L` 直接起 L，不经过 `ALLOWED_EDGES` ——
+所以上面这张边表里**永远不会有它**，也**不许为它加边**（加边就等于把形式化挂成流水线的
+一环，而业主的裁定把"该不该付形式化的成本"这个判断留给 B）。**`M→L` 不存在**（主控不许
+直连 L，与 `M→F` / `M→V` 同一族：只走间接）；`F→L` / `E→L` / `D→L` 都评估过、都没开，
+理由逐条登记在 `specs/l.py::LATER_EDGES`（那份表不被任何代码读，它是给人看的）。
+复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"` ⇒ `35`。
+判据：`tests/test_l_collab_surface_is_exactly_this.py`（逐角色断言"除 B 之外没有任何角色的
+出边里有 L"、`L` 的出边恰好 `{C}`、`B` 的出边里有 L）。
+**Lean 关着时这条协作面整条看不见**：L 不在角色表里、`formal.*` 不装配、`B→L` 与 `L→C`
+都被 `policy` 判成 `forbidden_edge`（理由串点名 `lean_off`，
+`tests/test_l_is_isolated_when_lean_is_off.py`）。
 **读数的连带**：`secretary.reach_fit` 对 C 的闭包又只剩它自己（`unreachable` 那一档在实表上
 重新有对象）—— 那是闭包**读数**，不是权限：真正的闸门仍只看**直接**出边（`policy.check`）。
 
@@ -208,6 +240,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | `G` | `documents`, `dependencies`, `review_findings` |
 | `H` | `review_findings`, `documents`（只读角色的显式登记例外） |
 | `V` | （空 ⇒ 只读：唯一产物是 `verifications/<命题号>.jsonl` 这个**文件**，不是表；`READ_ONLY_ROLES` 里的 `"V"` 与 `for_role` 的结构性剥离一起守它） |
+| `L` | `experiments`（**只有这一格**：`record` 落一行 `method="formal"` 的实验；刻意**不含** `statements` ⇒ "L 绕过 V 的签给命题升档"在结构上不可能。真身 `specs/l.py` 的 `write_set`） |
 | `M` | （空 ⇒ 并发判据上按"整张表"处理，与任何人串行） |
 | 编排器自有 | `CONDUCTOR_WRITE_SET = {tasks}` |
 
@@ -220,7 +253,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 > **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，62 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，65 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
@@ -233,7 +266,17 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `write_mapping` |
 | H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |
 | V | 3 | `verify_proof` `list_verifications` `read_proof` |
+| L | 3 | `formalize` `check_formal` `record`（逐条契约见 §L.2；**只在 Lean 开关打开时存在**） |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
+
+> 十一行加起来是 **65**（6+7+10+15+5+4+7+5+3+3+0），与标题那个 65 同源：标题读的是
+> `sum(len(v) for v in CAPABILITIES.values())`，不是"这张表里解析出来几行"。
+> 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `65`。
+> **`L` 那 3 个动作在 Lean 关着时也在这张表里**（`capabilities` 是声明面的派生，它不看开关；
+> 现读见上一句的复跑命令，Lean 关着跑同样是 `65`）。开关管的是另外两件事：**能不能派到它**
+> （`policy` 判 `forbidden_edge`，理由串点名 `lean_off`）与**它的工具面装不装**
+> （`formal_tools` 不装配 ⇒ `for_role("L")` 是空集）。"声明面不看开关、行为面看"这两根轴
+> 不许折成一句"Lean 关时 L 不存在"。
 
 > 装配期由 `capabilities.assert_capabilities()`（**导入期执行**）逐条核：
 > ① 键集合 == `schema.ROLES`（+`M`）；② 每个 `handler_name` 在
@@ -257,12 +300,12 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 ---
 
-## R0. 全局工具总表（95 个，逐条）
+## R0. 全局工具总表（98 个，逐条；Lean 关着时 95 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
 > `#` 列是**历史行号**（`paper_package` 退场与 `search.walk_citations` 落地都刻意**不补位**：
-> 本文别处按行号引用过旧号，补位会让那些引用静默指到别的工具上）⇒ `#` 不连续，行数按实际行数算 = 95。
+> 本文别处按行号引用过旧号，补位会让那些引用静默指到别的工具上）⇒ `#` 不连续，行数按实际行数算 = 98。
 
 | # | 工具 | summary | `side_effect` | 审批 | roles | 参数 | 返回结构 | 测试 | 已知问题 |
 |---:|---|---|---|---|---|---|---|---|---|
@@ -278,20 +321,20 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 12 | `doc.register_dependency` | 登记外部依赖（FC-23）：`status="closed"` 会先用真实数据核 `lit_id`/`experiment_id`；`dangling`/`external_unavailable` 必须写 `status_reason` | `write_local` | **是** | G | **used_by**,**kind**,**label**；page_range, quote, source_experiment_id, source_lit_id, status, status_reason | 落库后的 dependencies 行（含 `dep_id`/`status`/`source_claim_id`/`source_doc_id`） | `test_agent_g.py` | — |
 | 13 | `doc.paper_compile` | 把 `<项目根>/out/paper/main.tex`（**正文由智能体自己写**）编成 `main.pdf`，并写**框架自己产**的编译回执 `COMPILE-RECEIPT.json`；**不跑项目脚本**（LaTeX 引擎由框架直接起） | `write_local` | **是** | G | **project**；timeout_sec | `{tri,ok,reason,tex,pdf,engine,exit_codes,runs,pages,pdf_bytes,receipt_path,pdf_fresh,engine_stderr_tail,engine_stdout_tail,problems}`（`tri` ∈ `not_applicable` / `unknown` / `computed`） | `tests/test_papercompile.py` | **2026-10-13 重写**（业主裁定逐字「paper_package 里那些东西都是古早废案了，我们要智能体写文章」+ `draft/117`）：旧行跑项目里的 `code/compile_paper.py`，那条通道整条退场；`external=exec`（真的起 LaTeX 引擎）⇒ 审批列是；失败 kind ∈ `bad_project` / `paper_no_source` / `paper_compile_failed`；本机 MiKTeX 写完 PDF 却以 0xC0000409 退出 ⇒ 产物与退出码分两栏如实带回 |
 | 14 | `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类 | `none` | 否 | G H F D | **claim** | `{checked,claim_id,ok,findings,error_count,warning_count,checked_fields,decided,revision_hash,status_axis,undecided_reason}` | `test_agent_g.py` | INVENTORY 4.5#10：与 `review.scan_document` 重复检查**且已漂移** |
-| 17 | `fs.delete` | 删除文件；删目录必须显式 `recursive=true`（且不允许删工作区根） | `write_local` | **是** | A B D E F G | **path**；recursive | `data`=是否真的删掉；`meta.found` 区分本来就没有 | `test_tools_table_fs.py` | — |
-| 18 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B D E F G **M**（§57：大文件只能靠它改） | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
-| 19 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；`recursive=true` 时递归 | `read` | 否 | A B C D E F G H **M**（§38） **V** | limit, path, recursive | `{entries:[{name,path,is_dir,is_file,is_symlink,size,mtime}],total,returned,truncated}` | **零提及** | INVENTORY 4.1：`limit`/`truncated` 分页逻辑无断言 |
-| 20 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖） | `write_local` | **是** | A B D E F G | **src**,**dst** | `{src,dst}` | `test_tools_table_fs.py` | — |
-| 21 | `fs.read` | 读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注） | `read` | 否 | A B C D E F G H **M**（§38） **V** | **path**；max_bytes | `data`=文本；`meta` 给 `encoding`/`bytes_read`/`total_bytes`/`truncated`/`had_errors` | `test_tools_table_fs.py` | — |
-| 22 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」 | `read` | 否 | A B C D E F G H **M**（§38） **V** | **pattern**；include, limit, path | `{matches:[{path,line,text}],lines,total,truncated,scanned,skipped}` | `test_tools_table_fs.py` | — |
-| 23 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256 | `read` | 否 | A B C D E F G H **M**（§38） **V** | **path** | `{path,exists,is_dir,is_file,is_symlink,size,mtime,sha256,link_target}` | `test_tools_table_fs.py` | — |
-| 24 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件） | `write_local` | **是** | A B D E F G **M**（§38：主控自己交报告） | **path**,**content**；overwrite | `{path,bytes,sha256,created}` | `test_tools_table_fs.py` | — |
+| 17 | `fs.delete` | 删除文件；删目录必须显式 `recursive=true`（且不允许删工作区根） | `write_local` | **是** | A B D E F G **L** | **path**；recursive | `data`=是否真的删掉；`meta.found` 区分本来就没有 | `test_tools_table_fs.py` | — |
+| 18 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B D E F G **L** **M**（§57：大文件只能靠它改） | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
+| 19 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；`recursive=true` 时递归 | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | limit, path, recursive | `{entries:[{name,path,is_dir,is_file,is_symlink,size,mtime}],total,returned,truncated}` | **零提及** | INVENTORY 4.1：`limit`/`truncated` 分页逻辑无断言 |
+| 20 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖） | `write_local` | **是** | A B D E F G **L** | **src**,**dst** | `{src,dst}` | `test_tools_table_fs.py` | — |
+| 21 | `fs.read` | 读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注） | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | **path**；max_bytes | `data`=文本；`meta` 给 `encoding`/`bytes_read`/`total_bytes`/`truncated`/`had_errors` | `test_tools_table_fs.py` | — |
+| 22 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」 | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | **pattern**；include, limit, path | `{matches:[{path,line,text}],lines,total,truncated,scanned,skipped}` | `test_tools_table_fs.py` | — |
+| 23 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256 | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | **path** | `{path,exists,is_dir,is_file,is_symlink,size,mtime,sha256,link_target}` | `test_tools_table_fs.py` | — |
+| 24 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件） | `write_local` | **是** | A B D E F G **L** **M**（§38：主控自己交报告） | **path**,**content**；overwrite | `{path,bytes,sha256,created}` | `test_tools_table_fs.py` | — |
 | 25 | `graph.build` | 从 store 的三张表构建概念图索引，返回图规模摘要 | `read` | 否 | C D | （无） | `{concept_count,relation_count,pair_count,isolated_concepts,degree_top,…}` | `test_tools_graph_trace.py` | INVENTORY 总表：三态位 **无** |
 | 26 | `graph.neighbors` | 返回某概念的邻居概念代号（升序）及其连接的度数信息；**邻居数有上限**，截断时如实报出 | `read` | 否 | C D | **concept_id**；max_neighbors | `{'concept_id','name','degree','total_neighbors','returned_neighbors','truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}` | `test_tools_graph_trace.py` / `test_tools_attack_graph_fixes.py` | ✅ **已修**（本轮）：原先 `neighbors` 是**不可截断的裸列表**，上下文预算的剪枝在它上面不生效（实测 300 邻居 = 27046 字符、`prune_tool_result` 后一条没少）。现在有界层在**工具层**（`max_neighbors` 默认 200），`RelationGraph.neighbors` **保持裸 list**（4 个调用点按 list 语义用它） |
 | 27 | `graph.relations_between` | 返回同时包含两个概念的全部关系（按 `quote_verified`/`status`/信息量确定性排序） | `read` | 否 | C D | **a**,**b** | `{a,b,count,relations:[{relation_id,description,status,quote_verified,lit_id,page_range}]}` | `test_tools_graph_trace.py` | — |
 | 28 | `graph.stats` | 返回当前图的统计摘要与热度前列（不重建索引；未建图时按需构建一次） | `read` | 否 | C D | top_n | `{…summary…,hot:[…]}` | `test_tools_graph_trace.py` | INVENTORY 6.4：`summary().degree_top` 取前 5 而 `hot` 用 `top_n`（**未判断是否有意**） |
-| 29 | `manuscripts.list` | 列交接手稿（可按收件人/发件人过滤；默认最近 50 份） | `read` | 否 | A B C D E F G H **V** | to, sender, limit | `{'count','items':[{id,sender,recipient,title,summary,path,created_at}]}` | `test_manuscript_handoff.py` | — |
-| 30 | `manuscripts.read` | 按编号读一份交接手稿的全文（编号不存在时如实说没有，而不是返回空文本） | `read` | 否 | A B C D E F G H **V** | **id** | `{'id','path','sender','to','summary','text','sha256','bytes','body','created_at','format','note','refs','sid','task_id'}` | `test_manuscript_handoff.py` | — |
+| 29 | `manuscripts.list` | 列交接手稿（可按收件人/发件人过滤；默认最近 50 份） | `read` | 否 | A B C D E F G H **L** **V** | to, sender, limit | `{'count','items':[{id,sender,recipient,title,summary,path,created_at}]}` | `test_manuscript_handoff.py` | — |
+| 30 | `manuscripts.read` | 按编号读一份交接手稿的全文（编号不存在时如实说没有，而不是返回空文本） | `read` | 否 | A B C D E F G H **L** **V** | **id** | `{'id','path','sender','to','summary','text','sha256','bytes','body','created_at','format','note','refs','sid','task_id'}` | `test_manuscript_handoff.py` | — |
 | 31 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用；探测阶段**不会**下载 easyocr 模型 | `write_local` | **是** | B | refresh | `backends[]` + `any_ocr_backend_available`/`selected_for_auto`/`verdict` | `test_tools_search_ocr.py` | ✅ **已修**：原先声明 `read`（= 不需审批）却在**工作区外 mkdir**（`~/.EasyOCR/model`）并起进程 ⇒ 改为 `write_local`（如实声明） |
 | 32 | `ocr.detect_text_layer` | 判断 PDF 有没有文本层；无文本层时说明这是「无法校验」而不是「校验失败」 | `read` | 否 | B | **path** | `has_text_layer`/`pages`/`page_count`/`pages_with_text`/`chars`/`source_kind`/`reason`/`suggested_next`/`page_count_known`/`page_count_source`/`failed_pages` | `test_tools_search_ocr.py` | INVENTORY 4.3(b)：`page_count(p)` 在 `try` 之外，异常逃逸 |
 | 33 | `ocr.run` | 对指定页（缺省全部页）做 OCR；`auto` 按 easyocr→pytesseract 选第一个可用者，都不可用时 **fail** 并给安装建议（绝不返回空文本假装成功） | `write_local` | **是** | B | **path**；backend, dpi, languages, max_pages, pages | `pages[]` + `backend`/`elapsed_s`/`warnings`/`truncated_pages`/`total_chars` | `test_tools_search_ocr.py` | ✅ **已修两次**：原先声明 `read`，实际 easyocr 首次用**下载 ~100MB 模型** ⇒ 先改为遗留取值 `network`；B3 收官把它迁到两根轴上的确定值 —— `write_local`（下模型 + mkdir 模型目录 ⇒ 写我们拥有的东西）+ `declared_external="egress"`（真的下） |
@@ -314,19 +357,19 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 47 | `search.register` | 登记一条文献（`processed=false`）：先判重，命中则复用既有 `lit_id`；未命中则 `alloc_id('lit')` 并把文件收编进 `library/<lit_id>/` | `write_local` | **是** | A | **title**,**type_code**,**summary**；doi, path, request_id, year | `created`/`lit_id`/`path`/`dedup_key`/`download` | **零提及** | INVENTORY 4.1：**副作用最大、覆盖最少**；4.3(b) `row.validate()` 未包 guard，`ValueError` 逃逸 |
 | 48 | `search.shelf` | **不联网**：列出库里全文在盘上的文献（本地书架），`origin` 分 `local_ingest`/`downloaded` 两档 | `read` | 否 | A C H | limit, lit_id | `{count,rows_total,have_path,missing_files,local_ingest,downloaded,truncated,books,note}` | `test_search_offline.py` | **本轮新增**（§187）；`pages` 对网络下载进来的行是 `null`（下载时没记页数） |
 | 84 | `search.walk_citations` | 由一篇**已登记**的文献出发走一步引文图（`backward`=它引了谁 / `forward`=谁引了它）；**刻意不按热度排序** | `read` | **是** | A | **lit_id**；direction, limit | `{lit_id,doi,openalex_id,direction,count,candidates,note}` | `test_walk_citations.py` | 2026-10-15 新增（业主裁定「引文图是用新动作的方式落」）；**审批**：声明 `read`（不写我们的东西）＋ `external="egress"`（真的发出去）⇒ 与 `search.providers` 同一条口径，**要签字**；候选**不带判重标注**（不复制判重实现），登记走 `search.dedup_check`/`search.register`；出网在 provider 对象的方法里 ⇒ `walk_citations` 已补进 `scripts/lint_rules.py` 的 `_R010_NETWORK_MARKERS`（R010-b 与 R010-c 两个方向都盖住） |
-| 49 | `table.count` | 统计行数（可用 `filter` 做等值过滤） | `read` | 否 | A B C D E F G H **V** | **table**；filter | `data`=整数行数 | **零提及** | INVENTORY 4.1：docstring 承诺「计数不该受 `limit` 影响」，**这个不变量没被测** |
-| 50 | `table.create` | 新建一行：自动分配主键（`search_requests` 用 `r-NNNN`），校验通过才落盘，返回新 ID | `write_local` | **是** | A B D E F G | **table**,**row** | `data`=新主键**字符串**；`meta.row` 是实际落盘的整行 | `test_tools_table_fs.py` | INVENTORY 4.7①：`_next_request_id` 取**最小可用号**（与 `research_tools` 的 max+1 冲突） |
-| 51 | `table.delete` | 删除一行；被引用的 `statements`/`literature` 会被拒绝并列出引用者 | `write_local` | **是** | A B D E F G | **table**,**id** | `data`=是否真的删掉；`meta.references` 列出引用者 | `test_tools_table_fs.py` | — |
-| 52 | `table.get` | 按主键取一行；不存在时返回 `ok=True` 且 `data=None`（用 `meta.found=False` 说明） | `read` | 否 | A B C D E F G H **V** | **table**,**id** | `data`=行对象或 `None`；`meta.found` | `test_tools_table_fs.py` | — |
-| 53 | `table.list` | 列出某张表的行（支持等值过滤与分页），并给出过滤后的总数 | `read` | 否 | A B C D E F G H **V** | **table**；filter, limit, offset | `{rows,total,returned,limit,offset,table}` | **零提及** | INVENTORY 4.1：`total` 是**过滤后**总数，是分页正确性的唯一依据，**没有一条断言** |
-| 54 | `table.schema` | 返回表的字段名/类型/是否必填/默认值，以及全部受控词表 | `read` | 否 | A B C D E F G H **V** | （无） | `{tables:{表名:{fields,primary_key,vocabularies}},vocabularies}` | **零提及** | INVENTORY 4.1：反射出全部受控词表，**是 LLM 写参数的唯一依据**；4.5#9 `L3_STATUSES` 声称受控词表但无成员校验 |
-| 55 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配 | `read` | 否 | A B C D E F G H **V** | **table**,**query**；fields, limit | `{rows,total,matched_fields:{主键:[命中的字段]}}` | **零提及** | INVENTORY 4.1：`casefold()` 承诺与 `truncated` 语义无断言 |
-| 56 | `table.update` | 部分更新一行：只覆盖 `patch` 里给出的字段，其余字段（含诊断字段）原样保留；不允许改主键 | `write_local` | **是** | A B D E F G | **table**,**id**,**patch** | `data`=主键；`meta.row` 是合并后实际落盘的整行 | `test_tools_table_fs.py` | — |
+| 49 | `table.count` | 统计行数（可用 `filter` 做等值过滤） | `read` | 否 | A B C D E F G H **L** **V** | **table**；filter | `data`=整数行数 | **零提及** | INVENTORY 4.1：docstring 承诺「计数不该受 `limit` 影响」，**这个不变量没被测** |
+| 50 | `table.create` | 新建一行：自动分配主键（`search_requests` 用 `r-NNNN`），校验通过才落盘，返回新 ID | `write_local` | **是** | A B D E F G **L** | **table**,**row** | `data`=新主键**字符串**；`meta.row` 是实际落盘的整行 | `test_tools_table_fs.py` | INVENTORY 4.7①：`_next_request_id` 取**最小可用号**（与 `research_tools` 的 max+1 冲突） |
+| 51 | `table.delete` | 删除一行；被引用的 `statements`/`literature` 会被拒绝并列出引用者 | `write_local` | **是** | A B D E F G **L** | **table**,**id** | `data`=是否真的删掉；`meta.references` 列出引用者 | `test_tools_table_fs.py` | — |
+| 52 | `table.get` | 按主键取一行；不存在时返回 `ok=True` 且 `data=None`（用 `meta.found=False` 说明） | `read` | 否 | A B C D E F G H **L** **V** | **table**,**id** | `data`=行对象或 `None`；`meta.found` | `test_tools_table_fs.py` | — |
+| 53 | `table.list` | 列出某张表的行（支持等值过滤与分页），并给出过滤后的总数 | `read` | 否 | A B C D E F G H **L** **V** | **table**；filter, limit, offset | `{rows,total,returned,limit,offset,table}` | **零提及** | INVENTORY 4.1：`total` 是**过滤后**总数，是分页正确性的唯一依据，**没有一条断言** |
+| 54 | `table.schema` | 返回表的字段名/类型/是否必填/默认值，以及全部受控词表 | `read` | 否 | A B C D E F G H **L** **V** | （无） | `{tables:{表名:{fields,primary_key,vocabularies}},vocabularies}` | **零提及** | INVENTORY 4.1：反射出全部受控词表，**是 LLM 写参数的唯一依据**；4.5#9 `L3_STATUSES` 声称受控词表但无成员校验 |
+| 55 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配 | `read` | 否 | A B C D E F G H **L** **V** | **table**,**query**；fields, limit | `{rows,total,matched_fields:{主键:[命中的字段]}}` | **零提及** | INVENTORY 4.1：`casefold()` 承诺与 `truncated` 语义无断言 |
+| 56 | `table.update` | 部分更新一行：只覆盖 `patch` 里给出的字段，其余字段（含诊断字段）原样保留；不允许改主键 | `write_local` | **是** | A B D E F G **L** | **table**,**id**,**patch** | `data`=主键；`meta.row` 是合并后实际落盘的整行 | `test_tools_table_fs.py` | — |
 | 57 | `trace.chain` | 把一条关系代号链的每一步表述串起来（D 写报告可直接引用），缺号如实列出 | `read` | 否 | C D | **relation_ids** | `{level:'chain',relation_ids,steps,chain_text,missing}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)④：无 store/无 graph 时**静默返回 `ok` + `step_count=0`**（唯一一个"成功"的静默空结果）；4.5#4 `returns=` 与 6 条错误分支不符 |
 | 58 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文） | `read` | 否 | C D | **concept_id**；with_relations | `{level:'L2',concept,relation_count,relations,contains_fulltext:false}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)⑤：空图回退把「没查」报成「查了、没有」 |
 | 59 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层会如实报告而不是返回空串 | `read` | 否 | C D | **lit_id**；max_chars, pages | `{level:'L3',status,file_exists,has_text_layer,pages_returned,text,truncated,source_kind,abs_path,chars_returned,encoding,page_count}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)⑥：`store=None` 时**诚实的 fail 被前置检查遮蔽**；4.5#4 六条错误分支缺 `pages_returned`/`truncated` |
 | 60 | `trace.relation` | L1 溯源：由关系代号取回引文/描述/陈述/页码/状态/引文校验三态，并翻译概念名、附文献元数据 | `read` | 否 | C D | **relation_id** | `{level:'L1',relation_id,quote,description,statement,page_range,status,quote_verified,concepts,literature}` | `test_tools_graph_trace.py` | INVENTORY 4.5#7：`returns=` 少列 2 个实际键，且多一个写死的 `contains_fulltext: False`（**看起来像检查结论**） |
-| 61 | `verify.check_formal` | 把命题（Lean 源码/脚本）交给检查器真跑一次；只有 `verified` 给 proof 级证据，`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` 是"查了没通过"，`timeout`/`no_backend`/`tool_crashed` 是"没查成" | `read` | **是** | E F G | **claim**；script_path, source, name, imports, timeout_sec | `{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}`（`reason` 取 `formalgw.STATUSES` 八值词表；`exit_code` = 检查器进程的真实退出码，没跑成时是 `None`，**绝不用 0 冒充"跑过"** —— E-12(a)） | `test_tools_audit_fixes.py` | **P1 本轮接线**：工具层此前给 `script_path` 时返回 `checked=False` + `reason="not_implemented"`（全文零处提到 `formalgw`），现已转发到 `src/agentflow/formalgw.py` 的 `check_lean`。三态映射：`checked` 取自 `formalgw.evidence_of` 的结论位（`verified`/`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` ⇒ True；`timeout`/`no_backend`/`tool_crashed` ⇒ False）；`verified` 只在 `status == "verified"` 时为 True，`checked=False` 时保持 `None`（未查成绝不写成 False）。`side_effect` 由 `none` 改为 `read`。**B3 收官**：新增 `declared_external="exec"`（它执行的是调用方给内容的检查器）⇒ 审批列由 `否` 变 `是`、`roles` 由 `E F G H` 变 `E F G`（H 只读，拿不到需要审批的工具）。真实正控在这台机器的 Lean 4.7.0 上跑到 `verified` + `evidence_kind="proof"`，三条负控（含 sorry / 无后端 / 声明名对不上）各自如实失败（证据脚本 `temp/w5_p1_probe.py`）。已知缺口（本轮未改）：`script_path` 不经 `_resolve`，越出工作区的路径不会被工具层拦下 —— 记录在此待人工处置 |
+| 61 | `verify.check_formal` | 把命题（Lean 源码/脚本）交给检查器真跑一次；只有 `verified` 给 proof 级证据，`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` 是"查了没通过"，`timeout`/`no_backend`/`tool_crashed` 是"没查成" | `read` | **是** | **（无角色）** —— 形式化入口归 L 的 `formal.*`（原那个工具归 E角色一侧，已写死关闭） | **claim**；script_path, source, name, imports, timeout_sec | `{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}`（`reason` 取 `formalgw.STATUSES` 八值词表；`exit_code` = 检查器进程的真实退出码，没跑成时是 `None`，**绝不用 0 冒充"跑过"** —— E-12(a)） | `test_tools_audit_fixes.py` | **P1 本轮接线**：工具层此前给 `script_path` 时返回 `checked=False` + `reason="not_implemented"`（全文零处提到 `formalgw`），现已转发到 `src/agentflow/formalgw.py` 的 `check_lean`。三态映射：`checked` 取自 `formalgw.evidence_of` 的结论位（`verified`/`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` ⇒ True；`timeout`/`no_backend`/`tool_crashed` ⇒ False）；`verified` 只在 `status == "verified"` 时为 True，`checked=False` 时保持 `None`（未查成绝不写成 False）。`side_effect` 由 `none` 改为 `read`。**B3 收官**：新增 `declared_external="exec"`（它执行的是调用方给内容的检查器）⇒ 审批列由 `否` 变 `是`、`roles` 由 `E F G H` 变 `E F G`（H 只读，拿不到需要审批的工具）。真实正控在这台机器的 Lean 4.7.0 上跑到 `verified` + `evidence_kind="proof"`，三条负控（含 sorry / 无后端 / 声明名对不上）各自如实失败（证据脚本 `temp/w5_p1_probe.py`）。已知缺口（本轮未改）：`script_path` 不经 `_resolve`，越出工作区的路径不会被工具层拦下 —— 记录在此待人工处置 |
 | 62 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验记录的可复现性绑定 | `read` | 否 | E F G H | **path** | `{path,code_hash}` | `test_agent_e.py` | INVENTORY 4.3(b)：`open()` 的 `OSError`/`PermissionError` 逃逸 |
 | 63 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回的是事实，不是猜测 | `read` | 否 | E F G H | （无） | `{'checked','available','available_names','reason','probe_errors','looked_in','sources'}` | `test_agent_e.py` | ✅ **已修**：原先声明 `none` 却 `shutil.which` + `subprocess.run` ⇒ 改为 `read`；`checked` 不再硬编码 `True`（探测失败 ⇒ `False` + `probe_errors`）；`returns=` 补齐（**注意** `read` 与 `none` **都不需审批**，所以这次修正不影响审批面，只影响"审计口径"） |
 | 64 | `verify.evidence_for` | 查一条命题（`claim_key`）或一个研究问题（`for_question_id`）已有的实验证据。两个参数都不给 ⇒ `checked=False` | `read` | 否 | E F G H | claim_key, for_question_id | `{checked,experiments,best_evidence_kind,proved,reason}` | `test_agent_e.py` | INVENTORY 4.3(b)：`StoreError` 逃逸；4.7⑪ 排序键与 `list_experiments` 逐字重复 |
@@ -349,7 +392,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 81 | `text.extract` | **A 负责把一篇 PDF 转成纯文字稿入库**（业主口径）：读 PDF 自带的文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**原 PDF 原样保留**；写盘前核质量（NUL/替换字符/控制字符占比超标 ⇒ kind=garbled_text，**不写盘**）；纯文本文件直通入库（幂等） | `write_local` | **是** | A | lit_id 或 path | out_dir, pages, max_pages |
 | 81 | `conductor.status_report` | 只读：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `read` | 否 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps,note}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反） |
 | 82 | `conductor.board` | 只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，`expects=work` 的项要交付才算完。不含建议，也不替你决定要不要重派 | `read` | 否 | M | limit | `{checked,open_items,open_count,readings}`（**读不成 ⇒ 报错**，不回一个空板：`checked=False` 是"没查成"、`open_count==0` 才是"板上没事"，折平就是本仓最忌的形态） | `tests/test_board_items.py`、`tests/test_conductor_tools.py` | **本轮新增**（业主 2026-10-08 裁 A1=甲、T16）：A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）—— M 不进 `manuscripts.*` 是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`） |
-| 83 | `conductor.broadcast` | 给我名下的**直接子代理**广播一条通告（每个收件人一条 `expects=ack` 的板项）：级联由收件人自己决定（框架不代转）—— 要覆盖全树就逐层向下调用；我名下没有子代理时如实报"没有收件人"（**不假装发出去了**）；不知道我是谁（没有台账号、也没有调用上下文）⇒ 受控拒绝 | `write_local` | **是** | A B D E F G M | subject, body | `{checked,ok,broadcast,recipients,items,cascade,readings,note}`（`readings` 把"开了几条 / seen 几条 / acked 几条"分开报：展开了 ≠ 读到了） | `tests/test_broadcast_reaches_my_children.py` | **本轮新增**（业主 T20/T21 附二 乙）：一件能力、所有角色同一个做法（T21 作废了"只有 M 有全树档"那一版）；只读角色（C/H/V）不在它的 `roles` 声明里（声明了再剥掉会被 `cli tools` 报成"声明本身应改"）；"我是谁"由 `AgentLoop._do_tool` 的 `calling_as` 挂进调用上下文 |
+| 83 | `conductor.broadcast` | 给我名下的**直接子代理**广播一条通告（每个收件人一条 `expects=ack` 的板项）：级联由收件人自己决定（框架不代转）—— 要覆盖全树就逐层向下调用；我名下没有子代理时如实报"没有收件人"（**不假装发出去了**）；不知道我是谁（没有台账号、也没有调用上下文）⇒ 受控拒绝 | `write_local` | **是** | A B D E F G **L** **M** | subject, body | `{checked,ok,broadcast,recipients,items,cascade,readings,note}`（`readings` 把"开了几条 / seen 几条 / acked 几条"分开报：展开了 ≠ 读到了） | `tests/test_broadcast_reaches_my_children.py` | **本轮新增**（业主 T20/T21 附二 乙）：一件能力、所有角色同一个做法（T21 作废了"只有 M 有全树档"那一版）；只读角色（C/H/V）不在它的 `roles` 声明里（声明了再剥掉会被 `cli tools` 报成"声明本身应改"）；"我是谁"由 `AgentLoop._do_tool` 的 `calling_as` 挂进调用上下文 |
 | 88 | `analysis.register_report` | C 的**产出登记通道**（业主 2026-10-18：「只读角色的产出要能进台账」）：把这一趟 C 自己算出来的图读数 / 结构洞 / 候选缺口落成 `analysis_reports` 一行（复用 `agent_c._support.AnalysisReport.persist` —— 存盘顺序、号段、文件名规则都还是那一份实现）。只写这张表：`claims` / `literature` / `relations` 零写入点 | `write_local` | **是** | C | kind, summary, markdown；request, payload, params, warnings | `{checked,report_id,markdown_path,kind,summary,created_by}` | `tests/test_readonly_output_channel.py` | 根因读数（`projects/mp3` 末节第 5 条）：`analysis_reports` = 0，而 C 的图读数只活在回复与手稿里；同趟 run 记录（`projects/mp3/runs/C-20261018-201536-001.json`）里它两次尝试 `gaps` / `handle` 都拿到「没有名为 … 的工具」⇒ 它必须在**只读角色的例外表**（`READONLY_CALL_EXCEPTIONS["C"]`）里，否则 `_role_surface` 会把写工具整类剥掉 |
 | 89 | `review.record_finding` | H 把**自己读出来的**那一条发现落成 `review_findings` 行（机械扫描 `review_document` 覆盖不到的那一类）；不改 `documents.status`、不碰知识表；去重键仍是 `(kind,target,message)`（与 `review_document` 同一份） | `write_local` | **是** | H | doc_id, kind, target, message, evidence；level, axis, suggestion, round_no, verbatim_quote, line, line_unavailable_reason | `{checked,created,duplicate_skipped,finding_id,doc_id,kind,level,round,status}` | `tests/test_readonly_output_channel.py` | 与 `review_document` 的分工：后者落机器算得出的那批，这一件落角色自己读出来的那一条（「G8 回执没给退出码」「正文引用的材料盘上没有」）；`evidence` 必填且非空 —— 审校者的判断也要有依据 |
 | 90 | `lit.stage_add` | 把广搜结果**追加**进本次委托的待新增列表（一次任意条，超过 10 条也允许）：槽位号自动分配、只增不复用；入库是另一件事（`lit.admit_all`） | `write_local` | **是** | A | **request_id**,**entries**；batch | `{request_id,batch,count,staged}`；失败：`ok=False` + `kind`（no_store / no_delegation / bad_delegation / empty_batch / bad_batch / bad_entry / store_error） | `tests/test_search_tools_stage_admit.py` | 2026-10-20 新增（业主裁定「方案 1」的**待新增列表**：候选先进列表、逐条筛，筛完才迁进 `literature`） |
@@ -359,28 +402,31 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 94 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 `new_content` 才许入库 | `read` | 否 | A | **title**；doi | `{title,doi,checked,duplicate,overlap_score,overlap_kind,overlap_with,requires_new_content,reason}`；失败 `ok=False` + `kind` + `checked=False`（**重叠没查**，不是「没有重叠」） | `tests/test_search_tools_stage_admit.py` | 同上；三态口径与 `search.dedup_check` 逐字一致（`checked` 是"查没查"，不是"重不重"） |
 | 95 | `lit.admit` | 正式入库（逐条）：条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查都过了才走现有登记路径；超限**整笔拒绝**。**不清空列表**（清空属于 `lit.admit_all`） | `write_local` | **是** | A | slots, items；request_id, batch, new_content, overlap_ok | `{ok,kind,whole_call_refused,reason,request_id,batch,call_size,call_limit,delegation_admitted,delegation_limit,admitted,refused,cleared,registered,report,report_path}` | `tests/test_search_tools_stage_admit.py` | 同上；"整笔拒绝"与"逐条拒收"是两个读数（`whole_call_refused` vs `refused[]`） |
 | 96 | `lit.admit_all` | **一键迁移**：本委托待审且过筛（重叠检查）的行一次性迁进 `literature`（≤10 条），然后结算清空本委托的列表（全终态、不物理删），并写委托报告 `reports/lit-<request_id>.md`（**已入库 + 未入库含受控理由，两块都要有**） | `write_local` | **是** | A | request_id, new_content | `{ok,kind,whole_call_refused,reason,request_id,call_size,call_limit,delegation_admitted,delegation_limit,admitted,refused,cleared,registered,report,report_path}` | `tests/test_search_tools_stage_admit.py` | 同上；这是 `specs/a.py` 的 `boundary` 那条 97 字口径（"一次检索至多入库10篇 … 筛完一键迁移并清空列表；报告写清已入库与未入库"）的机器落点 |
-| 97 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 `stop_reason=escalated` 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）；收件人 = 运行期解析出的**召唤者**，**不要求**在 `edges` 里登记；顶层（没有召唤者）受控拒绝 `not_caller`，一行都不写 | `read` | 否 | A B C D E F G H V M | **need**,**kind**；evidence | `{to,to_task_id,need,kind,evidence,msg_id,state,note}`；受控拒绝：`ok=False` + `kind`（`not_caller` / …） | `tests/test_escalate_goes_up_and_stops.py` | 2026-10-20 新增（业主裁定「子代理卡住要能往上抛」）：它的 `roles` 是**十个角色全体** ⇒ 它同时进了 §0.2 那张"共有工具"表；`side_effect=read` 是刻意的（它只写一条给**父代理**的消息，不写任何表）；`external=none`（不进网络） |
+| 97 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 `stop_reason=escalated` 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）；收件人 = 运行期解析出的**召唤者**，**不要求**在 `edges` 里登记；顶层（没有召唤者）受控拒绝 `not_caller`，一行都不写 | `read` | 否 | A B C D E F G H L M V | **need**,**kind**；evidence | `{to,to_task_id,need,kind,evidence,msg_id,state,note}`；受控拒绝：`ok=False` + `kind`（`not_caller` / …） | `tests/test_escalate_goes_up_and_stops.py` | 2026-10-20 新增（业主裁定「子代理卡住要能往上抛」）：它的 `roles` 是**十一个角色全体**（Lean 关着时那 11 个里没有 `L`） ⇒ 它同时进了 §0.2 那张"共有工具"表；`side_effect=read` 是刻意的（它只写一条给**父代理**的消息，不写任何表）；`external=none`（不进网络） |
 | 98 | `doc.write_mapping` | 写论文对应表三份（`out/paper/MAPPING.json` + `MAPPING.md` + `mapping-appendix.tex`，并把 `\input` 一行放进正文）：三份全由 `papermapping.write_package` 从同一批行渲染，**不许手抄**；行读不懂时一行都不写（半张表比没有表更坏），写完立刻按读侧判据 `mapping_reading` 现读一遍 | `write_local` | **是** | G | **project**,**rows** | `{project,json,md,appendix,rows,state,md_state,appendix_state,problems,reason}`；`state` ∈ `pass` / `fail` / `unknown`；失败 kind ∈ `mapping_unresolvable` / `mapping_empty` / `mapping_not_clean` / `io_error` / `bad_project` | `tests/test_the_three_half_breaks_are_fixed.py` | 2026-10-22 新增（业主逐字「G加动作」）：`papermapping.write_package` 此前在 `src/` 下零调用方 ⇒ 手抄的 md 与附录必然与渲染器逐字对不上（`md_drifted`）；`external=none`（不起子进程）；只写论文包、不入库 |
+| 99 | `formal.formalize` | 把一条命题写成 Lean 源码、落盘到 `code/formal/<声明名>.lean`，再交给检查器真跑一次。结论三态：verified（检查器说通过）/ failed（检查器说不通过）/ unknown（没查成，带原因：开关关着 / 自检不过 / 没有检查器 / 超时）。返回里带 `path` / `sha256` / `exit_code` / `verifier_output` —— 只写「通过」而没有这三样的不算数 | `write_local` | **是** | **L** | **claim**,**source**；declaration_name, statement_id, proof_no, path_source, imports, timeout_sec | `{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code','status','problems','lean','lean_path','path','sha256','bytes','declaration_name','written','proof_no','proof_sha256','path_id','path_source','statement_id','statement_source','coverage','faithfulness','steps_path','refused','checker_status','checker_reason','b_library','report'}`；失败（未接线）：`ok=False` + `kind(not_wired)` | `tests/test_l_every_tool_and_action.py` | 2026-10-22 新增（业主施工单「照 E 的 Lean 面复制出 L」）：本件与 `formal.check_formal` / `formal.record` 三件只挂给 L（`formal_tools._ROLES_L == ("L",)`）；`external=exec`（真起检查器子进程）⇒ 审批是；`coverage` 的 `steps_total`/`steps_mapped`/`unmapped`/`sorry_lines` 是"忠实复述"的机器读数，漏一步或有 sorry ⇒ 结论只能是 `unknown` |
+| 100 | `formal.check_formal` | 把一段 Lean 源码（`source`）或工作区里的 `.lean`（`script_path`）交给检查器真跑一次。前置自检不是 usable 时如实回 unknown 并给原因：不起检查器、不抛栈。查了没通过（compile_error / uses_sorry / extra_axioms / decl_mismatch）与没查成是两件事 | `read` | **是** | **L** | **claim**；script_path, source, declaration_name, imports, timeout_sec | `{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code','status','problems','lean','lean_path'}`；受控拒绝那一支（路径越界 / 桥接层受控失败）：data 上多出 `refused` / `refusal_reason` 两格、`status` 落 `unknown`；失败（未接线）：`ok=False` + `kind(not_wired)` | `tests/test_l_wiring_and_isolation_matrix.py` | 2026-10-22 新增：与 E 那个同名工具同一份桥接层实现（`verify.check_formal`），差别只有前置自检闸；`side_effect=read` + `external=exec` ⇒ 审批列是 `是`（"不写我们的东西"与"起子进程"分居两根轴） |
+| 101 | `formal.record` | 把一次形式化检查登记成 `experiments` 表的一行（`method="formal"`）：先按 `statement_id` 读台账里那条命题的正文，再对 `code_path` 的 `.lean` **现跑一次**检查器，把现跑得到的 status / verified / checker / output_sha256 写进那一行。调用方给的读数只用于对账：与现跑不一致 ⇒ 受控拒绝 `reading_mismatch`，一行都不写。它**不动** `statements`：形式化 ≠ 审过，命题升档仍然要 V 的那一签 | `write_local` | **是** | **L** | **statement_id**,**code_path**；declaration_name, proof_no, path_id, path_source, imports, timeout_sec, status, verified, checker, verifier_output, exit_code, for_question_id, notes | `{'recorded','experiment_id','statement_id','method','claim','claim_key','status','verified','checker','output_sha256','code_hash','path','evidence_kind','result','negation_kind','exit_code','verifier_output','statement_evidence_kind_before','statement_evidence_kind_after','verification_required','detail','problems','reason','proof_no','path_id','proof_sha256','path_source','refused','refusal_reason'}`；失败（未接线）：`ok=False` + `kind(not_wired)` | `tests/test_l_faithfulness_is_measurable.py` | 2026-10-22 新增：`status` / `verified` / `checker` / `verifier_output` 是"调用方看到的读数"，**只用于对账、不采信**（采信它们等于让 `evidence_kind="proof"` 变成可随手搬运的标签）；`path_id` 只做标记、**不当键**（五元位第 4 位的键只能是证明号）；受控拒绝码见 `agent_l._support.RECORD_REASONS`（8 个） |
 
-### R0.1 95 个工具的公共事实（现读）
+### R0.1 98 个工具的公共事实（现读；Lean 关着时 95 个）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑 `validate_params`，非法即 `fail(kind="param_error")`，**不会进 handler**。
 - `roles_consistent_with_side_effect = true`：**写工具声明 C 或 V 会被剥掉**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。今天的登记例外只有两处：`READONLY_CALL_EXCEPTIONS['C']`（1 件：`analysis.register_report`）与 `READONLY_CALL_EXCEPTIONS['H']`（4 件落库代理，见 §H.4）；**V 一件没有**。
-- handler 形态（95）：`functools.partial` **91** / `lambda` **4** / 具名闭包 **0** ⇒ 那 4 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
-- 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools`（**95**）少"需要 store 才能注册"的那一族；**本文一律用 B 口径**。
+- handler 形态（98）：`functools.partial` **94** / `lambda` **4** / 具名闭包 **0** ⇒ 那 4 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
+- 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools`（**98**）少"需要 store 才能注册"的那一族；**本文一律用 B 口径**。
 - **V 的 12 件公共只读**（`conductor.escalate` 1 + `fs.*` 4 + `table.*` 5 + `manuscripts.*` 2）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。
 
 复跑：`python -m agentflow.cli tools`（条数 + 两根轴）与 `python tools/verify_role_specs.py`（逐角色对账）。
 
-### R0.2 不在 `build_registry` 那 95 里的 **9** 个工具（**必须单列**）
+### R0.2 不在 `build_registry` 那 98 里的 **9** 个工具（**必须单列**）
 
 | 来源 | 数量 | 工具 | `side_effect` | 是否过角色校验 |
 |---|---:|---|---|---|
 | `agent_c.register_tools` | 9 | `graph.hottest` `paths` `cold` `gaps` `svc_neighbors` `svc_relations_between` `contradictions` `structural_duplicates` `check_conflict` | 全 `read` | **否** |
 
-> 这 9 件**不在 `cli tools` 的 94 里** ⇒ 别把它们加进"某角色的工具数"。
-> 另两处"自注册面"**不另算条数**（它们的名字已经在 94 里）：`agent_d._fallback_trace_tools` 的
-> 3 个替身只在 D 自己构造的注册表里生效，而 94 里的 `trace.relation`/`trace.concept`/`trace.literature`
+> 这 9 件**不在 `cli tools` 的 98 里** ⇒ 别把它们加进"某角色的工具数"（Lean 关着时那个读数是 95）。
+> 另两处"自注册面"**不另算条数**（它们的名字已经在 98 里）：`agent_d._fallback_trace_tools` 的
+> 3 个替身只在 D 自己构造的注册表里生效，而 98 里的 `trace.relation`/`trace.concept`/`trace.literature`
 > 来自 `tools/trace_tools.py` 的正常注册（`roles=("C","D")`）；`review_tools` 的 4 件写侧
 > 自 2026-10-17（业主裁定「方案 1」）起由装配器自动 `include_writers=True` 装进主表
 > （`roles=("H",)`，见 §H.4）。
@@ -424,7 +470,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 > A 拿不到的组：`research.*`（D 的决策）、`ocr.*`（B 的解析）、`graph.*`/`trace.*`（C/D）、
 > `verify.*`（E/F/G/H/V）、`doc.*`/`review.*`、`attack.*`、`conductor.*`
-> （唯一的例外是 `conductor.escalate` —— 它按设计发给**十个角色全体**，见 §R0 第 97 行）。
+> （唯一的例外是 `conductor.escalate` —— 它按设计发给**十一个角色全体**，见 §R0 第 97 行）。
 
 ### A.5 状态机（**只留主转移表**；状态/约束/反例表与其余状态机见附录 §A.5）
 
@@ -901,7 +947,7 @@ C 的产出有两类，状态语义完全不同。
 | 改关系/概念 | E 的写集只有 `{experiments}` | **B** |
 | 判断"这条实验的结论值不值得写进报告" | 价值判断在 G/H | **G** / **H** |
 
-### E.4 工具面（26 个，实测）
+### E.4 工具面（25 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role E` ⇒ `side_effect` read 17 / write_local 9 / none 0；`external` none 24 / exec 2；需审批 10 件。逐件明细（分组清单 + 拿不到什么）见附录 §E.4。
 
@@ -1013,7 +1059,7 @@ C 的产出有两类，状态语义完全不同。
 > `blocked` + `blocked_reason` 并继续（FC-21 部分落地）。**无
 > `run_best_effort` / `run_all_or_nothing` 两种显式 API**（实测 0 命中）。
 
-### F.4 工具面（37 个，实测）
+### F.4 工具面（36 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role F` ⇒ `side_effect` read 21 / write_local 11 / none 5；`external` none 35 / exec 2；需审批 12 件。逐件明细（分组清单 + 拿不到什么）见附录 §F.4。
 
@@ -1141,7 +1187,7 @@ C 的产出有两类，状态语义完全不同。
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（39 个，实测）
+### G.4 工具面（38 个，实测）
 
 **现读**（2026-10-22）：`python -m agentflow.cli tools --role G` ⇒ `side_effect` read 21 / write_local 13 / none 5；`external` none 36 / exec 3；需审批 14 件。逐件明细（分组清单 + 拿不到什么）见附录 §G.4。
 
@@ -1468,6 +1514,220 @@ C 的产出有两类，状态语义完全不同。
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_v`。**当次（2026-10-18，F-5/F-6 修后复跑）**：`SELF-CHECK DONE（agent_v）：17 项通过 / 0 项失败`；**退出码 0**。
 台账编号是**六位**（`v-000001`；发号点 `verifications.next_verification_id` 走 `schema.format_id`，旧四位号读侧兼容）；五元位第 3 位的 owner **就是 V**（`evidencebits.BIT_OWNERS["reviewed"] == "V"`，实际签名者 `reviewed_by.verifier == "agent-V"`）。
 明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+
+## L —— Lean 形式化者（只在 Lean 开关打开时存在）
+
+### L.1 一句话定位
+
+**L 把 B 登记的那条命题与它的证明链路忠实搬进 Lean 源码，交给检查器真跑一次，如实报 `verified` / `failed` / `unknown`**，并把这一趟登记成一行 `experiments`（`method="formal"`）。
+它回答：**"这条命题写下来还是不是原文那条？机器核过没有？"**
+
+**L 的存在性由 Lean 开关决定**（`leanscope.LEAN_ONLY_ROLES == ("L",)`）：开关关着时它不在角色表里、`formal.*` 一件都不装配、按名取它的每一个入口给受控拒绝（`reason=lean_off`，配置读不懂时是 `lean_unreadable`）、提示词里一个字都不提它，`B→L` 与 `L→C` 都被判 `forbidden_edge`。
+**它不是"跑不动的 E"**：E 的 Lean 侧已经写死关闭（`agent_e._support.E_LEAN_SIDE_HARD_OFF = True`，受控拒绝码 `formal_moved_to_l`），而桥接层仍然只有一份（`agent_l._CheckFormalL` 继承 E 的 `_CheckFormal`，最终调到 `verify.check_formal` → `formalgw.check_lean`）；L 与 E 的差别只有两处 —— **前置自检闸**，以及"写盘 + 检查 + 三态"收成一个动作。
+
+**产物三样**：盘上的 `code/formal/<声明名>.lean`（带 sha256 与逐步对照 `*.steps.jsonl`）、检查器原话与真实退出码、`experiments` 的一行（`method="formal"`）。
+前两样不是表行，第三样是 —— 所以写集只有 `experiments` 一格。
+
+### L.2 职责
+
+| # | 职责 | 判据（实现位置） |
+|---|---|---|
+| L-1 | **忠实形式化**：把 B 的 `statement_full` + `proof_text` 逐句搬进 Lean；每一步在源码里要有一个落点（独占一行的 `-- step <k>`），补的假设用 `-- assume <文本>` 标出，逐步对照写进 `code/formal/<名字>.steps.jsonl`；漏一步或有 `sorry` ⇒ 结论只能是 `unknown` | `agent_l/formalize.py`；`specs/l.py` 的 `formalize` 摘要逐字；`coverage` 的 `steps_total` / `steps_mapped` / `unmapped` / `sorry_lines` |
+| L-2 | **真跑检查器**：把源码交给桥接层（唯一实现 `verify.check_formal`）真跑一次，按检查器原话与真实退出码下判；模型的话不许代替检查器 | `agent_l/_support.FORMAL_REASON_BY_TOOL_REASON`；`verifier_output` / `exit_code` |
+| L-3 | **三态结论，`unknown` 必带原因**：`unknown` 不许折进另外两档 | `agent_l/_support.THREE_STATES == ("verified","failed","unknown")`；受控理由表 `FORMAL_REASONS_L`（28 个取值） |
+| L-4 | **落盘 + 指纹 + 路径守卫**：写 `code/formal/<声明名>.lean`，给 `sha256`；任何越出工作区的路径先拒（`path_outside_workspace`） | `agent_l/core.py` 的 `_resolve`；`FORMAL_DIR`；`DECLARATION_NAME_RX`（声明名同时是文件名，`../` 在写盘之前被拒） |
+| L-5 | **自检闸**：任何 Lean 调用之前先过 `leantoolchain` 的四步（解析 / 版本 / 正样例 / 反控）；不是 `usable` 时这一趟的全部形式化结论记 `unknown`、不写盘、不起检查器、不连撞同一条错误 | `agent_l/core.py::_lean_selfcheck`；三档理由码 `lean_selfcheck_off` / `lean_selfcheck_unusable` / `lean_selfcheck_unknown`（`SELFCHECK_REASONS`） |
+| L-6 | **登记一行实验**（`record`）：按 `statement_id` 读台账正文，再对 `code_path` 的 `.lean` **现跑一次**，把现跑得到的 status / verified / checker / `output_sha256` 写进那一行；调用方给的读数只用于对账 | `agent_l/record.py`；拒绝码 8 个（`RECORD_REASONS`） |
+| L-7 | **第 4 位的逐路径凭据**：落 `proof_no` / `proof_sha256` / `path_id` / `path_source`，读侧现算 `{证明号: 状态}` | `evidencebits.formal_by_proof` / `FORMAL_PATH_STATES`；§L.7 的"二维口径"那一段 |
+| L-8 | **协作面（只有两条）**：只被 `B` 派；只派 `C` 梳理证明链；形式化失败或对不上时按受控形态汇报给 B（`report` 那一格为 `reported` 才算 B 真的收到了） | `specs/l.py::SPEC.edges == ('C',)`；`agent_l/report.py` + `proofreport.py` |
+
+**(a) 三个动作的契约**（`specs/l.py::ACTIONS` 是真身；工具面 `formal.*` 的同名工具在 §R0 的第 99–101 行）
+
+| 动作 | 参数（**必填**；其余可选） | `side_effect` / `external` | 动作面的 `returns`（`specs/l.py` 原文） |
+|---|---|---|---|
+| `formalize` | **`claim`**,**`source`**；`declaration_name`, `statement_id`, `proof_no`（`minimum: 1`）, `path_source`（`enum: B / C / L`）, `imports`（string[]）, `timeout_sec` | `write_local` / `exec`（写盘 + 起检查器，审批＝是） | `dict（status / path / sha256 / claim / reason / detail / verifier_output / exit_code / problems / statement_id / statement_source / coverage / faithfulness / steps_path / refused / checker_status / checker_reason / proof_no / proof_sha256 / path_id / path_source）` |
+| `check_formal` | **`claim`**；`script_path`（工作区里的 `.lean`，与 `source` 二选一）, `source`（源码全文）, `declaration_name`, `imports`, `timeout_sec` | `read` / `exec`（只读 + 起检查器，审批＝是） | `dict（checked / verified / reason / detail / verifier_output / status / exit_code）` |
+| `record` | **`statement_id`**,**`code_path`**；`declaration_name`, `proof_no`, `path_id`, `path_source`, `imports`, `timeout_sec`, `status`, `verified`, `checker`, `verifier_output`, `exit_code`, `for_question_id`, `notes` | `write_local` / `exec`（写一行 `experiments` + 自己再跑一次检查器，审批＝是） | `dict（recorded / experiment_id / statement_id / status / verified / checker / output_sha256 / evidence_kind / statement_evidence_kind_before / statement_evidence_kind_after / verification_required / detail / reason / proof_no / path_id / proof_sha256 / path_source）` |
+
+**工具面的返回声明是逐键清单，动作面那句是给人看的一句话** —— 两者不是同一份东西：`formal.formalize` 的 `returns=` 逐键列出
+`{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code','status','problems','lean','lean_path','path','sha256','bytes','declaration_name','written','proof_no','proof_sha256','path_id','path_source','statement_id','statement_source','coverage','faithfulness','steps_path','refused','checker_status','checker_reason','b_library','report'}`（失败时 `ok=False` + `kind(not_wired)`），
+`formal.check_formal` 列 `{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code','status','problems','lean','lean_path'}`（受控拒绝那一支多 `refused` / `refusal_reason`，`status` 落 `unknown`），
+`formal.record` 列 `{'recorded','experiment_id','statement_id','method','claim','claim_key','status','verified','checker','output_sha256','code_hash','path','evidence_kind','result','negation_kind','exit_code','verifier_output','statement_evidence_kind_before','statement_evidence_kind_after','verification_required','detail','problems','reason','proof_no','path_id','proof_sha256','path_source','refused','refusal_reason'}`。
+`capabilities` 的导入期两层对账逐 **property** 比的是**参数**（工具面那三件的 `params.required` 分别是 `["claim","source"]` / `["claim"]` / `["statement_id","code_path"]`，`additionalProperties: false`），返回串两处各自表述 —— 那不是两份实现，是两层各自的声明口径。
+
+### L.3 明确不负责
+
+| 不做什么 | 为什么不由 L 做 | 该由谁做 |
+|---|---|---|
+| **改写命题的任何一处**（假设、量词、定义、命题的名字） | `specs/l.py` 的 `boundary` 逐字："被改写过的定理即使机器核过，也不是原文那条" —— 加强假设是最容易混过去的一种走偏 | **B**（`statements` 的唯一登记方） |
+| 给命题**升档**（改 `statements` 的 `evidence_kind`） | 写集里只有 `experiments`，刻意不含 `statements`；**形式化 ≠ 审过**，"L 绕过 V 的签"在结构上不可能（不是靠纪律） | **V**（签第 3 位）+ **F / B**（登记） |
+| 判"这条命题值不值得做、下一步往哪儿走" | 那是**方向判断**，不是形式化判断；L 的官能表里 `敢创新` 是 `minor` | **D** |
+| 稿件级正式审查（体例 / 引用 / 依赖闭合） | 那是**五元位第 5 位**，owner 是 H；L 只看这条命题写对了没有、机器核过没有 | **H** |
+| 用 `sorry` / `admit` 把接不上的那一步堵住 | 含 `sorry` 的文件会**正常编译通过**，那不是证明；`uses_sorry` 是"查了没通过"，漏一步则连"通过"都没有对象 | —（结构性禁止：漏一步或有 sorry ⇒ `unknown`） |
+| 把没跑成的检查写成 `verified` 或 `failed` | 三态纪律：`unknown` 被折进另外两档，读者就分不出"命题可疑"与"我们没验"（`SPEC.brief.signature_error` 逐字） | —（结构性禁止） |
+| 自己改台账里的命题、越级找 D 或 V | `specs/l.py` 的 `boundary`：发现命题本身站不住就交回 B（登记）或 D（方向），别自己改别人的结论；越级那两条边不存在（`forbidden_edge`） | **B** |
+| 在 Lean 关着时"照样形式化" | 开关关着时 `formal.*` 都不存在；要审一份证明就走**逐行审阅**，并把结论如实记成 `unknown` | **V**（`verify.verify_proof`，逐行走查） |
+| 替调用方编一个"这个证明号是谁选的" | `path_source` 只收 `B` / `C` / `L` 三值，空 = 没交代；"谁选的路径"与"谁验的"必须分开 | **B / C / L**（三选一，但必须写明） |
+| 决定"验的是哪一份证明"却不给号 | 一个定理有多条证明路径时，不给号就一个字节都不写（`proof_path_unspecified`） | 调用方（`proof_no`） |
+
+### L.4 工具面（Lean 开时 23 个 / 关时 0 个，实测）
+
+**现读**（`AGENTFLOW_LEAN_ENABLED=1`）：`python -m agentflow.cli tools --role L` ⇒ **23** 件；
+`side_effect` **read 13 / write_local 10 / none 0**；`external` **none 20 / exec 3**（`formal.formalize` / `formal.check_formal` / `formal.record`）；**需审批 11 件**。
+
+**构成**（逐件复跑同一命令）：
+
+- **3 件 `formal.*`**：`formal.formalize`（`write_local`）/ `formal.check_formal`（`read`）/ `formal.record`（`write_local`）—— 三件都带 `external="exec"`，`roles=("L",)` 只挂给 L；
+- **12 件 A–H 共有的只读件**（与 §0.2 那张"共有工具"表逐件相同）：`conductor.escalate` `fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` `manuscripts.list` `manuscripts.read`；
+- **8 件共用写工具**：`fs.delete` `fs.edit` `fs.move` `fs.write` `table.create` `table.delete` `table.update` `conductor.broadcast`。
+
+**Lean 关着时是 0 件**：`AGENTFLOW_LEAN_ENABLED=0` 下同一个命令给出 `for_role("L") == []` —— 不是"能拿到 0 个工具"，而是"L 不存在"（`leanscope.is_hidden`）。
+复跑：`python -c "import sys;sys.path.insert(0,'src');import os;os.environ['AGENTFLOW_LEAN_ENABLED']='1';from agentflow.tools import build_registry;r=build_registry().registry;print(len(r.for_role('L')))"`（不带 `store` 的 A 口径 ⇒ `15`；B 口径 ⇒ `23`）。
+
+> ⚠️ **写集与工具面是两根轴，不许互相冒充**：`write_set == {"experiments"}` 是**并发判据**的输入，
+> 也是"L 不碰 `statements`"的声明；`for_role` 的结构性拦截**只针对只读角色**（C / H / V），
+> 所以 L 真的拿得到 10 件写工具（`fs.*` 4 + `table.*` 3 + `conductor.broadcast` + `formal.*` 2）。
+> "L 只写 `experiments`"这件事由**动作面**（`record` 是它唯一的落表动作）+ 写集声明承担，
+> **不由工具层承担** —— E 今天就是同一个口径，把它写成"L 拿不到写工具"是一句假话。
+
+**L 拿不到**：`verify.*` 一件都拿不到（L 不在任何 `verify.*` 的 `roles` 声明里；桥接层那个工具入口
+`verify.check_formal` 更是已经从**所有**角色的工具面里退出，它的 `roles` 现读是空集）、
+`graph.*` / `trace.*`（C / D 的图面）、`research.*`（D 的问题台账）、`attack.*`（F 的攻坚）、
+`doc.*` / `review.*`（G / H 的稿件与审校）、`search.*` / `ocr.*` / `text.extract`（A / B 的取材与解析）、
+`analysis.register_report`、`lit.*`、`conductor.summon`（派活是主控独有的那件）。
+
+### L.5 状态机（**只留主转移表**；L 今天没有下沉到附录的约束表/反例表）
+
+**(a) 一次形式化的迁移**
+
+`收到（B 派 / 用户单条）→ 取台账那一行 → 自检闸 → 写盘 → 起检查器 → 三态 →
+[`verified` 且要对账 ⇒ record 落一行] → 交回 B（或派 C 梳理证明链）`
+
+| 迁移 | 触发 | 允许？ |
+|---|---|---|
+| `收到 → 取台账` | 给了 `statement_id`（按号读 `statement_full` + `proof_text`） | ✅ |
+| `收到 → 取台账` | 没给号，但 `claim` 与台账某一行正文**逐字相同且唯一** | ✅（`statement_source` 如实说明用的是哪一条来源；转述过的 `claim` 认不出来 ⇒ 受控拒绝） |
+| `收到 → 拒绝` | 号不在册 / 那一行没有正文 | ✅ 受控拒绝（`statement_not_found` / `statement_body_empty`），一行都不写 |
+| `取台账 → 自检闸` | 每次调用都过一遍（同一实例只问一次自检读数） | ✅ |
+| `自检闸 → 拒绝` | 自检不是 `usable` | ✅ `unknown` + `lean_selfcheck_off` / `_unusable` / `_unknown`；**不写盘、不起检查器** |
+| `自检闸 → 写盘` | 声明名合法（`DECLARATION_NAME_RX`）且路径在工作区内 | ✅（`code/formal/<名字>.lean`，多路径时 `#p2` 起落 `..._p<n>.lean`） |
+| `写盘 → 检查器` | 落盘成功 | ✅（真跑；`exit_code` 与 `verifier_output` 原样带回） |
+| `检查器 → verified` | 检查器说通过且没有 `sorry`、没有多余公理、声明名对得上 | ✅ |
+| `检查器 → failed` | `compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch` | ✅（**查了没通过**，是结论不是故障） |
+| `检查器 → unknown` | `timeout` / `no_backend` / `tool_crashed` / `import_unavailable` / `source_unreadable` | ✅（**没查成**，必带原因） |
+| 三态任一 → record 落行 | 现跑一次对账，与调用方读数一致（`verified` / `failed` 都能落行；`unknown` 没有一次真的检查可登记） | ✅（`experiments` 一行，`method="formal"`） |
+| `record → 拒绝` | 读数对不上 / 号不在册 / 多路径未给号 / 产物名与号不符 / `path_source` 非法 | ❌ **一行都不写**（8 个拒绝码见 §L.7） |
+| `failed / unknown → 汇报 B` | `formalize` 判出那几档时自己投递（`report.reported` 才是 B 真的收到了） | ✅（B 改证明后重过 V 的签；缺陷严重时 B 通知 D） |
+| `verified → 派 C` | 需要把证明摆成依赖链时 | ✅（唯一出边；C 只读，不落库） |
+
+### L.6 预算与终止条件
+
+| 循环/上限 | 值 | 出处 | 用尽时 |
+|---|---|---|---|
+| 形式化这一路的**模型调用** | **0 次**（形式化是"给源码 + 起检查器"，不是"问模型"） | `agent_l/core.py` 的构造期注释逐字："与 E 同一条纪律：形式化这一路一次模型调用都没有" | — |
+| 单次检查器超时 | `timeout_sec` 缺省 **600 s**（`cfg["timeout"]` 可覆盖；每次调用也可显式给） | `agent_l/core.py::self.default_timeout` | ⇒ `timeout`（**`unknown`**，不是 `failed`） |
+| 自检 | 四步（解析 / 版本 / 正样例 / 反控）；同一实例只问一次（`_lean_reading_now` 缓存） | `leantoolchain.selfcheck`；`agent_l/core.py` | 不是 `usable` ⇒ 整趟 `unknown`；同一条失败**只报一行** |
+| 失败说明的长度 | 压成一行，上限 400 字符 | `agent_l/_support.one_line` | 真机读数（8 次 `check_formal` 全撞同一件事）就是这条的来历：理由太长时模型每次只读到开头 |
+| 终止条件 | 三态之一落地即终止；**`unknown` 也是终止** —— 不重试同一条错误 | `agent_l/_support.THREE_STATES` | 不重试 |
+| 同一命题的形式化次数 | **不设上限**（每份证明各自一格：`#p1` / `#p2` / …） | `evidencebits.FORMAL_PATH_STATES` | 新的一格，旧的不覆盖 |
+| `experiments` 的行数 | **不设上限**（一次 `record` 一行；`evidence_kind` 由读侧现算） | `agent_l/record.py` | 只追加 |
+
+### L.7 三态与失败模式
+
+**三态（对一次形式化的结论，都不是"没查成"）**：
+
+| 结论 | 含义 | 理由码（`FORMAL_REASONS_L` 的子集） | 落盘？ | 能登记？ |
+|---|---|---|---|---|
+| `verified` | 检查器说通过，且没有 `sorry` / 多余公理 / 声明名不符 | `verified` | ✅ | ✅（`record` 才落 `experiments` 行） |
+| `failed` | 检查器**说了**不通过 | `compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch` | ✅（源码在盘上，原话带回） | ✅（那一行会记 `status="failed"`） |
+| `unknown` | **检查器没说话**：开关关着 / 自检不过 / 没有检查器 / 超时 / 缺库 | `lean_selfcheck_off` / `lean_selfcheck_unusable` / `lean_selfcheck_unknown` / `no_backend` / `timeout` / `tool_crashed` / `import_unavailable` / `source_unreadable` | 自检闸挡下的**不写盘** | ❌（没有一次真的检查可登记） |
+
+**第四档：受控拒绝（`record` 的 8 个码）** —— 拒绝不是三态之一，它是"这次登记不成立"：
+
+| 理由码 | 触发 |
+|---|---|
+| `statement_not_found` / `statement_body_empty` | 号不在台账里 / 那一行没有正文 |
+| `reading_mismatch` | 调用方口述的 `status` / `verified` / `checker` / `verifier_output` 与刚才现跑的不一致（**不采信**） |
+| `artifact_not_lean` | `code_path` 不是工作区里的 `.lean` |
+| `proof_path_not_found` | `proof_no` 不在册 |
+| `proof_path_unspecified` | 这条命题有两条以上证明而没给号（`formalize` 同样适用：**一个字节都不写**） |
+| `proof_path_artifact_mismatch` | 产物名与号对不上（`#p2` 的产物必须是 `..._p2.lean`，否则登记进去的是另一条路径的源码） |
+| `bad_path_source` | `path_source` 不在 `B` / `C` / `L` 三值里 |
+
+**(a) 第 4 位（形式化通过）是二维的：`{证明号: 状态}`**
+
+业主 2026-10-22 的裁定逐字：
+> 「一个定理有多种证明路径，lean 形式化需指明对哪个路径做了形式化验证，即五元判据有关形式化的那一位也要改成二维列表。但关于一个定理的正确性，但凡任意一个路径通过核验，它就是对的」
+
+四条硬口径：
+
+1. **一条证明一格**：`bits.formal` 的写侧形状是 `{证明号: 状态}`（`bits.evidence.formal_by_proof` 是逐条凭据的口袋），状态取 `FORMAL_PATH_STATES = ("pending","na","failed","verified","stale")`；
+2. **汇总按 OR**：任一路径 `verified` ⇒ 汇总那一位是 `verified`（"但凡任意一个路径通过核验，它就是对的"）；**写侧只写四态，`stale` 是读侧产物**（`proof_sha256` 与现行正文不符 ⇒ 那一路径"验过、过期了"）—— 写侧写 `stale` 会被 `evidencebits` 判成越界；
+3. **多路径未指明 ⇒ 拒**：`proof_no` 是"验的是第几份证明"（1 = canonical，2 起在同一行的 `proofs` 清单里）；**有两条以上而不给号 ⇒ `proof_path_unspecified`，一个字节都不写**（不替调用方挑一条）；号不在册 ⇒ `proof_path_not_found`。`path_id`（C 给这条路径的显示名，`p<证明号>g<组号>`）只做标记、**不当键**：第 4 位的键只能是证明号。
+4. **不借光**：`#p1` 拿到 `verified` 不会让 `#p2` 变成 `theorem` —— 逐条 `(命题, 证明号)` 读的是它自己那一格（判据 `tests/test_formal_bit_is_two_dimensional.py` 的 ②③）。
+
+**(b) 形式化 ≠ 审过：V 的那一签仍然必需**
+
+`record` 只写 `experiments` 一行，**不动 `statements`**。命题的 `evidence_kind` 升到 `proof` 需要两件事同时成立：
+L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT_OWNERS["reviewed"] == "V"`，第 3 位）。
+写集里没有 `statements` ⇒ "L 自己把命题写成熟定理"在结构上不可能（不是靠纪律）。
+**已知不一致（如实记在这里，不靠改文档掩盖）**：`evidencebits.py:109` 的 `BIT_OWNERS["formal"]` 今天**仍写着 `E`**，而实际写者是 L（`record` 落的那一行）；
+这一格是"第 4 位归谁"的声明，它与 `specs/l.py` / `formal_tools._ROLES_L` 的真身不一致 —— 该由人裁定改哪一处，本文只报读数。
+
+### L.8 不变式
+
+- **L 只在 Lean 开关打开时存在**：关着时角色表里没有它、`formal.*` 不装配、按名取它受控拒绝。
+- **入边只有 `B→L`**；**出边只有 `L→C`**；除 B 之外没有任何角色的出边里有 L。
+- **「用户指定单条执行」是入口不是边**：`run-agent L` 不经过 `ALLOWED_EDGES`，边表里永远不会有它。
+- **写集只有 `experiments`**；`statements` 一格都没有 ⇒ 形式化升不了档。
+- **三态不许折叠**：`unknown` 永远带原因，永远不许写成 `verified` 或 `failed`。
+- **检查器原话 + 真实退出码**是形式化证据的唯一凭据（没跑成时 `exit_code` 是 `None`，绝不用 0 冒充"跑过"）。
+- **`sorry` 即不通过**：含 `sorry` 的文件会编译通过，但那不是证明。
+- **多路径未指明就拒**，不替调用方挑一条；`path_id` 不当键。
+- **`record` 不采信调用方读数**（只对账）；不一致 ⇒ `reading_mismatch`，一行都不写。
+- **`record` 不写 `statements`**：形式化 ≠ 审过。
+- **路径守卫在 `open()` 之前**：越出工作区就拒，不会"成功"。
+- **自检不过 ⇒ 不写盘、不起检查器、不连撞同一条错误**（同一条失败只报一行）。
+- **两处清单一致**：`specs/l.py` 已登记进 `.noai-paths`（`[category: auth-audit]`），两处必须逐条一致。
+
+### L.9 接口
+
+- **能被谁召唤**：**只有 `B`**（`capabilities.ALLOWED_EDGES["B"]` 里有 `L`；`specs/l.py` 的 `summonable=True` 只说"它可以被召唤"）。
+  `A` / `C` / `D` / `E` / `F` / `G` / `H` / `M` / `V` 的出边里都没有 L —— 逐角色判据
+  `tests/test_l_collab_surface_is_exactly_this.py`。
+  复跑：`python -c "from agentflow import capabilities as C;print(sorted(C.ALLOWED_EDGES['B']), sorted(C.ALLOWED_EDGES['M']))"` ⇒ B 含 `L`、M 不含。
+- **L 能召唤谁**：**只有 `C`**（`capabilities.ALLOWED_EDGES["L"] == {"C"}`），用途只有一件：把 B 登记的那条证明逐步摆成依赖链（谁依赖谁 / 哪一步是旁挂 / 哪一步是跳变 / 缺口在哪）。C 只读分析，不落库。
+- **「用户指定单条执行」是入口，不是边**：用户用 `run-agent L`（CLI）直接起一个 L，不经过 `ALLOWED_EDGES` —— 所以它**不进边表**，也**不许为它加边**（加边等于把形式化挂成流水线的一环）。这一句与 §0.5 的那一段是同一件事的两个落点。
+- **入参从哪来**：`statements` 行（`statement_full` + `proof_text`，按 `statement_id` 取；不给号时只认"`claim` 与台账正文逐字相同且唯一"这一种来源）+ `proof_no` + `path_source`（谁选的路径：B 指定 / 照 C 的建议 / L 自己决定）。
+- **产出被谁消费**：
+  - `code/formal/<声明名>.lean` + `*.steps.jsonl` → 人复核、`formal.record` 的 `code_path`；
+  - `experiments` 那一行（`method="formal"`、`claim_key="stmt:<命题号>"`）→ `evidencebits` 的第 4 位（`formal_by_proof`）、
+    `closing` 的收工门、`verify` 的不变式检查；
+  - 汇报（`agent_l/report.py`）→ **B 的收件箱**；B 改证明后重过 V 的签，缺陷严重时 B 通知 D（`B→D`）。
+- **动作 schema**：三个动作的 `params` / `returns` / `side_effect` / `handler_name` 见
+  `capabilities.CAPABILITIES` 与 `specs/l.py`；工具面那三件的逐键契约见 §R0 的第 99–101 行。
+
+### L.10 自检入口
+
+**L 今天没有自己的 `__main__`**（如实写在这里，不伪装成一个能跑的入口）：
+`python -m agentflow.agent_l` ⇒ `No module named agentflow.agent_l.__main__; 'agentflow.agent_l' is a package and cannot be directly executed`，**退出码 1**。
+它的"自检"分成两件真事，各自有命令：
+
+1. **自检闸本体（`leantoolchain` 的四步）**：
+   `$env:PYTHONPATH='src'; $env:AGENTFLOW_LEAN_ENABLED='1'; python -c "from agentflow.leantoolchain import selfcheck; r=selfcheck(); print(r['state'], r['checked'], r['problems'])"`。
+   当次读数（2026-10-23，本机）：**没设 `AGENTFLOW_LEAN_BIN` 时** ⇒ `unusable True [...]`（五档都没找到 lean）；
+   **把 `AGENTFLOW_LEAN_BIN` 指到本机那一版**（`D:\Incubator\_env\lean470\lean-4.7.0-windows\bin`）⇒ `usable True []`，
+   版本 `4.7.0`、`version_ok True`、`ok True`。
+   这正是 L 的 `lean_selfcheck_unusable` 与 `usable` 两档的真机读数 —— 关着（`off`）是第三档。
+2. **判据矩阵（形式化面 + 协作面 + 隔离面）**：
+   `$env:PYTHONPATH='src'; python -m pytest tests/test_l_is_isolated_when_lean_is_off.py tests/test_l_collab_surface_is_exactly_this.py -q`。
+   当次读数（2026-10-23）：**`22 passed in 23.66s`，退出码 0**。
+   全套 L 判据是 **10 个** `tests/test_l_*.py`：`test_l_action_dispatch`（动作派发）/ `test_l_collab_and_secretary`（协作面与秘书台账）/
+   `test_l_collab_surface_is_exactly_this`（入边只有 B、出边只有 C）/ `test_l_every_tool_and_action`（每个工具与每个动作）/
+   `test_l_faithfulness_and_library_matrix`（忠实复述与 B 的库矩阵）/ `test_l_faithfulness_is_measurable`（忠实复述是机器读数）/
+   `test_l_formalizes_what_b_says`（只形式化 B 登记的那条）/ `test_l_is_isolated_when_lean_is_off`（关掉时整条看不见）/
+   `test_l_report_and_seam_matrix`（汇报与接缝）/ `test_l_wiring_and_isolation_matrix`（接线与隔离）；
+   另有两件跨角色判据也守 L：`tests/test_formal_bit_is_two_dimensional.py`（第 4 位的二维口径）与 `tests/test_lean_switch_points_at_l.py`（开关的指路）。
 
 ## M —— 主控（Conductor）
 

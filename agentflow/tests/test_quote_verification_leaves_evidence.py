@@ -162,6 +162,11 @@ def test_the_write_side_does_not_land_a_verified_without_any_evidence(tmp_path: 
     而三栏全空）：它不是"历史数据脏"，而是"写入口允许这么写"。走生产写入侧
     （`B.register_statement` → 秘书），落到盘上的那一行必须是 unknown 档，
     并且理由说得出为什么。
+
+    2026-10-22 起夹具按 `kind="conjecture"` 注册（业主裁定 B-2：「没有引文 / 自己编的
+    命题必须从『猜想』注册」；B-3：「自产命题必须先 V 签才能叫定理级」）。这一条的
+    主题是 D1 的写侧断言（说"通过"却拿不出区间 ⇒ 降成 unknown），与 kind 无关 ——
+    用猜想那一档登记才走得到那一段。
     """
     from agentflow.agent_b import AgentB
     from agentflow.store import Store
@@ -172,7 +177,7 @@ def test_the_write_side_does_not_land_a_verified_without_any_evidence(tmp_path: 
     b = AgentB(st, extractor=None, extract_text=None, config={})
     out = b.register_statement(
         statement_full="设 G 是有限群；则 G 的阶有限。", origin="own_result",
-        kind="theorem", doc_id="000000", proof_text="证明：由定义直接得到。",
+        kind="conjecture", doc_id="000000", proof_text="证明：由定义直接得到。",
         quote_verified=True)
     assert out.get("ok") is True, out
     row = next(r for r in st.rows("statements") if r["stmt_id"] == out["stmt_id"])

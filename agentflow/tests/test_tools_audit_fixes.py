@@ -848,11 +848,17 @@ def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeyp
     assert "真跑" in spec.summary, "summary 必须如实说明它会真的跑一次检查器"
     assert "未接线" not in spec.summary, "它已经接线了，声明里不许再写未接线"
 
+    # 2026-10-22 晚裁定（E 的 Lean 侧写死关闭）之后，这一件不再属于任何角色
+    # （`roles=()`）⇒ 它已经不能经 `reg.call` 调到了（`call` 的第一句就是角色判据，
+    # 会回 `role_denied`）。而这一段量的是"声明与实现不许分裂"，落点是函数本体
+    # ⇒ 直接调函数（`reg` 只用来读声明）。判据见
+    # `tests/test_e_lean_side_is_hard_off.py` 第 1 条。
+
     # ---- 路径 1：无后端
     monkeypatch.setattr(
         VT, "detect_verifier", lambda: {"checked": True, "available": [], "available_names": [], "reason": "无", "probe_errors": []}
     )
-    d1 = reg.call("verify.check_formal", claim="1+1=2").data
+    d1 = VT.check_formal(claim="1+1=2").data
     # ---- 路径 2：有后端、没给脚本
     monkeypatch.setattr(
         VT,
@@ -865,10 +871,10 @@ def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeyp
             "probe_errors": [],
         },
     )
-    d2 = reg.call("verify.check_formal", claim="1+1=2").data
+    d2 = VT.check_formal(claim="1+1=2").data
     # ---- 路径 3：有后端 + 给了脚本路径，但盘上没有这个文件
     # （`E-3`：这是"没查成"`source_unreadable`，不是 `decl_mismatch`）
-    d3 = reg.call("verify.check_formal", claim="1+1=2", script_path="proofs/x.lean").data
+    d3 = VT.check_formal(claim="1+1=2", script_path="proofs/x.lean").data
     # ---- 路径 4（`E-4`，`B-R7` 之前没采）：探测本身没做成 ⇒ tool_crashed。
     # `available=[]` 与 `checked=False` 是两条独立的事实：这一支说的不是
     # "环境里没有检查器"，而是"我们不知道环境里有没有"。
@@ -883,7 +889,7 @@ def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeyp
             "probe_errors": ["PATH 读不了（桩）"],
         },
     )
-    d4 = reg.call("verify.check_formal", claim="1+1=2").data
+    d4 = VT.check_formal(claim="1+1=2").data
 
     for branch in (d1, d2, d3, d4):
         assert set(branch) == declared, f"返回的键与 returns= 不一致：{sorted(branch)}"
@@ -1028,23 +1034,26 @@ def test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind(
                  "available_names": ["lean"], "reason": "有", "probe_errors": []},
     )
 
+    # 2026-10-22 晚裁定（E 的 Lean 侧写死关闭）之后，这一件不再属于任何角色
+    # （`roles=()`）⇒ 它不能经 `reg.call` 调到（第一句就是角色判据，回 `role_denied`）。
+    # 这一段量的三条拒绝分支都在函数本体里 ⇒ 直接调函数（`reg` 只用来读声明）。
     # ---- 拒绝 1：给了源码但源码里没有具名声明，调用方也没给 checker_name
     # ⇒ 不回退成文件名词干（猜一个名字等于把"声明名核对"这条判据悄悄关掉）。
-    r1 = reg.call("verify.check_formal", claim="c", source="example : True := trivial")
+    r1 = VT.check_formal(claim="c", source="example : True := trivial")
     # ---- 拒绝 2：`formalgw.check_lean` 对非法参数抛 ValueError ⇒ param_error
     def raise_value_error(*_a, **_kw):
         raise ValueError("（桩）声明名不合法")
 
     monkeypatch.setattr(FG, "check_lean", raise_value_error)
-    r2 = reg.call("verify.check_formal", claim="c", source="theorem t : True := trivial",
-                  checker_name="t")
+    r2 = VT.check_formal(claim="c", source="theorem t : True := trivial",
+                         checker_name="t")
     # ---- 拒绝 3：桥接层抛别的异常 ⇒ check_failed（"没查成"，既不是通过也不是证伪）
     def raise_runtime_error(*_a, **_kw):
         raise RuntimeError("（桩）桥接层崩了")
 
     monkeypatch.setattr(FG, "check_lean", raise_runtime_error)
-    r3 = reg.call("verify.check_formal", claim="c", source="theorem t : True := trivial",
-                  checker_name="t")
+    r3 = VT.check_formal(claim="c", source="theorem t : True := trivial",
+                         checker_name="t")
 
     got = [r1, r2, r3]
     assert [r.ok for r in got] == [False, False, False], [r.error for r in got]

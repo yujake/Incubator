@@ -120,11 +120,20 @@ export function Live() {
                 { key: "since", title: "从什么时候起", render: (r) => <span class="mono">{r.since}</span> },
               ]}
             />
+            {/* D6（2026-10-22 读数）：这一格是宿主进程的 pid，不是这一行自己的 pid ——
+                `data/tasks.json` 里根本没有 pid 列，同一趟 run 里所有角色也共用同一个
+                宿主进程，所以多行会印出同一个号。表头与这句说明必须成对存在，
+                判据 `tests/test_webui_live_names_the_host_process.py` 逐字钉住。 */}
+            <div class="readings">
+              下面这一格的 pid 是宿主进程的 pid：同一趟 run 里所有角色共用同一个宿主进程，
+              所以多行会印出同一个号。要分辨"这一行是谁"，看角色与会话号
+              （绝对的 `task_id` 在名册那一张卡里）。
+            </div>
             <Table
               rows={pids}
               empty="进程面：没有登记在盘上且活着的进程。"
               columns={[
-                { key: "pid", title: "pid", render: (r) => <span class="mono">{String(r.pid)}</span> },
+                { key: "pid", title: "宿主进程 pid", render: (r) => <span class="mono">{String(r.pid)}</span> },
                 { key: "role", title: "角色" },
                 { key: "sid", title: "会话号", render: (r) => <span class="mono">{r.sid}</span> },
                 { key: "started_at", title: "起于", render: (r) => <span class="mono">{r.started_at}</span> },

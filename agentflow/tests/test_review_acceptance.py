@@ -34,7 +34,8 @@ def _stmt(store: Store, sid: str, **kw) -> dict:
                 statement_text="短版", statement_full="若假设 A 成立，则结论 B 成立",
                 proof_text="Proof. 逐字摘录……", source_lit_id="0000",
                 page_range=S.PageRange(start=7, end=8, label="pp. 7-8"),
-                quote_verified=True, quote_reason="逐字比对通过", evidence_kind="cross_check",
+                quote_verified=True, quote_span="p1:norm[4:40]",
+                quote_reason="逐字比对通过", evidence_kind="cross_check",
                 status="active", created_at=TS)
     base.update(kw)
     row = S.Statement(**base)

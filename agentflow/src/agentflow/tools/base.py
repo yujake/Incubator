@@ -958,8 +958,16 @@ class ToolRegistry:
 
         `filter_readonly` 只用来让 `call` 的离线检查构造一个"不剥离"的临时表
         （见 `_callable_for` 的注释）；两条判据本身逐字相同，不分叉。
+
+        业主 2026-10-22（「在Lean开关没开时隔绝L」）：由 Lean 开关决定存在性的角色在
+        开关关着时不存在 ⇒ 两个面都是空的（工具面与可调用面）。判据读
+        `leanscope`（唯一入口），这里不做第二份判断。
         """
+        from .. import leanscope as _LEANSCOPE
         from . import READ_ONLY_ROLES, SIDE_EFFECTS_WRITE  # 局部导入避免模块级循环
+
+        if _LEANSCOPE.is_hidden(role):
+            return [], {}
 
         out: list[ToolSpec] = []
         refused: list[str] = []

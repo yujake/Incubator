@@ -1,0 +1,181 @@
+{
+ "schema_version": 2,
+ "rows": [
+  {
+   "dep_id": "000000",
+   "used_by": "stmt:000001",
+   "kind": "experiment",
+   "label": "exp:000002",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": "000002",
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T00:58:37+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": null,
+   "created_by": "secretary-B"
+  },
+  {
+   "dep_id": "000001",
+   "used_by": "stmt:000002",
+   "kind": "experiment",
+   "label": "exp:000003",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": "000003",
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T00:58:54+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": null,
+   "created_by": "secretary-B"
+  },
+  {
+   "dep_id": "000002",
+   "used_by": "stmt:000003",
+   "kind": "experiment",
+   "label": "exp:000026",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": "000026",
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T05:24:12+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": null,
+   "created_by": "secretary-B"
+  },
+  {
+   "dep_id": "000003",
+   "used_by": "stmt:000003",
+   "kind": "theorem",
+   "label": "stmt:000002",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": null,
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T05:24:12+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": "000002",
+   "created_by": "secretary-B"
+  },
+  {
+   "dep_id": "000004",
+   "used_by": "stmt:000003",
+   "kind": "experiment",
+   "label": "exp:000029",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": "000029",
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T05:24:12+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": null,
+   "created_by": "secretary-B"
+  },
+  {
+   "dep_id": "000005",
+   "used_by": "stmt:000004",
+   "kind": "experiment",
+   "label": "exp:000026",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": "000026",
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T05:32:36+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": null,
+   "created_by": "secretary-B"
+  },
+  {
+   "dep_id": "000006",
+   "used_by": "stmt:000004",
+   "kind": "theorem",
+   "label": "stmt:000002",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": null,
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T05:32:36+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": "000002",
+   "created_by": "secretary-B"
+  },
+  {
+   "dep_id": "000007",
+   "used_by": "stmt:000004",
+   "kind": "experiment",
+   "label": "exp:000029",
+   "status": "closed",
+   "source_lit_id": null,
+   "source_experiment_id": "000029",
+   "page_range": {
+    "start": null,
+    "end": null,
+    "label": ""
+   },
+   "quote": "",
+   "status_reason": "",
+   "created_at": "2026-10-22T05:32:36+08:00",
+   "source_doc_id": null,
+   "source_claim_id": null,
+   "path_group": 1,
+   "source_stmt_id": null,
+   "created_by": "secretary-B"
+  }
+ ]
+}

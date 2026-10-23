@@ -63,10 +63,16 @@ _BAD = {"verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据"
 
 #: 自产命题的两件式（定理内容 + 证明过程）：`doc_id` 与 `quote_reason` 是
 #: `register_statement` 预检的硬要求。
+#:
+#: 2026-10-22（业主裁定 B-2「没有引文 / 自己编的命题必须从"猜想"注册」）：这一格加了
+#: `kind="conjecture"`。它不是这一组判据的主题（这一组问的是"canonical 正文被改时旧
+#: 正文留没留痕"），但自产 + 无出处 + 引文不是 true 的一笔从这一批起只许按猜想登记 ——
+#: 夹具跟着裁定的入口档走，判据本身一个字没动。
 OWN = {
     "statement_full": STATEMENT,
     "statement_text": STATEMENT_TEXT,
     "origin": "own_result",
+    "kind": "conjecture",
     "doc_id": S.format_id(0),
     "quote_reason": "我方自产命题，没有外部引文要比对",
 }

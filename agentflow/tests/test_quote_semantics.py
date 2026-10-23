@@ -21,7 +21,10 @@ from agentflow import evidencebits as EB
 from agentflow import schema as S
 
 
-# ============================================================ 1 四态表
+# ============================================================ 1 五态表
+#: 一个形状合法的区间（口径 `p{页}:norm[起:止]`，见 `quoteevidence.SPAN_SCHEME`）。
+_SPAN = "p2:norm[4:44]"
+
 @pytest.mark.parametrize("row, want", [
     # 还没查
     ({"quote_verified": None}, "unchecked"),
@@ -29,18 +32,27 @@ from agentflow import schema as S
     # 查过了、不一致（语义档也救不了它：H 的判据是"说同一件事"）
     ({"quote_verified": False}, "mismatch"),
     ({"quote_verified": False, "quote_mode": "semantic"}, "mismatch"),
-    # 通过的两档
-    ({"quote_verified": True, "quote_mode": "verbatim"}, "verbatim"),
-    ({"quote_verified": True, "quote_mode": "semantic"}, "semantic"),
-    # 历史行：方式那一栏还没有的时代，True 只可能来自逐字那一档
-    ({"quote_verified": True}, "verbatim"),
-    ({"quote_verified": True, "quote_mode": ""}, "verbatim"),
+    # 通过的两档（都带得出区间：区间是"核的是哪一段"的唯一载子）
+    ({"quote_verified": True, "quote_mode": "verbatim", "quote_span": _SPAN}, "verbatim"),
+    ({"quote_verified": True, "quote_mode": "semantic", "quote_span": "excerpt",
+      "quote_call_sha256": "c0ffee"}, "semantic"),
+    # 历史行：方式那一栏还没有的时代，True 只可能来自逐字那一档（区间仍要非空）
+    ({"quote_verified": True, "quote_span": _SPAN}, "verbatim"),
+    ({"quote_verified": True, "quote_mode": "", "quote_span": _SPAN}, "verbatim"),
     # 说不出方式的通过 ⇒ 按没查算（词表外的值就是"说不清"）
     ({"quote_verified": True, "quote_mode": "fuzzy"}, "unchecked"),
     ({"quote_verified": True, "quote_mode": "看起来一样"}, "unchecked"),
+    # D1（2026-10-22 第二版）：说通过而拿不出区间 ⇒ 第五档 `no_evidence`。
+    # 真机那 13 行就是这些形状（`true` + `verbatim` / 空方式 + 空 span）。
+    ({"quote_verified": True, "quote_mode": "verbatim"}, "no_evidence"),
+    ({"quote_verified": True}, "no_evidence"),
+    ({"quote_verified": True, "quote_mode": "", "quote_span": ""}, "no_evidence"),
+    # 语义档的第二件证据（调用指纹）缺了，同样拿不出"哪一次判的" ⇒ 同一档。
+    ({"quote_verified": True, "quote_mode": "semantic", "quote_span": "excerpt"},
+     "no_evidence"),
 ])
 def test_the_quote_state_table(row: dict, want: str) -> None:
-    """四态表（唯一读口径）：`unchecked` / `mismatch` / `verbatim` / `semantic`。"""
+    """五态表（唯一读口径）：`unchecked` / `mismatch` / `verbatim` / `semantic` / `no_evidence`。"""
     assert EB.quote_state(row) == want, row
     assert EB.quote_explains_itself(row) == (want in S.QUOTE_MODES), row
 
@@ -53,12 +65,23 @@ def _stmt(**kw) -> S.Statement:
     return S.Statement(**base)
 
 
-def test_a_bare_true_is_recorded_as_verbatim_not_left_empty() -> None:
-    """只说了"通过"、没说方式的行记实成 verbatim（历史事实），不许留白。"""
-    row = _stmt(quote_verified=True)
-    row.validate()
-    assert row.quote_mode == "verbatim", row.to_dict()
-    assert row.to_dict()["quote_mode"] == "verbatim"
+def test_a_bare_true_is_only_recorded_as_verbatim_when_it_has_a_span() -> None:
+    """D1（2026-10-22 第二版）：空方式记实成 verbatim 的前提从"说了通过"收紧成"有区间"。
+
+    改前：`quote_verified=True` 而 `quote_mode` 空 ⇒ 一律记成 `verbatim`（历史事实：
+    这一栏出现之前 True 只可能来自逐字那一档）。但真机 13 行说明那个前提已经不成立：
+    它们正是"空方式 + 空区间"，被记成逐字通过之后，读侧与收工门都按"核过了"算。
+    所以现在只有拿得出区间时才记实；区间为空就留空串，由读侧读成 `no_evidence`。
+    """
+    bare = _stmt(quote_verified=True)
+    bare.validate()
+    assert bare.quote_mode == "", ("没有区间就不许记成 verbatim（D1）："
+                                   f"{bare.to_dict()}")
+
+    with_span = _stmt(quote_verified=True, quote_span=_SPAN)
+    with_span.validate()
+    assert with_span.quote_mode == "verbatim", with_span.to_dict()
+    assert with_span.quote_span == _SPAN, with_span.to_dict()
 
 
 def test_the_semantic_verdict_is_kept_verbatim() -> None:
@@ -118,35 +141,52 @@ def test_the_semantic_mode_demands_its_evidence() -> None:
         S.Relation(relation_id="0003", concept_ids=["0001", "0002"], description="d",
                    lit_id="0000", page_range=S.PageRange(1, 2, "p.1-2"),
                    quote_verified=True, quote_mode="semantic").validate()
-    # 逐字那一档不需要这两栏（它自己那一份证据是"逐字命中"，由 check_quote 给）
+    # 逐字那一档不需要这两栏（它自己那一份证据是"逐字命中" + 区间，由 check_quote
+    # 与 locate_span 给）；D1 起"没有区间"不再记实成 verbatim（见上面那条判据）。
     plain = _stmt(quote_verified=True)
     plain.validate()
-    assert plain.quote_mode == "verbatim" and plain.quote_span == "", plain.to_dict()
+    assert plain.quote_mode == "" and plain.quote_span == "", plain.to_dict()
+    verbatim = _stmt(quote_verified=True, quote_span=_SPAN)
+    verbatim.validate()
+    assert verbatim.quote_mode == "verbatim", verbatim.to_dict()
 
 
 # ============================================================ 3 学分
 def test_the_citation_credit_needs_a_usable_mode() -> None:
-    """引用命题的学分：两档都给（逐字 / 语义），说不清方式的不给。"""
+    """引用命题的学分：两档都给（逐字 / 语义），说不清方式的不给、没有区间的不给。"""
     ok_v = {"stmt_id": "0001", "origin": "external_lit", "source_lit_id": "0001",
-            "quote_verified": True, "quote_mode": "verbatim", "status": "active"}
-    ok_s = {**ok_v, "stmt_id": "0002", "quote_mode": "semantic"}
+            "quote_verified": True, "quote_mode": "verbatim", "quote_span": _SPAN,
+            "status": "active"}
+    ok_s = {**ok_v, "stmt_id": "0002", "quote_mode": "semantic",
+            "quote_call_sha256": "c0ffee"}
     bad = {**ok_v, "stmt_id": "0003", "quote_mode": "fuzzy"}
+    # D1（2026-10-22）：说通过而拿不出区间 ⇒ 学分不给（那是 `no_evidence`）。
+    no_span = {**ok_v, "stmt_id": "0004", "quote_span": ""}
     assert EB.bits_from_row(ok_v)["grade"] == EB.bits_from_row(ok_s)["grade"] != "conjecture"
     assert EB.bits_from_row(bad)["grade"] == "conjecture", EB.bits_from_row(bad)
+    assert EB.bits_from_row(no_span)["grade"] == "conjecture", (
+        "空区间仍拿到引用学分 ⇒ D1 的读侧那一半没生效", EB.bits_from_row(no_span))
 
 
 def test_the_credit_reason_says_which_mode_it_was() -> None:
     """理由那一栏要把两档说开（读的人不该去猜"核过"是哪种核过）。"""
     rows = [{"stmt_id": "0001", "kind": "theorem", "origin": "external_lit",
-             "source_lit_id": "0001", "quote_verified": True, "quote_mode": "verbatim"},
+             "source_lit_id": "0001", "quote_verified": True, "quote_mode": "verbatim",
+             "quote_span": _SPAN},
             {"stmt_id": "0002", "kind": "theorem", "origin": "external_lit",
-             "source_lit_id": "0001", "quote_verified": True, "quote_mode": "semantic"}]
+             "source_lit_id": "0001", "quote_verified": True, "quote_mode": "semantic",
+             "quote_span": "excerpt", "quote_call_sha256": "c0ffee"}]
     from agentflow import evidencebits
 
     got = evidencebits.clean_statement_ids(rows)
     assert got["clean"] == ["0001", "0002"], got
     assert "逐字" in got["reasons"]["0001"], got
     assert "语义" in got["reasons"]["0002"], got
+    # D1：没有区间的"通过"落不进干净集合，而且理由说的是"拿不出证据"（不是"没核过"）。
+    bare = dict(rows[0], stmt_id="0003", quote_span="")
+    got2 = evidencebits.clean_statement_ids([bare])
+    assert got2["clean"] == [], got2
+    assert "拿不出" in got2["reasons"]["0003"], got2
 
 
 # ============================================================ 4 语义那一档（B 唤起 H）
@@ -214,7 +254,9 @@ def test_the_closing_gate_counts_by_the_same_two_columns(tmp_path) -> None:
     rows = [
         {"stmt_id": "0000", "origin": "external_lit", "kind": "theorem",
          "statement_full": "甲", "source_lit_id": "0000",
-         "quote_verified": True, "quote_reason": "逐字比对通过"},
+         "quote_verified": True, "quote_reason": "逐字比对通过",
+         # D1（2026-10-22）：老行（True 无方式）按逐字读的前提是它拿得出区间。
+         "quote_span": "p2:norm[4:44]"},
         {"stmt_id": "0001", "origin": "external_lit", "kind": "theorem",
          "statement_full": "乙", "source_lit_id": "0000",
          "quote_verified": True, "quote_mode": "semantic",
@@ -226,6 +268,11 @@ def test_the_closing_gate_counts_by_the_same_two_columns(tmp_path) -> None:
         {"stmt_id": "0003", "origin": "external_lit", "kind": "theorem",
          "statement_full": "丁", "source_lit_id": "0000",
          "quote_verified": None, "quote_reason": "还没查"},
+        # D1：说通过而拿不出区间（真机那 13 行的形状）⇒ 单列一栏，不算 true。
+        {"stmt_id": "0004", "origin": "external_lit", "kind": "theorem",
+         "statement_full": "戊", "source_lit_id": "0000",
+         "quote_verified": True, "quote_mode": "verbatim",
+         "quote_span": "", "quote_reason": "逐字比对通过（没有区间）"},
     ]
     with store.tx("statements", actor="test") as tx:
         for row in rows:
@@ -246,10 +293,12 @@ def test_the_closing_gate_counts_by_the_same_two_columns(tmp_path) -> None:
     data_path.write_text(_json.dumps(doc, ensure_ascii=False), encoding="utf-8")
 
     count, reading = CL._leg_reading(Store(root), "quote_verified_rows", root)
-    assert reading["verbatim"] == 1, reading      # 老行（True 无方式）按逐字读
+    assert reading["verbatim"] == 1, reading      # 老行（True 无方式、有区间）按逐字读
     assert reading["semantic"] == 1, reading
     assert reading["true"] == 2, reading          # 逐字 + 语义
     assert reading["unchecked"] == 2, reading     # `fuzzy` 那一行 + 还没查那一行
+    # D1（2026-10-22）：说通过而无区间单列一栏，且不计入 `true` 与 `judged`。
+    assert reading["no_evidence"] == 1, reading
     assert count == 2, (count, reading)
 
     """每条判据的模板都要带上 `_JSON_RULES`（真机实测的教训，见那一处的 docstring）。

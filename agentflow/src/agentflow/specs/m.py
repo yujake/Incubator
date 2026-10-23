@@ -53,8 +53,15 @@ SPEC = AgentSpec(
             "不拿清单走完当进展。",
             "**F 仍然只能间接由父代理转达，你派不动它**（业主 2026-10-10 裁定：不许直接控制 F）：要 F 攻坚 ⇒ 派 D（立题/关系那一侧"
             "的动作），由 D 建计划并派 F。**B 你可以直接派**：抽取/重抽取、命题与逐字出处派 `B`（命题进台账走 "
-            "`B.register_statement`）。**V 不在你的出边里**（业主 2026-10-20 撤掉了 M 直连 V 的那条边）：要 V 签字只走"
-            "**经 B** 的那条两跳路 `M→B→V`（B 入库文献侧内容时请 V 签）—— 这是**经 B** 的路，不是你直连 V，"
+            "`B.register_statement`）。**V 不在你的出边里**（业主 2026-10-20 撤掉了 M 直连 V 的那条边）：**你（M）**要 V 签字"
+            "只能走**经 B** 的 `M→B→V`（B 入库文献侧内容时请 V 签）—— 那是两跳、不是你直连 V；"
+            # 2026-10-22（D11「同一事实只留一个真身」）：这一句此前在 `specs/m.py`、手册
+            # （`agent_skills.py`）与画像（`AGENT-PROFILES.md`，由这份 brief 渲染）三处各写
+            # 一遍 —— 三份都是"谁是 V 的入口"的第二真身，改一处另外两处不会变、也不会有
+            # 任何判据变红。真身只有一个：`capabilities.ALLOWED_EDGES`（伙伴表就是它现算
+            # 渲染出来的）。所以这里只留「你（M）这一侧」的口径 + 主语，路线细节交回伙伴表。
+            "**F 与 B 各有直连 V 的边**（谁能直连谁、几条边，逐格以伙伴表为准 —— 伙伴表的"
+            "真身是 `capabilities.ALLOWED_EDGES`，这一段不再抄第二份路线图）。"
             # 2026-10-20 业主裁定（逐字："F 产出的证明带 V 签字后不该反复要求签字……只有 F 能派 V"）：
             # `M→V` 那条边同日撤掉（见下面的 `edges`），「派 V 走查证明」这个「义务」不归 M ⇒ 转交 D（D 再让 F 去办）。
             "但**证明走查不由你派**：F 产出的证明天生带 V 的签字，真发现缺签就派 **D** 去核、由 D 让 F 补签（那一签由 F 去办）。"
@@ -94,11 +101,11 @@ SPEC = AgentSpec(
             "**用户问「现在什么情况」时用 `conductor.status_report`**（`draft/39` §4 的入口②）：它只读收集当前情况（产出 / 交接 / "
             "在飞卡点 / 被拒与插话），把报告落到 `out/review/STATUS-<时刻>.{md,json}`，四类读数原样回给你；它**不发 ask_user、"
             "不停任何人的循环** —— 别拿反复侦察代替它。**收工前也落一份**（不必等用户问）。",
-            "**开关开着、而任务原文要求形式化时，你必派两步**（`TOOLCHAIN_FACTS` 第一行说「已开启」才算数）：① 裁决 "
-            "`E.check_formal`（只给结论不落库）→ ② 落库 `E.run_experiment(method=\"formal\")`；验收表用 `proof_experiment_rows`"
+            "**开关开着、而用户指定要验某一条时，走两步 —— 两步都在 L 那一岗**（`TOOLCHAIN_FACTS` 第一行说「已开启」才算数；形式化那一岗是 L；L 不是流水线的一环：不指定就不做）：① 裁决 "
+            "`L.check_formal`（只给结论不落库）→ ② 落库 `formal.record`（L 把这一次检查登记成 experiments 的 proof 行）；验收表用 `proof_experiment_rows`"
             "（`method=formal` **且** `evidence_kind=proof`）。**只做数值实验不算完成那一条** —— 任务说「能机器验证的定理做形式化"
-            "验证」时，派 E 做纯数值就是把这条要求降级了。",
-            "**形式化这条路：一次只核你给的那份源码**：`E.check_formal` 只给裁决、不落库，`E.run_experiment(method='formal')` 才落 "
+            "验证」时，只做纯数值就是把这条要求降级了（形式化那一岗是 L）。**L 不在你的出边里，而且它不是流水线的一环**：平时不召唤；只有研究与论文都落定之后、用户明确指定要验某一条时，才对那一条走这两步（写进派活里，写清是哪一条）。",
+            "**形式化这条路：一次只核你给的那份源码**（形式化那一岗是 L）：`L.check_formal` 只给裁决、不落库，`formal.record` 才落 "
             "proof 行。试错要有代价意识：只改检查器原话指出的那一处；继续试还是收手由你按**读得出来的代价**（试了几次 / 哪一档"
             "失败 / 检查器原话是什么）裁量并**留痕**。改不动就把命题**改小**（某个具体阶数的矩阵、有限枚举、纯 `Nat` 的算术），"
             "或如实记「未核到」并把检查器原话抄进交付。**Mathlib 能不能用，只从 TOOLCHAIN_FACTS 的现算读数来**：读数说可用 ⇒ "
@@ -139,7 +146,7 @@ SPEC = AgentSpec(
             "`search_frontier_rows` / `enumeration_optimization_rows`；造：`reviewed_proof_rows` 或 `counterexample_or_proof_rows`）"
             "—— `reviewed_proof_rows` 数的是**五位现算**到我方命题「预备定理级 / 正式定理」的行，引用命题（`origin=external_lit`）"
             "到高档不算；它写成 0 时先读 `statements_without_bits` 分清两种 0：**等于** `statements` ⇒ 产出方根本没走过位记录"
-            "（去派签位的人：数值 / 形式化 E、证明 F、审过 V、正式审查 H；写位的是 B 的 `register_statement`），**小于**它 ⇒ 算了"
+            "（去派签位的人：实验 E、证明 F、审过 V、正式审查 H；写位的是 B 的 `register_statement`），**小于**它 ⇒ 算了"
             "只是不够档；自报的 `status=proved` / `evidence_kind=proof` 不算凭据 —— 非数值方向走「造」这条腿，并在验收表里写清"
             "为什么不用数值（那就是第 1 位 `na` 的理由）；④想（`conjecture_rows` / `statement_rows` / `counterexample_or_proof_rows`）；"
             "⑤**看（关系分析）**：`c_analysis_runs`（数 `tasks` 里 role=C 跑过的行）—— 要么真的派过 C 的关系分析，要么写 `na` + 理由；"
@@ -246,8 +253,8 @@ SPEC = AgentSpec(
             "有任务**（补证据 D/F、核引文 A/B、重算关系读数 C、逐行审阅 V、把命题与出处对齐 B）—— 别把「写论文」读成只有 G 与 H 的事。",
             "**审校是一条以 B / H / V 为中心的协作链**：**B** 管命题台账与逐字出处（`statements` 的 `proof_text` 与 "
             "`quote_verified`：原文长什么样的唯一可比对文本）、**V** 逐行走查证明并签「审过」（`verifications`；Lean 关掉时这是本会话"
-            "唯一的「审过」凭据）、**H** 拿着 B 的台账与 V 的签名判稿件（它的采信规则只有两条：正文与台账逐字一致 + E 的 proof 或 "
-            "V 的签名）。三环各有各的欠账读数（`quote_verified_rows` / `reviewed_proof_rows` / `reviewed_documents` / "
+            "唯一的「审过」凭据）、**H** 拿着 B 的台账与 V 的签名判稿件（它的采信规则只有两条：正文与台账逐字一致 + L 的形式化（"
+            "`formal.record` 那一行）或 V 的签名）。三环各有各的欠账读数（`quote_verified_rows` / `reviewed_proof_rows` / `reviewed_documents` / "
             "`reviewed_current_rows`）—— **每一份手稿与正文都要走过这条链**；被审对象的落点由你在派活里给，H 的 `review_report` "
             "把报告落到**框架定的** `out/review/<doc_id>-review.md`，验收表里那一行 `review_files` 数的就是它。",
             "**研究型任务的验收表里要有一行「文献进稿」**：`document_literature_citations` ≥ 1。而「哪里算立论」只有你能定，所以"

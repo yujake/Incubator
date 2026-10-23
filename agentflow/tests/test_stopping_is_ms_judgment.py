@@ -88,6 +88,7 @@ def test_m_may_refuse_to_stop_even_when_the_machine_is_green(tmp_path: pathlib.P
                        label="Theorem 0.1", statement_text="短版",
                        statement_full="若 A 则 B", proof_text="Proof. …",
                        source_lit_id="0000", quote_verified=True,
+                       quote_span="p1:norm[4:40]",
                        quote_reason="逐字比对通过", evidence_kind="cross_check",
                        status="active", created_at=TS)
     stmt.validate()

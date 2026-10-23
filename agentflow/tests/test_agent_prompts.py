@@ -41,7 +41,9 @@ TASK = "把这条链路走一遍"
 ROOT = "D:/x"
 
 #: 伙伴条目：以角色字母开头、后接全角冒号的行。
-_PARTNER_BULLET = re.compile(r"^- ([A-HMV])：")
+#: 2026-10-22（新设 L）：字符集加上 `L` —— 它此前是 `[A-HMV]`，于是伙伴表里
+#: `- L：…` 那一行被这条正则整行漏掉（读数看起来"主表里没有这一行"，而它确实在）。
+_PARTNER_BULLET = re.compile(r"^- ([A-HLMV])：")
 #: 参数提示里"必填"那一栏（到分号或右括号为止）。
 _REQUIRED_GROUP = re.compile(r"必填 ([^；）]*)")
 
@@ -153,30 +155,43 @@ def test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded(
 
 
 def test_the_formal_writing_block_goes_to_whoever_holds_the_tool(registry: ToolRegistry):
-    """`TOOLCHAIN_FORMAL` 只发给手上真有 `verify.check_formal` 的角色（业主裁定 G）。
+    """`TOOLCHAIN_FORMAL` 只发给手上真有 `formal.*` 的角色（2026-10-22 起只有 L）。
+
+    旧期望把这一段算在 E 头上（2026-10-22 改指向 L）：那时受众判据是
+    `verify.check_formal`（E / F / G 三家都挂在工具面上），于是三家都被教"你怎么写 Lean
+    源码"。业主 2026-10-22 第四批的口径是「所有受 Lean 开关控制的提示词 / 工具 / 动作
+    一律指向 L」⇒ 受众判据收成 `formal.*`（`_writes_lean` 读的那一族），今天只有 L 占得上。
+    桥接层真身 `verify.check_formal` 仍在 E/F/G 的工具面上（那是权限面，不动），
+    但它不再决定"谁拿这一段"。
 
     两头都钉，因为两头的错法不一样：
-      - 漏发（会用它的角色没拿到）⇒ 重演 `draft/37` §89：8 次 `check_formal` 里
-        6 次白撞 `import Mathlib`，而框架手里有读数；
-      - 滥发（不写 Lean 的角色也收到一段"怎么写 Lean 源码"）⇒ 提示词变噪音，
-        而噪音的代价是"该看的那几句被淹掉"（本文件的伙伴表判据同一句话）。
-
-    判据按工具面现算（`_writes_lean`），不写死角色名 —— 所以它同时钉住
-    "角色与工具面对得上"这件事：注册表里谁有这件工具，谁就该有这一段。
+      - 漏发（这一岗真做形式化的人没拿到口径）⇒ 重演 `draft/37` §89：8 次
+        `check_formal` 里 6 次白撞 `import Mathlib`，而框架手里有读数；
+      - 滥发（不做形式化的人也收到一段"怎么写 Lean 源码"）⇒ 提示词变噪音，
+        而噪音的代价是"该看的那几句被淹掉"。
     """
     holders: list[str] = []
     for role in ALL_ROLES:
         sections = AP.prompt_audit(role, registry=registry, task=TASK,
                                    workspace_root=ROOT)["sections"]
-        holds = any(s.name == "verify.check_formal" for s in registry.for_role(role))
+        holds = any(s.name.startswith("formal.") for s in registry.for_role(role))
         assert ("TOOLCHAIN_FORMAL" in sections) is holds, (
-            f"{role}：工具面上{'有' if holds else '没有'} `verify.check_formal`，"
+            f"{role}：工具面上{'有' if holds else '没有'} `formal.*`，"
             f"而段表里{'有' if 'TOOLCHAIN_FORMAL' in sections else '没有'}那一段")
         if holds:
             holders.append(role)
-    assert holders == ["E", "F", "G"], (
-        f"持有这件工具的角色集合变了（现算：{holders}）⇒ 这一段的受众跟着变 —— "
-        "不是判据坏了，是读数变了：改这一行之前先看那三个角色的提示词是不是真的都该拿到它")
+    assert holders == ["L"], (
+        f"持有 `formal.*` 的角色集合变了（现算：{holders}）⇒ 这一段的受众跟着变 —— "
+        "不是判据坏了，是读数变了：改这一行之前先看那一岗的提示词是不是真的该拿到它")
+    # 负控：E / F / G 不再拿这一段（这一条是这一批的正题）。
+    # 为什么不在这里钉"它们手上还有 `verify.check_formal`"：2026-10-22 另一路把 E 的 Lean 侧
+    # 写死停用（理由码 `formal_moved_to_l`）并把那一件从 E 的工具面上摘掉 —— 那是权限面的事，
+    # 由 `tests/test_l_formalizes_what_b_says.py` 与冻结快照看，本判据只管"谁读怎么写"。
+    for role in ("E", "F", "G"):
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        assert "TOOLCHAIN_FORMAL" not in sections, (
+            f"{role} 又在读「怎么写 Lean 源码」那一段了 ⇒ 形式化又被算回它头上了")
 
 
 def test_the_toolchain_line_says_to_pass_mathlib_when_the_probe_says_it_works(
@@ -271,7 +286,8 @@ def test_the_parent_limits_block_goes_to_whoever_can_summon(registry: ToolRegist
             f"而段表里{'有' if 'PARENT_LIMITS' in sections else '没有'}派活上限那一段")
         if can:
             holders.append(role)
-    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "M"], (
+    # 2026-10-22：L 接上协作面（有出边）之后它也会读派活上限那一段 ⇒ 名单里多一个 L。
+    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "L", "M"], (
         f"能派活（出边非空）的角色集合变了（现算：{holders}）⇒ 这一段的受众跟着变 —— "
         "不是判据坏了，是能力表变了（唯一发不出 `summon` 的实测是 C）")
     # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这张表按原句恢复（又少了 `"C"`）。
@@ -444,21 +460,26 @@ def test_the_research_brief_asks_for_literature_citations_and_three_search_readi
 def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: ToolRegistry):
     """判据（`draft/37` §92）：提示词必须说清"形式化核验分两步"，且第二步是落库。
 
-    真机读数（第 6 趟）：主控照提示词派了 6 次 `E.check_formal`，其中两条真的 `verified=true`
-    （`exactness_core` / `fekete_core`），而 `experiments` 表是 0 行 —— 因为 `check_formal` 只给裁决、
-    不落台账。于是随后 10 条 proof 级断言一条都建不进 `documents`（FC-22 要 `exp:` 引用），
-    `documents` 与 H 那两跳全落空；旧提示词写的「`check_formal` 给出的 `verified=True` 是证据升级
-    （台账里那条断言的证据跟着变）」与实现不符。
+    旧期望把这两步算在 E 头上（2026-10-22 改指向 L）：那时写的是 ① `E.check_formal` 裁决
+    → ② `E.run_experiment(method='formal')` 落库。业主 2026-10-22 第四批之后形式化只由 L 做，
+    落库那一格改由 L 的 `formal.record` 承担 ⇒ 判据钉的两件事不变（先裁决、后落库、而且
+    裁决本身不落台账），只是主语换成 L。
 
-    判据的形状：① 提示词里必须有 `run_experiment` 与 `method='formal'` 这条落库路径；② 必须写明
-    `check_formal` 不落台账；③ 负控（事实那一侧）：`check_formal` 跑完之后 `experiments` 行数不变 ——
-    万一有人把它改成会写行，这条判据会红，提醒改提示词。"""
+    真机读数（第 6 趟）仍然成立：照着提示词派了 6 次裁决，其中两条真的 `verified=true`，
+    而 `experiments` 表是 0 行 —— 因为裁决那一步只给结论、不落台账。于是随后 10 条
+    proof 级断言一条都建不进 `documents`（FC-22 要 `exp:` 引用）。
+
+    判据的形状：① 提示词里必须同时有裁决那一步与落库那一步；② 必须写明裁决那一步不落台账；
+    ③ 负控（事实那一侧）：`check_formal` 跑完之后 `experiments` 行数不变 —— 万一有人把它
+    改成会写行，这条判据会红，提醒改提示词。"""
     paper_pack_roles = [r for r in ALL_ROLES if r in AP.PAPER_PACK_ROLES]
     assert paper_pack_roles, "没有角色拿到论文包那一段 ⇒ 这条判据失去对象"
     for role in paper_pack_roles:
         text = _prompt(role, registry)
-        assert "run_experiment(method='formal'" in text, f"{role} 的提示词没给落库那一步"
-        assert "只给裁决、不落台账" in text, f"{role} 的提示词没说清 check_formal 不落台账"
+        assert "`L.check_formal`" in text or "L.check_formal" in text, \
+            f"{role} 的提示词没把裁决那一步指向 L"
+        assert "formal.record" in text, f"{role} 的提示词没给落库那一步"
+        assert "只给裁决、不落台账" in text, f"{role} 的提示词没说清裁决不落台账"
 
     # ---- 事实那一侧（负控）：`check_formal` 真的不写 `experiments`
     import tempfile
@@ -479,21 +500,32 @@ def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: Too
         "`check_formal` 现在会写 experiments 了？那提示词里那两句（裁决/落库分开）必须跟着改")
 
 
-def test_e_is_told_to_write_the_lean_source_into_the_workspace(registry: ToolRegistry):
-    """判据（`draft/37` §98 的真机读数）：E 必须被明确告知"内联源码同时落进工作区"。
+def test_l_is_told_to_read_the_ledger_then_write_the_lean_source(registry: ToolRegistry):
+    """判据（`draft/37` §98 的真机读数，2026-10-22 改指向 L）：写 Lean 源码那一边的口径归 L。
 
-    第 10 趟真机：两次 `check_formal` 真的 `verified` 了（`exactness_forward`），
-    而内联源码只落在临时目录里 ⇒ 它既不是 `proof_location`、也没法交给
-    `run_experiment(method='formal', script_path=…)`；随后 4 次 `run_experiment`
-    指着 `code/exactness_forward.lean` 报"脚本不存在"，`experiments` 里一条 proof 行都没有。
-    裁决与落库之间只差"把源码写进工作区"这一步 —— 而这一步此前没人告诉过它。
+    旧期望把这一条算在 E 头上（2026-10-22 改指向 L）：原名是
+    `test_e_is_told_to_write_the_lean_source_into_the_workspace`，它要求 E 的提示词里
+    出现 `fs.write` / `code/lean/` / `decide` / `不归约` / `sorry` / `改一处再试` /
+    `checker_name` —— 也就是"E 被教怎么写 Lean 源码"。业主 2026-10-22 第四批之后 E 不再教
+    这件事（它那一岗是实验与反例），这一段口径整条搬到 L 那一岗，于是判据的主语换成 L。
+
+    真机读数（第 10 趟）仍然成立、而且正好是 L 的设计理由：两次裁决真的 `verified` 了，
+    而源码只落在临时目录里 ⇒ 它既不是 `proof_location`、也没法交给下一步。裁决与落库之间
+    只差"把源码写进工作区"这一步 —— 现在 L 的 `formalize` 一次成型（写盘 + 检查 + 三态），
+    所以判据钉的是"它的提示词里要读到这条链"：
+
+      - 输入是 B 登记的那一条（`statement_full` + `proof_text`，逐步对上）；
+      - 落点是 `code/formal/<声明名>.lean`，检查器原话与真实退出码是唯一凭据；
+      - 结论三态，`sorry` 堵不住（它编译得过，但框架逐字判"这不是证明"）。
     """
-    text = _prompt("E", registry)
-    for needle in ("fs.write", "code/lean/", "script_path", "proof_location"):
-        assert needle in text, f"E 的提示词里没有提到 {needle!r}"
-    # 无 Mathlib 时的三条写法口径（第 11 趟的真机失败形态，逐条写进去）
-    for needle in ("decide", "不归约", "sorry", "改一处再试", "checker_name"):
-        assert needle in text, f"E 的提示词里没有提到 {needle!r}"
+    text = _prompt("L", registry)
+    for needle in ("statement_full", "proof_text", "逐步", "code/formal", "三态", "sorry"):
+        assert needle in text, f"L 的提示词里没有提到 {needle!r}"
+    # 负控：E 那一侧不再有"怎么写 Lean 源码"的落点口径（这一批的正题）
+    e_text = _prompt("E", registry)
+    for needle in ("code/lean/", "decide", "不归约", "checker_name"):
+        assert needle not in e_text, (
+            f"E 的提示词里还留着「怎么写 Lean 源码」的口径 {needle!r} ⇒ 形式化又被算回它头上了")
 
 
 def test_every_action_in_the_partner_table_says_what_it_does(
@@ -632,7 +664,7 @@ def test_the_three_kinds_of_reference_are_told_apart(registry: ToolRegistry):
         holders.append(role)
         for want in ("台账号", "名册名", "实例标签", "对账", "绝对编码"):
             assert want in text, f"{role} 的指称判据里缺 {want!r}"
-    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "M"], holders
+    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "L", "M"], holders
     # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这张表按原句恢复（与上一条同口径）。
 
 
@@ -807,7 +839,7 @@ def test_the_three_shapes_that_carry_more_fields_teach_all_of_them(registry: Too
     教了一个不存在的字段（模型写了被拒），或者收了一个没教的字段（模型不知道该写）。
 
       - `summon_many` 的每一项：`brief` / `name` / `reuse`（与 `summon` 同三格）——
-        一批里派三件不同的活时，各自的简介写在各自那一项里（`_decode_shape` 的 `**extra`）；
+        一批里派三件不同的活时，各自的简介写在各自那一项里（`_decode_shape` 的 `extra` 字段）；
       - `message`：`reply_to` —— 回一条已经存在的对话 ⇒ 不再要求协作边
         （`message_admission` 的准入判据里它是第三个放行项）。这一条是"旁的角色先开口、
         你再回"这条路在提示词里唯一的落点，不写它模型就只能干看着；
@@ -1167,7 +1199,9 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
     # 2026-10-20：业主撤掉 `M→V`（「派 V 只有 F 与 B 两个入口」）⇒ 回到 {F, V} ——
     # 而这一条必须非空，否则下面那句"看得见但唤不起"的判据整体空转
     # （`gaps[M]` 为空时它一句都不验）。期望值跟着裁定走，判据强度不变。
-    assert gaps["M"] == {"F", "V"}, gaps["M"]
+    # 2026-10-22（新设 L + 只有 F→L 一条边）：M 看得见 L（伙伴表印全体简介），但唤不起它 ——
+    # 与 F / V 同一档，都必须在条目上带「你唤不起它」标记。
+    assert gaps["M"] == {"F", "L", "V"}, gaps["M"]
     assert gaps["M"], "主控的『唤不起』集合空了 ⇒ 这一整条判据退化成空转"
     assert not any(gaps[r] for r in gaps if r != "M"), \
         f"只有主控该有这一档（其余角色的条目就是出边）：{ {r: g for r, g in gaps.items() if g} }"
@@ -1339,7 +1373,9 @@ def test_every_role_still_carries_the_four_anchor_kinds(registry: ToolRegistry):
             f"{role} 的提示词里缺了 {missing} 这几类锚点 ⇒ 减负删过头了"
             "（身份/边界/上报/交接一律不许删）")
         checked.append(role)
-    assert len(checked) == 10, checked
+    # 2026-10-22（新设 L）：角色数从 10 变 11 —— 这一条守的是「每个角色都还读得到四类锚」，
+    # 所以对着 `ALL_ROLES` 的数判，不写死一个会随角色表漂的字面量。
+    assert len(checked) == len(ALL_ROLES), checked
 
 
 def test_deleting_a_safety_clause_makes_the_anchor_criterion_red(
@@ -2090,43 +2126,56 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p183"
+_FROZEN_PROMPT_VERSION = "p188"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    # `p165`（2026-10-19 晚）这一版装了两件事，十格全换值：
-    # ① B / F / M 三格：「有 proof_text ＋ V 签成立 ⇒ 就该落 `proof_review`，只有真没签名
-    #    才退 `heuristic`」那一条；
-    # ② 十格的前置提示词压缩（业主要求「稍微压一下，但必要的提示词不能删」）：只动
-    #    `specs/*.py` 的 `policy`，needle 1008 条 + 十格具体字面量 2459 条 + `NO_LEAN_REPLACEMENTS`
-    #    的 13 个左边逐条核过"改后仍在"（探针不进仓库）。
-    #  十格是两批改动先后落地之后现算的：上面那两批在同一时刻改同一批文件，
-    #    这张表按最后一版树重算（`pytest -k test_the_prompt_version_moves` 的同一环境）。
-    #    再改 `specs/*` 就必须连版本号一起动（这条判据两个方向都判）。
-    #  `p168` 这一版只动 A / B / C / D / M 五格 ⇒ 这五行的值换了，另五行逐字未动
-    #    （E / F / G / H / V 与 `p167` 那一版相同 —— 这本身就是"改动作用域"的读数）。
-    #  `p169` 十格全换值（理由逐条见上面那一段：A 的 boundary → 十格的伙伴表；
-    #    `conductor.escalate` → 十格的工具面与共用段；M 的第 12 条 skill → 只 M；
-    #    C 的两句假话 → B / C / D / F / M 这五格）。
-    #  `p182`（2026-10-22）只换 C 那一格：C 的 skills 多一条「最自然路径」
-    #    （业主新要求：分析最自然的关系路径而不只是最短依赖链），它的索引行只印在
-    #    C 那一格。`C.proof_chain` 的 payload 多一列 `path_shapes` 不进提示词正文
-    #    （动作面与工具面都没变，所以这里只有一格换值）。
-    #  `p183`（2026-10-22 第二批）也只换 C 那一格：业主澄清「这里 max 的意思是一批分析
-    #    能搜到多深，不妨碍如果有个证明有几十个大步骤，可以一批一批往回搜，再拼起来」
-    #    ⇒ C 那条「最自然路径」的索引行（`summary` / `when`）扩成"长链按 max_depth 一批
-    #    一批往回搜、前沿是下一批的起点、拼起来要交代接缝"，技能正文多一节动作循环。
-    #    技能正文不进提示词（索引行只印 slug + 一句话 + 什么时候读它），所以这一格里
-    #    变的就是那一行；`C.proof_chain` 的 payload 多 `frontier` / `frontier_checked` /
-    #    `frontier_note` 三格同样不进正文（动作面与工具面都没变）。
-    "A": "5cf5bf89198c506203b4b389769199eedd2852003804a84af2c86e7612ae360c",
-    "B": "94509219e9d680897a3785efc6417f7c94f978b572c02e97a973ead399a96f27",
-    "C": "c4375699e091a09dba527522e2d75f7c582a4436088978d6aadc9e72637453b4",
-    "D": "10fff18dfc267c507181f46c4b1594d2e6d5a8235ff61db0a2711b298ca0fc9c",
-    "E": "486305b098b3421560dd738dcb0e60913de8347848cd35a6f9b449c4dd65bc0f",
-    "F": "f7046c8befab285e3185ca56b0e32f59c9fe4ddd8daa5b053feb665013f55724",
-    "G": "0b681ab13933330243b41bae2512816610c69a2c47171bf77c7b472dc4331b19",
-    "H": "0028b8a68e387bce2f5a100a79e31a7f36ad279209d8493b906b6b2205c6f595",
-    "V": "6357d37167aa8343e1065af305cbb18fb5c33a2bf4e7df6c960af80017451ecf",
-    "M": "a8b4fc9879e0faee46ce6b4fa366c0e7ebe008c65e33a340744ac96ecfb92b4d",
+    # p186 那一版十一格全换值，理由逐条（留着当历史；p187 换值的理由见下面那一块）：
+    # ① 业主口径逐字「要保证 L 侧完全被 Lean 开关隔离，并改写所有智能体被 Lean 开关控制的
+    #    提示词、工具、动作等全部指向 L」；随后业主 B-5 改了形式化的启用条件：
+    #    「L 的形式化验证由于成本极高，口径改为：在全部研究和论文落定之后，用户指定有形式化
+    #    验证需求时，要一条才做一条」；
+    # ② 共用段：技能索引末尾那一句从"关掉时补一句做不了"翻成"开着时补一句形式化见 L"
+    #    （关着时一个字都不加）⇒ 十一格都读到它；
+    # ③ `TOOLCHAIN_FORMAL` 的受众从"手上有 `verify.check_formal` 的三家（E/F/G）"收成
+    #    "手上有 `formal.*` 的那一家（L）"，正文改写成 L 的口径（`statement_full` / `proof_text`
+    #    / 逐步 / `code/formal/` / 三态 + "不可召唤、用户指定才做一条"）；
+    # ④ `toolchain_facts_text()` 开着那一档补一行"形式化由 L 承担" ⇒ 十一格；
+    # ⑤ `specs/{e,d,g,h,m}.py` 里"形式化算在 E 头上"的句子逐条改成指向 L ⇒ 十一格
+    #    （伙伴表会印别人的职责句，所以不止 E/D/G/H/M 那五格）；
+    # 这些都是文本改动：动作面、工具面、边表、写集一格未动（`tests/test_lean_switch.py`
+    # 与 `tests/test_l_formalizes_what_b_says.py` 各守一头）。
+    #
+    # p187（2026-10-23 收口）十一格再全换，理由逐条：
+    # ① 共用段 `SKILLS_INDEX` 末尾那句「形式化见 L」补上了 L 的入口与协作面
+    #    （「入口只有两条：B 可以派 L —— `B → L` 是唯一的入边 —— 用户也可以
+    #    `run-agent L` 直接起一条；L 自己只派 C 梳理证明链」）⇒ 读这一段的是十一个
+    #    角色，所以十格一起换；② 论文包那一块（`PAPER_06`）的同一句也换了值 ⇒ G/H/M
+    #    三格再换一次；③ L 自己那一格：它的技能索引行写着「B 派你 —— `B → L` 是唯一
+    #    入边」，且工具面从两件长到三件（多出 `formal.record`）。
+    # 这一批改的是「谁拿得到哪些工具」与共用段的正文：动作面 62 → 65、边 32 → 35
+    # （`B → D` / `B → L` / `L → C`）、工具面 95 → 98（`verify.check_formal` 的角色面
+    # 从 E/F/G 收成空，`formal.*` 三件只挂 L）—— 这些读数在 golden 那一侧，不在这张表。
+    #
+    # p188（2026-10-23 审计收口）十一格再全换，只有一条理由，但它是共用段：
+    # 五元位那一段（`COLLAB_FIVEBITS`）里第 4 位 `formal` 的 owner 从 E 改成 L ——
+    # 业主 2026-10-22 晚裁定之后那一行只由 `formal.record` 落（`recorded_by="agent-L"`），
+    # E 的 formal 那一支一律回受控拒绝 `formal_moved_to_l`，而这一段印给全部十一个角色
+    # （渲染点现算自 `evidencebits.BIT_LEDGERS`）⇒ 十一格一起换。M 那一格另有第二处：
+    # `specs/m.py` 的 H 采信规则那句从「E 的 proof」改成「L 的形式化（`formal.record`
+    # 那一行）」。其余三处不进提示词：`closing.py` 那条 blocker（只在收工门的回执里）、
+    # `agent_skills.py` 的 G 技能正文（只落 `skills/`，提示词里只有索引）、
+    # `specs/e.py` 新加的两条 `NO_LEAN_REPLACEMENTS`（只在关档生效，开档一个字不改）。
+    # 重算：`python -B temp/recompute_prompt_digests.py`（口径只那一处，不手抄）。
+    "A": "3fff2fa8d6dd13cc1b5eea6cedf415c8a5566f7c08bc1a79ece9a624209283f8",
+    "B": "9e3e77e7c6cd2a1c8cdfb4de96bb3cba7f193b3e4daec5270766a2459eb793dc",
+    "C": "7a95b904b5226ee981cd2851395beb65198e3cd3b22cbfd05ccd3edbd4d218b9",
+    "D": "fbe3283de3108f6f1ccd5d8831eac29e31e9d302a0b17e07f4a2d24d95880c60",
+    "E": "adf4b4a2d8a8e7c002928fc5401340fdcbc3e4d2c3edc192f5b373517d6c9348",
+    "F": "13de89105eee4c3b6fc19a0ad9e72aec7c97b193898d0ec36905c92e94c57103",
+    "G": "5ce88be0c4284ebc42265620e5cb6cd54d23947c10cd81c4d69d1031b61e0c35",
+    "H": "1fac718d09d461500557c8551394b49c9046996f8613d7bbfb0a8af16f8606c8",
+    "L": "a7d86eb2eceb4617f47adfe48015fdd0183fe8ba54567e2a085ac363f4e87b8f",
+    "M": "1d1934cbd83a97211424c16f8445e34cd8f037d7c8181a7a671370a097c1f5e2",
+    "V": "ad3947fed8e528875775a273412d2495794590aadfe4b8f54a91a9d292253a8c",
 }
 
 

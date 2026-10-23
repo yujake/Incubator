@@ -74,15 +74,22 @@ def test_every_spec_matches_the_six_places_that_define_it_today() -> None:
 
 
 def test_the_registry_is_not_vacuous() -> None:
-    """反真空：十个角色都在、每格都有内容、总数与今天一致。"""
+    """反真空：十一个角色都在（A–H / V / L + 主控 M）、每格都有内容、总数与今天一致。"""
     reg = builtin_registry()
     assert reg.roles() == tuple(TOOL_ROLES), reg.roles()
-    assert len(reg.roles()) == 10
+    # 2026-10-22：10 → 11（新设 L，Lean 形式化者）。这一格是读数不是规格：
+    # 加角色时必须同时看它，否则"角色表少了一个"这类缺陷在这里恒绿。
+    assert len(reg.roles()) == 11, reg.roles()
     assert reg.read_only_roles() == ("C", "H", "V"), reg.read_only_roles()
     assert "M" not in reg.summonable_roles()
     # 2026-10-20 业主裁定：派 V 只有 F（自产证明）与 B（文献侧内容）两个入口，M 不再直连 V
     # （33 → 32）；同一天早一批改回 C 无出边、由 D 唤起 C（34 → 33）。
-    assert sum(len(v) for v in reg.edges().values()) == 32, (
+    # 2026-10-22 晚（业主的最终协作面裁定）：「只有 B 可以派 L，L 允许派 C 来梳理证明链，
+    # 消费 B 的定理证明库，可向 B 汇报形式化过程中遇到的困难、要求 B 完善证明并重新得到
+    # V 签，若缺陷严重，B 应通知 D 开展研究处理证明难点。」⇒ 边总数 32 → 35，恰好三条：
+    # `B → L`（形式化的唯一入口）、`B → D`（缺陷严重时的研究升级）、`L → C`（梳理证明链）。
+    # 这一格是读数不是规格：改边表时必须同时看它（否则"少了一条边"在这里恒绿）。
+    assert sum(len(v) for v in reg.edges().values()) == 35, (
         "边总数：2026-10-10 裁定第 4 条去掉 M→B / M→F / M→V 三条（32 → 29）；"
         "2026-10-13 业主裁定「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」（29 → 30）；"
         "2026-10-13 业主裁定「补 M 到 B」（30 → 31）；"
@@ -91,7 +98,8 @@ def test_the_registry_is_not_vacuous() -> None:
         "`reviewed_proof_rows = 0`，V 只能经 F→V）；"
         "2026-10-20 业主裁定「派 V 只有 F 与 B 两个入口，M 不再直连 V」（33 → 32，"
         "V 的两个入口仍在：F 自产证明时签、B 入库文献侧内容时签）；"
-        "文档那一份在 docs/ROLE-SPECS.md §0.5"
+        "2026-10-22 晚业主裁定「L 的协作面」（32 → 35 = +B→L、+B→D、+L→C）；"
+        "文档那一份在 docs/ROLE-SPECS.md §0.5（那一段的数字需要人跟着重算）"
     )
     for role in reg.roles():
         spec = reg.get(role)
