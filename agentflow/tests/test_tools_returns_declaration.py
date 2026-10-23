@@ -77,7 +77,7 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-23：95 → 98（147 收口第 6 步：L 的形式化入口三件 —— `formal.formalize` /
 #: `formal.check_formal` / `formal.record`；同一批里 `verify.check_formal` 的角色面收成空，
 #: 但它仍在册，所以总数只加不减）。
-TOOL_COUNT = 98
+TOOL_COUNT = 97
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -416,7 +416,6 @@ def tool_params() -> dict[str, dict]:
         "trace.concept": {"concept_id": "0000"},
         "trace.literature": {"lit_id": "0000", "max_chars": 200},
         "trace.relation": {"relation_id": "0000"},
-        "verify.check_formal": {"claim": "1+1=2"},
         "verify.code_hash": {"path": SOURCE_REL},
         "verify.detect_verifier": {},
         "verify.evidence_for": {"claim_key": "k"},
@@ -498,7 +497,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "table.count", "table.create", "table.delete", "table.get", "table.list", "table.schema",
         "table.search", "table.update",
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
-        "verify.check_formal", "verify.code_hash", "verify.detect_verifier", "verify.evidence_for",
+        "verify.code_hash", "verify.detect_verifier", "verify.evidence_for",
         "verify.list_experiments", "verify.run_experiment",
         # V（验证者，F-02 起）的三件只读工具。它们的探针没有模型缝（默认 None）
         # ⇒ `verify.verify_proof` 走 `checked=False, reason="judge_not_wired"` 那一条

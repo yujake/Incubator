@@ -255,9 +255,9 @@ def test_3b_the_e_prompt_never_mentions_a_disabled_lean_side(lean_on) -> None:
     改前红（2026-10-23 实测，改之前逐字，开档那一份 E 的提示词）：
     - 动作面那一行：`- check_formal：已停用（本岗的 Lean 侧写死关闭）：调用一律回受控拒绝
       `formal_moved_to_l`，形式化由 L 承担。…`；
-    - policy 第 2 条整段：「**先看 TOOLCHAIN_FACTS 的第一行**（`toolchain` 段的
+    - policy 第 2 条整段：「先看 TOOLCHAIN_FACTS 的第一行（`toolchain` 段的
       `lean_enabled`）：那一行说「Lean 形式化：已关闭」时 … 理由码 `lean_disabled` …」；
-    - policy 第 9 条：「**写 Lean 源码的写法口径不在这里**（形式化那一岗是 L）…」。
+    - policy 第 9 条：「写 Lean 源码的写法口径不在这里（形式化那一岗是 L）…」。
 
     裁定之后 E 既没有那一支动作、也不再有「关」这个概念 ⇒ 这三处都必须消失。
 

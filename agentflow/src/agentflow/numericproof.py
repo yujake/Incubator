@@ -606,8 +606,11 @@ def report_problems(experiment_row: Mapping[str, Any] | None) -> list[str]:
     """
     try:
         from . import exhaustionreport as _ER
-    except Exception:  # noqa: BLE001 —— 那一侧可能还没落地（并发开发期）
-        return []
+    except Exception as exc:  # noqa: BLE001 —— 那一侧可能还没落地（并发开发期）
+        # 2026-10-23：这里原来是 fail-open（返回空清单 = 没问题），而「没查成」与
+        # 「查过了没问题」是两件事 —— 导入失败就等于这一格没查，必须如实报出来，
+        # 否则一条 ②③ 根本没落盘的实验会被当成「齐了」。空清单只留给真查过且齐了。
+        return [f"②③ 的落盘核查没查成（exhaustionreport 不可导入：{type(exc).__name__}: {exc}）"]
     try:
         return [str(p) for p in (_ER.landing_problems(_as_mapping(experiment_row)) or [])]
     except Exception as exc:  # noqa: BLE001 —— 判据自己坏了也是"没查成"

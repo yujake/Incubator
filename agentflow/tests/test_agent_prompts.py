@@ -2129,56 +2129,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p188"
+_FROZEN_PROMPT_VERSION = "p189"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    # p186 那一版十一格全换值，理由逐条（留着当历史；p187 换值的理由见下面那一块）：
-    # ① 业主口径逐字「要保证 L 侧完全被 Lean 开关隔离，并改写所有智能体被 Lean 开关控制的
-    #    提示词、工具、动作等全部指向 L」；随后业主 B-5 改了形式化的启用条件：
-    #    「L 的形式化验证由于成本极高，口径改为：在全部研究和论文落定之后，用户指定有形式化
-    #    验证需求时，要一条才做一条」；
-    # ② 共用段：技能索引末尾那一句从"关掉时补一句做不了"翻成"开着时补一句形式化见 L"
-    #    （关着时一个字都不加）⇒ 十一格都读到它；
-    # ③ `TOOLCHAIN_FORMAL` 的受众从"手上有 `verify.check_formal` 的三家（E/F/G）"收成
-    #    "手上有 `formal.*` 的那一家（L）"，正文改写成 L 的口径（`statement_full` / `proof_text`
-    #    / 逐步 / `code/formal/` / 三态 + "不可召唤、用户指定才做一条"）；
-    # ④ `toolchain_facts_text()` 开着那一档补一行"形式化由 L 承担" ⇒ 十一格；
-    # ⑤ `specs/{e,d,g,h,m}.py` 里"形式化算在 E 头上"的句子逐条改成指向 L ⇒ 十一格
-    #    （伙伴表会印别人的职责句，所以不止 E/D/G/H/M 那五格）；
-    # 这些都是文本改动：动作面、工具面、边表、写集一格未动（`tests/test_lean_switch.py`
-    # 与 `tests/test_l_formalizes_what_b_says.py` 各守一头）。
-    #
-    # p187（2026-10-23 收口）十一格再全换，理由逐条：
-    # ① 共用段 `SKILLS_INDEX` 末尾那句「形式化见 L」补上了 L 的入口与协作面
-    #    （「入口只有两条：B 可以派 L —— `B → L` 是唯一的入边 —— 用户也可以
-    #    `run-agent L` 直接起一条；L 自己只派 C 梳理证明链」）⇒ 读这一段的是十一个
-    #    角色，所以十格一起换；② 论文包那一块（`PAPER_06`）的同一句也换了值 ⇒ G/H/M
-    #    三格再换一次；③ L 自己那一格：它的技能索引行写着「B 派你 —— `B → L` 是唯一
-    #    入边」，且工具面从两件长到三件（多出 `formal.record`）。
-    # 这一批改的是「谁拿得到哪些工具」与共用段的正文：动作面 62 → 65、边 32 → 35
-    # （`B → D` / `B → L` / `L → C`）、工具面 95 → 98（`verify.check_formal` 的角色面
-    # 从 E/F/G 收成空，`formal.*` 三件只挂 L）—— 这些读数在 golden 那一侧，不在这张表。
-    #
-    # p188（2026-10-23 审计收口）十一格再全换，只有一条理由，但它是共用段：
-    # 五元位那一段（`COLLAB_FIVEBITS`）里第 4 位 `formal` 的 owner 从 E 改成 L ——
-    # 业主 2026-10-22 晚裁定之后那一行只由 `formal.record` 落（`recorded_by="agent-L"`），
-    # E 的 formal 那一支一律回受控拒绝 `formal_moved_to_l`，而这一段印给全部十一个角色
-    # （渲染点现算自 `evidencebits.BIT_LEDGERS`）⇒ 十一格一起换。M 那一格另有第二处：
-    # `specs/m.py` 的 H 采信规则那句从「E 的 proof」改成「L 的形式化（`formal.record`
-    # 那一行）」。其余三处不进提示词：`closing.py` 那条 blocker（只在收工门的回执里）、
-    # `agent_skills.py` 的 G 技能正文（只落 `skills/`，提示词里只有索引）、
-    # `specs/e.py` 新加的两条 `NO_LEAN_REPLACEMENTS`（只在关档生效，开档一个字不改）。
-    # 重算：`python -B temp/recompute_prompt_digests.py`（口径只那一处，不手抄）。
     "A": "3fff2fa8d6dd13cc1b5eea6cedf415c8a5566f7c08bc1a79ece9a624209283f8",
-    "B": "9e3e77e7c6cd2a1c8cdfb4de96bb3cba7f193b3e4daec5270766a2459eb793dc",
+    "B": "a253e5d5b9211c9f7fb7972d0de2c60116377094d5b858b423c97535e87f740c",
     "C": "7a95b904b5226ee981cd2851395beb65198e3cd3b22cbfd05ccd3edbd4d218b9",
     "D": "fbe3283de3108f6f1ccd5d8831eac29e31e9d302a0b17e07f4a2d24d95880c60",
-    "E": "adf4b4a2d8a8e7c002928fc5401340fdcbc3e4d2c3edc192f5b373517d6c9348",
-    "F": "13de89105eee4c3b6fc19a0ad9e72aec7c97b193898d0ec36905c92e94c57103",
-    "G": "5ce88be0c4284ebc42265620e5cb6cd54d23947c10cd81c4d69d1031b61e0c35",
-    "H": "1fac718d09d461500557c8551394b49c9046996f8613d7bbfb0a8af16f8606c8",
+    "E": "9ab3aaa6dbffef789a74b7c07e548789aea39d32569ae893411e01954616f336",
+    "F": "765c48972f42b33f09f5702812333dfbe8fb240f0e5913be95a66d0337e11fe3",
+    "G": "8dc95c3bbe52e7c6aa0bbe3995a5baf0bb7806d7f2783bd97c3ad11ea34240b3",
+    "H": "eff1f964abda99f5191d2e258d170ee17de13745c4cf5d8821b81c24ee32cc1c",
     "L": "a7d86eb2eceb4617f47adfe48015fdd0183fe8ba54567e2a085ac363f4e87b8f",
-    "M": "1d1934cbd83a97211424c16f8445e34cd8f037d7c8181a7a671370a097c1f5e2",
-    "V": "ad3947fed8e528875775a273412d2495794590aadfe4b8f54a91a9d292253a8c",
+    "M": "3351e1bd2183b1b8edb2861e994f94f702029461073cc1992b1de97322a27ee9",
+    "V": "bee3d36e81ca1d6f1d870e7b04029a7d1d475c3e84d321a73591a2891ebbc55a",
 }
 
 

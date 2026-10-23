@@ -163,7 +163,7 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 | `V` | `F` |
 | `L`（Lean 形式化者，**只在 Lean 开关打开时存在**） | **`C`**（唯一出边，用途只有一件：梳理证明链）。L 的唯一入边是 `B→L`；`M` 的出边里没有它 |
 
-**边总数 = 35**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；下面是每一次加减
+**边总数 = 36**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；下面是每一次加减
 的读数，最后一条就是今天的数。V 落地前是 29 —— 新增的三条是 `M→V`、`F→V`、`V→F`。
 观测 2026-10-06（角色 V 落地）。
 **2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
@@ -253,7 +253,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 > **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，65 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，64 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
@@ -1773,7 +1773,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 **现读**：`python -m agentflow.cli tools --role M` ⇒ `side_effect` read 13 / write_local 8 / none 0；`external` none 21；需审批 8 件。逐件明细（分组清单 + 拿不到什么）见附录 §M.4。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（55 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（54 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。

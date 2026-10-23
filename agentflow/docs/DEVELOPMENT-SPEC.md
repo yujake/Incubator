@@ -187,8 +187,8 @@ LIVE-READINGS:END
 
 | 字面量 | 量法（复跑命令） |
 |---|---|
-| 动作总数 **65** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-10-23 加 L 的三件形式化动作 ⇒ 62 → 65） |
-| 可召唤动作数 **55** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；此前 2026-10-20 撤 `M→V` ⇒ 57 → 54） |
+| 动作总数 **64** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-10-23 加 L 的三件形式化动作 ⇒ 62 → 65） |
+| 可召唤动作数 **54** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；此前 2026-10-20 撤 `M→V` ⇒ 57 → 54） |
 | 子命令数 **27** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices） |
 
 **两条使用规矩**（与 §1.1 同源）：

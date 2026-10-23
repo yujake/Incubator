@@ -465,6 +465,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p188", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p188（2026-10-23 审计收口）：E 的 Lean 侧记忆最后四处残留（① evidencebits 的 formal owner E→L、② 五元位渲染跟着改成「formal：L 签」、③ closing 那条 load_bearing blocker 改指 formal.check_formal/formal.formalize、④ specs/m.py 与 agent_skills.py 里 H 的采信规则那句改指「L 的形式化（formal.record 那一行）」）；另加两条 specs/e.py 的 NO_LEAN_REPLACEMENTS 把关档的 formal 那行改成不点 L 的写法（只在关档生效 ⇒ 开档摘要不受影响，见 test_l_is_isolated_when_lean_is_off 的 0 处 L 判据）。facts 键集一格未动（15 格）：这一批换的是段正文，不涉及任何一格事实的落点"},
+        # p188 → p189（2026-10-23 夜）：数值穷举证明链与协作面那批。facts 键集一格未动（仍 15 格）。
+        {"version": "p189", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p189（2026-10-23 夜）：T0 档／穷举证明链（E 写②③ → V 七项会审 → B 的第三方签名闸）／E→V 边／G 的数值定理规范／H 认两种 file 落点／F 两类凭据并列／V 唤起者补 E 与 B；另 E 的 Lean 侧原始设计已清干净（动作 5→4、工具 98→97）。facts 键集仍是 15 格，这一批只换段正文"},
 )
 
 

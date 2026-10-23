@@ -809,7 +809,9 @@ def _verify_detect_verifier():
     # / `notes` —— 三个都是「来源读数」（可复现性的凭据）。
     returns=(
             "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason',"
-            "'code_hash','runtime_sec','notes'}"
+            "'code_hash','runtime_sec','notes',"
+            "'signed_by','proof_authors','report_path','report_sha256','report_bytes',"
+            "'report_blocks','report_problems'}"
             "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
             "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
             "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
@@ -951,6 +953,8 @@ _ROLES_V = ("V",)
     returns=(
             "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings',"
             "'unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits',"
+            # 2026-10-23：穷举型证据会审那一档的三格读数 + 签名主体（V）/ 作者（E）
+            "'exhaustion_review','checks','missing','signer','proof_authors','report_path',"
             "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
             "no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— "

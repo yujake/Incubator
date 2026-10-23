@@ -417,7 +417,7 @@ def test_f16_e_has_no_verify_check_formal_yet_the_function_is_callable(
     """F16：E 的工具面没有 `verify.check_formal`，而函数实体仍在且可调用。
 
     2026-10-23 晚裁定（「E 侧与 Lean 相关的工具和动作都该清干净」）之后这一条又前进
-    一格：工具那一件**整条删除**（改前的形态是 `roles=()` 的空壳），注册表里都没有它；
+    一格：工具那一件整条删除（改前的形态是 `roles=()` 的空壳），注册表里都没有它；
     而函数实体 `VT.check_formal` 仍在 —— 那一半是正控：删的是"E 的工具面那一件"，
     不是把桥接层实现删掉（L 的 `_CheckFormalL` 与 `formal.check_formal` 都经它）。
 
