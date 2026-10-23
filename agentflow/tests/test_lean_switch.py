@@ -337,11 +337,12 @@ def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
     它当时唯一的读数就是判据报"表失效了"，而"面还在广告"这件事没有任何断言。
     这条负控钉住的就是后者。
 
-    取的是这张表里仍然承重的第一条（`old` 以「形式化不是这一岗的活」开头）：
-    它落在 `specs/e.py` 的 policy 第一句上，而那一句是"本会话不做形式化验证"那条
-    统一写法的入口。2026-10-23 晚裁定之后动作面那一条已经退场（`check_formal` 整条
-    动作摘掉 ⇒ 它不再出现在任何角色的提示词里，左边无处可指），所以这一条负控换成
-    同一张表里仍然承重的这一行。
+    取的是这张表里仍然承重的第一条（`old` 以「形式化的结论以 V 的签」开头）：
+    它落在 `specs/e.py` 的 policy 第一句上，而那一句是"这一档的形式化要经谁安排"
+    那条统一写法的入口（2026-10-24 业主口径：是否形式化由用户指定，指定之后由 B 逐条
+    安排）。2026-10-23 晚裁定之后动作面那一条已经退场（`check_formal` 整条动作摘掉
+    ⇒ 它不再出现在任何角色的提示词里，左边无处可指），所以这一条负控换成本表里
+    仍然承重的这一行。
     """
     from agentflow import agent_prompts as AP
     from agentflow import schema as S
@@ -351,7 +352,7 @@ def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
     roles = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
     reg = build_registry().registry
     victim = next(i for i, (old, _n) in enumerate(E.NO_LEAN_REPLACEMENTS)
-                  if old.startswith("形式化不是这一岗的活"))
+                  if old.startswith("形式化的结论以 V 的签"))
 
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     AP.reset_toolchain_readings()

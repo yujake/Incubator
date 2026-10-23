@@ -2676,21 +2676,18 @@ def index_block(role: str) -> str:
         lines.append(f"| `{skill_path(owner, s.slug)}` | {s.summary} | {s.when} |")
     lines.append("")
     lines.append("读了之后按它做；做了什么要落台账（**没有台账的那一步等于没发生**）。")
-    # 2026-10-22 第四批（业主「所有受 Lean 开关控制的提示词/工具/动作全部指向 L」）：
-    # 这一格原来是"本会话 Lean 形式化关闭 + 上面若有一条讲形式化的技能它读来也做不了"
-    # （2026-10-17 的 Lean 审计 S6 加的）。那一句同时犯两种错：它把形式化讲成"做不了"
-    # （业主点名要去掉的那一类叙述），而且它在关着那一档里往每一份提示词都塞了一行
-    # Lean 字样 —— 关着时 L 在这一档不存在，该留的是零痕迹。现在反过来：
-    # 开着时补一句"形式化见 L"（"谁做形式化"只有这一个答案），关着时一个字都不加
-    # （`TOOLCHAIN_FACTS` 第一行已经说清这一档不做形式化）。
+    # 2026-10-24（业主口径：形式化要不要做由用户指定，指定之后由 B 逐条安排）：
+    # 这一格此前是"形式化见 L：`formal.*` 只挂在 L 身上，别自己写 Lean 源码……它的入口
+    # 只有两条"—— 那是一句"去哪找谁"的指路 + 一句禁令，而协作面里除 B 以外没有谁与 L 有边。
+    # 现在按正向指引重写：只写"这件事的结论以什么为准、谁安排的、回执是什么形状"，
+    # 不写"别自己写"也不写"找 L"（禁令归判据：工具面没有 formal.*，越权一律 forbidden_edge）。
+    # B 那一格不补这一句：它的收件通道写在 `specs/b.py` 的政策里（唯一该写全的地方）。
     from . import leanscope as _LEANSCOPE
 
-    if _LEANSCOPE.lean_on() and role not in _LEANSCOPE.LEAN_ONLY_ROLES:
-        lines.append("**形式化见 L**：`formal.*`（写 Lean 源码、检查器原话、三态结论）只挂在 L 身上，"
-                     "别自己写 Lean 源码；**但它不是流水线上的一环**（成本极高）：平时不启用、"
-                     "不主动召唤，只有用户指定之后才对**指定的那一条**走一次 —— "
-                     "它的入口只有两条：B 可以派 L（`B → L` 是唯一的入边），"
-                     "用户也可以用 `run-agent L` 直接起一条（L 自己只派 C 梳理证明链）。")
+    if _LEANSCOPE.lean_on() and role not in _LEANSCOPE.LEAN_ONLY_ROLES and role != "B":
+        lines.append("**形式化以 V 的签与 B 的台账为准**：要不要做由**用户**指定；"
+                     "指定之后每一条由 **B** 逐条安排（一条才做一条），回执"
+                     "（`experiments` 的 proof 行 + 原始输出原文 + 三态结论）由 B 带回。")
     return "\n".join(lines)
 
 

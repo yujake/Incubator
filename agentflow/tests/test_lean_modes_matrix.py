@@ -161,14 +161,24 @@ def test_profiles_markdown_keeps_formal_wording_when_on(lean_on):
     assert "形式化验证" in text
 
 # ---------------------------------------------------------------- 8. 技能索引（S6）
-def test_the_skills_index_points_at_l_when_on(lean_on):
-    """开着时索引末尾补的那一句"形式化见 L"（旧期望是"关掉时补一句做不了"，2026-10-22 翻面）。"""
+def test_the_skills_index_says_whose_sign_counts_when_on(lean_on):
+    """开着时索引末尾补的那一句"形式化以什么为准、由谁安排"。
+
+    历史：旧期望是"关掉时补一句做不了"（2026-10-22 翻面成"形式化见 L"）⇒
+    2026-10-24（业主：是否形式化由用户指定，指定之后 M 派 B、B 派 L）改成
+    "形式化以 V 的签与 B 的台账为准"：非 B 角色与 L 之间没有边，所以索引只写
+    结论的落点与安排人，不写"去找谁"。
+    """
     from agentflow import agent_skills as S
 
     block = S.index_block("E")
-    assert "形式化见 L" in block, block[-400:]
-    # L 自己的索引不加这一句（它不需要被告知"交给谁"）
-    assert "形式化见 L" not in S.index_block("L")
+    assert "形式化以 V 的签与 B 的台账为准" in block, block[-400:]
+    assert "指定之后每一条由 **B** 逐条安排" in block, block[-400:]
+    assert "形式化见 L" not in block, "索引里又出现了「形式化见 L」（非 B 角色与它没有边）"
+    # L 自己的索引不加这一句（它不需要被告知"这条路的结论记在谁那里"）
+    assert "形式化以 V 的签与 B 的台账为准" not in S.index_block("L")
+    # B 那一格也不加：它的收件通道写在 `specs/b.py` 的政策里（唯一该写全的地方）
+    assert "形式化以 V 的签与 B 的台账为准" not in S.index_block("B")
 
 
 def test_the_skills_index_has_no_trace_of_l_when_off(lean_off):

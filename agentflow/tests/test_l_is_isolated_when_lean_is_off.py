@@ -253,9 +253,11 @@ def _visibility_violations() -> list[str]:
         if not text.strip():
             bad.append("开着时 L 的提示词是空的")
 
-    # 主控的伙伴表在开着时必须有 L 这一行（这条是"隔绝"的负控：不许把开着也一起灭了）
+    # 主控的渲染在开着时必须有 L 的读数（这条是"隔绝"的负控：不许把开着也一起灭了）。
+    # 2026-10-24 起那一处读数不再是伙伴表里的一行（L 与主控没有边），而是五元位第 4 位的
+    # owner 读数（`formal`：L 签）—— 判"开档没被灭"这件事本身不变。
     if not ROLE_NAME.search(_prompt("M", build.registry)):
-        bad.append("开着时主控的伙伴表里没有 L 了（这个角色在模型眼里消失了）")
+        bad.append("开着时主控的读数里没有 L 了（这个角色在模型眼里消失了）")
     return bad
 
 
@@ -390,12 +392,24 @@ def test_on_the_l_surface_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_on_no_isolation_leaks_into_the_other_roles(monkeypatch: pytest.MonkeyPatch) -> None:
-    """开关开：L 仍然出现在主控的伙伴表里（读数的负控：不许把开着那一档也灭了）。"""
+    """开关开：L 仍然在别的角色的渲染里（读数的负控：不许把开着那一档也灭了）。
+
+    2026-10-24 口径（业主：是否形式化由用户指定 ⇒ M 派 B ⇒ B 派 L）：主控的伙伴表里
+    不再给 L 留一行（L 与主控没有边，那条间接路要用户先给许可），所以这一条的
+    正控换成两处今天仍然承重的读数：
+      ① 主控的提示词里仍然读得到 L（五元位第 4 位的 owner 读数：「`formal`：L 签」）——
+         这一格证明"开着那一档还在"，不证明"主控能找 L"；
+      ② B 的伙伴表里仍然有 L 那一行（`B → L` 是唯一入边）。
+    """
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     _reload_switch()
     m_text = _prompt("M")
-    assert ROLE_NAME.search(m_text), "开着时主控的伙伴表里没有 L 了"
-    assert "L：" in m_text, "开着时主控的伙伴表里没有 `L：` 这一行"
+    assert ROLE_NAME.search(m_text), "开着时主控的提示词里一处 L 都没有了（开档被灭了）"
+    assert "`formal`：**L** 签" in m_text, (
+        "开着时主控读不到五元位第 4 位的 owner 读数了")
+    assert "L：" not in m_text, "主控的伙伴表里又给 L 留了一行（L 与主控没有边）"
+    b_text = _prompt("B")
+    assert f"- {ROLE_L}：" in b_text, "开着时 B 的伙伴表里没有 L 那一行（唯一入边消失了）"
 
 
 # --------------------------------------------------------------------------- 判据 3

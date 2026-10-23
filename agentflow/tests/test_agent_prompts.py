@@ -458,28 +458,31 @@ def test_the_research_brief_asks_for_literature_citations_and_three_search_readi
 
 
 def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: ToolRegistry):
-    """判据（`draft/37` §92）：提示词必须说清"形式化核验分两步"，且第二步是落库。
+    """判据（`draft/37` §92）：提示词必须说清"核验的裁决与落库是两件事"。
 
-    旧期望把这两步算在 E 头上（2026-10-22 改指向 L）：那时写的是 ① `E.check_formal` 裁决
-    → ② `E.run_experiment(method='formal')` 落库。业主 2026-10-22 第四批之后形式化只由 L 做，
-    落库那一格改由 L 的 `formal.record` 承担 ⇒ 判据钉的两件事不变（先裁决、后落库、而且
-    裁决本身不落台账），只是主语换成 L。
+    历次改指向：旧期望把这两步算在 E 头上 ⇒ 2026-10-22 改指向 L（`L.check_formal` 裁决 →
+    `formal.record` 落库）⇒ 2026-10-24（业主：是否形式化由用户指定，指定之后 M 派 B、
+    B 派 L）改成"读回执"：G / H / M 与 L 之间没有边，它们读的是 B 带回来的回执，
+    所以这一段现在钉的是「回执的那几样」与「那两件事的分界」，而不是"去调哪个动作"。
 
     真机读数（第 6 趟）仍然成立：照着提示词派了 6 次裁决，其中两条真的 `verified=true`，
     而 `experiments` 表是 0 行 —— 因为裁决那一步只给结论、不落台账。于是随后 10 条
     proof 级断言一条都建不进 `documents`（FC-22 要 `exp:` 引用）。
 
-    判据的形状：① 提示词里必须同时有裁决那一步与落库那一步；② 必须写明裁决那一步不落台账；
-    ③ 负控（事实那一侧）：`check_formal` 跑完之后 `experiments` 行数不变 —— 万一有人把它
-    改成会写行，这条判据会红，提醒改提示词。"""
+    判据的形状：① 回执那四样（三态 / 原始输出 / 退出码 / `exp:<id>`）在提示词里；
+    ② 必须写明"查过了"不等于"台账里多了一条证据"；③ 负控（事实那一侧）：
+    `check_formal` 跑完之后 `experiments` 行数不变 —— 万一有人把它改成会写行，
+    这条判据会红，提醒改提示词。"""
     paper_pack_roles = [r for r in ALL_ROLES if r in AP.PAPER_PACK_ROLES]
     assert paper_pack_roles, "没有角色拿到论文包那一段 ⇒ 这条判据失去对象"
     for role in paper_pack_roles:
         text = _prompt(role, registry)
-        assert "`L.check_formal`" in text or "L.check_formal" in text, \
-            f"{role} 的提示词没把裁决那一步指向 L"
-        assert "formal.record" in text, f"{role} 的提示词没给落库那一步"
-        assert "只给裁决、不落台账" in text, f"{role} 的提示词没说清裁决不落台账"
+        assert "`exp:<id>`" in text, f"{role} 的提示词没写回执里那个台账编号（FC-22）"
+        assert "`verified=true` 只说明「这一次查过了」" in text, (
+            f"{role} 的提示词没把「查过了」与「台账里多了一条证据」分开")
+        assert "三态结论" in text, f"{role} 的提示词没写回执里的三态结论"
+        assert "`unknown` 时那是**没查成**" in text, (
+            f"{role} 的提示词没写 unknown 那一档怎么读（没查成 ≠ 两档结论之一）")
 
     # ---- 事实那一侧（负控）：`check_formal` 真的不写 `experiments`
     #
@@ -1207,7 +1210,10 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
     # （`gaps[M]` 为空时它一句都不验）。期望值跟着裁定走，判据强度不变。
     # 2026-10-22（新设 L + 只有 F→L 一条边）：M 看得见 L（伙伴表印全体简介），但唤不起它 ——
     # 与 F / V 同一档，都必须在条目上带「你唤不起它」标记。
-    assert gaps["M"] == {"F", "L", "V"}, gaps["M"]
+    # 2026-10-24（业主：是否形式化由用户指定 ⇒ M 派 B ⇒ B 派 L）：L 那一行从主控的伙伴表里
+    # 撤掉了 —— 它与主控没有边，而"经父代理转达"那条间接路对形式化不成立（许可在用户手上，
+    # 执行人是 B）。所以"唤不起"那一档回到 {F, V}，判据强度不变（仍然非空）。
+    assert gaps["M"] == {"F", "V"}, gaps["M"]
     assert gaps["M"], "主控的『唤不起』集合空了 ⇒ 这一整条判据退化成空转"
     assert not any(gaps[r] for r in gaps if r != "M"), \
         f"只有主控该有这一档（其余角色的条目就是出边）：{ {r: g for r, g in gaps.items() if g} }"
@@ -2132,19 +2138,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p193"
+_FROZEN_PROMPT_VERSION = "p194"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "3fff2fa8d6dd13cc1b5eea6cedf415c8a5566f7c08bc1a79ece9a624209283f8",
-    "B": "a253e5d5b9211c9f7fb7972d0de2c60116377094d5b858b423c97535e87f740c",
-    "C": "7a95b904b5226ee981cd2851395beb65198e3cd3b22cbfd05ccd3edbd4d218b9",
-    "D": "fafc60262fdee4bdd8d097cd5dca3c41e00eefea70ad62b6984733524a842980",
-    "E": "fd4375caa1106e7ddd7a9c13645d8238e2ccf52317f90c1cfbbc799f8500402a",
-    "F": "bc07c976fc13e8569caa00e8fb005afe391f7f388679a3574a9add313a89a9dc",
-    "G": "8dc95c3bbe52e7c6aa0bbe3995a5baf0bb7806d7f2783bd97c3ad11ea34240b3",
-    "H": "0513eb3711c1dd5d6746c260ebcfa7e4a7c9ef8c9fe3be9f3123062ab11a3e7e",
+    "A": "d5f54b4e54b17b6d680dafd9685bf458c683305dfce0ab6e485b06a3dc399035",
+    "B": "c9277127ad49f5507331bc6acec2c441796bcc67c46ad7d8984615602e434d13",
+    "C": "53527a8dda23d709dc977d9a7329762552489859ff7f24ebb24632163683150a",
+    "D": "8027cb2ee32153c13f5547f06dcdf91f15467f21b39de3640423c759e86dfc7a",
+    "E": "bbe2600e6f088c90f23e24edc55ce26a0b5754c56a22acfef70f819db08237ee",
+    "F": "127ffceb92ef0fffc0d348f7891883c635f6aece6e8c617b3fedf27b242eeaa8",
+    "G": "a71af92ac5f14d7d945f18a2a60886ceeb56986fefd575c7e5c6f8d009f2376e",
+    "H": "554b9eb7b1f612a690bfa6a74e2ebcb4a5e919654a2e56254b32dcb0c07cf197",
     "L": "61e94dd4452d4c1ac9f5c68e0625f77e33015fbbb42787c61062880ec9d13502",
-    "M": "9188efca3ca976718cf0b596fd65bd307006335022e6fccfc762fa20d82bbc29",
-    "V": "bee3d36e81ca1d6f1d870e7b04029a7d1d475c3e84d321a73591a2891ebbc55a",
+    "M": "24e390b4f817c6b79be990971861987c4b1bb374cda847bf732c6577bb9edea3",
+    "V": "190ff25bdc8cb762bd64d5d9b7878663ece0ad793e5ae8da589411969d1f1db8",
 }
 
 

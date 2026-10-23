@@ -485,6 +485,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p193", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p193（2026-10-24）：F 的凭据①不再写 Lean 形式化（改成机器核过源码的原话），因为只有 B 能碰 L、F 与 L 之间没有边；另 specs/e.py 关档改写第 9 条右侧去掉 formal.record。facts 键集仍 15 格"},
+        # p193 → p194（2026-10-24）：L 协作面全面对齐（授权链：用户指定 → M 派 B → B 派 L → L 报困难 → B 补证重签 → 严重时 B 通知 D）
+        {"version": "p194", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p194（2026-10-24）：非 B 角色的提示词不再把 L 当伙伴、不再堆否定句；M 写明用户要形式化时派 B，B 写明六步授权链与派 L 的三样交付。facts 键集仍 15 格"},
 )
 
 

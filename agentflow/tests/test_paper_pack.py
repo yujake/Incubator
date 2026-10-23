@@ -175,14 +175,15 @@ def test_the_paper_pack_section_is_versioned(store: Store):
 #: ① 2026-10-01（`projects/p3-review`）：只说"让包跟上"不够 —— 主控派 `G.build_document`（两次
 #: `invalid_params`），包一个字节没变、锚报 `drifted`，21 步打完收工 ⇒ 段里要点名走哪条路径。
 #: ② 同批第二次（`p3-review-20261001-220936`）：点名动作走通了，但 `H.verify_fixes` 排在 G 之后又改了
-#: `review_findings`、锚当场变回 `drifted` ⇒ 段里要写"会写台账的动作排在最后一次重渲染之前"。 ③ 第三次（`...-221654`）：锚一致但 `main.tex` 一字未变 ⇒ 要写"核验证明的主路径是 E 的形式化核验"。
+#: `review_findings`、锚当场变回 `drifted` ⇒ 段里要写"会写台账的动作排在最后一次重渲染之前"。 ③ 第三次（`...-221654`）：锚一致但 `main.tex` 一字未变 ⇒ 要写"核验证明的主路径"（当时算在
+#: E 的形式化核验上；2026-10-24 之后那段改成"回执的四样 + 由 B 逐条安排"，所以这一条
+#: 现在只剩"回执核什么"那半，`E.check_formal` 与"不注入任何库"两个 needle 随旧正文一起退场）。
 #: ④ 第四次（2026-10-03）：连派三次 `G.revise` 都没让包跟上（它动的是稿件 markdown）⇒ 于是加了 `G.paper_package`；2026-10-13 业主裁定（`draft/117`）那一整条退场、正文由智能体自己写：段里改点名
 #: "正文怎么进去（`fs.write`）/ 用哪件工具编（`doc.paper_compile`）/ 核什么（`COMPILE-RECEIPT.json` 的
 #: `tex_sha256`）"，外加"没有建论文包这个动作"这个反例；②那条顺序纪律随机制消失（不是被删，是没了对象）。
 PACK_FOLLOW_FACTS = ("fs.write", "doc.paper_compile", "COMPILE-RECEIPT.json",
                      "tex_sha256", "build_document", "G.revise",
-                     '没有"建论文包"这个动作', "最后一次改正文",
-                     "E.check_formal", "不注入任何库")
+                     '没有"建论文包"这个动作', "最后一次改正文")
 
 
 def pack_follow_problems(text: str) -> list[str]:

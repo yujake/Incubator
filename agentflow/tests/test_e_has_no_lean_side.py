@@ -262,7 +262,9 @@ def test_3b_the_e_prompt_never_mentions_a_disabled_lean_side(lean_on) -> None:
     裁定之后 E 既没有那一支动作、也不再有「关」这个概念 ⇒ 这三处都必须消失。
 
     反真空两条：E 的提示词仍然足够长（不是被清成空壳），而且「形式化」这件事仍然有人认领
-    —— 同一份渲染里 `形式化` 与 `L` 同句出现（指向 L，不是无人认领）。
+    —— 2026-10-24（业主：是否形式化由用户指定，指定之后 M 派 B、B 派 L）之后，认领的方式
+    不再是把 E 指向那个角色（E 与它没有边），而是同一句里写清"结论以 V 的签与 B 的台账为准"：
+    那才是 E 读得到的、可执行的那一半。
     """
     reg = _registry()
     renders: dict[str, str] = {}
@@ -289,8 +291,8 @@ def test_3b_the_e_prompt_never_mentions_a_disabled_lean_side(lean_on) -> None:
 
     on_text = renders["开"]
     assert "形式化" in on_text, "E 的提示词里一个「形式化」都没有了 ⇒ 这一条可能是靠删光换来的"
-    assert any("形式化" in s and L_TOKEN.search(s) for s in SENT_SPLIT.split(on_text)), (
-        "E 的提示词里没有一句把形式化指向 L ⇒ 那一路成了无人认领")
+    assert any("形式化" in s and "V 的签与 B 的台账" in s for s in SENT_SPLIT.split(on_text)), (
+        "E 的提示词里没有一句写清形式化的结论以什么为准 ⇒ 那一路成了无人认领")
 
 
 # ============================================================ 4. 符号

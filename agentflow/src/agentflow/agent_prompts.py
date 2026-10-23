@@ -2227,7 +2227,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_skills.py` 的 G 技能正文同一句（它只进 `skills/` 落盘文件、不进提示词）。
 #: 关档另加两条 `specs/e.py::NO_LEAN_REPLACEMENTS`（formal 那行与那句在关档改成不点 L
 #: 的写法），它们只在关档生效 ⇒ 开档摘要不受影响。facts 键集未变（15 格）。
-PROMPT_VERSION = "p193"
+PROMPT_VERSION = "p194"
 
 
 
@@ -4488,21 +4488,14 @@ PAPER_PACK = """\
 - 修订要落到**正文**上，不是只落到台账上：H 报出来的 fail 门是可操作的修订点 ——
   把证据不足以支撑强结论的句子改弱或补证据，改完再重编。
   真的没有可操作项时才写"正文无需修订"，并给出读数（哪几道门 pass、哪几条 finding 被逐条查过）。
-- **"核验证明"分两步，两步都要走**（`draft/37` §92 的真机读数，别只走第一步）：
-  这两步都在 L 那一岗（2026-10-22 起形式化只由 L 做）：
-  1. **裁决**：`L.check_formal` 逐条核工作区里已有的 Lean 源码（声明名可自动认名：恰好一条
-     具名声明时不用给声明名；`imports` 默认不注入任何库，要用 Mathlib 才显式传；
-     而这台机器上 Mathlib 能不能用，看上面 TOOLCHAIN_FACTS 那一段的现算读数）。
-     它**只给裁决、不落台账** —— `verified=True` 是"这一次查过了"，不是"台账里多了一条证据"。
-  2. **落库**：要让一条断言真的升到 `proof` 级（`documents` 的 claims 与 H 的复核都只认这一档），
-     必须由 L 把这一次检查登记成 `experiments` 的 proof 行（`formal.record`，带 `proof_location`
-     与检查器原话）—— `documents` 的断言才引用得到 `exp:<id>`（FC-22 的硬要求）。
-  **L 的协作面就这么窄**：B 可以派 L（`B → L` 是唯一的入边），L 自己只派 C（梳理证明链）；用户也可以用 `run-agent L` 直接起一条。形式化成本极高：平时不启用，只在**用户指定**之后对**指定的那一条**做，别把它排进流水线。
+- **形式化那一档的凭据长什么样、谁安排**（`draft/37` §92 的真机读数）：
+  要不要做由**用户指定**；指定之后由 **B** 逐条安排（一条才做一条）—— 每一步的产物是四样，
+  你读的也是这四样：① 三态结论（`verified` / `failed` / `unknown`）；② 原始输出的原文（不是转述）；
+  ③ 真实退出码；④ `experiments` 里那一行 proof 记录的编号（`exp:<id>`，`documents` 的断言引用它，FC-22 的硬要求）。
+  `verified=true` 只说明「这一次查过了」；「台账里多了一条证据」要看 ④ 那一行真的在。
+  三态是 `unknown` 时那是**没查成**（缺材料 / 超时 / 自检不过）：B 会补齐材料再派一次，这一档照实记，不折进另外两档。
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
-- **但先看 TOOLCHAIN_FACTS 的第一行**（业主 2026-10-12 的开关）：那一行说
-  **「Lean 形式化：已关闭」**时，上面两步**整条不适用** —— 这一趟不要写 Lean 源码、
-  不要派 `check_formal`、也不要落 `method='formal'`；`evidence_kind='proof'` 这一档
-  本会话**产不出来**，所以正文与交付里都不许出现"已形式化验证/已证明"这类词。
+- **「形式化已关闭」那一档的替代路线**（第一行读数说「已关闭」时走这条）：
   这条路换成**自然语言逐行审阅**，交付形状是：
   1. 证明过程逐字进 `statements` 的 `proof_text`（含假设、每一步依据、你接不上的那一步）；
   2. 派 V 的 `verify_proof`（命题号 + 证明全文）逐行走查，结论落 `verifications` 表 ——
@@ -5828,6 +5821,16 @@ def partners_out(role: str) -> tuple[str, ...]:
 
 
 
+#: 主控伙伴表里刻意不出现的那一格（其余角色仍然按"全体简介"排期）。
+#:
+#: 2026-10-24（业主口径：是否形式化由用户指定，指定之后 M 派 B、B 派 L）：L 与主控之间
+#: 没有边，而主控能到它的那条间接路（经 B）本身要用户先给出许可 —— 所以它不是"主控
+#: 看得见、唤不起"的那一档（F / V 那一档靠"经父代理转达"还能到），给它留一行只会让
+#: 主控把形式化当成自己可以安排的一件事。判据
+#: `tests/test_l_collab_surface_is_respected_everywhere.py` 逐角色钉住这一格。
+_CONDUCTOR_PARTNER_ROLES = tuple(r for r in S.ROLES if r != "L")
+
+
 def visible_partners(role: str) -> tuple[str, ...]:
 
 
@@ -5864,6 +5867,10 @@ def visible_partners(role: str) -> tuple[str, ...]:
 
     过滤 —— 一个开关关着时不存在的角色，不许在伙伴表里留一行"存在但没用到"。
 
+    2026-10-24（是否形式化由用户指定 ⇒ M 派 B ⇒ B 派 L）：那一格里再减一格 ——
+
+    L 不给主控留行（理由在 `_CONDUCTOR_PARTNER_ROLES` 上面那段）。
+
     """
 
 
@@ -5872,7 +5879,7 @@ def visible_partners(role: str) -> tuple[str, ...]:
 
 
 
-        return tuple(sorted(_LEANSCOPE.visible_roles(S.ROLES)))
+        return tuple(sorted(_LEANSCOPE.visible_roles(_CONDUCTOR_PARTNER_ROLES)))
 
 
 
@@ -6925,17 +6932,17 @@ def _faculty_block_names(count: int) -> tuple[str, ...]:
 
 
 def _no_toolchain_text() -> str:
-    """没有读到工具链读数时那一段（开着时补一句"形式化由 L 承担"）。
+    """没有读到工具链读数时那一段（只报事实与怎么取读数，不点名任何角色）。
 
-    为什么这一句要分档：那半句是"要形式化找谁"的指引，而它在开着与关着两档下
-    说的是完全不同的事 —— 关着时 L 在这一档不存在（`leanscope.is_hidden`），
-    任何角色名都不许出现在渲染文本里（判据
-    `tests/test_lean_switch_points_at_l.py` 的第三条）。所以这一句按开关现算，
-    与 `toolchain_facts_text` 那一段同一个读数（`_lean_switch`）。
+    2026-10-24 业主口径（形式化要不要做由用户指定、指定之后由 B 逐条安排）：这一句
+    此前在开着那一档补的是"形式化核验（那一岗是 L）"，等于在每一份提示词里给所有
+    角色指一条它们没有的路。现在两档同一句：只说"要判断能不能跑，先让框架跑一次
+    doctor"，谁安排这件事写在各自的角色段里（B 的政策、其余角色读到的那一句
+    "形式化以 V 的签与 B 的台账为准"）。
     """
-    who = "形式化核验（那一岗是 L）" if _lean_switch()[0] else "形式化核验"
     return ("这台机器上的证明工具链：（这一次没有读到读数 —— 探测没做，"
-            f"不是「没有检查器」。要判断能不能做{who}，先让框架跑一次 `agentflow doctor`）")
+            "不是「这台机器上跑不了」。要判断能不能跑形式化核验，"
+            "先让框架跑一次 `agentflow doctor`）")
 
 
 
@@ -7338,15 +7345,7 @@ def toolchain_facts_text() -> str:
 
 
 
-            "这一趟不要写 Lean 源码、不要派 `verify.check_formal`、也不要落 "
-
-
-
-            "`method=\"formal\"` 的实验；"
-
-
-
-            "- 替代路线（这条路上唯一的「审过」凭据）：把证明过程写进 `statements` 的 "
+            "- 这一趟走替代路线（这条路上唯一的「审过」凭据）：把证明过程写进 `statements` 的 "
 
 
 
@@ -7358,7 +7357,7 @@ def toolchain_facts_text() -> str:
 
 
 
-            "任何断言都不许写成已证明",
+            "所以任何断言都写成「逐行审阅」，不写「已证明」",
 
 
 
@@ -7460,8 +7459,8 @@ def toolchain_facts_text() -> str:
 
     # 2026-10-17（Lean 审计 S1）：第一行必须是开关状态 —— 六处提示词都写"看第一行"，
     # 而原来第一行是标题、状态在第二行；开分支还全篇没有"已开启"三个字。
-    lines = ["- Lean 形式化：**已开启**（`lean_enabled = true`）⇒ 本会话**可以**走形式化这条路；"
-             "形式化由 L 承担（`formal.*` 只在 L 的工具面上）—— 要形式化就找 L，别自己写 Lean 源码",
+    lines = ["- 形式化开关（`lean_enabled = true`）：**已开启** ⇒ 本会话可以走形式化这条路；"
+             "这条路要不要走由**用户指定**，指定之后一条一条经 **B** 的通道安排",
              "这台机器上的证明工具链（现算读数，不是记忆）：", f"- 检查器：{found}"]
 
 
@@ -9397,7 +9396,7 @@ HANDOFF_PROTOCOL = """\
 
 
 def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
-    """关掉 Lean 时那三张改写表按模块收集（E 一份、L 一份；顺序即应用顺序）。
+    """关掉 Lean 时那三张改写表按模块收集（B 一份、E 一份、L 一份；顺序即应用顺序）。
 
     为什么按模块收集而不是把 L 的条目塞进 `specs/e.py`：E 的那张表是按 E 自己的
     文本写的（E 的职责句、E 的政策、E 的动作摘要那一行；它原来还有一条按
@@ -9406,14 +9405,19 @@ def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
     文本一个字都不同 —— 混在一张表里，读的人就问不出"这一条是谁的"。两个角色的
     表各自住在自己的声明旁边（声明层是权限面的真身），应用点仍然只有一处。
 
+    2026-10-24 多收一份 B：`specs/b.py::PROOF_CHANNEL` 是形式化那条通道的唯一真身，
+    它必须写出派谁（只写"形式化那一岗"读的人不知道派谁），于是关档要有一份能把它
+    整段换掉的表 —— 那张表的左右两边都取自同一个模块的常量，不手抄。
+
     每一项是 `(模块名, 整块删的表, 整行删的标记, 逐条替换的表)`；模块缺某一张表时
     按空元组算（`getattr(..., ())`）—— 那张表不存在与它是空的，在应用上等价。
     """
+    from .specs import b as _B_SPEC
     from .specs import e as _E_SPEC
     from .specs import l as _L_SPEC
 
     out: list[tuple[str, tuple, tuple, tuple]] = []
-    for mod in (_E_SPEC, _L_SPEC):
+    for mod in (_B_SPEC, _E_SPEC, _L_SPEC):
         out.append((
             str(getattr(mod, "__name__", "")),
             tuple(getattr(mod, "NO_LEAN_DROP_BLOCKS", ())),
@@ -9428,12 +9432,12 @@ def _apply_no_lean_variant(text: str) -> str:
 
     业主 2026-10-12（逐字）：「负责 Lean 的智能体 E 在开关关掉时可不载入有关形式化验证的
     提示词，全体成员关于 E 的印象也可以没有『负责形式化验证』这个说法，一旦提到形式化验证
-    所有人的第一反应是系统做不了」。2026-10-22 新设 L 之后，这条口径同时管两个角色
-    （E 与 L 各有一份表，见 `_no_lean_tables`）。
+    所有人的第一反应是系统做不了」。2026-10-22 新设 L 之后，这条口径同时管三个角色
+    （B / E / L 各有一份表，见 `_no_lean_tables`）。
 
     四处刻意的做法：
 
-    - 改写表住在 `specs/e.py` 与 `specs/l.py`（各自声明旁边）：声明本身一个字不改
+    - 改写表住在 `specs/b.py` / `specs/e.py` / `specs/l.py`（各自声明旁边）：声明本身一个字不改
       （它派生权限面的四张表、被冻结快照钉着），随开关变的只是"渲染给模型看的那份文本"；
     - 应用点是唯一的收口（`system_prompt` / `prompt_audit` 都经过它）—— 提示词有多条
       渲染路径（角色段 / 伙伴表 / 工具面 / 政策），逐条去改会漏掉某一条，
