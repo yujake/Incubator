@@ -8,13 +8,15 @@ export interface CardProps {
   right?: ComponentChildren;
   /** `problem` 那一档给卡片描一圈警示色（"没查成"要在视觉上看得出来）。 */
   tone?: "plain" | "problem";
+  /** 这一张卡的锚点（`<section id=…>`）：别的页面要链到"某一栏"时用它。 */
+  id?: string;
   children?: ComponentChildren;
 }
 
 export function Card(props: CardProps) {
   const cls = props.tone === "problem" ? "card problem" : "card";
   return (
-    <section class={cls}>
+    <section class={cls} id={props.id}>
       <div class="card-head">
         <span class="card-title">{props.title}</span>
         {props.subtitle === undefined ? null : <span class="readings">{props.subtitle}</span>}

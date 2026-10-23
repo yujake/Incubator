@@ -78,17 +78,26 @@ def _own(full: str = "设 G 是 3-正则群；则弦长函数不是常值。",
 
 
 def _register_two(st: Store) -> dict:
-    """登记一条有两份证明的命题（`#p1` 甲、`#p2` 乙）。"""
+    """登记一条有两份证明的命题（`#p1` 甲、`#p2` 乙）。
+
+    B-2 闸（`must_start_as_conjecture`）之后的正路：这一笔还没有 V 的签 ⇒ 先按猜想登记
+    （`kind="conjecture"` 是明文放行的那一档）。这一份里的判据读的是证明与五位，
+    与 `kind` 无关；把首登改成 theorem 才是"绕开闸"，那件事本身会被 B-2 拒。
+    """
     return AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own(), proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
+        **_own(), kind="conjecture",
+        proofs=[{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}])
 
 
 def _register_one(st: Store, *, proof_text: str = P1,
                   full: str = "设 G 是 3-正则群；则弦长函数不是常值。",
                   short: str = "弦长函数不是常值") -> dict:
-    """登记一条只有 canonical 证明的命题（`full` / `short` 必须与别的行不同）。"""
+    """登记一条只有 canonical 证明的命题（`full` / `short` 必须与别的行不同）。
+
+    同 `_register_two` 的登记路径：没有 V 的签 ⇒ 首登按猜想。
+    """
     return AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own(full, short), proof_text=proof_text)
+        **_own(full, short), kind="conjecture", proof_text=proof_text)
 
 
 def _row(store: Store, stmt_id: str = SID) -> dict:
@@ -128,6 +137,59 @@ def _proof(reading: dict, proof_no: int) -> dict:
     hit = [p for p in (reading.get("proofs") or []) if int(p["proof_no"]) == int(proof_no)]
     assert hit, f"逐条读数里没有 #{proof_no}（读数：{reading.get('proofs')}）"
     return hit[0]
+
+
+def _bad_tail_world(st: Store) -> tuple[list[dict], str]:
+    """造一条好边 + 一条坏尾巴边（① L4 的夹具），返回 (依赖行, 坏尾巴原串)。"""
+    assert _register_one(st)["ok"] is True
+    _put_lit(st, LIT_A)
+    _put_lit(st, LIT_B)
+    bad_used = f"stmt:{SID}#pabc"
+    good_used = f"stmt:{SID}"
+    g = AgentG(st)
+    for used, label, lit_id in ((good_used, "好那条边", LIT_A),
+                                (bad_used, "坏尾巴那条边", LIT_B)):
+        out = g.register_dependency(used_by=used, kind="prior_art", label=label,
+                                    source_lit_id=lit_id, path_group=1, status="closed")
+        assert out.get("ok") is not False, out
+    deps = [dict(r) for r in st.rows("dependencies")]
+    assert sorted(str(r["used_by"]) for r in deps) == sorted([good_used, bad_used]), deps
+    return deps, bad_used
+
+
+def _bad_tail_problems(graph: _DepGraph, rep: dict, bad_used: str) -> list[str]:
+    """判据 ① 的读数：坏尾巴有没有被点名（图与 payload 两处 + 一条 warning）。
+
+    收在一处是为了让反真空那一条拿同一组读数打红（判据不经两套口径）。
+    """
+    problems: list[str] = []
+    if list(graph.bad_used_by) != [bad_used]:
+        problems.append(f"图里没有留下坏尾巴原串（bad_used_by={graph.bad_used_by!r}）")
+    payload = dict(getattr(rep, "payload", None) or {})
+    if payload.get("bad_used_by") != [bad_used]:
+        problems.append("payload 的 bad_used_by 没有点名坏尾巴"
+                        f"（读数：{payload.get('bad_used_by')!r}）")
+    warnings = [str(w) for w in (getattr(rep, "warnings", None) or [])]
+    if not any("bad_used_by" in w or "尾巴" in w for w in warnings):
+        problems.append(f"有坏尾巴却没有任何 warning（静默）：{warnings!r}")
+    return problems
+
+
+def _bits_decl_problems(decl: str) -> list[str]:
+    """判据 ③ 的读数：`StatementRow.bits` 必须声明成对象（类型面读得出 bits.reviewed）。"""
+    problems: list[str] = []
+    if "export interface StatementRow {" not in decl:
+        return ["type_decls() 里没有 StatementRow"]
+    block = decl.split("export interface StatementRow {", 1)[1].split("\n}", 1)[0]
+    lines = [line.strip() for line in block.splitlines() if line.strip().startswith("bits:")]
+    if len(lines) != 1:
+        problems.append(f"StatementRow 里 bits 的声明不是一条：{lines}")
+        return problems
+    if lines[0] != "bits: Record<string, unknown>;":
+        problems.append(f"bits 的声明不是对象（类型面读不出 bits.reviewed）：{lines[0]!r}")
+    if "number" in lines[0]:
+        problems.append("bits 仍被声明成 number")
+    return problems
 
 
 def _put_lit(store: Store, lit_id: str) -> None:
@@ -233,19 +295,8 @@ def test_a_bad_proof_tail_is_named_instead_of_disappearing(tmp_path: pathlib.Pat
     那条承重边静默消失，链仍然 `ok=True`、没有一条 warning。
     """
     st = _ws(tmp_path)
-    assert _register_one(st)["ok"] is True
-    _put_lit(st, LIT_A)
-    _put_lit(st, LIT_B)
-    g = AgentG(st)
+    deps, bad_used = _bad_tail_world(st)
     good_used = f"stmt:{SID}"
-    bad_used = f"stmt:{SID}#pabc"
-    for used, label, lit_id in ((good_used, "好那条边", LIT_A), (bad_used, "坏尾巴那条边", LIT_B)):
-        out = g.register_dependency(used_by=used, kind="prior_art", label=label,
-                                    source_lit_id=lit_id, path_group=1, status="closed")
-        assert out.get("ok") is not False, out
-
-    deps = [dict(r) for r in st.rows("dependencies")]
-    assert sorted(str(r["used_by"]) for r in deps) == sorted([good_used, bad_used]), deps
     graph = _DepGraph(stmts=[_row(st)], deps=deps, exps=[], lits=[])
 
     # 索引口径不变：坏尾巴不折成任何证明号，好边照旧落在 canonical 的组 1 上。
@@ -270,6 +321,8 @@ def test_a_bad_proof_tail_is_named_instead_of_disappearing(tmp_path: pathlib.Pat
     assert payload.get("groups_total") == 1, (
         f"① 好边那条路径不见了（groups_total={payload.get('groups_total')!r}）")
     assert [x["reached"] for x in payload["groups"]] == [True], payload["groups"]
+    # 同一组读数收在一处（反真空那一条拿它打红，判据不经两套口径）。
+    assert _bad_tail_problems(graph, rep, bad_used) == [], _bad_tail_problems(graph, rep, bad_used)
 
 
 # ============================================================ ② L3：任一条 in-sync
@@ -348,6 +401,8 @@ def test_the_statement_row_declares_bits_as_an_object() -> None:
         "`python -m agentflow.web.emit_types`）")
     assert "bits: Record<string, unknown>;" in on_disk, (
         "③ 生成物里 `bits` 不是对象（emit_types 没把这一格带出来）")
+    # 同一组读数收在一处（反真空那一条拿它打红，判据不经两套口径）。
+    assert _bits_decl_problems(decl) == [], _bits_decl_problems(decl)
 
 
 # ============================================================ ④ L6：工具层写口
@@ -451,3 +506,82 @@ def test_the_tool_declares_a_write_and_refuses_a_bad_row(tmp_path: pathlib.Path)
     assert res.meta.get("problems"), res.meta
     assert not any(p.is_file() for p in _three_files(project)), (
         "坏行被写掉了：一行读不懂时应当一行都不写")
+
+
+# ============================================================ 反真空：三处半断各注入一次
+#
+# 上面 ①②③ 的绿必须"有对象"：把每一处修好的那一格还原成改前的形态（只在本进程里
+# monkeypatch，不碰 src），对应的判据必须当场红。三处各一条，任何一条不红都说明那组
+# 断言在对着空气。
+
+
+def test_negative_control_the_dropped_bad_tail_problem_is_caught(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空（① L4）：把 `problem` 丢掉（改前那一行）⇒ ① 的读数必须红。
+
+    注入点就是断点原文里那个 `_problem`：`_DepGraph` 拿到的 `problem` 一律为空 ⇒
+    `bad_used_by` 留不下原串、`_bad_tail_warnings` 一条也说不出、payload 里那格是空的
+    —— 那条承重边静默消失，链照样 `ok=True`。`_bad_tail_problems` 是正控用的同一份读数。
+    """
+    from agentflow.agent_c import proof_chain as PC
+
+    st = _ws(tmp_path)
+    deps, bad_used = _bad_tail_world(st)
+    real = PC._split_used_by
+
+    def _dropped(used: str) -> tuple[str, int, str]:
+        head, no, _problem = real(used)
+        return head, no, ""
+
+    monkeypatch.setattr(PC, "_split_used_by", _dropped, raising=True)
+    graph = _DepGraph(stmts=[_row(st)], deps=deps, exps=[], lits=[])
+    rep = AgentC(st).proof_chain(SID)
+    assert graph.bad_used_by == [], graph.bad_used_by        # 留痕消失（改前的形态）
+    problems = _bad_tail_problems(graph, rep, bad_used)
+    assert problems != [], "problem 丢掉之后判据 ① 仍然全绿 ⇒ 那条判据没有对象"
+    assert any("bad_used_by" in p for p in problems), problems
+    assert any("warning" in p for p in problems), problems
+
+
+def test_negative_control_only_the_latest_signature_turns_the_summary_bit_red(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空（② L3）：把"逐条 sha 表"关掉、只核最近那一签 ⇒ ② 的读数必须红。
+
+    注入点：`evidencebits.reviewed_sha_by_proof` 一律返回空 ⇒ `_stale_review_cleared`
+    退回改前那条路（只看 `reviewed_by` 里那一次签名）。夹具就是 ② 的前半：签 #p1、
+    签 #p2、只改 #p2。这时逐条读数说 #p1 仍 signed、命题级 `reviewed=True`，
+    而汇总位被最近那一签（#p2）拖成 False —— 正是"签过 #p1、之后改了 #p2"读成没审过。
+    """
+    st = _ws(tmp_path)
+    assert _register_two(st)["ok"] is True
+    assert _sign(st, text=P1, proof_no=1)["statement_writeback"]["written"] is True
+    assert _sign(st, text=P2, proof_no=2)["statement_writeback"]["written"] is True
+    assert _edit(st, proof_no=2, text=P2_EDITED)["proof_text"] == P1
+    assert EB.bits_from_row(_row(st))["reviewed"] is True, "夹具前提：改稿这一笔没有动位本身"
+
+    monkeypatch.setattr(EB, "reviewed_sha_by_proof", lambda bits: {}, raising=True)
+    row = _row(st)
+    reading = VR.statement_review_reading(st.root, row)
+    assert _proof(reading, 1)["state"] == "signed", reading["proofs"]
+    assert reading["reviewed"] is True, reading
+    assert EB.bits_from_row(row)["reviewed"] is False, (
+        "只核最近那一签之后汇总位仍然是 True ⇒ ② 的判据没有对象（它本来就是真的）")
+
+
+def test_negative_control_a_number_bits_declaration_turns_the_type_reading_red(
+        monkeypatch) -> None:
+    """反真空（③ L9）：把声明还原成 `bits: number` ⇒ ③ 的读数必须红。
+
+    注入点：`readers.type_decls()` 返回改前那一份（`bits` 声明成 number）。正控用的
+    `_bits_decl_problems` 在这里必须非空 —— 否则"生成物与声明逐字节相同"那几条
+    对着的就不是"bits 是不是对象"。
+    """
+    decl = RD.type_decls()
+    bad = decl.replace("bits: Record<string, unknown>;", "bits: number;", 1)
+    assert bad != decl, "声明原文里找不到 bits 那一格 ⇒ 这一条负控没有对象"
+    assert _bits_decl_problems(decl) == [], "夹具前提：注入之前 ③ 的读数应当是绿的"
+
+    monkeypatch.setattr(RD, "type_decls", lambda: bad, raising=True)
+    problems = _bits_decl_problems(RD.type_decls())
+    assert problems != [], "bits 声明回 number 之后 ③ 仍然全绿 ⇒ 那条判据没有对象"
+    assert any("number" in p for p in problems), problems

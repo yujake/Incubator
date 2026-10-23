@@ -5,10 +5,9 @@
  * 「台账」那一张卡读共享快照（`api.getState()` 与 `Home` / `Run` 同一份读数）。
  * SSE：`state`。
  *
- * 七栏，每栏自己一个三态：
+ * 本页共九张卡，每张自己一个三态（栏数、标题都数 `ARTIFACT_CARDS` 那张表，不另写数字）：
  *
  * 1. 产物台账 `ledger`：路径 / `producer` / 一致性 / `exit_code` / `kind`，
- *    外加 `ledger_verify`（台账里钉的那一份与盘上现在这一版是不是同一份）；
  * 2. 交接手稿 `handoffs`：`body` 截断显示（后端 `webui/state.py` 的 `CLIP=400`
  *    是同一口径，这里跟它对齐，长文不许把表格撑爆）；
  * 3. 验收表的机器可判行 `checks`；
@@ -17,7 +16,20 @@
  * 6. 任务产物 `tasks`（`out/tasks/t-*.json` 与 `tasks` 台账行对应）；
  * 7. 文献库 `library` —— 如实标注的缺口：`draft/74` 说这一栏从产物面读
  *    `store.rows("literature")`，而 `ArtifactsView` 里没有这一栏，今天也没有别的
- *    端点给它 ⇒ 渲染 `not_applicable` 并写明，不编数。
+ *    端点给它 ⇒ 渲染 `not_applicable` 并写明，不编数；
+ * 8. 台账对账 `ledger_verify`（台账钉住的那一份 vs 盘上现在这一份；2026-10-23 前
+ *    它只在台账那一卡里并排显示）；
+ * 9. 实验产物的落点 `experiment_spots` 与 `code_exp` —— 第九张是它（2026-10-23 补：
+ *    `code/exp/` 下的脚本与 `out/experiments/<号>/{design,exhaustion}.md`；
+ *    证据链那张实验表的「报告」列也链到这张卡）。
+ *
+ * 另有一张「台账（第二个独立读数）」卡不在那张表里：它读的是共享快照
+ * （`useLive().snapshot.ledger`，与首页 / 一趟详情的「台账」卡同一份），不是这一面的
+ * 栏 —— 把它数进"栏数"会让"这一面有几栏"与"这一面读了几份盘"混成一件事。
+ *
+ * 数法（免得"九"与屏幕上数卡片对不上）：本页同时渲染十一张卡 —— 页头那张「产物」卡
+ * ＋ 这一面的九栏 ＋ 一张台账镜子卡。源码里 `<Card` 出现十三处，是因为页头卡有一个
+ * 「还没读到」的副本、「六件产物」按 `art.run_dir` 分两支（两支是同一栏）。
  *
  * ## 2026-10-23（业主：这一页的显示格式略有过时）
  *
@@ -41,6 +53,30 @@ import { useFace, useLive } from "../live";
 
 /** 长文截断（与后端 `webui/state.py` 的 `CLIP` 同一口径：两头留、中间省）。 */
 const CLIP = 400;
+
+/** 这一面读数的九张卡：栏序 = `draft/74 §3.4` 那七栏 + 后来补的两栏，标题的唯一来源。
+ *
+ * 2026-10-23（业主：文件头写"七栏"而实际已是九张卡）：改前那个数字是手写的，
+ * 加了卡它不会动 —— 于是文件头与屏幕各说各的。现在标题与数字都数这张表
+ * （`CARD_COUNT`），加一张卡忘了登记、或文件头那个中文数字忘了改，
+ * `tests/test_webui_readings_format.py` 的判据⑩ 会红。
+ *
+ * 第九张是「实验产物的落点」；第八张是「台账对账」。
+ */
+export const ARTIFACT_CARDS = {
+  ledger: "产物台账",
+  handoffs: "交接手稿 / 账本",
+  checks: "验收表的机器可判行",
+  style: "报告体例兑现",
+  products: "六件产物",
+  tasks: "任务产物",
+  library: "文献库（缺口）",
+  verify: "台账对账（台账钉住的那一份 vs 盘上现在这一份）",
+  spots: "实验产物的落点",
+} as const;
+
+/** 这一面读数卡的张数（文件头那句与页面副标题都数它，不另写一个数）。 */
+const CARD_COUNT = Object.keys(ARTIFACT_CARDS).length;
 
 function clip(text: string): string {
   if (text.length <= CLIP) {
@@ -92,7 +128,7 @@ export function Artifacts() {
     <>
       <Card
         title="产物"
-        subtitle={`七栏 · 整面 tri=${art.tri}`}
+        subtitle={`${CARD_COUNT} 张卡 · 整面 tri=${art.tri}`}
         tone={isUnreadable(art.tri) ? "problem" : "plain"}
         right={<TriState tri={art.tri} label="产物面" reason={art.reason} />}
       >
@@ -102,11 +138,19 @@ export function Artifacts() {
           <span class="mono">out/paper/ACCEPTANCE-CHECKS.json</span> · 体例{" "}
           <span class="mono">out/review/REPORT-STYLE.json</span> · 秘书{" "}
           <span class="mono">out/secretary/</span> 下的 <span class="mono">*.jsonl</span>
+          {" "}· 实验落点 <span class="mono">out/experiments/&lt;号&gt;/</span> 与{" "}
+          <span class="mono">code/exp/</span>
+        </div>
+        <div class="readings">
+          张数数的是 <span class="mono">ARTIFACT_CARDS</span> 那张表（标题与数字同一来源）：
+          <span class="mono">draft/74 §3.4</span> 原有的那七栏 + 第八张「台账对账」、
+          第九张「实验产物的落点」。另有一张「台账（第二个独立读数）」读的是共享快照
+          （与首页同一份），不是这一面的栏。
         </div>
       </Card>
 
       <Card
-        title="产物台账"
+        title={ARTIFACT_CARDS.ledger}
         subtitle={`${art.ledger.length} 行 · 一致性比的是与「台账对账」那一栏同一路径的核对行`}
         right={<TriState tri={art.ledger_tri} label="ledger" />}
       >
@@ -150,7 +194,7 @@ export function Artifacts() {
       </Card>
 
       <Card
-        title="台账对账（台账钉住的那一份 vs 盘上现在这一份）"
+        title={ARTIFACT_CARDS.verify}
         subtitle={`${art.ledger_verify.length} 行 · sha 原文不上屏，只报一致 / 不一致 / unknown`}
         right={<TriState tri={art.ledger_verify_tri} label="verify_entries" />}
       >
@@ -215,7 +259,7 @@ export function Artifacts() {
       </Card>
 
       <Card
-        title="交接手稿 / 账本"
+        title={ARTIFACT_CARDS.handoffs}
         subtitle={`${art.handoffs.length} 条 · 正文 sha 不再显示（没有第二份可比，业主不关心原文）`}
         right={<TriState tri={art.handoffs_tri} label="handoffs" />}
       >
@@ -246,7 +290,7 @@ export function Artifacts() {
       </Card>
 
       <Card
-        title="验收表的机器可判行"
+        title={ARTIFACT_CARDS.checks}
         subtitle={
           art.checks_tri === "not_applicable"
             ? "这一趟没有这份表"
@@ -285,7 +329,7 @@ export function Artifacts() {
       </Card>
 
       <Card
-        title="报告体例兑现"
+        title={ARTIFACT_CARDS.style}
         subtitle={
           art.style_tri === "not_applicable"
             ? "M 还没声明体例"
@@ -318,7 +362,7 @@ export function Artifacts() {
           （本机实测：t1-review-2 六件全是 not_applicable）。所以整卡改成一句导引；
           真有那个目录时（`project run` 跑过的项目）照旧画表。 */}
       {art.run_dir === "" ? (
-        <Card title="六件产物（属于另一条流水线）">
+        <Card title={ARTIFACT_CARDS.products} subtitle="属于另一条流水线">
           <div class="readings">
             六件产物（<span class="mono">run-manifest.json</span> /
             <span class="mono">model-transcript.jsonl</span> /
@@ -332,7 +376,7 @@ export function Artifacts() {
         </Card>
       ) : (
         <Card
-          title="六件产物"
+          title={ARTIFACT_CARDS.products}
           subtitle={`${art.run_dir} · 这六件只有盘上这一份，没有第二份可比 ⇒ 不显示 sha`}
           right={<TriState tri={art.products_tri} label="products" />}
         >
@@ -376,8 +420,9 @@ export function Artifacts() {
       )}
 
       <Card
-        title="实验产物的落点（`code/exp/` 与 `out/experiments/<号>/`）"
-        subtitle={`${art.experiment_spots.length} 个落点 · ${art.code_exp.length} 个实验脚本`}
+        title={ARTIFACT_CARDS.spots}
+        id="experiment-spots"
+        subtitle={`${art.experiment_spots.length} 个落点 · ${art.code_exp.length} 个实验脚本 · code/exp/ 与 out/experiments/<号>/`}
         right={<TriState tri={art.experiment_spots_tri} label="experiment_spots" />}
       >
         {/* 2026-10-23（业主：产物页要补这两处落点）：数值实验的产出分三处 ——
@@ -427,7 +472,7 @@ export function Artifacts() {
       </Card>
 
       <Card
-        title="任务产物"
+        title={ARTIFACT_CARDS.tasks}
         subtitle={`${art.tasks.length} 行`}
         right={<TriState tri={art.tasks_tri} label="tasks" />}
       >
@@ -456,7 +501,7 @@ export function Artifacts() {
       </Card>
 
       <Card
-        title="文献库（缺口）"
+        title={ARTIFACT_CARDS.library}
         right={
           <TriState
             tri="not_applicable"

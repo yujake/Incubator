@@ -71,11 +71,17 @@ def _own(full: str = "设 G 是 3-正则群；则弦长函数不是常值。",
 
 
 def _register_two(st: Store, *, extra: list | None = None) -> dict:
-    """登记一条有两份证明的命题（`#p1` 甲、`#p2` 乙），返回 B 的返回值。"""
+    """登记一条有两份证明的命题（`#p1` 甲、`#p2` 乙），返回 B 的返回值。
+
+    B-2 闸（`must_start_as_conjecture`）之后的正路：首登还没有 V 的签 ⇒ 按猜想登记
+    （明文放行的那一档）。这一份的八条负控读的是签名/证明号/对应表，与 `kind` 无关；
+    先立猜想、签完再升 theorem 的那一步在 `test_statement_write_...` 与
+    `test_the_three_half_breaks_...` 的夹具里走通了，这里只需要"登记路径不绕闸"。
+    """
     proofs = [{"proof_no": 1, "text": P1}, {"proof_no": 2, "text": P2}]
     proofs += list(extra or [])
     return AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own(), proofs=proofs)
+        **_own(), kind="conjecture", proofs=proofs)
 
 
 def _row(store: Store, stmt_id: str = SID) -> dict:
@@ -128,6 +134,23 @@ def _proof(reading: dict, proof_no: int) -> dict:
     hit = [p for p in reading["proofs"] if int(p["proof_no"]) == int(proof_no)]
     assert hit, (proof_no, reading["proofs"])
     return hit[0]
+
+
+def _bad_tail_readings_problems(used_by: str) -> list[str]:
+    """⑤ 的读数：一条坏尾巴必须被读成"不是证明号"（空列表 = 没被折成 #p1）。
+
+    收在一处是为了让反真空那一条拿同一份读数打红（判据不经两套口径）。
+    """
+    problems: list[str] = []
+    no = VR.as_proof_no(used_by)
+    if no != 0:
+        problems.append(f"as_proof_no({used_by!r})={no}（坏尾巴必须读成 0：不是证明号）")
+    head, tail_no, problem = _split_used_by(used_by)
+    if tail_no != PL.DEFAULT_PROOF_NO:
+        problems.append(f"_split_used_by 的证明号={tail_no}（坏尾巴要按 canonical 读）")
+    if not problem:
+        problems.append("_split_used_by 的 problem 是空串（读侧看不出这个尾巴是坏的）")
+    return problems
 
 
 def _r10(store: Store) -> tuple[int, dict]:
@@ -197,7 +220,8 @@ def _workspace_for_paper(tmp_path: pathlib.Path) -> tuple[Store, pathlib.Path]:
     st = _ws(tmp_path)
     assert _register_two(st)["ok"] is True
     q = AgentB(st, extractor=None, extract_text=None, config={}).register_statement(
-        **_own("设 H 是有限群；则 H 的阶有限。", "有限群的阶有限"), proof_text="显然。")
+        **_own("设 H 是有限群；则 H 的阶有限。", "有限群的阶有限"), kind="conjecture",
+        proof_text="显然。")
     assert q["ok"] is True and q["stmt_id"] == QID, q
     _put_experiment(st)
     assert _sign(st, text=P1, proof_no=1)["statement_writeback"]["written"] is True
@@ -372,6 +396,8 @@ def test_a_bad_proof_tail_is_not_folded_into_p1(tmp_path: pathlib.Path) -> None:
     clean_head, clean_no, clean_problem = _split_used_by(f"stmt:{SID}#p2")
     assert (clean_head, clean_no, clean_problem) == (f"stmt:{SID}", 2, ""), (
         clean_head, clean_no, clean_problem)
+    # 同一组读数收在一处（反真空那一条拿它打红，判据不经两套口径）。
+    assert _bad_tail_readings_problems(bad) == [], _bad_tail_readings_problems(bad)
 
     # 分组那一侧：坏尾巴的边不许被折成"第 1 条证明"，也不许凭空多出一个证明号。
     st = _ws(tmp_path)
@@ -489,3 +515,45 @@ def test_a_paper_without_a_table_fails_and_is_never_downgraded(
     PM.mapping_reading(plain)
     got_plain = PM.mapping_reading(plain, workspace_root=empty.root)
     assert got_plain["state"] == "unknown", got_plain
+
+
+# ============================================================ 反真空：把一条负控的错因去掉
+#
+# 八条负控的绿必须"有对象"：把某一条负控的错因从判据里摘掉（让坏输入看起来合法），
+# 那一条的断言必须当场红。只在进程内 monkeypatch，不碰 src。
+
+
+def test_negative_control_a_folded_bad_tail_turns_the_fifth_cell_red(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空（⑤ 坏尾巴）：让读侧把坏尾巴折成 `#p1`（改前的读法）⇒ ⑤ 的读数必须红。
+
+    注入点只有一处：`proofloc.parse_used_by_checked`（全仓拆这个尾巴的唯一解析点）。
+    让它对坏尾巴返回"干净的第 1 条证明" ⇒ `as_proof_no` 读成 1、`problem` 空、
+    分组把那条边折进 canonical 的第 1 组 —— 这三件都是 ⑤ 明令不许的。
+    """
+    real = PL.parse_used_by_checked
+
+    def _fold(used_by: str) -> tuple[str, int, str]:
+        head, no, problem = real(used_by)
+        if not problem:
+            return head, no, problem
+        return head.split("#", 1)[0], PL.DEFAULT_PROOF_NO, ""
+
+    bad = f"stmt:{SID}#pabc"
+    assert _bad_tail_readings_problems(bad) == [], "夹具前提：注入之前 ⑤ 的读数应当是绿的"
+    monkeypatch.setattr(PL, "parse_used_by_checked", _fold, raising=True)
+    assert VR.as_proof_no(bad) == PL.DEFAULT_PROOF_NO, VR.as_proof_no(bad)
+    problems = _bad_tail_readings_problems(bad)
+    assert problems != [], "坏尾巴被折成 #p1 之后 ⑤ 仍然全绿 ⇒ 那组断言没有对象"
+    assert any("as_proof_no" in p for p in problems), problems
+    assert any("problem" in p for p in problems), problems
+
+    # 分组那一侧同样变红：这条边被折进 canonical 的第 1 组（⑤ 的第二段明令不许）。
+    st = _ws(tmp_path)
+    assert _register_two(st)["ok"] is True
+    _put_lit(st, LIT_A)
+    AgentG(st).register_dependency(used_by=bad, kind="prior_art", label="坏尾巴那条边",
+                                   source_lit_id=LIT_A, path_group=1, status="closed")
+    deps = [dict(r) for r in st.rows("dependencies")]
+    two_d = _DepGraph(stmts=[_row(st)], deps=deps, exps=[], lits=[]).groups_of(SID)
+    assert PL.DEFAULT_PROOF_NO in two_d, two_d

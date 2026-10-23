@@ -349,7 +349,7 @@ export function Home() {
             >
               {sessions.map((s) => (
                 <option value={s.sid} key={s.sid}>
-                  {s.sid}（{s.events} 条事件 · {s.last_ts}）
+                  {s.sid}（{s.events} 条事件（会话） · {s.last_ts}）
                 </option>
               ))}
               <option value="__new__">新的一段（起一趟）</option>
@@ -466,7 +466,10 @@ export function Home() {
         </Card>
       ) : null}
 
-      <Card title="会话概览" subtitle={`${snapshot.sessions.length} 段`}>
+      <Card
+        title="会话概览"
+        subtitle={`${snapshot.sessions.length} 段 · 「事件条数（会话）」是按段数的，不是下面台账那一卡的写入笔数`}
+      >
         {snapshot.sessions.length === 0 ? (
           <span class="empty">暂无会话（读到了，里面是 0 段）。</span>
         ) : (
@@ -483,7 +486,15 @@ export function Home() {
                   </a>
                 ),
               },
-              { key: "events_seen", title: "事件" },
+              {
+                // D22（2026-10-23 业主：这一列与台账的"写入笔数"并排易混）：逐字叫
+                // 「事件条数（会话）」。它数的是这一段会话的事件（`sessions/<sid>.jsonl`
+                // 的行数，`SessionRow.events_seen`）；下面「台账」卡那个数数的是整个工作区
+                // 的写入事务（`upserts`）+ commit 标记行 —— 两个数不是一回事，
+                // 说明写在「使用说明」那一页（两种条数不是一回事）。
+                key: "events_seen",
+                title: "事件条数（会话）",
+              },
               {
                 key: "bad_lines",
                 title: "坏行",

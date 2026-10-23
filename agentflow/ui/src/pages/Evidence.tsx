@@ -25,6 +25,16 @@
  * - 命题多两格：非平凡度（`T0`–`T4` 或"未判"）与形式化第 4 位的逐路径读数
  *   （`{证明号: 状态}` 是二维的，折成一条汇总就等于让 `#p2` 借 `#p1` 的光）；
  * - reviewed 按证明逐条显示：验证行的第一格就是证明号（`proof_no`）。
+ *
+ * ## 2026-10-23 第二批（业主：五元位只展开了第 4 位 / 实验表没挂报告）
+ *
+ * - 五元位每一位一格：第 1 位 numeric、第 2 位 proof、第 3 位 reviewed、
+ *   第 4 位 formal（仍是按路径那一格）、第 5 位 audited 各占一列 ——
+ *   改前只有第 4 位在屏幕上，其余四位要从派生的等级去猜；
+ * - 第 3 位与第 4 位同一个样式：一份证明一格（`#p1 已签 ｜ #p2 未签`）；
+ * - 实验表补「报告」一列：`out/experiments/<号>/exhaustion.md`（②③ 的唯一落点）。
+ *   链接指向产物页那张实验落点卡（报告不在 web 服务的静态路由下，直接链文件是死链），
+ *   没有报告写「无」而不是留空。
  */
 import { api } from "../api";
 import { Badge } from "../components/Badge";
@@ -34,7 +44,7 @@ import { Nontriviality } from "../components/Nontriviality";
 import { Table, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
-import type { RelationRow, StatementRow } from "../types";
+import type { ExperimentRow, RelationRow, StatementRow } from "../types";
 
 /** 引文状态的五档（后端 `evidencebits.QUOTE_STATES`；词表外的值原样印，不折成"通过"）。 */
 const QUOTE_WORDS: Record<string, { text: string; kind: string }> = {
@@ -53,6 +63,90 @@ const FORMAL_WORDS: Record<string, string> = {
   na: "na（不适用）",
   stale: "stale（验过、过期了）",
 };
+
+/** 五元位那四位标量位的状态词（后端 `evidencebits.BIT_STATES` 的四档）。
+ *
+ * 词表外的值原样印：把认不出的状态折成 `pending`（"还没做"）与折成 `verified`
+ * 一样危险 —— 一个是把做过的事说成没做，一个是把没做的事说成做了。
+ */
+const BIT_WORDS: Record<string, string> = {
+  verified: "verified（已做）",
+  failed: "failed（没通过）",
+  na: "na（不适用）",
+  pending: "pending（未做）",
+};
+
+/** 一个标量位的词（空串 = 这一位没读出来 ⇒ `unknown`，不冒充 `pending`）。 */
+function bitWord(state: string): string {
+  if (state === "") {
+    return "unknown（这一位没读出来）";
+  }
+  return BIT_WORDS[state] ?? state;
+}
+
+/** 第 1 / 2 / 5 位那一格：一位一个词（读不到写 `unknown`，不写「未做」）。 */
+function bitCell(state: string) {
+  return state === "" ? (
+    <span class="tri-reason">{bitWord(state)}</span>
+  ) : (
+    <span class="mono">{bitWord(state)}</span>
+  );
+}
+
+/** 第 3 位那一格：按证明逐条签（`#p1 已签 ｜ #p2 未签`）。
+ *
+ * 与第 4 位同一个样式（一份证明一行）：这一位在盘上是"证明号 ⇒ 签没签过"那张表，
+ * 折成一句"审过"就等于让 `#p2` 借 `#p1` 的光。没有逐条记录时退回汇总位那个词，
+ * 但明写"说不出是哪一份签的"—— 那与"没签"不是同一句话。
+ */
+function reviewedCell(r: StatementRow) {
+  if (r.reviewed_paths.length === 0) {
+    return (
+      <span class="tri-reason">
+        汇总位 {bitWord(r.bit_reviewed)}（这一条没有逐证明的签名记录，说不出是哪一份签的）
+      </span>
+    );
+  }
+  return (
+    <span
+      class="mono"
+      title="第 3 位是按证明签的：一份证明一格，任一条签过即算过；签的是不是现在这一份正文，看「证明级」那一卡的证明一致"
+    >
+      {r.reviewed_paths.map((p) => `#p${p.proof_no} ${p.reviewed ? "已签" : "未签"}`).join(" ｜ ")}
+    </span>
+  );
+}
+
+/** 「报告」那一格指向产物页那张实验落点卡（`Artifacts.tsx` 给那张卡挂了这个 id）。
+ *
+ * 为什么不直接链到文件：web 服务只发 `/static/` 与页面（`routes.ROUTES`），
+ * 仓库相对路径当 `href` 点下去只会回到应用 —— 那是死链。链接指向"这一处在盘上
+ * 有没有、多大"那张卡，链接文字仍是业主点名的那份报告的仓库相对路径。
+ */
+const REPORT_SPOT_HREF = "/artifacts#experiment-spots";
+
+/** 实验表的「报告」那一格：`out/experiments/<号>/exhaustion.md`（②③ 的唯一落点）。
+ *
+ * 三档各说各的：有 ⇒ 链接；没有 ⇒ 写「无」（不是空白）；读不出来 ⇒ 写"没查成"
+ * （不许把"没读到"与"没有报告"折成同一个「无」）。
+ */
+function reportCell(r: ExperimentRow) {
+  if (r.exhaustion_tri === "unreadable") {
+    return <span class="tri-reason">没查成（这一份报告读不出来，不是「无」）</span>;
+  }
+  if (r.exhaustion_tri !== "computed" || r.exhaustion_path === "") {
+    const why =
+      r.exhaustion_path === ""
+        ? "台账里的实验号不成形，判不出落点"
+        : `${r.exhaustion_path} 还没落盘`;
+    return <span class="tri-reason">无（{why}）</span>;
+  }
+  return (
+    <a class="mono" href={REPORT_SPOT_HREF} title={`${r.exhaustion_path} —— 与产物页「实验产物的落点」那张卡是同一处`}>
+      {r.exhaustion_path}
+    </a>
+  );
+}
 
 /** 一行的引文状态：新后端给 `quote_state`，老后端没有这一格就按布尔读（三态不折平）。 */
 function quoteStateOf(r: StatementRow | RelationRow): string {
@@ -181,7 +275,7 @@ export function Evidence() {
               { key: "label", title: "标签", render: (r) => cell(r.label) },
               {
                 // 派生等级（五元位现算：任一路径通过即正式定理）。它不是谁自报的，
-                // 所以与上面那格"非平凡度"并排读：一个说多不平凡、一个说到没到定理。
+                // 所以与下面五格并排读：一个说多不平凡、一个说到没到定理。
                 key: "grade",
                 title: "派生等级",
                 render: (r) =>
@@ -190,6 +284,35 @@ export function Evidence() {
                   ) : (
                     r.grade_label
                   ),
+              },
+              {
+                // 五元位第 1 位（2026-10-23 第二批：每一位一格）。数值实验那一位
+                // 是四态（`pending` / `na` / `failed` / `verified`），不是布尔。
+                key: "bit_numeric",
+                title: "第 1 位·numeric（数值实验）",
+                render: (r) => bitCell(r.bit_numeric),
+              },
+              {
+                key: "bit_proof",
+                title: "第 2 位·proof（有证明）",
+                render: (r) => bitCell(r.bit_proof),
+              },
+              {
+                // 第 3 位按证明逐条签：一份证明一格（与第 4 位同一个样式）。
+                key: "reviewed_paths",
+                title: "第 3 位·reviewed（按证明）",
+                render: (r) => reviewedCell(r),
+              },
+              {
+                // 五元位第 4 位（2026-10-22 起是二维的）：一份证明一行。
+                key: "formal_paths",
+                title: "第 4 位·formal（按路径）",
+                render: (r) => formalCell(r),
+              },
+              {
+                key: "bit_audited",
+                title: "第 5 位·audited（正式审查）",
+                render: (r) => bitCell(r.bit_audited),
               },
               {
                 // 正文（R93 体检）：盘上 `statement_text`（短版）常常是空的，而
@@ -225,12 +348,12 @@ export function Evidence() {
                 render: (r) => quoteCell(r),
               },
               {
-                // 五元位第 4 位（2026-10-22 起是二维的）：一份证明一行。
-                key: "formal_paths",
-                title: "形式化（第 4 位·按路径）",
-                render: (r) => formalCell(r),
+                // 2026-10-23 第二批：五元位那五格插在「派生等级」后面，这一格
+                // （回验理由）跟着往后挪了一格 —— 内容一个字没动。
+                key: "quote_reason",
+                title: "回验理由",
+                render: (r) => cell(r.quote_reason),
               },
-              { key: "quote_reason", title: "回验理由", render: (r) => cell(r.quote_reason) },
             ]}
           />
         )}
@@ -306,6 +429,14 @@ export function Evidence() {
                     note="台账钉住的代码 sha 与盘上现在这一份脚本（脚本不在盘上或那一行没记 sha ⇒ 没得比）"
                   />
                 ),
+              },
+              {
+                // 2026-10-23 第二批（业主：实验表没挂穷举论证报告）：②③ 的落点是
+                // `out/experiments/<号>/exhaustion.md`（V 会照它判证据档）。
+                // 这一格把那份报告挂出来，没有就写「无」。
+                key: "exhaustion_path",
+                title: "报告",
+                render: (r) => reportCell(r),
               },
               { key: "artifact_paths", title: "产物" },
             ]}

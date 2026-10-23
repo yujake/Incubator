@@ -21,6 +21,15 @@
 `status` 的返回就是 `cachectl.status()` 那一份：两档 × 四格，`unknown` 的档带理由。
 它不是"全部通过"的意思 —— 工具调用成功（`ok(...)`）与"缓存新鲜"是两件事，
 所以判定要看 `data["verdict"]["tri"]`，不看工具调用本身的成败。
+
+## 本模块没有接线（这是写下来的决定，不是漏掉的）
+
+本文件不在 `src/agentflow/tools/__init__.py` 的 `_MODULES` 里 ⇒ `build_registry()`
+不会装配它，任何角色的工具面上都没有 `cache.status` / `cache.warm`。
+理由与"若要挂上要改什么"写在 `docs/KNOWN-UNWIRED.md`（那份清单可机核：
+`tests/test_known_unwired_modules.py` 逐条核"清单 == 盘上没装配的模块"）。
+业主此前裁定「本轮不挂」：这两件的真实用户面是命令行（`agentflow cache status|warm`）
+与网页上那两个按钮，工具面这一档是"主控在对话里代跑一条只读读数"。
 """
 from __future__ import annotations
 

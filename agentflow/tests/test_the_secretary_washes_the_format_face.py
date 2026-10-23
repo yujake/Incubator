@@ -59,17 +59,73 @@ def _sec(tmp_path: pathlib.Path, role: str = "M") -> tuple[Secretary, Store, pat
     return Secretary(role, root=root, store=st), st, root
 
 
+def _washed_problems(got: dict[str, Any]) -> list[str]:
+    """正控① 的读数：这一趟"格式面被秘书洗过"缺了什么（空列表 = 确实洗过了）。
+
+    四条条件逐字来自原断言（`checked` / `washed` / 没拒 / 动作真名 / 逐格 changes），
+    收在一处是为了让反真空那一条用同一组读数打红 —— 判据不经两套口径。
+
+    为什么不是放宽：这里比的是"洗前那个错名 → 声明里的真名"这一整条
+    （含 `changes` 里那句理由），不是"动作名字面没变"。洗格式关掉时
+    `washed=False`、`action` 仍是 `check_form`、`changes` 为空，三条同时不成立。
+    """
+    problems: list[str] = []
+    if got.get("checked") is not True:
+        problems.append(f"checked={got.get('checked')!r}（这一格没查成）")
+    if got.get("washed") is not True:
+        problems.append(f"washed={got.get('washed')!r}（格式面没被洗）")
+    if str(got.get("refused") or "") != "":
+        problems.append(f"refused={got.get('refused')!r}（这一趟被硬拒了）")
+    action = str((got.get("payload") or {}).get("action") or "")
+    if action != "check_formal":
+        problems.append(f"action={action!r}（要洗成 'check_formal'）")
+    want = [{"where": "", "field": "action", "from": "check_form",
+             "to": "check_formal", "why": "动作真名（唯一候选）"}]
+    if list(got.get("changes") or []) != want:
+        problems.append(f"changes={got.get('changes')!r}（要逐格记下洗前/洗后与理由）")
+    return problems
+
+
 # ---------------------------------------------------------------- 格式面（正控）
 
 def test_a_misspelled_action_is_washed_into_the_declared_name(tmp_path: pathlib.Path):
-    """正控①：`check_form` ⇒ `check_formal`（唯一候选），逐格记下来。"""
+    """正控①：`check_form` ⇒ `check_formal`（唯一候选），逐格记下来。
+
+    派给谁这一格换成 L：`check_formal` 是 L 的动作（2026-10-22 形式化那一路归 L，
+    `specs/l.py`），E 的动作表里已经没有它了 —— 判据守的是"错名被洗成声明里的真名"，
+    所以夹具跟着声明面走，不是把"洗过了"这一条放宽成"动作名字面相等"。
+    """
     sec, _st, _root = _sec(tmp_path)
-    got = sec.wash_delegation("summon", {"role": "E", "action": "check_form", "params": {}})
+    got = sec.wash_delegation("summon", {"role": "L", "action": "check_form", "params": {}})
     assert got["checked"] is True and got["washed"] is True, got
     assert got["refused"] == "", got
     assert got["payload"]["action"] == "check_formal", got["payload"]
     assert got["changes"] == [{"where": "", "field": "action", "from": "check_form",
                                "to": "check_formal", "why": "动作真名（唯一候选）"}], got["changes"]
+    # 同一组读数收在一个函数里，反真空那一条拿它打红（判据不经两套口径）。
+    assert _washed_problems(got) == [], _washed_problems(got)
+
+
+def test_negative_control_an_unwashed_format_face_turns_the_reading_red(
+        tmp_path: pathlib.Path, monkeypatch):
+    """反真空：把洗格式关掉（错名的候选表读不出来）⇒ 正控① 的读数必须红。
+
+    注入点只有一处：`declarations_candidates`（"这个错名该映到哪个真名"的唯一判据）。
+    让它一律返回空 ⇒ 秘书不再改写 `action`，载荷原样发出去（这就是"未洗的样子"）。
+    没有这一条，正控①的绿可能只是"`check_form` 本来就等于 `check_formal`"这类空话：
+    这里读到的 `washed=False` / `changes=[]` 说明那两条断言确实对着"洗过"这件事。
+    """
+    import agentflow.secretary as sec_mod
+
+    sec, _st, _root = _sec(tmp_path)
+    monkeypatch.setattr(sec_mod, "declarations_candidates", lambda *a, **k: [], raising=True)
+    got = sec.wash_delegation("summon", {"role": "L", "action": "check_form", "params": {}})
+    assert got["payload"]["action"] == "check_form", got["payload"]   # 还原成未洗的样子
+    assert got["washed"] is False and got["changes"] == [], got
+    problems = _washed_problems(got)
+    assert problems != [], "洗格式关掉之后判据仍然全绿 ⇒ 正控① 是恒真的"
+    assert any("action" in p for p in problems), problems
+    assert any("changes" in p for p in problems), problems
 
 
 def test_params_put_on_the_top_level_are_folded_into_params(tmp_path: pathlib.Path):

@@ -2215,7 +2215,7 @@ def _g_skills() -> tuple[Skill, ...]:
 
 **② 与 ③ 由 E 写，你只原样引用**：E 把它们写进 `statements` 表的 `proof_text` 那一栏的三段
 （`程序：` / `程序设计：` / `穷举论证：`），并落成 `out/experiments/<实验号>/exhaustion.md`
-（`exhaustionreport` 的 `write_report` 写；三块标题逐字、结尾署名 `作者：E`、
+（`exhaustionreport` 的 `land_report` 写盘、`compose_report` 拼那三段文本；三块标题逐字、结尾署名 `作者：E`、
 抬头写着 `exp:` 编号）。你写正文时：
 
 - 可以压缩措辞，**不许改写实质**，更不许把 E 的读数变成「我们认为」；

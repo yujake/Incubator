@@ -43,6 +43,7 @@ import re
 import pytest
 
 from agentflow import evidencebits as EB
+from agentflow import exhaustionreport as EX
 from agentflow import schema as S
 from agentflow import secretary as SEC
 from agentflow import webui as W
@@ -87,11 +88,16 @@ def _write_table(root: pathlib.Path, table: str, rows: list[dict]) -> None:
                 {"schema_version": S.SCHEMA_VERSION, "rows": rows})
 
 
-#: 第 4 位二维的那一份位记录（`#p1` 验过、`#p2` 还没做）。
+#: 第 4 位二维、第 3 位逐条的那一份位记录（`#p1` 验过并签过、`#p2` 还没做也没签）。
 _BITS_PER_PATH: dict = {
     "numeric": "pending", "proof": True, "reviewed": True,
     "formal": {"1": "verified", "2": "pending"}, "audited": False,
-    "evidence": {"formal_by_proof": {"1": {"checker": "lean4", "experiment_id": "e-1"}}},
+    "evidence": {
+        "formal_by_proof": {"1": {"checker": "lean4", "experiment_id": "000001"}},
+        # 第 3 位按证明逐条的那张表（写侧是 `verifications.sign_statement`）：
+        # 只签了 `#p1` ⇒ `#p2` 不许借它的光。
+        "reviewed_by_proof": {"1": True, "2": False},
+    },
 }
 
 
@@ -130,9 +136,14 @@ def _format_ws(tmp_path: pathlib.Path) -> pathlib.Path:
                                  "statement_sha256": SEC._statement_sha(FULL_OLD_SCALE),
                                  "nontriviality": 0, "label": "T0", "basis": "旧刻度"},
                                 ensure_ascii=False, sort_keys=True) + "\n")
-    # 实验：一个脚本在盘上（与台账的 sha 不符）、一个脚本不在盘上（没得比）
+    # 实验：一个脚本在盘上（与台账的 sha 不符）、一个脚本不在盘上（没得比）；
+    # 另有一条实验号成形的（`000001`）：它的穷举论证报告真的落在盘上
+    # （`out/experiments/000001/exhaustion.md`）⇒ 证据链那张实验表要能链到它。
     _write_bytes(root / "code" / "exp" / "a.py", "print('x')\n")
     _write_table(root, "experiments", [
+        {"experiment_id": "000001", "method": "numeric", "result": "supports",
+         "evidence_kind": "numeric", "code_path": "code/exp/a.py",
+         "code_hash": "b" * 64, "created_by": "E", "created_at": TS},
         {"experiment_id": "e-1", "method": "numeric", "result": "supports",
          "evidence_kind": "numeric", "code_path": "code/exp/a.py",
          "code_hash": "b" * 64, "created_by": "E", "created_at": TS},
@@ -604,3 +615,334 @@ def test_the_four_landing_points_are_in_place() -> None:
         assert token in art, f"Artifacts 页缺 `{token}`"
     assert "out/experiments" in art, "产物页没有写实验产物的落点"
     assert "code/exp" in art, "产物页没有写 code/exp 那处落点"
+
+
+# ============================================================ 第二批（§f/g/h/i）
+"""业主 2026-10-23 那张"略有过时"的清单里剩下的四件（②③ 两条都归 §g）。
+
+| # | 件 | 判据 | 负控 |
+|---|---|---|---|
+| ⑥ | f：首页那一列的名字 | 页面上逐字是「事件条数（会话）」，裸「事件」那一列不再有；说明页写清两种条数不是一回事 | 喂回改前那一段源码（裸「事件」+ 说明页缺那一段）⇒ 必须报 |
+| ⑦ | g：五位每位一格 | 五格标题逐条在（numeric / proof / reviewed / formal / audited），第 4 位仍按路径 | 把第 4 位折成一句汇总 ⇒ 必须报 |
+| ⑧ | g：reviewed 按证明逐条 | 读数里 `reviewed_paths` 一条证明一行；页面上是 `#p1 / #p2` 两个记号 | 把逐条那张表折成「最近一签」⇒ 只剩一条 |
+| ⑨ | h：实验表的「报告」列 | 读数给仓库相对落点 `out/experiments/<号>/exhaustion.md`；页面挂链接（指向产物页那张落点卡），没有报告写「无」 | 见 ⑪ |
+| ⑩ | i：产物页文件头的栏数 | 文件头那个数字与 `ARTIFACT_CARDS` 的条数、页面真挂的卡数三者相等，且是 9（第九张是实验产物的落点） | 少挂一张卡 / 还写着「七栏」⇒ 必须报 |
+| ⑪ | 反真空（④ 的另一面） | 把「报告」列打桩成恒空 ⇒ ⑨ 的检查函数必红 | 它本身就是反真空 |
+
+## 为什么「报告」列指向产物页那张卡、而不是直接链到文件
+
+报告不在 web 服务的静态路由下（`routes.ROUTES` 只有 `/static/{file...}` 与页面），
+拿仓库相对路径当 `href` 点下去只会回到应用 —— 那是死链。所以这一格的链接指向产物页
+「实验产物的落点」那张卡（`/artifacts#experiment-spots`），而链接的文字仍是仓库相对
+路径 `out/experiments/<号>/exhaustion.md`（业主点名的那一份）。判据两头都钉：链接的
+目标卡真的存在（产物页那张卡有那个 `id`），文字是相对仓库路径、不是绝对路径。
+"""
+
+
+# ====================================================================== 判据⑥（§f）
+#: 首页「会话概览」那一列的名字（业主点名的逐字形态）。
+SESSION_EVENT_COLUMN = "事件条数（会话）"
+
+
+def _two_counts_problems(home: str, help_text: str) -> list[str]:
+    """两种"条数"分开了吗（纯函数：负控喂改前那两段源码就能证明它会红）。
+
+    首页那一列数的是这一段会话的事件条数（`SessionRow.events_seen`），台账那张卡
+    数的是整个工作区的写入笔数（`upserts`）+ commit 标记行数。两个数并排摆着而名字
+    只差一个字（「事件」/「台账写入」），读的人很容易拿一个去核另一个。
+    """
+    body = _strip_js_comments(home)
+    help_body = _strip_js_comments(help_text)
+    problems: list[str] = []
+    if SESSION_EVENT_COLUMN not in body:
+        problems.append(f"Home 页没有「{SESSION_EVENT_COLUMN}」这一列")
+    if 'title: "事件"' in body:
+        problems.append("Home 页还写着裸「事件」那一列（与台账的写入笔数并排会混）")
+    if SESSION_EVENT_COLUMN not in help_body:
+        problems.append(f"说明页没有点名那一列（「{SESSION_EVENT_COLUMN}」）")
+    if "不是一回事" not in help_body:
+        problems.append("说明页没有写「两种条数不是一回事」")
+    for token, why in (("upserts", "台账那一格的口径（写入笔数）"),
+                       ("commit 标记", "commit 标记行另计这一句"),
+                       ("会话", "会话那一边的口径")):
+        if token not in help_body:
+            problems.append(f"说明页缺 {token!r}：{why}")
+    return problems
+
+
+def test_criterion_6_home_says_event_count_per_session() -> None:
+    """判据⑥（§f）：Home 那一列叫「事件条数（会话）」；说明页写清两种条数不是一回事。"""
+    assert _two_counts_problems(_page_text("Home"), _page_text("Help")) == [], (
+        _two_counts_problems(_page_text("Home"), _page_text("Help")))
+
+    # 改的只是名字：那一格仍然读 `events_seen`（不许把整列撤掉装作"不混了"）。
+    assert "events_seen" in _page_text("Home"), (
+        "Home 页不再读 events_seen —— 改名不许把那一格撤掉")
+
+
+def test_criterion_6_negative_control_the_bare_event_title_is_reported() -> None:
+    """判据⑥的反真空：改前那一列（裸「事件」）+ 没有那一段说明 ⇒ 检查函数必须报。"""
+    old_home = 'columns={[ { key: "sid", title: "会话" }, { key: "events_seen", title: "事件" } ]}'
+    #: 说明页改前只有「台账写入笔数 ≠ 事件文件行数」那一段，没有会话那一半。
+    old_help = ("台账写入 N 笔（其中 commit 标记 M 行）· 每提交一次事务写两行")
+    problems = _two_counts_problems(old_home, old_help)
+    assert problems, "改前那两段源码居然通过了"
+    assert any("裸「事件」" in p for p in problems), problems
+    assert any(SESSION_EVENT_COLUMN in p for p in problems), problems
+    assert any("不是一回事" in p for p in problems), problems
+
+
+# ====================================================================== 判据⑦（§g）
+#: 五元位的五个名字（后端唯一来源：`evidencebits.BIT_NAMES`）。
+#: 每一位在页面上占一格，标题逐字含这个名字。
+BIT_CELL_TITLES: tuple[str, ...] = (
+    "第 1 位·numeric（数值实验）",
+    "第 2 位·proof（有证明）",
+    "第 3 位·reviewed（按证明）",
+    "第 4 位·formal（按路径）",
+    "第 5 位·audited（正式审查）",
+)
+
+
+def _bit_cell_problems(source: str) -> list[str]:
+    """五位每位一格：五个标题都在，且第 4 位仍然是按路径那两句（纯函数）。
+
+    第 4 位那两句（`形式化：` / `路径${p.proof_no}`）是 2026-10-23 那一批的成果：
+    把它折成一句汇总就等于让 `#p2` 借 `#p1` 的光，所以这一条不许退化。
+    """
+    body = _strip_js_comments(source)
+    problems = [f"Evidence 页没有「{title}」这一格" for title in BIT_CELL_TITLES
+                if title not in body]
+    if "形式化：" not in body or "路径${p.proof_no}" not in body:
+        problems.append("第 4 位不再是按路径显示（退化成了汇总）")
+    if "reviewed_paths" not in body:
+        problems.append("第 3 位没有读 reviewed_paths（reviewed 没按证明逐条）")
+    return problems
+
+
+def test_criterion_7_the_five_bits_each_get_their_own_cell(format_ws: pathlib.Path) -> None:
+    """判据⑦（§g）：五个位名都在页面上，每位一格；第 4 位仍按路径。"""
+    # 五位的名字只有一个来源（反真空：这一句不成立时下面的标题就是自说自话）。
+    assert EB.BIT_NAMES == ("numeric", "proof", "reviewed", "formal", "audited"), EB.BIT_NAMES
+    rows = R.evidence_chain(format_ws)["statements"]
+    first = rows[0]
+    assert first["bit_numeric"] == "pending", first
+    assert first["bit_proof"] == "verified", first
+    assert first["bit_reviewed"] == "verified", first
+    assert first["bit_audited"] == "pending", first
+    # 一条没有位记录的命题：四格都读得出它们是"没做"，而不是缺席。
+    bare = [r for r in rows if r["stmt_id"] == "000003"][0]
+    for key in ("bit_numeric", "bit_proof", "bit_reviewed", "bit_audited"):
+        assert bare[key] == "pending", (key, bare[key])
+
+    assert _bit_cell_problems(_page_text("Evidence")) == [], (
+        _bit_cell_problems(_page_text("Evidence")))
+
+
+def test_criterion_7_negative_control_folding_bit4_into_one_word_is_reported() -> None:
+    """判据⑦的反真空：把第 4 位折成一句汇总（不再按路径）⇒ 检查函数必须报。"""
+    folded = """
+      columns={[
+        { key: "stmt_id", title: "命题号" },
+        { key: "formal_paths", title: "第 4 位·formal（按路径）", render: (r) => cell(r.grade_label) },
+        { key: "reviewed_paths", title: "第 3 位·reviewed（按证明）", render: (r) => cell(r.bit_reviewed) },
+      ]}
+    """
+    problems = _bit_cell_problems(folded)
+    assert problems, "折成汇总之后检查函数居然不报"
+    assert any("按路径" in p for p in problems), problems
+    assert any("numeric" in p for p in problems), problems
+
+
+# ====================================================================== 判据⑧（§g）
+def test_criterion_8_reviewed_is_signed_one_proof_at_a_time(format_ws: pathlib.Path) -> None:
+    """判据⑧（§g）：reviewed 按证明逐条 —— 读数一条证明一行，页面读到 `#p1` / `#p2`。"""
+    first = R.evidence_chain(format_ws)["statements"][0]
+    assert first["reviewed_paths"] == [{"proof_no": 1, "reviewed": True},
+                                       {"proof_no": 2, "reviewed": False}], first["reviewed_paths"]
+    # 汇总位与逐条那一层是两件事：`reviewed` 是"任一条签过"，逐条才说得出是哪一条。
+    assert first["bit_reviewed"] == "verified", first["bit_reviewed"]
+
+    body = _strip_js_comments(_page_text("Evidence"))
+    assert "#p${p.proof_no}" in body, "第 3 位不是按证明逐条印（没有 `#p` 那个记号）"
+    assert "已签" in body and "未签" in body, "第 3 位没有分出「签过 / 没签」两档"
+
+
+def test_criterion_8_negative_control_folding_reviewed_into_one_word_is_reported(
+        format_ws: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """判据⑧的反真空：把逐条那张表折成「最近一签」⇒ 只剩一条，正控那一句必须红。"""
+    before = R.evidence_chain(format_ws)["statements"][0]["reviewed_paths"]
+    assert len(before) == 2, before
+
+    monkeypatch.setattr(EB, "reviewed_by_proof", lambda row: {1: True})
+    after = R.evidence_chain(format_ws)["statements"][0]["reviewed_paths"]
+    assert len(after) == 1, after
+    with pytest.raises(AssertionError):
+        assert after == [{"proof_no": 1, "reviewed": True},
+                         {"proof_no": 2, "reviewed": False}], (
+            "折成最近一签之后，逐条那一句居然还绿着")
+
+
+# ====================================================================== 判据⑨（§h）
+def _report_column_problems(rows: list[dict]) -> list[str]:
+    """实验表的「报告」列：落点是仓库相对的 `out/experiments/<号>/exhaustion.md`。
+
+    三档各说各的（三态纪律）：
+    - `computed`：盘上有那一份 ⇒ 落点必须成形，且不许是绝对路径 / 反斜杠；
+    - `not_applicable`：没有报告（实验号不成形，或报告还没落盘）⇒ 落点为空；
+    - `unreadable`：读不出来 ⇒ 不算"没有"。
+
+    真空防线在最后一句：一条 `computed` 都没有时这一列是空的，而"空列"与"没做这一列"
+    在页面上长得一样。
+    """
+    problems: list[str] = []
+    linked = 0
+    for row in rows:
+        eid = str(row.get("experiment_id") or "")
+        path = str(row.get("exhaustion_path") or "")
+        tri = str(row.get("exhaustion_tri") or "")
+        if tri == "computed":
+            linked += 1
+            if not (path.startswith("out/experiments/")
+                    and path.endswith("/exhaustion.md")):
+                problems.append(
+                    f"{eid} 的报告落点不是 out/experiments/<号>/exhaustion.md：{path!r}")
+            if "\\" in path or path.startswith("/") or ":" in path:
+                problems.append(f"{eid} 的报告落点不是仓库相对路径：{path!r}")
+        elif tri == "not_applicable":
+            if path != "":
+                problems.append(f"{eid} 没有报告，却仍给了一个落点：{path!r}")
+        elif tri != "unreadable":
+            problems.append(f"{eid} 的 exhaustion_tri 是词表外的值：{tri!r}")
+    if linked == 0:
+        problems.append("实验表里一条「有报告」的行都没有 ⇒ 「报告」那一列没有落脚点")
+    return problems
+
+
+def test_criterion_9_the_experiment_table_links_the_exhaustion_report(
+        format_ws: pathlib.Path) -> None:
+    """判据⑨（§h）：实验表挂上 `out/experiments/<号>/exhaustion.md`，没有报告写「无」。"""
+    rows = R.evidence_chain(format_ws)["experiments"]
+    assert _report_column_problems(rows) == [], _report_column_problems(rows)
+    by_id = {str(r["experiment_id"]): r for r in rows}
+    assert by_id["000001"]["exhaustion_path"] == "out/experiments/000001/exhaustion.md", by_id
+    assert by_id["000001"]["exhaustion_tri"] == "computed", by_id["000001"]
+    # 没有报告的那两条（实验号不成形 ⇒ 判不出落点）：落点为空 = 页面上写「无」。
+    for eid in ("e-1", "e-2"):
+        assert by_id[eid]["exhaustion_path"] == "", by_id[eid]
+        assert by_id[eid]["exhaustion_tri"] == "not_applicable", by_id[eid]
+
+    body = _strip_js_comments(_page_text("Evidence"))
+    assert 'key: "exhaustion_path"' in body, "实验表没有「报告」那一列"
+    assert 'title: "报告"' in body, "「报告」那一列的名字不对"
+    assert 'const REPORT_SPOT_HREF = "/artifacts#experiment-spots"' in body, (
+        "「报告」那一格没有指向产物页的实验落点卡")
+    assert "{r.exhaustion_path}" in body, "链接的文字不是那份报告的仓库相对路径"
+    assert "exhaustion_tri" in body, "「报告」那一格没有按三态分档"
+    assert "无（" in body, "没有报告时没有写「无」"
+    # 链接指向的那张卡真的在（否则链接死在一个不存在的锚点上）。
+    assert 'id="experiment-spots"' in _strip_js_comments(_page_text("Artifacts")), (
+        "产物页那张实验落点卡没有 `id=\"experiment-spots\"`，链接会落在空处")
+
+
+def test_criterion_11_negative_control_an_always_empty_report_column_is_reported(
+        format_ws: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """判据⑪（反真空）：把「报告」列打桩成恒空 ⇒ 判据⑨ 的检查函数必红。"""
+    assert _report_column_problems(R.evidence_chain(format_ws)["experiments"]) == []
+
+    monkeypatch.setattr(EX, "report_relpath", lambda experiment_id: "")
+    stubbed = R.evidence_chain(format_ws)["experiments"]
+    assert all(r["exhaustion_path"] == "" for r in stubbed), stubbed
+    assert all(r["exhaustion_tri"] == "not_applicable" for r in stubbed), stubbed
+    with pytest.raises(AssertionError):
+        assert _report_column_problems(stubbed) == [], (
+            "打桩成恒空之后，判据⑨ 那一句居然还绿着")
+
+
+# ====================================================================== 判据⑩（§i）
+#: 产物页文件头声明的栏数（业主点名的数字：九张卡）。
+ARTIFACT_CARD_COUNT = 9
+
+#: 文件头那个数字（中文数字）与它的值。
+_HEADER_NUMERALS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+                    "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+
+
+def _artifact_registry(source: str) -> dict[str, str]:
+    """`ARTIFACT_CARDS` 那张表：`{键: 标题}`（按声明顺序，`dict` 的插入序就是栏序）。"""
+    body = _strip_js_comments(source)
+    start = body.find("export const ARTIFACT_CARDS")
+    if start < 0:
+        return {}
+    end = body.find("} as const;", start)
+    block = body[start:end if end > 0 else len(body)]
+    return {m.group(1): m.group(2)
+            for m in re.finditer(r"\n\s+([A-Za-z_][A-Za-z0-9_]*):\s*\n?\s*\"([^\"]+)\"", block)}
+
+
+def _artifact_card_count_problems(source: str) -> list[str]:
+    """文件头那个数字 == `ARTIFACT_CARDS` 的条数 == 页面真挂的卡数（纯函数）。
+
+    三者相等才叫"自证"：标题与数字来自同一张表，加一张卡忘了登记（或忘了改文件头
+    那个中文数字）都会当场红。改前那个数字是手写在文件头里的，加了卡它不会动 ——
+    于是"七栏"与屏幕上九张卡同时存在了一个批次。
+    """
+    body = _strip_js_comments(source)
+    problems: list[str] = []
+    cards = _artifact_registry(source)
+    if not cards:
+        problems.append("产物页没有 `ARTIFACT_CARDS` 那张表（文件头那个数字没有单一来源）")
+        return problems
+    declared = re.search(r"共([一二三四五六七八九十])张卡", source)
+    if declared is None:
+        problems.append("文件头没有声明这张纸有几张卡（缺「共N张卡」那一句）")
+    elif _HEADER_NUMERALS[declared.group(1)] != len(cards):
+        problems.append(
+            f"文件头写着 {declared.group(1)}张卡，而 `ARTIFACT_CARDS` 有 {len(cards)} 条")
+    if "const CARD_COUNT = Object.keys(ARTIFACT_CARDS).length" not in body:
+        problems.append("页面那个数字不是从 `ARTIFACT_CARDS` 数出来的")
+    mounted = set(re.findall(r"title=\{ARTIFACT_CARDS\.([A-Za-z_][A-Za-z0-9_]*)", body))
+    missing = sorted(set(cards) - mounted)
+    if missing:
+        problems.append(f"`ARTIFACT_CARDS` 登记了 {len(cards)} 条，这几张却没挂出来：{missing}")
+    unknown = sorted(mounted - set(cards))
+    if unknown:
+        problems.append(f"页面挂了表里没有的卡：{unknown}")
+    for stale_form in ("七栏 · 整面 tri=", "七栏，每栏自己一个三态"):
+        if stale_form in source:
+            problems.append(f"文件头还写着改前那句「{stale_form}」（实际已是九张卡）")
+    return problems
+
+
+def test_criterion_10_the_artifacts_header_counts_the_cards_it_renders() -> None:
+    """判据⑩（§i）：产物页文件头声明的栏数 == 实际卡片数（九张，第九张是实验落点）。"""
+    source = _page_text("Artifacts")
+    assert _artifact_card_count_problems(source) == [], (
+        _artifact_card_count_problems(source))
+    cards = _artifact_registry(source)
+    assert len(cards) == ARTIFACT_CARD_COUNT, list(cards)
+    # 第九张是什么：实验产物的落点（业主那句"并说明第九张是什么"的机器读数）。
+    assert "实验" in list(cards.values())[-1], list(cards.values())[-1]
+    # 那张镜子卡（台账的第二个独立读数）读的是共享快照，不是这一面的栏 ——
+    # 它写在表外，文件头里点过名（所以"九"不与它矛盾）。
+    assert "第二个独立读数" in source, "产物页那张台账镜子卡不见了"
+    body = _strip_js_comments(source)
+    assert "${CARD_COUNT} 张卡" in body, "页面副标题没有数那张表"
+
+
+def test_criterion_10_negative_control_a_missing_card_or_the_old_number_is_reported() -> None:
+    """判据⑩的反真空：少挂一张卡 / 还写着「七栏」/ 文件头数字与表不符 ⇒ 必须报。"""
+    source = _page_text("Artifacts")
+    assert _artifact_card_count_problems(source) == []
+    dropped = source.replace("title={ARTIFACT_CARDS.", 'title="x"', 1)
+    problems = _artifact_card_count_problems(dropped)
+    assert problems and any("却没挂出来" in p for p in problems), problems
+    # 改前那句「七栏」写回注释里 ⇒ 必须点到它。
+    stale = source.replace("export const ARTIFACT_CARDS", "/* 七栏 · 整面 tri=computed */\n"
+                                                         "export const ARTIFACT_CARDS", 1)
+    stale_problems = _artifact_card_count_problems(stale)
+    assert stale_problems and any("七栏" in p for p in stale_problems), stale_problems
+    # 文件头那个中文数字与表差一条 ⇒ 必须点到那个数。
+    miscount = source.replace("九张卡", "八张卡", 1)
+    miscount_problems = _artifact_card_count_problems(miscount)
+    assert miscount_problems and any("八张卡" in p for p in miscount_problems), miscount_problems

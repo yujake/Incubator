@@ -731,6 +731,9 @@ def test_every_role_prompt_is_rendered_without_template_leftovers(registry: Tool
 #: 登记表的用途与 `test_secretary_prompt_alignment` 里那张表同形：豁免必须留下理由，
 #: 而"表里某条已经不在提示词里"本身也要红（腐烂的豁免表＝看起来还在挡着什么）。
 _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
+    # 2026-10-24：L 的图论那一句点的不是工具，是模块里的函数（读自检第 ⑤ 步那条读数）。
+    # 它不是 agentflow 工具表里的件，模型照着写不会得到 unknown_action（那是 Python 侧的读数口）。
+    "leantoolchain.mathlib_reading": "模块函数不是工具：L 用来读第 ⑤ 步那条 Mathlib 读数的口",
     "fs.read": "真工具，但只在带 workspace_root 的注册表里 —— 本文件的夹具刻意不带（见文件头）",
     "fs.write": "同 fs.read",
     "fs.edit": "同 fs.read",
@@ -2129,7 +2132,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p190"
+_FROZEN_PROMPT_VERSION = "p191"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "3fff2fa8d6dd13cc1b5eea6cedf415c8a5566f7c08bc1a79ece9a624209283f8",
     "B": "a253e5d5b9211c9f7fb7972d0de2c60116377094d5b858b423c97535e87f740c",
@@ -2139,8 +2142,8 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "F": "765c48972f42b33f09f5702812333dfbe8fb240f0e5913be95a66d0337e11fe3",
     "G": "8dc95c3bbe52e7c6aa0bbe3995a5baf0bb7806d7f2783bd97c3ad11ea34240b3",
     "H": "eff1f964abda99f5191d2e258d170ee17de13745c4cf5d8821b81c24ee32cc1c",
-    "L": "a7d86eb2eceb4617f47adfe48015fdd0183fe8ba54567e2a085ac363f4e87b8f",
-    "M": "628c9a08ffa5b2f649cc57f444c5bfabb59b579ce303c8c0e092bd69637ddb05",
+    "L": "61e94dd4452d4c1ac9f5c68e0625f77e33015fbbb42787c61062880ec9d13502",
+    "M": "9188efca3ca976718cf0b596fd65bd307006335022e6fccfc762fa20d82bbc29",
     "V": "bee3d36e81ca1d6f1d870e7b04029a7d1d475c3e84d321a73591a2891ebbc55a",
 }
 

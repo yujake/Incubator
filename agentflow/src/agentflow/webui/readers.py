@@ -232,6 +232,9 @@ UNCHECKED_TYPES: dict[str, str] = {
     "FormalPath": "夹具没有 statements 行（真机 p9b/data/statements.json 也是 0 行）"
                   "⇒ `formal_paths[]` 恒为空数组；形状以 `evidencebits.formal_by_proof`"
                   " 的读数为准（逐键判据在 tests/test_webui_readings_format.py）",
+    "ReviewedPath": "同 `FormalPath`：夹具没有 statements 行 ⇒ `reviewed_paths[]` 恒为空"
+                    "数组（而真行上它一条证明一行）；形状以 "
+                    "`evidencebits.reviewed_by_proof` 的读数为准（逐键判据同上）",
     "ExperimentSpot": "夹具工作区没有 `out/experiments/<号>/`（实验跑过之后才落盘）"
                       "⇒ `experiment_spots[]` 恒为空数组；形状以 `experiment_spots()`"
                       " 的读数为准（同上那份判据文件）",
@@ -936,8 +939,57 @@ def _statement_tier_reading(root: str | Path, row: Mapping[str, Any]) -> dict[st
     return {"level": level, "label": label, "meaning": meaning, "tri": tri}
 
 
+def _bit_word(value: Any) -> str:
+    """一个标量位的状态词（`evidencebits.BIT_STATES` 的同一批词，不另造一套）。
+
+    位在盘上是两种形状：第 1 位是四态字符串（`pending` / `na` / `failed` /
+    `verified`），第 2/3/5 位是布尔。布尔在这里折成写侧那两档（`True` ⇒ `verified`、
+    `False` ⇒ `pending`），于是页面上五位的词是同一套 —— 而不是四格一串 true/false。
+    词表外的字符串原样返回（不折成 `pending`：读不出来与"没做"是两件事）。
+    """
+    if isinstance(value, bool):
+        return "verified" if value else "pending"
+    return str(value or "")
+
+
+def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
+    """命题行的五元位逐位读数（业主 2026-10-23：「每一位一格」）。
+
+    页面此前只展开了第 4 位（按路径），第 1/2/3/5 位在屏幕上根本不存在 ——
+    于是"这一条到没到定理"只能从派生的等级那一格去猜。这里把四位各自的读数
+    摆出来，第 4 位仍然是 `formal_paths`（二维的，一位多行，见
+    :func:`_statement_readings`），不在这里压成一句汇总。
+
+    第 3 位另给 `reviewed_paths`：`reviewed_by_proof` 那张表说"这一份签过没有"，
+    一条证明一行（`#p2` 不许借 `#p1` 的光）。它回答的是"签没签过"，"签的是不是
+    现在这一份正文"由 `verifications` 的 `proof_sha_consistency` 回答 ——
+    两件事各有各的落点，这一格不替另一件事说话。
+
+    读出不来时四格都是空串（页面按 `unknown` 处置），不冒充 `pending`。
+    """
+    from .. import evidencebits as EB
+
+    out: dict[str, Any] = {"bit_numeric": "", "bit_proof": "", "bit_reviewed": "",
+                           "bit_audited": "", "reviewed_paths": []}
+    try:
+        bits = EB.bits_from_row(row)
+    except Exception:  # noqa: BLE001 - 位读不出来 ⇒ 空串（页面写 unknown，不冒充 pending）
+        return out
+    out["bit_numeric"] = _bit_word(bits.get("numeric"))
+    out["bit_proof"] = _bit_word(bits.get("proof"))
+    out["bit_reviewed"] = _bit_word(bits.get("reviewed"))
+    out["bit_audited"] = _bit_word(bits.get("audited"))
+    try:
+        per = EB.reviewed_by_proof(row)
+    except Exception:  # noqa: BLE001 - 逐条那张表读不出来 ⇒ 一条都不列（不是"没签"）
+        per = {}
+    out["reviewed_paths"] = [{"proof_no": int(no), "reviewed": bool(flag)}
+                             for no, flag in sorted(per.items())]
+    return out
+
+
 def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
-    """命题行补三组呈现读数：引文五档、非平凡度、第 4 位的逐路径表（另加派生等级）。
+    """命题行补四组呈现读数：引文五档、非平凡度、第 4 位的逐路径表、五位的逐位格。
 
     - `quote_state`：引文的唯一读口径 `evidencebits.quote_state`（verbatim / semantic /
       mismatch / unchecked / no_evidence）—— 页面不再拿 `quote_verified` 这个布尔量
@@ -946,9 +998,11 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
     - `formal_paths`：`[{proof_no, state}]`，二维位逐路径（`evidencebits.formal_by_proof`）；
     - `grade` / `grade_label`：五元位派生的等级（任一路径通过即正式定理，
       `evidencebits.derive_grade`）—— 页面上"这一条到没到定理"与"哪条路径撑起来的"
-      于是分得开。
+      于是分得开；
+    - `bit_numeric` / `bit_proof` / `bit_reviewed` / `bit_audited` 与 `reviewed_paths`：
+      见 :func:`_bit_readings`（第 4 位不在这里，它仍是逐路径那一格）。
 
-    一个都不许自己算：四种读数各自只有一个出处，这里只搬运。
+    一个都不许自己算：每种读数各自只有一个出处，这里只搬运。
     """
     from .. import evidencebits as EB
 
@@ -967,6 +1021,7 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
         got["nontriviality_label"] = tier["label"]
         got["nontriviality_meaning"] = tier["meaning"]
         got["nontriviality_tri"] = tier["tri"]
+        got.update(_bit_readings(row))
         try:
             per = EB.formal_by_proof(row)
         except Exception:  # noqa: BLE001 - 第 4 位读不出来 ⇒ 一条路径都不列（不是"没验过"）
@@ -1042,14 +1097,24 @@ def _verification_consistency(rows: list[dict],
 
 
 def _experiment_code_consistency(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
-    """实验行补 `code_sha_consistency`：台账钉的代码 sha vs 盘上现在这一份脚本。
+    """实验行补三格：`code_sha_consistency`（代码一致）与 `exhaustion_path` / `exhaustion_tri`（报告）。
 
-    比的是 `code_path` 指向的那个文件（相对工作区根）。三种"没得比"都要落 `unknown`
-    而不是 `mismatch`：`code_path` 空、那一格 `code_hash` 空、文件不在盘上/读不出来。
+    代码那一格比的是 `code_path` 指向的那个文件（相对工作区根）。三种"没得比"都要落
+    `unknown` 而不是 `mismatch`：`code_path` 空、那一格 `code_hash` 空、文件不在盘上/读不出来。
     超过 `_CODE_HASH_MAX_BYTES` 的脚本不读（有界：一个实验的脚本不该有几十兆，
     而一次请求把整盘大文件哈希一遍会把这一面拖成秒级）。
+
+    报告那两格（业主 2026-10-23：证据链的实验表没挂穷举论证报告）：
+    `out/experiments/<号>/exhaustion.md` 是 ②③ 的唯一落点
+    （`exhaustionreport.report_relpath` —— 落点的口径只有那一处，这里只转发）。
+    - 盘上有 ⇒ `exhaustion_path` 是仓库相对的落点、`exhaustion_tri="computed"`；
+    - 没有（实验号不成形，或报告还没落盘）⇒ `exhaustion_path=""`、
+      `exhaustion_tri="not_applicable"`（页面写「无」，不是空白）；
+    - 读不出来（权限 / 路径解析出错）⇒ `unreadable`（"没查成"不是"没有"）。
     """
     import hashlib
+
+    from ..exhaustionreport import report_relpath
 
     out: list[dict[str, Any]] = []
     for row in rows:
@@ -1070,6 +1135,20 @@ def _experiment_code_consistency(root: Path, rows: list[dict]) -> list[dict[str,
             except OSError:
                 now = ""
         got["code_sha_consistency"] = sha_consistency(want, now)
+        got["exhaustion_path"] = ""
+        got["exhaustion_tri"] = TRI_NOT_APPLICABLE
+        try:
+            report = report_relpath(row.get("experiment_id"))
+        except Exception:  # noqa: BLE001 - 落点算不出来 ⇒ 没得说（不是"没有报告"）
+            report = ""
+            got["exhaustion_tri"] = TRI_UNREADABLE
+        if report:
+            got["exhaustion_path"] = report
+            try:
+                if (root / report).is_file():
+                    got["exhaustion_tri"] = TRI_COMPUTED
+            except OSError:
+                got["exhaustion_tri"] = TRI_UNREADABLE
         out.append(got)
     return out
 
@@ -3205,6 +3284,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("nontriviality", "number | null"), ("nontriviality_label", "string"),
       ("nontriviality_meaning", "string"), ("nontriviality_tri", "string"),
       ("formal_paths", "FormalPath[]"),
+      # 2026-10-23 第二批（业主：五元位每一位一格）：前四格是第 1/2/3/5 位各自的
+      # 状态词（`evidencebits.BIT_STATES` 那四档），第 4 位不在这里 —— 它是二维的，
+      # 读法是 `formal_paths`（压成一句汇总正是改前那个错）。
+      ("bit_numeric", "string"), ("bit_proof", "string"),
+      ("bit_reviewed", "string"), ("bit_audited", "string"),
+      ("reviewed_paths", "ReviewedPath[]"),
       ("grade", "string"), ("grade_label", "string"),
       # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：后三格是读模型的 join
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
@@ -3215,6 +3300,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "（`proof_no` 是证明号，`state` 取 `evidencebits.FORMAL_PATH_STATES` 的五档："
      "pending / na / failed / verified / stale）。折成一条汇总就等于让 `#p2` 借 `#p1` 的光",
      (("proof_no", "number"), ("state", "string"))),
+    ("ReviewedPath",
+     "evidencebits.reviewed_by_proof() 的一行 —— 五元位第 3 位按证明逐条"
+     "（`proof_no` 是证明号，`reviewed` 是「这一份签过没有」；签的是不是现在这一份"
+     "正文由 `VerificationRow.proof_sha_consistency` 回答。只签了 `#p1` 而定理还有"
+     "`#p2` 时 `#p2` 是 false —— 折成一句「审过」就等于让它借 `#p1` 的光）",
+     (("proof_no", "number"), ("reviewed", "boolean"))),
     ("ReviewFindingRow",
      "store.rows(\"review_findings\")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）",
      (("finding_id", "string"), ("doc_id", "string"), ("kind", "string"),
@@ -3378,6 +3469,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 2026-10-23（业主：sha 原文不显示）：`code_sha_consistency` 是"台账钉的代码 sha
       # vs 盘上现在这一份脚本"的三档读数（`code_hash` 留在数据里，页面不印）。
       ("code_sha_consistency", "string"),
+      # 2026-10-23 第二批（业主：实验表没挂穷举论证报告）：`exhaustion_path` 是那份
+      # 报告的仓库相对落点（`out/experiments/<号>/exhaustion.md`，口径在
+      # `exhaustionreport.report_relpath`），`exhaustion_tri` 是它的三态
+      # （computed / not_applicable / unreadable；`not_applicable` 时路径是空串）。
+      ("exhaustion_path", "string"), ("exhaustion_tri", "Tri"),
       # `exp:` 是 `schema.CITATION_PREFIXES` 登记的前缀 ⇒ 这一栏的编号真反查得出来。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),

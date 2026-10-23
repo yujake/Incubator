@@ -534,6 +534,11 @@ export interface StatementRow {
   nontriviality_meaning: string;
   nontriviality_tri: string;
   formal_paths: FormalPath[];
+  bit_numeric: string;
+  bit_proof: string;
+  bit_reviewed: string;
+  bit_audited: string;
+  reviewed_paths: ReviewedPath[];
   grade: string;
   grade_label: string;
   by_role: string;
@@ -546,6 +551,12 @@ export interface StatementRow {
 export interface FormalPath {
   proof_no: number;
   state: string;
+}
+
+/** 出处：evidencebits.reviewed_by_proof() 的一行 —— 五元位第 3 位按证明逐条（`proof_no` 是证明号，`reviewed` 是「这一份签过没有」；签的是不是现在这一份正文由 `VerificationRow.proof_sha_consistency` 回答。只签了 `#p1` 而定理还有`#p2` 时 `#p2` 是 false —— 折成一句「审过」就等于让它借 `#p1` 的光）。 */
+export interface ReviewedPath {
+  proof_no: number;
+  reviewed: boolean;
 }
 
 /** 出处：store.rows("review_findings")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）。 */
@@ -808,6 +819,8 @@ export interface ExperimentRow {
   created_by: string;
   for_question_id: string;
   code_sha_consistency: string;
+  exhaustion_path: string;
+  exhaustion_tri: Tri;
   by_role: string;
   by_role_source: string;
   by_task_id: string;

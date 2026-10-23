@@ -167,19 +167,62 @@ def _lean_reading_text(sc: Mapping) -> str:
 
 
 def _lean_first_screen(root: Path, *, stream=None) -> dict:
-    """第一屏：打印 Lean 工具链的三件事，开关开着时真跑一次自检。返回那份读数。
+    """第一屏：只打"这一趟允许不允许走形式化"，自检本身不跑。返回一份未查读数。
 
-    三件事是业主点名要露出来的：开关值 / 来源 / 解释器路径。之后是自检前四步的结论
-    （版本、sha256、正样例退出码、反控退出码）与逐条 `problems` —— "没通过"必须带原因，
-    一句"失败"不算读数。再之后是第 ⑤ 步那一格（Mathlib 图论可用与否）。
+    三件事是业主点名要露出来的：开关值 / 来源 / 解释器路径。它们读的是配置与文件面
+    （`settings.lean_enabled` 与 `toolchain.resolve_checker`，后者明写着"不跑版本命令"），
+    所以整段不 spawn、不写临时文件。
+
+    ## 为什么首屏不再跑自检（2026-10-25）
+
+    自检的第 ⑤ 步（Mathlib 图论）要真编译一次 `import Mathlib.Combinatorics.SimpleGraph.Basic`
+    加 `#check SimpleGraph`：本机实测 11.3 秒（整次自检 13.3 秒），而首屏的用途只是
+    "开跑之前让人看一眼开关与解释器"。把十几秒压在开工前那一下，读数是"这工具启动很慢"，
+    而它想回答的那个问题（这台机器的图论库可用吗）是 `agentflow doctor` 与收工门的活 ——
+    那两处照旧跑完整自检，一个格子都不少。
+
+    所以首屏对自检那几格只写"未查"并指路：`checked` 是 `False`、`state` 是 `unknown`、
+    `first_screen` 是 `True`。三态纪律在这里的落点是"没查不许长得像查过了" ——
+    `formal_evidence_state` 读到 unknown，于是这一趟任何形式化结论都不会因为首屏没查
+    被记成 verified（收工门那一步会再读一次真读数，并把结论写下来）。
 
     `stream` 只在 `--json` 那一档给 `sys.stderr`：机器读的那一份 stdout 必须保持
     可解析（一条人话混进 JSON 流里，下游拿到的是解析错误而不是结论）。
     """
     from . import leantoolchain as LT
+    from . import settings as SET
+    from . import toolchain as TC
 
     out = stream if stream is not None else sys.stdout
-    sc = LT.lean_selfcheck_reading(root=root)
+    enabled, enabled_src = SET.lean_enabled()
+    found = TC.resolve_checker("lean")
+    sc = {
+        "checked": False, "ok": False, "state": "unknown",
+        "enabled": bool(enabled), "enabled_source": str(enabled_src or "default"),
+        "source": str(found.get("source") or ""),
+        "lean_path": str(found.get("path") or ""),
+        "version": "", "version_ok": False, "sha256": "",
+        "positive": {"name": LT.POSITIVE_NAME, "exit_code": None, "output_head": "",
+                     "elapsed_ms": 0.0, "passed": False, "problem": "",
+                     "kind": "not_attempted"},
+        "negative": {"name": LT.NEGATIVE_NAME, "exit_code": None, "output_head": "",
+                     "elapsed_ms": 0.0, "failed": False, "control_ok": False,
+                     "problem": "", "kind": "not_attempted"},
+        # 第 ⑤ 步那一格用自检那一份空形状（`_empty_mathlib`），只把理由改成"未查"：
+        # 空形状的 state 本来就是 unknown + checked=False，不许在这里补一个"可用"。
+        "mathlib": {**LT._empty_mathlib(),  # noqa: SLF001 - 形状只有那一份定义
+                    "reason": ("未查（首屏不跑自检：第 ⑤ 步要真编译一次 Mathlib，"
+                               "本机实测 11.3 秒）—— 完整读数请跑 `agentflow doctor`")},
+        "problems": [],
+        "note": ("未查：首屏不跑自检（第 ⑤ 步那一次 Mathlib 编译本机实测 11.3 秒）。"
+                 "完整读数请跑 `agentflow doctor`；收工门那一步也会跑一次"),
+        "expected_version": "", "elapsed_ms": 0.0,
+        #: 这一份是"首屏的未查读数"，不是自检结果。判据按这两格把两件事分开
+        #: （`tests/test_first_screen_does_not_run_the_lean_selfcheck.py`）。
+        "first_screen": True, "measured": False,
+    }
+    if found.get("problem"):
+        sc["problems"].append(f"解释器那一档：{found['problem']}")
 
     def emit(line: str) -> None:
         print(line, file=out)
@@ -191,28 +234,18 @@ def _lean_first_screen(root: Path, *, stream=None) -> dict:
                     "（--lean > 环境变量 AGENTFLOW_LEAN_BIN > settings.json 的 "
                     "toolchain.lean_bin > config.yaml 的 lean_path > PATH）"))
     emit(tty.bullet(f"解释器：{_lean_cell(sc.get('lean_path'))}"))
-    if sc.get("state") == "off":
-        emit(tty.bullet("自检：没跑（开关关着 —— 不起子进程、不写临时文件）"))
+    if not enabled:
+        emit(tty.bullet("自检：未查（开关关着 —— 这一档本来就不起子进程、不写临时文件）"))
     else:
-        pos = sc.get("positive") or {}
-        neg = sc.get("negative") or {}
-        sha = str(sc.get("sha256") or "")
-        emit(tty.bullet(
-            f"自检：{_lean_cell(sc.get('state'))}（checked={sc.get('checked')}；"
-            f"ok={sc.get('ok')}）｜版本 {_lean_cell(sc.get('version'))}，期望 "
-            f"{_lean_cell(sc.get('expected_version')) or '4.x'}｜"
-            f"sha256 {sha[:12] + '…' if sha else '（没算出来）'}｜"
-            f"正样例退出 {_lean_cell(pos.get('exit_code'))}｜"
-            f"反控退出 {_lean_cell(neg.get('exit_code'))}（必须非 0）"))
-    for problem in sc.get("problems") or []:
+        emit(tty.bullet("自检：未查（首屏不跑自检：第 ⑤ 步要真编译一次 Mathlib，"
+                        "本机实测 11.3 秒）—— 完整读数请跑 "
+                        + tty.paint("`agentflow doctor`", "bold")))
+    for problem in sc["problems"]:
         emit(tty.bullet(tty.paint(f"没通过：{problem}", "yellow")))
     # 第 ⑤ 步那一格（业主 2026-10-25：盘上有 Mathlib 而裸 lean 不知道它在哪 ⇒
-    # 装了等于没装）。它与"这个 lean 是不是检查器"是两根轴，所以单独一行。
+    # 装了等于没装）。首屏这一格只写"未查"，不补一个"可用"。
     emit(tty.bullet(f"Mathlib（第 ⑤ 步，图论）：{_lean_mathlib_text(sc)}"))
-    problem = LT.evidence_state_problem(sc)
-    if problem:
-        # 这是"防虚构环境"的落点：自检没给出 usable ⇒ 形式化证据一律 unknown。
-        emit(tty.bullet(tty.paint(problem, "yellow")))
+    emit(tty.bullet("形式化证据：这一趟首屏不判定（自检未查）—— 收工门会跑一次并把结论写下来"))
     return sc
 
 
@@ -229,6 +262,12 @@ def _lean_evidence_text(lean: Mapping, reading: Mapping) -> str:
             f"跑过={'是' if lean.get('ran') else '否'}")
     if not lean.get("enabled"):
         return head + f"；proof 级证据 {lean.get('proved', 0)} 条 —— {lean.get('reason')}"
+    if (reading or {}).get("first_screen"):
+        # 首屏不跑自检（第 ⑤ 步那一次 Mathlib 编译实测 11.3 秒）⇒ 这一格不判定。
+        # 与"查过了、不可用"必须分开写：那会让人去修一个没坏的东西。
+        return (head + f"；proof 级证据 {lean.get('proved', 0)} 条 —— 形式化证据这一格"
+                "这一趟未查（首屏不跑自检：要读数请跑 `agentflow doctor`；"
+                "收工门那一步会跑一次并把结论写下来）")
     evidence_state, why = LT.formal_evidence_state(reading)
     if evidence_state != "verified":
         return (head + "；形式化证据记 unknown（不是 verified）："
@@ -3305,13 +3344,16 @@ def cmd_doctor(args) -> int:
     from . import leantoolchain as LT
     from . import toolchain as TC
 
-    rep = TC.toolchain_report()
-    # ---- 新增的一档：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
-    # 它与上面 `provers` 那一档问的不是同一件事：`provers` 回答"盘上有没有它、从哪一档找到的"，
-    # 这一档回答"找到的那个会不会拒绝假命题"—— 一个只打印版本、永远 0 退出的回显器
-    # 在前一档里是"可用"，在这一档里必须是 `unusable`（反控没失败）。
-    # 读数只从 `leantoolchain` 的只读那一口取（不在本地再造一次自检）。
+    # ---- 自检先跑（这一次），`toolchain_report` 再吃它 —— 整趟只编译一次。
+    #
+    # 这一档问的是"找到的那个检查器会不会拒绝假命题"（一个只打印版本、永远 0 退出的回显器
+    # 在 `provers` 那一档里是"可用"，在这里必须是 `unusable`：反控没失败）。
+    # 2026-10-25：Mathlib 那一轴改前有两个探测地址（`toolchain._import_mathlib_probe`
+    # 的 umbrella 编译 与 第 ⑤ 步的图论编译），doctor 为此编译两次（本机实测 18.9s + 12.4s）。
+    # 现在合成一处：把自检读数里的 `mathlib` 那一格原样交给 `toolchain_report`，
+    # 于是"doctor 给的 Mathlib 读数"与"收工门/首屏那一格"读的是同一份。
     sc = LT.lean_selfcheck_reading(root=Path(getattr(args, "root", None) or DEFAULT_ROOT))
+    rep = TC.toolchain_report(mathlib_reading=(sc.get("mathlib") or None))
     rep["lean_selfcheck"] = sc
     if args.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
@@ -3343,8 +3385,11 @@ def cmd_doctor(args) -> int:
             # 真机读数（2026-10-08）：依赖包的 junction 在环境搬迁后悬空，
             # umbrella 在、而 `import Mathlib` 报 `unknown package 'Std'`，
             # 上面那一行照样写"可用"。
-            print(tty.bullet("Mathlib 实测（真编译一次 `import Mathlib`）："
-                             + str(ml.get("import_mathlib_measured"))))
+            # 2026-10-25：实测那一次编译就是自检第 ⑤ 步的那一次（图论那条 import）——
+            # 两处探测合成一处之后不再另起一次 umbrella 编译，所以这一行按真实跑法写。
+            print(tty.bullet("Mathlib 实测（第 ⑤ 步真编译一次 "
+                             f"`import {LT.MATHLIB_GRAPH_MODULE}`）："
+                             + str(ml.get("graph_import_measured"))))
         # ---- 新增的一档：Lean 工具链开机自检（业主 2026-10-22）。
         # 逐键打出来（含 state 与逐条 problems）：这一档的用途正是"把虚构环境挡在跑之前"，
         # 而"哪一步没过、那个解释器是哪个二进制"是唯一的排查线索。

@@ -356,7 +356,7 @@ def test_d_owns_the_research_side() -> None:
     bad = _d_lead_problems(policy)
     assert bad == [], "D 的 policy 与 2026-10-20 的裁定不一致：\n  - " + "\n  - ".join(bad)
     assert "研究侧由你主导" in str(policy[0]), (
-        "那一条要在 policy 的**最前面**（越靠后越会被读成补充说明）", policy[0])
+        "那一条要在 policy 的最前面（越靠后越会被读成补充说明）", policy[0])
 
 
 def test_negctl_dropping_the_d_lead_item_is_red() -> None:
@@ -403,7 +403,17 @@ def _m_obligations(policy) -> list[str]:
         if "verify_proof" in text:
             reasons.append("点名了 `verify_proof`（V 的主动作）")
         if _OBLIGATION.search(text) and _DISPATCH_V.search(text):
-            reasons.append("有义务词、且写着「派 V」")
+            # 2026-10-24：否定句不算义务句。D-36 那条把"不能直呼 V（要签经 B）"写进 policy 之后，
+            # 这里会把否定当成义务。判据守的是"别让模型以为派 V 是它的活"，所以只要"派 V"前面
+            # 8 个字里有否定词，它就是禁令而不是义务 —— 但禁令本身必须留着（它是防误派的）。
+            negation_before = any(
+                re.search(r"(不能|不要|别|勿|禁止|不由你)[^。；]{0,8}$", text[:m.start()])
+                for m in _DISPATCH_V.finditer(text))
+            if negation_before:
+                reasons.append("（否定句：写着「不能派 V」—— 这是禁令不是义务，不计）")
+                reasons.pop()  # 不计入义务，只留痕迹在注释里
+            else:
+                reasons.append("有义务词、且写着「派 V」")
         if reasons:
             out.append(f"policy[{i}]：" + "；".join(reasons) + f"\n      原文：{text[:160]}")
     return out
@@ -433,10 +443,10 @@ def test_negctl_putting_the_dispatch_v_obligations_back_is_red() -> None:
     """⑤ 负控：把那两条"派 V"的义务句各自加回 M ⇒ 判据必红（每条都要单独咬得住）。"""
     policy = builtin_specs()["M"].brief.policy
     removed = (
-        "**要 V 走查就直接派 V**：正文或 `statements` 里存在**证明级断言**（`proof_review` / "
+        "要 V 走查就直接派 V：正文或 `statements` 里存在证明级断言（`proof_review` / "
         "`proof`）而 `reviewed_proof_rows` 记 0 时，要么派 `V` 走查（`verify.verify_proof`，"
         "逐条签名落 `verifications`），要么在验收表那一行写清为什么没有 V 的签名。",
-        "**「攻」里出现 `statement_id` 就当场派 V 去走查那一条**：看到它就在同一轮里派 "
+        "「攻」里出现 `statement_id` 就当场派 V 去走查那一条：看到它就在同一轮里派 "
         "`V.verify_proof(statement_id=<那个命题号>)`，不要等收工再想起来。",
         "缺签的活必须派 V 去做。",
     )

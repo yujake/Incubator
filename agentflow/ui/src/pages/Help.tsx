@@ -10,7 +10,8 @@
  * 一条自律：这一页里出现的每一条命令、每一个数字都必须是真在跑的动词、真在用的
  * 常量 —— 出处逐条写在旁边（`cli.py` 的 `EXIT_CODE_BY_STOP`、`budget.py` 的
  * `total_usd`、`readers.py` 的 `ROUTES` 与 `ROSTER_NODES_MAX`）。
- * 判据 `tests/test_webui_help_is_current.py` 钉着其中四条，改坏一条就红。
+ * 判据 `tests/test_webui_help_is_current.py` 钉着其中五条（名册 / 三态 / 退出码 /
+ * 预算 / 写面，逐节一条），改坏一条就红。
  */
 import { Card } from "../components/Card";
 
@@ -138,14 +139,17 @@ const PAGES: PageRow[] = [
   {
     page: "证据链（/evidence）",
     reads: "GET /api/evidence",
-    answers: "命题（含非平凡度 T0–T4 / 未判、五元位第 4 位按路径）、猜想、实验、"
-      + "审校发现、引文回验（五档，含 no_evidence）、证明级验证（reviewed 按证明逐条、"
-      + "证明一致性而非 sha 原文）、秘书决策 —— 七栏各带自己的三态",
+    answers: "命题（含非平凡度 T0–T4 / 未判、五元位五位各一格：numeric / proof / "
+      + "reviewed 按证明逐条 / formal 按路径 / audited）、猜想、实验（「报告」一列链到 "
+      + "out/experiments/<号>/exhaustion.md）、审校发现、引文回验（五档，含 no_evidence）、"
+      + "证明级验证（reviewed 按证明逐条、证明一致性而非 sha 原文）、秘书决策 —— "
+      + "七栏各带自己的三态",
   },
   {
     page: "产物（/artifacts）",
     reads: "GET /api/artifacts",
-    answers: "台账上的产物与一致性对账（一致 / 不一致 / unknown，sha 原文不上屏）、"
+    answers: "九张卡（数字与标题同数 ARTIFACT_CARDS；第九张是实验产物的落点）："
+      + "台账上的产物与一致性对账（一致 / 不一致 / unknown，sha 原文不上屏）、"
       + "台账写入笔数与 commit 标记两格、交接手稿、验收表的机器可判行、体例、任务结果、"
       + "实验产物落点（code/exp 与 out/experiments/<号>/{design,exhaustion}.md）",
   },
@@ -352,7 +356,7 @@ export function Help() {
         </div>
       </Card>
 
-      <Card title="四格读数怎么读（未读 / 待答 / 台账写入 / 宿主进程 pid）">
+      <Card title="容易读混的六格读数（未读 / 板项与在飞 / 待答 / 台账写入 / 会话事件条数 / 宿主进程 pid）">
         <div class="readings">
           <b>收件箱徽标</b>：写 <span class="mono">未读 N · 已读未 ack M</span>
           （没有未消条目时写「收件箱：没有未消的条目」；读不到时写「收件箱：未读到」）。
@@ -383,6 +387,17 @@ export function Help() {
           的总行数；<span class="mono">N</span> 回答的是「写了多少笔」。读不成 JSON 的坏行按行计入
           <span class="mono">N</span>，并在下面那句说明里单独点名；台账文件不在盘上时两格都是
           <span class="mono">unknown</span>（不是 0 笔）。
+        </div>
+        <div class="readings">
+          <b>两种「条数」不是一回事</b>：首页「会话概览」那一列逐字是
+          <span class="mono">事件条数（会话）</span> —— 它数的是这一段会话自己的事件条数
+          （<span class="mono">sessions/&lt;会话号&gt;.jsonl</span> 里的行数，
+          <span class="mono">events_seen</span>），每段各从 0 起数，别的段不算；
+          下面「台账」那张卡里的「台账写入 N 笔」数的是整个工作区的写入事务
+          （<span class="mono">upserts</span>），commit 标记行另计。两个数并排摆着、
+          名字又只差一个字，很容易拿一个去核另一个 —— 于是 2026-10-23 起列名写成
+          「事件条数（会话）」：它回答「这一段说了多少」，台账那一格回答「整个工作区
+          落了多少笔」。两者不相等不是缺陷，是两把尺子。
         </div>
         <div class="readings">
           <b>进程面那一列是宿主进程的 pid</b>：「在飞」页进程面的列名逐字是

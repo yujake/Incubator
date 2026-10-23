@@ -113,6 +113,19 @@ def _landed(st: Store) -> dict[str, Any]:
     return dict(rows[0])
 
 
+def _landed_problems(st: Store) -> list[str]:
+    """判据 ① 的入场读数：盘上恰好一条，且那一条确实是秘书落的正路产出。
+
+    收在一处是为了让反真空那一条用同一份读数打红（判据不经两套口径）：
+    这里的第一条就是 `_landed` 的那句 `len(rows) == 1`，后面接
+    `_honest_problems`（档位 / 五元位 / 留痕 / 号 / 正文）。
+    """
+    rows = st.rows("statements")
+    if len(rows) != 1:
+        return [f"盘上命题行 {len(rows)} 条（要恰好 1 条：秘书那一笔落下来的那一条）"]
+    return _honest_problems(dict(rows[0]))
+
+
 def _honest_problems(row: dict[str, Any]) -> list[str]:
     """一条落盘行作为"正路产出"缺了什么（空列表 = 它确实是正路的产出）。
 
@@ -149,7 +162,9 @@ def _sign_off(st: Store, stmt_id: str, proof_text: str) -> dict[str, Any]:
 def test_the_tool_call_lands_through_the_secretary(tmp_path):
     """① 正控：模型一次 `own.register_statement` ⇒ 行由秘书落盘（号、留痕、五元位都在）。"""
     st, cond, reg, backend = _world(tmp_path)
-    out = _drive(st, backend, _tool("own.register_statement", _payload()))
+    # B-2 闸（`must_start_as_conjecture`）之后的正路：这一笔还没有 V 的签 ⇒ 先按猜想登记
+    # （`kind="conjecture"` 是 B-2 明文放行的那一档），而不是一进门就叫 theorem。
+    out = _drive(st, backend, _tool("own.register_statement", _payload(kind="conjecture")))
     assert out["stop_reason"] == "final", out
 
     row = _landed(st)
@@ -166,9 +181,12 @@ def test_the_tool_call_lands_through_the_secretary(tmp_path):
     assert row["evidence_kind"] in ("heuristic", "cross_check"), row["evidence_kind"]
 
     # ---- 第二段：V 签完之后把同一份内容再交一次 ⇒ 秘书改那一行（不新建）
+    # 这一笔是「从猜想升成定理」的那一步：kind 回到 theorem（B-3 闸这时认得 V 的那一签）、
+    # 档位给 proof_review（升档的唯一凭据）。
     _sign_off(st, row["stmt_id"], PROOF)
     again = _drive(st, backend,
-                   _tool("own.register_statement", _payload(evidence_kind="proof_review")))
+                   _tool("own.register_statement",
+                         _payload(kind="theorem", evidence_kind="proof_review")))
     assert again["stop_reason"] == "final", again
     rows = st.rows("statements")
     assert len(rows) == 1, f"升档不许新建行：{rows}"
@@ -180,6 +198,8 @@ def test_the_tool_call_lands_through_the_secretary(tmp_path):
     assert upgraded["proof_text"] == row["proof_text"], "内容面一个字都不许动"
     # 判据 ① 的三条读数（同一组断言也被 ③b 拿去打红）
     assert _honest_problems(upgraded) == [], _honest_problems(upgraded)
+    # 入场读数（盘上恰好一条 + 它就是正路的产出）与上面同一组，反真空那一条拿它打红。
+    assert _landed_problems(st) == [], _landed_problems(st)
 
 
 def test_the_bare_action_name_also_reaches_the_route(tmp_path):
@@ -194,7 +214,8 @@ def test_the_bare_action_name_also_reaches_the_route(tmp_path):
     （秘书落盘、`bits` 由动作算、号由分配器给）。
     """
     st, cond, reg, backend = _world(tmp_path)
-    out = _drive(st, backend, _tool("register_statement", _payload()))
+    # 与上一条同一条正路：首登按猜想（B-2 闸之后的唯一入口），这里只核"短名也走得到"。
+    out = _drive(st, backend, _tool("register_statement", _payload(kind="conjecture")))
     assert out["stop_reason"] == "final", out
     run_path = str(out.get("llm_run_path") or "")
     step = json.loads(pathlib.Path(run_path).read_text(encoding="utf-8"))["steps"][0]
@@ -325,7 +346,7 @@ def test_negative_control_without_the_upgrade_the_kind_stays_heuristic(tmp_path,
     就是这么僵死的），而 ① 会在一个看起来跑通了的流程上变红。
     """
     st, cond, reg, backend = _world(tmp_path)
-    out = _drive(st, backend, _tool("own.register_statement", _payload()))
+    out = _drive(st, backend, _tool("own.register_statement", _payload(kind="conjecture")))
     assert out["stop_reason"] == "final", out
     row = _landed(st)
     _sign_off(st, row["stmt_id"], PROOF)
@@ -335,8 +356,40 @@ def test_negative_control_without_the_upgrade_the_kind_stays_heuristic(tmp_path,
         lambda self, existing, body: {"upgraded": False, "row": {}, "changes": [],
                                       "reason": ""}, raising=True)
     _drive(st, backend, _tool("own.register_statement",
-                              _payload(evidence_kind="proof_review")))
+                              _payload(kind="theorem", evidence_kind="proof_review")))
     rows = st.rows("statements")
     assert len(rows) == 1, rows
     assert rows[0]["evidence_kind"] in ("heuristic", "cross_check"), rows[0]["evidence_kind"]
     assert _honest_problems(dict(rows[0])) != [], "升档被关掉了，判据 ① 却仍然是绿的"
+
+
+def test_negative_control_without_the_secretarys_write_the_positive_reading_goes_red(
+        tmp_path, monkeypatch):
+    """反真空（判据 ① 的对象）：把秘书的写入关掉 ⇒ 盘上一行都不落，判据 ① 必须红。
+
+    这一条问的是"① 的绿到底是谁给的"。判据 ① 的入场读数是"盘上恰好一条、而且它是
+    秘书落下来的正路产出"（`_landed_problems`）。这里把 `Secretary.record_statement`
+    关成"只报没写"（返回 `refused`、一行都不落）—— 如果这时 ① 仍然绿，那说明这组
+    断言根本没对着写入，直接写表或凭空捏一条行也能过。
+
+    三态不许折平：这里分两段核。第一段是"B 确实走到了秘书那一关"（`calls` 非空，
+    否则测的就不是写入被关掉，而是 B 压根没交内容）；第二段才是"秘书没写 ⇒ 判据红"。
+    """
+    st, cond, reg, backend = _world(tmp_path)
+    calls: list[str] = []
+
+    def _no_write(self, payload, *, role="B", force_new=False):
+        calls.append(str(payload.get("statement_full") or ""))
+        return {"checked": False, "created": False, "duplicate": False, "upgraded": False,
+                "stmt_id": "", "deps_written": 0, "path_groups": 0, "tables": [],
+                "washed": False, "changes": [], "refused": "secretary_unavailable",
+                "reason": "探针：秘书的写入被关掉了（这一笔不许落盘）", "pending": []}
+
+    monkeypatch.setattr(Secretary, "record_statement", _no_write, raising=True)
+    out = _drive(st, backend, _tool("own.register_statement", _payload(kind="conjecture")))
+    assert out["stop_reason"] == "final", out
+    assert calls, "B 根本没交到秘书那一关 ⇒ 这一条负控测的不是写入"
+    assert st.rows("statements") == [], st.rows("statements")
+    problems = _landed_problems(st)
+    assert problems != [], "秘书的写入关掉了，判据 ① 却仍然是绿的（那组断言不是对着写入的）"
+    assert any("盘上命题行" in p for p in problems), problems

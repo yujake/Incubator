@@ -54,9 +54,9 @@ Mathlib 工程根写在 `toolchain.mathlib_root`（见 `agentflow/settings.examp
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -265,132 +265,209 @@ def lean_path_for(root: str | Path) -> str:
     return os.pathsep.join(str(p) for p in parts if p.is_dir())
 
 
-#: 实测 `import Mathlib` 的那一小段源码（`draft/83` §7 的 D70）。
-#:
-#: 为什么必须是真编译而不是查文件：2026-10-08 真机读数 —— `_env/` 那一份
-#: Mathlib 的 6 个依赖包（`std` / `aesop` / `importGraph` / `proofwidgets` / `Qq`）
-#: 是指向旧 `temp/` 落点的 junction，环境整体搬到 `_env/` 之后它们全部悬空。
-#: 于是 `Mathlib.olean` 在（文件面读数是"可用"），而每一次 `import Mathlib`
-#: 都报 `unknown package 'Std'`（T1 第 18 趟：形式化一条都没成，P8 判 0）。
-#: 文件在不在与"能不能编译"是两件事 —— 这一条探针就是把这个差别测出来。
-_IMPORT_MATHLIB_PROBE_SRC = (
-    "import Mathlib\n\n"
-    "theorem agentflow_mathlib_probe : (1 : Nat) + 1 = 2 := by norm_num\n"
-)
+#: 第 ⑤ 步的检查器原文里"缺哪个包"的那一句（`unknown package 'Std'`）。
+_MISSING_PACKAGE = re.compile(r"unknown package '([^']+)'")
 
 
-@lru_cache(maxsize=4)
-def _import_mathlib_probe(root: str) -> dict[str, Any]:
-    """真编译一次 `import Mathlib`（按根缓存；探测自己崩了也如实报，不折成"可用"）。"""
-    from . import formalgw as FG
+def _missing_imports_of(*texts: Any) -> list[str]:
+    """从检查器原文里抠出"缺的包"（只认原文里真的出现过的那几个名字）。
 
-    # 开关关着时连这一次真编译都不做（它要起 `lean` 子进程，还可能跑满 180 秒）：
-    # "用户说了这一趟不走形式化"这件事必须体现成一次都不碰。
-    if not lean_enabled()[0]:
+    为什么从这里读、不另问一次：改前这条信息来自那次 umbrella 探针自己的返回值。
+    现在只有第 ⑤ 步那一次编译（`leantoolchain.mathlib_reading` 的 `evidence`），
+    所以"缺哪个包"也只能从那条原文里读 —— 两处各读一份，就又是两个答案。
+    """
+    out: list[str] = []
+    for text in texts:
+        for name in _MISSING_PACKAGE.findall(str(text or "")):
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+def _reading_problems(row: Mapping[str, Any]) -> list[str]:
+    """一份第 ⑤ 步读数内部自相矛盾的地方（空清单 = 这份读数可以照用）。
+
+    判两件事，它们是"两处各说各话"在合并成一处之后唯一还能出现的形态：
+
+    - 结论有、而给出结论的那次编译没有：`usable` / `unusable` 只可能由一次真编译
+      产生 —— `runner` 与 `exit_code` 都空，就说明这条结论没有落点；
+    - `detected` 与 `root` 对不上（说检出了却没有工程根，或者反过来）。
+
+    命中任何一条时 :func:`mathlib_state` 报"没查成"，不替这份读数挑一个说法。
+    """
+    state = str(row.get("state") or "")
+    out: list[str] = []
+    if state in ("usable", "unusable"):
+        if row.get("exit_code") is None or not str(row.get("runner") or "").strip():
+            out.append(f"读数自称 {state}，却没有那一次编译的读数"
+                       "（runner 与 exit_code 都空）")
+    detected = bool(row.get("detected"))
+    root = str(row.get("root") or "")
+    if detected and not root:
+        out.append("读数自称 detected=True，工程根那一格却是空的")
+    if root and not detected:
+        out.append(f"读数给了工程根 {root}，detected 却是 False")
+    return out
+
+
+def _graph_import_verdict(row: Mapping[str, Any], *, enabled: bool,
+                          problems: Sequence[str]) -> str:
+    """第 ⑤ 步那一格的人话（三态：可用 / 不可用 / 没查成，外加两档"没查"）。"""
+    from . import leantoolchain as LT
+
+    module = str(getattr(LT, "MATHLIB_GRAPH_MODULE", "Mathlib"))
+    if not enabled:
+        # 开关关着时连探针都不跑：这一档必须与"探了、编译失败"分开说 —— 后者会让人去查
+        # junction / 缺包（一条真实的排障路），而这一次该看的是设置文件里的开关。
+        return ("没查（本会话的 Lean 形式化关着 ⇒ 第 ⑤ 步那条探针一次都没跑）—— "
+                "这不是「Mathlib 坏了」，也不是「没装」")
+    if problems:
+        return ("没查成（第 ⑤ 步那条读数自相矛盾，不替它挑一个说法）："
+                + "；".join(str(p) for p in problems))
+    state = str(row.get("state") or "")
+    if state == "usable":
+        secs = row.get("elapsed_ms")
+        secs_text = f"，{float(secs) / 1000.0:.1f}s" if isinstance(secs, (int, float)) and secs else ""
+        return (f"可用（实测：`import {module}` + `#check SimpleGraph` 以 0 退出"
+                f"{secs_text}；跑法 {row.get('runner') or '（空）'}）")
+    if state == "unusable":
+        missing = _missing_imports_of(row.get("evidence"), row.get("output_head"),
+                                      row.get("reason"))
+        return ("不可用（实测编译失败"
+                + (f"，缺的包：{'、'.join(missing)}" if missing else "")
+                + f"；检查器原文：{_head_text(row.get('evidence') or row.get('output_head'))}"
+                  "）—— 这是环境问题，不是命题问题：先看 `toolchain.mathlib_root` 指的那份"
+                  "工程里依赖包（`std` 等）的 `.lake/build/lib` 在不在"
+                  "（搬过目录的 junction 会悬空）")
+    if state == "absent":
+        return (f"没查（这台机器上没有 Mathlib 工程根 {module} 无从谈起）⇒ 第 ⑤ 步退回"
+                "裸 lean 跑；这是「没有库」，不是「检查器坏了」")
+    return ("没查成（第 ⑤ 步没给结论："
+            + str(row.get("reason") or "没给理由") + "）")
+
+
+def _head_text(value: Any) -> str:
+    """一格原文的头一段（空值也给一句可读的话，不留空白）。"""
+    text = str(value or "").strip()
+    if not text:
+        return "（空输出）"
+    first = text.splitlines()[0].strip()
+    return first if len(first) <= 160 else first[:160] + "…"
+
+
+def _probe_from_reading(row: Mapping[str, Any], *, enabled: bool,
+                        problems: Sequence[str]) -> dict[str, Any]:
+    """把第 ⑤ 步那条读数翻成既有那一格 `import_mathlib_probe` 的形状。
+
+    形状逐字保留（`checked` / `verified` / `status` / `reason` / `missing_imports` /
+    `elapsed_sec` / `exit_code`）：`agent_prompts.toolchain_formal_text` 按它分三档
+    （可用 ⇒ 显式传 imports；不可用 ⇒ 自足文件；没查成 ⇒ 自足文件 + 写进 notes）。
+    """
+    if not enabled:
         return {"checked": True, "verified": False, "status": "lean_disabled",
                 "reason": ("本会话的 Lean 形式化已关闭（toolchain.lean_enabled=false 或 "
-                           "AGENTFLOW_LEAN_ENABLED=0）⇒ 不跑 Mathlib 探针："
+                           "AGENTFLOW_LEAN_ENABLED=0）⇒ 不跑第 ⑤ 步那条探针："
                            "这是「没查」不是「不可用」"),
                 "missing_imports": [], "elapsed_sec": None, "exit_code": None}
-    try:
-        res = FG.check_lean(_IMPORT_MATHLIB_PROBE_SRC, name="agentflow_mathlib_probe",
-                            timeout_sec=180)
-    except Exception as exc:  # noqa: BLE001 —— 探测崩了是"没查成"，不是"不可用"
-        return {"checked": False, "verified": None, "status": "probe_crashed",
-                "reason": f"这条探针自己崩了（{type(exc).__name__}: {exc}）",
-                "missing_imports": [], "elapsed_sec": None}
-    ev = res.get("evidence") or {}
-    status = str(res.get("status") or "")
+    if problems:
+        return {"checked": False, "verified": None, "status": "reading_inconsistent",
+                "reason": "读数自相矛盾 ⇒ 没查成：" + "；".join(str(p) for p in problems),
+                "missing_imports": [], "elapsed_sec": None, "exit_code": None}
+    state = str(row.get("state") or "")
+    secs = row.get("elapsed_ms")
     return {
-        "checked": bool(ev.get("checked")),
-        "verified": bool(ev.get("proved")),
-        "status": status,
-        "reason": str(res.get("reason") or ""),
-        "missing_imports": [str(x) for x in (res.get("missing_imports") or [])],
-        "elapsed_sec": res.get("elapsed_sec"),
-        "exit_code": res.get("exit_code"),
+        "checked": state in ("usable", "unusable", "absent"),
+        "verified": state == "usable",
+        "status": state or "unknown",
+        "reason": str(row.get("reason") or ""),
+        "missing_imports": _missing_imports_of(row.get("evidence"), row.get("output_head"),
+                                               row.get("reason")),
+        "elapsed_sec": (float(secs) / 1000.0
+                        if isinstance(secs, (int, float)) and secs else None),
+        "exit_code": row.get("exit_code"),
     }
 
 
-def _measured_mathlib_verdict(probe: Mapping[str, Any]) -> str:
-    """把探针读数变成一句人话（三态：可用 / 不可用 / 没查成）。"""
-    if str(probe.get("status") or "") == "lean_disabled":
-        # 开关关着时没有探：这一档必须与"探了、编译失败"分开说 ——
-        # 后者会让人去查 junction / 缺包（一条真实的排障路），而这一次该看的是开关。
-        return (f"没查（{probe.get('reason') or '本会话形式化已关闭'}）—— "
-                "这不是「Mathlib 坏了」，也不是「没装」")
-    if probe.get("verified"):
-        secs = probe.get("elapsed_sec")
-        return ("可用（**实测**：真的编译了一次 `import Mathlib` + `norm_num`"
-                + (f"，{float(secs):.1f}s" if isinstance(secs, (int, float)) else "")
-                + "）")
-    if probe.get("checked"):
-        missing = probe.get("missing_imports") or []
-        return ("不可用（**实测**编译失败"
-                + (f"，缺的包：{'、'.join(str(m) for m in missing)}" if missing else "")
-                + f"；结论 {probe.get('status')}）—— 这一步是环境问题，不是命题问题："
-                  "先看 `toolchain.mathlib_root` 指的那份工程里依赖包（`std` 等）的 "
-                  "`.lake/build/lib` 在不在（搬过目录的 junction 会悬空）")
-    return ("没查成（探针没做成："
-            + str(probe.get("reason") or probe.get("status") or "没给理由")
-            + "）")
+def mathlib_state(env: Mapping[str, str] | None = None, *,
+                  reading: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Mathlib 那一轴的状态：第 ⑤ 步那条读数的一处投影。
 
+    ## 为什么改前是两处探测，现在是这一处（2026-10-25 合并）
 
-def mathlib_state(env: Mapping[str, str] | None = None) -> dict[str, Any]:
-    """Mathlib 那一轴的状态（三态）：工程根在不在、revision 与钉住的是否一致、能不能 import。
+    改前这一格自己有一套探测：`formalgw.find_mathlib_root` 找工程根、自己认两种
+    umbrella 布局、再真编译一次 `import Mathlib` + `norm_num`（`_import_mathlib_probe`，
+    超时 180 秒）。而自检的第 ⑤ 步另有一套：`leantoolchain.mathlib_reading` 读盘面
+    加一次 `import Mathlib.Combinatorics.SimpleGraph.Basic` + `#check SimpleGraph` 的真编译。
+    两套探的是同一件事，却可以给出两个答案 —— 2026-10-08 的现场就是文件面说可用、
+    真编译报 `unknown package 'Std'`；两处读数分家时，读的人分不清该信哪一个，
+    而 `agentflow doctor` 为此要编译两次（本机实测：umbrella 那一次 18.9 秒、
+    第 ⑤ 步那一次 12.4 秒）。
 
-    为什么要单列：`import Mathlib` 能不能用，取决于「工程根 + 那一份编好的缓存」，
-    与"有没有 lean 这个二进制"是两件事。实测 2026-10-03：根在、revision 与钉住的一致，
-    但 umbrella 的 `.olean` 不在缓存里 ⇒ `import Mathlib` 报 `import_unavailable`。
+    所以本函数现在只做一件事：把第 ⑤ 步那条读数（`leantoolchain.mathlib_reading`，
+    结论由 `leantoolchain._mathlib_control` 那一次真编译给出）投影成既有那几个键，
+    一格都不自己量。`reading=` 让调用方把已经跑过的那一份传进来 —— doctor 把自检读数里
+    的 `mathlib` 那一格直接给它，于是整趟只编译一次；不给就现读盘面（纯读，不起进程）。
 
-    ## 2026-10-04 的一处修正：umbrella 有两种布局，早先只认了一种
+    第 ⑤ 步读数内部自相矛盾时（结论有、而给出结论的那次编译没有），这一格报"没查成"，
+    不替它挑一个说法 —— 那正是"两处各说各话"在合并之后唯一还能出现的形态。
 
-    早先这里按 `.lake/build/lib/lean/Mathlib.olean` 找 —— 那是 Lean 4.9+ 的布局；
-    4.7.0 的布局是 `.lake/build/lib/Mathlib.olean`。于是盘上那份编译完整的 Mathlib
-    被判成"没装 Mathlib"（`import_unavailable`），而后面的 `import_mathlib` 那句话
-    就把模型引向了"换 import 列表"，而不是"把 LEAN_PATH 配上"。
-    现在两种布局都认，并把该配的 `lean_path` 一起给出来。
+    ## 键的口径
+
+    - `import_mathlib`：文件面读数（umbrella 的 `.olean` 在不在）。历史口径，逐字保留：
+      既有判据与文档都读它，但它不单独代表"可用"；
+    - `import_mathlib_probe` / `import_mathlib_measured` / `graph_import_measured`：
+      实测读数。三格同源 —— 本机只跑第 ⑤ 步那一次编译，所以"umbrella 实测"与
+      "图论实测"是同一份读数（拆成两次编译就是改前那个毛病）。
     """
     from . import formalgw as FG
+    from . import leantoolchain as LT
 
-    root = FG.find_mathlib_root(env)
-    if not root:
-        return {"checked": True, "root": "", "reason": "没找到 Mathlib 工程根"
-                                                      "（看 AGENTFLOW_MATHLIB_ROOT 与常见位置）"}
-    rev = FG.mathlib_revision(Path(root))
+    row = dict(reading) if reading is not None else LT.mathlib_reading(env=env)
+    problems = _reading_problems(row)
+    enabled = bool(lean_enabled(env)[0])
+    root = str(row.get("root") or "")
+    umbrella = str(row.get("umbrella_olean") or "")
+    rev: dict[str, Any] = FG.mathlib_revision(Path(root)) if root else {}
     pinned_commit = str(getattr(FG, "PINNED_MATHLIB_COMMIT", "") or "")
     pinned_tag = str(getattr(FG, "PINNED_MATHLIB_TAG", "") or "")
     got_commit = str(rev.get("commit") or "")
     same = bool(got_commit) and (got_commit == pinned_commit
                                  or got_commit.startswith(pinned_commit[:12]))
-    candidates = (Path(root) / ".lake" / "build" / "lib" / "Mathlib.olean",
-                  Path(root) / ".lake" / "build" / "lib" / "lean" / "Mathlib.olean")
-    umbrella = next((p for p in candidates if p.is_file()), None)
-    lp = lean_path_for(root)
-    # D70（`draft/83` §7）：文件面读数（umbrella 在不在）不再单独代表"可用"，
-    # 另给一条真编译的探针读数。两者分栏的理由与真机读数见 `_import_mathlib_probe`。
-    probe: dict[str, Any] = {
-        "checked": False, "verified": None, "status": "not_attempted",
-        "reason": "umbrella 的 `.olean` 不在 ⇒ 不试编译（文件面读数已经给了结论）",
-        "missing_imports": [], "elapsed_sec": None,
+    measured = _graph_import_verdict(row, enabled=enabled, problems=problems)
+    if not root:
+        reason = str(row.get("reason") or "") or ("没找到 Mathlib 工程根"
+                                                 "（看 AGENTFLOW_MATHLIB_ROOT 与常见位置）")
+    elif problems:
+        reason = "没查成（第 ⑤ 步那条读数自相矛盾）：" + "；".join(problems)
+    else:
+        reason = str(row.get("reason") or "")
+    return {
+        "checked": (not problems) and bool(row.get("checked")),
+        "state": "unknown" if problems else (str(row.get("state") or "") or "unknown"),
+        "detected": bool(row.get("detected")),
+        "root": root,
+        "source": str(rev.get("source") or ""),
+        "reason": reason,
+        #: 第 ⑤ 步那条读数是从哪一档找到工程根的（`flag` / `settings` / `env` / ...）。
+        "reading_source": str(row.get("source") or ""),
+        "version": str(row.get("version") or ""),
+        "commit": got_commit, "tag": str(rev.get("tag") or ""),
+        "pinned_commit": pinned_commit, "pinned_tag": pinned_tag, "pinned_match": same,
+        "umbrella_olean": umbrella,
+        "graph_olean": str(row.get("graph_olean") or ""),
+        "lean_path": str(row.get("lean_path") or ""),
+        "lean_path_segments": int(row.get("lean_path_segments") or 0),
+        #: 文件面读数（历史口径，逐字保留：既有判据与文档都读它）。
+        "import_mathlib": ("可用（umbrella 的 .olean 在；`LEAN_PATH` 用 lean_path 这一串，"
+                           "检查器起子进程时要带上它）" if umbrella else
+                           "不可用（两种布局都没找到 umbrella 的 .olean ⇒ import Mathlib 会报 "
+                           "import_unavailable；处置是编全 Mathlib 或只 import 缓存里有的模块）"),
+        #: 实测读数：第 ⑤ 步那一次真编译（同一份读数，不是第二次探测）。
+        "import_mathlib_probe": _probe_from_reading(row, enabled=enabled, problems=problems),
+        "import_mathlib_measured": measured,
+        #: 图论那一格（`import Mathlib.Combinatorics.SimpleGraph.Basic`）的实测结论。
+        "graph_import_measured": measured,
     }
-    if umbrella:
-        probe = _import_mathlib_probe(str(root))
-    return {"checked": True, "root": root, "commit": got_commit, "tag": str(rev.get("tag") or ""),
-            "source": str(rev.get("source") or ""), "reason": str(rev.get("reason") or ""),
-            "pinned_commit": pinned_commit, "pinned_tag": pinned_tag, "pinned_match": same,
-            "umbrella_olean": str(umbrella) if umbrella else "",
-            "lean_path": lp, "lean_path_segments": len(lp.split(os.pathsep)) if lp else 0,
-            #: 文件面读数（历史口径，逐字保留：既有判据与文档都读它）。
-            "import_mathlib": ("可用（umbrella 的 .olean 在；`LEAN_PATH` 用 lean_path 这一串，"
-                               "检查器起子进程时要带上它）" if umbrella else
-                               "不可用（两种布局都没找到 umbrella 的 .olean ⇒ import Mathlib 会报 "
-                               "import_unavailable；处置是编全 Mathlib 或只 import 缓存里有的模块）"),
-            #: 实测读数（D70）：真编译一次 `import Mathlib` + `norm_num`。
-            #: 判"这台机器能不能做形式化"要看这一条，不看上面那一条。
-            "import_mathlib_probe": probe,
-            "import_mathlib_measured": _measured_mathlib_verdict(probe),
-            }
 
 
 def lean_enabled(env: Mapping[str, str] | None = None) -> tuple[bool, str]:
@@ -427,13 +504,17 @@ def _model_spec(env: Mapping[str, str] | None = None) -> Any:
     return MG.spec_from_env(env)
 
 
-def toolchain_report(env: Mapping[str, str] | None = None) -> dict[str, Any]:
+def toolchain_report(env: Mapping[str, str] | None = None, *,
+                     mathlib_reading: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """跑一趟形式化核验之前该看的那几个事实（给 `agentflow doctor` 用）。
 
     只回答"这台机器能做什么"，「不发起任何模型调用」（它不花钱）。
     `model_key` 那一格只看「有没有配」，绝不打印值 —— 而且"配没配"要看
     环境变量与设置文件两档（2026-10-07 起 key 也可以落在 `settings.json` 里，
     那么这一格只读 key 的环境变量就会报"没配"，与真实情况相反）。
+
+    `mathlib_reading` 是"已经跑过的那一份第 ⑤ 步读数"（doctor 把自检读数里的
+    `mathlib` 那一格传进来）：给了它就一格都不再探，整趟只编译一次；不给则现读盘面。
     """
     spec = _model_spec(env)
     probe = probe_checkers(env)
@@ -456,7 +537,7 @@ def toolchain_report(env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "can_do_formal": bool(lean) and enabled,
         "lean_path": (lean or {}).get("path", ""),
         "lean_version": (lean or {}).get("version", ""),
-        "mathlib": mathlib_state(env),
+        "mathlib": mathlib_state(env, reading=mathlib_reading),
         # 2026-10-17（Lean 审计 #1）：原来这里还有一行 `"can_do_formal": bool(lean)`
         # 重复键覆盖了上面那行 —— 于是关掉 Lean 的机器上 `doctor` 仍说"能做形式化核验"。
         # 已删：能不能做 = 装了 且 开关开着（上面 456 行那一条是唯一口径）。

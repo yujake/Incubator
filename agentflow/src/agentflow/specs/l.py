@@ -244,9 +244,16 @@ SPEC = AgentSpec(
             "先看 TOOLCHAIN_FACTS 的第一行（开关）。那一行说已关闭时，这条路整条不适用：不写源码、"
             "不派检查，如实回 unknown 并给原因码（`lean_selfcheck_off`），改走自然语言逐行审阅"
             "（proof_text + V 的 verify_proof）；说已开启时才走下面几条。",
-            "任何 Lean 调用之前先过自检（`leantoolchain` 的四步：解析 / 版本 / 正样例 / 反控）。"
+            "任何 Lean 调用之前先过自检（`leantoolchain` 的**五步**：解析 / 版本 / 正样例 / 反控 / Mathlib 与图论）。"
             "自检不是 usable 时，这一趟的全部形式化结论记 unknown 并把原因写清：不起检查器、"
-            "不抛栈、不连撞同一条错误 —— 同一条失败只报一行，然后收手。",
+            "不抛栈、不连撞同一条错误 —— 同一条失败只报一行，然后收手。"
+            # 2026-10-24：图论库已装进 _env（`lake exe cache get` + SimpleGraph 编译通过），
+            # 但提示词里 0 处提到它 ⇒ L 只会写自足文件或瞎猜 import。这一句把"库可用"与
+            # "到底该怎么 import"接上；可用性仍以自检第 ⑤ 步那条读数为准（不靠记忆）。
+            "要证图论命题时，库走 `import Mathlib.Combinatorics.SimpleGraph.Basic`（不要只写 umbrella "
+            "`import Mathlib`：能过但更重）；它到底可不可用，看自检第 ⑤ 步那条 Mathlib 读数"
+            "（`leantoolchain.mathlib_reading`）—— 读数说 absent/unusable 时如实回 unknown，"
+            "不许拿一句 `import Mathlib` 硬撞。",
             "忠实复述 B 的证明链路：先把 B 的 statement_full 与 proof_text 逐句读一遍，"
             "把它的每一步与你打算写的 Lean 声明/策略一一对上，再动手写。"
             "对不上的三种情形各自处置 —— 条件是隐含的（补成显式假设并把这一处交回 B 复核）、"
