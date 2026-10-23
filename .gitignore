@@ -472,3 +472,6 @@ __pycache__/
 
 # 真机测试的输入论文（不入库；业主裁定：效果做好并经批准后，才可提到根目录当 demo）
 papers-for-real-run/
+
+saxl-ws/
+saxl-untrusted/
