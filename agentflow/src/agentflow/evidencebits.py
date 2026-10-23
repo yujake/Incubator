@@ -742,6 +742,189 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     return "conjecture"
 
 
+#: D-37（2026-10-24）：`kind` 能跟着证据走的起点与终点。
+#:
+#: 只允许"猜想 → theorem / lemma"这一个方向：`conjecture`（以及空串这个历史形态）
+#: 是唯一可以往上抬的声明，`theorem` / `lemma` 是唯一两个可以落下的名字。别的声明
+#: （`proposition` / `definition` / `concept` …）一个字都不动 —— 那是作者写下的判断，
+#: 读侧没有资格替它改（业主口径：不要覆盖 author 明确写下的更强 kind）。
+KIND_UPGRADABLE_FROM: tuple[str, ...] = ("conjecture", "")
+KIND_UPGRADE_TARGETS: tuple[str, ...] = ("theorem", "lemma")
+
+
+def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
+                         requested: str = "") -> dict[str, Any]:
+    """一条命题的 `kind` 该不该跟着证据升（D-37 的唯一口径：写侧的两个落点共用它）。
+
+    （它是纯读函数，所以任何读的人 —— 报告、探针、判据 —— 都能调它问"按盘上的证据，
+    这一行现在该叫什么"，而调它本身不会改盘。写侧只有两处落点：秘书的升档那一支、
+    B 同步第 4 位那一支。）
+
+    ## 现场（2026-10-24 真机 `cube-ws` 抓到，只读取数）
+    `statements 000000`：`kind="conjecture"`、`evidence_kind="proof_review"`、
+    `bits.grade="theorem"`（proof=true / reviewed=true / formal={"1": "verified"}），
+    `verifications/000000.jsonl#v-000001` 判「成立」且 `proof_sha256` 与现行正文相符
+    （`experiments 000001` 是 Lean 4.7.0 + Mathlib 真编译，exit 0）。
+    ⇒ 证据链齐全、等级现算也已经是 `theorem`，而行上的 `kind` 仍写着"猜想"。
+    读的人（G 写稿 / H 审校 / 收工门）读 `kind` 那一格，于是"这是定理"这句话在盘上
+    不存在 —— 等级与名字分家。
+
+    ## 判据（三件，按顺序判）
+    1. 起点只认 `conjecture`（:data:`KIND_UPGRADABLE_FROM`）⇒ 别的 kind 一律
+       `not_applicable`：作者写下的更强声明不许被这一格改掉；
+    2. 升档依据必须是盘上读得出来的那一行，两条路各算一条依据：
+       a. `verifications/<命题号>.jsonl` 里有一条盖住现行正文、判「成立」的签
+          （判据本体在 `verifications.proof_review_gap`，这里只取它的结论；
+          D-34 的"命题还没在册时审的那一签"也由它认领）；
+       b. `bits.evidence.formal_by_proof[证明号] == "verified"`（第 4 位逐条里
+          真有一条 `verified`；`stale` 不算 —— 那是"验过旧稿"）；
+       两条都没有 ⇒ `state="held"`，`shortfall` 逐条写清还差什么；
+    3. 落下的名字取 `requested`（提交方声明的那个，只在 `theorem` / `lemma` 之间选），
+       没给就是 `theorem`。
+
+    ## 为什么"只有形式化 verified、没有 V 的签"也落到 `theorem`（③ 的取舍，备查）
+    `derive_grade` 的现算口径是：第 2 位 + 第 3 位 ⇒ `pre_theorem`；第 2 位 + 第 4 位
+    任一路径 `verified` ⇒ `theorem`。V 的签与形式化通过是两条并列的独立凭据
+    （第 3 位 vs 第 4 位），而名字只有一个 ⇒ 两条依据都落到 `theorem`：
+    - V 签成立 + 证明 ⇒ `theorem`（等级现算是 `pre_theorem`，但那一签就是"这份证明站得住"
+      的结论，名字不该比它低一档）；
+    - 只有形式化 `verified`、没有 V 的签 ⇒ 也是 `theorem`，不是 lemma、也不是仍停在
+      conjecture：`derive_grade` 对"证明 + 任一路径形式化通过"本来就现算 `theorem`，
+      把它降成 `lemma` 会造出第二个等级口径（同一个 `bits` 在两处读出两个档）。
+      V 的签不是"能不能叫定理"的必要条件，它是第 3 位那条独立凭据；一条 Lean 真编译过的
+      证明已经是定理。这是本判据对 ③ 的答案。
+
+    ## 纯读（历史不追溯）
+    这个函数一个字节都不写：不改行、不改 `bits`、不补台账、不新建事件。它只回答
+    "按盘上现有的证据，这一行现在该叫什么"。改名由写侧的落点各自完成（秘书的升档
+    那一支、B 同步第 4 位那一支），两边都调这一个函数 ⇒ 口径只有一份。所以一条证据
+    齐全、`kind` 仍写着"猜想"的历史行读一次不会被静默改写：读它只给出
+    `state="upgraded"` 与依据，改不改由下一次写（同一份内容再交一次）决定。
+
+    ## 三态
+    | state | 含义 |
+    |---|---|
+    | `upgraded` | 证据够：`kind` 是升上去的那一个，`basis` 写着凭什么 |
+    | `held` | 证据不够：`kind` 保持 `conjecture`，`shortfall` 写清还差什么 |
+    | `not_applicable` | 行上的 kind 不是猜想（概念 / 已经写强了）⇒ 不覆写 |
+    | `unreadable` | 五元位算不出来 ⇒ 升不升判不了（没判成不是"已经升了"） |
+
+    返回键：`checked` / `state` / `kind` / `declared` / `grade` / `basis` /
+    `shortfall` / `why` / `statement_id`。`basis` 是给读的人复算的那一句
+    （形如 `verifications/000000.jsonl#v-000001 判成立` 或
+    `bits.evidence.formal_by_proof[1]=verified`）。
+
+    `root` 是工作区根（读 `verifications/` 台账用）。不给 ⇒ 那一签这一格
+    没查成（`shortfall` 里写明"没查成"，不许折成"没签"）；形式化那一条依据
+    不读盘，所以它照样能判。
+    """
+    outer = row if isinstance(row, Mapping) else {}
+    declared = str(outer.get("kind") or "").strip()
+    sid = str(outer.get("stmt_id") or outer.get("statement_id") or "")
+    out: dict[str, Any] = {
+        "checked": True, "state": "held", "declared": declared,
+        "kind": declared or "conjecture", "grade": "", "basis": "",
+        "shortfall": "", "why": "", "statement_id": sid,
+    }
+    if declared not in KIND_UPGRADABLE_FROM:
+        out.update(
+            state="not_applicable", kind=declared,
+            why=(f"行上的 kind={declared!r} 不是这一格能抬的起点（只抬 conjecture）⇒ "
+                 "作者写下的那个名字一个字不动"))
+        return out
+    try:
+        bits = bits_from_row(dict(outer))
+        grade = derive_grade(bits, kind=declared)
+    except Exception as exc:  # noqa: BLE001 - 算不出来要如实说，不许当成"升了"
+        why = (f"五元位算不出来（{type(exc).__name__}: {exc}）⇒ 该不该升判不了"
+               "（没判成不是「已经升了」）")
+        out.update(checked=False, state="unreadable", kind="conjecture",
+                   shortfall=why, why=why)
+        return out
+    out["grade"] = grade
+    if bits.get("voided_by"):
+        out.update(shortfall=("这一行已经作废（`bits.voided_by` 非空）⇒ 等级清零，"
+                              "kind 不抬：作废的命题不许再叫定理"))
+        out["why"] = out["shortfall"]
+        return out
+    if not bool(bits.get("proof")):
+        out.update(shortfall=("第 2 位（proof）还是空的：没有证明过程，V 的签与形式化"
+                              "都无从谈起（升档要看这两条凭据里的一条）"))
+        out["why"] = out["shortfall"]
+        return out
+    basis: list[str] = []
+    missing: list[str] = []
+    sig = _signature_basis(outer, root)
+    if sig.get("signed"):
+        witness = str(sig.get("ledger") or "")
+        vid = str(sig.get("verification_id") or "")
+        if vid:
+            witness = f"{witness}#{vid}"
+        basis.append(f"{witness or 'verifications/（台账）'} 判成立")
+    elif not sig.get("checked"):
+        missing.append("V 的那一签这一格没查成（没给 root / 台账读不出来）—— "
+                       "没查成不是「没签」，补齐 root 再判")
+    else:
+        missing.append("V 的一签（`verifications/<命题号>.jsonl` 里没有盖住现行正文、"
+                       "判「成立」的签）")
+    formal_no = _first_verified_path(bits)
+    if formal_no:
+        basis.append(f"bits.evidence.formal_by_proof[{formal_no}]=verified")
+    else:
+        missing.append("形式化（`bits.evidence.formal_by_proof` 里没有任何一条 verified）")
+    if not basis:
+        out.update(shortfall="；".join(missing))
+        out["why"] = ("证据不够 ⇒ kind 保持 conjecture（三态：不许折成「已经升了」）："
+                      + out["shortfall"])
+        return out
+    target = "lemma" if str(requested or "").strip() == "lemma" else "theorem"
+    if target not in KIND_UPGRADE_TARGETS:          # pragma: no cover - 防御性：目标词表只有两档
+        target = "theorem"
+    basis_text = "；".join(basis)
+    out.update(state="upgraded", kind=target, basis=basis_text,
+               why=(f"证据齐 ⇒ kind 跟着等级升：{declared or '（空）'} → {target}"
+                    f"（依据：{basis_text}；五元位现算等级 {grade}）"))
+    return out
+
+
+def _first_verified_path(row: Mapping[str, Any]) -> int:
+    """第 4 位里第一条 `verified` 的证明号（没有 ⇒ 0）。
+
+    只认 `formal_by_proof` 的逐条读数：`stale`（验过旧稿）与 `pending` / `na` / `failed`
+    都不算依据 —— 拿一条"验的不是现在这一份"的读数给名字背书，正是第 4 位那套纪律要堵的。
+    """
+    per = formal_by_proof(row)
+    for no in sorted(per):
+        if per[no] == "verified":
+            return int(no)
+    return 0
+
+
+def _signature_basis(row: Mapping[str, Any], root: Any) -> dict[str, Any]:
+    """V 那一签的读数（`verifications.proof_review_gap` 的结论，纯读）。
+
+    三态：`checked=False` 有两种来路 —— 没给 `root`（这一趟读不到台账）与台账读不出来；
+    两种都不许折成"没签"（那会让"没查成"变成一次降级判定）。`signed=True` 只在
+    `proof_review_gap` 判 `ok` 时成立（那一签盖住现行正文、判「成立」）。
+    """
+    if root is None:
+        return {"checked": False, "signed": False, "ledger": "",
+                "verification_id": "", "why": "这一趟没有工作区根 ⇒ 台账读不了"}
+    try:
+        from . import verifications as _VR   # 惰性：签名台账的口径只有一处
+        gap = _VR.proof_review_gap(root, row)
+    except Exception as exc:  # noqa: BLE001 - 台账读不了 ⇒ 没查成（不许当成没签）
+        return {"checked": False, "signed": False, "ledger": "",
+                "verification_id": "",
+                "why": f"`verifications` 台账读不出来（{type(exc).__name__}: {exc}）"}
+    return {"checked": bool(gap.get("checked")),
+            "signed": bool(gap.get("ok")),
+            "ledger": str(gap.get("ledger") or ""),
+            "verification_id": str(gap.get("verification_id") or ""),
+            "state": str(gap.get("state") or ""),
+            "why": str(gap.get("why") or "")}
+
+
 def bit_problems(bits: Mapping[str, Any]) -> list[str]:
     """五元位自身的完备性问题（空列表 = 合规）。
 

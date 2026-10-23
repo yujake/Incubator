@@ -535,6 +535,28 @@ class _RegisterStatement:
                 row["bits"] = synced["bits"]
                 out["formal_synced"] = True
                 out["formal_paths"] = dict(synced.get("paths") or {})
+                # ---- D-37（2026-10-24 真机 cube）：kind 跟着证据升。
+                #
+                # 为什么落在这一格：`kind` 的判据读的是第 4 位的逐条读数，而那一格刚刚才
+                # 变（第 4 位是 L 的台账同步进来的，B 只做这一笔写字）。等下一次登记再改，
+                # "L 验过了、行上还叫猜想"就多留一个来回 —— cube 那条老行正是这么留下来的。
+                # 判据只有一处：`evidencebits.kind_following_grade`（与秘书那一支、与读侧
+                # 共用一个函数）；这里只改 `kind` 与留痕，`bits` 用的是上面刚同步好的那一份。
+                kind_read = _EB.kind_following_grade(
+                    row, root=getattr(store, "root", None))
+                if str(kind_read.get("state") or "") == "upgraded":
+                    before_kind = str(row.get("kind") or "")
+                    target = str(kind_read.get("kind") or "")
+                    if target in _EB.KIND_UPGRADE_TARGETS and target != before_kind:
+                        row["kind"] = target
+                        row["_kind_upgrade"] = {
+                            "from": before_kind, "to": target,
+                            "basis": str(kind_read.get("basis") or ""),
+                            "grade": str(kind_read.get("grade") or ""),
+                            "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
+                            "at": S.now_iso(),
+                        }
+                        out["kind_upgraded"] = dict(row["_kind_upgrade"])
             #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
             if not out["attached"] and not canonical_changed and not out["formal_synced"]:
@@ -1140,6 +1162,14 @@ class _RegisterStatement:
                         "第 4 位（形式化通过）按 L 的 `experiments` 台账同步了："
                         f"逐条证明的状态 {out['formal_paths']}（键是证明号；"
                         "汇总按任一路径通过就算通过，逐条路径各自独立）。")
+                if attach.get("kind_upgraded"):
+                    # D-37：这一笔让 `kind` 跟着证据升了 —— 依据与落点一起报出来，
+                    # 静默改名与静默不改名同样是坏（读的人要知道它现在为什么叫定理）。
+                    trace = dict(attach["kind_upgraded"])
+                    out["kind_upgrade"] = trace
+                    out["note"] += (
+                        f"`kind` 也跟着证据升了：{trace.get('from') or '（空）'} → "
+                        f"{trace.get('to')}（依据：{trace.get('basis') or ''}）。")
                 out.update(self._proofs_reading(attach))
                 return out
             if proofs_listed and not attach.get("already"):
@@ -1152,6 +1182,11 @@ class _RegisterStatement:
                            "同一条命题（按规范化后的 statement_full 比）已在册 ⇒ "
                            "秘书查重后没有新建行；要引用它请用返回的 stmt_id，"
                            "确实要另起一条才走 `force_new`（本动作不暴露它）"
+                           # D-37：秘书那一支留下的"还差什么"（`kind` 没升成、
+                           # 档位没升成）必须转到这里来 —— 折成一句"重复登记"会把
+                           # "再去拿一份证据"说成"不用再交一次"。
+                           + (str(written.get("reason") or "")
+                              if str(written.get("reason") or "").strip() else "")
                            + ("；这一笔带来的证明清单里每一条都已经在册且逐字相同"
                               "（没有重复登记，也没有覆盖任何一份证明）"
                               if attach.get("already") else ""),
@@ -1224,6 +1259,9 @@ class _RegisterStatement:
                 **({"canonical_written": True,
                     "canonical_history": list(attach.get("canonical_history") or [])}
                    if attach.get("canonical_written") else {}),
+                #: D-37：这一笔让 `kind` 跟着证据升了（依据逐字在里面）。只在真升时出现。
+                **({"kind_upgrade": dict(attach["kind_upgraded"])}
+                   if attach.get("kind_upgraded") else {}),
                 # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
                 # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
                 # 也能扫到它；这里再给一次是为了让调用方当场就知道）。

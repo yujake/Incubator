@@ -3098,12 +3098,52 @@ class Secretary:
         在攻坚那一侧做的是同一件事（复用既有行时就地升到 `proof_review`），它也只改 `evidence_kind`。五元位的
         第 3 位（`reviewed`）是 V 的签名面，由 `verifications.bit3_payload(那一行)` 现读，不在这一格里抄进来 ——
         抄进来就有第二份"谁审过了"的账，而两份账迟早会分家。
+
+        ## D-37（2026-10-24 真机 cube）：`kind` 也跟着证据升
+        现场那一行早就升到了 `proof_review`（`have == want`），而 `kind` 仍写着 `conjecture` ⇒
+        "档位还要不要升"这一支根本进不来。所以 `kind` 那一格独立算：判据只有一处
+        （`evidencebits.kind_following_grade`，纯读；B 同步第 4 位那一支共用同一个），依据要么是 `verifications/`
+        里一条盖住现行正文、判「成立」的签，要么是第 4 位逐条里一条 `verified`。
+        只抬 `conjecture → theorem / lemma`（`body.kind` 只在两档之间选落点），作者写下的
+        别的 kind 一个字不动；`bits` 仍然一个字节不写（五元位由现算派生，不抄第二份账）。
+        升档依据落 `_kind_upgrade`（from / to / basis / grade / by / at），与 `_evidence_kind_upgrade`
+        同一套留痕形态。证据不够时这一行不改，`reason` 里附 `_kind_follow_note` 的原话
+        （"还差什么"），不许折成"已经升了"。
         """
+        from . import evidencebits as EB   # 惰性：D-37 的 kind 口径只有一处
         from . import verifications as VR   # 惰性：只在重复读数这一支才需要
 
         out: dict[str, Any] = {"upgraded": False, "row": {}, "changes": [], "reason": ""}
         want = str(body.get("evidence_kind") or "")
         have = str(existing.get("evidence_kind") or "")
+        row = dict(existing)
+        changes: list[str] = []
+        # ---- D-37（2026-10-24 真机 cube 的现场）：kind 跟着证据升。
+        #
+        # 与下面 `evidence_kind` 那一支各自独立：现场那一行早就升到了 `proof_review`
+        # （`have == want`），缺的只是 `kind` 那一步 —— 所以这一格不能挂在"档位还要不要
+        # 升"的条件下面。判据只有一处（`evidencebits.kind_following_grade`，纯读；B 同步
+        # 第 4 位那一支与它共用同一个），这里只做两件本层的事：改那一格、把依据留痕。
+        kind_read = EB.kind_following_grade(
+            existing, root=self.store.root, requested=str(body.get("kind") or ""))
+        kind_upgraded = False
+        if str(kind_read.get("state") or "") == "upgraded":
+            target = str(kind_read.get("kind") or "")
+            before_kind = str(existing.get("kind") or "")
+            if target in EB.KIND_UPGRADE_TARGETS and target != before_kind:
+                row["kind"] = target
+                # 留痕：只改 kind 的那一笔也要读得出来"凭什么"（与
+                # `_evidence_kind_upgrade` 同一套：from / to / 依据 / 谁 / 何时）。
+                row["_kind_upgrade"] = {
+                    "from": before_kind, "to": target,
+                    "basis": str(kind_read.get("basis") or ""),
+                    "grade": str(kind_read.get("grade") or ""),
+                    "by": f"secretary-{self.role}", "at": S.now_iso(),
+                }
+                changes.append(
+                    f"kind: {before_kind or '（空）'} → {target}"
+                    f"（升档依据：{str(kind_read.get('basis') or '')}）")
+                kind_upgraded = True
         #: 这一格能升到的两档：`proof_review`（V 逐行走查/会审签过）与 `proof`
         #: （穷举型证据：E 的程序 + ②③ 加上 V 那一签 —— 业主 2026-10-23 晚「穷举能拿
         #: proof」）。两档的凭据是同一份读数（V 签成立 + `proof_sha256` 与现行正文相符），
@@ -3112,43 +3152,67 @@ class Secretary:
         #: 要求 proof 必须有一份盖住这一条命题的 V 签，而 V 只审在册的命题 ⇒
         #: 「先按猜想落库、签完再升成定理级 proof」是唯一正路；这一格不通的话那条路在
         #: 秘书这一层就断了（`duplicate_statement`），穷举证明永远进不了定理证明库。
-        if want not in (VR.PROOF_REVIEW_KIND, "proof") or have == want:
+        evidence_upgraded = False
+        evidence_gap = ""
+        if (want in (VR.PROOF_REVIEW_KIND, "proof") and have != want
+                and have in VR.WEAKER_THAN_PROOF_REVIEW):
+            probe = dict(existing)
+            probe["evidence_kind"] = want
+            gap = VR.proof_review_gap(self.store.root, probe)
+            if not gap.get("ok"):
+                evidence_gap = (
+                    f"（这一行没有升到 {want}：`verifications.proof_review_gap` 判"
+                    f"凭据不够 —— {str(gap.get('why') or '查不到凭据')[:240]}）")
+            else:
+                row["evidence_kind"] = want
+                row["_evidence_kind_upgrade"] = {
+                    "from": have, "to": want,
+                    "verification_id": str(gap.get("verification_id") or ""),
+                    "ledger": str(gap.get("ledger") or ""),
+                    "proof_sha256_matched": bool(gap.get("sha_matches")),
+                    "by": f"secretary-{self.role}", "at": S.now_iso(),
+                }
+                changes.append(f"evidence_kind: {have} → {want}"
+                               f"（凭据：{gap.get('ledger') or ''}"
+                               f"#{gap.get('verification_id') or ''}）")
+                evidence_upgraded = True
+        if not (kind_upgraded or evidence_upgraded):
+            # 三态：一行都没改，而"还差什么"必须留在读数里（D-37）。
+            out["reason"] = evidence_gap + self._kind_follow_note(kind_read)
+            out["kind_reading"] = dict(kind_read)
             return out
-        if have not in VR.WEAKER_THAN_PROOF_REVIEW:
-            return out
-        probe = dict(existing)
-        probe["evidence_kind"] = want
-        gap = VR.proof_review_gap(self.store.root, probe)
-        if not gap.get("ok"):
+        out.update(upgraded=True, row=row, changes=changes,
+                   kind_reading=dict(kind_read))
+        if evidence_upgraded:
             out["reason"] = (
-                f"（这一行**没有**升到 {want}：`verifications.proof_review_gap` 判"
-                f"凭据不够 —— {str(gap.get('why') or '查不到凭据')[:240]}）")
-            return out
-        row = dict(existing)
-        row["evidence_kind"] = want
-        # 从猜想升成定理级：那一句话在 B 的拒信里写着（「kind 改回定理级」），而改前这一格
-        # 只改档位不改 kind ⇒ 行上永远是 conjecture + 强档，读的人没法把"这是定理"读出来。
-        # 只往强处改（conjecture → theorem / lemma），反方向不在这一格。
-        kind_now = str(body.get("kind") or "").strip()
-        if str(row.get("kind") or "") in ("conjecture", "") and kind_now in ("theorem", "lemma"):
-            row["kind"] = kind_now
-        # 留痕：这一格为什么从弱档变了 —— 不写下来，盘上就只能看到"档位不一样了"。
-        row["_evidence_kind_upgrade"] = {
-            "from": have, "to": want,
-            "verification_id": str(gap.get("verification_id") or ""),
-            "ledger": str(gap.get("ledger") or ""),
-            "proof_sha256_matched": bool(gap.get("sha_matches")),
-            "by": f"secretary-{self.role}", "at": S.now_iso(),
-        }
-        out.update(
-            upgraded=True, row=row,
-            changes=[f"evidence_kind: {have} → {want}"
-                     f"（凭据：{gap.get('ledger') or ''}#{gap.get('verification_id') or ''}）"],
-            reason=(f"同一份内容再交一次、且这一回带了 `{want}` 的凭据 ⇒ 秘书"
-                    f"**改那一行**（不新建）：`{gap.get('ledger') or ''}` 里 "
-                    f"{gap.get('verification_id') or ''} 签「成立」、`proof_sha256` 与现行"
-                    "正文相符（判据与写入期那道闸同一处）。内容面一个字没动。"))
+                f"同一份内容再交一次、且这一回带了 `{want}` 的凭据 ⇒ 秘书"
+                f"改那一行（不新建）：`{str((row.get('_evidence_kind_upgrade') or {}).get('ledger') or '')}` 里 "
+                f"{str((row.get('_evidence_kind_upgrade') or {}).get('verification_id') or '')} 签「成立」、"
+                "`proof_sha256` 与现行正文相符（判据与写入期那道闸同一处）。内容面一个字没动。")
+        else:
+            out["reason"] = (
+                "同一份内容再交一次 ⇒ 秘书改那一行（不新建）："
+                + "；".join(changes) + "。内容面一个字没动。")
+        if not evidence_upgraded and evidence_gap:
+            out["reason"] += evidence_gap
         return out
+
+    @staticmethod
+    def _kind_follow_note(reading: Mapping[str, Any]) -> str:
+        """D-37 的"还差什么"那一句（三态里 `held` / `unreadable` 的那一半）。
+
+        为什么必须说出来：证据不够时"没升"与"升了但没变化"在返回值上同形，
+        而调用方要能分辨"再去拿一份证据"与"不用再交一次"。`upgraded` 与 `not_applicable`
+        都不产出这句话 —— 前者已经写在 `changes` 里，后者是"本来就不该改"。
+        """
+        state = str((reading or {}).get("state") or "")
+        if state == "held":
+            return ("（`kind` 仍是 conjecture：要升成 theorem / lemma 还差 —— "
+                    + str((reading or {}).get("shortfall") or "凭据不够") + "）")
+        if state == "unreadable":
+            return ("（`kind` 升不升判不了："
+                    + str((reading or {}).get("shortfall") or "五元位算不出来") + "）")
+        return ""
 
     def _record_pending_concept(self, body: dict[str, Any], *,
                                 out: dict[str, Any]) -> dict[str, Any]:
