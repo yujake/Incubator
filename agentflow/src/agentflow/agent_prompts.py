@@ -2227,7 +2227,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_skills.py` 的 G 技能正文同一句（它只进 `skills/` 落盘文件、不进提示词）。
 #: 关档另加两条 `specs/e.py::NO_LEAN_REPLACEMENTS`（formal 那行与那句在关档改成不点 L
 #: 的写法），它们只在关档生效 ⇒ 开档摘要不受影响。facts 键集未变（15 格）。
-PROMPT_VERSION = "p191"
+PROMPT_VERSION = "p192"
 
 
 

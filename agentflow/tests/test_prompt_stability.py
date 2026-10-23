@@ -477,6 +477,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p191", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p191（2026-10-24）：M 写明不能直呼 V（要签经 B，M→B→V 两跳）；L 补图论 import（SimpleGraph.Basic）与自检五步；G 技能里的 write_report 改成 land_report/compose_report。facts 键集仍 15 格"},
+        # p191 → p192（2026-10-24）：H 的示例路径改成登记过的根（out/paper/proofs/thm.tex）
+        {"version": "p192", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p192（2026-10-24）：H 的 policy 示例路径从 proofs/thm.tex 改成 out/paper/proofs/thm.tex（原来的写法不在任何登记过的根下，skills 路径扫描判据会红）。facts 键集仍 15 格"},
 )
 
 

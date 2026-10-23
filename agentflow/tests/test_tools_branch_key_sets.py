@@ -81,6 +81,10 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 已逐字声明那 12 个键，由 `test_tools_returns_declaration.py` 的
     # "声明必须是实跑键集的子集"钉住。
     "manuscript_tools.py": 1,
+    # 2026-10-24：这批新增的两处 —— cache_tools 的两个 ok(doc) 与 formal_tools 的三处 ok({...})，
+    # 数字来自盘上实测；它们都是"看不清的分支"（ok 里没有 await/return 那种显式键）。
+    "cache_tools.py": 2,
+    "formal_tools.py": 3,
 }
 
 #: 看得见的 `ok({...})` 调用点下界（判据不许真空：扫描器坏掉时必须先是红）。
