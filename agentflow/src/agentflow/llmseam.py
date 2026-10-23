@@ -694,14 +694,15 @@ class LlmSeam:
         if not call.ok:
             return None, call
         if face is not None and call.tool_call_list:
-            if len(call.tool_call_list) > 1:
-                # 本循环的纪律是"一步一件事"（`_shape_of` 同名判据在文本那条路上）。
-                # 多条原生调用不是错误数据，但它与"一步一件事"冲突 ⇒ 明确说清楚，
-                # 而不是默默只执行第一条（那会让模型以为其余几条也生效了）。
-                bad = SeamCall(**{**call.__dict__, "ok": False, "problem": "judge_bad_json",
-                                  "detail": (f"这一步给了 {len(call.tool_call_list)} 条工具调用；"
-                                             "本循环一步只做一件事，请只留一条")})
-                return None, bad
+            # D-35（方案 B）：一步给多条原生调用时只执行第一条，其余丢弃 ——
+            # 但丢弃必须留读数，所以这里不把 `tool_call_list` 摘掉：整份调用原样
+            # 随 `call` 回去，循环那侧据 `call.tool_call_list[1:]` 在 step 结果里
+            # 写一条 `warn`（点名被丢的那几条的 action 名）。
+            #
+            # 为什么不再把整步判成 `judge_bad_json`（改前那一版就是那样）：r34b 真机
+            # 147 步里有 10 步因为"给了 2 条工具调用"整步作废，而 token 早就计费了
+            # （有的步 `tokens_out` 到 6000），产出全丢。"多条"不是坏数据，是模型
+            # 多给了一条 —— 它不是"没按协议说话"，所以不该走坏 JSON 那一档。
             data, problem, detail = face.to_shape(call.tool_call_list[0])
             if data is None:
                 bad = SeamCall(**{**call.__dict__, "ok": False, "problem": problem,
@@ -1064,6 +1065,20 @@ class ToolFace:
         if why:
             payload.setdefault("why", why)
         return {target: payload}, "", ""
+
+    def action_name(self, call: Mapping[str, Any]) -> str:
+        """一条原生调用指向的动作名（广告名映回真名；映不回来就照抄广告名）。
+
+        只服务读数（D-35 方案 B）：一步给了多条调用、只执行第一条时，被丢的那几条
+        要能在 step 的读数里被点名 —— 而模型给的是广告名（`fs_read`），盘上该记的是
+        真名（`fs.read`），否则"丢了哪个动作"这件事核对不上工具面。
+        它不解析参数、不判合法性：那件事只有 `to_shape` 一处做。
+        """
+        raw = str(call.get("name") or "")
+        target = self.names.get(raw)
+        if target is None:
+            return raw or "(未命名)"
+        return target.split(":", 1)[1] if target.startswith("tool:") else target
 
 
 def build_tool_face(role: str, registry: Any) -> ToolFace:

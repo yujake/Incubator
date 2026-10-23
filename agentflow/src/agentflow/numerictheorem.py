@@ -258,6 +258,58 @@ def citation_present(segment: Any, *, program: Any, evidence_id: Any) -> bool:
     return bool(eid) and eid in text
 
 
+def evidence_index_problems(*, row: Mapping[str, Any] | None,
+                            workspace_root: str | Path | None) -> list[str]:
+    """数值实验定理那一行的索引四格（D-34）：空清单 = 目录行指得到盘上那一份正文。
+
+    业主 2026-10-23 夜的模型：「D 侧报告的多半是新成果，B 基本都是从 D 的报告看到定理
+    （命题），经索引看 F 侧证明或 E 侧报告，并核实 V 签」。于是这一行除了"三块证明栏"
+    （程序 / ②③ / 落点）之外，还要能当目录用：
+
+    | 格 | 键 | 这一行该填什么 |
+    |---|---|---|
+    | 证据是哪一档 | `evidence_kind` | 数值实验定理这一行是 `report`（E 的报告） |
+    | 正文在哪 | `evidence_path` | E 那份读数的相对仓库路径（`out/experiments/<号>/exhaustion.md`） |
+    | 正文的指纹 | `evidence_sha256` | 那份文件的字节 sha256 |
+    | V 的签 | `v_signature` | `{"verdict": "成立", "sha256": <被签那一份的 sha256>}` |
+
+    判据本体只有一份：`numericproof.resolve_index`（四格齐不齐、路径取不取到对象、
+    两份 sha 对不对得上）。这里只多做两件本模块特有的事：
+
+    1. `evidence_path` 必须就是 `exhaustion_note` 那一处（一块读数只有一个落点 ——
+       两处各写一个地址，读的人不知道该信哪个）；
+    2. 把问题翻成"这一组的那几档"（调用方按现有五档拦门接线，不新造词）。
+
+    三态：没给工作区根 ⇒ `numericproof.resolve_index` 报"没查成" ⇒ 这里返回非空
+    （没查成不许折成通过）。
+    """
+    row_map = dict(row or {}) if isinstance(row, Mapping) else {}
+    entry = {
+        NP.INDEX_KIND_FIELD: row_map.get(NP.INDEX_KIND_FIELD),
+        NP.INDEX_PATH_FIELD: row_map.get(NP.INDEX_PATH_FIELD),
+        NP.INDEX_SHA_FIELD: row_map.get(NP.INDEX_SHA_FIELD),
+        NP.INDEX_SIGN_FIELD: row_map.get(NP.INDEX_SIGN_FIELD),
+    }
+    missing = NP.index_problems(entry)
+    if missing:
+        return [f"`{EVIDENCE_FIELD}` / `{NOTE_FIELD}` 那一行还缺索引 —— " + "；".join(missing) +
+                "。业主 2026-10-23 夜：D 的报告是目录（新成果＋索引），B 顺着索引看 F 侧证明"
+                "或 E 侧报告、并核实 V 签 —— 目录里没有这一条，B 就取不到正文，"
+                "这一条也就登记不进定理证明库"]
+    resolved = NP.resolve_index(workspace_root, entry)
+    out: list[str] = []
+    if resolved["problems"]:
+        out.extend(str(p) for p in resolved["problems"])
+        return out
+    note = str(row_map.get(NOTE_FIELD) or "").strip()
+    if note and NP.norm_rel(note) != NP.norm_rel(entry[NP.INDEX_PATH_FIELD]):
+        out.append(
+            f"`{NP.INDEX_PATH_FIELD}` 与 `{NOTE_FIELD}` 指的不是同一处："
+            f"索引写 {entry[NP.INDEX_PATH_FIELD]!r}，两块读数的落点写 {note!r} —— "
+            "一份读数只有一处落点，两个地址等于把「该信哪一份」留给读的人猜")
+    return out
+
+
 def _resolve(workspace_root: str | Path | None, raw: str) -> tuple[Path | None, str]:
     """把一条相对仓库根的路径解析成绝对路径（越界一律 None + 理由）。
 

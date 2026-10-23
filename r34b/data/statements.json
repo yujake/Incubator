@@ -1,0 +1,58 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "stmt_id": "000000",
+      "origin": "own_result",
+      "kind": "conjecture",
+      "label": "Ramsey R(3,4) = 9",
+      "statement_text": "R(3,4) = 9：每个 K_9 的红/蓝边二着色都含红色 K_3 或蓝色 K_4，且存在 K_8 的二着色两者皆无。",
+      "statement_full": "对完全图 K_n 的边做红/蓝二着色。记 R(3,4) 为最小整数 N，使得每一个 K_N 的红/蓝边二着色都\n包含一个红色 K_3（红色三角形）或一个蓝色 K_4（蓝色完全四边形）。则 N = 9。\n\n（假设：着色是任意的、无任何附加限制；K_n 是简单完全图；\"红色 K_3\" 指三个顶点两两边皆红。）",
+      "proof_text": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。",
+      "source_lit_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote_verified": false,
+      "quote_mode": "",
+      "quote_reason": "还没查成逐字回验：这是 origin=own_result 的自产证明，逐字来源是盘上文件 out/review/PROOF-R34.md（fs.read 读到，sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d），statement_full 与 proof_text 均按该文件逐字抄录、未改写未压缩；但没有对任何 literature 行做逐字命中比对，原因是本工作区 6 篇文献全部没有本地全文（000000/000002/000003/000005 = no_fulltext_this_time，000001/000004 = file_missing），无法提供可回验的引文区间，故 quote_verified=false 表示「未核成」而非「核不上」。对穷举核验的指向：exp:000000（claim_key=r34-ramsey-exactly-9，见该文件「机器可复核的部分」一节）；derived_from 一栏被框架限定为 statements 的 6 位 id，承载不了 exp: 引用，故写在这里。",
+      "quote_span": "",
+      "quote_call_sha256": "",
+      "evidence_kind": "cross_check",
+      "bits": {
+        "numeric": "pending",
+        "proof": true,
+        "reviewed": false,
+        "formal": "pending",
+        "audited": false,
+        "origin": "own_result",
+        "evidence": {
+          "numeric": {},
+          "numeric_reason": "",
+          "proof_process": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。",
+          "proof_source": "own",
+          "reviewed_by": {},
+          "formal": {},
+          "formal_reason": "",
+          "audited_by": {}
+        },
+        "voided_by": {},
+        "grade": "conjecture",
+        "audited_badge": false
+      },
+      "status": "active",
+      "derived_from": [],
+      "aliases": [],
+      "doc_id": null,
+      "line_range": {
+        "start": 3,
+        "end": 47,
+        "label": "out/review/PROOF-R34.md 第 3-47 行：第一节命题原文（含全部假设）+ 第二节证明全文"
+      },
+      "created_at": "2026-10-23T21:26:09+08:00",
+      "created_by": "secretary-B"
+    }
+  ]
+}

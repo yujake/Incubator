@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "kind": "cache_active",
+  "sid": "cube",
+  "at": "2026-10-23T13:01:36Z",
+  "lean_enabled": true,
+  "tier": "on",
+  "prompt_version": "p189",
+  "pid": 28828,
+  "workspace_root": "D:\\Incubator\\cube-ws"
+}

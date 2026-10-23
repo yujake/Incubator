@@ -2227,7 +2227,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_skills.py` 的 G 技能正文同一句（它只进 `skills/` 落盘文件、不进提示词）。
 #: 关档另加两条 `specs/e.py::NO_LEAN_REPLACEMENTS`（formal 那行与那句在关档改成不点 L
 #: 的写法），它们只在关档生效 ⇒ 开档摘要不受影响。facts 键集未变（15 格）。
-PROMPT_VERSION = "p189"
+PROMPT_VERSION = "p190"
 
 
 
@@ -3986,7 +3986,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
 
 
 
-    ("E", "敢创新"): "构造反例、设计新实验都算创新；形式化那一档的凭据只认检查器真的说过的话（形式化那一岗是 L）。",
+    ("E", "敢创新"): "构造反例、设计新实验都算创新；一条穷举证明的凭据只认那三件套（搜索空间 / 穷尽的判据 / 边界处理）与 V 的签字。",
 
 
 

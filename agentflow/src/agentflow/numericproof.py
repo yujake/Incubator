@@ -652,6 +652,240 @@ def find_exhaustion_record(experiments: Sequence[Mapping[str, Any]],
     return None
 
 
+# ---------------------------------------------------------------- 索引（D 的报告 = 目录）
+
+#: D 的报告是目录（业主 2026-10-23 夜：「D 侧报告的多半是新成果，B 基本都是从 D 的报告
+#: 看到定理（命题），经索引看 F 侧证明或 E 侧报告，并核实 V 签」）。目录那一行就是一条索引，
+#: 它必须说清四件事（缺任何一件，读的人就不知道该去取哪一份对象）：
+#:
+#: | 格 | 键 | 口径 |
+#: |---|---|---|
+#: | 证据是哪一档 | :data:`INDEX_KIND_FIELD` | :data:`INDEX_KIND_PROOF`（F 的证明）/ :data:`INDEX_KIND_REPORT`（E 的报告） |
+#: | 对象的相对路径 | :data:`INDEX_PATH_FIELD` | 相对仓库根（`out/experiments/000000/exhaustion.md` / `proofs/000004-p1.md`） |
+#: | 对象的指纹 | :data:`INDEX_SHA_FIELD` | 那份对象的字节 sha256（不是归一化之后的文本） |
+#: | V 的签 | :data:`INDEX_SIGN_FIELD` | `{"verdict": "成立", "sha256": <被签那一份的 sha256>}` |
+#:
+#: 四格只有这一份口径：`papermapping` 的对应表行、B 的入库闸（:func:`filing_problems`）、
+#: 以及 D 的提示词都从这里取名字，不各写一套。
+INDEX_KIND_FIELD = "evidence_kind"
+INDEX_PATH_FIELD = "evidence_path"
+INDEX_SHA_FIELD = "evidence_sha256"
+INDEX_SIGN_FIELD = "v_signature"
+INDEX_FIELDS: tuple[str, ...] = (INDEX_KIND_FIELD, INDEX_PATH_FIELD, INDEX_SHA_FIELD,
+                                 INDEX_SIGN_FIELD)
+#: 索引指的那份对象是"谁的正文"：F 侧的证明 / E 侧的报告（业主那两句话的落点）。
+INDEX_KIND_PROOF = "proof"
+INDEX_KIND_REPORT = "report"
+INDEX_KINDS: tuple[str, ...] = (INDEX_KIND_PROOF, INDEX_KIND_REPORT)
+#: `v_signature` 那一格里的两个键（verdict + 被签那一份的 sha）。
+SIGN_VERDICT_FIELD = "verdict"
+SIGN_SHA_FIELD = "sha256"
+
+
+def object_sha256(path: Any) -> str:
+    """一份对象字节的 sha256（算在字节上，不算在归一化之后的文本上）。
+
+    与 `verifications.proof_sha` 的分工：那个算的是"一段证明正文"（字符串），这个算的是
+    "盘上那一份文件"。索引里的 `evidence_sha256` 与 `v_signature` 的 `sha256` 都用这一份口径，
+    否则"签名时那一份"与"现在盘上那一份"会因为换行形态不同而永远对不上。
+    """
+    import hashlib
+    from pathlib import Path
+
+    return hashlib.sha256(Path(str(path)).read_bytes()).hexdigest()
+
+
+def index_entry_of(row: Mapping[str, Any] | None) -> dict[str, Any]:
+    """从一行（对应表那一行 / D 报告的目录行）里取出索引四格（归一成同一形状）。
+
+    缺的格一律空串（`:func:`index_problems` 据此点名缺哪一格）；`v_signature` 不是对象时
+    原样放进 `raw_sign`，由判据说它读不懂 —— 不静默当成"签过了"。
+    """
+    row = _as_mapping(row)
+    sign = row.get(INDEX_SIGN_FIELD)
+    sig = _as_mapping(sign)
+    return {
+        "kind": str(row.get(INDEX_KIND_FIELD) or "").strip(),
+        "path": norm_rel(row.get(INDEX_PATH_FIELD)),
+        "sha256": str(row.get(INDEX_SHA_FIELD) or "").strip().lower(),
+        "sign": sig,
+        "verdict": str(sig.get(SIGN_VERDICT_FIELD) or "").strip(),
+        "sign_sha256": str(sig.get(SIGN_SHA_FIELD) or "").strip().lower(),
+        "raw_sign": sign,
+    }
+
+
+def index_problems(entry: Mapping[str, Any] | None) -> list[str]:
+    """索引四格齐不齐（空清单 = 四格都在、形状也认得出；判据不碰盘）。
+
+    逐格点名缺哪一件：读的人照着那句话去补那一格，而不是"索引不对"。
+    """
+    got = index_entry_of(entry)
+    problems: list[str] = []
+    if not got["kind"]:
+        problems.append(
+            f"缺 {INDEX_KIND_FIELD}：这份对象是 F 的证明（{INDEX_KIND_PROOF}）"
+            f"还是 E 的报告（{INDEX_KIND_REPORT}）没写")
+    elif got["kind"] not in INDEX_KINDS:
+        problems.append(
+            f"{INDEX_KIND_FIELD} = {got['kind']!r} 不在受控词表 {list(INDEX_KINDS)} 里")
+    if not got["path"]:
+        problems.append(
+            f"缺 {INDEX_PATH_FIELD}：对象在仓库里的相对路径没写，读的人不知道该去取哪一份")
+    if not got["sha256"]:
+        problems.append(
+            f"缺 {INDEX_SHA_FIELD}：那份对象的字节 sha256 没写（没有指纹就没法核"
+            "「取到的是不是签名时那一份」）")
+    if not isinstance(got["raw_sign"], Mapping) or not got["raw_sign"]:
+        problems.append(
+            f"缺 {INDEX_SIGN_FIELD}：V 的签没写（要 `{{\"{SIGN_VERDICT_FIELD}\": "
+            f"\"成立\", \"{SIGN_SHA_FIELD}\": <被签那一份的 sha256>}}`）")
+    else:
+        if not got["verdict"]:
+            problems.append(f"{INDEX_SIGN_FIELD} 里没有 {SIGN_VERDICT_FIELD}（V 的结论）")
+        if not got["sign_sha256"]:
+            problems.append(
+                f"{INDEX_SIGN_FIELD} 里没有 {SIGN_SHA_FIELD}（签的是哪一份的 sha256）")
+    return problems
+
+
+def resolve_index(root: Any, entry: Mapping[str, Any] | None) -> dict[str, Any]:
+    """顺索引取对象：四格齐 ⇒ 读盘 ⇒ 算 sha256 ⇒ 与索引和签里那两份 sha 各比一次。
+
+    返回 `{"checked","found","path","sha256","verdict","problems","why"}`：
+
+    - `checked=False` ⇒ 这一格没查成（没给工作区根 / 路径解析不了 / 读不出来），不是"没有对象"；
+    - `checked=True, found=False` ⇒ 查过了：索引指不到对象，或对象与指纹对不上；
+    - `checked=True, found=True` ⇒ `sha256` 是盘上那一份的字节 sha256，且它同时等于
+      `evidence_sha256` 与 `v_signature.sha256`（判据 ④）。
+
+    这是"顺索引取对象"的唯一实现：B 的入库闸与对应表的五档拦门都走它（打桩它，
+    两条负控必须同时红 —— 判据 ⑥）。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "path": "", "sha256": "",
+                           "verdict": "", "problems": [], "why": ""}
+    got = index_entry_of(entry)
+    if entry is None or not _as_mapping(entry):
+        out.update(checked=True, problems=[
+            "D 的报告里没有这一条命题的索引行（目录里没有 E 那本 / F 那本）⇒ 顺索引取不到对象"])
+        out["why"] = out["problems"][0]
+        return out
+    missing = index_problems(entry)
+    if missing:
+        out.update(checked=True, problems=["索引四格不齐：" + "；".join(missing)])
+        out["why"] = out["problems"][0]
+        return out
+    out["checked"] = True
+    out["path"] = got["path"]
+    out["verdict"] = got["verdict"]
+    if root is None or not str(root).strip():
+        out["problems"] = [
+            f"没给工作区根 ⇒ 索引里那份对象 {got['path']!r} 无从取（这一格没查成，"
+            "不是「对象不在」）"]
+        out["why"] = out["problems"][0]
+        return out
+    target, why = _resolve_under(root, got["path"])
+    if target is None:
+        out["problems"] = [f"索引里的 {INDEX_PATH_FIELD} 不合口径：{why}"]
+        out["why"] = out["problems"][0]
+        return out
+    if not target.is_file():
+        out["problems"] = [
+            f"索引指不到对象：{got['path']} 不在盘上（目录说有这一本，盘上没有）⇒ "
+            "顺索引取不到，这一条不许当 proof"]
+        out["why"] = out["problems"][0]
+        return out
+    try:
+        got_sha = object_sha256(target)
+    except OSError as exc:
+        out["problems"] = [f"索引指的那份对象读不出来：{got['path']}"
+                           f"（{type(exc).__name__}: {exc}）"]
+        out["why"] = out["problems"][0]
+        return out
+    out["sha256"] = got_sha
+    if got_sha != got["sha256"]:
+        out["problems"] = [
+            f"索引里的 {INDEX_SHA_FIELD} 与盘上那份对象不符：索引记 "
+            f"{got['sha256'][:12]}…，盘上算得 {got_sha[:12]}… ⇒ 对象被换过 / 索引写的是别的版本"]
+        out["why"] = out["problems"][0]
+        return out
+    if got["sign_sha256"] != got_sha:
+        out["problems"] = [
+            f"V 的签与对象 sha 不符：{INDEX_SIGN_FIELD} 签的是 "
+            f"{got['sign_sha256'][:12]}…，而盘上那份对象是 {got_sha[:12]}… ⇒ "
+            "这一签盖的不是这一份（判据 ④）"]
+        out["why"] = out["problems"][0]
+        return out
+    if got["verdict"] != THIRD_PARTY_VERDICT_OK:
+        out["problems"] = [
+            f"索引里 V 的结论是 {got['verdict']!r}（要 {THIRD_PARTY_VERDICT_OK!r}）⇒ "
+            "这一份没有被签住"]
+        out["why"] = out["problems"][0]
+        return out
+    out["found"] = True
+    out["why"] = (f"顺索引取到 {got['kind']} 那一份对象 {got['path']}"
+                  f"（sha256 {got_sha[:12]}…，与 {INDEX_SHA_FIELD} 和 "
+                  f"{INDEX_SIGN_FIELD} 两处都相符）")
+    return out
+
+
+def _resolve_under(root: Any, rel: Any) -> tuple[Any, str]:
+    """把一条相对仓库根的路径解析成绝对路径（越界 / 绝对路径 ⇒ `(None, 理由)`）。"""
+    from pathlib import Path
+
+    text = norm_rel(rel)
+    if not text:
+        return None, "路径是空的"
+    candidate = Path(text)
+    if candidate.is_absolute() or ":" in text:
+        return None, "必须是相对仓库根的路径（收到绝对路径）"
+    if ".." in text.split("/"):
+        return None, "不许用 `..` 跳出仓库根"
+    base = Path(root).resolve()
+    target = (base / candidate).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        return None, "解析之后跑到仓库根外面去了"
+    return target, ""
+
+
+def find_index_entry(rows: Sequence[Mapping[str, Any]], *, program: Any = "",
+                     proof_text: Any = "") -> dict[str, Any] | None:
+    """在 D 报告的目录行里挑出"这一条命题"那一行（挑不到 ⇒ `None`，不猜一行）。
+
+    两条认法，各对应业主说的两本正文：
+
+    - 证明栏是程序（E 侧）：目录那一行的 `file` 就是那份程序 ⇒ 按路径认；
+    - 正文是一份证明（F 侧）：手上这一份的内容就是对象 ⇒ 按内容 sha 认
+      （目录里 `evidence_sha256` 等于这一份正文的 sha256）。
+
+    先认 F 那一档（内容相同即同一份，不看顺序），再认 E 那一档（按程序路径）。
+    """
+    want_prog = norm_rel(program)
+    text = str(proof_text or "")
+    wants = set()
+    if text:
+        import hashlib
+        wants.add(hashlib.sha256(text.encode("utf-8")).hexdigest())
+        relaxed = norm_text(text)
+        if relaxed != text:
+            wants.add(hashlib.sha256(relaxed.encode("utf-8")).hexdigest())
+    items = [dict(r) for r in (rows or ()) if isinstance(r, Mapping)]
+    if wants:
+        for row in items:
+            got = index_entry_of(row)
+            if got["sha256"] and got["sha256"] in wants:
+                return row
+    if want_prog:
+        for row in items:
+            got = index_entry_of(row)
+            if got["kind"] in (INDEX_KIND_REPORT, "") \
+                    and norm_rel(row.get("file")) == want_prog:
+                return row
+    return None
+
+
 # ---------------------------------------------------------------- 第三方签字（V 的会审）
 
 #: 第三方签字那一档的"签住了"取值（词表真身是 `verifications.VERDICTS` 的最后一档）。
@@ -659,7 +893,8 @@ THIRD_PARTY_VERDICT_OK = "成立"
 
 
 def latest_third_party_sign(root: Any, *, proof_text: Any = "",
-                            statement_id: str = "") -> dict[str, Any]:
+                            statement_id: str = "",
+                            object_sha256: str = "") -> dict[str, Any]:
     """读 `verifications/<命题号>.jsonl`，取「盖住这一份证明栏的最近一签」。
 
     为什么需要这一格（业主 2026-10-23 晚「签字仍然由 V 签」的落地）：改前 B 的入库闸读的是
@@ -682,19 +917,28 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
     借光（业主 2026-10-23 晚的坑：`kind=theorem` / `evidence_kind=proof` /
     `bits.reviewed=False` 正是"别人的签顶了这一行"的形态）。
 
-    返回 `{"checked","found","verdict","proof_sha256","ledger","why"}`：
+    返回 `{"checked","found","verdict","proof_sha256","ledger","why","route"}`：
 
-    - `checked=False` ⇒ 「没查成」（没给工作区根 / 没给命题号 / 台账读不出来），不是"没有签"；
+    - `checked=False` ⇒ 「没查成」（没给工作区根 / 台账读不出来），不是"没有签"；
     - `checked=True, found=False` ⇒ 查过了：台账不在盘上，或最近一签盖的不是这一份正文；
     - `checked=True, found=True` ⇒ `verdict` / `proof_sha256` / `ledger` 是那一签的读数。
+
+    ## D-34：找签改成"按对象内容 sha"（于是顺序不再重要）
+
+    改前只按命题号读。可命题号是"登记之后"才有的：r34b 的真机现场是 `statements` 0 行，
+    V 审完只能报 `statement_missing`，那一签没有落点、结论丢了。现在多一路
+    :data:`~verifications.PENDING_DIR_NAME`（`verifications/pending/<sha>.jsonl`）：
+    命题还没在册时 V 的那一签落在那里，按对象内容的 sha 认领 —— 于是"先签后登记"
+    与"先登记后签"是同一件事。
+
+    两路的次序：先读这一条命题自己的台账（若给了命题号），读不到"盖住这一份"的签时
+    再读 pending 那一份。两路都按"最近一签说了算"：pending 里最后一次审校（成立/有毛病）
+    就是结论。跨命题的台账不扫 —— `object_sha256` 相同的那一份对象只有一把钥匙，
+    而"别的命题的签给这一行借光"是另一件事（`verifications` 的那条纪律不动）。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "verdict": "",
-                           "proof_sha256": "", "ledger": "", "why": ""}
-    sid = str(statement_id or "").strip()
-    if not sid:
-        out["why"] = ("没给命题号 ⇒ 不知道读哪一份台账（V 只审在册的命题；"
-                      "这一格没查成，不是「没有签」）")
-        return out
+                           "proof_sha256": "", "ledger": "", "why": "",
+                           "route": "", "object_sha256": ""}
     if root is None or not str(root).strip():
         out["why"] = ("没给工作区根 ⇒ `verifications/` 无从读起（这一格没查成，"
                       "不是「没有签」）")
@@ -705,66 +949,113 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
         out["why"] = f"verifications 模块读不到（{type(exc).__name__}: {exc}）"
         return out
     text = str(proof_text or "")
-    if not text.strip():
-        out["why"] = "证明栏是空的 ⇒ 没有可签的对象"
+    want_object = str(object_sha256 or "").strip().lower()
+    out["object_sha256"] = want_object
+    if not text.strip() and not want_object:
+        out["why"] = "证明栏是空的、也没给对象 sha ⇒ 没有可签的对象"
         return out
     # 两种写法都认：原样那一份，以及去掉行尾空白/首尾空行之后的同一份（签的人可能
     # 贴的是归一化过的那一份）。两个 sha 之外的一律不算 —— 宽松会让改稿后的旧签生效。
-    want = {_VR.proof_sha(text)}
-    relaxed = norm_text(text)
-    if relaxed != text:
-        want.add(_VR.proof_sha(relaxed))
-    path = Path(root) / _VR.VERIFICATIONS_DIR / f"{sid}.jsonl"
-    if not path.is_file():
-        out.update(checked=True,
-                   why=(f"`{_VR.VERIFICATIONS_DIR}/{sid}.jsonl` 不在盘上 ⇒ "
-                        "这一条命题一次审校都没有（V 没审过它）"))
-        return out
-    try:
-        sign = None
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if not isinstance(row, dict):
-                continue
-            # 最近一签 = 最后一行；这里只留下"最近"这一份的读数（不做"任一成立即算"）。
-            sign = (lineno, row)
-    except Exception as exc:  # noqa: BLE001 —— 读不动/坏行 ⇒ 没查成
-        out["why"] = (f"台账 {sid}.jsonl 读不出来（{type(exc).__name__}: {exc}）⇒ "
-                      "这一格没查成，不许当成签过、也不许当成没签过")
-        return out
-    out["checked"] = True
-    if sign is None:
-        out["why"] = f"`{_VR.VERIFICATIONS_DIR}/{sid}.jsonl` 是空台账（一行都没有）"
-        return out
-    lineno, last = sign
-    out.update(found=str(last.get("proof_sha256") or "") in want,
-               verdict=str(last.get("verdict") or ""),
-               proof_sha256=str(last.get("proof_sha256") or ""),
-               ledger=f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#"
-                      f"{last.get('verification_id') or f'line{lineno}'}")
-    if out["found"]:
-        out["why"] = (f"{out['ledger']} 是最近一签，verdict={out['verdict']!r}、"
-                      "`proof_sha256` 与这一份证明栏相符")
+    want: set[str] = set()
+    if text.strip():
+        want = {_VR.proof_sha(text)}
+        relaxed = norm_text(text)
+        if relaxed != text:
+            want.add(_VR.proof_sha(relaxed))
+    # ---- 第一路：这一条命题自己的台账（原路，一个字都没改）
+    sid = str(statement_id or "").strip()
+    statement_why = ""
+    if sid:
+        path = Path(root) / _VR.VERIFICATIONS_DIR / f"{sid}.jsonl"
+        if not path.is_file():
+            statement_why = (f"`{_VR.VERIFICATIONS_DIR}/{sid}.jsonl` 不在盘上 ⇒ "
+                             "这一条命题一次审校都没有（V 没审过它）")
+        else:
+            try:
+                sign = None
+                for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                    if not line.strip():
+                        continue
+                    row = json.loads(line)
+                    if not isinstance(row, dict):
+                        continue
+                    # 最近一签 = 最后一行；这里只留下"最近"这一份的读数（不做"任一成立即算"）。
+                    sign = (lineno, row)
+            except Exception as exc:  # noqa: BLE001 —— 读不动/坏行 ⇒ 没查成
+                out["why"] = (f"台账 {sid}.jsonl 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                              "这一格没查成，不许当成签过、也不许当成没签过")
+                return out
+            out["checked"] = True
+            if sign is None:
+                statement_why = f"`{_VR.VERIFICATIONS_DIR}/{sid}.jsonl` 是空台账（一行都没有）"
+            else:
+                lineno, last = sign
+                matched = (str(last.get("proof_sha256") or "") in want
+                           or (want_object
+                               and str(last.get("object_sha256") or "").strip().lower()
+                               == want_object))
+                out.update(found=bool(matched),
+                           verdict=str(last.get("verdict") or ""),
+                           proof_sha256=str(last.get("proof_sha256") or ""),
+                           ledger=f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#"
+                                  f"{last.get('verification_id') or f'line{lineno}'}",
+                           route="statement")
+                if out["found"]:
+                    out["why"] = (f"{out['ledger']} 是最近一签，verdict={out['verdict']!r}、"
+                                  "指纹与这一份相符")
+                    return out
+                statement_why = (f"{out['ledger']} 是最近一签（verdict={out['verdict']!r}），"
+                                 "而它的 `proof_sha256` 与这一份证明栏对不上 —— "
+                                 "签的是改稿前的旧版或别的正文")
+                out.update(found=False, verdict="", proof_sha256="", ledger="", route="")
     else:
-        out["why"] = (f"{out['ledger']} 是最近一签（verdict={out['verdict']!r}），"
-                      "而它的 `proof_sha256` 与这一份证明栏对不上 —— 签的是改稿前的旧版"
-                      "或别的正文")
+        statement_why = ("没给命题号 ⇒ 这一条还没在册（V 只审在册的命题）；"
+                         "按对象 sha 去 pending 那边认领")
+    # ---- 第二路：命题还没在册时 V 落的那一签（按对象内容的 sha 认领）
+    out["checked"] = True
+    try:
+        pending = _VR.pending_sign(root, object_sha256=want_object,
+                                   proof_shas=tuple(sorted(want)))
+    except Exception as exc:  # noqa: BLE001 —— 读不动 pending 台账 ⇒ 没查成
+        out["why"] = (f"`{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/` 读不出来"
+                      f"（{type(exc).__name__}: {exc}）⇒ 这一格没查成")
+        return out
+    if pending.get("found"):
+        out.update(found=True, verdict=str(pending.get("verdict") or ""),
+                   proof_sha256=str(pending.get("proof_sha256") or ""),
+                   ledger=str(pending.get("ledger") or ""), route="pending")
+        out["why"] = (f"{out['ledger']} 是 pending 那一路的最近一签，"
+                      f"verdict={out['verdict']!r}、按对象 sha 认领到这一份"
+                      "（命题登记之前审的那一签不丢）")
+        return out
+    out["found"] = False
+    out["why"] = statement_why or (f"`{_VR.VERIFICATIONS_DIR}/"
+                                   f"{_VR.PENDING_DIR_NAME}/` 里也没有盖住这一份的签")
     return out
 
 
 def third_party_problems(proof_text: Any, *, root: Any = None,
-                         statement_id: str = "") -> list[str]:
+                         statement_id: str = "",
+                         object_sha256: str = "") -> list[str]:
     """这一份证明栏有没有第三方（V）的会审签名 —— 空清单 = 有，且最近一签是「成立」。
 
     三态（业主 2026-10-23 晚的口径，与 `verifications` 的三态纪律同向）：
-    - 没查成（没给根 / 没给命题号 / 台账读不出来）⇒ 拒（不许折成"通过"）；
+    - 没查成（没给根 / 台账读不出来）⇒ 拒（不许折成"通过"）；
     - 没有签（台账不在盘上）⇒ 拒，点名"缺 V 的会审签名"；
     - 最近一签不是「成立」⇒ 拒，把那一签的 `verdict` 与台账行写进拒信；
     - 最近一签「成立」且 sha 对得上 ⇒ 空清单（这一条才够 proof）。
+
+    `object_sha256` 是 D 报告的索引指的那份对象的字节 sha256（D-34）：给了它，
+    "签盖的是不是这一份"这条判据就按对象内容回答 —— 于是命题登记之前审的那一签
+    也能被认领（台账在 `verifications/pending/`）。
     """
-    sig = latest_third_party_sign(root, proof_text=proof_text, statement_id=statement_id)
+    # 调用形状与老版本逐字兼容：没有对象 sha 时只传原来那两个关键字 —— 打桩
+    # `latest_third_party_sign` 的既有反真空用例（`test_b_third_party_signature_gate.py`
+    # 的第 ⑤ 条）因此不用改，它打的那个桩仍然是"读台账"那一路的唯一入口。
+    kwargs: dict[str, Any] = {"proof_text": proof_text, "statement_id": statement_id}
+    if str(object_sha256 or "").strip():
+        kwargs["object_sha256"] = object_sha256
+    sig = latest_third_party_sign(root, **kwargs)
     if not sig["checked"]:
         return [f"缺 V 的会审签名：这一格没查成 —— {sig['why']}。"
                 "没查成不是「签过」，所以这一条拿不到 proof"]
@@ -816,7 +1107,8 @@ def statement_id_for_body(statements: Sequence[Mapping[str, Any]],
 def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
                     experiments: Sequence[Mapping[str, Any]] = (),
                     root: Any = None, statements: Sequence[Mapping[str, Any]] = (),
-                    statement_full: Any = "") -> list[str]:
+                    statement_full: Any = "",
+                    index_rows: Sequence[Mapping[str, Any]] = ()) -> list[str]:
     """B 的入库闸：`proof` 这一档不许 B 自签，也不许 B 替 E 写 ②③。
 
     只拦一种情形：`origin="own_result"` 且 `evidence_kind="proof"` ——
@@ -837,6 +1129,22 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
       这一格没查成 ⇒ 也拒（三态纪律：没查成不许折成通过）；
     - 都没有 ⇒ 最多到 :data:`SUPPORTED_ONLY_KIND`。
 
+    ## D-34：多一路"顺索引取对象"（`index_rows` 是 D 报告里的目录行）
+
+    业主 2026-10-23 夜的模型：D 的报告＝目录（新成果＋索引），F 的证明 / E 的报告＝正文，
+    V 的签＝盖章，B＝读者。于是 B 的入库有两条正路，走哪一条由证明栏的形状定：
+
+    - 证明栏是程序（E 侧的数值证据）：先过原来那几档（三段式、E 的 ②③、落盘核查），
+      再过第三方签字；`index_rows` 给得出这一条的索引行时，那一行也是要核的对象
+      （:func:`resolve_index` 取到对象、四格与两份 sha 都对得上）—— 索引指不到对象 ⇒ 拒；
+    - 证明栏不是程序（F 侧的自然语言证明）：以前在 ⑥ 那一档被一律拒（"证明栏不够格拿
+      proof"）。现在它由索引进来：目录里那一行说这是 F 的证明（`evidence_kind="proof"`）、
+      对象在盘上、sha 与 V 的签相符 ⇒ 允许登记成 proof。没有索引行 ⇒ 仍是 ⑥ 的那条拒信
+      （只是补一句"要么给三段式程序证明栏，要么让 D 的报告索引指到这份证明"）。
+
+    索引这一路是可打桩的（判据 ⑥ 的反真空）：`resolve_index` 恒成功 ⇒ 上面那两条负控
+    （对象 sha 不符 / 索引指不到对象）必须当场放行。
+
     为什么 `external_lit` 不在这条闸的射程内：文献里的定理本来就带着它的证明，
     那一档的凭据是逐字引文（`quote_verified` / V 的逐行走查），不是 E 的一次实验。
     """
@@ -845,6 +1153,34 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
         return []
     text = str(proof_text or "").strip()
     parsed = parse_proof_column(text)
+    program = proof_column_script(text)
+    # ---- 顺索引取对象（D 报告那一行）：E 侧与 F 侧共用这一份判据与这一条取法。
+    entry = find_index_entry(index_rows, program=program, proof_text=text) if index_rows else None
+    indexed = resolve_index(root, entry) if entry is not None else None
+    if indexed is not None and indexed["problems"]:
+        return [
+            "顺索引取对象没成：" + "；".join(indexed["problems"]) +
+            "。业主 2026-10-23 夜的模型：D 的报告是目录，正文是 F 的证明或 E 的报告，"
+            "V 的签是盖章 —— 目录那一行的四格（evidence_kind / evidence_path / "
+            "evidence_sha256 / v_signature）必须指得到盘上那一份、且 V 签的就是它"
+        ]
+    want_object = str(indexed["sha256"]) if indexed is not None else ""
+    if not program:
+        # F 侧：正文不是三段式程序 ⇒ 索引是它进 proof 的唯一正路（判据 ③）。
+        if indexed is None:
+            return [
+                "这一条的证明栏不够格拿 proof（它不是数值证据的三段式，"
+                "而 D 的报告里也没有指向它那份证明的索引行）" +
+                ("；" + "；".join(parsed["problems"]) if parsed["problems"] else "") +
+                "。F 侧的证明要 proof：让 D 的报告（论文对应表）为它写一行索引 —— "
+                "evidence_kind=\"proof\"、evidence_path（那份证明在仓库里的相对路径）、"
+                "evidence_sha256（它的字节 sha256）、v_signature（verdict + 被签那一份的 sha）；"
+                "索引指得到、且 V 的签盖的就是那一份，这一条才登记成 proof。"
+                f"补不齐就最多是 {SUPPORTED_ONLY_KIND}（{SUPPORTED_ONLY_LABEL}）"
+            ]
+        sid = statement_id_for_body(statements, statement_full)
+        return third_party_problems(text, root=root, statement_id=sid,
+                                    object_sha256=want_object)
     if parsed["problems"]:
         # ⑥：只有程序路径（或只有其中一段）⇒ 不许 proof，且点名缺哪一块。
         return [
@@ -909,7 +1245,7 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
     # `proof_sha256` 要与这一份证明栏对得上（判据本体 `latest_third_party_sign` /
     # `third_party_problems`，读法与 `agent_c.proof_chain._verified_ok` 同一口径）。
     sid = statement_id_for_body(statements, statement_full)
-    if not sid:
+    if not sid and not want_object:
         return [
             "缺 V 的会审签名：命题台账里没有与这一条同文的在册命题 ⇒ V 没有可审的对象"
             "（它只审在册的命题，`verify_proof` 对不在册的命题直接报 `statement_missing`）。"
@@ -921,7 +1257,8 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
             "kind 改回定理级。补不齐就最多是 "
             f"{SUPPORTED_ONLY_KIND}（{SUPPORTED_ONLY_LABEL}）"
         ]
-    return third_party_problems(text, root=root, statement_id=sid)
+    return third_party_problems(text, root=root, statement_id=sid,
+                                object_sha256=want_object)
 
 
 def verifier_problems(statement: Mapping[str, Any],

@@ -2129,18 +2129,18 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p189"
+_FROZEN_PROMPT_VERSION = "p190"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "3fff2fa8d6dd13cc1b5eea6cedf415c8a5566f7c08bc1a79ece9a624209283f8",
     "B": "a253e5d5b9211c9f7fb7972d0de2c60116377094d5b858b423c97535e87f740c",
     "C": "7a95b904b5226ee981cd2851395beb65198e3cd3b22cbfd05ccd3edbd4d218b9",
-    "D": "fbe3283de3108f6f1ccd5d8831eac29e31e9d302a0b17e07f4a2d24d95880c60",
-    "E": "9ab3aaa6dbffef789a74b7c07e548789aea39d32569ae893411e01954616f336",
+    "D": "fafc60262fdee4bdd8d097cd5dca3c41e00eefea70ad62b6984733524a842980",
+    "E": "fd4375caa1106e7ddd7a9c13645d8238e2ccf52317f90c1cfbbc799f8500402a",
     "F": "765c48972f42b33f09f5702812333dfbe8fb240f0e5913be95a66d0337e11fe3",
     "G": "8dc95c3bbe52e7c6aa0bbe3995a5baf0bb7806d7f2783bd97c3ad11ea34240b3",
     "H": "eff1f964abda99f5191d2e258d170ee17de13745c4cf5d8821b81c24ee32cc1c",
     "L": "a7d86eb2eceb4617f47adfe48015fdd0183fe8ba54567e2a085ac363f4e87b8f",
-    "M": "3351e1bd2183b1b8edb2861e994f94f702029461073cc1992b1de97322a27ee9",
+    "M": "628c9a08ffa5b2f649cc57f444c5bfabb59b579ce303c8c0e092bd69637ddb05",
     "V": "bee3d36e81ca1d6f1d870e7b04029a7d1d475c3e84d321a73591a2891ebbc55a",
 }
 

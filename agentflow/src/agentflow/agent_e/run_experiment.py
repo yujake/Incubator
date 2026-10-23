@@ -93,6 +93,10 @@ class _RunExperiment:
         imports: Sequence[str] | None = None,
         certificate: Mapping[str, Any] | None = None,
         search_bound: Mapping[str, Any] | None = None,
+        design: str | None = None,
+        enumeration: str | None = None,
+        exhaustive: bool | None = None,
+        search_space: str | None = None,
     ) -> dict:
         """跑一个实验脚本并登记一条 `Experiment` 行。
         推导规则见模块 docstring（唯一权威表述）：计算类方法的推导在 :func:`_derive`。
@@ -105,6 +109,16 @@ class _RunExperiment:
         `name` / `imports` 只服务形式化那一支：本方法保留这两个形参只是为了把"传了也不做"
         变成一句受控拒绝（F 的派活路径会按同一份子目标把它们传下来），不是一条通道；
         动作表与工具 schema 上都没有它们。
+        `design` / `enumeration` / `exhaustive` / `search_space` 是穷举证明的凭据（D-33，
+        2026-10-23 夜 r34b 真机）：四个都可选，给了就原样进 `observations`（其中 design /
+        enumeration / search_space 再经 `exhaustionreport.blocks_from` 落进
+        `out/experiments/<实验号>/exhaustion.md` 的那几段）。为什么要从参数面收：
+        提示词要求 E「跑之前先报三件套 + 把 exhaustive 写成布尔」，而这三格此前不在任何
+        schema 里 ⇒ 模型只能传空 params，报告落不成、4 条 exhaustive_search 全落
+        cross_check。等级由 `numericproof` 现算，不由这里判：缺任何一格，
+        那一条就是 cross_check（有数值实验支持，不构成证明）。
+        调用方显式给的那一格胜过脚本在 REPRO_RESULT 里自报的同名键（与 `search_bound`
+        同一个优先级），两者不一致时 `notes` 里留一句话 —— 本方法不替它们折中。
         这里没有 `sleep` 形参，这是刻意的（`D-2`）`capabilities.CAPABILITIES["E"].run_experiment` 的 params 里声明了 `sleep`，而它不在本方法的形参表里，本方法也不收 
         `inspect.Parameter.VAR_KEYWORD`。这不是漏了一个参数，也不是"反正 kwargs 收得住"：`sleep` 只服务替身夹具（`tests/test_conductor.py` / 
         `tests/test_scheduler.py` 的 `FakeE` 按同一份 schema 传它来控制"这次实验跑多久"），已逐条登记在 `capabilities.PARAM_SEAMS`里（键含理由串），并由 
@@ -245,6 +259,35 @@ class _RunExperiment:
 
         # ---- [4b]（在事务内写日志：文件名要用实验号，见 [5]）
 
+        # ---- [4c2] D-33：调用方报的穷举凭据（design / enumeration / exhaustive /
+        # search_space）落在 observations 里 —— 下游三处读的是同一份，不各写一份转换。
+        #
+        # 真机读数（r34b，2026-10-23 夜）：4 条 exhaustive_search 的 observations 里
+        # ②③ 一格都没有，exhaustion.md 于是缺三块里的前两块，等级全落 cross_check。
+        # 根因不在提示词（它要求 E 跑之前先报三件套），而在工具面收不下那三格 ——
+        # 这一轮把参数面补齐之后，它们在这里落到行上：
+        #   ① `exhaustionreport.blocks_from` 从这里读 design / enumeration /
+        #      search_space 写进报告（报告与台账因此是同一句话）；
+        #   ② `numericproof.exhaustion_problems` 从这里读同一批事实判等级；
+        #   ③ 读的人打开 experiments 那一行就能看见 E 报了什么。
+        # 优先级与下面 [4d] 的 `search_bound` 一致：调用方显式给 > 脚本自报；
+        # 两者不一致时留一句 note（不替它们折中 —— 折中会造出第三个值，
+        # 而那个值没有出处）。
+        for _key, _value in (("design", design), ("enumeration", enumeration),
+                             ("exhaustive", exhaustive), ("search_space", search_space)):
+            if _value is None:
+                continue
+            if isinstance(_value, str) and not _value.strip():
+                continue
+            _had = _key in derived["observations"]
+            _old = derived["observations"].get(_key)
+            derived["observations"][_key] = _value
+            if _had and _old != _value:
+                notes.append(
+                    f"[{_key}] 调用方给的是 {_value!r}，脚本自报的是 {_old!r} ⇒ 行上记"
+                    "调用方那份（与 `search_bound` 同一优先级）；两者不一致这件事留在这里"
+                    "给读的人看，不替它们折中")
+
         # ---- [4d] `search_bound` 的优先级（§133）：调用方显式给 > 脚本在结构化结论里
         # 自报的 `bound`（落进 `observations["bound"]`）> 无。脚本自报的那份是"这次真搜到
         # 哪儿"的读数，比调用方拍的那个数可信 —— 它让"界有没有往前推"可比较。
@@ -282,6 +325,13 @@ class _RunExperiment:
             # 落不成就如实降档（不是抛异常）：这一趟实验真的跑过了，报告没落成是
             # "这条证据不够 proof"，而"不太够"由 `numericproof.exhaustion_problems`
             # 单点决定（它会把这一格并进"缺什么"），所以这里只负责写出事实并记一句 note。
+            #
+            # D-33：`design` / `enumeration` / `search_space` 三格现在可能来自
+            # `run_experiment` 的入参（[4c2] 已经把它们并进 observations）—— 所以
+            # 这三块的内容既可能是 E 递下来的，也可能是脚本自报的，读口只有一个
+            # （`blocks_from` -> `numericproof` 的那几个读函数）。这里刻意不写
+            # `design=design or ...`：那会造出第二个读口，两处一旦分家，
+            # 报告与证明栏就会说两句不同的话。
             _blocks = _ER.blocks_from(observations=derived.get("observations"),
                                       certificate=certificate, search_bound=bound_arg)
             report = _ER.land_report(

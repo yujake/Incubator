@@ -1,0 +1,3 @@
+{"at": "2026-10-23T21:04:27+08:00", "first": true, "kind": "bind", "name": "B1", "owner": "t-000003", "role": "B", "seq": 1, "task_id": "t-000004"}
+{"at": "2026-10-23T21:07:20+08:00", "first": true, "kind": "bind", "name": "V1", "owner": "t-000003", "role": "V", "seq": 2, "task_id": "t-000006"}
+{"at": "2026-10-23T21:09:19+08:00", "first": true, "kind": "bind", "name": "B2", "owner": "t-000003", "role": "B", "seq": 3, "task_id": "t-000008"}

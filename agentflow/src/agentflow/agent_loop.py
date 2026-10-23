@@ -514,6 +514,20 @@ def _call_brief(shape: str, payload: Mapping[str, Any]) -> str:
     return shape
 
 
+def _multi_call_warning(face: Any, call: Any) -> str:
+    """D-35（方案 B）的读数：一步给了多条工具调用 ⇒ 只执行了第 1 条，点名丢掉的那几条。
+
+    为什么必须有这一句（不能静默只执行第一条）：模型以为其余几条也生效了，
+    "它请求过什么"与"框架做了什么"之间就会差一截，而在盘上一字不留。
+    名字走 `ToolFace.action_name`（广告名 → 真名），于是"丢的是哪个动作"可核对。
+    """
+    calls = tuple(getattr(call, "tool_call_list", ()) or ())
+    dropped = [face.action_name(c) for c in calls[1:]]
+    names = "、".join(dropped) or "(读不出名字)"
+    return (f"这一步给了 {len(calls)} 条工具调用，只执行第 1 条"
+            f"（其余 {len(calls) - 1} 条丢弃：{names}）")
+
+
 def _dead_loop_line(*, streak: int, same_reading: int, limit: int, what: str) -> str:
     """「原地打转」那一步的提醒：同调用 + 同读数 ⇒ 这一步没有新事实。
 
@@ -4657,6 +4671,10 @@ class AgentLoop:
                     note = self._retire_ready_note()
                     if note:
                         step_result = {**step_result, **note}
+                # 收工这一步也照 D-35 留读数：第一条是 `final`、后面还挂着别的调用
+                # 时，那几条同样被丢弃 —— 同一条纪律（丢弃必须看得见）。
+                if face is not None and len(getattr(call, "tool_call_list", ()) or ()) > 1:
+                    step_result = {**step_result, "warn": _multi_call_warning(face, call)}
                 run.steps.append(LoopStep(step, shape, payload, step_result,
                                           cache=step_cache))
                 run.stop_reason = "final"
@@ -4863,6 +4881,13 @@ class AgentLoop:
                 hint = self._param_table(shape, payload)
                 if hint:
                     result = {**result, "参数表": hint}
+            # ---- D-35（方案 B）：一步给了多条原生工具调用 ⇒ 只执行了第一条。
+            #
+            # 丢弃发生在解析层（`llmseam.ask_step` 取 `tool_call_list[0]`），而"丢了
+            # 哪几条"由 `call.tool_call_list[1:]` 在这里落成一句读数 —— 解析层不静默，
+            # 这一步的结果里就看得见"它请求了 N 条、框架只做了第 1 条、其余是哪些"。
+            if face is not None and len(getattr(call, "tool_call_list", ()) or ()) > 1:
+                result = {**result, "warn": _multi_call_warning(face, call)}
             # ---- S-B ③（施工单 §2 的甲方案）：剪枝在观测层之前做一次。
             #
             # 位置是关键，也是"假开"那条读数的真正修法：工具层那次（禁改区 `tools/base.py`）

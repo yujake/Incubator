@@ -1,0 +1,65 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "experiment_id": "000000",
+      "claim": "对任意正整数 n，记 S(n) := 1^3+2^3+...+n^3，则 S(n) = (n(n+1)/2)^2。假设：n 为正整数；依据：数学归纳法（路径 a）与 k^3 = (k(k+1)/2)^2 - ((k-1)k/2)^2 的裂项求和（路径 b），两条路径相互独立、互不引用。",
+      "claim_key": "stmt:000000",
+      "method": "formal",
+      "evidence_kind": "proof",
+      "result": "supports",
+      "negation_kind": "not_proved",
+      "code_path": "code/formal/sum_cubes.lean",
+      "code_hash": "a201725c3d07ed06238d877602abe0dd0d062036e134bdd5fc48a7122569b0ec",
+      "params": {
+        "checker": "lean 4.7.0",
+        "statement_id": "000000",
+        "declaration_name": "sum_cubes",
+        "proof_no": 1,
+        "path_id": "",
+        "proof_sha256": "36bbf5dae92a7d1089fd0a0cdeb230e8b9bb2709dafc89e5b5b76001408cce4c",
+        "path_source": "L"
+      },
+      "observations": {
+        "verifier_status": "verified",
+        "formal_reason": "verified",
+        "checked": true,
+        "tri_state": "verified",
+        "missing_imports": [],
+        "lean_version": "4.7.0",
+        "status": "verified",
+        "checker_status": "verified",
+        "verified": true,
+        "checker_verified": true,
+        "status_source": "checker",
+        "downgraded": false,
+        "checker": "lean 4.7.0",
+        "checker_claimed": "",
+        "output_sha256": "225e954032e9e5c5765839fd84345b4250899decb2cb19263a514ef91823c988",
+        "statement_id": "000000",
+        "statement_evidence_kind": "proof_review",
+        "declaration_name": "sum_cubes",
+        "code_hash": "a201725c3d07ed06238d877602abe0dd0d062036e134bdd5fc48a7122569b0ec",
+        "recorded_by": "agent-L",
+        "proof_no": 1,
+        "path_id": "",
+        "proof_sha256": "36bbf5dae92a7d1089fd0a0cdeb230e8b9bb2709dafc89e5b5b76001408cce4c",
+        "path_source": "L"
+      },
+      "exit_code": 0,
+      "runtime_sec": 16.703,
+      "artifact_paths": [
+        "code/formal/sum_cubes.lean"
+      ],
+      "counterexample": null,
+      "verifier_output": "C:\\Users\\ysc20\\AppData\\Local\\Temp\\agentflow-lean-d_vwfdd2\\sum_cubes.lean:99:27: warning: unused variable `hn` [linter.unusedVariables]\n'sum_cubes' depends on axioms: [propext, Quot.sound, Classical.choice]",
+      "verifier_subject_key": "stmt:000000",
+      "certificate": null,
+      "search_bound": {},
+      "for_question_id": null,
+      "notes": "[formal] 检查器原话：C:\\Users\\ysc20\\AppData\\Local\\Temp\\agentflow-lean-d_vwfdd2\\sum_cubes.lean:99:27: warning: unused variable `hn` [linter.unusedVariables] 'sum_cubes' depends on axioms: [propext, Quot.sound, Classical.choice]\n[formal] 检查器原样状态 'verified'（L 的受控理由 'verified'）；声明名 sum_cubes；\n[formal] 绑定命题 000000（claim_key=stmt:000000）；产物 code/formal/sum_cubes.lean（sha256 前 16 位 a201725c3d07ed06）\n[formal] 这一行绑的是第 1 份证明（这一份正文 sha256 前 12 位 36bbf5dae92a；路径来源 L；path_id=（空））—— 号不在册的证明不会被记到 #p1 头上\n[formal] ⇒ 本次是 proof 级证据（检查器说的，且综合结论没有被降档）\n[formal] 这次登记不动 `statements`：形式化 ≠ 审过。那一行的证据档仍是 proof_review，升档仍然要 V 的那一签\n[formal] 调用方附注：L 现跑一遍：exit_code=0，无 sorry，公理集 {propext, Quot.sound, Classical.choice}；coverage 39/39 步有落点、faithfulness=complete；源码 sha256=a201725c3d07ed06238d877602abe0dd0d062036e134bdd5fc48a7122569b0ec。不给 verifier_output/status/exit_code 读数，以现跑结果为准。",
+      "created_at": "2026-10-23T21:25:36+08:00",
+      "created_by": "agent-L"
+    }
+  ]
+}

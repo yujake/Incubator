@@ -246,12 +246,17 @@ def check_formal(
     由 `AgentL.check_formal`（`formal.check_formal` 工具）直接调，不再有"它自己的动作面"。
     所以这里不再有 `checker_name` 与 `name` 的那条避撞名登记：那次翻译的两个落点
     （`specs/e.py` 的动作参数、`AgentE.check_formal` 的形参）都不在了。
-    - `verify.run_experiment`：能力表 `{claim, claim_key, script_path, params,method, for_question_id, timeout, sleep}`；工具 schema 
-    `{claim, claim_key,script_path, params, method, for_question_id, timeout, certificate, search_bound}`；方法层 
-    `{self, claim, claim_key, script_path, params, method,for_question_id, timeout, name, imports}`。能力表有而工具 schema 没有的只有 
+    - `verify.run_experiment`：能力表 `{claim, claim_key, script_path, params,method, for_question_id, timeout, sleep, design, enumeration, exhaustive, search_space}`；工具 schema 
+    `{claim, claim_key,script_path, params, method, for_question_id, timeout, certificate, search_bound, design, enumeration, exhaustive, search_space}`；方法层 
+    `{self, claim, claim_key, script_path, params, method,for_question_id, timeout, name, imports, certificate, search_bound, design, enumeration, exhaustive, search_space}`。能力表有而工具 schema 没有的只有 
     `sleep`；工具 schema 与方法层都没有 `run_name` / `imports` 了（它们只服务 formal 那一支，
     而 E 不再做形式化）—— 方法层留着这两个形参只为了把"传了也不做"变成一句受控拒绝，
-    不是一条通道。- 三处口径差别的性质各不相同，不许压成一句"能力表漂了"：`sleep` 只活在能力表与替身夹具之间—— 实测 `AgentE.run_experiment` 的形参
+    不是一条通道。
+    `certificate` / `search_bound` 与 D-33 那一批四格（`design` / `enumeration` /
+    `exhaustive` / `search_space`）在能力表、工具 schema、方法层三处同名同类型，
+    取值全可选 —— 这一节的名字清单要随它们一起维护，否则读这段的人会以为工具面
+    还收不下那几格。
+    - 三处口径差别的性质各不相同，不许压成一句"能力表漂了"：`sleep` 只活在能力表与替身夹具之间—— 实测 `AgentE.run_experiment` 的形参
     表里「没有」 `sleep`，它「也不收」`**kw`，所以不许写成"方法层收得住它"（`capabilities.py` 的`E.run_experiment` 逐字登记了它为什么存在，那是另一回事）。`D-2` 之后这一格不再只由注释担保：
     它逐条登记在 `capabilities.PARAM_SEAMS`里（键含理由串），并由 `capabilities.assert_capabilities()` 第 [8] 条在导入期核—— 声明了而实现不收、又不登记，
     `import agentflow.capabilities` 直接失败。
@@ -781,6 +786,49 @@ def _verify_detect_verifier():
                 "description": ("证书的适用范围（给了 certificate 就**必须**给）："
                                 "说清 B 是什么、用什么算法搜的 —— 证书脱离边界没有意义"),
             },
+    # ---- D-33（2026-10-23 夜，r34b 真机）：穷举证明的三格凭据此前收不下 ----
+    #
+    # 真机读数：r34b 跑了 4 条 exhaustive_search，evidence_kind 全落 cross_check，
+    # 每条 observations.exhaustion_report 都是「报告里缺 ['程序设计思路','穷举论证',
+    # '运行环境']」，bytes=0。根因不是模型不会写 —— 提示词要求「跑之前先报三件套 +
+    # 把 exhaustive 写成布尔」，而这三格此前不在任何 schema 里 ⇒ E 只能传空 params，
+    # 于是 ②③ 落不成。提示词与工具口径不一致，账要算在工具面上。
+    #
+    # 四格全部可选：非穷举的实验不该被逼着填它们（方法层也只对给了的做记录）。
+    # 但穷举那一档一旦给了，就要原样收下来：design / enumeration 进 exhaustion.md 的
+    # 那两段，exhaustive 进 observations（`numericproof` 只认布尔 true）。
+    # 缺任何一格 ⇒ 那条证据落 cross_check（numericproof.exhaustion_problems 逐条点名
+    # 缺什么），所以下面四条 description 都把这件事写在模型的可见面上。
+            "design": {
+                "type": "string",
+                "description": ("穷举证明的第 ② 块凭据：程序设计思路 —— 要解决什么、"
+                                "按什么结构搜、为什么覆盖全域。原样写进 "
+                                "out/experiments/<实验号>/exhaustion.md 的「程序设计思路」那一段。"
+                                "穷举那一档缺它（或缺 enumeration / exhaustive 任一格）"
+                                "⇒ 这条实验只能落 cross_check（有数值实验支持，不构成证明）"),
+            },
+            "enumeration": {
+                "type": "string",
+                "description": ("穷举证明的第 ③ 块凭据：穷举论证 —— 搜索空间多大、这个数是怎么算出来的、"
+                                "用了哪些对称性/剪枝、为什么这些剪枝不丢解、边界怎么处理。"
+                                "原样写进 exhaustion.md 的「穷举论证」那一段。缺它 ⇒ 报告三块不齐、"
+                                "这一条落 cross_check 并点名缺「穷举论证」"),
+            },
+            "exhaustive": {
+                "type": "boolean",
+                "description": ("穷尽的判据：只认布尔 true。这一格与 design / enumeration 一起构成"
+                                "穷举证明的凭据，缺一格就落 cross_check。"
+                                "缺省（不给）与 false 都不算 true；\"true\" / 1 也不算 —— "
+                                "那几档一律落 cross_check（说不清不许读成说过了）"),
+            },
+            "search_space": {
+                "type": "string",
+                "description": ("搜索空间的文字描述（可选）：多大、这个数是怎么算出来的。"
+                                "判定读的是 search_bound（穷举那一档给了证书就必须给）；"
+                                "这一格进 observations.search_space，与脚本自报的同名键不一致时"
+                                "以调用方为准、并在 notes 里留一句。三种都没有 ⇒ 缺搜索空间，"
+                                "落 cross_check"),
+            },
            },
            "required": ["claim", "claim_key", "script_path"],
            "additionalProperties": False,
@@ -819,7 +867,7 @@ def _verify_detect_verifier():
     tags=("experiment", "evidence"),
     external="exec",
 )
-def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, certificate=None, search_bound=None):
+def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None):
     """verify.run_experiment 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（_need_store, _run_experiment_tool）由装配期用 `partial` 绑定，
@@ -828,6 +876,11 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
     2026-10-23 晚：`run_name` / `imports` 两个形参随 `method='formal'` 一起退场
     （它们只服务那一支，而 E 不再做形式化）—— 工具 schema、本函数、`AgentE` 的
     公开参数面三处同时没有它们，所以「声明了但收不下」在结构上不可能发生。
+
+    D-33（同日夜，r34b 真机）：`design` / `enumeration` / `exhaustive` / `search_space`
+    四格同一批加进来，四处（工具 schema / 本函数 / `AgentE.run_experiment` /
+    `specs/e.py` 的动作表）同名同类型 —— 它们是穷举证明的凭据，缺一格那条证据就落
+    `cross_check`。四格都可选：不是穷举的实验不该被逼着填。
     """
     return (
     _need_store("verify.run_experiment")
@@ -841,6 +894,10 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
                    timeout=timeout,
                    certificate=certificate,
                    search_bound=search_bound,
+                   design=design,
+                   enumeration=enumeration,
+                   exhaustive=exhaustive,
+                   search_space=search_space,
                )
     )
 
@@ -1149,6 +1206,14 @@ def register(
                     # §84 D1：证书与边界（硬约束 2c/2d 的事实通道）
                     certificate=kw.get("certificate"),
                     search_bound=kw.get("search_bound"),
+                    # D-33（r34b 真机）：穷举证明的三格凭据 + 搜索空间的文字描述。
+                    # 三个都原样交给 `AgentE.run_experiment`（它负责写进 ②③ 与 observations）
+                    # —— 工具层不在这里替它判「齐不齐」，那一份判据只有
+                    # `numericproof.exhaustion_problems` 一处。
+                    design=kw.get("design"),
+                    enumeration=kw.get("enumeration"),
+                    exhaustive=kw.get("exhaustive"),
+                    search_space=kw.get("search_space"),
                 )
             )
         except ToolError:

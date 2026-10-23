@@ -260,6 +260,18 @@ class AgentV:
                 # 像"「命题与证明都审过了」"，而"这个命题在不在册"没有任何一处说过。
                 # 按本模块「既有纪律」（`checked=False` ⇒ 「不落台账行」，见上面
                 # `no_proof_text` / `problem` 两处）在这一格「拒判」并给出路。
+                #
+                # ---- D-34（2026-10-24）：但穷举型证据的那一签不许丢 ----
+                #
+                # r34b 的真机现场：`statements` 0 行，V 审完判「成立」，而
+                # `record_verification` 要一个合法命题号才写得出台账 ⇒ 那一签没有落点，
+                # 只能 escalation，结论丢了。业主的模型是"V 的签＝盖章"，盖章不该因为
+                # "那一页还没装订进册"而作废 ⇒ 这一档改走 `verifications/pending/<sha>`：
+                # 那一签按对象内容的 sha 落盘，B 登记之后按同一个 sha 认领
+                # （`numericproof.latest_third_party_sign` 的第二路）。顺序于是不再重要。
+                pending = self._review_without_statement(text=text, no=no)
+                if pending is not None:
+                    return self._finish_pending(out, statement_id=sid, no=no, got=pending)
                 out["kind"] = "statement_missing"
                 out["reason"] = "statement_missing"
                 out["detail"] = (f"命题 {sid} 不在 statements 里 ⇒ **没审**"
@@ -306,7 +318,12 @@ class AgentV:
                         proof_text=_text_for_ledger,
                         verdict=_ER.verdict_of(_reviewed), verifier=self.actor,
                         submission_id=str(self.cfg.get("submission_id") or ""),
-                        store=self.store, proof_no=no)
+                        store=self.store, proof_no=no,
+                        # D-34：这一签审的对象是 E 那份报告（它的字节 sha256 与相对路径）。
+                        # 记进台账之后，B 的入库闸就能"按对象内容找签"（B 的报告是目录，
+                        # 索引里那四格写的就是这一份），于是"谁先谁后"不再重要。
+                        object_sha256=str(_reviewed.get("report_sha256") or ""),
+                        object_path=str(_reviewed.get("report_path") or ""))
                 except (VR.VerificationError, OSError) as exc:
                     out["reason"] = "ledger_unwritable"
                     out["detail"] = (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ "
@@ -427,6 +444,90 @@ class AgentV:
             "ledger": f"verifications/{sid}.jsonl#{row['verification_id']}",
             "reason": f"{row['verification_id']}：{row['verdict']}"
                       + ("（签第 3 位）" if payload else "（不签第 3 位）"),
+        })
+        return out
+
+    def _review_without_statement(self, *, text: str, no: int) -> dict[str, Any] | None:
+        """命题还没在册时的一次穷举型证据会审（D-34）；不归这一档 ⇒ `None`。
+
+        为什么只接穷举型证据：那一档的会审是机械的（七项可核的事实：
+        程序在不在、报告落没落、数字对不对得上……），不需要命题正文就能判 ——
+        而普通逐行走查要"按写成后的样子整体重读"，缺了命题那一页就无从审
+        （那一档仍按原样报 `statement_missing`）。
+
+        返回 `{"reviewed": {...}, "row": {...}}`；台账写不进去时返回
+        `{"reason": "ledger_unwritable", "detail": ...}`（这一格"没查成"，不是"签过了"）。
+        """
+        if not str(text or "").strip():
+            return None
+        from .. import exhaustionreport as _ER
+
+        exp_rows: list = []
+        try:
+            if self.store is not None:
+                exp_rows = list(self.store.rows("experiments"))
+        except (StoreError, AttributeError, TypeError):
+            exp_rows = []
+        if not _ER.is_exhaustion_column({"proof_text": text}, exp_rows):
+            return None
+        reviewed = _ER.review(workspace_root=self.workspace_root,
+                              statement={"proof_text": text}, experiments=exp_rows)
+        try:
+            row = VR.record_pending_sign(
+                self.workspace_root, proof_text=text,
+                verdict=_ER.verdict_of(reviewed), verifier=self.actor,
+                object_sha256=str(reviewed.get("report_sha256") or ""),
+                object_path=str(reviewed.get("report_path") or ""))
+        except (VR.VerificationError, OSError) as exc:
+            return {"reason": "ledger_unwritable",
+                    "detail": (f"pending 台账写不进去（{type(exc).__name__}: {exc}）⇒ "
+                               "这一格没查成（那一签没有落点，必须重签）")}
+        self._emit(f"verify_proof(未在册)：穷举型证据会审 ⇒ {row.get('verdict')}"
+                   f"（落 {VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/，按对象 sha 可认领）")
+        return {"reviewed": reviewed, "row": row}
+
+    def _finish_pending(self, out: dict[str, Any], *, statement_id: str, no: int,
+                        got: Mapping[str, Any]) -> dict[str, Any]:
+        """`_review_without_statement` 的收尾：把那一签的读数摊进返回值（键集不增不减）。
+
+        `checked=True` 是诚实的：这一次审了、结论也在盘上（`verifications/pending/`）。
+        `signed_bit3=False` 也是诚实的：第 3 位住在 `statements` 那一行上，而那一行还不存在 ——
+        "盖章"与"入册"是两件事，B 登记之后按同一个 sha 认领，那一签才算落到位上。
+        """
+        if str(got.get("reason") or ""):
+            out["reason"] = str(got.get("reason"))
+            out["detail"] = str(got.get("detail") or "")
+            return out
+        row = dict(got.get("row") or {})
+        reviewed = dict(got.get("reviewed") or {})
+        out.update({
+            "checked": True,
+            "kind": "numeric_evidence_unregistered",
+            "verification_id": str(row.get("verification_id") or ""),
+            "verdict": str(row.get("verdict") or ""),
+            "defect_step": row.get("defect_step"),
+            "findings": list(row.get("findings") or []),
+            "unresolved_errors": int(row.get("unresolved_errors") or 0),
+            "proof_sha256": str(row.get("proof_sha256") or ""),
+            "proof_no": no,
+            "proof_chars": int(row.get("proof_chars") or 0),
+            "signed_bit3": False,
+            "exhaustion_review": reviewed,
+            "signer": str(reviewed.get("signed_by") or ""),
+            "proof_authors": list(reviewed.get("proof_authors") or []),
+            "report_path": str(reviewed.get("report_path") or ""),
+            "checks": list(reviewed.get("checks") or []),
+            "missing": list(reviewed.get("missing") or []),
+            "ledger": (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/"
+                       f"{str(row.get('object_sha256') or row.get('proof_sha256') or '')[:64]}"
+                       f".jsonl#{row.get('verification_id') or '?'}"),
+            "reason": (f"{row.get('verification_id')}：{row.get('verdict')}"
+                       "（命题还没在册 ⇒ 这一签落在 pending，按对象 sha 可认领）"),
+            "detail": (f"命题 {statement_id} 不在 statements 里：这一签没有地方翻第 3 位，"
+                       "但它已经审过并按对象内容的 sha 落盘（"
+                       f"`{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/`）—— "
+                       "B 把这一条登记之后按同一个 sha 认领，结论不会丢；"
+                       "不许把它当成「没审」"),
         })
         return out
 

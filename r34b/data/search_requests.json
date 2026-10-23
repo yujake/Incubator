@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "request_id": "r-000001",
+      "timestamp": "2026-10-23T21:02:43+08:00",
+      "topic": "Ramsey number R(3,4)",
+      "mode": "topical",
+      "content_description": "Sources for the classical small Ramsey number R(3,4)=9: Greenwood-Gleason 1955 (Combinatorial relations and chromatic graphs), Radziszowski's Small Ramsey Numbers dynamic survey, and later small-Ramsey computations / explicit K_8 witness and exhaustive K_9 check.",
+      "done": true,
+      "submitted_by": "A",
+      "claimed_by": "A",
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "000000",
+        "000001",
+        "000002",
+        "000003",
+        "000004",
+        "000005"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "high",
+      "for_question_id": null,
+      "submit_note": "首轮 openalex topical 检索 provider_error（RemoteDisconnected），改 openalex+crossref 合并重试成功；另按题名 precise 查 Greenwood-Gleason 1955 与 Small Ramsey Numbers。逐条核题名/年份/DOI 后入库 6 篇，无凑数。全文：000001（DS1 综述）与 000004（R(3,4)>8）已下到 downloads/；000000/000002/000003/000005 只核到书目记录、正文未取到。",
+      "providers": [
+        "openalex",
+        "crossref"
+      ]
+    }
+  ]
+}

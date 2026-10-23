@@ -98,6 +98,28 @@
 其余行（例子、实验、自然语言证明的定理）一格都不要动 —— 防误伤那一条判据就在
 `tests/test_numeric_theorem_writing_spec.py` 第 4b 条。
 
+### 索引四格（D-34，业主 2026-10-23 夜：D 的报告是目录）
+
+业主那三句话把这条链的模型说死了：D 的报告是目录（新成果＋索引），F 的证明 / E 的报告是
+正文，V 的签是盖章，B 是读者 ——「B 基本都是从 D 的报告看到定理（命题），经索引看 F 侧
+证明或 E 侧报告，并核实 V 签」。于是数值实验定理那一行（以及任何"正文在别处"的行）还要
+带四格，缺一件 B 就取不到正文：
+
+| 格 | 键 | 口径 |
+|---|---|---|
+| 正文是哪一档 | `evidence_kind` | `report`（E 的报告）/ `proof`（F 的证明） |
+| 正文在哪 | `evidence_path` | 相对仓库根（`out/experiments/000000/exhaustion.md`） |
+| 正文的指纹 | `evidence_sha256` | 那份文件字节的 sha256 |
+| V 的签 | `v_signature` | `{"verdict": "成立", "sha256": <被签那一份的 sha256>}` |
+
+这四格的列义只有一份（`numericproof.INDEX_*`），判据也只有一份
+（`numericproof.resolve_index`：四格齐 => 读盘 => 算 sha256 => 与 `evidence_sha256` 和
+`v_signature.sha256` 各比一次）。本模块那一档拦门（`mapping_numeric_evidence_missing`，
+判据本体 `numerictheorem.evidence_index_problems`）与 B 的入库闸读的是同一个函数 ——
+不许出现第二份口径，否则会出现"B 认、G/H 不认"的分家。
+四格只进 `MAPPING.json`（机器读那一份）：md 与附录的列已经排满，加列会让旧附录整份对不上，
+而那两份的用途是给人看"哪一行对应哪一份文件"，不是给 B 取对象。
+
 ## 双向都不许有孤儿
 
 正文是"`main.tex` ＋ 它递归 `\\input` / `\\include` 进来的那些文件"（相对路径按被包含
@@ -491,6 +513,16 @@ class Row:
     numeric_evidence: str = ""
     #: E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪份读数里（相对仓库根）。
     exhaustion_note: str = ""
+    #: ---- 索引四格（D-34；列义只有一份，在 `numericproof.INDEX_*`） --------------
+    #:
+    #: D 的报告是目录：每一行必须指得到正文那一份（F 的证明 / E 的报告）、
+    #: 说得出它的字节指纹、并带上 V 签的那一格的 sha。四格缺一件，"读目录去取正文"
+    #: 这件事就断在那儿 —— 而 B 的入库正是顺着它走的。
+    evidence_kind: str = ""
+    evidence_path: str = ""
+    evidence_sha256: str = ""
+    #: `{"verdict": "成立", "sha256": <被签那一份的 sha256>}`。
+    v_signature: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """写回 json 的形状（字段顺序固定，diff 才读得懂）。"""
@@ -511,6 +543,14 @@ class Row:
             out["numeric_evidence"] = self.numeric_evidence
         if self.exhaustion_note:
             out["exhaustion_note"] = self.exhaustion_note
+        if self.evidence_kind:
+            out[NP.INDEX_KIND_FIELD] = self.evidence_kind
+        if self.evidence_path:
+            out[NP.INDEX_PATH_FIELD] = self.evidence_path
+        if self.evidence_sha256:
+            out[NP.INDEX_SHA_FIELD] = self.evidence_sha256
+        if self.v_signature is not None:
+            out[NP.INDEX_SIGN_FIELD] = dict(self.v_signature)
         return out
 
 
@@ -562,6 +602,25 @@ def mapping_paths(project_root: str | Path) -> tuple[Path, Path]:
 def appendix_path(project_root: str | Path) -> Path:
     """正文附录那一份（由 json 渲染）的绝对路径。"""
     return package_dir(project_root) / APPENDIX_FILE_NAME
+
+
+def index_rows(project_root: str | Path) -> list[dict[str, Any]]:
+    """盘上那张表的原始行（D 报告里那些目录行；读不到 ⇒ 空清单）。
+
+    为什么要这个入口（D-34）：B 的入库是"读 D 的报告 → 顺着索引去取 F 的证明 / E 的报告 →
+    核 V 签"。B 手上只有工作区根，而表的落点、文件名的口径都在本模块（`mapping_paths`），
+    所以它从这里取，不自己拼路径。三态：读不到 / 坏 json ⇒ 空清单 —— 调用方（`numericproof`
+    的入库闸）把它读成"目录里没有这一条"，折的方向是拒，不是放行。
+    """
+    path, _md = mapping_paths(project_root)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    raw = payload.get("rows") if isinstance(payload, Mapping) else payload
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [dict(item) for item in raw if isinstance(item, Mapping)]
 
 
 def _scan_envs(text: str, counts: dict[str, int], *, where_file: str = "",
@@ -1298,6 +1357,17 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 "编号 exp:NNNNNN、`exhaustion_note` 是那块读数在仓库里的相对路径）",
                 label=label))
             continue
+        bad_index = [f for f in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD)
+                     if item.get(f) is not None and not isinstance(item.get(f), str)]
+        bad_sign = item.get(NP.INDEX_SIGN_FIELD)
+        if bad_index or (bad_sign is not None and not isinstance(bad_sign, Mapping)):
+            problems.append(_problem(
+                "mapping_unresolvable",
+                f"第 {i} 行的索引格形状不对（{bad_index or [NP.INDEX_SIGN_FIELD]}）："
+                "`evidence_kind` / `evidence_path` / `evidence_sha256` 是字符串、"
+                "`v_signature` 是对象（{\"verdict\": …, \"sha256\": …}）",
+                label=label))
+            continue
         rows.append(Row(kind=kind, label=label, env_no=env_no,
                         ledger_id=str(item.get("ledger_id") or "").strip(),
                         proof_no=proof_no,
@@ -1308,7 +1378,15 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                         citation_loc=dict(loc) if isinstance(loc, Mapping) else None,
                         citation_loc_reason=str(item.get("citation_loc_reason") or "").strip(),
                         numeric_evidence=str(item.get(NT.EVIDENCE_FIELD) or "").strip(),
-                        exhaustion_note=str(item.get(NT.NOTE_FIELD) or "").strip()))
+                        exhaustion_note=str(item.get(NT.NOTE_FIELD) or "").strip(),
+                        # 索引四格（D-34）：形状在这里归一，"齐不齐 / 指不指得到对象"
+                        # 由 `numerictheorem.evidence_index_problems` 一处判（判据不在这里）。
+                        evidence_kind=str(item.get(NP.INDEX_KIND_FIELD) or "").strip(),
+                        evidence_path=str(item.get(NP.INDEX_PATH_FIELD) or "").strip(),
+                        evidence_sha256=str(item.get(NP.INDEX_SHA_FIELD) or "").strip(),
+                        v_signature=(dict(item.get(NP.INDEX_SIGN_FIELD))
+                                     if isinstance(item.get(NP.INDEX_SIGN_FIELD), Mapping)
+                                     else None)))
     return rows, problems
 
 
@@ -1899,6 +1977,14 @@ def _numeric_problems(row: Row, ledger_row: Mapping[str, Any] | None,
                                        evidence_id=want)
     for detail in note_problems:
         add(NT.EXHAUSTION_NOTE_MISSING, f"表里 label={label!r}：{detail}")
+
+    # ---- 索引四格（D-34）：这一行还要当"目录"用 —— 指得到正文（E 的报告）、
+    # 说得出它的字节指纹、并带上 V 签那一格的 sha。判据本体在
+    # `numerictheorem.evidence_index_problems`（它再转发 `numericproof.resolve_index`），
+    # 于是"顺索引取对象"这条口径与 B 的入库闸是同一个实现：不会出现
+    # "B 认、G/H 不认"的分家。问题落进既有五档里最贴的那一档（缺 E 的读数那一格）。
+    for detail in NT.evidence_index_problems(row=row.to_dict(), workspace_root=workspace):
+        add(NT.NUMERIC_EVIDENCE_MISSING, f"表里 label={label!r}：{detail}")
 
     # 正文那一段要指回 E 的读数（整份正文搜一遍不算：那段话必须是这一条的）。
     segment = segments.get(label)

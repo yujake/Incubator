@@ -1,0 +1,1 @@
+- [2026-10-23 21:20:45] 已把 ②③ 写进 out/experiments/000000/exhaustion.md、000002/exhaustion.md、000003/exhaustion.md；行上的 exhaustion_report 是跑前快照，所以预先写好 000003 的报告再跑一次，才能让那一行的快照读到 ok=true。

@@ -469,6 +469,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p189", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p189（2026-10-23 夜）：T0 档／穷举证明链（E 写②③ → V 七项会审 → B 的第三方签名闸）／E→V 边／G 的数值定理规范／H 认两种 file 落点／F 两类凭据并列／V 唤起者补 E 与 B；另 E 的 Lean 侧原始设计已清干净（动作 5→4、工具 98→97）。facts 键集仍是 15 格，这一批只换段正文"},
+        # p189 → p190（2026-10-24）：数值实验定理的**索引链**（E 上报 D、D 写目录行+索引四格、B 顺索引核签）
+        {"version": "p190", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p190（2026-10-24）：D/E/M 三段变 —— E 的穷举协议第⑤步改成上报父代理、D 新增目录行+索引四格与派 B、M 明确派 D；另 agent_prompts 的 FACULTY_LOCAL[(E,敢创新)] 与 specs/e.py 同步。facts 键集仍 15 格"},
 )
 
 

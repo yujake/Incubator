@@ -313,16 +313,28 @@ def test_two_layer_legacy_overclaim_is_still_detectable(monkeypatch):
     1. `_tool_axes` 原样读出 `(side_effect, external, explicit)` —— 它不再查
        任何翻译表，第三个分量就是"人写没写这个字段"；
     2. 两边都未迁移时，判据不报任何 external 分歧（默认 `none` 对 `none`）。
+
+    2026-10-24：`verify.check_formal` 与 E 的 `check_formal` 已随 E 的 Lean 侧清场删除
+    （E 的动作 5→4、工具 98→97），这一对两层声明的真身现在是 L 的
+    `formal.check_formal` 与 `L.check_formal`。这里跟上真身 —— 改的动机：判据守的
+    纪律没变（"两层都未迁移时不报 external 分歧"、`_tool_axes` 原样读出三个分量），
+    换的只是被指的那一格。
     """
     base = C._tool_side_effects()
-    assert base["verify.check_formal"] == ("read", "exec", True), base["verify.check_formal"]
+    assert base["formal.check_formal"] == ("read", "exec", True), base["formal.check_formal"]
     assert C._tool_axes(("read", "none", False)) == ("none", "read", False)
-    assert C._tool_axes(base["verify.check_formal"]) == ("exec", "read", True)
+    assert C._tool_axes(base["formal.check_formal"]) == ("exec", "read", True)
+    # 反真空：这一对必须真的"比过"（进 `compared` 那一格）。不钉这一条的话，下面那句
+    # "没有分歧"在"根本没比对"时也成立 —— 那是 unknown，不是通过。
+    compared = {tuple(pair) for pair in C.two_layer_reconciliation()["compared"]}
+    assert ("L.check_formal", "formal.check_formal") in compared, (
+        f"`L.check_formal` 没对上 `formal.check_formal` ⇒ 下面那条'没有分歧'量的是"
+        f"'没有比对'；真比对上的有 {sorted(compared)[:6]}…")
 
     monkeypatch.setattr(C, "_tool_side_effects",
-                        lambda: {**base, "verify.check_formal": ("read", "none", False)})
-    original = C.CAPABILITIES["E"]
-    C.CAPABILITIES["E"] = tuple(
+                        lambda: {**base, "formal.check_formal": ("read", "none", False)})
+    original = C.CAPABILITIES["L"]
+    C.CAPABILITIES["L"] = tuple(
         C.ActionSpec(s.role, s.action, s.summary, s.params, s.returns,
                      side_effect=s.side_effect,
                      handler_name=s.handler_name,
@@ -331,24 +343,34 @@ def test_two_layer_legacy_overclaim_is_still_detectable(monkeypatch):
     )
     try:
         got = [d for d in C.declaration_divergences()
-               if "E.check_formal" in d.where and d.code in
+               if "L.check_formal" in d.where and d.code in
                ("two_layer_external_divergence", "two_layer_external_imprecise")]
         assert got == [], [d.to_dict() for d in got]
     finally:
-        C.CAPABILITIES["E"] = original
+        C.CAPABILITIES["L"] = original
 
 
 def test_two_layer_divergence_is_real_when_the_capability_understates(monkeypatch):
     """负控：能力层低估风险轴时必须报 error（而不是被"保守"吞掉）。
 
-    正控是真树：`E.check_formal` 两层都说 `read` + `exec`，没有 error。
+    正控是真树：`L.check_formal` 两层都说 `read` + `exec`，没有 error。
     负控把能力层的 `external` 抹掉（回到"没迁移"的默认值），
     而工具层仍然声明 `exec` ⇒ 能力层低估了风险轴，必须报 error。
+
+    2026-10-24：`verify.check_formal` 与 E 的 `check_formal` 已随 E 的 Lean 侧清场删除
+    （E 的动作 5→4、工具 98→97），这一对现在是 L 的 `formal.check_formal` 与
+    `L.check_formal`。这里跟上真身 —— 改的动机：判据守的纪律没变（能力层低估
+    `external` 必须报 error，不许被"保守"吞掉），换的只是被指的那一格。
     """
     base = C._tool_side_effects()
-    assert base["verify.check_formal"] == ("read", "exec", True), base["verify.check_formal"]
-    original = C.CAPABILITIES["E"]
-    C.CAPABILITIES["E"] = tuple(
+    assert base["formal.check_formal"] == ("read", "exec", True), base["formal.check_formal"]
+    # 反真空：这条负控必须有比对对象，否则"报出来了"可能来自别的动作。
+    compared = {tuple(pair) for pair in C.two_layer_reconciliation()["compared"]}
+    assert ("L.check_formal", "formal.check_formal") in compared, (
+        f"`L.check_formal` 没对上 `formal.check_formal` ⇒ 这条负控量不到那两层声明；"
+        f"真比对上的有 {sorted(compared)[:6]}…")
+    original = C.CAPABILITIES["L"]
+    C.CAPABILITIES["L"] = tuple(
         C.ActionSpec(s.role, s.action, s.summary, s.params, s.returns,
                      side_effect=s.side_effect,
                      handler_name=s.handler_name,
@@ -357,10 +379,10 @@ def test_two_layer_divergence_is_real_when_the_capability_understates(monkeypatc
     )
     try:
         got = [d for d in C.declaration_divergences() if d.code == "two_layer_external_divergence"]
-        assert any("E.check_formal" in d.where for d in got), got
+        assert any("L.check_formal" in d.where for d in got), got
         assert all(d.level == "error" for d in got)
     finally:
-        C.CAPABILITIES["E"] = original
+        C.CAPABILITIES["L"] = original
 
 
 def test_two_layer_external_imprecise_is_a_warning_not_an_error():

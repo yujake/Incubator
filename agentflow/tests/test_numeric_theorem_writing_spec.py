@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import pathlib
 
@@ -155,13 +156,23 @@ def _statement(*, proof_text: str = PROOF_COLUMN) -> dict:
 
 
 def _row(**over) -> dict:
-    """对应表那一行（数值实验定理：证明栏是程序路径，另带 E 读数与两块落点）。"""
+    """对应表那一行（数值实验定理：证明栏是程序路径，另带 E 读数与两块落点）。
+
+    D-34 起还带索引四格（业主 2026-10-23 夜：D 的报告是目录）：
+    `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature` —— 四格指的就是
+    `NOTE` 那一份读数的字节与 V 签的那一版，所以按 `NOTE_TEXT` 现算 sha256。
+    """
+    note_sha = hashlib.sha256(NOTE_TEXT.encode("utf-8")).hexdigest()
     row = {
         "kind": "theorem", "label": "thm:r34", "env_no": 1,
         "ledger_id": f"stmt:{SID}", "proof_no": 1,
         "file": PROGRAM,
         "numeric_evidence": f"exp:{EID}",
         "exhaustion_note": NOTE,
+        "evidence_kind": "report",
+        "evidence_path": NOTE,
+        "evidence_sha256": note_sha,
+        "v_signature": {"verdict": "成立", "sha256": note_sha},
         "citation_loc_reason": "我方自产命题（E 签的穷举证明），没有外部引文",
     }
     row.update(over)

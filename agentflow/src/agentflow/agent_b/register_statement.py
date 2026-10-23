@@ -767,7 +767,11 @@ class _RegisterStatement:
                                              # 缺任何一件 ⇒ 那一格"没查成" ⇒ 闸照旧拒。
                                              root=getattr(self.store, "root", None),
                                              statements=stmt_rows,
-                                             statement_full=full)
+                                             statement_full=full,
+                                             # D-34：D 报告的目录行（论文对应表）。
+                                             # 读不到 ⇒ 空清单 ⇒ 索引那一路取不到对象，
+                                             # 闸按"目录里没有这一条"拒（不是放行）。
+                                             index_rows=self._report_index_rows())
         if _sign_problems:
             return _refuse("proof_needs_third_party_signature", "；".join(_sign_problems))
         # ---- 2026-10-16（亲测 B 时加的）：「把缺的出处字段一次说齐」 --------------
@@ -1400,6 +1404,34 @@ class _RegisterStatement:
     #: 这条闸的受控拒绝码（调用方据它分辨「参数不对」与「还欠 V 一签」）。
     SELF_AUTHORED_NEEDS_V = "self_authored_needs_v"
 
+    def _report_index_rows(self) -> list[dict]:
+        """D 报告的目录行（论文对应表那几行；读不到 ⇒ 空清单，不猜）。
+
+        ## 为什么要读它（业主 2026-10-23 夜的模型，D-34）
+
+        「D 侧报告的多半是新成果，B 基本都是从 D 的报告看到定理（命题），经索引看 F 侧证明
+        或 E 侧报告，并核实 V 签，然后 B 拿着这些注册定理（命题）入库」——
+        于是"顺索引取对象"是 B 的入库里一个正常的步骤，不是可选的附加校验。
+        索引的落点与列义只有一份（`papermapping` 的那张表 + `numericproof.INDEX_*`），
+        这里只做一次读。
+
+        三态：读不到（没有 `MAPPING.json` / 坏 json）⇒ 空清单 —— 调用方（`filing_problems`）
+        把它读成"目录里没有这一条"，于是索引那一路取不到对象、闸照旧拒。
+        这不是把"没查成"折成"通过"：折的方向是拒。
+        """
+        store = getattr(self, "store", None)
+        root = getattr(store, "root", None) if store is not None else None
+        if root is None:
+            return []
+        try:
+            from .. import papermapping as _PM
+        except Exception:  # noqa: BLE001 —— 那一侧读不到就是"没有目录"
+            return []
+        try:
+            return list(_PM.index_rows(root))
+        except Exception:  # noqa: BLE001 —— 坏 json / 读不出来 ⇒ 同上
+            return []
+
     def _v_signature_for(self, *, statement_full: str, proof_text: str) -> dict:
         """这一条自产命题有没有「V 签成立、且盖的正是这一份正文」的签（纯读）。
 
@@ -1487,6 +1519,31 @@ class _RegisterStatement:
                 return out
             out["why"] = (f"在册的那一条（{sid}）没有盖住这一份正文的「成立」签："
                           f"{str(reading.get('why') or '')[:200]}")
+        # ---- D-34：命题登记之前审的那一签不丢（按内容 sha 认领）
+        #
+        # r34b 的真机现场：`statements` 0 行时 V 审完只能报 `statement_missing`，那一签
+        # 没有落点。现在它落在 `verifications/pending/<sha>.jsonl`；命题后来登记上了，
+        # 而"先签后登记"与"先登记后签"必须是同一件事 ⇒ 这一格按这一份正文的 sha
+        # 去 pending 里认领。认不到就还是没签（`out["why"]` 里已经写着为什么）。
+        try:
+            pending = VR.pending_sign(getattr(self.store, "root", None) or "",
+                                      proof_shas=(sha,))
+        except Exception as exc:  # noqa: BLE001 —— pending 读不动 ⇒ 没查成，不是"没有签"
+            out.update(checked=False,
+                       why=(f"`verifications/{VR.PENDING_DIR_NAME}/` 读不出来"
+                            f"（{type(exc).__name__}: {exc}）⇒ 第 3 位没查成"))
+            return out
+        if pending.get("found") and str(pending.get("verdict") or "") == "成立":
+            out.update(signed=True,
+                       stmt_id=str(out.get("stmt_id") or ""),
+                       verification_id=str(pending.get("ledger") or "").split("#")[-1],
+                       why=(f"{pending.get('ledger')} 是命题还没在册时 V 审的那一签"
+                            f"（verdict={pending.get('verdict')!r}）—— 按这一份正文的 sha "
+                            "认领到，于是「先签后登记」与「先登记后签」是同一件事"))
+            return out
+        if pending.get("found"):
+            out["why"] = (f"命题还没在册时 V 审过这一份，但那一签的结论是 "
+                          f"{pending.get('verdict')!r}（不是「成立」）⇒ 这一条仍没有签住")
         return out
 
     def _e_signed_exhaustion(self, proof_text: Any) -> dict | None:

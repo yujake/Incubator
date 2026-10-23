@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "counters": {
+    "usage": 136,
+    "question": 1,
+    "experiment": 4,
+    "candidate": 6,
+    "lit": 6,
+    "stmt": 2
+  }
+}

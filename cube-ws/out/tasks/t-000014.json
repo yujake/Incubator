@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T21:25:47+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2686,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"stmt:000000 已形式化并通过检查器，登记为 exp:000000（method=formal, evidence_kind=proof）。\\n\\n【三态结论】verified（检查器真跑：exit_code=0，用时约 16s）。\\n【盘上文件】code/formal/sum_cubes.lean，sha256=a201725c3d07ed06238d877602abe0dd0d062036e134bdd5fc48a7122569b0ec（5603 bytes）。\\n【检查器原话（逐字）】\\nC:\\\\\\\\Users\\\\\\\\ysc20\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\agentflow-lean-efpfgysv\\\\\\\\sum_cubes.lean:99:27: warning: unused variable `hn` [linter.unusedVariables]\\n'sum_cubes' depends on axioms: [propext, Quot.sound, Classical.choice]\\n【公理审计】只有 propext / Quot.sound / Classical.choice（均在允许集内），无 sorryAx；coverage 读数 sorry_lines=[]。\\n\\n【忠实性】B 的 proof_text（reports/proof-p000000-cubesum.md，sha256=36bbf5dae92a7d1089fd0a0cdeb230e8b9bb2709dafc89e5b5b76001408cce4c）共 39 步，覆盖率读数 steps_total=39 / steps_mapped=39 / unmapped=[]，faithfulness=complete。两条独立路径在源码里各有落点：路径 (a) 归纳法 → four_mul_sum_cubes + sum_cubes；路径 (b) 裂项 → four_mul_sq（引理 L 的 ℕ 版）+ tel_step + sum_cubes_telescope（对 n 归纳，每步只用引理 L，不引用路径 a）。\\n\\n【必须交代的差异（未改写命题，只是把隐含假设写出）】statement_full 里的「n 为正整数」在 Lean 里显式成 (hn : 0 < n)，记为 assumptions_added（1 条，第 37 步）；该假设在证明中实际未被使用（linter 的 unused variable 警告即此），故命题强度未削弱、也未加强。定理名 sum_cubes 与命题正文均照 B 的登记，未作改动。\\n\\n【登记】formal.record 现跑一次并落 experiments 行：experiment_id=000000，status=verified，result=supports，绑第 1 份证明（proof_sha256 前 12 位 36bbf5dae92a），path_source=L。注意：statements 的 evidence_kind 写前写后仍是 proof_review —— 形式化不等于 V 的审签，命题升档仍要 V 那一签，我没有动 statements。\\n\\n【过程留痕（三次 failed 都是真的跑失败，不是 unknown）】中间三轮分别是：claim 与 statement_full 不逐字相同（claim_mismatch，被台账闸拒、未写盘）→ compile_error（第 31/47 行 expected token，ℕ 除法与 pow 归一化处接不上）→ compile_error（rewrite 找不到 2*x 模式）→ 第 4 轮 verified。失败时的检查器原话均已随 formalize 的返回值落档；没有用 sorry 或加强假设去凑通过。\", \"llm_run_path\": \"D:\\\\Incubator\\\\cube-ws\\\\runs\\\\L-20261023-212547-001.json\", \"messages\": [], \"steps\": 13, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "1c2fddfb73256a1a9d47b9e8cf2e7654b590a0885fe85cf0b691462796d0b866",
+ "readings": {},
+ "role": "L",
+ "status": "done",
+ "task_id": "t-000014"
+}

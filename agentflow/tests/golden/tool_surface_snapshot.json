@@ -1366,6 +1366,22 @@
          "minimum": 1,
          "type": "integer"
         },
+        "evidence_kind": {
+         "description": "这一行的正文是哪一本：proof（F 的证明）/ report（E 的报告）。数值实验定理那一行填 report",
+         "enum": [
+          "proof",
+          "report"
+         ],
+         "type": "string"
+        },
+        "evidence_path": {
+         "description": "正文在仓库里的相对路径（如 out/experiments/000000/exhaustion.md）",
+         "type": "string"
+        },
+        "evidence_sha256": {
+         "description": "那份文件字节的 sha256（不是文本归一化之后的）",
+         "type": "string"
+        },
         "exhaustion_note": {
          "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里（相对仓库根，如 out/experiments/000000/exhaustion.md）",
          "type": "string"
@@ -1414,6 +1430,10 @@
          "description": "第几号证明：1 = canonical（行上的 proof_text）",
          "minimum": 1,
          "type": "integer"
+        },
+        "v_signature": {
+         "description": "{verdict, sha256}：V 的结论与它签的那一份的 sha256",
+         "type": "object"
         }
        },
        "required": [
@@ -4619,6 +4639,18 @@
      "claim_key": {
       "type": "string"
      },
+     "design": {
+      "description": "穷举证明的第 ② 块凭据：程序设计思路 —— 要解决什么、按什么结构搜、为什么覆盖全域。原样写进 out/experiments/<实验号>/exhaustion.md 的「程序设计思路」那一段。穷举那一档缺它（或缺 enumeration / exhaustive 任一格）⇒ 这条实验只能落 cross_check（有数值实验支持，不构成证明）",
+      "type": "string"
+     },
+     "enumeration": {
+      "description": "穷举证明的第 ③ 块凭据：穷举论证 —— 搜索空间多大、这个数是怎么算出来的、用了哪些对称性/剪枝、为什么这些剪枝不丢解、边界怎么处理。原样写进 exhaustion.md 的「穷举论证」那一段。缺它 ⇒ 报告三块不齐、这一条落 cross_check 并点名缺「穷举论证」",
+      "type": "string"
+     },
+     "exhaustive": {
+      "description": "穷尽的判据：只认布尔 true。这一格与 design / enumeration 一起构成穷举证明的凭据，缺一格就落 cross_check。缺省（不给）与 false 都不算 true；\"true\" / 1 也不算 —— 那几档一律落 cross_check（说不清不许读成说过了）",
+      "type": "boolean"
+     },
      "for_question_id": {
       "type": "string"
      },
@@ -4641,6 +4673,10 @@
      "search_bound": {
       "description": "证书的适用范围（给了 certificate 就**必须**给）：说清 B 是什么、用什么算法搜的 —— 证书脱离边界没有意义",
       "type": "object"
+     },
+     "search_space": {
+      "description": "搜索空间的文字描述（可选）：多大、这个数是怎么算出来的。判定读的是 search_bound（穷举那一档给了证书就必须给）；这一格进 observations.search_space，与脚本自报的同名键不一致时以调用方为准、并在 notes 里留一句。三种都没有 ⇒ 缺搜索空间，落 cross_check",
+      "type": "string"
      },
      "timeout": {
       "minimum": 1,
@@ -5507,7 +5543,7 @@
   "verify.list_experiments": "(claim_key=None, limit=None)",
   "verify.list_verifications": "(statement_id=None, limit=None)",
   "verify.read_proof": "(statement_id)",
-  "verify.run_experiment": "(claim, claim_key, script_path, params=None, method='numeric', for_question_id=None, timeout=600, certificate=None, search_bound=None)",
+  "verify.run_experiment": "(claim, claim_key, script_path, params=None, method='numeric', for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None)",
   "verify.verify_proof": "(statement_id, proof_text=None, readonly_facts=None, proof_no=None)"
  },
  "summary": {

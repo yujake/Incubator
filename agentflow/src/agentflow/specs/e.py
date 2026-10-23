@@ -48,7 +48,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # ⇒ 模型看不见、也就永远满足不了（实测 T1：method='exhaustive_search'
               # 三次 failed，报「必须给出 certificate」）。方法层与工具层同轮接上。
               "certificate": _OBJ,
-              "search_bound": _OBJ},
+              "search_bound": _OBJ,
+              # D-33（2026-10-23 夜，r34b 真机）：穷举证明的三格凭据此前不在任何声明面里，
+              # 而提示词要求 E 跑之前先报三件套 + 把 `exhaustive` 写成布尔 ⇒ 模型只能传空
+              # params，②③ 落不成（4 条 exhaustive_search 全落 cross_check）。
+              # 四格全部可选（非穷举的实验不该被逼填），但穷举那一档要收得下：
+              # 工具 schema（`verify_tools.py` 的 `verify.run_experiment`）与
+              # `AgentE.run_experiment` 同轮加了同名同类型的四格 —— 两层对账会强制一致。
+              # 缺 design / enumeration / exhaustive 任何一格 ⇒ 这条证据落 cross_check
+              # （判据本体是 `numericproof.exhaustion_problems`，不在这张表里重写一份）。
+              "design": _S,
+              "enumeration": _S,
+              "exhaustive": _B,
+              "search_space": _S},
              ("claim", "claim_key", "script_path")),
         "dict（experiment_id / result / evidence_kind / …）",
         side_effect="write_local", handler_name="run_experiment",
@@ -166,7 +178,19 @@ SPEC = AgentSpec(
             "立刻派 V 会审（E → V 是直接边，用 `summon` 唤起 V）：把证明栏（程序相对仓库的路径 + 你写的 ②③）与只读读数"
             "一起交给它的 `verify.verify_proof` —— 那一签（`signed_by=V`、`proof_authors` 含 E、`proof_reason=exhaustion`）"
             "是这份证明成立的唯一凭据，你自己签不了。④ 不完全的实验（抽样、只扫了一批点、`exhaustive` 不是布尔 `true`）"
-            "只能记「有数值实验支持」，不许写成「已证明」或「定理」，也不许自己给这一条签 proof —— 这是业主点名的分界。",
+            "只能记「有数值实验支持」，不许写成「已证明」或「定理」，也不许自己给这一条签 proof —— 这是业主点名的分界。"
+            # 2026-10-23 夜（业主的三句话，D-34）：「E 拿着有 V 签名的报告**上报** D 找 B 入库，和 F 拿着 V 签名的证明
+            # 上报 D 找 B 入库是一个逻辑」；「一般 D 会是 E 和 F 的父代理，所以我的用词是上报，即向上找 D 而非向下派 D。
+            # 如果向上直接是 M 也无所谓，M 会派 D」。于是 ④ 之后还差最后一步：**上报**（不是自己去入库）。
+            # 代码侧的真身是 `numericproof.INDEX_*` 那四格（D 报告里的一行）＋ B 的入库闸
+            # （`numericproof.filing_problems` 顺索引取对象、核 `evidence_sha256` 与 `v_signature`）。
+            "⑤ 拿到 V 的签之后**上报父代理，不要自己去入库**：把（那份程序的相对路径 + 你写的 ②③ + V 的签）"
+            "一起交上去 —— **父是 D 就报 D；父是 M 就报 M，由 M 派 D/B**。这是**上报**（向上找 D）而不是向下派 D："
+            "D 会把这一条写进它的报告与论文对应表的**索引四格**（`evidence_kind`＝`report`、`evidence_path`＝你那份 "
+            "`out/experiments/<实验号>/exhaustion.md`、`evidence_sha256`＝它的字节 sha256、`v_signature`＝"
+            "`{verdict, sha256}`），再由 D 派 B 入库。**你既不要写对应表，也不要自己去找 B 的 "
+            "`register_statement`**：B 认的是 D 报告里那一行索引，缺了它，你这份证据只能被记成「有数值实验支持」——"
+            "那不是证据不行，是目录里没有 E 那本的条目。",
             "**你发现的例子要交出去**：数值实验里撞见的反例 / 玩具例先落 `experiments`（`refutes` 必须带非空 `counterexample`），"
             "**再交 D** 写进研究手稿的「例子与反例」那一节（`E → D` 是直接边）：撞见的那个例子**不落下来就等于没发现**。",
             # 判据：`tests/test_agent_e.py::test_schema_rejects_refutes_without_counterexample`

@@ -1,0 +1,1281 @@
+{
+  "role": "B",
+  "task": "B：这一趟派给你的活是 —— 两件事。①消化文献队列：literature.unprocessed=6（id 000000-000005），用你的 run_once 逐篇消化（一次一篇），把它做完。②登记命题：盘上 out/review/PROOF-R34.md（sha256 4eb2dba6d8daa1bf）里第一节是含全部假设的命题、第二节是完整证明。把这条命题登记进 statements，origin=own_result；statement_full 用第一节的命题原文（含假设），proof_text 用第二节的证明全文逐字（不许改写、不许压缩），并在 proof_text 里保留对穷举核验的指向 exp:000000；出处字段按你的规矩填（若必须指一篇 literature，就用题名与 Ramsey R(3,4) 最对得上的那一行，并在 quote_reason 里说清它支持的是哪一句；对不上就照实写 partial/none，不许硬凑）。③不要自报 proof 等级：等级由证据位现算，你只负责把三件套（命题正文、逐字证明、出处）写全。④回我三样读数：新 statements 行的 id、该行的 origin 与 evidence 字段、literature.unprocessed 消化后剩余数。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "invalid",
+      "payload": {},
+      "result": {
+        "problem": "judge_bad_json",
+        "detail": "这一步给了 2 条工具调用；本循环一步只做一件事，请只留一条",
+        "raw_reply": "",
+        "raw_reply_path": "out/invalid/r34b-step0.txt"
+      },
+      "problem": "judge_bad_json",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 16256,
+        "prompt_cache_miss_tokens": 11940,
+        "tokens_in": 28196,
+        "tokens_out": 194,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/review/PROOF-R34.md"
+        },
+        "why": "先读要登记的命题与证明全文，逐字核对第一节/第二节"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# R(3,4) = 9：命题与完整证明（供 B 登记进 statements、供 V 逐行走查）\n\n## 命题（statement_full，含全部假设）\n\n对完全图 K_n 的边做红/蓝二着色。记 R(3,4) 为最小整数 N，使得每一个 K_N 的红/蓝边二着色都\n包含一个红色 K_3（红色三角形）或一个蓝色 K_4（蓝色完全四边形）。则 N = 9。\n\n（假设：着色是任意的、无任何附加限制；K_n 是简单完全图；\"红色 K_3\" 指三个顶点两两边皆红。）\n\n## 证明\n\n### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。\n\n## 机器可复核的部分（与本工作区的对应关系）\n\n- 上界与下界都由穷举搜索独立核到：experiments 行 `claim_key=r34-ramsey-exactly-9`，\n  脚本 `code/r34_verify.py`（sha256 76b4c735d4008f57），exit_code = 0，\n  n=9 的\"干净\"着色数为 0，n=8 的\"干净\"着色数为 17640（含上文给出的那个见证）。\n- 剪枝版（用步骤 1 的引理：red degree <= 3）与不剪枝版在 n=7、n=8 上给出相同计数，\n  说明该剪枝不丢解；n=9 时两种读法都是 0。\n- 上述穷举只是对这条命题的独立复核，不构成本命题的证明本身：书面证明见第一、二节。\n",
+        "error": "",
+        "meta": {
+          "path": "out/review/PROOF-R34.md",
+          "encoding": "utf-8",
+          "bytes_read": 2948,
+          "total_bytes": 2948,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 51,
+          "total_lines": 51,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 51 行",
+          "sha256": "4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 27520,
+        "prompt_cache_miss_tokens": 1084,
+        "tokens_in": 28604,
+        "tokens_out": 188,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table_list",
+        "args": {
+          "table": "literature",
+          "filter": {
+            "processed": false
+          },
+          "limit": 20
+        },
+        "why": "确认未消化文献队列的实际行（id、题名、有无正文），再逐篇 run_once"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "literature",
+          "rows": [
+            {
+              "lit_id": "000000",
+              "title": "Combinatorial Relations and Chromatic Graphs",
+              "type": "J",
+              "summary": "Crossref 元数据：R. E. Greenwood, A. M. Gleason, Canadian Journal of Mathematics 1955。DOI 10.4153/cjm-1955-001-4 对应书目记录。本轮 Crossref 返回该条无摘要、无 pdf_url，正文未取到（未下载）——这里只如实登记书目，不对正文内容作任何断言。",
+              "path": null,
+              "processed": false,
+              "source_request_ids": [],
+              "dedup_key": "doi:10.4153/cjm-1955-001-4",
+              "doi": "10.4153/cjm-1955-001-4",
+              "year": 1955,
+              "authors": [],
+              "venue": null,
+              "language": null,
+              "added_at": "2026-10-23T21:17:31+08:00",
+              "download": {
+                "status": "skipped",
+                "http_status": null,
+                "bytes": 0,
+                "sha256": null,
+                "error": "no_local_path",
+                "url": "https://doi.org/10.4153/cjm-1955-001-4",
+                "fulltext": "no_fulltext_this_time",
+                "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+              },
+              "pages": "",
+              "matched": "",
+              "claimed_by": null,
+              "lease_until": null,
+              "mine_attempts": 0,
+              "last_mine_error": null,
+              "_keys": [
+                "doi:10.4153/cjm-1955-001-4",
+                "title:combinatorial relations and chromatic graphs|1955",
+                "title:combinatorial relations and chromatic graphs|*"
+              ]
+            },
+            {
+              "_keys": [
+                "doi:10.37236/21",
+                "title:small ramsey numbers|2011",
+                "title:small ramsey numbers|*"
+              ],
+              "lit_id": "000001",
+              "title": "Small Ramsey Numbers",
+              "type": "J",
+              "summary": "Radziszowski 的动态调查（Electronic Journal of Combinatorics, DS1）。摘要：We present data which, to the best of our knowledge, includes all known nontrivial values and bounds for specific graph, hypergraph and multicolor Ramsey numbers, where the avoided graphs are complete or complete without one edge. Many results pertaining to other more studied cases are also presented. We give references to all cited bounds and values, as well as to previous similar compilations.",
+              "path": "downloads/lit-000001-radziszowski-smallramseynumbers.pdf",
+              "processed": false,
+              "source_request_ids": [],
+              "dedup_key": "doi:10.37236/21",
+              "doi": "10.37236/21",
+              "year": 2011,
+              "authors": [],
+              "venue": null,
+              "language": null,
+              "added_at": "2026-10-23T21:17:32+08:00",
+              "download": {
+                "status": "skipped",
+                "http_status": null,
+                "bytes": 0,
+                "sha256": null,
+                "error": "no_local_path",
+                "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/DS1/pdf",
+                "fulltext": "no_fulltext_this_time",
+                "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+              },
+              "pages": "",
+              "matched": "",
+              "claimed_by": null,
+              "lease_until": null,
+              "mine_attempts": 0,
+              "last_mine_error": null
+            },
+            {
+              "lit_id": "000002",
+              "title": "On Some Small Classical Ramsey Numbers",
+              "type": "J",
+              "summary": "Exoo 2013, The Electronic Journal of Combinatorics（Crossref 记录无摘要）。本轮只取到 Crossref 书目与 pdf 链接，未下载前的正文内容不作断言。",
+              "path": null,
+              "processed": false,
+              "source_request_ids": [],
+              "dedup_key": "doi:10.37236/3137",
+              "doi": "10.37236/3137",
+              "year": 2013,
+              "authors": [],
+              "venue": null,
+              "language": null,
+              "added_at": "2026-10-23T21:17:32+08:00",
+              "download": {
+                "status": "skipped",
+                "http_status": null,
+                "bytes": 0,
+                "sha256": null,
+                "error": "no_local_path",
+                "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p68/pdf",
+                "fulltext": "no_fulltext_this_time",
+                "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+              },
+              "pages": "",
+              "matched": "",
+              "claimed_by": null,
+              "lease_until": null,
+              "mine_attempts": 0,
+              "last_mine_error": null,
+              "_keys": [
+                "doi:10.37236/3137",
+                "title:on some small classical ramsey numbers|2013",
+                "title:on some small classical ramsey numbers|*"
+              ]
+            },
+            {
+              "lit_id": "000003",
+              "title": "New Computational Upper Bounds for Ramsey Numbers $R(3,k)$",
+              "type": "J",
+              "summary": "Goedgebeur & Radziszowski 2013, The Electronic Journal of Combinatorics（Crossref 记录无摘要）。本轮只取到书目与 pdf 链接。",
+              "path": null,
+              "processed": false,
+              "source_request_ids": [],
+              "dedup_key": "doi:10.37236/2824",
+              "doi": "10.37236/2824",
+              "year": 2013,
+              "authors": [],
+              "venue": null,
+              "language": null,
+              "added_at": "2026-10-23T21:17:32+08:00",
+              "download": {
+                "status": "skipped",
+                "http_status": null,
+                "bytes": 0,
+                "sha256": null,
+                "error": "no_local_path",
+                "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p30/pdf",
+                "fulltext": "no_fulltext_this_time",
+                "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+              },
+              "pages": "",
+              "matched": "",
+              "claimed_by": null,
+              "lease_until": null,
+              "mine_attempts": 0,
+              "last_mine_error": null,
+              "_keys": [
+                "doi:10.37236/2824",
+                "title:new computational upper bounds for ramsey numbers r 3 k|2013",
+                "title:new computational upper bounds for ramsey numbers r 3 k|*"
+              ]
+            },
+            {
+              "_keys": [
+                "doi:10.24036/rmj.v1i1.1",
+                "title:the classical ramsey number r 3 4 8 using the weighted graph|2022",
+                "title:the classical ramsey number r 3 4 8 using the weighted graph|*"
+              ],
+              "lit_id": "000004",
+              "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph",
+              "type": "J",
+              "summary": "Khairul Azmi, Elva, W Widia, Rangkiang Mathematics Journal 2022。摘要（OpenAlex 原样要点）：讨论经典 Ramsey 数 R(3,4) > 8，即 m=8 是最大的整数使得 K_8 仍可能既无红 K_3 又无蓝 K_4；用加权图方法处理 K_8 的 28 条边上的着色搜索。",
+              "path": "downloads/lit-000004-azmi-r34-weightedgraph.pdf",
+              "processed": false,
+              "source_request_ids": [],
+              "dedup_key": "doi:10.24036/rmj.v1i1.1",
+              "doi": "10.24036/rmj.v1i1.1",
+              "year": 2022,
+              "authors": [],
+              "venue": null,
+              "language": null,
+              "added_at": "2026-10-23T21:17:32+08:00",
+              "download": {
+                "status": "skipped",
+                "http_status": null,
+                "bytes": 0,
+                "sha256": null,
+                "error": "no_local_path",
+                "url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1",
+                "fulltext": "no_fulltext_this_time",
+                "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+              },
+              "pages": "",
+              "matched": "",
+              "claimed_by": null,
+              "lease_until": null,
+              "mine_attempts": 0,
+              "last_mine_error": null
+            },
+            {
+              "lit_id": "000005",
+              "title": "Large Progress in Small Ramsey Numbers",
+              "type": "M",
+              "summary": "Soifer 2010，收于 Geometric Etudes in Combinatorial Mathematics 的章节（Crossref 记录无摘要，无 pdf_url）。本轮只核到书目记录。",
+              "path": null,
+              "processed": false,
+              "source_request_ids": [],
+              "dedup_key": "doi:10.1007/978-0-387-75470-3_7",
+              "doi": "10.1007/978-0-387-75470-3_7",
+              "year": 2010,
+              "authors": [],
+              "venue": null,
+              "language": null,
+              "added_at": "2026-10-23T21:17:32+08:00",
+              "download": {
+                "status": "skipped",
+                "http_status": null,
+                "bytes": 0,
+                "sha256": null,
+                "error": "no_local_path",
+                "url": "https://doi.org/10.1007/978-0-387-75470-3_7",
+                "fulltext": "no_fulltext_this_time",
+                "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+              },
+              "pages": "",
+              "matched": "",
+              "claimed_by": null,
+              "lease_until": null,
+              "mine_attempts": 0,
+              "last_mine_error": null,
+              "_keys": [
+                "doi:10.1007/978-0-387-75470-3_7",
+                "title:large progress in small ramsey numbers|2010",
+                "title:large progress in small ramsey numbers|*"
+              ]
+            }
+          ],
+          "total": 6,
+          "returned": 6,
+          "limit": 20,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "total": 6,
+          "returned": 6,
+          "offset": 0,
+          "limit": 20
+        },
+        "aliased_from": "table_list"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 27904,
+        "prompt_cache_miss_tokens": 2179,
+        "tokens_in": 30083,
+        "tokens_out": 70,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {},
+        "why": "开始消化第一篇未处理文献（队列 6 篇，逐篇 run_once）"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "BRunResult(processed=1, concepts_created=0, concepts_reused=0, relations_added=0, relations_duplicate=0, relations_suspect=0, suspect_by_quote=0, quotes_verified=0, quotes_failed=0, quotes_unknown=0, quotes_out_of_declared_range=0, unreadable=1, skipped_no_extractor=0, failed=0, skipped_lease_active=0, skipped_lease_backoff=0, gave_up=0, conflict_checks_run=0, conflicts_detected=0, conflict_checks_skipped=0, concepts_refused=0, relations_deferred=0, concept_quota={}, skipped_reason=None, details=[{'lit_id': '000000', 'stage': 'acquire', 'skipped': 'no_fulltext_this_time: https://doi.org/10.4153/cjm-1955-001-4'}])",
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 29312,
+        "prompt_cache_miss_tokens": 3215,
+        "tokens_in": 32527,
+        "tokens_out": 213,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {},
+        "why": "继续消化队列第二篇（000000 已如实报 no_fulltext，剩 5 篇）"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "BRunResult(processed=1, concepts_created=0, concepts_reused=0, relations_added=0, relations_duplicate=0, relations_suspect=0, suspect_by_quote=0, quotes_verified=0, quotes_failed=0, quotes_unknown=0, quotes_out_of_declared_range=0, unreadable=1, skipped_no_extractor=0, failed=0, skipped_lease_active=0, skipped_lease_backoff=0, gave_up=0, conflict_checks_run=0, conflicts_detected=0, conflict_checks_skipped=0, concepts_refused=0, relations_deferred=0, concept_quota={}, skipped_reason=None, details=[{'lit_id': '000001', 'stage': 'acquire', 'skipped': 'file_missing:D:\\\\Incubator\\\\r34b\\\\library\\\\downloads\\\\lit-000001-radziszowski-smallramseynumbers.pdf'}])",
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 31872,
+        "prompt_cache_miss_tokens": 1072,
+        "tokens_in": 32944,
+        "tokens_out": 140,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {
+          "args": {}
+        },
+        "why": "继续消化队列第三篇（000000/000001 已如实报缺全文，剩 4 篇）"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "BRunResult(processed=1, concepts_created=0, concepts_reused=0, relations_added=0, relations_duplicate=0, relations_suspect=0, suspect_by_quote=0, quotes_verified=0, quotes_failed=0, quotes_unknown=0, quotes_out_of_declared_range=0, unreadable=1, skipped_no_extractor=0, failed=0, skipped_lease_active=0, skipped_lease_backoff=0, gave_up=0, conflict_checks_run=0, conflicts_detected=0, conflict_checks_skipped=0, concepts_refused=0, relations_deferred=0, concept_quota={}, skipped_reason=None, details=[{'lit_id': '000002', 'stage': 'acquire', 'skipped': 'no_fulltext_this_time: https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p68/pdf'}])",
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 32256,
+        "prompt_cache_miss_tokens": 1095,
+        "tokens_in": 33351,
+        "tokens_out": 116,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {},
+        "why": "继续消化队列第四篇（000002 已如实报缺全文，剩 000003-000005）"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "BRunResult(processed=1, concepts_created=0, concepts_reused=0, relations_added=0, relations_duplicate=0, relations_suspect=0, suspect_by_quote=0, quotes_verified=0, quotes_failed=0, quotes_unknown=0, quotes_out_of_declared_range=0, unreadable=1, skipped_no_extractor=0, failed=0, skipped_lease_active=0, skipped_lease_backoff=0, gave_up=0, conflict_checks_run=0, conflicts_detected=0, conflict_checks_skipped=0, concepts_refused=0, relations_deferred=0, concept_quota={}, skipped_reason=None, details=[{'lit_id': '000003', 'stage': 'acquire', 'skipped': 'no_fulltext_this_time: https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p30/pdf'}])",
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 32640,
+        "prompt_cache_miss_tokens": 1062,
+        "tokens_in": 33702,
+        "tokens_out": 113,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {},
+        "why": "继续消化队列第五篇（000003 已如实报缺全文，剩 000004-000005）"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "BRunResult(processed=1, concepts_created=0, concepts_reused=0, relations_added=0, relations_duplicate=0, relations_suspect=0, suspect_by_quote=0, quotes_verified=0, quotes_failed=0, quotes_unknown=0, quotes_out_of_declared_range=0, unreadable=1, skipped_no_extractor=0, failed=0, skipped_lease_active=0, skipped_lease_backoff=0, gave_up=0, conflict_checks_run=0, conflicts_detected=0, conflict_checks_skipped=0, concepts_refused=0, relations_deferred=0, concept_quota={}, skipped_reason=None, details=[{'lit_id': '000004', 'stage': 'acquire', 'skipped': 'file_missing:D:\\\\Incubator\\\\r34b\\\\library\\\\downloads\\\\lit-000004-azmi-r34-weightedgraph.pdf'}])",
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 33024,
+        "prompt_cache_miss_tokens": 1057,
+        "tokens_in": 34081,
+        "tokens_out": 41,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {},
+        "why": "继续消化队列最后一篇（000004 已如实报缺全文，剩 000005）"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "BRunResult(processed=1, concepts_created=0, concepts_reused=0, relations_added=0, relations_duplicate=0, relations_suspect=0, suspect_by_quote=0, quotes_verified=0, quotes_failed=0, quotes_unknown=0, quotes_out_of_declared_range=0, unreadable=1, skipped_no_extractor=0, failed=0, skipped_lease_active=0, skipped_lease_backoff=0, gave_up=0, conflict_checks_run=0, conflicts_detected=0, conflict_checks_skipped=0, concepts_refused=0, relations_deferred=0, concept_quota={}, skipped_reason=None, details=[{'lit_id': '000005', 'stage': 'acquire', 'skipped': 'no_fulltext_this_time: https://doi.org/10.1007/978-0-387-75470-3_7'}])",
+        "error": "",
+        "meta": {},
+        "框架提醒": "【同一个调用】同一个形状、同一份参数连着第 3 次（同一读数连着 1 次，工具 own.run_once）—— 读数还在变，所以这不是原地打转。但连着问同一件事三次之后，先问自己一句：它还会给你新东西吗？不会再给就换做法，或者把「卡在哪」写进 final 收工。"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 33408,
+        "prompt_cache_miss_tokens": 968,
+        "tokens_in": 34376,
+        "tokens_out": 69,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "table.count",
+        "args": {
+          "table": "literature",
+          "filter": {
+            "processed": false
+          }
+        },
+        "why": "确认 6 篇逐篇 run_once 之后未消化队列的剩余数（每篇都如实报 no_fulltext / file_missing）"
+      },
+      "result": {
+        "tool": "table.count",
+        "ok": true,
+        "data": 0,
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "total": 0,
+          "filtered": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 33664,
+        "prompt_cache_miss_tokens": 1110,
+        "tokens_in": 34774,
+        "tokens_out": 192,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "statement_full": "对完全图 K_n 的边做红/蓝二着色。记 R(3,4) 为最小整数 N，使得每一个 K_N 的红/蓝边二着色都包含一个红色 K_3（红色三角形）或一个蓝色 K_4（蓝色完全四边形）。则 N = 9。\n\n（假设：着色是任意的、无任何附加限制；K_n 是简单完全图；\"红色 K_3\" 指三个顶点两两边皆红。）",
+          "statement_text": "R(3,4) = 9：每一个 K_9 的红/蓝边二着色都含红色 K_3 或蓝色 K_4，且存在 K_8 的一个既无红色 K_3 又无蓝色 K_4 的二着色。",
+          "label": "Ramsey R(3,4) = 9",
+          "origin": "own_result",
+          "line_range": {
+            "start": 1,
+            "end": 51,
+            "label": "out/review/PROOF-R34.md 第 1-51 行（第一节命题、第二节证明、机器可复核部分）"
+          },
+          "proof_text": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。\n\n## 机器可复核的部分（与本工作区的对应关系）\n\n- 上界与下界都由穷举搜索独立核到：experiments 行 `claim_key=r34-ramsey-exactly-9`，\n  脚本 `code/r34_verify.py`（sha256 76b4c735d4008f57），exit_code = 0，\n  n=9 的\"干净\"着色数为 0，n=8 的\"干净\"着色数为 17640（含上文给出的那个见证）。\n- 剪枝版（用步骤 1 的引理：red degree <= 3）与不剪枝版在 n=7、n=8 上给出相同计数，\n  说明该剪枝不丢解；n=9 时两种读法都是 0。\n- 上述穷举只是对这条命题的独立复核，不构成本命题的证明本身：书面证明见第一、二节。",
+          "derived_from": [
+            "exp:000000"
+          ],
+          "evidence_kind": "cross_check",
+          "quote_verified": false,
+          "quote_reason": "出处是本地稿件 out/review/PROOF-R34.md（fs.read 读到，sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d），proof_text 与 statement_full 均逐字取自该文件第一、二节，未做任何改写/压缩。没有走逐字回验（`quoteverify.check_quote`）而标 false 的原因：这条是 origin=own_result，引文的\"来源\"是盘上稿件而不是文献全文；本工作区 6 篇 literature（000000-000005）逐篇 run_once 全部报 no_fulltext_this_time / file_missing，没有一篇有本地全文可供比对，因此无法对任何 literature 行做逐字回验 —— 这是\"查不了\"，不是\"查了不一致\"。出处映射：proof_text 第三节\"机器可复核的部分\"里写的 `experiments 行 claim_key=r34-ramsey-exactly-9` 即 exp:000000（已在 derived_from 记下）。同主题文献行里题名最对得上的是 lit:000004《The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph》（2022，只覆盖 R(3,4)>8 这半个下界、且仅到摘要、无正文），其次是 lit:000000 Greenwood & Gleason 1955《Combinatorial Relations and Chromatic Graphs》（R(3,4)=9 的经典出处，但本轮只有 Crossref 书目、正文未取到）—— 二者都只能算 partial，不足以支撑命题任何一句的逐字引文，故未挂 source_lit_id。另：本条还没有 V 的签名（verifications/ 下无本命题的行），所以 evidence_kind 按规矩退到 cross_check 而不是 proof_review。"
+        },
+        "why": "把 PROOF-R34.md 的命题（含全部假设）与完整证明逐字登记进 statements，三件套齐全，不自行声明证明等级"
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": false,
+          "kind": "must_start_as_conjecture",
+          "reason": "这一笔是 origin='own_result'、没有 source_lit_id、quote_verified 也不是 true ⇒ 没有引文 / 自己编的命题必须从「猜想」注册（业主 2026-10-22 裁定 B-2），不能一进门就声明成 'theorem'。两条正路（都不必改这一行的内容）：① 把 kind 改成 \"conjecture\" 再交一次（升档不用你报：等级由 evidencebits.derive_grade 按五元位现算 —— 有证明过程且 V 签过就自己抬）；② 走猜想登记那条路：D 的 register_conjecture 动作（工具面 `conjecture.register_conjecture`）先把这条立成猜想，再拿证据回来。如果你本来就有外部出处：给 source_lit_id + page_range 并按 origin='external_lit' 重交。",
+          "refusal_reason": "invalid_params"
+        },
+        "error": "",
+        "meta": {
+          "statement_tier": {
+            "tier": "T0",
+            "downgraded": true,
+            "decision": "太平凡",
+            "reason": "两条判据都答不上：材料里没有任何『后面哪一步会用到它』的使用者（source 与 why_this_is_not_trivial 均为空串），也没有说明它比已知的哪一条强——R(3,4)=9 是教科书级的经典小 Ramsey 数精确值，纯属基础事实，故判平凡、归 T0。",
+            "basis": [
+              "statements 收录判据①：需指得出具体使用者（哪条证明的哪一步、哪个猜想）；本条 source 与 why_this_is_not_trivial 字段均为空串，无任何使用者线索",
+              "statements 收录判据②：需说明比已知的那一条强在哪；本条未给出任何对照对象或加强陈述",
+              "statement_full 本身即经典结论 R(3,4)=9（Greenwood–Gleason 型小 Ramsey 数精确值），为教科书基础定理，无附加技巧或跨领域工具的主张",
+              "按『太平凡』后果条款：不拦收录，档位给 0"
+            ],
+            "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          }
+        },
+        "tier": {
+          "tier": "T0",
+          "downgraded": true,
+          "decision": "太平凡",
+          "reason": "两条判据都答不上：材料里没有任何『后面哪一步会用到它』的使用者（source 与 why_this_is_not_trivial 均为空串），也没有说明它比已知的哪一条强——R(3,4)=9 是教科书级的经典小 Ramsey 数精确值，纯属基础事实，故判平凡、归 T0。",
+          "basis": [
+            "statements 收录判据①：需指得出具体使用者（哪条证明的哪一步、哪个猜想）；本条 source 与 why_this_is_not_trivial 字段均为空串，无任何使用者线索",
+            "statements 收录判据②：需说明比已知的那一条强在哪；本条未给出任何对照对象或加强陈述",
+            "statement_full 本身即经典结论 R(3,4)=9（Greenwood–Gleason 型小 Ramsey 数精确值），为教科书基础定理，无附加技巧或跨领域工具的主张",
+            "按『太平凡』后果条款：不拦收录，档位给 0"
+          ],
+          "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+          "judged_by": "secretary",
+          "judge": "statement_aesthetic"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.register_statement 的参数表：statement_full: string，必填；source_lit_id: string，origin='external_lit' 必需：论文那一行的 lit_id（必须是 literature 表里真实存在的行，写库前会核）；proof_text: string，origin='own_result' 的逐字证明摘录。**可以不给**（P-06）：缺它 ⇒ 第 2 位空 ⇒ 现算等级降到「猜想」并进待办，**不拒收** —— 那条硬要求实测一条真猜想都没挡住，只挡住了如实登记；proofs: array；kind: string；label: string；statement_text: string；origin: string，枚举 [external_lit/own_result]，来源。**它决定还要给哪些字段**（写库前逐条硬校验）：external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；own_result（我们自己的）⇒ 必须给 doc_id 或；page_range: object，origin='external_lit' 必需：出处页码（start，或 label —— 如「全文未分页」；只给空的 start/end 等于没给）；evidence_kind: string，枚举 [proof/proof_review/cross_check/heuristic]，证据强度。**有 `proof_text` 且 V 在 `verifications/<命题号>.jsonl` 里签了「成立」（且签的就是现行这一版正文）⇒ 就该写 `proof_review`** —— 定义只在 `s；quote_verified: boolean，引文回验是否通过；不传 = 还没查（None）。2026-10-14 起“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同；quote_mode: string，枚举 [verbatim/semantic]，这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」）：verbatim＝逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先；quote_reason: string，quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查；quote_span: string，引文在来源里命中哪一段。逐字档的口径是 `p{页}:norm[起:止]`：页号从 1 起，起止是该页经 `textutil.normalize_for_quote` 归一化之后的字符偏移（含头不含尾）；语义档这一栏是 H；quote_call_sha256: string，**只有 `quote_mode=semantic` 这一档填**：H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`（那次语义判定的调用指纹）。逐字档不填 —— 它；derived_from: array；doc_id: string，origin='own_result' 时与 line_range **二者必居其一**：我方稿件那一行的 id。**格式：6 位十进制字符串（如 \"000000\"；旧数据里的 4 位号仍可读）** —— 写成 \"doc；line_range: object，origin='own_result' 时与 doc_id **二者必居其一**：start 或 label 至少一个（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 34048,
+        "prompt_cache_miss_tokens": 946,
+        "tokens_in": 34994,
+        "tokens_out": 3407,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "kind": "conjecture",
+          "label": "Ramsey R(3,4) = 9",
+          "origin": "own_result",
+          "line_range": {
+            "start": 3,
+            "end": 47,
+            "label": "out/review/PROOF-R34.md 第 3-47 行（第一节命题 + 第二节证明）"
+          },
+          "derived_from": [
+            "exp:000000"
+          ],
+          "evidence_kind": "cross_check",
+          "quote_verified": null,
+          "quote_reason": "还没有做逐字回验：本条 origin=own_result，正文与证明都逐字取自盘上 out/review/PROOF-R34.md（fs.read 读到，sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d，共 51 行），没有拿 literature 的本地全文去比对——本工作区 6 篇文献全部无本地全文（000000/000002/000003/000005 = no_fulltext_this_time，000001/000004 = file_missing），所以 quote_verified 保持 null（还没查），不是 false。文献侧的对应只到书目级：lit:000004《The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph》（Azmi 等 2022）的摘要只支持『R(3,4) > 8 / m=8 最大』这半句（下界），上界 R(3,4) <= 9 与完整证明无任何本地文献正文可对，属 partial，不硬凑。文件内对穷举核验的指向见『机器可复核的部分』一节（experiments 行 claim_key=r34-ramsey-exactly-9，脚本 sha256 76b4c735d4008f57，n=9 干净着色数 0、n=8 为 17640），台账引用落在 derived_from=exp:000000（proof_text 逐字不动，故不把 id 写进正文）。V 尚未对这条证明签字，故 evidence_kind 不写 proof_review。",
+          "statement_full": "对完全图 K_n 的边做红/蓝二着色。记 R(3,4) 为最小整数 N，使得每一个 K_N 的红/蓝边二着色都\n包含一个红色 K_3（红色三角形）或一个蓝色 K_4（蓝色完全四边形）。则 N = 9。\n\n（假设：着色是任意的、无任何附加限制；K_n 是简单完全图；\"红色 K_3\" 指三个顶点两两边皆红。）",
+          "proof_text": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。"
+        },
+        "why": "上一次被拒是 kind 的入口约束（own_result 无引文不许一进门声明成定理）；照拒绝理由把 kind 改成 conjecture 重交，正文与证明逐字不动"
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": false,
+          "kind": "write_failed",
+          "reason": "落盘没成（ValueError: derived_from[] 必须是 6 位十进制字符串（如 000000；旧数据里的 4 位号仍可读），收到 'exp:000000'）⇒ 这一笔按'没写成'读",
+          "refusal_reason": "invalid_params",
+          "stmt_id": ""
+        },
+        "error": "",
+        "meta": {
+          "statement_tier": {
+            "tier": "T0",
+            "downgraded": true,
+            "decision": "太平凡",
+            "reason": "材料既未指出任何后续证明步骤或猜想会用到它，也未说明它比已知的经典结论 R(3,4)=9 强在哪里，两条判据都答不上来。",
+            "basis": [
+              "材料中 source、statement、why_this_is_not_trivial 均为空，未给出具体使用者或后续证明步骤",
+              "statement_full 只是经典 Ramsey 数 R(3,4)=9 的陈述，没有说明相对已知结果的增强",
+              "按题目判据，缺①具体使用者和②强于已知之处，应判太平凡并归 T0"
+            ],
+            "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          }
+        },
+        "tier": {
+          "tier": "T0",
+          "downgraded": true,
+          "decision": "太平凡",
+          "reason": "材料既未指出任何后续证明步骤或猜想会用到它，也未说明它比已知的经典结论 R(3,4)=9 强在哪里，两条判据都答不上来。",
+          "basis": [
+            "材料中 source、statement、why_this_is_not_trivial 均为空，未给出具体使用者或后续证明步骤",
+            "statement_full 只是经典 Ramsey 数 R(3,4)=9 的陈述，没有说明相对已知结果的增强",
+            "按题目判据，缺①具体使用者和②强于已知之处，应判太平凡并归 T0"
+          ],
+          "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+          "judged_by": "secretary",
+          "judge": "statement_aesthetic"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.register_statement 的参数表：statement_full: string，必填；source_lit_id: string，origin='external_lit' 必需：论文那一行的 lit_id（必须是 literature 表里真实存在的行，写库前会核）；proof_text: string，origin='own_result' 的逐字证明摘录。**可以不给**（P-06）：缺它 ⇒ 第 2 位空 ⇒ 现算等级降到「猜想」并进待办，**不拒收** —— 那条硬要求实测一条真猜想都没挡住，只挡住了如实登记；proofs: array；kind: string；label: string；statement_text: string；origin: string，枚举 [external_lit/own_result]，来源。**它决定还要给哪些字段**（写库前逐条硬校验）：external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；own_result（我们自己的）⇒ 必须给 doc_id 或；page_range: object，origin='external_lit' 必需：出处页码（start，或 label —— 如「全文未分页」；只给空的 start/end 等于没给）；evidence_kind: string，枚举 [proof/proof_review/cross_check/heuristic]，证据强度。**有 `proof_text` 且 V 在 `verifications/<命题号>.jsonl` 里签了「成立」（且签的就是现行这一版正文）⇒ 就该写 `proof_review`** —— 定义只在 `s；quote_verified: boolean，引文回验是否通过；不传 = 还没查（None）。2026-10-14 起“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同；quote_mode: string，枚举 [verbatim/semantic]，这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」）：verbatim＝逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先；quote_reason: string，quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查；quote_span: string，引文在来源里命中哪一段。逐字档的口径是 `p{页}:norm[起:止]`：页号从 1 起，起止是该页经 `textutil.normalize_for_quote` 归一化之后的字符偏移（含头不含尾）；语义档这一栏是 H；quote_call_sha256: string，**只有 `quote_mode=semantic` 这一档填**：H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`（那次语义判定的调用指纹）。逐字档不填 —— 它；derived_from: array；doc_id: string，origin='own_result' 时与 line_range **二者必居其一**：我方稿件那一行的 id。**格式：6 位十进制字符串（如 \"000000\"；旧数据里的 4 位号仍可读）** —— 写成 \"doc；line_range: object，origin='own_result' 时与 doc_id **二者必居其一**：start 或 label 至少一个（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 34304,
+        "prompt_cache_miss_tokens": 3475,
+        "tokens_in": 37779,
+        "tokens_out": 2848,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "statement_full": "对完全图 K_n 的边做红/蓝二着色。记 R(3,4) 为最小整数 N，使得每一个 K_N 的红/蓝边二着色都\n包含一个红色 K_3（红色三角形）或一个蓝色 K_4（蓝色完全四边形）。则 N = 9。\n\n（假设：着色是任意的、无任何附加限制；K_n 是简单完全图；\"红色 K_3\" 指三个顶点两两边皆红。）",
+          "statement_text": "R(3,4) = 9",
+          "label": "Ramsey R(3,4) = 9",
+          "kind": "conjecture",
+          "origin": "own_result",
+          "line_range": {
+            "start": 3,
+            "end": 47,
+            "label": "out/review/PROOF-R34.md 第 3-47 行（第一节命题原文 + 第二节证明全文）"
+          },
+          "proof_text": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。",
+          "evidence_kind": "cross_check",
+          "quote_verified": null,
+          "quote_reason": "proof_text 逐字取自本工作区文件 out/review/PROOF-R34.md 第二节（fs.read 读到全 51 行，文件 sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d，与派活给的 4eb2dba6d8daa1bf 相符）；这一笔没有对 literature 全文做逐字回验，因为本工作区 6 篇文献全部无本地全文（000000/000002/000003/000005 = no_fulltext_this_time，000001/000004 = file_missing），故 quote_verified 保持 null（还没查），不是 false。evidence_kind 写 cross_check 而非 proof_review：目前还没有 V 在 verifications/<命题号>.jsonl 上的签名；穷举核验的指向见派生引用 exp 行 000000（claim_key=r34-ramsey-exactly-9，proof_text 步骤 2 内也写着“本工作区由 exp 行的校准读数 n=5 有 12 个…n=6 为 0 个所独立核到”）。",
+          "derived_from": [
+            "000000"
+          ]
+        },
+        "why": "把 out/review/PROOF-R34.md 的命题（含全部假设）与证明全文逐字登记为 own_result；derived_from 用 6 位十进制（exp 行 000000），kind 按上一笔拒绝理由改为 conjecture，等级由证据位现算"
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": false,
+          "kind": "write_failed",
+          "reason": "落盘没成（ValueError: derived_from 不能包含自身（自环会让'承重链'永远闭合））⇒ 这一笔按'没写成'读",
+          "refusal_reason": "invalid_params",
+          "stmt_id": ""
+        },
+        "error": "",
+        "meta": {
+          "statement_tier": {
+            "tier": "T0",
+            "downgraded": true,
+            "decision": "太平凡",
+            "reason": "材料既未指出任何后续证明步骤或猜想会用到它，也未说明它比已知的经典结论 R(3,4)=9 强在哪里，两条判据都答不上来。",
+            "basis": [
+              "材料中 source、statement、why_this_is_not_trivial 均为空，未给出具体使用者或后续证明步骤",
+              "statement_full 只是经典 Ramsey 数 R(3,4)=9 的陈述，没有说明相对已知结果的增强",
+              "按题目判据，缺①具体使用者和②强于已知之处，应判太平凡并归 T0"
+            ],
+            "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          }
+        },
+        "tier": {
+          "tier": "T0",
+          "downgraded": true,
+          "decision": "太平凡",
+          "reason": "材料既未指出任何后续证明步骤或猜想会用到它，也未说明它比已知的经典结论 R(3,4)=9 强在哪里，两条判据都答不上来。",
+          "basis": [
+            "材料中 source、statement、why_this_is_not_trivial 均为空，未给出具体使用者或后续证明步骤",
+            "statement_full 只是经典 Ramsey 数 R(3,4)=9 的陈述，没有说明相对已知结果的增强",
+            "按题目判据，缺①具体使用者和②强于已知之处，应判太平凡并归 T0"
+          ],
+          "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+          "judged_by": "secretary",
+          "judge": "statement_aesthetic"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.register_statement 的参数表：statement_full: string，必填；source_lit_id: string，origin='external_lit' 必需：论文那一行的 lit_id（必须是 literature 表里真实存在的行，写库前会核）；proof_text: string，origin='own_result' 的逐字证明摘录。**可以不给**（P-06）：缺它 ⇒ 第 2 位空 ⇒ 现算等级降到「猜想」并进待办，**不拒收** —— 那条硬要求实测一条真猜想都没挡住，只挡住了如实登记；proofs: array；kind: string；label: string；statement_text: string；origin: string，枚举 [external_lit/own_result]，来源。**它决定还要给哪些字段**（写库前逐条硬校验）：external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；own_result（我们自己的）⇒ 必须给 doc_id 或；page_range: object，origin='external_lit' 必需：出处页码（start，或 label —— 如「全文未分页」；只给空的 start/end 等于没给）；evidence_kind: string，枚举 [proof/proof_review/cross_check/heuristic]，证据强度。**有 `proof_text` 且 V 在 `verifications/<命题号>.jsonl` 里签了「成立」（且签的就是现行这一版正文）⇒ 就该写 `proof_review`** —— 定义只在 `s；quote_verified: boolean，引文回验是否通过；不传 = 还没查（None）。2026-10-14 起“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同；quote_mode: string，枚举 [verbatim/semantic]，这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」）：verbatim＝逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先；quote_reason: string，quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查；quote_span: string，引文在来源里命中哪一段。逐字档的口径是 `p{页}:norm[起:止]`：页号从 1 起，起止是该页经 `textutil.normalize_for_quote` 归一化之后的字符偏移（含头不含尾）；语义档这一栏是 H；quote_call_sha256: string，**只有 `quote_mode=semantic` 这一档填**：H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`（那次语义判定的调用指纹）。逐字档不填 —— 它；derived_from: array；doc_id: string，origin='own_result' 时与 line_range **二者必居其一**：我方稿件那一行的 id。**格式：6 位十进制字符串（如 \"000000\"；旧数据里的 4 位号仍可读）** —— 写成 \"doc；line_range: object，origin='own_result' 时与 doc_id **二者必居其一**：start 或 label 至少一个（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37120,
+        "prompt_cache_miss_tokens": 3080,
+        "tokens_in": 40200,
+        "tokens_out": 2864,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "statement_full": "对完全图 K_n 的边做红/蓝二着色。记 R(3,4) 为最小整数 N，使得每一个 K_N 的红/蓝边二着色都\n包含一个红色 K_3（红色三角形）或一个蓝色 K_4（蓝色完全四边形）。则 N = 9。\n\n（假设：着色是任意的、无任何附加限制；K_n 是简单完全图；\"红色 K_3\" 指三个顶点两两边皆红。）",
+          "statement_text": "R(3,4) = 9：每个 K_9 的红/蓝边二着色都含红色 K_3 或蓝色 K_4，且存在 K_8 的二着色两者皆无。",
+          "label": "Ramsey R(3,4) = 9",
+          "kind": "conjecture",
+          "origin": "own_result",
+          "line_range": {
+            "start": 3,
+            "end": 47,
+            "label": "out/review/PROOF-R34.md 第 3-47 行：第一节命题原文（含全部假设）+ 第二节证明全文"
+          },
+          "proof_text": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。",
+          "evidence_kind": "cross_check",
+          "quote_verified": false,
+          "quote_reason": "还没查成逐字回验：这是 origin=own_result 的自产证明，逐字来源是盘上文件 out/review/PROOF-R34.md（fs.read 读到，sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d），statement_full 与 proof_text 均按该文件逐字抄录、未改写未压缩；但没有对任何 literature 行做逐字命中比对，原因是本工作区 6 篇文献全部没有本地全文（000000/000002/000003/000005 = no_fulltext_this_time，000001/000004 = file_missing），无法提供可回验的引文区间，故 quote_verified=false 表示「未核成」而非「核不上」。对穷举核验的指向：exp:000000（claim_key=r34-ramsey-exactly-9，见该文件「机器可复核的部分」一节）；derived_from 一栏被框架限定为 statements 的 6 位 id，承载不了 exp: 引用，故写在这里。"
+        },
+        "why": "把 PROOF-R34.md 第一节（含假设的命题）与第二节（证明全文逐字）登记进 statements，三件套齐；kind=conjecture 按框架要求，等级交给证据位现算"
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "stmt_id": "000000",
+          "source_lit_id": null,
+          "self_authored_review": {
+            "needs_v": false,
+            "signed": false,
+            "in_ledger": false,
+            "checked": true,
+            "verification_id": "",
+            "why": "kind='conjecture' 不在这一条闸的射程里：猜想本来就要先落库才审得动（V 只审在册的命题）⇒ 按猜想注册不受阻，从猜想升成 theorem/lemma 的那一步才要 V 的签"
+          },
+          "quote_verified": false,
+          "origin": "own_result",
+          "quote_mode": "",
+          "quote_span": "",
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "",
+            "where": "statements.proof_text"
+          },
+          "evidence_kind": "cross_check",
+          "row": {
+            "stmt_id": "000000",
+            "origin": "own_result",
+            "kind": "conjecture",
+            "label": "Ramsey R(3,4) = 9",
+            "statement_text": "R(3,4) = 9：每个 K_9 的红/蓝边二着色都含红色 K_3 或蓝色 K_4，且存在 K_8 的二着色两者皆无。",
+            "statement_full": "对完全图 K_n 的边做红/蓝二着色。记 R(3,4) 为最小整数 N，使得每一个 K_N 的红/蓝边二着色都\n包含一个红色 K_3（红色三角形）或一个蓝色 K_4（蓝色完全四边形）。则 N = 9。\n\n（假设：着色是任意的、无任何附加限制；K_n 是简单完全图；\"红色 K_3\" 指三个顶点两两边皆红。）",
+            "proof_text": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。",
+            "source_lit_id": null,
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote_verified": false,
+            "quote_mode": "",
+            "quote_reason": "还没查成逐字回验：这是 origin=own_result 的自产证明，逐字来源是盘上文件 out/review/PROOF-R34.md（fs.read 读到，sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d），statement_full 与 proof_text 均按该文件逐字抄录、未改写未压缩；但没有对任何 literature 行做逐字命中比对，原因是本工作区 6 篇文献全部没有本地全文（000000/000002/000003/000005 = no_fulltext_this_time，000001/000004 = file_missing），无法提供可回验的引文区间，故 quote_verified=false 表示「未核成」而非「核不上」。对穷举核验的指向：exp:000000（claim_key=r34-ramsey-exactly-9，见该文件「机器可复核的部分」一节）；derived_from 一栏被框架限定为 statements 的 6 位 id，承载不了 exp: 引用，故写在这里。",
+            "quote_span": "",
+            "quote_call_sha256": "",
+            "evidence_kind": "cross_check",
+            "bits": {
+              "numeric": "pending",
+              "proof": true,
+              "reviewed": false,
+              "formal": "pending",
+              "audited": false,
+              "origin": "own_result",
+              "evidence": {
+                "numeric": {},
+                "numeric_reason": "",
+                "proof_process": "### 一、上界 R(3,4) <= 9\n\n反设存在 K_9 的一个红/蓝边二着色，既无红色 K_3，也无蓝色 K_4。对任一顶点 v，记 d_R(v) 为\nv 关联的红边数，d_B(v) = 8 - d_R(v) 为蓝边数。\n\n**步骤 1（d_R(v) <= 3）。** 若 d_R(v) >= 4，取 v 的 4 个红色邻点，记集合 A，|A| = 4。\n若 A 中存在一条红边 xy，则 vxy 是红色 K_3，与反设矛盾；故 A 中 6 条边全为蓝色，\nA 本身即一个蓝色 K_4，亦与反设矛盾。因此 d_R(v) <= 3，从而 d_B(v) >= 5。\n\n**步骤 2（d_B(v) <= 5）。** 设 v 的蓝邻点集为 B，|B| = d_B(v) >= 5。若 |B| >= 6，取 B 中\n6 个顶点，由 R(3,3) = 6（6 个顶点的完全图任意红/蓝二着色必含单色三角形；本工作区由\nexp 行的校准读数 n=5 有 12 个无单色三角形着色、n=6 为 0 个所独立核到）知这 6 个顶点上有\n单色三角形 T。若 T 为红色，与\"无红色 K_3\"矛盾；若 T 为蓝色，则 T 的三个顶点都在 B 中，\n与 v 用蓝边相连，故 T ∪ {v} 是蓝色 K_4，矛盾。因此 |B| <= 5，即 d_B(v) <= 5。\n\n**步骤 3（握手引理给出矛盾）。** 由步骤 1、2，对每个 v 都有 d_B(v) = 5、d_R(v) = 3。\n于是红色子图是 9 个顶点上的 3-正则图，其边数为 9 * 3 / 2 = 27/2，不是整数，矛盾。\n故 K_9 的每个红/蓝二着色都含红色 K_3 或蓝色 K_4，即 R(3,4) <= 9。\n\n### 二、下界 R(3,4) > 8\n\n在顶点集 {0,1,...,7} 上取红色边集\n\nE_R = {01, 02, 03, 14, 15, 24, 26, 35, 37, 47, 56, 67}，\n\n其余边染蓝。E_R 是 8 个顶点上的 3-正则图（每点度数 3），且不含三角形；其补图（蓝色图）\n亦不含 K_4。因此这个着色既无红色 K_3 也无蓝色 K_4，故 R(3,4) > 8。\n\n### 三、结论\n\n8 < R(3,4) <= 9 ⇒ R(3,4) = 9。",
+                "proof_source": "own",
+                "reviewed_by": {},
+                "formal": {},
+                "formal_reason": "",
+                "audited_by": {}
+              },
+              "voided_by": {},
+              "grade": "conjecture",
+              "audited_badge": false
+            },
+            "status": "active",
+            "derived_from": [],
+            "aliases": [],
+            "doc_id": null,
+            "line_range": {
+              "start": 3,
+              "end": 47,
+              "label": "out/review/PROOF-R34.md 第 3-47 行：第一节命题原文（含全部假设）+ 第二节证明全文"
+            },
+            "created_at": "2026-10-23T21:26:09+08:00",
+            "created_by": "secretary-B"
+          },
+          "deps_state": "none_in_proof",
+          "deps_written": 0,
+          "deps_dangling": [],
+          "deps_unmappable": [],
+          "pending_definitions": [],
+          "proof_text_dropped": "",
+          "proofs_dropped": [],
+          "pending": [],
+          "note": "登记 ≠ 核对：quote_verified 是三态（True/False/None），它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。五元位已随这一行落库（现算等级 conjecture；第 2 位来源 own）——等级不许自报，判据永远现算。这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），表格 ['statements', 'dependencies']、路径组 0。"
+        },
+        "error": "",
+        "meta": {
+          "statement_tier": {
+            "tier": "T0",
+            "downgraded": true,
+            "decision": "太平凡",
+            "reason": "材料既未指出任何后续证明步骤或猜想会用到它，也未说明它比已知的经典结论 R(3,4)=9 强在哪里，两条判据都答不上来。",
+            "basis": [
+              "材料中 source、statement、why_this_is_not_trivial 均为空，未给出具体使用者或后续证明步骤",
+              "statement_full 只是经典 Ramsey 数 R(3,4)=9 的陈述，没有说明相对已知结果的增强",
+              "按题目判据，缺①具体使用者和②强于已知之处，应判太平凡并归 T0"
+            ],
+            "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          }
+        },
+        "tier": {
+          "tier": "T0",
+          "downgraded": true,
+          "decision": "太平凡",
+          "reason": "材料既未指出任何后续证明步骤或猜想会用到它，也未说明它比已知的经典结论 R(3,4)=9 强在哪里，两条判据都答不上来。",
+          "basis": [
+            "材料中 source、statement、why_this_is_not_trivial 均为空，未给出具体使用者或后续证明步骤",
+            "statement_full 只是经典 Ramsey 数 R(3,4)=9 的陈述，没有说明相对已知结果的增强",
+            "按题目判据，缺①具体使用者和②强于已知之处，应判太平凡并归 T0"
+          ],
+          "note": "平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23：秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据：① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪",
+          "judged_by": "secretary",
+          "judge": "statement_aesthetic"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 39424,
+        "prompt_cache_miss_tokens": 3357,
+        "tokens_in": 42781,
+        "tokens_out": 2914,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 14,
+      "shape": "final",
+      "payload": {
+        "final": "B 这一趟两件事都做完了。读数如下。\n\n① 新 statements 行的 id：**000000**（label=\"Ramsey R(3,4) = 9\"，kind=conjecture，status=active，落库时间 2026-10-23T21:26:09+08:00）。\n② 该行的 origin 与 evidence 字段：**origin=own_result**；**evidence_kind=cross_check**；`quote_verified=false`（三态里的『还没查成』，不是『核不上』），`quote_mode` 为空；五元位现算等级 **conjecture**（proof 位=true，numeric/formal 位=pending，reviewed/audited 位=false）—— 等级不是我报的，是框架按证据位现算的。三件套：statement_full = PROOF-R34.md 第一节命题原文（含『着色任意、K_n 简单完全图、红 K_3 定义』三条假设）；proof_text = 第二节证明全文逐字（一、上界／二、下界／三、结论，一字未改未压缩，其中步骤 2 自带对本工作区 exp 行校准读数 n=5→12、n=6→0 的指向）；出处 = line_range `out/review/PROOF-R34.md` 第 3–47 行 + 该文件 sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d；对穷举核验的指向 exp:000000 写在 quote_reason（原因：`derived_from` 被框架限定为 statements 的 6 位 id，装不下 `exp:` 引用，且填 \"000000\" 会被判自环拒写）。evidence_kind 落 cross_check 的唯一理由是还没有 V 对这条正文的签名（`verifications/000000.jsonl` 不存在）；若 V 走查签『成立』，应把同一份内容再交一次 `own.register_statement` 改档为 proof_review —— 这一步我没做，因为派活只要求登记与如实填档，不自报等级。\n③ literature.unprocessed 消化后剩余数：**0**（起点 6）。逐篇 run_once 的如实结果：000000 = no_fulltext_this_time（doi:10.4153/cjm-1955-001-4）、000001 = file_missing（downloads/lit-000001-radziszowski-smallramseynumbers.pdf 不在盘上）、000002 = no_fulltext_this_time、000003 = no_fulltext_this_time、000004 = file_missing（downloads/lit-000004-azmi-r34-weightedgraph.pdf 不在盘上）、000005 = no_fulltext_this_time。六篇全部 unreadable=1，**概念行 0 条、关系行 0 条** —— 没有正文就没有逐字引文，按边界不产出任何关系，也没有假装整理过。这也是 quote_verified 只能是 false 的直接原因：库里 6 篇文献无一有本地全文，拿不出可回验的引文区间。\n\n另需转达的两条读数（不在派活范围内，但下游会用）：秘书对本条判『太平平凡』降 T0，缺的两条判据是 ① 后面哪一步具体会用到它、② 它比已知哪一条强；要升档就补这两条重交。另 literature 表里 000001/000004 两条 `path` 字段指向的文件在盘上不存在（`library/downloads/` 下），要 A 重取全文。",
+        "evidence": [
+          "stmt:000000",
+          "exp:000000",
+          "lit:000000",
+          "lit:000001",
+          "lit:000002",
+          "lit:000003",
+          "lit:000004",
+          "lit:000005"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "B 回报：命题已登记为 stmt:000000（own_result / cross_check / conjecture 现算），literature.unprocessed 6→0，六篇全部缺全文故 0 概念 0 关系",
+          "body": "## ① 新 statements 行\n\n- `stmt_id = 000000`，label `Ramsey R(3,4) = 9`，kind=`conjecture`，status=`active`\n- **origin = `own_result`**\n- **evidence_kind = `cross_check`**（`quote_verified=false`，`quote_mode` 空；五元位现算等级 `conjecture`，proof 位 true，numeric/formal pending，reviewed/audited false）\n\n三件套（缺一不可，都已写全）：\n\n1. `statement_full` = `out/review/PROOF-R34.md` 第一节命题原文，含三条假设（着色任意无附加限制 / K_n 简单完全图 / 『红色 K_3』指三顶点两两边皆红）。\n2. `proof_text` = 第二节证明**全文逐字**（一、上界 d_R(v)<=3 → d_B(v)<=5 → 握手引理 27/2 矛盾；二、下界 K_8 红色边集 E_R={01,02,03,14,15,24,26,35,37,47,56,67}；三、结论）。未改写、未压缩。步骤 2 原文内自带对本工作区 exp 行校准读数（n=5→12、n=6→0）的指向。\n3. 出处 = `line_range` `out/review/PROOF-R34.md` 第 3–47 行；该文件 sha256 `4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d`（与你给的 4eb2dba6d8daa1bf 一致）。\n\n对穷举核验的指向 **exp:000000**（claim_key=r34-ramsey-exactly-9）写在 `quote_reason` 里：`derived_from` 被框架限定为 statements 的 6 位 id（填 `exp:000000` 被拒；填 `\"000000\"` 被判自环拒写），装不下跨表引用。我没有为了塞指针去改 proof_text —— 那是改写原文。\n\n未自报档位：`evidence_kind` 落 `cross_check` 的唯一原因是 `verifications/000000.jsonl` 里**还没有 V 的签名**。若 V 走查后在 `proof_sha256` 与现行正文相符的前提下签『成立』，把同一份内容再交一次 `own.register_statement` 即可改档为 `proof_review`（这一步我留给派活给我的那一方定）。\n\n## ② literature.unprocessed 消化后剩余\n\n**0**（起点 6，逐篇 `run_once` 全部 unreadable）：\n\n| lit_id | run_once 读数 |\n|---|---|\n| 000000 | `no_fulltext_this_time: https://doi.org/10.4153/cjm-1955-001-4` |\n| 000001 | `file_missing: library/downloads/lit-000001-radziszowski-smallramseynumbers.pdf` |\n| 000002 | `no_fulltext_this_time: .../eljc/article/download/v20i1p68/pdf` |\n| 000003 | `no_fulltext_this_time: .../eljc/article/download/v20i1p30/pdf` |\n| 000004 | `file_missing: library/downloads/lit-000004-azmi-r34-weightedgraph.pdf` |\n| 000005 | `no_fulltext_this_time: https://doi.org/10.1007/978-0-387-75470-3_7` |\n\n产出：**概念行 0、关系行 0**。没有正文 ⇒ 没有逐字引文 ⇒ 按边界不产出关系，不假装整理过。\n\n## ③ 要你/下游知道的两条\n\n- 秘书判本条『太平平凡』→ 落 **T0**，缺的判据：① 后面哪一步具体会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪。补齐后重交才升档。\n- **A 那批文献一个字都没下下来**：000001 / 000004 的 `path` 字段指向 `library/downloads/` 下两个**不存在的文件**，其余四篇 `download.status=skipped` / `bytes=0`。要让文献侧真的可引，需要 A 重取全文（这六篇里题名与 R(3,4) 最对得上的是 000004『The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph』与 000000 Greenwood–Gleason 1955）。\n\n我卡在哪：不卡。命题已入库、队列已清零；缺的是**文献全文**（不在我的面内）与**V 的签名**（决定这条能不能从 cross_check 升 proof_review）。",
+          "refs": [
+            "stmt:000000",
+            "exp:000000",
+            "lit:000004",
+            "lit:000000"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000003",
+          "ok": true,
+          "id": "000003",
+          "path": "manuscripts/handoffs.jsonl#000003",
+          "to": "M",
+          "brief": "B 回报：命题已登记为 stmt:000000（own_result / cross_check / conjecture 现算），literature.unprocessed 6→0，六篇全部缺全文故 0 概念 0 关系",
+          "addressing": {
+            "checked": true,
+            "how": "outside_roster",
+            "to": "M",
+            "kind": "",
+            "name": "",
+            "task_id": "",
+            "role": "",
+            "brief": "",
+            "candidates": [],
+            "callable": "",
+            "refused": "",
+            "error": "",
+            "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）",
+            "delivery": "role",
+            "manuscript_to": "M"
+          },
+          "notify_channel": "role",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "m000007",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 42112,
+        "prompt_cache_miss_tokens": 5280,
+        "tokens_in": 47392,
+        "tokens_out": 2501,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    }
+  ],
+  "final": "B 这一趟两件事都做完了。读数如下。\n\n① 新 statements 行的 id：**000000**（label=\"Ramsey R(3,4) = 9\"，kind=conjecture，status=active，落库时间 2026-10-23T21:26:09+08:00）。\n② 该行的 origin 与 evidence 字段：**origin=own_result**；**evidence_kind=cross_check**；`quote_verified=false`（三态里的『还没查成』，不是『核不上』），`quote_mode` 为空；五元位现算等级 **conjecture**（proof 位=true，numeric/formal 位=pending，reviewed/audited 位=false）—— 等级不是我报的，是框架按证据位现算的。三件套：statement_full = PROOF-R34.md 第一节命题原文（含『着色任意、K_n 简单完全图、红 K_3 定义』三条假设）；proof_text = 第二节证明全文逐字（一、上界／二、下界／三、结论，一字未改未压缩，其中步骤 2 自带对本工作区 exp 行校准读数 n=5→12、n=6→0 的指向）；出处 = line_range `out/review/PROOF-R34.md` 第 3–47 行 + 该文件 sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d；对穷举核验的指向 exp:000000 写在 quote_reason（原因：`derived_from` 被框架限定为 statements 的 6 位 id，装不下 `exp:` 引用，且填 \"000000\" 会被判自环拒写）。evidence_kind 落 cross_check 的唯一理由是还没有 V 对这条正文的签名（`verifications/000000.jsonl` 不存在）；若 V 走查签『成立』，应把同一份内容再交一次 `own.register_statement` 改档为 proof_review —— 这一步我没做，因为派活只要求登记与如实填档，不自报等级。\n③ literature.unprocessed 消化后剩余数：**0**（起点 6）。逐篇 run_once 的如实结果：000000 = no_fulltext_this_time（doi:10.4153/cjm-1955-001-4）、000001 = file_missing（downloads/lit-000001-radziszowski-smallramseynumbers.pdf 不在盘上）、000002 = no_fulltext_this_time、000003 = no_fulltext_this_time、000004 = file_missing（downloads/lit-000004-azmi-r34-weightedgraph.pdf 不在盘上）、000005 = no_fulltext_this_time。六篇全部 unreadable=1，**概念行 0 条、关系行 0 条** —— 没有正文就没有逐字引文，按边界不产出任何关系，也没有假装整理过。这也是 quote_verified 只能是 false 的直接原因：库里 6 篇文献无一有本地全文，拿不出可回验的引文区间。\n\n另需转达的两条读数（不在派活范围内，但下游会用）：秘书对本条判『太平平凡』降 T0，缺的两条判据是 ① 后面哪一步具体会用到它、② 它比已知哪一条强；要升档就补这两条重交。另 literature 表里 000001/000004 两条 `path` 字段指向的文件在盘上不存在（`library/downloads/` 下），要 A 重取全文。",
+  "evidence": [
+    "stmt:000000",
+    "exp:000000",
+    "lit:000000",
+    "lit:000001",
+    "lit:000002",
+    "lit:000003",
+    "lit:000004",
+    "lit:000005"
+  ],
+  "stop_reason": "final",
+  "bad_json": 1,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 3,
+  "stalled_max": 0,
+  "dead_loop_nudges": 1,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "counters_reset_at": 15,
+  "compactions": 0,
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "handoffs": [
+    "000003"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p189",
+    "role": "B",
+    "prompt_sha256": "862af97d4d54cac09c3be1309dac3608551def20bf2802b31b9cde0b12242622",
+    "prompt_chars": 30278,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_INBOX",
+      "TASK_BOARD",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ],
+    "preset": {
+      "id": "",
+      "path": "",
+      "trust": "",
+      "rows": 0,
+      "problem": ""
+    }
+  },
+  "spend": {
+    "calls": 17,
+    "tokens_in": 526985,
+    "tokens_out": 18632,
+    "usd": 0.018858,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 15,
+    "no_request_calls": 0,
+    "hit": 484864,
+    "miss": 40920,
+    "unknown_calls": 0,
+    "tokens_in": 525784,
+    "hit_rate": 0.9222,
+    "mismatched_calls": 0,
+    "saved_usd": 0.071274,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 105.516,
+  "notes": [
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000000）",
+    "缓存读数：命中 484864 / 未命中 40920 token，命中率 92.2%（15 次调用）；按 modelcost 口径估算可省 约 0.071274 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "B 这一趟两件事都做完了。读数如下。\n\n① 新 statements 行的 id：**000000**（label=\"Ramsey R(3,4) = 9\"，kind=conjecture，status=active，落库时间 2026-10-23T21:26:09+08:00）。\n② 该行的 origin 与 evidence 字段：**origin=own_result**；**evidence_kind=cross_check**；`quote_verified=false`（三态里的『还没查成』，不是『核不上』），`quote_mode` 为空；五元位现算等级 **conjecture**（proof 位=true，numeric/formal 位=pending，reviewed/audited 位=false）—— 等级不是我报的，是框架按证据位现算的。三件套：statement_full = PROOF-R34.md 第一节命题原文（含『着色任意、K_n 简单完全图、红 K_3 定义』三条假设）；proof_text = 第二节证明全文逐字（一、上界／二、下界／三、结论，一字未改未压缩，其中步骤 2 自带对本工作区 exp 行校准读数 n=5→12、n=6→0 的指向）；出处 = line_range `out/review/PROOF-R34.md` 第 3–47 行 + 该文件 sha256 4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d；对穷举核验的指向 exp:000000 写在 quote_reason（原因：`derived_from` 被框架限定为 statements 的 6 位 id，装不下 `exp:` 引用，且填 \"000000\" 会被判自环拒写）。evidence_kind 落 cross_check 的唯一理由是还没有 V 对这条正文的签名（`verifications/000000.jsonl` 不存在）；若 V 走查签『成立』，应把同一份内容再交一次 `own.register_statement` 改档为 proof_review —— 这一步我没做，因为派活只要求登记与如实填档，不自报等级。\n③ literature.unprocessed 消化后剩余数：**0**（起点 6）。逐篇 run_once 的如实结果：000000 = no_fulltext_this_time（doi:10.4153/cjm-1955-001-4）、000001 = file_missing（downloads/lit-000001-radziszowski-smallramseynumbers.pdf 不在盘上）、000002 = no_fulltext_this_time、000003 = no_fulltext_this_time、000004 = file_missing（downloads/lit-000004-azmi-r34-weightedgraph.pdf 不在盘上）、000005 = no_fulltext_this_time。六篇全部 unreadable=1，**概念行 0 条、关系行 0 条** —— 没有正文就没有逐字引文，按边界不产出任何关系，也没有假装整理过。这也是 quote_verified 只能是 false 的直接原因：库里 6 篇文献无一有本地全文，拿不出可回验的引文区间。\n\n另需转达的两条读数（不在派活范围内，但下游会用）：秘书对本条判『太平平凡』降 T0，缺的两条判据是 ① 后面哪一步具体会用到它、② 它比已知哪一条强；要升档就补这两条重交。另 literature 表里 000001/000004 两条 `path` 字段指向的文件在盘上不存在（`library/downloads/` 下），要 A 重取全文。",
+    "evidence": [
+      "stmt:000000",
+      "exp:000000",
+      "lit:000000",
+      "lit:000001",
+      "lit:000002",
+      "lit:000003",
+      "lit:000004",
+      "lit:000005"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "B 回报：命题已登记为 stmt:000000（own_result / cross_check / conjecture 现算），literature.unprocessed 6→0，六篇全部缺全文故 0 概念 0 关系",
+      "body": "## ① 新 statements 行\n\n- `stmt_id = 000000`，label `Ramsey R(3,4) = 9`，kind=`conjecture`，status=`active`\n- **origin = `own_result`**\n- **evidence_kind = `cross_check`**（`quote_verified=false`，`quote_mode` 空；五元位现算等级 `conjecture`，proof 位 true，numeric/formal pending，reviewed/audited false）\n\n三件套（缺一不可，都已写全）：\n\n1. `statement_full` = `out/review/PROOF-R34.md` 第一节命题原文，含三条假设（着色任意无附加限制 / K_n 简单完全图 / 『红色 K_3』指三顶点两两边皆红）。\n2. `proof_text` = 第二节证明**全文逐字**（一、上界 d_R(v)<=3 → d_B(v)<=5 → 握手引理 27/2 矛盾；二、下界 K_8 红色边集 E_R={01,02,03,14,15,24,26,35,37,47,56,67}；三、结论）。未改写、未压缩。步骤 2 原文内自带对本工作区 exp 行校准读数（n=5→12、n=6→0）的指向。\n3. 出处 = `line_range` `out/review/PROOF-R34.md` 第 3–47 行；该文件 sha256 `4eb2dba6d8daa1bf302df9342329101c7a87745fbc29aff7b435b31eceb86c4d`（与你给的 4eb2dba6d8daa1bf 一致）。\n\n对穷举核验的指向 **exp:000000**（claim_key=r34-ramsey-exactly-9）写在 `quote_reason` 里：`derived_from` 被框架限定为 statements 的 6 位 id（填 `exp:000000` 被拒；填 `\"000000\"` 被判自环拒写），装不下跨表引用。我没有为了塞指针去改 proof_text —— 那是改写原文。\n\n未自报档位：`evidence_kind` 落 `cross_check` 的唯一原因是 `verifications/000000.jsonl` 里**还没有 V 的签名**。若 V 走查后在 `proof_sha256` 与现行正文相符的前提下签『成立』，把同一份内容再交一次 `own.register_statement` 即可改档为 `proof_review`（这一步我留给派活给我的那一方定）。\n\n## ② literature.unprocessed 消化后剩余\n\n**0**（起点 6，逐篇 `run_once` 全部 unreadable）：\n\n| lit_id | run_once 读数 |\n|---|---|\n| 000000 | `no_fulltext_this_time: https://doi.org/10.4153/cjm-1955-001-4` |\n| 000001 | `file_missing: library/downloads/lit-000001-radziszowski-smallramseynumbers.pdf` |\n| 000002 | `no_fulltext_this_time: .../eljc/article/download/v20i1p68/pdf` |\n| 000003 | `no_fulltext_this_time: .../eljc/article/download/v20i1p30/pdf` |\n| 000004 | `file_missing: library/downloads/lit-000004-azmi-r34-weightedgraph.pdf` |\n| 000005 | `no_fulltext_this_time: https://doi.org/10.1007/978-0-387-75470-3_7` |\n\n产出：**概念行 0、关系行 0**。没有正文 ⇒ 没有逐字引文 ⇒ 按边界不产出关系，不假装整理过。\n\n## ③ 要你/下游知道的两条\n\n- 秘书判本条『太平平凡』→ 落 **T0**，缺的判据：① 后面哪一步具体会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪。补齐后重交才升档。\n- **A 那批文献一个字都没下下来**：000001 / 000004 的 `path` 字段指向 `library/downloads/` 下两个**不存在的文件**，其余四篇 `download.status=skipped` / `bytes=0`。要让文献侧真的可引，需要 A 重取全文（这六篇里题名与 R(3,4) 最对得上的是 000004『The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph』与 000000 Greenwood–Gleason 1955）。\n\n我卡在哪：不卡。命题已入库、队列已清零；缺的是**文献全文**（不在我的面内）与**V 的签名**（决定这条能不能从 cross_check 升 proof_review）。",
+      "refs": [
+        "stmt:000000",
+        "exp:000000",
+        "lit:000004",
+        "lit:000000"
+      ]
+    }
+  }
+}

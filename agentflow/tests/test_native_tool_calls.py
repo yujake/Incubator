@@ -445,13 +445,24 @@ def test_an_unadvertised_function_is_refused_with_the_name_in_the_message(tmp_pa
     assert data is None and "fs_read" in call.detail, call.detail
 
 
-def test_two_tool_calls_in_one_step_are_refused_not_silently_truncated(tmp_path: Path):
-    """负控（一步一件事）：两条原生调用 ⇒ 明确拒；不许悄悄只执行第一条。"""
+def test_two_tool_calls_in_one_step_take_the_first_and_keep_the_rest_as_evidence(tmp_path: Path):
+    """D-35（方案 B）取代了"两条都拒"那一版：两条原生调用 ⇒ 执行第一条，其余留下读数。
+
+    改前红（r34b 现场）：整步 `judge_bad_json`，`detail` 是"这一步给了 2 条工具调用；
+    本循环一步只做一件事，请只留一条" —— 147 步里有 10 步这样作废，token 已计费、
+    产出全丢。现在解析层取第一条执行，而 `call.tool_call_list` 仍原样带着两条：
+    循环据此在 step 结果里落一句 `warn`（判据见
+    `tests/test_d35_multi_call_takes_first.py`）；一条都不给仍判 invalid（那一档没放宽）。
+    """
     seam, _gw = _seam(tmp_path, [{"tool_calls": [_call("conductor_state", {}),
                                                  _call("conductor_ledger", {"view": "stats"})]}])
     face = LL.build_tool_face("M", build_registry().registry)
     data, call = seam.ask_step("t", face=face)
-    assert data is None and "只做一件事" in call.detail, call.detail
+    assert call.ok and data is not None, call.to_dict()
+    assert data == {"tool": "conductor.state", "args": {}, "why": ""}, data
+    # 被丢的那条没有消失：整份调用还在，且能映回真名（丢弃的读数可核）
+    assert len(call.tool_call_list) == 2 and call.tool_calls == 2, call.to_dict()
+    assert face.action_name(call.tool_call_list[1]) == "conductor.ledger"
 
 
 def test_the_text_fallback_is_untouched(tmp_path: Path):

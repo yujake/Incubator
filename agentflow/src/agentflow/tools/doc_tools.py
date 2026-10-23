@@ -28,6 +28,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
+from .. import numericproof as NP
 from .. import papercompile as PC
 from .. import papermapping as PM
 from .. import proofloc as _PL
@@ -2413,6 +2414,18 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
                             "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境"
                                            "落在哪一份读数里（相对仓库根，如 "
                                            "out/experiments/000000/exhaustion.md）"},
+        # 索引四格（D-34）：D 的报告是目录，B 顺着它去取正文（F 的证明 / E 的报告）。
+        # 名字与列义只有一份（`numericproof.INDEX_*`），这里只是把形状告诉模型。
+        "evidence_kind": {"type": "string", "enum": list(NP.INDEX_KINDS),
+                          "description": "这一行的正文是哪一本：proof（F 的证明）/ "
+                                         "report（E 的报告）。数值实验定理那一行填 report"},
+        "evidence_path": {"type": "string",
+                          "description": "正文在仓库里的相对路径（如 "
+                                         "out/experiments/000000/exhaustion.md）"},
+        "evidence_sha256": {"type": "string",
+                            "description": "那份文件字节的 sha256（不是文本归一化之后的）"},
+        "v_signature": {"type": "object",
+                        "description": "{verdict, sha256}：V 的结论与它签的那一份的 sha256"},
     },
     "required": ["kind", "label", "env_no", "ledger_id", "proof_no", "file"],
 }

@@ -1,0 +1,2 @@
+{"reason": "user", "by": "user", "force": false, "at": "2026-10-23T21:34:23+08:00", "sid": "r34b", "path": "D:\\Incubator\\r34b\\.agentflow-stop", "consumed_at": "2026-10-23T21:34:23+08:00", "consumed_by_sid": "r34b", "level": "stop_file", "removed": false}
+{"reason": "user", "by": "user", "force": false, "at": "2026-10-23T21:34:23+08:00", "sid": "r34b", "path": "D:\\Incubator\\r34b\\.agentflow-stop", "consumed_at": "2026-10-23T21:34:24+08:00", "consumed_by_sid": "r34b", "level": "stop_file", "removed": true}

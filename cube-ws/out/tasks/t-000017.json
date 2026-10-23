@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T21:28:23+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2416,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"没改成：这一格在「已有行」上没有可写的正路。三条路都试过，逐条给读数——① table.update（patch 只含 quote_reason）→ ok=false，refusal=direct_write_refused（原话：statements 不由通用写口直写，只有 Secretary.record_statement(payload, role=\\\"B\\\") 一条正路）；② own.register_statement（同一份内容 + 新 quote_reason + evidence_kind=proof_review）→ ok=true、new_row=false，但只同步了 evidence 档位与 bits 的第 4 位，quote_reason 原样未变；③ 再交一次 → ok=false、refusal_reason=invalid_params、kind=duplicate_statement（按 statement_full 查重，已有行拒收）。\\n\\n【改动前后 quote_reason 原文（两段逐字相同，就是没变）】\\n前：origin=own_result 的自产结果，没有外部文献引文可做逐字回验（proof_text 是 reports/proof-p000000-cubesum.md 的全文，不是 literature 里的句子）；V 尚未签字，故 quote_verified 不置 true，按三态纪律标为「还没查」。\\n后：（同上，一字未变）。\\n\\n【硬约束核对】quote_verified 仍为 null（没改成 true/false）；proof_text 仍 2082 字、sha256=36bbf5dae92a7d1089fd0a0cdeb230e8b9bb2709dafc89e5b5b76001408cce4c（等于 reports/proof-p000000-cubesum.md 全文，与 V 签的 v-000001 那一版相符）；statement_text 与 statement_full 逐字未动；proof_history 未新增条目。\\n\\n【重交那一笔的副作用（如实报，不是我手写的）】bits 第 4 位（formal）从空 → verified，来源是 L 的 exp:000000（checker lean 4.7.0、exit_code=0、proof_sha256 与现行 proof_text 相符），由秘书按台账重算同步；evidence_kind=proof_review；tier 仍 T0（秘书判「太平凡」）。\\n\\n【另报一条收件箱里的矛盾】收件箱有 L 的 4 条形式化困难上报（m000001 statement_mismatch；m000002 第 8 步 unfaithful_step；m000003–m000005 第 37 步 missing_hypothesis×3），与台账现状（exp:000000 formal=verified）矛盾。我没有按上报去改 proof_text（那会动到 V 签过的那一版正文的 sha），请让 L 按台账口径回执一次：是那批上报已被后续那一趟覆盖，还是 verified 那一笔需要复核。\", \"llm_run_path\": \"D:\\\\Incubator\\\\cube-ws\\\\runs\\\\B-20261023-212823-001.json\", \"messages\": [], \"steps\": 12, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "f390cbc4b6b27cc88a637f94190cd49955c3824baa307a9eb38bdcc6c8f7f28f",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000017"
+}

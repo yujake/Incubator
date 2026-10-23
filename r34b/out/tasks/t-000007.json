@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T21:23:41+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 6698,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已完成 E 侧结构缺口的两块补写，但必须如实报告一件事：**行上的 `observations.exhaustion_report` 是「运行时快照」，我无法用任何重跑把它变成 ok=true**——我已用三组读数证明这一点，请 M 决定由谁在框架侧重算这一格。\\n\\n## 一、②③ 已按协议落盘（三处，均署名 作者：E、含 exp 编号与程序地址）\\n- `out/experiments/000000/exhaustion.md` —— 12032 字节（我这次写的；原为 0/存根）\\n- `out/experiments/000002/exhaustion.md` —— 10376 字节\\n- `out/experiments/000003/exhaustion.md` —— 10278 字节，sha256 `902e7cdcb81e77ee52a7e71bff1ce5873a5f488d5e1c9c30518a3aa7d46db288`\\n- `out/experiments/000001/exhaustion.md` —— **6168 字节，已完整**（V 会审挂的那条 exp:000001 的盘上报告不缺任何一块）\\n每份都含四块：程序地址 / 程序设计思路（对象编码 red[v]/blue[v] 邻接位掩码 + rdeg[v] + colour 字典；边按字典序 (0,1)…(n-2,n-1)；三条剪枝规则：红三角 `red[i]&red[j]!=0`、蓝 K4 经 `blue_edge_creates_clique`、n=9 的 `max_red_deg=3`；capped/cap_nodes/cap_seconds 的处理；引理 L 的陈述与 n=7/8 一致性对账）/ 穷举论证（|space|=2^36=68719476736、单调禁形⇒剪枝不丢解、n≤8 plain 完整计数 2812/13842/17640、n=9 plain 触顶不算穷尽而 degree-bounded 跑完 count=0 not capped、K_8 12 条红边见证、边界 n=9 闭合、自校准 R(3,3)=12/0）/ 运行环境。\\n\\n## 二、为什么 ok 没能变 true（三组读数，不是猜测）\\n1. **预写无效**：我先把完整 11109 字节报告写进 `out/experiments/000003/exhaustion.md`（created=true），再跑 `verify.run_experiment` → 跑完该文件被工具覆盖成 988 字节存根，`report_bytes=0`、`report_blocks={}`。\\n2. **读时不重算**：000003 写满 10278 字节后 `table.get`，行上仍是 `ok=false, bytes=0, sha256=\\\"\\\"`；`table.update` 改 notes 后返回的整行同样仍是 `ok=false`。\\n3. **持久化层同结论**：`data/experiments.json` 里 exp 000001 的 `exhaustion_report` 记着 `bytes:0, sha256:\\\"\\\", ok:false`，而它盘上的报告是完整的 6168 字节。\\n⇒ 结论：这一格是**跑时快照**（在写存根之前/以空报告算出），任何重跑都只能再产出一个新的 ok=false 快照。**要 ok=true 必须在框架侧按盘上文件重解析一次**（或由持该工具的那一方把 report reading 改成读时现算）。我没有、也不会去手改 `observations` 把读数伪造成 true——那正是拿不到证据时补写结论。\\n\\n## 三、要求的回报字段（读数取自 exp:000003，与 000000/000001/000002 逐位一致）\\n- **experiment_id**：`000003`（本次新产；`000001` 是 V 会审挂的那条，盘上报告同样完整）\\n- **method**：`exhaustive_search`\\n- **evidence_kind**：`cross_check`（**不给 proof**，证据等级按我的规矩落；V 那一签才是 proof 档唯一凭据）\\n- **search_bound**（000003 行上实存值）：`{\\\"n_upper\\\": 9, \\\"edges\\\": 36, \\\"search_space\\\": \\\"2^36 = 68719476736 red/blue 2-colourings of E(K_9)\\\", \\",
+ "payload_sha256": "306e48f012e41a78a5edec196193a546b4a87e8a6c66695147f44c4e07234278",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000007"
+}

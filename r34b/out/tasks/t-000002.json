@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T21:14:57+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 5670,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已按判据跑完并登记，读数如下（全部来自脚本 stdout 与台账，未改脚本一行逻辑）。\\n\\n【1. 复现命令】verify.run_experiment(claim='R(3,4) = 9: every red/blue 2-colouring of E(K_9) contains a red K_3 or a blue K_4, and there exists a red/blue 2-colouring of E(K_8) containing neither.', claim_key='r34-ramsey-exactly-9', script_path='code/r34_verify.py', method='exhaustive_search')；脚本 sha256 前 16 位 76b4c735d4008f57（= 你给的 76b4c735...，一致，未被改动）。原始输出：out/experiments/000001.log。\\n\\n【2. exit_code 与运行】exit_code=0（真实进程退出码），runtime=7.172s（第一趟 numeric 登记 exp:000000 同样 exit_code=0、7.594s）。stderr 为空。\\n\\n【3. REPRO_RESULT 原话（逐字，line 17 of 000001.log）】\\nREPRO_RESULT: {\\\"bound\\\":\\\"R(3,4) = 9 exactly (lower: an explicit clean colouring of K_8; upper: exhaustive count 0 of clean colourings of K_9)\\\",\\\"claim\\\":\\\"R(3,4) = 9: every red/blue colouring of E(K_9) has a red K3 or a blue K4, and some colouring of E(K_8) has neither\\\",\\\"data\\\":{\\\"K8_red_edges\\\":[[0,1],[0,2],[0,3],[1,4],[1,5],[2,4],[2,6],[3,5],[3,7],[4,7],[5,6],[6,7]],\\\"blue_clique\\\":4,\\\"calibration_R33\\\":{\\\"5\\\":{\\\"blue_clique\\\":3,\\\"cap_reason\\\":null,\\\"capped\\\":false,\\\"count\\\":12,\\\"edges\\\":10,\\\"max_red_deg\\\":null,\\\"n\\\":5,\\\"nodes\\\":265,\\\"seconds\\\":0.0},\\\"6\\\":{\\\"blue_clique\\\":3,\\\"cap_reason\\\":null,\\\"capped\\\":false,\\\"count\\\":0,\\\"edges\\\":15,\\\"max_red_deg\\\":null,\\\"n\\\":6,\\\"nodes\\\":987,\\\"seconds\\\":0.0}},\\\"failures\\\":[],\\\"n\\\":9,\\\"n8_clean_colourings\\\":17640,\\\"n9_clean_colourings\\\":0,\\\"objects\\\":\\\"red/blue 2-colourings of E(K_n)\\\",\\\"pruning_crosscheck\\\":{\\\"7\\\":{\\\"agree\\\":true,\\\"degree_bounded_count\\\":13842,\\\"degree_bounded_nodes\\\":100892,\\\"plain_count\\\":13842,\\\"seconds\\\":0.088},\\\"8\\\":{\\\"agree\\\":true,\\\"degree_bounded_count\\\":17640,\\\"degree_bounded_nodes\\\":629777,\\\"plain_count\\\":17640,\\\"seconds\\\":0.583}}},\\\"result\\\":\\\"supports\\\",\\\"scaling\\\":[{\\\"blue_clique\\\":3,\\\"count\\\":12,\\\"edges\\\":10,\\\"n\\\":5,\\\"nodes\\\":265,\\\"seconds\\\":0.0},{\\\"blue_clique\\\":3,\\\"count\\\":0,\\\"edges\\\":15,\\\"n\\\":6,\\\"nodes\\\":987,\\\"seconds\\\":0.0},{\\\"blue_clique\\\":4,\\\"count\\\":2812,\\\"edges\\\":1",
+ "payload_sha256": "fef2dcc0cacf0d83b24a78093ce48da0c9d6df7dc9607126b445aee1174141d5",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000002"
+}

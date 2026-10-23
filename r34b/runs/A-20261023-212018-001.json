@@ -1,0 +1,4715 @@
+{
+  "role": "A",
+  "task": "A：这一趟派给你的活是 —— 检索并登记关于 Ramsey 数 R(3,4) 的文献，目标是把「R(3,4)=9」这一经典结论的来源变成盘上可引的 literature 行。\n\n起手建议（怎么做由你定）：\n- 先用规范术语短题名查：topic=\"Ramsey number R(3,4)\"，必要时再查 \"R(3,4) = 9\" / \"Greenwood and Gleason\" / \"Ramsey numbers small\"。\n- 按你的规矩精选（一次至多入库 10 篇），只收真的讲小 Ramsey 数、且能取到正文的；取不到全文的如实报 outcome，不要拿不相关的凑数。\n- 回报里写清每一条请求的 outcome 与 result_lit_ids，以及取回的题名/年份。\n\n若检索后端不可用（no_provider / query_not_applicable），如实回报这一档，不要编造文献行。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "search.literature",
+        "args": {
+          "topic": "Ramsey number R(3,4)",
+          "mode": "topical",
+          "limit": 10
+        },
+        "why": "用规范术语短题名现查小 Ramsey 数 R(3,4) 的文献候选"
+      },
+      "result": {
+        "tool": "search.literature",
+        "ok": false,
+        "data": null,
+        "error": "provider='openalex' 检索失败：RemoteDisconnected: Remote end closed connection without response",
+        "meta": {
+          "kind": "provider_error",
+          "provider": "openalex",
+          "topic": "Ramsey number R(3,4)",
+          "mode": "topical"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 15616,
+        "prompt_cache_miss_tokens": 13126,
+        "tokens_in": 28742,
+        "tokens_out": 369,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "search.providers",
+        "args": {},
+        "why": "先真实探测哪些检索源可用，避免在断连的后端上反复重试"
+      },
+      "result": {
+        "tool": "search.providers",
+        "ok": true,
+        "data": {
+          "skip_network": false,
+          "providers": [
+            {
+              "name": "openalex",
+              "note": "主力源：标题/年份/DOI/类型/摘要/OA 的 PDF 链接，支持被引降序（找奠基性文献）",
+              "requires_network": true,
+              "available": true,
+              "status": "probed_ok",
+              "reason": "真实请求成功并返回可解析 JSON（GET /works?search=…&per-page=1）",
+              "latency_s": 2.203,
+              "evidence": "GET /works?search=…&per-page=1"
+            },
+            {
+              "name": "crossref",
+              "note": "补充源：页码、container-title、publisher 等元数据补齐；摘要覆盖不如 OpenAlex",
+              "requires_network": true,
+              "available": true,
+              "status": "probed_ok",
+              "reason": "真实请求成功并返回可解析 JSON（GET /works?query.bibliographic=…&rows=1）",
+              "latency_s": 0.985,
+              "evidence": "GET /works?query.bibliographic=…&rows=1"
+            },
+            {
+              "name": "doaj",
+              "note": "开放获取期刊文章（类型固定 J）；只覆盖 OA 期刊，范围窄",
+              "requires_network": true,
+              "available": true,
+              "status": "probed_ok",
+              "reason": "真实请求成功并返回可解析 JSON（GET /api/search/articles/bibjson.title:…）",
+              "latency_s": 2.046,
+              "evidence": "GET /api/search/articles/bibjson.title:…"
+            },
+            {
+              "name": "europepmc",
+              "note": "生命科学领域覆盖好，其它领域仅作补充",
+              "requires_network": true,
+              "available": true,
+              "status": "probed_ok",
+              "reason": "真实请求成功并返回可解析 JSON（GET /search?query=…&pageSize=1）",
+              "latency_s": 0.969,
+              "evidence": "GET /search?query=…&pageSize=1"
+            },
+            {
+              "name": "fixture",
+              "note": "离线 fixture（读 demo/fixtures/candidates.json）：不联网、确定性，供离线跑通与测试",
+              "requires_network": false,
+              "available": true,
+              "status": "probed_ok",
+              "reason": "离线 fixture 文件存在：D:\\Incubator\\agentflow\\demo\\fixtures\\candidates.json",
+              "latency_s": null,
+              "evidence": "D:\\Incubator\\agentflow\\demo\\fixtures\\candidates.json"
+            }
+          ],
+          "available": [
+            "openalex",
+            "crossref",
+            "doaj",
+            "europepmc",
+            "fixture"
+          ],
+          "unavailable": [],
+          "unverified": [],
+          "summary": "5 个已探测可用、0 个已探测不可用、0 个未探测。",
+          "default_provider": "openalex"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 28032,
+        "prompt_cache_miss_tokens": 1077,
+        "tokens_in": 29109,
+        "tokens_out": 193,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "search.literature",
+        "args": {
+          "topic": "Ramsey number R(3,4)",
+          "mode": "topical",
+          "limit": 10,
+          "providers": [
+            "openalex",
+            "crossref"
+          ]
+        },
+        "why": "openalex 刚才断连是瞬时的；改问两个源合并，避免单源失败整次落空"
+      },
+      "result": {
+        "tool": "search.literature",
+        "ok": true,
+        "data": {
+          "provider": "multi",
+          "mode": "topical",
+          "topic": "Ramsey number R(3,4)",
+          "description": "",
+          "limit": 10,
+          "count": 10,
+          "new_count": 10,
+          "existing_count": 0,
+          "unknown_count": 0,
+          "batch_duplicate_count": 0,
+          "store_checked": true,
+          "store_read_error": null,
+          "existing_table_size": 0,
+          "candidates": [
+            {
+              "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph",
+              "year": 2022,
+              "doi": "10.24036/rmj.v1i1.1",
+              "type_code": "J",
+              "authors": [
+                "Khairul Azmi",
+                "Elva",
+                "W Widia"
+              ],
+              "venue": "Rangkiang Mathematics Journal",
+              "language": "en",
+              "summary": "At present, research on Ramsey Numbers has expanded to a wider scope, not only between 2 complete graphs that are complementary to each other but also a combination of complete graphs, circle graphs, star graphs, wheel graphs, and others. While the classic Ramsey number still leaves problems that need to be solved. Ramsey number R(3,4) > 8. This means that m=8 is the largest integer such that K_(8) which contains components of a red graph G and a complete blue graph G which is still possible not to get K_3 in graph G and not get a blue K_4 in graph G .The graph K_(8) has a total of 28 edges. There are as many as the combination (28,3) red edge pairs that need to be avoided so as not to get any red K_3 edge pairs. And there are as many as the combination (28,4) edge pairs blue. That needs to be avoided in order not to get a pair of blue K_4 edges. Determining the coloring of the of the graph directly is certainly very difficult, especially if the Ramsey number is getting bigger. It's like looking for a needle in a haystack. Need to use a special method in order to solve this problem. The weighting graph method, where each edge is given weight with a certain value, is able to solve…",
+              "pdf_url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1",
+              "landing_url": "https://doi.org/10.24036/rmj.v1i1.1",
+              "provider": "openalex",
+              "dedup_key": "doi:10.24036/rmj.v1i1.1",
+              "dedup_keys": [
+                "doi:10.24036/rmj.v1i1.1",
+                "title:the classical ramsey number r 3 4 8 using the weighted graph|2022",
+                "title:the classical ramsey number r 3 4 8 using the weighted graph|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "openalex"
+              ],
+              "channel": "foundational",
+              "cited_by_count": 0
+            },
+            {
+              "title": "Parallel evaluation of ASP programs:techniques and implementation",
+              "year": 2011,
+              "doi": null,
+              "type_code": "D",
+              "authors": [
+                "M. Sirianni",
+                "Francesco Ricca",
+                "Nicola Leone"
+              ],
+              "venue": "Archive of Doctoral Theses and Digital Collections (University of Calabria)",
+              "language": "en",
+              "summary": "Answer Set Programming (ASP) is a purely declarative programming paradigm\\nbased on nonmonotonic reasoning and logic programming. The idea of ASP\\nis to represent a given computational problem by a logic program such that\\nits answer sets correspond to solutions, and then, use an answer set solver\\nto find such solutions. The ASP language is very expressive and allows the\\nrepresentation of high-complexity problems (i.e., every problem in the second\\nlevel of the polynomial hierarchy); unfortunately, the expressive power of the\\nlanguage comes at the price of an elevated cost of answer set computation. Even\\nif this fact has initially discouraged the development of ASP system, nowadays\\nseveral implementations are available, and the interest for ASP is growing in\\nthe scientific community as well as in the field of industry.\\nIn the last few years, significant technological enhancements have been achie-\\nved in the design of computer architectures, with a move towards the adoption\\nof multi-core microprocessors. As a consequence, Symmetric Multi-Processing\\n(SMP) has become available even on non-dedicated machines. Indeed, at the\\ntime of writing, the majority of computer systems…",
+              "pdf_url": "http://hdl.handle.net/10955/1045",
+              "landing_url": "http://hdl.handle.net/10955/1045",
+              "provider": "openalex",
+              "dedup_key": "title:parallel evaluation of asp programs techniques and implementation|2011",
+              "dedup_keys": [
+                "title:parallel evaluation of asp programs techniques and implementation|2011",
+                "title:parallel evaluation of asp programs techniques and implementation|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "openalex"
+              ],
+              "channel": "foundational",
+              "cited_by_count": 0
+            },
+            {
+              "title": "Some Ramsey- and anti-Ramsey-type results in combinatorial number theory and geometry",
+              "year": null,
+              "doi": "10.15476/elte.2015.139",
+              "type_code": "D",
+              "authors": [
+                "József Borbély"
+              ],
+              "venue": null,
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.15476/elte.2015.139",
+              "provider": "crossref",
+              "dedup_key": "doi:10.15476/elte.2015.139",
+              "dedup_keys": [
+                "doi:10.15476/elte.2015.139",
+                "title:some ramsey and anti ramsey type results in combinatorial number theory and geometry|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Turán Number and Related Ramsey Number",
+              "year": 2022,
+              "doi": "10.1007/978-3-031-12762-5_7",
+              "type_code": "M",
+              "authors": [
+                "Yusheng Li",
+                "Qizhong Lin"
+              ],
+              "venue": "Applied Mathematical Sciences Elementary Methods of Graph Ramsey Theory",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1007/978-3-031-12762-5_7",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1007/978-3-031-12762-5_7",
+              "dedup_keys": [
+                "doi:10.1007/978-3-031-12762-5_7",
+                "title:turán number and related ramsey number|2022",
+                "title:turán number and related ramsey number|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Ramsey Number Lower Bound",
+              "year": 2012,
+              "doi": "10.59350/x1mq6-06n92",
+              "type_code": "EB",
+              "authors": [
+                "Jeremy Kun"
+              ],
+              "venue": null,
+              "language": null,
+              "summary": "",
+              "pdf_url": "https://rogue-scholar.org/api/records/7sj8q-caw49/files/10.59350_x1mq6-06n92.pdf/content",
+              "landing_url": "https://doi.org/10.59350/x1mq6-06n92",
+              "provider": "crossref",
+              "dedup_key": "doi:10.59350/x1mq6-06n92",
+              "dedup_keys": [
+                "doi:10.59350/x1mq6-06n92",
+                "title:ramsey number lower bound|2012",
+                "title:ramsey number lower bound|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Ramsey Number Lower Bound",
+              "year": 2012,
+              "doi": "10.59350/j8wdj-pah14",
+              "type_code": "EB",
+              "authors": [
+                "Jeremy Kun"
+              ],
+              "venue": null,
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.59350/j8wdj-pah14",
+              "provider": "crossref",
+              "dedup_key": "doi:10.59350/j8wdj-pah14",
+              "dedup_keys": [
+                "doi:10.59350/j8wdj-pah14",
+                "title:ramsey number lower bound|2012",
+                "title:ramsey number lower bound|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "12. More Problems Of Ramsey Type In Additive Number Theory",
+              "year": 2018,
+              "doi": "10.1515/9783110576702-012",
+              "type_code": "M",
+              "authors": [],
+              "venue": "Ramsey Theory",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1515/9783110576702-012",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1515/9783110576702-012",
+              "dedup_keys": [
+                "doi:10.1515/9783110576702-012",
+                "title:12 more problems of ramsey type in additive number theory|2018",
+                "title:12 more problems of ramsey type in additive number theory|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "A note on the Ramsey number and the planar Ramsey number for C4 and complete graphs",
+              "year": 1999,
+              "doi": "10.7151/dmgt.1090",
+              "type_code": "J",
+              "authors": [
+                "Halina Bielak"
+              ],
+              "venue": "Discussiones Mathematicae Graph Theory",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.7151/dmgt.1090",
+              "provider": "crossref",
+              "dedup_key": "doi:10.7151/dmgt.1090",
+              "dedup_keys": [
+                "doi:10.7151/dmgt.1090",
+                "title:a note on the ramsey number and the planar ramsey number for c4 and complete graphs|1999",
+                "title:a note on the ramsey number and the planar ramsey number for c4 and complete graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Ramsey Medal, Modeling Competition winners announced",
+              "year": 2019,
+              "doi": "10.1287/orms.2019.05.13",
+              "type_code": "Z",
+              "authors": [],
+              "venue": "Volume 46, Number 5, October 2019",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1287/orms.2019.05.13",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1287/orms.2019.05.13",
+              "dedup_keys": [
+                "doi:10.1287/orms.2019.05.13",
+                "title:ramsey medal modeling competition winners announced|2019",
+                "title:ramsey medal modeling competition winners announced|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Bounds For The Set-Coloring Ramsey Number",
+              "year": 2025,
+              "doi": "10.2139/ssrn.5380593",
+              "type_code": "EB",
+              "authors": [
+                "Yanyan Song",
+                "Yaping Mao"
+              ],
+              "venue": null,
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.2139/ssrn.5380593",
+              "provider": "crossref",
+              "dedup_key": "doi:10.2139/ssrn.5380593",
+              "dedup_keys": [
+                "doi:10.2139/ssrn.5380593",
+                "title:bounds for the set coloring ramsey number|2025",
+                "title:bounds for the set coloring ramsey number|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            }
+          ],
+          "elapsed_s": 8.266,
+          "diagnostics": {},
+          "providers_requested": [
+            "openalex",
+            "crossref"
+          ],
+          "sources": [
+            {
+              "name": "openalex",
+              "status": "ok",
+              "count": 2,
+              "error_kind": "",
+              "error": "",
+              "delivered": true,
+              "refused": false
+            },
+            {
+              "name": "crossref",
+              "status": "ok",
+              "count": 10,
+              "error_kind": "",
+              "error": "",
+              "delivered": true,
+              "refused": false
+            }
+          ],
+          "source_count": 2,
+          "source_failures": [],
+          "source_refusals": [],
+          "cost": {
+            "provider_calls": 2,
+            "elapsed_s": 8.266
+          },
+          "warnings": []
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 28416,
+        "prompt_cache_miss_tokens": 1496,
+        "tokens_in": 29912,
+        "tokens_out": 281,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "search_requests",
+          "limit": 20
+        },
+        "why": "看是否已有待办检索请求行（决定是走 own.run_once 还是自己建委托）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "search_requests",
+          "rows": [],
+          "total": 0,
+          "returned": 0,
+          "limit": 20,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "total": 0,
+          "returned": 0,
+          "offset": 0,
+          "limit": 20
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 29184,
+        "prompt_cache_miss_tokens": 2863,
+        "tokens_in": 32047,
+        "tokens_out": 788,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "lit_candidates",
+          "limit": 30
+        },
+        "why": "上一轮 search.literature 的候选在观测层被截断；去 lit_candidates 表读回完整候选，才能逐条筛"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "lit_candidates",
+          "rows": [],
+          "total": 0,
+          "returned": 0,
+          "limit": 30,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "lit_candidates",
+          "total": 0,
+          "returned": 0,
+          "offset": 0,
+          "limit": 30
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 31360,
+        "prompt_cache_miss_tokens": 1380,
+        "tokens_in": 32740,
+        "tokens_out": 883,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.schema",
+        "args": {
+          "table": "search_requests"
+        },
+        "why": "先看 search_requests 的字段与受控词表，才能建一条合规的委托行并写回 outcome / result_lit_ids"
+      },
+      "result": {
+        "tool": "table.schema",
+        "ok": true,
+        "data": {
+          "tables": {
+            "search_requests": {
+              "file": "search_requests.json",
+              "primary_key": "request_id",
+              "id_kind": "request",
+              "uses_id_counter": false,
+              "fields": [
+                {
+                  "name": "request_id",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "timestamp",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "topic",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "mode",
+                  "type": "str(literal)",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ],
+                  "vocabulary": "SEARCH_MODES",
+                  "enum": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ]
+                },
+                {
+                  "name": "content_description",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "done",
+                  "type": "bool",
+                  "required": false,
+                  "default": false,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submitted_by",
+                  "type": "str",
+                  "required": false,
+                  "default": "unknown",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "claimed_by",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "lease_until",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "attempts",
+                  "type": "int",
+                  "required": false,
+                  "default": 0,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "result_lit_ids",
+                  "type": "list[str]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "last_error",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "outcome",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": "SEARCH_OUTCOMES",
+                  "enum": [
+                    "ok",
+                    "no_results",
+                    "search_failed",
+                    "gave_up"
+                  ]
+                },
+                {
+                  "name": "priority",
+                  "type": "str",
+                  "required": false,
+                  "default": "medium",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "for_question_id",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submit_note",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "providers",
+                  "type": "list[str]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                }
+              ],
+              "required": [
+                "request_id",
+                "timestamp",
+                "topic",
+                "mode"
+              ],
+              "vocabularies": {
+                "mode": {
+                  "vocabulary": "SEARCH_MODES",
+                  "values": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ]
+                },
+                "outcome": {
+                  "vocabulary": "SEARCH_OUTCOMES",
+                  "values": [
+                    "ok",
+                    "no_results",
+                    "search_failed",
+                    "gave_up"
+                  ]
+                }
+              }
+            }
+          },
+          "vocabularies": {
+            "SEARCH_MODES": [
+              "broad",
+              "topical",
+              "precise"
+            ],
+            "PRIORITIES": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "LIT_TYPES": [
+              "J",
+              "M",
+              "C",
+              "D",
+              "R",
+              "S",
+              "P",
+              "N",
+              "EB",
+              "Z"
+            ],
+            "RELATION_STATUS": [
+              "active",
+              "suspect",
+              "rejected"
+            ],
+            "SEARCH_OUTCOMES": [
+              "ok",
+              "no_results",
+              "search_failed",
+              "gave_up"
+            ],
+            "DOWNLOAD_STATUSES": [
+              "ok",
+              "content_mismatch",
+              "failed",
+              "skipped"
+            ],
+            "CANDIDATE_STATUSES": [
+              "pending",
+              "withdrawn",
+              "rejected",
+              "admitted",
+              "cleared"
+            ],
+            "CANDIDATE_REASON_CODES": [
+              "withdrawn_by_reviewer",
+              "rejected_off_topic",
+              "rejected_low_quality",
+              "duplicate_doi",
+              "overlap_without_new_content",
+              "overlap_ok_false",
+              "registration_failed",
+              "over_cap",
+              "not_screened"
+            ],
+            "LIT_MATCH_STATUSES": [
+              "exact",
+              "partial",
+              "mismatch"
+            ],
+            "QUOTE_MODES": [
+              "verbatim",
+              "semantic"
+            ],
+            "REPORT_KINDS": [
+              "hottest",
+              "paths",
+              "cold",
+              "gaps"
+            ],
+            "QUESTION_STATUSES": [
+              "open",
+              "needs_evidence",
+              "researching",
+              "answered",
+              "dropped"
+            ],
+            "CONTRADICTION_VERDICTS": [
+              "resolved",
+              "unresolved",
+              "new_contradiction",
+              "persistent"
+            ],
+            "QUESTION_KINDS": [
+              "gap",
+              "contradiction"
+            ],
+            "CONJECTURE_STATUSES": [
+              "proposed",
+              "needs_evidence",
+              "testing",
+              "supported_not_proved",
+              "refuted",
+              "proved",
+              "promoted",
+              "known_in_literature",
+              "withdrawn"
+            ],
+            "CONJECTURE_FORMS": [
+              "universal",
+              "existential",
+              "identity",
+              "bound",
+              "structural"
+            ],
+            "CONJECTURE_QUESTION_WORDS": [
+              "谁",
+              "什么",
+              "是否",
+              "吗",
+              "？",
+              "?",
+              "which",
+              "what",
+              "whether"
+            ],
+            "CONJECTURE_QUESTION_MARKS": [
+              "?",
+              "？",
+              "是否",
+              "吗"
+            ],
+            "CONJECTURE_QUESTION_PATTERNS": [
+              "^\\s*(谁|什么|哪些|哪类|如何|怎么|为什么)",
+              "(?i)^\\s*(which|what|whether|who|whom|whose|when|where|why|how)\\b",
+              "(?i)^\\s*(is|are|does|do|can|could|should|would|will|has|have)\\b"
+            ],
+            "REPROCESS_REASONS": [
+              "quote_unverifiable",
+              "low_information",
+              "need_context",
+              "structural_duplicate"
+            ],
+            "REPROCESS_STATUSES": [
+              "pending",
+              "done",
+              "rejected"
+            ],
+            "EXPERIMENT_METHODS": [
+              "numeric",
+              "symbolic",
+              "exhaustive_search",
+              "formal"
+            ],
+            "EVIDENCE_KINDS": [
+              "proof",
+              "proof_review",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_EVIDENCE_KINDS": [
+              "proof",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_RESULTS": [
+              "supports",
+              "refutes",
+              "inconclusive"
+            ],
+            "NEGATION_KINDS": [
+              "disproved",
+              "not_proved",
+              "not_searched_here",
+              "no_local_evidence"
+            ],
+            "ATTACK_STATUSES": [
+              "open",
+              "attacking",
+              "progress",
+              "supported_not_proved",
+              "stalled",
+              "resolved",
+              "abandoned"
+            ],
+            "ATTACK_TERMINAL_STATUSES": [
+              "resolved",
+              "abandoned",
+              "stalled",
+              "supported_not_proved"
+            ],
+            "SUBGOAL_STATUSES": [
+              "todo",
+              "in_progress",
+              "supported_not_proved",
+              "closed",
+              "blocked",
+              "dropped"
+            ],
+            "SUBGOAL_OWNERS": [
+              "F",
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "G"
+            ],
+            "DOC_KINDS": [
+              "reproduction_report",
+              "survey",
+              "paper",
+              "note"
+            ],
+            "DOC_STATUSES": [
+              "draft",
+              "in_review",
+              "revised",
+              "accepted",
+              "rejected",
+              "unresolved_review"
+            ],
+            "REVIEW_VERDICTS": [
+              "",
+              "成立",
+              "有毛病",
+              "看不出来"
+            ],
+            "DEP_KINDS": [
+              "theorem",
+              "definition",
+              "lemma",
+              "proposition",
+              "dataset",
+              "experiment",
+              "prior_art"
+            ],
+            "DEP_STATUSES": [
+              "closed",
+              "dangling",
+              "external_unavailable",
+              "refuted",
+              "disputed"
+            ],
+            "STATEMENT_ORIGINS": [
+              "external_lit",
+              "own_result"
+            ],
+            "STATEMENT_STATUSES": [
+              "active",
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition"
+            ],
+            "STATEMENT_UNUSABLE_STATUSES": [
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition"
+            ],
+            "CLAIM_KINDS": [
+              "定义",
+              "定理",
+              "命题",
+              "引理",
+              "推论",
+              "例",
+              "注",
+              "反例"
+            ],
+            "CLAIM_STATUSES": [
+              "证",
+              "验",
+              "待精化",
+              "作废"
+            ],
+            "ALLOWED_USE_KINDS": [
+              "主结果",
+              "Remark only",
+              "移入 open"
+            ],
+            "NUMERIC_EVIDENCE_KEYS": [
+              "script",
+              "range",
+              "n_cases",
+              "n_counterexamples"
+            ],
+            "CLAIM_SOURCE_KINDS": [
+              "自证",
+              "文献",
+              "未决"
+            ],
+            "CLAIM_CHECK_KINDS": [
+              "证明",
+              "数值",
+              "只读了陈述"
+            ],
+            "FINDING_KINDS": [
+              "unsupported_claim",
+              "dangling_dep",
+              "overclaim",
+              "missing_negation_kind",
+              "scope_drift",
+              "garbled",
+              "inconsistent_number"
+            ],
+            "FINDING_LEVELS": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "FINDING_STATUSES": [
+              "open",
+              "fixed",
+              "wontfix",
+              "disputed"
+            ],
+            "FINDING_MATHS_VALUES": [
+              "yes",
+              "no"
+            ],
+            "ROLES": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "G",
+              "H",
+              "V",
+              "L"
+            ],
+            "ITEM_KINDS": [
+              "delegation",
+              "message",
+              "report",
+              "notice"
+            ],
+            "ITEM_EXPECTS": [
+              "ack",
+              "work"
+            ],
+            "ITEM_STATES": [
+              "queued",
+              "claimed",
+              "seen",
+              "done",
+              "block"
+            ],
+            "ITEM_CLOSES": [
+              "acked",
+              "completed"
+            ],
+            "TASK_STATUSES": [
+              "pending",
+              "running",
+              "done",
+              "cancelled",
+              "failed",
+              "block"
+            ],
+            "TASK_OUTCOMES": [
+              "ok",
+              "no_result",
+              "not_applicable",
+              "refused",
+              "failed",
+              "cancelled"
+            ],
+            "REFUSAL_REASONS": [
+              "unknown_role",
+              "unknown_action",
+              "forbidden_edge",
+              "invalid_params",
+              "depth_exceeded",
+              "fanout_exceeded",
+              "concurrency_exceeded",
+              "budget_exceeded",
+              "deadline_exceeded",
+              "cycle_detected",
+              "not_wired"
+            ],
+            "USAGE_SCOPES": [
+              "summon",
+              "experiment",
+              "search",
+              "extract",
+              "review",
+              "reason"
+            ],
+            "EVAL_REQUIRED_FIELDS": [
+              "benchmark",
+              "benchmark_version",
+              "split",
+              "k",
+              "decontamination",
+              "date",
+              "source"
+            ]
+          }
+        },
+        "error": "",
+        "meta": {
+          "table_count": 1,
+          "vocabulary_count": 58
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 32000,
+        "prompt_cache_miss_tokens": 1473,
+        "tokens_in": 33473,
+        "tokens_out": 482,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "table.create",
+        "args": {
+          "table": "search_requests",
+          "row": {
+            "topic": "Ramsey number R(3,4)",
+            "mode": "topical",
+            "submitted_by": "A",
+            "content_description": "Sources for the classical small Ramsey number R(3,4)=9: Greenwood–Gleason 1955, Radziszowski's Small Ramsey Numbers dynamic survey, and later small-Ramsey-number computations/witnesses (explicit K_8 colouring, exhaustive K_9 check).",
+            "priority": "high",
+            "done": false
+          },
+          "why": "为本趟检索建一条委托行（后续 lit.stage_add 与 outcome/result_lit_ids 都挂在这条 request_id 上）"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.create",
+        "ok": false,
+        "data": null,
+        "error": "search_requests 缺少必填字段（SearchRequest.__init__() missing 1 required positional argument: 'timestamp'）",
+        "meta": {
+          "table": "search_requests",
+          "kind": "validation"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 32768,
+        "prompt_cache_miss_tokens": 3256,
+        "tokens_in": 36024,
+        "tokens_out": 490,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "usage_ledger",
+          "limit": 2
+        },
+        "why": "台账里有真实时间戳格式，用它给新建的 search_requests 行一个不编造的时间值"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "usage_ledger",
+          "rows": [
+            {
+              "usage_id": "000000",
+              "scope": "reason",
+              "role": "M",
+              "task_id": "t-000001",
+              "tokens_in": 37960,
+              "tokens_out": 142,
+              "tokens_total": 38102,
+              "usd": 0.00147,
+              "attempts": 1,
+              "at": "2026-10-23T21:02:38+08:00",
+              "note": "source=llmseam;role=M;call_index=0;outcome=ok；price=table;vendor=deepseek;model=deepseek-flash;peak=False;cache=billed;in_hit=0.003;in=0.15;out=0.6；idem-d845c4f441a5",
+              "idem_key": "idem-d845c4f441a5"
+            },
+            {
+              "usage_id": "000001",
+              "scope": "reason",
+              "role": "M",
+              "task_id": "t-000001",
+              "tokens_in": 38677,
+              "tokens_out": 650,
+              "tokens_total": 39327,
+              "usd": 0.000716,
+              "attempts": 1,
+              "at": "2026-10-23T21:02:43+08:00",
+              "note": "source=llmseam;role=M;call_index=1;outcome=ok；price=table;vendor=deepseek;model=deepseek-flash;peak=False;cache=billed;in_hit=0.003;in=0.15;out=0.6；idem-c1c3b6ab9cb5",
+              "idem_key": "idem-c1c3b6ab9cb5"
+            }
+          ],
+          "total": 59,
+          "returned": 2,
+          "limit": 2,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "usage_ledger",
+          "total": 59,
+          "returned": 2,
+          "offset": 0,
+          "limit": 2
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 35328,
+        "prompt_cache_miss_tokens": 1282,
+        "tokens_in": 36610,
+        "tokens_out": 556,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "table.create",
+        "args": {
+          "table": "search_requests",
+          "row": {
+            "timestamp": "2026-10-23T21:02:43+08:00",
+            "topic": "Ramsey number R(3,4)",
+            "mode": "topical",
+            "content_description": "Sources for the classical small Ramsey number R(3,4)=9: Greenwood-Gleason 1955 (Combinatorial relations and chromatic graphs), Radziszowski's Small Ramsey Numbers dynamic survey, and later small-Ramsey computations / explicit K_8 witness and exhaustive K_9 check.",
+            "submitted_by": "A",
+            "priority": "high",
+            "done": false
+          }
+        },
+        "why": "为本趟检索建一条委托行（lit.stage_add 与 outcome/result_lit_ids 都挂在这条 request_id 上）；时间戳取自 usage_ledger 最近一条真实读数，不编造"
+      },
+      "result": {
+        "tool": "table.create",
+        "ok": true,
+        "data": "r-000001",
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "id": "r-000001",
+          "id_field": "request_id",
+          "row": {
+            "request_id": "r-000001",
+            "timestamp": "2026-10-23T21:02:43+08:00",
+            "topic": "Ramsey number R(3,4)",
+            "mode": "topical",
+            "content_description": "Sources for the classical small Ramsey number R(3,4)=9: Greenwood-Gleason 1955 (Combinatorial relations and chromatic graphs), Radziszowski's Small Ramsey Numbers dynamic survey, and later small-Ramsey computations / explicit K_8 witness and exhaustive K_9 check.",
+            "done": false,
+            "submitted_by": "A",
+            "claimed_by": null,
+            "lease_until": null,
+            "attempts": 0,
+            "result_lit_ids": [],
+            "last_error": null,
+            "outcome": null,
+            "priority": "high",
+            "for_question_id": null,
+            "submit_note": "",
+            "providers": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 35840,
+        "prompt_cache_miss_tokens": 1847,
+        "tokens_in": 37687,
+        "tokens_out": 343,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "search.literature",
+        "args": {
+          "topic": "Combinatorial relations and chromatic graphs",
+          "mode": "precise",
+          "description": "Greenwood and Gleason 1955, Canadian Journal of Mathematics: the paper that established the classical small Ramsey numbers R(3,3)=6, R(3,4)=9, R(4,4)=18. Looking for the primary source of the proof that R(3,4)=9.",
+          "limit": 10,
+          "providers": [
+            "crossref",
+            "openalex"
+          ]
+        },
+        "why": "按题名精确查 R(3,4)=9 的原始出处（Greenwood–Gleason 1955），而不是拿拓扑搜索结果凑数"
+      },
+      "result": {
+        "tool": "search.literature",
+        "ok": true,
+        "data": {
+          "provider": "multi",
+          "mode": "precise",
+          "topic": "Combinatorial relations and chromatic graphs",
+          "description": "Greenwood and Gleason 1955, Canadian Journal of Mathematics: the paper that established the classical small Ramsey numbers R(3,3)=6, R(3,4)=9, R(4,4)=18. Looking for the primary source of the proof that R(3,4)=9.",
+          "limit": 10,
+          "count": 10,
+          "new_count": 10,
+          "existing_count": 0,
+          "unknown_count": 0,
+          "batch_duplicate_count": 0,
+          "store_checked": true,
+          "store_read_error": null,
+          "existing_table_size": 0,
+          "candidates": [
+            {
+              "title": "Combinatorial Relations and Chromatic Graphs",
+              "year": 1955,
+              "doi": "10.4153/cjm-1955-001-4",
+              "type_code": "J",
+              "authors": [
+                "R. E. Greenwood",
+                "A. M. Gleason"
+              ],
+              "venue": "Canadian Journal of Mathematics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.4153/cjm-1955-001-4",
+              "provider": "crossref",
+              "dedup_key": "doi:10.4153/cjm-1955-001-4",
+              "dedup_keys": [
+                "doi:10.4153/cjm-1955-001-4",
+                "title:combinatorial relations and chromatic graphs|1955",
+                "title:combinatorial relations and chromatic graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Gallai–Ramsey numbers for graphs with chromatic number three",
+              "year": 2021,
+              "doi": "10.1016/j.dam.2021.07.024",
+              "type_code": "J",
+              "authors": [
+                "Qinghong Zhao",
+                "Bing Wei"
+              ],
+              "venue": "Discrete Applied Mathematics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1016/j.dam.2021.07.024",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1016/j.dam.2021.07.024",
+              "dedup_keys": [
+                "doi:10.1016/j.dam.2021.07.024",
+                "title:gallai ramsey numbers for graphs with chromatic number three|2021",
+                "title:gallai ramsey numbers for graphs with chromatic number three|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Mixed ramsey numbers: Edge chromatic numbers vs. graphs",
+              "year": 1978,
+              "doi": "10.1007/bfb0070389",
+              "type_code": "M",
+              "authors": [
+                "Linda M. Lesniak",
+                "Albert D. Polimeni",
+                "Donald W. VanderJagt"
+              ],
+              "venue": "Lecture Notes in Mathematics Theory and Applications of Graphs",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1007/bfb0070389",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1007/bfb0070389",
+              "dedup_keys": [
+                "doi:10.1007/bfb0070389",
+                "title:mixed ramsey numbers edge chromatic numbers vs graphs|1978",
+                "title:mixed ramsey numbers edge chromatic numbers vs graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Large Progress in Small Ramsey Numbers",
+              "year": 2010,
+              "doi": "10.1007/978-0-387-75470-3_7",
+              "type_code": "M",
+              "authors": [
+                "Alexander Soifer"
+              ],
+              "venue": "Geometric Etudes in Combinatorial Mathematics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1007/978-0-387-75470-3_7",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1007/978-0-387-75470-3_7",
+              "dedup_keys": [
+                "doi:10.1007/978-0-387-75470-3_7",
+                "title:large progress in small ramsey numbers|2010",
+                "title:large progress in small ramsey numbers|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Generalised Ramsey numbers for small graphs",
+              "year": 1974,
+              "doi": "10.1016/0012-365x(74)90008-9",
+              "type_code": "J",
+              "authors": [
+                "Robert W. Irving"
+              ],
+              "venue": "Discrete Mathematics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1016/0012-365x(74)90008-9",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1016/0012-365x(74)90008-9",
+              "dedup_keys": [
+                "doi:10.1016/0012-365x(74)90008-9",
+                "title:generalised ramsey numbers for small graphs|1974",
+                "title:generalised ramsey numbers for small graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Target Ramsey numbers in graphs",
+              "year": 2026,
+              "doi": "10.61091/jcmcc131-17",
+              "type_code": "J",
+              "authors": [
+                "Gary Chartrand",
+                "Ping Zhang"
+              ],
+              "venue": "Journal of Combinatorial Mathematics and Combinatorial Computing",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.61091/jcmcc131-17",
+              "provider": "crossref",
+              "dedup_key": "doi:10.61091/jcmcc131-17",
+              "dedup_keys": [
+                "doi:10.61091/jcmcc131-17",
+                "title:target ramsey numbers in graphs|2026",
+                "title:target ramsey numbers in graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Using Characteristic Classes to Design Tests for Chromatic Numbers of Graphs",
+              "year": 2008,
+              "doi": "10.1007/978-3-540-71962-5_19",
+              "type_code": "M",
+              "authors": [],
+              "venue": "Algorithms and Computation in Mathematics Combinatorial Algebraic Topology",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1007/978-3-540-71962-5_19",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1007/978-3-540-71962-5_19",
+              "dedup_keys": [
+                "doi:10.1007/978-3-540-71962-5_19",
+                "title:using characteristic classes to design tests for chromatic numbers of graphs|2008",
+                "title:using characteristic classes to design tests for chromatic numbers of graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Relations between 2-local and 2-mean Ramsey numbers for graphs",
+              "year": 2007,
+              "doi": "10.1016/j.disc.2005.11.036",
+              "type_code": "J",
+              "authors": [
+                "Halina Bielak"
+              ],
+              "venue": "Discrete Mathematics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1016/j.disc.2005.11.036",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1016/j.disc.2005.11.036",
+              "dedup_keys": [
+                "doi:10.1016/j.disc.2005.11.036",
+                "title:relations between 2 local and 2 mean ramsey numbers for graphs|2007",
+                "title:relations between 2 local and 2 mean ramsey numbers for graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Chromatic Ramsey numbers",
+              "year": 1998,
+              "doi": "10.1016/s0012-365x(98)00047-8",
+              "type_code": "J",
+              "authors": [
+                "Xuding Zhu"
+              ],
+              "venue": "Discrete Mathematics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1016/s0012-365x(98)00047-8",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1016/s0012-365x(98)00047-8",
+              "dedup_keys": [
+                "doi:10.1016/s0012-365x(98)00047-8",
+                "title:chromatic ramsey numbers|1998",
+                "title:chromatic ramsey numbers|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Ramsey numbers and bipartite Ramsey numbers via quasi-random graphs",
+              "year": 2021,
+              "doi": "10.1016/j.disc.2020.112162",
+              "type_code": "J",
+              "authors": [
+                "Meng Liu",
+                "Yusheng Li"
+              ],
+              "venue": "Discrete Mathematics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1016/j.disc.2020.112162",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1016/j.disc.2020.112162",
+              "dedup_keys": [
+                "doi:10.1016/j.disc.2020.112162",
+                "title:ramsey numbers and bipartite ramsey numbers via quasi random graphs|2021",
+                "title:ramsey numbers and bipartite ramsey numbers via quasi random graphs|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            }
+          ],
+          "elapsed_s": 3.485,
+          "diagnostics": {},
+          "providers_requested": [
+            "crossref",
+            "openalex"
+          ],
+          "sources": [
+            {
+              "name": "crossref",
+              "status": "ok",
+              "count": 10,
+              "error_kind": "",
+              "error": "",
+              "delivered": true,
+              "refused": false
+            },
+            {
+              "name": "openalex",
+              "status": "ok",
+              "count": 0,
+              "error_kind": "",
+              "error": "",
+              "delivered": true,
+              "refused": false
+            }
+          ],
+          "source_count": 2,
+          "source_failures": [],
+          "source_refusals": [],
+          "cost": {
+            "provider_calls": 2,
+            "elapsed_s": 3.485
+          },
+          "warnings": []
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36992,
+        "prompt_cache_miss_tokens": 1275,
+        "tokens_in": 38267,
+        "tokens_out": 351,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "search.literature",
+        "args": {
+          "description": "Radziszowski's Dynamic Survey 'Small Ramsey Numbers' (Electronic Journal of Combinatorics, DS1) — the standard reference table that records R(3,4)=9 with its history and citations back to Greenwood-Gleason.",
+          "limit": 10,
+          "mode": "precise",
+          "providers": [
+            "crossref",
+            "openalex"
+          ],
+          "topic": "Small Ramsey Numbers"
+        },
+        "why": "R(3,4)=9 的标准综述性出处是 Radziszowski 的 Small Ramsey Numbers 动态调查，单独按题名精确查一次",
+        "shape_alias": "name"
+      },
+      "result": {
+        "tool": "search.literature",
+        "ok": true,
+        "data": {
+          "provider": "multi",
+          "mode": "precise",
+          "topic": "Small Ramsey Numbers",
+          "description": "Radziszowski's Dynamic Survey 'Small Ramsey Numbers' (Electronic Journal of Combinatorics, DS1) — the standard reference table that records R(3,4)=9 with its history and citations back to Greenwood-Gleason.",
+          "limit": 10,
+          "count": 10,
+          "new_count": 10,
+          "existing_count": 0,
+          "unknown_count": 0,
+          "batch_duplicate_count": 0,
+          "store_checked": true,
+          "store_read_error": null,
+          "existing_table_size": 0,
+          "candidates": [
+            {
+              "title": "Small Ramsey Numbers",
+              "year": 2011,
+              "doi": "10.37236/21",
+              "type_code": "J",
+              "authors": [
+                "Stanisław Radziszowski"
+              ],
+              "venue": "The Electronic Journal of Combinatorics",
+              "language": "en",
+              "summary": "We present data which, to the best of our knowledge, includes all known nontrivial values and bounds for specific graph, hypergraph and multicolor Ramsey numbers, where the avoided graphs are complete or complete without one edge. Many results pertaining to other more studied cases are also presented. We give references to all cited bounds and values, as well as to previous similar compilations. We do not attempt complete coverage of asymptotic behavior of Ramsey numbers, but concentrate on their specific values.",
+              "pdf_url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/DS1/pdf",
+              "landing_url": "https://doi.org/10.37236/21",
+              "provider": "crossref",
+              "dedup_key": "doi:10.37236/21",
+              "dedup_keys": [
+                "doi:10.37236/21",
+                "title:small ramsey numbers|2011",
+                "title:small ramsey numbers|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref",
+                "openalex"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Ramsey Numbers Involving Cycles",
+              "year": 2011,
+              "doi": "10.1007/978-0-8176-8092-3_3",
+              "type_code": "M",
+              "authors": [
+                "Stanisław P. Radziszowski"
+              ],
+              "venue": "Ramsey Theory",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1007/978-0-8176-8092-3_3",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1007/978-0-8176-8092-3_3",
+              "dedup_keys": [
+                "doi:10.1007/978-0-8176-8092-3_3",
+                "title:ramsey numbers involving cycles|2011",
+                "title:ramsey numbers involving cycles|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "On Some Small Classical Ramsey Numbers",
+              "year": 2013,
+              "doi": "10.37236/3137",
+              "type_code": "J",
+              "authors": [
+                "Geoffrey Exoo"
+              ],
+              "venue": "The Electronic Journal of Combinatorics",
+              "language": null,
+              "summary": "",
+              "pdf_url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p68/pdf",
+              "landing_url": "https://doi.org/10.37236/3137",
+              "provider": "crossref",
+              "dedup_key": "doi:10.37236/3137",
+              "dedup_keys": [
+                "doi:10.37236/3137",
+                "title:on some small classical ramsey numbers|2013",
+                "title:on some small classical ramsey numbers|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "New Computational Upper Bounds for Ramsey Numbers $R(3,k)$",
+              "year": 2013,
+              "doi": "10.37236/2824",
+              "type_code": "J",
+              "authors": [
+                "Jan Goedgebeur",
+                "Stanisław P. Radziszowski"
+              ],
+              "venue": "The Electronic Journal of Combinatorics",
+              "language": null,
+              "summary": "",
+              "pdf_url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p30/pdf",
+              "landing_url": "https://doi.org/10.37236/2824",
+              "provider": "crossref",
+              "dedup_key": "doi:10.37236/2824",
+              "dedup_keys": [
+                "doi:10.37236/2824",
+                "title:new computational upper bounds for ramsey numbers r 3 k|2013",
+                "title:new computational upper bounds for ramsey numbers r 3 k|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Constructive Lower Bounds on Classical Multicolor Ramsey Numbers",
+              "year": 2004,
+              "doi": "10.37236/1788",
+              "type_code": "J",
+              "authors": [
+                "Xu Xiaodong",
+                "Xie Zheng",
+                "Geoffrey Exoo",
+                "Stanisław P. Radziszowski"
+              ],
+              "venue": "The Electronic Journal of Combinatorics",
+              "language": null,
+              "summary": "",
+              "pdf_url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v11i1r35/pdf",
+              "landing_url": "https://doi.org/10.37236/1788",
+              "provider": "crossref",
+              "dedup_key": "doi:10.37236/1788",
+              "dedup_keys": [
+                "doi:10.37236/1788",
+                "title:constructive lower bounds on classical multicolor ramsey numbers|2004",
+                "title:constructive lower bounds on classical multicolor ramsey numbers|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Bipartite Ramsey Numbers for Graphs of Small Bandwidth",
+              "year": 2018,
+              "doi": "10.37236/7334",
+              "type_code": "J",
+              "authors": [
+                "Lili Shen",
+                "Qizhong Lin",
+                "Qinghai Liu"
+              ],
+              "venue": "The Electronic Journal of Combinatorics",
+              "language": null,
+              "summary": "",
+              "pdf_url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v25i2p16/pdf",
+              "landing_url": "https://doi.org/10.37236/7334",
+              "provider": "crossref",
+              "dedup_key": "doi:10.37236/7334",
+              "dedup_keys": [
+                "doi:10.37236/7334",
+                "title:bipartite ramsey numbers for graphs of small bandwidth|2018",
+                "title:bipartite ramsey numbers for graphs of small bandwidth|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Small Ramsey Numbers for Books, Wheels, and Generalizations",
+              "year": 2025,
+              "doi": "10.37236/13577",
+              "type_code": "J",
+              "authors": [
+                "Bernard Lidický",
+                "Gweneth McKinley",
+                "Florian Pfender",
+                "Steven Van Overberghe"
+              ],
+              "venue": "The Electronic Journal of Combinatorics",
+              "language": "en",
+              "summary": "We describe applications of a range of different computational methods to Ramsey numbers. We use flag algebras, local search, bottom-up generation, and enumeration of polycirculant graphs.These methods are applied to Ramsey numbers for books and wheels. We also initiate the study of generalized small Ramsey numbers. Let $GR(r,K_s,t)$ denote the minimum number of vertices $n$ such that any $r$-edge-coloring of $K_n$ has a copy of $K_s$ with at most $t$ colors. We establish over 20 new bounds including exact determination of the Ramsey numbers $R(W_5, W_7) = 15$, $R(W_5, W_9) = 18$, $R(B_2, B_8) = 21$, $R(B_3, B_7) = 20$, $GR(3,K_4,2) = 10$, and $GR(4,K_4,3) = 10$.",
+              "pdf_url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v32i4p64/pdf",
+              "landing_url": "https://doi.org/10.37236/13577",
+              "provider": "crossref",
+              "dedup_key": "doi:10.37236/13577",
+              "dedup_keys": [
+                "doi:10.37236/13577",
+                "title:small ramsey numbers for books wheels and generalizations|2025",
+                "title:small ramsey numbers for books wheels and generalizations|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref",
+                "openalex"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Ramsey Numbers of $$C_4$$ C 4 versus Wheels and Stars",
+              "year": 2015,
+              "doi": "10.1007/s00373-014-1504-3",
+              "type_code": "J",
+              "authors": [
+                "Yali Wu",
+                "Yongqi Sun",
+                "Rui Zhang",
+                "Stanisław P. Radziszowski"
+              ],
+              "venue": "Graphs and Combinatorics",
+              "language": null,
+              "summary": "",
+              "pdf_url": "http://link.springer.com/content/pdf/10.1007/s00373-014-1504-3.pdf",
+              "landing_url": "https://doi.org/10.1007/s00373-014-1504-3",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1007/s00373-014-1504-3",
+              "dedup_keys": [
+                "doi:10.1007/s00373-014-1504-3",
+                "title:ramsey numbers of c 4 c 4 versus wheels and stars|2015",
+                "title:ramsey numbers of c 4 c 4 versus wheels and stars|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Anti-Ramsey Numbers of Graphs with Small Connected Components",
+              "year": 2015,
+              "doi": "10.1007/s00373-015-1581-y",
+              "type_code": "J",
+              "authors": [
+                "Shoni Gilboa",
+                "Yehuda Roditty"
+              ],
+              "venue": "Graphs and Combinatorics",
+              "language": null,
+              "summary": "",
+              "pdf_url": "http://link.springer.com/content/pdf/10.1007/s00373-015-1581-y.pdf",
+              "landing_url": "https://doi.org/10.1007/s00373-015-1581-y",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1007/s00373-015-1581-y",
+              "dedup_keys": [
+                "doi:10.1007/s00373-015-1581-y",
+                "title:anti ramsey numbers of graphs with small connected components|2015",
+                "title:anti ramsey numbers of graphs with small connected components|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            },
+            {
+              "title": "Ramsey–Turán problems with small independence numbers",
+              "year": 2024,
+              "doi": "10.1016/j.ejc.2023.103872",
+              "type_code": "J",
+              "authors": [
+                "József Balogh",
+                "Ce Chen",
+                "Grace McCourt",
+                "Cassie Murley"
+              ],
+              "venue": "European Journal of Combinatorics",
+              "language": null,
+              "summary": "",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1016/j.ejc.2023.103872",
+              "provider": "crossref",
+              "dedup_key": "doi:10.1016/j.ejc.2023.103872",
+              "dedup_keys": [
+                "doi:10.1016/j.ejc.2023.103872",
+                "title:ramsey turán problems with small independence numbers|2024",
+                "title:ramsey turán problems with small independence numbers|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [
+                "crossref"
+              ],
+              "channel": "relevance",
+              "cited_by_count": null
+            }
+          ],
+          "elapsed_s": 10.109,
+          "diagnostics": {},
+          "providers_requested": [
+            "crossref",
+            "openalex"
+          ],
+          "sources": [
+            {
+              "name": "crossref",
+              "status": "ok",
+              "count": 10,
+              "error_kind": "",
+              "error": "",
+              "delivered": true,
+              "refused": false
+            },
+            {
+              "name": "openalex",
+              "status": "ok",
+              "count": 10,
+              "error_kind": "",
+              "error": "",
+              "delivered": true,
+              "refused": false
+            }
+          ],
+          "source_count": 2,
+          "source_failures": [],
+          "source_refusals": [],
+          "cost": {
+            "provider_calls": 2,
+            "elapsed_s": 10.109
+          },
+          "warnings": []
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37504,
+        "prompt_cache_miss_tokens": 3404,
+        "tokens_in": 40908,
+        "tokens_out": 296,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.stage_add",
+        "args": {
+          "request_id": "r-000001",
+          "entries": [
+            {
+              "title": "Combinatorial Relations and Chromatic Graphs",
+              "doi": "10.4153/cjm-1955-001-4",
+              "year": 1955,
+              "type_code": "J",
+              "url": "https://doi.org/10.4153/cjm-1955-001-4",
+              "provider": "crossref",
+              "summary": "Crossref 元数据：R. E. Greenwood, A. M. Gleason, Canadian Journal of Mathematics 1955。DOI 10.4153/cjm-1955-001-4 对应书目记录。本轮 Crossref 返回该条无摘要、无 pdf_url，正文未取到（未下载）——这里只如实登记书目，不对正文内容作任何断言。",
+              "relevance": "R(3,4)=9 上界（任意红蓝 2-着色 K_9 必含红 K_3 或蓝 K_4）的原始出处，即 Greenwood–Gleason 1955。本轮只核到书目记录，正文未取到。"
+            },
+            {
+              "title": "Small Ramsey Numbers",
+              "doi": "10.37236/21",
+              "year": 2011,
+              "type_code": "J",
+              "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/DS1/pdf",
+              "provider": "crossref",
+              "summary": "Radziszowski 的动态调查（Electronic Journal of Combinatorics, DS1）。摘要：We present data which, to the best of our knowledge, includes all known nontrivial values and bounds for specific graph, hypergraph and multicolor Ramsey numbers, where the avoided graphs are complete or complete without one edge. Many results pertaining to other more studied cases are also presented. We give references to all cited bounds and values, as well as to previous similar compilations.",
+              "relevance": "R(3,4)=9 的标准二次出处：把所有已知具体小 Ramsey 数与界连同其引文出处编成表，是「这条结论凭什么」的引用枢纽。"
+            },
+            {
+              "title": "On Some Small Classical Ramsey Numbers",
+              "doi": "10.37236/3137",
+              "year": 2013,
+              "type_code": "J",
+              "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p68/pdf",
+              "provider": "crossref",
+              "summary": "Exoo 2013, The Electronic Journal of Combinatorics（Crossref 记录无摘要）。本轮只取到 Crossref 书目与 pdf 链接，未下载前的正文内容不作断言。",
+              "relevance": "直接讲经典小 Ramsey 数的计算工作，属 R(3,4) 一类小值的方法学与复核来源。"
+            },
+            {
+              "title": "New Computational Upper Bounds for Ramsey Numbers $R(3,k)$",
+              "doi": "10.37236/2824",
+              "year": 2013,
+              "type_code": "J",
+              "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p30/pdf",
+              "provider": "crossref",
+              "summary": "Goedgebeur & Radziszowski 2013, The Electronic Journal of Combinatorics（Crossref 记录无摘要）。本轮只取到书目与 pdf 链接。",
+              "relevance": "R(3,k) 族计算上界；R(3,4)=9 是该族的第一个已知值，用来交代该类结论的计算方法与可复核性。"
+            },
+            {
+              "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph",
+              "doi": "10.24036/rmj.v1i1.1",
+              "year": 2022,
+              "type_code": "J",
+              "url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1",
+              "provider": "openalex",
+              "summary": "Khairul Azmi, Elva, W Widia, Rangkiang Mathematics Journal 2022。摘要（OpenAlex 原样要点）：讨论经典 Ramsey 数 R(3,4) > 8，即 m=8 是最大的整数使得 K_8 仍可能既无红 K_3 又无蓝 K_4；用加权图方法处理 K_8 的 28 条边上的着色搜索。",
+              "relevance": "R(3,4)=9 的下界那一半（R(3,4)>8，即 K_8 存在反例着色）的近年文献，可与原始 K_8 见证互为交叉核对。注意：低影响期刊，证据强度按 cross_check 记，不当定理出处。"
+            },
+            {
+              "title": "Large Progress in Small Ramsey Numbers",
+              "doi": "10.1007/978-0-387-75470-3_7",
+              "year": 2010,
+              "type_code": "M",
+              "url": "https://doi.org/10.1007/978-0-387-75470-3_7",
+              "provider": "crossref",
+              "summary": "Soifer 2010，收于 Geometric Etudes in Combinatorial Mathematics 的章节（Crossref 记录无摘要，无 pdf_url）。本轮只核到书目记录。",
+              "relevance": "小 Ramsey 数（含 R(3,4)=9）的综述性/史话性章节，可供交代该结论的流传与文献链；正文未取到，仅作战术参考。"
+            }
+          ]
+        },
+        "why": "把三轮检索里真正讲小 Ramsey 数 / R(3,4) 的候选精选进本委托的待新增列表，其余（ASP 并行求值、Gallai-Ramsey、characteristic classes 等）不 stage"
+      },
+      "result": {
+        "tool": "lit.stage_add",
+        "ok": true,
+        "data": {
+          "request_id": "r-000001",
+          "batch": 1,
+          "count": 6,
+          "staged": [
+            {
+              "slot": "000000",
+              "batch": 1,
+              "title": "Combinatorial Relations and Chromatic Graphs"
+            },
+            {
+              "slot": "000001",
+              "batch": 1,
+              "title": "Small Ramsey Numbers"
+            },
+            {
+              "slot": "000002",
+              "batch": 1,
+              "title": "On Some Small Classical Ramsey Numbers"
+            },
+            {
+              "slot": "000003",
+              "batch": 1,
+              "title": "New Computational Upper Bounds for Ramsey Numbers $R(3,k)$"
+            },
+            {
+              "slot": "000004",
+              "batch": 1,
+              "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph"
+            },
+            {
+              "slot": "000005",
+              "batch": 1,
+              "title": "Large Progress in Small Ramsey Numbers"
+            }
+          ]
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 40192,
+        "prompt_cache_miss_tokens": 3222,
+        "tokens_in": 43414,
+        "tokens_out": 3355,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.stage_list",
+        "args": {
+          "request_id": "r-000001"
+        },
+        "why": "迁移前先核对本委托 6 个待审槽的实际内容与状态，确认没有把不相关条目混进去"
+      },
+      "result": {
+        "tool": "lit.stage_list",
+        "ok": true,
+        "data": {
+          "request_id": "r-000001",
+          "current_request_id": "r-000001",
+          "batch": null,
+          "status": null,
+          "count": 6,
+          "counts": {
+            "pending": 6,
+            "withdrawn": 0,
+            "rejected": 0,
+            "admitted": 0,
+            "cleared": 0
+          },
+          "gaps": [],
+          "rows": [
+            {
+              "slot": "000000",
+              "batch": 1,
+              "status": "pending",
+              "title": "Combinatorial Relations and Chromatic Graphs",
+              "request_id": "r-000001",
+              "doi": "10.4153/cjm-1955-001-4",
+              "provider": "crossref",
+              "year": 1955,
+              "type_code": "J",
+              "summary": "Crossref 元数据：R. E. Greenwood, A. M. Gleason, Canadian Journal of Mathematics 1955。DOI 10.4153/cjm-1955-001-4 对应书目记录。本轮 Crossref 返回该条无摘要、无 pdf_url，正文未取到（未下载）——这里只如实登记书目，不对正文内容作任何断言。",
+              "url": "https://doi.org/10.4153/cjm-1955-001-4",
+              "added_at": "2026-10-23T21:17:26+08:00",
+              "relevance": "R(3,4)=9 上界（任意红蓝 2-着色 K_9 必含红 K_3 或蓝 K_4）的原始出处，即 Greenwood–Gleason 1955。本轮只核到书目记录，正文未取到。",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null
+            },
+            {
+              "slot": "000001",
+              "batch": 1,
+              "status": "pending",
+              "title": "Small Ramsey Numbers",
+              "request_id": "r-000001",
+              "doi": "10.37236/21",
+              "provider": "crossref",
+              "year": 2011,
+              "type_code": "J",
+              "summary": "Radziszowski 的动态调查（Electronic Journal of Combinatorics, DS1）。摘要：We present data which, to the best of our knowledge, includes all known nontrivial values and bounds for specific graph, hypergraph and multicolor Ramsey numbers, where the avoided graphs are complete or complete without one edge. Many results pertaining to other more studied cases are also presented. We give references to all cited bounds and values, as well as to previous similar compilations.",
+              "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/DS1/pdf",
+              "added_at": "2026-10-23T21:17:26+08:00",
+              "relevance": "R(3,4)=9 的标准二次出处：把所有已知具体小 Ramsey 数与界连同其引文出处编成表，是「这条结论凭什么」的引用枢纽。",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null
+            },
+            {
+              "slot": "000002",
+              "batch": 1,
+              "status": "pending",
+              "title": "On Some Small Classical Ramsey Numbers",
+              "request_id": "r-000001",
+              "doi": "10.37236/3137",
+              "provider": "crossref",
+              "year": 2013,
+              "type_code": "J",
+              "summary": "Exoo 2013, The Electronic Journal of Combinatorics（Crossref 记录无摘要）。本轮只取到 Crossref 书目与 pdf 链接，未下载前的正文内容不作断言。",
+              "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p68/pdf",
+              "added_at": "2026-10-23T21:17:26+08:00",
+              "relevance": "直接讲经典小 Ramsey 数的计算工作，属 R(3,4) 一类小值的方法学与复核来源。",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null
+            },
+            {
+              "slot": "000003",
+              "batch": 1,
+              "status": "pending",
+              "title": "New Computational Upper Bounds for Ramsey Numbers $R(3,k)$",
+              "request_id": "r-000001",
+              "doi": "10.37236/2824",
+              "provider": "crossref",
+              "year": 2013,
+              "type_code": "J",
+              "summary": "Goedgebeur & Radziszowski 2013, The Electronic Journal of Combinatorics（Crossref 记录无摘要）。本轮只取到书目与 pdf 链接。",
+              "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v20i1p30/pdf",
+              "added_at": "2026-10-23T21:17:26+08:00",
+              "relevance": "R(3,k) 族计算上界；R(3,4)=9 是该族的第一个已知值，用来交代该类结论的计算方法与可复核性。",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null
+            },
+            {
+              "slot": "000004",
+              "batch": 1,
+              "status": "pending",
+              "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph",
+              "request_id": "r-000001",
+              "doi": "10.24036/rmj.v1i1.1",
+              "provider": "openalex",
+              "year": 2022,
+              "type_code": "J",
+              "summary": "Khairul Azmi, Elva, W Widia, Rangkiang Mathematics Journal 2022。摘要（OpenAlex 原样要点）：讨论经典 Ramsey 数 R(3,4) > 8，即 m=8 是最大的整数使得 K_8 仍可能既无红 K_3 又无蓝 K_4；用加权图方法处理 K_8 的 28 条边上的着色搜索。",
+              "url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1",
+              "added_at": "2026-10-23T21:17:26+08:00",
+              "relevance": "R(3,4)=9 的下界那一半（R(3,4)>8，即 K_8 存在反例着色）的近年文献，可与原始 K_8 见证互为交叉核对。注意：低影响期刊，证据强度按 cross_check 记，不当定理出处。",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null
+            },
+            {
+              "slot": "000005",
+              "batch": 1,
+              "status": "pending",
+              "title": "Large Progress in Small Ramsey Numbers",
+              "request_id": "r-000001",
+              "doi": "10.1007/978-0-387-75470-3_7",
+              "provider": "crossref",
+              "year": 2010,
+              "type_code": "M",
+              "summary": "Soifer 2010，收于 Geometric Etudes in Combinatorial Mathematics 的章节（Crossref 记录无摘要，无 pdf_url）。本轮只核到书目记录。",
+              "url": "https://doi.org/10.1007/978-0-387-75470-3_7",
+              "added_at": "2026-10-23T21:17:26+08:00",
+              "relevance": "小 Ramsey 数（含 R(3,4)=9）的综述性/史话性章节，可供交代该结论的流传与文献链；正文未取到，仅作战术参考。",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null
+            }
+          ],
+          "total_all_delegations": 6,
+          "note": "默认只返回**当前委托**的行（`request_id` = 最近一次暂存的那次委托）；查历史请显式给 request_id（`*` = 全部）。`withdrawn` 的行是空槽位：序号不复用、题名与理由都留着；`rejected` 是审内容后拒收；`admitted` 已回填 lit_id；`cleared` 是迁移结算时被清空的残留（带 cleared_at）。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 42752,
+        "prompt_cache_miss_tokens": 1792,
+        "tokens_in": 44544,
+        "tokens_out": 272,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.admit_all",
+        "args": {
+          "request_id": "r-000001",
+          "why": "6 个槽已逐条核过题名/年份/DOI 与本轮检索目标一致（R(3,4)=9 的原始出处、标准综述、小 Ramsey 计算文献、K_8 下界见证），无重叠库、无凑数条目——一键迁移入库并结算清空本委托列表"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "lit.admit_all",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "kind": "",
+          "whole_call_refused": false,
+          "reason": "",
+          "request_id": "r-000001",
+          "call_size": 6,
+          "call_limit": 10,
+          "delegation_admitted": 6,
+          "delegation_limit": 10,
+          "admitted": [
+            {
+              "slot": "000000",
+              "title": "Combinatorial Relations and Chromatic Graphs",
+              "lit_id": "000000",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": ""
+            },
+            {
+              "slot": "000001",
+              "title": "Small Ramsey Numbers",
+              "lit_id": "000001",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": ""
+            },
+            {
+              "slot": "000002",
+              "title": "On Some Small Classical Ramsey Numbers",
+              "lit_id": "000002",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": ""
+            },
+            {
+              "slot": "000003",
+              "title": "New Computational Upper Bounds for Ramsey Numbers $R(3,k)$",
+              "lit_id": "000003",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": ""
+            },
+            {
+              "slot": "000004",
+              "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph",
+              "lit_id": "000004",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": ""
+            },
+            {
+              "slot": "000005",
+              "title": "Large Progress in Small Ramsey Numbers",
+              "lit_id": "000005",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": ""
+            }
+          ],
+          "refused": [],
+          "cleared": [],
+          "registered": 6,
+          "report": {
+            "path": "D:/Incubator/r34b/reports/lit-r-000001.md",
+            "rel_path": "reports/lit-r-000001.md",
+            "chars": 1127,
+            "admitted": 6,
+            "not_admitted": 0,
+            "request_id": "r-000001"
+          },
+          "report_path": "D:/Incubator/r34b/reports/lit-r-000001.md"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 43776,
+        "prompt_cache_miss_tokens": 3178,
+        "tokens_in": 46954,
+        "tokens_out": 475,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 14,
+      "shape": "invalid",
+      "payload": {},
+      "result": {
+        "problem": "judge_bad_json",
+        "detail": "这一步给了 4 条工具调用；本循环一步只做一件事，请只留一条",
+        "raw_reply": "",
+        "raw_reply_path": "out/invalid/r34b-step14.txt"
+      },
+      "problem": "judge_bad_json",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 46208,
+        "prompt_cache_miss_tokens": 1875,
+        "tokens_in": 48083,
+        "tokens_out": 913,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "search.download",
+        "args": {
+          "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/DS1/pdf",
+          "hint": "lit-000001-Radziszowski-SmallRamseyNumbers",
+          "why": "把 R(3,4)=9 的标准综述 Small Ramsey Numbers 正文下到本地，才算「取到正文」"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "search.download",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/DS1/pdf",
+          "hint": "lit-000001-Radziszowski-SmallRamseyNumbers",
+          "path": "D:\\Incubator\\r34b\\downloads\\lit-000001-radziszowski-smallramseynumbers.pdf",
+          "rel_path": "downloads/lit-000001-radziszowski-smallramseynumbers.pdf",
+          "dest_dir": "D:\\Incubator\\r34b\\downloads",
+          "filename": "lit-000001-radziszowski-smallramseynumbers.pdf",
+          "bytes": 585821,
+          "sha256": "9519a676ee381f02f03269c22e3f101162b2fdcc9d432e4103cb1192fdff91bc",
+          "http_status": 200,
+          "max_bytes_requested": 52428800,
+          "max_bytes_effective": 52428800,
+          "elapsed_s": 60.593,
+          "content_warning": null,
+          "warnings": []
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 47360,
+        "prompt_cache_miss_tokens": 1131,
+        "tokens_in": 48491,
+        "tokens_out": 195,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "search.download",
+        "args": {
+          "url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1",
+          "hint": "lit-000004-Azmi-R34-WeightedGraph"
+        },
+        "why": "把讲 R(3,4)>8（K_8 反例着色这一半）的文献正文下到本地，让下界那一半也有可取正文的来源"
+      },
+      "result": {
+        "tool": "search.download",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1",
+          "hint": "lit-000004-Azmi-R34-WeightedGraph",
+          "path": "D:\\Incubator\\r34b\\downloads\\lit-000004-azmi-r34-weightedgraph.pdf",
+          "rel_path": "downloads/lit-000004-azmi-r34-weightedgraph.pdf",
+          "dest_dir": "D:\\Incubator\\r34b\\downloads",
+          "filename": "lit-000004-azmi-r34-weightedgraph.pdf",
+          "bytes": 528174,
+          "sha256": "9f1a916120966efdf6d2502fd3999f9e2b86ca05cbe978317d3fb2db879bd1ad",
+          "http_status": 200,
+          "max_bytes_requested": 52428800,
+          "max_bytes_effective": 52428800,
+          "elapsed_s": 42.906,
+          "content_warning": null,
+          "warnings": []
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 47744,
+        "prompt_cache_miss_tokens": 1255,
+        "tokens_in": 48999,
+        "tokens_out": 166,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "search_requests",
+          "id": "r-000001",
+          "patch": {
+            "outcome": "ok",
+            "done": true,
+            "claimed_by": "A",
+            "attempts": 1,
+            "result_lit_ids": [
+              "000000",
+              "000001",
+              "000002",
+              "000003",
+              "000004",
+              "000005"
+            ],
+            "providers": [
+              "openalex",
+              "crossref"
+            ],
+            "submit_note": "首轮 openalex topical 检索 provider_error（RemoteDisconnected），改 openalex+crossref 合并重试成功；另按题名 precise 查 Greenwood-Gleason 1955 与 Small Ramsey Numbers。逐条核题名/年份/DOI 后入库 6 篇，无凑数。全文：000001（DS1 综述）与 000004（R(3,4)>8）已下到 downloads/；000000/000002/000003/000005 只核到书目记录、正文未取到。"
+          },
+          "why": "把本委托的终局（outcome=ok）与 result_lit_ids 写回 search_requests 行"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": true,
+        "data": "r-000001",
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "id": "r-000001",
+          "id_field": "request_id",
+          "row": {
+            "request_id": "r-000001",
+            "timestamp": "2026-10-23T21:02:43+08:00",
+            "topic": "Ramsey number R(3,4)",
+            "mode": "topical",
+            "content_description": "Sources for the classical small Ramsey number R(3,4)=9: Greenwood-Gleason 1955 (Combinatorial relations and chromatic graphs), Radziszowski's Small Ramsey Numbers dynamic survey, and later small-Ramsey computations / explicit K_8 witness and exhaustive K_9 check.",
+            "done": true,
+            "submitted_by": "A",
+            "claimed_by": "A",
+            "lease_until": null,
+            "attempts": 1,
+            "result_lit_ids": [
+              "000000",
+              "000001",
+              "000002",
+              "000003",
+              "000004",
+              "000005"
+            ],
+            "last_error": null,
+            "outcome": "ok",
+            "priority": "high",
+            "for_question_id": null,
+            "submit_note": "首轮 openalex topical 检索 provider_error（RemoteDisconnected），改 openalex+crossref 合并重试成功；另按题名 precise 查 Greenwood-Gleason 1955 与 Small Ramsey Numbers。逐条核题名/年份/DOI 后入库 6 篇，无凑数。全文：000001（DS1 综述）与 000004（R(3,4)>8）已下到 downloads/；000000/000002/000003/000005 只核到书目记录、正文未取到。",
+            "providers": [
+              "openalex",
+              "crossref"
+            ]
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 48256,
+        "prompt_cache_miss_tokens": 1210,
+        "tokens_in": 49466,
+        "tokens_out": 629,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 18,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "lit_id": "000001"
+        },
+        "why": "把已下到本地的 Radziszowski《Small Ramsey Numbers》转成可读文本，下游 B 才能按页核出 R(3,4)=9 的逐字出处"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": false,
+        "data": null,
+        "error": "编号 '000001' 那一行没有全文路径（`path` 为空）⇒ 这一篇在盘上找不到，先把它收编（`A.ingest_local`）或直接给路径",
+        "meta": {
+          "kind": "lit_without_path",
+          "lit_id": "000001"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 48768,
+        "prompt_cache_miss_tokens": 1766,
+        "tokens_in": 50534,
+        "tokens_out": 335,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 19,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "path": "downloads/lit-000001-radziszowski-smallramseynumbers.pdf"
+        },
+        "why": "lit 行 000001 没记 path，所以直接给它盘上那份 PDF 的路径做文字层抽取，下游才能按页引 R(3,4)=9"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": true,
+        "data": {
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "abs_path": "D:\\Incubator\\r34b\\library\\lit-000001-radziszowski-smallramseynumbers.txt",
+          "lit_id": "",
+          "pages": 149,
+          "chars": 394248,
+          "sha256": "927c1244a9aa6f9a9c1f4a1620857805de62eae1678326655d6695998d239a39",
+          "quality": {
+            "chars": 394248,
+            "nul_bytes": 0,
+            "replacement_chars": 0,
+            "control_chars": 0,
+            "control_ratio": 0.0
+          },
+          "max_pages": 200,
+          "truncated": false,
+          "note": "纯文字稿已入库（与 PDF 同层）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹（下游可拿它核「读到的是不是同一份」）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 49792,
+        "prompt_cache_miss_tokens": 1095,
+        "tokens_in": 50887,
+        "tokens_out": 250,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 20,
+      "shape": "tool",
+      "payload": {
+        "name": "search.local",
+        "args": {
+          "query": "R(3,4) = 9",
+          "lit_id": "000001",
+          "limit": 3,
+          "max_chars": 1200
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "search.local",
+        "ok": true,
+        "data": {
+          "query": "R(3,4) = 9",
+          "searched": true,
+          "count": 0,
+          "candidates": 0,
+          "scanned": 0,
+          "skipped_no_file": [],
+          "unreadable": [],
+          "no_text_layer": [],
+          "hits": [],
+          "elapsed_s": 0.0,
+          "note": "每条命中给的是**原文里连续的一段**（不是拼起来的句子），并带 lit_id 与页码 —— 引文回验比的就是这段原文。`skipped_no_file` / `unreadable` / `no_text_layer` 是「这一本没查到」的三个不同理由：它们不等于「这本书里没有这个主题」。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 50176,
+        "prompt_cache_miss_tokens": 1256,
+        "tokens_in": 51432,
+        "tokens_out": 283,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 21,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "literature",
+          "id": "000001",
+          "patch": {
+            "path": "downloads/lit-000001-radziszowski-smallramseynumbers.pdf"
+          },
+          "why": "把已下到的 DS1 全文路径写回 literature 行，本地书架才扫得到这一本（刚才 search.local 扫了 0 本就是因为这一行的 path 为空）"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": true,
+        "data": "000001",
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000001",
+          "id_field": "lit_id",
+          "row": {
+            "_keys": [
+              "doi:10.37236/21",
+              "title:small ramsey numbers|2011",
+              "title:small ramsey numbers|*"
+            ],
+            "lit_id": "000001",
+            "title": "Small Ramsey Numbers",
+            "type": "J",
+            "summary": "Radziszowski 的动态调查（Electronic Journal of Combinatorics, DS1）。摘要：We present data which, to the best of our knowledge, includes all known nontrivial values and bounds for specific graph, hypergraph and multicolor Ramsey numbers, where the avoided graphs are complete or complete without one edge. Many results pertaining to other more studied cases are also presented. We give references to all cited bounds and values, as well as to previous similar compilations.",
+            "path": "downloads/lit-000001-radziszowski-smallramseynumbers.pdf",
+            "processed": false,
+            "source_request_ids": [],
+            "dedup_key": "doi:10.37236/21",
+            "doi": "10.37236/21",
+            "year": 2011,
+            "authors": [],
+            "venue": null,
+            "language": null,
+            "added_at": "2026-10-23T21:17:32+08:00",
+            "download": {
+              "status": "skipped",
+              "http_status": null,
+              "bytes": 0,
+              "sha256": null,
+              "error": "no_local_path",
+              "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/DS1/pdf",
+              "fulltext": "no_fulltext_this_time",
+              "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+            },
+            "pages": "",
+            "matched": "",
+            "claimed_by": null,
+            "lease_until": null,
+            "mine_attempts": 0,
+            "last_mine_error": null
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 50688,
+        "prompt_cache_miss_tokens": 1105,
+        "tokens_in": 51793,
+        "tokens_out": 425,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 22,
+      "shape": "tool",
+      "payload": {
+        "name": "search.local",
+        "args": {
+          "query": "R(3,4)",
+          "lit_id": "000001",
+          "limit": 3,
+          "max_chars": 1200
+        },
+        "why": "path 已写回 literature 行，重跑一次本地全文检索，取 R(3,4)=9 的逐字片段与页码（定位与确认）"
+      },
+      "result": {
+        "tool": "search.local",
+        "ok": true,
+        "data": {
+          "query": "R(3,4)",
+          "searched": true,
+          "count": 0,
+          "candidates": 0,
+          "scanned": 0,
+          "skipped_no_file": [
+            "000001"
+          ],
+          "unreadable": [],
+          "no_text_layer": [],
+          "hits": [],
+          "elapsed_s": 0.016,
+          "note": "每条命中给的是**原文里连续的一段**（不是拼起来的句子），并带 lit_id 与页码 —— 引文回验比的就是这段原文。`skipped_no_file` / `unreadable` / `no_text_layer` 是「这一本没查到」的三个不同理由：它们不等于「这本书里没有这个主题」。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51072,
+        "prompt_cache_miss_tokens": 1635,
+        "tokens_in": 52707,
+        "tokens_out": 130,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 23,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "R\\(3,4\\)\\s*=\\s*9",
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "limit": 12
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "R\\(3,4\\)\\s*=\\s*9",
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "matches": [],
+          "lines": [],
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51968,
+        "prompt_cache_miss_tokens": 1080,
+        "tokens_in": 53048,
+        "tokens_out": 509,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 24,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "limit": 15,
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "pattern": "R\\s*\\(\\s*3\\s*,\\s*4\\s*\\)"
+        },
+        "why": "上一版正则要求 “R(3,4) = 9” 连写，DS1 表里常带空格或小写 r，放宽空格后重搜一次，看正文是否真有逐字出处",
+        "shape_alias": "name"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "R\\s*\\(\\s*3\\s*,\\s*4\\s*\\)",
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "matches": [
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 738,
+              "text": "Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14"
+            }
+          ],
+          "lines": [
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:738: Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14"
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 52352,
+        "prompt_cache_miss_tokens": 1274,
+        "tokens_in": 53626,
+        "tokens_out": 387,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 25,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "start_line": 690,
+          "max_lines": 60
+        },
+        "why": "找出第 738 行那条逐字命中前面最近的 page 分页标记，才能给出框架口径的页码"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "651\r\n944\r\n1346\r\n1855\r\n2499\r\n3301\r\n4305\r\n7\r\n492\r\n832\r\n1368\r\n2119\r\n3197\r\n4665\r\n6653\r\n9260\r\n12635\r\n8\r\n1518\r\n2662\r\n4402\r\n7040\r\n10836\r\n9\r\n4956\r\n8675\r\n14631\r\n10\r\n16064\r\nTable Ib. Upper bounds for R (k, l), l ≥k ≥4, l ≥5. All of them were obtained by\r\nAngeltveit and McKay in 2019 [AnM2] and 2023-2024 [AnM3, AnM4], except R (4, 5) [MR4],\r\nand they improve over previously best known bounds reported in Table Ia.\r\nWe split the data into Table Ia with a separate table of references corresponding to it,\r\nand Table Ib of new upper bounds. In Table Ia, the known exact values appear as centered\r\nentries, lower bounds as top entries, and upper bounds as bottom entries. For some of the\r\nexact values two references are given when the lower and upper bound credits are different.\r\nIn large computational projects from 2019 to 2023, Angeltveit and McKay ran independent\r\ncomputations [AnM2, AnM3], and obtained new upper bounds reported in Table Ib. These, by\r\nusing the classical recursive upper bound 2.3.a, and the methods of [HW+, HYZ, LiShen],\r\nlead to improvements of other higher upper bounds listed in Table Ia but not reported in\r\nTable Ib.\r\n(a)\r\nThe task equivalent to that of proving R (3, 3) ≤6 was the second problem in the\r\nKu¨rscha´k Mathematics Competitions in Hungary in 1947 [BaLiu].\r\nIt also was the\r\nsecond problem in Part I of the William Lowell Putnam Mathematical Competition held\r\nin March 1953 [Bush].\r\n(b)\r\nGreenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14\r\nand R (4, 4) = 18 in 1955.\r\n(c)\r\nKe´ry [Ke´ry] proved that R (3, 6) = 18 in 1964, but only in 2007 an elementary and self-\r\ncontained proof of this result appeared in English [Car].\r\n(d)\r\nAll of the critical graphs for the numbers R (k, l) (graphs on R (k, l) −1 vertices without\r\nKk and without Kl in the complement) are known for k = 3 and l = 3, 4, 5 [Ke´ry], 6\r\n[Ka2], 7 [RaK2, McZ], 8 [BrGS] and 9 [GoeR1], and there are 1, 3, 1, 7, 191, 477142,\r\nand 1 of them, respectively.\r\nThere are…（落档截断，原 2135 字）",
+        "error": "",
+        "meta": {
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "encoding": "utf-8",
+          "bytes_read": 200000,
+          "total_bytes": 410839,
+          "truncated": true,
+          "start_line": 690,
+          "lines_read": 60,
+          "total_lines": 6788,
+          "next_line": 750,
+          "windowed": true,
+          "had_errors": false,
+          "note": "只读了前 200000 字节（共 410839 字节）；本次给第 690–749 行（共 6788 行）；续读 start_line=750",
+          "sha256": "791702beccc7457a129047d44ee18f6a3a0504b30c7a9bf1a016795471c20bec"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 52864,
+        "prompt_cache_miss_tokens": 1495,
+        "tokens_in": 54359,
+        "tokens_out": 398,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 26,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "pattern": "^===== page [0-9]+ =====",
+          "limit": 200
+        },
+        "why": "列出全部分页标记的行号，取第 738 行之前最近的那一个，才能按框架分页口径给出这条逐字引文的页码"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "^===== page [0-9]+ =====",
+          "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+          "matches": [
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1,
+              "text": "===== page 1 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 39,
+              "text": "===== page 2 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 129,
+              "text": "===== page 3 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 214,
+              "text": "===== page 4 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 290,
+              "text": "===== page 5 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 341,
+              "text": "===== page 6 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 647,
+              "text": "===== page 7 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 752,
+              "text": "===== page 8 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 817,
+              "text": "===== page 9 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 867,
+              "text": "===== page 10 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1086,
+              "text": "===== page 11 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1189,
+              "text": "===== page 12 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1242,
+              "text": "===== page 13 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1267,
+              "text": "===== page 14 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1318,
+              "text": "===== page 15 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1364,
+              "text": "===== page 16 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1557,
+              "text": "===== page 17 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1753,
+              "text": "===== page 18 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1834,
+              "text": "===== page 19 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1886,
+              "text": "===== page 20 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 1939,
+              "text": "===== page 21 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 2097,
+              "text": "===== page 22 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 2376,
+              "text": "===== page 23 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 2451,
+              "text": "===== page 24 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 2507,
+              "text": "===== page 25 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 2562,
+              "text": "===== page 26 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 2812,
+              "text": "===== page 27 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 2856,
+              "text": "===== page 28 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3038,
+              "text": "===== page 29 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3090,
+              "text": "===== page 30 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3254,
+              "text": "===== page 31 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3495,
+              "text": "===== page 32 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3568,
+              "text": "===== page 33 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3628,
+              "text": "===== page 34 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3696,
+              "text": "===== page 35 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 3801,
+              "text": "===== page 36 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4025,
+              "text": "===== page 37 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4085,
+              "text": "===== page 38 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4153,
+              "text": "===== page 39 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4199,
+              "text": "===== page 40 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4240,
+              "text": "===== page 41 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4300,
+              "text": "===== page 42 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4345,
+              "text": "===== page 43 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4386,
+              "text": "===== page 44 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4429,
+              "text": "===== page 45 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4471,
+              "text": "===== page 46 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4530,
+              "text": "===== page 47 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4582,
+              "text": "===== page 48 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4651,
+              "text": "===== page 49 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4710,
+              "text": "===== page 50 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4764,
+              "text": "===== page 51 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4833,
+              "text": "===== page 52 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4893,
+              "text": "===== page 53 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 4954,
+              "text": "===== page 54 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5011,
+              "text": "===== page 55 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5110,
+              "text": "===== page 56 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5210,
+              "text": "===== page 57 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5292,
+              "text": "===== page 58 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5352,
+              "text": "===== page 59 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5408,
+              "text": "===== page 60 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5456,
+              "text": "===== page 61 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5583,
+              "text": "===== page 62 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5662,
+              "text": "===== page 63 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5724,
+              "text": "===== page 64 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5786,
+              "text": "===== page 65 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5840,
+              "text": "===== page 66 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5900,
+              "text": "===== page 67 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 5963,
+              "text": "===== page 68 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6027,
+              "text": "===== page 69 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6081,
+              "text": "===== page 70 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6156,
+              "text": "===== page 71 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6229,
+              "text": "===== page 72 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6250,
+              "text": "===== page 73 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6306,
+              "text": "===== page 74 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6359,
+              "text": "===== page 75 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6439,
+              "text": "===== page 76 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6491,
+              "text": "===== page 77 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6552,
+              "text": "===== page 78 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6612,
+              "text": "===== page 79 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6666,
+              "text": "===== page 80 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6729,
+              "text": "===== page 81 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6778,
+              "text": "===== page 82 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6835,
+              "text": "===== page 83 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6898,
+              "text": "===== page 84 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 6953,
+              "text": "===== page 85 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7036,
+              "text": "===== page 86 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7092,
+              "text": "===== page 87 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7111,
+              "text": "===== page 88 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7181,
+              "text": "===== page 89 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7250,
+              "text": "===== page 90 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7328,
+              "text": "===== page 91 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7399,
+              "text": "===== page 92 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7470,
+              "text": "===== page 93 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7543,
+              "text": "===== page 94 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7613,
+              "text": "===== page 95 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7681,
+              "text": "===== page 96 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7743,
+              "text": "===== page 97 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7824,
+              "text": "===== page 98 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7888,
+              "text": "===== page 99 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 7960,
+              "text": "===== page 100 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8029,
+              "text": "===== page 101 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8088,
+              "text": "===== page 102 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8158,
+              "text": "===== page 103 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8241,
+              "text": "===== page 104 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8325,
+              "text": "===== page 105 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8393,
+              "text": "===== page 106 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8459,
+              "text": "===== page 107 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8527,
+              "text": "===== page 108 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8599,
+              "text": "===== page 109 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8673,
+              "text": "===== page 110 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8744,
+              "text": "===== page 111 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8812,
+              "text": "===== page 112 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8880,
+              "text": "===== page 113 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 8957,
+              "text": "===== page 114 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9040,
+              "text": "===== page 115 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9110,
+              "text": "===== page 116 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9180,
+              "text": "===== page 117 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9257,
+              "text": "===== page 118 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9339,
+              "text": "===== page 119 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9407,
+              "text": "===== page 120 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9483,
+              "text": "===== page 121 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9563,
+              "text": "===== page 122 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9639,
+              "text": "===== page 123 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9715,
+              "text": "===== page 124 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9783,
+              "text": "===== page 125 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9864,
+              "text": "===== page 126 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 9941,
+              "text": "===== page 127 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10025,
+              "text": "===== page 128 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10100,
+              "text": "===== page 129 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10173,
+              "text": "===== page 130 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10251,
+              "text": "===== page 131 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10321,
+              "text": "===== page 132 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10396,
+              "text": "===== page 133 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10470,
+              "text": "===== page 134 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10546,
+              "text": "===== page 135 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10618,
+              "text": "===== page 136 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10690,
+              "text": "===== page 137 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10763,
+              "text": "===== page 138 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10838,
+              "text": "===== page 139 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10905,
+              "text": "===== page 140 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 10970,
+              "text": "===== page 141 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11045,
+              "text": "===== page 142 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11119,
+              "text": "===== page 143 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11192,
+              "text": "===== page 144 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11274,
+              "text": "===== page 145 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11345,
+              "text": "===== page 146 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11416,
+              "text": "===== page 147 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11500,
+              "text": "===== page 148 ====="
+            },
+            {
+              "path": "library/lit-000001-radziszowski-smallramseynumbers.txt",
+              "line": 11570,
+              "text": "===== page 149 ====="
+            }
+          ],
+          "lines": [
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1: ===== page 1 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:39: ===== page 2 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:129: ===== page 3 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:214: ===== page 4 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:290: ===== page 5 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:341: ===== page 6 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:647: ===== page 7 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:752: ===== page 8 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:817: ===== page 9 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:867: ===== page 10 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1086: ===== page 11 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1189: ===== page 12 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1242: ===== page 13 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1267: ===== page 14 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1318: ===== page 15 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1364: ===== page 16 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1557: ===== page 17 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1753: ===== page 18 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1834: ===== page 19 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1886: ===== page 20 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:1939: ===== page 21 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:2097: ===== page 22 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:2376: ===== page 23 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:2451: ===== page 24 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:2507: ===== page 25 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:2562: ===== page 26 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:2812: ===== page 27 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:2856: ===== page 28 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3038: ===== page 29 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3090: ===== page 30 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3254: ===== page 31 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3495: ===== page 32 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3568: ===== page 33 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3628: ===== page 34 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3696: ===== page 35 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:3801: ===== page 36 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4025: ===== page 37 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4085: ===== page 38 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4153: ===== page 39 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4199: ===== page 40 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4240: ===== page 41 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4300: ===== page 42 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4345: ===== page 43 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4386: ===== page 44 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4429: ===== page 45 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4471: ===== page 46 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4530: ===== page 47 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4582: ===== page 48 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4651: ===== page 49 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4710: ===== page 50 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4764: ===== page 51 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4833: ===== page 52 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4893: ===== page 53 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:4954: ===== page 54 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5011: ===== page 55 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5110: ===== page 56 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5210: ===== page 57 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5292: ===== page 58 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5352: ===== page 59 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5408: ===== page 60 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5456: ===== page 61 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5583: ===== page 62 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5662: ===== page 63 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5724: ===== page 64 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5786: ===== page 65 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5840: ===== page 66 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5900: ===== page 67 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:5963: ===== page 68 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6027: ===== page 69 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6081: ===== page 70 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6156: ===== page 71 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6229: ===== page 72 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6250: ===== page 73 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6306: ===== page 74 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6359: ===== page 75 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6439: ===== page 76 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6491: ===== page 77 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6552: ===== page 78 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6612: ===== page 79 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6666: ===== page 80 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6729: ===== page 81 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6778: ===== page 82 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6835: ===== page 83 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6898: ===== page 84 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:6953: ===== page 85 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7036: ===== page 86 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7092: ===== page 87 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7111: ===== page 88 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7181: ===== page 89 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7250: ===== page 90 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7328: ===== page 91 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7399: ===== page 92 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7470: ===== page 93 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7543: ===== page 94 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7613: ===== page 95 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7681: ===== page 96 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7743: ===== page 97 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7824: ===== page 98 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7888: ===== page 99 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:7960: ===== page 100 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8029: ===== page 101 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8088: ===== page 102 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8158: ===== page 103 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8241: ===== page 104 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8325: ===== page 105 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8393: ===== page 106 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8459: ===== page 107 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8527: ===== page 108 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8599: ===== page 109 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8673: ===== page 110 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8744: ===== page 111 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8812: ===== page 112 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8880: ===== page 113 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:8957: ===== page 114 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9040: ===== page 115 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9110: ===== page 116 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9180: ===== page 117 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9257: ===== page 118 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9339: ===== page 119 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9407: ===== page 120 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9483: ===== page 121 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9563: ===== page 122 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9639: ===== page 123 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9715: ===== page 124 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9783: ===== page 125 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9864: ===== page 126 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:9941: ===== page 127 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10025: ===== page 128 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10100: ===== page 129 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10173: ===== page 130 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10251: ===== page 131 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10321: ===== page 132 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10396: ===== page 133 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10470: ===== page 134 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10546: ===== page 135 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10618: ===== page 136 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10690: ===== page 137 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10763: ===== page 138 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10838: ===== page 139 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10905: ===== page 140 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:10970: ===== page 141 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11045: ===== page 142 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11119: ===== page 143 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11192: ===== page 144 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11274: ===== page 145 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11345: ===== page 146 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11416: ===== page 147 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11500: ===== page 148 =====",
+            "library/lit-000001-radziszowski-smallramseynumbers.txt:11570: ===== page 149 ====="
+          ],
+          "total": 149,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 149,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 53632,
+        "prompt_cache_miss_tokens": 2042,
+        "tokens_in": 55674,
+        "tokens_out": 359,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 27,
+      "shape": "note",
+      "payload": {
+        "text": "定位结论：R(3,4)=9 的逐字出处已核到 —— lit-000001（Radziszowski, Small Ramsey Numbers, EJC 2011, DOI 10.37236/21）抽出的正文 library/lit-000001-radziszowski-smallramseynumbers.txt 第 738 行，分页标记 page 7（647 行 = page 7 起，752 行 = page 8 起），片段逐字：\"Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14\"；matched=exact（题名/年份/DOI 与本篇一致，且这条命题确在本篇正文明文出现）。注意它不是证明本身，而是「谁定的这个值」的二次出处。丢掉/未入库的候选与理由：首轮 openalex topical 返回里 \"Parallel evaluation of ASP programs\"（计算机，跑题）、\"Turán Number and Related Ramsey Number\"（Li & Lin，讲 Turán 数关联界、不直接给 R(3,4)=9）、朱拉隆功·Borbély 学位论文类无正文条目，均未 stage；即「这一条没进结果」，不等于「这些文献不存在」。Greenwood-Gleason 1955（lit-000000）只核到 Crossref 书目、无 pdf_url，正文这一轮没取到 —— 若 D 要把它当「定理出处」引用，需再找正文或换可核来源。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\r34b\\notes\\A.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 54912,
+        "prompt_cache_miss_tokens": 3482,
+        "tokens_in": 58394,
+        "tokens_out": 832,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 28,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "literature",
+          "id": "000004",
+          "patch": {
+            "path": "downloads/lit-000004-azmi-r34-weightedgraph.pdf"
+          }
+        },
+        "why": "把已下到的 R(3,4)>8 那篇全文路径写回 literature 行，让下界那一半在盘上也有可取正文的来源"
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": true,
+        "data": "000004",
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000004",
+          "id_field": "lit_id",
+          "row": {
+            "_keys": [
+              "doi:10.24036/rmj.v1i1.1",
+              "title:the classical ramsey number r 3 4 8 using the weighted graph|2022",
+              "title:the classical ramsey number r 3 4 8 using the weighted graph|*"
+            ],
+            "lit_id": "000004",
+            "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph",
+            "type": "J",
+            "summary": "Khairul Azmi, Elva, W Widia, Rangkiang Mathematics Journal 2022。摘要（OpenAlex 原样要点）：讨论经典 Ramsey 数 R(3,4) > 8，即 m=8 是最大的整数使得 K_8 仍可能既无红 K_3 又无蓝 K_4；用加权图方法处理 K_8 的 28 条边上的着色搜索。",
+            "path": "downloads/lit-000004-azmi-r34-weightedgraph.pdf",
+            "processed": false,
+            "source_request_ids": [],
+            "dedup_key": "doi:10.24036/rmj.v1i1.1",
+            "doi": "10.24036/rmj.v1i1.1",
+            "year": 2022,
+            "authors": [],
+            "venue": null,
+            "language": null,
+            "added_at": "2026-10-23T21:17:32+08:00",
+            "download": {
+              "status": "skipped",
+              "http_status": null,
+              "bytes": 0,
+              "sha256": null,
+              "error": "no_local_path",
+              "url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1",
+              "fulltext": "no_fulltext_this_time",
+              "note": "本次无全文：只登记了候选源给出的定位链接（url 这一格），没有下载字节；要全文请按它重取"
+            },
+            "pages": "",
+            "matched": "",
+            "claimed_by": null,
+            "lease_until": null,
+            "mine_attempts": 0,
+            "last_mine_error": null
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57728,
+        "prompt_cache_miss_tokens": 1843,
+        "tokens_in": 59571,
+        "tokens_out": 974,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 29,
+      "shape": "final",
+      "payload": {
+        "final": "A 这一趟的活做完了：为「R(3,4)=9」建了 1 条检索委托并登记了 6 篇 literature 行，其中 2 篇已把正文落到本地，并把关键命题在正文里逐字定位到（页码 + 片段）。\n\n【委托 r-000001】topic=\"Ramsey number R(3,4)\", mode=topical, providers=[openalex, crossref], done=true, outcome=ok。\nresult_lit_ids = [\"000000\",\"000001\",\"000002\",\"000003\",\"000004\",\"000005\"]\n说明：首轮用 openalex 单源 topical 检索失败（provider_error: RemoteDisconnected —— 那一档是「没查成」，不是「没有文献」）；随后 search.providers 真实探测 5 源均可用，改 openalex+crossref 合并重试成功（10 候选），再按题名 precise 查 \"Combinatorial relations and chromatic graphs\"（Greenwood–Gleason）与 \"Small Ramsey Numbers\"（Radziszowski）各取得 10 候选。逐条核题名/年份/DOI 后精选 6 条入库，未拿跑题条目凑数。\n\n【已入库（题名 / 年份 / DOI）】\n- lit-000000 Combinatorial Relations and Chromatic Graphs / 1955 / 10.4153/cjm-1955-001-4（R(3,4)=9 的原始出处；只核到 Crossref 书目，pdf_url 为空，正文本轮未取到）\n- lit-000001 Small Ramsey Numbers / 2011 / 10.37236/21（Radziszowski DS1 综述；全文已下载 + 已抽文字层）\n- lit-000002 On Some Small Classical Ramsey Numbers / 2013 / 10.37236/3137（只核到书目与 pdf 链接，未下载）\n- lit-000003 New Computational Upper Bounds for Ramsey Numbers R(3,k) / 2013 / 10.37236/2824（同上）\n- lit-000004 The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph / 2022 / 10.24036/rmj.v1i1.1（下界那一半；全文已下载并写回 path。低影响期刊，证据强度按 cross_check 记，不当定理出处）\n- lit-000005 Large Progress in Small Ramsey Numbers / 2010 / 10.1007/978-0-387-75470-3_7（只核到书目，无 pdf_url）\n\n【逐字定位（R14）】命题「R(3,4)=9 由 Greenwood–Gleason 定出」在 lit-000001 正文里 matched=exact：\n文件 library/lit-000001-radziszowski-smallramseynumbers.txt，第 738 行，框架分页 page 7（page 7 起于 647 行，page 8 起于 752 行）。\n逐字片段：\"Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14\"\n注意：这是「谁定了这个值」的二次出处，不是证明本身；不要把它写成「这一定理的证明依据」。\n\n【未入库 / 未 stage 的候选（如实）】首轮 openalex 结果里 \"Parallel evaluation of ASP programs\"（计算机方向）、\"Turán Number and Related Ramsey Number\"（讲 Turán 关联界、不直接给 R(3,4)=9）、Borbély 学位论文条目（无正文且非小 Ramsey 数专题）均判为不相关，未 stage —— 这只表示「这一条没进结果」，不表示这些文献不存在。\n\n【未取到正文的如实报】lit-000000 / 000002 / 000003 / 000005 只核到书目记录、PDF 未下载（000000 与 000005 的源根本没给 pdf_url）。若 D 要把 lit-000000 当「定理出处」引用，需要另外取到正文或换一篇可核来源；我不拿它当逐字凭据。\n\n【下一步该谁做】抽概念、建关系是 B 的活：等 D 把研究问题写成 statements 之后，把这批 lit 行连同上面那条 page 7 的逐字片段交给 B，他可据此建 relations（含 quote / page_range）。这一步我没越权代做。",
+        "evidence": [
+          "r-000001",
+          "lit:000000",
+          "lit:000001",
+          "lit:000002",
+          "lit:000003",
+          "lit:000004",
+          "lit:000005",
+          "reports/lit-r-000001.md",
+          "downloads/lit-000001-radziszowski-smallramseynumbers.pdf",
+          "downloads/lit-000004-azmi-r34-weightedgraph.pdf",
+          "library/lit-000001-radziszowski-smallramseynumbers.txt"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "A 检索完毕：r-000001 outcome=ok，入库 6 篇（lit-000000~000005），R(3,4)=9 的来源已定位到 lit-000001 page 7 逐字引文",
+          "body": "## 做了什么\n按派活检索 R(3,4) 文献并登记，建委托 r-000001（mode=topical，providers=openalex+crossref），outcome=**ok**，`result_lit_ids = [000000,000001,000002,000003,000004,000005]`。委托报告：`reports/lit-r-000001.md`。\n\n## 依据\n- 首次 openalex 单源检索失败：`provider_error: RemoteDisconnected` —— 这是「没查成」，不是「没有文献」。`search.providers` 实测 5 源可用后改双源合并重试成功。\n- 已入库（题名 / 年 / DOI）：\n  - lit-000000 Combinatorial Relations and Chromatic Graphs / 1955 / 10.4153/cjm-1955-001-4 —— R(3,4)=9 的**原始出处**，但只核到书目、无 pdf_url，正文本轮未取到。\n  - lit-000001 Small Ramsey Numbers / 2011 / 10.37236/21 —— 全文已下载并抽出文字层。\n  - lit-000002 On Some Small Classical Ramsey Numbers / 2013 / 10.37236/3137；lit-000003 New Computational Upper Bounds for R(3,k) / 2013 / 10.37236/2824；lit-000005 Large Progress in Small Ramsey Numbers / 2010 —— 只核到书目，正文未取。\n  - lit-000004 The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph / 2022 / 10.24036/rmj.v1i1.1 —— 下界一半，全文已下载（低影响期刊，按 cross_check 记，不当定理出处）。\n\n## 逐字定位（matched=exact）\nlit-000001 的 `library/lit-000001-radziszowski-smallramseynumbers.txt` 第 738 行，框架分页 **page 7**：\n> Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14\n\n这是二次出处（谁定了这个值），**不是证明本身**。\n\n## 要谁做什么 / 我卡在哪\n抽概念、建关系是 B 的活：请 D 先把研究问题写成 statements，再把 lit-000000~000005 与上面那条 page 7 引文交给 B 建 relations。lit-000000（Greenwood–Gleason 1955）如果要当「定理出处」引用，需要另取正文或换可核来源 —— 这一点我没法在本轮内解决。",
+          "refs": [
+            "r-000001",
+            "lit:000000",
+            "lit:000001",
+            "lit:000002",
+            "lit:000003",
+            "lit:000004",
+            "lit:000005"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'r-000001' 立不住：引用的前序手稿 'r-000001' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 58496,
+        "prompt_cache_miss_tokens": 2246,
+        "tokens_in": 60742,
+        "tokens_out": 2184,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    }
+  ],
+  "final": "A 这一趟的活做完了：为「R(3,4)=9」建了 1 条检索委托并登记了 6 篇 literature 行，其中 2 篇已把正文落到本地，并把关键命题在正文里逐字定位到（页码 + 片段）。\n\n【委托 r-000001】topic=\"Ramsey number R(3,4)\", mode=topical, providers=[openalex, crossref], done=true, outcome=ok。\nresult_lit_ids = [\"000000\",\"000001\",\"000002\",\"000003\",\"000004\",\"000005\"]\n说明：首轮用 openalex 单源 topical 检索失败（provider_error: RemoteDisconnected —— 那一档是「没查成」，不是「没有文献」）；随后 search.providers 真实探测 5 源均可用，改 openalex+crossref 合并重试成功（10 候选），再按题名 precise 查 \"Combinatorial relations and chromatic graphs\"（Greenwood–Gleason）与 \"Small Ramsey Numbers\"（Radziszowski）各取得 10 候选。逐条核题名/年份/DOI 后精选 6 条入库，未拿跑题条目凑数。\n\n【已入库（题名 / 年份 / DOI）】\n- lit-000000 Combinatorial Relations and Chromatic Graphs / 1955 / 10.4153/cjm-1955-001-4（R(3,4)=9 的原始出处；只核到 Crossref 书目，pdf_url 为空，正文本轮未取到）\n- lit-000001 Small Ramsey Numbers / 2011 / 10.37236/21（Radziszowski DS1 综述；全文已下载 + 已抽文字层）\n- lit-000002 On Some Small Classical Ramsey Numbers / 2013 / 10.37236/3137（只核到书目与 pdf 链接，未下载）\n- lit-000003 New Computational Upper Bounds for Ramsey Numbers R(3,k) / 2013 / 10.37236/2824（同上）\n- lit-000004 The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph / 2022 / 10.24036/rmj.v1i1.1（下界那一半；全文已下载并写回 path。低影响期刊，证据强度按 cross_check 记，不当定理出处）\n- lit-000005 Large Progress in Small Ramsey Numbers / 2010 / 10.1007/978-0-387-75470-3_7（只核到书目，无 pdf_url）\n\n【逐字定位（R14）】命题「R(3,4)=9 由 Greenwood–Gleason 定出」在 lit-000001 正文里 matched=exact：\n文件 library/lit-000001-radziszowski-smallramseynumbers.txt，第 738 行，框架分页 page 7（page 7 起于 647 行，page 8 起于 752 行）。\n逐字片段：\"Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14\"\n注意：这是「谁定了这个值」的二次出处，不是证明本身；不要把它写成「这一定理的证明依据」。\n\n【未入库 / 未 stage 的候选（如实）】首轮 openalex 结果里 \"Parallel evaluation of ASP programs\"（计算机方向）、\"Turán Number and Related Ramsey Number\"（讲 Turán 关联界、不直接给 R(3,4)=9）、Borbély 学位论文条目（无正文且非小 Ramsey 数专题）均判为不相关，未 stage —— 这只表示「这一条没进结果」，不表示这些文献不存在。\n\n【未取到正文的如实报】lit-000000 / 000002 / 000003 / 000005 只核到书目记录、PDF 未下载（000000 与 000005 的源根本没给 pdf_url）。若 D 要把 lit-000000 当「定理出处」引用，需要另外取到正文或换一篇可核来源；我不拿它当逐字凭据。\n\n【下一步该谁做】抽概念、建关系是 B 的活：等 D 把研究问题写成 statements 之后，把这批 lit 行连同上面那条 page 7 的逐字片段交给 B，他可据此建 relations（含 quote / page_range）。这一步我没越权代做。",
+  "evidence": [
+    "r-000001",
+    "lit:000000",
+    "lit:000001",
+    "lit:000002",
+    "lit:000003",
+    "lit:000004",
+    "lit:000005",
+    "reports/lit-r-000001.md",
+    "downloads/lit-000001-radziszowski-smallramseynumbers.pdf",
+    "downloads/lit-000004-azmi-r34-weightedgraph.pdf",
+    "library/lit-000001-radziszowski-smallramseynumbers.txt"
+  ],
+  "stop_reason": "final",
+  "bad_json": 1,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "counters_reset_at": 30,
+  "compactions": 0,
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p189",
+    "role": "A",
+    "prompt_sha256": "ce26480595d4bf19690e1f650e96fd3c11857a970adde3020e388fd303e6f9dc",
+    "prompt_chars": 29476,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "A_SEARCH_STYLE",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_INBOX",
+      "TASK_BOARD",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ],
+    "preset": {
+      "id": "a",
+      "path": "D:\\Incubator\\agentflow\\presets\\roles\\a",
+      "trust": "system",
+      "rows": 1,
+      "problem": ""
+    }
+  },
+  "spend": {
+    "calls": 30,
+    "tokens_in": 1358237,
+    "tokens_out": 18103,
+    "usd": 0.024707,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 30,
+    "no_request_calls": 0,
+    "hit": 1291776,
+    "miss": 66461,
+    "unknown_calls": 0,
+    "tokens_in": 1358237,
+    "hit_rate": 0.9511,
+    "mismatched_calls": 0,
+    "saved_usd": 0.189891,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 283.578,
+  "notes": [
+    "收工没有可用 notify 表（notify.refs 里的 'r-000001' 立不住：引用的前序手稿 'r-000001' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 1291776 / 未命中 66461 token，命中率 95.1%（30 次调用）；按 modelcost 口径估算可省 约 0.189891 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000009（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "A 这一趟的活做完了：为「R(3,4)=9」建了 1 条检索委托并登记了 6 篇 literature 行，其中 2 篇已把正文落到本地，并把关键命题在正文里逐字定位到（页码 + 片段）。\n\n【委托 r-000001】topic=\"Ramsey number R(3,4)\", mode=topical, providers=[openalex, crossref], done=true, outcome=ok。\nresult_lit_ids = [\"000000\",\"000001\",\"000002\",\"000003\",\"000004\",\"000005\"]\n说明：首轮用 openalex 单源 topical 检索失败（provider_error: RemoteDisconnected —— 那一档是「没查成」，不是「没有文献」）；随后 search.providers 真实探测 5 源均可用，改 openalex+crossref 合并重试成功（10 候选），再按题名 precise 查 \"Combinatorial relations and chromatic graphs\"（Greenwood–Gleason）与 \"Small Ramsey Numbers\"（Radziszowski）各取得 10 候选。逐条核题名/年份/DOI 后精选 6 条入库，未拿跑题条目凑数。\n\n【已入库（题名 / 年份 / DOI）】\n- lit-000000 Combinatorial Relations and Chromatic Graphs / 1955 / 10.4153/cjm-1955-001-4（R(3,4)=9 的原始出处；只核到 Crossref 书目，pdf_url 为空，正文本轮未取到）\n- lit-000001 Small Ramsey Numbers / 2011 / 10.37236/21（Radziszowski DS1 综述；全文已下载 + 已抽文字层）\n- lit-000002 On Some Small Classical Ramsey Numbers / 2013 / 10.37236/3137（只核到书目与 pdf 链接，未下载）\n- lit-000003 New Computational Upper Bounds for Ramsey Numbers R(3,k) / 2013 / 10.37236/2824（同上）\n- lit-000004 The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph / 2022 / 10.24036/rmj.v1i1.1（下界那一半；全文已下载并写回 path。低影响期刊，证据强度按 cross_check 记，不当定理出处）\n- lit-000005 Large Progress in Small Ramsey Numbers / 2010 / 10.1007/978-0-387-75470-3_7（只核到书目，无 pdf_url）\n\n【逐字定位（R14）】命题「R(3,4)=9 由 Greenwood–Gleason 定出」在 lit-000001 正文里 matched=exact：\n文件 library/lit-000001-radziszowski-smallramseynumbers.txt，第 738 行，框架分页 page 7（page 7 起于 647 行，page 8 起于 752 行）。\n逐字片段：\"Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14\"\n注意：这是「谁定了这个值」的二次出处，不是证明本身；不要把它写成「这一定理的证明依据」。\n\n【未入库 / 未 stage 的候选（如实）】首轮 openalex 结果里 \"Parallel evaluation of ASP programs\"（计算机方向）、\"Turán Number and Related Ramsey Number\"（讲 Turán 关联界、不直接给 R(3,4)=9）、Borbély 学位论文条目（无正文且非小 Ramsey 数专题）均判为不相关，未 stage —— 这只表示「这一条没进结果」，不表示这些文献不存在。\n\n【未取到正文的如实报】lit-000000 / 000002 / 000003 / 000005 只核到书目记录、PDF 未下载（000000 与 000005 的源根本没给 pdf_url）。若 D 要把 lit-000000 当「定理出处」引用，需要另外取到正文或…（落档截断，原 2149 字）",
+    "evidence": [
+      "r-000001",
+      "lit:000000",
+      "lit:000001",
+      "lit:000002",
+      "lit:000003",
+      "lit:000004",
+      "lit:000005",
+      "reports/lit-r-000001.md",
+      "downloads/lit-000001-radziszowski-smallramseynumbers.pdf",
+      "downloads/lit-000004-azmi-r34-weightedgraph.pdf",
+      "library/lit-000001-radziszowski-smallramseynumbers.txt"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "A 检索完毕：r-000001 outcome=ok，入库 6 篇（lit-000000~000005），R(3,4)=9 的来源已定位到 lit-000001 page 7 逐字引文",
+      "body": "## 做了什么\n按派活检索 R(3,4) 文献并登记，建委托 r-000001（mode=topical，providers=openalex+crossref），outcome=**ok**，`result_lit_ids = [000000,000001,000002,000003,000004,000005]`。委托报告：`reports/lit-r-000001.md`。\n\n## 依据\n- 首次 openalex 单源检索失败：`provider_error: RemoteDisconnected` —— 这是「没查成」，不是「没有文献」。`search.providers` 实测 5 源可用后改双源合并重试成功。\n- 已入库（题名 / 年 / DOI）：\n  - lit-000000 Combinatorial Relations and Chromatic Graphs / 1955 / 10.4153/cjm-1955-001-4 —— R(3,4)=9 的**原始出处**，但只核到书目、无 pdf_url，正文本轮未取到。\n  - lit-000001 Small Ramsey Numbers / 2011 / 10.37236/21 —— 全文已下载并抽出文字层。\n  - lit-000002 On Some Small Classical Ramsey Numbers / 2013 / 10.37236/3137；lit-000003 New Computational Upper Bounds for R(3,k) / 2013 / 10.37236/2824；lit-000005 Large Progress in Small Ramsey Numbers / 2010 —— 只核到书目，正文未取。\n  - lit-000004 The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph / 2022 / 10.24036/rmj.v1i1.1 —— 下界一半，全文已下载（低影响期刊，按 cross_check 记，不当定理出处）。\n\n## 逐字定位（matched=exact）\nlit-000001 的 `library/lit-000001-radziszowski-smallramseynumbers.txt` 第 738 行，框架分页 **page 7**：\n> Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14\n\n这是二次出处（谁定了这个值），**不是证明本身**。\n\n## 要谁做什么 / 我卡在哪\n抽概念、建关系是 B 的活：请 D 先把研究问题写成 statements，再把 lit-000000~000005 与上面那条 page 7 引文交给 B 建 relations。lit-000000（Greenwood–Gleason 1955）如果要当「定理出处」引用，需要另取正文或换可核来源 —— 这一点我没法在本轮内解决。",
+      "refs": [
+        "r-000001",
+        "lit:000000",
+        "lit:000001",
+        "lit:000002",
+        "lit:000003",
+        "lit:000004",
+        "lit:000005"
+      ]
+    }
+  }
+}

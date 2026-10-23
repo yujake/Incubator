@@ -97,6 +97,140 @@ def verification_ledger_path(root: str | Path, statement_id: str) -> Path:
     return verifications_dir(root) / f"{sid}.jsonl"
 
 
+#: 「命题还没在册时审的那一签」落在哪：`verifications/pending/<sha>.jsonl`（D-34）。
+#:
+#: 为什么单独一个子目录（而不是塞进 `verifications/` 顶层）：顶层那一层是"每个命题一份台账"，
+#: `list_verifications` 与收工门 R10 都按顶层 `*.jsonl` 逐个命题读 —— 混进一份没有命题号的
+#: 台账会让那些读法把一行"还不属于任何命题"的签算到某个命题头上。子目录不进那条 glob，
+#: 而认领它的入口只有一个：:func:`pending_sign`（按对象内容的 sha）。
+PENDING_DIR_NAME = "pending"
+#: pending 台账里那一行的编号前缀（`u-NNNNNN`：u = 未登记）。
+PENDING_PREFIX = "u-"
+
+
+def pending_dir(root: str | Path) -> Path:
+    """pending 台账的目录（只算路径，不建目录）。"""
+    return verifications_dir(root) / PENDING_DIR_NAME
+
+
+def pending_ledger_path(root: str | Path, key: str) -> Path:
+    """一份 pending 台账：`verifications/pending/<内容 sha>.jsonl`（按对象内容分文件）。"""
+    text = str(key or "").strip().lower()
+    if len(text) != 64 or any(ch not in "0123456789abcdef" for ch in text):
+        raise VerificationError(
+            "pending 台账的文件名必须是 64 位十六进制的 sha256（按对象内容分文件），"
+            f"收到 {key!r}")
+    return pending_dir(root) / f"{text}.jsonl"
+
+
+def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[str, Any],
+                        verifier: str = "V", object_sha256: Any = "",
+                        object_path: Any = "") -> dict[str, Any]:
+    """把"命题还没在册时"的一次审校落进 pending 台账，返回那一行。
+
+    为什么要这一格（D-34，r34b 的真机现场）：V 审完判「成立」，而 `statements` 是 0 行 ——
+    `record_verification` 要一个合法命题号才写得出 `verifications/<号>.jsonl`，于是那一签
+    没有落点，结论只能 escalation 掉。结论丢了不是"没审"，是"审了没处记"。
+
+    落点按对象内容的 sha 分文件：`object_sha256`（那份报告 / 证明文件的字节 sha256）给了
+    就用它，没给就退到证明正文的 sha（`proof_sha256`）。两个 sha 都写进行里，所以 B 后来
+    认领时按哪一个都找得到（"顺序不再重要"）。
+
+    结论一样要过 `parse_verdict`（`有毛病` 必须给 `defect_step`）：坏结论不许落盘。
+    """
+    checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
+                                        "defect_step": verdict.get("defect_step"),
+                                        "quote": verdict.get("quote", ""),
+                                        "why": verdict.get("why", ""),
+                                        "findings": list(verdict.get("findings") or [])},
+                                       ensure_ascii=False, default=str))
+    text = str(proof_text or "")
+    sha = proof_sha(text)
+    obj = str(object_sha256 or "").strip().lower()
+    key = obj or sha
+    path = pending_ledger_path(root, key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows, problems = JF.read_jsonl(path)
+    if problems:
+        raise VerificationError(f"pending 台账有读不出来的行：{problems[:3]}")
+    row = {
+        "verification_id": f"{PENDING_PREFIX}{S.format_id(len(rows) + 1)}",
+        # 没有命题号是这一档的定义（命题还没在册）：两个键都留空串而不是缺键 ——
+        # 读的人要能分辨"这一行不属于任何命题"与"这一行是旧格式、没有这个键"。
+        "statement_id": "", "stmt_id": "",
+        "proof_no": int(DEFAULT_PROOF_NO),
+        "verifier": str(verifier or "V"), "verdict": checked["verdict"],
+        "defect_step": checked["defect_step"], "quote": checked["quote"],
+        "why": checked["why"], "findings": checked["findings"],
+        "unresolved_errors": checked["unresolved_errors"],
+        "proof_sha256": sha, "proof_chars": len(text),
+        #: 对象（盘上那一份报告 / 证明文件）的字节 sha256 与相对路径：认领时按它。
+        "object_sha256": obj, "object_path": str(object_path or "").strip().replace("\\", "/"),
+        "round": len(rows) + 1, "used_faces": [], "submission_id": "",
+        "landed": "pending", "at": _now_iso(),
+    }
+    _append_verification(path, row)
+    return row
+
+
+def pending_rows(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
+    """pending 台账的全部行（按落盘顺序；坏行照实报出，不静默跳过）。"""
+    base = pending_dir(root)
+    out: list[dict[str, Any]] = []
+    problems: list[str] = []
+    if not base.is_dir():
+        return out, problems
+    for file in sorted(base.glob("*.jsonl")):
+        rows, bad = JF.read_jsonl(file)
+        problems.extend(f"{PENDING_DIR_NAME}/{file.name}: {b}" for b in bad)
+        out.extend(rows)
+    return out, problems
+
+
+def pending_sign(root: str | Path, *, object_sha256: Any = "",
+                 proof_shas: Sequence[str] = ()) -> dict[str, Any]:
+    """按对象内容的 sha 认领 pending 台账里的那一签（最近一次审校说了算）。
+
+    返回 `{"found","verdict","proof_sha256","object_sha256","ledger","why"}`。
+    `found=False` 只表示"pending 里没有盖住这一份的签"，不是"没查成"；
+    读不出来时才抛 `VerificationError`（三态：没查成不许折成没有签）。
+    """
+    out: dict[str, Any] = {"found": False, "verdict": "", "proof_sha256": "",
+                           "object_sha256": "", "ledger": "", "why": ""}
+    obj = str(object_sha256 or "").strip().lower()
+    wants = {str(s or "").strip().lower() for s in (proof_shas or ()) if str(s or "").strip()}
+    rows, problems = pending_rows(root)
+    if problems:
+        raise VerificationError("；".join(problems[:3]))
+    hit: dict[str, Any] | None = None
+    for row in rows:
+        got_obj = str(row.get("object_sha256") or "").strip().lower()
+        got_proof = str(row.get("proof_sha256") or "").strip().lower()
+        if obj:
+            if got_obj != obj:
+                continue
+        elif wants:
+            if got_proof not in wants:
+                continue
+        else:
+            continue
+        hit = row
+    if hit is None:
+        where = (f"对象 sha256 {obj[:12]}…" if obj else f"证明正文 sha {sorted(wants)[:1]}")
+        out["why"] = (f"`{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/` 里没有盖住这一份"
+                      f"（{where}）的签 —— 命题还没在册时 V 也没审过它")
+        return out
+    out.update(found=True, verdict=str(hit.get("verdict") or ""),
+               proof_sha256=str(hit.get("proof_sha256") or ""),
+               object_sha256=str(hit.get("object_sha256") or ""),
+               ledger=(f"{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/"
+                       f"{str(hit.get('object_sha256') or hit.get('proof_sha256') or '')[:64]}"
+                       f".jsonl#{hit.get('verification_id') or '?'}"))
+    out["why"] = (f"{out['ledger']} 是按对象内容 sha 认领到的那一签，"
+                  f"verdict={out['verdict']!r}")
+    return out
+
+
 def cold_start_prompt(statement_full: str, proof_text: str,
                       *, readonly_facts: str = "") -> str:
     """V 的冷启动提示词（纯函数：只有对象 + 只读读数，没有 F 的叙述、没有 store 句柄）。
@@ -415,7 +549,8 @@ def next_verification_id(root: str | Path, statement_id: str) -> str:
 def record_verification(root: str | Path, *, statement_id: str, proof_text: str, verdict: Mapping[str, Any],
            verifier: str = "V", round_no: int | None = None,
            used_faces: Iterable[str] = (), submission_id: str = "",
-           store: Any = None, proof_no: Any = None) -> dict[str, Any]:
+           store: Any = None, proof_no: Any = None,
+           object_sha256: Any = "", object_path: Any = "") -> dict[str, Any]:
     """把一次审校写进这个命题的台账（追加一行），返回那一行。
 
     编号 `v-NNNN` 由脚本按文件内顺序发（`draft/39` §3.21 五：与手稿编号、台账 id 同一套）。
@@ -484,6 +619,12 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "submission_id": str(submission_id or ""),
         "at": _now_iso(),
     }
+    #: D-34：这一签审的对象（盘上那份报告 / 证明文件）的字节 sha256 与相对路径。
+    #: 只在调用方真的知道时写（条件写入，老行因此逐字节不变），读侧按它认领
+    #: "命题登记之前审的那一签"（`numericproof.latest_third_party_sign` 的第二路）。
+    if str(object_sha256 or "").strip():
+        row["object_sha256"] = str(object_sha256).strip().lower()
+        row["object_path"] = str(object_path or "").strip().replace("\\", "/")
     if store is None:
         _append_verification(path, row)
         return row
@@ -1208,6 +1349,58 @@ CODE_AUDIT = "proof_review_without_verification"
 PROOF_REVIEW_KIND = "proof_review"
 
 
+def _pending_signed(root: str | Path, proof_text: Any) -> dict[str, Any] | None:
+    """命题还没在册时 V 审的那一签（按这一份正文的 sha 认领）；没有 ⇒ `None`。
+
+    D-34：`verifications/pending/<sha>.jsonl` 里的那一行是真的审过（七项机械会审），
+    只是当时没有命题号可挂。它是"先签后登记"那一半的证据面，所以在
+    :func:`proof_review_gap` 里与"这一条命题台账里的那一签"同等看待 —— 判据仍然只有
+    这一处（`signs_bit3`：成立且没有未解决 error）。
+    """
+    text = str(proof_text or "")
+    if not text.strip():
+        return None
+    try:
+        got = pending_sign(root, proof_shas=(proof_sha(text),))
+    except VerificationError:
+        return None
+    if not got.get("found"):
+        return None
+    return got
+
+
+def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
+                      got: Mapping[str, Any], *, statement_id: str) -> dict[str, Any]:
+    """:func:`_pending_signed` 认到那一签之后，把 `proof_review_gap` 的读数摊开。
+
+    判据与"台账那一路"同一条（`signs_bit3`）：`成立` 且没有未解决 error 才算签住。
+    """
+    row_ok = (str(got.get("verdict") or "") == "成立")
+    out["ledger"] = str(got.get("ledger") or "")
+    out["verification_id"] = str(out["ledger"]).split("#")[-1]
+    out["verdict"] = str(got.get("verdict") or "")
+    out["rows"] = 1
+    out["sha_matches"] = True
+    out["checked"] = True
+    checks[1].update(ok=bool(row_ok),
+                     detail=(f"{out['ledger']}（命题还没在册时审的那一签）"
+                             if row_ok else f"{out['ledger']}：结论不是「成立」"))
+    checks[2].update(ok=bool(row_ok),
+                     detail=("按这一份正文的 sha 认领到（待登记的那一签）"
+                             if row_ok else "签的不是这一份"))
+    if not row_ok:
+        out["state"] = "rejected"
+        out["why"] = (f"命题 {statement_id} 的证明在 pending 台账里那一签是 "
+                      f"{out['verdict']!r}（要「成立」）⇒ 复核过、结论不是成立")
+        return out
+    out["state"] = "signed"
+    out["ok"] = True
+    out["why"] = (f"命题 {statement_id} 的凭据在 `{out['ledger']}`：V 在命题还没在册时"
+                  "审过这一份并判「成立」，按这一份正文的 sha 认领到"
+                  "（「先签后登记」与「先登记后签」是同一件事）")
+    return out
+
+
 def proof_review_gap(root: str | Path, row: Mapping[str, Any],
                      proof_no: Any = None) -> dict[str, Any]:
     """一条 `evidence_kind="proof_review"` 的命题有没有凭据 —— 纯读，不写任何东西。
@@ -1315,6 +1508,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
     path = verification_ledger_path(root, sid)
     out["ledger"] = f"{VERIFICATIONS_DIR}/{sid}.jsonl"
     if not path.is_file():
+        pending = _pending_signed(root, text)
+        if pending is not None:
+            return _gap_from_pending(out, checks, pending, statement_id=sid)
         out["checked"] = True
         checks[1]["detail"] = f"`{out['ledger']}` 不在盘上（一次审校都没有）"
         checks[2]["detail"] = "没有那一行，无从比"
@@ -1335,6 +1531,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
                       "凭据**没查成**（不是「查过、没问题」）")
         return out
     if not rows:
+        pending = _pending_signed(root, text)
+        if pending is not None:
+            return _gap_from_pending(out, checks, pending, statement_id=sid)
         out["checked"] = True
         checks[1]["detail"] = "台账是空文件"
         checks[2]["detail"] = "同上"
