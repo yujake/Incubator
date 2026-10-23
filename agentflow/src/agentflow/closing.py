@@ -3234,6 +3234,92 @@ def _check_paper(rep: ClosingReport, project_dir: str, store: Any) -> None:
     ))
 
 
+#: 「有命题、已成稿，而论文包里没有对应表」这一档的理由码（D-38）。
+#:
+#: 为什么另立一个码而不是复用 `papermapping.mapping_package_missing`：那一个的前提是
+#: "有正文（`main.tex`）"，而 D-38 的现场是"正文也没写、表也没写，但稿件已经有了" ——
+#: 两趟真机的对应表格那时是 unknown（"不适用"），于是"论文欠一张对应表"这件事在收工门上
+#: 一点读数都没有。这一档只在那一个前提不成立时补位（两个码不重复报同一件事）。
+MAPPING_NOT_WRITTEN_CODE = "mapping_not_written"
+
+
+def _mapping_json_exists(path: Any) -> bool:
+    """对应表在不在盘上 —— 这一格的唯一存在性检查（反真空用例只打这一处桩）。
+
+    单独成函数而不是内联 `Path.is_file()`：判据 ⑤ 要把"存在性检查打桩成恒真"，
+    而桩必须打在唯一那一处，否则打桩之后仍然有别的 `is_file()` 在拦，那条反真空
+    就证明不了自己。
+    """
+    return Path(str(path)).is_file()
+
+
+def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
+    """有命题、已成稿，而论文包里没有对应表 —— 这是"没产出"，不是"没查成"。
+
+    D-38 的两趟真机读数（`cube-ws` / `r34c`）：`doc.build_document` 各 3 / 2 次、
+    `doc.write_mapping` 两次都是 0，`out/paper` 里只有两份验收表。那一趟的对应表那一格
+    是 unknown（"没有 `main.tex` ⇒ 不适用"）⇒ "论文欠一张对应表"在收工门上没有任何读数。
+
+    三态（`checked` / `missing` 两格）：
+    - `statements` 或 `documents` 读不出来 ⇒ `checked=False`、`missing=False`
+      （没查成不许读成"没问题"，也不许读成"缺"）；
+    - 有 statements、有 documents，而 `<项目根>/out/paper/MAPPING.json` 不在盘上
+      ⇒ `checked=True`、`missing=True`；
+    - 其余（还没有命题 / 还没有稿件 / 表在盘上）⇒ `checked=True`、`missing=False`。
+
+    为什么"已成稿"看 `documents` 有没有行：`doc.build_document` 是 `documents` 表唯一的
+    建行入口（`G.revise` / `H.review` 只改已有行），所以"有一行"就是"成稿那一步真的
+    成功过"。这一档只判"表产出了没有"，表与正文对不对得上仍归
+    `papermapping.mapping_reading`。
+
+    纯读：不写盘、不读会话。
+    """
+    from . import papermapping as PM
+
+    project = Path(str(project_root))
+    json_path = PM.package_dir(project) / PM.MAPPING_JSON_NAME
+    out: dict[str, Any] = {
+        "checked": False, "statements": 0, "documents": 0, "by_status": {},
+        "mapping_json": str(json_path), "exists": None, "missing": False, "reason": "",
+    }
+    if store is None:
+        out["reason"] = "没有 store ⇒ 有命题 / 已成稿这两格读不出来（没查成）"
+        return out
+    # 常见的调用姿势错误：把论文包目录（…/out/paper）当项目根传。这一档要的是项目根
+    # （表在 <项目根>/out/paper/ 下），在包目录上判只会得到一个假的"缺表"（与
+    # `_check_paper` 那句"给的目录看起来是论文包本身"同一口径：说出来，别静默判红）。
+    if (project / PC.TEX_NAME).is_file():
+        out["reason"] = (f"给的目录看起来是论文包本身（{project / PC.TEX_NAME} 在它下面）"
+                         "⇒ 这一档没查成：请改传项目根（表在 <项目根>/out/paper/ 下）")
+        return out
+    try:
+        statements = len(store.rows("statements"))
+        documents = [dict(r) for r in store.rows("documents")]
+    except Exception as exc:  # noqa: BLE001 - 读不到是"没查成"，不许折成"缺"或"没问题"
+        out["reason"] = (f"`statements` / `documents` 读不出来"
+                         f"（{type(exc).__name__}: {exc}）⇒ 这一格没查成")
+        return out
+    by_status: dict[str, int] = {}
+    for row in documents:
+        key = str(row.get("status") or "")
+        by_status[key] = by_status.get(key, 0) + 1
+    exists = _mapping_json_exists(json_path)
+    out.update(checked=True, statements=int(statements), documents=len(documents),
+               by_status=by_status, exists=bool(exists))
+    if not exists and statements >= 1 and documents:
+        out["missing"] = True
+        out["reason"] = (
+            f"有 {statements} 条命题、{len(documents)} 份已成稿的稿件（`documents` 有行 = "
+            f"`doc.build_document` 成功过），论文包里却没有 {json_path} ⇒ 缺对应表 ⇒ "
+            "论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
+    elif exists:
+        out["reason"] = f"对应表在盘上（{json_path}）；表与正文对不对得上归 mapping 那几格"
+    else:
+        out["reason"] = ("还没有命题或还没有成稿 ⇒ 这一档不适用（它是给"
+                         "「论文已经写出来」那一阶段的判据，不是给早期阶段的）")
+    return out
+
+
 def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
     """论文对应表那一格（业主 2026-10-22）：三态齐全，且不是第八格之外的第九格。
 
@@ -3257,6 +3343,12 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
     Lean 产物都没有）只进读数、不动门：它说的不是"表与正文对不上"，把每一份不使用
     形式化的论文都堵在这一格上是不对的 —— 但"两格无从填起"必须看得见，
     所以 `warning_findings` 与 `warnings` 都在读数里（"看见了、这一档不拦"）。
+
+    另一档（D-38，2026-10-24）：有命题、已成稿，而论文包里从来没有 `MAPPING.json`
+    ⇒ `readings['mapping']['mapping_written']['missing']` 为真，并补一条 blocker
+    （理由码 `mapping_not_written`）。它补的是上面三态的共同盲区：三态以"有没有正文"
+    为轴，而"正文也没写、稿件却已成稿"那一形态落在 `unknown`（不适用）上 ——
+    两趟真机的对应表就是这样静默缺席的。
 
     判据只有一处实现（`agentflow.papermapping.mapping_reading`），分档只有一处
     （`agentflow.agent_h.mapping_judge.level_of`）—— 这里只做接线与折成 `Finding`。
@@ -3301,6 +3393,29 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
             "mapping", str(item.get("kind") or ""),
             level if level in ("blocker", "warning") else "warning",
             str(item.get("message") or "")))
+
+    # ---- D-38（2026-10-24）：有命题、已成稿，而论文包里从来没有对应表。
+    #
+    # 为什么补在 `mapping_reading` 之后、而不是并进它的三态：那三态以"有没有正文"为轴，
+    # 而 D-38 的现场是"正文也没写、表也没写，稿件却已经成稿" —— 那边判 unknown（不适用），
+    # 于是"论文欠一张对应表"在收工门上完全没有读数。这一档只在那边没有报
+    # `mapping_package_missing` 时补位，同一个"表不在盘上"不重复报两条。
+    written = mapping_absence_reading(store, root)
+    got["mapping_written"] = written
+    already_missing = [p for p in (got.get("problems") or [])
+                       if str(p.get("kind") or "") == "mapping_package_missing"]
+    if written.get("missing") and not already_missing:
+        detail = (
+            f"{written['reason']}。处置：派 G 调 `doc.write_mapping` 一次落三份"
+            "（`MAPPING.json` / `MAPPING.md` / 正文附录），数值实验定理那一行的三格"
+            "（`file` / `numeric_evidence` / `exhaustion_note`）与 Lean 那两格"
+            "（`lean_file` / `lean_target`）齐了才算写完，再重编 PDF")
+        rep.findings.append(Finding("mapping", MAPPING_NOT_WRITTEN_CODE, "blocker", detail))
+        got["findings"] = int(got.get("findings") or 0) + 1
+        got["blockers"] = int(got.get("blockers") or 0) + 1
+        counts = dict(got.get("problem_counts") or {})
+        counts[MAPPING_NOT_WRITTEN_CODE] = counts.get(MAPPING_NOT_WRITTEN_CODE, 0) + 1
+        got["problem_counts"] = counts
 
 
 #: 污染面的残余边界（改前那句已作废，逐字理由见下）。

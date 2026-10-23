@@ -1021,6 +1021,26 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
         got["documents"] = []
         got["problems"] = list(got["problems"]) + [
             "没有 store ⇒ 说不出验收表背后的 documents 行是哪一条（没查成，不是「没有」）"]
+    # ---- D-38 C（2026-10-24）：论文包缺对应表时，M 手里的验收表要能读到这件事。
+    #
+    # 为什么要接到这里：D-38 两趟真机的 out/paper 里只有两份验收表，M 读验收表时
+    # 看不到"论文欠一张对应表"这一项 —— 于是它在验收表里连那一行都不会写。判据与
+    # 收工门那一格共用同一处实现（`closing.mapping_absence_reading`），这里只把
+    # 结论翻成一句 M 能照写的话；表在盘上时这句话不出现（不是一句恒真的提示）。
+    if store is not None:
+        try:
+            written = CL.mapping_absence_reading(store, base)
+        except Exception as exc:  # noqa: BLE001 - 没查成也要说出来，不许静默当成"表在"
+            got["problems"] = list(got["problems"]) + [
+                f"论文对应表这一项没查成：{type(exc).__name__}: {exc} ⇒ 验收表里那一项记"
+                "「未核到」，不许记「成立」"]
+        else:
+            if written.get("missing"):
+                got["problems"] = list(got["problems"]) + [
+                    f"论文包里没有 {written['mapping_json']}（有 "
+                    f"{written['statements']} 条命题、{written['documents']} 份稿件）⇒ "
+                    "验收表里「论文对应表」那一项记「未完成」；缺对应表 ⇒ 论文无法从稿件"
+                    "追溯到台账（不许记 `na`、也不许把那一行省掉）"]
     if ids:
         want = [str(x) for x in ids]
         keep = [r for r in got["rows"] if r["id"] in want]
@@ -1465,7 +1485,10 @@ _ACCEPTANCE_HEADER_ALIASES: tuple[str, ...] = ("判据", "编号", "id", "序号
 #:
 #: 顺序是判据的一部分："不成立"必须先于"成立"判 —— `"成立" in "不成立"` 会把
 #: 不成立读成成立（2026-09-29 实测：验收表里 P10/P11 写着「不成立」，解析出来却是 10/10 成立）。
-_ACCEPTANCE_NOT_OK_ALIASES: tuple[str, ...] = ("不成立", "未通过", "不通过", "失败",
+#: 2026-10-24（D-38 C）：加「未完成」—— 那一档说的是"这一项还没做完"，与「不成立」
+#:（做完了、结论是坏的）不是同一件事，但两者都算这一行没过；不加它的话 M 按新口径写
+#: 下的「未完成」会落成"结论格读不懂"（那一行既不算通过也不算不成立，等于没记）。
+_ACCEPTANCE_NOT_OK_ALIASES: tuple[str, ...] = ("不成立", "未通过", "不通过", "失败", "未完成",
                                                "fail", "no", "false", "✗", "×", "否")
 _ACCEPTANCE_OK_ALIASES: tuple[str, ...] = ("成立", "通过", "pass", "ok", "yes", "true",
                                            "✓", "√", "是")

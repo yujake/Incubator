@@ -164,6 +164,7 @@ SPEC = AgentSpec(
             "`document_claim_rows`，或必须在稿件里才成立的档（`document_literature_citations` / `supported_claims` / "
             "`claims_supported_by_their_evidence`）；⑧**闭（请求闭环）**：`unfinished_request_rows`（**上限 0**）。读数不够时"
             "**不许把那一行删掉**：删掉 ⇒ 收工门判 `fail` 并点名缺哪个环节；如实写 0 ⇒ 那一行自己不成立（也红，但红得精确）。",
+            "**验收表里必须有一行「论文对应表」**（D-38，2026-10-24）：论文包里有 `out/paper/MAPPING.json` 且那一行三格齐（`file` ＋ 数值实验定理的 `numeric_evidence` / `exhaustion_note`，或有 Lean 产出时的 `lean_file` / `lean_target`）⇒ 记「成立」；论文已经成稿而论文包里没有 `MAPPING.json` ⇒ 那一行记「**未完成**」（不是 `na`、也不许把这一行省掉）。缺对应表 ⇒ 论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环没有落点），而这一项此前只数两份 ACCEPTANCE，所以两趟真机都没把它当成交付的一部分。",
             "**G8（可复跑门）由你代跑、H 只判回执**：H 是只读角色、拿不到执行工具，「本轮实跑过」只能由你把它变成一份回执。"
             "做法：派 E 用 `verify.run_experiment(script_path=…)` 把正文里点名的数值脚本重跑一遍（它返回 `exit_code` 与 stdout），"
             "把这四个键凑成 `run_evidence` 交给 H：`{'checked': true, 'commands': [{'claim_id','command','exit_code','output_tail'}]}`。"
@@ -187,7 +188,8 @@ SPEC = AgentSpec(
             "`out/paper/main.pdf`（收工门看的就是回执里的 `tex_sha256`：这份 PDF 是不是盘上这份正文编的）。**正文只有一个来源：G "
             "自己写** —— 不要派渲染/核锚，也不要指望脚本替你写正文。常见交付形式的构成（判决在 `draft/83` §5.2）：①**论文** = "
             "`out/paper/main.tex`（**主件，G 自己一段段写**）+ `main.pdf` + 两份验收表（`ACCEPTANCE-CHECKS.json` / `ACCEPTANCE.md`）"
-            "+ `COMPILE-RECEIPT.json`（编译回执）；**没有渲染锚这回事了** —— 旧的「论文包」（`RENDER-ANCHOR.json` + 项目自带的 "
+            "+ `COMPILE-RECEIPT.json`（编译回执）+ **论文对应表 `out/paper/MAPPING.json`**（G 调 `doc.write_mapping` 一次落三份："
+            "json / md / 正文附录）；**没有渲染锚这回事了** —— 旧的「论文包」（`RENDER-ANCHOR.json` + 项目自带的 "
             "`code/make_paper.py` / `code/compile_paper.py`）**不是本系统的部件**，不要派这类活；②**研究手稿** = 一行 `documents`"
             "（`kind=\"note\"` 或 `\"survey\"`）+ markdown + `out/review/REPORT.md`；③**清单型交付** = 一行 `documents`"
             "（`kind=\"survey\"`，条目写进 `sections`）+ 说明报告；④**说明报告** = `out/review/REPORT.md`（每趟都要交）。"

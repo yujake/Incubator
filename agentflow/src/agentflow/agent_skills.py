@@ -2189,7 +2189,7 @@ def _g_skills() -> tuple[Skill, ...]:
 - **编译**：`doc.paper_compile` 出 `out/paper/main.pdf`。
   本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ **产物与退出码分两栏读**，
   别只看退出码判成败。
-- **先有对应表，再写正文**（业主 2026-10-22）：对应表用 `doc.write_mapping` 一次写三份 ——
+- **成稿是四步动作序列**（业主 2026-10-24 定，与 `specs/g.py` 的 policy 同一口径）：① 写正文 → ② 落对应表 → ③ 逐行核三格齐 → ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
   你只给行（正文里每条定理/引理/命题/推论/例子/实验各占一行：`kind` / `label` / `env_no` /
   `ledger_id` / `proof_no` / `file`），它调 `papermapping.write_package` 渲染出
   `out/paper/MAPPING.json`、`out/paper/MAPPING.md` 与正文附录「附录：产出对应表」，并把
@@ -2198,7 +2198,7 @@ def _g_skills() -> tuple[Skill, ...]:
   正文里每个定理类环境都要能在表里找到一行，表里每一行也要在正文里
   有一个环境 —— 两个方向都不许有孤儿。多证明时每条证明各占一行（`#p1` / `#p2`）。
   `file` 写**论文包内的相对路径**（绝对路径在别人机器上等于不存在）。
-  顺序是死的：先 `doc.write_mapping` → 再写/改正文 → 再 `doc.paper_compile`（改完正文
+  顺序是死的：先写/改正文 → 再 `doc.write_mapping` → 再核三格齐 → 最后 `doc.paper_compile`（改完正文
   必须重编一次）。
 
 ## 数值实验定理：三块，作者是 E（业主 2026-10-23，E-1）
