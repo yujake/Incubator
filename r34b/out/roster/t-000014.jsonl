@@ -1,1 +1,0 @@
-{"at": "2026-10-23T21:26:55+08:00", "brief": "逐行走查 stmt:000000 的证明，签三态结论到 verifications/000000.jsonl", "brief_source": "parent", "first_task_id": "t-000015", "kind": "add", "name": "V1", "owner": "t-000014", "role": "V", "seq": 1, "surface": "S01", "task_id": "t-000015"}
