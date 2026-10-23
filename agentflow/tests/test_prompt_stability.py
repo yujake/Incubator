@@ -481,6 +481,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p192", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p192（2026-10-24）：H 的 policy 示例路径从 proofs/thm.tex 改成 out/paper/proofs/thm.tex（原来的写法不在任何登记过的根下，skills 路径扫描判据会红）。facts 键集仍 15 格"},
+        # p192 → p193（2026-10-24）：F 的凭据句去掉 Lean 字样（按 L 的协作面：F 与 L 无关系）
+        {"version": "p193", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p193（2026-10-24）：F 的凭据①不再写 Lean 形式化（改成机器核过源码的原话），因为只有 B 能碰 L、F 与 L 之间没有边；另 specs/e.py 关档改写第 9 条右侧去掉 formal.record。facts 键集仍 15 格"},
 )
 
 
