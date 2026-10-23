@@ -12,34 +12,102 @@
  *    `counterexample_experiment_id`）；
  * 3. 实验 `experiments`；
  * 4. 审校发现 `review_findings`；
- * 5. 引文回验：`relations` 的 `quote_verified` 三个数（真 / 假 / 未查）——
- *    不是 true 的那些必须把 `quote_reason` 一起显出来，否则读的人不知道为什么；
+ * 5. 引文回验：`relations` 的 `quote_state` 五档（逐字 / 语义 / 不一致 / 未查 /
+ *    没有可复核的区间）—— 不是"通过"的那几档必须把 `quote_reason` 一起显出来，
+ *    否则读的人不知道为什么；
  * 6. 证明级 `verifications`（裁定 K2：盘上无真机样本 ⇒ 夹具造一行；页面标明）；
  * 7. 秘书决策 `secretary`。
+ *
+ * ## 2026-10-23（业主：显示格式过时了）
+ *
+ * - sha 原文一律不上屏：证明那一栏只印"一致 / 不一致 / unknown（没得比）"
+ *   （比的是 V 签的那一份 vs 命题现在这一份，见那一栏的副标题）；
+ * - 命题多两格：非平凡度（`T0`–`T4` 或"未判"）与形式化第 4 位的逐路径读数
+ *   （`{证明号: 状态}` 是二维的，折成一条汇总就等于让 `#p2` 借 `#p1` 的光）；
+ * - reviewed 按证明逐条显示：验证行的第一格就是证明号（`proof_no`）。
  */
 import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
+import { Consistency } from "../components/Consistency";
+import { Nontriviality } from "../components/Nontriviality";
 import { Table, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
-import type { RelationRow } from "../types";
+import type { RelationRow, StatementRow } from "../types";
 
-/** 引文回验的三个数（真 / 假 / 未查）。读不到的那一档一律 `unknown`。 */
-function quoteTally(rows: RelationRow[]): { yes: number; no: number; unchecked: number } {
-  let yes = 0;
-  let no = 0;
-  let unchecked = 0;
-  for (const r of rows) {
-    if (r.quote_verified === true) {
-      yes += 1;
-    } else if (r.quote_verified === false) {
-      no += 1;
-    } else {
-      unchecked += 1;
-    }
+/** 引文状态的五档（后端 `evidencebits.QUOTE_STATES`；词表外的值原样印，不折成"通过"）。 */
+const QUOTE_WORDS: Record<string, { text: string; kind: string }> = {
+  verbatim: { text: "逐字通过", kind: "badge-pass" },
+  semantic: { text: "语义通过", kind: "badge-pass" },
+  mismatch: { text: "不一致", kind: "badge-fail" },
+  unchecked: { text: "未查", kind: "badge-na" },
+  no_evidence: { text: "没有可复核的区间", kind: "badge-unknown" },
+};
+
+/** 五元位第 4 位逐路径的五档（后端 `evidencebits.FORMAL_PATH_STATES`）。 */
+const FORMAL_WORDS: Record<string, string> = {
+  verified: "verified",
+  failed: "failed",
+  pending: "pending",
+  na: "na（不适用）",
+  stale: "stale（验过、过期了）",
+};
+
+/** 一行的引文状态：新后端给 `quote_state`，老后端没有这一格就按布尔读（三态不折平）。 */
+function quoteStateOf(r: StatementRow | RelationRow): string {
+  if (r.quote_state !== "") {
+    return r.quote_state;
   }
-  return { yes, no, unchecked };
+  if (r.quote_verified === true) {
+    return "verbatim";
+  }
+  return r.quote_verified === false ? "mismatch" : "unchecked";
+}
+
+/** 引文那一格：五档各有自己的词（`no_evidence` 与"未查"欠的东西不同，不许合并）。 */
+function quoteCell(r: StatementRow) {
+  if (r.proof_text === "" && quoteStateOf(r) === "unchecked") {
+    return <span class="tri-reason">不适用（这一行没有逐字摘录）</span>;
+  }
+  const state = quoteStateOf(r);
+  const got = QUOTE_WORDS[state];
+  return got === undefined ? (
+    <span class="tri-reason">{state === "" ? "unknown" : state}</span>
+  ) : (
+    <Badge kind={got.kind} text={got.text} />
+  );
+}
+
+/** 第 4 位那一格：按路径逐条印（`形式化：路径1 verified ｜ 路径2 pending`）。 */
+function formalCell(r: StatementRow) {
+  if (r.formal_paths.length === 0) {
+    return <span class="tri-reason">不适用（这一条还没有形式化的路径读数）</span>;
+  }
+  const text = r.formal_paths
+    .map((p) => `路径${p.proof_no} ${FORMAL_WORDS[p.state] ?? p.state}`)
+    .join(" ｜ ");
+  return (
+    <span class="mono" title="第 4 位是二维的（一份证明一行）：任一路径通过即算过，而验的是哪一条逐条可读">
+      形式化：{text}
+    </span>
+  );
+}
+
+/** 引文回验的五档计数（读不到的那一档一律算"未查"）。 */
+function quoteTally(rows: RelationRow[]): Record<string, number> {
+  const out: Record<string, number> = {
+    verbatim: 0,
+    semantic: 0,
+    mismatch: 0,
+    unchecked: 0,
+    no_evidence: 0,
+  };
+  for (const r of rows) {
+    const key = quoteStateOf(r);
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
 }
 
 export function Evidence() {
@@ -59,7 +127,10 @@ export function Evidence() {
 
   const ev = face.data;
   const tally = quoteTally(ev.relations);
-  const notTrue = ev.relations.filter((r) => r.quote_verified !== true);
+  const notClean = ev.relations.filter((r) => {
+    const state = quoteStateOf(r);
+    return state !== "verbatim" && state !== "semantic";
+  });
 
   return (
     <>
@@ -92,9 +163,34 @@ export function Evidence() {
             empty="暂无命题（已读出）。"
             columns={[
               { key: "stmt_id", title: "命题号" },
+              {
+                // 2026-10-23（业主：命题要标注非平凡度等级）：一格 `T0`–`T4` 或"未判"，
+                // hover 给这一档的语义。未判不是 T0（0 从 2026-10-23 起是一档真的档位）。
+                key: "nontriviality_label",
+                title: "非平凡度",
+                render: (r) => (
+                  <Nontriviality
+                    label={r.nontriviality_label}
+                    meaning={r.nontriviality_meaning}
+                    tri={r.nontriviality_tri}
+                  />
+                ),
+              },
               { key: "status", title: "状态", render: (r) => cell(r.status) },
               { key: "kind", title: "类别", render: (r) => cell(r.kind) },
               { key: "label", title: "标签", render: (r) => cell(r.label) },
+              {
+                // 派生等级（五元位现算：任一路径通过即正式定理）。它不是谁自报的，
+                // 所以与上面那格"非平凡度"并排读：一个说多不平凡、一个说到没到定理。
+                key: "grade",
+                title: "派生等级",
+                render: (r) =>
+                  r.grade_label === "" ? (
+                    <span class="tri-reason">unknown（五元位算不出来）</span>
+                  ) : (
+                    r.grade_label
+                  ),
+              },
               {
                 // 正文（R93 体检）：盘上 `statement_text`（短版）常常是空的，而
                 // `statement_full`（含完整假设的那一版）有字 —— 旧版直接印
@@ -119,25 +215,20 @@ export function Evidence() {
                 },
               },
               {
-                key: "quote_verified",
+                // 引文回验（2026-10-23：五档）。比对对象是 `proof_text` 那一栏的逐字
+                // 摘录，概念行结构上就没有引文 ⇒ 那一档是不适用，不是"未查"。
+                // 五档：逐字通过 / 语义通过 / 不一致 / 未查 / 没有可复核的区间
+                // （最后一档是"说通过了、而盘上拿不出可复核的区间"，与"还没查"欠的
+                // 东西不同 —— 折平会让读的人去补一条不存在的工序）。
+                key: "quote_state",
                 title: "引文回验",
-                // 三态在这里要多一档（R93 体检）：`quote_verified` 的比对对象是
-                // `proof_text` 那一栏的逐字摘录（`schema.Statement` 逐字写过"没有逐字原文，
-                // 引文回验这件事无从做起"）。概念行（`kind=concept`）结构上就没有引文，
-                // 旧版把这一档印成「未查」——那是把"这一步对它不适用"读成"这一步没人做"。
-                render: (r) => {
-                  if (r.proof_text === "" && r.quote_verified === null) {
-                    return <span class="tri-reason">不适用（这一行没有逐字摘录）</span>;
-                  }
-                  return r.quote_verified === null ? (
-                    "未查"
-                  ) : (
-                    <Badge
-                      kind={r.quote_verified ? "badge-pass" : "badge-fail"}
-                      text={r.quote_verified ? "真" : "假"}
-                    />
-                  );
-                },
+                render: (r) => quoteCell(r),
+              },
+              {
+                // 五元位第 4 位（2026-10-22 起是二维的）：一份证明一行。
+                key: "formal_paths",
+                title: "形式化（第 4 位·按路径）",
+                render: (r) => formalCell(r),
               },
               { key: "quote_reason", title: "回验理由", render: (r) => cell(r.quote_reason) },
             ]}
@@ -203,7 +294,19 @@ export function Evidence() {
                 render: (r) => (r.exit_code === null ? "unknown" : String(r.exit_code)),
               },
               { key: "code_path", title: "代码", render: (r) => cell(r.code_path) },
-              { key: "code_hash", title: "代码 sha", render: (r) => cell(r.code_hash) },
+              {
+                // 2026-10-23（业主：sha 原文不显示）：这一格只说"台账钉的代码 sha 与盘上
+                // 现在这一份脚本"一致不一致。三种"没得比"（没记 sha / 脚本不在盘上 /
+                // 读不出来）都落 unknown，不冒充"不一致"。
+                key: "code_sha_consistency",
+                title: "代码一致",
+                render: (r) => (
+                  <Consistency
+                    value={r.code_sha_consistency}
+                    note="台账钉住的代码 sha 与盘上现在这一份脚本（脚本不在盘上或那一行没记 sha ⇒ 没得比）"
+                  />
+                ),
+              },
               { key: "artifact_paths", title: "产物" },
             ]}
           />
@@ -240,36 +343,41 @@ export function Evidence() {
       </Card>
 
       <Card
-        title="引文回验（relations 的 quote_verified）"
-        subtitle={`真 ${tally.yes} · 假 ${tally.no} · 未查 ${tally.unchecked}`}
+        title="引文回验（relations 的五档 quote_state）"
+        subtitle={`逐字 ${tally.verbatim} · 语义 ${tally.semantic} · 不一致 ${tally.mismatch} · 未查 ${tally.unchecked} · 没有可复核的区间 ${tally.no_evidence}`}
         right={<TriState tri={ev.relations_tri} label="relations" />}
       >
         {isUnreadable(ev.relations_tri) ? (
-          <span class="empty">这一栏没查成 —— 那三个数不是 0，是没读到。</span>
+          <span class="empty">这一栏没查成 —— 那五个数不是 0，是没读到。</span>
         ) : (
           <>
             <div class="readings">
-              <span class="mono">{ev.relations.length}</span> 条关系；非「真」项须连同理由阅读。
+              <span class="mono">{ev.relations.length}</span> 条关系；不是「逐字 / 语义」通过的那些
+              须连同理由阅读。五档里「没有可复核的区间」与「未查」是两件事：前者说通过了、
+              却指不出核的是哪一段（欠一次重核），后者是还没人查（欠一次回验）。
             </div>
-            {notTrue.length === 0 ? (
+            {notClean.length === 0 ? (
               <span class="empty">
-                没有不是「真」的引文。
+                没有不是「逐字 / 语义」通过的引文。
               </span>
             ) : (
               <Table
-                rows={notTrue}
-                empty="没有不是真的引文。"
+                rows={notClean}
+                empty="没有不是「逐字 / 语义」通过的引文。"
                 columns={[
                   { key: "relation_id", title: "关系号" },
                   {
-                    key: "quote_verified",
+                    key: "quote_state",
                     title: "回验",
-                    render: (r) =>
-                      r.quote_verified === false ? (
-                        <Badge kind="badge-fail" text="假" />
+                    render: (r) => {
+                      const state = quoteStateOf(r);
+                      const got = QUOTE_WORDS[state];
+                      return got === undefined ? (
+                        <span class="tri-reason">{state === "" ? "unknown" : state}</span>
                       ) : (
-                        <Badge kind="badge-na" text="未查" />
-                      ),
+                        <Badge kind={got.kind} text={got.text} />
+                      );
+                    },
                   },
                   { key: "quote", title: "引文" },
                   { key: "statement", title: "断言" },
@@ -282,13 +390,15 @@ export function Evidence() {
 
       <Card
         title="证明级（V 的验证台账）"
-        subtitle={`${ev.verifications.length} 条`}
+        subtitle={`${ev.verifications.length} 条 · reviewed 按证明逐条`}
         right={<TriState tri={ev.verifications_tri} label="verifications" />}
       >
         <div class="readings">
           这一栏是 V 的签名行：<span class="mono">verdict</span> 只有「成立」显绿，其余档显黄
-          （不假装通过）；<span class="mono">unresolved_errors</span> 与
-          <span class="mono">proof_sha256</span> 要一起读，才知道这一行可不可回验。
+          （不假装通过）；<span class="mono">unresolved_errors</span> 与「证明一致」那一格要一起读，
+          才知道这一行可不可回验。第一格是证明号（<span class="mono">proof_no</span>）——
+          一个定理有多条证明路径时，reviewed 是逐条签的。sha 原文不上屏：那一格只说
+          「一致 / 不一致 / unknown（没得比）」，比的是 V 签的那一份与命题现在这一份。
         </div>
         {isUnreadable(ev.verifications_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
@@ -299,6 +409,12 @@ export function Evidence() {
             columns={[
               { key: "verification_id", title: "验证号" },
               { key: "statement_id", title: "命题号" },
+              {
+                // reviewed 按证明逐条：证明号是这一格的主键（`#p1` 是 canonical 那一份）。
+                key: "proof_no",
+                title: "证明号",
+                render: (r) => <span class="mono">#{r.proof_no}</span>,
+              },
               { key: "verifier", title: "签名者" },
               {
                 key: "verdict",
@@ -310,7 +426,18 @@ export function Evidence() {
                   />
                 ),
               },
-              { key: "proof_sha256", title: "证明 sha" },
+              {
+                // 2026-10-23（业主：sha 原文不显示）：这一格就是原来的「证明 sha」，
+                // 现在只说两份是不是同一份。
+                key: "proof_sha_consistency",
+                title: "证明一致",
+                render: (r) => (
+                  <Consistency
+                    value={r.proof_sha_consistency}
+                    note="V 签的那一份证明与命题现在这一份（同一个证明号；命题正文没读到或那一行没记 sha ⇒ 没得比）"
+                  />
+                ),
+              },
               { key: "unresolved_errors", title: "未解错误数" },
               { key: "at", title: "时间", render: (r) => cell(r.at) },
             ]}

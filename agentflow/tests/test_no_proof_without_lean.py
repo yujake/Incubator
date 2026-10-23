@@ -62,8 +62,10 @@ def test_a_formal_experiment_is_refused_outright(lean_off, tmp_path):
     """核心：无 Lean 时 `method="formal"` 直接拒绝，且一行都不落。
 
     我原来以为它会落一行 `inconclusive`+`heuristic`；实测比那更硬 ——
-    `agent_e/run_experiment.py:113` 抛 `ExperimentError`（「不登记 method='formal' 的实验，
-    也不起检查器」）。这更好：根本没有机会产出一行带 `proof` 的记录。
+    `agent_e/run_experiment.py` 抛 `ExperimentError`（「E 不做形式化」）。这更好：
+    根本没有机会产出一行带 `proof` 的记录。2026-10-23 晚裁定之后这一档不再看开关
+    （E 的动作面没有 `method='formal'` 了，理由码 `formal_not_in_e`）⇒ 本用例钉的
+    "拒绝 + 一行都不落"在无 Lean 这一档更成立，而且是最强的那一形态。
     判据钉住这个更强的口径，并额外断言"台账里没多出实验行"。
     """
     from agentflow.agent_e._support import ExperimentError
@@ -80,8 +82,9 @@ def test_a_formal_experiment_is_refused_outright(lean_off, tmp_path):
 
     e = AgentE(st, workspace_root=ws)
     with pytest.raises(ExperimentError) as ei:
-        e.run_experiment("1+1=2", "t_np", str(src), method="formal", name="t_np")
-    assert "lean" in str(ei.value).lower(), ei.value
+        e.run_experiment("1+1=2", "t_np", str(src), method="formal")
+    assert "formal_not_in_e" in str(ei.value), ei.value
+    assert "不做形式化" in str(ei.value), ei.value
     after = st.rows("experiments")
     assert len(after) == before, f"拒绝了却还是落了行：{after}"
     assert not any(str(r.get("evidence_kind")) == "proof" for r in after)

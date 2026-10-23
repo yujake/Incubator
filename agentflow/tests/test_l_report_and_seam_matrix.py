@@ -414,32 +414,30 @@ def test_d11_only_research_severity_disturbs_d(
 
 def test_f16_e_has_no_verify_check_formal_yet_the_function_is_callable(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """F16：E 的工具面没有 `verify.check_formal`，但函数实体仍在且可调用。
+    """F16：E 的工具面没有 `verify.check_formal`，而函数实体仍在且可调用。
 
-    改前红：改前 `_verify_check_formal` 的 `roles` 是 `_ROLES_WRITE`（E/F/G）
-    ⇒ "E 的工具面上没有它"第一条断言就红。函数实体（`VT.check_formal`）改前改后
-    一直都在 —— 那一半是正控：证明"停用"停的是授权，不是把实现删掉。
+    2026-10-23 晚裁定（「E 侧与 Lean 相关的工具和动作都该清干净」）之后这一条又前进
+    一格：工具那一件**整条删除**（改前的形态是 `roles=()` 的空壳），注册表里都没有它；
+    而函数实体 `VT.check_formal` 仍在 —— 那一半是正控：删的是"E 的工具面那一件"，
+    不是把桥接层实现删掉（L 的 `_CheckFormalL` 与 `formal.check_formal` 都经它）。
 
-    三层各判一次：注册表里还在（`get` 拿得到）、任何人拿不到（`for_role` 全空）、
-    经角色面调用被拒（`call` 的受控理由点名可调用面）。最后直调函数实体真跑一次。
+    三层各判一次：注册表里没有它（`get` 抛）、任何角色拿不到（`for_role` 全空）、
+    而函数实体真跑一次仍然给 `verified`（真 Lean；跑不动就如实 skip）。
     """
     _lean_env(monkeypatch, True)
     st, ws = _workspace(tmp_path)
     reg = build_registry(store=st, workspace_root=ws).registry
 
-    spec = reg.get("verify.check_formal")
-    assert spec is not None, "verify.check_formal 不在注册表里了（停用不等于删实现）"
-    assert tuple(spec.roles) == (), f"它又被授给某个角色了：{spec.roles}"
-    assert "verify.check_formal" in set(reg.names()), reg.names()
+    assert "verify.check_formal" not in set(reg.names()), (
+        f"`verify.check_formal` 还在注册表里：{reg.names()}")
+    from agentflow.tools.base import ToolError
+
+    with pytest.raises(ToolError):
+        reg.get("verify.check_formal")
 
     for role in tuple(S.ROLES) + (S.CONDUCTOR_ROLE,):
         face = {tool.name for tool in reg.for_role(role)}
         assert "verify.check_formal" not in face, f"{role} 的工具面上还有它"
-
-    scoped = reg.call("verify.check_formal", role="E", claim=CLAIM,
-                      source="theorem t : True := trivial")
-    assert scoped.ok is False, scoped
-    assert "可调用面" in str(scoped.error or ""), scoped.error
 
     # ---- 函数实体仍在且可调用（真 Lean 跑一次；跑不动就如实 skip）。
     # `checker_name` 必须给：桥接层会往源码尾部追加一条 `#print axioms <名字>`，

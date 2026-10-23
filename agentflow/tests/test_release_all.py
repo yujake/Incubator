@@ -2646,6 +2646,12 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 登记它们的理由是"包目录里凭空多出一个模块"必须有人解释（`R6-AN-1` 的原始形态）。
     "webui/": "用户端网页（`draft/73` §1.2 的 R1 拆包：W0 一次拆到位）：`state.py` 的 `snapshot()` 读模型 + `views.py`（**W5 已退场**）与 `writes.py` 的写路径 + `routes.py` 的路由表 + `server.py` 的 http.server 与静态路由；`__init__.py` 保持公开面不变（四条 GET 与 `POST /answer`，唯一写路径走 `userio.answer_question`）",
     "web/": "网页的样式与令牌包：`assets.py` 把 DSH 的令牌整份照搬（MIT，来源见 `docs/USER-END-DSH-STYLE.md`），`__init__.py` 只放包说明",
+    # 2026-10-23（数值穷举证明链）：E 的 ②③ 报告落盘的唯一口径。
+    "exhaustionreport.py": "E 写的程序设计/穷举论证落 out/experiments/<号>/exhaustion.md：签 ②③ 齐不齐、V 会审与 B 的登记闸都问这一处（同一事实一份实现）",
+    # 2026-10-23：穷尽是否够 proof、证明栏三段怎么组怎么拆的唯一口径。
+    "numericproof.py": "穷尽是否够 proof、证明栏三段、signed_by=V 且作者含 E —— B 的入库闸 / schema 硬约束 / verify 审计 / 对应表全问它",
+    # 2026-10-23（G 侧）：数值实验定理在论文里那三格的判据。
+    "numerictheorem.py": "对应表数值行的判据：file 是不是程序相对仓库根路径、E 那条 exp: 读数在不在台账、exhaustion_note 三块齐不齐",
 }
 
 

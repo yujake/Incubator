@@ -870,11 +870,8 @@ _KNOWN_TOOL_ONLY_CONSTRAINTS: dict[tuple[str, str], tuple[frozenset[str], str]] 
         "`graph.relations_between` 的两个端点 `a` / `b` 同样带编号长度上下界，动作面只写了 `_S`。"
         "与上一条同一处修法（`specs/c.py`），同一批人审一起改。",
     ),
-    ("E", "check_formal"): (
-        frozenset({"timeout_sec.minimum"}),
-        "`verify.check_formal` 的 `timeout_sec` 有 `minimum=1`（零或负数会被校验拒），动作面只写了 `_N`。"
-        "改它在 `specs/e.py`。",
-    ),
+    # 2026-10-23 晚：`("E", "check_formal")` 那一对已删 —— 动作整条摘掉之后这一对
+    # 不再存在（`unregistered_tool_only_constraints` 也会因"登记过期"报红）。
     ("E", "list_experiments"): (
         frozenset({"limit.minimum"}),
         "`verify.list_experiments` 的 `limit` 有 `minimum=0`，动作面只写了 `_I`。改它在 `specs/e.py`。",
@@ -1183,15 +1180,9 @@ _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "`conjecture.register_conjecture` 有 `force_new`（重复登记时是否强建新行），"
         "动作面没声明 ⇒ 主控派活时用不上这个开关。",
     ),
-    ("E", "run_experiment"): (
-        frozenset({"run_name"}),
-        "`verify.run_experiment` 有 `run_name`，动作面没声明。",
-    ),
-    ("E", "check_formal"): (
-        frozenset({"checker_name"}),
-        "`verify.check_formal` 有 `checker_name`（指定用哪个证明检查器），动作面没声明 ⇒"
-        "编排层选不了检查器（提示词里也没有这一档）。",
-    ),
+    # 2026-10-23 晚：`("E", "run_experiment")` 的 `run_name` 与
+    # `("E", "check_formal")` 的 `checker_name` 两对已删 —— 前者随工具 schema 一起
+    # 退场（那两个参数只服务 formal，而 E 不做形式化），后者随动作整条摘掉。
     ("G", "compose_claim"): (
         frozenset({"allowed_use", "counterexamples", "errata_ids", "freeze_reason", "frozen",
                    "kind", "numeric_evidence", "proof_location", "revision_hash",
@@ -1349,16 +1340,12 @@ _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "「算不算已失效关系」开关 ⇒ 工具面没有（它今天恒按现行算）。",
     ),
     ("E", "run_experiment"): (
-        frozenset({"name", "sleep"}),
-        "`name` 只在 `method=\"formal\"` 时有意义（工具面同一件事叫 `run_name`）；"
-        "`sleep` 只服务替身夹具、实现侧刻意不收（逐条理由在 `PARAM_SEAMS`）⇒ 两者都没有"
-        "同名工具参数。",
+        frozenset({"sleep"}),
+        "`sleep` 只服务替身夹具、实现侧刻意不收（逐条理由在 `PARAM_SEAMS`）⇒ 工具面没有"
+        "同名工具参数。2026-10-23 晚：`name` 从这一格里退场 —— 动作面不再声明它"
+        "（它只服务 formal，而 E 不做形式化，工具 schema 的 `run_name` 也一起删了）。",
     ),
-    ("E", "check_formal"): (
-        frozenset({"name"}),
-        "`verify.check_formal` 指定检查器的那一格叫 `checker_name`，动作面叫 `name` ⇒"
-        "名字对不上；改哪一边会同时动工具面与能力面，先登记。",
-    ),
+    # 2026-10-23 晚：`("E", "check_formal")` 那一对已删（动作整条摘掉）。
     ("H", "list_findings"): (
         frozenset({"kind"}),
         "`review.list_findings` 按 `level` / `status` 过滤，而动作面按 `kind` 过滤 ⇒"

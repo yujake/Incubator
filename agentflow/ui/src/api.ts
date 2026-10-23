@@ -493,13 +493,28 @@ export interface CacheTier {
  * 是"当前没有可用缓存"那一句；这时 `fresh` 是 `false`，但它的意思是"这一趟不能当
  * 新鲜用"，不是"量过了发现变了" —— 先看 `tri`，再看 `fresh`。
  *
+ * `source` 是这一档从哪来的（`run` = 这个工作区正在跑或最近一趟的运行记录、
+ * `process` = 本进程开关、`unknown` = 运行记录读不出来）。多进程时页面此前说的是
+ * 网页自己的开关，而用户要看的是正在跑的那一趟的开关 —— 这一格就是那条界线。
+ *
  * `text` 是给人看的那一行，命令行 `cache status` 印的是同一个字符串（同一个函数出）；
  * 页面只把里面的加粗标记画成粗体，不另拼文案。
  */
 export interface CacheActive {
   tier: string;
   label: string;
-  lean: boolean;
+  /** `source === "unknown"` 时是 `null`（这一趟用哪一档根本不知道，不许折成 `false`）。 */
+  lean: boolean | null;
+  /** `run` / `process` / `unknown`（每一层都自报来源）。 */
+  source: string;
+  /** 来源那一格的人话（正文里"来源=…"用的就是它）。 */
+  source_text: string;
+  /** 来源的补充说明（为什么没读运行记录）；没有要补的就是空串。 */
+  source_note: string;
+  /** 运行记录那一格：哪一趟 / 什么时候 / 还活着没有（`source !== "run"` 时为空串）。 */
+  record_sid: string;
+  record_at: string;
+  record_state: string;
   strategy: string;
   run_at: string;
   prompt_version: string;
@@ -542,7 +557,9 @@ export interface CacheView {
     fingerprint: string;
   };
   tiers: Record<string, CacheTier>;
-  /** 按当前开关，这一趟会命中哪一档（顶部横幅与面板都先画这一行）。 */
+  /** 这一格读的是哪个工作区（空串 = 不可判定；`active.source` 据此说清来源）。 */
+  workspace: string;
+  /** 按三层来源，这一趟会用哪一档（顶部横幅与面板都先画这一行）。 */
   active: CacheActive;
   reminder: CacheReminder;
   verdict: {

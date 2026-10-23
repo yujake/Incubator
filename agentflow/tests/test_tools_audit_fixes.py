@@ -503,22 +503,27 @@ def test_side_effect_ocr_tools_are_declared_individually(store: Store, tmp_path:
 
 
 def test_side_effect_check_formal_declares_exec_and_needs_approval(store: Store):
-    """`verify.check_formal` 起的是调用方给内容的检查器 ⇒ `read` + `exec`，且需要审批。
+    """形式化检查那一件起的是调用方给内容的检查器 ⇒ `read` + `exec`，且需要审批。
 
     B3 收官的行为变化（P-15/P-19）：它此前声明 `read` 且 `external="none"`，
     于是"起检查器进程"这个事实只在注释里。现在第二根轴如实为 `exec`：
 
     - `needs_approval` 从 `False` 变 `True`（沙箱未声明 ⇒ 起进程要签字）；
-    - `sandbox_required` 从 `False` 变 `True`；
-    - `roles` 从 `_ROLES`（含 H）改成 `_ROLES_WRITE` ⇒ H 的工具面少一个。
+    - `sandbox_required` 从 `False` 变 `True`。
+
+    2026-10-23 晚：这一格量的是 `formal.check_formal`（L 的那一件）。被删掉的
+    `verify.check_formal` 是同一份实现的另一个门面，两条轴逐字相同；门面没了，
+    事实（起检查器 ⇒ exec ⇒ 要审批）仍要有人看着。
     """
-    reg = registry_for(VT, store, root=store.root)
-    spec = reg.get("verify.check_formal")
+    from agentflow.tools import build_registry
+
+    reg = build_registry(store=store, workspace_root=store.root).registry
+    spec = reg.get("formal.check_formal")
     assert spec.side_effect == "read", "它读的是检查器的输出，不改我们的东西"
     assert spec.declared_external == "exec"
     assert spec.needs_approval is True
     assert spec.sandbox_required is True
-    assert "H" not in spec.roles, "声明必须正确：它现在需要审批，H 只读 ⇒ 不能拥有它"
+    assert set(spec.roles) == {"L"}, "形式化入口只属于 L（H 只读、E 已没有这一面）"
     # 负控：同一族的 `detect_verifier` 跑的是工具自己写死的 `--version` 探测，
     # 调用方决定不了跑什么 ⇒ 它保持 `read` + `none`（R010 已逐条登记为例外）。
     probe = reg.get("verify.detect_verifier")
@@ -827,105 +832,6 @@ def test_detect_verifier_checked_false_when_the_version_probe_fails(store: Store
     assert det["probe_errors"]
 
 
-def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeypatch: pytest.MonkeyPatch):
-    """声明与实现不许再分裂：`returns=` 里承诺的键 == 每一条 ok 分支实际返回的键。本用例在 P1 接线（`check_formal` 转发到 `formalgw.check_lean`）之后被改过两处，两处都是旧断言的收敛，
-    而不是判据放宽：`summary` 过去必须含"未接线"（那时它确实没接线）；现在必须说清它会真跑一次；- 第三条路径过去断言 `reason == "not_implemented"`。那条路径给的是 `script_path="proofs/x.lean"`，而工作区里没有这个文件：接线之后它读不到源码。
-    `E-3` 之前这里报的是 `decl_mismatch`（"文件里没有你要证的东西"，`checked=True`），那是"错的旧形态" —— 读不到源码是"没查成"，不是"查了、命题不成立"。现在 `formalgw` 给出 `source_unreadable`，于是 `checked=False`、`verified=None`（不是 `False`）。改这条断言不是为了让测试变绿，而是断言本身断的就是那个错的旧形态（`E-3` 的现状读数与 `draft/28` §26.2 的授权都在）。四条 ok 分支的键集合仍必须逐字相同。
-    - `missing_imports`（B8a/G-18）是新加的第 7 个键：`import_unavailable` 要能回答"哪个库不可得"，而六键形态里没有位置放它。它四条路径都在（历史形态"要么都有、要么都没有"保持不变），空列表只表示"检查器没有抱怨找不到包"。
-    - `verifier_status`（B5b/B8b 的 `G-24①`）是第 8 个键：`reason` 收口进 `agent_e.FORMAL_REASONS`/本层受控词表之后，检查器原样报的那个状态必须有一个透传栏（收口与透传成对存在，否则收口就是删信息）。四条路径都在，拒绝路径上是空串（"没有检查器状态可透传"）。
-    - `exit_code`（`E-12(a)`，`draft/44`）是第 9 个键：真机 50 条 formal 里 41 条 `exit_code=None`，而那一格改前同时表示"没查成"与"检查器跑完了"两件事 —— 检查器进程的真实退出码必须有自己的位置（上游读数是 `agent_e/core.py` 的 `_record_formal`，它把"跑到哪一步"与"结论是什么"分开记）。三条"没起检查器"的分支给 `None`（"没有退出码"是诚实的值，不是 `0` —— `0` 会被读成"检查器跑完了、退出码 0"），主分支给检查器原样报的那个值。
-    口径是「契约对每一条分支都成立」（主控 2026-10-07 裁 (a)）：key 集合不随分支变，所以 `set(返回) == 声明` 这条判据在每条分支上都仍然有效。同口径的另两处是 `tests/test_check_formal_wiring.py`（桩 + 注释键数 + `N-4` 的例外表）与 agent 侧 `agent_e/core.py::_formal_refusal`（拒绝分支补 `exit_code: None`）。
-    - 第 4 条 ok 分支 `tool_crashed`（`E-4`：探测本身没做成）此前没有被采样（`B-R7` 登记过这件事），现在补上。这里采的是 ok 分支。
-    失败那一侧是「2 个 `return fail(...)` 调用点，覆盖 3 类情形」—— 本文件与 `tools/verify_tools.py` 的旧措辞都写成"三条 `return fail(...)` 分支"，那是把「情形数」当成了「调用点数」（`R0-B2` 实测：AST 数出 2 个调用点）：①拿不到声明名、②声明名参数不合法 —— 这两类汇进同一个调用点（`except ValueError` ⇒ `kind="param_error"`，`verify_tools.py:436-443`）；③桥接层抛异常走另一个调用点（`except Exception` ⇒ `kind="check_failed"`，`:444-450`）。
-    两个调用点给的都是 `ok=False` + `data=None`（一个键都不给），由本文件里逐条 `return` 比对声明的用例与运行期那条 `test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind` 钉住（`I-4`/`T3`/`C2`）。
-    上面这个数字有机械判据守着（`test_the_fail_call_site_count_in_this_docstring_is_live`）：改了调用点数而没改这句话，它会红。"""
-    reg = registry_for(VT, store, root=store.root)
-    spec = reg.get("verify.check_formal")
-    declared = declared_keys(spec.returns)
-    assert declared == {"checked", "verified", "claim", "reason", "detail",
-                        "verifier_output", "missing_imports", "verifier_status",
-                        "exit_code"}
-    assert "真跑" in spec.summary, "summary 必须如实说明它会真的跑一次检查器"
-    assert "未接线" not in spec.summary, "它已经接线了，声明里不许再写未接线"
-
-    # 2026-10-22 晚裁定（E 的 Lean 侧写死关闭）之后，这一件不再属于任何角色
-    # （`roles=()`）⇒ 它已经不能经 `reg.call` 调到了（`call` 的第一句就是角色判据，
-    # 会回 `role_denied`）。而这一段量的是"声明与实现不许分裂"，落点是函数本体
-    # ⇒ 直接调函数（`reg` 只用来读声明）。判据见
-    # `tests/test_e_lean_side_is_hard_off.py` 第 1 条。
-
-    # ---- 路径 1：无后端
-    monkeypatch.setattr(
-        VT, "detect_verifier", lambda: {"checked": True, "available": [], "available_names": [], "reason": "无", "probe_errors": []}
-    )
-    d1 = VT.check_formal(claim="1+1=2").data
-    # ---- 路径 2：有后端、没给脚本
-    monkeypatch.setattr(
-        VT,
-        "detect_verifier",
-        lambda: {
-            "checked": True,
-            "available": [{"name": "lean", "path": "lean", "version": "4"}],
-            "available_names": ["lean"],
-            "reason": "有",
-            "probe_errors": [],
-        },
-    )
-    d2 = VT.check_formal(claim="1+1=2").data
-    # ---- 路径 3：有后端 + 给了脚本路径，但盘上没有这个文件
-    # （`E-3`：这是"没查成"`source_unreadable`，不是 `decl_mismatch`）
-    d3 = VT.check_formal(claim="1+1=2", script_path="proofs/x.lean").data
-    # ---- 路径 4（`E-4`，`B-R7` 之前没采）：探测本身没做成 ⇒ tool_crashed。
-    # `available=[]` 与 `checked=False` 是两条独立的事实：这一支说的不是
-    # "环境里没有检查器"，而是"我们不知道环境里有没有"。
-    monkeypatch.setattr(
-        VT,
-        "detect_verifier",
-        lambda: {
-            "checked": False,
-            "available": [],
-            "available_names": [],
-            "reason": "探测本身没做成（桩）",
-            "probe_errors": ["PATH 读不了（桩）"],
-        },
-    )
-    d4 = VT.check_formal(claim="1+1=2").data
-
-    for branch in (d1, d2, d3, d4):
-        assert set(branch) == declared, f"返回的键与 returns= 不一致：{sorted(branch)}"
-        assert branch["verifier_output"] == ""
-    # 三条是"没查成"：checked=False 且没有验证结论。
-    for branch in (d1, d2, d3, d4):
-        assert branch["checked"] is False
-        assert branch["verified"] is None, "没跑过 ⇒ verified 必须是 None，不许写成 False"
-    # 第三条路径（`E-3` 之后）：盘上没有那个脚本 ⇒ 没查成（`source_unreadable`）。
-    # 它过去被折成 `decl_mismatch`（"声明名对不上"，`checked=True`/`verified=False`），
-    # 那是把"路径写错了"报成"你证的东西不在文件里" —— 调用方会去改数学而不是改路径。
-    assert [d["reason"] for d in (d1, d2, d3, d4)] == [
-        "no_backend", "no_script", "source_unreadable", "tool_crashed",
-    ]
-    # `verifier_status`（`G-24①`）：检查器原样报的那个状态。工具层这一栏与 `reason`
-    # 逐字相同（收口发生在 E 那一层，见 tests/test_agent_e_formal_reasons.py）。
-    # `d1` / `d2` 是"没起检查器"（无后端 / 调用方没给源码）⇒ 空串
-    # （"没有检查器状态可透传"）；`d4` 是探测本身没做成，也没有检查器状态。
-    # `d3` 例外：`source_unreadable` 是 `formalgw` 报出来的状态，所以它照样透传
-    # —— 它同时是 `reason` 与 `verifier_status`，因为这一档说的就是"这次检查没发生"。
-    assert [d["verifier_status"] for d in (d1, d2, d4)] == ["", "", ""]
-    assert d3["verifier_status"] == "source_unreadable"
-    # 负控：任何分支都不许声称验证过
-    assert all(b["verified"] is not True for b in (d1, d2, d3, d4))
-
-
-# ----------------------------------------------------- `R0-B2`：措辞里的调用点数要现算
-
-#: 本文件里写调用点数的那句话的形状。为什么要"可解析"：数字散在散文里时，
-#: 改代码的人没有理由去改它 —— 同族先例是 `tests/test_check_formal_wiring.py`
-#: 的 `f"{len(CONTRACT_KEYS)} 个键"`（`N-4`）。
-#: 数字位写 `\d+`，所以 docstring 里引这个形状时必须用 `N` 之类的非数字占位
-#: （否则判据会把自己举的例子也当成"写了一个数"）。
-_FAIL_CALL_SITE_CLAIM = re.compile(r"(\d+)\s*个\s*`return fail\(\.\.\.\)`\s*调用点")
-
-
 def _claim_docstring(text: str) -> str:
     """取断言契约那个用例自己的 docstring（不是全文件的 docstring）。
 
@@ -979,95 +885,6 @@ def _claim_problem(doc_text: str, source: str) -> str:
                 f"（`R0-B2` 的原始形态正是这样：写着「三条」而实测 2 个 —— "
                 "把情形数当成了调用点数）")
     return ""
-
-
-def test_the_fail_call_site_count_in_this_docstring_is_live() -> None:
-    """反回流：上面那句"2 个调用点"必须与 AST 现算一致，改代码忘了改话就红。
-
-    为什么值得一条用例：这句措辞已经错过一次（`B-R5` 起就写着"三条"），
-    而它不是笔误 —— 它把"3 类情形"说成了"3 个调用点"，下一个人照着它推理就会
-    以为有三个失败出口。数字能机械核，所以就让机器核。
-
-    边界（刻意不扫）：`src/agentflow/tools/verify_tools.py` 里同样的计数
-    （`:439` / `:779` / `:785` / `:787`）在 FC-27 禁改区（`prover-bridge` 类），
-    原文同样把情形数写成调用点数、且 `:785`/`:787` 那两句已被后来的用例推翻
-    （实测采样 4 条 ok 分支、且失败分支有逐分支采样用例）。那几处已登记人审队列，
-    本判据故意只看本文件 —— 否则它会因为一条我无权改的注释而长红，那是判据替人做决定。
-    """
-    source = Path(VT.__file__).read_text(encoding="utf-8")
-    docs = _claim_docstring(Path(__file__).read_text(encoding="utf-8"))
-
-    live = _fail_call_sites(source)
-    assert len(live) == 2, (
-        f"`check_formal` 的 `return fail(...)` 调用点数变了（现算 {len(live)} 个：{live}）"
-        "⇒ 先确认是不是真的加/删了失败出口，再同时改那句措辞与这里的锚")
-
-    problem = _claim_problem(docs, source)
-    assert not problem, problem
-
-    # 反负控：把那个数字改回旧值（`B-R5` 起写的"三条"）⇒ 同一读法必须报出来。
-    doctored = _FAIL_CALL_SITE_CLAIM.sub("3 个 `return fail(...)` 调用点", docs, count=1)
-    assert doctored != docs, "反负控没改到那句话 —— 这条负控自己失效了"
-    assert _claim_problem(doctored, source), (
-        "数字被改回旧值，判据却一声不吭 ⇒ 它是真空的")
-    # 反向的负控：连"没有落脚点"这一态也要报出来（删掉那句话 ⇒ 不是"一致"）
-    assert _claim_problem("这里没有任何计数句", source), "删掉那句话之后判据仍判绿 ⇒ 它没有接点"
-
-
-def test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind(
-    store: Store, monkeypatch: pytest.MonkeyPatch
-):
-    """`I-4`/`T3`/`C2`：三条拒绝分支逐条采样 —— 失败时 `ok=False`、`data=None`、kind 在声明里。
-
-    拒绝分支没有键集合可谈（`base.fail` 逐字 `data=None`），所以声明用分号把
-    "失败：ok=False + kind(...) + data=None"写成了另一节。此前没有任何用例采过
-    这三条分支（`D2` 登记过），于是把它们改成猜测/放行在套件里看不出来。
-    """
-    reg = registry_for(VT, store, root=store.root)
-    spec = reg.get("verify.check_formal")
-    declared_kinds = _declared_failure_kinds(spec.returns)
-    assert declared_kinds, f"声明里没有可解析的失败 kind 词表：{spec.returns!r}"
-
-    monkeypatch.setattr(
-        VT, "detect_verifier",
-        lambda: {"checked": True, "available": [{"name": "lean", "path": "lean", "version": "4"}],
-                 "available_names": ["lean"], "reason": "有", "probe_errors": []},
-    )
-
-    # 2026-10-22 晚裁定（E 的 Lean 侧写死关闭）之后，这一件不再属于任何角色
-    # （`roles=()`）⇒ 它不能经 `reg.call` 调到（第一句就是角色判据，回 `role_denied`）。
-    # 这一段量的三条拒绝分支都在函数本体里 ⇒ 直接调函数（`reg` 只用来读声明）。
-    # ---- 拒绝 1：给了源码但源码里没有具名声明，调用方也没给 checker_name
-    # ⇒ 不回退成文件名词干（猜一个名字等于把"声明名核对"这条判据悄悄关掉）。
-    r1 = VT.check_formal(claim="c", source="example : True := trivial")
-    # ---- 拒绝 2：`formalgw.check_lean` 对非法参数抛 ValueError ⇒ param_error
-    def raise_value_error(*_a, **_kw):
-        raise ValueError("（桩）声明名不合法")
-
-    monkeypatch.setattr(FG, "check_lean", raise_value_error)
-    r2 = VT.check_formal(claim="c", source="theorem t : True := trivial",
-                         checker_name="t")
-    # ---- 拒绝 3：桥接层抛别的异常 ⇒ check_failed（"没查成"，既不是通过也不是证伪）
-    def raise_runtime_error(*_a, **_kw):
-        raise RuntimeError("（桩）桥接层崩了")
-
-    monkeypatch.setattr(FG, "check_lean", raise_runtime_error)
-    r3 = VT.check_formal(claim="c", source="theorem t : True := trivial",
-                         checker_name="t")
-
-    got = [r1, r2, r3]
-    assert [r.ok for r in got] == [False, False, False], [r.error for r in got]
-    assert [r.data for r in got] == [None, None, None], (
-        "拒绝分支不许给键集合（`base.fail` 逐字 `data=None`）—— 给了键就等于"
-        "声明里那节'失败分支不承诺上面那套键'是假的"
-    )
-    kinds = [r.meta.get("kind") for r in got]
-    assert kinds == ["param_error", "param_error", "check_failed"], kinds
-    for kind in kinds:
-        assert kind in declared_kinds, (
-            f"实测 kind={kind!r} 不在声明的失败词表 {sorted(declared_kinds)} 里 —— "
-            "调用方按声明写错误处理就会漏掉这一档（`C1` 是同一个形态）"
-        )
 
 
 def test_code_hash_failure_kinds_match_its_declaration_every_branch(
@@ -1212,70 +1029,6 @@ def _branch_shapes(source: str, func: str):
     return ok_keys, fail_keys, fail_kinds, other
 
 
-def test_every_return_of_check_formal_matches_its_declaration(store: Store):
-    """`I-4`/`T3`：逐条 `return` 与声明比对 —— 覆盖全部 ok 分支与全部 fail 分支。
-
-    旧判据只采 3 条 ok 分支，于是「分支间键集合不一致」与「失败分支被改成放行」在套件里结构性看不见（`I-4` 的注入实验：把拒绝分支改成猜一个名字，104 条相关用例照样全绿）。这里改成语法级判据：从
-    `verify_tools` 的源码里把`check_formal` 的每一条 `return` 抽出来，逐条与声明比对。三条硬要求：
-
-    1. 每一条 ok 分支的键集合必须与声明的键集合逐字相同（不是子集）；
-    2. 每一条 fail 分支都不许给键集合（`data=None`）；
-    3. 每条 fail 分支的 `kind` 必须在声明的失败词表里；
-    4. 没有"读不出形状"的 `return` —— 读不出不许算通过。
-    """
-    reg = registry_for(VT, store, root=store.root)
-    spec = reg.get("verify.check_formal")
-    declared = declared_keys(spec.returns)
-    declared_kinds = _declared_failure_kinds(spec.returns)
-    src = Path(VT.__file__).read_text(encoding="utf-8")
-    ok_keys, fail_keys, fail_kinds, other = _branch_shapes(src, "check_formal")
-
-    assert not other, f"check_formal 里有读不出形状的 return：{other}"
-    assert len(ok_keys) >= 4, (
-        f"只抽到 {len(ok_keys)} 条 ok 分支 —— 判据没覆盖到该覆盖的分支"
-        "（今天有：探测没做成 / 无后端 / 无脚本 / 跑完一次）"
-    )
-    for keys in ok_keys:
-        assert keys is not None, (
-            "有一条 ok 分支的返回不是字典字面量 ⇒ 键集合读不出来。"
-            "把字典挪到别处构造会让这条判据静默失效，请把它写成字面量或显式登记例外"
-        )
-        assert keys == declared, (
-            f"ok 分支的键与 `returns=` 不一致：多 {sorted(keys - declared)}，"
-            f"少 {sorted(declared - keys)}"
-        )
-    assert fail_keys, "一条 fail 分支都没抽到 —— 这条判据其实没在检查拒绝路径"
-    for keys in fail_keys:
-        assert keys is None, (
-            f"fail 分支居然给了键集合 {sorted(keys)}，而声明写的是 `data=None`（一个键都不给）"
-        )
-    assert declared_kinds, f"声明里没有可解析的失败 kind 词表：{spec.returns!r}"
-    assert len(fail_kinds) == len(fail_keys)
-    for kind in fail_kinds:
-        assert kind in declared_kinds, (
-            f"fail 分支的 kind={kind!r} 不在声明的失败词表 {sorted(declared_kinds)} 里"
-        )
-
-
-def test_negative_control_the_branch_checker_catches_an_extra_key_in_an_ok_branch(store: Store):
-    """负控（`I-4`）：给一条 ok 分支多塞一个键 ⇒ 逐分支判据必须发现。
-
-    注入打在真实源码片段的文本上（把 `return ok(` 的第一个位置参数换成一个
-    多带一个键的字典）。第一句断言"注入确实改了源码片段"：锚点哪天失效，
-    这条会红，而不是静默地什么都没注入（空转的负控与没有负控是一回事）。
-    """
-    reg = registry_for(VT, store, root=store.root)
-    declared = declared_keys(reg.get("verify.check_formal").returns)
-    src = Path(VT.__file__).read_text(encoding="utf-8")
-    seg = _function_segment(src, "check_formal")
-    mutated = seg.replace("return ok(", 'return ok({"leaked_key": 1}, ', 1)
-    assert mutated != seg, "注入锚点失效（`return ok(` 的写法变了）—— 重新对准锚点"
-    ok_keys, _, _, _ = _branch_shapes(mutated, "check_formal")
-    assert any(keys is not None and keys != declared for keys in ok_keys), (
-        "给一条 ok 分支多塞一个键，逐分支判据居然没发现"
-    )
-
-
 def test_negative_control_the_branch_checker_catches_a_keyed_fail_branch(store: Store):
     """负控（`I-4`/`C2`）：让一条 fail 分支返回字典 ⇒ 逐分支判据必须发现。
 
@@ -1338,8 +1091,13 @@ def test_declared_returns_are_a_subset_of_what_the_tools_actually_return(store: 
         assert res.ok, (name, res.error)
         missing = declared_keys(verify_reg.get(name).returns) - set(res.data)
         assert not missing, f"{name} 的 returns= 承诺了但没给：{sorted(missing)}"
-    det = verify_reg.call("verify.detect_verifier").data
-    assert not declared_keys(verify_reg.get("verify.detect_verifier").returns) - set(det)
+    # 2026-10-23 晚：`verify.detect_verifier` 的 roles 从 `('E','F','G','H')` 收成
+    # `('F','G','H')`（探测 Lean/Coq/Isabelle 属 Lean 侧）⇒ 这张表代表 E 时调不到它。
+    # 这一格按 F 量（工具还在，只是不在 E 的面上）。
+    probe_reg = registry_for(VT, store, root=store.root)
+    probe_reg.bound_role = "F"
+    det = probe_reg.call("verify.detect_verifier").data
+    assert not declared_keys(probe_reg.get("verify.detect_verifier").returns) - set(det)
 
 
 # ============================================================ P2-10 非 ToolError 逃逸

@@ -89,17 +89,59 @@ DECISION_REJECTED = "拒绝了秘书的格式洗"
 #: 三态：判不了是正经结论之一（没缝 / 开关关着 / 模型没回），不是"先收了再说"。
 STATEMENT_VERDICTS = ("合格", "太平凡", "判不了")
 
-#: 非平凡性的四档（业主 2026-10-21）：它回答"多不平凡"，与 `STATEMENT_VERDICTS`（"收不收"）是两根轴。
+#: 非平凡性的五档（业主 2026-10-21 定 T1–T4；2026-10-23 补 T0）：它回答"多不平凡"，
+#: 与 `STATEMENT_VERDICTS`（"收不收"）是两根轴。
+#:
+#: 2026-10-23 业主裁定的要点（逐字）：「只是加一个档位叫 T0（和 T1 到 T4 是一个性质），
+#: T0 叫基础定理或初步结论，T1 重新定位为有一定价值的非平凡结论，T2 到 T4 定位不变」。
+#: 所以 T0 不是"次品档"、不是"未评级"，它是同一根轴上的第一档：
+#: 平凡但真的那些（`a+b=b+a` 那一类，以及由数值实验直接穷举出来的基础事实）落在 T0，
+#: 而它们"能进表"这件事由 T0 这一档保证（改前是"平凡 ⇒ 当场拒收"）。
 #:
 #: | 档 | 语义（业主原话） |
 #: |---|---|
-#: | 1 | 刚过 B 侧的收录门槛，结论有价值 |
+#: | 0 | 基础定理或初步结论（平凡但真；含由数值实验直接穷举得出的那些） |
+#: | 1 | 有一定价值的非平凡结论 |
 #: | 2 | 证明方法都是平凡的，但工作量较大 |
 #: | 3 | 需要用较多的技巧或跨领域工具 |
 #: | 4 | 需要天才般的洞察力，或思维链极长，或是偏离主流研究方向的神奇构造 |
 #:
-#: `0` 不是一档，是"判不了"（与三态纪律一致：没查成不许读成第 1 档）。
-NONTRIVIALITY_LEVELS: tuple[int, ...] = (1, 2, 3, 4)
+#: "判不了"不再用 0 表示（0 从这一天起是一档真的档位）：见 :data:`NONTRIVIALITY_UNJUDGED`。
+NONTRIVIALITY_LEVELS: tuple[int, ...] = (0, 1, 2, 3, 4)
+
+#: "这一格没判成"的取值（三态里的第三态）。它不在 `NONTRIVIALITY_LEVELS` 里：
+#:
+#: 改前用 `0` 表示它，而 2026-10-23 起 `0` 是 T0（真的档位）—— 两个意思折进同一个值，
+#: 读的人会把"没人判过"读成"基础定理"。所以这一档挪到 `None`（JSON 里是 null）。
+NONTRIVIALITY_UNJUDGED: None = None
+
+#: 档位台账的刻度的标记（写在每一行里）。
+#:
+#: 为什么需要它：`out/secretary/nontriviality.jsonl` 是 append-only 的，改前那些行里
+#: `nontriviality: 0` 的意思是"判不了"（那时 0 不是档位）。没有这个标记，读侧就会把
+#: 历史行 0 读成 T0 —— 那是把"没人判过"冒充成一条基础定理。所以：
+#: 有 `scale == NONTRIVIALITY_SCALE` 的行按新刻度读（0 = T0）；
+#: 没有这一格的历史行按旧刻度读（0 = 判不了）。
+NONTRIVIALITY_SCALE = "T0-T4"
+
+#: 档位的显示名（`0 -> "T0"`）。读侧一律调 :func:`nontriviality_label`，不各写一份。
+_NONTRIVIALITY_LABELS: dict[int, str] = {level: f"T{level}" for level in NONTRIVIALITY_LEVELS}
+
+
+def nontriviality_label(level: Any) -> str:
+    """档位号 → 显示名（`0 -> "T0"` … `4 -> "T4"`；判不了 ⇒ 空串）。"""
+    got = _nontriviality_level(level)
+    return _NONTRIVIALITY_LABELS.get(got, "") if got is not None else ""
+
+
+def _is_trivial_verdict(decision: Any) -> bool:
+    """这一次判断的结论是不是「太平凡」（唯一口径）。
+
+    为什么要单独一个函数：2026-10-23 之后"太平凡"这个结论有两个后果（落 T0 +
+    不在入库口拒收），两处必须问同一个问题。而这一条是"把'懂平凡'这一档打桩"
+    的注射点 —— 判据要把"恒判平凡"打进去看非平凡那一支会不会红，就得有一个名字。
+    """
+    return str(decision or "") == "太平凡"
 
 #: 判断类别 → 它允许的结论词表（唯一一处把"哪类判断有哪些结论"写下来的地方）。
 #:
@@ -1309,11 +1351,23 @@ class Secretary:
                 "checked": False,
                 "reason": f"模型给的结论 {decision!r} 不在 {kind} 的词表 {list(allowed)} 里 ⇒ 不采信",
                 "cost": cost})
-        return self._record_judge(kind, context, {
+        out = {
             "checked": True, "decision": decision,
             "reason": str(data.get("reason") or "")[:500],
             "basis": [str(x) for x in (data.get("basis") or [])][:5],
-            "elapsed_sec": self._last_judge_elapsed, "cost": cost})
+            "elapsed_sec": self._last_judge_elapsed, "cost": cost}
+        if kind == "statement_aesthetic":
+            # ---- 2026-10-23：档位是同一趟判断的第二个输出（业主 2026-10-21），
+            # 而这一层此前把模型给的 `nontriviality` 丢掉了（只白名单了四格）⇒
+            # `judge_statement` 永远读到 None、台账里永远落"判不了"。
+            # 真机读数（r34 的 `out/secretary/nontriviality.jsonl`）：5 行全是
+            # `nontriviality: 0` / `basis: ""` —— 那正是这条丢失的形态（"没人判过"
+            # 与"判过但丢了"在盘上同形）。所以这里按类别把它放行，原样交给上层收敛。
+            # 注意这里不做校验（收敛与三态在 `judge_statement` 一处做）：
+            # 这一层只管"别把它丢了"。
+            out["nontriviality"] = data.get("nontriviality", data.get("tier"))
+            out["nontriviality_basis"] = str(data.get("nontriviality_basis") or "")[:500]
+        return self._record_judge(kind, context, out)
 
     def _record_judge(self, kind: str, context: Mapping[str, Any],
                       result: dict[str, Any]) -> dict[str, Any]:
@@ -1354,8 +1408,9 @@ class Secretary:
         | 判了 | `checked=True` + `decision ∈ {"合格","太平凡","判不了"}` + `reason` + `basis` |
         | 不是 B 的秘书 | `checked=False` + 理由（这一问只属于 B） |
         | 没缝 / 开关关着 / 超时 / 坏 JSON | `checked=False` + 理由（`judge` 的那几支） |
-        调用方（`agent_loop._statement_filing_refusal`）只在 `checked=True` 且 `decision == "太平凡"` 时才拦：
-        拦是"这条别收"，`checked=False` 是"这一格没查成"，两者在台账与工具结果里长得不一样。
+        调用方（`agent_loop._statement_filing_tier`）读的是同一个结论，但后果变了（业主
+        2026-10-23）：「太平凡」不再拒收，而是落 T0（基础定理或初步结论）——
+        `checked=False` 仍然是"这一格没查成"，两者在台账与工具结果里长得不一样。
         """
         if str(self.role) != "B":
             return {"checked": False, "decision": "", "basis": [],
@@ -1396,12 +1451,23 @@ class Secretary:
                     "cost": {"ledger": "", "reason": "没发调用（沿用本趟第一次的结论）"}}
         got = self.judge("statement_aesthetic", context, task_id=task_id)
         if got.get("checked"):
-            # 2026-10-21：同一趟判断的第二个输出 —— 非平凡性档位（1–4；0 = 判不了）。
-            # 三态纪律：0 不许被下游读成"第 1 档"，所以它同时带 tri="unjudged"。
+            # 2026-10-21：同一趟判断的第二个输出 —— 非平凡性档位（0–4；判不了 = None）。
+            #
+            # 2026-10-23 业主裁定之后，"太平凡"这个结论不再意味着"拒收"，而是
+            # "落 T0（基础定理或初步结论）"。所以档位在这里被就地改写成 0：
+            # 秘书自己报的档位在"平凡"这一支上不算数（它可能写 2/3，而这一条
+            # 已经判成平凡了 —— 两栏自相矛盾会让下游按 2/3 去读它，
+            # 而收录口那边又是按"平凡"放的）。三态纪律：判不了（None）不许读成 T0，
+            # 所以只有"判了且判平凡"才写 0。
             level = _nontriviality_level(got.get("nontriviality"))
-            got = {**got, "nontriviality": level,
-                   "nontriviality_basis": str(got.get("nontriviality_basis") or ""),
-                   "nontriviality_tri": "computed" if level else "unjudged"}
+            basis_note = str(got.get("nontriviality_basis") or "")
+            if _is_trivial_verdict(got.get("decision")):
+                level = 0
+                basis_note = (f"降为 {nontriviality_label(0)}（{str(got.get('reason') or '')[:200]}）"
+                              + (f"；秘书原报档位依据：{basis_note}" if basis_note else ""))
+            got = {**got, "nontriviality": level, "label": nontriviality_label(level),
+                   "nontriviality_basis": basis_note,
+                   "nontriviality_tri": "computed" if level is not None else "unjudged"}
             root = getattr(self, "root", None)
             if root is not None:
                 try:
@@ -3026,7 +3092,7 @@ class Secretary:
         | 该升而凭据不够 | `{"upgraded": False, "reason": "（…；V 那一签还差…）"}` |
         | 不该升（方向不对/同档） | `{"upgraded": False, "reason": ""}` |
         "凭据不够"与"不该升"都不写库：前者留在重复读数那一支，并把 `proof_review_gap` 的原话附进 `reason`。只允许
-        弱 → 强（`verifications.WEAKER_THAN_PROOF_REVIEW` → `proof_review`）：反方向（把 `proof_review` 降成
+        弱 → 强（`verifications.WEAKER_THAN_PROOF_REVIEW` → `proof_review` 或 `proof`）：反方向（把 `proof_review` 降成
         `heuristic`）不在这一格 —— 降档是另一个决定，它需要的不是"同一份内容再交一次"这件事，而是写清为什么降（`quote_reason`）。
         ## 只动档位与留痕，不动 bits（与 F 的 `_promote_if_understated` 同一口径）：`agent_f/core._promote_if_understated`
         在攻坚那一侧做的是同一件事（复用既有行时就地升到 `proof_review`），它也只改 `evidence_kind`。五元位的
@@ -3038,7 +3104,15 @@ class Secretary:
         out: dict[str, Any] = {"upgraded": False, "row": {}, "changes": [], "reason": ""}
         want = str(body.get("evidence_kind") or "")
         have = str(existing.get("evidence_kind") or "")
-        if want != VR.PROOF_REVIEW_KIND or have == want:
+        #: 这一格能升到的两档：`proof_review`（V 逐行走查/会审签过）与 `proof`
+        #: （穷举型证据：E 的程序 + ②③ 加上 V 那一签 —— 业主 2026-10-23 晚「穷举能拿
+        #: proof」）。两档的凭据是同一份读数（V 签成立 + `proof_sha256` 与现行正文相符），
+        #: 所以判据仍然只走 `verifications.proof_review_gap` 一处，不另立一套。
+        #: 为什么要开 `proof` 这一档：B 的第三方签字闸（`numericproof.filing_problems`）
+        #: 要求 proof 必须有一份盖住这一条命题的 V 签，而 V 只审在册的命题 ⇒
+        #: 「先按猜想落库、签完再升成定理级 proof」是唯一正路；这一格不通的话那条路在
+        #: 秘书这一层就断了（`duplicate_statement`），穷举证明永远进不了定理证明库。
+        if want not in (VR.PROOF_REVIEW_KIND, "proof") or have == want:
             return out
         if have not in VR.WEAKER_THAN_PROOF_REVIEW:
             return out
@@ -3047,11 +3121,17 @@ class Secretary:
         gap = VR.proof_review_gap(self.store.root, probe)
         if not gap.get("ok"):
             out["reason"] = (
-                "（这一行**没有**升到 proof_review：`verifications.proof_review_gap` 判"
+                f"（这一行**没有**升到 {want}：`verifications.proof_review_gap` 判"
                 f"凭据不够 —— {str(gap.get('why') or '查不到凭据')[:240]}）")
             return out
         row = dict(existing)
         row["evidence_kind"] = want
+        # 从猜想升成定理级：那一句话在 B 的拒信里写着（「kind 改回定理级」），而改前这一格
+        # 只改档位不改 kind ⇒ 行上永远是 conjecture + 强档，读的人没法把"这是定理"读出来。
+        # 只往强处改（conjecture → theorem / lemma），反方向不在这一格。
+        kind_now = str(body.get("kind") or "").strip()
+        if str(row.get("kind") or "") in ("conjecture", "") and kind_now in ("theorem", "lemma"):
+            row["kind"] = kind_now
         # 留痕：这一格为什么从弱档变了 —— 不写下来，盘上就只能看到"档位不一样了"。
         row["_evidence_kind_upgrade"] = {
             "from": have, "to": want,
@@ -3064,7 +3144,7 @@ class Secretary:
             upgraded=True, row=row,
             changes=[f"evidence_kind: {have} → {want}"
                      f"（凭据：{gap.get('ledger') or ''}#{gap.get('verification_id') or ''}）"],
-            reason=(f"同一份内容再交一次、且这一回带了 `proof_review` 的凭据 ⇒ 秘书"
+            reason=(f"同一份内容再交一次、且这一回带了 `{want}` 的凭据 ⇒ 秘书"
                     f"**改那一行**（不新建）：`{gap.get('ledger') or ''}` 里 "
                     f"{gap.get('verification_id') or ''} 签「成立」、`proof_sha256` 与现行"
                     "正文相符（判据与写入期那道闸同一处）。内容面一个字没动。"))
@@ -4232,31 +4312,55 @@ def _statement_sha(statement_full: str) -> str:
     return hashlib.sha256(str(statement_full or "").strip().encode("utf-8")).hexdigest()
 
 
-def _nontriviality_level(value: Any) -> int:
-    """把模型给的档位收敛到 `0|1|2|3|4`（别的一律当 0 = 判不了，不许当 1）。
+def _nontriviality_level(value: Any) -> int | None:
+    """把模型给的档位收敛到 `0|1|2|3|4`；别的（含缺省）一律 `None` = 判不了。
 
-    只认整数（或纯数字字符串）：`1.9` 这种不是"第 1 档"，它是坏输入 —— 四舍五入会把
-    坏输入变成一个合法档位，那正是"静默降级"的形态。
+    2026-10-23 起 `0` 是一档真的档位（T0 基础定理或初步结论），所以"判不了"必须
+    换一个值：`None`。这里刻意不把坏输入折成 0 —— 那会把"模型给了 `1.9`"读成
+    "这是一条基础定理"，正是"静默降级"的形态。同理也不许折成 1。
+
+    只认整数（或纯数字字符串）：`1.9` 不是"第 1 档"，它是坏输入。
     """
     if isinstance(value, bool):
-        return 0
+        return None
     if isinstance(value, int):
-        got = value
+        got: Any = value
     elif isinstance(value, str) and value.strip().isdigit():
         got = int(value.strip())
     else:
-        return 0
-    return got if got in NONTRIVIALITY_LEVELS else 0
+        return None
+    return got if got in NONTRIVIALITY_LEVELS else None
 
 
-def append_nontriviality(root: str | Path, *, statement_full: str, level: int,
+def _level_from_row(row: Mapping[str, Any]) -> int | None:
+    """从一行台账读档位（含旧刻度的兼容，唯一读口）。
+
+    旧行（没有 `scale` 标记）里 `0` 是"判不了"；新行（有标记）里 `0` 是 T0。
+    这一区分只在这里做一次，理由见 :data:`NONTRIVIALITY_SCALE`。
+    """
+    level = _nontriviality_level(row.get("nontriviality"))
+    if not str(row.get("scale") or "").strip():
+        return level if level else None
+    return level
+
+
+def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
                          basis: str = "", role: str = "", task_id: str = "") -> None:
-    """追加一行档位读数（append-only；显式 LF，Windows 上不留 CRLF）。"""
+    """追加一行档位读数（append-only；显式 LF，Windows 上不留 CRLF）。
+
+    `level` 给 `None`（或缺省/坏值）⇒ 这一行记的是"判不了"：`nontriviality: null`
+    且 `label` 空。判不了照旧落一行 —— 它也是读数（"没人判过"与"台账里没这一条"
+    在盘上应当分得开）。
+    """
     path = nontriviality_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
+    got = _nontriviality_level(level)
     row = {"at": _now_iso(), "statement_sha256": _statement_sha(statement_full),
            "statement_chars": len(str(statement_full or "")),
-           "nontriviality": _nontriviality_level(level), "basis": str(basis or ""),
+           # 刻度标记：读侧靠它区分"0 = T0"与旧行的"0 = 判不了"（见 NONTRIVIALITY_SCALE）
+           "scale": NONTRIVIALITY_SCALE,
+           "nontriviality": got, "label": nontriviality_label(got),
+           "basis": str(basis or ""),
            "role": str(role or ""), "task_id": str(task_id or "")}
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）：这一行是
@@ -4267,14 +4371,15 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: int,
 def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:
     """这条命题当前的非平凡性档位（折叠旁支台账里同一个 sha 的最后一行）。
 
-    三态：读到 ⇒ `{"tri": "computed", "level": 1..4, "basis": …}`；
-    没有记录 / 全是 0 ⇒ `{"tri": "unknown", "level": 0, …}`（不是 1）。
+    三态：读到 ⇒ `{"tri": "computed", "level": 0..4, "label": "T0".."T4", "basis": …}`；
+    没有记录 / 记的是判不了 ⇒ `{"tri": "unknown", "level": None, "label": "", …}`
+    （不是 1，也不是 0 —— 0 从 2026-10-23 起是 T0，一档真的档位）。
     """
     path = nontriviality_path(root)
     sha = _statement_sha(statement_full)
     if not path.is_file():
-        return {"tri": "unknown", "level": 0, "basis": "", "at": "",
-                "reason": f"{path} 不在盘上 ⇒ 这条命题还没有档位读数"}
+        return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
+                "at": "", "reason": f"{path} 不在盘上 ⇒ 这条命题还没有档位读数"}
     last: dict[str, Any] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -4287,10 +4392,11 @@ def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:
         if str(row.get("statement_sha256") or "") == sha:
             last = row
     if not last:
-        return {"tri": "unknown", "level": 0, "basis": "", "at": "",
-                "reason": "台账里没有这条命题的档位读数"}
-    level = _nontriviality_level(last.get("nontriviality"))
-    return {"tri": "computed" if level else "unknown", "level": level,
+        return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
+                "at": "", "reason": "台账里没有这条命题的档位读数"}
+    level = _level_from_row(last)
+    return {"tri": "computed" if level is not None else "unknown", "level": level,
+            "label": nontriviality_label(level),
             "basis": str(last.get("basis") or ""), "at": str(last.get("at") or "")}
 
 
@@ -4330,10 +4436,16 @@ def _judge_system(kind: str) -> str:
                "判『判不了』= 材料不足（例如只有一句转述、没有逐字证明文本）——"
                "**不许因为「看起来像个定理」就判合格**（业主原话：这张收录表比综述好太多，"
                "前提是里面不留平凡的）。"
+               # 2026-10-23 业主裁定：判『太平凡』不再等于"不许进"，它落 T0
+               # （基础定理或初步结论）—— 同一根档位轴上的第一档，与 T1–T4 同性质。
+               "注意『太平凡』的后果：它**不拦收录**，只是把这条判成 "
+               "T0（基础定理或初步结论）—— 所以两条判据答不上来时照样要如实判平凡，"
+               "并把档位给 0。"
                "**另加两个字段（同一趟判断的第二个输出，不另发调用）**："
-               "nontriviality（整数 1-4：1=刚过收录门槛、结论有价值；2=方法都平凡但工作量大；"
+               "nontriviality（整数 0-4：0=基础定理或初步结论（平凡但真，含由数值实验"
+               "直接穷举得出的那些）；1=有一定价值的非平凡结论；2=方法都平凡但工作量大；"
                "3=需要较多技巧或跨领域工具；4=需要天才般洞察/极长思维链/偏离主流的神奇构造；"
-               "判不了就给 0，**不许拿 1 冒充「没判」**）、"
+               "判不了就给 null，**不许拿 0 冒充「没判」**）、"
                "nontriviality_basis（一句话：凭什么判这一档）。")
     else:
         ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"

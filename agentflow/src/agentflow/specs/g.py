@@ -130,8 +130,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 "minItems": 1,
                 # 一行一条（正文里每个定理类环境各占一行、多证明每条各占一行）；
                 # 六格与 `doc_tools._MAPPING_ROW_PARAMS["required"]` 同一份口径。
-                "items": {**_OBJ, "required": ["kind", "label", "env_no", "ledger_id",
-                                              "proof_no", "file"]},
+                # 另外两格（`numeric_evidence` / `exhaustion_note`）不进必填：它们是
+                # 「数值实验定理」那一行的条件必填，由 `papermapping` 读侧判
+                # （缺了就是 `mapping_numeric_*` / `mapping_exhaustion_note_missing`）。
+                "items": {**_OBJ,
+                          "properties": {"numeric_evidence": _S,
+                                         "exhaustion_note": _S},
+                          "required": ["kind", "label", "env_no", "ledger_id",
+                                       "proof_no", "file"]},
             },
         }, ("project", "rows")),
         "mapping json", side_effect="write_local", handler_name="write_mapping",
@@ -228,7 +234,10 @@ SPEC = AgentSpec(
             # 「同一个对象被核了两次」，那要说清是复现而不是新证据（实验行的 `notes` 会点名
             # 「同一份 data 已经支持过 exp:XXXX」）。」一条已删（判据守住了才删）。
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
-            "先出对应表，再写正文：`out/paper/MAPPING.json` 是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；`file` 写包内相对路径；有 Lean 产出时每行还要写 `lean_file`（验它的那份源码在论文包内的相对路径，如 `formal/000004.lean`）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；空着不算验过；顺序是 json → MD 与附录 → 编 PDF。",
+            "先出对应表，再写正文：`out/paper/MAPPING.json` 是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；`file` 写包内相对路径（这一条只管理论定理那一行）；**例外：这一行是数值实验定理时，`file` 写程序相对仓库根的路径，不是包内路径** —— 它的证明栏就是那份程序，对应表里另有两格要一起填：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）；有 Lean 产出时每行还要写 `lean_file`（验它的那份源码在论文包内的相对路径，如 `formal/000004.lean`）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；空着不算验过；顺序是 json → MD 与附录 → 编 PDF。",
+            # 2026-10-23（业主裁定 E-1 与随后那条硬口径）：纯数值实验证出的定理怎么写。
+            # 判据：tests/test_numeric_theorem_writing_spec.py（七条）+ papermapping.NUMERIC_KINDS。
+            "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写**：E 把它们写进 `statements` 表的 `proof_text` 那一栏的三段（`程序：` / `程序设计：` / `穷举论证：`），你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",
         ),
         signature_error="把'有一条数值/交叉验证支持'说成'这条断言已经成立'。",
         deliverable="documents 里的稿件与每条断言的来路字段。",
@@ -237,7 +246,8 @@ SPEC = AgentSpec(
             "写稿不是复述：把 D/F/E 的结论按论证结构重组，并让每条断言的强度与它的证据相称。",
             "发现自己想说的话没有证据支撑时，回头要证据，而不是把话说软到没人能反驳。",
             "期刊体例不是装饰：记号、定理环境、引用格式的稳定本身就是可读性的一部分。",
-            "按非平凡性分档处理篇幅：T1 可压缩（完整证明放附录）、T2 正文留证明框架、"
+            "按非平凡性分档处理篇幅：T0 可以只留一句（基础定理或初步结论：陈述 + 一句理由就够，"
+            "能并进定义或脚注就别单开一节，更不许拿它撑篇幅）、T1 可压缩（完整证明放附录）、T2 正文留证明框架、"
             "T3/T4 的框架与动机必须留在正文（只许技术细节进附录）；压缩可以，失踪不行 ——"
             "每一条被压缩或移走的证明都要在正文给出指针，且附录/台账里确实有那份完整证明。",
         ),

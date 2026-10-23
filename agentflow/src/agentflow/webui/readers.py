@@ -84,14 +84,18 @@ __all__ = [
     "CHECKED_TYPES", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX", "HANDLERS",
     "LEDGER_EVENT_SCAN_BYTES", "LEDGER_EVENT_SCAN_KINDS", "LEDGER_EVENT_SCAN_SESSIONS",
     "LEDGER_ROLE_FIELDS", "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
-    "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES", "ROSTER_INBOX_ITEMS",
+    "MISSING_TYPES", "NONTRIVIALITY_UNJUDGED_WORD", "PENDING_ENDPOINTS", "ROUTES",
+    "ROSTER_INBOX_ITEMS",
     "ROSTER_NODES_MAX",
-    "RUN_ROW_KEYS", "UNCHECKED_TYPES", "acceptance_face", "artifacts_face",
-    "chat_face", "evidence_chain", "handle_acceptance", "handle_artifacts",
+    "RUN_ROW_KEYS", "SHA_MATCH", "SHA_MISMATCH", "SHA_UNKNOWN", "UNCHECKED_TYPES",
+    "acceptance_face", "artifacts_face",
+    "chat_face", "evidence_chain", "experiment_spots", "handle_acceptance",
+    "handle_artifacts",
     "handle_chat", "handle_evidence",
     "handle_machine", "handle_roster", "handle_run_events", "handle_run_view",
     "handle_state",
-    "machine_face", "roster_face", "run_events", "run_products", "run_view",
+    "machine_face", "roster_face", "run_events", "run_products",
+    "run_view", "sha_consistency",
     "state_face",
     "ts_fields", "type_decls",
 ]
@@ -221,6 +225,18 @@ UNCHECKED_TYPES: dict[str, str] = {
     "AcceptanceRow": "契约判据 C 的 `_backend_keys` 只读验收面的顶层键、没读 `rows[]`"
                      "⇒ 形状以 `_acceptance_rows` 与 `AcceptanceRow` 的声明为准"
                      "（逐键判据在 tests/test_ledger_faces_carry_role_and_id.py）",
+    # 2026-10-23（业主：命题标注非平凡度 / 第 4 位按路径 / sha 只报一致）：这三行的
+    # 行一级类型在夹具上读不出键 —— 夹具的 statements 是 0 行，也没有 out/experiments/
+    # 与 code/exp/。形状以各自那一个读数函数为准，逐键判据在
+    # `tests/test_webui_readings_format.py`（它自造工作区，把这三种形态都造出来）。
+    "FormalPath": "夹具没有 statements 行（真机 p9b/data/statements.json 也是 0 行）"
+                  "⇒ `formal_paths[]` 恒为空数组；形状以 `evidencebits.formal_by_proof`"
+                  " 的读数为准（逐键判据在 tests/test_webui_readings_format.py）",
+    "ExperimentSpot": "夹具工作区没有 `out/experiments/<号>/`（实验跑过之后才落盘）"
+                      "⇒ `experiment_spots[]` 恒为空数组；形状以 `experiment_spots()`"
+                      " 的读数为准（同上那份判据文件）",
+    "CodeExpFile": "同 `ExperimentSpot`：夹具没有 `code/exp/` ⇒ `code_exp[]` 恒为空数组；"
+                   "形状以 `experiment_spots()` 的 `code_exp` 为准（同上）",
 }
 
 #: 契约判据 D 的例外面：本模块声明、但后端还没落地的端点（`{端点: 理由}`）。
@@ -812,6 +828,357 @@ def _annotate_ledger_rows(root_p: Path,
             for column, rows in columns.items()}
 
 
+# ============================================================ 3.5 呈现读数（业主 2026-10-23）
+#
+# 这一节只做一件事：把判据层已经有的读数换成"人要看的那一格"，不改任何判定语义。
+# 三条口径（业主原话：「对于 sha 值用户并不关心，只用显示是否一致即可」「对于命题的
+# 显示要标注非平凡度等级」「证据链第 4 位按路径显示」）：
+#
+# 1. sha 一律不出原文，只出一致性读数：:data:`SHA_MATCH` / :data:`SHA_MISMATCH` /
+#    :data:`SHA_UNKNOWN`。三档里"没得比"必须与"不一致"分开 —— 折平就等于把
+#    "没有第二份可核"读成"两份不一样"，那是本项目的三态纪律最忌的一折；
+# 2. 非平凡度：档位与显示名一律调 `secretary.nontriviality_of` /
+#    `nontriviality_label`（本模块不另写一份读口），这里只补 hover 用的那句说明；
+#    判不了是 `None` + 空 label，页面显示"未判"，绝不折成 T0（2026-10-23 起 0 是
+#    一档真的档位）；
+# 3. 五元位第 4 位是二维的（`{证明号: 状态}`）：逐路径给出来（`formal_by_proof`），
+#    汇总留给等级派生 —— 折成一条汇总就等于让 `#p2` 借 `#p1` 的光。
+
+#: sha 一致性的三档（`match` / `mismatch` / `unknown`）。
+SHA_MATCH = "match"
+SHA_MISMATCH = "mismatch"
+SHA_UNKNOWN = "unknown"
+
+#: 非平凡度"判不了"在页面上的写法（不是 T0 —— 2026-10-23 起 T0 是一档真的档位）。
+NONTRIVIALITY_UNJUDGED_WORD = "未判"
+
+#: 档位号 → hover 里那句说明（逐条对着 `secretary.NONTRIVIALITY_LEVELS` 与它上面那张
+#: 语义表；档位只有 0..4 这五个取值，`nontriviality_label` 负责 T0 这四个字符）。
+_NONTRIVIALITY_MEANINGS: dict[int, str] = {
+    0: "T0 基础定理或初步结论（平凡但真；含由数值实验直接穷举得出的那些）",
+    1: "T1 有一定价值的非平凡结论",
+    2: "T2 证明方法都是平凡的，但工作量较大",
+    3: "T3 需要用较多的技巧或跨领域工具",
+    4: "T4 需要天才般的洞察力，或思维链极长，或是偏离主流研究方向的神奇构造",
+}
+
+
+def sha_consistency(want: Any, now: Any) -> str:
+    """两份 sha 是不是同一份：`match` / `mismatch` / `unknown`（任一边拿不出来 = 没得比）。
+
+    为什么这一格不显示 sha 原文：业主 2026-10-23 的口径是"用户并不关心 sha 值，
+    只用显示是否一致即可"。于是这一层把"两份十六进制串相不相等"收成一个词，页面
+    只印那个词。绝不截断显示前 8 位那种 —— 半截哈希既不能核也不能读。
+
+    三档不许折平：任一边是空串（没记 sha、文件不在盘上、那一栏不适用）⇒ `unknown`，
+    它与 `mismatch` 是两件事（"没得比"不是"不一致"）。大小写与首尾空白不算差异
+    （盘上的 sha 有时带大写或空格，那是同一个值）。
+
+    这一条是"sha 一致性打桩"的注射点：把所有调用点都走这里，才能用一个桩把
+    "恒一致"打进去看 `mismatch` 那一支的判据会不会红
+    （`tests/test_webui_readings_format.py` 的第⑤条）。
+    """
+    left = str(want or "").strip().lower()
+    right = str(now or "").strip().lower()
+    if not left or not right:
+        return SHA_UNKNOWN
+    return SHA_MATCH if left == right else SHA_MISMATCH
+
+
+def _ledger_verify_consistency(row: Mapping[str, Any]) -> str:
+    """台账核对行的一致性：拿那一行的两份 sha 真比一次（`sha_consistency`）。
+
+    为什么不从 `status` 折过来：`status` 是 `artifacts.STATUSES` 的五档（ok / changed /
+    missing / unreadable / not_a_file），它说的是"这一条核对是怎么结束的"；而"一致吗"
+    问的是两份 sha 相不相等。两者在 `missing` / `unreadable` 这两档上会分家 ——
+    那时 `sha256_now` 是空串，一致性那一格必须是 `unknown`（没得比），不是"不一致"。
+    比一次 sha 就把这条口径落在唯一一处（`sha_consistency`），于是"把一致性打桩成
+    恒一致 ⇒ 不一致那一支必红"这个注射点也真的能覆盖这一栏。
+    """
+    return sha_consistency(row.get("sha256"), row.get("sha256_now"))
+
+
+def _statement_tier_reading(root: str | Path, row: Mapping[str, Any]) -> dict[str, Any]:
+    """一条命题当前的非平凡度：`{level, label, meaning, tri}`。
+
+    读口只有一处：`secretary.nontriviality_of`（按含完整假设的正文 sha 折叠旁支台账
+    `out/secretary/nontriviality.jsonl`）。这里只做两件事：把 hover 那句说明补上、
+    把"判不了"写成 `level=None` + 空 `label`。
+
+    `tri` 是这一格自己的三态：`computed`（读到一档）/ `unknown`（台账里没有这一条，
+    或者记的是"判不了"）。页面据此显示 :data:`NONTRIVIALITY_UNJUDGED_WORD`
+    —— 不是 T0（折平就把"没人判过"冒充成一条基础定理）。
+
+    `meaning` 在判不了时是空串：hover 里编一句"这是 T0"正是要防的那种假话。
+
+    代价：一条命题读一遍旁支台账（`nontriviality_of` 的读法就是逐行扫）。命题行在
+    真机上是个位数（p9b 7 行）、台账是几十行，一次请求的可接受代价就在这里。
+    要再省就得在 `secretary` 那边加一个批量读口（一次读完建索引）—— 那会动一个
+    今晚刚变过的文件，本批刻意不动：这一层只搬运，不给别处添新的读法。
+    """
+    from .. import statementbody as SB
+
+    body = SB.body_of(row)
+    level: int | None = None
+    label = ""
+    tri = "unknown"
+    try:
+        from ..secretary import nontriviality_of
+
+        got = nontriviality_of(root, body)
+        raw = got.get("level")
+        level = raw if isinstance(raw, int) and not isinstance(raw, bool) else None
+        label = str(got.get("label") or "") if level is not None else ""
+        tri = "computed" if (level is not None and label) else "unknown"
+    except Exception:  # noqa: BLE001 - 读数层：取不到就是"判不了"，不是 T0
+        level, label, tri = None, "", "unknown"
+    meaning = _NONTRIVIALITY_MEANINGS.get(level, "") if level is not None else ""
+    return {"level": level, "label": label, "meaning": meaning, "tri": tri}
+
+
+def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
+    """命题行补三组呈现读数：引文五档、非平凡度、第 4 位的逐路径表（另加派生等级）。
+
+    - `quote_state`：引文的唯一读口径 `evidencebits.quote_state`（verbatim / semantic /
+      mismatch / unchecked / no_evidence）—— 页面不再拿 `quote_verified` 这个布尔量
+      去猜"没查"与"没证据"的区别；
+    - `nontriviality*`：见 :func:`_statement_tier_reading`；
+    - `formal_paths`：`[{proof_no, state}]`，二维位逐路径（`evidencebits.formal_by_proof`）；
+    - `grade` / `grade_label`：五元位派生的等级（任一路径通过即正式定理，
+      `evidencebits.derive_grade`）—— 页面上"这一条到没到定理"与"哪条路径撑起来的"
+      于是分得开。
+
+    一个都不许自己算：四种读数各自只有一个出处，这里只搬运。
+    """
+    from .. import evidencebits as EB
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            out.append(row)
+            continue
+        got = dict(row)
+        try:
+            got["quote_state"] = EB.quote_state(row)
+        except Exception:  # noqa: BLE001 - 引文那一格读不出来 ⇒ 按没查处置
+            got["quote_state"] = "unchecked"
+        tier = _statement_tier_reading(root, row)
+        got["nontriviality"] = tier["level"]
+        got["nontriviality_label"] = tier["label"]
+        got["nontriviality_meaning"] = tier["meaning"]
+        got["nontriviality_tri"] = tier["tri"]
+        try:
+            per = EB.formal_by_proof(row)
+        except Exception:  # noqa: BLE001 - 第 4 位读不出来 ⇒ 一条路径都不列（不是"没验过"）
+            per = {}
+        got["formal_paths"] = [{"proof_no": int(no), "state": str(state)}
+                               for no, state in sorted(per.items())]
+        grade = ""
+        try:
+            grade = EB.derive_grade(EB.bits_from_row(row), kind=str(row.get("kind") or ""))
+        except Exception:  # noqa: BLE001 - 等级算不出来 ⇒ 空串（页面按 unknown 处置）
+            grade = ""
+        got["grade"] = grade
+        got["grade_label"] = EB.GRADE_LABELS.get(grade, "")
+        out.append(got)
+    return out
+
+
+def _quote_state_rows(rows: list[dict]) -> list[dict[str, Any]]:
+    """关系行补 `quote_state`（引文五档：逐字 / 语义 / 不一致 / 未查 / 无复核区间）。
+
+    与命题行同一个读口（`evidencebits.quote_state`）。为什么关系行也要这一格：
+    页面上的「引文回验」那一卡按状态分档计数，只有布尔的话 `no_evidence` 那一档
+    会被算进"未查"—— 而它欠的东西不同（欠一次重核，不是欠一次回验）。
+    """
+    from .. import evidencebits as EB
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            out.append(row)
+            continue
+        got = dict(row)
+        try:
+            got["quote_state"] = EB.quote_state(row)
+        except Exception:  # noqa: BLE001 - 读不出来 ⇒ 按"还没查"处置（不冒充通过）
+            got["quote_state"] = "unchecked"
+        out.append(got)
+    return out
+
+
+def _verification_consistency(rows: list[dict],
+                              statements: Mapping[str, Mapping[str, Any]]
+                              ) -> list[dict[str, Any]]:
+    """验证行补 `proof_sha_consistency`：V 签的那一份证明 vs 命题现在那一份。
+
+    比的两边各自只有一个出处：签的那一份是这一行的 `proof_sha256`，现在那一份是
+    `verifications.proof_sha(proof_text_of(命题行, 这个证明号))`。命题行不在读到的
+    statements 里（被引用的外部命题 / 那一行还没落盘）⇒ `unknown`：没得比。
+
+    为什么按 `proof_no` 取而不是按"最新一份"：多证明模型下每一条路径各签各的，
+    拿错的路径去比会让另一条路径的改稿把这一条判成"不一致"。
+    """
+    from .. import verifications as VR
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            out.append(row)
+            continue
+        got = dict(row)
+        sid = str(row.get("statement_id") or row.get("stmt_id") or "")
+        stmt = statements.get(sid)
+        now = ""
+        if stmt is not None:
+            try:
+                text = VR.proof_text_of(stmt, row.get("proof_no") or 1)
+                now = VR.proof_sha(text) if text else ""
+            except Exception:  # noqa: BLE001 - 取不到现在的正文 ⇒ 没得比
+                now = ""
+        got["proof_sha_consistency"] = sha_consistency(row.get("proof_sha256"), now)
+        out.append(got)
+    return out
+
+
+def _experiment_code_consistency(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
+    """实验行补 `code_sha_consistency`：台账钉的代码 sha vs 盘上现在这一份脚本。
+
+    比的是 `code_path` 指向的那个文件（相对工作区根）。三种"没得比"都要落 `unknown`
+    而不是 `mismatch`：`code_path` 空、那一格 `code_hash` 空、文件不在盘上/读不出来。
+    超过 `_CODE_HASH_MAX_BYTES` 的脚本不读（有界：一个实验的脚本不该有几十兆，
+    而一次请求把整盘大文件哈希一遍会把这一面拖成秒级）。
+    """
+    import hashlib
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            out.append(row)
+            continue
+        got = dict(row)
+        rel = str(row.get("code_path") or "").strip()
+        want = str(row.get("code_hash") or "")
+        now = ""
+        if rel and want:
+            path = Path(rel)
+            if not path.is_absolute():
+                path = root / path
+            try:
+                if path.is_file() and path.stat().st_size <= _CODE_HASH_MAX_BYTES:
+                    now = hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError:
+                now = ""
+        got["code_sha_consistency"] = sha_consistency(want, now)
+        out.append(got)
+    return out
+
+
+#: 代码 sha 对照的规模上限（8 MiB）：超过它就不读，落 `unknown`（"没得比"，不是"不一致"）。
+_CODE_HASH_MAX_BYTES = 8 * 1024 * 1024
+
+#: 实验产物的落点（`agent_e` / `exhaustionreport` 写的那些目录与文件）。
+_EXPERIMENT_SPOT_DIR = ("out", "experiments")
+_CODE_EXP_DIR = ("code", "exp")
+#: 一个实验号下要报的那几份（`.md` 是"读得懂的读法"，`.log` 是原始输出）。
+_EXPERIMENT_SPOT_FILES: tuple[tuple[str, str], ...] = (
+    ("exhaustion.md", "穷举论证（程序设计 / 穷举论证 / 运行环境三块；缺它拿不到 proof）"),
+    ("log", "运行日志（原始输出）"),
+)
+
+
+def experiment_spots(root: str | Path) -> dict[str, Any]:
+    """实验产物的落点读数：`code/exp/` 与 `out/experiments/<号>/{design,exhaustion}.md`。
+
+    这一面是"产物页要补的那两处落点"（2026-10-23 业主：产物那一栏略有过时）。
+    它只报盘上真有什么，不编"应该有但还没写"的行：
+
+    - `rows[]`：一个落点一行 —— `{kind, path, exists, bytes, tri}`；
+      `kind` 是 `design` / `exhaustion` / `log` / `code`；
+    - `code_exp[]`：`code/exp/` 下的脚本（相对路径 + 字节数）；
+    - 三态：`out/experiments/` 还没落过 ⇒ `not_applicable` + 理由（合法初态），
+      读不出来 ⇒ `unreadable`。不把"还没跑过实验"读成"实验产物是空的"。
+
+    规模是有界的：实验号目录按名字排序取前 `_EXPERIMENT_SPOT_MAX` 个，脚本同理；
+    截断在 `truncated` 里说出口（静默截断等于让"只有这么多"与"被砍了"一样）。
+    """
+    root_p = Path(str(root))
+    base = root_p.joinpath(*_EXPERIMENT_SPOT_DIR)
+    code_dir = root_p.joinpath(*_CODE_EXP_DIR)
+    out: dict[str, Any] = {"tri": TRI_NOT_APPLICABLE, "reason": "", "dir": str(base),
+                           "rows": [], "code_exp": [], "truncated": False}
+    rows: list[dict[str, Any]] = []
+    problems: list[str] = []
+    found: list[Path] = []
+    if base.is_dir():
+        try:
+            found = sorted((p for p in base.iterdir() if p.is_dir()),
+                           key=lambda p: p.name)
+        except OSError as exc:
+            problems.append(f"{base} 读不出来：{type(exc).__name__}: {exc}")
+    numbered = found[:_EXPERIMENT_SPOT_MAX]
+    for one in numbered:
+        for name, _why in _EXPERIMENT_SPOT_FILES:
+            if name == "log":
+                # 日志只报真有的那一份：没有就不占一行（页面上"没有这一行"就是
+                # "这一趟还没写日志"，不必再编一条 `不在` 的行去替它说话）。
+                for hit in sorted(one.glob("*.log"))[:1]:
+                    rows.append(_spot_row(hit, root_p, "log"))
+                continue
+            rows.append(_spot_row(one / name, root_p, name.split(".")[0]))
+    code_exp: list[dict[str, Any]] = []
+    if code_dir.is_dir():
+        try:
+            files = sorted(p for p in code_dir.rglob("*") if p.is_file())
+        except OSError as exc:
+            problems.append(f"{code_dir} 读不出来：{type(exc).__name__}: {exc}")
+            files = []
+        for path in files[:_EXPERIMENT_SPOT_MAX]:
+            got = _spot_row(path, root_p, "code")
+            code_exp.append({"path": got["path"], "bytes": got["bytes"]})
+    out["rows"] = rows
+    out["code_exp"] = code_exp
+    out["truncated"] = len(found) > len(numbered) or (
+        bool(code_dir.is_dir()) and len(code_exp) >= _EXPERIMENT_SPOT_MAX)
+    if problems:
+        out["tri"] = TRI_UNREADABLE
+        out["reason"] = "；".join(problems)
+    elif rows or code_exp:
+        out["tri"] = TRI_COMPUTED
+    else:
+        out["reason"] = (f"{base} 与 {code_dir} 都不在盘上（还没跑过实验；合法初态："
+                         "这一趟没有实验产物，不是「读不出来」）")
+    return out
+
+
+#: 落点那一面的规模上限（实验号目录数与 `code/exp` 脚本数各一个）。
+_EXPERIMENT_SPOT_MAX = 50
+
+
+def _spot_row(path: Path, root: Path, kind: str) -> dict[str, Any]:
+    """一个落点一行：`{kind, path, exists, bytes, tri}`。
+
+    路径一律写成工作区相对、正斜杠分隔（`out/experiments/000001/design.md`）：
+    这一格是给人看的、也会被贴着读，Windows 的反斜杠会把同一处落点在两处写法下
+    印成两个样子。
+    """
+    rel = str(path)
+    try:
+        rel = path.resolve().relative_to(root.resolve()).as_posix()
+    except (OSError, ValueError):  # noqa: BLE001 - 取不到相对路径就印绝对路径（读数不为空即可）
+        pass
+    if not path.is_file():
+        return {"kind": kind, "path": rel, "exists": False, "bytes": None,
+                "tri": TRI_NOT_APPLICABLE}
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        return {"kind": kind, "path": rel, "exists": True, "bytes": None,
+                "tri": TRI_UNREADABLE, "reason": f"{type(exc).__name__}: {exc}"}
+    return {"kind": kind, "path": rel, "exists": True, "bytes": size,
+            "tri": TRI_COMPUTED}
+
+
 def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     """`GET /api/evidence` 的读模型：证据链七栏 + 三态。
 
@@ -824,6 +1191,20 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     表是空文件 / 还没写过 ⇒ 对应栏 `[]` 而整面 `tri="computed"`（读到了，
     里面是 0 行 —— 这与"没读到"是两件事，前者不报 `unreadable`）。
     每一栏另有一个 `<栏>_tri`，于是"哪一栏没读成"不会被整面的一个词吞掉。
+
+    ## 2026-10-23（业主的三条显示口径）多加的那几格
+
+    行形状变了，判定一个字没改（这一层仍然只是搬运）：
+
+    - 命题行：`quote_state`（引文五档，含 `no_evidence`）、`nontriviality` /
+      `nontriviality_label` / `nontriviality_meaning` / `nontriviality_tri`
+      （非平凡度：判不了是 `None` + 空 label，页面写"未判"，不是 T0）、
+      `formal_paths`（第 4 位逐路径：`[{proof_no, state}]`）、
+      `grade` / `grade_label`（五元位派生的等级）；
+    - 关系行：`quote_state`（同一个读口，引文那一卡按五档计数）；
+    - 实验行：`code_sha_consistency`（台账钉的代码 sha vs 盘上现在这一份脚本）；
+    - 验证行：`proof_sha_consistency`（V 签的那一份 vs 命题现在那一份，
+      按 `proof_no` 逐条比）。
     """
     from ..store import Store
     from ..verifications import list_verifications
@@ -864,6 +1245,16 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     # ---- 逐行补"是谁、在哪一趟写的"（读模型的 join；磁盘格式一个字节都不变）
     out.update(_annotate_ledger_rows(root_p, {
         key: out.get(key) or [] for key in _LEDGER_EVIDENCE_COLUMNS}))
+    # ---- 2026-10-23（业主的三条显示口径）：引文五档 / 非平凡度 / 第 4 位逐路径。
+    # 顺序有讲究：命题行先补，验证行才能拿它比"V 签的那一份 vs 现在这一份"。
+    out["statements"] = _statement_readings(root_p, out.get("statements") or [])
+    out["relations"] = _quote_state_rows(out.get("relations") or [])
+    out["experiments"] = _experiment_code_consistency(root_p,
+                                                      out.get("experiments") or [])
+    by_sid = {str(r.get("stmt_id") or ""): r for r in out["statements"]
+              if isinstance(r, Mapping)}
+    out["verifications"] = _verification_consistency(out.get("verifications") or [],
+                                                     by_sid)
     if problems:
         out["tri"] = TRI_UNREADABLE
     elif len(absent) == len(_EVIDENCE_TABLES):
@@ -1058,6 +1449,14 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     三态是逐栏的（`ledger_tri` / `handoffs_tri` / ...）：一整面里有一栏读不出来时，
     整面 `unreadable` 并把这些栏点名，而读得出来的那些栏照常给行 —— 少给一栏会让
     "这一栏没读成"变成"这一栏是空的"，那两者在界面上必须分得开。
+
+    ## 2026-10-23（业主：sha 原文不显示，只显示一致不一致）
+    两栏台账各多一格 `sha_consistency`（`match` / `mismatch` / `unknown`）：
+    `ledger_verify` 那一格由 `artifacts.STATUSES` 的五档折过来，`ledger` 那一格取
+    同一路径的核对行的读数（没有对应核对行 ⇒ `unknown`：没得比）。
+    另外补了实验产物的落点两栏：`experiment_spots`（`out/experiments/<号>/` 下的
+    `design.md` / `exhaustion.md` / `.log`）与 `code_exp`（`code/exp/` 下的脚本）。
+    sha 原文仍然留在数据里（`sha256` / `sha256_now` 一个字没动）—— 改的只是渲染。
     """
     from .. import manuscripts as MS
     from ..artifacts import read_ledger, verify_entries
@@ -1132,6 +1531,26 @@ def artifacts_face(root: str | Path, store: Any = None, *,
         key: out.get(key) or []
         for key in ("ledger", "ledger_verify", "handoffs", "checks", "secretary",
                     "products", "tasks")}))
+    # ---- 2026-10-23（业主：sha 原文不显示，只显示一致不一致）：
+    # 台账行的一致性取自同一路径的核对行（`verify_entries` 已经把两份 sha 读出来了），
+    # 核对行自己的一致性由 `sha_consistency` 真比一次（见 `_ledger_verify_consistency`）。
+    out["ledger_verify"] = [
+        {**dict(r), "sha_consistency": _ledger_verify_consistency(r)}
+        if isinstance(r, Mapping) else r for r in out.get("ledger_verify") or []]
+    consistency_by_path = {str(r.get("path") or ""): str(r.get("sha_consistency") or SHA_UNKNOWN)
+                           for r in out["ledger_verify"] if isinstance(r, Mapping)}
+    out["ledger"] = [
+        {**dict(r), "sha_consistency": consistency_by_path.get(
+            str(r.get("path") or ""), SHA_UNKNOWN)}
+        if isinstance(r, Mapping) else r for r in out.get("ledger") or []]
+    # ---- 实验产物的落点（产物页补的那两处：`code/exp/` 与 `out/experiments/<号>/`）。
+    spots = experiment_spots(root_p)
+    out["experiment_spots"] = spots["rows"]
+    out["experiment_spots_tri"] = spots["tri"]
+    out["experiment_spots_reason"] = spots["reason"]
+    out["code_exp"] = spots["code_exp"]
+    if spots["tri"] == TRI_UNREADABLE:
+        problems.append(f"实验产物落点：{spots['reason']}")
     # 整面的三态：有一条读不出来 ⇒ `unreadable`；七栏全是"还没写过" ⇒ `not_applicable`
     # （一个还没跑过的工作区不该被读成"产物面都是空的"）；其余 ⇒ `computed`。
     per_column = [str(out[k]) for k in ("ledger_tri", "handoffs_tri", "checks_tri",
@@ -2635,7 +3054,19 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("secretary", "SecretaryDecision[]"), ("secretary_tri", "Tri"),
       ("products", "RunProduct[]"), ("products_tri", "Tri"), ("run_dir", "string"),
       ("products_reason", "string"),
+      # 2026-10-23（产物页补的那两处落点）：`code/exp/` 与 `out/experiments/<号>/`。
+      ("experiment_spots", "ExperimentSpot[]"), ("experiment_spots_tri", "Tri"),
+      ("experiment_spots_reason", "string"), ("code_exp", "CodeExpFile[]"),
       ("tasks", "TaskRow[]"), ("tasks_tri", "Tri"))),
+    ("ExperimentSpot",
+     "artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点"
+     "（`out/experiments/<号>/design.md` / `exhaustion.md` / `.log`；"
+     "`kind` 是 design / exhaustion / log）",
+     (("kind", "string"), ("path", "string"), ("exists", "boolean"),
+      ("bytes", "number | null"), ("tri", "Tri"), ("reason?", "string"))),
+    ("CodeExpFile",
+     "artifacts_face() 的 code_exp[] —— `code/exp/` 下的一个脚本（相对工作区的路径）",
+     (("path", "string"), ("bytes", "number | null"))),
     ("AcceptanceView",
      "acceptance_face() —— 内容级验收（键名逐字来自 reviewaccept.CRITERIA 与 "
      "AUXILIARY_SIGNALS）",
@@ -2767,10 +3198,23 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("bits", "Record<string, unknown>"),
       ("status", "string"), ("derived_from", "string"), ("doc_id", "string"),
       ("line_range", "string"), ("created_at", "string"), ("created_by", "string"),
+      # 2026-10-23（业主：命题要标注非平凡度、第 4 位按路径显示、引文读数分档）：
+      # 这十格都是读模型的现算读数（`_statement_readings`），不是 `schema.Statement`
+      # 的字段。`nontriviality` 是 `number | null` —— `null` 是"未判"，不是 T0。
+      ("quote_state", "string"),
+      ("nontriviality", "number | null"), ("nontriviality_label", "string"),
+      ("nontriviality_meaning", "string"), ("nontriviality_tri", "string"),
+      ("formal_paths", "FormalPath[]"),
+      ("grade", "string"), ("grade_label", "string"),
       # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：后三格是读模型的 join
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"), ("by_task_id_tri", "string"))),
+    ("FormalPath",
+     "evidencebits.formal_by_proof() 的一行 —— 五元位第 4 位的一条路径"
+     "（`proof_no` 是证明号，`state` 取 `evidencebits.FORMAL_PATH_STATES` 的五档："
+     "pending / na / failed / verified / stale）。折成一条汇总就等于让 `#p2` 借 `#p1` 的光",
+     (("proof_no", "number"), ("state", "string"))),
     ("ReviewFindingRow",
      "store.rows(\"review_findings\")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）",
      (("finding_id", "string"), ("doc_id", "string"), ("kind", "string"),
@@ -2792,6 +3236,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("concept_group_key", "string"), ("dedup_key", "string"), ("status", "string"),
       ("duplicate_of", "string"), ("created_at", "string"),
       ("supporting_lit_ids", "string[]"),
+      # 2026-10-23：引文五档（`_quote_state_rows`；含 `no_evidence` —— 说通过而拿不出
+      # 可复核区间的那一档，折进"未查"就把它欠的东西读错了）。
+      ("quote_state", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
@@ -2808,6 +3255,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("unresolved_errors", "number"), ("proof_sha256", "string"),
       ("proof_chars", "number"), ("round", "number"), ("used_faces", "string[]"),
       ("submission_id", "string"), ("at", "string"),
+      # 2026-10-23（业主：sha 原文不显示）：`proof_sha_consistency` 是
+      # "V 签的那一份 vs 命题现在这一份（按 `proof_no` 逐条比）"的三档读数。
+      # `proof_sha256` 留在数据里（凭据要能复核），只是页面不再印它。
+      ("proof_sha_consistency", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
@@ -2816,15 +3267,20 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("at", "string"), ("path", "string"), ("sha256", "string"), ("bytes", "number"),
       ("producer", "string"), ("kind", "string"), ("task_id", "string"),
       ("exit_code", "number | null"), ("note", "string"),
+      # 2026-10-23（业主：sha 原文不显示）：这一格取同一路径的核对行读数
+      # （match / mismatch / unknown），页面只印它。
+      ("sha_consistency", "string"),
       # 台账行没有 `created_by`（`artifacts.FIELDS` 里没有那一栏）⇒ `by_role` 是空串。
       # `by_task_id` 按 `path` 反查（`agent_run_artifact` 事件同时带 path 与编号）。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
     ("LedgerVerifyRow",
-     "artifacts.verify_entries() 的行 —— 台账钉的 sha 与盘上现在这一版是不是同一版",
+     "artifacts.verify_entries() 的行 —— 台账钉的 sha 与盘上现在这一版是不是同一版"
+     "（`sha_consistency` 把 `status` 的五档折成 match / mismatch / unknown）",
      (("path", "string"), ("sha256", "string"), ("producer", "string"),
       ("at", "string"), ("sha256_now", "string"), ("status", "string"),
+      ("sha_consistency", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
@@ -2919,6 +3375,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("runtime_sec", "number | null"), ("notes", "string"),
       ("created_at", "string"), ("created_by", "string"),
       ("for_question_id", "string"),
+      # 2026-10-23（业主：sha 原文不显示）：`code_sha_consistency` 是"台账钉的代码 sha
+      # vs 盘上现在这一份脚本"的三档读数（`code_hash` 留在数据里，页面不印）。
+      ("code_sha_consistency", "string"),
       # `exp:` 是 `schema.CITATION_PREFIXES` 登记的前缀 ⇒ 这一栏的编号真反查得出来。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),

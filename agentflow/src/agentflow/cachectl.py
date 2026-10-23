@@ -33,12 +33,27 @@
 
 ## 当前这一趟用哪一档（`active`）
 
-两档各自的状态回答"两档落没落地"，回答不了"我现在打开的网页会用哪一档"。业主
-2026-10-23 晚补的就是这一格：`status()["active"]` 说的是"按当前开关，这一趟会命中
-哪一档的缓存"。它的取值只走一条路 —— `tier_reading(当前档)` 内部调
-`cache_readings(lean=当前开关)`，与上面那两档的四格是同一个入口、同一份读数，于是
-"哪一档在用"与"那一档落地了没有"不可能各算一套。读不出来 ⇒ `tri="unknown"` 加
-人话理由（`why`），绝不回落到另一档。
+两档各自的状态回答"两档落没落地"，回答不了"我现在打开的网页会用哪一档"。这一格按
+三层来源定，且每一层都自报来源（`active.source`）：
+
+1. `source="run"`：这个工作区里有正在跑（或最近一趟）的运行记录、且记录里带着那一趟
+   的 lean 状态 ⇒ 用那一趟的开关。记录落在
+   `<工作区>/runs/cache-active-<会话号>.json`（`lean_enabled` / `tier` / `sid` /
+   `pid` / `at`），由起跑那一刻的 :func:`run_reading` 写下。正在跑与最近一趟不同时
+   优先正在跑：活着的判据是 `<工作区>/runs/<角色>-<会话号>.pid` 里那个 pid 还在
+   （`stopctl.alive`）。
+2. `source="process"`：这个工作区没有运行记录 ⇒ 退回本进程的开关
+   （`leanscope.lean_on()`），文案里写明"按本进程开关"。
+3. `source="unknown"`：运行记录文件在、但读不出来（坏 JSON / 没记 lean / 列不出目录）
+   ⇒ `tri="unknown"` 加理由。这一档绝不拿本进程开关冒充那一趟的开关。
+
+工作区怎么找：显式 `root` > 环境变量 `AGENTFLOW_WORKSPACE_ROOT` > 进程命令行
+`--root`（网页进程正是被它起来的）。都取不到就落到第 2 层，文案里说清"工作区不可判定"。
+
+选中哪一档之后，档位与覆盖数仍然只走一条路 —— 调 `tier_reading(那一档)`（它内部调
+`cache_readings(lean=那一档)`），与上面两档的四格是同一个入口、同一份读数，于是
+"哪一档在用"与"那一档落地了没有"不可能各算一套。那一档的读数读不出来 ⇒
+`tri="unknown"` 加人话理由（`why`），绝不回落到另一档。
 
 ## 起跑时那一行（`run_reading`）
 
@@ -48,6 +63,11 @@
 不新鲜 / 未落地 / 换了 key ⇒ 一行 warning 指向『试算』）。它只加读数、不拦跑 ——
 不新鲜的缓存跑起来照样是对的，只是按未命中计费，所以这一行绝不改退出码、也绝不
 因此不发请求。读不出来时自己接住异常降级成 warning（这一趟照旧起跑）。
+
+它同时是运行记录的写入点：起跑那一刻把这一趟的 lean 状态记进
+`<工作区>/runs/cache-active-<会话号>.json`（原子替换：先写 `.tmp` 再 `os.replace`），
+于是另一条进程（网页）问"当前使用哪一档"时读到的是这一趟的开关，而不是它自己的。
+写不成不拦跑：那一格退回 `source="process"`，文案里说清这个工作区没有运行记录。
 
 ## 换 key 的重落提醒
 
@@ -87,14 +107,22 @@ from . import leanscope as LEANSCOPE
 __all__ = [
     "ACTIVE_NAME",
     "DEFAULT_READINGS",
+    "ENV_WORKSPACE_ROOT",
     "EXIT_FRESH",
     "EXIT_STALE",
     "EXIT_UNKNOWN",
     "REASON_ABSENT",
     "REASON_KEY_FINGERPRINT_MISSING",
     "REASON_NO_READINGS",
+    "REASON_RUN_RECORD_UNREADABLE",
     "RUN_INFO",
+    "RUN_RECORD_PREFIX",
+    "RUN_STATE_RECENT",
+    "RUN_STATE_RUNNING",
     "RUN_WARNING",
+    "SOURCE_PROCESS",
+    "SOURCE_RUN",
+    "SOURCE_UNKNOWN",
     "TIER_LABEL",
     "TIERS",
     "active_reading",
@@ -103,10 +131,13 @@ __all__ = [
     "fingerprint",
     "key_reading",
     "plan",
+    "record_active_run",
     "run",
     "run_reading",
+    "run_record_reading",
     "status",
     "warm",
+    "workspace_root",
 ]
 
 #: 两档形式化开关在读数里的名字。`off` = `lean_enabled=false`，`on` = `true`。
@@ -133,6 +164,25 @@ REASON_KEY_FINGERPRINT_MISSING = "key_fingerprint_missing"
 
 #: 受控缺席（这一档按产品设计不存在那个目标）的词，来自读数行的 `kind="absent"`。
 REASON_ABSENT = "lean_off"
+
+#: "当前使用哪一档"的三层来源（`active.source`）：运行记录 / 本进程开关 / 读不出来。
+SOURCE_RUN = "run"
+SOURCE_PROCESS = "process"
+SOURCE_UNKNOWN = "unknown"
+
+#: 运行记录那一格的两种状态：正在跑的那一趟 / 最近一趟（都不是就是没有记录）。
+RUN_STATE_RUNNING = "running"
+RUN_STATE_RECENT = "recent"
+
+#: 这一趟的开关记录落在 `<工作区>/runs/` 下的文件名前缀（一份会话一份，起跑时覆盖）。
+RUN_RECORD_PREFIX = "cache-active-"
+
+#: 运行记录读不出来时的理由码（这一格是 unknown，不许冒充 run 或 process）。
+REASON_RUN_RECORD_UNREADABLE = "run_record_unreadable"
+
+#: 工作区根可以显式给的那一格。产品路径从进程命令行 `--root` 取（网页进程正是被它
+#: 起来的），这一格是给"命令行里没有 --root、但调用方知道工作区"的场合留的出口。
+ENV_WORKSPACE_ROOT = "AGENTFLOW_WORKSPACE_ROOT"
 
 #: 读数文件的缺省落点。真身是 `warm_prompt_cache.DEFAULT_READINGS`，这里在调用期取，
 #: 不另抄一份路径（抄一份就会在别人搬家时静默指向旧位置）。
@@ -521,6 +571,253 @@ def _tier_in_use(lean: bool) -> str:
     return "on" if lean else "off"
 
 
+# ---------------------------------------------------------------- 运行记录（这一趟的开关）
+
+
+def _argv_option(name: str) -> str:
+    """进程命令行里那个旗标的值（`--root X` 与 `--root=X` 两种写法都认）。
+
+    为什么要看命令行：`GET /api/cache` 拿不到工作区（那一条端点只转调
+    `cachectl.status()`），而网页进程是被 `--root` 起来的 —— 命令行里那个值就是它
+    服务的工作区。取不到就返回空串，调用方据此如实说"工作区不可判定"。
+    """
+    items = [str(item) for item in (sys.argv or [])]
+    for index, item in enumerate(items):
+        if item == name:
+            if index + 1 < len(items):
+                return items[index + 1]
+        elif item.startswith(name + "="):
+            return item[len(name) + 1:]
+    return ""
+
+
+def workspace_root(root: Path | str | None = None) -> Path | None:
+    """这一格读的是哪个工作区：显式给的 > 环境变量 > 进程命令行 `--root` > 不可判定。
+
+    不可判定时返回 `None`（不是 `Path.cwd()`）：拿当前目录顶上会读成"这个工作区没有
+    运行记录"，而那句话在别的目录下起网页时就变成了谎话。宁可说"工作区不可判定"，
+    再退回本进程开关。
+    """
+    if root is not None and str(root).strip():
+        return Path(str(root)).resolve()
+    env = str(os.environ.get(ENV_WORKSPACE_ROOT) or "").strip()
+    if env:
+        return Path(env).resolve()
+    raw = _argv_option("--root").strip()
+    if raw:
+        return Path(raw).resolve()
+    return None
+
+
+def _runs_dir(root: Path) -> Path:
+    """`<工作区>/runs/`：目录名与 `stopctl.PID_DIR_NAME` 是一份真身，不另抄一个。"""
+    from . import stopctl as SC
+
+    return Path(root) / SC.PID_DIR_NAME
+
+
+def _file_tag(raw: Any) -> str:
+    """会话号 ⇒ 文件名里那一段（只留可移植的字符，空串给 `nosid`）。"""
+    keep = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+    text = "".join(ch if ch in keep else "_" for ch in str(raw or ""))
+    return text.strip("._") or "nosid"
+
+
+def _session_sid() -> str:
+    """这一趟的会话号：命令行 `--sid`（`--sid=lg2` 也认）> `sessions.session_id()`。"""
+    from . import sessions as SS
+
+    return _argv_option("--sid").strip() or SS.session_id()
+
+
+def _alive(pid: Any) -> bool:
+    """这个 pid 还活着吗（探活只有一份真身：`stopctl.alive`）。"""
+    try:
+        from . import stopctl as SC
+
+        return bool(SC.alive(int(pid or 0)))
+    except Exception:  # noqa: BLE001 - 探不了就当"不活着"（最多把正在跑说成最近一趟）
+        return False
+
+
+def record_active_run(*, root: Path | str | None = None, sid: str = "",
+                      lean: bool | None = None) -> dict[str, Any]:
+    """把这一趟的 lean 状态记进 `<工作区>/runs/cache-active-<会话号>.json`。
+
+    为什么要有这一格：环境变量是进程私有的，网页那条进程读不到跑着的那一趟的开关 ——
+    页面上那一格此前只能说网页自己的开关，多进程时就是说反的。把起跑那一刻的开关
+    落成一份盘上读数，另一条进程才读得到"正在跑的那一趟"用的是哪一档。
+
+    三态：`written=True` 写成了；写不成（工作区不可判定 / 目录或文件不可写）返回
+    `written=False` 与 `reason`。写不成不抛、不拦跑：起跑那一行照旧印，页面上那一格
+    退回 `source="process"` 并在文案里说清这个工作区没有运行记录。
+    """
+    out: dict[str, Any] = {"written": False, "path": "", "reason": ""}
+    ws = workspace_root(root)
+    if ws is None:
+        out["reason"] = "workspace_root_unknown"
+        return out
+    value = _lean_now() if lean is None else bool(lean)
+    sid_text = str(sid or _session_sid())
+    path = _runs_dir(ws) / f"{RUN_RECORD_PREFIX}{_file_tag(sid_text)}.json"
+    payload = {
+        "schema": 1,
+        "kind": "cache_active",
+        "sid": sid_text,
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "lean_enabled": bool(value),
+        "tier": _tier_in_use(bool(value)),
+        "prompt_version": str(AP.PROMPT_VERSION),
+        "pid": int(os.getpid()),
+        "workspace_root": str(ws),
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8", newline="\n")
+        os.replace(tmp, path)
+    except OSError as exc:
+        out["reason"] = f"{type(exc).__name__}: {exc}"
+        return out
+    out.update({"written": True, "path": str(path)})
+    return out
+
+
+def _parse_run_record(path: Path) -> dict[str, Any]:
+    """读一份运行记录；读不懂就抛 `ValueError`（调用方把它记成"读不出来"）。
+
+    只认三样：`sid`（说不清是哪一趟就不算记录）、`lean_enabled`（必须是真布尔，
+    "没记"与"记成关"是两件事）、`at`（挑最近一趟用）。其余键只带回 `prompt_version`
+    与 `pid`：前者让读者看得出记录是哪一版提示词下写的，后者是探活用的那个号。
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"{type(exc).__name__}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("不是 JSON 对象")
+    sid = str(data.get("sid") or "")
+    if not sid:
+        raise ValueError("没有 sid（说不清是哪一趟）")
+    lean = data.get("lean_enabled")
+    if not isinstance(lean, bool):
+        raise ValueError("没有 lean_enabled 这一格（这份记录没记 lean 状态）")
+    try:
+        pid = int(data.get("pid") or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    return {
+        "path": str(path),
+        "sid": sid,
+        "at": str(data.get("at") or ""),
+        "lean": bool(lean),
+        "tier": _tier_in_use(bool(lean)),
+        "prompt_version": str(data.get("prompt_version") or ""),
+        "pid": pid,
+        "state": "",
+    }
+
+
+def _live_run_sids(root: Path) -> dict[str, str]:
+    """`<工作区>/runs/*.pid` 里还活着的那些：会话号 → 角色（读不出来就当没有）。"""
+    out: dict[str, str] = {}
+    try:
+        files = sorted(_runs_dir(root).glob("*.pid"))
+    except OSError:
+        return out
+    for path in files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        sid = str(data.get("sid") or "")
+        if sid and _alive(data.get("pid")):
+            out[sid] = str(data.get("role") or "")
+    return out
+
+
+def run_record_reading(*, root: Path | str | None = None) -> dict[str, Any]:
+    """这个工作区里正在跑（或最近一趟）的运行记录的 lean 状态。
+
+    三态（`tri`）：
+
+    - `found`：读到一份带 lean 状态的记录；`state` 说它是"正在跑"（`running`，
+      同会话的 `*.pid` 还活着）还是"最近一趟"（`recent`）；`record` 是那一份；
+    - `missing`：这个工作区没有运行记录（目录不存在 / 一份都没有）—— 调用方退回
+      本进程开关。`reason="workspace_root_unknown"` 表示连工作区都没判定出来；
+    - `unknown`：记录文件在、但读不出来（坏 JSON / 没记 lean / 列不出目录）——
+      `reason=run_record_unreadable`，`detail` 里是原话。这一档不许拿别的来源冒充。
+
+    正在跑与最近一趟不同时优先正在跑；都在就跑得最晚的那一份。
+    """
+    out: dict[str, Any] = {"tri": "missing", "reason": "", "detail": "",
+                           "path": "", "state": "", "record": {}}
+    ws = workspace_root(root)
+    if ws is None:
+        out["reason"] = "workspace_root_unknown"
+        return out
+    runs = _runs_dir(ws)
+    if not runs.exists():
+        return out
+    try:
+        files = sorted(runs.glob(f"{RUN_RECORD_PREFIX}*.json"))
+    except OSError as exc:
+        out.update({"tri": "unknown", "reason": REASON_RUN_RECORD_UNREADABLE,
+                    "detail": f"列不出 {runs}：{type(exc).__name__}: {exc}"})
+        return out
+    if not files:
+        return out
+    parsed: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for path in files:
+        try:
+            parsed.append(_parse_run_record(path))
+        except ValueError as exc:
+            problems.append(f"{path.name}：{exc}")
+    if not parsed:
+        out.update({"tri": "unknown", "reason": REASON_RUN_RECORD_UNREADABLE,
+                    "detail": ("；".join(problems) or "运行记录读不出来")[:400]})
+        return out
+    live = _live_run_sids(ws)
+    for record in parsed:
+        record["state"] = (RUN_STATE_RUNNING if record["sid"] in live
+                           else RUN_STATE_RECENT)
+    pool = [r for r in parsed if r["state"] == RUN_STATE_RUNNING] or parsed
+    chosen = max(pool, key=lambda r: (r["at"], r["sid"]))
+    out.update({"tri": "found", "state": chosen["state"], "path": chosen["path"],
+                "record": chosen})
+    return out
+
+
+def _source_text(source: str, record: Mapping[str, Any]) -> str:
+    """`active.source_text` 那一格的人话（正文里"来源=…"用的就是它）。"""
+    if source == SOURCE_RUN:
+        where = ("正在跑的那一趟" if record.get("state") == RUN_STATE_RUNNING
+                 else "最近一趟")
+        return f"{where} {str(record.get('sid') or '(不知道会话号)')}"
+    if source == SOURCE_PROCESS:
+        return "按本进程开关"
+    return "unknown"
+
+
+def _source_note(source: str, workspace: Path | None) -> str:
+    """来源那一格的补充说明（为什么没读运行记录）；没有要补的就返回空串。"""
+    if source == SOURCE_PROCESS:
+        return ("工作区不可判定，没敢按运行记录猜" if workspace is None
+                else "这个工作区没有运行记录")
+    return ""
+
+
+def _run_record_why(record: Mapping[str, Any]) -> str:
+    """运行记录读不出来时 `active.why` 的原话（理由码 ＋ 细节，不编一句）。"""
+    reason = str(record.get("reason") or REASON_RUN_RECORD_UNREADABLE)
+    detail = str(record.get("detail") or "").strip()
+    return f"{reason}：{detail}" if detail else reason
+
+
 def _active_why(tri: str, fresh: bool, missing: Iterable[str],
                 reading: Mapping[str, Any]) -> str:
     """`active.why` 那一格：没查成 / 查到了但不新鲜 / 缺谁，三种各自的原话。
@@ -543,29 +840,46 @@ def _active_text(doc: Mapping[str, Any]) -> str:
     星号是"强调"的标记而不是装饰：业主 2026-10-23 那张施工单给的就是这一句的形状
     （"当前使用：Lean 版缓存（版本 · 覆盖 · 那一趟）｜开关：开"）。做成一份字面量放
     在这里，是为了让"网页上说的档"与"命令行说的档"共用同一个产出点。
+
+    来源必须上这一行（`source_text`）：这一格最要紧的一次误读就是它 —— 页面在说
+    web 的开关，而用户要看的是正在跑的那一趟的开关。所以括号里恒有"来源=…"，
+    "按本进程开关"与"正在跑的那一趟 lg2"是两句不同的话，不许混。
     """
+    source_text = str(doc.get("source_text") or doc.get("source") or "unknown")
+    note = str(doc.get("source_note") or "").strip()
+    origin = f"来源={source_text}" + (f"；{note}" if note else "")
     if str(doc.get("tri")) != "found":
         why = str(doc.get("why") or "unknown")
-        return f"当前没有可用缓存（理由：{why}）—— 去点「试算」看要预热什么"
+        return f"当前没有可用缓存（{origin}；理由：{why}）—— 去点「试算」看要预热什么"
     switch = "开" if doc.get("lean") else "关"
     body = f"{doc.get('prompt_version') or ''} · {doc.get('covered') or '0/0'}"
     absent = [str(t) for t in (doc.get("absent") or [])]
     if absent:
         body += "，" + "、".join(absent) + " 受控缺席"
-    at = str(doc.get("run_at") or "")
-    if at:
-        body += f" · {at}"
+    # 预热那一趟的时间（`run_at`）刻意不上这一行：现在括号里有"来源=…"点名是哪一趟，
+    # 旁边再挂一个没有标签的时间，读者会把它读成来源那一趟的时间（那是另一件事）。
+    # 那一格仍在 `active.run_at` 里，要看的自己取。
     missing = [str(t) for t in (doc.get("missing") or [])]
     if missing:
         body += "，缺：" + "、".join(missing)
     elif doc.get("fresh") is False:
         body += "，" + str(doc.get("why") or "不新鲜")
+    body += f"，{origin}"
     name = ACTIVE_NAME.get(str(doc.get("tier")), "")
     return f"当前使用：**{name}**（{body}）｜开关：{switch}"
 
 
-def _active_doc(*, tier: str, lean: bool, reading: Mapping[str, Any]) -> dict[str, Any]:
-    """把一档的四格读数折成"当前使用"那一格（键集见 :func:`active_reading`）。"""
+def _active_doc(*, tier: str, lean: bool | None, reading: Mapping[str, Any],
+                source: str = SOURCE_PROCESS,
+                record: Mapping[str, Any] | None = None,
+                workspace: Path | None = None) -> dict[str, Any]:
+    """把一档的四格读数折成"当前使用"那一格（键集见 :func:`active_reading`）。
+
+    `source` 是这一档从哪来的（运行记录 / 本进程开关 / 读不出来），`record` 是那一份
+    运行记录（`run_record_reading` 的 `record`），`workspace` 是这一格读的是哪个工作区
+    （None = 不可判定）。三者一起进正文，于是"这一格说的是谁"不需要读者猜。
+    """
+    record = dict(record or {})
     tri = str(reading.get("tri") or "unknown")
     total = int(reading.get("total") or 0)
     covered = int(reading.get("covered") or 0) if tri == "found" else 0
@@ -574,9 +888,18 @@ def _active_doc(*, tier: str, lean: bool, reading: Mapping[str, Any]) -> dict[st
     fresh = bool(reading.get("fresh")) if tri == "found" else False
     doc: dict[str, Any] = {
         "tier": tier,
-        "label": ACTIVE_NAME[tier],
+        "label": ACTIVE_NAME.get(tier, ""),
         "lean": lean,
-        "strategy": "switch",
+        #: 档位从哪来：`run` / `process` / `unknown`（见模块 docstring 的三层来源）。
+        "source": source,
+        "source_text": _source_text(source, record),
+        "source_note": _source_note(source, workspace),
+        #: 运行记录那一格的三样（`source != "run"` 时是空串）：哪一趟、什么时候、还活着没有。
+        "record_sid": str(record.get("sid") or ""),
+        "record_at": str(record.get("at") or ""),
+        "record_state": str(record.get("state") or ""),
+        "strategy": (SOURCE_RUN if source == SOURCE_RUN
+                     else ("switch" if source == SOURCE_PROCESS else SOURCE_UNKNOWN)),
         "run_at": str(reading.get("at") or ""),
         "prompt_version": str(AP.PROMPT_VERSION),
         "readings_prompt_version": str(reading.get("readings_prompt_version") or ""),
@@ -603,27 +926,57 @@ def active_reading(*, path: Path | None = None,
                    per_tier: Mapping[str, Mapping[str, Any]] | None = None,
                    renders: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
                    key: Mapping[str, Any] | None = None,
-                   lean: bool | None = None) -> dict[str, Any]:
+                   lean: bool | None = None,
+                   root: Path | str | None = None,
+                   use_record: bool = True) -> dict[str, Any]:
     """当前这一趟会用哪一档（`GET /api/cache` 与 `cache status` 共用的那一格）。
 
-    ## 取值只走一条路
+    ## 三层来源（每一层都进 `source`）
 
-    `tier_reading(当前档)` —— 它内部调 `cache_readings(lean=当前开关)`，与 `status()`
+    - 这个工作区有运行记录且带 lean 状态 ⇒ 用那一趟的开关（`source="run"`）；
+    - 没有运行记录 ⇒ 用本进程开关（`source="process"`，`lean` 参数就是它）；
+    - 记录文件在但读不出来 ⇒ `source="unknown"`、`tri="unknown"`、`why` 说理由，
+      绝不拿本进程开关冒充那一趟的开关。
+
+    `use_record=False` 是给 :func:`run_reading` 用的：起跑那一刻这一趟的开关就是这个
+    进程的开关（它就是"正在跑的这趟"），不许被上一个会话留下来的记录顶掉。
+
+    ## 档位与覆盖数只走一条路
+
+    `tier_reading(选中档)` —— 它内部调 `cache_readings(lean=那一档)`，与 `status()`
     里那两档的四格是同一个入口、同一份读数。`per_tier` 传进来时直接复用 `status()`
     已经算好的那一格（同一个对象，不重算、不另读一次文件）；没给就现算一档（`plan()`
     只要一档时走这里）。
 
     ## 三态
 
-    - `tri="found"`：`covered` / `missing` / `absent` / `run_at` 都是那一趟的读数；
-    - `tri="unknown"`：这一档整档没有读数 / 读数文件读不出来 / 渲染失败 —— `why` 说
-      理由，`fresh` 是 False 但它的意思是"这一趟不能当新鲜用"，不是"量过了发现变了"
-      （先看 `tri`，再看 `fresh`）。绝不回落到另一档：那会把"这一档没预热"画成
-      "另一档的缓存正在用"。
+    - `tri="found"`：`covered` / `missing` / `absent` / `run_at` 都是那一档的读数；
+    - `tri="unknown"`：这一档整档没有读数 / 读数文件读不出来 / 渲染失败 / 运行记录
+      读不出来 —— `why` 说理由，`fresh` 是 False 但它的意思是"这一趟不能当新鲜用"，
+      不是"量过了发现变了"（先看 `tri`，再看 `fresh`）。绝不回落到另一档：那会把
+      "这一档没预热"画成"另一档的缓存正在用"。
 
     `text` 是给人看的那一行（命令行原样打印、网页把星号画成加粗）。
     """
-    current = _lean_now() if lean is None else bool(lean)
+    workspace = workspace_root(root)
+    record = (run_record_reading(root=root) if use_record
+              else {"tri": "missing", "reason": "", "detail": "", "path": "",
+                    "state": "", "record": {}})
+    if str(record.get("tri")) == "unknown":
+        return _active_doc(tier="", lean=None, source=SOURCE_UNKNOWN, record={},
+                           workspace=workspace, reading={
+                               "tri": "unknown",
+                               "reason": _run_record_why(record),
+                               "total": len(all_targets()),
+                               "missing": list(all_targets()),
+                           })
+    chosen = dict(record.get("record") or {})
+    if str(record.get("tri")) == "found":
+        source = SOURCE_RUN
+        current = bool(chosen.get("lean"))
+    else:
+        source = SOURCE_PROCESS
+        current = _lean_now() if lean is None else bool(lean)
     tier = _tier_in_use(current)
     reading = (per_tier or {}).get(tier)
     if reading is None:
@@ -631,13 +984,15 @@ def active_reading(*, path: Path | None = None,
             reading = tier_reading(tier, path=path,
                                    renders=(renders or {}).get(tier), key=key)
         except Exception as exc:  # noqa: BLE001 - 读不出来属于 unknown，不是"零覆盖"
-            return _active_doc(tier=tier, lean=current, reading={
-                "tri": "unknown",
-                "reason": f"render_failed: {type(exc).__name__}: {exc}",
-                "total": len(all_targets()),
-                "missing": list(all_targets()),
-            })
-    return _active_doc(tier=tier, lean=current, reading=reading)
+            return _active_doc(tier=tier, lean=current, source=source, record=chosen,
+                               workspace=workspace, reading={
+                                   "tri": "unknown",
+                                   "reason": f"render_failed: {type(exc).__name__}: {exc}",
+                                   "total": len(all_targets()),
+                                   "missing": list(all_targets()),
+                               })
+    return _active_doc(tier=tier, lean=current, source=source, record=chosen,
+                       workspace=workspace, reading=reading)
 
 
 #: 起跑那一行（:func:`run_reading`）的两档级别。刻意只有两档：这一行是"读数"，
@@ -649,7 +1004,9 @@ RUN_WARNING = "warning"
 def run_reading(*, path: Path | None = None,
                 renders: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
                 key: Mapping[str, Any] | None = None,
-                lean: bool | None = None) -> dict[str, Any]:
+                lean: bool | None = None,
+                root: Path | str | None = None,
+                sid: str = "") -> dict[str, Any]:
     """起跑前读一次"这一趟用哪一档"，折成一行读数（只读、零花费、永不抛）。
 
     ## 为什么要有这一口
@@ -659,26 +1016,45 @@ def run_reading(*, path: Path | None = None,
     在运行期是看不见的，用户只能自己去敲 `cache status` 再看一遍。业主的口径是让运行时
     也读一格，但只加读数、不拦跑：不新鲜的缓存跑起来照样是对的，只是会按未命中计费。
 
+    ## 它同时写下运行记录
+
+    这一口是"这一趟起跑"唯一的钩子，所以运行记录由它写（`record_active_run`）：
+    `<工作区>/runs/cache-active-<会话号>.json` 里记下这一趟的 lean 状态。另一条进程
+    （网页）问"当前使用哪一档"时读的就是它 —— 否则那一格只能读网页自己的开关，
+    多进程时就是说反的。
+
+    这一行自己的档位不读运行记录（`use_record=False`）：它就是正在起跑的这一趟，
+    上一个会话留下来的记录不许顶掉它。写不成（工作区不可判定 / 盘写不了）照样印这一行，
+    `record` 那一格如实带回去（`written=False` 与理由），页面据此退回本进程开关。
+
     ## 三态与两种级别（不是判定，只是读数）
 
     - `info`：这一档查到了（`tri="found"`）、新鲜（`fresh=True`）且没换过 key ⇒
-      `缓存：使用 Lean 版缓存（p187 · 12/12）`；
+      `缓存：使用 Lean 版缓存（p188 · 12/12）`；
     - `warning`：没查成（整档没有读数 / 渲染失败）、不新鲜、或 key 变了 ⇒ 一行
       `缓存：这一档不新鲜（原因），建议先点『试算』看要预热什么`。括号里的原因逐字来自
       读数本身（`why` / `fresh_reason` / 换 key 那条提醒），不另编一句。
 
     `active` 那一格原样带回去（与 `cache status` / 网页面板是同一个 `active_reading`
-    返回），调用方要显示更多就自己取，不必再读一次文件。
+    返回），调用方要显示更多就自己取，不必再读一次文件；`record` 是这一趟运行记录的
+    写入回执（`written` / `path` / `reason`）。
 
     ## 为什么自己接住所有异常
 
     这一行是"顺带读一格"：它读不出来时该发生的事是"照常跑，只少一行说明"，绝不是"这一趟
     起不来"。所以这里把异常折成一行 warning —— 与"读数只加不拦"同一条纪律。
     """
+    current = _lean_now() if lean is None else bool(lean)
     try:
-        active = active_reading(path=path, renders=renders, key=key, lean=lean)
+        record = record_active_run(root=root, sid=str(sid or ""), lean=current)
+    except Exception as exc:  # noqa: BLE001 - 写运行记录不许拖垮起跑
+        record = {"written": False, "path": "",
+                  "reason": f"{type(exc).__name__}: {exc}"}
+    try:
+        active = active_reading(path=path, renders=renders, key=key,
+                                lean=current, root=root, use_record=False)
     except Exception as exc:  # noqa: BLE001 - 读不出来只许降级成一行 warning
-        return {"level": RUN_WARNING, "tri": "unknown", "active": {},
+        return {"level": RUN_WARNING, "tri": "unknown", "active": {}, "record": record,
                 "text": (f"缓存：这一档不新鲜（没查成：{type(exc).__name__}: {exc}），"
                          "建议先点『试算』看要预热什么")}
     tri = str(active.get("tri") or "unknown")
@@ -687,7 +1063,7 @@ def run_reading(*, path: Path | None = None,
     if tri == "found" and fresh and key_tri != "stale":
         name = str(active.get("label") or "")
         body = f"{active.get('prompt_version') or ''} · {active.get('covered') or '0/0'}"
-        return {"level": RUN_INFO, "tri": tri, "active": active,
+        return {"level": RUN_INFO, "tri": tri, "active": active, "record": record,
                 "text": f"缓存：使用 {name}（{body}）"}
     if tri != "found":
         reason = "没查成：" + (str(active.get("why") or "").strip() or REASON_NO_READINGS)
@@ -696,24 +1072,31 @@ def run_reading(*, path: Path | None = None,
                   "这一趟按未命中计费）")
     else:
         reason = str(active.get("why") or "").strip() or "这些目标的现渲染摘要与读数不一致"
-    return {"level": RUN_WARNING, "tri": tri, "active": active,
+    return {"level": RUN_WARNING, "tri": tri, "active": active, "record": record,
             "text": f"缓存：这一档不新鲜（{reason}），建议先点『试算』看要预热什么"}
 
 
 def status(*, path: Path | None = None,
            renders: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
            key: Mapping[str, Any] | None = None,
-           tiers: Iterable[str] = TIERS) -> dict[str, Any]:
+           tiers: Iterable[str] = TIERS,
+           root: Path | str | None = None) -> dict[str, Any]:
     """两档 × 四格的状态读数（只读、零花费），外加"当前使用哪一档"与换 key 那条提醒。
 
-    返回的 `active` 是"按当前开关，这一趟会命中哪一档"（:func:`active_reading`），
-    `reminder` 是网页顶部横幅与命令行最后一行共用的那一份：`active` 为真时 `text`
-    就是要显示的那句话，`dismiss_key` 是"这个提醒属于哪一片缓存"（指纹 + 模型）——
-    换 key 之后它变了，于是被关掉的横幅会再出现一次。
+    返回的 `active` 是"这一趟会用哪一档"（:func:`active_reading`）—— 来源按三层定：
+    这个工作区的运行记录 / 本进程开关 / 读不出来，`active.source` 与正文里那一句
+    都会自报是哪一层。`reminder` 是网页顶部横幅与命令行最后一行共用的那一份：`active`
+    为真时 `text` 就是要显示的那句话，`dismiss_key` 是"这个提醒属于哪一片缓存"
+    （指纹 + 模型）—— 换 key 之后它变了，于是被关掉的横幅会再出现一次。
+
+    `root` 是"这个工作区"的根（不给就按 `workspace_root` 那条梯子找：显式 >
+    环境变量 > 进程命令行 `--root`）。`workspace` 那一格原样带回去，读的人才知道
+    这一格看的是哪个工作区（空串 = 不可判定）。
     """
     out_path = Path(path) if path is not None else default_readings_path()
     current_key = dict(key) if key is not None else key_reading()
     now_lean = _lean_now()
+    workspace = workspace_root(root)
     rendered = {tier: dict((renders or {}).get(tier) or render_tier(tier))
                 for tier in tiers}
     per_tier = {tier: tier_reading(tier, path=out_path, renders=rendered[tier], key=current_key)
@@ -770,11 +1153,14 @@ def status(*, path: Path | None = None,
         "lean_now": now_lean,
         "prompt_version": str(AP.PROMPT_VERSION),
         "key": current_key,
+        # 这一格读的是哪个工作区（空串 = 不可判定；`active.source` 据此说清来源）。
+        "workspace": str(workspace or ""),
         "tiers": per_tier,
         # 当前这一趟会用哪一档：复用上面算好的那一格（同一个 entry、同一份读数），
         # 不另读一次文件、也不另算一套覆盖数。
         "active": active_reading(path=out_path, per_tier=per_tier,
-                                 renders=rendered, key=current_key, lean=now_lean),
+                                 renders=rendered, key=current_key, lean=now_lean,
+                                 root=root),
         "reminder": reminder,
         "verdict": {"tri": verdict, "unknown_tiers": unknown,
                     "stale_tiers": stale, "key_unknown_tiers": key_unknown},
@@ -1065,10 +1451,14 @@ def _readings_path(raw: str) -> Path | None:
 
 
 def cmd_status(args: Any) -> int:
-    """`agentflow cache status`：两档的四格 + 换 key 那一行（只读、零花费）。"""
+    """`agentflow cache status`：两档的四格 + 换 key 那一行（只读、零花费）。
+
+    工作区从顶层的 `--root` 取（命令行参数里就有；不给就走 `workspace_root` 那条梯子）：
+    这样"当前使用哪一档"与网页读的是同一口径（同一个 `active_reading`）。
+    """
     path = _readings_path(getattr(args, "readings", ""))
     try:
-        doc = status(path=path)
+        doc = status(path=path, root=getattr(args, "root", None))
     except Exception as exc:  # noqa: BLE001 - 读不出来属于"没查成"
         print(f"[unknown] 状态没读出来：{type(exc).__name__}: {exc}")
         return EXIT_UNKNOWN

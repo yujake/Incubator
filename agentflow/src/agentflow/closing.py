@@ -3918,10 +3918,22 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
 
 
 def _has_t3(exp: Mapping[str, Any]) -> bool:
-    """T3 的机械形态（§10.2）：形式化方法 + proof 级 + 检查器真的说过话。"""
-    return (str(exp.get("method") or "") == "formal"
-            and str(exp.get("evidence_kind") or "") == "proof"
-            and bool(str(exp.get("verifier_output") or "").strip()))
+    """T3 的机械形态（§10.2）：形式化方法 + proof 级 + 检查器真的说过话。
+
+    2026-10-23（业主裁定「纯数值实验把整个命题证掉了也能拿 proof，理由是穷举，
+    签名是那份程序」）：这一格多一个入口 —— 按穷举签下的 proof 行（signed_by=V、②③ 由 E 写）也算背书。
+    判据本体只有一处（`numericproof.is_signed_exhaustion`：方法属于计算类、
+    `evidence_kind="proof"`、签名者 E、证明理由在受控词表里），这里不抄第二份。
+    不加这一支的后果是可量化的：一条真的穷举证明会被这一格判成"没有 T3 背书"，
+    于是"穷举也能拿 proof"这句话在收工门上永远是一个 blocker。
+    """
+    if str(exp.get("evidence_kind") or "") != "proof":
+        return False
+    if str(exp.get("method") or "") == "formal":
+        return bool(str(exp.get("verifier_output") or "").strip())
+    from . import numericproof as _NP
+
+    return _NP.is_signed_exhaustion(exp)
 
 
 def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
@@ -4969,16 +4981,18 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
         if got:
             problems.append(f"{name}: {got}")
         # 档位那一条与证明在不在无关：证明在台账里、但框架被搬进附录，一样是"塞走"
-        tier = 0
+        # 2026-10-23：`level` 是 `None` = 判不了、`0` = T0（真的档位）—— 改前两者都读成 0，
+        # 于是"没人判过"会被当成 T0，而 T3/T4 的门槛写法 `>= 3` 在 None 上会抛 TypeError。
+        tier: int | None = None
         if row is not None:
             try:  # 档位是旁支台账里的读数（`secretary.nontriviality_of`）；取不到就当没判
                 from . import secretary as _SEC
-                tier = int(_SEC.nontriviality_of(root, str(row.get("statement_full") or ""))["level"])
+                tier = _SEC.nontriviality_of(root, str(row.get("statement_full") or ""))["level"]
             except Exception:  # noqa: BLE001 - 读数取不到不影响这条判据
-                tier = 0
+                tier = None
         in_body = (body + after).strip()
         points_to_appendix = bool(_APPENDIX_POINTER.search(in_body))
-        if tier >= 3 and points_to_appendix and len(in_body) < 400:
+        if tier is not None and tier >= 3 and points_to_appendix and len(in_body) < 400:
             problems.append(
                 f"{name}: 档位 T{tier} 的框架被整段移进附录（正文只剩 {len(in_body)} 字符的指针）"
                 " —— T3/T4 的框架与动机必须留在正文")
@@ -5010,21 +5024,33 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
                 "reason": "没有工作区根 ⇒ 非平凡性这一格没读到（不是\"全是 T1\"）"}
     rows = _paper_statement_rows(root)
     high: list[dict[str, Any]] = []
+    t0_ids: list[str] = []
     for row in rows:
         # D2：正文只有一个读口（`statementbody.body_of`：真身 `statement_full` 优先，
         # 空则退回历史行的 `statement_text`）。
         text = _SB.body_of(row)
         got = _SEC.nontriviality_of(root, text)
-        level = int(got.get("level") or 0)
-        counts["unjudged" if not level else f"T{level}"] += 1
-        if level >= 3:
+        # 2026-10-23：`level` 是 `None` = 判不了、`0` = T0（真的档位）。
+        # 改前这两件事折叠在 0 上，于是"没人判过"与"基础定理"在读数里同形。
+        level = got.get("level")
+        counts["unjudged" if level is None else f"T{level}"] += 1
+        if level == 0:
+            t0_ids.append(str(row.get("stmt_id") or ""))
+        if level is not None and level >= 3:
             high.append({"stmt_id": str(row.get("stmt_id") or ""), "level": level,
+                         "label": _SEC.nontriviality_label(level),
                          "basis": str(got.get("basis") or ""),
                          "tri": str(got.get("tri") or "unknown")})
     return {
         "checked": bool(rows),
         "statements_total": len(rows),
         "counts": counts,
+        # 平凡 ⇒ 落 T0，不拒收（业主 2026-10-23）：这一格让"降为 T0"在收工读数上看得到，
+        # 而不是只在秘书台账里躺着。
+        "downgraded_to_t0": t0_ids,
+        "downgraded_to_t0_total": len(t0_ids),
+        "downgraded_note": ("平凡不再拒收：判「太平凡」的命题落 T0（基础定理或初步结论），"
+                            "与 T1–T4 是同一根档位轴上的第一档"),
         "high_tier": high,
         "high_tier_total": len(high),
         "paper_scaffolding_problems": paper_proof_scaffolding_problems(root),
@@ -5064,8 +5090,10 @@ def t4_ladder_problems(root: str | Path) -> list[str]:
         text = _SB.body_of(row)
         if not text.strip():
             continue
-        level = int(_SEC.nontriviality_of(root, text).get("level") or 0)
-        if level < 4:
+        level = _SEC.nontriviality_of(root, text).get("level")
+        # 2026-10-23：判不了是 `None`（改前是 0）；T0 是 0 但它是真的档位，
+        # 与 T4 无关 —— 所以这里判的是"是不是第 4 档"，不是"有没有读数"。
+        if level != 4:
             continue
         sid = str(row.get("stmt_id") or "")
         needle = text.strip()[:40]

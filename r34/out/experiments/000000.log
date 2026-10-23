@@ -1,0 +1,26 @@
+# R34_eq_9
+# 脚本 code/r34_check.py  sha256=915a24d9f9d1d955
+# exit_code=0  runtime=0.282s
+# claim: R(3,4)=9：K_9 的任意 2-着色必含红 K_3 或蓝 K_4（上界），且 K_8 存在同时避开红 K_3 与蓝 K_4 的 2-着色（下界，见证＝Möbius 梯 M_8 作红图）。
+----- stdout -----
+PROGRESS: {"n": 6, "nodes": 653, "seconds": 0.0015, "solutions_found": 150, "red_triangle_prunes": 179, "blue_k4_prunes": 139, "complete": true}
+PROGRESS: {"n": 7, "nodes": 3094, "seconds": 0.0039, "solutions_found": 238, "red_triangle_prunes": 1420, "blue_k4_prunes": 1139, "complete": true}
+PROGRESS: {"n": 8, "nodes": 14583, "seconds": 0.024, "solutions_found": 96, "red_triangle_prunes": 8097, "blue_k4_prunes": 6203, "complete": true}
+PROGRESS: {"n": 9, "nodes": 69827, "seconds": 0.125, "solutions_found": 0, "red_triangle_prunes": 40642, "blue_k4_prunes": 29053, "complete": true}
+
+READINGS (each number defined):
+  nodes                = DFS nodes entered in the pruned tree for K_n
+  raw_colorings        = 2^(C(n,2)), colourings before any pruning
+  solutions_found      = complete colourings reached, modulo the symmetry breaking
+  red_triangle_prunes  = branches killed because a red edge would close a red K_3
+  blue_k4_prunes       = branches killed because a blue edge would close a blue K_4
+  red_triangle_count   = number of red K_3 in the K_8 witness
+  blue_K4_count        = number of blue K_4 in the K_8 witness
+  n=6: nodes=653 seconds=0.0015 solutions_found=150 complete=True
+  n=7: nodes=3094 seconds=0.0039 solutions_found=238 complete=True
+  n=8: nodes=14583 seconds=0.0240 solutions_found=96 complete=True
+  n=9: nodes=69827 seconds=0.1250 solutions_found=0 complete=True
+  K_8 witness (Moebius ladder M_8 = C_8 + 4 diameters, taken as the RED graph; blue = complement): red_edges=12 blue_edges=16 red_triangles=0 blue_K4s=0 valid=True
+
+REPRO_RESULT: {"result": "supports", "bound": {"upper": "R(3,4) <= 9: no 2-colouring of K_9 avoids both a red K_3 and a blue K_4", "lower": "R(3,4) >= 9: explicit 2-colouring of K_8 avoiding red K_3 and blue K_4", "search_bound": {"n": 9, "raw_colourings": 68719476736, "nodes_visited": 69827, "exhaustive": true, "quotient": "symmetry breaking: vertex-0 red neighbourhood is a prefix {1..d}; inside the blue class B the red neighbourhood of vertex 1 is a prefix of B", "algorithm": "DFS over lexicographically ordered edges, complete"}}, "strategy": "backtracking + incremental red-triangle pruning + blue-K4 completion pruning + prefix symmetry breaking (iso rejection quotient)", "scaling": {"6": {"nodes": 653, "seconds": 0.0015, "raw_colorings_2^C(n,2)": 32768, "solutions_found_up_to_symmetry_breaking": 150, "red_triangle_prunes": 179, "blue_k4_prunes": 139, "complete": true, "mode": "stopped_at_first_witness"}, "7": {"nodes": 3094, "seconds": 0.0039, "raw_colorings_2^C(n,2)": 2097152, "solutions_found_up_to_symmetry_breaking": 238, "red_triangle_prunes": 1420, "blue_k4_prunes": 1139, "complete": true, "mode": "stopped_at_first_witness"}, "8": {"nodes": 14583, "seconds": 0.024, "raw_colorings_2^C(n,2)": 268435456, "solutions_found_up_to_symmetry_breaking": 96, "red_triangle_prunes": 8097, "blue_k4_prunes": 6203, "complete": true, "mode": "stopped_at_first_witness"}, "9": {"nodes": 69827, "seconds": 0.125, "raw_colorings_2^C(n,2)": 68719476736, "solutions_found_up_to_symmetry_breaking": 0, "red_triangle_prunes": 40642, "blue_k4_prunes": 29053, "complete": true, "mode": "exhaustive"}}, "data": {"claim": "R(3,4) = 9", "upper_bound_proved_by_search": true, "lower_bound_witness": {"graph": "Moebius ladder M_8 = C_8 + 4 diameters, taken as the RED graph; blue = complement", "n": 8, "red_edge_count": 12, "blue_edge_count": 16, "red_degree_per_vertex": [3, 3, 3, 3, 3, 3, 3, 3], "red_edges": [[0, 1], [0, 4], [0, 7], [1, 2], [1, 5], [2, 3], [2, 6], [3, 4], [3, 7], [4, 5], [5, 6], [6, 7]], "red_triangle_count": 0, "blue_K4_count": 0, "witness_valid": true}, "K_8_witness_also_found_by_search": true, "definitions": {"nodes": "DFS nodes entered (root + one per edge decision in the pruned tree)", "raw_colourings": "2^(C(n,2))", "solutions_found": "leaves reached modulo symmetry breaking (not labelled count)", "red_triangle_prunes": "branches killed by the red-K_3 check", "blue_k4_prunes": "branches killed by the blue-K_4 check", "red_triangle_count": "number of red K_3 in the K_8 witness", "blue_K4_count": "number of blue K_4 in the K_8 witness"}, "note_n6_n8_mode": "for n<=8 the DFS stops at the first witness, so its nodes count is the cost of reaching a witness, not the full tree; n=9 is the only exhaustive traversal", "all_runs_complete": true}}
+----- stderr -----

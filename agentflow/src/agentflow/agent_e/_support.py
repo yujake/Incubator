@@ -1,4 +1,4 @@
-"""智能体 E：数值实验与形式化验证。
+"""智能体 E：数值实验与反例。
 设计基线：``test/test1/DESIGN-ROLES.md`` §2.1 与 `schema.Experiment` 的硬约束。
 一个"能跑实验"的智能体最自然也最危险的越界，就是把"我算了几千个点都对"写成"已证明" ——数学里数值实验不构成证明（FC-22）。
 - `Experiment.evidence_kind` 是结构化字段，不是注释里的告诫；- 计算类方法（numeric / symbolic / exhaustive_search）在 schema 层就拿不到
@@ -15,29 +15,35 @@
 `negation_kind="no_local_evidence"`；- `evidence_kind` 由 method 推导，脚本自报值只作为"它想声称什么"被记录：计算类方法一律 `cross_check`（自报 proof ⇒ 降级
 + 记 notes）。 3. 脚本没有打印那行（或格式非法）⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,`evidence_kind="heuristic"`，
 `notes` 写明"脚本未给出结构化结论"。
-形式化路径（`method="formal"`）与计算类路径的分工`method="formal"` 不走上面那三条规则：它把工作区里的 `.lean` 文件交给`verify.check_formal`（唯一实现）真跑一次，判据全部来自检查器，
-而不是来自脚本的自我陈述。这是本模块唯一能产出 `evidence_kind="proof"` 的入口，收口规则是：
-1. 检查器返回 `verified` ⇒ 登记 `evidence_kind="proof"`、`result="supports"`、`negation_kind="not_proved"`、`verifier_output` 是检查器自己
-的那句话、`verifier_subject_key` 逐字等于本行的 `claim_key`（schema 硬约束 2/2b 要求）； 2. 检查器跑了但没通过（`compile_error` / `uses_sorry` / 
-`extra_axioms` /`decl_mismatch`）⇒ `inconclusive` + `heuristic`：它给不出任何正面证据，所以不许落 `cross_check`（那是"另一个方法旁证过"，见 
-`formalgw.evidence_of`）； 3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /`source_unreadable` / 
-`lean_disabled` / `param_error`）⇒ 同上，且 `notes` 里写明是哪一种。其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`（`no_backend`
-/ `timeout` / `tool_crashed` / `source_unreadable` /`lean_disabled` / `param_error` / `formal_moved_to_l`）—— 上面这一行必须覆盖它，导入期断言与 
-`tests/test_agent_e.py` 各守一遍。为什么必须机器守：这里此前只有四项（少了 `source_unreadable` 与 `param_error`），而没有任何一条测试会因此变红（`R2-AN-3`），于是同一文件里
-docstring 与常量互相矛盾。`import_unavailable` 不在那张常量表里：它是 `formalgw` 的检查器状态（库不可得 ⇒ 那次检查没有发生），见 `FORMAL_REASONS` 与 
-`_FORMAL_REASON_BY_TOOL_REASON`。`lean_disabled`（业主 2026-10-12 的开关：`toolchain.lean_enabled=false`）在那张表里：它是"本会话这条路被用户关掉了"，属于
-E 自己的受控理由 ——与"机器上没有 Lean"（`no_backend`）是两件事，混起来的代价是让人去查环境。`formal_moved_to_l` 是业主 2026-10-22 晚裁定的那一档（「E 的
-Lean 侧开关全写死成关闭」）：E 这一侧不再读那个开关，形式化那一支在动作面第一句就给这个受控理由码、并把形式化指向 L —— 它必须与 `lean_disabled` 分开，
-否则模型会去翻设置文件找一个对这条路根本不存在的开关。 4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
-形式化路径的输入是一份检查器能读的形式化源码，"用 Python 脚本冒充形式化产物"正是 FC-22 要拦的那种越权。
-`name` / `imports` 只对形式化路径有意义：给计算类方法传它们会被拒绝，而不是被静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，实际用的是默认 Mathlib"这种假话没有任何地方会报出来）。
-- `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；给了参数但库里没有 ⇒ 
-`checked=True, experiments=[], proved=False`（查了、没有）。- `check_formal` 无后端 ⇒ `checked=False, reason="no_backend"`，不是 
-`verified=False`（那是"验证没过"，与"没验证"完全不同）。受控理由至少要分清五种：`no_backend` / `timeout` / `tool_crashed` /`source_unreadable`（环境的锅，本次没查
-成 —— 最后那一档是"`script_path`给的源码文件读不到"，`E-3`）与 `no_script`（调用方没给源码 —— 有后端时也会走到这一态，它不是"本机没有检查器"）。第 6 种是 `lean_disabled`（业主
-2026-10-12 的开关）：本会话这条路被用户关掉了，与"本机没有检查器"是两件事 —— 前者的处置是改走自然语言逐行审阅（或在设置文件里把 `toolchain.lean_enabled` 打开），后者的处置是装工具链。把"没查成"的判据
-写成`checked is False` 就会把这几档全部折叠成第一档。这六种理由都属于本模块的局部受控词表 :data:`FORMAL_REASONS`，而检查器原样报的那个状态另走 `verifier_status`（见 :meth:
-`AgentE.check_formal`的 docstring：收口与透传必须同时在，否则收口就是删信息）。- `proved` 只有在存在 proof 级实验时才为 True（FC-22）。
+形式化路径不在本模块了（业主 2026-10-23 晚：「E 侧与 Lean 相关的工具和动作都该清干净」）
+`AgentE.run_experiment(method="formal")` 由动作面第一句以理由码 `formal_not_in_e` 拒绝，
+`AgentE` 上没有 `check_formal`；形式化那一岗的实现体（`_CheckFormal`，见本包的
+`check_formal.py`）仍然留着，L 的 `_CheckFormalL` 继承它。下面这一段是那份实现的历史口径
+（它今天只服务 L），E 这一层不再走：
+1. 检查器返回 `verified` ⇒ `evidence_kind="proof"`、`result="supports"`、
+`verifier_output` 是检查器自己的话、`verifier_subject_key` 等于本行的 `claim_key`； 2. 查了但没通过
+（`compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch`）⇒ `inconclusive` + `heuristic`
+（它给不出正面证据，不许落 `cross_check`）； 3. 没查成（`timeout` / `import_unavailable` / `no_backend` /
+`tool_crashed` / `source_unreadable` / `lean_disabled` / `param_error` / `formal_moved_to_l`）⇒ 同上，
+且 `notes` 里写明是哪一种。其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`
+（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` / `lean_disabled` / `param_error` /
+`formal_moved_to_l`）—— 上面这一行必须覆盖它，导入期断言与 `tests/test_agent_e.py` 各守一遍。
+`formal_moved_to_l` 是历史理由码：E 不再产出它（那一支动作已经摘掉），但它留在词表里 ——
+历史台账行、`closing` 的那条读数与既有判据都还带着这个字符串，删掉会让旧行读不出意思。
+`lean_disabled` 仍是"用户把开关关掉了"（可行动：去设置里打开），`no_backend` 是"机器上没有" ——
+两者混起来会让人去查环境。
+4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
+形式化路径的输入是一份检查器能读的形式化源码（这条判据随实现体一起保留给 L）。
+`name` / `imports` 只对形式化路径有意义：E 收到它们时以受控理由码 `formal_not_in_e` 拒绝，
+而不是静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，实际用的是默认 Mathlib"
+这种假话没有任何地方会报出来）。
+- `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；给了参数但库里没有 ⇒
+`checked=True, experiments=[], proved=False`（查了、没有）。
+- `check_formal` 的受控理由词表（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` /
+`lean_disabled` / `no_script` / `formal_moved_to_l`）随实现体一起服务 L：把"没查成"的判据写成
+`checked is False` 会把这几档全部折叠成第一档。检查器原样报的那个状态另走 `verifier_status`
+（收口与透传必须同时在，否则收口就是删信息）。
+- `proved` 只有在存在 proof 级实验时才为 True（FC-22）。
 - `params` / `artifact_paths` 是信息性字段：本模块不会把它们变成命令行参数，也不会去读那些产物文件。- 判读不走 LLM（`llm` 只用于 `author_script` 写脚本，S-10(a)）：数值实验的判读
 必须是确定性的（FC-16）—— `run_experiment` / `_derive` / `_parse_conclusion` 一条缝调用都没有，判据见 
 `tests/test_agent_e_author_script.py::test_the_reading_path_never_calls_the_seam`。
@@ -60,17 +66,13 @@ from ..tools.base import ToolError, ToolRegistry
 from ..agentspec import AgentBrief, AgentSpec
 __all__ = [
     "AgentE",
-    "E_LEAN_SIDE_HARD_OFF",
-    "E_LEAN_SIDE_NOTE",
-    "E_LEAN_SIDE_REASON",
+    "E_NO_FORMAL_REASON",
     "ExperimentError",
     "FORMAL_REASONS",
     "REPRO_RESULT_PREFIX",
     "build_experiment",
     "declared_name_of_notes",
-    "e_lean_side_hard_off",
     "install_e_tools",
-    "lean_side_reading",
     "selftest",
 ]
 REPRO_RESULT_PREFIX = "REPRO_RESULT:"
@@ -107,61 +109,24 @@ FORMAL_REASONS: tuple[str, ...] = (
     "path_outside_workspace",
     "tool_failed",
     "status_unregistered",
-    #: 业主 2026-10-22 晚裁定（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时
-    #: 发生错乱。当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计。」
-    #: 这一档与 `lean_disabled` 刻意分开：后者是「用户把开关关掉了」（可行动：去设置里
-    #: 打开），而这一条是「这条路已经不在 E 身上了」（可行动：走 L 的那三件工具）。
-    #: 把它折进 `lean_disabled` 会让模型去翻设置文件找一个根本不存在的开关。
+    #: 历史理由码（业主 2026-10-22 晚裁定那一档）。2026-10-23 晚裁定把 E 的 Lean 侧
+    #: 整条摘掉之后，E 不再产出它 —— 但它留在词表里：历史台账行、`closing` 那条读数
+    #: 与既有判据都还带着这个字符串，删掉会让旧行读不出意思。
+    #: 「这一档为什么不能做」今天由下面的 `E_NO_FORMAL_REASON` 说（E 不做形式化），
+    #: 不再由这一条说（它说的是"搬到 L"，而那个说法已经不对了）。
     "formal_moved_to_l",
+    #: E 的动作面拒绝 `method="formal"` 的理由码（业主 2026-10-23 晚：「E 侧与 Lean
+    #: 相关的工具和动作都该清干净」）。它与 `formal_moved_to_l` 刻意分开：后者说的是
+    #: "这条路搬去 L 了"（一个已经过时的转述），这一条说的是"E 不做形式化"（一句事实）。
+    #: 判据：`tests/test_e_has_no_lean_side.py` 判据 3。
+    "formal_not_in_e",
 )
 
 
-#: E 的 Lean 侧写死关闭（业主 2026-10-22 晚裁定）。这是唯一判据：
-#: `run_experiment(method='formal')` 与 `check_formal` 都在第一句读它。
-#:
-#: 为什么是一个模块级字面量而不是设置项：裁定要的是「写死」—— 没有环境变量、
-#: 没有设置文件键、没有构造函数参数能把它打开。判据
-#: `tests/test_e_lean_side_is_hard_off.py` 的第 5 条直接把它改成 False，用来证明
-#: 第 2 条不是真空的（改了它，那一条必须变红）。
-E_LEAN_SIDE_HARD_OFF: bool = True
-
-#: 写死关闭时那个受控拒绝码（`FORMAL_REASONS` 里的取值，别处不许再写字面量）。
-E_LEAN_SIDE_REASON: str = "formal_moved_to_l"
-
-#: 「E 的 Lean 侧已停用」那一句读数（拒绝回执、自检、`lean_side_reading()` 共用一份）。
-#: 这句话刻意不在 `specs/e.py` 的提示词里：提示词里点名 L 会让「开关关着时一个字都
-#: 不提 L」那条判据变红（L 在那一档不存在），所以「这一侧停用了、形式化归谁」这件事
-#: 由读数说，不由提示词说。
-E_LEAN_SIDE_NOTE: str = (
-    "E 的 Lean 侧已停用（写死关闭，不再看 toolchain.lean_enabled 开关）："
-    "形式化由 L 承担（formal.formalize / formal.check_formal / formal.record）。"
-)
+#: E 的动作面拒绝形式化时的受控理由码（唯一字面量；判据与 `run_experiment` 都读它）。
+E_NO_FORMAL_REASON: str = "formal_not_in_e"
 
 
-def e_lean_side_hard_off() -> bool:
-    """E 的 Lean 侧是不是写死关闭（唯一判据，见 :data:`E_LEAN_SIDE_HARD_OFF`）。
-
-    刻意写成函数而不是让调用方直接读常量：这样判据只要改一处，
-    而"还有一个地方自己读了一遍常量"这种分叉结构上不可能发生。
-    """
-    return bool(E_LEAN_SIDE_HARD_OFF)
-
-
-def lean_side_reading() -> dict[str, Any]:
-    """E 的 Lean 侧这一档的读数（业主裁定要求的「在读数里明确」那一格）。
-
-    五格分工：`engine` 是这条路的归属（`"off_hard_coded"`：写死关闭，不是开关档位）、
-    `formal_owner` 是形式化现在的承担者、`reason` 是受控拒绝码、`note` 是一句人话、
-    `reads_lean_switch` 回答「这一侧还读不读那个开关」（裁定的要点：不读了）。
-    """
-    return {
-        "role": "E",
-        "engine": "off_hard_coded" if e_lean_side_hard_off() else "switch_driven",
-        "formal_owner": "L",
-        "reason": E_LEAN_SIDE_REASON,
-        "reads_lean_switch": False,
-        "note": E_LEAN_SIDE_NOTE,
-    }
 _FORMAL_REASON_BY_TOOL_REASON: dict[str, str] = {
     "verified": "verified",
     "compile_error": "compile_error",
@@ -428,10 +393,19 @@ def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
         )
         return _NO_EVIDENCE_KIND
     if kind == "proof" and method != "formal":
+        # 2026-10-23 业主裁定之后，"计算类能不能拿 proof"有了一道真的判据
+        # （`numericproof`：搜索空间 + exhaustive + 覆盖说明齐备才够）。
+        # 但脚本自报的等级仍然一个字都不采信 —— 让被判定的对象自己决定"算不算证明"
+        # 等于没有判官。所以这里照旧落到 cross_check（"有数值实验支持"那一档），
+        # 真正的等级由 `build_experiment` 里的 E 签名现算；这一句只负责把
+        # "你自报的那一档没被当真"留在 notes 里。
         notes.append(
-            f"脚本自报 evidence_kind='proof'，但 method={method!r} 是计算类方法 ⇒ 拒绝并降级为 cross_check。"
-            "理由：让被判定的对象自己决定'算不算证明'，等于没有判官；"
-            "数学里数值/符号/穷举实验都不构成证明（FC-22）"
+            f"脚本自报 evidence_kind='proof'，但 method={method!r} 是计算类方法 ⇒ "
+            "拒绝并降级为 cross_check（自报的等级不采信）：等级由 E 按穷尽证据现算 —— "
+            "脚本要在结构化结论里给 `exhaustive: true`、搜索空间与覆盖说明"
+            "（`numericproof.EXHAUSTIVE_KEY` / `SPACE_KEYS` / `ENUMERATION_KEY` / `DESIGN_KEY`），"
+            "齐备才算穷举证明。理由：数学里数值/符号/穷举实验只在'整个论域枚举完'"
+            "这一种情形下构成证明（业主 2026-10-23），而那件事不能由脚本自己说了算"
         )
         return "cross_check"
     return kind
@@ -639,29 +613,46 @@ def build_experiment(
     created_by: str = "agent-E",
 ) -> S.Experiment:
     """把"推导结果"装成一行 `Experiment`。纯函数（不碰 store），便于单测。
-    它只做装配与校验，不做任何推导 —— 推导在 `_derive`（计算类方法）或:meth:`AgentE._record_formal`（形式化方法），写入在 
+    它只做装配与校验，不做任何推导 —— 推导在 `_derive`（计算类方法），写入在 
     `AgentE.run_experiment`。这样"为什么这条记录长这样"可以脱离子进程被单独复现。
     ## 四个"证据形状"字段为什么要在这里有位置（`P-8`）
     `schema.Experiment.validate` 有四条与证据形状绑定的硬约束：
-    - `evidence_kind="proof"` ⇒ `verifier_output` 必须非空（硬约束 2）；- `evidence_kind="proof"` ⇒ 
+    - `evidence_kind="proof"` ⇒ `verifier_output` 必须非空（硬约束 2；改前对计算类一律拒，见下）；- `evidence_kind="proof"` ⇒ 
     `verifier_subject_key` 必须非空且等于 `claim_key`（硬约束 2b：检查器输出必须绑定到它管的那个命题）；- 
     `method="exhaustive_search"` ⇒ 必须有 `certificate`（硬约束 2c）；- 给了 `certificate` ⇒ 必须有 
     `search_bound`（证书脱离边界没有意义）。
     本函数此前一个都不收 ⇒ 形式化路径上的 proof 记录在 `row.validate()` 必然抛，于是"E 登记不了一条 proof 级实验"（`P-8`）。这四个参
     数不是新判据：它们是让推导侧能把已有的硬约束所需的事实交下来的通道。默认值全为空，计算类调用点逐字节不变。
+    ## 2026-10-23 起它还做一件事：E 在签名那一刻判穷举（业主裁定）
+    计算类方法（numeric / symbolic / exhaustive_search）现在也能落到 `evidence_kind="proof"` ——
+    当且仅当整个论域被穷尽验证过。判定与签名的唯一口径是
+    `numericproof.sign_experiment`：它看的是脚本自报的搜索空间 / exhaustive / 覆盖说明
+    与调用方给的 `certificate` / `search_bound`，并把这些事实与该签的结论一起写进
+    `observations[E_SIGNATURE_KEY]`（签名者 E、证明理由 exhaustion、程序路径与哈希）。
+    脚本自己报的 `evidence_kind` 仍然不采信（`_normalize_evidence_kind` 那一支照旧降级）：
+    等级由 E 现算，不由被判定的对象自报。
     """
+    from .. import numericproof as _NP
+
+    sign = _NP.sign_experiment(method=method, derived=derived, code_path=code_path,
+                               code_hash=code_hash, certificate=certificate,
+                               search_bound=search_bound, experiment_id=experiment_id)
+    evidence_kind = str(sign.get("evidence_kind")
+                        or derived.get("evidence_kind") or "cross_check")
+    observations = (dict(sign["observations"]) if "observations" in sign
+                    else _as_dict(derived.get("observations")))
     row = S.Experiment(
         experiment_id=experiment_id,
         claim=claim,
         claim_key=claim_key,
         method=method,
-        evidence_kind=str(derived.get("evidence_kind") or "cross_check"),
+        evidence_kind=evidence_kind,
         result=str(derived.get("result") or "inconclusive"),
         negation_kind=derived.get("negation_kind"),
         code_path=code_path,
         code_hash=code_hash,
         params=dict(params or {}),
-        observations=_as_dict(derived.get("observations")),
+        observations=observations,
         exit_code=exit_code,
         runtime_sec=runtime_sec,
         artifact_paths=list(artifact_paths),
@@ -713,6 +704,16 @@ def _result_reason(row: S.Experiment) -> str:
     if row.exit_code not in (0, None):
         return f"脚本 exit_code={row.exit_code} ⇒ 未正常跑完，记 inconclusive（崩溃不得当成支持）"
     if row.evidence_kind == "proof":
+        # 2026-10-23 起 proof 有两个入口：形式化（检查器说的）与穷举（V 签、②③ 由 E 写）。
+        # 这一句要说出是哪一个 —— 两档的凭据形态不同，读的人据此去查不同的地方。
+        from .. import numericproof as _NP
+
+        if _NP.is_signed_exhaustion(row.to_dict()):
+            sig = _NP.signature_of(row.to_dict())
+            return (
+                f"{row.method} 实验穷尽了整个论域 ⇒ 证据等级 {row.evidence_kind}"
+                f"（签名者 E，理由 {sig.get('proof_reason')}，"
+                f"证明栏写程序 {sig.get('script_path')}；覆盖说明已入台账）")
         return (
             f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}"
             "（有形式化检查器输出）"

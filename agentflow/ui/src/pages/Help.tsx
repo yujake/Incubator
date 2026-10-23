@@ -138,12 +138,16 @@ const PAGES: PageRow[] = [
   {
     page: "证据链（/evidence）",
     reads: "GET /api/evidence",
-    answers: "命题、猜想、实验、审校发现、引文回验、证明级验证、秘书决策 —— 七栏各带自己的三态",
+    answers: "命题（含非平凡度 T0–T4 / 未判、五元位第 4 位按路径）、猜想、实验、"
+      + "审校发现、引文回验（五档，含 no_evidence）、证明级验证（reviewed 按证明逐条、"
+      + "证明一致性而非 sha 原文）、秘书决策 —— 七栏各带自己的三态",
   },
   {
     page: "产物（/artifacts）",
     reads: "GET /api/artifacts",
-    answers: "台账上的产物与 sha 对账、交接手稿、验收表的机器可判行、体例、任务结果",
+    answers: "台账上的产物与一致性对账（一致 / 不一致 / unknown，sha 原文不上屏）、"
+      + "台账写入笔数与 commit 标记两格、交接手稿、验收表的机器可判行、体例、任务结果、"
+      + "实验产物落点（code/exp 与 out/experiments/<号>/{design,exhaustion}.md）",
   },
   {
     page: "验收（/acceptance）",

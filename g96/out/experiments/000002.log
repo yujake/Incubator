@@ -1,0 +1,30 @@
+# sylow96-counting
+# 脚本 code/sylow_96_c3xc32.py  sha256=bbe6aa6987c1d872
+# exit_code=0  runtime=0.141s
+# claim: 对 |G|=96，格 (n_3,n_2)=(1,1) 可由 G=C_3×C_32 实现：全枚举 96 个元素得 n_3=1、n_2=1、|N_G(Q)|=96、|N_G(P)|=96、阶 3 元恰 2 个、2-元恰 32 个；余下 62 个元素阶被 3 整除且 >3（6/12/24/48/96）。故「剩余元 96-2n_3 全是 2-元、于是 n_2=1 的格被排除」不成立。
+----- stdout -----
+CHECK |G| = 96                                       OK   |G| = 96
+order spectrum of C_3 x C_32: {1: 1, 2: 1, 3: 2, 4: 2, 6: 2, 8: 4, 12: 4, 16: 8, 24: 8, 32: 16, 48: 16, 96: 32}
+CHECK order spectrum matches lcm formula             OK   spectrum={1: 1, 2: 1, 3: 2, 4: 2, 6: 2, 8: 4, 12: 4, 16: 8, 24: 8, 32: 16, 48: 16, 96: 32}
+CHECK spectrum sums to |G|                           OK   sum=96
+CHECK group is abelian (all pairs commute)           OK   96^2 = 9216 pairs
+CHECK 2-elements form a subgroup of order 32         OK   |{g : ord(g) is a 2-power}| = 32
+CHECK 3-elements form a subgroup of order 3          OK   |{g : ord(g) | 3}| = 3
+CHECK n_3 = 1                                        OK   distinct subgroups of order 3: 1
+CHECK n_2 = 1 (unique Sylow 2)                       OK   2-element set is a subgroup of order 32, hence the only Sylow 2
+CHECK |N_G(Q)| = 96/n_3                              OK   |N_G(Q)| = 96, [G:N_G(Q)] = 1 = n_3
+CHECK |N_G(P)| = 96/n_2                              OK   |N_G(P)| = 96, [G:N_G(P)] = 1 = n_2
+elements of order 3            = 2  (= 2*n_3 = 2)
+elements NOT of order 3        = 94  (= 96 - 2*n_3 = 94)
+  of which 2-elements          = 32
+  of which ord divisible by 3 but > 3 = 62  (orders 6,12,24,48,96)
+CHECK leftover decomposes                            OK   32 + 62 = 94
+CHECK 2-elements != leftover (so '2-elements = 96-2n_3' fails here) OK   32 != 94
+PROGRESS: {"count": 2, "order": 6}
+PROGRESS: {"count": 4, "order": 12}
+PROGRESS: {"count": 8, "order": 24}
+PROGRESS: {"count": 16, "order": 48}
+PROGRESS: {"count": 32, "order": 96}
+checks: 12/12 passed
+REPRO_RESULT: {"bound": "complete enumeration of the 96 elements of the single explicit group C_3 x C_32; no search over groups", "checks_passed": 12, "checks_total": 12, "counterexample": {"NGP": 96, "NGQ": 96, "group": "C_3 x C_32 (direct product, componentwise addition)", "group_order": 96, "leftover_not_order3": 94, "n_2": 1, "n_3": 1, "note": "n_3 = 1 makes 'distinct Sylow 3-subgroups intersect trivially' vacuously true, yet n_2 = 1 occurs here: so that hypothesis does not force n_2 = 3, and the 2-element count is 32, not 96 - 2*n_3 = 94.", "num_2_elements": 32, "num_elements_order_3": 2, "num_order_divisible_by_3_gt_3": 62, "trivial_sylow3_intersection": true}, "group_order": 96, "identity_ok": true, "leftover_not_order3": 94, "order3_count_iff_trivial_intersection": 2, "order_divisible_by_3_gt_3": 62, "refuted_statement": "在 |G| = 96 且「不同 Sylow 3-子群交于单位元」成立时，n_2 = 1 的格子被排除：因为 2-元个数 = 96 - 2*n_3，与 32 不符（n_2 = 1 迫使 2-元个数 = 32）", "result": "refutes", "scaling": {"elements": 96, "pairs_commuted": 9216, "seconds": 0.0062}, "strategy": "explicit construction + brute force over 96 elements (order spectrum, subgroup closure, normaliser closure)", "two_elements": 32, "unverified": ["number of isomorphism classes of groups of order 32 (51 NOT verified here)", "number of isomorphism classes of groups of order 96 (231 NOT verified here)", "which of the six cells (n_3,n_2) are realised by some group of order 96"]}
+----- stderr -----

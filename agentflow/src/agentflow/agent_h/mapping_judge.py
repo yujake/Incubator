@@ -49,6 +49,13 @@ PAPER_OBJECTIVE_KINDS: tuple[str, ...] = PM.PAPER_KINDS
 #: 归到拦门那一档 —— 判据的真身是 `papermapping.LEAN_KINDS`，这里只是别名。
 LEAN_OBJECTIVE_KINDS: tuple[str, ...] = PM.LEAN_KINDS
 
+#: 客观档的第六组：数值实验定理那五条（业主 2026-10-23，E-1）。
+#:
+#: 「证明栏是不是相对仓库的那份程序、那条读数是不是 E 签的穷举、两块读数在不在、
+#: 正文指不指得回 E」全是可判事实，所以同样拦门；判据的真身是
+#: `papermapping.NUMERIC_KINDS`（再往上是 `numerictheorem`），这里只是别名。
+NUMERIC_OBJECTIVE_KINDS: tuple[str, ...] = PM.NUMERIC_KINDS
+
 #: 只进读数、不拦门的那一档：Lean 开关开着而盘上一个 Lean 产物都没有。
 #:
 #: 它说的不是"表与正文对不上"，而是"这一趟的形式化一个文件都没落"——
@@ -60,7 +67,7 @@ LEAN_WARN_KINDS: tuple[str, ...] = PM.LEAN_WARN_KINDS
 #: 全部客观 kind（判出来就拦门）。
 BLOCKING_KINDS: tuple[str, ...] = (
     MAPPING_OBJECTIVE_KINDS + CITATION_OBJECTIVE_KINDS + MD_OBJECTIVE_KINDS
-    + PAPER_OBJECTIVE_KINDS + LEAN_OBJECTIVE_KINDS
+    + PAPER_OBJECTIVE_KINDS + LEAN_OBJECTIVE_KINDS + NUMERIC_OBJECTIVE_KINDS
 )
 
 #: 主观档：读稿人的判断。只点名、不拦门（业主口径："主观类维持只点名不拦"）。
@@ -174,7 +181,7 @@ def problem_counts(findings: Sequence[Mapping[str, Any]]) -> dict[str, int]:
 __all__ = [
     "BLOCKING_KINDS", "CITATION_OBJECTIVE_KINDS", "LEAN_OBJECTIVE_KINDS",
     "LEAN_WARN_KINDS", "LEVEL_BLOCKER", "LEVEL_INFO", "LEVEL_WARNING",
-    "MAPPING_OBJECTIVE_KINDS", "MD_OBJECTIVE_KINDS", "PAPER_OBJECTIVE_KINDS",
-    "SUBJECTIVE_KINDS", "findings_of", "is_objective", "is_subjective", "is_warning",
-    "level_of", "problem_counts", "warnings_of",
+    "MAPPING_OBJECTIVE_KINDS", "MD_OBJECTIVE_KINDS", "NUMERIC_OBJECTIVE_KINDS",
+    "PAPER_OBJECTIVE_KINDS", "SUBJECTIVE_KINDS", "findings_of", "is_objective",
+    "is_subjective", "is_warning", "level_of", "problem_counts", "warnings_of",
 ]

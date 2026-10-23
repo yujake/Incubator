@@ -9,9 +9,9 @@ E 的核心是"产出证据，不产出结论"。这里锁住六条最容易悄�
 - `Experiment` 的 schema 硬约束逐条生效（直接对 schema 构造，不经 E）；
 - `evidence_for` 的三态：没查 ≠ 查了没有，且 `proved` 只在有 proof 级
   证据时为真（FC-22）；
-- `check_formal` 的受控理由必须按具体理由分开：无后端 ⇒ `no_backend`，
-  有后端但没给源码 ⇒ `no_script`（把两者折叠成 `checked is False`
-  会把"本机有 Lean"报成"本机没有 Lean"）；
+- `check_formal` 不在 E 上（2026-10-23 晚裁定之后它整条摘掉；被保留的那份实现由
+  L 的 `_CheckFormalL` 继承，它的受控理由另由 `tests/test_agent_e_formal_reasons.py`
+  经 L 逐档核）；
 - 路径越界被拒绝。
 
 全部离线、确定性：不联网、不依赖仓库里的任何外部文件，脚本都是现写现跑。
@@ -82,24 +82,6 @@ def write_script(store: Store, rel: str, body: str) -> str:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(body, encoding="utf-8")
     return rel
-
-
-@pytest.fixture(autouse=True)
-def _lean_side_hard_off_is_lifted(monkeypatch: pytest.MonkeyPatch) -> None:
-    """本文件测的是「被保留的实现」，不是 E 的动作面。
-
-    业主 2026-10-22 晚裁定把 E 的 Lean 侧写死关闭（`agent_e._support.E_LEAN_SIDE_HARD_OFF`）：
-    动作面在 `run_experiment(method='formal')` 与 `check_formal` 的第一句就回
-    `formal_moved_to_l`。那一层由 `tests/test_e_lean_side_is_hard_off.py` 的五条判据守。
-
-    而本文件里这一批用例要守的是「代码先不删」那一半：`_record_formal` 与
-    `_CheckFormal` 的实现体仍然逐字有用（L 的 `_CheckFormalL` 继承的就是它，
-    `formal_tools` 也直接调同一份函数）。所以这里把那个字面量临时放开，让它们继续量
-    被保留的那条路 —— 放开是显式的、每个用例结束后由 monkeypatch 还原。
-    """
-    from agentflow.agent_e import _support as SUP
-
-    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
 
 
 def make_e(store: Store, **cfg) -> AgentE:
@@ -222,9 +204,20 @@ def test_run_experiment_records_row_with_hash_and_exit_code(store):
     assert row["code_path"] == "probes/honest.py", "记录的必须是工作区内相对路径"
     # E-11：`observations` 里多了一条框架自己的读数 `conclusion_source`
     # （结论从哪来：`line` / `json_key` / `missing` / …）；脚本自报的那几个键逐字不动。
-    assert {k: v for k, v in row["observations"].items() if k != "conclusion_source"} == {
+    #
+    # 2026-10-23（业主裁定：数值实验也能拿 proof，签字由 V、②③ 由 E 写）：
+    # 框架还多写两格 —— `e_signature`（签名与"够不够 proof"的判定）与
+    # `exhaustion_report`（②③ 那份读数落没落盘的事实），与 `conclusion_source`
+    # 同一性质：框架自己的读数，不是脚本自报的。所以它们也排除在"逐字不动"之外。
+    _framework_keys = {"conclusion_source", "e_signature", "exhaustion_report"}
+    assert {k: v for k, v in row["observations"].items() if k not in _framework_keys} == {
         "grid": 64, "max_err": 1e-9}
     assert row["observations"]["conclusion_source"] == "line", row["observations"]
+    # 签名这一格必须真的在（它决定"这条证据能不能叫 proof"）；非穷举的那一趟只能是
+    # "有数值实验支持"，且签名里逐条写着缺什么。
+    sig = row["observations"]["e_signature"]
+    assert sig["signed_by"] == "V" and sig["evidence_kind"] == "cross_check", sig
+    assert sig["problems"], "不构成证明的读数必须点名缺哪一块"
     assert row["created_by"] == "agent-E"
 
 
@@ -295,18 +288,14 @@ def test_script_self_reported_proof_is_downgraded_and_noted(store):
     assert store.rows("experiments")[0]["evidence_kind"] == "cross_check"
 
 
-def test_formal_method_keeps_proof_only_because_schema_requires_verifier_output(store):
-    """反误伤：`method="formal"` 时脚本自报 proof 不被降级为 cross_check。
+def test_formal_method_is_refused_as_not_e_job(store):
+    """反误伤：`method="formal"` 现在是范围声明（E 不做形式化），不是一条实现路径。
 
-    注意：这个用例在 `P-8` 之前断言的是"E 的 run_experiment 不产生 verifier_output，
-    所以这条记录仍会因'proof 必须有检查器输出'被 schema 拒"。那句话描述的是
-    缺陷本身（`P-8`：形式化路径一个证据形状字段都不传 ⇒ E 永远登记不了一条
-    proof 级实验），不是判据。修好之后形式化路径改走检查器
-    （正控见 `tests/test_agent_e_formal_path.py`），所以这里断言的是两件仍然成立的事：
-
-    1. 降级规则只针对计算类方法（直接量 `_derive`，原判据逐字保留）；
-    2. `method="formal"` 而产物不是 `.lean` ⇒ 当场拒绝，且一行都不写
-       —— 这不是放宽 FC-22，而是把"形式化路径的输入"钉死。
+    2026-10-23 晚裁定（「E 侧与 Lean 相关的工具和动作都该清干净」）之后：
+    1. 降级规则仍只针对计算类方法（直接量 `_derive`，原判据逐字保留）——
+       `method="formal"` 不再是 E 能走到的分支，`_derive` 对它的取值只服务历史行；
+    2. `run_experiment(method="formal")` 当场受控拒绝（理由码 `formal_not_in_e`），
+       且一行都不写 —— 形式化那一支由 L 承担（判据见 `tests/test_e_has_no_lean_side.py`）。
     """
     rel = write_script(store, "probes/lying.py", LYING_PROBE)
     lying_stdout = "REPRO_RESULT: " + json.dumps(
@@ -317,11 +306,10 @@ def test_formal_method_keeps_proof_only_because_schema_requires_verifier_output(
     assert _derive(0, lying_stdout, method="numeric")["evidence_kind"] == "cross_check"
     assert _derive(0, lying_stdout, method="symbolic")["evidence_kind"] == "cross_check"
     assert _derive(0, lying_stdout, method="exhaustive_search")["evidence_kind"] == "cross_check"
-    assert _derive(0, lying_stdout, method="formal")["evidence_kind"] == "proof"
-    # ---- 2. 非 .lean 产物在形式化路径上被拒绝（不是"跑完再让 schema 拒"）
+    # ---- 2. `method="formal"` 在动作面第一句就被拒（不是"跑完再让 schema 拒"）
     with pytest.raises(ExperimentError) as ei:
         make_e(store).run_experiment("形式化方法", "formal-claim", rel, method="formal")
-    assert ".lean" in str(ei.value)
+    assert "formal_not_in_e" in str(ei.value), str(ei.value)
     assert store.rows("experiments") == [], "被拒绝的形式化实验不得留下任何行"
 
 
@@ -628,84 +616,28 @@ def test_evidence_for_filters_by_question_id(store):
     assert e.evidence_for(for_question_id="0009")["experiments"] == []
 
 
-# ============================================================ [6] check_formal 的三态
+# ============================================================ [6] check_formal 不在 E 上
 
 
-def test_check_formal_without_backend_is_not_checked_not_failed(store, monkeypatch):
-    """无后端 ⇒ `checked=False, reason="no_backend"`，不是 `verified=False`。
+def test_e_has_no_check_formal_method(store):
+    """E 上没有 `check_formal`：动作摘掉之后方法也一起删了。
 
-    把"没验证"与"验证没过"折叠成同一个 `False`，下游就会把"本环境没有证明检查器"
-    读成"这个命题被证伪了" —— 这正是本项目反复踩到的三态坑。
+    2026-10-23 晚裁定（「E 侧与 Lean 相关的工具和动作都该清干净」）：这一支不是
+    "写死关闭"（那还会留着一个方法），而是整条动作摘掉。被保留下来的实现
+    （`agent_e/check_formal.py::_CheckFormal`）只由 L 的 `_CheckFormalL` 继承 ——
+    两条继承链分开，于是"E 能不能形式化"在结构上不可能，而不是靠一句守卫。
+
+    三态纪律仍由那份实现承担（`tests/test_agent_e_formal_reasons.py` 与
+    `tests/test_check_formal_wiring.py` 都经 L 量它）。
     """
-    monkeypatch.setattr(
-        VT,
-        "detect_verifier",
-        lambda: {"checked": True, "available": [], "available_names": [], "reason": "（测试注入：无检查器）"},
-    )
-    got = make_e(store).check_formal("1 + 1 = 2")
-    assert got["checked"] is False
-    assert got["reason"] == "no_backend"
-    assert got["verified"] is None, "没验证必须是 None，不能是 False"
-    assert got["verifier_output"] == ""
-    # 反误伤：这个返回值不能被读成"验证失败"
-    assert got["reason"] != "verification_failed"
+    from agentflow.agent_e.check_formal import _CheckFormal
+    from agentflow.agent_l import AgentL
 
-
-def test_check_formal_with_backend_and_no_source_is_no_script_not_no_backend(store, monkeypatch):
-    """有后端 + 调用方没给源码 ⇒ `no_script`，不是 `no_backend`。
-
-    `checked=False` 有两种来源：环境侧"没查成"（`no_backend` / `timeout` /
-    `tool_crashed`）与调用方侧"没给源码"（`no_script`）。两者的处置完全不同
-    —— 前者要去装检查器，后者要把参数补上。把判据写成 `checked is False`
-    就会把后者读成前者：那正是"本机装了 Lean，却被报成没有 Lean"这个
-    安静的错误（自检 `agent_e.selftest` 里曾逐字犯过）。
-    """
-    monkeypatch.setattr(
-        VT, "detect_verifier",
-        lambda: {"checked": True, "available": [{"name": "lean", "path": "lean",
-                                                 "version": "Lean 4.7.0"}],
-                 "available_names": ["lean"], "reason": "（测试注入：有检查器）"},
-    )
-    got = make_e(store).check_formal("1 + 1 = 2")
-    assert got["reason"] == "no_script", got
-    assert got["reason"] != "no_backend", "有后端时不许报成'环境里没有检查器'"
-    assert got["checked"] is False
-    assert got["verified"] is None, "没查成必须是 None，不能是 False"
-    assert "没有给" in got["detail"] and "script_path" in got["detail"]
-
-
-def test_check_formal_with_backend_and_a_source_really_calls_the_bridge(store, monkeypatch):
-    """正控：有后端 + 给了源码 ⇒ 真的转发给 `formalgw.check_lean`（不提前收口）。
-
-    与上一条合起来才说明 `no_script` 是"源码缺席"这一支的结论，而不是
-    任何一次调用的兜底结论。替身打在 `formalgw` 上（工具层是在函数体里
-    惰性 import 它的 —— 顶层互引会成环），所以打断的是真正的转发目标。
-    """
-    from agentflow import formalgw as FG
-
-    seen: dict = {}
-
-    def _spy(source, *, name, imports, timeout_sec, source_path=None):
-        seen.update(source=source, name=name, imports=imports,
-                    timeout_sec=timeout_sec, source_path=source_path)
-        return {"status": "verified", "reason": "（测试注入：假结论）",
-                "evidence": {"checked": True, "proved": True, "evidence_kind": "proof"}}
-
-    monkeypatch.setattr(
-        VT, "detect_verifier",
-        lambda: {"checked": True, "available": [{"name": "lean", "path": "lean",
-                                                 "version": "Lean 4.7.0"}],
-                 "available_names": ["lean"], "reason": "（测试注入：有检查器）"},
-    )
-    monkeypatch.setattr(FG, "check_lean", _spy)
-    src = "theorem one_plus_one : 1 + 1 = 2 := rfl\n"
-    got = make_e(store).check_formal("1 + 1 = 2", source=src, name="one_plus_one",
-                                     imports=(), timeout_sec=7)
-    assert seen["source"] == src and seen["name"] == "one_plus_one"
-    assert seen["imports"] == () and seen["timeout_sec"] == 7.0
-    assert seen["source_path"] is None
-    assert got["reason"] == "verified" and got["verified"] is True
-    assert got["checked"] is True
+    assert not hasattr(AgentE, "check_formal"), "E 上还有 check_formal 方法"
+    assert _CheckFormal not in AgentE.__mro__, (
+        f"E 仍然混入了 _CheckFormal ⇒ 那一支还挂在 E 的继承链上：{AgentE.__mro__}")
+    assert issubclass(AgentL, _CheckFormal), (
+        "L 不再继承 `_CheckFormal` ⇒ 被保留的真身被一起删掉了")
 
 
 # ============================================================ [7] 事务性与事件日志
@@ -753,9 +685,19 @@ def test_verify_tools_registered_with_honest_side_effects(store):
     工具声明本身正确（本断言守它）；② `ToolRegistry.for_role` 对只读角色结构性剥掉所有写工具（`test_tools_base.py` 守它）。"""
     e = make_e(store)
     names = set(e.tools.names())
+    surface = {str(getattr(s, "name", "")) for s in e.tools.for_role("E")}
     assert {"verify.run_experiment", "verify.evidence_for", "verify.list_experiments"} <= names
-    # 保留已有的三个工具（有人在并行做验收测试，会用到）
-    assert {"verify.code_hash", "verify.detect_verifier", "verify.check_formal"} <= names
+    assert "verify.code_hash" in names
+    # 2026-10-23 晚（「E 侧与 Lean 相关的工具和动作都该清干净」）：
+    # `verify.detect_verifier` 仍在注册表里（F/G/H 要它回答"这机器能不能形式化"），
+    # 但它的 roles 已经从 `('E','F','G','H')` 收成 `('F','G','H')`；`verify.check_formal`
+    # 整条删除（不是收成空 roles）。判据本体见 `tests/test_e_has_no_lean_side.py` 判据 2。
+    assert "verify.detect_verifier" not in surface, (
+        "探测 Lean/Coq/Isabelle 属 Lean 侧 ⇒ 不该在 E 的工具面上")
+    assert "verify.detect_verifier" in names, "它还在注册表里（只从 E 的面上拿掉）"
+    assert "verify.check_formal" not in names, "那一件已经整条删了"
+    assert set(e.tools.get("verify.detect_verifier").roles) == {"F", "G", "H"}, (
+        "它只从 E 的工具面拿掉，不是从全树删掉")
     assert e.tools.get("verify.run_experiment").side_effect == "write_local"
     assert e.tools.get("verify.evidence_for").side_effect == "read"
     assert e.tools.get("verify.list_experiments").side_effect == "read"
@@ -824,8 +766,7 @@ def test_module_selftest_passes_offline():
     刻意不复用 `store` 夹具：自检自己建临时工作区，因此这里能顺带证明
     "它不依赖测试环境的任何既有状态"。`agent_e.selftest()` 的流程是
     正常脚本 → 自报 proof → 崩溃 → 无结论 → 路径越界 → 超时 → 三态 → 事务性 →
-    check_formal（无后端 ⇒ `no_backend`；有后端且没给源码 ⇒ `no_script`，
-    有后端且给了源码 ⇒ 真的跑一次检查器）。
+    formal 当场拒绝（E 不做形式化，理由码 `formal_not_in_e`）→ name/imports 的受控拒绝。
     """
     from agentflow import agent_e
 
@@ -937,11 +878,15 @@ def test_module_docstring_covers_every_not_checked_reason():
     这条用例再把"判据本身"钉住（导入期断言被 `-O` 关掉时它仍然在）。
     """
     import agentflow.agent_e as AE
+    from agentflow.agent_e import _support as SUP
 
-    found = AE._docstring_not_checked_reasons(AE.__doc__ or "")
+    # 2026-10-23 晚：`agent_e/__init__.py` 的 docstring 不再描述 check_formal 的三态
+    # （E 没有那一支了），而 `_NOT_CHECKED_REASONS` 与它的文档说明都在 `_support.py` ——
+    # 判据跟着声明走（导入期断言读的也是那一份 `__doc__`）。
+    found = AE._docstring_not_checked_reasons(SUP.__doc__ or "")
     missing = set(AE._NOT_CHECKED_REASONS) - found
     assert missing == set(), (
-        f"模块 docstring 第 3 条没有覆盖 _NOT_CHECKED_REASONS，缺 {sorted(missing)}；"
+        f"`_support` 的 docstring 第 3 条没有覆盖 _NOT_CHECKED_REASONS，缺 {sorted(missing)}；"
         f"docstring 里读到的是 {sorted(found)}"
     )
     # 判据的非平凡性自校：它必须真的能读出东西（空集会让上面那条断言靠缺失通过）
@@ -960,8 +905,9 @@ def test_docstring_guard_negative_control_four_item_version_goes_red():
     注入后的文本必须与当前 docstring 不同，且替换掉的那一段正是当前实现里的第 3 条。
     """
     import agentflow.agent_e as AE
+    from agentflow.agent_e import _support as SUP
 
-    current = AE.__doc__ or ""
+    current = SUP.__doc__ or ""
     assert AE._docstring_not_checked_reasons(current) >= set(AE._NOT_CHECKED_REASONS), (
         "前置条件不成立：当前 docstring 本身就没过判据 ⇒ 这条负控证明不了任何东西"
     )

@@ -1403,18 +1403,24 @@ def test_the_statement_judgement_belongs_to_B_only(tmp_path):
     assert ok["checked"] is True and ok["decision"] == "合格", ok
 
 
-def test_the_filing_gate_refuses_only_on_too_trivial(tmp_path):
-    """入库口那一道闸：只有「判了 + 判的是太平凡」才拦（其余一律放行）。
+def test_the_filing_gate_lands_on_t0_instead_of_refusing(tmp_path):
+    """入库口那一道闸：判「太平凡」⇒ 落 T0，不再拒收（业主 2026-10-23）。
 
-    六个放行档逐个过一遍：合格 / 判不了 / 没查成 / 不是 B / 不是入库那件工具 / 没秘书。
-    把它们折成"拦或不拦"两种结局是这一格最容易犯的错 —— 那会让"这一格没查成"决定产出入库。
+    改前这一格是"只有『判了 + 判太平凡』才拦"，返回 `ok=False` +
+    `kind=statement_too_trivial`。业主的裁定把收场方式换了：平凡不是"不许进"，
+    是"进哪一档"（T0 = 基础定理或初步结论）。所以这一格现在的返回值是一格读数
+    （`tier="T0"` + `downgraded=True`），而不是拒绝。
+
+    六个放行档逐个过一遍：合格 / 判不了 / 没查成 / 不是 B / 不是入库那件工具 / 没秘书
+    —— 它们一律什么都不加（`None`）。把"加了档位读数"与"拒收"折成同一种结局，
+    是这一格最容易犯的错。
     """
     import types
 
     from agentflow.agent_loop import AgentLoop
 
     def gate(role, secretary, name="own.register_statement"):
-        return AgentLoop._statement_filing_refusal(
+        return AgentLoop._statement_filing_tier(
             types.SimpleNamespace(role=role, secretary=secretary, my_task_id="t-000001"),
             name, {"statement_full": "a+b=b+a"})
 
@@ -1425,11 +1431,10 @@ def test_the_filing_gate_refuses_only_on_too_trivial(tmp_path):
         def judge_statement(self, **kw):
             return self.out
 
-    refused = gate("B", _Sec({"checked": True, "decision": "太平凡", "reason": "两条都答不上"}))
-    assert refused is not None and refused["ok"] is False, refused
-    assert refused["kind"] == "statement_too_trivial", refused
-    assert "太平凡" in refused["error"] and "最接近的那一条" in refused["error"], refused
-    assert refused["secretary"]["decision"] == "太平凡", refused
+    note = gate("B", _Sec({"checked": True, "decision": "太平凡", "reason": "两条都答不上"}))
+    assert note is not None and note["tier"] == "T0", note
+    assert note["downgraded"] is True and note["decision"] == "太平凡", note
+    assert "不" not in note.get("error", ""), "这一格不许再返回拒绝"
     for label, args in (
         ("合格", ("B", _Sec({"checked": True, "decision": "合格"}))),
         ("判不了", ("B", _Sec({"checked": True, "decision": "判不了"}))),
@@ -1445,7 +1450,7 @@ def test_the_filing_gate_refuses_only_on_too_trivial(tmp_path):
 
 
 def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
-    """判断炸了 ⇒ 不拦（fail-open），但必须留痕：秘书台账里要有一行说清这一格没查成。
+    """判断炸了 ⇒ 不加档位、不拦（fail-open），但必须留痕：秘书台账里要有一行。
 
     为什么不是"炸了就拦"：拦下来等于让"没查成"决定产出（三态纪律）；而静默放行又会让
     "秘书这趟根本没工作"永远查不出来。所以走 fail-open + 留痕这一对。
@@ -1464,7 +1469,7 @@ def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
             rows.append(dict(kw))
             return {}
 
-    got = AgentLoop._statement_filing_refusal(
+    got = AgentLoop._statement_filing_tier(
         types.SimpleNamespace(role="B", secretary=_Boom(), my_task_id="t-000001"),
         "own.register_statement", {"statement_full": "a+b=b+a"})
     assert got is None, "判断炸了不该把入库这条路堵死（fail-open）"
@@ -1558,8 +1563,13 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
     assert again["checked"] is True and ok_seam.calls == 1, again
 
 
-def test_the_filing_refusal_says_the_same_statement_will_get_the_same_answer(tmp_path):
-    """拦下来的那句话必须写明原样再交一遍不会有别的结论（真机上一次 run 白烧 20 次调用）。"""
+def test_the_filing_tier_note_points_at_the_upgrade_path(tmp_path):
+    """落 T0 的那一格读数必须指路（判据两条），并说清"平凡不再拒收"。
+
+    判据：把业主 2026-10-23 的裁定落在"模型看得见的那一格"上 —— 平凡 ⇒ 落 T0、
+    照旧收录；想升档就按秘书给的理由补一条判据。没有这一句，模型只会看到
+    `tier=T0` 而不知道下一步该干什么（真机里同一份命题被原样重交 6 次就是这个形态）。
+    """
     import types
 
     from agentflow.agent_loop import AgentLoop
@@ -1569,12 +1579,13 @@ def test_the_filing_refusal_says_the_same_statement_will_get_the_same_answer(tmp
             return {"checked": True, "decision": "太平凡", "reason": "两条判据都答不上",
                     "basis": [], "reused": True}
 
-    got = AgentLoop._statement_filing_refusal(
+    got = AgentLoop._statement_filing_tier(
         types.SimpleNamespace(role="B", secretary=_Sec(), my_task_id="t-1"),
         "own.register_statement", {"statement_full": "x"})
-    assert got is not None and got["kind"] == "statement_too_trivial", got
-    assert "原样再交一次不会有别的结论" in got["error"], got["error"]
-    assert got["secretary"]["reused"] is True, got
+    assert got is not None and got["tier"] == "T0", got
+    assert "T0" in got["note"] and "拦收录" in got["note"], got["note"]
+    assert "后面哪一步会用到它" in got["note"], got["note"]
+    assert got["reason"] == "两条判据都答不上", got
 
 
 # ---------------------------------------------------------------- 封野路（2026-10-19 晚）

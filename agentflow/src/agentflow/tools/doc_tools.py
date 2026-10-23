@@ -2404,6 +2404,15 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
                          "description": "引文的本地位置 {file, page_range|line_range|char_range}"},
         "citation_loc_reason": {"type": "string",
                                 "description": "不给 citation_loc 时那句理由"},
+        # 数值实验定理那两格（业主 2026-10-23，E-1）：与 `papermapping.Row` 同一份口径，
+        # 条件必填（定理类行、且那条命题的证明栏是程序）由读侧判，不在这里进 `required`。
+        "numeric_evidence": {"type": "string",
+                             "description": "这条定理压着的 E 那条穷举读数（exp:NNNNNN）。"
+                                            "证明栏是程序的那几行必填"},
+        "exhaustion_note": {"type": "string",
+                            "description": "E 写的那两块（程序设计思路 / 穷举论证）与运行环境"
+                                           "落在哪一份读数里（相对仓库根，如 "
+                                           "out/experiments/000000/exhaustion.md）"},
     },
     "required": ["kind", "label", "env_no", "ledger_id", "proof_no", "file"],
 }
@@ -2519,7 +2528,9 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
             summary="写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，"
             "并把 \\input 一行放进正文）。先写表、再写正文、最后 paper_compile；"
             "md 与附录由 json 渲染，别手写。有 Lean 产出时每行还要写 lean_file 与 "
-            "lean_target（验它的源码在哪、验的是哪个声明）。",
+            "lean_target（验它的源码在哪、验的是哪个声明）。数值实验定理那一行的证明栏"
+            "写程序的相对路径（相对仓库根），另写 numeric_evidence（E 的 exp 读数）与 "
+            "exhaustion_note（E 那两块读数落在哪）—— 缺任何一块都会拒。",
             params={
                 "type": "object",
                 "properties": {
@@ -2540,6 +2551,9 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
                 "'appendix_state','lean_state','lean','warnings','problems','reason'}；"
                 "state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/"
                 "unknown（没有正文，表没有可对的东西）；"
+                "numeric_evidence / exhaustion_note 是数值实验定理那一行的条件必填："
+                "缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / 正文那一段指不回 E，都会进 "
+                "problems 并让 state 落到 fail（工具随之 ok=False）；"
                 "lean_state ∈ off（没开 Lean，`lean_file` / `lean_target` 允许为空）/ "
                 "on（开关开着且有 Lean 产物 ⇒ 定理类那几行必须写两格）/ "
                 "on_no_artifact（开关开着而一个 Lean 产物都没有，见 warnings）；"

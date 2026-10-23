@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T12:56:26+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3431,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"E 交付（确定性数值实验，判读全部由脚本给出，未过模型）\\n\\n【实验行】experiments 000004（method=numeric，result=supports，evidence_kind=cross_check，exit_code=0，runtime=277.7s）\\n脚本：scripts/g336_semidirect.py，sha256 前 16 位 5877302ee3e0df83；日志：out/experiments/000004.log（含 REPRO_RESULT 行与每步 PROGRESS）；明细：out/g336_semidirect_summary.json\\n复现令：verify.run_experiment(claim=…, claim_key=\\\"conj-000000-n7eq1-invariants\\\", method=\\\"numeric\\\", script_path=\\\"scripts/g336_semidirect.py\\\", timeout=900)\\n（首跑 000003 exit_code=1 已如实记为 inconclusive，两处 bug 修好后才有 000004：①Group.table 是嵌套表而 derived_closure 走扁平索引；②χ 值是 C₆ 里的**指数**不是乘数，乘子须取 pow(3,χ,7)（3 生成 (Z/7)^*）——不然非平凡作用会被算成恒等，这一条复现时最容易踩。）\\n\\n【方法（可复核）】n_7=1 ⇒ Sylow-7 正规，Schur–Zassenhaus 给 G≅C₇⋊_χH，|H|=48。Aut(C₇)=C₆ 交换 ⇒ χ 过 H/H'。脚本对每个显式 48 阶群 H：枚举全部子群，取 K◁H、H'≤K、H/K 循环且阶 m∈{2,3,6}（K=H 即 m=1 平凡 χ），对每个 (K,m) 取生成元定出 χ，构造**显式 336 元素乘法表**，再用暴力算：元素阶分布、|Z(G)|、导出子群阶 |G'|、n₇、可解性。每个构造都与一个独立的闭式预测（由 (H,K,m) 直接推出谱/Z/G'）逐项比对，失配 0 条 —— 两套互相独立的计算一致。\\n\\n【三项读数】\\n(1) n_7=1 的互不同构类数：**下界 68**（136 个构造给出 68 个两两不同的三元组；同构 ⇒ 三元组相同，故 68 是合法下界）。注意：H 只用了 52 个 48 阶同构类中的 **16 个**（5 个交换 + 11 个非交换），因此这只是**子集，不是全枚举**，n_7=1 的总类数本趟**未定**（如实记 unknown）。\\n(2) 被 (元素阶分布,|Z(G)|,|G'|) 两两区分的互不同构类最大个数：**68**（远超猜想要求的 8）。同时 68≥15 顺带支撑猜想的“至少 15 个互不同构的 336 阶群”那一半（这 68 个还全部 n_7=1、全部可解）。\\n(3) 脚本与退出码：scripts/g336_semidirect.py，exit_code=**0**，code_hash=5877302ee3e0df83。\\n\\n【校验与适用范围】136 个构造全部 |G|=336（all_constructed_groups_have_order_336=true）、全部恰好 6 个 7 阶元 ⇒ n₇=1（true）、全部可解（true）。适用范围只有“从这 16 个 H 造得出来的那些 G”；不覆盖其余 36 个 48 阶 H，也不覆盖 n_7=8 的侧。环境里 gapy/GAP **不可用**（ModuleNotFoundError / gap_executable=null），故没有 GAP IsomorphismGroups 复核 —— 但本命题不需要它：三元组相异 ⇒ 不同构，这个方向是确定的；反向（三元组相同是否同构）本趟没判，也不影响结论。\\n\\n【最小见证集（前 8 个三元组就够）】S4×C2 (Z=1, |G'|=84)、(Q8×C6, m=6) (Z=2,|G'|=14)、A4×C4 (m=2) (Z=2,|G'|=28, 谱含 42 阶 48 个)、A4×C4 (m=6) (Z=2,|G'|=28, 无 42 阶)、C2⁴⋊C3 (m=2) 与 (m=6) 各一、D16×C3 (m=3) 与 (m=6) 各一 —— 阶分布各不相同，均见 out/g336_semidirect_summary.json 的 representative_triples。\\n\", \"llm_run_path\": \"D:\\\\Incubator\\\\g336\\\\",
+ "payload_sha256": "c40ea254245aafa16aad728c3153e997a3ee893949ccde166029d3b4192759f9",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000006"
+}

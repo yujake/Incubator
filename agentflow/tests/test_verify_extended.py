@@ -687,7 +687,7 @@ def test_cross_check_claim_with_unclosed_dependency_stays_a_warning(store):
 #   - 太宽：`claim_key='L'` 是 `'Lean4: no goals'` 的子串 ⇒ 一条完全自报的 proof 不报；
 #     名字只出现在一句与结论无关的告警里也算"检查器管过它"。
 #   - 太窄（更危险）：不能绑 `claim_key` —— 生产路径上它与 Lean 声明名可以合法地
-#     不同（`tests/test_agent_e_formal_path.py` 的正控：`claim_key='probe-eq'`、
+#     不同（L 那条路的正控：`claim_key='probe-eq'`、
 #     Lean 声明 `probe_eq`，Lean 标识符不许带连字符）。
 # 新判据绑 `notes` 里那个被检查的声明名（写入点 `agent_e._declared_name_note`），
 # 并要求输出里有绑名的结构化诊断（读法只有 `formalgw.concluded_names` 一处）。
@@ -705,7 +705,8 @@ def _proof_row(store, eid: str, *, claim_key: str, verifier_output: str, notes: 
                 result="supports", negation_kind="not_proved")
 
 
-#: `agent_e._record_formal` 真写出来的那一段（形态与分词都照它）。
+#: 历史 formal 行里那一段的真实形态（写入点曾是 `agent_e/core.py` 里的那条 formal
+#: 路径；2026-10-23 晚它摘掉之后，同样的形态由 L 的 `formal.record` 写，读法不变）。
 _NOTES_PROBE = ("[formal] 检查器状态 'verified'（本层受控理由 verified）；"
                 "声明名 probe_eq；脚本 proofs/probe_eq.lean（sha256 前 16 位 deadbeef）；"
                 "imports=[]")

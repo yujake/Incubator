@@ -43,9 +43,9 @@
 :data:`LEAN_ONLY_ROLES` 是那份名单（今天只有 `L`）。E 不在这里：E 的大部分本事
 （数值实验、查询、登记）与 Lean 无关，开关只改它那一面的一套文案 —— 那条路由
 `specs/e.py` 的改写表承担，与本模块无关。
-2026-10-22 晚裁定之后 E 的行为面也不再受本模块影响：它的 Lean 侧写死关闭
-（`agent_e._support.E_LEAN_SIDE_HARD_OFF`，受控拒绝码 `formal_moved_to_l`），
-两档下逐字相同 —— 本模块只管 `L` 的存在性，以及 E 那份文案里"指向谁"的措辞。
+2026-10-23 晚裁定（「E 侧与 Lean 相关的工具和动作都该清干净」）之后 E 的这一面
+已经不存在了：它的动作表没有 `check_formal`、`run_experiment(method='formal')`
+以理由码 `formal_not_in_e` 拒绝 —— 本模块只管 `L` 的存在性。
 """
 from __future__ import annotations
 

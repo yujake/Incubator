@@ -369,93 +369,62 @@ def test_a_false_proposition_must_be_failed_not_verified(bad_run: dict) -> None:
 
 # ============================================================ 6. E 未被削弱
 def test_e_is_not_weakened_by_the_copy(tmp_path: pathlib.Path) -> None:
-    """E 的形式化动作与桥接层实现都还在，只是不再作为工具露给 E/F/G。
+    """E 的实验面原样，而它的 Lean 侧已经整条退场（2026-10-23 晚裁定）。
 
-    2026-10-22 晚业主裁定：「E 的 Lean 侧写死关闭（代码不删，等 L 被证实后再删）」。
-    据此本判据的口径改过一次（改前它断言 `verify.check_formal` 的 roles 仍是
-    `("E","F","G")`，而那个期望现在是错的）：
+    这一条改过一次口径（改前断言 E 的动作表五格 + `verify.check_formal` 的 `roles=()`）。
+    裁定（逐字「E 侧与 Lean 相关的工具和动作都该清干净」）之后那个中间态也没了：
 
-    - 桥接层真身仍在：`VT.check_formal` 这个函数实体、`AgentE.check_formal`
-      这个方法、E 的动作表五格，一个字都不许少（L 的 `_CheckFormalL` 就是继承它）；
-    - 但它不再挂在任何角色的工具面上（`roles=()`）：形式化入口归 L 的
-      `formal.*`，E/F/G 的工具面里不该再出现它 —— 这是权限面的收窄，不是缺失。
+    - 桥接层真身仍在：`VT.check_formal` 这个函数实体还在（L 的 `_CheckFormalL` 经
+      `agent_e/check_formal.py::_CheckFormal` 调到它）；
+    - 但工具那一件整条删除了（不是 `roles=()`）：注册表里没有 `verify.check_formal`；
+    - E 的动作表四格（`check_formal` 不在其中），`AgentE` 上没有 `check_formal` 方法；
+    - E 的实验面一件不少（`run_experiment` / `run_script_experiment` / `evidence_for` /
+      `list_experiments`），`verify.run_experiment` 仍在它工具面上。
 
-    改前红（两个方向都要能说话）：从 E 的动作表里删一格、删掉 `VT.check_formal` 的
-    函数实体、或者把 `formal.*` 漏进 E 的工具面 ⇒ 任一条红。反过来，谁把
-    `verify.check_formal` 的 roles 改回 `("E","F","G")`，"不再露出"那一条也会红
-    （这一条现在守的是收窄之后的样子，不是收窄之前的样子）。
-
-    最后一段真的跑 E 的既有判据（`tests/test_lean_switch.py`：开关轴上的六处落点），
-    证明"复制"没有以"改 E"为代价。
+    改前红（两个方向都要能说话）：多回一格动作、把 `verify.check_formal` 装回注册表、
+    或者把 `formal.*` 漏进 E 的工具面 ⇒ 任一条红；反过来，谁把 E 的实验面削掉一格，
+    "E 没被削弱"那几条也会红。
     """
     from agentflow.agent_e import AgentE
     from agentflow.specs import e as ESPEC
+    from agentflow.store import Store
     from agentflow.tools import build_registry
     from agentflow.tools import verify_tools as VT
 
-    # ---- E 的动作表原样（L 的动作在 L 名下，不许搬走 E 的）
+    # ---- E 的声明面：四格动作，没有 check_formal
     e_actions = tuple(s.action for s in C.CAPABILITIES["E"])
-    assert e_actions == ("run_experiment", "check_formal", "evidence_for",
+    assert e_actions == ("run_experiment", "evidence_for",
                          "list_experiments", "run_script_experiment"), e_actions
-    for name in ("run_experiment", "check_formal"):
-        assert callable(getattr(AgentE, name, None)), f"AgentE.{name} 不见了"
-    assert ESPEC.SPEC.summonable is True and tuple(ESPEC.SPEC.edges) == ("B", "D"), ESPEC.SPEC
+    assert not hasattr(AgentE, "check_formal"), "AgentE 上还有 check_formal 方法"
+    assert ESPEC.SPEC.summonable is True and tuple(ESPEC.SPEC.edges) == ("B", "D", "V"), ESPEC.SPEC
 
-    # ---- 桥接层真身仍在（函数实体 + 工具声明的两根轴），只是 roles 收成 ()
+    # ---- 桥接层真身仍在（函数实体），而工具那一件整条删除
     assert callable(VT.check_formal), "VT.check_formal 的函数实体不见了（那是桥接层真身）"
-    spec = next(s for s in VT.__dict__.values()
-                if getattr(getattr(s, "__tool_spec__", None), "name", "") == "verify.check_formal")
-    tool = spec.__tool_spec__
-    assert tuple(tool.roles) == (), (
-        f"verify.check_formal 又挂回角色了：{tool.roles}（2026-10-22 晚裁定：E 的 Lean 侧写死关闭，"
-        "形式化入口归 L 的 formal.*）")
-    assert tool.side_effect == "read" and tool.external == "exec", (tool.side_effect, tool.external)
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+    reg = build_registry(store=st, workspace_root=str(ws)).registry
+    assert "verify.check_formal" not in set(reg.names()), (
+        "`verify.check_formal` 又装回注册表了（裁定要的是整条删掉，不是 roles=()）")
+    assert "formal.check_formal" in set(reg.names()), "L 的形式化入口不见了"
 
-    # ---- 工具面：E 拿不到桥接层，也拿不到 L 的 formal.*
-    reg = build_registry().registry
-    e_face = {s.name for s in reg.for_role("E")}
-    assert "verify.check_formal" not in e_face, (
-        "E 的工具面里又出现了 verify.check_formal（E 的 Lean 侧写死关闭之后它不该露出）")
-    for role in ("F", "G"):
-        face = {s.name for s in reg.for_role(role)}
-        assert "verify.check_formal" not in face, f"{role} 的工具面里还有 verify.check_formal"
-    assert not {"formal.formalize", "formal.check_formal", "formal.record"} & e_face, (
-        "L 的工具漏进了 E 的工具面（两个角色的入口差别必须看得见）")
+    # ---- E 的实验面一件不少
+    face = {spec.name for spec in reg.for_role("E")}
+    for want in ("verify.run_experiment", "verify.code_hash", "verify.evidence_for"):
+        assert want in face, f"E 的工具面少了 {want}：{sorted(face)}"
+    assert not any(n.startswith("formal.") for n in face), f"formal.* 漏进了 E 的工具面：{sorted(face)}"
 
-    # ---- E 的 Lean 开关改写表还在、且左边仍在"开着时"的提示词里逐字出现（反真空）
-    #
-    # 判据必须看十一个角色拼起来的那份文本：E 的表里有几条左边只出现在别的角色的
-    # 提示词里（伙伴表那一行、M 的"数值 / 形式化 E…"那一档）—— 只看 E 那一格会把
-    # 它们误报成"失效"（那正是 `tests/test_lean_switch.py` 用 `"\n".join(...)` 的理由）。
-    reg2 = build_registry().registry
-    roles = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
-    on_text = "\n".join(
-        AP.system_prompt(role, registry=reg2, toolchain_facts=AP.toolchain_facts_text(),
-                         toolchain_formal=AP.toolchain_formal_text())
-        for role in roles)
-    missing = [old for old, _new in ESPEC.NO_LEAN_REPLACEMENTS if old not in on_text]
-    assert missing == [], f"E 的改写表有条目失效了：{missing[:2]}"
-    for mark in ESPEC.NO_LEAN_DROP_LINE_MARKERS:
-        assert mark in on_text, f"E 的删除标记失效了：{mark!r}"
-    for start, keep in ESPEC.NO_LEAN_DROP_BLOCKS:
-        assert start in on_text and keep in on_text, (start, keep)
-
-    # ---- 真的跑 E 的既有判据（子进程：不受本文件的 monkeypatch 影响）
-    root = pathlib.Path(__file__).resolve().parents[1]
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(root / "src")
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONUTF8"] = "1"
-    proc = subprocess.run([sys.executable, "-m", "pytest", "tests/test_lean_switch.py",
+    here = pathlib.Path(__file__).resolve().parent
+    proc = subprocess.run([sys.executable, "-m", "pytest", str(here / "test_lean_switch.py"),
                            "-q", "--no-header", "-p", "no:cacheprovider"],
-                          cwd=str(root), env=env, capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", timeout=900)
-    assert proc.returncode == 0, (
-        "E 的 Lean 开关判据不再全绿（复制把 E 弄坏了）：\n"
-        + (proc.stdout or "")[-4000:] + "\n" + (proc.stderr or "")[-2000:])
+                          cwd=str(here.parent), capture_output=True, text=True,
+                          env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8",
+                               "PYTHONUTF8": "1"})
+    tail = "\n".join((proc.stdout or proc.stderr or "").splitlines()[-12:])
+    assert proc.returncode == 0, f"test_lean_switch.py 红了（退出码 {proc.returncode}）：\n{tail}"
 
 
-# ============================================================ 7. 反真空
 def _unknown_from_the_gate(data: dict) -> bool:
     """这一份结论是不是"自检闸拦下来"的那一档（判据 4 的 unknown 档）。
 

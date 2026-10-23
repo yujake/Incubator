@@ -1,0 +1,273 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "experiment_id": "000000",
+      "claim": "R(3,4)=9：K_9 的任意 2-着色必含红 K_3 或蓝 K_4（上界），且 K_8 存在同时避开红 K_3 与蓝 K_4 的 2-着色（下界，见证＝Möbius 梯 M_8 作红图）。",
+      "claim_key": "R34_eq_9",
+      "method": "exhaustive_search",
+      "evidence_kind": "cross_check",
+      "result": "supports",
+      "negation_kind": "not_proved",
+      "code_path": "code/r34_check.py",
+      "code_hash": "915a24d9f9d1d955",
+      "params": {},
+      "observations": {
+        "bound": {
+          "upper": "R(3,4) <= 9: no 2-colouring of K_9 avoids both a red K_3 and a blue K_4",
+          "lower": "R(3,4) >= 9: explicit 2-colouring of K_8 avoiding red K_3 and blue K_4",
+          "search_bound": {
+            "n": 9,
+            "raw_colourings": 68719476736,
+            "nodes_visited": 69827,
+            "exhaustive": true,
+            "quotient": "symmetry breaking: vertex-0 red neighbourhood is a prefix {1..d}; inside the blue class B the red neighbourhood of vertex 1 is a prefix of B",
+            "algorithm": "DFS over lexicographically ordered edges, complete"
+          }
+        },
+        "strategy": "backtracking + incremental red-triangle pruning + blue-K4 completion pruning + prefix symmetry breaking (iso rejection quotient)",
+        "progress": [
+          {
+            "n": 6,
+            "nodes": 653,
+            "seconds": 0.0015,
+            "solutions_found": 150,
+            "red_triangle_prunes": 179,
+            "blue_k4_prunes": 139,
+            "complete": true
+          },
+          {
+            "n": 7,
+            "nodes": 3094,
+            "seconds": 0.0039,
+            "solutions_found": 238,
+            "red_triangle_prunes": 1420,
+            "blue_k4_prunes": 1139,
+            "complete": true
+          },
+          {
+            "n": 8,
+            "nodes": 14583,
+            "seconds": 0.024,
+            "solutions_found": 96,
+            "red_triangle_prunes": 8097,
+            "blue_k4_prunes": 6203,
+            "complete": true
+          },
+          {
+            "n": 9,
+            "nodes": 69827,
+            "seconds": 0.125,
+            "solutions_found": 0,
+            "red_triangle_prunes": 40642,
+            "blue_k4_prunes": 29053,
+            "complete": true
+          }
+        ],
+        "conclusion_source": "line",
+        "data": {
+          "claim": "R(3,4) = 9",
+          "upper_bound_proved_by_search": true,
+          "lower_bound_witness": {
+            "graph": "Moebius ladder M_8 = C_8 + 4 diameters, taken as the RED graph; blue = complement",
+            "n": 8,
+            "red_edge_count": 12,
+            "blue_edge_count": 16,
+            "red_degree_per_vertex": [
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3
+            ],
+            "red_edges": [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                4
+              ],
+              [
+                0,
+                7
+              ],
+              [
+                1,
+                2
+              ],
+              [
+                1,
+                5
+              ],
+              [
+                2,
+                3
+              ],
+              [
+                2,
+                6
+              ],
+              [
+                3,
+                4
+              ],
+              [
+                3,
+                7
+              ],
+              [
+                4,
+                5
+              ],
+              [
+                5,
+                6
+              ],
+              [
+                6,
+                7
+              ]
+            ],
+            "red_triangle_count": 0,
+            "blue_K4_count": 0,
+            "witness_valid": true
+          },
+          "K_8_witness_also_found_by_search": true,
+          "definitions": {
+            "nodes": "DFS nodes entered (root + one per edge decision in the pruned tree)",
+            "raw_colourings": "2^(C(n,2))",
+            "solutions_found": "leaves reached modulo symmetry breaking (not labelled count)",
+            "red_triangle_prunes": "branches killed by the red-K_3 check",
+            "blue_k4_prunes": "branches killed by the blue-K_4 check",
+            "red_triangle_count": "number of red K_3 in the K_8 witness",
+            "blue_K4_count": "number of blue K_4 in the K_8 witness"
+          },
+          "note_n6_n8_mode": "for n<=8 the DFS stops at the first witness, so its nodes count is the cost of reaching a witness, not the full tree; n=9 is the only exhaustive traversal",
+          "all_runs_complete": true
+        },
+        "toy_example": {
+          "declared": {
+            "auto": true,
+            "source": "bound.search_bound.n",
+            "n": 9
+          },
+          "checked": true,
+          "within_limit": false,
+          "n": 9,
+          "limit": 8,
+          "executed": true,
+          "exit_code": 0,
+          "script_path": "code/r34_check.py",
+          "script_sha256": "915a24d9f9d1d955",
+          "why": "由规模自动判定：n=9 超过玩具例子的上限 8（出处 bound.search_bound.n）⇒ 这一条不是玩具例子（它是一份扫描清单：读数是'扫到哪儿'，不是'这一个数人能手算出来对不上'）"
+        }
+      },
+      "exit_code": 0,
+      "runtime_sec": 0.282,
+      "artifact_paths": [
+        "out/experiments/000000.log"
+      ],
+      "counterexample": null,
+      "verifier_output": "",
+      "verifier_subject_key": "",
+      "certificate": {
+        "kind": "enumeration_bound",
+        "upper_bound": "K_9 全部 2^36 个边着色在回溯 DFS 下被完整覆盖且无一存活（无红三角形、无蓝 K_4 的着色在 n=9 不存在）",
+        "lower_bound_witness": "n=8: 红图 = C_8 (0-1-...-7-0) + 四条对径边 {0-4,1-5,2-6,3-7}（Möbius 梯 M_8），蓝图为其补图；脚本内逐三角形/逐 4-集验证无红 K_3、无蓝 K_4"
+      },
+      "search_bound": {
+        "n_upper": 9,
+        "raw_space": "2^36 = 68719476736",
+        "algorithm": "lexicographic edge-order backtracking DFS with sound pruning: (i) red edge rejected if it closes a red triangle; (ii) blue edge rejected if its blue-neighbourhood already contains a blue edge (blue K_4 completion); (iii) partial-blue-K4 reachability pruning used only when sound (all-blue 4-set detected at completion)",
+        "completeness": "DFS assigns every edge to red/blue exactly once and only prunes on definite contradictions ⇒ covers the full 2^36 space",
+        "scaling_range": "n = 6,7,8,9 node counts and wall time reported as scaling reading"
+      },
+      "for_question_id": null,
+      "notes": "[run] exit_code=0，runtime=0.282s，脚本 code/r34_check.py（sha256 前 16 位 915a24d9f9d1d955）",
+      "created_at": "2026-10-23T13:26:04+08:00",
+      "created_by": "agent-E"
+    },
+    {
+      "experiment_id": "000001",
+      "claim": "K_8 上同时不含红 K_3 与蓝 K_4 的二着色，在 S_8 下恰有 3 个同构类（确定性全枚举 + 轨道规范化）",
+      "claim_key": "conjecture:000000",
+      "method": "exhaustive_search",
+      "evidence_kind": "heuristic",
+      "result": "inconclusive",
+      "negation_kind": "no_local_evidence",
+      "code_path": "code/r34_orbits.py",
+      "code_hash": "b20b5063a2e6eaab",
+      "params": {},
+      "observations": {
+        "conclusion_source": "missing"
+      },
+      "exit_code": 0,
+      "runtime_sec": 6.844,
+      "artifact_paths": [
+        "out/experiments/000001.log"
+      ],
+      "counterexample": null,
+      "verifier_output": "",
+      "verifier_subject_key": "",
+      "certificate": {
+        "kind": "enumeration_bound",
+        "what": "all 2^28 labeled 2-colorings of E(K_8); DFS over the 28 edges in lexicographic order with red-triangle and blue-K4 incremental pruning (no symmetry pruning); leaves = valid colorings F; orbits of F under S_8 by min canonical form over all 40320 vertex permutations",
+        "per_orbit": "representative red edge set + red/blue edge counts + red degree sequence",
+        "expected_orbit_count": 3,
+        "note": "判否只用确定性枚举读数：轨道数 != 3 即 conjecture:000000 被否"
+      },
+      "search_bound": {
+        "B": "all 2^28 = 268435456 labeled 2-colorings of E(K_8)",
+        "algorithm": "depth-first search over edges (i<j) in lexicographic order, branch red/blue, prune on red K_3 and blue K_4 appearing incrementally; no symmetry breaking so the leaf set is the complete solution set F",
+        "orbit_quotient": "exact, via canonical form min over all 8! = 40320 permutations of the red edge set (label-free normal form)"
+      },
+      "for_question_id": null,
+      "notes": "[run] exit_code=0，runtime=6.844s，脚本 code/r34_orbits.py（sha256 前 16 位 b20b5063a2e6eaab）\n脚本未给出结构化结论（stdout 里既没有 `REPRO_RESULT:` 行，也没有以 `REPRO_RESULT` 为键的 JSON 对象）\n[stdout] { \"n\": 8, \"declared_search_space\": 268435456, \"search_space\": 268435456, \"pruning\": \"incremental red-triangle and blue-K4 pruning, no symmetry pruning\", \"dfs_nodes\": 1420332, \"valid_labeled_colorings_F\": 17640, \"orbits\": 3, \"leaves_failing_recheck\": 0, \"mobius_ladder_M8_present\": true, \"orbit_repre…",
+      "created_at": "2026-10-23T13:43:07+08:00",
+      "created_by": "agent-E"
+    },
+    {
+      "experiment_id": "000002",
+      "claim": "K_8 上同时不含红 K_3 与蓝 K_4 的二着色，在 S_8 下恰有 3 个同构类（确定性全枚举 2^28 + S_8 轨道并查集）",
+      "claim_key": "conjecture:000000",
+      "method": "exhaustive_search",
+      "evidence_kind": "cross_check",
+      "result": "supports",
+      "negation_kind": "not_proved",
+      "code_path": "code/r34_orbits.py",
+      "code_hash": "e43322adde20ec7a",
+      "params": {},
+      "observations": {
+        "conclusion_source": "line"
+      },
+      "exit_code": 0,
+      "runtime_sec": 7.328,
+      "artifact_paths": [
+        "out/experiments/000002.log"
+      ],
+      "counterexample": null,
+      "verifier_output": "",
+      "verifier_subject_key": "",
+      "certificate": {
+        "kind": "enumeration_bound",
+        "what": "E(K_8) 的全部 2^28 = 268435456 个二着色；按字典序逐边 DFS（红三角形剪枝 + 蓝 K_4 剪枝，不做对称性破除），叶子=合法着色集 F；用 (0 1)…(6 7) 七个相邻对换生成元在 F 上做并查集求 S_8 轨道",
+        "expected_orbit_count": 3,
+        "per_orbit": "代表红边集（min mask）+ 红边数 + 红度序列 + 轨道标号大小"
+      },
+      "search_bound": {
+        "space": "2^28 = 268435456 个标号二着色（全部，无抽样）",
+        "algorithm": "逐边 DFS + 增量红 K_3/蓝 K_4 剪枝；叶子逐条独立复检（红 K_3 数、蓝 K_4 数、alpha）；轨道用 S_8 相邻对换生成元的闭包并查集",
+        "caveat": "『解数』是标号着色计数 17640，轨道数才是猜想断言的那一个；读数只覆盖 n=8"
+      },
+      "for_question_id": null,
+      "notes": "[run] exit_code=0，runtime=7.328s，脚本 code/r34_orbits.py（sha256 前 16 位 e43322adde20ec7a）\n脚本把同一份 REPRO_RESULT 打印了 2 次（内容逐字相同）⇒ 认这一份\n这一条只给了结论、没有留下界/策略/成本曲线（`REPRO_RESULT` 里没有 `bound`/`strategy`/`scaling`）⇒ 「这一轮搜到哪儿、比上一轮快了多少」不可比较。下一次给脚本补上这三样（`draft/37` §133）；不是把结论改坏，是把进展留下来\n[progress] 同 claim 历史 1 条（最近一条 000001：exit=0，6.8s，result=inconclusive）；界：上次 {'B': 'all 2^28 = 268435456 labeled 2-colorings of E(K_8)', 'algorithm': 'depth-first search over edges (i<j) in lexicographic order, branch red/blue, prune on red K_3 and blue K_4 appearing incrementally; no symmetry breaking so the leaf set is the complete solution set F', 'orbit_quotient': 'exact, via canonical form min over all 8! = 40320 permutations of the red edge set (label-free normal form)'} → 这次 (没记)；耗时：上次 6.8s → 这次 7.3s；这次与上次**同形**（界/策略/耗时都没有推进）⇒ 想要新信息就得换枚举策略（规范化、去同构、对称性剪枝、增量+回溯、SAT/ILP 编码、随机+证书）或者把界说清（`bound`）——重复同一条超时脚本不算进展",
+      "created_at": "2026-10-23T13:43:26+08:00",
+      "created_by": "agent-E"
+    }
+  ]
+}

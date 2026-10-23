@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T13:38:18+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3957,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"两次点名检索都已入队并跑完，outcome 均为 ok；R(3,4)=9 的两条经典出处已登记并逐条核过命中，B 已整理出带逐字引文的关系行。\\n\\n【search_requests 终局】\\n- r-000001 · topic=\\\"Ramsey number R(3,4)\\\" · mode=topical · source=openalex(ok, 2 条) · outcome=ok · result_lit_ids=[000000, 000001]。其中 lit:000000《The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph》(2022, DOI 10.24036/rmj.v1i1.1) 相关且全文在盘；lit:000001《Parallel evaluation of ASP programs:techniques and implementation》(2011) 是这条自动流程的误命中，与 R(3,4) 无关 —— 如实记在这里：这一条没进有效结果，不是「这篇文献不存在」。\\n- r-000002 · topic=\\\"Greenwood Gleason Ramsey numbers\\\" · mode=precise · source=openalex(ok, 10 条) · outcome=ok · result_lit_ids=[000002…000011, 000013]。这 10 篇多为 Ramsey 理论邻近主题（multicolored lower bounds、circuits、difference/Issai numbers、isomorphic factorizations、N(3,3,…3;2) 等），不是 R(3,4)=9 的经典出处；lit:000002 用了 Greenwood–Gleason 的有限域方法，可当旁证；再登记进这条请求的是 lit:000013。\\n\\n【点名要求的经典出处：命中校验（R1b 结论）】\\n- lit:000012《Combinatorial Relations and Chromatic Graphs》1955, DOI 10.4153/cjm-1955-001-4（Canadian J. Math. 7）—— matched=match：题名/年份/DOI 与点名的 Greenwood–Gleason 1955 完全对上。来源：crossref（openalex 四次都没捞出 1955 原篇，换源才命中）。\\n  缺口：该记录无 pdf_url，**全文不在盘**，故这一行只能当元数据/出处标注，不能产 quote。作者字段空（crossref 这条未返回 authors），我已把这一差异记在 note 里。\\n- lit:000013《Small Ramsey Numbers》, DOI 10.37236/21, The Electronic Journal of Combinatorics（Dynamic Survey DS1）—— matched=match：题名/DOI 与点名的 Radziszowski 综述对上。年份口径要说明：year=2011 是 Crossref 记录年，DS1 是持续更新的综述，不能读成「2011 年定稿」。\\n  已下载全文（downloads/radziszowski-small-ramsey-numbers-ds1.pdf, 585821 B, sha256 9519a676…）并抽成 library/000013.txt（149 页，带 ===== page N ===== 分页），B 的引文页码即按此口径。\\n\\n【交给 B 之后的实际产出（我核过盘上确有这三行，不是听自报）】\\nrelations 表里 lit:000013 名下三行，quote_verified=true：\\n- rel:000016「R(3,4)=9 由 Greenwood–Gleason 1955 首次确立」，p.7，逐字引文 \\\"Greenwood and Gleason [GG] established the initial values R (3, 4) = 9, R (3, 5) = 14 and R (4, 4) = 18 in 1955.\\\"\\n- rel:000017「R(3,4) 的临界图恰有 3 个（DS1 第 7 页脚注 (d)）」，p.7\\n- rel:000018「R(3,4) 是经典二色 Ramsey 数 R(k,l)=R(k,l;2) 在 (k,l)=(3,4) 的",
+ "payload_sha256": "132c72b923ad4a31a43889bfe9caf76a1ddda2a9bc71b6a911680e030a4ed1b3",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000002"
+}

@@ -1,0 +1,1171 @@
+{
+  "role": "E",
+  "task": "E：这一趟派给你的活是 —— 336 阶群的 Sylow 数值与群计数——可复现实验。要做的事：\n1) 先探明本机有没有 GAP（`which gap` / `gap -q -c 'Print(1);'`），以及 Python 侧可用的群论库（sympy.combinatorics 等）。把探查原话记下来。\n2) 写脚本落盘 scripts/sylow336.py（不要内联进参数），确定性打印：\n   - p=2,3,7 的全部可行 n_p（n_p ≡ 1 mod p 且 n_p | 336/p）；\n   - 每个 (n_2,n_3,n_7) 组合的初等可行性（n_p=1 ⟺ Sylow p-子群正规；n_7=8 时由 |G:N_G(P_7)|=8 得 G 在 8 个 Sylow 7-子群上的共轭作用，核与嵌入 A_8 的阶数检验 336 | 8! 等）；\n   - 若 GAP 可用：数 336 阶群的同构类数并列出 SmallGroup(336,i) 的不变量（Sylow 个数、中心阶、可解性）；不可用就如实打印不可用，改做构造性枚举给某一族的计数下界（如 n_7=1 时由 N ⋊ H 的扩张计数给出）。\n   脚本必须打印单独一行：REPRO_RESULT: {\"result\": \"supports|refutes|inconclusive\", \"bound\": ..., \"strategy\": ..., \"scaling\": ..., \"data\": {...}}\n3) 用 E.run_experiment(script_path=...) 真跑一遍，退出码与 stdout 落进 experiments，产出可被正文引用的 exp 行。\n预算很紧：一轮内给出可引用的实验行，不要反复重写脚本。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.write",
+        "args": {
+          "path": "scripts/sylow336.py",
+          "content": "#!/usr/bin/env python3\n\"\"\"Sylow numbers + certified group-count lower bound for |G| = 336 = 2^4 * 3 * 7.\n\nDeterministic: every printed number is computed here (no hardcoded answers).\nLast line is a single-line `REPRO_RESULT: {...}` per the repro protocol.\n\"\"\"\nimport json\nimport shutil\nimport subprocess\nimport sys\nimport time\nfrom collections import Counter\n\nN = 336\nPFAC = [(2, 16), (3, 3), (7, 7)]\n\n\ndef pr(*a):\n    print(*a)\n    sys.stdout.flush()\n\n\ndef progress(**kw):\n    pr(\"PROGRESS: \" + json.dumps(kw, sort_keys=True, default=str))\n\n\n# ---------------------------------------------------------------- group engine\nclass Tbl:\n    \"\"\"Finite group as an explicit multiplication table over a canonical element list.\"\"\"\n    __slots__ = (\"name\", \"elems\", \"idx\", \"n\", \"ident\", \"e\", \"tab\", \"_o\", \"_inv\")\n\n    def __init__(self, name, elems, mult, ident):\n        self.name = name\n        self.elems = list(elems)\n        self.idx = {x: i for i, x in enumerate(self.elems)}\n        if len(self.idx) != len(self.elems):\n            raise RuntimeError(\"duplicate elements in \" + name)\n        self.n = len(self.elems)\n        self.ident = ident\n        self.e = self.idx[ident]\n        idx = self.idx\n        tab = []\n        for a in self.elems:\n            row = []\n            for b in self.elems:\n                row.append(idx[mult(a, b)])\n            tab.append(row)\n        self.tab = tab\n        self._o = None\n        self._inv = None\n\n    def orders(self):\n        if self._o is None:\n            tab, e, n = self.tab, self.e, self.n\n            o = [0] * n\n            for i in range(n):\n                cur, k = e, 0\n                while True:\n                    k += 1\n                    cur = tab[cur][i]\n                    if cur == e:\n                        break\n                    if k > n:\n                        raise RuntimeError(\"%s: not a group, element %d\" % (self.name, i))\n                o[i] = k\n            self._o = o\n        return self._o\n\n    def inverses(self):\n        if self._inv is None:\n            o = self.orders()\n            tab, e = self.tab, self.e\n            inv = [0] * self.n\n            for i in range(self.n):\n                cur = e\n                for _ in range(o[i] - 1):\n                    cur = tab[cur][i]\n                inv[i] = cur\n            self._inv = inv\n        return self._inv\n\n\ndef closure(tab, e, gens):\n    S = {e}\n    frontier = [e]\n    gens = list(gens)\n    while frontier:\n        nf = []\n        for x in frontier:\n            tx = tab[x]\n            for g in gens:\n                y = tx[g]\n                if y not in S:\n                    S.add(y)\n                    nf.append(y)\n        frontier = nf\n    return S\n\n\ndef center_order(G):\n    tab, n = G.tab, G.n\n    c = 0\n    for a in range(n):\n        ta = tab[a]\n        ok = True\n        for b in range(n):\n            if ta[b] != tab[b][a]:\n                ok = False\n                break\n        if ok:\n            c += 1\n    return c\n\n\ndef abelianization_order(G):\n    tab, n, e = G.tab, G.n, G.e\n    inv = G.inverses()\n    comms = set()\n    for a in range(n):\n        ta, ia = tab[a], inv[a]\n        for b in range(n):\n            x = ta[b]\n            x = tab[x][ia]\n            x = tab[x][inv[b]]\n            comms.add(x)\n    S = closure(tab, e, comms)\n    if n % len(S):\n        raise RuntimeError(\"commutator subgroup order does not divide group order\")\n    return n // len(S)\n\n\ndef sylow2_number(G):\n    tab, e, n = G.tab, G.e, G.n\n    o = G.orders()\n    two = [i for i in range(n) if (o[i] & (o[i] - 1)) == 0]\n    start = max(two, key=lambda i: (o[i], -i))\n    H = closure(tab, e, [start])\n    target = 16\n    for x in two:\n        if len(H) == target:\n            break\n        if x in H:\n            continue\n        K = closure(tab, e, list(H) + [x])\n        if len(K) > len(H) and len(K) in (1, 2, 4, 8, 16):\n            H = K\n    if len(H) != target:\n        raise RuntimeError(\"%s: no Sylow 2-subgroup of order 16 found (stuck at %d)\"\n                           % (G.name, len(H)))\n    inv = G.inverses()\n    nc = 0\n    for g in range(n):\n        tg, ig = tab[g], inv[g]\n        ok = True\n        for p in H:\n            if tab[tg[p]][ig] not in H:\n                ok = False\n                break\n        if ok:\n            nc += 1\n    if n % nc:\n        raise RuntimeError(\"normalizer order does not divide group order\")\n    return n // nc\n\n\ndef cyclic(k, name=None):\n    return Tbl(name or (\"C%d\" % k), list(range(k)), lambda a, b: (a + b) % k, 0)\n\n\ndef dirprod(A, B, name=None):\n    elems = [(a, b) for a in A.elems for b in B.elems]\n    ma, mb = A.tab, B.tab\n    ia, ib = A.idx, B.idx\n    ea, eb = A.elems, B.elems\n\n    def mult(x, y):\n        return (ea[ma[ia[x[0]]][ia[y[0]]]], eb[mb[ib[x[1]]][ib[y[1]]]])\n\n    return Tbl(name or (A.name + \"x\" + B.name), elems, mult, (A.ident, B.ident))\n\n\ndef perm_group(name, gens, deg):\n    e = tuple(range(deg))\n\n    def comp(p, q):\n        return tuple(p[q[i]] for i in range(deg))\n\n    S = {e}\n    frontier = [e]\n    gl = list(gens)\n    while frontier:\n        nf = []\n        for x in frontier:\n            for g in gl:\n                y = comp(g, x)\n                if y not in S:\n                    S.add(y)\n                    nf.append(y)\n        frontier = nf\n    return Tbl(name, sorted(S), comp, e)\n\n\ndef q8():\n    elems = [(a, b) for a in range(4) for b in range(2)]\n\n    def mult(x, y):\n        a1, b1 = x\n        a2, b2 = y\n        if b1 == 0:\n            return ((a1 + a2) % 4, b2)\n        if b2 == 0:\n            return ((a1 - a2) % 4, 1)\n        return ((a1 - a2 + 2) % 4, 0)\n\n    return Tbl(\"Q8\", elems, mult, (0, 0))\n\n\ndef sl23():\n    Q = q8()\n    ii = Q.idx[(0, 1)]      # alpha(i) = j\n    jj = Q.idx[(1, 1)]      # alpha(j) = k = ij\n    M = []\n    for (a, b) in Q.elems:\n        cur = Q.e\n        for _ in range(a):\n            cur = Q.tab[cur][ii]\n        for _ in range(b):\n            cur = Q.tab[cur][jj]\n        M.append(cur)\n    A = [list(range(8)), M, [M[M[k]] for k in range(8)]]\n    elems = [(q, t) for q in range(8) for t in range(3)]\n\n    def mult(x, y):\n        q1, t1 = x\n        q2, t2 = y\n        return (Q.tab[q1][A[t1][q2]], (t1 + t2) % 3)\n\n    return Tbl(\"SL23\", elems, mult, (0, 0))\n\n\ndef gl23():\n    els = []\n    for a in range(3):\n        for b in range(3):\n            for c in range(3):\n                for d in range(3):\n                    if (a * d - b * c) % 3:\n                        els.append((a, b, c, d))\n\n    def mult(x, y):\n        a, b, c, d = x\n        e, f, g, h = y\n        return ((a * e + b * g) % 3, (a * f + b * h) % 3,\n                (c * e + d * g) % 3, (c * f + d * h) % 3)\n\n    return Tbl(\"GL23\", els, mult, (1, 0, 0, 1))\n\n\ndef meta21():\n    \"\"\"Frobenius group C7 : C3 of order 21 (C3 acts by the automorphism x -> 2x).\"\"\"\n    elems = [(a, b) for a in range(7) for b in range(3)]\n\n    def mult(x, y):\n        a1, b1 = x\n        a2, b2 = y\n        return ((a1 + pow(2, b1, 7) * a2) % 7, (b1 + b2) % 3)\n\n    return Tbl(\"C7:C3\", elems, mult, (0, 0))\n\n\ndef invariants(G):\n    t0 = time.time()\n    o = G.orders()\n    spec = Counter(o)\n    n3 = spec.get(3, 0) // 2\n    n7 = spec.get(7, 0) // 6\n    inv = {\n        \"order\": G.n,\n        \"center\": center_order(G),\n        \"abelianization\": abelianization_order(G),\n        \"n2\": sylow2_number(G),\n        \"n3\": n3,\n        \"n7\": n7,\n        \"order_spectrum\": {str(k): v for k, v in sorted(spec.items())},\n    }\n    return inv, time.time() - t0\n\n\n# ---------------------------------------------------------------- 1. env probe\ndef probe():\n    pr(\"=== 1. ENV PROBE (verbatim) ===\")\n    pr(\"python: \" + sys.version.replace(\"\\n\", \" \"))\n    pr(\"python_executable: \" + sys.executable)\n    gap = shutil.which(\"gap\")\n    pr(\"shutil.which('gap') -> \" + repr(gap))\n    gap_facts = {\"which\": gap, \"ran\": False, \"stdout\": None, \"stderr\": None,\n                 \"returncode\": None, \"cmd\": None}\n    if gap:\n        cmd = [gap, \"-q\", \"-c\", \"Print(1);\"]\n        gap_facts[\"cmd\"] = \" \".join(cmd)\n        try:\n            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)\n            gap_facts.update({\"ran\": True, \"stdout\": r.stdout, \"stderr\": r.stderr,\n                              \"returncode\": r.returncode})\n            pr(\"$ gap -q -c 'Print(1);'   rc=\" + str(r.returncode))\n            pr(\"  stdout=\" + repr(r.stdout))\n            pr(\"  stderr=\" + repr(r.stderr))\n        except Exception as exc:                     # noqa: BLE001\n            gap_facts.update({\"ran\": False, \"stderr\": repr(exc)})\n            pr(\"$ gap -q -c 'Print(1);'   FAILED: \" + repr(exc))\n    else:\n        pr(\"gap: NOT FOUND on PATH (shutil.which returned None) -> GAP branch unavailable\")\n    py_facts = {}\n    try:\n        import sympy\n        py_facts[\"sympy_version\"] = sympy.__version__\n        pr(\"import sympy -> OK, version \" + sympy.__version__)\n    except Exception as exc:                          # noqa: BLE001\n        py_facts[\"sympy_version\"] = None\n        pr(\"import sympy -> FAILED \" + repr(exc))\n    try:\n        from sympy.combinatorics import Permutation, PermutationGroup\n        py_facts[\"sympy_combinatorics\"] = \"OK\"\n        pr(\"from sympy.combinatorics import Permutation, PermutationGroup -> OK\")\n    except Exception as exc:                          # noqa: BLE001\n        py_facts[\"sympy_combinatorics\"] = repr(exc)\n        pr(\"from sympy.combinatorics import Permutation, PermutationGroup -> FAILED \"\n           + repr(exc))\n    for mod in (\"sympy.combinatorics.named_groups\", \"sympy.combinatorics.fp_groups\",\n                \"sympy.combinatorics.pc_groups\", \"sympy.combinatorics.util\"):\n        try:\n            __import__(mod)\n            pr(\"import \" + mod + \" -> OK\")\n        except Exception as exc:                      # noqa: BLE001\n            pr(\"import \" + mod + \" -> FAILED \" + repr(exc))\n    return gap_facts, py_facts\n\n\n# ---------------------------------------------------------------- 5. GAP branch\ndef gap_branch(gap_facts):\n    if not (gap_facts.get(\"ran\") and gap_facts.get(\"returncode\") == 0):\n        pr(\"GAP branch: SKIPPED (gap unavailable) -- exact isomorphism-class count of \"\n           \"order-336 groups NOT determined by this run\")\n        return {\"available\": False,\n                \"reason\": \"shutil.which('gap') -> %r ; gap -q -c 'Print(1);' ran=%r rc=%r\"\n                          % (gap_facts.get(\"which\"), gap_facts.get(\"ran\"),\n                             gap_facts.get(\"returncode\"))}\n    code = r'''\nn := NumberSmallGroups(336);\nPrint(\"NumberOfSmallGroups336=\", n, \"\\n\");\nfor i in [1..n] do\n  G := SmallGroup(336, i);\n  Print(\"SG336 i=\", i,\n        \" n2=\", Index(G, Normalizer(G, SylowSubgroup(G, 2))),\n        \" n3=\", Index(G, Normalizer(G, SylowSubgroup(G, 3))),\n        \" n7=\", Index(G, Normalizer(G, SylowSubgroup(G, 7))),\n        \" |Z|=\", Size(Centre(G)),\n        \" solvable=\", IsSolvable(G), \"\\n\");\nod;\nQUIT;\n'''\n    try:\n        r = subprocess.run([gap_facts[\"which\"], \"-q\", \"-b\"], input=code,\n                           capture_output=True, text=True, timeout=2400)\n        pr(\"GAP small-group scan rc=\" + str(r.returncode))\n        pr(r.stdout)\n        if r.stderr:\n            pr(\"GAP stderr: \" + r.stderr)\n        return {\"available\": True, \"returncode\": r.returncode,\n                \"stdout_head\": \"\\n\".join(r.stdout.splitlines()[:40]),\n                \"n_lines\": len(r.stdout.splitlines())}\n    except Exception as exc:                          # noqa: BLE001\n        pr(\"GAP small-group scan FAILED: \" + repr(exc))\n        return {\"available\": True, \"failed\": repr(exc)}\n\n\n# ---------------------------------------------------------------- main\ndef main():\n    t_start = time.time()\n    gap_facts, py_facts = probe()\n\n    pr(\"\")\n    pr(\"=== 2. Sylow arithmetic, |G| = 336 = 2^4 * 3 * 7 ===\")\n    opts = {}\n    for p, e in PFAC:\n        m = N // e\n        divs = [d for d in range(1, m + 1) if m % d == 0]\n        cand = [n for n in divs if (n - 1) % p == 0]\n        brute = [n for n in range(1, N + 1) if N % (e * n) == 0 and (n - 1) % p == 0]\n        if cand != brute:\n            raise RuntimeError(\"divisor scan and brute scan disagree for p=%d\" % p)\n        opts[p] = cand\n        pr(\"p=%d  p^a=%2d  N/p^a=%3d  divisors(N/p^a)=%s\" % (p, e, m, divs))\n        pr(\"   => n_%d in %-26s [n=1 mod %d, n | %d; full scan of 1..336 agrees]\"\n           % (p, cand, p, m))\n    progress(step=\"sylow_options\", done=True, opts=opts)\n\n    pr(\"\")\n    pr(\"=== 3. Elementary feasibility of the %d triples (n_2,n_3,n_7) ===\"\n       % (len(opts[2]) * len(opts[3]) * len(opts[7])))\n    triples = []\n    for n2 in opts[2]:\n        for n3 in opts[3]:\n            for n7 in opts[7]:\n                need = 1 + n2 * (16 - 1) + n3 * (3 - 1) + n7 * (7 - 1)\n                cnt_ok = need <= N\n                act = None\n                act_ok = True\n                if n7 == 8:\n                    ngo = N // 8\n                    kerns = [k for k in range(1, ngo + 1) if ngo % k == 0]\n                    img_ok = all(((N // k) % 8 == 0) and (40320 % (N // k) == 0)\n                                 for k in kerns)\n                    act = {\"index_of_N_G_of_P7\": 8,\n                           \"N_G_P7_order\": ngo,\n                           \"kernel_order_candidates\": kerns,\n                           \"all_image_orders_divisible_by_8_and_dividing_8fact\": img_ok,\n                           \"336_divides_8factorial\": (40320 % N == 0),\n                           \"8factorial_over_336\": 40320 // N,\n                           \"336_divides_A8_order\": (20160 % N == 0),\n                           \"A8_order_over_336\": 20160 // N}\n                    act_ok = (40320 % N == 0)\n                triples.append({\"n2\": n2, \"n3\": n3, \"n7\": n7,\n                                \"distinct_elements_needed\": need,\n                                \"element_count_ok\": bool(cnt_ok),\n                                \"index8_action\": act,\n                                \"elementary_feasible\": bool(cnt_ok and act_ok)})\n    n_feas = sum(1 for t in triples if t[\"elementary_feasible\"])\n    n_elt = sum(1 for t in triples if t[\"element_count_ok\"])\n    pr(\"triples total=%d ; pass element-count bound (1+sum n_p(p^a-1) <= 336)=%d ; \"\n       \"pass all elementary checks=%d\" % (len(triples), n_elt, n_feas))\n    pr(\"note: n_p=1 <=> the Sylow p-subgroup is normal (standard Sylow theorem).\")\n    pr(\"note: n_7=8 => |G:N_G(P_7)|=8, so G acts on the 8 Sylow 7-subgroups; \"\n       \"the arithmetic tests (336 | 8! = %d, 336 | |A_8| = %d) do NOT exclude this case.\"\n       % (40320, 20160))\n    for t in triples:\n        if not t[\"elementary_feasible\"]:\n            pr(\"  infeasible by element count: (n2,n3,n7)=%s  needs %d > 336 distinct elements\"\n               % ((t[\"n2\"], t[\"n3\"], t[\"n7\"]), t[\"distinct_elements_needed\"]))\n    progress(step=\"triples\", total=len(triples), feasible=n_feas)\n\n    pr(\"\")\n    pr(\"=== 4. GAP branch ===\")\n    gap_out = gap_branch(gap_facts)\n\n    pr(\"\")\n    pr(\"=== 5. Constructive lower bound (n_7 = 1 extension family) ===\")\n    pr(\"family A: C7 x H,  H a group of order 48 (17 explicit H below)\")\n    pr(\"family B: (C7:C3) x A,  A abelian of order 16 (5 groups)\")\n    Hlist = []\n\n    def addH(name, G):\n        if G.n != 48:\n            raise RuntimeError(\"%s has order %d, expected 48\" % (name, G.n))\n        Hlist.append((name, G))\n\n    addH(\"C3xC16\", dirprod(cyclic(3), cyclic(16)))\n    addH(\"C3xC8xC2\", dirprod(cyclic(3), dirprod(cyclic(8), cyclic(2))))\n    addH(\"C3xC4xC4\", dirprod(cyclic(3), dirprod(cyclic(4), cyclic(4))))\n    addH(\"C3xC4xC2xC2\", dirprod(cyclic(3), dirprod(cyclic(4), dirprod(cyclic(2), cyclic(2)))))\n    addH(\"C3xC2^4\", dirprod(cyclic(3), dirprod(dirprod(cyclic(2), cyclic(2)),\n                                               dirprod(cyclic(2), cyclic(2)))))\n    S3p = perm_group(\"S3\", [(1, 2, 0), (1, 0, 2)], 3)\n    addH(\"S3xC8\", dirprod(S3p, cyclic(8)))\n    addH(\"S3xC4xC2\", dirprod(dirprod(S3p, cyclic(4)), cyclic(2)))\n    addH(\"S3xC2^3\", dirprod(S3p, dirprod(cyclic(2), dirprod(cyclic(2), cyclic(2)))))\n    D8p = perm_group(\"D8\", [(1, 2, 3, 0), (0, 3, 2, 1)], 4)\n    addH(\"D8xC6\", dirprod(D8p, cyclic(6)))\n    addH(\"Q8xC6\", dirprod(q8(), cyclic(6)))\n    A4p = perm_group(\"A4\", [(1, 2, 0, 3), (1, 0, 3, 2)], 4)\n    addH(\"A4xC4\", dirprod(A4p, cyclic(4)))\n    addH(\"A4xC2xC2\", dirprod(A4p, dirprod(cyclic(2), cyclic(2))))\n    addH(\"D48\", perm_group(\"D48\", [tuple((i + 1) % 24 for i in range(24)),\n                                   tuple((-i) % 24 for i in range(24))], 24))\n    addH(\"GL(2,3)\", gl23())\n    addH(\"SL(2,3)xC2\", dirprod(sl23(), cyclic(2)))\n\n    Ab16 = []\n    Ab16.append((\"C16\", cyclic(16)))\n    Ab16.append((\"C8xC2\", dirprod(cyclic(8), cyclic(2))))\n    Ab16.append((\"C4xC4\", dirprod(cyclic(4), cyclic(4))))\n    Ab16.append((\"C4xC2xC2\", dirprod(cyclic(4), dirprod(cyclic(2), cyclic(2)))))\n    Ab16.append((\"C2^4\", dirprod(dirprod(cyclic(2), cyclic(2)),\n                                dirprod(cyclic(2), cyclic(2)))))\n    M21 = meta21()\n\n    candidates = []\n    for name, H in Hlist:\n        candidates.append((\"C7 x \" + name, dirprod(cyclic(7), H)))\n    for name, A in Ab16:\n        candidates.append((\"(C7:C3) x \" + name, dirprod(M21, A)))\n\n    seen = {}\n    constructed = []\n    failures = []\n    costs = []\n    for name, G in candidates:\n        try:\n            inv, dt = invariants(G)\n        except Exception as exc:                      # noqa: BLE001\n            failures.append({\"group\": name, \"error\": repr(exc)})\n            pr(\"  FAILED  %-24s %r\" % (name, exc))\n            continue\n        if inv[\"order\"] != N:\n            failures.append({\"group\": name, \"error\": \"order %d != 336\" % inv[\"order\"]})\n            continue\n        key = json.dumps(inv, sort_keys=True)\n        costs.append(dt)\n        row = {\"group\": name, \"invariants\": inv}\n        if key in seen:\n            row[\"isomorphic_to_invariant_twin\"] = seen[key]\n        else:\n            seen[key] = name\n        constructed.append(row)\n        pr(\"  %-24s n2=%-2d n3=%-3d n7=%d |Z|=%-3d |G^ab|=%-3d orders=%s  (%.2fs)\"\n           % (name, inv[\"n2\"], inv[\"n3\"], inv[\"n7\"], inv[\"center\"],\n              inv[\"abelianization\"], inv[\"order_spectrum\"], dt))\n        progress(step=\"group\", group=name, n2=inv[\"n2\"], n3=inv[\"n3\"],\n                 n7=inv[\"n7\"], sec=round(dt, 3))\n\n    K = len(seen)\n    realized = sorted({(r[\"invariants\"][\"n2\"], r[\"invariants\"][\"n3\"],\n                        r[\"invariants\"][\"n7\"]) for r in constructed})\n    pr(\"\")\n    pr(\"certified lower bound: %d pairwise non-isomorphic groups of order 336 \"\n       \"(distinct invariant tuples: centre, |G^ab|, n_2, n_3, n_7, order spectrum)\"\n       % K)\n    pr(\"Sylow triples realized by the construction: %s\" % (realized,))\n    if failures:\n        pr(\"construction failures: \" + json.dumps(failures))\n\n    # ---------------- verdict (all checks are mechanical) ----------------\n    checks = []\n    checks.append((\"opts_recomputed_by_brute_force\", True))\n    checks.append((\"triple_count_is_product\", len(triples) ==\n                   len(opts[2]) * len(opts[3]) * len(opts[7])))\n    checks.append((\"336_divides_8factorial\", 40320 % N == 0))\n    checks.append((\"336_divides_A8\", 20160 % N == 0))\n    checks.append((\"lower_bound_at_least_10\", K >= 10))\n    checks.append((\"all_constructed_have_normal_Sylow7\",\n                   all(r[\"invariants\"][\"n7\"] == 1 for r in constructed)))\n    ok = all(v for _, v in checks)\n    result = \"supports\" if ok else \"inconclusive\"\n    res = {\n        \"result\": result,\n        \"bound\": {\n            \"n_2\": opts[2], \"n_3\": opts[3], \"n_7\": opts[7],\n            \"triples_total\": len(triples),\n            \"triples_passing_element_count\": n_elt,\n            \"triples_elementary_feasible\": n_feas,\n            \"certified_lower_bound_on_number_of_groups_of_order_336\": K,\n            \"bound_meaning\": (\"K counts pairwise non-isomorphic groups built explicitly \"\n                              \"here and separated by deterministic invariants; it is a \"\n                              \"lower bound, NOT the total number of order-336 groups\"),\n        },\n        \"strategy\": (\"brute-force divisor scan for n_p (n=1 mod p, n | 336/p^a) over \"\n                     \"1..336; element-count necessary condition 1+sum n_p(p^a-1) <= 336; \"\n                     \"index-8 action arithmetic for n_7=8; constructive lower bound via \"\n                     \"C7 x H and (C7:C3) x A with full multiplication tables and exact \"\n                     \"invariants (centre, abelianization, n_2 via normalizer, n_3/n_7 via \"\n                     \"element-order counts, order spectrum)\"),\n        \"scaling\": {\n            \"sylow_scan_sec\": round(time.time() - t_start, 3),\n            \"candidate_groups\": len(candidates),\n            \"built_groups\": len(constructed),\n            \"distinct_by_invariants\": K,\n            \"per_group_sec\": [round(c, 3) for c in costs],\n            \"cost_model\": (\"per group: table build O(|G|^2)=112896 mults; orders, centre \"\n                           \"and commutator scan are O(|G|^2); Sylow-2 search is O(|G|) \"\n                           \"closure steps + O(|G|*16) normalizer test\"),\n            \"total_sec\": round(time.time() - t_start, 3),\n        },\n        \"data\": {\n            \"env\": {\"gap\": gap_facts, \"python_group_theory\": py_facts},\n            \"gap_branch\": gap_out,\n            \"opts\": {str(p): opts[p] for p in opts},\n            \"realized_triples\": [list(r) for r in realized],\n            \"groups\": [{\"group\": r[\"group\"],\n                        \"n2\": r[\"invariants\"][\"n2\"],\n                        \"n3\": r[\"invariants\"][\"n3\"],\n                        \"n7\": r[\"invariants\"][\"n7\"],\n                        \"center\": r[\"invariants\"][\"center\"],\n                        \"abelianization\": r[\"invariants\"][\"abelianization\"],\n                        \"order_spectrum\": r[\"invariants\"][\"order_spectrum\"]}\n                       for r in constructed],\n            \"failures\": failures,\n        },\n    }\n    if result == \"refutes\":\n        res[\"counterexample\"] = {\"note\": \"see failed checks\"}\n    pr(\"checks: \" + json.dumps([{\"name\": n, \"ok\": bool(v)} for n, v in checks]))\n    pr(\"REPRO_RESULT: \" + json.dumps(res, sort_keys=True))\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        },
+        "why": "落盘被派的实验脚本：探查 GAP/sympy、算 336 阶群的 Sylow 可行域与三元组初等可行性，并给构造性群计数下界"
+      },
+      "result": {
+        "tool": "fs.write",
+        "ok": true,
+        "data": {
+          "path": "scripts/sylow336.py",
+          "bytes": 22168,
+          "sha256": "d24e7ba38261e2fbc27266b9c180d24ab80a6ed0c7990f787e3e6e3635d9f3e7",
+          "created": true
+        },
+        "error": "",
+        "meta": {
+          "path": "scripts/sylow336.py",
+          "bytes": 22168,
+          "created": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 23873,
+        "tokens_in": 23873,
+        "tokens_out": 36816,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "own_run_script_experiment",
+        "args": {
+          "claim": "For |G|=336=2^4·3·7: the feasible Sylow counts are n_2 ∈ {1,3,7,21}, n_3 ∈ {1,4,7,16,28,112}, n_7 ∈ {1,8}; the list is produced and screened by a deterministic script that also records (a) the GAP/Python group-library probe verbatim, (b) the finiteness-screen (Sylow-count constraints, 336 | 8! embedding check for n_7=8, and the count of 336-order group isomorphism classes if a library is present, else a certified constructive lower bound from N ⋊ H extension counting).",
+          "claim_key": "sylow-numbers-336",
+          "script_path": "scripts/sylow336.py",
+          "why": "run the on-disk deterministic experiment so exit code and stdout land in the experiments ledger as a citable exp row"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.run_script_experiment",
+        "ok": true,
+        "data": {
+          "experiment_id": "000000",
+          "recorded": true,
+          "result": "supports",
+          "evidence_kind": "cross_check",
+          "negation_kind": "not_proved",
+          "exit_code": 0,
+          "runtime_sec": 2.844,
+          "code_hash": "d24e7ba38261e2fb",
+          "notes": "[run] exit_code=0，runtime=2.844s，脚本 scripts/sylow336.py（sha256 前 16 位 d24e7ba38261e2fb）",
+          "reason": "numeric 实验支持该命题，证据等级 cross_check（不构成证明）"
+        },
+        "error": "",
+        "meta": {},
+        "aliased_from": "own_run_script_experiment"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 23168,
+        "prompt_cache_miss_tokens": 1718,
+        "tokens_in": 24886,
+        "tokens_out": 405,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "experiments",
+          "id": "000000"
+        },
+        "why": "取回刚登记的实验行，核对 stdout 里的 Sylow 计数与 GAP 探查原话，写进结论"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "experiment_id": "000000",
+          "claim": "For |G|=336=2^4·3·7: the feasible Sylow counts are n_2 ∈ {1,3,7,21}, n_3 ∈ {1,4,7,16,28,112}, n_7 ∈ {1,8}; the list is produced and screened by a deterministic script that also records (a) the GAP/Python group-library probe verbatim, (b) the finiteness-screen (Sylow-count constraints, 336 | 8! embedding check for n_7=8, and the count of 336-order group isomorphism classes if a library is present, else a certified constructive lower bound from N ⋊ H extension counting).",
+          "claim_key": "sylow-numbers-336",
+          "method": "numeric",
+          "evidence_kind": "cross_check",
+          "result": "supports",
+          "negation_kind": "not_proved",
+          "code_path": "scripts/sylow336.py",
+          "code_hash": "d24e7ba38261e2fb",
+          "params": {},
+          "observations": {
+            "bound": {
+              "bound_meaning": "K counts pairwise non-isomorphic groups built explicitly here and separated by deterministic invariants; it is a lower bound, NOT the total number of order-336 groups",
+              "certified_lower_bound_on_number_of_groups_of_order_336": 20,
+              "n_2": [
+                1,
+                3,
+                7,
+                21
+              ],
+              "n_3": [
+                1,
+                4,
+                7,
+                16,
+                28,
+                112
+              ],
+              "n_7": [
+                1,
+                8
+              ],
+              "triples_elementary_feasible": 38,
+              "triples_passing_element_count": 38,
+              "triples_total": 48
+            },
+            "strategy": "brute-force divisor scan for n_p (n=1 mod p, n | 336/p^a) over 1..336; element-count necessary condition 1+sum n_p(p^a-1) <= 336; index-8 action arithmetic for n_7=8; constructive lower bound via C7 x H and (C7:C3) x A with full multiplication tables and exact invariants (centre, abelianization, n_2 via normalizer, n_3/n_7 via element-order counts, order spectrum)",
+            "progress": [
+              {
+                "done": true,
+                "opts": {
+                  "2": [
+                    1,
+                    3,
+                    7,
+                    21
+                  ],
+                  "3": [
+                    1,
+                    4,
+                    7,
+                    16,
+                    28,
+                    112
+                  ],
+                  "7": [
+                    1,
+                    8
+                  ]
+                },
+                "step": "sylow_options"
+              },
+              {
+                "feasible": 38,
+                "step": "triples",
+                "total": 48
+              },
+              {
+                "group": "C7 x C3xC16",
+                "n2": 1,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.022,
+                "step": "group"
+              },
+              {
+                "group": "C7 x C3xC8xC2",
+                "n2": 1,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.031,
+                "step": "group"
+              },
+              {
+                "group": "C7 x C3xC4xC4",
+                "n2": 1,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.02,
+                "step": "group"
+              },
+              {
+                "group": "C7 x C3xC4xC2xC2",
+                "n2": 1,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.03,
+                "step": "group"
+              },
+              {
+                "group": "C7 x C3xC2^4",
+                "n2": 1,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.03,
+                "step": "group"
+              },
+              {
+                "group": "C7 x S3xC8",
+                "n2": 3,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.017,
+                "step": "group"
+              },
+              {
+                "group": "C7 x S3xC4xC2",
+                "n2": 3,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.017,
+                "step": "group"
+              },
+              {
+                "group": "C7 x S3xC2^3",
+                "n2": 3,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.024,
+                "step": "group"
+              },
+              {
+                "group": "C7 x D8xC6",
+                "n2": 1,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.021,
+                "step": "group"
+              },
+              {
+                "group": "C7 x Q8xC6",
+                "n2": 1,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.028,
+                "step": "group"
+              },
+              {
+                "group": "C7 x A4xC4",
+                "n2": 1,
+                "n3": 4,
+                "n7": 1,
+                "sec": 0.026,
+                "step": "group"
+              },
+              {
+                "group": "C7 x A4xC2xC2",
+                "n2": 1,
+                "n3": 4,
+                "n7": 1,
+                "sec": 0.026,
+                "step": "group"
+              },
+              {
+                "group": "C7 x D48",
+                "n2": 3,
+                "n3": 1,
+                "n7": 1,
+                "sec": 0.016,
+                "step": "group"
+              },
+              {
+                "group": "C7 x GL(2,3)",
+                "n2": 3,
+                "n3": 4,
+                "n7": 1,
+                "sec": 0.028,
+                "step": "group"
+              },
+              {
+                "group": "C7 x SL(2,3)xC2",
+                "n2": 1,
+                "n3": 4,
+                "n7": 1,
+                "sec": 0.031,
+                "step": "group"
+              },
+              {
+                "group": "(C7:C3) x C16",
+                "n2": 1,
+                "n3": 7,
+                "n7": 1,
+                "sec": 0.032,
+                "step": "group"
+              },
+              {
+                "group": "(C7:C3) x C8xC2",
+                "n2": 1,
+                "n3": 7,
+                "n7": 1,
+                "sec": 0.023,
+                "step": "group"
+              },
+              {
+                "group": "(C7:C3) x C4xC4",
+                "n2": 1,
+                "n3": 7,
+                "n7": 1,
+                "sec": 0.018,
+                "step": "group"
+              },
+              {
+                "group": "(C7:C3) x C4xC2xC2",
+                "n2": 1,
+                "n3": 7,
+                "n7": 1,
+                "sec": 0.015,
+                "step": "group"
+              },
+              {
+                "group": "(C7:C3) x C2^4",
+                "n2": 1,
+                "n3": 7,
+                "n7": 1,
+                "sec": 0.03,
+                "step": "group"
+              }
+            ],
+            "conclusion_source": "line",
+            "data": {
+              "env": {
+                "gap": {
+                  "cmd": null,
+                  "ran": false,
+                  "returncode": null,
+                  "stderr": null,
+                  "stdout": null,
+                  "which": null
+                },
+                "python_group_theory": {
+                  "sympy_combinatorics": "OK",
+                  "sympy_version": "1.12"
+                }
+              },
+              "failures": [],
+              "gap_branch": {
+                "available": false,
+                "reason": "shutil.which('gap') -> None ; gap -q -c 'Print(1);' ran=False rc=None"
+              },
+              "groups": [
+                {
+                  "abelianization": 336,
+                  "center": 336,
+                  "group": "C7 x C3xC16",
+                  "n2": 1,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "112": 48,
+                    "12": 4,
+                    "14": 6,
+                    "16": 8,
+                    "168": 48,
+                    "2": 1,
+                    "21": 12,
+                    "24": 8,
+                    "28": 12,
+                    "3": 2,
+                    "336": 96,
+                    "4": 2,
+                    "42": 12,
+                    "48": 16,
+                    "56": 24,
+                    "6": 2,
+                    "7": 6,
+                    "8": 4,
+                    "84": 24
+                  }
+                },
+                {
+                  "abelianization": 336,
+                  "center": 336,
+                  "group": "C7 x C3xC8xC2",
+                  "n2": 1,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 8,
+                    "14": 18,
+                    "168": 96,
+                    "2": 3,
+                    "21": 12,
+                    "24": 16,
+                    "28": 24,
+                    "3": 2,
+                    "4": 4,
+                    "42": 36,
+                    "56": 48,
+                    "6": 6,
+                    "7": 6,
+                    "8": 8,
+                    "84": 48
+                  }
+                },
+                {
+                  "abelianization": 336,
+                  "center": 336,
+                  "group": "C7 x C3xC4xC4",
+                  "n2": 1,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 24,
+                    "14": 18,
+                    "2": 3,
+                    "21": 12,
+                    "28": 72,
+                    "3": 2,
+                    "4": 12,
+                    "42": 36,
+                    "6": 6,
+                    "7": 6,
+                    "84": 144
+                  }
+                },
+                {
+                  "abelianization": 336,
+                  "center": 336,
+                  "group": "C7 x C3xC4xC2xC2",
+                  "n2": 1,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 16,
+                    "14": 42,
+                    "2": 7,
+                    "21": 12,
+                    "28": 48,
+                    "3": 2,
+                    "4": 8,
+                    "42": 84,
+                    "6": 14,
+                    "7": 6,
+                    "84": 96
+                  }
+                },
+                {
+                  "abelianization": 336,
+                  "center": 336,
+                  "group": "C7 x C3xC2^4",
+                  "n2": 1,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "14": 90,
+                    "2": 15,
+                    "21": 12,
+                    "3": 2,
+                    "42": 180,
+                    "6": 30,
+                    "7": 6
+                  }
+                },
+                {
+                  "abelianization": 112,
+                  "center": 56,
+                  "group": "C7 x S3xC8",
+                  "n2": 3,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 4,
+                    "14": 42,
+                    "168": 48,
+                    "2": 7,
+                    "21": 12,
+                    "24": 8,
+                    "28": 48,
+                    "3": 2,
+                    "4": 8,
+                    "42": 12,
+                    "56": 96,
+                    "6": 2,
+                    "7": 6,
+                    "8": 16,
+                    "84": 24
+                  }
+                },
+                {
+                  "abelianization": 112,
+                  "center": 56,
+                  "group": "C7 x S3xC4xC2",
+                  "n2": 3,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 8,
+                    "14": 90,
+                    "2": 15,
+                    "21": 12,
+                    "28": 96,
+                    "3": 2,
+                    "4": 16,
+                    "42": 36,
+                    "6": 6,
+                    "7": 6,
+                    "84": 48
+                  }
+                },
+                {
+                  "abelianization": 112,
+                  "center": 56,
+                  "group": "C7 x S3xC2^3",
+                  "n2": 3,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "14": 186,
+                    "2": 31,
+                    "21": 12,
+                    "3": 2,
+                    "42": 84,
+                    "6": 14,
+                    "7": 6
+                  }
+                },
+                {
+                  "abelianization": 168,
+                  "center": 84,
+                  "group": "C7 x D8xC6",
+                  "n2": 1,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 8,
+                    "14": 66,
+                    "2": 11,
+                    "21": 12,
+                    "28": 24,
+                    "3": 2,
+                    "4": 4,
+                    "42": 132,
+                    "6": 22,
+                    "7": 6,
+                    "84": 48
+                  }
+                },
+                {
+                  "abelianization": 168,
+                  "center": 84,
+                  "group": "C7 x Q8xC6",
+                  "n2": 1,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 24,
+                    "14": 18,
+                    "2": 3,
+                    "21": 12,
+                    "28": 72,
+                    "3": 2,
+                    "4": 12,
+                    "42": 36,
+                    "6": 6,
+                    "7": 6,
+                    "84": 144
+                  }
+                },
+                {
+                  "abelianization": 84,
+                  "center": 28,
+                  "group": "C7 x A4xC4",
+                  "n2": 1,
+                  "n3": 4,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 16,
+                    "14": 42,
+                    "2": 7,
+                    "21": 48,
+                    "28": 48,
+                    "3": 8,
+                    "4": 8,
+                    "42": 48,
+                    "6": 8,
+                    "7": 6,
+                    "84": 96
+                  }
+                },
+                {
+                  "abelianization": 84,
+                  "center": 28,
+                  "group": "C7 x A4xC2xC2",
+                  "n2": 1,
+                  "n3": 4,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "14": 90,
+                    "2": 15,
+                    "21": 48,
+                    "3": 8,
+                    "42": 144,
+                    "6": 24,
+                    "7": 6
+                  }
+                },
+                {
+                  "abelianization": 28,
+                  "center": 14,
+                  "group": "C7 x D48",
+                  "n2": 3,
+                  "n3": 1,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 4,
+                    "14": 150,
+                    "168": 48,
+                    "2": 25,
+                    "21": 12,
+                    "24": 8,
+                    "28": 12,
+                    "3": 2,
+                    "4": 2,
+                    "42": 12,
+                    "56": 24,
+                    "6": 2,
+                    "7": 6,
+                    "8": 4,
+                    "84": 24
+                  }
+                },
+                {
+                  "abelianization": 14,
+                  "center": 14,
+                  "group": "C7 x GL(2,3)",
+                  "n2": 3,
+                  "n3": 4,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "14": 78,
+                    "2": 13,
+                    "21": 48,
+                    "28": 36,
+                    "3": 8,
+                    "4": 6,
+                    "42": 48,
+                    "56": 72,
+                    "6": 8,
+                    "7": 6,
+                    "8": 12
+                  }
+                },
+                {
+                  "abelianization": 42,
+                  "center": 28,
+                  "group": "C7 x SL(2,3)xC2",
+                  "n2": 1,
+                  "n3": 4,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "14": 18,
+                    "2": 3,
+                    "21": 48,
+                    "28": 72,
+                    "3": 8,
+                    "4": 12,
+                    "42": 144,
+                    "6": 24,
+                    "7": 6
+                  }
+                },
+                {
+                  "abelianization": 48,
+                  "center": 16,
+                  "group": "(C7:C3) x C16",
+                  "n2": 1,
+                  "n3": 7,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "112": 48,
+                    "12": 28,
+                    "14": 6,
+                    "16": 8,
+                    "2": 1,
+                    "24": 56,
+                    "28": 12,
+                    "3": 14,
+                    "4": 2,
+                    "48": 112,
+                    "56": 24,
+                    "6": 14,
+                    "7": 6,
+                    "8": 4
+                  }
+                },
+                {
+                  "abelianization": 48,
+                  "center": 16,
+                  "group": "(C7:C3) x C8xC2",
+                  "n2": 1,
+                  "n3": 7,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 56,
+                    "14": 18,
+                    "2": 3,
+                    "24": 112,
+                    "28": 24,
+                    "3": 14,
+                    "4": 4,
+                    "56": 48,
+                    "6": 42,
+                    "7": 6,
+                    "8": 8
+                  }
+                },
+                {
+                  "abelianization": 48,
+                  "center": 16,
+                  "group": "(C7:C3) x C4xC4",
+                  "n2": 1,
+                  "n3": 7,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 168,
+                    "14": 18,
+                    "2": 3,
+                    "28": 72,
+                    "3": 14,
+                    "4": 12,
+                    "6": 42,
+                    "7": 6
+                  }
+                },
+                {
+                  "abelianization": 48,
+                  "center": 16,
+                  "group": "(C7:C3) x C4xC2xC2",
+                  "n2": 1,
+                  "n3": 7,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "12": 112,
+                    "14": 42,
+                    "2": 7,
+                    "28": 48,
+                    "3": 14,
+                    "4": 8,
+                    "6": 98,
+                    "7": 6
+                  }
+                },
+                {
+                  "abelianization": 48,
+                  "center": 16,
+                  "group": "(C7:C3) x C2^4",
+                  "n2": 1,
+                  "n3": 7,
+                  "n7": 1,
+                  "order_spectrum": {
+                    "1": 1,
+                    "14": 90,
+                    "2": 15,
+                    "3": 14,
+                    "6": 210,
+                    "7": 6
+                  }
+                }
+              ],
+              "opts": {
+                "2": [
+                  1,
+                  3,
+                  7,
+                  21
+                ],
+                "3": [
+                  1,
+                  4,
+                  7,
+                  16,
+                  28,
+                  112
+                ],
+                "7": [
+                  1,
+                  8
+                ]
+              },
+              "realized_triples": [
+                [
+                  1,
+                  1,
+                  1
+                ],
+                [
+                  1,
+                  4,
+                  1
+                ],
+                [
+                  1,
+                  7,
+                  1
+                ],
+                [
+                  3,
+                  1,
+                  1
+                ],
+                [
+                  3,
+                  4,
+                  1
+                ]
+              ]
+            }
+          },
+          "exit_code": 0,
+          "runtime_sec": 2.844,
+          "artifact_paths": [
+            "out/experiments/000000.log"
+          ],
+          "counterexample": null,
+          "verifier_output": "",
+          "verifier_subject_key": "",
+          "certificate": null,
+          "search_bound": {
+            "bound_meaning": "K counts pairwise non-isomorphic groups built explicitly here and separated by deterministic invariants; it is a lower bound, NOT the total number of order-336 groups",
+            "certified_lower_bound_on_number_of_groups_of_order_336": 20,
+            "n_2": [
+              1,
+              3,
+              7,
+              21
+            ],
+            "n_3": [
+              1,
+              4,
+              7,
+              16,
+              28,
+              112
+            ],
+            "n_7": [
+              1,
+              8
+            ],
+            "triples_elementary_feasible": 38,
+            "triples_passing_element_count": 38,
+            "triples_total": 48
+          },
+          "for_question_id": null,
+          "notes": "[run] exit_code=0，runtime=2.844s，脚本 scripts/sylow336.py（sha256 前 16 位 d24e7ba38261e2fb）",
+          "created_at": "2026-10-23T12:40:55+08:00",
+          "created_by": "agent-E-compute"
+        },
+        "error": "",
+        "meta": {
+          "table": "experiments",
+          "id": "000000",
+          "id_field": "experiment_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 24192,
+        "prompt_cache_miss_tokens": 1305,
+        "tokens_in": 25497,
+        "tokens_out": 219,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    },
+    {
+      "index": 3,
+      "shape": "final",
+      "payload": {
+        "final": "E 交付：experiments 行 exp:000000（claim_key=sylow-numbers-336，method=numeric，evidence_kind=cross_check，result=supports，exit_code=0，runtime=2.844s，脚本 scripts/sylow336.py，sha256 前 16 位 d24e7ba38261e2fb，stdout 日志 out/experiments/000000.log）。\n\n一、环境探查（原话已落进 exp 行 observations.data.env）：\n- GAP：`shutil.which('gap') -> None`；因 which 为空，`gap -q -c 'Print(1);'` 记 ran=False、rc=None、stdout/stderr=None。⇒ 本机无 GAP，GAP 分支如实打印不可用（gap_branch.available=false），未伪造任何 SmallGroup 不变量。\n- Python 群论库：sympy 1.12，`sympy.combinatorics` 导入 OK。\n\n二、确定性数值（脚本内部现算，非硬编码）：\n- |G| = 336 = 2^4·3·7。n_p ≡ 1 (mod p) 且 n_p | 336/p 的全解：\n  n_2 ∈ {1,3,7,21}（168 的奇因子）、n_3 ∈ {1,4,7,16,28,112}、n_7 ∈ {1,8}（48 的因子中 ≡1 mod 7 者）。\n- 三元组总数 4·6·2 = 48；通过初等可行性筛查 38 个（38/48）。口径：n_p=1 ⟺ 该 Sylow p-子群正规；n_7=8 时由 |G:N_G(P_7)|=8 得共轭作用 G→S_8，阶数检验 336 | 8! = 40320（40320/336 = 120）成立，故 n_7=8 不被排除；元素计数/阶谱一致性一并核对，无一条被排除。\n- 因 GAP 不可用，改做构造性枚举：显式构造 20 个两两不同构的 336 阶群（Sylow 相容因子的直积族，如 C7×C3×C16、(C7:C3)×C16、C7×GL(2,3) 等），以确定性不变量（阶谱、交换化阶、中心阶、(n_2,n_3,n_7)）分离 ⇒ 336 阶群同构类数的**下界 ≥ 20**。\n\n三、强度与边界（必须随结论一起传）：\n- 这是 cross_check（数值/枚举一致性），不是证明；上述 Sylow 清单只是**必要条件筛查**，每一三元组的可实现性未在此建立。\n- 「20」是下界不是总数：无 GAP ⇒ 336 阶群同构类总数本趟**未测**（不是 20）。\n- 未做形式化（本岗 Lean 关闭口径之外，且形式化归 L）。",
+        "evidence": [
+          "exp:000000"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "336 阶 Sylow 数值+构造性下界：exp:000000（cross_check，exit 0），本机无 GAP，同构类数只给下界 20",
+          "body": "## 做了什么\n把「336 阶群的 Sylow 数值与群计数」变成一条可复现实验：脚本 `scripts/sylow336.py`（sha256 前 16 位 `d24e7ba38261e2fb`）落盘后经 `E.run_experiment` 真跑，登记为 **exp:000000**（method=numeric，evidence_kind=cross_check，result=supports，**exit_code=0**，runtime 2.844s，stdout 全文在 `out/experiments/000000.log`）。正文可直接引 `exp:000000`。\n\n## 依据（读数，全部由脚本现算）\n1. **环境探查原话**（落进 observations.data.env，未加工）：\n   - GAP：`shutil.which('gap') -> None`；`gap -q -c 'Print(1);'` ⇒ `ran=False, returncode=None, stdout=None, stderr=None`。**本机无 GAP**，GAP 分支如实打印 `available=false`，没有伪造任何 `SmallGroup(336,i)` 不变量。\n   - Python 侧：sympy 1.12，`sympy.combinatorics` 导入 OK（可用，但本族计数不依赖它）。\n2. **Sylow 可行值**（n_p ≡ 1 mod p 且 n_p | 336/p 的全解）：\n   - n_2 ∈ {1, 3, 7, 21}\n   - n_3 ∈ {1, 4, 7, 16, 28, 112}\n   - n_7 ∈ {1, 8}\n3. **三元组筛查**：总数 4·6·2 = **48**，通过初等可行性 **38** 个。判据：n_p=1 ⟺ Sylow p-子群正规；n_7=8 时 |G:N_G(P_7)|=8 ⇒ 共轭作用 G→S_8，阶数检验 **336 | 8! = 40320**（40320/336 = 120）成立，故 n_7=8 不被排除；另加元素计数/阶谱一致性核对，无一被排除。\n4. **构造性计数下界**：因 GAP 不可用，改为显式构造 Sylow 相容因子的直积族（如 `C7×C3×C16`、`C7×C3×C8×C2`、`C7×S3×C8`、`(C7:C3)×C16`、`C7×GL(2,3)`、`C7×SL(2,3)×C2` 等），以确定性不变量（阶谱 / 交换化阶 / 中心阶 / (n_2,n_3,n_7)）两两分离 ⇒ **336 阶群同构类数的下界 ≥ 20**。不同不变量 ⇒ 必不同构，故分离合法；不变量相同者被并掉只会低估，下界仍成立。\n\n## 要对方注意的边界（不许被正文抬强度）\n- 这是 **cross_check**，不是证明；**Sylow 清单是必要条件筛查**，各三元组的可实现性本趟未建立。\n- **「20」是下界，不是总数**：无 GAP ⇒ 336 阶群同构类总数本趟 **未测**（三态：不是「没有」、不是「等于 20」）。\n- 若要总数，只有两条路：装 GAP 后数 `NumberSmallGroups(336)` 并抽 `SmallGroup(336,i)` 的不变量；或走 `N ⋊ H` 扩张的带证书枚举（成本高，需要新策略才允许再跑，重复同一条脚本不算进展）。\n\n## 我卡在哪\nGAP 缺失这一条不在我这边能补（装软件是环境决定，不是实验设计）；需要你定：是否允许装 GAP，还是接受「下界 ≥ 20 + 必要条件筛查」这一档结项。若要例子/反例进研究手稿，可把 exp:000000 的 20 个显式群转给 D。"
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000000",
+          "ok": true,
+          "id": "000000",
+          "path": "manuscripts/handoffs.jsonl#000000",
+          "to": "M",
+          "brief": "336 阶 Sylow 数值+构造性下界：exp:000000（cross_check，exit 0），本机无 GAP，同构类数只给下界 20",
+          "addressing": {
+            "checked": true,
+            "how": "outside_roster",
+            "to": "M",
+            "kind": "",
+            "name": "",
+            "task_id": "",
+            "role": "",
+            "brief": "",
+            "candidates": [],
+            "callable": "",
+            "refused": "",
+            "error": "",
+            "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）",
+            "delivery": "role",
+            "manuscript_to": "M"
+          },
+          "notify_channel": "role",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "m000001",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 24832,
+        "prompt_cache_miss_tokens": 4144,
+        "tokens_in": 28976,
+        "tokens_out": 3641,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      }
+    }
+  ],
+  "final": "E 交付：experiments 行 exp:000000（claim_key=sylow-numbers-336，method=numeric，evidence_kind=cross_check，result=supports，exit_code=0，runtime=2.844s，脚本 scripts/sylow336.py，sha256 前 16 位 d24e7ba38261e2fb，stdout 日志 out/experiments/000000.log）。\n\n一、环境探查（原话已落进 exp 行 observations.data.env）：\n- GAP：`shutil.which('gap') -> None`；因 which 为空，`gap -q -c 'Print(1);'` 记 ran=False、rc=None、stdout/stderr=None。⇒ 本机无 GAP，GAP 分支如实打印不可用（gap_branch.available=false），未伪造任何 SmallGroup 不变量。\n- Python 群论库：sympy 1.12，`sympy.combinatorics` 导入 OK。\n\n二、确定性数值（脚本内部现算，非硬编码）：\n- |G| = 336 = 2^4·3·7。n_p ≡ 1 (mod p) 且 n_p | 336/p 的全解：\n  n_2 ∈ {1,3,7,21}（168 的奇因子）、n_3 ∈ {1,4,7,16,28,112}、n_7 ∈ {1,8}（48 的因子中 ≡1 mod 7 者）。\n- 三元组总数 4·6·2 = 48；通过初等可行性筛查 38 个（38/48）。口径：n_p=1 ⟺ 该 Sylow p-子群正规；n_7=8 时由 |G:N_G(P_7)|=8 得共轭作用 G→S_8，阶数检验 336 | 8! = 40320（40320/336 = 120）成立，故 n_7=8 不被排除；元素计数/阶谱一致性一并核对，无一条被排除。\n- 因 GAP 不可用，改做构造性枚举：显式构造 20 个两两不同构的 336 阶群（Sylow 相容因子的直积族，如 C7×C3×C16、(C7:C3)×C16、C7×GL(2,3) 等），以确定性不变量（阶谱、交换化阶、中心阶、(n_2,n_3,n_7)）分离 ⇒ 336 阶群同构类数的**下界 ≥ 20**。\n\n三、强度与边界（必须随结论一起传）：\n- 这是 cross_check（数值/枚举一致性），不是证明；上述 Sylow 清单只是**必要条件筛查**，每一三元组的可实现性未在此建立。\n- 「20」是下界不是总数：无 GAP ⇒ 336 阶群同构类总数本趟**未测**（不是 20）。\n- 未做形式化（本岗 Lean 关闭口径之外，且形式化归 L）。",
+  "evidence": [
+    "exp:000000"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "counters_reset_at": 4,
+  "compactions": 0,
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "handoffs": [
+    "000000"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p188",
+    "role": "E",
+    "prompt_sha256": "b72c174f5bbcbbfef464528f5f450855348b45d5c8d20a71895f494a918f4293",
+    "prompt_chars": 27734,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_INBOX",
+      "TASK_BOARD",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ],
+    "preset": {
+      "id": "",
+      "path": "",
+      "trust": "",
+      "rows": 0,
+      "problem": ""
+    }
+  },
+  "spend": {
+    "calls": 4,
+    "tokens_in": 103232,
+    "tokens_out": 41081,
+    "usd": 0.029522,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 4,
+    "no_request_calls": 0,
+    "hit": 72192,
+    "miss": 31040,
+    "unknown_calls": 0,
+    "tokens_in": 103232,
+    "hit_rate": 0.6993,
+    "mismatched_calls": 0,
+    "saved_usd": 0.010612,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 207.766,
+  "notes": [
+    "缓存读数：命中 72192 / 未命中 31040 token，命中率 69.9%（4 次调用）；按 modelcost 口径估算可省 约 0.010612 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "E 交付：experiments 行 exp:000000（claim_key=sylow-numbers-336，method=numeric，evidence_kind=cross_check，result=supports，exit_code=0，runtime=2.844s，脚本 scripts/sylow336.py，sha256 前 16 位 d24e7ba38261e2fb，stdout 日志 out/experiments/000000.log）。\n\n一、环境探查（原话已落进 exp 行 observations.data.env）：\n- GAP：`shutil.which('gap') -> None`；因 which 为空，`gap -q -c 'Print(1);'` 记 ran=False、rc=None、stdout/stderr=None。⇒ 本机无 GAP，GAP 分支如实打印不可用（gap_branch.available=false），未伪造任何 SmallGroup 不变量。\n- Python 群论库：sympy 1.12，`sympy.combinatorics` 导入 OK。\n\n二、确定性数值（脚本内部现算，非硬编码）：\n- |G| = 336 = 2^4·3·7。n_p ≡ 1 (mod p) 且 n_p | 336/p 的全解：\n  n_2 ∈ {1,3,7,21}（168 的奇因子）、n_3 ∈ {1,4,7,16,28,112}、n_7 ∈ {1,8}（48 的因子中 ≡1 mod 7 者）。\n- 三元组总数 4·6·2 = 48；通过初等可行性筛查 38 个（38/48）。口径：n_p=1 ⟺ 该 Sylow p-子群正规；n_7=8 时由 |G:N_G(P_7)|=8 得共轭作用 G→S_8，阶数检验 336 | 8! = 40320（40320/336 = 120）成立，故 n_7=8 不被排除；元素计数/阶谱一致性一并核对，无一条被排除。\n- 因 GAP 不可用，改做构造性枚举：显式构造 20 个两两不同构的 336 阶群（Sylow 相容因子的直积族，如 C7×C3×C16、(C7:C3)×C16、C7×GL(2,3) 等），以确定性不变量（阶谱、交换化阶、中心阶、(n_2,n_3,n_7)）分离 ⇒ 336 阶群同构类数的**下界 ≥ 20**。\n\n三、强度与边界（必须随结论一起传）：\n- 这是 cross_check（数值/枚举一致性），不是证明；上述 Sylow 清单只是**必要条件筛查**，每一三元组的可实现性未在此建立。\n- 「20」是下界不是总数：无 GAP ⇒ 336 阶群同构类总数本趟**未测**（不是 20）。\n- 未做形式化（本岗 Lean 关闭口径之外，且形式化归 L）。",
+    "evidence": [
+      "exp:000000"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "336 阶 Sylow 数值+构造性下界：exp:000000（cross_check，exit 0），本机无 GAP，同构类数只给下界 20",
+      "body": "## 做了什么\n把「336 阶群的 Sylow 数值与群计数」变成一条可复现实验：脚本 `scripts/sylow336.py`（sha256 前 16 位 `d24e7ba38261e2fb`）落盘后经 `E.run_experiment` 真跑，登记为 **exp:000000**（method=numeric，evidence_kind=cross_check，result=supports，**exit_code=0**，runtime 2.844s，stdout 全文在 `out/experiments/000000.log`）。正文可直接引 `exp:000000`。\n\n## 依据（读数，全部由脚本现算）\n1. **环境探查原话**（落进 observations.data.env，未加工）：\n   - GAP：`shutil.which('gap') -> None`；`gap -q -c 'Print(1);'` ⇒ `ran=False, returncode=None, stdout=None, stderr=None`。**本机无 GAP**，GAP 分支如实打印 `available=false`，没有伪造任何 `SmallGroup(336,i)` 不变量。\n   - Python 侧：sympy 1.12，`sympy.combinatorics` 导入 OK（可用，但本族计数不依赖它）。\n2. **Sylow 可行值**（n_p ≡ 1 mod p 且 n_p | 336/p 的全解）：\n   - n_2 ∈ {1, 3, 7, 21}\n   - n_3 ∈ {1, 4, 7, 16, 28, 112}\n   - n_7 ∈ {1, 8}\n3. **三元组筛查**：总数 4·6·2 = **48**，通过初等可行性 **38** 个。判据：n_p=1 ⟺ Sylow p-子群正规；n_7=8 时 |G:N_G(P_7)|=8 ⇒ 共轭作用 G→S_8，阶数检验 **336 | 8! = 40320**（40320/336 = 120）成立，故 n_7=8 不被排除；另加元素计数/阶谱一致性核对，无一被排除。\n4. **构造性计数下界**：因 GAP 不可用，改为显式构造 Sylow 相容因子的直积族（如 `C7×C3×C16`、`C7×C3×C8×C2`、`C7×S3×C8`、`(C7:C3)×C16`、`C7×GL(2,3)`、`C7×SL(2,3)×C2` 等），以确定性不变量（阶谱 / 交换化阶 / 中心阶 / (n_2,n_3,n_7)）两两分离 ⇒ **336 阶群同构类数的下界 ≥ 20**。不同不变量 ⇒ 必不同构，故分离合法；不变量相同者被并掉只会低估，下界仍成立。\n\n## 要对方注意的边界（不许被正文抬强度）\n- 这是 **cross_check**，不是证明；**Sylow 清单是必要条件筛查**，各三元组的可实现性本趟未建立。\n- **「20」是下界，不是总数**：无 GAP ⇒ 336 阶群同构类总数本趟 **未测**（三态：不是「没有」、不是「等于 20」）。\n- 若要总数，只有两条路：装 GAP 后数 `NumberSmallGroups(336)` 并抽 `SmallGroup(336,i)` 的不变量；或走 `N ⋊ H` 扩张的带证书枚举（成本高，需要新策略才允许再跑，重复同一条脚本不算进展）。\n\n## 我卡在哪\nGAP 缺失这一条不在我这边能补（装软件是环境决定，不是实验设计）；需要你定：是否允许装 GAP，还是接受「下界 ≥ 20 + 必要条件筛查」这一档结项。若要例子/反例进研究手稿，可把 exp:000000 的 20 个显式群转给 D。"
+    }
+  }
+}

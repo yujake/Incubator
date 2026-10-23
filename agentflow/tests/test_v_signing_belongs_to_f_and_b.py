@@ -34,12 +34,15 @@ from agentflow.verifications import (
 )
 
 #: 边总数的现读：D 不派 V 那一批之后是 33；2026-10-20 同一裁定把 `M→V` 也撤了
-#: （"派 V 只有 F 与 B 两个入口"）⇒ 32。
-EXPECTED_EDGE_TOTAL = 32
+#: （"派 V 只有 F 与 B 两个入口"）⇒ 32；2026-10-22 晚「L 的协作面」（+B→L、+B→D、+L→C）
+#: ⇒ 35；2026-10-23 晚「加 E 派 V 的边」（业主逐字：「E 写的报告要能落下来，且 V 也要会审
+#: 这种东西，加 E 派 V 的边」）⇒ 36。
+EXPECTED_EDGE_TOTAL = 36
 
-#: V 的两个入口（2026-10-20 业主裁定逐字：「派 V 只有 F（自产证明）与 B（文献侧内容）
-#: 两个入口；M 不再直连 V」）。F 与 B 两条一条都不许少，而 `M` 必须不在里面。
-V_ENTRANCES = frozenset({"F", "B"})
+#: V 的入口（2026-10-20 业主裁定逐字：「派 V 只有 F（自产证明）与 B（文献侧内容）
+#: 两个入口；M 不再直连 V」；2026-10-23 晚再加 E —— E 跑出穷举证据之后要能直接派 V 会审）。
+#: F / B / E 三条一条都不许少，而 `M` 必须不在里面。
+V_ENTRANCES = frozenset({"F", "B", "E"})
 
 #: M 的出边（反真空：撤 V 之后这七条一条都不许少）。
 M_EDGES = frozenset({"A", "B", "C", "D", "E", "G", "H"})
@@ -95,7 +98,7 @@ def test_d_has_no_edge_to_v_and_the_total_is_unchanged() -> None:
     # 反真空（正控的另一半）：V 的两个入口（F 与 B）都还在，否则上面那条"不含 V"
     # 可能只是"整个 V 都没人够得着"。
     assert set(V_ENTRANCES) == {r for r, tos in C.ALLOWED_EDGES.items() if "V" in tos}, (
-        "V 的入口集合变了（2026-10-20 裁定：只有 F 与 B 两个入口）",
+        "V 的入口集合变了（2026-10-20 裁定：F 与 B；2026-10-23 晚再加 E）",
         sorted(r for r, t in C.ALLOWED_EDGES.items() if "V" in t))
     for holder in sorted(V_ENTRANCES):
         assert "V" in C.ALLOWED_EDGES[holder], f"{holder}→V 不见了（V 少了一个入口）"

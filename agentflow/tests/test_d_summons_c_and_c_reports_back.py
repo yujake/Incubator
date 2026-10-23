@@ -10,8 +10,9 @@ C 没有出边，链条是 `D → C` 单向：要「候选的更短路径」由 
 `analysis.register_report` 落一份 `analysis_reports` 形态的报告）⇒ D 的下一步里拿得到那份报告
 （`summon` 返回值里带着报告号与路径，且它们出现在 D 第二步的提示词里）；`tasks` 里那条 C 任务
 `called_by == "D"`、`parent_task_id == D 的任务号`。
-② 反真空：`C.edges == ()` 且 `ALLOWED_EDGES["C"] == frozenset()`，边总数 32（2026-10-20 同日业主裁定
-「M 不再直连 V」：33 → 32）—— 不是"我没找到那条边"，是"它真的不在权限面上"。
+② 反真空：`C.edges == ()` 且 `ALLOWED_EDGES["C"] == frozenset()`，边总数 36（2026-10-20 同日业主裁定
+「M 不再直连 V」：33 → 32；2026-10-22 晚「L 的协作面」+3 ⇒ 35；2026-10-23 晚「加 E 派 V 的边」
+⇒ 36）—— 不是"我没找到那条边"，是"它真的不在权限面上"。
 ③ 负控：把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ ② 必须红（证明 ② 真的在读权限面）。
 ④ 负控：把 D 的 `_do_summon` 改成"不读返回值直接 final" ⇒ ① 必须红（证明 ① 守的是"报告回到了 D
 手上"，不是"派出去过"）。
@@ -36,8 +37,9 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 
 #: 边总数的现读（2026-10-20 改回 C 无出边之后：34 → 33；同日业主裁定「M 不再直连 V」：
-#: 33 → 32 —— V 的两个入口是 F 与 B，M→V 撤掉）。
-EXPECTED_EDGE_TOTAL = 32
+#: 33 → 32 —— V 的入口是 F 与 B，M→V 撤掉；2026-10-22 晚「L 的协作面」+3 ⇒ 35；
+#: 2026-10-23 晚「加 E 派 V 的边」⇒ 36）。
+EXPECTED_EDGE_TOTAL = 36
 
 #: 这一趟要跑的两条循环：D 派活、C 干自己的活（空动作 ⇒ 角色级那一档）。
 LOOPS: dict[tuple[str, str], dict] = {("D", ""): {}, ("C", ""): {}}

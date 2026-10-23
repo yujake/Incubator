@@ -1,0 +1,94 @@
+# sylow-numbers-336
+# 脚本 scripts/sylow336.py  sha256=d24e7ba38261e2fb
+# exit_code=0  runtime=2.844s
+# claim: For |G|=336=2^4·3·7: the feasible Sylow counts are n_2 ∈ {1,3,7,21}, n_3 ∈ {1,4,7,16,28,112}, n_7 ∈ {1,8}; the list is produced and screened by a deterministic script that also records (a) the GAP/Python group-library probe verbatim, (b) the finiteness-screen (Sylow-count constraints, 336 | 8! embedding check for n_7=8, and the count of 336-order group isomorphism classes if a library is present, else a certified constructive lower bound from N ⋊ H extension counting).
+----- stdout -----
+=== 1. ENV PROBE (verbatim) ===
+python: 3.11.4 (tags/v3.11.4:d2340ef, Jun  7 2023, 05:45:37) [MSC v.1934 64 bit (AMD64)]
+python_executable: C:\Users\ysc20\AppData\Local\Programs\Python\Python311\python.exe
+shutil.which('gap') -> None
+gap: NOT FOUND on PATH (shutil.which returned None) -> GAP branch unavailable
+import sympy -> OK, version 1.12
+from sympy.combinatorics import Permutation, PermutationGroup -> OK
+import sympy.combinatorics.named_groups -> OK
+import sympy.combinatorics.fp_groups -> OK
+import sympy.combinatorics.pc_groups -> OK
+import sympy.combinatorics.util -> OK
+
+=== 2. Sylow arithmetic, |G| = 336 = 2^4 * 3 * 7 ===
+p=2  p^a=16  N/p^a= 21  divisors(N/p^a)=[1, 3, 7, 21]
+   => n_2 in [1, 3, 7, 21]              [n=1 mod 2, n | 21; full scan of 1..336 agrees]
+p=3  p^a= 3  N/p^a=112  divisors(N/p^a)=[1, 2, 4, 7, 8, 14, 16, 28, 56, 112]
+   => n_3 in [1, 4, 7, 16, 28, 112]     [n=1 mod 3, n | 112; full scan of 1..336 agrees]
+p=7  p^a= 7  N/p^a= 48  divisors(N/p^a)=[1, 2, 3, 4, 6, 8, 12, 16, 24, 48]
+   => n_7 in [1, 8]                     [n=1 mod 7, n | 48; full scan of 1..336 agrees]
+PROGRESS: {"done": true, "opts": {"2": [1, 3, 7, 21], "3": [1, 4, 7, 16, 28, 112], "7": [1, 8]}, "step": "sylow_options"}
+
+=== 3. Elementary feasibility of the 48 triples (n_2,n_3,n_7) ===
+triples total=48 ; pass element-count bound (1+sum n_p(p^a-1) <= 336)=38 ; pass all elementary checks=38
+note: n_p=1 <=> the Sylow p-subgroup is normal (standard Sylow theorem).
+note: n_7=8 => |G:N_G(P_7)|=8, so G acts on the 8 Sylow 7-subgroups; the arithmetic tests (336 | 8! = 40320, 336 | |A_8| = 20160) do NOT exclude this case.
+  infeasible by element count: (n2,n3,n7)=(7, 112, 8)  needs 378 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 1, 8)  needs 366 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 4, 8)  needs 372 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 7, 8)  needs 378 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 16, 1)  needs 354 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 16, 8)  needs 396 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 28, 1)  needs 378 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 28, 8)  needs 420 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 112, 1)  needs 546 > 336 distinct elements
+  infeasible by element count: (n2,n3,n7)=(21, 112, 8)  needs 588 > 336 distinct elements
+PROGRESS: {"feasible": 38, "step": "triples", "total": 48}
+
+=== 4. GAP branch ===
+GAP branch: SKIPPED (gap unavailable) -- exact isomorphism-class count of order-336 groups NOT determined by this run
+
+=== 5. Constructive lower bound (n_7 = 1 extension family) ===
+family A: C7 x H,  H a group of order 48 (17 explicit H below)
+family B: (C7:C3) x A,  A abelian of order 16 (5 groups)
+  C7 x C3xC16              n2=1  n3=1   n7=1 |Z|=336 |G^ab|=336 orders={'1': 1, '2': 1, '3': 2, '4': 2, '6': 2, '7': 6, '8': 4, '12': 4, '14': 6, '16': 8, '21': 12, '24': 8, '28': 12, '42': 12, '48': 16, '56': 24, '84': 24, '112': 48, '168': 48, '336': 96}  (0.02s)
+PROGRESS: {"group": "C7 x C3xC16", "n2": 1, "n3": 1, "n7": 1, "sec": 0.022, "step": "group"}
+  C7 x C3xC8xC2            n2=1  n3=1   n7=1 |Z|=336 |G^ab|=336 orders={'1': 1, '2': 3, '3': 2, '4': 4, '6': 6, '7': 6, '8': 8, '12': 8, '14': 18, '21': 12, '24': 16, '28': 24, '42': 36, '56': 48, '84': 48, '168': 96}  (0.03s)
+PROGRESS: {"group": "C7 x C3xC8xC2", "n2": 1, "n3": 1, "n7": 1, "sec": 0.031, "step": "group"}
+  C7 x C3xC4xC4            n2=1  n3=1   n7=1 |Z|=336 |G^ab|=336 orders={'1': 1, '2': 3, '3': 2, '4': 12, '6': 6, '7': 6, '12': 24, '14': 18, '21': 12, '28': 72, '42': 36, '84': 144}  (0.02s)
+PROGRESS: {"group": "C7 x C3xC4xC4", "n2": 1, "n3": 1, "n7": 1, "sec": 0.02, "step": "group"}
+  C7 x C3xC4xC2xC2         n2=1  n3=1   n7=1 |Z|=336 |G^ab|=336 orders={'1': 1, '2': 7, '3': 2, '4': 8, '6': 14, '7': 6, '12': 16, '14': 42, '21': 12, '28': 48, '42': 84, '84': 96}  (0.03s)
+PROGRESS: {"group": "C7 x C3xC4xC2xC2", "n2": 1, "n3": 1, "n7": 1, "sec": 0.03, "step": "group"}
+  C7 x C3xC2^4             n2=1  n3=1   n7=1 |Z|=336 |G^ab|=336 orders={'1': 1, '2': 15, '3': 2, '6': 30, '7': 6, '14': 90, '21': 12, '42': 180}  (0.03s)
+PROGRESS: {"group": "C7 x C3xC2^4", "n2": 1, "n3": 1, "n7": 1, "sec": 0.03, "step": "group"}
+  C7 x S3xC8               n2=3  n3=1   n7=1 |Z|=56  |G^ab|=112 orders={'1': 1, '2': 7, '3': 2, '4': 8, '6': 2, '7': 6, '8': 16, '12': 4, '14': 42, '21': 12, '24': 8, '28': 48, '42': 12, '56': 96, '84': 24, '168': 48}  (0.02s)
+PROGRESS: {"group": "C7 x S3xC8", "n2": 3, "n3": 1, "n7": 1, "sec": 0.017, "step": "group"}
+  C7 x S3xC4xC2            n2=3  n3=1   n7=1 |Z|=56  |G^ab|=112 orders={'1': 1, '2': 15, '3': 2, '4': 16, '6': 6, '7': 6, '12': 8, '14': 90, '21': 12, '28': 96, '42': 36, '84': 48}  (0.02s)
+PROGRESS: {"group": "C7 x S3xC4xC2", "n2": 3, "n3": 1, "n7": 1, "sec": 0.017, "step": "group"}
+  C7 x S3xC2^3             n2=3  n3=1   n7=1 |Z|=56  |G^ab|=112 orders={'1': 1, '2': 31, '3': 2, '6': 14, '7': 6, '14': 186, '21': 12, '42': 84}  (0.02s)
+PROGRESS: {"group": "C7 x S3xC2^3", "n2": 3, "n3": 1, "n7": 1, "sec": 0.024, "step": "group"}
+  C7 x D8xC6               n2=1  n3=1   n7=1 |Z|=84  |G^ab|=168 orders={'1': 1, '2': 11, '3': 2, '4': 4, '6': 22, '7': 6, '12': 8, '14': 66, '21': 12, '28': 24, '42': 132, '84': 48}  (0.02s)
+PROGRESS: {"group": "C7 x D8xC6", "n2": 1, "n3": 1, "n7": 1, "sec": 0.021, "step": "group"}
+  C7 x Q8xC6               n2=1  n3=1   n7=1 |Z|=84  |G^ab|=168 orders={'1': 1, '2': 3, '3': 2, '4': 12, '6': 6, '7': 6, '12': 24, '14': 18, '21': 12, '28': 72, '42': 36, '84': 144}  (0.03s)
+PROGRESS: {"group": "C7 x Q8xC6", "n2": 1, "n3": 1, "n7": 1, "sec": 0.028, "step": "group"}
+  C7 x A4xC4               n2=1  n3=4   n7=1 |Z|=28  |G^ab|=84  orders={'1': 1, '2': 7, '3': 8, '4': 8, '6': 8, '7': 6, '12': 16, '14': 42, '21': 48, '28': 48, '42': 48, '84': 96}  (0.03s)
+PROGRESS: {"group": "C7 x A4xC4", "n2": 1, "n3": 4, "n7": 1, "sec": 0.026, "step": "group"}
+  C7 x A4xC2xC2            n2=1  n3=4   n7=1 |Z|=28  |G^ab|=84  orders={'1': 1, '2': 15, '3': 8, '6': 24, '7': 6, '14': 90, '21': 48, '42': 144}  (0.03s)
+PROGRESS: {"group": "C7 x A4xC2xC2", "n2": 1, "n3": 4, "n7": 1, "sec": 0.026, "step": "group"}
+  C7 x D48                 n2=3  n3=1   n7=1 |Z|=14  |G^ab|=28  orders={'1': 1, '2': 25, '3': 2, '4': 2, '6': 2, '7': 6, '8': 4, '12': 4, '14': 150, '21': 12, '24': 8, '28': 12, '42': 12, '56': 24, '84': 24, '168': 48}  (0.02s)
+PROGRESS: {"group": "C7 x D48", "n2": 3, "n3": 1, "n7": 1, "sec": 0.016, "step": "group"}
+  C7 x GL(2,3)             n2=3  n3=4   n7=1 |Z|=14  |G^ab|=14  orders={'1': 1, '2': 13, '3': 8, '4': 6, '6': 8, '7': 6, '8': 12, '14': 78, '21': 48, '28': 36, '42': 48, '56': 72}  (0.03s)
+PROGRESS: {"group": "C7 x GL(2,3)", "n2": 3, "n3": 4, "n7": 1, "sec": 0.028, "step": "group"}
+  C7 x SL(2,3)xC2          n2=1  n3=4   n7=1 |Z|=28  |G^ab|=42  orders={'1': 1, '2': 3, '3': 8, '4': 12, '6': 24, '7': 6, '14': 18, '21': 48, '28': 72, '42': 144}  (0.03s)
+PROGRESS: {"group": "C7 x SL(2,3)xC2", "n2": 1, "n3": 4, "n7": 1, "sec": 0.031, "step": "group"}
+  (C7:C3) x C16            n2=1  n3=7   n7=1 |Z|=16  |G^ab|=48  orders={'1': 1, '2': 1, '3': 14, '4': 2, '6': 14, '7': 6, '8': 4, '12': 28, '14': 6, '16': 8, '24': 56, '28': 12, '48': 112, '56': 24, '112': 48}  (0.03s)
+PROGRESS: {"group": "(C7:C3) x C16", "n2": 1, "n3": 7, "n7": 1, "sec": 0.032, "step": "group"}
+  (C7:C3) x C8xC2          n2=1  n3=7   n7=1 |Z|=16  |G^ab|=48  orders={'1': 1, '2': 3, '3': 14, '4': 4, '6': 42, '7': 6, '8': 8, '12': 56, '14': 18, '24': 112, '28': 24, '56': 48}  (0.02s)
+PROGRESS: {"group": "(C7:C3) x C8xC2", "n2": 1, "n3": 7, "n7": 1, "sec": 0.023, "step": "group"}
+  (C7:C3) x C4xC4          n2=1  n3=7   n7=1 |Z|=16  |G^ab|=48  orders={'1': 1, '2': 3, '3': 14, '4': 12, '6': 42, '7': 6, '12': 168, '14': 18, '28': 72}  (0.02s)
+PROGRESS: {"group": "(C7:C3) x C4xC4", "n2": 1, "n3": 7, "n7": 1, "sec": 0.018, "step": "group"}
+  (C7:C3) x C4xC2xC2       n2=1  n3=7   n7=1 |Z|=16  |G^ab|=48  orders={'1': 1, '2': 7, '3': 14, '4': 8, '6': 98, '7': 6, '12': 112, '14': 42, '28': 48}  (0.01s)
+PROGRESS: {"group": "(C7:C3) x C4xC2xC2", "n2": 1, "n3": 7, "n7": 1, "sec": 0.015, "step": "group"}
+  (C7:C3) x C2^4           n2=1  n3=7   n7=1 |Z|=16  |G^ab|=48  orders={'1': 1, '2': 15, '3': 14, '6': 210, '7': 6, '14': 90}  (0.03s)
+PROGRESS: {"group": "(C7:C3) x C2^4", "n2": 1, "n3": 7, "n7": 1, "sec": 0.03, "step": "group"}
+
+certified lower bound: 20 pairwise non-isomorphic groups of order 336 (distinct invariant tuples: centre, |G^ab|, n_2, n_3, n_7, order spectrum)
+Sylow triples realized by the construction: [(1, 1, 1), (1, 4, 1), (1, 7, 1), (3, 1, 1), (3, 4, 1)]
+checks: [{"name": "opts_recomputed_by_brute_force", "ok": true}, {"name": "triple_count_is_product", "ok": true}, {"name": "336_divides_8factorial", "ok": true}, {"name": "336_divides_A8", "ok": true}, {"name": "lower_bound_at_least_10", "ok": true}, {"name": "all_constructed_have_normal_Sylow7", "ok": true}]
+REPRO_RESULT: {"bound": {"bound_meaning": "K counts pairwise non-isomorphic groups built explicitly here and separated by deterministic invariants; it is a lower bound, NOT the total number of order-336 groups", "certified_lower_bound_on_number_of_groups_of_order_336": 20, "n_2": [1, 3, 7, 21], "n_3": [1, 4, 7, 16, 28, 112], "n_7": [1, 8], "triples_elementary_feasible": 38, "triples_passing_element_count": 38, "triples_total": 48}, "data": {"env": {"gap": {"cmd": null, "ran": false, "returncode": null, "stderr": null, "stdout": null, "which": null}, "python_group_theory": {"sympy_combinatorics": "OK", "sympy_version": "1.12"}}, "failures": [], "gap_branch": {"available": false, "reason": "shutil.which('gap') -> None ; gap -q -c 'Print(1);' ran=False rc=None"}, "groups": [{"abelianization": 336, "center": 336, "group": "C7 x C3xC16", "n2": 1, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "112": 48, "12": 4, "14": 6, "16": 8, "168": 48, "2": 1, "21": 12, "24": 8, "28": 12, "3": 2, "336": 96, "4": 2, "42": 12, "48": 16, "56": 24, "6": 2, "7": 6, "8": 4, "84": 24}}, {"abelianization": 336, "center": 336, "group": "C7 x C3xC8xC2", "n2": 1, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 8, "14": 18, "168": 96, "2": 3, "21": 12, "24": 16, "28": 24, "3": 2, "4": 4, "42": 36, "56": 48, "6": 6, "7": 6, "8": 8, "84": 48}}, {"abelianization": 336, "center": 336, "group": "C7 x C3xC4xC4", "n2": 1, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 24, "14": 18, "2": 3, "21": 12, "28": 72, "3": 2, "4": 12, "42": 36, "6": 6, "7": 6, "84": 144}}, {"abelianization": 336, "center": 336, "group": "C7 x C3xC4xC2xC2", "n2": 1, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 16, "14": 42, "2": 7, "21": 12, "28": 48, "3": 2, "4": 8, "42": 84, "6": 14, "7": 6, "84": 96}}, {"abelianization": 336, "center": 336, "group": "C7 x C3xC2^4", "n2": 1, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "14": 90, "2": 15, "21": 12, "3": 2, "42": 180, "6": 30, "7": 6}}, {"abelianization": 112, "center": 56, "group": "C7 x S3xC8", "n2": 3, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 4, "14": 42, "168": 48, "2": 7, "21": 12, "24": 8, "28": 48, "3": 2, "4": 8, "42": 12, "56": 96, "6": 2, "7": 6, "8": 16, "84": 24}}, {"abelianization": 112, "center": 56, "group": "C7 x S3xC4xC2", "n2": 3, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 8, "14": 90, "2": 15, "21": 12, "28": 96, "3": 2, "4": 16, "42": 36, "6": 6, "7": 6, "84": 48}}, {"abelianization": 112, "center": 56, "group": "C7 x S3xC2^3", "n2": 3, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "14": 186, "2": 31, "21": 12, "3": 2, "42": 84, "6": 14, "7": 6}}, {"abelianization": 168, "center": 84, "group": "C7 x D8xC6", "n2": 1, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 8, "14": 66, "2": 11, "21": 12, "28": 24, "3": 2, "4": 4, "42": 132, "6": 22, "7": 6, "84": 48}}, {"abelianization": 168, "center": 84, "group": "C7 x Q8xC6", "n2": 1, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 24, "14": 18, "2": 3, "21": 12, "28": 72, "3": 2, "4": 12, "42": 36, "6": 6, "7": 6, "84": 144}}, {"abelianization": 84, "center": 28, "group": "C7 x A4xC4", "n2": 1, "n3": 4, "n7": 1, "order_spectrum": {"1": 1, "12": 16, "14": 42, "2": 7, "21": 48, "28": 48, "3": 8, "4": 8, "42": 48, "6": 8, "7": 6, "84": 96}}, {"abelianization": 84, "center": 28, "group": "C7 x A4xC2xC2", "n2": 1, "n3": 4, "n7": 1, "order_spectrum": {"1": 1, "14": 90, "2": 15, "21": 48, "3": 8, "42": 144, "6": 24, "7": 6}}, {"abelianization": 28, "center": 14, "group": "C7 x D48", "n2": 3, "n3": 1, "n7": 1, "order_spectrum": {"1": 1, "12": 4, "14": 150, "168": 48, "2": 25, "21": 12, "24": 8, "28": 12, "3": 2, "4": 2, "42": 12, "56": 24, "6": 2, "7": 6, "8": 4, "84": 24}}, {"abelianization": 14, "center": 14, "group": "C7 x GL(2,3)", "n2": 3, "n3": 4, "n7": 1, "order_spectrum": {"1": 1, "14": 78, "2": 13, "21": 48, "28": 36, "3": 8, "4": 6, "42": 48, "56": 72, "6": 8, "7": 6, "8": 12}}, {"abelianization": 42, "center": 28, "group": "C7 x SL(2,3)xC2", "n2": 1, "n3": 4, "n7": 1, "order_spectrum": {"1": 1, "14": 18, "2": 3, "21": 48, "28": 72, "3": 8, "4": 12, "42": 144, "6": 24, "7": 6}}, {"abelianization": 48, "center": 16, "group": "(C7:C3) x C16", "n2": 1, "n3": 7, "n7": 1, "order_spectrum": {"1": 1, "112": 48, "12": 28, "14": 6, "16": 8, "2": 1, "24": 56, "28": 12, "3": 14, "4": 2, "48": 112, "56": 24, "6": 14, "7": 6, "8": 4}}, {"abelianization": 48, "center": 16, "group": "(C7:C3) x C8xC2", "n2": 1, "n3": 7, "n7": 1, "order_spectrum": {"1": 1, "12": 56, "14": 18, "2": 3, "24": 112, "28": 24, "3": 14, "4": 4, "56": 48, "6": 42, "7": 6, "8": 8}}, {"abelianization": 48, "center": 16, "group": "(C7:C3) x C4xC4", "n2": 1, "n3": 7, "n7": 1, "order_spectrum": {"1": 1, "12": 168, "14": 18, "2": 3, "28": 72, "3": 14, "4": 12, "6": 42, "7": 6}}, {"abelianization": 48, "center": 16, "group": "(C7:C3) x C4xC2xC2", "n2": 1, "n3": 7, "n7": 1, "order_spectrum": {"1": 1, "12": 112, "14": 42, "2": 7, "28": 48, "3": 14, "4": 8, "6": 98, "7": 6}}, {"abelianization": 48, "center": 16, "group": "(C7:C3) x C2^4", "n2": 1, "n3": 7, "n7": 1, "order_spectrum": {"1": 1, "14": 90, "2": 15, "3": 14, "6": 210, "7": 6}}], "opts": {"2": [1, 3, 7, 21], "3": [1, 4, 7, 16, 28, 112], "7": [1, 8]}, "realized_triples": [[1, 1, 1], [1, 4, 1], [1, 7, 1], [3, 1, 1], [3, 4, 1]]}, "result": "supports", "scaling": {"built_groups": 20, "candidate_groups": 20, "cost_model": "per group: table build O(|G|^2)=112896 mults; orders, centre and commutator scan are O(|G|^2); Sylow-2 search is O(|G|) closure steps + O(|G|*16) normalizer test", "distinct_by_invariants": 20, "per_group_sec": [0.022, 0.031, 0.02, 0.03, 0.03, 0.017, 0.017, 0.024, 0.021, 0.028, 0.026, 0.026, 0.016, 0.028, 0.031, 0.032, 0.023, 0.018, 0.015, 0.03], "sylow_scan_sec": 2.602, "total_sec": 2.602}, "strategy": "brute-force divisor scan for n_p (n=1 mod p, n | 336/p^a) over 1..336; element-count necessary condition 1+sum n_p(p^a-1) <= 336; index-8 action arithmetic for n_7=8; constructive lower bound via C7 x H and (C7:C3) x A with full multiplication tables and exact invariants (centre, abelianization, n_2 via normalizer, n_3/n_7 via element-order counts, order spectrum)"}
+----- stderr -----

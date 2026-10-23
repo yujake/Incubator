@@ -166,7 +166,12 @@ def test_allowed_edges_match_design_table():
     # 这两条之外没有放宽任何别的边（A / E / F / G 仍然不在 B 的出边里）。
     assert C.ALLOWED_EDGES["B"] == frozenset({"C", "D", "H", "L", "V"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
-    assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D"})
+    # 2026-10-23 晚（业主裁定逐字：「E 写的报告要能落下来，且 V 也要会审这种东西，
+    # 加 E 派 V 的边」）：E 跑出穷举证据之后要能直接派 V 会审 —— 在那之前两人之间
+    # 隔着 M 转一手，而"谁该看什么"就多一处猜测。这条边是单向的（E→V）：V 自己的
+    # 出边（只有 F）一个字未动，其它角色到 V 的边也没有动（那一份在
+    # `test_agent_v_exhaustion_review.py` 里逐条钉着）。
+    assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D", "V"})
     assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E", "V"})
     assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"})
     # `V`（验证者）只与 F 交互：出边只有 F（用户 2026-10-05 第七轮裁定）。

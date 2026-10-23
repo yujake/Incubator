@@ -10,6 +10,21 @@
 | ③ | 同一个进程里 关 → 开 → 关：`active` 三次都跟着换（覆盖数、那一趟、那一行文案一起换） | 没有这一格就无从谈"跟随"；有了以后它若被缓存住，读数会停在旧档 |
 | ④ | 反真空：把"哪一档在用"打桩成恒 `off` ⇒ ② 必红；把"当前开关"打桩成恒 `False` ⇒ ① 与 ③ 必红 | 判据若接在别处，打桩不会让它变 |
 
+## 三层来源（2026-10-23 晚的小修：多进程时那一格说反了）
+
+网页进程自己没设 `AGENTFLOW_LEAN_ENABLED`，于是"当前使用"那一格说的是网页的开关，
+而不是正在跑的那一趟的开关。下面五条钉住新的口径（每一条在改之前都是红的）：
+
+| 条 | 判据 | 改前为什么红 |
+|---|---|---|
+| ⑦ | 夹具工作区里有一条 lean=true 的运行记录，测试进程开关是关 ⇒ `active` 是 Lean 版、`source="run"`、文案里写"正在跑的那一趟" | 没有这一路取数，`active` 只看本进程开关 ⇒ 显示非 Lean 版；`source` 这一格根本不存在 |
+| ⑧ | 同一条记录换成 lean=false、进程开关是开 ⇒ `active` 是非 Lean 版、`source="run"`（双向都测） | 同上，反方向也错 |
+| ⑨ | 没有运行记录 ⇒ `source="process"`，文案里有"按本进程开关" | `source` 这一格不存在 |
+| ⑩ | 运行记录读不出来 ⇒ `source="unknown"` 加理由，不许冒充 run 或 process | 同上；改前的实现会直接拿本进程开关顶上 |
+| ⑪ | 反真空：把"读运行记录"打桩成恒 None ⇒ ⑦ 必红 | 判据若没真的接在那一处，打桩不会让它变 |
+
+另有一条（`test_12`）钉住"优先正在跑"：正在跑的那一趟即使比最近一趟更早，也要取它。
+
 ## 为什么断言里现读一次真开关
 
 `_assert_follows_the_real_switch` 不用测试自己 set 的那个值，而是现读
@@ -28,6 +43,7 @@ from __future__ import annotations
 import contextlib
 import http.client
 import json
+import os
 import pathlib
 import threading
 from typing import Any, Iterator
@@ -370,6 +386,234 @@ def test_6_the_cache_endpoint_carries_the_active_tier(tmp_path: pathlib.Path) ->
     assert active["strategy"] == "switch", active
     assert "当前" in active["text"], active["text"]
     assert active["tri"] in ("found", "unknown"), active
+
+
+# ====================================================================== 运行记录的 lean 状态
+#: 工作区根可以显式给的那一格（网页进程拿不到 root，靠它找到"这个工作区"）。
+WS_ENV = "AGENTFLOW_WORKSPACE_ROOT"
+
+#: 运行记录里那一趟的时间（与缓存读数文件里两趟的时间都不同，才量得出"读的是哪一处"）。
+RECORD_AT = "2026-10-23T04:15:27Z"
+
+
+def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:
+    """一个夹具工作区：`runs/` 与 `sessions/` 都在（与真工作区同形）。"""
+    ws = tmp_path / "ws-run-records"
+    (ws / "runs").mkdir(parents=True, exist_ok=True)
+    (ws / "sessions").mkdir(parents=True, exist_ok=True)
+    return ws
+
+
+def _lean_record(ws: pathlib.Path, *, sid: str = "lg2", lean: bool = True,
+                 at: str = RECORD_AT, pid: int | None = None) -> pathlib.Path:
+    """写一条"这一趟起跑时的 lean 状态"记录（`run_reading` 起跑时写的那个形状）。"""
+    from agentflow import agent_prompts as AP
+
+    path = ws / "runs" / f"cache-active-{sid}.json"
+    payload = {"schema": 1, "kind": "cache_active", "sid": sid, "at": at,
+               "lean_enabled": bool(lean), "tier": "on" if lean else "off",
+               "prompt_version": str(AP.PROMPT_VERSION),
+               "pid": int(os.getpid() if pid is None else pid),
+               "workspace_root": str(ws)}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+    return path
+
+
+def _live_pid(ws: pathlib.Path, *, sid: str = "lg2", role: str = "M",
+              pid: int | None = None) -> pathlib.Path:
+    """写一份还活着的进程登记（`runs/<角色>-<会话号>.pid`，判"正在跑"用的就是它）。"""
+    path = ws / "runs" / f"{role}-{sid}.pid"
+    path.write_text(json.dumps({"pid": int(os.getpid() if pid is None else pid),
+                               "role": role, "sid": sid,
+                               "started_at": "2026-10-23T12:15:27+08:00",
+                               "ppid": os.getppid()}, ensure_ascii=False) + "\n",
+                    encoding="utf-8")
+    return path
+
+
+def _assert_run_lean_on_shape(doc: dict[str, Any]) -> None:
+    """⑦ 的断言体：记录说 lean=true，本进程开关是关 —— 那一格必须说 Lean 版。"""
+    active = doc["active"]
+    assert active["tier"] == "on", active       # 改前这一格是 off（说了反话）
+    assert active["lean"] is True, active
+    assert active["tri"] == "found", (active["tri"], active["why"])
+    assert active["fresh"] is True, active
+    assert active["covered"] == "12/12", active
+    assert active["run_at"] == ON_AT, active
+    assert active["source"] == "run", active
+    assert active["record_sid"] == "lg2", active
+    assert active["record_at"] == RECORD_AT, active
+    assert active["record_state"] == "running", active
+    assert "**Lean 版缓存**" in active["text"], active["text"]
+    assert "来源=正在跑的那一趟 lg2" in active["text"], active["text"]
+    assert "按本进程开关" not in active["text"], active["text"]
+    assert "开关：开" in active["text"], active["text"]
+
+
+def test_7_a_lean_on_run_record_wins_over_the_process_switch_off(
+        both_tiers: tuple[pathlib.Path, Any],
+        renders: dict[str, dict[str, dict[str, Any]]],
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None:
+    """⑦ 记录说 lean=true、进程开关关 ⇒ active 是 Lean 版、source=run（不许说反）。"""
+    path, C = both_tiers
+    ws = _workspace(tmp_path)
+    _lean_record(ws, lean=True)
+    _live_pid(ws)
+    monkeypatch.setenv(WS_ENV, str(ws))
+    monkeypatch.setenv(SWITCH_ENV, "0")
+    doc = C.status(path=path, renders=renders, key=_key())
+    assert doc["lean_now"] is False, doc["lean_now"]   # 前提：网页进程开关确实是关的
+    _assert_run_lean_on_shape(doc)
+    # 命令行与网页同一个函数出：`cache status` 印的是同一句
+    assert C.cmd_status(_ns(readings=str(path))) in (C.EXIT_FRESH, C.EXIT_STALE,
+                                                     C.EXIT_UNKNOWN)
+    out = capsys.readouterr().out
+    assert str(doc["active"]["text"]) in out, out
+
+
+def test_8_a_lean_off_run_record_wins_over_the_process_switch_on(
+        both_tiers: tuple[pathlib.Path, Any],
+        renders: dict[str, dict[str, dict[str, Any]]],
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑧ 同一条记录换成 lean=false、进程开关开 ⇒ active 是非 Lean 版、source=run。"""
+    path, C = both_tiers
+    ws = _workspace(tmp_path)
+    _lean_record(ws, lean=False)
+    _live_pid(ws)
+    monkeypatch.setenv(WS_ENV, str(ws))
+    monkeypatch.setenv(SWITCH_ENV, "1")
+    doc = C.status(path=path, renders=renders, key=_key())
+    active = doc["active"]
+    assert doc["lean_now"] is True, doc["lean_now"]  # 进程开关开着，而这一格说的是运行记录
+    assert active["tier"] == "off", active          # 改前这一格是 on（同样说反）
+    assert active["lean"] is False, active
+    assert active["source"] == "run", active
+    assert active["tri"] == "found", (active["tri"], active["why"])
+    assert active["covered"] == "11/12", active
+    assert "L" in active["absent"], active
+    assert active["run_at"] == OFF_AT, active
+    assert active["record_state"] == "running", active
+    assert "**非 Lean 版缓存**" in active["text"], active["text"]
+    assert "L 受控缺席" in active["text"], active["text"]
+    assert "来源=正在跑的那一趟 lg2" in active["text"], active["text"]
+    assert "开关：关" in active["text"], active["text"]
+    # 双向都测：②那一档的断言体在这里必须不成立（否则这一条只是重复了①）
+    with pytest.raises(AssertionError):
+        _assert_run_lean_on_shape(doc)
+
+
+def test_9_without_a_run_record_the_process_switch_is_the_source(
+        both_tiers: tuple[pathlib.Path, Any],
+        renders: dict[str, dict[str, dict[str, Any]]],
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑨ 工作区里没有运行记录 ⇒ source=process，文案里写明"按本进程开关"。"""
+    path, C = both_tiers
+    ws = _workspace(tmp_path)                      # runs/ 是空的
+    monkeypatch.setenv(WS_ENV, str(ws))
+    monkeypatch.setenv(SWITCH_ENV, "0")
+    doc = C.status(path=path, renders=renders, key=_key())
+    active = doc["active"]
+    # 改前这一行里没有"来源"两个字：它只说"按当前开关"（等于让读者以为那就是正在跑的那一趟）
+    assert "按本进程开关" in active["text"], active["text"]
+    assert "这个工作区没有运行记录" in active["text"], active["text"]
+    assert active["source"] == "process", active
+    assert active["strategy"] == "switch", active
+    assert active["tier"] == "off", active
+    assert active["covered"] == "11/12", active
+    assert "来源=正在跑的那一趟" not in active["text"], active["text"]
+    # 前端类型里补上了来源那一格（页面不另拼文案，但契约要跟着长）
+    api_ts = API_TS.read_text(encoding="utf-8")
+    assert "export interface CacheActive {" in api_ts, "api.ts 少了 CacheActive 的声明"
+    block = api_ts.split("export interface CacheActive {", 1)[1].split("}", 1)[0]
+    assert "source: string" in block, "api.ts 的 CacheActive 少了 source 这一格"
+
+
+def test_10_an_unreadable_run_record_is_unknown_and_never_impersonates(
+        both_tiers: tuple[pathlib.Path, Any],
+        renders: dict[str, dict[str, dict[str, Any]]],
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑩ 运行记录读不出来 ⇒ source=unknown 加理由；不许冒充 run，也不许退回 process。"""
+    path, C = both_tiers
+    ws = _workspace(tmp_path)
+    bad = ws / "runs" / "cache-active-lg2.json"
+    bad.write_text('{"sid": "lg2", "lean_enabled": ', encoding="utf-8")
+    monkeypatch.setenv(WS_ENV, str(ws))
+    monkeypatch.setenv(SWITCH_ENV, "1")
+    doc = C.status(path=path, renders=renders, key=_key())
+    active = doc["active"]
+    # 改前这一行会写成"Lean 版缓存…开关：开"（拿本进程开关冒充那一趟的开关）
+    assert "来源=unknown" in active["text"], active["text"]
+    assert "按本进程开关" not in active["text"], active["text"]
+    assert "正在跑的那一趟" not in active["text"], active["text"]
+    assert "最近一趟" not in active["text"], active["text"]
+    # 也不许把"没读成"画成"这一档没有读数"（那是另一条理由）
+    assert "cache_missing_for_lean_state" not in active["text"], active["text"]
+    assert active["source"] == "unknown", active
+    assert active["tri"] == "unknown", active
+    assert active["tier"] == "", active
+    assert "run_record_unreadable" in active["why"], active["why"]
+
+    # 第二种读不出来：JSON 是好的，但没记 lean 状态（这一格不能猜）
+    bad.write_text(json.dumps({"sid": "lg2", "at": RECORD_AT}), encoding="utf-8")
+    again = C.status(path=path, renders=renders, key=_key())
+    assert again["active"]["source"] == "unknown", again["active"]
+    assert again["active"]["tri"] == "unknown", again["active"]
+
+
+def test_11_stubbing_the_run_record_reader_makes_7_red(
+        both_tiers: tuple[pathlib.Path, Any],
+        renders: dict[str, dict[str, dict[str, Any]]],
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑪ 反真空：把"读运行记录"打桩成恒 None ⇒ ⑦ 必红。"""
+    path, C = both_tiers
+    ws = _workspace(tmp_path)
+    _lean_record(ws, lean=True)
+    _live_pid(ws)
+    monkeypatch.setenv(WS_ENV, str(ws))
+    monkeypatch.setenv(SWITCH_ENV, "0")
+    healthy = C.status(path=path, renders=renders, key=_key())
+    _assert_run_lean_on_shape(healthy)             # 前提：真判据下这一格是 Lean 版
+
+    monkeypatch.setattr(C, "run_record_reading",
+                        lambda **_kw: {"tri": "missing", "reason": "", "detail": "",
+                                       "path": "", "state": "", "record": {}},
+                        raising=False)
+    stubbed = C.status(path=path, renders=renders, key=_key())
+    assert stubbed["active"]["source"] == "process", stubbed["active"]
+    assert stubbed["active"]["tier"] == "off", stubbed["active"]
+    with pytest.raises(AssertionError):
+        _assert_run_lean_on_shape(stubbed)
+
+
+def test_12_a_running_run_wins_over_a_newer_finished_one(
+        both_tiers: tuple[pathlib.Path, Any],
+        renders: dict[str, dict[str, dict[str, Any]]],
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """同一条口径的另一半：正在跑的那一趟比"最近一趟"优先（哪怕后者更新）。"""
+    path, C = both_tiers
+    ws = _workspace(tmp_path)
+    # 正在跑的那一趟：更早，但 pid 还活着（lg2，lean=true）
+    _lean_record(ws, sid="lg2", lean=True, at="2026-10-23T03:00:00Z")
+    _live_pid(ws, sid="lg2")
+    # 最近一趟：更晚，但没有人活着（lg3，lean=false）
+    _lean_record(ws, sid="lg3", lean=False, at="2026-10-23T05:00:00Z")
+    monkeypatch.setenv(WS_ENV, str(ws))
+    monkeypatch.setenv(SWITCH_ENV, "0")
+    doc = C.status(path=path, renders=renders, key=_key())
+    active = doc["active"]
+    assert "正在跑的那一趟 lg2" in active["text"], active["text"]
+    assert active["source"] == "run", active
+    assert active["record_sid"] == "lg2", active
+    assert active["record_state"] == "running", active
+    assert active["tier"] == "on", active
 
 
 def _ns(**kw: Any) -> Any:

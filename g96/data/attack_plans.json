@@ -1,0 +1,102 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "plan_id": "000000",
+      "problem": "对 |G|=96=2^5·3，若 n_3(G)=1 且 n_2(G)=1（Q∈Syl_3 与 P∈Syl_2 都正规），则 G ≅ P × C_3。s1 最短路径：Q∩P=1（阶互素）⇒ |QP|=96=|G| ⇒ G=PQ；P、Q 均正规 ⇒ [P,Q]≤P∩Q=1 ⇒ 互相中心化 ⇒ φ:P×Q→G,(p,q)↦pq 是同构 ⇒ G≅P×Q≅P×C_3。推论：该格同构类与 32 阶群同构类一一对应，类数=g(32)（文献口径 51，本地全文缺失，只作待核口径）。",
+      "problem_key": "conj-000000-n3n2-1-splits",
+      "for_question_id": "000000",
+      "status": "attacking",
+      "rounds": 1,
+      "budget": {
+        "max_rounds": 6,
+        "max_parallel_subgoals": 2,
+        "max_persist_attempts": 3,
+        "max_depth": 3
+      },
+      "subgoals": [
+        {
+          "sid": "s1",
+          "text": "证明 P∩Q=1 且 G=PQ（Lagrange + 阶乘公式 |PQ|=|P||Q|/|P∩Q|）。",
+          "owner": "F",
+          "status": "blocked",
+          "evidence_ids": [],
+          "experiment_ids": [],
+          "proof_experiment_ids": [],
+          "blocked_reason": "未接线：本框架尚无可自动调用的 F 侧推理入口",
+          "attempts": 0,
+          "negation_kind": null,
+          "in_flight": true,
+          "tried_strategies": [
+            "套用已知定理"
+          ]
+        },
+        {
+          "sid": "s2",
+          "text": "证明 P、Q 均正规 ⇒ [P,Q]⊆P∩Q=1 ⇒ 逐元素交换，故 φ:P×Q→G 是同态且满、核平凡，得 G≅P×C_3。",
+          "owner": "F",
+          "status": "todo",
+          "evidence_ids": [],
+          "experiment_ids": [],
+          "proof_experiment_ids": [],
+          "blocked_reason": "",
+          "attempts": 0,
+          "negation_kind": null
+        },
+        {
+          "sid": "s3",
+          "text": "把 (n_3,n_2)=(1,1) 格与 32 阶群同构类的一一对应写成推论，并把类数 51 标为待核口径（无逐字全文）。",
+          "owner": "F",
+          "status": "todo",
+          "evidence_ids": [],
+          "experiment_ids": [],
+          "proof_experiment_ids": [],
+          "blocked_reason": "",
+          "attempts": 0,
+          "negation_kind": null
+        }
+      ],
+      "history": [
+        {
+          "round": 1,
+          "sid": "s1",
+          "action": "no_change",
+          "outcome": "no_change",
+          "detail": "子目标 s1（证明 P∩Q=1 且 G=PQ（Lagrange + 阶乘公式 |PQ|=|P||Q|/|P∩Q|）。）需要 F 的推理，但**本框架尚未接线自动推理** ⇒ **未推进**（这一轮什么都没做，不是'做了但没结果'）；已按 §3.16 落成产物 `dead_end`（reason=缺工具，best_partial 1 条）。要把 owner=F 的子目标真正推起来，需要 F 侧先接上可调用的推理入口；在此之前 F 只如实记账，绝不用空证据冒充进展",
+          "evidence": [],
+          "at": "2026-10-23T13:20:30+08:00",
+          "product_detail": {
+            "product": "dead_end",
+            "strategy": "套用已知定理",
+            "why_strategy": "没有可调用的推理入口时，唯一诚实的产物是 dead_end（换子目标/等人接线）",
+            "reason": "缺工具",
+            "evidence": "子目标 s1（证明 P∩Q=1 且 G=PQ（Lagrange + 阶乘公式 |PQ|=|P||Q|/|P∩Q|）。）的 owner=F 侧没有可自动调用的推理入口；这一轮据此判定走不下去，而不是假装推进",
+            "best_partial": [
+              {
+                "what": "子目标原文：证明 P∩Q=1 且 G=PQ（Lagrange + 阶乘公式 |PQ|=|P||Q|/|P∩Q|）。",
+                "ids": [],
+                "why_partial": "还没有任何证据行 —— 这一条是原文本身，不是进展"
+              }
+            ]
+          },
+          "product": "dead_end",
+          "strategy": "套用已知定理",
+          "best_partial": [
+            {
+              "what": "子目标原文：证明 P∩Q=1 且 G=PQ（Lagrange + 阶乘公式 |PQ|=|P||Q|/|P∩Q|）。",
+              "ids": [],
+              "why_partial": "还没有任何证据行 —— 这一条是原文本身，不是进展"
+            }
+          ],
+          "dead_end_reason": "缺工具"
+        }
+      ],
+      "depth": 0,
+      "parent_plan_id": null,
+      "best_partial": "已进行 1 轮。子目标进展（按'离终结有多近'排序）：\n- s2（owner=F，status=todo）: 证明 P、Q 均正规 ⇒ [P,Q]⊆P∩Q=1 ⇒ 逐元素交换，故 φ:P×Q→G 是同态且满、核平凡，得 G≅P×C_3。\n- s3（owner=F，status=todo）: 把 (n_3,n_2)=(1,1) 格与 32 阶群同构类的一一对应写成推论，并把类数 51 标为待核口径（无逐字全文）。\n- s1（owner=F，status=blocked）: 证明 P∩Q=1 且 G=PQ（Lagrange + 阶乘公式 |PQ|=|P||Q|/|P∩Q|）。；卡点：未接线：本框架尚无可自动调用的 F 侧推理入口\n**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。",
+      "created_at": "2026-10-23T13:20:28+08:00",
+      "updated_at": "2026-10-23T13:20:30+08:00",
+      "created_by": "agent-F"
+    }
+  ]
+}

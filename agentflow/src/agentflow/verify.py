@@ -656,10 +656,26 @@ def _check_5(rep, lit_by_id, questions, store):
                                     f"for_question_id 指向不存在的研究问题 {qid}"))
         # FC-22 的第二道闸：schema 已在写入时拒绝"计算类称 proof"，
         # 这里再核一遍表里的存量数据（历史数据、手工改过的数据都在射程内）。
+        #
+        # 2026-10-23（业主裁定「纯数值实验把整个命题证掉了也能拿 proof，理由是穷举，
+        # 签名是那份程序」）：这一闸从"计算类一律不许 proof"变成"穷尽证据齐备才许"，
+        # 判据本体只有一处（`numericproof.exhaustion_problems`）。不齐的行照旧是
+        # `evidence_kind_overclaim` —— 这正是"算了几千个点就说已证明"的拦网。
         if e.get("evidence_kind") == "proof" and e.get("method") != "formal":
-            rep.issues.append(Issue("error", "experiments", eid, "evidence_kind_overclaim",
-                                    f"method={e.get('method')!r} 却记录 evidence_kind='proof'。"
-                                    "数值/符号/穷举都只是交叉验证，不构成证明（FC-22）"))
+            from . import numericproof as _NP
+
+            _num_problems = _NP.exhaustion_problems(
+                method=e.get("method"), observations=e.get("observations"),
+                certificate=e.get("certificate"), search_bound=e.get("search_bound"),
+                code_path=e.get("code_path"), result=e.get("result"))
+            if _num_problems:
+                rep.issues.append(Issue(
+                    "error", "experiments", eid, "evidence_kind_overclaim",
+                    f"method={e.get('method')!r} 却记录 evidence_kind='proof'，"
+                    "而穷尽证据不齐（" + "；".join(_num_problems) + "）。"
+                    "数值/符号/穷举通常只是交叉验证，不构成证明（FC-22）；"
+                    "要拿 proof 就得给出搜索空间 + exhaustive=true + 覆盖说明，"
+                    f"并由 {_NP.NUMERIC_SIGNER} 签（证明栏写程序脚本）"))
         if e.get("code_path") and not str(e.get("code_hash") or "").strip():
             rep.issues.append(Issue("error", "experiments", eid, "unhashed_experiment_code",
                                     "有 code_path 却没有 code_hash：这样的'可复现'只是口号"
@@ -1759,16 +1775,25 @@ def _check_13(rep, store) -> None:
                     if str(e.get("method")) == "formal"
                     and str(e.get("evidence_kind")) == "proof"]
     _formal_keys = [k for k in _formal_keys if k]
+    # 2026-10-23（业主裁定：穷举也能拿 proof，签名是那份程序）：第二条合法背书 ——
+    # 命题的证明栏就是某条穷举证明的三段式证明栏（① 程序 + ② 程序设计 + ③ 穷举论证；V 签、②③ 由 E 写）。
+    # 判据本体只有一处（`numericproof.find_signed_exhaustion_for_column`）。
+    from . import numericproof as _NP
+
     for _s in statements:
         if str(_s.get("evidence_kind") or "") != "proof":
             continue
         _sid = str(_s.get("stmt_id") or "")
         _hay = (str(_s.get("label") or "") + " " + str(_s.get("proof_text") or "")).lower()
-        if not any(k in _hay for k in _formal_keys):
-            rep.issues.append(Issue(
-                "warning", "statements", _sid, "proof_stmt_without_formal_backing",
-                f"命题自称 proof，但台账里没有与它对应的 formal 实验（已有键 {_formal_keys[:4]}）"
-                "；要么补 run_experiment(method=formal)，要么把 evidence_kind 降档"))
+        if any(k in _hay for k in _formal_keys):
+            continue
+        if _NP.find_signed_exhaustion_for_column(experiments, _s.get("proof_text")) is not None:
+            continue
+        rep.issues.append(Issue(
+            "warning", "statements", _sid, "proof_stmt_without_formal_backing",
+            f"命题自称 proof，但台账里没有与它对应的 formal 实验（已有键 {_formal_keys[:4]}），"
+            "也没有一条对应的穷举证明（证明栏应当是那份三段式：程序地址 + 程序设计 + 穷举论证）"
+            "；要么补 run_experiment(method=formal) / 穷举证明，要么把 evidence_kind 降档"))
     for s in statements:
         sid = str(s.get("stmt_id") or "")
         lid = str(s.get("source_lit_id") or "")

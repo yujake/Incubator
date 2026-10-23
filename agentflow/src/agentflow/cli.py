@@ -106,7 +106,7 @@ def make_store(root: Path | None = None) -> Store:
 # ---------------------------------------------------------------- Lean 工具链开机自检
 #
 # 业主 2026-10-22 的原话：「开机自检可以做，防止用户提供虚构的lean环境」。
-# 自检本体在 `leantoolchain`（纯函数四步自检 + 一份四档读数）；这一节只做两件事：
+# 自检本体在 `leantoolchain`（纯函数自检 + 一份四档读数）；这一节只做两件事：
 # 把它打到第一屏，并把"自检不是 usable"变成摘要里那一格 unknown。
 #
 # 为什么接线集中在这一个文件里：`tools/verify_tools.py` 是 FC-27 禁改区
@@ -123,8 +123,37 @@ def _lean_cell(value) -> str:
     return str(value)
 
 
+def _lean_mathlib_text(sc: Mapping) -> str:
+    """第 ⑤ 步（Mathlib 图论）那一格的一行摘要（版本 / 路径 / 可用与否 / 证据原文）。
+
+    为什么这一格必须打到台面上：用户看到的"Lean 能用"与"形式化能用"是两件事 ——
+    盘上那份 Mathlib 编译好了而裸 `lean.exe` 报 `unknown package 'Mathlib'` 的形态
+    等于"装了没用"（2026-10-25 的现场）。这一格就是那件事的读数。
+    `sc` 里没有 `mathlib` 那一格时（老读数、或调用方注入了自检替身）如实写"没读到"，
+    不补一个"可用"。
+    """
+    m = dict(sc.get("mathlib") or {})
+    if not m:
+        return "（这一格没读到：自检读数里没有 mathlib）"
+    state = str(m.get("state") or "")
+    if state == "absent":
+        return ("无 Mathlib（五档都没找到工程根）⇒ 第 ⑤ 步退回裸 lean；"
+                "这一项不可用，不是『检查器坏了』")
+    head = (f"{_lean_cell(state)}；工程根={_lean_cell(m.get('root'))}"
+            f"（来源 {_lean_cell(m.get('source'))}）；"
+            f"版本={_lean_cell(m.get('version'))}")
+    if m.get("runner"):
+        head += (f"；跑法={_lean_cell(m.get('runner'))}"
+                 f"，退出码={_lean_cell(m.get('exit_code'))}")
+    if state == "unusable" or state == "unknown":
+        head += f"；理由：{_lean_cell(m.get('reason'))}"
+    elif m.get("evidence"):
+        head += f"；检查器原文：{_lean_cell(m.get('evidence'))}"
+    return head
+
+
 def _lean_reading_text(sc: Mapping) -> str:
-    """自检读数的一行摘要：state + 开关值 + 来源 + 解释器路径。"""
+    """自检读数的一行摘要：state + 开关值 + 来源 + 解释器路径 + Mathlib 那一格。"""
     src = _lean_cell(sc.get("source"))
     if not str(sc.get("source") or ""):
         src = "五档都没找到"
@@ -133,15 +162,16 @@ def _lean_reading_text(sc: Mapping) -> str:
             f"（来源 {_lean_cell(sc.get('enabled_source'))}）；"
             f"来源={src}；解释器={_lean_cell(sc.get('lean_path'))}；"
             f"版本={_lean_cell(sc.get('version'))}"
-            f"（{'符合期望' if sc.get('version_ok') else '不符或没读出来'}）")
+            f"（{'符合期望' if sc.get('version_ok') else '不符或没读出来'}）；"
+            f"Mathlib={_lean_mathlib_text(sc)}")
 
 
 def _lean_first_screen(root: Path, *, stream=None) -> dict:
     """第一屏：打印 Lean 工具链的三件事，开关开着时真跑一次自检。返回那份读数。
 
-    三件事是业主点名要露出来的：开关值 / 来源 / 解释器路径。之后是四步自检的结论
+    三件事是业主点名要露出来的：开关值 / 来源 / 解释器路径。之后是自检前四步的结论
     （版本、sha256、正样例退出码、反控退出码）与逐条 `problems` —— "没通过"必须带原因，
-    一句"失败"不算读数。
+    一句"失败"不算读数。再之后是第 ⑤ 步那一格（Mathlib 图论可用与否）。
 
     `stream` 只在 `--json` 那一档给 `sys.stderr`：机器读的那一份 stdout 必须保持
     可解析（一条人话混进 JSON 流里，下游拿到的是解析错误而不是结论）。
@@ -176,6 +206,9 @@ def _lean_first_screen(root: Path, *, stream=None) -> dict:
             f"反控退出 {_lean_cell(neg.get('exit_code'))}（必须非 0）"))
     for problem in sc.get("problems") or []:
         emit(tty.bullet(tty.paint(f"没通过：{problem}", "yellow")))
+    # 第 ⑤ 步那一格（业主 2026-10-25：盘上有 Mathlib 而裸 lean 不知道它在哪 ⇒
+    # 装了等于没装）。它与"这个 lean 是不是检查器"是两根轴，所以单独一行。
+    emit(tty.bullet(f"Mathlib（第 ⑤ 步，图论）：{_lean_mathlib_text(sc)}"))
     problem = LT.evidence_state_problem(sc)
     if problem:
         # 这是"防虚构环境"的落点：自检没给出 usable ⇒ 形式化证据一律 unknown。
@@ -231,6 +264,18 @@ def _print_lean_selfcheck(sc: Mapping) -> None:
                          if k != "output_head")
         print(tty.bullet(f"{name}：{head}"))
         print(f"    输出开头：{_lean_cell(row.get('output_head'))}")
+    # 第 ⑤ 步（Mathlib 图论）逐格打出来：工程根 / 版本 / 跑法 / 退出码 / 检查器原文。
+    # 只打一句"图论不可用"等于把"是哪一层断的"藏起来 —— 而"工程根没找到"与
+    # "工程根找到了、`.olean` 不在"与"编过了但库不认"要改的地方完全不同。
+    ml = dict(sc.get("mathlib") or {})
+    if ml:
+        print(tty.bullet(f"mathlib：{_lean_mathlib_text(sc)}"))
+        print(tty.bullet(f"mathlib.runner={_lean_cell(ml.get('runner'))}；"
+                         f"argv={' '.join(str(c) for c in (ml.get('argv') or [])) or '（空）'}"))
+        print(f"    cwd={_lean_cell(ml.get('cwd'))}")
+        print(f"    输出开头：{_lean_cell(ml.get('evidence') or ml.get('output_head'))}")
+        for problem in ml.get("problems") or []:
+            print(f"  - [mathlib] {problem}")
     problems = list(sc.get("problems") or [])
     print(tty.bullet("problems：" + ("（无）" if not problems else f"{len(problems)} 条")))
     for problem in problems:

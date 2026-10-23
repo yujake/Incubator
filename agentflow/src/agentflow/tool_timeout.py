@@ -161,9 +161,9 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
         "框架内置的 LaTeX 编译（两遍 pdflatex）—— 长稿子分钟级起步，给它半小时；"
         "读者从 `draft/117` 起：旧路的 render/build/anchor 三条已退场"),
     # `verify.*` 两件在禁改区 `tools/verify_tools.py` 里 ⇒ 检查点只能由人加（如实标 pending）。
-    "verify.check_formal": TimeoutDecl(
-        600.0, "VERIFY_TIMEOUT", "pending",
-        "Lean/Coq 检查是分钟级起步；handler 在禁改区 verify_tools.py ⇒ 检查点要人加"),
+    # 2026-10-23 晚：`verify.check_formal` 整条删除（E 不做形式化）⇒ 这一格从表里退场；
+    # 形式化那一件今天叫 `formal.check_formal`（L 的），它没有声明限时 —— 那要不要补
+    # 是一笔独立的裁定，不在这一轮。
     "verify.run_experiment": TimeoutDecl(
         600.0, "EXPERIMENT_TIMEOUT", "pending",
         "跑一段实验脚本；handler 在禁改区 verify_tools.py ⇒ 检查点要人加"),

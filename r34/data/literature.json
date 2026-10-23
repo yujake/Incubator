@@ -1,0 +1,547 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "lit_id": "000000",
+      "title": "The Classical Ramsey Number R(3,4)>8 Using the Weighted Graph",
+      "type": "J",
+      "summary": "At present, research on Ramsey Numbers has expanded to a wider scope, not only between 2 complete graphs that are complementary to each other but also a combination of complete graphs, circle graphs, star graphs, wheel graphs, and others. While the classic Ramsey number still leaves problems that need to be solved. Ramsey number R(3,4) > 8. This means that m=8 is the largest integer such that K_(8) which contains components of a red graph G and a complete blue graph G which is still possible not to get K_3 in graph G and not get a blue K_4 in graph G .The graph K_(8) has a total of 28 edges. There are as many as the combination (28,3) red edge pairs that need to be avoided so as not to get any red K_3 edge pairs. And there are as many as the combination (28,4) edge pairs blue. That needs to be avoided in order not to get a pair of blue K_4 edges. Determining the coloring of the of the graph directly is certainly very difficult, especially if the Ramsey number is getting bigger. It's like looking for a needle in a haystack. Need to use a special method in order to solve this problem. The weighting graph method, where each edge is given weight with a certain value, is able to solve…",
+      "path": "000000/the-classical-ramsey-number-r-3-4-8-using-the-weighted-graph.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "doi:10.24036/rmj.v1i1.1",
+      "doi": "10.24036/rmj.v1i1.1",
+      "year": 2022,
+      "authors": [
+        "Khairul Azmi",
+        "Elva",
+        "W Widia"
+      ],
+      "venue": "Rangkiang Mathematics Journal",
+      "language": "en",
+      "added_at": "2026-10-23T13:24:24+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": 200,
+        "bytes": 528174,
+        "sha256": "9f1a916120966efdf6d2502fd3999f9e2b86ca05cbe978317d3fb2db879bd1ad",
+        "error": null,
+        "url": "https://math.ppj.unp.ac.id/index.php/RMJ/article/download/1/1"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.24036/rmj.v1i1.1",
+        "title:the classical ramsey number r 3 4 8 using the weighted graph|2022",
+        "title:the classical ramsey number r 3 4 8 using the weighted graph|*"
+      ]
+    },
+    {
+      "lit_id": "000001",
+      "title": "Parallel evaluation of ASP programs:techniques and implementation",
+      "type": "D",
+      "summary": "Answer Set Programming (ASP) is a purely declarative programming paradigm\\nbased on nonmonotonic reasoning and logic programming. The idea of ASP\\nis to represent a given computational problem by a logic program such that\\nits answer sets correspond to solutions, and then, use an answer set solver\\nto find such solutions. The ASP language is very expressive and allows the\\nrepresentation of high-complexity problems (i.e., every problem in the second\\nlevel of the polynomial hierarchy); unfortunately, the expressive power of the\\nlanguage comes at the price of an elevated cost of answer set computation. Even\\nif this fact has initially discouraged the development of ASP system, nowadays\\nseveral implementations are available, and the interest for ASP is growing in\\nthe scientific community as well as in the field of industry.\\nIn the last few years, significant technological enhancements have been achie-\\nved in the design of computer architectures, with a move towards the adoption\\nof multi-core microprocessors. As a consequence, Symmetric Multi-Processing\\n(SMP) has become available even on non-dedicated machines. Indeed, at the\\ntime of writing, the majority of computer systems…",
+      "path": "000001/parallel-evaluation-of-asp-programs-techniques-and-implement.html",
+      "processed": false,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:parallel evaluation of asp programs techniques and implementation|2011",
+      "doi": null,
+      "year": 2011,
+      "authors": [
+        "M. Sirianni",
+        "Francesco Ricca",
+        "Nicola Leone"
+      ],
+      "venue": "Archive of Doctoral Theses and Digital Collections (University of Calabria)",
+      "language": "en",
+      "added_at": "2026-10-23T13:24:24+08:00",
+      "download": {
+        "status": "content_mismatch",
+        "http_status": 200,
+        "bytes": 435904,
+        "sha256": "3f0d80de4b298392dfd8e708d73c21009300d9502adcdc1d846261783633a1b7",
+        "error": "content_type_mismatch: text/html (URL 无后缀；可能是落地页/登录墙/跳转页，不是直链文件)",
+        "url": "http://hdl.handle.net/10955/1045"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "title:parallel evaluation of asp programs techniques and implementation|2011",
+        "title:parallel evaluation of asp programs techniques and implementation|*"
+      ]
+    },
+    {
+      "lit_id": "000002",
+      "title": "New Lower Bounds for Some Multicolored Ramsey Numbers",
+      "type": "J",
+      "summary": "In this article we use two different methods to find new lower bounds for some multicolored Ramsey numbers. In the first part we use the finite field method used by Greenwood and Gleason [GG] to show that $R(5,5,5) \\geq 242$ and $R(6,6,6) \\geq 692$. In the second part we extend Fan Chung's result in [C] to show that, $$ R(3,3,3,k_1,k_2,\\dots,k_r) \\geq 3 R(3,3,k_1,k_2,\\dots,k_r) + R(k_1,k_2,\\dots,k_r) - 3 $$ holds for any natural number $r$ and for any $k_i\\geq 3$, $i=1,2,\\dots r$. This general result, along with known results, imply the following nontrivial bounds: $R(3,3,3,4) \\geq 91$, $R(3,3,3,5) \\geq 137$, $R(3,3,3,6) \\geq 165$, $R(3,3,3,7) \\geq 220$, $R(3,3,3,9) \\geq 336$, and $R(3,3,3,11) \\geq 422$.",
+      "path": "000002/new-lower-bounds-for-some-multicolored-ramsey-numbers.pdf",
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.37236/1435",
+      "doi": "10.37236/1435",
+      "year": 1998,
+      "authors": [
+        "Aaron Robertson"
+      ],
+      "venue": "The Electronic Journal of Combinatorics",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": 200,
+        "bytes": 108436,
+        "sha256": "e0a691feed4e125685811537cb529d919c94852fcbe3cd44f7a2260825206a67",
+        "error": null,
+        "url": "https://www.combinatorics.org/ojs/index.php/eljc/article/download/v6i1r3/pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.37236/1435",
+        "title:new lower bounds for some multicolored ramsey numbers|1998",
+        "title:new lower bounds for some multicolored ramsey numbers|*"
+      ]
+    },
+    {
+      "lit_id": "000003",
+      "title": "Dichromatic graphs and Ramsey numbers",
+      "type": "J",
+      "summary": "",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.1016/s0021-9800(68)80070-5",
+      "doi": "10.1016/s0021-9800(68)80070-5",
+      "year": 1968,
+      "authors": [
+        "K. Walker"
+      ],
+      "venue": "Journal of Combinatorial Theory",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "failed",
+        "http_status": 403,
+        "bytes": 0,
+        "sha256": null,
+        "error": "all_sources_failed: http_403 [last_kind=http_403]",
+        "url": "https://www.sciencedirect.com/science/article/pii/S0021980068800705/pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.1016/s0021-9800(68)80070-5",
+        "title:dichromatic graphs and ramsey numbers|1968",
+        "title:dichromatic graphs and ramsey numbers|*"
+      ]
+    },
+    {
+      "lit_id": "000004",
+      "title": "Difference Ramsey Numbers and Issai Numbers",
+      "type": "J",
+      "summary": "",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.1006/aama.2000.0678",
+      "doi": "10.1006/aama.2000.0678",
+      "year": 2000,
+      "authors": [
+        "Aaron Robertson"
+      ],
+      "venue": "Advances in Applied Mathematics",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "failed",
+        "http_status": 403,
+        "bytes": 0,
+        "sha256": null,
+        "error": "all_sources_failed: http_403 [last_kind=http_403]",
+        "url": "https://www.sciencedirect.com/science/article/pii/S019688580090678X/pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.1006/aama.2000.0678",
+        "title:difference ramsey numbers and issai numbers|2000",
+        "title:difference ramsey numbers and issai numbers|*"
+      ]
+    },
+    {
+      "lit_id": "000005",
+      "title": "Generalized Ramsey Theory for Graphs. II. Small Diagonal Numbers",
+      "type": "J",
+      "summary": "Consider a finite nonnull graph G with no loops or multiple edges and no isolated points. Its Ramsey number r ( G ) r(G) is defined as the minimum number p such that every 2-coloring of the lines of the complete graph K p {K_p} must contain a monochromatic G . This generalizes the classical diagonal Ramsey numbers r ( n , n ) = r ( K n ) r(n,n) = r({K_n}) . We obtain the exact value of the Ramsey number of every such graph with at most four points.",
+      "path": "000005/generalized-ramsey-theory-for-graphs-ii-small-diagonal-numbe.html",
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.1090/s0002-9939-1972-0332559-x",
+      "doi": "10.1090/s0002-9939-1972-0332559-x",
+      "year": 1972,
+      "authors": [
+        "Václav Chvátal",
+        "Frank Harary"
+      ],
+      "venue": "Proceedings of the American Mathematical Society",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "content_mismatch",
+        "http_status": 200,
+        "bytes": 9401815,
+        "sha256": "032911122bb393cf9f36c1c5c8eb54e57d27daf230798e1dbb3d065041e65821",
+        "error": "content_type_mismatch: text/html (URL 期望 .pdf；可能被代理/劫持或链接并非直链)",
+        "url": "https://www.ams.org/proc/1972-032-02/S0002-9939-1972-0332559-X/S0002-9939-1972-0332559-X.pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.1090/s0002-9939-1972-0332559-x",
+        "title:generalized ramsey theory for graphs ii small diagonal numbers|1972",
+        "title:generalized ramsey theory for graphs ii small diagonal numbers|*"
+      ]
+    },
+    {
+      "lit_id": "000006",
+      "title": "Ramsey numbers and their generalizations",
+      "type": "D",
+      "summary": "Magistrsko delo govori o teoriji, ki v splošnem sodi na področje kombinatorike. Po Ramseyevem izreku iz leta 1930 za poljubna tri naravna števila r, , n obstaja neko najmanjše naravno število m0, za katero velja, da lahko vsaki množici moči m  m0 najprej njene r-elementne podmnožice poljubno razdelimo v  disjunktnih razredov, pa bomo v osnovni množici zagotovo našli podmnožico velikosti n, tako da so vse njene r-elementne podmnožice iz istega razreda. Pripadajoča teorija se v primeru, ko je r = 2, zelo dobro prevede iz množic na polne grafe. Pri tem nam osnovno množico predstavlja množica vozlišč polnega grafa, 2-elementne podmnožice pa so povezave med vozlišči. Število razredov  predstavlja število barv, s katerimi barvamo povezave grafa. V celotnem grafu tedaj iščemo poln podgraf določenega reda n, v katerem so vse povezave iste barve oziroma pripadajo istemu razredu. Pripadajoča števila m0 so klasična Ramseyeva števila. Klasična Ramseyeva števila za polne grafe so sicer še vedno zelo živa in zanimiva tema, vendar so mnogi avtorji osnovni koncept posplošili, iz česar se je rodilo mnogo različnih izpeljank in posplošitev Ramseyevih števil. Kot rečeno obravnavamo pri klasičnih…",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:ramsey numbers and their generalizations|2018",
+      "doi": null,
+      "year": 2018,
+      "authors": [
+        "Mitja Hočevar"
+      ],
+      "venue": "Repository of the University of Ljubljana (University of Ljubljana)",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "failed",
+        "http_status": null,
+        "bytes": 0,
+        "sha256": null,
+        "error": "all_sources_failed: network_error: timed out [last_kind=network_error]",
+        "url": "http://pefprints.pef.uni-lj.si/5374/1/Ramsey%2Dmagistrsko_delo%2Dmitja_hocevar.pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "title:ramsey numbers and their generalizations|2018",
+        "title:ramsey numbers and their generalizations|*"
+      ]
+    },
+    {
+      "lit_id": "000007",
+      "title": "Generalized Ramsey theory. IX. Isomorphic factorizations. IV. Isomorphic Ramsey numbers",
+      "type": "J",
+      "summary": "The ramsey number of a graph G with no isolates has been defined as the minimum p such that every 2-coloring of (the lines of) the complete graph K p contains a monochromatic G.An isomorphic factorization of K p is a partition of its lines into isomorphic subgraphs.Combining these concepts, we define the isomorphic ramsey number of G as the minimum p such that for all n^p, every 2-coloring of K n which induces an isomorphic factorization contains a monochromatic G.The isomorphic ramsey numbers of all the small graphs (with at most four points) are determined.The extension to c > 2 colors is also studied.1* Introduction.The classical ramsey number, which stems",
+      "path": "000007/generalized-ramsey-theory-ix-isomorphic-factorizations-iv-is.pdf",
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.2140/pjm.1979.80.435",
+      "doi": "10.2140/pjm.1979.80.435",
+      "year": 1979,
+      "authors": [
+        "Frank Harary",
+        "Robert W. Robinson"
+      ],
+      "venue": "Pacific Journal of Mathematics",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": 200,
+        "bytes": 966810,
+        "sha256": "9a462494fd65e87add175cd164c40d4eedc7ef89a6a7fbcc380f4ade6087a655",
+        "error": null,
+        "url": "http://msp.org/pjm/1979/80-2/pjm-v80-n2-p14-s.pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.2140/pjm.1979.80.435",
+        "title:generalized ramsey theory ix isomorphic factorizations iv isomorphic ramsey numbers|1979",
+        "title:generalized ramsey theory ix isomorphic factorizations iv isomorphic ramsey numbers|*"
+      ]
+    },
+    {
+      "lit_id": "000008",
+      "title": "On the ramsey numbers N(3,3,…3;2)",
+      "type": "J",
+      "summary": "",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.1016/0012-365x(73)90125-8",
+      "doi": "10.1016/0012-365x(73)90125-8",
+      "year": 1973,
+      "authors": [
+        "Fan Chung"
+      ],
+      "venue": "Discrete Mathematics",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "failed",
+        "http_status": 403,
+        "bytes": 0,
+        "sha256": null,
+        "error": "all_sources_failed: http_403 [last_kind=http_403]",
+        "url": "https://www.sciencedirect.com/science/article/pii/0012365X73901258/pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.1016/0012-365x(73)90125-8",
+        "title:on the ramsey numbers n 3 3 3 2|1973",
+        "title:on the ramsey numbers n 3 3 3 2|*"
+      ]
+    },
+    {
+      "lit_id": "000009",
+      "title": "Numbers in Ramsey theory",
+      "type": "J",
+      "summary": "We survey several longstanding open problems on classical Ramsey numbers. These problems are easy to state but hard to solve while their history and developments are intimately associated with major advances in combinatorics.",
+      "path": "000009/numbers-in-ramsey-theory.pdf",
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.56994/jomp.001.001.001",
+      "doi": "10.56994/jomp.001.001.001",
+      "year": 2025,
+      "authors": [
+        "Fan Chun"
+      ],
+      "venue": null,
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": 200,
+        "bytes": 1635992,
+        "sha256": "aba6334b53f988e2568531a3f799f416ba168e5bec13481574fe82d62cef2974",
+        "error": null,
+        "url": "https://jomprob.org/index.php/jomp/article/download/Vol-1Issue-1Paper-1/Vol-1Issue-1Paper-1"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.56994/jomp.001.001.001",
+        "title:numbers in ramsey theory|2025",
+        "title:numbers in ramsey theory|*"
+      ]
+    },
+    {
+      "lit_id": "000010",
+      "title": "Upper bounds for some Ramsey numbers",
+      "type": "J",
+      "summary": "",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.1016/s0021-9800(67)80112-1",
+      "doi": "10.1016/s0021-9800(67)80112-1",
+      "year": 1967,
+      "authors": [
+        "J. G. Kalbfleisch"
+      ],
+      "venue": "Journal of Combinatorial Theory",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "failed",
+        "http_status": 403,
+        "bytes": 0,
+        "sha256": null,
+        "error": "all_sources_failed: http_403 [last_kind=http_403]",
+        "url": "https://www.sciencedirect.com/science/article/pii/S0021980067801121/pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.1016/s0021-9800(67)80112-1",
+        "title:upper bounds for some ramsey numbers|1967",
+        "title:upper bounds for some ramsey numbers|*"
+      ]
+    },
+    {
+      "lit_id": "000011",
+      "title": "On Ramsey numbers for circuits",
+      "type": "J",
+      "summary": "",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.1016/0095-8956(74)90050-1",
+      "doi": "10.1016/0095-8956(74)90050-1",
+      "year": 1974,
+      "authors": [
+        "H. L. Abbott"
+      ],
+      "venue": "Journal of Combinatorial Theory Series B",
+      "language": "en",
+      "added_at": "2026-10-23T13:26:28+08:00",
+      "download": {
+        "status": "failed",
+        "http_status": 403,
+        "bytes": 0,
+        "sha256": null,
+        "error": "all_sources_failed: http_403 [last_kind=http_403]",
+        "url": "https://www.sciencedirect.com/science/article/pii/0095895674900501/pdf"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.1016/0095-8956(74)90050-1",
+        "title:on ramsey numbers for circuits|1974",
+        "title:on ramsey numbers for circuits|*"
+      ]
+    },
+    {
+      "lit_id": "000012",
+      "title": "Combinatorial Relations and Chromatic Graphs",
+      "type": "J",
+      "summary": "Greenwood, R. E.; Gleason, A. M. Canadian Journal of Mathematics 7 (1955), 1-7. The classical paper establishing small Ramsey numbers by explicit constructions and chromatic-graph arguments: it proves R(3,3)=6 and R(3,4)=9 (i.e. every red/blue colouring of the edges of K_9 contains a red triangle or a blue K_4, while K_8 admits a colouring avoiding both), and gives the corresponding partition relations. This is the standard origin cited for R(3,4)=9. Retrieved via Crossref (DOI verified against the Canadian Journal of Mathematics record). Note: full text is not on the local shelf (crossref record has no pdf_url), so this row is metadata-only until a fulltext is fetched.",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [],
+      "dedup_key": "doi:10.4153/cjm-1955-001-4",
+      "doi": "10.4153/cjm-1955-001-4",
+      "year": 1955,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-10-23T13:26:59+08:00",
+      "download": {
+        "status": "skipped",
+        "http_status": null,
+        "bytes": 0,
+        "sha256": null,
+        "error": "no_local_path"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.4153/cjm-1955-001-4",
+        "title:combinatorial relations and chromatic graphs|1955",
+        "title:combinatorial relations and chromatic graphs|*"
+      ]
+    },
+    {
+      "lit_id": "000013",
+      "title": "Small Ramsey Numbers",
+      "type": "J",
+      "summary": "Radziszowski, Stanisław. \"Small Ramsey Numbers\", The Electronic Journal of Combinatorics, Dynamic Survey DS1 (DOI 10.37236/21). The standard continuously maintained survey/table of known small Ramsey numbers; its tables list the classical values including R(3,4)=9 (attributed to Greenwood-Gleason 1955), together with the known bounds for neighbouring cases and the references for each entry. Retrieved via Crossref (DOI verified against the EJC record); this is the survey of record for citing the value R(3,4)=9.",
+      "path": null,
+      "processed": false,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "doi:10.37236/21",
+      "doi": "10.37236/21",
+      "year": 2011,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-10-23T13:27:09+08:00",
+      "download": {
+        "status": "skipped",
+        "http_status": null,
+        "bytes": 0,
+        "sha256": null,
+        "error": "no_local_path"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 0,
+      "last_mine_error": null,
+      "_keys": [
+        "doi:10.37236/21",
+        "title:small ramsey numbers|2011",
+        "title:small ramsey numbers|*"
+      ]
+    }
+  ]
+}

@@ -75,6 +75,29 @@
 "表与正文对不上"。两格里只要填了一格（哪怕开关关着），就要当真核 —— 只填一半同样是
 `mapping_lean_missing`：填了就是声称，声称就得能复核。
 
+### 数值实验定理那两格（业主 2026-10-23 的裁定 E-1）
+
+纯数值实验把整个命题穷尽验证掉（覆盖全域）时也能到 `proof` 这一档，理由写「穷举」，
+签名是那份程序；入定理证明库时证明栏写程序地址（相对仓库）。于是这类定理在对应表里
+多两格，且证明栏换了一种指向：
+
+- `file`：这一行是数值实验定理时，它写的是那份程序（相对仓库根，如 `code/r34_check.py`），
+  不再是论文包内的那份 tex —— 判据差一档叫 `mapping_proof_program_missing`；
+- `numeric_evidence`：E 的那条穷举读数（`exp:NNNNNN`）。台账里必须有它、必须是
+  `numericproof.is_signed_exhaustion` 那一档、且它的程序就是 `file` 那一份；差一档叫
+  `mapping_numeric_evidence_missing`；
+- `exhaustion_note`：E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪一份读数里
+  （相对仓库根）。里面缺块、缺署名（`作者：E`）或缺读数编号 => `mapping_exhaustion_note_missing`。
+
+三块合起来就是这条定理在论文里的证明栏：正文那一段还要指回 E 的读数（程序路径或
+`exp:` 编号都算），指不回去 => `mapping_numeric_citation_missing`。词汇与判定只有一份，
+在 `numerictheorem`（本模块只接线，不另写一套口径）。
+
+哪一行算"数值实验定理"：它是 theorem / lemma / proposition / corollary，且它登记的那条
+命题的 `proof_text` 本身就是程序（`numericproof.is_script_path`），或者它自己填了那两格。
+其余行（例子、实验、自然语言证明的定理）一格都不要动 —— 防误伤那一条判据就在
+`tests/test_numeric_theorem_writing_spec.py` 第 4b 条。
+
 ## 双向都不许有孤儿
 
 正文是"`main.tex` ＋ 它递归 `\\input` / `\\include` 进来的那些文件"（相对路径按被包含
@@ -127,6 +150,8 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import papercompile as PC
 from . import proofloc as PL
+from . import numericproof as NP
+from . import numerictheorem as NT
 from . import schema as S
 from . import verifications as V
 
@@ -183,10 +208,19 @@ LEAN_SKIP_DIRS: tuple[str, ...] = (".lake", ".git", ".hg", "node_modules", "__py
 LEAN_OFF_CELL = "（未开 Lean）"
 LEAN_UNFILLED_CELL = "（没填）"
 
+#: 数值实验定理那两格的占位写法（空着时印它，不印空白）。
+#:
+#: 与 Lean 那两格的区别：那两格分"未开 Lean"与"没填"两档，这两格没有开关可分 ——
+#: 空着就是"这一行不是数值实验定理，或者该填没填"，读者要能看见它。
+NUMERIC_EMPTY_CELL = "（非数值证明）"
+
 #: 每一行的必填字段（其余见 `OPTIONAL_ROW_FIELDS` 与 `CONDITIONAL_ROW_FIELDS`）。
 ROW_FIELDS: tuple[str, ...] = (
     "kind", "label", "env_no", "ledger_id", "proof_no", "file",
 )
+
+#: 数值实验定理那两格（业主 2026-10-23，E-1）：口径与判定在 `numerictheorem`，这里只转发。
+NUMERIC_ROW_FIELDS: tuple[str, ...] = NT.NUMERIC_ROW_FIELDS
 
 #: 可以不给的字段。
 OPTIONAL_ROW_FIELDS: tuple[str, ...] = ("page_or_section",)
@@ -254,11 +288,17 @@ LEAN_KINDS: tuple[str, ...] = (
 #: 但"两格无从填起"这件事必须看得见（空着与"验过了"要分得开），所以它在 `warnings` 里。
 LEAN_WARN_KINDS: tuple[str, ...] = ("lean_on_but_no_artifact",)
 
+#: 数值实验定理那一组（业主 2026-10-23，E-1）：证明栏是程序、三块与署名由 E 给。
+#:
+#: 真身在 `numerictheorem.NUMERIC_KINDS`（这里只是别名，别处不另抄一份）：缺程序路径、
+#: 程序没有 E 签的穷举证明、缺 E 的读数编号、缺块 / 缺署名 / 缺出处、正文那段指不回读数。
+NUMERIC_KINDS: tuple[str, ...] = NT.NUMERIC_KINDS
+
 #: 本模块会产出的全部问题类别（判据要逐类覆盖它，见 `tests/test_paper_mapping_table.py`）。
 #:
 #: 只收拦门的那几组：`LEAN_WARN_KINDS` 不进这里（它在 `warnings` 里，不改 `state`）。
 ALL_PROBLEM_KINDS: tuple[str, ...] = (
-    MAPPING_KINDS + CITATION_KINDS + MD_KINDS + PAPER_KINDS + LEAN_KINDS
+    MAPPING_KINDS + CITATION_KINDS + MD_KINDS + PAPER_KINDS + LEAN_KINDS + NUMERIC_KINDS
 )
 
 #: 三态取值。
@@ -447,6 +487,10 @@ class Row:
     page_or_section: str = ""
     citation_loc: Mapping[str, Any] | None = None
     citation_loc_reason: str = ""
+    #: E 的那条穷举读数（`exp:NNNNNN`）：数值实验定理那一行必须给（业主 2026-10-23）。
+    numeric_evidence: str = ""
+    #: E 写的那两块（程序设计思路 / 穷举论证）与运行环境落在哪份读数里（相对仓库根）。
+    exhaustion_note: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """写回 json 的形状（字段顺序固定，diff 才读得懂）。"""
@@ -463,6 +507,10 @@ class Row:
             out["citation_loc"] = dict(self.citation_loc)
         if self.citation_loc_reason:
             out["citation_loc_reason"] = self.citation_loc_reason
+        if self.numeric_evidence:
+            out["numeric_evidence"] = self.numeric_evidence
+        if self.exhaustion_note:
+            out["exhaustion_note"] = self.exhaustion_note
         return out
 
 
@@ -473,6 +521,10 @@ class BodyEnv:
     `file` 是它所在那一份 tex 相对论文包的名字（`main.tex` 或 `sections/body.tex`）：
     跟了 `\\input` 之后，"第 12 行"必须说得清是哪个文件的第 12 行，否则报出来的
     位置指不回原文件。
+
+    `start` / `end` 是它在（已经剥离注释的）那段正文里的字节区间：数值实验定理那一条
+    要读"定理那一段"里有没有指回 E 的读数（`theorem_segments`），而"那一段"正是从
+    这个区间的末尾往后接一个 `proof` 环境。默认 0/0 表示"没记位置"（别的调用方不关心它）。
     """
 
     kind: str
@@ -480,6 +532,8 @@ class BodyEnv:
     env_no: int
     line: int
     file: str = ""
+    start: int = 0
+    end: int = 0
 
 
 @dataclass
@@ -548,7 +602,7 @@ def _scan_envs(text: str, counts: dict[str, int], *, where_file: str = "",
             kind=kind, label=(label.group(1).strip() if label else ""),
             env_no=int(top["env_no"]),
             line=line_offset + text.count("\n", 0, int(top["start"])) + 1,
-            file=where_file)))
+            file=where_file, start=int(top["start"]), end=m.end())))
     found.sort(key=lambda item: item[0])
     return [env for _pos, env in found]
 
@@ -689,6 +743,64 @@ def _body_envs_of_package(package: Path, main_path: Path, main_text: str
     for rel, segment, line_offset in segments:
         envs.extend(_scan_envs(segment, counts, where_file=rel, line_offset=line_offset))
     return envs, files, problems
+
+
+#: `proof` 环境的开 / 闭标记。它与 `ENV_KINDS` 分开：`proof` 不进对应表（一条定理占一行），
+#: 但数值实验定理那三块的引用就写在它里面，所以"那一段"要把它接进来。
+_PROOF_OPEN_RE = re.compile(r"\\begin\s*\{proof\*?\}")
+_PROOF_CLOSE_RE = re.compile(r"\\end\s*\{proof\*?\}")
+
+
+def _segment_of(text: str, env: BodyEnv) -> str:
+    """一个定理环境那一段：它自己 + 紧随其后的第一个 `proof` 环境。
+
+    中间夹着别的定理类环境的那一档不接（那个 `proof` 不是这条定理的）：
+    否则"某一条定理的证明里写了出处"会让整份正文里每一条数值实验定理都算指得回。
+    """
+    body = text[int(env.start):int(env.end)]
+    tail = text[int(env.end):]
+    opened = _PROOF_OPEN_RE.search(tail)
+    if opened is None:
+        return body
+    if _ENV_OPEN_RE.search(tail[:opened.start()]) is not None:
+        return body
+    closed = _PROOF_CLOSE_RE.search(tail, opened.end())
+    end = closed.end() if closed is not None else opened.end()
+    return body + "\n" + tail[opened.start():end]
+
+
+def theorem_segments(project_root: str | Path, *,
+                     tex: str | None = None) -> dict[str, str]:
+    """`label` -> 那条定理"那一段"的正文（环境自身 + 紧跟其后第一个 `proof` 环境）。
+
+    为什么不整份正文搜一遍：整份搜等于"任何一句顺带提到那份程序的话"都能让判据变绿，
+    而判据要问的是"这条数值实验定理那一段有没有指回 E 的读数"。纯读，不写盘。
+    `tex` 直接给了就只扫这一份（调用方已经读过盘、或没有盘的情形）。
+    """
+    package = package_dir(project_root)
+    if tex is None:
+        main_path = package / PC.TEX_NAME
+        if not main_path.is_file():
+            # 空输入理应得空输出：没有正文就没有"那一段"。调用方那边不会把它读成
+            # "指得回"——`mapping_reading` 会先按 `has_paper` 判过"有没有正文"，
+            # 真到了这里还没正文的分支落的是 `mapping_numeric_citation_missing`。
+            return {}
+        try:
+            main_text = main_path.read_text(encoding="utf-8")
+        except OSError:
+            # 读不出来的那一档同样是"没有那一段"，由调用方落 `mapping_numeric_citation_missing`
+            # （"没读到"不许读成"没有要求"）。
+            return {}
+        segments = _collect_tex_segments(package, main_path, main_text)[0]
+    else:
+        segments = [(PC.TEX_NAME, strip_tex_comments(str(tex)), 0)]
+    out: dict[str, str] = {}
+    for _rel, segment, _offset in segments:
+        for env in _scan_envs(segment, {}):
+            if not env.label or env.label in out:
+                continue
+            out[env.label] = _segment_of(segment, env)
+    return out
 
 
 def read_ledger_tables(workspace_root: str | Path) -> dict[str, list[Mapping[str, Any]]]:
@@ -1177,6 +1289,15 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 "`lean_target` 是 Lean 里那个声明的名字）",
                 label=label))
             continue
+        bad_numeric = [f for f in NUMERIC_ROW_FIELDS
+                       if item.get(f) is not None and not isinstance(item.get(f), str)]
+        if bad_numeric:
+            problems.append(_problem(
+                "mapping_unresolvable",
+                f"第 {i} 行的 {bad_numeric} 必须是字符串（`numeric_evidence` 是 E 那条读数的"
+                "编号 exp:NNNNNN、`exhaustion_note` 是那块读数在仓库里的相对路径）",
+                label=label))
+            continue
         rows.append(Row(kind=kind, label=label, env_no=env_no,
                         ledger_id=str(item.get("ledger_id") or "").strip(),
                         proof_no=proof_no,
@@ -1185,7 +1306,9 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                         lean_target=str(item.get("lean_target") or "").strip(),
                         page_or_section=str(item.get("page_or_section") or "").strip(),
                         citation_loc=dict(loc) if isinstance(loc, Mapping) else None,
-                        citation_loc_reason=str(item.get("citation_loc_reason") or "").strip()))
+                        citation_loc_reason=str(item.get("citation_loc_reason") or "").strip(),
+                        numeric_evidence=str(item.get(NT.EVIDENCE_FIELD) or "").strip(),
+                        exhaustion_note=str(item.get(NT.NOTE_FIELD) or "").strip()))
     return rows, problems
 
 
@@ -1218,10 +1341,25 @@ def _lean_cell(value: str, lean_on: bool) -> str:
     return LEAN_UNFILLED_CELL if lean_on else LEAN_OFF_CELL
 
 
+def _numeric_cell(value: str) -> str:
+    """数值实验定理那两格在表格里的一格：空着时印占位（不让空白被读成"没问题"）。
+
+    与 Lean 那两格的 `_lean_cell` 同一个理由，但默认值不同：Lean 有开关状态可分，
+    这两格没有开关 —— 空着就是"这一行不是数值实验定理，或者该填没填"，
+    两种情况都得由读者看得见，所以印同一句占位。
+    """
+    return value or NUMERIC_EMPTY_CELL
+
+
 def _row_key_text(row: Row) -> str:
-    """附录里那条机器可读注释的内容（`|` 分隔，判据靠它数行与比 label）。"""
+    """附录里那条机器可读注释的内容（`|` 分隔，判据靠它数行与比 label）。
+
+    末尾两格是数值实验定理的（E 的读数编号与两块读数的落点）：追加在末尾而不是插在中间，
+    因为 `appendix_row_keys` 按位置读前几格 —— 插在中间会让旧附录整份对不上。
+    """
     return "|".join([row.kind, str(int(row.env_no)), row.label, row.ledger_id,
-                     str(int(row.proof_no)), row.file, row.lean_file, row.lean_target])
+                     str(int(row.proof_no)), row.file, row.lean_file, row.lean_target,
+                     row.numeric_evidence, row.exhaustion_note])
 
 
 def appendix_row_keys(block: str) -> list[tuple[str, str]]:
@@ -1250,13 +1388,18 @@ def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None) ->
         "\\section*{" + APPENDIX_TITLE + "}",
         "",
         "本表由 \\texttt{" + MAPPING_JSON_NAME + "} 渲染（\\texttt{agentflow.papermapping.render\\_appendix}），"
-        "不许手抄第二份。\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件。"
+        "不许手抄第二份。\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件；"
+        "数值实验定理那一行的 \\texttt{file} 是那份穷举程序的相对路径（相对仓库根）。"
         "Lean 那两列是「验它的那份源码在哪」与「验的是哪个声明」：有 Lean 产出时这两列必填，"
-        "开关关时它们印「" + LEAN_OFF_CELL + "」（空不等于验过）。",
+        "开关关时它们印「" + LEAN_OFF_CELL + "」（空不等于验过）。"
+        "最后两列是数值实验定理的：E 的那条穷举读数（\\texttt{" + NT.EVIDENCE_PREFIX
+        + "NNNNNN}）与 E 写的那两块（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION
+        + "）落在哪一份读数里；不填印「" + NUMERIC_EMPTY_CELL + "」。",
         "",
-        "\\begin{tabular}{llllp{0.15\\textwidth}p{0.15\\textwidth}p{0.15\\textwidth}"
-        "p{0.15\\textwidth}}",
-        "环境 & label & 台账序号 & 证明号 & 真实文件 & Lean 文件 & Lean 声明 & 引文位置 \\\\",
+        "\\begin{tabular}{llllp{0.12\\textwidth}p{0.12\\textwidth}p{0.12\\textwidth}"
+        "p{0.12\\textwidth}p{0.12\\textwidth}p{0.12\\textwidth}}",
+        "环境 & label & 台账序号 & 证明号 & 真实文件 & Lean 文件 & Lean 声明 & 引文位置 "
+        "& E 读数 & 两块读数 \\\\",
         "\\hline",
     ]
     for row in items:
@@ -1270,6 +1413,8 @@ def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None) ->
             _tex_escape(_lean_cell(row.lean_file, lean_on)),
             _tex_escape(_lean_cell(row.lean_target, lean_on)),
             _tex_escape(_loc_text(row) or row.citation_loc_reason or ""),
+            _tex_escape(_numeric_cell(row.numeric_evidence)),
+            "\\texttt{" + _tex_escape(_numeric_cell(row.exhaustion_note)) + "}",
         ]) + " \\\\")
     lines += ["\\hline", "\\end{tabular}", "", APPENDIX_END, ""]
     return "\n".join(lines)
@@ -1301,15 +1446,20 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
         "`lean_file` 与 `lean_target`：有 Lean 产出时，每条定理/引理/命题/推论还要说清"
         "验它的是论文包内哪一份 `.lean`、以及那份源码里的哪个声明名。开关关时这两列印"
         "「" + LEAN_OFF_CELL + "」—— 空不等于验过。",
+        "`numeric_evidence` 与 `exhaustion_note`：数值实验定理那一行（证明栏是程序）多这两格 ——"
+        "E 的那条穷举读数编号（`" + NT.EVIDENCE_PREFIX + "NNNNNN`）与 E 写的那两块"
+        "（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION + "）落在哪一份读数里；"
+        "那一行的 `file` 写的是那份程序的相对路径（相对仓库根），不是论文包内的 tex。",
         "",
         "| # | kind | label | env_no | ledger_id | proof_no | file | lean_file | lean_target "
-        "| citation_loc | citation_loc_reason | page_or_section |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| citation_loc | citation_loc_reason | page_or_section | numeric_evidence "
+        "| exhaustion_note |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for i, row in enumerate(items, start=1):
         lines.append(
             "| {i} | {kind} | {label} | {no} | {ledger} | {proof} | {file} | {lean_file} "
-            "| {lean_target} | {loc} | {reason} | {where} |".format(
+            "| {lean_target} | {loc} | {reason} | {where} | {evidence} | {note} |".format(
                 i=i, kind=row.kind, label=row.label or "（没有 label）", no=int(row.env_no),
                 ledger=row.ledger_id, proof=int(row.proof_no),
                 file=row.file or "（空）",
@@ -1317,7 +1467,9 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
                 lean_target=_lean_cell(row.lean_target, lean_on),
                 loc=_loc_text(row) or "",
                 reason=row.citation_loc_reason or "",
-                where=row.page_or_section or ""))
+                where=row.page_or_section or "",
+                evidence=_numeric_cell(row.numeric_evidence),
+                note=_numeric_cell(row.exhaustion_note)))
     lines.append("")
     counts: dict[str, int] = {}
     for row in items:
@@ -1577,8 +1729,12 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
 
 
 def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
-                package_root: Path) -> _RowCheck:
-    """一行的三条轴：台账代号码 / 证明号 / 文件（三条互不遮蔽：一条坏不影响别条被报）。"""
+                package_root: Path, workspace: Path) -> _RowCheck:
+    """一行的三条轴：台账代号码 / 证明号 / 文件（三条互不遮蔽：一条坏不影响别条被报）。
+
+    `workspace` 是数值实验定理那一支要用的：它的证明栏是仓库内那份程序，
+    不是论文包内的文件（口径见 `is_numeric_row`）。
+    """
     got = _RowCheck()
     resolved = resolve_ledger_id(row.ledger_id, ledger)
     if not resolved["ok"]:
@@ -1612,16 +1768,150 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
                         f"而 `stmt:{row_id}` 的证明清单里只有 {known}（`proofs` 那一条）"
                         "—— 证明号必须能被台账解析到",
                         label=row.label, where=MAPPING_JSON_NAME)
-    state = file_state(package_root, row.file)
-    if state["state"] in ("missing", "directory"):
-        got.add("mapping_file_missing",
-                f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 `file` "
-                f"读不到：{state['reason']}", label=row.label, where=MAPPING_JSON_NAME)
-    elif state["state"] == "outside":
-        got.add("mapping_unresolvable",
-                f"表里 label={row.label!r} 的 `file` 不合口径：{state['reason']}",
-                label=row.label, where=MAPPING_JSON_NAME)
+    numeric = is_numeric_row(row, got.ledger_row)
+    if numeric:
+        # 数值实验定理那一行的证明栏是程序（相对仓库根），与论文包内那份 tex 是两回事：
+        # 走同一张 `file_state` 会把 `code/…` 判成"指到包外"，于是每一条真的穷举证明都红。
+        state = NT.program_state(workspace, row.file)
+        if state["state"] != "present":
+            got.add(NT.PROOF_PROGRAM_MISSING,
+                    f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个，数值实验定理）"
+                    f"的证明栏（`file`）不过关：{state['reason']}",
+                    label=row.label, where=MAPPING_JSON_NAME)
+    else:
+        state = file_state(package_root, row.file)
+        if state["state"] in ("missing", "directory"):
+            got.add("mapping_file_missing",
+                    f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 `file` "
+                    f"读不到：{state['reason']}", label=row.label, where=MAPPING_JSON_NAME)
+        elif state["state"] == "outside":
+            got.add("mapping_unresolvable",
+                    f"表里 label={row.label!r} 的 `file` 不合口径：{state['reason']}",
+                    label=row.label, where=MAPPING_JSON_NAME)
     return got
+
+
+def is_numeric_row(row: Row, ledger_row: Mapping[str, Any] | None) -> bool:
+    """这一行是不是数值实验定理（证明栏是程序，或它自己填了那两格）。
+
+    两个来源都要认：
+      - 台账说它的证明就是一份程序（`stmt` 行的 `proof_text` 过了
+        `numerictheorem.is_program_proof`）—— 这是 E-1 的权威判据；
+      - 或者这一行自己填了 `numeric_evidence` / `exhaustion_note` —— 填了就是声称，
+        声称就得能复核（与 Lean 那两格同一条纪律）。
+
+    只对命题类环境算（`LEAN_TARGETED_KINDS`）：例子与实验不是"被证明的命题"，
+    它们的 `file` 仍然是论文包内那份材料。
+    """
+    if row.kind not in LEAN_TARGETED_KINDS:
+        return False
+    if row.numeric_evidence or row.exhaustion_note:
+        return True
+    if isinstance(ledger_row, Mapping) and NT.is_program_proof(ledger_row.get("proof_text")):
+        return True
+    return False
+
+
+def _numeric_problems(row: Row, ledger_row: Mapping[str, Any] | None,
+                      ledger: Mapping[str, Sequence[Mapping[str, Any]]],
+                      workspace: Path, segments: Mapping[str, str]) -> list[dict[str, Any]]:
+    """数值实验定理那一条的逐格判据（空清单 = 三块齐全、指得回 E、正文也指得回）。
+
+    五档一一对应业主那三块与"作者是 E"：证明栏是程序（`mapping_proof_program_missing`）、
+    那条读数确实是 E 签的穷举（`mapping_proof_program_unbacked`）、E 的读数编号在
+    （`mapping_numeric_evidence_missing`）、两块读数与署名在（`mapping_exhaustion_note_missing`）、
+    正文那一段指得回（`mapping_numeric_citation_missing`）。
+    """
+    out: list[dict[str, Any]] = []
+    label, where = row.label, MAPPING_JSON_NAME
+
+    def add(kind: str, detail: str) -> None:
+        out.append(_problem(kind, detail, label=label, where=where))
+
+    # ① 程序相对地址：证明栏就是那份程序，且盘上真的有它。
+    state = NT.program_state(workspace, row.file)
+    if state["state"] != "present":
+        add(NT.PROOF_PROGRAM_MISSING,
+            f"表里 label={label!r}（数值实验定理）的证明栏（`file`）不过关：{state['reason']}"
+            f" —— 这一行的证明栏要写程序的相对路径（相对仓库根），像 `code/r34_check.py`")
+        return out
+
+    # 那条 E 的读数：编号必须给、必须在台账里、必须与这份程序是同一件事。
+    want = str(row.numeric_evidence or "").strip()
+    if not want:
+        add(NT.NUMERIC_EVIDENCE_MISSING,
+            f"表里 label={label!r} 缺 `{NT.EVIDENCE_FIELD}`：这条定理压在哪一条 E 的穷举读数上"
+            f"（`{NT.EVIDENCE_PREFIX}NNNNNN`）必须写出来 —— 业主口径里正文要标出它来自 E 的那条读数")
+        return out
+    experiments = [dict(r) for r in (ledger.get("experiments") or ())
+                   if isinstance(r, Mapping)]
+    found = next((dict(r) for r in experiments
+                  if NT.evidence_id_of(r) == want), None)
+    if found is None:
+        add(NT.NUMERIC_EVIDENCE_MISSING,
+            f"表里 label={label!r} 的 `{NT.EVIDENCE_FIELD}` = {want!r} 在台账里没有这一行实验")
+        return out
+    if not NP.is_signed_exhaustion(found):
+        reasons = NP.exhaustion_problems(
+            method=found.get("method"),
+            observations=found.get("observations"),
+            certificate=found.get("certificate"),
+            search_bound=found.get("search_bound"),
+            code_path=found.get("code_path"),
+            result=found.get("result"))
+        add(NT.PROOF_PROGRAM_UNBACKED,
+            f"表里 label={label!r} 的读数 {want} 不是 E 签的穷举证明"
+            f"（method={found.get('method')!r}，evidence_kind={found.get('evidence_kind')!r}，"
+            f"签名的证明理由={NP.signature_of(found).get('proof_reason')!r}）："
+            f"{'；'.join(reasons) if reasons else '签名或证明理由不齐'}"
+            f" ⇒ 这一条只能记成「{NT.SUPPORTED_ONLY_WORD}」，不许写成定理 / 已证明")
+        return out
+    script = NP.proof_column_script(NP.proof_column(found))
+    if NP.norm_rel(script) != NP.norm_rel(row.file):
+        add(NT.NUMERIC_EVIDENCE_MISSING,
+            f"表里 label={label!r} 的 `{NT.EVIDENCE_FIELD}` = {want} 那一段的程序是 "
+            f"{script!r}，而证明栏写的是 {row.file!r} —— 同一条定理的证明栏只能指一份程序")
+        return out
+
+    # 落库那一份证明栏（`statements.proof_text`）就是这条定理的证明栏：三段（① 程序、
+    # ② 程序设计、③ 穷举论证）缺任何一段，它都还不算证明 —— 只能记成"有数值实验支持"。
+    if isinstance(ledger_row, Mapping):
+        column_problems = NT.proof_column_problems(ledger_row.get("proof_text"))
+        for detail in column_problems:
+            add(NT.EXHAUSTION_NOTE_MISSING,
+                f"表里 label={label!r} 落库那份证明栏（`{row.ledger_id}`）{detail}"
+                f" —— 三段齐了才叫证明栏；缺的那一段由 E 写，G 原样引用")
+        registered = NP.proof_column_script(ledger_row.get("proof_text"))
+        if registered and NP.norm_rel(registered) != NP.norm_rel(row.file):
+            add(NT.PROOF_PROGRAM_MISSING,
+                f"表里 label={label!r} 的证明栏写的是 {row.file!r}，而落库那份证明栏第 ① 段"
+                f"写的是 {registered!r} —— 同一条定理的证明栏只能指一份程序")
+
+    # ②③ 两块读数 + 署名 + 读数编号：E 写的那一份落点必须读得到、且三块齐。
+    expected = NT.note_relpath(found)
+    if expected and NP.norm_rel(row.exhaustion_note) != expected:
+        add(NT.EXHAUSTION_NOTE_MISSING,
+            f"表里 label={label!r} 的 `{NT.NOTE_FIELD}` 写的是 "
+            f"{str(row.exhaustion_note or '').strip()!r}，而 E 那条读数（{want}）的落点是 "
+            f"{expected!r} —— 两块读数的落点只有一处（`exhaustionreport.report_relpath`），"
+            "G 不许另挑一个地方说「E 写在那」")
+    note_problems = NT.corpus_problems(note=row.exhaustion_note, workspace_root=workspace,
+                                       evidence_id=want)
+    for detail in note_problems:
+        add(NT.EXHAUSTION_NOTE_MISSING, f"表里 label={label!r}：{detail}")
+
+    # 正文那一段要指回 E 的读数（整份正文搜一遍不算：那段话必须是这一条的）。
+    segment = segments.get(label)
+    if segment is None:
+        add(NT.NUMERIC_CITATION_MISSING,
+            f"表里 label={label!r} 在正文里找不到那个环境（这一行的正文那一段无从核对）—— "
+            "先把正文里那一条定理写出来，再回头核这一格")
+    elif not NT.citation_present(segment, program=row.file, evidence_id=want):
+        add(NT.NUMERIC_CITATION_MISSING,
+            f"表里 label={label!r} 的正文那一段里指不回 E 的读数：要写出那份程序"
+            f"（{row.file}）或 E 的读数编号（{want}）—— 业主口径是「在正文里标出它们来自 E 的"
+            "那条读数」；把 E 的两块改写成没有出处的叙述，等于把 E 的读数换成我们自己的说法")
+    return out
 
 
 def _stray_mapping_copies(project: Path, workspace: Path) -> list[Path]:
@@ -1774,9 +2064,12 @@ def mapping_reading(project_root: str | Path, *,
     if LEAN_KINDS:
         problems += _lean_problems(rows, package, lean_on, artifacts)
     known = ledger if ledger is not None else read_ledger_tables(workspace)
+    # 数值实验定理那一支要读"定理那一段"：真遇上这种行时才去扫（扫一遍要把 `\input`
+    # 跟完，不该为一份全是自然语言证明的稿子付这份成本）。`None` = 还没扫过。
+    segments: dict[str, str] | None = None
     seen_targets: dict[tuple[str, int], Row] = {}
     for row in rows:
-        got = _row_checks(row, known, package)
+        got = _row_checks(row, known, package, workspace)
         problems += got.problems
         if got.ledger_row is not None:
             key = (str(row.ledger_id).split("#")[0], int(row.proof_no))
@@ -1793,9 +2086,17 @@ def mapping_reading(project_root: str | Path, *,
         if isinstance(got.ledger_row, Mapping) and str(row.ledger_id).startswith("stmt:"):
             origin = str(got.ledger_row.get("origin") or "")
         problems += _citation_problems(row, package, origin)
+        if NUMERIC_KINDS and is_numeric_row(row, got.ledger_row):
+            if segments is None:
+                segments = theorem_segments(project, tex=tex_text if tex is not None else None)
+            problems += _numeric_problems(row, got.ledger_row, known, workspace, segments)
 
     for row in rows:
-        state = file_state(package, row.file)
+        resolved = resolve_ledger_id(row.ledger_id, known)
+        target = (ledger_row(known, str(resolved["table"]), str(resolved["row_id"]))
+                  if resolved["ok"] else None)
+        state = (NT.program_state(workspace, row.file) if is_numeric_row(row, target)
+                 else file_state(package, row.file))
         if state["state"] == "empty":
             reading["empty_files"].append(state["file"])
 

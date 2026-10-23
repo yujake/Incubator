@@ -98,28 +98,31 @@ def test_real_handler_has_no_sleep_and_no_var_keyword():
     )
 
 
-def test_same_family_names_are_either_accepted_or_registered():
-    """同族（`name` / `checker_name` / `run_name`）：每一处都落在"接受"或"登记"上。
+def test_the_avoid_name_family_is_gone_from_the_declarations():
+    """同族（`name` / `checker_name` / `run_name`）：2026-10-23 晚之后一个都不剩。
 
-    这三个名字来自两个不同的坑：`name` 是能力表与方法层都正确、而工具层会撞名的那一个
-    （`ToolRegistry.call` 的第一个形参就叫 `name`）；`checker_name` / `run_name`
-    是工具层的避撞名。它们此前只由 `tools/verify_tools.py` 的一段自然语言登记着，
-    现在各自的层都有机器判据：能力表这一侧由第 [8] 条核，工具层那侧由注册期核。
+    这三个名字来自两个不同的坑：`name` 是"能力表与方法层都正确、而工具层会撞名"
+    的那一个（`ToolRegistry.call` 的第一个形参就叫 `name`）；`checker_name` /
+    `run_name` 是工具层的避撞名。它们此前只由 `tools/verify_tools.py` 的一段自然语言
+    登记着，后来各自的层都有了机器判据。
+
+    裁定把 E 的 Lean 侧整条摘掉之后，这一族的宿主（`E.check_formal` 与它的工具、
+    `E.run_experiment` 的两个 formal 参数）全都没了：
+    - 能力表里不许再出现这三个名字（出现就意味着方法层得收它）；
+    - `E.check_formal` 这条动作不存在了（`find_action` 返回 None）；
+    - 工具层剩下的那个避撞名是 `formal.check_formal` 的 `declaration_name`
+      （L 的动作名，由 `test_tools_side_names_of_the_same_family_are_accepted_by_their_handlers` 守着）。
+
+    这一条比原来更硬：原来守的是"这三个名字每一处都落在接受或登记上"，
+    现在守的是"它们不在任何一处"。
     """
-    formal = C.find_action("E", "check_formal")
-    assert formal is not None
-    assert "name" in _properties(formal)
-    named, accepts_kw = C.handler_accepted("E", "check_formal")
-    assert not accepts_kw
-    assert "name" in named, (
-        "能力表声明了 name，而 AgentE.check_formal 的形参里没有它 ⇒ 这一格必须是"
-        "『改实现』或『登记接缝』，不许留第三态"
-    )
-    # 避撞名只活在工具层：能力表里不许出现它们（出现就意味着方法层得收它）
+    assert C.find_action("E", "check_formal") is None, (
+        "E 的动作表里还有 check_formal ⇒ 这一族又回来了")
     for role, specs in C.CAPABILITIES.items():
         for spec in specs:
-            assert "checker_name" not in _properties(spec), f"{role}.{spec.action} 声明了工具层的避撞名"
-            assert "run_name" not in _properties(spec), f"{role}.{spec.action} 声明了工具层的避撞名"
+            for banned in ("name", "checker_name", "run_name"):
+                assert banned not in _properties(spec), (
+                    f"{role}.{spec.action} 声明了撞名族里的 {banned!r}")
 
 
 def test_gate_params_is_the_declaration_intersected_with_the_implementation():
@@ -144,15 +147,13 @@ def test_gate_params_is_the_declaration_intersected_with_the_implementation():
     assert bad is not None and "sleep" in bad, f"接缝参数没被拦下：{bad!r}"
     # 实现侧独有的参数同样进不来（交集是双向的）
     #
-    # `T0-13`（2026-09-29）之前这里用的例子是 `imports` / `name` —— 那时它们是
-    # `E.run_experiment` 的实现侧独有参数：闸门如实拒收，于是"E 能形式化"与
-    # "M 能派形式化"是两件事（P6 的验收路径被堵）。T0-13 把这两格补进了声明，
-    # 那个例子也随之消失。所以这里：
-    #   ① 换一个凭空参数名，继续守"未声明的参数一律进不来"；
-    #   ② 另加正控：那两格现在进得来（这正是 P6 能经派活跑通的原因）。
+    # `T0-13`（2026-09-29）把 `imports` / `name` 补进了声明（那时它们是 formal 路径的
+    # 参数）。2026-10-23 晚裁定把它们一起撤了：E 不做形式化 ⇒ 那两个参数不在动作面上，
+    # 也不在工具 schema 上。所以这里从"它们必须能过闸门"翻成"它们必须被闸门拒"——
+    # 判据的规则一个字没改（未声明的参数一律进不来），改的是"什么算未声明"这个事实。
     assert C.check_params(spec, {**ok_params, "nope": 1}) is not None
-    assert C.check_params(spec, {**ok_params, "name": "a_theorem", "imports": []}) is None, (
-        "T0-13 之后 formal 路径的两个参数必须能过闸门 —— 否则 M 派不出形式化验证"
+    assert C.check_params(spec, {**ok_params, "name": "a_theorem", "imports": []}) is not None, (
+        "E 不做形式化之后 name / imports 不再声明 ⇒ 闸门必须拒收它们"
     )
 
 
@@ -227,21 +228,24 @@ def test_tools_side_assertion_is_wired_and_covers_every_registered_tool(store):
 
 
 def test_tools_side_names_of_the_same_family_are_accepted_by_their_handlers(store):
-    """同族的工具层半边：`checker_name` / `run_name` 真的被各自的 handler 接受。
+    """同族的工具层半边：`declaration_name` 真的被它的 handler 接受。
 
-    `verify.check_formal` 与 `verify.run_experiment` 的 handler 是显式列了形参的
-    lambda（不收 VAR_KEYWORD），所以这条判据对它们有牙。
+    2026-10-23 晚之后这一族只剩 `formal.check_formal` 那一格（L 的 `declaration_name`；
+    `verify.check_formal` 的 `checker_name` 与 `verify.run_experiment` 的 `run_name`
+    随 E 的 formal 面一起退场）。这一件的 handler 是"转发给 AgentL"的 `**kw` 形态
+    （`_formal_check_formal(_store, _root, **kw)`）⇒ "逐形参对齐"那一半在这里是 N/A，
+    如实写下来而不是假装它还管得着；能判的是三件：声明里有它、注册期接缝判据为零违反、
+    以及 handler 确实是 `**kw` 形态（它一变，这一条就该改回更强的逐形参对齐）。
     """
     reg = build_registry(store=store, workspace_root=store.root).registry
-    for tool, prop in (("verify.check_formal", "checker_name"), ("verify.run_experiment", "run_name")):
+    for tool, prop in (("formal.check_formal", "declaration_name"),):
         spec = reg.get(tool)
         assert prop in _properties(spec), f"{tool} 的 schema 里没有 {prop}"
-        sig = inspect.signature(spec.handler)
-        assert prop in sig.parameters, f"{tool} 的 handler 不接受 {prop}（声明与实现分家了）"
-        assert not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()), (
-            f"{tool} 的 handler 开始收 VAR_KEYWORD ⇒ 这条判据对它不再适用，别再假装它管得着"
-        )
         assert B.tool_param_seam_violations(spec) == []
+        sig = inspect.signature(spec.handler)
+        assert any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()), (
+            f"{tool} 的 handler 变成显式列形参了 ⇒ 这一条应当改回逐形参对齐（那是更强的判据）"
+        )
 
 
 # ============================================================ 工具层：负控与自校
@@ -253,7 +257,7 @@ def test_tools_side_seam_is_the_only_way_through(store, monkeypatch):
     只有后者时，`register` 可能根本没核。
     """
     reg = build_registry(store=store, workspace_root=store.root).registry
-    original = reg.get("verify.check_formal")
+    original = reg.get("verify.run_experiment")
     props = dict(original.params["properties"])
     props[FAKE_PROPERTY] = {"type": "string"}
     poisoned = dataclasses.replace(original, params={**original.params, "properties": props})
@@ -287,7 +291,7 @@ def test_public_entry_check_param_seams_is_directly_exercised(store, monkeypatch
     再补一档"登记进接缝表之后放行"——证明它读的正是与 `register` 期同一个 `PARAM_SEAMS`。
     """
     reg = build_registry(store=store, workspace_root=store.root).registry
-    ok = reg.get("verify.check_formal")
+    ok = reg.get("verify.run_experiment")
     B.check_param_seams(ok)  # 正控：合规 spec 不抛
 
     props = dict(ok.params["properties"])

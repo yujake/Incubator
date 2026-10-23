@@ -161,7 +161,7 @@ SPEC = AgentSpec(
             "**清单上的每一条都要指得到行**：给出**行号或逐字引文**才算查过；读不到（正文还没写、找不到 `\\appendix`、文件不在盘上）"
             "就如实落一条 finding 说清「没查成什么」，**不许把「我没看」写成「没有」**，也不许因为清单长就只勾前两条 —— 勾不完的写进"
             "报告，别默认它通过。",
-            "按对应表逐行核：读 `out/paper/MAPPING.json`，逐行核 label/env_no 与正文对得上、`ledger_id` 与 `proof_no` 能在台账里解析、`file` 在包里、正文附录与 json 渲染逐字一致。这一档是客观问题（可拦）：`mapping_*` / `md_*`；逻辑颠倒、缺铺垫、术语未定义、承诺未回应、交叉引用错仍是主观档：点名到句、不拦门。",
+            "按对应表逐行核：读 `out/paper/MAPPING.json`，逐行核 label/env_no 与正文对得上、`ledger_id` 与 `proof_no` 能在台账里解析、`file` 与它该有的落点一致、正文附录与 json 渲染逐字一致。**`file` 有两种落点，都对，不许只按一种去拦**：理论定理那一行写论文包内的相对路径（`proofs/thm.tex` 这一形态，它在包里）；数值实验定理那一行写程序相对**仓库根**的路径（`code/r34_check.py` 这一形态，**不在包里是正常的** —— 按「必须在包里」去拦，会把每一条合规的数值定理都误判成错）。同一行还要认两格（它们同样不是包内文件）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`，仓库相对路径）。这一档是客观问题（可拦）：`mapping_*` / `md_*`；逻辑颠倒、缺铺垫、术语未定义、承诺未回应、交叉引用错仍是主观档：点名到句、不拦门。",
         ),
         signature_error="把'这一轮没查出 error'说成'这份稿子没问题'（只有 warning 不等于审过了）。",
         deliverable="review_findings 行、一次审校的裁决（哪些问题拦住交付）与它落成的稿件状态（通过 ⇒ `accepted` 并签一条；不通过 ⇒ `in_review` / `unresolved_review`）。",

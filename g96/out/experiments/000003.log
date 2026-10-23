@@ -1,0 +1,37 @@
+# sylow96-counting
+# 脚本 code/sylow_96_a4xc8.py  sha256=fbaf468c8cfed429
+# exit_code=0  runtime=0.125s
+# claim: 对 |G|=96 且 H（不同 Sylow 3-子群交于单位元）成立时，2-元个数恒等于 96-2·n_3，因此 n_2=1 的格子被排除 —— 该命题为假：G=A_4×C_8（|G|=96）满足 H（n_3=4，四个 3 阶子群两两交于单位元，共 8 个 3 阶元），但 n_2=1、2-元恰 32 个，余下 88-32=56 个元素阶被 3 整除且 >3（6/12/24）。
+----- stdout -----
+CHECK |A_4| = 12 OK 12
+CHECK |G| = 96 and elements are distinct OK 96
+CHECK identity acts trivially OK 96 elements
+CHECK every element has an inverse OK 96 elements
+order spectrum of A_4 x C_8: {1: 1, 2: 7, 3: 8, 4: 8, 6: 8, 8: 16, 12: 16, 24: 32}
+CHECK order spectrum matches the lcm formula OK spectrum={1: 1, 2: 7, 3: 8, 4: 8, 6: 8, 8: 16, 12: 16, 24: 32}
+CHECK spectrum sums to |G| OK sum=96
+CHECK every order-3 subgroup is closed of order 3 OK n_3 = 4
+CHECK n_3 = 4 OK distinct subgroups of order 3: 4
+CHECK H: distinct Sylow 3-subgroups meet only in e  (NON-vacuous, n_3 = 4 > 1) OK pairwise intersections all {e}
+CHECK 2-element set is a subgroup of order 32 OK |{g : ord(g) is a 2-power}| = 32
+CHECK n_2 = 1  (unique Sylow 2, normal) OK |N_G(P)| = 96, n_2 = 96/|N_G(P)| = 1
+CHECK |N_G(Q)| = 96/n_3 = 24 for every Sylow 3-subgroup OK sizes=[24, 24, 24, 24]
+CHECK orbit-stabiliser identity n_3 = [G:N_G(Q)] OK n_3 = 4
+elements of order 3                     = 8  (= 2*n_3 = 8)
+elements NOT of order 3                 = 88  (= 96 - 2*n_3)
+  of which 2-elements                   = 32
+  of which ord divisible by 3 and > 3   = 56  (orders 6,12,24)
+CHECK #elements of order 3 = 2*n_3 OK 8 = 2*4
+CHECK leftover decomposes into 2-elements + order divisible by 3 and > 3 OK 32 + 56 = 88
+CHECK REFUTATION: #2-elements != 96 - 2*n_3 OK 32 != 88
+PROGRESS: {"count": 1, "order": 1, "seconds": 0.0096}
+PROGRESS: {"count": 7, "order": 2, "seconds": 0.0096}
+PROGRESS: {"count": 8, "order": 3, "seconds": 0.0096}
+PROGRESS: {"count": 8, "order": 4, "seconds": 0.0096}
+PROGRESS: {"count": 8, "order": 6, "seconds": 0.0096}
+PROGRESS: {"count": 16, "order": 8, "seconds": 0.0096}
+PROGRESS: {"count": 16, "order": 12, "seconds": 0.0096}
+PROGRESS: {"count": 32, "order": 24, "seconds": 0.0096}
+checks: 16/16 passed
+REPRO_RESULT: {"H_holds_nonvacuously": true, "NGP": 96, "NGQ": 24, "bound": "complete enumeration of the 96 elements of the single explicit group A_4 x C_8; no search over groups of order 96", "checks_passed": 16, "checks_total": 16, "counterexample": {"H_holds_nonvacuously": true, "NGP": 96, "NGQ": [24, 24, 24, 24], "group": "A_4 x C_8 (explicit pairs (even permutation, k in Z/8))", "group_order": 96, "leftover_not_order3": 88, "n_2": 1, "n_3": 4, "note": "H holds with n_3 = 4 > 1 and yet n_2 = 1: the 2-elements form V_4 x C_8 of order 32, while 96 - 2*n_3 = 88. The missing 56 elements have order 6, 12 or 24. So H does NOT force '#2-elements = 96 - 2*n_3' and does NOT exclude n_2 = 1.", "num_2_elements": 32, "num_elements_order_3": 8, "num_order_divisible_by_3_gt_3": 56}, "group_order": 96, "leftover_not_order3": 88, "n2": 1, "n3": 4, "order3_count": 8, "order_divisible_by_3_gt_3": 56, "refuted_statement": "在 |G| = 96 且 H（不同 Sylow 3-子群交于单位元）成立时，2-元个数恒等于 96 - 2*n_3，因此 n_2 = 1 的格子被排除", "result": "refutes", "scaling": {"elements": 96, "normalizer_passes": 5, "seconds": 0.0096}, "spectrum": {"1": 1, "12": 16, "2": 7, "24": 32, "3": 8, "4": 8, "6": 8, "8": 16}, "strategy": "explicit construction + brute force over 96 elements (orders, subgroup closure, normaliser closure, Sylow-3 intersection test)", "two_elements": 32, "unverified": ["number of isomorphism classes of groups of order 32 (the value 51 is NOT verified here)", "number of isomorphism classes of groups of order 96 (the value 231 is NOT verified here)", "which cells (n_3,n_2) are realised by some group of order 96 (witnessed here: (1,1) and (4,1); (16,1),(1,3),(4,3),(16,3) NOT witnessed)"]}
+----- stderr -----

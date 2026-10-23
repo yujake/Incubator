@@ -6,12 +6,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ._support import Any, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
-# 业主 2026-10-22 晚裁定：E 的 Lean 侧写死关闭。三个名字都从 `_support` 取（那一侧是
-# 唯一出处：判定、理由码、那句读数各一份），这里不另写字面量。
-from ._support import E_LEAN_SIDE_NOTE as _LEAN_SIDE_NOTE
-from ._support import E_LEAN_SIDE_REASON as _LEAN_SIDE_REASON
-from ._support import e_lean_side_hard_off as _lean_side_hard_off
+from ._support import Any, E_NO_FORMAL_REASON, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
+from .. import exhaustionreport as _ER
 from .. import verifications as VR
 
 #: 「玩具例子」在台账上的落点：`experiments.observations[TOY_EXAMPLE_KEY]`。
@@ -99,13 +95,16 @@ class _RunExperiment:
         search_bound: Mapping[str, Any] | None = None,
     ) -> dict:
         """跑一个实验脚本并登记一条 `Experiment` 行。
-        推导规则见模块 docstring（唯一权威表述）：计算类方法在 :func:`_derive`，形式化方法在 :meth:`_record_formal`。
+        推导规则见模块 docstring（唯一权威表述）：计算类方法的推导在 :func:`_derive`。
         返回 ``{"experiment_id", "recorded", "result", "evidence_kind","negation_kind", "exit_code", "reason"}``。
         schema 校验失败必须让异常冒出来（本方法不做 try/except 兜底）：那说明上面的推导规则与 `Experiment.validate` 不一致，而"推导规则与 schema 打架"正是本项目最该炸的地方。
-        形式化路径（`P-8`）`method="formal"` 时登记的不是"这个脚本说了什么"，而是"检查器核了什么"：
-        - 产物必须是工作区里的 `.lean` 文件（别的后缀当场拒绝，见模块 docstring）；- `name` / `imports` 只对这条路径有意义，它们是给检查器的参数（`name` 不给时由工具层按其声明取文件名词干，本方法不另猜一
-        次）；- 只有检查器给出 `verified` 才登记 `evidence_kind="proof"`，`verifier_output` 与 `verifier_subject_key` 都来自那一次真实检查。
-        计算类方法给了 `name` / `imports` 会被拒绝（不是静默忽略）：静默忽略会让调用方以为自己指定了检查条件，而实际用的是默认值 ——这种假话没有任何地方会报出来。
+        形式化不在这一岗（业主 2026-10-23 晚：「E 侧与 Lean 相关的工具和动作都该清干净」）：
+        `method="formal"` 在第一句就以受控理由码 `formal_not_in_e` 拒绝，本方法没有 formal 的
+        实现路径（那条登记 formal 行的私有路径已随动作面一起删除），也不起检查器 ——
+        形式化那一支由 L 承担。
+        `name` / `imports` 只服务形式化那一支：本方法保留这两个形参只是为了把"传了也不做"
+        变成一句受控拒绝（F 的派活路径会按同一份子目标把它们传下来），不是一条通道；
+        动作表与工具 schema 上都没有它们。
         这里没有 `sleep` 形参，这是刻意的（`D-2`）`capabilities.CAPABILITIES["E"].run_experiment` 的 params 里声明了 `sleep`，而它不在本方法的形参表里，本方法也不收 
         `inspect.Parameter.VAR_KEYWORD`。这不是漏了一个参数，也不是"反正 kwargs 收得住"：`sleep` 只服务替身夹具（`tests/test_conductor.py` / 
         `tests/test_scheduler.py` 的 `FakeE` 按同一份 schema 传它来控制"这次实验跑多久"），已逐条登记在 `capabilities.PARAM_SEAMS`里（键含理由串），并由 
@@ -122,7 +121,7 @@ class _RunExperiment:
             raise ExperimentError(f"method 必须是 {S.EXPERIMENT_METHODS} 之一，收到 {method!r}")
         # `certificate` / `search_bound` 只对「穷举/枚举类」方法有意义：
         # `schema.Experiment` 的硬约束 2c 说 `method="exhaustive_search"` 必须给
-        # certificate、给了 certificate 必须给 search_bound。与上面 name/imports
+        # certificate、给了 certificate 必须给 search_bound。与下面 name/imports
         # 同一条纪律：对别的 method 传它们 = 让人以为自己指定了检查条件。
         #
         # 为什么这两格必须存在（2026-10-03，`draft/37` §84 的 D1）：`P-8` 只把通道接到了
@@ -136,36 +135,31 @@ class _RunExperiment:
                 "它们是「在 B 内没有反例」这类结论的证书与适用范围；别的 method 的证据等级"
                 "由 `_derive` 推导，没有任何地方会读它们"
             )
-        if method != "formal" and (name is not None or imports is not None):
-            raise ExperimentError(
-                f"name / imports 只对 method='formal' 有效（收到 method={method!r}）—— "
-                "计算类方法的证据等级由 `_derive` 推导，没有任何检查器会读这两个参数。"
-                "静默忽略会让调用方以为自己指定了检查条件（说明了 imports，实际用的是默认值）"
-            )
 
-        # ---- [0] 业主 2026-10-22 晚裁定：E 的 Lean 侧写死关闭。
+        # ---- [0] 形式化不是 E 的活（业主 2026-10-23 晚裁定：逐字「E 侧与 Lean 相关的
+        # 工具和动作都该清干净」）。
         #
-        # 裁定原文（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时发生错乱。
-        # 当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计。」
+        # 改前这一支的形态是"写死关闭"：动作还在，第一句回受控拒绝 `formal_moved_to_l`
+        # 并把形式化指向 L。裁定之后那个概念也没了 —— 动作表里没有 `check_formal`，
+        # 本方法里没有 formal 的实现路径（那条登记 formal 行的私有路径已删）。所以这一档只剩一句话：
+        # E 不做形式化。它不指向任何人（"搬到 L"是那个过时的转述），只如实说这一岗的范围。
         #
-        # 改前这里读的是 `settings.lean_enabled()`：开关关着才拒，开着就一路走到
-        # `_record_formal`。那让 E 的行为跟着一个与它无关的开关跳 —— 而裁定要的正是
-        # 「别让测 L 的那一趟被 E 这一侧的状态干扰」：现在不论开关哪一档，这一支都拒，
-        # 同一句话、同一个理由码。
-        #
-        # 为什么仍在跑脚本之前拒：形式化实验的产物是一份 `.lean`，它跑起来要起检查器。
-        # 只靠下游（`formalgw.check_lean`）兜的表现是：台账里多一条 inconclusive 的
-        # formal 行、模型多花一步、而用户看到的是"实验失败"而不是"这条路不在 E 身上"。
-        # 三态纪律：拒绝要可行动 —— 消息里既说清这一侧停用了，也说清现在归谁。
-        #
-        # 代码保留（业主：「代码先不删」）：`_record_formal` 与本函数下面那条分支一个字
-        # 没改，`E_LEAN_SIDE_HARD_OFF` 为 False 时它们照旧可走（L 与判据都用得着）。
-        if method == "formal" and _lean_side_hard_off():
+        # 为什么仍在跑脚本之前拒：形式化实验的产物是一份 `.lean`，跑起来要起检查器。
+        # 只靠下游兜的表现是：台账里多一条 inconclusive 的 formal 行、模型多花一步，
+        # 而用户看到的是"实验失败"，不是"这条路不在 E 身上"。
+        if method == "formal":
             raise ExperimentError(
-                f"{_LEAN_SIDE_NOTE}（理由码 {_LEAN_SIDE_REASON}）⇒ 不登记 method='formal' "
-                "的实验，也不起检查器。不需要形式化时改走自然语言证明审阅这条路：把证明"
-                "过程写进 `statements` 的 `proof_text`，再请 V 用 `verify.verify_proof` "
-                "逐行走查（它的结论进 `verifications` 表，是这条路唯一的'审过'凭据）"
+                f"E 不做形式化（理由码 {E_NO_FORMAL_REASON}）：本岗的动作面没有 "
+                "method='formal'，也不起任何检查器。要跑实验请用 method='numeric' | "
+                "'symbolic' | 'exhaustive_search'；一条断言的证明那一档由别的岗承担，"
+                "本岗不替它下结论"
+            )
+        if name is not None or imports is not None:
+            raise ExperimentError(
+                f"E 不做形式化（理由码 {E_NO_FORMAL_REASON}）⇒ name / imports 没有意义"
+                f"（收到 method={method!r}）—— 它们是给检查器的参数，而本岗不起检查器；"
+                "证据等级由 `_derive` 推导。静默忽略会让调用方以为自己指定了检查条件"
+                "（说明了 imports，实际什么也没发生）"
             )
 
         # ---- R-01（`draft/44`）：这四条不用跑脚本就能判 ⇒ 在起子进程之前判掉。
@@ -193,20 +187,6 @@ class _RunExperiment:
             chash = VT.code_hash(path)
         except ToolError as e:
             raise ExperimentError(f"计算 code_hash 失败：{e}") from e
-
-        # ---- [2b] 形式化路径：判据来自检查器，而不是来自脚本的自我陈述
-        if method == "formal":
-            return self._record_formal(
-                claim,
-                claim_key,
-                path,
-                code_hash=chash,
-                params=params,
-                for_question_id=for_question_id,
-                timeout=timeout if timeout is not None else self.default_timeout,
-                name=name,
-                imports=imports,
-            )
 
         # ---- [3] 独立进程执行 + 超时
         run = self._run_script(path, timeout=timeout if timeout is not None else self.default_timeout)
@@ -265,6 +245,16 @@ class _RunExperiment:
 
         # ---- [4b]（在事务内写日志：文件名要用实验号，见 [5]）
 
+        # ---- [4d] `search_bound` 的优先级（§133）：调用方显式给 > 脚本在结构化结论里
+        # 自报的 `bound`（落进 `observations["bound"]`）> 无。脚本自报的那份是"这次真搜到
+        # 哪儿"的读数，比调用方拍的那个数可信 —— 它让"界有没有往前推"可比较。
+        #
+        # 这一份要在写 ②③ 的读数之前算好：E 写的那份报告里"搜索空间"那一段，
+        # 与台账上 `search_bound` 那一列必须是同一个数（两处不一致 = 同一件事两个地址）。
+        bound_arg = (dict(search_bound) if isinstance(search_bound, Mapping)
+                     else (dict((derived.get("observations") or {}).get("bound") or {})
+                           or None))
+
         # ---- [5] 一个事务：alloc_id + 写 experiments
         #
         # `alloc_id` 必须在持锁事务内进行，否则两个 E 实例会拿到同一个
@@ -282,6 +272,31 @@ class _RunExperiment:
             if log_error:
                 notes.append(f"[log] 原始输出未能落盘（{log_error}）—— 实验行本身照样写")
                 log_rel = ""
+            # ---- [5a] ②③ 落盘（业主 2026-10-23 晚：「E 写的报告要能落下来」）
+            #
+            # 改前 ②③ 只活在 `observations` 的自由格里：台账上有那两段字，盘上却没有一份
+            # 可引用的东西 —— B 登记时只能把文本贴进证明栏，G 在正文里也没法指向一份文件，
+            # V 更没有材料可核。现在它们落成 `out/experiments/<实验号>/exhaustion.md`，
+            # 并把路径、字节数与 sha256 记进 `observations["exhaustion_report"]`。
+            #
+            # 落不成就如实降档（不是抛异常）：这一趟实验真的跑过了，报告没落成是
+            # "这条证据不够 proof"，而"不太够"由 `numericproof.exhaustion_problems`
+            # 单点决定（它会把这一格并进"缺什么"），所以这里只负责写出事实并记一句 note。
+            _blocks = _ER.blocks_from(observations=derived.get("observations"),
+                                      certificate=certificate, search_bound=bound_arg)
+            report = _ER.land_report(
+                self.workspace_root, experiment_id=eid, claim=claim, claim_key=claim_key,
+                script_path=_relpath(path, self.workspace_root), script_sha256=chash,
+                design=_blocks["design"], enumeration=_blocks["enumeration"],
+                search_space=_blocks["search_space"],
+                environment=_ER.environment_reading(exit_code=run["exit_code"],
+                                                    runtime_sec=run["runtime_sec"]),
+                result=derived.get("result"), evidence_kind=derived.get("evidence_kind"))
+            if report.get("problems"):
+                notes.append("[report] ②③ 的读数没有落成："
+                             + "；".join(str(p) for p in report.get("problems") or [])
+                             + " ⇒ 这一条不许标 proof（最多是「有数值实验支持」）")
+            derived["observations"][_ER.REPORT_KEY] = report
             row = build_experiment(
                 eid,
                 claim,
@@ -298,16 +313,17 @@ class _RunExperiment:
                 extra_notes=notes,
                 # 硬约束 2c/2d 的事实通道（P-8 的另一半）：证书与它的适用范围。
                 certificate=(dict(certificate) if isinstance(certificate, Mapping) else None),
-                # `search_bound` 的优先级（§133）：调用方显式给 > 脚本在结构化结论里自报的
-                # `bound`（落进 `observations["bound"]`）> 无。脚本自报的那份是"这次真搜到哪儿"
-                # 的读数，比调用方拍的那个数可信 —— 它让"界有没有往前推"可比较。
-                search_bound=(dict(search_bound) if isinstance(search_bound, Mapping)
-                              else (dict((derived.get("observations") or {}).get("bound") or {})
-                                    or None)),
+                search_bound=bound_arg,
                 created_by=self.actor,
             )
             tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
 
+        # 签名那一格（`observations.e_signature`）：谁签、谁写 ②③ —— 读侧不自己去翻台账。
+        # 从 `row` 上读而不是从 `derived` 上读：签名是 `build_experiment` 里现算并写进
+        # 那一行的，`derived` 里没有它（读 `derived` 会得到一格空字符串，而看上去像"没签"）。
+        _obs = row.observations if isinstance(row.observations, Mapping) else {}
+        _sig = _obs.get("e_signature")
+        _sig = dict(_sig) if isinstance(_sig, Mapping) else {}
         out = {
             "experiment_id": eid,
             "recorded": True,
@@ -317,6 +333,16 @@ class _RunExperiment:
             "exit_code": row.exit_code,
             "runtime_sec": row.runtime_sec,
             "code_hash": row.code_hash,
+            # ②③ 的落点（业主 2026-10-23 晚：E 写的报告要能落下来；读的人要能拿到路径）：
+            # 一份读数里两块都在，`blocks` 说清哪两段真的写了字。B 登记证明栏时指它、
+            # G 在正文里引它、V 会审时读它 —— 三处引用的是同一个相对路径。
+            "report_path": str(report.get("path") or ""),
+            "report_sha256": str(report.get("sha256") or ""),
+            "report_bytes": int(report.get("bytes") or 0),
+            "report_blocks": dict(report.get("blocks") or {}),
+            "report_problems": [str(p) for p in report.get("problems") or []],
+            "signed_by": str(_sig.get("signed_by") or ""),
+            "proof_authors": [str(a) for a in (_sig.get("proof_authors") or [])],
             "notes": row.notes,
             "reason": _result_reason(row),
         }

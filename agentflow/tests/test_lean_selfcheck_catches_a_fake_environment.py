@@ -76,20 +76,29 @@ def _fake_lean(workdir: pathlib.Path) -> pathlib.Path:
     - 拿一个 `.lean` 文件当参数时也退出 0（连 `1 = 2` 都"证明成功"）。
     于是第 ①②③ 步全过，「只有反控」能把它揪出来。
 
+    2026-10-25 加一行：它也照抄一行 `#check SimpleGraph` 的输出。理由不是"让假 lean
+    更像真的"（它本来就是假的），而是第 ⑤ 步（Mathlib 图论）排在反控之后 ——
+    ⑤ 那条用例要演示"把反控打桩成通过之后，这个假环境会一路绿到底"，而第 ⑤ 步一旦
+    靠"输出里没有 `SimpleGraph`"把它拦下来，那个演示就变成了"另一道门在拦"。
+    虚构环境本来就能伪造任何输出；能机械区分它与检查器的仍然只有反控（第 ④ 步）。
+
     Windows 上写成 `.bat`（`subprocess` 起 `.bat` 由系统 shell 兜住）；
     其余平台写 `sh` 脚本。两者都只做"回显 + 退出 0"。
     """
     workdir.mkdir(parents=True, exist_ok=True)
+    fake_check = "SimpleGraph.{u} (V : Type u) : Type u"
     if os.name == "nt":
         path = workdir / "lean.bat"
         text = ("@echo off\r\n"
                 "echo Lean (version 4.7.0, x86_64-w64-windows-gnu, commit fake, Release)\r\n"
+                f"echo {fake_check}\r\n"
                 "exit /b 0\r\n")
         path.write_bytes(text.encode("utf-8"))
         return path
     path = workdir / "lean"
     text = ("#!/bin/sh\n"
             "echo \"Lean (version 4.7.0, x86_64-w64-windows-gnu, commit fake, Release)\"\n"
+            f"echo \"{fake_check}\"\n"
             "exit 0\n")
     path.write_bytes(text.encode("utf-8"))
     path.chmod(0o755)

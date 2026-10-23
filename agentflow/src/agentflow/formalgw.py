@@ -870,8 +870,9 @@ def declaration_names(source: str) -> list[str]:
     为什么要"全部"而不只是第一条（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：
     调用方只想给一份 `.lean` 文件、不想再报一遍声明名时，唯一的两种诚实做法是
     "文件里恰好只有一条声明 ⇒ 用它"或"不止一条 ⇒ 请调用方点名"。
-    此前那两种都不是：工具层拿文件名词干当声明名（`agent_e` 的 `_record_formal`
-    与 `verify_tools.check_formal` 各有一处），于是"源码里没有这个名字"被报成
+    此前那两种都不是：工具层拿文件名词干当声明名（`agent_e` 那条 formal 路径与
+    `verify_tools.check_formal` 各有一处；`agent_e` 那条 2026-10-23 晚已随 E 的
+    Lean 侧一起摘掉），于是"源码里没有这个名字"被报成
     `decl_mismatch`（`checked=True`，读起来像"查了没通过"），而它其实是
     "调用方写错了参数" —— 两者的处置完全相反（见本模块 docstring 的判定顺序一节）。
 
@@ -985,7 +986,7 @@ def declaration_name(source: str) -> str:
 
     与 `sole_declaration_name` 的分工：这一条回答"第一条是谁"（给 `lean_snippets`
     这类"一段文本里可能有多个片段"的场景用），那一条回答"这一段只有一个候选吗"
-    （给 `check_lean` / `_record_formal` 这类"必须点名核哪一条"的场景用）。
+    （给 `check_lean` 这类"必须点名核哪一条"的场景用）。
     """
     found = qualified_declaration_names(source)
     return found[0] if found else ""

@@ -1218,6 +1218,11 @@ EXPERIMENT_METHODS = ("numeric", "symbolic", "exhaustive_search", "formal")
 #: 证据等级（FC-22 落地核心）：proof（形式化检查器核验过，只有 `method="formal"` 才可能拿到）·
 #: proof_review（`proof_text` 非空 ＋ V 签「成立」；不是机器检查 ⇒ 必须自带 disclaimer，是"没有 Lean 也要能写
 #: 论文"的落点）· cross_check（数值/穷举交叉验证，不构成证明，报告必须自动附这句话）· heuristic（最弱）。
+#: 2026-10-23 业主裁定：「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，
+#: 签名是对应的程序脚本……这些有关数值实验的都由 E 来签。」（晚间更正：签字由 V、②③ 由 E 写）
+#: 形式化（检查器说的）与穷举（E 按 `numericproof` 的穷尽证据签的，`proof_reason="exhaustion"`，
+#: 凭据是程序脚本 + 搜索空间 + 覆盖说明）。上面那句"只有 method='formal' 才可能拿到"因此
+#: 由 `numericproof.exhaustion_problems` 那一支改写 —— 计算类仍然拿不到"随手的" proof。
 #: 强制三处：`verifications.proof_review_gap`（判据本体：最后一签「成立」且 `proof_sha256` 对得上现在这一版）·
 #: `store._refuse_fake_proof_review`（写入期当场拒收，`proof_review_without_evidence`）· `verify._check_13` 的
 #: `proof_review_without_verification`（审计期 error，逐条点名存量）。
@@ -1456,13 +1461,17 @@ class Experiment:
     """E 的一次实验记录（DESIGN-ROLES.md §2.1）。
 
     本表最重要的一条规矩：`method` 是"计算类"（numeric / symbolic /
-    exhaustive_search）时，`evidence_kind` 不得为 `"proof"`。
+    exhaustive_search）时，`evidence_kind` 不得为 `"proof"` —— 除非整个论域
+    被穷尽验证过（业主 2026-10-23：穷举能拿 proof，签字由 V、②③ 由 E 写，证明栏写程序脚本；
+    判据本体 `numericproof.exhaustion_problems`）。
     这条由 :meth:`validate` 机械执行，不靠人记得。
 
-    为什么必须机械执行：数学里数值实验不构成证明（`09-...md` §6.2(1)
+    为什么必须机械执行：数学里数值实验一般不构成证明（`09-...md` §6.2(1)
     "验证通过 ≠ 数学正确"）。而"我算了几千个点都对"写成"已证明"是本领域
     最自然也最危险的过度声称。把它变成 schema 约束，就让这句谎话
-    在写入的那一刻炸掉，而不是等到审校（或读者）发现。
+    在写入的那一刻炸掉，而不是等到审校（或读者）发现。业主 2026-10-23 补的那一档
+    不是放宽这条：它要的是"整个论域"这三件可核的证据（搜索空间 / exhaustive /
+    覆盖说明），而"算了几千个点"恰恰拿不出它们。
     """
 
     experiment_id: str
@@ -1527,15 +1536,86 @@ class Experiment:
         if self.negation_kind is not None and self.negation_kind not in NEGATION_KINDS:
             raise ValueError(f"negation_kind 必须是 {NEGATION_KINDS} 之一或 None，收到 {self.negation_kind!r}")
 
-        # ---- 硬约束 1：计算类方法永远拿不到 proof 等级（FC-22 的机械落地）
+        # ---- 硬约束 1：计算类方法要 proof 必须拿出"整个论域被穷尽验证"的三件证据
+        #
+        # 2026-10-23 业主裁定的机械落地（改前是"计算类方法永远拿不到 proof"）：
+        # 「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，
+        #   签名是对应的程序脚本……这些有关数值实验的都由 E 来签。」
+        # 于是这一条从"永远不许"变成"只有穷尽证据齐备才许"，判据本体只有一处：
+        # `numericproof.exhaustion_problems`（搜索空间 + 布尔 true 的 exhaustive +
+        # 覆盖说明 + 程序脚本的相对路径）。缺任何一条（含"说不清"那一档）⇒ 拒，
+        # 且拒信逐条列出缺什么 —— 它要能让人/模型当场改对。
+        # 为什么仍然不是"随你标"：`a+b=b+a` 那种数值扫描也会喊"我都算过了"，
+        # 而"算了很多点"与"穷尽了整个论域"之间隔着覆盖说明这一句人话。
         if self.method != "formal" and self.evidence_kind == "proof":
-            raise ValueError(
-                f"method={self.method!r} 的实验不得声称 evidence_kind='proof'。"
-                "数值/符号/穷举都只是**交叉验证**：数学里数值实验不构成证明。"
-                "若确实要主张已证明，必须走 method='formal' 并给出 verifier_output。"
-            )
-        # ---- 硬约束 2：声称 proof 必须有检查器输出
-        if self.evidence_kind == "proof" and not self.verifier_output.strip():
+            from . import numericproof as _NP
+
+            _problems = _NP.exhaustion_problems(
+                method=self.method, observations=self.observations,
+                certificate=self.certificate, search_bound=self.search_bound,
+                code_path=self.code_path, result=self.result)
+            if _problems:
+                raise ValueError(
+                    f"method={self.method!r} 的实验不得声称 evidence_kind='proof' —— "
+                    "除非整个论域被穷尽验证过（业主 2026-10-23：穷举能拿 proof，"
+                    f"签名主体是 {_NP.PROOF_SIGNER}，证明栏写「程序地址 + 程序设计 + "
+                    "穷举论证」三段，后两段由 E 写）。这一行缺："
+                    + "；".join(_problems)
+                    + "。补齐之前它最多是 "
+                    f"{_NP.SUPPORTED_ONLY_KIND}（{_NP.SUPPORTED_ONLY_LABEL}）；"
+                    "要主张已证明也可以走 method='formal' 并给出 verifier_output。"
+                )
+            # ---- 硬约束 1b：穷举那一档的签名主体必须是 V、②③ 的作者必须含 E
+            #      （业主 2026-10-23 晚：「签字仍然由 V 签……E 是 ②③ 的原作者，
+            #      但签名主体是 V」）。
+            #
+            # 判据本体 `numericproof.is_signed_exhaustion`：signed_by=V、proof_authors 含 E、
+            # 证明理由在受控词表里。缺它 ⇒ 这一行是"手写的 proof"，没有任何人签过 ——
+            # 而"谁签的、②③ 是谁写的"正是这一档与"数值实验支持"之间唯一可核的分界。
+            #
+            # 第三方签字那一半（V 的会审签名真落在 `verifications/<号>.jsonl` 里）不在这里判：
+            # `validate` 是纯的（手上没有工作区根），而这条实验行是在 V 审之前写的
+            # （E 跑完实验就要落行，V 审的是随后登记成命题的那份证明栏）⇒ 在这一层要那
+            # 一签会让正控永远过不去。它落在 B 的入库闸 `numericproof.filing_problems`
+            # （那一步手上既有根、又正是"命题要以 proof 进库"的那一刻）。
+            if not _NP.is_signed_exhaustion({"method": self.method,
+                                             "evidence_kind": self.evidence_kind,
+                                             "observations": self.observations}):
+                raise ValueError(
+                    "计算类的 proof 行必须带签名：`observations"
+                    f"[{_NP.SIGNATURE_KEY!r}]` 里要有 `signed_by={_NP.PROOF_SIGNER!r}`、"
+                    f"`{_NP.PROOF_AUTHORS_KEY}` 含 `{_NP.NUMERIC_AUTHOR!r}`、"
+                    f"`proof_reason={_NP.PROOF_REASON_EXHAUSTION!r}`。"
+                    "没有签名者的'已证明'与 cross_check 在证据上是同一件事；"
+                    "签名只由 E 的 run_experiment 在判定穷尽之后写"
+                    "（`numericproof.sign_experiment`）"
+                )
+            # ---- 硬约束 1c：②③ 必须已经落成盘上一份可核的读数
+            #      （业主 2026-10-23 晚：「E 写的报告要能落下来」）。
+            #
+            # 判据本体在 `exhaustionreport.exhaustion_problems`
+            # （`numericproof.report_problems` 只转发）：它读行上的落盘事实
+            # （路径 / 字节数 / sha256 / 三块齐不齐）。没有这一条时，一条 proof 行
+            # 可以在盘上什么都没有的情况下写进库 —— 而"②③ 写了"正是业主口中
+            # "这条证据能不能叫证明"的那一半。
+            _report_problems = _NP.report_problems({
+                "experiment_id": self.experiment_id, "method": self.method,
+                "evidence_kind": self.evidence_kind, "observations": self.observations})
+            if _report_problems:
+                raise ValueError(
+                    "计算类的 proof 行必须带 ②③ 的落盘读数："
+                    + "；".join(_report_problems)
+                    + "。补齐之前它最多是 "
+                    f"{_NP.SUPPORTED_ONLY_KIND}（{_NP.SUPPORTED_ONLY_LABEL}）"
+                )
+        # ---- 硬约束 2：声称 proof 必须有签名者说的话
+        #
+        # 形式化那一档说的是"检查器的原始输出"；穷举那一档说的是"那份程序跑了什么"
+        # （它的凭据是 code_path + code_hash + certificate/search_bound，硬约束 2c 与 6
+        # 已经各自强制过）。两档都要有凭据，只是凭据的形态不同 —— 缺了它，
+        # "已证明"与 cross_check 在证据上是同一件事，不应享受 proof 的待遇。
+        _numeric_proof = (self.method != "formal" and self.evidence_kind == "proof")
+        if self.evidence_kind == "proof" and not _numeric_proof and not self.verifier_output.strip():
             raise ValueError(
                 "evidence_kind='proof' 时必须给出 verifier_output（证明检查器的原始输出）。"
                 "没有它的'已证明'与 'cross_check' 在证据上是同一件事，不应享受 proof 的待遇"
@@ -1546,7 +1626,10 @@ class Experiment:
         # 没有这一条时，`verifier_output` 是一个自由字符串 —— 你可以把命题 A 的
         # 检查器输出粘到命题 B 的行上，而结构上完全合法。
         # 这不是理论风险：任何"批量跑了一堆检查、再批量写记录"的实现都会踩到它。
-        if self.evidence_kind == "proof" and not self.verifier_subject_key.strip():
+        # 穷举那一档没有"检查器输出"，它的上下文绑定是 code_path + code_hash（硬约束 6）
+        # 与 certificate/search_bound（硬约束 2c）—— 所以这一条只对形式化那一路强制。
+        if (self.evidence_kind == "proof" and not _numeric_proof
+                and not self.verifier_subject_key.strip()):
             raise ValueError(
                 "evidence_kind='proof' 时必须给出 verifier_subject_key（检查器输出管的是哪个命题）。"
                 "否则无法排除'把 A 命题的检查器输出贴到 B 命题的记录上'"

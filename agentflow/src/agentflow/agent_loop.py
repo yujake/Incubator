@@ -5996,17 +5996,28 @@ class AgentLoop:
                 f"这一批里 {len(need)} 项派不出去：{want}；明细见 results")
         return out
 
-    def _statement_filing_refusal(self, name: str, args: Mapping[str, Any]) -> dict[str, Any] | None:
-        """B 要入库一条命题时，先问它自己的秘书"这条太平凡吗"；太平凡就拦下。
+    def _statement_filing_tier(self, name: str, args: Mapping[str, Any]) -> dict[str, Any] | None:
+        """B 要入库一条命题时，先问它自己的秘书"这条太平凡吗"；判太平凡就落 T0，不再拒收。
 
-        业主 2026-10-14 裁决第 12 条前半逐字：「作为 B 的秘书的任务，判断一个待入库的命题是否太平凡有没有资
-        格入库」。条件三个同时成立才拦：本角色是 B、工具是它这一趟被派的那件入库动作（
-        `own.register_statement`）、秘书判了且判的是「太平凡」；三者缺一 ⇒ 返回 `None`（照旧入库）。
+        业主 2026-10-23 的裁定（逐字要点）：「B 侧收录命题时被"太平凡"拦截了很多次……
+        可以让秘书不再因"太平凡"拦收录，只是加一个档位叫 T0（和 T1 到 T4 是一个性质），
+        T0 叫基础定理或初步结论」。业主 2026-10-14 裁决第 12 条前半那句「判断一个待入库的
+        命题是否太平凡有没有资格入库」因此换了收场方式：秘书照旧判，判「太平凡」的
+        落 T0（基础定理或初步结论）并如实收下 —— 平凡不是"不许进"，是"进哪一档"。
 
-        秘书没装配 / 没缝 / 开关关着 / 超时 / 坏 JSON ⇒ `checked=False` ⇒ 不拦（"没查成"不等于"太平凡"，否则
-        等于让"没查"决定产出入库；台账里那一行仍会落，见 `judge` 的 `_record_judge`）；`判不了` 也不拦。为什
-        么在这里：B 手上没有"问秘书"这个形状，而"入库前判一下"恰恰是那种忘了就静默发生的事。返回值与别的工具
-        拒绝同形（`ok=False` + `error`），模型据此能改（换一条命题、或写清"后面哪一步会用到它"再交一次）。
+        三件事分开写在这里：
+        1. 只在三个条件同时成立时才问秘书：本角色是 B、工具是它这一趟被派的那件入库动作
+           （`own.register_statement`）、秘书装配了判断面。三者缺一 ⇒ `None`（什么都不加）。
+        2. 秘书没缝 / 开关关着 / 超时 / 坏 JSON ⇒ `checked=False` ⇒ 什么都不加（"没查成"
+           不等于"太平凡"，也不等于"合格"；台账里那一行仍会落，见 `judge` 的 `_record_judge`）。
+        3. 判了且判「太平凡」⇒ 返回一格读数（不是拒绝）：`tier="T0"`、`downgraded=True`、
+           秘书的原话与依据。调用方（`_do_tool`）把它并进这次工具调用的结果，于是
+           "这一条进了 T0"在模型与台账上都看得见。
+
+        为什么不再返回拒绝：拒收的代价在真机上量过（2026-10-14 第五趟：同一份 21 字的命题
+        被提交 6 次、每次都拿到同一个「太平凡」，一次 run 烧掉 20/26 次调用与 $0.226，
+        而 `statements` 仍是 0 行；r34 那一趟 B 的秘书台账里 4 次「太平凡」、收录表 0 行）。
+        挡的是"平凡能进表"，代价却是"整条收录链停摆" —— 而业主这一次裁定把这个交换取消了。
         """
         if str(getattr(self, "role", "")) != "B" or str(name) != "own.register_statement":
             return None
@@ -6033,25 +6044,23 @@ class AgentLoop:
             return None
         if not got.get("checked"):
             return None
-        if str(got.get("decision")) != "太平凡":
+        from . import secretary as _SEC
+
+        if not _SEC._is_trivial_verdict(got.get("decision")):
             return None
+        # 档位读数由秘书台账给（`append_nontriviality` 已经写过一行 T0）：
+        # 这里只把它翻成这一步的读数，不另存一份状态。
         return {
-            "tool": str(name), "ok": False, "kind": "statement_too_trivial",
-            "error": ("入库被你的秘书拦下：这条命题**太平凡**（"
-                      f"{str(got.get('reason') or '')[:300]}）。"
-                      "两条判据至少答上一条再交一次：① 后面哪一步会用到它（指名道姓）；"
-                      "② 它比收录表里最接近的那一条强在哪。答不上来就别收 —— "
-                      "平凡行会把收录表淹掉，而下游「按册子溯源」全靠这张表。"
-                      # 2026-10-14 第五趟真机读数：同一份 21 字的命题被提交了 6 次，
-                      # 每次都拿到同一个「太平凡」，一次 run 因此烧掉 20/26 次调用。
-                      # 判断的对象只有那段文本，所以原样再交一遍不会有别的结论 ——
-                      # 这一句把"该改什么"说死：改命题或改判据，不是再交一遍。
-                      "**同一个命题原样再交一次不会有别的结论**（这一趟已经判过它了）——"
-                      "要改的是命题本身或上面那两条判据。"),
-            "secretary": {"checked": True, "decision": got.get("decision"),
-                          "reason": got.get("reason"), "basis": got.get("basis"),
-                          "reused": bool(got.get("reused"))},
-            "meta": {"judged_by": "secretary", "kind": "statement_aesthetic"},
+            "tier": _SEC.nontriviality_label(0),
+            "downgraded": True,
+            "decision": str(got.get("decision") or ""),
+            "reason": str(got.get("reason") or "")[:300],
+            "basis": list(got.get("basis") or []),
+            "note": ("平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23："
+                     "秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据："
+                     "① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪"),
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic",
         }
 
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -6085,19 +6094,19 @@ class AgentLoop:
         if name not in known and f"own.{raw}" in known:
             name, aliased_from = f"own.{raw}", raw
         args = dict(payload.get("args") or {})
-        # ---- B 的入库口：先过秘书那一关（业主 2026-10-14 裁决第 12 条前半）
+        # ---- B 的入库口：先过秘书那一关（业主 2026-10-14 裁决第 12 条前半 +
+        #      2026-10-23 的收场方式：判「太平凡」落 T0，不再拒收）
         #
         # 位置在这一层而不是工具层：这一格要本体自己的缝（`self.secretary`）与
-        # `my_task_id`，而工具层两样都没有；而且拦下来的形态必须与别的拒绝同形
-        # （模型据此改参数），所以它得在 `registry.call` 之前、在同一个返回面上。
+        # `my_task_id`，而工具层两样都没有；而且"这一条落哪一档"必须与别的读数同形
+        # （并进这一次工具调用的结果），所以它得在 `registry.call` 之前、同一个返回面上。
         #
         # `name in known` 那一句是必要的（不是防御性写法）：注册表里没有这个名字时
         # 这一步的结果是 `unknown_tool`，而秘书的这一次判断要花一次模型调用 ——
         # 为一次不会发生的入库去问它，等于让"名字写错了"顺手扣一笔钱。
+        filing_tier: dict[str, Any] | None = None
         if name in known:
-            filing = self._statement_filing_refusal(name, args)
-            if filing is not None:
-                return filing
+            filing_tier = self._statement_filing_tier(name, args)
         # ---- 读写面（S1n-b，业主 T23）：子代理只能读写父切割给它的面。
         #
         # 判据在这一层（不是工具层）：`self.surface` 是这一趟的面（绝对路径），
@@ -6157,6 +6166,11 @@ class AgentLoop:
                "error": res.error or "", "meta": dict(res.meta or {})}
         if aliased_from:
             out["aliased_from"] = aliased_from
+        # 入库前那一趟判断的档位读数（业主 2026-10-23：平凡 ⇒ 落 T0，不拒收）。
+        # 只在这一步真的把那条命题交下去了之后才挂（拒绝 / 没调成时它没有对象可言）。
+        if filing_tier:
+            out["tier"] = dict(filing_tier)
+            out["meta"]["statement_tier"] = dict(filing_tier)
         # `draft/97` §15.4 的载体那一半：工具把"哪几条定义待补"报回来 ⇒ 这一步就地
         # 向直接父发一条报文（父通常就是 A，原文在它手里）。不这样做的话，"定义待补"
         # 只是台账上的一个状态，而 §14.13 的正控要求"A 那边真的有人被找"。

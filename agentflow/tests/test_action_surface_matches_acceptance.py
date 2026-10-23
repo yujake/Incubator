@@ -125,26 +125,25 @@ def test_the_search_certificate_fields_are_advertised_in_both_layers(tmp_path: p
         assert field in sig, f"方法签名不收 {field}：{sorted(sig)}"
 
 
-def test_the_conditional_formal_params_say_so_in_their_description():
-    """负控（条件性参数要写明条件）：`name`/`imports` 的描述必须写出"仅 formal"。
-
-    修之前它们是「光秃秃的」 `_S`（只声明类型）⇒ 模型给计算类方法传了它们、被拒三次，
-    而"为什么被拒"要等它自己撞出来。
-    """
-    action = next(a for a in CAP.actions_for("E") if a.action == "run_experiment")
-    props = (action.params or {}).get("properties") or {}
-    for field in ("name", "imports"):
-        desc = str((props.get(field) or {}).get("description") or "")
-        assert "formal" in desc, f"{field} 的描述没写清只对 formal 有效：{desc!r}"
+#: 2026-10-23 晚：`test_the_conditional_formal_params_say_so_in_their_description`
+#: 整条删除 —— 它守的是"条件性参数 `name` / `imports` 要在描述里写明只对 formal 有效"。
+#: 裁定之后 E 的 `run_experiment` 不再声明这两个参数（它们只服务 formal，而 E 不做
+#: 形式化；工具 schema 的那两格也一起退场）⇒ "广告了却不说条件"这件事在结构上不可能，
+#: 判据没有可量的对象。这不是放宽：参数的消失比描述写对更强（判据见
+#: `tests/test_e_has_no_lean_side.py` 判据 1 与 `tests/test_agent_e.py` 的 §[6]）。
 
 
-def test_check_formal_says_it_needs_source_or_script_path():
-    """负控（沉默的必需）：`check_formal` 的摘要必须写明"二者必居其一"。
+def test_the_formal_action_says_it_needs_source_or_script_path():
+    """负控（沉默的必需）：形式化那条动作的摘要必须写明"二者必居其一"。
 
     T1 里它被调 3 次、三次都没给源码 ⇒ 落进 `no_script`（什么都没核），
     而那三次调用在模型看来都是"我调了形式化"。
+
+    2026-10-23 晚：这条动作从 E 挪到了 L（E 的动作表里没有 `check_formal` 了），
+    所以它量的是 L 那一格 —— 判据本身一个字没松：摘要里仍然必须同时出现
+    `source` 与 `script_path`。
     """
-    action = next(a for a in CAP.actions_for("E") if a.action == "check_formal")
+    action = next(a for a in CAP.actions_for("L") if a.action == "check_formal")
     summary = str(action.summary or "")
     assert "source" in summary and "script_path" in summary, summary
 

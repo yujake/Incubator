@@ -1,0 +1,26 @@
+# g336-sylow-construct-invariants
+# 脚本 code/e336_full.py  sha256=a3c7f065af8db604
+# exit_code=1  runtime=0.156s
+# claim: 对 336 = 2^4·3·7：Sylow 数由代码枚举 (n_2∈{1,3,7,21}, n_3∈{1,4,7,16,28,112}, n_7∈{1,8})；用 C_7 ⋊_χ H（|H|=48，χ 平凡与各非平凡同态）显式构造出一批阶恰为 336 的群，各构造的 |G|、元素阶分布、|Z(G)|、|G'|、可解性由代码计算并两两比较；n_7=1 且不变量两两不同的构造至少 8 个，且 PSL(2,7)×C_2（阶 336）的导出列不到 1（不可解）。
+----- stdout -----
+=== (1) Sylow count table for |G| = 336 ===
+factorization of 336: 2^4 * 3^1 * 7^1
+p=2: n_2 == 1 mod 2 and n_2 | 21  =>  [1, 3, 7, 21]
+p=3: n_3 == 1 mod 3 and n_3 | 112  =>  [1, 4, 7, 16, 28, 112]
+p=7: n_7 == 1 mod 7 and n_7 | 48  =>  [1, 8]
+elementary-feasible (n_2,n_3,n_7) triples enumerated: 48
+PROGRESS: {"n2": [1, 3, 7, 21], "n3": [1, 4, 7, 16, 28, 112], "n7": [1, 8], "stage": "sylow", "triples": 48}
+
+=== (2)(3) constructions and invariants ===
+[H] C48  |H| = 48
+----- stderr -----
+Traceback (most recent call last):
+  File "D:\Incubator\g336\code\e336_full.py", line 650, in <module>
+    main()
+  File "D:\Incubator\g336\code\e336_full.py", line 489, in main
+    homs, gens = homs_to_C6(H)
+                 ^^^^^^^^^^^^^
+  File "D:\Incubator\g336\code\e336_full.py", line 360, in homs_to_C6
+    tx = tab[x]
+         ~~~^^^
+IndexError: list index out of range

@@ -1,0 +1,3 @@
+{"at": "2026-10-23T13:24:05+08:00", "brief": "检索 Ramsey 数 R(3,4) 的经典文献。", "brief_source": "secretary", "first_task_id": "t-000002", "kind": "add", "name": "A1", "owner": "t-000001", "role": "A", "seq": 1, "surface": "S01", "task_id": "t-000002"}
+{"at": "2026-10-23T13:24:05+08:00", "brief": "对 R(3,4)=9 做确定性复核，写一个可复跑脚本并留下 REPRO_RESULT 读数。", "brief_source": "secretary", "first_task_id": "t-000003", "kind": "add", "name": "E1", "owner": "t-000001", "role": "E", "seq": 2, "surface": "S02", "task_id": "t-000003"}
+{"at": "2026-10-23T13:38:18+08:00", "brief": "研究 R(3,4)：立题并把研究循环跑起来的第一步。", "brief_source": "secretary", "first_task_id": "t-000007", "kind": "add", "name": "D1", "owner": "t-000001", "role": "D", "seq": 3, "surface": "S03", "task_id": "t-000007"}

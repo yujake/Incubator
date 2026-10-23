@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "task_id": "t-000001",
+      "role": "M",
+      "action": "run",
+      "called_by": "user",
+      "parent_task_id": null,
+      "depth": 1,
+      "input_key": "top:M:935d89e3",
+      "status": "running",
+      "outcome": null,
+      "refusal_reason": null,
+      "instance": "",
+      "detail": "证明拉格朗日定理（有限群的子群阶整除群阶），并要求形式化。",
+      "error": null,
+      "started_at": "2026-10-23T12:12:42+08:00",
+      "ended_at": null,
+      "tokens": 0,
+      "usd": 0.0,
+      "artifacts": [],
+      "inputs": [],
+      "kind": "",
+      "expects": "",
+      "item_state": "",
+      "item_close": "",
+      "seen_by": "",
+      "seen_step": null,
+      "keep_alive": false
+    },
+    {
+      "task_id": "t-000002",
+      "role": "B",
+      "action": "",
+      "called_by": "M",
+      "parent_task_id": "t-000001",
+      "depth": 2,
+      "input_key": "@e2eb534db74d",
+      "status": "running",
+      "outcome": null,
+      "refusal_reason": null,
+      "instance": "",
+      "detail": "派活（不点动作）：由该角色按自己的能力范围自己选动作",
+      "error": null,
+      "started_at": "2026-10-23T12:13:38+08:00",
+      "ended_at": null,
+      "tokens": 0,
+      "usd": 0.0,
+      "artifacts": [],
+      "inputs": [
+        "conductor:admitted"
+      ],
+      "kind": "",
+      "expects": "",
+      "item_state": "",
+      "item_close": "",
+      "seen_by": "",
+      "seen_step": null,
+      "keep_alive": false
+    }
+  ]
+}

@@ -975,7 +975,8 @@ def test_install_e_f_g_tools_are_all_wired(store):
     （静默少一只手是本项目最忌讳的降级形态）。
     """
     e_names = set(install_e_tools(store).names())
-    assert {"verify.run_experiment", "verify.check_formal", "verify.evidence_for"} <= e_names
+    # 2026-10-23 晚：`verify.check_formal` 整条删除（E 不做形式化）；这一面只留实验与查询。
+    assert {"verify.run_experiment", "verify.evidence_for", "verify.list_experiments"} <= e_names
 
     f_names = set(install_f_tools(store).names())
     assert {"attack.create_plan", "attack.step", "attack.status", "attack.list_plans"} <= f_names

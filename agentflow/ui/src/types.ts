@@ -297,8 +297,28 @@ export interface ArtifactsView {
   products_tri: Tri;
   run_dir: string;
   products_reason: string;
+  experiment_spots: ExperimentSpot[];
+  experiment_spots_tri: Tri;
+  experiment_spots_reason: string;
+  code_exp: CodeExpFile[];
   tasks: TaskRow[];
   tasks_tri: Tri;
+}
+
+/** 出处：artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点（`out/experiments/<号>/design.md` / `exhaustion.md` / `.log`；`kind` 是 design / exhaustion / log）。 */
+export interface ExperimentSpot {
+  kind: string;
+  path: string;
+  exists: boolean;
+  bytes: number | null;
+  tri: Tri;
+  reason?: string;
+}
+
+/** 出处：artifacts_face() 的 code_exp[] —— `code/exp/` 下的一个脚本（相对工作区的路径）。 */
+export interface CodeExpFile {
+  path: string;
+  bytes: number | null;
 }
 
 /** 出处：acceptance_face() —— 内容级验收（键名逐字来自 reviewaccept.CRITERIA 与 AUXILIARY_SIGNALS）。 */
@@ -508,10 +528,24 @@ export interface StatementRow {
   line_range: string;
   created_at: string;
   created_by: string;
+  quote_state: string;
+  nontriviality: number | null;
+  nontriviality_label: string;
+  nontriviality_meaning: string;
+  nontriviality_tri: string;
+  formal_paths: FormalPath[];
+  grade: string;
+  grade_label: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
+}
+
+/** 出处：evidencebits.formal_by_proof() 的一行 —— 五元位第 4 位的一条路径（`proof_no` 是证明号，`state` 取 `evidencebits.FORMAL_PATH_STATES` 的五档：pending / na / failed / verified / stale）。折成一条汇总就等于让 `#p2` 借 `#p1` 的光。 */
+export interface FormalPath {
+  proof_no: number;
+  state: string;
 }
 
 /** 出处：store.rows("review_findings")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）。 */
@@ -557,6 +591,7 @@ export interface RelationRow {
   duplicate_of: string;
   created_at: string;
   supporting_lit_ids: string[];
+  quote_state: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -582,6 +617,7 @@ export interface VerificationRow {
   used_faces: string[];
   submission_id: string;
   at: string;
+  proof_sha_consistency: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -599,13 +635,14 @@ export interface ArtifactRow {
   task_id: string;
   exit_code: number | null;
   note: string;
+  sha_consistency: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
 }
 
-/** 出处：artifacts.verify_entries() 的行 —— 台账钉的 sha 与盘上现在这一版是不是同一版。 */
+/** 出处：artifacts.verify_entries() 的行 —— 台账钉的 sha 与盘上现在这一版是不是同一版（`sha_consistency` 把 `status` 的五档折成 match / mismatch / unknown）。 */
 export interface LedgerVerifyRow {
   path: string;
   sha256: string;
@@ -613,6 +650,7 @@ export interface LedgerVerifyRow {
   at: string;
   sha256_now: string;
   status: string;
+  sha_consistency: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -769,6 +807,7 @@ export interface ExperimentRow {
   created_at: string;
   created_by: string;
   for_question_id: string;
+  code_sha_consistency: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;

@@ -482,20 +482,23 @@ def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: Too
         assert "只给裁决、不落台账" in text, f"{role} 的提示词没说清裁决不落台账"
 
     # ---- 事实那一侧（负控）：`check_formal` 真的不写 `experiments`
+    #
+    # 2026-10-23 晚：这一格改量 L 的那条路（`formal.check_formal`；E 的动作整条摘掉了）。
+    # 判据不变：裁决那一步只给结论、不落台账 —— 落库是 `formal.record` 的事。
     import tempfile
     from pathlib import Path as _P
 
-    from agentflow.agent_e import AgentE
+    from agentflow.agent_l import AgentL
     from agentflow.store import Store
 
     ws = _P(tempfile.mkdtemp(prefix="formal-path-judge-"))
     st = Store(ws)
     st.init()
-    e = AgentE(st)
+    l = AgentL(st)
     before = len(st.rows("experiments"))
     (ws / "t.lean").write_text("theorem judge_trivial : (1 : Nat) + 1 = 2 := rfl\n",
                                encoding="utf-8")
-    e.check_formal(claim="判据：1+1=2", script_path="t.lean")
+    l.check_formal(claim="判据：1+1=2", script_path="t.lean")
     assert len(st.rows("experiments")) == before, (
         "`check_formal` 现在会写 experiments 了？那提示词里那两句（裁决/落库分开）必须跟着改")
 

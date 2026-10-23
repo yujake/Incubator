@@ -1,0 +1,4 @@
+{"at": "2026-10-23T13:09:27+08:00", "brief": "认领检索请求 r-000001", "brief_source": "secretary", "first_task_id": "t-000004", "kind": "add", "name": "A1", "owner": "t-000002", "role": "A", "seq": 1, "surface": "S01", "task_id": "t-000004"}
+{"at": "2026-10-23T13:11:19+08:00", "brief": "检索 96 阶与 32 阶群分类的文献出处", "brief_source": "parent", "first_task_id": "t-000006", "kind": "add", "name": "A2", "owner": "t-000002", "role": "A", "seq": 2, "surface": "S02", "task_id": "t-000006"}
+{"at": "2026-10-23T13:11:19+08:00", "brief": "确定性脚本核 Sylow 计数与六格不变量表", "brief_source": "parent", "first_task_id": "t-000007", "kind": "add", "name": "E1", "owner": "t-000002", "role": "E", "seq": 3, "surface": "S03", "task_id": "t-000007"}
+{"at": "2026-10-23T13:20:14+08:00", "brief": "攻坚猜想 000000：(1,1) 格是否 G≅P×C_3", "brief_source": "parent", "first_task_id": "t-000010", "kind": "add", "name": "F1", "owner": "t-000002", "role": "F", "seq": 4, "surface": "S04", "task_id": "t-000010"}

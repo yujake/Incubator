@@ -35,6 +35,7 @@ import pathlib
 import pytest
 
 from agentflow import closing as CL
+from agentflow import numerictheorem as NT
 from agentflow import papercompile as PC
 from agentflow import papermapping as PM
 from agentflow import schema as S
@@ -576,6 +577,9 @@ def test_objective_kinds_block_and_subjective_ones_only_name() -> None:
     assert MJ.SUBJECTIVE_KINDS, "主观那一档不许是空的（否则'只点名'这条口径没有对象）"
     assert all(MJ.level_of(k) == MJ.LEVEL_INFO for k in MJ.SUBJECTIVE_KINDS)
     assert set(MJ.BLOCKING_KINDS) & set(MJ.SUBJECTIVE_KINDS) == set(), "两档不许有交集"
+    # 数值实验定理那五条（业主 2026-10-23，E-1）：同样是可判事实，所以同样拦门。
+    assert MJ.NUMERIC_OBJECTIVE_KINDS == PM.NUMERIC_KINDS, "词表只许有一个真身"
+    assert all(MJ.level_of(k) == MJ.LEVEL_BLOCKER for k in MJ.NUMERIC_OBJECTIVE_KINDS)
     uncovered = [k for k in PM.ALL_PROBLEM_KINDS
                  if k not in set(MJ.BLOCKING_KINDS) | set(MJ.SUBJECTIVE_KINDS)]
     assert uncovered == [], uncovered
@@ -653,18 +657,35 @@ def test_the_closing_reading_without_a_project_root_is_unknown() -> None:
 
 # ---------------------------------------------------------------- 13 反真空
 
+#: 由另一份判据负责产出的 kind（这里只登记、指到它那一份，不重复造夹具）。
+#:
+#: 为什么可以这样：这一条问的是"每一类有没有产出路径"，路径在别的文件里也算数 ——
+#: 但必须点名是哪一条（判据会去那份文件里核这个函数真的存在）。不点名的话，
+#: "这里漏了"与"在别处"就分不开，而两者在读数上一模一样。
+PRODUCED_IN_OTHER_FILE: dict[str, str] = {
+    "mapping_proof_program_missing": "tests/test_numeric_theorem_writing_spec.py",
+    "mapping_proof_program_unbacked": "tests/test_numeric_theorem_writing_spec.py",
+    "mapping_numeric_evidence_missing": "tests/test_numeric_theorem_writing_spec.py",
+    "mapping_exhaustion_note_missing": "tests/test_numeric_theorem_writing_spec.py",
+    "mapping_numeric_citation_missing": "tests/test_numeric_theorem_writing_spec.py",
+}
+
 
 def test_every_problem_kind_is_reachable() -> None:
     """每一类问题都真的产得出来（词表里挂着一个永远不报的 kind 与"没接上"同效）。"""
     assert len(set(PM.ALL_PROBLEM_KINDS)) == len(PM.ALL_PROBLEM_KINDS)
     assert set(PM.ALL_PROBLEM_KINDS) == (
         set(PM.MAPPING_KINDS) | set(PM.CITATION_KINDS) | set(PM.MD_KINDS)
-        | set(PM.PAPER_KINDS) | set(PM.LEAN_KINDS)
+        | set(PM.PAPER_KINDS) | set(PM.LEAN_KINDS) | set(PM.NUMERIC_KINDS)
     )
     # Lean 那两格的四条（业主 2026-10-22 追加）也在这张总表里：它们拦门，所以与
     # `LEAN_WARN_KINDS`（只进读数的那一档）必须是两回事。
     assert set(PM.LEAN_KINDS) & set(PM.LEAN_WARN_KINDS) == set()
     assert PM.LEAN_WARN_KINDS, "警告那一档不许是空的（否则'没有 Lean 产物'就没有落点）"
+    # 数值实验定理那一组（业主 2026-10-23，E-1）与 Lean 那两格、警告档都不许串。
+    assert set(PM.NUMERIC_KINDS) & set(PM.LEAN_KINDS) == set()
+    assert set(PM.NUMERIC_KINDS) & set(PM.LEAN_WARN_KINDS) == set()
+    assert PM.NUMERIC_KINDS == NT.NUMERIC_KINDS, "词表只许有一个真身（在 numerictheorem）"
 
 
 def test_every_problem_kind_is_produced_by_some_broken_workspace(tmp_path: pathlib.Path) -> None:
@@ -728,8 +749,16 @@ def test_every_problem_kind_is_produced_by_some_broken_workspace(tmp_path: pathl
     twice[1]["lean_target"] = twice[0]["lean_target"]
     _lean_broken(twice)
 
-    missing_kinds = sorted(set(PM.ALL_PROBLEM_KINDS) - seen)
+    missing_kinds = sorted(set(PM.ALL_PROBLEM_KINDS) - seen - set(PRODUCED_IN_OTHER_FILE))
     assert not missing_kinds, f"这些 kind 一次都没被产出来过：{missing_kinds}"
+    # 登记在别处的那些必须真有一条判据在产它（点名而不核实，等于把漏的挪到看不见的地方）。
+    for kind, rel in sorted(PRODUCED_IN_OTHER_FILE.items()):
+        assert kind in set(PM.ALL_PROBLEM_KINDS), f"{kind} 不在词表里（登记过期）"
+        path = pathlib.Path(__file__).resolve().parents[1] / rel
+        assert path.is_file(), f"{kind} 登记在 {rel}，而那份判据不在盘上"
+        text = path.read_text(encoding="utf-8")
+        assert "def test_" in text and kind in text, (
+            f"{kind} 登记在 {rel}，而那份文件里既没有判据也没有点名这个 kind")
 
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用

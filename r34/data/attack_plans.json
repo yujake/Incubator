@@ -1,0 +1,102 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "plan_id": "000000",
+      "problem": "证明或否定：K_8 上同时不含红 K_3 与蓝 K_4 的二着色，在 S_8 下恰有 3 个同构类（等价说法：n=8 上 triangle-free 且 α(G)≤3 的图 G，红图；蓝图取补），判否只用确定性枚举读数。",
+      "problem_key": "conjecture:000000",
+      "for_question_id": null,
+      "status": "attacking",
+      "rounds": 1,
+      "budget": {
+        "max_rounds": 8,
+        "max_parallel_subgoals": 3,
+        "max_persist_attempts": 3,
+        "max_depth": 2
+      },
+      "subgoals": [
+        {
+          "sid": "s1",
+          "text": "结构归约（手证）：红图 G triangle-free 且 α(G)≤3、n=8 ⇒ 每点红度 ≤3（红度 2 时两邻点必相邻，否则与该两邻点的不相关集凑出独立 4-集），即 Δ≤3；据此给出 m 的可行范围与 M_8（C_8 + 四条对径边）合法性的确定性核验。done_when：每条引理可被独立重算、缺口逐条点名。",
+          "owner": "F",
+          "status": "blocked",
+          "evidence_ids": [],
+          "experiment_ids": [],
+          "proof_experiment_ids": [],
+          "blocked_reason": "未接线：本框架尚无可自动调用的 F 侧推理入口",
+          "attempts": 0,
+          "negation_kind": null,
+          "in_flight": true,
+          "tried_strategies": [
+            "套用已知定理"
+          ]
+        },
+        {
+          "sid": "s2",
+          "text": "确定性枚举建档：对 2^28 个二着色（红 K_3 / 蓝 K_4 增量剪枝）求存活集 F，再在 8! 个置换下按 (红边 bitmask) 规范化求轨道数与每轨道代表，落一条 experiments 行（脚本 sha256 + 复现命令）。done_when：读数给出轨道数实数与各轨道代表，能与 V/E 的独立管线对上。",
+          "owner": "E",
+          "status": "todo",
+          "evidence_ids": [],
+          "experiment_ids": [],
+          "proof_experiment_ids": [],
+          "blocked_reason": "",
+          "attempts": 0,
+          "negation_kind": null
+        },
+        {
+          "sid": "s3",
+          "text": "命题—证明定稿：把 s1 的手证 + s2 的枚举读数写成命题—证明（命题：K_8 上无红 K_3 无蓝 K_4 的二着色在 S_8 下恰有 N 个同构类，N 由 s2 读数定），交 B 登记 statements 并派 V 复核签字。done_when：V 签『成立』，行档位为 proof_review；若 N≠3 则改写为否证并如实报告。",
+          "owner": "F",
+          "status": "todo",
+          "evidence_ids": [],
+          "experiment_ids": [],
+          "proof_experiment_ids": [],
+          "blocked_reason": "",
+          "attempts": 0,
+          "negation_kind": null
+        }
+      ],
+      "history": [
+        {
+          "round": 1,
+          "sid": "s1",
+          "action": "no_change",
+          "outcome": "no_change",
+          "detail": "子目标 s1（结构归约（手证）：红图 G triangle-free 且 α(G)≤3、n=8 ⇒ 每点红度 ≤3（红度 2 时两邻点必相邻，否则与该两邻点的不相关集凑出独立 4-集），即 Δ≤3；据此给出 m 的可行范围与 M_8（C_8 + 四条对径边）合法性的确定性核验。done_when：每条引理可被独立重算、缺口逐条点名。）需要 F 的推理，但**本框架尚未接线自动推理** ⇒ **未推进**（这一轮什么都没做，不是'做了但没结果'）；已按 §3.16 落成产物 `dead_end`（reason=缺工具，best_partial 1 条）。要把 owner=F 的子目标真正推起来，需要 F 侧先接上可调用的推理入口；在此之前 F 只如实记账，绝不用空证据冒充进展",
+          "evidence": [],
+          "at": "2026-10-23T13:42:01+08:00",
+          "product_detail": {
+            "product": "dead_end",
+            "strategy": "套用已知定理",
+            "why_strategy": "没有可调用的推理入口时，唯一诚实的产物是 dead_end（换子目标/等人接线）",
+            "reason": "缺工具",
+            "evidence": "子目标 s1（结构归约（手证）：红图 G triangle-free 且 α(G)≤3、n=8 ⇒ 每点红度 ≤3（红度 2 时两邻点必相邻，否则与该两邻点的不相关集凑出独立 4-集），即 Δ≤3；据此给出 m 的可行范围与 M_8（C_8 + 四条对径边）合法性的确定性核验。done_when：每条引理可被独立重算、缺口逐条点名。）的 owner=F 侧没有可自动调用的推理入口；这一轮据此判定走不下去，而不是假装推进",
+            "best_partial": [
+              {
+                "what": "子目标原文：结构归约（手证）：红图 G triangle-free 且 α(G)≤3、n=8 ⇒ 每点红度 ≤3（红度 2 时两邻点必相邻，否则与该两邻点的不相关集凑出独立",
+                "ids": [],
+                "why_partial": "还没有任何证据行 —— 这一条是原文本身，不是进展"
+              }
+            ]
+          },
+          "product": "dead_end",
+          "strategy": "套用已知定理",
+          "best_partial": [
+            {
+              "what": "子目标原文：结构归约（手证）：红图 G triangle-free 且 α(G)≤3、n=8 ⇒ 每点红度 ≤3（红度 2 时两邻点必相邻，否则与该两邻点的不相关集凑出独立",
+              "ids": [],
+              "why_partial": "还没有任何证据行 —— 这一条是原文本身，不是进展"
+            }
+          ],
+          "dead_end_reason": "缺工具"
+        }
+      ],
+      "depth": 0,
+      "parent_plan_id": null,
+      "best_partial": "已进行 1 轮。子目标进展（按'离终结有多近'排序）：\n- s2（owner=E，status=todo）: 确定性枚举建档：对 2^28 个二着色（红 K_3 / 蓝 K_4 增量剪枝）求存活集 F，再在 8! 个置换下按 (红边 bitmask) 规范化求轨道数与每轨道代表，落一条 experiments 行（脚本 sha256 + 复现命令）。done_when：读数给出轨道数实数与各轨道代表，能与 V/E 的独立管线对上。\n- s3（owner=F，status=todo）: 命题—证明定稿：把 s1 的手证 + s2 的枚举读数写成命题—证明（命题：K_8 上无红 K_3 无蓝 K_4 的二着色在 S_8 下恰有 N 个同构类，N 由 s2 读数定），交 B 登记 statements 并派 V 复核签字。done_when：V 签『成立』，行档位为 proof_review；若 N≠3 则改写为否证并如实报告。\n- s1（owner=F，status=blocked）: 结构归约（手证）：红图 G triangle-free 且 α(G)≤3、n=8 ⇒ 每点红度 ≤3（红度 2 时两邻点必相邻，否则与该两邻点的不相关集凑出独立 4-集），即 Δ≤3；据此给出 m 的可行范围与 M_8（C_8 + 四条对径边）合法性的确定性核验。done_when：每条引理可被独立重算、缺口逐条点名。；卡点：未接线：本框架尚无可自动调用的 F 侧推理入口\n**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。",
+      "created_at": "2026-10-23T13:41:53+08:00",
+      "updated_at": "2026-10-23T13:42:01+08:00",
+      "created_by": "agent-F"
+    }
+  ]
+}

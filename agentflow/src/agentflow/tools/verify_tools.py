@@ -1,18 +1,21 @@
 """证明检查器的桥接层工具面（`detect_verifier` / `check_formal` / 实验与查询那几条）。
-## 这个模块今天是什么（2026-10-22 划线：形式化入口归 L）
+## 这个模块今天是什么（2026-10-22 划线：形式化入口归 L；2026-10-23 晚 E 的 Lean 侧清空）
 
 本模块是**桥接层的真身**，不再是"形式化的门面"：把 Lean/Coq 源码交给检查器并把它的
-原话解释出来（`check_formal` → `verify.check_formal` / `formalgw`），这一件事仍然只有
-一份实现，E 与 L 都经它取读数。**形式化的入口是 L 的 `formal.*`**（`formal.formalize` /
-`formal.check_formal` / `formal.record`）：模型要"把一条命题写成 Lean 并核一遍、再登记
-一行实验"时走那三件。
-2026-10-22 晚裁定（业主逐字：「E 的 Lean 侧开关全写死成关闭」）之后，本模块这件
-`verify.check_formal` 的 `roles` 收成了 `()`：它仍然装配着、函数本体一行没删
-（`agent_l._CheckFormalL` 继承 `AgentE` 的 `check_formal` 走的就是它，`formal_tools`
-直接调同一个函数），但它不再属于任何角色 ⇒ 谁的 `for_role` 里都没有它，也不能经
-`ToolRegistry.call` 调到（第一句就是角色判据）。动作面那一条由
-`AgentE.check_formal` / `AgentE.run_experiment(method='formal')` 的受控拒绝
-（`formal_moved_to_l`）承担，判据见 `tests/test_e_lean_side_is_hard_off.py`。
+原话解释出来（`check_formal` → `formalgw`），这一件事仍然只有一份实现，L 经它取读数。
+形式化的入口是 L 的 `formal.*`（`formal.formalize` / `formal.check_formal` /
+`formal.record`）：模型要"把一条命题写成 Lean 并核一遍、再登记一行实验"时走那三件。
+
+2026-10-23 晚裁定（业主逐字：「E 侧与 Lean 相关的工具和动作都该清干净」）之后：
+- 工具 `verify.check_formal` **整条删除**（不是把 `roles` 收成 `()`）—— `verify.*` 这一
+  族今天只剩 `code_hash` / `detect_verifier` / 三条实验与查询，没有任何一条形式化入口；
+- 函数 `check_formal`（本文件的纯函数）**保留**：它是桥接层唯一实现，
+  `agent_l._CheckFormalL` 继承的 `agent_e.check_formal._CheckFormal` 直接调它，
+  `formal_tools` 也经 L 调它。删的是"工具面那一件"，不是这份实现；
+- `verify.detect_verifier` 仍装配着，但它的 `roles` 从 `('E','F','G','H')` 收成
+  `('F','G','H')` —— 探测 Lean/Coq/Isabelle 属 Lean 侧，E 的工具面里不再有它；
+- E 的动作面没有 `check_formal` 了；`run_experiment(method='formal')` 由动作面第一句
+  以理由码 `formal_not_in_e` 拒绝（判据见 `tests/test_e_has_no_lean_side.py`）。
 
 ## 这一层要解决的根本问题
 数学里"算对了"与"证完了"是天壤之别。一个能跑数值实验的系统，最大的危险不是算错，而是把「算对了」说成「证明了」 —— 因为这两句话在自然语言里只差几个字，而在数学上是两
@@ -35,6 +38,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -48,6 +52,14 @@ from .base import ParamError, ToolError, ToolResult, ToolRegistry, ToolSpec, fai
 #: G 需要引用实验作为证据，H 需要核对"证据等级有没有被夸大"。
 #: 「A/B/C/D 不在其中」：它们关心的是文献与关系，不是数值证据。
 _ROLES = ("E", "F", "G", "H")
+
+#: `verify.detect_verifier` 的角色面（2026-10-23 晚从 `_ROLES` 里摘掉 E）。
+#:
+#: 为什么单独一张：探测 Lean/Coq/Isabelle 属 Lean 侧（业主裁定「E 侧与 Lean 相关的工具
+#: 和动作都该清干净」），而 E 的其余工具（跑实验 / 查证据 / 算哈希）与 Lean 无关。
+#: F / G / H 仍需要它来回答"这台机器上能不能形式化"（它们据此判断一条 proof 级证据
+#: 该不该等、一条子目标能不能标 closed）⇒ 只从 E 的工具面拿掉，不从全树删掉。
+_ROLES_DETECT = ("F", "G", "H")
 
 #: 「写工具」（会跑子进程 + 写 `experiments` 表）单独声明角色：H 只读，
 #: 不能拥有"跑实验并落库"的能力。声明正确 + `for_role` 的结构性拦截，
@@ -134,6 +146,78 @@ def detect_verifier() -> dict:
     return out
 
 
+def _bridge_mathlib_lean_path() -> dict[str, str | None]:
+    """起检查器之前把 Mathlib 的 `LEAN_PATH` 段并进进程环境（只加不改）。
+
+    返回「改之前的那一格」（空字典 = 什么都没改），调用方必须在 `finally` 里交给
+    :func:`_restore_lean_path` 还原。
+
+    ## 为什么这一层要做这件事（2026-10-25 的现场）
+
+    桥接层起检查器的命令是裸的 `[lean, <file>]`（`formalgw.check_lean` 那一处定义），
+    它靠进程环境里的 `LEAN_PATH` 找包。于是"Mathlib 编译好了"与"`import Mathlib`
+    能不能编过"是两件事：盘上那份 Mathlib 的 `SimpleGraph` 38 个模块全有 `.olean`，
+    而裸 `lean.exe` 实测报的原文是
+    `error: unknown package 'Mathlib'` 加 `unknown identifier 'SimpleGraph'`（退出码 1）。
+    也就是说"装了等于没装"。
+
+    ## 为什么走 `LEAN_PATH` 而不是 `lake env lean`
+
+    首选那一条是 `lake env lean`，它在 `leantoolchain.mathlib_command` 里（自检第 ⑤ 步
+    走那一条）。本层不走它的理由是一处结构性的事实，不是口味：那条命令由
+    `formalgw.check_lean` 拼（`[exe, str(path)]`，只有那一处定义），要在这里换成
+    `lake env` 就得给 `check_lean` 注入 `run_fn` —— 而 `run_fn is not None` 会把
+    `check_lean` 的后端元数据那一支整个换掉（`backend.checked=False`、版本号不再探测），
+    于是"这一次是哪个二进制、什么版本"这条读数消失。用 `LEAN_PATH` 则完全不碰那条命令：
+    检查器还是同一个 `lean.exe`、探测还是同一次探测，差的只是它能不能找到库。
+
+    ## 与 `formalgw.ensure_lean_path` 的关系（两份判据吗）
+
+    不是两份：`ensure_lean_path` 只在进程环境里还没有 `LEAN_PATH` 段时补，
+    而它补的那一串来自 `find_mathlib_root()`（环境变量 / 设置文件），
+    不看 `_env/` 下那几档缺省候选。本函数补的正是那个缺口 —— 工程根与库段的判据
+    仍然只有一处（`leantoolchain.mathlib_reading` → `toolchain.lean_path_for`）。
+    两层补出来的段相同的情况下，`ensure_lean_path` 是幂等的（它去重）。
+
+    ## 副作用与还原
+
+    它改的是进程那一份 `LEAN_PATH`（子进程继承），而还原在 `finally` 里做 ——
+    所以"这一趟之外的任何读数"都不受它影响。为什么必须还原：`find_mathlib_root` 会从
+    `LEAN_PATH` 回推工程根，留下的副作用会让同进程里后面的"没装 Mathlib"读数变成
+    "装了"，而那种漂移是静默的（没有任何断言会红）。
+    """
+    try:
+        from .. import leantoolchain as LT
+
+        reading = LT.mathlib_reading()
+    except Exception:  # noqa: BLE001 - 库检测坏了不许把桥接层弄崩（编译会如实报）
+        return {}
+    segments = str(reading.get("lean_path") or "")
+    if not reading.get("detected") or not segments:
+        return {}
+    have = [s for s in str(os.environ.get("LEAN_PATH") or "").split(os.pathsep) if s]
+    merged: list[str] = []
+    for seg in segments.split(os.pathsep) + have:
+        if seg and seg not in merged:
+            merged.append(seg)
+    saved: dict[str, str | None] = {"LEAN_PATH": os.environ.get("LEAN_PATH")}
+    os.environ["LEAN_PATH"] = os.pathsep.join(merged)
+    return saved
+
+
+def _restore_lean_path(saved: Mapping[str, str | None]) -> None:
+    """把 `LEAN_PATH` 还原成 :func:`_bridge_mathlib_lean_path` 之前的样子。
+
+    原来没有这一格时删掉它（而不是写成空串）：空串也是一个值，而
+    `find_mathlib_root` 对"没有"与"是空的"读法不同（前者不参与回推）。
+    """
+    for key, value in saved.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
 def check_formal(
     claim: str,
     *,
@@ -156,15 +240,18 @@ def check_formal(
     / `run_name`，通用判据在`tests/test_schema_handler_params.py`。
     能力表的参数集与工具 schema 的参数集：既非相等也非包含（`R2b-AN-1-C`）参照三个层面：能力表（`capabilities.py`）、工具 schema（本节所在文件）、以及「方法层的真形参表」（`inspect.signature`
     实测）。
-    - `verify.check_formal`：能力表 `{claim, script_path, source, name, imports,timeout_sec}`；工具 schema 
-    `{claim, script_path, source, checker_name,imports, timeout_sec}`；方法层 
-    `{self, claim, script_path, source, name,imports, timeout_sec}`。两个方向的差集都恰好是一个元素：能力表有而工具没有 `name`，工具有而能力表没有 `checker_name`。
+    2026-10-23 晚裁定（业主逐字：「E 侧与 Lean 相关的工具和动作都该清干净」）之后，这一段
+    只剩一处还在：`E.run_experiment` 的三层对照仍在（能力表 / 工具 schema / 方法层），而
+    `E.check_formal` 与工具 `verify.check_formal` 都已整条删除 —— 本函数是留下的那一份实现，
+    由 `AgentL.check_formal`（`formal.check_formal` 工具）直接调，不再有"它自己的动作面"。
+    所以这里不再有 `checker_name` 与 `name` 的那条避撞名登记：那次翻译的两个落点
+    （`specs/e.py` 的动作参数、`AgentE.check_formal` 的形参）都不在了。
     - `verify.run_experiment`：能力表 `{claim, claim_key, script_path, params,method, for_question_id, timeout, sleep}`；工具 schema 
-    `{claim, claim_key,script_path, params, method, for_question_id, timeout, run_name, imports}`；方法层 
+    `{claim, claim_key,script_path, params, method, for_question_id, timeout, certificate, search_bound}`；方法层 
     `{self, claim, claim_key, script_path, params, method,for_question_id, timeout, name, imports}`。能力表有而工具 schema 没有的只有 
-    `sleep`；工具 schema 有而能力表没有的是 `run_name` 与 `imports`。- 三处口径差别的性质各不相同，不许压成一句"能力表漂了"：`checker_name` 是「避撞名」（`ToolRegistry.call`
-    的第一个形参就叫 `name`，工具层再声明 `name` 就永远无法按名传入；`agent_e.py` 里逐字做了一次`checker_name=name` 的翻译，所以工具层与能力表的名字不同、而「接线是通的」）；`name` 在方法层与能
-    力表上「是对的」（`AgentE.check_formal` 的形参就叫`name`，它不经 `ToolRegistry.call`）；`sleep` 只活在能力表与替身夹具之间—— 实测 `AgentE.run_experiment` 的形参
+    `sleep`；工具 schema 与方法层都没有 `run_name` / `imports` 了（它们只服务 formal 那一支，
+    而 E 不再做形式化）—— 方法层留着这两个形参只为了把"传了也不做"变成一句受控拒绝，
+    不是一条通道。- 三处口径差别的性质各不相同，不许压成一句"能力表漂了"：`sleep` 只活在能力表与替身夹具之间—— 实测 `AgentE.run_experiment` 的形参
     表里「没有」 `sleep`，它「也不收」`**kw`，所以不许写成"方法层收得住它"（`capabilities.py` 的`E.run_experiment` 逐字登记了它为什么存在，那是另一回事）。`D-2` 之后这一格不再只由注释担保：
     它逐条登记在 `capabilities.PARAM_SEAMS`里（键含理由串），并由 `capabilities.assert_capabilities()` 第 [8] 条在导入期核—— 声明了而实现不收、又不登记，
     `import agentflow.capabilities` 直接失败。
@@ -202,20 +289,29 @@ def check_formal(
     `checked=True 且 available == []` ⇒ `no_backend`（不变）。三态位也对齐：两支都是 `checked=False, verified=None`，都绝不写成`verified=False`（那是"查了、
     命题不成立"）。
     `root`：相对路径必须解析到工作区，而不是解析到进程的 CWD（`P-8` 接线时实测）`source_path` 的读发生在 `formalgw` 里（`Path(source_path).read_text()`），而那个读用的是进程当
-    前目录。调用方给的是工作区内的相对路径（`AgentE.check_formal` 的契约就是如此），于是"工作区 ≠ 进程 CWD"时那个文件根本读不到：`E-3` 之前实测得到 `decl_mismatch`（一次路径解析问题被报成"你证的
+    前目录。调用方给的是工作区内的相对路径（`AgentL.check_formal` 的契约就是如此），于是"工作区 ≠ 进程 CWD"时那个文件根本读不到：`E-3` 之前实测得到 `decl_mismatch`（一次路径解析问题被报成"你证的
     东西不在文件里"，而后者是数学结论层面的说法）；`E-3` 之后得到 `source_unreadable`（"没查成"，`checked=False, verified=None`），`detail` 里是 
     `FileNotFoundError: 'p8_probe.lean'`。
-    所以 `root` 给定时，相对路径在这里就被解析成绝对路径（并拒绝越界），不再依赖调用进程的 CWD。`root` 由装配层（`register` 的 handler）与`AgentE` 显式给；
+    所以 `root` 给定时，相对路径在这里就被解析成绝对路径（并拒绝越界），不再依赖调用进程的 CWD。`root` 由装配层（`agent_l` 与 `formal_tools` 的 handler）与 `AgentL` 显式给；
     副作用与「审批面」（`axes-4`：这三处说法此前互相矛盾）`source` 给的是内存里的源码时，`formalgw` 会写一份临时 `.lean` 文件（跑完即删）；`workdir` 为 None 时它建的是临时目录。因此本工具的实际副
     作用是"起检查器子进程 + 写临时文件"，工具声明为 `read`（执行本地只读命令）—— 这与 `verify.detect_verifier` 同一口径：`none` 表示"什么都不做"，而它显然不是。
     「但"都不需要审批"只对 `detect_verifier` 成立」：
     | 工具 | 声明 | 沙箱未声明可用时 `needs_approval` ||---|---|---|| `verify.detect_verifier` | `read` + `external="none"` | `False`（不需要审
-    批） || `verify.check_formal` | `read` + `external="exec"` | 「`True`（需要审批）」 |
+    批） || `formal.check_formal` | `read` + `external="exec"` | 「`True`（需要审批）」 |
     `check_formal` 的第二根轴是 `exec`，因为"执行一个由调用方决定内容的程序"这件事「确实」发生在它身上（源码来自调用方）—— 而那正是 `NEEDS_APPROVAL` 的判据。旧版这段 docstring 逐字写着"两者都
     不需要审批，所以审批面没有变化"，与同一个文件的声明（`:751-752` 的注释也写了"它从此需要审批"）「给出两个相反结论」。按 docstring 读的人（含写审批面报告、写 `docs/ROLE-SPECS.md` 审批列的人）会把 
     `check_formal` 记成不需要审批。
     「不要为了让这句话成真去改声明」：把 `declared_external` 从 `exec` 改成 `none`会把"执行调用方给的程序"这件事从第二根轴上抹掉，回到"两根轴压成一档"的老形态。`.noai-paths` 给这个文件的登
     记理由逐字是"桥接层说谎 ⇒ proof 级证据是假的"。
+    `imports` 里有 `Mathlib...` 时这一层还多一件事（2026-10-25 接的线）：起检查器之前
+    把 Mathlib 的库段并进进程的 `LEAN_PATH`，跑完还原（`_bridge_mathlib_lean_path`）。改前
+    的形态是"盘上那份 Mathlib 编译好了，而裸 `lean.exe` 报
+    `error: unknown package 'Mathlib'`" —— 也就是装了等于没装。首选本应是
+    `lake env lean`（自检第 ⑤ 步走的是那一条，见 `leantoolchain.mathlib_command`），
+    这一层不用它的理由逐字写在 `_bridge_mathlib_lean_path` 的 docstring 里：那条命令由
+    `formalgw.check_lean` 拼，换成 `run_fn` 会把后端元数据那一支整个换掉。
+    这件事「不新增返回键」：调用方读到的仍然是那九格；能不能编过由 `reason` 说
+    （`verified` / `compile_error` / `import_unavailable`），不另造一格。
     """
     # ---- 开关（业主 2026-10-12，`toolchain` 段的 `lean_enabled`）：用户把这条路关掉时，
     # 判据是「那个开关」，不是"环境里有没有检查器" —— 所以这一步必须排在探测「之前」：
@@ -355,6 +451,12 @@ def check_formal(
         # （参数不叫 `name` 的理由见本函数的 docstring：`name` 与
         #  `ToolRegistry.call` 的第一个形参撞名，按名传入会 TypeError。）
 
+    # `draft/37` §103 的接线在 2026-10-25 补上第二半：`formalgw` 那边只补
+    # 「环境变量/设置文件指了工程根」那一档，而盘上那份 Mathlib 常常没有任何人
+    # 指过（`_env/` 下就有）。所以起检查器之前把库段补进 `LEAN_PATH`，
+    # 跑完在 `finally` 里还原 —— 见 `_bridge_mathlib_lean_path` 的 docstring
+    # （含"为什么不在这里改用 `lake env lean`"那条结构性理由）。
+    saved_env = _bridge_mathlib_lean_path()
     try:
         raw = check_lean(
             src,
@@ -380,6 +482,10 @@ def check_formal(
             kind="check_failed",
             checker_name=nm,
         )
+    finally:
+        # `finally` 而不是"成功路径上也还原一次"：异常那两条 return 也要还原，
+        # 否则一次失败就把 `LEAN_PATH` 永久留在进程里（下一次读数会因此变样）。
+        _restore_lean_path(saved_env)
 
     # `evidence_of` 是"这次到了什么等级"的唯一定义处（`_conclude` 每次都算好），
     # 因此 `checked` 从它读，而不是在这里再列一遍"哪些状态算查了"。
@@ -625,7 +731,7 @@ def _verify_code_hash(_hash_of, path):
     # （`detect_verifier` 里逐条 `--version`）。声明 `none` 等于说"这个工具
     # 什么都不做" —— 而"不起进程"与"起了进程但只读"是两件不同的事。
     side_effect="read",
-    roles=_ROLES,
+    roles=_ROLES_DETECT,
     # 「2026-10-15 补齐」（`draft/124` §17，「本文件是 FC-27 禁改区 [prover-bridge]」，
     # 按业主"先改后签"口径登记，待 2 名人审）：`looked_in` 是"我「去哪几处找过」"、
     # `sources` 是逐处结果 —— 它们承载三态（没找到 / 没查）里"查过哪几处"那一半，
@@ -642,145 +748,25 @@ def _verify_detect_verifier():
     return ok(detect_verifier())
 
 @tool(
-    "verify.check_formal",
-    (
-            "把一条命题（Lean 源码，给 `source` 或 `script_path`）交给检查器**真跑**一次。只有 `verified` 给 proof "
-            "级证据；查了没通过（compile_error/uses_sorry/extra_axioms/decl_mismatch）与没查成（timeout/"
-            "import_unavailable/no_backend/tool_crashed/source_unreadable，`missing_imports` "
-            "列找不到的包）都不是通过。"
-            ),
-    {
-           "type": "object",
-           "properties": {
-            "claim": {"type": "string"},
-            "script_path": {
-                "type": "string",
-                "description": "工作区内待检查的 .lean 脚本；给了 source 时以 source 为准",
-            },
-            "source": {"type": "string", "description": "Lean 源码全文（与 script_path 二选一）"},
-    # 注意：参数名是 checker_name，不是 name：ToolRegistry.call 的
-    # 第一个形参就叫 name（tools/base.py），工具自己再声明一个 name
-    # 就永远无法按名传入 —— 实测 reg.call('verify.check_formal',
-    # name='t') 抛 TypeError: got multiple values for argument 'name'。
-    # 详见 check_formal 的 docstring（C3）。
-            "checker_name": {
-                "type": "string",
-                "description": "要核对的声明名（公理审计与声明名核对都要求它；不给时取文件名词干）",
-            },
-    # 这里没有旧名 `name`：`R2b-AN-1-A` 实测它是一条会把人
-    # 引向假 bug 的声明 —— `validate_params` 认它合法、而 handler
-    # 的形参表里没有它 ⇒ `spec.handler(**merged)` 抛 TypeError、
-    # 被 base.py 兜成 kind='unexpected'（'库内部出错'那一类），
-    # 于是调用方拿着 schema 的声明去写参数，拿回来的是一个
-    # 会让人去查工具注册表的分类。父代理裁定删掉它，不接受
-    # "登记为残余"；声明名的唯一入口是 `checker_name`。
-    # 守住它的通用判据在 tests/test_schema_handler_params.py
-    # （schema 的每个 property 都必须被 handler 签名接受）。
-            "imports": {"type": "array", "items": {"type": "string"}},
-            "timeout_sec": {"type": "number", "minimum": 1},
-           },
-           "required": ["claim"],
-           "additionalProperties": False,
-           },
-    # 注意：handler 的形参名必须是 checker_name，不许沿用它原来的名字 name：`ToolRegistry.call` 用关键字
-    # 参数调用 handler，传进来的键名就是这里声明的属性名 —— 名字对不上 ⇒ 每次调用都 TypeError。装配时的
-    # root 是"工作区"在这里的唯一来源：相对 script_path 必须解析到它，而不是进程 CWD（见 `check_formal` 的
-    # docstring）。read + exec：它真的起检查器子进程（命令内容由调用方给），并可能写临时 .lean 文件；两者
-    # 都如实声明，各占一根轴。
-    # 字段名是 `declared_external`（「不是」 `external` —— 后者是属性名，写进构造器会 `TypeError`，G-45 已
-    # 登记）。`roles` 从 `_ROLES` 改成 `_ROLES_WRITE`，理由与 `verify.run_experiment` 同族但更值得写下来：
-    # 「声明本身必须正确」，不能靠 `for_role` 兜底 —— `role_filter_notes` 的语义是"声明写错"的留痕，靠过滤
-    # 兜底会让留痕变成常态噪音，而噪音里会藏着真正的错误。行为变化（如实登记）：它从此需要审批，H 的工具面
-    # 因此从 23 条变 22 条。
-    side_effect="read",
-    # 业主 2026-10-22 晚裁定（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时
-    # 发生错乱。当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计。」
-    #
-    # 于是这一件的 `roles` 从 `_ROLES_WRITE`（`('E','F','G')`）收成 `()`：工具仍然装配在
-    # 注册表里（代码一行没删，函数级复用照旧 —— `agent_l._CheckFormalL` 继承的是
-    # `agent_e` 的那一份实现，`formal_tools` 也直接调本模块的函数），但它不再属于任何
-    # 角色 ⇒ 谁的 `for_role` 里都没有它，形如"某个角色手上还有形式化入口"这件事在工具面
-    # 上结构性地不可能。`roles=()` 是一个真实声明（"这个工具不属于任何角色"），不是缺字段：
-    # `ToolSpec.__post_init__` 只要求它是元组（见 `tools/base.py` 的那一段）。
-    #
-    # 为什么改 `roles` 而不是删工具、也不在 `for_role` 里加一条过滤：删工具会带走 L 与
-    # 判据共用的实现与函数级复用；在 `for_role` 里加过滤等于在权限面上写第二份实现
-    # （`P-14` 的形态）。判据见 `tests/test_e_lean_side_is_hard_off.py` 第 1 条。
-    roles=(),
-    # `records` 声明的是 ok 分支的键集合（与同模块 `verify.code_hash` 同一种写法：分号后面写失败分支的形态）。
-    # 分号是刻意的：`C2` 之前这里写的是一个无条件的 8 键集合，而本工具有 3 条 `return fail(...)` 分支（拿不到
-    # 声明名 / 声明名参数不合法 / 桥接层抛异常）走 `ok=False` + `data=None`、一个键都不给 —— 声明逐字描述的是
-    # 成功路径，却长得像在描述全部路径。
-    # `D2`：这个字符串不是"逐分支采样"的契约。`tests/test_tools_audit_fixes.py` 的
-    # `test_check_formal_return_shape_matches_its_declaration` 只采样 3 条 ok 分支（无后端 / 无脚本 / 声明名对不
-    # 上），断言键集合与这里逐字相同；3 条 fail 分支由本行的分号形态声明，目前没有逐分支采样用例（待办：由
-    # 父代理在 C2 的失败分支口径定稿之后补）。`verifier_status`（`G-24①`）是第 8 个键（检查器原样报的状态透
-    # 传，与受控词表 `reason` 成对）；`exit_code`（E-12(a)，`draft/44`）是第 9 个键（检查器进程真实退出码，没
-    # 跑成时是 `None`，绝不用 0 冒充"跑过"）。
-    returns=(
-            "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}"
-            "；失败（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）：ok=False + kind(param_error/check_failed) + data=None"
-            "（一个键都不给 —— 失败分支不承诺上面那套键）"
-            ),
-    tags=("experiment", "formal"),
-    external="exec",
-)
-def _verify_check_formal(base, claim, script_path=None, source=None, checker_name=None, imports=None, timeout_sec=None):
-    """verify.check_formal 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
-
-    注入值（base）由装配期用 `partial` 绑定，
-    所以模型看到的签名与搬移前逐字相同。
-    """
-    return (
-    check_formal(
-               claim,
-               script_path=script_path,
-               source=source,
-               checker_name=checker_name,
-               imports=imports,
-               timeout_sec=timeout_sec,
-               # 装配时的 root 是"工作区"在这里的唯一来源：相对 script_path
-               # 必须解析到它，而不是解析到进程 CWD（见 `check_formal` 的 docstring）。
-               root=base,
-               )
-    )
-
-@tool(
     "verify.run_experiment",
     (
             "在独立进程里跑工作区内脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会降级为 `cross_check`；"
-            "崩溃记 `inconclusive`；`method='formal'` 走检查器，只有 `verified` 才登记 proof。"
+            "崩溃记 `inconclusive`；`method='formal'` 不是 E 的活（当场受控拒绝，理由码 `formal_not_in_e`）。"
             ),
     {
            "type": "object",
            "properties": {
             "claim": {"type": "string"},
             "claim_key": {"type": "string"},
-            "script_path": {"type": "string", "description": "工作区内的相对路径（formal 时必须是 .lean）"},
+            "script_path": {"type": "string", "description": "工作区内的相对路径"},
             "params": {"type": "object"},
             "method": {"type": "string", "enum": list(S.EXPERIMENT_METHODS)},
             "for_question_id": {"type": "string"},
             "timeout": {"type": "integer", "minimum": 1},
-    # `P-8`：只对 method='formal' 有意义（`AgentE.run_experiment`
-    # 对计算类方法收到它们时会拒绝，不是静默忽略）。
-    #
-    # 注意：参数名是 run_name，不是 name（`C3`）：`ToolRegistry.call`
-    # 的第一个形参就叫 name，工具再声明一个 name 就永远无法按名传入
-    # （实测 reg.call(..., name='t') 抛 TypeError: got multiple values
-    # for argument 'name'）。理由与写法同 verify.check_formal。
-            "run_name": {
-                "type": "string",
-                "description": "formal：要核对的声明名（不给时取 .lean 文件的名词干）",
-            },
-    # 这里没有旧名 `name`，理由与 verify.check_formal 逐字相同
-    # （`R2b-AN-1-A`：schema 声明了 handler 收不下的参数
-    # ⇒ kind='unexpected' 这个假 bug 分类）。声明名的唯一入口
-    # 是 `run_name`，判据在 tests/test_schema_handler_params.py。
-            "imports": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "formal：这次检查要加载的库（不给时用检查器的默认值）",
-            },
+    # 这里没有 `run_name` / `imports`：它们只服务 `method='formal'`，而 2026-10-23 晚
+    # 裁定之后 E 不做形式化（动作面也没有这一支）。广告两格收不下的参数会让模型
+    # 按 schema 传参、再拿回一次必然的拒绝（`tests/test_action_surface_matches_acceptance.py`
+    # 那一族判据的存在理由）。F 的方法层调用仍然可以传它们，E 会以受控拒绝回答。
     # `draft/37` §84 的 D1：这两格此前「不在任何 schema 里」，而
     # `schema.Experiment` 的硬约束 2c 要求「method='exhaustive_search' 必须给
     # certificate」⇒ 模型无论怎么调都必然失败（实测 T1：三次 failed）。现在广告出来。
@@ -831,11 +817,15 @@ def _verify_check_formal(base, claim, script_path=None, source=None, checker_nam
     tags=("experiment", "evidence"),
     external="exec",
 )
-def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, run_name=None, imports=None, certificate=None, search_bound=None):
+def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, certificate=None, search_bound=None):
     """verify.run_experiment 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（_need_store, _run_experiment_tool）由装配期用 `partial` 绑定，
     所以模型看到的签名与搬移前逐字相同。
+
+    2026-10-23 晚：`run_name` / `imports` 两个形参随 `method='formal'` 一起退场
+    （它们只服务那一支，而 E 不再做形式化）—— 工具 schema、本函数、`AgentE` 的
+    公开参数面三处同时没有它们，所以「声明了但收不下」在结构上不可能发生。
     """
     return (
     _need_store("verify.run_experiment")
@@ -847,8 +837,6 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
                    method=method,
                    for_question_id=for_question_id,
                    timeout=timeout,
-                   run_name=run_name,
-                   imports=imports,
                    certificate=certificate,
                    search_bound=search_bound,
                )
@@ -1048,7 +1036,6 @@ def _verify_read_proof(_need_store, _agent_v, statement_id):
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_verify_code_hash, ('_hash_of',)),
     (_verify_detect_verifier, ()),
-    (_verify_check_formal, ('base',)),
     (_verify_run_experiment, ('_need_store', '_run_experiment_tool')),
     (_verify_evidence_for, ('_need_store', '_read_rows', 'store')),
     (_verify_list_experiments, ('_need_store', '_read_rows', 'store')),
@@ -1152,15 +1139,9 @@ def register(
                     method=kw.get("method", "numeric"),
                     for_question_id=kw.get("for_question_id"),
                     timeout=kw.get("timeout", 600),
-                    # `P-8`：形式化路径的两个参数（声明名 / 要加载的库）。
-                    # 计算类方法收到它们时 `AgentE.run_experiment` 会拒绝
-                    # （不是静默忽略）—— 这里只是把通道接上。
-                    # 本层的工具参数叫 run_name（撞名理由见该 ToolSpec 的属性注释），
-                    # 但 `AgentE.run_experiment` 这一侧的关键字就是 name：
-                    # 它是 agent 层的方法，不受 ToolRegistry.call 的形参影响。
-                    # 名字翻译只发生在这三行里，别在别处再抄一遍。
-                    name=kw.get("run_name"),
-                    imports=kw.get("imports"),
+                    # 2026-10-23 晚：这里不再有 `name=` / `imports=` —— 工具 schema 已经没有
+                    # 那两格（它们只服务 formal 那一支），而 `AgentE.run_experiment` 收到
+                    # `method='formal'` 时第一句就以理由码 `formal_not_in_e` 拒绝。
                     # §84 D1：证书与边界（硬约束 2c/2d 的事实通道）
                     certificate=kw.get("certificate"),
                     search_bound=kw.get("search_bound"),

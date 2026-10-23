@@ -1,0 +1,7 @@
+cell,n3,n2,NGQ,NGP,index_Q,index_P,identity_ok,count_order3_iff_H,count_order3_bound_general,sylow3_union_size_iff_H,leftover_not_order3,two_elements_min,two_elements_max,two_elements_forced,order3div_gt3_min,order3div_gt3_max,counting_feasible,H_status,candidate_order_spectrum
+"n3=1,n2=1",1,1,96,96,1,1,True,2,2,3,94,32,32,32,62,62,True,vacuous: with n_3=1 there is only one Sylow 3-subgroup,"1,2,3,4,6,8,12,16,24,32,48,96"
+"n3=1,n2=3",1,3,96,32,1,3,True,2,2,3,94,32,94,,0,62,True,vacuous: with n_3=1 there is only one Sylow 3-subgroup,"1,2,3,4,6,8,12,16,24,32,48,96"
+"n3=4,n2=1",4,1,24,96,4,1,True,8,8,9,88,32,32,32,56,56,True,"hypothesis on G; NOT decidable from the pair (n_3,n_2)","1,2,3,4,6,8,12,16,24,32,48,96"
+"n3=4,n2=3",4,3,24,32,4,3,True,8,8,9,88,32,88,,0,56,True,"hypothesis on G; NOT decidable from the pair (n_3,n_2)","1,2,3,4,6,8,12,16,24,32,48,96"
+"n3=16,n2=1",16,1,6,96,16,1,True,32,32,33,64,32,32,32,32,32,True,"hypothesis on G; NOT decidable from the pair (n_3,n_2)","1,2,3,4,6,8,12,16,24,32,48,96"
+"n3=16,n2=3",16,3,6,32,16,3,True,32,32,33,64,32,64,,0,32,True,"hypothesis on G; NOT decidable from the pair (n_3,n_2)","1,2,3,4,6,8,12,16,24,32,48,96"

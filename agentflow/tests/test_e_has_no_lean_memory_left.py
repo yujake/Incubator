@@ -367,9 +367,9 @@ def test_4_g_skill_body_does_not_say_e_proof() -> None:
         - 稿件级审校由 H 做（`H.review`），它的判据是"正文与台账逐字一致 +
           E 的 proof 或 V 的签名"。
 
-    为什么这句是假话：E 现在只产 `cross_check` / `heuristic`，`proof` 档只有 L 能签
-    （`agent_e._support.E_LEAN_SIDE_HARD_OFF`）。G 照着这句写稿，就会把一条
-    `cross_check` 当 `proof` 引用 —— 而收工门（判据 3 那条）会因此拦下来。
+    为什么这句是假话：E 这一岗从 2026-10-23 晚起没有 Lean 侧（动作表里没有 `check_formal`，
+    `method="formal"` 以理由码 `formal_not_in_e` 拒绝），`proof` 档只有 L 能签。G 照着这句写稿，
+    就会把一条 `cross_check` 当 `proof` 引用 —— 而收工门（判据 3 那条）会因此拦下来。
 
     反真空：那句话仍然说清 H 的采信规则（正文与台账逐字一致 + 形式化或 V 的签名），
     不是把整句删掉。

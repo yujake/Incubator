@@ -220,6 +220,14 @@ class AgentV:
             "ledger": "",
             "reason": "",
             "detail": "",
+            # 穷举型证据会审那一档的四格（普通逐行走查路径上它们是空的，但键要在：
+            # "这一格没有读数"与"这一格是空字符串"必须由键的存在区分开）。
+            "exhaustion_review": {},
+            "signer": "",
+            "proof_authors": [],
+            "report_path": "",
+            "checks": [],
+            "missing": [],
         }
         sid = out["statement_id"]
         if not S.is_valid_id(sid):
@@ -261,6 +269,52 @@ class AgentV:
                 self._emit(f"verify_proof({sid})：命题不在册 ⇒ 没审，不落台账行")
                 return out
             statement_full = _SB.body_of(hit)
+            # ---- 2026-10-23 晚（业主：「E 写的报告要能落下来，且 V 也要会审这种东西」）
+            #
+            # 穷举型证据（证明栏第 ① 段是一份数值实验程序）不按"逐行读证明文本"审：
+            # 要审的是那份程序与 E 写的 ②③ 对不对得上（程序在不在、搜索空间的数在代码里
+            # 有没有着落、剪枝/对称性有没有解释、边界写没写、结论是不是穷尽、形式化那一格
+            # 填的类别对不对）。判据本体只有一处：`exhaustionreport.review`；这里只负责
+            # 把它的三态结论翻成一次审校（落台账、`成立` 才签第 3 位）。
+            #
+            # 三态里最要紧的一档是「看不出来」：报告没落地（E 的 ②③ 没落成盘上那份读数）
+            # 时不许判成立 —— 缺材料时的诚实结论是看不出来，而它照样落一行台账
+            # （它是"看过、判不了"的证据，与"没查成"分得开）。
+            from .. import exhaustionreport as _ER
+
+            _exp_rows: list = []
+            try:
+                _exp_rows = list(self.store.rows("experiments"))
+            except (StoreError, AttributeError, TypeError):
+                _exp_rows = []
+            if _ER.is_exhaustion_column(hit, _exp_rows):
+                _reviewed = _ER.review(workspace_root=self.workspace_root,
+                                       statement=hit, experiments=_exp_rows)
+                out["kind"] = "numeric_evidence"
+                out["exhaustion_review"] = dict(_reviewed)
+                out["signer"] = str(_reviewed.get("signed_by") or "")
+                out["proof_authors"] = list(_reviewed.get("proof_authors") or [])
+                out["report_path"] = str(_reviewed.get("report_path") or "")
+                self._emit(
+                    f"verify_proof({sid})：穷举型证据会审 ⇒ {_reviewed.get('verdict')}"
+                    f"（{len(_reviewed.get('checks') or [])} 项检查，"
+                    f"缺材料 {_reviewed.get('missing') or []}）")
+                _text_for_ledger = text or str(hit.get("proof_text") or "")
+                try:
+                    _row = VR.record_verification(
+                        self.workspace_root, statement_id=sid,
+                        proof_text=_text_for_ledger,
+                        verdict=_ER.verdict_of(_reviewed), verifier=self.actor,
+                        submission_id=str(self.cfg.get("submission_id") or ""),
+                        store=self.store, proof_no=no)
+                except (VR.VerificationError, OSError) as exc:
+                    out["reason"] = "ledger_unwritable"
+                    out["detail"] = (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ "
+                                     "这一格没查成（不落台账、不改位、必须重签）")
+                    self._emit(f"verify_proof({sid})：台账写不进去 —— 会审没落地")
+                    return out
+                return self._finish_numeric(out, statement_id=sid, no=no, row=_row,
+                                            reviewed=_reviewed)
             # 正文只从"证明号指定的那一份"取（2026-10-22 审计第 2 条）：
             # 改前不看号，一律读 canonical ⇒ "审 #p2"拿的是 #p1 的正文。
             listed = {int(n) for n, _ in VR.proof_list(hit)}
@@ -373,6 +427,60 @@ class AgentV:
             "ledger": f"verifications/{sid}.jsonl#{row['verification_id']}",
             "reason": f"{row['verification_id']}：{row['verdict']}"
                       + ("（签第 3 位）" if payload else "（不签第 3 位）"),
+        })
+        return out
+
+    def _finish_numeric(self, out: dict[str, Any], *, statement_id: str, no: int,
+                        row: Mapping[str, Any], reviewed: Mapping[str, Any]) -> dict[str, Any]:
+        """穷举型证据会审的收尾：台账那一行落地没有、五元位、返回值。
+
+        这一段与 `verify_proof` 的普通收尾是同一套纪律（只认 `row` 上的 `checked`）：
+        台账没落地就不许报"签住了第 3 位"；`成立` 才签；`有毛病` / `看不出来` 照样
+        留一行（那是"看过、结论是没过/判不了"的证据）。
+        """
+        sid = statement_id
+        writeback = dict(row.get("statement_writeback") or {})
+        if row.get("checked") is False:
+            out.update({
+                "checked": False,
+                "review_write": writeback,
+                "reason": f"ledger_row_lost：{row.get('reason') or '台账那一行没写成'}",
+                "detail": (f"V 的会审结论是 {row.get('verdict')!r}，但台账那一行没落地 ⇒ "
+                           "这一签没有落地、命题行的第 3 位也没改；必须重签"),
+            })
+            self._emit(f"verify_proof({sid})：{out['reason']} —— 台账里没有这一签")
+            return out
+        payload = VR.bit3_payload(row)
+        bits: dict[str, Any] = {}
+        try:
+            from .. import evidencebits as EB
+
+            bits = EB.bits_of(proof=str(row.get("proof_text") or ""), **payload)
+        except Exception as exc:  # noqa: BLE001 —— 合成失败不影响台账那一行（它已经落盘）
+            self._emit(f"verify_proof({sid})：五元位合成失败（{type(exc).__name__}: {exc}）")
+        self._emit(f"verify_proof({sid})：{row['verification_id']} verdict={row['verdict']} "
+                   f"signed_bit3={bool(payload)}（穷举型证据会审）")
+        if writeback and writeback.get("written"):
+            self._emit(f"verify_proof({sid})：{VR.proof_label(sid, no)} 的 reviewed 已写回")
+        out.update({
+            "checked": True,
+            "verification_id": row["verification_id"],
+            "verdict": row["verdict"],
+            "defect_step": row["defect_step"],
+            "findings": row["findings"],
+            "unresolved_errors": row["unresolved_errors"],
+            "proof_sha256": row["proof_sha256"],
+            "proof_no": row.get("proof_no"),
+            "proof_chars": row["proof_chars"],
+            "signed_bit3": bool(payload),
+            "reviewed_by": dict(payload.get("reviewed_by") or {}),
+            "bits": bits,
+            "review_write": writeback,
+            "ledger": f"verifications/{sid}.jsonl#{row['verification_id']}",
+            "reason": f"{row['verification_id']}：{row['verdict']}"
+                      + ("（签第 3 位）" if payload else "（不签第 3 位）"),
+            "checks": list(reviewed.get("checks") or []),
+            "missing": list(reviewed.get("missing") or []),
         })
         return out
 

@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T13:18:21+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3601,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"E 交付（D 派活）：纯 Python 确定性脚本已写入磁盘并跑通，数值全部由代码判定（我没有做人工判读，也没有使用 GAP 或网络）。\\n\\n【文件与复现】\\n- 主脚本：code/sylow_96.py（sha256 前 16 位 a0a2a39f5e0e9af8）→ 实验 exp:000000，exit_code=0，runtime 0.125s，result=supports，evidence_kind=cross_check（numeric）。复现：python code/sylow_96.py\\n- 反例见证 1：code/sylow_96_c3xc32.py（sha256 bbe6aa6987c1d872）→ exp:000002，exit_code=0，result=refutes（negation_kind=disproved）。复现：python code/sylow_96_c3xc32.py\\n- 反例见证 2：code/sylow_96_a4xc8.py（sha256 fbaf468c8cfed429）→ exp:000003，exit_code=0，result=refutes（disproved）。复现：python code/sylow_96_a4xc8.py\\n- 失败记录（如实记录）：exp:000001 exit_code=1，原因是我自己的 order() 函数差一（返回值恒为真阶-1），导致阶谱、2-元集全错，N2=None 引发 TypeError；修复后重跑，记为 exp:000002。这条记录保留，不是静默作废。\\n- CSV：out/sylow_96.csv（6 行 × 20 列，sha256 fc895178c48c4309b9b840db5067ca20f33fd1415ab77b7bed8108f89dc056e9），由脚本 print 并回读核对。\\n\\n【(1) 解集】divisors(32)=[1,2,4,8,16,32]，其中 ≡1 mod 3 的是 n_3 ∈ {1,4,16}；divisors(3)=[1,3]，其中为奇数的是 n_2 ∈ {1,3}。\\n\\n【(2) 六格中心化子阶与恒等式】|N_G(Q)|=96/n_3：n_3=1→96，n_3=4→24，n_3=16→6；|N_G(P)|=96/n_2：n_2=1→96，n_2=3→32。六格的 [G:N_G(Q)] 与 n_3、[G:N_G(P)] 与 n_2 全部相符（CSV 的 identity_ok 六行全为 True，脚本 chk 全部通过）。\\n\\n【(3) H（不同 Sylow 3-子群交于单位元）下的阶 3 元计数】2·n_3 = 2 / 2 / 8 / 8 / 32 / 32；余元 96−2n_3 = 94 / 94 / 88 / 88 / 64 / 64。**这里我要更正一处**：我原先在 exp:000000 的 claim 文本里写的「余下 96−2n_3 个元素为 2-元，由此排除 n_2=1 的格」是**错的**：余元不是 2-元，还会包含阶被 3 整除但 >3 的元素（6/12/24/48/96）。「2-元个数 = 96−2n_3」这个前提本身并不成立。我已把更正写进 exp:000000 的 notes，并用两个具体群全枚举给出反例（exp:000002、exp:000003）。\\n\\n【反例（值得进 D 的「例子与反例」一节）】\\n- exp:000002：G=C_3×C_32（|G|=96），n_3=1（H 平凡成立）、n_2=1、|N_G(Q)|=|N_G(P)|=96、阶 3 元恰 2 个、2-元恰 32 个；余下 94−32=62 个元素的阶被 3 整除且 >3。\\n- exp:000003（更强，H 非平凡成立）：G=A_4×C_8（|G|=96），n_3=4（四个 3 阶子群两两交于单位元，共 8 个阶 3 元，2·n_3=8 与代码计数一致），但 **n_2=1**、2-元恰 32 个，而 96−2n_3=88 → 另 56 个元素阶为 6/12/24。故在 H 下也不能由「2-元个数」推断出 n_2=1 不成立。\\n- 已核到能实现的格子：(n_3,n_2)=(1,1) 由 C_3×C_32，(4,1) 由 A_4×C_8；其余格子是否有群实现，本趟**未核到**（没有做群枚举）。\\n\\n【明确未核到（不许写成已证）】\\n- 「32 阶群有 51 个同构类」——**未核到**：本趟无 GAP、无 32 阶群枚举，脚本 REPRO_RESULT 的 unverified 列表里逐字记了这条",
+ "payload_sha256": "607e2f38617b87b1d7f95a891ca800941f9bcf75bc6cd3a717cbd1022fc3c0bf",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000007"
+}

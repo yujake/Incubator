@@ -67,7 +67,10 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
                  "relations", "verifications", "secretary", "quote_verified",
                  "counterexample_experiment_id"),
     "Artifacts": ("ledger", "ledger_verify", "handoffs", "checks", "style",
-                  "products", "tasks", "sha256_now", "run_dir"),
+                  "products", "tasks", "run_dir", "sha_consistency"),
+    # 2026-10-23（业主：sha 原文不显示，只显示一致不一致）：这一格原来钉的是
+    # `sha256_now`（盘上现在那一版的哈希）。页面现在读的是 `sha_consistency`
+    # （match / mismatch / unknown）—— 钉的位置没变，钉的东西换成了那个词。
     "Acceptance": ("criteria", "auxiliary", "details", "failed", "capUsd"),
     # R90 追加三个：形式化开关本身（`lean_enabled`）、它的来源（`lean_enabled_source`）
     # 与当前模式（`formal_mode`）—— 只看 `lean_ready` 会把"用户关掉了"读成"没装"。

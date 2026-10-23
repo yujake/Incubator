@@ -1,31 +1,43 @@
 /*
  * 产物（`draft/74 §3.4` 逐行落）。
  *
- * 输入：`api.getArtifacts()` → `ArtifactsView`（B 线的 `readers.artifacts_face`）。
+ * 输入：`api.getArtifacts()` → `ArtifactsView`（B 线的 `readers.artifacts_face`）；
+ * 「台账」那一张卡读共享快照（`api.getState()` 与 `Home` / `Run` 同一份读数）。
  * SSE：`state`。
  *
  * 七栏，每栏自己一个三态：
  *
- * 1. 产物台账 `ledger`：路径 / `producer` / `sha256` / `exit_code` / `kind`，
- *    外加 `ledger_verify`（台账里钉的 sha 与盘上**现在**这一版是不是同一版）；
+ * 1. 产物台账 `ledger`：路径 / `producer` / 一致性 / `exit_code` / `kind`，
+ *    外加 `ledger_verify`（台账里钉的那一份与盘上现在这一版是不是同一份）；
  * 2. 交接手稿 `handoffs`：`body` 截断显示（后端 `webui/state.py` 的 `CLIP=400`
  *    是同一口径，这里跟它对齐，长文不许把表格撑爆）；
  * 3. 验收表的机器可判行 `checks`；
  * 4. 报告体例 `style.sections`；
  * 5. 六件产物 `products`（裁定 J2：真机无样本 ⇒ 夹具造，页面标明"夹具样本"）；
  * 6. 任务产物 `tasks`（`out/tasks/t-*.json` 与 `tasks` 台账行对应）；
- * 7. 文献库 `library` —— **如实标注的缺口**：`draft/74` 说这一栏从产物面读
+ * 7. 文献库 `library` —— 如实标注的缺口：`draft/74` 说这一栏从产物面读
  *    `store.rows("literature")`，而 `ArtifactsView` 里没有这一栏，今天也没有别的
  *    端点给它 ⇒ 渲染 `not_applicable` 并写明，不编数。
+ *
+ * ## 2026-10-23（业主：这一页的显示格式略有过时）
+ *
+ * - sha 原文一律不上屏（「对于 sha 值用户并不关心，只用显示是否一致即可」）：
+ *   台账那一格说"一致 / 不一致 / unknown（没得比）"，副标题写清比的是与哪一份；
+ *   半截哈希那种写法（前 8 位）也不许出现 —— 它既不能核也不能读；
+ * - 补 `code/exp/` 与 `out/experiments/<号>/{design,exhaustion}.md` 的落点那一栏
+ *   （实验代码与两份读得懂的说明落在哪，盘上现在有没有）；
+ * - 台账改成 `upserts` / `commit_markers` 两格（与 `Home` / `Run` 同一句文案），
+ *   不再有"事件 N 条"那种总行数口径。
  */
 import type { ComponentChildren } from "preact";
 
 import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
+import { Consistency } from "../components/Consistency";
 import { Table, cell, plain } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
-import { useFace } from "../live";
+import { useFace, useLive } from "../live";
 
 /** 长文截断（与后端 `webui/state.py` 的 `CLIP` 同一口径：两头留、中间省）。 */
 const CLIP = 400;
@@ -59,6 +71,8 @@ function verifyBadge(status: string): ComponentChildren {
 
 export function Artifacts() {
   const face = useFace(() => api.getArtifacts());
+  const live = useLive();
+  const ledger = live.snapshot === null ? null : live.snapshot.ledger;
 
   if (face.data === null) {
     return (
@@ -93,7 +107,7 @@ export function Artifacts() {
 
       <Card
         title="产物台账"
-        subtitle={`${art.ledger.length} 行`}
+        subtitle={`${art.ledger.length} 行 · 一致性比的是与「台账对账」那一栏同一路径的核对行`}
         right={<TriState tri={art.ledger_tri} label="ledger" />}
       >
         {isUnreadable(art.ledger_tri) ? (
@@ -106,7 +120,18 @@ export function Artifacts() {
               { key: "path", title: "路径" },
               { key: "producer", title: "谁产出的" },
               { key: "kind", title: "类别" },
-              { key: "sha256", title: "sha256" },
+              {
+                // 2026-10-23（业主：sha 原文不显示）：这一格取同一路径的核对行读数，
+                // 没有对应核对行 ⇒ unknown（没得比），不是"不一致"。
+                key: "sha_consistency",
+                title: "与盘上这一份",
+                render: (r) => (
+                  <Consistency
+                    value={r.sha_consistency}
+                    note="台账钉住的那一份与盘上现在这一份（这一路径没有核对行 ⇒ 没得比）"
+                  />
+                ),
+              },
               {
                 key: "bytes",
                 title: "字节",
@@ -114,7 +139,7 @@ export function Artifacts() {
               },
               { key: "task_id", title: "任务" },
               { key: "at", title: "登记时间", render: (r) => cell(r.at) },
-              // R93 体检：这里原来还有一列「退出码」。台账的格式里**有** `exit_code`
+              // R93 体检：这里原来还有一列「退出码」。台账的格式里有 `exit_code`
               // 这一栏（`artifacts.FIELDS`），但真机上登记的都是 `out/tasks/` 下那些
               // "任务结果文件"——那种东西没有退出码，于是整列恒 `unknown`
               // （本机实测：t1-review-2 的 6 行全是）。退出码真正的落点是「证据链 →
@@ -125,8 +150,8 @@ export function Artifacts() {
       </Card>
 
       <Card
-        title="台账对账（台账里钉的 sha vs 盘上现在这一版）"
-        subtitle={`${art.ledger_verify.length} 行`}
+        title="台账对账（台账钉住的那一份 vs 盘上现在这一份）"
+        subtitle={`${art.ledger_verify.length} 行 · sha 原文不上屏，只报一致 / 不一致 / unknown`}
         right={<TriState tri={art.ledger_verify_tri} label="verify_entries" />}
       >
         {isUnreadable(art.ledger_verify_tri) ? (
@@ -137,18 +162,61 @@ export function Artifacts() {
             empty="没有可对账的台账行（台账是空的）。"
             columns={[
               { key: "path", title: "路径" },
-              { key: "sha256", title: "台账里的 sha" },
-              { key: "sha256_now", title: "盘上现在的 sha" },
-              { key: "status", title: "结论", render: (r) => verifyBadge(r.status) },
+              {
+                // 2026-10-23：原来的两列（台账里的 sha / 盘上现在的 sha）合成一列。
+                // 这一格只印"一致 / 不一致 / unknown（没得比）"—— 两份都拿不到时是
+                // 没得比，不是"不一致"（那一档由下面 `status` 的五档自己说清）。
+                key: "sha_consistency",
+                title: "一致吗",
+                render: (r) => (
+                  <Consistency
+                    value={r.sha_consistency}
+                    note="台账钉住的那一份与盘上现在这一份（盘上这一份取不到哈希、或台账指的是目录 ⇒ 没得比）"
+                  />
+                ),
+              },
+              { key: "status", title: "核对结论", render: (r) => verifyBadge(r.status) },
               { key: "producer", title: "谁产出的" },
             ]}
           />
         )}
       </Card>
 
+      <Card title="台账（第二个独立读数）" subtitle="写入笔数与 commit 标记分两格">
+        {ledger === null ? (
+          <TriState tri="unreadable" label="台账" reason="共享快照还没读到" />
+        ) : (
+          <>
+            {/* D21（与 Home 的「台账」卡、Run 的「台账」卡同一个口径）：`events` 不再是
+                events.jsonl 的总行数，它是写入笔数（`upserts`）；其中的 commit 标记行数
+                单列。两次事务写两行 ⇒ 只报总行数会把"写了多少笔"翻倍地回答。 */}
+            <div class="readings">
+              台账写入{" "}
+              <span class="mono">
+                {ledger.upserts === null ? "unknown" : ledger.upserts}
+              </span>{" "}
+              笔（其中 commit 标记{" "}
+              <span class="mono">
+                {ledger.commit_markers === null ? "unknown" : ledger.commit_markers}
+              </span>{" "}
+              行）· tasks 行数{" "}
+              <span class="mono">{ledger.tables === null ? "unknown" : ledger.tables}</span> · 落点{" "}
+              <span class="mono">{ledger.path}</span>
+            </div>
+            {ledger.events_note === "" ? null : (
+              <div class="readings">{ledger.events_note}</div>
+            )}
+            {ledger.tables_note === "" ? null : (
+              <div class="readings">{ledger.tables_note}</div>
+            )}
+            {ledger.note === "" ? null : <div class="readings">{ledger.note}</div>}
+          </>
+        )}
+      </Card>
+
       <Card
         title="交接手稿 / 账本"
-        subtitle={`${art.handoffs.length} 条`}
+        subtitle={`${art.handoffs.length} 条 · 正文 sha 不再显示（没有第二份可比，业主不关心原文）`}
         right={<TriState tri={art.handoffs_tri} label="handoffs" />}
       >
         {isUnreadable(art.handoffs_tri) ? (
@@ -163,7 +231,6 @@ export function Artifacts() {
               { key: "to", title: "收" },
               { key: "summary", title: "摘要", render: (r) => plain(r.summary) },
               { key: "refs", title: "引用" },
-              { key: "sha256", title: "sha256" },
               { key: "sid", title: "会话", render: (r) => cell(r.sid) },
               { key: "task_id", title: "任务", render: (r) => cell(r.task_id) },
               { key: "format", title: "格式" },
@@ -266,7 +333,7 @@ export function Artifacts() {
       ) : (
         <Card
           title="六件产物"
-          subtitle={art.run_dir}
+          subtitle={`${art.run_dir} · 这六件只有盘上这一份，没有第二份可比 ⇒ 不显示 sha`}
           right={<TriState tri={art.products_tri} label="products" />}
         >
           {isUnreadable(art.products_tri) ? (
@@ -298,13 +365,66 @@ export function Artifacts() {
                   render: (r) =>
                     r.lines === null ? "unknown（非 JSONL，按设计没有行数）" : String(r.lines),
                 },
-                { key: "sha256", title: "sha256", render: (r) => cell(r.sha256) },
+                // 2026-10-23（业主：sha 原文不显示）：这一列撤掉。六件产物只有盘上这
+                // 一份，没有第二份可比 —— 印一列"unknown（没得比）"不如在副标题里
+                // 说清这件事（下面那句就是它）。台账钉过的文件在上面两栏里有一致性读数。
                 { key: "tri", title: "三态", render: (r) => <TriState tri={r.tri} /> },
               ]}
             />
           )}
         </Card>
       )}
+
+      <Card
+        title="实验产物的落点（`code/exp/` 与 `out/experiments/<号>/`）"
+        subtitle={`${art.experiment_spots.length} 个落点 · ${art.code_exp.length} 个实验脚本`}
+        right={<TriState tri={art.experiment_spots_tri} label="experiment_spots" />}
+      >
+        {/* 2026-10-23（业主：产物页要补这两处落点）：数值实验的产出分三处 ——
+            `code/exp/` 下的脚本、`out/experiments/<号>/design.md`（这一步打算怎么验）、
+            `out/experiments/<号>/exhaustion.md`（程序 / 程序设计 / 穷举论证三块，V 会审它）。
+            这一栏只报盘上真有什么；没有就直说"还没跑过实验"，不铺一屏"不在"。 */}
+        {isUnreadable(art.experiment_spots_tri) ? (
+          <span class="empty">这一栏没查成（不是"一个落点都没有"）。</span>
+        ) : art.experiment_spots.length === 0 ? (
+          <div class="readings">
+            {art.experiment_spots_reason === ""
+              ? "这一趟还没有实验产物（out/experiments/ 下没有 <实验号>/ 目录）。"
+              : art.experiment_spots_reason}
+          </div>
+        ) : (
+          <Table
+            rows={art.experiment_spots}
+            empty="这一趟还没有实验产物。"
+            columns={[
+              { key: "path", title: "落点" },
+              { key: "kind", title: "哪一份" },
+              {
+                key: "exists",
+                title: "在不在",
+                render: (r) => (
+                  <Badge
+                    kind={r.exists ? "badge-pass" : "badge-na"}
+                    text={r.exists ? "在" : "不在"}
+                  />
+                ),
+              },
+              {
+                key: "bytes",
+                title: "字节",
+                render: (r) => (r.bytes === null ? "unknown" : String(r.bytes)),
+              },
+              { key: "tri", title: "三态", render: (r) => <TriState tri={r.tri} /> },
+            ]}
+          />
+        )}
+        {art.code_exp.length === 0 ? null : (
+          <div class="readings">
+            <span class="mono">code/exp/</span> 下的脚本：
+            {art.code_exp.map((f) => ` ${f.path}（${f.bytes === null ? "unknown" : f.bytes} 字节）`)}
+          </div>
+        )}
+      </Card>
 
       <Card
         title="任务产物"
@@ -346,7 +466,7 @@ export function Artifacts() {
         }
       >
         <div class="readings">
- processed 三态、download.status/bytes/sha256、matched 那几栏要新增一条
+          processed 三态、download 的字节与一致性、matched 那几栏要新增一条
           只读端点才能给读数 —— 页面不许自己编一个数。
         </div>
       </Card>

@@ -61,6 +61,19 @@ docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
 两条同时成立时优先报 `must_start_as_conjecture`：裁定 B-2 的入口判据比 B-3 的升级
 判据更靠前（还没立成猜想的东西，谈不上升级）。V 已经签住的那一笔给 B-2 让路 ——
 那一签本身就是"它先立过猜想、走过复核"的证据（`_self_authored_gate` 的 `signed`）。
+第十二件：穷举证明的签字是 V 的、②③ 是 E 写的，B 不许自签（业主 2026-10-23 裁定与晚间的更正）
+裁定逐字要点：「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，
+签名是对应的程序脚本……这些有关数值实验的都由 E 来签。若要入定理证明库，证明栏写
+程序地址（相对于仓库）。」落点是两道闸，判据本体都在 `numericproof`：
+
+- 入参闸（`proof_needs_third_party_signature`）：`origin="own_result"` +
+  `evidence_kind="proof"` ⇒ 证明栏要么是程序脚本的相对路径、且台账里有一条 E 按穷举
+  签下的 proof（`observations.e_signature` 里 `signed_by="E"` +
+  `proof_reason="exhaustion"`），要么有一条 `method="formal"` 的 proof 实验。两样都没有
+  ⇒ 整笔不写。改前 B 可以直接把自己的结果标成 proof，而没有任何一格会问"谁签的"。
+- 上面那两道 V 闸的例外：证明栏是程序、且 E 已按穷举签过 ⇒ 这一条不需要 V 的签
+  （V 对数值证据直接拒签）。不改这一处的后果是一条真的穷举证明永远进不了定理证明库：
+  它既过不了 B-3，也拿不到 V 那一签。
 """
 from __future__ import annotations
 
@@ -68,6 +81,7 @@ from typing import Mapping
 
 from ._support import S
 from .. import evidencebits as _EB
+from .. import numericproof as _NP
 from .. import quoteevidence as QE
 from .. import verifications as _VR
 from ..refusals import refuse as _refuse
@@ -726,6 +740,36 @@ class _RegisterStatement:
             return _refuse("bad_evidence_kind",
                            f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
                            "（它是证据**强度**，不是来源；来源走 source_lit_id）")
+        # ---- 2026-10-23（业主裁定「都由 E 来签」→ 晚间更正「签字仍然由 V 签」）：B 不许自签 proof
+        #
+        # `proof` 这一档从这一天起有两个入口：形式化（检查器/L 那一支）与穷举
+        # （E 按 `numericproof` 的穷尽证据签、证明栏写程序脚本）。两样都不是 B 能给的，
+        # 所以本动作在写入前核一次台账：我方结果（`origin="own_result"`）要 proof，
+        # 就必须指得到一条真的第三方签名。判据只有一处（`numericproof.filing_problems`），
+        # 这里只把它的结论翻成一条带 `kind` 的拒绝 —— 拒信逐条写清缺什么、怎么补。
+        exp_rows = []
+        try:
+            exp_rows = list(self.store.rows("experiments"))
+        except Exception:  # noqa: BLE001 —— 读不到台账不等于"没有签名"；见下
+            # 读不到实验台账时不能放行（那会把"查不了"折成"查过了没问题"）：
+            # 交给 `filing_problems` 的空清单分支 ⇒ 拒，理由里会写"台账里没有对应实验"。
+            exp_rows = []
+        stmt_rows = []
+        try:
+            stmt_rows = list(self.store.rows("statements"))
+        except Exception:  # noqa: BLE001 —— 同上：读不到命题台账 ⇒ 那一格"没查成"⇒ 拒
+            stmt_rows = []
+        _sign_problems = _NP.filing_problems(origin=origin, evidence_kind=evidence_kind,
+                                             proof_text=proof_text, experiments=exp_rows,
+                                             # 第三方签字（V 的会审签名）要按命题读台账：
+                                             # 根 + 在册的那条命题（按正文认号，与
+                                             # `_v_signature_for` 同一个认法）。
+                                             # 缺任何一件 ⇒ 那一格"没查成" ⇒ 闸照旧拒。
+                                             root=getattr(self.store, "root", None),
+                                             statements=stmt_rows,
+                                             statement_full=full)
+        if _sign_problems:
+            return _refuse("proof_needs_third_party_signature", "；".join(_sign_problems))
         # ---- 2026-10-16（亲测 B 时加的）：「把缺的出处字段一次说齐」 --------------
         # 这一格原本是"一次只点名一条"（实测要走 bad_origin → missing_quote_reason →
         # missing_page_range 「三轮」才凑齐）。业主口径："真实智能体也会在这里困惑并
@@ -961,6 +1005,10 @@ class _RegisterStatement:
         if (str(origin) == "own_result" and not lit_id
                 and quote_verified is not True
                 and kind_now not in CONJECTURE_START_KINDS
+                # 2026-10-23：穷举证明的那一档让路 —— 它一进门就能叫定理，凭的是 E 的签名
+                # 与那份程序（业主：「纯数值实验直接把整个命题证掉了，那也能拿 proof 标识」），
+                # 而不是"先立猜想、等 V 的签"。判据与 `_self_authored_gate` 那一条同源。
+                and self._e_signed_exhaustion(proof_text) is None
                 and not bool((self_authored.get("reading") or {}).get("signed"))):
             return _must_start_as_conjecture_refusal(kind_now=kind_now,
                                                      origin=str(origin))
@@ -1441,6 +1489,23 @@ class _RegisterStatement:
                           f"{str(reading.get('why') or '')[:200]}")
         return out
 
+    def _e_signed_exhaustion(self, proof_text: Any) -> dict | None:
+        """这条命题的证明栏是不是「一条 E 已按穷举签下的 proof」的程序路径。
+
+        2026-10-23 业主裁定（逐字要点）：「这些有关数值实验的都由 E 来签」→ 随后更正为
+        「签字仍然由 V 签（不是 E）。E 是 ②③ 的原作者，但签名主体是 V」；「若要入定理
+        证明库，证明栏写程序地址（相对于仓库）」。⇒ 这一类命题的第三方签名是 V 的那一签
+        （材料是 E 写的那一份程序 + ②③），不是 V 的逐行走查（逐行走查对数值证据不适用，
+        见 `numericproof.verifier_problems`）。
+        本方法只做一次查表，判据本体在 `numericproof.find_signed_exhaustion_for_column`。
+        """
+        rows: list = []
+        try:
+            rows = list(self.store.rows("experiments"))
+        except Exception:  # noqa: BLE001 —— 读不到台账就是"没有这一签"（不许当成有）
+            rows = []
+        return _NP.find_signed_exhaustion_for_column(rows, proof_text)
+
     def _self_authored_gate(self, *, origin: str, kind: str, lit_id: str,
                             statement_full: str, proof_text: str) -> dict:
         """业主 B-3 的写侧闸：自产的定理级命题要么有 V 的签，要么受控拒绝。
@@ -1496,6 +1561,17 @@ class _RegisterStatement:
         if not self_authored:
             reading["why"] = ("有文献出处（origin=external_lit 且 source_lit_id 非空）⇒ "
                               "这一条不是我们杜撰的，闸不拦它")
+            return {"needs_v": False, "refused": "", "reason": "", "reading": reading}
+        # 2026-10-23（业主裁定）：数值证据的签名主体是 V、②③ 的作者是 E。证明栏写程序路径、
+        # 且台账里有一条对应的穷举证明 ⇒ 这一条的第三方签名已经在盘上了，不要再向它要 V 的
+        # 逐行走查 —— 逐行走查对数值证据本来就不适用（`numericproof.verifier_problems`），
+        # 两条闸叠在一起会让一条真的穷举证明永远进不了定理证明库。
+        if self._e_signed_exhaustion(proof_text) is not None:
+            reading.update(
+                checked=True, needs_v=False, signed=True,
+                why=(f"这一份的证明栏是程序 {str(proof_text or '')[:60]!r}，台账里有它对应的 "
+                     "穷举证明（signed_by=V、proof_authors 含 E、proof_reason=exhaustion）⇒ "
+                     "数值证据由 V 签、②③ 由 E 写，不需要 V 的逐行走查"))
             return {"needs_v": False, "refused": "", "reason": "", "reading": reading}
         sig = self._v_signature_for(statement_full=statement_full, proof_text=proof_text)
         reading.update(

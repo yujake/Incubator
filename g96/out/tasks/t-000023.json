@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-23T13:29:20+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 640,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {\"blocked\": [], \"blocked_items\": [], \"checked\": false, \"reason\": \"这一趟还没落台账号 ⇒ 剩余任务翻不了（没查成）\", \"why\": \"stop_file\"}, \"final\": \"用户叫停（开关文件 .agentflow-stop）：第 0 步之后收工。已经做过的事都留在台账与盘上；要看这一趟做了什么用 `agentflow --root D:\\\\Incubator\\\\g96 runs`，要接着跑用 `agentflow --root D:\\\\Incubator\\\\g96 run-agent --resume --task \\\"<接着做什么>\\\" --sid g96`\", \"llm_run_path\": \"D:\\\\Incubator\\\\g96\\\\runs\\\\A-20261023-132920-001.json\", \"messages\": [], \"steps\": 0, \"stop_reason\": \"stop_file\", \"summons\": []}",
+ "payload_sha256": "05876762e7b43bc8108af6ef1c5cfeced56d48e314b2c36f73315032db3f8525",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000023"
+}

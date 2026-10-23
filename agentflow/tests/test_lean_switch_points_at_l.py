@@ -361,26 +361,32 @@ def test_never_hiding_turns_the_zero_trace_criterion_red(
 
 # --------------------------------------------------------------------------- ⑥
 def test_e_is_not_weakened() -> None:
-    """E 没有被削弱：动作面与工具面原样，且 `test_lean_switch.py` 仍全绿（子进程证）。
+    """E 没有被顺手削弱：裁定范围之外的动作面与工具面原样，且 `test_lean_switch.py` 仍全绿。
 
     为什么这一条必须在这里：这一批改的全是文本，而"改文本"最容易顺手把 E 的能力面
-    也收掉（例如把 `verify.check_formal` 从它工具面上摘掉）。摘掉之后没有任何文本判据会红，
-    而 E 那一岗就真的少了半条路。
+    也收掉。2026-10-23 晚的裁定确实收掉了两格（`check_formal` 动作与
+    `verify.detect_verifier` 在 E 面上的那一格），所以这一条分成两半：
+    裁定内的三件必须真的没了（收掉了才算执行了裁定），裁定外的必须一件不少
+    （实验、查询、算哈希、脚本封装都还在）。两半缺一条都会让"清理"变成"顺手削掉"。
     """
     from agentflow import capabilities as C
 
     actions = {spec.action for spec in C.CAPABILITIES["E"]}
-    for want in ("run_experiment", "check_formal", "run_script_experiment",
+    for want in ("run_experiment", "run_script_experiment",
                  "evidence_for", "list_experiments"):
-        assert want in actions, f"E 的动作面少了 {want}（这一批只许改文案）"
+        assert want in actions, f"E 的动作面少了 {want}（裁定只让删 check_formal）"
+    assert "check_formal" not in actions, "裁定要删的 check_formal 还在 E 的动作表里"
     face = {spec.name for spec in _registry().for_role("E")}
     assert "verify.run_experiment" in face, f"E 的工具面少了实验那一路：{sorted(face)}"
-    assert len(face) >= 10, f"E 的工具面只剩 {sorted(face)} ⇒ 这不是改文案，是把能力面收掉了"
-    # 桥接层真身必须仍然装配在某处（它是 `formal.*` 与 `verify.check_formal` 共同的下游）：
-    # 它今天挂在哪几个角色身上由权限面定（2026-10-22 之后 E 那一侧写死停用、不再挂它），
-    # 这一条只钉"这件工具没有被删掉"。
-    assert "verify.check_formal" in _registry().names(), (
-        "工具面上没有 `verify.check_formal` 了 ⇒ 桥接层真身被删了，而不只是改了文案")
+    assert "verify.code_hash" in face, f"E 的工具面少了可复现性那一格：{sorted(face)}"
+    assert len(face) >= 14, f"E 的工具面只剩 {sorted(face)} ⇒ 这不是清理 Lean 侧，是把能力面收掉了"
+    assert "verify.detect_verifier" not in face, "裁定要求把探测从 E 的面上拿掉"
+    # 桥接层真身必须仍然装配在某处（它是 `formal.*` 共同的下游）：删的是"E 的工具面那一件"，
+    # 不是这份实现。它今天挂在 L 的那三件工具下面（`formal.check_formal`）。
+    assert "formal.check_formal" in _registry().names(), (
+        "L 的形式化入口不见了 ⇒ 桥接层真身被删了，而不只是收掉了 E 那一面")
+    assert "verify.check_formal" not in _registry().names(), (
+        "`verify.check_formal` 还在注册表里 ⇒ 裁定要的是整条删掉，不是收成空 roles")
 
     here = pathlib.Path(__file__).resolve().parent
     proc = subprocess.run([sys.executable, "-m", "pytest", str(here / "test_lean_switch.py"),

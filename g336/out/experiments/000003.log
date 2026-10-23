@@ -1,0 +1,20 @@
+# conj-000000-n7eq1-invariants
+# 脚本 scripts/g336_semidirect.py  sha256=bbc525c02198510d
+# exit_code=1  runtime=0.187s
+# claim: 336 阶群中 n_7=1 的群类数下界，以及 (元素阶分布, |Z(G)|, |G'|) 三元组对其中互不同构类的区分个数（手工构造的 C_7⋊_χH 子集）
+----- stdout -----
+ENV {"gap_executable": null, "gapy_error": "ModuleNotFoundError: No module named 'gapy'", "gapy_importable": false}
+----- stderr -----
+Traceback (most recent call last):
+  File "D:\Incubator\g336\scripts\g336_semidirect.py", line 581, in <module>
+    main()
+  File "D:\Incubator\g336\scripts\g336_semidirect.py", line 475, in main
+    hder = frozenset(H.derived_subgroup())
+                     ^^^^^^^^^^^^^^^^^^^^
+  File "D:\Incubator\g336\scripts\g336_semidirect.py", line 257, in derived_subgroup
+    return derived_closure(self.table, self.n, self.inv, range(self.n))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Incubator\g336\scripts\g336_semidirect.py", line 267, in derived_closure
+    c = table[a * n + inv[b]]
+                      ~~~^^^
+TypeError: list indices must be integers or slices, not list

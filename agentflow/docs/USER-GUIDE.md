@@ -369,7 +369,7 @@ python -m agentflow --root projects\<ws> closing
 ```
 
 `closing` 逐格印 `paper / contradictions / load_bearing / report_shape / user_pending / substance / acceptance / artifact_ledger`，
-再印非平凡性那一行（`T1..T4` + 未判），以及论文侧缺铺垫与 T4 缺造梯子记录（`[warning]` 行）。
+再印非平凡性那一行（`T0..T4` + 未判；T0 = 基础定理或初步结论，平凡不再拒收），以及论文侧缺铺垫与 T4 缺造梯子记录（`[warning]` 行）。
 另有一条零模型调用的进度读数：`python -m agentflow --root <ws> status-report`
 （落 `out/review/STATUS-<时间>.md|json`，其中"在飞"只数实例行，见 §5）。
 
@@ -381,7 +381,7 @@ python -m agentflow --root projects\<ws> closing
    正文有没有内部编号（`exp:`/`stmt:` 之类只许出现在附录 index）。
 2. **宏大的定理有没有被派"搭梯子 / 拆分"**：
    - 「在飞」页的名册树看派活结构（谁派的、派给谁、绝对编号）；
-   - `closing` 的非平凡性那一行看档位分布（T3/T4 就是"宏大"的那几条）；
+   - `closing` 的非平凡性那一行看档位分布（T3/T4 就是"宏大"的那几条；T0 是平凡但真的那些，它们照旧收录）；
    - 出现 `[warning] nontriviality：T4 缺造梯子记录` ⇒ 研究侧没接这个信号；
    - 论文里 `definition` 环境数应当随 T4 的处理**上升**（"造梯子"的可见形态）。
 

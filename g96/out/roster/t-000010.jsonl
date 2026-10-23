@@ -1,0 +1,2 @@
+{"at": "2026-10-23T13:21:03+08:00", "brief": "复核 conj-000000 的 P×C_3 拆分证明", "brief_source": "parent", "first_task_id": "t-000011", "kind": "add", "name": "V1", "owner": "t-000010", "role": "V", "seq": 1, "surface": "S01", "task_id": "t-000011"}
+{"at": "2026-10-23T13:24:12+08:00", "brief": "登记 conjecture 000000 的拆分定理为 statements 一行", "brief_source": "parent", "first_task_id": "t-000014", "kind": "add", "name": "B1", "owner": "t-000010", "role": "B", "seq": 2, "surface": "S02", "task_id": "t-000014"}

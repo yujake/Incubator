@@ -56,64 +56,26 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
    ⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
      `evidence_kind="heuristic"`，`notes` 写明"脚本未给出结构化结论"。
 
-## 形式化路径（`method="formal"`）与计算类路径的分工
+## 形式化不在这一岗（业主 2026-10-23 晚：「E 侧与 Lean 相关的工具和动作都该清干净」）
 
-`method="formal"` 不走上面那三条规则：它把工作区里的 `.lean` 文件交给
-`verify.check_formal`（唯一实现）真跑一次，判据全部来自检查器，而不是来自脚本的
-自我陈述。这是本模块唯一能产出 `evidence_kind="proof"` 的入口，收口规则是：
+本模块的动作表没有 `check_formal`，`AgentE` 上也没有这个方法；`run_experiment` 收到
+`method="formal"` 时在第一句以受控理由码 `formal_not_in_e` 拒绝，一行都不落、也不起
+检查器。形式化那一岗的实现体（`check_formal.py` 的 `_CheckFormal`）仍然留在本包里 ——
+L 的 `_CheckFormalL` 继承它，桥接层（`verify_tools.check_formal` 那个纯函数）只有一份
+实现。这条继承关系是"L 复用 E 的实现"，不是"E 还能形式化"。
 
-1. 检查器返回 `verified` ⇒ 登记 `evidence_kind="proof"`、`result="supports"`、
-   `negation_kind="not_proved"`、`verifier_output` 是检查器自己的那句话、
-   `verifier_subject_key` 逐字等于本行的 `claim_key`（schema 硬约束 2/2b 要求）；
-2. 检查器跑了但没通过（`compile_error` / `uses_sorry` / `extra_axioms` /
-   `decl_mismatch`）⇒ `inconclusive` + `heuristic`：它给不出任何正面证据，
-   所以不许落 `cross_check`（那是"另一个方法旁证过"，见 `formalgw.evidence_of`）；
-3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /
-   `source_unreadable` / `lean_disabled` / `param_error` / `formal_moved_to_l`）⇒ 同上，
-   且 `notes` 里写明是哪一种。
-   其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`
-   （`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` /
-   `lean_disabled` / `param_error` / `formal_moved_to_l`）
-   —— 上面这一行必须覆盖它，导入期断言与 `tests/test_agent_e.py` 各守一遍。
-   为什么必须机器守：这里此前只有四项（少了 `source_unreadable` 与 `param_error`），
-   而没有任何一条测试会因此变红（`R2-AN-3`），于是同一文件里
-   docstring 与常量互相矛盾。`import_unavailable` 不在那张常量表里：
-   它是 `formalgw` 的检查器状态（库不可得 ⇒ 那次检查没有发生），
-   见 `FORMAL_REASONS` 与 `_FORMAL_REASON_BY_TOOL_REASON`。
-   `lean_disabled`（业主 2026-10-12 的开关：`toolchain.lean_enabled=false`）
-   在那张表里：它是"本会话这条路被用户关掉了"，与"机器上没有 Lean"
-   （`no_backend`）是两件事 —— 混起来的代价是让人去查环境，而该看的是设置文件。
-   `formal_moved_to_l` 是业主 2026-10-22 晚裁定那一档（「E 的 Lean 侧开关全写死成
-   关闭」）：E 这一侧不再读那个开关，形式化那一支在动作面第一句就回这个理由码、
-   并把形式化指向 L —— 它与 `lean_disabled` 必须分开，否则模型会去翻设置文件找一个
-   对这条路根本不存在的开关。
-   三态纪律：没查成绝不等于查了通过。
-4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
-   形式化路径的输入是一份检查器能读的形式化源码，"用 Python 脚本冒充形式化产物"
-   正是 FC-22 要拦的那种越权。
+`name` / `imports` 只服务形式化那一支：动作表与工具 schema 上都没有它们（工具面因此
+传不进来）。方法层仍然收着这两个形参，只是为了把"传了也不做"变成一句受控拒绝 ——
+F 的派活路径会按同一份子目标把它们传下来，而让它 TypeError 会把"调用方多给了一个
+参数"读成"E 内部有 bug"。
 
-`name` / `imports` 只对形式化路径有意义：给计算类方法传它们会被拒绝，而不是被
-静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，
-实际用的是默认 Mathlib"这种假话没有任何地方会报出来）。
-
-## 三态纪律在本模块的三处落地
+## 三态纪律在模块里的落点
 
 - `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；
   给了参数但库里没有 ⇒ `checked=True, experiments=[], proved=False`（查了、没有）。
-- `check_formal` 无后端 ⇒ `checked=False, reason="no_backend"`，
-  不是 `verified=False`（那是"验证没过"，与"没验证"完全不同）。
-  受控理由至少要分清六种：`no_backend` / `timeout` / `tool_crashed` /
-  `source_unreadable`（环境的锅，本次没查成 —— 最后那一档是"`script_path`
-  给的源码文件读不到"，`E-3`）、`lean_disabled`（用户把这条路关掉了）与
-  `no_script`（调用方没给源码 —— 有后端时也会走到这一态，它不是"本机没有检查器"）。
-  把"没查成"的判据写成 `checked is False` 就会把这几档全部折叠成第一档。
-  这六种理由都属于本模块的局部受控词表 :data:`FORMAL_REASONS`，
-  而检查器原样报的那个状态另走 `verifier_status`（见 :meth:`AgentE.check_formal`
-  的 docstring：收口与透传必须同时在，否则收口就是删信息）。
-  2026-10-22 晚裁定之后还有第 7 种：`formal_moved_to_l` —— E 的 Lean 侧写死关闭
-  （业主逐字：「E 的 Lean 侧开关全写死成关闭」），形式化那一支在动作面第一句就回这个
-  受控理由码，并把形式化指向 L。它必须与 `lean_disabled` 分开：后者是「用户把开关关掉了」
-  （可行动：去设置里打开），前者是「这条路已经不在 E 身上了」（可行动：走 L 那三件工具）。
+- `check_formal` 的那套受控理由（`no_backend` / `timeout` / `tool_crashed` /
+  `source_unreadable` / `lean_disabled` / `no_script`）随 `_CheckFormal` 一起服务 L；
+  把"没查成"的判据写成 `checked is False` 会把几档全部折叠成第一档。
 - `proved` 只有在存在 proof 级实验时才为 True（FC-22）。
 
 ## 已知边界（如实标注，不要读成缺陷）
@@ -143,25 +105,18 @@ from ._support import (AgentBrief, AgentSpec, Any, COMPUTATIONAL_METHODS, Experi
     _relpath, _result_reason, _which, _write_run_log, annotations, build_experiment, 
     declared_name_of_notes, install_e_tools, json, os, re, subprocess, sys, time,
 )
-# 业主 2026-10-22 晚裁定（E 的 Lean 侧写死关闭）：判定、理由码与那句读数都是公开入口 ——
-# 「在读数里明确」这条要求靠 `lean_side_reading()` 兑现，别处不许再拼一份。
-from ._support import (E_LEAN_SIDE_HARD_OFF, E_LEAN_SIDE_NOTE, E_LEAN_SIDE_REASON,
-                       e_lean_side_hard_off, lean_side_reading)
+from ._support import E_NO_FORMAL_REASON
 from ..specs.e import SPEC
 
 __all__ = [
     "AgentE",
-    "E_LEAN_SIDE_HARD_OFF",
-    "E_LEAN_SIDE_NOTE",
-    "E_LEAN_SIDE_REASON",
+    "E_NO_FORMAL_REASON",
     "ExperimentError",
     "FORMAL_REASONS",
     "REPRO_RESULT_PREFIX",
     "build_experiment",
     "declared_name_of_notes",
-    "e_lean_side_hard_off",
     "install_e_tools",
-    "lean_side_reading",
     "selftest",
     "SPEC",
 ]

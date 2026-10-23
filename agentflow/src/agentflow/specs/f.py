@@ -82,7 +82,13 @@ SPEC = AgentSpec(
             "需要 C/D/E 的推理而框架没接线时，如实写未接线，不许编一个中间结果顶上。",
             "立项的预算要么不给（框架按本次运行的缺省预算填），要么四类键缺一不可：`max_rounds` / `max_parallel_subgoals` / `max_persist_attempts` / `max_depth` —— 给了却缺键会被判 `budget_incomplete` 拒绝创建、一行都不写（FC-18：只有轮数上限则单轮可无限扇出，只有并发上限则可无限轮）。",
             "停下必须交 `best_partial`：`status='stalled'` 时它不许为空（schema 的硬条件），`verify` 另有点名 `stalled_without_partial` —— 已证的引理、缩小的范围、排除的路逐条带 id 写进去；只写在回报的散文里不算交。",
-            "子目标标 `closed` 必须有 proof 级证据（`proof_experiment_ids` 非空）；只有数值或穷举支持就标 `supported_not_proved`（FC-22）—— 数值支持不是证明，拿它关子目标正是这条纪律要防的事。",
+            # 2026-10-23 晚（业主：穷举证明也算 proof，签名是那份程序）：这一句改前只写着
+            # 「只有数值或穷举支持就标 supported_not_proved」—— 于是真穷举证明（V 会审成立、
+            # `proof_reason=exhaustion`）被这条纪律连坐降档，攻坚子目标永远关不上。
+            # 代码侧早就能收：`agent_f/core.py` 的 `if kind == "proof"` 只看等级，不看是哪条路
+            # 挣来的。所以这里把「closed 的合法凭据」写成两类并列，并把旧那句"数值支持不是证明"
+            # 改成它真正的意思：未经 V 审的不算。
+            "子目标标 `closed` 必须有 proof 级证据（`proof_experiment_ids` 非空）。**这类凭据只有两类，并列**：① Lean 形式化（检查器核过 `.lean` 那份源码之后带回的原话；这一路没开时它自然空着，别去凑）。② **已由 V 会审成立的穷举证明**（签名 `signed_by=V`、`proof_authors` 含 E、`proof_reason=exhaustion`，证明栏是程序相对仓库根的路径 + 你从 E 写的 ②③ 引下来的那两段）。**只有数值或穷举支持、未经 V 审的不算证明**：那一档标 `supported_not_proved`（FC-22）—— 拿它关子目标正是这条纪律要防的事。",
         ),
         policy=(
             "每一轮先挑一个可判定的子目标，做完就落台账；子目标不可判定时先把它拆小。每轮要留下一批新事实（有推理缝时 ≥3 条："

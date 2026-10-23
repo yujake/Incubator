@@ -13,7 +13,7 @@
 读不懂当场报错 |
 | 2 | `toolchain`（读数层） | `toolchain_report()` 给 `lean_enabled` / `formal_mode`；关掉时 `can_do_formal=False` |
 | 3 | `formalgw.check_lean`（桥接层） | 关掉 ⇒ `status="lean_disabled"`、`checked=False`、连探测/进程都不起 |
-| 4 | `agent_e`（实现层） | 关掉 ⇒ `run_experiment(method="formal")` 前置拒绝（`lean_disabled`），`check_formal` 如实回没查成 |
+| 4 | `agent_e`（实现层） | 关掉 ⇒ `run_experiment(method="formal")` 前置拒绝（2026-10-23 晚起是 `formal_not_in_e`：E 不做形式化，与开关无关）；`_CheckFormal` 那份实现经 L 仍然如实回没查成 |
 | 5 | 提示词（`TOOLCHAIN_FACTS` / `TOOLCHAIN_FORMAL`） | 关掉 ⇒ 先报"已关闭"并给出替代路线（`proof_text` + V 的 `verify_proof`） |
 | 6 | 收工门（`closing` 的 `load_bearing`） | 关掉 ⇒ 记 `na` + 理由（不是 pass、也不是 fail），并给替代读数 |
 
@@ -169,12 +169,12 @@ def test_the_switch_on_does_not_change_the_bridge(monkeypatch: pytest.MonkeyPatc
 # ============================================================ 4. 实现层（E）
 def test_e_refuses_a_formal_experiment_before_running_anything(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """实现层：`method='formal'` 在跑脚本之前就被拒，理由里带上替代路线。
+    """实现层：`method='formal'` 在跑脚本之前就被拒，理由是「E 不做形式化」。
 
-    2026-10-22 晚裁定之后这一条不再是"关掉时才拒"：业主逐字「E 的 Lean 侧开关全写死成
-    关闭」⇒ 两档都拒，理由码 `formal_moved_to_l`。开关关着这一档仍然要有这条判据（它是
-    裁定前后的公共行为），而"两档逐字相同"由
-    `tests/test_e_lean_side_is_hard_off.py` 第 4 条单独守。
+    2026-10-23 晚裁定（「E 侧与 Lean 相关的工具和动作都该清干净」）之后这一支不再
+    看开关、也不再是"写死关闭"：它是一条范围声明（E 不做形式化，理由码
+    `formal_not_in_e`），两档逐字相同。判据本体在 `tests/test_e_has_no_lean_side.py`
+    判据 3；这里只钉住"关档也一样"。
     """
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     ws = tmp_path / "ws"
@@ -187,8 +187,9 @@ def test_e_refuses_a_formal_experiment_before_running_anything(
     with pytest.raises(ExperimentError) as exc:
         e.run_experiment("命题", "k1", str(script), method="formal")
     msg = str(exc.value)
-    assert "已停用" in msg and "verify_proof" in msg, msg
-    assert "formal_moved_to_l" in msg, "拒绝要给可行动的受控理由码"
+    assert "不做形式化" in msg, msg
+    assert "formal_not_in_e" in msg, "拒绝要给可行动的受控理由码"
+    assert "formal_moved_to_l" not in msg, "旧理由码（「搬到 L」）不该再出现"
     # 负控：非形式化那条路照常（关掉 Lean 不该把数值实验也关掉）
     num = ws / "code" / "y.py"
     num.write_text('print("REPRO_RESULT: {\\"result\\": \\"supports\\"}")\n', encoding="utf-8")
@@ -196,24 +197,25 @@ def test_e_refuses_a_formal_experiment_before_running_anything(
     assert got["evidence_kind"] in ("cross_check", "heuristic"), got
 
 
-def test_e_check_formal_reports_lean_disabled_not_no_backend(
+def test_check_formal_reports_lean_disabled_not_no_backend(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """实现层（被保留的那一份）：受控理由要把"用户关掉了"与"机器上没有"分开。
 
-    2026-10-22 晚裁定之后 E 的动作面已经不读开关（`formal_moved_to_l`，见
-    `tests/test_e_lean_side_is_hard_off.py` 第 2/4 条），但 `_CheckFormal` 的实现体按裁定
-    保留（「代码先不删」；L 的 `_CheckFormalL` 继承它）⇒ 这一档的三态区分仍然要可判。
-    所以这里显式放开那个写死字面量，量的是被保留的实现。
+    这一条量的是 `agent_e/check_formal.py::_CheckFormal` 那份实现（L 的
+    `_CheckFormalL` 继承它）：2026-10-23 晚之后 E 已经没有这个方法了，而这份实现
+    仍然承重，所以这里经 L 的那条路量它 —— 自检闸显式放开成 `usable`，
+    量的是"闸门之后逐字走同一份代码"那一半。
     """
-    from agentflow.agent_e import _support as SUP
+    from agentflow.agent_l import AgentL
 
-    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
+    monkeypatch.setattr(AgentL, "_lean_selfcheck", lambda self: ("usable", ""),
+                        raising=True)
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
-    out = AgentE(st, workspace_root=ws).check_formal("命题", source="theorem t : True := trivial",
-                                                     name="t")
+    out = AgentL(st, workspace_root=ws).check_formal(
+        "命题", source="theorem t : True := trivial", declaration_name="t")
     assert out["checked"] is False, out
     assert out["reason"] == "lean_disabled", out
     assert out["reason"] != "no_backend", "两件事不许折叠成一档"
@@ -335,11 +337,11 @@ def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
     它当时唯一的读数就是判据报"表失效了"，而"面还在广告"这件事没有任何断言。
     这条负控钉住的就是后者。
 
-    取的是动作面那一条（`old` 以 `check_formal：` 开头）：它正是当年漂掉的那一类——
-    左边从真身（`specs/e.py` 的 `ACTIONS`）现读，改坏它 ⇒ 关掉时那一行照旧读作
-    "删掉形式化那一岗的本事"。2026-10-22 晚裁定之后工具面那一条退场了
-    （`verify.check_formal` 不再属于任何角色 ⇒ 它不再出现在任何角色的提示词里，
-    左边无处可指），所以这一条负控换成同一张表里仍然承重的动作面那一行。
+    取的是这张表里仍然承重的第一条（`old` 以「形式化不是这一岗的活」开头）：
+    它落在 `specs/e.py` 的 policy 第一句上，而那一句是"本会话不做形式化验证"那条
+    统一写法的入口。2026-10-23 晚裁定之后动作面那一条已经退场（`check_formal` 整条
+    动作摘掉 ⇒ 它不再出现在任何角色的提示词里，左边无处可指），所以这一条负控换成
+    同一张表里仍然承重的这一行。
     """
     from agentflow import agent_prompts as AP
     from agentflow import schema as S
@@ -349,7 +351,7 @@ def test_a_corrupted_entry_in_the_rewrite_table_is_reported_by_name(
     roles = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
     reg = build_registry().registry
     victim = next(i for i, (old, _n) in enumerate(E.NO_LEAN_REPLACEMENTS)
-                  if old.startswith("check_formal："))
+                  if old.startswith("形式化不是这一岗的活"))
 
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     AP.reset_toolchain_readings()

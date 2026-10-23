@@ -1,0 +1,58 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "request_id": "r-000001",
+      "timestamp": "2026-10-23T13:24:10+08:00",
+      "topic": "Ramsey number R(3,4)",
+      "mode": "topical",
+      "content_description": "Classic literature on the Ramsey number R(3,4)=9: original determination and survey tables (Greenwood-Gleason 1955; Radziszowski, Small Ramsey Numbers).",
+      "done": true,
+      "submitted_by": "agent-A-lit",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "000000",
+        "000001"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "low",
+      "for_question_id": null,
+      "submit_note": "",
+      "providers": []
+    },
+    {
+      "request_id": "r-000002",
+      "timestamp": "2026-10-23T13:24:28+08:00",
+      "topic": "Greenwood Gleason Ramsey numbers",
+      "mode": "precise",
+      "content_description": "Greenwood and Gleason 1955, Combinatorial relations and chromatic graphs - the classical determination that R(3,4)=9; plus Radziszowski's dynamic survey Small Ramsey Numbers.",
+      "done": true,
+      "submitted_by": "agent-A-lit",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "000002",
+        "000003",
+        "000004",
+        "000005",
+        "000006",
+        "000007",
+        "000008",
+        "000009",
+        "000010",
+        "000011",
+        "000013"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "low",
+      "for_question_id": null,
+      "submit_note": "",
+      "providers": []
+    }
+  ]
+}

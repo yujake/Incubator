@@ -5,63 +5,13 @@
 """
 from __future__ import annotations
 
-from ._support import Any, DeclarationNameError, ExperimentError, Mapping, Path, Sequence, Store, ToolRegistry, _NOT_CHECKED_REASONS, _NO_EVIDENCE_KIND, _declared_name_note, _decode, _digest, _kill_child, _relpath, _result_reason, _stop_requested, _which, build_experiment, install_e_tools, os, sole_declaration_name, subprocess, sys, time
-# 业主 2026-10-22 晚裁定（E 的 Lean 侧写死关闭）：判定、理由码、那句读数都从
-# `_support` 取 —— 那一侧是唯一出处，本文件不另写字面量。
-from ._support import E_LEAN_SIDE_NOTE as _LEAN_SIDE_NOTE
-from ._support import E_LEAN_SIDE_REASON as _LEAN_SIDE_REASON
-from ._support import e_lean_side_hard_off as _lean_side_hard_off
+from ._support import Any, E_NO_FORMAL_REASON as _NO_FORMAL_REASON, ExperimentError, Mapping, Path, Store, ToolRegistry, _decode, _digest, _kill_child, _stop_requested, _which, install_e_tools, os, subprocess, sys, time
 from .. import schema as S
 from .run_experiment import _RunExperiment
 from .author_script import _AuthorScript
-from .check_formal import _CheckFormal
 from .evidence_for import _EvidenceFor
 from .list_experiments import _ListExperiments
 from .run_script_experiment import _RunScriptExperiment
-
-#: 受控拒绝的理由码：派发层只认 `schema.REFUSAL_REASONS` 里的取值（`draft/146` D30）。
-#: E 自己的理由码（`formal_moved_to_l` / `path_outside_workspace` / `tool_failed`）留在
-#: `reason` 与 `detail` 里，不进这一格 —— 两套词表不许折叠。
-_REFUSAL_REASON_FOR_FORMAL = "invalid_params"
-assert _REFUSAL_REASON_FOR_FORMAL in S.REFUSAL_REASONS, (
-    "受控拒绝的理由码必须来自 schema.REFUSAL_REASONS")
-
-
-def _mathlib_remedy_note(status: str, imports: "Sequence[str] | None", path: Path) -> str:
-    """这一次 formal 失败能不能被「忘了传 Mathlib」解释？能就明说（现算，不猜）。
-    
-    真机读数（2026-10-05 T1 第 16 趟）：4 次 formal 全部`imports=（默认：不注入任何库）`，检查器原话 
-    `failed to synthesize instance` /`omega did not find a contradiction` ⇒ 全是 
-    `compile_error`，一条 proof 行都没落成（`P8`）。提示词那一侧同批改成"读数说可用就把它传进去"，但读数这一侧也要说：一句话能省掉的 4 次重复尝试，
-    不该指望模型记得住第 30 步之前读过的政策。
-    
-    只在三个条件同时成立时说（否则就是替检查器编一个原因）：① 检查器状态是 `compile_error`（`uses_sorry` / `decl_mismatch` / 
-    超时都与缺库无关）；② 本机 Mathlib 现算可用；③ 这一次确实没有要它（`imports` 里没有、源码里也没有 `import Mathlib`）。
-    """
-    if status != "compile_error":
-        return ""
-    if imports and any(str(x).strip().lower() == "mathlib" for x in imports):
-        return ""
-    try:
-        source = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        source = ""
-    if "import mathlib" in source.lower():
-        return ""
-    try:
-        from ..toolchain import mathlib_state
-
-        state = mathlib_state()
-    except Exception:  # noqa: BLE001 —— 读数读不到就什么都不说，不替检查器编原因
-        return ""
-    if not state.get("umbrella_olean"):
-        return ""
-    return ("[formal] 处置读数（框架现算，不是猜）：本机 Mathlib **可用**，而这一次没有把它"
-            "传进去（`imports` 里没有 `Mathlib`，源码里也没有 `import Mathlib`）—— "
-            "缺库时库里的实例与引理都不在，`failed to synthesize instance` / "
-            "`omega did not find a contradiction` 这类原话就是这么来的。"
-            "**把 `['Mathlib']` 传进 `imports` 再试一次**，不要拿这一次的失败改结论。")
-
 
 class _Core:
     def __init__(
@@ -286,291 +236,24 @@ class _Core:
             "launch_error": None,
             "process_tree": "job" if job is not None else "kill_child",
         }
-    def _record_formal(
-        self,
-        claim: str,
-        claim_key: str,
-        path: Path,
-        *,
-        code_hash: str,
-        params: Mapping[str, Any] | None,
-        for_question_id: str | None,
-        timeout: int,
-        name: str | None,
-        imports: Sequence[str] | None,
-    ) -> dict:
-        """形式化路径：真跑一次检查器，按检查器给的结论登记一行 `Experiment`。
-        这是 `P-8` 的接线：此前 `run_experiment` 只有"跑脚本 + 读脚本自报的结论"一条路径，而 `build_experiment` 一个证据形状字段都
-        不传 ⇒ 走到`row.validate()` 必然抛（"evidence_kind='proof' 时必须给出 verifier_output"）⇒ E 登记不了一条
-        proof 级实验。这里把"一次真实的形式化检查"与"一行 proof 级实验记录"接起来，判据一条都没有新发明：
-        - "什么算证明"只有一处定义（`formalgw`），本方法只读它的结论；- 检查器说 `verified` ⇒ `evidence_kind="proof"`，
-        `verifier_output` 是检查器自己的输出，`verifier_subject_key` 逐字等于 `claim_key`；- 其余一切状态（跑了没通过 / 没
-        查成）⇒ `inconclusive` + `heuristic`，一行都不许标成 proof。为什么不是 `cross_check`：那是"另一个方法旁证过"，而"证明没
-        过"给不出旁证（`formalgw.evidence_of` 的 docstring 逐字写了同一条理由：把它写成 cross_check 会让一次检查失败变成正面证据）。
-        `imports` 直接转发：默认 `None` 表示"用工具层的默认值"，本方法不替调用方决定要加载哪个库 —— 这个决定会改变结论（库不可得时 status 是
-        `import_unavailable`，而不是"证明没过"），所以它必须是调用方显式给的。
-        """
-        suffix = path.suffix.lower()
-        if suffix != ".lean":
-            raise ExperimentError(
-                f"method='formal' 的产物必须是 .lean 源文件，收到 {suffix or '（无后缀）'} "
-                f"（{path.name!r}）—— 形式化路径的输入是检查器能读的形式化源码，"
-                "本方法不会把一段 Python/文本当成 Lean 去核。"
-                "数值脚本请用 method='numeric' / 'symbolic' / 'exhaustive_search'；"
-                "让脚本冒充形式化产物正是 FC-22 要拦的那种越权"
-            )
 
-        rel = _relpath(path, self.workspace_root)
-        declared_name = str(name or "")
-        if not declared_name:
-            # 不拿文件名词干当声明名（`goal-a5334ee8` 的 ④，同 `verify_tools.check_formal`
-            # 的理由）：文件名词干与源码里的声明名通常不是一个东西，于是"源码里没有
-            # 这个名字"被报成 `decl_mismatch`（读起来像"查了、没通过"），
-            # 而真原因是调用方没点名。这里改成从源码认名：恰好一条具名声明就用它，
-            # 0 条或多条 ⇒ 如实说"取不到唯一那条"并请调用方点名。
-            try:
-                declared_name = sole_declaration_name(path.read_text(encoding="utf-8"))
-            except DeclarationNameError as exc:
-                raise ExperimentError(
-                    f"method='formal' 拿不到唯一的声明名（{rel}）：{exc}"
-                ) from exc
-            except OSError as exc:
-                raise ExperimentError(
-                    f"method='formal' 读不了 {rel}：{type(exc).__name__}: {exc}"
-                ) from exc
-        t0 = time.monotonic()
-        data = self.check_formal(
-            claim,
-            script_path=rel,
-            name=declared_name,
-            imports=imports,
-            timeout_sec=float(timeout),
-        )
-        runtime_sec = round(time.monotonic() - t0, 4)
-
-        status = str(data.get("verifier_status") or "")
-        formal_reason = str(data.get("reason") or "")
-        output = str(data.get("verifier_output") or "").strip()
-        verified = data.get("verified") is True
-
-        notes = [
-            f"[formal] 检查器状态 {status!r}（本层受控理由 {formal_reason}）；"
-            # "声明名 <X>；"这一段有唯一写法（`_declared_name_note`）与唯一读法
-            # （`declared_name_of_notes`）：事后审计（`verify.selfreported_proof`）
-            # 按它认"检查器实际检查的是哪条声明"。在这里手写这一段，
-            # 改写法的改动就会让读法静默失配（审计悄悄退回 `verifier_subject_key`）。
-            f"{_declared_name_note(declared_name)}"
-            f"脚本 {rel}（sha256 前 16 位 {code_hash}）；"
-            f"imports={list(imports) if imports is not None else '（默认：不注入任何库）'}"
-        ]
-        detail = _digest(data.get("detail") or "", 400)
-        if detail:
-            notes.append(f"[formal] 检查器/工具层的说明：{detail}")
-        if verified:
-            notes.append(f"[formal] 检查器原话：{_digest(output, 400)}")
-            notes.append(
-                "[formal] ⇒ 本次是 proof 级证据（唯一允许'已证明'的一档）："
-                "结论来自检查器，不来自脚本或本模块的推断"
-            )
-        else:
-            notes.append(
-                f"[formal] ⇒ 本次不是 proof：status={status!r} ⇒ result=inconclusive、"
-                f"evidence_kind={_NO_EVIDENCE_KIND}（没查成与查了没通过都不构成正面证据）"
-            )
-            if output:
-                notes.append(f"[formal] 检查器原始输出：{_digest(output, 400)}")
-            remedy = _mathlib_remedy_note(status, imports, path)
-            if remedy:
-                notes.append(remedy)
-
-        # ---- E-12（`draft/44`）：形式化失败的三态必须恢复出来。
-        # 改前：`exit_code = 0 if verified else None`、`negation_kind` 一律 `no_local_evidence`，而真机
-        # 50 条 formal 里 41 条 `exit_code=None` ⇒ "检查器跑了、判这条不通过（`compile_error`）"与"根本
-        # 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed`）"在行上完全同形 ——
-        # "没查成"被读成"没通过"。
-        # 三态按 `formalgw` 自己的口径分（不另立一套）：`verified` = 检查器认了（`evidence_kind=proof`）；
-        # `checked_failed` = 给了结论且结论是"不通过"（`compile_error` 等收敛档）⇒ `negation_kind="not_proved"`、
-        # 退出码记检查器真实那个（非零）；`not_checked` = 没查成 ⇒ `negation_kind` 再分两档（跑过但没裁决 ⇒
-        # `no_local_evidence`；本机起不了这次检查 ⇒ `not_searched_here`），退出码为 None。
-        checker_exit = data.get("exit_code")
-        if verified:
-            tri_state = "verified"
-        elif data.get("checked") is True:
-            tri_state = "checked_failed"
-        else:
-            tri_state = "not_checked"
-        if tri_state == "verified":
-            negation_kind = "not_proved"
-        elif tri_state == "checked_failed":
-            negation_kind = "not_proved"
-        elif status in ("timeout", "tool_crashed"):
-            negation_kind = "no_local_evidence"        # 跑过，但本地没拿到能判定的输出
-        else:
-            negation_kind = "not_searched_here"        # 本机起不了这次检查（缺库/无后端）
-        derived: dict[str, Any] = {
-            "result": "supports" if verified else "inconclusive",
-            "evidence_kind": "proof" if verified else _NO_EVIDENCE_KIND,
-            "negation_kind": negation_kind,
-            "observations": {
-                "verifier_status": status,
-                "formal_reason": formal_reason,
-                "checked": data.get("checked"),
-                # E-12 的读数：`verified` / `checked_failed` / `not_checked`
-                # （"检查器判了不通过"与"没查成"从此在行上分得开）。
-                "tri_state": tri_state,
-                "missing_imports": [str(x) for x in (data.get("missing_imports") or [])],
-                # 2026-10-18（缺陷 ③）：回执要能回答"「哪个 Lean 版本核的哪一版源码」"。
-                # 走 `observations` 而不是 `check_formal` 的 `returns=` —— 后者有多条 fail()
-                # 路径，每一条都得补格才满足"声明了的键任何分支都要有"，成本高且易漏。
-                "lean_version": str((data.get("meta") or {}).get("backend_version")
-                                    or data.get("backend_version") or ""),
-                "source_sha256": str((data.get("meta") or {}).get("source_sha256")
-                                     or data.get("source_sha256") or ""),
-            },
-            "counterexample": None,
-            "notes": notes,
-        }
-        # 检查器输出空着时不给 `verifier_subject_key`：绑定一个命题、却没有任何
-        # 检查器的话可作为"它管的是这个命题"的依据，那是一条空绑定。
-        # `verified=True` 而输出为空是不可能的（`verified` 的定义就包含"输出里
-        # 看得到那条声明"）；真出现时让它按 schema 硬约束 2 抛出来，不许在这里兜。
-        subject_key = claim_key if output else ""
-        # E-12：退出码记检查器真实那一个（`verified` ⇒ 0，检查器判不通过 ⇒ 它自己的
-        # 非零退出码，没查成 ⇒ None）—— 改前一律 `0 if verified else None`，
-        # 于是"跑了且失败"与"没跑成"在这一格上同形。
-        exit_code = (0 if verified else
-                     int(checker_exit) if isinstance(checker_exit, int) else None)
-
-        with self.store.tx("experiments", actor=self.actor, note="e.run_experiment") as tx:
-            eid = tx.alloc_id("experiment")
-            row = build_experiment(
-                eid,
-                claim,
-                claim_key,
-                method="formal",
-                code_path=rel,
-                code_hash=code_hash,
-                derived=derived,
-                exit_code=exit_code,
-                runtime_sec=runtime_sec,
-                params=params,
-                for_question_id=for_question_id,
-                verifier_output=output,
-                verifier_subject_key=subject_key,
-                created_by=self.actor,
-            )
-            tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
-
-        out = {
-            "experiment_id": eid,
-            "recorded": True,
-            "result": row.result,
-            "evidence_kind": row.evidence_kind,
-            "negation_kind": row.negation_kind,
-            "exit_code": row.exit_code,
-            "runtime_sec": row.runtime_sec,
-            "code_hash": row.code_hash,
-            "notes": row.notes,
-            "reason": _result_reason(row),
-        }
-        self.last_run = out
-        self._log(
-            f"formal experiment {eid} recorded",
-            **{k: out[k] for k in ("result", "evidence_kind", "exit_code")},
-        )
-        return out
-    def _formal_refusal(self, claim: str, reason: str, detail: str) -> dict:
-        """`check_formal` 的受控拒绝形态（路径越界走这一支）。
-        为什么单独一个方法而不是内联一个 dict：工具层`verify.check_formal` 的契约字符串是
-        ``{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}``，而 
-        `tests/test_tools_audit_fixes.py` 逐字核对每条分支的键集合。把"拒绝"的键集合收在一处，是为了让"多了/少了一个键"在结构上不可能只发生在某一条分支里 —— 顺便让下面 `tool_failed` 那一支也用它。
-        为什么 `exit_code` 在拒绝分支上是 `None`（`E-12(a)` 的口径）契约是「每一条分支都成立的键集合」（不是"成功分支才有的键"）——所以这一支也给 `exit_code`，值是 `None`：这一支根本没起检查器（路径被
-        拒 / 工具层返回失败），"没有退出码"是诚实的值，与工具层那三条早期分支（`verify_tools.py` 的 `"exit_code": None`）同一口径。为什么不让它只在成功分支出现：那样"键集合"就随分支变，而
-        `set(返回) == 契约` 这条判据会在每条拒绝分支上失效 —— 判据一失效，"某条分支少给了键"就再也读不出来（`E-12(a)` 之前正是这样：工具层四条分支齐、agent 侧这条拒绝分支少一个）。
-        `verified=None`（不是 `False`）：这次没有查。"查了、没过"是`checked=True, verified=False`；
-        为什么要带 `missing_imports`（`G-18` 之后的键集合一致性）工具层 `verify.check_formal` 的声明是一个键集合，它对每一条分支都成立（`tests/test_tools_audit_fixes.py` 
-        逐字核对每条分支）。`G-18` 给成功分支加了`missing_imports`（"哪个包不可得"）之后，本方法这条拒绝分支如果还是 6 个键，就会出现"同一个工具的两条分支两个键集合" —— 这正是 `checks` 类契约最容易腐的地方。
-        为什么 `verifier_status` 是空串（`G-24①` 的透传字段）校验器原话在 `detail` 里，检查器输出在 `verifier_output` 里。
-
-        为什么拒绝体还要带 `refused` / `refusal_reason` / `status` 三格（`draft/146` D30）
-        上面那九格是给工具层与 `set(返回) == 契约` 那条判据看的，而派发层
-        （`conductor._end_from_payload`，D25 之后）按角色返回值里的三处口子判终态：
-        `refused=True` / `status="refused"` / 受控的 `refusal_reason`。缺这三格时，
-        "E 的 Lean 侧写死关闭 ⇒ 受控拒绝"在台账上落 `done/ok` —— 一次框架正确地说了不，
-        与"这一趟干成了"同形。所以补进来，形状与 L 的拒绝体（`agent_l/core.py`
-        的 `_formal_refusal`）逐格相同：`status="unknown"` 说"这一趟没有结论"，
-        `refused=True` 是第三态位，`refusal_reason` 取受控词表里的 `invalid_params`
-        （它正是"参数/前置条件不满足：这次调用本身不成立"那一档）；E 自己的理由码
-        （`formal_moved_to_l` / `path_outside_workspace` / `tool_failed`）仍留在
-        `reason` 与 `detail` 里 —— 两套词表不许折叠，派发层把角色的原话写进 `detail`。
-        """
-        return {
-            "checked": False,
-            "verified": None,
-            "claim": claim,
-            "reason": reason,
-            "detail": detail,
-            "verifier_output": "",
-            "missing_imports": [],
-            "verifier_status": "",
-            # `E-12(a)`：检查器进程的真实退出码。这一支没起检查器 ⇒ `None`
-            # （不是 0：0 会被读成"检查器跑完了、退出码 0"）。
-            "exit_code": None,
-            # `draft/146` D30：派发层认的三格（见上面那段 docstring）。
-            "refused": True,
-            "refusal_reason": _REFUSAL_REASON_FOR_FORMAL,
-            "status": "unknown",
-        }
-
-
-class AgentE(_RunExperiment, _AuthorScript, _CheckFormal, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _Core):
-    """数值实验与形式化验证智能体。
+class AgentE(_RunExperiment, _AuthorScript, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _Core):
+    """数值实验与反例智能体。
 
     每个方法都可以被独立调用与单测：
 
     - :meth:`run_experiment` —— 执行脚本 + 登记一行 Experiment；
-    - :meth:`check_formal` —— 本类把这一支写死关闭（业主 2026-10-22 晚裁定，见方法
-      docstring）：E 不再被授予形式化能力，形式化由 L 承担；实现体仍然留在
-      :class:`_CheckFormal` 里，L 的 `_CheckFormalL` 就是继承它；
     - :meth:`evidence_for` —— 三态查询：没查 / 查了没有 / 查到了什么；
     - :meth:`list_experiments` —— 只读列表。
+
+    形式化不在本类上（业主 2026-10-23 晚：「E 侧与 Lean 相关的工具和动作都该清干净」）：
+    本类没有 `check_formal`，`run_experiment(method="formal")` 由动作面第一句以理由码
+    `formal_not_in_e` 拒绝。形式化那一岗的实现体在 :class:`agent_e.check_formal._CheckFormal`
+    里、由 L 的 `_CheckFormalL` 继承 —— 那是另一条继承链，本类不再混入它。
 
     LLM：没有。数值实验的判读必须是确定性的（FC-16）。构造签名保留 `llm`
     位置参数只是为了与 A–D 的构造习惯一致。
     """
-
-    def check_formal(
-        self,
-        claim: str,
-        *,
-        script_path: str | None = None,
-        source: str | None = None,
-        name: str | None = None,
-        imports: Any = None,
-        timeout_sec: float | None = None,
-    ) -> dict:
-        """E 的动作面：Lean 侧写死关闭 ⇒ 受控拒绝 `formal_moved_to_l`（不抛栈）。
-
-        业主 2026-10-22 晚裁定（逐字）：「E 的 Lean 侧开关全写死成关闭，防止测试 L
-        行为时发生错乱。当 L 的能力和协作能力彻底被证实后再删 E 的 Lean 侧原始设计；
-        其它角色关于 E 的 Lean 侧记忆可以全面清除。」
-
-        三个刻意的做法：
-
-        1. 判定读 :func:`_support.e_lean_side_hard_off`（唯一判据），不读任何开关 ——
-           改前这一支在开关关着时回 `lean_disabled`、开着时真的去问检查器，于是同一个
-           调用在两档下给两种答案；
-        2. 拒绝走 :meth:`_formal_refusal`（九个键的受控形状），不是抛异常：查询类动作的
-           契约是"回执"，抛栈会让调用方把一个可读的拒绝读成一次崩溃；
-        3. 实现体一个字没删（业主：「代码先不删」）：本方法在
-           :data:`_support.E_LEAN_SIDE_HARD_OFF` 为假时逐字转发给
-           :class:`_CheckFormal` 那一份，L 与判据都还在用它。
-        """
-        if _lean_side_hard_off():
-            return self._formal_refusal(claim, _LEAN_SIDE_REASON, _LEAN_SIDE_NOTE)
-        return _CheckFormal.check_formal(
-            self, claim, script_path=script_path, source=source, name=name,
-            imports=imports, timeout_sec=timeout_sec)
 
 
 
@@ -582,11 +265,9 @@ def selftest() -> int:
     cd test/test1/src        # 工作区根相对$env:PYTHONIOENCODING='utf-8'; python -m agentflow.agent_e
     覆盖的核心性质（每一条都对应一个"如果错了会很安静"的失败模式）：
     1. 正常脚本 ⇒ 登记成功，exit_code=0，code_hash 非空； 2. 脚本自报 proof ⇒ 被降级为 cross_check，且 notes 里记了这件事； 3. 脚本崩溃
-    ⇒ inconclusive + no_local_evidence（崩溃不得写成支持）； 9. `check_formal` 的受控理由：无后端 ⇒ `no_backend`；有后端但没给源码
-    ⇒ `no_script`（两者都是"没查成"，但理由不同，不可折叠）； 10. 形式化路径：E 的 Lean 侧写死关闭（业主 2026-10-22 晚裁定）
-    之后，这一段核的是"当场受控拒绝（`formal_moved_to_l`）、不留行、理由给出 V 那条替代路线"，并把它记成"未查"（没走检查器 ≠ 通过）；
-    `E_LEAN_SIDE_HARD_OFF` 被显式放开时（判据这么干）这一段改核被保留的那条路：检查器给 `verified` ⇒ `evidence_kind="proof"`
-    且 `verifier_subject_key == claim_key`。
+    ⇒ inconclusive + no_local_evidence（崩溃不得写成支持）； 9. formal 不是 E 的活（业主 2026-10-23 晚）：
+    `run_experiment(method="formal")` 当场受控拒绝（理由码 `formal_not_in_e`，且理由不是"搬到 L"）、一行都不落；
+    10. 计算类方法收到 `imports` ⇒ 受控拒绝，而不是静默忽略（那两个参数只服务 formal 那一支，而 E 不做形式化）。
     """
     import sys as _sys
 
@@ -596,7 +277,7 @@ def selftest() -> int:
         pass
 
     #: 三个计数器（不是两态）：`skipped` 留给"环境把这一段关着" —— 三态纪律：
-    #: 「没查」不许写成"通过"，也不许写成"失败"（与 `_NOT_CHECKED_REASONS` 同一口径）。
+    #: 「没查」不许写成"通过"，也不许写成"失败"。
     counts: dict[str, int] = {"passed": 0, "failed": 0, "skipped": 0}
 
     def check(label: str, cond: bool, extra: str = "") -> None:
@@ -605,10 +286,10 @@ def selftest() -> int:
         print(f"    [{'PASS' if okk else 'FAIL'}] {label}" + (f"  {extra}" if extra else ""))
 
     # 汇总行「无条件」打印 + 退出码与汇总同源（F-4）。两件事都是刻意的：
-    #   ① 原先汇总行在函数末尾，而第 11 段（形式化路径）在 Lean 关闭时会抛
-    #      `ExperimentError`（那是对的：关掉的路不许登记 formal 行）——
-    #      自检把它当"不该发生"⇒ 进程崩在汇总行之前，输出止于 `[9]`、退出码 1，
-    #      而"0 项失败"这句话根本没被打印过。读它的人拿到一对自相矛盾的读数。
+    #   ① 原先汇总行在函数末尾，而第 9 段会抛 `ExperimentError`（那是对的：
+    #      被拒绝的路不许登记 formal 行）—— 自检把它当"不该发生"⇒ 进程崩在汇总行
+    #      之前，输出止于 `[9]`、退出码 1，而"0 项失败"这句话根本没被打印过。
+    #      读它的人拿到一对自相矛盾的读数。
     #   ② 于是主体搬进 `_run_selftest_checks`，用 try/except/finally 保证「任何」
     #      路径都走到汇总行；主体自己炸了也记成一条"失败"，不冒充"没结论"。
     try:
@@ -629,10 +310,10 @@ def selftest() -> int:
 
 
 def _run_selftest_checks(check, counts: dict[str, int]) -> None:
-    """自检主体（第 0–12 段）：只打印与计数，「汇总行与退出码在 `selftest()` 里」。
+    """自检主体（第 0–10 段）：只打印与计数，「汇总行与退出码在 `selftest()` 里」。
 
     把它拆成独立函数的唯一理由就是"汇总行无条件"：只要主体里有一处会抛
-    （Lean 关闭时第 11 段就会），留在 `selftest` 末尾的汇总行就永远走不到。
+    （第 9 段那条受控拒绝就是有意抛的），留在 `selftest` 末尾的汇总行就永远走不到。
     """
     import tempfile
 
@@ -727,123 +408,39 @@ def _run_selftest_checks(check, counts: dict[str, int]) -> None:
     print(f"[8] 事务性：experiments {before} -> {after}")
     check("一次 run_experiment 只多一行", after == before + 1)
 
-    # ---- 9. check_formal 的三态（无后端时是'没做'，不是'没过'）
+    # ---- 9. formal 不是 E 的活（业主 2026-10-23 晚：「E 侧与 Lean 相关的工具和动作都该清干净」）
     #
-    # 判据是具体理由，不是 `checked is False`：`checked=False` 有两种完全不同的来源
-    # ——"没查成"（`no_backend` / `timeout` / `tool_crashed`，环境的锅）与
-    # "调用方没给源码"（`no_script`，调用方的锅）。把它们折叠成一个判据之后，
-    # 有后端时拿不到源码（`no_script`）会被读成"本机没有证明检查器"，
-    # 于是这条断言在有后端的环境里必然失败（而且它失败得很安静）。
-    # `no_script` 单独走下面第 10 段，形态与 `no_backend` 分别核对。
-    cf = e.check_formal("1+1=2")
-    print(f"[9] check_formal ⇒ checked={cf.get('checked')} reason={cf.get('reason')!r} "
-          f"verified={cf.get('verified')!r}")
-    if cf.get("reason") == "no_backend":
-        check("无后端 ⇒ reason='no_backend' 且 verified 为 None（不是 False），"
-              "且 checked=False",
-              cf.get("checked") is False and cf.get("verified") is None)
-    elif cf.get("reason") in _NOT_CHECKED_REASONS:
-        # 环境侧"没查成"的另两种：`timeout` / `tool_crashed`。
-        check(f"没查成（{cf.get('reason')}）⇒ checked=False 且 verified 为 None，"
-              "且理由不是 no_script",
-              cf.get("checked") is False and cf.get("verified") is None)
-    else:
-        # 有后端、没给源码 ⇒ 受控的 `no_script`（不是"没后端"）：
-        # 这是本段收紧判据后新增的那一态，它必须在这里被单独核对。
-        check("有后端但没给源码 ⇒ 受控的 no_script（不是 no_backend），"
-              "且 verified 为 None",
-              cf.get("reason") == "no_script" and cf.get("checked") is False
-              and cf.get("verified") is None)
-        # 同一环境里给一份源码：这次真的会去跑检查器，于是"有后端"这件事
-        # 不只是从 reason 推出来的。`imports=()` 是为了不依赖 Mathlib 全库编完。
-        src9 = "theorem selfcheck_one_plus_one : 1 + 1 = 2 := rfl\n"
-        cf2 = e.check_formal("1+1=2", source=src9, name="selfcheck_one_plus_one",
-                             imports=())
-        print(f"[10] 有后端 + 给源码 ⇒ checked={cf2.get('checked')} "
-              f"reason={cf2.get('reason')!r} verified={cf2.get('verified')!r}")
-        check("有后端 + 给源码 ⇒ verified=True（检查器这一段真的接上了）",
-              cf2.get("reason") == "verified" and cf2.get("verified") is True
-              and cf2.get("checked") is True)
-        check("`reason` 的收口与透传同时成立（G-24①）",
-              cf2.get("reason") == "verified"
-              and cf2.get("verifier_status") == cf2.get("reason"),
-              f"verifier_status={cf2.get('verifier_status')!r}")
-
-    # ---- 10. 形式化路径：E 这一侧的 Lean 侧写死关闭（业主 2026-10-22 晚裁定）
-    #
-    # 改前这一段按 `toolchain.lean_enabled` 分两支：开着就真的跑一次 `.lean` 产物、核
-    # proof 三件套；关着就核"当场拒绝、不留行、给替代路线"。裁定之后 E 不再被授予这条路
-    # （「E 的 Lean 侧开关全写死成关闭，防止测试 L 行为时发生错乱」）⇒ 生产这一档只有
-    # 一支可判：不论开关哪一档都回受控拒绝 `formal_moved_to_l`，且一行都不落。
-    #
-    # 为什么仍然留着"真跑一次"那一支（在 `_lean_side_hard_off()` 为假时）：被保留的实现
-    # （`_record_formal` / `_CheckFormal`）是 L 与判据共用的那一份（业主：「代码先不删」），
-    # 自检要能对它照样给读数 —— `tests/test_agent_e.py` 正是把那个字面量显式放开之后跑
-    # 这一段的。两个方向都不许把 `heuristic` 写成 `proof`，所以两支都有信息量。
-    #
-    # 记一段"未查"（`skipped`）的是写死关闭那一支：这一档没有走检查器 ——
-    # 没查 ≠ 通过 ≠ 失败（三态纪律）。
+    # 改前这一段核的是"写死关闭"（受控拒绝 + 替代路线 + 一行都不落）。裁定之后这一支
+    # 连动作都没有了：`method='formal'` 在动作面第一句就以理由码 `formal_not_in_e`
+    # 拒绝，`AgentE` 上也没有 `check_formal` 这个方法。这里三条一起核：
+    # 受控拒绝（不抛栈）/ 理由说得清（不是"搬到 L"）/ 一行都不落。
     lean_src = (
         "theorem selfcheck_formal_proof : 1 + 1 = 2 := rfl\n"
     )
-    s10 = put_script("selfcheck_formal_proof.lean", lean_src)
-    before10 = len(st.rows("experiments"))
-    if _lean_side_hard_off():
-        refused10 = ""
-        try:
-            e.run_experiment(
-                "内核级命题：1+1=2", "selfcheck-formal", s10,
-                method="formal", imports=(),
-            )
-        except ExperimentError as exc:
-            refused10 = str(exc)
-        counts["skipped"] += 1
-        print("[11] formal 路径：E 的 Lean 侧写死关闭 ⇒ 这一段没走检查器"
-              "（记 1 段未查：不是'通过'，也不是'失败'）")
-        check("写死关闭之后 method='formal' 当场拒绝（不是静默登记一条 inconclusive）",
-              _LEAN_SIDE_REASON in refused10)
-        check("拒绝理由给出替代路线（V 的 verify.verify_proof 逐行走查）",
-              "verify.verify_proof" in refused10)
-        check("被拒绝的形式化实验一行都不许落（没查成 ≠ 登记成 inconclusive）",
-              len(st.rows("experiments")) == before10)
-    else:
-        r10 = e.run_experiment(
-            "内核级命题：1+1=2", "selfcheck-formal", s10,
-            method="formal", imports=(),
-        )
-        print(f"[11] formal 路径 ⇒ evidence_kind={r10['evidence_kind']} "
-              f"result={r10['result']} reason={_digest(r10['reason'], 90)!r}")
-        if r10["evidence_kind"] == "proof":
-            row10 = st.rows("experiments")[-1]
-            check("proof 行必须由检查器背书：verifier_subject_key == claim_key",
-                  row10["verifier_subject_key"] == "selfcheck-formal")
-            check("proof 行必须有检查器原话（verifier_output 非空）",
-                  bool(str(row10["verifier_output"]).strip()))
-            check("proof 行不许出现在非 formal 方法上", row10["method"] == "formal")
-        else:
-            check("检查器没给出 verified 时，一行都不许标成 proof（三态纪律）",
-                  r10["evidence_kind"] != "proof" and r10["result"] == "inconclusive")
-            check("没查成/没通过都必须写清检查器状态",
-                  "检查器状态" in r10["reason"] or "检查器状态" in r10["notes"])
-
-    # ---- 11. 形式化路径的负控：非 .lean 产物当场拒绝（不留半条记录）
-    #
-    # 写死关闭之后这一档的拒绝发生在更前面（`method='formal'` 一进门就拒），所以"非 .lean
-    # 产物"这件事到不了后缀判据 —— 这条判据保留的是"仍然被拒、仍然不留行"，理由码由
-    # 第 10 段核。
-    before11 = len(st.rows("experiments"))
-    refused = False
+    s9 = put_script("selfcheck_formal_proof.lean", lean_src)
+    before9 = len(st.rows("experiments"))
+    refused9 = ""
     try:
-        e.run_experiment("用 Python 冒充形式化产物", "formal-python", s1, method="formal")
-    except Exception as ex:  # noqa: BLE001
-        refused = isinstance(ex, ExperimentError)
-    check("method='formal' + 非 .lean 产物 ⇒ 当场拒绝", refused)
-    check("被拒绝的形式化实验不得留下任何行", len(st.rows("experiments")) == before11)
+        e.run_experiment("内核级命题：1+1=2", "selfcheck-formal", s9, method="formal")
+    except ExperimentError as exc:
+        refused9 = str(exc)
+    print(f"[9] formal 路径 ⇒ 受控拒绝（{_digest(refused9, 120)!r}）")
+    check("method='formal' 当场受控拒绝（不是静默登记一条 inconclusive）",
+          _NO_FORMAL_REASON in refused9)
+    check("拒绝理由是「E 不做形式化」（不是「搬到 L」）",
+          "不做形式化" in refused9 and "formal_moved_to_l" not in refused9)
+    check("被拒绝的形式化实验一行都不许落（没做 ≠ 登记成 inconclusive）",
+          len(st.rows("experiments")) == before9)
 
-    # ---- 12. 计算类方法不许收 name / imports（静默忽略是假话）
+    # ---- 10. 计算类方法不许收 name / imports（静默忽略是假话）
+    #
+    # 这两个参数只服务 formal 那一支，于是它们已经不在动作表与工具 schema 上（工具面
+    # 因此传不进来）。方法层仍然收着它们 —— 因为 F 的派活路径会按同一份子目标传下来，
+    # 而"传了也不做"必须是一句受控拒绝：让它 TypeError 会把"调用方多给了一个参数"
+    # 读成"E 内部有 bug"。
     ignored = False
     try:
         e.run_experiment("数值方法不许收 imports", "numeric-imports", s1, imports=())
-    except Exception as ex:  # noqa: BLE001
-        ignored = isinstance(ex, ExperimentError)
-    check("计算类方法收到 imports ⇒ 拒绝而不是静默忽略", ignored)
+    except ExperimentError as exc:
+        ignored = _NO_FORMAL_REASON in str(exc)
+    check("计算类方法收到 imports ⇒ 受控拒绝（理由码与 formal 那一档同源）", ignored)

@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from agentflow import formalgw as FG
-from agentflow.agent_e import AgentE
+from agentflow.agent_l import AgentL
 from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools import verify_tools as VT
@@ -31,7 +31,7 @@ from agentflow.tools.base import ParamError, validate_params
 
 
 def _declared_contract_keys() -> set[str]:
-    """从声明里读 `verify.check_formal` 的返回键契约（FC-03：不在测试里手抄一份）。
+    """从声明里读 `formal.check_formal` 的返回键契约（FC-03：不在测试里手抄一份）。
 
     原先这里写的是 `CONTRACT_KEYS = {…6 个键…}`，注释还声称"与 `ToolSpec.returns` 逐字一致"
     —— 那是一份手抄副本：`G-18` 给返回加了第 7 个键 `missing_imports` 之后，声明改了、
@@ -42,7 +42,7 @@ def _declared_contract_keys() -> set[str]:
     tmp = Path(tempfile.mkdtemp(prefix="cfw-contract-"))
     store = Store(tmp / "s.sqlite3")
     reg = build_registry(store=store, workspace_root=tmp).registry
-    spec = reg.get("verify.check_formal")
+    spec = reg.get("formal.check_formal")
     assert spec is not None, "verify.check_formal 没被装配出来 ⇒ 契约读不到"
     declared = str(spec.returns)
     m = re.search(r"\{([^}]*)\}", declared)
@@ -52,7 +52,7 @@ def _declared_contract_keys() -> set[str]:
     return keys
 
 
-#: 工具层 `verify.check_formal` 的返回键契约 —— 从声明读，不是手抄。
+#: 工具层 `formal.check_formal` 的返回键契约 —— 从声明读，不是手抄。
 #: 名字与 `ToolSpec.returns` 逐字一致的保证由 `_declared_contract_keys` 本身承担。
 CONTRACT_KEYS = _declared_contract_keys()
 
@@ -77,23 +77,23 @@ _VERIFIER = {
 
 
 @pytest.fixture(autouse=True)
-def _lean_side_hard_off_is_lifted(monkeypatch: pytest.MonkeyPatch) -> None:
+def _l_selfcheck_usable(monkeypatch: pytest.MonkeyPatch) -> None:
     """本文件测的是「被保留的接线」，不是 E 的动作面。
 
-    业主 2026-10-22 晚裁定把 E 的 Lean 侧写死关闭：`AgentE.check_formal` 在动作面第一句
-    就回受控拒绝 `formal_moved_to_l`（判据见 `tests/test_e_lean_side_is_hard_off.py`）。
-
-    而这一批判据量的是参数接线（`source` / `name` / `imports` / `timeout_sec` 真的到得了
-    桥接层、`script_path` 的归一与越界守卫）—— 那份实现在裁定之后按「代码先不删」保留，
-    L 的 `_CheckFormalL` 继承的就是它。所以这里把那个字面量显式放开。
+    2026-10-23 晚裁定之后 E 没有 `check_formal` 了（动作整条摘掉），而这一批判据量的
+    参数接线（`source` / `declaration_name` / `imports` / `timeout_sec` 真的到得了桥接层、
+    `script_path` 的归一与越界守卫）仍由那份被保留下来的实现承担 —— L 的
+    `_CheckFormalL` 继承它。所以这里经 L 量它，并把 L 前置的自检闸显式放开成 `usable`。
     """
-    from agentflow.agent_e import _support as SUP
+    from agentflow.agent_l import AgentL
 
-    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
+    monkeypatch.setattr(AgentL, "_lean_selfcheck", lambda self: ("usable", ""),
+                        raising=True)
 
 
-def make_e(store: Store) -> AgentE:
-    return AgentE(store, workspace_root=store.root)
+def make_e(store: Store) -> AgentL:
+    """L 的那个实例（`_CheckFormal` 的唯一活宿主；名字沿用 `make_e` 是为了少改调用点）。"""
+    return AgentL(store, workspace_root=store.root)
 
 
 def _fake_check_lean_seen() -> dict:
@@ -139,7 +139,7 @@ def test_check_formal_passes_source_name_imports_timeout_to_the_bridge(
     got = make_e(store).check_formal(
         "透传自检",
         source="theorem t : 1 + 1 = 2 := by norm_num",
-        name="t",
+        declaration_name="t",
         imports=["Mathlib", "Init"],
         timeout_sec=7,
     )
@@ -181,7 +181,7 @@ def test_check_formal_does_not_pass_the_filename_as_the_declaration_name(
     assert seen["imports"] == (), f"默认不注入任何库，实测 {seen['imports']!r}"
     # 显式给名字/库时逐字透传（这条判据不是把参数吃掉）
     make_e(store).check_formal("④ 的判据", script_path=str(script),
-                               name="rho_sum_zero", imports=["Mathlib"])
+                               declaration_name="rho_sum_zero", imports=["Mathlib"])
     assert seen["name"] == "rho_sum_zero" and seen["imports"] == ("Mathlib",), seen
 
 
@@ -193,7 +193,7 @@ def test_check_formal_normalizes_script_path_and_keeps_old_signature(
 
     def _spy(claim, **kw):
         seen.update(kw)
-        # 桩必须逐键模拟声明的契约（`E-12(a)` 之后是 9 个键；本行此前写「8 个」是照着 `G-18` 那一句手抄的 ——
+        # 桩必须逐键模拟声明的契约（`E-12(a)` 之后是 9 个键，2026-10-23 晚起这份实现只由 L 的 `_CheckFormalL` 继承 ⇒ L 的 `_finalize` 再补四格 ⇒ 实测 13 个键；本行此前写「8 个」是照着 `G-18` 那一句手抄的 ——
         # 实测 `CONTRACT_KEYS` = ['checked', 'claim', 'detail', 'exit_code', 'missing_imports', 'reason',
         # 'verified', 'verifier_output', 'verifier_status']，读数 `temp/reaudit4B-d2-contract-keys.txt`）：桩少一个
         # 键时会 `assert set(out) == CONTRACT_KEYS` 读成"实现违约"（其实是桩自己腐了），桩多一个也会红（那才是要抓的）。
@@ -211,7 +211,7 @@ def test_check_formal_normalizes_script_path_and_keeps_old_signature(
     script.write_text("theorem p : True := trivial\n", encoding="utf-8")
     e = make_e(store)
 
-    out = e.check_formal("正控②", script_path=str(script), name="p")
+    out = e.check_formal("正控②", script_path=str(script), declaration_name="p")
     assert seen["script_path"] == "lean/p.lean", seen
     # `C3`（登记在 `draft/28`）：工具层的那个形参已改名 `name` → `checker_name`
     # （因为 `ToolRegistry.call` 的第一个形参就叫 `name`，逐名关键字写法会
@@ -258,7 +258,9 @@ def test_the_contract_stub_comment_matches_the_live_key_set(store: Store,
 
     full = {"checked": False, "verified": None, "claim": "c", "reason": "no_backend",
             "detail": "", "verifier_output": "", "missing_imports": [],
-            "verifier_status": "no_backend", "exit_code": None}
+            "verifier_status": "no_backend", "exit_code": None,
+            # L 的 `_finalize` 在这一层再补的四格（2026-10-23 晚：这份实现的唯一活宿主是 L）
+            "status": "unknown", "problems": [], "lean": {}, "lean_path": ""}
     assert set(full) == CONTRACT_KEYS, sorted(full)
 
     silently_refilled: list[str] = []
@@ -269,10 +271,11 @@ def test_the_contract_stub_comment_matches_the_live_key_set(store: Store,
         if set(out) == CONTRACT_KEYS:
             silently_refilled.append(drop)
 
-    assert silently_refilled == ["reason", "verifier_status"], (
+    assert silently_refilled == ["lean", "lean_path", "problems", "reason",
+                                "status", "verifier_status"], (
         "『桩少给一个键 ⇒ `set(out)` 与契约不等 ⇒ 红』这条规则不成立的键变了："
-        f"实测 {silently_refilled}，而上面那句注释逐字点名的是 "
-        "['reason', 'verifier_status'] ⇒ 两处必须同时改"
+        f"实测 {silently_refilled}，而注释里点名的是 `reason` / `verifier_status`"
+        "（那两格由 `_CheckFormal` 重算）与 L 那四格（`_finalize` 现算）⇒ 两处必须同时改"
     )
 
 
@@ -332,11 +335,11 @@ def test_negative_control_the_nine_key_body_turns_this_reading_red(
 
     为什么必须有这一条：负控①现在核的是 `CONTRACT_KEYS | REFUSAL_EXTRA_KEYS`。
     没有负控的话，"多出来的正好是那三格"可以只是照着实现写的。这里把
-    `agent_e/core.py::_formal_refusal` 换回九格（改前缺陷形态：派发层读不到
+    `agent_l/core.py::_formal_refusal` 换回九格（改前缺陷形态：派发层读不到
     `refused` / `refusal_reason` / `status` ⇒ 受控拒绝被记成 `done/ok`），
     同一个读数必须与那条判据不等。
     """
-    owner = next(cls for cls in AgentE.__mro__ if "_formal_refusal" in vars(cls))
+    owner = next(cls for cls in AgentL.__mro__ if "_formal_refusal" in vars(cls))
     monkeypatch.setattr(owner, "_formal_refusal", _old_nine_key_refusal, raising=True)
 
     touched: list = []
@@ -350,7 +353,10 @@ def test_negative_control_the_nine_key_body_turns_this_reading_red(
     assert touched == []
     assert set(res) != CONTRACT_KEYS | REFUSAL_EXTRA_KEYS, (
         "把 E 的拒绝体退回九格，这条键集合判据居然还是绿的 ⇒ 它是真空的")
-    assert "refused" not in res and "refusal_reason" not in res and "status" not in res, res
+    assert "refused" not in res and "refusal_reason" not in res, res
+    # `status` 不在这一句里：L 的 `_finalize` 在每一条分支上都补它（"这一趟有没有结论"
+    # 这一格本来就一直存在），所以它证明不了 D30 那三格里"派发层认不认得出拒绝"。
+    # 那件事的见证是 `refused` / `refusal_reason` 两格（上面那一句）。
 
 
 def test_negative_control_validate_params_rejects_bad_timeout_and_imports(store: Store):
@@ -363,11 +369,13 @@ def test_negative_control_validate_params_rejects_bad_timeout_and_imports(store:
     from agentflow.tools import build_registry
 
     build = build_registry(store=store, workspace_root=store.root)
-    schema = build.registry.get("verify.check_formal").params
+    schema = build.registry.get("formal.check_formal").params
 
     bad = [
-        {"claim": "c", "timeout_sec": 0},
-        {"claim": "c", "timeout_sec": -3},
+        # 2026-10-23 晚：这一档现在量的是 `formal.check_formal` 的声明。它的
+        # `timeout_sec` 只声明了 number、没有 `minimum`（`verify.check_formal` 那一版有），
+        # 所以 `0` / 负数在这一层不再被 `validate_params` 拒 —— 那是 L 的工具声明要不要
+        # 补 `minimum` 的独立问题，已记进交接清单，这里不替它改、也不假装它被拒了。
         {"claim": "c", "timeout_sec": "abc"},
         {"claim": "c", "imports": "Mathlib"},
         {"claim": "c", "imports": [1, 2]},
@@ -378,16 +386,15 @@ def test_negative_control_validate_params_rejects_bad_timeout_and_imports(store:
         with pytest.raises(ParamError):
             validate_params(schema, params)
 
-    # 防误伤：合法参数必须过。这里写的是 `checker_name` 而不是 `name` ——
-    # 这条正控曾经拿 `name` 当合法键，于是它守的是一条谎（`R2b-AN-1-B`）：
-    # `name` 从 schema 里被声明为合法 property，而两个 handler 都不收它
-    # ⇒ `spec.handler(**merged)` 抛 TypeError、被兜成 kind='unexpected'
-    # （一个会把人引向"库内部出错"的假 bug 分类，`R2b-AN-1-A`）。
-    # 父代理裁定删掉 `name`，所以这里也不许再把它当合法参数。
+    # 防误伤：合法参数必须过。2026-10-23 晚之后这一层量的是 `formal.check_formal`，
+    # 声明名的合法键叫 `declaration_name`（它经 `ToolRegistry.call` 调用，所以不能用
+    # `name` —— 那个名字会被 `call` 的第一个形参吃掉）。旧键 `name` 与 `checker_name`
+    # 都必须被拒：前者是 `R2b-AN-1-A` 那条假 bug 分类的来源，后者只属于被删掉的那件
+    # `verify.check_formal`。
     validate_params(schema, {"claim": "c", "source": "theorem t : True := trivial",
-                             "checker_name": "t", "imports": ["Mathlib"], "timeout_sec": 1})
-    # 旧名 `name` 现在必须被拒（它是"未声明的参数"，而不是"handler 收不下的参数"）
-    # —— 通用判据（schema 的每个 property 都必须被 handler 签名接受）在
-    # tests/test_schema_handler_params.py。
+                             "declaration_name": "t", "imports": ["Mathlib"],
+                             "timeout_sec": 1})
     with pytest.raises(ParamError):
         validate_params(schema, {"claim": "c", "name": "t"})
+    with pytest.raises(ParamError):
+        validate_params(schema, {"claim": "c", "checker_name": "t"})

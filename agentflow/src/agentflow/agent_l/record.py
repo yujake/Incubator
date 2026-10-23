@@ -72,7 +72,9 @@ output_sha256` —— 那四格是读数，必须出现在调用契约里；本�
 | 查了没通过（`compile_error` 等） | `heuristic` | `inconclusive` | `not_proved` |
 | 没查成（`timeout` / 无后端 / 自检不过） | `heuristic` | `inconclusive` | `not_searched_here` / `no_local_evidence` |
 
-映射本体在 `agent_e._support` 与 `agent_e/core.py::_record_formal` 里，本模块
+映射本体在 `agent_e._support` 的 `_FORMAL_REASON_BY_TOOL_REASON` 与
+`agent_e/check_formal.py` 的那一份实现里（E 的 formal 动作 2026-10-23 晚已摘掉，
+这里指的是被保留下来的那份实现），本模块
 不抄第二份：它直接调 `build_experiment`（同一个装配函数），只把"这一行属于
 哪条命题、哪一版源码"这几格换成 L 自己的读数。
 """
@@ -303,11 +305,11 @@ class _Record:
         # 只取其中一个都会漏掉一类谎：只看检查器 ⇒ coverage 0% 也能记 proof；
         # 只看调用方 ⇒ 现编一个 verified 就能记 proof。
         effective_verified = fresh_verified and composite == "verified"
-        # ---- 5. 三态 → 证据形状（与 E 的 `_record_formal` 同一套映射，不抄第二份）
+        # ---- 5. 三态 → 证据形状（与 `_CheckFormal` 那份实现同一套映射，不抄第二份）
         #
         # 映射按检查器那一层算（`tri_state` 是桥接层的三态，不是综合结论）：
-        # 那是 `agent_e/core.py::_record_formal` 的口径，同一个 `experiments` 行在
-        # E 与 L 名下必须同形。综合结论只降档：检查器说 verified 而综合不是
+        # 那是 `agent_e/check_formal.py` 与 `agent_e/_support.py` 的口径，同一个
+        # `experiments` 行在历史 formal 行与 L 名下必须同形。综合结论只降档：检查器说 verified 而综合不是
         # verified 时，这一行的 evidence_kind 退回 `heuristic`、result 记
         # `inconclusive`，并在 observations 里逐字留下 `downgraded` 的理由。
         derived, _neg = _formal_derived(data, fresh_status, fresh_verified, output)
@@ -518,12 +520,12 @@ def _readings_mismatch(*, given_status: Any, given_verified: Any, given_output: 
 
 def _formal_derived(data: Mapping[str, Any], status: str, verified: bool,
                     output: str) -> tuple[dict[str, Any], str]:
-    """三态 → `build_experiment` 要的那几格（与 E 的 `_record_formal` 同一套映射）。
+    """三态 → `build_experiment` 要的那几格（与 `_CheckFormal` 那份实现同一套映射）。
 
     为什么这一段必须与 E 逐条同源：`experiments` 那一行是跨角色共享的证据面，
     同一个检查器状态在 E 与 L 名下写成两种形状，下游（`verify` 的审计、
     `closing` 的收工门、论文的证据分档统计）就会把同一件事读成两件事。
-    所以这里不新写映射规则：它按 `agent_e/core.py::_record_formal` 的三条分支
+    所以这里不新写映射规则：它按 `agent_e/check_formal.py` 与 `_support.py` 的三条分支
     落地（`verified` / `checked_failed` / `not_checked`），差异只有"这一行绑定的是命题号"。
     """
     if verified:

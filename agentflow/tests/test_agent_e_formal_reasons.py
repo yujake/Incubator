@@ -28,7 +28,8 @@ from pathlib import Path
 import pytest
 
 from agentflow import formalgw as FG
-from agentflow.agent_e import FORMAL_REASONS, AgentE, _FORMAL_REASON_BY_TOOL_REASON
+from agentflow.agent_e import FORMAL_REASONS, _FORMAL_REASON_BY_TOOL_REASON
+from agentflow.agent_l import AgentL
 from agentflow.store import Store
 from agentflow.tools import verify_tools as VT
 
@@ -42,23 +43,23 @@ _VERIFIER = {
 
 
 @pytest.fixture(autouse=True)
-def _lean_side_hard_off_is_lifted(monkeypatch: pytest.MonkeyPatch) -> None:
+def _l_selfcheck_usable(monkeypatch: pytest.MonkeyPatch) -> None:
     """本文件测的是「被保留的收口与透传」，不是 E 的动作面。
 
-    业主 2026-10-22 晚裁定把 E 的 Lean 侧写死关闭：`AgentE.check_formal` 在动作面第一句
-    就回受控拒绝 `formal_moved_to_l`（判据见 `tests/test_e_lean_side_is_hard_off.py`）。
-
-    而 `_CheckFormal` 的实现体按裁定保留下来（L 的 `_CheckFormalL` 继承它）：检查器状态
-    的收口（`FORMAL_REASONS`）与透传（`verifier_status`）仍然要逐档可判，所以这里把那个
-    字面量显式放开，量被保留的那条路。
+    2026-10-23 晚裁定之后 E 没有再混入 `_CheckFormal`（`check_formal` 整条动作摘掉），
+    而那份实现按裁定保留下来（L 的 `_CheckFormalL` 继承它）：检查器状态的收口
+    （`FORMAL_REASONS`）与透传（`verifier_status`）仍然要逐档可判。所以这里经 L 量它，
+    并把 L 前置的自检闸显式放开成 `usable` —— 量的是闸门之后那一份逐字相同的代码。
     """
-    from agentflow.agent_e import _support as SUP
+    from agentflow.agent_l import AgentL
 
-    monkeypatch.setattr(SUP, "E_LEAN_SIDE_HARD_OFF", False, raising=True)
+    monkeypatch.setattr(AgentL, "_lean_selfcheck", lambda self: ("usable", ""),
+                        raising=True)
 
 
-def make_e(store: Store) -> AgentE:
-    return AgentE(store, workspace_root=store.root)
+def make_e(store: Store) -> AgentL:
+    """L 的那个实例（`_CheckFormal` 的唯一活宿主；名字沿用 `make_e` 是为了少改调用点）。"""
+    return AgentL(store, workspace_root=store.root)
 
 
 def _stub_check_lean(status: str):
@@ -131,7 +132,7 @@ def test_all_nine_checker_statuses_survive_the_collection(
         monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
         monkeypatch.setattr(FG, "check_lean", _stub_check_lean(status))
         out = make_e(store).check_formal("命题", source="theorem t : True := trivial",
-                                         name="t", imports=())
+                                         declaration_name="t", imports=())
         got[status] = (out["reason"], out["verifier_status"])
     for status, (reason, passed) in got.items():
         assert reason in FORMAL_REASONS, (status, reason)
@@ -161,7 +162,7 @@ def test_a_failed_tool_call_lands_on_a_bounded_reason(store: Store, monkeypatch:
     """
     monkeypatch.setattr(VT, "check_formal",
                         lambda *a, **k: VT.fail("（桩）工具层失败", kind="param_error"))
-    out = make_e(store).check_formal("c", source="theorem t : True := trivial", name="t")
+    out = make_e(store).check_formal("c", source="theorem t : True := trivial", declaration_name="t")
     assert out["reason"] == "tool_failed", out
     assert out["reason"] in FORMAL_REASONS
     assert "param_error" in out["detail"], "失败种类必须仍然可读"
