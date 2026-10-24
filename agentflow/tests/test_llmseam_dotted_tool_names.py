@@ -94,14 +94,17 @@ def test_the_readout_side_agrees_with_the_parse_side():
 ])
 def test_a_name_that_is_not_on_the_face_is_refused_with_candidates(
         written: str, expect_candidate: str):
-    """② 负控：不存在的名字照旧拒（`judge_bad_json`），而拒信里带并列候选。
+    """② 负控：不存在的名字照旧拒（`judge_unknown_tool`），而拒信里带并列候选。
 
     这一条防的是"把查找放宽成永远能找到"：认两种写法不等于认任意写法。
     """
     face = _face()
     data, problem, detail = face.to_shape({"name": written, "arguments": "{}"})
     assert data is None, data
-    assert problem == "judge_bad_json", (problem, detail)
+    # 2026-10-26（第 ⑤ 条根因）：这一档的码从 `judge_bad_json` 改成 `judge_unknown_tool`
+    # —— 它从来不是坏 JSON，而 `judge_bad_json` 那一档的纠正话术（"只回一行 JSON"）
+    # 对着这条错说出去是把模型领向更错的方向。两个码在 `errorstats` 里归同一个类目。
+    assert problem == "judge_unknown_tool", (problem, detail)
     assert J.is_judge_problem(problem), "这个码必须登记进 JUDGE_PROBLEMS"
     assert written in detail, detail
     assert "并列候选" in detail, detail
@@ -117,7 +120,7 @@ def test_a_tool_that_belongs_to_another_role_is_still_refused():
     face = _face()
     for written in ("fs.read", "fs_read"):
         data, problem, detail = face.to_shape({"name": written, "arguments": "{}"})
-        assert data is None and problem == "judge_bad_json", (written, problem, detail)
+        assert data is None and problem == "judge_unknown_tool", (written, problem, detail)
 
 
 # ============================================================ ③ 反真空
@@ -138,7 +141,7 @@ def test_negative_control_an_identity_sanitizer_turns_the_dotted_name_red(
     monkeypatch.setattr(LL, "_sanitize", lambda name: str(name))
     dotted, problem, detail = face.to_shape({"name": "table.get", "arguments": "{}"})
     assert dotted is None, dotted
-    assert problem == "judge_bad_json", (problem, detail)
+    assert problem == "judge_unknown_tool", (problem, detail)
     assert "没广告过" in detail, detail
     # 广告名那一半不受影响（它是原样命中的）—— 红的是"点号写法"这一条
     data, ok, _ = face.to_shape({"name": "table_get", "arguments": "{}"})

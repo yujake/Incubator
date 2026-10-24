@@ -907,6 +907,19 @@ export interface RosterNode {
   in_flight: number | null;
   inbox: RosterInbox;
   tasks: RosterTask[];
+  child_count: number | null;
+  roster_child_count: number;
+  unrostered_children: RosterUnrostered[];
+}
+
+/** 出处：roster_face() 的 nodes[].unrostered_children[] 一项 —— 台账里有父、名册正文与对照表里都没有任何名册项接过的那一行（它同时仍进页面底部的 `unplaced`，两处是同一处判据的两个落位）。 */
+export interface RosterUnrostered {
+  task_id: string;
+  role: string;
+  status: string;
+  started_at: string;
+  ended_at: string;
+  why: string;
 }
 
 /** 出处：roster_face() 的 nodes[].tasks[] 一项 —— 这个子代理接过的一件活：编号来自`<父>-index.jsonl` 的调用记录，状态与起止时间来自 `data/tasks.json`。 */

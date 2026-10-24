@@ -66,6 +66,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # —— 改宽度那一批漏了它，真机上直接现形：`V.verify_proof 的参数不合法：
                 # statement_id. 长度最多 4`（B 试了两次都被拒，一次真跑因此白等一轮）。
                 "statement_id": {**_S, "minLength": 4, "maxLength": S.ID_DIGITS},
+                # 2026-10-26（收口批）：`proof_text` 不再必填 —— 三处口径改前互相矛盾
+                # （本行 required 有它、工具面 description 说"不给时从 statements 取"、
+                # 实现真的支持不给）。真身在工具层（`tools/verify_tools.py`，
+                # `validate_params` 读的那一份），这里跟着它说同一句话：只给命题号即可，
+                # 正文从 statements 里 `proof_no` 指的那一份取。两层根级 required
+                # 必须逐字相同，判据是 `assert_capabilities()` 第 [9] 条与第 [9c] 条
+                # （`_PARAMS_DERIVED_FROM_TOOL` 里登记了 ("V", "verify_proof")）。
                 "proof_text": _S,
                 # 业主 2026-10-22（多证明模型）：签的是"第几条证明"，1 = canonical。
                 # 下界 1 的真身在工具层（`verify.verify_proof` 的 `proof_no.minimum=1`，
@@ -78,7 +85,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # （I12 的结构形态，见 `verifications.cold_start_prompt`）。
                 "readonly_facts": _S,
             },
-            required=("statement_id", "proof_text"),
+            required=("statement_id",),
         ),
         "一行验证台账（含 v-NNNN / verdict / findings / proof_sha256）",
         side_effect="read", handler_name="verify_proof",

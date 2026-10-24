@@ -15,7 +15,7 @@ pip install -e ".[browser]"     # pyproject 的 optional-dependencies: browser p
 所以浏览器里 `#app` 那一层只在 SPA 回退路径（`/machine` 这类客户端路由，请求头带 `Accept: text/html`）上才挂得起来。
 2. Machine 页的"写设置表单"与 Run 页的"叫停按钮"已经不是空壳了（R81 起）：
 下面那两条原先 `skip` 的判据已经换成真断言 —— 设置表单永不回填 key、且 key 那一格是 `type=password`；叫停按钮第一次点击只"上膛"，盘上零改动。
-3. 九页的逐页核对（R88）走真浏览器：每页都要挂起来、控制台不许有 error、
+3. 十页的逐页核对（R88）走真浏览器：每页都要挂起来、控制台不许有 error、
 正文里不许出现 markdown 记号（`**`；密钥掩码 `***` 不算）。写面本身的浏览器侧读数（真浏览器来源去打那几个端点）见下面第 4/5/6 条。
 """
 
@@ -671,16 +671,16 @@ def test_the_chat_box_routes_the_message_by_state(tmp_path: pathlib.Path) -> Non
         assert "第二档" in str(answers[0].get("answer")), answers[0]
 
 
-# ============================================================ 6 九页逐页核对（R88）
-#: 九页的客户端路由（`ui/src/main.tsx` 的路由表；`/run/:sid` 用一个不存在的会话号，
+# ============================================================ 6 十页逐页核对（R88）
+#: 十页的客户端路由（`ui/src/main.tsx` 的路由表；`/run/:sid` 用一个不存在的会话号，
 #: 页面照样要挂起来 —— 它那时该显"读不出来"，不是白屏）。
-ROUTES = ("/", "/live", "/budget", "/evidence", "/artifacts", "/acceptance",
+ROUTES = ("/", "/errors", "/live", "/budget", "/evidence", "/artifacts", "/acceptance",
           "/machine", "/help", "/run/demo-sid")
 
 
 def test_every_page_mounts_clean_and_prints_no_markdown_markers(
         tmp_path: pathlib.Path) -> None:
-    """逐页核对（R88）：九页都要挂起来、控制台不許有 error、正文里不許有 markdown 记号。
+    """逐页核对（R88）：十页都要挂起来、控制台不許有 error、正文里不許有 markdown 记号。
 
     为什么这一条必须在真浏览器里：`**` 这类记号是上屏之后才看得见的缺陷 ——
     本机 2026-10-13 就是这样逮到验收页那两处的（`reviewaccept` 的话被逐字打印）。
@@ -712,10 +712,10 @@ def test_every_page_mounts_clean_and_prints_no_markdown_markers(
 
 
 def test_every_page_has_the_nav_and_at_least_one_card(tmp_path: pathlib.Path) -> None:
-    """反真空：九页每一页都从导航进得去，而且正文里真有卡片。
+    """反真空：十页每一页都从导航进得去，而且正文里真有卡片。
 
     没有这一条，上面那条可以靠"每页都渲染同一张空白卡片"或"整页只有导航"变绿 ——
-    所以这里加两条下限：导航八条都在（`ui/src/main.tsx` 的 `NAV`），
+    所以这里加两条下限：导航九条都在（`ui/src/main.tsx` 的 `NAV`），
     且每一页至少有一张卡片标题（`.card-title`）。
     """
     with _workspace(tmp_path) as root, _live(root) as live:
@@ -724,7 +724,7 @@ def test_every_page_has_the_nav_and_at_least_one_card(tmp_path: pathlib.Path) ->
             _enter_spa(live, route)
             page.wait_for_timeout(200)
             links = page.eval_on_selector_all("nav a", "ns => ns.map(n => n.textContent)")
-            assert len(links) >= 8, f"{route} 上导航只有 {links}"
+            assert len(links) >= 9, f"{route} 上导航只有 {links}"
             titles = page.eval_on_selector_all(
                 ".card-title", "ns => ns.map(n => n.textContent)")
             assert titles, f"{route} 上一张卡片都没有（正文是空的）"

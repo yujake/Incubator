@@ -2309,7 +2309,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: facts 键集一格未动（15 格）：inbox / board 仍在 `STEP_VOLATILE_FACTS` 里，变的只是
 #: 它们的落点（system 的两段挪进开场那条 user 消息），那一侧记在
 #: tests/test_prompt_stability.py 的 `_VOLATILE_FACT_SETS`。
-PROMPT_VERSION = "p201"
+#:
+#: p201 → p202（2026-10-26 收口批）：本批三件，逐字列在这里（业主施工单的措辞）：
+#:   ① `judge_unknown_tool` 新码 —— `judge.JUDGE_PROBLEMS` 末尾那一族多了一个失败码
+#:      （"原生工具调用面里点了一个没广告过的函数名"，类目 `unknown_tool`）。这一格
+#:      是整批换十一格的唯一原因：`JUDGE_PROBLEMS` 被逐项拼进每个角色的
+#:      `THREE_STATE` 那一段（`"、".join(J.JUDGE_PROBLEMS)`，段名与
+#:      `SECTION_ORDERS["THREE_STATE"]` 同源），于是加一个码等于改十一个角色的提示词。
+#:   ② `verify.verify_proof.required` 去掉 `proof_text` —— 声明里那一格从
+#:      `["statement_id", "proof_text"]` 收成 `["statement_id"]`（实现本来就从
+#:      `verifications.proof_text_of` 取，另两处 description 也一直是"可以不给"）。
+#:      V 那一格的工具目录因此换了一行（其余角色的段逐字未动，但十一格的摘要都换，
+#:      原因见 ①）。
+#:   ③ F 的写集去 `statements` —— `specs/f.py` 的 `write_set` 拿掉那一格（业主口径：
+#:      命题只经秘书 / B 登记，`secretary.STATEMENT_WRITER_ROLES = ("B",)`），policy 里
+#:      三处「你自己落成 statements 一行」同步改成「交给 B 登记」。这条只动 F 一格，
+#:      但它在 ① 的射程里。
+#: 另外同批改了 `specs/d.py` 一处文案：D 的「登记猜想之前先判重」那条不再教
+#: `force_new=true`（`own.register_conjecture` 的参数表里没有它，`additionalProperties:
+#: False`）—— 改成"要另起一条就把差异写进正文重新交"。不动 D 的权限面，D 那一格换值。
+#: 读数：十一格摘要全换，逐格旧值 → 新值见 `tests/test_agent_prompts.py` 的冻结表上方；
+#: facts 键集一格未动（15 格），那一侧记在 `tests/test_prompt_stability.py`。
+PROMPT_VERSION = "p202"
 
 
 

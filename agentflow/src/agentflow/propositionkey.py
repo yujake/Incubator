@@ -1,6 +1,26 @@
 # -*- coding: utf-8 -*-
 """命题同一性与同种证明的判据（纯函数、确定性、零模型调用）。
 
+## 先读这一节：本模块现在管到哪一层（2026-10-24 业主改口径）
+
+业主逐字：「不用机械判据，让秘书洗定理名，让秘书判。」以及一句准绳：「定理描述一致
+（什么条件推出什么结论），就是一个定理」。
+
+所以"这两条是不是同一个定理"的终判不在本模块：它在
+`secretary.Secretary.adjudicate_proposition`（一次模型调用，三态 same / different /
+unknown，按正文 sha256 缓存）。本模块在那一层的上游只做两件事：
+
+| 层 | 在哪 | 做什么 | 不许做什么 |
+|---|---|---|---|
+| 粗筛 | 本模块 `candidates_for` | 按词面相似度排出一小批候选（"交给秘书看哪几条"） | 不许替秘书下结论 |
+| 终判 | `secretary.adjudicate_proposition` | 读条件与结论，判同一 / 不同 / 判不了，并洗出定理名 | 不许拿字符串相同当"同一" |
+| 兜底 | 本模块 `proposition_key` / `same_proposition` | 只在秘书这一格没判成（没缝 / 开关关着 / 超时）时兜住旧口径 | 不许覆盖秘书给过的结论 |
+
+第三行是历史口径（2026-10-24 上午的裁定 + 判据
+`tests/test_secretary_recognizes_the_same_proposition.py` 钉着它），保留它是因为
+"秘书没接上时整条写入路不许因此瘫掉"：那时它退成"一模一样才并"，比"什么都不并"更接近
+真相。秘书一旦判了（`checked=True`），它说了算 —— 包括判 different 与判 unknown。
+
 ## 这一份回答的两个问题（业主 2026-10-24 的原话）
 
 业主逐字：「我怕 B 的秘书看到对表述几乎相同的定理，不会有种意识它们是同一个，然后把
@@ -11,7 +31,7 @@
 
 | 问题 | 判据 | 命中之后 |
 |---|---|---|
-| 这两条命题是不是同一条 | `same_proposition` | 不新建命题行，落成那条命题的第 N 份证明 |
+| 这两条命题是不是同一条 | `candidates_for` 粗筛 → 秘书终判 | 不新建命题行，落成那条命题的第 N 份证明 |
 | 同一命题下这两份证明是不是同一种证法 | `same_kind_proof` | 不新增证明号，受控拒绝 `proof_same_kind`（或 `merge=true` 合成一份并重拿 V 签） |
 
 ## 命题键（`proposition_key`）
@@ -74,7 +94,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 #: 命题这一轴的阈值：键不同时，词面重合度到多少才算"同一条命题"。
 #:
@@ -532,6 +552,44 @@ def same_kind_proof(a: str, b: str, *,
     判成"不同"又会让同一种证法被并列记录。两种都不对，所以是 unknown。
     """
     return _judge(a, b, threshold=threshold, basis=BASIS_PROOF_SIMILARITY, what="证明")
+
+
+# ------------------------------------------------------------------ 粗筛候选
+
+
+def candidates_for(statement_full: str, rows: Iterable[Mapping[str, Any]], *,
+                   limit: int = 4) -> list[dict[str, Any]]:
+    """在同批命题里粗筛出"可能同一条"的一小批候选（只排序，不判同一性）。
+
+    ## 为什么只粗筛（业主 2026-10-24 的口径）
+    「不用机械判据，让秘书洗定理名，让秘书判」—— 判"什么条件推出什么结论"是模型的事。
+    但把整个台账（真机几千行）塞进提示词既贵又没用：模型在几百条候选里挑"同一条"
+    会挑错。所以这一格只做一件确定性的、可审阅的事：按词面相似度排个序，取前 `limit` 条，
+    交给秘书在提示词里逐条比对。命中与不命中都由秘书说，这里一句话都不下。
+
+    ## 为什么"词面相似度 0 的也要进候选"
+    sylow4 那三条正是反例：类方程版、McKay p-元组版、Wielandt p^a-子集版是同一个定理的
+    三种写法，词面重合度很低（0.2 上下）。如果按阈值筛，最该被看到的那一条会被筛掉 ——
+    于是"同一个定理"永远认不出来。排序是给秘书的方便，不是筛子：排序之后仍然凑满
+    `limit` 条（有号的、正文非空的），让模型自己判。
+
+    ## 返回什么
+    每项 `{"stmt_id", "label", "statement_full", "similarity"}`：
+    相似度只是排序用的读数，进提示词让模型知道"这两条看起来像不像"（它可以选择不信）。
+    没有号的、正文空的行不当候选（那是坏行，不是"可能同一条"）。确定性：同分按号升序。
+    """
+    probe = str(statement_full or "")
+    scored: list[dict[str, Any]] = []
+    for row in rows:
+        sid = str(row.get("stmt_id") or "")
+        other = str(row.get("statement_full") or "")
+        if not sid or not other.strip():
+            continue
+        score = prose_similarity(probe, other) if probe.strip() else 0.0
+        scored.append({"stmt_id": sid, "label": str(row.get("label") or ""),
+                       "statement_full": other, "similarity": float(score)})
+    scored.sort(key=lambda c: (-c["similarity"], str(c["stmt_id"])))
+    return scored[: max(0, int(limit))]
 
 
 def selftest() -> int:

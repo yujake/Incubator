@@ -83,6 +83,7 @@ from ._support import S
 from .. import evidencebits as _EB
 from .. import numericproof as _NP
 from .. import quoteevidence as QE
+from .. import refusals as _R
 from .. import verifications as _VR
 from ..refusals import refuse as _refuse
 
@@ -186,7 +187,7 @@ def _normalize_proofs(raw: object, *, proof_text: str) -> tuple[list[dict], str,
         text = str(text or "")
         if not text.strip():
             return [], "", _refuse(
-                "empty_proof_text",
+                _R.EMPTY_PROOF_TEXT,
                 f"{where}（#{no}）的 text 是空的 —— 空正文不是「还没写」，"
                 "而是「这一条其实没交」；要么补上正文，要么把它从清单里去掉")
         if no == 1 and canon.strip() and canon.strip() != text.strip():
@@ -250,6 +251,56 @@ def _normalize_range(raw: object, *, what: str) -> tuple[dict, str]:
     if isinstance(start, int) and isinstance(end, int) and start > end:
         return {}, f"{what}.start({start}) 不能大于 {what}.end({end})"
     return out, ""
+
+
+def _text_truncation_reading(*, statement_full: str, proof_text: str,
+                             proofs: list | None) -> dict:
+    """这一笔的正文有没有超出"判档位那一趟"能读的上限 ⇒ 空字典 或 一份截断读数。
+
+    ## 为什么截断读数落在写侧（业主 2026-10-24 裁定 B2 的第 2 条）
+    真机读数（sylow4）：一条正文 8375 字，判档位那一趟的材料在 4000 字处被切断，
+    而材料里一个字都没说"被切了" ⇒ 模型给出"证明截断，无法定档"，台账落成
+    `nontriviality: null` + basis "材料不足"。这就是把"我们没给它看全"记成了"它给的材料不够"。
+    现在判档位那一侧自己会报 `text_truncated`（`secretary.material_truncation`），
+    写侧这一格回答另一个问题：这一笔交上来的正文，本身有没有超过判档位读的上限 ——
+    超了的话，档位判不了是输入不完整，而修法是"把正文拆段 / 压到上限内再登记"，
+    不是"再补点材料试试"。
+
+    判据只有一条：正文（`proof_text` + `proofs` 里的每一份；都没有时退回
+    `statement_full` 里那一段证明）超过 `secretary.PROOF_BODY_CAP` 字。
+    没超 ⇒ 空字典（老返回值逐字不变）；超了 ⇒ 三格：`text_truncated` /
+    `text_truncated_note` / `tier_material`。
+
+    ## 为什么上限从 `secretary` 现读，而不是在这里再写一个 20000
+    两个数一漂，就会出现"写侧说没超、判档位那侧已经截了"的读数分裂 ——
+    而那种分裂没有任何一格会红。上限的真身只有一处（`secretary.PROOF_BODY_CAP`）。
+    """
+    from .. import secretary as _SEC
+
+    pieces = [str(proof_text or "")]
+    for item in (proofs or []):
+        if isinstance(item, Mapping):
+            pieces.append(str(item.get("text") or item.get("proof_text") or ""))
+    joined = "\n\n".join(piece for piece in pieces if piece.strip())
+    if not joined.strip():
+        # 证明没交在这一栏：判档位那一趟读的是 statement_full 里的证明小节
+        # （`secretary._looks_like_a_proof` 是同一处判据，这里只问"它会不会被读"）。
+        whole = str(statement_full or "")
+        joined = whole if _SEC._looks_like_a_proof(whole) else ""
+    if not joined.strip():
+        return {}
+    chars = len(joined)
+    cap = int(_SEC.PROOF_BODY_CAP)
+    if chars <= cap:
+        return {}
+    return {
+        "text_truncated": True,
+        "text_truncated_note": (
+            f"这一条正文在 {cap} 字处被截断（正文共 {chars} 字，判档位读的上限是 {cap} 字）"
+            "—— 档位判不了是因为输入不完整，不是因为材料不足；"
+            "修法是把正文拆成分节的多条命题，或先压到上限之内再登记"),
+        "tier_material": {"chars": chars, "cap": cap, "over_by": chars - cap},
+    }
 
 
 def _canonical_history_entry(old_text: str, new_text: str) -> dict:
@@ -478,6 +529,28 @@ class _RegisterStatement:
         #: 有变化就写回（`formal_synced=True`），没变化则一个字都不写 —— "不写新行、不动
         #: canonical"这两条保持不变。
         nothing_to_attach = not entries and not want
+        # ---- 0 字证明：受控拒绝（业主 2026-10-24 裁定 B2 的第 1 条）
+        #
+        # 这一格是"声明了第 N 份证明、而它的正文是空的"。`_normalize_proofs` 已经在
+        # 入口拦过一遍，但这一格是第二道写入口（多证明的追加、合并稿的顺位接续都经过
+        # 它），所以判据要在这里再问一次 —— 两个写入口只拦一个，等于"清单从另一条路
+        # 进来时静默写一条空证明"。拒绝码与入口同一个（`refusals.EMPTY_PROOF_TEXT`）：
+        # 同一件事在两处必须说同一个词。
+        #
+        # 注意不拦"整笔一条证明都没交"：自产命题的"证明还没做完"是合法登记态
+        # （F-05 的待办那一档，见 `needs_proof` 那一段），拦掉它等于把那条路堵死。
+        for _entry in (entries or []):
+            if not isinstance(_entry, Mapping):
+                continue
+            if str(_entry.get("text") or "").strip():
+                continue
+            _no = int(_entry.get("proof_no") or 0)
+            out["refused"] = _R.EMPTY_PROOF_TEXT
+            out["reason"] = (
+                f"证明清单里的 #{_no or '?'} 正文是空的 —— 空正文不是「还没写」，"
+                "而是「这一份其实没交」；整笔不写（要么补上正文，要么把这一份从清单里"
+                "去掉）。已经落盘的那几份一个字都不动")
+            return out
         #: 写进 `proof_text` 的是调用方交来的原样正文（`raw_want`），不是比较用的
         #: `want`（去掉了首尾空白）：`bits.evidence.proof_process` 记的是原样正文，
         #: 写一份去空白的进盘就会让"正文的 sha"与"位里记的正文"分家。
@@ -748,9 +821,15 @@ class _RegisterStatement:
             # 而不是在这里被拒。这一档此前也拒，于是"定义还没抽到"这件事在 B 的动作里
             # 根本走不通（只有直接调秘书那条路能落）—— 而 §15.4 最常见的场景
             # （B 消化 A 查回来的论文时撞到生僻定义）走的正是这个动作。
-            return _refuse("bad_statement",
+            #
+            # 2026-10-24（业主裁定 B2 的第 1 条）：受控码改成 `empty_statement_text`。
+            # 为什么不继续用 `bad_statement`：那一句拒信把"只有短版"与"0 字"混在一档里，
+            # 而"0 字"是另一件事 —— 它连可判的对象都没有（判档位那一趟也会拒它，
+            # 见 `secretary.judge_statement` 的同一条受控码），所以两者的读数要分得开。
+            return _refuse(_R.EMPTY_STATEMENT_TEXT,
                            "statement_full 不能为空 —— 只有短版（statement_text）不算数："
-                           "省掉假设的命题会被下游当成无条件成立"
+                           "省掉假设的命题会被下游当成无条件成立；0 字正文连"
+                           "非平凡性档位都没法判（四项力气读数一项都取不到）"
                            "（`kind=\"concept\"` 除外：定义抽不到时留空 + 待补标记，见 draft/97 §14.13）")
         origin = str(origin or "external_lit")
         if origin not in S.STATEMENT_ORIGINS:
@@ -795,6 +874,10 @@ class _RegisterStatement:
         proofs_listed, proof_text, proofs_bad = _normalize_proofs(proofs, proof_text=proof_text)
         if proofs_bad is not None:
             return proofs_bad
+        # 判档位那一趟能不能读完这条正文（B2 的第 2 条）：空字典 = 读得完。
+        # 位置在这里：证明清单刚归一完，`proof_text` 已经是最终那一份（#p1 已接进来）。
+        trunc_reading = _text_truncation_reading(statement_full=full, proof_text=proof_text,
+                                                 proofs=proofs_listed)
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
         # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
         # `PageRange.__post_init__` 的比大小，`TypeError` 从动作里抛出去。
@@ -1140,10 +1223,23 @@ class _RegisterStatement:
                    "similarity": float(written.get("similarity") or 0.0),
                    "proof_no": proof_no,
                    "duplicate_reading": bool(written.get("duplicate")),
+                   # ---- 命题同一性那一趟判定的读数（业主 2026-10-24：「让秘书洗定理名，
+                   # 让秘书判」）。四样都要透出来，否则调用方看不见"这一条被并进去了"
+                   # 与"凭什么并的"：`adjudication`（三态 + 判词 + 是否沿用缓存）、
+                   # `canonical_name`（洗过的定理名）、`label_washed`（原标签 → 定理名）、
+                   # `proof_route`（标签里被洗掉的那条路线 —— 它落在第 N 份证明上，没有丢）。
+                   "adjudication": dict(written.get("adjudication") or {}),
+                   "canonical_name": str(written.get("canonical_name") or ""),
+                   "label_washed": dict(written.get("label_washed") or {}),
+                   "proof_route": str(written.get("proof_route") or ""),
                    "row": dict(written.get("row") or {}),
                    #: 秘书那一笔把依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                    "deps_missing": dict(written.get("deps_missing") or {}),
                    "note": str(written.get("reason") or "")}
+            #: 判档位那一趟读不完这条正文时的那三格（空字典 = 读得完；见
+            #: `_text_truncation_reading`）：三条"没有新建行"的出口都要带上它 ——
+            #: 这一笔交上来的正文超了上限这件事，与"有没有新建行"无关。
+            out.update(trunc_reading)
             if proof_no >= 1:
                 out["proofs"] = [{"proof_no": proof_no}]
             if written.get("merged_same_kind"):
@@ -1203,7 +1299,10 @@ class _RegisterStatement:
                    "note": ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
                             f"（{written.get('reason') or ''}）。"
-                            "内容面一个字没动；要改内容请另起一条（force_new）并写清为什么。")}
+                            "内容面一个字没动；这一笔要改内容，就把差异写进 statement_full "
+                            "重新交（正文按规范化比不同才会落新的一行）。")}
+            #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
+            out.update(trunc_reading)
             if proofs_listed:
                 out.update(self._proofs_reading(attach))
                 pd = self._write_attached_proof_deps(sec, stmt_now, proofs_listed, attach)
@@ -1262,6 +1361,8 @@ class _RegisterStatement:
                        #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                        "deps_missing": dict(written.get("deps_missing") or {}),
                        "note": ("这一条没有新建行（同一条命题已在册）。")}
+                #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
+                out.update(trunc_reading)
                 if attach.get("canonical_written"):
                     out["canonical_written"] = True
                     out["canonical_history"] = list(attach.get("canonical_history") or [])
@@ -1306,10 +1407,19 @@ class _RegisterStatement:
                                stmt_id=stmt_dup)
             # 对调用方来说这是"这一次没有新行"，必须说出来（`ok=False` + `kind`），
             # 并把既有那一条的号给它 —— 否则它只会看到"没写成"而不知道东西在哪。
+            #
+            # 2026-10-26：这段拒信改前写着"确实要另起一条才走 `force_new`（本动作不暴露它）"。
+            # 指一个本动作根本没有的参数，等于把模型送去撞 invalid_params —— 拒信要能把模型
+            # 指回正路，指的必须是这条动作上真有的做法：同一条命题的第 2 份及以后的证明走
+            # `proofs=[{proof_no: N, text: …}]`；确实是另一条命题就把差异写进
+            # `statement_full`（正文按规范化比不同才会落新的一行）。
             return _refuse("duplicate_statement",
                            "同一条命题（按规范化后的 statement_full 比）已在册 ⇒ "
-                           "秘书查重后没有新建行；要引用它请用返回的 stmt_id，"
-                           "确实要另起一条才走 `force_new`（本动作不暴露它）"
+                           "秘书查重后没有新建行；要引用它请用返回的 stmt_id。"
+                           "同一命题的第 2 份及以后的证明走 `proofs=[{proof_no: N, text: …}]`"
+                           "（`#p1` 是行上的 `proof_text`）；确实是另一条命题就把差异写进 "
+                           "`statement_full` —— 正文按规范化比不同才会落新的一行。"
+                           "这条动作的参数表就是上面出现的这几个，别给别的名字"
                            # D-37：秘书那一支留下的"还差什么"（`kind` 没升成、
                            # 档位没升成）必须转到这里来 —— 折成一句"重复登记"会把
                            # "再去拿一份证据"说成"不用再交一次"。
@@ -1363,12 +1473,23 @@ class _RegisterStatement:
                 "self_authored_review": self._self_authored_reading(self_authored),
                 "quote_verified": quote_verified, "origin": origin,
                 "quote_mode": str(quote_mode or ""),
+                #: 判档位那一趟读不完这条正文时的那三格（空字典 = 读得完；见
+                #: `_text_truncation_reading`）。业主口径：截断要显式报，不许记成"材料不足"。
+                **trunc_reading,
                 "quote_span": str(quote_span or ""),
                 #: 写侧断言（D1）的读数：`action` 只有 `keep` 与 `downgrade` 两档
                 #: （`refuse` 那一档走 `_refuse` 返回，到不了这里）。降档必须看得见 ——
                 #: 静默把一句"通过了"改成 unknown 与静默放过它同样是坏。
                 "quote_evidence": evidence_reading,
                 "evidence_kind": evidence_kind, "row": data,
+                #: 命题同一性那一趟判定的读数（业主 2026-10-24：「让秘书洗定理名，让秘书
+                #: 判」）：三态 + 判词 + 洗过的定理名 + "原标签 → 定理名" + 标签里被洗掉的
+                #: 那条路线（它落在第 1 份证明上，没有丢）。判 different / unknown 时
+                #: `adjudication.verdict` 就是那个结论，`basis` 是"凭什么是它"。
+                "adjudication": dict(written.get("adjudication") or {}),
+                "canonical_name": str(written.get("canonical_name") or ""),
+                "label_washed": dict(written.get("label_washed") or {}),
+                "proof_route": str(written.get("proof_route") or ""),
                 "deps_state": str(written.get("deps_state") or ""),
                 "deps_written": int(written.get("deps_written") or 0),
                 "deps_dangling": list(written.get("deps_dangling") or []),

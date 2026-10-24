@@ -433,14 +433,18 @@ def test_criterion2_an_incomplete_experiment_is_only_supported_not_proved(
 def _assert_nontrivial_branch_keeps_its_tier(store: Store) -> None:
     """③ 的非平凡那一支（被 ⑤-b 打桩之后必须红的那一段）。
 
-    判了「合格」、秘书给了第 3 档 ⇒ 这一条不许被压成 T0（"懂平凡"不是"恒判平凡"）。
+    判了「合格」、力气读数落在第 3 档 ⇒ 这一条不许被压成 T0（"懂平凡"不是"恒判平凡"）。
+
+    2026-10-24（业主裁定 B2）之后档位由"证明花的力气"给，所以这一支要带一份真够 T3 的
+    证明正文（体量 16 200 字 ⇒ 分数 8 ⇒ T3）：不交证明时档位是「未判」，那一支另有判据。
     """
+    statement = ("设 D 是 III 型因子，则它的某个不变量取整数值。\n\n证明：" + "推导。" * 5400)
     sec = _secretary_b(store, {"decision": "合格", "reason": "L3 那一步要用到它",
                                "basis": ["L3"], "nontriviality": 3,
                                "nontriviality_basis": "用了跨领域工具"})
-    note = _gate(sec, statement_full="设 D 是 III 型因子，则它的某个不变量取整数值。")
+    note = _gate(sec, statement_full=statement)
     assert note is None, f"非平凡命题被贴了档位读数（那说明'懂平凡'被打桩成恒平凡）：{note}"
-    got = SEC.nontriviality_of(store.root, "设 D 是 III 型因子，则它的某个不变量取整数值。")
+    got = SEC.nontriviality_of(store.root, statement)
     assert (got["tri"], got["level"], got["label"]) == ("computed", 3, "T3"), got
 
 
@@ -448,10 +452,16 @@ def test_criterion3_a_trivial_statement_is_filed_and_lands_on_t0(tmp_path: pathl
     """③ 平凡命题 ⇒ 收录成功且档位 T0（改前：被「太平凡」拒收）。
 
     这是业主这一次裁定的正面：平凡不是"不许进"，是"进哪一档"。
+
+    2026-10-24（业主裁定 B2）之后"平凡"的含义是"力气小"，而档位由力气读数给：
+    所以这一条要带一份力气小的证明（一行推导）。不交证明时档位是「未判」——
+    "没有证明正文"与"证明花的力气小"是两件事（判据见
+    `tests/test_nontriviality_is_judged_by_effort.py` 的 (a)/(b)）。
     """
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
-    text = "对任意正整数 n，n^2+n 一定是偶数。"
+    text = ("对任意正整数 n，n^2+n 一定是偶数。\n\n"
+            "证明：n 与 n+1 必有一偶，故 n(n+1) 是偶数。∎")
     sec = _secretary_b(store, {"decision": "太平凡", "reason": "这是显而易见的等式重排",
                               "basis": ["没有后续使用"], "nontriviality": 2})
     note = _gate(sec, statement_full=text)

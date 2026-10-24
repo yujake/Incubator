@@ -107,7 +107,13 @@ def test_unknown_is_not_a_tier(tmp_path: pathlib.Path) -> None:
 
 
 def test_the_tier_travels_on_the_same_judge_call_not_a_second_one(tmp_path: pathlib.Path) -> None:
-    """①+②：`judge_statement` 在同一次判断里给出两栏；判了却没给档位 ⇒ None 且 `unjudged`。"""
+    """①+②：`judge_statement` 在同一次判断里给出两栏；判了却没给档位 ⇒ None 且 `unjudged`。
+
+    2026-10-24（业主裁定 B2：「看证明花的力气就能判非平凡度」）之后档位改由力气读数给
+    （`secretary.nontriviality_from_effort`），读数一项都取不到时才是 None。所以这里
+    第一问交一份 T3 量级的证明正文（体量 16 200 字 ⇒ 8 分 ⇒ T3）；第二问不交证明 ⇒
+    读数缺项 ⇒ None + unjudged（这一支的语义与改前逐字相同）。
+    """
     calls: list[str] = []
 
     def fake_judge(kind: str, context, *, task_id: str = ""):
@@ -119,13 +125,15 @@ def test_the_tier_travels_on_the_same_judge_call_not_a_second_one(tmp_path: path
     fake_judge.extra = {"nontriviality": 3, "nontriviality_basis": "用了跨领域工具"}
     boss = SEC.Secretary(role="B", root=tmp_path)
     boss.judge = fake_judge  # type: ignore[assignment]
-    got = boss.judge_statement(statement_full="命题甲", task_id="t-9")
+    t3_proof = "证明：" + "推导。" * 5400  # 体量读数 16 200 字 ⇒ 分数 8 ⇒ T3
+    got = boss.judge_statement(statement_full="命题甲", proof_text=t3_proof, task_id="t-9")
     assert calls == ["statement_aesthetic"], f"只该发一次判断，实际 {calls}"
     assert got["decision"] == "合格"
     assert (got["nontriviality"], got["nontriviality_tri"]) == (3, "computed")
     assert SEC.nontriviality_of(tmp_path, "命题甲")["level"] == 3
 
-    # 判了但没给档位 ⇒ None + unjudged（不许当 1，也不许当 0）
+    # 判了但这一趟没有证明正文 ⇒ 四项力气读数一项都取不到 ⇒ None + unjudged
+    # （不许当 1，也不许当 0）
     fake_judge.extra = {}
     got = boss.judge_statement(statement_full="命题乙", task_id="t-9")
     assert (got["nontriviality"], got["nontriviality_tri"]) == (None, "unjudged")
@@ -133,20 +141,23 @@ def test_the_tier_travels_on_the_same_judge_call_not_a_second_one(tmp_path: path
 
 
 def test_a_trivial_verdict_forces_t0_on_the_same_call(tmp_path: pathlib.Path) -> None:
-    """③ 判「太平凡」⇒ 档位就地落 0（T0），秘书自报的 3 档在那一支上不算数。
+    """③ 读数给出 T0 且秘书判「太平凡」⇒ 档位 0；秘书自报的 3 档在那一支上不算数。
 
     业主 2026-10-23：平凡 ⇒ 落 T0，不再拒收。所以"平凡"与"档位"这两栏必须一致：
     判平凡却把档位记成 3，会让下游按 3 去读它，而收录口那边又按平凡放行。
+    2026-10-24 起"太平凡"这一个结论的含义是"力气小"（读数落 T0），所以这一条
+    要交一份力气小的证明（三行、只用定义）—— 没有证明正文时档位是「未判」，不是 T0。
     """
 
     def fake_judge(kind: str, context, *, task_id: str = ""):
-        return {"checked": True, "decision": "太平凡", "reason": "两条判据都答不上",
+        return {"checked": True, "decision": "太平凡", "reason": "力气小",
                 "basis": ["没有使用者"], "nontriviality": 3,
                 "nontriviality_basis": "自报三档"}
 
     boss = SEC.Secretary(role="B", root=tmp_path)
     boss.judge = fake_judge  # type: ignore[assignment]
-    got = boss.judge_statement(statement_full="a+b=b+a", task_id="t-9")
+    small_proof = "证明：由定义直接得到。\n1. 零元唯一。\n2. 由 1 得结论。∎"
+    got = boss.judge_statement(statement_full="a+b=b+a", proof_text=small_proof, task_id="t-9")
     assert (got["nontriviality"], got["nontriviality_tri"]) == (0, "computed"), got
     assert got["label"] == "T0", got
     assert "降为 T0" in got["nontriviality_basis"], got["nontriviality_basis"]

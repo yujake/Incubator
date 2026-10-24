@@ -138,7 +138,7 @@ def _pages(_raw: str) -> int:
 
 
 def _pages_besides_this(_raw: str) -> int:
-    """「旁边八页」：路由总数减去本页那一格。"""
+    """「旁边九页」：路由总数减去本页那一格。"""
     return _pages(_raw) - 1
 
 
@@ -360,12 +360,12 @@ class Claim:
 #: 页面里每一个数字断言的出处。三列：页面上的那段话、代码里的那个读数、读数在哪。
 CLAIMS: tuple[Claim, ...] = (
     Claim("十一个角色（A–H、V、L、M）", "capabilities.CAPABILITIES 的键数", _roles),
-    Claim("旁边八页读的就是那些盘上事实", "main.tsx 的 ROUTES 条数减本页那一格",
+    Claim("旁边九页读的就是那些盘上事实", "main.tsx 的 ROUTES 条数减本页那一格",
           _pages_besides_this),
-    Claim("（加上本页一共九页）", "main.tsx 的 ROUTES 条数", _pages),
-    Claim("就是本页：九页分工", "main.tsx 的 ROUTES 条数", _pages),
-    Claim("九页共享那份快照与连接态", "main.tsx 的 ROUTES 条数", _pages),
-    Claim("九个页面各看什么", "main.tsx 的 ROUTES 条数", _pages),
+    Claim("（加上本页一共十页）", "main.tsx 的 ROUTES 条数", _pages),
+    Claim("就是本页：十页分工", "main.tsx 的 ROUTES 条数", _pages),
+    Claim("十页共享那份快照与连接态", "main.tsx 的 ROUTES 条数", _pages),
+    Claim("十个页面各看什么", "main.tsx 的 ROUTES 条数", _pages),
     Claim("九张卡（数字与标题同数 ARTIFACT_CARDS", "ARTIFACT_CARDS 的键数", _card_count),
     Claim("第九张是实验产物的落点", "spots 在 ARTIFACT_CARDS 里的位次", _spots_ordinal),
     Claim("五元位五位各一格", "evidencebits.BIT_NAMES 的位数", _bit_names),

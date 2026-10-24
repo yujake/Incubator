@@ -238,6 +238,10 @@ UNCHECKED_TYPES: dict[str, str] = {
                   "⇒ 形状以 `roster_face` 的 `tasks` 为准",
     "RosterUnplaced": "同 `RosterNode`：夹具上没有名册文件，`unplaced[]` 是空数组"
                       "⇒ 形状以 `roster_face` 的 `unplaced` 为准",
+    # 2026-10-25（「子 N」按台账数、未落名册的子挂在父节点下）：同一档 —— 夹具上
+    # 没有名册节点，这一格自然也是空数组，形状以 `roster_face` 的真读数为准。
+    "RosterUnrostered": "同 `RosterNode`：`nodes[].unrostered_children[]` 在夹具上是空数组"
+                        "⇒ 形状以 `roster_face` 的 `unrostered_children` 为准",
     # 2026-10-21（台账行带"角色 + 绝对编号"）：验收面的 `rows[]` 在任何工作区上都有
     # 五行（判据是现算的、不依赖盘上数据），但它没有进契约判据 C 的读数清单
     # （`tests/test_webui_contracts.py::_backend_keys` 只取验收面的顶层键）⇒ 判据 C
@@ -2882,6 +2886,35 @@ def _roster_children_of(kids_of: Mapping[str, list[dict[str, Any]]],
     return out
 
 
+def _roster_unrostered_children(ledger_child_ids: list[str], *,
+                                tasks_by_tid: Mapping[str, dict[str, Any]],
+                                registered: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """台账里有父、名册项没接走的那些子（编号 + 角色 + 状态）。
+
+    ## 为什么要单成一个函数（2026-10-25 业主截图）
+
+    父节点上的「子 N」只数名册项时，名册漏写一个，父的子树读数就比台账低一个
+    （sylow4：M 名下有 6 个，页面显示「子 4」）。所以"台账里有、名册上没人接"的
+    这几个必须单独列出来，挂在父节点下看得见 —— 它们同时仍进页面底部的
+    `unplaced`，两处同一处判据（`registered` 就是"名册项接过的活"那张映射）。
+
+    单成一个函数的第二个理由：判据 g（反真空）把它打桩成恒空 ⇒ 「其中 M 个未落名册」
+    这一格必须当场变 0，于是"按台账数"这件事不是被空数组顺手带绿的。
+    """
+    out: list[dict[str, Any]] = []
+    for tid in ledger_child_ids:
+        if tid in registered:
+            continue
+        row = tasks_by_tid.get(tid) or {}
+        out.append({"task_id": tid,
+                    "role": str(row.get("role") or ""),
+                    "status": str(row.get("status") or ""),
+                    "started_at": str(row.get("started_at") or ""),
+                    "ended_at": str(row.get("ended_at") or ""),
+                    "why": "台账里有它这一行，名册正文与对照表里都没有任何名册项接过它"})
+    return out
+
+
 def _roster_clip(text: str, limit: int = ROSTER_INBOX_CLIP) -> str:
     """一条正文截到 `limit` 字（截了就写一句"截过"，不许静默截断）。"""
     body = str(text or "")
@@ -3333,6 +3366,21 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     # `conductor.inside_subtree` 同一条纪律）。一个节点 = 一个名册项（常驻子代理），
     # 它下面挂着"这个子代理接过的那些活"（`tasks`，每件各带自己的时间与状态）。
     # 这一份不承担"谁是谁的子"（那一件由上面的 `children_of` 说）。
+    #
+    # 2026-10-25（业主截图）：2026-10-24 起节点上的"子 N"只数名册项 —— 名册项少一个，
+    # 父的子树读数就比台账低一个，而少的那一个既不在这棵树里、也不在任何一处说
+    # "它是谁的儿子"。所以每个节点补三格：`child_count`（台账里的子数）、
+    # `roster_child_count`（名册项数）、`unrostered_children`（有父、没落名册的那些：
+    # 编号 + 角色 + 状态，挂在父节点下看得见，同时仍进页面底部的 `unplaced`）。
+    #
+    #: 台账里"谁是谁的子"（只数代理行：板项的 `parent_task_id` 是收件人，不进这张表）。
+    ledger_kids: dict[str, list[str]] = {}
+    for tid, r in tasks_by_tid.items():
+        pid = str(r.get("parent_task_id") or "")
+        if pid:
+            ledger_kids.setdefault(pid, []).append(tid)
+    #: 台账那一栏读成没有：读不到就一律 None / 空数组（"没查成"不是"没有子"）。
+    tasks_read = out["tasks_tri"] == TRI_COMPUTED
     nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
     max_depth = 0
@@ -3370,6 +3418,18 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         live = sum(1 for tr in task_readings
                    if str(tr.get("status") or "") in ("pending", "running"))
         kids = [k for k in (children_of.get(tid) or []) if k]
+        # 这个节点名下的台账子：节点键本身那一行（顶趟 / 名册项的建项那件活）的
+        # 直接子，加上它接的每一件活（`tasks[]`）各自的直接子 —— 并起来。
+        # 名册项没接走的那些是"有父、没落名册"，与页面底部的 `unplaced` 同一个判据
+        # （`owner_of_task` 里没有它）：两处口径一致，不是二选一。
+        ledger_child_ids: list[str] = [k for k in ledger_kids.get(tid, ()) if k]
+        for one_task in task_ids:
+            for kid_id in ledger_kids.get(one_task, ()):
+                if kid_id not in ledger_child_ids:
+                    ledger_child_ids.append(kid_id)
+        unrostered_kids = (_roster_unrostered_children(
+            ledger_child_ids, tasks_by_tid=tasks_by_tid, registered=owner_of_task)
+            if tasks_read else [])
         node: dict[str, Any] = {
             "task_id": tid,
             "name": str(row.get("name") or ""),
@@ -3382,6 +3442,10 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                           "role": str((node_row.get(k) or {}).get("role") or ""),
                           "retired": bool((node_row.get(k) or {}).get("retired"))}
                          for k in kids],
+            # 子数按台账数（读不到台账 ⇒ null，不是 0）；名册项数是其中"落了名册"的那部分。
+            "child_count": (len(ledger_child_ids) if tasks_read else None),
+            "roster_child_count": len(kids),
+            "unrostered_children": (unrostered_kids if tasks_read else []),
             "retired": bool(row.get("retired")),
             "retired_branch": str(row.get("retired_branch") or ""),
             "brief": str(row.get("brief") or ""),
@@ -3947,7 +4011,19 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("surface", "string"), ("status", "string"), ("task_found", "boolean"),
       ("in_flight", "number | null"), ("inbox", "RosterInbox"),
       # 这个子代理接过的每一件活（业主 2026-10-24：「一个子代理可接收多个任务」）。
-      ("tasks", "RosterTask[]"))),
+      ("tasks", "RosterTask[]"),
+      # 2026-10-25（业主截图：「子 N」只数名册项，漏掉"有父但没落名册"的那些）：
+      # `child_count` 是台账里的子数（台账读不到 ⇒ null，不是 0），
+      # `roster_child_count` 是名册项数，`unrostered_children` 是"有父、没落名册"的那些
+      # （编号 + 角色 + 状态；它们同时仍进页面底部的 `unplaced`，两处同一口径）。
+      ("child_count", "number | null"), ("roster_child_count", "number"),
+      ("unrostered_children", "RosterUnrostered[]"))),
+    ("RosterUnrostered",
+     "roster_face() 的 nodes[].unrostered_children[] 一项 —— 台账里有父、名册正文与"
+     "对照表里都没有任何名册项接过的那一行（它同时仍进页面底部的 `unplaced`，"
+     "两处是同一处判据的两个落位）",
+     (("task_id", "string"), ("role", "string"), ("status", "string"),
+      ("started_at", "string"), ("ended_at", "string"), ("why", "string"))),
     ("RosterTask",
      "roster_face() 的 nodes[].tasks[] 一项 —— 这个子代理接过的一件活：编号来自"
      "`<父>-index.jsonl` 的调用记录，状态与起止时间来自 `data/tasks.json`",
@@ -4135,13 +4211,25 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
         if row is None:
             return
         parent = str(row.get("parent_task_id") or "")
+        kid_rows = by_parent.get(tid, [])
         kids = [{"name": "", "role": str(k.get("role") or ""), "task_id": str(k.get("task_id")),
-                 "retired": False} for k in by_parent.get(tid, [])]
+                 "retired": False} for k in kid_rows]
         status = str(row.get("status") or "")
         nodes.append({
             "task_id": tid, "name": "", "role": str(row.get("role") or ""),
             "parent_task_id": parent, "parent_name": "",
             "children": kids, "retired": False, "retired_branch": "",
+            # 这一档整棵树都来自台账：子数就是台账子数，名册项数恒为 0，
+            # 于是每一个子都"没落名册"（它们确实不在任何名册文件里）。
+            "child_count": len(kid_rows), "roster_child_count": 0,
+            "unrostered_children": [
+                {"task_id": str(k.get("task_id") or ""),
+                 "role": str(k.get("role") or ""),
+                 "status": str(k.get("status") or ""),
+                 "started_at": str(k.get("started_at") or ""),
+                 "ended_at": str(k.get("ended_at") or ""),
+                 "why": "名册那一格没读到 ⇒ 这一行只有台账，名册上没有它"}
+                for k in kid_rows],
             "brief": "", "brief_source": "", "surface": "",
             "status": status, "task_found": True,
             "in_flight": 1 if status in ("pending", "running") else 0,

@@ -458,6 +458,27 @@ h3 {
   color: var(--dsw-alias-label-secondary);
 }
 
+/* 未落名册的子（2026-10-25 业主截图：它们不许只躺在页面底部的 unplaced 里）：
+   挂在自己的父节点下面一行，编号 + 角色 + 状态；与名册子一样缩进，但颜色退一档
+   —— 它是"台账里有、名册上没有"，不是名册里的成员。 */
+.roster-unrostered {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: baseline;
+  margin-left: var(--sp-4);
+  padding-left: var(--sp-2);
+  border-left: 1px dashed var(--dsw-alias-border-l2);
+  font-size: var(--fs-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.roster-unrostered-item {
+  display: inline-flex;
+  gap: var(--sp-1);
+  align-items: baseline;
+}
+
 .roster-missing {
   display: flex;
   flex-wrap: wrap;

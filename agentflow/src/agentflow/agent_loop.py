@@ -7627,6 +7627,59 @@ class AgentLoop:
                 f"这一批里 {len(need)} 项派不出去：{want}；明细见 results")
         return out
 
+    #: 五项力气读数 → 各自的加分台阶（唯一一处定义在 `secretary.proof_effort_readings`）。
+    #:
+    #: 为什么这张表住在这一层：note 是给模型看的指路牌（"补哪一项能升档"），而档位本身
+    #: 只由 `secretary.nontriviality_from_effort` 落格 —— 这里一个字都不算档位，
+    #: 只把"这一条哪几项还在 0 分"翻成一句人话。
+    _EFFORT_UPGRADE_STEPS: tuple[tuple[str, str, str], ...] = (
+        ("体量", "chars", "每 2000 字 +1"),
+        ("步骤", "steps", "每 6 步 +1"),
+        ("引理", "lemmas", "每 2 条引理 +1"),
+        ("工具簇跨度", "clusters", "跨到第 2 个工具簇才 +1"),
+        ("绕路", "detour", "记下走过的一段死路 +1"),
+    )
+
+    @classmethod
+    def _filing_tier_note(cls, got: Mapping[str, Any]) -> str:
+        """落 T0 那一格读数里的指路牌：按力气口径说清"还差哪一项、补哪一项能升档"。
+
+        为什么不再是旧那两问（业主 2026-10-24 的裁定原话）：「不一定一条定理后面要用，
+        也不一定存在"已知那条"，看证明花的力气就能判非平凡度」。旧口径那两问留在这句
+        note 里，模型就会去编"谁会用到它"来升档 —— 而档位只由五项力气读数落格，
+        那两问一个字都不参与（B 仍可以把它们写在 `why` 里给秘书看，只是不作判据，
+        也不再是这一格教给模型的升档路径）。
+
+        两档文案：材料里没有证明正文时点名"缺「证明正文」"并指到 `proof_text` /
+        `proofs`；有力气读数时点名还在 0 分的那几项（每一项各 +1）。
+        """
+        head = ("平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23："
+                "秘书不再因「太平凡」拦收录）。档位按力气判（业主 2026-10-24）："
+                "五项读数 = 体量 / 步骤 / 引理 / 工具簇跨度 / 绕路")
+        effort = got.get("effort")
+        effort = dict(effort) if isinstance(effort, Mapping) else {}
+        if not effort or list(effort.get("missing") or []):
+            return (head + "。这一条缺「证明正文」这一项：五项读数一项都取不到 ⇒ 档位落「未判」。"
+                    "补上 proof_text（或 proofs=[{proof_no, text}] 里的正文）再交一次"
+                    "就能判出档位")
+        chars = int(effort.get("chars") or 0)
+        steps = int(effort.get("steps") or 0)
+        lemmas = int(effort.get("lemmas") or 0)
+        clusters = int(effort.get("clusters") or 0)
+        detour = bool(effort.get("detour"))
+        score = int(effort.get("score") or 0)
+        label = str(got.get("label") or "") or "T0"
+        still_zero = {"chars": chars // 2000 == 0, "steps": steps // 6 == 0,
+                      "lemmas": lemmas // 2 == 0, "clusters": clusters < 2,
+                      "detour": not detour}
+        how = "、".join(f"{name}（{hint}）"
+                        for name, key, hint in cls._EFFORT_UPGRADE_STEPS if still_zero[key])
+        return (head + f"。这一条现在读到：体量 {chars} 字、步骤 {steps}、引理 {lemmas} 条、"
+                f"工具簇 {clusters} 个、绕路{'有' if detour else '无'}"
+                f"（力气分数 {score} ⇒ {label}）。"
+                f"还在 0 分的项：{how or '（无，五项都进分了）'} —— 补哪一项就升档；"
+                "证明正文写在 proof_text 里，多份证明写在 proofs=[{proof_no, text}]")
+
     def _statement_filing_tier(self, name: str, args: Mapping[str, Any]) -> dict[str, Any] | None:
         """B 要入库一条命题时，先问它自己的秘书"这条太平凡吗"；判太平凡就落 T0，不再拒收。
 
@@ -7660,6 +7713,20 @@ class AgentLoop:
                 statement_full=str(args.get("statement_full") or args.get("statement") or ""),
                 statement=str(args.get("statement") or ""),
                 source=str(args.get("source_lit_id") or args.get("source") or ""),
+                # ---- 证明正文必须转（2026-10-24，业主裁定 B2 的写侧接缝）
+                #
+                # 判档位的唯一判据是"这份证明花了多大力气"，而力气只能从证明正文里数出来
+                # （`_looks_like_a_proof` 只认 40 字以上、带证明字样的那一段）。
+                # 这里不转 `proof_text` / `proofs` 的话，秘书那一趟的材料里就只有命题正文：
+                # 真机 sylow4 的 8 条互不相同的登记里，6 条的命题正文只有 424–516 字、
+                # 不含证明小节 ⇒ 五项读数一项都取不到 ⇒ 全部落「未判（缺证明正文）」，
+                # 而它们各自的证明正文有 5164–7553 字（实算 T2/T3）。新口径就在这一行上白做。
+                #
+                # 形状照 `secretary.judge_statement` 的签名：`proof_text` 是那一段正文
+                # （`specs/b.py` 把它定为证明栏），`proofs` 是多证明清单
+                # `[{proof_no, text}]`（第 2 份及以后的正文可能只在这一栏里）。
+                proof_text=str(args.get("proof_text") or ""),
+                proofs=args.get("proofs"),
                 task_id=str(getattr(self, "my_task_id", "") or ""),
             )
         except Exception as exc:  # noqa: BLE001 —— 判断炸了不许把入库这条路堵死
@@ -7681,15 +7748,32 @@ class AgentLoop:
             return None
         # 档位读数由秘书台账给（`append_nontriviality` 已经写过一行 T0）：
         # 这里只把它翻成这一步的读数，不另存一份状态。
+        #
+        # 2026-10-24（B2）：`tier` 不再写死 T0 —— 档位是力气读数给的，秘书那一趟已经把
+        # 0–4 档连名字一起带回来（`label` / `nontriviality`），这里照抄。只有"判了太平凡
+        # 而档位名没带回来"这一支（替身秘书 / 旧结果）才退回 T0。
+        level = got.get("nontriviality")
+        label = str(got.get("label") or _SEC.nontriviality_label(level) or "")
+        effort = got.get("effort")
+        effort = dict(effort) if isinstance(effort, Mapping) else {}
         return {
-            "tier": _SEC.nontriviality_label(0),
+            "tier": label or _SEC.nontriviality_label(0),
+            "label": label,
+            "nontriviality": level,
+            "nontriviality_tri": ("computed" if level is not None else "unjudged"),
+            # 只带判档用得上的那几格读数：note 里的指路牌与台账里那一行都是按它们写的，
+            # 模型不必去猜"为什么是这一档"（`cluster_evidence` 那类明细留在秘书台账里）。
+            "effort": {k: effort.get(k) for k in
+                       ("chars", "steps", "lemmas", "clusters", "detour", "score",
+                        "missing", "body_from")},
             "downgraded": True,
             "decision": str(got.get("decision") or ""),
             "reason": str(got.get("reason") or "")[:300],
             "basis": list(got.get("basis") or []),
-            "note": ("平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23："
-                     "秘书不再因「太平凡」拦收录）。想升档就按秘书的理由补一条判据："
-                     "① 后面哪一步会用到它（指名道姓）；② 它比收录表里最接近的那一条强在哪"),
+            # 为什么经类名调、不经 `self`：判据与测试把这个方法挂在
+            # `types.SimpleNamespace` 上（只带 role / secretary / my_task_id 三格），
+            # 那一格上没有第二条方法；类名调法让"这一格只吃 got 一个参数"成为事实。
+            "note": AgentLoop._filing_tier_note(got),
             "judged_by": "secretary",
             "judge": "statement_aesthetic",
         }

@@ -1007,7 +1007,16 @@ _ROLES_V = ("V",)
                 "maxLength": S.ID_DIGITS,
                 "description": f"命题号（{S.ID_DIGITS} 位十进制，与 statements.stmt_id 同一套；旧数据里的 4 位号仍可读）",
             },
-            "proof_text": {"type": "string", "description": "待审的证明全文；不给时从 statements 取"},
+            # 三处口径必须说同一句话（2026-10-26 收口）：声明里的 `required`、这行
+            # description、以及实现（`agent_v.AgentV.verify_proof` 在参数为空时取
+            # `verifications.proof_text_of(命中行, proof_no)`）。改前 `required` 里
+            # 有它，而另外两处都说"可以不给" —— 于是模型只给命题号就被参数门拒成
+            # `param_invalid`，而那条路在实现里本来是通的（真机 15 条 param_invalid 里
+            # 7 条死在这里）。判据：`tests/test_verify_proof_takes_text_from_the_shelf.py`。
+            "proof_text": {"type": "string", "description":
+                           "待审的证明全文。可以不给：不给（或给空串）时从 statements 里取 "
+                           "`proof_no` 指的那一份，取到的正文由返回里的 proof_sha256 / "
+                           "proof_chars 给出读数"},
             # 业主 2026-10-22（多证明模型）：签的是"第几条证明"。缺省 1 = canonical（行上的 proof_text）。
             # 不加它，V 在"只派活不点名动作"的召唤下只能签 #p1，而 #p2 永远签不了 —— 且没有任何判据会报。
             "proof_no": {"type": "integer", "minimum": 1, "description": "第几条证明（1 = canonical，缺省 1）"},
@@ -1016,7 +1025,7 @@ _ROLES_V = ("V",)
     # "它能碰什么"就被固定在签名里，而不是靠一句"它会守规矩"。
             "readonly_facts": {"type": "string", "description": "只读读数（命题现状 / 台账条数）"},
            },
-           "required": ["statement_id", "proof_text"],
+           "required": ["statement_id"],
            "additionalProperties": False,
            },
     side_effect="read",

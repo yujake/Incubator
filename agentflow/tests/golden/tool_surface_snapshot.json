@@ -5171,7 +5171,7 @@
       "type": "integer"
      },
      "proof_text": {
-      "description": "待审的证明全文；不给时从 statements 取",
+      "description": "待审的证明全文。可以不给：不给（或给空串）时从 statements 里取 `proof_no` 指的那一份，取到的正文由返回里的 proof_sha256 / proof_chars 给出读数",
       "type": "string"
      },
      "readonly_facts": {
@@ -5186,8 +5186,7 @@
      }
     },
     "required": [
-     "statement_id",
-     "proof_text"
+     "statement_id"
     ],
     "type": "object"
    },

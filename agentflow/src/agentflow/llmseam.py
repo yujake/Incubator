@@ -1070,7 +1070,13 @@ class ToolFace:
         target = self._resolve(raw_name)
         if target is None:
             cands = self.candidates(raw_name)
-            return None, "judge_bad_json", (
+            # 2026-10-26：这一档的码从 `judge_bad_json` 改成 `judge_unknown_tool`。
+            # 它从来不是坏 JSON（模型给的结构完全合法，只是名字不在这份广告面上），
+            # 而 `judge_bad_json` 那一档的纠正话术是"只回一行 JSON" —— 对着这条错说那句话
+            # 等于把模型领向更错的方向（真机三趟 16 条 `judge_bad_json` 里 8 条是这个形态）。
+            # 文本协议下同一件事记 `unknown_tool`（`tools/base.py` 那一档），两个码现在
+            # 归同一个错误类目（`errorstats.CODE_TABLE`），`judge_bad_json` 只留给真的坏 JSON。
+            return None, "judge_unknown_tool", (
                 f"模型调用了一个没广告过的函数 {raw_name!r}（这一趟广告的是 "
                 f"{sorted(self.names)[:6]}…；并列候选（{len(cands)} 个）：{cands}"
                 " —— 机器只列候选、不自动改写）")

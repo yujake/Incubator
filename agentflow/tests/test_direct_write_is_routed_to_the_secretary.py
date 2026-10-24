@@ -349,9 +349,11 @@ def test_extend_the_route_table_to_amend_and_the_wild_road_criterion_turns_red(t
 
 
 def test_the_stats_read_routed_writes_as_routed_and_not_as_direct_write(tmp_path):
-    """⑤ 对拍同一夹具：路由过后 `direct_write` 为 0、`routed_to_backstop` 有数。
+    """⑤ 对拍同一夹具：路由过后 `direct_write` 为 0，而这一笔进过程读数（不进 total）。
 
-    改前红：同一笔在改前会以 `direct_write_refused` 落进 `direct_write`。
+    改前红：同一笔在更早的版本里会以 `direct_write_refused` 落进 `direct_write`。
+    2026-10-26 起口径再细分：办成的那一笔是过程读数 `direct_write_routed`，
+    错误表里那一档（`routed_to_backstop`）只留"兜底方没接住"（拒 / 不可达）。
     """
     st = _ws(tmp_path)
     reg = _reg(st)
@@ -361,7 +363,9 @@ def test_the_stats_read_routed_writes_as_routed_and_not_as_direct_write(tmp_path
     stats = _stats_for(st, routed)
     assert stats.checked is True, stats.reason
     assert stats.count("B", "direct_write") == 0, stats.by_role
-    assert stats.category_total("routed_to_backstop") == 1, stats.by_role
+    assert stats.category_total("routed_to_backstop") == 0, stats.by_role
+    assert stats.total == 0, stats.by_role
+    assert stats.process_category_total("direct_write_routed") == 1, stats.process
     assert stats.sources["hits"]["codes"]["B"]["routed_to_backstop.secretary"] == 1, (
         stats.sources["hits"])
 
@@ -527,13 +531,25 @@ def test_the_two_kinds_of_backstop_are_counted_separately(tmp_path):
     assert codes.get("routed_to_backstop.secretary") == 1, codes
     assert codes.get("routed_to_backstop.literal") == 1, codes
     assert stats.count("B", "direct_write") == 0, stats.by_role
-    assert stats.category_total("routed_to_backstop") == 2, stats.by_role
+    # 2026-10-26：两条都是"办成"⇒ 过程读数各 +1，错误表那一档 0
+    assert stats.category_total("routed_to_backstop") == 0, stats.by_role
+    assert stats.process_category_total("direct_write_routed") == 2, stats.process
 
 
 def test_every_runtime_code_is_registered_in_the_stats_table():
-    """⑧b 反真空：运行时拼得出来的码必须已经在 `errorstats` 那张表里（否则它就数不到）。"""
+    """⑧b 反真空：运行时拼得出来的码必须已经在 `errorstats` 那张表里（否则它就数不到）。
+
+    2026-10-26：六个码现在落在两张类目表上 —— 办成的两档是过程读数
+    `direct_write_routed`，拒的 / 不可达的四档留在错误表 `routed_to_backstop`。
+    这里逐档判，两个方向都钉住（"都归到同一个类目"会让 ③ 那条拆分的绿变成假绿）。
+    """
     for backstop in ("secretary", "literal"):
-        for state in ("", "refused", "unavailable"):
+        done = TT._route_code(backstop, "")
+        assert done in TT.ROUTED_CODES, done
+        assert ES.CODE_TO_CATEGORY.get(done) == "direct_write_routed", done
+        assert "direct_write_routed" in ES.PROCESS_CATEGORY_NAMES, done
+        for state in ("refused", "unavailable"):
             code = TT._route_code(backstop, state)
             assert code in TT.ROUTED_CODES, code
             assert ES.CODE_TO_CATEGORY.get(code) == "routed_to_backstop", code
+            assert "routed_to_backstop" in ES.ERROR_CATEGORY_NAMES, code

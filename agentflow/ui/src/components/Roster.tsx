@@ -72,7 +72,7 @@ import { api } from "../api";
 import { useFace } from "../live";
 import { buildRosterTree, taskLine } from "../rosterTree";
 import type { TreeRow } from "../rosterTree";
-import type { RosterChild, RosterInbox, RosterNode, RosterTask, RosterView } from "../types";
+import type { RosterChild, RosterInbox, RosterNode, RosterTask, RosterUnrostered, RosterView } from "../types";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 import { TriState, isUnreadable } from "./TriState";
@@ -141,6 +141,50 @@ function childText(children: RosterChild[]): string {
   return children
     .map((c) => `${c.name === "" ? "（无名）" : c.name}(${c.task_id})`)
     .join("、");
+}
+
+/** 未落名册的子（台账里有父、名册正文与对照表里都没有任何名册项接过的那几行）。
+ *
+ * 旧后端（进程起在这次改动之前）给的读数里没有这一格 ⇒ 按空数组处理：那时页面
+ * 与改前逐字一样，不是"没有未落名册的子"这个结论。
+ */
+function unrosteredOf(node: RosterNode): RosterUnrostered[] {
+  return Array.isArray(node.unrostered_children) ? node.unrostered_children : [];
+}
+
+/** 「子 N」那一格：N = 台账里这个父的子数（不是名册项数）。
+ *
+ * 为什么改口径（2026-10-25 业主截图）：名册项只数"落了名册"的那些，名册漏写一个，
+ * 父的子树读数就比台账低一个（sylow4：M 名下有 6 个，页面显示「子 4」）。所以：
+ * - N 取 `child_count`（台账数）；台账读不到（null）⇒ 退回名册项数并注明"台账未读到"；
+ * - 名册项数比台账少时，同一格后面显式写「其中 M 个未落名册」——不许悄悄少算。
+ */
+function childCountText(node: RosterNode): string {
+  const missing = unrosteredOf(node).length;
+  const total = typeof node.child_count === "number" ? node.child_count : node.children.length;
+  const unknown = typeof node.child_count === "number" ? "" : "（台账未读到，按名册项数）";
+  const tail = missing > 0 ? `（其中 ${missing} 个未落名册）` : "";
+  return `子 ${total}${unknown}${tail}`;
+}
+
+/** 未落名册的子那一行：编号 + 角色 + 状态（业主：不许只躺在页面底部的 unplaced 里）。 */
+function UnrosteredLine(props: { children: RosterUnrostered[] }) {
+  const rows = props.children;
+  if (rows.length === 0) {
+    return null;
+  }
+  return (
+    <div class="roster-unrostered">
+      <span class="readings">未落名册的子（{rows.length}）：</span>
+      {rows.map((u) => (
+        <span class="roster-unrostered-item" key={`unrostered:${u.task_id}`}>
+          <span class="mono">{u.task_id}</span>
+          <Badge kind="badge-unknown" text={u.role === "" ? "unknown" : u.role} />
+          <span class="readings">{u.status === "" ? "unknown" : u.status}</span>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 /** 收件箱那一格：读不到就是"未读到"（不是 0 条）。
@@ -244,7 +288,7 @@ function NodeDetail(props: { node: RosterNode }) {
         </span>
       </div>
       <div class="row">
-        子（{n.children.length}）：
+        子（{typeof n.child_count === "number" ? n.child_count : n.children.length}）：
         <span class="roster-children">{childText(n.children)}</span>
       </div>
       <div class="row">
@@ -339,7 +383,7 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             </span>
             <Badge kind="badge-unknown" text={node.role === "" ? "unknown" : node.role} />
             <span class="mono">{node.task_id === "" ? "unknown" : node.task_id}</span>
-            <span class="readings">子 {node.children.length}</span>
+            <span class="readings">{childCountText(node)}</span>
             {node.in_flight === null ? (
               <Badge kind="badge-unknown" text="在飞：未读到" />
             ) : node.in_flight > 0 ? (
@@ -363,6 +407,9 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
           )}
         </div>
       </div>
+      {/* ↓ 未落名册的子挂在父节点下面（编号 + 角色 + 状态，不必点开明细就看得见）。
+          它们同时仍进页面底部的 unplaced 列表：两处是同一处判据的两个落位。 */}
+      <UnrosteredLine children={unrosteredOf(node)} />
       {tasksShown ? <TaskList tasks={node.tasks} /> : null}
       {ctx.picked === node.task_id ? <NodeDetail node={node} /> : null}
       {open && kids.length > 0 ? (

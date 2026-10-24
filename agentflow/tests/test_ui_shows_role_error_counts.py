@@ -14,7 +14,7 @@
 | e 反真空 | 把 `by_role` 打桩成 `{}` ⇒ a 必红（证明端点不是硬编码的 0） |
 
 为什么 d 是扫源码而不是跑浏览器：这一栏的"画法"只有源码能回答（`tests/test_webui_pages.py`
-对九页用的是同一套办法）；浏览器那一层有自己的判据（`tests/test_webui_browser.py`，需要
+对十页用的是同一套办法）；浏览器那一层有自己的判据（`tests/test_webui_browser.py`，需要
 playwright，没装就 skip），这里不重复它、也不假装跑过它。
 
 三态纪律（这一组的主线）：`0` 与"读不到"必须是两句话。b 与 c 分别钉住这两档，而且
@@ -347,10 +347,15 @@ def _unknown_band_problems(text: str) -> list[str]:
 
 # ====================================================================== 前端接线
 def test_the_frontend_declares_both_endpoints_and_the_nav_reaches_the_band() -> None:
-    """接线：`api.ts` 声明两条端点、首页挂上这一栏、导航多了那一格。
+    """接线：`api.ts` 声明两条端点、错误动作页挂上这一栏、导航多了那一格。
 
     为什么要有这一条：端点与页面各自绿着而中间那根线没接，是这个项目反复踩的形态
     （判据 C 的 `MISSING_TYPES` 与 D 的例外表都是为这件事设的）。
+
+    2026-10-24 补正（业主：「对话页和错误动作页完全一致是怎么回是？」）：这一栏从
+    首页搬到了自己的页面（`pages/RoleErrorsPage.tsx`），导航那一格是 `/errors`
+    这条独立路由。所以这里核的落点从 `Home.tsx` 换成了那一页；首页不许再挂着它
+    这件事由 `tests/test_error_actions_is_its_own_page.py` 的 a / c / d 三条把守。
     """
     api_text = API_TS.read_text(encoding="utf-8")
     assert f'errors: "{ERRORS_PATH}"' in api_text, "api.ts 的 ENDPOINTS 少了 /api/errors"
@@ -359,7 +364,10 @@ def test_the_frontend_declares_both_endpoints_and_the_nav_reaches_the_band() -> 
     assert "getErrors:" in api_text and "getErrorCategories:" in api_text, (
         "api.ts 少了取数函数")
 
-    home = (UI_SRC / "pages" / "Home.tsx").read_text(encoding="utf-8")
-    assert "<RoleErrors" in home, "首页没有挂上这一栏（那一格导航就点了没处去）"
+    page_path = UI_SRC / "pages" / "RoleErrorsPage.tsx"
+    assert page_path.is_file(), "错误动作页不在盘上（那一格导航就点了没处去）"
+    page = page_path.read_text(encoding="utf-8")
+    assert "<RoleErrors" in page, "错误动作页没有挂上这一栏"
     main = (UI_SRC / "main.tsx").read_text(encoding="utf-8")
     assert '"错误动作"' in main, "导航里没有『错误动作』那一格"
+    assert 'path: "/errors"' in main, "导航里『错误动作』没有指向自己的路由"

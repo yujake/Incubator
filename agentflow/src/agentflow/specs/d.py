@@ -239,7 +239,14 @@ SPEC = AgentSpec(
             "候选更短路径由你自己向 C 要（用循环的 `summon` 形状派 C，C 的报告随返回值交回）；C 没有出边，也不该给它加。"
             "拿到那条候选就按它立一条可判猜想（`testable` 写清若成立省掉哪一步），再派 F 落实证明，不要自己顺手写完。",
             "**登记猜想之前先判重**：不给 `conjecture_id` 时框架按规范化后的 `statement` 查重 —— 命中就**更新既有那一行**并回 "
-            "`duplicate=true`（不是新建）；要真的另起一条必须显式 `force_new=true`。所以改写一条猜想之前先想清楚：这是「同一条改个"
+            # 2026-10-26（收口批）：这一句改前写着「要真的另起一条必须显式 force_new=true」，而
+            # `own.register_conjecture` 的参数表里没有它（那件工具的参数面就是 D 这条动作的声明，
+            # `additionalProperties: False`）⇒ 照这句写只会撞 `invalid_params`。改法是把差异写进
+            # 正文重新交（规范化后不同才会落新的一行）—— 与拒信（`agent_b.register_statement`
+            # 的 `duplicate_statement` 与 `secretary.record_statement` 那一条）说的同一件事，
+            # 口径逐字同源。判据：tests/test_duplicate_refusal_names_a_real_parameter.py。
+            "`duplicate=true`（不是新建）；要另起一条就把差异写进正文重新交（正文按规范化比不同才会落新的一行）。"
+            "所以改写一条猜想之前先想清楚：这是「同一条改个"
             "说法」还是「另一条」—— 前者会更新原行（历史留在同一行上），后者才是新行。",
             "**你的研究手稿是这一趟之后唯一还在的记忆**：固定落点 `reports/RESEARCH.md`（相对工作区根），**七节，按这个次序** —— "
             "**成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步**。每轮收尾更新它：**先 `fs.read` "

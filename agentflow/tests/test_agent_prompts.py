@@ -2149,7 +2149,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p201"
+_FROZEN_PROMPT_VERSION = "p202"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2159,18 +2159,28 @@ _FROZEN_PROMPT_VERSION = "p201"
 # D/E/F 与 G/H/V/L 两批审计、S1 摘掉 system 的 inbox/board 两格、S2 的出口按角色现算、
 # 以及共用段那几处）改了既有角色段也改了共用段，逐组理由写在 `agent_prompts.PROMPT_VERSION`
 # 上方那一段。十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 2026-10-26（p202 收口批）：十一格全换。根因只有一条 —— `judge.JUDGE_PROBLEMS` 多了一个
+# 失败码 `judge_unknown_tool`，而那份词表被逐项拼进每个角色的 `THREE_STATE` 段
+# （`"、".join(J.JUDGE_PROBLEMS)`）⇒ 加一个码等于改十一个角色的提示词。另两笔在段上的落点：
+# `verify.verify_proof.required` 去掉 `proof_text`（V 的工具目录那一行换值）、F 的写集不去
+# 影响段、但 policy 三处「你自己落成 statements 一行」改成「交给 B 登记」；还有 `specs/d.py`
+# 一处文案（不再教 `force_new`）。逐格的旧值 → 新值：
+#   A 1022e25d→d8819279 / B f7d38a5c→407bf1ee / C 630ad84f→72ace081 / D 07409c4a→110f7eb7 /
+#   E 3121e244→f46e5f64 / F 835fa4ca→46bd35c5 / G e59dbbf8→a1d7077d / H ad1e532a→e9bdf211 /
+#   L dac10e41→b60b8d3f / M 38b381b9→16bf19ba / V 0afe4946→33b5d66b。
+# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "1022e25dcff1970b87b4d352f9edf1d7e7adfe36f2a09a29afa69f3ee8ca768b",
-    "B": "f7d38a5c5a86c9ce0ce78971180d2c0567c0ef36faad105314c4a166115922ed",
-    "C": "630ad84f74ded1554f03fe66675e527d734a99504d1d1ad1e648cfeb061fd4bb",
-    "D": "07409c4a206f9a41e5adeefc37903d0ccdea6ddc98fac2ae8d27888cce193a27",
-    "E": "3121e244497043ac0d53e89d000a259181fd42c2442dcc51c0a69a5786c12ee9",
-    "F": "835fa4cab644fbd7c074701c807d1918c35fd4c95dbf3c0903bd7c0174b95117",
-    "G": "e59dbbf8cc2e2ef6a749d4baccb99d04f2a6c26793fa0264eef101e99cb12da7",
-    "H": "ad1e532a98dda266b7a50cfec08ff877a892b3c204887838e00cb2618826ded4",
-    "L": "dac10e41dca5711f0a2a299d64ce228e9f74154715789dd69db0b0a116a180c1",
-    "M": "38b381b99dcf3671381d31baca5d550bc43484342352683c6f5496f1ed971bef",
-    "V": "0afe494661344dc087ffda17b0859c5782dd1dced02761b3b8289ba023236396",
+    "A": "d881927900395f0246a2ef10f7694c4f1581b513373b942fc5e49711bff50c15",
+    "B": "407bf1eec36648a23c5774a45ad528c6b5d63fa0d588ad4f6e0b08f36afed2be",
+    "C": "72ace081cb15f2991e77efd6e50c53380506e5e6e580c1aba179d1a7dbcf70e5",
+    "D": "110f7eb7e3c29bb3a2323fd0da9c2215536dbd44a5ce63404ebe007932cc5daa",
+    "E": "f46e5f64706a38ac5a29f7e6f6bb4c1255e1fe2c59b6d5ad7559d278c0eec3dd",
+    "F": "46bd35c549be0e731035859e4357c9592ec0492d41f0b3baa388d57102704feb",
+    "G": "a1d7077d2ad703b5587625eea2ef80d106c730286a82fe1186fc35d0e4b56631",
+    "H": "e9bdf211fd39c3f3a31d298f9d100aef61a21cbcac2ffe8fc29ee200cc0efa96",
+    "L": "b60b8d3ff8a4072a045de8daefd90a15b00410fa8961cca927ada12953da9bf5",
+    "M": "16bf19ba8b46f0d1ea6ba1a7725eba344e345823ac74a702bb8d3bfae42bfe09",
+    "V": "33b5d66bc8b8a7226236869f4f42de7ed59ee6d6d9a8a4ebc4e42d78bc89e67f",
 }
 
 

@@ -70,7 +70,18 @@
   `multi_call_unexecuted`（拆出来了、这一趟没执行成）/ `multi_call_out_of_limit`
   （超上限：这一趟还剩的步数/花销不够，那几条没执行）。三档全 0 才是绿。
 - `PROCESS_CATEGORIES`（过程读数，单独一栏、不计错）：`steps_split`（被拆分的步数）与
-  `multi_call_executed_calls`（拆出来并真的执行了的调用条数）。
+  `multi_call_executed_calls`（拆出来并真的执行了的调用条数），外加
+  `direct_write_routed`（直写请求被系统转交正路并办成的条数，2026-10-26 加）。
+
+## 路由成功也是过程读数，不是错误（2026-10-26）
+
+直写兜底那一档（`routed_to_backstop`）此前把三件不同的事混在一个类目里：路由办成了 /
+兜底方拒了 / 兜底方不可达。前一件是"系统按设计接管"，后两件才是"这一笔没落成" ——
+混在一起的后果是"系统替模型办成了"照样进错误总数（与 multi_call 当初的形态一模一样）。
+所以按同一手法拆开：办成的进过程读数 `direct_write_routed`，拒的 / 不可达的留在错误表
+（类目名仍是 `routed_to_backstop`，含义收窄成"兜底方没接住"）。
+判据 `tests/test_routed_success_is_a_process_reading.py` 钉住"成功的一条只进过程读数、
+被拒的才进 total"，并带一条反真空（把路由表清空 ⇒ 同一笔读成 `direct_write`）。
 
 两处读数各有唯一来源，都不读"步的那段文字"：`steps_split` 取 `result` 里的结构字段
 `multi_call`（取 `call_index == 0` 的那一条 ⇒ 一步正好一次），逐条结局取 `agent_step_call`
@@ -117,8 +128,9 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("unknown_tool",
      "名字不存在：工具面没有这件工具 / 该角色没有这个动作 / 角色名不存在"),
     ("routed_to_backstop",
-     "直写兜底：通用写口碰到'只能经正路写'的表时由系统代为转交正路执行（"
-     "routed = 兜底方办成了 / *_refused = 兜底方按它自己的判据拒了 / unavailable = 兜底方不可达）"),
+     "直写兜底没接住：通用写口把请求转交正路，而兜底方拒了（*_refused）或不可达"
+     "（*_unavailable）—— 都没落成。转交并办成的那些不在这里，它们是过程读数 "
+     "`direct_write_routed`（2026-10-26 拆开：办成 ≠ 出错）"),
     ("direct_write",
      "写库野路：绕开正路直写 statements / dependencies / lit_candidates（通用写口被拒）"),
     ("readonly_role_write",
@@ -172,6 +184,10 @@ PROCESS_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("multi_call_executed_calls",
      "拆分执行：多调用步里拆出来的、真的执行了的调用条数（过程读数，不计错；"
      "判据读 `agent_step_call` 的逐条记录）"),
+    ("direct_write_routed",
+     "直写被转交正路并办成：通用写口碰到'只能经正路写'的表时，系统把这一笔交给兜底方，"
+     "兜底方按它自己的判据跑完、行真的落了盘（过程读数，不计错；判据读结局码 "
+     "routed_to_backstop.<兜底方>，拒的 / 不可达的在错误表里那一档）"),
 )
 
 #: 全部类目（错误 ＋ 过程读数）。`primary_code` 的优先级按这一张表的顺序取：错误类目全排在
@@ -221,18 +237,20 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # ---- 直写兜底（业主 2026-10-24：「不应该是提醒智能体要走秘书，而是自动将直写请求
     # 路由到秘书接管」）。路由不再计入 `direct_write`：那一档只留"兜底方也接不住"的野路。
     # 结局码逐条登记在 `ROUTED_CODES`（字面量），拼装只允许拼出那张表里的东西。
-    ("routed_to_backstop.secretary", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；产出见 :576 `_route_code`）"),
-    ("routed_to_backstop.literal", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；产出见 :576 `_route_code`）"),
+    # 2026-10-26 拆开（与 multi_call 同一手法）：办成的两档进过程读数 `direct_write_routed`
+    # —— "系统替模型办成了"不是错误动作；只有拒的 / 不可达的留在错误表上。
+    ("routed_to_backstop.secretary", "direct_write_routed",
+     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；产出见 :584 `_route_code`）"),
+    ("routed_to_backstop.literal", "direct_write_routed",
+     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；产出见 :584 `_route_code`）"),
     ("routed_to_backstop.secretary_refused", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
+     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
     ("routed_to_backstop.literal_refused", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
+     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
     ("routed_to_backstop.secretary_unavailable", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；兜底方不可达 ⇒ unknown，不折成成功）"),
+     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；兜底方不可达 ⇒ unknown，不折成成功）"),
     ("routed_to_backstop.literal_unavailable", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；同上）"),
+     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；同上）"),
     ("role_denied", "readonly_role_write",
      "src/agentflow/tools/base.py:1173,1178（call 的调用期角色判据）"),
     ("not_wired", "not_wired",
@@ -262,6 +280,14 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("duplicate_claim_id", "duplicate_conflict", "src/agentflow/claimanatomy.py:1717,1728"),
     ("duplicate_id", "duplicate_conflict", "src/agentflow/verify.py:219"),
     ("invalid_params", "controlled_refusal", "src/agentflow/schema.py:2498（词表）/ src/agentflow/refusals.py:38"),
+    # ---- 空正文的两档（业主 2026-10-24 裁定 B2 的第 1 条）：写侧与判档位那一侧共用一个字面量
+    # （真身在 `refusals.py`）。`bad_statement` 是它们的前身：改前"0 字"与"只有短版"混在
+    # 那一个码里，于是同一种输入在写侧与判档位侧拿到两个名字。
+    ("empty_statement_text", "controlled_refusal",
+     "src/agentflow/refusals.py:52（真身）/ src/agentflow/agent_b/register_statement.py:829（写侧产出）"
+     " / src/agentflow/secretary.py:1706（判档位那一侧的受控拒绝）"),
+    ("empty_proof_text", "controlled_refusal",
+     "src/agentflow/refusals.py:53（真身）/ src/agentflow/agent_b/register_statement.py:190,548（两个写入口）"),
     ("bad_statement", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:704"),
     ("bad_origin", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:710"),
     ("bad_evidence_kind", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:762"),
@@ -276,6 +302,14 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("secretary_unavailable", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:1052"),
     # ---- 判据层
     ("judge_bad_json", "judge_bad_json", "src/agentflow/judge.py:67,206,208（problem 码）"),
+    # 2026-10-26：原生工具调用面里"点了一个没广告过的函数名"此前折成 `judge_bad_json`
+    # （`llmseam.ToolFace.to_shape`），而文本协议下同一个动作记的是 `unknown_tool` ——
+    # 同一件事两个类目，于是"名字不存在"这一类在两种协议下各数一半。现在它归到一个类目
+    # （`unknown_tool`：名字不存在），码保留判据层自己的名字 —— 与 `judge_not_wired`
+    # 归 `not_wired` 是同一手法：码说"哪一层看出来的"，类目说"这是个什么错"。
+    # `judge_bad_json` 从此只留给"真的不是 JSON"。
+    ("judge_unknown_tool", "unknown_tool",
+     "src/agentflow/judge.py:76（词表）/ src/agentflow/llmseam.py:1079（产出：没广告过的函数名）"),
     ("judge_bad_args", "judge_bad_args", "src/agentflow/agent_loop.py:4455,8142"),
     ("judge_no_reply:", "judge_no_reply", "src/agentflow/agent_loop.py:15,805（带后缀那一族）"),
     ("judge_timeout", "judge_no_reply", "src/agentflow/agent_loop.py:808（_NO_REPLY_NAMED）"),
@@ -854,12 +888,12 @@ def render_text(stats: ErrorStats) -> list[str]:
         for cat, _n in cats:
             lines.append(f"  {cat}: {meanings.get(cat, '')}")
 
-    # ---- 过程读数：拆分（不是错误，单独一栏）
+    # ---- 过程读数（不是错误，单独一栏）
     proc = list(stats.process_categories().items())
     lines.append("")
-    lines.append("拆分读数（过程读数，不是错误：一步给多条调用是正常能力，被拆开逐条执行）：")
+    lines.append("过程读数（不是错误：步被拆开逐条执行是正常能力，直写被转交正路办成也是）：")
     if not proc:
-        lines.append("  这一步没有任何拆分（被拆分的步数 0 / 拆出来的调用 0）")
+        lines.append("  没有任何过程读数（被拆分的步数 0 / 拆出来的调用 0 / 转交办成 0）")
     else:
         phead = ["角色"] + [cat for cat, _n in proc]
         prows: list[list[str]] = []
@@ -872,16 +906,18 @@ def render_text(stats: ErrorStats) -> list[str]:
         for cat, _n in proc:
             lines.append(f"  {cat}: {pmeanings.get(cat, '')}")
     lines.append(
-        "  真失败长在错误表那三档上："
+        "  真失败长在错误表上：多调用那三档（"
         f"multi_call_discarded={stats.category_total('multi_call_discarded')} / "
         f"multi_call_unexecuted={stats.category_total('multi_call_unexecuted')} / "
         f"multi_call_out_of_limit={stats.category_total('multi_call_out_of_limit')}"
-        " —— 这三类全 0 才是绿；『步被拆分』本身不是失败。")
+        "）与兜底方没接住那一档（routed_to_backstop="
+        f"{stats.category_total('routed_to_backstop')}）全 0 才是绿；"
+        "『步被拆分』与『转交办成』本身都不是失败。")
 
     lines.append("")
     lines.append("口径：角色归属见 errorstats 模块 docstring（召唤期结构判据记 called_by）；"
                  "一条记录只算一次，主码 = 类目表靠前的类目优先、同类目里长码优先。"
-                 "拆分读数是过程读数（process），不进 total / role_total（业主 D-65）。")
+                 "过程读数是 process，不进 total / role_total（业主 D-65）。")
     return lines
 
 

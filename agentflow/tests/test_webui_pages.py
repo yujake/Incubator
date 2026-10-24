@@ -37,9 +37,11 @@ from agentflow.webui import routes
 REPO = pathlib.Path(__file__).resolve().parents[1]
 UI_SRC = REPO / "ui" / "src"
 
-#: 九页的文件名 → 那一页那条（或那几条）端点（2026-10-12：业主的预算窗口与监控加了后三页）。
+#: 十页的文件名 → 那一页那条（或那几条）端点（2026-10-12：业主的预算窗口与监控加了后三页；
+#: 2026-10-24：错误动作从首页那一栏独立成页，第十页是 `RoleErrorsPage`）。
 PAGES: dict[str, tuple[str, ...]] = {
     "Home": ("/api/state",),
+    "RoleErrorsPage": ("/api/errors", "/api/errors/categories"),
     "Run": ("/api/run/{sid}", "/api/run-index"),
     "Evidence": ("/api/evidence",),
     "Artifacts": ("/api/artifacts",),
@@ -56,6 +58,10 @@ PAGES: dict[str, tuple[str, ...]] = {
 PAGE_KEYS: dict[str, tuple[str, ...]] = {
     "Home": ("pending_questions", "sessions", "problems", "bad_lines", "last_kind",
              "ledger", "tables_note", "waiting_on"),
+    # 错误动作页是一层薄壳：取数与画法都在 `components/RoleErrors.tsx` 里（一次全量扫描
+    # 加一个「重新读」按钮），页面自己不读一个键。那一栏的键与空态由
+    # `tests/test_ui_shows_role_error_counts.py` 的 b / d 两条把守。
+    "RoleErrorsPage": (),
     # Run 那一页后半段十条是题 T2-a 的逐条事件（`api.getRunEvents` 那一块）：
     # 端点与类型由契约 A/C 钉，这里钉的是"页面真的读了它"。
     # 2026-10-12 追加 `switch_present`：停机那一栏接上了 `/api/live`（它是那一面的键）。
@@ -608,28 +614,53 @@ def test_machine_negative_control_catches_a_page_that_drops_the_source_column() 
 
 
 # ====================================================================== 反真空
+#: 三态落点不在本页源文件里的那两页（各自的理由见下）。
+#: - `Help`：静态说明页，没有读数；
+#: - `RoleErrorsPage`：薄壳，读与三态都在 `components/RoleErrors.tsx` 里 —— 那一栏的
+#:   unknown 形态（`UnreadableBand` + 「读不到」）由
+#:   `tests/test_ui_shows_role_error_counts.py` 的 c 条逐字把守。
+_TRI_STATE_LIVES_ELSEWHERE = {"Help", "RoleErrorsPage"}
+
+
 def test_every_page_is_registered_and_every_page_source_exists() -> None:
-    """反真空：九页都在这一组里，源码都在盘上，而且每页都用了 TriState。
+    """反真空：十页都在这一组里，源码都在盘上，而且每页都有三态落点。
 
     没有这一条，"页面改名/被删"会让上面几条以 skip 的形态静默变绿 —— 绿得毫无内容。
     2026-10-12：`Help` 页刻意不调端点（它是说明页），但"在盘上 + 不自己 fetch"
     这两条照旧核 —— 空端点表是声明，不是免检。
     """
-    expected = {"Home", "Run", "Evidence", "Artifacts", "Acceptance", "Machine",
-                "Budget", "Live", "Help"}
+    expected = {"Home", "RoleErrorsPage", "Run", "Evidence", "Artifacts", "Acceptance",
+                "Machine", "Budget", "Live", "Help"}
     assert set(PAGES) == expected, sorted(PAGES)
     assert set(PAGE_KEYS) == expected, sorted(PAGE_KEYS)
     for name in sorted(expected):
         path = UI_SRC / "pages" / f"{name}.tsx"
         assert path.is_file(), f"{path} 不在盘上"
         body = path.read_text(encoding="utf-8")
-        if name != "Help":
-            # Help 页是一张静态说明页（没有读数要画三态）；其余每一页都必须在源码里
-            # 出现 `TriState`，否则"没查成"与"读到 0"在那一页上会长成一个样子。
+        if name not in _TRI_STATE_LIVES_ELSEWHERE:
+            # 其余每一页都必须在源码里出现 `TriState`，否则"没查成"与"读到 0"
+            # 在那一页上会长成一个样子。
             assert TRI_TOKEN in body, f"{name} 页没有用 {TRI_TOKEN}"
         # 页面必须走 api.ts 的那一层，不许自己 fetch 一个裸地址（端点的唯一出口）
         assert "fetch(" not in _strip_js_comments(body), (
             f"{name} 页自己 fetch 了 —— 端点必须只从 api.ts 走")
+
+
+def test_the_error_actions_page_is_a_thin_shell_around_the_band() -> None:
+    """错误动作页：薄壳（渲染 `RoleErrors`），不自己取数、不自己画一份读数。
+
+    为什么单列一条：这一页的读与画都在组件里，通用那套"页面读了哪些键"的判据对它是
+    空的 —— 空的检查会让"页面被换成一片空白"也照样绿。这里钉住它真的挂着那一栏，
+    而那一栏的源码仍带着自己的取数与三态（组件那一侧由
+    `tests/test_ui_shows_role_error_counts.py` 逐条核）。
+    """
+    text = _page_text("RoleErrorsPage")
+    body = _strip_js_comments(text)
+    assert 'from "../components/RoleErrors"' in body, "这一页没有 import RoleErrors"
+    assert "<RoleErrors />" in body, "这一页没有渲染 <RoleErrors />"
+    band = (UI_SRC / "components" / "RoleErrors.tsx").read_text(encoding="utf-8")
+    for key in ("getErrors(", "getErrorCategories(", "总错误动作"):
+        assert key in band, f"那一栏的落点里没有 {key}（读与画不该被搬到别处）"
 
 
 #: 渲染正文里的 markdown 强调记号：JSX 不解析 markdown，写进去就原样印在网页上。
@@ -644,7 +675,7 @@ def _markdown_marker_problems(label: str, text: str) -> list[str]:
 
 
 def test_no_page_prints_markdown_markers_to_the_screen() -> None:
-    """九页与各组件的渲染正文里不许有 markdown 记号（`**粗**` 会被原样印出来）。
+    """十页与各组件的渲染正文里不许有 markdown 记号（`**粗**` 会被原样印出来）。
 
     为什么单列一条：这一批实测漏过两处 —— Help 页的「验收」、预算页重设按钮的
     `impact`（`会把总额**覆盖**成 $…`）。两处都不是 JSX 能消化的语法，用户看到的是

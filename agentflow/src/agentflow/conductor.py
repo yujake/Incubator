@@ -214,9 +214,16 @@ class SummonResult:
     #: 而"没走过"与"走过了没登记"必须分得开（三态，不是两态）。
     #: `roster_name`：登记成功后秘书发的名册名（空 = 没登记上，理由在下一格）。
     #: `roster_problem`：没登记上的理由（空 = 登记成功或未受理那一档不适用）。
+    #: `roster_state`：写侧的三态读数（2026-10-24 sylow4 真机缺陷的读数面）——
+    #: "written" = 名册三份都读到这一趟的那一行；"missing" = 至少一份没写成
+    #: （`roster_problem` 逐份给文件名与原因）；"unknown" = 读不到（不许折成写成了）；
+    #: 空串 = 这一趟根本没有"登记"这一步（未受理 / 没走过漏斗）。
+    #: `roster_note`：写成了、但父给的某几格被写侧兜底换过时的说明（不是失败）。
     roster_name: str = ""
     roster_problem: str = ""
     roster_considered: bool = False
+    roster_state: str = ""
+    roster_note: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -320,12 +327,28 @@ class SummonHandle:
     def parent_task_id(self) -> str | None:
         return self.start.parent_task_id
 
+    def roster_reading(self) -> dict[str, str]:
+        """这一笔派活的写侧名册读数（登记发生在 `summon_begin` 的 [5b]，此刻已经有值）。
+
+        为什么句柄要带这一格（2026-10-24 sylow4 真机）：可抢占派活的孩子还在跑时，
+        父代理那一步拿到的是"还在跑"，而登记早就发生了 —— 登记成没成、缺哪一份，
+        过去只有等孩子落定之后才读得到。读数是四格，与 `SummonResult` 逐字同名。
+        """
+        rec = dict(getattr(self.start, "roster_rec", None) or {})
+        return {"roster_name": str(rec.get("name") or ""),
+                "roster_problem": str(rec.get("problem") or ""),
+                "roster_state": str(rec.get("state") or ""),
+                "roster_note": str(rec.get("note") or ""),
+                "roster_considered": bool(rec.get("considered"))}
+
     def describe(self) -> dict[str, Any]:
-        """句柄那一份（不含结果）：已派出的编号 + 还在跑 + 谁派的。"""
-        return {"role": self.role, "action": self.action, "instance": self.instance,
-                "task_id": self.task_id, "parent_task_id": self.parent_task_id,
-                "running": self.running(), "done": self.done(),
-                "started_at": str(self.start.started_at or "")}
+        """句柄那一份（不含结果）：已派出的编号 + 还在跑 + 谁派的 + 名册读数。"""
+        got = {"role": self.role, "action": self.action, "instance": self.instance,
+               "task_id": self.task_id, "parent_task_id": self.parent_task_id,
+               "running": self.running(), "done": self.done(),
+               "started_at": str(self.start.started_at or "")}
+        got.update(self.roster_reading())
+        return got
 
     # ---------------------------------------------------------- 落定
     def attach(self, thread: Any) -> None:
@@ -389,13 +412,23 @@ class SummonHandle:
         return self._settled_result()
 
     def _running_result(self) -> SummonResult:
+        """还没落定的结果：名册那一格照实给（登记在 [5b] 已经发生，与孩子跑没跑完无关）。"""
+        reading = self.roster_reading()
+        if not reading["roster_considered"]:
+            # 老构造 / 替身：连"走没走过漏斗"都无从判断 ⇒ 三态照旧不折平。
+            reading = {"roster_name": "", "roster_considered": False,
+                       "roster_state": "",
+                       "roster_problem": "结果还没回来 ⇒ 名册读数还没读回来（不是没登记）"}
         return SummonResult(
             task_id=self.task_id, role=self.role, action=self.action,
             status="running", outcome=None,
             detail=("还在跑：本步先不等（可抢占）。它落定之后会在父代理的下一个"
                     "返场点投递；这条不是终态，读成失败或读成成功都不对"),
-            roster_considered=False,
-            roster_problem="结果还没回来 ⇒ 名册读数还没读回来（不是没登记）",
+            roster_name=str(reading.get("roster_name") or ""),
+            roster_problem=str(reading.get("roster_problem") or ""),
+            roster_considered=bool(reading.get("roster_considered")),
+            roster_state=str(reading.get("roster_state") or ""),
+            roster_note=str(reading.get("roster_note") or ""),
         )
 
     def _settled_result(self) -> SummonResult:
@@ -1207,51 +1240,196 @@ class Conductor:
     # `surface_of(owner=父, task_id=子)` 从名册里读那一趟的读写面；改前名册行是返回之后
     # 才有的 ⇒ 面切割从来没生效过。登记提前之后它第一次有行可读。
 
+    #: 名册三份（写侧兜底与"写没写成"的读数都以这三份为口径，顺序即报错顺序）。
+    _ROSTER_FILES: tuple[tuple[str, str], ...] = (
+        ("roster", "名册正文"), ("index", "对照表"), ("surfaces", "面池"))
+
     def _register_roster(self, *, task_id: str, role: str, owner: str,
                          meta: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        """把"刚建立的那个子行"登记进 `owner` 的名册。返回 `{name, problem, considered}`。
+        """把"刚建立的那个子行"登记进 `owner` 的名册。
 
-        三条口径（与 :meth:`summon` 的第 [5] 步一起构成"恰好登记一次"）：
+        返回 `{name, problem, considered, state, note}`，后两格是写侧的三态读数：
+
+        - `state="written"`：名册三份都读得到"这一趟的那一行"；
+        - `state="missing"`：至少一份没写成，`problem` 逐份给文件名与原因；
+        - `state="unknown"`：读不到（不许折成"写成了"，也不许折成"没写成"）；
+        - `state=""`：这一趟根本没有"登记"这一步（只在调用方没走这条漏斗时出现）；
+        - `note` 非空 = 写成了，但父给的那几格被写侧兜底换过（不是失败）。
+
+        六条口径（与 :meth:`summon` 的第 [5] 步一起构成"恰好登记一次"）：
         1. 只在这里登记 —— 调用点一个都不许再自己调 `roster_add`（重复行会让名册里出现
            两条同名项，`Secretary.next_name` 按角色序号发号，第二条会变成 X2）；
         2. 没写入口（`roster_sink` 与 `secretary` 都空）⇒ 返回一条 problem，不抛：
            "名册不在手上"与"登记过了"必须分得开（三态，不是两态）；
         3. 秘书拒收 / 抛异常 ⇒ 返回 problem，不抛（登记失败不许带走这次派活），
-           原文照抄，不替它改写成"没给简介"。
+           原文照抄，不替它改写成"没给简介"；
+        4. 名字由框架发：调用方没给 `name` 也没给 `reuse` ⇒ 显式走"新建"那一支
+           （`new=role`），名字由 `Secretary.next_name` 按用过的最大序号顺延 ——
+           不靠父记得给名字，也不会把同一个名字发给两个子代理；
+        5. 父给的那一句简介进不了名册（超长 / 多行）⇒ 不拿它去撞秘书的内容闸：
+           改交空简介 + 任务原文，走秘书代写那一支（登记行里 `brief_source=secretary`）。
+           这一条是 2026-10-24 sylow4 真机缺陷的修法：两个 F 给的那句简介是 68 / 70 字，
+           内容闸把整份登记拒在写盘之前 ⇒ 三份名册文件一份都没建出来（`out/roster/` 里
+           连 ``<父>-surfaces.jsonl`` 都没有），读侧那两个 V 只能落在 `unplaced`；
+        6. 写没写成要读盘，不许只信返回值：秘书报了成功而盘上没有那一行，同样按
+           "没写成"报。三份任一份缺，都不许让这次召唤静默通过。
         """
         meta = dict(meta or {})
         if not str(owner or "").strip():
             # 没有父的绝对编号 ⇒ 名册上没有它的位置（顶趟本来就不进任何人的名册，
             # 但一次召唤没有父是结构问题：孤儿行）。两种都要留理由，别静默。
-            return {"name": "", "considered": True,
+            return {"name": "", "considered": True, "state": "missing",
                     "problem": (f"{task_id}：没有父的绝对编号 ⇒ 名册没地方登记"
                                 "（`tasks.parent_task_id` 是父子关系的唯一权威来源）")}
         if not str(task_id or "").strip():
-            return {"name": "", "considered": True,
+            return {"name": "", "considered": True, "state": "missing",
                     "problem": "这一笔还没有台账编号 ⇒ 名册没登记"}
         sink = self.roster_sink if self.roster_sink is not None else self.secretary
         if sink is None:
-            return {"name": "", "considered": True,
+            return {"name": "", "considered": True, "state": "missing",
                     "problem": ("这一趟没有秘书 ⇒ 名册不在手上（没有登记）"
                                 "（`conductor.roster_sink` 与 `conductor.secretary` 都是 None）")}
+        want_name = str(meta.get("name") or "")
+        reuse = str(meta.get("reuse") or "")
+        brief = str(meta.get("brief") or "")
+        task = str(meta.get("task") or "")
+        note = ""
+        brief_for_add = brief
+        if not self._roster_brief_fits(brief) and str(task or "").strip():
+            # 口径 5：父那一句进不了名册，但任务原文在 ⇒ 换成"秘书代写"那一支。
+            # 不截断、不删改父的原文（那是秘书的内容闸管的事）：换的是"谁来写这一句"。
+            brief_for_add = ""
+            note = (f"父给的简介进不了名册（{self._roster_brief_why(brief)}）；"
+                    "改由秘书按任务原文代写后登记（名册行里 brief_source=secretary）")
+        kwargs: dict[str, Any] = {
+            "owner": str(owner), "role": str(role), "task_id": str(task_id),
+            "brief": brief_for_add,
+            # `task` 一并交给秘书：简介没写时由它代写并留痕（2026-10-20 裁定），
+            # 所以这里不写 `brief or task`（那是"任务原文顶替"）。
+            "task": task,
+            "want_name": want_name,
+            "reuse": reuse,
+        }
+        if not want_name and not reuse:
+            # 口径 4：召唤即登记 —— 名字由框架发，不靠父记得给。
+            kwargs["new"] = str(role)
         try:
-            got = sink.roster_add(
-                owner=str(owner), role=str(role), task_id=str(task_id),
-                brief=str(meta.get("brief") or ""),
-                # `task` 一并交给秘书：简介没写时由它代写并留痕（2026-10-20 裁定），
-                # 所以这里不写 `brief or task`（那是"任务原文顶替"）。
-                task=str(meta.get("task") or ""),
-                want_name=str(meta.get("name") or ""),
-                reuse=str(meta.get("reuse") or ""),
-            )
+            got = sink.roster_add(**kwargs)
         except Exception as exc:  # noqa: BLE001 —— 登记失败不许带走这次派活
-            return {"name": "", "considered": True,
+            return {"name": "", "considered": True, "state": "missing",
                     "problem": f"{task_id}：名册登记没跑成：{type(exc).__name__}: {exc}"}
-        problem = str((got or {}).get("problem") or "") if isinstance(got, Mapping) else ""
-        if problem:
-            return {"name": "", "considered": True, "problem": f"{task_id}：{problem}"}
-        name = str((got or {}).get("name") or "") if isinstance(got, Mapping) else ""
-        return {"name": name, "considered": True, "problem": ""}
+        got = got if isinstance(got, Mapping) else {}
+        name = str(got.get("name") or "")
+        raised = str(got.get("problem") or "")
+        reading = self._roster_files_reading(
+            sink=sink, owner=str(owner), name=name, task_id=str(task_id),
+            surface=str(got.get("surface") or ""))
+        missing = [(label, cell) for key, label in self._ROSTER_FILES
+                   for cell in (reading.get(key) or {},)
+                   if cell.get("state") == "missing"]
+        unknown = [(label, cell) for key, label in self._ROSTER_FILES
+                   for cell in (reading.get(key) or {},)
+                   if cell.get("state") == "unknown"]
+        problem = ""
+        if missing:
+            problem = (f"{task_id}：名册三份没写全 —— " + "；".join(
+                f"{label} {cell.get('file') or '（没有文件名）'} 没写成（{cell.get('why')}）"
+                for label, cell in missing))
+        elif unknown:
+            problem = (f"{task_id}：名册读不到（unknown），这一处不许当成写成了 —— "
+                       + "；".join(f"{label}：{cell.get('why')}"
+                                   for label, cell in unknown))
+        state = "missing" if missing else ("unknown" if unknown else "written")
+        if not name:
+            # 名字是名册项的身份：没有名字的那一项等于没登记（也绝不许两个子代理共用空名）。
+            state = "missing"
+            problem = (f"{task_id}：秘书没有发名（返回的 name 是空串）⇒ 名册项没有名字，"
+                       "按没写成报" + (f"；{problem}" if problem else ""))
+            raised = ""
+        if raised:
+            if problem:
+                problem += f"；秘书那一侧的原话：{raised}"
+            else:
+                # 三份都读到那一行，但秘书那一侧报了问题 ⇒ 不丢原话，按"写成但不干净"记。
+                note = (note + "；" if note else "") + \
+                       f"秘书那一侧报了问题（三份都已写成）：{raised}"
+        return {"name": name, "considered": True, "problem": problem,
+                "state": state, "note": note}
+
+    @staticmethod
+    def _roster_brief_fits(text: str) -> bool:
+        """这一句进得了名册吗（口径只有一处：`secretary.BRIEF_MAX` 与它的单行要求）。"""
+        from . import secretary as SEC
+
+        one = str(text or "").strip()
+        return len(one) <= SEC.BRIEF_MAX and "\n" not in one
+
+    @staticmethod
+    def _roster_brief_why(text: str) -> str:
+        """那一句为什么进不了名册（给 `roster_note` 用的人话，不替秘书改它的判据）。"""
+        from . import secretary as SEC
+
+        one = str(text or "").strip()
+        if "\n" in one:
+            return "名册简介必须单行"
+        return f"名册简介不得超过 {SEC.BRIEF_MAX} 字（读到 {len(one)} 字）"
+
+    def _roster_files_reading(self, *, sink: Any, owner: str, name: str,
+                              task_id: str, surface: str = "") -> dict[str, dict[str, str]]:
+        """逐份读名册三份：这一趟的那一行在不在（`written` / `missing` / `unknown`）。
+
+        读的路径与写的人取同一个根（`sink.root`）：换一个根去读，问的就不是同一件事了。
+        读不到那三份路径（写入口没有盘上根）⇒ `unknown`，不是"没写成"。
+        """
+        from . import jsonlfile as JF
+        from . import secretary as SEC
+
+        root = getattr(sink, "root", None)
+        if root is None:
+            return {key: {"state": "unknown", "file": "", "why": "名册写入口没有盘上根"}
+                    for key, _label in self._ROSTER_FILES}
+        paths = {"roster": SEC.roster_path(root, owner),
+                 "index": SEC.roster_index_path(root, owner),
+                 "surfaces": SEC.surfaces_path(root, owner)}
+        out: dict[str, dict[str, str]] = {}
+        for key, _label in self._ROSTER_FILES:
+            path = paths[key]
+            try:
+                rows, bad, state = JF.read_jsonl_state(path)
+            except Exception as exc:  # noqa: BLE001 —— 读不成是 unknown，不是 missing
+                out[key] = {"state": "unknown", "file": path.name,
+                            "why": f"{type(exc).__name__}: {exc}"}
+                continue
+            if state == "unreadable":
+                out[key] = {"state": "unknown", "file": path.name,
+                            "why": (bad[0] if bad else "读不出来")}
+                continue
+            if any(self._roster_row_is_this_child(row, key=key, name=name,
+                                                  task_id=task_id, surface=surface)
+                   for row in rows):
+                out[key] = {"state": "written", "file": path.name, "why": ""}
+                continue
+            out[key] = {"state": "missing", "file": path.name,
+                        "why": ("文件里没有这一趟的那一行" if state != "absent"
+                                else "这一趟没把它建出来")}
+        return out
+
+    @staticmethod
+    def _roster_row_is_this_child(row: Mapping[str, Any], *, key: str, name: str,
+                                  task_id: str, surface: str = "") -> bool:
+        """这一行是不是"这个子代理的那一行"（三份的键不同：正文看 `add`、对照表看 `bind`）。"""
+        kind = str(row.get("kind") or "")
+        who = str(row.get("name") or "")
+        if key == "surfaces":
+            return bool((name and who == name)
+                        or (surface and str(row.get("slot") or "") == str(surface)))
+        if key == "roster" and kind != "add":
+            return False
+        if key == "index" and kind != "bind":
+            return False
+        if task_id and str(row.get("task_id") or "") == str(task_id):
+            return True
+        return bool(name) and who == name
 
     # ---------------------------------------------------------------- 工作项板（业主 2026-10-08 裁 A1=甲）
     #
@@ -4048,8 +4226,17 @@ class Conductor:
         #
         # 失败姿态：`_register_roster` 从不抛（没秘书/秘书拒收/抛异常都变成一条 problem），
         # 所以登记不会带走这次派活；读数随 `SummonResult.roster_*` 交回调用方。
+        #
+        # 2026-10-24（sylow4 真机）：这里多一条——写没写成要读盘（`roster_rec["state"]`），
+        # 并把"没写成"与"兜底换过"都打进日志。理由：可抢占派活的父代理那一步拿到的是
+        # "还在跑"，读不到名册那几格（`_do_summon` 在 handle 没落定时提前返回）⇒
+        # 若这里不记，一次整份漏写就只剩读侧的 `unplaced` 这一个事后读数。
         roster_rec = self._register_roster(task_id=tid, role=role,
                                            owner=str(parent_task_id or ""), meta=roster)
+        if roster_rec.get("problem"):
+            self._log(f"名册没写成：{roster_rec['problem']}", task_id=tid)
+        elif roster_rec.get("note"):
+            self._log(f"名册写成（{roster_rec['note']}）", task_id=tid)
         return SummonStart(
             role=str(role), action=str(action), params=params, by=str(by),
             parent_task_id=parent_task_id, input_key=str(input_key),
@@ -4152,6 +4339,8 @@ class Conductor:
         res.roster_considered = bool(roster_rec.get("considered"))
         res.roster_name = str(roster_rec.get("name") or "")
         res.roster_problem = str(roster_rec.get("problem") or "")
+        res.roster_state = str(roster_rec.get("state") or "")
+        res.roster_note = str(roster_rec.get("note") or "")
         return res
 
     # ---------------------------------------------------------------- 参数校验

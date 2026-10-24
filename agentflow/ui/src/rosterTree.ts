@@ -30,6 +30,7 @@ import type {
   RosterInboxItem,
   RosterNode,
   RosterTask,
+  RosterUnrostered,
   RosterView,
   Tri,
 } from "./types";
@@ -169,6 +170,35 @@ function asInboxItems(value: unknown): RosterInboxItem[] {
 }
 
 /** 这个子代理接过的那些活（`nodes[].tasks[]`；读不到就是空数组，不是"没干过活"）。 */
+/** 未落名册的子（台账里有父、名册正文与对照表都没说谁接过它）。
+ *
+ * 旧后端给的读数里没有这一格 ⇒ 空数组（那时名册页与改前逐字一样，不是"没有未落名册"。）
+ */
+function asUnrostered(value: unknown): RosterUnrostered[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: RosterUnrostered[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    const taskId = asText(item["task_id"]);
+    if (taskId === "") {
+      continue;
+    }
+    out.push({
+      task_id: taskId,
+      role: asText(item["role"]),
+      status: asText(item["status"]),
+      started_at: asText(item["started_at"]),
+      ended_at: asText(item["ended_at"]),
+      why: asText(item["why"]),
+    });
+  }
+  return out;
+}
+
 function asTasks(value: unknown): RosterTask[] {
   if (!Array.isArray(value)) {
     return [];
@@ -235,6 +265,7 @@ function asNode(value: unknown): RosterNode | null {
   if (taskId === "") {
     return null;
   }
+  const children = asChildren(value["children"]);
   return {
     task_id: taskId,
     name: asText(value["name"]),
@@ -243,7 +274,12 @@ function asNode(value: unknown): RosterNode | null {
     depth: asNumber(value["depth"]) ?? 1,
     parent_task_id: asText(value["parent_task_id"]),
     parent_name: asText(value["parent_name"]),
-    children: asChildren(value["children"]),
+    children,
+    // 子数按台账数（读不到 ⇒ null，界面那一格退回名册项数并注明"台账未读到"）；
+    // 名册项数缺省按 children 的数量算（旧后端只给 children）。
+    child_count: asNumber(value["child_count"]),
+    roster_child_count: asNumber(value["roster_child_count"]) ?? children.length,
+    unrostered_children: asUnrostered(value["unrostered_children"]),
     retired: value["retired"] === true,
     retired_branch: asText(value["retired_branch"]),
     brief: asText(value["brief"]),

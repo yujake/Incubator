@@ -32,6 +32,8 @@ from typing import Any
 
 from . import schema as S
 
+__all__ = ["PRECONDITION_REASON", "EMPTY_STATEMENT_TEXT", "EMPTY_PROOF_TEXT", "refuse"]
+
 #: 前置条件不满足时用的那一档受控理由。集中在这里，是为了让"动作拒绝"这件事
 #: 只有一个落点：散在各文件里的字面量一旦漂移，`Task.validate` 会在写库那一刻抛，
 #: 而那时"拒绝"已经变成"崩溃"了。
@@ -44,6 +46,19 @@ assert PRECONDITION_REASON in S.REFUSAL_REASONS, (
     f"{PRECONDITION_REASON!r} 不在 schema.REFUSAL_REASONS 里 ⇒ 所有动作拒绝都会"
     "在写台账时抛异常（拒绝被记成崩溃）"
 )
+
+#: 空正文的两个受控码（业主 2026-10-24 裁定 B2 的第 1 条：0 字命题 / 0 字证明要受控拒绝）。
+#:
+#: 为什么这两个字面量住在这里而不是各自写一份：`register_statement`（写侧硬拦）与
+#: `secretary.judge_statement`（判档位那一侧）必须说同一个词 —— 否则同一个输入在两处
+#: 拿到两个 `kind`，调用方只能靠猜"这两个是不是同一件事"。
+#:
+#: 两者的分工：`empty_statement_text` 是"这一条命题没有正文"（没有可判的对象）；
+#: `empty_proof_text` 是"这一笔声明了第 N 份证明，而它的正文是空的"（声明了却没交）。
+#: 后者刻意不管"整笔一条证明都没交"那一档：自产命题的"证明还没做完"是合法登记态
+#: （F-05 的待办那一档），拦掉它等于把那条路堵死。
+EMPTY_STATEMENT_TEXT = "empty_statement_text"
+EMPTY_PROOF_TEXT = "empty_proof_text"
 
 
 def refuse(kind: str, error: str, **extra: Any) -> dict:

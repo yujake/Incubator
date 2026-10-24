@@ -1511,10 +1511,16 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
 
     负控（三态那一条）：没查成不许缓存 —— 把"这一次没查成"变成"以后都别查了"，
     等于让一次超时永久关掉一道门；缝好起来之后必须还能真判。
+
+    2026-10-24（业主裁定 B2）之后档位由"证明花的力气"给，而"太平凡"这一个结论的含义
+    是"力气小"：不交证明正文时档位是「未判」、结论会被改记「判不了」（那一支见
+    `test_secretary_rates_nontriviality.py`）。所以要拿到「太平凡」，这一条得带一份
+    力气小的证明；同一个命题的第二问连证明一起沿用（缓存键含证明正文的摘要）。
     """
     sec = _sec()
     root = tmp_path / "ws"
     root.mkdir()
+    small_proof = "证明：由定义直接得到。所以 n^2+n = n(n+1) 是偶数。∎"
 
     class _Counting:
         def __init__(self, payload):
@@ -1530,8 +1536,10 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
     # ① 同一份文本问两次 ⇒ 只花一次调用，第二次标 reused 且结论逐字相同
     seam = _Counting({"decision": "太平凡", "reason": "两条依据都缺", "basis": ["x"]})
     s = sec.Secretary("B", root=root, seam=seam, enable_model=True)
-    first = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。")
-    second = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。")
+    first = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。",
+                              proof_text=small_proof)
+    second = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。",
+                               proof_text=small_proof)
     assert first["checked"] is True and first["decision"] == "太平凡", first
     assert seam.calls == 1, f"同一个命题被真问了 {seam.calls} 次"
     assert second["decision"] == first["decision"] and second.get("reused") is True, second
@@ -1543,6 +1551,7 @@ def test_the_same_statement_is_not_judged_twice(tmp_path):
 
     # ② 换了文本（或补上判据）⇒ 那是新的一次判断，必须真问
     third = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。",
+                              proof_text=small_proof,
                               basis_hint="判据①：L3 那一步要用到它。")
     assert seam.calls == 2, f"换了文本却没再问（calls={seam.calls}）"
     assert third.get("reused") is None, third
@@ -1567,8 +1576,13 @@ def test_the_filing_tier_note_points_at_the_upgrade_path(tmp_path):
     """落 T0 的那一格读数必须指路（判据两条），并说清"平凡不再拒收"。
 
     判据：把业主 2026-10-23 的裁定落在"模型看得见的那一格"上 —— 平凡 ⇒ 落 T0、
-    照旧收录；想升档就按秘书给的理由补一条判据。没有这一句，模型只会看到
+    照旧收录；想升档就得知道补哪一项。没有这一句，模型只会看到
     `tier=T0` 而不知道下一步该干什么（真机里同一份命题被原样重交 6 次就是这个形态）。
+
+    2026-10-24（业主裁定 B2）之后"升档路径"换了口径：不再是「后面哪一步会用到它 /
+    它比收录表里最接近的那一条强在哪」，而是五项力气读数（体量 / 步骤 / 引理 /
+    工具簇跨度 / 绕路）里补哪一项能升档（判据见
+    `tests/test_filing_tier_carries_the_proof.py` 的 (c)）。
     """
     import types
 
@@ -1584,7 +1598,9 @@ def test_the_filing_tier_note_points_at_the_upgrade_path(tmp_path):
         "own.register_statement", {"statement_full": "x"})
     assert got is not None and got["tier"] == "T0", got
     assert "T0" in got["note"] and "拦收录" in got["note"], got["note"]
-    assert "后面哪一步会用到它" in got["note"], got["note"]
+    # 升档路径是"补哪一项力气读数"，旧那两问已经不作判据
+    assert "力气" in got["note"] and "补" in got["note"], got["note"]
+    assert "后面哪一步会用到它" not in got["note"], got["note"]
     assert got["reason"] == "两条判据都答不上", got
 
 

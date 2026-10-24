@@ -183,8 +183,10 @@ def _assert_a(root: pathlib.Path) -> ES.ErrorStats:
     # 错误表里不该有任何 multi_call 这一族的东西
     assert not [c for c in stats.categories() if c.startswith("multi_call")], stats.categories()
     # 人读那一份：拆分是单独一栏，并且明说"不是错误"
+    # 2026-10-26：那一栏的标题改成"过程读数"了（它现在除了拆分，还收"直写被转交办成"
+    # 那一格 —— 同为过程读数）。判据的那半句话不变：错误表里不许出现这一族。
     text = "\n".join(ES.render_text(stats))
-    assert "拆分读数" in text and "不是错误" in text, text
+    assert "过程读数" in text and "不是错误" in text, text
     assert "steps_split" in text and "multi_call_executed_calls" in text, text
     # 机器读那一份：total 与 process 是两组键，谁也不含谁
     payload = stats.as_dict()
@@ -279,10 +281,14 @@ def test_b_the_three_real_failures_are_the_only_things_that_count(
     assert live.category_total("multi_call_out_of_limit") == 0, live.as_dict()
     # 它进错误总数（不是被挡在 total 之外）
     assert "multi_call_discarded" in live.categories(), live.categories()
-    # 同一趟里那条 invalid 步另有它自己的类目（两件事分开记，互不吞并）
+    # 同一趟里那条 invalid 步另有它自己的类目（两件事分开记，互不吞并）。
+    # 2026-10-26（第 ⑤ 条根因）：那一步点了一个没广告过的函数名 ⇒ 它的类目现在是
+    # `unknown_tool`（判据层的码是 `judge_unknown_tool`），不再是 `judge_bad_json`
+    # —— 改前"名字不存在"这一件事在文本协议与原生工具调用下各数一半。
     assert live.total == (live.category_total("multi_call_discarded")
-                          + live.category_total("judge_bad_json")), live.as_dict()
-    assert live.category_total("judge_bad_json") == 1, live.as_dict()
+                          + live.category_total("unknown_tool")), live.as_dict()
+    assert live.category_total("unknown_tool") == 1, live.as_dict()
+    assert live.category_total("judge_bad_json") == 0, live.as_dict()
     # 拆分这两格仍然是过程读数：一步被拆开、一条真的执行了
     assert live.process_category_total("steps_split") == 1, live.as_dict()
     assert live.process_category_total("multi_call_executed_calls") == 1, live.as_dict()
@@ -407,7 +413,9 @@ def test_e_the_category_tables_are_self_consistent(tmp_path: pathlib.Path) -> No
     assert payload["process"] == {"steps_split": 5, "multi_call_executed_calls": 9}, payload
     assert payload["process_by_role"] == {
         "M": {"multi_call_executed_calls": 9, "steps_split": 5}}, payload
-    # 人读那一份：错误表里没有 multi_call 这一族，拆分单独一栏
+    # 人读那一份：错误表里没有 multi_call 这一族，过程读数单独一栏
+    # 2026-10-26：分栏标题从"拆分读数"改成"过程读数"（这一栏现在也收"直写被转交办成"），
+    # 切分点跟着换；判据要的那半句话不变（错误表那一段里一个 multi_call 都不许有）。
     text = "\n".join(ES.render_text(stats))
-    assert "multi_call" not in text.split("拆分读数")[0], text
-    assert "拆分读数" in text, text
+    assert "multi_call" not in text.split("过程读数")[0], text
+    assert "过程读数" in text, text

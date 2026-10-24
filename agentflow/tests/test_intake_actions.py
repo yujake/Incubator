@@ -199,7 +199,11 @@ def test_b_register_statement_refuses_bad_input_without_writing(tmp_path: Path):
     assert ghost["ok"] is False and ghost["kind"] == "unknown_lit_id", ghost
 
     shallow = b.register_statement(source_lit_id=lit_id, **{**STATEMENT, "statement_full": " "})
-    assert shallow["ok"] is False and shallow["kind"] == "bad_statement", shallow
+    # 2026-10-24（业主裁定 B2 的第 1 条）：受控码从 `bad_statement` 换成
+    # `empty_statement_text` —— 0 字正文与"只有短版"是两档，读数要分得开
+    # （判据见 `tests/test_nontriviality_is_judged_by_effort.py` 的 (a)）。
+    assert shallow["ok"] is False, shallow
+    assert shallow["kind"] == "empty_statement_text", shallow
 
     no_source = b.register_statement(**{**STATEMENT, "source_lit_id": ""})
     assert no_source["ok"] is False and no_source["kind"] == "missing_source", no_source

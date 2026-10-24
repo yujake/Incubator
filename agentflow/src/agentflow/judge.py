@@ -66,6 +66,14 @@ JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_auth_failed",
     "judge_bad_json",
     "judge_bad_args",
+    # `judge_unknown_tool`（2026-10-26 加）：原生工具调用面里"点了一个没广告过的函数名"。
+    # 它与 `judge_bad_json` 必须分开，理由是"下一步该说什么"完全不同：坏 JSON 要提醒模型
+    # "只回一行 JSON"，而点错名字要提醒它"这一趟广告的是哪几个函数、并列候选是哪几个" ——
+    # 后者在文本协议下记的是 `unknown_tool`（工具层那一档），于是同一件事在两种协议下
+    # 之前各记一半（`errorstats` 里两个类目）。现在两者归同一个类目
+    # （`unknown_tool`：名字不存在），码保留判据层自己的名字 —— 与 `judge_not_wired`
+    # 归 `not_wired` 是同一手法：码说"哪一层看出来的"，类目说"这是个什么错"。
+    "judge_unknown_tool",
     "judge_over_budget",
     "judge_refused",
     "judge_failed",

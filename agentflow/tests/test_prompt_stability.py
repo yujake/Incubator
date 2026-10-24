@@ -529,6 +529,15 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p201", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p201（2026-10-25 收口批）：十一格全换（M 的 27 条过时清理 / D·E·F 与 G·H·V·L 两批审计 / S1 摘掉 system 的 inbox·board 两格 / S2 的监控与工具面出口按角色现算 / 共用段那几处）。facts 键集仍 15 格：inbox 与 board 只是换了落点（system 段 → 开场 user 消息），键名与条数一格未动"},
+        # p201 → p202（2026-10-26 收口批）：`judge.JUDGE_PROBLEMS` 多一个码 ⇒ 十一格摘要全换；
+        # `verify.verify_proof.required` 去掉 `proof_text`；F 的写集去 `statements`；`specs/d.py`
+        # 一处文案不再教 `force_new`。这四笔换的都是段正文与工具/写集声明，一格事实的落点都没挪
+        # （`STEP_VOLATILE_FACTS` 仍是那 15 格、键名一个没改）⇒ `count` / `keys_sha256` 与上一格
+        # 同值。它们仍是 `PS.volatile_facts_digest()` 的现算值，不手抄（这一格现算出来就是
+        # 同一个数：事实键集没动，动的是段与声明）。
+        {"version": "p202", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p202（2026-10-26 收口批）：十一格摘要全换（唯一根因是 `judge_unknown_tool` 新码进了 `THREE_STATE` 那段）；另 `verify.verify_proof.required` 去掉 `proof_text`、F 的写集去 `statements`、D 的一处文案不再教 `force_new`。facts 键集仍 15 格（键名与条数一格未动）"},
 )
 
 

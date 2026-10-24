@@ -30,7 +30,6 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { CachePanel } from "../components/PromptCache";
-import { RoleErrors } from "../components/RoleErrors";
 import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -323,10 +322,6 @@ export function Home() {
       {/* 两档提示词缓存的面板（2026-10-23）：落在首页最上面 —— 用户一进来就看得到
           "两档落没落地、新不新鲜、缺谁"，两个按钮就在下面（真预热要二次确认）。 */}
       <CachePanel />
-      {/* 错误动作那一栏（2026-10-24，业主：「ui侧加一个大栏专门显示各角色错误动作计数」）：
-          落在首页、紧挨着缓存面板 —— 导航里那一格「错误动作」链到的就是它。
-          读不到的时候它整栏显示「读不到」，不是一张 0 行的表。 */}
-      <RoleErrors />
       <Card
         title="对话"
         subtitle={

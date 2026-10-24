@@ -34,9 +34,6 @@ import type { ErrorCategoryGlossary, RoleErrorsView } from "../api";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 
-/** 这一栏的锚点（导航那一格链到它；也是页面上唯一的一个 id）。 */
-export const ROLE_ERRORS_ID = "role-errors";
-
 /** 抬头那一句"最集中的类目"取前几名。 */
 const TOP_LIMIT = 3;
 
@@ -94,7 +91,6 @@ export function UnreadableBand(props: { reason: string }) {
     <Card
       title="错误动作"
       subtitle="按角色 × 类目（只读）"
-      id={ROLE_ERRORS_ID}
       tone="problem"
       right={<Badge kind="badge-unknown" text="读不到" />}
     >
@@ -224,7 +220,7 @@ export function RoleErrors() {
   }
   if (view === null) {
     return (
-      <Card title="错误动作" subtitle="按角色 × 类目（只读）" id={ROLE_ERRORS_ID}>
+      <Card title="错误动作" subtitle="按角色 × 类目（只读）">
         <span class="empty">
           正在读——这一条要扫事件流与全部会话记录，大工作区上十几秒。
         </span>
@@ -248,7 +244,6 @@ export function RoleErrors() {
     <Card
       title="错误动作"
       subtitle="按角色 × 类目（只读；零模型调用）"
-      id={ROLE_ERRORS_ID}
       right={
         <button
           class="btn"

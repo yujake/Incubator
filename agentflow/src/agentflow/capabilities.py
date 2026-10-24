@@ -111,6 +111,20 @@ def unmapped_actions() -> list[tuple[str, str]]:
     看见它的前提是先把"能力层的动作"与"工具层的 spec"按名字对上；
     对不上的动作就必须如实报出来，而不是当成"一致"（那是 P16 的
     "判据真空通过"：空集永远是子集）。
+
+    ## "对上了"的判据是装配面，不是声明面（2026-10-26，第 ④ 条根因）
+
+    `_tool_side_effects()` 读的是**声明**：`tools._MODULES` 加上
+    `_TOOL_MODULE_EXTRAS` 里逐条登记的那几件 —— 而后者登记的理由是
+    "两层参数对账要看得见这条工具"（见那张表的理由串），不是"它是工具面上的一件"。
+    于是 `D.register_conjecture` 曾经被算成"已对上"：名字对上了
+    `conjecture.register_conjecture` 的声明，而 `build_registry` 根本装配不到那个模块
+    ⇒ 工具面上没有它 ⇒ `agent_loop._own_actions_to_expose` 也不注入 `own.register_conjecture`
+    ⇒ 模型按手册喊短名 `register_conjecture`，只拿到"并列候选 0 个"。
+    现在对得上 = "那个组由 `tools._MODULES` 里的模块产出"，也就是工具面上真有这件工具
+    （过滤发生在 :func:`_candidates`，`_matching_tool_name` 与它共用同一条判据）。
+    "读到了、但不注册"这件事仍然是可见的，落点是
+    `param_type_coverage()['tools_read_but_not_registered']` —— 两件事分开说，谁也不冒充谁。
     """
     tools = _tool_side_effects()
     unmapped: list[tuple[str, str]] = []
@@ -168,12 +182,15 @@ def matching_tool_name(spec: ActionSpec) -> str | None:
 
 
 def _matching_tool_name(spec: ActionSpec, tools: Mapping[str, Any]) -> str | None:
-    """:func:`matching_tool_name` 的纯函数形态（工具表由调用方给，避免重复解析源码）。"""
-    groups = _TOOL_GROUPS_BY_ROLE.get(spec.role, ())
-    hits = sorted(
-        name for name in tools
-        if name.split(".")[-1] == spec.handler_name and name.split(".")[0] in groups
-    )
+    """:func:`matching_tool_name` 的纯函数形态（工具表由调用方给，避免重复解析源码）。
+
+    与 :func:`_candidates` 共用同一份实现（`:func:`_candidates_impl`），但刻意不转调
+    `_candidates` 这个名字：后者是负控打桩的接缝（`tests/test_capabilities_two_layer.py`
+    把 `_candidates` 打桩成"两个候选 / 一个都没有"来证明对账面会红），而这一条查的是
+    "某个动作能不能唯一对上一个工具"，打桩它会让只读例外表（`READONLY_CALL_EXCEPTIONS`）
+    的解析跟着变 —— 那会把一条负控变成两条判据互相干扰的假证明。
+    """
+    hits = _candidates_impl(spec, tools)
     return hits[0] if len(hits) == 1 else None
 
 
@@ -290,6 +307,27 @@ assert len(set(_TOOL_MODULES)) == len(_TOOL_MODULES), (
 )
 
 
+def _assembled_groups() -> frozenset[str]:
+    """工具面上真的装配过的组前缀（`tools._MODULES` 派生的那一份，2026-10-26 加）。
+
+    为什么要与 `_TOOL_MODULES` 分开：「读声明」与「装配」是两件事。`_TOOL_MODULES` 多读一个
+    模块，是为了让两层参数对账看得见 `conjecture.register_conjecture` 的约束面；
+    而"这件工具在不在工具面上"只能看 `tools._MODULES` —— 装配期真正注册工具的那张表。
+    把两者混成一个集合的后果是一次静默的错判：`D.register_conjecture` 被算成"已对上"，
+    于是 `agent_loop` 不注入 `own.register_conjecture`，模型在模型驱动模式下喊短名时
+    只拿到"并列候选 0 个"。判据 `tests/test_d_can_reach_register_conjecture.py`。
+    """
+    from .tools import _TOOL_GROUP_PREFIXES
+
+    return frozenset(_TOOL_GROUP_PREFIXES)
+
+
+#: 装配面上的组前缀（`tools._MODULES` 派生）。`_candidates` 用它把"只读到、不装配"的
+#: 那几件工具挡在"对得上"之外 —— 三处读数（`unmapped_actions` / `two_layer_reconciliation`
+#: / `declaration_divergences`）共用 `_candidates`，所以这条过滤只有一处落点。
+_ASSEMBLED_GROUPS: frozenset[str] = _assembled_groups()
+
+
 @dataclass(frozen=True)
 class DeclarationDivergence:
     """两层声明不一致的一条记录。带机器可读的码。"""
@@ -332,7 +370,11 @@ def two_layer_reconciliation() -> dict:
     ## 为什么这个函数必须存在（它补的是一条真的缝）：`declaration_divergences` 答"两层在哪里不一致"，
     而"对账面有没有真的在做"有三个不同答案，必须分开数：`compared`（动作与工具唯一对上了）、
     `unmatched`（`handler_name` 在角色工具组里对应 0 个 ⇒ 没比成，unknown）、`ambiguous`（对应 ≥2 个 ⇒ 按唯一性约定拒绝猜，unknown）。
-    实测（2026-10-15 现算）：62 个动作 = 23 compared + 39 unmatched + 0 ambiguous（`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 工具名最后一段正是 `walk_citations`，与 `handler_name` 逐字相同；对照 `search_literature` 落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，所以"两层形状一致"对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
+    实测（2026-10-26 现算）：64 个动作 = 24 compared + 40 unmatched + 0 ambiguous
+    （2026-10-15 是 62 个动作 = 23 compared + 39 unmatched + 0 ambiguous；`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 工具名最后一段正是 `walk_citations`，与 `handler_name` 逐字相同；对照 `search_literature` 落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，所以"两层形状一致"对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
+    2026-10-26：`D.register_conjecture` 从 compared 挪进 unmatched —— 它对应的
+    `conjecture.register_conjecture` 只被"读到"、没有被 `build_registry` 装配（见 `_ASSEMBLED_GROUPS`），
+    所以"两层有一个唯一对应的工具"这句话对它不成立（+1 unmatched、−1 compared、动作总数不变）。
     此前各次（数字逐次可复算，每次只增不改）：（2026-10-14）60 = 21 + 39 + 0（退场前：`paper_package` 那一条本来也进 `unmatched`）；（2026-10-06）59 = 21 + 38 + 0（加角色 V 的三条动作 `verify.verify_proof` / `verify.list_verifications` / `verify.read_proof` 全部对上，`_TOOL_GROUPS_BY_ROLE["V"]` 只登记 `verify` 一组）；（2026-10-03）55 = 18 + 37 + 0（加 `G.paper_package`，2026-10-13 退场）；（2026-10-02）53 = 18 + 35 + 0（加 `A.ingest_local` 与 `B.register_statement`）；（2026-09-30）51 = 17 + 34 + 0（加 `A.search_literature`）。
     `C.proof_chain` 与 C 的其余八条同族：`handler_name` 在 `_TOOL_GROUPS_BY_ROLE["C"]` 里对不上工具组 ⇒ 进 `unmatched`，并逐条登记在 `_KNOWN_UNMATCHED_ACTIONS`。
     `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）—— 于是 `ambiguous` 那一格可以静默长大：它今天恰好是 0，所以那条缝从没被看见。本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。
@@ -360,11 +402,32 @@ def declaration_divergences_for(
 def _candidates(
     spec: ActionSpec, tools: Mapping[str, tuple[str, str, bool]]
 ) -> list[str]:
-    """一个动作在它的角色工具组里能对上的工具名（已排序，可能 0 / 1 / 多个）。"""
+    """一个动作在它的角色工具组里能对上的工具名（负控打桩的接缝；实现见 `_candidates_impl`）。
+
+    为什么留这一层同名包装：本仓的负控靠"把这一格打桩掉、看判据会不会红"来证明判据真的
+    在比对（`tests/test_capabilities_two_layer.py` 的两条负控）。实现放在
+    `_candidates_impl` 里，于是"打桩 `_candidates`"只影响对账面，不波及
+    `_matching_tool_name`（后者查的是同一件事的另一个消费者）。
+    """
+    return _candidates_impl(spec, tools)
+
+
+def _candidates_impl(
+    spec: ActionSpec, tools: Mapping[str, tuple[str, str, bool]]
+) -> list[str]:
+    """`_candidates` 的实现：名字最后一段 + 角色工具组 + 装配面，三条一起判。
+
+    前两条是名字消歧（`handler_name` 逐字相同、组在 `_TOOL_GROUPS_BY_ROLE` 里登记过）；
+    第三条（`_ASSEMBLED_GROUPS`）是 2026-10-26 补的：那个组必须由 `tools._MODULES` 里的
+    模块产出。少了它，"只读到、不装配"的工具（`conjecture.register_conjecture`，
+    见 `_TOOL_MODULE_EXTRAS` 的理由串）会被算成"对上了"，而它在工具面上根本不存在。
+    """
     groups = _TOOL_GROUPS_BY_ROLE.get(spec.role, ())
     return sorted(
         n for n in tools
-        if n.split(".")[-1] == spec.handler_name and n.split(".")[0] in groups
+        if n.split(".")[-1] == spec.handler_name
+        and n.split(".")[0] in groups
+        and n.split(".")[0] in _ASSEMBLED_GROUPS
     )
 
 
@@ -1175,11 +1238,14 @@ _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "`graph.neighbors` 有可选上限 `max_neighbors`，动作面只声明了必填。"
         "C 的图上动作今天只走 `neighbors`/`paths` 两个入口，上限是否要暴露给编排层未见裁定。",
     ),
-    ("D", "register_conjecture"): (
-        frozenset({"force_new"}),
-        "`conjecture.register_conjecture` 有 `force_new`（重复登记时是否强建新行），"
-        "动作面没声明 ⇒ 主控派活时用不上这个开关。",
-    ),
+    # 2026-10-26：`("D", "register_conjecture")` 那一对已删（登记过期）。它登记的是
+    # "`conjecture.register_conjecture` 有 `force_new`，动作面没声明"；而那条工具不在
+    # `tools._MODULES` 里（`build_registry` 不装配它）⇒ 这一对现在落进"没有工具层"那一格
+    # （见 `_KNOWN_UNMATCHED_ACTIONS` 与 `_KNOWN_ACTION_ONLY_PARAMS` 的同名条目）。
+    # 反向缺口只对"唯一匹配到工具"的对算，所以这条登记留着就会变成噪音；
+    # "那条工具上有 force_new" 这个事实仍在它自己的 schema 里，工具的注册状态由
+    # `param_type_coverage()['tools_read_but_not_registered']` 报。
+    #
     # 2026-10-23 晚：`("E", "run_experiment")` 的 `run_name` 与
     # `("E", "check_formal")` 的 `checker_name` 两对已删 —— 前者随工具 schema 一起
     # 退场（那两个参数只服务 formal，而 E 不做形式化），后者随动作整条摘掉。
@@ -1346,6 +1412,19 @@ _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "（它只服务 formal，而 E 不做形式化，工具 schema 的 `run_name` 也一起删了）。",
     ),
     # 2026-10-23 晚：`("E", "check_formal")` 那一对已删（动作整条摘掉）。
+    ("D", "register_conjecture"): (
+        frozenset({
+            "conjecture_id", "counterexample_experiment_id", "experiment_ids", "form",
+            "known_lit_id", "negation_statement", "notes", "origin", "promoted_to",
+            "proof_experiment_id", "statement", "status", "testable", "withdraw_reason",
+        }),
+        "这条动作没有工具层（2026-10-26 起）：落地工具 `conjecture.register_conjecture` "
+        "住在 `tools/conjecture_tools.py`，而那个模块不在 `tools._MODULES` 里 ⇒ "
+        "`build_registry` 不装配它。「读到、但不注册」这件事仍由 "
+        "`param_type_coverage()['tools_read_but_not_registered']` 如实报出（那条工具上有 "
+        "`force_new`，本动作面不声明它 —— 同一条事实的另一半）。这里的 14 格是动作面"
+        "声明的全部 property：没有工具面时它们只活在动作面，不登记就等于在读数里不存在。",
+    ),
     ("H", "list_findings"): (
         frozenset({"kind"}),
         "`review.list_findings` 按 `level` / `status` 过滤，而动作面按 `kind` 过滤 ⇒"
@@ -2967,6 +3046,18 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # `draft/37` §115：从零做研究时"立起第一行问题"的通路 —— 它只写
     # `research_questions` 一行，工具层没有同名工具（不是转发，也没有对应的 tool 调用）。
     "D.propose_question",
+    # 2026-10-26（第 ④ 条根因）：`register_conjecture` 此前被算成"已对上"，
+    # 而它对应的 `conjecture.register_conjecture` 不在 `tools._MODULES` 里
+    # （`build_registry` 装配不到那个模块，D 走 `agent_d._support` 的直接 import）
+    # ⇒ 工具面上没有它，模型驱动模式下 D 喊短名只会拿到"并列候选 0 个"。
+    # 现在"对得上"的判据改成装配面（`_candidates` 的 `_ASSEMBLED_GROUPS` 过滤），
+    # 于是它诚实地落进"没有工具层"这一格 —— `agent_loop._own_actions_to_expose`
+    # 据此把 `own.register_conjecture` 注入这一趟的工具面。
+    # 为什么不选另一条路（把 `conjecture_tools` 加进 `tools._MODULES`）：那会改变
+    # 广告出去的整份工具面（`tests/golden/tool_surface_snapshot.json` 里每个角色的
+    # 工具清单都会多一件），而"不重冻 golden"是本批的硬边界；而且那件工具的
+    # `roles` / 依赖装配也都要一起接进来，改动的面比这条判据大。
+    "D.register_conjecture",
     "E.run_script_experiment",
     "G.render", "G.refresh_markdown", "G.revise",
     "H.review",

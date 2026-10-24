@@ -296,7 +296,7 @@ def test_criterion_1_no_sha_text_reaches_the_screen(format_ws: pathlib.Path) -> 
     problems: list[str] = []
     for page, payload in (("Evidence", ev), ("Artifacts", art)):
         problems += _sha_leak_problems(page, _page_reads(_page_text(page)), payload)
-    # 全站都算：九页与每个组件都不许读"持有一个哈希"的那一族字段
+    # 全站都算：十页与每个组件都不许读"持有一个哈希"的那一族字段
     # （这一条不依赖具体读数，所以用一个空 payload）。
     for path in (sorted((UI_SRC / "pages").glob("*.tsx"))
                  + sorted((UI_SRC / "components").glob("*.tsx"))):

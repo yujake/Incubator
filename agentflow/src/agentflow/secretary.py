@@ -24,6 +24,7 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -32,6 +33,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from . import manuscripts as MS
 from . import proofloc as _PL
 from . import propositionkey as _PK
+from . import refusals as R
 from . import schema as S
 from . import statementbody as _SB
 
@@ -125,6 +127,31 @@ NONTRIVIALITY_UNJUDGED: None = None
 #: 没有这一格的历史行按旧刻度读（0 = 判不了）。
 NONTRIVIALITY_SCALE = "T0-T4"
 
+#: 判档位那一趟交给模型的材料（user 消息那一段）最多多少字。
+#:
+#: 2026-10-24 之前是 4000，而且没有任何一格说"被截了"。真机读数（sylow4）：一条正文
+#: 8375 字，材料 JSON 在 4000 字处被切断，模型读到半句证明，于是给出"证明截断，无法
+#: 定档"，台账落成 `nontriviality: null` + basis "材料不足"。业主裁定（2026-10-24）：
+#: 正文被截断要显式报 `text_truncated`，并说清"档位判不了是因为输入不完整，不是因为
+#: 材料不足"。所以这里两件事一起改：上限抬到与逐字段上限同量级（20 000），且超限时
+#: 必须由 :func:`material_truncation` 报出精确的截断点。
+JUDGE_MATERIAL_CAP = 24_000
+
+#: 判档位读"力气"的那份正文最多读多少字（超出 ⇒ 这一趟的档位落「判不了 + 被截断」）。
+#:
+#: 与 :data:`JUDGE_MATERIAL_CAP` 分开：前者是"材料 JSON 有多长"，后者是"证明正文有多长"。
+#: 两个数都必须显式，且都必须被 :func:`proof_effort_readings` 读到 —— 一处截断、另一处
+#: 不知道，就是 2026-10-24 之前那个形态。
+PROOF_BODY_CAP = 20_000
+
+#: 空命题正文的受控码（写侧 `register_statement` 与判档位这一侧共用一个字面量）。
+#:
+#: 为什么不是复用 `bad_statement`：那一个管的是"只有短版（statement_text）、没有含完整
+#: 假设的正文"，这一档管的是"0 字"（连短版都没有）。两种输入的处置相同（整笔不写），
+#: 但读数必须分得开 —— 前者是"你给错了栏"，后者是"没有可判的对象"。
+#: 字面量的真身住在 `refusals.py`：同一句拒绝在写侧与判档位这一侧必须说同一个词。
+EMPTY_STATEMENT_TEXT = R.EMPTY_STATEMENT_TEXT
+
 #: 档位的显示名（`0 -> "T0"`）。读侧一律调 :func:`nontriviality_label`，不各写一份。
 _NONTRIVIALITY_LABELS: dict[int, str] = {level: f"T{level}" for level in NONTRIVIALITY_LEVELS}
 
@@ -144,6 +171,40 @@ def _is_trivial_verdict(decision: Any) -> bool:
     """
     return str(decision or "") == "太平凡"
 
+#: 「这一条与在册的哪一条是同一条命题」的结论词表（业主 2026-10-24 的准绳）。
+#:
+#: 业主逐字：「定理描述一致（什么条件推出什么结论），就是一个定理」。所以这一问只有三个
+#: 结论：同一组条件推出同一组结论（same）/ 不是（different）/ 条件或结论有一侧写不清、
+#: 判不了（unknown）。三态不是"两态 + 一个兜底"：unknown 的处置是"不并、留凭据"，它与
+#: different（"判过了，确实不是"）在台账上必须分得开 —— 折平就会把"没人判过"读成"判过
+#: 了、不同"，于是同一条定理又被拆成两条。
+PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different", "unknown")
+
+#: 命题同一性判定的旁支台账（append-only）：一行一次判定，键是命题正文的 sha256。
+#:
+#: 为什么按正文 sha 缓存而不是按本次登记：同一段正文被交上来第二遍（改个标签、换个人重交、
+#: 重试）时，判定不会有别的结论 —— 而每一次都要真发一次模型调用。真机 sylow4 的形态正好是
+#: "同一条定理交了三遍"，没有这一层就是三笔钱买同一句话。
+PROPOSITION_VERDICT_LEDGER = "proposition_verdicts.jsonl"
+
+#: 交给秘书的候选上限（"按主题粗筛一小批"）：4 条。
+#:
+#: 为什么不给更多：一次判定要在提示词里同时放下这一条的正文与每条候选的正文/定理名。
+#: 候选越多，每条能分到的字数越少 —— 而对"条件与结论是否一致"这件事，半条命题没有用。
+PROPOSITION_VERDICT_CANDIDATES = 4
+
+#: 一次判定里这一条正文最多看多少字符（每条候选各自也有同样的上限）。
+PROPOSITION_VERDICT_TEXT_CHARS = 1200
+
+#: 证明的"路子"说明住在哪：行 JSON 里一个 `{证明号: 一句话}` 的字典。
+#:
+#: 业主要求（2026-10-24）：「路线写在证明这一层」。它不能待在命题的 label 里 ——
+#: 那条 label 是定理名（`Sylow 三定理`），带"（路线一：…）"之后，同一条定理的三种证法
+#: 就成了三条不同的命题（真机 sylow4 的三行正是这么来的）。所以：
+#: 定理名归 label，路子归证明号（这一格），依赖的路径分组归 `Dependency.path_group`。
+#: 键是证明号的字符串形式（JSON 的键只能是字符串），读侧一律走 :func:`proof_route_of`。
+PROOF_ROUTES_KEY = "_proof_routes"
+
 #: 判断类别 → 它允许的结论词表（唯一一处把"哪类判断有哪些结论"写下来的地方）。
 #:
 #: 加一类判断时只加一行：`Secretary.JUDGE_KINDS` 与 `judge()` 的校验都从这张表派生，
@@ -153,6 +214,8 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     "tool_name": DECISIONS,
     "rearrange": DECISIONS,
     "statement_aesthetic": STATEMENT_VERDICTS,
+    # 命题同一性（业主 2026-10-24：「让秘书洗定理名，让秘书判」）：结论词表就是三态。
+    "proposition_identity": PROPOSITION_VERDICTS,
 }
 
 
@@ -679,6 +742,11 @@ PROOF_SAME_JACCARD = _PK.PROOF_SAME_JACCARD
 #: 同一命题命中的两条依据（进返回值与拒信：读的人要能分辨"凭什么并的"）。
 MERGED_BY_KEY = _PK.BASIS_KEY
 MERGED_BY_SIMILARITY = _PK.BASIS_SIMILARITY
+#: 第三种依据（2026-10-24 晚）：秘书那一趟模型判定说"同一条"（`adjudicate_proposition`）。
+#:
+#: 它必须与上面两条分开命名：键相同 / 相似度兜底都是机械读数，而这一条是"读了条件与结论
+#: 之后判的" —— 三者的可信度、可复核方式、以及"凭什么并的"那句话都不一样。
+MERGED_BY_ADJUDICATION = "secretary_adjudication"
 #: 同种证明的拒收码（写侧与拒信共用这一个字面量）。
 PROOF_SAME_KIND = "proof_same_kind"
 #: 参与"同一命题"判定的 kind（命题性的那几档）。
@@ -1010,6 +1078,14 @@ class Secretary:
         #: 只记 `checked=True` 的结论：没查成（没缝 / 超时 / 坏 JSON）不许缓存 ——
         #: 那会把"这一次没查成"变成"以后都别查了"，而缝是可能好起来的。
         self._statement_verdicts: dict[str, dict[str, Any]] = {}
+        #: 命题同一性的同题不重判表（业主 2026-10-24：「让秘书洗定理名，让秘书判」）。
+        #:
+        #: 键 = 命题正文的 sha256（见 `_proposition_verdict_key`）；值 = 第一次的判定。
+        #: 这一层只是进程内的快表：盘上那份 append-only 台账
+        #: （`out/secretary/proposition_verdicts.jsonl`，见 `proposition_verdict_of`）才是
+        #: 跨进程/跨趟的缓存 —— 没有盘上那一份，"同一条正文第二次进来不再花钱"这句话只在
+        #: 同一个秘书实例活着的时候成立。
+        self._proposition_verdicts: dict[str, dict[str, Any]] = {}
 
     # ------------------------------------------------------------ 台账（E 类：记录）
 
@@ -1536,6 +1612,19 @@ class Secretary:
             # 这一层只管"别把它丢了"。
             out["nontriviality"] = data.get("nontriviality", data.get("tier"))
             out["nontriviality_basis"] = str(data.get("nontriviality_basis") or "")[:500]
+        if kind == "proposition_identity":
+            # ---- 2026-10-24：同一趟判断的第二组输出（业主：让秘书洗定理名，让秘书判）。
+            #
+            # 这一类的判词不止一个词：还要把名字洗出来（canonical_name）、把标签里那条
+            # 路线挪到证明那一层（route），并把"条件是什么 / 结论是什么"各自留一句比对
+            # （condition / conclusion）。这一层只做放行与截断，不校验语义（校验与三态在
+            # `adjudicate_proposition` 一处做）—— 与 `nontriviality` 那一支同一条纪律：
+            # 这一格只管"别把它丢了"（丢了之后盘上只剩一个 same，人看不出凭什么）。
+            out["canonical_name"] = str(data.get("canonical_name") or "")[:200]
+            out["same_as"] = str(data.get("same_as") or data.get("same_stmt_id") or "")[:64]
+            out["route"] = str(data.get("route") or "")[:500]
+            out["condition"] = str(data.get("condition") or "")[:500]
+            out["conclusion"] = str(data.get("conclusion") or "")[:500]
         return self._record_judge(kind, context, out)
 
     def _record_judge(self, kind: str, context: Mapping[str, Any],
@@ -1564,27 +1653,78 @@ class Secretary:
 
     def judge_statement(self, *, statement_full: str, statement: str = "",
                         source: str = "", basis_hint: str = "",
+                        proof_text: str = "", proofs: list | None = None,
                         task_id: str = "") -> dict[str, Any]:
-        """B 的秘书专属：这条待入库的命题够不够格（业主 2026-10-14 裁决第 12 条前半）。
+        """B 的秘书专属：这条待入库的命题落在非平凡性的哪一档（业主 2026-10-14 裁决第 12 条前半）。
 
         原话：「第十二条作为 B 的秘书的任务，判断一个待入库的命题是否太平凡有没有资格入库，且让 B 在挑定理和
         命题提交入库时要有审美。」为什么是"秘书"而不是"又一条机器判据"：平凡与否不是字符串能判的事
         （`a+b=b+a` 与一条真定理的字面形态可能很像），它属于本仓划给秘书的那一类判断（`draft/55` §2 的 B 类：
-        机器只摆材料，结论由本体自己的缝给）。所以这里只是取材料 + 交给 :meth:`judge`，不新增算法。三态，且
-        "没查成"不许读成"合格"：
+        机器只摆材料，结论由本体自己的缝给）。三态，且"没查成"不许读成"合格"：
+
         | 结局 | 返回 |
         |---|---|
         | 判了 | `checked=True` + `decision ∈ {"合格","太平凡","判不了"}` + `reason` + `basis` |
         | 不是 B 的秘书 | `checked=False` + 理由（这一问只属于 B） |
         | 没缝 / 开关关着 / 超时 / 坏 JSON | `checked=False` + 理由（`judge` 的那几支） |
-        调用方（`agent_loop._statement_filing_tier`）读的是同一个结论，但后果变了（业主
-        2026-10-23）：「太平凡」不再拒收，而是落 T0（基础定理或初步结论）——
-        `checked=False` 仍然是"这一格没查成"，两者在台账与工具结果里长得不一样。
+        | 正文 0 字 | `checked=False` + `code=empty_statement_text`（不进判档流程，不发调用，不落台账） |
+
+        ## 2026-10-24（业主裁定 B2）：判据换成"这份证明花了多大力气"
+        业主原话：「不一定一条定理后面要用，也不一定存在"已知那条"，看证明花的力气就能判非平凡度」。
+        于是这一趟的材料里多一格 `effort`：机器数好的四项读数（体量 / 步骤 / 引理 / 工具簇跨度）
+        外加绕路与分数（:func:`proof_effort_readings`）。档位由分数落格
+        （:data:`EFFORT_TIER_BANDS`），`nontriviality_from_effort` 是唯一那个落格函数。
+
+        三个"谁是权威"的取舍写在这里，读的人不用去猜：
+        1. 读数完整 ⇒ 档位按读数给定；秘书自报的 `nontriviality` 只作交叉核对，
+           不一致时以读数为准，并把两边都写进 `nontriviality_basis`。
+        2. 读数缺项（没有证明正文）或正文被截断 ⇒ 档位是 `None` + 原因点名缺哪一项 ——
+           不许落 0 冒充"基础定理"，也不许把"输入不完整"写成"材料不足"。
+        3. `decision` 跟着档位走（两栏不许自相矛盾）：读数给出 T1 以上而秘书判了「太平凡」⇒
+           改记「合格」；读数一项都拿不到或输入被截断而秘书判了「太平凡」⇒ 改记「判不了」。
+           两次改写都在结果里留 `decision_overridden_from`。
+
+        `proof_text` / `proofs` 是可选的：`specs/b.py` 规定证明交在 `proof_text` 那一栏，
+        而 `agent_loop._statement_filing_tier` 这一趟只转交命题正文（那一行不在本文件，
+        见 `_statement_filing_tier` 的调用点）——所以正文里自带证明小节时（真机上 B 有时
+        整段写进 `statement_full`），读数照样读得到；真读不到就是"缺证明正文"那一支。
         """
         if str(self.role) != "B":
             return {"checked": False, "decision": "", "basis": [],
                     "reason": f"这一问只属于 B 的秘书（本条秘书属于 {self.role!r}）⇒ 这一格没查成",
                     "cost": {"ledger": "", "reason": "没发调用（不是 B 的秘书）"}}
+        # ---- 0 字命题：不进判档流程（B2 的第 1 条，2026-10-24）
+        #
+        # 真机读数（sylow4 的 `out/secretary/nontriviality.jsonl`）：11 行里有 1 行的
+        # `statement_chars` 是 0，档位 None、basis "无任何命题或证明内容，无法定档"。
+        # 那一行根本不该存在：空正文不是一个"判不了的对象"，它是"没有对象" ——
+        # 判它一次要花一次模型调用，而结论只能是"没东西可判"。所以这一格在取材料之前
+        # 就受控拒绝：不发调用、不落台账（判不了的读数也不留 —— 它会被读成"有人判过"）。
+        body_full = str(statement_full or "")
+        if not body_full.strip():
+            return {"checked": False, "decision": "", "basis": [],
+                    "code": EMPTY_STATEMENT_TEXT,
+                    "reason": ("这一条命题的正文是 0 字 ⇒ 不进判档位（受控拒绝）。"
+                               "空正文不是「材料不足」：它没有可判的对象，四项力气读数"
+                               "（体量/步骤/引理/跨度）一项都取不到。把含完整假设的正文"
+                               "交上来再判；`kind=\"concept\"` 的空定义走登记那条路，"
+                               "不经过这一问"),
+                    "nontriviality": NONTRIVIALITY_UNJUDGED, "label": "",
+                    "nontriviality_tri": "unjudged", "nontriviality_basis": "",
+                    "effort": {}, "text_truncated": False,
+                    "cost": {"ledger": "", "reason": "没发调用（正文 0 字 ⇒ 不进判档位）"}}
+        # ---- 力气读数（B2 的机器侧，判档位的唯一判据）
+        #
+        # `proofs` 是 B 一次交上来的多份证明（多证明模型）：任一份都算这份证明的力气，
+        # 所以拼成一段一起读。`statement_full` 在它像一份证明正文时也参与（见
+        # `_looks_like_a_proof`：真机上 B 有时把整段证明写进这一栏）。
+        proof_bodies = [str(proof_text or "")]
+        for item in (proofs or []):
+            if isinstance(item, Mapping):
+                proof_bodies.append(str(item.get("text") or item.get("proof_text") or ""))
+        proof_joined = "\n\n".join(x for x in proof_bodies if str(x).strip())
+        readings = proof_effort_readings(statement_full=body_full, proof_text=proof_joined,
+                                         basis_hint=basis_hint)
         # 2026-10-15 业主裁定 D4：这几格此前是 `[:2000] / [:500] / [:300] / [:500]`
         # —— 一条静默截断，而且截的恰好是判据的输入：秘书要判的是"这条命题
         # 平不平凡"，而命题的长尾（限定条件、量词顺序）正是决定平凡与否的部分。
@@ -1594,14 +1734,38 @@ class Secretary:
         # 注意 `statement_full` 同时是缓存键的输入（见下面的 sha256）：键必须
         # 跟着一起变 —— 它变了是好事，"同一命题问第二遍不重复花钱"仍然成立，
         # 而两条前 2000 字符相同、之后不同的命题不再被误认成同一条。
+        #
+        # 2026-10-24：多一格 `effort`（力气读数）。它按 `sort_keys` 排在材料最前面 ——
+        # 万一材料真的被截断，模型至少已经看到读数本身，而不是只看到半句正文。
         context = {
-            "statement_full": str(statement_full or "")[:20_000],
+            "effort": {k: readings.get(k) for k in
+                       ("chars", "steps", "lemmas", "clusters", "cluster_names",
+                        "detour", "score", "missing", "text_truncated", "truncated_at")},
+            "statement_full": body_full[:20_000],
             "statement": str(statement or "")[:20_000],
             "source": str(source or "")[:4_000],
             "why_this_is_not_trivial": str(basis_hint or "")[:8_000],
         }
+        # 截断读数：正文超上限、或材料 JSON 超上限，两种都算"输入不完整"。
+        material_cut = material_truncation(context)
+        body_cut = bool(readings.get("text_truncated"))
+        text_truncated = bool(body_cut or material_cut["truncated"])
+        if body_cut:
+            at = int(readings.get("truncated_at") or PROOF_BODY_CAP)
+            trunc_note = (f"这一条正文在 {at} 字处被截断（正文共 "
+                          f"{int(readings.get('body_chars') or 0)} 字，判档位读的上限是 "
+                          f"{at} 字）—— 档位判不了是因为输入不完整，不是因为材料不足")
+        elif material_cut["truncated"]:
+            trunc_note = (f"这一条正文在 {material_cut['at']} 字处被截断（材料共 "
+                          f"{material_cut['chars']} 字，材料上限是 {material_cut['at']} 字）"
+                          "—— 档位判不了是因为输入不完整，不是因为材料不足")
+        else:
+            trunc_note = ""
+        # 缓存键：命题正文 + B 写的素材 + 证明正文的摘要。第三项是 2026-10-24 加的 ——
+        # 同一条定理的第二份证明是另一次判断（力气不同），拿正文键去沿用会把它判成第一次那一档。
         key = hashlib.sha256(
-            (context["statement_full"] + "\x00" + context["why_this_is_not_trivial"])
+            (context["statement_full"] + "\x00" + context["why_this_is_not_trivial"]
+             + "\x00" + hashlib.sha256(proof_joined.encode("utf-8")).hexdigest())
             .encode("utf-8")).hexdigest()
         prior = self._statement_verdicts.get(key)
         if prior is not None:
@@ -1621,28 +1785,72 @@ class Secretary:
         got = self.judge("statement_aesthetic", context, task_id=task_id)
         if got.get("checked"):
             # 2026-10-21：同一趟判断的第二个输出 —— 非平凡性档位（0–4；判不了 = None）。
+            # 2026-10-23 业主裁定：判「太平凡」不再意味着"拒收"，而是"落 T0"。
+            # 2026-10-24 业主裁定（B2）：档位与"太平凡"都改由力气读数定。
             #
-            # 2026-10-23 业主裁定之后，"太平凡"这个结论不再意味着"拒收"，而是
-            # "落 T0（基础定理或初步结论）"。所以档位在这里被就地改写成 0：
-            # 秘书自己报的档位在"平凡"这一支上不算数（它可能写 2/3，而这一条
-            # 已经判成平凡了 —— 两栏自相矛盾会让下游按 2/3 去读它，
-            # 而收录口那边又是按"平凡"放的）。三态纪律：判不了（None）不许读成 T0，
-            # 所以只有"判了且判平凡"才写 0。
-            level = _nontriviality_level(got.get("nontriviality"))
-            basis_note = str(got.get("nontriviality_basis") or "")
-            if _is_trivial_verdict(got.get("decision")):
-                level = 0
-                basis_note = (f"降为 {nontriviality_label(0)}（{str(got.get('reason') or '')[:200]}）"
-                              + (f"；秘书原报档位依据：{basis_note}" if basis_note else ""))
+            # 三态纪律：判不了（None）不许读成 T0 —— 所以只有"读数给出 0 档"才写 0；
+            # 读数一项都取不到时，秘书若判了「太平凡」，那一判断没有依据（改前正是
+            # 这样把每一条都压成 T0），改记「判不了」。
+            decided = str(got.get("decision") or "")
+            model_level = _nontriviality_level(got.get("nontriviality"))
+            model_note = str(got.get("nontriviality_basis") or "")
+            verdict = nontriviality_from_effort(readings)
+            level = verdict["level"]
+            notes: list[str] = []
+            if text_truncated:
+                level = None
+                notes.append(trunc_note)
+                if _is_trivial_verdict(decided):
+                    got["decision_overridden_from"] = decided
+                    got["decision"] = "判不了"
+                    notes.append("秘书判了「太平凡」，但这一趟看到的是被截断的正文 ⇒ "
+                                 "那一判断不采信，改记「判不了」")
+                if model_note:
+                    notes.append(f"秘书原报档位依据（输入不完整，只留痕不作判据）：{model_note}")
+            elif level is None:
+                notes.append(str(verdict["why"]))
+                if _is_trivial_verdict(decided):
+                    got["decision_overridden_from"] = decided
+                    got["decision"] = "判不了"
+                    notes.append("秘书判了「太平凡」，但这一趟一项力气读数都取不到 ⇒ "
+                                 "「力气小」没有依据，改记「判不了」")
+                if model_level is not None:
+                    notes.append(f"秘书自报 {nontriviality_label(model_level)}，"
+                                 "但这一趟一项力气读数都取不到 ⇒ 档位落「未判」")
+                if model_note:
+                    notes.append(f"秘书原报档位依据：{model_note}")
+            else:
+                # 读数完整：档位按读数给定（秘书自报只作交叉核对）。
+                if _is_trivial_verdict(decided):
+                    if level == 0:
+                        notes.append(f"降为 {nontriviality_label(0)}：" + str(verdict["why"])
+                                     + f"；秘书原话：{str(got.get('reason') or '')[:200]}")
+                    else:
+                        got["decision_overridden_from"] = decided
+                        got["decision"] = "合格"
+                        notes.append("秘书判了「太平凡」，但" + str(verdict["why"])
+                                     + " ⇒ 档位不压低（判据只有力气那一组，"
+                                     "「没人用得上 / 不比已知强」不作判据）")
+                else:
+                    notes.append(str(verdict["why"]))
+                if model_level is not None and model_level != level:
+                    notes.append(f"秘书自报 {nontriviality_label(model_level)}，"
+                                 "与力气读数不一致 ⇒ 以读数为准")
+                if model_note:
+                    notes.append(f"秘书原报档位依据：{model_note}")
+            basis_note = "；".join(n for n in notes if n)[:900]
             got = {**got, "nontriviality": level, "label": nontriviality_label(level),
                    "nontriviality_basis": basis_note,
-                   "nontriviality_tri": "computed" if level is not None else "unjudged"}
+                   "nontriviality_tri": "computed" if level is not None else "unjudged",
+                   "effort": readings, "effort_score": int(readings.get("score") or 0),
+                   "text_truncated": bool(text_truncated)}
             root = getattr(self, "root", None)
             if root is not None:
                 try:
-                    append_nontriviality(root, statement_full=str(context.get("statement_full") or ""),
-                                         level=level, basis=got["nontriviality_basis"],
-                                         role=str(self.role or ""), task_id=str(task_id or ""))
+                    append_nontriviality(root, statement_full=body_full,
+                                         level=level, basis=basis_note,
+                                         role=str(self.role or ""), task_id=str(task_id or ""),
+                                         effort=readings, text_truncated=bool(text_truncated))
                 except Exception as exc:  # noqa: BLE001 - 落盘失败不影响判断本身
                     got["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
             # 只记判过的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
@@ -3241,6 +3449,221 @@ class Secretary:
         out["changes"].extend(changes)
         return keyed, changes
 
+    # ------------------------------------------------------------ 命题同一性（模型判）
+
+    def _proposition_candidates(self, full: str, *,
+                                rows: Iterable[Mapping[str, Any]] | None = None
+                                ) -> list[dict[str, Any]]:
+        """粗筛交给秘书看的候选（命题性的、可用的、有号有正文的那几行）。
+
+        过滤的三条与 `_same_proposition_candidate` 逐字同源（它守的是同一件事，只是那一格
+        在"没有模型"时兜底）：只留命题性的 kind（`PROPOSITION_KINDS`：概念/定义不是命题）、
+        跳过 `schema.STATEMENT_UNUSABLE_STATUSES` 的行（被否证/被取代的行不能当并入口）、
+        跳过没号或正文空的行。排序与截断交给 `propositionkey.candidates_for`（唯一一处）。
+        """
+        pool = rows if rows is not None else None
+        if pool is None:
+            store = getattr(self, "store", None)
+            if store is None:
+                return []
+            try:
+                pool = store.rows("statements")
+            except Exception as exc:  # noqa: BLE001 —— 读不到就没有候选（调用方据 basis 说清）
+                self._log(f"命题候选读不出来：{type(exc).__name__}: {exc}")
+                return []
+        keep: list[dict[str, Any]] = []
+        for r in pool:
+            if not str(r.get("stmt_id") or "").strip():
+                continue
+            if not _is_proposition_kind(r.get("kind")):
+                continue
+            if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
+                continue
+            if not str(r.get("statement_full") or "").strip():
+                continue
+            keep.append(dict(r))
+        # 候选里也带上"这条已有几份证明"：秘书凭它一眼看出"这是同一个定理的第几种证法"。
+        from . import verifications as VR   # 惰性：证明清单的唯一读口径
+
+        picks = _PK.candidates_for(full, keep, limit=PROPOSITION_VERDICT_CANDIDATES)
+        by_id = {str(r.get("stmt_id") or ""): r for r in keep}
+        for pick in picks:
+            row = by_id.get(str(pick.get("stmt_id") or ""), {})
+            pick["proof_nos"] = [int(no) for no, _t in VR.proof_list(row)] if row else []
+            pick["statement_full"] = str(pick.get("statement_full") or "")[
+                :PROPOSITION_VERDICT_TEXT_CHARS]
+        return picks
+
+    def adjudicate_proposition(self, stmt_like: Mapping[str, Any] | str, *,
+                               rows: Iterable[Mapping[str, Any]] | None = None,
+                               task_id: str = "") -> dict[str, Any]:
+        """这一条与在册的哪一条是同一个定理（一次模型调用，三态，按正文 sha256 缓存）。
+
+        业主 2026-10-24 的两句（唯一权威）：「不用机械判据，让秘书洗定理名，让秘书判」；
+        「定理描述一致（什么条件推出什么结论），就是一个定理」。
+
+        所以这一格做两件事，一次调用做完：
+        ① 洗定理名：`Sylow 三定理（路线一：类方程/强归纳 + 共轭作用，自证草稿，待 V 审签）`
+           ⇒ `canonical_name = "Sylow 三定理"`，被洗掉的"路线一：…"进 `route`
+           （它不丢：落进证明那一层，见 :func:`proof_route_of`）；
+        ② 判是不是同一个命题：读条件与结论，给 same / different / unknown，
+           判 same 时点名并进哪一条（`same_as`）。
+
+        ## 三态与依据（返回）
+        | 结局 | 返回 |
+        |---|---|
+        | 判同一 | `checked=True` + `verdict="same"` + `same_as=<stmt_id>` + `canonical_name` |
+        | 判不同 | `checked=True` + `verdict="different"`（不并，新建） |
+        | 判不了 | `checked=True` + `verdict="unknown"`（不并，留 `basis`） |
+        | 没查成 | `checked=False` + `reason`（没缝 / 开关关着 / 超时 / 坏 JSON / 词表外结论） |
+
+        `basis` 是那一趟的判词（条件一句 + 结论一句 + 一句理由），三态都要有：
+        "判不了"也必须留下"缺的是条件还是结论"，否则下一次还是判不了。
+        `same` 而 `same_as` 指不出一个候选号 ⇒ 当场降成 `unknown`：凭一个指不出来的号
+        合并，等于替它编一条依据（与"模型给的结论不在词表里就不采信"同一条纪律）。
+
+        ## 为什么按正文 sha256 缓存（`out/secretary/proposition_verdicts.jsonl`）
+        判定的对象是那段正文；同一条正文换个标签、重试、换个人再交一次，结论不会有别的
+        答案，而每一次都要真发一次调用。真机 sylow4 的形态正好是"同一条定理交了三遍"——
+        没有这一层就是三笔钱买同一句话。只缓存判过的（`checked=True`）：没查成不许缓存，
+        那会把"这一次没查成"变成"以后都别查了"。
+        `reused=True` + `cost.reason="没发调用（沿用缓存）"` 是"这一趟没花钱"的唯一读数。
+        """
+        if isinstance(stmt_like, str):
+            stmt_like = {"statement_full": stmt_like}
+        full = str(stmt_like.get("statement_full") or "")
+        label = str(stmt_like.get("label") or "")
+        kind = str(stmt_like.get("kind") or "theorem")
+        out: dict[str, Any] = {
+            "checked": False, "verdict": _PK.STATE_UNKNOWN, "canonical_name": "",
+            "same_as": "", "route": "", "condition": "", "conclusion": "",
+            "basis": "", "reason": "", "label": label, "kind": kind,
+            "candidates": [], "cost": {"ledger": "", "reason": "没发调用（还没判）"},
+            "reused": False, "cached": False, "statement_sha256": "",
+            #: 这一格到底有没有"试过"：有缝且开关开着才是试过。
+            #:
+            #: 它与 `checked` 是两根轴（三态之外再分一层）：`attempted=False` 是"这一名
+            #: 秘书根本没有判同一性这一路"（没缝），`attempted=True` + `checked=False` 是
+            #: "试了、没查成"（超时 / 坏 JSON）。盘上要不要留痕由它决定 —— 没有缝的秘书
+            #: 写出来的行必须与改前逐字节相同（否则"这一段正文之前长什么样"被一个从来
+            #: 没发生过的判定改写了）。
+            "attempted": bool(self.seam is not None and self.enable_model),
+        }
+        if not _is_proposition_kind(kind):
+            out["reason"] = (f"kind={kind!r} 不在命题性的那几档 {list(PROPOSITION_KINDS)} 里 "
+                             "⇒ 不是命题，不参与同一性判定（也不洗它的名字）")
+            return out
+        if not full.strip():
+            out["reason"] = "命题正文是空的 ⇒ 没有可判的东西（不洗名、不并）"
+            return out
+        key = _proposition_verdict_key(full)
+        out["statement_sha256"] = key
+        cached = self._proposition_verdicts.get(key) or proposition_verdict_of(self.root, full)
+        if cached:
+            out.update(
+                checked=True,
+                verdict=str(cached.get("verdict") or _PK.STATE_UNKNOWN),
+                canonical_name=str(cached.get("canonical_name") or ""),
+                same_as=str(cached.get("same_as") or ""),
+                route=str(cached.get("route") or ""),
+                condition=str(cached.get("condition") or ""),
+                conclusion=str(cached.get("conclusion") or ""),
+                basis=str(cached.get("basis") or ""),
+                reused=True, cached=True,
+                cached_at=str(cached.get("at") or ""),
+                cached_label=str(cached.get("label") or ""),
+                cost={"ledger": "", "reason": "没发调用（沿用缓存：同一段正文判过一遍）"},
+                # 候选表照旧摆出来：读的人要能核对"沿用这一次判定的那批候选还在不在"。
+                candidates=self._proposition_candidates(full, rows=rows))
+            return out
+        candidates = self._proposition_candidates(full, rows=rows)
+        out["candidates"] = candidates
+        context = {
+            # 这一条给三倍于候选的篇幅：它是要被判的那一条，缺了一半就没法判。
+            "statement_full": full[: PROPOSITION_VERDICT_TEXT_CHARS * 3],
+            "label": label,
+            "kind": kind,
+            "candidates": [{"stmt_id": c["stmt_id"], "label": c["label"],
+                            "proof_nos": c.get("proof_nos") or [],
+                            "statement_full": c["statement_full"]} for c in candidates],
+            "how_to_judge": ("只比条件与结论；条件强弱不同 ⇒ different；"
+                             "条件只是记号/等价改写 ⇒ same；写不清 ⇒ unknown"),
+        }
+        got = self.judge("proposition_identity", context, task_id=task_id)
+        out["cost"] = dict(got.get("cost") or {})
+        out["judged_elapsed_sec"] = got.get("elapsed_sec")
+        if not got.get("checked"):
+            out["checked"] = False
+            out["reason"] = str(got.get("reason") or "这一格没查成（原因不明）")
+            return out
+        out["checked"] = True
+        out["verdict"] = str(got.get("decision") or _PK.STATE_UNKNOWN)
+        out["canonical_name"] = str(got.get("canonical_name") or "").strip()
+        out["same_as"] = str(got.get("same_as") or "").strip()
+        out["route"] = str(got.get("route") or "").strip()
+        out["condition"] = str(got.get("condition") or "").strip()
+        out["conclusion"] = str(got.get("conclusion") or "").strip()
+        out["reason"] = str(got.get("reason") or "")
+        parts = [str(x).strip() for x in (got.get("basis") or []) if str(x).strip()]
+        out["basis"] = "；".join(parts + ([out["reason"]] if out["reason"] else []))
+        if out["verdict"] == _PK.STATE_SAME:
+            ids = [str(c["stmt_id"]) for c in candidates]
+            if out["same_as"] not in ids:
+                out["verdict"] = _PK.STATE_UNKNOWN
+                out["reason"] = (
+                    f"模型判 same，但 same_as={out['same_as']!r} 不是候选表里的号"
+                    f"（候选 {ids or '空'}）⇒ 不并：凭一个指不出来的号合并，等于替它编一条依据")
+                out["basis"] = "；".join(parts + [out["reason"]])
+        try:
+            row = append_proposition_verdict(
+                self.root, statement_full=full, verdict=out["verdict"],
+                canonical_name=out["canonical_name"], same_as=out["same_as"],
+                route=out["route"], label=label, condition=out["condition"],
+                conclusion=out["conclusion"], basis=out["basis"],
+                role=str(self.role or ""), task_id=str(task_id or self.task_id or ""))
+            self._proposition_verdicts[key] = dict(row)
+            out["cached"] = True
+            out["cached_at"] = str(row.get("at") or "")
+        except OSError as exc:
+            # 缓存写不成不影响这一趟的结论（结论已经在返回值里），但必须说出来：
+            # 写不成意味着下一趟还要再花一次钱。
+            out["cache_problem"] = f"{type(exc).__name__}: {exc}"
+            self._log(f"命题判定台账没写成：{out['cache_problem']}")
+        return out
+
+    @staticmethod
+    def _annotate_proposition(row: dict[str, Any], adj: Mapping[str, Any], *,
+                              proof_no: int = 1, route: str = "") -> dict[str, Any]:
+        """把"这一次判定"与"这条路子"落到命题行上（只加读数键，不动 schema）。
+
+        ## 两格，各管一件事
+        - `_proof_routes = {证明号: 一句话}`：这条路线的说明。业主 2026-10-24：
+          「路线写在证明这一层」—— 它从此不住在 label 里，也不再丢（洗名不是丢信息）。
+        - `_proposition_adjudication = {verdict, basis, ...}`：这一条是凭哪一次判定落成
+          现在这样的。判 different / unknown 的也要落：只落 same 的记录，读的人就分不出
+          "判过了、不同"与"没人判过"（三态纪律在盘上也要分得开）。
+        这两个键都不在 `schema.Statement` 里 —— store 落的是 JSON 行，`row_from_dict` 只取
+        它认识的键（与 `_proposition_matches` / `proof_history` 同一做法），所以不必动 schema。
+        """
+        out = dict(row)
+        if str(route or "").strip():
+            routes = dict(out.get(PROOF_ROUTES_KEY) or {})
+            routes[str(int(proof_no or 1) or 1)] = str(route).strip()
+            out[PROOF_ROUTES_KEY] = routes
+        if adj and (adj.get("checked") or adj.get("attempted")):
+            out["_proposition_adjudication"] = {
+                "checked": bool(adj.get("checked")),
+                "attempted": bool(adj.get("attempted")),
+                "verdict": str(adj.get("verdict") or ""),
+                "canonical_name": str(adj.get("canonical_name") or ""),
+                "same_as": str(adj.get("same_as") or ""),
+                "basis": str(adj.get("basis") or ""),
+                "reason": str(adj.get("reason") or ""),
+                "reused": bool(adj.get("reused")),
+                "at": S.now_iso(),
+            }
+        return out
+
     def record_statement(self, payload: Mapping[str, Any], *, role: str = "B",
                          force_new: bool = False) -> dict[str, Any]:
         """B 交内容 ⇒ 秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一次做完）。
@@ -3280,6 +3703,13 @@ class Secretary:
                                "merged_same_kind": False, "proof_no": 0,
                                "matched_by": "", "similarity": 0.0, "same_kind": [],
                                "proposition_state": "", "proposition_reason": "",
+                               #: 命题同一性判定的三态读数（见 `_adjudication_reading`）。
+                               #: 空字典 = 这一笔没走到那一格（例如 `force_new` 早退）。
+                               "adjudication": {},
+                               #: 洗过的定理名与"洗掉了什么"（业主 2026-10-24：让秘书洗定理名）。
+                               "canonical_name": "", "label_washed": {},
+                               #: 这一笔的证明自己的路子说明（路线住在证明这一层）。
+                               "proof_route": "",
                                "resign_required": False, "reviewed": False,
                                "stmt_id": "", "deps_written": 0, "path_groups": 0,
                                #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
@@ -3337,13 +3767,50 @@ class Secretary:
                                    "补上这两栏，或把 quote_verified 改成 None/False 并写明"
                                    "为什么（三态纪律：没查不许折成查过了没问题）"))
                 return out
+        # ---- 命题同一性：让秘书洗定理名、让秘书判（业主 2026-10-24）。
+        #
+        # 位置在"落盘之前、事务之外"：这一步会发一次模型调用（可以慢、可以超时），
+        # 把它放进 `store.tx` 就是拿网络等待去占着写锁，而锁里不该有网络等待。
+        # 读候选用的是 `self.store.rows`（只读），事务里那一份快照由 `_record_statement_tx`
+        # 自己再用 `tx.rows` 核（合并前它必须确认那一条还在、还可并）。
+        adjudication = self.adjudicate_proposition(
+            {"statement_full": full, "label": str(body.get("label") or ""), "kind": kind})
+        out["adjudication"] = self._adjudication_reading(adjudication)
+        out["canonical_name"] = str(adjudication.get("canonical_name") or "")
         try:
             return self._record_statement_tx(body, full=full, kind=kind,
-                                             force_new=bool(force_new), out=out)
+                                             force_new=bool(force_new), out=out,
+                                             adjudication=adjudication)
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             out.update(checked=False, created=False, refused="write_failed",
                        reason=f"落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
             return out
+
+    @staticmethod
+    def _adjudication_reading(adj: Mapping[str, Any]) -> dict[str, Any]:
+        """命题同一性判定的读数（进返回值与台账；不把内部候选表整份甩出去）。
+
+        三态在这一格里必须一眼能分辨：`checked=False` 是"没查成"（没缝 / 超时），
+        `verdict="unknown"` 是"查过了、判不了"。折平这两个会让"没人判过"看起来像
+        "判过了、确实不同"。
+        """
+        got = dict(adj or {})
+        return {
+            "checked": bool(got.get("checked")),
+            "attempted": bool(got.get("attempted")),
+            "verdict": str(got.get("verdict") or _PK.STATE_UNKNOWN),
+            "canonical_name": str(got.get("canonical_name") or ""),
+            "same_as": str(got.get("same_as") or ""),
+            "route": str(got.get("route") or ""),
+            "condition": str(got.get("condition") or ""),
+            "conclusion": str(got.get("conclusion") or ""),
+            "basis": str(got.get("basis") or ""),
+            "reason": str(got.get("reason") or ""),
+            "reused": bool(got.get("reused")),
+            "cached": bool(got.get("cached")),
+            "candidates": [str(c.get("stmt_id") or "") for c in (got.get("candidates") or [])],
+            "cost": dict(got.get("cost") or {}),
+        }
 
     def _upgrade_evidence_kind(self, existing: Mapping[str, Any],
                                body: Mapping[str, Any]) -> dict[str, Any]:
@@ -3684,10 +4151,33 @@ class Secretary:
         return [(no, plan[no]) for no in sorted(plan)]
 
     def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
-                             force_new: bool, out: dict[str, Any]) -> dict[str, Any]:
-        """一笔事务把命题（+ 概念行 + 依赖组）落盘（`record_statement` 的写那一半）。"""
+                             force_new: bool, out: dict[str, Any],
+                             adjudication: Mapping[str, Any] | None = None
+                             ) -> dict[str, Any]:
+        """一笔事务把命题（+ 概念行 + 依赖组）落盘（`record_statement` 的写那一半）。
+
+        `adjudication` 是事务之外那一次模型判定（见 `adjudicate_proposition`）：
+        它决定这一笔是"并进在册的那一条"还是"新建"，并把定理名洗成 `canonical_name`。
+        事务里不再发调用 —— 锁里不许有网络等待。
+        """
         from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
         from . import textutil as T       # 惰性：查重键的唯一实现
+
+        adj = dict(adjudication or {})
+        # ---- 洗定理名（业主 2026-10-24）：「Sylow 三定理（路线一：…）」⇒「Sylow 三定理」。
+        # 落点是 label；被洗掉的路线进证明那一层（见下面 `_proof_routes` 那一格）。
+        # 这里只动"写进这一行的那份 body 副本"：调用方交上来的原文一个字不改
+        # （`out["label_washed"]` 留着 from / to 两格，静默改名是不许的）。
+        if adj.get("checked") and str(adj.get("canonical_name") or "").strip():
+            was = str(body.get("label") or "")
+            now = str(adj.get("canonical_name") or "").strip()
+            if was != now:
+                body = dict(body)
+                body["label"] = now
+                out["canonical_name"] = now
+                out["label_washed"] = {"from": was, "to": now}
+        route = str(adj.get("route") or "").strip() if adj.get("checked") else ""
+        out["proof_route"] = route
 
         groups = [list(g) for g in (body.get("deps") or [])]
         # 显式给了 `deps` ⇒ 走严格那一条（指着一个不在册的号 = 整笔不写：那是 G 的
@@ -3753,15 +4243,23 @@ class Secretary:
                     return out
                 out.update(checked=True, created=False, duplicate=True,
                            stmt_id=str(existing.get("stmt_id") or ""),
+                           # 2026-10-26：这一句改前写着"确实要另起一条，请给 force_new"，
+                           # 而走到这里的每一条路（B 的 `register_statement`、被通用写口
+                           # 路由过来的 `table.create`）都没有 force_new 这个参数 ——
+                           # 拒信因此指了一条不存在的路（`duplicate` 那一档的拒信要能
+                           # 把模型指回正路，指的必须是这条路上真有的做法）。
                            reason=("同一条 statement_full 已在册 ⇒ 重复读数，不新建行"
-                                   "（确实要另起一条，请给 force_new）"
+                                   "（要引用既有那一行，用返回里的 stmt_id 即可；"
+                                   "确实是另一条命题时把差异写进 statement_full —— "
+                                   "正文按规范化比不同才会落新的一行）"
                                    + str(upgraded.get("reason") or "")))
                 return out
             # ---- 2026-10-24（业主：表述几乎相同的两条命题是同一个；证明方式几乎相同的
             # 视为同种证明）：同一命题 ⇒ 并成第 N 份证明；同种证明 ⇒ 受控拒绝或合并。
             merged = self._merge_into_proposition(tx, body, full=full, kind=kind,
                                                   groups=groups,
-                                                  force_new=bool(force_new), out=out)
+                                                  force_new=bool(force_new), out=out,
+                                                  adjudication=adj)
             if merged is not None:
                 return merged
             steps = self._resolve_write_steps(tx, body, out, groups)
@@ -3789,7 +4287,9 @@ class Secretary:
                 # 读数：`quote_reason` 是秘书补的（B 只交两样，见 `_statement_from`）——
                 # 补了必须看得见，否则"这一格为什么有值"在盘上无从分辨。
                 out["quote_reason_filled"] = True
-            tx.upsert("statements", row.to_dict(), note="record_statement")
+            data = self._annotate_proposition(row.to_dict(), adj, proof_no=1,
+                                              route=route)
+            tx.upsert("statements", data, note="record_statement")
             if kind == "concept" and legacy.get("present"):
                 # 交来的就是一条概念（`kind="concept"`）⇒ 它自己那一行也要镜像：
                 # 漏掉这一支，B 用"整条交一条概念"的写法时老读侧就看不见它
@@ -3867,7 +4367,7 @@ class Secretary:
                 proof_text=body.get("proof_text") or "", deps_written=dep_count,
                 derived_from=body.get("derived_from") or (), stmt_id=stmt_id, scan=scan)
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
-                   row=row.to_dict(), tables=written, deps_written=len(steps),
+                   row=data, tables=written, deps_written=len(steps),
                    path_groups=len(groups), pending_concepts=pending_concepts)
         return out
 
@@ -4109,7 +4609,8 @@ class Secretary:
 
     def _merge_into_proposition(self, tx: Any, body: Mapping[str, Any], *, full: str,
                                 groups: list[list[dict[str, Any]]], kind: str = "",
-                                force_new: bool, out: dict[str, Any]
+                                force_new: bool, out: dict[str, Any],
+                                adjudication: Mapping[str, Any] | None = None
                                 ) -> dict[str, Any] | None:
         """同一命题 / 同种证明两道判断的落点（业主 2026-10-24）。
 
@@ -4137,9 +4638,21 @@ class Secretary:
         这一笔的依赖全部落在 `used_by="stmt:<号>#pN"`（第 N 条证明）上，`path_group`
         照旧是"第几条路径"。两条证明的依赖面因此分开，`_DepGraph.groups_of` 读出来
         是 `{1: {…}, 2: {…}}` 两维（既有机制，不在这里重写）。
+
+        ## 谁说了算（2026-10-24 晚，业主改口径）
+        业主逐字：「不用机械判据，让秘书洗定理名，让秘书判」，准绳是「定理描述一致
+        （什么条件推出什么结论），就是一个定理」。所以：
+
+        - `adjudication.checked`（秘书判成了）⇒ 它说了算：`same` ⇒ 并进它点名的
+          `same_as` 那一条；`different` / `unknown` ⇒ 不并（`unknown` 也一律不许拿
+          相似度去猜 —— 判不了就是不并，台账里留 basis 给人看）；
+        - 没查成（没缝 / 开关关着 / 超时 / 坏 JSON）⇒ 退回既有机械判据
+          （`_same_proposition_candidate`：键相同或词面相似度达阈值）。这一档必须留着：
+          秘书没接上时整条写入路不能因此瘫掉，而"一模一样才并"比"什么都不并"更接近真相。
         """
         from . import verifications as VR   # 惰性：证明清单 / 签名状态的唯一读口径
 
+        adj = dict(adjudication or {})
         # 三态读数（"这一笔被判成什么"）：没有命中时也要能读出判过了、判的是哪一种。
         # 不许把"判不了"折成"不同"—— 两者的 `reason` 不同，处置也不同。
         probe = _PK.judgeable(full)
@@ -4166,11 +4679,46 @@ class Secretary:
             out["proposition_reason"] = (str(probe["reason"]) if not probe["ok"] else
                                          "这一笔没有带证明正文 ⇒ 不并（合并只针对第 N 份证明）")
             return None
-        hit = self._same_proposition_candidate(tx, full, kind=kind)
-        if hit is None:
-            # 三态：没命中也要能读出来"判过、判的是不同"，但这一支不写任何内容 ——
-            # 返回值里 `merged` 保持 False 就是那个读数（`out` 的初值）。
-            return None
+        if adj.get("checked"):
+            # ---- 秘书判过了：三种结论各自落地，机械判据一律不再插话。
+            verdict_word = str(adj.get("verdict") or _PK.STATE_UNKNOWN)
+            out["adjudication"] = self._adjudication_reading(adj)
+            out["proposition_reason"] = (str(adj.get("basis") or "")
+                                         or str(adj.get("reason") or ""))
+            if verdict_word != _PK.STATE_SAME:
+                out["proposition_state"] = (verdict_word if verdict_word in
+                                            (_PK.STATE_DIFFERENT, _PK.STATE_UNKNOWN)
+                                            else _PK.STATE_UNKNOWN)
+                # 判 different / unknown ⇒ 不并，这一支一个字节都不写（调用方照常新建）。
+                # `unknown` 尤其不许拿相似度去猜：那是把"没人判过"冒充"判过了、不同"的
+                # 同一类错，只是方向相反。
+                return None
+            target_id = str(adj.get("same_as") or "")
+            # 与 `_same_proposition_candidate` 同一组过滤：模型点名的是登记那一刻的候选，
+            # 到了事务里它可能已经被否证/被取代/改成非命题 kind —— 那时不许把新证明挂上去。
+            hit = next(({"row": dict(r), "stmt_id": str(r.get("stmt_id") or ""),
+                         "verdict": {"state": _PK.STATE_SAME,
+                                     "basis": MERGED_BY_ADJUDICATION,
+                                     "similarity": 0.0,
+                                     "reason": str(adj.get("basis") or "")}}
+                        for r in tx.rows("statements")
+                        if str(r.get("stmt_id") or "") == target_id
+                        and _is_proposition_kind(r.get("kind"))
+                        and str(r.get("status") or "") not in S.STATEMENT_UNUSABLE_STATUSES), None)
+            if hit is None:
+                out["proposition_state"] = _PK.STATE_UNKNOWN
+                out["proposition_reason"] = (
+                    f"秘书判 same 并点名 stmt:{target_id or '（空）'}，而事务快照里读不到那一条"
+                    "（或它的状态已不可并）⇒ 不并、照常新建（不在一条读不到的行上写证明）")
+                return None
+        else:
+            # ---- 没查成：退回既有机械判据（键相同 / 词面相似度达阈值）。
+            out["adjudication"] = self._adjudication_reading(adj)
+            hit = self._same_proposition_candidate(tx, full, kind=kind)
+            if hit is None:
+                # 三态：没命中也要能读出来"判过、判的是不同"，但这一支不写任何内容 ——
+                # 返回值里 `merged` 保持 False 就是那个读数（`out` 的初值）。
+                return None
         row = dict(hit["row"])
         sid = str(hit["stmt_id"])
         verdict = dict(hit["verdict"])
@@ -4233,13 +4781,40 @@ class Secretary:
                            "created_at": S.now_iso()})
             row[VR.PROOFS_KEY] = listed
         written = ["statements"]
+        # ---- 洗定理名 + 路线进证明层（业主 2026-10-24：「路线写在证明这一层」）。
+        #
+        # 这一笔的 label 已经被洗成 `canonical_name`（见 `_record_statement_tx`），但并进去之后
+        # label 用的是那条在册行的。所以这里两件都要做：
+        # ① 在册那一条的名字如果与洗过的名字不同 ⇒ 顺手把它洗掉（真机 sylow4 的三行正是
+        #    这么来的：第一条带着"（路线一：…）"落了盘，后来的两份证明并进来时把它洗净）；
+        # ② 这一笔自己的路线说明落到"第 N 份证明"上（`_proof_routes`），不丢。
+        route = str(adj.get("route") or "").strip() if adj.get("checked") else ""
+        canonical = str(adj.get("canonical_name") or "").strip() if adj.get("checked") else ""
+        if canonical and str(row.get("label") or "") != canonical:
+            old_label = str(row.get("label") or "")
+            # 只在"在册那个名字是本名加修饰"时洗（`Sylow 三定理（路线一：…）` ⇒ `Sylow 三定理`）。
+            # 两个都干净、却不完全同名的（`Sylow 三定理` 与 `Sylow 定理`）不动它：名字不参与
+            # 同一性判定（业主：「不看名称」），先落盘的那个名字赢 —— 否则每并一份证明就改名
+            # 一次，而"这一条现在叫什么"会跟着最后一次提交漂。
+            if canonical in old_label:
+                out["label_washed"] = {"from": old_label, "to": canonical, "stmt_id": sid}
+                row["label"] = canonical
+        if route:
+            out["proof_route"] = route
+            routes = dict(row.get(PROOF_ROUTES_KEY) or {})
+            routes[str(int(proof_no))] = route
+            row[PROOF_ROUTES_KEY] = routes
+        if canonical:
+            out["canonical_name"] = canonical
         # 变体留痕：这一笔是"同一条命题的另一种写法"，盘上要读得出"它凭什么并进来"。
         # 有界（只留最近 20 条）：这是读数，不是账本；无界列表会让一行无限长大。
         matches = [dict(m) for m in (row.get("_proposition_matches") or [])
                    if isinstance(m, Mapping)]
         matches.append({"statement_full": full, "basis": basis,
                         "similarity": similarity, "proof_no": proof_no,
-                        "at": S.now_iso(), "by": f"secretary-{self.role}"})
+                        "label": str(body.get("label") or ""),
+                        "route": route, "at": S.now_iso(),
+                        "by": f"secretary-{self.role}"})
         row["_proposition_matches"] = matches[-20:]
         body_for_deps = dict(body)
         body_for_deps["proof_no"] = proof_no
@@ -4265,7 +4840,13 @@ class Secretary:
                            f"这一份的依赖落在 `used_by=\"stmt:{sid}#p{proof_no}\"`"
                            f"（{deps_written} 条、{len(groups or [])} 组），"
                            "与既有证明的依赖面按证明号分开；第 3 位（审过）由 V 逐份签，"
-                           f"登记不等于审过（`bits.evidence.reviewed_by_proof` 支持逐份）"))
+                           f"登记不等于审过（`bits.evidence.reviewed_by_proof` 支持逐份）"
+                           # 洗名与路线各一句：读的人要能看出"标签被改过"与"路线去哪了"。
+                           + (f"；定理名按秘书的判定洗成 {out['label_washed']['to']!r}"
+                              f"（原标签 {out['label_washed']['from']!r}）"
+                              if out.get("label_washed") else "")
+                           + (f"；这一份的路线说明落在第 {proof_no} 份证明上"
+                              f"（{route}）" if route else "")))
         return out
 
     @staticmethod
@@ -4273,6 +4854,8 @@ class Secretary:
         """把"凭什么判成同一条"翻成一句人话（返回值与拒信共用一份措辞）。"""
         if str(basis) == _PK.BASIS_KEY:
             return "proposition_key 相同"
+        if str(basis) == MERGED_BY_ADJUDICATION:
+            return "秘书判的（条件与结论一致）"
         return f"prose_similarity {float(similarity):.4f}"
 
     def _merge_target(self, row: Mapping[str, Any], proof: str,
@@ -5370,12 +5953,23 @@ def _level_from_row(row: Mapping[str, Any]) -> int | None:
 
 
 def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
-                         basis: str = "", role: str = "", task_id: str = "") -> None:
+                         basis: str = "", role: str = "", task_id: str = "",
+                         effort: Mapping[str, Any] | None = None,
+                         text_truncated: bool = False) -> None:
     """追加一行档位读数（append-only；显式 LF，Windows 上不留 CRLF）。
 
     `level` 给 `None`（或缺省/坏值）⇒ 这一行记的是"判不了"：`nontriviality: null`
     且 `label` 空。判不了照旧落一行 —— 它也是读数（"没人判过"与"台账里没这一条"
     在盘上应当分得开）。
+
+    ## `effort` 为什么也落下来（2026-10-24，B2）
+    档位从这一天起是"证明花的力气"给的，而力气是四项读数 + 一个分数。只落档位的话，
+    读的人（人、页面、复算脚本）无法判断"这一档是读数给的还是模型随口给的"——
+    而后者正是改前那个形态。所以四项读数、分数与边界表里的那一档一起落进这一行：
+    复算的人拿同一张 :data:`EFFORT_TIER_BANDS` 一比就能确认这一档对不对。
+
+    `text_truncated` 同理落下来：它是"这一行判不了"的一个具体原因，与"缺某项读数"、
+    "判了"三者在盘上必须分得开（三态纪律的第四格：输入不完整也是一种没查成）。
     """
     path = nontriviality_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -5386,6 +5980,7 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
            "scale": NONTRIVIALITY_SCALE,
            "nontriviality": got, "label": nontriviality_label(got),
            "basis": str(basis or ""),
+           "effort": dict(effort or {}), "text_truncated": bool(text_truncated),
            "role": str(role or ""), "task_id": str(task_id or "")}
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）：这一行是
@@ -5418,11 +6013,370 @@ def nontriviality_of(root: str | Path, statement_full: str) -> dict[str, Any]:
             last = row
     if not last:
         return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
-                "at": "", "reason": "台账里没有这条命题的档位读数"}
+                "at": "", "reason": "台账里没有这条命题的档位读数",
+                "effort": {}, "text_truncated": False}
     level = _level_from_row(last)
     return {"tri": "computed" if level is not None else "unknown", "level": level,
             "label": nontriviality_label(level),
-            "basis": str(last.get("basis") or ""), "at": str(last.get("at") or "")}
+            "basis": str(last.get("basis") or ""), "at": str(last.get("at") or ""),
+            # 力气读数与截断标记原样带出来（写侧落进台账的那两份）：
+            # 读的人要能自己按同一张边界表复算这一档，而不是只能相信 basis 那句话。
+            "effort": dict(last.get("effort") or {}),
+            "text_truncated": bool(last.get("text_truncated"))}
+
+
+# ---------------------------------------------------------------- 判档位的"力气"读数
+#
+# 业主 2026-10-24 的裁定（逐字）：「"后面哪一步会用到它 / 比已知那条强在哪"这俩和非平凡度
+# 有啥关系？不一定一条定理后面要用，也不一定存在"已知那条"，看证明花的力气就能判非平凡度」。
+# 所以判据从"会不会被用到 / 比已知强在哪"换成这份证明花的力气。四项读数各有定义、
+# 各有计分权重（唯一一处定义就在下面这张表）：
+#
+# | 读数 | 怎么数 | 计分 |
+# |---|---|---|
+# | 体量 chars | 证明正文的字符数（超过 PROOF_BODY_CAP 就判不了） | 每 2000 字 1 分 |
+# | 步骤 steps | 编号步骤行 / 分节标题 / 「步骤 N」「第 N 步」三者取最大 | 每 6 步 1 分 |
+# | 引理 lemmas | 正文里点名的不同引理号（引理 / 推论 / Lemma / Corollary） | 每 2 条 1 分 |
+# | 跨度 clusters | 命中的工具簇个数（见 EFFORT_TOOL_CLUSTERS） | 每多一簇 1 分 |
+# | 绕路 detour | 正文自述绕开了熟路（"不使用 / 绕开 / 另证 / 自足"等） | 命中 +1 分 |
+#
+# 四档边界（分数 = 上面五项之和，整数）：
+#
+# | 档 | 分数 | 典型读数 |
+# |---|---|---|
+# | T0 | 0–1 | 正文 < 2000 字、步骤 < 6、引理 < 2、单一工具簇、不绕路 |
+# | T1 | 2–3 | 只有一项读数刚过线（例如正文 2000–4000 字） |
+# | T2 | 4–7 | 体量大：约 5000 字 + 6 步 + 2 条引理 + 跨一簇 |
+# | T3 | 8–15 | 技巧多或跨领域：约 8000 字 + 10 条引理 + 3 簇 |
+# | T4 | 16 以上 | 极长或极偏：两万字以上，且引理与工具簇都拉满 |
+#
+# 三态纪律不变：一项都读不到（没有证明正文）或正文被截断 ⇒ 档位是 None，且原因必须点名
+# 缺的是哪一项读数 —— 不许拿 0 冒充"判不了"，也不许拿"材料不足"冒充"输入不完整"。
+
+#: 力气分数 → 档位的边界表（唯一一处定义；改它等于改"多不平凡"的口径）。
+#:
+#: 分数是五项读数之和（见上面那张表），每档的分数区间写在第一、二格，第三格是档位名。
+#: 判据 `tests/test_nontriviality_is_judged_by_effort.py` 的 (c)/(d) 钉的就是这条表的
+#: 两头：体量大 + 多条引理 + 跨簇的证明必须进 T2 以上，三行只用定义的证明必须落在 T0。
+EFFORT_TIER_BANDS: tuple[tuple[int, int, str], ...] = (
+    (0, 1, "T0"), (2, 3, "T1"), (4, 7, "T2"), (8, 15, "T3"), (16, 10 ** 9, "T4"),
+)
+
+#: "跨度"读数的单位：工具簇。一个簇 = 一类论证工具；簇的个数就是"跨了几个领域"的机器读数。
+#:
+#: 为什么按簇数而不是按"领域"这个名字：数学里的领域边界是人的约定，而一份证明用了哪几类
+#: 工具是文本里读得出来的。判据只认后者（可复算），前者留在 basis 的一句话里。
+EFFORT_TOOL_CLUSTERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("group-action", ("群作用", "轨道", "稳定化子", "共轭", "陪集", "正规化子", "中心化子")),
+    ("counting", ("同余", "模 p", "mod p", "Frobenius", "Lucas", "二项式", "计数",
+                  "整除", "素因子")),
+    ("linear", ("线性", "矩阵", "特征值", "张量", "维数", "对角", "秩")),
+    ("analysis", ("连续", "极限", "测度", "积分", "收敛", "范数", "可微")),
+    ("homology", ("同调", "上同调", "范畴", "函子", "层", "谱序列")),
+    ("combinatorics", ("生成函数", "容斥", "双射", "极值", "图论", "Ramsey")),
+    ("probability", ("期望", "方差", "随机", "概率", "大数")),
+    ("formal", ("Lean", "Coq", "Isabelle", "形式化", "证明助手")),
+)
+
+#: 步骤读数的三个模式（取各自命中数的最大值，不求和：同一行可能被两条同时数到）。
+_EFFORT_STEP_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*(\d+)[.、)．]\s", re.M),
+    re.compile(r"^\s*#{2,4}\s", re.M),
+    re.compile(r"(?:步骤|第)\s*(\d+)\s*步"),
+    re.compile(r"Step\s*(\d+)", re.I),
+)
+
+#: 引理号（"引入了哪几条引理"）：引理 / 推论 / Lemma / Corollary 后面那个号。
+_EFFORT_LEMMA_RE = re.compile(r"(?:引理|推论|Lemma|Corollary)\s*([0-9]+(?:\.[0-9]+)?)", re.I)
+
+#: 引到的既有定理号（只作 basis 里的读数列出，不单独计分：它们已经通过"工具簇"与"引理数"
+#: 两条读数进入了分数，再计一次就是同一个力气算两遍）。
+_EFFORT_THEOREM_RE = re.compile(r"(?:定理|Theorem|命题|Proposition)\s*([0-9]+(?:\.[0-9]+)?)", re.I)
+
+#: "绕了远路"的自述词：命中即说明这份证明自己说了"我避开了某条熟路"。
+#: 它只认文本自述，不替作者判断"世上有没有更短的路"（那件事机器判不了）。
+_EFFORT_DETOUR_WORDS: tuple[str, ...] = (
+    "绕开", "绕远", "另证", "不依赖", "不使用", "避开", "非标准", "自足", "重新证明",
+)
+
+#: 一段文本"像不像一份证明正文"的判据（用于 statement_full 这一栏的回退读法）。
+#:
+#: 为什么需要它：业主写进 `specs/b.py` 的口径是"证明正文交在 proof_text 里"，而真机上
+#: B 有时把整段证明写进 statement_full（sylow4 的那条 8375 字就是）。这一格只回答
+#: "这段文本能不能当证明正文去读力气"，不回答"它是不是好证明"。
+#:
+#: ## 为什么只认结构标记、不认"证明正文"这四个字（2026-10-24 真机复算改的口径）
+#: 第一版把 `证明正文` 与 `###` 也算标记，于是 sylow4 那几条 500 字上下的命题正文
+#: 全被当成证明读了：它们写着"完整逐字证明见本行 proof_text""三者的证明只使用引理 0…"，
+#: 于是"引理 0/1/2/3/4"被数成 5 条引理、档位凭空到 T2。提到证明不等于它是证明。
+#: 现在只认真的开证/收证那一类标记；长正文（>= 2000 字）仍然直接算（真机那条 8375 字
+#: 的整段证明就是这么认的）。
+_EFFORT_PROOF_MARKERS: tuple[str, ...] = (
+    "证明：", "证：", "证毕", "∎", "QED", "归纳法", "反证",
+)
+
+
+def _looks_like_a_proof(text: str) -> bool:
+    """这段文本能不能当"证明正文"来读力气（判据见 :data:`_EFFORT_PROOF_MARKERS`）。
+
+    太短的（< 40 字）一律不算：一条命题正文里出现"证："这种字眼时，40 字以下连一行
+    推导都放不下，把它当证明读只会让读数虚高。
+    """
+    body = str(text or "")
+    if len(body) >= 2000:
+        return True
+    if len(body.strip()) < 40:
+        return False
+    return any(mark in body for mark in _EFFORT_PROOF_MARKERS)
+
+
+def proof_effort_readings(*, statement_full: str = "", proof_text: str = "",
+                          basis_hint: str = "") -> dict[str, Any]:
+    """这份证明花了多大力气（四项读数 + 绕路 + 分数），以及"哪一项读不到"。
+
+    这是 B2 的机器侧：判档位的唯一判据。它是纯函数（不打桩、不读盘、不调模型），
+    所以"档位是不是按力气判的"这件事可以被复算 —— 判据
+    `tests/test_nontriviality_is_judged_by_effort.py` 的 (f) 就是把这里的输出打桩成全 0 /
+    恒 T3，看 (c)/(d) 会不会跟着红。
+
+    正文从哪来（按优先级，只取一处）：
+    1. `proof_text`（`specs/b.py` 规定的"逐字证明摘录"那一栏）；
+    2. `statement_full` 且它像一份证明正文（:func:`_looks_like_a_proof`）——
+       真机上 B 有时把整段证明写进这一栏；
+    3. 都没有 ⇒ `missing=["proof_body"]`：四项读数一项都取不到，档位必须落「判不了」。
+
+    `basis_hint`（`why_this_is_not_trivial`）刻意不参与读数：那是 B 自己写的素材声明，
+    把它当证据等于让被评的人自己报分数。它照旧进材料（模型看得到），但不进读数。
+
+    返回的键：`chars` / `steps` / `lemmas` / `lemma_names` / `theorems` / `clusters` /
+    `cluster_names` / `cluster_evidence` / `detour` / `detour_words` / `score` /
+    `body_chars` / `body_from` / `missing` / `text_truncated` / `truncated_at`。
+    """
+    primary = str(proof_text or "")
+    if primary.strip():
+        body, body_from = primary, "proof_text"
+    else:
+        whole = str(statement_full or "")
+        if _looks_like_a_proof(whole):
+            body, body_from = whole, "statement_full"
+        else:
+            body, body_from = "", ""
+    out: dict[str, Any] = {
+        "chars": 0, "steps": 0, "lemmas": 0, "lemma_names": [], "theorems": 0,
+        "clusters": 0, "cluster_names": [], "cluster_evidence": {},
+        "detour": False, "detour_words": [], "score": 0,
+        "body_chars": len(body), "body_from": body_from,
+        "missing": [], "text_truncated": False, "truncated_at": 0,
+    }
+    if not body.strip():
+        out["missing"] = ["proof_body"]
+        return out
+    # 截断先判：这一趟能读的只有前 PROOF_BODY_CAP 字，读不完就不许给档位
+    # （业主口径：档位判不了是因为输入不完整，不是因为材料不足）。
+    if len(body) > PROOF_BODY_CAP:
+        out["text_truncated"] = True
+        out["truncated_at"] = PROOF_BODY_CAP
+    seen = body[:PROOF_BODY_CAP]
+    steps = 0
+    for pattern in _EFFORT_STEP_PATTERNS:
+        steps = max(steps, len(pattern.findall(seen)))
+    lemmas = sorted(set(_EFFORT_LEMMA_RE.findall(seen)))
+    theorems = sorted(set(_EFFORT_THEOREM_RE.findall(seen)))
+    evidence: dict[str, str] = {}
+    for name, words in EFFORT_TOOL_CLUSTERS:
+        hit = next((w for w in words if w in seen), "")
+        if hit:
+            evidence[name] = hit
+    detour_words = [w for w in _EFFORT_DETOUR_WORDS if w in seen]
+    chars = len(seen)
+    score = ((chars // 2000) + (steps // 6) + (len(lemmas) // 2)
+             + max(0, len(evidence) - 1) + (1 if detour_words else 0))
+    out.update({
+        "chars": chars, "steps": steps, "lemmas": len(lemmas),
+        "lemma_names": lemmas, "theorems": len(theorems),
+        "clusters": len(evidence), "cluster_names": sorted(evidence),
+        "cluster_evidence": evidence, "detour": bool(detour_words),
+        "detour_words": detour_words[:4], "score": score,
+    })
+    return out
+
+
+def effort_tier_label(score: Any) -> str:
+    """分数 → 档位名（`0 -> "T0"` …；坏输入 ⇒ 空串）。边界只在这里读一次。"""
+    try:
+        got = int(score)
+    except (TypeError, ValueError):
+        return ""
+    for low, high, label in EFFORT_TIER_BANDS:
+        if low <= got <= high:
+            return label
+    return ""
+
+
+def nontriviality_from_effort(readings: Mapping[str, Any]) -> dict[str, Any]:
+    """力气读数 → 非平凡性档位（三态：读全了给 0–4；读不到/被截断给 None + 原因）。
+
+    为什么这一层与 :func:`proof_effort_readings` 分开：读数是"文本里数出来的东西"，
+    档位是"这些数落在哪一格"。分开之后，判据可以把两者分别打桩（(f) 的反真空：
+    读数全 0 ⇒ 体量大的那条必须掉档；读数恒 T3 ⇒ 三行证明必须升档），
+    而"打桩之后判据会不会跟着红"正是"这一档到底是不是读数给的"的唯一证明。
+
+    返回 `{"level": int|None, "label": "T0".."T4"|"", "band": 同 label, "score": int,
+    "why": 一句话, "missing": [...]}`。三态的第一条：`missing` 非空、或 `text_truncated`
+    为真 ⇒ `level` 是 None，`why` 点名缺的是哪一项 —— 不是 0。
+    """
+    got = dict(readings or {})
+    missing = [str(x) for x in (got.get("missing") or [])]
+    score = int(got.get("score") or 0)
+    base = {"score": score, "missing": missing}
+    truncated = bool(got.get("text_truncated"))
+    if truncated:
+        at = int(got.get("truncated_at") or PROOF_BODY_CAP)
+        return {**base, "level": None, "label": "", "band": "",
+                "why": (f"这一条正文在 {at} 字处被截断（正文共 "
+                        f"{int(got.get('body_chars') or 0)} 字，读的上限是 {at} 字）"
+                        "—— 档位判不了是因为输入不完整，不是因为材料不足")}
+    if missing:
+        names = {"proof_body": "证明正文（体量/步骤/引理/跨度四项都取不到）"}
+        lack = "、".join(names.get(m, m) for m in missing)
+        return {**base, "level": None, "label": "", "band": "",
+                "why": f"判不了：缺的是「{lack}」这一项力气读数 —— "
+                       "补上逐字证明正文（proof_text 或 statement_full 里的证明小节）再判"}
+    label = effort_tier_label(score)
+    if not label:
+        return {**base, "level": None, "label": "", "band": "",
+                "why": f"判不了：力气分数 {score!r} 落在边界表之外（EFFORT_TIER_BANDS 要改）"}
+    detail = (f"力气分数 {score} = 体量 {int(got.get('chars') or 0)} 字/{int(got.get('chars') or 0) // 2000}"
+              f" + 步骤 {int(got.get('steps') or 0)}/{int(got.get('steps') or 0) // 6}"
+              f" + 引理 {int(got.get('lemmas') or 0)}/{int(got.get('lemmas') or 0) // 2}"
+              f" + 工具簇 {int(got.get('clusters') or 0)}/{max(0, int(got.get('clusters') or 0) - 1)}"
+              f" + 绕路 {'1' if got.get('detour') else '0'}")
+    return {**base, "level": int(label[1:]), "label": label, "band": label,
+            "why": f"按力气读数判 {label}（{detail}）"}
+
+
+def material_truncation(context: Mapping[str, Any]) -> dict[str, Any]:
+    """判档位的那段材料会不会被截断 ⇒ `{"truncated", "at", "chars", "cap"}`。
+
+    与 :func:`_judge_material` 用同一个渲染与同一个上限：两处各算一次长度，是这一格
+    唯一能自证"我报的截断点就是模型看到的截断点"的办法（读侧不另抄一份口径）。
+    """
+    body = json.dumps(dict(context), ensure_ascii=False, sort_keys=True, default=str)
+    chars = len(body)
+    return {"truncated": chars > JUDGE_MATERIAL_CAP, "at": JUDGE_MATERIAL_CAP,
+            "chars": chars, "cap": JUDGE_MATERIAL_CAP}
+
+
+# ---------------------------------------------------------------- 命题同一性的旁支台账
+
+
+def proposition_verdicts_path(root: str | Path) -> Path:
+    """命题同一性判定台账的路径：`out/secretary/proposition_verdicts.jsonl`。"""
+    return Path(root).joinpath(*SECRETARY_DIR, PROPOSITION_VERDICT_LEDGER)
+
+
+def _proposition_verdict_key(statement_full: str) -> str:
+    """缓存键：命题正文的 sha256（去首尾空白之后）。
+
+    为什么键是正文而不是（正文 + 标签）：业主口径是"定理描述一致（什么条件推出什么结论），
+    就是一个定理" —— 判定的对象是那一段描述，标签只是它的名字。同一条正文换个标签再交
+    一次，判定结论不会有别的答案；按（正文 + 标签）做键就会为"改了个名字"再花一次钱。
+    标签带来的那点差异由命中缓存之后的重放处理：结论与洗过的定理名一起沿用，读的人从
+    `cached` 与 `label` 两格看得见这一次交上来的标签是什么。
+    """
+    return hashlib.sha256(str(statement_full or "").strip().encode("utf-8")).hexdigest()
+
+
+def append_proposition_verdict(root: str | Path, *, statement_full: str,
+                               verdict: str, canonical_name: str = "",
+                               same_as: str = "", route: str = "",
+                               label: str = "", condition: str = "",
+                               conclusion: str = "", basis: str = "",
+                               role: str = "", task_id: str = "") -> dict[str, Any]:
+    """追加一行判定读数（append-only；显式 LF，Windows 上不留 CRLF）。
+
+    只记判过的结论（same / different / unknown 都算判过了）：没查成（没缝 / 开关关着 /
+    超时 / 坏 JSON）不许缓存 —— 那会把"这一次没查成"变成"以后都别查了"，而缝是可能好起来
+    的（与 `_statement_verdicts` 同一条纪律）。
+
+    每行带 `statement_sha256`：读侧按它折叠出"这条正文最后一次判定是什么"，不必去猜行序。
+    返回写下去的那一行（调用方拿它进返回值，不另拼一份）。
+    """
+    path = proposition_verdicts_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"at": _now_iso(),
+           "statement_sha256": _proposition_verdict_key(statement_full),
+           "statement_chars": len(str(statement_full or "")),
+           "verdict": str(verdict or ""),
+           "canonical_name": str(canonical_name or ""),
+           "same_as": str(same_as or ""),
+           "route": str(route or ""),
+           "label": str(label or ""),
+           "condition": str(condition or ""),
+           "conclusion": str(conclusion or ""),
+           "basis": str(basis or ""),
+           "role": str(role or ""), "task_id": str(task_id or "")}
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）。
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+    return row
+
+
+def proposition_verdict_of(root: str | Path, statement_full: str) -> dict[str, Any]:
+    """这条正文在台账里最后一次判定的结论（没有 ⇒ 空字典）。
+
+    三态：返回空字典 = "没有判定过"（不是"判过不同"）；返回带 `verdict` 的行 = 判过。
+    两者在调用方那里处置完全不同（前者要发一次调用，后者不许再花钱），所以这里不折成
+    一个默认值。
+    """
+    path = proposition_verdicts_path(root)
+    key = _proposition_verdict_key(statement_full)
+    if not path.is_file():
+        return {}
+    last: dict[str, Any] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("statement_sha256") or "") == key and str(row.get("verdict") or ""):
+            last = dict(row)
+    return last
+
+
+# ---------------------------------------------------------------- 证明的路子说明
+
+
+def proof_routes_of(row: Mapping[str, Any]) -> dict[int, str]:
+    """这一行每条证明的一句话路子说明 `{证明号: 说明}`（读侧唯一口径）。
+
+    路子住在证明号上，不在命题的 label 里（业主 2026-10-24：「路线写在证明这一层」）。
+    写侧是 `Secretary.record_statement`：标签里被洗掉的"（路线一：…）"这类修饰落到这里，
+    与那条证明的 `proof_no` 对齐。没有说明的证明不在字典里（缺省是空串，不是"没交"）。
+    """
+    raw = row.get(PROOF_ROUTES_KEY)
+    out: dict[int, str] = {}
+    if not isinstance(raw, Mapping):
+        return out
+    for key, value in raw.items():
+        try:
+            no = int(str(key).strip())
+        except (TypeError, ValueError):
+            continue
+        text = str(value or "").strip()
+        if no >= 1 and text:
+            out[no] = text
+    return out
+
+
+def proof_route_of(row: Mapping[str, Any], proof_no: Any = 1) -> str:
+    """某一份证明自己的路子说明（没有 ⇒ 空串）。"""
+    return proof_routes_of(row).get(int(proof_no or 0) or 1, "")
 
 
 def _judge_system(kind: str) -> str:
@@ -5453,25 +6407,65 @@ def _judge_system(kind: str) -> str:
                "判『建议重排』= 映到某一个（在 reason 里写清是哪一个）；"
                "判『建议不派』= 一个都不映（这次不该调工具）。")
     elif kind == "statement_aesthetic":
+        # 2026-10-24 业主裁定（逐字）：「"后面哪一步会用到它 / 比已知那条强在哪"这俩和
+        # 非平凡度有啥关系？不一定一条定理后面要用，也不一定存在"已知那条"，看证明花的
+        # 力气就能判非平凡度」。于是这一格换了判据：从"会不会被用到 / 比已知强在哪"
+        # 换成"这份证明花了多大力气"。旧那两问降级成可选说明（可以写，不作判据）。
+        #
+        # 为什么判据要逐字写出分数表：材料里的 `effort` 那一格是机器数好的四项读数 + 分数
+        # （`secretary.proof_effort_readings`），档位是分数落格（`EFFORT_TIER_BANDS`）。
+        # 模型这一趟只做"照表落格 + 写清依据"，判断的可复算部分留在机器侧 —— 否则
+        # "为什么这一条是 T3"永远只能靠一句自由文本。
         ask = ("问题：本体（B）要把下面这条命题收进 `statements`（定理与证明收录表）。"
-               "它够格吗？判据只有两条 —— ① **后面哪一步会用到它**（指得出一个具体的使用者："
-               "哪条证明的哪一步、哪个猜想）；② **它比已知的那一条强在哪**。"
-               "两条都答不上来就判『太平凡』（在 reason 里写清缺哪一条）。"
-               "判『合格』时 basis 里必须给出那两条依据。"
-               "判『判不了』= 材料不足（例如只有一句转述、没有逐字证明文本）——"
-               "**不许因为「看起来像个定理」就判合格**（业主原话：这张收录表比综述好太多，"
-               "前提是里面不留平凡的）。"
-               # 2026-10-23 业主裁定：判『太平凡』不再等于"不许进"，它落 T0
-               # （基础定理或初步结论）—— 同一根档位轴上的第一档，与 T1–T4 同性质。
-               "注意『太平凡』的后果：它**不拦收录**，只是把这条判成 "
-               "T0（基础定理或初步结论）—— 所以两条判据答不上来时照样要如实判平凡，"
-               "并把档位给 0。"
-               "**另加两个字段（同一趟判断的第二个输出，不另发调用）**："
-               "nontriviality（整数 0-4：0=基础定理或初步结论（平凡但真，含由数值实验"
-               "直接穷举得出的那些）；1=有一定价值的非平凡结论；2=方法都平凡但工作量大；"
-               "3=需要较多技巧或跨领域工具；4=需要天才般洞察/极长思维链/偏离主流的神奇构造；"
-               "判不了就给 null，**不许拿 0 冒充「没判」**）、"
-               "nontriviality_basis（一句话：凭什么判这一档）。")
+               "它落在非平凡性的哪一档（T0 到 T4）？"
+               "判据只有一组：这份证明花的力气。材料里 `effort` 那一格就是机器数好的读数，"
+               "四项 —— ① 体量（证明正文多少字）；② 步骤（编号步骤行与分节数）；"
+               "③ 引理（正文点名了几条不同的引理）；④ 工具簇的跨度（用了几类论证工具，"
+               "跨没跨领域）—— 外加一格「绕路」（正文自述避开了熟路）。"
+               "分数 = 体量每 2000 字 1 分 + 步骤每 6 步 1 分 + 引理每 2 条 1 分 + 工具簇"
+               "每多一簇 1 分 + 绕路 1 分。档位按分数落格：0 到 1 分是 T0（基础定理或"
+               "初步结论）、2 到 3 分是 T1（有一定价值的非平凡结论）、4 到 7 分是 T2"
+               "（证明方法都平凡但工作量较大）、8 到 15 分是 T3（需要较多的技巧或"
+               "跨领域工具）、16 分以上是 T4（天才般的洞察力/极长思维链/偏离主流的构造）。"
+               "判『太平凡』只有一个含义：力气小（分数落在 T0 那两档）—— 它不拦收录，"
+               "只是把这条判成 T0 并把档位给 0。"
+               "判『合格』= 力气读数大得足以不是 T0（在 basis 里把分数与四项读数写出来）。"
+               "旧口径已经不作判据：后面哪一步会用到它、它比已知的那一条强在哪，"
+               "这两件可写可不写 —— 写了只当说明，没写、答不上来、或者明说没有使用者，"
+               "都不影响档位；档位只看力气那一组读数，不许因为它们缺就把档位压低。"
+               "判『判不了』只有一个含义：这一趟的力气读数缺项（材料里 `effort.missing` "
+               "非空，或 `text_truncated` 为真 —— 输入不完整）—— 判不了时给 null，"
+               "并在 reason 里点名缺的是哪一项读数；不许把它写成『材料不足』。"
+               "另加两个字段（同一趟判断的第二个输出，不另发调用）："
+               "nontriviality（整数 0-4，逐字按上面那张分数表落格；判不了就给 null，"
+               "不许拿 0 冒充「没判」；0 是真心气小的那一档）、"
+               "nontriviality_basis（一句话：把分数与四项读数写出来，例如 "
+               "『分数 7 = 体量 5164 字/2 + 步骤 8/1 + 引理 5/2 + 工具簇 3/2 + 绕路 0』）。")
+    elif kind == "proposition_identity":
+        ask = (
+            "问题：下面这一条命题（条件 ⇒ 结论）与候选表里的每一条，是不是同一个定理？"
+            "业主定的准绳逐字是：「定理描述一致（什么条件推出什么结论），就是一个定理」。"
+            "所以判据只有一条 —— 条件组与结论组是否一致。四种情形逐条写清："
+            "① 同一组条件推出同一组结论 ⇒ 判 same，并在 same_as 里给出候选的 stmt_id；"
+            "② 条件是包含关系（一条更强 / 一条更弱）⇒ 判 different，basis 里写明"
+            "『条件强弱不同』，不许因为『看起来是同一个主题』就判 same；"
+            "③ 结论相同、条件只是同一条件的另一种记号或等价改写（换变量名、换记号、"
+            "把『有限群』写成『阶有限的群』这一类）⇒ 仍判 same；"
+            "④ 条件或结论有一侧写不清（缺假设、只给了名字、正文被截断）⇒ 判 unknown，"
+            "并在 basis 里点名缺的是条件还是结论 —— 读不出就如实给 unknown，不许猜；"
+            "候选表为空 ⇒ 判 different（没有可并的对象）。"
+            "不参与判定的东西：定理叫什么名字、证明走哪条路线、证明手法、表述风格 ——"
+            "这些都不是『条件 ⇒ 结论』的一部分。"
+            "另加四个字段（同一趟判断的输出，不另发调用）："
+            "canonical_name（把这一条的标签洗成干净的定理名：只留定理名，把"
+            "『（路线一：…）』『（自证草稿，待 V 审签）』『独立证明』这类修饰去掉；"
+            "两三条写法不同的同一命题要洗成同一个名字）、"
+            "route（被洗掉的那句路线/草稿状态，收敛成一句话，作为证明这一层的路线说明；"
+            "标签里本来没有路线就填空串）、"
+            "condition（一句话：这一条的条件是什么）、"
+            "conclusion（一句话：这一条的结论是什么）。"
+            "basis 里必须分别对条件与结论各给一句比对（例如『条件：都是有限群 + p 是素数，"
+            "一致；结论：都是 Sylow p-子群存在，一致』）—— 不许只给一个总分。")
     else:
         ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"
                "该重排成什么？判『建议重排』并在 reason 里给出重排后的说法；"
@@ -5486,8 +6480,23 @@ def _judge_material(context: Mapping[str, Any]) -> str:
     上游前缀缓存要求前缀逐字节相同，把材料写进前缀等于每一问都换一段前缀。
     与 :func:`_judge_system` 合起来逐字节等于改前那条整提示词（判据钉着这一点：
     `tests/test_secretary_system_carries_the_head.py`）。
+
+    ## 2026-10-24：这一格不再静默截断
+    改前是 `json.dumps(...)[:4000]`：一条 8375 字的正文在 4000 字处被切断，而材料里
+    没有一个字说"被切了"。模型的反应是"证明截断，无法定档"，台账落成 None + basis
+    "材料不足" —— 那是把"我们没给它看全"记成了"它给的材料不够"。
+    现在两条：上限抬到 :data:`JUDGE_MATERIAL_CAP`；真的超了就在材料尾部写下截断点与
+    那两句话（"输入不完整"不是"材料不足"），并由 :func:`material_truncation` 把同一个
+    截断点交给结果与台账。两处必须同时成立：只写一句提示而不抬高上限，等于把
+    "看不全"写成一句免责声明。
     """
-    body = json.dumps(dict(context), ensure_ascii=False, sort_keys=True, default=str)[:4000]
+    body = json.dumps(dict(context), ensure_ascii=False, sort_keys=True, default=str)
+    total = len(body)
+    if total > JUDGE_MATERIAL_CAP:
+        note = (f"\n…【材料在 {JUDGE_MATERIAL_CAP} 字处被截断：这一条正文共 {total} 字，"
+                f"只给了前 {JUDGE_MATERIAL_CAP} 字。档位判不了时请写「输入被截断」——"
+                "这是输入不完整，不是材料不足】\n")
+        return f"材料：\n{body[:JUDGE_MATERIAL_CAP]}{note}"
     return f"材料：\n{body}\n"
 
 

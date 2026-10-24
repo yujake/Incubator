@@ -117,7 +117,8 @@ SPEC = AgentSpec(
             # （`proofs` / `used_by="stmt:<号>#pN"` / `path_group` / `reviewed_by_proof` /
             # 对应表的 `proof_no`），缺的是"要几种证明时该交什么形状"的口径 —— 这一条是 F 侧的正向政策。
             "**一条定理要几种证明，就是一条命题的 `proof_no` 1..N，不是几条命题**：D 或用户要「几种证明"
-            "语言 / 几条独立路径」时，你把 N 份都写出来、一次落成**一条 stmt** —— `statements` 那一行由你写。"
+            "语言 / 几条独立路径」时，你把 N 份都写出来、一次落成**一条 stmt** —— `statements` 那一行交给 "
+            "**B 登记**（你把命题正文与 N 份证明全文一并交过去，由它落那一行；你不写那张表）。"
             "各条证明用 `proofs=[{proof_no: 1..N, text: …}]` 一次交清，不要为每条路线各立一条命题。每条证明各自送 V 签"
             "（`verify_proof` 带 `proof_no=N`，V 的签按份落在 `bits.evidence.reviewed_by_proof` 里），"
             "不许拿一份的签替另一份背书。每条证明用到的依赖按 `used_by=\"stmt:<命题号>#pN\"` ＋ "
@@ -126,7 +127,7 @@ SPEC = AgentSpec(
             "（表述不同不等于不同命题）；拆开后 `proof_no` 恒为 1、`path_group` 只剩一组，"
             "多证明机制一次都不会被触发。",
             "**V 签过之后这一行的档位就该是 `proof_review`，不许一直写 `heuristic`**（2026-10-19 晚，按 `projects/mp2` 的 "
-            "`stmt:000003` 修）：你落 `statements` 那一行时，档位由 `verifications/<命题号>.jsonl` 里的签名**现算**"
+            "`stmt:000003` 修）：交 B 登记 `statements` 那一行时，档位由 `verifications/<命题号>.jsonl` 里的签名**现算**"
             "（`_proof_outlet` 会自己看）—— `proof_text` 非空 ＋ 最近一签「成立」且 `proof_sha256` 与现行正文相符 ⇒ "
             "`proof_review`；**只有真没有那一签时才落 `heuristic`**。这是定义（`schema.EVIDENCE_KINDS`），不是自报：那一签只有 "
             "V 写得进。两条出口照走：① 还没签 ⇒ 先派 V 走查，签完（同样的论证再交一遍时这一行会被**就地升档**，不登记第二行）；"
@@ -136,14 +137,14 @@ SPEC = AgentSpec(
             "经通用表工具 `table.create` 写，写清 `relation_ids` 与为什么）—— B 的 `run` 每趟都会 `run_reprocess()` 领走它；"
             "**只在报告里写「这个关系该重抽」等于没提**。",
             "**阶段性中间成果要落一处一条**：每推进一条引理就写进 `reports/attack-<plan_id>.md`（一条一行：状态 / 依据 / 下一步），"
-            "**先 `fs.read` 再改**（覆盖一个没读过的文件会被观测闸门拒）；够格的中间结论**你自己落成 `statements` 一行** —— 那才是可复核"
+            "**先 `fs.read` 再改**（覆盖一个没读过的文件会被观测闸门拒）；够格的中间结论**交给 B 登记成 `statements` 一行** —— 那才是可复核"
             "的那一份，盘上那份是给人读的推进台账。",
             "**方向由 D 定，你负责把它做成**：你收到方向后落成计划（`F.create_plan`：`problem_key` 用 D 给的那一条、`subgoals` 给"
             "一到三个可判定的子目标）并稳定推进（`F.step`）—— **按计划走，不在推进中悄悄换方向**；真要换（连续两轮没有实质进展、"
             "或撞见结构性障碍）就把理由回报 D 由它定。",
             "**你造的例子要整理成命题—证明格式**：D 的手稿里「存在这样的例子」那一句必须引到一个落点，而**例子由谁造决定落点长什么"
             "样** —— E 从数值搜索里撞见的例子由 E 落（代码 + 实验行）；**你造的例子由你整理成「命题 + 证明」**：命题写成「某某例子"
-            "符合某形式」（把「它符合什么」写清楚，别只贴一段构造），证明就是那个验证过程，然后**你自己落成 `statements` 一行**。",
+            "符合某形式」（把「它符合什么」写清楚，别只贴一段构造），证明就是那个验证过程，然后**交给 B 登记成 `statements` 一行**。",
             # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
             # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
@@ -203,16 +204,16 @@ SPEC = AgentSpec(
                      'attack_plans',
                      'reprocess_requests',
                      'search_requests',
-                     # 2026-10-19（`draft/44` 的 P3-6）：`proof` 那一档的产物出口。
-                     # 改前 F 交出的论证只活在 `history.product_detail` 里（全仓没有读者），
-                     # 而 policy 曾要求"够格的中间结论交 B 登记成 `statements`" ——
-                     # 那条路在真机里从来没有走通过（F 没有这条路，M 也不会替它派）。
-                     # 现在 F 自己落一行（`evidence_kind` 由 `verifications/<命题号>.jsonl` 里
-                     # 的签名现算：有那一签 ⇒ `proof_review`，没有才 `heuristic`；`bits` 留空
-                     # —— 五位里第 3 位的 owner 是 V，不替别人签），可复核的那一份因此存在了。
-                     # 这是「写集扩容」（F 从此会写 `statements`）⇒ 落在 FC-27 的
-                     # 人工复核面里：本批只做、不签。
-                     'statements',
+                     # 2026-10-26（收口批）：`statements` 从 F 的写集里拿掉 —— 权限面以
+                     # 秘书那一层为准（`secretary.STATEMENT_WRITER_ROLES = ("B",)`，业主口径
+                     # "命题只经秘书 / B 登记"）。改前这里有过一格，policy 也写着"那一行由你
+                     # 写"，于是 F 被教着去写一张它写不进的表：真机 4 条 `not_statement_writer`
+                     # 全是照那份规格做出来的。现在 F 把命题正文与证明全文交给 B，由 B 登记。
+                     # 这一格还连着两个更细的口径：① `bits` 不许由 F 填（五位里第 3 位的 owner
+                     # 是 V），而 `table_tools._NOT_ROUTABLE_KEYS` 把空对象也算作"碰了派生面"
+                     # ⇒ 照旧规格写 `bits={}` 会被判 direct_write；② 档位
+                     # （`evidence_kind`）由 `verifications/<命题号>.jsonl` 的签名现算，
+                     # 那不是 F 的活。判据：`tests/test_f_hands_propositions_to_b.py`。
                  )),
     class_path='agentflow.agent_f:AgentF',
     actions=ACTIONS,
