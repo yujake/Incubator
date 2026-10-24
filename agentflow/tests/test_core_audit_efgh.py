@@ -570,7 +570,12 @@ def test_agent_h_module_writes_tables_only_inside_the_declared_fixture_harness()
 
     所以这里把豁免显式穷举，并且把两条通道分别钉死：
     经 `store.tx` 的只有 `_seed_document` / `_selftest`；
-    绕过 store 直接改盘的只有 `_inject_raw_document`。
+    绕过 store 直接改盘的是 `_inject_raw_document`（改表）与 `_selftest`（写论文正文）。
+
+    2026-10-24 补第二条（业主裁定「H 审论文（out/paper/main.tex / pdf），documents 只是
+    它的登记行」）：自检要有一份被审的正文才审得下去，于是 `_selftest` 现在也会写
+    `out/paper/main.tex`。它写的不是任何一张表，而是"被审对象"本身 —— 两条通道因此
+    各多一格，且各自逐字列出（豁免清单仍然必须与实际情况逐条相同）。
     模块里的 `_SELFTEST_HARNESS` 必须正好是这两者的并集 —— 声明与实际不一致
     就说明有人加了一处没登记的写入（这正是"降级必须显式"的形态）。
     """
@@ -581,7 +586,10 @@ def test_agent_h_module_writes_tables_only_inside_the_declared_fixture_harness()
     tx_funcs = {f for f, _t, _ln, k in writes if k == "tx"}
     raw_funcs = {f for f, _t, _ln, k in writes if k != "tx"}
     assert tx_funcs == {"_seed_document", "_selftest"}, f"经 store.tx 写表的函数变了：{sorted(tx_funcs)}"
-    assert raw_funcs == {"_inject_raw_document"}, f"绕过 store 直接改盘的函数变了：{sorted(raw_funcs)}"
+    assert raw_funcs == {"_inject_raw_document", "_selftest"}, (
+        f"绕过 store 直接改盘的函数变了：{sorted(raw_funcs)}"
+        "（只允许两处：夹具改表 _inject_raw_document、自检写被审正文 _selftest）"
+    )
     assert set(_SELFTEST_HARNESS) == tx_funcs | raw_funcs, (
         f"豁免清单与实际情况不一致：声明 {sorted(_SELFTEST_HARNESS)}，"
         f"实际 tx={sorted(tx_funcs)} raw={sorted(raw_funcs)}。"

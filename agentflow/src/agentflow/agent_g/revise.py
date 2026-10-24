@@ -163,6 +163,9 @@ class _Revise:
                         "宁可整笔回滚，也不留下一份'库与磁盘不一致'的稿件"
                     ) from e
                 rendered = str(target)
+                # `D-44`：重画之后，中间产物自己的 sha 也跟着换一版 —— 记在同一笔事务里。
+                # 不记的话，读侧会把每一次正常改稿都报成"内容已变"（噪音会把真信号淹掉）。
+                DT.record_markdown_artifact(tx, doc_id, rel, target)
             # 「这份稿子引了几条台账凭据 / 库里还有多少可引的」（`doc.build_document` 的
             # `meta.citation_coverage` 同一条读数，走同一份实现）：修订这条路也要给，
             # 否则"改写"成了绕开那条读数的后门 —— 与 `check_citations` / `check_proofs`

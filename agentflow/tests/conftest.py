@@ -185,6 +185,36 @@ def write_library_file(store: Store, rel: str, text: str) -> Path:
     return p
 
 
+def write_paper(store: Store, body: str | None = None, *, name: str = "main.tex") -> Path:
+    """在 `<工作区>/out/paper/` 下落一份论文正文（H 的审校对象）。
+
+    业主 2026-10-24 裁定之后，H 审的是论文正文（`out/paper/main.tex`，退到
+    `main.pdf` 的文本层），`documents` 那一行只是它的登记行。所以"要调
+    `AgentH.review` / `review.review_document`"的夹具必须先把正文写下来：
+    一个没有正文的工作区，H 给出的正确结论是"没有可审的论文"（`checked=False` +
+    `verdict="unreviewable"`，不落发现、不动状态）—— 那是正确行为，但不是这些用例
+    想测的东西。落点与真实路径同源（`papercompile.package_dir`），不另写一份路径。
+
+    `body` 缺省给一份最小但合法形状的 tex（有导言区、有正文、以换行结尾）。
+    """
+    from agentflow import papercompile as PC
+
+    text = body if body is not None else (
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        "\\section{摘要}\n"
+        "这一份是最小论文正文（夹具）。\n"
+        "\\end{document}\n"
+    )
+    p = PC.package_dir(store.root) / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    # 按字节写：`write_text` 在 Windows 上会把 "\n" 翻成 "\r\n"，而这一份正文的
+    # sha256 / 行数都是判据（`D-44`：sha 是盘上那份文件的字节摘要）—— 夹具自己
+    # 先把字节定死，判据才不用为平台让路。
+    p.write_bytes(text.encode("utf-8"))
+    return p
+
+
 def sync_counters(store: Store) -> None:
     """把 counters.json 对齐到"max(已用 4 位 ID) + 1"。
 
@@ -389,7 +419,7 @@ def add_relation(
 
 
 # --------------------------------------------------------------------------- J2/K2 夹具
-# 裁定 J2 / K2：六件产物与 V 的验证台账真机没有样本（`draft/74 §0.3` 实测：全树 `**/run-manifest.json` 搜到
+# 裁定 J2 / K2：六件产物与 V 的验证台账真机没有样本（`draft/74 §0.3` 实测：全树 `/run-manifest.json` 搜到
 # 0 个、`verifications/` 目录 0 个）⇒ 判据输入由夹具造，并在页面上标明"夹具样本"。造在 `tests/conftest.py`
 # 的理由是 `draft/78 §2` 的边界：这个文件归 B 线独有，A/C 要造夹具就造在自己文件的局部 fixture 里 —— 一份 共享样本只有一个落点，改了不会只改一半。形状逐个有出处：六件产物的名字 ← `runflow.ARTIFACTS`；台账行的
 # 9 个键 ← `artifacts.FIELDS`；交接行的键 ← `manuscripts.write` 写的那个 dict；秘书决策行 ←

@@ -27,16 +27,28 @@ from agentflow.agent_h import AgentH
 from agentflow.store import Store
 from agentflow.tools import review_tools as RV
 
-from conftest import add_concept, add_literature, add_relation
+from conftest import add_concept, add_literature, add_relation, write_paper
 
 TS = "2026-01-01T00:00:00+00:00"
 DISCLAIMER = "数值交叉验证，不构成证明"
 
 
 def _store(tmp_path: Path) -> Store:
-    """带最小知识表的工作区（否则引文会悬空，噪音盖过要测的东西）。"""
+    """带最小知识表的工作区（否则引文会悬空，噪音盖过要测的东西）。
+
+    2026-10-24 起还带一份论文正文：H 审的对象是 `out/paper/main.tex`
+    （业主裁定「只对论文负责是正确的，documents等都是中间产物」）。
+    正文里逐字写上本文件那条断言的正文，行号才有来源。
+    """
     st = Store(tmp_path)
     st.init()
+    write_paper(st, "\n".join([
+        r"\documentclass{article}",
+        r"\begin{document}",
+        "谱落在区间内。",
+        r"\end{document}",
+        "",
+    ]))
     add_literature(st, "0000", title="某文献", path=None, processed=True, sync=False)
     add_concept(st, "0000", "谱", definition="d", sync=False)
     add_concept(st, "0001", "区间", definition="d", sync=False)

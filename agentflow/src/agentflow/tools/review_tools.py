@@ -1,4 +1,12 @@
 """H 的工具：审校。
+## 审校对象是论文，不是台账行（业主 2026-10-24 裁定）
+「只对论文负责是正确的，documents 等都是中间产物」＋「H 审论文（`out/paper/main.tex` /
+pdf），documents 只是它的登记行」。所以 `review.review_document` 的输入正文来自
+`read_paper_body`：`<项目根>/out/paper/main.tex` 优先，退到 `main.pdf` 的文本层；
+两者的正文都带行号（`_line_of` 因此能定位），本次审的那一份正文的 sha256 记进读数。
+两者都没有 ⇒ `checked=False` + `verdict="unreviewable"`，不落发现、不动状态：
+没审到不是"审过、没问题"。`documents` 那一行仍然只是中间产物 —— 审完只改它的
+`status`，台账行缺失时论文照审（缺的只是登记行）。
 ## 这个模块存在的最重要理由
 审校者的判断也需要证据。
 1. `schema.ReviewFinding.evidence` 必填非空（写入时硬约束）； 2. 本模块的每个检查都给出 `evidence` 字段，内容是触发该发现的实际值（例
@@ -165,16 +173,23 @@ _SEMANTIC_NOT_WIRED_REASON = (
     "⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）"
 )
 
-#: `line` 这一格为什么是第三态（`None` + 自证理由），而不是一个数字。
+#: `line` 这一格为什么仍然可能是第三态（`None` + 自证理由），而不是一个数字。
 #:
 #: `P-9` 的口径逐字是"行号只有在版本冻结（G11）之后才有意义"（`docs/PROPOSALS.md:239-240`）。
 #: 未冻结时记下的行号在改稿之后就是错的，而它看起来一样精确 —— `.noai-paths` 里
-#: "理由里刻意不写行号"是与它同一条纪律的另一面。`scan_document` 是纯函数，只拿到
-#: `documents` 那一行，没有任何行号来源；G11 的冻结结论也还没有接进 H 的产出方
-#: （`draft/28` §96.3 第 2 条：`GateContext` 里 `findings` 与 `observed_hash` 不相绑）。
-#: ⇒ 如实给 `None` + 这一句理由，而不是猜一个数字（猜出来的行号是一个发明出来的数字）。
+#: "理由里刻意不写行号"是与它同一条纪律的另一面。
+#:
+#: 2026-10-24 起行号来源有了：`review_document` 先把被审的论文正文读进来
+#: （`read_paper_body`：`out/paper/main.tex`，退到 `main.pdf` 的文本层），
+#: 那份正文连同它的行号一起进 `scan_document` ⇒ `_line_of` 能把每条发现的逐字引文
+#: 定位到正文的某一行。此前这里写的是"审校是纯函数、只读 `documents` 那一行，
+#: 没有行号来源" —— 那句话在业主裁定「H 审论文，`documents` 只是它的登记行」之后
+#: 已经不成立了，所以去掉。仍然有 `None` 的那一档只剩两种情形（本串逐字写明它们）：
+#: 本次没读到正文（三态第三态，见 `read_paper_body`），或这条发现的引文在那份正文里
+#: 逐字找不到。加上 G11 的冻结结论还没有接进本产出方（`draft/28` §96.3 第 2 条）。
 _LINE_UNAVAILABLE_REASON = (
-    "本次拿不到行号：审校是纯函数、只读 `documents` 那一行，没有行号来源；"
+    "本次拿不到行号：这条发现的逐字引文在被审论文正文里定位不到"
+    "（本次没读到正文，或那句话不在正文里逐字出现）；"
     "且 `P-9` 的口径是「行号只有在版本冻结（G11）之后才有意义」，"
     "而 G11 的冻结结论还没有接进本产出方（`draft/28` §96.3 第 2 条）"
 )
@@ -258,6 +273,223 @@ def _line_of(text: str, needle: str) -> int | None:
     if pos < 0:
         return None
     return body.count("\n", 0, pos) + 1
+
+
+def _locate_quote(text: str, quote: Any) -> int | None:
+    """在正文里定位一条发现的逐字引文，返回 1 起行号（找不到 ⇒ None）。
+
+    比 `_line_of` 多两道判据，两道都是被真实数据逼出来的：
+
+    1. 引文可能是被截过的（`_verbatim_quote` 超过 20 词时以 "…" 收尾）—— 那个省略号
+       不在正文里，原样去找必然找不到。所以先去掉省略号再找；
+    2. 引文进 `_verbatim_quote` 时连续空白被压成一个空格（`" ".join(text.split())`），
+       而正文是 LaTeX：一句话可能跨行、行内也可能有连续空格。所以第二遍按"空白不敏感"
+       的形态找：把正文压成单空格串、同时记住每个字符属于第几行，再在这条压平串上
+       `find`，命中的位置直接翻译回行号。
+
+    两遍都找不到才返回 `None`（调用方据此给"行号拿不到"的第三态与理由串）——
+    不会因为"这一句长了点"就把整条发现的行号判死。
+    """
+    raw = str(quote or "").strip()
+    if not (text or "") or not raw:
+        return None
+    direct = _line_of(text, raw)
+    if direct is not None:
+        return direct
+    needle = raw.replace("…", "").strip()
+    if not needle:
+        return None
+    direct = _line_of(text, needle)
+    if direct is not None:
+        return direct
+    flat: list[str] = []
+    owners: list[int] = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        words = line.split()
+        if not words:
+            continue
+        for word in words:
+            flat.append(word)
+            owners.extend([lineno] * len(word))
+            flat.append(" ")
+            owners.append(lineno)
+    haystack = "".join(flat).rstrip()
+    pos = haystack.find(" ".join(needle.split()))
+    if pos < 0 or pos >= len(owners):
+        return None
+    return owners[pos]
+
+
+# ---------------------------------------------------------------- 被审对象：论文正文
+#
+# 业主 2026-10-24 裁定（逐字）：「只对论文负责是正确的，documents等都是中间产物」，
+# 并已确认：「H 审论文（out/paper/main.tex / pdf），documents 只是它的登记行」。
+#
+# 所以本模块的审校对象是论文正文，不是 `documents` 那一行：
+#   * 正文优先读 `<项目根>/out/paper/main.tex`；没有 tex 就退到 `main.pdf` 抽出的文本；
+#   * 两者都没有（或读不出来、或读出来是空的）⇒ 三态里的第三态：
+#     `checked=False` + 逐字理由，不许折成 `accepted`（"没审到"不是"审过、没问题"）；
+#   * 正文连同它的行号一起进 `scan_document`（`_line_of` 因此有行号来源）；
+#   * `documents` 那一行仍然是中间产物：审完只改它的 `status`（现状保留），
+#     本次审的正文 sha256 记进读数（`paper_body`）与本轮 `reason`，可追溯。
+#
+# 论文包的落点不在这里另写一份：`papercompile.package_dir` / `TEX_NAME` / `PDF_NAME`
+# 就是"论文包在哪、正文叫什么"的唯一声明面（`draft/142` 之后 `out/paper/` 是那个包）。
+
+#: 被审正文的来源档（读数 `paper_body["source"]` 的取值域；空串 = 没读到正文）。
+#: 两个来源档必须分得开：同一句话在 tex 与 pdf 抽取文本里的行号本来就不是一回事。
+PAPER_SOURCES: tuple[str, ...] = ("tex", "pdf")
+
+
+def _checked_paper_reading(reading: dict) -> dict:
+    """正文读数的唯一出口：顺手把 `source` 的取值域钉住（声明与实现对齐的自检）。
+
+    为什么值得一行断言：`source` 决定"这个行号是 tex 的行号还是 pdf 抽取文本的行号"，
+    而这两者混起来没有任何下游会报错 —— 它只会让行号变成一句假精确。
+    """
+    source = str(reading.get("source") or "")
+    if source not in ("",) + PAPER_SOURCES:
+        raise ValueError(
+            f"正文读数里的 source={source!r} 不在 {PAPER_SOURCES} 里（空串 = 没读到正文）"
+        )
+    return reading
+
+
+def read_paper_body(project_root: Any) -> dict:
+    """读本次要审的论文正文，返回带行号、字节数与 sha256 的读数（三态）。
+
+    返回的键（不含正文本身 —— 正文 25 KB，塞进工具返回值会把上下文烧光）：
+
+    - `checked`：这一趟有没有真的拿到一份可审的正文；
+    - `source`：`"tex"` / `"pdf"` / `""`（从哪一份读的；空串 = 没读到）；
+    - `path`：相对项目根的 posix 路径（没读到就是该找而没找到的那个路径的说明）；
+    - `sha256`：盘上那份文件的字节 sha256（唯一口径 = `papercompile.file_digest`，
+      不做任何规范化 —— 与 `COMPILE-RECEIPT.json` 的 `tex_sha256` 同一把尺子）；
+    - `bytes` / `lines` / `chars`：字节数、行数、字符数（`lines` 就是本次交给
+      `scan_document` 的那份正文的行数，行号以它为准）；
+    - `text`：正文本身（只有本函数与它的调用方看得见，不进读数）；
+    - `reason`：没读到时的逐字理由（读到了就是空串）。
+
+    PDF 那一档的行号是抽取出来的文本的行号（不是 PDF 的页/行），读数里
+    `source="pdf"` 就是这句限定：同一句话在 pdf 与 tex 里的行号本来就不是一回事，
+    所以两个来源档必须分得开（折平它会让"行号"变成一句假精确）。
+
+    三态纪律（与 `dep_check` / `semantic_check` 同形）：读不到 ⇒ `checked=False`
+    + 理由；绝不返回一个空正文却让 `checked=True`（那会被下游读成"审过、干净"）。
+    """
+    root = Path(str(project_root))
+    from .. import papercompile as PC
+
+    package = PC.package_dir(root)
+    rel_dir = "/".join(PC.PACKAGE_REL)
+    reading = {
+        "checked": False,
+        "source": "",
+        "path": f"{rel_dir}/{PC.TEX_NAME}",
+        "sha256": "",
+        "bytes": 0,
+        "lines": 0,
+        "chars": 0,
+        "text": "",
+        "reason": "",
+    }
+
+    tex = package / PC.TEX_NAME
+    if tex.is_file():
+        try:
+            raw = tex.read_bytes()
+        except OSError as e:
+            reading["reason"] = (
+                f"没有可审的论文：{rel_dir}/{PC.TEX_NAME} 在盘上，但读不出来"
+                f"（{type(e).__name__}: {e}）"
+            )
+            return _checked_paper_reading(reading)
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as e:
+            reading["reason"] = (
+                f"没有可审的论文：{rel_dir}/{PC.TEX_NAME} 读出来了，但不是 UTF-8"
+                f"（{e}）⇒ 这一份正文我方判不了行号"
+            )
+            return _checked_paper_reading(reading)
+        reading.update(
+            checked=bool(text.strip()),
+            source="tex" if text.strip() else "",
+            path=f"{rel_dir}/{PC.TEX_NAME}",
+            # 字节 sha256 与回执里的 `tex_sha256` 同一口径（同一份实现）。
+            sha256=PC.file_digest(tex),
+            bytes=len(raw),
+            lines=text.count("\n") + 1 if text else 0,
+            chars=len(text),
+            text=text,
+        )
+        if not reading["checked"]:
+            reading["reason"] = (
+                f"没有可审的论文：{rel_dir}/{PC.TEX_NAME} 在盘上，但它是空的 ⇒"
+                "这一趟没有正文可审（不是『审过、没问题』）"
+            )
+        return _checked_paper_reading(reading)
+
+    pdf = package / PC.PDF_NAME
+    if pdf.is_file():
+        try:
+            from ..extract import extract_text
+
+            got = extract_text(pdf)
+            text = str(getattr(got, "text", "") or "")
+        except Exception as e:  # noqa: BLE001 —— 抽不出来是"没查成"，如实带回
+            reading.update(
+                path=f"{rel_dir}/{PC.PDF_NAME}",
+                reason=(
+                    f"没有可审的论文：{rel_dir}/{PC.PDF_NAME} 在盘上，但正文抽不出来"
+                    f"（{type(e).__name__}: {e}）"
+                ),
+            )
+            return _checked_paper_reading(reading)
+        reading.update(
+            checked=bool(text.strip()),
+            source="pdf" if text.strip() else "",
+            path=f"{rel_dir}/{PC.PDF_NAME}",
+            sha256=PC.file_digest(pdf),
+            bytes=int(pdf.stat().st_size),
+            lines=text.count("\n") + 1 if text else 0,
+            chars=len(text),
+            text=text,
+        )
+        if not reading["checked"]:
+            reading["reason"] = (
+                f"没有可审的论文：{rel_dir}/{PC.PDF_NAME} 在盘上，但它没有文本层"
+                "（抽出来的正文是空的）⇒ PDF 那一档也审不了"
+            )
+        return _checked_paper_reading(reading)
+
+    reading["reason"] = (
+        "没有可审的论文："
+        f"{rel_dir}/{PC.TEX_NAME} 与 {rel_dir}/{PC.PDF_NAME} 都不在盘上"
+        "（项目根下这个论文包里没有正文）⇒ 这一趟**没有可审的论文**，"
+        "不是『审过、没问题』；先让 G 写出正文再让 H 审"
+    )
+    return _checked_paper_reading(reading)
+
+
+#: 读数里带的正文档位（`read_paper_body` 的返回里能进工具返回值的那些键）。
+_PAPER_READING_KEYS: tuple[str, ...] = (
+    "checked", "source", "path", "sha256", "bytes", "lines", "chars", "reason",
+)
+
+
+def paper_reading(paper: Mapping[str, Any]) -> dict:
+    """把 `read_paper_body` 的返回压成读数（去掉正文本身）。
+
+    为什么必须去掉 `text`：正文 25 KB，`review_document` 的返回值会进模型的上下文，
+    把正文塞进去等于每审一次就多烧一次全文的 token —— 而模型要看的是读数。
+    """
+    return {k: paper.get(k) for k in _PAPER_READING_KEYS}
+
+
+def _body_text_of(paper: Mapping[str, Any]) -> str:
+    """一份正文读数里"能不能审"的判据只有一处：拿到了、且不是空白。"""
+    return str(paper.get("text") or "") if paper.get("checked") else ""
 
 
 # ---------------------------------------------------------------- 纯函数判据
@@ -696,7 +928,7 @@ def scan_document(
     if doc_text:
         for f in findings:
             if f.get("line") is None:
-                located = _line_of(doc_text, str(f.get("verbatim_quote") or ""))
+                located = _locate_quote(doc_text, f.get("verbatim_quote"))
                 if located is not None:
                     f["line"] = located
                     f["line_unavailable_reason"] = ""
@@ -937,6 +1169,84 @@ def record_finding(
             "level": level_s, "round": round_val, "status": "open"}
 
 
+def _unreviewable_review(
+    store: Any,
+    doc_id: str,
+    *,
+    round_no: int | None,
+    paper_view: Mapping[str, Any],
+    doc: Mapping[str, Any],
+    actor: str = "agent-H",
+) -> dict:
+    """没有可审的正文时的返回形状：一个字都不写盘，且不判 pass。
+
+    为什么不是抛异常：这不是"调用方参数错"，而是"这一趟没有对象可审" —— 它必须是一个
+    可读的结论（谁被审了、为什么审不了、下一步该干什么），而不是一次崩掉。但它与
+    `accepted` 必须隔着一整个档：`checked=False` + `verdict="unreviewable"`。
+
+    为什么不动 `documents.status`：状态是"审过之后"的裁决（`_set_doc_status` 会顺手写
+    审核轴三格）。这一趟根本没审 —— 把状态推成 `in_review`/`accepted` 都是在替一次
+    不存在的审校记账。返回值里的 `status` 是现在的状态（读数），不是本次写下的。
+
+    键集合与正常路径逐字相同（`test_tools_returns_declaration` 的判据是
+    "声明 ⊆ 实现"：两条返回路径少一个键都会当场变红）。
+    """
+    existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == str(doc_id)]
+    if round_no is None:
+        round_no = max((int(r.get("round") or 1) for r in existing), default=0) + 1
+    round_no = int(round_no)
+    status_now = str(doc.get("status") or "")
+    zero_coverage = {
+        "claims_total": 0,
+        "claims_reviewed": 0,
+        "claims_decided": 0,
+        "claims_semantically_judged": 0,
+        "note": (
+            "这一趟**没有可审的论文正文** ⇒ 覆盖率这一格全是 0，"
+            "它是『没审到』的读数，不是『审过、零发现』"
+        ),
+    }
+    return {
+        "doc_id": str(doc_id),
+        "checked": False,
+        "round": round_no,
+        "new_findings": [],
+        "duplicate_skipped": 0,
+        "reopened": [],
+        "error_count": 0,
+        "warning_count": 0,
+        "info_count": 0,
+        "dep_check": {
+            "checked": False,
+            "reason": "没有可审的论文 ⇒ 依赖闭合这一维没查（不得读成『依赖都闭合』）",
+            "open": [],
+        },
+        "semantic_check": {
+            "checked": False,
+            "judge": "",
+            "reason": "没有可审的论文 ⇒ 语义级判据这一维没查",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0,
+        },
+        "coverage": zero_coverage,
+        "status": status_now,
+        "status_updated": False,
+        "status_error": "",
+        "signature": None,
+        "signature_error": None,
+        "verdict": "unreviewable",
+        "reason": (
+            f"{paper_view.get('reason') or '没有可审的论文'}。"
+            "⇒ 本次**没有判 pass**：一条发现都没落、`documents` 的状态一个字都没动"
+            "（没审到不是『审过、没问题』）。下一步：让 G 先把正文写进 "
+            "`out/paper/main.tex`（或编出带文本层的 `main.pdf`），再让 H 审。"
+        ),
+        "paper_body": dict(paper_view),
+    }
+
+
 def review_document(
     store: Any,
     doc_id: str,
@@ -950,8 +1260,17 @@ def review_document(
     # 默认路径一个 LLM 调用都不发。
     semantic_judge: Any = None,
 ) -> dict:
-    """审一份稿件：把机械发现落成 `ReviewFinding` 行，并更新 `documents.status`。
-    返回 ``{"doc_id","checked","round","new_findings","duplicate_skipped","reopened","error_count","warning_count","info_count","dep_check","status","status_updated","status_error","verdict","reason"}``。
+    """审一份论文：把机械发现落成 `ReviewFinding` 行，并更新 `documents.status`。
+    返回 ``{"doc_id","checked","round","new_findings","duplicate_skipped","reopened","error_count","warning_count","info_count","dep_check","semantic_check","coverage","status","status_updated","status_error","signature","signature_error","verdict","reason","paper_body"}``。
+    ## 审的是论文，不是台账行（业主 2026-10-24 裁定）
+    「只对论文负责是正确的，documents 等都是中间产物」＋「H 审论文（`out/paper/main.tex` /
+    pdf），documents 只是它的登记行」。所以本函数的输入正文来自 `read_paper_body`：
+    `<项目根>/out/paper/main.tex` 优先，退到 `main.pdf` 的文本层。那份正文连同它的行号
+    一起交给 `scan_document`（`_line_of` 因此能把发现的逐字引文定位到正文某一行）。
+    - 两者都没有（或读不出来 / 抽出来是空的）⇒ `checked=False`、`verdict="unreviewable"`，
+      一个字都不写盘（不落发现、不动状态）：没审到不是"审过、没问题"；
+    - `documents` 那一行是中间产物：审完只改它的 `status`（现状保留）。台账行缺失时
+      仍可审（论文是真身），这一缺只记读数（`paper_body` 里的 `documents_row`）。
     ## 三段式（为什么是三个事务而不是一个）
     1. 落发现（`review_findings`）：发现是审校的产出，必须落库 ——"发现了但没记下来"等于没发现。 2. 重开谎报（`review_findings`）：
     G 把一条 finding 标成 `fixed` 之后，如果重跑检查仍然复现，这条 finding 会被重新打开。没有这一步， G 只要点一下"已修复"，审校就只看状态、成
@@ -961,11 +1280,37 @@ def review_document(
     话在没有查过的情况下不许说出口。
     """
     doc_id = str(doc_id)
-    doc = _doc_of(store, doc_id)
+    # ---- 被审对象：论文正文（这一路输入此前根本不存在 ⇒ 原来那句"没有行号来源"成立）
+    root = Path(getattr(store, "root", None) or ".")
+    paper = read_paper_body(root)
+    body = _body_text_of(paper)
+    # 台账行缺失是允许的（③ 论文是真身）：只有"既没有台账行、又没有正文"才是真的没东西可审。
+    row_missing = False
+    try:
+        doc = _doc_of(store, doc_id)
+    except ValueError:
+        if not body.strip():
+            raise
+        row_missing = True
+        # 台账行缺了：按"这一行还没登记过"的形状起一份最小输入（claims 为空 ⇒
+        # 断言级检查没有对象可查，但正文级读数与论文 sha256 照样如实给出）。
+        doc = {"doc_id": doc_id, "kind": "paper", "title": "", "claims": [],
+               "sections": [], "open_problems": [], "markdown_path": None}
+    paper_view = paper_reading(paper)
+    paper_view["documents_row"] = "missing" if row_missing else "present"
+    if not body.strip():
+        return _unreviewable_review(
+            store, doc_id, round_no=round_no, paper_view=paper_view, doc=doc,
+            actor=actor,
+        )
+
+    # 审校输入 = 台账行 + 正文（行号来源就是它；`scan_document` 只读 `doc["text"]`）
+    submitted = dict(doc)
+    submitted["text"] = body
     deps, _dep_provided = _resolve_deps(store, doc_id, dependencies)
     # 语义判据一路透传给 `scan_document`（`draft/28` §196）：不传就等于这一维永远"没查"，
     # 而 H 的报告里那一格会一直写着 0 —— "没接线"与"查过没问题"必须分得开。
-    scan = scan_document(doc, dependencies=deps, semantic_judge=semantic_judge)
+    scan = scan_document(submitted, dependencies=deps, semantic_judge=semantic_judge)
 
     existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
     if round_no is None:
@@ -1054,8 +1399,15 @@ def review_document(
         reopened = [{"finding_id": r["finding_id"], "kind": r.get("kind"), "target": r.get("target")} for r in to_reopen]
 
     dep_checked = bool(scan["dep_check"].get("checked"))
+    #: 本次真的逐条检查过的断言数。`0` 是"一条断言都没审到"，不是"审过、零发现" ——
+    #: 唯一会走到这里的正常形态就是 ③（`documents` 行缺失：论文照审，但没有断言可查）。
+    claims_total = int(scan["coverage"].get("claims_total") or 0)
     if scan["error_count"]:
         verdict = "rejected"
+    elif not claims_total:
+        # 覆盖率 0 ⇒ 不许 accepted（"没审到"不是"审过、没问题"）。这一档与
+        # "依赖没查"同族：都是"这一维没有证据"，所以落同一个第三态 `unverified`。
+        verdict = "unverified"
     elif not dep_checked:
         # 「依赖闭合没查」不等于「依赖闭合」—— 不许在这个前提下判 accepted。
         verdict = "unverified"
@@ -1064,7 +1416,9 @@ def review_document(
     else:
         verdict = "accepted"
 
-    target_status = "accepted" if (scan["error_count"] == 0 and dep_checked) else "in_review"
+    target_status = (
+        "accepted" if (scan["error_count"] == 0 and dep_checked and claims_total) else "in_review"
+    )
     status_updated, status_error, status_now = _set_doc_status(store, doc_id, target_status, actor=actor)
     # `T4-B`：判 accepted 就签一条（`draft/29` §8.8.3"接受档签一条，毫不犹豫"）。
     # 签在状态写成之后：签名钉的是那一版的内容哈希与它读到的发现，
@@ -1077,6 +1431,15 @@ def review_document(
     )
 
     reason_bits = [
+        # 被审的是什么，先于"查出什么"：这一格就是"这一轮 H 看的是哪一份正文"的可追溯读数
+        # （业主 2026-10-24：「只对论文负责」）。`sha256` 取盘上那份文件的字节摘要，
+        # 与编译回执的 `tex_sha256` 同一口径。
+        (
+            f"被审正文：{paper_view['path']}（{paper_view['source'] or '未知来源'}，"
+            f"sha256={str(paper_view['sha256'] or '')[:16]}…，{paper_view['lines']} 行）"
+            + ("；⚠️ `documents` 台账行缺失（论文是真身，缺的只是登记行，已按读数记下）"
+               if row_missing else "")
+        ),
         f"机械检查发现 error={scan['error_count']}、warning={scan['warning_count']}、info={scan['info_count']}",
         (
             f"依赖闭合已检查（{scan['dep_check'].get('reason')}）"
@@ -1086,6 +1449,14 @@ def review_document(
         f"新增发现 {len(new_findings)} 条、与已有发现重复被跳过 {duplicate_skipped} 条",
         f"覆盖率 {scan['coverage']['claims_reviewed']}/{scan['coverage']['claims_total']}"
         f"（判成 {scan['coverage']['claims_decided']}）",
+        # 覆盖率 0 也是一条必须说出口的读数：它把"没有断言可查"与"断言都查过、都干净"
+        # 分开（前者不许 accepted，见上面 verdict 分档里的那一支）。
+        *(
+            ["⚠️ 本次**一条断言都没审到**（覆盖率 0）⇒ 不判 accepted："
+             + ("`documents` 台账行缺失，没有 claims 可查 —— 论文照审，"
+                "但『没有断言』不等于『断言都对』" if row_missing else "这一行的 claims 是空的")]
+            if not claims_total else []
+        ),
         # `R-42`：写入路径也必须把"语义级没查"说出来 —— 否则 `accepted` 会被读成
         # "两层都查过了"。这里不改 verdict 分档（改动分档是口径，属禁改区）：
         # 语义级判据今天只能通过 `scan_document(semantic_judge=…)` 注入，
@@ -1100,7 +1471,10 @@ def review_document(
     if reopened:
         reason_bits.append(f"重开 {len(reopened)} 条「标了 fixed 但重跑仍复现」的发现")
     if not status_updated:
-        reason_bits.append(f"⚠️ 文档状态**未能更新**（{status_error}）—— 这通常因为盘上这份稿件本身不合 schema")
+        reason_bits.append(
+            f"⚠️ 文档状态**未能更新**（{status_error}）—— 这通常因为盘上这份稿件本身不合 schema，"
+            "或 `documents` 里根本没有这一行（论文照审，状态这一笔如实报失败）"
+        )
 
     return {
         "doc_id": doc_id,
@@ -1124,6 +1498,9 @@ def review_document(
         "signature": signature,
         "signature_error": signature_error,
         "verdict": verdict,
+        # 本次审的论文正文是哪一份（可追溯）：`path` / `source` / `sha256` / `bytes` /
+        # `lines` / `chars` 与"台账行在不在"。它是读数，不是判据 —— 判据是 verdict。
+        "paper_body": dict(paper_view),
         "reason": "；".join(reason_bits) + "。",
     }
 
@@ -1239,9 +1616,18 @@ def verify_fixes(
 
     doc = _doc_of(store, doc_id)
     deps, dep_checked = _resolve_deps(store, doc_id, dependencies)
+    # 复审复扫与 `review_document` 用同一个被审对象（业主 2026-10-24：H 审论文）：
+    # 有正文就把正文当输入（行号/引文都指着它），没有正文就照旧只读台账行 ——
+    # 复审不因为"这一路上没正文"而拒绝干活，但也不许声称自己审过正文
+    # （它的返回里 `paper_body.checked` 就是这一点的读数）。
+    _paper = read_paper_body(Path(getattr(store, "root", None) or "."))
+    _body = _body_text_of(_paper)
+    _submitted: dict = dict(doc)
+    if _body.strip():
+        _submitted["text"] = _body
     # R-04-a：复扫与 `review_document` 共用同一个语义判据（`semantic_judge=None`
     # 时 `semantic_check["checked"] is False` —— 那是"没查"，不是"没问题"）。
-    scan = scan_document(doc, dependencies=deps, semantic_judge=semantic_judge)
+    scan = scan_document(_submitted, dependencies=deps, semantic_judge=semantic_judge)
     current = {_dedup_key(f): f for f in scan["findings"]}
     semantic_check = dict(scan.get("semantic_check") or {})
     #: 这一轮语义判据真的判过吗（R-04-b 的判据面）。
@@ -1460,6 +1846,9 @@ def verify_fixes(
         "status": status_now,
         "status_updated": status_updated,
         "status_error": status_error,
+        # 这一轮复扫用的是哪一份正文（与 `review_document` 同一个读数形状）：
+        # `checked=False` 就是"这一轮没读到正文 ⇒ 复扫只看台账行"，不是"没问题"。
+        "paper_body": paper_reading(_paper),
     }
 
 
@@ -1697,7 +2086,7 @@ def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, leve
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
-    returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated'}",
+    returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body'}",
     tags=("review", "write"),
 )
 def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw):
@@ -1732,7 +2121,7 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
-    returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count'}",
+    returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count','paper_body'}",
     tags=("review", "write"),
 )
 def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **kw):

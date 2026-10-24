@@ -36,6 +36,11 @@ ACTIVE_INPUT_RE = re.compile(r"\\input\s*\{\s*mapping-appendix(?:\.tex)?\s*\}")
 
 #: 台账里那几条能被解析到的 (ledger_id, proof_no)：每行各占一个槽，
 #: 两行不许指同一个 (命题, 证明号)（那也是 `mapping_orphan`，与这里要测的事无关）。
+#:
+#: 2026-10-24（D-40）起还有第二条：两个不同 label 的定理类环境不许压在同一条命题上
+#: （"一条命题对一个环境"，见 `papermapping._statement_surplus_problems`）。所以下面
+#: 凡是给两个环境各登记一行的用例，第二行取 slot 2（`stmt:000005`）而不是 slot 1
+#: （slot 1 是 `stmt:000004#p2`，与 slot 0 同一条命题）。
 LEDGER_SLOTS: tuple[tuple[str, int], ...] = (
     ("stmt:000004#p1", 1),
     ("stmt:000004#p2", 2),
@@ -145,7 +150,7 @@ def test_a_begin_spaced_off_its_brace_is_still_a_theorem(tmp_path: pathlib.Path)
 
     # 登记齐了就该绿（防误伤：读对了才可能逐一对上）
     PM.write_package(root, [PM.Row(**_row("thm:main", 1, 0)),
-                            PM.Row(**_row("thm:spaced", 2, 1))])
+                            PM.Row(**_row("thm:spaced", 2, 2))])
     got2 = PM.mapping_reading(root)
     assert got2["state"] == "pass", (got2["reason"], _details(got2))
     assert got2["envs"] == 2, got2
@@ -198,15 +203,15 @@ def test_a_theorem_inside_iffalse_is_not_a_body_environment(tmp_path: pathlib.Pa
         "\\end{lemma}\n"
     )
     root = _workspace(tmp_path, tex, rows=[_row("thm:main", 1, 0),
-                                           _row("lem:after", 1, 1, kind="lemma")])
+                                           _row("lem:after", 1, 2, kind="lemma")])
     got = PM.mapping_reading(root)
     assert got["envs"] == 2, ("\\iffalse 里的环境被算成正文了", got)
     assert got["state"] == "pass", (got["reason"], _details(got))
 
     # 登记 `\\iffalse` 里那一条 => 正文没有它 => 红
     PM.write_package(root, [PM.Row(**_row("thm:main", 1, 0)),
-                            PM.Row(**_row("lem:after", 1, 1, kind="lemma")),
-                            PM.Row(**_row("thm:off", 2, 2))])
+                            PM.Row(**_row("lem:after", 1, 2, kind="lemma")),
+                            PM.Row(**_row("thm:off", 2, 1))])
     got2 = PM.mapping_reading(root)
     assert got2["state"] == "fail", ("\\iffalse 里的环境被当成了正文", got2)
     assert "thm:off" in _details(got2), _details(got2)
@@ -272,7 +277,7 @@ def test_a_theorem_in_an_inputted_section_is_read_and_tex_files_says_so(
 
     # 登记两行 => pass（表里两行都指得到正文里的环境）
     PM.write_package(root, [PM.Row(**_row("thm:one", 1, 0)),
-                            PM.Row(**_row("thm:two", 2, 1))])
+                            PM.Row(**_row("thm:two", 2, 2))])
     got2 = PM.mapping_reading(root)
     assert got2["state"] == "pass", (got2["reason"], _details(got2))
     assert got2["envs"] == 2, got2
@@ -299,7 +304,7 @@ def test_nested_environments_are_both_read_and_input_cycles_do_not_hang(
     assert got["state"] == "fail", ("0 行表却判 pass：嵌套里的环境没被读出来", got)
     assert got["envs"] == 2, ("嵌套环境被外层匹配吞掉了", got)
     PM.write_package(nested, [PM.Row(**_row("thm:outer", 1, 0)),
-                              PM.Row(**_row("lem:inner", 1, 1, kind="lemma"))])
+                              PM.Row(**_row("lem:inner", 1, 2, kind="lemma"))])
     got2 = PM.mapping_reading(nested)
     assert got2["state"] == "pass", (got2["reason"], _details(got2))
     assert got2["envs"] == 2, got2

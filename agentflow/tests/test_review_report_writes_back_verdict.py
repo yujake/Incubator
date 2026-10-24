@@ -27,11 +27,17 @@ from agentflow.agent_h import AgentH
 from agentflow.store import Store
 from agentflow.tools import review_tools as RV
 
+from conftest import write_paper
+
 
 @pytest.fixture()
 def h_store(tmp_path):
     st = Store(tmp_path / "ws")
     st.init()
+    # 业主 2026-10-24：H 审的是论文正文（`out/paper/main.tex`），`documents` 只是登记行。
+    # 夹具带上正文，本文件里那些"机械裁决"的用例才有被审的对象（没有正文时 H 的正确
+    # 结论是"没有可审的论文"，`verdict="unreviewable"`）。
+    write_paper(st)
     return st
 
 

@@ -493,6 +493,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p195", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p195（2026-10-24）：G 的成稿改成四步动作序列（没调 write_mapping 等于没成稿）；M 的验收表与交付物构成加入论文对应表。facts 键集仍 15 格"},
+        # p195 → p196（2026-10-24）：D-40（正文结构以 B 台账为准、形式化细节不进正文）＋ D-45（论文语言与正文同语言）＋ D-38 第二步（受控档 paper_mapping_rows）
+        {"version": "p196", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p196（2026-10-24）：G 一格（写作参照物 + 论文语言）、M 一格（受控档加入 paper_mapping_rows）。facts 键集仍 15 格"},
 )
 
 

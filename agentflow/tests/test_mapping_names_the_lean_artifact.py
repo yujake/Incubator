@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import pytest
 
@@ -196,9 +197,14 @@ def test_lean_off_leaves_both_cells_empty_and_the_reading_says_so(
     rows, problems = PM.parse_rows(json.loads(json_path.read_text(encoding="utf-8")))
     assert problems == [], problems
     assert [(r.lean_file, r.lean_target) for r in rows[:2]] == [("", ""), ("", "")]
-    # 人读的那一份与正文附录里印的是「未开 Lean」，不是一段空白
+    # 人读的那一份恒中文；正文附录按论文语言出文（D-45）—— 这份夹具的正文是英文，
+    # 所以附录里印的是英文占位。两处读到的都是"这一格不是空白"，只是语言不同。
     assert PM.LEAN_OFF_CELL in md_path.read_text(encoding="utf-8")
-    assert PM.LEAN_OFF_CELL in PM.appendix_path(root).read_text(encoding="utf-8")
+    appendix = PM.appendix_path(root).read_text(encoding="utf-8")
+    assert PM.paper_language(root) == PM.PAPER_LANGUAGE_EN
+    assert "(Lean off)" in appendix
+    assert not re.search(r"[\u4e00-\u9fff]", appendix), \
+        "英文论文的附录里混进了中文（D-45）"
 
 
 # ---------------------------------------------------------------- 2 干净就过

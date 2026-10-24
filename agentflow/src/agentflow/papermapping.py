@@ -196,8 +196,12 @@ APPENDIX_INPUT = "\\input{mapping-appendix}"
 APPENDIX_TITLE = "附录：产出对应表"
 
 #: 附录块的界标（判据靠这一对定位；手抄的那一段没有它就对不上）。
+#:
+#: 界标本身不许带 CJK（D-45）：它是渲染产物的一部分，英文论文的附录里连注释也扫不到
+#: 一个中文字；所以这句说明用英文写死，两种语言共用同一个界标 —— 界标一旦按语言分叉，
+#: 读侧（`_appendix_block`）就得知道该找哪一种，而它只拿得到正文文本。
 APPENDIX_BEGIN = ("% ==== MAPPING-APPENDIX BEGIN"
-                  "（由 out/paper/MAPPING.json 渲染，不许手改）====")
+                  " (rendered from out/paper/MAPPING.json; do not edit by hand) ====")
 APPENDIX_END = "% ==== MAPPING-APPENDIX END ===="
 
 #: 附录里每一行的机器可读注释
@@ -213,6 +217,36 @@ ENV_KINDS: tuple[str, ...] = (
 #:
 #: 为什么不是全部六类：例子与实验不是"被 Lean 验的命题"，它们没有声明名可写。
 LEAN_TARGETED_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary")
+
+#: "一条命题对一个环境"这条口径管哪几类环境（业主 2026-10-24，D-40）。
+#:
+#: 就是定理类四件套。例子与实验不是被证明的命题 —— 它们照样各占对应表一行，
+#: 但不参与"正文环境数 = 台账命题数"这条一一对应。
+STATEMENT_ENV_KINDS: tuple[str, ...] = LEAN_TARGETED_KINDS
+
+#: 自定义环境（`\newtheorem{名字}{标题}`）印出来是这四个词之一 ⇒ 它就是一个定理类环境。
+#:
+#: D-40 的现场（cube2，2026-10-24）：G 把 Lean 的六段分解照搬进正文，再用
+#: `\newtheorem{claim}[theorem]{Lemma}` 把 5 个中间步骤印成 Lemma。那 5 个环境名
+#: 不在 `ENV_KINDS` 里，所以扫描器看不见它们 —— 正文侧只剩 1 个 theorem 环境，
+#: "1 个环境对 1 条命题"当场成立，一条判据都拦不住（它既伪装成 Lemma，又绕开判据）。
+#: 印成 Lemma 的宏与 `\begin{lemma}` 在读者眼里没有任何区别，所以这一格按"印出来的
+#: 标题"认，而不是按环境名认。
+STATEMENT_ENV_TITLES: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary")
+
+#: 台账里不算"命题"的那几类 `kind`（概念并表后的 `kind="concept"`，以及定义/记号这类）。
+#:
+#: 为什么缺 `kind` 的旧行算命题：`schema.Statement` 只要求 `kind` 非空（它是自由文本），
+#: 早期工作区与判据夹具里没有这一格。把"没说"读成"不是命题"会让那些正文全部变成
+#: "多出来的定理类环境" —— 那是最贵的一种假阳性。
+NON_PROPOSITION_KINDS: tuple[str, ...] = (
+    "concept", "definition", "notation", "dataset", "experiment", "remark",
+    "example", "open_problem", "openproblem",
+)
+
+#: `\newtheorem{名字}[计数器]{标题}` / `\newtheorem{名字}{标题}[节]`（标题那一支必取）。
+_NEWTHEOREM_RE = re.compile(
+    r"\\newtheorem\*?\s*\{(?P<name>[^{}]+)\}\s*(?:\[[^{}]*\]\s*)?\{(?P<title>[^{}]*)\}")
 
 #: Lean 那两格（`lean_file` / `lean_target`）：有 Lean 产出时必填，其余时候允许为空。
 LEAN_ROW_FIELDS: tuple[str, ...] = ("lean_file", "lean_target")
@@ -623,8 +657,22 @@ def index_rows(project_root: str | Path) -> list[dict[str, Any]]:
     return [dict(item) for item in raw if isinstance(item, Mapping)]
 
 
+def _env_token_re(kinds: Sequence[str]) -> re.Pattern[str]:
+    """某一组环境名对应的 begin / end 标记（`_ENV_TOKEN_RE` 是 `ENV_KINDS` 那一档）。"""
+    return re.compile(
+        r"\\(?P<which>begin|end)\s*\{(?P<kind>"
+        + "|".join(re.escape(k) for k in kinds) + r")(?P<star>\*?)\}")
+
+
+def _env_open_re(kinds: Sequence[str]) -> re.Pattern[str]:
+    """某一组环境名对应的"再开一个环境"标记（算外层 label 时在这截断）。"""
+    return re.compile(
+        r"\\begin\s*\{(?:" + "|".join(re.escape(k) for k in kinds) + r")(?:\*?)\}")
+
+
 def _scan_envs(text: str, counts: dict[str, int], *, where_file: str = "",
-               line_offset: int = 0) -> list[BodyEnv]:
+               line_offset: int = 0,
+               kinds: Sequence[str] | None = None) -> list[BodyEnv]:
     """在已经剥离注释的正文里栈式扫环境（嵌套时内外层各自产出一条）。
 
     为什么用栈而不是一条非贪婪正则：非贪婪会一路匹配到最内层那个 `end` 之后，
@@ -634,10 +682,15 @@ def _scan_envs(text: str, counts: dict[str, int], *, where_file: str = "",
 
     `counts` 由调用方跨文件 / 跨片段传进来：`env_no` 是"读完所有 `\\input` 之后的
     整体出现顺序"，每份文件各自从头数会让序号与正文对不上。
+
+    `kinds` 是这次要认的环境名（缺省 = `ENV_KINDS`，即对应表那六类）；"一条命题对一个
+    环境"那一条会把它换成 `statement_env_names()` 的读数（多认印成 Lemma 的自定义宏）。
     """
     found: list[tuple[int, BodyEnv]] = []
     opens: list[dict[str, Any]] = []
-    for m in _ENV_TOKEN_RE.finditer(text):
+    token_re = _ENV_TOKEN_RE if kinds is None else _env_token_re(kinds)
+    open_re = _ENV_OPEN_RE if kinds is None else _env_open_re(kinds)
+    for m in token_re.finditer(text):
         kind = str(m.group("kind"))
         star = str(m.group("star"))
         if m.group("which") == "begin":
@@ -653,7 +706,7 @@ def _scan_envs(text: str, counts: dict[str, int], *, where_file: str = "",
             continue
         opens.pop()
         body = text[int(top["body"]):m.start()]
-        inner = _ENV_OPEN_RE.search(body)
+        inner = open_re.search(body)
         if inner is not None:
             body = body[:inner.start()]
         label = _LABEL_RE.search(body)
@@ -674,6 +727,45 @@ def body_envs(tex: str) -> list[BodyEnv]:
     """
     counts: dict[str, int] = {}
     return _scan_envs(strip_tex_comments(str(tex or "")), counts)
+
+
+def _printed_env_title(title: str) -> str:
+    """`\\newtheorem` 标题那一段"印出来的第一个词"（小写；去掉命令与花括号）。"""
+    plain = re.sub(r"\\[A-Za-z]+\*?", " ", str(title or ""))
+    words = re.findall(r"[A-Za-z]+", plain.lower())
+    return words[0] if words else ""
+
+
+def statement_env_names(tex: str) -> tuple[str, ...]:
+    """正文里算"定理类环境"的全部环境名。
+
+    = `STATEMENT_ENV_KINDS` + 导言区里那些"印出来是 Theorem / Lemma / Proposition /
+    Corollary"的自定义环境。只认标题、不认环境名：`\\newtheorem{claim}{Claim}` 印的是
+    Claim，不算定理类环境；`\\newtheorem{claim}[theorem]{Lemma}` 印的是 Lemma，算 ——
+    读者看到的是一行 "Lemma 3.4"，它与 `\\begin{lemma}` 在正文里没有任何区别。
+
+    只读主文件（`main.tex`）的导言区：自定义环境通常只在那里声明，而 `\\input` 进来的
+    分节文件用的是同一份导言区。
+    """
+    names = list(STATEMENT_ENV_KINDS)
+    for m in _NEWTHEOREM_RE.finditer(strip_tex_comments(str(tex or ""))):
+        name = m.group("name").strip()
+        if not name or name in names:
+            continue
+        if _printed_env_title(m.group("title")) in STATEMENT_ENV_TITLES:
+            names.append(name)
+    return tuple(names)
+
+
+def statement_envs_of_text(tex: str) -> list[BodyEnv]:
+    """单份正文里全部定理类环境（`body_envs` 再加上印成 Lemma 的自定义环境）。
+
+    只用于"一条命题对一个环境"那一条（`_statement_surplus_problems`）：对应表本身
+    仍然按 `ENV_KINDS` 六类登记 —— 自定义环境在表里没有 `kind` 可写，那正是这一条
+    要报的形态（它不是"另一类合法的环境"，而是"绕开对应表的那条路"）。
+    """
+    clean = strip_tex_comments(str(tex or ""))
+    return _scan_envs(clean, {}, kinds=statement_env_names(clean))
 
 
 def _env_where(env: BodyEnv) -> str:
@@ -794,14 +886,26 @@ def _collect_tex_segments(package: Path, main_path: Path, main_text: str
 
 
 def _body_envs_of_package(package: Path, main_path: Path, main_text: str
-                          ) -> tuple[list[BodyEnv], list[str], list[dict[str, Any]]]:
-    """正文那一侧的完整读数：环境、这次读了哪几个文件（读入顺序）、读不完的问题。"""
+                          ) -> tuple[list[BodyEnv], list[BodyEnv], list[str],
+                                     list[dict[str, Any]]]:
+    """正文那一侧的完整读数：环境、定理类环境（含印成 Lemma 的自定义宏）、这次读了
+    哪几个文件（读入顺序）、读不完的问题。
+
+    为什么两列分开返回：`envs` 是对应表那六类（表行按它登记），`statement_envs` 多认
+    那些"印出来是 Lemma"的自定义宏 —— 只有"一条命题对一个环境"那一条读第二列。
+    把两列合成一列会让每一份用了 `claim` 宏的正文都要求表里多出几行没有 `kind` 可写的行。
+    """
     segments, files, problems = _collect_tex_segments(package, main_path, main_text)
     counts: dict[str, int] = {}
     envs: list[BodyEnv] = []
+    names = statement_env_names(main_text)
+    statement_counts: dict[str, int] = {}
+    statement_envs: list[BodyEnv] = []
     for rel, segment, line_offset in segments:
         envs.extend(_scan_envs(segment, counts, where_file=rel, line_offset=line_offset))
-    return envs, files, problems
+        statement_envs.extend(_scan_envs(segment, statement_counts, where_file=rel,
+                                         line_offset=line_offset, kinds=names))
+    return envs, statement_envs, files, problems
 
 
 #: `proof` 环境的开 / 闭标记。它与 `ENV_KINDS` 分开：`proof` 不进对应表（一条定理占一行），
@@ -1407,26 +1511,275 @@ def _loc_text(row: Row) -> str:
     return " · ".join(p for p in parts if p)
 
 
-def _lean_cell(value: str, lean_on: bool) -> str:
+# ---------------------------------------------------------------- 论文语言（D-45）
+#
+# 附录是论文的一部分：标题、说明段、表头、占位格都得跟正文同一种语言。语言只在一处判
+# （`paper_language`：正文的 CJK 密度），渲染函数按它出文 —— 于是"英文论文的附录里印着
+# 中文"这件事在结构上不会发生，而不是靠谁记得手改。
+
+#: 论文语言的两种取值。
+PAPER_LANGUAGE_EN = "en"
+PAPER_LANGUAGE_ZH = "zh"
+
+#: 全部取值（`render_appendix` 的 `language=` 只收这两个）。
+PAPER_LANGUAGES: tuple[str, ...] = (PAPER_LANGUAGE_EN, PAPER_LANGUAGE_ZH)
+
+#: 没有正文可读时的默认语言：本仓的论文是英文，默认跟着它走。
+DEFAULT_PAPER_LANGUAGE = PAPER_LANGUAGE_EN
+
+#: 判"这是中文论文"的密度门（CJK 字符数 / 非空白字符数）。
+#:
+#: 实测读数（2026-10-24）：cube2 那份英文正文 0.000；判据夹具里那几份"英文导言区 +
+#: 三行中文定理"的稿子 0.10 上下；一份中文散文为主的稿子在 0.40 以上。0.30 把后两类
+#: 分开，于是夹具里那几个中文定理不会被读成"中文论文"。`PAPER_LANGUAGE_MIN_CJK` 是
+#: 第二道闸：正文里零星几个中文字不许把整篇判成中文。
+PAPER_LANGUAGE_CJK_RATIO = 0.30
+PAPER_LANGUAGE_MIN_CJK = 20
+
+#: CJK 字符（汉字常用区 + 扩展 A + 兼容区）。
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+#: 论文抬头那四个宏：中文方案（ctex 的 chinese scheme、或手写重定义）改的就是它们。
+#:
+#: 为什么盯这四个：它们是"每印一次就混一次语言"的那一类 —— `\proofname` 改一次，
+#: 正文里每一条证明的开头都从 "Proof." 变成「证明」（cube2 的现场）。
+HEADING_MACROS: tuple[str, ...] = ("proofname", "abstractname", "refname", "appendixname")
+
+#: `\renewcommand{\proofname}{…}` / `\renewcommand\proofname{…}` / `\def\proofname{…}`
+#: （带星号与参数个数的写法都收）。取值那一支不含花括号：抬头名里没有嵌套命令。
+_HEADING_REDEFINE_RE = re.compile(
+    r"\\(?:renewcommand|providecommand|newcommand|def)\*?\s*\{?\s*\\"
+    r"(?P<macro>" + "|".join(HEADING_MACROS) + r")\s*\}?\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}")
+
+#: `\documentclass[选项]{类名}`（类名那一支必取）。
+_CLASS_RE = re.compile(r"\\documentclass\s*(?P<options>\[[^\]]*\])?\s*\{(?P<cls>[^{}]*)\}")
+
+#: ctex 那一族文档类：默认 scheme 是 chinese，源码里一个中文都没有，印出来却是
+#: 「摘要」「参考文献」「证明。」。
+_CJK_CLASSES: tuple[str, ...] = ("ctexart", "ctexrep", "ctexbook", "ctexbeamer")
+
+#: 附录里由渲染器产出的那几段文字，按语言分两个版本（两版的键集必须一致）。
+#:
+#: 为什么整段都按语言写死在这里、而不是只换标题：缺一个占位格（「（未开 Lean）」这种）
+#: 就够让英文附录里冒出中文 —— D-45 的现场里正是一行里同时出现了英文散文与中文占位。
+_APPENDIX_TEXT: dict[str, Any] = {
+    PAPER_LANGUAGE_EN: {
+        "title": "Appendix: Output Mapping",
+        "note": (
+            "This table is rendered from \\texttt{" + MAPPING_JSON_NAME + "} by "
+            "\\texttt{agentflow.papermapping.render\\_appendix}, so there is no second copy to keep "
+            "by hand. The \\texttt{file} column is a path relative to the paper package and therefore "
+            "names the same file on another machine; for a theorem proved by an exhaustive numerical "
+            "experiment, \\texttt{file} is the path of that program relative to the repository root. "
+            "The Lean column says where the source that checks the statement lives and which "
+            "declaration it checks; both are mandatory whenever Lean output exists, and with the "
+            "switch off the cell reads ``(Lean off)'' (an empty cell never means checked). "
+            "The last two columns belong to theorems proved by numerical experiment: the reading of "
+            "E's exhaustive run (\\texttt{" + NT.EVIDENCE_PREFIX + "NNNNNN}) and where E's two written "
+            "blocks (design note and exhaustion argument) live; when absent they read "
+            "``(not a numeric proof)''. This paragraph itself is written by the renderer in the "
+            "language of the paper: do not hand-copy it and do not mix languages."
+        ),
+        "columns": (
+            "Env", "Label", "Ledger row", "Proof", "File",
+            "Lean (file / declaration)", "Citation location", "E reading", "Exhaustion note",
+        ),
+        "lean_off": "(Lean off)",
+        "lean_unfilled": "(not filled)",
+        "numeric_empty": "(not a numeric proof)",
+    },
+    PAPER_LANGUAGE_ZH: {
+        "title": APPENDIX_TITLE,
+        "note": (
+            "本表由 \\texttt{" + MAPPING_JSON_NAME + "} 渲染（\\texttt{agentflow.papermapping.render\\_appendix}），"
+            "不许手抄第二份；这一段说明由渲染函数按论文语言生成，不许手抄、不许混语言。"
+            "\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件；"
+            "数值实验定理那一行的 \\texttt{file} 是那份穷举程序的相对路径（相对仓库根）。"
+            "Lean 那一列是「验它的那份源码在哪」与「验的是哪个声明」两部分：有 Lean 产出时这两部分必填，"
+            "开关关时印「" + LEAN_OFF_CELL + "」（空不等于验过）。"
+            "最后两列是数值实验定理的：E 的那条穷举读数（\\texttt{" + NT.EVIDENCE_PREFIX
+            + "NNNNNN}）与 E 写的那两块（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION
+            + "）落在哪一份读数里；不填印「" + NUMERIC_EMPTY_CELL + "」。"
+        ),
+        "columns": (
+            "环境", "label", "台账序号", "证明号", "真实文件",
+            "Lean（文件 / 声明）", "引文位置", "E 读数", "两块读数",
+        ),
+        "lean_off": LEAN_OFF_CELL,
+        "lean_unfilled": LEAN_UNFILLED_CELL,
+        "numeric_empty": NUMERIC_EMPTY_CELL,
+    },
+}
+
+#: 附录表的九列定宽（`\\textwidth` 的比例；九列合计 0.90，剩下的留给列间距与 `\\tabcolsep`）。
+#:
+#: 业主 2026-10-24（D-46）：原先是四列 `l`（自然宽）加六列定宽，引文位置那一格是一整句
+#: 英文，于是整张表宽出 `\\textwidth`、右侧被切到页外，Lean 那两列还互相压字。现在九列
+#: 全定宽、Lean 的文件与声明并成一列、整表 `\\small` 且 `\\tabcolsep` 收到 2pt。
+APPENDIX_COLUMN_WIDTHS: tuple[float, ...] = (
+    0.09, 0.11, 0.10, 0.06, 0.09, 0.12, 0.16, 0.07, 0.10,
+)
+
+#: 定宽列里"字母数字连写的长串"隔几个字给一个可选断点（`_tex_breakable` 用它）。
+#:
+#: 取 7：比任何一列的最小可用宽度都短（`theorem` / `experiment` / `nicomachus` 这类整词
+#: 因此断得开），又长到不会把普通词断得七零八落。
+PAPER_CELL_BREAK_RUN = 7
+
+
+def _cjk_count(text: Any) -> int:
+    """这段文本里有多少个 CJK 字符（判据扫附录 CJK 与判论文语言共用这一个读法）。"""
+    return len(_CJK_RE.findall(str(text or "")))
+
+
+def paper_language_of_text(tex: str) -> str:
+    """一段 tex 正文的语言读数（`en` / `zh`）：只有一条判据 —— 正文的 CJK 密度。
+
+    先剥注释：注释不是印出来的正文，里面的中文不该把整篇判成中文论文。
+    """
+    body = strip_tex_comments(str(tex or ""))
+    total = len(re.sub(r"\s+", "", body))
+    if not total or _cjk_count(body) < PAPER_LANGUAGE_MIN_CJK:
+        return PAPER_LANGUAGE_EN
+    return (PAPER_LANGUAGE_ZH
+            if _cjk_count(body) / total >= PAPER_LANGUAGE_CJK_RATIO
+            else PAPER_LANGUAGE_EN)
+
+
+def paper_language(project_root: str | Path | None = None) -> str:
+    """论文语言 = 正文语言（D-45）：读论文包里的 `main.tex` 定，读不到就按默认英文。
+
+    这是本模块唯一的语言判定口：附录的标题、说明段、表头、占位格全由它决定。
+    判据把它打桩成恒中文时附录必须跟着变中文（反真空）—— 这也是为什么
+    `render_appendix` 自己调它，而不是让每个调用方各传一个字符串。
+    """
+    if project_root is None:
+        return DEFAULT_PAPER_LANGUAGE
+    try:
+        text = (package_dir(project_root) / PC.TEX_NAME).read_text(encoding="utf-8")
+    except OSError:
+        return DEFAULT_PAPER_LANGUAGE
+    return paper_language_of_text(text)
+
+
+def appendix_title(language: str = PAPER_LANGUAGE_ZH) -> str:
+    """附录那一节的标题（按论文语言；中文那一版就是业主点名的「附录：产出对应表」）。"""
+    return str(_APPENDIX_TEXT[language]["title"])
+
+
+def paper_heading_problems(tex: str) -> list[str]:
+    """英文论文里"抬头被换成中文"的静态判定（D-45 ⑥）：返回问题清单，空 = 没命中。
+
+    判三件，都能在 tex 源码上一眼看定：
+
+    - 四个抬头宏（`\\proofname` 那一族）被重定义成含 CJK 的值 —— 改一次，每一条证明、
+      每一页页眉都跟着换语言；
+    - 文档类是 ctex 那一族且没有 `scheme=plain`：它的默认方案把同样的四个抬头印成
+      中文，而源码里一个中文字都看不见（cube2 的现场：`\\documentclass[11pt]{ctexart}`）；
+    - 正文本身是中文（`paper_language_of_text` 读到 `zh`）时上面两条都不算缺陷 ——
+      中文论文里中文抬头是对的。
+
+    这是纯判定：只读 tex 文本，不碰盘、不改状态。
+    """
+    body = strip_tex_comments(str(tex or ""))
+    if paper_language_of_text(body) != PAPER_LANGUAGE_EN:
+        return []
+    problems: list[str] = []
+    for match in _HEADING_REDEFINE_RE.finditer(body):
+        if _CJK_RE.search(match.group(0)):
+            problems.append(
+                f"导言区把 \\{match.group('macro')} 重定义成了含中文的值（{match.group(0)}）"
+                "—— 英文论文里这个抬头每印一次就混一次语言")
+    for match in _CLASS_RE.finditer(body):
+        cls = match.group("cls").strip()
+        options = (match.group("options") or "").replace(" ", "")
+        if cls in _CJK_CLASSES and "scheme=plain" not in options:
+            problems.append(
+                f"文档类是 {cls}（选项 {options or '无'}）—— ctex 的默认方案会把 "
+                "abstract / references / appendix / proof 四个抬头印成中文"
+                "（源码里一个中文字都没有）；英文论文用 article，或显式写 scheme=plain")
+    return problems
+
+
+def _tex_breakable(escaped: str) -> str:
+    """给路径/编号/长词加可断点（定宽列里的一串字必须断得开）。
+
+    为什么需要：`p{}` 列里 `\\texttt{formal/000000.lean}` 这种整串在 TeX 眼里是一个词，
+    列宽 45pt 而串宽 100pt 时它不换行 —— 直接压到邻列上（D-46 的现场）。两档断点：
+
+    - `/` `:` `.` `_` 后面插 `\\allowbreak{}`（路径与编号的自然断点，不带连字符）；
+    - 字母数字连写的长串每 `PAPER_CELL_BREAK_RUN` 个字插一个 `\\-`（可断连字符）：
+      `experiment` 这种整词比整列还宽时，它是唯一能断的地方，断出来带连字符不难看。
+
+    两档都只是"可选断点"：不断的时候一个字符都不多印。
+    """
+    out: list[str] = []
+    run = 0
+    for char in escaped:
+        out.append(char)
+        if char in "/:._":
+            out.append("\\allowbreak{}")
+            run = 0
+        elif char.isascii() and char.isalnum():
+            run += 1
+            if run >= PAPER_CELL_BREAK_RUN:
+                out.append("\\-")
+                run = 0
+        else:
+            run = 0
+    return "".join(out)
+
+
+def _cell(text: Any, *, mono: bool = False) -> str:
+    """表格里的一格：先转义、再加可断点；`mono=True` 的那几格套 `\\texttt{}`。
+
+    整格用 `\\raggedright` 排版（不用 `array` 宏包，`>{}` 那种列格式要它，而论文的导言区
+    只保证 amsmath / booktabs）：长路径与整句英文挤在定宽列里时，两端对齐会撑出巨大的
+    词间距（D-46 现场那一列的文字看着像"竖排折行"，一半原因就是它）。
+    """
+    body = _tex_breakable(_tex_escape(text))
+    if mono:
+        body = "\\texttt{" + body + "}"
+    return "{\\raggedright " + body + "\\par}"
+
+
+def _lean_cell(value: str, lean_on: bool, language: str = PAPER_LANGUAGE_ZH) -> str:
     """Lean 那两格在表格里的一格：空着时按开关状态写占位，不印空白。
 
     "空"与"验过了"必须分得开：开关关时印「未开 Lean」（这一趟没走形式化，不是没写），
     开关开而没填就印「没填」——它是不是红的由 `mapping_lean_*` 那几档判，
     这一格只负责不让读者把空白读成"没问题"。
+
+    `language` 只决定占位那句怎么写：英文论文的附录里不许出现中文（D-45）。
+    默认值是中文（人读的 `MAPPING.md` 恒中文，走的就是默认值）。
     """
     if value:
         return value
-    return LEAN_UNFILLED_CELL if lean_on else LEAN_OFF_CELL
+    text = _APPENDIX_TEXT[language]
+    return str(text["lean_unfilled"] if lean_on else text["lean_off"])
 
 
-def _numeric_cell(value: str) -> str:
+def _numeric_cell(value: str, language: str = PAPER_LANGUAGE_ZH) -> str:
     """数值实验定理那两格在表格里的一格：空着时印占位（不让空白被读成"没问题"）。
 
     与 Lean 那两格的 `_lean_cell` 同一个理由，但默认值不同：Lean 有开关状态可分，
     这两格没有开关 —— 空着就是"这一行不是数值实验定理，或者该填没填"，
-    两种情况都得由读者看得见，所以印同一句占位。
+    两种情况都得由读者看得见，所以印同一句占位。`language` 的口径同 `_lean_cell`。
     """
-    return value or NUMERIC_EMPTY_CELL
+    return value or str(_APPENDIX_TEXT[language]["numeric_empty"])
+
+
+def _lean_pair(row: Row, lean_on: bool, language: str) -> str:
+    """Lean 那一格（D-46 把文件与声明并成一列）：`文件 / 声明`。
+
+    两格都空（按开关印出同一句占位）时只印一次：`（未开 Lean）/（未开 Lean）`
+    会让读者以为漏填了一格。
+    """
+    left = _lean_cell(row.lean_file, lean_on, language)
+    right = _lean_cell(row.lean_target, lean_on, language)
+    if not row.lean_file and not row.lean_target:
+        return left
+    return f"{left} / {right}"
 
 
 def _row_key_text(row: Row) -> str:
@@ -1453,48 +1806,60 @@ def appendix_row_keys(block: str) -> list[tuple[str, str]]:
     return out
 
 
-def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None) -> str:
+def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None,
+                    language: str | None = None,
+                    project_root: str | Path | None = None) -> str:
     """把行渲染成正文附录（唯一渲染函数；手抄的那一段过不了逐字比对）。
 
     `lean_enabled` 不给时按 `lean_switch()` 的当次读数（读盘那一侧也走同一个默认）：
-    Lean 那两列因此印的是这一趟的真实状态，而不是一段永远一样的空白。
+    Lean 那一列因此印的是这一趟的真实状态，而不是一段永远一样的空白。
+
+    `language` 不给时按 `paper_language(project_root)` 的读数：附录是论文的一部分，
+    标题、说明段、表头、占位格全部跟正文同语言（D-45）。给了 `language` 就照给的写
+    （判据里反真空那一条把这一支打桩成恒中文）。
+
+    表格不再宽出 `\\textwidth`（D-46）：九列全定宽、整表 `\\small`、`\\tabcolsep` 收到
+    2pt，Lean 的文件与声明并成一列；路径类的格子带 `\\allowbreak{}` 断点，免得一串
+    类型宽字把定宽列撑破。
     """
     items = list(rows)
     lean_on = lean_switch()[0] if lean_enabled is None else bool(lean_enabled)
+    lang = paper_language(project_root) if language is None else str(language)
+    if lang not in PAPER_LANGUAGES:
+        raise ValueError(f"language 只能是 {PAPER_LANGUAGES} 之一，收到的是 {lang!r}")
+    text = _APPENDIX_TEXT[lang]
+    columns = tuple(text["columns"])
+    spec = ("@{}" + "".join(f"p{{{width:.2f}\\textwidth}}"
+                            for width in APPENDIX_COLUMN_WIDTHS) + "@{}")
     lines = [
         APPENDIX_BEGIN,
-        "\\section*{" + APPENDIX_TITLE + "}",
+        "\\section*{" + str(text["title"]) + "}",
         "",
-        "本表由 \\texttt{" + MAPPING_JSON_NAME + "} 渲染（\\texttt{agentflow.papermapping.render\\_appendix}），"
-        "不许手抄第二份。\\texttt{file} 一列是论文包内的相对路径 —— 换一台机器也指向同一份文件；"
-        "数值实验定理那一行的 \\texttt{file} 是那份穷举程序的相对路径（相对仓库根）。"
-        "Lean 那两列是「验它的那份源码在哪」与「验的是哪个声明」：有 Lean 产出时这两列必填，"
-        "开关关时它们印「" + LEAN_OFF_CELL + "」（空不等于验过）。"
-        "最后两列是数值实验定理的：E 的那条穷举读数（\\texttt{" + NT.EVIDENCE_PREFIX
-        + "NNNNNN}）与 E 写的那两块（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION
-        + "）落在哪一份读数里；不填印「" + NUMERIC_EMPTY_CELL + "」。",
+        str(text["note"]),
         "",
-        "\\begin{tabular}{llllp{0.12\\textwidth}p{0.12\\textwidth}p{0.12\\textwidth}"
-        "p{0.12\\textwidth}p{0.12\\textwidth}p{0.12\\textwidth}}",
-        "环境 & label & 台账序号 & 证明号 & 真实文件 & Lean 文件 & Lean 声明 & 引文位置 "
-        "& E 读数 & 两块读数 \\\\",
+        # 字号与列间距只在组内生效：`\\small` 要是漏到别的小节，读者会以为整篇都是小字。
+        "\\begingroup",
+        "\\small",
+        "\\setlength{\\tabcolsep}{2pt}",
+        "\\begin{tabular}{" + spec + "}",
+        "\\hline",
+        " & ".join(columns) + " \\\\",
         "\\hline",
     ]
     for row in items:
         lines.append(APPENDIX_ROW_PREFIX + _row_key_text(row))
         lines.append(" & ".join([
-            _tex_escape(f"{row.kind} {int(row.env_no)}"),
-            "\\texttt{" + _tex_escape(row.label) + "}",
-            "\\texttt{" + _tex_escape(row.ledger_id) + "}",
+            _cell(f"{row.kind} {int(row.env_no)}"),
+            _cell(row.label, mono=True),
+            _cell(row.ledger_id, mono=True),
             str(int(row.proof_no)),
-            "\\texttt{" + _tex_escape(row.file) + "}",
-            _tex_escape(_lean_cell(row.lean_file, lean_on)),
-            _tex_escape(_lean_cell(row.lean_target, lean_on)),
-            _tex_escape(_loc_text(row) or row.citation_loc_reason or ""),
-            _tex_escape(_numeric_cell(row.numeric_evidence)),
-            "\\texttt{" + _tex_escape(_numeric_cell(row.exhaustion_note)) + "}",
+            _cell(row.file, mono=True),
+            _cell(_lean_pair(row, lean_on, lang)),
+            _cell(_loc_text(row) or row.citation_loc_reason or ""),
+            _cell(_numeric_cell(row.numeric_evidence, lang)),
+            _cell(_numeric_cell(row.exhaustion_note, lang), mono=True),
         ]) + " \\\\")
-    lines += ["\\hline", "\\end{tabular}", "", APPENDIX_END, ""]
+    lines += ["\\hline", "\\end{tabular}", "\\endgroup", "", APPENDIX_END, ""]
     return "\n".join(lines)
 
 
@@ -1622,7 +1987,7 @@ def write_appendix(project_root: str | Path) -> Path:
     rows, _problems = parse_rows(payload)
     frag = appendix_path(root)
     frag.parent.mkdir(parents=True, exist_ok=True)
-    frag.write_bytes((render_appendix(rows) + "\n").encode("utf-8"))
+    frag.write_bytes((render_appendix(rows, project_root=root) + "\n").encode("utf-8"))
     tex = package_dir(root) / PC.TEX_NAME
     if tex.is_file():
         text = tex.read_text(encoding="utf-8")
@@ -1706,13 +2071,16 @@ def _appendix_reading(project_root: Path, tex: str,
                       rows: Sequence[Row]) -> tuple[str, list[dict[str, Any]]]:
     """附录那一节的状态（`present` / `missing` / `mismatch`）与它的问题。"""
     block = _appendix_block(project_root, tex)
+    # 语言从正文读（与写侧同一个判定口）：英文论文的附录标题是 Appendix: Output Mapping，
+    # 照中文标题去找会把它判成"没印出来"（D-45）。
+    lang = paper_language(project_root)
     if not block.strip():
         return "missing", [_problem(
             "mapping_not_in_paper",
-            f"正文里读不到「{APPENDIX_TITLE}」那一节 —— 由 json 渲染（`write_appendix`），"
+            f"正文里读不到「{appendix_title(lang)}」那一节 —— 由 json 渲染（`write_appendix`），"
             f"再把 `{APPENDIX_INPUT}` 放进正文；表只在盘上、没印进正文，H 读稿时看不到它",
             where=PC.TEX_NAME)]
-    want = render_appendix(rows)
+    want = render_appendix(rows, language=lang)
     if _norm_text(block) == _norm_text(want):
         return "present", []
     in_paper = appendix_row_keys(block)
@@ -1804,6 +2172,113 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
                     label=label, where=MAPPING_JSON_NAME))
             seen[row.ledger_id] = row
     return problems
+
+
+def proposition_statement_ids(ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None
+                              ) -> list[str]:
+    """台账里算"命题"的那几条的 `stmt_id`（按台账里的顺序）。
+
+    口径（业主 2026-10-24，D-40）：`kind` 不在 `NON_PROPOSITION_KINDS` 里就算命题 ——
+    概念并进 `statements` 之后那一批 `kind="concept"` 的行是定义/记号，不是正文要
+    对着写环境的命题；反过来，缺 `kind` 的旧行算命题（"没说"不许读成"不是"）。
+    """
+    out: list[str] = []
+    for row in (ledger or {}).get("statements") or ():
+        if not isinstance(row, Mapping):
+            continue
+        stmt_id = str(row.get("stmt_id") or "").strip()
+        if not stmt_id:
+            continue
+        if str(row.get("kind") or "").strip().lower() in NON_PROPOSITION_KINDS:
+            continue
+        out.append(stmt_id)
+    return out
+
+
+def _statement_env_label(env: BodyEnv) -> str:
+    """一个定理类环境在报信里的名字（没有 label 时退到位置）。"""
+    return env.label or f"（无 label 的那个 {env.kind}，第 {env.line} 行）"
+
+
+def _statement_surplus_problems(
+        statement_envs: Sequence[BodyEnv], rows: Sequence[Row],
+        ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """正文的定理类环境 vs 台账登记的命题：一条命题对一个环境（业主 2026-10-24，D-40）。
+
+    逐环境按正文顺序认领一条还没被认领过的命题：那一行要按 `kind` + `label` 对上
+    环境，`ledger_id` 要解析到 `statements`，而那一行还要算命题。认领不到的环境就是
+    "正文多出来的" —— 三种来源报同一句话并逐个点名 label：
+
+      - 对应表里没有这一行（正文有、表里没有）；
+      - 那一行指的是台账里的概念/定义行（不是命题）；
+      - 那一行压着的命题已经被前面某个环境用掉了（一条命题不许对两个环境）。
+
+    返回 `(problems, 多出来的 label 清单)`。台账里一条 `statements` 行都没有时返回
+    `([], [])`：那一档是"无从判起"（没读到台账，不是"正文多出来了"），把两者折平会让
+    每一份夹具工作区都红；而"台账读得到、里面只有概念行"照判 —— 那种稿子确实一个
+    命题都没登记，正文里的定理类环境全是多出来的。问题类别落在既有的
+    `mapping_orphan` 上：它就是"孤儿"的另一半，只是这次判据从"表里有没有那一行"
+    升级到"台账里有没有那一条命题"。
+    """
+    statements = [row for row in ((ledger or {}).get("statements") or ())
+                  if isinstance(row, Mapping)]
+    if not statements:
+        return [], []
+    propositions = proposition_statement_ids(ledger)
+    prop_set = set(propositions)
+    by_key: dict[tuple[str, str], list[str]] = {}
+    mapped: dict[tuple[str, str], list[str]] = {}
+    for row in rows:
+        resolved = resolve_ledger_id(row.ledger_id, ledger)
+        if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+            continue
+        stmt_id = str(resolved.get("row_id") or "")
+        key = (str(row.kind), str(row.label))
+        mapped.setdefault(key, [])
+        if stmt_id not in mapped[key]:
+            mapped[key].append(stmt_id)
+        if stmt_id in prop_set:
+            by_key.setdefault(key, []).append(stmt_id)
+    used: dict[str, BodyEnv] = {}
+    extra: list[tuple[BodyEnv, str]] = []
+    for env in statement_envs:
+        key = (str(env.kind), str(env.label))
+        take = next((sid for sid in by_key.get(key, ()) if sid not in used), "")
+        if take:
+            used[take] = env
+            continue
+        taken = [sid for sid in by_key.get(key, ()) if sid in used]
+        if not mapped.get(key):
+            why = "（对应表里没有这一行）"
+        elif taken:
+            why = ("（与 " + _statement_env_label(used[taken[0]])
+                   + " 压在同一条命题 stmt:" + taken[0] + " 上）")
+        else:
+            why = ("（表里那一行指 stmt:" + mapped[key][0]
+                   + "，而台账里那不是命题）")
+        extra.append((env, why))
+    if not extra:
+        return [], []
+    labels: list[str] = []
+    named: list[str] = []
+    for env, why in extra:
+        label = _statement_env_label(env)
+        labels.append(label)
+        named.append(label + why)
+    detail = (
+        f"正文多出 {len(extra)} 个定理类环境，台账里没有对应命题："
+        + "、".join(named)
+        + f"（台账里算命题的是 {len(propositions)} 条："
+        + "、".join(f"stmt:{sid}" for sid in propositions[:8])
+        + ("等" if len(propositions) > 8 else "")
+        + "）—— 正文的定理/引理/命题结构以 B 台账登记的命题为准：一条命题对一个环境，"
+        "证明用那一行的 `proof_text`；L 的形式化产物只作「这一条命题的形式化已验证」的"
+        "凭据，它内部的 lemma / step 不进正文目录、不拆成多个定理类环境（业主口径："
+        "参照 L 会切割太细）。印成 Lemma 的自定义宏（例如 "
+        "`\\newtheorem{claim}[theorem]{Lemma}`）同样算定理类环境，不能用它绕开这一条")
+    return [_problem("mapping_orphan", detail, label=labels[0] if labels else "",
+                     where=_env_where(extra[0][0]))], labels
 
 
 def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
@@ -2037,11 +2512,15 @@ def mapping_reading(project_root: str | Path, *,
     else:
         tex_text = str(tex)
     has_paper = bool(str(tex_text or "").strip())
+    # 定理类环境（含印成 Lemma 的自定义宏）：只有"一条命题对一个环境"那一条读它。
+    statement_envs: list[BodyEnv] = []
     if tex is None and has_paper:
-        envs, tex_files, body_problems = _body_envs_of_package(package, tex_path, tex_text)
+        envs, statement_envs, tex_files, body_problems = _body_envs_of_package(
+            package, tex_path, tex_text)
     else:
         # 调用方直接给了正文文本（没有文件可跟）：只扫这一份，`tex_files` 是空的。
         envs = body_envs(tex_text)
+        statement_envs = statement_envs_of_text(tex_text)
     lean_on, lean_source = lean_switch()
     artifacts = lean_artifacts(project)
     if not lean_on:
@@ -2068,6 +2547,8 @@ def mapping_reading(project_root: str | Path, *,
         "mapping_md": str(md_path),
         "rows": 0,
         "envs": len(envs),
+        "statement_envs": len(statement_envs),
+        "statement_surplus": [],
         "tex_files": list(tex_files),
         "md_state": "",
         "appendix_state": "",
@@ -2186,6 +2667,13 @@ def mapping_reading(project_root: str | Path, *,
         if state["state"] == "empty":
             reading["empty_files"].append(state["file"])
 
+    # 一条命题对一个环境（业主 2026-10-24，D-40）：正文的定理类环境里，凡认领不到
+    # 一条台账命题的那些（表里没行 / 指的是概念行 / 命题被别人用了）都要被点名。
+    surplus_problems, surplus_labels = _statement_surplus_problems(
+        statement_envs, rows, known)
+    problems += surplus_problems
+    reading["statement_surplus"] = list(surplus_labels)
+
     reading["problems"] = problems
     if problems:
         reading["state"] = "fail"
@@ -2194,10 +2682,18 @@ def mapping_reading(project_root: str | Path, *,
             counts[item["kind"]] = counts.get(item["kind"], 0) + 1
         reading["reason"] = ("表在包里、但有 {n} 处问题（{by}）—— 逐条见 problems".format(
             n=len(problems), by="、".join(f"{k} {v}" for k, v in counts.items())))
+        if surplus_labels:
+            # 拒信本身就要点名（只给一个计数等于让读者自己去翻 problems）。
+            reading["reason"] += (
+                "；正文多出 " + str(len(surplus_labels)) + " 个定理类环境，"
+                "台账里没有对应命题：" + "、".join(surplus_labels[:8])
+                + ("等" if len(surplus_labels) > 8 else ""))
     else:
         reading["state"] = "pass"
         reading["reason"] = (f"{len(rows)} 行与正文 {len(envs)} 个环境逐一对上，附录逐字一致，"
-                             "`ledger_id` 与 `proof_no` 都能在台账里解析到，`file` 都在包里")
+                             "`ledger_id` 与 `proof_no` 都能在台账里解析到，`file` 都在包里；"
+                             f"正文 {len(statement_envs)} 个定理类环境对着 "
+                             f"{len(proposition_statement_ids(known))} 条台账命题，一条命题对一个环境")
     # 两档都写进 reason：`pass` 不等于"什么都没剩"，`warnings` 与 Lean 那一格必须被看见
     # （三态纪律：把"没开 Lean / 没有 Lean 产出"与"验过了"折成同一个沉默是本项目最忌的形态）。
     reading["reason"] += "；Lean：" + lean_reason

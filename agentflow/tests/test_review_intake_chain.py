@@ -31,6 +31,8 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools.doc_tools import CROSS_CHECK_DISCLAIMER
 
+from conftest import write_paper
+
 #: 盘上的"外部论文"（只用来证明它真的在盘上；登记走的是台账那一侧）。
 EXTERNAL_TEX = """\\documentclass{article}
 \\begin{document}
@@ -121,6 +123,18 @@ def test_external_paper_intake_chain_is_walkable_with_existing_tools(wired):
     lit_id = _register_external_paper(reg)
     stmt_id = _register_statement(store, lit_id)
     doc_id = _build_our_manuscript(reg, lit_id, text="数值抽样与该结论一致（引自外部论文）。")
+    # 业主 2026-10-24（「只对论文负责是正确的，documents等都是中间产物」）：H 审的是论文
+    # 正文（`out/paper/main.tex`），`documents` 只是它的登记行。不落正文时 `review` 的
+    # 正确结论是"没有可审的论文"（`checked=False`）⇒ 本用例要验的那条链（审阅真的发生
+    # 了、状态被推成 accepted）就断了。正文里逐字写上这条断言的正文，行号才有来源。
+    write_paper(store, "\n".join([
+        r"\documentclass{article}",
+        r"\begin{document}",
+        r"\section{主定理}",
+        "数值抽样与该结论一致（引自外部论文）。",
+        r"\end{document}",
+        "",
+    ]))
     # 这里刻意不断言 lit_id != doc_id：id 是按表分配的（`alloc_id` 的 id_kind），
     # 所以"第一篇文献"与"第一份稿件"都可能叫 `0000` —— 两个命名空间互不相干。
     # 这正是 §37 那次混得起来的原因，也是为什么拒信里那句"稿件 0000 不存在"必须点名

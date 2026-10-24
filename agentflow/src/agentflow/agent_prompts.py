@@ -2227,7 +2227,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_skills.py` 的 G 技能正文同一句（它只进 `skills/` 落盘文件、不进提示词）。
 #: 关档另加两条 `specs/e.py::NO_LEAN_REPLACEMENTS`（formal 那行与那句在关档改成不点 L
 #: 的写法），它们只在关档生效 ⇒ 开档摘要不受影响。facts 键集未变（15 格）。
-PROMPT_VERSION = "p195"
+PROMPT_VERSION = "p196"
 
 
 
@@ -9396,7 +9396,8 @@ HANDOFF_PROTOCOL = """\
 
 
 def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
-    """关掉 Lean 时那三张改写表按模块收集（B 一份、E 一份、L 一份；顺序即应用顺序）。
+    """关掉 Lean 时那三张改写表按模块收集（B 一份、E 一份、L 一份，外加 G 的论文体例一段；
+    顺序即应用顺序）。
 
     为什么按模块收集而不是把 L 的条目塞进 `specs/e.py`：E 的那张表是按 E 自己的
     文本写的（E 的职责句、E 的政策、E 的动作摘要那一行；它原来还有一条按
@@ -9409,15 +9410,21 @@ def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
     它必须写出派谁（只写"形式化那一岗"读的人不知道派谁），于是关档要有一份能把它
     整段换掉的表 —— 那张表的左右两边都取自同一个模块的常量，不手抄。
 
+    2026-10-24 再收一份 G（D-40）：`specs/g.py::WRITING_SCOPE` 是"正文结构以 B 台账的
+    命题为准、形式化细节不进正文"那一段的唯一真身，它必须点名 L（开档逐句判据见
+    `tests/test_lean_switch_points_at_l.py`），关档时用同文件的 `WRITING_SCOPE_NO_LEAN`
+    整段换掉（零痕迹判据见 `tests/test_l_is_isolated_when_lean_is_off.py`）。
+
     每一项是 `(模块名, 整块删的表, 整行删的标记, 逐条替换的表)`；模块缺某一张表时
     按空元组算（`getattr(..., ())`）—— 那张表不存在与它是空的，在应用上等价。
     """
     from .specs import b as _B_SPEC
     from .specs import e as _E_SPEC
+    from .specs import g as _G_SPEC
     from .specs import l as _L_SPEC
 
     out: list[tuple[str, tuple, tuple, tuple]] = []
-    for mod in (_B_SPEC, _E_SPEC, _L_SPEC):
+    for mod in (_B_SPEC, _E_SPEC, _G_SPEC, _L_SPEC):
         out.append((
             str(getattr(mod, "__name__", "")),
             tuple(getattr(mod, "NO_LEAN_DROP_BLOCKS", ())),

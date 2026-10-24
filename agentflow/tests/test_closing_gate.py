@@ -156,6 +156,27 @@ def _numeric_experiment(store: Store, eid: str = "0001", **patch) -> dict:
     return row.to_dict()
 
 
+def _run_evidence(root: pathlib.Path, *entries: dict) -> pathlib.Path:
+    """写一份 G8 回执（`out/review/RUN-EVIDENCE.json`），每条命令对上台账里那一次运行。
+
+    为什么夹具里要有它（D-41，2026-10-24 真机 r34d）：收工门现在逐条核回执有没有
+    `experiments` 台账行背书（同一个 `code_path` / `code_hash` + 同一个 `exit_code`）。
+    下面几个负控的底座会写一条"只有数值支持"的实验（`_numeric_experiment` 的
+    `code/exp.py`，exit 0），而稿件又引着它 ⇒ 那一档会被触发。夹具因此要同时交一份
+    对得上的回执；不交的话，那几条用例红的原因就变成了"回执没有背书"，
+    而它们各自要隔开的是别的东西（承重结论 / 降档）。
+    """
+    payload = {"checked": True,
+               "commands": list(entries) or [{"claim_id": "c1",
+                                              "command": "python code/exp.py",
+                                              "exit_code": 0,
+                                              "output_tail": "REPRO_RESULT: {}"}]}
+    p = root / "out" / "review" / "RUN-EVIDENCE.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8", newline="\n")
+    return p
+
+
 def _paper_with_claim(store: Store, *, evidence_kind: str = "proof",
                       citations: list[str] | None = None, doc_id: str = "0001") -> dict:
     """一份带一条断言的稿件（默认 proof 级、引到 T3 实验）。
@@ -956,6 +977,9 @@ def test_the_load_bearing_check_goes_red_alone(tmp_path: pathlib.Path):
     st, report = _good(tmp_path)
     # 把那条 T3 实验换成只有数值支持的一条（同一实验号，形态不再是 T3）
     _numeric_experiment(st, eid="0001")
+    # 稿件引着那条数值实验 ⇒ G8 那一档（D-41）也会被触发；交一份对得上台账的回执，
+    # 让这条用例仍然只测「承重结论」这一件事
+    _run_evidence(tmp_path)
     # 同上：台账变了不影响回执 ⇒ 不必再编一次
     rep = _gate(st, report)
     assert rep.status["load_bearing"] == "fail", rep.to_dict()
@@ -974,6 +998,9 @@ def test_a_downgraded_claim_does_not_fail_the_gate(tmp_path: pathlib.Path):
     st, report = _good(tmp_path)
     _numeric_experiment(st, eid="0001")
     _paper_with_claim(st, evidence_kind="cross_check")
+    # 降档之后稿件引的是那条数值实验 ⇒ G8 那一档被触发（D-41）：这一条只测「降档允许」，
+    # 所以回执要对得上台账（脚本 + exit_code）
+    _run_evidence(tmp_path)
     _seal(tmp_path, st)
     rep = _gate(st, report)
     assert rep.status["load_bearing"] == "pass", rep.to_dict()

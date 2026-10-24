@@ -1041,6 +1041,19 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
                     f"{written['statements']} 条命题、{written['documents']} 份稿件）⇒ "
                     "验收表里「论文对应表」那一项记「未完成」；缺对应表 ⇒ 论文无法从稿件"
                     "追溯到台账（不许记 `na`、也不许把那一行省掉）"]
+    # ---- D-38 第二步（2026-10-24）：机器可判那一份里「论文对应表」这一档的三种形态。
+    #
+    # 为什么接在这里：M 写两张表（人读的 ACCEPTANCE.md 与机器可判的
+    # ACCEPTANCE-CHECKS.json），而这一档此前只有人读那张能表达「未完成」。
+    # 三种形态都要读得出来，且老工作区不因为门加了一档而变红：
+    #   - 机器表里那一行缺失（老工作区）⇒ 读成「没查成」（unknown），不判红，点名请 M 补；
+    #   - 机器表里记了 na + 理由 ⇒ 不适用（na 不是通过，也不是失败）；
+    #   - 人读表里那一行记「未完成」⇒ 它没过（解析器已读成 ok=False）。
+    # 判据本体在 `closing`（`paper_mapping_cell_reading` / `acceptance_absent_kind_state`）；
+    # 这里只读表、只把结论翻成一句 M 能照写的话。没有那份机器可判文件时一言不发
+    # （那一趟没走机器可判那一档，由收工门自己判，不在这里补噪音）。
+    got["problems"] = list(got["problems"]) + _paper_mapping_leg_problems(
+        base, [r for r in got["rows"] if isinstance(r, Mapping)])
     if ids:
         want = [str(x) for x in ids]
         keep = [r for r in got["rows"] if r["id"] in want]
@@ -1600,6 +1613,77 @@ def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
             "rows": rows, "row_count": len(rows), "ok_count": ok_count,
             "not_ok_count": not_ok_count, "readings_truncated": truncated,
             "row_ids": [r["id"] for r in rows], "problems": problems}
+
+
+def _paper_mapping_human_row(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """人读验收表里「论文对应表」那一行（按名称 / 编号里的词认，取第一行）。
+
+    认法刻意不按固定编号：P12 是 D-38 那两趟真机里 M 自己写的号，换一份表就变。
+    名称里带「对应表」或 MAPPING 的那一行就是它；认不出来返回 None（不是"没有这一行"
+    的结论，只是这一层没有可读的行 —— 调用方还有机器可判那张表那一层）。
+    """
+    for row in rows:
+        text = f"{row.get('name') or ''}{row.get('id') or ''}".lower()
+        if "对应表" in text or "mapping" in text:
+            return row
+    return None
+
+
+def _paper_mapping_leg_problems(base: Path, rows: list[dict[str, Any]]) -> list[str]:
+    """「论文对应表」这一档在两张验收表里的三种形态（D-38 第二步，2026-10-24）。
+
+    M 手上有两张表：人读的 `out/paper/ACCEPTANCE.md`（`rows` 是解析出来的行）与机器可判的
+    `out/paper/ACCEPTANCE-CHECKS.json`。这一步让这一档在两张表上都读得出来：
+
+    - 机器表里那一行缺失（老工作区）⇒ 读成「没查成」（unknown），不判红，点名叫 M 补一行；
+    - 机器表里那一行标了 `na` + 理由 ⇒ 不适用（`na` 不是通过，也不是失败）；
+    - 人读表里那一行记的是「未完成」一类结论（解析器已读成 `ok=False`）⇒ 它没过；
+      机器表里同时有一行时，两张表的结论不一致这件事要点出来（收工门只读机器那张）。
+
+    只在机器表真的在盘上时才说话：没有那份文件是「这一趟没走机器可判那一档」，
+    由收工门自己判（研究型项目缺表有它自己的红），这里再补一句只会变成噪音。
+    返回空列表 = 这一档在两张表里都没有要报的形态。
+    """
+    from .. import closing as CL
+
+    path = Path(base) / CL.ACCEPTANCE_CHECKS_NAME
+    want = CL.PAPER_MAPPING_LEG_KIND
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        checks = raw["checks"] if isinstance(raw, dict) else raw
+        if not isinstance(checks, list):
+            raise ValueError("顶层必须是数组，或 {'checks': [...]}")
+    except Exception as exc:  # noqa: BLE001 - 读不懂要说出来，不许静默当成"没有这一档"
+        return [f"机器可判的验收表读不出来（{path}：{type(exc).__name__}: {exc}）⇒ "
+                f"`{want}` 这一档没查成（不是「没有这一行」）；收工门那一侧同样记 unknown"]
+    mine = [r for r in checks if isinstance(r, Mapping) and str(r.get("kind") or "") == want]
+    problems: list[str] = []
+    if not mine:
+        problems.append(
+            f"验收表缺 `{want}` 这一档（老工作区里的 {CL.ACCEPTANCE_CHECKS_NAME} 没有这一行）"
+            "⇒ 读成「没查成」（unknown），不判红；下一趟补一行："
+            "{\"id\": \"P12\", \"kind\": \"paper_mapping_rows\", \"min\": 1}"
+            "（读数 = out/paper/MAPPING.json 里三格齐的行数，分母是表里的行数）")
+    else:
+        for row in mine:
+            rid = str(row.get("id") or "")
+            if row.get("na") is True:
+                note = str(row.get("note") or "").strip()
+                problems.append(
+                    f"验收表行 {rid} 把 `{want}` 标了 na"
+                    + (f"（理由：{note}）" if note else "（没写理由 ⇒ 那一行读不懂）")
+                    + " ⇒ 这一档不适用（na 不是通过，也不是失败）")
+    human = _paper_mapping_human_row(rows)
+    if human is not None and human.get("ok") is False and mine:
+        problems.append(
+            f"验收表行 {human.get('id') or '（无编号）'}"
+            f"（{human.get('name') or '论文对应表'}）记的是「未完成」一类结论"
+            f"（读数：{human.get('reading') or '（空）'}），而机器可判那张表里有一行 "
+            f"`{want}` ⇒ 两张表对同一件事的结论不一致：收工门只读机器那张，"
+            "人读那张请改到与它一致（补完对应表再一起翻）")
+    return problems
 
 
 def selftest() -> int:

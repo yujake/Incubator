@@ -238,6 +238,35 @@ def _selftest() -> int:
             tx.upsert("dependencies", row.to_dict())
     print("[2] 稿件 2 份（干净 1 份、把 cross_check 说成证明的 1 份）、依赖 2 条")
 
+    # ---- 论文正文（业主 2026-10-24 裁定：H 审的是论文，`documents` 只是它的登记行）
+    #
+    # 自检此前只种 `documents` 行，于是"H 的输入是哪一份正文"这件事根本没有出现过。
+    # 现在审校对象是 `out/paper/main.tex`（退到 `main.pdf` 的文本层）：没有正文时
+    # `review` 会如实回"没有可审的论文"（`verdict="unreviewable"`）—— 那是正确行为，
+    # 但自检要验的是"干净稿件必须被接受"，所以这里先把正文写下来，把那两句断言逐字
+    # 放进正文（行号就是按正文定位的，正文里没有那句话就定不到）。
+    from .. import papercompile as _PC
+
+    _paper = _PC.package_dir(root) / _PC.TEX_NAME
+    _paper.parent.mkdir(parents=True, exist_ok=True)
+    _paper.write_text(
+        "\n".join(
+            [
+                r"\documentclass{article}",
+                r"\begin{document}",
+                r"\section{主要结果}",
+                "谱落在区间内。",
+                r"\section{数值证据}",
+                "数值抽样支持该结论，因此我们已证明它成立。",
+                r"\end{document}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    print(f"[2b] 被审正文：{_paper}（{_paper.stat().st_size} 字节，sha256="
+          f"{_PC.file_digest(_paper)[:16]}…）")
+
     h = AgentH(st, config={"max_review_rounds": 2})
     print(f"[3] H 的自由工具箱（{len(h.tools)} 个，全部应为 none/read）：")
     for t in h.tools.describe():

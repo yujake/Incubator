@@ -29,6 +29,8 @@ from agentflow.tools import review_tools as RV
 from agentflow.tools.base import ToolRegistry
 from agentflow.tools.conductor_tools import reset_cache
 
+from conftest import write_paper
+
 
 class _Model:
     """替身模型：按剧本回一条判定 JSON。"""
@@ -55,7 +57,21 @@ def _seam(root: pathlib.Path, model: Any) -> LlmSeam:
 
 
 def _doc(store: Store, claims: list[dict]) -> str:
-    """放一份带断言的稿件，返回 doc_id。"""
+    """放一份带断言的稿件，返回 doc_id。
+
+    2026-10-24 起还要落一份论文正文：H 审的是 `out/paper/main.tex`
+    （业主裁定「只对论文负责是正确的，documents等都是中间产物」），没有正文时
+    `review_document` 的正确结论是"没有可审的论文"。这里把每条断言的正文逐字
+    写进正文 —— 行号那一格就是按逐字引文在正文里定位的。
+    """
+    write_paper(
+        store,
+        "\n".join(
+            [r"\documentclass{article}", r"\begin{document}"]
+            + [str(c.get("text") or "") for c in claims]
+            + [r"\end{document}", ""]
+        ),
+    )
     with store.tx("documents", "counters", actor="test") as tx:
         tx.upsert("documents", S.Document(
             doc_id="0000", kind="paper", title="P2 断言台账", status="draft", claims=claims,

@@ -26,5 +26,9 @@ class _RefreshMarkdown:
         deps = DT.dependencies_for_doc(self.store.rows("dependencies"), str(doc_id))
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(DT.render_markdown(doc, dependencies=deps), encoding="utf-8")
+        # `D-44`：重画就是换了一份中间产物 ⇒ 把它的新 sha 记下来（否则读侧会把每一次
+        # 正常的重画都报成"内容已变"）。这一步只追加一条 info 事件，不改任何数据行
+        # —— 事务开在 `DT.note_markdown_artifact` 内部，本函数一个字都不写表。
+        DT.note_markdown_artifact(self.store, doc_id, rel, target)
         self._emit(f"重渲染 doc:{doc_id} → {rel}")
         return str(target)

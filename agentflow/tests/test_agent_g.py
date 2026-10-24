@@ -28,7 +28,7 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools import doc_tools as DT
 
-from conftest import add_literature
+from conftest import add_literature, write_paper
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -602,6 +602,14 @@ def test_g_and_h_output_passes_the_global_verify(g: AgentG, g_store: Store):
     from agentflow.verify import verify_all
 
     doc = g.build_document("paper", "可被 verify 检查的稿件", claims=_clean_claims(g))
+    # 业主 2026-10-24：H 审的是论文正文（`out/paper/main.tex`），`documents` 只是登记行。
+    # 不落正文时 `review` 的正确结论是"没有可审的论文"⇒ 本用例想验的
+    # "G/H 的产出能被 verify 检查"就测不到了。
+    write_paper(g_store, "\n".join(
+        [r"\documentclass{article}", r"\begin{document}"]
+        + [str(c.get("text") or "") for c in doc.get("claims") or []]
+        + [r"\end{document}", ""]
+    ))
     g.register_dependency(
         f"doc:{doc['doc_id']}#claim-1",
         "theorem",

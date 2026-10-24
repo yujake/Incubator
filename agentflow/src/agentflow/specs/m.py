@@ -225,7 +225,7 @@ SPEC = AgentSpec(
             "`counterexample_or_proof_rows` / `search_frontier_rows` / `enumeration_optimization_rows` / `manuscript_rows` / "
             "`unfinished_request_rows` / `literature_unprocessed_rows` / `reviewed_current_rows` / `retrieval_ok_rows` / `document_rows` / "
             "`document_body_rows` / `document_claim_rows` / `claim_evidence_fit_rows` / `artifact_ledger_bad_rows` / "
-            "`reviewed_then_digested_rows` / `review_files`。其中 `manuscript_edited` 与 `citation_records_vs_bibitems` 要**只读基线 "
+            "`reviewed_then_digested_rows` / `review_files` / `paper_mapping_rows` / `run_evidence_backed_rows`。其中 `manuscript_edited`"
             "`source/`**（审阅型工作区才有）—— 没有 `source/` 时那一行记 `not_applicable`（第四态：这一档在这个工作区用不上），"
             "**不是整张表没查成**（CC-05 的口径）。",
             "**挑哪一档要看你实际做的是什么**（D54）—— 「算或造」那一环不是只有 `numeric_experiment_rows`：它**只数 "

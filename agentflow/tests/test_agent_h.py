@@ -33,7 +33,7 @@ from agentflow.tools import review_tools as RV
 from agentflow.tools.base import ToolRegistry, ToolSpec
 from agentflow.tools.doc_tools import CROSS_CHECK_DISCLAIMER, PROOF_REVIEW_DISCLAIMER
 
-from conftest import add_concept, add_literature, add_relation
+from conftest import add_concept, add_literature, add_relation, write_paper
 
 TS = "2026-01-01T00:00:00+00:00"
 KNOWLEDGE_FILES = ("statements.json", "relations.json", "literature.json")
@@ -94,6 +94,39 @@ def overclaim_claim(*, with_disclaimer: bool = True, citations: list[str] | None
         "negation_kind": None,
         "disclaimer": CROSS_CHECK_DISCLAIMER if with_disclaimer else "",
     }
+
+
+def paper_body() -> str:
+    """本文件各用例会审到的那几句断言，逐字落进一份最小论文正文。
+
+    为什么夹具必须有它（业主 2026-10-24 裁定）：H 审的是论文正文
+    （`out/paper/main.tex`），`documents` 那一行只是它的登记行。没有正文时
+    `review` 的正确结论是"没有可审的论文"（`checked=False`），那些用例要测的
+    "好稿件必须过 / 坏稿件必须被抓"就全都测不到了。
+
+    逐字写进来还有第二个用处：`line` 那一格是按引文在正文里定位的
+    （`_line_of`），所以正文里真的出现这句话，行号才不是猜的。
+    """
+    return "\n".join(
+        [
+            r"\documentclass{article}",
+            r"\begin{document}",
+            r"\section{主要结果}",
+            # `clean_claim()` 的正文
+            "谱落在区间内。",
+            "",
+            r"\section{数值证据}",
+            # `overclaim_claim()` 的两种正文
+            "数值抽样支持该结论，因此我们已证明它成立。",
+            "数值抽样支持该结论。",
+            "",
+            r"\section{否定型}",
+            # `test_review_reports_a_negative_claim_without_negation_kind` 的正文
+            "该推广不成立。",
+            r"\end{document}",
+            "",
+        ]
+    )
 
 
 def document_row(doc_id: str, claims: list[dict], *, status: str = "draft") -> dict:
@@ -182,7 +215,12 @@ def only_finding(st: Store, doc_id: str, kind: str) -> dict:
 
 @pytest.fixture
 def h_store(store: Store) -> Store:
-    """带知识表的最小工作区（知识表要非空，逐字节比对才有意义）。"""
+    """带知识表的最小工作区（知识表要非空，逐字节比对才有意义）。
+
+    2026-10-24 起还带一份论文正文：H 的被审对象是论文（`out/paper/main.tex`），
+    见 `paper_body()` 与 `conftest.write_paper`。
+    """
+    write_paper(store, paper_body())
     add_literature(store, "0000", title="Spec S̃_m = [−m, m]", processed=True, sync=False)
     add_concept(store, "0000", "谱", definition="d", sync=False)
     add_concept(store, "0001", "区间", definition="d", sync=False)
@@ -673,10 +711,21 @@ def test_agent_h_selftest_passes(h_store: Store):
     assert any("selftest" in line for line in agent.logs)
 
 
-def test_review_rejects_an_unknown_document(h: AgentH):
-    """负控：审一份不存在的稿件必须报错，而不是"没有发现 ⇒ accepted"。"""
+def test_review_rejects_an_unknown_document(store: Store):
+    """负控：既没有论文正文、也没有那份台账行 ⇒ 审校必须报错（不是"没有发现 ⇒ accepted"）。
+
+    2026-10-24 起这条负控的口径变了（业主裁定「H 审论文，`documents` 只是它的登记行」）：
+    两条前提拆开判 ——
+
+    - 正文在 + 台账行缺 ⇒ 照审（论文是真身，缺的只是登记行）：判据在新文件
+      `tests/test_d42_h_reviews_the_paper_not_the_ledger_row.py` 的 ③；
+    - 正文不在 + 台账行缺 ⇒ 真的没有对象可审 ⇒ 仍然抛（本用例）。
+
+    所以本用例刻意用一个没有正文的工作区（`store`，不是 `h_store`）：
+    它守的是"没东西可审时不许静默通过"这条更硬的方向。
+    """
     with pytest.raises(ReviewError, match="不存在"):
-        h.review("0007")
+        AgentH(store).review("0007")
 
 
 def test_h_output_does_not_break_the_global_verify(h: AgentH, h_store: Store):

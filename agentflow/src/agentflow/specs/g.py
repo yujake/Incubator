@@ -161,6 +161,50 @@ def _build(d: BuilderDeps) -> Any:
     return AgentG(d.store, config=dict(d.config), llm=d.llm, workspace_root=d.workspace_root)
 
 
+# 2026-10-24 业主裁定（D-40 的根因）：「G 的写作只参照 B 侧收录的证明，如果参照 L 侧的形式化
+# 会切割太细。」＋ 同日口径更正：「形式化细节不进论文正文。」
+# 判据：tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py（五条）。
+#: D-40 那一条政策：正文结构照 B 台账的命题，形式化细节不进正文。
+#:
+#: 为什么单独拎成常量：它必须点名 L（开档时"形式化找谁"要指得到，`tests/test_lean_switch_points_at_l.py`
+#: 的判据 ① 逐句核这一条），而关档时 L 不是这一档的角色 —— 那时用
+#: `WRITING_SCOPE_NO_LEAN` 整段换掉（零痕迹判据见 `tests/test_l_is_isolated_when_lean_is_off.py`）。
+WRITING_SCOPE = (
+    "**正文的定理/引理/命题结构以 B 台账登记的命题为准**（业主 2026-10-24：「G 的写作只参照 B 侧收录的证明，"
+    "如果参照 L 侧的形式化会切割太细」）：`statements` 里 kind 是定理类的那几条 = 正文里那几个定理类环境，"
+    "**一条命题对一个环境**，证明就用那一行的 `proof_text`；台账里没有登记的命题，正文里不许凭空多出一个定理类环境。"
+    "**L 的形式化产物只作「这一条命题的形式化已验证」的凭据**，不是正文目录的来源：它内部的 lemma / step 分解"
+    "**不进正文**、不拆成多个 theorem / lemma / proposition 环境。**形式化细节不进正文**：不搬 Lean 的 lemma / step "
+    "标题、不写 tactic、不贴检查器输出，**附录与脚注也不进**；正文最多一句结论性表述（「这一条已由检查器验证」），"
+    "并**指向对应表里那一行** —— 形式化凭据的落点只有两处：`out/paper/MAPPING.json` 那一行（`lean_file` / "
+    "`lean_target`，或数值实验定理那两格 `numeric_evidence` / `exhaustion_note`）与 `experiments` 台账那一行"
+    "（路径 + 三态 + sha 都在那里），读者要看凭据就去那两处看。**`claim` 宏不得用来伪装定理类环境**：它是给"
+    "「证明过程中的中间步骤」用的，不冒充 Lemma 标签 —— `\\newtheorem{claim}[theorem]{Lemma}` 这种定义会让它印成 "
+    "Lemma、被当成正文里的另一个定理（真机实测：1 个 theorem 环境 + 5 个印成 Lemma 的 claim，而台账只有 1 条命题 ⇒ "
+    "对应表只能 1 行，环境与行对不上），**禁写**；对应表按环境逐行核，印成 Lemma 的自定义宏同样算一个定理类环境。"
+)
+
+#: 关掉 Lean 时上面那一段的替身：同一条口径，一个字都不提 L / Lean（那一档没有这一岗）。
+WRITING_SCOPE_NO_LEAN = (
+    "**正文的定理/引理/命题结构以 B 台账登记的命题为准**：`statements` 里 kind 是定理类的那几条 = 正文里那几个"
+    "定理类环境，**一条命题对一个环境**，证明就用那一行的 `proof_text`；台账里没有登记的命题，正文里不许凭空多出一个"
+    "定理类环境。**形式化产物只作「这一条命题已由检查器验证」的凭据**，不是正文目录的来源：它内部的 lemma / step "
+    "分解**不进正文**、不拆成多个定理类环境。**形式化细节不进正文**：不搬 lemma / step 标题、不写 tactic、不贴检查器"
+    "输出，**附录与脚注也不进**；正文最多一句结论性表述（「这一条已由检查器验证」），并**指向对应表里那一行** —— "
+    "凭据的落点只有两处：`out/paper/MAPPING.json` 那一行与 `experiments` 台账那一行（路径与 sha 都在那里）。"
+    "**`claim` 宏不得用来伪装定理类环境**：它是给「证明过程中的中间步骤」用的，不冒充 Lemma 标签 —— "
+    "`\\newtheorem{claim}[theorem]{Lemma}` 这种定义禁写；对应表按环境逐行核，印成 Lemma 的自定义宏同样算一个定理类环境。"
+)
+
+#: 关掉 Lean 时，上面那一段整段换成另一份（这一档做不出形式化）。
+#:
+#: 与 `specs/b.py` / `specs/e.py` / `specs/l.py` 那三张表同一机制：左边与右边都是本文件的常量，
+#: 应用点唯一（`agent_prompts._apply_no_lean_variant`）。
+NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    (WRITING_SCOPE, WRITING_SCOPE_NO_LEAN),
+)
+
+
 #: 本角色的声明。
 SPEC = AgentSpec(
     role='G',
@@ -189,11 +233,20 @@ SPEC = AgentSpec(
             "→（可选）**Appendix B**；合格线只有一句：读者读完应知道「问题是什么、已知什么、你新增了什么、凭什么相信」，且**不依赖"
             "任何内部编号／台账／验收表**。**没有新增结论的稿子不许投**：要么不写，要么用 `build_document` 如实写成综述"
             "（`kind=\"survey\"`）并在摘要首句标明「本文是综述，不含新结论」。",
-            "**第 3 节的合格线：≥ 6 个 `theorem` / `lemma` / `proposition` 环境，每个都带 `\\begin{proof}…\\end{proof}` 且分 (1)(2)(3) "
-            "步**：每一步写成「由 X 得 Y」，粒度 = 假设 → 推理链 → 结论，可被人逐行检查；**不许**用「由 `exp:NNNN` 可得」「见附录表 "
+            # 2026-10-24（业主裁定，D-40）：环境数量由台账定，不再写死一个下限 ——
+            # 定写下限会逼作者"凑数"，而凑数的两条路（虚构命题 / 把一份证明拆细）都已经被
+            # 这一条下面那一段禁掉了。判据：tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py。
+            "**第 3 节的合格线：台账登记的每条命题各占一个定理类环境，每个都带 `\\begin{proof}…\\end{proof}` 且分 (1)(2)(3) "
+            "步**（环境数量由 `statements` 里 kind 是定理类的那几条定：**一条命题对一个环境，不凑数、不拆细**；台账里只有 1 "
+            "条命题就只写 1 个定理类环境）：每一步写成「由 X 得 Y」，粒度 = 假设 → 推理链 → 结论，可被人逐行检查；**不许**用"
+            "「由 `exp:NNNN` 可得」「见附录表 "
             "N」代替论证；平凡或已知的事实也要写成引理并给出处，不许用「众所周知」蒙过去；**证不了的写成 `Conjecture` 或 "
             "`Open problem` 并写明缺哪一步**（缺引理／缺估计／缺无穷情形）；无 Lean 时**自然语言证明必须有**，但不许写「机器验证」"
             "「Lean 已验证」（`proof` 那一档的凭据是 `experiments` 那一行 + V 的签）—— 台账那一格记 `proof_review`（人逐行审过），不是 `proof`。",
+            # 2026-10-24 业主裁定（D-40 的根因）：正文结构照 B 台账的命题，形式化细节不进正文。
+            # 那一段单独拎成常量 `WRITING_SCOPE`（关档有替身，见本文件末尾的
+            # `NO_LEAN_REPLACEMENTS`）；判据见 tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py。
+            WRITING_SCOPE,
             "**正文里这六样一个都不许出现**：① 内部编号 `exp:` / `stmt:` / `lit:` / `rel:` / `conj:` 一个都不许（全进附录 A）；"
             "② 自审小节「文献可核性」「Reproducibility」「ACCEPTANCE」「缺口与边界（逐条）」；③ 过程词「台账」「本轮」「本项目」"
             "「验收表」「sha256」「我们派了 E 跑」「M 决定」；④ 内部术语 `cross_check` / `supported_not_proved` / "
@@ -210,6 +263,21 @@ SPEC = AgentSpec(
             "接在后面（`\\newcommand` / `\\DeclareMathOperator`）。**这只是推荐**：宏包可以增删、定理环境可以改名、边距可以改。"
             "**硬线只有一条：语言必须是英文** —— 标题、摘要、正文、定理与证明、图表标题、参考文献一律英文，全文 CJK 字符数为 0，"
             "连 `%` 注释里也不留中文（要写中文解释就写进 `documents` 手稿或回报里）。",
+            # 2026-10-24（业主裁定，D-45）：上面那条语言硬线只写到"正文"，而几个抬头不在正文里
+            # —— 摘要/参考文献/附录的标题由文档类印，证明的开头由 `\proofname` 印，附录的说明段
+            # 由渲染器印。于是英文论文的 PDF 上出现了「摘要」「参考文献」「证明。」与整段中文说明。
+            # 判据：tests/test_d45_d46_paper_language_and_appendix_width.py。
+            "**论文语言 = 正文语言，标题与页眉也是同一种语言**（业主 2026-10-24，D-45）：这批论文写英文，"
+            "那就是**整份英文** —— 正文、`Abstract` / `References` / `Appendix` 这些**标题**、页眉里的节名、"
+            "定理与证明的抬头（`Theorem` / `Lemma` / `Proof.`）**全部同一种语言**；除文献条目里的原文书名这类"
+            "必要处，**正文与标题不出现中文**，全文 CJK 字符数为 0。**抬头是文档类印的，不是你在正文里写的**："
+            "`\\documentclass{ctexart}` 的默认方案把 abstract / references / appendix / proof 四个抬头印成"
+            "「摘要」「参考文献」「附录」「证明。」，而源码里一个中文字都没有 —— 英文论文用 "
+            "`\\documentclass[11pt]{article}`（上一条配方里 `ctexart` 那一格按论文语言替换），也**不许**自己写 "
+            "`\\renewcommand{\\proofname}{证明}` 这类把抬头换成中文的重定义。"
+            "**附录那一段说明由渲染函数按论文语言生成**（`doc.write_mapping` 渲染出 `mapping-appendix.tex`）："
+            "不许手抄、不许混语言、不许为了「看着一致」去手改渲染出来的那一段 —— 手改的与 json 对不上"
+            "（`mapping_paper_mismatch`），而且那一段印出来的语言就是读者看到的论文语言。",
             "**断言只能声称它所引实验的 `result` 支持的东西**：引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）"
             "的实验时，这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），或者先去让 E 跑出一个真给出 "
             "`REPRO_RESULT:` 的实验。",

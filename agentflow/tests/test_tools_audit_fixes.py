@@ -41,7 +41,7 @@ from agentflow.tools import trace_tools as TR
 from agentflow.tools import verify_tools as VT
 from agentflow.tools.base import ToolError, ToolRegistry
 
-from conftest import add_literature, add_request, write_library_file
+from conftest import add_literature, add_request, write_library_file, write_paper
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -261,6 +261,10 @@ def test_scan_document_and_review_document_agree_on_verdict(store: Store):
     给出两个都不报错的相反结论。
     """
     seed_document(store, doc_row())
+    # 业主 2026-10-24：`review_document` 审的是论文正文（`out/paper/main.tex`）——
+    # 没有正文时它如实回"没有可审的论文"（`unreviewable`），那与本用例要测的
+    # "两条入口的 verdict 同口径"不是同一件事。
+    write_paper(store)
     reader = RV.scan_document(store.rows("documents")[0], dependencies=None)
     writer = RV.review_document(store, "0000", dependencies=None)
     assert writer["dep_check"]["checked"] is False
