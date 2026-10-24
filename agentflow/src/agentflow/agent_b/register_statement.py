@@ -1093,6 +1093,68 @@ class _RegisterStatement:
             "doc_id": str(doc_id or ""), "line_range": dict(line_norm), "bits": bits,
         }
         written = sec.record_statement(payload, role="B")
+        if written.get("merged") and not written.get("created"):
+            # 2026-10-24（业主：表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为
+            # 同种证明，可选各取所长混合成一份、重拿 V 签）：秘书把这一笔判成了"已有命题"。
+            # 两种去向，都由秘书落盘（证明清单 / 依赖 / 合并稿的覆盖都在那一笔事务里）：
+            #   - 第 N 份证明（`proof_no` >= 1、`merged_same_kind` 为假）⇒ 这里不再
+            #     调 `_attach_proofs`：秘书已经把它写进 `proofs`（或 canonical 那一格），
+            #     再写一遍就是"同一份证明两个写者"；
+            #   - 同种证明的合并稿（`merged_same_kind` 为真）⇒ 秘书把它作为那一份证明的
+            #     新版本，旧正文已进 `proof_history`，且要求 V 重签（`resign_required`）。
+            # 两种都不动 canonical 那一格以外的任何正文 —— 改 canonical 的只有合并那一档，
+            # 而它由秘书在事务里做（含留痕），不在这里补一刀。
+            stmt_now = str(written.get("stmt_id") or "")
+            proof_no = int(written.get("proof_no") or 0)
+            out = {"ok": True, "stmt_id": stmt_now, "new_row": False, "merged": True,
+                   "merged_into": str(written.get("merged_into") or stmt_now),
+                   "self_authored_review": self._self_authored_reading(self_authored),
+                   "source_lit_id": lit_id or None,
+                   "quote_verified": quote_verified, "origin": origin,
+                   "quote_mode": str(quote_mode or ""),
+                   "evidence_kind": evidence_kind,
+                   "matched_by": str(written.get("matched_by") or ""),
+                   "similarity": float(written.get("similarity") or 0.0),
+                   "proof_no": proof_no,
+                   "duplicate_reading": bool(written.get("duplicate")),
+                   "row": dict(written.get("row") or {}),
+                   "note": str(written.get("reason") or "")}
+            if proof_no >= 1:
+                out["proofs"] = [{"proof_no": proof_no}]
+            if written.get("merged_same_kind"):
+                out["merged_same_kind"] = True
+                out["resign_required"] = True
+                out["reviewed"] = bool(written.get("reviewed"))
+                out["proof_standing"] = dict(written.get("proof_standing") or {})
+                out["proof_history"] = list(written.get("proof_history") or [])
+            elif proofs_listed:
+                # 调用方这一笔还带了 `proofs` 里的第 2 份及以后（多证明清单）。秘书只把
+                # `proof_text`（清单里的 #p1）判成了第 N 份证明，所以剩下的按顺位接在它
+                # 后面 —— 不接就是静默丢掉"这一笔交上来的另外几份证明"。
+                base_no = int(written.get("proof_no") or 0)
+                extra = [{"proof_no": base_no + offset,
+                          "text": str(entry.get("text") or ""),
+                          "created_at": str(entry.get("created_at") or "")}
+                         for offset, entry in enumerate(proofs_listed, 1)]
+                more = self._attach_proofs(stmt_now, extra, canonical="", bits=bits)
+                attached_more = [int(n) for n in (more.get("attached") or [])]
+                if attached_more:
+                    listed = [{"proof_no": base_no}] if base_no >= 1 else []
+                    listed.extend({"proof_no": n} for n in attached_more)
+                    out["proofs"] = listed
+                    out["note"] += (
+                        "这一笔还带来 "
+                        + "、".join(f"#{n}" for n in attached_more)
+                        + "（清单里的第 2 份及以后），按顺位接在第 "
+                        + f"{base_no} 份之后。")
+                if more.get("refused") or (not attached_more and more.get("reason")):
+                    out["proofs_not_attached"] = {
+                        "refused": str(more.get("refused") or ""),
+                        "reason": str(more.get("reason") or ""),
+                        "already": [int(n) for n in (more.get("already") or [])]}
+            if proofs_dropped:
+                out["proofs_dropped"] = proofs_dropped
+            return out
         if written.get("upgraded") and not written.get("created"):
             # 同一份内容再交一次、这一回带了 `proof_review` 的凭据 ⇒ 秘书「改那一行」
             # （不新建）。这是 `evidence_kind` 从弱档走到 `proof_review` 的唯一一条正路：

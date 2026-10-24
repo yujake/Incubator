@@ -581,15 +581,19 @@ def test_criterion_5_every_consistency_site_goes_through_the_one_function() -> N
     """判据⑤的另一半：四处一致性读数都得走 `sha_consistency`（否则打桩覆盖不到它们）。
 
     四处：产物台账 / 台账对账 / 实验的代码 / 证明级。前两处在 `artifacts_face`，
-    后两处在 `evidence_chain` —— 源码里出现的那几个读法必须都来自同一个函数。
+    后两处在 `evidence_chain` —— 源码里出现的那几个读法必须都来自同一个函数
+    （实验那一格先过 `code_consistency` 加第四档「已撤销」，比值本身仍交给
+    `sha_consistency`，于是"把比较打桩成恒一致"照样覆盖得到它）。
     """
     src = (REPO / "src" / "agentflow" / "webui" / "readers.py").read_text(encoding="utf-8")
-    for name in ('got["code_sha_consistency"] = sha_consistency(',
+    for name in ('got["code_sha_consistency"] = code_consistency(',
                  'got["proof_sha_consistency"] = sha_consistency(',
                  '"sha_consistency": _ledger_verify_consistency(r)'):
         assert name in src, f"`readers.py` 里没有这一处（{name}）"
     assert 'return sha_consistency(row.get("sha256"), row.get("sha256_now"))' in src, (
         "台账核对那一行没有真比两份 sha")
+    assert "return sha_consistency(want, got)" in src, (
+        "实验行的代码一致没有走同一个比值函数（第四档只是状态，不是第二份比较）")
 
 
 # ====================================================================== 反真空（四面落点）

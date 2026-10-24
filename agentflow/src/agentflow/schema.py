@@ -1241,6 +1241,62 @@ EXPERIMENT_EVIDENCE_KINDS = ("proof", "cross_check", "heuristic")
 #: 一次实验对被检验命题的结论。
 EXPERIMENT_RESULTS = ("supports", "refutes", "inconclusive")
 
+#: 实验行的状态（`Experiment.status`）。只有两档：仍有效 / 已撤销。
+#:
+#: 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
+#: 撤销不是删行：`store` 的删除会让读者连「这一条曾经算数」都看不见，而课题台账要的
+#: 正是「哪一条还算数、为什么不算了」。所以撤销是两档状态加四条留痕（谁 / 何时 /
+#: 为什么 / 换成哪一份脚本）。
+#: 为什么复用 `active` / `voided` 这两个词：`STATEMENT_STATUSES` 与 `evidencebits`
+#: 的作废载荷（`bits.voided_by`）已经在用这一族词，同一件事不许有两个说法。
+EXPERIMENT_ACTIVE = "active"
+EXPERIMENT_VOIDED = "voided"
+EXPERIMENT_STATUSES = (EXPERIMENT_ACTIVE, EXPERIMENT_VOIDED)
+
+#: 撤销实验行的受控理由码（`Experiment.void_reason_code`）。
+#:
+#: 今天只有一档：脚本改了。出处是业主 2026-10-24 裁定（逐字）：「改脚本后应该重新
+#: 登记并把老登记撤销」—— 现场是 `projects/sylow3` 的 `exp 000000` 与 `exp 000001`
+#: 挂在同一个 `code_path` 上、`code_hash` 不同，页面上只报「代码不一致」，两条并列
+#: 挂着，读者无从判断哪一条还算数。
+#: 为什么是受控词表而不是自由文本：理由是机器可判的那一半（判据逐字钉
+#: `code_changed`），而「为什么撤」那句人话另有 `void_reason` 一栏。
+#: 加一档 = 加一种「老登记不再算数」的合法理由，必须先有人裁定。
+VOID_REASON_CODE_CHANGED = "code_changed"
+VOID_REASON_CODES = (VOID_REASON_CODE_CHANGED,)
+
+
+def experiment_is_voided(row: Any) -> bool:
+    """这一行实验是不是已经撤销（读侧唯一判据）。
+
+    为什么读侧也要一个函数：`tools.verify_tools.evidence_for`（读数）与
+    `closing._leg_reading` 的验收档必须用同一个谓词问「这条还算不算证据」——
+    两处各写一份，口径一分家就没有任何测试能看见，而读者会同时看到两个数。
+    `None` / 非对象一律按「没撤销」读；`status` 缺席的历史行同理（它们是加这一列
+    之前写的，当时每一行都是有效行）。
+    """
+    if not isinstance(row, dict):
+        return False
+    return str(row.get("status") or "") == EXPERIMENT_VOIDED
+
+
+def active_experiment_rows(rows: Iterable[Any]) -> list[Any]:
+    """从一批实验行里滤掉已撤销的那些（顺序不变）。"""
+    return [row for row in rows if not experiment_is_voided(row)]
+
+
+def experiment_void_reason(*, code_hash_from: Any, code_hash_to: Any) -> str:
+    """脚本改了那一档的撤销理由（逐字格式的唯一出处）。
+
+    格式是「脚本 <旧 sha 前 16 位> → <新 sha 前 16 位>」：十六进制串不截成八位那种
+    半截哈希（既不能核也不能读），而 16 位足够在同一台账里分清两份脚本。
+    为什么要有这个函数：写侧（`agent_e.run_experiment`）与 `validate` 的判据都要
+    这一句，两处各拼一次就会有一处悄悄改了格式。
+    """
+    old = str(code_hash_from or "").strip()[:16]
+    new = str(code_hash_to or "").strip()[:16]
+    return f"脚本 {old} → {new}"
+
 #: 三种否定必须分开（FC-25）。
 #:
 #:   disproved           —— 已证否（有可复现的反例）
@@ -1515,6 +1571,22 @@ class Experiment:
     search_bound: dict = field(default_factory=dict)
     for_question_id: str | None = None
     notes: str = ""
+    #: 这一行还算不算数（受控词表 `EXPERIMENT_STATUSES`）。
+    #:
+    #: 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
+    #: 两档：`active`（仍有效）/ `voided`（已撤销）。撤销不是删除 —— 手稿里引过的
+    #: `exp:<号>` 必须还能打开，读者要能看见「这一条曾经算数、为什么不算了」。
+    status: str = EXPERIMENT_ACTIVE
+    #: 撤销留痕：谁撤的、什么时候、为什么（人话）、受控理由码。
+    #: 四格只在 `status="voided"` 时非空 —— 有效行上留着半截撤销痕迹，读侧就分不清
+    #: 「没撤」与「撤了一半」（`validate` 因此两档都判）。
+    voided_by: str = ""
+    voided_at: str = ""
+    void_reason: str = ""
+    void_reason_code: str = ""
+    #: 撤销时那个脚本的新 sha256（整串）。老那一份就是本行的 `code_hash` ⇒ 两格合起来
+    #: 是「脚本 旧 → 新」这句人话的可核依据（`void_reason` 只印两边的前 16 位）。
+    voided_code_to: str = ""
     created_at: str = ""
     created_by: str = "agent-E"
 
@@ -1692,6 +1764,48 @@ class Experiment:
                 )
         # `for_question_id` 必须是 4 位号：那一条由上面那次
         # `experiment_preflight_problems()`（R-01）判过 —— 同一处口径，不在这里重复判。
+
+        # ---- 硬约束 7：撤销是「两档状态 ＋ 四条留痕」，不许撤一半
+        #
+        # 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
+        # 为什么要在 schema 层判：撤销是「这一行不再是证据」的唯一开关，而读侧
+        # （`experiment_is_voided`）只看 `status` 一个词 —— 一条 `status="voided"`
+        # 却没有理由的行，在读数里会变成「无缘无故不算数了」，那种行比不撤更坏。
+        # 反方向同样要判：有效行上挂着撤销留痕，读的人会以为它已经被撤过。
+        if self.status not in EXPERIMENT_STATUSES:
+            raise ValueError(f"status 必须是 {EXPERIMENT_STATUSES} 之一，收到 {self.status!r}")
+        _void_trail = {"voided_by": self.voided_by, "voided_at": self.voided_at,
+                       "void_reason": self.void_reason,
+                       "void_reason_code": self.void_reason_code,
+                       "voided_code_to": self.voided_code_to}
+        if self.status == EXPERIMENT_VOIDED:
+            if self.void_reason_code not in VOID_REASON_CODES:
+                raise ValueError(
+                    f"撤销的实验行必须给受控理由码 ∈ {VOID_REASON_CODES}，"
+                    f"收到 {self.void_reason_code!r}（理由码是机器可判的那一半）")
+            _missing = [name for name, value in _void_trail.items()
+                        if not str(value or "").strip()]
+            if _missing:
+                raise ValueError(
+                    f"撤销的实验行缺留痕 {_missing}：谁撤的 / 什么时候 / 为什么 / "
+                    "换成哪一份脚本，缺一条都复核不了这次撤销")
+            if self.void_reason_code == VOID_REASON_CODE_CHANGED:
+                if not str(self.code_hash or "").strip():
+                    raise ValueError(
+                        "理由码 code_changed 的撤销行必须留 code_hash（被改掉的那一份脚本）")
+                _want = experiment_void_reason(code_hash_from=self.code_hash,
+                                               code_hash_to=self.voided_code_to)
+                if self.void_reason.strip() != _want:
+                    raise ValueError(
+                        "理由码 code_changed 的 void_reason 必须逐字是 "
+                        f"{_want!r}（两个 sha 前 16 位），收到 {self.void_reason!r}")
+        else:
+            _filled = [name for name, value in _void_trail.items()
+                       if str(value or "").strip()]
+            if _filled:
+                raise ValueError(
+                    f"有效（status={self.status!r}）的实验行不许带撤销留痕：{_filled} ——"
+                    "撤了一半的行会让读侧分不清它到底还算不算数")
 
     def to_dict(self) -> dict:
         return asdict(self)

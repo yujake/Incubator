@@ -819,6 +819,9 @@ export interface ExperimentRow {
   created_by: string;
   for_question_id: string;
   code_sha_consistency: string;
+  code_sha_from: string;
+  code_sha_to: string;
+  void_reason: string;
   exhaustion_path: string;
   exhaustion_tri: Tri;
   by_role: string;

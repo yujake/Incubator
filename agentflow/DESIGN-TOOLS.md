@@ -81,7 +81,7 @@ class ToolSpec:
 | 文献检索（A 专用） | `search.literature` / `search.download` / `search.dedup_check` / `search.providers` | A | `literature`/`providers`/`dedup_check` = `read`；`download` = `write_local` | `literature`/`providers`/`download` = **`egress`**；`dedup_check` = `none` |
 | OCR（B 专用） | `ocr.run` / `ocr.detect_text_layer` / `ocr.backends` | B | `detect_text_layer` = `read`；`run`/`backends` = `write_local` | `run` = **`egress`**（首次下 easyocr 模型）；其余 `none` |
 | 图分析（C 组为主） | `graph.build` / `graph.neighbors` / `graph.relations_between` / `graph.stats` | C D | `read` | `none` |
-| 溯源（D 组为主） | `trace.chain` / `trace.concept` / `trace.literature` / `trace.relation` | C D | `read` | `none` |
+| 溯源（D 组为主） | `trace.chain` / `trace.concept` / `trace.literature` / `trace.relation` / `trace.children` | C D | `read` | `none` |
 | 研究（D 专用） | `research.submit_gap` / `research.list_gaps` / `research.write_note` / `research.poll_waiting` / `research.set_status` | D | `list_gaps` / `poll_waiting` = `read`；`submit_gap`/`write_note`/`set_status` = `write_local` | 全部 `none` |
 
 > ⚠️ **本表的"副作用"列是写作时的快照**，`network` 那两格今天已不成立（拆成两根轴，见上表说明）；
@@ -110,7 +110,7 @@ class ToolSpec:
 > | `agentflow/src/agentflow/tools/search_tools.py` | `search.*`（`search.local` / `search.shelf` / `search.register` / `search.ingest_local` 是后加的） | 8 |
 > | `agentflow/src/agentflow/tools/ocr_tools.py` | `ocr.*` | 3 |
 > | `agentflow/src/agentflow/tools/graph_tools.py` | `graph.*` | 4 |
-> | `agentflow/src/agentflow/tools/trace_tools.py` | `trace.*` | 4 |
+> | `agentflow/src/agentflow/tools/trace_tools.py` | `trace.*`（`trace.children` 是 2026-10-24 后加的） | 5 |
 > | `agentflow/src/agentflow/tools/research_tools.py` | `research.*`（`poll_waiting` / `set_status` 是后加的） | 5 |
 > | `agentflow/src/agentflow/tools/verify_tools.py` | `verify.*` | 6 |
 > | `agentflow/src/agentflow/tools/attack_tools.py` | `attack.*` | 6 |

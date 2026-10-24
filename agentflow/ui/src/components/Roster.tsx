@@ -38,12 +38,22 @@
  *   - 必须把 `reason` 原样摆出来（后端逐档写清了是哪一档）；
  *   - 节点列表为空时也只能说"没读到"，不许说"没有"。
  * 反过来，`answer === "ok"` 而 `nodes` 是空数组才算"读到了、里面是 0 个"（合法空态）。
+ *
+ * ## 取数不许挨着渲染（2026-10-24 真机故障之后的划线）
+ * 改前父子关系与"缺号怎么办"都长在这个组件里：`data.roots.map(renderBranch)`，而
+ * `renderBranch` 第一句就是 `ctx.childrenOf[tid] ?? []`。真机上跑着的是旧后端
+ * （进程起在 D-51 落盘之前），那一份读数里没有 `children_of` ⇒ `undefined[tid]`
+ * 当场抛 TypeError，正文那一段永远到不了 DOM，于是"抬头在、树一行都没有"。
+ * 现在这些判断全在 `../rosterTree`（纯函数、全函数、可被判据直接跑），这一层只
+ * 负责把算好的行摆成 DOM：它不再直取任何一格可能不存在的读数。
  */
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 
 import { api } from "../api";
 import { useFace } from "../live";
+import { buildRosterTree } from "../rosterTree";
+import type { TreeRow } from "../rosterTree";
 import type { RosterChild, RosterInbox, RosterNode, RosterView } from "../types";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
@@ -62,13 +72,18 @@ const DEFAULT_OPEN_DEPTH = 2;
  */
 const openOverride: Map<string, boolean> = new Map();
 
-/** 一个节点此刻开不开：用户点过就照用户点的，没点过就按默认层数算。 */
+/** 一个节点此刻开不开：用户点过就照用户点的，没点过就按默认层数算。
+ *
+ * 层号读不出来（缺那一格）按第 1 层算：折叠守的是"别把页面淹掉"，它不该反过来
+ * 把一整支藏起来 —— 看不见的节点等于没画。
+ */
 function isOpen(node: RosterNode): boolean {
   const asked = openOverride.get(node.task_id);
   if (asked !== undefined) {
     return asked;
   }
-  return node.depth <= DEFAULT_OPEN_DEPTH;
+  const depth = Number.isFinite(node.depth) ? node.depth : 1;
+  return depth <= DEFAULT_OPEN_DEPTH;
 }
 
 /** 名册名那几档的空值（根不在任何人的名册里；名字一经退役永久不复用）。 */
@@ -205,12 +220,8 @@ function NodeDetail(props: { node: RosterNode }) {
 
 /** 递归画树要用的那几样东西（一路传下去，免得每次取数都重算一遍）。 */
 interface TreeCtx {
-  byId: Map<string, RosterNode>;
-  childrenOf: Record<string, string[]>;
   /** 点开的那个节点的明细（一次只开一个，与改前一致）。 */
   picked: string;
-  /** 已经画过的节点（防环：名册链成环时不许变成死循环）。 */
-  visited: Set<string>;
   onToggle: (node: RosterNode) => void;
   onPick: (tid: string) => void;
 }
@@ -220,32 +231,26 @@ interface TreeCtx {
  * 缩进与连接线由嵌套的 `.roster-kids` 给（`border-left` 就是那条竖线），所以这里
  * 不再按 `depth` 现算左缩进 —— 那正是改前"按层平铺"的形态。层号仍然印在行首
  * （`dN` 是读数，不是缩进的来源）。
+ *
+ * 父子关系、"这一支缺号"这些判断全在 `rosterTree.buildRosterTree` 里做完了：
+ * 这里只负责把一行树摆成 DOM。改前这里自己读 `children_of` 与 `nodes`，后端少给
+ * 一格就整片不画 —— 那一次故障的教训是"取数不许挨着渲染"。
  */
-function renderBranch(tid: string, ctx: TreeCtx): ComponentChildren {
-  const node = ctx.byId.get(tid);
-  if (node === undefined) {
+function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
+  const node = row.node;
+  if (node === null) {
+    // 父子关系里有它、可这次读数里没有它（截断 / 成环）：如实摆一行，不许跳过。
     return (
-      <div class="roster-node roster-missing" key={`missing:${tid}`}>
-        <span class="mono">{tid === "" ? "unknown" : tid}</span>
-        <span class="readings">
-          这一份父子关系里有它，但这次读数里没有它的节点（规模上限截断了？）
-        </span>
+      <div class="roster-node roster-missing" key={`missing:${row.task_id}`}>
+        <span class="mono">{row.task_id === "" ? "unknown" : row.task_id}</span>
+        <span class="readings">{row.text}</span>
       </div>
     );
   }
-  if (ctx.visited.has(tid)) {
-    return (
-      <div class="roster-node roster-missing" key={`again:${tid}`}>
-        <span class="mono">{tid}</span>
-        <span class="readings">这一支已经在上面画过（名册链成环）⇒ 不再往下展开</span>
-      </div>
-    );
-  }
-  ctx.visited.add(tid);
-  const kids = ctx.childrenOf[tid] ?? [];
+  const kids = row.kids;
   const open = isOpen(node);
   return (
-    <div class="roster-branch" key={tid}>
+    <div class="roster-branch" key={row.task_id}>
       <div class="roster-node">
         <div class="roster-row">
           {kids.length === 0 ? (
@@ -266,8 +271,8 @@ function renderBranch(tid: string, ctx: TreeCtx): ComponentChildren {
           <button
             type="button"
             class="roster-pick"
-            aria-expanded={ctx.picked === tid}
-            onClick={() => ctx.onPick(tid)}
+            aria-expanded={ctx.picked === node.task_id}
+            onClick={() => ctx.onPick(node.task_id)}
           >
             <span class="mono">d{node.depth}</span>
             <span class="roster-name">{nameText(node)}</span>
@@ -284,11 +289,9 @@ function renderBranch(tid: string, ctx: TreeCtx): ComponentChildren {
           </button>
         </div>
       </div>
-      {ctx.picked === tid ? <NodeDetail node={node} /> : null}
+      {ctx.picked === node.task_id ? <NodeDetail node={node} /> : null}
       {open && kids.length > 0 ? (
-        <div class="roster-kids">
-          {kids.map((kid) => renderBranch(kid, ctx))}
-        </div>
+        <div class="roster-kids">{kids.map((kid) => renderBranch(kid, ctx))}</div>
       ) : null}
     </div>
   );
@@ -306,10 +309,12 @@ export function RosterPanel() {
   // 展开态本身住在模块级的 `openOverride` 里；这个计数器只负责让一次点击变成一次重绘。
   const [, setTick] = useState<number>(0);
   const data: RosterView | null = face.data;
+  // `files` 那一格也照"取不到就是 0 份"处理：抬头这一句不许成为整张卡片的崩溃点。
+  const files = data === null || !Array.isArray(data.files) ? 0 : data.files.length;
   const subtitle =
     data === null
       ? ""
-      : `节点 ${cell(data.count)} 个 · 最深 ${cell(data.max_depth)} 层 · 读到的名册/对照表文件 ${data.files.length} 份`;
+      : `节点 ${cell(data.count)} 个 · 最深 ${cell(data.max_depth)} 层 · 读到的名册/对照表文件 ${files} 份`;
   return (
     <Card
       title="名册（roster）"
@@ -336,9 +341,12 @@ export function RosterPanel() {
 
 /** 名册卡片的正文（读数齐了之后那一半）。
  *
- * 为什么单独一个组件：树的遍历要在渲染之前先跑一遍（`visited` 是复用的），
- * 而 `RosterPanel` 那一层还要管取数与三态——把"画树"这一段单独摆开，读的人
- * 一眼看得出哪几行是树、哪几行是壳。
+ * 为什么单独一个组件：树的遍历要在渲染之前先跑一遍，而 `RosterPanel` 那一层还要
+ * 管取数与三态——把"画树"这一段单独摆开，读的人一眼看得出哪几行是树、哪几行是壳。
+ *
+ * 父子关系、"缺号"、"走不到"这些判断都不在这里：它们在 `rosterTree.buildRosterTree`
+ * 里（纯函数、全函数）。改前这一段自己读 `data.roots` / `data.children_of`，后端
+ * 少给一格就整片不画 —— 取数不许挨着渲染，这就是那一次故障的教训。
  */
 function RosterBody(props: {
   data: RosterView;
@@ -347,44 +355,18 @@ function RosterBody(props: {
   repaint: () => void;
 }) {
   const data = props.data;
-  const byId = new Map<string, RosterNode>();
-  for (const n of data.nodes) {
-    byId.set(n.task_id, n);
-  }
+  const tree = buildRosterTree(data);
   const ctx: TreeCtx = {
-    byId,
-    childrenOf: data.children_of,
     picked: props.picked,
-    visited: new Set<string>(),
     onToggle: (node: RosterNode) => {
       openOverride.set(node.task_id, !isOpen(node));
       props.repaint();
     },
     onPick: (tid: string) => props.setPicked(props.picked === tid ? "" : tid),
   };
-  // 根按后端给的顺序画（多根是合法的：一个工作区可以有好几趟顶趟）。
-  const branches = data.roots.map((root) => renderBranch(root, ctx));
-  // "从根上走不到"要按完整的父子关系算，不能按"画出来的那些"算：折叠起来的分支
-  // 只是没画，它并没有走不到。所以这里另跑一遍可达性（成环时靠 reached 收敛）。
-  const reached = new Set<string>();
-  let frontier = [...data.roots];
-  while (frontier.length > 0) {
-    const next: string[] = [];
-    for (const tid of frontier) {
-      if (reached.has(tid)) {
-        continue;
-      }
-      reached.add(tid);
-      for (const kid of data.children_of[tid] ?? []) {
-        if (!reached.has(kid)) {
-          next.push(kid);
-        }
-      }
-    }
-    frontier = next;
-  }
-  // 走不到的节点（名册链成环 / 父不在这次读数里）：如实摆出来，不许静默丢。
-  const unreached = data.nodes.filter((n) => !reached.has(n.task_id));
+  const nodes = Array.isArray(data.nodes) ? data.nodes.length : 0;
+  const coverage = data.coverage ?? ({ tasks_agents: null, roster_nodes: null, unrostered: null });
+  const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
   return (
     <>
       <div class="readings">
@@ -402,22 +384,35 @@ function RosterBody(props: {
           （后端给的计数栏是 null，不是 0）。
         </div>
       ) : null}
-      {data.nodes.length === 0 ? (
+      {nodes === 0 ? (
         <div class="empty">
           {data.answer === "ok"
             ? "读到了名册，但里面一个节点都没有（合法空态：读到了、里面是 0 个）。"
             : "节点列表是空的 —— 与上面那句「名册没读到」一起读，不许当成「没有子代理」。"}
         </div>
-      ) : (
+      ) : null}
+      {tree.notes.map((note) => (
+        <div class="readings roster-note" key={note}>
+          {note}
+        </div>
+      ))}
+      {tree.missing.length === 0 ? null : (
+        <div class="readings roster-note">
+          这一份父子关系里有 {tree.missing.length} 个编号不在这次的节点读数里（可能被截断）
+          ⇒ 逐个摆出说明行，不跳过：
+          <span class="roster-diag">{tree.missing.join("、")}</span>
+        </div>
+      )}
+      {nodes === 0 ? null : (
         <div class="roster-tree">
-          {branches}
-          {unreached.length === 0 ? null : (
+          {tree.rows.map((row) => renderBranch(row, ctx))}
+          {tree.unreached.length === 0 ? null : (
             <div class="roster-missing">
               <span class="readings">
-                还有 {unreached.length} 个节点从根上走不到（名册链成环，或它的父不在这次
+                还有 {tree.unreached.length} 个节点从根上走不到（名册链成环，或它的父不在这次
                 读数里）⇒ 按平铺摆在这里，不当成它们不存在：
               </span>
-              {unreached.map((n) => (
+              {tree.unreached.map((n) => (
                 <span class="roster-diag" key={`unreached:${n.task_id}`}>
                   {" "}
                   d{n.depth} {nameText(n)}（<span class="mono">{n.task_id}</span>）
@@ -432,18 +427,18 @@ function RosterBody(props: {
           这一棵树超过后端的规模上限 ⇒ 只画了一部分（`truncated=true`）。
         </div>
       ) : null}
-      {data.coverage.roster_nodes === null ? null : (
+      {coverage.roster_nodes === null ? null : (
         <div class="readings">
-          对账：台账里 {cell(data.coverage.tasks_agents)} 个代理行 · 名册上{" "}
-          {cell(data.coverage.roster_nodes)} 个节点 · 其中{" "}
-          {cell(data.coverage.unrostered)} 个「有父的代理行」不在任何名册里
+          对账：台账里 {cell(coverage.tasks_agents)} 个代理行 · 名册上{" "}
+          {cell(coverage.roster_nodes)} 个节点 · 其中{" "}
+          {cell(coverage.unrostered)} 个「有父的代理行」不在任何名册里
           （名册机制上线之前落的行）。
         </div>
       )}
-      {data.diagnostics.length === 0 ? null : (
+      {diagnostics.length === 0 ? null : (
         <div class="readings">
           逐条诊断：
-          {data.diagnostics.map((d) => (
+          {diagnostics.map((d) => (
             <span class="roster-diag" key={d}>
               {" "}
               {d}

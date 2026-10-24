@@ -31,6 +31,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import manuscripts as MS
 from . import proofloc as _PL
+from . import propositionkey as _PK
 from . import schema as S
 from . import statementbody as _SB
 
@@ -601,6 +602,10 @@ STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
     # 多段可选证明：B 自己分的段（每段一组 `path_group`）。不给就把
     # "定理内容 + 证明过程"当一段 —— 秘书不按空行/字样猜 B 想分几段（`draft/97` §14.11）。
     "proof_paths",
+    # 2026-10-24（业主：表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为同种
+    # 证明，可选"各取所长混合成一份、重拿 V 签"）：`merge=True` 是那一档可选项的开关。
+    # 它必须能过这一层的白名单 —— 否则调用方交上来的合并稿会被静默当成"另一份新证明"。
+    "merge",
 })
 #: 键名别名 ⇒ 正名（每一列的别名必须唯一，否则 `_statement_key_candidate` 返回空 =
 #: "不猜"）。写在这里而不是散在代码里，是为了让"认哪些写法"可被一条判据逐条读出来。
@@ -621,6 +626,36 @@ STATEMENT_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "proof_paths": ("proof_groups", "proof_segments"),
     "concepts": ("definitions",),
 }
+#: 同一命题的判据（业主 2026-10-24）：命中键或命中相似度 ⇒ 这一笔不是新命题，
+#: 而是那条命题的第 N 份证明。缺省阈值与唯一实现都在 `propositionkey`，
+#: 这里只是把它们摆到秘书这一层（可注入：构造参数 `same_proposition_jaccard`）。
+SAME_PROPOSITION_JACCARD = _PK.SAME_PROPOSITION_JACCARD
+#: 同种证明的判据（同一命题下的第 N 份证明）：命中 ⇒ 不新增证明号，受控拒绝
+#: `proof_same_kind`（或 `merge=True` 合成一份并重拿 V 签）。
+PROOF_SAME_JACCARD = _PK.PROOF_SAME_JACCARD
+#: 同一命题命中的两条依据（进返回值与拒信：读的人要能分辨"凭什么并的"）。
+MERGED_BY_KEY = _PK.BASIS_KEY
+MERGED_BY_SIMILARITY = _PK.BASIS_SIMILARITY
+#: 同种证明的拒收码（写侧与拒信共用这一个字面量）。
+PROOF_SAME_KIND = "proof_same_kind"
+#: 参与"同一命题"判定的 kind（命题性的那几档）。
+#:
+#: 为什么需要这一格：`Statement.kind` 刻意是自由文本（`schema.Statement` 的类 docstring
+#: 写明"不参与任何判据分支"），于是"两条表述几乎相同的命题是同一个"这句话不能对所有
+#: kind 都成立 —— 一条 `definition` 不是命题，把一条定理并进一条定义（或反过来）会让
+#: 台账上少掉一整类条目，而"并了"这件事在盘上看起来完全合法。真机反例就在本仓的判据里：
+#: `tests/test_agent_b_concept_registration_carries_kind.py` 用"同一条正文、只换
+#: theorem / definition"核对五个位是否逐字相同 —— 那两条本来就该是两行。
+#: 反过来，`theorem` 与 `lemma` 之间要能并：同一份东西在两篇文献里被叫成两种名字是常态，
+#: 而那不是"两条命题"。
+#: 认不出的 kind 一律不并（保守：并错一条的代价比漏并大）。
+PROPOSITION_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary",
+                                      "conjecture")
+
+
+def _is_proposition_kind(kind: Any) -> bool:
+    """这个 kind 算不算"命题性的"（决定它参不参与同一命题判定）。"""
+    return str(kind or "").strip().lower() in PROPOSITION_KINDS
 #: 一步依赖认得的来源键 ⇒ `(来源字段, 表, 表的 id 字段, 该给的 `kind` 缺省)`。
 #: 顺序就是"先认哪一个"：一步最多给一个来源（`Dependency.validate` 的"四选一"）。
 STEP_SOURCE_KEYS: tuple[tuple[str, str, str, str, str], ...] = (
@@ -792,7 +827,9 @@ class Secretary:
     def __init__(self, role: str, *, root: str | Path, store: Any = None,
                  registry: Any = None, seam: Any = None, log: Any = None,
                  deadline_sec: float = DEFAULT_DEADLINE_SEC,
-                 enable_model: bool = False, sid: str | None = None) -> None:
+                 enable_model: bool = False, sid: str | None = None,
+                 same_proposition_jaccard: float = SAME_PROPOSITION_JACCARD,
+                 proof_same_jaccard: float = PROOF_SAME_JACCARD) -> None:
         self.role = str(role)
         self.root = Path(str(root))
         self.store = store
@@ -800,6 +837,11 @@ class Secretary:
         self.seam = seam
         self.log = log
         self.deadline_sec = float(deadline_sec)
+        #: 同一命题 / 同种证明的两个阈值（业主 2026-10-24）。可注入的理由：这两条判据的
+        #: 松紧是口径问题，不是实现问题 —— 不同工作区的表述习惯不同（sylow3 那种带
+        #: 长尾注的登记与短句式的登记），阈值该能被一次实验性调参改掉，而不必改代码。
+        self.same_proposition_jaccard = float(same_proposition_jaccard)
+        self.proof_same_jaccard = float(proof_same_jaccard)
         #: 会话号（花销归因要读 `llm_call` 事件；`None` = 缺省会话，与 `llmseam` 同一口径）。
         self.sid = sid
         #: 判断类要不要真发一次模型调用（`draft/53` §12 / `draft/55` §5.2）。
@@ -3003,6 +3045,16 @@ class Secretary:
         洗不动）、`unresolved_dependency`（依赖指着一个不在册的 id）、`unknown_lit_id`（出处不在册）、
         `empty_statement`（命题缺 `statement_full` —— 只有短版不算数）。概念的定义空着不是拒绝：它落成
         `pending_definition` + 待补标记（`D12` 甲）。
+        ## 同一命题 / 同种证明（业主 2026-10-24）
+        登记时先按 `statement_full` 的规范化值查重（老口径，逐字不变）；老口径没命中时再判
+        "是不是同一条命题"（`propositionkey.same_proposition`：确定性键相同，或词面相似度
+        ≥ `same_proposition_jaccard`）。命中 ⇒ 不新建命题行，而是那条命题的第 N 份证明：证明
+        落 `proofs` 清单（canonical 空时落 `proof_text`）、依赖落 `used_by="stmt:#pN"`。
+        没有证明正文的重复登记不进这一支（它不产生"第 N 份证明"，老口径原样保留）。
+        同一命题下新交来的证明与在册某一份同种（`proof_same_kind`，相似度 ≥
+        `proof_same_jaccard`）⇒ 不新增证明号，受控拒绝并点名第几份；调用方给 `merge=True`
+        并交合并稿时，合并稿成为那一份证明的新版本、旧正文进 `proof_history`，且要求 V 重签
+        （`resign_required=True`，未重签前读侧现算为未成立）。
         ## 为什么"洗不动"在这里是硬拒（而在派活那条路上不是）：派活洗不动可以原样发出去，让下游闸门去拒
         （`refused` 行本身就是证据）；写入这条路上没有下游闸门：`Statement.validate` 只查形状，而"键名是别名"这种错会让内容静默落成空字段。
         写是不可逆的，所以这里选"不写"（与 `draft/90` §1.2 对"硬拒"的取舍同一条理由：拒绝是受控的，静默写坏不是）。
@@ -3012,7 +3064,11 @@ class Secretary:
         否则整笔不写（不许留一条挂空号的依赖 —— 那正是"依赖图静默少一环"的成因）。
         """
         out: dict[str, Any] = {"checked": False, "created": False, "duplicate": False,
-                               "upgraded": False,
+                               "upgraded": False, "merged": False, "merged_into": "",
+                               "merged_same_kind": False, "proof_no": 0,
+                               "matched_by": "", "similarity": 0.0, "same_kind": [],
+                               "proposition_state": "", "proposition_reason": "",
+                               "resign_required": False, "reviewed": False,
                                "stmt_id": "", "deps_written": 0, "path_groups": 0,
                                "tables": [], "washed": False, "changes": [],
                                "refused": "", "reason": "", "pending": []}
@@ -3421,54 +3477,16 @@ class Secretary:
                                    "（确实要另起一条，请给 force_new）"
                                    + str(upgraded.get("reason") or "")))
                 return out
-            steps, missing = _resolve_dep_steps(groups, tx)
-            if missing and body.get("deps"):
-                # 显式给的依赖指着不在册的号 ⇒ 整笔不写（G 那一族的契约）
-                out.update(refused="unresolved_dependency",
-                           reason=("依赖里有一条指着不在册的 id ⇒ 整笔不写（不许留一条挂空号的"
-                                   "依赖：那正是'依赖图静默少一环'的成因）"),
-                           unresolved=missing)
+            # ---- 2026-10-24（业主：表述几乎相同的两条命题是同一个；证明方式几乎相同的
+            # 视为同种证明）：同一命题 ⇒ 并成第 N 份证明；同种证明 ⇒ 受控拒绝或合并。
+            merged = self._merge_into_proposition(tx, body, full=full, kind=kind,
+                                                  groups=groups,
+                                                  force_new=bool(force_new), out=out)
+            if merged is not None:
+                return merged
+            steps = self._resolve_write_steps(tx, body, out, groups)
+            if steps is None:
                 return out
-            if missing:
-                # 从证明文本里扫出来的引用：业主 §14.11 的判据是"那条边落 `dangling`
-                # 并在读数里点名，不整笔拒" —— 拒了等于把整条定理丢掉，而"证明里引了
-                # 一个还不存在的号"正是最该留下痕迹的那件事。
-                #
-                # 两档必须分开（`_resolve_dep_steps` 的 `why` 把它们区分开）：
-                # "表里没有这个号" ⇒ 落一条 `dangling` 边；"这一步本身不合法"
-                # （来源不是四选一 / kind 不在词表里）⇒ 不落边，但进 `deps_unmappable`
-                # 点名 —— 把后者也写成 `dangling` 会造出一条形状就不对的依赖行，
-                # 而"写一条坏行"比"少写一条并点名"更坏。
-                kept = list(steps)
-                for m in missing:
-                    stp = dict(m.get("step") or {})
-                    why = str(m.get("why") or "")
-                    if "表里没有" in why:
-                        stp["status"] = "dangling"
-                        # 来源要从键名翻到字段名：`_resolve_dep_steps` 成功那一路
-                        # 已经翻过了（它返回的 step 带 `source_*`），而走 `missing` 这一路的
-                        # step 是输入的副本（只有 `stmt_id` 这种键名）⇒ 不翻的话
-                        # 悬空边会落成"四选一个来源都没有"的行（实测抓到：`source_stmt_id=None`）。
-                        for _key, _field, _table, _idf, _dkind in STEP_SOURCE_KEYS:
-                            if str(stp.get(_key) or "").strip():
-                                stp[_field] = str(stp[_key]).strip()
-                                break
-                        # `Dependency.validate` 的硬要求：`status="dangling"` 必须写
-                        # `status_reason`（"只标状态不说原因 = 记了一笔没人能接手"）。
-                        stp["status_reason"] = (
-                            f"证明文本里引用了 {stp.get('label') or stp.get('code')}，"
-                            f"而{why} ⇒ 这条依赖边**留着**并标 `dangling`（不整笔拒、也不丢掉它："
-                            "丢掉等于依赖图静默少一环）；等那一行进库之后由下一次核对闭合")
-                        kept.append(stp)
-                        out["deps_dangling"].append(
-                            {"ref": str(stp.get("label") or stp.get("code") or ""),
-                             "path_group": int(m.get("path_group") or 1), "why": why})
-                    else:
-                        out["deps_unmappable"].append({
-                            "ref": str(stp.get("label") or stp.get("code") or ""),
-                            "path_group": int(m.get("path_group") or 1),
-                            "why": f"扫出来的这一步落不了：{why}"})
-                steps = kept
             lit = str(body.get("source_lit_id") or "")
             if lit and tx.find("literature", lit_id=lit) is None:
                 lit_rows = tx.rows("literature")
@@ -3560,40 +3578,455 @@ class Secretary:
             if refused_concepts:
                 out["concepts_refused"] = refused_concepts[:20]
             out["concept_quota"] = quota.reading()
-            for step in steps:
-                dep_id = tx.alloc_id(S.TABLES["dependencies"]["id_kind"])
-                # 多证明模型（业主 2026-10-22）：这条命题的依赖属于它的第几条证明。
-                # 载荷没写 ⇒ canonical（第 1 条）⇒ 生成出来的 `used_by` 与改前逐字相同
-                # （`proofloc.used_by_of` 对第 1 条不写 `#pN` 尾巴）。
-                # `path_group` 一个字没动：它说的是"第几条路径"，与"第几条证明"是两维。
-                proof_no = step.get("proof_no") or body.get("proof_no") or _PL.DEFAULT_PROOF_NO
-                try:
-                    proof_no = int(proof_no)
-                except (TypeError, ValueError):
-                    proof_no = _PL.DEFAULT_PROOF_NO
-                dep = S.Dependency(
-                    dep_id=dep_id,
-                    used_by=_PL.used_by_of(f"stmt:{stmt_id}", proof_no),
-                    kind=str(step.get("kind") or "theorem"),
-                    label=str(step.get("label") or "") or _dep_label(step),
-                    source_lit_id=step.get("source_lit_id"),
-                    source_experiment_id=step.get("source_experiment_id"),
-                    source_stmt_id=step.get("source_stmt_id"),
-                    source_doc_id=step.get("source_doc_id"),
-                    quote=str(step.get("quote") or ""),
-                    status=str(step.get("status") or "closed"),
-                    # `status != "closed"` 时 `Dependency.validate` 要求非空理由
-                    # （扫出来的悬空引用在 `_record_statement_tx` 里已经写好了这一格）。
-                    status_reason=str(step.get("status_reason") or ""),
-                    page_range=S.PageRange(),
-                    path_group=int(step["path_group"]),
-                    created_at=S.now_iso(), created_by=f"secretary-{self.role}")
-                dep.validate()
-                tx.upsert("dependencies", dep.to_dict(), note="record_statement:dependency")
+            self._write_dep_steps(tx, steps, stmt_id=stmt_id, body=body)
             written.append("dependencies")
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
                    row=row.to_dict(), tables=written, deps_written=len(steps),
                    path_groups=len(groups), pending_concepts=pending_concepts)
+        return out
+
+    def _resolve_write_steps(self, tx: Any, body: Mapping[str, Any],
+                             out: dict[str, Any], groups: list[list[dict[str, Any]]]
+                             ) -> list[dict[str, Any]] | None:
+        """把依赖组解析成可落盘的步骤；判不了就返回 `None`（调用方据此整笔不写）。
+
+        从 :meth:`_record_statement_tx` 里拆出来是因为 2026-10-24 之后有两个调用点：
+        "新建一条命题"与"并进已有命题的第 N 份证明"。两处必须用同一套判据 ——
+        各写一份的形态是"两条路径对同一条悬空依赖给出两种处置"，而那种漂移没有
+        任何读数会响（与 `_resolve_dep_steps` 的注释同一条理由）。
+        三态：`None` = 拒（显式给的依赖指着不在册的号）；列表 = 可写（悬空边落
+        `dangling` 并点名，扫不动的进 `deps_unmappable`）。
+        """
+        steps, missing = _resolve_dep_steps(groups, tx)
+        if missing and body.get("deps"):
+            # 显式给的依赖指着不在册的号 ⇒ 整笔不写（G 那一族的契约）
+            out.update(refused="unresolved_dependency",
+                       reason=("依赖里有一条指着不在册的 id ⇒ 整笔不写（不许留一条挂空号的"
+                               "依赖：那正是'依赖图静默少一环'的成因）"),
+                       unresolved=missing)
+            return None
+        if not missing:
+            return steps
+        # 从证明文本里扫出来的引用：业主 §14.11 的判据是"那条边落 `dangling`
+        # 并在读数里点名，不整笔拒" —— 拒了等于把整条定理丢掉，而"证明里引了
+        # 一个还不存在的号"正是最该留下痕迹的那件事。
+        #
+        # 两档必须分开（`_resolve_dep_steps` 的 `why` 把它们区分开）：
+        # "表里没有这个号" ⇒ 落一条 `dangling` 边；"这一步本身不合法"
+        # （来源不是四选一 / kind 不在词表里）⇒ 不落边，但进 `deps_unmappable`
+        # 点名 —— 把后者也写成 `dangling` 会造出一条形状就不对的依赖行，
+        # 而"写一条坏行"比"少写一条并点名"更坏。
+        kept = list(steps)
+        for m in missing:
+            stp = dict(m.get("step") or {})
+            why = str(m.get("why") or "")
+            if "表里没有" in why:
+                stp["status"] = "dangling"
+                # 来源要从键名翻到字段名：`_resolve_dep_steps` 成功那一路
+                # 已经翻过了（它返回的 step 带 `source_*`），而走 `missing` 这一路的
+                # step 是输入的副本（只有 `stmt_id` 这种键名）⇒ 不翻的话
+                # 悬空边会落成"四选一个来源都没有"的行（实测抓到：`source_stmt_id=None`）。
+                for _key, _field, _table, _idf, _dkind in STEP_SOURCE_KEYS:
+                    if str(stp.get(_key) or "").strip():
+                        stp[_field] = str(stp[_key]).strip()
+                        break
+                # `Dependency.validate` 的硬要求：`status="dangling"` 必须写
+                # `status_reason`（"只标状态不说原因 = 记了一笔没人能接手"）。
+                stp["status_reason"] = (
+                    f"证明文本里引用了 {stp.get('label') or stp.get('code')}，"
+                    f"而{why} ⇒ 这条依赖边留着并标 `dangling`（不整笔拒、也不丢掉它："
+                    "丢掉等于依赖图静默少一环）；等那一行进库之后由下一次核对闭合")
+                kept.append(stp)
+                out["deps_dangling"].append(
+                    {"ref": str(stp.get("label") or stp.get("code") or ""),
+                     "path_group": int(m.get("path_group") or 1), "why": why})
+            else:
+                out["deps_unmappable"].append({
+                    "ref": str(stp.get("label") or stp.get("code") or ""),
+                    "path_group": int(m.get("path_group") or 1),
+                    "why": f"扫出来的这一步落不了：{why}"})
+        return kept
+
+    def _write_dep_steps(self, tx: Any, steps: Iterable[Mapping[str, Any]], *,
+                         stmt_id: str, body: Mapping[str, Any]) -> int:
+        """把解析好的步骤写成 `dependencies` 行，返回写了几条。
+
+        多证明模型（业主 2026-10-22）：这条命题的依赖属于它的第几条证明。载荷没写
+        ⇒ canonical（第 1 条）⇒ 生成出来的 `used_by` 与改前逐字相同
+        （`proofloc.used_by_of` 对第 1 条不写 `#pN` 尾巴）。
+        `path_group` 一个字没动：它说的是"第几条路径"，与"第几条证明"是两维。
+        """
+        count = 0
+        for step in steps:
+            dep_id = tx.alloc_id(S.TABLES["dependencies"]["id_kind"])
+            proof_no = step.get("proof_no") or body.get("proof_no") or _PL.DEFAULT_PROOF_NO
+            try:
+                proof_no = int(proof_no)
+            except (TypeError, ValueError):
+                proof_no = _PL.DEFAULT_PROOF_NO
+            dep = S.Dependency(
+                dep_id=dep_id,
+                used_by=_PL.used_by_of(f"stmt:{stmt_id}", proof_no),
+                kind=str(step.get("kind") or "theorem"),
+                label=str(step.get("label") or "") or _dep_label(step),
+                source_lit_id=step.get("source_lit_id"),
+                source_experiment_id=step.get("source_experiment_id"),
+                source_stmt_id=step.get("source_stmt_id"),
+                source_doc_id=step.get("source_doc_id"),
+                quote=str(step.get("quote") or ""),
+                status=str(step.get("status") or "closed"),
+                # `status != "closed"` 时 `Dependency.validate` 要求非空理由
+                # （扫出来的悬空引用在 `_resolve_write_steps` 里已经写好了这一格）。
+                status_reason=str(step.get("status_reason") or ""),
+                page_range=S.PageRange(),
+                path_group=int(step["path_group"]),
+                created_at=S.now_iso(), created_by=f"secretary-{self.role}")
+            dep.validate()
+            tx.upsert("dependencies", dep.to_dict(), note="record_statement:dependency")
+            count += 1
+        return count
+
+    def _same_proposition_candidate(self, tx: Any, full: str, *,
+                                    kind: str = "") -> dict[str, Any] | None:
+        """在册的命题里找"同一条"：命中就返回那一条（含依据与读数），否则 `None`。
+
+        判据只有一处（`propositionkey.same_proposition`）：先比确定性键，键不同再比
+        词面相似度。本函数只做"在哪儿找、怎么选"这两件本层的事：
+        - 只在命题性的 kind 之间判（`PROPOSITION_KINDS`；定义/概念/认不出的 kind 不并，
+          理由见 `PROPOSITION_KINDS`）；
+        - 跳过概念行（概念不是命题，键与相似度对它没有意义）；
+        - 跳过 `schema.STATEMENT_UNUSABLE_STATUSES` 里的行（被否证/被取代的行不许
+          当依据用，"并进一条已经被取代的命题"等于把新证明挂在一条废行上）；
+        - 多条命中时取相似度最高的、同分取号最小的（确定性：同一次登记不能因为
+          行的物理顺序不同而并进不同的一条）。
+        """
+        if not _is_proposition_kind(kind):
+            return None
+        candidates: list[dict[str, Any]] = []
+        for r in tx.rows("statements"):
+            sid = str(r.get("stmt_id") or "")
+            if not sid:
+                continue
+            if not _is_proposition_kind(r.get("kind")):
+                continue
+            if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
+                continue
+            other = str(r.get("statement_full") or "")
+            if not other.strip():
+                continue
+            verdict = _PK.same_proposition(full, other,
+                                           threshold=self.same_proposition_jaccard)
+            if str(verdict.get("state") or "") != _PK.STATE_SAME:
+                continue
+            candidates.append({"similarity": float(verdict.get("similarity") or 0.0),
+                               "stmt_id": sid, "row": dict(r), "verdict": verdict})
+        if not candidates:
+            return None
+        candidates.sort(key=lambda c: (-c["similarity"], str(c["stmt_id"])))
+        return candidates[0]
+
+    def _same_kind_hits(self, row: Mapping[str, Any], proof: str) -> list[dict[str, Any]]:
+        """这条命题在册的证明里，与新交来的这一份同种的那些（相似度降序）。
+
+        判据只有一处（`propositionkey.same_kind_proof`）。`unknown`（太短/纯符号）
+        不算命中：那是"判不了"，把它读成"同种"会让一份真的另一种短证明被拒。
+        """
+        from . import verifications as VR   # 惰性：证明清单的唯一读口径
+
+        hits: list[dict[str, Any]] = []
+        if not str(proof or "").strip():
+            return hits
+        for no, text in VR.proof_list(row):
+            got = _PK.same_kind_proof(proof, text, threshold=self.proof_same_jaccard)
+            if str(got.get("state") or "") != _PK.STATE_SAME:
+                continue
+            hits.append({"proof_no": int(no), "similarity": float(got.get("similarity") or 0.0),
+                         "detail": dict(got.get("detail") or {}),
+                         "reason": str(got.get("reason") or "")})
+        hits.sort(key=lambda h: (-h["similarity"], int(h["proof_no"])))
+        return hits
+
+    def _merge_into_proposition(self, tx: Any, body: Mapping[str, Any], *, full: str,
+                                groups: list[list[dict[str, Any]]], kind: str = "",
+                                force_new: bool, out: dict[str, Any]
+                                ) -> dict[str, Any] | None:
+        """同一命题 / 同种证明两道判断的落点（业主 2026-10-24）。
+
+        这不是"新建一条命题"那一支：命中之后这一笔的去向只有三种，每一种都如实写进
+        `out`（三态，读的人要能分辨"并了 / 拒了 / 没命中照常新建"）：
+
+        | 结局 | 返回里的读数 |
+        |---|---|
+        | 并成第 N 份证明 | `merged=True` + `merged_into` + `proof_no=N` + `matched_by` |
+        | 同种证明、且没给 merge | `checked=False` + `refused="proof_same_kind"` + 点名第几份 |
+        | merge=True 且命中同种 | `merged=True` + `merged_same_kind=True` + `resign_required=True` |
+        | 没命中 | `None`（调用方照常新建；这一支一个字节都不写） |
+
+        ## 为什么"并进一条命题"要落在秘书这一层
+        业主 2026-10-09 的裁定是"B 交内容、秘书实际操作增改查"。判"这两条是不是同一条
+        定理"正是"查重"那一件活，而查重的读数（依据是键还是相似度、读数多少）必须与
+        落盘在同一笔事务里 —— 分两处就会出现"读的时候判了同一条、写的时候建了新行"。
+
+        ## 证明号从哪来
+        第 N 份：`verifications.proof_list(row)` 的最大证明号 + 1（读口径只有那一处）。
+        canonical 还是空的时候（先登记命题、后补证明），这一份就是 #p1，写 `proof_text`
+        那一格而不是清单 —— 同一格不许有两个权威。
+
+        ## 依赖落在哪一维
+        这一笔的依赖全部落在 `used_by="stmt:<号>#pN"`（第 N 条证明）上，`path_group`
+        照旧是"第几条路径"。两条证明的依赖面因此分开，`_DepGraph.groups_of` 读出来
+        是 `{1: {…}, 2: {…}}` 两维（既有机制，不在这里重写）。
+        """
+        from . import verifications as VR   # 惰性：证明清单 / 签名状态的唯一读口径
+
+        # 三态读数（"这一笔被判成什么"）：没有命中时也要能读出判过了、判的是哪一种。
+        # 不许把"判不了"折成"不同"—— 两者的 `reason` 不同，处置也不同。
+        probe = _PK.judgeable(full)
+        out["proposition_state"] = (_PK.STATE_UNKNOWN if not probe["ok"]
+                                   else _PK.STATE_DIFFERENT)
+        out["proposition_reason"] = str(probe["reason"] or "没命中在册的同一条命题（键不同、相似度未达阈值）")
+        if force_new:
+            # 调用方明确要"另起一条" ⇒ 不并（`force_new` 的含义就是不许替它合并）。
+            out["proposition_reason"] = "force_new：调用方明确要另起一条，跳过同一性合并"
+            return None
+        if not _is_proposition_kind(kind):
+            # 一条定义/概念不是命题："表述几乎相同的两条命题是同一个"这句话对它不成立。
+            out["proposition_reason"] = (
+                f"kind={kind!r} 不在命题性的那几档 {list(PROPOSITION_KINDS)} 里 ⇒ "
+                "不参与同一命题判定（不并）")
+            return None
+        proof = str(body.get("proof_text") or "")
+        if not proof.strip():
+            # 没有证明正文 ⇒ 这一笔不产生"第 N 份证明"，也就不进这一支：
+            # 合并解决的是"两份证明被并列记录"，而没有正文的重复登记只是一次重复读数。
+            # 老口径（按规范化正文精确查重）在这一支上原样保留 —— 不在这一笔里顺手
+            # 改掉"命题级重复登记"的处置（那会让 `record_statement` 的返回值在
+            # "带不带证明"两种情形下变成两个意思只差一个字的读数）。
+            out["proposition_reason"] = (str(probe["reason"]) if not probe["ok"] else
+                                         "这一笔没有带证明正文 ⇒ 不并（合并只针对第 N 份证明）")
+            return None
+        hit = self._same_proposition_candidate(tx, full, kind=kind)
+        if hit is None:
+            # 三态：没命中也要能读出来"判过、判的是不同"，但这一支不写任何内容 ——
+            # 返回值里 `merged` 保持 False 就是那个读数（`out` 的初值）。
+            return None
+        row = dict(hit["row"])
+        sid = str(hit["stmt_id"])
+        verdict = dict(hit["verdict"])
+        out["proposition_state"] = _PK.STATE_SAME
+        out["proposition_reason"] = str(verdict.get("reason") or "")
+        basis = str(verdict.get("basis") or "")
+        similarity = float(verdict.get("similarity") or 0.0)
+        kind_hits = self._same_kind_hits(row, proof)
+        merge = body.get("merge") is True
+        existing = VR.proof_list(row)
+        # ---- merge=True：合成一份，覆盖那一份证明的正文（要 V 重签）
+        #
+        # 这里刻意不去要求"合并稿本身与某一份同种"：合并稿是各取所长写出来的，
+        # 它当然与原稿都不像（实测：两份 0.84 同种的原稿合成之后，合并稿与每一份
+        # 的相似度掉到 0.67 / 0.59）。判据是"这一笔声明了自己是合并稿，而这条命题
+        # 确实已在册"—— 后者由上面的同一性判定给出，前者由调用方声明。
+        if merge:
+            target, how = self._merge_target(row, proof, body, existing)
+            if target < 1:
+                out.update(checked=False, created=False, duplicate=False, merged=False,
+                           refused="bad_merge_target", stmt_id=sid, merged_into=sid,
+                           matched_by=basis, similarity=similarity,
+                           reason=(f"`proof_no` 指的是这条命题在册的那一份证明，{how} ⇒ "
+                                   "整笔不写（合并要落到一份具体的证明上：合并稿覆盖谁的正文、"
+                                   "谁的旧正文进 proof_history、谁的签要重拿，都由它决定）"))
+                return out
+            return self._merge_same_kind_version(tx, row=row, sid=sid, full=full,
+                                                 proof_no=int(target), merged_text=proof,
+                                                 verdict=verdict, kind_hits=kind_hits,
+                                                 merge_note=how, out=out)
+        # ---- 同种证明：不新增证明号
+        if kind_hits:
+            top = kind_hits[0]
+            others = "、".join(f"#{int(h['proof_no'])}" for h in kind_hits)
+            out.update(checked=False, created=False, duplicate=False, merged=False,
+                       refused=PROOF_SAME_KIND, stmt_id=sid, merged_into=sid,
+                       matched_by=basis, similarity=similarity, proof_no=0,
+                       same_kind=kind_hits,
+                       reason=(f"这一笔要与 stmt:{sid} 的第 {others} 份证明同种（相似度 "
+                               f"{float(top['similarity']):.4f} >= 阈值 "
+                               f"{self.proof_same_jaccard:.2f}）⇒ 不新增证明号"
+                               "（证明方式几乎相同的视为同种证明，并列记录会让一条定理"
+                               "看起来有好几条独立证法）。两条处置：① 换一条真正不同的"
+                               "证法再交（键不同、相似度低于阈值即可）；② 给 merge=true、"
+                               f"proof_no={int(top['proof_no'])}（要合并到哪一份）并交一份"
+                               "各取所长的合并正文 —— 秘书把它作为那一份证明的新版本"
+                               "（旧正文进行的 proof_history），并要求 V 重签"))
+            return out
+        # ---- 落成第 N 份证明（或 canonical 那一格还是空的时候的 #p1）
+        if not VR.proof_text_of(row, 1).strip():
+            row["proof_text"] = proof
+            proof_no = 1
+            written = ["statements"]
+            canonical_replaced = False
+        else:
+            proof_no = max(int(no) for no, _ in existing) + 1
+            listed = [dict(p) if isinstance(p, Mapping) else p
+                      for p in (row.get(VR.PROOFS_KEY) or [])]
+            listed.append({"proof_no": proof_no, "text": proof,
+                           "created_at": S.now_iso()})
+            row[VR.PROOFS_KEY] = listed
+            written = ["statements"]
+            canonical_replaced = False
+        # 变体留痕：这一笔是"同一条命题的另一种写法"，盘上要读得出"它凭什么并进来"。
+        # 有界（只留最近 20 条）：这是读数，不是账本；无界列表会让一行无限长大。
+        matches = [dict(m) for m in (row.get("_proposition_matches") or [])
+                   if isinstance(m, Mapping)]
+        matches.append({"statement_full": full, "basis": basis,
+                        "similarity": similarity, "proof_no": proof_no,
+                        "at": S.now_iso(), "by": f"secretary-{self.role}"})
+        row["_proposition_matches"] = matches[-20:]
+        body_for_deps = dict(body)
+        body_for_deps["proof_no"] = proof_no
+        steps = self._resolve_write_steps(tx, body_for_deps, out, groups)
+        if steps is None:
+            return out
+        deps_written = self._write_dep_steps(tx, steps, stmt_id=sid, body=body_for_deps)
+        if deps_written:
+            written.append("dependencies")
+        tx.upsert("statements", row, note="record_statement:merged_proof")
+        out.update(checked=True, created=False, duplicate=False, merged=True,
+                   merged_into=sid, stmt_id=sid, proof_no=proof_no,
+                   matched_by=basis, similarity=similarity, same_kind=[],
+                   tables=written, row=row, deps_written=deps_written,
+                   path_groups=len(groups or []), canonical_written=canonical_replaced,
+                   reason=(f"并入已有命题 stmt:{sid}，作为第 {proof_no} 份证明"
+                           f"（依据：{self._basis_text(basis, similarity)}）；"
+                           f"这一份的依赖落在 `used_by=\"stmt:{sid}#p{proof_no}\"`"
+                           f"（{deps_written} 条、{len(groups or [])} 组），"
+                           "与既有证明的依赖面按证明号分开；第 3 位（审过）由 V 逐份签，"
+                           f"登记不等于审过（`bits.evidence.reviewed_by_proof` 支持逐份）"))
+        return out
+
+    @staticmethod
+    def _basis_text(basis: str, similarity: float) -> str:
+        """把"凭什么判成同一条"翻成一句人话（返回值与拒信共用一份措辞）。"""
+        if str(basis) == _PK.BASIS_KEY:
+            return "proposition_key 相同"
+        return f"prose_similarity {float(similarity):.4f}"
+
+    def _merge_target(self, row: Mapping[str, Any], proof: str,
+                      body: Mapping[str, Any],
+                      existing: Sequence[tuple[int, str]]) -> tuple[int, str]:
+        """合并稿要覆盖哪一份证明：显式号优先，没给就取与合并稿最像的那一份。
+
+        返回 `(证明号, 依据说明)`；证明号 < 1 表示"指定了一个不在册的号"（调用方据此拒绝）。
+        为什么允许不显式给号：合并稿与两份原稿都不像（那是"各取所长"的必然结果），
+        所以"最像"只能当线索；真的指错了，`proof_history` 里留着被覆盖的旧正文，
+        读的人能看出来并让它重走一次。显式号则是确定的（拒信里会把它给调用方）。
+        """
+        explicit = body.get("proof_no")
+        if explicit not in (None, "", 0):
+            try:
+                no = int(explicit)
+            except (TypeError, ValueError):
+                no = 0
+            if any(int(no) == int(n) for n, _ in existing):
+                return int(no), "显式给了 proof_no"
+            return 0, f"而 proof_no={explicit!r} 不在册（在册的是 {[n for n, _ in existing]}）"
+        best: list[tuple[float, int]] = []
+        for no, text in existing:
+            if not str(text or "").strip():
+                continue
+            best.append((_PK.proof_similarity(proof, str(text)), int(no)))
+        if not best:
+            return 1, "这条命题还没有任何证明正文 ⇒ 合并稿落成 #p1"
+        best.sort(key=lambda item: (-item[0], item[1]))
+        score, no = best[0]
+        return no, f"没给 proof_no，取与合并稿最像的那一份（#{no}，相似度 {score:.4f}）"
+
+    def _merge_same_kind_version(self, tx: Any, *, row: dict[str, Any], sid: str,
+                                 full: str, proof_no: int, merged_text: str,
+                                 verdict: Mapping[str, Any],
+                                 kind_hits: list[dict[str, Any]],
+                                 merge_note: str,
+                                 out: dict[str, Any]) -> dict[str, Any]:
+        """`merge=True` 那一档：把合并稿作为"那一份证明的新版本"，并要求 V 重签。
+
+        ## 写什么
+        - 被命中的那一份（第 k 份）的正文换成调用方交来的合并稿：k=1 时是行上的
+          `proof_text`（canonical 那一格），k>1 时是 `proofs` 清单里的那一条；
+        - 旧正文整段留痕：进 `proof_history`，元素形状与 canonical 覆盖那一支逐字相同
+          （`{text, sha, at, replaced_by}`）再加一格 `proof_no` —— 否则一条命题有多份
+          证明时，"这一版是哪一份的旧稿"读不出来；
+        - `_proof_merge` 记下这一笔合并了哪几份、相似度、谁做的。有界，只留最近 20 条。
+
+        ## 为什么"合并"与"直接覆盖"必须分开（业主原话：重拿 V 签）
+        直接覆盖只是改稿（`stale` 是读数）；合并是"两份同种证明合成一份"，它的正确性
+        依赖 V 重新看过合并稿。所以这里不动 `bits`、也不写任何"审过了"的凭据，
+        返回值里 `resign_required=True` 且把 V 的现行状态如实报出来（`proof_standing`）：
+        合并稿与旧签的 sha 不同 ⇒ `review_standing` 现算是 `stale`，`reviewed` 是 False，
+        "未重签之前不算成立"这句话由读侧现算，而不是由本函数说一句"已成立"。
+        """
+        from . import verifications as VR   # 惰性：签名状态与正文 sha 的唯一读口径
+
+        old_text = VR.proof_text_of(row, proof_no)
+        entry = {"text": old_text, "sha": VR.proof_sha(old_text), "at": S.now_iso(),
+                 "replaced_by": VR.proof_sha(merged_text), "proof_no": int(proof_no)}
+        history = [dict(h) if isinstance(h, Mapping) else h
+                   for h in (row.get("proof_history") or [])]
+        history.append(entry)
+        row["proof_history"] = history
+        if int(proof_no) == 1:
+            row["proof_text"] = merged_text
+        else:
+            listed = []
+            for item in (row.get(VR.PROOFS_KEY) or []):
+                one = dict(item) if isinstance(item, Mapping) else item
+                if isinstance(one, Mapping) and int(VR.proof_no_of(one)) == int(proof_no):
+                    one["text"] = merged_text
+                listed.append(one)
+            row[VR.PROOFS_KEY] = listed
+        merges = [dict(m) for m in (row.get("_proof_merge") or [])
+                  if isinstance(m, Mapping)]
+        merges.append({"proof_no": int(proof_no),
+                       "from_proofs": [int(h["proof_no"]) for h in kind_hits] or [int(proof_no)],
+                       "similarity": [float(h["similarity"]) for h in kind_hits],
+                       "matched_by": str(verdict.get("basis") or ""),
+                       "target": merge_note,
+                       "statement_full": str(full),
+                       "at": S.now_iso(), "by": f"secretary-{self.role}",
+                       "resign_required": True})
+        row["_proof_merge"] = merges[-20:]
+        matches = [dict(m) for m in (row.get("_proposition_matches") or [])
+                   if isinstance(m, Mapping)]
+        matches.append({"statement_full": str(full),
+                        "basis": str(verdict.get("basis") or ""),
+                        "similarity": float(verdict.get("similarity") or 0.0),
+                        "proof_no": int(proof_no), "at": S.now_iso(),
+                        "by": f"secretary-{self.role}", "merged": True})
+        row["_proposition_matches"] = matches[-20:]
+        tx.upsert("statements", row, note="record_statement:merge_same_kind")
+        standing: dict[str, Any] = {}
+        try:
+            standing = VR.review_standing(self.store.root, statement_id=sid,
+                                          proof_text=merged_text, proof_no=int(proof_no))
+        except Exception as exc:  # noqa: BLE001 —— 读不到签名状态不等于"已重签"
+            standing = {"state": "unknown",
+                        "why": f"签名状态读不出来（{type(exc).__name__}: {exc}）⇒ "
+                               "按'未重签'处理（不许把没查成读成已成立）"}
+        state = str(standing.get("state") or "unsigned")
+        out.update(checked=True, created=False, duplicate=False, merged=True,
+                   merged_same_kind=True, merged_into=sid, stmt_id=sid,
+                   proof_no=int(proof_no), matched_by=str(verdict.get("basis") or ""),
+                   similarity=float(verdict.get("similarity") or 0.0),
+                   same_kind=kind_hits, tables=["statements"],
+                   row=row, canonical_written=int(proof_no) == 1,
+                   proof_history=list(row["proof_history"]),
+                   proof_standing=standing, resign_required=True,
+                   reviewed=state == "signed",
+                   reason=(f"合并稿已作为 stmt:{sid} 第 {proof_no} 份证明的新版本落盘"
+                           f"（{merge_note}；旧正文整段进 `proof_history`，sha 可与签名"
+                           "台账的 `proof_sha256` 直接对上）；这一笔是同种证明合成一份，"
+                           f"按业主口径要 V 重签 —— 现行签名状态是 `{state}`，"
+                           "未重签之前不算成立（读侧现算，不由本函数声明）。合并稿不新增"
+                           "依赖边：两条原稿的依赖面各自在册，要补新依赖走 G 的 "
+                           "`register_dependency`"))
         return out
 
     def _statement_from(self, body: Mapping[str, Any], *, full: str, kind: str,

@@ -2369,6 +2369,23 @@ def test_the_design_tools_criterion_is_not_vacuous():
 #:   * 「新增模块要在这里登记」，连同"它为什么必须是一个顶层模块"的一行理由；
 #:     删模块要同时删掉它那一行理由（登记过期与漏登记同样危险：前者让人以为"有人看过了"）。
 _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
+    # 2026-10-24（p200 那一批的登记缺口，D-53 跑 `-k registry` 时按判据补登）：
+    # 父子链的只读追踪侧（一层工具 `trace.children` 与全树工具 `conductor.watch`
+    # 共用的读数实现）。它不注册工具、不写盘，但确实是一个顶层模块；
+    # 漏登记会让 `test_agentflow_top_level_modules_match_the_registry` 把整批读数判红。
+    "agenttrace.py": "父子链只读追踪：children_with_facts / watch_rows / clamp_depth / "
+                     "节点四格读数（状态 / 最近 N 步 / 被拒类目 / 产出是否落盘）——"
+                     "一层与全树两条工具面共用同一份读侧，不另写第二套父子谓词",
+    # 2026-10-24 晚（D-53 业主裁定「把时钟做成系统原生工具」）：时钟是系统级
+    # 能力面 —— 它不属于任何角色，也不属于任何循环；计时器/闹钟依附在它上面
+    # （`tools/clock_tools.py` 只做工具面）。为什么必须是顶层模块：判据要能在
+    # 不建 Store 的情况下装假时钟、单独核三态读数与到点判定。
+    "clock.py": "系统时钟（D-53）：唯一取时口，计时器/闹钟依附在它上面。"
+                "Reading（墙钟 + 单调计数，三态 ok/partial/unknown）/ RealClock / "
+                "FakeClock（advance 后自动 fire_due）/ Timer / TimerBook（落盘 "
+                "out/clock/state.json）/ now / start_timer / start_alarm / "
+                "cancel_timer / timers / due_timers / fire_due / record_wake / "
+                "read_wakes / pending_wakes / consume_wakes / set_due_handler",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，

@@ -130,6 +130,31 @@ const REPORT_SPOT_HREF = "/artifacts#experiment-spots";
  * 三档各说各的：有 ⇒ 链接；没有 ⇒ 写「无」（不是空白）；读不出来 ⇒ 写"没查成"
  * （不许把"没读到"与"没有报告"折成同一个「无」）。
  */
+/** 实验表的「代码一致」那一格：四档（一致 / 已撤销 / 不一致 / unknown）。
+ *
+ * 2026-10-24（业主：改脚本后重新登记并撤销老登记）：第四档「已撤销」不是红 ——
+ * 它说的是"这件事已经处置过：老登记作废、新登记接上"，而「不一致」说的是
+ * "脚本改过却没重新登记"，是异常。折平之后读者看见一片红，分不清哪一条要动手。
+ * 「已撤销」还要印出从哪一份换到哪一份（两个 sha 前 16 位与撤销理由）——
+ * 只写「已撤销」三个字，读者仍然不知道它换成了哪一份脚本。
+ */
+function codeCell(r: ExperimentRow) {
+  if (r.code_sha_consistency === "revoked") {
+    const detail = r.void_reason !== "" ? r.void_reason : `${r.code_sha_from} → ${r.code_sha_to}`;
+    return (
+      <span class="consistency" title={`已撤销：${detail}（这一行不再算作该结论的证据）`}>
+        <Badge kind="badge-unknown" text={`已撤销（脚本已改：${detail}）`} />
+      </span>
+    );
+  }
+  return (
+    <Consistency
+      value={r.code_sha_consistency}
+      note="台账钉住的代码 sha 与盘上现在这一份脚本（脚本不在盘上或那一行没记 sha ⇒ 没得比）"
+    />
+  );
+}
+
 function reportCell(r: ExperimentRow) {
   if (r.exhaustion_tri === "unreadable") {
     return <span class="tri-reason">没查成（这一份报告读不出来，不是「无」）</span>;
@@ -421,14 +446,10 @@ export function Evidence() {
                 // 2026-10-23（业主：sha 原文不显示）：这一格只说"台账钉的代码 sha 与盘上
                 // 现在这一份脚本"一致不一致。三种"没得比"（没记 sha / 脚本不在盘上 /
                 // 读不出来）都落 unknown，不冒充"不一致"。
+                // 2026-10-24：第四档「已撤销」（脚本已改：旧 → 新）—— 不是红。
                 key: "code_sha_consistency",
                 title: "代码一致",
-                render: (r) => (
-                  <Consistency
-                    value={r.code_sha_consistency}
-                    note="台账钉住的代码 sha 与盘上现在这一份脚本（脚本不在盘上或那一行没记 sha ⇒ 没得比）"
-                  />
-                ),
+                render: (r) => codeCell(r),
               },
               {
                 // 2026-10-23 第二批（业主：实验表没挂穷举论证报告）：②③ 的落点是

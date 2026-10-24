@@ -488,6 +488,14 @@ h3 {
   padding-left: var(--sp-2);
 }
 
+/* 树上面那几行"说不上来"的话（降级口径、被截断的缺号汇总）。
+   2026-10-24 真机故障之后加的：那一档原先一个字都没有，页面看起来像"这里本来就
+   没有东西"。留一条竖线是为了让它在树旁边显眼，而不是又一段灰字。 */
+.roster-note {
+  border-left: 2px solid var(--dsw-alias-state-warn-primary);
+  padding-left: var(--sp-2);
+}
+
 .roster-inbox-item {
   align-items: flex-start;
 }

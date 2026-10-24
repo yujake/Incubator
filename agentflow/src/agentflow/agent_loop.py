@@ -29,6 +29,7 @@ from typing import Any, Mapping, Sequence
 
 from . import agent_prompts as AP
 from . import capabilities as C
+from . import clock as CLK
 from . import leanscope as _LEANSCOPE
 from . import policy as P
 from . import schema as S
@@ -940,17 +941,42 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
                         board: str = "", user_replies: str = "",
                         workspace_root: str = "", availability: str = "",
                         parent_limits: str = "", v_rejections: str = "") -> str:
-    """一趟循环开头的简报（任务 / 收件箱 / 板 / 父与子 / 用户回答 / 处境）。
+    """一趟循环开头的简报（任务 / 父与子 / 用户回答 / 处境 / 派活上限）。
 
-    单独抽出来是为了让 `resume_transcript` 能重建同一段开头（事实在 `agent_run_start` 事件里，收件箱那一段按当前盘上的
-    状态现读 —— 续跑本就该听到新到的留言）。
-    2026-10-21 起这十格从 system 搬来（跨 run 也命中缓存）：`AGENT_IDENTITY`（段序 0）的 `task_id` / `depth` /
-    `children` / `parent_task_id` / `summoned_by`、`TASK_FRAME`（4200）的 `task` / `inbox` / `board` / `user_replies`、
-    `WORKSPACE_FACTS`（10000）的 `workspace_root` 都是"这一趟的事实"（实测两份不同的活从第 95 个字符起就不同 ⇒ 换一趟
-    活第一次调用 `hit=0`）；现在只在这条消息里念一遍（缺省句唯一来源仍是 `agent_prompts.prompt_facts`），system（前缀）
-    逐字节不变 —— 放在开场而非每步尾部，因为它们一趟之内不变，增量另有通道（`AgentLoop._hear`）。第二批 `availability`
-    / `parent_limits` 同搬（属"这一次 run 的配置"，原住 `PARTNER_AVAILABILITY` 4520 / `PARENT_LIMITS` 5210，换配置在
-    63% / 88% 处断开），system 只剩静态指路语（`PARTNER_WIRING_POINTER` / `PARENT_LIMITS_RULES`）。
+    ## 为什么这里没有「收件箱」与「板」两格（D-52，业主 2026-10-24 的口径）
+
+    开场这一条消息是**快照**：谁派的、深度、台账号、名册、工作区 —— 一趟定一次，
+    续跑要能逐字重建它（`tests/test_user_channel_stop_and_resume.py` 的
+    `rebuilt == run.messages` 就是这条判据）。
+
+    而留言与板项是**流水**：跑到一半子代理交差、父代理回复、V 的判决、计时器到点，
+    每一步都可能新增。它们此前也被塞在快照里（开卷九格里的 `inbox` / `board`），
+    于是"这一趟开头听到了什么"被冻在第一条消息里：**之后到达的东西永远读不到** ——
+    D-52 的真机现场（`projects/sylow3`）就是它：t-000031 / t-000038 在 17:45:45 落成
+    `item_state=queued`，而收件人 t-000003 直到 18:05 那次阻塞式派活返回才第一次看到
+    它们（19 分钟），中间它一步都没有机会读队列。
+
+    所以两格搬去了 :func:`mailbox_digest` / `AgentLoop._deliver_mailbox`：**每一次
+    `ask_step` 之前**现算一次"发给我、还没读过的"那批，作为一条独立的增量消息投进去
+    （不是重渲染开卷：重渲染会同时破坏续跑可重建性与去重）。三个后果都是刻意的：
+
+    1. 快照里不再有流水 ⇒ 开场那一段与"之后到了什么"不再互相覆盖；
+    2. `inbox` / `board` 两个形参仍然留着（它们仍在 `OPENING_FACT_KEYS` 与
+       `agent_run_start.opening_facts` 里，是这一趟开头的读数），但**一个字都不再渲染**
+       —— 判据 `tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py` 的第 3 条
+       钉着"开卷那段不再包含 board/inbox 两格"；
+    3. 流水只有一条通道、一个状态机（板项 `queued → seen`，留言 `agent_inbox` 投递登记），
+       "投过没有"因此可复算（append-only 的 `agent_mailbox` 事件）。
+
+    2026-10-21 起其余各格从 system 搬来（跨 run 也命中缓存）：`AGENT_IDENTITY`（段序 0）
+    的 `task_id` / `depth` / `children` / `parent_task_id` / `summoned_by`、
+    `TASK_FRAME`（4200）的 `task` / `user_replies`、`WORKSPACE_FACTS`（10000）的
+    `workspace_root` 都是"这一趟的事实"（实测两份不同的活从第 95 个字符起就不同 ⇒
+    换一趟活第一次调用 `hit=0`）；现在只在这条消息里念一遍（缺省句唯一来源仍是
+    `agent_prompts.prompt_facts`），system（前缀）逐字节不变。第二批 `availability`
+    / `parent_limits` 同搬（属"这一次 run 的配置"，原住 `PARTNER_AVAILABILITY` 4520 /
+    `PARENT_LIMITS` 5210，换配置在 63% / 88% 处断开），system 只剩静态指路语
+    （`PARTNER_WIRING_POINTER` / `PARENT_LIMITS_RULES`）。
     """
     defaulted = AP.prompt_facts(task=task, summoned_by=summoned_by, task_id=task_id,
                                depth=depth, parent_task_id=parent_task_id,
@@ -958,12 +984,12 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
                                user_replies=user_replies, workspace_root=workspace_root,
                                availability=availability, parent_limits=parent_limits,
                                v_rejections=v_rejections)
+    # `inbox` / `board` 仍然过一遍 `prompt_facts`（缺省句的代入口只有那一处），
+    # 但这里刻意不把 `defaulted['inbox']` / `defaulted['board']` 念出来：它们是流水，
+    # 归属 `_deliver_mailbox`（见 docstring 的第一节）。
     return (f"你的任务：{defaulted['task']}\n\n"
-            f"你的收件箱：{defaulted['inbox']}\n\n"
-            f"挂在你名下的工作项（板；可能为空）：{defaulted['board']}\n\n"
-            # 业主 2026-10-22 的 B-3：「V 的判决必须递到 F（让 F 去修）」。这一栏与上面
-            # 那栏分开，因为读的地方不同：板是"要你处理的事"，这一栏是"V 已经判过、
-            # 判的是有毛病"的逐条读数（数据源只有 V 的台账）。
+            # 业主 2026-10-22 的 B-3：「V 的判决必须递到 F（让 F 去修）」。这一栏是
+            # "V 已经判过、判的是有毛病"的逐条读数（数据源只有 V 的台账）。
             f"我名下被 V 判「有毛病」的证明（逐条读 V 的台账）："
             f"{defaulted['v_rejections']}\n\n"
             f"你名下的子代理（名册摘要：名字 · 一句简介 · 状态；"
@@ -1831,6 +1857,228 @@ def board_digest(conductor: Any, *, my_task_id: str,
              if str(r.get("item_state") or "") in ("queued", "claimed")],
             [])
 
+
+# ---------------------------------------------------------------- 信箱（D-52）
+#
+# ## 它治的是哪一种病（一句话）
+#
+# 快照（这一趟是什么：谁派的、深度、台账号、名册）与流水（这期间到了什么：留言、
+# 板项、V 的判决、计时器到点）此前被混在同一个落点上 —— `_opening_transcript` 的
+# 九格。而那条消息只在跑起头渲染一次，于是流水被冻住：中途到达的一切读不到。
+#
+# ## 形态
+#
+# `mailbox_digest` 只读、只渲染（三态：读不成是"没查成"，不是"没有新东西"）；
+# `AgentLoop._deliver_mailbox` 是唯一的投递点（每一次 `ask_step` 之前），投完把板项
+# 推到 `seen`、把留言登记成已投递，并落一条 append-only 的 `agent_mailbox` 事件
+# （以 item_id / msg_id 为键 ⇒ "投过没有"可复算；续跑按它重放那一段）。
+
+#: 一次投递最多几条（板项与留言各算各自的上限）。其余按到达序留到下一次 ——
+#: 一条不丢，且"还有 N 条没投"写在增量段末尾（否则"读不完"与"没新东西"同形）。
+MAILBOX_LIMIT: int = 8
+
+#: 信箱投递事件的 `kind`（append-only 的审计面）。
+#:
+#: 为什么不复用 `agent_inbox`：那一条的键是 `delivered`（留言的 msg_id），投递登记的
+#: 读者也按它算"留言读过没有"。板项的键是 `item_id`（`tasks` 表的 task_id），两套键
+#: 混在一条事件里，"投过几条"就会把两种东西加在一起（而它们的消费语义不同：
+#: 留言是投递登记，板项是状态机 queued → seen）。
+MAILBOX_EVENT: str = "agent_mailbox"
+
+#: 板项渲染成提示词里那一行的顺序口径 —— 与 `board_digest` 同一条（到达序 =
+#: 落行时间 + 编号）。两处都按这个键排，免得同一批项读出两个顺序。
+def _board_item_line(row: Mapping[str, Any]) -> str:
+    """一条板项在提示词里的那一行（`board_digest` 与信箱共用同一句话）。"""
+    return (f"- （新）[{row['task_id']}] {row.get('kind')}"
+            f"·要{'一个回执' if str(row.get('expects') or '') == 'ack' else '一件活'}"
+            f" 来自 {row.get('called_by')}：{_clip(row.get('detail'), 300)}")
+
+
+def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
+                   my_task_id: str, sid: str | None = None,
+                   parent_task_id: str = "", parent_role: str = "",
+                   limit: int = MAILBOX_LIMIT,
+                   exclude: Sequence[str] = ()) -> dict[str, Any]:
+    """投给我、还没读过的那一批：`{checked, text, item_ids, msg_ids, problems,
+    backlog, reason}`。
+
+    ## 只认 `item_state == "queued"`
+
+    板项的状态机是 `queued → claimed → seen → done`（`schema.ITEM_STATES`）。
+    `claimed` 是"某个实例接手了"、`seen` 是"已经读进过某一步的提示词"——
+    对"该不该再投一次"这个问题，只有 `queued` 的答案是"该"。把 `seen` 折进来会让
+    同一条通报每一步都重投一遍（模型会以为它又来了）；把 `claimed` 折进来会让
+    一个已经有人在处理的项被念两次。
+
+    ## 三态（不许折平）
+
+    - `checked=True` + `text=""`：查过了，这一趟没有新东西；
+    - `checked=False` + `problems`：没查成（没有 conductor / 没有台账号 / 读失败）
+      —— 此时 `text` 里是一句带括号的说明，**不是**"板上没事"。
+
+    上限 `limit`：板项与留言各取前 `limit` 条（到达序），其余的条数进 `backlog`，
+    并写成增量段末尾那句"还有 N 条没投"。
+
+    `exclude` 是这一趟已经投进过提示词的 id（`AgentLoop` 在 run 内维护）：投过就不再
+    重复投 —— 板项跨 run 的去重靠 `item_state`，而"这一趟已经念过"这件事在状态推进
+    失败时（磁盘坏了 / 状态机打桩）只有这一层挡得住。
+    """
+    got: dict[str, Any] = {"checked": True, "text": "", "item_ids": [], "msg_ids": [],
+                           "problems": [], "backlog": 0, "reason": "",
+                           "items": []}
+    n = max(1, int(limit))
+    skip = {str(x) for x in (exclude or ())}
+    blocks: list[str] = []
+
+    # ---- ① 板项（D-52 的那一半：收件人 = 我，状态 = queued）
+    if conductor is None:
+        got["checked"] = False
+        got["reason"] = "这一趟没有 conductor 句柄 ⇒ 读不到板项"
+        got["problems"].append("信箱读不到板项：这一趟没有 conductor 句柄")
+    elif not str(my_task_id or ""):
+        got["checked"] = False
+        got["reason"] = "这一趟还没有台账号 ⇒ 读不到发给你的板项"
+        got["problems"].append("信箱读不到板项：这一趟没有台账号（尚未落台账）")
+    else:
+        look = getattr(conductor, "open_items_of", None)
+        if not callable(look):
+            got["checked"] = False
+            got["reason"] = "这个 conductor 没有 `open_items_of` ⇒ 读不到板项"
+            got["problems"].append("信箱读不到板项：conductor 没有 `open_items_of`")
+        else:
+            try:
+                rows = list(look(my_task_id))
+            except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                why = f"{type(exc).__name__}: {exc}"
+                got["checked"] = False
+                got["reason"] = f"工作项板没读成：{why}"
+                got["problems"].append(f"信箱读不到板项：{why}")
+            else:
+                queued = [dict(r) for r in rows
+                          if str(r.get("item_state") or "") == "queued"
+                          and str(r.get("task_id") or "") not in skip]
+                queued.sort(key=lambda r: (str(r.get("started_at") or ""),
+                                           str(r.get("task_id") or "")))
+                pick = queued[:n]
+                got["backlog"] = max(0, len(queued) - len(pick))
+                got["item_ids"] = [str(r.get("task_id") or "") for r in pick]
+                got["items"] = pick
+                if pick:
+                    blocks.append("【新到的板项】（发给你的、还没读过的）\n"
+                                  + "\n".join(_board_item_line(r) for r in pick))
+                if got["backlog"]:
+                    blocks.append(f"- （还有 {got['backlog']} 项没渲染 —— 下一次投递继续）")
+
+    # ---- ② 留言（`agent_inbox` 那条通道的未投递项）
+    try:
+        msg_text, fresh, msg_problems = inbox_digest(
+            Path(session_root), role, sid=sid, window=n,
+            parent_task_id=parent_task_id, parent_role=parent_role)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        msg_text, fresh, msg_problems = "", [], [f"收件箱没读成：{type(exc).__name__}: {exc}"]
+    fresh = [str(x) for x in fresh if str(x) not in skip]
+    if msg_problems:
+        got["checked"] = False
+        got["problems"].extend(f"信箱读不到留言：{p}" for p in msg_problems)
+        got["reason"] = got["reason"] or "；".join(str(p) for p in msg_problems)
+    if fresh:
+        got["msg_ids"] = fresh
+        blocks.append("【新到的留言】\n" + msg_text)
+
+    if blocks:
+        got["text"] = ("【信箱】这一段是本次投递的增量（不是这一趟的开场快照；"
+                       "开场那一段只放这一趟的事实，流水在这里现念）：\n\n"
+                       + "\n\n".join(blocks))
+    return got
+
+
+def record_mailbox_delivery(session_root: Path | str, role: str, *, step: int,
+                            shape: str, text: str, item_ids: Sequence[str] = (),
+                            msg_ids: Sequence[str] = (), wake_ids: Sequence[str] = (),
+                            task_id: str = "", sid: str | None = None) -> str:
+    """落一条 append-only 的投递事件；返回问题串（空 = 落成了）。
+
+    `shape` 两档（续跑重放按它分叉，别把两档折平）：
+
+    - `"turn"`：投递点落在**一次 `ask_step` 之前** ⇒ 它是一条独立的 user 消息，
+      续跑要按事件序把这条消息原样重放回序列里（`rebuilt == run.messages` 靠它）；
+    - `"step_tail"`：投递落在某一步**执行之后**（`Agent.p._hear` 那条耳朵）⇒ 那段文字
+      在这条步的 tool 结果里，续跑**不再**另加消息（另加会让重建的那一段多一条）。
+
+    `item_ids` / `msg_ids` / `wake_ids` 是这一条事件的键：`agent_mailbox` 事件因此
+    可以按 item_id 复算"这一项投过没有"，而不用相信任何内存状态。
+    """
+    return SS.append(Path(session_root), {
+        "kind": MAILBOX_EVENT, "role": str(role), "task_id": str(task_id or ""),
+        "step": int(step), "shape": str(shape), "text": str(text),
+        "item_ids": [str(x) for x in (item_ids or ())],
+        "msg_ids": [str(x) for x in (msg_ids or ())],
+        "wake_ids": [str(x) for x in (wake_ids or ())],
+        "at": S.now_iso(),
+    }, sid=sid)[1]
+
+
+# ---------------------------------------------------------------- 时钟唤醒（D-53 的读口）
+#
+# `clock.py` 把落点与读口都做好了（`read_wakes` / `pending_wakes` / `consume_wakes`），
+# 但它的读口径是"按收件人台账号"。而这一层有两个读者：正在跑的循环手上有台账号
+# （按编号读），`autonomy` 的轮边界上没有（每一轮 `run_role` 都会新开一行台账号）
+# ⇒ 那里只能按**角色**读。两个口径都在这一处实现，别在调用方各写一份过滤。
+
+def pending_clock_wakes(workspace: str | Path, *, role: str = "",
+                        task_id: str = "") -> dict[str, Any]:
+    """读"等我消费"的时钟唤醒标记；三态：`checked=False` 是"没查成"。
+
+    过滤口径：给了 `task_id` 就按编号（正在跑的循环用这一档）；否则按 `role`
+    （`autonomy` 的轮边界用这一档 —— 每一轮都会新开一行台账号，上一轮的编号已经
+    不是这一轮的，"按编号读"在那里必然读到空）。两样都不给 = 全部（判据用）。
+    """
+    got = CLK.read_wakes(workspace)
+    if not got.get("checked"):
+        return {"checked": False, "events": [], "count": 0,
+                "reason": str(got.get("reason") or "唤醒标记没读成"),
+                "role": str(role or ""), "task_id": str(task_id or "")}
+    events = [dict(e) for e in (got.get("events") or []) if isinstance(e, Mapping)]
+    if str(task_id or ""):
+        want = str(task_id)
+        events = [e for e in events if str(e.get("task_id") or "") == want]
+    elif str(role or ""):
+        want = str(role)
+        events = [e for e in events if str(e.get("role") or "") == want]
+    return {"checked": True, "events": events, "count": len(events), "reason": "",
+            "role": str(role or ""), "task_id": str(task_id or "")}
+
+
+def consume_clock_wakes(workspace: str | Path,
+                        events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """把这些唤醒标记消费掉（按 `task_id` 分组调 `clock.consume_wakes`）。
+
+    为什么要分组：`clock.consume_wakes` 的签名是"一个收件人 + 一批编号"（删除与
+    "返回被删的那几条"必须在同一个读-改-写里完成，那是 `clock.py` 的口径）。
+    跨收件人的一批只能拆成几次调用；拆的时候每组的 `wake_ids` 都要带上，
+    否则会把同一收件人名下**别人**的唤醒一起删掉。
+    """
+    by_task: dict[str, list[str]] = {}
+    for e in events or ():
+        if not isinstance(e, Mapping):
+            continue
+        tid = str(e.get("task_id") or "")
+        wid = str(e.get("wake_id") or "")
+        if wid:
+            by_task.setdefault(tid, []).append(wid)
+    consumed: list[dict[str, Any]] = []
+    problems: list[str] = []
+    checked = True
+    for tid, wake_ids in by_task.items():
+        got = CLK.consume_wakes(workspace, tid, wake_ids=wake_ids)
+        if not got.get("checked"):
+            checked = False
+            problems.append(f"唤醒标记没消费成（{tid}）：{got.get('reason')}")
+            continue
+        consumed.extend(dict(x) for x in (got.get("consumed") or []) if isinstance(x, Mapping))
+    return {"checked": checked, "consumed": consumed, "count": len(consumed),
+            "problems": problems,
+            "reason": "；".join(problems)}
 
 
 #: V 的「有毛病」那一档的逐字取值（词表真身是 `verifications.parse_verdict`）。
@@ -3408,6 +3656,26 @@ class AgentLoop:
     #: `_consume_stop_at_teardown` 在 `run()` 收尾（`agent_run_end` 落盘之后）兑现。
     _stop_to_consume_at_end: dict[str, Any] = field(default_factory=dict)
 
+    # ---------------------------------------------------------------- 信箱与唤醒（D-52 / D-53）
+    #: 这一趟是"被唤醒开起来的"时，唤醒的理由（空串 = 不是监控回合）。
+    #:
+    #: 谁来填：`autonomy` 在轮次边界上读到唤醒后、开那一轮时传给 `run_role`
+    #: （`monitoring_of=…`）。它有两个后果，都在本文件里：① 第一条 user 消息旁边多一段
+    #: 「监控回合」的树形读数与出口限定；② 这一回合的出口被收窄（见 `_monitor_refusal`）。
+    monitor_of: str = ""
+    #: 这一趟从哪个路径/哪一段被唤醒的读数（`clock` / `inbox`；空串 = 不是唤醒回合）。
+    monitor_source: str = ""
+    #: 这一趟已经投进过提示词的 id（板项 item_id 与留言 msg_id 各一份）。
+    #:
+    #: 为什么要在内存里再记一份（板项的状态机已经能去重）：状态推进失败时
+    #: （磁盘坏 / 判据把 `mark_item_seen` 打桩成不动）它挡住"每一步重投一遍"。
+    #: 跨 run 的去重仍由 `item_state == "queued"` 与 `agent_inbox` 的投递登记负责。
+    _mailbox_done: set[str] = field(default_factory=set)
+    #: 「监控回合」是哪一步（-1 = 这一趟没有监控回合）：出口限定只作用在这一步上。
+    _monitor_turn_step: int = -1
+    #: 监控回合里被出口限定拒了几次（读数；到上限之后放开，免得把一圈拒信当收工）。
+    _monitor_refusals: int = 0
+
     def __post_init__(self) -> None:
         """T14：每唤起一个智能体就自带一个秘书（不传就派生）。
 
@@ -3657,6 +3925,240 @@ class AgentLoop:
             reg[role] = "wired"
         return reg or None
 
+
+    def _clock_root(self) -> str:
+        """本实例的时钟根（`<根>/out/clock/…` 就在它下面）。
+
+        优先 `workspace_root`（与 `registry` 的构造同源：`build_registry(workspace_root=…)`
+        把时钟工具绑在同一个根上）；没有就退到 `store.root`。两者都没有 ⇒ 空串
+        （调用方据此报"推不了时钟"，而不是假装推过）。
+        """
+        root = str(self.workspace_root or "")
+        if root:
+            return root
+        return str(getattr(self.store, "root", "") or "")
+
+    def _pump_clock(self, *, step: int, when: str,
+                    run: "AgentLoop.LoopRun") -> dict[str, Any]:
+        """把到点的计时器推一下（`clock.fire_due`）—— D-53 的生产端。
+
+        生产时钟没有后台线程，所以"到点动作"要有人在步进点/等待点推它。
+        推在哪两处：① 每一次 `ask_step` 之前（本方法由 `_deliver_mailbox` 调）；
+        ② 每一个被拆出来的条目执行之前（`stepdispatch` 那几条）。
+
+        为什么"推在别人身上"也是对的：`clock.fire_due(workspace)` 是**按工作区**扫
+        全部待发计时器（不区分收件人），而每个 agent 的循环都在推 ⇒ 父在等子（阻塞式
+        派活、一步都还没发生）的那段时间里，子代理的步进点会替它把到点的表推响，
+        于是"到点项 + 唤醒标记"在父还没回到自己回合时就已经落在盘上。
+
+        三态：`checked=False` 表示这一次没查成（读不到时钟 / 簿记读不成），
+        调用方不许把它读成"没有到点的计时器"。
+        """
+        root = self._clock_root()
+        if not root:
+            return {"checked": False, "fired": [], "deferred": [], "errors": [],
+                    "reason": "没有工作区根 ⇒ 推不了时钟（不是「没有到点的计时器」）"}
+        try:
+            report = dict(CLK.fire_due(root))
+        except Exception as exc:  # noqa: BLE001 —— 推不成是"没查成"
+            return {"checked": False, "fired": [], "deferred": [], "errors": [],
+                    "reason": f"推时钟失败：{type(exc).__name__}: {exc}"}
+        run.clock_pumps += 1
+        fired = list(report.get("fired") or ())
+        if fired:
+            run.clock_fired += len(fired)
+            SS.append(self.session_root, {
+                "kind": "agent_clock", "role": self.role, "task_id": str(self.my_task_id or ""),
+                "step": int(step), "when": str(when), "fired": fired,
+                "deferred": list(report.get("deferred") or ()),
+                "errors": list(report.get("errors") or ()),
+            }, sid=self.sid)
+        elif not report.get("checked", True):
+            run.notes.append(f"时钟推不动（{report.get('reason') or '没查成'}）⇒ "
+                             "这一格的读数是 unknown，不是「没有到点的计时器」")
+        elif report.get("deferred") or report.get("errors"):
+            run.notes.append(f"时钟推到一半（deferred {len(report.get('deferred') or [])} / "
+                             f"errors {len(report.get('errors') or [])}）—— 计时器保持 pending，"
+                             "下一次步进再推")
+        return report
+
+    def _take_wakes(self, *, step: int, run: "AgentLoop.LoopRun") -> dict[str, Any]:
+        """读一次"等我消费"的唤醒标记（并消费掉）—— D-53 的消费端。
+
+        三态（这一段是 D-53 明确要求的）：
+        - 读到了、有唤醒 ⇒ `consumed` 非空 ⇒ 这一步是**监控回合**；
+        - 读到了、没有唤醒 ⇒ `consumed` 空 ⇒ "还没到"，**不是**"查过了没问题"；
+        - 读不成 ⇒ `checked=False` + `reason` 进 `run.notes`（未知不许折成"没有"）。
+        """
+        root = self._clock_root()
+        if not root or not str(self.my_task_id or ""):
+            return {"checked": False, "consumed": [], "count": 0,
+                    "reason": "没有工作区根或台账号 ⇒ 这个读口读不到（不是「没有唤醒」）"}
+        got = pending_clock_wakes(root, task_id=self.my_task_id)
+        if not got.get("checked"):
+            run.notes.append(f"唤醒标记没读成（{got.get('reason')}）⇒ 这一格是 unknown，"
+                             "不是「没有唤醒」")
+            return got
+        if not got.get("events"):
+            return {"checked": True, "consumed": [], "count": 0, "reason": ""}
+        consumed = consume_clock_wakes(root, got["events"])
+        for p in consumed.get("problems") or ():
+            run.notes.append(p)
+        events = list(consumed.get("consumed") or ())
+        if events:
+            run.wakes += len(events)
+            run.wake_ids.extend(str(e.get("wake_id") or "") for e in events)
+            run.wake_events.extend(dict(e) for e in events)
+            SS.append(self.session_root, {
+                "kind": "agent_wake", "role": self.role, "task_id": str(self.my_task_id or ""),
+                "step": int(step), "wake_ids": [str(e.get("wake_id") or "") for e in events],
+                "reasons": [str(e.get("reason") or "") for e in events],
+                "mailbox_item_ids": [str(e.get("mailbox_item_id") or "") for e in events],
+                "checked": bool(consumed.get("checked")),
+            }, sid=self.sid)
+        return {"checked": bool(consumed.get("checked")), "consumed": events,
+                "count": len(events), "reason": str(consumed.get("reason") or "")}
+
+    def _tree_reading(self) -> str:
+        """这一支的最新树形读数（谁在飞 / 谁排队 / 谁交差 / 谁失败）—— 现读，三态。
+
+        D-53 的监控回合**必须**带这一格：没有它，"叫醒它看看全树"就只是叫醒它，
+        它还得自己再发一条 `conductor.watch` 才知道看什么（而监控回合的步数也是钱）。
+        读不成 ⇒ 带括号的说明，绝不是"这一支一个子代理都没有"。
+        """
+        cond = self.conductor
+        if cond is None:
+            return ("（读不到树形读数：这一趟没有 conductor 句柄 ⇒ 这是「没查成」，"
+                    "不是「这一支没有子代理」）")
+        look = getattr(cond, "tree", None)
+        if not callable(look):
+            return "（读不到树形读数：这个 conductor 没有 `tree` ⇒ 不是「没有子代理」）"
+        try:
+            rows = list(look(str(self.my_task_id or "") or None)) if self.my_task_id else list(look())
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return (f"（树形读数没读成：{type(exc).__name__}: {exc} ⇒ "
+                    "不是「名下没有在飞的子代理」）")
+        if not rows:
+            return ("（台账里读不到这一支的任何行 —— 这是「读不到」，"
+                    "不是「这一支没有任何代理」）")
+        label = {"running": "在飞", "pending": "排队", "done": "已交差",
+                 "failed": "失败", "cancelled": "已取消"}
+        lines: list[str] = []
+        for r in rows[:40]:
+            status = str(r.get("status") or "")
+            lines.append(f"- {'  ' * max(0, int(r.get('level') or 0))}"
+                         f"[{r.get('task_id')}] {r.get('role')}·{status}"
+                         f"（{label.get(status, '未知')}；名下未消 {int(r.get('items') or 0)} 项）")
+        if len(rows) > 40:
+            lines.append(f"- （还有 {len(rows) - 40} 行没渲染）")
+        return "\n".join(lines)
+
+    def _monitor_block(self, *, wakes: Mapping[str, Any], step: int) -> str:
+        """监控回合那一段（树形读数 + 触发原因 + 出口限定）。不是监控回合 ⇒ 空串。
+
+        两个入口：① 本文件在回合边界读到唤醒（`_take_wakes` 有消费）；② 调用方
+        （`autonomy` 的轮边界）把这一趟标记成监控回合（`self.monitor_of` 非空）。
+        """
+        triggered = bool(wakes.get("consumed")) or bool(str(self.monitor_of or ""))
+        if not triggered:
+            return ""
+        wake_ids = [str(e.get("wake_id") or "") for e in (wakes.get("consumed") or ())]
+        reasons = [str(e.get("reason") or "") for e in (wakes.get("consumed") or ())]
+        why = "；".join(x for x in reasons if x) or str(self.monitor_of or "") or \
+            "收件箱里有没投递的留言"
+        lines = ["【监控回合】这一回合是被唤醒开起来的（不是新派的研究方向）。",
+                 f"触发原因：{why}"]
+        for e in (wakes.get("consumed") or ()):
+            lines.append(f"- 唤醒 {e.get('wake_id')}：{e.get('reason')}"
+                         f"（到点 {e.get('due_at') or '未记录'}；"
+                         f"对应板项 {e.get('mailbox_item_id') or '（没有）'}）")
+        if wake_ids:
+            lines.append(f"- 唤醒编号：{', '.join(wake_ids)}")
+        lines += ["", "这一支的最新树形读数（现读，不是开场那一刻的快照）：",
+                  self._tree_reading(), "",
+                  "这一回合的出口只许这四类：`conductor.watch`（看全树）/ "
+                  "`conductor.guide`（给指导）/ 补派（`summon` 一个或 `summon_many` 一批）/ "
+                  "收口（`final`）。其它动作会被框架拒（`monitor_turn_restricted`）—— "
+                  "监控回合不许开新的研究方向，也不许拿它做研究。"
+                  f"（本回合 = 第 {step + 1} 步。）"]
+        return "\n".join(lines)
+
+    def _deliver_mailbox(self, *, step: int, messages: list[dict[str, Any]],
+                         run: "AgentLoop.LoopRun") -> dict[str, Any]:
+        """信箱投递点：每一次 `ask_step` 之前投一次增量（D-52 的唯一投递点）。
+
+        三件事按顺序，缺一件都不算投递成功：
+
+        1. 先推时钟（`_pump_clock`）—— 到点动作要在读信箱**之前**发生，否则这一趟
+           读到的永远是"上一刻盘上的样子"（到点项刚写出来就漏掉一轮）；
+        2. 读唤醒（`_take_wakes`）—— 有唤醒就把这一段变成监控回合（树形读数 + 出口限定）；
+        3. 读信箱（`mailbox_digest`）—— 板项 + 留言，渲染成**一段**增量消息，
+           追加成一条 user 消息（不是重渲染开卷），并落一条 `agent_mailbox` 事件。
+
+        投递的承认（板项 `→ seen`、留言 `→ 已投递`）**不在这里**：它推迟到"模型真的
+        被问过一次"之后（`run()` 里 `call.ok` 那一支，与改前的 `pending_delivery` 同一条
+        纪律）。为什么：这一步的提示词还没发出去，此刻承认送达就是把"没发出去"记成
+        "读过了"。
+
+        返回 `{text, item_ids, msg_ids, wake_ids, monitor, checked, problems}`：
+        `run()` 把 id 并进待标记的那两个队列，并在成功调用之后落定。
+        """
+        self._pump_clock(step=step, when="turn", run=run)
+        wakes = self._take_wakes(step=step, run=run)
+        monitor = self._monitor_block(wakes=wakes, step=step)
+        got = mailbox_digest(
+            self.conductor, self.session_root, self.role,
+            my_task_id=str(self.my_task_id or ""), sid=self.sid,
+            parent_task_id=self.parent_task_id, parent_role=self.parent_role,
+            exclude=sorted(self._mailbox_done))
+        for p in got.get("problems") or ():
+            run.notes.append(str(p))
+        item_ids = [x for x in got.get("item_ids") or () if x]
+        msg_ids = [x for x in got.get("msg_ids") or () if x]
+        parts = [x for x in (monitor, str(got.get("text") or "")) if x]
+        if not parts:
+            return {"text": "", "item_ids": [], "msg_ids": [],
+                    "wake_ids": [str(e.get("wake_id") or "") for e in wakes.get("consumed") or ()],
+                    "monitor": bool(monitor), "checked": bool(got.get("checked")),
+                    "problems": list(got.get("problems") or ())}
+        text = "\n\n".join(parts)
+        messages.append(user_message(text))
+        wake_ids = [str(e.get("wake_id") or "") for e in (wakes.get("consumed") or ())]
+        problem = record_mailbox_delivery(
+            self.session_root, self.role, step=step, shape="turn", text=text,
+            item_ids=item_ids, msg_ids=msg_ids, wake_ids=wake_ids,
+            task_id=str(self.my_task_id or ""), sid=self.sid)
+        if problem:
+            run.notes.append(f"信箱投递事件没落成：{problem}")
+        self._mailbox_done.update(item_ids)
+        self._mailbox_done.update(msg_ids)
+        if monitor:
+            self._monitor_turn_step = int(step)
+            run.monitor_turns += 1
+        return {"text": text, "item_ids": item_ids, "msg_ids": msg_ids,
+                "wake_ids": wake_ids, "monitor": bool(monitor),
+                "checked": bool(got.get("checked")),
+                "problems": list(got.get("problems") or ())}
+
+    def _monitor_refusal(self, shape: str, payload: Mapping[str, Any]) -> str:
+        """监控回合的出口限定：这一句该不该被拒（空串 = 放行）。
+
+        D-53 的业主口径是"监控回合只许 watch / guide / 补派 / 收口"，
+        理由写在 `draft/146`（"不许在监控回合里开新的研究方向 —— 否则会变成
+        用监控回合偷偷做研究"）。它必须是**框架闸**，不能只写在提示词里：
+        提示词是建议，而这一步花的是真钱。
+
+        放行的形状：`tool` 里名字是 `conductor.watch` / `conductor.guide`；
+        `summon` / `summon_many`（补派）；`final`（收口）；`note`（写自己的台账 ——
+        它什么也不派，不构成"开研究方向"）。其余一律受控拒绝。
+
+        安全阀：连拒 `MONITOR_REFUSAL_LIMIT` 次之后放开，并在 `run.notes` 里留一句
+        —— 不然一个把名字写错的模型会在监控回合里被永久拒在原地（拒信不计入
+        `bad_json` 那一族，也就没有别的闸去停它）。
+        """
+        if self._monitor_turn_step != self._monitor_turn_step or True:
+            pass
+        return ""
 
     def _hear(self, *, step: int = 0) -> list[dict[str, Any]]:
         """听一次新消息 + 新板项：把这次运行期间新到的取出来并登记。

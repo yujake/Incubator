@@ -13,9 +13,16 @@
 ⇒ 结论：没有"看得见却调不动"或明显多余的项。这一条把它钉住，免得以后有人凭"看着不像他的"删掉一件别人真需要的工具。
 ## 判据（含负控）
 ① `conductor.escalate` 在十个角色面上都有（通用上行，少一个就有人上不了报）；② `conductor.broadcast` 只出现在有子代理的角色面上（A/B/D/E/F/G）；③ M 的面是纯编排面：
-不许出现 `attack.*` / `doc.*` / `verify.*` / `lit.*` / `analysis.*`（M 的活是统筹与搭桥，研究侧的执行归 D）；④ 反真空：十个角色面都非空、并集 = 全库工具数（95）
+不许出现 `attack.*` / `doc.*` / `verify.*` / `lit.*` / `analysis.*`（M 的活是统筹与搭桥，研究侧的执行归 D）；④ 反真空：十个角色面都非空、并集 = 全库工具数（102）
 ——否则"没有多余项"可能是"面是空的"。
 """
+
+#: 本文件普查的角色集合刻意不含 L：L 的三件 `formal.*` 只挂给它自己，
+#: 而这条判据问的是"A-H + V + M 的面有没有漏"。并集口径因此是
+#: "全库 105 件（Lean 开）− L 专属的 3 件 = 102 件"。
+#: 2026-10-24 晚（D-53）：这个数从 95 改到 102。95 在 p200 那一批之后已经
+#: 过期（当时新增 `trace.children` 与 M 的两件编排工具），本轮又加了 5 件
+#: `clock.*`；判据的结论没变，变的是它后面那个会腐烂的字面量。
 
 from __future__ import annotations
 
@@ -79,4 +86,4 @@ def test_no_face_is_empty_and_the_union_is_the_whole_library(
     assert not empty, f"这些角色的工具面是空的：{empty}"
     union = {n for names in faces.values() for n in names}
     # 全库工具数从模板快照读（`tests/golden/tool_surface_snapshot.json` 是那张的权威读数）
-    assert len(union) == 95, f"角色面并集是 {len(union)} 件（期望 95）—— 有人被摘掉了工具，或新工具没挂上"
+    assert len(union) == 102, f"角色面并集是 {len(union)} 件（期望 102）—— 有人被摘掉了工具，或新工具没挂上"

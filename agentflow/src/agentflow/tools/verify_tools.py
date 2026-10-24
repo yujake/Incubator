@@ -572,6 +572,11 @@ def evidence_for(
     ``proved`` 是三态（`errors-1`，登记在 `draft/28`）：「没查」时它是 ``None``，「查了」时才是 ``True``/``False``。
     旧版在"没查"那一支写 ``False`` —— 而那正是本文件 213-215 行明令禁止的折叠："没查成时该位写 None、绝不写成 False"（`check_formal`
     的 `verified` 就是这么做的）。只读 `proved` 的调用方旧版无法区分"没查"与"查了没有 proof 级证据"。
+
+    已撤销的实验行不算证据（业主 2026-10-24：「改脚本后应该重新登记并把老登记撤销」）：
+    判据只有一处（`schema.experiment_is_voided`）。撤销之后仍返回行号明细 ——
+    但它们进 `reason` 的「已撤销」那一句，不进 `experiments` / `count` / 分档计数，
+    于是「这条结论还有几条证据」与验收表那几档（`closing._leg_reading`）读的是同一个数。
     """
     if claim_key is None and for_question_id is None:
         # 形状与"查了"那一支「完全一致」（含分档计数的零值）：调用方可以无条件地读
@@ -594,12 +599,23 @@ def evidence_for(
         }
 
     hits: list[dict] = []
+    revoked: list[dict] = []
     for row in store.rows("experiments"):
         if claim_key is not None and row.get("claim_key") != claim_key:
             continue
         if for_question_id is not None and row.get("for_question_id") != for_question_id:
             continue
+        # 已撤销的行不是证据（判据与验收侧同一个谓词：`schema.experiment_is_voided`）。
+        # 单独收一栏而不是直接丢掉：读的人要能看见「这里原本有一条、它被撤了」，
+        # 否则「查了、没有」会把一次撤销读成「从来没做过这个实验」。
+        if S.experiment_is_voided(row):
+            revoked.append(row)
+            continue
         hits.append(row)
+    revoked_ids = [str(r.get("experiment_id") or "") for r in revoked]
+    revoked_note = (f"；另有 {len(revoked)} 条已撤销（{', '.join(revoked_ids[:8])}）"
+                    "不算证据 —— 撤销理由在各自那一行的 `void_reason` 上"
+                    if revoked else "")
     hits.sort(key=lambda r: (str(r.get("created_at") or ""), str(r.get("experiment_id") or "")))
 
     if not hits:
@@ -618,7 +634,7 @@ def evidence_for(
             "proved": False,
             "reason": (
                 f"已查（{' 且 '.join(scope)}）：**没有**任何登记在案的实验证据。"
-                "这是'查了、没有'，不是'没查'"
+                "这是'查了、没有'，不是'没查'" + revoked_note
             ),
         }
 
@@ -648,6 +664,7 @@ def evidence_for(
         "reason": (
             f"已查：{len(hits)} 条实验（{result_counts}），最强证据等级为 {best!r}"
             + ("（有 proof 级证据）" if proved else "（**没有** proof 级证据 ⇒ 未被证明）")
+            + revoked_note
         ),
     }
 

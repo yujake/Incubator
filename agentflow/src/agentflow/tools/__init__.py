@@ -172,6 +172,12 @@ _check_write_levels_are_registered()
 #: 登记表产生 —— 没有第二条产生路径；`H` 的落库代理是它的第一个用户（`agent_h.AgentH.writers`）。
 _MODULES: tuple[str, ...] = (
     "table_tools",
+    # 2026-10-24（D-53 业主裁定「把时钟做成系统原生工具」）：五件 `clock.*`
+    # （clock.now / clock.timer_start / clock.alarm_start / clock.timer_list /
+    # clock.timer_cancel）。它是通用工具 —— 挂给全部角色 + 主控，不写任何知识表，
+    # 只落"到点"这一条通信（tasks 的 notice 板项 + out/clock 的唤醒标记）。
+    # 工具体在 `tools/clock_tools.py`，时钟与计时器簿记在顶层 `clock.py`。
+    "clock_tools",
     "fs_tools",
     "search_tools",
     "ocr_tools",

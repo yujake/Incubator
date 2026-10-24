@@ -81,7 +81,8 @@ from .. import sessions as SS
 from ..jsonlfile import read_jsonl_state
 
 __all__ = [
-    "CHECKED_TYPES", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX", "HANDLERS",
+    "CHECKED_TYPES", "CODE_CONSISTENCY_REVOKED", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX",
+    "HANDLERS",
     "LEDGER_EVENT_SCAN_BYTES", "LEDGER_EVENT_SCAN_KINDS", "LEDGER_EVENT_SCAN_SESSIONS",
     "LEDGER_ROLE_FIELDS", "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
     "MISSING_TYPES", "NONTRIVIALITY_UNJUDGED_WORD", "PENDING_ENDPOINTS", "ROUTES",
@@ -89,8 +90,8 @@ __all__ = [
     "ROSTER_NODES_MAX",
     "RUN_ROW_KEYS", "SHA_MATCH", "SHA_MISMATCH", "SHA_UNKNOWN", "UNCHECKED_TYPES",
     "acceptance_face", "artifacts_face",
-    "chat_face", "evidence_chain", "experiment_spots", "handle_acceptance",
-    "handle_artifacts",
+    "chat_face", "code_consistency", "evidence_chain", "experiment_spots",
+    "handle_acceptance", "handle_artifacts",
     "handle_chat", "handle_evidence",
     "handle_machine", "handle_roster", "handle_run_events", "handle_run_view",
     "handle_state",
@@ -852,15 +853,24 @@ SHA_MATCH = "match"
 SHA_MISMATCH = "mismatch"
 SHA_UNKNOWN = "unknown"
 
+#: 实验的「代码一致」那一格多出的一档：这一行在台账上已经撤销（脚本改过）。
+#:
+#: 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
+#: 为什么它不能并进 `mismatch`：「不一致」说的是"这一行还挂着，但它钉的脚本已经不是
+#: 盘上那一份"——那是一处异常，要人去处理；「已撤销」说的是"这件事已经处置过：
+#: 老登记作废、新登记接上"。前者是红，后者不是红。折平之后，读者看见一片红，
+#: 分不清哪一条要动手、哪一条已经被撤过（现场：`projects/sylow3` 的 000000 与 000001）。
+CODE_CONSISTENCY_REVOKED = "revoked"
+
 #: 非平凡度"判不了"在页面上的写法（不是 T0 —— 2026-10-23 起 T0 是一档真的档位）。
 NONTRIVIALITY_UNJUDGED_WORD = "未判"
 
 #: 档位号 → hover 里那句说明（逐条对着 `secretary.NONTRIVIALITY_LEVELS` 与它上面那张
 #: 语义表；档位只有 0..4 这五个取值，`nontriviality_label` 负责 T0 这四个字符）。
 _NONTRIVIALITY_MEANINGS: dict[int, str] = {
-    0: "T0 基础定理或初步结论（平凡但真；含由数值实验直接穷举得出的那些）",
+    0: "T0 基础定理或初步结论（含由数值实验直接穷举得出的那些）",
     1: "T1 有一定价值的非平凡结论",
-    2: "T2 证明方法都是平凡的，但工作量较大",
+    2: "T2 证明方法都在常规范围内，但工作量较大",
     3: "T3 需要用较多的技巧或跨领域工具",
     4: "T4 需要天才般的洞察力，或思维链极长，或是偏离主流研究方向的神奇构造",
 }
@@ -886,6 +896,37 @@ def sha_consistency(want: Any, now: Any) -> str:
     if not left or not right:
         return SHA_UNKNOWN
     return SHA_MATCH if left == right else SHA_MISMATCH
+
+
+def code_consistency(row: Mapping[str, Any], now: Any) -> str:
+    """实验行的「代码一致」四档：`match` / `revoked` / `mismatch` / `unknown`。
+
+    四档的语义（判据逐条钉在
+    `tests/test_experiment_is_revoked_when_its_script_changes.py`）：
+
+    - `match`：台账钉的 sha 与盘上现在这一份脚本是同一份；
+    - `revoked`：这一行已经撤销（`schema.experiment_is_voided`）—— 它钉的是旧脚本，
+      撤销理由与两个 sha 前缀在行上（`void_reason` / `code_sha_from` / `code_sha_to`）。
+      撤销优先于 sha 比较：撤销是台账上的既成事实，与盘上现在有没有那个文件无关；
+    - `mismatch`：仍有效，但 sha 对不上 —— 这一条是异常（脚本改过却没重新登记）；
+    - `unknown`：没得比（行上没记 sha / 脚本不在盘上 / 读不出来），不许冒充 `mismatch`。
+
+    写侧记的哈希只有前 16 位（`verify_tools.code_hash` 的定义就是「前 16 位」），
+    所以「同一份脚本」在这里必须是前缀关系而不是逐字相等 —— 直接逐字比会把每一行都
+    判成 `mismatch`（真机 `projects/sylow3` 的两行就是这样，而 `exp 000001` 明明一致）。
+    前缀比较的口径与 `closing._hash_prefixed` 同一句话：一方是另一方的前缀即是同一份。
+    比值本身仍然只走 :func:`sha_consistency`（一处口径）：这一层只把短的那一边对齐，
+    并多加一档状态。
+    """
+    from .. import schema as S
+
+    if S.experiment_is_voided(dict(row)):
+        return CODE_CONSISTENCY_REVOKED
+    want = str(row.get("code_hash") or "").strip().lower()
+    got = str(now or "").strip().lower()
+    if want and got and len(want) < len(got):
+        return sha_consistency(want, got[:len(want)])
+    return sha_consistency(want, got)
 
 
 def _ledger_verify_consistency(row: Mapping[str, Any]) -> str:
@@ -1097,10 +1138,15 @@ def _verification_consistency(rows: list[dict],
 
 
 def _experiment_code_consistency(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
-    """实验行补三格：`code_sha_consistency`（代码一致）与 `exhaustion_path` / `exhaustion_tri`（报告）。
+    """实验行补五格：`code_sha_consistency`（代码一致，四档）、两个 sha 前缀与撤销理由，
+    以及 `exhaustion_path` / `exhaustion_tri`（报告）。
 
-    代码那一格比的是 `code_path` 指向的那个文件（相对工作区根）。三种"没得比"都要落
-    `unknown` 而不是 `mismatch`：`code_path` 空、那一格 `code_hash` 空、文件不在盘上/读不出来。
+    代码那一格比的是 `code_path` 指向的那个文件（相对工作区根）。四档语义与优先级
+    见 :func:`code_consistency`：`match` / `revoked` / `mismatch` / `unknown`。
+    「已撤销」不是红，而且它要能说清"从哪一份换到哪一份" ⇒ 同一行另给
+    `code_sha_from` / `code_sha_to`（各 16 位，不印整串）与 `void_reason`（那句人话）。
+    三种"没得比"都要落 `unknown` 而不是 `mismatch`：`code_path` 空、那一格 `code_hash`
+    空、文件不在盘上/读不出来。
     超过 `_CODE_HASH_MAX_BYTES` 的脚本不读（有界：一个实验的脚本不该有几十兆，
     而一次请求把整盘大文件哈希一遍会把这一面拖成秒级）。
 
@@ -1134,7 +1180,12 @@ def _experiment_code_consistency(root: Path, rows: list[dict]) -> list[dict[str,
                     now = hashlib.sha256(path.read_bytes()).hexdigest()
             except OSError:
                 now = ""
-        got["code_sha_consistency"] = sha_consistency(want, now)
+        got["code_sha_consistency"] = code_consistency(row, now)
+        # 撤销的那一行要把"从哪一份换到哪一份"印出来（两个 sha 前 16 位 + 那句话）。
+        # 有效行这三格是空串：页面据此不印"已撤销"的细节（空串不是"没读到"）。
+        got["code_sha_from"] = str(row.get("code_hash") or "").strip()[:16]
+        got["code_sha_to"] = str(row.get("voided_code_to") or "").strip()[:16]
+        got["void_reason"] = str(row.get("void_reason") or "")
         got["exhaustion_path"] = ""
         got["exhaustion_tri"] = TRI_NOT_APPLICABLE
         try:
@@ -1281,7 +1332,10 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
       `formal_paths`（第 4 位逐路径：`[{proof_no, state}]`）、
       `grade` / `grade_label`（五元位派生的等级）；
     - 关系行：`quote_state`（同一个读口，引文那一卡按五档计数）；
-    - 实验行：`code_sha_consistency`（台账钉的代码 sha vs 盘上现在这一份脚本）；
+    - 实验行：`code_sha_consistency`（台账钉的代码 sha vs 盘上现在这一份脚本；
+      四档 `match` / `revoked` / `mismatch` / `unknown`）＋ 撤销那一档的
+      `code_sha_from` / `code_sha_to` / `void_reason`（业主 2026-10-24：
+      改脚本要重新登记并撤销老登记 —— 「已撤销」不是红，要能说出从哪一份换到哪一份）；
     - 验证行：`proof_sha_consistency`（V 签的那一份 vs 命题现在那一份，
       按 `proof_no` 逐条比）。
     """
@@ -3567,8 +3621,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("created_at", "string"), ("created_by", "string"),
       ("for_question_id", "string"),
       # 2026-10-23（业主：sha 原文不显示）：`code_sha_consistency` 是"台账钉的代码 sha
-      # vs 盘上现在这一份脚本"的三档读数（`code_hash` 留在数据里，页面不印）。
+      # vs 盘上现在这一份脚本"的读数（`code_hash` 留在数据里，页面不印）。
+      # 2026-10-24（业主：改脚本后重新登记并撤销老登记）：它多了第四档 `revoked`，
+      # 另带三格 —— 两个 sha 前 16 位（`code_sha_from` / `code_sha_to`）与那句撤销理由
+      # （`void_reason`，逐字「脚本 <旧> → <新>」）。有效行上这三个是空串。
       ("code_sha_consistency", "string"),
+      ("code_sha_from", "string"), ("code_sha_to", "string"),
+      ("void_reason", "string"),
       # 2026-10-23 第二批（业主：实验表没挂穷举论证报告）：`exhaustion_path` 是那份
       # 报告的仓库相对落点（`out/experiments/<号>/exhaustion.md`，口径在
       # `exhaustionreport.report_relpath`），`exhaustion_tri` 是它的三态

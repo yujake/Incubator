@@ -79,6 +79,9 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 于是净增 2 = 95 + 3 − 1）。
 #: 2026-10-24：97 → 100（业主裁定「普通代理能追一层，M能想追几层追几层」：
 #: `trace.children` 一层、`conductor.watch` 全树、`conductor.guide` 沿树指导三件）。
+#: 2026-10-24 晚（D-53 业主裁定「把时钟做成系统原生工具」）：100 → 105
+#: （`clock.now` / `clock.timer_start` / `clock.alarm_start` / `clock.timer_list` /
+#: `clock.timer_cancel` 五件；顶层时钟在 `src/agentflow/clock.py`）。
 #:
 #: 这一格曾经写着"95 → 98"并附一句"`verify.check_formal` 的角色面收成空，但它仍在册，
 #: 所以总数只加不减"—— 那句话在盘上已经不成立：那个工具不是"收成空角色"，
@@ -93,7 +96,7 @@ TS = "2026-01-01T00:00:00+00:00"
 #:     一件都没有），所以少 3。
 #: 两个数都写在这里，是因为它们都真的存在：把第二个数搬进这一格会少算三件，
 #: 而少算三件时这条判据"照样绿"—— 那正是最坏的一种绿。
-TOOL_COUNT = 100
+TOOL_COUNT = 105
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -260,6 +263,18 @@ def tool_params() -> dict[str, dict]:
             "evidence": "判据探针用",
             "level": "warning",
         },
+        # ---- D-53 的时钟五件（2026-10-24 晚）----
+        # 探针只验键集，不真的等到点：计时器给 1 小时、闹钟给 2099 年，
+        # 两次调用都停在"pending"那一支（返回值键集合与成功投递那一支相同）。
+        # `timer_cancel` 用不存在的号：它返回"查过了、没有这一条"（ok=True），
+        # 不是工具失败 —— 三态纪律，见 `clock_timer_cancel` 的 docstring。
+        "clock.now": {},
+        "clock.timer_start": {"after_sec": 3600,
+                              "reason": "探针：只验键集，不真的等到点"},
+        "clock.alarm_start": {"at": "2099-01-01T00:00:00+00:00",
+                              "reason": "探针：只验键集，不真的等到点"},
+        "clock.timer_list": {},
+        "clock.timer_cancel": {"timer_id": "tm-000000"},
         # ---- 主控的编排面工具（T0-9）：探针参数一律用"不会真的派活出去"的形态 ——
         # 主控的 Conductor 默认没有角色接线，派活会以 refused/not_wired 如实落台账，
         # 而 `ok(...)` 照样返回（拒绝 ≠ 工具失败）。`ensure_project` 的落点由夹具注入临时目录。
@@ -549,6 +564,10 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 判据的读数：`returns=` 少了实跑给的格），那是 `tools/formal_tools.py`
         # 里那两条 `returns=` 的缺口，不在本文件的射程内。
         "formal.check_formal", "formal.formalize",
+        # D-53 的时钟五件（2026-10-24 晚）：探针都真跑到了 ok 分支（起表/列表/
+        # 取消未命中都是成功读数），键名读自实跑观测。
+        "clock.now", "clock.timer_start", "clock.alarm_start",
+        "clock.timer_list", "clock.timer_cancel",
     }
 )
 

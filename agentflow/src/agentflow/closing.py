@@ -1234,6 +1234,17 @@ def _experiment_rows(store: Any) -> list[dict[str, Any]]:
     return [dict(r) for r in store.rows("experiments")]
 
 
+def _active_experiment_rows(store: Any) -> list[dict[str, Any]]:
+    """仍然有效的实验行（已撤销的那些不在里面：`schema.experiment_is_voided`）。
+
+    验收档问的是「这条结论现在还有几条证据」，而撤销说的是「那一条不再算数」
+    （业主 2026-10-24：「改脚本后应该重新登记并把老登记撤销」）。所以数证据的
+    那几档一律走这里，不直接数台账行数 —— 判据只有一处，与读数侧的
+    `verify_tools.evidence_for` 用同一个谓词（两边口径分家会让同一个问题给出两个数）。
+    """
+    return S.active_experiment_rows([dict(r) for r in store.rows("experiments")])
+
+
 def numeric_conclusions(store: Any, rows: Sequence[Mapping[str, Any]] | None = None,
                         ) -> dict[str, Any]:
     """成稿里引到的数值/穷举结论（G8 那一档的触发条件，唯一出处）。
@@ -1579,7 +1590,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # 两条证明各算一条 —— 折成"一行实验算一条"会让重跑把读数顶高，
         # 折成"一条命题算一条"会让 #p2 的那份验证消失。
         from . import verifications as _VR_PX
-        rows = [r for r in store.rows("experiments")
+        rows = [r for r in _active_experiment_rows(store)
                 if str(r.get("method") or "") == "formal"
                 and str(r.get("evidence_kind") or "") == "proof"]
         counted: dict[tuple[str, int], str] = {}
@@ -2355,7 +2366,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # `method="numeric"`，于是全 `inconclusive` 也能让「算」那一环变绿
         # （真机 T2 `p6q`：10 条实验全 `inconclusive`，读数 10 ⇒ 绿）。
         # 判据见 `experiment_concludes`：结论 + 界/证书（形式化那一支看检查器输出）。
-        numeric = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
+        numeric = [r for r in _active_experiment_rows(store)
+                   if str(r.get("method") or "") == "numeric"]
         rows = [r for r in numeric if experiment_concludes(r)]
         return len(rows), {
             "experiments": [str(r.get("experiment_id") or "") for r in rows[:8]],
@@ -2541,9 +2553,9 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "逐轮读数在 `advanced_plans` 里 —— 每一轮为什么算/不算都写在那句 `why` 上，"
                      "读不到两种说法")}
     if kind == "counterexample_or_proof_rows":
-        proof = [r for r in store.rows("experiments")
+        proof = [r for r in _active_experiment_rows(store)
                  if str(r.get("evidence_kind") or "") == "proof"]
-        refuted = [r for r in store.rows("experiments")
+        refuted = [r for r in _active_experiment_rows(store)
                    if str(r.get("result") or "") == "refutes"
                    and dict(r.get("counterexample") or {})]
         return len(proof) + len(refuted), {
@@ -2553,7 +2565,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "一条都没有时，交付里必须明写「本轮没有判决性结论」——"
                      "而不是拿支持性数值当结论")}
     if kind == "search_frontier_rows":
-        rows = [r for r in store.rows("experiments") if dict(r.get("search_bound") or {})]
+        rows = [r for r in _active_experiment_rows(store) if dict(r.get("search_bound") or {})]
         keys = {str(r.get("claim_key") or "") for r in rows}
         return len(keys), {"claim_keys": sorted(k for k in keys if k)[:12],
                            "with_bound": len(rows), "experiments_total": len(store.rows("experiments")),
@@ -2561,7 +2573,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                                     "`search_bound`；被超时杀掉的那次也照样有界（`PROGRESS:` 行）")}
     if kind == "enumeration_optimization_rows":
         by_key: dict[str, list[dict[str, Any]]] = {}
-        for r in store.rows("experiments"):
+        for r in _active_experiment_rows(store):
             bound = dict(r.get("search_bound") or {})
             if not bound:
                 continue

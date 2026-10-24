@@ -59,6 +59,80 @@ TOY_EXAMPLE_MAX_SEARCH_SPACE = 40320
 TOY_EXAMPLE_RESULT_SOURCES: tuple[str, ...] = ("line", "json_key", "multiple")
 
 
+#: 撤销老登记时的理由码出处：`schema.VOID_REASON_CODE_CHANGED`（FC-27 文件 `schema.py`）。
+#:
+#: 这一格只做转发，不另写一份字面量：写侧、`validate` 与判据读的是同一个词，
+#: 改词只改 `schema.py` 那一处（业主 2026-10-24 裁定：改脚本后重新登记并撤销老登记）。
+VOID_REASON_CODE_CHANGED = S.VOID_REASON_CODE_CHANGED
+
+
+def _existing_experiment_rows(tx: Any) -> tuple[list[dict] | None, str]:
+    """把「既有登记」读出来：`(行, "")` 或 `(None, 读不出来的原因)`。
+
+    为什么单独抽成一个函数（而不是内联 `tx.rows`）：这是自动处置的第三态
+    （读不到既有行 ⇒ 不撤，但返回值里必须说「没能核既有登记」）的注入点。
+    读不出来的原因原样带回调用方 —— 「没查成」不许被读成「没有旧登记」。
+    """
+    try:
+        return [dict(row) for row in tx.rows("experiments")], ""
+    except Exception as exc:  # noqa: BLE001 - 读不到不是本次实验的错，不许静默
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _same_code_path(row: Mapping[str, Any], code_path: str) -> bool:
+    """这一行实验与本次跑的是不是同一个脚本（路径身份的唯一判据）。
+
+    归一到正斜杠再逐字比：`code_path` 落盘时已经过 `_relpath`（正斜杠），但历史行
+    与别处写进来的行可能带反斜杠 —— 那时同一个脚本会被读成两个路径，撤销就不会发生，
+    而这正是现场那一幕（两条实验挂在同一个脚本上，谁也没撤谁）。
+    """
+    want = str(code_path or "").strip().replace("\\", "/")
+    got = str(row.get("code_path") or "").strip().replace("\\", "/")
+    return bool(want) and got == want
+
+
+def _void_superseded_rows(rows: Sequence[dict], *, code_path: str, code_hash: str,
+                          actor: str, at: str) -> tuple[list[dict], list[dict]]:
+    """把「同一脚本的既有有效行、且 `code_hash` 与本次不同」逐条撤销。
+
+    返回 `(被撤销的那些行, 判不了的那些行)`；被撤销的行是就地改过的 dict
+    （调用方负责 `tx.upsert` 写回，于是撤销与新行在同一个事务里落盘）。
+
+    判据只有三句（业主 2026-10-24 的裁定）：同一个 `code_path`、`code_hash` 不同、
+    仍然是有效行。三条全中才撤 —— 脚本没变的重跑（负控）与不同脚本（负控）都不许撤。
+    第四种情形要单独说：同一路径但那一行没有 `code_hash`（加哈希之前的史前行），
+    判不了它是不是被改过 ⇒ 不撤，但把它放进第二张表，由调用方在返回值里点名。
+
+    为什么要就地改而不是造新 dict：`row` 就是台账里的那一行形状，撤销要补的四格
+    （状态 / 谁 / 何时 / 换成哪一份）必须与其余字段一并在同一次 `upsert` 里落盘，
+    否则「撤了一半」的行会写进台账（`schema.Experiment.validate` 会拒，但那时已经
+    花了脚本的钱）。
+    """
+    voided: list[dict] = []
+    unclear: list[dict] = []
+    want_hash = str(code_hash or "").strip()
+    for row in rows:
+        if S.experiment_is_voided(row):
+            continue
+        if not _same_code_path(row, code_path):
+            continue
+        old_hash = str(row.get("code_hash") or "").strip()
+        if not old_hash:
+            unclear.append(row)
+            continue
+        if old_hash == want_hash:
+            continue
+        row["status"] = S.EXPERIMENT_VOIDED
+        row["void_reason_code"] = VOID_REASON_CODE_CHANGED
+        row["void_reason"] = S.experiment_void_reason(code_hash_from=old_hash,
+                                                      code_hash_to=want_hash)
+        row["voided_by"] = str(actor or "")
+        row["voided_at"] = str(at or "")
+        row["voided_code_to"] = want_hash
+        voided.append(row)
+    return voided, unclear
+
+
 def is_toy_example(reading: object) -> bool:
     """这一格读数「算不算」一个玩具例子 —— 唯一口径（读侧一律调它，不各写一份）。
 
@@ -370,6 +444,40 @@ class _RunExperiment:
                 report = {"path": "", "bytes": 0, "sha256": "", "ok": False,
                           "problems": [], "blocks": {}, "missing": [],
                           "experiment_id": eid, "at": ""}
+            # ---- [5b] 改脚本 ⇒ 撤销老登记（业主 2026-10-24 裁定，唯一权威）
+            #
+            # 逐字：「改脚本后应该重新登记并把老登记撤销」。
+            # 现场（`projects/sylow3`）：`exp 000000` 与 `exp 000001` 挂在同一个
+            # `code_path` 上、`code_hash` 不同；盘上现在是后一版，页面上 000000 那一格
+            # 只报「代码不一致」，两条实验并列挂着，读者无从判断哪一条还算数。
+            # 报「不一致」不等于把它撤销 —— 撤销是台账上的一个事实（状态 + 四条留痕），
+            # 读侧（`schema.experiment_is_voided`）只看那一格。
+            #
+            # 两条顺序要求：① 必须在写新行之前读既有行（否则本次这一行会被自己那条
+            # 判据看见）；② 撤销与建行在同一个事务里 —— 要么一起落盘，要么一起不落。
+            _existing, _read_error = _existing_experiment_rows(tx)
+            if _read_error:
+                # 第三态：读不到既有行 ⇒ 不撤，但必须说出口（不许静默当没有）。
+                notes.append(
+                    "[void] 没能核既有登记（" + _read_error + "）⇒ 这次一条都没撤；"
+                    "这是「没查成」，不是「没有旧登记」")
+            else:
+                _replaced, _unclear = _void_superseded_rows(
+                    _existing, code_path=_relpath(path, self.workspace_root),
+                    code_hash=chash, actor=self.actor, at=S.now_iso())
+                for _old in _replaced:
+                    tx.upsert(
+                        "experiments", _old,
+                        note=f"experiment:{_old.get('experiment_id')}:void:code_changed")
+                    notes.append(
+                        f"[void] 已撤销 exp:{_old.get('experiment_id')}（脚本已改："
+                        f"{str(_old.get('code_hash') or '')[:16]} → {chash[:16]}）"
+                        " —— 它不再算作该结论的证据")
+                for _old in _unclear:
+                    notes.append(
+                        f"[void] exp:{_old.get('experiment_id')} 与本次同一个脚本"
+                        f"（{_relpath(path, self.workspace_root)}）但没有 code_hash ⇒ "
+                        "判不了它是不是被改过，没有撤销（判不了不等于没改）")
             row = build_experiment(
                 eid,
                 claim,
