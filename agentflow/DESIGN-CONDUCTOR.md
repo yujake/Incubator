@@ -149,8 +149,8 @@ res = conductor.summon(
 ```python
 @dataclass(frozen=True)
 class Policy:
-    max_depth: int = 3                 # 召唤链深度上限（M=1）
-    max_fanout: int = 5                # 单个任务最多派生几个子召唤
+    max_chain_depth: int = 4          # 链长：台账 4 跳 = 链上 5 个代理（业主 2026-10-24 裁定）
+    max_direct_children: int = 25     # 一个父能同时挂几个直接子（只数直接子，业主 2026-10-24）
     max_concurrency: int = 4           # 全局同时运行的任务数
     max_tasks_per_run: int = 200       # 一次 run 的召唤总数（生命周期总量）
     wall_clock_sec: float | None = 900 # 全局墙钟截止（FC-20）
@@ -164,7 +164,7 @@ class Policy:
 **四类上限必须同时存在**（FC-18）：
 只有 `max_tasks_per_run`（总量）⇒ 瞬时可以把并发打爆；
 只有 `max_concurrency`（瞬时）⇒ 扇出可以无限持续；
-只有 `max_depth` ⇒ 每一层都能无限宽；只有 `max_fanout` ⇒ 链可以无限深。
+只有 `max_chain_depth` ⇒ 每一层都能无限宽；只有 `max_direct_children` ⇒ 链可以无限深。
 **缺任一类，另三类都可以被绕过** —— 所以 `Policy.validate()` 要求四个都是正数，
 且 `run` 启动时断言"四类都在"（完整性自检 `policy.assert_policy_complete`）。
 
@@ -196,11 +196,16 @@ H → G            # 审校发现问题 → 请 G 修订（H 不改稿）
 
 ### 3.2 循环与活锁
 
-- **深度**：`depth > max_depth` ⇒ `refused/depth_exceeded`。
-- **扇出**：一个任务已受理 `max_fanout` 个子任务（口径 = 受理数：被闸门拒掉、根本没跑的
-  尝试照旧落台账但不占名额 —— 否则父任务触顶后就再也派不出活，且每次尝试再占一格＝自我毒化）
-  ⇒ `refused/fanout_exceeded`。上限按发起方角色取：默认档 = `policy.max_fanout`，
-  主控 `M` 一档 = 20（`policy.FANOUT_LIMIT_BY_ROLE`，编排者一趟要派的活天然比工人多）。
+- **链长**：`depth > max_chain_depth` ⇒ `refused/depth_exceeded`。两种数法差一，
+  两处都写清：业主数**链上的代理个数**（M W X Y Z ⇒ 5 个，第 5 个不能再派，业主 2026-10-24
+  原话：「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」）；台账 `Task.depth` 数**跳数**
+  （主控不落行，它的直接子 = 1）⇒ `max_chain_depth = 4` 跳 = 链上 5 个代理，
+  换算只在 `policy.max_agents_on_chain`。这是结构闸门，不是成本闸门。
+- **扇出**：一个任务名下的直接子达 `max_direct_children` 个（口径 = 单时刻在飞：被闸门拒掉、
+  根本没跑的尝试照旧落台账但不占名额 —— 否则父任务触顶后就再也派不出活，且每次尝试再占一格＝自我毒化）
+  ⇒ `refused/fanout_exceeded`。只数直接子，不管隔着几层的子（业主 2026-10-24：
+  「12是只管直接子，不管隔着几层的子」）。上限按发起方角色取：默认档 = `policy.max_direct_children`（25），
+  主控 `M` 一档 = 100（`policy.DIRECT_CHILDREN_LIMIT_BY_ROLE`，编排者一趟要派的活天然比工人多）。
 - **判重**：`(role, action, input_key)` 若出现在**祖先链**上 ⇒ `refused/cycle_detected`。
   用 `input_key`（调用方给的输入指纹）而不是全部参数：参数里常有时间戳这类噪声，
   而"同样的问题问两遍"才是要防的事。

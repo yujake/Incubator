@@ -298,18 +298,24 @@ def test_the_parent_limits_are_computed_from_the_policy():
 
     正控：换一个把四类上限都改掉的 `Policy` ⇒ 渲染出来的那一句跟着换；负控：缺省值一个字都不该
     出现在改过的那一段里 —— 写死的数字在"被覆盖过的 run"里就是谎话（`cli.py` 就传过 `wall_clock_sec`）。
-    另钉两处口径：主控那一档来自 `FANOUT_LIMIT_BY_ROLE`（100，同时把工人档 25 写出来做对照），而
+    另钉两处口径：主控那一档来自 `DIRECT_CHILDREN_LIMIT_BY_ROLE`（100，同时把工人档 25 写出来做对照），而
     `wall_clock_sec=None` 那一支必须写成"这一次不限"（不是"限 0"，也不是不写 —— 业主裁定 B 的另一面：
     墙钟不缩短，但"没设"与"设为 0"必须分得开）。
 
-    2026-10-15 改（承 `draft/123` 裁定 C4/C5）：缺省值整体抬高（`max_depth` 5→12、`max_fanout` 5→25、
+    2026-10-15 改（承 `draft/123` 裁定 C4/C5）：缺省值整体抬高（`max_direct_children` 5→25、
     `max_concurrency` 4→16、`max_tasks_per_run` 200→5000、`wall_clock_sec` 900→14400、M 档 20→100），
     而这条判据里的字面量没有跟着改 ⇒ 它红了。改法刻意把新旧两套缺省值都放进负控：职责是"默认值
     不许被写死在渲染里"，所以凡是当期缺省值都不许出现在被覆盖过的那一段里 —— 只列旧值会在下一次抬阈值时再变成谎言。（同族教训：`test_refusal_family_numbers` 那份手写 code
-    清单做"反真空"自相矛盾。）"""
+    清单做"反真空"自相矛盾。）
+
+    2026-10-24 补：链长那一格不再跟 C5 一起抬，业主原话「深度5的意思是假如M-W-X-Y-Z，
+    Z就不能再派子代理」⇒ `max_chain_depth` 回到"链上 5 个代理"（台账口径 4 跳；
+    更名与两种数法见 `policy.Policy` 的注释与 `policy.max_agents_on_chain`）；
+    本判据不看那个数字（它要求数字一律现算），所以这一格改回来不影响它。
+    """
     from agentflow import policy as POL
 
-    odd = POL.Policy(max_depth=9, max_fanout=7, max_concurrency=3,
+    odd = POL.Policy(max_chain_depth=9, max_direct_children=7, max_concurrency=3,
                      max_tasks_per_run=11, wall_clock_sec=None)
     text = AP.parent_limits_text(odd, "E")
     for want in ("7 个", "9", "3 个", "11 个", "这一次**不限**"):
@@ -320,12 +326,12 @@ def test_the_parent_limits_are_computed_from_the_policy():
     for stale in stale_defaults:
         assert stale not in text, f"这一段里还留着写死的缺省值数字 {stale!r}：{text}"
 
-    # 主控那一档来自 FANOUT_LIMIT_BY_ROLE；工人档来自 Policy.max_fanout（两处都现算）
+    # 主控那一档来自 DIRECT_CHILDREN_LIMIT_BY_ROLE；工人档来自 Policy.max_direct_children（两处都现算）
     m_text = AP.parent_limits_text(odd, "M")
     assert "最多 100 个" in m_text and "工人档是 7 个" in m_text, m_text
     assert "最多 7 个（" not in m_text, m_text
 
-    # 默认 Policy 的那一支：工人档等于 Policy.max_fanout ⇒ 不再补"工人档是…"那半句
+    # 默认 Policy 的那一支：工人档等于 Policy.max_direct_children ⇒ 不再补"工人档是…"那半句
     plain = AP.parent_limits_text(POL.Policy(), "E")
     assert "最多 25 个。" in plain and "工人档" not in plain, plain
 
@@ -2138,19 +2144,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p199"
+_FROZEN_PROMPT_VERSION = "p200"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "d5f54b4e54b17b6d680dafd9685bf458c683305dfce0ab6e485b06a3dc399035",
-    "B": "c9277127ad49f5507331bc6acec2c441796bcc67c46ad7d8984615602e434d13",
-    "C": "53527a8dda23d709dc977d9a7329762552489859ff7f24ebb24632163683150a",
-    "D": "8027cb2ee32153c13f5547f06dcdf91f15467f21b39de3640423c759e86dfc7a",
-    "E": "bbe2600e6f088c90f23e24edc55ce26a0b5754c56a22acfef70f819db08237ee",
-    "F": "127ffceb92ef0fffc0d348f7891883c635f6aece6e8c617b3fedf27b242eeaa8",
-    "G": "ad7ceddc13602ee61769e5b6d5118aa1bbad713fef2c7f01fccbda21a5a55ad5",
-    "H": "554b9eb7b1f612a690bfa6a74e2ebcb4a5e919654a2e56254b32dcb0c07cf197",
-    "L": "61e94dd4452d4c1ac9f5c68e0625f77e33015fbbb42787c61062880ec9d13502",
-    "M": "81125c28d88f19e315d1cf6a62b918c72877fa36a353a2a34c7fa1aad82ea020",
-    "V": "190ff25bdc8cb762bd64d5d9b7878663ece0ad793e5ae8da589411969d1f1db8",
+    "A": "d994d5cb89a09bd5482b53eff9cf03e670f2bcac8fc8995ced855436907cc96c",
+    "B": "704599fa1c7ebf32b29dfead63b2571e9b24a0c1efce2c5249444a6a452fc851",
+    "C": "6fa9a84f7373f5d2fa8930657191f24eefc4340883bbf1de2ad58823ab4728e7",
+    "D": "ac07a2afb60e6dd4dfcacde0511928af094d032e5e478dc7236cf624d504d550",
+    "E": "309fd96589b57f32ea4f39bc8b5a82c0cee24cf8bdfe4cac03f2b3428b864391",
+    "F": "0ea652e39660fd6cb5ed544332f91ac46139c918a63dfd7fb70fca07c4949970",
+    "G": "3dcf354e82d28c3cdc71d2879f5ad45d521ed06e7e31a477e7ea9b9d59c5887e",
+    "H": "523e4f1e72c7e456a704d9aaa51fe35d5791fd8ff05bd4516034e981d2a99487",
+    "L": "9ee9af5544633a62425b774efcc2662acb7550b497846098e68b048c3e8e4bdf",
+    "M": "5bbe23972f313b806a577f8b242e0d93220e0e0373e6a9a375d2a5acd384a7ab",
+    "V": "9478650b3feaff6795532862f01696d8dd80df9b005dd7439fb75d841cee3e9c",
 }
 
 

@@ -55,7 +55,7 @@ def test_board_items_do_not_eat_the_fanout_quota(tmp_path: pathlib.Path):
     """
     _st, cond = _cond(tmp_path)
     owner = cond.open_top_level_run("M", "顶层的活")
-    limit = P.fanout_limit_for(P.Policy(), "M")
+    limit = P.direct_children_limit_for(P.Policy(), "M")
     _notices(cond, owner, limit)
     assert len(cond._in_flight_children_of(owner)) == 0, (
         "板项不是代理：20 条 notice 之后，代理轴读数必须是 0",

@@ -2242,7 +2242,25 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_skills.py` 的 M 技能 `skills/M/规划-先了解全貌再定方向.md`。写成一般化的规划习惯，
 #: 不含任务名、不含写死的条数、第一步也不写死手段（业主当场拦过照抄样例：「你这是为了这个
 #: 专项任务定制提示词！！」）。只有 M 一格换值（改的是 policy 与 M 自己的技能索引行）。
-PROMPT_VERSION = "p199"
+#:
+#: p199 → p200（2026-10-24）：监控下级那一层按已落地的实现写进所有角色的提示词。
+#: 业主口径逐字两条：「注意不只是M侧改，其它所有智能体都要知道有监控一层子代理的能力」
+#: 与「到时候改M提示词那路要在监控接线后按具体实现明确」。
+#:   ① 十个可召唤角色（A B C D E F G H V L）的 policy 各加一条：能看直接下级
+#:      （点名 `trace.children`，给的是状态 / 被拒次数与类目 / 最近几步 / 产出是否真落盘 /
+#:      最近一次交接），只看一层；要看更深就 `conductor.escalate` 向 M 请求，M 会把指导
+#:      连同各级父的通知一起发下来（拿到的是指导，不是原始全树数据）。
+#:   ② M 的 policy 第 05 条（处置三条手段）从「写成一句话指导、沿树传到对应智能体」改成
+#:      点名工具的实现口径：看全树用 `conductor.watch`，下发指导用 `conductor.guide`
+#:      （它自己给每一级父各开一条板项，所以不必再另发 message），并补一句「非 M 角色只
+#:      看得见一层、会通过 `conductor.escalate` 向你请求深看」。原来那两句
+#:      「沿树传到对应智能体」/「各级父也知道」逐字保留（`test_m_plans_before_it_proves`
+#:      按它们认那一步）。
+#: 工具面这一批一件没动：`trace.children` / `conductor.watch` / `conductor.guide` 是上一
+#: 批接线就落地的三件（97 → 100 件）⇒ 十一格的工具目录那一段在这一版之前就印着它们。
+#: 读数：十一格摘要全换（每格多了那一条政策，M 那一格还改了第 05 条）。
+#: 判据：tests/test_every_role_knows_it_can_watch_its_children.py（四条）。
+PROMPT_VERSION = "p200"
 
 
 

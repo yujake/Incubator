@@ -170,6 +170,15 @@ SPEC = AgentSpec(
             "依赖有没有循环；④ **强度** —— 结论是否比原文更强（更强就是缺陷，这一档叫 `stronger_than_source`）；⑤ **台账一致** —— "
             "与被审的那一行字面是否一致。这几条角度怎么用，见 `skills/V/` 下那两份手册（自足-核的是那一行字面 / 假设轴-前提是否真被"
             "满足），按需读。",
+            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
+            # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
+            # `conductor.escalate` 都在本角色的工具面上（两件都声明只读，不会被只读角色的
+            # 结构性过滤剥掉）。判据：tests/test_every_role_knows_it_can_watch_its_children.py。
+            "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
+            "逐个给子任务的状态、被拒次数与类目（`refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
+            "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
+            "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 会把对你的指导连同各级父的通知一起"
+            "发下来：你看到的是指导，不是原始全树数据。",
         ),
         signature_error="把“我没看出毛病”写成“成立”：漏检与通过是两件事，而台账上它们只差一个字。",
         deliverable="verifications/<命题号>.jsonl 里那一行：`v-NNNN` + 三态结论 + 逐条 findings（带步号）+ 被审证明的 sha256。",

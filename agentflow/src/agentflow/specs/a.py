@@ -254,6 +254,16 @@ SPEC = AgentSpec(
             "被指认无可信度、或还在待审核的文献：不可当引文入库，只可当研究参考 —— 它的原话不进 `quote`，"
             "也不拿它当「这条结论凭什么」的凭据；结论里要用到它，先换一篇可核的来源，"
             "或者把它按「研究参考 / 待核」如实标出来。",
+            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
+            # 子代理的能力」）＋「到时候改M提示词那路要在监控接线后按具体实现明确」：
+            # 只写这一实现里真有的两件 —— `trace.children` 与 `conductor.escalate` 都在本角色的
+            # 工具面上（`trace.children` 的 `roles` 是全部可召唤角色，escalate 是全部角色）。
+            # 判据：tests/test_every_role_knows_it_can_watch_its_children.py。
+            "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
+            "逐个给子任务的状态、被拒次数与类目（`refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
+            "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
+            "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 会把对你的指导连同各级父的通知一起"
+            "发下来：你看到的是指导，不是原始全树数据。",
         ),
         signature_error="把一条候选被丢掉说成这篇文献不存在。",
         deliverable="search_requests 里每一条请求的终局（outcome）与 result_lit_ids。",

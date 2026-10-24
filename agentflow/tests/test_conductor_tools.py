@@ -47,6 +47,11 @@ M_TOOL_FACE = {
     # 顶层调用会被受控拒绝（`not_caller`），而不是"顶层看不见这个工具"
     # （"看不见"与"不许"是两件事：前者模型会以为能力不存在而绕路）。
     "conductor.escalate",
+    # 全树追踪与沿树指导（2026-10-24 业主裁定「普通代理能追一层，M能想追几层追几层」）：
+    # M 看不到一层那一件的全部同族能力就说不过去 —— `conductor.watch` 是"想追几层
+    # 追几层"的那一半，`conductor.guide` 是"看完之后把指导意见沿树传下来"的那一半。
+    # 一层那一半在 `trace.children`（A–H 都有，M 不需要）。
+    "conductor.watch", "conductor.guide",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 13 件）；留给"编排面本身"的判据用。
@@ -726,7 +731,10 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
         assert name not in hand_line, (name, hand_line)
     # S6-b：广播是写工具（开板项）⇒ 它也进"手"那一档的清单 ⇒ 计数从 7 涨到 8。
     assert "conductor.broadcast" in hand_line, hand_line
-    assert "可改 8 件" in hand_line, hand_line
+    # 2026-10-24：`conductor.guide` 同样是写工具（给目标与各级父各开一条板项）
+    # ⇒ 计数 8 涨到 9。判据不变：这一行点名的件数必须等于真写工具的件数。
+    assert "conductor.guide" in hand_line, hand_line
+    assert "可改 9 件" in hand_line, hand_line
 
 
 def test_state_and_role_spec_are_read_only_views(tmp_path: Path):

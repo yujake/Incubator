@@ -171,7 +171,11 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
    `A→B`、`B→{C,H,V}`、`C→∅`（2026-10-20 改回"无出边"：D 唤起 C、C 的汇报就是它的返回值）、
    `D→{A,B,C,E,F}`、`E→{B,D}`、`F→{A,B,C,D,E,V}`、`G→{A,D,E,F}`、`H→{A,E,G}`。
 4. **A–H 对召唤者负责**：被动（主控召唤）或同伴召唤，受三条约束 —— 边必须被策略允许、
-   深度有限（`policy.Policy.max_depth` 现读 **12**）、同一 `(role, action, input_key)` 不得在祖先链上重复（§1.2）。
+   委派链长有限（链上最多 **5** 个代理，即 `policy.Policy.max_chain_depth` 现读 **4**
+   台账跳数 —— 业主数代理个数、台账 `Task.depth` 数跳数，差一的换算只在
+   `policy.max_agents_on_chain`；业主 2026-10-24 原话：「深度5的意思是假如M-W-X-Y-Z，
+   Z就不能再派子代理」—— 这是结构闸门，不是成本闸门）、
+   同一 `(role, action, input_key)` 不得在祖先链上重复（§1.2）。
 5. **并发是策略、不是常量**；可并发的判据是"会不会写同一张表的同一批行"（§1.3）；
    写集由 `capabilities.WRITE_SETS` 定义；只读角色（C/H/V）拿不到 `fs.*` / `table.*` 的写工具
    （C/H 各自的落库代理由 `tools.base.READONLY_CALL_EXCEPTIONS` 逐条登记 —— C 1 件、H 4 件，V 一件没有）。

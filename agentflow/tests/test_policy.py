@@ -428,7 +428,7 @@ def test_unmapped_actions_are_reported_not_silently_treated_as_consistent():
 
 def test_policy_validate_rejects_each_missing_limit():
     """FC-18：四类上限缺任一类都可以被绕过，所以每个都必须为正数。"""
-    for field_name in ("max_depth", "max_fanout", "max_concurrency", "max_tasks_per_run"):
+    for field_name in ("max_chain_depth", "max_direct_children", "max_concurrency", "max_tasks_per_run"):
         for bad in (0, -1):
             with pytest.raises(ValueError, match=field_name):
                 P.Policy(**{field_name: bad})
@@ -457,7 +457,7 @@ def test_policy_is_frozen_value_object():
     """策略是值对象：出生时合法，之后不可变（改了它等于改了判据的依据）。"""
     p = P.Policy()
     with pytest.raises(Exception):
-        p.max_depth = 9  # type: ignore[misc]
+        p.max_chain_depth = 9  # type: ignore[misc]
 
 
 def test_negative_budget_is_rejected():
@@ -610,36 +610,39 @@ def test_forbidden_edge_takes_priority_over_depth():
 
     `C → B` 无论在什么深度都是越权；报 depth_exceeded 会让人以为"再浅一点就行"。
     """
-    r = P.check(P.Policy(max_depth=1), _d(frm="C", to="B", action="run_once", depth=99))
+    r = P.check(P.Policy(max_chain_depth=1), _d(frm="C", to="B", action="run_once", depth=99))
     assert r is not None and r.reason == "forbidden_edge"
 
 
 def test_depth_exceeded():
-    r = P.check(P.Policy(max_depth=3), _d(depth=4))
+    r = P.check(P.Policy(max_chain_depth=3), _d(depth=4))
     assert r is not None and r.reason == "depth_exceeded"
 
 
 def test_depth_boundary_is_allowed():
-    """边界正控：`depth == max_depth` 必须放行 —— 否则"默认值"会变成"默认值减一"。"""
-    assert P.check(P.Policy(max_depth=3), _d(depth=3)) is None
+    """边界正控：`depth == max_chain_depth` 必须放行 —— 否则"默认值"会变成"默认值减一"。"""
+    assert P.check(P.Policy(max_chain_depth=3), _d(depth=3)) is None
 
 
-def test_the_default_depth_is_twelve_after_the_2026_10_15_ruling():
-    """默认深度 5 → 12（业主 2026-10-15 裁定 C5）。
+def test_the_default_chain_depth_is_four_hops_which_is_five_agents():
+    """默认链长：台账 4 跳 = 链上 5 个代理（业主 2026-10-24 原话，逐字）。
 
-    前情：默认深度 3 → 5 是所有者 2026-10-08 的裁定（「我们限制递归调用深度为5，
-    毕竟 20*(5*5*5*5) 也非常可观了」）。2026-10-15 的裁定标准逐字是
-    「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），删或把
-    触发水平抬高到几乎不可能触发的程度」，依据是 T5 第 8 趟的真实链长：
-    正常研究里一次"D 的追问"会再走一遍 `D → A → B`，链长立刻 6 ——
-    也就是说 5 不是"上限"，它是正常工作会撞到的一堵墙。
+    业主 2026-10-24：「扇出12的意思是能一个父能有几个子，深度5的意思是假如
+    M-W-X-Y-Z，Z就不能再派子代理。」他数的是链上的代理个数（Z 是第 5 个），
+    而台账 `Task.depth` 数的是跳数（主控不落行，它的直接子 = 1）
+    ⇒ 要让"第 5 个代理能干活、它再派就被拒"，这一格的值就是 4 跳。
 
-    两件事：①默认值就是 12；②边界精确 —— 第 12 层放行、第 13 层拒。
+    沿革：3 → 5（所有者 2026-10-08）→ 2026-10-15 曾按 C5 抬到 12（那条理由没有
+    业主对"深度"这一轴的裁定背书）→ 2026-10-24 按上引原话改回"链上 5 个代理"。
+
+    两件事：①默认值就是 4（且 `max_agents_on_chain() + 0` 换算后 == 5）；
+    ②边界精确 —— 台账跳数 4 放行、跳数 5 拒。
     """
     p = P.Policy()
-    assert p.max_depth == 12, p.to_dict()
-    assert P.check(p, _d(depth=12)) is None, "第 12 层必须放行"
-    r = P.check(p, _d(depth=13))
+    assert p.max_chain_depth == 4, p.to_dict()
+    assert P.max_agents_on_chain(p) == 5, "台账 4 跳必须对上链上 5 个代理（差一只有一处换算）"
+    assert P.check(p, _d(depth=4)) is None, "第 5 个代理（台账跳数 4）必须放行"
+    r = P.check(p, _d(depth=5))
     assert r is not None and r.reason == "depth_exceeded", r
 
 
@@ -666,40 +669,40 @@ def test_cycle_uses_input_key_not_all_params():
 
 
 def test_fanout_exceeded():
-    """默认档（工人）的扇出上限 = `Policy.max_fanout`，在 `>=` 处拒。
+    """默认档（工人）的扇出上限 = `Policy.max_direct_children`，在 `>=` 处拒。
 
     为什么这里显式写 `frm="A"`（而 `_d` 的默认 frm 是 M）：上限按发起方角色取
     （题15 选B，2026-10-07），主控那一档是 20，不写 frm 就会测到主控档上。
     主控档自己的判据见 `test_fanout_limit_is_per_initiator_role`。
     """
-    r = P.check(P.Policy(max_fanout=2), _d(frm="A", to="B", action="run_once", fanout=2))
+    r = P.check(P.Policy(max_direct_children=2), _d(frm="A", to="B", action="run_once", direct_children=2))
     assert r is not None and r.reason == "fanout_exceeded"
-    assert P.check(P.Policy(max_fanout=2),
-                   _d(frm="A", to="B", action="run_once", fanout=1)) is None
+    assert P.check(P.Policy(max_direct_children=2),
+                   _d(frm="A", to="B", action="run_once", direct_children=1)) is None
 
 
 def test_fanout_limit_is_per_initiator_role():
-    """扇出上限按发起方角色取：主控一档 = 100，默认档 = `Policy.max_fanout`（25）。
+    """扇出上限按发起方角色取：主控一档 = 100，默认档 = `Policy.max_direct_children`（25）。
 
     那两个数钉在判据里是刻意的：它们是人裁的编排余量（题15 选B，2026-10-07
     定的双档；数字由业主 2026-10-15 裁定 C5 抬到 100 / 25），
     改它应当先改那一处裁定，而不是顺手调一个常量。口径在 2026-10-08 被所有者
-    改成"单时刻在飞"（`fanout` = 此刻还没返回的子代理数；见 `policy` 的模块 docstring），
-    这里的 `_d(fanout=…)` 直接给的就是那个数。
+    改成"单时刻在飞"（`direct_children` = 此刻还没返回的直接子数；见 `policy` 的模块
+    docstring），这里的 `_d(direct_children=…)` 直接给的就是那个数。
     """
     p = P.Policy()
-    assert P.fanout_limit_for(p, S.CONDUCTOR_ROLE) == 100
-    assert P.fanout_limit_for(p, "A") == p.max_fanout == 25
+    assert P.direct_children_limit_for(p, S.CONDUCTOR_ROLE) == 100
+    assert P.direct_children_limit_for(p, "A") == p.max_direct_children == 25
     # 反真空：两档都真的会拒，报文里能读出"此刻在飞几个"与"上限是多少"。
-    worker = P.check(p, _d(frm="A", to="B", action="run_once", fanout=25))
+    worker = P.check(p, _d(frm="A", to="B", action="run_once", direct_children=25))
     assert worker is not None and worker.reason == "fanout_exceeded"
     assert "在飞 25" in worker.detail and "上限 25" in worker.detail, worker.detail
-    assert P.check(p, _d(frm="M", to="A", action="run_once", fanout=26)) is None
-    boss = P.check(p, _d(frm="M", to="A", action="run_once", fanout=100))
+    assert P.check(p, _d(frm="M", to="A", action="run_once", direct_children=26)) is None
+    boss = P.check(p, _d(frm="M", to="A", action="run_once", direct_children=100))
     assert boss is not None and boss.reason == "fanout_exceeded"
     assert "在飞 100" in boss.detail and "上限 100" in boss.detail, boss.detail
-    # 报文要说清那个 100 是从哪来的（否则读的人会以为上限就是 policy.max_fanout）
-    assert "FANOUT_LIMIT_BY_ROLE" in boss.detail and "policy.max_fanout=25" in boss.detail
+    # 报文要说清那个 100 是从哪来的（否则读的人会以为上限就是 policy.max_direct_children）
+    assert "DIRECT_CHILDREN_LIMIT_BY_ROLE" in boss.detail and "policy.max_direct_children=25" in boss.detail
 
 
 def test_concurrency_exceeded():
@@ -768,7 +771,7 @@ def test_check_edge_does_not_raise_on_any_reason():
     """
     for kw in (
         dict(to="Z"), dict(action="?"), dict(frm="C", to="B", action="run_once"),
-        dict(depth=99), dict(fanout=99), dict(running=99), dict(total=999),
+        dict(depth=99), dict(direct_children=99), dict(running=99), dict(total=999),
         dict(deadline_hit=True), dict(usd_left=0.0),
     ):
         out = P.check_edge(P.Policy(), kw.pop("frm", "M"), kw.pop("to", "C"),

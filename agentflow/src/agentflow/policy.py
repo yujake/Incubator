@@ -12,8 +12,8 @@
 |---|---|
 | `max_tasks_per_run`（总量） | 瞬时把并发打爆：总量对了，但 200 个任务同时开跑 |
 | `max_concurrency`（瞬时） | 扇出可以无限持续：每秒 4 个，跑一天 |
-| `max_depth` | 每一层都能无限宽（深度 5，每层 9999 个） |
-| `max_fanout` | 链可以无限深（每次只派生 1 个，但派生 10000 层） |
+| `max_chain_depth` | 每一层都能无限宽（链上 5 个代理 = 台账 4 跳，每层 9999 个直接子） |
+| `max_direct_children` | 链可以无限深（每次只派生 1 个，但派生 10000 层） |
 
 所以 `Policy.validate()` 要求四个都是正数，"没设上限"这种事在本层
 不存在 —— 要放宽就把数字调大，而不是把它变成 None。这是一条刻意的
@@ -30,8 +30,8 @@
 
 ## 扇出的口径：同时在飞的子代理数（所有者 2026-10-08 裁定）
 
-`check()` 的第 [5] 步读 `Decision.fanout`，它的定义是"父任务此刻派出去、还没返回
-的子代理数"—— 不是"这个父任务累计派过几个"。所有者逐字：
+`check()` 的第 [5] 步读 `Decision.direct_children`，它的定义是"父任务此刻派出去、还没返回
+的直接子数"—— 不是"这个父任务累计派过几个"，也不是"整棵树一共多少节点"。所有者逐字：
 
 > 「我认为的"派活上限"不是累计的，是单时刻的，即 M 同时派出在后台运行的子代理数
 > 不超过 20，各角色智能体允许同时向其它智能体派活数不超过 5，智能体返回后腾出空间。」
@@ -41,11 +41,38 @@
 闸门拒掉的召唤根本没跑、连 `running` 行都没有（见 `Conductor._refuse`）⇒ 天然不计，
 上一版那条"自我毒化"的防线因此仍然成立（累计口径下它才是必要条件）。
 
+## 扇出只数直接子（业主 2026-10-24 裁定）
+
+业主原话逐字：「扇出12的意思是能一个父能有几个子，深度5的意思是假如M-W-X-Y-Z，
+Z就不能再派子代理。」补的下一句是：「12是只管直接子，不管隔着几层的子」。
+
+所以 `max_direct_children` 这一格数的是"同一个父此刻挂在它名下的、还没返回的直接子"：
+它对孙辈、曾孙辈没有任何约束，也不跟"整棵树一共多少节点"换算 —— 每一层各自有自己的
+12（本框架默认档 25、主控档 100）：一个父可以挂 12 个直接子，其中每个子又各自挂
+12 个直接子（能挂到第几层由链长 `max_chain_depth` 截断），这不叫"扇出叠加违规"。
+两根轴互不换算：深度管链有多长，扇出管一个父有几个直接子（判据
+`tests/test_depth_lock_is_five_and_fanout_is_not_depth.py` 按这三句话守着）。
+
+## 链长有两种数法，差一（业主数法 vs 台账数法）
+
+业主 2026-10-24 原话：「深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理」——
+他数的是链上的代理个数：M(1) W(2) X(3) Y(4) Z(5)，第 5 个（Z）不能再派。
+台账里 `Task.depth` 数的是跳数：主控不落任务行，它的直接子 depth = 1
+（`Conductor._depth_of(None)`）。所以：
+
+- 链上 5 个代理 = 台账 4 跳；
+- `Policy.max_chain_depth` 比的是台账跳数 ⇒ 取值 4；
+- 换算的唯一落点是 `policy.max_agents_on_chain`（跳数 + 1），拒绝报文与文档都读它。
+
+两处都要写清，否则下一个读的人还会差一（判据里有两条盯着：①链上第 5 个能干活、
+它再派就被拒；②`max_chain_depth + 1 == 链上代理个数` 的等式）。
+
 这一条取代了原来的"受理数"口径（题15 选B，2026-10-07）：那一版把名额算成了生命周期
 总量，于是 T1 第 18/19 趟在第 51–88 步就用完了 20 个名额，此后 `G.build_document`
 与修好的 Lean 重派全部进不去 —— 一趟 78–138 步的研究型跑批只许派 20 次活，是结构性不够。
 累计读数没有丢：它仍在台账里（`Conductor._admitted_children_of` 是审计面），
-只是不再当判据。上限本身按发起方角色取：默认档 = `Policy.max_fanout`（5），主控 `M` 一档 = 20。
+只是不再当判据。上限本身按发起方角色取：默认档 = `Policy.max_direct_children`（25），
+主控 `M` 一档 = 100（`DIRECT_CHILDREN_LIMIT_BY_ROLE`）。
 
 触顶时先等（所有者 2026-10-08 补的下一句：「当达到派活上限后，父智能体或主控
 只可等待子智能体返回结果」）：等待发生在 `Conductor.summon`（`fanout_wait_sec`，
@@ -60,12 +87,14 @@
 
 这句话回答了"扇出名额挂在谁身上"，而实现里它落在任务行上（= 一个实例）：
 
-- `Decision.fanout` 数的是"这一个父任务此刻在飞的子代理"，不是"这个角色一共有几个
+- `Decision.direct_children` 数的是"这一个父任务此刻在飞的直接子"，不是"这个角色一共有几个
   子在飞" —— 于是 D#1（某个父任务名下的 D 调用）在自己的 5 个位满时，只影响它自己；
 - 别人（另一个父任务）再向 D 派活 ⇒ 新建一行 D 任务（D#2），它自己的在飞数是 0，
   立刻开跑 —— 不需要等 D#1，也不会被 D#1 的满额挡住。这就是"另起一个 D2"在台账上的形态；
-- 相乘关系因此成立：每个实例各自有 `max_fanout` 个位，沿链相乘；`max_depth=5` 把链截断
-  （理论上界 20×5⁴，实际由 `max_concurrency` 与 `max_tasks_per_run` 卡住）。
+- 相乘关系因此成立：每个实例各自有 `max_direct_children` 个位，沿链相乘；
+  `max_chain_depth=4`（链上 5 个代理）把链截断
+  （理论上界 = 主控档 100 乘以链上每一跳的 25，实际由 `max_concurrency` 与
+  `max_tasks_per_run` 卡住）。
 """
 
 from __future__ import annotations
@@ -81,31 +110,54 @@ from . import schema as S
 class Policy:
     """一次 run 的策略。四类上限必须同时存在且为正数（FC-18）。"""
 
-    #: 召唤链深度上限。主控发起 = 1，因此 `max_depth=5` ⇒ `M(1) → A(2) → B(3) → C(4) → D(5)` 已到底。
+    #: 委派链长上限，按台账口径数：`Task.depth` 是跳数，主控的直接子 = 1。
     #:
-    #: 默认值 3 → 5 是所有者 2026-10-08 的裁定（逐字：「我们限制递归调用深度为5，
-    #: 毕竟 20*(5*5*5*5) 也非常可观了」）：名额是逐实例的（每个在跑的实例各自
-    #: 有 `max_fanout` 个同时在飞的子代理位），所以理论上的并行规模沿链相乘 ——
-    #: 主控 20 × 每层 5，四层就是 20×5⁴ = 12500。实际能跑多少仍由
-    #: `max_concurrency`（全局瞬时）与 `max_tasks_per_run`（生命周期总量）卡住，
-    #: 深度这一根轴管的是"链能有多长"，不是"能同时跑多少"。
+    #: ## 两种数法（业主原话 vs 台账），差一，两处都必须写明
     #:
-    #: 2026-10-15 业主裁定 C5：5 → 12。裁定标准逐字是「凡是可能阻止智能体
-    #: 完成大项目的（限制输入、思考、产出、步数等），删或把触发水平抬高到
-    #: 几乎不可能触发的程度（即使触发也是提醒而非强杀）」。T5 第 8 趟的真实
-    #: 链长只有 4 层（`M → A → B → C/D`），5 之所以危险是因为"研究得越深、
-    #: 委托链越长"恰好是这一行的正常形态：一个 D 的追问会再走一遍
-    #: `D → A → B`，链长立刻 6。12 层留出两轮完整的再委托余量，
-    #: 而它仍然是一个上界（深度判据本身留着一一它防的是真无限递归）。
-    max_depth: int = 12
-    #: 单个任务同时在飞的子代理数上限（默认档；主控那一档见
-    #: `FANOUT_LIMIT_BY_ROLE`）。口径见模块 docstring 的"扇出的口径"一节。
+    #: 业主 2026-10-24 原话（唯一权威，逐字）：「扇出12的意思是能一个父能有几个子，
+    #: 深度5的意思是假如M-W-X-Y-Z，Z就不能再派子代理。」
+    #:
+    #: - 业主数法 = 链上的代理个数：M(1) W(2) X(3) Y(4) Z(5) —— 最多 5 个，第 5 个
+    #:   就是 Z，它不能再派第 6 个。
+    #: - 台账数法 = 跳数（`Conductor._depth_of`：主控的直接子 = 1，子 = 父 + 1）。
+    #:   M 自己不落任务行，所以"链上 5 个代理"= 台账 4 跳。
+    #:
+    #: 于是这一格取 4：`max_chain_depth=4` ⇒ 台账 depth 1..4 放行（= 链上 A、B、D、F
+    #: 到第 5 个代理），depth=5 拒（= 想派第 6 个代理）。换算的唯一落点是
+    #: :func:`max_agents_on_chain`（跳数 + 1），判据里有反真空盯着这个等式。
+    #:
+    #: ## 它管什么、不管什么
+    #:
+    #: 这一格只管"链有多长"；"一个父能同时挂几个直接子"是另一根轴
+    #: （`max_direct_children`），两根轴不换算、不叠加 —— 12 只管直接子，
+    #: 不管隔着几层的子。
+    #:
+    #: 这不是成本闸门，是结构闸门：第 5 个代理之后派活会被拒（`depth_exceeded`，
+    #: 报文点名"第几个代理"），与钱、与 token 都无关。它挡的是"链可以无限深"
+    #: （每次只派生 1 个，但派生 10000 层）。
+    #:
+    #: ## 沿革
+    #:
+    #: 3 → 5 是所有者 2026-10-08 的裁定（逐字：「我们限制递归调用深度为5，
+    #: 毕竟 20*(5*5*5*5) 也非常可观了」）。2026-10-15 曾按裁定 C5 把这一格抬到 12，
+    #: 理由写的是"T5 第 8 趟链长 4 层、再委托会到 6 层"—— 那条理由没有业主对"深度"
+    #: 这一轴的裁定背书，还把"扇出 12"与"深度 12"混成了一件事（C5 抬的是扇出
+    #: 5 → 25、并发 4 → 16、总量 200 → 5000、墙钟 900s → 4h，不是深度）。
+    #: 2026-10-24 业主按上引原话改回"链上 5 个代理"，台账口径落成 4；
+    #: 扇出那一族（25 / 主控 100）一个数没动。
+    max_chain_depth: int = 4
+    #: 单个任务同时在飞的直接子数上限（默认档；主控那一档见
+    #: `DIRECT_CHILDREN_LIMIT_BY_ROLE`）。只数直接子，不管隔着几层的子：
+    #: 孙辈、曾孙辈各自挂在它们自己的父名下，算的是那个父的格。
+    #: 口径见模块 docstring 的"扇出的口径""扇出只数直接子"两节。
     #:
     #: 2026-10-15 业主裁定 C5：5 → 25。这一根轴管的是"一个代理能同时
     #: 派出去几个"，而研究工作的真实形态是并行的（同时读三篇文献、同时验两条
     #: 引文、同时跑两个实验）。5 会把"同时"变成"排队"，而排队不会报错 ——
     #: 它只是让每一趟都更慢、更容易撞上墙钟。25 是"几乎不可能由正常研究触发"的量级。
-    max_fanout: int = 25
+    #: 业主 2026-10-24 补的口径（逐字）：「12是只管直接子，不管隔着几层的子」
+    #: —— 所以这一格与"整棵树多大"无关，也不与链长那一格换算。
+    max_direct_children: int = 25
     #: 全局同时运行的任务数（瞬时上限）。
     #:
     #: 2026-10-15 业主裁定 C5：4 → 16。4 是本框架早期"离线单机"时代的数 ——
@@ -145,9 +197,29 @@ class Policy:
         # 在构造与使用之间自由流动（中途被谁读走都不知道）。
         self.validate()
 
+    # ---- 旧名的只读别名（2026-10-24 更名保留）
+    #
+    # 业主 2026-10-24：「会造成歧义的变量名改掉」⇒ 链长那一格改叫
+    # `max_chain_depth`（与链长对得上）、扇出那一族改叫 `max_direct_children`
+    # （只数直接子）。但外部的只读方（`agent_prompts.parent_limits_text`、
+    # `secretary` 的 `getattr(..., "max_depth", 5)`、以及一批判据）仍在读旧名 ——
+    # 一刀切断会让这些地方静默拿到默认值，所以旧名留成只读别名：
+    # 读得到、值相同、但不可写（它是属性不是字段，`dataclasses.replace` /
+    # `to_dict` 都只认新名）。
+    @property
+    def max_depth(self) -> int:
+        """旧名，等同于 `max_chain_depth`（只读；2026-10-24 更名保留）。"""
+        return self.max_chain_depth
+
+    @property
+    def max_fanout(self) -> int:
+        """旧名，等同于 `max_direct_children`（只读；2026-10-24 更名保留）。"""
+        return self.max_direct_children
+
     def validate(self) -> None:
         """四类上限必须都是正数。不合法抛 ValueError（不返回布尔）。"""
-        for name in ("max_depth", "max_fanout", "max_concurrency", "max_tasks_per_run"):
+        for name in ("max_chain_depth", "max_direct_children", "max_concurrency",
+                     "max_tasks_per_run"):
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, int):
                 raise ValueError(f"Policy.{name} 必须是 int，收到 {v!r}")
@@ -170,11 +242,32 @@ class Policy:
         return asdict(self)
 
 
+def max_agents_on_chain(policy: Policy) -> int:
+    """链上最多能有多少个代理（业主的数法）：`max_chain_depth` + 1。
+
+    两种数法差一的唯一换算落点，写在这里而不是散在注释里：
+
+    - 台账数法：`Task.depth` 是跳数。主控不落任务行，它的直接子 depth = 1
+      （`Conductor._depth_of(None)` ⇒ 1）；`max_chain_depth` 比的就是这个跳数。
+    - 业主数法：链上的代理个数 —— M(1) W(2) X(3) Y(4) Z(5)，第 5 个不能再派。
+
+    所以"链上 5 个代理"= 台账 4 跳，反过来"台账跳数上限 N"= 链上 N+1 个代理。
+    默认策略上这两个数是 4 与 5（判据
+    `tests/test_depth_lock_is_five_and_fanout_is_not_depth.py` 里有反真空：
+    把 `max_chain_depth` 打桩、或只改一边，等式就红）。
+
+    它是读数不是判据：判据仍然是 `d.depth > policy.max_chain_depth`；这个函数
+    只负责把台账跳数翻成人话（拒绝报文与文档都读它，免得各自 +1 各自错）。
+    """
+    return int(policy.max_chain_depth) + 1
+
+
 # ---------------------------------------------------------------- 逐角色的上限覆盖
 
 
-#: 发起方角色 → 同时在飞的子代理数上限的显式覆盖（唯一一处；不在表里的角色一律用
-#: `Policy.max_fanout`，所以默认档仍然只有那一个来源）。20 这个数只写在这里。
+#: 发起方角色 → 同时在飞的直接子数上限的显式覆盖（唯一一处；不在表里的角色一律用
+#: `Policy.max_direct_children`，所以默认档仍然只有那一个来源）。100 这个数只写在这里。
+#: 这一格只数直接子（业主 2026-10-24：「12是只管直接子，不管隔着几层的子」）。
 #:
 #: 为什么只有主控单独一档（题15 选B，2026-10-07；口径由所有者 2026-10-08 定为"单时刻"）：
 #:
@@ -199,18 +292,29 @@ class Policy:
 #: 是因为真正该管住失控的是钱（`usd_budget` + `budget.limit_usd(root)` 的总账）：
 #: 扇出上限的职责只剩"别让一次编程错误无限递归"，那是 100 与 20 都能胜任的事，
 #: 而 20 在真机上已经被证明会误伤正常编队（见上面那两段读数）。
-FANOUT_LIMIT_BY_ROLE: dict[str, int] = {S.CONDUCTOR_ROLE: 100}
+DIRECT_CHILDREN_LIMIT_BY_ROLE: dict[str, int] = {S.CONDUCTOR_ROLE: 100}
+
+#: 旧名（2026-10-24 更名保留，只读语义）：同一个 dict 对象，不是副本 ——
+#: 两份表会让"主控一档到底多少"有两个答案。
+FANOUT_LIMIT_BY_ROLE: dict[str, int] = DIRECT_CHILDREN_LIMIT_BY_ROLE
 
 
-def fanout_limit_for(policy: Policy, frm: str) -> int:
-    """发起方角色 `frm` 的同时在飞子代理上限：默认档取自 `Policy.max_fanout`，
-    主控一档见 `FANOUT_LIMIT_BY_ROLE`。
+def direct_children_limit_for(policy: Policy, frm: str) -> int:
+    """发起方角色 `frm` 的同时在飞直接子上限：默认档取自 `Policy.max_direct_children`，
+    主控一档见 `DIRECT_CHILDREN_LIMIT_BY_ROLE`。
+
+    这一格只数直接子（业主 2026-10-24：「12是只管直接子，不管隔着几层的子」）：
+    孙辈挂在子自己名下，算的是子的格，不占父的格。
 
     为什么按发起方（`Decision.frm`）取而不是按父任务的角色取：名额约束的是
     "谁在派活"。同一棵树上一个工人同时在飞 5 个就该满，而主控同时在飞 6 个是正常编队
-    （真机那一趟主控需要至少 4 次有效派活，读数见 `FANOUT_LIMIT_BY_ROLE`）。
+    （真机那一趟主控需要至少 4 次有效派活，读数见 `DIRECT_CHILDREN_LIMIT_BY_ROLE`）。
     """
-    return FANOUT_LIMIT_BY_ROLE.get(frm, policy.max_fanout)
+    return DIRECT_CHILDREN_LIMIT_BY_ROLE.get(frm, policy.max_direct_children)
+
+
+#: 旧名（2026-10-24 更名保留）：函数别名，读的是同一份实现与同一张表。
+fanout_limit_for = direct_children_limit_for
 
 
 # ---------------------------------------------------------------- 拒绝
@@ -249,8 +353,8 @@ class Decision:
     """一次召唤的判定输入（纯数据，判定函数不碰 store）。
 
     为什么把它做成显式对象而不是一堆位置参数：判定条件有八条，
-    一个 `check_edge(frm, to, depth=..., fanout=..., ...)` 的签名会让
-    "忘了传 fanout"变成默认值 0 ⇒ 永远放行。显式对象让新增判据时
+    一个 `check_edge(frm, to, depth=..., direct_children=..., ...)` 的签名会让
+    "忘了传 direct_children"变成默认值 0 ⇒ 永远放行。显式对象让新增判据时
     调用方必须一起改，而不是悄悄拿到一个宽松的默认。
     """
 
@@ -262,11 +366,14 @@ class Decision:
     #: 名字，`role` 是写集判定的名字，两者在同一次召唤里恰好相同，
     #: 但把写集判据接到 `to` 上会让"边判定改名"顺手改坏并发判据。
     role: str = ""
-    #: 本次召唤的深度（主控发起 = 1）。
+    #: 本次召唤在委派链上的跳数（`Conductor` 建链：主控的召唤 = 1，子 = 父 + 1）。
+    #: 判据只用它跟 `Policy.max_chain_depth` 比：链长这一根轴，与直接子数无关。
     depth: int = 1
-    #: 父任务此刻在飞的子代理数（不含本次）。口径见模块 docstring 的
-    #: "扇出的口径"一节（所有者 2026-10-08 裁定：单时刻，不是累计；返回即腾出名额）。
-    fanout: int = 0
+    #: 父任务此刻在飞的直接子数（不含本次）。只数直接子，不管隔着几层的子。
+    #: 口径见模块 docstring 的"扇出的口径""扇出只数直接子"两节
+    #: （所有者 2026-10-08：单时刻，不是累计；返回即腾出名额。
+    #: 业主 2026-10-24：「12是只管直接子，不管隔着几层的子」）。
+    direct_children: int = 0
     #: 当前正在运行的任务数（瞬时）。
     running: int = 0
     #: 本次 run 已经发生的召唤总数。
@@ -285,6 +392,15 @@ class Decision:
     #: 墙钟是否已到点（由 `Conductor` 用它的 start/deadline 算好传进来；
     #: policy 不认识时钟 —— 判据必须是可单测的纯函数）。
     deadline_hit: bool = False
+
+    @property
+    def fanout(self) -> int:
+        """旧名，等同于 `direct_children`（只读；2026-10-24 更名保留）。
+
+        读得到、值相同，但构造时请用 `direct_children=` —— `fanout` 这个词
+        正是业主点名要改掉的歧义名（"扇出"读不出"只数直接子"）。
+        """
+        return self.direct_children
 
 
 # ---------------------------------------------------------------- 判定
@@ -331,7 +447,11 @@ def check_edge(policy: Policy, frm: str, to: str, *, registry: Any = None,
        报 `depth_exceeded` 会让人以为是"再深一点就行"；
        第 [2] 步里 `NON_SUMMONABLE` 排在角色存在性之前 —— 召唤主控是
        "这条边不许存在"，不是"角色名拼错了"
-    3. 深度 → 4. 循环 → 5. 扇出 → 6. 并发 → 7. 总量 → 8. 预算 → 9. 墙钟
+    3. 链长 → 4. 循环 → 5. 直接子数 → 6. 并发 → 7. 总量 → 8. 预算 → 9. 墙钟
+
+    第 3 步判的是链长（`depth` vs `Policy.max_chain_depth`），第 5 步判的才是
+    扇出（`direct_children` vs 发起方那一档直接子上限）—— 两根轴不换算
+    （业主 2026-10-24：「12是只管直接子，不管隔着几层的子」）。
 
     唯一的例外是主控 `M` 自己：它没有"动作"这件事（`check_action('M', …)`
     永远返回 `unknown_action`），但"没人能召唤主控"是一条显式的边判据。
@@ -346,7 +466,13 @@ def check_edge(policy: Policy, frm: str, to: str, *, registry: Any = None,
 
     参数 `**kw` 里认得的键见 :class:`Decision`；额外的键会被忽略（向前兼容），
     但拼错的键名不会被发现 —— 所以 :func:`check` 才是推荐入口。
+
+    旧名兼容（2026-10-24 更名）：`fanout=` 仍认，按直接子数解释 —— 不映射就会
+    落到下面那个"未知键忽略"的过滤器里，于是默认 0、闸门永远放行（静默的方向
+    是放行，所以这一条必须显式映射而不是省掉）。
     """
+    if "fanout" in kw and "direct_children" not in kw:
+        kw["direct_children"] = kw.pop("fanout")
     d = Decision(frm=frm, to=to, **{k: v for k, v in kw.items() if k in Decision.__dataclass_fields__})
     return check(policy, d)
 
@@ -457,12 +583,21 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
             "edge",
         )
 
-    # ---- [3] 深度（主控发起 = 1）
-    if d.depth > policy.max_depth:
+    # ---- [3] 链长（台账跳数：M 的召唤 = 1；链上第几个代理 = 跳数 + 1）
+    #
+    # 理由码 `depth_exceeded` 是对外口径（`schema.REFUSAL_REASONS` 里登记着），
+    # 不跟着改名；这里的 depth 一律指台账跳数，与直接子数无关。
+    # 报文按业主的数法（第几个代理）点明，同时把台账读数一起给出 —— 两种数法差一，
+    # 只写一种会让读的人再差一（业主原话：「Z就不能再派子代理」）。
+    if d.depth > policy.max_chain_depth:
+        agents = max_agents_on_chain(policy)      # 链上最多几个代理（业主数法）
         return Refusal(
             "depth_exceeded",
-            f"depth={d.depth} 超过 max_depth={policy.max_depth}（主控发起 = 1）",
-            "max_depth",
+            f"已经到第 {agents} 个代理（业主原话里的 Z）了，链上最多 {agents} 个代理 "
+            f"⇒ 不能再派第 {agents + 1} 个。台账数法：本次 depth={d.depth} 超过 "
+            f"max_chain_depth={policy.max_chain_depth}（主控的召唤 = 1，链上代理个数 = 跳数 + 1）。"
+            "这是结构闸门，不是成本闸门 —— 换个做法（自己收口或交给同级伙伴），不要再往深里派",
+            "max_chain_depth",
         )
 
     # ---- [4] 循环：同一条 (role, action, input_key) 不得出现在祖先链上
@@ -477,34 +612,41 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
             "cycle",
         )
 
-    # ---- [5] 扇出（口径：此刻在飞的子代理数；上限按发起方角色取）
+    # ---- [5] 扇出：直接子数（口径：此刻在飞的直接子；上限按发起方角色取）
     #
-    # `d.fanout` 由调用方（`Conductor`）按"子行里还没返回的那些"算
+    # `d.direct_children` 由调用方（`Conductor`）按"子行里还没返回的那些"算
     # （`_in_flight_children_of`：`status ∈ {pending, running}`）。所有者 2026-10-08 逐字：
     # 「派活上限不是累计的，是单时刻的……智能体返回后腾出空间」。
     # 这一条与"被闸门拒掉的不占名额"相容：拒掉的召唤没跑、也没有 running 行。
-    # 上限按发起方取：默认档 = `policy.max_fanout`，主控一档 = `FANOUT_LIMIT_BY_ROLE`（20）。
+    # 上限按发起方取：默认档 = `policy.max_direct_children`，
+    # 主控一档 = `DIRECT_CHILDREN_LIMIT_BY_ROLE`（100）。
+    #
+    # 只数直接子（业主 2026-10-24：「12是只管直接子，不管隔着几层的子」）：
+    # 孙辈挂在子自己名下、算子的格，父的读数不因"树上总节点多"而变大 ——
+    # 所以这里读的是这一个父在飞的直接子数，不是整棵树的规模，也不是累计派出数。
     #
     # 数的是代理，不是工作项（2026-10-08 深夜 S1e）：`_in_flight_children_of` 只看
     # `kind == ""` 的代理行。板项行（`kind` 非空）的 `status` 永远是 `pending`
     # （板的状态机只改 `item_state`）⇒ 把它们算进来会让"子代理已收工"的每一条通报
     # 永久占一个名额。实测：父名下 20 条 `notice` ⇒ `fanout_exceeded`，而零代理。
-    limit = fanout_limit_for(policy, d.frm)
-    if d.fanout >= limit:
+    limit = direct_children_limit_for(policy, d.frm)
+    if d.direct_children >= limit:
         # 报文要能同时读出"此刻在飞几个"与"上限是多少"，以及那个上限是从哪来的；
         # 还要说清"返回就腾位置"—— 否则模型会以为这一趟到此为止（T1 第 19 趟实测：
         # 它读到"到上限了"之后把 25 步全花在别处，因为报文没说怎么办）。
-        if d.frm in FANOUT_LIMIT_BY_ROLE:
-            origin = f"FANOUT_LIMIT_BY_ROLE 里主控那一档，policy.max_fanout={policy.max_fanout}"
+        if d.frm in DIRECT_CHILDREN_LIMIT_BY_ROLE:
+            origin = ("DIRECT_CHILDREN_LIMIT_BY_ROLE 里主控那一档，"
+                      f"policy.max_direct_children={policy.max_direct_children}")
         else:
-            origin = "policy.max_fanout"
+            origin = "policy.max_direct_children"
         return Refusal(
             "fanout_exceeded",
-            f"该任务此刻在飞 {d.fanout} 个子代理，达到发起方 {d.frm} 的同时在飞上限 {limit}"
-            f"（{origin}）。这也是单时刻口径：子代理一返回就腾出名额 —— "
+            f"该任务此刻在飞 {d.direct_children} 个直接子，达到发起方 {d.frm} 的直接子上限 {limit}"
+            f"（{origin}）。这一格只数直接子，不管隔着几层的子（孙辈算它们自己父的格）—— "
+            "这也是单时刻口径：直接子一返回就腾出名额 —— "
             "先等已派出去的那些回来（读 `out/tasks/*.json` 或 `conductor.state` 看谁还没回），"
             "下一轮再派；同时确认自己没有把同一件事重复派出去",
-            "max_fanout",
+            "max_direct_children",
         )
 
     # ---- [6] 并发（瞬时）
@@ -666,7 +808,8 @@ def assert_policy_complete(policy: Policy) -> None:
     `Optional` 时，在这里炸 —— 而不是让一个 `None` 悄悄流向判定函数。
     """
     absent = [
-        n for n in ("max_depth", "max_fanout", "max_concurrency", "max_tasks_per_run")
+        n for n in ("max_chain_depth", "max_direct_children", "max_concurrency",
+                    "max_tasks_per_run")
         if getattr(policy, n, None) is None
     ]
     if absent:

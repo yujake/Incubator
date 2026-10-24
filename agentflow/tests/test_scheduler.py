@@ -233,7 +233,7 @@ def _conductor(store, *, policy=None, registry=None, token=None,
     # 它的判据在 `tests/test_fanout_admission.py`。
     return CO.Conductor(
         store,
-        policy=policy or P.Policy(max_concurrency=4, max_fanout=5,
+        policy=policy or P.Policy(max_concurrency=4, max_direct_children=5,
                                   max_tasks_per_run=100, wall_clock_sec=60),
         registry=registry or {},
         token=token,
@@ -260,7 +260,7 @@ def test_disjoint_calls_really_run_concurrently(tmp_path):
     sleep = 0.3
     rec = _Recorder()
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "C": ("object", FakeC(rec, sleep=sleep)),
         "H": ("object", FakeH(rec, sleep=sleep)),
@@ -296,7 +296,7 @@ def test_intersecting_calls_do_not_overlap(tmp_path):
     sleep = 0.3
     rec = _Recorder()
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(rec, sleep=sleep))})
     plan = [_e_task("e1", sleep=sleep), _e_task("e2", sleep=sleep)]
     waves = P.waves_of(plan, limit=pol.max_concurrency)
@@ -325,7 +325,7 @@ def test_same_role_two_instances_really_run_concurrently(tmp_path):
     sleep = 0.4
     rec = _Recorder()
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(rec, sleep=sleep))})
     plan = [SC.TaskCall("E", "run_experiment",
                         {"claim": f"c{i}", "claim_key": f"k{i}", "script_path": "s.py"},
@@ -353,7 +353,7 @@ def test_same_role_without_instance_is_still_serialized(tmp_path):
     sleep = 0.3
     rec = _Recorder()
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(rec, sleep=sleep))})
     plan = [_e_task("e1", sleep=sleep), _e_task("e2", sleep=sleep)]
     assert len(P.waves_of(plan, limit=pol.max_concurrency)) == 2
@@ -389,7 +389,7 @@ def test_concurrency_never_exceeds_policy_limit(tmp_path):
     """
     rec = _Recorder()
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "C": ("object", FakeC(rec, sleep=0.2)),
         "H": ("object", FakeH(rec, sleep=0.2)),
@@ -451,7 +451,7 @@ def test_merge_order_follows_input_order(tmp_path):
     """
     rec = _Recorder()
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "C": ("object", FakeC(rec, sleep=0.25)),
         "H": ("object", FakeH(rec, sleep=0.05)),
@@ -519,7 +519,7 @@ def test_one_failure_does_not_stop_others(tmp_path):
 
 
 def test_fanout_limit_refuses_extra_children(tmp_path):
-    """扇出上限：一个任务同时在飞的子代理超过 `max_fanout` ⇒ 拒（`fanout_exceeded`）。
+    """扇出上限：一个任务同时在飞的子代理超过 `max_direct_children` ⇒ 拒（`fanout_exceeded`）。
 
     链用 `H → G`（`ALLOWED_EDGES["H"] == {"G"}`）—— 为什么不用 `C → H`：
     C 的边是空的，从 C 派任何子任务都会先被判 `forbidden_edge`，
@@ -532,7 +532,7 @@ def test_fanout_limit_refuses_extra_children(tmp_path):
     """
     store = _mk_store(tmp_path)
     rec = _Recorder()
-    pol = P.Policy(max_concurrency=4, max_fanout=2, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=2, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "H": ("object", FakeH(rec)), "G": ("object", FakeG(rec)),
     })
@@ -576,7 +576,7 @@ def test_fanout_negative_control_under_limit(tmp_path):
     """
     store = _mk_store(tmp_path)
     rec = _Recorder()
-    pol = P.Policy(max_concurrency=4, max_fanout=3, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=3, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "H": ("object", FakeH(rec)), "G": ("object", FakeG(rec)),
     })
@@ -592,7 +592,7 @@ def test_fanout_negative_control_under_limit(tmp_path):
 def test_total_tasks_budget_refuses_extra(tmp_path):
     """总量上限：`max_tasks_per_run` 用尽 ⇒ 后续一律被拒。"""
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=2, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=2, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"C": ("object", FakeC(_Recorder()))})
     outs = [c.summon("C", "hottest", {"top_n": 1}) for _ in range(3)]
     assert [o.outcome for o in outs] == ["ok", "ok", "refused"]
@@ -601,13 +601,13 @@ def test_total_tasks_budget_refuses_extra(tmp_path):
 
 
 def test_depth_limit_refuses_deeper_chain(tmp_path):
-    """深度正控：`max_depth=3` 时能跑到第 3 层，第 4 层被拒。
+    """深度正控：`max_chain_depth=3` 时能跑到第 3 层，第 4 层被拒。
 
     链：`M → A(1) → B(2) → C(3)`，然后从 B 再派生必须仍是 3（深度不是"第几个孩子"）。
     """
     store = _mk_store(tmp_path)
     rec = _Recorder()
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "A": ("object", TwoStep()), "B": ("object", TwoStep()),
         "C": ("object", FakeC(rec)),
@@ -623,11 +623,11 @@ def test_depth_limit_refuses_deeper_chain(tmp_path):
 
 
 def test_depth_limit_is_hard_at_the_boundary(tmp_path):
-    """负控（深度）：把 `max_depth` 收到 2，第 3 层必须被拒
+    """负控（深度）：把 `max_chain_depth` 收到 2，第 3 层必须被拒
     （`refused/depth_exceeded`）。"""
     store = _mk_store(tmp_path)
     rec = _Recorder()
-    pol = P.Policy(max_depth=2, max_concurrency=4, max_fanout=5,
+    pol = P.Policy(max_chain_depth=2, max_concurrency=4, max_direct_children=5,
                    max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "A": ("object", TwoStep()), "B": ("object", TwoStep()),
@@ -648,7 +648,7 @@ def test_cycle_detected_on_repeated_key(tmp_path):
     链：`M →D(probe_c, same-key)→ F(status)→ D(probe_c, same-key)`。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_depth=6, max_concurrency=4, max_fanout=5,
+    pol = P.Policy(max_chain_depth=6, max_concurrency=4, max_direct_children=5,
                    max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "D": ("object", TwoStep()), "F": ("object", TwoStep()),
@@ -670,7 +670,7 @@ def test_cycle_negative_control_different_key_passes(tmp_path):
     否则"对第二个问题问同一个角色"会被误判成活锁 —— 而那是正常进展。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_depth=6, max_concurrency=4, max_fanout=5,
+    pol = P.Policy(max_chain_depth=6, max_concurrency=4, max_direct_children=5,
                    max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "D": ("object", TwoStep()), "F": ("object", TwoStep()),
@@ -692,7 +692,7 @@ def test_budget_exhaustion_refuses_later_summons(tmp_path):
     此前它走的是 `token_budget=100` + `budget={"max_tokens": 10}`。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100,
                    wall_clock_sec=60, usd_budget=1.0)
     c = _conductor(store, policy=pol, registry={"E": ("object", Spendy(100))})
     first = c.summon("E", "run_experiment",
@@ -718,7 +718,7 @@ def test_budget_negative_control_no_task_is_mutated(tmp_path):
     —— 那会让台账与真实发生的事矛盾（终态先到先得，见 I-2）。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100,
                    wall_clock_sec=60, usd_budget=1.0)
     c = _conductor(store, policy=pol, registry={"E": ("object", Spendy(50))})
     r = c.summon("E", "run_experiment",
@@ -750,7 +750,7 @@ def test_deadline_refuses_new_and_signals_running(tmp_path):
     (b) 已开始的任务不会因为到点而丢结果。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=0.25)
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=0.25)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(None, sleep=0.45))})
     plan = [_e_task("a", sleep=0.45), _e_task("b", sleep=0.45)]
     res = c.run_plan(plan)
@@ -767,7 +767,7 @@ def test_deadline_cooperative_handler_is_cancelled(tmp_path):
     store = _mk_store(tmp_path)
     token = CancelToken()
     aware = TokenAware(token, sleep=5.0)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", aware)}, token=token)
     out: dict = {}
     th = threading.Thread(target=lambda: out.update(res=c.run_plan([_e_task("a", sleep=1.0)])))
@@ -817,7 +817,7 @@ def test_cancel_stops_the_queue_mid_plan(tmp_path):
     store = _mk_store(tmp_path)
     token = CancelToken()
     aware = TokenAware(token, sleep=2.0)
-    pol = P.Policy(max_concurrency=1, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=1, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", aware)}, token=token)
     plan = [_e_task(f"c{i}", sleep=1.0) for i in range(3)]
     out: dict = {}
@@ -842,7 +842,7 @@ def test_deadline_negative_control_generous_wall_clock(tmp_path):
     没有这条，`deadline_exceeded` 可能只是因为"实现永远判到点"。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(None, sleep=0.05))})
     res = c.run_plan([_e_task("a", sleep=0.05), _e_task("b", sleep=0.05)])
     assert [r.outcome for r in res] == ["ok", "ok"]

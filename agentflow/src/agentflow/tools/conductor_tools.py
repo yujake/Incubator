@@ -1454,6 +1454,200 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
 )
 
 
+# ---------------------------------------------------------------- 全树追踪（只有 M）
+
+@tool(
+    "conductor.watch",
+    "看任意一支任务树的行为：从 task_id（或某个角色在台账里的实例行）向下走，"
+    "每个节点给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、"
+    "最近一次交接手稿摘要。depth 缺省（或 0）= 整棵树；主控能想追几层追几层。",
+    {"type": "object",
+     "properties": {
+         "task_id": {"type": "string", "minLength": 4, "maxLength": 8,
+                     "description": "从哪一行开始向下看（缺省=我这一趟）"},
+         "role_name": {"type": "string",
+                       "description": "看某个角色在台账里的每一行（task_id 优先；不给 task_id 时才用它）"},
+         "depth": {"type": "integer", "minimum": 0, "maximum": 64,
+                   "description": "含根向下看几层；0 或缺省 = 全树"},
+         "window": {"type": "integer", "minimum": 1, "maximum": 50,
+                    "description": "每个节点给最近几步（缺省 5）"},
+     },
+     "required": [], "additionalProperties": False},
+    side_effect="read",
+    roles=("M",),
+    returns=("{'checked','roots','depth_requested','depth_reached','window','rows',"
+             "'count','truncated','session'}；每个节点里有 {'task_id','role','level',"
+             "'status','outcome','recent_steps','refusals','products','last_handoff'}"),
+)
+def conductor_watch(_conductor: Any, store: Any, *, task_id: str = "",
+                    role_name: str = "", depth: int = 0,
+                    window: int = 5) -> ToolResult:
+    """全树读数（判据在 `agenttrace.watch_rows`）。
+
+    为什么是主控专属：业主原话「普通代理能追一层，M能想追几层追几层」。一层那一半
+    在 `trace.children`（所有可被召唤的角色都有），本件只声明 `roles=("M",)`。
+    `depth=0` 表示不额外截断：上界交给台账的真实深度，不写死一个会过期的数字。
+    """
+    from .. import agenttrace as AT
+    from .. import conductor as COND
+
+    if store is None:
+        return fail("没有工作区（装配时没给 store）⇒ 读不到台账，本次没查成",
+                    kind="no_store", checked=False)
+    try:
+        rows = store.rows("tasks")
+    except Exception as exc:  # noqa: BLE001 - 读不成不等于没有任务
+        return fail(f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成",
+                    kind="store_error", checked=False)
+    roots: list[dict[str, Any]] = []
+    wanted_task = str(task_id or "")
+    wanted_role = str(role_name or "")
+    if wanted_task:
+        hit = next((r for r in rows if str(r.get("task_id") or "") == wanted_task), None)
+        if hit is None:
+            return fail(f"台账里没有 {wanted_task} 这一行", kind="not_found",
+                        checked=True, task_id=wanted_task)
+        roots = [hit]
+    elif wanted_role:
+        roots = [r for r in rows
+                 if str(r.get("role") or "") == wanted_role and not str(r.get("kind") or "")]
+        if not roots:
+            return fail(f"台账里没有角色 {wanted_role} 的实例行（这是查过了、确实没有；"
+                        "不是'没读成'）", kind="not_found", checked=True,
+                        role_name=wanted_role)
+    else:
+        mine = str(COND.current_task_id() or "")
+        hit = next((r for r in rows if str(r.get("task_id") or "") == mine), None)
+        if hit is None:
+            return fail("既没给 task_id 也没给 role_name，而这一趟没有台账号 ⇒ 不猜一棵树",
+                        kind="no_identity", checked=False)
+        roots = [hit]
+    roots.sort(key=lambda r: str(r.get("task_id") or ""))
+    parts = [
+        AT.watch_rows(store, getattr(store, "root", None) or ".", task_row=r,
+                      depth=(int(depth) or None), window=window)
+        for r in roots
+    ]
+    merged: list[dict[str, Any]] = []
+    for part in parts:
+        merged.extend(part.get("rows") or [])
+    return ok({
+        "checked": all(p.get("checked") for p in parts),
+        "roots": [str(r.get("task_id") or "") for r in roots],
+        "depth_requested": int(depth) or None,
+        "depth_reached": max((p.get("depth_reached") or 0) for p in parts) if parts else 0,
+        "window": int(window),
+        "rows": merged,
+        "count": len(merged),
+        "truncated": any(p.get("truncated") for p in parts),
+        "session": (parts[0].get("session") if parts else {}),
+    })
+
+
+@tool(
+    "conductor.guide",
+    "把 M 的指导沿树传到指定智能体，并让它的各级父代理各收到一条板项"
+    "（父知道 M 对自己这一支说了什么）。to 是台账号；text 是指导正文。",
+    {"type": "object",
+     "properties": {
+         "to": {"type": "string", "minLength": 4, "maxLength": 8,
+                "description": "收件智能体的台账号（tasks 表里的 task_id）"},
+         "text": {"type": "string", "minLength": 1, "maxLength": 800,
+                  "description": "指导正文（800 字以内）"},
+         "notify_parents": {"type": "boolean",
+                            "description": "是否让各级父代理各收一条板项（缺省是）"},
+     },
+     "required": ["to", "text"], "additionalProperties": False},
+    side_effect="write_local",
+    roles=("M",),
+    returns=("{'checked','ok','to','to_role','item_id','ancestors','skipped','text',"
+             "'note'}；ancestors 每项是 {'task_id','role','item_id'}"),
+)
+def conductor_guide(_conductor: Any, store: Any, *, to: str, text: str,
+                    notify_parents: bool = True) -> ToolResult:
+    """M 的指导沿树下发（复用板项，不新造一条边）。
+
+    落点：给收件人开一条 `notice`/`ack` 板项（收件人编号写在 `parent_task_id`
+    上，与 `notify_children_of_stop` 同一口径），再给它的每一级父代理各开一条
+    同样口径的板项 —— 于是"指导到了谁"与"各级父知道"两件事都能用
+    `conductor.board` / `open_items_of` 读回来。为什么不开一条新的边：业主口径是
+    "用已有的上行手段请求、M 沿树传指导"，板项本来就是收件人可见的那条通道。
+    """
+    c = None
+    try:
+        c = _conductor()
+    except Exception as exc:  # noqa: BLE001 - 没有主控句柄时如实报，不假装发出去了
+        return fail(f"没有主控句柄（{type(exc).__name__}: {exc}）⇒ 指导没有下发",
+                    kind="no_conductor", checked=False)
+    body = str(text or "").strip()
+    if not body:
+        return fail("text 不能为空：指导要是一句能执行的话", kind="param_error")
+    try:
+        rows = (c.store if store is None else store).rows("tasks")
+    except Exception as exc:  # noqa: BLE001
+        return fail(f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成",
+                    kind="store_error", checked=False)
+    target = next((r for r in rows if str(r.get("task_id") or "") == str(to or "")), None)
+    if target is None:
+        return fail(f"台账里没有 {to} 这一行 ⇒ 指导没有下发", kind="not_found",
+                    checked=True, to=str(to or ""))
+    target_role = str(target.get("role") or "")
+    if not target_role:
+        return fail(f"{to} 那一行没有角色 ⇒ 不知道开给谁，指导没有下发",
+                    kind="not_found", checked=True, to=str(to or ""))
+    item_id = c.open_item(
+        kind="notice", role=target_role, expects="ack", action="notice",
+        summary=body[:200], called_by="M", parent_task_id=str(to),
+        depth=int(target.get("depth") or 1) + 1,
+        input_key=f"guide@M->{to}")
+    c.set_item_detail(item_id, f"M 的指导：{body}")
+    ancestors: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    if notify_parents:
+        seen: set[str] = {str(to)}
+        parent = str(target.get("parent_task_id") or "")
+        while parent and parent not in seen:
+            seen.add(parent)
+            row = next((r for r in rows if str(r.get("task_id") or "") == parent), None)
+            if row is None:
+                skipped.append({"task_id": parent, "why": "台账里没有这一行（父链断裂）"})
+                break
+            try:
+                aid = c.open_item(
+                    kind="notice", role=str(row.get("role") or ""), expects="ack",
+                    action="notice",
+                    summary=(f"M 指导了你这一支的 {to}（{target_role}）：{body[:120]}"),
+                    called_by="M", parent_task_id=parent,
+                    depth=int(row.get("depth") or 1) + 1,
+                    input_key=f"guide-parent@{to}->{parent}")
+                c.set_item_detail(aid, f"M 对 {to}（{target_role}）的指导：{body}")
+            except Exception as exc:  # noqa: BLE001 - 一条父项开不成不许带走主项
+                skipped.append({"task_id": parent,
+                                "why": f"板项没开成：{type(exc).__name__}: {exc}"})
+            else:
+                ancestors.append({"task_id": parent,
+                                  "role": str(row.get("role") or ""), "item_id": aid})
+            if str(row.get("role") or "") == "M":
+                break
+            parent = str(row.get("parent_task_id") or "")
+    return ok({"checked": True, "ok": True, "to": str(to), "to_role": target_role,
+               "item_id": item_id, "ancestors": ancestors, "skipped": skipped,
+               "text": body,
+               "note": (f"已开给 {to}（{target_role}）一条 ack 板项；"
+                        f"各级父代理各一条：{[a['task_id'] for a in ancestors]}")})
+
+
+#: 全树那一档的两件（2026-10-24 业主裁定）。为什么在下面补进 `_TOOL_FUNCTIONS`、
+#: 而不是直接写进上面那个元组：那两件声明放在这里是为了与其它 `conductor.*` 的
+#: 声明挨在一起（读的人按顺序就能看到"M 的面上有哪些件"），而 `register` 与
+#: `selftest` 读的是模块级的 `_TOOL_FUNCTIONS` —— 追加发生在同一个模块的导入期，
+#: 两条读路径都看得到同一份清单（不另开第二张表）。
+_TOOL_FUNCTIONS = _TOOL_FUNCTIONS + (
+    (conductor_watch, ('_conductor', 'store')),
+    (conductor_guide, ('_conductor', 'store')),
+)
+
+
 def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None,
              role_registry: Any = None, policy: Any = None,
              session: Any = None,

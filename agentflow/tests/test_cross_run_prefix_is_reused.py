@@ -294,7 +294,7 @@ def _policy_b() -> Any:
     """配置乙的 `Policy`：墙钟 / 四类上限都换过 ⇒ `parent_limits` 那一格逐字不同。"""
     from agentflow import policy as POL
 
-    return POL.Policy(max_depth=9, max_fanout=7, max_concurrency=3,
+    return POL.Policy(max_chain_depth=9, max_direct_children=7, max_concurrency=3,
                       max_tasks_per_run=11, wall_clock_sec=None)
 
 

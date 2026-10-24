@@ -4,7 +4,7 @@
 ## 为什么单独一条（业主 2026-10-14 裁定 ③ 逐字）
 
 「确保二层唤起（父→子→孙）道路畅通」—— 并点名要先查清卡在哪。查出来的读数（`temp/_r103_*.py` 一组探针，真机 `p9-t1-nolean`）是：
-不是深度挡的：`policy.max_depth=5`，`M(1)→A(2)→B(3)` 离上限还远；真机上
+不是深度挡的：`policy.max_chain_depth=5`，`M(1)→A(2)→B(3)` 离上限还远；真机上
 也确实跑出过一条三跳链（M→H→A→B，`tasks` 里 t-0018 d2 → t-0019 d3 → t-0020..24 d4）。
 - 断在第三跳：那 5 条孙代理的活没有一条成功 —— 3 条以
 `TypeError: Object of type PageRange is not JSON serializable` 崩掉（子代理第一步读 `table.schema`，而反射出来的

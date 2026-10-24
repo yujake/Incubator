@@ -140,7 +140,7 @@ def _mk_store(tmp_path) -> Store:
     return st
 
 
-def _mk_conductor(store, *, max_fanout: int, g=None, fanout_wait_sec: float = 0.0,
+def _mk_conductor(store, *, max_direct_children: int, g=None, fanout_wait_sec: float = 0.0,
                   log=None) -> CO.Conductor:
     """夹具一律传 `fanout_wait_sec=0`（= 不等，立即拒）。
 
@@ -151,7 +151,7 @@ def _mk_conductor(store, *, max_fanout: int, g=None, fanout_wait_sec: float = 0.
     """
     return CO.Conductor(
         store,
-        policy=P.Policy(max_concurrency=8, max_fanout=max_fanout,
+        policy=P.Policy(max_concurrency=8, max_direct_children=max_direct_children,
                         max_tasks_per_run=500, wall_clock_sec=600),
         registry={"H": ("object", FakeH()), "G": ("object", g or FakeG())},
         fanout_wait_sec=fanout_wait_sec,
@@ -242,10 +242,10 @@ def test_gate_refusal_does_not_consume_a_fanout_slot(tmp_path):
     `_admitted_children_of` 才 +1，而在飞读数在同步派活返回后回到 seed 的数。
 
     改前（受理数口径）：被拒的那一行也算进 `fanout` ⇒ 这一件合法派活看到
-    `fanout=cap` ⇒ 报 `fanout_exceeded`，父任务从此再也派不出活。
+    `direct_children=cap` ⇒ 报 `fanout_exceeded`，父任务从此再也派不出活。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3)
+    c = _mk_conductor(store, max_direct_children=3)
     parent = _parent(c)
 
     _seed_in_flight(store, parent, 2)          # 此刻在飞 2（cap=3，还剩 1 格）
@@ -270,7 +270,7 @@ def test_gate_refusal_does_not_consume_a_fanout_slot(tmp_path):
 def test_refused_attempts_at_the_cap_never_deepen_the_poison(tmp_path):
     """触顶之后每次尝试照旧落行，但在飞读数不许再涨（真机 detail 里那个 5→9）。"""
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3)
+    c = _mk_conductor(store, max_direct_children=3)
     parent = _parent(c)
     _seed_in_flight(store, parent, 3)
 
@@ -289,7 +289,7 @@ def test_refused_attempts_at_the_cap_never_deepen_the_poison(tmp_path):
 
 def test_display_face_still_lists_attempts(tmp_path):
     """展示面没被改坏：`_children_of` 仍然列出全部尝试（含被拒的）。"""
-    c = _mk_conductor(_mk_store(tmp_path), max_fanout=3)
+    c = _mk_conductor(_mk_store(tmp_path), max_direct_children=3)
     parent = _parent(c)
     assert _revise(c, parent, "k0").outcome == "ok"
     assert _bad_revise(c, parent, "seed").refusal_reason == "invalid_params"
@@ -305,7 +305,7 @@ def test_display_face_still_lists_attempts(tmp_path):
 #
 # 这两条是语义反转：所有者 2026-10-08 的裁定推翻了题15 选B 的那一半 ——
 # 改前它们是"跑完也占名额"，现在是"跑完（无论失败还是角色自己拒）就腾出名额"。
-# 改前的写法在这一条上会拒：`max_fanout=1` 时第 1 件跑完就把唯一的格占死。
+# 改前的写法在这一条上会拒：`max_direct_children=1` 时第 1 件跑完就把唯一的格占死。
 
 
 def test_a_failed_child_frees_the_slot_on_return(tmp_path):
@@ -317,7 +317,7 @@ def test_a_failed_child_frees_the_slot_on_return(tmp_path):
     两件事：①返回后 `_in_flight_children_of(parent) == []`；②下一件立刻受理。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=1, g=BoomG())
+    c = _mk_conductor(store, max_direct_children=1, g=BoomG())
     parent = _parent(c)
 
     boom = _revise(c, parent, "k0")
@@ -341,7 +341,7 @@ def test_a_role_refused_child_frees_the_slot_on_return(tmp_path):
     在"腾不腾位"上没有差别 —— 两者都已经是终态行。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=1, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=1, g=RefusingG())
     parent = _parent(c)
 
     role_refusal = _revise(c, parent, "k0")
@@ -364,7 +364,7 @@ def test_the_admission_mark_is_on_disk_while_the_handler_runs(tmp_path):
     """受理标记与 `running` 行同一笔事务：跑到一半看盘，它已经在（结算标记还不在）。"""
     store = _mk_store(tmp_path)
     probe = ProbeG(store)
-    c = _mk_conductor(store, max_fanout=2, g=probe)
+    c = _mk_conductor(store, max_direct_children=2, g=probe)
     parent = _parent(c)
 
     r = _revise(c, parent, "k0")
@@ -386,7 +386,7 @@ def test_the_gate_refusal_row_carries_no_admission_mark(tmp_path):
     ①行上没有标记；②在飞分子不含它；③累计分子也不含它。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3)
+    c = _mk_conductor(store, max_direct_children=3)
     parent = _parent(c)
     seed = _bad_revise(c, parent, "seed")
     assert seed.refusal_reason == "invalid_params"
@@ -431,7 +431,7 @@ def test_a_contained_charge_failure_still_occupies_the_slot(tmp_path, monkeypatc
     （同步派活返回后那一行已经不在飞），它证明不了累计占位。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=2, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=2, g=RefusingG())
 
     def boom(*_a, **_kw):
         raise RuntimeError("替身：记账炸了")
@@ -462,7 +462,7 @@ def test_a_failed_charge_writeback_still_occupies_the_slot(tmp_path, monkeypatch
     这里删掉了旧的"闸门仍按那一行占住的格子拒第 3 件"那段：上限看的是在飞数。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=2, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=2, g=RefusingG())
     # 父任务要在注入之前造好：`_set_usage` 是每一次召唤收尾都走的，
     # 注入之后再造父任务会让它自己也炸（那是另一个形态，不是这一条要判的）。
     parent = _parent(c)
@@ -503,7 +503,7 @@ def test_the_previous_minimal_fix_would_miss_this_row(tmp_path, monkeypatch):
         return any(str(x) == CO._SETTLED_MARK for x in (row.get("inputs") or []))
 
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=2, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=2, g=RefusingG())
 
     def boom(*_a, **_kw):
         raise RuntimeError("替身：记账炸了")
@@ -525,13 +525,13 @@ def test_the_previous_minimal_fix_would_miss_this_row(tmp_path, monkeypatch):
 def test_conductor_tier_dispatches_more_than_five_while_worker_refuses_at_five(tmp_path):
     """同一棵树：主控档同时在飞 100（裁定 C5 后的数），工人档按自己的上限；各自到点被拒、返回即腾位。
 
-    两件事：①主控档的上限取自 `FANOUT_LIMIT_BY_ROLE`（2026-10-15 业主裁定 C5：20 → 100），
+    两件事：①主控档的上限取自 `DIRECT_CHILDREN_LIMIT_BY_ROLE`（2026-10-15 业主裁定 C5：20 → 100），
     在飞 99 时第 100 件受理、在飞 100 时下一件被拒且报文里两个数都读得出来；
-    ②工人档在 5 处被拒（反真空；本用例显式给 `max_fanout=5`，所以这条与默认值无关），
+    ②工人档在 5 处被拒（反真空；本用例显式给 `max_direct_children=5`，所以这条与默认值无关），
     并把一行标成返回之后名额立刻还回来（所有者那句话的机器化）。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=5)
+    c = _mk_conductor(store, max_direct_children=5)
 
     m_parent = _parent(c)
     _seed_in_flight(store, m_parent, 99, called_by="M")
@@ -563,7 +563,7 @@ def test_conductor_tier_dispatches_more_than_five_while_worker_refuses_at_five(t
 def test_conductor_tier_is_exactly_one_hundred(tmp_path):
     """主控那一档恰好是 100（同时在飞，裁定 C5）：在飞 100 被拒、有一行返回后立刻受理。"""
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=5)
+    c = _mk_conductor(store, max_direct_children=5)
 
     full = _parent(c)
     _seed_in_flight(store, full, 100, called_by="M")
@@ -622,7 +622,7 @@ def test_a_capped_summon_waits_and_dispatches_when_a_slot_frees_in_time(tmp_path
     然后只睡 0.4s，窗口给 5s。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3, fanout_wait_sec=5.0)
+    c = _mk_conductor(store, max_direct_children=3, fanout_wait_sec=5.0)
     parent = _parent(c)
     in_flight = _seed_in_flight(store, parent, 3)
 
@@ -661,7 +661,7 @@ def test_a_capped_summon_times_out_and_refuses_with_the_wait_reading(tmp_path):
     必须分得开（前者继续派、后者拒并带上读数）。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3, fanout_wait_sec=0.3)
+    c = _mk_conductor(store, max_direct_children=3, fanout_wait_sec=0.3)
     parent = _parent(c)
     _seed_in_flight(store, parent, 3)
 
@@ -680,7 +680,7 @@ def test_a_capped_summon_times_out_and_refuses_with_the_wait_reading(tmp_path):
 def test_await_fanout_slot_is_disabled_by_a_zero_window(tmp_path):
     """单元级：窗口为 0 ⇒ `wait_disabled`、`waited=False`、读数原样不退（不冒充腾位）。"""
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3, fanout_wait_sec=0.0)
+    c = _mk_conductor(store, max_direct_children=3, fanout_wait_sec=0.0)
     parent = _parent(c)
     _seed_in_flight(store, parent, 3)
 
@@ -698,7 +698,7 @@ def test_await_fanout_slot_honours_an_already_cancelled_token(tmp_path):
     窗口为 0 时拿到的是 `wait_disabled` —— 这是实现里"不等"的优先级，不是缺陷。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3, fanout_wait_sec=5.0)
+    c = _mk_conductor(store, max_direct_children=3, fanout_wait_sec=5.0)
     parent = _parent(c)
     _seed_in_flight(store, parent, 3)
 
@@ -713,7 +713,7 @@ def test_await_fanout_slot_honours_an_already_cancelled_token(tmp_path):
 def test_await_fanout_slot_reports_slot_freed_when_a_child_returns(tmp_path):
     """单元级正控：等待期间有一行返回 ⇒ `slot_freed`，读数里两个数都对得上。"""
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=3, fanout_wait_sec=5.0)
+    c = _mk_conductor(store, max_direct_children=3, fanout_wait_sec=5.0)
     parent = _parent(c)
     in_flight = _seed_in_flight(store, parent, 3)
 
@@ -738,20 +738,20 @@ def test_await_fanout_slot_reports_slot_freed_when_a_child_returns(tmp_path):
 # ---------------------------------------------------------------- 判据口径本身
 
 
-def test_policy_default_tier_is_policy_max_fanout():
-    """工人档的上限只有一处来源：`Policy.max_fanout`（不许在别处再写一个 5）。"""
+def test_policy_default_tier_is_policy_max_direct_children():
+    """工人档的上限只有一处来源：`Policy.max_direct_children`（不许在别处再写一个 5）。"""
     for cap in (2, 3, 7):
-        p = P.Policy(max_fanout=cap)
-        assert P.fanout_limit_for(p, "H") == cap
-        assert P.fanout_limit_for(p, "A") == cap
+        p = P.Policy(max_direct_children=cap)
+        assert P.direct_children_limit_for(p, "H") == cap
+        assert P.direct_children_limit_for(p, "A") == cap
 
 
 def test_unknown_initiator_falls_back_to_policy_default():
-    """不在覆盖表里的发起方一律退回 `Policy.max_fanout`（保守方向，不fail-open）。"""
-    p = P.Policy(max_fanout=4)
-    assert P.fanout_limit_for(p, "Z") == 4
+    """不在覆盖表里的发起方一律退回 `Policy.max_direct_children`（保守方向，不fail-open）。"""
+    p = P.Policy(max_direct_children=4)
+    assert P.direct_children_limit_for(p, "Z") == 4
     # 闸门那一层的负控用真角色（H→G 是允许的边）：在飞 4 处仍拒，报文带在飞几与上限。
-    r = P.check(p, P.Decision(frm="H", to="G", action="revise", fanout=4))
+    r = P.check(p, P.Decision(frm="H", to="G", action="revise", direct_children=4))
     assert r is not None and r.reason == "fanout_exceeded"
     assert "在飞 4" in r.detail and "上限 4" in r.detail, r.detail
 
@@ -771,7 +771,7 @@ def test_a_saturated_instance_does_not_block_another_parents_dispatch(tmp_path):
     角色上（"这个角色一共有几个子在飞"）会把并行度压成"每个角色 5 个"，而那与所有者说的
     20*(5*5*5*5) 是两回事 —— 后者要求名额沿链相乘。"""
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_fanout=5)
+    c = _mk_conductor(store, max_direct_children=5)
     p1 = _parent(c, doc_id="0001")
     p2 = _parent(c, doc_id="0002")
     assert p1 != p2

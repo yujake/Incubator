@@ -515,16 +515,99 @@ def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
         }
     )
 
+# ---------------------------------------------------------------- 父子链（一层）
+
+@tool(
+    "trace.children",
+    "看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、"
+    "被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。"
+    "非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明"
+    "「更深要看请向 M 请求」以及那条上行调用的原文。",
+    {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS + 2,
+                        "description": "要看谁的直接下级（缺省=我自己；非 M 角色只许填自己）"},
+            "depth": {"type": "integer", "minimum": 1, "maximum": 12,
+                      "description": ("想看几层。普通代理固定按 1 层给（更深的层要 M 才能看）；"
+                                      "只有 M 调 conductor.watch 时才按传入值走")},
+            "window": {"type": "integer", "minimum": 1, "maximum": 50,
+                       "description": "每个子任务给最近几步（缺省 5）"},
+        },
+        "required": [],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    # 「普通代理能追一层」是业主原话里的前半句：这一件因此对所有可被召唤的角色开放
+    # （C/H/V 是只读角色，side_effect="read" 让结构性过滤不会剥掉它）。主控不在这
+    # 一份声明里：M 要看全树用 conductor.watch（业主原话的后半句）。
+    roles=tuple(S.ROLES),
+    returns=("{'checked','me','depth_requested','depth_granted','one_layer_only',"
+             "'children','count','deeper','session'}；每个子任务里有 "
+             "{'task_id','role','status','outcome','recent_steps','refusals',"
+             "'products','last_handoff'}"),
+)
+def trace_children(store, root, *, task_id: str = "", depth: int = 1,
+                   window: int = 5) -> ToolResult:
+    """"我直接下级"的读数入口（判据在 `agenttrace.children_with_facts`）。
+
+    身份从调用上下文读（`AgentLoop._do_tool` 用 `calling_as` 挂上），与
+    `conductor.broadcast` 同一处挂点：工具的形状里没有"我是谁"这一格。
+    非 M 角色只许看自己的下级 —— 传别人的台账号会被受控拒绝，否则"一层"这条
+    约束只要换一个 task_id 就绕过去了。
+    """
+    from .. import agenttrace as AT
+    from .. import conductor as COND
+
+    if store is None:
+        return fail("没有工作区（装配时既没给 store 也没给 root）⇒ 读不到台账，本次没查成",
+                    kind="no_store", checked=False)
+    mine = str(task_id or "") or str(COND.current_task_id() or "")
+    role = str(COND.current_caller_role() or "")
+    if not mine:
+        return fail(
+            "读不到'我是谁'（没有台账号，也没有传 task_id）⇒ 不猜一个实例来追。"
+            "生产路径上这个号由 `AgentLoop._do_tool` 用 `calling_as` 挂上；"
+            "脚本里可以显式传 task_id。",
+            kind="no_identity", checked=False)
+    try:
+        rows = store.rows("tasks")
+    except Exception as exc:  # noqa: BLE001 - 读不成不等于没有子代理
+        return fail(f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成",
+                    kind="store_error", checked=False)
+    me_row = next((r for r in rows if str(r.get("task_id") or "") == mine), None)
+    if me_row is None:
+        return fail(f"台账里没有 {mine} 这一行 ⇒ 不知道自己是谁，也不猜一个父",
+                    kind="not_found", checked=True, task_id=mine)
+    if role != S.CONDUCTOR_ROLE:
+        my_task = str(COND.current_task_id() or "")
+        if my_task and mine != my_task:
+            return fail(
+                f"非主控角色只能看自己的直接下级（你这一趟是 {my_task}，传的是 {mine}）"
+                "⇒ 一层不是'换一个 task_id'就能绕过的。要看别人那一支请向 M 请求："
+                "`conductor.escalate(need=\"深看请求：…\", kind=\"other\")`",
+                kind="not_mine", checked=True, task_id=mine)
+    data = AT.children_with_facts(store, root or getattr(store, "root", None) or ".",
+                                  me_row, depth=depth, window=window)
+    if not data.get("children"):
+        data["note"] = ("台账里我名下没有直接下级（这是查过了、确实没有；"
+                        "不是'没读成'）")
+    return ok(data)
+
+
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (trace_relation, ('_g',)),
     (trace_concept, ('_g',)),
     (trace_literature, ('_g', 'store')),
     (trace_chain, ('_g',)),
+    # 父子链（2026-10-24 业主裁定）：store 读台账，root 读会话记录与手稿。
+    (trace_children, ('store', 'root')),
 )
 
 
-def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) -> list[str]:
+def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None,
+             root: Any = None) -> list[str]:
     """注册溯源工具，返回工具名列表。
     数据源三态（不要把它读成布尔）：
     | 装配情况 | 行为 ||---|---|| 显式传入 `graph` | 四个工具都从这张图回答 || 没传 graph，但传了 `store` | 每次调用用 
@@ -579,6 +662,7 @@ def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) ->
     _bound: dict[str, Any] = {}
     _bound['_g'] = _g
     _bound['store'] = store
+    _bound['root'] = root
     names: list[str] = []
     for _fn, _deps in _TOOL_FUNCTIONS:
         names.append(registry.register(replace(

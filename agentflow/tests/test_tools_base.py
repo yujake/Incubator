@@ -626,7 +626,10 @@ def test_role_surface_A_has_search_but_no_research(store):
     assert any(n.startswith("search.") for n in names)
     assert not any(n.startswith("research.") for n in names)
     assert not any(n.startswith("ocr.") for n in names)
-    assert not any(n.startswith(("graph.", "trace.")) for n in names)
+    # `trace.children` 是例外（业主 2026-10-24：「普通代理能追一层」）：它读的是
+    # 父子链的行为，不是知识图。除它以外的 `trace.*` 仍然是 C/D 的溯源面。
+    assert not any(n.startswith("graph.") for n in names)
+    assert not any(n.startswith("trace.") and n != "trace.children" for n in names)
 
 
 def test_role_surface_B_has_ocr_but_no_search(store):
@@ -635,7 +638,11 @@ def test_role_surface_B_has_ocr_but_no_search(store):
     names = reg.names()
     assert any(n.startswith("ocr.") for n in names)
     assert not any(n.startswith("search.") for n in names)
-    assert not any(n.startswith(("graph.", "trace.", "research.")) for n in names)
+    # 同 A：`trace.children` 是业主 2026-10-24 给所有可被召唤角色的那一条，
+    # 其余 `trace.*`（概念图溯源）仍不在 B 的面上。
+    assert not any(n.startswith("graph.") for n in names)
+    assert not any(n.startswith("trace.") and n != "trace.children" for n in names)
+    assert not any(n.startswith("research.") for n in names)
 
 
 def test_role_surface_C_and_D_analysis_tools_are_pure_reads(store):

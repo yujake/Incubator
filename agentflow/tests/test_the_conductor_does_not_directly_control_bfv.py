@@ -126,7 +126,7 @@ def _world(tmp_path: pathlib.Path) -> Conductor:
     stub = _Stub()
     return Conductor(
         st,
-        policy=Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100,
+        policy=Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100,
                       wall_clock_sec=60),
         registry={r: ("object", stub) for r in ("A", "B", "D", "F", "V")},
         fanout_wait_sec=0.0,

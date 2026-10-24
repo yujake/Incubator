@@ -198,6 +198,15 @@ SPEC = AgentSpec(
             #  :521 那一行）。原来那 6 行里的真机故事与示例数值（`n=40` / `1681=41×41`）就是这一条
             #  已经被判据接手之后剩下的叙述 —— 删的是故事，不是义务。
             "**反例只有一个合法落法：`result=refutes` + 非空 `counterexample`**（只写进 `certificate` 不算法；`claim` 写**被检验的那条命题**，「这条命题为假」是结论、不是 claim）。",
+            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
+            # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
+            # `conductor.escalate` 都在本角色的工具面上。判据：
+            # tests/test_every_role_knows_it_can_watch_its_children.py。
+            "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
+            "逐个给子任务的状态、被拒次数与类目（`refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
+            "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
+            "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 会把对你的指导连同各级父的通知一起"
+            "发下来：你看到的是指导，不是原始全树数据。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、退出码、复现命令）。",

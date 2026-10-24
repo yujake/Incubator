@@ -158,7 +158,7 @@ class FakeF:
 def _conductor(store, *, policy=None, registry=None, token=None, backend="local") -> CO.Conductor:
     return CO.Conductor(
         store,
-        policy=policy or P.Policy(max_concurrency=4, max_fanout=5,
+        policy=policy or P.Policy(max_concurrency=4, max_direct_children=5,
                                   max_tasks_per_run=100, wall_clock_sec=60),
         registry=registry or {},
         backend=backend,
@@ -320,7 +320,7 @@ def test_i3_depth_is_parent_plus_one(tmp_path):
 def test_i3_negative_control_dangling_parent_is_refused(tmp_path):
     """I-3 负控：父任务不存在 ⇒ 拒绝（不许凭空挂一个父）。
 
-    凭空挂父会让深度链断裂，而"深度"是 `max_depth` 的唯一判据 ——
+    凭空挂父会让深度链断裂，而"深度"是 `max_chain_depth` 的唯一判据 ——
     链断了，深度上限就静默失效。
     """
     store = _mk_store(tmp_path)
@@ -384,7 +384,7 @@ def test_i4_negative_control_no_refusal_reason_on_ok(tmp_path):
 def test_i5_peak_concurrency_within_limit(tmp_path):
     """I-5：峰值同时 `running` 的行数 ≤ `max_concurrency`。"""
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=8, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=2, max_direct_children=8, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "C": ("object", FakeC()), "E": ("object", FakeE(sleep=0.15)),
         "H": ("object", FakeH(sleep=0.15)),
@@ -410,7 +410,7 @@ def test_i5_negative_control_limit_is_actually_reached(tmp_path):
     把 `peak_running == 上限` 当成判据会得到一个偶发失败的测试（它与机器快慢有关），而那正是"时间断言
     要给足余量"要防的东西。所以：峰值并发用探针判，`peak_running` 只判"≤ 上限"（I-5 的字面要求）。"""
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=3, max_fanout=8, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=3, max_direct_children=8, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "C": ("object", FakeC()), "H": ("object", FakeH(sleep=0.3)),
         "E": ("object", FakeE(sleep=0.3)),
@@ -437,7 +437,7 @@ def test_i5_negative_control_limit_is_actually_reached(tmp_path):
 def test_i6_intersecting_write_sets_are_serialized(tmp_path):
     """I-6：写集相交的两个任务不许并发（都写 `experiments`）。"""
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(sleep=0.15))})
     assert len(P.waves_of([_e_call("a", sleep=0.15), _e_call("b", sleep=0.15)], limit=4)) == 2
     t0 = time.monotonic()
@@ -460,7 +460,7 @@ def test_i6_negative_control_disjoint_are_parallel(tmp_path):
     —— 机器慢会同时拖慢两者，比值不受影响。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
 
     # ① 不相交 ⇒ 并发
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(sleep=0.3)),
@@ -498,7 +498,7 @@ def test_i7_budget_exhaustion_refuses_new_tasks(tmp_path):
     `usd_budget=0.0` 与 `None` 语义不同：前者是"预算为零"，后者是"没设预算"。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100,
                    wall_clock_sec=60, usd_budget=0.0)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(tokens=100))})
     first = c.summon("E", "run_experiment", {"claim": "a", "claim_key": "ka", "script_path": "s.py"},
@@ -515,7 +515,7 @@ def test_i7_a_running_task_is_not_killed_when_the_budget_runs_out(tmp_path):
     "花光了预算"与"被预算杀死"是两件事。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100,
                    wall_clock_sec=60, usd_budget=1.0)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(tokens=100))})
     first = c.summon("E", "run_experiment", {"claim": "a", "claim_key": "ka", "script_path": "s.py"},
@@ -539,7 +539,7 @@ def test_i7_negative_control_unlimited_budget_never_refuses(tmp_path):
     实现成 0 的话，第二次调用就会被拒 —— 而调用方以为自己没有上限。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=2, max_fanout=5, max_tasks_per_run=100,
+    pol = P.Policy(max_concurrency=2, max_direct_children=5, max_tasks_per_run=100,
                    wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(tokens=10**6))})
     outs = [c.summon("E", "run_experiment",
@@ -563,7 +563,7 @@ def test_i8_cancel_is_cooperative_and_never_retries(tmp_path):
     store = _mk_store(tmp_path)
     token = CancelToken()
     e = FakeE(sleep=5.0, token=token)
-    pol = P.Policy(max_concurrency=1, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=1, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", e)}, token=token)
     out: dict = {}
     th = threading.Thread(target=lambda: out.update(res=c.run_plan([
@@ -592,7 +592,7 @@ def test_i8_negative_control_without_cancel_task_runs(tmp_path):
     """
     store = _mk_store(tmp_path)
     e = FakeE(sleep=0.02)
-    pol = P.Policy(max_concurrency=1, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=1, max_direct_children=5, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"E": ("object", e)})
     res = c.run_plan([_e_call("a", sleep=0.02), _e_call("b", sleep=0.02)])
     assert [r.outcome for r in res] == ["ok", "ok"]
@@ -647,7 +647,7 @@ def test_i9_negative_control_rebuild_detects_manual_corruption(tmp_path):
 
 def test_i10_merge_order_is_deterministic_across_runs(tmp_path):
     """I-10：同一 plan 跑两次，`SummonResult` 列表顺序相同。"""
-    pol = P.Policy(max_concurrency=4, max_fanout=8, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=8, max_tasks_per_run=100, wall_clock_sec=60)
     plan_factory = lambda: [  # noqa: E731
         SC.TaskCall("E", "run_experiment", {"claim": "e", "claim_key": "ke",
                                             "script_path": "s.py", "sleep": 0.15}),
@@ -674,7 +674,7 @@ def test_i10_negative_control_order_is_input_order_not_completion(tmp_path):
     慢的那个放第一位、快的放第二位：按完成顺序会得到 `[fast, slow]`。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=4, max_fanout=8, max_tasks_per_run=100, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=4, max_direct_children=8, max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "E": ("object", FakeE(sleep=0.25)), "C": ("object", FakeC()),
     })
@@ -733,11 +733,11 @@ def test_refusal_negative_control_forbidden_pair_actually_allowed_list(tmp_path)
 def test_four_layer_chain_is_refused_by_depth(tmp_path):
     """深度：造一条 `M→A→B→C` 的链，断言第 4 层被 `depth_exceeded` 拒。
 
-    `max_depth=3`：`M` 发起 = 1，所以 `A(1) → B(2) → C(3)` 已到底，
+    `max_chain_depth=3`：`M` 发起 = 1，所以 `A(1) → B(2) → C(3)` 已到底，
     第 4 层无论走哪条边都必须被深度拒。
     """
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_depth=3, max_concurrency=4, max_fanout=8,
+    pol = P.Policy(max_chain_depth=3, max_concurrency=4, max_direct_children=8,
                    max_tasks_per_run=100, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={
         "A": ("object", TwoStep("a")), "B": ("object", TwoStep("b")), "C": ("object", FakeC()),
@@ -1316,11 +1316,11 @@ def test_direct_summon_result_has_children_after_running(tmp_path):
 def test_policy_snapshot_is_recorded_in_stats(tmp_path):
     """`stats()` 里带策略快照 —— "当时的上限是多少"必须能从台账侧回答。"""
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_depth=7, max_fanout=6, max_concurrency=5, max_tasks_per_run=99,
+    pol = P.Policy(max_chain_depth=7, max_direct_children=6, max_concurrency=5, max_tasks_per_run=99,
                    wall_clock_sec=12.5)
     c = _conductor(store, policy=pol)
     s = c.stats()["policy"]
-    assert s["max_depth"] == 7 and s["max_tasks_per_run"] == 99
+    assert s["max_chain_depth"] == 7 and s["max_tasks_per_run"] == 99
     # 2026-10-15 业主裁定 A7：策略快照里不许再有 token 预算这一格
     # （留一格就有人会把它打开，而打开它就会把"想得久"判成过错）
     assert "token_budget" not in s
@@ -1350,7 +1350,7 @@ def test_concurrent_summons_never_share_a_task_id(tmp_path):
     修法：取号与建行在同一把锁 + 同一个事务里（`Conductor._write_new_row`）。这条测试同时断言"号唯一"与
     "行数 == 召唤次数"—— 后者才是覆盖的直接证据。"""
     store = _mk_store(tmp_path)
-    pol = P.Policy(max_concurrency=32, max_fanout=5, max_tasks_per_run=500, wall_clock_sec=60)
+    pol = P.Policy(max_concurrency=32, max_direct_children=5, max_tasks_per_run=500, wall_clock_sec=60)
     c = _conductor(store, policy=pol, registry={"C": ("object", FakeC())})
     n = 24
     bar = threading.Barrier(n)
@@ -1430,7 +1430,7 @@ def test_fc19_guard_refuses_before_work_starts(tmp_path):
     store = _mk_store(tmp_path)
     first = _CountingE(tokens=100)
     second = _CountingE(tokens=0)
-    c = _conductor(store, policy=P.Policy(max_concurrency=2, max_fanout=5,
+    c = _conductor(store, policy=P.Policy(max_concurrency=2, max_direct_children=5,
                                           max_tasks_per_run=100, wall_clock_sec=60,
                                           usd_budget=0.0),
                    registry={"E": ("object", first)})
@@ -1499,7 +1499,7 @@ def test_fc19_the_per_summon_estimate_is_checked_against_the_remaining_money(tmp
     没给 `max_usd` 时这一格完全不参与判定（只剩全局那一处）。
     """
     store = _mk_store(tmp_path)
-    c = _conductor(store, policy=P.Policy(max_concurrency=2, max_fanout=5,
+    c = _conductor(store, policy=P.Policy(max_concurrency=2, max_direct_children=5,
                                           max_tasks_per_run=100, wall_clock_sec=60,
                                           usd_budget=1.0))
     assert c.meter.budget_usd == 1.0
@@ -1514,7 +1514,7 @@ def test_fc19_the_per_summon_estimate_is_checked_against_the_remaining_money(tmp
     # 不给这一格 ⇒ 只由全局那一处判（此刻全局还有钱 ⇒ 放行）
     assert c._meter_guard("E", None).allowed is True
     # 负控：没有全局上限时，"预计"这一格也不许凭空拒绝（不然它就成了新的暗闸）
-    loose = _conductor(store, policy=P.Policy(max_concurrency=2, max_fanout=5,
+    loose = _conductor(store, policy=P.Policy(max_concurrency=2, max_direct_children=5,
                                               max_tasks_per_run=100, wall_clock_sec=60))
     assert loose._meter_guard("E", {"max_usd": 10 ** 9}).allowed is True
 

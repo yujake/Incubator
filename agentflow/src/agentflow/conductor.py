@@ -3011,23 +3011,26 @@ class Conductor:
 
         # ---- [4] 策略判定（边 / 深度 / 循环 / 扇出 / 并发 / 总量 / 预算 / 墙钟）
         chain = tuple(lineage) if lineage is not None else self._ancestry(parent_task_id)
-        # 扇出 = 此刻在飞的子代理数（所有者 2026-10-08 裁定：单时刻，不是累计；
-        # 子代理返回即腾出名额）—— 判据见 `_in_flight_children_of`。
+        # 扇出 = 此刻在飞的直接子数（所有者 2026-10-08 裁定：单时刻，不是累计；
+        # 直接子返回即腾出名额）—— 判据见 `_in_flight_children_of`。
+        # 只数直接子，不管隔着几层的子（业主 2026-10-24：「12是只管直接子，
+        # 不管隔着几层的子」）：孙辈挂在子自己名下，算子的格。
         # 累计读数（`_admitted_children_of`）仍在台账/审计面，但不参与策略判定。
         # 上限那一档按发起方角色取（`by`），默认档与主控档都在 `policy` 里。
-        fanout = len(self._in_flight_children_of(parent_task_id)) if parent_task_id else 0
+        direct_children = len(self._in_flight_children_of(parent_task_id)) if parent_task_id else 0
         # ---- [4-pre] 触顶就等（所有者 2026-10-08：「只可等待子智能体返回结果」）
         #
         # 等在这里、而不是等在第 [5] 步之后：占位令牌（`self._running`）此刻还没拿，
         # 等的时候不会把全局并发名额攥在手里（拿在手里会让别的线程也派不动）。
         fanout_wait: dict[str, Any] | None = None
-        fanout_limit = P.fanout_limit_for(self.policy, by)
-        if parent_task_id and fanout >= fanout_limit:
-            fanout_wait = self._await_fanout_slot(parent_task_id, fanout_limit, token=token)
-            fanout = len(self._in_flight_children_of(parent_task_id))
+        direct_children_limit = P.direct_children_limit_for(self.policy, by)
+        if parent_task_id and direct_children >= direct_children_limit:
+            fanout_wait = self._await_fanout_slot(
+                parent_task_id, direct_children_limit, token=token)
+            direct_children = len(self._in_flight_children_of(parent_task_id))
             self._log(f"扇出触顶：等 {fanout_wait.get('waited_sec', 0):.1f}s"
                       f"（在飞 {fanout_wait.get('in_flight_before')} → "
-                      f"{fanout_wait.get('in_flight_after')}，上限 {fanout_limit}，"
+                      f"{fanout_wait.get('in_flight_after')}，上限 {direct_children_limit}，"
                       f"{fanout_wait.get('reason')}）")
         # ---- B9（`draft/41-A` 的 B9）：判据与占位必须在同一个临界区里
         #
@@ -3079,7 +3082,8 @@ class Conductor:
                 instance=instance,
             )
         d = Decision(
-            frm=by, to=role, action=action, depth=depth, fanout=fanout, running=running,
+            frm=by, to=role, action=action, depth=depth, direct_children=direct_children,
+            running=running,
             total=total, ancestry=chain, key=(role, action, input_key),
             # 预算不再在这里判：`Decision.tokens_left/usd_left` 用的是
             # 本次 run 的即时视图，而权威账在 `usage_ledger`。

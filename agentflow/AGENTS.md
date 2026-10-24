@@ -96,6 +96,7 @@ pyproject.toml                   [category: release-deploy] `[project]` 与 `[bu
 
 [category: auth-audit] 七、权限与审计（谁能做什么，以及谁做过了什么）
 
+src/agentflow/tools/table_tools.py  [category: auth-audit] `_rows` 对 `tasks` 表的行级可见面（`_caller_task_id` / `_TASK_VISIBLE_CHILD_DEPTH` / `_visible_tasks`）：它决定一个角色能读到哪几行任务 —— 非 M 只看到自己、直接下级与自己的父，无台账号时受控拒绝。改它等于改「谁能看见谁的活」，而工具层不会报错，它只会「成功」返回一张看起来合法的表
 src/agentflow/tools/__init__.py  [category: auth-audit] `ROLES` 的引入、`READ_ONLY_ROLES` 与 `SIDE_EFFECTS_WRITE`：只读角色（C/H）的权限面单一来源
 src/agentflow/tools/base.py      [category: auth-audit] `for_role` 的结构性过滤（工具面：只读角色一律拿不到写工具）与 `call` / `_callable_for` 的调用期角色判据（可调用面）以及 `READONLY_CALL_EXCEPTIONS` 这张逐条登记的例外表（只读角色仍可调用的那几个落库代理只由它产生）三处共用同一个私有谓词 `_role_surface` —— 它们是同一件事的**实现**，与上面的**声明**分处两文件，必须同时人审；只读角色的权限面由这三处共同决定，改任意一处都是改权限（`P-14` 之后 `for_role` 只是这三处里的第一处）
 src/agentflow/verify.py          [category: auth-audit] `verify_all` 的一致性审计：不变量检查的判据本身被改宽 ⇒ 审计从此永远"通过"

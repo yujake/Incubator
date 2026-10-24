@@ -83,9 +83,17 @@ def _rows(ctx: TableContext, table: str) -> list[dict]:
 
     只读工具用它是对的（理由见模块 docstring），但它拿到的是某一瞬间的副本：
     读出来的行不能再 upsert 回去，否则会覆盖别人在这期间的修改。
+
+    `tasks` 是唯一带角色过滤的一张表（业主 2026-10-24 裁定「普通代理能追一层，
+    M能想追几层追几层」）：通用读口不许把全表交给非主控角色，否则
+    `table.list("tasks")` 就是那条"想追几层追几层"的绕过路径。过滤口径见
+    `_visible_tasks`（本文件），全树那一半在 `conductor.watch`（只有 M 拿得到）。
     """
     _spec_of(table)  # 提前校验表名，给出比 KeyError 更清楚的错误
-    return ctx.store.rows(table)
+    rows = ctx.store.rows(table)
+    if table == "tasks":
+        return _visible_tasks(rows, role=_caller_role(), task_id=_caller_task_id())
+    return rows
 
 
 def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
@@ -607,6 +615,71 @@ def _caller_role() -> str:
         return str(current_caller_role() or "")
     except Exception:  # noqa: BLE001
         return ""
+
+
+def _caller_task_id() -> str:
+    """这一次工具调用是哪个台账号发起的（空串 = 读不到，不是"零号"）。
+
+    与 `_caller_role` 同一处挂点（`AgentLoop._do_tool` 的 `calling_as`），但它是
+    `tasks` 行级过滤唯一能用的身份：角色名只说"我是哪一类代理"，说不了"我这一支
+    是哪一棵子树"。空串 = 没有挂点（脚本 / 单测），`_visible_tasks` 会据此拒读，
+    而不是把"不知道我是谁"折成"可以看全表"。
+    """
+    try:
+        from ..conductor import current_task_id
+    except Exception:  # noqa: BLE001 - 读不到就是读不到（空串），不编一个号出来
+        return ""
+    try:
+        return str(current_task_id() or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+#: `tasks` 读侧的可见面：自己 + 直接下级 + 自己的父（父是向上的一格，不漏下去）。
+#: 为什么不是"自己整棵子树"：普通代理只能追一层（业主 2026-10-24 原话），给子树
+#: 等于让 `table.list("tasks")` 变回那条绕过路径。为什么留父那一行：它是"我这一趟
+#: 从哪来"，本来就在提示词里（`{{parent_task_id}}`），读它不增加任何可见面。
+_TASKS_VISIBLE_CHILD_DEPTH = 1
+
+
+def _visible_tasks(rows: Iterable[Mapping[str, Any]], *, role: str,
+                   task_id: str) -> list[dict[str, Any]]:
+    """`tasks` 的读侧过滤（业主 2026-10-24 裁定的执行点）。
+
+    三条口径：
+    - 主控 M：全表（它能想追几层追几层；全树的正路是 `conductor.watch`）；
+    - 非 M 且有台账号：自己那一行 + 直接下级（`parent_task_id` 等于我、且
+      `kind == ""` 的实例行）+ 自己的父那一行；
+    - 非 M 且没有台账号：受控拒绝。不许"没挂身份就按全表读"——那正是这次要关的
+      那条路（`table.get` / `table.list` / `table.search` / `table.count` 都经
+      `_rows`，所以关在这一处就够）。
+
+    为什么要排除板项行：`tasks` 里板项（`kind` 非空）的 `parent_task_id` 口径是
+    "收件人的编号"（D89），把它们当子代理会让"我的直接下级"多出一批通报项
+    （与 `Conductor._children_of` 同一条出身过滤）。
+    """
+    if str(role or "") == S.CONDUCTOR_ROLE:
+        return [dict(r) for r in rows]
+    me = str(task_id or "")
+    if not me:
+        raise ToolError(
+            "tasks 全表只有主控 M 能读；非主控角色必须带着自己的台账号来读，"
+            "而这一次调用没有台账号 ⇒ 本次没查成（不按全表兜底）。"
+            "看自己的直接下级用 trace.children；要看更深的分支请向 M 请求："
+            "conductor.escalate(need=\"深看请求：…\", kind=\"other\")"
+        )
+    by_id = {str(r.get("task_id") or ""): dict(r) for r in rows}
+    mine = by_id.get(me) or {}
+    parent = str(mine.get("parent_task_id") or "")
+    keep = {me}
+    if parent:
+        keep.add(parent)
+    keep |= {
+        str(r.get("task_id") or "") for r in rows
+        if str(r.get("parent_task_id") or "") == me and not str(r.get("kind") or "")
+    }
+    return [dict(r) for r in rows if str(r.get("task_id") or "") in keep]
+
 
 
 def _direct_write_intent(table: str, op: str, payload: Mapping[str, Any]) -> str:

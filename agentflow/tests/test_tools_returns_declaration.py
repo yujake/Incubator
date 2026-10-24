@@ -77,6 +77,8 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-23：95 → 97（147 收口第 6 步：L 的形式化入口三件 —— `formal.formalize` /
 #: `formal.check_formal` / `formal.record` 进册；同一批里 `verify.check_formal` 整条删除，
 #: 于是净增 2 = 95 + 3 − 1）。
+#: 2026-10-24：97 → 100（业主裁定「普通代理能追一层，M能想追几层追几层」：
+#: `trace.children` 一层、`conductor.watch` 全树、`conductor.guide` 沿树指导三件）。
 #:
 #: 这一格曾经写着"95 → 98"并附一句"`verify.check_formal` 的角色面收成空，但它仍在册，
 #: 所以总数只加不减"—— 那句话在盘上已经不成立：那个工具不是"收成空角色"，
@@ -85,13 +87,13 @@ TS = "2026-01-01T00:00:00+00:00"
 #: `python -m agentflow.cli tools` 的实测总数）。98 与 97 并存的含糊正是这次订正的理由。
 #:
 #: 两个口径（同一个包的两次装配，差的是 Lean 开关，不许互换）：
-#:   · Lean 开：97 件 —— 判据进程里 `tests/conftest.py` 把 `AGENTFLOW_LEAN_ENABLED`
+#:   · Lean 开：100 件 —— 判据进程里 `tests/conftest.py` 把 `AGENTFLOW_LEAN_ENABLED`
 #:     钉成 "1"，`formal_tools` 装在册；本常量与下面的 `registry` 都在这一档里跑。
-#:   · Lean 关：94 件 —— shell 缺省时 `formal_tools` 整个模块不装（那三件 `formal.*`
+#:   · Lean 关：97 件 —— shell 缺省时 `formal_tools` 整个模块不装（那三件 `formal.*`
 #:     一件都没有），所以少 3。
 #: 两个数都写在这里，是因为它们都真的存在：把第二个数搬进这一格会少算三件，
 #: 而少算三件时这条判据"照样绿"—— 那正是最坏的一种绿。
-TOOL_COUNT = 97
+TOOL_COUNT = 100
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -238,6 +240,8 @@ _PREREQS: dict[str, tuple[str, dict]] = {
 def tool_params() -> dict[str, dict]:
     """55 个工具各自那一次调用的参数。"""
     plan_id = _ALLOCATED.get("plan_id") or "0000"
+    probe_root = _ALLOCATED.get("probe_task_root") or ""
+    probe_child = _ALLOCATED.get("probe_task_child") or ""
     return {
         # ---- 只读角色的两件产出登记工具（2026-10-18 业主裁定；判据 `test_readonly_output_channel`）----
         # 参数取最小合规形态：C 交一份报告、H 记一条自己读出来的发现。
@@ -299,6 +303,11 @@ def tool_params() -> dict[str, dict]:
         # `calling_as` 提供（工具形状里没有这几格）—— 夹具因此给它挂了一个父。
         "conductor.escalate": {"need": "探针：取回 lit:0000 的全文",
                                "kind": "fetch_fulltext", "evidence": ["lit:0000"]},
+        # 全树追踪（2026-10-24 业主裁定）：探针读 `_seed` 铺的那棵两节点树。
+        # `calling_as` 给的是 M 的身份 ⇒ 层数不截断、也能读任意一支。
+        "conductor.watch": {"task_id": probe_root, "window": 3},
+        # 沿树指导：收件人是根名下那个子代理；它给目标与各级父各开一条板项 ⇒ 写工具。
+        "conductor.guide": {"to": probe_child, "text": "探针：沿树指导一条"},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -427,6 +436,7 @@ def tool_params() -> dict[str, dict]:
         "table.update": {"table": "research_questions", "id": "0000",
                          "patch": {"notes": "探针改过的笔记"}},
         "trace.chain": {"relation_ids": ["0000"]},
+        "trace.children": {"task_id": probe_root, "depth": 2, "window": 3},
         "trace.concept": {"concept_id": "0000"},
         "trace.literature": {"lit_id": "0000", "max_chars": 200},
         "trace.relation": {"relation_id": "0000"},
@@ -525,6 +535,9 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 上行（2026-10-19「父子天然双向」）：探针走成功支（`state="escalated"`，
         # 父与会话身份由 `observations` 的 `calling_as` 挂上），键名读自实跑观测。
         "conductor.escalate",
+        # 父子链三件（2026-10-24）：探针都走到了返回数据的成功支（`_seed` 铺了两节点树）。
+        # `conductor.guide` 的键集合在目标与各级父两条落点上都同一份，观测一次即可。
+        "trace.children", "conductor.watch", "conductor.guide",
         # 文字层抽取：探针真跑（`tool_params()` 给了 `SOURCE_REL`）⇒ 键名读自实现。
         # 待新增文献列表的七件（2026-10-20）：探针都真跑到了 ok 分支（`_seed` 铺了 4 个槽）
         # ⇒ 键名读自实跑观测，而不是读源码。
@@ -585,6 +598,9 @@ MUTATING_LAST: frozenset[str] = frozenset(
         # 上行（2026-10-19）：它往会话里追加一条留言 + 一条 `agent_escalation` ⇒
         # 与别的破坏前置数据的工具同档，排在后面跑（它读的是"我是谁/父是谁"那套上下文）。
         "conductor.escalate",
+        # 沿树指导（2026-10-24）：它给目标与各级父各开一条板项（写 `tasks`）⇒ 排在后面，
+        # 免得 `conductor.board` / `conductor.ledger` 的探针读到它多出来的行。
+        "conductor.guide",
         "fs.move",
         "fs.delete",
         "fs.write",
@@ -907,6 +923,24 @@ def _seed(store: Store, root: Path) -> None:
             )
             row.validate()
             tx.upsert("lit_candidates", row.to_dict(), note="fixture")
+    # 父子链（2026-10-24 业主裁定「普通代理能追一层，M能想追几层追几层」）：
+    # `trace.children` / `conductor.watch` 要有一棵真的树才走得到返回数据的成功支。
+    # 根与一个直接下级就够：前者验"看自己"，后者验"看下级"与嵌套键。
+    # 编号由 `Conductor` 现发（不写死），探针参数从 `_ALLOCATED` 取同一份。
+    from agentflow.conductor import Conductor, LocalBackend
+
+    cond = Conductor(store, policy=None, backend=LocalBackend({}))
+    task_root = cond.open_top_level_run("M", "探针：父子链的根")
+    task_child = cond._write_new_row(
+        {"role": "D", "action": "write_report", "called_by": "M",
+         "parent_task_id": task_root, "depth": 2, "input_key": "probe:child",
+         "status": "running", "outcome": None, "refusal_reason": None,
+         "instance": "", "detail": "探针：根名下的一件活", "error": None,
+         "started_at": TS, "ended_at": None, "tokens": 0, "usd": 0.0,
+         "artifacts": [], "inputs": []},
+        note="fixture:task-chain")
+    _ALLOCATED["probe_task_root"] = str(task_root)
+    _ALLOCATED["probe_task_child"] = str(task_child)
 
 
 class _RoleGateBypassedRegistry(ToolRegistry):
