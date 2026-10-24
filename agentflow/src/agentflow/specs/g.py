@@ -278,6 +278,19 @@ SPEC = AgentSpec(
             "**附录那一段说明由渲染函数按论文语言生成**（`doc.write_mapping` 渲染出 `mapping-appendix.tex`）："
             "不许手抄、不许混语言、不许为了「看着一致」去手改渲染出来的那一段 —— 手改的与 json 对不上"
             "（`mapping_paper_mismatch`），而且那一段印出来的语言就是读者看到的论文语言。",
+            # 2026-10-24（D-47，清点 cube2 的 main.log 时发现）：上面几条只写到「写什么」与
+            # 「抬头用哪种语言」，没写「长串进正文能不能断」—— 于是正文把 out/experiments/…、
+            # code/…、64 位 sha256 整串排进 typewriter，日志里 5 条 Overfull（125.28 / 185.70 /
+            # 61.81 / 41.43 / 68.80pt）。判据：tests/test_d47_long_paths_break_in_the_body.py。
+            "**正文里出现长路径、长哈希时必须可断行**（业主 2026-10-24，D-47）：`out/experiments/000001/…`、"
+            "`code/…`、64 位 sha256 这类长串在 typewriter 字体里**不可断行**，整串排进正文就会把一行撑出页宽"
+            "（cube2 实测：一串声明名连排 125.28pt，一个 64 位 sha256 185.70pt）。正文里**不许**出现整串不可断的 "
+            "typewriter：要么在 `\\texttt{…}` 里于 `/ . _ -` 之后插 `\\allowbreak{}`，要么用 `\\path{…}`"
+            "（`url` 宏包，可在 `/ . _ -` 处断行），要么把长串移到脚注或附录、正文只留一句指过去。"
+            "**相邻几串连排时断点要落在每一串内部**：cube2 那段连排只把 `\\texttt` 换成 `\\path{}` 仍剩一条 "
+            "33.76pt —— 断在串与串之间排不出一行放得下的断法；移进脚注或附录的那一串自己也要能断（附录的行"
+            "一样会撑出页宽）。编完读 `doc.paper_compile` 的日志：正文段（`\\appendix` 之前）"
+            "`Overfull \\hbox` 超过 20pt 的条数必须是 0。",
             "**断言只能声称它所引实验的 `result` 支持的东西**：引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）"
             "的实验时，这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），或者先去让 E 跑出一个真给出 "
             "`REPRO_RESULT:` 的实验。",

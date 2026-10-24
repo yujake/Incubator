@@ -497,6 +497,10 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p196", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p196（2026-10-24）：G 一格（写作参照物 + 论文语言）、M 一格（受控档加入 paper_mapping_rows）。facts 键集仍 15 格"},
+        # p196 → p197（2026-10-24）：D-47 —— 正文里的长路径/长哈希必须可断行（\allowbreak 或 \path）
+        {"version": "p197", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p197（2026-10-24）：只有 G 一格变（正文长串断行口径）。facts 键集仍 15 格"},
 )
 
 

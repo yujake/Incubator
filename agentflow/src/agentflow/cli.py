@@ -3591,6 +3591,33 @@ def cmd_stop(args) -> int:
     return 0 if mine else 3
 
 
+def cmd_stats(args) -> int:
+    """统计量（测试工具）：按角色 × 类目数"错误动作"，只读、零模型调用、不落盘。
+
+    形状：`agentflow stats errors --root <工作区> [--json]`。实现全在 `errorstats`，
+    这里只做三件事：解析 `--root`、选呈现（人读的小表 / 机器可读的 JSON）、把三态翻成
+    退出码（`0` 查过了（含"全 0"）/ `2` 没查成）。
+
+    为什么退出码只有 0 与 2、没有 1：这一层不是判据，它不判"错误太多"。0 与 2 的分界是
+    三态纪律那条线 —— "0 次错误动作"与"没读到事件流"不许用同一个退出码表示。
+    角色归属与主码规则（同一条记录只算一次）写在 `errorstats` 的模块 docstring 里。
+    """
+    from . import errorstats as ES
+
+    root = Path(getattr(args, "root", None) or DEFAULT_ROOT).resolve()
+    stats = ES.error_action_stats(root)
+    if getattr(args, "json", False):
+        print(ES.stats_json(stats))
+    else:
+        for line in ES.render_text(stats):
+            print(line)
+    if not stats.checked:
+        print(f"[unknown] 没查成：{stats.reason or '读不到事件流或会话记录'}"
+              "（这里的 0 不是「没有错误动作」）", file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_status_report(args) -> int:
     """项目状态报告（`draft/39` §4）：只读台账与手稿，零模型调用，不打断任何循环。
 
@@ -4306,6 +4333,21 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--since", default="", help="只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）")
     sp.add_argument("--out", default="", help="报告落哪个目录（缺省 <工作区>/out/review）")
     sp.set_defaults(func=cmd_status_report)
+
+    # 统计量（测试工具，业主 2026-10-24）：按角色 × 类目数"错误动作"（含被各种判据拦下与
+    # 被秘书拦下的行为）。只读、零模型调用、不落任何文件 —— 实现全在 `errorstats`。
+    # 为什么挂在 `stats` 下面而不是又开一个动词：这个量会长出别的读数（拒信分布、
+    # 逐角色成功率…），"统计量"是一类东西；今天只有 `errors` 一档，缺省就是它。
+    # `--root` 用 `default=argparse.SUPPRESS`：子 parser 的缺省 None 会把用户写在子命令
+    # 前面的顶层 `--root` 覆盖掉（与 `start` 那一组同一个理由）。
+    sp = sub.add_parser("stats", help="统计量（只读测试工具）：按角色数错误动作")
+    _ssub = sp.add_subparsers(dest="stats_cmd", metavar="<统计量>")
+    _err = _ssub.add_parser("errors",
+                            help="按角色 × 类目统计错误动作计数（附合计、类目释义与三态）")
+    _err.add_argument("--root", default=argparse.SUPPRESS, help="工作区根（与顶层 --root 同义）")
+    _err.add_argument("--json", action="store_true", help="机器可读（JSON）")
+    _err.set_defaults(func=cmd_stats, stats_cmd="errors")
+    sp.set_defaults(func=cmd_stats, stats_cmd="errors")
 
     # 用户端网页：给人看"它在等什么、跑到哪了、上一趟干了什么"，并让人在那里回答问题。
     # 它是「只读投影」（每次请求都从盘上现读），唯一的写路径是 `POST /answer` → `userio.answer_question`。
