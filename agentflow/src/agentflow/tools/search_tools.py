@@ -37,7 +37,8 @@ from .. import fetch as F
 from .. import providers as P
 from .. import schema as S
 from .. import textutil as T
-from ..store import Store
+from ..litstage import LitStageError
+from ..store import Store, StoreError
 
 __all__ = [
     "PROVIDER_CATALOG",
@@ -1611,9 +1612,13 @@ def _search_register(ctx, title, type_code, summary, path=None, doi=None, year=N
 
 
 def _stage_fail(exc: Exception) -> Any:
-    """把 `litstage` 的受控错翻成工具层的 `fail`（模型据此能改）。"""
-    from ..litstage import LitStageError
+    """把 `litstage` 的受控错翻成工具层的 `fail`（模型据此能改）。
 
+    `LitStageError` / `StoreError` 的绑定在模块顶部：四个 handler 的 `except` 元组
+    与这里读的是同一个名字（2026-10-24 修复的缺陷 A：它们此前只在
+    `_stage_fail` / `lit.admit` / `lit.admit_all` 里局部 import，于是底层一抛错，
+    `except (LitStageError, ...)` 自己先 `NameError`，三态被折成 `unexpected`）。
+    """
     if isinstance(exc, LitStageError):
         return fail(str(exc), kind=exc.kind, **dict(exc.detail or {}))
     if isinstance(exc, StoreError):
@@ -1878,7 +1883,7 @@ def _h_lit_admit(
     一处直接写 `literature` ——"绕开登记路径"在结构上做不到（判据见 `tests/test_search_tools_stage_admit.py`）。
     「它不清空列表」：清空是一次委托的收尾动作，属于 `lit.admit_all`。
     """
-    from ..litstage import LitStageError, admit as _admit
+    from ..litstage import admit as _admit
 
     if ctx.store is None:
         return fail("未配置 store：入不了库（不是「都重复了」）", kind="no_store")
@@ -1980,7 +1985,7 @@ def _h_lit_admit_all(
     
     它仍守"一次委托至多入库 10 篇"与"重叠高需 `new_content`"两条。
     """
-    from ..litstage import LitStageError, admit_all as _admit_all
+    from ..litstage import admit_all as _admit_all
 
     if ctx.store is None:
         return fail("未配置 store：入不了库（不是「都重复了」）", kind="no_store")

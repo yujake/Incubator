@@ -29,7 +29,7 @@
 
 `formal.formalize` 写工作区文件（`write_local`）并起检查器子进程（`external="exec"`），
 `formal.check_formal` 只读 + 起子进程（`read` + `exec`），`formal.record` 写一行
-`experiments`（`write_local`）并**自己再起一次检查器**（`external="exec"`）。
+`experiments`（`write_local`）并自己再起一次检查器（`external="exec"`）。
 两根轴逐条如实声明 —— `capabilities` 的导入期对账读的就是这几个字面量。
 """
 from __future__ import annotations

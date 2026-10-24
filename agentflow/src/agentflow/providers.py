@@ -213,8 +213,8 @@ class QueryApplicability:
     ``state`` 的取值为 :data:`QUERY_APPLICABILITY_STATES` 之一，语义逐条：
 
     * ``applicable_as_is`` —— 题面里有英文关键词，查询原样可发（旧行为，逐字不变）；
-    * ``query_not_applicable_cjk`` —— 题面抽不出任何英文关键词，**这一问不发给
-      以英文文献为主的上游库**（fail-closed：宁可这一问落"未接线"，也不把
+    * ``query_not_applicable_cjk`` —— 题面抽不出任何英文关键词，这一问不发给
+      以英文文献为主的上游库（fail-closed：宁可这一问落"未接线"，也不把
       中文原串打给英文库换回噪音）；
     * ``query_empty`` —— 根本没有查询串。
 
@@ -1077,10 +1077,10 @@ def http_get_json(
             delay = _retry_after_seconds(getattr(exc, "headers", None))
             if delay is None:
                 delay = min(2.0**attempt, 20.0) * (0.8 + 0.4 * random.random())
-            # 2026-10-18（真机 T2，缺陷 ⑭）：OpenAlex 回 `Retry-After: 60`，而这里会**原地睡 60 秒**
+            # 2026-10-18（真机 T2，缺陷 ⑭）：OpenAlex 回 `Retry-After: 60`，而这里会原地睡 60 秒
             # 再试 —— 真机读数：20 分钟只烧掉 $0.09，因为每轮都在等限流。
             # 与 `_h_download` 里那条"Forbidden/限流要换源而不是原地耗时间"同一个原则：
-            # 等待超过这道闸就不再等，**立刻**把 `rate_limited` 抛给检索层去换 provider。
+            # 等待超过这道闸就不再等，立刻把 `rate_limited` 抛给检索层去换 provider。
             if delay > RATE_LIMIT_MAX_WAIT_SEC:
                 logger.warning(
                     "限流要求等待 %.1fs（HTTP %s）> 上限 %.0fs ⇒ 不在原地等，直接报 rate_limited"
@@ -1116,14 +1116,14 @@ def http_get_json(
 def _openalex_pdf_url(work: Mapping[str, Any]) -> tuple[str | None, str]:
     """按"可获取性"从高到低挑 PDF 链接，并返回来源说明（便于事后审计）。
 
-    ## `R-51`（`draft/28` §154）：`pdf_url` 与落地页**逐字相同**时要标出来
+    ## `R-51`（`draft/28` §154）：`pdf_url` 与落地页逐字相同时要标出来
 
-    OpenAlex 有时把**落地页/仓库页/handle 解析器**填进 `pdf_url`
+    OpenAlex 有时把落地页/仓库页/handle 解析器填进 `pdf_url`
     （实测：`hdl.handle.net/1773/25218`、`ul.qucosa.de/id/qucosa%3A11139`
     这两条的 `best_oa_location.pdf_url` 与 `landing_page_url` 逐字相同）。
     那种 URL 下回来的是 HTML，"下载成功"会被读成"拿到全文"。
 
-    这里**不改** `pdf_url` 的取值（字节仍然值得当证据留下，`fetch`/`agent_a`
+    这里不改 `pdf_url` 的取值（字节仍然值得当证据留下，`fetch`/`agent_a`
     会把它标成 `content_mismatch`），只在来源串上打一个 `|landing_same_as_pdf` 标记 ——
     于是事后审计能在候选记录里一眼看出"这条根本没有直链"。
     """
@@ -1132,7 +1132,7 @@ def _openalex_pdf_url(work: Mapping[str, Any]) -> tuple[str | None, str]:
     def mark(url: str, source: str, loc: Any = None) -> tuple[str, str]:
         """`pdf_url` 与落地页逐字相同 ⇒ 在来源串上打标记（R-51）。
 
-        要比**两处**落地页：work 级 `_openalex_landing_url`（优先 DOI）与该 location
+        要比两处落地页：work 级 `_openalex_landing_url`（优先 DOI）与该 location
         自己的 `landing_page_url`。只比前者会漏掉实测那两条（它们的 work 级落地页是
         DOI，而 location 级落地页与 `pdf_url` 逐字相同）。
         """
@@ -1191,11 +1191,11 @@ class OpenAlexProvider:
 
     #: OpenAlex 建议显式声明 select 以减少响应体积；缺字段时解析端全部做了兜底。
     #:
-    #: ⚠️ **2026-10-15 加 `referenced_works`**（新动作 `A.walk_citations` 的回溯那一半要用它）。
+    #: 2026-10-15 加 `referenced_works`（新动作 `A.walk_citations` 的回溯那一半要用它）。
     #: 加之前按本类的纪律实测过它可 select（`temp/_probe_citation_walk.py`：
     #: `select=…,referenced_works,…` 返回的是 `["https://openalex.org/W…", …]` 列表，
-    #: 源论文那一篇是 **123** 个 id）—— 与 `language` 那种"合法字段但不可 select"不同。
-    #: 代价：每条多一个 id 列表（回溯时才用得上）；收益：**不用为走查再发一次请求**。
+    #: 源论文那一篇是 123 个 id）—— 与 `language` 那种"合法字段但不可 select"不同。
+    #: 代价：每条多一个 id 列表（回溯时才用得上）；收益：不用为走查再发一次请求。
     SELECT_FIELDS = (
         "id,doi,title,display_name,type,type_crossref,publication_year,publication_date,"
         "language,authorships,primary_location,best_oa_location,locations,open_access,"
@@ -1274,13 +1274,13 @@ class OpenAlexProvider:
 
         ## fail-closed（`X-NEW-1` 的 D 选项）
 
-        题面里抽不出任何英文关键词时（纯中文题面的常态），**不拿中文原串去打
-        这个以英文文献为主的库**：抛 `ProviderError`，落第三态
+        题面里抽不出任何英文关键词时（纯中文题面的常态），不拿中文原串去打
+        这个以英文文献为主的库：抛 `ProviderError`，落第三态
         `query_not_applicable_cjk`。理由与"为什么是异常"逐字见
         `_require_applicable_query`。中英混排的题面照旧发出去。
         """
 
-        # 缺陷 ⑰：这个源被限流过就**只在冷却期内直接拒**，不碰网络 ——
+        # 缺陷 ⑰：这个源被限流过就只在冷却期内直接拒，不碰网络 ——
         # 让调用方立刻换下一个源，而不是把"已限流"再问一遍。
         _left = _provider_cooling(self.name)
         if _left > 0:
@@ -1529,11 +1529,11 @@ class OpenAlexProvider:
         used_plan: _QueryPlan,
         last: str,
     ) -> tuple[list[dict], _QueryPlan]:
-        """第三档（`r-0002` 那一趟的整改）：**前两串都零召回**时退到"只用 topic"。
+        """第三档（`r-0002` 那一趟的整改）：前两串都零召回时退到"只用 topic"。
 
         触发条件三条同时成立，缺一条都不发这一次请求：
         这一路有第三档串、它不等于前两串、而且前两次真的都是 0 条。
-        发出去之后无论有没有结果，**两次读数都留在 `last_phrase_fallbacks` 里**
+        发出去之后无论有没有结果，两次读数都留在 `last_phrase_fallbacks` 里
         （`last_resort` / `last_resort_count`）—— "换了个串才查到"与"换了也没查到"
         是两件事，台账上必须分得开。
         """
@@ -1557,7 +1557,7 @@ class OpenAlexProvider:
     CITATION_BATCH = 25
 
     def _fetch_one_work(self, ident: str) -> dict | None:
-        """按 **DOI 或 OpenAlex id** 取**单条** work（含 `referenced_works` / `id`）。
+        """按 DOI 或 OpenAlex id 取单条 work（含 `referenced_works` / `id`）。
 
         `ident` 是 `W…`（或 `https://openalex.org/W…`）时走 `/works/W…`，
         否则当 DOI 走 `/works/doi:…`。取不到 ⇒ None。
@@ -1591,44 +1591,44 @@ class OpenAlexProvider:
         direction: str = "backward",
         limit: int = 20,
     ) -> list[Candidate]:
-        """由**一篇已有的论文**出发，在引文图上走一步（新动作 `A.walk_citations` 的底层）。
+        """由一篇已有的论文出发，在引文图上走一步（新动作 `A.walk_citations` 的底层）。
 
-        - `backward`（**回溯**）：这一篇**引了谁** —— 读源记录的 `referenced_works`
+        - `backward`（回溯）：这一篇引了谁 —— 读源记录的 `referenced_works`
           （OpenAlex 内部 id），再用 `filter=openalex_id:W1|W2|…` 批量解析成候选；
-        - `forward`（**前推**）：**谁引了这一篇** —— 用 `filter=cites:<W…>`。
+        - `forward`（前推）：谁引了这一篇 —— 用 `filter=cites:<W…>`。
 
         ## 为什么不另写一套解析
 
-        两个方向都只是**一次普通的 works 查询**，所以候选取样一律走 `_parse_work`
-        —— 一份解析只有一处实现（本仓的 R003 纪律）。传 `mode="walk"`（**不是** `"precise"`）
-        是刻意的：引文走查**没有"主题"**，硬塞一个主题进去会让 `_precise_keep` 按题名精筛，
+        两个方向都只是一次普通的 works 查询，所以候选取样一律走 `_parse_work`
+        —— 一份解析只有一处实现（本仓的 R003 纪律）。传 `mode="walk"`（不是 `"precise"`）
+        是刻意的：引文走查没有"主题"，硬塞一个主题进去会让 `_precise_keep` 按题名精筛，
         而它会把"这一篇引的、但题名不含那几个关键词"的条目静默剔掉 —— 那是编读数。
 
         ## 不排序（`sort=None`），且这是刻意的
 
         本仓别处按 `cited_by_count:desc` 排序是为了找"主流/奠基"那一批；而引文走查的
-        典型用途恰恰是**找更冷门的那条路**（业主点名的"更短证明路径"就是这一类）——
-        **按热度排对这件事是反的**。所以这里交回 OpenAlex 的默认次序，由调用方自己判。
+        典型用途恰恰是找更冷门的那条路（业主点名的"更短证明路径"就是这一类）——
+        按热度排对这件事是反的。所以这里交回 OpenAlex 的默认次序，由调用方自己判。
 
         ## 实测（`temp/_probe_citation_walk.py`，2026-10-15，$0）
 
-        源论文 `10.1098/rsos.181055`：自己引了 **123** 篇；解析前 5 个 id ⇒ 回来 5 条真候选
-        （有题名/年份/DOI）。前推 `cites:W2883591297` ⇒ **29** 条，前 5 条里 **4 条 `is_oa=True`**
+        源论文 `10.1098/rsos.181055`：自己引了 123 篇；解析前 5 个 id ⇒ 回来 5 条真候选
+        （有题名/年份/DOI）。前推 `cites:W2883591297` ⇒ 29 条，前 5 条里 4 条 `is_oa=True`
         —— 前推这一侧的 OA 比例高，对"顺手把全文也拿到"特别有利。
         """
         want = max(1, int(limit))
         src = _stringify(openalex_id).rsplit("/", 1)[-1]
         refs: list[str] = []
-        # ⚠️ **即使给的是 `openalex_id` 也要取一次源记录**：回溯那一半要的是
-        # `referenced_works`，它只在源记录上。不取的话回溯会**静默返回空**
+        # 即使给的是 `openalex_id` 也要取一次源记录：回溯那一半要的是
+        # `referenced_works`，它只在源记录上。不取的话回溯会静默返回空
         # —— 那是假阴性（"这一篇谁都没引"与"我没去读它的参考文献"长得一样）。
         ident = src or normalize_doi(_stringify(doi))
         if not ident:
             raise ProviderError("引文走查需要 doi 或 openalex_id 至少给一个")
         work = self._fetch_one_work(ident)
         if work is None:
-            # ⚠️ **不许 return []**：取不到源记录是"这一趟**没做成**"，
-            # 而空列表在下游是一个**有效结论**（"这一篇没有引文邻居"）——
+            # 不许 return []：取不到源记录是"这一趟没做成"，
+            # 而空列表在下游是一个有效结论（"这一篇没有引文邻居"）——
             # 两者折平就是本项目最贵的那类假阴性（lint R002 正是在这里抓到我）。
             # 抛出去 ⇒ 工具层落成 `fail(kind="walk_failed")`，调用方读得到理由。
             raise ProviderError(f"取不到源记录（{ident!r}）⇒ 这一趟引文走查没做成，"
@@ -1638,7 +1638,7 @@ class OpenAlexProvider:
         if not src:
             raise ProviderError(f"源记录里读不出 OpenAlex id（{ident!r}）⇒ 前后推都定位不到它，"
                                 "这一趟没做成")
-        # 注意：`refs` 为空**是**有效结论（这一篇确实谁都没引）⇒ 回溯那一支照旧返回 `[]`。
+        # 注意：`refs` 为空是有效结论（这一篇确实谁都没引）⇒ 回溯那一支照旧返回 `[]`。
 
         out: list[Candidate] = []
         if direction == "backward":
@@ -1817,15 +1817,15 @@ class _QueryPlan:
     #: 整串短语在长题面上会零召回（字面匹配），主查询空手而归时由
     #: `OpenAlexProvider._fetch_with_fallback` 拿它再抓一次。
     fallback: str = ""
-    #: 第三档（`r-0002` 那一趟的整改）：**前两串都零召回**时退到"只用 topic"的那一条。
+    #: 第三档（`r-0002` 那一趟的整改）：前两串都零召回时退到"只用 topic"的那一条。
     #:
-    #: 为什么需要第三档：`precise` 的主串与降级串**都带着 description 的词项**
+    #: 为什么需要第三档：`precise` 的主串与降级串都带着 description 的词项
     #: （`term_query(description) OR …`），而 OpenAlex 的长串 OR 查询会真的零召回
     #: （不是被标题过滤掉、是上游 `meta.count=0`）。真机读数（T2 第 23 趟 `t2r`）：
     #: topic=`edge-girth-regular graphs` + 一段 30 词的 description ⇒ 主串 0 条、
     #: 降级串 0 条 ⇒ 台账写 `no_results`（三次）；而同一个 topic 只留短 description
     #: 或清空 description ⇒ 10 条（含标题就是《Edge-girth-regular graphs》那一篇）。
-    #: 也就是说"查不到"的真原因是**查询串太长**，而既有降级链两次都不脱开 description。
+    #: 也就是说"查不到"的真原因是查询串太长，而既有降级链两次都不脱开 description。
     #: 第三档只脱开 description、保留 topic，代价是精度下降 —— 与
     #: `keyword_hit` docstring 里那条取舍同向（"漏掉一篇好文献比多留几篇噪音代价更大"），
     #: 且 `precise` 还有 `_precise_keep` 的标题关键词过滤兜着。
@@ -2104,7 +2104,7 @@ class CrossrefProvider:
         `ProviderError` 落第三态 `query_not_applicable_cjk`。
         """
 
-        # 缺陷 ⑰：这个源被限流过就**只在冷却期内直接拒**，不碰网络 ——
+        # 缺陷 ⑰：这个源被限流过就只在冷却期内直接拒，不碰网络 ——
         # 让调用方立刻换下一个源，而不是把"已限流"再问一遍。
         _left = _provider_cooling(self.name)
         if _left > 0:
@@ -2286,7 +2286,7 @@ class DoajProvider:
         `query_not_applicable_cjk`。
         """
 
-        # 缺陷 ⑰：这个源被限流过就**只在冷却期内直接拒**，不碰网络 ——
+        # 缺陷 ⑰：这个源被限流过就只在冷却期内直接拒，不碰网络 ——
         # 让调用方立刻换下一个源，而不是把"已限流"再问一遍。
         _left = _provider_cooling(self.name)
         if _left > 0:
@@ -2440,7 +2440,7 @@ class EuropePmcProvider:
         `query_not_applicable_cjk`。
         """
 
-        # 缺陷 ⑰：这个源被限流过就**只在冷却期内直接拒**，不碰网络 ——
+        # 缺陷 ⑰：这个源被限流过就只在冷却期内直接拒，不碰网络 ——
         # 让调用方立刻换下一个源，而不是把"已限流"再问一遍。
         _left = _provider_cooling(self.name)
         if _left > 0:
@@ -2525,9 +2525,9 @@ class EuropePmcProvider:
             "pmid": _stringify(entry.get("pmid")) or None,
             "pmcid": _stringify(entry.get("pmcid")) or None,
             "is_open_access": _stringify(entry.get("isOpenAccess")) or None,
-            #: 这条 `pdf_url` 是**我们构造**出来的（EBI 的全文路由 / 预印本仓库参数），
-            #: 不是 provider 报来的直链。合并时它**不该盖过**别家报来的真链接 —— 见
-            #: `_pdf_url_rank` 与 `_merge_candidates`（**10-B**，2026-10-15）。
+            #: 这条 `pdf_url` 是我们构造出来的（EBI 的全文路由 / 预印本仓库参数），
+            #: 不是 provider 报来的直链。合并时它不该盖过别家报来的真链接 —— 见
+            #: `_pdf_url_rank` 与 `_merge_candidates`（10-B，2026-10-15）。
             "pdf_url_derived": bool(pdf_url) and str(pdf_url).startswith(_DERIVED_PDF_PREFIXES),
             "europepmc": dict(entry),
         }
@@ -2547,25 +2547,25 @@ class EuropePmcProvider:
         )
 
 
-#: 我们**构造**出来的 pdf_url 的形态（不是 provider 报来的直链）。
+#: 我们构造出来的 pdf_url 的形态（不是 provider 报来的直链）。
 _DERIVED_PDF_PREFIXES: tuple[str, ...] = (
     "https://www.ebi.ac.uk/europepmc/webservices/rest/",
     "https://europepmc.org/api/fulltextRepo?",
 )
 
-#: 一个 `pdf_url` 有多可信（越大越可信）。**10-B**（2026-10-15）。
+#: 一个 `pdf_url` 有多可信（越大越可信）。10-B（2026-10-15）。
 #:
-#: 为什么需要它：`_merge_candidates` 的规矩是"**先到者赢**"（只填补空缺、不覆盖），
-#: 而它的 docstring 假设"先到的源（**如 OpenAlex**）通常字段更全" —— 但 `--provider`
-#: 的实际顺序是 `crossref,doaj,europepmc,openalex`，**OpenAlex 是最后一个**。
-#: ⇒ OpenAlex 手里那条**能打开的合法 OA 位置**（`best_oa_location`）会被前面某一家
-#: **由我们构造出来的** URL 盖掉。实测（同一 DOI）：OpenAlex 给的是可用的 OA 位置，
+#: 为什么需要它：`_merge_candidates` 的规矩是"先到者赢"（只填补空缺、不覆盖），
+#: 而它的 docstring 假设"先到的源（如 OpenAlex）通常字段更全" —— 但 `--provider`
+#: 的实际顺序是 `crossref,doaj,europepmc,openalex`，OpenAlex 是最后一个。
+#: ⇒ OpenAlex 手里那条能打开的合法 OA 位置（`best_oa_location`）会被前面某一家
+#: 由我们构造出来的 URL 盖掉。实测（同一 DOI）：OpenAlex 给的是可用的 OA 位置，
 #: 而盘上那些行的 `download.url` 是 EuropePMC 的 EBI 路由 ⇒ 好链接被丢了。
 #:
 #: 分级（只为这一件事服务，不引入新的判据）：
-#:   3 = `best_oa_location`（OpenAlex **按定义**算出来的最佳合法 OA 位置）
+#:   3 = `best_oa_location`（OpenAlex 按定义算出来的最佳合法 OA 位置）
 #:   2 = 别的 OA 字段 / 别家报来的直链（`primary_location` / `open_access.oa_url` / Crossref 的 link）
-#:   1 = **我们构造的**（`_DERIVED_PDF_PREFIXES`）
+#:   1 = 我们构造的（`_DERIVED_PDF_PREFIXES`）
 #:   0 = 没有 pdf_url
 def _pdf_url_rank(c: "Candidate") -> int:
     if not c.pdf_url:
@@ -2580,29 +2580,29 @@ def _pdf_url_rank(c: "Candidate") -> int:
 
 
 def _europepmc_urls(entry: Mapping[str, Any], doi: str | None) -> tuple[str | None, str | None]:
-    """从 ``fullTextUrlList`` 找**取得到**的全文直链与落地页。
+    """从 ``fullTextUrlList`` 找取得到的全文直链与落地页。
 
-    ⚠️ **2026-10-15 修（真机读数驱动）**：此前这里把 Europe PMC 自己在
+    2026-10-15 修（真机读数驱动）：此前这里把 Europe PMC 自己在
     `fullTextUrlList` 里报的 `https://europepmc.org/articles/PMC…?pdf=render` 当直链。
-    实测（$0 探针，逐条 GET）**那一个永远 403**，而且**与 User-Agent 无关**
-    —— 它是**网站页**，不是可编程取的 API：
+    实测（$0 探针，逐条 GET）那一个永远 403，而且与 User-Agent 无关
+    —— 它是网站页，不是可编程取的 API：
 
     | 取法 | `PMC6502358`（真 OA） | `PMC6365842` | `pmc299930` |
     |---|---|---|---|
     | `europepmc.org/articles/{PMC}?pdf=render`（项目的 UA） | 403 | 403 | 403 |
     | 同上，浏览器 UA | 403 | 403 | 403 |
-    | `www.ebi.ac.uk/europepmc/webservices/rest/{PMC}/fullTextXML` | **200 + JATS XML** | 500 | 500 |
+    | `www.ebi.ac.uk/europepmc/webservices/rest/{PMC}/fullTextXML` | 200 + JATS XML | 500 | 500 |
 
-    代价（T5 第 8 趟 `p8h` 的盘上读数）：41 条文献里 **17 条 `http_403`，其中 12 条是
-    europepmc** —— 全部 `download.status=failed`，而那 41 条里本来就只有 6 条有可读全文。
+    代价（T5 第 8 趟 `p8h` 的盘上读数）：41 条文献里 17 条 `http_403`，其中 12 条是
+    europepmc —— 全部 `download.status=failed`，而那 41 条里本来就只有 6 条有可读全文。
 
-    ⇒ 改法：**报来的网页直链不再当下载目标**（它取不到，报出去只是把"我们取不到"
+    ⇒ 改法：报来的网页直链不再当下载目标（它取不到，报出去只是把"我们取不到"
     伪装成"下载失败"）；有 `pmcid` 时走 EBI 的 OA 全文路由。
-    量化收益（同一次探针，那 12 条逐条试）：**5 条**走 EBI 路由能取到真全文
+    量化收益（同一次探针，那 12 条逐条试）：5 条走 EBI 路由能取到真全文
     （551 KB / 367 KB / 302 KB / 85 KB / 38 KB），另 7 条 500（不在 OA 子集，如实失败）。
 
-    ⚠️ 另一处**同类错**也在这里修掉：兜底曾写
-    `…fulltextRepo?pprId={pmcid}…` —— `pprId` 收的是**预印本号（PPR…）**，
+    另一处同类错也在这里修掉：兜底曾写
+    `…fulltextRepo?pprId={pmcid}…` —— `pprId` 收的是预印本号（PPR…），
     把 `PMC…` 塞进去结构上永远不会成。现在只在 id 真的是 `PPR…` 时才用它。
     """
     pdf_url: str | None = None
@@ -2622,10 +2622,10 @@ def _europepmc_urls(entry: Mapping[str, Any], doi: str | None) -> tuple[str | No
                 landing = url
             if doc_style != "pdf":
                 continue
-            # 已知取不到的形态：Europe PMC 的**网站页**（`/articles/…?pdf=render`）。
+            # 已知取不到的形态：Europe PMC 的网站页（`/articles/…?pdf=render`）。
             #
-            # ⚠️ 判据必须是 **URL 形态**，不能靠 `site`：实测这一项的站点字段是
-            # **`Europe_PMC`**（下划线），不是 `pmc` ⇒ 按 `site == "pmc"` 判**永远匹配不上**；
+            # 判据必须是 URL 形态，不能靠 `site`：实测这一项的站点字段是
+            # `Europe_PMC`（下划线），不是 `pmc` ⇒ 按 `site == "pmc"` 判永远匹配不上；
             # 而 `documentStyle == "pdf"` 又恰好让它通过（`?pdf=render` 里就含 "pdf"）
             # ⇒ 那一条 403 的直链就是这么被选中的。
             if "europepmc.org/articles/" in url:
@@ -2639,20 +2639,20 @@ def _europepmc_urls(entry: Mapping[str, Any], doi: str | None) -> tuple[str | No
             pdf_url = (f"https://europepmc.org/api/fulltextRepo?pprId={pmcid}"
                        f"&type=FILE&fileName={pmcid}.pdf")
         elif pmcid and _stringify(entry.get("isOpenAccess")).strip().upper() == "Y":
-            # ⚠️ **只有 `isOpenAccess == "Y"` 才拼这条路由**（**10-A**，2026-10-15）。
+            # 只有 `isOpenAccess == "Y"` 才拼这条路由（10-A，2026-10-15）。
             #
-            # 实测（`temp/_probe_oa_flag.py`：两组**已知结局**的 id 逐条读标记，$0）：
-            #   `isOpenAccess` 把两组分得**干干净净** —— 5 条返 200 的全是 `Y`、
-            #   6 条返 500 的全是 `N`；而 `inEPMC` / `hasPDF` **两组全是 Y**（分不开）、
+            # 实测（`temp/_probe_oa_flag.py`：两组已知结局的 id 逐条读标记，$0）：
+            #   `isOpenAccess` 把两组分得干干净净 —— 5 条返 200 的全是 `Y`、
+            #   6 条返 500 的全是 `N`；而 `inEPMC` / `hasPDF` 两组全是 Y（分不开）、
             #   `isOA` 全是 null。⇒ 判据就是这一格，不是猜的。
             #
-            # 为什么不"试了再说"：下载层对 5xx 会**重试 3 次** ⇒ 非 OA 的那些每条白跑 3 次。
+            # 为什么不"试了再说"：下载层对 5xx 会重试 3 次 ⇒ 非 OA 的那些每条白跑 3 次。
             # T5 第 9 趟的盘上读数：18 条 `http_status=500`（约 54 次白跑）＋满屏噪音。
-            # 非 OA ⇒ 这里**不给 url**，如实落成"没有开放全文"（`download.status=skipped`
+            # 非 OA ⇒ 这里不给 url，如实落成"没有开放全文"（`download.status=skipped`
             # ＋ `no_pdf_url`），而不是"下载失败"＋重试三次 ——
-            # 三态纪律：那**不是失败**，是"这一篇没有我们取得到的全文"。
+            # 三态纪律：那不是失败，是"这一篇没有我们取得到的全文"。
             #
-            # ⚠️ 落盘的扩展名是 `.xml` ⇒ 抽取那一侧必须认它（见 `extract._XML_SUFFIXES`）；
+            # 落盘的扩展名是 `.xml` ⇒ 抽取那一侧必须认它（见 `extract._XML_SUFFIXES`）；
             # 两边是一件事的两半，改一处不改另一处只会把 403 换成"格式不认识"。
             pdf_url = (f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}"
                        "/fullTextXML")
@@ -2695,7 +2695,7 @@ class FixtureProvider:
         故中文 topic 视为"命中全部"（与 precise 的降级策略一致）。
         """
 
-        # 缺陷 ⑰：这个源被限流过就**只在冷却期内直接拒**，不碰网络 ——
+        # 缺陷 ⑰：这个源被限流过就只在冷却期内直接拒，不碰网络 ——
         # 让调用方立刻换下一个源，而不是把"已限流"再问一遍。
         _left = _provider_cooling(self.name)
         if _left > 0:
@@ -3081,14 +3081,14 @@ def _merge_candidates(base: Candidate, other: Candidate, source: str) -> Candida
             return b
         return a
 
-    # `pdf_url` 不按"先到者赢"：见 `_pdf_url_rank`（**10-B**）。
-    # 一家的 URL 先落地、并不等于它**取得到** —— 而"取得到"才是这一格的全部意义。
+    # `pdf_url` 不按"先到者赢"：见 `_pdf_url_rank`（10-B）。
+    # 一家的 URL 先落地、并不等于它取得到 —— 而"取得到"才是这一格的全部意义。
     pdf_url = pick(base.pdf_url, other.pdf_url)
     if _pdf_url_rank(other) > _pdf_url_rank(base):
         pdf_url = other.pdf_url
         other_raw = other.raw if isinstance(other.raw, Mapping) else {}
         if other_raw.get("pdf_url_source") is not None:
-            # ⚠️ **复制一份再改**：`raw` 就是 `base.raw` 那个**同一个对象**（`merged` 也用它），
+            # 复制一份再改：`raw` 就是 `base.raw` 那个同一个对象（`merged` 也用它），
             # 就地改等于把"来源"写到了 base 头上 —— 那是"合并污染了被合并的一方"，
             # 而这一格存在意义正是让"这条链接是从哪儿来的"读得准。
             raw = {**raw, "pdf_url_source": other_raw.get("pdf_url_source")}
@@ -3262,7 +3262,7 @@ def _as_seq(value: Any) -> list:
 
     Crossref/DOAJ 的脏记录会把 `author`/`link`/`authors` 给成数字或字符串；
     `for x in 5` 会抛 `TypeError: 'int' object is not iterable`，一条脏记录
-    就能让**整次检索**崩掉（本该只跳过这一条）。
+    就能让整次检索崩掉（本该只跳过这一条）。
     """
     if isinstance(value, (list, tuple)):
         return list(value)

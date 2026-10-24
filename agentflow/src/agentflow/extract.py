@@ -80,18 +80,18 @@ _ENCODING_CHAIN: Final[tuple[str, ...]] = ("utf-8", "utf-8-sig", "gb18030", "lat
 _TEXT_SUFFIXES: Final[frozenset[str]] = frozenset({".txt", ".md"})
 _HTML_SUFFIXES: Final[frozenset[str]] = frozenset({".html", ".htm", ".xhtml"})
 
-#: 真正的 XML（不是 XHTML）也算"标记语言"，**按扩展名显式**走剥标签那一条路。
+#: 真正的 XML（不是 XHTML）也算"标记语言"，按扩展名显式走剥标签那一条路。
 #:
-#: ⚠️ **2026-10-15 加（真机读数驱动，业主授权动禁改区）**：此前 `.xml` 落到最后的
-#: `UnsupportedFormat` —— 而 Europe PMC **唯一取得到全文的那条路**
-#: （EBI 的 `/rest/{PMCID}/fullTextXML`，对真 OA 文章返 200）返回的正是 **JATS XML**。
+#: 2026-10-15 加（真机读数驱动，业主授权动禁改区）：此前 `.xml` 落到最后的
+#: `UnsupportedFormat` —— 而 Europe PMC 唯一取得到全文的那条路
+#: （EBI 的 `/rest/{PMCID}/fullTextXML`，对真 OA 文章返 200）返回的正是 JATS XML。
 #: ⇒ 只修 provider 的端点、不修这里，等于把 `403` 换成另一种"读不到"
 #: （12 条里能救回来的 5 条会以"格式不认识"再失败一次）。
 #:
 #: 实测（$0 探针，`PMC6502358`）：`.xml` ⇒ 今天抛 `UnsupportedFormat`；
-#: 同一份内容**剥完标签是 218,954 字符**干净正文（原始 XML 547,355 字符）。
+#: 同一份内容剥完标签是 218,954 字符干净正文（原始 XML 547,355 字符）。
 #:
-#: 为什么**只按扩展名**认、不把 `<?xml` 加进 `_sniff`：嗅探那条路救的是
+#: 为什么只按扩展名认、不把 `<?xml` 加进 `_sniff`：嗅探那条路救的是
 #: "内容与文件名不符"（HTML 被存成 `.bin`）。而 `<?xml` 单独一个声明太弱 ——
 #: SVG / RSS / 配置文件都以它开头，误判会让下游拿到空正文（理由见 `_sniff`）。
 _XML_SUFFIXES: Final[frozenset[str]] = frozenset({".xml"})
@@ -370,12 +370,12 @@ class _HTMLTextExtractor(HTMLParser):
         self._skip_stack: list[str] = []
         #: 非块级标签两侧插什么（缺省空串 = HTML 的老行为）。
         #:
-        #: 为什么 XML 需要它（2026-10-15，实测驱动）：JATS 的字段大多是**行内**元素
+        #: 为什么 XML 需要它（2026-10-15，实测驱动）：JATS 的字段大多是行内元素
         #: （`journal-title` / `article-id` / `surname` …），而这里只对块级标签断开
-        #: ⇒ 相邻字段会被**粘在一起**。实测 `PMC6502358` 剥出来是
+        #: ⇒ 相邻字段会被粘在一起。实测 `PMC6502358` 剥出来是
         #: `'2753rsosRoyal Society Open ScienceR Soc Open SciThe Royal SocietyPMC6502358…'`
         #: —— `SocietyR` 这种粘连会污染引文回验（逐字子串匹配）与模型的阅读。
-        #: 插一个**空格**（而不是全部换行）是刻意的：换行会把
+        #: 插一个空格（而不是全部换行）是刻意的：换行会把
         #: `<p>We <italic>show</italic> that</p>` 拆成三行、切断句子；
         #: 空格既分开字段、又保住句子的连续性。
         self._inline_sep = inline_sep
@@ -524,12 +524,12 @@ def _sniff(raw: bytes) -> str:
     - ``b"%PDF"`` ⇒ 走既有 PDF 回退链。放在最前：PDF 的魔数在文件第 0 字节，
       而后面两条判据要看开头，顺序反过来会让一份以声明开头的 PDF 走错路。
     - 开头（跳过 UTF-8 BOM 与空白）是 ``<!DOCTYPE`` / ``<html``，或 ``<?xml``
-      且同一次读取里出现 ``<html`` ⇒ HTML。`<?xml` 单独**仍然不算**：XHTML 是 HTML，
+      且同一次读取里出现 ``<html`` ⇒ HTML。`<?xml` 单独仍然不算：XHTML 是 HTML，
       而 `<?xml` 一个声明太弱（SVG / RSS / 配置文件都以它开头），误判会让下游拿到
       "剥完标签什么都没有"的空正文。
-      ⚠️ **2026-10-15 补一句边界**：真 XML（JATS 全文那一类）现在**按扩展名 `.xml` 支持**
-      （见 `_XML_SUFFIXES` 与分派里那一条），**走的是扩展名那条路，不是嗅探这条**。
-      也就是说：`foo.xml` 会被剥标签读；而一个**存成 `.bin` 的 JATS 文件仍会被拒**
+      2026-10-15 补一句边界：真 XML（JATS 全文那一类）现在按扩展名 `.xml` 支持
+      （见 `_XML_SUFFIXES` 与分派里那一条），走的是扩展名那条路，不是嗅探这条。
+      也就是说：`foo.xml` 会被剥标签读；而一个存成 `.bin` 的 JATS 文件仍会被拒
       —— 那一条是刻意的（"内容与文件名不符"只救 HTML 那一种形态，原因见上）。
     - 其余一律返回空串 ⇒ 调用方保持原有行为（按扩展名分派），所以本函数
       只可能把"原本会失败的分派"救回来，不会改变任何原本成功的路径。
@@ -636,10 +636,10 @@ def _page_status_of(pages: Sequence[str], status: Sequence[str] | None,
     不是"两支走完全相同的路径"。
 
     `expected` 用来处理一个故意留下的小错位：无文本层时 `pages` 被置空（§6.3 契约），
-    而后端给的 `status` 仍然与**真实页数**等长。此时不能因为"长度与 `pages` 不等"
+    而后端给的 `status` 仍然与真实页数等长。此时不能因为"长度与 `pages` 不等"
     就把整份状态丢掉 —— 那正是被修掉的那个缺陷。给了 `expected` 就按它比长度。
 
-    `R3-8`：长度确实对不上时**不许静默降级**。旧版在这里无声地改按内容推，
+    `R3-8`：长度确实对不上时不许静默降级。旧版在这里无声地改按内容推，
     于是后端上报的 `failed` 凭空消失、回到"真引文被判成幻觉"的那条路径，
     而没有任何信号（重审实测：`_finish_pdf(['第一页','','第三页'], 'PyPDF2', ['ok'])`
     ⇒ `page_status=('ok','empty','ok')`、`failed_pages=()`）。
@@ -678,10 +678,10 @@ def _finish_pdf(pages: Sequence[str], backend: str,
         # 无文本层：pages=[] 是给 agent_b 的信号（§6.3），
         # source_kind 仍保持 "pdf"，好让报告能区分"扫描版 PDF"与"非 PDF"。
         #
-        # `R3-2`（重审实测的修法）：逐页状态**必须带出去**。
+        # `R3-2`（重审实测的修法）：逐页状态必须带出去。
         # 旧版在这里无条件写 `page_status=()`，于是"整篇每一页都抽取失败"这一档
         # 在 `failed_pages()` 眼里是"没有失败的页" ⇒ `ocr_tools` 里专为
-        # "抽取失败"写的那一支（`失败原因是抽取失败`）成了**死代码**，
+        # "抽取失败"写的那一支（`失败原因是抽取失败`）成了死代码，
         # 工具把"我们的后端在这份文件上全崩了"报成"疑似扫描件（本来就是空白页）"，
         # 而这两种情况的处置完全不同（换后端重试 vs 走 OCR）。
         #
@@ -691,7 +691,7 @@ def _finish_pdf(pages: Sequence[str], backend: str,
         # `page_status` 记的是后端上报的真实页数，`pages` 是空元组），所以要读
         # 就用 `page_status` / `failed_pages()`，不要拿 `pages` 的长度去索引它
         # —— 空 `pages` 会让按它兜底的读者静默读空。两者分开正是 `F-4` 的用意。
-        # `R3B-2`（第二轮复审实测）：日志行必须和工具面一样**分开这两件事**。
+        # `R3B-2`（第二轮复审实测）：日志行必须和工具面一样分开这两件事。
         # 旧版无论哪一种都打同一句「PDF 无文本层（疑似扫描件）」——
         # 于是"我们的抽取链在这份文件上全崩了"与"它本来就是扫描件"
         # 在日志里长得一模一样（`ocr_tools` 那边已经分开，日志这边还没有）。
@@ -746,8 +746,8 @@ def extract_text(
     ``if kind == "pdf"`` 分支——分支越多，§6.3 漏判的可能性越大。
 
     超限抛 :class:`ExtractTooLarge`，不截断（理由见模块 docstring 第 3 条）。
-    内容嗅探只读文件头的 :data:`_SNIFF_BYTES` 字节：它**只影响原本会被判成
-    "不支持的扩展名"的那些文件**，已经能成功的路径一字未动。
+    内容嗅探只读文件头的 :data:`_SNIFF_BYTES` 字节：它只影响原本会被判成
+    "不支持的扩展名"的那些文件，已经能成功的路径一字未动。
     """
     p = Path(path)
     if not p.exists():
@@ -758,10 +758,10 @@ def extract_text(
     suffix = p.suffix.lower()
     _check_size(p, max_bytes)
 
-    # ⚠️ **显式 `.xml` 必须先于魔数嗅探**（2026-10-15，实测驱动）：
+    # 显式 `.xml` 必须先于魔数嗅探（2026-10-15，实测驱动）：
     # JATS 全文常常以 ``<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96)…"`` 开头，
     # 而 `_sniff` 把 ``<!DOCTYPE`` 判成 HTML ⇒ 走到下面那一条 `HtmlNotSupported`
-    # ⇒ **一个我们明确按扩展名支持的文件被拒**。实测那 5 条 OA 里就有 1 条
+    # ⇒ 一个我们明确按扩展名支持的文件被拒。实测那 5 条 OA 里就有 1 条
     # （`PMC13322628`）是这个形态：修好端点、也认了 `.xml`，却仍读不到。
     # 顺序在这里就是判据：扩展名是调用方明说的，嗅探是猜的 —— 明说优先。
     if suffix in _XML_SUFFIXES:

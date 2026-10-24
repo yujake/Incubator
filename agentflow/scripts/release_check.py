@@ -24,11 +24,11 @@
     1 = 有 fail
     2 = 有 unknown（没跑成 ≠ 通过）、有项被 `--skip` 关掉，或检查器自身出错
 
-⭐ `unknown` 与 `fail` 分开，且都不等于 `pass`。 这是三态纪律在发布门上的落地：
+`unknown` 与 `fail` 分开，且都不等于 `pass`。 这是三态纪律在发布门上的落地：
 "pytest 因为收集错误没跑起来"既不是"测试通过"，也不是"测试失败"，
 把它算成任何一档都会掩盖真相。
 
-⭐ `--skip` 关掉的项也记 `unknown`（`I-3`），不是"不参与判定"。
+`--skip` 关掉的项也记 `unknown`（`I-3`），不是"不参与判定"。
 理由：`--skip` 是调试开关，而"调试时跳过七项"与"八项都通过"在旧输出里长得一模一样
 （旧版逐字打印 `发布检查总判定：PASS    pass=1 fail=0 unknown=0` 且全文不出现"跳过"）。
 被跳过的项以名字进 `skipped` 列表与 `--json`，总判定按 `unknown` 记 ⇒ 退出码 2。
@@ -80,8 +80,8 @@ SRC = REPO_ROOT / "src"
 #: （例如"本次改动的文件集"）。实测：`python scripts/release_check.py --skip ...`
 #: 跑完 `.release-lint.json` 的 sha256 从 `B625A5B9…` 变成 `E25FCCA4…`。
 #:
-#: 口径（**不是**"不产生产物"—— 产物本身是证据）：产物搬到**被 `.gitignore`
-#: 排除的** `temp/` 里。`.gitignore` 的 `/temp/` 前导斜杠锚定在**上一级**
+#: 口径（不是"不产生产物"—— 产物本身是证据）：产物搬到被 `.gitignore`
+#: 排除的 `temp/` 里。`.gitignore` 的 `/temp/` 前导斜杠锚定在上一级
 #: 仓库根，而本文件的 `REPO_ROOT` 是 `agentflow/`，所以落点是 `REPO_ROOT.parent / "temp"`。
 #: 这与编排层 `tools/release_all.py` 取验收目录用的 `root.parent / "test" / "test2"`
 #: 是同一个伞形仓库约定。

@@ -1,15 +1,15 @@
 """证明检查器的桥接层工具面（`detect_verifier` / `check_formal` / 实验与查询那几条）。
 ## 这个模块今天是什么（2026-10-22 划线：形式化入口归 L；2026-10-23 晚 E 的 Lean 侧清空）
 
-本模块是**桥接层的真身**，不再是"形式化的门面"：把 Lean/Coq 源码交给检查器并把它的
+本模块是桥接层的真身，不再是"形式化的门面"：把 Lean/Coq 源码交给检查器并把它的
 原话解释出来（`check_formal` → `formalgw`），这一件事仍然只有一份实现，L 经它取读数。
 形式化的入口是 L 的 `formal.*`（`formal.formalize` / `formal.check_formal` /
 `formal.record`）：模型要"把一条命题写成 Lean 并核一遍、再登记一行实验"时走那三件。
 
 2026-10-23 晚裁定（业主逐字：「E 侧与 Lean 相关的工具和动作都该清干净」）之后：
-- 工具 `verify.check_formal` **整条删除**（不是把 `roles` 收成 `()`）—— `verify.*` 这一
+- 工具 `verify.check_formal` 整条删除（不是把 `roles` 收成 `()`）—— `verify.*` 这一
   族今天只剩 `code_hash` / `detect_verifier` / 三条实验与查询，没有任何一条形式化入口；
-- 函数 `check_formal`（本文件的纯函数）**保留**：它是桥接层唯一实现，
+- 函数 `check_formal`（本文件的纯函数）保留：它是桥接层唯一实现，
   `agent_l._CheckFormalL` 继承的 `agent_e.check_formal._CheckFormal` 直接调它，
   `formal_tools` 也经 L 调它。删的是"工具面那一件"，不是这份实现；
 - `verify.detect_verifier` 仍装配着，但它的 `roles` 从 `('E','F','G','H')` 收成

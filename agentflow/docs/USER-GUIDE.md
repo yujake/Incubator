@@ -250,22 +250,136 @@ python -m agentflow --root <ws> budget --add 5 --note "让它跑完"
 
 不带开关的 `doctor` 是另一件事：探工具链（有没有模型 key、有没有证明检查器、Mathlib 对不对得上）
 并跑一次 Lean 工具链自检，同样不发起任何模型调用；退出码 0 齐 / 1 有缺 / 2 没查成。
+后者每个没通过的项后面会跟一条 `fix_hint`（可直接复制执行的命令原文），`--json` 里在
+`data.checks[].fix_hint` —— 用法见下面 7.4。
 
 ---
 
-## 7. `--help` 首屏的四组（27 个子命令）
+## 7. 命令行：四个入口 + 28 个旧名（一个都没删）
 
-`agentflow --help` 按四组印子命令（分组表是 `cli.SUBCOMMAND_GROUPS`，漏登记的会落在"未分组"那一栏）：
+`agentflow --help` 的首屏现在只印四行入口 + 一段"旧名仍可用"。`agentflow --help-legacy`
+印出完整的 28 行对照表（旧名 → 新路径），那张表在下面 7.2 也抄了一份。
 
-| 组（逐字） | 成员 |
-|---|---|
-| 研究（跑一次研究） | `start`、`run`、`run-agent`、`run-a`、`run-b`、`submit`、`analyze`、`pipeline`、`closing` |
-| 项目（工作区与产物） | `project`、`evidence`、`artifacts`、`status-report`、`answer`、`inbox` |
-| 诊断（看清这台机器与这一趟） | `status`、`verify`、`tools`、`doctor`、`budget`、`stop`、`cache` |
-| 运维（数据维护与界面） | `init`、`rebuild`、`repair`、`demo`、`web` |
+### 7.1 四个入口各管什么
 
-`cache` 那一组是两档提示词缓存：`cache status` 是只读读数（已落盘 / 新鲜 / 覆盖 / 缺），
+| 入口 | 一句话用途 | 成员 |
+|---|---|---|
+| `incubate` | 孵化：把一趟研究开起来、管起来 | `init`、`start`、`stop`、`status`、`answer`、`inbox`、`submit` |
+| `inspect` | 查看：只读的读数与检查 | `status-report`、`stats`、`evidence`、`artifacts`、`analyze`、`tools`、`cache`、`budget`、`doctor`、`verify` |
+| `run` | 跑：流水线与角色循环，以及它们的维护 | `topic`（= 旧 `run`）、`pipeline`、`run-a`、`run-b`、`run-agent`、`repair`、`rebuild`、`project`、`closing` |
+| `serve` | 服务：网页与离线演示 | `web`、`demo` |
+
+写法是 `agentflow <入口> <成员> [旗标]`，例如：
+
+```powershell
+agentflow inspect stats cost --json          # 钱花在哪了
+agentflow incubate start --task "…" --mode research --dry-run
+agentflow run topic --topic "Saxl 猜想"      # 与 agentflow run --topic … 同一条命令
+```
+
+三件要知道的事：
+
+1. 新路径与旧名是**同一条命令**（不是别名层）：`agentflow inspect stats` 在解析之前就折回
+   `agentflow stats`，所以旗标、缺省、输出、退出码一个字都不差。
+2. 组名本身只出现在首屏，不在 `--help` 的子命令清单里 —— 子命令数仍然是 28。
+3. `run` 这个组的组名同时是旧命令名：`agentflow run`（不带成员）仍然是"端到端跑一个主题"，
+   组页走 `agentflow run --help`（那一页会把旧命令的全部旗标接在后面）。
+
+### 7.2 新老命令对照表（`agentflow --help-legacy` 的那一份）
+
+| 旧名 | 新路径 | 旧名 | 新路径 |
+|---|---|---|---|
+| `init` | `agentflow incubate init` | `doctor` | `agentflow inspect doctor` |
+| `start` | `agentflow incubate start` | `verify` | `agentflow inspect verify` |
+| `stop` | `agentflow incubate stop` | `run` | `agentflow run topic` |
+| `status` | `agentflow incubate status` | `pipeline` | `agentflow run pipeline` |
+| `answer` | `agentflow incubate answer` | `run-a` | `agentflow run run-a` |
+| `inbox` | `agentflow incubate inbox` | `run-b` | `agentflow run run-b` |
+| `submit` | `agentflow incubate submit` | `run-agent` | `agentflow run run-agent` |
+| `status-report` | `agentflow inspect status-report` | `repair` | `agentflow run repair` |
+| `stats` | `agentflow inspect stats` | `rebuild` | `agentflow run rebuild` |
+| `evidence` | `agentflow inspect evidence` | `project` | `agentflow run project` |
+| `artifacts` | `agentflow inspect artifacts` | `closing` | `agentflow run closing` |
+| `analyze` | `agentflow inspect analyze` | `web` | `agentflow serve web` |
+| `tools` | `agentflow inspect tools` | `demo` | `agentflow serve demo` |
+| `cache` | `agentflow inspect cache` | | |
+| `budget` | `agentflow inspect budget` | | |
+
+旧名**这一版全部保留**（业主口径：新指令接管且行为确认正常之后再清理；清理不是这一版的事）。
+`repair` / `rebuild` / `demo` / `evidence migrate` 四条的实现在这一版已经搬出 CLI
+（`tools/legacy_cli/`），CLI 里只剩一行转发 —— 下一版删除时只删那一行与那个目录。
+
+### 7.3 `stats` 的四张读数
+
+`agentflow stats <errors|flow|cost|gates|all> [--root <工作区>] [--json]`。四张表都是
+只读、零模型调用、不落盘；`all` 是四张一起打（三态取合取：有一张没查成，合计就是 unknown）。
+
+| 读数 | 回答什么问题 | 数据源 | 主要字段 |
+|---|---|---|---|
+| `errors` | 每种角色犯了几次"错误动作"，各属哪一类 | `events.jsonl` 的 `tasks` 行 + `sessions/*.jsonl` | `by_role` / `role_total` / `total` / `categories` |
+| `flow` | 每种角色走了几步、各是什么形状、被拦下多少、转投多少 | 同一批会话记录（`agent_step` 的 `shape` 与 `result`） | `roles[角色].steps/shapes/blocked/relayed`、`totals` |
+| `cost` | 钱与 token 按角色、按阶段怎么分布 | `data/usage_ledger.json` | `by_role` / `by_scope` / `total`（`usd` / `tokens_*` / `attempts` / `rows`） |
+| `gates` | 收工门八格各是什么状态（三态一张表） | 现跑 `closing.check_closing`（不读缓存） | `cells` / `counts` / `machine_pass` / `can_close` / `verdict` |
+
+三态在这里是硬口径：
+
+- `state=checked`：读到了。**全 0 也是 checked** —— "这一趟 0 次错误动作"是一个答案。
+- `state=unknown`：没查成（工作区不在、事件流读不明白…）。此时表里的 0 不是"没有"，是
+  "没读到"；`problems` 里逐条写着为什么。
+- `errors` 那一档还有个老形态：不给 `--readout` 时它按 `errorstats` 原来的样子打（那份输出
+  有消费者）；`--readout` 给出与新三张表同一个五键形状，数值与三态两处必须一致。
+
+`gates` 需要知道"哪个项目"才知道论文/验收那几格查什么：
+
+```powershell
+agentflow inspect stats gates --root projects\my-topic --project-dir projects\my-topic --report out\report.md
+```
+
+不给 `--project-dir` 时那几格如实记 `unknown`（不是 pass）——十格里有几格 unknown 是正常的，
+但"unknown 当成通过"不是。
+
+### 7.4 `doctor` 的 `fix_hint`：失败项后面那条可以直接复制的命令
+
+`agentflow inspect doctor` 只诊断、**不会替你改**（没有 `--fix`，也不写任何配置）。
+它把逐项读数打完后，会多打一段"下一步"，每个没通过的项后面跟一条能直接复制的命令：
+
+```
+下一步（2 档没通过；doctor 只诊断，不会替你改）
+  · [model_key] base=… ；model=…（环境变量与 agentflow/settings.json 的 model.api_key 两处都没有 key）
+    照这条改：$env:AGENTFLOW_MODEL_API_KEY='<把模型 key 填在这里>'
+  · [mathlib_root] 没找到 Mathlib 工程根
+    照这条改：$env:AGENTFLOW_MATHLIB_ROOT='<Mathlib 工程的根目录>'
+```
+
+`--json` 里同一份判定在 `data.checks`：每项 `{name, state, detail, fix_hint}`，`state` 取
+`ok` / `fail` / `unknown` / `off`（`off` = 你自己关掉的，不是缺陷）。脚本可以只读那一格：
+
+```powershell
+agentflow inspect doctor --json | ConvertFrom-Json | ForEach-Object { $_.data.checks } |
+  Where-Object { $_.state -eq "fail" } | ForEach-Object { $_.fix_hint }
+```
+
+`doctor --selfcheck` 是另一档（只扫包内源码、秒级、不碰工具链）；它的 `checks` 里只有
+`package_syntax` 一项 —— 没探测的东西不许下结论。
+
+### 7.5 `--json` 的契约（`inspect` 那一组）
+
+从 `inspect` 那一组走的 `--json` 一律是外层四格：
+
+```json
+{"ok": true, "state": "checked", "data": { … }, "problems": []}
+```
+
+`state` 取 `checked`（查过了）/ `failed`（查过了有问题）/ `unknown`（没查成），与退出码
+0 / 1 / 2 一一对应。旧路径上早就有 `--json` 的那六条（`stats`/`tools`/`cache`/`budget`/
+`doctor`/`verify`）保持原样不变 —— 要外壳就在前面加组名。逐条的字段表见
+`docs/CLI-CONTRACT.md`。
+
+### 7.6 `cache` 那一组
+
+`cache status` 是只读读数（已落盘 / 新鲜 / 覆盖 / 缺哪几段 + key 变化提醒），
 `cache warm --lean on|off|both` 是**真预热**（会花钱；先看 `--dry-run` 那一档，它花 0）。
+两档读的是 `cachectl` 里同一份实现（命令行与网页按钮同源）。
 
 ---
 

@@ -1009,6 +1009,57 @@ class ToolFace:
     names: Mapping[str, str]
     sha256: str
 
+    def _resolve(self, raw_name: str) -> str | None:
+        """一条调用名 ⇒ 这一趟名字表里的键；认不出返回 `None`。
+
+        ## 为什么两种写法都要认（`draft/152` 之二，真机读数）
+
+        广告出去的是归一化名：`names` 的键只有下划线写法（`fs_read` 这样的函数名
+        才符合 OpenAI 兼容接口的字符集），而提示词、拒信、文档、工具面里用的都是
+        带点的真名（`fs.read` / `table.get`）。模型两种名字都见过，于是它写点号名
+        是必然会发生的事 —— 改前这里只按原样查 `names`，点号名一律查不到，
+        落成"模型调用了一个没广告过的函数"，再被计进 `judge_bad_json`。真机三趟
+        16 条 `judge_bad_json` 里 8 条就是这个形态（`table.get`、`review.record_finding`
+        …），而它们没有一条是坏 JSON。
+
+        于是查找按三步走：先原样（模型写的就是广告名，最常见），再按 `_sanitize`
+        归一化一次（模型写的是真名），最后交给调用方列候选。两步都查不到才算
+        "真的不在这一趟的面上" —— 那一条仍然拒（负控在测试里）。
+
+        反向不会混淆：两件不同的真名归一化成同一个广告名时，`build_tool_face`
+        已经用 `ValueError` 拒掉整份面（广告名撞车），所以"归一化查一次"命中的
+        至多一件工具，不会把两个工具混成一个。
+
+        为什么不是"由调用方自己写两遍 get"：`to_shape`（解析）与 `action_name`
+        （读数）读的是同一张表，两处各写一套回退，早晚会在其中一处漏掉点号写法，
+        而漏掉的那一半正是"模型写对了、框架说没有"这个形态。
+        """
+        name = str(raw_name or "")
+        target = self.names.get(name)
+        if target is not None:
+            return target
+        alias = _sanitize(name)
+        if alias != name:
+            return self.names.get(alias)
+        return None
+
+    def candidates(self, raw_name: str) -> list[str]:
+        """认不出的名字的并列候选（真名写法；判据只有一份，转发到工具层那一处）。
+
+        为什么给候选而不是自动改写：选哪一个是一次判断（它是模型想做的事），
+        框架替它挑一个等于替它表态。真机 `unknown_tool` 那 7 条里就有 4 条照着
+        错误的候选去改会更错，所以这里只列、不改。
+
+        为什么候选是真名（带点）：提示词与其它拒信都用真名，模型拿到的名字要与它
+        在文档里看到的那一套一致。惰性导入 `tools.base` 是刻意的 —— 它在调用期
+        才生效，避免本模块与工具层在 import 期互相牵扯。
+        """
+        from .tools.base import candidate_tool_names
+
+        pool = sorted({(value.split(":", 1)[1] if value.startswith("tool:") else value)
+                       for value in self.names.values()})
+        return candidate_tool_names(str(raw_name or ""), pool)
+
     def to_shape(self, call: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str, str]:
         """把一条原生工具调用翻成循环协议的形状。返回 `(data, problem, detail)`。
 
@@ -1016,11 +1067,13 @@ class ToolFace:
         "看起来像调用"的空对象（那会让下一步去执行一件模型没说过的事）。
         """
         raw_name = str(call.get("name") or "")
-        target = self.names.get(raw_name)
+        target = self._resolve(raw_name)
         if target is None:
+            cands = self.candidates(raw_name)
             return None, "judge_bad_json", (
                 f"模型调用了一个没广告过的函数 {raw_name!r}（这一趟广告的是 "
-                f"{sorted(self.names)[:6]}…）")
+                f"{sorted(self.names)[:6]}…；并列候选（{len(cands)} 个）：{cands}"
+                " —— 机器只列候选、不自动改写）")
         raw_args = call.get("arguments")
         text = raw_args if isinstance(raw_args, str) else json.dumps(raw_args or {},
                                                                     ensure_ascii=False, default=str)
@@ -1073,9 +1126,12 @@ class ToolFace:
         要能在 step 的读数里被点名 —— 而模型给的是广告名（`fs_read`），盘上该记的是
         真名（`fs.read`），否则"丢了哪个动作"这件事核对不上工具面。
         它不解析参数、不判合法性：那件事只有 `to_shape` 一处做。
+
+        名字查找走 `_resolve`（认点号与下划线两种写法）：与 `to_shape` 是同一处口径，
+        否则会出现"这一步解析得了、被丢的那条却映不回真名"的分家。
         """
         raw = str(call.get("name") or "")
-        target = self.names.get(raw)
+        target = self._resolve(raw)
         if target is None:
             return raw or "(未命名)"
         return target.split(":", 1)[1] if target.startswith("tool:") else target

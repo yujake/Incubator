@@ -48,7 +48,10 @@
   - `llm_call` 的 `problem`（判据层的 `judge_bad_json` / `judge_bad_args` /
     `judge_no_reply:*` / `judge_failed:*`）；
   - `agent_step` 的 `result.error` 与 `result.warn`（工具层与收工门的拒信原话；`warn` 里
-    那句"条工具调用，只执行第 1 条"就是 D-35 的读数，判据 `tests/test_d35_multi_call_takes_first.py`）；
+    那句"条调用，已按顺序逐条…"就是拆分口径的读数 —— 一个多调用步记 1，
+    判据 `tests/test_multi_call_is_split_and_executed.py`）；
+  - `agent_step_call` 的逐条记录（`stepdispatch` 拆分出来的每一条调用一条；真的执行了的那几条
+    记进 `multi_call_executed_calls` —— 它是"拆出来的调用条数"，不是"被丢弃的条数"）；
   - `agent_message` 的 `subject`（`请代唤` = 越权被拒之后的转投）。
   刻意不读 `payload`：那是模型自己写的原话，"提到一个码"不等于"撞上那个码"。
   也刻意不读 `runs/*.json`：它与 `agent_step` 是同一批步的两份落盘，两份都读会把同一步
@@ -81,6 +84,9 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
      "名册外的对象：按角色名发给一个不在自己名册里的人（只有父与子能通话）"),
     ("unknown_tool",
      "名字不存在：工具面没有这件工具 / 该角色没有这个动作 / 角色名不存在"),
+    ("routed_to_backstop",
+     "直写兜底：通用写口碰到'只能经正路写'的表时由系统代为转交正路执行（"
+     "routed = 兜底方办成了 / *_refused = 兜底方按它自己的判据拒了 / unavailable = 兜底方不可达）"),
     ("direct_write",
      "写库野路：绕开正路直写 statements / dependencies / lit_candidates（通用写口被拒）"),
     ("readonly_role_write",
@@ -106,7 +112,9 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("judge_failed",
      "判据层：判据本身失败（judge_failed:<kind>，如网络断；不是模型的错，但要看得见）"),
     ("multi_call",
-     "一步给了多条工具调用而只执行第 1 条（D-35 取第一条，其余丢弃并点名）"),
+     "多调用步：模型一步给了 2 条及以上工具调用、被接住层拆开逐条执行（记步数，不记被丢条数）"),
+    ("multi_call_executed_calls",
+     "拆分执行：多调用步里拆出来的、真的执行了的调用条数（一条一条记；未执行的不计）"),
     ("unreadable",
      "读不明白：台账/回执/上下文图读不出来或解析失败（不许读成 0 的那一档）"),
     ("closing_blocked",
@@ -142,6 +150,21 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("unknown_role", "unknown_tool",
      "src/agentflow/schema.py:2495（词表）/ src/agentflow/policy.py:302,433（产出）"),
     ("direct_write_refused", "direct_write", "src/agentflow/store.py:248（DIRECT_WRITE_REFUSED）"),
+    # ---- 直写兜底（业主 2026-10-24：「不应该是提醒智能体要走秘书，而是自动将直写请求
+    # 路由到秘书接管」）。路由不再计入 `direct_write`：那一档只留"兜底方也接不住"的野路。
+    # 结局码逐条登记在 `ROUTED_CODES`（字面量），拼装只允许拼出那张表里的东西。
+    ("routed_to_backstop.secretary", "routed_to_backstop",
+     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；产出见 :576 `_route_code`）"),
+    ("routed_to_backstop.literal", "routed_to_backstop",
+     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；产出见 :576 `_route_code`）"),
+    ("routed_to_backstop.secretary_refused", "routed_to_backstop",
+     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
+    ("routed_to_backstop.literal_refused", "routed_to_backstop",
+     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
+    ("routed_to_backstop.secretary_unavailable", "routed_to_backstop",
+     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；兜底方不可达 ⇒ unknown，不折成成功）"),
+    ("routed_to_backstop.literal_unavailable", "routed_to_backstop",
+     "src/agentflow/tools/table_tools.py:550（ROUTED_CODES；同上）"),
     ("role_denied", "readonly_role_write",
      "src/agentflow/tools/base.py:1173,1178（call 的调用期角色判据）"),
     ("not_wired", "not_wired",
@@ -160,29 +183,29 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("缺少必填参数", "param_invalid", "src/agentflow/tools/base.py:395（ParamError 原文）"),
     ("参数错误：", "param_invalid", "src/agentflow/tools/base.py:1214（ToolResult.fail 原文）"),
     ("param_error", "param_invalid", "src/agentflow/tools/base.py:1187,1233（kind）"),
-    ("missing_source", "param_invalid", "src/agentflow/tools/register_statement.py:821"),
-    ("missing_own_source", "param_invalid", "src/agentflow/tools/register_statement.py:870"),
-    ("missing_quote_reason", "param_invalid", "src/agentflow/tools/register_statement.py:830"),
-    ("missing_page_range", "param_invalid", "src/agentflow/tools/register_statement.py:845,860"),
+    ("missing_source", "param_invalid", "src/agentflow/agent_b/register_statement.py:821"),
+    ("missing_own_source", "param_invalid", "src/agentflow/agent_b/register_statement.py:870"),
+    ("missing_quote_reason", "param_invalid", "src/agentflow/agent_b/register_statement.py:830"),
+    ("missing_page_range", "param_invalid", "src/agentflow/agent_b/register_statement.py:845,860"),
     ("duplicate_doi", "duplicate_conflict",
      "src/agentflow/schema.py:128,144（词表）/ src/agentflow/litstage.py:637（产出）"),
-    ("duplicate_statement", "duplicate_conflict", "src/agentflow/tools/register_statement.py:1181"),
+    ("duplicate_statement", "duplicate_conflict", "src/agentflow/agent_b/register_statement.py:1181"),
     ("duplicate_paper_number", "duplicate_conflict", "src/agentflow/paperledger.py:205"),
     ("duplicate_claim_id", "duplicate_conflict", "src/agentflow/claimanatomy.py:1717,1728"),
     ("duplicate_id", "duplicate_conflict", "src/agentflow/verify.py:219"),
     ("invalid_params", "controlled_refusal", "src/agentflow/schema.py:2498（词表）/ src/agentflow/refusals.py:38"),
-    ("bad_statement", "controlled_refusal", "src/agentflow/tools/register_statement.py:704"),
-    ("bad_origin", "controlled_refusal", "src/agentflow/tools/register_statement.py:710"),
-    ("bad_evidence_kind", "controlled_refusal", "src/agentflow/tools/register_statement.py:762"),
-    ("bad_id", "controlled_refusal", "src/agentflow/tools/register_statement.py:929"),
-    ("bad_line_range", "controlled_refusal", "src/agentflow/tools/register_statement.py:759"),
-    ("bad_page_range", "controlled_refusal", "src/agentflow/tools/register_statement.py:756"),
+    ("bad_statement", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:704"),
+    ("bad_origin", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:710"),
+    ("bad_evidence_kind", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:762"),
+    ("bad_id", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:929"),
+    ("bad_line_range", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:759"),
+    ("bad_page_range", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:756"),
     ("proofs_not_attached", "controlled_refusal",
-     "src/agentflow/tools/register_statement.py:1176,1208"),
+     "src/agentflow/agent_b/register_statement.py:1176,1208"),
     ("proof_needs_third_party_signature", "controlled_refusal",
-     "src/agentflow/tools/register_statement.py:798"),
-    ("canonical_not_written", "controlled_refusal", "src/agentflow/tools/register_statement.py:1130"),
-    ("secretary_unavailable", "controlled_refusal", "src/agentflow/tools/register_statement.py:1052"),
+     "src/agentflow/agent_b/register_statement.py:798"),
+    ("canonical_not_written", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:1130"),
+    ("secretary_unavailable", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:1052"),
     # ---- 判据层
     ("judge_bad_json", "judge_bad_json", "src/agentflow/judge.py:67,206,208（problem 码）"),
     ("judge_bad_args", "judge_bad_args", "src/agentflow/agent_loop.py:4455,8142"),
@@ -191,9 +214,15 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("judge_output_limit", "judge_no_reply", "src/agentflow/agent_loop.py:808,837"),
     ("judge_failed:", "judge_failed", "src/agentflow/agent_loop.py:1135（真机 judge_failed:ModelReplyNotOk）"),
     ("judge_not_wired", "not_wired", "src/agentflow/judge.py:14（没接线那一档）"),
-    ("条工具调用，只执行第 1 条", "multi_call", "src/agentflow/agent_loop.py:517（_multi_call_warning）"),
+    # 拆分口径（2026-10-22，业主「multi_call 应该让系统自动整理拆分」）：
+    # `multi_call` 数的是多调用步（一步给了≥2 条调用、被拆开逐条执行），
+    # 不再是"被丢弃的并列调用数"；`agent_step_call` 数的是拆出来的调用条数
+    # （逐条记录里 `not_executed=false` 的那些）。两行都指 `stepdispatch` 那一处真身。
+    ("条调用，已按顺序逐条", "multi_call", "src/agentflow/stepdispatch.py:230（summary 的文案）"),
+    ("agent_step_call", "multi_call_executed_calls",
+     "src/agentflow/stepdispatch.py:53（STEP_CALL_EVENT 的定义）"),
     ("run_evidence_unreadable", "unreadable", "src/agentflow/closing.py:1082（RUN_EVIDENCE_UNREADABLE_CODE）"),
-    ("context_graph_unreadable", "unreadable", "src/agentflow/tools/register_statement.py:946"),
+    ("context_graph_unreadable", "unreadable", "src/agentflow/agent_b/register_statement.py:946"),
     # ---- 流程层
     ("mapping_not_written", "closing_blocked", "src/agentflow/closing.py:3738（MAPPING_NOT_WRITTEN_CODE）"),
     ("run_evidence_unbacked", "closing_blocked", "src/agentflow/closing.py:1079（RUN_EVIDENCE_UNBACKED_CODE）"),
@@ -244,7 +273,8 @@ _FAILED_OUTCOME = "failed"
 def primary_code(*texts: Any) -> tuple[str, str] | None:
     """这段文字命中的主码：(码, 类目)。没有命中 ⇒ None。
 
-    口径见模块 docstring 第 2 条：字数最长的命中码胜出，同长按类目表顺序。
+    口径见模块 docstring 第 2 条：类目表靠前的类目优先，同类目里字数长的码优先
+    （同长按 `CODE_TABLE` 的顺序）；顺序的唯一实现在 `_MATCH_ORDER` 里。
     `texts` 里空值与非字符串一律先折成空串，于是"字段缺失"与"字段是空串"同形 ——
     这两件事在统计上本来就该同形（都等于"这条记录没留下这句话"）。
     """
@@ -439,10 +469,11 @@ def _known_role(value: Any) -> bool:
     return bool(name) and (name in S.ROLES or name == S.CONDUCTOR_ROLE)
 
 
-def _step_text(record: Mapping[str, Any]) -> tuple[str, str]:
-    """一条 `agent_step` 的拒信原话：(整段可扫的文字, 模型自己写的 payload 名字)。
+def _step_text(record: Mapping[str, Any]) -> str:
+    """一条 `agent_step` 的拒信原话（可扫的那一段）。
 
-    只取 `result.error` / `result.warn` / `problem`，不取 `payload`（见模块 docstring）。
+    只取 `result.error` / `result.warn` / `result.problem` / `result.kind` 与记录自己的
+    `problem`，不取 `payload`（理由见模块 docstring：模型"提到一个码"不等于"撞上那个码"）。
     """
     parts: list[str] = []
     problem = record.get("problem")
@@ -456,7 +487,7 @@ def _step_text(record: Mapping[str, Any]) -> tuple[str, str]:
                 parts.append(str(value))
     elif isinstance(result, str):
         parts.append(result)
-    return (" ".join(parts), "")
+    return " ".join(parts)
 
 
 # ---------------------------------------------------------------- 核心函数
@@ -514,10 +545,18 @@ def error_action_stats(target: Any) -> ErrorStats:
                     _bump(role, *found)
                 continue
             if kind == "agent_step":
-                text, _ = _step_text(record)
-                found = primary_code(text)
+                found = primary_code(_step_text(record))
                 if found is not None:
                     _bump(role, *found)
+                continue
+            if kind == "agent_step_call":
+                # 拆分口径的逐条记录：一条记一次（口径见 `ERROR_CATEGORIES`）。
+                # 两种记录各自只记一件事，所以"一条记录只算一次"那条规则在这里不被破坏：
+                # 多调用步由 `agent_step` 的 warn 记 1（`multi_call`），拆出来的每条调用
+                # 由本记录记 1（`multi_call_executed_calls`）。没执行的那几条不算"执行过的调用"，
+                # 但它们在事件流里逐条可查（`ok=False` / `not_executed=True` / `reason`）。
+                if not bool(record.get("not_executed")):
+                    _bump(role, "agent_step_call", "multi_call_executed_calls")
                 continue
             if kind == "agent_message":
                 subject = str(record.get("subject") or "")

@@ -361,7 +361,8 @@ def _bits_after_canonical_write(row: Mapping, fresh: Mapping | None) -> dict:
 class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None,
-                        other_proofs: list[str] | None = None) -> tuple[dict, dict | None]:
+                        other_proofs: list[str] | None = None,
+                        kind: str = "") -> tuple[dict, dict | None]:
         """按 `evidencebits` 现算五元位，返回 `(bits, 拒绝)`；拒绝非空 ⇒ 整笔不写。
 
         三态见模块 docstring 的"第八件"。这里只做两件事：「算」（`bits_of`）与
@@ -377,6 +378,26 @@ class _RegisterStatement:
         "这条命题有没有证明"，所以它看的是"任何一份有正文"，而 `proof_process` 仍然优先
         取 canonical 那一份（老字段的读数不变）；只有 canonical 空、别的份有正文时才拿
         第一份顶上 —— 否则一条"证明在 #p2 里"的命题会被记成"没有证明"。
+
+        ## `kind` 为什么必须传进来（写作侧与校验侧必须是同一个值）
+
+        `evidencebits.derive_grade` 对 `kind="concept"` 有一条短路：概念不参与等级链，
+        等级现算成 `not_applicable`（`draft/97` 的并表口径）。而落盘那一关由
+        `schema.Statement.validate` 走 `evidencebits.bits_shape_problems(self.bits,
+        kind=self.kind)` —— 它一定带着这一行的 `kind` 去重算等级，并把"存下的等级与
+        现算的等级不一致"当成自报而拒收。
+
+        所以这一格不传 `kind` 的后果不是"等级算得粗一点"，而是：概念行在这里算出
+        `grade="conjecture"`，校验端按 `kind="concept"` 重算出 `not_applicable`，
+        两者一比就判"bits.grade 写的是 'conjecture'，按五位现算是 'not_applicable'"
+        ⇒ 任何 `kind=concept` 的登记 100% 被拒。真机读数（r34d 的两次连续尝试）逐字
+        就是这句话，而 B 随后被逼去用通用写口 `table.create` 直写 statements（被
+        `store.direct_write_refusal` 拒），那 5 条 `direct_write` 里有 1 条的根因在这里。
+
+        传 `kind` 之后，"写进去的那个等级"与"校验端现算的那个等级"是同一个函数用同一个
+        `kind` 算出来的，不可能分家；别的 kind 的派生结果与不传时逐字相同（`derive_grade`
+        只在 `concept` 那一支看 `kind`）。本地这道形状关也一并带上 `kind` —— 两处必须
+        同口径，否则这里放过的行会在事务里被校验端拒掉，而拒绝点离调用方更远。
         """
         own = str(origin) == "own_result"
         texts = [str(t or "") for t in ([proof_text] + list(other_proofs or []))]
@@ -388,8 +409,11 @@ class _RegisterStatement:
                 quote_verified=quote_verified,
                 proof=bool(texts) and own,
                 proof_process=(texts[0] if own and texts else ""),
+                # 必须与 `schema.Statement.validate` 用的是同一个值：概念行的等级
+                # （`not_applicable`）只有带上 kind 才算得出来，见上面那段说明。
+                kind=kind,
             )
-            problems = list(_EB.bits_shape_problems(bits))
+            problems = list(_EB.bits_shape_problems(bits, kind=kind))
         except Exception as exc:  # noqa: BLE001 - 算不出来要如实记，不许折成空 bits
             return {}, _refuse(
                 "bits_compute_failed",
@@ -1044,7 +1068,10 @@ class _RegisterStatement:
         bits, bits_bad = self._statement_bits(
             origin=str(origin), lit_id=lit_id, proof_text=str(proof_text or ""),
             quote_verified=quote_verified,
-            other_proofs=[str(e.get("text") or "") for e in proofs_listed])
+            other_proofs=[str(e.get("text") or "") for e in proofs_listed],
+            # 透传的是上面唯一一处派生出来的 `kind_now`（不是再算一次）：
+            # 位里的等级、校验端的等级、落库那一行的 kind 必须是同一个字符串。
+            kind=kind_now)
         if bits_bad is not None:
             return bits_bad
         sec = self._statement_secretary()
@@ -1460,6 +1487,7 @@ class _RegisterStatement:
         store = getattr(self, "store", None)
         root = getattr(store, "root", None) if store is not None else None
         if root is None:
+            # 三态：读不到工作区根 ⇒ 空清单，折向「拒」（不是「没有这一条」）
             return []
         try:
             from .. import papermapping as _PM

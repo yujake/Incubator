@@ -315,6 +315,103 @@ def direct_write_refusal(table: str) -> str:
     )
 
 
+#: 一次直写请求的兜底路由（业主 2026-10-24 裁定，逐字）：
+#:
+#: 「关于直写statements的问题，不应该是提醒智能体要走秘书，而是自动将直写请求路由到秘书接管」
+#: 「还有哪些动作是被"需要经秘书"拦截的？都走自动路由。甚至包装得足够好后可以让智能体
+#:   对秘书的存在无感，只是知道某些动作会有人帮他兜底。」
+#:
+#: 这张表是"哪张表 → 由谁兜底 → 什么意图 → 走哪条正路的哪个入口"的唯一落点。
+#: 它只写名字与出处，不写实现：`store` 在依赖图最底层（`secretary` / `litstage` /
+#: `doc_tools` 反过来 import 它），执行落在
+#: `tools/table_tools.py::_route_direct_write`。
+#:
+#: 两层分工（改这一格之前先读这两句）：
+#:   - 判据 = `direct_write_refusal`（没变：通用写口就是不许自己写这些表）；
+#:   - 处置 = 工具层先查本表：能兜底的交给兜底方正路执行，兜不了的才把拒信回给模型。
+#: 路由只换入口，不换判据：兜底方自己的校验（秘书的洗格式 / 出处 / 查重 / 升档、
+#: litstage 的受控理由码与配额、`register_dependency` 的"来源必须在册"）一条都不跳过，
+#: 所以本表是"多了一个入口"，不是"少了一道闸"。
+#:
+#: ## 可路由（三张表，六条入口）
+#: | 表 | 兜底方 | 意图 | 入口 | 出处 |
+#: |---|---|---|---|---|
+#: | `statements` | secretary | register（新建 / 改 / 升档） | `Secretary.record_statement` | src/agentflow/secretary.py:2990 |
+#: | `dependencies` | literal | register | `doc.register_dependency` | src/agentflow/tools/doc_tools.py:1876 |
+#: | `lit_candidates` | literal | add | `lit.stage_add` | src/agentflow/litstage.py:290（`stage_entries`） |
+#: | `lit_candidates` | literal | withdraw | `lit.stage_withdraw` | src/agentflow/litstage.py:493（`withdraw`） |
+#: | `lit_candidates` | literal | reject | `lit.stage_reject` | src/agentflow/litstage.py:510（`reject`） |
+#: | `lit_candidates` | literal | admit | `lit.admit` | src/agentflow/litstage.py:808（`admit`） |
+#:
+#: `secretary` = 由秘书那条路接管（它有"谁可以交命题内容"的判据，路由不替它放宽）；
+#: `literal` = 由那条正路的实现本身接管（没有第三层，就是工具层调的那一个函数）。
+#:
+#: ## 仍然拒（刻意不进这张表）
+#: - 迁移 / 账本类表：`counters`（发号器，不在 `schema.TABLES` 里）、`tasks`（召唤台账）、
+#:   `usage_ledger`、`eval_results` —— 它们的写者是框架自己的收口路径，通用写口本来
+#:   就不该碰，兜底也不接管（"路由"只对"有正路可走"的写有意义，对"根本没有这条正路"
+#:   的写只剩拒）。
+#: - 载荷带 `bits` / `verification_id` / `reviewed_by` / `created_by` 的形态（见
+#:   `tools/table_tools.py::_NOT_ROUTABLE_KEYS`）：那是写入期现算的派生面与别人的签名面，
+#:   接管它等于把"绕开推导"洗成"系统代劳"。
+#: - 带 `tool:` 记号的裸事务（不经工具层、直接开 tx）：那已经越过了模型的手，判据仍由
+#:   `Store.tx` 的提交块逐笔拒（本表管不到它）。
+DIRECT_WRITE_ROUTES: tuple[tuple[str, str, str, str, str], ...] = (
+    ("statements", "secretary", "register", "Secretary.record_statement",
+     "src/agentflow/secretary.py:2990（record_statement）"),
+    ("dependencies", "literal", "register", "doc.register_dependency",
+     "src/agentflow/tools/doc_tools.py:1876（register_dependency）"),
+    ("lit_candidates", "literal", "add", "lit.stage_add",
+     "src/agentflow/litstage.py:290（stage_entries）"),
+    ("lit_candidates", "literal", "withdraw", "lit.stage_withdraw",
+     "src/agentflow/litstage.py:493（withdraw）"),
+    ("lit_candidates", "literal", "reject", "lit.stage_reject",
+     "src/agentflow/litstage.py:510（reject）"),
+    ("lit_candidates", "literal", "admit", "lit.admit",
+     "src/agentflow/litstage.py:808（admit）"),
+)
+
+#: 兜底方的两种身份（`DIRECT_WRITE_ROUTES` 第 2 列的全部取值）。
+DIRECT_WRITE_BACKSTOPS: frozenset[str] = frozenset({"secretary", "literal"})
+
+
+def direct_write_route(table: str, intent: str = "") -> tuple[str, str, str, str, str] | None:
+    """这张表 + 这个意图走哪条正路。没有 ⇒ None（那一笔只能拒）。
+
+    `intent` 由工具层从这一次写请求读出来（见 `tools/table_tools.py::_direct_write_intent`）：
+    同一个 `lit_candidates` 上"新增/撤掉/拒收/入库"是四条不同的正路，拿错入口等于换判据。
+    意图不明（空串）一律 None —— "猜一个入口"是本仓最忌的那种折平。
+    """
+    name = str(table or "")
+    want = str(intent or "")
+    for row in DIRECT_WRITE_ROUTES:
+        if row[0] == name and row[2] == want:
+            return row
+    return None
+
+
+def direct_write_backstop(table: str) -> str:
+    """这张表的兜底方（`secretary` / `literal`）；不可路由 ⇒ 空串。"""
+    name = str(table or "")
+    for row in DIRECT_WRITE_ROUTES:
+        if row[0] == name:
+            return row[1]
+    return ""
+
+
+def routable_direct_write_tables() -> tuple[str, ...]:
+    """全部可路由的表（去重后按 `DIRECT_WRITE_ROUTES` 的顺序）。
+
+    它是"哪些表可路由"的唯一读数，判据 `tests/test_direct_write_is_routed_to_the_secretary.py`
+    拿它做反真空（清空 ⇒ 路由判据必红；扩成"所有表" ⇒ 野路判据必红）。
+    """
+    seen: list[str] = []
+    for row in DIRECT_WRITE_ROUTES:
+        if row[0] not in seen:
+            seen.append(row[0])
+    return tuple(seen)
+
+
 class Tx:
     """一次事务。通过 `tx.rows(t)` 拿行、`tx.mark_dirty(t)` 声明要写回。"""
 

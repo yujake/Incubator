@@ -442,24 +442,37 @@ def test_c7_watch_prints_a_reachable_url_on_the_same_workspace(tmp_path: Path) -
 
 # ============================================================ C8 分组 help
 def test_c8_the_first_screen_is_grouped_and_lists_every_subcommand() -> None:
-    """C8：help 首屏看得出研究 / 项目 / 诊断 / 运维四组，且一个子命令都没漏。"""
+    """C8：help 首屏看得出四个入口组，且 28 个旧名一个都没漏（只是收进了那一段说明）。
+
+    2026-10-24（业主批的 A–E，"往 F 的形状靠"）：首屏从"四组标题 + 28 行"改成"四个动词
+    入口 + 一段『旧名仍可用』"。判据的意图一个字都没变 —— 仍然是"首屏能看出分层，且没有
+    任何一个子命令静默消失"；变的是"哪些名字出现在哪里"：组名出现在组那一行，旧名出现在
+    那一段说明里（两者都在同一屏上，`out` 里逐字找得到）。
+    """
     code, out, err = _run(["--help"])
     assert code == 0, (code, out, err)
-    for group in ("研究", "项目", "诊断", "运维"):
+    for group in cli.GROUP_NAMES:
         assert group in out, f"help 首屏没有「{group}」这一组：\n{out}"
+    assert "旧名仍可用" in out, out
 
     parser = cli.build_parser()
     subs = [a for a in parser._actions if getattr(a, "choices", None)]
     assert len(subs) == 1, "必须保留唯一一个 subparsers action（三处判据靠它取 choices）"
     names = set(subs[0].choices)
     # 2026-10-23：26 -> 27（新增 `cache` 那一组：两档提示词缓存的状态与预热）。
-    assert len(names) == 27, sorted(names)
+    # 2026-10-24：27 -> 28（新增 `stats` 那一组：统计量，今天只有 `errors` 一档；
+    # 实现全在 `errorstats`，它是只读测试工具，不写库不写盘）。
+    # 2026-10-24 第二轮：28 个旧名一个都没删、一个都没加 —— 这一轮只加了四个入口组
+    # （incubate / inspect / run / serve），它们不走 `choices`（见 `canonical_argv`），
+    # 所以这个数字仍然是 28，而它现在同时是"旧名一个都没丢"的读数。
+    assert len(names) == 28, sorted(names)
     for name in names:
         assert name in out, f"help 里没有 {name}"
 
-    listed = [name for _title, group in cli.SUBCOMMAND_GROUPS for name in group]
-    assert set(listed) == names, set(listed) ^ names
-    assert len(listed) == len(set(listed)), "分组表里有重复登记"
+    # 分层表覆盖的旧名必须逐字等于 choices 的并集（一个不漏、一个不多、不重复）。
+    covered = [old for old, _path in cli.command_paths()]
+    assert set(covered) == names, set(covered) ^ names
+    assert len(covered) == len(set(covered)), "分层表里有重复登记的旧名"
 
 
 def test_c8_extract_rounds_is_not_printed_twice() -> None:

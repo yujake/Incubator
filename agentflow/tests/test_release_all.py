@@ -2369,6 +2369,26 @@ def test_the_design_tools_criterion_is_not_vacuous():
 #:   * 「新增模块要在这里登记」，连同"它为什么必须是一个顶层模块"的一行理由；
 #:     删模块要同时删掉它那一行理由（登记过期与漏登记同样危险：前者让人以为"有人看过了"）。
 _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
+    # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
+    # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
+    # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
+    # 挂在某个角色包里会让"谁算错的那一方"这件事出现两份实现。
+    "errorstats.py": "按角色 × 类目的错误动作计数（只读、零模型调用、不写库不写盘）："
+                     "ERROR_CATEGORIES（逐类一行含义）/ CODE_TABLE（码→类目→file:line 出处）/ "
+                     "CODE_TO_CATEGORY / CALLER_ATTRIBUTED_CODES（召唤期结构判据记 called_by）/"
+                     "primary_code（一条记录只算一次的主码规则）/ error_action_stats（三态 "
+                     "checked+state+reason）/ render_text / stats_json",
+    # 2026-10-24（业主批的 CLI 更新方案 A–E，F 的形状）：四个只读读数收成同一个外层。
+    # 为什么必须落在顶层、且不许 import cli/webui：CLI 与（将来）网页都要读同一份口径，
+    # 任何一边各自实现一次就会退回"同一个数两份实现"——真机已经撞过一次（status-report
+    # 与网页的"在飞任务"差一档）。判据 tests/test_readouts_are_the_single_shape.py 钉住
+    # 五键形状、三态（读不到不折成 0）、反真空、以及"这一层不 import 呈现层"。
+    "readouts.py": "四个只读读数的统一外层（checked/state/reason/data/problems）："
+                   "errors_readout（复用 errorstats 的计数）/ flow_readout（按角色的动作、"
+                   "被拦、转投分布）/ cost_readout（usage_ledger 按角色与 scope 的花费与 "
+                   "token）/ gates_readout（收工门八格三态一张表，现算不读缓存）/ scan（四条"
+                   "读数共用的那一次读盘）/ READOUT_DATA_KEYS（每张表的键集，判据从它取）/ "
+                   "render_text（人读的呈现）",
     # 2026-10-22（多证明模型 S1）：`used_by` 里那个 `#pN` 尾巴的唯一解析点 ——
     # 一条定理可以有多条证明，每条证明各有一条自己的依赖链；两份解析就会让
     # 台账上是第 2 条、读出来是第 1 条这种错静默发生。

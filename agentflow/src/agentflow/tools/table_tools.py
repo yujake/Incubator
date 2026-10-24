@@ -495,53 +495,526 @@ def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
     }
 
 
-def _direct_write_refusal(table: str) -> ToolResult | None:
-    """`statements` / `dependencies` / `lit_candidates` 的「通用写口直写」 ⇒ 受控拒绝。
-    ## 为什么这一格存在（2026-10-19 晚，`projects/mp2` 的真机读数）
-    `mp2-7.jsonl` 第 94 行 B 调 `register_statement` ⇒ `unknown_tool`（那个名字不在它的工具面上），第 97 行改走 
-    `table.create(table="statements")`、「手写」 `bits={}` 与`evidence_kind="heuristic"`。于是秘书那四件
-    活（洗格式 / 发编号 / 查重 / 改表）与五元位一件没跑，而盘上那一行看起来完全合法 —— `stmt:000003` 有 1909 字证明、 V 也签了「成立」，档位
-    却停在 `heuristic`。
-    判据本体在 `store.direct_write_refusal`（「只有一处」：工具层与 `Store.tx` 的提交块共用一个函数，所以关掉它的负控对两层同时生效）。
-    这里只把它的读数翻成工具层的受控失败 —— 模型据此能改（拒信里逐字写着该走哪条路）。
-    `table.delete` 不在这条限制里（删除不制造证据，它另有 `_REF_SPECS` 的引用保护）——「唯一的例外是 `lit_candidates`」：那张表的
-    "删掉"必须表现为 `withdrawn`（见`_candidate_delete_refusal`），见 `table_delete` 里那一处。
+# ---------------------------------------------------------------- 直写兜底（路由）
+#
+# 历史（读这一节之前先看一眼，否则会以为"判据被放宽了"）：
+#   2026-10-19 晚的形态是「拒 + 拒信里逐字指路」（`projects/mp2/sessions/mp2-7.jsonl`
+#   第 97 行：`table.create(table="statements")` 手写 `bits={}` 与
+#   `evidence_kind="heuristic"`）。业主 2026-10-24 的裁定把「处置」换掉了：
+#   「不应该是提醒智能体要走秘书，而是自动将直写请求路由到秘书接管」。
+#   模型那一侧现在读到的是 `_direct_write_disposal`（先兜底、兜不了才拒）；
+#   判据本身仍是 `store.direct_write_refusal`（`Store.tx` 的提交块读同一个函数）。
+#
+# 业主 2026-10-24 两段逐字：
+#   「关于直写statements的问题，不应该是提醒智能体要走秘书，而是自动将直写请求路由到秘书接管」
+#   「还有哪些动作是被"需要经秘书"拦截的？都走自动路由。甚至包装得足够好后可以让智能体
+#    对秘书的存在无感，只是知道某些动作会有人帮他兜底。」
+#
+# 分工（与 `store.DIRECT_WRITE_ROUTES` 那一格逐字对齐）：
+#   判据 = `store.direct_write_refusal`（没变：通用写口就是不许自己写这些表）；
+#   处置 = 本节的 `_direct_write_disposal`：先问"这一笔能不能交给兜底方"，
+#          能就交（判据一条不跳过），不能才拒。
+# 路由只换入口，不换判据：兜底方各自的校验（秘书的洗格式 / 出处 / 引文 / 升档，
+# litstage 的受控理由码与配额，`register_dependency` 的"来源必须在册"）全部照跑，
+# 所以"接管"不等于"放行"。
+#
+# 三态（返回形状见 `_routed_ok` / `_routed_refused` / `_route_unavailable`）：
+#   | 结局 | ok | `state` | 读数 |
+#   |---|---|---|---|
+#   | 兜底方办成了 | True | routed | `backstop` / `what_happened` / `row` / 编号 |
+#   | 兜底方拒（含它自己的校验） | False | refused_by_backstop | `refused_by_backstop` 原话 |
+#   | 兜底方不可达（异常 / 没实现） | False | unknown | 不折成成功 |
+#   | 野路（载荷碰派生面 / 意图不明 / 没有正路的表） | False | refused | `direct_write_refused` |
+#
+# 仍然要拒的（逐条，负控在 `tests/test_direct_write_is_routed_to_the_secretary.py`）：
+#   1. 载荷带 `_NOT_ROUTABLE_KEYS` 里任何一格（`bits` / `verification_id` / `reviewed_by` /
+#      `created_by`）—— 那是写入期现算的派生面与别人的签名面，接管它等于把"绕开推导"
+#      洗成"系统代劳"；
+#   2. `table.update` 只改 `proof_text` 而不改 `statement_full` —— 证明正文变了就是另一条
+#      命题，不能就地替换已登记的那一份；
+#   3. 迁移 / 账本类表（`counters` / `tasks` / `usage_ledger` / `eval_results`）与
+#      "意图读不出来"的 `lit_candidates` 更新；
+#   4. 依赖边的"就地改"（没有这条正路：改来源就是另一条边）；
+#   5. 带 `tool:` 记号的裸事务 —— 它根本不经这里，由 `Store.tx` 的提交块逐笔拒。
+
+#: 兜底路由的类目名（`errorstats.ERROR_CATEGORIES` 的 `routed_to_backstop` 那一档）。
+#: 结局码是 `<类目>.<兜底方>[.<结局>]`：类目一格、结局分开计（成功 / 兜底方拒 / 不可用）。
+ROUTED_CATEGORY = "routed_to_backstop"
+
+#: 全部结局码（逐条写出来，不靠运行时拼）。
+#:
+#: 为什么必须逐条写字面量：`errorstats` 的"码 → 类目"那张表要逐条登记出处，而它的判据
+#: （`tests/test_error_action_stats.py::test_every_category_has_a_code_that_really_exists_in_the_source`）
+#: 要求那个码真的出现在出处文件里。只在运行时用 f-string 拼出来的码，在那条判据眼里
+#: 就是"编的"。所以字面量在这里、拼装只允许拼出这张表里的东西（`_route_code` 末尾那条断言）。
+ROUTED_CODES: tuple[str, ...] = (
+    "routed_to_backstop.secretary",
+    "routed_to_backstop.literal",
+    "routed_to_backstop.secretary_refused",
+    "routed_to_backstop.literal_refused",
+    "routed_to_backstop.secretary_unavailable",
+    "routed_to_backstop.literal_unavailable",
+)
+
+#: 路由不接管的载荷键（"野路"的第二档，见上面"仍然要拒的"第 1 条）。
+_NOT_ROUTABLE_KEYS: frozenset[str] = frozenset(
+    {"bits", "verification_id", "reviewed_by", "created_by"})
+
+
+def _wild_road_reason(table: str, why: str) -> str:
+    """野路（兜底方也接不住）时的拒信正文：只说"这一笔为什么不能落"，不指路。
+
+    业主 2026-10-24 的追加口径逐字：「只有真的办不成（秘书拒 / 参数非法）才把理由
+    原样带回，且理由里不出现'请改用某个工具'的指路语」。所以这里不给工具名，
+    只说这一笔缺什么 / 为什么不能落盘。
     """
-    why = _store_mod.direct_write_refusal(table)
-    if not why:
-        return None
-    if table == "lit_candidates":
-        return fail(why, table=table, kind=_store_mod.DIRECT_WRITE_REFUSED,
-                    route="lit.stage_add / lit.stage_withdraw / lit.stage_reject / lit.admit_all",
-                    route_tool="lit.admit_all")
-    return fail(why, table=table, kind=_store_mod.DIRECT_WRITE_REFUSED,
-                route="Secretary.record_statement(payload, role=\"B\")",
-                route_tool="own.register_statement")
+    return (f"{_store_mod.DIRECT_WRITE_REFUSED}：这一笔写请求没有由通用写口落盘，"
+            f"也没有兜底方接得住（表 {table!r}）：{why}"
+            "整笔不写：盘上那一行一个字节都没变。")
 
 
-def _candidate_delete_refusal(table: str, slot: str) -> ToolResult | None:
-    """`lit_candidates` 的行「不许物理删」 ⇒ 受控拒绝（业主 2026-10-20 第 2 条）。
+def _route_code(backstop: str, state: str = "") -> str:
+    """结局码：`routed_to_backstop.<兜底方>` / `.…_refused` / `.unavailable`。
 
-    为什么删除也要挡：撤掉 = 槽位置空 + 写理由，而「序号不复用」这件事只有在
-    "那一行还在盘上"时才成立。`table.delete` 掉一行之后，"第 3 号被撤了哪一篇、为什么"
-    就永久消失了，而 `lit_candidates` 的序号计数器仍然停在那里 —— 于是列表上出现
-    一个谁也解释不了的缺口（`verify` 的 `id_gap` 会报，但报的是"某次事务分配了号却没建行"，
-    与"有人删掉了审计记录"完全是两件事）。
-
-    正常的撤掉走 `lit.stage_withdraw`（或审内容后 `lit.stage_reject`）。
+    为什么结局写进码里：`errorstats`（只读、按码归类的那个读数）拿到的只有一段文本，
+    "路由成功了"与"兜底方拒了"如果共用一个码，那一档就分不开 —— 而分开正是业主
+    2026-10-24 第 3 条要的（"成功 / 被兜底方拒 分开计"）。
     """
-    if str(table) != "lit_candidates":
+    who = str(backstop or "unknown")
+    tail = str(state or "")
+    code = f"{ROUTED_CATEGORY}.{who}" if not tail else f"{ROUTED_CATEGORY}.{who}_{tail}"
+    # 拼出来的码必须已经在 `ROUTED_CODES` 里登记过（否则 `errorstats` 那张表里没有它，
+    # 这一笔就会掉进"没见过的东西不许编"那一档 —— 那比没有读数更坏）。
+    # 没登记 ⇒ 退成裸类目名：`errorstats` 会把它读成"未归类"（看得见），而不是记到别的类目上。
+    return code if code in ROUTED_CODES else ROUTED_CATEGORY
+
+
+def _caller_role() -> str:
+    """这一次工具调用是哪个角色发起的（空串 = 读不到，不是"没有角色"）。
+
+    为什么从 `conductor.current_caller_role()` 现读：工具的形状里没有"我是谁"这一格
+    （`TableContext.actor` 是装配期绑的常量 "tool"，不是发起人）。`conductor.calling_as`
+    在 `AgentLoop._do_tool` 里包住每一次工具调用（agent_loop.py:6169），所以生产路径上
+    这一格总是有值；只读工具、脚本与单测里没有挂点 ⇒ 空串。
+    这个值只「转交」给兜底方（"谁要求写这一条命题"），不替兜底方放宽它的判据：
+    秘书那条路有"只有 B 能交命题内容"的规矩，路由把它原样传过去。
+    """
+    try:
+        from ..conductor import current_caller_role
+    except Exception:  # noqa: BLE001 —— 读不到就是读不到（空串），不编一个角色出来
+        return ""
+    try:
+        return str(current_caller_role() or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _direct_write_intent(table: str, op: str, payload: Mapping[str, Any]) -> str:
+    """从这一次写请求读出"想做的那件事"（`store.DIRECT_WRITE_ROUTES` 的第 3 列）。
+
+    读不出来 ⇒ 空串 ⇒ 兜底不接管（"猜一个入口"等于换判据，比拒更坏）。
+    口径：
+      - `table.create`：`statements` / `dependencies` ⇒ register；`lit_candidates` ⇒ add；
+      - `table.delete`：⇒ withdraw（`lit_candidates` 的"删掉"必须表现为"撤掉"）；
+      - `table.update`：看载荷里的 `status` 与理由栏（admitted ⇒ admit、rejected /
+        `reject_reason` ⇒ reject、withdrawn / `withdrawn_reason` ⇒ withdraw），其余 ⇒ 空串。
+    """
+    name = str(table or "")
+    kind = str(op or "")
+    if kind == "delete":
+        return "withdraw"
+    if kind in ("create", "update"):
+        if name == "statements":
+            # 新建 / 改 / 升档都走秘书那一条（它自己按 statement_full 查重、按 verifications 升档）
+            return "register"
+        if name == "dependencies":
+            # 登记一条边可以兜底；"就地改一条已登记的边"没有正路（改来源就是另一条边），
+            # 故意给它一个读不出入口的意图名 —— 于是它落到"兜底不接管"那一档。
+            return "register" if kind == "create" else "amend"
+        if name == "lit_candidates":
+            if kind == "create":
+                return "add"
+            got = dict(payload or {})
+            status = str(got.get("status") or "").strip()
+            if status == "admitted":
+                return "admit"
+            if status == "rejected" or str(got.get("reject_reason") or "").strip():
+                return "reject"
+            if status == "withdrawn" or str(got.get("withdrawn_reason") or "").strip():
+                return "withdraw"
+            return ""
+    return ""
+
+
+def _routed_shape(*, backstop: str, entry: str, table: str, state: str,
+                  what_happened: str, row: Mapping[str, Any] | None = None,
+                  landed_id: str = "", changes: Sequence[Any] = (),
+                  requested_id: str = "", dropped_keys: Sequence[str] = (),
+                  refused: str = "", detail: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """一次兜底处置的完整读数（三态共用同一个形状，读的人不用猜缺了哪一格）。
+
+    `backstop` 是"谁兜的底"（`secretary` / `literal`），`routed_to` 是那条正路的入口名，
+    `routed_from` 固定是 `direct_write`（这次请求本来走的是通用写口）。
+    成功与失败只在 `state` / `refused_by_backstop` 两格上分叉 —— 所以读的人不必
+    从两套键名里推断"这到底成没成"。
+    """
+    payload: dict[str, Any] = {
+        "backstop": str(backstop),
+        "routed_to": str(entry),
+        "routed_from": "direct_write",
+        "table": str(table),
+        "state": str(state),
+        "what_happened": str(what_happened),
+        "row": dict(row) if isinstance(row, Mapping) else None,
+        "id": str(landed_id),
+        "requested_id": str(requested_id),
+        "changes": list(changes or ()),
+        "dropped_keys": list(dropped_keys or ()),
+        "refused_by_backstop": str(refused),
+        # 秘书那一档另外留一个同名键（业主 2026-10-24 第一条裁定逐字用的是 "refused_by_secretary"）。
+        "refused_by_secretary": str(refused) if str(backstop) == "secretary" else "",
+    }
+    if detail:
+        payload["detail"] = dict(detail)
+    return payload
+
+
+def _routed_ok(*, backstop: str, entry: str, table: str, what_happened: str,
+               row: Mapping[str, Any] | None = None, landed_id: str = "",
+               changes: Sequence[Any] = (), requested_id: str = "",
+               dropped_keys: Sequence[str] = (),
+               detail: Mapping[str, Any] | None = None) -> ToolResult:
+    """兜底方办成了：`ok=True`，`data` 是上面那个形状。
+
+    为什么 `error` 那一格也带一句（`ok` 仍然是 True）：`errorstats` 那份按码归类的读数
+    只读 `result.error` / `warn` / `problem` / `kind` 这几个通道（见 `errorstats._step_text`），
+    而"这一笔被兜底接管了"正是业主第 3 条要计的事件。所以那一格写的是接管读数、
+    不是失败：`ok=True` 说明这条路走通了。正文里逐字写明这一点，避免模型把
+    "有人兜底"读成"我做错了"。
+    """
+    data = _routed_shape(backstop=backstop, entry=entry, table=table, state="routed",
+                         what_happened=what_happened, row=row, landed_id=landed_id,
+                         changes=changes, requested_id=requested_id,
+                         dropped_keys=dropped_keys, detail=detail)
+    note = (f"{_route_code(backstop)}：{what_happened}"
+            "（这一格是兜底读数，不是失败读数：ok=true 就是'系统替你办成了'）")
+    return ToolResult(True, data, note, {"kind": _route_code(backstop),
+                                         **{k: v for k, v in data.items()
+                                            if k not in ("row", "detail")}})
+
+
+def _routed_refused(*, backstop: str, entry: str, table: str, why: str,
+                    changes: Sequence[Any] = (), requested_id: str = "",
+                    dropped_keys: Sequence[str] = (),
+                    detail: Mapping[str, Any] | None = None) -> ToolResult:
+    """兜底方自己拒了：理由原样带回（不翻译、不裁剪、不指路）。"""
+    data = _routed_shape(backstop=backstop, entry=entry, table=table,
+                         state="refused_by_backstop",
+                         what_happened="系统替你转交过，兜底方按它自己的判据拒了；这一笔没有落盘",
+                         changes=changes, requested_id=requested_id,
+                         dropped_keys=dropped_keys, refused=why, detail=detail)
+    return fail(f"{_route_code(backstop, 'refused')}：{why}",
+                kind=_route_code(backstop, "refused"),
+                **{k: v for k, v in data.items() if k not in ("row", "detail")},
+                detail=dict(detail or {}))
+
+
+def _route_unavailable(*, backstop: str, entry: str, table: str, why: str,
+                       requested_id: str = "") -> ToolResult:
+    """兜底方不可达 / 这一格没实现：`state="unknown"`，不许折成成功（三态纪律）。"""
+    data = _routed_shape(backstop=backstop, entry=entry, table=table, state="unknown",
+                         what_happened="系统没接上兜底方：这一笔既没落盘、也没被它判过（unknown）",
+                         requested_id=requested_id, refused="",
+                         detail={"why": why})
+    return fail(f"{_route_code(backstop, 'unavailable')}：兜底方不可达（{why}）"
+                "⇒ 这一笔按'没查成'读，不是'办成了'。",
+                kind=_route_code(backstop, "unavailable"),
+                **{k: v for k, v in data.items() if k not in ("row", "detail")},
+                detail=dict(data.get("detail") or {}))
+
+
+def _direct_write_disposal(ctx: TableContext, *, table: str, op: str,
+                           payload: Mapping[str, Any], id: str = "",
+                           idf: str = "") -> ToolResult | None:
+    """通用写口碰到"只能经正路写"的表时，先算一次处置。返回 None = 照常写。
+
+    调用点在三个写口的入口（`table_create` / `table_update` / `table_delete`），
+    在进事务之前 —— 兜底方自己会开它自己的事务，两层事务叠在一起会死锁
+    （`filelock` 不可重入），所以顺序必须是"先处置、后决定要不要自己写"。
+    """
+    name = str(table or "")
+    if not _store_mod.direct_write_refusal(name):
+        return None          # 不是禁区表：一个字节都不干预
+    if str(op or "") == "delete" and name != "lit_candidates":
+        # 删除不制造证据：`statements` / `dependencies` 的行删掉不算"直写"（判据同 `Store.tx`
+        # 提交块那一段：只有 delete 的那一笔放行）。`lit_candidates` 是唯一的例外 ——
+        # 它的"删掉"必须表现为"撤掉"，所以走下面的兜底。
         return None
-    return fail(
-        f"`lit_candidates` 的行不许物理删（请求删 {slot!r}）："
-        "撤掉 = 槽位置空 + 写理由，序号不复用。删掉之后「第 3 号被撤了哪一篇、为什么」"
-        "就查不出来了，而这正是这张表存在的理由。两条正路：\n"
-        "  ① 撤掉某一槽 ⇒ `lit.stage_withdraw(slot=…, reason_code=\"withdrawn_by_reviewer\", note=…)`；\n"
-        "  ② 审内容后拒收 ⇒ `lit.stage_reject(slot=…, reason_code=\"rejected_off_topic\")`。",
-        table=table, id=slot, kind=_store_mod.DIRECT_WRITE_REFUSED,
-        route="lit.stage_withdraw / lit.stage_reject",
-        route_tool="lit.stage_withdraw",
-    )
+    keys = {str(k) for k in (payload or {}) if not str(k).startswith("_")}
+    if op and str(op) == "update" and idf and str(idf) in keys and str(payload.get(idf)) != str(id):
+        # 改主键 = 把 delete+create 伪装成 update（所有外键都指向旧代号）⇒ 不接管。
+        return fail(
+            f"不允许修改主键 {idf}（{id} → {payload.get(idf)}）。"
+            "主键是外键的锚点，改了会让所有引用它的行变成悬空引用。",
+            table=name, id=id, kind="primary_key_change",
+        )
+    wild = sorted(_NOT_ROUTABLE_KEYS & keys)
+    if wild:
+        return fail(
+            f"{_store_mod.DIRECT_WRITE_REFUSED}：这一笔要写 {wild} —— "
+            "那几格是写入期现算的派生面（五元位）与别人的签名 / 审计面，"
+            "手写它等于把推导整条跳过，所以兜底不接管它。整笔不写：盘上一个字节都没变。",
+            table=name, kind=_store_mod.DIRECT_WRITE_REFUSED, wild_keys=wild,
+        )
+    if (str(op or "") == "update" and "proof_text" in keys and "statement_full" not in keys):
+        return fail(
+            f"{_store_mod.DIRECT_WRITE_REFUSED}：这一笔只改 `proof_text` 而没改 `statement_full` —— "
+            "证明正文变了就是另一条命题，不能就地替换已登记的那一份。整笔不写。",
+            table=name, kind=_store_mod.DIRECT_WRITE_REFUSED, wild_keys=["proof_text"],
+        )
+    intent = _direct_write_intent(name, op, payload)
+    route = _store_mod.direct_write_route(name, intent)
+    if route is None:
+        if name == "dependencies" and str(op or "") == "update":
+            return fail(_wild_road_reason(
+                name,
+                "依赖边没有「就地改」这一条正路 —— 换一个来源就是另一条边，"
+                "不是把这条边改掉（它的 status 由核对那一步写，不由通用写口写）。"),
+                table=name, kind=_store_mod.DIRECT_WRITE_REFUSED, intent=intent)
+        return fail(_wild_road_reason(
+            name,
+            f"这一笔的意图读不出来（动作 {op!r}，载荷键 {sorted(keys)}）⇒ "
+            "系统不替你猜该走哪一条正路。要做的那件事得写进载荷"
+            "（例如目标状态与受控理由码），再交一次。"),
+            table=name, kind=_store_mod.DIRECT_WRITE_REFUSED, intent=intent)
+    return _route_direct_write(ctx, route=route, table=name, op=str(op or ""),
+                               payload=payload, id=id, idf=idf)
+
+
+def _route_direct_write(ctx: TableContext, *, route: tuple[str, str, str, str, str],
+                        table: str, op: str, payload: Mapping[str, Any],
+                        id: str = "", idf: str = "") -> ToolResult:
+    """按 `store.DIRECT_WRITE_ROUTES` 那一行把请求交给兜底方（分发器）。"""
+    backstop, _intent, entry = route[1], route[2], route[3]
+    if backstop == "secretary":
+        return _route_to_secretary(ctx, entry=entry, table=table, op=op,
+                                   payload=payload, id=id, idf=idf)
+    if backstop == "literal" and table == "dependencies":
+        return _route_to_dependency_register(ctx, entry=entry, payload=payload)
+    if backstop == "literal" and table == "lit_candidates":
+        return _route_to_lit_backstop(ctx, entry=entry, intent=_intent,
+                                      payload=payload, id=id)
+    if backstop not in _store_mod.DIRECT_WRITE_BACKSTOPS:
+        return _route_unavailable(backstop=str(backstop), entry=str(entry), table=table,
+                                  why=(f"兜底方 {backstop!r} 不在 "
+                                       f"{sorted(_store_mod.DIRECT_WRITE_BACKSTOPS)} 里"))
+    # 表里登记了兜底方、实现没接上：unknown（不许折成成功，也不许折成"拒"）
+    return _route_unavailable(backstop=str(backstop), entry=str(entry), table=table,
+                              why="工具层没有这一格的实现（表登记了入口、代码没接上）")
+
+
+def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
+                        payload: Mapping[str, Any], id: str = "",
+                        idf: str = "") -> ToolResult:
+    """`statements` 的直写 ⇒ 秘书那条正路（`Secretary.record_statement`）。
+
+    改（`table.update`）走"同一份内容再交一次"：把盘上那一行读出来、叠上 patch、
+    整份交给秘书 —— 于是查重、升档、出处核对都还是秘书那一条在判，
+    而"改哪一格"由秘书决定（升档会就地改上去，内容没变则回"已在册、不新建"）。
+    """
+    role = _caller_role()
+    body = dict(payload or {})
+    # `dropped` 只算调用方自己交上来的键（改那一档的 patch）：合并出来的整行里
+    # 有一堆行对象字段（`stmt_id` / `created_at` / `status` …）不是"被丢掉的载荷"。
+    allowed = _secretary_keys()
+    dropped = sorted(k for k in body
+                     if allowed and k not in allowed and not str(k).startswith("_"))
+    requested = str(payload.get(str(idf or "stmt_id")) or "") if idf else ""
+    if op == "update":
+        current = None
+        if id:
+            current = next((r for r in _rows(ctx, table)
+                            if str(r.get(str(idf or "stmt_id")) or "") == str(id)), None)
+        if current is None:
+            # 与不带兜底那一档同形（`tx.find` 找不到就是 not_found）：空 id 也走这里，
+            # 因为"要改哪一行"根本不知道（不是"路由没成"）。
+            return fail(f"{table} 里没有主键 {id}", table=table, id=id, found=False,
+                        kind="not_found")
+        merged = dict(current)
+        merged.update(dict(payload or {}))
+        body = merged
+        requested = str(id)
+    try:
+        from ..secretary import Secretary
+
+        sec = Secretary(role, root=ctx.store.root, store=ctx.store)
+        got = sec.record_statement(body, role=role)
+    except Exception as exc:  # noqa: BLE001 —— 兜底方不可达必须回 unknown，不许折成成功
+        return _route_unavailable(backstop="secretary", entry=str(entry), table=table,
+                                  why=f"{type(exc).__name__}: {exc}", requested_id=requested)
+    refused = str(got.get("refused") or "")
+    reason = str(got.get("reason") or "")
+    if refused:
+        return _routed_refused(backstop="secretary", entry=str(entry), table=table,
+                               why=(f"{refused}：{reason}" if reason else refused),
+                               changes=list(got.get("changes") or ()),
+                               requested_id=requested, dropped_keys=dropped, detail=got)
+    if got.get("duplicate"):
+        # 秘书的判据是"同一份 statement_full 只登记一次"：这不是失败，也不是"这次写成了"
+        # —— 它是兜底方的"已在册、没新建"，按兜底方拒记，并把它的原话逐字带回。
+        return _routed_refused(backstop="secretary", entry=str(entry), table=table,
+                               why=(reason or "duplicate：同一条命题已在册，未新建行"),
+                               changes=list(got.get("changes") or ()),
+                               requested_id=requested, dropped_keys=dropped, detail=got)
+    created = bool(got.get("created"))
+    upgraded = bool(got.get("upgraded"))
+    what = ("已由系统代为登记（秘书那条正路：洗格式 / 发编号 / 查重 / 改表一次做完）"
+            if created else
+            "已由系统代为升档（同一份内容、更强的证据档；没有新建行）" if upgraded else
+            "已由系统代为处理（秘书那条正路没有新建行，读数见 detail）")
+    row = got.get("row") if isinstance(got.get("row"), Mapping) else None
+    return _routed_ok(backstop="secretary", entry=str(entry), table=table,
+                      what_happened=what, row=row,
+                      landed_id=str(got.get("stmt_id") or ""),
+                      changes=list(got.get("changes") or ()),
+                      requested_id=requested, dropped_keys=dropped, detail=got)
+
+
+def _secretary_keys() -> frozenset[str]:
+    """秘书那条路认得的载荷键（正名 ∪ 别名）；读不到 ⇒ 空集（那一格就不报 dropped）。"""
+    try:
+        from ..secretary import STATEMENT_KEY_ALIASES, STATEMENT_PARAM_KEYS
+    except Exception:  # noqa: BLE001
+        return frozenset()
+    out = set(STATEMENT_PARAM_KEYS)
+    for alts in STATEMENT_KEY_ALIASES.values():
+        out.update(alts)
+    return frozenset(out)
+
+
+def _route_to_dependency_register(ctx: TableContext, *, entry: str,
+                                  payload: Mapping[str, Any]) -> ToolResult:
+    """`dependencies` 的直写 ⇒ `doc.register_dependency`（那条正路的函数本身）。
+
+    它的判据（`kind` / `status` 词表、`status=closed` 时来源必须在册、规矩 A 的
+    "`source_stmt_id` 要指向一条可用的命题"）一条都不跳过 —— 路由只换入口。
+    """
+    def _s(key: str) -> str:
+        return str(payload.get(key) or "")
+
+    #: 那条正路的参数表里没有的键（`source_doc_id` 不是 `register_dependency` 的入参 ——
+    #: 它只收三种来源）。载荷里给了就进 `dropped_keys`（看得见，不静默丢）。
+    dropped = sorted(k for k in ("source_doc_id", "dep_id", "created_at", "created_by")
+                     if k in payload)
+    try:
+        from .doc_tools import register_dependency
+
+        row = register_dependency(
+            ctx.store,
+            used_by=_s("used_by"),
+            kind=_s("kind"),
+            label=_s("label"),
+            source_lit_id=_s("source_lit_id") or None,
+            source_experiment_id=_s("source_experiment_id") or None,
+            source_stmt_id=_s("source_stmt_id") or None,
+            path_group=int(payload.get("path_group") or 1),
+            proof_no=int(payload.get("proof_no") or 1),
+            page_range=payload.get("page_range"),
+            quote=_s("quote"),
+            status=_s("status") or "dangling",
+            status_reason=_s("status_reason"),
+            actor=str(ctx.actor or "tool"),
+        )
+    except ValueError as exc:     # 它自己的受控拒绝（词表 / 来源不在册 / 缺必填）
+        return _routed_refused(backstop="literal", entry=str(entry), table="dependencies",
+                               why=str(exc), dropped_keys=dropped)
+    except Exception as exc:  # noqa: BLE001
+        return _route_unavailable(backstop="literal", entry=str(entry), table="dependencies",
+                                  why=f"{type(exc).__name__}: {exc}")
+    landed = dict(row or {})
+    return _routed_ok(backstop="literal", entry=str(entry), table="dependencies",
+                      what_happened="已由系统代为登记这条依赖边（来源在册性照核）",
+                      row=landed, landed_id=str(landed.get("dep_id") or ""),
+                      dropped_keys=dropped)
+
+
+def _route_to_lit_backstop(ctx: TableContext, *, entry: str, intent: str,
+                           payload: Mapping[str, Any], id: str = "") -> ToolResult:
+    """`lit_candidates` 的直写 ⇒ 按意图分派到 `lit.*` 那四条正路。
+
+    这里调的是 `litstage` 那几个函数本体（槽位发号、受控理由码、入库上限、报告刷新
+    都在里面），不是抄一份判据：`search_tools` 的 `_h_lit_*` 只是给它们套了一层
+    工具壳。`admit` 那一档是唯一例外 —— 它还需要"登记路径"那个闭包
+    （`_registrar_from_candidate`，`lit.admit` 与 `lit.admit_all` 共用的那一份），
+    所以那一档直接调 `_h_lit_admit`（同一份实现，不自造第二份）。
+    """
+    from ..litstage import LitStageError
+    from ..litstage import reject as _lit_reject
+    from ..litstage import stage_entries as _lit_stage_entries
+    from ..litstage import withdraw as _lit_withdraw
+
+    actor = str(ctx.actor or "tool")
+    slot = str(id or payload.get("slot") or "")
+    note = str(payload.get("note") or "")
+    try:
+        if intent == "add":
+            got = _lit_stage_entries(ctx.store, [dict(payload)],
+                                     request_id=str(payload.get("request_id") or ""),
+                                     batch=payload.get("batch"), actor=actor)
+            staged = list(got.get("staged") or ())
+            row = dict(staged[0] or {}) if staged else None
+            return _routed_ok(backstop="literal", entry=str(entry), table="lit_candidates",
+                              what_happened="已由系统代为追加进待新增列表（槽位号只增不复用）",
+                              row=row, landed_id=str((row or {}).get("slot") or ""),
+                              detail=got)
+        if intent == "withdraw":
+            got = _lit_withdraw(ctx.store, slot, str(payload.get("reason_code") or ""),
+                                str(payload.get("withdrawn_reason") or note), actor=actor)
+            return _routed_ok(backstop="literal", entry=str(entry), table="lit_candidates",
+                              what_happened="已由系统代为撤掉那一槽（行留在列表里、理由写在行上）",
+                              row=dict(got), landed_id=str(got.get("slot") or ""))
+        if intent == "reject":
+            got = _lit_reject(ctx.store, slot, str(payload.get("reason_code") or ""),
+                              str(payload.get("reject_reason") or note), actor=actor)
+            return _routed_ok(backstop="literal", entry=str(entry), table="lit_candidates",
+                              what_happened="已由系统代为拒收那一槽（理由写在行上、行没删）",
+                              row=dict(got), landed_id=str(got.get("slot") or ""))
+    except LitStageError as exc:          # 兜底方自己的受控拒绝（受控理由码 / 槽位 / 配额）
+        return _routed_refused(backstop="literal", entry=str(entry), table="lit_candidates",
+                               why=str(exc), detail=dict(getattr(exc, "detail", {}) or {}))
+    except Exception as exc:  # noqa: BLE001
+        return _route_unavailable(backstop="literal", entry=str(entry),
+                                  table="lit_candidates", why=f"{type(exc).__name__}: {exc}")
+    if intent != "admit":                 # 表里登记了意图、实现没接上
+        return _route_unavailable(backstop="literal", entry=str(entry),
+                                  table="lit_candidates",
+                                  why=f"没有 {intent!r} 这一格的分派")
+    try:
+        from pathlib import Path
+
+        from . import search_tools as ST
+
+        tctx = ST._Ctx(Path(str(ctx.store.root)), store=ctx.store, actor=actor)
+        got_res = ST._h_lit_admit(tctx, slots=[slot])
+    except Exception as exc:  # noqa: BLE001
+        return _route_unavailable(backstop="literal", entry=str(entry),
+                                  table="lit_candidates", why=f"{type(exc).__name__}: {exc}")
+    if not got_res.ok:
+        return _routed_refused(backstop="literal", entry=str(entry), table="lit_candidates",
+                               why=str(got_res.error or ""), detail=dict(got_res.meta or {}))
+    body = dict(got_res.data or {})
+    admitted = list(body.get("admitted") or ())
+    if not admitted:
+        why = "；".join(str(r.get("why") or r.get("code") or "")
+                        for r in (body.get("refused") or ())) or str(body.get("reason") or "")
+        return _routed_refused(backstop="literal", entry=str(entry), table="lit_candidates",
+                               why=(why or "一条都没入库"), detail=body)
+    row = dict(admitted[0] or {})
+    return _routed_ok(backstop="literal", entry=str(entry), table="lit_candidates",
+                      what_happened="已由系统代为入库（条数上限与重叠检查照核）",
+                      row=row, landed_id=str(row.get("lit_id") or row.get("slot") or ""),
+                      detail=body)
+
 
 
 # ---------------------------------------------------------------- 工具实现
@@ -643,7 +1116,9 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
     side_effect="write_local",
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是新主键字符串（标量），声明不出键集合。
-    returns="data=新主键字符串（**标量，无键集合**）；meta.row 是实际落盘的整行。",
+    returns=("data=新主键字符串（标量）；meta.row 是实际落盘的整行。"
+             "被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, "
+             "what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}"),
     tags=("table", "crud", "write"),
 )
 def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> ToolResult:
@@ -657,8 +1132,10 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
     idf: str = spec["id_field"]
-    # ---- 封野路：这两张表不由通用写口直写（判据只有一处，见 `_direct_write_refusal`）
-    refused = _direct_write_refusal(table)
+    # ---- 直写兜底（2026-10-24 业主裁定）：这两张表不由通用写口直写 —— 请求转交正路执行。
+    # 判据只有一处（见 `_direct_write_disposal`）：能兜底的由兜底方办、兜不了的才拒。
+    refused = _direct_write_disposal(ctx, table=table, op="create",
+                                     payload=dict(row or {}), idf=idf)
     if refused is not None:
         return refused
 
@@ -711,7 +1188,9 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     side_effect="write_local",
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是主键字符串（标量），声明不出键集合。
-    returns="data=主键（**标量，无键集合**）；meta.row 是合并后实际落盘的整行。",
+    returns=("data=主键（标量）；meta.row 是合并后实际落盘的整行。"
+             "被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / "
+             "refused_by_backstop …）。"),
     tags=("table", "crud", "write"),
 )
 def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, Any]) -> ToolResult:
@@ -725,14 +1204,15 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
         idf = _spec_of(table)["id_field"]
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
-    # ---- 封野路：同 `table.create`（判据只有一处，见 `_direct_write_refusal`）。
-    # 这一格也是"V 签完之后把档位写强"那条路被关掉的地方 ⇒ 出口是秘书的
-    # `record_statement`：同一份内容再交一次，它会把那一行改上去（不新建）。
-    refused = _direct_write_refusal(table)
-    if refused is not None:
-        return refused
+    # ---- 直写兜底：同 `table.create`（见 `_direct_write_disposal`）。
+    # 这一格也是"V 签完之后把档位写强"那条路被接管的地方：同一份内容再交一次，
+    # 秘书会按 `verifications` 里那一签决定升不升档（升档就地改那一行、不新建）。
     if not patch:
         return fail("patch 不能为空（空 patch 只会更新 updated_at，通常是调用方写错了）", table=table, id=id, kind="param_error")
+    refused = _direct_write_disposal(ctx, table=table, op="update",
+                                     payload=dict(patch or {}), id=id, idf=idf)
+    if refused is not None:
+        return refused
 
     try:
         with ctx.store.tx(table, "counters", actor=ctx.actor, note=f"tool:table.update:{table}") as tx:
@@ -772,7 +1252,8 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是布尔标量（是否真的删掉了），声明不出键集合。
     # 引用者清单在 meta.references 里（被拒时是原因，放行时是将会悬空的清单）。
-    returns="data=是否真的删掉了（**布尔标量，无键集合**）；meta.references 列出引用者（被拒时是原因，放行时是将会悬空的清单）。",
+    returns=("data=是否真的删掉了（布尔标量）；meta.references 列出引用者（被拒时是原因，"
+             "放行时是将会悬空的清单）。被兜底接管那一档 data 是对象（同上）。"),
     tags=("table", "crud", "write"),
 )
 def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
@@ -787,8 +1268,11 @@ def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
     idf: str = spec["id_field"]
-    # ---- 封野路（第二档）：`lit_candidates` 的行不许物理删（判据见 `_candidate_delete_refusal`）
-    no_delete = _candidate_delete_refusal(table, id)
+    # ---- 删除也走一次兜底：`lit_candidates` 的行「删掉」按意图分派成「撤掉」（见
+    # `_direct_write_disposal`）—— 物理删会把"第 3 号被撤了哪一篇、为什么"永久抹掉，
+    # 而序号不复用只有在那一行还在盘上时才成立。别的表的删除不制造证据 ⇒ 判据放行。
+    no_delete = _direct_write_disposal(ctx, table=table, op="delete",
+                                       payload={}, id=id, idf=idf)
     if no_delete is not None:
         return no_delete
     # 声明所有会被读到的表（引用扫描要逐张查）+ counters。
@@ -1210,6 +1694,14 @@ def _selftest() -> int:
         # mp2-7.jsonl` 第 97 行 —— 手写 `bits={}` + `evidence_kind="heuristic"`）。
         # 自检的职责是"真走一遍生产路径"，所以这里改成「生产路径本身」：秘书落盘；
         # 而"直写被拒"这件事在 [4] 里单独判一次（否则这一节会变成一条恒真断言的集合）。
+        #
+        # 2026-10-24（本批缺陷 B）：夹具显式写了 origin="own_result"，就必须同时
+        # 声明 self_authored=True —— `conceptrows.concept_origin_problem` 的 docstring
+        # 第 3 条写着"它不是默认值"，秘书写入侧读的是同一份判据。此前的夹具只写了
+        # origin，于是三条概念行都被 concept_origin_refused 拒掉，后面那条链
+        # （relations / statements.count / 删除保护 / search / list）跟着一起红 14 项。
+        # 错在夹具一侧，不在判据：判据的负控见
+        # `tests/test_tools_table_fs.py::test_a_concept_declaring_own_result_without_self_authored_is_refused`。
         from ..secretary import Secretary
 
         sec = Secretary("B", root=st.root, store=st)
@@ -1217,6 +1709,7 @@ def _selftest() -> int:
         for name in ("群", "域", "环"):
             got = sec.record_statement(
                 {"kind": "concept", "label": name, "origin": "own_result",
+                 "self_authored": True,
                  "statement_full": f"{name}的陈述"}, role="B")
             check(f"概念行 {name} 经秘书落盘", bool(got.get("created")),
                   f"stmt_id={got.get('stmt_id')} refused={got.get('refused')}")
@@ -1286,21 +1779,23 @@ def _selftest() -> int:
         bad = reg.call("table.create", table="research_questions",
                        row={"question": "q", "origin": "f", "nmae": "拼错"})
         check("未知字段被拒", not bad.ok and "没有字段" in (bad.error or ""), f"error={bad.error}")
-        # ---- 封野路（2026-10-19 晚）：`statements` / `dependencies` 不由通用写口直写。
+        # ---- 直写兜底（2026-10-24 业主裁定）：`statements` / `dependencies` 的直写请求
+        # 由系统转交正路执行 —— 通用写口不再自己写，也不再"拒 + 指路"。
         for tname in ("statements", "dependencies"):
             bad = reg.call("table.create", table=tname,
                            row={"origin": "own_result", "kind": "theorem",
                                 "statement_full": "手写的", "quote_reason": "尚未逐字校验"})
-            check(f"直写 {tname} 被拒（direct_write_refused）",
-                  not bad.ok and bad.meta.get("kind") == "direct_write_refused",
+            check(f"直写 {tname} 被转交正路（routed_to_backstop.*）",
+                  not bad.ok and str(bad.meta.get("kind") or "").startswith(
+                      "routed_to_backstop"),
                   f"ok={bad.ok} kind={bad.meta.get('kind')}")
-            check(f"{tname} 的拒信逐字指路（Secretary.record_statement / own.register_statement）",
-                  "Secretary.record_statement" in (bad.error or "")
-                  and "own.register_statement" in (bad.error or ""), f"error={bad.error}")
+            check(f"{tname} 的读数带着兜底方的原话（refused_by_backstop）",
+                  bool(bad.meta.get("refused_by_backstop")), f"meta={bad.meta}")
         bad = reg.call("table.update", table="statements", id=concept_ids[0],
                        patch={"evidence_kind": "proof_review"})
-        check("直改 statements 被拒（升档也要走秘书）",
-              not bad.ok and bad.meta.get("kind") == "direct_write_refused",
+        check("直改 statements 也被转交（升档由秘书按 V 那一签判）",
+              not bad.ok and (str(bad.meta.get("kind") or "").startswith("routed_to_backstop")
+                              or bad.meta.get("kind") == "not_found"),
               f"ok={bad.ok} kind={bad.meta.get('kind')}")
         check("野路被拒之后一行都没多", reg.call("table.count", table="statements").data == 3,
               "(statements 仍为 3 行)")

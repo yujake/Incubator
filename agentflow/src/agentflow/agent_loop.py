@@ -36,6 +36,7 @@ from . import sessions as SS
 from . import userio as U
 from . import llmseam as LL
 from . import promptstability as PSTAB
+from . import stepdispatch as SD
 from .llmseam import LlmSeam
 
 SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final",
@@ -514,18 +515,26 @@ def _call_brief(shape: str, payload: Mapping[str, Any]) -> str:
     return shape
 
 
-def _multi_call_warning(face: Any, call: Any) -> str:
-    """D-35（方案 B）的读数：一步给了多条工具调用 ⇒ 只执行了第 1 条，点名丢掉的那几条。
+def _first_call_action(face: Any, call: Any, shape: str, payload: Mapping[str, Any]) -> str:
+    """这一步第一条调用的动作名（读数用：广告名映回真名，`fs_read` → `fs.read`）。
 
-    为什么必须有这一句（不能静默只执行第一条）：模型以为其余几条也生效了，
-    "它请求过什么"与"框架做了什么"之间就会差一截，而在盘上一字不留。
-    名字走 `ToolFace.action_name`（广告名 → 真名），于是"丢的是哪个动作"可核对。
+    只服务"逐条记账"的第一条那一格 —— 其余条目的名字由 `stepdispatch` 从载荷里取。
+    取不到（没有原生面 / 没有调用表）就退回形状名，绝不编一个名字出来。
     """
     calls = tuple(getattr(call, "tool_call_list", ()) or ())
-    dropped = [face.action_name(c) for c in calls[1:]]
-    names = "、".join(dropped) or "(读不出名字)"
-    return (f"这一步给了 {len(calls)} 条工具调用，只执行第 1 条"
-            f"（其余 {len(calls) - 1} 条丢弃：{names}）")
+    if face is not None and calls:
+        try:
+            return str(face.action_name(calls[0]))
+        except Exception:  # noqa: BLE001 —— 读数坏了不许带走这一步
+            pass
+    return SD.action_of(shape, payload)
+
+
+# D-35 的读数"只执行第 1 条"到 2026-10-22 为止是本文件唯一处理"一步多条调用"的落点。
+# 现在那件事搬到 `stepdispatch.catch_step_request`（接住 → 拆分 → 逐条执行 → 汇总），
+# 理由与"为什么不能在循环里再写一段多条怎么办"见该模块 docstring。
+# 本文件不再有"多条怎么办"的分支：循环只按 `StepDispatch.items` 逐条走同一条路
+# （判据 `tests/test_multi_call_is_split_and_executed.py` 的"没有旁路"那一条扫源码）。
 
 
 def _dead_loop_line(*, streak: int, same_reading: int, limit: int, what: str) -> str:
@@ -618,6 +627,22 @@ def tool_message(step: int, content: str, *, name: str = "") -> dict[str, Any]:
     if name:
         out["name"] = str(name)
     return out
+
+
+def _invalid_correction(step: int, problem: str, detail: str) -> str:
+    """一个 invalid 步的纠正话术（按 `problem` 分档）—— 与 `resume_messages` 的取法同一份。
+
+    为什么要一个名字：拆分口径里每条装不出来的调用也要落一对 assistant/tool 消息
+    （续跑重建是按 `agent_step` 事件逐条重放的，只落事件不落消息会让重建出来的那一段
+    比当时多两步）。那对消息的纠正话术必须与重建侧逐字相同，所以选档这件事只写一处。
+    """
+    if problem == "judge_bad_args":
+        return _bad_args_line(step, detail)
+    if problem == "judge_bad_json":
+        return _bad_json_line(step, problem, detail)
+    if _is_no_reply(problem):
+        return _no_reply_line(step, problem, detail)
+    return _invalid_line(step, problem)
 
 
 def render_messages(messages: Sequence[Mapping[str, Any]]) -> str:
@@ -3451,6 +3476,12 @@ class AgentLoop:
         为什么单独一个方法而不是在循环里写 `while True`：这一句就是那条裁定的落点本身，
         值得有个能被 grep 到的名字与 docstring（判据也直接打在它上面）。
         出口不在这里 —— 循环的 `break` 各自带 `stop_reason`（收工/叫停/预算/墙钟/判停/未接线…）。
+
+        ## 与拆分口径的关系（2026-10-22）
+
+        步数按拆分后的条目记（业主要看的步数是拆后的）：一步给 N 条调用 ⇒ N 条条目、
+        N 个步号。这里不需要为它加游标 —— 循环里每次迭代只消费一个步号，而"这一回合的第 k 条
+        拿到哪个步号"由 `stepdispatch.step_index_of` 算（判据 11 / 12 钉的就是那一处）。
         """
         step = start
         while True:
@@ -4284,6 +4315,12 @@ class AgentLoop:
 
         #: 不设步数硬闸（照 DSH：它的 agent-loop 里没有 maxSteps 这类字段）。
         #: 出口只有 `break`（收工 / 叫停 / 预算 / 墙钟 / 判停 / 未接线…），每个都带自己的 stop_reason。
+        #:
+        #: 拆分口径的待执行条目（一步给 N 条调用 ⇒ 这里排着 N 条，逐条执行、逐条计步）。
+        pending: list[Any] = []
+        dispatch: Any = None
+        turn_call: Any = None
+        turn_cache: dict[str, Any] = {}
         for step in self._step_counter(start_step):
             if step + 1 >= next_report_at:
                 # 跨过阈值 ⇒ 上报（四样读数：已用步数 / 最近在做什么 / 花了多少 / 还没交 final）。
@@ -4374,240 +4411,301 @@ class AgentLoop:
                 if note:
                     run.notes.append(note)
                 break
-            # ---- 集体插话（`draft/39` §3.11 二 D07，用户 2026-10-05 裁）
+            # ---- 回合前段（一个"回合" = 一次模型调用）
             #
-            # 摆在下一步开头：插话不是"再来一条消息"，而是"做这一步之前先看它"。
-            # 为什么在预算判据之后、`ask_step` 之前：预算耗尽/用户叫停时不该再被插话
-            # 拖着做事；而这一步的提示词是下一句就要发出去的，插话必须在那之前进去。
-            new_interjections, ij_problems = read_interjections(self.session_root, self.role,
-                                                                sid=self.sid)
-            run.notes.extend(f"插话读取：{p}" for p in ij_problems)
-            if new_interjections:
-                ids = [str(i.get("interjection_id") or "") for i in new_interjections]
-                messages.append(user_message(_interjection_block(new_interjections)))
-                _p, seen_problem = mark_interjections_seen(self.session_root, self.role, ids,
-                                                           sid=self.sid, step=step)
-                if seen_problem:
-                    run.notes.append(f"插话消费登记失败：{seen_problem}")
-                if any(i.get("is_stop") for i in new_interjections):
-                    # 叫停类：这一步做完之后要落"有没有改变做法"（下面按 key 比）
-                    pending_interjections = {"ids": ids, "step": step,
-                                             "prev_key": prev_key, "prev_reading": prev_reading}
-                # ---- 新用户消息 ⇒ 进度计数清零（裁定 12-F；只有主控有这条通道）
+            # 拆出来的条目还排着（`pending` 非空）⇒ 这一趟不向模型要新东西，直接执行下一条：
+            # 一个回合管 N 条调用，而"要一次模型"这件事只发生在队列空的时候。
+            # 于是"一步给 N 条"与"一步给 1 条"走的是同一条执行路径（`stepdispatch` 的拆分结果），
+            # 循环里没有第二支"多条怎么办"。
+            if not pending:
+                # ---- 集体插话（`draft/39` §3.11 二 D07，用户 2026-10-05 裁）
                 #
-                # 逐字理由（DSH 的承诺，照搬）：「A new user message clears the count,
-                # so a fresh instruction is never treated as a loop」。
-                # 只有 M 收得到用户插话（`read_interjections` 对非主控直接返回空表），
-                # 所以这一格结构上只对主控生效；子代理按"委托边界"清零（见循环头的说明）。
-                # 父代理的一条普通留言不清：留言不是新委托 —— 那条负控在
-                # `tests/test_the_progress_counts_are_per_delegation.py` 里。
-                if any(str(i.get("channel") or "") == "user" for i in new_interjections):
-                    prev_key, prev_reading, prev_stall = "", "", ""
-                    same_call, stalled = 0, 0
-                    counters_reset_at = step
-            # ---- S-B（裁定 7乙 + 8乙 + 12-I=甲）：步边界上的压缩判定。
-            #
-            # 位置与理由：读插话之后、`ask_step` 之前 —— 这一步的提示词是下一句就要发出去的，
-            # 压缩必须在那之前生效；而插话（新用户消息）不该被刚压过的历史吃掉。
-            # 判定本身在 `_maybe_compact`（它负责三态、事件三件套与"只压一次"的闸门）。
-            messages = self._maybe_compact(messages, step=step, run=run)
-            # 静态/动态分离之后 system 本该一个字节都不变；这里每步确认一次
-            # （变了就如实发新的并落一条红灯读数，见 `_system_at_step`）。
-            system = self._system_at_step(system_facts, system, step=step)
-            data, call = self.seam.ask_step(self._prompt(messages, step=step),
-                                            system=system, task_id=my_task_id,
-                                            note=f"{self.role}.step{step}",
-                                            face=face)
-            # 这一步那次调用的缓存读数（三态：上游没给 ⇒ `hit`/`miss` 都是 `None`，
-            # 不许折成 0）。它随后挂进这一步的 `LoopStep` 与 `agent_step` 事件 ——
-            # 改前上游的读数只到 `SeamCall` 为止，一条 run 记录里都没有它。
-            step_cache = PSTAB.prompt_cache_record(call)
-            # 第一次成功的模型调用之后才登记投递（推迟标记的落点，见上面那段注释）：
-            # "模型真的被问过一次"= 这一批消息确实进了上下文 ⇒ 承认它送达。
-            if pending_delivery and not delivered_marked and call.ok:
-                problem = mark_delivered(self.session_root, self.role, pending_delivery,
-                                         sid=self.sid)
-                if problem:
-                    run.notes.append(f"投递登记失败：{problem}")
-                pending_delivery, delivered_marked = [], True
-            if pending_seen and call.ok:
-                # 渲染即 seen（业主 A3=甲）：这一步的提示词里带了它们 ⇒ 标 seen。
-                # 只标渲染过的那些（`board_digest` 返回什么就标什么，D75 的口径）。
-                still: list[str] = []
-                for item_id in pending_seen:
-                    state, why = self.conductor.mark_item_seen(
-                        item_id, by_task_id=my_task_id, step=step)
-                    if not state:
-                        still.append(item_id)
-                        run.notes.append(f"工作项 {item_id} 没标成 seen：{why}")
-                    elif state == "ack_unbacked":
-                        run.notes.append(f"工作项 {item_id}：{why}")
-                    else:
-                        # S4-b：停止通知（`kind=notice`、`expects=ack`）读到就算收到
-                        # ⇒ 框架替这一趟 ack 它（"ack 才算传达到"，`draft/84` §2.2）。
-                        # 为什么框架可以代 ack：这条通知的对象是这一趟进程（收工），
-                        # 不是要模型交付的活；模型有没有"表态"不影响它已经收到这件事。
-                        ack_note = self._ack_stop_notice(item_id, step)
-                        if ack_note:
-                            run.notes.append(ack_note)
-                pending_seen = still
-            if data is None:
-                args_error = call.problem == "judge_bad_args"
-                # 「没拿到可用的回复」不进坏 JSON 那一档（`LoopRun.no_reply` 的说明）：
-                # 它不是"它说错了"，是我们没收到能用的回答。
-                no_reply = _is_no_reply(call.problem)
-                auth_failed = call.problem == "judge_auth_failed"
-                if args_error:
-                    run.bad_args += 1
-                    run.bad_args_streak += 1
-                elif no_reply:
-                    run.no_reply += 1
-                    run.no_reply_streak += 1
-                elif auth_failed:
-                    # key 无效/无权：不是"没查成"（查过了、确定不行），也不是它说错了。
-                    # 处置只有一条（换 key / 查额度），重试三次只是把钱再烧一遍 ⇒ 立刻停。
-                    # 这里不并进任何 streak（`bad_json` / `no_reply` 都不）：并进去会让
-                    # "三连击"这个读数把一个配置错误说成协议问题 —— 而这一条正是
-                    # 「归因错 ⇒ 处置错」那一族（2026-10-15 与 `judge_no_reply` 同批加）。
-                    pass
-                else:
-                    run.bad_json += 1
-                    run.bad_json_streak += 1
-                # 把模型实际说了什么、以及「框架为什么不认」都留在这一步里（2026-09-30；
-                # `draft/37` §68 补齐 `detail`）：只有 `problem` 时，"它为什么解析不出来"
-                # 在台账上是不可回答的 —— 真机里 M 连着三次 `judge_bad_json`，我只能靠猜。
-                # 第十二趟更糟：`problem` 是 `judge_bad_json`，而 `detail`（带解析报错
-                # 与原文前 200 字）「根本没进记录」 —— 于是"为什么这两句 JSON 没解析出来"
-                # 又一次只能靠猜。留 detail + raw_reply，两条判据（"说了什么"与
-                # "框架怎么读的"）都在盘上。
-                bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
-                              "raw_reply": _clip(call.text, 600)}
-                # 整条原文落盘（D40）：报错给了列号，而被剪掉的那一段才是证据。
-                dump = _dump_invalid_reply(self.workspace_root, self.sid, step, call.text or "")
-                if dump:
-                    bad_result["raw_reply_path"] = dump
-                run.steps.append(LoopStep(step, "invalid", {}, bad_result,
-                                          problem=call.problem, cache=step_cache))
-                SS.append(self.session_root, {
-                    "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
-                    "payload": {}, "result": dict(bad_result),
-                    "prompt_cache": dict(step_cache),
-                }, sid=self.sid)
-                if call.problem == "judge_not_wired":
-                    run.stop_reason = "not_wired"
-                    run.final = ("没有接模型（judge_not_wired）：这次运行没有产生任何判断，"
-                                 "也没有写任何数据")
-                    break
-                if auth_failed:
-                    # 立刻停：理由说实话（既不是"它说错了"，也不是"网络没通"），
-                    # 并给出唯一那条可行动的路。步骤与事件已在上面记全（与 `judge_not_wired` 同形）。
-                    run.stop_reason = "model_auth_failed"
-                    run.final = (f"模型没认这把 key（{_clip(str(call.detail), 200)}）—— "
-                                 "这不是它回了坏 JSON，也不是网络没通；"
-                                 "换 key / 查额度之后再跑，重试没有意义")
-                    break
-                if args_error:
-                    # 参数坏：「交回工具层」（`draft/37` §65，DSH 的 `ToolArgsError` 口径）。
-                    # 反馈里点名"是哪个函数的参数坏了"（`call.detail` 带着工具名与原文），
-                    # 这类错误是可纠正的，不该按"形状漂移"处置。
-                    if run.bad_args_streak > self.max_bad_args:
-                        run.stop_reason = "bad_args_limit"
-                        run.final = (f"连续 {run.bad_args_streak} 次把工具参数写成不合法 JSON"
-                                     f"（最后一次：{call.detail}），停止")
-                        break
-                    # S-C：这一句纠正进 tool 那条消息（配对 id 照给 —— 它确实是
-                    # 框架对"这一步那次调用"的回答）。
-                    messages.append(assistant_message(step, {}, name="invalid"))
-                    messages.append(tool_message(step, _bad_args_line(step, str(bad_result["detail"]))))
-                    continue
-                if no_reply:
-                    # 这一档不走"重述协议"那条纠正（它不是它说错了），也不与坏 JSON 共用一个上限。
-                    # 上限仍复用 `max_bad_json`：它量的是"连着几次这一步没产出任何东西"，
-                    # 而上限存在的理由是"不许拿整趟运行去等一个不回来的回答"
-                    # （每次超时在网关里已经自己重试过 `ModelSpec.max_retries` 次）。
-                    if run.no_reply_streak > self.max_bad_json:
-                        # 停止理由逐档说实话（2026-10-15 加第三档）：超时 / 输出吃光 /
-                        # 没连上（`judge_no_reply:<kind>`）三者的处置方向不同 ——
-                        # 调大上限、拆小这一步、等网络回来 —— 而它们此前共用一个
-                        # "bad_json_limit"，那句话在 DNS 失效那一趟是假的。
-                        if call.problem == "judge_timeout":
-                            run.stop_reason = "model_timeout"
-                            nxt = ("超时那一档可调大 AGENTFLOW_MODEL_TIMEOUT_SEC")
-                        elif call.problem == "judge_output_limit":
-                            run.stop_reason = "model_output_limit"
-                            nxt = "输出吃光那一档要把这一步拆小、把思考压短"
+                # 摆在下一步开头：插话不是"再来一条消息"，而是"做这一步之前先看它"。
+                # 为什么在预算判据之后、`ask_step` 之前：预算耗尽/用户叫停时不该再被插话
+                # 拖着做事；而这一步的提示词是下一句就要发出去的，插话必须在那之前进去。
+                new_interjections, ij_problems = read_interjections(self.session_root, self.role,
+                                                                    sid=self.sid)
+                run.notes.extend(f"插话读取：{p}" for p in ij_problems)
+                if new_interjections:
+                    ids = [str(i.get("interjection_id") or "") for i in new_interjections]
+                    messages.append(user_message(_interjection_block(new_interjections)))
+                    _p, seen_problem = mark_interjections_seen(self.session_root, self.role, ids,
+                                                               sid=self.sid, step=step)
+                    if seen_problem:
+                        run.notes.append(f"插话消费登记失败：{seen_problem}")
+                    if any(i.get("is_stop") for i in new_interjections):
+                        # 叫停类：这一步做完之后要落"有没有改变做法"（下面按 key 比）
+                        pending_interjections = {"ids": ids, "step": step,
+                                                 "prev_key": prev_key, "prev_reading": prev_reading}
+                    # ---- 新用户消息 ⇒ 进度计数清零（裁定 12-F；只有主控有这条通道）
+                    #
+                    # 逐字理由（DSH 的承诺，照搬）：「A new user message clears the count,
+                    # so a fresh instruction is never treated as a loop」。
+                    # 只有 M 收得到用户插话（`read_interjections` 对非主控直接返回空表），
+                    # 所以这一格结构上只对主控生效；子代理按"委托边界"清零（见循环头的说明）。
+                    # 父代理的一条普通留言不清：留言不是新委托 —— 那条负控在
+                    # `tests/test_the_progress_counts_are_per_delegation.py` 里。
+                    if any(str(i.get("channel") or "") == "user" for i in new_interjections):
+                        prev_key, prev_reading, prev_stall = "", "", ""
+                        same_call, stalled = 0, 0
+                        counters_reset_at = step
+                # ---- S-B（裁定 7乙 + 8乙 + 12-I=甲）：步边界上的压缩判定。
+                #
+                # 位置与理由：读插话之后、`ask_step` 之前 —— 这一步的提示词是下一句就要发出去的，
+                # 压缩必须在那之前生效；而插话（新用户消息）不该被刚压过的历史吃掉。
+                # 判定本身在 `_maybe_compact`（它负责三态、事件三件套与"只压一次"的闸门）。
+                messages = self._maybe_compact(messages, step=step, run=run)
+                # 静态/动态分离之后 system 本该一个字节都不变；这里每步确认一次
+                # （变了就如实发新的并落一条红灯读数，见 `_system_at_step`）。
+                system = self._system_at_step(system_facts, system, step=step)
+                data, call = self.seam.ask_step(self._prompt(messages, step=step),
+                                                system=system, task_id=my_task_id,
+                                                note=f"{self.role}.step{step}",
+                                                face=face)
+                # 这一步那次调用的缓存读数（三态：上游没给 ⇒ `hit`/`miss` 都是 `None`，
+                # 不许折成 0）。它随后挂进这一步的 `LoopStep` 与 `agent_step` 事件 ——
+                # 改前上游的读数只到 `SeamCall` 为止，一条 run 记录里都没有它。
+                step_cache = PSTAB.prompt_cache_record(call)
+                # 第一次成功的模型调用之后才登记投递（推迟标记的落点，见上面那段注释）：
+                # "模型真的被问过一次"= 这一批消息确实进了上下文 ⇒ 承认它送达。
+                if pending_delivery and not delivered_marked and call.ok:
+                    problem = mark_delivered(self.session_root, self.role, pending_delivery,
+                                             sid=self.sid)
+                    if problem:
+                        run.notes.append(f"投递登记失败：{problem}")
+                    pending_delivery, delivered_marked = [], True
+                if pending_seen and call.ok:
+                    # 渲染即 seen（业主 A3=甲）：这一步的提示词里带了它们 ⇒ 标 seen。
+                    # 只标渲染过的那些（`board_digest` 返回什么就标什么，D75 的口径）。
+                    still: list[str] = []
+                    for item_id in pending_seen:
+                        state, why = self.conductor.mark_item_seen(
+                            item_id, by_task_id=my_task_id, step=step)
+                        if not state:
+                            still.append(item_id)
+                            run.notes.append(f"工作项 {item_id} 没标成 seen：{why}")
+                        elif state == "ack_unbacked":
+                            run.notes.append(f"工作项 {item_id}：{why}")
                         else:
-                            run.stop_reason = "model_unreachable"
-                            nxt = ("没连上那一档要看网络/DNS 与本机到 api 的通路"
-                                   "（网关已按 `ModelSpec.max_retries` 重试过）")
-                        run.final = (
-                            f"连着 {run.no_reply_streak} 次没拿到可用的回复"
-                            f"（最后一次：{call.problem}；{_clip(str(bad_result['detail']), 200)}）—— "
-                            "这不是它回了坏 JSON，是这一步没有产出可用的东西；停止。"
-                            f"下一趟可以 `--resume` 续跑；{nxt}")
+                            # S4-b：停止通知（`kind=notice`、`expects=ack`）读到就算收到
+                            # ⇒ 框架替这一趟 ack 它（"ack 才算传达到"，`draft/84` §2.2）。
+                            # 为什么框架可以代 ack：这条通知的对象是这一趟进程（收工），
+                            # 不是要模型交付的活；模型有没有"表态"不影响它已经收到这件事。
+                            ack_note = self._ack_stop_notice(item_id, step)
+                            if ack_note:
+                                run.notes.append(ack_note)
+                    pending_seen = still
+                if data is None:
+                    args_error = call.problem == "judge_bad_args"
+                    # 「没拿到可用的回复」不进坏 JSON 那一档（`LoopRun.no_reply` 的说明）：
+                    # 它不是"它说错了"，是我们没收到能用的回答。
+                    no_reply = _is_no_reply(call.problem)
+                    auth_failed = call.problem == "judge_auth_failed"
+                    if args_error:
+                        run.bad_args += 1
+                        run.bad_args_streak += 1
+                    elif no_reply:
+                        run.no_reply += 1
+                        run.no_reply_streak += 1
+                    elif auth_failed:
+                        # key 无效/无权：不是"没查成"（查过了、确定不行），也不是它说错了。
+                        # 处置只有一条（换 key / 查额度），重试三次只是把钱再烧一遍 ⇒ 立刻停。
+                        # 这里不并进任何 streak（`bad_json` / `no_reply` 都不）：并进去会让
+                        # "三连击"这个读数把一个配置错误说成协议问题 —— 而这一条正是
+                        # 「归因错 ⇒ 处置错」那一族（2026-10-15 与 `judge_no_reply` 同批加）。
+                        pass
+                    else:
+                        run.bad_json += 1
+                        run.bad_json_streak += 1
+                    # 把模型实际说了什么、以及「框架为什么不认」都留在这一步里（2026-09-30；
+                    # `draft/37` §68 补齐 `detail`）：只有 `problem` 时，"它为什么解析不出来"
+                    # 在台账上是不可回答的 —— 真机里 M 连着三次 `judge_bad_json`，我只能靠猜。
+                    # 第十二趟更糟：`problem` 是 `judge_bad_json`，而 `detail`（带解析报错
+                    # 与原文前 200 字）「根本没进记录」 —— 于是"为什么这两句 JSON 没解析出来"
+                    # 又一次只能靠猜。留 detail + raw_reply，两条判据（"说了什么"与
+                    # "框架怎么读的"）都在盘上。
+                    bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
+                                  "raw_reply": _clip(call.text, 600)}
+                    # 整条原文落盘（D40）：报错给了列号，而被剪掉的那一段才是证据。
+                    dump = _dump_invalid_reply(self.workspace_root, self.sid, step, call.text or "")
+                    if dump:
+                        bad_result["raw_reply_path"] = dump
+                    run.steps.append(LoopStep(step, "invalid", {}, bad_result,
+                                              problem=call.problem, cache=step_cache))
+                    SS.append(self.session_root, {
+                        "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
+                        "payload": {}, "result": dict(bad_result),
+                        "prompt_cache": dict(step_cache),
+                    }, sid=self.sid)
+                    if call.problem == "judge_not_wired":
+                        run.stop_reason = "not_wired"
+                        run.final = ("没有接模型（judge_not_wired）：这次运行没有产生任何判断，"
+                                     "也没有写任何数据")
+                        break
+                    if auth_failed:
+                        # 立刻停：理由说实话（既不是"它说错了"，也不是"网络没通"），
+                        # 并给出唯一那条可行动的路。步骤与事件已在上面记全（与 `judge_not_wired` 同形）。
+                        run.stop_reason = "model_auth_failed"
+                        run.final = (f"模型没认这把 key（{_clip(str(call.detail), 200)}）—— "
+                                     "这不是它回了坏 JSON，也不是网络没通；"
+                                     "换 key / 查额度之后再跑，重试没有意义")
+                        break
+                    if args_error:
+                        # 参数坏：「交回工具层」（`draft/37` §65，DSH 的 `ToolArgsError` 口径）。
+                        # 反馈里点名"是哪个函数的参数坏了"（`call.detail` 带着工具名与原文），
+                        # 这类错误是可纠正的，不该按"形状漂移"处置。
+                        if run.bad_args_streak > self.max_bad_args:
+                            run.stop_reason = "bad_args_limit"
+                            run.final = (f"连续 {run.bad_args_streak} 次把工具参数写成不合法 JSON"
+                                         f"（最后一次：{call.detail}），停止")
+                            break
+                        # S-C：这一句纠正进 tool 那条消息（配对 id 照给 —— 它确实是
+                        # 框架对"这一步那次调用"的回答）。
+                        messages.append(assistant_message(step, {}, name="invalid"))
+                        messages.append(tool_message(step, _bad_args_line(step, str(bad_result["detail"]))))
+                        continue
+                    if no_reply:
+                        # 这一档不走"重述协议"那条纠正（它不是它说错了），也不与坏 JSON 共用一个上限。
+                        # 上限仍复用 `max_bad_json`：它量的是"连着几次这一步没产出任何东西"，
+                        # 而上限存在的理由是"不许拿整趟运行去等一个不回来的回答"
+                        # （每次超时在网关里已经自己重试过 `ModelSpec.max_retries` 次）。
+                        if run.no_reply_streak > self.max_bad_json:
+                            # 停止理由逐档说实话（2026-10-15 加第三档）：超时 / 输出吃光 /
+                            # 没连上（`judge_no_reply:<kind>`）三者的处置方向不同 ——
+                            # 调大上限、拆小这一步、等网络回来 —— 而它们此前共用一个
+                            # "bad_json_limit"，那句话在 DNS 失效那一趟是假的。
+                            if call.problem == "judge_timeout":
+                                run.stop_reason = "model_timeout"
+                                nxt = ("超时那一档可调大 AGENTFLOW_MODEL_TIMEOUT_SEC")
+                            elif call.problem == "judge_output_limit":
+                                run.stop_reason = "model_output_limit"
+                                nxt = "输出吃光那一档要把这一步拆小、把思考压短"
+                            else:
+                                run.stop_reason = "model_unreachable"
+                                nxt = ("没连上那一档要看网络/DNS 与本机到 api 的通路"
+                                       "（网关已按 `ModelSpec.max_retries` 重试过）")
+                            run.final = (
+                                f"连着 {run.no_reply_streak} 次没拿到可用的回复"
+                                f"（最后一次：{call.problem}；{_clip(str(bad_result['detail']), 200)}）—— "
+                                "这不是它回了坏 JSON，是这一步没有产出可用的东西；停止。"
+                                f"下一趟可以 `--resume` 续跑；{nxt}")
+                            break
+                        messages.append(assistant_message(step, {}, name="invalid"))
+                        messages.append(tool_message(
+                            step, _no_reply_line(step, call.problem, str(bad_result["detail"]))))
+                        continue
+                    if run.bad_json_streak > self.max_bad_json:
+                        run.stop_reason = "bad_json_limit"
+                        run.final = (f"连续 {run.bad_json_streak} 次没有给出可解析的 JSON"
+                                     f"（最后一次：{call.problem}），停止")
                         break
                     messages.append(assistant_message(step, {}, name="invalid"))
                     messages.append(tool_message(
-                        step, _no_reply_line(step, call.problem, str(bad_result["detail"]))))
+                        step, _bad_json_line(step, call.problem, str(bad_result["detail"]))))
                     continue
-                if run.bad_json_streak > self.max_bad_json:
-                    run.stop_reason = "bad_json_limit"
-                    run.final = (f"连续 {run.bad_json_streak} 次没有给出可解析的 JSON"
-                                 f"（最后一次：{call.problem}），停止")
-                    break
-                messages.append(assistant_message(step, {}, name="invalid"))
-                messages.append(tool_message(
-                    step, _bad_json_line(step, call.problem, str(bad_result["detail"]))))
-                continue
-            # `roster=self._address_of`（2026-10-22）：名册名 / 绝对编号也能寻址 ——
-            # 解码这一步就要把它们翻成"哪个角色"（收件箱按角色收），判据只有
-            # `roster_addresses` 那一份（`_address_of` 只是把它的上下文接上）。
-            shape, payload, problem = _shape_of(data, roster=self._address_of)
-            if problem:
-                # 「形状认得出来、只是某个值写错了」与「形状认不出来」分开计
-                # （`draft/37` §140 的真机读数）：前者交回模型改那个值就该能救活
-                # （走 `bad_args` 那一档，与"工具参数不是合法 JSON"同一类），
-                # 后者才是"没按协议说"（`bad_json` 那一档）。
-                # 第 5 趟有一整段因为 `{"message":{"to":"ALL"}}` 被算进后者：连着三次
-                # ⇒ 60 秒整段作废，而它离"把 to 改成 #public"只差一个词。
-                recognized = (next((str(k) for k in data if str(k) in SHAPES), "")
-                              if isinstance(data, Mapping) else "")
-                if recognized:
-                    run.bad_args += 1
-                    run.bad_args_streak += 1
-                else:
+                # `roster=self._address_of`（2026-10-22）：名册名 / 绝对编号也能寻址 ——
+                # 解码这一步就要把它们翻成"哪个角色"（收件箱按角色收），判据只有
+                # `roster_addresses` 那一份（`_address_of` 只是把它的上下文接上）。
+                shape, payload, problem = _shape_of(data, roster=self._address_of)
+                if problem:
+                    # 「形状认得出来、只是某个值写错了」与「形状认不出来」分开计
+                    # （`draft/37` §140 的真机读数）：前者交回模型改那个值就该能救活
+                    # （走 `bad_args` 那一档，与"工具参数不是合法 JSON"同一类），
+                    # 后者才是"没按协议说"（`bad_json` 那一档）。
+                    # 第 5 趟有一整段因为 `{"message":{"to":"ALL"}}` 被算进后者：连着三次
+                    # ⇒ 60 秒整段作废，而它离"把 to 改成 #public"只差一个词。
+                    recognized = (next((str(k) for k in data if str(k) in SHAPES), "")
+                                  if isinstance(data, Mapping) else "")
+                    if recognized:
+                        run.bad_args += 1
+                        run.bad_args_streak += 1
+                    else:
+                        run.bad_json += 1
+                        run.bad_json_streak += 1
+                    bad_result = {"problem": problem, "shape_recognized": recognized,
+                                  "raw_reply": _clip(json.dumps(data, ensure_ascii=False, default=str), 600)}
+                    run.steps.append(LoopStep(step, "invalid", payload, bad_result,
+                                              problem=problem, cache=step_cache))
+                    SS.append(self.session_root, {
+                        "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
+                        "payload": dict(payload), "result": dict(bad_result),
+                        "prompt_cache": dict(step_cache),
+                    }, sid=self.sid)
+                    if recognized and run.bad_args_streak > self.max_bad_args:
+                        run.stop_reason = "bad_args_limit"
+                        run.final = (f"连续 {run.bad_args_streak} 次形状说对了、值写错了"
+                                     f"（形状 {recognized}；最后一次：{problem}），停止")
+                        break
+                    if not recognized and run.bad_json_streak > self.max_bad_json:
+                        run.stop_reason = "bad_json_limit"
+                        run.final = (f"连续 {run.bad_json_streak} 次形状不合法"
+                                     f"（最后一次：{problem}），停止")
+                        break
+                    messages.append(assistant_message(step, data, name=recognized or "step"))
+                    messages.append(tool_message(
+                        step, _payload_line(step, recognized, problem) if recognized
+                        else _invalid_line(step, problem), name=recognized or "step"))
+                    continue
+                # 说对了一次 ⇒ 连击清零（`draft/37` §68）。清零的判据是"它按协议说出了一个形状"，
+                # 不是"那件事办成了" —— 工具被拒、召唤被拒、参数不合法都算说对了协议，
+                # 那些走的是各自的纠正路径（`RELAY_REFUSALS` / `invalid_params`）。
+                run.bad_json_streak = 0
+                run.bad_args_streak = 0
+                run.no_reply_streak = 0
+                # ---- 接住这一步的请求并拆分（唯一入口：`stepdispatch.catch_step_request`）
+                #
+                # 模型一次可能给 1 条、也可能给 4 条原生调用。这里把"这一步要求做什么"
+                # 整包接住、按原顺序拆成有序条目，下面按条目逐条执行（每条 = 一步）。
+                # 单条与多条走的是同一个函数、同一个结果类型：拆一条 = 一条。
+                dispatch = SD.catch_step_request(
+                    SD.StepRequest(
+                        turn_index=step, first_step=step, shape=shape, payload=payload,
+                        action=_first_call_action(face, call, shape, payload), call=call),
+                    decode=self._decode_call_item)
+                if dispatch.problem:
+                    # 接住层自己接不住（一个条目都拆不出来）⇒ 整步 unknown。
+                    # 绝不允许退化成"只跑第一条"：那正是这次要修掉的形态。
+                    unknown = {"problem": dispatch.problem,
+                               "detail": _clip(dispatch.detail, 600)}
+                    run.steps.append(LoopStep(step, "invalid", {}, unknown,
+                                              problem=dispatch.problem, cache=step_cache))
+                    SS.append(self.session_root, {
+                        "kind": "agent_step", "role": self.role, "index": step,
+                        "shape": "invalid", "payload": {},
+                        "result": dict(unknown), "prompt_cache": dict(step_cache),
+                    }, sid=self.sid)
                     run.bad_json += 1
                     run.bad_json_streak += 1
-                bad_result = {"problem": problem, "shape_recognized": recognized,
-                              "raw_reply": _clip(json.dumps(data, ensure_ascii=False, default=str), 600)}
-                run.steps.append(LoopStep(step, "invalid", payload, bad_result,
-                                          problem=problem, cache=step_cache))
-                SS.append(self.session_root, {
-                    "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
-                    "payload": dict(payload), "result": dict(bad_result),
-                    "prompt_cache": dict(step_cache),
-                }, sid=self.sid)
-                if recognized and run.bad_args_streak > self.max_bad_args:
-                    run.stop_reason = "bad_args_limit"
-                    run.final = (f"连续 {run.bad_args_streak} 次形状说对了、值写错了"
-                                 f"（形状 {recognized}；最后一次：{problem}），停止")
-                    break
-                if not recognized and run.bad_json_streak > self.max_bad_json:
-                    run.stop_reason = "bad_json_limit"
-                    run.final = (f"连续 {run.bad_json_streak} 次形状不合法"
-                                 f"（最后一次：{problem}），停止")
-                    break
-                messages.append(assistant_message(step, data, name=recognized or "step"))
-                messages.append(tool_message(
-                    step, _payload_line(step, recognized, problem) if recognized
-                    else _invalid_line(step, problem), name=recognized or "step"))
+                    messages.append(assistant_message(step, {}, name="invalid"))
+                    messages.append(tool_message(step, _invalid_line(step, dispatch.problem)))
+                    if run.bad_json_streak > self.max_bad_json:
+                        run.stop_reason = "bad_json_limit"
+                        run.final = (f"连续 {run.bad_json_streak} 次这一步没有拆出可执行的条目"
+                                     f"（最后一次：{dispatch.problem}），停止")
+                        break
+                    continue
+                pending = list(dispatch.items)
+                turn_call, turn_cache = call, step_cache
+            # ---- 条目执行（一条 = 一步；拆分口径见 `stepdispatch`）
+            #
+            # 走到这里 `pending` 一定有货：要么刚被 `catch_step_request` 拆出来，
+            # 要么是同一回合里剩下的条目。每条都走下面同一条路径 ——
+            # 单条与多条没有第二条路（判据 `test_the_single_path_and_the_multi_path_are_one`）。
+            item = pending.pop(0)
+            step = item.step_index
+            call = turn_call
+            # 缓存读数与思维链只挂在回合的第一条上：它们量的是"那一次模型调用"，
+            # 抄给每一条会让同一笔调用在 `prompt_cache` 汇总里被数 N 次、思维链被读 N 遍。
+            step_cache = turn_cache if item.call_index == 0 else {}
+            shape, payload = item.shape, item.payload
+            # 逐条记账的两个读数（只在多调用回合里算：单条那一路与改前逐字相同）。
+            item_t0 = time.monotonic() if (dispatch is not None and dispatch.multi) else 0.0
+            item_spend0 = self._global_spend()[0] if item_t0 else 0.0
+            if item.problem:
+                # 这一条解码不出来 ⇒ 如实记一条"未执行"，不影响其余条目
+                # （判据③：一条被拒不作废整步）。
+                self._record_undecodable_item(item, dispatch, run, step_cache, messages)
                 continue
-            # 说对了一次 ⇒ 连击清零（`draft/37` §68）。清零的判据是"它按协议说出了一个形状"，
-            # 不是"那件事办成了" —— 工具被拒、召唤被拒、参数不合法都算说对了协议，
-            # 那些走的是各自的纠正路径（`RELAY_REFUSALS` / `invalid_params`）。
-            run.bad_json_streak = 0
-            run.bad_args_streak = 0
-            run.no_reply_streak = 0
             if shape == "final":
                 # ---- 强制 notify 表（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）：除主控外收工必须填这张表
                 # （`to`/`summary`/`body`），填错/没填就打回并附格式说明；主控 M 的 `final` 是给用户的回复，
@@ -4671,10 +4769,27 @@ class AgentLoop:
                     note = self._retire_ready_note()
                     if note:
                         step_result = {**step_result, **note}
-                # 收工这一步也照 D-35 留读数：第一条是 `final`、后面还挂着别的调用
-                # 时，那几条同样被丢弃 —— 同一条纪律（丢弃必须看得见）。
-                if face is not None and len(getattr(call, "tool_call_list", ()) or ()) > 1:
-                    step_result = {**step_result, "warn": _multi_call_warning(face, call)}
+                # ---- 拆分口径的逐条记账（`stepdispatch`）
+                #
+                # 收工这一条也是"回合里的一条"：它同样占一个步号、落一条 `agent_step_call`，
+                # 而"第 k 条 <工具名> <结果一句话>"的汇总挂在回合的最后一条上（模型只读一遍）。
+                # 改前这里是"只执行第 1 条"的 warn —— 真机三趟 76 个多调用步里丢掉的
+                # 107 条全是只读，一条都没执行；现在每一条都有它自己的结局读数。
+                if dispatch is not None and dispatch.multi:
+                    final_outcome = SD.outcome_of(shape, payload, {**step_result, "ok": True})
+                    final_outcome["elapsed_ms"] = int((time.monotonic() - item_t0) * 1000)
+                    final_outcome["usd"] = round(
+                        self._global_spend()[0] - item_spend0, 6)
+                    dispatch.note(item, final_outcome)
+                    self._land_step_call(item, shape, payload, final_outcome, run)
+                    batch = dispatch.provenance(item)
+                    if item.is_last:
+                        summary = dispatch.summary()
+                        batch = {**batch, "summary": summary, "turn": dispatch.reading()}
+                        step_result = {**step_result, "warn": summary,
+                                       "multi_call": batch}
+                    else:
+                        step_result = {**step_result, "multi_call": batch}
                 run.steps.append(LoopStep(step, shape, payload, step_result,
                                           cache=step_cache))
                 run.stop_reason = "final"
@@ -4881,13 +4996,27 @@ class AgentLoop:
                 hint = self._param_table(shape, payload)
                 if hint:
                     result = {**result, "参数表": hint}
-            # ---- D-35（方案 B）：一步给了多条原生工具调用 ⇒ 只执行了第一条。
+            # ---- 拆分口径的逐条记账（`stepdispatch` 接住 → 拆分 → 逐条执行）
             #
-            # 丢弃发生在解析层（`llmseam.ask_step` 取 `tool_call_list[0]`），而"丢了
-            # 哪几条"由 `call.tool_call_list[1:]` 在这里落成一句读数 —— 解析层不静默，
-            # 这一步的结果里就看得见"它请求了 N 条、框架只做了第 1 条、其余是哪些"。
-            if face is not None and len(getattr(call, "tool_call_list", ()) or ()) > 1:
-                result = {**result, "warn": _multi_call_warning(face, call)}
+            # 改前（D-35 方案 B）：解析层只取 `tool_call_list[0]`，其余丢弃，这里只补一句
+            # warn 点名被丢的那几条 —— 真机三趟 76 个多调用步、被丢 107 条全部是只读，
+            # 一个字节都没执行。现在每一条都有自己的步号、自己的准入与记账，
+            # 这里把这一条的结局记下来（`agent_step_call`），并给最后一条挂上汇总
+            # （"第 k 条 <工具名> <结果一句话>" + 一句可执行建议）。
+            if dispatch is not None and dispatch.multi:
+                outcome = SD.outcome_of(shape, payload, result)
+                outcome["elapsed_ms"] = int((time.monotonic() - item_t0) * 1000)
+                outcome["usd"] = round(self._global_spend()[0] - item_spend0, 6)
+                dispatch.note(item, outcome)
+                self._land_step_call(item, shape, payload, outcome, run)
+                batch = dispatch.provenance(item)
+                if item.is_last:
+                    summary = dispatch.summary()
+                    result = {**result, "warn": summary,
+                              "multi_call": {**batch, "summary": summary,
+                                             "turn": dispatch.reading()}}
+                else:
+                    result = {**result, "multi_call": batch}
             # ---- S-B ③（施工单 §2 的甲方案）：剪枝在观测层之前做一次。
             #
             # 位置是关键，也是"假开"那条读数的真正修法：工具层那次（禁改区 `tools/base.py`）
@@ -4902,7 +5031,10 @@ class AgentLoop:
             # （`_recorded_reasoning` 走的截断口径与落档一致）—— 于是"当时那份序列"
             # 与"从事件重建的那份序列"逐条相等（`resume_messages` 的判据靠这一条成立），
             # 而"这段被截过"这件事本身写在文本里（不静默截断）。
-            thought = _recorded_reasoning(call.reasoning)
+            #
+            # 拆分口径：思维链属于那个回合（一次模型调用），所以只有第一条带它 ——
+            # 抄给同一回合的每条会让"它想了什么"在上下文里重复 N 遍。
+            thought = _recorded_reasoning(call.reasoning) if item.call_index == 0 else ""
             event: dict[str, Any] = {
                 "kind": "agent_step", "role": self.role, "index": step, "shape": shape,
                 "payload": dict(payload), "result": dict(step_obj.result),
@@ -5001,6 +5133,15 @@ class AgentLoop:
             # 到不了这里（上面的 `for` 走的是无限计数器，裁定 12-K：不设步数硬闸）。
             # 留着这一支只为"万一有人把计数器换成有限 range"时不静默：见下面的判据。
             run.stop_reason = "no_progress_limit"
+
+        # ---- 拆分口径的收尾：本回合拆出来、但没轮到执行的条目
+        #
+        # 出口（收工 / 判停 / 预算 / 叫停 / 墙钟 / 上行）都可能在回合中途发生。
+        # 剩下的条目照样计步（业主要看的步数是拆后的）并标 `not_executed`，
+        # 理由如实写（"因预算未执行" / "因本回合已收工未执行"）—— 不许把它们静默丢掉，
+        # 更不许把没执行的那一条折成成功。
+        if dispatch is not None and pending:
+            self._settle_pending_items(dispatch, pending, run, messages)
 
         run.spend = self.seam.spend.to_dict()
         # ---- 提示词缓存的收工汇总（2026-10-19）：上游的
@@ -5756,6 +5897,136 @@ class AgentLoop:
             return ""
         return ("【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次"
                 "（键名与类型都要对；表里没列的键一律不许传）：\n- " + "\n- ".join(lines))
+
+    # ---------------------------------------------------------------- 拆分条目（stepdispatch）
+    #
+    # 这一组是本文件与 `stepdispatch` 的接缝，只做三件事：解码第 2..N 条原生调用、
+    # 落"逐条记录"、把没轮到的条目如实收尾。拆分本身与"多条怎么处理"的判据
+    # 全在 `stepdispatch` 里 —— 本文件没有第二支"多条怎么办"。
+
+    def _decode_call_item(self, raw: Mapping[str, Any]) -> tuple[str, Mapping[str, Any],
+                                                                str, str, str]:
+        """接住层的 `decode` 回调：一条原生调用 ⇒ `(shape, payload, action, problem, detail)`。
+
+        与第 1 条走的是同一套解码（`ToolFace.to_shape` → `_shape_of`），所以
+        "第 2 条调用被怎么读"与"第 1 条被怎么读"不可能出现两套判据。
+        解码不出来时第 3 个返回值是 `problem`（那一条不执行、如实记成被拒）。
+        """
+        face = self._face
+        if face is None:
+            return ("", {}, str(raw.get("name") or ""), "judge_bad_json",
+                    "这一趟没有原生工具面 ⇒ 这条调用解码不出来")
+        action = str(face.action_name(raw))
+        data, problem, detail = face.to_shape(raw)
+        if data is None:
+            return "", {}, action, problem or "judge_bad_json", str(detail)
+        shape, payload, problem = _shape_of(data, roster=self._address_of)
+        return str(shape), payload, action, str(problem), ""
+
+    def _land_step_call(self, item: Any, shape: str, payload: Mapping[str, Any],
+                        outcome: Mapping[str, Any], run: "AgentLoop.LoopRun") -> None:
+        """落一条 `agent_step_call`：第几条 / 工具名 / ok / 耗时 / usd（逐条可查的落点）。
+
+        键的三态：`not_executed=True` 的那一条 `ok=False` 且带 `reason`（不许折成成功）；
+        `usd` 是这一条执行期间的全局花销增量（只读工具是 0.0，召唤一路才可能非零），
+        `usd=None` 只在"这一条没执行"时出现（没有花销可算，不是"花了零"）。
+        """
+        try:
+            SS.append(self.session_root, {
+                "kind": SD.STEP_CALL_EVENT, "role": self.role,
+                "index": int(item.step_index),
+                "turn_index": int(item.turn_index),
+                "call_index": int(item.call_index),
+                "calls": int(item.calls),
+                "shape": str(shape),
+                "tool": str(outcome.get("action") or SD.action_of(shape, payload)),
+                "ok": bool(outcome.get("ok")),
+                "outcome": str(outcome.get("line") or ""),
+                "not_executed": bool(outcome.get("not_executed")),
+                "reason": str(outcome.get("reason") or ""),
+                "elapsed_ms": int(outcome.get("elapsed_ms") or 0),
+                "usd": outcome.get("usd"),
+            }, sid=self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 读数落不成不许带走这一趟
+            run.notes.append(f"逐条记录没落成（第 {item.call_index + 1} 条："
+                             f"{type(exc).__name__}: {exc}）")
+
+    def _record_undecodable_item(self, item: Any, dispatch: Any, run: "AgentLoop.LoopRun",
+                                 step_cache: Mapping[str, Any],
+                                 messages: list[dict[str, Any]]) -> None:
+        """这一条装不出来（没广告过的函数 / 参数不是 JSON）⇒ 记一条"未执行"，不影响其余。
+
+        为什么不把它算进 `bad_json` 连击：整步的协议是对的（其余条目照常执行），
+        坏的只是"这一条调用"。把它算进连击会让"模型多给了一条写错的调用"变成
+        "整趟按坏 JSON 收工"，那正是这次要修掉的形态。
+        """
+        outcome = SD.outcome_of(item.shape, item.payload, {}, executed=False)
+        outcome["line"] = ("未执行（解码不出："
+                           f"{SD.digest_line(item.detail or item.problem, 60)}）")
+        outcome["not_executed"] = True
+        outcome["reason"] = "decode"
+        outcome["usd"] = None
+        if dispatch is not None:
+            dispatch.note(item, outcome)
+        entry = {"ok": False, "not_executed": True, "reason": "decode",
+                 "problem": str(item.problem or "judge_bad_json"),
+                 "detail": str(item.detail or ""),
+                 "multi_call": (dispatch.provenance(item) if dispatch is not None else {})}
+        run.steps.append(LoopStep(int(item.step_index), "invalid", dict(item.payload), entry,
+                                  problem=str(item.problem or "judge_bad_json"),
+                                  cache=dict(step_cache)))
+        SS.append(self.session_root, {
+            "kind": "agent_step", "role": self.role, "index": int(item.step_index),
+            "shape": "invalid", "payload": dict(item.payload), "result": dict(entry),
+            "prompt_cache": dict(step_cache),
+        }, sid=self.sid)
+        # 消息序列照 `resume_messages` 对 invalid 步的拼法补上（同一套纠正话术）：
+        # 只落事件不落消息，续跑重建出来的那一段就会比当时多两步。
+        problem = str(item.problem or "judge_bad_json")
+        messages.append(assistant_message(item.step_index, item.payload, name="invalid"))
+        messages.append(tool_message(item.step_index,
+                                     _invalid_correction(item.step_index, problem,
+                                                         str(item.detail or "")),
+                                     name="invalid"))
+        self._land_step_call(item, item.shape, item.payload, outcome, run)
+        run.notes.append(f"第 {item.call_index + 1} 条调用没执行（解码不出）："
+                         f"{SD.digest_line(item.detail or item.problem, 120)}")
+
+    def _settle_pending_items(self, dispatch: Any, pending: list[Any], run: "AgentLoop.LoopRun",
+                              messages: list[dict[str, Any]]) -> None:
+        """把回合里没轮到的条目收尾：照样计步、标"未执行"、理由如实。
+
+        消息序列也要补上同样的两条（assistant + tool）：`resume_messages` 是按
+        `agent_step` 事件逐条重建的，这里只落事件不落消息，续跑那一趟就会看到
+        比当时多出几步 —— "当时那份"与"重建那份逐条相等"是本仓最强的一条判据。
+        """
+        reason = (SD.NOT_EXECUTED_BUDGET if run.stop_reason == "budget"
+                  else SD.NOT_EXECUTED_FINISHED)
+        for item in list(pending):
+            outcome = dispatch.mark_not_executed(item, reason)
+            outcome["usd"] = None
+            shape = str(item.shape or "invalid")
+            entry: dict[str, Any] = {
+                "ok": False, "not_executed": True, "reason": str(reason),
+                "detail": str(outcome.get("detail") or outcome.get("line") or ""),
+                "multi_call": dispatch.provenance(item),
+            }
+            if item.is_last:
+                summary = dispatch.summary()
+                entry["warn"] = summary
+                entry["multi_call"] = {**dispatch.provenance(item), "summary": summary,
+                                       "turn": dispatch.reading()}
+            run.steps.append(LoopStep(int(item.step_index), shape, dict(item.payload), entry,
+                                      cache={}))
+            SS.append(self.session_root, {
+                "kind": "agent_step", "role": self.role, "index": int(item.step_index),
+                "shape": shape, "payload": dict(item.payload), "result": dict(entry),
+                "prompt_cache": {},
+            }, sid=self.sid)
+            messages.append(assistant_message(item.step_index, item.payload, name=shape,
+                                              content=_spoken_half(item.step_index, item.payload)))
+            messages.append(tool_message(item.step_index, _result_half(entry), name=shape))
+            self._land_step_call(item, shape, item.payload, outcome, run)
 
     def _execute(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         if shape == "tool":

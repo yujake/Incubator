@@ -181,21 +181,21 @@ def test_the_injected_tool_writes_through_the_real_implementation(tmp_path):
 
 
 def test_without_the_injection_the_child_is_back_to_writing_tables_by_hand(tmp_path, monkeypatch):
-    """反负控：把注入关掉 ⇒ 这一趟两条路都断（正路没有、野路被拒）。
-    ## 这一条的口径在 2026-10-19 晚换过（`projects/mp2` 的真机读数）
-    改前它断的是"关掉注入之后 `table.create` 那条路真的走得通" —— 那时野路还开着，于是"绿是注入带来的"用"手写表落了库"来证明。
-    现在野路被`store.direct_write_refusal` 受控拒绝（`mp2-7.jsonl` 第 97 行就是它的真机形态），所以本判据改成更强的那一版：
+    """反负控：把注入关掉 ⇒ 这一趟两条路都断（正路没有、通用写口那一笔由系统兜底后仍不成立）。
+    ## 这一条的口径换过两次，最后一次是 2026-10-24（业主裁定「自动将直写请求路由到秘书接管」）
+    改前它断的是"关掉注入之后 `table.create` 那条路真的走得通" —— 那时野路还开着。
+    2026-10-19 晚改成"野路被受控拒绝"；2026-10-24 起改成"野路被转交给秘书那条正路"：
     1. `own.register_statement` 没了 ⇒ 这一步是 `unknown_tool`（正路真的断在这件工具上）；
-    2. `table.create("statements")` 也落不了库 ⇒ `ok=False` + `direct_write_refused`，
-    且拒信把模型指回正路；
+    2. `table.create("statements")` 那一笔被转交秘书 ⇒ 秘书按它自己的判据拒（这一份载荷的
+       `source_lit_id` 不在 literature 里）⇒ `routed_to_backstop.secretary_refused`；
     3. 盘上 statements 0 行 —— 于是正向用例里那一行，除了"注入真的发生了"以外
-    没有任何别的解释（改前那条"手写表也能落库"的出口已经被封掉）。
+    没有任何别的解释（手写表那条出口既不落行、也不是模型自己写的）。
     """
     monkeypatch.setattr(LlmBackend, "_registry_with_own_action",
                         lambda self, base, **kw: base, raising=True)
     # 手写表这一笔连形状都合规（它能过 `table.create` 的字段校验），
     # 可它违反的是动作自己的出处预检（`source_lit_id=999999` 不在 literature 里）
-    # 与"这两张表只经秘书"这条规矩 —— 两条都该把它挡在外面。
+    # 与"这两张表只经正路"这条规矩 —— 两条都该把它挡在外面。
     bad = dict(_GOOD_ROW, source_lit_id="999999")
     st, cond, backend, child = _world(tmp_path, [
         _tool("own.register_statement", dict(bad)),
@@ -211,8 +211,9 @@ def test_without_the_injection_the_child_is_back_to_writing_tables_by_hand(tmp_p
     assert "unknown_tool" in json.dumps(first.get("result") or {}, ensure_ascii=False), first
     got = second.get("result") or {}
     assert got.get("ok") is False, got
-    assert (got.get("meta") or {}).get("kind") == "direct_write_refused", got
-    assert "Secretary.record_statement" in str(got.get("error") or ""), got
+    kind = str((got.get("meta") or {}).get("kind") or "")
+    assert kind.startswith("routed_to_backstop"), got
+    assert "999999" in json.dumps(got.get("meta") or {}, ensure_ascii=False), got
     assert st.rows("statements") == [], (
         "野路居然落库了 —— 那正向用例的绿就说明不了'绿是注入带来的'："
         + str(st.rows("statements"))[:200])

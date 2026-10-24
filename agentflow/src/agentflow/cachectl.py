@@ -1455,6 +1455,9 @@ def cmd_status(args: Any) -> int:
 
     工作区从顶层的 `--root` 取（命令行参数里就有；不给就走 `workspace_root` 那条梯子）：
     这样"当前使用哪一档"与网页读的是同一口径（同一个 `active_reading`）。
+
+    读写：只读：模板文件、缓存目录与 key 指纹（不写任何东西）。
+    实现方式一句话：`cachectl.status_report`。
     """
     path = _readings_path(getattr(args, "readings", ""))
     try:
@@ -1471,6 +1474,11 @@ def cmd_status(args: Any) -> int:
 
 
 def cmd_warm(args: Any) -> int:
+    """`agentflow cache warm --lean on|off|both [--dry-run]`：真预热或只给计划。
+
+    读写：读模板并写缓存落盘（`--dry-run` 只算不写、一次模型都不调；真预热会花钱）。
+    实现方式一句话：`cachectl.warm`（两档 lean 各自一份缓存）。
+    """
     """`agentflow cache warm --lean on|off|both [--dry-run]`：真预热或只给计划。"""
     raw = str(getattr(args, "lean", "") or "")
     wanted = tuple(TIERS) if raw == "both" else ((raw,) if raw in TIERS else ())
@@ -1552,6 +1560,11 @@ def add_subcommands(sub: Any) -> None:
 
 
 def cmd_cache(args: Any) -> int:
+    """`cache` 这一组的总入口（分给两个子命令；认不出就报用法，退出码 2）。
+
+    读写：读提示词模板与两档缓存目录；`warm` 会真发模型调用（花钱），`status` 只读。
+    实现方式一句话：`cachectl`（命令行与网页按钮读同一份实现）。
+    """
     """`cache` 这一组的总入口（分给两个子命令；认不出就报用法，退出码 2）。"""
     which = str(getattr(args, "cache_cmd", "") or "")
     if which == "status":

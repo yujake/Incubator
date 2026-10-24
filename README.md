@@ -447,9 +447,24 @@ The distinction that matters in practice:
 
 ## Command Line
 
-The parser currently exposes 27 subcommands: `build_parser()` is the source of truth, and the
-top-level `--help` prints them in four groups (the grouping table is `cli.SUBCOMMAND_GROUPS`; a
-subcommand missing from it lands in an "ungrouped" row instead of disappearing).
+The parser currently exposes 28 subcommands: `build_parser()` is the source of truth. The top-level
+`--help` now prints four verb groups (`incubate` / `inspect` / `run` / `serve`, table:
+`cli.COMMAND_GROUPS`) plus a short "the old names still work" note; the full 28-row mapping is
+`agentflow --help-legacy` (and `docs/USER-GUIDE.md` §7.2).
+
+```text
+incubate   init start stop status answer inbox submit
+inspect    status-report stats evidence artifacts analyze tools cache budget doctor verify
+run        topic(=old run) pipeline run-a run-b run-agent repair rebuild project closing
+serve      web demo
+```
+
+The group names are not subcommands: `cli.canonical_argv` folds `agentflow inspect stats` back to
+`agentflow stats` before parsing, so every old name keeps its flags, defaults, output, and exit
+codes byte for byte (the count stays 28). `agentflow run` (no member) is still the old topic run;
+its group page is `agentflow run --help`.
+
+The legacy names, grouped the way they were before this change (kept here as an index:
 
 ```
 研究（跑一次研究）
@@ -476,12 +491,18 @@ subcommand missing from it lands in an "ungrouped" row instead of disappearing).
   verify       global invariant check (exit 1 on error)
   tools        list the tool surface per role
   doctor       machine check (no model calls; 0 complete / 1 something missing / 2 could not check);
-               `doctor --selfcheck` compiles every file in the package instead
+               `doctor --selfcheck` compiles every file in the package instead; every failing
+               item carries a `fix_hint` (a command you can copy and run)
   budget       show / set / add to the run budget
   stop         stop a running run-agent (graceful by default)
   cache        two-tier prompt cache: `status` (read-only: landed / fresh / covered / missing,
                plus the key-change reminder) and `warm --lean on|off|both [--dry-run]`
                (real warm-up spends money; `--dry-run` spends 0)
+  stats        four read-only readings (`errors` wrong actions per role, `flow` actions / blocked /
+               relayed per role, `cost` money and tokens per role and per stage, `gates` the eight
+               closing-gate cells) plus `all`; three-state (`checked` / `unknown`) so "nothing
+               happened" and "could not read" never share a value; `inspect stats … --json` returns
+               the four-key envelope (see `docs/CLI-CONTRACT.md`)
 
 运维（数据维护与界面）
   init         initialize data directories and empty tables
@@ -490,6 +511,10 @@ subcommand missing from it lands in an "ungrouped" row instead of disappearing).
   demo         offline end-to-end demo
   web          start the user-facing web server
 ```
+
+`repair`, `rebuild`, `demo`, and `evidence migrate` are staging tools: their implementation now
+lives in `tools/legacy_cli/` and the CLI keeps a one-line forward (byte-identical output; the next
+version deletes them).
 
 Four of them are aliases of the `start` execution body (`cli._run_spec`) and keep their old flags,
 defaults, and `--help` output verbatim: `run`, `run-agent`, `project run`, and `web`.

@@ -1,18 +1,21 @@
-"""D-35（方案 B）的判据：一步给多条工具调用 ⇒ 只执行第一条，其余丢弃但必须留读数。
+"""D-35 的判据（口径已改：从"取第一条"改为"逐条拆分执行"）。
 
-## 这一条修的是什么（r34b 现场，硬证据）
+## 这一条判据现在守什么（口径变更，逐字记下来）
 
-147 步里有 10 步被整步判废：`agent_step.result.problem=judge_bad_json`，
-`detail` 是"这一步给了 2 条工具调用；本循环一步只做一件事，请只留一条"。
-代价不是"少一步"：token 已经计费（有的步 `tokens_out` 到 6000），而这一步的产出全丢。
-同一趟里另有 1 条是 JSON 少逗号的解析错 —— 那是模型输出真的坏了，与"多条"不是一件事。
+改前的口径（方案 B）：一步给多条工具调用 ⇒ 只执行第 1 条，其余丢弃，只留一句 warn 点名。
+它修掉的是更早那一版"多条 ⇒ 整步判 `judge_bad_json`"（r34b 现场：147 步里 10 步整步判废，
+token 已经计费、产出全丢），但代价是"其余几条一个字节都没执行" ——
+真机三趟（`projects/r34d` + `projects/cube2`）共 76 个多调用步、被丢 107 条，全部是只读。
 
-## 口径（方案 B：只改解析层）
+现在的口径（2026-10-22，业主「multi_call 应该让系统自动整理拆分」）：
+一步给 N 条 ⇒ 接住、按原顺序拆成 N 条条目、逐条执行（每条走完整准入/预算/参数校验）、
+逐条记账、逐条计步；一条被拒不影响其余；汇总里逐条点名（第 k 条 / 工具名 / 结果一句话）。
 
-1. 多条 ⇒ 执行第一条，其余丢弃；丢弃必须留读数（`result.warn` 里点名被丢的 action）；
-2. 一条都不给 ⇒ 仍判 invalid（不许因为这次放宽把空步也放过）；
-3. JSON 真的解析不出 ⇒ 仍判 invalid，且不许记"多条"那条 warning（两种错不被混成一类）；
-4. 主循环结构、步数统计、停止条件都不动（判据末尾核对步数）。
+所以本文件保留的是当时那三条边界（它们与口径无关，至今仍然成立）：
+1. 一条都不给 ⇒ 仍判 invalid（不许因为放宽"多条"把空步也放过）；
+2. JSON 真的解析不出 ⇒ 仍判 invalid，且不许记"多条"那条读数（两种错不被混成一类）；
+3. 整步被"多条"作废是不允许的（改前更早那一版就是那样）；而"只跑第一条就完事"同样不允许
+   （判据末尾核对：两条都真的执行了、步数是拆后的两条 + 收工那一步）。
 
 判据里的模型是桩（`_StubGateway` 按脚本回原生 `tool_calls` 或文本），全程离线、零花销。
 """
@@ -26,6 +29,7 @@ import pytest
 
 from agentflow import llmseam as LL
 from agentflow import modelgw as MG
+from agentflow import stepdispatch as SD
 from agentflow.agent_loop import LlmBackend, run_role
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
@@ -95,9 +99,18 @@ def _run(tmp_path: pathlib.Path, script: list[dict], *, max_steps: int = 4):
     return run, gw
 
 
+def _summary_of(run: Any) -> str:
+    """这一步的汇总（拆分口径下它挂在回合最后一条的 `warn` 上）。"""
+    for step in run.steps:
+        text = str(step.result.get("warn") or "")
+        if "条调用，已按顺序逐条" in text:
+            return text
+    return ""
+
+
 def _first_step_taken(run: Any, gw: _StubGateway) -> None:
-    """判据 ①+② 的公共断言（⑤ 把它打桩成"全丢"，验证这一份真的会红）。"""
-    # ① 第一步不是 invalid，而是真的执行了一次工具
+    """判据 ①+② 的公共断言（⑤ 把它打桩成"整步作废"，验证这一份真的会红）。"""
+    # ① 这一步不是 invalid，而且第一条真的执行了一次工具
     first = run.steps[0]
     assert first.shape == "tool", run.to_dict()
     assert first.problem == "", first.problem
@@ -107,31 +120,39 @@ def _first_step_taken(run: Any, gw: _StubGateway) -> None:
     assert SENTINEL in str(first.result), first.result
     assert len(gw.prompts) >= 2, gw.prompts
     assert SENTINEL in gw.prompts[1], gw.prompts[1][-600:]
-    # 这一步不被计成坏 JSON（改前：整步 invalid、`bad_json` 涨 1）
+    # 这一步不被计成坏 JSON（改前更早那一版：整步 invalid、`bad_json` 涨 1）
     assert run.bad_json == 0, run.to_dict()
     assert not [s for s in run.steps if s.problem == "judge_bad_json"], run.to_dict()
-    # ② 读数里点名被丢的那几条的 action（广告名映回真名，可核）
-    warn = str(first.result.get("warn") or "")
-    assert "只执行第 1 条" in warn, first.result
-    assert "conductor.ledger" in warn, warn
-    assert "其余 1 条丢弃" in warn, warn
-    # 步数统计没被动（两步：工具一步 + 收工一步）
-    assert [s.shape for s in run.steps] == ["tool", "final"], run.to_dict()
+    # ② 口径：两条都被拆出来逐条执行（改前方案 B：只执行第 1 条、其余丢弃）
+    assert [s.shape for s in run.steps] == ["tool", "tool", "final"], run.to_dict()
+    second = run.steps[1]
+    assert second.index == 1, run.to_dict()
+    assert second.result.get("ok") is True, second.result
+    assert second.result.get("tool") == "conductor.ledger", second.result
+    # 汇总里逐条点名（第 k 条 / 工具名 / 结果一句话），不再是"只执行第 1 条"
+    summary = _summary_of(run)
+    assert "这一步给了 2 条调用，已按顺序逐条" in summary, summary
+    assert "第 1 条 fs.read 成功" in summary, summary
+    assert "第 2 条 conductor.ledger 成功" in summary, summary
+    assert "丢弃" not in summary, summary
+    # 步数统计：按拆分后的条目记（两条调用 + 收工那一步）
     assert run.stop_reason == "final", run.to_dict()
 
 
-def test_two_calls_execute_the_first_and_say_so(tmp_path: pathlib.Path):
-    """① 一步给 2 条 ⇒ 第一条被执行、步不算 invalid、读数里有"只执行第 1 条"的 warning。
+def test_two_calls_are_both_executed_and_said_so(tmp_path: pathlib.Path):
+    """① 一步给 2 条 ⇒ 两条都真的执行、步不算 invalid、汇总里逐条点名。
 
-    改前红：整步 `judge_bad_json`（`detail`="这一步给了 2 条工具调用…"），工具一次都没被调，
-    于是 `first.shape == "tool"` 与 `SENTINEL in first.result` 两条先红。
+    改前红（方案 B 那一版）：第 2 条被丢弃 —— `[s.shape for s in run.steps]` 会是
+    `["tool", "final"]`、`second.result` 不存在、汇总里写的是"只执行第 1 条"。
+    改前更早一版（整步作废）：`first.shape` 是 `invalid`、工具一次都没被调 ——
+    那一档由判据 ⑤ 的桩继续守着。
     """
     run, gw = _run(tmp_path, [_two_calls(), _final_call("读完了")])
     _first_step_taken(run, gw)
 
 
-def test_the_dropped_actions_are_named(tmp_path: pathlib.Path):
-    """② 读数里点名被丢的那几条的 action（这里是 `conductor.ledger`，不是广告名）。"""
+def test_every_split_item_is_named_with_its_outcome(tmp_path: pathlib.Path):
+    """② 三条调用 ⇒ 汇总逐条点名（第 k 条 / 动作真名 / 结果一句话），一条都不许"丢弃"。"""
     run, _gw = _run(tmp_path, [
         {"tool_calls": [
             _call("fs_read", {"path": "data/sentinel.txt", "why": "读它"}, "c1"),
@@ -140,13 +161,16 @@ def test_the_dropped_actions_are_named(tmp_path: pathlib.Path):
         ]},
         _final_call("读完了"),
     ])
-    warn = str(run.steps[0].result.get("warn") or "")
-    assert "只执行第 1 条" in warn, warn
-    assert "其余 2 条丢弃" in warn, warn
-    # 两条被丢的都点名，且是动作真名（不是函数广告名 conductor_ledger）
-    for action in ("conductor.ledger", "conductor.state"):
-        assert action in warn, warn
-    assert "conductor_ledger" not in warn, warn
+    summary = _summary_of(run)
+    assert "这一步给了 3 条调用，已按顺序逐条" in summary, summary
+    # 三条都被拆出来执行了（步数按条目记）
+    assert [s.shape for s in run.steps] == ["tool", "tool", "tool", "final"], run.to_dict()
+    assert [s.index for s in run.steps] == [0, 1, 2, 3], run.to_dict()
+    # 点名用的是动作真名（不是函数广告名）
+    for action in ("fs.read", "conductor.ledger", "conductor.state"):
+        assert action in summary, summary
+    assert "conductor_ledger" not in summary, summary
+    assert "丢弃" not in summary, summary
 
 
 def test_no_call_at_all_is_still_invalid(tmp_path: pathlib.Path):
@@ -156,11 +180,11 @@ def test_no_call_at_all_is_still_invalid(tmp_path: pathlib.Path):
     assert first.shape == "invalid", run.to_dict()
     assert first.problem == "judge_bad_json", first.problem
     assert "warn" not in first.result, first.result
-    assert "只执行第 1 条" not in json.dumps(first.result, ensure_ascii=False), first.result
+    assert "条调用，已按顺序逐条" not in json.dumps(first.result, ensure_ascii=False), first.result
 
 
 def test_a_torn_json_is_still_invalid_and_is_not_called_multi(tmp_path: pathlib.Path):
-    """④ 负控：JSON 真的解析不出（少逗号）⇒ 仍 invalid，且不许记"多条"那条 warning。
+    """④ 负控：JSON 真的解析不出（少逗号）⇒ 仍 invalid，且不许记"多条"那条读数。
 
     两种错的处置方向不同（一个要重说协议、一个只是多给了一条），
     混成一类会让"这一步到底怎么了"在台账上不可回答。
@@ -173,14 +197,14 @@ def test_a_torn_json_is_still_invalid_and_is_not_called_multi(tmp_path: pathlib.
     assert "解析报错" in str(first.result.get("detail") or ""), first.result
     assert "warn" not in first.result, first.result
     text = json.dumps(first.result, ensure_ascii=False)
-    assert "只执行第 1 条" not in text and "丢弃" not in text, text
+    assert "条调用，已按顺序逐条" not in text and "丢弃" not in text, text
 
 
 def test_the_rule_is_not_vacuous(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
-    """⑤ 反真空：把"只取第一条"打桩成"全丢" ⇒ ① 必红。
+    """⑤ 反真空：把"多条"打桩成"整步作废"（改前更早那一版）⇒ ① 必红。
 
-    如果 ① 在"全丢"的桩下也绿，那它证明的不是"取第一条"，而是别的什么
-    （例如"这一步根本没被检查"）。
+    如果 ① 在"整步作废"的桩下也绿，那它证明的不是"这一条的处置对了"，
+    而是"这一步根本没被检查"。
     """
     real = LL.LlmSeam.ask_step
 
@@ -196,3 +220,23 @@ def test_the_rule_is_not_vacuous(tmp_path: pathlib.Path, monkeypatch: pytest.Mon
     run, gw = _run(tmp_path, [_two_calls(), _final_call("读完了")])
     with pytest.raises(AssertionError):
         _first_step_taken(run, gw)
+
+
+def test_the_old_take_first_branch_is_gone(tmp_path: pathlib.Path,
+                                           monkeypatch: pytest.MonkeyPatch):
+    """⑥ 反真空（口径那一侧）：把拆分打桩回"只跑第一条"⇒ ① 必红，且盘上没有逐条记录。
+
+    这一条与 ⑤ 分开：⑤ 守"整步作废"那一档，本一条守"只执行第 1 条"那一档 ——
+    两档都要有桩，否则口径一改就可能悄悄退回其中一档而判据全绿。
+    """
+    real = SD.catch_step_request
+
+    def _only_first(request: SD.StepRequest, *, decode: Any) -> SD.StepDispatch:
+        got = real(request, decode=decode)
+        return SD.StepDispatch(items=got.items[:1], turn_index=got.turn_index, requested=1)
+
+    monkeypatch.setattr(SD, "catch_step_request", _only_first)
+    run, gw = _run(tmp_path, [_two_calls(), _final_call("读完了")])
+    with pytest.raises(AssertionError):
+        _first_step_taken(run, gw)
+    assert [s.shape for s in run.steps] == ["tool", "final"], run.to_dict()

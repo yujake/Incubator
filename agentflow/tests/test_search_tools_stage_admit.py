@@ -294,32 +294,45 @@ def test_negative_control_physical_delete_makes_the_slot_disappear(reg, store):
     assert check() != [], "负控没红：物理删掉之后判据仍然绿"
 
 
-def test_negative_control_table_delete_is_refused_on_lit_candidates(reg):
-    """野路判据：`table.delete(lit_candidates)` 被拒（撤掉只能走 `lit.stage_withdraw`）。"""
+def test_negative_control_table_delete_is_redirected_to_withdraw_on_lit_candidates(reg):
+    """野路判据：`table.delete(lit_candidates)` 不许物理删 —— 它被转交成"撤掉"。
+
+    ## 2026-10-24 换过处置（业主裁定「自动将直写请求路由到秘书接管」）
+    改前这一格是"拒 + 指路"。现在它由 `lit.stage_withdraw` 那条正路接管；
+    而"撤掉必须写受控理由码"是那条正路自己的判据 ⇒ 没给理由时它拒，
+    理由原样带回，行仍在列表里（既没被删，也没被悄悄改成 withdrawn）。
+    """
     slots = _stage(reg, ["Try to delete me"])
     res = reg.call("table.delete", table="lit_candidates", id=slots[0])
-    assert not res.ok and res.meta["kind"] == "direct_write_refused", res.meta
-    assert res.meta["route_tool"] == "lit.stage_withdraw", res.meta
+    assert not res.ok, res
+    assert res.meta["kind"] == "routed_to_backstop.literal_refused", res.meta
+    assert res.meta["routed_to"] == "lit.stage_withdraw", res.meta
+    assert "理由码" in str(res.meta.get("refused_by_backstop") or ""), res.meta
 
 
-def test_direct_write_is_refused_and_the_negative_control_opens_it(reg, monkeypatch):
-    """野路判据（与 `store.direct_write_refusal` 同形）：`table.create/update` 被拒；
-    把那个函数关掉 ⇒ 通用写口又能写进去（负控证明工具层读的是那一条判据）。"""
+def test_direct_writes_are_taken_over_by_the_lister_backstops(reg, monkeypatch):
+    """野路判据（2026-10-24 换过处置）：`lit_candidates` 的直写由 `lit.*` 正路接管；
+    把判据关掉 ⇒ 通用写口又能自己写进去（负控证明工具层读的是那一条判据）。"""
     res = reg.call("table.create", table="lit_candidates",
                    row={"title": "hand written", "request_id": RID, "batch": 1,
                         "status": "pending"})
-    assert not res.ok and res.meta["kind"] == "direct_write_refused", res.meta
+    assert res.ok is True, (res.error, res.meta)
+    assert res.meta["backstop"] == "literal", res.meta
+    assert res.meta["routed_to"] == "lit.stage_add", res.meta
     slots = _stage(reg, ["Legit row"])
     res = reg.call("table.update", table="lit_candidates", id=slots[0],
                    patch={"status": "admitted", "lit_id": "000000"})
-    assert not res.ok and res.meta["kind"] == "direct_write_refused", res.meta
+    assert res.meta["backstop"] == "literal", res.meta
+    assert res.meta["routed_to"] == "lit.admit", res.meta
     from agentflow import store as store_mod
 
     monkeypatch.setattr(store_mod, "direct_write_refusal", lambda table: "")
     res = reg.call("table.create", table="lit_candidates",
                    row={"title": "hand written", "request_id": RID, "batch": 1,
                         "status": "pending"})
+    # 负控：判据关掉之后这一笔根本不进兜底，通用写口自己就写进去了（没有 backstop 这一格）
     assert res.ok, f"关掉判据之后通用写口仍然写不进去：{res.error}"
+    assert res.meta.get("backstop") is None, res.meta
 
 
 # ---------------------------------------------------------------- ⑤ 按委托重置

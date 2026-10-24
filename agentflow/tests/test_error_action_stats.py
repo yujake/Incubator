@@ -324,3 +324,47 @@ def test_the_category_table_has_no_duplicate_or_unknown_categories() -> None:
         assert cat in cats, f"{code} 的类目 {cat} 不在 ERROR_CATEGORIES 里"
         assert where.strip(), f"{code} 没写出处"
     assert ES.CODE_TO_CATEGORY == {c: cat for c, cat, _w in ES.CODE_TABLE}
+
+
+# ---------------------------------------------------------------- 呈现与 CLI 出口
+
+
+def test_the_rendered_table_carries_roles_totals_and_the_three_state(
+        tmp_path: pathlib.Path) -> None:
+    """人读的那张小表必须带：角色行、合计行、类目释义、三态那一行。"""
+    stats = ES.error_action_stats(_fixture_workspace(tmp_path / "ws"))
+    text = "\n".join(ES.render_text(stats))
+    assert "checked=True" in text and "state=checked" in text
+    for needle in ("角色", "合计", "A", "B", "forbidden_edge", "写库野路"):
+        assert needle in text, f"表里缺 {needle}\n{text}"
+    assert "类目释义" in text
+    # 合计那一行必须等于 total（同一份数的两种投影不许打架）
+    total_line = [ln for ln in ES.render_text(stats) if ln.startswith("合计")][0]
+    assert total_line.split()[-1] == str(stats.total), total_line
+
+    unknown = ES.error_action_stats(tmp_path / "nowhere")
+    unknown_text = "\n".join(ES.render_text(unknown))
+    assert "state=unknown" in unknown_text
+    assert "不是" in unknown_text and "没查成" in unknown_text, unknown_text
+
+
+def test_the_cli_exit_code_separates_zero_from_unknown(tmp_path: pathlib.Path,
+                                                       capsys) -> None:
+    """`stats errors` 的退出码只分两档：0 查过了（含全 0）/ 2 没查成。"""
+    from agentflow.cli import main as cli_main
+
+    ws = _fixture_workspace(tmp_path / "ws")
+    assert cli_main(["stats", "errors", "--root", str(ws)]) == 0
+    out = capsys.readouterr().out
+    assert "错误动作计数" in out and "checked=True" in out
+
+    # 机器可读那一份必须是可解析的 JSON，且三态跟着走
+    assert cli_main(["stats", "errors", "--root", str(ws), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["total"] == 4 and payload["state"] == "checked"
+
+    # 工作区不存在 ⇒ 2（没查成），不是 0（"没有错误动作"）
+    assert cli_main(["stats", "errors", "--root", str(tmp_path / "nowhere")]) == 2
+    captured = capsys.readouterr()
+    assert "unknown" in captured.err and "不是" in captured.err
+    assert "错误动作计数" in captured.out, "人读的表仍然要打出来（0 与没读到要看得见）"

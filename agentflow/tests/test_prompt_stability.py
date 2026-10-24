@@ -501,6 +501,11 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p197", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p197（2026-10-24）：只有 G 一格变（正文长串断行口径）。facts 键集仍 15 格"},
+        # p197 → p198（2026-10-24）：业主裁定 —— G 缺命题 / 缺证明时提给 D（D 出研究手稿并登记，
+        # B 从 D 侧的手稿收录入库），并写明 G→B 没有这条边（真机 cube2 / r34d 的 forbidden_edge）。
+        {"version": "p198", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p198（2026-10-24）：只有 G 一格变（缺命题 → 提给 D、B 从 D 侧手稿收录、G→B 这条边不存在）。facts 键集仍 15 格"},
 )
 
 

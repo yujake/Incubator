@@ -25,7 +25,8 @@
 | [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md) | 各角色自检的**失败项台账**（待修缺陷证据，不是文档问题） |
 | [`LEAN-MODES.md`](LEAN-MODES.md) | 有 Lean / 无 Lean 两模式的完整矩阵：开关、动作可用面、证据上限、收工门各格 |
 | [`READING-MAP.md`](READING-MAP.md) | 大文件的行数与「该读哪一段」的索引 |
-| [`USER-GUIDE.md`](USER-GUIDE.md) | 用户视角：从哪进、怎么建项目、产物在哪、出错先看哪 |
+| [`USER-GUIDE.md`](USER-GUIDE.md) | 用户视角：从哪进、怎么建项目、产物在哪、出错先看哪（CLI 一节含四个入口与 28 行新老对照表） |
+| [`CLI-CONTRACT.md`](CLI-CONTRACT.md) | `inspect` 那一组 `--json` 的机器可读契约：外层四格 / 每条命令的 `data` 字段 / 三态语义 |
 | [`USER-TEST.md`](USER-TEST.md) | 用户侧验收剧本 |
 | [`FORMAL-TOOLCHAIN.md`](FORMAL-TOOLCHAIN.md) | 证明检查器桥接层的接法与失败分类 |
 | [`FC27-PENDING-LEAN.md`](FC27-PENDING-LEAN.md) | 本批 Lean 改动的待批清单（**需要人审**，不由 AI 代签） |

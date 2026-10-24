@@ -74,9 +74,23 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-19 业主裁定「父子天然双向」：93 → 94
 #: （`conductor.escalate` —— 子代理把卡住的那件事写进父的收件箱）。
 #: 2026-10-22：94 → 95（业主逐字「G加动作」—— `doc.write_mapping` 是论文对应表唯一的写口）。
-#: 2026-10-23：95 → 98（147 收口第 6 步：L 的形式化入口三件 —— `formal.formalize` /
-#: `formal.check_formal` / `formal.record`；同一批里 `verify.check_formal` 的角色面收成空，
-#: 但它仍在册，所以总数只加不减）。
+#: 2026-10-23：95 → 97（147 收口第 6 步：L 的形式化入口三件 —— `formal.formalize` /
+#: `formal.check_formal` / `formal.record` 进册；同一批里 `verify.check_formal` 整条删除，
+#: 于是净增 2 = 95 + 3 − 1）。
+#:
+#: 这一格曾经写着"95 → 98"并附一句"`verify.check_formal` 的角色面收成空，但它仍在册，
+#: 所以总数只加不减"—— 那句话在盘上已经不成立：那个工具不是"收成空角色"，
+#: 是被整条删除（依据：`src/agentflow/tools/verify_tools.py` 顶部那段"工具
+#: `verify.check_formal` 整条删除（不是把 `roles` 收成 `()`）"，以及
+#: `python -m agentflow.cli tools` 的实测总数）。98 与 97 并存的含糊正是这次订正的理由。
+#:
+#: 两个口径（同一个包的两次装配，差的是 Lean 开关，不许互换）：
+#:   · Lean 开：97 件 —— 判据进程里 `tests/conftest.py` 把 `AGENTFLOW_LEAN_ENABLED`
+#:     钉成 "1"，`formal_tools` 装在册；本常量与下面的 `registry` 都在这一档里跑。
+#:   · Lean 关：94 件 —— shell 缺省时 `formal_tools` 整个模块不装（那三件 `formal.*`
+#:     一件都没有），所以少 3。
+#: 两个数都写在这里，是因为它们都真的存在：把第二个数搬进这一格会少算三件，
+#: 而少算三件时这条判据"照样绿"—— 那正是最坏的一种绿。
 TOOL_COUNT = 97
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。

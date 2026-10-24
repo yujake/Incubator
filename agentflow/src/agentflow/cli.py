@@ -18,13 +18,14 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import sys
 import textwrap
 import time
 from collections.abc import Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -99,6 +100,12 @@ def load_config(root: Path, path: str | None = None) -> dict:
 
 
 def make_store(root: Path | None = None) -> Store:
+    """开一个工作区句柄（不做任何守卫，也不建目录）。
+
+    为什么单独抽出来：`Store(root)` 之前那条 `.resolve()` 是所有子命令的共同约定
+    （相对路径按进程当前目录解析），散在二十几处就会有一处忘了 resolve —— 于是同一个
+    工作区两个句柄指向两个路径。守卫（能不能开、要不要 init）在各命令自己那一层。
+    """
     root = Path(root or DEFAULT_ROOT).resolve()
     return Store(root)
 
@@ -404,6 +411,14 @@ def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
 
 
 def cmd_init(args) -> int:
+    """初始化一个工作区：建目录、写下每张空表、落工作区标记。
+
+    读写：写 `<root>/data/`（各表文件 + `events.jsonl`）与 `library/`，并在根上落
+    工作区标记文件；用户的投料（例如一篇 PDF）不删不改。
+    实现方式一句话：本函数只解析 `--root/--force/--allow-foreign-entries`，真正的守卫
+    与建表全在 :func:`init_workspace`（外来条目那一档在那里 fail-closed）。
+    退出码：`0` 建成 / `2` 没查成（目录里有外来条目而没给开关、或 `data/` 已在盘上）。
+    """
     root = Path(args.root or DEFAULT_ROOT).resolve()
     st = make_store(root)
     code = init_workspace(st, root,
@@ -427,6 +442,9 @@ def cmd_submit(args) -> int:
     2. 输入不合法 ⇒ 整批不写 + 退出码 2。`row.validate()` 的 `ValueError` 原先在事务中途炸出，
        调用方拿到的是一个 traceback；而"你给的 mode/topic 不合法"是调用方错误，应当以一行说明 +
        非零退出码结束。事务本身是"异常即不提交"，所以这里 catch 之后可以如实说"整批未写入"。
+
+    读写：写 `search_requests`（一行一个请求，取号走 `interactions.next_prefixed_id`）。
+    实现方式一句话：`interactions.admit_search_request`（入队与准入在同一条链上）。
     """
     from . import interactions as X
 
@@ -504,6 +522,9 @@ def cmd_run_a(args) -> int:
     `AgentA.run` 把它们写成 `outcome="search_failed"` / `gave_up`，而"队列空"写成
     `skipped_reason`。原先这里恒返回 0，于是"这一轮所有请求都因为搜不到而放弃"
     在脚本看来与"一切正常"完全一样 —— 正是"未报错被读成无问题"的形态。
+
+    读写：读 `search_requests`，写 `literature` 与候选台账（经 `AgentA.run` 那一套写口）。
+    实现方式一句话：`agent_a.AgentA`（本层装配 provider 与配置）。
     """
     from .agent_a import AgentA
     from . import fetch as F
@@ -553,6 +574,9 @@ def cmd_run_b(args) -> int:
     `AgentB` 刻意不把这类文献置 `processed`（留给租约到期重试，见模块 docstring
     第 4 条），也就是说"这一轮没干成"—— 那必须能从退出码上看见，
     否则定时任务会把"每轮都在重试同一篇"当成持续成功。
+
+    读写：读 `lit_candidates`，写 `literature` / `statements` / `relations`（经秘书那几条唯一写口）。
+    实现方式一句话：`agent_b.AgentB.run_once`（抽取器只有 `host.b_extractor` 一处装配）。
     """
     from . import host as _H
     from .agent_b import AgentB
@@ -583,6 +607,15 @@ def cmd_run_b(args) -> int:
 
 
 def cmd_status(args) -> int:
+    """看看这个工作区的库里有什么：每张表几行，外加事件流的追加数。
+
+    读写：只读（`Store.stats()` 是无锁快照读）。它刻意会 `st.init()` —— 于是"对一个
+    空目录跑一次 status"会把这个工作区建起来。这是历史行为，`init` 的守卫在
+    `init_workspace` 里，`status` 这一档只用于"已经点了头的工作区"。
+    实现方式一句话：表名清单来自 `S.TABLES`（唯一真身），本函数只排版；
+    `--json` 直接印 `Store.stats()` 那一份。
+    退出码：`0` 读到了 / `2` 没查成（工作区打不开，由 `main` 统一接 `StoreError`）。
+    """
     st = make_store(args.root)
     st.init()
     s = st.stats()
@@ -610,6 +643,16 @@ def cmd_status(args) -> int:
 
 
 def cmd_verify(args) -> int:
+    """校验全局不变量（关系、引文、台账一致性），`--deep` 会重开文献逐条复核。
+
+    读写：只读台账与 `library/` 里的文献（`--deep` 时真的重读正文）。它同样会
+    `st.init()`（与 `status` 同一个历史行为）。
+    实现方式一句话：判定全在 :func:`verify.verify_all`，本函数只把旗标翻成参数、
+    把 `--json` 与人读两档印出来，并把"有没有 error（`--strict` 时含 warning）"
+    翻成退出码 —— 判据不在 CLI 里，改宽它等于改审计。
+    退出码：`0` 没有 error / `1` 查过了、有 error（`--strict` 时 warning 也算）/
+    `2` 没查成（`StoreError`，由 `main` 统一接）。
+    """
     root = Path(args.root or DEFAULT_ROOT).resolve()
     st = make_store(root)
     st.init()
@@ -650,78 +693,89 @@ def cmd_verify(args) -> int:
     return 1 if (args.strict and rep.warnings) else 0
 
 
+#: 移植期工具的落点（业主 2026-10-24 批的 CLI 更新方案 C）。
+#:
+#: 四条命令（`repair` / `rebuild` / `demo` / `evidence migrate`）的实现搬到了
+#: `tools/legacy_cli/<名字>.py`，CLI 里只留同名命令做一行转发。目的：让"下一版删掉
+#: 它们"变成一次机械操作（删那个目录 + 删这几个一行函数），其余代码一行都不用动。
+#:
+#: 为什么按文件路径加载而不是 `import tools.legacy_cli.rebuild`：`tools/` 只在源码仓库里，
+#: 不在 `src/` 下，也不是装好的包的一部分。按 `__file__` 往上两级定位仓库根，得到的
+#: 行为是确定的：源码仓库里跑 ⇒ 找得到；装好的包里跑 ⇒ 那句人话（退出码 2），
+#: 而不是一个 import 栈。
+_LEGACY_TOOLS_DIR = "legacy_cli"
+
+
+def _legacy_module(name: str):
+    """加载 `tools/legacy_cli/<name>.py`（按仓库根定位，不依赖 `sys.path`）。
+
+    缓存进 `sys.modules`：同一进程里连跑两次不会重新执行模块体（模块体里有 import，
+    重复执行在多线程下会出怪相）。
+    """
+    key = f"_agentflow_legacy_cli_{name}"
+    # 先判文件、再看缓存：反过来会让"文件已经不在了"被一个上次缓存的模块盖住，
+    # 于是"装好的包里没有 tools/"那句话永远走不到（判据靠它）。
+    root = Path(__file__).resolve().parents[2]
+    path = root / "tools" / _LEGACY_TOOLS_DIR / f"{name}.py"
+    if not path.is_file():
+        raise ImportError(
+            f"移植期工具不在盘上：{path}\n"
+            f"  `{name}` 的实现已经搬出 CLI（tools/{_LEGACY_TOOLS_DIR}/{name}.py）。"
+            "装好的包里没有 tools/ 目录 ⇒ 这条命令只能在源码仓库里跑；"
+            "下一版它会连同那个目录一起被删掉。")
+    cached = sys.modules.get(key)
+    if cached is not None:
+        return cached
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(key, path)
+    if spec is None or spec.loader is None:  # pragma: no cover - 文件刚判过存在
+        raise ImportError(f"读不了这个文件：{path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[key] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:  # noqa: BLE001 模块体炸了 ⇒ 不留半成品在缓存里
+        sys.modules.pop(key, None)
+        raise
+    return module
+
+
 def cmd_rebuild(args) -> int:
-    st = make_store(args.root)
-    if not st.events_path.exists():
-        print("[rebuild] 没有 events.jsonl，无法重建")
-        return 1
-    out = st.rebuild(backup=not args.no_backup)
-    print(f"[rebuild] 已从事件日志重建：应用 {out['applied']} 条，跳过 {out['skipped']} 条")
-    # ---- R-06 的可见面（`46-01 §2.2(b)` STEP-3 逐字："明细没有人看得见就等于没做"）
-    #
-    # `skipped` 那个整数一直有，但没有人知道跳过了什么：重建完照样打印
-    # "已重建：应用 N 条"，而"N 条为什么没进去"一个字都不说 —— 读的人据此
-    # 以为重建是完整的（`verify` 的 `rebuild` 相关读数也只看得到那个整数）。
-    # 所以这里把 `store.rebuild` 新增的两键（`skipped_by_reason` / `skipped_details`）
-    # 打出来。三态纪律：非空才打印 —— 干净的重建不许多出噪音，
-    # 否则"有跳过"这件事会在满屏输出里贬值。
-    by_reason = dict(out.get("skipped_by_reason") or {})
-    if by_reason:
-        detail = "、".join(f"{k}={v}" for k, v in sorted(by_reason.items()))
-        print(f"[rebuild] 跳过的分类计数：{detail}")
-        for row in list(out.get("skipped_details") or [])[:5]:
-            print(f"[rebuild]   跳过明细：{row}")
-        if len(list(out.get("skipped_details") or [])) > 5:
-            print(f"[rebuild]   （另有 {len(list(out.get('skipped_details') or [])) - 5} 条明细未打印）")
-    print(f"[rebuild] counters = {out['counters']}")
-    return 0
+    """从 `events.jsonl` 重放重建全部快照（数据出事时的逃生门）。
+
+    legacy：真实现在 `tools/legacy_cli/rebuild.py`，下一版删除，先确认行为无差异。
+    转发的只是调用这一层 —— 输出、退出码、旗标与搬走前逐字节相同
+    （判据 `tests/test_legacy_cli_forwards.py` 拿搬走前实测的指纹对拍）。
+
+    读写了哪些表或文件：读 `data/events.jsonl`，覆盖 `data/*.json` 各表快照，
+    缺省先在 `data/` 下留一份备份（`--no-backup` 关掉）。
+    """
+    return _legacy_module("rebuild").main(args)
 
 
 def cmd_repair(args) -> int:
-    """按 verify 的派生规则修复 related_concepts（唯一允许的"自动修复"，因为它完全可派生）。
+    """重算派生列 `related_concepts`（`--related` 必须显式给；写 concepts 表）。
 
-    `--related` 原先是一个被忽略的开关：函数体从不读 `args.related`，
-    于是"不带参数跑一次"也会照样重写 concepts 表。一个声明了却不起作用的选项
-    比没有更危险 —— 调用方以为自己在做只读检查，实际上知识表已经被改了。
-    这里 fail-closed：没有显式指名要重算什么，就一行都不写并以退出码 2 说明。
+    legacy：真实现在 `tools/legacy_cli/repair.py`，下一版删除，先确认行为无差异。
+    并表之后这一列已随老表退役，所以今天它基本只会走进"受控退出 + 指路"那一支。
+
+    读写了哪些表或文件：读 `relations` 与 concepts 表；只有在真的需要重算时才写
+    concepts（缺省 fail-closed，一行都不写，退出码 2）。
     """
-    from . import dedup as D
+    return _legacy_module("repair").main(args)
 
-    if not args.related:
-        print(
-            "[repair] 需要显式指定重算目标。本命令会写 concepts 表，因此不接受"
-            "'不带参数就默认全做'：请用 `repair --related`（重算 related_concepts）。",
-            file=sys.stderr,
-        )
-        return 2
 
-    st = make_store(args.root)
-    # 并表落刀之后这一格随老表退役：`related_concepts` 是老表专有的一列，
-    # 新标准里"哪些概念相关"由 `relations` 表本身回答（读侧用同一个
-    # `derive_related_concepts` 现算）⇒ 没有可重算的落点。这里受控退出 + 指路，
-    # 而不是让 `tx("concepts")` 抛一句"未知表"（读的人拿到那句话不知道下一步做什么）。
-    if not CR.legacy_present(st).get("present"):
-        print(
-            "[repair] `--related` 随并表退役（S1r）：`related_concepts` 是老表专有的一列，"
-            "新标准里那件事由 `relations` 表管，读侧现算，没有可重算的落点。"
-            "处置：要核对图与关系的偏离，用 `agentflow verify`（`related_drift` 那一档）；"
-            "要重放老库，用 `agentflow rebuild`（它会折叠并逐条落 `out/migrate-map.jsonl`）。",
-            file=sys.stderr,
-        )
-        return 2
-    with st.tx(*CR.tables_for_concept_write("relations"), actor="repair", note="related") as tx:
-        rels = tx.rows("relations")
-        changed = 0
-        for c in CR.view_tx(tx, shape="legacy")["rows"]:
-            want = D.derive_related_concepts(c["concept_id"], rels, include_suspect=True)
-            if c.get("related_concepts") != want:
-                c["related_concepts"] = want
-                c["updated_at"] = S.now_iso()
-                # 一处调用办两件事（老表那份 + 新标准那份，同号）—— 见 `conceptrows`
-                CR.upsert_legacy_shaped(tx, c, actor="repair", note="related_recomputed")
-                changed += 1
-    print(f"[repair] related_concepts 重算了 {changed} 行")
-    return 0
+def cmd_demo(args) -> int:
+    """离线端到端演示（不联网、不花钱；`--keep` 保留上次的演示数据）。
+
+    legacy：真实现在 `tools/legacy_cli/demo.py`，下一版删除，先确认行为无差异；
+    执行体本身在库里（`demo.run_demo`），这里只是把两个旗标翻成两个入参。
+
+    读写了哪些表或文件：在 `<root>/demo/run` 下建一整套演示工作区（会写盘），
+    缺省先清掉上次那一份。
+    """
+    return _legacy_module("demo").main(args)
 
 
 def cmd_tools(args) -> int:
@@ -729,6 +783,9 @@ def cmd_tools(args) -> int:
 
     这个命令存在的意义：工具层的权限面是设计的一部分（A 拿不到 D 的工具等），
     但它默认是隐式的 —— 加一条命令把它变成可打印的事实，才好在评审时核对。
+
+    读写：不读不写工作区文件；只现算工具面按角色的装配表。
+    实现方式一句话：`tools.build_registry` / `for_role`（与运行期同一份装配）。
     """
     from agentflow.tools import ROLES, TOOL_ROLES, build_registry
 
@@ -802,6 +859,11 @@ def _build_agent_c(root: Path, cfg: dict):
 
 
 def cmd_analyze(args) -> int:
+    """运行 C 的关系分析（四类需求之一）。
+
+    读写：只读 relations / statements / research_questions 与概念视图；分析结果由 `agent_c` 落 `analysis_reports`（本层不另写表）。
+    实现方式一句话：`agent_c.handle` 分派到四个分析入口（hottest / cold / gaps / paths）。
+    """
     """运行 C 的关系分析（四类需求之一）。"""
     root = Path(args.root or DEFAULT_ROOT).resolve()
     cfg = load_config(root, args.config)
@@ -882,6 +944,11 @@ def _resolve_concept(st, token: str) -> str | None:
 
 
 def cmd_pipeline(args) -> int:
+    """把 A→B→C→D 串起来跑（DESIGN-TOOLS.md §5）。
+
+    读写：读 `search_requests` / `literature`；A/B 那一趟的写口各写自己的表，C 的报告落 `analysis_reports`。
+    实现方式一句话：`pipeline.run_pipeline`（A/B 传 None 就是「不检索」，语义只在一处）。
+    """
     """把 A→B→C→D 串起来跑（DESIGN-TOOLS.md §5）。"""
     from . import host as H
     from agentflow.agent_a import AgentA
@@ -923,12 +990,6 @@ def cmd_pipeline(args) -> int:
     )
     print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
     return 0
-
-
-def cmd_demo(args) -> int:
-    from .demo import run_demo
-
-    return run_demo(Path(args.root or DEFAULT_ROOT).resolve(), reset=not args.keep)
 
 
 # ---------------------------------------------------------------- 统一执行体（RunSpec）
@@ -979,26 +1040,134 @@ START_MODES: tuple[str, ...] = ("auto", "topic", "role", "research",
 START_PLAN_KEYS: tuple[str, ...] = ("mode", "task", "workspace", "project", "model",
                                     "budget", "lean", "summons", "writes", "spend")
 
-#: help 首屏的分组（`draft/145` 的 F5：二十多个子命令分两页才看全，且没有分组）。
+#: 新分层（F 的形状；业主 2026-10-24：「A 到 E 都是好的，且尽可能往 F 的想法上靠，
+#: 至少形状上一致」）：四个动词组，每组一句话说明它管什么。
 #:
-#: 为什么是一张表而不是给 `add_parser` 加 group：argparse 的 subparsers 没有分组能力
-#: （`_SubParsersAction` 只认一张 `choices` 字典），而三处既有判据正是靠"唯一一个
-#: subparsers action"取 `choices` 的。所以分组只能发生在呈现层
-#: （`_GroupedHelpFormatter`），这张表就是那份呈现的唯一真身。
+#: ## 为什么要这一层，又为什么旧名一个都不删
 #:
-#: 每个子命令都必须落在某一组里：漏登记的不会静默消失 —— 格式化时落到"未分组"那一栏
-#: 并照样印出来，判据也断言并集等于全部子命令。
-SUBCOMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("研究（跑一次研究）", (
-        "start", "run", "run-agent", "run-a", "run-b", "submit",
-        "analyze", "pipeline", "closing")),
-    ("项目（工作区与产物）", (
-        "project", "evidence", "artifacts", "status-report", "answer", "inbox")),
-    ("诊断（看清这台机器与这一趟）", (
-        "status", "verify", "tools", "doctor", "budget", "stop", "cache")),
-    ("运维（数据维护与界面）", (
-        "init", "rebuild", "repair", "demo", "web")),
+#: 二十八个平铺的动词对读 `--help` 的人不友好（"doctor 和 verify 该先跑哪个"、
+#: "stats 跟 status 有什么不一样"）；但它们每一个都已经被真机上的脚本、文档与
+#: 用户肌肉记忆用着。所以这一轮只做"加一层入口"：
+#:
+#: - 新入口：`agentflow <组> <成员> [旗标]`（本表就是它的唯一真身）；
+#: - 旧入口：`agentflow <旧名> [旗标]` 照旧可用 —— 它不是别名层，它就是同一条命令
+#:   （`canonical_argv` 把新路径折回旧名再交给同一个 parser，所以两者连 `args` 都是
+#:   同一份，不存在"走新路少一个旗标"这种漂法）。
+#:
+#: ## 成员名怎么定的
+#:
+#: 成员名逐字沿用旧名（`inspect stats` 就是 `stats`），只有一处例外：端到端跑主题那条
+#: 旧命令叫 `run`，而组也叫 `run` —— 组内再叫 `run` 会得到 `agentflow run run` 这种
+#: 没人想敲的东西，所以它在组里叫 `topic`（`MEMBER_ALIASES` 里那一行）。`agentflow run`
+#: 不带成员时仍然是那条旧命令，行为一个字都没变。
+#:
+#: ## 四组之外有没有漏的
+#:
+#: 旧名 28 个，这张表覆盖 28 个（判据 `tests/test_cli_grouped_entry_points.py` 断言并集
+#: 相等）。其中 `verify` / `doctor` 归 `inspect`、`closing` 归 `run` 是本次归纳时补的
+#: （业主给的名单里只点到 25 个）：不补它们就成了新体系里的孤儿，而"能不能交"与"这台
+#: 机器行不行"显然都是查看类。要改回去就删这三行，判据会跟着红并点名。
+COMMAND_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("incubate", "孵化：把一趟研究开起来、管起来", (
+        "init", "start", "stop", "status", "answer", "inbox", "submit")),
+    ("inspect", "查看：只读的读数与检查", (
+        "status-report", "stats", "evidence", "artifacts", "analyze", "tools", "cache",
+        "budget", "doctor", "verify")),
+    ("run", "跑：流水线与角色循环，以及它们的维护", (
+        "topic", "pipeline", "run-a", "run-b", "run-agent", "repair", "rebuild",
+        "project", "closing")),
+    ("serve", "服务：网页与离线演示", ("web", "demo")),
 )
+
+#: 组内成员名 → 它等价的旧命令名。只有真的换了名字的要写在这里（"同名的"不必登记）。
+#:
+#: 键写成 `组.成员` 而不是嵌套字典：这张表只有几行，扁平写法在 diff 里一眼能看出
+#: "这一轮换了哪个名字"，嵌套写法会把理由与键隔开两屏。
+MEMBER_ALIASES: dict[str, str] = {"run.topic": "run"}
+
+
+def _group_members() -> dict[str, dict[str, str]]:
+    """组 → {成员名: 旧命令名}（未在 `MEMBER_ALIASES` 登记的成员与旧名同名）。"""
+    out: dict[str, dict[str, str]] = {}
+    for group, _purpose, members in COMMAND_GROUPS:
+        out[group] = {m: MEMBER_ALIASES.get(f"{group}.{m}", m) for m in members}
+    return out
+
+
+#: 组 → {成员名: 旧命令名}。`canonical_argv`、组页、判据都读它（一处定义）。
+GROUP_MEMBERS: dict[str, dict[str, str]] = _group_members()
+
+#: 组名（顺序即呈现顺序）。
+GROUP_NAMES: tuple[str, ...] = tuple(group for group, _p, _m in COMMAND_GROUPS)
+
+#: 组名 → 一句话用途。
+GROUP_PURPOSE: dict[str, str] = {group: purpose for group, purpose, _m in COMMAND_GROUPS}
+
+
+def command_paths() -> tuple[tuple[str, str], ...]:
+    """旧名 → 新路径的全文对照表（`--help-legacy`、文档与判据都读这一份）。
+
+    一个旧名只给一条新路径（`dict` 的插入序 = `COMMAND_GROUPS` 的表序）。这张表是
+    "旧名一个都没删、而且每个都有一条新路径到达"这句话唯一可执行的形态：文档里的
+    对照表、`--help` 末尾那句"旧名仍可用"、判据里的"并集相等"全从它生成。
+    """
+    pairs: dict[str, str] = {}
+    for group, _purpose, members in COMMAND_GROUPS:
+        for member in members:
+            pairs.setdefault(GROUP_MEMBERS[group][member], f"{group} {member}")
+    return tuple(pairs.items())
+
+
+#: 旧名清单（28 个，`build_parser()` 的 choices 必须逐字等于它）。
+LEGACY_COMMANDS: tuple[str, ...] = tuple(old for old, _path in command_paths())
+
+#: 顶层里"带值"的那两个开关 —— 找命令位置时必须跳过它们的值，否则
+#: `agentflow --root inspect stats` 会把 `inspect` 当成 `--root` 的值。
+_VALUE_OPTIONS: frozenset[str] = frozenset({"--root", "--config"})
+
+
+def _command_index(argv: list[str]) -> int | None:
+    """argv 里第一个"命令 token"的下标（跳过顶层开关与它们的值）。找不到 ⇒ None。"""
+    i = 0
+    while i < len(argv):
+        token = str(argv[i])
+        if token in _VALUE_OPTIONS:
+            i += 2
+            continue
+        if token.startswith("--root=") or token.startswith("--config="):
+            i += 1
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        return i
+    return None
+
+
+def canonical_argv(argv: list[str]) -> list[str]:
+    """把 `agentflow <组> <成员> …` 折回旧名的 argv（形状见 `COMMAND_GROUPS`）。
+
+    这是"新指令接管、旧指令不删"那条纪律的实现：新路径不是另一条执行链，它在解析之前
+    就被折成旧名，于是两条路走进同一个 `parser`、同一个 `func`、同一份 `args`。
+    刻意的三处"不折"（都由 `main` 在后面给人话或交给 argparse）：
+
+    - 只有组名没有成员（`agentflow inspect`）⇒ 打组页；
+    - 第二个词以 `-` 开头（`agentflow run --topic t`）⇒ 它就是旧命令本身；
+    - 成员名不认识 ⇒ 不改写（`main` 会点名"这个组里没有它"）。
+    """
+    raw = list(argv)
+    index = _command_index(raw)
+    if index is None:
+        return raw
+    members = GROUP_MEMBERS.get(str(raw[index]))
+    if members is None:
+        return raw
+    if index + 1 >= len(raw):
+        return raw
+    member = str(raw[index + 1])
+    if member.startswith("-") or member not in members:
+        return raw
+    return raw[:index] + [members[member]] + raw[index + 2:]
 
 
 @dataclass(frozen=True)
@@ -1631,6 +1800,9 @@ def cmd_start(args) -> int:
       argparse 那句原文 —— 用户从"缺什么"里读不出"该给哪个旗标"）。
 
     退出码：0 做成了 / 1 查过了、有问题 / 2 没查成（用法错或前提不满足）。
+
+    读写：按 `--mode` 落到四条执行体之一（topic / role / project / web），读写的就是那一条自己的表；`--dry-run` 一个字节都不写、一次模型都不调。
+    实现方式一句话：`_run_spec` 一个执行体（五条入口只在这一层归一旗标）。
     """
     spec, problem = _spec_of_start(args)
     if problem:
@@ -1653,6 +1825,9 @@ def cmd_run(args) -> int:
 
     这一层只剩"翻成 `RunSpec` 再交给 `_run_spec`"（`draft/145` §3.2 的别名形态：
     解析层不动、执行层收口）；真正的执行体是 :func:`_exec_topic`。
+
+    读写：写那一趟临时工作区的各表、`usage_ledger`（真花钱的账）与六件产物目录。
+    实现方式一句话：`runflow.run_topic`（本层只把旗标翻成 `RunSpec`）。
     """
     return _run_spec(_spec_from(args, mode=MODE_TOPIC, origin="run"), args)
 
@@ -1874,71 +2049,17 @@ def _evidence_store(project_dir: Path) -> int:
     return 1 if any(not r["ok"] for r in rows) else 0
 
 
-def _evidence_migrate(project_dir: Path, *, apply: bool) -> int:
-    """把历史产物里的内联正文迁成引用形态；默认 dry-run。
+def _evidence_migrate(args) -> int:
+    """把历史产物里的内联正文迁成引用形态（默认 dry-run，`--apply` 才动盘）。
 
-    为什么默认只 dry-run：这一步改的是历史证据本体（产物里那一段正文），
-    "改证据"这种事必须由人显式点头（`--apply`），而且每一份都要先备份。
+    legacy：真实现在 `tools/legacy_cli/evidence_migrate.py`，下一版删除，
+    先确认行为无差异（判据 `tests/test_legacy_cli_forwards.py` 拿搬走前实测的指纹对拍）。
+
+    读写了哪些表或文件：读 `<项目根>/out/run-*/evidence.json`；`--apply` 时写
+    `.fulltext/` 正文库（`fulltextstore.put`）、改写那些产物，并先在
+    `<项目根>/../temp/evidence-migrate-<stamp>/` 留一份逐份备份。
     """
-    from . import fulltextstore as FS
-
-    store_dir = project_dir / FS.STORE_DIR_NAME
-    todo: list[tuple[Path, int, int]] = []
-    for ev_path in sorted(project_dir.glob("out/run-*/evidence.json")):
-        try:
-            ev = json.loads(ev_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            print(tty.bullet(tty.paint(f"跳过（读不了）：{ev_path}", "yellow")))
-            continue
-        n = 0
-        saved = 0
-        for src in ev.get("sources") or []:
-            full = src.get("fulltext") or {}
-            pages = [str(p) for p in (full.get("text_pages") or [])]
-            if pages and not full.get("text_ref"):
-                n += 1
-                saved += len(json.dumps(pages, ensure_ascii=False, default=str).encode("utf-8"))
-        if n:
-            todo.append((ev_path, n, saved))
-
-    if not todo:
-        print(tty.bullet("没有需要迁移的产物（都已经没有内联正文）"))
-        return 0
-    total = sum(s for _p, _n, s in todo)
-    for line in tty.table(("产物", "内联来源数", "可省字节"),
-                          [(str(p.relative_to(project_dir)), str(n), str(s)) for p, n, s in todo]):
-        print(line)
-    if not apply:
-        print(tty.bullet(f"dry-run：将写 {total} 字节进 {store_dir}，"
-                         f"改写 {len(todo)} 份产物（加 --apply 才动盘；动盘前逐份备份）"))
-        return 0
-
-    stamp = S.now_iso().replace(":", "").replace("-", "")[:15]
-    backup_dir = Path(str(store_dir.parent / "temp")) / f"evidence-migrate-{stamp}"
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    done = 0
-    for ev_path, _n, _s in todo:
-        ev = json.loads(ev_path.read_text(encoding="utf-8"))
-        backup = backup_dir / f"{ev_path.parent.name}-evidence.json"
-        backup.write_bytes(ev_path.read_bytes())
-        for src in ev.get("sources") or []:
-            full = src.get("fulltext") or {}
-            pages = [str(p) for p in (full.get("text_pages") or [])]
-            if not (pages and not full.get("text_ref")):
-                continue
-            ref = FS.put(pages, store_dir=store_dir, pdf_sha256=str(full.get("sha256") or ""),
-                         pdf_path=str(full.get("path") or ""), pdf_bytes=int(full.get("bytes") or 0),
-                         backend=str(full.get("backend") or ""))
-            full.pop("text_pages", None)
-            full.pop("text", None)
-            full["text_ref"] = ref
-            full["chars"] = int(ref.get("chars") or 0)
-            full["text_store"] = "ref"
-        ev_path.write_text(json.dumps(ev, ensure_ascii=False, indent=1, default=str) + "\n",
-                           encoding="utf-8", newline="\n")
-        done += 1
-    print(tty.bullet(f"已迁移 {done} 份产物；备份在 {backup_dir}"))
-    return 0
+    return _legacy_module("evidence_migrate").main(args)
 
 
 def cmd_evidence(args) -> int:
@@ -1946,6 +2067,9 @@ def cmd_evidence(args) -> int:
 
     三态（与全仓同一条纪律）：0 = 查过、都对得上；1 = 查过了、有坏引用；
     2 = 没查成（目标不在 / 读不了）。
+
+    读写：读 `out/run-*/evidence.json` 与 `.fulltext/` 正文库；`migrate --apply` 会写正文库并改写那些产物（逐份先备份）。
+    实现方式一句话：`fulltextstore` 的 `verify_ref` / `inventory` / `put`，本文件只做分派与呈现。
     """
     target = Path(args.target)
     if args.action == "verify":
@@ -1958,7 +2082,7 @@ def cmd_evidence(args) -> int:
     if not target.is_dir():
         print(f"[evidence] 没查成：{target} 不是目录", file=sys.stderr)
         return 2
-    return _evidence_migrate(target, apply=bool(args.apply))
+    return _evidence_migrate(args)
 
 
 # ---------------------------------------------------------------- 入口
@@ -1972,6 +2096,9 @@ def cmd_artifacts(args) -> int:
 
     `record` 是唯一写的动作，而且先核文件后写台账 —— 一条钉不住内容的登记
     不是弱证据，是假证据（见 `agentflow.artifacts` 的模块 docstring）。
+
+    读写：读 `artifacts` 台账与盘上文件的哈希；`record` 写一行归属，其余五个 action 只读。
+    实现方式一句话：`artifacts` 模块（登记、哈希、归属查询各一处实现）。
     """
     from . import artifacts as A
 
@@ -2101,6 +2228,9 @@ def cmd_project(args) -> int:
 
     这里是唯一把 `--projects-dir` 与 `--start` 翻译成动作的地方；
     真正的判定与执行在 `agentflow.projects`（那里有它自己的负控自检）。
+
+    读写：读写 `projects/<名字>/` 下那一整套工作区：`list` / `plan` 只读，`run` / `create` 会建目录、写表、落报告。
+    实现方式一句话：`projects` 模块（`list_projects` / `project_plan` / `run_project` / `create_project`）。
     """
     from . import projects as P
 
@@ -2729,6 +2859,9 @@ def cmd_run_agent(args) -> int:
 
     这一层与 `run` / `project run` / `web` 一样只剩"翻成 `RunSpec` 再交给 `_run_spec`"
     （`draft/145` §3.2 的别名形态）；真正的执行体是 :func:`_exec_role`。
+
+    读写：读任务与检查点；写 `tasks` / `usage_ledger` / `sessions/<sid>.jsonl` 与 `runs/` 下的运行记录（每一笔花销都进台账）。
+    实现方式一句话：`agent_loop.run_role`（多轮走 `autonomy`，退出码由 `_run_agent_exit_code` 翻）。
     """
     return _run_spec(_spec_from(args, mode=MODE_ROLE, origin="run-agent"), args)
 
@@ -3109,6 +3242,9 @@ def cmd_inbox(args) -> int:
     所以人需要一个不挑会话的入口）。而真机每一趟都有自己的 sid ⇒ 只看缺省会话
     会把"它在等什么"读成"没有待答"。
     退出码 0 = 查过了（有待答与没有待答都算查过了）。
+
+    读写：只读 `questions` / `user_answer` 与 `sessions/*.jsonl`（一个字节都不写）。
+    实现方式一句话：`userio.pending_questions`（按会话扫，缺省扫全部会话）。
     """
     from . import userio as U
 
@@ -3146,6 +3282,9 @@ def cmd_answer(args) -> int:
     回答内容三档来源（等价于 DSH 的回答形状）：`--select <label>`（可重复，可 0/n 个）、
     `--custom <正文>`、以及 `--text` 位置参数（等价于 `--custom`，老调用方照旧）。
     退出码：0 = 写成了；2 = 没查成（上面三种，或没给回答内容）。
+
+    读写：读 `questions`（待答）与已写的 `user_answer`；写一行 `user_answer`（append-only，已有回答一律不覆盖）。
+    实现方式一句话：唯一写口是 `userio.answer_question`。
     """
     from . import userio as U
 
@@ -3315,6 +3454,150 @@ def _broken_source_notice(exc: BaseException) -> str:
             "`agentflow doctor --selfcheck`")
 
 
+#: 体检里每一档"人该去做什么"的修复提示（`fix_hint` 的内容，都是能直接复制执行的原文）。
+#:
+#: 三条口径（业主 2026-10-24 的 E 格）：
+#:
+#: 1. `doctor` 只诊断、不修。所以它唯一的用处就是把"下一步敲什么"写清楚 ——
+#:    一个"模型 key：没配"而不说怎么配的读数，读的人还得去翻文档。
+#: 2. 提示必须是命令原文（`$env:…='…'` / `agentflow …` / `python -m …`），不是散文。
+#:    散文没法复制执行，而"能不能照着做"正是这一格要解决的问题。
+#: 3. 值一律用 `<尖括号占位>` 表示"这里填你的"：写死一个假的路径比不写更坏 ——
+#:    有人会照抄，然后拿到一个更难查的错。
+#:
+#: 键是"失败项的名字"（`doctor_checks` 产出的 `name`）。判据
+#: `tests/test_doctor_fix_hint.py` 断言"每个失败项都有非空提示"，并且拿一张
+#: 全失败的人造读数逐项过一遍（删一条提示就红）。
+DOCTOR_FIX_HINTS: dict[str, str] = {
+    "model_key": "$env:AGENTFLOW_MODEL_API_KEY='<把模型 key 填在这里>'",
+    "lean_enabled": "$env:AGENTFLOW_LEAN_ENABLED='1'",
+    "prover": "$env:AGENTFLOW_LEAN_BIN='<lean.exe 或它所在的目录>'",
+    "prover_probe": "$env:AGENTFLOW_LEAN_BIN='<lean.exe 或它所在的目录>'",
+    "lean_version": "$env:AGENTFLOW_LEAN_BIN='<与 lean-toolchain 那一行同版本的 lean.exe>'",
+    "lean_selfcheck": "$env:AGENTFLOW_LEAN_BIN='<那个会拒绝假命题的 lean.exe 或它所在的目录>'",
+    "mathlib_root": "$env:AGENTFLOW_MATHLIB_ROOT='<Mathlib 工程的根目录>'",
+    "mathlib_import": "$env:AGENTFLOW_MATHLIB_ROOT='<能 import Mathlib 的那个工程的根目录>'",
+    "package_syntax": "python -m agentflow.cli doctor --selfcheck",
+}
+
+#: 体检项的三种落点（与全仓三态同一套词；`off` 是"用户自己关掉的"，不是缺陷）。
+DOCTOR_ITEM_STATES: tuple[str, ...] = ("ok", "fail", "unknown", "off")
+
+
+def _doctor_item(name: str, state: str, detail: str) -> dict:
+    """一档体检项的读数。`fix_hint` 只在"没通过"时给（通过的东西不需要下一步）。"""
+    assert state in DOCTOR_ITEM_STATES, state
+    return {"name": name, "state": state, "detail": str(detail or ""),
+            "fix_hint": "" if state in ("ok", "off") else DOCTOR_FIX_HINTS.get(name, "")}
+
+
+def doctor_checks(rep: Mapping, *, selfcheck: Mapping | None = None,
+                  only: tuple[str, ...] | None = None) -> list[dict]:
+    """把一份体检读数翻成逐项 `{name, state, detail, fix_hint}`。
+
+    为什么要有这一层（而不是在 `cmd_doctor` 里散着 print）：`--json` 与人读的两份输出
+    必须是同一批判定，否则"机器看到有 3 条没通过、人看到 2 条"这种漂法迟早出现。所以
+    判定只在这里做一次，人读那边只是把它排版。
+
+    `state` 四档：`ok` / `fail`（查过了、缺东西）/ `unknown`（没查成）/ `off`（用户关掉的）。
+    `off` 不算失败：把"我自己关的"和"环境缺东西"混成一档，会让关掉 Lean 的人去查环境。
+
+    `only` 是给 `--selfcheck` 那一档用的白名单：那一档只问"包内源码能不能编译"，
+    把它没探测的东西（模型 key / 证明检查器）也报成"没通过"就是另一种撒谎。
+    """
+    items: list[dict] = []
+    model = rep.get("model") or {}
+    items.append(_doctor_item(
+        "model_key", "ok" if model.get("key_present") else "fail",
+        f"base={model.get('base_url')}；model={model.get('model')}"
+        + ("" if model.get("key_present") else "（环境变量与 agentflow/settings.json 的 "
+                                              "model.api_key 两处都没有 key）")))
+
+    enabled = bool(rep.get("lean_enabled"))
+    items.append(_doctor_item(
+        "lean_enabled", "ok" if enabled else "off",
+        f"来源={rep.get('lean_enabled_source') or '（没记）'}；formal_mode={rep.get('formal_mode')}"))
+
+    prov = rep.get("provers") or {}
+    available = prov.get("available") or []
+    items.append(_doctor_item(
+        "prover", "unknown" if not prov.get("checked") else ("ok" if available else "fail"),
+        ("找到：" + "、".join(f"{r.get('name')}@{r.get('path')}" for r in available))
+        if available else f"一个都没找到；找过 —— {'；'.join(prov.get('looked_in') or [])}"))
+    probe_errors = prov.get("probe_errors") or []
+    if probe_errors:
+        items.append(_doctor_item("prover_probe", "unknown", "；".join(probe_errors)))
+
+    sc = rep.get("lean_selfcheck") or {}
+    if isinstance(sc, Mapping) and sc:
+        expected = str(sc.get("expected_version") or "")
+        got = str(sc.get("version") or "")
+        if enabled and expected:
+            items.append(_doctor_item(
+                "lean_version", "ok" if sc.get("version_ok") else "fail",
+                f"钉住 {expected} / 实测 {got or '（没读到版本）'}"))
+        state = str(sc.get("state") or "unknown")
+        problems = [str(p) for p in (sc.get("problems") or [])]
+        items.append(_doctor_item(
+            "lean_selfcheck",
+            "ok" if state == "usable" else ("off" if state == "off" else "fail"),
+            f"state={state}；检查器={sc.get('lean_path') or '（没找到）'}"
+            + ("；" + "；".join(problems) if problems else "")))
+
+    ml = rep.get("mathlib") or {}
+    if isinstance(ml, Mapping) and ml:
+        root = str(ml.get("root") or "")
+        # Lean 关着时 Mathlib 那两档是"不适用"而不是"缺东西"：把"我自己关的"读成
+        # "环境缺库"，会让人去装一个这一趟根本不会用到的库。
+        items.append(_doctor_item(
+            "mathlib_root", "off" if not enabled else ("ok" if root else "fail"),
+            (f"根={root}；与钉住的一致={bool(ml.get('pinned_match'))}"
+             if root else str(ml.get("reason") or "没找到 Mathlib 工程根"))))
+        if root:
+            measured = ml.get("graph_import_measured")
+            text = str(measured if measured is not None else ml.get("import_mathlib") or "")
+            usable = text.strip().lower().startswith("usable")
+            items.append(_doctor_item(
+                "mathlib_import",
+                "off" if not enabled else ("ok" if usable else "fail"),
+                f"第 ⑤ 步真编译读数：{text}"))
+
+    if selfcheck is not None:
+        broken = list(selfcheck.get("problems") or [])
+        if not selfcheck.get("checked"):
+            items.append(_doctor_item(
+                "package_syntax", "unknown", str(selfcheck.get("reason") or "没查成")))
+        elif broken:
+            where = "、".join(
+                f"{Path(str(b.get('file') or '?')).name}:{b.get('line')}:{b.get('column')}"
+                for b in broken[:5])
+            items.append(_doctor_item(
+                "package_syntax", "fail",
+                f"{len(broken)} 个坏文件（{where}" +
+                ("…" if len(broken) > 5 else "") + "）；修好之前任何 import 到它的子命令都会一起坏"))
+        else:
+            items.append(_doctor_item(
+                "package_syntax", "ok", f"扫了 {selfcheck.get('files', 0)} 个 .py，语法错误 0 个"))
+    if only is not None:
+        items = [it for it in items if it.get("name") in only]
+    return items
+
+
+def _print_doctor_checks(items: list[dict]) -> None:
+    """人读的"下一步"那一段：只打没通过的那几档，每条后面跟一条可直接复制的命令。
+
+    为什么只打没通过的：全通过的机器上多打七行"下一步"等于噪音，而噪音会让真正
+    该看的那一条贬值（与 `rebuild` 里"非空才打印"同一条纪律）。
+    """
+    bad = [it for it in items if it.get("state") in ("fail", "unknown")]
+    if not bad:
+        return
+    print(tty.paint(f"下一步（{len(bad)} 档没通过；doctor 只诊断，不会替你改）", "bold"))
+    for it in bad:
+        print(tty.bullet(f"[{it['name']}] {it['detail']}"))
+        print(f"    照这条改：{it['fix_hint']}")
+
+
 def cmd_doctor(args) -> int:
     """体检：这台机器现在能做哪些事（「不发起任何模型调用」，不花钱）。
 
@@ -3330,13 +3613,22 @@ def cmd_doctor(args) -> int:
     `--selfcheck` 是另一个问题、也是另一档代价：它只扫包内源码（逐文件 `compile`），
     不探测工具链、不编译 Mathlib。分出来的理由见 `selfcheck_package` 的注释 —— 那一档
     实测 1 秒量级，而体检本身可能分钟级（Mathlib 那一步真的编译一次）。
+
+    读写：不读不写工作区；只探测环境（PATH / settings.json / 模型 key 在不在）并跑一次 Lean 自检（临时 `.lean` 落在 `%TEMP%`，跑完删净）。
+    实现方式一句话：`toolchain.toolchain_report` + `leantoolchain.lean_selfcheck_reading`，判定在 `doctor_checks` 一次做完。
     """
     if bool(getattr(args, "selfcheck", False)):
         rep = selfcheck_package()
+        # E 格（业主 2026-10-24）：失败项带 `fix_hint`（可直接复制执行的命令原文）。
+        # 自检这一档的"失败项"就是坏文件逐条 —— 所以这里把 `doctor_checks` 的同一份
+        # 判定接到自检读数上，`--json` 与人读都读它，两处不会各说一套。
+        # `only` 白名单：这一档没探测模型 key / 证明检查器，就不该对它们下结论。
+        rep["checks"] = doctor_checks({}, selfcheck=rep, only=("package_syntax",))
         if getattr(args, "json", False):
             print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
         else:
             print(format_selfcheck(rep))
+            _print_doctor_checks(rep["checks"])
         if not rep.get("checked"):
             return 2
         return 1 if (rep.get("problems") or rep.get("unreadable")) else 0
@@ -3355,6 +3647,9 @@ def cmd_doctor(args) -> int:
     sc = LT.lean_selfcheck_reading(root=Path(getattr(args, "root", None) or DEFAULT_ROOT))
     rep = TC.toolchain_report(mathlib_reading=(sc.get("mathlib") or None))
     rep["lean_selfcheck"] = sc
+    # E 格：逐项读数 + `fix_hint`。`--json` 的 `checks` 与人读的"下一步"读的是同一份
+    # 判定（`doctor_checks`），所以"机器看到 3 条、人看到 2 条"这种漂法不会出现。
+    rep["checks"] = doctor_checks(rep)
     if args.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
     else:
@@ -3397,6 +3692,7 @@ def cmd_doctor(args) -> int:
         print(tty.bullet("结论：" + ("这一趟能做形式化核验（proof 级证据可达）"
                                      if rep["can_do_formal"] else
                                      "这一趟做不了形式化核验（会如实报没核到）")))
+        _print_doctor_checks(rep["checks"])
     if not rep["provers"]["checked"]:
         return 2
     return 0 if (rep["model"]["key_present"] and rep["can_do_formal"]) else 1
@@ -3418,6 +3714,9 @@ def cmd_web(args) -> int:
     这一层与 `run` / `run-agent` / `project run` 一样先翻 `RunSpec`（`draft/145` §3.2）；
     区别只有一处：`web` 这条老命令仍然逐字转发给 `webui.run(argv)`，多印一个字都不行
     （C2）。要"URL / 工作区 / sid / 当前轮"那四格读数的是 `start --watch`。
+
+    读写：只读投影（每次请求都现读盘）；唯一的写路径是答问（`userio.answer_question`）。
+    实现方式一句话：`webui.run`（本层只把旗标翻成它的 argv）。
     """
     return _run_spec(_spec_from(args, mode=MODE_WEB, origin="web", watch=False), args)
 
@@ -3452,6 +3751,9 @@ def cmd_budget(args) -> int:
       现读到新上限 —— 不需要重启、不需要重跑）。
     为什么要有这一条命令：改前"跑到一半加钱"在结构上没有入口（`Policy` 是 frozen、`LlmSeam.usd_budget`
     与 `TokenMeter.budget_usd` 只在构造期注入），唯一的办法是重跑一次。
+
+    读写：读/写 `<工作区>/budget.json` 寄存器（总额、已花、追加历史）；不碰任何表。
+    实现方式一句话：`budget` 模块的寄存器读写（运行期的闸门读同一份）。
     """
     from . import budget as B
     from .tokenmeter import TokenMeter
@@ -3516,6 +3818,9 @@ def cmd_stop(args) -> int:
     | `4` | 没有开关（`--clear` 时无可撤；无需清） | 什么都不用做 |
     | `2` | 没做成（强制停时一个进程都没杀掉 —— 受限环境的常见形态） | 读原话，别读成"停住了" |
     为什么"别人的开关一律不许清"要写成一个码：驱动器此前只看"命令成没成功"，于是它会把用户刚落的开关顺手撤掉（"停完就清"），而那正是"用户叫停"这件事在系统里消失的形态。
+
+    读写：写/撤 `<工作区>/.agentflow-stop` 与 `runs/stop-history.jsonl`；`--force` 按 `runs/*.pid` 杀进程（连子孙）。
+    实现方式一句话：`stopctl`（开关、登记、消费历史各一处实现）。
     """
     from . import stopctl
 
@@ -3591,29 +3896,111 @@ def cmd_stop(args) -> int:
     return 0 if mine else 3
 
 
-def cmd_stats(args) -> int:
-    """统计量（测试工具）：按角色 × 类目数"错误动作"，只读、零模型调用、不落盘。
+#: `agentflow stats` 的四个读数（名字, 一句话）。名字是 `readouts.READOUTS` 的键。
+#:
+#: 为什么是一张表而不是在 `build_parser` 里抄四遍 `add_parser`：help 文案、子命令名与
+#: `readouts.READOUTS` 三者必须同源，抄四遍就给了它们各自漂的机会（`stats errors` 的
+#: help 曾经写着"只读、零模型调用"，而另一档的文案漏了同一句）。
+STATS_KINDS: tuple[tuple[str, str], ...] = (
+    ("errors", "按角色 × 类目统计错误动作计数（附合计、类目释义与三态）"),
+    ("flow", "按角色的动作分布：走了几步、各是什么形状、被拦下多少、转投多少"),
+    ("cost", "钱与 token 的分布：按角色、按阶段（usage_ledger 的 scope）"),
+    ("gates", "收工门八格三态一张表（现算；不给 --project-dir 时那几格如实记 unknown）"),
+    ("all", "上面四项一起打（三态取合取：有一条没查成就整条记 unknown）"),
+)
 
-    形状：`agentflow stats errors --root <工作区> [--json]`。实现全在 `errorstats`，
-    这里只做三件事：解析 `--root`、选呈现（人读的小表 / 机器可读的 JSON）、把三态翻成
-    退出码（`0` 查过了（含"全 0"）/ `2` 没查成）。
 
-    为什么退出码只有 0 与 2、没有 1：这一层不是判据，它不判"错误太多"。0 与 2 的分界是
-    三态纪律那条线 —— "0 次错误动作"与"没读到事件流"不许用同一个退出码表示。
-    角色归属与主码规则（同一条记录只算一次）写在 `errorstats` 的模块 docstring 里。
+def _stats_readout(kind: str, root: Path, args):
+    """按名字取一条读数（`gates` 多两个入参：项目根与报告路径）。
+
+    唯一的分支在这里：`gates` 的读数需要"这是哪个项目"才知道论文/验收那几格查什么，
+    其余三条只吃一个工作区根。把它做成一个函数而不是散在 `cmd_stats` 里，是为了让
+    "哪个读数要哪些入参"只有一处说法。
     """
-    from . import errorstats as ES
+    from . import readouts as RO
 
+    fn = RO.READOUTS[kind]
+    if kind == "gates":
+        return fn(root, project_dir=str(getattr(args, "project_dir", "") or ""),
+                  report_path=str(getattr(args, "report", "") or ""))
+    return fn(root)
+
+
+def cmd_stats(args) -> int:
+    """统计量（只读测试工具）：四项读数与它们的一份合计。
+
+    形状：`agentflow stats errors|flow|cost|gates|all [--root <工作区>] [--json]`。
+    读数本身全在 `readouts`（统一五键 + 三态），CLI 只做三件事：解析 `--root`、
+    选呈现（人读的小表 / 机器可读的 JSON）、把三态翻成退出码。
+
+    读写了哪些表或文件：只读。`data/events.jsonl`、`sessions/*.jsonl`、
+    `data/usage_ledger.json`，以及收工门那八格要读的表（全是只读快照读）；
+    不落报告、不建目录、不加锁、零模型调用。
+
+    实现方式一句话：`_stats_readout` 从 `readouts.READOUTS` 取实现，人读走
+    `readouts.render_readout`，机器可读直接 `json.dumps` 那份 dict（同一份对象，不二次加工）。
+
+    退出码：`0` 查过了（含"全 0"）/ `2` 没查成（JSON 里 `state="unknown"`）。
+    没有 1：这一层不是判据，它不判"错误太多"。
+
+    `errors` 那一档有一个刻意的例外：不给 `--readout` 时它按老形态打
+    （`errorstats.stats_json`）。理由：那份输出的形状已经有消费者（`total` / `state`
+    两个键被判据逐字钉着），而本轮的纪律是"旧指令行为不变"。`--readout` 给出与新三张表
+    同一个五键形状；数值与三态在两处必须一致，判据 `tests/test_cli_stats_four_tables.py`
+    拿同一夹具对拍。
+    """
+    from . import readouts as RO
+
+    kind = str(getattr(args, "stats_cmd", None) or "errors")
     root = Path(getattr(args, "root", None) or DEFAULT_ROOT).resolve()
-    stats = ES.error_action_stats(root)
-    if getattr(args, "json", False):
-        print(ES.stats_json(stats))
+    as_json = bool(getattr(args, "json", False))
+
+    if kind == "errors" and not getattr(args, "readout", False):
+        # ---- 老形态（逐字节不变）：`errorstats` 自己的渲染与 JSON
+        from . import errorstats as ES
+
+        stats = ES.error_action_stats(root)
+        if as_json:
+            print(ES.stats_json(stats))
+        else:
+            for line in ES.render_text(stats):
+                print(line)
+        if not stats.checked:
+            print(f"[unknown] 没查成：{stats.reason or '读不到事件流或会话记录'}"
+                  "（这里的 0 不是「没有错误动作」）", file=sys.stderr)
+            return 2
+        return 0
+
+    if kind == "all":
+        parts = {name: _stats_readout(name, root, args)
+                 for name, _help in STATS_KINDS if name != "all"}
+        readout = RO.merge_readouts(parts)
+        if as_json:
+            print(json.dumps(readout, ensure_ascii=False, indent=2))
+        else:
+            for name in RO.ALL_DATA_KEYS:
+                print("=" * 72)
+                for line in RO.render_readout(name, parts[name]):
+                    print(line)
+            print("=" * 72)
+            print(f"合计三态    checked={readout['checked']}  state={readout['state']}")
+            if readout["reason"]:
+                print(f"原因        {readout['reason']}")
+        if not readout["checked"]:
+            print(f"[unknown] 没查成：{readout['reason']}"
+                  "（这里的 0 不是「没有」，是「没查成」）", file=sys.stderr)
+            return 2
+        return 0
+
+    readout = _stats_readout(kind, root, args)
+    if as_json:
+        print(json.dumps(readout, ensure_ascii=False, indent=2))
     else:
-        for line in ES.render_text(stats):
+        for line in RO.render_readout(kind, readout):
             print(line)
-    if not stats.checked:
-        print(f"[unknown] 没查成：{stats.reason or '读不到事件流或会话记录'}"
-              "（这里的 0 不是「没有错误动作」）", file=sys.stderr)
+    if not readout["checked"]:
+        print(f"[unknown] 没查成：{readout['reason']}"
+              "（这里的 0 不是「没有」，是「没查成」）", file=sys.stderr)
         return 2
     return 0
 
@@ -3625,6 +4012,9 @@ def cmd_status_report(args) -> int:
 
     为什么它不是"问 M 一句"：`ask_user` 那条路是反向的（让 M 停下来等人），
     而用户中途想知道情况时，正确的形态是旁路观测 —— 读盘 → 出报告，谁都不停。
+
+    读写：只读全部台账与手稿；写 `out/review/STATUS-<ts>.{md,json}`（报告本体，不写任何表）。
+    实现方式一句话：`statusreport.write_status_report`（本层只打读数与下一步）。
     """
     from . import statusreport as SR
     from .store import Store
@@ -3678,6 +4068,9 @@ def cmd_closing(args) -> int:
     落到 `out/review/m-verdicts.jsonl`，这里缺省读那一份；`--goal-met` / `--goal-not-met` 是"人/CI
     代述 M 的说法"的显式入口。没有判据 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。八格照旧
     逐格现算并打出来，但它们是读数。
+
+    读写：只读台账（statements / relations / experiments / documents / review_findings …）与 `out/paper/`、`out/review/` 下的产物；不写任何表、不改任何文件。
+    实现方式一句话：`closing.check_closing` 现算八格，本层只排版与翻退出码。
     """
     from . import closing as CL
     from . import leantoolchain as LT
@@ -3775,12 +4168,98 @@ def _print_review_acceptance(store, *, project: str, report: str,
     print(f"  {acc.summary()}")
 
 
+def _subparsers_action(parser: argparse.ArgumentParser):
+    """顶层唯一的那个 subparsers action（三处判据靠它取 `choices`）。"""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action
+    return None
+
+
+def _subcommand_helps(parser: argparse.ArgumentParser) -> dict[str, str]:
+    """子命令名 → 它那一句 help（从 parser 里现读，不在别处抄第二份）。"""
+    action = _subparsers_action(parser)
+    helps: dict[str, str] = {}
+    for choice in (getattr(action, "_choices_actions", None) or []) if action else []:
+        helps[str(getattr(choice, "dest", ""))] = str(getattr(choice, "help", "") or "")
+    return helps
+
+
+#: 组页里"组名"那一列占多宽（够放 `incubate` 再加两格）。
+_GROUP_COL = 12
+
+#: 组页与首屏里"成员"那一行缩进多少格。
+_MEMBER_INDENT = 4 + _GROUP_COL
+
+
+def _wrap(text: str, *, indent: int, width: int = 100) -> list[str]:
+    """折行并把续行缩进到 `indent` 格（空串 ⇒ 一行空）。"""
+    parts = textwrap.wrap(str(text or ""), width=max(20, width - indent)) or [""]
+    return [" " * indent + parts[0], *(" " * indent + p for p in parts[1:])]
+
+
+def _render_group_help(group: str, parser: argparse.ArgumentParser) -> str:
+    """组页（`agentflow inspect` / `agentflow inspect --help`）。
+
+    只讲三件事：这个组管什么、组里有哪些成员（每个一句）、以及"旧名仍然直接用"。
+    为什么要有这一页：新入口的第一跳是组名，而 argparse 没有"组"这个东西 —— 它只认
+    `choices` 里的 28 个旧名。不给人这一页，用户敲 `agentflow inspect` 会拿到
+    `invalid choice: 'inspect'`，那等于把"分层"这件事藏进文档里。
+    """
+    members = GROUP_MEMBERS[group]
+    helps = _subcommand_helps(parser)
+    lines = [f"agentflow {group} —— {GROUP_PURPOSE[group]}", ""]
+    lines.append(f"用法：agentflow {group} <成员> [旗标]")
+    example_old, example_path = command_paths()[0]
+    for old, path in command_paths():
+        if path.startswith(f"{group} "):
+            example_old, example_path = old, path
+            break
+    lines.append(f"      例：agentflow {example_path}        "
+                 f"（与 agentflow {example_old} 是同一条命令）")
+    lines.append("")
+    lines.append("成员（成员名就是旧名；旧名本身也仍然可以直接敲）：")
+    column = max(len(m) for m in members) + 2
+    for member, old in members.items():
+        note = "" if old == member else f"（旧名 `{old}`）"
+        head = f"    {member:<{column}}"
+        body = textwrap.wrap(f"{helps.get(old, '')}{note}",
+                             width=max(30, 100 - len(head))) or [""]
+        lines.append(head + body[0])
+        lines.extend(" " * len(head) + extra for extra in body[1:])
+    lines.append("")
+    lines.append("看某一条的旗标：`agentflow {0} <成员> --help`。".format(group))
+    lines.append("旧名 → 新路径的全文对照表：`agentflow --help-legacy`。")
+    return "\n".join(lines)
+
+
+def _render_legacy_help() -> str:
+    """旧名 → 新路径的全文对照表（`agentflow --help-legacy`）。
+
+    单独一页的理由：`--help` 首屏要能一眼读完（`draft/145` 的 F5 说的是"二十多个子命令
+    分两页才看全"），而 28 行对照表塞进去就又是两页。这张表与 `command_paths()` 同源，
+    所以改分层只改那一处。
+    """
+    lines = ["旧名 → 新路径（本轮一个旧名都没删；两边行为逐字相同）", ""]
+    width = max(len(old) for old, _path in command_paths())
+    for old, path in command_paths():
+        lines.append(f"  {old:<{width}}  →  agentflow {path}")
+    lines.append("")
+    lines.append("分组的用途：")
+    for group, purpose, _members in COMMAND_GROUPS:
+        lines.append(f"  {group:<{_GROUP_COL}}{purpose}")
+    lines.append("")
+    lines.append("旧名不带组前缀（`agentflow stats`）与新路径（`agentflow inspect stats`）"
+                 "等价：新路径在解析之前就折回旧名，所以旗标、缺省、退出码一个字都不差。")
+    return "\n".join(lines)
+
+
 class _GroupedHelpFormatter(argparse.RawDescriptionHelpFormatter):
-    """首屏按 `SUBCOMMAND_GROUPS` 分组印子命令。
+    """首屏按 `COMMAND_GROUPS` 印四个入口，并把 28 个旧名的一句话说明收进"旧名仍可用"。
 
     为什么只能在这一层做（`draft/145` 的 F5）：argparse 没有给 subparsers 分组的能力
     （`_SubParsersAction` 只认一张 `choices` 字典），而三处既有判据正是靠"唯一一个
-    subparsers action"读 `choices` 的 —— 拆成多个会一起红。所以分组只发生在呈现层：
+    subparsers action"读 `choices` 的 —— 拆成多个会一起红。所以呈现只发生在这里：
     这里只拦 subparsers 那一种 action，其余一律照 argparse 原样走，于是每个子命令自己的
     `--help` 一个字都不变（C2 要求老命令的输出逐字一致）。
     """
@@ -3796,20 +4275,31 @@ class _GroupedHelpFormatter(argparse.RawDescriptionHelpFormatter):
         names = list(action.choices)
         lines: list[str] = []
         placed: set[str] = set()
-        for title, group in SUBCOMMAND_GROUPS:
-            rows = [name for name in group if name in names]
+        lines.append("  组内地名就是旧名；旧名本身也仍然可以直接敲")
+        for group, purpose, members in COMMAND_GROUPS:
+            rows = [m for m in members if GROUP_MEMBERS[group][m] in names]
             if not rows:
                 continue
-            lines.append(f"  {title}")
-            for name in rows:
-                placed.add(name)
-                lines.extend(self._command_lines(name, helps.get(name, "")))
+            lines.append(f"    {group:<{_GROUP_COL}}{purpose}")
+            member_text = "  ".join(rows)
+            lines.extend(_wrap(member_text, indent=_MEMBER_INDENT,
+                               width=max(60, self._width)))
+            placed |= {GROUP_MEMBERS[group][m] for m in rows}
         rest = [name for name in names if name not in placed]
         if rest:
             # 漏登记不静默消失：落在这一栏里，判据也断言并集等于全部子命令。
-            lines.append("  未分组（SUBCOMMAND_GROUPS 漏登记了，请补进去）")
+            lines.append("  未分组（COMMAND_GROUPS 漏登记了，请补进去）")
             for name in rest:
                 lines.extend(self._command_lines(name, helps.get(name, "")))
+        lines.append("")
+        lines.append("  例：`agentflow inspect stats cost --json`；"
+                     "某一条的旗标看 `agentflow inspect stats --help`。")
+        lines.append("")
+        lines.append("  旧名仍可用（一个都没删，与新路径逐字等价）：")
+        lines.extend(_wrap(" ".join(LEGACY_COMMANDS), indent=4,
+                           width=max(60, self._width)))
+        lines.append("  全文对照表与四组的用途：`agentflow --help-legacy`"
+                     "（也在 docs/USER-GUIDE.md 的 CLI 一节）。")
         return "\n".join(lines) + "\n\n"
 
     def _command_lines(self, name: str, help_text: str) -> list[str]:
@@ -3822,6 +4312,18 @@ class _GroupedHelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """建整张命令行表：28 个旧命令 + 顶层开关（四个组由 `canonical_argv` 折回这里）。
+
+    读写：不读不写任何文件（`--help` 之所以能在 0 毫秒内给出来，就是因为这一层只装表）。
+    实现方式一句话：每个子命令一个 `add_parser` + 一句 `set_defaults(func=cmd_xxx)`；
+    首屏的分组只发生在呈现层（`_GroupedHelpFormatter`），`choices` 仍然是那 28 个名字
+    —— 三处判据（子命令数、分组覆盖、`--json` 契约）都靠这个唯一的 subparsers action。
+
+    加一条命令时要一起改的地方（顺序即"漏了会红"的顺序）：
+    `COMMAND_GROUPS` 里给它一个组 → 这里 `add_parser` + `set_defaults` → 那个 handler
+    写清"干什么 / 读写哪些表 / 实现方式" → `docs/USER-GUIDE.md` 与 `docs/CLI-CONTRACT.md`
+    各补一行/一节 → 子命令数那两处读数（`README.md` 与 `docs/DEVELOPMENT-SPEC.md`）。
+    """
     p = argparse.ArgumentParser(prog="agentflow",
                                 description="面向数学研究的多智能体协同框架（正式版；A–H + 主控 M）",
                                 formatter_class=_GroupedHelpFormatter)
@@ -3836,8 +4338,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--plain", action="store_true",
                    help="纯 ASCII 输出（制表符/勾号都不画；老终端或想粘到邮件里时用）")
     p.add_argument("--compact", action="store_true", help="少画框、少空行")
+    # 旧名 → 新路径的全文对照表（28 行）。单独一页而不是塞进 `--help`：首屏要能一眼读完，
+    # 而这张表与 `command_paths()` 同源，改分层只改那一处。
+    p.add_argument("--help-legacy", action="store_true",
+                   help="打印旧名 → 新路径的全文对照表（本轮一个旧名都没删，两边逐字等价）")
     #: `metavar` 是"首屏能读"的一半：二十多个名字全塞进 usage 行会折成三行，
     #: 而真正想让人看的是下面那四组。子命令清单仍在 `choices` 里（判据读的就是它）。
+    #:
+    #: 抬头改的是 `_positionals` 那一组的 `title`（默认 `positional arguments`）：
+    #: 顶层没有别的位置参数，那一组里只有这个 subparsers action，所以改它就是改那一节的
+    #: 抬头。为什么不给 `add_subparsers` 传 `title=`：那会新建一个组并把它追加到
+    #: "options" 之后，于是最重要的那一节会被挤到 `--help` 的最下面。
+    #: `parser._actions` 与 `choices` 一个字都不变 —— 三处判据靠的仍然是
+    #: "唯一一个 subparsers action"。
+    p._positionals.title = "命令（四个入口）"
     sub = p.add_subparsers(dest="cmd", metavar="<命令>")
 
     sp = sub.add_parser("init", help="初始化数据目录与空表")
@@ -3910,6 +4424,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-len", type=int, default=4, help="路径最大跳数")
     sp.add_argument("--request", default="", help="原始需求原文（登记在报告里便于审计）")
     sp.add_argument("--text", default=None, help="直接用自然语言需求，走 C.handle() 分派")
+    # B 格：`--json` 是这一轮新加的开关（此前没有），所以它给的是外层四格
+    # （ok / state / data / problems，见 `_envelope_payload`）。`data.text` 是这条命令
+    # 原本打印的那份报告原文 —— 本命令还没有结构化输出，这一格不假装有。
+    sp.add_argument("--json", action="store_true",
+                    help="机器可读：外层四格（ok/state/data/problems），data.text 是报告原文")
     sp.set_defaults(func=cmd_analyze)
 
     sp = sub.add_parser("pipeline", help="编排：C→D→(A→B→D 复查) 循环")
@@ -4125,6 +4644,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("target", help="verify 给运行目录；store/migrate 给项目目录")
     sp.add_argument("--apply", action="store_true",
                     help="migrate 真的改写产物（缺省只 dry-run：这一步改的是历史证据本体）")
+    # B 格：这一轮新加的开关 ⇒ 外层四格（`data.text` 是它打印的那份读数）。
+    sp.add_argument("--json", action="store_true",
+                    help="机器可读：外层四格（ok/state/data/problems），data.text 是读数原文")
     sp.set_defaults(func=cmd_evidence)
 
     # 产物归属登记（依据 draft/28 §153 的 A3/A4 与 R-52）：谁在哪个路径产出了什么。
@@ -4146,6 +4668,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="record：产生它的那次执行的退出码（没跑过就别给，不许拿 0 冒充）")
     sp.add_argument("--note", default="", help="record：人读的补充")
     sp.add_argument("--out", default=None, help="report：写到这个文件（缺省打到 stdout）")
+    # B 格：这一轮新加的开关 ⇒ 外层四格（`data.text` 是台账渲染出来的原文）。
+    sp.add_argument("--json", action="store_true",
+                    help="机器可读：外层四格（ok/state/data/problems），data.text 是读数原文")
     sp.set_defaults(func=cmd_artifacts)
 
     sp = sub.add_parser(
@@ -4332,21 +4857,36 @@ def build_parser() -> argparse.ArgumentParser:
                         help="项目状态报告（只读台账与手稿；落 out/review/STATUS-<ts>.{md,json}）")
     sp.add_argument("--since", default="", help="只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）")
     sp.add_argument("--out", default="", help="报告落哪个目录（缺省 <工作区>/out/review）")
+    # B 格：这一轮新加的开关 ⇒ 外层四格。这条命令真正的机器可读那一份一直是它落盘的
+    # `STATUS-<ts>.json`（路径就在 data.text 的读数里），`--json` 给的是外层四格 +
+    # 那段人读的原文，免得脚本去猜文件名的通配符。
+    sp.add_argument("--json", action="store_true",
+                    help="机器可读：外层四格（ok/state/data/problems），data.text 是报告原文")
     sp.set_defaults(func=cmd_status_report)
 
-    # 统计量（测试工具，业主 2026-10-24）：按角色 × 类目数"错误动作"（含被各种判据拦下与
-    # 被秘书拦下的行为）。只读、零模型调用、不落任何文件 —— 实现全在 `errorstats`。
-    # 为什么挂在 `stats` 下面而不是又开一个动词：这个量会长出别的读数（拒信分布、
-    # 逐角色成功率…），"统计量"是一类东西；今天只有 `errors` 一档，缺省就是它。
+    # 统计量（测试工具，业主 2026-10-24）：先只有"按角色 × 类目数错误动作"，本轮扩成
+    # 四张读数（errors / flow / cost / gates）＋ 一条 `all`。读数本身全在 `readouts`
+    # （统一五键 + 三态），这里只挂子命令与开关 —— 于是"同一个数两份实现"不会从这里回来。
     # `--root` 用 `default=argparse.SUPPRESS`：子 parser 的缺省 None 会把用户写在子命令
     # 前面的顶层 `--root` 覆盖掉（与 `start` 那一组同一个理由）。
-    sp = sub.add_parser("stats", help="统计量（只读测试工具）：按角色数错误动作")
+    sp = sub.add_parser("stats", help="统计量（只读测试工具）：错误动作 / 动作流 / 花费 / 收工门")
     _ssub = sp.add_subparsers(dest="stats_cmd", metavar="<统计量>")
-    _err = _ssub.add_parser("errors",
-                            help="按角色 × 类目统计错误动作计数（附合计、类目释义与三态）")
-    _err.add_argument("--root", default=argparse.SUPPRESS, help="工作区根（与顶层 --root 同义）")
-    _err.add_argument("--json", action="store_true", help="机器可读（JSON）")
-    _err.set_defaults(func=cmd_stats, stats_cmd="errors")
+    for _name, _kind_help in STATS_KINDS:
+        _sp = _ssub.add_parser(_name, help=_kind_help)
+        _sp.add_argument("--root", default=argparse.SUPPRESS, help="工作区根（与顶层 --root 同义）")
+        _sp.add_argument("--json", action="store_true", help="机器可读（JSON）")
+        if _name in ("gates", "all"):
+            # 只对 gates 有意义的两格：不给 ⇒ 依赖它们的那几格如实记 unknown（不是 pass）。
+            _sp.add_argument("--project-dir", default="",
+                             help="（gates/all）项目根：论文 / 验收 / 产物台账那几格要它")
+            _sp.add_argument("--report", default="",
+                             help="（gates/all）报告路径：报告形状那一格要它")
+        if _name == "errors":
+            # 老形态的兼容出口：不给这个开关时按 `errorstats` 的原样打（逐字节不变）。
+            _sp.add_argument("--readout", action="store_true",
+                             help="按新的五键读数形状打（checked/state/reason/data/problems），"
+                                  "与 flow/cost/gates 同一个外层；不给则保持老形态")
+        _sp.set_defaults(func=cmd_stats, stats_cmd=_name)
     sp.set_defaults(func=cmd_stats, stats_cmd="errors")
 
     # 用户端网页：给人看"它在等什么、跑到哪了、上一趟干了什么"，并让人在那里回答问题。
@@ -4388,7 +4928,180 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _print_subcommand_help(parser: argparse.ArgumentParser, name: str) -> None:
+    """把某个旧命令自己的 `--help` 原样打出来（组页要接在它前面时用）。
+
+    为什么读 `_name_parser_map` 而不是再 `build_parser()` 一次：那会造出第二份 parser，
+    而"组页后面接的真是那条命令的 help"这件事必须拿同一份对象才算数。
+    """
+    action = _subparsers_action(parser)
+    child = (getattr(action, "choices", None) or {}).get(name) if action else None
+    if child is not None:
+        child.print_help()
+
+
+#: `--json` 的外层四格（业主 2026-10-24 批的 B 格）。`inspect` 那一组的机器可读输出
+#: 一律是这一层，里面才是各命令自己那一份 `data`。
+#:
+#: 为什么还要一层外壳：三态是这套框架的硬纪律，而"每条命令各拿一个字段表示三态"
+#: （`ok` / `checked` / `state` / 出没出问题）必然会漂。外壳把这件事收成一处，
+#: 于是脚本可以只写一次 `if not doc["ok"]`。
+JSON_ENVELOPE_KEYS: tuple[str, ...] = ("ok", "state", "data", "problems")
+
+#: 三态取值（`state` 那一格）：`checked` 查过了 / `failed` 查过了有问题 / `unknown` 没查成。
+JSON_ENVELOPE_STATES: tuple[str, ...] = ("checked", "failed", "unknown")
+
+#: 这四条命令的 `--json` 是本轮新加的（它们此前没有这个开关），所以外层四格
+#: 在两条路上都生效。另外六条（stats / tools / cache / budget / doctor / verify）
+#: 早就有自己的 `--json`，那些输出已有消费者：旧路径一个字节都不许变，只有从
+#: `inspect` 那一组走时才套外层（见 `_wants_json_envelope` 的注释）。
+ENVELOPE_ONLY_COMMANDS: frozenset[str] = frozenset({
+    "status-report", "evidence", "artifacts", "analyze"})
+
+
+def _envelope_state(code: int) -> str:
+    """退出码 → 三态词（与全仓 0/1/2 的口径逐字对应）。"""
+    if code == 0:
+        return "checked"
+    if code == 1:
+        return "failed"
+    return "unknown"
+
+
+def _envelope_payload(raw_text: str, code: int, problems: list[str]) -> dict:
+    """把一条命令打印的原文装进外层四格（幂等：已经是外层就原样放行）。
+
+    认得四种输入：
+
+    1. 已经是四格外层（`ok`/`state`/`data`/`problems` 齐）⇒ 原样返回（幂等点）。
+    2. 是读数层那五格（`checked`/`state`/`reason`/`data`/`problems`，见 `readouts`）
+       ⇒ 翻成外层四格：`ok` 由退出码给，`problems` 里补上那条 `reason`。
+       为什么要有这一支：`agentflow inspect stats flow --json` 走的正是这里，而它的
+       `data` 已经是"这一类读数自己的表" —— 再套一层会得到 `data.data` 那种读不下去的形状。
+    3. 是一个 JSON 对象（各命令自己那一份）⇒ 放进 `data`。
+    4. 不是 JSON（`analyze` / `evidence` / `artifacts` / `status-report` 这几条还没有
+       结构化输出）⇒ `data = {"text": 原文}`。这一格是诚实的占位：它不假装有结构，
+       也没把原文丢掉。
+    """
+    state = _envelope_state(code)
+    body = str(raw_text or "")
+    parsed: object = None
+    if body.strip():
+        try:
+            parsed = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+    if isinstance(parsed, dict):
+        if set(JSON_ENVELOPE_KEYS) <= set(parsed):
+            extra = [str(p) for p in (parsed.get("problems") or [])]
+            return {"ok": bool(parsed.get("ok")) and code == 0,
+                    "state": str(parsed.get("state") or state),
+                    "data": parsed.get("data") if isinstance(parsed.get("data"), dict) else {},
+                    "problems": extra + list(problems)}
+        if {"checked", "state", "data"} <= set(parsed):
+            notes = [_problem_line(p) for p in (parsed.get("problems") or [])]
+            reason = str(parsed.get("reason") or "")
+            if reason and not parsed.get("checked"):
+                notes.insert(0, reason)
+            return {"ok": bool(parsed.get("checked")) and code == 0,
+                    "state": str(parsed.get("state") or state),
+                    "data": parsed.get("data") if isinstance(parsed.get("data"), dict) else {},
+                    "problems": notes + list(problems)}
+        return {"ok": code == 0, "state": state, "data": parsed,
+                "problems": list(problems)}
+    data: dict = {"text": body}
+    return {"ok": code == 0, "state": state, "data": data, "problems": list(problems)}
+
+
+def _problem_line(item: object) -> str:
+    """把一条 `problems` 条目折成一行文本（外壳里的 `problems` 一律是字符串数组）。
+
+    读数层给的是 `{"code", "detail"}`（结构化），stderr 给的是原话（字符串）。外壳里
+    两者同形，脚本才能只写一次 `for line in doc["problems"]`。
+    """
+    if isinstance(item, Mapping):
+        code = str(item.get("code") or "")
+        detail = str(item.get("detail") or "")
+        return f"[{code}] {detail}" if code else detail
+    return str(item)
+
+
+def _wants_json_envelope(request: tuple[str, str, str] | None, args) -> bool:
+    """这一趟要不要套 `--json` 的外层四格。
+
+    两条路各有一条理由（缺一条就会有一半的消费者拿到旧形状）：
+
+    - 从 `inspect` 那一组走（`agentflow inspect <成员> …`）：外层一律套上 ——
+      那一组是新入口，它的机器可读输出就是"契约"本身；
+    - 旧路径 + 本轮新加 `--json` 的那四条（`status-report` / `evidence` /
+      `artifacts` / `analyze`）：它们此前根本没有这个开关，所以没有旧形状可破坏。
+
+    为什么另外六条旧路径不套：`tools --json` 的输出有一份冻结快照判据逐字钉着
+    （`tests/golden/tool_surface_snapshot.json`），`budget` / `verify` / `doctor` /
+    `stats errors` / `cache` 各有消费者；把它们的字节改掉就不是"旧指令行为不变"了。
+    """
+    if not getattr(args, "json", False):
+        return False
+    if request is not None and request[0] == "inspect":
+        return True
+    return str(getattr(args, "cmd", "")) in ENVELOPE_ONLY_COMMANDS
+
+
+def _run_enveloped(args) -> int:
+    """跑一次命令，把它打印的东西收起来，打一份外层四格的 JSON。
+
+    为什么要"收起来再打"：这四条命令（与那六条）都是自己 `print` 的，它们不该为了
+    JSON 长出第二套渲染（那正是"同一个数两份实现"）。收 stdout、把 stderr 的每一行
+    记进 `problems`，是唯一不碰它们内部的做法。
+
+    退出码原样返回：外层四格是给人/脚本读的，进程退出码才是 CI 的判据 —— 两处不许
+    分家，所以这里不打折也不升级。
+    """
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        code = int(args.func(args) or 0)
+    problems = [line for line in str(err.getvalue()).splitlines() if line.strip()]
+    doc = _envelope_payload(str(out.getvalue()), code, problems)
+    if code != 0 and not doc["problems"]:
+        # 没通过却一条原因都没打给 stderr 的命令（`doctor` / `cache` 是这一档：它们的
+        # 逐条原因在 `data` 里）。外壳不许在这种时候给一个空 `problems` —— 读脚本的人
+        # 会以为"失败了但没原因"。所以补一句指路，指到 `data` 里那一份。
+        doc["problems"] = [f"退出码 {code}（{doc['state']}）：这一条没把原因打到 stderr，"
+                           "逐条原因在 data 里那份读数（doctor 看 data.checks）"]
+    print(json.dumps(doc, ensure_ascii=False, indent=2, default=str))
+    for line in problems:
+        print(line, file=sys.stderr)
+    return code
+
+
+def _group_request(argv: list[str]) -> tuple[str, str, str] | None:
+    """argv 是不是一个"组"的请求：返回 `(组名, 成员名或空串, 原样的那个词)`，否则 None。
+
+    四组之外一律 None（照旧走 argparse）。三档形态都从这里出去，`main` 只需要看
+    `member` 是空串（打组页）、`-h/--help`（打组页 + 旧命令自己的 help）还是别的词
+    （不认识 ⇒ 人话点名）。`run` 那一组特殊：它的组名同时是旧命令名，所以"裸 `agentflow
+    run`"与"`agentflow run <不是成员>`"都原样交回 argparse —— 那条命令一个字节都不许动。
+    """
+    index = _command_index(argv)
+    if index is None:
+        return None
+    group = str(argv[index])
+    if group not in GROUP_MEMBERS:
+        return None
+    member = str(argv[index + 1]) if index + 1 < len(argv) else ""
+    return (group, member, str(argv[index]))
+
+
 def main(argv: list[str] | None = None) -> int:
+    """命令总入口：钉编码 → 认组页 → 折回旧名 → 解析 → 交给 handler（必要时套 `--json` 外壳）。
+
+    读写：这一层自己不读写任何工作区文件；它只钉输出编码（`pin_utf8`）、认 `--help-legacy`、
+    把 `agentflow <组> <成员>` 折回旧名（`canonical_argv`），并把三类"没跑成"翻成退出码
+    2：源码/import 坏了（C6 那一级，报 `文件:行`）、`StoreError`、以及 Ctrl-C。
+    实现方式一句话：解析层一个字不动，分层与外壳都发生在"进 handler 之前"那几行 ——
+    于是 28 个旧命令的 `args`、旗标、输出与退出码全部保持原样。
+    退出码：handler 返回什么就是什么（0 / 1 / 2 的三态口径在各命令自己的 docstring 里）。
+    """
     # 先把输出编码钉住再做任何事：GBK 控制台编不出摘要里的 `⇒` ⇒ print 抛异常 ⇒ 进程以 1
     # 结束，而 1 是"查过了、发现问题"。那会把 `run` 无 key 的受控码 2（没跑成）反转成 1。
     pin_utf8()
@@ -4398,13 +5111,53 @@ def main(argv: list[str] | None = None) -> int:
     # 是为了让"能用"这件事不依赖记忆。
     if not raw:
         return shell()
+    # ---- 新分层（`COMMAND_GROUPS`）的两个入口：组页与"这个组里没有它"的人话。
+    # 为什么必须在 `parse_args` 之前：argparse 不认识组名（`choices` 里只有 28 个旧名），
+    # 让它先看到 `inspect` 只会得到 `invalid choice: 'inspect'` —— 分层就被藏进文档里了。
+    request = _group_request(raw)
+    if request is not None:
+        group, member, word = request
+        members = GROUP_MEMBERS[group]
+        wants_page = member in ("", "-h", "--help")
+        if wants_page and not (group == "run" and member == ""):
+            # `run` 那一组的裸组名不归这里：`agentflow run` 是旧命令本身（缺 --topic 的
+            # 那句人话由 argparse 给），组页走 `agentflow run --help`。
+            parser = build_parser()
+            print(_render_group_help(group, parser))
+            if group == "run":
+                # 组名与旧命令同名：把旧命令自己的 help 接在同一页后面，于是
+                # `agentflow run --help` 既讲清了组，也没有丢掉任何一格旗标。
+                print()
+                _print_subcommand_help(parser, "run")
+            if member in ("-h", "--help"):
+                # 与 argparse 的 `--help` 同一条契约：先打印、再以 SystemExit(0) 结束
+                # （`agentflow run --help` 这一档改前就走 argparse，进程内调用方
+                # 一直靠 `except SystemExit` 接它）。
+                raise SystemExit(0)
+            return 0
+        if (not wants_page and not member.startswith("-")
+                and member not in members and group != "run"):
+            # `run` 那一组不接这一档：它的组名同时是旧命令名，不认识的第二个词照旧交给
+            # argparse（`unrecognized arguments`），那条命令的行为一个字节都不改。
+            print(f"[用法错误] `{group}` 这一组里没有 `{member}`。\n"
+                  f"  组内成员：{'  '.join(members)}\n"
+                  f"  看这一页：`agentflow {group} --help`；"
+                  f"看某一条的旗标：`agentflow {group} <成员> --help`", file=sys.stderr)
+            return 2
+    raw = canonical_argv(raw)
     parser = build_parser()
     args = parser.parse_args(raw)
     tty.set_style(color=False if (args.no_color or args.plain) else None,
                   charset="ascii" if args.plain else None)
+    if getattr(args, "help_legacy", False):
+        print(_render_legacy_help())
+        return 0
     if args.cmd is None:
         return shell()
+    envelope = _wants_json_envelope(request, args)
     try:
+        if envelope:
+            return _run_enveloped(args)
         return args.func(args)
     except (SyntaxError, ImportError) as e:
         # 启动自检的第一级（`draft/145` 的 C6）：某个模块在运行时才 import 到它时坏了 ⇒

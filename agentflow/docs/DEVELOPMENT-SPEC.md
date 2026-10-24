@@ -54,9 +54,12 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 20 / info 49`（复跑 `python -B scripts/lint_rules.py`；
-`error` 那一栏刻意不钉 —— 它由发布门第 5 项按"必须为 0"强制；**严格档的两个数只写进块里的
-`lint_rules_strict_*` 两行**，正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
+**linter 的当次三栏（日常档）**：`error 0 / warning 22 / info 49`（观测 2026-10-24 14:55 +0800，
+复跑 `python -B scripts/lint_rules.py`；`warning` / `info` 是当次读数，判据逐行拿它们对账。
+`error` 那一格写的是发布门第 5 项的**要求值**、不是读数 —— 它按"必须为 0"强制，而并行施工期间
+同一棵树上的实测在 0–4 之间跳（那一刻是 4，全部落在 `readouts.py` / `cli.py` 与它们的判据文件的
+docstring 星号强调上，不在本批改动里）。**严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**，
+正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
 ```powershell
 cd D:\Incubator\agentflow
@@ -66,14 +69,14 @@ $env:PYTHONPATH='src'   # 只有跑 `python -m agentflow.*` / `python -c "...imp
 
 ```text
 LIVE-READINGS:BEGIN
-# 本块按判据口径量（`tests/conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）；CLI 缺省 shell 是 95/15
+# 本块按判据口径量（`tests/conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）；CLI 缺省 shell 是 94/15
 # 名字 = 数字        # 含义 + 复跑命令 + 观测时刻
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 20   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
+lint_rules_warning      = 22   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 49   # 同一档的 info 栏
-lint_rules_strict_warning = 80 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 84 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
 noai_paths_glob         = 45   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 42   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
@@ -81,13 +84,13 @@ noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组�
 tools_star_tools_py     = 18   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total         = 98   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
+cli_tools_total         = 97   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径；Lean 开 = 97，Lean 关 = 94 —— 三件 `formal.*` 不装配。判据在 Lean 开的档里跑）
 cli_tools_modules       = 16   # 同一行"已装模块 N"
 cli_tools_role_a        = 37   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
 cli_tools_role_b        = 23
 cli_tools_role_c        = 23
 cli_tools_role_d        = 42
-cli_tools_role_e        = 25
+cli_tools_role_e        = 24
 cli_tools_role_f        = 36
 cli_tools_role_g        = 38
 cli_tools_role_h        = 31
@@ -99,7 +102,7 @@ webui_routes            = 28   # `python -c "import sys;sys.path.insert(0,'src')
 webui_routes_get        = 20   # 同上，按 `x[0] == 'GET'` 计数
 webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 14    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
+webui_test_files        = 15    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
 LIVE-READINGS:END
 ```
 
@@ -189,7 +192,7 @@ LIVE-READINGS:END
 |---|---|
 | 动作总数 **64** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-10-23 加 L 的三件形式化动作 ⇒ 62 → 65） |
 | 可召唤动作数 **54** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；此前 2026-10-20 撤 `M→V` ⇒ 57 → 54） |
-| 子命令数 **27** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices） |
+| 子命令数 **28** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices。2026-10-24 加 `stats` 那一组：统计量，今天只有 `errors` 一档 ⇒ 27 → 28） |
 
 **两条使用规矩**（与 §1.1 同源）：
 1. **引用任何计数前先在这张表里找它**：找到"有判据"⇒ 可以信当次值；
@@ -390,10 +393,11 @@ LIVE-READINGS:END
   - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
     `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
     **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
-  - 判据文件共 **14** 个：`test_webui{,_contracts,_help_is_current,_pages,_readers,_roster_panel,_settings_write,_sse,_static,_writes,_browser,_ledger_counts_writes,_live_names_the_host_process,_pending_is_one_list}.py`；
-    复跑 `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`（2026-10-23 实测：14；
+  - 判据文件共 **15** 个：`test_webui{,_contracts,_help_is_current,_pages,_readers,_readings_format,_roster_panel,_settings_write,_sse,_static,_writes,_browser,_ledger_counts_writes,_live_names_the_host_process,_pending_is_one_list}.py`；
+    复跑 `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`（2026-10-23 复跑实测：15；
     这一格随并行施工变 —— 本节第一次量到的是 10，`test_webui_help_is_current.py` 落地后变 11，
-    2026-10-22 的三条（台账写入计数 / 直播点名宿主进程 / 待答只有一张清单）落地后变 14）。
+    2026-10-22 的三条（台账写入计数 / 直播点名宿主进程 / 待答只有一张清单）落地后变 14，
+    之后再量到 15：多出来的那一件是 `test_webui_readings_format.py`）。
 - **已知边界**（照实写，**不许写成"已解决"**）：
   1. `draft/35` 的七层里**没有这一层**（整份文件里 `webui` / `web/` / `Web 端` **0 命中**，
      复跑 `Select-String -Path 'draft\35-… .md' -Pattern 'webui|web/|Web 端'`）——

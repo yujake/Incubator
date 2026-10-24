@@ -230,32 +230,43 @@ def test_the_bare_action_name_also_reaches_the_route(tmp_path):
 
 
 def test_the_wild_road_is_refused_with_the_route_spelled_out(tmp_path):
-    """② 封路正控：`table.create("statements")` 直写 ⇒ 被拒，拒信逐字写出该走哪条路。
+    """② 封路正控：`table.create("statements")` 直写 ⇒ 不落盘，且处置口径已换（2026-10-24）。
 
     参数用的是 `mp2-7.jsonl` 第 97 行逐字那一份（手写 `evidence_kind` + `bits`）：
     判据要挡的正是那个形态，而不是一个抽象的表名。
+
+    ## 这一条的口径在 2026-10-24 换过（业主裁定「自动将直写请求路由到秘书接管」）
+    改前它断的是"直写被拒 + 拒信逐字指路"。现在处置分两档，本判据两档都核：
+      - 载荷带 `bits`（手写五元位那一档）⇒ 仍拒（`direct_write_refused`），
+        理由说的是"那几格是现算派生面"，不是"你该去找谁"（业主追加口径第 7 条）；
+      - 干净的载荷 ⇒ 由系统兜底接管（`routed_to_backstop.*`），行落不落由兜底方判。
+    两档都不许落行 —— 这一条要的红没有变，变的只是"拒"与"接管"的边界。
     """
     st, cond, reg, backend = _world(tmp_path)
-    for table, row in (
-        ("statements", {"origin": "own_result", "kind": "proposition",
+    res = reg.call("table.create", role="B", table="statements",
+                   row={"origin": "own_result", "kind": "proposition",
                         "label": "椭圆无等弦点", "statement_full": STATEMENT,
                         "proof_text": PROOF, "evidence_kind": "heuristic", "bits": {},
                         "line_range": {"start": 17, "end": 83},
-                        "quote_reason": "尚未逐字校验"}),
-        ("dependencies", {"used_by": "stmt:" + S.format_id(0), "kind": "theorem",
-                          "label": "引理 1", "source_stmt_id": S.format_id(0)}),
-    ):
-        res = reg.call("table.create", role="B", table=table, row=row)
-        assert res.ok is False, (table, res.data)
-        assert res.meta.get("kind") == "direct_write_refused", (table, res.meta)
-        err = str(res.error or "")
-        assert "Secretary.record_statement" in err, err
-        assert "own.register_statement" in err, err
-        assert "table.delete" in err, "拒信要逐字写着哪条不受这条限制"
-        assert res.meta.get("route_tool") == "own.register_statement", res.meta
+                        "quote_reason": "尚未逐字校验"})
+    assert res.ok is False, (res.data, res.meta)
+    assert res.meta.get("kind") == "direct_write_refused", res.meta
+    err = str(res.error or "")
+    assert "bits" in err, err
+    for hint in ("own.register_statement", "Secretary.record_statement", "请用", "改走"):
+        assert hint not in err, f"拒信里还有指路语 {hint!r}：{err}"
+    # `dependencies` 的登记可以兜底（`doc.register_dependency` 那条正路），
+    # 但这一份载荷指的 `source_stmt_id` 不在册 ⇒ 兜底方按它自己的判据拒（一条都不落）。
+    dep = reg.call("table.create", role="B", table="dependencies",
+                   row={"used_by": "stmt:" + S.format_id(0), "kind": "theorem",
+                        "label": "引理 1", "source_stmt_id": S.format_id(0),
+                        "status": "closed"})
+    assert dep.ok is False, (dep.data, dep.meta)
+    assert dep.meta.get("kind") == "routed_to_backstop.literal_refused", dep.meta
     upd = reg.call("table.update", role="B", table="statements",
                    id=S.format_id(0), patch={"evidence_kind": "proof_review"})
-    assert upd.ok is False and upd.meta.get("kind") == "direct_write_refused", upd.meta
+    assert upd.ok is False, upd.meta
+    assert upd.meta.get("kind") == "not_found", upd.meta
     assert st.rows("statements") == [] and st.rows("dependencies") == [], "拒了就不许落行"
 
 

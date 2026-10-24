@@ -1,24 +1,24 @@
-"""跨智能体交互的**冻结契约**（DESIGN-INTERACTIONS.md §1 I1–I7）。
+"""跨智能体交互的冻结契约（DESIGN-INTERACTIONS.md §1 I1–I7）。
 
 为什么要有这个模块，而不是把逻辑分别写进 A/B/C/D
 -------------------------------------------------
 
 上一版最贵的教训有两个，都指向同一个解法：
 
-1. **同一判据写在两处 ⇒ 必然漂移。** `RuleExtractor` 的 docstring 早就警告过
+1. 同一判据写在两处 ⇒ 必然漂移。 `RuleExtractor` 的 docstring 早就警告过
    "两个模块各持一套判据"。"矛盾"这个判据此前只活在 `agent_d` 里；I6 要求
    B 在写入期也问同一个问题。若 B 自己再写一份 `_negated`，那么"写入期认为不矛盾、
-   事后 C 认为矛盾"会变成一个**没有报错**的静默分裂。
-2. **共享存储 + 多智能体下，最容易死锁的地方是"在事务里调用别人"。**
+   事后 C 认为矛盾"会变成一个没有报错的静默分裂。
+2. 共享存储 + 多智能体下，最容易死锁的地方是"在事务里调用别人"。
    I6 的硬约束是：B 在提交事务内问 C "这条新关系与已有的是否矛盾"，
-   而 C 要读图。如果 C 去查 store，就是**锁重入**（`filelock` 在同一进程内
+   而 C 要读图。如果 C 去查 store，就是锁重入（`filelock` 在同一进程内
    重入同一把锁会直接抛错，在别的实现里则是死锁）。
 
-因此本模块的**全部**函数满足两条铁律：
+因此本模块的全部函数满足两条铁律：
 
-- **不接收 `Store` / `Tx`，不开事务，不碰文件系统。**（`assert_store_free` 在导入时
+- 不接收 `Store` / `Tx`，不开事务，不碰文件系统。（`assert_store_free` 在导入时
   自检签名，防止后来者顺手加一个 `store=` 参数。）
-- **纯函数**：同样的入参必得同样的出参，不读时间、不读随机数、不改入参。
+- 纯函数：同样的入参必得同样的出参，不读时间、不读随机数、不改入参。
 
 各智能体对本模块的用法：
 
@@ -26,10 +26,10 @@
 智能体        用到的契约
 ===========  ==========================================================
 A            ``priority_rank`` / ``order_pending_requests``（I7 取任务）
-             ``admit_search_request``（I7 配额闸门，在**调用方的** tx 内执行）
+             ``admit_search_request``（I7 配额闸门，在调用方的 tx 内执行）
 B            ``check_conflict``（I6 写入期闸门，纯函数）
              ``admit_reprocess_request``（I4 重抽取配额）
-C            ``check_conflict`` / ``detect_contradictions``（对外**再导出**同一份实现）
+C            ``check_conflict`` / ``detect_contradictions``（对外再导出同一份实现）
              ``structural_duplicate_pairs``（I5 候选）
 D            ``detect_contradictions`` / ``adjudicate_contradiction``（I2 闭环）
              ``evidence_relevance``（§3.2 证据就绪判据）
@@ -40,12 +40,12 @@ D            ``detect_contradictions`` / ``adjudicate_contradiction``（I2 闭�
 -------------------------
 
 跨智能体返回的每个"空"都必须是三态，见 `DESIGN-INTERACTIONS.md` §3.4。
-具体做法：**凡"没查"的情况下返回 `None` 的开关，都不给默认值**，
+具体做法：凡"没查"的情况下返回 `None` 的开关，都不给默认值，
 并且每个结果字典都带一个显式的 ``checked`` 布尔位：
 
-- ``{"checked": False, "conflict": None}`` —— **没检查**（例如调用方没把已有关系传进来）
-- ``{"checked": True,  "conflict": False}`` —— **检查过，不冲突**
-- ``{"checked": True,  "conflict": True}``  —— **检查过，冲突**
+- ``{"checked": False, "conflict": None}`` —— 没检查（例如调用方没把已有关系传进来）
+- ``{"checked": True,  "conflict": False}`` —— 检查过，不冲突
+- ``{"checked": True,  "conflict": True}``  —— 检查过，冲突
 
 禁止把前两者压成同一个 ``False``：那正是"静默失败比崩溃更危险"的经典形态。
 """
@@ -57,12 +57,12 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import schema as S
-# `MAX_ID` 是"4 位 ID 的上限"的**唯一定义处**（`store.py`）。这里 import 它而不是
+# `MAX_ID` 是"4 位 ID 的上限"的唯一定义处（`store.py`）。这里 import 它而不是
 # 另写一个 9999：上限一旦有两个字面量就会漂移，而漂移的表现是"一处 fail-closed、
 # 另一处照样发 5 位号"。`store.py` 只依赖 `schema`，不会与 `interactions` 成环。
 from .store import MAX_ID
 
-#: 本契约模块的版本。**语义变化就要升它**（见 `agentflow.__init__` 的说明）。
+#: 本契约模块的版本。语义变化就要升它（见 `agentflow.__init__` 的说明）。
 #:
 #: 版本历史：
 #:   1 —— 首版：I1–I12 落地时的契约（三态结果、strong/weak 矛盾分档、
@@ -73,23 +73,23 @@ CONTRACT_VERSION = 1
 class IdSpaceExhausted(ValueError):
     """4 位 ID 空间用尽（`P-4`：上限下沉进 :func:`next_prefixed_id`）。
 
-    ## 为什么是一个**具名**异常，而不是裸 `ValueError`
+    ## 为什么是一个具名异常，而不是裸 `ValueError`
 
-    上限下沉之后，`interactions.next_prefixed_id` 会在**取号那一刻**就挡住越界 ——
+    上限下沉之后，`interactions.next_prefixed_id` 会在取号那一刻就挡住越界 ——
     这比"只靠工具层那道守卫"强（`agent_c` / `agent_d` / `agent_f` / `cli` / `demo`
     都直接调它，绕不过）。
 
     但工具层的契约是"受控失败抛 `ToolError`"（`tools/base.py`）：裸 `ValueError`
-    到了工具层会被兜成 `kind='unexpected'`，于是"编号空间用尽"（一个**已知、
-    可处理**的情况）与"工具内部有 bug"在下游长得一模一样。
+    到了工具层会被兜成 `kind='unexpected'`，于是"编号空间用尽"（一个已知、
+    可处理的情况）与"工具内部有 bug"在下游长得一模一样。
 
-    所以这里给它一个**具名**类型：工具层 `except IdSpaceExhausted` 精确翻译成
+    所以这里给它一个具名类型：工具层 `except IdSpaceExhausted` 精确翻译成
     `ToolError`，既保住"判据只有一份"，又保住"工具层的失败类型不降级"。
-    它继承 `ValueError` 是为了让**非工具层**的既有调用方（把 `ValueError`
+    它继承 `ValueError` 是为了让非工具层的既有调用方（把 `ValueError`
     当受控失败的那些）行为不变。
 
-    另：`ToolRegistry` / `table_tools` 的 `assert_request_id_in_space` 是**第二道**
-    守卫（覆盖"别人自己拼了一个号传进来"的情形），它**不**依赖本异常。
+    另：`ToolRegistry` / `table_tools` 的 `assert_request_id_in_space` 是第二道
+    守卫（覆盖"别人自己拼了一个号传进来"的情形），它不依赖本异常。
     """
 
 
@@ -147,19 +147,19 @@ __all__ = [
 #: I2/I3/I4/I7 的所有上限。集中一处，便于"调闸门"时一眼看全。
 #:
 #: 为什么每个循环都必须有上限：I2 的矛盾闭环是"发现→提问→检索→消化→复核"，
-#: 若裁决可以是"仍未解决"，那它天然是一个**不会自己停的循环**。
+#: 若裁决可以是"仍未解决"，那它天然是一个不会自己停的循环。
 #: 没有上限的自治循环不是"更自主"，而是"会烧完预算且不给结论"。
 #:
-#: ⚠️ **2026-10-15 业主裁定 C9 把这些数字整体抬高**。裁定标准逐字是
-#: 「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、**步数**等），删或把
-#: 触发水平**抬高到几乎不可能触发**的程度（即使触发也是提醒而非强杀）」。
+#: 2026-10-15 业主裁定 C9 把这些数字整体抬高。裁定标准逐字是
+#: 「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），删或把
+#: 触发水平抬高到几乎不可能触发的程度（即使触发也是提醒而非强杀）」。
 #: 抬高的方向与依据：
 #:
-#: - 这些数字是 2026-09 的**离线单机**读数下定的（那时候一次检索几毫秒），
+#: - 这些数字是 2026-09 的离线单机读数下定的（那时候一次检索几毫秒），
 #:   而现在一次上游检索是秒级、一次抽取是分钟级 —— 同样的"20 个在途"含义完全不同；
 #: - 它们此前会在正常研究里真的触发（T5 第 8 趟的 `D` 只问了 2 个问题就撞上
-#:   `max_rounds_per_contradiction`），而**撞上之后没有任何读数说"这是配额挡的"**；
-#: - 真正该管住"烧钱不给结论"的是**钱**（`usd_budget` + 总账），不是配额。
+#:   `max_rounds_per_contradiction`），而撞上之后没有任何读数说"这是配额挡的"；
+#: - 真正该管住"烧钱不给结论"的是钱（`usd_budget` + 总账），不是配额。
 #:   配额剩下的职责是"防一次编程错误把请求数炸成 O(n²)"，那是 100 与 10 都能胜任的事。
 DEFAULTS: dict[str, int] = {
     "max_inflight_requests": 200,  # I7 全局在途检索请求上限（20 → 200，裁定 C9）
@@ -176,9 +176,9 @@ DEFAULTS: dict[str, int] = {
 
 #: 一个根本不存在的研究问题。
 #:
-#: ⚠️ 中文标记**刻意只留"不"**：`"非"` / `"无"` 会命中术语本身
+#: 中文标记刻意只留"不"：`"非"` / `"无"` 会命中术语本身
 #: （"非交换环"、"无穷"），把"有否定"和"没否定"的两句话都判成带否定，
-#: 于是矛盾判据 **永远不触发** —— 而矛盾恰恰是最有价值的发现。
+#: 于是矛盾判据 永远不触发 —— 而矛盾恰恰是最有价值的发现。
 #: 这种"看起来在检测、实际恒为假"的判据比没有判据更坏。
 #: 术语级的对立（"可交换" vs "不可交换"）交给 :data:`OPPOSITE_PAIRS` 处理。
 NEGATION_MARKERS: tuple[str, ...] = (
@@ -213,9 +213,9 @@ def contains(haystack: str, needle: str) -> bool:
 
 
 def negated(text: str) -> bool:
-    """文本里是否出现**否定标记**。
+    """文本里是否出现否定标记。
 
-    ⚠️ ASCII 标记按**词边界**匹配。朴素的子串匹配会让 `"no "` 命中
+    ASCII 标记按词边界匹配。朴素的子串匹配会让 `"no "` 命中
     `"non-commutative"`、`"not "` 命中 `"note "`，于是"有否定"和"没否定"的两句话
     都被判成带否定，矛盾判据恒为假。见 :data:`NEGATION_MARKERS` 的说明。
     """
@@ -225,14 +225,14 @@ def negated(text: str) -> bool:
 def opposite_flags(text: str) -> set[tuple[str, str]]:
     """文本命中的"对立词组"（返回 `(肯定式, 否定式)` 元组集合）。
 
-    只按**肯定式**登记：术语本身（"非交换环"）会命中"交换"但不命中
+    只按肯定式登记：术语本身（"非交换环"）会命中"交换"但不命中
     "不交换"，因此不会被误判成"带否定"。
     """
     return {(a, b) for a, b in OPPOSITE_PAIRS if contains(text, a)}
 
 
 def concept_pair_key(concept_ids: Sequence[str]) -> str | None:
-    """一对概念的规范键。少于 2 个概念返回 ``None``（**显式**表示"这不是一对"）。
+    """一对概念的规范键。少于 2 个概念返回 ``None``（显式表示"这不是一对"）。
 
     为什么不用行里已存的 `concept_group_key`：那是写入时的产物，历史数据可能缺失
     或不一致。由 `concept_ids` 现场推导才是唯一权威 —— 与 `RelationGraph` 的做法一致。
@@ -250,67 +250,67 @@ def _text_of(rel: Mapping[str, Any]) -> str:
 
 # ---------------------------------------------------------------- I2：矛盾检测
 
-#: 检测矛盾时的"同一件事"范围。只比较**概念组完全相同**的关系：
+#: 检测矛盾时的"同一件事"范围。只比较概念组完全相同的关系：
 #: 矛盾只可能发生在谈同一件事的两句话之间。
 CONFLICT_SCOPE = "same_concept_group"
 
 
 def detect_contradictions(relations: Sequence[Mapping[str, Any]]) -> list[dict]:
-    """找出**互相矛盾**的两条关系。
+    """找出互相矛盾的两条关系。
 
-    判定只用两条可核实的信号，且**两条必须同时成立**才算候选：
+    判定只用两条可核实的信号，且两条必须同时成立才算候选：
 
     1. 两条关系覆盖同一组概念（``concept_pair_key`` 相同）—— 矛盾只可能发生在
        谈同一件事的两句话之间；
-    2. 它们的 ``statement``/``description`` 在"否定标记"或"对立词组"上**冲突**。
+    2. 它们的 ``statement``/``description`` 在"否定标记"或"对立词组"上冲突。
 
-    为什么必须这么严：矛盾是**最有价值**的发现（说明文献之间存在真实分歧，
+    为什么必须这么严：矛盾是最有价值的发现（说明文献之间存在真实分歧，
     正是值得研究的地方），但假矛盾会把 D 引向不存在的问题，比漏判更贵。
     所以这里宁可用"字面标记"这种笨办法，也不用"让模型判断语义"。
 
-    ⚠️ **本函数不假装能判定一般语义矛盾。** 它只做可逐字核实的形态，
+    本函数不假装能判定一般语义矛盾。 它只做可逐字核实的形态，
     并且这一点必须写在报告里 —— 把"字面检测"说成"语义分析"是过度声称。
 
     ## `strength`：为什么必须把两种信号分开（这是一次真实缺陷的修复）
 
     | strength | 触发形态 | 可信度 |
     |---|---|---|
-    | ``strong`` | 一句**明确断言**肯定是 ``(肯定式)``，另一句**明确断言**了对应的 ``(否定式)``（如 "A 是 B" vs "A 不是 B"） | 高 —— 这是货真价实的对立 |
-    | ``weak``   | 一句**出现**否定标记（"不"/"not "…），另一句**没出现** | **低 —— 大量假阳性** |
+    | ``strong`` | 一句明确断言肯定是 ``(肯定式)``，另一句明确断言了对应的 ``(否定式)``（如 "A 是 B" vs "A 不是 B"） | 高 —— 这是货真价实的对立 |
+    | ``weak``   | 一句出现否定标记（"不"/"not "…），另一句没出现 | 低 —— 大量假阳性 |
 
     这个区分来自一次实测：把 25 条真实论文关系（中文表述）过一遍本函数，
-    ``weak`` 信号报了 6 条（24%），而它们**没有一条是矛盾**。根因有两个：
+    ``weak`` 信号报了 6 条（24%），而它们没有一条是矛盾。根因有两个：
 
-    - ``("是","不是")`` 这一对立词组里，"是"在中文里**无处不在**
+    - ``("是","不是")`` 这一对立词组里，"是"在中文里无处不在
       （"等号是公开问题"），于是"甲文有'是'、乙文连'是'都没有"被算成了对立；
-    - 裸否定标记在自然语言里也不等于否定命题："**不必**用数值搜索"、"**No**
+    - 裸否定标记在自然语言里也不等于否定命题："不必用数值搜索"、"No
       numerical output is used as a proof" 都命中否定标记，但它们不是对立主张。
 
-    24% 的报警率意味着 `status="suspect"` 这个标记**失去意义** —— 而
+    24% 的报警率意味着 `status="suspect"` 这个标记失去意义 —— 而
     "假报警比不校验更糟，因为它会训练人忽略告警"。所以：
-    **只有 `strong` 允许驱动状态变更；`weak` 只作为线索记录**（见
+    只有 `strong` 允许驱动状态变更；`weak` 只作为线索记录（见
     :func:`check_conflict` 的 ``conflict`` / ``weak_signals`` 分流）。
 
-    旧实现还有一个真正的**逻辑错误**：条件写的是 ``only_a != only_b``，
-    其中 ``only_x = 命中肯定式 and 未命中否定式``。这使得"**提到肯定式**"与
-    "**压根没提这个词**"被判成两种对立态度 —— 而后者显然不是否定。
-    现在改成"一方明确肯定 **且** 另一方明确否定"才算 strong。
+    旧实现还有一个真正的逻辑错误：条件写的是 ``only_a != only_b``，
+    其中 ``only_x = 命中肯定式 and 未命中否定式``。这使得"提到肯定式"与
+    "压根没提这个词"被判成两种对立态度 —— 而后者显然不是否定。
+    现在改成"一方明确肯定 且 另一方明确否定"才算 strong。
     """
     out: list[dict] = []
     seen: set[tuple[str, str]] = set()
     for i in range(len(relations)):
         for j in range(i + 1, len(relations)):
             a, b = relations[i], relations[j]
-            # ⚠️ `concept_pair_key` 是**派生态**，不是输入。
+            # `concept_pair_key` 是派生态，不是输入。
             #
             # 曾经的写法是 `a.get("concept_pair_key")`，直接读行里的字段。这造成了一个
-            # **完全静默**的失效：`relations` 表里存的字段名是 `concept_group_key`，
-            # 于是对**直接从表里读出来的行**（C 的 `contradictions()`、任何脚本），
+            # 完全静默的失效：`relations` 表里存的字段名是 `concept_group_key`，
+            # 于是对直接从表里读出来的行（C 的 `contradictions()`、任何脚本），
             # 本函数恒返回 `[]` —— 不报错、不告警，看起来就像"没有矛盾"。
             # 只有 agent_d 自己悄悄补过 `concept_pair_key` 的那条路径能正常工作。
             #
             # 这正是"缓存/派生态与真源不一致"的教科书形态：派生态一旦被当成输入，
-            # 忘了算的那一方就会**静默拿到空结果**。修法是就地推导 ——
+            # 忘了算的那一方就会静默拿到空结果。修法是就地推导 ——
             # 与 `RelationGraph.group_counts` 的做法一致（"由 concept_ids 现场推导
             # 才是唯一权威"）。
             key_a = a.get("concept_pair_key") or concept_pair_key([str(c) for c in (a.get("concept_ids") or []) if c])
@@ -380,18 +380,18 @@ def _digest(text: Any, width: int = 200) -> str:
 
 # ---------------------------------------------------------------- I2：矛盾裁决
 
-#: 裁决词表与理由代码的对应。理由代码是**机器可判定**的（测试与统计靠它），
+#: 裁决词表与理由代码的对应。理由代码是机器可判定的（测试与统计靠它），
 #: `reason` 是人话。两者必须同时给出 —— 只有人话则无法断言，只有代码则人看不懂。
 #:
-#: ⚠️ **本词表只覆盖"关系层"的理由**（由 :func:`adjudicate_contradiction` 产出）。
-#: 调用方（D）在实现闭环时还会产生**策略层**的码，那些**不属于**本词表，
+#: 本词表只覆盖"关系层"的理由（由 :func:`adjudicate_contradiction` 产出）。
+#: 调用方（D）在实现闭环时还会产生策略层的码，那些不属于本词表，
 #: 例如：
 #:   - ``weak_only_signal``  —— 只剩 weak 线索 ⇒ 直接判 persistent，不再追问
 #:     （策略：矛盾是最强信号，但弱线索不是；继续追问只会烧 A 的产能）
 #:   - ``inflight_limit``    —— I7 的在途配额挡住了这一轮的追问请求
 #:   - ``budget_exhausted``  —— 全局矛盾请求配额用尽（与"单条轮数用尽"不同）
 #: 把它们分开写清楚是为了让"这条矛盾为什么停了"在报告里可复核：
-#: **关系层说"还对立"，策略层说"但我们不追了"，这是两句不同的话。**
+#: 关系层说"还对立"，策略层说"但我们不追了"，这是两句不同的话。
 ADJUDICATION_CODES = (
     "side_removed",  # 一方已不在关系表 / 已非 active ⇒ 争议自然消失
     "side_superseded",  # 一方被判重（duplicate_of 非空）⇒ 由另一方代表
@@ -401,7 +401,7 @@ ADJUDICATION_CODES = (
     "new_conflict",  # 原有那条已解决/未决，但冒出了涉及同一条关系的新矛盾
 )
 
-#: **策略层**的理由码（由调用方 D 产出，不由本模块产出）。
+#: 策略层的理由码（由调用方 D 产出，不由本模块产出）。
 #: 单列出来，是为了让"本词表里没有它"成为一个显式事实，而不是一个疏漏。
 ADJUDICATION_POLICY_CODES = (
     "weak_only_signal",  # 只剩 weak 线索 ⇒ 判 persistent，不再追问
@@ -417,7 +417,7 @@ def adjudicate_contradiction(
     rounds: int = 0,
     max_rounds: int | None = None,
 ) -> dict:
-    """对一条矛盾做**复核裁决**（I2 闭环的收敛点）。
+    """对一条矛盾做复核裁决（I2 闭环的收敛点）。
 
     入参
     ----
@@ -426,14 +426,14 @@ def adjudicate_contradiction(
         不是恰好两条关系时抛 :class:`MalformedContradictionRecord`（具名受控异常，
         见该异常自己的 docstring 说明为什么不是裸 `ValueError`）。
     scope_relations
-        **重新读到的**关系集合。必须包含原来的两条（或显式地不包含 —— 那就是
+        重新读到的关系集合。必须包含原来的两条（或显式地不包含 —— 那就是
         "一方已被删除/合并"的证据）。调用方负责给全，本函数不做范围推导。
         传 ``None`` 的语义是"我这次没能读到关系集合" ⇒ 返回 ``checked=False``
         （与 :func:`check_conflict` 的 ``existing_relations=None`` 同一口径：
         "没查"绝不允许被读成"查过了、不矛盾"）。省略这个参数仍然不行，
         没有默认值。
     rounds
-        这条矛盾**已经追问过**几轮（0 表示还没追问过）。
+        这条矛盾已经追问过几轮（0 表示还没追问过）。
     max_rounds
         轮数上限；``None`` 取 :data:`DEFAULTS`。
 
@@ -457,22 +457,22 @@ def adjudicate_contradiction(
 
     裁决四选一（见 `schema.CONTRADICTION_VERDICTS`）：
 
-    - ``resolved``            —— 争议消失，并指出**哪一方胜出**（或"双方都不再有效"）
-    - ``unresolved``          —— 仍然对立，且**还有追问预算** ⇒ 值得再来一轮
-    - ``new_contradiction``   —— 冒出涉及原关系的新矛盾（这是**新信息**，不是重复）
-    - ``persistent``          —— 仍然对立但预算已尽 ⇒ **停止追问，交给人看**
+    - ``resolved``            —— 争议消失，并指出哪一方胜出（或"双方都不再有效"）
+    - ``unresolved``          —— 仍然对立，且还有追问预算 ⇒ 值得再来一轮
+    - ``new_contradiction``   —— 冒出涉及原关系的新矛盾（这是新信息，不是重复）
+    - ``persistent``          —— 仍然对立但预算已尽 ⇒ 停止追问，交给人看
 
     ``persistent`` 与 ``unresolved`` 必须分开，否则"该停了"和"继续"会被混为一谈，
     循环要么停不下来，要么在还有信息时过早放弃。
 
-    判定顺序（**这个顺序本身是设计**，不是实现细节）：
+    判定顺序（这个顺序本身是设计，不是实现细节）：
 
     1. 一方消失 / 非 active / 已判重 ⇒ ``resolved``（代码 ``side_removed`` /
        ``side_superseded``）。理由：图里只剩一方，"矛盾"在结构上已不存在。
     2. 两条都还在，但重新检测后不再对立 ⇒ ``resolved``（``no_longer_conflicting``）。
-       这是**最有价值的一种解决**：新证据让人把其中一条的陈述改对了。
+       这是最有价值的一种解决：新证据让人把其中一条的陈述改对了。
     3. 仍然对立：
-       a. 若出现涉及原关系**的新**矛盾对 ⇒ ``new_contradiction``（新信息优先）；
+       a. 若出现涉及原关系的新矛盾对 ⇒ ``new_contradiction``（新信息优先）；
        b. 否则若 ``rounds >= max_rounds`` ⇒ ``persistent``；
        c. 否则 ⇒ ``unresolved``。
     """
@@ -596,21 +596,21 @@ def check_conflict(
     *,
     existing_relations: Sequence[Mapping[str, Any]] | None,
 ) -> dict:
-    """写入期闸门：**这条待写入的关系与图中已有的关系是否矛盾？**（I6）
+    """写入期闸门：这条待写入的关系与图中已有的关系是否矛盾？（I6）
 
-    ⚠️ **签名里没有 `store`，这是硬约束，不是风格问题。**
+    签名里没有 `store`，这是硬约束，不是风格问题。
 
-    B 在**自己的事务内**调用本函数。若这里去查 store，`filelock` 会在同一进程内
+    B 在自己的事务内调用本函数。若这里去查 store，`filelock` 会在同一进程内
     重入同一把锁 —— 轻则抛错，重则死锁。共享存储 + 多智能体架构里，
-    "在事务里调用别人、别人又去拿锁"是**最容易死锁**的形态，所以必须从签名上写死。
-    调用方（B）负责把已有关系**读好传进来**。
+    "在事务里调用别人、别人又去拿锁"是最容易死锁的形态，所以必须从签名上写死。
+    调用方（B）负责把已有关系读好传进来。
 
     参数
     ----
     existing_relations
-        **必须显式传**，可以是空列表，但**不能省略**（没有默认值）。
+        必须显式传，可以是空列表，但不能省略（没有默认值）。
         传 ``None`` 的语义是"我这次没有能力检查" ⇒ 返回 ``checked=False``。
-        这正是三态纪律：**"没检查"绝不允许被读成"检查过、不冲突"**。
+        这正是三态纪律："没检查"绝不允许被读成"检查过、不冲突"。
 
     返回
     ----
@@ -622,11 +622,11 @@ def check_conflict(
 
     与 :func:`detect_contradictions` 的关系
     ---------------------------------------
-    本函数**复用同一份字面判据**，不另写一套。做法是给草稿补上
+    本函数复用同一份字面判据，不另写一套。做法是给草稿补上
     ``concept_pair_key`` 后与范围内的已有关系一起送进 :func:`detect_contradictions`。
     这样"写入期认为不矛盾、事后 C 认为矛盾"这种静默分裂在结构上不可能发生。
 
-    范围（``scope``）：只比较**概念组完全相同**的已有关系。为什么不比较"概念组有交集"的？
+    范围（``scope``）：只比较概念组完全相同的已有关系。为什么不比较"概念组有交集"的？
     因为那样 "A 是 B"（组 {A,B}）会与 "A 不是 C"（组 {A,C}）被判为矛盾 —— 假矛盾
     比漏判更贵（见 :func:`detect_contradictions` 的说明）。
     """
@@ -662,9 +662,9 @@ def check_conflict(
 
     draft = dict(draft_relation)
     draft["concept_pair_key"] = key
-    # 草稿还没有 relation_id 时给它一个**不可能与真实 ID 冲突**的占位符，
+    # 草稿还没有 relation_id 时给它一个不可能与真实 ID 冲突的占位符，
     # 否则 detect_contradictions 里的 `a.get("relation_id") == b.get("relation_id")`
-    # 会因为两边都是 None 而**静默跳过** —— 那会让闸门恒不报冲突。
+    # 会因为两边都是 None 而静默跳过 —— 那会让闸门恒不报冲突。
     draft["relation_id"] = str(draft.get("relation_id") or "")
     if not draft["relation_id"]:
         draft["relation_id"] = "<draft>"
@@ -694,12 +694,12 @@ def check_conflict(
         }
         (hits if x.get("strength") == "strong" else weak_hits).append(item)
 
-    # ⚠️ `conflict=True` **只由 strong 信号驱动**。
+    # `conflict=True` 只由 strong 信号驱动。
     #
     # 为什么：I6 的后果是 `status="suspect"`。若让 weak 信号（"否定词出现与否不一致"）
     # 也能置这个状态，实测会有 ~24% 的关系被打上 suspect —— 那时这个标记
     # 就不再指示任何东西，而"假报警比不校验更糟，因为它会训练人忽略告警"。
-    # weak 信号并不丢弃：它们进 `weak_signals`，供 C/D 当作**线索**继续查。
+    # weak 信号并不丢弃：它们进 `weak_signals`，供 C/D 当作线索继续查。
     if hits:
         return {
             "checked": True,
@@ -744,28 +744,28 @@ def structural_duplicate_pairs(
     *,
     max_pairs: int | None = None,
 ) -> list[dict]:
-    """找出**结构上等价**的概念对（I5 候选，由 C 提出、B 决定）。
+    """找出结构上等价的概念对（I5 候选，由 C 提出、B 决定）。
 
-    结构等价的定义（**两条都要满足**）：
+    结构等价的定义（两条都要满足）：
 
     1. 邻域完全相同（``neighbors(a) == neighbors(b)``，不含彼此）；
-    2. 两者之间**没有**直接关系。
+    2. 两者之间没有直接关系。
 
-    为什么要第 2 条：若 a、b 之间已有关系（例如 "a ≅ b"），那它们**已经被声明为
-    两个不同的东西**，此时邻域相同是自然的，合并会抹掉一条真实知识。
+    为什么要第 2 条：若 a、b 之间已有关系（例如 "a ≅ b"），那它们已经被声明为
+    两个不同的东西，此时邻域相同是自然的，合并会抹掉一条真实知识。
 
     为什么要邻域非空：否则所有孤立概念两两"邻域相同（都是空集）"，
     会产生 O(n²) 个纯噪声候选。
 
-    ⚠️ **结构等价 ≠ 同义**。两个不同的概念完全可能都连着同一批邻居。
-    因此本函数**只提出候选**，并且额外给出 ``name_evidence``：
+    结构等价 ≠ 同义。两个不同的概念完全可能都连着同一批邻居。
+    因此本函数只提出候选，并且额外给出 ``name_evidence``：
 
     - ``"same_normalized_name"`` / ``"alias"`` —— 名字侧也有证据 ⇒ ``proposal="merge"``
     - ``"none"`` —— 只有结构证据 ⇒ ``proposal="review"``，
-      且 ``reason`` 里写明"**不得据此合并**"。合并决定权在 B，B 必须给理由。
+      且 ``reason`` 里写明"不得据此合并"。合并决定权在 B，B 必须给理由。
 
     这个"只有结构证据就不给 merge 建议"的设计是刻意的：I5 的验收里有一条
-    **负控**——"邻域相同但显然不同的概念"必须被 **B 拒绝**。若本函数在这里
+    负控——"邻域相同但显然不同的概念"必须被 B 拒绝。若本函数在这里
     就把 ``proposal`` 给了 ``merge``，负控就只能靠 B 的自觉，而自觉不是可判定的。
     """
     mp = DEFAULTS["structural_duplicate_max_pairs"] if max_pairs is None else int(max_pairs)
@@ -802,15 +802,15 @@ def structural_duplicate_pairs(
             na, nb = adj.get(a, set()), adj.get(b, set())
             if not na:
                 continue  # 孤立概念不参与（见 docstring）
-            # ⚠️ **"两者已有直接关系"必须在邻域比较之前判**。
+            # "两者已有直接关系"必须在邻域比较之前判。
             #
-            # 这一行原先写在 `na != nb` **之后**，于是它**永远不执行**：
+            # 这一行原先写在 `na != nb` 之后，于是它永远不执行：
             # 无向图的邻接表由"每条关系的概念两两展开"建立、不含自环，
             # 所以 `na == nb ∧ b ∈ na` ⇒ `b ∈ nb` ⇒ b 有自环，矛盾。
-            # 也就是说"有直接关系"这个情形**已经被 `na != nb` 排除了**，
+            # 也就是说"有直接关系"这个情形已经被 `na != nb` 排除了，
             # 那行 `continue` 只是看起来在起作用 —— 而"看起来在起作用的死代码"
             # 会让后来者以为负控靠它，从而在重构时把真正的防线拆掉。
-            # 现在把它提到前面：它**可达**，而且它正是 `na != nb` 成立的原因，
+            # 现在把它提到前面：它可达，而且它正是 `na != nb` 成立的原因，
             # 于是代码与 docstring 的第 2 条要求一一对应。
             if b in na or a in nb:
                 continue  # 已被声明为两个不同的东西 ⇒ 合并会抹掉一条真实知识
@@ -846,7 +846,7 @@ def structural_duplicate_pairs(
                 truncated = True
                 break
     if truncated:
-        # 截断必须**说出来**，否则"只找到这些"与"还有但没枚举"无法区分。
+        # 截断必须说出来，否则"只找到这些"与"还有但没枚举"无法区分。
         for item in out:
             item["truncated"] = True
         out.append(
@@ -870,10 +870,10 @@ _NAME_EVIDENCE_TEXT = {
 
 
 def _name_evidence(a: Mapping[str, Any], b: Mapping[str, Any]) -> str:
-    """名字侧的独立证据。**只用名字，不看结构** —— 两路证据必须独立才有意义。
+    """名字侧的独立证据。只用名字，不看结构 —— 两路证据必须独立才有意义。
 
     规范化走 :func:`textutil.normalize`（= `dedup.find_concept` 用的同一个），
-    理由同本模块顶部：**同一判据不能有两份实现**。若这里自己写一套小写化规则，
+    理由同本模块顶部：同一判据不能有两份实现。若这里自己写一套小写化规则，
     就会出现"B 的判重认为两个概念同名、C 的结构重复候选认为不同名"的静默分裂。
     """
     from . import textutil as T
@@ -903,20 +903,20 @@ def find_equivalent_question(
     relation_ids: Sequence[str],
     jaccard_threshold: float | None = None,
 ) -> dict | None:
-    """在已有问题里找一个**与候选问题等价**的，避免同一件事被研究两次（§3.1）。
+    """在已有问题里找一个与候选问题等价的，避免同一件事被研究两次（§3.1）。
 
     等价判据（满足其一即可）：
 
-    - **共享 ≥1 个关系代号** —— 关系代号是"引用了哪条知识"，共享即同一件事。
-      这是主判据，因为它是**精确**的。
-    - **概念集合的 Jaccard ≥ 阈值**（默认 0.6）—— 兜底，覆盖"同一批概念、
+    - 共享 ≥1 个关系代号 —— 关系代号是"引用了哪条知识"，共享即同一件事。
+      这是主判据，因为它是精确的。
+    - 概念集合的 Jaccard ≥ 阈值（默认 0.6）—— 兜底，覆盖"同一批概念、
       但报告里引用的关系条目不同"的情况。
 
     返回 ``{"matched": True, "question_id", "by", "detail", "similarity"}``
-    或 ``{"matched": False, "by": None, ...}``（**检查过、没有**，不是"没检查"）。
+    或 ``{"matched": False, "by": None, ...}``（检查过、没有，不是"没检查"）。
 
     为什么需要它：上一版 D 的 `ingest` 只按 `(kind, 排序后的 rel_ids)` 去重，
-    于是**同一份报告里两条不同链条支持同一个研究点**时会生成两个问题。
+    于是同一份报告里两条不同链条支持同一个研究点时会生成两个问题。
     （实测 4 条问题里只有 2 条是不同的。）去重键太窄，等价类才够。
     """
     thr = DEFAULTS["question_jaccard_threshold"] if jaccard_threshold is None else float(jaccard_threshold)
@@ -976,20 +976,20 @@ def evidence_relevance(
     *,
     new_relations: Sequence[Mapping[str, Any]] | None,
 ) -> dict:
-    """新到的证据**是否真的回答了那个问题**（§3.2）。
+    """新到的证据是否真的回答了那个问题（§3.2）。
 
     上一版 `poll` 的判据是"请求 done 且其文献都 processed"。那只说明
-    "**消化完了**"，不说明"这些新证据真的回答了那个问题"。后果是：一个查不到
-    东西的问题会**反复**触发同一件事的检索，把 A 的产能烧在同一个空洞上。
+    "消化完了"，不说明"这些新证据真的回答了那个问题"。后果是：一个查不到
+    东西的问题会反复触发同一件事的检索，把 A 的产能烧在同一个空洞上。
 
-    本函数只做**可判定的**那一层：新落库的关系里，有没有任何一条落在该问题的
+    本函数只做可判定的那一层：新落库的关系里，有没有任何一条落在该问题的
     `related_concept_ids` 上？
 
-    - ``new_relations=None`` ⇒ ``checked=False``（**没查**，不是"不相关"）
+    - ``new_relations=None`` ⇒ ``checked=False``（没查，不是"不相关"）
     - 有落点 ⇒ ``relevant``，给出 `relevant_relation_ids` / `relevant_lit_ids`
     - 无落点 ⇒ ``irrelevant``，并给出 `advice="lower_priority"`
 
-    ⚠️ **它不判定"是否足够回答"** —— 那是语义问题，本函数不声称能判。
+    它不判定"是否足够回答" —— 那是语义问题，本函数不声称能判。
     它只回答"这批新证据与这个问题有没有交集"，而这一层恰恰是能判定的那一层。
     """
     if new_relations is None:
@@ -1057,15 +1057,15 @@ def priority_rank(priority: Any) -> int:
 def role_key_of_submitter(submitted_by: str) -> str:
     """把提交方折到"角色那一层"（`agent-A-egr` → `agent-A`）；折不动就原样返回。
 
-    业主 2026-10-12 裁定 CS-15 ②：**实例后缀不改变档位**。真机读数（77 个工作区）：
+    业主 2026-10-12 裁定 CS-15 ②：实例后缀不改变档位。真机读数（77 个工作区）：
     `search_requests` 280 行里约 270 行的 `submitted_by` 是 `agent-A-A1` / `agent-A-egr` /
-    `agent-A-topical` 这类实例写法，而 `SUBMITTER_DEFAULT_PRIORITY` 里的键是**角色级**的
+    `agent-A-topical` 这类实例写法，而 `SUBMITTER_DEFAULT_PRIORITY` 里的键是角色级的
     ⇒ 改前逐行落到兜底 low，理由串还写着"陌生来源"（对框架自己的角色是一句错话）。
 
     两条刻意的界：
-    - **冒号后缀不折**：`agent-D:contradiction` 靠精确匹配与 `agent-D` 分成两个键
+    - 冒号后缀不折：`agent-D:contradiction` 靠精确匹配与 `agent-D` 分成两个键
       （high vs medium）——折了就把这两个键并成一个，那是改设计而不是修 bug；
-    - **只折 `agent-<单段>` 这一形态**（`agent-D2` 这种没有短横线的名册名不折）：
+    - 只折 `agent-<单段>` 这一形态（`agent-D2` 这种没有短横线的名册名不折）：
       "D2 是不是 D 的实例"要读名册才知道，属于另一个问题。
     """
     s = str(submitted_by or "")
@@ -1081,9 +1081,9 @@ def resolve_priority(submitted_by: str, explicit: Any = None) -> tuple[str, str]
     """定优先级。返回 ``(priority, why)``。
 
     规则：显式给出的优先（校验合法后直接用）；否则查
-    `schema.SUBMITTER_DEFAULT_PRIORITY`（**先按原样精确匹配，再按 `role_key_of_submitter`
-    折到角色那一层查一次** —— CS-15 ②）；再否则 ``low``。
-    **返回 ``why`` 是刻意的**：让"为什么这条排前面"在日志里可查，
+    `schema.SUBMITTER_DEFAULT_PRIORITY`（先按原样精确匹配，再按 `role_key_of_submitter`
+    折到角色那一层查一次 —— CS-15 ②）；再否则 ``low``。
+    返回 ``why`` 是刻意的：让"为什么这条排前面"在日志里可查，
     而不是一个没人知道来源的字段值。
     """
     if explicit is not None:
@@ -1107,7 +1107,7 @@ def resolve_priority(submitted_by: str, explicit: Any = None) -> tuple[str, str]
 
 
 def inflight_requests(rows: Sequence[Mapping[str, Any]]) -> list[dict]:
-    """"在途"的定义：``done`` 为假。**只有这一个口径。**
+    """"在途"的定义：``done`` 为假。只有这一个口径。
 
     为什么必须写成一个函数：一旦 A 的配额计算和 D 的"我还在等几件事"用了
     不同口径（比如一边把 `outcome=gave_up` 也算在途），配额就会静默失准。
@@ -1126,26 +1126,26 @@ def order_pending_requests(
 
     ## 第二档的精确语义（曾与文档不一致，已按实现改正）
 
-    第二档是 **"现在能不能立刻取走"**（0）还是 **"有人正持有有效租约"**（1）。
-    **空租约与已过期租约都算"能立刻取走"**，落在同一个桶里，由后面的
+    第二档是 "现在能不能立刻取走"（0）还是 "有人正持有有效租约"（1）。
+    空租约与已过期租约都算"能立刻取走"，落在同一个桶里，由后面的
     timestamp / request_id 决定先后。
 
-    为什么不做成"已过期的排在全新之前"：A 的 `_claim` **本来就会跳过**
+    为什么不做成"已过期的排在全新之前"：A 的 `_claim` 本来就会跳过
     "有人正持有有效租约"的行，所以那一档对 A 的实际取任务顺序没有影响；
-    而把空租约与已过期拆成两个桶，会与 A 的**退避租约**机制打架 ——
+    而把空租约与已过期拆成两个桶，会与 A 的退避租约机制打架 ——
     失败重试时 A 只留一个未来的 `lease_until`、把 `claimed_by` 置空，
     那时的行在语义上就是"可以再取"，把它排到全新任务后面会让退避机制
-    以另一种方式复活。**当前实现保证的是"死掉的租约不会被饿死"**，
+    以另一种方式复活。当前实现保证的是"死掉的租约不会被饿死"，
     这是设计真正担心的事；"过期优先于全新"则不是（详见 A 子任务的实测报告）。
 
-    - **优先级次序**优先 —— 这是 I7 的全部意义。
+    - 优先级次序优先 —— 这是 I7 的全部意义。
     - 其次是"可立刻取走"先于"有人正持有有效租约"。
     - 再次是提交时间（同级 FIFO，需求里明说）。
-    - 最后用 request_id 兜底，保证**全序**（否则排序不稳定，"先 high 后 medium"
+    - 最后用 request_id 兜底，保证全序（否则排序不稳定，"先 high 后 medium"
       这类断言会随机失败）。
 
     ``now`` 只在测试里显式传入；生产路径用 `store.lease_expired` 的同一判据 ——
-    这里为避免引入时间依赖，把"租约是否过期"作为**调用方已算好的布尔**读入：
+    这里为避免引入时间依赖，把"租约是否过期"作为调用方已算好的布尔读入：
     行里若有 ``_lease_expired`` 键就用它，否则按 `lease_until` 是否为空判断
     （空租约 = 无人持有 = 可立刻取走）。
     """
@@ -1174,17 +1174,17 @@ def admit_search_request(
     for_question_id: str | None = None,
     max_inflight: int | None = None,
 ) -> dict:
-    """I7 的**准入闸门**（在调用方的 tx 内执行，自己不加锁）。
+    """I7 的准入闸门（在调用方的 tx 内执行，自己不加锁）。
 
     做两件事：定优先级 + 拒绝超额。
 
-    为什么要**拒绝**而不是"无限排队"：队列无上限时，提交方（尤其是循环里的 D）
+    为什么要拒绝而不是"无限排队"：队列无上限时，提交方（尤其是循环里的 D）
     永远不会感到压力，于是"知识不足就提问"会退化成"每轮都问"，
-    而 A 的产能是固定的 —— 结果是**所有**请求都变慢，包括最关键的那条矛盾。
-    显式拒绝会把压力**传导回提交方**，让它决定"这条到底值不值得问"。
+    而 A 的产能是固定的 —— 结果是所有请求都变慢，包括最关键的那条矛盾。
+    显式拒绝会把压力传导回提交方，让它决定"这条到底值不值得问"。
 
     返回 ``{"admitted", "reason", "priority", "priority_why", "inflight", "limit"}``。
-    ``admitted=False`` 时**不产生任何写入**（调用方据此跳过）。
+    ``admitted=False`` 时不产生任何写入（调用方据此跳过）。
     """
     limit = DEFAULTS["max_inflight_requests"] if max_inflight is None else int(max_inflight)
     inflight = inflight_requests(existing_rows)
@@ -1214,10 +1214,10 @@ def admit_search_request(
 
 
 def reprocess_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
-    """每个关系已被**受理**（pending + done）的重抽取次数。
+    """每个关系已被受理（pending + done）的重抽取次数。
 
-    ⚠️ **被拒的（``status="rejected"``）不计入**：否则闸门会用"我拒绝过"
-    来证明"我做过了"，拒绝两次之后一个**从未被处理过**的关系就再也进不来了。
+    被拒的（``status="rejected"``）不计入：否则闸门会用"我拒绝过"
+    来证明"我做过了"，拒绝两次之后一个从未被处理过的关系就再也进不来了。
     这是"计数口径"必须写清楚的典型例子。
     """
     out: dict[str, int] = {}
@@ -1239,18 +1239,18 @@ def admit_reprocess_request(
 ) -> dict:
     """I4 的准入闸门：同一关系最多被重抽取 ``max_per_relation`` 次。
 
-    为什么必须有：重抽取会**改数据**。没有上限时，"引文不可核实"这个信号
+    为什么必须有：重抽取会改数据。没有上限时，"引文不可核实"这个信号
     会让 B 反复回同一页做同一件事 —— 每轮都失败、每轮都重来，
     而每次都会写一行新记录。上限把"无效努力"变成一次明确的拒绝。
 
-    ## 调用口径（**必须遵守，否则上限会静默减半**）
+    ## 调用口径（必须遵守，否则上限会静默减半）
 
-    1. ``existing_rows`` 是 ``reprocess_requests`` 表的**当前全部行**。
-    2. **调用方必须先排除"正在受理的那一行"**：`reprocess_counts` 的口径是
-       `pending + done`，而 B 是在请求**已经在表里**时才复核配额 ——
+    1. ``existing_rows`` 是 ``reprocess_requests`` 表的当前全部行。
+    2. 调用方必须先排除"正在受理的那一行"：`reprocess_counts` 的口径是
+       `pending + done`，而 B 是在请求已经在表里时才复核配额 ——
        不排除自身就会把同一次受理数两次，于是 `max_per_relation=2` 实际只允许 1 次。
        这不会报任何错，只会让上限悄悄变成一半。
-    3. **顺序前提**：提交方必须**先调本闸门、再插入请求行**。
+    3. 顺序前提：提交方必须先调本闸门、再插入请求行。
        若反过来（先插请求再申请），该行已经计入 `reprocess_counts`，语义就变了。
     """
     lim = DEFAULTS["max_reprocess_per_relation"] if max_per_relation is None else int(max_per_relation)
@@ -1278,39 +1278,39 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
     """生成 ``<prefix>-NNNN`` 形式的 ID（用于 ``r-`` / ``p-`` 这类非 4 位空间）。
 
     与 4 位 ID 空间分开：``search_requests`` / ``reprocess_requests`` 是
-    **过程记录**（可以很多），而概念/关系/文献是**知识实体**（4 位够用且要短）。
+    过程记录（可以很多），而概念/关系/文献是知识实体（4 位够用且要短）。
     混用会让 4 位空间被过程记录吃掉。
 
-    取 ``max+1`` 并跳过已占用的号 —— 不记录计数器，因此**删除中间行不会导致撞号**。
+    取 ``max+1`` 并跳过已占用的号 —— 不记录计数器，因此删除中间行不会导致撞号。
 
-    ## ⚠️ `prefix` **不带**连接号（文档与实现曾经不一致）
+    ## `prefix` 不带连接号（文档与实现曾经不一致）
 
-    曾经的 docstring 写"生成 ``<prefix>-NNNN``"，读起来像是**要把连接号一起传**。
-    按那个读法传 ``prefix="r-"`` 会得到 ``"r--0001"`` —— 而它**能通过
-    `SearchRequest.validate`**（那里只查非空），于是**静默落库**；
+    曾经的 docstring 写"生成 ``<prefix>-NNNN``"，读起来像是要把连接号一起传。
+    按那个读法传 ``prefix="r-"`` 会得到 ``"r--0001"`` —— 而它能通过
+    `SearchRequest.validate`（那里只查非空），于是静默落库；
     更糟的是下一轮 `startswith("r-")`/数字解析匹配不上，取号永远从 1 重来，
     直到与已有行撞号。这是一次真实的"文档与实现对不上"（与 `Tx.mark_dirty`
     曾经那次同族）。
 
-    现在：docstring 说清 `prefix="r"`，并且**在这里 fail-closed 拒绝含分隔符的前缀** ——
+    现在：docstring 说清 `prefix="r"`，并且在这里 fail-closed 拒绝含分隔符的前缀 ——
     与其让一个写错的参数静默产生坏 ID，不如当场炸。
 
-    ## ⚠️ 编号上限在这里（`P-4`：上限下沉，判据只有一份）
+    ## 编号上限在这里（`P-4`：上限下沉，判据只有一份）
 
-    `r-NNNNNN` 是**编号宽度契约**，不是风格偏好：`store.MAX_ID` 是它唯一的常量来源
-    （本函数直接 import 它，**不另写一个上限数字**），而 `store.alloc_id` 用满即
+    `r-NNNNNN` 是编号宽度契约，不是风格偏好：`store.MAX_ID` 是它唯一的常量来源
+    （本函数直接 import 它，不另写一个上限数字），而 `store.alloc_id` 用满即
     `IdExhausted`。宽度本身来自 `schema.ID_DIGITS`（2026-10-14 业主裁定：四位改六位，
     防溢出），本函数只调 `schema.format_id()` —— 形态一处定义，发号点一处不漏。
-    本函数此前**没有任何上限**：表里已用到上限时它会给出超长号，而
-    `SearchRequest.validate` 只查"非空"，所以它会**静默落库**，
+    本函数此前没有任何上限：表里已用到上限时它会给出超长号，而
+    `SearchRequest.validate` 只查"非空"，所以它会静默落库，
     一直到某个下游按固定宽度解析时才暴露。
 
-    这正是"静默升位宽"。所以越界时这里抛**具名**的 `IdSpaceExhausted`（`ValueError` 的子类，
+    这正是"静默升位宽"。所以越界时这里抛具名的 `IdSpaceExhausted`（`ValueError` 的子类，
     fail-closed，与工具层 `table_tools.assert_request_id_in_space` 同一语义），错误信息里给出上限值。
     为什么是具名类型而不是裸 `ValueError`：工具层据此精确翻成 `ToolError`，
     否则"空间用尽"会被兜成 `kind='unexpected'`、与"内部 bug"同形。
-    为什么上限必须在**这里**而不是只放在工具层：`agent_c` / `agent_d` / `agent_f` /
-    `cli` / `demo` 都**直接调用本函数**，它们绕不过工具层那道守卫。
+    为什么上限必须在这里而不是只放在工具层：`agent_c` / `agent_d` / `agent_f` /
+    `cli` / `demo` 都直接调用本函数，它们绕不过工具层那道守卫。
     """
     if not prefix or not prefix.isalnum():
         raise ValueError(
@@ -1327,9 +1327,9 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
     while f"{prefix}-{S.format_id(n)}" in used:
         n += 1
     if n > MAX_ID:
-        # 越界**不许**静默产出超长 ID。消息里必须给出上限，否则调用方只知道
+        # 越界不许静默产出超长 ID。消息里必须给出上限，否则调用方只知道
         # "炸了"，不知道"还能不能补"。
-        # 类型是**具名**的 `IdSpaceExhausted`（见它的 docstring）：工具层据此精确翻成
+        # 类型是具名的 `IdSpaceExhausted`（见它的 docstring）：工具层据此精确翻成
         # `ToolError`，避免被兜成 `kind='unexpected'`（那会让"空间用尽"与"内部 bug"同形）。
         raise IdSpaceExhausted(
             f"{prefix}-{'N' * S.ID_DIGITS} 的 {S.ID_DIGITS} 位编号空间已用尽（上限 {MAX_ID}）："
@@ -1345,16 +1345,16 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
 # ---------------------------------------------------------------- 导入期自检
 
 def assert_store_free(*funcs: Any) -> None:
-    """断言给定函数（默认本模块全部公开函数）**签名里没有 store/tx**。
+    """断言给定函数（默认本模块全部公开函数）签名里没有 store/tx。
 
     为什么要在导入期做：I6 的死锁约束是"B 在事务内调用 C 的纯函数"。
-    这条约束最容易在**后续维护**里被破坏 —— 有人为了图方便加一个
+    这条约束最容易在后续维护里被破坏 —— 有人为了图方便加一个
     ``store=None`` 参数，于是三年后某次调用就在事务里重入了锁。
-    把它变成导入期断言，破坏者会在**第一次 import 时**就炸掉，而不是在
+    把它变成导入期断言，破坏者会在第一次 import 时就炸掉，而不是在
     生产环境里偶发死锁。
 
-    ⚠️ 例外：:func:`order_pending_requests` 内部 `from .store import lease_expired`
-    只是为了复用**同一个**租约判据（纯函数，无锁）。它不接收 Store 实例，
+    例外：:func:`order_pending_requests` 内部 `from .store import lease_expired`
+    只是为了复用同一个租约判据（纯函数，无锁）。它不接收 Store 实例，
     因此不违反本约束 —— 约束针对的是"接收 Store/Tx 并去拿锁"。
     """
     targets = funcs or tuple(

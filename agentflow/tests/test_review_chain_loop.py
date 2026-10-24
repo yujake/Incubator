@@ -173,11 +173,15 @@ def test_the_downstream_role_reads_it_after_the_loop_ran(tmp_path):
 
 
 def test_the_loop_cannot_reach_the_generic_table_writer(tmp_path):
-    """负控（真机 `mp2-7.jsonl` 第 97 行）：循环里喊 `table.create("statements")` ⇒ 被拒。
+    """负控（真机 `mp2-7.jsonl` 第 97 行）：循环里喊 `table.create("statements")` ⇒ 由系统兜底。
 
-    它与上面那条正控成对：同一条循环、同一个模型、只是这一句喊的是野路
-    ⇒ 一行都不许落，而拒信要能把模型指回正路。没有这一条，正控的绿说明不了
-    "野路被封了"。
+    它与上面那条正控成对：同一条循环、同一个模型，只是这一句喊的是通用写口。
+    ## 2026-10-24 换过处置（业主裁定「自动将直写请求路由到秘书接管」）
+    改前这一格断的是"被拒、一行不落"。现在断的是更强的那一件事：模型没有自己写，
+    它那一笔被转交给了秘书那条正路 —— 所以落下来的行必须是秘书落的
+    （`created_by=secretary-B`）、读数里必须带 `backstop=secretary`。
+    这一条的正控价值反而更清楚了：同一个模型拿通用写口也能得到合法的行，
+    但那一行不是它手写的。
     """
     st, cond, reg, gw, backend = _world(tmp_path)
     # 换一份剧本：第一句走野路
@@ -193,9 +197,13 @@ def test_the_loop_cannot_reach_the_generic_table_writer(tmp_path):
     assert out["stop_reason"] == "final", out
     step = _steps(out)[0]
     got = step.get("result") or {}
-    assert got.get("ok") is False, got
-    assert "direct_write_refused" in json.dumps(got, ensure_ascii=False), got
-    assert st.rows("statements") == [], st.rows("statements")
+    body = got.get("data") if isinstance(got.get("data"), dict) else {}
+    assert got.get("ok") is True, got
+    assert body.get("backstop") == "secretary", body
+    assert "routed_to_backstop.secretary" in json.dumps(got, ensure_ascii=False), got
+    rows = st.rows("statements")
+    assert len(rows) == 1, rows
+    assert rows[0]["created_by"] == "secretary-B", rows[0]["created_by"]
 
 
 def test_a_dangling_artifact_reference_is_caught_by_verify(tmp_path):

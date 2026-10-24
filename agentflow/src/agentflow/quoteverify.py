@@ -71,13 +71,13 @@ def _pages_unreadable(doc, start: int | None, end: int | None) -> bool | None:
     """`[start, end]`（1-based 闭区间，已收窄）里有没有"抽取失败"的页。
 
     三态返回值：`True` = 有不可读的页；`False` = 没有（或这份文档没有逐页信息）；
-    `None` = **诊断取不到**（`page_unreadable` / `failed_pages` 抛了异常）。
+    `None` = 诊断取不到（`page_unreadable` / `failed_pages` 抛了异常）。
 
     ## `R3-5`：判据只有一份实现
 
     这个窗口收窄逻辑此前是本模块里的一个闭包（`failed_pages()` + 区间过滤），
     与 `DocumentText.page_unreadable`（`extract.py`）是同一件事的两份实现 ——
-    而那一份在当时**生产代码里 0 个调用点**，只有测试在用，它的 docstring 却写着
+    而那一份在当时生产代码里 0 个调用点，只有测试在用，它的 docstring 却写着
     "引文校验用它来区分…"。那句话当时是假的，两份实现也没有任何断言把它们钉在一起
     （今天在越界/None/反向区间上恰好一致，明天不一定）。
     现在删掉闭包、直接问文档对象：窗口收窄只有 `DocumentText.page_unreadable` 一处实现。
@@ -168,18 +168,18 @@ def check_quote(
 
     tried: list[str] = []
     pr = page_range or PageRange(None, None, "")
-    # ---- `R-08` = B1 候选 C（`draft/52`）：**空窗口**（`start > end`）判"没法判"。
+    # ---- `R-08` = B1 候选 C（`draft/52`）：空窗口（`start > end`）判"没法判"。
     #
-    # 为什么这不是"没找到"：声明的是一个**空区间** —— 它里面不可能有任何一页，
-    # 于是"在这段里没找到"这句话**没有信息量**（分母是 0）。旧实现会让 `scan`
+    # 为什么这不是"没找到"：声明的是一个空区间 —— 它里面不可能有任何一页，
+    # 于是"在这段里没找到"这句话没有信息量（分母是 0）。旧实现会让 `scan`
     # 直接返回 `None`（`lo > hi`），再靠 `widen` 把窗口撑开去数页外命中，
     # 得出 `substring_match_outside_declared_range`（"页码错了"）—— 而那是
-    # 拿一个**编码错误**去指控引文/页码错了（`True` 会被下游读成"引文可靠"）。
+    # 拿一个编码错误去指控引文/页码错了（`True` 会被下游读成"引文可靠"）。
     #
     # 守卫必须带 `pr.known`：页码未知（`start=end=None`）走的是另一档
     # （`not_found_page_unknown`）—— 没有这个守卫会把它一起吃掉。
-    # 2026-10-17（IO #10）：调用方可能把台账里的 **dict** 直接传进来（`page_range` 是
-    # `{"start":…,"end":…}`）。原来直接 `pr.known` ⇒ AttributeError；这里改成**可读拒信**
+    # 2026-10-17（IO #10）：调用方可能把台账里的 dict 直接传进来（`page_range` 是
+    # `{"start":…,"end":…}`）。原来直接 `pr.known` ⇒ AttributeError；这里改成可读拒信
     # （类型契约是 `schema.PageRange`，静默接受 dict 会让 `known` 的语义在半路丢）。
     if isinstance(pr, Mapping):
         raise ValueError(
@@ -195,7 +195,7 @@ def check_quote(
         if hit:
             return hit
         if widen > 0:
-            # `widened` 的标签必须与**真的扫过的窗口**一致（T / R-08 的标签修正）：
+            # `widened` 的标签必须与真的扫过的窗口一致（T / R-08 的标签修正）：
             # 越界被收窄到空集时说 `empty`，不写出 `widened:4-3` 这种反向区间
             # （反向标签会让人以为"从第 4 页往第 3 页扫过"）。
             w_lo = max(1, pr.start - widen)

@@ -2227,7 +2227,13 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `agent_skills.py` 的 G 技能正文同一句（它只进 `skills/` 落盘文件、不进提示词）。
 #: 关档另加两条 `specs/e.py::NO_LEAN_REPLACEMENTS`（formal 那行与那句在关档改成不点 L
 #: 的写法），它们只在关档生效 ⇒ 开档摘要不受影响。facts 键集未变（15 格）。
-PROMPT_VERSION = "p197"
+#: p189 之后各批的理由与「换了几格」的读数记在两处：段摘要那边在
+#: `tests/test_agent_prompts.py` 的冻结表上方，facts 键集那边在
+#: `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` 账本里（各自最后几格）。
+#: p198（2026-10-24）：`specs/g.py` 的 policy 补一条正向路径 —— 正文缺命题 / 缺证明时
+#: 把缺口提给 D（D 出研究手稿并登记，B 从 D 侧的手稿收录入库），并写明 G→B 没有这条边。
+#: 只有 G 一格换值。
+PROMPT_VERSION = "p198"
 
 
 

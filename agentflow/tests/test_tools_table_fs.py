@@ -25,6 +25,7 @@ import hashlib
 
 import pytest
 
+from agentflow import conceptrows as CR
 from agentflow import schema as S
 from agentflow.secretary import Secretary
 from agentflow.tools import fs_tools, table_tools
@@ -116,23 +117,40 @@ def test_table_crud_roundtrip_preserves_untouched_fields(tables):
 
 
 def test_the_generic_write_tools_refuse_the_two_tables_the_secretary_owns(tables):
-    """野路受控拒绝：`statements` / `dependencies` 不许通用写口直写。
+    """野路受控拒绝：`statements` / `dependencies` 不许通用写口自己写。
 
     真机形态（`projects/mp2/sessions/mp2-7.jsonl` 第 97 行）：B 拿不到
     `register_statement`，于是 `table.create(table="statements")` 手写
     `bits={}` + `evidence_kind="heuristic"` —— 秘书那四件活与五元位一件没跑。
-    拒信必须逐字写出该走哪条路（模型据此能改），且一行都不落。
+
+    ## 2026-10-24 换过一次处置（业主裁定「自动将直写请求路由到秘书接管」）
+    判据（"通用写口不许自己写这两张表"）一个字没动；变的是处置：
+      - 载荷带 `bits`（手写五元位）⇒ 仍拒（`direct_write_refused`），一行不落；
+      - 干净的载荷 ⇒ 系统把它转交给正路执行（`routed_to_backstop.*`），
+        行落不落由那条正路自己的判据定。
+    这一条现在两档都核，且都核"一行没落"。
     """
-    for table in ("statements", "dependencies"):
-        made = tables.call("table.create", table=table,
-                           row={"origin": "own_result", "kind": "theorem",
-                                "statement_full": "手写的", "quote_reason": "尚未逐字校验"})
-        assert made.ok is False, (table, made.ok)
-        assert made.meta.get("kind") == "direct_write_refused", made.meta
-        assert "Secretary.record_statement" in made.error, made.error
-        assert "table.delete" in made.error, made.error   # 逐字写着哪条不受限
-        upd = tables.call("table.update", table=table, id=S.format_id(0), patch={"label": "x"})
-        assert upd.ok is False and upd.meta.get("kind") == "direct_write_refused", upd.meta
+    made = tables.call("table.create", table="statements",
+                       row={"origin": "own_result", "kind": "theorem",
+                            "statement_full": "手写的", "quote_reason": "尚未逐字校验",
+                            "bits": {}})
+    assert made.ok is False, made.ok
+    assert made.meta.get("kind") == "direct_write_refused", made.meta
+    assert "bits" in str(made.error or ""), made.error
+    # 干净载荷 ⇒ 转交正路（这里的发起方没有挂点 ⇒ 秘书按它自己的判据拒，
+    # 这一格要的只是"它真的被转交了"，见 `tests/test_direct_write_is_routed_to_the_secretary.py`）
+    clean = tables.call("table.create", table="statements",
+                        row={"origin": "own_result", "kind": "theorem",
+                             "statement_full": "手写的", "quote_reason": "尚未逐字校验"})
+    assert clean.ok is False, clean
+    assert str(clean.meta.get("kind") or "").startswith("routed_to_backstop"), clean.meta
+    dep = tables.call("table.create", table="dependencies",
+                      row={"origin": "own_result", "kind": "theorem",
+                           "statement_full": "手写的", "quote_reason": "尚未逐字校验"})
+    assert dep.ok is False, dep
+    assert str(dep.meta.get("kind") or "").startswith("routed_to_backstop"), dep.meta
+    upd = tables.call("table.update", table="statements", id=S.format_id(0), patch={"label": "x"})
+    assert upd.ok is False and upd.meta.get("kind") == "not_found", upd.meta
     assert tables.call("table.count", table="statements").data == 0
     assert tables.call("table.count", table="dependencies").data == 0
 
@@ -198,6 +216,35 @@ def test_delete_concept_referenced_by_relation_names_the_referrer(tables, store)
     assert any(r["table"] == "relations" and r["row_id"] == rel.data for r in refs)
     # 被拒之后行必须还在（宁可误拒也不能误删）
     assert tables.call("table.get", table="statements", id=S.format_id(0)).meta["found"] is True
+
+
+def test_a_concept_declaring_own_result_without_self_authored_is_refused(store, monkeypatch):
+    """概念行的 origin 判据：显式写 own_result 必须带 self_authored=True。
+
+    依据（schema 那一侧）：`conceptrows.concept_origin_problem` 的 docstring 第 3 条 ——
+    `own_result` 的 `self_authored` 不是默认值；"没声明"与"确实是新概念"必须分得开。
+    秘书的写入侧（`Secretary._record_statement_tx`）读的就是这一份实现。
+
+    这一条也是 `tools/table_tools.py` 自检里那张概念行夹具的负控：夹具此前只写了
+    `origin="own_result"`，被这条判据拒掉，链式红了 14 项。修的是夹具（补
+    `self_authored=True`），判据一个字没动 —— 下面三段分别是拒 / 放行 / 反真空。
+    """
+    sec = Secretary("B", root=store.root, store=store)
+    base = {"kind": "concept", "label": "环", "origin": "own_result",
+            "statement_full": "环的陈述（未声明自撰）"}
+    refused = sec.record_statement(dict(base), role="B")
+    assert refused.get("created") is False, refused
+    assert refused.get("refused") == "concept_origin_refused", refused
+    assert "self_authored" in str(refused.get("reason") or ""), refused
+
+    declared = sec.record_statement({**base, "statement_full": "环的陈述（已声明）",
+                                     "self_authored": True}, role="B")
+    assert declared.get("created") is True, declared
+
+    # 反真空：把这条判据打桩成恒放行 ⇒ 缺声明的那一笔也必须能落盘。
+    monkeypatch.setattr(CR, "concept_origin_problem", lambda **kwargs: "")
+    forced = sec.record_statement({**base, "statement_full": "环的陈述（反真空）"}, role="B")
+    assert forced.get("created") is True, forced
 
 
 def test_delete_literature_referenced_by_request_result_lit_ids_is_refused(tables):

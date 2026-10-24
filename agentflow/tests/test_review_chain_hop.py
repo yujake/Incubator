@@ -82,20 +82,24 @@ def test_b_lands_a_complete_statement_by_handing_it_to_its_secretary(tmp_path):
     assert got["stmt_id"] == out["stmt_id"] and got["stmt_id"].isdigit()
 
 
-def test_the_wild_road_through_table_create_is_refused(tmp_path):
-    """负控（`mp2-7.jsonl` 第 97 行那个形态）：B 用通用写口直写 `statements` ⇒ 被拒。
+def test_the_wild_road_through_table_create_is_taken_over_by_the_backstop(tmp_path):
+    """负控（`mp2-7.jsonl` 第 97 行那个形态）：B 用通用写口直写 `statements`。
 
-    判据落在工具层（模型的手）：`ok=False`、`kind=direct_write_refused`，
-    而拒信里必须逐字写着该走哪条路（`Secretary.record_statement` / `own.register_statement`）
-    —— 模型据此能改，而不是只知道"不行"。盘上一条都不许落。
+    ## 2026-10-24 换过处置（业主裁定「自动将直写请求路由到秘书接管」）
+    改前这一格是"被拒 + 拒信逐字指路"。现在它在工具层被转交给秘书那条正路：
+    判据落点没变（还是"通用写口不许自己写这两张表"），变的是谁执行 ——
+      - 发起方身份读不到（这里的 `reg.call(role="B")` 没有 `calling_as` 挂点）⇒
+        秘书按它自己的规矩拒（`not_statement_writer`），理由原样带回；
+      - 盘上一条都不许落（这一条的红没有变）。
+    正路那一档（上面那条）落在同一张表上、同一个 `created_by=secretary-B`，区别只在
+    "谁开的那一笔"：正路是 B 交内容，这一条是系统替模型兜底。
     """
     st, reg = _world(tmp_path)
     res = _create(reg, role="B", row=dict(_ROW))
     assert res.ok is False, res
-    assert res.meta.get("kind") == "direct_write_refused", res.meta
-    assert "Secretary.record_statement" in res.error, res.error
-    assert "own.register_statement" in res.error, res.error
-    assert st.rows("statements") == [], "被拒之后**一个字节都不许落库**"
+    assert str(res.meta.get("kind") or "").startswith("routed_to_backstop"), res.meta
+    assert res.meta.get("refused_by_backstop"), res.meta
+    assert st.rows("statements") == [], "被兜底方拒掉之后一个字节都不许落库"
 
 
 def test_the_guard_fires_through_the_front_door_not_only_in_a_unit_test(tmp_path):

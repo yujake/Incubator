@@ -81,11 +81,11 @@ from .. import leanscope as _LEANSCOPE  # noqa: E402
 #:
 #: 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这份名单刻意仍然完整（含 L）。
 #: 理由是它有两个不同的用途，而混成一个是会松掉一道真门：
-#:   - 它是**声明词表**：`ToolSpec.roles` 里能出现哪些角色名由它判（`P-1` 的
+#:   - 它是声明词表：`ToolSpec.roles` 里能出现哪些角色名由它判（`P-1` 的
 #:     "拼错了名字"闸门）。把 L 从这里删掉，等于让 `roles=tuple(S.ROLES)` 这种
 #:     "全体角色"的写法变成拼写错误 ⇒ `table_tools` / `conductor_tools` /
 #:     `manuscript_tools` 会整模块装不上（实测），而那与业主的要求毫无关系；
-#:   - 它是**读数来源**：`cli tools` 的逐角色计数与 skills 的工具面普查都从它派生。
+#:   - 它是读数来源：`cli tools` 的逐角色计数与 skills 的工具面普查都从它派生。
 #:     这些读数是面向人的，所以它们逐个过 `leanscope.visible_roles`（见那两处）。
 #: "L 在开关关着时不存在"这件事落在更下面一层：`ToolRegistry._role_surface` 对
 #: `leanscope.is_hidden` 的角色直接返回空面（工具面与可调用面都是空）。
