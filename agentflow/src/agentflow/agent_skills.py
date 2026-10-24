@@ -38,6 +38,34 @@ __all__ = ["SKILLS_DIR", "SURVEY", "Skill", "CATALOG", "skills_for", "index_bloc
            "materialize", "validate", "builtin_sources"]
 
 #: 工作区里那一层目录名（相对工作区根）。
+# 2026-10-24：手册正文（落盘成 skills/<角色>/<slug>.md，模型会 fs.read）里的 L 指向。
+# 为什么单独一张表：`specs/*.py` 那三张表是按声明真身的文本写的，而手册正文是另一批字面量
+# （两趟真机与 Leanscope 审计都点名过）。关档时它们必须一起去掉，否则 L 的存在会从
+# 「模型按需读的文档」这个后门回来。
+NO_LEAN_SKILL_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ('派 L 的入口只有两条：B 可以派 L',
+     '形式化那一档的入口只有一个：用户指定之后由 B 逐条安排（一条才做一条）、回执由 B 带回'),
+    ('| 用户**指定**要验某一条（研究与论文都落定之后） | L（形式化那一岗；',
+     '| 用户**指定**要验某一条（研究与论文都落定之后） | 记一条「待形式化」（本会话形式化关着），'),
+    ('- **L（形式化）**：**L 也不在你的出边里**',
+     '- **形式化那一档**：本会话不可用（关着），这一格记「未核到」'),
+    ('形式化那一档由 L 做，它**成本极高**：B 可以派 L',
+     '形式化那一档本会话不可用（关着），结论以 V 的签与 B 的台账为准'),
+    ('能机器核的（`L.check_formal` 过的那几条，形式化那一岗是 L）',
+     '能机器核的那几条'),
+    ('稿件级审校 `H.review`）；形式化那一档由 L 做',
+     '稿件级审校 `H.review`）；形式化那一档本会话不可用'),
+    ('，成本极高、不主动召唤，不指定就不派。派 L 的唯一入口是 B（`B → L`），L 只派 C；用户也可以 `run-agent L` 直接起一条） |',
+     '，不排进流水线 |'),
+    ('（派 L 的唯一入口是 B —— `B → L` 是那条唯一的入边；',
+     '（结论以 V 的签与 B 的台账为准；'),
+    ('（`B → L` 是唯一的入边），用户也可以用 `run-agent L`', ''),
+    ('L 自己只派 C 梳理证明链，用户也可以用 `run-agent L` 直接起一条）。', '。'),
+    ('（`B → L` 是唯一的入边），L 只派 C（梳理证明链），用户也可以用 `run-agent L` 直接起一条；', ''),
+    ('（`B → L` 是唯一的入边）', ''),
+    ('`run-agent L`', ''),
+)
+
 SKILLS_DIR = "skills"
 
 #: `shared` 这个槽里的 skill 给每个角色（协作链层面的、与某一岗无关的那些）。
@@ -2189,7 +2217,7 @@ def _g_skills() -> tuple[Skill, ...]:
 - **编译**：`doc.paper_compile` 出 `out/paper/main.pdf`。
   本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ **产物与退出码分两栏读**，
   别只看退出码判成败。
-- **成稿是四步动作序列**（业主 2026-10-24 定，与 `specs/g.py` 的 policy 同一口径）：① 写正文 → ② 落对应表 → ③ 逐行核三格齐 → ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
+- **成稿是四步动作序列**（业主 2026-10-24 定；与本角色提示词里的政策同一口径）：① 写正文 → ② 落对应表 → ③ 逐行核三格齐 → ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
   你只给行（正文里每条定理/引理/命题/推论/例子/实验各占一行：`kind` / `label` / `env_no` /
   `ledger_id` / `proof_no` / `file`），它调 `papermapping.write_package` 渲染出
   `out/paper/MAPPING.json`、`out/paper/MAPPING.md` 与正文附录「附录：产出对应表」，并把
@@ -2710,6 +2738,10 @@ def materialize(root: str | pathlib.Path) -> list[str]:
         for s in rows:
             path = base / SKILLS_DIR / owner / f"{s.slug}.md"
             text = _render(owner, s)
+            # 2026-10-24：手册正文也要过 Lean 关档改写 —— 它是模型会 fs.read 的东西。
+            if not _LEANSCOPE.lean_on():
+                for _old, _new in NO_LEAN_SKILL_REPLACEMENTS:
+                    text = text.replace(_old, _new)
             try:
                 if path.is_file() and path.read_text(encoding="utf-8") == text:
                     continue
