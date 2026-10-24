@@ -1550,8 +1550,16 @@ class Secretary:
                     "reason": f"不认识的判断类别 {kind!r}（认 {list(self.JUDGE_KINDS)}）",
                     "cost": {"ledger": "", "reason": "没发调用（类别不认识）"}}
         if self.seam is None:
-            return {"checked": False,
-                    "reason": "没有装配模型缝（本智能体自己的 llmseam）⇒ 这一格没查成",
+            # ---- 2026-10-26（真机 sylow5）：这一句必须把"缝从哪来"的读数一并带出来。
+            #
+            # 改前它只说"没有装配模型缝"，而全仓五个构造点一个都没传 `seam=` ⇒
+            # 命题同一性判定这一整条链在真机上一次都没发生过，没人能从返回值里看出
+            # "这不是判过了、是根本没判"。装配读数（`model_source`）现在由
+            # `for_role_wired` 写在秘书身上：`none（秘书那一档没有配模型 key …）`。
+            why = "没有装配模型缝（本智能体自己的 llmseam）⇒ 这一格没查成"
+            if str(self.model_source or ""):
+                why = f"{why}（装配读数：{self.model_source}）"
+            return {"checked": False, "reason": why,
                     "cost": {"ledger": "", "reason": "没发调用（没有缝）"}}
         if not self.enable_model:
             return {"checked": False,
@@ -3540,6 +3548,15 @@ class Secretary:
             "basis": "", "reason": "", "label": label, "kind": kind,
             "candidates": [], "cost": {"ledger": "", "reason": "没发调用（还没判）"},
             "reused": False, "cached": False, "statement_sha256": "",
+            #: 这一条判定用的是哪一条缝（`Secretary.model_source` 的三档读数：
+            #: `body（…）` / `secretary（…）` / `none（…）`）。空串 = 这一名秘书是裸造的
+            #: （`Secretary(...)` 没传 `seam=`），那一档就是"没有判断面"。
+            #:
+            #: 为什么把它放进返回值（2026-10-26 真机 sylow5）：`judge()` 那句"没有装配
+            #: 模型缝"只在 `Secretary.judge` 的局部返回值里，调用方（B 的工具返回、直写
+            #: 路由的 detail）看不到"缝为什么没有" —— 而 sylow5 的根因恰恰是装配处漏了
+            #: 一根线，不是判据坏了。缝的来源与"判了没有"必须同时在读数上。
+            "seam_source": str(self.model_source or ""),
             #: 这一格到底有没有"试过"：有缝且开关开着才是试过。
             #:
             #: 它与 `checked` 是两根轴（三态之外再分一层）：`attempted=False` 是"这一名
@@ -3552,10 +3569,10 @@ class Secretary:
         if not _is_proposition_kind(kind):
             out["reason"] = (f"kind={kind!r} 不在命题性的那几档 {list(PROPOSITION_KINDS)} 里 "
                              "⇒ 不是命题，不参与同一性判定（也不洗它的名字）")
-            return out
+            return self._with_adjudication_visibility(out)
         if not full.strip():
             out["reason"] = "命题正文是空的 ⇒ 没有可判的东西（不洗名、不并）"
-            return out
+            return self._with_adjudication_visibility(out)
         key = _proposition_verdict_key(full)
         out["statement_sha256"] = key
         cached = self._proposition_verdicts.get(key) or proposition_verdict_of(self.root, full)
@@ -3575,7 +3592,7 @@ class Secretary:
                 cost={"ledger": "", "reason": "没发调用（沿用缓存：同一段正文判过一遍）"},
                 # 候选表照旧摆出来：读的人要能核对"沿用这一次判定的那批候选还在不在"。
                 candidates=self._proposition_candidates(full, rows=rows))
-            return out
+            return self._with_adjudication_visibility(out)
         candidates = self._proposition_candidates(full, rows=rows)
         out["candidates"] = candidates
         context = {
@@ -3595,7 +3612,7 @@ class Secretary:
         if not got.get("checked"):
             out["checked"] = False
             out["reason"] = str(got.get("reason") or "这一格没查成（原因不明）")
-            return out
+            return self._with_adjudication_visibility(out)
         out["checked"] = True
         out["verdict"] = str(got.get("decision") or _PK.STATE_UNKNOWN)
         out["canonical_name"] = str(got.get("canonical_name") or "").strip()
@@ -3629,6 +3646,40 @@ class Secretary:
             # 写不成意味着下一趟还要再花一次钱。
             out["cache_problem"] = f"{type(exc).__name__}: {exc}"
             self._log(f"命题判定台账没写成：{out['cache_problem']}")
+        return self._with_adjudication_visibility(out)
+
+    @staticmethod
+    def _with_adjudication_visibility(adj: Mapping[str, Any]) -> dict[str, Any]:
+        """把"判了没有"那一格挂到判定返回值上（键名 `proposition_adjudication`）。
+
+        ## 它为什么必须存在（真机 sylow5，2026-10-26）
+
+        改前这一格只活在 `checked` / `reason` 两个平铺的键里，而它们旁边紧挨着
+        `verdict` / `canonical_name` / `basis` 那一组判词 —— 读的人（尤其是模型，
+        它只看工具返回的那一份 JSON）很容易把它们读成"判过了，结论是 unknown"。
+        真机 sylow5 的后果就是：`out/secretary/proposition_verdicts.jsonl` 一次都没
+        建出来，而会话里没有任何一格说"这一条判定根本没发生"。
+
+        所以这里把三件事收进同一格、显式命名：
+        - `checked`：判成了没有（`False` 不是说"不同"，是"没判"）；
+        - `attempted`：有没有真的去判（没缝 ⇒ `False`，试了没成 ⇒ `True`）；
+        - `seam_source`：这一条判定用的哪条缝（`none（…）` 就是没接线）。
+
+        ## 为什么挂在这里而不是每个 `return` 自己写
+
+        :meth:`adjudicate_proposition` 有五条返回路径（不是命题 / 正文空 / 沿用缓存 /
+        没查成 / 判了）。让每条路径各写一次，等于把"这一格在不在"交给五处自觉 ——
+        而本仓最贵的那一类缺陷正是"某一条返回路径少写一格"。所以只留一个出口。
+        """
+        out = dict(adj)
+        out["proposition_adjudication"] = {
+            "checked": bool(out.get("checked")),
+            "attempted": bool(out.get("attempted")),
+            "verdict": str(out.get("verdict") or _PK.STATE_UNKNOWN),
+            "reason": str(out.get("reason") or ""),
+            "seam_source": str(out.get("seam_source") or ""),
+            "reused": bool(out.get("reused")),
+        }
         return out
 
     @staticmethod
@@ -3706,6 +3757,11 @@ class Secretary:
                                #: 命题同一性判定的三态读数（见 `_adjudication_reading`）。
                                #: 空字典 = 这一笔没走到那一格（例如 `force_new` 早退）。
                                "adjudication": {},
+                               #: "判了没有"的一句话（见 `_with_adjudication_visibility`）：
+                               #: `checked` / `attempted` / `reason` / `seam_source`。
+                               #: 空字典 = 这一笔没走到那一格（同上；拒绝那几笔在
+                               #: `reason` 里已经说清了为什么不写）。
+                               "proposition_adjudication": {},
                                #: 洗过的定理名与"洗掉了什么"（业主 2026-10-24：让秘书洗定理名）。
                                "canonical_name": "", "label_washed": {},
                                #: 这一笔的证明自己的路子说明（路线住在证明这一层）。
@@ -3776,6 +3832,13 @@ class Secretary:
         adjudication = self.adjudicate_proposition(
             {"statement_full": full, "label": str(body.get("label") or ""), "kind": kind})
         out["adjudication"] = self._adjudication_reading(adjudication)
+        #: 判不了必须可见（2026-10-26）：`adjudication` 是那一趟的逐字读数，而这一格是
+        #: "判了没有"的一句话（`checked` / `attempted` / `reason` / `seam_source`）。
+        #: 为什么要两格：前者挨着 `verdict` / `basis` 那一组判词，读的人（模型只看工具
+        #: 返回的那份 JSON）容易把它读成"判过了、结论 unknown"；这一格单独命名，于是
+        #: "这一条判定根本没发生"在返回值里不可能被漏看。
+        out["proposition_adjudication"] = dict(
+            adjudication.get("proposition_adjudication") or {})
         out["canonical_name"] = str(adjudication.get("canonical_name") or "")
         try:
             return self._record_statement_tx(body, full=full, kind=kind,
@@ -3808,6 +3871,10 @@ class Secretary:
             "reason": str(got.get("reason") or ""),
             "reused": bool(got.get("reused")),
             "cached": bool(got.get("cached")),
+            #: 这一条判定用哪条缝（三档见 `seam_for_secretary`）。没有缝时它连着为什么 ——
+            #: "判不了"的原因不能只活在秘书的台账里：调用方（B 的工具返回、直写路由的
+            #: detail）拿到的就是这一份读数。
+            "seam_source": str(got.get("seam_source") or ""),
             "candidates": [str(c.get("stmt_id") or "") for c in (got.get("candidates") or [])],
             "cost": dict(got.get("cost") or {}),
         }
@@ -6517,8 +6584,98 @@ def for_role(role: str, *, root: str | Path, **kw: Any) -> Secretary:
     `agent_loop._secretary_for`）与 `conductor.Conductor`（M 的派活路径）——
     两者都不在 FC-27 名册。生产路径会传 `seam=<本角色自己的 LlmSeam>` 与
     `enable_model=True`（主控裁定 A5），于是三条判断真的发生、花销记在本体账上。
+
+    这一支自己不去造缝（`seam=None` 就是"没有判断面"，`judge()` 会如实报
+    `checked=False`）。手上没有缝的构造点该调 :func:`for_role_wired` ——
+    它在造秘书之前先把缝拿来，并把"缝从哪来"写进 `Secretary.model_source`。
     """
     return Secretary(str(role), root=Path(str(root)), **kw)
+
+
+def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
+                       sid: str | None = None) -> tuple[Any, str]:
+    """秘书判断面那一条缝：`(缝 或 None, 读数)` —— 拿不到时读数就说清为什么。
+
+    ## 为什么需要这一处（真机 sylow5 的读数，2026-10-26）
+
+    命题同一性判定这一整条链在真机上是死的：`record_statement` 会调
+    :meth:`Secretary.adjudicate_proposition`，后者调 :meth:`Secretary.judge`，
+    而 `judge` 的第二道闸是 `if self.seam is None: return checked=False`。
+    全仓的 `Secretary(...)` 构造点当时一个都没传 `seam=`（`tools/table_tools.py`、
+    `conductor.py`、`closing.py`、`tools/conductor_tools.py`、
+    `agent_b/core.py` 的 `_statement_secretary`），于是每一次判词都走"没缝"那一支、
+    静默退回机械判据（相似度 0.15–0.33 ⇒ 判 different ⇒ 同一条定理被登记 2–3 次），
+    而 `out/secretary/proposition_verdicts.jsonl` 一次都没被建出来。
+
+    单测一直是绿的，因为每一处判据都自己塞了一条 `_FakeSeam` —— 那正是本仓说的
+    "实现了但没接线"的形态：实现与判据都在，只有装配处漏了一根线。
+
+    ## 三档读数（进 `Secretary.model_source`，也进判定返回值的 `seam_source`）
+
+    - `body（调用方给的缝）`：调用方手上已经有缝（例如 `agent_loop.run_role`
+      派生出来的那一条），原样用；
+    - `secretary（LlmSeam.for_secretary）`：现造一条秘书档的缝
+      （业主 2026-10-14：「所有智能体的秘书另外共用一个 api key」）；
+    - `none（…）`：造出来的缝 `wired=False`（设置里 `secretary` 那一档没有 key）。
+      这一档返回 `None` 而不是那条空缝：装一条空缝上去会让判定变成
+      "试过了、没成（`judge_not_wired`）"，而事实是"这一名秘书根本没有判断面" ——
+      而 `attempted` 那一格（:meth:`adjudicate_proposition`）会把前者写成
+      `attempted=True`，于是"从来没判过"在盘上长成了"判过没成"。
+
+    为什么不用 `LlmSeam.for_role`：秘书的判断是"判断类"调用，共用一把 key 才能
+    单独限额、单独看账（`by_role="secretary:<本体角色>"`），见
+    :meth:`LlmSeam.for_secretary` 的 docstring。
+    """
+    if seam is not None:
+        return seam, "body（调用方给的缝）"
+    try:
+        from .llmseam import LlmSeam
+    except Exception as exc:  # noqa: BLE001 —— 拿不到缝的工厂 ⇒ 读数写清，不猜
+        return None, f"none（拿不到 llmseam：{type(exc).__name__}: {exc}）"
+    try:
+        got = LlmSeam.for_secretary(owner_role=str(role), session_root=Path(str(root)),
+                                    sid=sid)
+    except Exception as exc:  # noqa: BLE001 —— 造缝失败是"没接线"，不是"没有结论"
+        return None, f"none（造缝失败：{type(exc).__name__}: {exc}）"
+    if got is None:
+        return None, "none（LlmSeam.for_secretary 返回 None：造不出秘书档的缝）"
+    if not getattr(got, "wired", False):
+        return None, ("none（秘书那一档没有配模型 key ⇒ for_secretary 造出来的是空缝；"
+                      "这里不把空缝装上去：空缝会把『从来没有判断面』写成『试过了、没成』）")
+    return got, "secretary（LlmSeam.for_secretary）"
+
+
+def for_role_wired(role: str, *, root: str | Path, seam: Any = None,
+                   store: Any = None, registry: Any = None,
+                   sid: str | None = None, enable_model: bool = True,
+                   **kw: Any) -> Secretary:
+    """造一名"判断面接上了线"的某角色秘书（手上没有缝的构造点调这一支）。
+
+    与 :func:`for_role` 只差一件事：造秘书之前先把缝拿来
+    （:func:`seam_for_secretary`），于是 `judge()` 不会因为"没人传 seam="而永远返回
+    `checked=False`。真机 sylow5 的形态就是后一种：五个构造点一个都没传 `seam=`，
+    命题同一性判定一次都没发生。
+
+    参数
+    ----
+    seam : 调用方手上已有的缝（`None` ⇒ 现造一条秘书档的，见 :func:`seam_for_secretary`）。
+    enable_model : 与 :class:`Secretary` 同义，缺省 `True` —— 这一支的整个存在意义就是
+        把判断面打开；关着的时候 `judge()` 仍然如实返回 `checked=False`（说"开关关着"），
+        所以"我明确不要模型判断"也读得出来。
+    kw : 其余关键字参数原样交给 :class:`Secretary`（`deadline_sec` / `log` / 两个阈值…）。
+
+    读数：`Secretary.model_source` 记的是"缝从哪来"（三档见 :func:`seam_for_secretary`），
+    没有缝时它连着为什么 —— `judge()` 的 `checked=False` 那一格会把这句话一并带出来，
+    于是"判不了"在返回值与台账上都能见到原因，而不是静默退回机械判据。
+    """
+    seam_now, source = seam_for_secretary(str(role), root=root, seam=seam, sid=sid)
+    sec = Secretary(str(role), root=Path(str(root)), store=store, registry=registry,
+                    seam=seam_now, sid=sid, enable_model=bool(enable_model), **kw)
+    try:
+        sec.model_source = source
+    except Exception:  # noqa: BLE001 —— 留痕写不上不许把秘书造失败（判断面还在）
+        pass
+    return sec
 
 
 def _now_iso() -> str:

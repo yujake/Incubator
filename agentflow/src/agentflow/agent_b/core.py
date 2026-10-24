@@ -115,13 +115,32 @@ class _Core:
         这条口径必须是同一件事。派生失败不抛（与 `AgentLoop.__post_init__` 同一条理由：
         工厂坏了是环境问题），但"没有秘书"这件事落在 `secretary_problem` 里，
         于是它在返回值里读得到（`register_statement` 会把它写成受控拒绝）。
+
+        ## 2026-10-26（真机 sylow5）：现派生的那一条必须带缝
+
+        改前这里走 `for_role("B", root=..., store=...)` —— 没传 `seam=`、也没开
+        `enable_model`，于是这一名秘书的命题同一性判定（`record_statement` →
+        `adjudicate_proposition` → `judge`）在第二道闸上永远折成
+        `checked=False`：真机 sylow5 的 `out/secretary/proposition_verdicts.jsonl`
+        一次都没被建出来，9 条命题里 `proof_no` 非 None 的 0 条，同一条定理被登记
+        2–3 次（`Sylow I（存在性）` 与 `命题 1（Sylow I 存在性）` 各自成行）。
+
+        单测一直是绿的，因为每一处判据都自己塞了一条 `_FakeSeam` —— 断的正是这一根
+        装配线。`for_role_wired` 在造秘书之前先把缝拿来（`llmseam.LlmSeam.for_secretary`，
+        业主 2026-10-14：「所有智能体的秘书另外共用一个 api key」），拿不到就把
+        "为什么"写进 `model_source`，于是 `judge` 的 `checked=False` 与
+        `record_statement` 的 `proposition_adjudication` 都带着那句原因。
+
+        缝的派生本身不惜代价地 fail-open：`seam_for_secretary` 自己把"拿不到缝"
+        （没装 llmseam / 造缝抛异常 / 秘书档没配 key）都折成 `None` + 一句读数，
+        所以造缝失败不会把整条写路径关掉 —— 写入仍然要能发生，判词那一格如实报判不了。
         """
         if self.secretary is not None or not self.auto_secretary:
             return self.secretary
         try:
-            from ..secretary import for_role
+            from ..secretary import for_role_wired
 
-            self.secretary = for_role("B", root=self.store.root, store=self.store)
+            self.secretary = for_role_wired("B", root=self.store.root, store=self.store)
         except Exception as exc:  # noqa: BLE001 —— 派生失败 ⇒ 写路径关闭，但不许静默
             self.secretary = None
             self.secretary_problem = (f"秘书派生失败（{type(exc).__name__}: {exc}）⇒ "

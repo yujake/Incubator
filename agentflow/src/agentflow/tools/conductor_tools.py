@@ -1472,20 +1472,27 @@ def _roster_secretary(conductor: Any, store: Any) -> Any:
     销号必须落在「同一份名册文件」上，否则 `retire_ready` 说"可销"、名册里却找不到那个名字
     （两处各读一份名册的形态）。两档都空 ⇒ 现造一个：`Secretary` 的构造零模型调用，
     只读 root 与 store（`Secretary._conductor` 会用它读台账）。
+
+    现造那一条走 `secretary.for_role_wired` 而不是裸的 `Secretary(...)`
+    （2026-10-26 真机 sylow5）：后者不传 `seam=` ⇒ 这一名秘书没有判断面，任何经它
+    落下去的判词（今天还没有，命题同一性那条判定就在同一个构造点上）
+    都会静默折成 `checked=False`。缝从哪来写进 `Secretary.model_source`
+    （秘书档没配 key 时它连着"为什么没缝"）。
     """
     for attr in ("roster_sink", "secretary"):
         got = getattr(conductor, attr, None)
         if got is not None:
             return got
-    from ..secretary import for_role as _secretary_for_role
+    from ..secretary import for_role_wired as _secretary_wired
 
     root = getattr(store, "root", None) or getattr(conductor, "root", None) or "."
-    # `for_role` 是模块级函数（`secretary.for_role`），不是 `Secretary` 的方法。
-    # 写成 `Secretary.for_role(...)` 会在"两档都没接"这条回退路上抛 AttributeError，
-    # 而那条路只有装配没接 `roster_sink` / `secretary` 时才走到 —— 于是它一直没人发现，
-    # 直到 `tests/test_tools_returns_declaration.py` 用一个裸 `Conductor` 探针调到这里。
-    return _secretary_for_role(str(current_caller_role() or S.CONDUCTOR_ROLE),
-                               root=root, store=store)
+    # `for_role` / `for_role_wired` 都是模块级函数（`secretary.*`），不是 `Secretary` 的
+    # 方法。写成 `Secretary.for_role(...)` 会在"两档都没接"这条回退路上抛
+    # AttributeError，而那条路只有装配没接 `roster_sink` / `secretary` 时才走到 ——
+    # 于是它一直没人发现，直到 `tests/test_tools_returns_declaration.py` 用一个裸
+    # `Conductor` 探针调到这里。
+    return _secretary_wired(str(current_caller_role() or S.CONDUCTOR_ROLE),
+                            root=root, store=store)
 
 
 @tool(

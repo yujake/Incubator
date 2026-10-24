@@ -918,9 +918,21 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
         body = merged
         requested = str(id)
     try:
-        from ..secretary import Secretary
+        # ---- 2026-10-26（真机 sylow5）：这一支必须带着缝造秘书。
+        #
+        # 改前是 `Secretary(role, root=..., store=...)` —— 没传 `seam=`，于是
+        # `record_statement` 里那条命题同一性判定（`adjudicate_proposition` →
+        # `judge`）每次都在第二道闸（`if self.seam is None`）上折成
+        # `checked=False`，静默退回机械判据：相似度 0.15–0.33 ⇒ 判 different ⇒
+        # 同一条定理被登记 2–3 次，而 `out/secretary/proposition_verdicts.jsonl`
+        # 一次都没建出来（sylow5 的真机读数）。
+        #
+        # `for_role_wired` 与 `Secretary(...)` 只差一件事：造秘书之前先把缝拿来
+        # （秘书档没配 key ⇒ 缝是 None + `model_source` 写明为什么）。判不了时
+        # 返回值里的 `proposition_adjudication` 会把这一句原样透出来。
+        from ..secretary import for_role_wired
 
-        sec = Secretary(role, root=ctx.store.root, store=ctx.store)
+        sec = for_role_wired(role, root=ctx.store.root, store=ctx.store)
         got = sec.record_statement(body, role=role)
     except Exception as exc:  # noqa: BLE001 —— 兜底方不可达必须回 unknown，不许折成成功
         return _route_unavailable(backstop="secretary", entry=str(entry), table=table,
@@ -1775,9 +1787,13 @@ def _selftest() -> int:
         # （relations / statements.count / 删除保护 / search / list）跟着一起红 14 项。
         # 错在夹具一侧，不在判据：判据的负控见
         # `tests/test_tools_table_fs.py::test_a_concept_declaring_own_result_without_self_authored_is_refused`。
-        from ..secretary import Secretary
+        # 自检走的是生产路径，所以秘书也要按生产路径装（`for_role_wired`：先把缝拿来）。
+        # 这一节铺的是概念行（`kind="concept"`），不参与命题同一性判定；但它与直写路由
+        # 那条路必须是同一支构造点 —— 否则自检会在一条"没接线"的形态上永远亮绿
+        # （2026-10-26 真机 sylow5：实现与判据都在，只有装配处漏了一根线）。
+        from ..secretary import for_role_wired
 
-        sec = Secretary("B", root=st.root, store=st)
+        sec = for_role_wired("B", root=st.root, store=st)
         concept_ids: list[str] = []
         for name in ("群", "域", "环"):
             got = sec.record_statement(

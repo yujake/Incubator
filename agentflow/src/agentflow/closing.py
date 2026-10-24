@@ -5503,10 +5503,15 @@ def child_counts_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
     `readings`、不进 `status`、不产生 `Finding` ⇒ 门的强度一格没改（与
     `roster_registration` 那一格同一套纪律）：这两个数是"看"，不是"拦"。
     """
-    from .secretary import Secretary
+    from .secretary import for_role_wired
 
     try:
-        got = Secretary(S.CONDUCTOR_ROLE, root=root, store=store).child_counts()
+        # 构造点与别的装配处统一走 `for_role_wired`（2026-10-26 真机 sylow5：全仓的
+        # `Secretary(...)` 一个都没传 `seam=`，于是命题同一性判定那整条链是死的）。
+        # 这一处只读名册（`child_counts`，不判命题），但"构造点漏了 seam=" 是一个
+        # 会复发的形态，而它的破法只有一个：所有构造点都走同一支。
+        # 缝从哪来写进 `Secretary.model_source`（秘书档没配 key 时它连着为什么）。
+        got = for_role_wired(S.CONDUCTOR_ROLE, root=root, store=store).child_counts()
     except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
         return {"checked": False, "child_count": None, "active_child_count": None,
                 "reason": f"{type(exc).__name__}: {exc}"}

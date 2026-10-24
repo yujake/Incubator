@@ -2968,14 +2968,25 @@ class Conductor:
         out: dict[str, Any] = {"checked": False, "how": "roster_unavailable", "refused": "",
                                "error": "", "why": "", "to": str(to), "task_id": "",
                                "name": "", "kind": "", "role": "", "callable": "",
+                               #: 这一趟用的秘书是哪一条缝（三档见 `secretary.seam_for_secretary`）。
+                               #: 空串 = 沿用本实例已装配的那一名秘书（不在这里现造）。
+                               "secretary_seam": "",
                                "candidates": []}
         sec = getattr(self, "secretary", None)
         if sec is None or not hasattr(sec, "roster_view"):
             try:
-                from .secretary import Secretary
+                # ---- 2026-10-26（真机 sylow5）：这一支也要带缝造秘书。
+                #
+                # 改前是裸的 `Secretary(...)`：没传 `seam=` ⇒ 这一名临时的秘书没有判断面
+                # （`judge()` 永远 `checked=False`）。这条路上今天只读名册、不判命题，但
+                # 「构造点漏了 seam=」正是 sylow5 那条死链的根因形态 —— 让它与别的构造点
+                # 走同一支（`for_role_wired`），下一个把判据挂到这里的人不必再踩一次。
+                # 缝从哪来写进读数 `addressing.secretary_seam`（拿不到时它连着为什么）。
+                from .secretary import for_role_wired
 
-                sec = Secretary(str(who or S.CONDUCTOR_ROLE), root=Path(str(root)),
-                                store=getattr(self, "store", None))
+                sec = for_role_wired(str(who or S.CONDUCTOR_ROLE), root=str(root),
+                                     store=getattr(self, "store", None))
+                out["secretary_seam"] = str(getattr(sec, "model_source", "") or "")
             except Exception as exc:  # noqa: BLE001 —— 拿不到名册 ⇒ 读数标出来（fail-open）
                 out["why"] = f"名册拿不到（{type(exc).__name__}: {exc}）⇒ 退回运行期解析出的父"
                 return out
