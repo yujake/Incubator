@@ -67,6 +67,33 @@ _ALLOWED_L_PREFIXES = ("- `formal`：**L** 签", "这些伙伴可以唤起你：
 #: 第二格只对谁成立（入边那一行里出现 L 的，全仓只有这一个角色）。
 _INBOUND_L_ROLE = "C"
 
+#: 第三格：业主原话的逐字引用行（按角色列出）。
+#:
+#: 现场：`specs/g.py` 的 D-40 那一条把业主 2026-10-24 的裁定原话整句搬进了 G 的提示词，
+#: 而那句原话里带着「参照 L 侧的形式化会切割太细」⇒ 判据 1 按"出现 L 就算把 L 当伙伴"读，
+#: 把这一行也读成了违反。
+#:
+#: 口径（业主已确认）：业主原话不拆不改 —— 改引文比留一个角色名更坏。所以豁免落在
+#: "那一行逐字存在"上，而不是"凡是提到 L 的行都放过"：下面按整行相等放行，引文动一个字
+#: 这条豁免就自动失效（判据 1 当场红）；而"允许清单自己腐烂"这件事由
+#: `test_the_verbatim_quote_exemption_does_not_rot` 单独报出来 —— 否则读到的结论是
+#: "提示词退步了"，而真正的原因是"允许清单过期了"。
+_G_VERBATIM_OWNER_LINE: str = (
+    '- **正文的定理/引理/命题结构以 B 台账登记的命题为准**（业主 2026-10-24：「G 的写作只参照 B 侧收录的证明，如果参照 L '
+    '侧的形式化会切割太细」）：`statements` 里 kind 是定理类的那几条 = 正文里那几个定理类环境，**一条命题对一个环境**，证明就用那一行的 '
+    '`proof_text`；台账里没有登记的命题，正文里不许凭空多出一个定理类环境。**L 的形式化产物只作「这一条命题的形式化已验证」的凭据**，不是正文目录的来源：它内部的 '
+    'lemma / step 分解**不进正文**、不拆成多个 theorem / lemma / proposition 环境。**形式化细节不进正文**：不搬 Lean 的 '
+    'lemma / step 标题、不写 tactic、不贴检查器输出，**附录与脚注也不进**；正文最多一句结论性表述（「这一条已由检查器验证」），并**指向对应表里那一行** '
+    '—— 形式化凭据的落点只有两处：`out/paper/MAPPING.json` 那一行（`lean_file` / `lean_target`，或数值实验定理那两格 '
+    '`numeric_evidence` / `exhaustion_note`）与 `experiments` 台账那一行（路径 + 三态 + sha '
+    '都在那里），读者要看凭据就去那两处看。**`claim` 宏不得用来伪装定理类环境**：它是给「证明过程中的中间步骤」用的，不冒充 Lemma 标签 —— '
+    '`\\newtheorem{claim}[theorem]{Lemma}` 这种定义会让它印成 Lemma、被当成正文里的另一个定理（真机实测：1 个 theorem 环境 + '
+    '5 个印成 Lemma 的 claim，而台账只有 1 条命题 ⇒ 对应表只能 1 行，环境与行对不上），**禁写**；对应表按环境逐行核，印成 Lemma '
+    '的自定义宏同样算一个定理类环境。'
+)
+#: 允许清单按角色挂（`{角色: (逐字行, ...)}`）：只有这里点名的那一行、只在那个角色身上放行。
+_VERBATIM_OWNER_LINES: dict[str, tuple[str, ...]] = {"G": (_G_VERBATIM_OWNER_LINE,)}
+
 #: 「把 L 当可以打交道的人」的几种说法（判据 1 的第二种形状：点名 L 且带动作）。
 #: 冗余于逐行白名单，但红的时候给出的理由更具体（读者一眼知道该改哪一句）。
 L_CONTACT = re.compile(
@@ -134,6 +161,11 @@ def _l_mention_problems(role: str, text: str) -> list[str]:
             continue
         if role == _INBOUND_L_ROLE and line.startswith(_ALLOWED_L_PREFIXES[1]):
             continue
+        # 第三格（整行相等，不用前缀）：业主原话逐字引用（D-40）—— 改引文比留一个角色名更坏。
+        # 用 `in` 而不是 `startswith` 是刻意的：引文尾巴改了也算过期，那时这一行不再被放行，
+        # 判据 1 会点名它（而不是让一条"开头对得上"的豁免继续盖住一条被改写过的引文）。
+        if line in _VERBATIM_OWNER_LINES.get(role, ()):
+            continue
         hit = L_CONTACT.search(line)
         why = f"（{hit.group(0)!r}）" if hit else ""
         bad.append(f"{role}:{lineno}: 提示词里出现了 L{why}：{line[:90]}")
@@ -162,7 +194,8 @@ def test_one_no_other_role_treats_l_as_a_partner() -> None:
     「要形式化就找 L，别自己写 Lean 源码」与「形式化见 L：`formal.*` 只挂在 L 身上」。
 
     反真空：白名单那两格必须真的在（否则"没有 L"可能只是"这两行也没了"），
-    且判据函数在一份加回「找 L」的文本上必须报出来。
+    且判据函数在一份加回「找 L」的文本上必须报出来。第三格（业主原话的逐字引用行）
+    是整行相等的豁免，它自己会不会腐烂由下一条判据单独钉。
     """
     reg = _registry()
     problems: list[str] = []
@@ -193,6 +226,36 @@ def test_one_no_other_role_treats_l_as_a_partner() -> None:
     # 反真空：判据函数在一份"加回找 L"的文本上必须报出来
     assert _l_mention_problems("E", "…断言能否形式化就找 L（形式化那一岗）…"), (
         "判据函数在旧句子上也报不出来 ⇒ 判据 1 读的不是这件事")
+
+
+def test_the_verbatim_quote_exemption_does_not_rot() -> None:
+    """反真空（豁免的牙）：允许清单里那一行必须逐字还在 G 的提示词里。
+
+    为什么单列一条：`_l_mention_problems` 的第三格按整行相等放行，引文一旦被改写，
+    豁免就再也不匹配 —— 判据 1 会红，但读者看到的是"G 又提到 L 了"，而真正的原因是
+    "允许清单过期了"。这一条把过期单独报出来，理由与豁免本身同一句：
+    业主原话逐字引用（D-40），改引文比留一个角色名更坏。
+
+    负控（同一把尺子的另一半）：把那一行的最后一个字改掉 ⇒ 判据 1 必须重新点名它，
+    否则"豁免"与"过期"分不开，这条判据只是又念了一遍文案。
+    """
+    reg = _registry()
+    checked = 0
+    for role, lines in _VERBATIM_OWNER_LINES.items():
+        rendered = set(_prompt(role, reg).splitlines())
+        for want in lines:
+            assert want in rendered, (
+                f"{role} 的提示词里已经找不到这条豁免的逐字原文（开头：{want[:60]!r}）⇒ "
+                "豁免从此永不生效：要么把引文恢复逐字（业主原话不拆不改，D-40），"
+                "要么连同这条豁免一起删掉并在报告里交代理由")
+            checked += 1
+    assert checked >= 1, "允许清单里一行都没读到 ⇒ 这条判据失去对象（不是'没有腐烂'）"
+
+    victim = _VERBATIM_OWNER_LINES["G"][0]
+    rotted = _prompt("G", reg).replace(victim, victim[:-1] + "！", 1)
+    assert rotted != _prompt("G", reg), "负控没改到 G 的那一行 ⇒ 这一刀是空转"
+    assert _l_mention_problems("G", rotted), (
+        "引文改了最后一个字之后判据 1 仍然放行 ⇒ 这条豁免读的不是'逐字'")
 
 
 # ============================================================ 判据 2

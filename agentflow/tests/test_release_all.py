@@ -2672,6 +2672,14 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "numericproof.py": "穷尽是否够 proof、证明栏三段、signed_by=V 且作者含 E —— B 的入库闸 / schema 硬约束 / verify 审计 / 对应表全问它",
     # 2026-10-23（G 侧）：数值实验定理在论文里那三格的判据。
     "numerictheorem.py": "对应表数值行的判据：file 是不是程序相对仓库根路径、E 那条 exp: 读数在不在台账、exhaustion_note 三块齐不齐",
+    # 2026-10-24（业主：「multi_call 应该让系统自动整理拆分」；做法「接住请求，拆分，分条执行」）：
+    # 多调用接住/拆分/逐条执行的公共层 —— 它不属于任何角色（判据扫源码断言一个角色名都没有），
+    # 准入差异与边表都在层之下判，本层只认形状 / 载荷 / 条目序号这三样。
+    "stepdispatch.py": "多调用接住/拆分/逐条执行的公共层：`StepRequest` / `StepItem` / "
+                       "`StepDispatch` / `catch_step_request`（整包接住，拆不出条目时给 "
+                       "`CATCH_FAILED` 而不是只跑第一条）+ `step_index_of`（步数按拆后条目记）/ "
+                       "`action_of` / `outcome_of` / `digest_line`（汇总成一行回给模型）；"
+                       "不读盘不写盘、不认识任何角色、不判准入",
 }
 
 

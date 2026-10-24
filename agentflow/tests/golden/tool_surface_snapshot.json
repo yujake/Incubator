@@ -3221,7 +3221,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated'}",
+   "returns": "{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body'}",
    "roles": [
     "H"
    ],
@@ -3303,7 +3303,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count'}",
+   "returns": "{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count','paper_body'}",
    "roles": [
     "H"
    ],
@@ -3854,7 +3854,7 @@
     ],
     "type": "object"
    },
-   "returns": "data=新主键字符串（**标量，无键集合**）；meta.row 是实际落盘的整行。",
+   "returns": "data=新主键字符串（标量）；meta.row 是实际落盘的整行。被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}",
    "roles": [
     "A",
     "B",
@@ -3915,7 +3915,7 @@
     ],
     "type": "object"
    },
-   "returns": "data=是否真的删掉了（**布尔标量，无键集合**）；meta.references 列出引用者（被拒时是原因，放行时是将会悬空的清单）。",
+   "returns": "data=是否真的删掉了（布尔标量）；meta.references 列出引用者（被拒时是原因，放行时是将会悬空的清单）。被兜底接管那一档 data 是对象（同上）。",
    "roles": [
     "A",
     "B",
@@ -4233,7 +4233,7 @@
     ],
     "type": "object"
    },
-   "returns": "data=主键（**标量，无键集合**）；meta.row 是合并后实际落盘的整行。",
+   "returns": "data=主键（标量）；meta.row 是合并后实际落盘的整行。被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / refused_by_backstop …）。",
    "roles": [
     "A",
     "B",
