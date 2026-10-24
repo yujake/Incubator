@@ -56,7 +56,7 @@ const OPEN: CmdRow[] = [
   },
   {
     cmd: "python -m agentflow.cli --root <工作区> web --allow-writes",
-    why: "打开写面（缺省只读）：起一趟 / 插话 / 叫停 / 改设置 / 改预算都走这一档；答问除外 —— POST /answer 是既有写路径，不进那张授权矩阵，缺省也放行",
+    why: "打开写面（缺省只读）：起一趟 / 插话 / 叫停 / 改设置 / 改预算 / 预热提示词缓存都走这一档；答问除外 —— POST /answer 是既有写路径，不进那张授权矩阵，缺省也放行",
   },
   {
     cmd: "python -m agentflow.cli --root <工作区> web --no-settings-write",
@@ -87,7 +87,7 @@ const RUNS: CmdRow[] = [
   },
   {
     cmd: "agentflow --root <工作区> stop --force",
-    why: "直接停：连子孙进程一起杀（不可逆，页面上要两次确认）",
+    why: "直接停：连子孙进程一起杀（不可逆，页面上要先过一道确认）",
   },
   {
     cmd: "agentflow --root <工作区> status-report",
@@ -124,7 +124,7 @@ const PAGES: PageRow[] = [
   {
     page: "一趟详情（/run/会话号）",
     reads: "GET /api/run/{sid} · /api/run-index · /api/run/{sid}/events · /api/live",
-    answers: "这一趟走到哪、花了多少（检查点与事件求和两处并排）、逐条事件、交付说明、停机开关",
+    answers: "这一趟走到哪、花了多少（检查点与事件求和并排）、逐条事件、交付说明、停机开关",
   },
   {
     page: "在飞（/live）",
@@ -223,7 +223,7 @@ const MISREADS: MisreadRow[] = [
   },
   {
     wrong: "写面默认关着，说明网页还接不了线",
-    right: "七条 POST 全在路由表里（/answer、/api/stop、/api/submit、/api/settings、/api/budget、/api/run、/api/task）；缺省只读是因为服务端要 --allow-writes 才放行（/api/ 下那六条写端点如此；/answer 是既有写路径、缺省也放行），不是没接线。",
+    right: "八条 POST 全在路由表里（/answer、/api/stop、/api/submit、/api/settings、/api/budget、/api/run、/api/task、/api/cache/warm）；缺省只读是因为服务端要 --allow-writes 才放行（/api/ 下那七条写端点如此；/answer 是既有写路径、缺省也放行），不是没接线。",
   },
 ];
 
@@ -232,13 +232,14 @@ export function Help() {
     <>
       <Card title="这是什么">
         <div class="readings">
-          面向数学研究的多智能体协同框架：十个角色（A–H、V、M）各有分工，主控 M 决定派谁做什么。
+          面向数学研究的多智能体协同框架：十一个角色（A–H、V、L、M）各有分工，主控 M 决定派谁做什么。
 每一步都由模型决定、由框架执行并落盘；旁边八页读的就是那些盘上事实（加上本页一共九页）。
         </div>
         <div class="readings">
           角色一句话：A 检索并登记文献 · B 抽概念建关系 · C 算图与计数（只读）·
-          D 研究循环（把方向收敛成结论或如实说证据不足）· E 数值实验（没有 Lean 时不做形式化）·
-          F 多轮难题攻坚 · G 写稿 · H 审校（只读）· V 证明级验证（只读）· M 主控。
+          D 研究循环（把方向收敛成结论或如实说证据不足）· E 数值实验（形式化不归它）·
+          F 多轮难题攻坚 · G 写稿 · H 审校（只读）· V 证明级验证（只读）·
+          L 形式化验证（把 B 登记的那条命题忠实搬进 Lean 真跑，只写形式化实验那一格）· M 主控。
         </div>
       </Card>
 
@@ -269,19 +270,20 @@ export function Help() {
           </tbody>
         </table>
         <div class="readings">
-          写面现状：七条 POST 已全部接线 ——
+          写面现状：八条 POST 已全部接线 ——
           <span class="mono">POST /answer</span>（答问）·
           <span class="mono">/api/stop</span>（叫停）·
           <span class="mono">/api/submit</span>（提交检索请求）·
           <span class="mono">/api/settings</span>（改设置）·
           <span class="mono">/api/budget</span>（改预算）·
           <span class="mono">/api/run</span>（起一趟）·
-          <span class="mono">/api/task</span>（插话）。没有「登记了还没落地」的写端点。
+          <span class="mono">/api/task</span>（插话）·
+          <span class="mono">/api/cache/warm</span>（预热提示词缓存）。没有「登记了还没落地」的写端点。
         </div>
         <div class="readings">
           授权次序是四层：回环来源 ⇒ CSRF 令牌 ⇒ <span class="mono">--allow-writes</span> ⇒
           （只有改设置才要）设置写面 —— 这四层管的是 <span class="mono">/api/</span>
-          下那六条写端点；<span class="mono">POST /answer</span> 是既有写路径，不进那张矩阵（只落审计）。
+          下那七条写端点；<span class="mono">POST /answer</span> 是既有写路径，不进那张矩阵（只落审计）。
           每一次到达写端点的尝试（含被拒）都追加一行
           <span class="mono">web-actions.jsonl</span>；<span class="mono">/api/</span>
           下未注册的路径回 404，那一类不算一次写尝试。
@@ -366,7 +368,7 @@ export function Help() {
           外加「其中状态读不出来 N 条」（词表外的行单列，不并进前两格）。
         </div>
         <div class="readings">
-          <b>板项与在飞是两条轴</b>：板项行是 <span class="mono">kind</span> 非空、
+          <b>板项与在飞不能混算</b>：板项行是 <span class="mono">kind</span> 非空、
           <span class="mono">item_state</span> 不是 <span class="mono">done</span> 的那些行；
           「在飞」看的是实例行（<span class="mono">kind</span> 为空、<span class="mono">status</span>
           是 <span class="mono">pending</span> / <span class="mono">running</span>）。
@@ -386,7 +388,7 @@ export function Help() {
           所以 <span class="mono">N + M</span> 才是 <span class="mono">data/events.jsonl</span>
           的总行数；<span class="mono">N</span> 回答的是「写了多少笔」。读不成 JSON 的坏行按行计入
           <span class="mono">N</span>，并在下面那句说明里单独点名；台账文件不在盘上时两格都是
-          <span class="mono">unknown</span>（不是 0 笔）。
+          <span class="mono">unknown</span>（不是 0）。
         </div>
         <div class="readings">
           <b>两种「条数」不是一回事</b>：首页「会话概览」那一列逐字是
@@ -422,7 +424,7 @@ export function Help() {
               <td>
                 <span class="mono">computed</span>
               </td>
-              <td>已读出：源读到了。数字是真的，可以是 0（"读到了，里面是 0 行"）。</td>
+              <td>已读出：源读到了。数字是真的，可以是 0（读到了，只是里面一行都没有）。</td>
               <td>真数字</td>
             </tr>
             <tr>
@@ -450,7 +452,7 @@ export function Help() {
           只有 computed 档的 0 才读成"没有"。名册那条端点另用一套字：
           <span class="mono">answer="ok"</span>（名册真读成了）/
           <span class="mono">answer="unknown"</span>（名册没读到 —— 目录不在、目录里一个名册文件都没有、
-          目录读不出来、有一条读不出来，四档都算），此时 <span class="mono">count</span>
+          目录读不出来、有一条读不出来，这些都算），此时 <span class="mono">count</span>
           一行都没读到时是 <span class="mono">null</span>、只读到一部分时是那一部分的真数字
           —— 不是 0。「在飞」面同理：它的
           <span class="mono">answer</span> 只有「有」/「没有」/「没查成」三档，读不出来时显"没查成"，

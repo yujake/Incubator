@@ -873,6 +873,7 @@ export interface RosterView {
   dir: string;
   nodes: RosterNode[];
   roots: string[];
+  children_of: Record<string, string[]>;
   count: number | null;
   max_depth: number | null;
   files: string[];

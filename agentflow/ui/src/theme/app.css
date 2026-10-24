@@ -374,11 +374,18 @@ h3 {
   overflow: auto;
 }
 
-/* 名册那一棵树（2026-10-21）：一行一个节点，左缩进由 `depth` 现算（见
-   `components/Roster.tsx` 的 `indentOf`）。行本身是一个按钮 —— 点开看那一格的
-   收件箱与在飞读数。字号与间距只走 token（判据 test_app_css_uses_only_tokens 会拦裸色值）。 */
+/* 名册那一棵树（2026-10-24：业主「名册按树展开，不只是简单按层展开」）。
+   一个父一条分支：子挂在自己的 `.roster-kids` 里，缩进与连接线都由那个容器的
+   `border-left` 给 —— 于是"谁是谁的子"是从结构上看出来的，不是从层号推出来的。
+   折叠三角在行首（`.roster-twist`），没有子的节点摆一个不能点的圆点占位，
+   这样同一层的行首是对齐的。字号与间距只走 token（判据
+   `test_app_css_uses_only_tokens_in_the_theme` 会拦裸色值）。 */
 .roster-tree {
   margin: var(--sp-2) 0;
+}
+
+.roster-branch {
+  min-width: 0;
 }
 
 .roster-node {
@@ -389,12 +396,59 @@ h3 {
   border-top: 0;
 }
 
+.roster-row {
+  display: flex;
+  gap: var(--sp-1);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.roster-twist {
+  flex: 0 0 auto;
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: var(--fs-1);
+  cursor: pointer;
+}
+
+.roster-twist:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.roster-twist-leaf {
+  color: var(--dsw-alias-label-secondary);
+  display: inline-block;
+  text-align: center;
+  width: 1.2em;
+}
+
+.roster-kids {
+  margin-left: var(--sp-4);
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
+.roster-missing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
 .roster-pick {
+  flex: 1 1 auto;
   display: flex;
   gap: var(--sp-2);
   align-items: baseline;
   flex-wrap: wrap;
-  width: 100%;
+  min-width: 0;
   padding: var(--sp-1) var(--sp-2);
   border: 0;
   border-radius: 8px;

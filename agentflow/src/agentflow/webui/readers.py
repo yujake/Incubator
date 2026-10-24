@@ -2608,6 +2608,13 @@ _ROSTER_SIDE_SUFFIX: tuple[str, ...] = ("-surfaces.jsonl", "-retired.jsonl")
 _ROSTER_INDEX_SUFFIX = "-index.jsonl"
 
 
+#: 台账兜底那一档要搬进 `RosterView` 的键（与 :func:`_roster_from_tasks` 的返回键一一
+#: 对应）。为什么单列一份：`roster_face` 里两个"名册读不到"的分支搬的是同一批键，
+#: 抄两遍就会漏一处 —— 而漏的那一处表现为"某一档少一个键"，前端读它时才知道少了。
+_ROSTER_FALLBACK_KEYS: tuple[str, ...] = ("nodes", "roots", "children_of", "count",
+                                          "max_depth", "coverage")
+
+
 def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, Path]], str]:
     """名册目录里"哪个父有哪一份名册 / 对照表"：`([(父, 名册)], [(父, 对照表)], 问题)`。
 
@@ -2640,6 +2647,59 @@ def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, 
             return [], [], f"{name} 的文件名里读不出父的绝对编号"
         found.append((owner, path))
     return found, index_found, ""
+
+
+def _roster_landing_order(roster_rows: list[dict[str, Any]],
+                          index_rows: list[dict[str, Any]]) -> dict[str, int]:
+    """一个父名下"每个子是按第几行落的盘"：`task_id` → 行序（越小越先落）。
+
+    为什么要有它（业主 2026-10-24：「名册按树展开」）：一个父的多个子在页面上必须
+    按落盘行序排，而 `secretary._fold_roster` 交回来的是按名册名排序的一项一条
+    （那是秘书视图要的顺序，不是树的顺序）。这里不重排折叠结果、也不重读文件 ——
+    只把上面刚读过的原始行按"这个 `task_id` 第一次出现"编个序，让并集按它稳定排序。
+
+    行序口径：
+    - `<父>.jsonl` 的行序为主（一个子的编号第一次出现在第几行，它的序就是几）；
+    - 只出现在对照表 `<父>-index.jsonl` 里的子（`roster_add` 的 reuse 支只写那里）
+      排在名册各行之后，按它们自己在对照表里的行序；
+    - 两边都没出现过的编号（不该有）落在末尾，稳定排序保住了它们的原有相对顺序。
+    """
+    order: dict[str, int] = {}
+    for i, row in enumerate(roster_rows):
+        tid = str(row.get("task_id") or "")
+        if tid and tid not in order:
+            order[tid] = i
+    base = len(roster_rows)
+    for j, row in enumerate(index_rows):
+        for tid in (str(row.get("first_task_id") or ""), str(row.get("task_id") or "")):
+            if tid and tid not in order:
+                order[tid] = base + j
+    return order
+
+
+def _roster_children_of(kids_of: Mapping[str, list[dict[str, Any]]],
+                        roots: list[str]) -> dict[str, list[str]]:
+    """按父子的形状：`{父的绝对编号: [它的直接子的绝对编号...]}`（按落盘行序）。
+
+    这就是"名册按树展开"要的那一份读数。它与 `nodes`（按层排的那一份）出自同一份
+    折叠结果 `kids_of` —— 上面每份 `<父>.jsonl` 只读了一次，这里只是换个索引方式，
+    不重读、不重算（业主那句「不只是简单按层展开」要的是形状，不是第二遍扫描）。
+
+    键序：根先、其余按编号排（读的人先看见顶趟）；没有子的父不出现（空数组不是
+    "这个父没有子"的读数 —— 它压根没有这一格）。
+
+    与 `nodes` 的关系：`nodes` 是整棵树的节点读数，规模超上限时会被截断
+    （`truncated=true`），而这一份仍是完整的父子关系（它只花一个数组）。所以截断
+    那一档里可能点到不在 `nodes` 里的编号 —— 那是"这次没画它"，不是"它不存在"。
+    """
+    out: dict[str, list[str]] = {}
+    seen_roots = set(roots)
+    for owner in list(roots) + [o for o in sorted(kids_of) if o not in seen_roots]:
+        kids = [str(row.get("task_id") or "") for row in (kids_of.get(owner) or [])]
+        kids = [k for k in kids if k]
+        if kids:
+            out[owner] = kids
+    return out
 
 
 def _roster_clip(text: str, limit: int = ROSTER_INBOX_CLIP) -> str:
@@ -2737,6 +2797,21 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     | `inbox` | `data/tasks.json` 的板项行（见 :func:`_roster_inbox`） |
     | `depth` | 名册链现算：根 = 1（口径写在下面） |
 
+    ## 两份形状，同一份读（业主 2026-10-24）
+    业主原话：「名册按树展开，不只是简单按层展开。」⇒ 这个读数里有两份形状，
+    都由上面那一次读盘折出来的 `kids_of` 派生，不重读文件、不重算折叠：
+
+    - `children_of`：`{父的绝对编号: [直接子的绝对编号...]}`，子按落盘行序
+      （`<父>.jsonl` 的行序；只在对照表里出现的子排在它后面，按对照表的行序）。
+      它是"谁是谁的直接子"的那一份，页面的树照它递归。
+    - `nodes`：按层排（BFS）的节点读数（`depth` / 角色 / 子数 / 状态 / 收件箱那一格）。
+      这一份只管"每个节点有什么读数"，不管"谁是谁的子"—— 改前页面拿它按 `depth`
+      缩进，于是画出来是 d1 / d2 d2 d2 / d3 ... 的按层平铺，同一个名册名在两层各出现
+      一次，读不出父子（缺陷 D-51，`draft/146`）。
+
+    截断那一档（`truncated=true`）只截 `nodes`：`children_of` 仍是完整的父子关系，
+    所以它可能点到不在 `nodes` 里的编号 —— 那是"这次没画它"，不是"它不存在"。
+
     ## 什么算"这个父名下的一个子"（D15）
     两份盘上事实的并集：`out/roster/<父>.jsonl` 的 `add` 行（名字、简介、槽位）与
     `out/roster/<父>-index.jsonl` 的 `bind` 行（名字此刻的编号）。为什么必须并上后者：
@@ -2776,7 +2851,8 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     ## 规模
     节点上限 `limit`（默认 :data:`ROSTER_NODES_MAX`），超了截断并置 `truncated`；
     一个节点的收件箱只列 `inbox_items` 条（`inbox.more` 报剩下几条）。`nodes` 是
-    前序遍历（父一定在子前面）—— 前端按 `depth` 缩进就能画出树，不必自己递归。
+    按层排的（BFS：父一定在子前面），`children_of` 是父子关系那一份 —— 页面画树用
+    后者，前者给每个节点的读数。
     """
     from ..secretary import _fold_index     # noqa: PLC0415 - 折叠口径的唯一实现
     from ..secretary import _fold_roster    # noqa: PLC0415 - 折叠口径的唯一实现
@@ -2789,7 +2865,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     out: dict[str, Any] = {
         "answer": "unknown", "tri": TRI_NOT_APPLICABLE, "reason": "",
         "root": str(root_p), "dir": str(dir_p),
-        "nodes": [], "roots": [], "count": None, "max_depth": None,
+        "nodes": [], "roots": [], "children_of": {}, "count": None, "max_depth": None,
         "files": [], "diagnostics": [], "truncated": False,
         "coverage": {"tasks_agents": None, "roster_nodes": None, "unrostered": None},
         "tasks_tri": TRI_NOT_APPLICABLE, "tasks_reason": "",
@@ -2797,7 +2873,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
 
     if not dir_p.exists():
         fb = _roster_from_tasks(root_p)
-        out.update({k: fb[k] for k in ("nodes", "roots", "count", "max_depth", "coverage")})
+        out.update({k: fb[k] for k in _ROSTER_FALLBACK_KEYS})
         out["reason"] = (
             f"{dir_p} 不在盘上 ⇒ 名册那一格没读到。answer=unknown："
             "这是「没读到」，不是「名册上一个子代理都没有」。"
@@ -2816,7 +2892,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         return out
     if not found:
         fb = _roster_from_tasks(root_p)
-        out.update({k: fb[k] for k in ("nodes", "roots", "count", "max_depth", "coverage")})
+        out.update({k: fb[k] for k in _ROSTER_FALLBACK_KEYS})
         out["reason"] = (
             f"{dir_p} 在盘上但一个 <父编号>.jsonl 都没有（还没有人往名册里写过一行）⇒ "
             "answer=unknown。" + fb["reason"])
@@ -2826,6 +2902,9 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     diagnostics: list[str] = []
     problems: list[str] = []
     children_by_owner: dict[str, list[dict[str, Any]]] = {}
+    #: 每份 `<父>.jsonl` 的原始行（按文件里的行序）。它只在这里读一次，下面用它编
+    #: "落盘行序"，于是"按父子"的那一份形状不必回头再扫一遍文件。
+    rows_by_owner: dict[str, list[dict[str, Any]]] = {}
     for owner, path in found:
         rows, bad, state = read_jsonl_state(path)
         if state == "unreadable":
@@ -2841,6 +2920,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             diagnostics.append(f"{path.name} 里一条子代理记录都没有（文件在、读成了 0 行）")
             continue
         children_by_owner[owner] = folded
+        rows_by_owner[owner] = [dict(r) for r in rows]
         out["files"].append(path.name)
 
     if not children_by_owner:
@@ -2859,6 +2939,8 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     # 首次登记时写的），所以"复用过的名字的新实例"只在这张表里有。折叠出来的每个
     # `task_id`（第一次绑定的那个 + 此刻绑定的那个）都是这个父名下的子。
     index_by_owner: dict[str, list[dict[str, Any]]] = {}
+    #: 每份对照表的原始行（同样只在这里读一次，给"落盘行序"补上只出现在对照表里的子）。
+    index_rows_by_owner: dict[str, list[dict[str, Any]]] = {}
     for owner, path in index_found:
         rows, bad, state = read_jsonl_state(path)
         if state == "unreadable":
@@ -2871,6 +2953,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             diagnostics.append(f"{path.name} 里一条对照表记录都没有（文件在、读成了 0 行）")
             continue
         index_by_owner[owner] = folded_index
+        index_rows_by_owner[owner] = [dict(r) for r in rows]
         out["files"].append(path.name)
     half = sorted(set(index_by_owner) - set(children_by_owner))
     if half:
@@ -2908,6 +2991,14 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                 merged.append({"task_id": tid, "name": str(item.get("name") or ""),
                                "role": str(item.get("role") or ""),
                                "retired": bool(item.get("retired"))})
+        # 按落盘行序排（业主 2026-10-24：「同一父的多个子按落盘顺序排，不按角色名重排」）：
+        # `_fold_roster` 交回来的是按名册名排序的一项一条，那是秘书视图的顺序，不是树
+        # 的顺序。这里按"这个子的编号第一次出现在第几行"稳定排序 —— 上面那两份原始行
+        # 就是刚读过的同一批文件，一次都没重读。稳定排序让没有行序的编号（不该有）
+        # 保持原有相对顺序。
+        order = _roster_landing_order(rows_by_owner.get(owner) or [],
+                                      index_rows_by_owner.get(owner) or [])
+        merged.sort(key=lambda row: order.get(str(row.get("task_id") or ""), len(order)))
         kids_of[owner] = merged
         for row in merged:
             tid = str(row.get("task_id") or "")
@@ -2950,7 +3041,15 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         out["tasks_tri"] = TRI_UNREADABLE
         out["tasks_reason"] = f"tasks 台账读不出来：{type(exc).__name__}: {exc}"
 
-    # ---- 前序遍历（父一定在子前面；深度上限 64 与 `conductor.inside_subtree` 同一条纪律）
+    # ---- 按父子的形状（业主 2026-10-24：「名册按树展开，不只是简单按层展开」）
+    #
+    # 与下面 `nodes` 同源：都是上面那份 `kids_of`（每份 `<父>.jsonl` 只读了一次）。
+    # 这就是"谁是谁的直接子"的唯一读数 —— 按层排的 `nodes` 画不出父子，这一份能。
+    children_of = _roster_children_of(kids_of, roots)
+
+    # ---- 按层排的节点读数（BFS：父一定在子前面；深度上限 64 与
+    # `conductor.inside_subtree` 同一条纪律）。它是"每个节点有什么读数"的那一份，
+    # 不承担"谁是谁的子"（那一件由上面的 `children_of` 说）。
     nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
     max_depth = 0
@@ -3007,6 +3106,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
 
     out["nodes"] = nodes
     out["roots"] = roots
+    out["children_of"] = children_of
     out["count"] = len(nodes)
     out["max_depth"] = max_depth
     out["diagnostics"] = diagnostics
@@ -3501,7 +3601,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "`data/tasks.json` 的 status/收件箱读数）",
      (("answer", "string"), ("tri", "Tri"), ("reason", "string"),
       ("root", "string"), ("dir", "string"), ("nodes", "RosterNode[]"),
-      ("roots", "string[]"), ("count", "number | null"),
+      ("roots", "string[]"), ("children_of", "Record<string, string[]>"),
+      ("count", "number | null"),
       ("max_depth", "number | null"), ("files", "string[]"),
       ("diagnostics", "string[]"), ("coverage", "RosterCoverage"),
       ("tasks_tri", "Tri"), ("tasks_reason", "string"), ("truncated", "boolean"))),
@@ -3617,7 +3718,7 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
     try:
         rows = list((json.loads(path.read_text(encoding="utf-8")) or {}).get("rows") or [])
     except (OSError, json.JSONDecodeError):
-        return {"nodes": [], "roots": [], "count": None, "max_depth": None,
+        return {"nodes": [], "roots": [], "children_of": {}, "count": None, "max_depth": None,
                 "coverage": {"tasks_agents": None, "roster_nodes": 0, "unrostered": None},
                 "reason": f"{path} 读不出来 ⇒ 台账兜底也读不到"}
     agents = [r for r in rows if str(r.get("kind") or "") == "" and str(r.get("task_id") or "")]
@@ -3628,7 +3729,6 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
     roots = [str(r.get("task_id")) for r in agents
              if str(r.get("parent_task_id") or "") not in ids]
     depth_of: dict[str, int] = {}
-
     def depth(tid: str, seen: set[str] | None = None) -> int:
         if tid in depth_of:
             return depth_of[tid]
@@ -3667,10 +3767,15 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
 
     for rid in roots:
         walk(rid)
+    # 按父子的形状（与名册那一侧同一个函数）：父必须是台账里的一行（`pid in ids`），
+    # 否则根那一行（`parent_task_id` 是空串）会被画成一个叫空串的父。
+    children_of = _roster_children_of(
+        {pid: kids for pid, kids in by_parent.items() if pid in ids}, roots)
     # 三态纪律：一条代理行都没有 ⇒ `count` 是 None（读不到），不是 0
     # （判据 `test_webui_roster_panel` 的"无名册 ⇒ count 为 null"那一档钉着这一点）。
     empty = not agents
-    return {"nodes": nodes, "roots": roots, "count": None if empty else len(nodes),
+    return {"nodes": nodes, "roots": roots, "children_of": children_of,
+            "count": None if empty else len(nodes),
             "max_depth": None if empty else max((n["depth"] for n in nodes), default=None),
             "coverage": {"tasks_agents": None if empty else len(agents),
                          "roster_nodes": None if empty else 0,

@@ -117,17 +117,20 @@ def _budget_problems(body: str) -> list[str]:
 
 
 # ====================================================================== §5 写面
-#: `writes.ROUTES` 里的七条 POST（顺序与那张表一致）。
+#: `writes.ROUTES` 里的八条 POST（顺序与那张表一致）。2026-10-24（D-50）：缓存预热
+#: `POST /api/cache/warm` 并进了写面子表（`cacheface.ROUTES`），于是这里从七条变八条；
+#: 这一条只钉"页面上有没有逐条点名"，条数本身由
+#: `tests/test_help_page_matches_the_code.py` 与 `writes.ROUTES` 现算对拍。
 _WRITES = ("/answer", "/api/stop", "/api/submit", "/api/settings",
-           "/api/budget", "/api/run", "/api/task")
+           "/api/budget", "/api/run", "/api/task", "/api/cache/warm")
 
 #: 页面里点到的端点（`/api/...` 一整段，含占位符与大括号）。
 _ENDPOINT = re.compile(r"/(?:api/[A-Za-z0-9_{}/-]+)")
 
 
 def _write_problems(body: str) -> list[str]:
-    """§5：写面现状（七条 POST 全接线）+ 页面点到的端点都必须真在路由表里。"""
-    problems = [f"写面那七条里没写 {path!r}（它已接线）" for path in _WRITES
+    """§5：写面现状（八条 POST 全接线）+ 页面点到的端点都必须真在路由表里。"""
+    problems = [f"写面那八条里没写 {path!r}（它已接线）" for path in _WRITES
                 if path not in body]
     if "没有「登记了还没落地」的写端点" not in body:
         problems.append("没写「没有登记了还没落地」这一句（写面现状说不清）")
