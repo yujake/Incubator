@@ -8,6 +8,7 @@ from collections.abc import Mapping
 
 from ._support import Any, E_NO_FORMAL_REASON, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
 from .. import exhaustionreport as _ER
+from .. import numericproof as _NP
 from .. import verifications as VR
 
 #: 「玩具例子」在台账上的落点：`experiments.observations[TOY_EXAMPLE_KEY]`。
@@ -332,21 +333,43 @@ class _RunExperiment:
             # （`blocks_from` -> `numericproof` 的那几个读函数）。这里刻意不写
             # `design=design or ...`：那会造出第二个读口，两处一旦分家，
             # 报告与证明栏就会说两句不同的话。
-            _blocks = _ER.blocks_from(observations=derived.get("observations"),
-                                      certificate=certificate, search_bound=bound_arg)
-            report = _ER.land_report(
-                self.workspace_root, experiment_id=eid, claim=claim, claim_key=claim_key,
-                script_path=_relpath(path, self.workspace_root), script_sha256=chash,
-                design=_blocks["design"], enumeration=_blocks["enumeration"],
-                search_space=_blocks["search_space"],
-                environment=_ER.environment_reading(exit_code=run["exit_code"],
-                                                    runtime_sec=run["runtime_sec"]),
-                result=derived.get("result"), evidence_kind=derived.get("evidence_kind"))
-            if report.get("problems"):
-                notes.append("[report] ②③ 的读数没有落成："
-                             + "；".join(str(p) for p in report.get("problems") or [])
-                             + " ⇒ 这一条不许标 proof（最多是「有数值实验支持」）")
-            derived["observations"][_ER.REPORT_KEY] = report
+            #
+            # D-43（业主 2026-10-24）：「「程序设计思路/穷举论证」只针对想升格成数值证明的
+            # 数值实验，对一般数值实验不做要求」。所以落不落盘先问一句
+            # `numericproof.wants_numeric_proof`（method=exhaustive_search / 布尔 true 的
+            # exhaustive / 调用方声称 proof，三者任一）：
+            #   · 想升格的那一条 ⇒ 照旧落盘（缺块也照写，缺什么由 problems 点名）；
+            #   · 一般数值实验（numeric / cross_check / heuristic）⇒ 不落 —— 改前每条都落
+            #     一份两块正文各 0 字的报告，真机 r34d 000004-000009 与 cube2 000001/000002
+            #     就这样各多了一份（行上 `bytes=0`），而它们本来就不打算当证明。
+            # 报告 dict 仍按同一形状给出（空 path / 0 字节 / 空 problems）：读数面的键集
+            # 不因这一档而变，下游读 `report_path` 的地方不必各记一个条件。
+            if _NP.wants_numeric_proof(method=method,
+                                       observations=derived.get("observations"),
+                                       certificate=certificate, search_bound=bound_arg,
+                                       evidence_kind=derived.get("evidence_kind")):
+                _blocks = _ER.blocks_from(observations=derived.get("observations"),
+                                          certificate=certificate, search_bound=bound_arg)
+                report = _ER.land_report(
+                    self.workspace_root, experiment_id=eid, claim=claim, claim_key=claim_key,
+                    script_path=_relpath(path, self.workspace_root), script_sha256=chash,
+                    design=_blocks["design"], enumeration=_blocks["enumeration"],
+                    search_space=_blocks["search_space"],
+                    environment=_ER.environment_reading(exit_code=run["exit_code"],
+                                                        runtime_sec=run["runtime_sec"]),
+                    result=derived.get("result"),
+                    evidence_kind=derived.get("evidence_kind"))
+                if report.get("problems"):
+                    notes.append("[report] ②③ 的读数没有落成："
+                                 + "；".join(str(p) for p in report.get("problems") or [])
+                                 + " ⇒ 这一条不许标 proof（最多是「有数值实验支持」）")
+                derived["observations"][_ER.REPORT_KEY] = report
+            else:
+                # 一般数值实验：不写报告，也不在 `observations` 里留一格空的落盘事实
+                # （留了会被读侧当成"落过盘但没成"，那是另一种欠账）。
+                report = {"path": "", "bytes": 0, "sha256": "", "ok": False,
+                          "problems": [], "blocks": {}, "missing": [],
+                          "experiment_id": eid, "at": ""}
             row = build_experiment(
                 eid,
                 claim,

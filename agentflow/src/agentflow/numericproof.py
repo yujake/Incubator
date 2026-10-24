@@ -30,6 +30,14 @@
    普通理论定理填 Lean 程序（`.lean` 路径）—— 两者同一格、填的东西不同，
    不许互相冒充。判据见 :func:`formal_slot`（判据 ⑧）。
 
+## ②③ 只对"想升格成数值证明"的那一条要求（D-43，业主 2026-10-24）
+
+业主原话：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，对一般数值实验
+不做要求」。于是"要不要三件套"绑在意图上，不绑在 `method` 上 —— 判据本体是
+:func:`wants_numeric_proof`（`method="exhaustive_search"` / 布尔 true 的 `exhaustive` /
+调用方声称 `evidence_kind="proof"`，三者任一）。一般数值实验（`numeric` / `cross_check` /
+`heuristic`）⇒ 不要求报告、不报 `problems`、不落空文件；已经写了报告的不因缺块扣分。
+
 ## 为什么「穷尽证据」这几个键就够（而不是再要一份证书）
 
 `certificate` 说的是"在 B 内没有反例"的证书，`search_bound` 说的是那个 B —— 它们是
@@ -60,6 +68,13 @@ CALCULATION_METHODS: tuple[str, ...] = ("numeric", "symbolic", "exhaustive_searc
 
 #: 形式化那一档的方法名（它的证据由检查器说，不由本模块签）。
 FORMAL_METHOD = "formal"
+
+#: "想升格成数值证明"的方法（业主 2026-10-24 的 D-43：「程序设计思路/穷举论证」只针对
+#: 想升格成数值证明的数值实验，对一般数值实验不做要求）。
+#:
+#: 这一格不是"要不要三件套"的全部判据 —— 判据本体在 :func:`wants_numeric_proof`：
+#: 方法只是三条入口之一，另外两条是"脚本报了布尔 true 的 exhaustive"与"调用方声称 proof"。
+PROOF_INTENT_METHODS: tuple[str, ...] = ("exhaustive_search",)
 
 #: 「证明理由」的受控词表。今天只有一档：穷举。
 #:
@@ -258,17 +273,60 @@ def _space_reading(observations: Mapping[str, Any],
     return None, ""
 
 
+def wants_numeric_proof(*, method: Any = "",
+                        observations: Mapping[str, Any] | None = None,
+                        certificate: Mapping[str, Any] | None = None,
+                        search_bound: Mapping[str, Any] | None = None,
+                        evidence_kind: Any = "") -> bool:
+    """这一条实验是不是"想升格成数值证明" —— 要不要 ②③ 三件套的唯一判据（D-43）。
+
+    业主原话（2026-10-24，唯一权威）：「「程序设计思路/穷举论证」只针对想升格成数值证明的
+    数值实验，对一般数值实验不做要求」。
+
+    改前这条要求绑在 `method` 上（凡是计算类都问三件套），真机 r34d `000004`-`000009` 与
+    cube2 `000001`/`000002` 于是每条都在喊「报告里缺 ['程序设计思路','穷举论证']」，
+    盘上还多出一份"两块正文各 0 字"的报告。现在按意图问，三条入口任一成立才算想升格：
+
+    1. `method="exhaustive_search"`：这一档本身就是奔着穷举证明去的；
+    2. `exhaustive` 读到布尔 `true`：读口与优先级与 :func:`exhaustion_problems` 同一份
+       （`observations` > `certificate.detail` > `search_bound`）—— "说不清"（缺省 /
+       `"true"` / `1`）不算想升格，它连穷尽判定都过不去；
+    3. 调用方显式声称 `evidence_kind="proof"`：声称了就是想要那一档，材料得按那一档齐。
+
+    为什么"一般数值实验"不要求：②③ 是"把数值证据升格成证明"要交的材料，不是所有数值
+    实验的入场券。一般数值实验（`numeric` / `cross_check` / `heuristic`）该说的是
+    "算了什么、在什么范围内算了"，那已经落在 `observations` 与 `search_bound` 里。
+
+    三态纪律：本函数只回答"要不要"，不回答"齐不齐"（后者是
+    :func:`report_problems` / `exhaustion_problems` 的事）。已经写了报告的一般数值实验
+    ⇒ 本函数给 `False`，于是读侧照常读、不因缺块扣分（报告本身仍由 `exhaustionreport`
+    读得出、展示得出）。
+    """
+    if str(method or "").strip() in PROOF_INTENT_METHODS:
+        return True
+    if str(evidence_kind or "").strip() == "proof":
+        return True
+    flag, _where = _exhaustive_reading(_as_mapping(observations),
+                                       _as_mapping(certificate),
+                                       _as_mapping(search_bound))
+    return flag is True
+
+
 def exhaustion_problems(*, method: Any,
                         observations: Mapping[str, Any] | None = None,
                         certificate: Mapping[str, Any] | None = None,
                         search_bound: Mapping[str, Any] | None = None,
                         code_path: Any = "",
-                        result: Any = "supports") -> list[str]:
+                        result: Any = "supports",
+                        evidence_kind: Any = "") -> list[str]:
     """穷尽判定：空清单 = 整个论域被穷尽验证过（够 proof）；非空 = 缺什么，逐条写清。
 
     要的东西就是业主 2026-10-23 晚点名的三块（证明栏的三段，作者都是 E）：
     ① 程序相对地址（`code_path`）、② 程序设计（`design`）、③ 穷举论证（`enumeration`），
     外加"可核"这件事本身：布尔 true 的 `exhaustive` 与一个说得出范围的搜索空间。
+
+    `evidence_kind` 只是 :func:`wants_numeric_proof` 的第三条入口（调用方显式声称 proof），
+    缺省空串表示这一趟没人在喊"我要 proof"。
     """
     problems: list[str] = []
     if not is_calculation(method):
@@ -318,7 +376,18 @@ def exhaustion_problems(*, method: Any,
     # 为什么并进这里而不是各入口各写一份：等级的方向由本函数单点决定
     # （`exhaustion_verdict` 只看 `problems` 空不空），所以"报告没落成"与
     # "没有 exhaustive 标记"在下游是同一句话：这条证据不够 proof，逐条说明缺什么。
-    problems.extend(report_problems({"observations": obs}))
+    #
+    # D-43（业主 2026-10-24）：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，
+    # 对一般数值实验不做要求」⇒ 这一步只对 `wants_numeric_proof` 为真的那一条问。
+    # 一般数值实验没有报告不是欠账 —— 改前它对每一条计算类实验都问，于是 numeric/cross_check
+    # 的行上也挂着"报告里缺 ②③"，那是把"升格材料"当成了"所有数值实验的入场券"。
+    if wants_numeric_proof(method=method, observations=obs, certificate=cert,
+                           search_bound=bound, evidence_kind=evidence_kind):
+        problems.extend(report_problems({"method": str(method or ""),
+                                         "observations": obs,
+                                         "certificate": cert,
+                                         "search_bound": bound,
+                                         "evidence_kind": str(evidence_kind or "")}))
     return problems
 
 
@@ -401,15 +470,20 @@ def exhaustion_verdict(*, method: Any,
                        certificate: Mapping[str, Any] | None = None,
                        search_bound: Mapping[str, Any] | None = None,
                        code_path: Any = "",
-                       result: Any = "supports") -> dict[str, Any]:
+                       result: Any = "supports",
+                       evidence_kind: Any = "") -> dict[str, Any]:
     """一次计算类实验的穷尽判定读数（写侧、B 的入库闸、审计三处共用这一份）。
 
     返回的 `evidence_kind` 只有两个取值：够 proof（且签名者 E、理由 exhaustion），
     或者 :data:`SUPPORTED_ONLY_KIND`（"有数值实验支持"，不构成证明）。
+
+    `evidence_kind` 形参是调用方"这一条想登记成什么"的声称（传给
+    :func:`wants_numeric_proof` 的第三条入口），不是本函数要返回的那一格。
     """
     problems = exhaustion_problems(method=method, observations=observations,
                                    certificate=certificate, search_bound=search_bound,
-                                   code_path=code_path, result=result)
+                                   code_path=code_path, result=result,
+                                   evidence_kind=evidence_kind)
     obs = _as_mapping(observations)
     cert = _as_mapping(certificate)
     bound = _as_mapping(search_bound)
@@ -467,7 +541,10 @@ def sign_experiment(*, method: Any,
     obs = _as_mapping(facts.get("observations"))
     verdict = exhaustion_verdict(method=method, observations=obs,
                                  certificate=certificate, search_bound=search_bound,
-                                 code_path=code_path, result=facts.get("result"))
+                                 code_path=code_path, result=facts.get("result"),
+                                 # 调用方显式声称 proof 也是"想升格"的入口（D-43）：
+                                 # 声称了就是想要那一档，三件套得按那一档问。
+                                 evidence_kind=facts.get("evidence_kind"))
     problems = list(verdict["problems"])
     kind = "proof" if verdict["exhaustive"] else str(
         facts.get("evidence_kind") or SUPPORTED_ONLY_KIND)
@@ -594,16 +671,30 @@ def norm_text(text: Any) -> str:
 
 
 def report_problems(experiment_row: Mapping[str, Any] | None) -> list[str]:
-    """②③ 的落盘核查：交给 `exhaustionreport`（那一侧是唯一实现，本模块不抄第二份）。
+    """②③ 的落盘核查：只对"想升格成数值证明"的那一条问（D-43），转发到 `exhaustionreport`。
 
-    业主 2026-10-23 晚的口径把 ②③ 的载体落成"一份可核的读数"（`exhaustionreport`
-    那一侧判它在不在盘上、与实验行对不对得上）。本模块只做一次转发：
+    业主 2026-10-24（唯一权威）：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值
+    实验，对一般数值实验不做要求」。所以这里先问一句 :func:`wants_numeric_proof`：
 
-    - 那一侧还没落地（import 失败）⇒ 返回空清单，并用 :func:`report_check_available`
-      把"这一格没查成"如实暴露出去（不许把"没查成"读成"查过了没问题"）；
-    - 那一侧在、但它自己抛了 ⇒ 返回一条"没查成"的问题（同样是如实，不吞）；
-    - 正常 ⇒ 原样返回它的问题清单（空 = 齐了）。
+    - 这一行不是想升格的那一条（`numeric` / `cross_check` / `heuristic`，既没有布尔 true 的
+      `exhaustive`、也没有声称 `proof`）⇒ 返回空清单。空清单在这里的意思是"这一格不向它要"，
+      与"要了且齐了"同形，但两件事都由这一份判据单点决定，下游不必各记一个条件；
+    - 想升格的那一条 ⇒ 转发 `exhaustionreport.landing_problems`（那一侧是唯一实现，
+      本模块不抄第二份）：
+      - 那一侧还没落地（import 失败）⇒ 返回一条"没查成"（不许把"没查成"读成"查过了没问题"）；
+      - 那一侧在、但它自己抛了 ⇒ 返回一条"没查成"（同样是如实，不吞）；
+      - 正常 ⇒ 原样返回它的问题清单（空 = 齐了）。
+
+    已经写了报告的一般数值实验 ⇒ 本条返回空清单（不因缺块扣分），但那份报告仍由
+    `exhaustionreport.read_report` 照常读得出来、展示得出来（读侧没有因为这次放宽改动）。
     """
+    row = _as_mapping(experiment_row)
+    if not wants_numeric_proof(method=row.get("method"),
+                               observations=row.get("observations"),
+                               certificate=row.get("certificate"),
+                               search_bound=row.get("search_bound"),
+                               evidence_kind=row.get("evidence_kind")):
+        return []
     try:
         from . import exhaustionreport as _ER
     except Exception as exc:  # noqa: BLE001 —— 那一侧可能还没落地（并发开发期）
@@ -612,7 +703,7 @@ def report_problems(experiment_row: Mapping[str, Any] | None) -> list[str]:
         # 否则一条 ②③ 根本没落盘的实验会被当成「齐了」。空清单只留给真查过且齐了。
         return [f"②③ 的落盘核查没查成（exhaustionreport 不可导入：{type(exc).__name__}: {exc}）"]
     try:
-        return [str(p) for p in (_ER.landing_problems(_as_mapping(experiment_row)) or [])]
+        return [str(p) for p in (_ER.landing_problems(row) or [])]
     except Exception as exc:  # noqa: BLE001 —— 判据自己坏了也是"没查成"
         return [f"②③ 的落盘核查没查成（exhaustionreport 抛了 {type(exc).__name__}: {exc}）"]
 

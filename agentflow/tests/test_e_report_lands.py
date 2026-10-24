@@ -9,7 +9,10 @@
    `out/experiments/<实验号>/exhaustion.md`：路径是相对仓库根的稳定落点、字节数与
    sha256 与盘上那份逐字对得上，且返回值里读得到那个路径（B 登记、G 引用都靠它）；
 2. 负控：报告没落成（真注入：落点被一个同名文件占住 ⇒ 写不进去）⇒ 那条证据标不成
-   proof，读数里逐条写着缺什么；schema 那一层同样拒一条"没有落盘事实的 proof 行"；
+   proof，读数里逐条写着缺什么；schema 那一层同样拒一条"没有落盘事实的 proof 行"
+   （D-43 之后这一条只对"想升格成数值证明"的实验成立：判据
+   `numericproof.wants_numeric_proof`；一般数值实验不要求报告，见
+   `tests/test_d43_report_only_for_exhaustion_attempts.py`）；
 3. 反真空：把"报告存在性检查"打桩成恒真 ⇒ 第 2 条必红（同一次注入下它会被标成 proof）；
 4. 三块齐的判据与 G 那一侧同源：`numerictheorem.blocks_missing` 认为那份读数三块齐全
    （同一件事不写第二份口径）。
@@ -220,15 +223,24 @@ def test_2b_schema_refuses_a_proof_row_without_any_landing_facts(
 
 
 def test_2c_an_incomplete_experiment_still_cannot_be_proof(tmp_path: pathlib.Path) -> None:
-    """② 的第三半（与报告无关的那条负控，反真空）：只有扫描点数的实验仍是 cross_check。"""
+    """② 的第三半（与报告无关的那条负控，反真空）：只有扫描点数的实验仍是 cross_check。
+
+    D-43（业主 2026-10-24：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，
+    对一般数值实验不做要求」）之后，这一档连报告都不落 —— 它不是"想升格"的那一条。
+    所以这条负控判两件事：等级仍是 cross_check（不受"有没有报告"影响），
+    且它既不落 `exhaustion.md`、也不在 `report_problems` 里被记一笔。
+    """
     store = _store(tmp_path)
     out = _run(store, PARTIAL_PROBE, "code/scan_points.py")
     assert out["evidence_kind"] == "cross_check", out
-    # 报告照样落盘（E 写了"没有给出"这两块），但它缺 ②③ ⇒ 落盘本身不能把证据升级
-    assert out["report_path"], "报告落盘与证据等级是两件事：落盘不该被这条负控挡住"
+    # 一般数值实验：不要求报告 ⇒ 不落文件、不报 problems（D-43）
+    assert out["report_path"] == "" and out["report_bytes"] == 0, out
+    assert out["report_problems"] == [], out["report_problems"]
+    assert not (pathlib.Path(store.root) / ER.report_relpath(out["experiment_id"])).exists()
     row = store.rows("experiments")[-1]
-    problems = ER.landing_problems(row)
-    assert problems and any("程序设计" in p for p in problems), problems
+    assert NP.report_problems(row) == []
+    # 反真空：等级判定本身照旧说得出缺什么（这次放宽的只是报告那一格）
+    assert NP.signature_of(row)["problems"], "等级判定不许被这次放宽弄空"
 
 
 # ------------------------------------------------------------------ ⑤ 反真空

@@ -15,7 +15,7 @@
 那一格 `papermapping` 的 `exhaustion_note` 认的是同一个位置 —— 于是 E 写一份、
 B 登记时指它、G 在正文里引它、V 审它，四处说的是同一份东西。
 
-## 判据只有一份：`exhaustion_problems`
+## 判据只有一份：`landing_problems`
 
 它是"这份读数在不在、三块齐不齐"的唯一实现。`numericproof.report_problems` 只是一次
 转发（那一侧的 `exhaustion_problems` 是穷尽判定的唯一入口），所以：
@@ -24,6 +24,15 @@ B 登记时指它、G 在正文里引它、V 审它，四处说的是同一份�
   等级由 `exhaustion_problems` 单点决定 ⇒ 落成 cross_check，不是 proof）；
 - B 的入库闸：证明栏三段齐但落盘核查不过 ⇒ 受控拒绝（`numericproof.filing_problems`）；
 - V 的会审：缺材料 ⇒ `看不出来` 并点名缺哪一块，不许判 `成立`。
+
+## "要不要"与"齐不齐"是两件事（D-43，业主 2026-10-24）
+
+业主原话：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，对一般数值实验
+不做要求」。所以本模块只回答"齐不齐"，不回答"要不要"：后者是
+`numericproof.wants_numeric_proof` 那一份判据（`method="exhaustive_search"` / 布尔 true 的
+`exhaustive` / 调用方声称 `proof`，三者任一）。落盘那一步的调用方（E 的 `run_experiment`）
+先问那一句，只有"想升格"的那一条才写报告；一般数值实验不写、不记、也不因缺块扣分。
+已经写了报告的一般数值实验 ⇒ 本模块的读侧（:func:`read_report`）照常读、照常展示。
 
 ## 三态纪律：事实写在行上，盘上再核一次
 
@@ -284,6 +293,11 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
     实验号不合法（没有落点）、目录建不起来、写不进去 / 读不回来。
     为什么不抛：这一趟实验已经真的跑过了，报告没落成是"这一条证据不够 proof"，
     不是"这次实验不算" —— 把它抛上去会让调用方以为实验本身失败。
+
+    D-43（业主 2026-10-24）之后它的调用条件多一句：只有"想升格成数值证明"的那一条
+    才该调它（判据 `numericproof.wants_numeric_proof`）。本函数不自己判那件事 ——
+    它是"把 ②③ 落成盘上一份"的动作，不承担"这一条要不要报告"的判定；否则同一句
+    "要不要"会在这里与 `numericproof.report_problems` 里各长一份。
     """
     problems: list[str] = []
     facts: dict[str, Any] = {
@@ -488,6 +502,11 @@ def landing_problems(experiment_row: Mapping[str, Any] | None) -> list[str]:
     它只读行上的事实，不碰盘：`schema.Experiment.validate` 是纯的，而写侧记录的事实
     是"读回来的字节数与 sha256"（见 :func:`land_report`）；盘上再核一次是读侧
     （V 的会审 / B 的入库闸）用 :func:`disk_problems` 做的事。
+
+    它不判"这条实验要不要这份报告"（D-43）：那一格是
+    `numericproof.wants_numeric_proof`。直接调用本函数的读侧（V 的会审）是按
+    "这一条正在被当成证明来审"这个前提进来的，所以"行上没有落盘事实"在它那里仍是
+    一条要报的欠账；而"要不要"这一层由 `numericproof.report_problems` 先问过。
     """
     row = _as_mapping(experiment_row)
     facts = report_facts(row)
