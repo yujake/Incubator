@@ -29,6 +29,8 @@ from agentflow.conductor import Conductor
 from agentflow.store import Store
 from agentflow.tools import ROLES, build_registry
 
+from conftest import write_paper
+
 PAPER_MD = """# 外部论文（他人写的）
 
 ## 主定理
@@ -447,6 +449,19 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
     hops.append({"action": "build_document", "status": doc.status, "outcome": doc.outcome})
     assert doc.outcome == "ok", (doc.status, doc.outcome, doc.refusal_reason, doc.detail)
     doc_id = st.rows("documents")[0]["doc_id"]
+
+    # 业主 2026-10-24（「只对论文负责是正确的，documents等都是中间产物」）：H 审的是论文
+    # 正文（`out/paper/main.tex`），`documents` 只是它的登记行。不落正文时 `review` 的
+    # 正确结论是"没有可审的论文"（`checked=False`）⇒ 这一跳推不动状态，本用例要验的
+    # "四张表各有行"就断在最后一步。正文里逐字写上这条断言的正文（行号按它定位）。
+    write_paper(st, "\n".join([
+        r"\documentclass{article}",
+        r"\begin{document}",
+        r"\section{主定理}",
+        "数值抽样与该结论一致（引自外部论文）。",
+        r"\end{document}",
+        "",
+    ]))
 
     review = c.summon("H", "review", {"doc_id": doc_id}, by="M", input_key="hop-h")
     hops.append({"action": "review", "status": review.status, "outcome": review.outcome})

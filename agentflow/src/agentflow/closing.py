@@ -1297,7 +1297,7 @@ def run_evidence_reading(store: Any, project_root: Path | str) -> dict[str, Any]
       `exit_code`）⇒ 没查成，不判 pass。
 
     返回里带 `entries`（逐条：脚本、退出码、对上哪一行、为什么对不上）、
-    `required`（成稿引用的**数值结论条数**）、`covered`（被对上台账的命令覆盖到的结论
+    `required`（成稿引用的数值结论条数）、`covered`（被对上台账的命令覆盖到的结论
     条数）、`missing_conclusions` / `missing_scripts`。读数全部是现算的：不读回执里的
     `generated_by` 那句话。
 
