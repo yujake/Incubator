@@ -104,21 +104,44 @@ def test_no_role_filter_notes_when_declarations_are_correct():
 
 
 def test_real_registry_gives_no_write_tool_to_read_only_roles(store):
-    """端到端：真实装配出来的工具层里，C 与 H 的工具面 0 个写工具。"""
+    """端到端：真实装配出来的工具层里，C 与 H 的工具面里没有未登记的写工具。
+
+    "未登记"有两档，且都要显式登记过（不是"看着像就行"）：
+    1. `READONLY_CALL_EXCEPTIONS`：只读角色自己的落库代理（2026-10-17 业主裁定「方案 1」）；
+    2. `UNIVERSAL_TOOLS`：通用能力（2026-10-24 业主裁定「通用能力根本不该出现谁能用这个说法」）——
+       `clock.timer_start` 据实是 `write_local`，而它对所有角色都可用，所以它必须能出现在
+       C/H/V 的工具面上。这不是"闸开了"：通用能力的硬约束写在工具层
+       （只许写通信/簿记类表），判据见 `tests/test_universal_tools_are_for_everyone.py`。
+    """
     build = build_registry(store=store, workspace_root=store.root)
     assert build.skipped == [], build.skipped
+    from agentflow.tools import UNIVERSAL_TOOLS
+
+    _uni = set(UNIVERSAL_TOOLS)
     for role in READ_ONLY_ROLES:
         specs = build.registry.for_role(role)
         leaks = [s.name for s in specs if s.side_effect in SIDE_EFFECTS_WRITE]
         # 2026-10-17（业主裁定「方案 1」）：只读角色自己的落库代理是允许的
         from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
         _ex = {n for n, _w in _EXC.get(role, ())}
-        leaks = [n for n in leaks if n not in _ex]
+        universal_write = [n for n in leaks if n not in _ex and n in _uni]
+        leaks = [n for n in leaks if n not in _ex and n not in _uni]
         assert leaks == [], f"{role} 的工具面里有**未登记**的写工具：{leaks}"
+        # 正向：被剔掉的那几件确实是登记在案的通用能力，而且真的在面上 ——
+        # 没有这一半，上面那条断言就算被一张空名单掏空也照样绿。
+        assert universal_write, (
+            f"{role} 的面上一件通用写工具都没有 ⇒ 要么通用集合空了，要么这条排除规则"
+            "把判据掏空了（通用能力里今天有 `clock.timer_start` 这类 write_local）"
+        )
+        assert set(universal_write) <= {n for n in _uni if n in {s.name for s in specs}}, (
+            f"{role} 的工具面与通用集合对不上：{universal_write}"
+        )
         assert specs, f"{role} 一个工具都没有 —— 那不是只读，那是没接线"
     # 声明侧也应当已经干净（`for_role` 的留痕为空），否则说明有人又写错了 roles
     # 2026-10-17（业主裁定「方案 1」）：H 的落库代理是登记过的放行，不是"声明错误"。
-    _notes = {k: [m for m in v if "方案 1」放行了" not in m and "方案 1」放行" not in m]
+    # 2026-10-24：通用能力也是登记过的放行（它们不进例外表，理由见 `UNIVERSAL_TOOLS`）。
+    _markers = ("方案 1」放行了", "方案 1」放行", "按通用能力放行了")
+    _notes = {k: [m for m in v if not any(mark in m for mark in _markers)]
               for k, v in build.registry.role_filter_notes.items()}
     _notes = {k: v for k, v in _notes.items() if v}
     assert _notes == {}, (

@@ -168,6 +168,9 @@ def test_using_an_external_source_id_as_a_document_id_is_refused(wired):
     手里只有盘上那份文件与一个来源 id 的概念，于是去 `revise` / `review_report`
     一个不存在的 doc_id。拒得明确比拒得含糊重要 —— 那条理由（"稿件 0000 不存在"）
     正是下一轮 M 该读到的东西：它说明"这条路不是给外部论文走的"，而不是"暂时不通"。
+
+    2026-10-25：`own_errors` 补进动作面的必填之后，这一条要把它一起带上 —— 否则拒的
+    是参数门（`缺少必填参数：own_errors`），而这条用例问的是"那条 id 本身不成立"。
     """
     store, _conductor, reg = wired
     lit_id = _register_external_paper(reg)
@@ -177,8 +180,8 @@ def test_using_an_external_source_id_as_a_document_id_is_refused(wired):
     assert g.outcome == "refused", g
     assert "不存在" in str(g.detail), g
 
-    h = _conductor.summon("H", "review_report", {"doc_id": lit_id}, by="M",
-                          input_key="wrong-id-review")
+    h = _conductor.summon("H", "review_report", {"doc_id": lit_id, "own_errors": []},
+                          by="M", input_key="wrong-id-review")
     assert h.outcome == "refused", h
     assert "不存在" in str(h.detail), h
 

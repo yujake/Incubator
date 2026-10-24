@@ -34,7 +34,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "subgoals": {"type": "array", "items": {"type": "object",
                      "description": "子目标：{sid, text, owner}（text 要可判定）"}},
         "budget": {"type": "object",
-                   "description": "三维预算，四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}"},
+                   "description": "四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}"},
               "depth": _I, "parent_plan_id": _S},
              ("problem", "problem_key")),
         "dict（plan_id）", side_effect="write_local", handler_name="create_plan",
@@ -88,7 +88,7 @@ SPEC = AgentSpec(
             # 代码侧早就能收：`agent_f/core.py` 的 `if kind == "proof"` 只看等级，不看是哪条路
             # 挣来的。所以这里把「closed 的合法凭据」写成两类并列，并把旧那句"数值支持不是证明"
             # 改成它真正的意思：未经 V 审的不算。
-            "子目标标 `closed` 必须有 proof 级证据（`proof_experiment_ids` 非空）。**这类凭据只有两类，并列**：① 机器核过的那份源码之后带回的原话（那一档不是你的活，你只认回执；这一路没开时它自然空着）。② **已由 V 会审成立的穷举证明**（签名 `signed_by=V`、`proof_authors` 含 E、`proof_reason=exhaustion`，证明栏是程序相对仓库根的路径 + 你从 E 写的 ②③ 引下来的那两段）。**只有数值或穷举支持、未经 V 审的不算证明**：那一档标 `supported_not_proved`（FC-22）—— 拿它关子目标正是这条纪律要防的事。",
+            "子目标标 `closed` 必须有 proof 级证据（`proof_experiment_ids` 非空）。**这类凭据只有两类，并列**：① 机器核过的那份源码之后带回的原话（那一档不是你的活，你只认回执；**要不要做只能由用户指定**，这一路没开时它自然空着）。② **已由 V 会审成立的穷举证明**（签名 `signed_by=V`、`proof_authors` 含 E、`proof_reason=exhaustion`，证明栏是程序相对仓库根的路径 + 你从 E 写的 ②③ 引下来的那两段）。**只有数值或穷举支持、未经 V 审的不算证明**：那一档标 `supported_not_proved`（FC-22）—— 拿它关子目标正是这条纪律要防的事。",
         ),
         policy=(
             "每一轮先挑一个可判定的子目标，做完就落台账；子目标不可判定时先把它拆小。每轮要留下一批新事实（有推理缝时 ≥3 条："
@@ -109,17 +109,17 @@ SPEC = AgentSpec(
             # 改前 V 的「有毛病」只落 `verifications/<命题号>.jsonl`，运行期一个字都递不到 F（真机 t-000026：四条全判有
             # 毛病，而 F 那一侧看不到、也没人去修）。
             "**你名下被 V 判「有毛病」的证明会在开场事实里逐条列出来（「我名下被 V 判『有毛病』的证明」那一栏，含命题号 / 最近"
-            "一签的编号 / 错在第几步 / 那一签盖的是不是现在这一份），同一条判决还会作为一项落在你的收件板上**（`called_by=V`）："
-            "读到就**按它给的步号补那一步**，补完把这一份**重新送 V**（`verify.verify_proof`，同一份正文再走一次 `verify_proof`）"
-            "重签 —— **不许绕开 V** 直接把它当定理用，也不许改命题去迁就那一签；步号没读到时用 `verify.read_proof` 读回那一签再问 V。",
+            "一签的编号 / 错在第几步 / 那一签盖的是不是现在这一份），同一条判决还会作为一项落在你的工作项板上**（`called_by=V`）："
+            "读到就**按它给的步号补那一步**，补完把这一份**重新送 V**（`verify_proof`，同一份正文再走一次）"
+            "重签 —— **不许绕开 V** 直接把它当定理用，也不许改命题去迁就那一签；步号没读到时**请 V 用 `read_proof` 读回那一签再问你**。",
             # 2026-10-24 业主裁定（D-54，逐字要点）：「Sylow 第一定理，会有几种证明语言，会有不同的
             # 依赖面……让 C 从不同的依赖面起点追依赖链就能完整显示不同证明路径」。多证明机制早就在
             # （`proofs` / `used_by="stmt:<号>#pN"` / `path_group` / `reviewed_by_proof` /
             # 对应表的 `proof_no`），缺的是"要几种证明时该交什么形状"的口径 —— 这一条是 F 侧的正向政策。
             "**一条定理要几种证明，就是一条命题的 `proof_no` 1..N，不是几条命题**：D 或用户要「几种证明"
-            "语言 / 几条独立路径」时，你把 N 份都写出来、一次交给 B 登记成**一条 stmt**"
-            "（`proofs=[{proof_no: 1..N, text: …}]`），不要为每条路线各立一条命题。每条证明各自送 V 签"
-            "（`verify.verify_proof` 带 `proof_no=N`，V 的签按份落在 `bits.evidence.reviewed_by_proof` 里），"
+            "语言 / 几条独立路径」时，你把 N 份都写出来、一次落成**一条 stmt** —— `statements` 那一行由你写。"
+            "各条证明用 `proofs=[{proof_no: 1..N, text: …}]` 一次交清，不要为每条路线各立一条命题。每条证明各自送 V 签"
+            "（`verify_proof` 带 `proof_no=N`，V 的签按份落在 `bits.evidence.reviewed_by_proof` 里），"
             "不许拿一份的签替另一份背书。每条证明用到的依赖按 `used_by=\"stmt:<命题号>#pN\"` ＋ "
             "`path_group` 标明它属于第几条，于是 C 能从每个依赖面各追出一条完整证明链。论文对应表里"
             "同一条命题占多行、每行各带 `proof_no`。**反向判据：不要把同一条定理拆成多条命题**"
@@ -136,14 +136,14 @@ SPEC = AgentSpec(
             "经通用表工具 `table.create` 写，写清 `relation_ids` 与为什么）—— B 的 `run` 每趟都会 `run_reprocess()` 领走它；"
             "**只在报告里写「这个关系该重抽」等于没提**。",
             "**阶段性中间成果要落一处一条**：每推进一条引理就写进 `reports/attack-<plan_id>.md`（一条一行：状态 / 依据 / 下一步），"
-            "**先 `fs.read` 再改**（覆盖一个没读过的文件会被观测闸门拒）；够格的中间结论交 **B** 登记成 `statements` —— 那才是可复核"
+            "**先 `fs.read` 再改**（覆盖一个没读过的文件会被观测闸门拒）；够格的中间结论**你自己落成 `statements` 一行** —— 那才是可复核"
             "的那一份，盘上那份是给人读的推进台账。",
             "**方向由 D 定，你负责把它做成**：你收到方向后落成计划（`F.create_plan`：`problem_key` 用 D 给的那一条、`subgoals` 给"
             "一到三个可判定的子目标）并稳定推进（`F.step`）—— **按计划走，不在推进中悄悄换方向**；真要换（连续两轮没有实质进展、"
             "或撞见结构性障碍）就把理由回报 D 由它定。",
             "**你造的例子要整理成命题—证明格式**：D 的手稿里「存在这样的例子」那一句必须引到一个落点，而**例子由谁造决定落点长什么"
             "样** —— E 从数值搜索里撞见的例子由 E 落（代码 + 实验行）；**你造的例子由你整理成「命题 + 证明」**：命题写成「某某例子"
-            "符合某形式」（把「它符合什么」写清楚，别只贴一段构造），证明就是那个验证过程，然后交 **B** 登记成 `statements` 一行。",
+            "符合某形式」（把「它符合什么」写清楚，别只贴一段构造），证明就是那个验证过程，然后**你自己落成 `statements` 一行**。",
             # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
             # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
@@ -205,7 +205,7 @@ SPEC = AgentSpec(
                      'search_requests',
                      # 2026-10-19（`draft/44` 的 P3-6）：`proof` 那一档的产物出口。
                      # 改前 F 交出的论证只活在 `history.product_detail` 里（全仓没有读者），
-                     # 而 policy 第 2 条要求"够格的中间结论交 B 登记成 `statements`" ——
+                     # 而 policy 曾要求"够格的中间结论交 B 登记成 `statements`" ——
                      # 那条路在真机里从来没有走通过（F 没有这条路，M 也不会替它派）。
                      # 现在 F 自己落一行（`evidence_kind` 由 `verifications/<命题号>.jsonl` 里
                      # 的签名现算：有那一签 ⇒ `proof_review`，没有才 `heuristic`；`bits` 留空

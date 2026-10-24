@@ -9,11 +9,15 @@
 4. 工作区不存在 / 事件流读不到 / 会话文件读不明白 ⇒ `checked=False`、`state="unknown"` ——
    负控：不许把"没读到"折成 0。
 5. 反真空 —— 把码到类目那张表打桩成空，第 1 条判据必须红（否则计数是硬编码出来的）。
-6. 类目不凭空造 —— `ERROR_CATEGORIES` 每一类都要有一个码，且那个码真的出现在
+6. 类目不凭空造 —— 每一类（错误类目与过程读数类目两张表）都要有一个码，且那个码真的出现在
    `src/agentflow/` 的某个文件里（扫的时候排除 `errorstats.py` 本身）。
 
 第 6 条为什么必须排除本模块：`CODE_TABLE` 自己就写着那些码，不排除的话"表里有的码
 一定在源码里"是同一句话的自己证明自己，防不住"编出来的类目"。
+
+两张类目表的分工见 `errorstats` 模块 docstring（错误类目进 total；`PROCESS_CATEGORIES`
+是拆分的过程读数、不进 total —— 业主 D-65）。第 6 条对两张表一视同仁：
+过程读数也不许是编出来的名字，它的码同样要能在生产侧找到。
 """
 from __future__ import annotations
 
@@ -290,10 +294,13 @@ def _source_texts() -> dict[str, str]:
 
 
 def test_every_category_has_a_code_that_really_exists_in_the_source() -> None:
-    """每个类目都要有一个真实拒绝码，且那个码就在出处文件里（防"编出来的类目"）。"""
+    """每个类目都要有一个真实拒绝码，且那个码就在出处文件里（防"编出来的类目"）。
+
+    两张类目表都查：错误类目与过程读数类目（拆分那两格也是读数，名字同样不许凭空造）。
+    """
     source = _source_texts()
     assert source, "夹具前提变了：扫不到 src/agentflow 下的 .py"
-    for category, meaning in ES.ERROR_CATEGORIES:
+    for category, meaning in ES.ERROR_CATEGORIES + ES.PROCESS_CATEGORIES:
         assert meaning.strip(), f"类目 {category} 没有写含义"
         assert "\n" not in meaning
         codes = [code for code, cat, _w in ES.CODE_TABLE if cat == category]
@@ -315,13 +322,20 @@ def test_every_category_has_a_code_that_really_exists_in_the_source() -> None:
 
 
 def test_the_category_table_has_no_duplicate_or_unknown_categories() -> None:
-    """表本身的自洽：码不重复、每个码的类目都在 `ERROR_CATEGORIES` 里、类目无重复。"""
-    cats = [cat for cat, _why in ES.ERROR_CATEGORIES]
+    """表本身的自洽：码不重复、每个码的类目都在两张类目表里、类目无重复。
+
+    两张表合起来就是 `ALL_CATEGORIES`（错误 ＋ 过程读数），码的类目只能落在这两者里 ——
+    落不进去说明码表里有一个谁也不认的类目名（那种名字永远不会被数出来）。
+    """
+    cats = [cat for cat, _why in ES.ALL_CATEGORIES]
     assert len(cats) == len(set(cats)), f"类目重复：{cats}"
+    assert ES.ALL_CATEGORIES == ES.ERROR_CATEGORIES + ES.PROCESS_CATEGORIES
+    assert not (set(c for c, _w in ES.ERROR_CATEGORIES)
+                & set(c for c, _w in ES.PROCESS_CATEGORIES)), "两张类目表不许有交集"
     codes = [code for code, _c, _w in ES.CODE_TABLE]
     assert len(codes) == len(set(codes)), "同一个码登记了两次（主码就不确定了）"
     for code, cat, where in ES.CODE_TABLE:
-        assert cat in cats, f"{code} 的类目 {cat} 不在 ERROR_CATEGORIES 里"
+        assert cat in cats, f"{code} 的类目 {cat} 不在 ALL_CATEGORIES 里"
         assert where.strip(), f"{code} 没写出处"
     assert ES.CODE_TO_CATEGORY == {c: cat for c, cat, _w in ES.CODE_TABLE}
 

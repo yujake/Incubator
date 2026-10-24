@@ -6,6 +6,14 @@
 B 不该能调 `search.download`（下载是 A 的职责，且它是网络副作用）。
 把"谁能用什么"固化在这里，比写在提示词里可靠得多 —— 提示词可以被绕过，注册表不能。
 
+## 唯一的例外：通用能力没有"谁能用"这回事
+
+业主裁定（`UNIVERSAL_TOOLS` 一节逐字引了原话）：通用能力不该出现"谁能用"这个说法。
+于是本文件多了一张受控集合 `UNIVERSAL_TOOLS`，它的判据不是"谁被允许用"，
+而是"它写不写知识表" —— 只写通信与簿记（`tasks` 的 notice 行 / 板项、事件流、
+`out/clock` 的状态与唤醒标记）的工具对全部角色开放，包括只读角色 C/H/V。
+这条例外刻意的形状：进集合要写下理由，写知识表则判据直接红且不发给只读角色。
+
 ## 为什么用签名反射而不是写死参数
 
 各工具模块的 `register()` 需要的依赖不同（`table_tools` 要 `store`，`fs_tools` 要 `root`，
@@ -250,6 +258,314 @@ def _check_param_seams_are_registered(
 
 
 _check_param_seams_are_registered()
+
+
+# ---------------------------------------------------------------- 通用能力（第二条轴：可达性）
+#
+# 业主裁定（逐字，唯一权威）：「通用能力根本不该出现谁能用这个说法」。
+#
+# 这条裁定把两件此前压在一起的事分开：
+#   - 副作用轴（`side_effect`）：它改不改我们拥有的东西。据实声明 —— `clock.timer_start`
+#     会写 `tasks` 的 notice 行与 `out/clock` 的状态，所以它是 `write_local`，不许写成 `read`；
+#   - 可达性轴（本节这张受控集合）：它是不是通用能力。通用能力对全部角色都可拿
+#     （含只读角色 C/H/V 与主控 M），不因为副作用等级被剥掉。
+#
+# 改前把两根轴压成一根的代价（实测）：为了让只读角色拿得到 `clock.timer_start`，
+# 它的声明被写成 `side_effect="read"` —— 而它真的会写表。「谎报换可达性」使
+# 「只读角色的工具面里没有写工具」这条判据在声明层面先成了假话，而没有任何东西会红。
+# 改法不是「往只读例外表里再加三条」（那是"谁能用"的另一种说法，且通用能力一旦
+# 走例外表，下一个通用工具就得再加一条），而是本表：进集合要写下理由。
+#
+# 硬约束（不许通用集合变成后门）：通用工具写的表只许是 `BOOKKEEPING_TABLES`；
+# 碰知识表（`KNOWLEDGE_TABLES`）⇒ 判据直接红，且 `for_role` 对它 fail-closed（不发给只读角色）。
+# 三道判据各守一处：
+#   ① 导入期 `_check_universal_tools_are_registered()`：登记形态、写集在允许面内、
+#      不许与 `READONLY_CALL_EXCEPTIONS` 重复登记（通用能力不是例外）；
+#   ② 装配期 `build_registry` 的孤儿判据 `stale_universal_tools()`：登记的名字必须真的在树上；
+#   ③ `base.ToolRegistry._role_surface`：只读角色不剥通用工具，但写集越界的通用工具不发给它。
+# 登记写集与实现的一致性由 `tests/test_universal_tools_are_for_everyone.py` 用
+# `capabilities._tool_write_set_from_source` 读 —— 那是工具层之外的一份实现，
+# 本文件不复制它的扫描器（FC-03：同一件事不许两份实现）。
+
+#: 通信/簿记类表：通用工具唯一允许写的表。
+#:
+#: 板项就是 `tasks` 里 `kind="notice"` 的行（`Conductor.open_item`），所以"tasks / 板项"
+#: 是同一张表；事件流（`events/`）、`out/clock` 的状态与唤醒标记、`notes` 都是文件，
+#: 不在表里 —— 于是它们不需要在这里出现。
+#:
+#: 为什么是"允许面"而不是"禁写名单"：禁写名单会漏（新加一张表就默认放行），
+#: 而通用工具是"所有角色都能拿"的能力面，它只该有"确实不需要写"这一档。
+BOOKKEEPING_TABLES: frozenset[str] = frozenset({"tasks"})
+
+#: 知识表：通用工具一个字都不许写（命中即红）。
+#:
+#: `claims` 不是一张表（它是 `documents` 行里的一格），所以"写 claims"这条约束由
+#: `documents` 代表 —— 写 `documents` 就等于改断言本体。
+KNOWLEDGE_TABLES: frozenset[str] = frozenset({
+    "statements",
+    "literature",
+    "relations",
+    "documents",
+    "conjectures",
+    "research_questions",
+    "experiments",
+    "dependencies",
+    "attack_plans",
+})
+
+
+@dataclass(frozen=True)
+class UniversalTool:
+    """一条通用能力的登记：为什么它是通用能力，以及它最多写哪几张表。
+
+    `tables` 是「它可能写到的表」的一个上界，不是"它每次都会写"的清单：
+    方向必须是 `实现算出的写集 ⊆ 本字段 ⊆ BOOKKEEPING_TABLES`。
+    为什么是上界而不是相等：有一类通用工具的写发生在到点/异步那一侧
+    （`clock.timer_start` 的 `tasks` 行由 `_deliver_due` 落，而它由 `clock.fire_due`
+    触发，不在工具入口的调用链上），AST 扫描器跟不到那里。把方向定成上界，
+    这一类就能如实登记；下界方向（"实现写了登记之外的表"）仍然逐条判红，
+    所以上界不会变成"什么都能写"的缺口。
+
+    写不出理由的登记与没登记在证据上是一回事（与 `PARAM_SEAMS` /
+    `READONLY_CALL_EXCEPTIONS` 的纪律同族）：`why` 非空由导入期判据强制。
+    """
+
+    why: str
+    tables: frozenset[str] = frozenset()
+
+
+#: 通用能力的受控集合：工具名 -> 登记。首批是 D-53 的时钟五件、父子追踪一件、
+#: 上行通道一件。为什么把它们放在一起：它们的可达性判据是同一条
+#: （"它写不写知识表"），而不是"谁被允许用它"。
+UNIVERSAL_TOOLS: dict[str, UniversalTool] = {
+    "clock.now": UniversalTool(
+        "读系统时钟与等我的唤醒标记（纯读）。业主 D-53：「其它人要看表也可以用」",
+        frozenset(),
+    ),
+    "clock.timer_start": UniversalTool(
+        "起一次性计时器：写 `out/clock` 的状态与到期后的唤醒标记，到点落一条 "
+        "`tasks` notice 行（板项）。业主 D-53：「所有角色都能用」",
+        frozenset({"tasks"}),
+    ),
+    "clock.alarm_start": UniversalTool(
+        "定一次性闹钟：与 `clock.timer_start` 同一套落点（`out/clock` 的状态 + "
+        "到点的 `tasks` notice 行），差别只在时间怎么给",
+        frozenset({"tasks"}),
+    ),
+    "clock.timer_list": UniversalTool(
+        "列计时器与唤醒标记读数（纯读）；与 `clock.now` 同一口径",
+        frozenset(),
+    ),
+    "clock.timer_cancel": UniversalTool(
+        "取消一条待发的计时器：只改 `out/clock` 的状态，不写任何表"
+        "（取消之后就不该再有 notice 行）",
+        frozenset(),
+    ),
+    "trace.children": UniversalTool(
+        "读任务树里我这一层的直接下级：只读 `tasks` 的可见行，不写任何东西。"
+        "父子追踪对所有角色开放 —— 否则只读角色连自己在等谁都不知道",
+        frozenset(),
+    ),
+    "conductor.escalate": UniversalTool(
+        "上行通道：孩子把需求写进召唤者的收件箱（一条 `agent_message` 事件，不写任何表）。"
+        "业主 2026-10-19 裁定「父子天然双向」，含只读角色",
+        frozenset(),
+    ),
+    "conductor.ack": UniversalTool(
+        "消项：收件人把自己名下已经读过/办完的板项推到 done，只改 `tasks` 的 "
+        "`item_state` / `item_close` 两格并追加一条事件（簿记，不写知识表）。"
+        "业主 D-68 逐字「就做手，不兜底」：凡是会收到板项的角色都得拿得到这只手 —— "
+        "板项按 `parent_task_id` 投给任何一行，只读角色 C/H/V 同样收交接通报、"
+        "指导与停止通知，所以它不是某个角色的活，是通用能力",
+        frozenset({"tasks"}),
+    ),
+}
+
+
+def is_universal_tool(
+    name: str, *, universal: Mapping[str, "UniversalTool"] | None = None
+) -> bool:
+    """这个名字是不是登记在案的通用能力（`universal=None` ⇒ 读本文件的受控集合）。
+
+    形参只为让判据能被单独喂表（负控与单元测试用）；真正跑的那一次读的就是真表。
+    """
+    table = UNIVERSAL_TOOLS if universal is None else universal
+    return str(name) in table
+
+
+def universal_tool_tables(
+    name: str, *, universal: Mapping[str, "UniversalTool"] | None = None
+) -> frozenset[str] | None:
+    """这件通用工具登记自己能写的表（没登记 ⇒ `None`，不是空集）。
+
+    三态：`None` = 它不是通用工具（"没登记"）；空集 = 登记了、且不写任何表。
+    把两者折叠成空集，会让"没登记"被读成"查过了、不写"。
+    """
+    table = UNIVERSAL_TOOLS if universal is None else universal
+    entry = table.get(str(name))
+    return None if entry is None else frozenset(entry.tables)
+
+
+def universal_tool_is_bookkeeping_only(
+    name: str,
+    *,
+    universal: Mapping[str, "UniversalTool"] | None = None,
+    bookkeeping: Iterable[str] | frozenset[str] | None = None,
+) -> bool:
+    """这件通用工具的登记写集是否只落在通信/簿记类表上（硬约束的判据本体）。
+
+    没登记的名字返回假（不是通用工具就谈不上"通用工具的写集"）；`base._role_surface`
+    只在 `is_universal_tool()` 为真时才问这一句，所以这里的"没登记 ⇒ 假"不会把
+    普通工具误判成越界。
+    """
+    tables = universal_tool_tables(name, universal=universal)
+    if tables is None:
+        return False
+    allow = set(BOOKKEEPING_TABLES if bookkeeping is None else bookkeeping)
+    return not (set(tables) - allow)
+
+
+def universal_tool_violations(
+    write_sets: Mapping[str, frozenset[str] | None],
+    *,
+    universal: Mapping[str, "UniversalTool"] | None = None,
+    bookkeeping: Iterable[str] | None = None,
+    knowledge: Iterable[str] | None = None,
+) -> dict[str, list[str]]:
+    """逐个通用工具核「它的写集只落在通信/簿记类表上」，返回 `{工具名: [违规理由]}`。
+
+    `write_sets` 是「工具名 -> 从实现算出来的写集」；`None` 表示算不出来。
+    它是必填形参，没有默认值 —— 少给一张写集表这件事必须当场报错，
+    而不是让判据在空表上返回"零违反"（那是真空通过：`P16` 的形态）。
+    缺键与 `None` 都记违规：前者是"没查"，后者是"没查成"，两者都不是"没有写"。
+
+    两条判据的方向刻意不同：
+      - 登记写集必须是允许面的子集（登记本身不许越界）；
+      - 实现写集必须是登记写集的子集（实现不许写登记之外的表）。
+    合起来是 `实现 ⊆ 登记 ⊆ 通信/簿记表`。反方向（登记多于实现）是上界语义，
+    见 `UniversalTool.tables` 的注释。
+    """
+    table = UNIVERSAL_TOOLS if universal is None else universal
+    allow = set(BOOKKEEPING_TABLES if bookkeeping is None else bookkeeping)
+    know = set(KNOWLEDGE_TABLES if knowledge is None else knowledge)
+    out: dict[str, list[str]] = {}
+    for name in sorted(table):
+        reasons: list[str] = []
+        declared = set(table[name].tables)
+        bad_declared = sorted(declared - allow)
+        if bad_declared:
+            reasons.append(
+                f"登记的写集 {sorted(declared)} 里 {bad_declared} 不在通信/簿记表 "
+                f"{sorted(allow)} 里"
+            )
+        declared_knowledge = sorted(declared & know)
+        if declared_knowledge:
+            reasons.append(f"登记的写集碰了知识表 {declared_knowledge}（通用工具一个字都不许写）")
+        if name not in write_sets:
+            reasons.append("没有给出它的写集（没查不等于没有写）")
+        else:
+            actual = write_sets[name]
+            if actual is None:
+                reasons.append(
+                    "它的写集算不出来（没查成）：要么让实现函数与工具名对得上，"
+                    "要么把它从通用集合里撤掉"
+                )
+            else:
+                undeclared = sorted(set(actual) - declared)
+                if undeclared:
+                    reasons.append(
+                        f"实现写了登记之外的表 {undeclared}（登记的是 {sorted(declared)}）"
+                    )
+                hits = sorted(set(actual) & know)
+                if hits:
+                    reasons.append(f"实现写了知识表 {hits}")
+                outside = sorted(set(actual) - allow)
+                if outside:
+                    reasons.append(f"实现写了通信/簿记表以外的表 {outside}")
+        if reasons:
+            out[name] = reasons
+    return out
+
+
+def stale_universal_tools(
+    specs: Mapping[str, Any], *, universal: Mapping[str, Any] | None = None
+) -> list[str]:
+    """`UNIVERSAL_TOOLS` 里已经不在树上的名字（拼错 / 工具改名后留下的孤儿）。
+
+    与 `stale_tool_param_seams` 同一条纪律：登记表不许烂成噪音，而"登记了"与
+    "生效了"是两件事 —— 一个拼错的名字会让那条通用能力静默地不存在。
+    """
+    table = UNIVERSAL_TOOLS if universal is None else universal
+    return sorted(set(table) - set(specs))
+
+
+def _check_universal_tools_are_registered(
+    universal: Mapping[str, UniversalTool] | None = None,
+    bookkeeping: Iterable[str] | None = None,
+    knowledge: Iterable[str] | None = None,
+    groups: tuple[str, ...] = _TOOL_GROUP_PREFIXES,
+    exceptions: Mapping[str, Any] | None = None,
+) -> None:
+    """导入期交叉断言：通用能力的受控集合形态与允许面（本条判据的五条）。
+
+    1. 键必须是 `组.动作` 形态，且组前缀由 `_MODULES` 里某个模块产出 —— 拼错的名字
+       不会命中任何工具，那条通用能力静默地不存在；
+    2. 理由串必须非空 —— 写不出理由就该改代码而不是登记；
+    3. 登记写集必须是 `BOOKKEEPING_TABLES` 的子集；
+    4. 登记写集不许碰 `KNOWLEDGE_TABLES`；
+    5. 通用工具不许同时出现在 `READONLY_CALL_EXCEPTIONS` 里 —— 通用能力不是例外，
+       两者混记会让"它为什么能拿"有两个互相独立的来源（改一处、另一处不动）。
+       业主口径是"通用能力不该有谁能用这回事"，例外表回答的正是"谁能用"。
+
+    外加一条反真空：集合为空时本判据会静默通过，而那时所有通用能力都退回
+    "按副作用等级剥掉"的旧世界 —— 所以空集合本身就是红。
+    形参只为让判据能被单独喂表（负控与单元测试用）；真正跑的那一次在下面用默认值调用。
+    """
+    table = UNIVERSAL_TOOLS if universal is None else universal
+    allow = set(BOOKKEEPING_TABLES if bookkeeping is None else bookkeeping)
+    know = set(KNOWLEDGE_TABLES if knowledge is None else knowledge)
+    exempt = READONLY_CALL_EXCEPTIONS if exceptions is None else exceptions
+
+    assert table, (
+        "UNIVERSAL_TOOLS 是空的 —— 通用能力集合清空之后，所有通用工具都会退回"
+        "『按副作用等级被只读角色剥掉』的旧口径，而本判据会静默通过"
+    )
+    bad_shape = sorted(k for k in table if not isinstance(k, str) or "." not in k)
+    assert not bad_shape, (
+        f"UNIVERSAL_TOOLS 的键 {bad_shape} 不是 `组.动作` 形态 —— 工具名只有这一种形态，"
+        "拼错的键不会命中任何工具，于是那条通用能力静默失效"
+    )
+    unknown_group = sorted({k.split(".")[0] for k in table} - set(groups))
+    assert not unknown_group, (
+        f"UNIVERSAL_TOOLS 里的组前缀 {unknown_group} 不由任何工具模块产出"
+        f"（_MODULES 派生出的是 {sorted(groups)}）⇒ 这些登记永远不会命中任何工具"
+    )
+    for name, entry in sorted(table.items()):
+        assert str(entry.why or "").strip(), (
+            f"UNIVERSAL_TOOLS[{name!r}] 没有理由串 —— 登记而不写理由，"
+            "与没登记在证据上是一回事（写不出理由就该改代码）"
+        )
+        stray = sorted(set(entry.tables) - allow)
+        assert not stray, (
+            f"UNIVERSAL_TOOLS[{name!r}] 登记自己会写 {stray}，而通用工具只许写通信/簿记表 "
+            f"{sorted(allow)} —— 写别的表说明它是某个角色的活，不是通用能力"
+        )
+        hits = sorted(set(entry.tables) & know)
+        assert not hits, (
+            f"UNIVERSAL_TOOLS[{name!r}] 登记自己会写知识表 {hits} ⇒ 它会把"
+            "『只读角色拿得到』变成『只读角色能改知识表』的后门"
+        )
+    overlaps = sorted(
+        {name for name, _why in (n for ns in exempt.values() for n in ns)} & set(table)
+    )
+    assert not overlaps, (
+        f"这些工具既是通用能力、又在只读例外表 READONLY_CALL_EXCEPTIONS 里：{overlaps} ⇒ "
+        "『它为什么对只读角色可用』有了两个互相独立的来源。业主口径：通用能力不进例外表 —— "
+        "请把例外表里的那条删掉（通用能力由 UNIVERSAL_TOOLS 一条判据负责）"
+    )
+
+
+_check_universal_tools_are_registered()
 
 
 @dataclass
@@ -509,6 +825,23 @@ def build_registry(
             raise ToolError(msg)
         skipped.append({"module": "<param-seams>", "stage": "validate", "error": msg})
 
+    # ---- 通用能力集合的孤儿判据（与参数接缝那条同一处置口径）
+    #
+    # `_check_universal_tools_are_registered()` 只能核"这张表自己的形态"（导入期树上一个
+    # 工具都没有）；"登记的名字到底有没有人产出"只能在这里核。拼错的名字不会报错，
+    # 它只会让那条通用工具按普通工具的判据被只读角色剥掉 —— 静默的能力缺失。
+    stale_universal = stale_universal_tools(reg._specs)
+    if stale_universal:
+        msg = (
+            f"UNIVERSAL_TOOLS 里这些名字在装配出来的树上不存在：{stale_universal}。"
+            "要么工具名改了而登记没跟着改，要么那条登记本来就写错了 —— "
+            "两种都会让『通用能力对所有人可用』静默失效（登记表不许烂成噪音）"
+        )
+        # 只记进 `skipped`，不在这里单独抛：`strict=True` 的唯一出口是下面那道
+        # 「严格模式下不允许模块被跳过」—— 两个退出点会让"严格档到底为什么失败"
+        # 取决于哪一条先跑到，而那种先后关系没有人维护。
+        skipped.append({"module": "<universal-tools>", "stage": "validate", "error": msg})
+
     if strict and skipped:
         raise ToolError(f"严格模式下不允许模块被跳过：{skipped}")
     return RegistryBuild(registry=reg, loaded=loaded, skipped=skipped, params_checked=params_checked,
@@ -531,6 +864,15 @@ __all__ = [
     "READONLY_CALL_EXCEPTIONS",
     "PARAM_SEAMS",
     "SIDE_EFFECTS_WRITE",
+    "BOOKKEEPING_TABLES",
+    "KNOWLEDGE_TABLES",
+    "UNIVERSAL_TOOLS",
+    "UniversalTool",
+    "is_universal_tool",
+    "stale_universal_tools",
+    "universal_tool_is_bookkeeping_only",
+    "universal_tool_tables",
+    "universal_tool_violations",
     "RegistryBuild",
     "ToolError",
     "ToolRegistry",

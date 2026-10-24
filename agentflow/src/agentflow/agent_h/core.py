@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from .. import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
-from ._support import Any, CROSS_CHECK_DISCLAIMER, Callable, Mapping, Path, RV, ReviewError, S, SIDE_EFFECTS_WRITE, Store, ToolRegistry, _H_READONLY_SIDE_EFFECTS, _H_WRITABLE_TOOLS, _inject_raw_document, _seed_document, install_h_tools
+from ._support import Any, CROSS_CHECK_DISCLAIMER, Callable, Mapping, Path, RV, ReviewError, S, SIDE_EFFECTS_WRITE, Store, ToolRegistry, _H_READONLY_SIDE_EFFECTS, _H_WRITABLE_TOOLS, _inject_raw_document, _seed_document, h_free_toolbox_accepts, install_h_tools
 from .review import _Review
 from .verify_fixes import _VerifyFixes
 from .list_findings import _ListFindings
@@ -47,10 +47,13 @@ class _Core:
         # ---- 装配期断言（FC-03 的形态）：拿不到合规的注册表就拒绝启动。
         # 审校者手里若有一把能改稿的刀，整套"发现/掩盖可区分"的设计就当场失效，
         # 而它不会报任何错 —— 所以这里必须 fail-closed。
-        bad = [t for t in self.tools.describe() if t["side_effect"] not in _H_READONLY_SIDE_EFFECTS]
+        bad = [
+            t for t in self.tools.describe()
+            if not h_free_toolbox_accepts(t["name"], t["side_effect"])
+        ]
         if bad:
             raise ReviewError(
-                "H 的工具栏里出现了非只读工具："
+                "H 的工具栏里出现了既不是只读、也不是通用能力的工具："
                 + "、".join(f"{t['name']}({t['side_effect']})" for t in bad)
                 + "。审校者必须只能提发现，不能改稿 —— 若它能改，"
                 "'发现问题'与'掩盖问题'在结构上就无法区分"
@@ -119,7 +122,7 @@ class _Core:
         try:
             surface = self.tools.describe()
             ok_surface = bool(surface) and all(
-                t["side_effect"] in _H_READONLY_SIDE_EFFECTS for t in surface
+                h_free_toolbox_accepts(t["name"], t["side_effect"]) for t in surface
             )
             rows = self.store.rows("documents")
             ok_write = True
@@ -128,7 +131,7 @@ class _Core:
                 ok_write = data.get("checked") is True and data.get("dep_check", {}).get("checked") is False
             ok = ok_surface and ok_write
             self._emit(
-                f"selftest：{'通过' if ok else '失败'}（自由工具箱 {len(surface)} 个只读工具；"
+                f"selftest：{'通过' if ok else '失败'}（自由工具箱 {len(surface)} 个工具：只读 + 通用能力；"
                 f"拒绝的写工具 {len(getattr(self.tools, 'refused_write_tools', []))} 个）"
             )
             return 0 if ok else 1

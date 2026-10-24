@@ -313,6 +313,39 @@ def retired_path(root: str | Path, owner: str) -> Path:
     return Path(root).joinpath(*ROSTER_DIR, f"{owner}-retired.jsonl")
 
 
+#: 名册目录里"不是名册正文"的那几种后缀（`<父>-index.jsonl` / `<父>-surfaces.jsonl` /
+#: `<父>-retired.jsonl`）。全工作区口径的读数按它排除，而不是按"文件名里有没有横线"猜 ——
+#: 父的编号本身不含横线，但靠猜迟早会把一种新后缀算成一份名册。
+_ROSTER_SIDECAR_SUFFIXES: tuple[str, ...] = ("-index.jsonl", "-surfaces.jsonl",
+                                             "-retired.jsonl")
+
+
+def roster_owners(root: str | Path) -> tuple[list[str], str]:
+    """`out/roster/` 下有哪些父名册（`(父编号列表, 问题)`）。
+
+    只认 `<父>.jsonl`：三种旁支（对照表 / 面池 / 销号名单）按
+    `_ROSTER_SIDECAR_SUFFIXES` 排除。目录不存在 ⇒ `([], "")`（那是"还没有人派过活"，
+    不是读失败）；目录读不出来 ⇒ `([], 理由)`（三态，不折成"一份名册都没有"）。
+    """
+    folder = Path(root).joinpath(*ROSTER_DIR)
+    if not folder.is_dir():
+        return [], ""
+    try:
+        names = [p.name for p in folder.iterdir() if p.is_file()]
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        return [], f"名册目录读不成（{type(exc).__name__}: {exc}）"
+    out: list[str] = []
+    for name in names:
+        if not name.endswith(".jsonl"):
+            continue
+        if any(name.endswith(s) for s in _ROSTER_SIDECAR_SUFFIXES):
+            continue
+        owner = name[: -len(".jsonl")]
+        if owner:
+            out.append(owner)
+    return sorted(out), ""
+
+
 # ---------------------------------------------------------------- 读写面与槽位池（S1n）
 #
 # 业主 T23：子代理只能读写父切割给它的面；父原则上必须把各子代理的面拆开（不重叠）；
@@ -386,11 +419,15 @@ def _fold_surfaces(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """把名册事件流折叠成"当前状态"（一项一条）。
+    """把名册事件流折叠成"当前状态"（一项一条 = 一个常驻子代理）。
 
-    口径：`add` 建项（后写的同名字覆盖 `retired` 标记为 False 是不可能的 ——
-    名字不复用，所以同名字只会有一次 `add`）；`bind` 推当前调用；`retire` 标退役；
-    `keep_alive` 只记那一格。
+    口径：`add` 建项（一项 = 一个子代理的身份：名字 / 角色 / 简介 / 面）；
+    `bind` 只推这一项"最近一次接的活"的编号读数；`retire` 标退役；`keep_alive` 只记
+    那一格。名字是身份：同一个名字不会有两项。
+
+    `task_id` / `first_task_id` 是"调用流水读数"（这一项是为哪件活建的、最近一次
+    是哪件活），不是身份，也不是归属键 —— 一个子代理可以接 N 件活，名册里仍是
+    一项（业主 2026-10-24：「一个子代理可接收多个任务」「不可按照任务号记录名册」）。
     """
     items: dict[str, dict[str, Any]] = {}
     for raw in rows:
@@ -583,6 +620,12 @@ def declarations_candidates(name: str, names: Iterable[str], *, limit: int = 3) 
 STATEMENT_WRITE_TABLES: tuple[str, str] = ("statements", "dependencies")
 #: 谁可以交命题内容给这一条路径（写入侧是 B 的活，别的人交 ⇒ 受控拒绝）。
 STATEMENT_WRITER_ROLES: tuple[str, ...] = ("B",)
+#: `deps_missing` 的三档（三态：不把「不适用」折成「缺」，也不把「缺」折成「零依赖」）。
+DEPS_MISSING_PRESENT = "present"
+DEPS_MISSING_ABSENT = "missing"
+DEPS_MISSING_NOT_APPLICABLE = "not_applicable"
+DEPS_MISSING_STATES: tuple[str, ...] = (DEPS_MISSING_PRESENT, DEPS_MISSING_ABSENT,
+                                        DEPS_MISSING_NOT_APPLICABLE)
 #: 一条命题载荷认得的字段（正名）。别名表见 `STATEMENT_KEY_ALIASES`。
 STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
     "statement_full", "statement_text", "kind", "label", "proof_text", "origin",
@@ -743,6 +786,74 @@ def _dep_label(step: Mapping[str, Any]) -> str:
     return "依赖"
 
 
+def _deps_missing_reading(*, proof_text: Any, deps_written: int,
+                          derived_from: Any = (), stmt_id: str = "",
+                          proof_no: int = 0, scan: Mapping[str, Any] | None = None) -> dict:
+    """这一行"带证明正文、却一条依赖都没落"时的三态读数（`state` 只有三档）。
+
+    为什么需要这一格（真机 sylow3，2026-10-24）：七条命题各自带 2700 到 6300 字的证明，
+    而 `dependencies` 全表 0 行 —— 证明里写的是中文散文式的"引理 1 / 引理 4"，
+    引用扫描只认 `stmt:` / `lit:` / `exp:` / `doc:` 四种前缀，于是一条都扫不出来，
+    `deps_state="none_in_proof"`、`deps_written=0`。这两个读数都只活在这一次调用的
+    返回值里，收工门不数 `dependencies`、读侧也没有一格问过这件事 ⇒ 依赖面 0 行
+    是静默的，C 的"按依赖面追几条不同证明路径"因此无从谈起。
+
+    三态（不猜）：
+    :data:`DEPS_MISSING_PRESENT` —— 落了至少一条依赖，依赖面建起来了；
+    :data:`DEPS_MISSING_ABSENT` —— 带证明正文而零依赖。两条子因分开写：
+        `derived_from` 非空 ⇒ 依赖信息其实在盘上的另一处（命题行的 `derived_from`），
+        只是没落成 `dependencies` 行；`derived_from` 也空 ⇒ 证明正文里确实没有一条
+        在册引用（自足证明合法，但读的人要能看出"扫了、确实是空"）；
+    :data:`DEPS_MISSING_NOT_APPLICABLE` —— 这一行没有证明正文（概念行 / 还没写证明），
+        依赖面这一格不适用。
+    """
+    text = str(proof_text or "")
+    chars = len(text.strip())
+    derived = [str(x) for x in (derived_from or ())]
+    refs = int((scan or {}).get("refs") or 0)
+    out: dict[str, Any] = {
+        "state": DEPS_MISSING_NOT_APPLICABLE,
+        "stmt_id": str(stmt_id or ""),
+        "proof_no": int(proof_no or 0),
+        "proof_chars": chars,
+        "deps_written": int(deps_written or 0),
+        "scanned_refs": refs,
+        #: 依赖信息的另一处落点（命题行的 `derived_from`）：它非空而依赖表 0 行，
+        #: 就是"信息在盘上、依赖面没建起来"的那一档。
+        "derived_from": derived,
+        "why": "",
+        "next_step": "",
+    }
+    if chars <= 0:
+        out["why"] = ("这一行没有证明正文（概念行 / 还没写证明）⇒ 依赖面这一格不适用"
+                      "（既不是「缺依赖」，也不是「依赖为零」）")
+        return out
+    if int(deps_written or 0) > 0:
+        out["state"] = DEPS_MISSING_PRESENT
+        out["why"] = f"这一行落了 {int(deps_written)} 条依赖，依赖面建起来了"
+        return out
+    out["state"] = DEPS_MISSING_ABSENT
+    if derived:
+        out["why"] = (
+            f"这一行有 {chars} 字证明正文，却一条 `dependencies` 行都没有；"
+            f"而它的 `derived_from` 点名了 {derived} —— 依赖信息在盘上的另一处，"
+            "没有落成依赖边（依赖表里读不到，按依赖面追证明路径的人就看不到）")
+        out["next_step"] = (
+            "把这些号写成依赖边：`B.register_statement` 交 `derived_from` 的同时"
+            "把证明里的引用写成 `stmt:NNNNNN`（扫描只认带前缀的写法），"
+            "或由 G 走 `doc.register_dependency` 逐条登记")
+    else:
+        out["why"] = (
+            f"这一行有 {chars} 字证明正文，而引用扫描一条在册引用都没扫到"
+            f"（扫了 {refs} 条）⇒ 依赖表 0 行。自足的证明合法，但「扫了、确实是空」"
+            "与「没扫」必须分开读：`deps_state` 给的就是这个三态")
+        out["next_step"] = (
+            "如果这份证明其实引用了在册的命题 / 文献 / 实验，请把引用写成带前缀的样子"
+            "（`stmt:` / `lit:` / `exp:` / `doc:`）再交一次，或在证明正文里逐条点名；"
+            "如果它确实自足，这一格就是如实的「零依赖」")
+    return out
+
+
 def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
                        tx: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """把二维列表解析成可落盘的一步一行（只读：解析完再决定写不写）。
@@ -756,27 +867,43 @@ def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
     missing: list[dict[str, Any]] = []
     for gi, grp in enumerate(groups, start=1):
         for st in grp:
+            #: 组号：这一步自己带了 `path_group` 就用它（多证明清单那一档里
+            #: "一份证明 = 一条可选路径"，组号就是证明号）；没带就用它在二维列表里
+            #: 的位置 —— 老写法（`deps` / `proof_paths`）的读数因此逐字不变。
+            try:
+                group_no = int(st.get("path_group") or 0) or gi
+            except (TypeError, ValueError):
+                group_no = gi
             found = [(key, field, table, idf, dkind)
                      for key, field, table, idf, dkind in STEP_SOURCE_KEYS
                      if str(st.get(key) or "").strip()]
             if len(found) != 1:
-                missing.append({"path_group": gi, "step": dict(st),
+                missing.append({"path_group": group_no, "step": dict(st),
                                 "why": ("一步依赖必须恰好给一个来源（stmt_id / "
                                         "experiment_id / lit_id / doc_id 四选一）")})
                 continue
             key, field, table, idf, dkind = found[0]
             sid = str(st[key]).strip()
             if tx.find(table, **{idf: sid}) is None:
-                missing.append({"path_group": gi, "step": dict(st),
+                missing.append({"path_group": group_no, "step": dict(st),
                                 "why": f"{table} 表里没有 {idf}={sid!r}"})
                 continue
             kind = str(st.get("kind") or dkind)
             if kind not in S.DEP_KINDS:
-                missing.append({"path_group": gi, "step": dict(st),
+                missing.append({"path_group": group_no, "step": dict(st),
                                 "why": f"kind 必须是 {S.DEP_KINDS} 之一，收到 {kind!r}"})
                 continue
-            step = {"path_group": gi, "kind": kind, "label": str(st.get("label") or ""),
+            step = {"path_group": group_no, "kind": kind, "label": str(st.get("label") or ""),
                     "quote": str(st.get("quote") or "")}
+            #: 这一步属于第几份证明（多证明清单那一档才会带）：不往这里搬的话，
+            #: `_write_dep_steps` 只能按 `body["proof_no"]` 落 `used_by`，
+            #: 于是 #p2 / #p3 的依赖会全被记到 #p1 名下（依赖面又混成一维）。
+            try:
+                step_no = int(st.get("proof_no") or 0)
+            except (TypeError, ValueError):
+                step_no = 0
+            if step_no >= 1:
+                step["proof_no"] = step_no
             step[field] = sid
             steps.append(step)
     return steps, missing
@@ -2678,38 +2805,109 @@ class Secretary:
 
         return JF.read_jsonl(retired_path(self.root, owner))
 
-    def next_name(self, owner: str, role: str) -> tuple[str, str]:
-        """下一个可用的本地名（`<角色><序号>`；退役不回收）。返回 `(名字, 问题)`。
+    def _used_names(self, owner: str) -> dict[str, str]:
+        """该父名下"用过的所有名字"：名字 → 角色（含已收口、已销号、只在对照表里的）。
 
-        序号 = 该 owner 名下该角色出现过的最大序号 + 1（含已退役的项 —— 这正是
-        "不回收"的落点：`D1` 退役之后下一个是 `D2`，绝不把 `D1` 给另一个人）。
+        三份盘上事实的并集，一处都不许漏：
+        - 名册正文 `<父>.jsonl`（折叠后的一项一条：这是名册项的正文来源）；
+        - 对照表 `<父>-index.jsonl` 的每一条调用记录里的 `name`（名册正文缺行时，
+          名字只活在这里 —— D-66 的现场就是那个形态）；
+        - 销号名单 `<父>-retired.jsonl`（销号的名字仍然"用过"，绝不回收）。
+
+        为什么发号与占用判断都必须读这三份（业主 2026-10-24 的最终口径）：
+        「如果一个子代理（例如 G1）被销号，且有 G2，再派 G 时追加写成 G3（不可复用 G1）」
+        —— 只读正文会把"正文里没有、但确实用过"的名字算成空号，于是同一个名字被发给
+        两个不同的子代理。名字是身份，用过的名字就不再是空号。
         """
-        rows, bad = self.roster_rows(owner)
-        if bad:
-            return "", f"名册有 {len(bad)} 行读不出来 ⇒ 不猜序号（{bad[0]}）"
-        used = []
-        for r in rows:
-            name = str(r.get("name") or "")
+        out: dict[str, str] = {}
+        rows, _bad = self.roster_rows(owner)
+        for row in rows:
+            name = str(row.get("name") or "")
+            if name:
+                out.setdefault(name, str(row.get("role") or ""))
+        index, _bad2 = self.roster_index(owner)
+        for row in index:
+            name = str(row.get("name") or "")
+            if name:
+                out.setdefault(name, str(row.get("role") or ""))
+        for name in self._retired_used(owner):
+            out.setdefault(name, "")
+        return out
+
+    def _retired_used(self, owner: str) -> list[str]:
+        """销号名单里的名字（"扫已销号的名字"这一步单独一处，判据可以把它打桩成跳过）。"""
+        rows, _bad = self.retired_names(owner)
+        return [str(r.get("name") or "") for r in rows if str(r.get("name") or "")]
+
+    def next_name(self, owner: str, role: str) -> tuple[str, str]:
+        """下一个可用的本地名（`<角色><序号>`；用过的名字绝不回收）。返回 `(名字, 问题)`。
+
+        序号 = 该 owner 名下该角色"用过的最大序号 + 1"。"用过"包括活跃、已收口、
+        已销号，以及只在对照表里留下调用记录的名字（见 :meth:`_used_names`）——
+        这正是业主 2026-10-24 的最终口径：「G1 被销号，且有 G2，再派 G 时追加写成
+        G3（不可复用 G1）」。
+        """
+        used = self._used_names(owner)
+        seen = []
+        for name in used:
             if name.startswith(role) and name[len(role):].isdigit():
-                used.append(int(name[len(role):]))
-        return f"{role}{max(used, default=0) + 1}", ""
+                seen.append(int(name[len(role):]))
+        return f"{role}{max(seen, default=0) + 1}", ""
+
+    def _reuse_refusal(self, owner: str, name: str) -> str:
+        """`reuse=<名>` 这个目标能不能接活：空串 = 能，否则是一句受控拒绝的理由。
+
+        判据只有一条（业主 2026-10-24 的最终口径）："在册且未销号"就能再接活。
+        「已收口子代理可再接收活，但已销号不可用」——
+        - 收口（上一件活已交差、状态 done/ended，但名册项还在册）⇒ 只是闲下来了，
+          可以再接一件活；
+        - 销号（名册项标了 retired、名字进了销号名单）⇒ 这个子代理退场了，名字永久
+          不复用（`reuse` 指向它一律受控拒绝）。
+
+        这一处刻意单独成一个方法：判据把它打桩成"只要在册就行"⇒ 销号那一档必须红；
+        打桩成"只认活跃任务"⇒ 收口那一档必须红（`tests/test_roster_ownership_...`）。
+        """
+        if not self._name_exists(owner, name):
+            return f"名册里没有 {name} ⇒ 不猜（复用必须父先看名册）"
+        if self._is_retired(owner, name):
+            return f"{name} 已销号（名字永久不复用，业主 B1）"
+        return ""
 
     def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
                    task: str = "", task_id_first: str = "", want_name: str = "",
-                   reuse: str = "", surface: str = "") -> dict[str, Any]:
+                   reuse: str = "", surface: str = "", new: str = "") -> dict[str, Any]:
         """名册登记（增那一支）：`{"name","role","task_id","brief","brief_written","problem"}`。
 
-        - `reuse` 给了名字 ⇒ 只推进对照表的当前调用，名册项不动（复用不是增）；
-        - 否则：`want_name` 给了就用它（已被用过的名字一律拒，含已退役的 ⇒ "已销号"），没给就用 `next_name`；
-        - 名册行与对照表行一笔写：任一写失败 ⇒ 返回 problem 并不留下半份（先写对照表再写名册；反过来会造出
-          "有名字没电话"的项）；
-        - `brief` 缺失（空 / 纯空白）而 `task` 非空 ⇒ 秘书代写：由 `brief_from_task` 从任务原文派生一句
-          （确定性、不调模型、不花钱，≤60 字、单行），登记行里那一格记 `brief_source="secretary"`、返回
-          `brief_written=True`；父给的那一句记 `brief_source="parent"`、`brief_written=False` —— 不许静默冒充
-          "父给的"（业主 2026-10-20：「简介没写，则秘书帮忙写，秘书的重要职责就是辅助通讯」）；
-        - `brief` 与 `task` 都空 ⇒ 拒（那句话是退役时认人的唯一依据，秘书不替它编 —— 这一档刻意保留）；父给的
-          `brief` 超长 / 多行 ⇒ 照旧拒（"超长属于内容，秘书不替它删"）；代写那一支自己就截在 60 字以内，所以
-          它永远不会撞上这道内容闸（否则会形成"没给简介⇒永远登记不上"的死角）。
+        ## 两个入口，语义不同（业主 2026-10-24）
+        名册项是"一个常驻子代理"的身份（名字 / 角色 / 简介 / 读写面），不是一件活。
+        一个子代理可以接好几件活，所以写入侧只有两条路：
+
+        - `reuse=<名>`："同一个子代理再接一件活"。名册项一个字不动，只在对照表里
+          追加一条调用记录（哪一件活落到了这个名字上）。合法目标 = 在册且未销号
+          （收口了也可以再接活；已销号 ⇒ 受控拒绝，见 :meth:`_reuse_refusal`）。
+        - `new=<角色>`（或 `want_name=<名>`，或两样都不给）："新建一个同类子代理"。
+          名字由秘书发号（:meth:`next_name`）：用过的最大序号 + 1，用过的名字绝不回收
+          （含已销号的）；`want_name` 点了一个用过的名字 ⇒ 受控拒绝并写清它是活跃 /
+          已收口 / 已销号。要再派一个同类子代理时用这一支，不要拿旧名字挂新活。
+
+        两个入口不许混着给（`reuse` 与 `new` / `want_name` 同时给 ⇒ 受控拒绝：那是
+        两句互相矛盾的话，猜哪一句都会替调用方改主意）。
+
+        ## 盘上落什么（`task_id` 是调用流水读数，不是归属键）
+        - 名册正文 `<父>.jsonl`：`kind="add"` 一行建项（名字、角色、简介、面、创建时间）；
+          `kind="retire"` 一行销号；
+        - 对照表 `<父>-index.jsonl`：`kind="bind"` 一条调用记录（名字 + 这一件活的编号
+          + 时间）。`task_id` / `task_name_first` 这类字段只回答"这一条/这一项是为哪件
+          活落的"，不回答"这个名册项是谁" —— 名册项的身份是 `owner` + `name`
+          （读侧按名字归组：一个节点 + N 件活，见 `webui.readers.roster_face`）。
+
+        ## 简介（业主 2026-10-20）
+        `brief` 缺失（空 / 纯空白）而 `task` 非空 ⇒ 秘书代写：由 `brief_from_task` 从
+        任务原文派生一句（确定性、不调模型、不花钱，≤60 字、单行），登记行里那一格记
+        `brief_source="secretary"`、返回 `brief_written=True`；父给的那一句记
+        `brief_source="parent"`、`brief_written=False` —— 不许静默冒充"父给的"。
+        `brief` 与 `task` 都空 ⇒ 拒（那句话是退役时认人的唯一依据，秘书不替它编）；
+        父给的 `brief` 超长 / 多行 ⇒ 照旧拒（"超长属于内容，秘书不替它删"）。
         """
         text = str(brief or "").strip()
         source = "parent"
@@ -2724,19 +2922,31 @@ class Secretary:
             return {"name": "", "role": str(role), "task_id": str(task_id),
                     "brief": text, "brief_written": source == "secretary",
                     "problem": "任务简介必须是单行、不超过 60 字（超长属于内容，秘书不替它删）"}
+        given = [key for key, value in
+                 (("reuse", reuse), ("new", new), ("want_name", want_name)) if str(value or "")]
+        if len(given) > 1:
+            return {"name": str(reuse or want_name or ""), "role": str(role),
+                    "task_id": str(task_id), "brief": text,
+                    "brief_written": source == "secretary",
+                    "problem": (f"{'、'.join(given)} 不能同时给：reuse 是「同一个子代理"
+                                "再接一件活」，new / want_name 是「新建一个同类子代理」"
+                                " —— 两句话互相矛盾，秘书不替调用方猜哪一句算数")}
+        if str(new or "") and str(new) != str(role):
+            return {"name": "", "role": str(role), "task_id": str(task_id), "brief": text,
+                    "brief_written": source == "secretary",
+                    "problem": f"new={new} 与 role={role} 对不上（新建的是哪个角色就写哪个）"}
         at = _now_iso()
         if reuse:
             name = str(reuse)
-            if not self._name_exists(owner, name):
+            refusal = self._reuse_refusal(owner, name)
+            if refusal:
                 return {"name": name, "role": str(role), "task_id": str(task_id),
-                        "problem": f"名册里没有 {name} ⇒ 不猜（复用必须父先看活跃名册）"}
-            if self._is_retired(owner, name):
-                return {"name": name, "role": str(role), "task_id": str(task_id),
-                        "problem": f"{name} 已销号（退役的名字永久不复用，业主 B1）"}
+                        "brief": text, "brief_written": source == "secretary",
+                        "problem": refusal}
             bind: dict[str, Any] = {"kind": "bind", "owner": owner, "name": name,
                                     "role": str(role), "task_id": str(task_id), "at": at}
             if source == "secretary":
-                # 复用支不写名册行 ⇒ 这一次代写的那句话也得留痕（否则"谁写的"就丢了）。
+                # 复用支不写名册项 ⇒ 这一次代写的那句话也得留痕（否则"谁写的"就丢了）。
                 # 只在代写时补这两格：父给的那一支落盘逐字不变。
                 bind.update({"brief": text, "brief_source": "secretary"})
             ok, why = append_jsonl(roster_index_path(self.root, owner), bind)
@@ -2749,8 +2959,10 @@ class Secretary:
         if want_name:
             name = str(want_name)
             if self._name_exists(owner, name):
-                problem = (f"{name} 已经用过（{'已销号' if self._is_retired(owner, name) else '在用'}）"
-                           "⇒ 受控拒绝：不许静默改名（业主 B2）")
+                status = ("已销号" if self._is_retired(owner, name) else "已收口或还在用")
+                problem = (f"{name} 已经用过（{status}）⇒ 受控拒绝：用过的名字不再发给"
+                           "另一个子代理（要新建一个同类子代理，让秘书顺延发号，"
+                           "或显式给一个没用过的名字）")
                 return {"name": name, "role": str(role), "task_id": str(task_id),
                         "problem": problem}
         else:
@@ -3070,6 +3282,10 @@ class Secretary:
                                "proposition_state": "", "proposition_reason": "",
                                "resign_required": False, "reviewed": False,
                                "stmt_id": "", "deps_written": 0, "path_groups": 0,
+                               #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
+                               #: 键一直在，值只有真写到那一格时才填 —— 拒绝那一档是空字典，
+                               #: 不拿"没走那一格"冒充"依赖不缺"。
+                               "deps_missing": {},
                                "tables": [], "washed": False, "changes": [],
                                "refused": "", "reason": "", "pending": []}
         if self.store is None:
@@ -3351,8 +3567,11 @@ class Secretary:
         """从"定理内容 + 证明过程"里扫出依赖（业主 `draft/97` §14.11 乙：B 只交这两样）。
 
         ## 路径分组（`Dependency.path_group`）：载荷给了显式的 `proof_paths`（多段可选证明，B 自己分的段）⇒
-        每段一组，下标从 1 起（组内 AND / 组间 OR，见 `draft/97` §12.1）；没给 ⇒ 把 `statement_full` +
-        `proof_text` 当一段（全归第 1 组）—— 刻意"不猜"：不按空行、不按"证明一/证明二"这种字样去猜 B 想分几段。
+        每段一组，下标从 1 起（组内 AND / 组间 OR，见 `draft/97` §12.1）；载荷给了 `proofs`（多证明清单，
+        业主 2026-10-22）⇒ 一份证明一组，组下标就是它在清单里的位次，并且这一组的每一步都带上它的
+        `proof_no`（于是 `used_by` 落成 `stmt:<号>#pN`，第 2 份及以后的依赖面不再与 #p1 混在一起）。
+        两样都没给 ⇒ 把 `statement_full` + `proof_text` 当一段（全归第 1 组）—— 刻意"不猜"：
+        不按空行、不按"证明一/证明二"这种字样去猜 B 想分几段。
         ## 三态（`state`）：
         | 取值 | 什么时候 | 为什么必须分开 |
         |---|---|---|
@@ -3365,15 +3584,27 @@ class Secretary:
         from . import textutil as T   # 惰性：引用扫描的唯一实现
 
         raw_paths = body.get("proof_paths")
-        if isinstance(raw_paths, (list, tuple)) and raw_paths:
-            paths = [str(p or "") for p in raw_paths]
+        #: 一条路径 = `(proof_no, 要扫的正文)`；`proof_no=0` 表示"这一笔没说它是第几份证明"，
+        #: 于是 `_write_dep_steps` 照旧按 `body["proof_no"]`（缺省 canonical）落 `used_by`。
+        #:
+        #: 多证明清单排在 `proof_paths` 之前：`proofs` 是"这条定理有几份证明"的声明面，
+        #: 而 `proof_paths` 是"某一份证明里有几条可选路径"的声明面 —— 两者都给时，
+        #: 一份证明一组比"整份证明被切成几段"更不容易把依赖挂错证明号。
+        proof_plan = self._proof_dep_plan(body)
+        if proof_plan:
+            paths = [text for _no, text in proof_plan]
+        elif isinstance(raw_paths, (list, tuple)) and raw_paths:
+            proof_plan = [(0, str(p or "")) for p in raw_paths]
+            paths = [text for _no, text in proof_plan]
         else:
-            paths = [str(body.get("statement_full") or "") + "\n" + str(body.get("proof_text") or "")]
+            proof_plan = [(0, str(body.get("statement_full") or "") + "\n"
+                           + str(body.get("proof_text") or ""))]
+            paths = [text for _no, text in proof_plan]
         groups: list[list[dict[str, Any]]] = []
         unmappable: list[dict[str, str]] = []
         seen_unmappable: set[str] = set()
         found = 0
-        for gi, text in enumerate(paths, 1):
+        for gi, (plan_no, text) in enumerate(proof_plan, 1):
             steps: list[dict[str, Any]] = []
             for ref in T.find_citations(text):
                 found += 1
@@ -3389,19 +3620,68 @@ class Secretary:
                                     "列在这里点名（不许静默丢）")})
                     continue
                 field, dep_kind = mapping
-                steps.append({"kind": dep_kind, "label": ref["raw"], "code": ref["code"],
-                              "table": ref["table"], field: ref["code"], "path_group": gi,
-                              "_from": "proof_scan"})
+                #: 路径组：多证明清单那一档里"一份证明 = 一条可选路径"，于是组号就是
+                #: 证明号（第 2 份证明的依赖落在 `path_group=2`）；老写法（没有 `proofs`）
+                #: 仍按段落下标，`proof_paths` 的第 N 段就是第 N 组 —— 老读数逐字不变。
+                group_no = int(plan_no) if plan_no >= 1 else gi
+                step = {"kind": dep_kind, "label": ref["raw"], "code": ref["code"],
+                        "table": ref["table"], field: ref["code"], "path_group": group_no,
+                        "_from": "proof_scan"}
+                if plan_no >= 1:
+                    # 这一组属于第几份证明：`_write_dep_steps` 据此落
+                    # `used_by="stmt:<号>#pN"`（第 1 份不加尾巴，老写法逐字不变）。
+                    step["proof_no"] = int(plan_no)
+                steps.append(step)
             if steps:
                 groups.append(steps)
         if found:
             state = "from_proof"
-        elif "proof_text" in body:
+        elif "proof_text" in body or body.get("proofs"):
             state = "none_in_proof"
         else:
             state = "unknown"
         return {"state": state, "groups": groups, "unmappable": unmappable,
                 "paths": len(paths), "refs": found}
+
+    @staticmethod
+    def _proof_dep_plan(body: Mapping[str, Any]) -> list[tuple[int, str]]:
+        """多证明载荷 ⇒ "一份证明一组"的扫描计划（`[(proof_no, 正文)]`，按证明号升序）。
+
+        为什么要这一格：第 2 份及以后的证明正文原先根本不进扫描（`_scan_proof_deps` 只看
+        `statement_full` + `proof_text`），于是 `proofs=[#p1,#p2,#p3]` 交上去之后
+        依赖面只有 #p1 那一条 —— 第 2、3 份证明引用的东西静默不进依赖图，
+        而 `used_by="stmt:#pN"` 也就一次都没被写出来过（真机 sylow3 正是这个读数：
+        `proof_no` 全 1、依赖 0 行）。
+
+        三态：
+        - 载荷没有 `proofs`（或不是列表 / 空）⇒ 空列表 = "这一笔不是多证明"，
+          调用方照老路把整份 `statement_full + proof_text` 当一段（老读数逐字不变）；
+        - `proofs` 里有条目而 `proof_text` 非空 ⇒ #p1 用 `proof_text` 的正文
+          （它是 canonical 的唯一权威），其余按清单里的号与正文；
+        - 条目认不出证明号 / 正文为空 ⇒ 跳过那一条（不猜它是第几份；`B.register_statement`
+          的预检已经会整笔拒收，这里只是不让脏载荷把扫描带崩）。
+        """
+        raw = body.get("proofs")
+        if not isinstance(raw, (list, tuple)) or not raw:
+            return []
+        plan: dict[int, str] = {}
+        for item in raw:
+            if not isinstance(item, Mapping):
+                continue
+            try:
+                no = int(item.get("proof_no") or 0)
+            except (TypeError, ValueError):
+                continue
+            text = str(item.get("text") or item.get("proof_text") or "")
+            if no < 1 or not text.strip():
+                continue
+            plan[no] = text
+        if not plan:
+            return []
+        canon = str(body.get("proof_text") or "")
+        if canon.strip():
+            plan[1] = canon
+        return [(no, plan[no]) for no in sorted(plan)]
 
     def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
                              force_new: bool, out: dict[str, Any]) -> dict[str, Any]:
@@ -3578,8 +3858,14 @@ class Secretary:
             if refused_concepts:
                 out["concepts_refused"] = refused_concepts[:20]
             out["concept_quota"] = quota.reading()
-            self._write_dep_steps(tx, steps, stmt_id=stmt_id, body=body)
+            dep_count = self._write_dep_steps(tx, steps, stmt_id=stmt_id, body=body)
             written.append("dependencies")
+            #: 依赖面到底建起来没有：带证明正文而一条依赖都没落 ⇒ 这一格说 `missing`
+            #: （改前只有返回值里的 `deps_written=0`，而没有任何一格问过这件事 ——
+            #: 真机 sylow3 七条命题、依赖全表 0 行，就是这样静默过去的）。
+            out["deps_missing"] = _deps_missing_reading(
+                proof_text=body.get("proof_text") or "", deps_written=dep_count,
+                derived_from=body.get("derived_from") or (), stmt_id=stmt_id, scan=scan)
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
                    row=row.to_dict(), tables=written, deps_written=len(steps),
                    path_groups=len(groups), pending_concepts=pending_concepts)
@@ -3654,7 +3940,9 @@ class Secretary:
         多证明模型（业主 2026-10-22）：这条命题的依赖属于它的第几条证明。载荷没写
         ⇒ canonical（第 1 条）⇒ 生成出来的 `used_by` 与改前逐字相同
         （`proofloc.used_by_of` 对第 1 条不写 `#pN` 尾巴）。
-        `path_group` 一个字没动：它说的是"第几条路径"，与"第几条证明"是两维。
+        `path_group` 由扫描那一格给：老写法下它是"第几条路径"（`proof_paths` 的段落下标），
+        多证明清单下它是"第几份证明"（组内 AND / 组间 OR 的语义不变：几份证明就是几条
+        可选的路径）。
         """
         count = 0
         for step in steps:
@@ -3685,6 +3973,79 @@ class Secretary:
             tx.upsert("dependencies", dep.to_dict(), note="record_statement:dependency")
             count += 1
         return count
+
+    def record_proof_deps(self, stmt_id: str,
+                          entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+        """把"已经挂到某条命题上的第 N 份证明"的依赖写成 `dependencies` 行。
+
+        ## 为什么需要第二个入口（同一个写入方，同一套判据）
+        `record_statement` 只看得见这一笔交上来的 `proof_text`（#p1）。第 2 份及以后的
+        证明是 `B.register_statement` 在 `_attach_proofs` 里挂到既有行上的，那一笔只动
+        `statements`（B 的写集里没有 `dependencies`）⇒ 那几份证明引用的东西原先一条都
+        不进依赖图，`used_by="stmt:#pN"` 因此一次都没被写出来过（真机 sylow3：
+        依赖 0 行、`proof_no` 全 1）。这一格是那条路的补写口：判据（扫引用 / 悬空边点名 /
+        "四选一"来源）全部复用 `_scan_proof_deps` 与 `_resolve_write_steps`，一行都没有
+        另写一份 —— 两条路上"同一条悬空引用怎么处置"必须是同一个答案。
+
+        三态（不进依赖表的两种原因分开）：
+        - `checked=True` ＋ `deps_written>0` ⇒ 写成了；
+        - `checked=True` ＋ `deps_written=0` ⇒ 扫了，这几份证明确实没有在册引用
+          （自足证明合法，读数在 `deps_missing` 里）；
+        - `checked=False` ⇒ 没写（没有 store / 依赖指着不在册的号 / 落盘失败），`reason` 说清。
+        """
+        out: dict[str, Any] = {"checked": False, "stmt_id": str(stmt_id or ""),
+                               "deps_written": 0, "path_groups": 0, "proof_nos": [],
+                               "deps_dangling": [], "deps_unmappable": [],
+                               "deps_missing": {}, "refused": "", "reason": ""}
+        proofs = []
+        for item in (entries or ()):
+            if not isinstance(item, Mapping):
+                continue
+            try:
+                no = int(item.get("proof_no") or 0)
+            except (TypeError, ValueError):
+                continue
+            text = str(item.get("text") or item.get("proof_text") or "")
+            if no < 1 or not text.strip():
+                continue
+            proofs.append({"proof_no": no, "text": text})
+        out["proof_nos"] = [int(e["proof_no"]) for e in proofs]
+        if not proofs:
+            out.update(checked=False,
+                       reason="没有可扫的证明正文（第 2 份及以后的证明清单是空的）")
+            return out
+        if self.store is None:
+            out.update(refused="secretary_unavailable",
+                       reason="这一名秘书没有 store ⇒ 依赖写不了")
+            return out
+        body = {"proofs": proofs}
+        scan = self._scan_proof_deps(body)
+        out["deps_unmappable"] = list(scan["unmappable"])
+        out["path_groups"] = len(scan["groups"])
+        try:
+            with self.store.tx(*STATEMENT_WRITE_TABLES, actor=f"secretary-{self.role}",
+                               note="record_proof_deps") as tx:
+                if tx.find("statements", stmt_id=out["stmt_id"]) is None:
+                    out.update(refused="unknown_statement",
+                               reason=(f"`statements` 里没有 {out['stmt_id']} ⇒ 这几份证明的"
+                                       "依赖没有落点（清单挂不上时也没有行可挂）"))
+                    return out
+                steps = self._resolve_write_steps(tx, body, out, scan["groups"])
+                if steps is None:
+                    return out
+                out["deps_written"] = self._write_dep_steps(tx, steps, stmt_id=out["stmt_id"],
+                                                            body=body)
+        except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
+            out.update(checked=False, refused="write_failed",
+                       reason=f"依赖落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
+            return out
+        out["checked"] = True
+        out["deps_missing"] = _deps_missing_reading(
+            proof_text="\n".join(str(e["text"]) for e in proofs),
+            deps_written=int(out["deps_written"] or 0),
+            stmt_id=out["stmt_id"], proof_no=int(proofs[0]["proof_no"]),
+            scan={"refs": int(scan.get("refs") or 0)})
+        return out
 
     def _same_proposition_candidate(self, tx: Any, full: str, *,
                                     kind: str = "") -> dict[str, Any] | None:
@@ -3859,11 +4220,11 @@ class Secretary:
                                "（旧正文进行的 proof_history），并要求 V 重签"))
             return out
         # ---- 落成第 N 份证明（或 canonical 那一格还是空的时候的 #p1）
-        if not VR.proof_text_of(row, 1).strip():
+        canonical_was_empty = not VR.proof_text_of(row, 1).strip()
+        if canonical_was_empty:
+            # 先登记命题、后补证明：这一份就是 #p1，写 canonical 那一格（不进清单）。
             row["proof_text"] = proof
             proof_no = 1
-            written = ["statements"]
-            canonical_replaced = False
         else:
             proof_no = max(int(no) for no, _ in existing) + 1
             listed = [dict(p) if isinstance(p, Mapping) else p
@@ -3871,8 +4232,7 @@ class Secretary:
             listed.append({"proof_no": proof_no, "text": proof,
                            "created_at": S.now_iso()})
             row[VR.PROOFS_KEY] = listed
-            written = ["statements"]
-            canonical_replaced = False
+        written = ["statements"]
         # 变体留痕：这一笔是"同一条命题的另一种写法"，盘上要读得出"它凭什么并进来"。
         # 有界（只留最近 20 条）：这是读数，不是账本；无界列表会让一行无限长大。
         matches = [dict(m) for m in (row.get("_proposition_matches") or [])
@@ -3890,11 +4250,16 @@ class Secretary:
         if deps_written:
             written.append("dependencies")
         tx.upsert("statements", row, note="record_statement:merged_proof")
+        out["deps_missing"] = _deps_missing_reading(
+            proof_text=proof, deps_written=deps_written,
+            derived_from=body.get("derived_from") or (), stmt_id=sid,
+            proof_no=proof_no,
+            scan={"refs": sum(len(g) for g in (groups or []))})
         out.update(checked=True, created=False, duplicate=False, merged=True,
                    merged_into=sid, stmt_id=sid, proof_no=proof_no,
                    matched_by=basis, similarity=similarity, same_kind=[],
                    tables=written, row=row, deps_written=deps_written,
-                   path_groups=len(groups or []), canonical_written=canonical_replaced,
+                   path_groups=len(groups or []), canonical_written=canonical_was_empty,
                    reason=(f"并入已有命题 stmt:{sid}，作为第 {proof_no} 份证明"
                            f"（依据：{self._basis_text(basis, similarity)}）；"
                            f"这一份的依赖落在 `used_by=\"stmt:{sid}#p{proof_no}\"`"
@@ -4464,6 +4829,129 @@ class Secretary:
         out["why"] = "" if out["name"] else "父的名册名读不到（它记在祖父的名册里）"
         return out
 
+    def child_counts(self, *, owner: str = "",
+                     snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """两个读数：子代理数 / 活跃子代理数（本方法是它们唯一的实现）。
+
+        ## 两个数各自的定义（业主 2026-10-26 裁定，逐字见 `conductor` 那两个常量）
+        - 子代理数 = 名册里还没销号的名册项数（在册、未退役）；
+        - 活跃子代理数 = 其中"工作没做完还在做"的数量，口径只有一条：
+          `active(node) = 自身有未收口的任务 or 任一直接子 active`（`conductor.activity_snapshot`
+          是那一处的实现），所以"在等下级"也算活跃。
+
+        两个数必须各自出现、不许相加也不许互相代替：前者回答"这一支还有几个名字在用"，
+        后者回答"其中几个还在干活或还在等"。折成一个数之后，"名册只增不减"与
+        "活都干完了"会长得一模一样。
+
+        ## 范围
+        `owner` 给了 ⇒ 只看那一个父的名册；不给 ⇒ 全工作区（`roster_owners` 扫
+        `out/roster/<父>.jsonl`，三种旁支排除）。`by_owner` 是同一个口径的分父读数。
+
+        ## 三态与"判不了"（不许折平）
+        名册读不成 / 台账读不成 ⇒ `checked=False` + `reason`，两个数都是 `None`
+        （`0` 是"名册空了"这个很强的结论，而"没读成"什么都不说）。
+        某一项的名册行读得出来、但台账里没有它那一行 ⇒ 它的活跃判不了 ⇒ 进 `unjudged`
+        且 `complete=False`，同时 `active_child_count` 只数判得了的那些（读数里
+        `complete` 那一格就是这件事的显式声明，不许靠"大概都判得了"糊过去）。
+
+        ## `waiting_only`（病态形状）
+        每一项 `active and not self_busy` 的节点都进 `waiting_only`，带一句人话
+        「它自己不忙，是在等 D2（active）」。那不是错，但父必须看得见 ——
+        这一支的活积在下级身上，而中间那几层只是挂着名字在等。
+        """
+        from .conductor import (ACTIVE_CHILD_COUNT_KEY, CHILD_COUNT_KEY,
+                                CHILD_COUNT_LABELS)
+
+        labels = dict(CHILD_COUNT_LABELS)
+        out: dict[str, Any] = {"checked": False, "reason": "", "owner": str(owner or ""),
+                               CHILD_COUNT_KEY: None, ACTIVE_CHILD_COUNT_KEY: None,
+                               "labels": labels, "waiting_only": [], "unjudged": [],
+                               "complete": False, "by_owner": {}, "bad_roster_lines": [],
+                               "note": ""}
+        want = str(owner or "")
+        if want:
+            owners, why_dir = [want], ""
+        else:
+            owners, why_dir = roster_owners(self.root)
+        if why_dir:
+            out["reason"] = why_dir
+            return out
+        items: list[dict[str, Any]] = []
+        bad_lines: list[str] = []
+        for own in owners:
+            rows, bad = self.roster_rows(own)
+            bad_lines.extend(str(x) for x in bad)
+            for it in rows:
+                if it.get("retired"):
+                    continue
+                items.append({"owner": own, "name": str(it.get("name") or ""),
+                              "role": str(it.get("role") or ""),
+                              "task_id": str(it.get("task_id") or "")})
+        out["bad_roster_lines"] = bad_lines
+        if bad_lines and not items:
+            out["reason"] = (f"名册有 {len(bad_lines)} 行读不出来、且没有任何一项读得出来："
+                             f"{bad_lines[0]}")
+            return out
+        cond = self._conductor()
+        if cond is None:
+            out["reason"] = "没有 store ⇒ 读不到台账（活跃子代理数判不了）"
+            return out
+        snap = dict(snapshot) if snapshot is not None else cond.activity_snapshot()
+        if not snap.get("checked"):
+            out["reason"] = f"台账读不成（{snap.get('reason')}）⇒ 活跃子代理数判不了"
+            return out
+        by_task = dict(snap.get("by_task") or {})
+        per_owner: dict[str, dict[str, int]] = {}
+        active_count = 0
+        waiting: list[dict[str, Any]] = []
+        unjudged: list[dict[str, Any]] = []
+        for it in items:
+            slot = per_owner.setdefault(it["owner"], {CHILD_COUNT_KEY: 0,
+                                                      ACTIVE_CHILD_COUNT_KEY: 0})
+            slot[CHILD_COUNT_KEY] = int(slot[CHILD_COUNT_KEY]) + 1
+            tid = it["task_id"]
+            cell = by_task.get(tid)
+            if cell is None:
+                unjudged.append({"owner": it["owner"], "name": it["name"],
+                                 "task_id": tid,
+                                 "why": "台账里没有它那一行 ⇒ 它有没有未收口的活判不了"})
+                continue
+            if not cell.get("active"):
+                continue
+            active_count += 1
+            slot[ACTIVE_CHILD_COUNT_KEY] = int(slot[ACTIVE_CHILD_COUNT_KEY]) + 1
+            if not cell.get("waiting_only"):
+                continue
+            kids = [str(k) for k in (cell.get("waiting_for") or [])]
+            wait_names: list[str] = []
+            for k in kids:
+                nm, _why = self.name_of(owner=tid, task_id=k)
+                if nm:
+                    wait_names.append(nm)
+                else:
+                    krow = by_task.get(k) or {}
+                    wait_names.append(f"{krow.get('role') or '?'}（{k}）")
+            waiting.append({"owner": it["owner"], "name": it["name"],
+                            "role": it["role"], "task_id": tid,
+                            "waiting_for": kids, "for_names": wait_names,
+                            "note": ("它自己不忙，是在等 " + "、".join(wait_names)
+                                     + "（active）")})
+        note = (f"{labels[CHILD_COUNT_KEY]}={len(items)}，"
+                f"{labels[ACTIVE_CHILD_COUNT_KEY]}={active_count}")
+        if waiting:
+            note += f"（其中 {len(waiting)} 个靠等下级才活跃）"
+        if unjudged:
+            note += (f"；有 {len(unjudged)} 项判不了活跃"
+                     "（台账里没有它那一行）⇒ 活跃子代理数只数了判得了的那些")
+        out.update({"checked": True, "reason": "",
+                    CHILD_COUNT_KEY: len(items),
+                    ACTIVE_CHILD_COUNT_KEY: active_count,
+                    "waiting_only": waiting, "unjudged": unjudged,
+                    "complete": not unjudged,
+                    "by_owner": {k: dict(v) for k, v in sorted(per_owner.items())},
+                    "note": note})
+        return out
+
     def roster_view(self, *, owner: str, scope: str = "self",
                     limit: int = 20) -> dict[str, Any]:
         """名册视图（只读，不许修补 —— I-15）：`{"checked","rows","more","reason","diagnostics"}`。
@@ -4483,7 +4971,18 @@ class Secretary:
         ## 逐行 diagnostic（不再一行坏就整份拒）：改前名册里有一行读不出来 ⇒ `{"checked": False, "rows": []}`
         （整体拒）。DSH 的 `list-agents.js:30-47` 是逐行报 `corrupt/unsupported/unavailable`。现在照它：好行照常
         渲染，坏行逐条落进 `diagnostics`（带行号与类别）。只有一种情形仍然整体拒：一条好行都没有而坏行有（三态纪律挡的正是"名册是空的"与"名册读不成"被折成同一句话）。
+        ## 两个读数各占一格（业主 2026-10-26）
+        这一份视图顶上带 `child_count`（子代理数 = 名下未销号的名册项数）与
+        `active_child_count`（活跃子代理数 = 其中"工作没做完还在做"的数量，含靠等下级才
+        活跃的那些），另有一格 `counts`（`Secretary.child_counts` 的整份读数：`owner` /
+        `waiting_only` / `unjudged` / `note`）。两个数不许相加、不许互相代替 ——
+        口径与三态都在 :meth:`child_counts` 里，这里只转发。每一行另带 `active` /
+        `waiting_only` / `waiting_note`：`active` 是"按继承口径算，它算不算活跃"，
+        与 `state`（它自己此刻在不在跑）是两件事（"在等"也算活跃）。
+        读不成 ⇒ 两个数都是 `None`（不是 0）。
         """
+        from .conductor import ACTIVE_CHILD_COUNT_KEY, CHILD_COUNT_KEY
+
         cond = self._conductor()
         rows, bad = self.roster_rows(owner)
         diagnostics = [_diagnose_line(line) for line in bad]
@@ -4491,24 +4990,30 @@ class Secretary:
         # 改前这一份视图只有"我名下的子代理"—— 父是谁只能从 `AgentLoop.parent_task_id`
         # 那个内存字段读到，而名册自己（盘上那一份）答不上来。现在六条 return 都带上它。
         parent = self.parent_of(owner=owner)
+
+        def _fail(reason: str) -> dict[str, Any]:
+            """这一份视图"没查成"的统一形状（两个读数都是 None，不是 0）。"""
+            return {"checked": False, "rows": [], "more": 0, "scope": scope,
+                    "diagnostics": diagnostics, "parent": parent, "reason": reason,
+                    "counts": None, CHILD_COUNT_KEY: None,
+                    ACTIVE_CHILD_COUNT_KEY: None}
+
         if not rows and bad:
-            return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics, "parent": parent,
-                    "reason": f"名册有 {len(bad)} 行读不出来、且没有一行读得出来：{bad[0]}"}
+            return _fail(f"名册有 {len(bad)} 行读不出来、且没有一行读得出来：{bad[0]}")
         if cond is None:
-            return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics, "parent": parent,
-                    "reason": "没有 store ⇒ 读不到台账（状态判不了）"}
+            return _fail("没有 store ⇒ 读不到台账（状态判不了）")
         try:
             ready = cond.retire_ready(owner)
         except Exception as exc:  # noqa: BLE001
-            return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics, "parent": parent,
-                    "reason": f"就绪读数没读成（{type(exc).__name__}: {exc}）"}
+            return _fail(f"就绪读数没读成（{type(exc).__name__}: {exc}）")
         if not ready.get("checked"):
-            return {"checked": False, "rows": [], "more": 0, "scope": scope,
-                    "diagnostics": diagnostics, "parent": parent,
-                    "reason": f"就绪读数没读成（{ready.get('reason')}）"}
+            return _fail(f"就绪读数没读成（{ready.get('reason')}）")
+        # 活跃读数只取一次（逐行调 `active_reading` 会把同一张台账读 N 遍）：
+        # `counts` 与逐行那三格共用这一份快照。
+        snap = cond.activity_snapshot()
+        counts = self.child_counts(owner=owner, snapshot=snap)
+        activity = dict(snap.get("by_task") or {}) if snap.get("checked") else {}
+        name_of_tid = {str(r.get("task_id") or ""): str(r.get("name") or "") for r in rows}
         by_child = {str(r["task_id"]): r for r in ready.get("ready", [])}
         # 一份手稿读数，逐行取"它最近报了什么"（每行读一次会把名册变成 N 次全表读）。
         reports: dict[str, str] = {}
@@ -4541,6 +5046,13 @@ class Secretary:
                 "status": _status_enum(facts, retired=bool(r.get("retired"))),
                 "in_flight": int(facts.get("in_flight") or 0),
                 "last_reading": reports.get(tid, ""),
+                # 活跃按继承口径算（业主 2026-10-26：有活跃的下级，自己已收口也算活跃），
+                # 与 `state` 是两件事；`waiting_note` 是"靠等"的那一句人话。
+                "active": bool((activity.get(tid) or {}).get("active")),
+                "waiting_only": bool((activity.get(tid) or {}).get("waiting_only")),
+                "waiting_note": str((cond.active_reading(
+                    tid, names=name_of_tid, snapshot=snap).get("note") or "")
+                    if snap.get("checked") else ""),
             }
             if scope == "descendants":
                 row["parent"] = parent_name
@@ -4551,7 +5063,9 @@ class Secretary:
             out.append(row)
         more = max(0, len(out) - int(limit))
         return {"checked": True, "rows": out[:int(limit)], "more": more, "scope": scope,
-                "diagnostics": diagnostics, "parent": parent, "reason": ""}
+                "diagnostics": diagnostics, "parent": parent, "reason": "",
+                "counts": counts, CHILD_COUNT_KEY: counts.get(CHILD_COUNT_KEY),
+                ACTIVE_CHILD_COUNT_KEY: counts.get(ACTIVE_CHILD_COUNT_KEY)}
 
     def _roster_targets(self, *, owner: str, rows: list[dict[str, Any]], scope: str,
                         cond: Any) -> list[dict[str, Any]]:
@@ -4668,7 +5182,8 @@ class Secretary:
             return {"checked": False, "rows": [],
                     "reason": f"{type(exc).__name__}: {exc}"}
 
-    def retire(self, *, owner: str, name: str, by_task_id: str = "") -> dict[str, Any]:
+    def retire(self, *, owner: str, name: str, by_task_id: str = "",
+               reason: str = "") -> dict[str, Any]:
         """退役（业主 §1.9 的三分支，`draft/90` §1.9 逐字）。返回：
 
         `{"ok","action":"retired"|"reported"|"refused","report":{…},"why":[…], "reading":{…}}`
@@ -4678,6 +5193,12 @@ class Secretary:
         - `waiting_no_children` ⇒ `retired`：写退役事件 + 销号名单 + 对照表标退役 +
           `conductor.note_edge_release`（父侧那一笔幂等落痕）；
         - 未登记 / 读不成 / 已销号 ⇒ `refused`（没读成 ≠ 可以退役）。
+
+        ## `reason`（D-59）：父发起销号时那一句理由，逐字落进三份台账
+        销号是父的决定，而"为什么"只有父知道。改前这一句没有落点：`retired` 三行
+        只记了 `branch` / `at` / `by`，于是"这个子是怎么退场的"在盘上永远读不回来
+        （`by` 是编号，不是理由）。现在它原样进名册那一行、对照表那一行与销号名单那一行
+        （`reason` 键，缺省空串 ⇒ 这一段对既有调用方的落盘行只多一个键，不改任何既有键）。
         """
         cond = self._conductor()
         if cond is None:
@@ -4736,13 +5257,15 @@ class Secretary:
         wrote_roster, why_r = append_jsonl(roster_path(self.root, owner),
                                            {"kind": "retire", "owner": owner, "name": str(name),
                                             "task_id": tid, "branch": branch, "by": str(by_task_id),
+                                            "reason": str(reason or ""),
                                             "reading": reading, "at": at})
         wrote_index, why_i = append_jsonl(roster_index_path(self.root, owner),
                                           {"kind": "retire", "owner": owner, "name": str(name),
-                                           "task_id": tid, "at": at})
+                                           "task_id": tid, "reason": str(reason or ""), "at": at})
         wrote_retired, why_x = append_jsonl(retired_path(self.root, owner),
                                             {"owner": owner, "name": str(name), "task_id": tid,
                                              "role": str(row.get("role") or ""), "at": at,
+                                             "reason": str(reason or ""),
                                              "branch": branch})
         if not (wrote_roster and wrote_index and wrote_retired):
             return {"ok": False, "action": "refused", "report": {},
@@ -4775,8 +5298,13 @@ class Secretary:
         return "", f"对照表里没有 {name!r}（未登记或已退役）"
 
     def _name_exists(self, owner: str, name: str) -> bool:
-        rows, _bad = self.roster_rows(owner)
-        return any(str(r.get("name") or "") == str(name) for r in rows)
+        """这个名字在这个父名下用过没有（名册正文 + 对照表 + 销号名单，三份都算）。
+
+        为什么要三份（D-66）：名册正文缺行时，一个用过的名字可能只在对照表的调用
+        记录里、或只在销号名单里；只读正文会把它算成空号，于是同一个名字被发给
+        另一个子代理。名字是身份，"用过"是永久事实。
+        """
+        return str(name) in self._used_names(owner)
 
     def _is_retired(self, owner: str, name: str) -> bool:
         rows, _bad = self.retired_names(owner)

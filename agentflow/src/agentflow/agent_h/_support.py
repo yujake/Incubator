@@ -3,8 +3,13 @@
 若审校者能直接改稿，它就同时是"发现者"与"修正者"，于是"发现问题"与"掩盖问题"在结构上无法区分 —— 这不是分工洁癖，而是"审校记录能不能被信任"的前提。把这条做成结
 构约束（而不是写在提示词里），是它唯一可靠的落地方式。
 ## "H 只读"在这里由三件事共同保证（缺一条就只剩口号）
-1. 工具面只读：`install_h_tools()` 只把 `side_effect in ("none","read")`的工具放进 H 的自由工具箱，并在构造时断言
-这一点（拿到不合规的注册表就 fail-closed 拒绝启动）。被拒的写工具会记进 `registry.refused_write_tools`，不静默丢弃。 2. 落库
+1. 工具面只读：`install_h_tools()` 只把 `side_effect in ("none","read")` 的工具、以及
+`tools.UNIVERSAL_TOOLS` 里登记过的通用能力放进 H 的自由工具箱（判据本体是
+`h_free_toolbox_accepts`），并在构造时断言这一点（拿到不合规的注册表就 fail-closed 拒绝启动）。
+为什么通用能力也在里面：业主 2026-10-24 裁定「通用能力根本不该出现谁能用这个说法」——
+`clock.timer_start` 据实是 `write_local`，而它必须对包括 H 在内的所有角色可用。
+硬约束没变：通用能力的登记写集只许落在通信/簿记类表上，碰知识表的一律不收。
+被拒的写工具会记进 `registry.refused_write_tools`，不静默丢弃。 2. 落库
 代理被钉死：H 唯一会写盘的动作（写 `review_findings`、改 `documents.status`）走的是显式的"代理注册表"（`self.writers`，
 `include_writers=True`），而这两个工具的落点固定：不碰 `claims`，不碰任何知识表。 3. 可核对的运行期断言：审校前后 
 `concepts/relations/literature` 逐字节不变；`documents.json` 的唯一变化点是 `status`（连 `updated_at`
@@ -20,10 +25,11 @@ from .. import schema as S
 from ..store import Store
 from ..tools import READONLY_CALL_EXCEPTIONS, SIDE_EFFECTS_WRITE, build_registry
 from ..tools import review_tools as RV
+from ..tools import universal_tool_is_bookkeeping_only
 from ..tools.base import ToolRegistry, ToolSpec
 from ..tools.doc_tools import CROSS_CHECK_DISCLAIMER
 from ..agentspec import AgentBrief, AgentSpec
-__all__ = ["AgentH", "ReviewError", "filter_readonly_h_surface", "install_h_tools"]
+__all__ = ["AgentH", "ReviewError", "filter_readonly_h_surface", "h_free_toolbox_accepts", "install_h_tools"]
 class ReviewError(RuntimeError):
     """审校流程本身失败（工具未接线 / 注册表不合规 / 稿件不存在）。"""
 _UNSPECIFIED: Any = object()
@@ -31,14 +37,33 @@ _H_READONLY_SIDE_EFFECTS = ("none", "read")
 _H_WRITABLE_TOOLS: tuple[str, ...] = tuple(
     name for name, _why in READONLY_CALL_EXCEPTIONS["H"]
 )
+def h_free_toolbox_accepts(name: str, side_effect: str) -> bool:
+    """H 的自由工具箱收不收这件工具（"H 只读"这条判据的本体，三处共用一份）。
+
+    ## 判据是两条，不是一条
+    1. `side_effect in ("none","read")` —— 不写我们拥有的东西的工具，H 可以随便反复调；
+    2. 或者它是通用能力（`tools.UNIVERSAL_TOOLS` 里登记、且登记的写集只落在通信/簿记类表上）。
+
+    第 2 条是 2026-10-24 业主裁定（逐字：「通用能力根本不该出现谁能用这个说法」）的落地：
+    `clock.timer_start` 据实是 `write_local`（它落 `tasks` 的 notice 行与 `out/clock` 的状态），
+    而它同时是所有人都能拿的通用工具 —— 旧判据只看 `side_effect`，于是 H 的自由工具箱
+    会把它当写工具拒绝掉，而"所有角色都能用"这句话在 H 这里就成了空话。
+    判据仍然不看"谁能用"：它看的是"这件工具写不写知识表"。写知识表的工具
+    （`table.update` / `doc.build_document` / …）`universal_tool_is_bookkeeping_only()`
+    返回假，照旧被拒 —— 门没有被整扇打开。
+    """
+    if side_effect in _H_READONLY_SIDE_EFFECTS:
+        return True
+    return universal_tool_is_bookkeeping_only(name)
 def filter_readonly_h_surface(
     specs: Iterable[ToolSpec],
 ) -> tuple[list[ToolSpec], list[dict]]:
     """把 H 的角色面裁成"只读面"，并把被拒的写工具记录下来。
     ## 这一层与工具层那一层的关系（`roles-7`：两处注释此前互相否认）
     工具层已经有一道只读过滤：`tools/base.ToolRegistry._role_surface` 在角色命中`READ_ONLY_ROLES` 时剥掉"写副作用 或 
-    `external == "exec"`"的工具 —— 它看两根轴。本函数是 H 装配路径上的第二道，判据更窄：只看 `side_effect` 属不属于`_H_READONLY_SIDE_EFFECTS`（`none`
-    / `read`）—— 它不看 `external`，也不认 `unknown`。于是在"写"这根轴上本层不会比工具层更宽；子集关系由下面那条可执行的断言钉住（不是只写在注释里），并写明它唯一可能不成立的那一
+    `external == "exec"`"的工具 —— 它看两根轴。本函数是 H 装配路径上的第二道，判据见 `h_free_toolbox_accepts`：
+    `side_effect` 属不属于 `none` / `read`，或者它是不是通用能力 —— 它不看 `external`，也不认 `unknown`。
+    于是在"写"这根轴上本层不会比工具层更宽；子集关系由下面那条可执行的断言钉住（不是只写在注释里），并写明它唯一可能不成立的那一
     格（`side_effect` 属 none/read 加 `external == "exec"` 加 roles 含 H）。
     本层仍然必须保留，理由不是"它今天拦到了什么"，而是两个报告字段只在它这里有：`refused_write_tools`（显式拒绝清单）与 `raw_surface_size`（裁剪前的面有多大）。有了它们，
     "静默丢弃"与"显式拒绝"在报告里才是两件事（FC-08）。
@@ -52,14 +77,14 @@ def filter_readonly_h_surface(
     kept: list[ToolSpec] = []
     refused: list[dict] = []
     for s in items:
-        if s.side_effect in _H_READONLY_SIDE_EFFECTS:
+        if h_free_toolbox_accepts(s.name, s.side_effect):
             kept.append(s)
         else:
             refused.append(
                 {
                     "name": s.name,
                     "side_effect": s.side_effect,
-                    "reason": "H 的工具面必须全部 none/read：能改表的工具会让审校者同时成为修正者",
+                    "reason": "H 的工具面必须全部 none/read 或通用能力：能改表的工具会让审校者同时成为修正者",
                 }
             )
 

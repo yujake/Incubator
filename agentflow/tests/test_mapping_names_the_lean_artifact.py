@@ -2,8 +2,9 @@
 """论文对应表里的 Lean 两格（业主 2026-10-22 追加）。
 
 业主原话：「有 Lean 产出时，还要写明 Lean 程序的位置与它验的是哪条定理/哪条证明」。
-两格的字段：`lean_file`（验它的那份源码在论文包里哪个相对路径）与
-`lean_target`（那份源码里哪个声明的名字）。
+两格的字段：`lean_file`（验它的那份源码在哪：项目根相对路径 `code/formal/000004.lean`
+（L 的落点）或论文包内相对路径 `formal/000004.lean`，两个根都解析 —— 2026-10-25 第 4 条）
+与 `lean_target`（那份源码里哪个声明的名字）。
 
 ## 这一组守什么（八条，逐条对应业主给的口径）
 
@@ -12,7 +13,7 @@
 2. 开关开、盘上有 `.lean`，两条定理行都给了两格且名字真的在那份源码里 => `pass`；
 3. 开关开、有 `.lean`，某条定理行缺 `lean_target` => `fail` +
    `mapping_lean_missing`，且这一档是 blocker；
-4. `lean_file` 不在包里（不存在 / 绝对路径 / 指到包外 / 不是 `.lean`）
+4. `lean_file` 两个根里都找不到（不存在 / 绝对路径 / 指到两个根之外 / 不是 `.lean`）
    => `mapping_lean_file_missing`；
 5. `lean_target` 在那一份源码里找不到（用 `foo` 对 `fooBar` 做词边界反例）
    => `mapping_lean_target_missing`；
@@ -349,8 +350,9 @@ def test_an_artifact_outside_the_package_still_counts_as_lean_output(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`out/formal/` 下也有产物：那也算"有 Lean 产出"，两格因此必填。
 
-    它填不进 `lean_file`（包外路径红），所以这时该走的路是先把源码放进包里 ——
-    这条用例钉的是"产出在包外也不算没有产出"这个读数，不许静默放过。
+    它今天也能直接填进 `lean_file`（项目根相对路径 `out/formal/000004.lean` —— 2026-10-25
+    第 4 条把项目根加进解析面），而这条用例钉的是另一件事："产出在包外也不算没有产出"
+    这个读数，不许静默放过。
     """
     _lean(monkeypatch, True)
     root = _workspace(tmp_path, rows=_rows(lean=False), lean_source=None)

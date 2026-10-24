@@ -55,6 +55,23 @@ from .agentspec import AgentBrief, AgentSpec
 #: 一次召唤的终局状态（`status`），与 `schema.TASK_STATUSES` 一致。
 TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled", "failed")
 
+#: 「自身有未收口的任务」= 这一行还停在这些状态里（`schema.TASK_STATUSES` 的其余几格都是终态）。
+#:
+#: `block` 刻意不在里面：它是"停了、但这件活没做完"（`schema.TASK_STATUSES` 那一行的注释逐字）。
+#: 停了就不是"还在做"，而「活跃」问的是"还在做 / 在等"，不是"欠着多少活"—— 后者由
+#: `open_items_of` 与 `retire_ready` 的 `items_open` 各自回答，两轴不许折成一格。
+UNFINISHED_STATUSES: tuple[str, ...] = ("pending", "running")
+
+#: 两个读数各自的机器键（业主 2026-10-26 裁定：两个数分开命名，不许混成一个数）。
+#:
+#: 业主逐字：「未销号的子代理数叫子代理数，工作未做完还在做的子代理数叫活跃子代理数」。
+#: 键给机器，中文名给人，两者同源（`CHILD_COUNT_LABELS`）—— 名册面、收工读数与 CLI
+#: 读数都从这里取措辞，不许各写一份（同一读数三处措辞迟早会漂成三个意思）。
+CHILD_COUNT_KEY = "child_count"
+ACTIVE_CHILD_COUNT_KEY = "active_child_count"
+CHILD_COUNT_LABELS: dict[str, str] = {CHILD_COUNT_KEY: "子代理数",
+                                      ACTIVE_CHILD_COUNT_KEY: "活跃子代理数"}
+
 #: 检查器那一族动作写在 `status` 里的结论三态（与 `agent_l._support.THREE_STATES` 同一组词）。
 #:
 #: 它们不是任务终态：`verified` 说"检查器说通过"，`failed` 说"检查器说不通过"，
@@ -213,6 +230,200 @@ class SummonResult:
         把 refusal 算成 ok 会让"越权被拦住"在调用方看来像一次成功交付。
         """
         return self.status == "done" and self.outcome == "ok"
+
+
+# ---------------------------------------------------------------- 可抢占的派活
+#
+# D-64 的返回形状。改前只有"阻塞到全部完成"这一种拼法，于是父代理在等孩子期间
+# 零回合（真机 92 分钟）。三个类型分工如下：
+#
+# | 类型 | 谁造 | 里面有什么 | 谁读 |
+# |---|---|---|---|
+# | `SummonStart` | `Conductor.summon_begin` | 前半的成果：`task_id`（已落 running 行）或预先判定的拒绝 | 只有 `summon_run` / `SummonHandle` |
+# | `SummonHandle` | `Conductor.summon_preemptible` / `start_summon` | 已派出的编号 + 还在跑 + 落定后的结果 | `agent_loop`（返场点）/ 调度器 |
+# | `scheduler.WaveHandle` | `scheduler.start_waves` | 一批 `SummonHandle`（同一形状，逐项一张票） | `run_plan` 的调用方 / `agent_loop` |
+#
+# 为什么单任务与整批是同一个形状（不是两套）：判据 f 条要求"单任务 `summon`
+# 同形"—— 一批 = 一串单独的句柄，于是"爸拿到了什么"这件事在两条路上逐字同构，
+# 不会出现"批量能抢占、单个仍阻塞"那种半修。
+
+
+@dataclass
+class SummonStart:
+    """一次召唤的前半（已经派出去，或者已经被拒绝）。见 `Conductor.summon_begin`。"""
+
+    role: str = ""
+    action: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
+    by: str = S.CONDUCTOR_ROLE
+    parent_task_id: str | None = None
+    input_key: str = ""
+    instance: str = ""
+    token: Any = None
+    #: `summon_begin` 开始的那一刻（单调钟）。后半月 `elapsed_sec` 靠它。
+    t0: float = 0.0
+    #: 已落盘的那条 `running` 行。`None` = 没派出去（看 `refusal`）。
+    task_id: str | None = None
+    #: 前半的拒绝（终局已定）：越权 / 越深 / 触顶 / 预算 / 取消 / 参数。
+    refusal: SummonResult | None = None
+    roster: Mapping[str, Any] | None = None
+    roster_rec: dict[str, Any] = field(default_factory=dict)
+    started_at: str = ""
+
+
+class SummonHandle:
+    """一次可抢占派活的句柄：派完立刻可读，结果随后落定。
+
+    ## 三个状态的位（三态纪律，不折平）
+
+    - `done()`：后半跑完了没有（`False` 期间 `task_id` 已经在台账上、行是 `running`）；
+    - `poll()`：不等，落地了就给出结果，没有就 `None`（"还没回来"不是"失败了"）；
+    - `result(timeout=…)`：等，到点还没回来就给一个 `status="running"` 的结果 ——
+      那个结果不是终态，它说的是"本步先不等了"。把它读成失败或读成成功
+      都会把"还在跑"折进另一个故事（本项目最忌的那一类折叠）。
+
+    ## 为什么线程是 daemon
+
+    父循环可能在孩子跑完之前就收工（预算/叫停/步数上限）。那样的收工必须如实
+    留痕（`agent_loop` 的退场读数），但不许把一个已经没人在等的孩子变成
+    "进程退不出去"—— 进程被一个后台 handler 钉死比"这一趟少一条读数"更贵。
+    """
+
+    def __init__(self, start: SummonStart) -> None:
+        self.start = start
+        self._done = threading.Event()
+        self._result: SummonResult | None = None
+        self._error: BaseException | None = None
+        self._thread: threading.Thread | None = None
+        self._settled_at: float | None = None
+        #: 落定回调（调度器把"这一项落定了"通知给 `WaveHandle`）。缺省 None。
+        self.on_settle: Any = None
+
+    # ---------------------------------------------------------- 只读读数
+    @property
+    def role(self) -> str:
+        return str(self.start.role or "")
+
+    @property
+    def action(self) -> str:
+        return str(self.start.action or "")
+
+    @property
+    def instance(self) -> str:
+        return str(self.start.instance or "")
+
+    @property
+    def task_id(self) -> str | None:
+        return self.start.task_id
+
+    @property
+    def parent_task_id(self) -> str | None:
+        return self.start.parent_task_id
+
+    def describe(self) -> dict[str, Any]:
+        """句柄那一份（不含结果）：已派出的编号 + 还在跑 + 谁派的。"""
+        return {"role": self.role, "action": self.action, "instance": self.instance,
+                "task_id": self.task_id, "parent_task_id": self.parent_task_id,
+                "running": self.running(), "done": self.done(),
+                "started_at": str(self.start.started_at or "")}
+
+    # ---------------------------------------------------------- 落定
+    def attach(self, thread: Any) -> None:
+        self._thread = thread
+
+    def settle(self, result: SummonResult) -> None:
+        if self._done.is_set():
+            return
+        self._result = result
+        self._settled_at = time.monotonic()
+        self._done.set()
+        self._notify()
+
+    def fail(self, error: BaseException) -> None:
+        """后半炸了（存储/记账那一层）。如实记下来，`result()` 时落成 failed 行。
+
+        改前这条异常会一路炸给 `run_waves` 的调用方 ⇒ 那一批整批丢结果
+        （列表变短或干脆没有列表）。现在它是一条 `failed` 结果：列表长度恒等
+        这条不变量因此更强了，而不是更弱。
+        """
+        if self._done.is_set():
+            return
+        self._error = error
+        self._settled_at = time.monotonic()
+        self._done.set()
+        self._notify()
+
+    def _notify(self) -> None:
+        """落定之后通知登记过的那个人（回调炸了不许把这一条结果带下水）。"""
+        hook = self.on_settle
+        if hook is None:
+            return
+        try:
+            hook(self)
+        except Exception:  # noqa: BLE001 - 见 docstring
+            pass
+
+    # ---------------------------------------------------------- 三态读数
+    def done(self) -> bool:
+        return self._done.is_set()
+
+    def running(self) -> bool:
+        """派出去、还没落定。没派出去（预判拒绝）也不算在跑。"""
+        return bool(self.task_id) and not self.done()
+
+    def finished_at(self) -> float | None:
+        return self._settled_at
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """等到落定（或到点）。返回"落定了没有"。"""
+        return self._done.wait(None if timeout is None else max(0.0, float(timeout)))
+
+    def poll(self) -> SummonResult | None:
+        """不等：落定了就给结果，没有就 `None`。"""
+        return self._result if self._done.is_set() else None
+
+    def result(self, timeout: float | None = None) -> SummonResult:
+        """等到落定再给结果；到点还没回来 ⇒ 一个 `status="running"` 的结果（非终态）。"""
+        if not self.wait(timeout):
+            return self._running_result()
+        return self._settled_result()
+
+    def _running_result(self) -> SummonResult:
+        return SummonResult(
+            task_id=self.task_id, role=self.role, action=self.action,
+            status="running", outcome=None,
+            detail=("还在跑：本步先不等（可抢占）。它落定之后会在父代理的下一个"
+                    "返场点投递；这条不是终态，读成失败或读成成功都不对"),
+            roster_considered=False,
+            roster_problem="结果还没回来 ⇒ 名册读数还没读回来（不是没登记）",
+        )
+
+    def _settled_result(self) -> SummonResult:
+        if self._result is not None:
+            return self._result
+        err = self._error
+        text = f"{type(err).__name__}: {err}" if err is not None else "后半没有给出结果"
+        return SummonResult(
+            task_id=self.task_id, role=self.role, action=self.action,
+            status="failed", outcome="failed", error=text,
+            detail=f"可抢占派活的后半炸了（{text}）",
+        )
+
+
+def _summon_thread_main(handle: SummonHandle, ctx: Any, run: Any) -> None:
+    """后台线程的入口：跑后半，把结果（或异常）落到句柄上。
+
+    异常一律在这里收住：一个后台 handler 抛出去没有人接，症状是"线程默默死了、
+    那条任务的 running 行永远不落终态"。落成 failed 结果至少留下可读的原话。
+    上下文用 `ctx.run` 进（`consuming_as` / `calling_as` 是 ContextVar）：
+    不带上它，这一趟在后台线程里就"不知道自己是谁"，队列认领那一步会认错父。
+    """
+    try:
+        res = ctx.run(run, handle.start)
+    except BaseException as exc:  # noqa: BLE001 - 见 docstring
+        handle.fail(exc)
+        return
+    handle.settle(res)
 
 
 # ---------------------------------------------------------------- backend
@@ -1083,7 +1294,8 @@ class Conductor:
         return self._write_new_row(row, note=f"item:{kind}")
 
     def _set_item(self, task_id: str, *, state: str, close: str = "",
-                  by_task_id: str = "", step: int | None = None) -> tuple[str, str]:
+                  by_task_id: str = "", step: int | None = None,
+                  note: str = "") -> tuple[str, str]:
         """工作项状态迁移的唯一写入点。返回 `(落成的状态, 问题)`。
 
         三条不变量（都在这里判，判不过 ⇒ 零写入，并在返回值里说清）：
@@ -1092,6 +1304,11 @@ class Conductor:
         2. 没 `seen` 就 `done` ⇒ 返回 `"ack_unbacked"`（空口 ack 的机器形态，业主 A5：
            只记读数、不拒写；升级档见 `draft/88` §7）；
         3. `seen` 必须带 `by_task_id` 与 `step`（"谁在第几步读的"是判据要的量）。
+
+        ## `note`（D-68）：这一笔事件自己的来路
+        状态是列（给当前值），事件才是历史（给来路）。消项那一侧要落"谁在第几步确认的"
+        —— 那一格装不进 `tasks`（列里没有"确认步号"这一格），所以它落在事件 note 上。
+        缺省空串 ⇒ 沿用从前的 `item:<state>`，既有调用方的事件逐字不变。
         """
         with self.store.tx("tasks", actor="conductor") as tx:
             row = next((r for r in tx.rows("tasks")
@@ -1110,12 +1327,17 @@ class Conductor:
                 return "", f"{task_id} 已经到过 {cur!r}（不许倒退或重复迁移）"
             row["item_state"] = state
             if state == "seen":
-                row["seen_by"], row["seen_step"] = str(by_task_id), int(step or 0)
+                # `seen_by` 与 `seen_step` 必须"都在或都不在"（`schema.Task.validate`
+                # 逐字要求：半份读数比没有更糟）⇒ 没有步号时连 `seen_by` 一起不写。
+                if step is None:
+                    row["seen_by"], row["seen_step"] = "", None
+                else:
+                    row["seen_by"], row["seen_step"] = str(by_task_id), int(step)
             if state == "done":
                 row["item_close"] = str(close)
             task = S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__})
             task.validate()
-            tx.upsert("tasks", task.to_dict(), note=f"item:{state}")
+            tx.upsert("tasks", task.to_dict(), note=note or f"item:{state}")
         return state, ""
 
     def claim_item(self, task_id: str, *, by_task_id: str = "") -> tuple[str, str]:
@@ -1152,6 +1374,138 @@ class Conductor:
         """`→ done`（行为完成）：`close="acked"`（知道了）或 `"completed"`（做完了）。"""
         return self._set_item(task_id, state="done", close=close, by_task_id=by_task_id)
 
+    def ack_items(self, item_ids: Sequence[str], *, by_task_id: str, note: str = "",
+                  close: str = "acked") -> dict[str, Any]:
+        """收件人自己把名下的板项推到 `done`（`conductor.ack` 的唯一判定与写入点）。
+
+        业主 D-68 逐字：「就做手，不兜底。在"销号"时，如果 task_board 没清，发提醒，
+        不准直接销号」。改前这个动作在代码里根本不存在 —— `close_item` 只有一个调用者
+        （`agent_loop._ack_stop_notice`，只 ack 停止通知），于是模型只能在回复里说
+        "已处理"，而盘上那条项永远停在 `seen`（真机 `projects/sylow3`：45 条 seen
+        + 3 条 queued）。这一件补的就是那只手。
+
+        返回 `{"checked","ok","state","acked","already_done","refused","unknown",
+        "missing","not_yours","refusal_codes","results","count","requested",
+        "by_task_id","note","reason"}`，几档 `state`：
+
+        - `acked`：给到的每一条都到 `done`；
+        - `partial`：成了一些、拒了一些（`refused` 逐条给 `item_id` / `code` / `reason`）；
+        - `refused`：一条都没成（`refusal_codes` 去重给出理由码）；
+        - `nothing`：调用方一条都没给（一个字节都不写）；
+        - `unknown`：台账读不成（`checked=False`）—— 这是"没查成"，不是"都拒了"。
+
+        三条判定（每一条都对应一种真实的错手）：
+        1. 只许 ack 收件人是自己的项（`parent_task_id == by_task_id`）⇒ 否则 `not_yours`。
+           父代理最容易犯的那一手就是"看见孩子名下挂着项、顺手替它确认"，
+           那会让「孩子还没看」这件事实消失 —— 而它正是 ack 存在的理由；
+        2. 只许 ack 板项（`kind` 非空）⇒ 否则 `not_board_item`（代理行不归状态机管）；
+        3. 状态机仍然只往后走：没 `seen` 的项先补记一次 `seen`（见下面那一段），
+           绝不跳过 `seen` 直接 `done`（业主 A5 的空口 ack 闸不拆）。
+
+        ## 为什么 `queued` 的项也能 ack（这一条是 D-68 的关键取舍）
+        ack 是收件人的动作，不是投递器的：真机那 3 条 `queued` 是旧代码没投出去的项，
+        若 ack 只认 `seen`，它们就永远清不掉 ⇒ 销号门与 final 门会把整棵树永久卡死。
+        所以对还没 `seen` 的项先补记一次 `seen`（`seen_by` = 本次的收件人），
+        而"这一项从没被投递过"这件事逐字写进那条 done 事件的 note（`step=未读`）——
+        状态机的列上给了一个合法的占位（`seen_step=0`，`schema` 要求两格都在），
+        真相在事件里，不在列上。
+        """
+        ids = [str(x) for x in (item_ids or ())]
+        out: dict[str, Any] = {
+            "checked": True, "ok": False, "state": "refused",
+            "acked": [], "already_done": [], "refused": [], "unknown": [],
+            "missing": [], "not_yours": [], "refusal_codes": [], "results": [],
+            "count": 0, "requested": len(ids), "by_task_id": str(by_task_id or ""),
+            "note": str(note or ""), "reason": "",
+        }
+        me = str(by_task_id or "")
+        if not me:
+            out["checked"] = False
+            out["state"] = "unknown"
+            out["reason"] = ("没有收件人（by_task_id 是空的）⇒ 不知道该确认谁名下的项"
+                             "（不猜一个收件人）")
+            return out
+        if close not in S.ITEM_CLOSES:
+            out["refusal_codes"] = ["bad_close"]
+            out["reason"] = f"收口方式必须是 {S.ITEM_CLOSES} 之一，收到 {close!r}"
+            return out
+        try:
+            rows = self._tasks()
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不许折成"都拒了"
+            out["checked"] = False
+            out["state"] = "unknown"
+            out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成"
+            return out
+        by_id = {str(r.get("task_id") or ""): r for r in rows}
+        for tid in ids:
+            row = by_id.get(tid)
+            if row is None:
+                out["missing"].append(tid)
+                out["refused"].append({"item_id": tid, "code": "no_such_item",
+                                       "reason": f"台账里没有 {tid} 这一项"})
+                continue
+            if not str(row.get("kind") or ""):
+                out["refused"].append({"item_id": tid, "code": "not_board_item",
+                                       "reason": (f"{tid} 不是板项（kind 为空）⇒ "
+                                                  "它的状态不由状态机管")})
+                continue
+            owner_of = str(row.get("parent_task_id") or "")
+            if owner_of != me:
+                out["not_yours"].append(tid)
+                out["refused"].append({
+                    "item_id": tid, "code": "not_yours",
+                    "reason": (f"{tid} 的收件人是 {owner_of or '（顶层）'}，不是你 ⇒ "
+                               "只有收件人自己能确认（替别人 ack 会让'它还没看'消失）")})
+                continue
+            before = str(row.get("item_state") or "queued")
+            if before == "done":
+                out["already_done"].append(tid)
+                out["acked"].append(tid)
+                out["results"].append({"item_id": tid, "ok": True, "code": "already_done",
+                                       "state_before": before, "state_after": "done",
+                                       "step": None, "seen_backfilled": False})
+                continue
+            backfilled = before != "seen"
+            if backfilled:
+                state, why = self._set_item(tid, state="seen", by_task_id=me, step=0)
+                if state != "seen":
+                    code = "ack_unbacked" if state == "ack_unbacked" else "state_error"
+                    out["refused"].append({"item_id": tid, "code": code,
+                                           "reason": f"{tid} 补记 seen 没成（{why}）"})
+                    continue
+            step = by_id[tid].get("seen_step")
+            step_txt = "未读" if step is None else str(int(step))
+            event_note = f"item:done:by={me}:step={step_txt}:close={close}"
+            if backfilled:
+                event_note += "（这一项从没被投递过，ack 补记了 seen）"
+            if str(note or "").strip():
+                event_note += f"；{str(note).strip()}"
+            state, why = self._set_item(tid, state="done", close=close, by_task_id=me,
+                                        note=event_note)
+            if state != "done":
+                code = "ack_unbacked" if state == "ack_unbacked" else "state_error"
+                out["refused"].append({"item_id": tid, "code": code,
+                                       "reason": f"{tid} 没推到 done（{why}）"})
+                continue
+            out["acked"].append(tid)
+            out["results"].append({"item_id": tid, "ok": True, "code": "",
+                                   "state_before": before, "state_after": "done",
+                                   "step": step, "seen_backfilled": bool(backfilled)})
+        n = len(out["acked"])
+        out["ok"] = n > 0
+        if not ids:
+            out["state"] = "nothing"
+        elif n and out["refused"]:
+            out["state"] = "partial"
+        elif n:
+            out["state"] = "acked"
+        else:
+            out["state"] = "refused"
+        out["count"] = n
+        out["refusal_codes"] = list(dict.fromkeys(str(x.get("code") or "")
+                                                 for x in out["refused"]))
+        return out
+
     def open_items_of(self, task_id: str) -> list[dict]:
         """挂在 `task_id` 名下、还没消的工作项（板项轴）。
 
@@ -1183,11 +1537,16 @@ class Conductor:
     def active_children(self, task_id: str) -> dict[str, Any]:
         """`task_id` 名下代理行的两态快照（三态返回）。业主 T22 的"活跃 / 在等待"。
 
-        `{"checked": bool, "rows": [{"task_id","role","state"}], "reason": ""}`
+        `{"checked": bool, "rows": [{"task_id","role","state","active","waiting_only",
+        "waiting_for","note"}], "reason": ""}`
 
         - `state == "活跃"`：那一行 `status ∈ {pending, running}`（此刻在跑一次调用）；
         - `state == "在等待"`：那一行已是终态但还挂在这个父名下（退役与否由名册层说，
-          见 `draft/90` §1.9 —— conductor 这一层不知道 `keep_alive` 与名字）。
+          见 `draft/90` §1.9 —— conductor 这一层不知道 `keep_alive` 与名字）；
+        - `active`：按继承口径算出来的"算不算活跃"（业主 2026-10-26：有活跃的下级，
+          自己已经收口也还是活跃的）；`waiting_only`：它是不是靠等下级才活跃
+          （病态形状的布尔），`note` 是那句话人话。`state` 与 `active` 是两件事：
+          前者是"它自己此刻在不在跑"，后者是"这一支的活算不算没做完"。
 
         只数代理行（`kind == ""`）：工作项（板项）走 `open_items_of`。
         读不成 ⇒ `checked=False` + `reason`，不许折成 `rows=[]`
@@ -1197,16 +1556,281 @@ class Conductor:
             rows = self._tasks()
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
             return {"checked": False, "rows": [], "reason": f"{type(exc).__name__}: {exc}"}
-        out: list[dict[str, str]] = []
+        # 活跃是向上继承的（`activity_snapshot` 是那条口径的唯一实现）：`state` 仍是原来的
+        # 两档（它自己此刻在不在跑），另两格 `active` / `waiting_only` 回答"按继承口径算，
+        # 它算不算活跃、是不是靠等下级才活跃"。两格分开而不是把 `state` 改成三档：
+        # `state` 已经有消费者（退役第②支的报文），改它的取值域等于悄悄改那一段的语义。
+        snap = self.activity_snapshot()
+        by_task = dict(snap.get("by_task") or {}) if snap.get("checked") else {}
+        out: list[dict[str, Any]] = []
         for r in rows:
             if r.get("parent_task_id") != task_id or str(r.get("kind") or ""):
                 continue
+            tid = str(r.get("task_id") or "")
             state = ("活跃" if str(r.get("status") or "") in ("pending", "running")
                      else "在等待")
-            out.append({"task_id": str(r.get("task_id") or ""),
-                        "role": str(r.get("role") or ""), "state": state})
+            cell = by_task.get(tid) or {}
+            got = self.active_reading(tid, snapshot=snap) if by_task else {}
+            out.append({"task_id": tid,
+                        "role": str(r.get("role") or ""), "state": state,
+                        "active": bool(cell.get("active")),
+                        "waiting_only": bool(cell.get("waiting_only")),
+                        "waiting_for": list(cell.get("waiting_for") or []),
+                        "note": str(got.get("note") or "")})
         out.sort(key=lambda x: x["task_id"])
         return {"checked": True, "rows": out, "reason": ""}
+
+    # -------------------------------------------------- 活跃判定（向上继承）与树遍历
+    def activity_snapshot(self) -> dict[str, Any]:
+        """全树每一个代理行的活跃读数（一次台账快照算完，含"在等"的向上继承）。
+
+        ## 口径（业主 2026-10-26 原话，逐字见模块头那一节）
+            active(node) = 自身有未收口的任务 or 任一直接子 active
+        「自身有未收口的任务」= 它自己那一行 `status ∈ UNFINISHED_STATUSES`
+        （`pending` / `running`）。`schema.TASK_STATUSES` 的其余几格都是终态，其中
+        `block` 是"停了、但这件活没做完"—— 停了就不算还在做（理由逐字在
+        `UNFINISHED_STATUSES` 的注释里）。
+
+        ## "等"也算活跃（这一条最容易写错）
+        业主逐字：「若一子代理自身不活跃，但有活跃的子代理甚至孙代理，它还是叫活跃的，
+        但这是病态形状（应该是这个孙辈或重孙辈的父代理在等它，爷爷辈在等父，
+        有"等"这个动作还是算活跃的）」。所以一个已经收口、名下却还有活跃子代理的节点
+        仍然是活跃的；同时它是"靠等下级才活跃"（`waiting_only`），那是病态形状而不是错 ——
+        真在干活的是那些下级，标出来是为了让父看见"我这一支的活积在下面"。
+
+        ## 返回
+        `{"checked", "by_task", "waiting_only", "reason"}`，`by_task` 每一格：
+        - `self_busy`：它自己有没有未收口的任务；
+        - `active`：按上面的继承口径算出来的那一位；
+        - `waiting_only`：`active and not self_busy`（病态形状的布尔）；
+        - `waiting_for`：直接子里活跃的那几个（`waiting_only` 时非空）；
+        - `busy_roots`：把它撑成活跃的那些"真在跑"的节点的编号（自己忙 ⇒ 就是它自己）；
+        - `status` / `role`：台账原值（读数要能对着台账核）。
+
+        读不成 ⇒ `checked=False` + `reason`：把它折成"都不活跃"会让一整棵子树被误销，
+        而销号是不可逆的那一类动作（这正是"没查成"与"查过了没问题"被折平的代价）。
+        """
+        try:
+            rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return {"checked": False, "by_task": {}, "waiting_only": [],
+                    "reason": f"{type(exc).__name__}: {exc}"}
+        role_of: dict[str, str] = {}
+        status_of: dict[str, str] = {}
+        kids: dict[str, list[str]] = {}
+        for r in rows:
+            tid = str(r.get("task_id") or "")
+            if not tid:
+                continue
+            role_of[tid] = str(r.get("role") or "")
+            status_of[tid] = str(r.get("status") or "")
+        for r in rows:
+            tid = str(r.get("task_id") or "")
+            pid = str(r.get("parent_task_id") or "")
+            if tid and pid:
+                kids.setdefault(pid, []).append(tid)
+        self_busy = {tid: status_of[tid] in UNFINISHED_STATUSES for tid in status_of}
+        active: dict[str, bool] = {}
+        busy_roots: dict[str, list[str]] = {}
+        # 迭代后序（显式栈 + 在栈集合）：深链 / 坏链（环）都不许把这里变成爆栈或死循环，
+        # 而"谁把谁撑成活跃"必须自底向上算完才能定 —— 递归的写法在这里只是一行更短。
+        for start in sorted(status_of):
+            if start in active:
+                continue
+            stack: list[tuple[str, bool]] = [(start, False)]
+            onstack: set[str] = {start}
+            while stack:
+                tid, done = stack.pop()
+                if done:
+                    onstack.discard(tid)
+                    if self_busy.get(tid):
+                        active[tid] = True
+                        busy_roots[tid] = [tid]
+                    else:
+                        live = [k for k in kids.get(tid, ()) if active.get(k)]
+                        active[tid] = bool(live)
+                        busy_roots[tid] = sorted({x for k in live
+                                                  for x in busy_roots.get(k, ())})
+                    continue
+                if tid in active:
+                    onstack.discard(tid)
+                    continue
+                stack.append((tid, True))
+                for k in kids.get(tid, ()):
+                    if k in active or k in onstack:
+                        continue
+                    stack.append((k, False))
+                    onstack.add(k)
+        by_task: dict[str, dict[str, Any]] = {}
+        waiting_only: list[str] = []
+        for tid in sorted(status_of):
+            waiting_for = sorted(k for k in kids.get(tid, ()) if active.get(k))
+            wo = bool(active.get(tid)) and not self_busy.get(tid)
+            by_task[tid] = {"task_id": tid, "role": role_of.get(tid, ""),
+                            "status": status_of.get(tid, ""),
+                            "self_busy": bool(self_busy.get(tid)),
+                            "active": bool(active.get(tid)),
+                            "waiting_only": wo,
+                            "waiting_for": waiting_for,
+                            "busy_roots": list(busy_roots.get(tid) or [])}
+            if wo:
+                waiting_only.append(tid)
+        return {"checked": True, "by_task": by_task, "waiting_only": waiting_only,
+                "reason": ""}
+
+    def active_reading(self, task_id: str, *, names: Mapping[str, str] | None = None,
+                       snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """一个节点的活跃读数（三态）＋"靠等"的那一句人话。
+
+        `names` 是"编号 → 名册名"的对照（秘书那一侧给得出；不给就用角色 + 编号）。
+        `snapshot` 可复用一次 :meth:`activity_snapshot` 的结果 —— 级联销号要对整个子树
+        逐个判，重算 N 遍等于把同一张表读 N 遍。
+
+        返回 `{"checked","task_id","active","self_busy","waiting_only","waiting_for",
+        "busy_roots","status","role","note","reason"}`。`note` 是给人读的那一句：
+        靠等 ⇒ 「它自己不忙，是在等 D2（active）」；自己在跑 ⇒ 「它自己在跑（status=running）」；
+        两样都没有 ⇒ 「它自己不忙，名下也没有活跃的下级」。
+        """
+        tid = str(task_id or "")
+        snap = dict(snapshot) if snapshot is not None else self.activity_snapshot()
+        blank = {"checked": False, "task_id": tid, "active": False, "self_busy": False,
+                 "waiting_only": False, "waiting_for": [], "busy_roots": [],
+                 "status": "", "role": "", "note": ""}
+        if not snap.get("checked"):
+            blank["reason"] = str(snap.get("reason") or "台账读不成")
+            return blank
+        by_task = dict(snap.get("by_task") or {})
+        cell = by_task.get(tid)
+        if cell is None:
+            blank["reason"] = f"台账里没有 {tid!r} 这一行代理 ⇒ 活跃判不了"
+            return blank
+
+        def label(other: str) -> str:
+            got = str((names or {}).get(other) or "")
+            if got:
+                return got
+            row = by_task.get(other) or {}
+            return f"{row.get('role') or '?'}（{other}）"
+
+        if cell.get("waiting_only"):
+            note = ("它自己不忙，是在等 "
+                    + "、".join(label(k) for k in cell.get("waiting_for") or [])
+                    + "（active）")
+        elif cell.get("self_busy"):
+            note = f"它自己在跑（status={cell.get('status') or 'unknown'}）"
+        else:
+            note = "它自己不忙，名下也没有活跃的下级"
+        return {"checked": True, "task_id": tid, "active": bool(cell.get("active")),
+                "self_busy": bool(cell.get("self_busy")),
+                "waiting_only": bool(cell.get("waiting_only")),
+                "waiting_for": list(cell.get("waiting_for") or []),
+                "busy_roots": list(cell.get("busy_roots") or []),
+                "status": str(cell.get("status") or ""),
+                "role": str(cell.get("role") or ""), "note": note, "reason": ""}
+
+    def subtree_postorder(self, root_task_id: str) -> dict[str, Any]:
+        """子树的销号次序：从最深到最浅（先叶子后父）。
+
+        返回 `{"checked","order","depth_of","parent_of","rows","reason"}`：`order` 含根
+        自己，深度严格不升；同一深度按编号升序（确定性让"次序"这件事可以被逐条断言）。
+        `depth_of` 是从根算起的相对深度，不信台账里的 `depth` 字段 —— 历史行有缺这一格
+        或写错的，而销号次序要的只是"在这一支里谁比谁深"。
+
+        为什么"后序"就等于"深度降序"：子节点一定比父更深，所以深度降序的每一种线性化
+        都是合法的后序。这条等价关系是本方法与"先叶子后父"那句原话之间的桥。
+        根不在台账里 / 台账读不成 ⇒ `checked=False` + `reason`（不猜一棵树出来）。
+        """
+        root = str(root_task_id or "")
+        try:
+            rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "order": [], "depth_of": {}, "parent_of": {},
+                    "rows": [], "reason": f"{type(exc).__name__}: {exc}"}
+        parent_of: dict[str, str] = {}
+        for r in rows:
+            tid = str(r.get("task_id") or "")
+            if tid:
+                parent_of[tid] = str(r.get("parent_task_id") or "")
+        if root not in parent_of:
+            return {"checked": False, "order": [], "depth_of": {}, "parent_of": {},
+                    "rows": [],
+                    "reason": f"台账里没有 {root!r} 这一行代理 ⇒ 子树判不了"}
+        kids: dict[str, list[str]] = {}
+        for tid, pid in parent_of.items():
+            if pid:
+                kids.setdefault(pid, []).append(tid)
+        depth_of: dict[str, int] = {root: 0}
+        queue: list[str] = [root]
+        while queue:                                  # 广度下行：环不会把这里变成死循环
+            cur = queue.pop(0)
+            for k in sorted(kids.get(cur, ())):
+                if k in depth_of:
+                    continue
+                depth_of[k] = depth_of[cur] + 1
+                queue.append(k)
+        order = sorted(depth_of, key=lambda x: (-depth_of[x], x))
+        inside = set(order)
+        return {"checked": True, "order": order, "depth_of": dict(depth_of),
+                "parent_of": {k: parent_of.get(k, "") for k in order},
+                "rows": [dict(r) for r in rows if str(r.get("task_id") or "") in inside],
+                "reason": ""}
+
+    def active_in_subtree(self, root_task_id: str, *,
+                          names: Mapping[str, str] | None = None) -> dict[str, Any]:
+        """子树里还在活跃的节点（受控拒绝要点名的那一份读数）。
+
+        返回 `{"checked","rows","active_count","subtree_size","busy_root_ids",
+        "child_count","active_child_count","reason"}`：
+        - `rows`：只放活跃的节点，次序照 :meth:`subtree_postorder`（最深的在前）；
+          每行带 `task_id` / `role` / `status` / `self_busy` / `waiting_only` / `note`
+          与 `busy`（把它撑成活跃的那些"真在跑"的节点，含它们在做什么）——
+          "点名它卡在哪件任务上"要的就是 `busy` 这一格；
+        - `active_count` / `subtree_size`：这一支里活跃几个、一共几行代理；
+        - `busy_root_ids`：去重后的"真在跑"的编号。
+
+        两个读数（`child_count` / `active_child_count`）在这里刻意留空值：它们问的是
+        "名册里未销号的名册项"，与"台账里这一支的代理行"是两个量 —— 见
+        `secretary.Secretary.child_counts` 的 docstring（销号要看的是前者）。
+        """
+        order = self.subtree_postorder(root_task_id)
+        if not order.get("checked"):
+            return {"checked": False, "rows": [], "active_count": 0, "subtree_size": 0,
+                    "busy_root_ids": [], "child_count": None,
+                    "active_child_count": None,
+                    "reason": str(order.get("reason") or "子树判不了")}
+        snap = self.activity_snapshot()
+        if not snap.get("checked"):
+            return {"checked": False, "rows": [], "active_count": 0,
+                    "subtree_size": len(order.get("order") or []), "busy_root_ids": [],
+                    "child_count": None, "active_child_count": None,
+                    "reason": str(snap.get("reason") or "活跃读数没读成")}
+        by_task = dict(snap.get("by_task") or {})
+        row_of = {str(r.get("task_id") or ""): r for r in order.get("rows") or []}
+        out: list[dict[str, Any]] = []
+        busy_ids: set[str] = set()
+        for tid in order.get("order") or []:
+            cell = by_task.get(tid) or {}
+            if not cell.get("active"):
+                continue
+            busy = []
+            for bid in cell.get("busy_roots") or []:
+                busy_ids.add(bid)
+                brow = row_of.get(bid) or {}
+                busy.append({"task_id": bid,
+                             "role": str(brow.get("role") or cell.get("role") or ""),
+                             "status": str(brow.get("status") or ""),
+                             "action": str(brow.get("action") or "")})
+            got = self.active_reading(tid, names=names, snapshot=snap)
+            out.append({"task_id": tid, "role": str(cell.get("role") or ""),
+                        "status": str(cell.get("status") or ""),
+                        "self_busy": bool(cell.get("self_busy")),
+                        "waiting_only": bool(cell.get("waiting_only")),
+                        "note": str(got.get("note") or ""),
+                        "busy": busy})
+        return {"checked": True, "rows": out, "active_count": len(out),
+                "subtree_size": len(order.get("order") or []),
+                "busy_root_ids": sorted(busy_ids),
+                "child_count": None, "active_child_count": None, "reason": ""}
 
     def inside_subtree(self, root_task_id: str, task_id: str) -> dict[str, Any]:
         """`task_id` 是不是在 `root_task_id` 这一支下面（含它自己）。三态。
@@ -1701,6 +2325,24 @@ class Conductor:
             tx.upsert("tasks", task.to_dict(), note="edge:released")
         return mark, ""
 
+    @staticmethod
+    def _released_pairs(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """一行代理里"父已经销过哪些子"的落痕（逐条 `(子代号, 第几次)`）。
+
+        为什么抽成静态方法：落痕的格式只有一处（`note_edge_release` 写的那个前缀），
+        而读侧已经有两处（`released_edges` 与 `retire_integrity`）—— 两处各写一遍
+        解析，迟早一处改了另一处没改，而分叉的形态是"销号门说干净、final 门说没销"。
+        """
+        out: list[dict[str, Any]] = []
+        for raw in ((row or {}).get("inputs") or []):
+            text = str(raw)
+            if not text.startswith(_EDGE_RELEASED_PREFIX):
+                continue
+            child, _, attempt = text[len(_EDGE_RELEASED_PREFIX):].partition("#")
+            out.append({"child_task_id": child, "attempt": int(attempt or 0)})
+        out.sort(key=lambda x: (x["child_task_id"], x["attempt"]))
+        return out
+
     def released_edges(self, parent_task_id: str) -> dict[str, Any]:
         """读回父侧认过的那些边（三态）：`{"checked", "edges": [{"child_task_id","attempt"}], "reason"}`。
 
@@ -1714,15 +2356,104 @@ class Conductor:
         if row is None:
             return {"checked": False, "edges": [],
                     "reason": f"台账里没有 {parent_task_id!r}"}
-        out: list[dict[str, Any]] = []
-        for raw in (row.get("inputs") or []):
-            text = str(raw)
-            if not text.startswith(_EDGE_RELEASED_PREFIX):
+        return {"checked": True, "edges": self._released_pairs(row), "reason": ""}
+
+    def retire_integrity(self, root_task_id: str) -> dict[str, Any]:
+        """`root_task_id` 名下整棵树是不是已经全部销号（M 收工前的结构完整性闸）。
+
+        业主 D-68 逐字：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」。
+        改前这条读数不存在：M 名下有几十个还在册的代理，与它收工那件事毫无关系
+        （真机 `projects/sylow3`：50 个实例行、48 条板项，一条销号落痕都没有）。
+
+        返回 `{"checked","complete","root","nodes","dirty","count","total",
+        "root_open_items","reason"}`：
+
+        - `checked`：台账读到没有（读不成 ⇒ `False` + `reason`，绝不折成"干净"）；
+        - `complete`：这一支是否全部销号（`nodes` 与 `dirty` 都空才算）；
+        - `nodes`：还在册的节点，逐条给 `task_id` / `role` / `status` / `retired` /
+          `open_items` / `open_item_ids`（前 8 条）—— 这就是拒信里那份清单；
+        - `dirty`：已经销号、可名下还有未消项的节点（结构矛盾那一档，同样算不干净）；
+        - `count` / `total`：还在册几个 / 这一支一共有几个节点（不含根自己）；
+        - `root_open_items`：根自己名下的未消项条数（读数，不参与判定 —— 根没有父，
+          销号对它没有对象，而业主那句判据说的是"它下面那棵树"）。
+
+        ## 销号的判据取哪一处
+        取父行 `inputs` 里的 `edge-released:` 落痕（`Secretary.retire` 每次销号都会先写它，
+        写不成就不许销号）—— 它与名册三份台账同源，而这一层读得到、不必去翻 N 份名册文件。
+        判据本身只有 `_released_pairs` 一处（`released_edges` 与这里共用）。
+
+        ## 三态与代价
+        台账读不成、根那一行不存在 ⇒ `checked=False`。把这两种折成"干净"的代价是
+        整棵树没销号而 final 照记（业主那句话正好要挡住这一档）。
+        """
+        out: dict[str, Any] = {
+            "checked": True, "complete": False, "root": str(root_task_id or ""),
+            "nodes": [], "dirty": [], "count": 0, "total": 0,
+            "root_open_items": 0, "reason": "",
+        }
+        root = str(root_task_id or "")
+        if not root:
+            out["checked"] = False
+            out["reason"] = "没给根台账号 ⇒ 不知道该看哪一棵树（不猜）"
+            return out
+        try:
+            rows = self._tasks()
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            out["checked"] = False
+            out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成"
+            return out
+        agents = {str(r.get("task_id") or ""): r for r in rows
+                  if not str(r.get("kind") or "")}
+        if root not in agents:
+            out["checked"] = False
+            out["reason"] = f"台账里没有 {root!r} 这一行代理 ⇒ 判不了它名下那棵树"
+            return out
+        kids: dict[str, list[str]] = {}
+        for tid, row in agents.items():
+            pid = str(row.get("parent_task_id") or "")
+            if pid:
+                kids.setdefault(pid, []).append(tid)
+        # 显式栈（深链与坏链都不许把这里变成爆栈或死循环）；环上的节点只认一次。
+        order: list[str] = []
+        seen = {root}
+        stack = [root]
+        while stack:
+            pid = stack.pop()
+            for kid in sorted(kids.get(pid, ())):
+                if kid in seen:
+                    continue
+                seen.add(kid)
+                order.append(kid)
+                stack.append(kid)
+        open_items: dict[str, list[str]] = {}
+        for row in rows:
+            if not str(row.get("kind") or ""):
                 continue
-            child, _, attempt = text[len(_EDGE_RELEASED_PREFIX):].partition("#")
-            out.append({"child_task_id": child, "attempt": int(attempt or 0)})
-        out.sort(key=lambda x: (x["child_task_id"], x["attempt"]))
-        return {"checked": True, "edges": out, "reason": ""}
+            if str(row.get("item_state") or "") == "done":
+                continue
+            open_items.setdefault(str(row.get("parent_task_id") or ""), []).append(
+                str(row.get("task_id") or ""))
+        for tid in order:
+            row = agents[tid]
+            pid = str(row.get("parent_task_id") or "")
+            released = {p["child_task_id"] for p in self._released_pairs(agents.get(pid, {}))}
+            retired = tid in released
+            mine = sorted(open_items.get(tid, ()))
+            cell = {"task_id": tid, "role": str(row.get("role") or ""),
+                    "status": str(row.get("status") or ""), "retired": bool(retired),
+                    "open_items": len(mine), "open_item_ids": mine[:8]}
+            if retired and mine:
+                cell["why"] = "已经销号，可名下还有没消的项（结构矛盾那一档）"
+                out["dirty"].append(cell)
+                continue
+            if not retired:
+                cell["why"] = "还在册（它的父还没给它销号）"
+                out["nodes"].append(cell)
+        out["total"] = len(order)
+        out["count"] = len(out["nodes"])
+        out["root_open_items"] = len(open_items.get(root, ()))
+        out["complete"] = not out["nodes"] and not out["dirty"]
+        return out
 
     def keep_alive_of(self, task_id: str) -> dict[str, Any]:
         """这一项/这个代理声明的"做完还待命"（A6=丙）。`{"checked","keep_alive","reason"}`。
@@ -2888,7 +3619,154 @@ class Conductor:
         instance: str = "",
         roster: Mapping[str, Any] | None = None,
     ) -> SummonResult:
-        """唯一的召唤入口。见模块 docstring 的完整流程。
+        """唯一的召唤入口 —— 阻塞式拼法（`summon_begin` 再 `summon_run`）。
+
+        D-64 起它只是两种拼法里的那一种：`summon_preemptible` 派完就给句柄，
+        这一种派完就等到孩子跑完。两者是同一段实现（前半在 `summon_begin`、
+        后半在 `summon_run`），所以"可抢占版"与"阻塞版"不可能漂移 —— 判据
+        `tests/test_summon_is_preemptible.py` 的 e 条（结果集/顺序/refusal 一致）
+        就是靠这条构造性等式。
+
+        参数说明在 `summon_begin`（唯一的一份）。
+        """
+        return self.summon_run(self.summon_begin(
+            role, action, params, by=by, parent_task_id=parent_task_id,
+            input_key=input_key, budget=budget, token=token, lineage=lineage,
+            instance=instance, roster=roster))
+
+    def summon_preemptible(
+        self,
+        role: str,
+        action: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        by: str = S.CONDUCTOR_ROLE,
+        parent_task_id: str | None = None,
+        input_key: str = "",
+        budget: Mapping[str, Any] | None = None,
+        token: CancelToken | None = None,
+        lineage: Sequence[tuple[str, str, str]] | None = None,
+        instance: str = "",
+        roster: Mapping[str, Any] | None = None,
+    ) -> "SummonHandle":
+        """派完就返回句柄（不等到孩子跑完）—— 这就是 D-64 的"可抢占"。
+
+        与 `summon` 的差别只有一处：后半段（执行 handler、写终态、记账）跑在
+        一个后台线程里，句柄立刻可读（`task_id` / `running` / `done`）。
+        前半段（判据、落 running 行、名册登记）仍在调用线程里同步做完 ——
+        它是"派活真的发生了没有"的判据，必须与调用方的因果顺序一致：
+        派出去的编号在 `summon_preemptible` 返回那一刻就已经在台账上，
+        而不是"过一会儿可能会出现"。
+
+        真机理由（2026-10-24 sylow3 只读读数）：M（t-000001）第 4 步 invalid
+        在 17:34:17，第 5 步的调用 17:34:25 起，而 `agent_step index=5` 落在
+        19:06:48 —— 一次阻塞式派活让父代理 92 分钟零回合；D1 的第 8 步同样
+        阻塞了 29 分钟。后果不是"慢"，是"下一次 ask_step 之前的任何投递都只能
+        在阻塞结束时才出手"（t-000031 的 notice 迟到 20m28s）。
+        """
+        return self.start_summon(self.summon_begin(
+            role, action, params, by=by, parent_task_id=parent_task_id,
+            input_key=input_key, budget=budget, token=token, lineage=lineage,
+            instance=instance, roster=roster))
+
+    def open_handle(self, start: "SummonStart", *, on_settle: Any = None) -> "SummonHandle":
+        """造一个句柄，但不起线程（调度器自己管线程与并发闸）。
+
+        为什么要这一层：`scheduler` 的每一张票要自己决定"什么时候跑后半、
+        跑在哪个线程、包不包信号量与探针"。它需要的是同一个 `SummonHandle`
+        类型（判据 f 条：单任务与整批同一个形状），但不是 `start_summon`
+        那条线程。
+        """
+        handle = SummonHandle(start=start)
+        handle.on_settle = on_settle
+        if start.refusal is not None:
+            handle.settle(start.refusal)
+        return handle
+
+    def start_summon(self, start: "SummonStart", *, on_settle: Any = None,
+                     run: Any = None) -> "SummonHandle":
+        """把 `summon_begin` 的产物挂到一个后台线程上，并立刻返回句柄。
+
+        两个可选钩子（缺省 = 老行为）：
+
+        - `run`：跑哪一段（缺省 `self.summon_run`）。调度器传一个把
+          `Semaphore` 与 `ConcurrencyProbe` 包好的版本 —— 并发上限与探针
+          必须包住"真的执行"那一段，而它在后台线程里；
+        - `on_settle`：落定时回调（调度器用它把"这一波这一项落定了"通知给
+          `WaveHandle` 的条件变量）。它可能在调用线程上被同步调用
+          （预先判定的拒绝不占线程）。
+
+        线程是 daemon：一次派活的线程不该把进程钉死（父循环可能在它跑完之前
+        就收工 —— 那种情况由 `agent_loop` 的收工门与退场读数如实交代）。
+        """
+        handle = self.open_handle(start, on_settle=on_settle)
+        if start.refusal is not None:
+            # 预先判定的拒绝（越权/超深/触顶/预算/取消）：终局已定，不占线程。
+            return handle
+        ctx = contextvars.copy_context()
+        th = threading.Thread(
+            target=_summon_thread_main,
+            args=(handle, ctx, run or self.summon_run),
+            name=f"agentflow-summon-{start.task_id or 'x'}", daemon=True)
+        handle.attach(th)
+        th.start()
+        return handle
+
+    def summon_begin(
+        self,
+        role: str,
+        action: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        by: str = S.CONDUCTOR_ROLE,
+        parent_task_id: str | None = None,
+        input_key: str = "",
+        budget: Mapping[str, Any] | None = None,
+        token: CancelToken | None = None,
+        lineage: Sequence[tuple[str, str, str]] | None = None,
+        instance: str = "",
+        roster: Mapping[str, Any] | None = None,
+    ) -> "SummonStart":
+        """召唤的前半：判据 + 落 running 行 + 名册登记（不含执行）。见模块 docstring。
+
+        返回 `SummonStart`：`refusal` 非空 = 这一趟没派出去（终局已定，理由就是
+        那个 `SummonResult`）；否则 `task_id` 非空、`tasks` 行已经是 `running`、
+        名册那一格已经登记过。参数说明在 `_summon_preflight`。
+        """
+        got = self._summon_preflight(
+            role, action, params, by=by, parent_task_id=parent_task_id,
+            input_key=input_key, budget=budget, token=token, lineage=lineage,
+            instance=instance, roster=roster)
+        if isinstance(got, SummonStart):
+            return got
+        # 前半的终局是"没派出去"（越权/超深/触顶/预算/取消/参数）：包成同一个
+        # 返回类型，于是调用方只需要判 `refusal is not None`，不必判两个类型。
+        # 折成两个返回类型就是那种漂移：总有一处忘了判第二个。
+        return SummonStart(role=str(getattr(got, "role", "") or role),
+                           action=str(getattr(got, "action", "") or action),
+                           params=dict(params or {}), by=str(by),
+                           parent_task_id=parent_task_id, input_key=str(input_key),
+                           instance=str(instance), token=token, refusal=got)
+
+    def _summon_preflight(
+        self,
+        role: str,
+        action: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        by: str = S.CONDUCTOR_ROLE,
+        parent_task_id: str | None = None,
+        input_key: str = "",
+        budget: Mapping[str, Any] | None = None,
+        token: CancelToken | None = None,
+        lineage: Sequence[tuple[str, str, str]] | None = None,
+        instance: str = "",
+        roster: Mapping[str, Any] | None = None,
+    ) -> Any:
+        """召唤的前半本体：八道判据，全部通过才落 running 行、登记名册。
+
+        返回 `SummonStart`（派出去了）或 `SummonResult`（没派出去，终局已定）。
+        两个返回类型只在这一层出现：公开面 `summon_begin` 已经收敛成一种。
 
         参数
         ----
@@ -3172,6 +4050,32 @@ class Conductor:
         # 所以登记不会带走这次派活；读数随 `SummonResult.roster_*` 交回调用方。
         roster_rec = self._register_roster(task_id=tid, role=role,
                                            owner=str(parent_task_id or ""), meta=roster)
+        return SummonStart(
+            role=str(role), action=str(action), params=params, by=str(by),
+            parent_task_id=parent_task_id, input_key=str(input_key),
+            instance=str(instance), token=token, t0=t0, task_id=tid,
+            roster=dict(roster) if roster else None,
+            roster_rec=dict(roster_rec or {}), started_at=str(started),
+        )
+
+    def summon_run(self, start: "SummonStart") -> SummonResult:
+        """召唤的后半：执行 handler、写终态、记账（可以直接在别的线程里跑）。
+
+        与 `summon_begin` 成对：`summon` = 两段在同一条调用栈上顺序跑；
+        `summon_preemptible` = 前半在调用线程、后半在后台线程。
+        这里的每一句都不碰"派活成不成立"的判据（那是前半的事），
+        只回答"这一趟跑出了什么"。
+        """
+        if start.refusal is not None:
+            return start.refusal
+        tid = str(start.task_id or "")
+        if not tid:  # pragma: no cover - 前半要么落行要么落拒绝，走到这里说明它坏了
+            return SummonResult(role=start.role, action=start.action, status="failed",
+                                outcome="failed", error="summon_begin 既没落行也没拒绝",
+                                detail="内部错误：派活前半没有给出 task_id")
+        role, action, params = start.role, start.action, start.params
+        token, instance = start.token, start.instance
+        roster, roster_rec, t0 = start.roster, start.roster_rec, start.t0
 
         # ---- [6] 执行
         try:
@@ -3715,31 +4619,69 @@ class Conductor:
         )
 
     # ---------------------------------------------------------------- 计划
-    def run_plan(self, plan: Sequence[TaskCall], *, token: CancelToken | None = None) -> list[SummonResult]:
-        """把一串 call 交给 `scheduler.run_waves`。
+    def summon_many(self, plan: Sequence[TaskCall], *, token: CancelToken | None = None,
+                    probe: Any = None) -> Any:
+        """派一批（可抢占）：派完立刻返回 `scheduler.WaveHandle`（D-64）。
 
-        返回列表长度恒等于 `len(plan)` 且顺序与 plan 一致（I-10）。
-        并发度不改变结果顺序 —— 这是"可复现"的判据本身。
+        句柄上读得到"已派出的 task_id 列表"与"还在跑的列表"，不必等到全部完成：
+        `handle.dispatched()` / `handle.running()` / `handle.settled()` /
+        `handle.wait_any(timeout)` / `handle.results()`。
+
+        它与 `run_plan` 是同一台引擎的两种拼法（`run_plan` = 这个句柄的阻塞读法），
+        所以"可抢占"与"阻塞"两条路的结果集、顺序、refusal 由构造而相同。
+        """
+        from . import scheduler as SC
+
+        token = token or self.token
+        P.assert_policy_complete(self.policy)
+        self._log(f"summon_many：{len(plan)} 个召唤（可抢占），policy={self.policy.to_dict()}")
+        # S-03 的消费点在这里（不在 `run_plan`）：两条拼法都要"派活时顺手认领队列"，
+        # 放在这条唯一的分派入口上，就不会出现"可抢占那条不认领"的半边。
+        self._consume_queue_before_dispatch()
+        return SC.start_waves(list(plan), conductor=self, policy=self.policy,
+                              token=token, probe=probe)
+
+    def run_plan(self, plan: Sequence[TaskCall], *, token: CancelToken | None = None,
+                 preemptible: bool = False) -> Any:
+        """把一串 call 派出去。两种拼法共用一台引擎，由 `preemptible` 选。
+
+        - `preemptible=False`（默认，改前逐字不变）：等到全部落定，返回
+          `list[SummonResult]`。列表长度恒等于 `len(plan)` 且顺序与 plan 一致
+          （I-10），并发度不改变结果顺序 —— 这是"可复现"的判据本身。
+          禁改区的 `tools/conductor_tools.conductor_summon_many`、`pipeline` /
+          `deliver` 与一批判据的替身都走这一档。
+        - `preemptible=True`（D-64）：派完立刻返回 `scheduler.WaveHandle`
+          （`dispatched()` / `running()` / `settled()` / `wait_any()`），
+          父代理不必等到全部完成；`agent_loop._do_summon_many` 走这一档。
+          要那一份完整列表时就 `handle.results()`（列表兼容的读法）。
+
+        为什么默认仍是阻塞：把默认改掉等于让所有既有调用方一夜之间从"拿到结果"
+        变成"拿到句柄"，而它们多半只是 `for r in res` —— 那种改动不会报错，
+        只会在别处变成"结果集空了一半"（实测：`tests/test_scheduler.py` 的两条
+        时序判据当场变绿，因为总耗时读成了 0）。要可抢占的地方显式要。
 
         父是谁（2026-10-20）：plan 里那些 call 自己带着 `parent_task_id`（一件一件
         各归各的父）；而"派活时顺手认领队列"那一步的父不在这里传 —— 它由调用方用
         :func:`consuming_as` 挂上（工具路径已经有 `calling_as`，shape 路径由
         `_do_summon_many` 挂），见 `consume_pending_search_requests` 的最后一段。
         """
-        from . import scheduler as SC
-
         token = token or self.token
-        P.assert_policy_complete(self.policy)
-        self._log(f"run_plan：{len(plan)} 个召唤，policy={self.policy.to_dict()}")
-        # ---- S-03 的第一个消费点（队列级认领 · 乙形态）：派活时顺手把还没做完的
-        # 检索请求交给 A 的 `run_once`（幂等：同一条 request_id 只唤起一次）。
-        # 放在派活之前：这一波 plan 之后，队里那条 pending 就该有人做了。
-        # 扫队失败不许拖住这一波派活（它只是"顺手多做一件"）。
+        self._log(f"run_plan：{len(plan)} 个召唤"
+                  f"{'（可抢占）' if preemptible else '（阻塞）'}，"
+                  f"policy={self.policy.to_dict()}")
+        handle = self.summon_many(plan, token=token)
+        return handle if preemptible else handle.results()
+
+    def _consume_queue_before_dispatch(self) -> None:
+        """`run_plan` 与 `summon_many` 共用的那一步：派活之前扫一次待认领的队列。
+
+        抽成一个方法是因为两条拼法都要它（D-64）：只给 `run_plan` 会变成
+        "阻塞式派活顺手认领、可抢占派活不认领" —— 同一件事两条口径。
+        """
         try:
             self.consume_pending_search_requests(trigger="dispatch")
         except Exception as exc:  # noqa: BLE001 - 见上
             self._log(f"派活前扫队失败：{type(exc).__name__}: {exc}")
-        return SC.run_waves(plan, conductor=self, policy=self.policy, token=token)
 
     # ---------------------------------------------------------------- 停止
     def _signal_stop(self, code: str, detail: str, *, by: str) -> str:

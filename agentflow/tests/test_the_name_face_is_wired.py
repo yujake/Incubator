@@ -25,6 +25,7 @@ from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from _d68_board_fixture import children_clean_their_boards  # noqa: E402 - D-68 夹具助手（替身角色不会自己 ack，见该模块 docstring）
 
 SID = "s1k3"
 
@@ -51,6 +52,7 @@ def _env(tmp_path: pathlib.Path) -> tuple[Store, Conductor, Any, pathlib.Path, s
     st = Store(ws)
     st.init()
     cond = Conductor(st, policy=None, backend=LocalBackend({}))
+    children_clean_their_boards(cond)
     reg = build_registry(store=st, conductor=cond).registry
     me = cond.open_top_level_run("M", "我这一趟的活")
     gate = _Gate([{"text": json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)}])
@@ -114,6 +116,11 @@ def test_a_summon_with_a_brief_registers_the_roster(tmp_path: pathlib.Path):
         tmp_path,
         {"M": [json.dumps({"summon": {"role": "D", "task": "派活：写一份报告", "params": {},
                                       "brief": "把 X 的族构造证据补齐", "why": "试一试"}},
+                          ensure_ascii=False),
+               # D-68（业主 2026-10-26）：「最终 final 时应该是 M 下整棵树都已销号，
+               # 否则不记 final」⇒ 收工之前先把它销号（名册名 D1）。
+               json.dumps({"tool": "conductor.retire_child",
+                           "args": {"child_name": "D1", "reason": "收口前先销号"}},
                           ensure_ascii=False),
                json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)],
          "D": [json.dumps({"final": "干完了", "evidence": []}, ensure_ascii=False)]},

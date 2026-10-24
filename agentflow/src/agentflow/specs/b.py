@@ -239,7 +239,8 @@ PROOF_CHANNEL = (
 PROOF_CHANNEL_NO_LEAN = (
     "**形式化那一档本会话产不出来（系统做不了）**：证明的判读走逐行审阅 —— 证明过程逐字进 "
     "`statements` 的 `proof_text`（含假设、每一步的依据、你接不上的那一步），再请 V 用 "
-    "`verify.verify_proof` 逐行走查，结论进 `verifications` 表（签发新的那一档要 V 的「成立」）。"
+    "`verify.verify_proof` 逐行走查，结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）"
+    "（签发新的那一档要 V 的「成立」）。"
     "用户指定「这一条需要形式化验证」时，如实回「本会话形式化已关闭」这一读数，"
     "并把这条要求连同缺的那几样记进交付。"
 )

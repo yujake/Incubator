@@ -198,9 +198,27 @@ WRITING_SCOPE_NO_LEAN = (
 
 #: 关掉 Lean 时，上面那一段整段换成另一份（这一档做不出形式化）。
 #:
-#: 与 `specs/b.py` / `specs/e.py` / `specs/l.py` 那三张表同一机制：左边与右边都是本文件的常量，
+#: 与 `specs/b.py` / `specs/e.py` 那两张表同一机制：左边与右边都是本文件的常量，
 #: 应用点唯一（`agent_prompts._apply_no_lean_variant`）。
+#:
+#: 2026-10-25（审计 G/H/V/L 第 4 条）：`lean_file` 那一句改成「项目根相对路径 + 源码落在
+#: `code/formal/`」之后，它在关档那一档也成立（那一档盘上没有 Lean 产出 ⇒ 两格应当留空），
+#: 所以替身说的不是"这一岗不存在"，而是"这一档没有可填的东西"。替身里那句"本会话产不出
+#: Lean 产出"是关档的读数，不是把这一岗的工作藏起来。
+#:
+#: 顺序与 E 那张表同一条纪律：具体的长条目在前、短条目在后。
+LEAN_FILE_ROW = (
+    "有 Lean 产出时每行还要写 `lean_file`（验它的那份源码的真实位置：**项目根相对路径** —— 源码落在 "
+    "`code/formal/`，所以写 `code/formal/000004.lean`；论文包内那种写法（`formal/000004.lean`）也认，"
+    "两种写法解析的都是盘上同一份）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；"
+    "空着不算验过。"
+)
+LEAN_FILE_ROW_NO_LEAN = (
+    "有 Lean 产出时每行还要写 `lean_file` 与 `lean_target`（本会话产不出 Lean 产出 ⇒ 这两格留空，"
+    "不许自己编一个路径）；空着不算验过。"
+)
 NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    (LEAN_FILE_ROW, LEAN_FILE_ROW_NO_LEAN),
     (WRITING_SCOPE, WRITING_SCOPE_NO_LEAN),
 )
 
@@ -260,14 +278,14 @@ SPEC = AgentSpec(
             "召唤的只有 A / D / E / F；直接召唤会被判 `forbidden_edge` 并白丢一步 —— 这一步的替代是把缺口写给 D，"
             "同一件事仍然往前走。**你不需要、也不能直接召唤 B**：B 的入口在 D 的手稿那一侧，你要的那次收录在"
             "那里发生。",
-            "**正文里这六样一个都不许出现**：① 内部编号 `exp:` / `stmt:` / `lit:` / `rel:` / `conj:` 一个都不许（全进附录 A）；"
+            "**正文里这六样一个都不许出现**：① 内部编号 `exp:` / `stmt:` / `lit:` / `rel:` / `eval:` / `doc:` 一个都不许（全进附录 A）；"
             "② 自审小节「文献可核性」「Reproducibility」「ACCEPTANCE」「缺口与边界（逐条）」；③ 过程词「台账」「本轮」「本项目」"
             "「验收表」「sha256」「我们派了 E 跑」「M 决定」；④ 内部术语 `cross_check` / `supported_not_proved` / "
             "`known_in_literature`（翻译成数学语言：「数值证据支持」「我们在 n ≤ 12 内验证过」「这是文献中的已知定理」）；"
             "⑤ 计算证据（数值实验节、参数扫描表、读数清单）—— 只许进附录 A；⑥ 凑长度（同一结论换三种说法、大段文献摘要、把台账"
             "字段当表格铺开）。一句话：正文 = 问题 + 定义 + 定理与证明 + 讨论，附录 = 算过的证据，长度由定理与证明撑。",
             "**附录 A 是内部编号与算过的东西的唯一落点**：算法、参数域、量的表、内部编号（`exp:` / `stmt:` / `lit:` / `rel:` / "
-            "`conj:`）、可复现入口全在 `Appendix A: Computational evidence`；`Appendix B` 只放长证明的机械细节（穷举、坐标计算"
+            "`eval:` / `doc:`）、可复现入口全在 `Appendix A: Computational evidence`；`Appendix B` 只放长证明的机械细节（穷举、坐标计算"
             "这类），**不许把主证明搬走** —— 主证明留在第 3 节。",
             "**导言区是配方，语言是硬线**：导言区**推荐**照本仓 mp3 那一篇论文的导言区写（六位编号、三层定理风格）—— "
             "`\\documentclass[11pt]{ctexart}`、`amsmath,amssymb,amsthm`、`geometry`（`margin=2.5cm`）、`booktabs`，三个 "
@@ -328,7 +346,7 @@ SPEC = AgentSpec(
             # 「同一个对象被核了两次」，那要说清是复现而不是新证据（实验行的 `notes` 会点名
             # 「同一份 data 已经支持过 exp:XXXX」）。」一条已删（判据守住了才删）。
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
-            "**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：① 正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/paper/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「三格齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；`file` 写包内相对路径（这一条只管理论定理那一行）；**例外：这一行是数值实验定理时，`file` 写程序相对仓库根的路径，不是包内路径** —— 它的证明栏就是那份程序，对应表里另有两格要一起填：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）；有 Lean 产出时每行还要写 `lean_file`（验它的那份源码在论文包内的相对路径，如 `formal/000004.lean`）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；空着不算验过。**「三格齐」才算这一行写完**：理论定理行 = `file` 那一格，数值实验定理行另加 `numeric_evidence` / `exhaustion_note`（这三格），有 Lean 产出的定理类行另加 `lean_file` / `lean_target`（那两格）；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。",
+            "**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：① 正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/paper/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「三格齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；`file` 写包内相对路径（这一条只管理论定理那一行）；**例外：这一行是数值实验定理时，`file` 写程序相对仓库根的路径，不是包内路径** —— 它的证明栏就是那份程序，对应表里另有两格要一起填：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）；有 Lean 产出时每行还要写 `lean_file`（验它的那份源码的真实位置：**项目根相对路径** —— 源码落在 `code/formal/`，所以写 `code/formal/000004.lean`；论文包内那种写法（`formal/000004.lean`）也认，两种写法解析的都是盘上同一份）与 `lean_target`（那份源码里字面出现的声明名，如 `FreeGroupFactor.isII1`）；空着不算验过。**「三格齐」才算这一行写完**：理论定理行 = `file` 那一格，数值实验定理行另加 `numeric_evidence` / `exhaustion_note`（这三格），有 Lean 产出的定理类行另加 `lean_file` / `lean_target`（那两格）；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。",
             # 2026-10-23（业主裁定 E-1 与随后那条硬口径）：纯数值实验证出的定理怎么写。
             # 判据：tests/test_numeric_theorem_writing_spec.py（七条）+ papermapping.NUMERIC_KINDS。
             "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写**：E 把它们写进 `statements` 表的 `proof_text` 那一栏的三段（`程序：` / `程序设计：` / `穷举论证：`），你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",

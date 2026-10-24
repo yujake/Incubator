@@ -31,6 +31,7 @@ from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from _d68_board_fixture import children_clean_their_boards  # noqa: E402 - D-68 夹具助手（替身角色不会自己 ack，见该模块 docstring）
 
 #: 三跳都要"循环驱动"才能各自再派下一层：M 派 A、A 派 B、B 干活。
 LOOPS: dict[tuple[str, str], dict] = {("M", "run"): {}, ("A", "run_once"): {}, ("B", "run_once"): {}}
@@ -51,6 +52,11 @@ SCRIPTS: dict[str, list[str]] = {
                                "why": "这一件是 A 的编排面"},
                     "notify": {"to": "A", "summary": "请登记 Theorem 1.5",
                                "body": "## 要你做什么\n登记 Theorem 1.5。\n", "refs": []}},
+                   ensure_ascii=False),
+        # D-68（业主 2026-10-26）：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」
+        # ⇒ 收工之前先把这一支销掉（级联把 A 名下的 B 一起带走）。
+        json.dumps({"tool": "conductor.retire_child",
+                    "args": {"child_name": "A1", "reason": "收口前先销号"}},
                    ensure_ascii=False),
         json.dumps({"final": "已交 A 转达"}, ensure_ascii=False),
     ],
@@ -115,6 +121,7 @@ def _world(tmp_path: pathlib.Path):
                                           price=(0.0, 0.0), sid="t"),
         max_steps=6, store=st, sid="t")
     cond = Conductor(st, policy=None, backend=backend)
+    children_clean_their_boards(cond)
     backend.conductor = cond
     built = build_registry(store=st, conductor=cond, workspace_root=str(st.root))
     backend.registry = built.registry

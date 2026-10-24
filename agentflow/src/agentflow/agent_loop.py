@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import re
 import time
@@ -101,9 +102,12 @@ JSON_TAIL = (
     "只把占位符换成你的内容：不要自己数括号、也不要自己加一层嵌套 —— "
     "实测最常见的坏 JSON 就是最后多补一个 `}`：\n"
     '{"tool": "<工具名>", "args": {...}}\n'
-    '{"summon": {"role": "A-H", "action": "<动作名>", "params": {...}}}\n'
-    '{"summon_many": {"targets": [{"role": "A-H", "action": "<动作名>", "instance": "<可选>"}],'
-    ' "why": "<为什么一次派这一批>"}}\n'
+    # 2026-10-25（审计 G/H/V/L 第 9 条）：骨架里不再有 `action` 这一格，也不再教 `A-H`
+    # 这种角色级寻址 —— `_do_summon` 只读 `role` + `task` + `params`（形状里没有填动作的
+    # 位置，见那里的注释），而寻址一律落在一个真的角色名上（伙伴表里那一格）。
+    '{"summon": {"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>", "params": {...}}}\n'
+    '{"summon_many": {"targets": [{"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>",'
+    ' "instance": "<可选>"}], "why": "<为什么一次派这一批>"}}\n'
     '{"message": {"to": "<伙伴或 #public>", "subject": "...", "body": "..."}}\n'
     # 骨架里的字段名用协议的首选名（2026-10-07 修）：这里原写 `"title"` + `"brief"`，
     # 而 `HANDOFF_PROTOCOL` 逐字写着"旧名仍然接受，但新写的一律用 `summary`" —— 骨架是
@@ -945,24 +949,28 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
 
     ## 为什么这里没有「收件箱」与「板」两格（D-52，业主 2026-10-24 的口径）
 
-    开场这一条消息是**快照**：谁派的、深度、台账号、名册、工作区 —— 一趟定一次，
+    开场这一条消息是快照：谁派的、深度、台账号、名册、工作区 —— 一趟定一次，
     续跑要能逐字重建它（`tests/test_user_channel_stop_and_resume.py` 的
     `rebuilt == run.messages` 就是这条判据）。
 
-    而留言与板项是**流水**：跑到一半子代理交差、父代理回复、V 的判决、计时器到点，
+    而留言与板项是流水：跑到一半子代理交差、父代理回复、V 的判决、计时器到点，
     每一步都可能新增。它们此前也被塞在快照里（开卷九格里的 `inbox` / `board`），
-    于是"这一趟开头听到了什么"被冻在第一条消息里：**之后到达的东西永远读不到** ——
-    D-52 的真机现场（`projects/sylow3`）就是它：t-000031 / t-000038 在 17:45:45 落成
-    `item_state=queued`，而收件人 t-000003 直到 18:05 那次阻塞式派活返回才第一次看到
-    它们（19 分钟），中间它一步都没有机会读队列。
+    于是"这一趟开头听到了什么"被冻在第一条消息里。开卷之后唯一还会送东西的是
+    "一步执行完之后听一次"那条耳朵（`AgentLoop._hear`），而它对这些步都不发生：
+    `invalid` / 没拿到回复 / 正在阻塞等子 / 收工那一步。真机现场（`projects/sylow3`，
+    只读读数）：t-000031 / t-000038 在 17:44:42 / 17:45:45 落成 `item_state=queued`，
+    收件人 t-000003 直到 18:05:06 那次阻塞式派活返回、步 8 执行完才被那条耳朵送到
+    （19 分钟；它在这 19 分钟里一步都没有），而"送过没有"在盘上一条记录都没有
+    （`seen_step=8` 查不到对应的投递事件）。所以缺的不是"再调一次渲染"，是
+    "把流水的投递口从'上一步的耳朵'改成'每一次 ask_step 之前的一次读数'"。
 
-    所以两格搬去了 :func:`mailbox_digest` / `AgentLoop._deliver_mailbox`：**每一次
-    `ask_step` 之前**现算一次"发给我、还没读过的"那批，作为一条独立的增量消息投进去
+    所以两格搬去了 :func:`mailbox_digest` / `AgentLoop._deliver_mailbox`：每一次
+    `ask_step` 之前现算一次"发给我、还没读过的"那批，作为一条独立的增量消息投进去
     （不是重渲染开卷：重渲染会同时破坏续跑可重建性与去重）。三个后果都是刻意的：
 
     1. 快照里不再有流水 ⇒ 开场那一段与"之后到了什么"不再互相覆盖；
     2. `inbox` / `board` 两个形参仍然留着（它们仍在 `OPENING_FACT_KEYS` 与
-       `agent_run_start.opening_facts` 里，是这一趟开头的读数），但**一个字都不再渲染**
+       `agent_run_start.opening_facts` 里，是这一趟开头的读数），但一个字都不再渲染
        —— 判据 `tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py` 的第 3 条
        钉着"开卷那段不再包含 board/inbox 两格"；
     3. 流水只有一条通道、一个状态机（板项 `queued → seen`，留言 `agent_inbox` 投递登记），
@@ -1213,6 +1221,26 @@ class LoopRun:
     counters_reset_at: int = 0
     #: 这一趟压了几次历史（S-B；读数，不是判据）：0 = 一次都没压。
     compactions: int = 0
+    #: ---- 信箱与唤醒的两个收口读数（D-52 / D-53）
+    #:
+    #: 业主的施工单第 ④ 条要两个数："这一趟投递了多少条 / 唤醒了几次"。
+    #: 读数落在 `agent_run_end`（与 `agent_mailbox` / `agent_wake` 那两条事件同源），
+    #: 于是"投了几条"既能从事件流逐条复算，也能从收工那一行一眼读到。
+    #:
+    #: `mailbox_items` / `mailbox_msgs` 是这一趟投进去的 id（按投递顺序）：
+    #: 只报 count 的话，"投的是哪几条"还得去翻事件；而"投过没有"正是 D-52 要回答的问题。
+    mailbox_items: list[str] = field(default_factory=list)
+    mailbox_msgs: list[str] = field(default_factory=list)
+    #: 监控回合数与唤醒标记数（`wake_ids` 逐条点名）。
+    monitor_turns: int = 0
+    wakes: int = 0
+    wake_ids: list[str] = field(default_factory=list)
+    #: 唤醒事件的明细（`wake_id` / `reason` / `due_at` / `mailbox_item_id`）：
+    #: 收工那一行要能回答"为什么被叫醒"，而不只是"叫醒过几次"。
+    wake_events: list[dict[str, Any]] = field(default_factory=list)
+    #: 推了几次时钟 / 推响了几条计时器（D-53 的生产端读数）。
+    clock_pumps: int = 0
+    clock_fired: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
     #: 「收工那一步」的原始载荷（模型给的 `final` / `evidence` / `notify` 逐字一份）。
@@ -1400,12 +1428,18 @@ class LoopRun:
         `blocked_remaining` / `bad_json_streak` / `bad_args` / `bad_args_streak` /
         `no_reply` / `no_reply_streak` / `dead_loop_max` / `same_call_max` /
         `stalled_max` / `dead_loop_nudges` / `stalled_nudges` / `dead_loop_stopped` /
-        `counters_reset_at` / `compactions` / `waiting_for` / `resumed_from` /
+        `counters_reset_at` / `compactions` / `mailbox_items` / `mailbox_msgs` /
+        `mailbox_delivered` / `monitor_turns` / `wakes` / `wake_ids` / `wake_events` /
+        `clock_pumps` / `clock_fired` / `waiting_for` / `resumed_from` /
         `notify_rejections` / `handoffs` / `summons` / `summons_refused` /
         `messages_sent` / `messages_refused` / `productions` / `summons_total` /
         `summons_consumed` / `summons_continued` / `summons_waived` /
         `summons_unconsumed` / `summon_consumption` / `prompt_audit` / `spend` /
         `prompt_cache` / `elapsed_sec` / `notes` / `final_payload`。
+
+        （D-52/D-53 那九格此前漏在这份清单外：`mailbox_*` / `monitor_turns` /
+        `wake*` / `clock_*` —— 判据 `tests/test_summons_and_numbered_addressing.py::test_to_dict_documents_every_key_it_returns`
+        要求两个方向都相等，所以"加了键没补文档"会当场红。这里补齐的是文档，不是行为。）
 
         `summons` 与 `summons_refused` 是同一件事的两半，判据都在
         :func:`_summon_landed`：前者只记真的开出了子任务的召唤，后者逐条点名"尝试过但
@@ -1436,6 +1470,17 @@ class LoopRun:
             "counters_reset_at": self.counters_reset_at,
             # S-B：这一趟压了几次（0 = 一次都没压；与"没启用"那一档合起来读）。
             "compactions": self.compactions,
+            # D-52 / D-53 的两个收口读数：投了几条（板项 / 留言分别列 id）、
+            # 唤醒了几次（编号逐条点名）、监控回合数、推时钟的次数与推响的条数。
+            "mailbox_items": list(self.mailbox_items),
+            "mailbox_msgs": list(self.mailbox_msgs),
+            "mailbox_delivered": len(self.mailbox_items) + len(self.mailbox_msgs),
+            "monitor_turns": self.monitor_turns,
+            "wakes": self.wakes,
+            "wake_ids": list(self.wake_ids),
+            "wake_events": [dict(e) for e in self.wake_events],
+            "clock_pumps": self.clock_pumps,
+            "clock_fired": self.clock_fired,
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons,
@@ -1885,6 +1930,111 @@ MAILBOX_LIMIT: int = 8
 #: 留言是投递登记，板项是状态机 queued → seen）。
 MAILBOX_EVENT: str = "agent_mailbox"
 
+#: 监控回合里放行的形状（D-53 的出口限定）。`note` 在列：它只写自己的台账，
+#: 什么也不派；`final` 是收口。
+MONITOR_TURN_SHAPES: frozenset[str] = frozenset({"tool", "summon", "summon_many",
+                                                 "note", "final"})
+
+#: 监控回合里放行的工具名（`tool` 那一档只认这两件）。
+MONITOR_TURN_TOOLS: frozenset[str] = frozenset({"conductor.watch", "conductor.guide"})
+
+
+def monitor_exit_text(role: str) -> str:
+    """监控回合的出口那一段（S2，2026-10-25：按角色渲染，不把 M 的出口写给所有人）。
+
+    为什么必须按角色：`conductor.watch` / `conductor.guide` 只在主控的工具面上
+    （`MONITOR_TURN_TOOLS` 是这两件，而非 M 角色连一件都没有）。改前这一段给十一个
+    角色都写"只许 watch / guide / 补派 / 收口" ⇒ 非 M 读到两件它没有的工具，照做只会
+    拿 `unknown_tool` / 越权拒绝。非 M 走得通的只有补派、收口、note 三类
+    （`MONITOR_TURN_SHAPES` 里它们都在，且 `note` 只写自己的台账）。
+    """
+    if str(role) == S.CONDUCTOR_ROLE:
+        return ("这一回合的出口只许这四类：`conductor.watch`（看全树）/ "
+                "`conductor.guide`（给指导）/ 补派（`summon` 一个或 `summon_many` 一批）/ "
+                "收口（`final`）。")
+    return ("这一回合的出口只许这三类：补派（`summon` 一个或 `summon_many` 一批）/ "
+            "收口（`final`）/ `note`（只写自己的台账）。")
+
+#: 出口限定连拒几次之后放开（安全阀；理由见 `AgentLoop._monitor_refusal`）。
+MONITOR_REFUSAL_LIMIT: int = 3
+
+#: 可抢占派活（D-64）：派完在"这一步"里最多等多久（秒）。
+#:
+#: 真机读数（sylow3 只读复算）说这个数不能是"无上限"：M（t-000001）第 5 步的
+#: `summon_many` 从 17:34:25 一直阻塞到 19:06:48（92 分钟），那期间父代理一步都
+#: 没有，于是"下一次 ask_step 之前的投递"结构上不可能发生（t-000031 的通报迟到
+#: 20m28s）。也不能是 0：`summon` 的既有契约是"返回值里有孩子的结果"，秒级的孩子
+#: 必须照旧在同一个步里回来（`tests/test_d_summons_c_and_c_reports_back.py`）。
+#:
+#: 取的 180 秒是两个方向的折中，两边都有读数撑着：
+#:   · 上界：真机那次是 92 分钟 ⇒ 180 秒把"零回合 92 分钟"改成"最迟 3 分钟一次回合"；
+#:   · 下界：`tests/test_agent_loop.py` 那种"嵌套循环当孩子"的夹具在机器被压满时
+#:     实测要 20 秒级；短于这个数会让"孩子还没回来"变成一个与机器快慢有关的抖动
+#:     （那类判据本该只在真·长任务上红）。
+CHILD_STEP_WAIT_SEC: float = 180.0
+
+#: 可抢占派活（D-64）：返场点上最多等多久（秒）——"定期返场"的那个周期。
+#:
+#: 父代理还有子在跑时，每一次被问之前先等"有孩子回来 / 有时钟唤醒到点"。
+#: 取的参考是 D-53 那条业主口径「每 10 分钟看一次全树」的一半：孩子一回来就立刻
+#: 返场（那是生产性的回合），什么都没有时最迟 5 分钟返场一次（那是"定期"）。
+#: 为什么不能是 0：还有子在跑又没有任何新事实时，立刻问模型只会买到一句
+#: "我还在等"；而循环的步数没有硬闸（裁定 12-K），那是无限烧钱。
+CHILD_RETURN_WAIT_SEC: float = 300.0
+
+#: 收工时还在跑的孩子最多再等多久（秒）。到点就如实留痕、不再等 ——
+#: 一次收工不该被一个后台 handler 拖成"这条命令不返回"。
+CHILD_EXIT_DRAIN_SEC: float = 5.0
+
+#: 可抢占派活的开关（D-64）。`False` = 退回改前"派完等全部完成"的旧拼法。
+#:
+#: 为什么留一个开关而不是无条件打开：这是"反真空"判据的挂点
+#: （`tests/test_summon_is_preemptible.py` 的 d 条：把它打桩成 False ⇒ a/b 两条必红）。
+#: 没有这一格，"父代理拿到了回合"可能只是被别的东西满足的 —— 那样的判据什么都没钉住。
+PREEMPTIBLE_DISPATCH: bool = True
+
+
+def _takes_kwarg(fn: Any, name: str) -> bool:
+    """`fn` 收不收名为 `name` 的关键字（签名里带可变关键字形参也算收）。
+
+    为什么要探这一下：D-64 的开关是给 `Conductor.run_plan` 加的一个关键字
+    （`preemptible=`），而一批判据与外部调用点把它换成了替身
+    （`def run_plan(calls, token=None)`）。硬传那个关键字对替身是 TypeError，
+    而那种红的形状与"可抢占坏了"一样 —— 探签名把两者分开，替身走它自己那一套。
+    """
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    if name in params:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+def _patched_on_instance(obj: Any, name: str) -> bool:
+    """`obj` 上的 `name` 是不是被换成了实例属性（替身）。
+
+    为什么这一格是"可抢占要不要让路"的判据：一批判据用
+    `monkeypatch.setattr(cond, "summon", 替身)` 把派活那一层换掉，为的是只量
+    名册登记或父编号。可抢占走的是另一条入口（`summon_preemptible` /
+    `run_plan(preemptible=True)`），硬接上去就等于绕开它换掉的那一个 —— 那种红
+    看起来像"可抢占把别的判据弄坏了"，实际是"绕开了替身"。
+    所以：调用方显式换掉过 ⇒ 走它给的那一个（阻塞版），一行都不抢。
+    """
+    return name in getattr(obj, "__dict__", {})
+
+
+def _child_record_done(rec: Mapping[str, Any]) -> bool:
+    """这一笔挂账是不是"全落定了"（⇒ 可以从返场清单上摘掉）。"""
+    handle = rec.get("handle")
+    if handle is None:
+        return True
+    if str(rec.get("kind") or "") == "summon_many":
+        done = getattr(handle, "done", None)
+        return bool(done()) if callable(done) else True
+    done = getattr(handle, "done", None)
+    return bool(done()) if callable(done) else True
+
 #: 板项渲染成提示词里那一行的顺序口径 —— 与 `board_digest` 同一条（到达序 =
 #: 落行时间 + 编号）。两处都按这个键排，免得同一批项读出两个顺序。
 def _board_item_line(row: Mapping[str, Any]) -> str:
@@ -1898,7 +2048,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                    my_task_id: str, sid: str | None = None,
                    parent_task_id: str = "", parent_role: str = "",
                    limit: int = MAILBOX_LIMIT,
-                   exclude: Sequence[str] = ()) -> dict[str, Any]:
+                   rendered: Sequence[str] = ()) -> dict[str, Any]:
     """投给我、还没读过的那一批：`{checked, text, item_ids, msg_ids, problems,
     backlog, reason}`。
 
@@ -1910,24 +2060,30 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
     同一条通报每一步都重投一遍（模型会以为它又来了）；把 `claimed` 折进来会让
     一个已经有人在处理的项被念两次。
 
+    两层去重，各管一件事（判据第 2 条把这条写死：一开始只有状态机那一层，
+    超上限时队头被下一步重投、队尾永远轮不到）：
+
+    - `rendered`：这一趟已经渲染进过提示词的 id（`AgentLoop._mailbox_rendered`），
+      管"这一趟还要不要再渲染它"；
+    - `item_state == queued`：状态机，管"跨趟还要不要再投它"（`seen` = 已经承认过）。
+
+    两层都是必要的：承认送达是推迟的（要等"模型真的被问过一次"），而渲染是立刻的 ⇒
+    只靠状态机，一次装不下的积压会在下一步被同一批队头项重新占满。
+
     ## 三态（不许折平）
 
     - `checked=True` + `text=""`：查过了，这一趟没有新东西；
     - `checked=False` + `problems`：没查成（没有 conductor / 没有台账号 / 读失败）
-      —— 此时 `text` 里是一句带括号的说明，**不是**"板上没事"。
+      —— 此时 `text` 里是一句带括号的说明，不是"板上没事"。
 
     上限 `limit`：板项与留言各取前 `limit` 条（到达序），其余的条数进 `backlog`，
     并写成增量段末尾那句"还有 N 条没投"。
-
-    `exclude` 是这一趟已经投进过提示词的 id（`AgentLoop` 在 run 内维护）：投过就不再
-    重复投 —— 板项跨 run 的去重靠 `item_state`，而"这一趟已经念过"这件事在状态推进
-    失败时（磁盘坏了 / 状态机打桩）只有这一层挡得住。
     """
     got: dict[str, Any] = {"checked": True, "text": "", "item_ids": [], "msg_ids": [],
                            "problems": [], "backlog": 0, "reason": "",
                            "items": []}
     n = max(1, int(limit))
-    skip = {str(x) for x in (exclude or ())}
+    already = {str(x) for x in (rendered or ())}
     blocks: list[str] = []
 
     # ---- ① 板项（D-52 的那一半：收件人 = 我，状态 = queued）
@@ -1956,7 +2112,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
             else:
                 queued = [dict(r) for r in rows
                           if str(r.get("item_state") or "") == "queued"
-                          and str(r.get("task_id") or "") not in skip]
+                          and str(r.get("task_id") or "") not in already]
                 queued.sort(key=lambda r: (str(r.get("started_at") or ""),
                                            str(r.get("task_id") or "")))
                 pick = queued[:n]
@@ -1976,7 +2132,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
             parent_task_id=parent_task_id, parent_role=parent_role)
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
         msg_text, fresh, msg_problems = "", [], [f"收件箱没读成：{type(exc).__name__}: {exc}"]
-    fresh = [str(x) for x in fresh if str(x) not in skip]
+    fresh = [str(x) for x in fresh if str(x) not in already]
     if msg_problems:
         got["checked"] = False
         got["problems"].extend(f"信箱读不到留言：{p}" for p in msg_problems)
@@ -2000,10 +2156,10 @@ def record_mailbox_delivery(session_root: Path | str, role: str, *, step: int,
 
     `shape` 两档（续跑重放按它分叉，别把两档折平）：
 
-    - `"turn"`：投递点落在**一次 `ask_step` 之前** ⇒ 它是一条独立的 user 消息，
+    - `"turn"`：投递点落在一次 `ask_step` 之前 ⇒ 它是一条独立的 user 消息，
       续跑要按事件序把这条消息原样重放回序列里（`rebuilt == run.messages` 靠它）；
-    - `"step_tail"`：投递落在某一步**执行之后**（`Agent.p._hear` 那条耳朵）⇒ 那段文字
-      在这条步的 tool 结果里，续跑**不再**另加消息（另加会让重建的那一段多一条）。
+    - `"step_tail"`：投递落在某一步执行之后（`Agent.p._hear` 那条耳朵）⇒ 那段文字
+      在这条步的 tool 结果里，续跑不再另加消息（另加会让重建的那一段多一条）。
 
     `item_ids` / `msg_ids` / `wake_ids` 是这一条事件的键：`agent_mailbox` 事件因此
     可以按 item_id 复算"这一项投过没有"，而不用相信任何内存状态。
@@ -2023,7 +2179,7 @@ def record_mailbox_delivery(session_root: Path | str, role: str, *, step: int,
 # `clock.py` 把落点与读口都做好了（`read_wakes` / `pending_wakes` / `consume_wakes`），
 # 但它的读口径是"按收件人台账号"。而这一层有两个读者：正在跑的循环手上有台账号
 # （按编号读），`autonomy` 的轮边界上没有（每一轮 `run_role` 都会新开一行台账号）
-# ⇒ 那里只能按**角色**读。两个口径都在这一处实现，别在调用方各写一份过滤。
+# ⇒ 那里只能按角色读。两个口径都在这一处实现，别在调用方各写一份过滤。
 
 def pending_clock_wakes(workspace: str | Path, *, role: str = "",
                         task_id: str = "") -> dict[str, Any]:
@@ -2056,7 +2212,7 @@ def consume_clock_wakes(workspace: str | Path,
     为什么要分组：`clock.consume_wakes` 的签名是"一个收件人 + 一批编号"（删除与
     "返回被删的那几条"必须在同一个读-改-写里完成，那是 `clock.py` 的口径）。
     跨收件人的一批只能拆成几次调用；拆的时候每组的 `wake_ids` 都要带上，
-    否则会把同一收件人名下**别人**的唤醒一起删掉。
+    否则会把同一收件人名下别人的唤醒一起删掉。
     """
     by_task: dict[str, list[str]] = {}
     for e in events or ():
@@ -2437,6 +2593,44 @@ def _decode_roster_problem(addr: Mapping[str, Any],
     return "", candidates, ""
 
 
+def _decode_roster_outcome(written: str, roster: Any
+                           ) -> tuple[dict[str, Any] | None, dict[str, Any], str]:
+    """名册写法在解码层的唯一落点（`message` 与 `handoff` 两条通道共用）。
+
+    返回 `(拒收载荷, 读数格, 那句话)`，三条出口由调用方按同一个顺序读：
+
+    - `拒收载荷` 非空 ⇒ 受控拒绝：里面已经有 `to` / `refused` / `candidates` /
+      `callable` / `error`，调用方原样返回（同一份拒绝码，不各写一套）；
+    - `拒收载荷` 为空而 `读数格["role"]` 非空 ⇒ 解析到了那个角色：调用方把 `to`
+      换成收件箱认得的角色、把读数格原样挂到 `roster_addressing` 上；
+    - 两格都空 ⇒ 这一次解码没有名册上下文（`roster is None`：模块级单测直接调
+      `_decode_shape` 的那一档）⇒ 调用方按改前的判据拒收。
+
+    为什么抽成一处：`message` 与 `handoff` 的"名册名 / 绝对编号"必须是同一份解析、
+    同一个拒绝码。改前只有 `message` 那一支接了名册解析，而 D-63 之后政策教的就是
+    名册名 —— 手稿通道若不接，模型照政策写的那一句会被判非法（提示词教了一个框架
+    不收的字面量，本仓反复记过的形态）。
+
+    D-63 起读数格多带一格 `addressed_by`（`roster_name` / `task_id` /
+    `role_fallback`）：回执上要能看出这一次是靠哪种写法定到收件人的。
+    """
+    addr = _decode_roster_recipient(written, roster)
+    if addr is None:
+        return None, {}, ""
+    code, candidates, error = _decode_roster_problem(addr, written)
+    if code:
+        refused = {"to": str(written or ""), "refused": code,
+                   "candidates": [str(x) for x in candidates],
+                   "callable": str(addr.get("callable") or ""), "error": error}
+        return refused, {}, f"{code}：{error}"
+    return None, {"written": str(written or ""),
+                  "name": str(addr.get("name") or ""),
+                  "task_id": str(addr.get("task_id") or ""),
+                  "role": str(addr.get("role") or ""),
+                  "how": str(addr.get("how") or ""),
+                  "addressed_by": str(addr.get("addressed_by") or "")}, ""
+
+
 def _decode_shape(data: Mapping[str, Any], *,
                   roster: Any = None) -> tuple[str, Mapping[str, Any], str]:
     """规范形态的解码：一次只说一件事，取的那个键必须是 `SHAPES` 里的一种。
@@ -2590,30 +2784,24 @@ def _decode_shape(data: Mapping[str, Any], *,
             # 绝对台账号 —— 判据与解析都在 `roster_addresses`（经 `roster` 传进来），
             # 这里只负责"翻成谁"与受控拒绝码。改前这些写法一律被判 invalid / bad_args
             # ⇒ 模型照提示词写 `to="B1"` 一步也发不出去，而名册那一层明明支持它。
-            addr = _decode_roster_recipient(written, roster)
-            if addr is not None:
-                code, candidates, error = _decode_roster_problem(addr, written)
-                if code:
-                    return key, {"to": written, "refused": code,
-                                 "candidates": candidates,
-                                 "callable": str(addr.get("callable") or ""),
-                                 "error": error}, (f"{code}：{error}")
-                role = str(addr.get("role") or "")
-                return key, {"to": role,
-                             "subject": str(value.get("subject") or "（无标题）"),
-                             "body": str(value.get("body") or ""),
-                             "reply_to": str(value.get("reply_to") or ""),
-                             # 原写法 + 解析结果（读数要能对回原稿）。`to` 已经是收件箱
-                             # 认得的角色：收件箱按角色收，把 B1 原样写进 `to` 只会得到
-                             # 一条没有进程读得到的留言（业主 2026-10-22 的原话）。
-                             "roster_addressing": {
-                                 "written": written,
-                                 "name": str(addr.get("name") or ""),
-                                 "task_id": str(addr.get("task_id") or ""),
-                                 "role": role,
-                                 "how": str(addr.get("how") or "")}}, ""
-            return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
-                            f"{S.CONDUCTOR_ROLE}、也不是公共频道 {PUBLIC}（写 ALL 也认）")
+            # D-63（2026-10-24 业主：「现在怎么还有to谁的写法？已经是名册机制了！」）：
+            # 这段解析与 `handoff` 那一支共用同一个落点（`_decode_roster_outcome`）。
+            refused, marker, problem = _decode_roster_outcome(written, roster)
+            if refused is not None:
+                return key, refused, problem
+            role = str(marker.get("role") or "")
+            if not role:
+                return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
+                                f"{S.CONDUCTOR_ROLE}、也不是公共频道 {PUBLIC}（写 ALL 也认）")
+            # 原写法 + 解析结果（读数要能对回原稿）。`to` 已经是收件箱认得的角色：
+            # 收件箱按角色收，把 B1 原样写进 `to` 只会得到一条没有进程读得到的留言
+            # （业主 2026-10-22 的原话）。读数格在 `_decode_roster_outcome` 里造，
+            # 这里不另拼一份（两份会漂）。
+            return key, {"to": role,
+                         "subject": str(value.get("subject") or "（无标题）"),
+                         "body": str(value.get("body") or ""),
+                         "reply_to": str(value.get("reply_to") or ""),
+                         "roster_addressing": marker}, ""
         return key, {"to": to, "subject": str(value.get("subject") or "（无标题）"),
                      "body": str(value.get("body") or ""),
                      "reply_to": str(value.get("reply_to") or "")}, ""
@@ -2638,10 +2826,25 @@ def _decode_shape(data: Mapping[str, Any], *,
         # 也写 `<伙伴/M/ALL>`。于是模型照提示词写 `ALL` 会被拒，被拒后拿到的改法还是
         # `ALL`，同一步能连撞两次（这正是"提示词教了一个框架不收的字面量"。
         # 判据与归一都走唯一那份词表：`_known_recipient` / `_recipient_for_channel`。
+        #
+        # D-63（2026-10-24 业主：「现在怎么还有to谁的写法？已经是名册机制了！」）：
+        # 名册名 / 绝对编号也是这一格的合法写法 —— 与 `message` 共用同一个解析落点
+        # （`_decode_roster_outcome`）。手稿台账的收件人面仍然是角色（`manuscripts` 的
+        # 主键口径），所以解析到成员之后 `to` 写它的角色、原写法进 `roster_addressing`；
+        # "这一条通知落到哪个实例的板上"由 `_do_handoff` → `_handoff_address` 决定
+        # （那一步用的是原写法，不是这里的角色）。
+        roster_marker: dict[str, Any] = {}
         if not _known_recipient(to):
-            return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
-                            f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}（给所有人写 to=\"ALL\"，"
-                            "两种写法等价）")
+            refused, marker, problem = _decode_roster_outcome(to, roster)
+            if refused is not None:
+                return key, refused, problem
+            role = str(marker.get("role") or "")
+            if not role:
+                return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
+                                f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}（给所有人写 to=\"ALL\"，"
+                                "两种写法等价）")
+            to = role
+            roster_marker = marker
         summary = (str(value.get("summary") or "").strip()
                    or str(value.get("brief") or "").strip()
                    or str(value.get("title") or "").strip())
@@ -2655,13 +2858,18 @@ def _decode_shape(data: Mapping[str, Any], *,
         refs = value.get("refs") or []
         if not isinstance(refs, (list, tuple)):
             return "", {}, "handoff 的 refs 必须是编号数组"
-        return key, {"to": _recipient_for_channel(to, all_as="ALL"), "summary": summary,
-                     "body": body,
-                     "refs": [str(x) for x in refs],
-                     # `R2b-⑲`：带了这一格 ⇒ 走秘书的 `handoff_revise`（订正某一号，
-                     # 旧行保留）。它是可选键：不填就是新增（旧行为逐字不变）。
-                     "revises": str(value.get("revises") or "").strip(),
-                     "why": str(value.get("why") or "")}, ""
+        ret = {"to": _recipient_for_channel(to, all_as="ALL"), "summary": summary,
+               "body": body,
+               "refs": [str(x) for x in refs],
+               # `R2b-⑲`：带了这一格 ⇒ 走秘书的 `handoff_revise`（订正某一号，
+               # 旧行保留）。它是可选键：不填就是新增（旧行为逐字不变）。
+               "revises": str(value.get("revises") or "").strip(),
+               "why": str(value.get("why") or "")}
+        if roster_marker:
+            # 只在原写法是名册写法时才加这一格：老载荷的键集因此一个字节不变
+            # （与 `notify` / `blocked` 那些"给了才带"的键同一条纪律）。
+            ret["roster_addressing"] = roster_marker
+        return key, ret, ""
     if key in ("retire", "roster", "interrupt"):
         # 名册面的两个形状（S1k-2 加进 `SHAPES`、S1k-3 的判据直接打在 `_do_retire` /
         # `_do_roster` 上）—— 解码器当时漏了这两支，于是它们一路掉进下面那个
@@ -2920,6 +3128,12 @@ def delivery_addressing(base: Mapping[str, Any], addr: Mapping[str, Any]) -> dic
     探针的整份读数原样进 `addressing.roster_probe` —— 「为什么这次能发给非名册收件人」
     这句话必须还读得到（收紧规则不等于把理由抹掉）。探针没有拒绝时那一格不出现
     （成功的一步不为空读数长出一个键）。
+
+    D-63 起 `addressed_by`（`roster_name` / `task_id` / `role_fallback` /
+    `role_dispatch` / `channel`）留在成功那一档的 `addressing` 里：它不属于"被拒"，
+    而是"这一条是靠哪一种写法定到收件人的" —— 抹掉它，兼容档（角色代号兜到的那些）
+    就数不出来了。它也不进 `roster_probe`：那是"名册探针怎么答的"，与"最终用了哪一档"
+    是两个问题。
     """
     merged = {**base, **addr}
     out = {k: v for k, v in merged.items() if k not in ("refused", "error")}
@@ -2948,15 +3162,34 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     控拒绝，业主 B1：名字永久不复用）、`not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名匹
     配到多个 ⇒ 受控拒绝 + 列候选，「不替你挑一个」）。
     这一格「只判"发给谁"」，不判"能不能发"：协作边准入仍是 `message_admission` 那一份唯一实现。
+
+    ## `addressed_by`（D-63，业主 2026-10-24：「现在怎么还有to谁的写法？已经是名册机制了！」）
+
+    这一格回答「这一次的收件人是靠哪一种写法定下来的」，取值与产出它的那一行一一对应：
+
+    | 取值 | 含义 | 落到哪里 |
+    |---|---|---|
+    | `task_id` | 写的是绝对编号（第一公民） | 那个实例 |
+    | `roster_name` | 写的是名册名（`D1`） | 那个实例 |
+    | `role_fallback` | 写的是角色代号，而该角色在册恰好一个 | 那一个实例（兼容档） |
+    | `role_dispatch` | 写的是角色代号、发信人是主控 M、而此刻在册 0 个 | 角色通道（派活/通知） |
+    | `channel` | `#public` / `ALL` / 用户 / 主控 M | 频道（不归名册管） |
+    | 空串 | 没有解析到任何收件人（含全部受控拒绝） | 无 |
+
+    为什么必须有这一格：改前"按名册名发"与"按角色代号发"在回执上长得一样 ——
+    `how` 都是 `parent` / `child`，读的人分不出这一次到底用的是哪一档，于是
+    「角色代号还能不能当收件人」这件事在盘上没有读数。有了它，兼容档是可见的、
+    也是可数的（`role_fallback` 出现的次数就是"还有多少条在用老写法"）。
+    它刻意不是"收件人是不是唯一的"那种判断：唯一性由 `ambiguous_in_roster` 那一档拒。
     """
     out: dict[str, Any] = {
         "to": str(to or ""), "checked": False, "how": "", "kind": "", "name": "",
         "task_id": "", "role": "", "brief": "", "candidates": [], "callable": "",
-        "refused": "", "error": "", "why": "",
+        "refused": "", "error": "", "why": "", "addressed_by": "",
     }
     token = str(to or "").strip()
     if _is_all_recipient(token) or token in ("user", "用户") or token == S.CONDUCTOR_ROLE:
-        out.update(checked=True, how="outside_roster",
+        out.update(checked=True, how="outside_roster", addressed_by="channel",
                    why=("`#public` / `ALL` / 用户 / 主控 M 不是'给名册上的某个代理发消息'："
                         "公共频道另有可见面判据（业主 T20/T21），用户是频道外的读者，"
                         "而 M 是顶层发起方（名册上没有它的上级）—— 代唤协议逐字要求"
@@ -2986,9 +3219,12 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
            if str(m.get("task_id") or "") and str(m["task_id"]) == token
            and str(m["task_id"]) != mine]
     how_hint = token
+    addressed_by = "task_id" if hit else ""
     # ② 名册名
     if not hit:
         hit = [m for m in members if str(m.get("name") or "") and str(m["name"]) == token]
+        if hit:
+            addressed_by = "roster_name"
     # ③ 角色名（便利写法：名册内唯一匹配）
     if not hit and token.upper() in S.ROLES:
         role = token.upper()
@@ -2996,15 +3232,16 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
                 and not m.get("retired")]
         if len(live) == 1:
             hit = live
-            how_hint = f"角色名 {role} 在名册内唯一匹配"
+            addressed_by = "role_fallback"
+            how_hint = f"角色代号 {role} 在名册内唯一匹配（兼容档）"
         elif len(live) > 1:
             names = sorted(str(m.get("name") or m.get("task_id") or "") for m in live)
             out.update(checked=True, how="ambiguous_in_roster", role=role,
                        candidates=names, refused="ambiguous_in_roster",
-                       error=(f"角色名 {role} 在你的名册里匹配到 {len(names)} 个"
-                              f"（{'、'.join(names)}）⇒ 受控拒绝："
-                              f"要发给谁：{' 还是 '.join(names)}"
-                              "（写成名册名或绝对编号就只投那一个；不替你挑一个）"),
+                       error=(f"角色代号 {role} 在你的名册上在册 {len(names)} 个"
+                              f"（{'、'.join(names)}）⇒ 受控拒绝：不替你挑一个 —— "
+                              f"请写名册名或绝对编号：{' 或 '.join(names)}"
+                              f"（名册名就是那个实例的名字，绝对编号是它的台账号）"),
                        why=f"名册内同名多匹配：{names}")
             return out
         else:
@@ -3020,13 +3257,17 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
             # 这「不是」新放宽：改前 `to="E"` 走的正是这条通道（判据
             # `test_agent_loop.py::test_messages_are_durable_and_reach_only_the_recipient`）。
             # 名册里「有」匹配时上面那几支先命中，所以"同名多实例不许随便挑"对 M 同样成立。
+            # `addressed_by="role_dispatch"`：它确实没有落到任何实例上（这是在册 0 个
+            # 那一档），读数要能把它与"落到了某个实例"分开。
             out.update(checked=True, how="outside_roster", role=token.upper(),
-                       why=(f"发信人是主控 M ⇒ 按角色名 {token.upper()} 派活/通知不归名册管"
+                       addressed_by="role_dispatch",
+                       why=(f"发信人是主控 M ⇒ 按角色代号 {token.upper()} 派活/通知不归名册管"
                             "（它名下这会还没有那个角色的实例）"))
             return out
         out.update(checked=True, how="not_in_roster", refused="not_in_roster",
                    error=(f"{token or '（空）'} 不在你的名册里（只有父与子能通话）⇒ 受控拒绝："
-                          f"不许按角色名随便发。你能通话的是：{out['callable']}"),
+                          f"不许按角色代号随便发 —— 请写名册名或绝对编号。"
+                          f"你能通话的是：{out['callable']}"),
                    why=f"名册上没有 {token}（父 ∪ 子 里没有这个编号/名字）")
         return out
     member = hit[0]
@@ -3036,6 +3277,7 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
                kind=str(member.get("kind") or ""), name=str(member.get("name") or ""),
                task_id=str(member.get("task_id") or ""),
                role=str(member.get("role") or ""), brief=str(member.get("brief") or ""),
+               addressed_by=addressed_by,
                why=(f"名册成员（{'父' if member.get('kind') == 'parent' else '子'}）"
                     f"{member.get('name') or member.get('task_id')} → "
                     f"实例 {member.get('task_id')}（{how_hint}）"))
@@ -3665,16 +3907,44 @@ class AgentLoop:
     monitor_of: str = ""
     #: 这一趟从哪个路径/哪一段被唤醒的读数（`clock` / `inbox`；空串 = 不是唤醒回合）。
     monitor_source: str = ""
-    #: 这一趟已经投进过提示词的 id（板项 item_id 与留言 msg_id 各一份）。
+    #: 这一趟已经渲染进过提示词的 id（板项 item_id 与留言 msg_id 混装）。
     #:
-    #: 为什么要在内存里再记一份（板项的状态机已经能去重）：状态推进失败时
-    #: （磁盘坏 / 判据把 `mark_item_seen` 打桩成不动）它挡住"每一步重投一遍"。
-    #: 跨 run 的去重仍由 `item_state == "queued"` 与 `agent_inbox` 的投递登记负责。
-    _mailbox_done: set[str] = field(default_factory=set)
+    #: 为什么它必须存在（而状态机不能替代它）：承认送达是推迟的（`item_state → seen`
+    #: 要等"模型真的被问过一次"），而渲染是立刻的。两步之间如果只靠状态机去重，
+    #: 一次装不下而留下的积压会在下一步被同一批队头项重新占满 —— 超上限那条规定
+    #: （"其余下一次、一条不丢"）就变成了"队头无限重投、队尾永远轮不到"。
+    #: 判据 `tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py` 的第 2 条
+    #: 一开始就是被这个形态打红的（10 条投了两次 8 条、后 2 条一直 queued）。
+    #:
+    #: 两层各管一件事，不许折平：这一层管"这一趟还要不要渲染它"，状态机管
+    #: "跨趟它还要不要投"（`queued` 才是要投；`seen` 是已经承认过的）。
+    _mailbox_rendered: set[str] = field(default_factory=set)
     #: 「监控回合」是哪一步（-1 = 这一趟没有监控回合）：出口限定只作用在这一步上。
     _monitor_turn_step: int = -1
     #: 监控回合里被出口限定拒了几次（读数；到上限之后放开，免得把一圈拒信当收工）。
     _monitor_refusals: int = 0
+
+    # ---------------------------------------------------------------- 可抢占的派活（D-64）
+    #: 派完在"这一步"里最多等多久（秒）。到点就把"已派出 / 还在跑"交回父代理。
+    #:
+    #: 为什么要留这一段等待：`summon` / `summon_many` 的既有契约是"返回值里有孩子的
+    #: 结果"（业主 2026-10-09：汇报就是返回值；`tests/test_d_summons_c_and_c_reports_back.py`
+    #: 钉着它）。秒级、十秒级的孩子照旧在同一个步里回来；而 92 分钟那种阻塞被切成
+    #: "等一小段，然后父代理继续拿回合"。
+    child_step_wait_sec: float = CHILD_STEP_WAIT_SEC
+    #: 返场点上最多等多久（秒）：父代理每一次被问之前，先等"有孩子回来 / 有唤醒到点"。
+    #:
+    #: 为什么要有它（而不是立刻把回合交给模型）：还有子在跑、又没有任何新事实时，
+    #: 立刻问模型买到的是一句"我还在等" —— 而循环的步数没有硬上限（裁定 12-K），
+    #: 那种空转是无限烧钱。等到有动静再返场，这也是"不忙等、也不不等待"的落点。
+    child_return_wait_sec: float = CHILD_RETURN_WAIT_SEC
+    #: 收工时还没回来的孩子最多再等多久（秒）；到点就如实留痕，不再等。
+    child_exit_drain_sec: float = CHILD_EXIT_DRAIN_SEC
+    #: 这一趟还挂着的派活句柄（`{"kind", "handle", "calls", "task_ids", "step"}`）。
+    #:
+    #: 只装"派出去但还没全部落定"的那些：全部落定的在派活那一步就消费掉了
+    #: （于是"孩子很快回来"那条路上的行为与改前逐字相同 —— 一个句柄都不会留下）。
+    _child_handles: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """T14：每唤起一个智能体就自带一个秘书（不传就派生）。
@@ -3946,7 +4216,7 @@ class AgentLoop:
         推在哪两处：① 每一次 `ask_step` 之前（本方法由 `_deliver_mailbox` 调）；
         ② 每一个被拆出来的条目执行之前（`stepdispatch` 那几条）。
 
-        为什么"推在别人身上"也是对的：`clock.fire_due(workspace)` 是**按工作区**扫
+        为什么"推在别人身上"也是对的：`clock.fire_due(workspace)` 是按工作区扫
         全部待发计时器（不区分收件人），而每个 agent 的循环都在推 ⇒ 父在等子（阻塞式
         派活、一步都还没发生）的那段时间里，子代理的步进点会替它把到点的表推响，
         于是"到点项 + 唤醒标记"在父还没回到自己回合时就已经落在盘上。
@@ -3986,8 +4256,8 @@ class AgentLoop:
         """读一次"等我消费"的唤醒标记（并消费掉）—— D-53 的消费端。
 
         三态（这一段是 D-53 明确要求的）：
-        - 读到了、有唤醒 ⇒ `consumed` 非空 ⇒ 这一步是**监控回合**；
-        - 读到了、没有唤醒 ⇒ `consumed` 空 ⇒ "还没到"，**不是**"查过了没问题"；
+        - 读到了、有唤醒 ⇒ `consumed` 非空 ⇒ 这一步是监控回合；
+        - 读到了、没有唤醒 ⇒ `consumed` 空 ⇒ "还没到"，不是"查过了没问题"；
         - 读不成 ⇒ `checked=False` + `reason` 进 `run.notes`（未知不许折成"没有"）。
         """
         root = self._clock_root()
@@ -4022,7 +4292,7 @@ class AgentLoop:
     def _tree_reading(self) -> str:
         """这一支的最新树形读数（谁在飞 / 谁排队 / 谁交差 / 谁失败）—— 现读，三态。
 
-        D-53 的监控回合**必须**带这一格：没有它，"叫醒它看看全树"就只是叫醒它，
+        D-53 的监控回合必须带这一格：没有它，"叫醒它看看全树"就只是叫醒它，
         它还得自己再发一条 `conductor.watch` 才知道看什么（而监控回合的步数也是钱）。
         读不成 ⇒ 带括号的说明，绝不是"这一支一个子代理都没有"。
         """
@@ -4076,12 +4346,224 @@ class AgentLoop:
             lines.append(f"- 唤醒编号：{', '.join(wake_ids)}")
         lines += ["", "这一支的最新树形读数（现读，不是开场那一刻的快照）：",
                   self._tree_reading(), "",
-                  "这一回合的出口只许这四类：`conductor.watch`（看全树）/ "
-                  "`conductor.guide`（给指导）/ 补派（`summon` 一个或 `summon_many` 一批）/ "
-                  "收口（`final`）。其它动作会被框架拒（`monitor_turn_restricted`）—— "
+                  monitor_exit_text(self.role) + "其它动作会被框架拒（`monitor_turn_restricted`）—— "
                   "监控回合不许开新的研究方向，也不许拿它做研究。"
                   f"（本回合 = 第 {step + 1} 步。）"]
         return "\n".join(lines)
+
+    # ---------------------------------------------------------- 子代理返场（D-64）
+    def _register_child_handle(self, handle: Any, *, kind: str, calls: Sequence[Any],
+                               step: int = -1) -> dict[str, Any]:
+        """把一个派活句柄挂在循环上（返场点从这里读）。返回那一笔挂账。
+
+        ## 登记时机（"派出去就登记，落定了就摘掉"）
+
+        派活那一步会先登记再等一小段：这样等待期间到达的时钟唤醒能把它打断
+        （D-53 的监控回合不该被一个 180 秒的等待压住），而"等到了"的那些
+        在下面被取走、摘掉 —— 于是"孩子很快回来"那条路上的行为与改前逐字相同
+        （结果照旧写进派活那一步的返回值，一个句柄都不会留下）。
+        """
+        wait_any = getattr(handle, "wait_any", None)
+        if kind != "summon_many" and not callable(wait_any):
+            wait_any = getattr(handle, "wait", None)
+        rec = {
+            "kind": str(kind), "handle": handle, "calls": list(calls),
+            "step": int(step), "wait": wait_any, "taken": False,
+        }
+        self._child_handles.append(rec)
+        return rec
+
+    def _forget_child_handle(self, rec: Mapping[str, Any]) -> None:
+        """把一笔挂账摘掉（派活那一步已经把它的结果写进返回值了）。"""
+        self._child_handles = [r for r in self._child_handles if r is not rec]
+
+    def _children_running(self) -> list[str]:
+        """还在跑的编号（全部挂着的句柄合起来，按登记顺序）。"""
+        out: list[str] = []
+        for rec in list(self._child_handles):
+            handle = rec.get("handle")
+            if handle is None:
+                continue
+            if rec["kind"] == "summon_many":
+                out.extend(str(x) for x in (handle.running() or ()) if x)
+            else:
+                tid = getattr(handle, "task_id", None)
+                if tid and not handle.done():
+                    out.append(str(tid))
+        return out
+
+    def _take_child_results(self, rec: Mapping[str, Any]) -> list[Any]:
+        """取走这一笔"新回来的"结果（每一条只投一次）。"""
+        handle = rec.get("handle")
+        if handle is None:
+            return []
+        if rec["kind"] == "summon_many":
+            take = getattr(handle, "take_settled", None)
+            return list(take() or ()) if callable(take) else []
+        if rec.get("taken") or not handle.done():
+            return []
+        rec["taken"] = True            # type: ignore[index]
+        return [handle.result()]
+
+    def _child_settled_text(self, rows: Sequence[Any]) -> str:
+        """把回来的那几条渲染成一段给人读的增量（与阻塞版里的字段同名）。"""
+        lines: list[str] = []
+        for r in rows:
+            head = (f"- [{getattr(r, 'task_id', '') or '（没编号）'}] "
+                    f"{getattr(r, 'role', '')} 结局 "
+                    f"{getattr(r, 'status', '')}/{getattr(r, 'outcome', None) or '-'}")
+            reason = str(getattr(r, "refusal_reason", None) or "")
+            if reason:
+                head += f"（拒绝理由 {reason}）"
+            detail = _clip(getattr(r, "detail", "") or getattr(r, "error", "") or "", 200)
+            lines.append(f"{head}：{detail}" if detail else head)
+            payload = getattr(r, "payload", None)
+            if isinstance(payload, Mapping):
+                path = str(payload.get("llm_run_path") or "")
+                if path:
+                    lines.append(f"  它的完整记录：{path}；它的结论："
+                                 f"{_clip(payload.get('final') or '（没留下结论）', 300)}")
+        return "\n".join(lines)
+
+    def _children_round_trip(self, *, step: int, run: "AgentLoop.LoopRun",
+                             wait: bool) -> dict[str, Any]:
+        """返场点：把已经回来的孩子取走、渲染成一段增量；还没回来的等一小段。
+
+        ## 为什么它挂在 `_deliver_mailbox` 上（而不是另开一个投递点）
+
+        D-52 已经把"每一次 `ask_step` 之前投一次增量"这件事收敛到那一个点上，
+        D-64 的回灌必须走同一条：孩子回来的结果与板项、留言一样，都是"这一步
+        才到的事实"，混进同一条 user 消息才不会出现"两条增量、两种去重"。
+
+        ## 等待语义（不是忙等，也不是不等待）
+
+        `wait=True` 时最多等 `child_return_wait_sec` 秒，但只要有孩子落定、
+        或者时钟唤醒到点，就立刻返场（那是生产性的回合）。等待本身走句柄的
+        条件变量（`WaveHandle.wait_any` / `SummonHandle.wait`），不是空转。
+        """
+        running_before = self._children_running()
+        waited = {"reason": "none", "waited_sec": 0.0}
+        if wait and running_before:
+            waited = self._wait_for_children(timeout=float(self.child_return_wait_sec))
+        settled: list[Any] = []
+        still: list[str] = []
+        for rec in list(self._child_handles):
+            settled.extend(self._take_child_results(rec))
+            handle = rec.get("handle")
+            if rec["kind"] == "summon_many":
+                still.extend(str(x) for x in (getattr(handle, "running", lambda: [])() or ())
+                             if x)
+            else:
+                tid = getattr(handle, "task_id", None)
+                if tid and not handle.done():
+                    still.append(str(tid))
+        # 全部落定的那些从挂账上摘掉（下一回合不再看它）
+        self._child_handles = [r for r in self._child_handles
+                               if not _child_record_done(r)]
+        text = ""
+        if settled:
+            text = ("【子代理返场】你派出去的那些活回来了几条（这不是新消息，是你自己的"
+                    "子代理交差）：\n" + self._child_settled_text(settled))
+        if still:
+            text = (text + "\n\n" if text else "") + (
+                f"【子代理还在跑】名下还有 {len(still)} 项没回来："
+                f"{'、'.join(still)}。它们回来之后会在下一次返场时投到这里。"
+                "这段时间你仍拿得到回合：可以 `conductor.watch` 看全树、`conductor.guide` "
+                "给指导、补派新活，或者把手上别的事推进；收工（final）会被拒到它们回齐"
+                "（可抢占不等于不等孩子）。")
+        return {"text": text, "settled": settled, "running": still,
+                "checked": True, "wait": waited}
+
+    def _wait_for_children(self, *, timeout: float) -> dict[str, Any]:
+        """等"全部回来 / 时钟唤醒到点 / 到点"。返回读数（`reason` 说清是哪一种）。
+
+        ## 一个坑：`wait_any` 不是"全部落定"
+
+        句柄那两档的等待语义不同：`WaveHandle.wait_any()` 是"又有东西落定"
+        （可抢占的语义），`SummonHandle.wait()` 是"这一个落定"。两种情况都可能
+        "还有别人在跑"，所以这里只把它当作"带早醒的睡"，不把它当成
+        "全回来了"—— 每一轮都回到 `_children_running()` 重新判。
+        改前的写法（`wait(...) is True ⇒ settled`）会让"2 个孩子里回来 1 个"
+        读成"全回来了"，于是派活那一步把另一个还在跑的孩子记成终局。
+
+        每 0.5 秒看一眼唤醒标记（它是文件，读一次很便宜）：这样 D-53 的
+        "每 10 分钟看一次全树"不会因为父代理正卡在等孩子里而晚到整整一个切片。
+        """
+        began = time.monotonic()
+        deadline = began + max(0.0, float(timeout))
+        while True:
+            if not self._children_running():
+                return {"reason": "settled", "waited_sec": time.monotonic() - began}
+            if self._wake_pending():
+                return {"reason": "wake", "waited_sec": time.monotonic() - began}
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return {"reason": "slice", "waited_sec": time.monotonic() - began}
+            for rec in list(self._child_handles):
+                wait = rec.get("wait")
+                if not callable(wait):
+                    continue
+                try:
+                    wait(min(left, 0.5))
+                except Exception:  # noqa: BLE001 - 等坏了不许把返场点一起带走
+                    continue
+
+    def _wake_pending(self) -> bool:
+        """有没有到点的唤醒（读不成 ⇒ 当作没有；下一次会重新读）。"""
+        try:
+            from . import clock as CLK
+
+            got = CLK.pending_wakes(self.session_root, task_id=str(self.my_task_id or ""))
+        except Exception:  # noqa: BLE001 - 见 docstring
+            return False
+        return bool(int(got.get("count") or 0)) if isinstance(got, Mapping) else False
+
+    def _children_hold(self) -> str:
+        """收工门（D-64 与 D-68 的接缝）：还有孩子在跑 ⇒ 不许收口。
+
+        返回拒信（空串 = 放行）。业主口径的机器形态：「final 仍要求整棵树销号」——
+        于是"可抢占"不许变成"不等子就收口"。这一道闸只认我自己派出去、还没回来
+        的那些（台账里别人的行不在我的判断范围内：那是 D-68 那一条收工门的事）。
+        两道门各管一件事，顺序上这一道先响（它更具体：点名到编号）。
+        """
+        running = self._children_running()
+        if not running:
+            return ""
+        return (f"收工被拒（children_running）：你名下还有 {len(running)} 项派出去的活"
+                f"没回来（{'、'.join(running)}）。可抢占不等于不等孩子 —— 它们回来之后"
+                "结果会在下一次返场时投给你。现在可以：`conductor.watch` 看它们到哪一步、"
+                "`conductor.guide` 给它们一句指导、补派新活，或者先推进手上别的事；"
+                "它们回齐了再 final。")
+
+    def _settle_children_at_exit(self, *, run: "AgentLoop.LoopRun") -> None:
+        """退场：还挂着的孩子最多再等 `child_exit_drain_sec` 秒，然后如实留痕。
+
+        为什么不是无限等：一次收工（预算用完 / 叫停 / 协议连击）不许被一个后台
+        handler 拖住；那些孩子是台账里真实的行，会在后台跑完并各自落终态 ——
+        这一趟要给的是"我走的时候它们还没回来"这句话，不是假装它没发生。
+        """
+        running = self._children_running()
+        if not running:
+            self._child_handles = []
+            return
+        waited = 0.0
+        if float(self.child_exit_drain_sec) > 0:
+            got = self._wait_for_children(timeout=float(self.child_exit_drain_sec))
+            waited = float(got.get("waited_sec") or 0.0)
+        left = self._children_running()
+        if not left:
+            self._child_handles = []
+            return
+        note = (f"收工时还有 {len(left)} 项派出去的活没回来（{'、'.join(left)}）；"
+                f"已经又等了 {waited:.1f}s。它们不在这条进程的调用栈上，会在后台跑完并各自"
+                "落终态 —— 这一趟没有等它们收口（如实记，不假装它们回来了）")
+        run.notes.append(note)
+        SS.append(self.session_root, {
+            "kind": "agent_children", "role": self.role,
+            "task_id": str(self.my_task_id or ""), "step": -1,
+            "settled": [], "running": list(left), "waited_sec": round(waited, 3),
+            "why": "exit", "checked": True,
+        }, sid=self.sid)
 
     def _deliver_mailbox(self, *, step: int, messages: list[dict[str, Any]],
                          run: "AgentLoop.LoopRun") -> dict[str, Any]:
@@ -4089,13 +4571,13 @@ class AgentLoop:
 
         三件事按顺序，缺一件都不算投递成功：
 
-        1. 先推时钟（`_pump_clock`）—— 到点动作要在读信箱**之前**发生，否则这一趟
+        1. 先推时钟（`_pump_clock`）—— 到点动作要在读信箱之前发生，否则这一趟
            读到的永远是"上一刻盘上的样子"（到点项刚写出来就漏掉一轮）；
         2. 读唤醒（`_take_wakes`）—— 有唤醒就把这一段变成监控回合（树形读数 + 出口限定）；
-        3. 读信箱（`mailbox_digest`）—— 板项 + 留言，渲染成**一段**增量消息，
+        3. 读信箱（`mailbox_digest`）—— 板项 + 留言，渲染成一段增量消息，
            追加成一条 user 消息（不是重渲染开卷），并落一条 `agent_mailbox` 事件。
 
-        投递的承认（板项 `→ seen`、留言 `→ 已投递`）**不在这里**：它推迟到"模型真的
+        投递的承认（板项 `→ seen`、留言 `→ 已投递`）不在这里：它推迟到"模型真的
         被问过一次"之后（`run()` 里 `call.ok` 那一支，与改前的 `pending_delivery` 同一条
         纪律）。为什么：这一步的提示词还没发出去，此刻承认送达就是把"没发出去"记成
         "读过了"。
@@ -4106,20 +4588,48 @@ class AgentLoop:
         self._pump_clock(step=step, when="turn", run=run)
         wakes = self._take_wakes(step=step, run=run)
         monitor = self._monitor_block(wakes=wakes, step=step)
+        # ---- 子代理返场（D-64）：与 D-52 同一条投递点
+        #
+        # 位置在这一处的理由：唤醒已经消费完（有唤醒就是监控回合，不再等孩子，
+        # 否则"被叫醒看全树"会先被一个 5 分钟的等待拖住），而信箱还没读
+        # （孩子回来的结果与板项、留言拼成同一条增量，才有同一个去重面）。
+        children = self._children_round_trip(
+            step=step, run=run, wait=not bool(wakes.get("consumed")))
+        if children.get("settled") or children.get("running"):
+            SS.append(self.session_root, {
+                "kind": "agent_children", "role": self.role,
+                "task_id": str(self.my_task_id or ""), "step": int(step),
+                "settled": [str(getattr(r, "task_id", "") or "")
+                            for r in (children.get("settled") or ())],
+                "settled_outcomes": [str(getattr(r, "outcome", None) or "")
+                                     for r in (children.get("settled") or ())],
+                "running": [str(x) for x in (children.get("running") or ())],
+                "waited_sec": round(float(
+                    (children.get("wait") or {}).get("waited_sec") or 0.0), 3),
+                "wait_reason": str((children.get("wait") or {}).get("reason") or ""),
+                "checked": True,
+            }, sid=self.sid)
+            run.notes.append(
+                f"第 {step} 步返场：子代理回来 {len(children.get('settled') or ())} 条，"
+                f"还在跑 {len(children.get('running') or ())} 条"
+                f"（等待 {float((children.get('wait') or {}).get('waited_sec') or 0):.1f}s，"
+                f"原因 {(children.get('wait') or {}).get('reason') or 'none'}）")
         got = mailbox_digest(
             self.conductor, self.session_root, self.role,
             my_task_id=str(self.my_task_id or ""), sid=self.sid,
             parent_task_id=self.parent_task_id, parent_role=self.parent_role,
-            exclude=sorted(self._mailbox_done))
+            rendered=sorted(self._mailbox_rendered))
         for p in got.get("problems") or ():
             run.notes.append(str(p))
         item_ids = [x for x in got.get("item_ids") or () if x]
         msg_ids = [x for x in got.get("msg_ids") or () if x]
-        parts = [x for x in (monitor, str(got.get("text") or "")) if x]
+        parts = [x for x in (monitor, str(children.get("text") or ""),
+                             str(got.get("text") or "")) if x]
         if not parts:
             return {"text": "", "item_ids": [], "msg_ids": [],
                     "wake_ids": [str(e.get("wake_id") or "") for e in wakes.get("consumed") or ()],
                     "monitor": bool(monitor), "checked": bool(got.get("checked")),
+                    "children": children,
                     "problems": list(got.get("problems") or ())}
         text = "\n\n".join(parts)
         messages.append(user_message(text))
@@ -4130,22 +4640,23 @@ class AgentLoop:
             task_id=str(self.my_task_id or ""), sid=self.sid)
         if problem:
             run.notes.append(f"信箱投递事件没落成：{problem}")
-        self._mailbox_done.update(item_ids)
-        self._mailbox_done.update(msg_ids)
+        # 渲染集：这一趟已经把它念进过提示词了（与"承认送达"分开的一层，见字段说明）。
+        self._mailbox_rendered.update(item_ids)
+        self._mailbox_rendered.update(msg_ids)
         if monitor:
             self._monitor_turn_step = int(step)
             run.monitor_turns += 1
         return {"text": text, "item_ids": item_ids, "msg_ids": msg_ids,
                 "wake_ids": wake_ids, "monitor": bool(monitor),
-                "checked": bool(got.get("checked")),
+                "checked": bool(got.get("checked")), "children": children,
                 "problems": list(got.get("problems") or ())}
 
-    def _monitor_refusal(self, shape: str, payload: Mapping[str, Any]) -> str:
+    def _monitor_refusal(self, shape: str, payload: Mapping[str, Any], *, step: int) -> str:
         """监控回合的出口限定：这一句该不该被拒（空串 = 放行）。
 
         D-53 的业主口径是"监控回合只许 watch / guide / 补派 / 收口"，
         理由写在 `draft/146`（"不许在监控回合里开新的研究方向 —— 否则会变成
-        用监控回合偷偷做研究"）。它必须是**框架闸**，不能只写在提示词里：
+        用监控回合偷偷做研究"）。它必须是框架闸，不能只写在提示词里：
         提示词是建议，而这一步花的是真钱。
 
         放行的形状：`tool` 里名字是 `conductor.watch` / `conductor.guide`；
@@ -4156,20 +4667,43 @@ class AgentLoop:
         —— 不然一个把名字写错的模型会在监控回合里被永久拒在原地（拒信不计入
         `bad_json` 那一族，也就没有别的闸去停它）。
         """
-        if self._monitor_turn_step != self._monitor_turn_step or True:
-            pass
-        return ""
+        if int(self._monitor_turn_step) < 0 or int(self._monitor_turn_step) != int(step):
+            return ""
+        if self._monitor_refusals >= MONITOR_REFUSAL_LIMIT:
+            return ""
+        if str(shape) in MONITOR_TURN_SHAPES:
+            if str(shape) != "tool":
+                return ""
+            name = str(payload.get("name") or "")
+            if name in MONITOR_TURN_TOOLS:
+                return ""
+        self._monitor_refusals += 1
+        allowed = ("`conductor.watch` / `conductor.guide` / 补派（`summon` 或 "
+                   "`summon_many`）/ 收口（`final`）")
+        return (f"监控回合的出口限定：{_call_brief(shape, payload) or shape} 不属于"
+                f"{allowed} —— 这一回合是被时钟/收件箱唤醒开起来的，只许看全树、给指导、"
+                "补派、收口，不许开新的研究方向。请照这四类重写一句。"
+                f"（第 {self._monitor_refusals}/{MONITOR_REFUSAL_LIMIT} 次被拒；"
+                "到上限之后框架会放开这一限制并留一条读数。）")
 
-    def _hear(self, *, step: int = 0) -> list[dict[str, Any]]:
+    def _hear(self, *, step: int = 0, run: "AgentLoop.LoopRun | None" = None
+              ) -> list[dict[str, Any]]:
         """听一次新消息 + 新板项：把这次运行期间新到的取出来并登记。
 
         这里用 `window=None`：这一步的结果会把新到的全部并进去（`heard` 就是它们），
         所以"渲染了多少就标多少"这条纪律在这里等价于"标全部新到的" ——
-        与跑在 `run()` 开头的那一次（有窗口、见 `inbox_digest`）口径一致，只是窗口不同。
+        与信箱投递点（有窗口、见 `mailbox_digest`）口径一致，只是窗口与落点不同：
+        这一处把新到的并进这一步的结果（模型在下一步的 tool 消息里读到），
+        信箱那一处把它作为一条独立的增量 user 消息（在下一步的提示词之前）。
 
         板项那一半（S1i，业主 A3=甲"渲染即 seen"）：未 `seen` 的项与留言同一处取，
         取到什么就标什么（`mark_item_seen`，带 `seen_by`/`seen_step`）——
         于是"挂在父名下的交差通报"在下一步就进得了上下文，而不是等下一次运行。
+
+        2026-10-24（D-52）：这一处也落一条 `agent_mailbox` 事件（`shape="step_tail"`），
+        于是"投过没有"在盘上是可复算的 —— 改前板项被标 seen 之后没有任何投递记录
+        （真机 `projects/sylow3`：t-000031 / t-000038 的 `seen_step=8` 在会话里找不到
+        对应的投递事件，只能靠猜它是哪一步读到的）。
         """
         digest, fresh, problems = inbox_digest(self.session_root, self.role, sid=self.sid,
                                               window=None,
@@ -4202,6 +4736,24 @@ class AgentLoop:
                 if not state:
                     heard.append({"板项没标成 seen": f"{item_id}：{why}"})
         heard.extend({"板读取问题": p} for p in board_problems)
+        # 投递记录（append-only）：`step_tail` 那一档在续跑重放时不另加消息
+        # （这段文字已经在下面那条 tool 消息里了，另加会让重建多一条）。
+        tail_text = "\n\n".join(x for x in (
+            ("【板】\n" + board_text) if board_ids else "",
+            ("【留言】\n" + digest) if fresh else "") if x)
+        if tail_text:
+            event_problem = record_mailbox_delivery(
+                self.session_root, self.role, step=step, shape="step_tail",
+                text=tail_text, item_ids=board_ids, msg_ids=fresh,
+                task_id=str(self.my_task_id or ""), sid=self.sid)
+            if event_problem:
+                heard.append({"投递记录没落成": event_problem})
+            # 渲染集同源：这一段文字已经进了这一步的 tool 结果 ⇒ 这一趟不必再渲染它。
+            self._mailbox_rendered.update(str(x) for x in board_ids)
+            self._mailbox_rendered.update(str(x) for x in fresh)
+            if run is not None:
+                run.mailbox_items.extend(str(x) for x in board_ids)
+                run.mailbox_msgs.extend(str(x) for x in fresh)
         return heard
 
     def _retire_ready_note(self) -> dict[str, Any]:
@@ -4503,6 +5055,105 @@ class AgentLoop:
                 "（读数，不拦收工 —— 这一趟的结论可能不含它们的产出）"
                 + ("（注：这个读数是重算过的 —— 读数期间台账又变了）" if got.get("retried") else ""))
 
+    def _final_gate_reading(self, run: "AgentLoop.LoopRun | None" = None
+                            ) -> dict[str, Any]:
+        """收工前的结构完整性闸：M 名下整棵树是不是已经全部销号（D-68，三态）。
+
+        业主 2026-10-26 逐字：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」。
+        改前这一格不存在：M 名下有几十个还在册的代理，与它收工那件事毫无关系
+        （真机 `projects/sylow3`：50 个实例行、48 条板项、0 条销号落痕）。
+
+        返回 `{"checked","applicable","complete","root","nodes","dirty","count",
+        "total","root_open_items","why","reason"}`：
+
+        - `applicable`：这道闸对这一趟有没有对象 —— 只有主控 M 有（其余角色名下没有
+          "整棵树"这回事），所以非 M 一律 `applicable=False, complete=True`（放行，且
+          不落噪声）；"不是 M"是查过了的结论，不是"没查成"；
+        - `checked`：台账读到没有。读不成 ⇒ `checked=False` 但这一趟照旧放行
+          （没有台账的那一趟本来就不在这道闸的射程里：`run_role` 拿不到 conductor 时
+          连台账号都没有），同时把"这一格没查成"写进 `run.notes` —— 不许静默；
+        - `complete`：这一支全部销号了没有（`nodes` 与 `dirty` 都空）；
+        - `nodes` / `dirty` / `count` / `total` / `root_open_items`：判据本体在
+          `Conductor.retire_integrity`（这一层只做"要不要拦"与"怎么说"）；
+        - `why`：不干净时那一句人话（逐节点点名 + 未消项条数 + 处置路径）。
+
+        为什么只有这一处：业主那句说的是"不记 final"，而 `final` 落盘的唯一入口是
+        `run()` 里 `shape == "final"` 那一支 —— 门放在别处就成了"记了 final 又提醒"。
+        """
+        reading: dict[str, Any] = {
+            "checked": True, "applicable": False, "complete": True,
+            "root": str(self.my_task_id or ""), "nodes": [], "dirty": [],
+            "count": 0, "total": 0, "root_open_items": 0, "why": "", "reason": "",
+        }
+        if str(self.role) != S.CONDUCTOR_ROLE:
+            reading["reason"] = "不是主控那一趟 ⇒ 名下没有整棵树可销（这道闸对它没有对象）"
+            return reading
+        # ---- 任何 final 都要清仓，没有例外（业主 2026-10-26 追裁）
+        #
+        # 这里曾经有一条"监控/被唤醒的回合不判"的例外（`monitor_of` 或 `run.wakes > 0`），
+        # 被业主追裁删掉：它是一个绕闸的口子 —— M 只要在一次被唤醒的回合里发 `final`，
+        # 就绕过了"整棵树都要销号"的要求。业主原话是「最终 final 时应该是 M 下整棵树
+        # 都已销号，否则不记 final」，没有给"哪种回合的 final"留口子。
+        # 于是判据只有一条：这一趟的 `final` 一律要过 `retire_integrity`；
+        # 树没清 ⇒ 不记 final（`stop_reason="final_refused"`），谁被唤醒、因为什么被唤醒都一样。
+        reading["applicable"] = True
+        cond = self.conductor
+        mine = str(self.my_task_id or "")
+        if cond is None or not mine:
+            reading["checked"] = False
+            reading["reason"] = ("这一趟没有台账（conductor 或台账号是空的）⇒ "
+                                 "名下那棵树查不成，这一格按没查成记，不按干净记")
+            if run is not None:
+                run.notes.append(f"收工前的销号完整性没查成：{reading['reason']}")
+            return reading
+        look = getattr(cond, "retire_integrity", None)
+        if not callable(look):
+            reading["checked"] = False
+            reading["reason"] = "conductor 没有 retire_integrity（这一格没接上）"
+            if run is not None:
+                run.notes.append(f"收工前的销号完整性没查成：{reading['reason']}")
+            return reading
+        try:
+            got = look(mine)
+        except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"干净"
+            reading["checked"] = False
+            reading["reason"] = f"{type(exc).__name__}: {exc}"
+            if run is not None:
+                run.notes.append(f"收工前的销号完整性没查成（{reading['reason']}）")
+            return reading
+        if not isinstance(got, Mapping):
+            reading["checked"] = False
+            reading["reason"] = "retire_integrity 的读数不是对象"
+            if run is not None:
+                run.notes.append(f"收工前的销号完整性没查成：{reading['reason']}")
+            return reading
+        for key in reading:
+            if key in got:
+                reading[key] = got[key]
+        reading["applicable"] = True
+        if not reading.get("checked"):
+            if run is not None:
+                run.notes.append(f"收工前的销号完整性没查成（{reading.get('reason')}）")
+            return reading
+        reading["complete"] = bool(reading.get("complete"))
+        if reading["complete"]:
+            return reading
+        nodes = [dict(n) for n in (reading.get("nodes") or [])]
+        dirty = [dict(n) for n in (reading.get("dirty") or [])]
+        named = "、".join(
+            f"{n.get('task_id')}（{n.get('role') or '?'}，名下 {int(n.get('open_items') or 0)}"
+            " 条未消项）" for n in nodes[:6])
+        more = f"等 {len(nodes)} 个" if len(nodes) > 6 else ""
+        why = (f"还没销号：{reading.get('root') or mine} 名下整棵树还有 "
+               f"{int(reading.get('count') or 0)}/{int(reading.get('total') or 0)} 个代理在册"
+               + (f"（{named}{more}）" if named else "")
+               + (f"；另有 {len(dirty)} 个已销号节点名下还有未消项" if dirty else "")
+               + " ⇒ 先用 `conductor.ack` 把各节点名下的未消项确认掉，"
+               "再用 `conductor.retire_child` 逐个销号；整棵树都销号之前不记 final"
+               "（结构完整性闸）")
+        reading["why"] = why
+        return reading
+
     def _budget_text(self) -> str:
         """给模型看的那一句"还剩多少钱"。
 
@@ -4657,11 +5308,16 @@ class AgentLoop:
         # 会把消息的"新"标记永久吃掉 —— 消息还在盘上，但它再也不标"新"，
         # 而且会被挤进 8 条窗口（真机 579 条留言、只有 8 条被标记读过，这个形态是其中一支）。
         # 现在：先进上下文、模型真的被问过一次之后，才承认"它送达了"。
-        pending_delivery: list[str] = list(fresh_ids)
-        delivered_marked = False
-        # 板项那一半：渲染过、但还没标 seen 的项（与 `pending_delivery` 同一处落定 ——
-        # "模型真的被问过一次"才算它进过上下文，业主 A3 的"渲染即 seen"落在这里）。
-        pending_seen: list[str] = list(board_ids)
+        #
+        # 2026-10-24（D-52）：这两条队列从此由信箱投递点（每一次 `ask_step` 之前，
+        # `_deliver_mailbox`）追加，开场那一次不再往里塞东西 —— 开卷九格已删掉
+        # `inbox` / `board` 两格（见 `_opening_transcript` 的 docstring），所以
+        # "开场读到的那批"不再是"进过提示词的那批"：把它们塞进来会造出
+        # "没投过却标了 seen / 已投递"的那一族静默错（D-52 要治的正是它）。
+        pending_delivery: list[str] = []
+        # 板项那一半：投进过提示词、但还没标 seen 的项（与 `pending_delivery` 同一处落定
+        # —— "模型真的被问过一次"才算它进过上下文，业主 A3 的"渲染即 seen"落在这里）。
+        pending_seen: list[str] = []
 
         availability = self._availability()
         # 父与子两格（业主 T21 附）：数据在台账里，缺的一直是"渲染给模型看"。
@@ -4957,6 +5613,21 @@ class AgentLoop:
                 # 压缩必须在那之前生效；而插话（新用户消息）不该被刚压过的历史吃掉。
                 # 判定本身在 `_maybe_compact`（它负责三态、事件三件套与"只压一次"的闸门）。
                 messages = self._maybe_compact(messages, step=step, run=run)
+                # ---- 信箱投递点（D-52）：每一次 `ask_step` 之前投一次增量。
+                #
+                # 为什么必须在压缩之后：压缩会把历史换掉（`surface_op` 的位置 span），
+                # 增量段是"这一步才到的"，它不该被刚压过的那一段吃掉；而它又必须
+                # 在提示词拼出来之前进 `messages` —— 这一步的提示词是下一句就发出去的。
+                # 投进去的板项 / 留言的承认推迟到下面 `call.ok` 那一支（同一条纪律）。
+                mailbox = self._deliver_mailbox(step=step, messages=messages, run=run)
+                pending_seen.extend(x for x in mailbox.get("item_ids") or ()
+                                    if x not in pending_seen)
+                pending_delivery.extend(x for x in mailbox.get("msg_ids") or ()
+                                        if x not in pending_delivery)
+                if mailbox.get("item_ids"):
+                    run.mailbox_items.extend(str(x) for x in mailbox["item_ids"])
+                if mailbox.get("msg_ids"):
+                    run.mailbox_msgs.extend(str(x) for x in mailbox["msg_ids"])
                 # 静态/动态分离之后 system 本该一个字节都不变；这里每步确认一次
                 # （变了就如实发新的并落一条红灯读数，见 `_system_at_step`）。
                 system = self._system_at_step(system_facts, system, step=step)
@@ -4968,14 +5639,14 @@ class AgentLoop:
                 # 不许折成 0）。它随后挂进这一步的 `LoopStep` 与 `agent_step` 事件 ——
                 # 改前上游的读数只到 `SeamCall` 为止，一条 run 记录里都没有它。
                 step_cache = PSTAB.prompt_cache_record(call)
-                # 第一次成功的模型调用之后才登记投递（推迟标记的落点，见上面那段注释）：
+                # 模型真的被问过一次之后才登记投递（推迟标记的落点，见上面那段注释）：
                 # "模型真的被问过一次"= 这一批消息确实进了上下文 ⇒ 承认它送达。
-                if pending_delivery and not delivered_marked and call.ok:
+                if pending_delivery and call.ok:
                     problem = mark_delivered(self.session_root, self.role, pending_delivery,
                                              sid=self.sid)
                     if problem:
                         run.notes.append(f"投递登记失败：{problem}")
-                    pending_delivery, delivered_marked = [], True
+                    pending_delivery = []
                 if pending_seen and call.ok:
                     # 渲染即 seen（业主 A3=甲）：这一步的提示词里带了它们 ⇒ 标 seen。
                     # 只标渲染过的那些（`board_digest` 返回什么就标什么，D75 的口径）。
@@ -5209,6 +5880,33 @@ class AgentLoop:
                 self._record_undecodable_item(item, dispatch, run, step_cache, messages)
                 continue
             if shape == "final":
+                # ---- D-64：还有子代理没回来 ⇒ 这一步的 final 被拒（可重试）
+                #
+                # 位置在 D-68 那道结构完整性闸之前：这一条更具体（点名到还在跑的编号），
+                # 而且它是可恢复的（那几个孩子一定会落定，父只需再等一次返场）。
+                # 两条闸各管一件事、不互相替代：
+                #   · 这一条管"我自己派出去、还没回来"的（可抢占不许变成不等子就收口）；
+                #   · D-68 那条管"整棵树在册节点与未消项"（结构完整性，M 才有对象）。
+                hold = self._children_hold()
+                if hold:
+                    run.notes.append(hold)
+                    refused_result: dict[str, Any] = {
+                        "ok": False, "refused": "children_running", "error": hold,
+                        "detail": hold, "running": self._children_running()}
+                    run.steps.append(LoopStep(step, shape, payload,
+                                              _for_record(refused_result), cache=step_cache))
+                    SS.append(self.session_root, {
+                        "kind": "agent_step", "role": self.role, "index": step,
+                        "shape": shape, "payload": dict(payload),
+                        "result": dict(_for_record(refused_result)),
+                        "heuristic_tokens": step_node_tokens(step, payload, refused_result),
+                        "prompt_cache": dict(step_cache),
+                    }, sid=self.sid)
+                    messages.append(assistant_message(
+                        step, payload, name=shape, content=_spoken_half(step, payload)))
+                    messages.append(tool_message(step, _result_half(refused_result),
+                                                 name=shape))
+                    continue
                 # ---- 强制 notify 表（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）：除主控外收工必须填这张表
                 # （`to`/`summary`/`body`），填错/没填就打回并附格式说明；主控 M 的 `final` 是给用户的回复，
                 # 不在这套里（用户原话："向用户回复时不搞这种操作"）。
@@ -5217,6 +5915,24 @@ class AgentLoop:
                 # 3 次 ⇒ `stop_reason="no_notify"`）一次都没触发过，只贡献提示词篇幅。新口径只留"要交接就写
                 # 手稿"：形状对 ⇒ 秘书照旧执笔一行手稿；没填/填错 ⇒ 不打回、照常收工，只把原因落进这一步
                 # 的读数（`notify_problem`）—— 阻塞一条委托比放行更贵。
+                #
+                # ---- D-68（业主 2026-10-26 逐字）：「最终 final 时应该是 M 下整棵树都已销号，
+                # 否则不记 final」。这是结构完整性闸，不是建议：闸不过就一个字节都不写
+                # （`run.final` 留空、不落手稿、`stop_reason="final_refused"`），
+                # 并把"哪些节点还在册、各自名下还有多少未消项"的清单交回给模型与盘上。
+                # 位置必须在 notify / 手稿之前：一份写着"我做完了"的交接手稿与一次被拒的
+                # 收工互相矛盾，而"记了 final 又提醒"正是业主要挡的那一档（不记 final）。
+                final_gate = self._final_gate_reading(run)
+                if final_gate.get("applicable") and not final_gate.get("complete"):
+                    why = str(final_gate.get("why") or "还有节点没销号 ⇒ 不记 final")
+                    run.notes.append(why)
+                    # 清单进这一步的结果：模型下一轮读得到（有几种工具能处置它）；
+                    # 落盘的那一份在 `agent_run_end.notes` 与 `runs/*.json` 的 steps 里。
+                    run.steps.append(LoopStep(step, shape, payload,
+                                              {"final_refused": dict(final_gate),
+                                               "why": why}, cache=step_cache))
+                    run.stop_reason = "final_refused"
+                    break
                 notify_problem = self.notify_reading(payload)
                 notify = payload.get("notify")
                 step_result: dict[str, Any] = {}
@@ -5406,11 +6122,30 @@ class AgentLoop:
                     if gate:
                         run.notes.append(f"派活的 notify 表格式有问题（{gate}）⇒ "
                                          "照常派活，留痕退回框架派生那一份")
-                result = self._execute(shape, payload)
+                # ---- 时钟推进（D-53 的生产端）：每一条被执行的条目之前推一次。
+                #
+                # 为什么连"拆出来的每一条"都要推：一条模型回复可能拆出 N 条调用，
+                # 这 N 条各占一步、各可能耗时（召唤尤其），而"到点"不该等整个回合
+                # 结束才被发现。`fire_due` 是幂等的（已 fired 的不再算 due）。
+                self._pump_clock(step=step, when="step", run=run)
+                # ---- 监控回合的出口限定（D-53）：被唤醒开起来的那一回合只许
+                # watch / guide / 补派 / 收口。这是一道框架闸（不是提示词建议）。
+                monitor_refusal = self._monitor_refusal(shape, payload, step=step)
+                if monitor_refusal:
+                    result = {"ok": False, "refused": "monitor_turn_restricted",
+                              "error": monitor_refusal,
+                              "detail": monitor_refusal}
+                    run.notes.append(f"监控回合出口限定拒了一条：{_call_brief(shape, payload)}")
+                    if self._monitor_refusals >= MONITOR_REFUSAL_LIMIT:
+                        run.notes.append(
+                            f"监控回合出口限定已连拒 {self._monitor_refusals} 次 ⇒ "
+                            "从下一步起放开（许可的名单写在提示词里；放开这件事必须留痕）")
+                else:
+                    result = self._execute(shape, payload)
                 if dispatch_notify is not None:
                     # 派活照旧执行，留痕在它之后写：账本里的每一行都对应一次"真的发出去的派活"
                     # （写在前面会让"被策略拒掉的派活"也留下一行像是办成了）。
-                    hand = self._do_handoff(dispatch_notify)
+                    hand = self._do_handoff(dispatch_notify, board_item=False)
                     if hand.get("ok"):
                         run.handoffs.append(str(hand.get("id") or ""))
                     result = {**result, "dispatch_handoff": hand}
@@ -5434,7 +6169,7 @@ class AgentLoop:
             # 耳朵一直开着：这一步做完先听一次新消息与板项，把它并进这一步的结果里
             # （并进结果而不是只并进 transcript：台账与会话记录要能看到"他当时听到了什么"）。
             # `step=step`：板项标 seen 时要写"在第几步读的"（业主 A3 的判据靠它配对）。
-            heard = self._hear(step=step)
+            heard = self._hear(step=step, run=run)
             board_this_step = any("板" == str(k) for h in heard for k in h) if heard else False
             if board_this_step or (step == 0 and board_ids):
                 # 这一步读到了板项 ⇒ 顺带把"哪几项可以退役了"报给父（只报；写盘在 S1k）。
@@ -5645,6 +6380,13 @@ class AgentLoop:
         if dispatch is not None and pending:
             self._settle_pending_items(dispatch, pending, run, messages)
 
+        # ---- D-64 退场：还挂着的派活句柄最多再等一小段，然后如实留痕
+        #
+        # 正常收工走不到"还有孩子在跑"这一支（收工门会先拒）；能走到这里的是
+        # 别的出口（预算/叫停/协议连击/上行/等用户）。那些孩子不在这条调用栈上，
+        # 会在后台跑完 —— 这一趟要给的是"我走的时候它们还没回来"，不是假装没有。
+        self._settle_children_at_exit(run=run)
+
         run.spend = self.seam.spend.to_dict()
         # ---- 提示词缓存的收工汇总（2026-10-19）：上游的
         # `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 从 2026-10-14 起就在
@@ -5752,6 +6494,21 @@ class AgentLoop:
             # 让"有没有被截断"一眼可见。
             "final": run.final, "final_sha256": _sha(run.final)[:16],
             "final_chars": len(run.final), "spend": dict(run.spend),
+            # ---- D-52 / D-53 的收口读数：这一趟投递了多少条 / 唤醒了几次。
+            #
+            # 与 `agent_mailbox` / `agent_wake` 两条事件同源：事件流可以逐条复算
+            # （以 item_id / wake_id 为键），这两个数是它的汇总（收工那一行一眼可读）。
+            # 刻意分成两格而不是并成一个总数：板项与留言的消费语义不同
+            # （状态机 vs 投递登记），合并之后"投了 9 条"读不出是哪一种。
+            "mailbox_items": list(run.mailbox_items),
+            "mailbox_msgs": list(run.mailbox_msgs),
+            "mailbox_delivered": len(run.mailbox_items) + len(run.mailbox_msgs),
+            "monitor_turns": run.monitor_turns,
+            "wakes": run.wakes,
+            "wake_ids": list(run.wake_ids),
+            "wake_events": [dict(e) for e in run.wake_events],
+            "clock_pumps": run.clock_pumps,
+            "clock_fired": run.clock_fired,
             # 提示词缓存的收工读数（`LoopRun.prompt_cache`）：与 `spend` 并列 ——
             # "花了多少"与"靠前缀缓存省了多少"是同一笔钱的两面，分开落才核得动。
             "prompt_cache": dict(run.prompt_cache),
@@ -6731,13 +7488,70 @@ class AgentLoop:
         # 见 `conductor.consuming_as` 的理由（一批判据的替身函数不接受新形参）。
         from .conductor import consuming_as
 
+        # 要不要走可抢占那一档：`run_plan` 收不收 `preemptible` 这个开关。
+        # 为什么要探一下签名的本事：一批判据用 `run_plan` 的替身（它们只认
+        # `(calls, token=None)`），硬传一个多余的关键字会变成 TypeError ——
+        # 那种红与"可抢占坏了"长得一样，会把真问题淹掉。替身/旧实现 ⇒ 走它们
+        # 自己那一套（返回列表，本来就是"全部跑完"的语义）。
+        preemptible = (bool(PREEMPTIBLE_DISPATCH)
+                       and not _patched_on_instance(c, "run_plan")
+                       and _takes_kwarg(c.run_plan, "preemptible"))
         with consuming_as(owner):
-            results = c.run_plan(calls, token=self.token)
+            if preemptible:
+                batch = c.run_plan(calls, token=self.token, preemptible=True)
+            else:
+                batch = c.run_plan(calls, token=self.token)
+        # ---- 可抢占（D-64）：只在本步里等 `child_step_wait_sec` 秒
+        #
+        # 改前这里拿到的是一个已经全部跑完的列表 —— 于是父代理在等孩子期间零回合
+        # （真机 sylow3 的 M 卡了 92 分钟）。现在 `run_plan` 给的是句柄：
+        # 秒级能回来的那些照旧写进这一步的 `results`（"汇报 = 返回值"那条契约不动），
+        # 还没回来的转成"已派出 / 还在跑" + 一条返场挂账，结果下一次返场投过来。
+        by_index: dict[int, Any] = {}
+        dispatched: dict[int, str] = {}
+        preempted = False
+        if isinstance(batch, list):            # 替身 / 旧实现：已经是终局
+            for i, r in enumerate(batch):
+                by_index[i] = r
+        else:
+            rec = self._register_child_handle(batch, kind="summon_many", calls=calls)
+            # 等"全部落定"或"有时钟唤醒到点"，最多 `child_step_wait_sec`。
+            # 走 `_wait_for_children` 而不是 `batch.wait_all`：一条 180 秒的等待
+            # 不许压住 D-53 的监控回合（唤醒一到就返场）。
+            self._wait_for_children(timeout=float(self.child_step_wait_sec))
+            settled_all = bool(batch.done()
+                               if callable(getattr(batch, "done", None)) else False)
+            taken = getattr(batch, "settled_by_index", None)
+            if callable(taken):
+                by_index.update(taken())
+            for row in batch.dispatched() or ():
+                dispatched[int(row.get("index"))] = str(row.get("task_id") or "")
+            if settled_all:
+                self._forget_child_handle(rec)
+            else:
+                preempted = True
         probe = getattr(c, "_last_probe", None)
         waves = [len(w) for w in P.waves_of(calls,
                                             limit=getattr(c.policy, "max_concurrency", None))]
         items = []
-        for r, call in zip(results, calls):
+        for i, call in enumerate(calls):
+            r = by_index.get(i)
+            if r is None:
+                # 还没回来：这一项不是「被拒了」，也不是「失败了」。两档要分开：
+                #   · 已经有 `task_id` ⇒ 它在跑（`running`）；
+                #   · 还没有编号 ⇒ 它还在排队（分波：前一波没落定，这一波不许开跑）。
+                # 折成一档会让「3 个在跑」与「1 个在跑、2 个排队」读成同一件事。
+                tid = dispatched.get(i) or ""
+                items.append({"role": call.role, "action": call.action,
+                              "instance": call.instance,
+                              "task_id": tid or None,
+                              "status": ("running" if tid else "pending"), "outcome": None,
+                              "refusal_reason": None,
+                              "detail": ("还在跑：本步先不等（可抢占）；它回来之后"
+                                         "结局会在下一次返场时投给你" if tid else
+                                         "还在排队（分波：前一波还没落定）⇒ 还没派出去；"
+                                         "它会在前一波落定后被派出去，结局同样在返场时投给你")})
+                continue
             items.append({"role": call.role, "action": call.action, "instance": call.instance,
                           "task_id": r.task_id, "status": r.status, "outcome": r.outcome,
                           "refusal_reason": r.refusal_reason, "detail": _clip(r.detail, 200)})
@@ -6747,10 +7561,24 @@ class AgentLoop:
             "ok_count": sum(1 for i in items if i["outcome"] == "ok"),
             "refused_count": sum(1 for i in items if i["outcome"] == "refused"),
             "failed_count": sum(1 for i in items if i["status"] == "failed"),
+            "running_count": sum(1 for i in items if i["status"] == "running"),
             "waves": waves, "concurrent_peak": int(getattr(probe, "peak", 0) or 0),
             "results": items,
             "ok": True,
         }
+        if preempted:
+            # 三件事一起说，缺一件都会让读的人把"还在跑"读成别的：
+            # ① 哪几项已经派出去了（编号）；② 哪几项还在跑；③ 结果去哪拿。
+            out["preempted"] = True
+            out["dispatched"] = [i["task_id"] for i in items if i.get("task_id")]
+            out["running"] = [i["task_id"] for i in items
+                              if i["status"] == "running" and i.get("task_id")]
+            out["how_to_get_the_rest"] = (
+                "这一批还没跑完，所以 `results` 里状态为 running 的那几项还没有结局。"
+                "它们回来之后，框架会在你下一次被问之前以【子代理返场】投给你"
+                "（不必再派一次，也不要因为 status=running 就重试）。"
+                "在那之前你仍拿得到回合：可以 watch 全树、guide 给指导、补派新活；"
+                "收工（final）会被拒到它们回齐。")
         # ---- 名册登记：读数在这里，写字不在这里（2026-10-21 收口）
         #
         # 唯一的登记点是 `Conductor.summon` 的第 [5b] 步（子行落盘之后、子代理跑起来
@@ -6766,7 +7594,12 @@ class AgentLoop:
         self._bind_roster_sink()
         names: list[str] = []
         problems: list[str] = []
-        for i, (r, call) in enumerate(zip(results, calls)):
+        for i, call in enumerate(calls):
+            r = by_index.get(i)
+            if r is None:
+                # 还没回来 ⇒ 名册读数也还没回来（登记本身发生在派活的第 [5b] 步，
+                # 也就是已经发生了；这里缺的是"登记成了没有"那个读数）。
+                continue
             got_name, got_problem = self._roster_reading(
                 r, owner=str(self.my_task_id or ""), role=str(call.role),
                 task_id=str(getattr(r, "task_id", "") or ""),
@@ -7206,13 +8039,47 @@ class AgentLoop:
             out.update(self._no_owner_refusal(f"把「{task_arg[:40]}」派给 {role}："))
             return out
         try:
-            res = self.conductor.summon(role, "", params,
-                                        by=self.role, parent_task_id=owner,
-                                        token=self.token, input_key=key,
-                                        # 名册登记的材料（登记发生在 `Conductor.summon`
-                                        # 的 [5b]：子行落盘之后、子代理跑起来之前）。
-                                        roster={"brief": brief_arg, "task": task_arg,
-                                                "name": name_arg, "reuse": reuse_arg})
+            if PREEMPTIBLE_DISPATCH and not _patched_on_instance(self.conductor, "summon"):
+                # ---- 可抢占（D-64）：派完就拿到句柄，只在本步里等一小段
+                handle = self.conductor.summon_preemptible(
+                    role, "", params,
+                    by=self.role, parent_task_id=owner,
+                    token=self.token, input_key=key,
+                    # 名册登记的材料（登记发生在 `summon_begin` 的 [5b]：
+                    # 子行落盘之后、子代理跑起来之前）。
+                    roster={"brief": brief_arg, "task": task_arg,
+                            "name": name_arg, "reuse": reuse_arg})
+                rec = self._register_child_handle(handle, kind="summon", calls=[])
+                # 等"它回来"或"有时钟唤醒到点"，最多 `child_step_wait_sec`。
+                # 走 `_wait_for_children` 而不是 `handle.wait`：一条 180 秒的等待
+                # 不许压住 D-53 的监控回合（唤醒一到就返场）。
+                self._wait_for_children(timeout=float(self.child_step_wait_sec))
+                if not handle.done():
+                    # 还没回来：把"已派出 / 还在跑"如实交回，并挂一条返场账。
+                    # ok 仍是 True —— 派活这件事真的发生了（有一行 running、有编号）；
+                    # 它有没有干成由 status/outcome 说，而这两格现在说的是"还在跑"。
+                    tid = getattr(handle, "task_id", None)
+                    out.update(ok=True, task_id=tid, status="running", outcome=None,
+                               refusal_reason=None, preemptible=True,
+                               dispatched=[tid] if tid else [],
+                               running=[tid] if tid else [],
+                               detail=("还在跑：本步先不等（可抢占）。它回来之后结论会在"
+                                       "你下一次被问之前以【子代理返场】投给你 —— "
+                                       "不要因为 status=running 就重派；收工会被拒到它回齐"))
+                    return out
+                # 回来了：结果照旧写进这一步的返回值（"汇报 = 返回值"那条契约），
+                # 挂账摘掉（否则返场点会把它再投一次）。
+                got = self._take_child_results(rec) or [handle.result()]
+                self._forget_child_handle(rec)
+                res = got[0]
+            else:
+                res = self.conductor.summon(role, "", params,
+                                            by=self.role, parent_task_id=owner,
+                                            token=self.token, input_key=key,
+                                            # 名册登记的材料（登记发生在 `Conductor.summon`
+                                            # 的 [5b]：子行落盘之后、子代理跑起来之前）。
+                                            roster={"brief": brief_arg, "task": task_arg,
+                                                    "name": name_arg, "reuse": reuse_arg})
         except Exception as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             return out
@@ -7646,6 +8513,17 @@ class AgentLoop:
         `addressing.how` 都是 parent/child（名册判据通过），而这一档的 `channel`
         是角色通道。`via_roster` 只认那一次现读的名册：payload 里的 `written` 只是
         "原写法"的指针，它自称的东西不算数。
+
+        D-63（2026-10-24 业主：「现在怎么还有to谁的写法？已经是名册机制了！」）：
+        收件人的三种写法各有各的处置，判据仍然只有 `roster_addresses` 那一处，
+        这一层只读它的结论：
+
+        1. 名册名或绝对编号 ⇒ 只投那个成员（读数 `addressed_by=roster_name` / `task_id`）；
+        2. 角色代号、而该角色在册恰好一个 ⇒ 兼容解析到那一个（读数
+           `addressed_by=role_fallback`），不因为"写法旧"就拒掉；
+        3. 角色代号、而该角色在册多个 ⇒ 受控拒绝 `ambiguous_in_roster` 并点名那几个
+           名册名（拒信里给改写法）；在册 0 个 ⇒ 受控拒绝 `not_in_roster` 并列出
+           "你能通话的是"。两档都不许静默挑一个、也不许静默丢弃。
         """
         to = str(payload.get("to"))
         reply_to = str(payload.get("reply_to") or "")
@@ -8162,7 +9040,8 @@ class AgentLoop:
             if (getattr(self, "parent_problem", "") and not str(
                 getattr(self, "parent_task_id", ""))) else "")
 
-    def _do_handoff(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def _do_handoff(self, payload: Mapping[str, Any], *,
+                    board_item: bool = True) -> dict[str, Any]:
         """写一份交接手稿 + 把"编号 + 一句简要描述"发给收件人（`draft/37` §134）。
 
         两件事一起做，因为它们是同一件事的两半：手稿是「内容」，留言是「通知」；让模型分两步做就会出现"写了手稿但对方
@@ -8174,8 +9053,24 @@ class AgentLoop:
         `handoff` 保留；写这一行的是 `self.secretary.handoff_add(...)`（`sender` 仍是本角色）；没装配秘书 ⇒ 不写并如实
         报错（"形状保留、写路径关闭"的判据就在这一支）。`manuscripts.read` / `manuscripts.list` 工具保留（这就是"智能
         体只保留查"）。
+
+        ## `board_item=False`（D-68，2026-10-26）：派活通知不落收件人的板
+
+        派活那条路（`_dispatch_notify` → 本方法）写的是"父把活交出去了"这份投递凭证：
+        活本身已经是那次召唤的 `task`，手的正文在 `handoffs.jsonl` 里读得回全文，收件人
+        此刻已经跑完了那一趟。把它落成收件人名下的 `queued` 板项，等于给一个已经离场的
+        收件人留一条它这辈子读不到、也没人替得了的待办 —— 而 D-68 的销号门要求"板上有
+        没消的就不许销号"（业主逐字：「task_board 没清，不准直接销号」）⇒ 那一支永远
+        销不掉、`final` 永远记不下来。所以这一档改落一条 `agent_message` 事件
+        （投递照旧有痕），不建 `tasks` 行。
         """
         to = str(payload.get("to") or "")
+        # D-63（2026-10-24）：解码层把名册写法（名册名 / 绝对编号）翻成了角色的同时，
+        # 把原写法留在 `roster_addressing.written` 里。寻址要问的是原写法 —— 问角色
+        # 只会得到"落到角色通道"，而业主的口径是"写名册名就是写给那一个实例"。
+        # 没有这一格（照旧按角色名 / M / ALL 写）时逐字走改前的路。
+        _marker = payload.get("roster_addressing")
+        written = str(_marker.get("written") or "") if isinstance(_marker, Mapping) else ""
         channel = PUBLIC if to == "ALL" else to
         # `summary` 是这一形状的正名（它就是进留言的那一句话）；`brief` / `title` 是旧名，
         # 仍然接受 —— 旧调用点、旧提示词与模型的历史习惯都不至于因此写不进去。
@@ -8186,7 +9081,7 @@ class AgentLoop:
         # ---- 收件人（业主 2026-10-19）：名册名 / 绝对编号这一档必须落在名册上
         # （判据与理由见 `_handoff_address`：手稿的收件人面是角色，名册给的是实例）。
         # 拒绝发生在写任何东西之前：半份状态（手稿写了、人没收到）比没写更贵。
-        _addr, _gate = self._handoff_address(to)
+        _addr, _gate = self._handoff_address(written or to)
         if _gate:
             return {"handoff": "未写成", "ok": False, "to": channel,
                     "refused": _gate["refused"], "candidates": (_gate.get("candidates") or []),
@@ -8247,7 +9142,7 @@ class AgentLoop:
                        + f"\n全文：`manuscripts.read(id=\"{shown}\")`"
                          f"（盘上 {rec.get('path')}）")
         notify_how = "role"
-        if str(_addr.get("delivery") or "") == "roster":
+        if str(_addr.get("delivery") or "") == "roster" and board_item:
             # 名册成员 ⇒ 投到那个实例的板项（实例级）。改前这里对名册名也走
             # `send_message(to="D1")`，而收件箱是按角色收的 ⇒ 那条留言没有任何人读得到。
             deliv = self._message_to_member({"subject": notify_subject, "body": notify_body},
@@ -8255,6 +9150,14 @@ class AgentLoop:
             msg_id, problem = str(deliv.get("item_id") or ""), (
                 "" if deliv.get("ok") else str(deliv.get("note") or "投递没成"))
             notify_how = "roster"
+        elif str(_addr.get("delivery") or "") == "roster":
+            # 派活通知这一档（D-68）：不建板项，改落一条 `agent_message` 事件。
+            # 理由见本方法的 docstring 末一节；投递照旧有痕，只是不再留一条清不掉的待办。
+            msg_id, problem = send_message(
+                self.session_root, sender=self.role, to=channel,
+                subject=notify_subject, body=notify_body,
+                sid=self.sid, from_task_id=str(self.my_task_id or ""))
+            notify_how = "event"
         else:
             msg_id, problem = send_message(
                 self.session_root, sender=self.role, to=channel,
@@ -8267,8 +9170,11 @@ class AgentLoop:
                 "existing_same_summary": dup_note,
                 "notified": msg_id if not problem else "",
                 "error": problem,
-                "note": ("收件人下次运行时（或本步之后）会在收件箱/板上看到编号；"
-                         "它用 `manuscripts.read` 读全文")}
+                "note": (("收件人下次运行时会在收件箱里看到这条留言（派活通知不落板："
+                          "见本方法 docstring 的 D-68 一节，它用 `manuscripts.read` 读全文）")
+                         if notify_how == "event" else
+                         ("收件人下次运行时（或本步之后）会在收件箱/板上看到编号；"
+                          "它用 `manuscripts.read` 读全文"))}
 
     def _record_interjection_effect(self, run: LoopRun, pending: dict[str, Any] | None,
                                     *, step: int, shape: str, payload: Mapping[str, Any]) -> None:
@@ -8903,7 +9809,17 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
     out: list[dict[str, Any]] = [user_message(_opening_transcript(**opening))]
     next_step = 0
     for e in events[begin + 1:end]:
-        if e.get("kind") != "agent_step" or str(e.get("role")) != role:
+        if str(e.get("role") or "") != role:
+            continue
+        # ---- 信箱投递（D-52）：`shape="turn"` 的那一档要按事件序把那条 user 消息
+        # 原样重放回来 —— 它当时就在"第 k 步的提示词之前"，位置由事件顺序决定。
+        # `shape="step_tail"` 那一档不重放：那段文字当时在那一步的 tool 结果里
+        # （`result["新消息"]`），这里再加一条会让重建多出一条消息。
+        if e.get("kind") == MAILBOX_EVENT:
+            if str(e.get("shape") or "") == "turn":
+                out.append(user_message(str(e.get("text") or "")))
+            continue
+        if e.get("kind") != "agent_step":
             continue
         step = int(e.get("index") or 0)
         shape = str(e.get("shape") or "")
@@ -8922,7 +9838,16 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
             else:
                 correction = _invalid_line(step, problem)
             out.append(assistant_message(step, payload, name=shape, reasoning=thought))
-            out.append(tool_message(step, correction, name=shape))
+            # 这一条不带 `name`：`invalid` 那一支在循环里append 的就是不带名字的
+            # （`messages.append(tool_message(step, _bad_json_line(...)))`）。改前这里
+            # 带了 `name=shape`，于是"含 invalid 步的一趟"永远重放不回去
+            # （`rebuilt == run.messages` 在 name 那一格上红）—— 那是改前就存在的一处
+            # 重建不一致，2026-10-24（D-52 的续跑判据）在这里补上。
+            # 还剩一处已知不一致（本次没修，已登记）："形状认不出来"的那一档
+            # （`messages.append(assistant_message(step, data, name=recognized or "step"))`）
+            # 把原始 `data` 塞进了 assistant 消息，而事件里存的是解码后的 `payload`
+            # ⇒ 它拼不回来；要修得先改那一条事件的落档内容（那是另一条缺陷）。
+            out.append(tool_message(step, correction))
         else:
             out.append(assistant_message(step, payload, name=shape,
                                          content=_spoken_half(step, payload),
@@ -9050,7 +9975,8 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
              workspace_root: str = "", sid: str | None = None, token: Any = None,
              from_env: bool = True, user_timeout_sec: float | None = None,
              ask_policy: str | None = None, resume: bool = False,
-             stop_file: str = "", secretary: Any = None) -> LoopRun:
+             stop_file: str = "", secretary: Any = None,
+             monitoring_of: str = "") -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。
 
     `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，两处分开写迟早会出现"审计记录落在别处"
@@ -9062,6 +9988,11 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     重建的那一段接着跑。无论哪条路，跑完都写一次步检查点（停在等用户时带 `waiting_for=<qid>`）；被拒的那几条
     路也各写一条 `agent_run_start`（带 `resume_refused` 与 `resume_attempted_from`；`resumed_from` 只在真的
     接着跑时才写）。
+
+    `monitoring_of`（D-53）：这一趟是不是"被唤醒开起来的监控回合"。非空 = 唤醒的理由，
+    它让这一趟的第一条增量消息带上这一支的树形读数与出口限定，并把第一步的出口收窄成
+    watch / guide / 补派 / 收口（`AgentLoop._monitor_refusal`，框架闸）。空串 = 普通回合，
+    改前的行为一个字不变。
     """
     root = Path(session_root) if session_root is not None else Path(str(getattr(store, "root", "")))
     if not str(root):
@@ -9108,6 +10039,10 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                      sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec,
                      ask_policy=ask_policy, stop_file=str(stop_file or ""),
                      secretary=secretary)
+    # ---- D-53：这一趟是不是"被唤醒开起来的监控回合"（由 `autonomy` 在轮边界上判定）。
+    # 它让第一条增量消息带上树形读数与出口限定，并在这一步上收窄出口（框架闸，
+    # 见 `_monitor_refusal`）。空串 = 普通回合（改前行为一个字不变）。
+    loop.monitor_of = str(monitoring_of or "")
     summoned_by = S.CONDUCTOR_ROLE if role == S.CONDUCTOR_ROLE else ""
     start_depth = 1 if role == S.CONDUCTOR_ROLE else 2
     # ---- F1（`44 J-32` 的"往前走"半）：给这一趟开一条 tasks 行，并让它成为

@@ -82,6 +82,10 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-24 晚（D-53 业主裁定「把时钟做成系统原生工具」）：100 → 105
 #: （`clock.now` / `clock.timer_start` / `clock.alarm_start` / `clock.timer_list` /
 #: `clock.timer_cancel` 五件；顶层时钟在 `src/agentflow/clock.py`）。
+#: 2026-10-26（D-59 业主裁定「销号的发起在父代理，销号的实际动作在秘书侧」）：105 → 106
+#: （`conductor.retire_child` —— 父代理侧唯一的销号发起入口，落实仍在 `Secretary.retire`）。
+#: 2026-10-26（D-68 业主裁定「就做手，不兜底」）：106 → 107
+#: （`conductor.ack` —— 收件人自己把名下已读/已办的板项确认掉；销号门与 final 门都读它）。
 #:
 #: 这一格曾经写着"95 → 98"并附一句"`verify.check_formal` 的角色面收成空，但它仍在册，
 #: 所以总数只加不减"—— 那句话在盘上已经不成立：那个工具不是"收成空角色"，
@@ -96,7 +100,7 @@ TS = "2026-01-01T00:00:00+00:00"
 #:     一件都没有），所以少 3。
 #: 两个数都写在这里，是因为它们都真的存在：把第二个数搬进这一格会少算三件，
 #: 而少算三件时这条判据"照样绿"—— 那正是最坏的一种绿。
-TOOL_COUNT = 105
+TOOL_COUNT = 107
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -323,6 +327,20 @@ def tool_params() -> dict[str, dict]:
         "conductor.watch": {"task_id": probe_root, "window": 3},
         # 沿树指导：收件人是根名下那个子代理；它给目标与各级父各开一条板项 ⇒ 写工具。
         "conductor.guide": {"to": probe_child, "text": "探针：沿树指导一条"},
+        # 销号（D-59，2026-10-26）：探针「落在受控拒绝那一支」 —— 探针的身份是
+        # `t-probe`（`observations` 的 `calling_as`），而 `probe_child` 的父是
+        # `probe_task_root` ⇒ 工具回 `state=refused`（"不是你的子代理"）。这一支与
+        # 成功支、unknown 支的 `data` 键集合是同一套（本工具的 `data` 是
+        # `conductor_retire_child` 里那一个字面量字典，三档共用），所以这条探针照样
+        # 能验"声明 ⊆ 实现"；真跑到三分支的判据在
+        # `tests/test_a_parent_retires_its_finished_child.py` 的 ①②③④。
+        "conductor.retire_child": {"task_id": probe_child,
+                                   "reason": "探针：只验键集，不真的销号"},
+        # 消项（D-68，2026-10-26）：探针给一个不存在的编号 ⇒ 落在 `state=refused`
+        # 那一支（逐条 `no_such_item`）。三档共用 `conductor_ack` 里那一个字面量 `data`
+        # 字典，所以键集合在这里照样验得全；真跑到 acked / partial / not_yours 三支的
+        # 判据在 `tests/test_ack_is_the_hand_and_retire_needs_a_clean_board.py` 的 a/b。
+        "conductor.ack": {"item_ids": ["t-999999"], "note": "探针：只验键集，不真的消项"},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -591,6 +609,18 @@ CODE_ONLY_KEY_SOURCE: dict[str, str] = {
     # （`agent_l/record.py` 的 `_RECORD_KEYS`：每一条分支上都成立）。
     "formal.record": "成功支要求夹具先有一条 `statements` 命题行（探针只走到受控拒绝"
     "`statement_not_found`）⇒ 键名读自 `agent_l/record.py` 的 `_RECORD_KEYS`。",
+    # D-59 的销号工具：探针的身份（`t-probe`）不是 `probe_child` 的父 ⇒ 它走的是
+    # `state=refused` 那一支（受控拒绝），而不是"销掉了一行"那一支。键名读自
+    # `conductor_tools.conductor_retire_child` 里那一个字面量 `data` 字典 —— 三档
+    # （retired / refused / unknown）共用它，所以三条支的键集合逐字相同；真的跑到
+    # 三分支的判据在 `tests/test_a_parent_retires_its_finished_child.py`。
+    "conductor.retire_child": "成功支要求『调用者就是那个子的父』（探针身份是 `t-probe`，"
+    "而 `probe_child` 的父是 `probe_task_root`）⇒ 探针落在 `state=refused` 那一支；"
+    "键名读自 `conductor_retire_child` 里那个三档共用的 `data` 字面量。",
+    # D-68 的消项工具：探针给一个不存在的编号 ⇒ `state=refused`（逐条 `no_such_item`）。
+    # 键名读自 `conductor_ack` 里那个所有分支共用的 `data` 字面量。
+    "conductor.ack": "成功支要求『那几条板项的收件人就是调用者』（探针的编号不存在）⇒ "
+    "探针落在 `state=refused` 那一支；键名读自 `conductor_ack` 里那个共用的 `data` 字面量。",
 }
 
 #: `EXECUTED` 里带保留的那一条：真跑过，但那一次用的是桩 provider。
@@ -620,6 +650,12 @@ MUTATING_LAST: frozenset[str] = frozenset(
         # 沿树指导（2026-10-24）：它给目标与各级父各开一条板项（写 `tasks`）⇒ 排在后面，
         # 免得 `conductor.board` / `conductor.ledger` 的探针读到它多出来的行。
         "conductor.guide",
+        # 销号（D-59）：成功那一支会写名册三份台账与一条消边；探针落在受控拒绝那一支
+        # （一行都不写），但它与"能销"只差一步上下文 ⇒ 排在后面，免得挡住别人的读数。
+        "conductor.retire_child",
+        # 消项（D-68）：成功那一支会改 `tasks` 的 item_state 并追加一条事件；探针落在
+        # `no_such_item` 那一支（一行都不写），同样排在后面。
+        "conductor.ack",
         "fs.move",
         "fs.delete",
         "fs.write",

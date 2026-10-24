@@ -32,7 +32,8 @@ from .. import schema as S
 from ..cancellation import CANCEL_CODES
 from ..conductor import (DEFAULT_FANOUT_WAIT_SEC, ESCALATE_KINDS, Conductor, NotWiredError,
                          SummonResult, current_caller_role, current_task_id)
-from . import READ_ONLY_ROLES, ToolError, ToolRegistry, ToolResult, fail, ok, tool
+from . import (READ_ONLY_ROLES, UNIVERSAL_TOOLS, ToolError, ToolRegistry, ToolResult, fail,
+               is_universal_tool, ok, tool)
 
 #: 一个工作区一个主控（键 = store 根路径）。主控是会话状态：
 #: 预算、台账、取消信号必须跨多次工具调用连续，否则每次派活都是一个新主控。
@@ -225,7 +226,8 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
     {
         "type": "object",
         "properties": {
-            "target_role": {"type": "string", "description": "被召唤的角色（A–H）"},
+            "target_role": {"type": "string", "description":
+                            "被召唤的角色代号（能不能派它、你有哪些出边，见伙伴表）"},
             # 「2026-10-16（业主口径 S2 最终形态）」：`action` 「整个摘掉」 ——
             # 「一致改成 task 必填，action 不填」「action 完全不用父代理填」。
             # 派活只有 `target_role` + `task`；点哪个动作是被派者自己的事。
@@ -302,7 +304,8 @@ def conductor_summon(_conductor, target_role: str, task: str, params: dict | Non
                 "items": {
                     "type": "object",
                     "properties": {
-                        "target_role": {"type": "string", "description": "被召唤的角色（A–H）"},
+                        "target_role": {"type": "string", "description":
+                            "被召唤的角色代号（能不能派它、你有哪些出边，见伙伴表）"},
                         # 2026-10-16（口径 S2 最终形态）：`action` 同样摘掉（与 `summon` 一致）。
                         "task": {"type": "string", "description":
                                  "**必填**：这件活是什么（可带起手建议）"},
@@ -867,10 +870,12 @@ def conductor_state(_conductor, ) -> ToolResult:
 
 @tool(
     "conductor.role_spec",
-    "某角色的规格：允许的动作与各自的参数名、以及它今天有哪些工具。派活前用它确认『这个角色能不能做这件事』；与 capabilities 同源。",
+    "某角色的描述（不是它的工具面）：role、summonable（你能不能直接派它），外加职责 / 交付物 / 边界 / "
+    "政策 / 立场 / 签名错六格；不给它的动作表，也不给它今天的工具名。派活前用它确认『这个角色是干什么的』；"
+    "与声明层同源。",
     {
         "type": "object",
-        "properties": {"role_name": {"type": "string", "description": "角色名（A–H）"}},
+        "properties": {"role_name": {"type": "string", "description": "角色名（A–H / V / L）"}},
         "required": ["role_name"],
         "additionalProperties": False,
     },
@@ -1422,6 +1427,632 @@ def conductor_escalate(_conductor: Any, need: str, kind: str,
     return ok(payload, **got)
 
 
+# ---------------------------------------------------------------- 销号（父发起，秘书落实）
+
+#: `conductor.retire_child` 的三态（`state` 那一格）：可销 / 不可销 / 读不到。
+#:
+#: 为什么是三档而不是一个布尔：`Conductor.retire_ready` 与 `Secretary.retire` 各自都已经是
+#: 三态的（`checked` 位），折成一个 `retired: bool` 会让「台账 / 名册读不出来」与「它还在飞」
+#: 在读数上长得一模一样 —— 而父下一步该做的事正好相反（前者要重读一次，后者要等）。
+RETIRE_CHILD_STATES: tuple[str, ...] = ("retired", "refused", "unknown")
+
+
+def _parent_roles() -> tuple[str, ...]:
+    """谁拿得到 `conductor.retire_child`：能当父的那些角色（边表里有出边）。
+
+    ## 为什么从边表派生，而不是手写一份清单
+    「谁能当父」的权威定义只有一处（`specs/<角色>.py` 的 `edges`，
+    `capabilities.ALLOWED_EDGES` 是它的派生）。手写一份名单会在有人加边时静默漏掉那个角色，
+    而漏掉的表现是"这个角色看不到销号工具" —— 它不报错，只会让那一支的名册越来越长
+    （D-59 的原始症状：父从不给交完差的子销号）。
+
+    ## 两处排除，都是结构性的、都登记在这里（不是遗漏）
+    - `C` 没有出边（它不召唤任何人）⇒ 它当不了父，销号工具对它没有对象；
+    - 只读角色（`C` / `H` / `V`）拿不到写工具 —— `ToolRegistry.for_role` 按
+      `SIDE_EFFECTS_WRITE` 结构性剥离。本件落 `out/roster/*.jsonl`、并在台账里记一笔消边，
+      是真写，所以它不能挂在只读角色面上（`AGENTS.md` 第七类：权限面被悄悄放宽 ⇒
+      测试全绿、上线即越权）。「登记下来的缺口」：`H` / `V` 边表里有出边（`H→A/E/G`、
+      `V→F`），它们名下若有子代理，本工具不是它们的销号入口 —— 那件事要由人（或一次
+      明确放宽只读角色写面的裁定）来处理，而不是在这里静默抹掉。
+    """
+    from .. import specs as _specs
+
+    return tuple(sorted(r for r, out in _specs.edges().items()
+                        if out and r not in READ_ONLY_ROLES))
+
+
+#: 拿得到销号工具的角色（`_parent_roles()` 的读数，声明期算一次）。
+_PARENT_ROLES: tuple[str, ...] = _parent_roles()
+
+
+def _roster_secretary(conductor: Any, store: Any) -> Any:
+    """这一趟「写名册的那个秘书」（与 `Conductor._register_roster` 同一条取法）。
+
+    取法三档，与名册登记那一处逐字对齐（`roster_sink` 优先，其次 `secretary`）：
+    销号必须落在「同一份名册文件」上，否则 `retire_ready` 说"可销"、名册里却找不到那个名字
+    （两处各读一份名册的形态）。两档都空 ⇒ 现造一个：`Secretary` 的构造零模型调用，
+    只读 root 与 store（`Secretary._conductor` 会用它读台账）。
+    """
+    for attr in ("roster_sink", "secretary"):
+        got = getattr(conductor, attr, None)
+        if got is not None:
+            return got
+    from ..secretary import for_role as _secretary_for_role
+
+    root = getattr(store, "root", None) or getattr(conductor, "root", None) or "."
+    # `for_role` 是模块级函数（`secretary.for_role`），不是 `Secretary` 的方法。
+    # 写成 `Secretary.for_role(...)` 会在"两档都没接"这条回退路上抛 AttributeError，
+    # 而那条路只有装配没接 `roster_sink` / `secretary` 时才走到 —— 于是它一直没人发现，
+    # 直到 `tests/test_tools_returns_declaration.py` 用一个裸 `Conductor` 探针调到这里。
+    return _secretary_for_role(str(current_caller_role() or S.CONDUCTOR_ROLE),
+                               root=root, store=store)
+
+
+@tool(
+    "conductor.retire_child",
+    "给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧"
+    "（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。"
+    "child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，"
+    "原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）"
+    "⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），"
+    "而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、"
+    "一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。"
+    "销号前置：它名下的板项必须已经清干净（queued / seen 都算没清）—— 不清就受控拒绝，"
+    "先把那些项逐条处置掉再来销（没读的东西不许跟着名字一起销掉）。"
+    "三态：可销 ⇒ state=retired；不可销（还在飞 / 名下还有未消的板项 / "
+    "不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ "
+    "state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是"
+    "「它交完了、名字永久不复用」。",
+    {"type": "object",
+     "properties": {
+         # 为什么这一格叫 `child_name` 而不是 `name`：`ToolRegistry.call(name, ...)` 的首个形参
+         # 就叫 `name`，而 `agent_loop._do_tool` 把模型给的 args 摊成关键字传进去
+         # ⇒ 形参叫 `name` 会撞成 `TypeError: call() got multiple values for argument 'name'`。
+         # 那正是"模型写的名字对、工具本身没问题、却拿到工具层抛错"的形态（2026-10-26 实测）。
+         # 所以正路是 `child_name`；`name` 只作为兼容别名收（按映射整体传入时才走得到），
+         # 读数里用 `addressed_by` 记这一次是按哪一格指称的。
+         "child_name": {"type": "string", "minLength": 1, "maxLength": 32,
+                        "description": "子代理的名册名（如 `D1`；来自 {\"roster\": {\"of\": \"self\"}}）"},
+         "reason": {"type": "string", "maxLength": 300,
+                    "description": "为什么销它（一句话，逐字落进名册与销号名单）"},
+         "task_id": {"type": "string", "minLength": 6, "maxLength": 8,
+                     "description": "旧的兼容写法：子代理的绝对编号（新写的一律用 child_name）"},
+     },
+     "required": [],
+     "additionalProperties": False},
+    side_effect="write_local",
+    roles=_PARENT_ROLES,
+    returns=("{'checked','state','retired','task_id','name','parent_task_id','branch',"
+             "'task_id_compat','addressed_by',"
+             "'open_items','missing','reason','note','retired_path','roster_retired',"
+             "'subtree','subtree_size','order','cascade','retired_count','unrostered',"
+             "'active_nodes','busy_task_ids','readings','child_count',"
+             "'active_child_count'}；"
+             "open_items 是列表（没销成时才非空），每项给 task_id / kind / item_state / "
+             "summary 四格 —— 那四条键名刻意不写进键集合：空列表时一个都观测不到，"
+             "写进去会让『声明 ⊆ 实跑』在受控拒绝那一支假红；"
+             "cascade 是按销号次序排的逐项读数（task_id / name / role / depth / state），"
+             "order 是本次的销号次序（最深的在前），active_nodes 是拒绝时点名的活跃节点"),
+)
+def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
+                           task_id: str = "", reason: str = "",
+                           name: str = "") -> ToolResult:
+    """工具体：父发起、秘书落实（三分支的判定在 `Secretary.retire`，本层不另写一份）。
+
+    ## 三态为什么都在 `ok(...)` 里（不是 `fail`）
+    `state` 就是这次销号的结论，而三档都要「带同一套键」回去（`returns=` 声明的是 `data` 的键
+    集合，同一张面的先例：`formal.record` 把受控拒绝放在 `refused` 格子里而不是 `data=None`）。
+    `state=refused` / `unknown` 不是工具故障：模型下一步该做的是"等它跑完/别销它"或"重读一次"，
+    那些判断需要 `missing` / `branch` 这几格，`fail` 会把它们全吞掉。
+
+    ## 判定次序（先读得到，再判得了，最后才是"能不能销"）
+    1. 我是谁（`current_task_id()`：父的台账号 = 名册的 owner）；
+    2. 台账读得出来吗 ⇒ 读不出来一律 `unknown`（不许折成"它不在飞"）；
+    3. 这一行是不是我的子代理（`parent_task_id` 必须是我；板项行不是代理）；
+    4. 子树与销号次序（`Conductor.subtree_postorder`：从最深到最浅，先叶子后父）；
+    5. 子树里有没有还在活跃的节点（`Conductor.active_in_subtree`，含"在等"的向上继承）
+       —— 有就整笔拒绝并点名"谁卡在哪件任务上"；
+    6. 逐项核：未消的板项（每一项都要核）、`retire_ready` 的三分支、名册名；
+    7. 全过 ⇒ 按第 4 步的次序从最深的开始逐项交给秘书（一次也不许反序）。
+
+    ## 级联（业主 2026-10-26）
+    「销号时需保证被销号子代理无活跃子代理，且自动帮它的子代理销号（从最深的开始销号）」。
+    所以销的不是一个名字，是它名下那一支：叶子先退场、父后走，次序落进 `order` 与 `cascade`
+    两格（`cascade` 逐项带 `task_id` / `name` / `role` / `depth` / `state` / `why`）。
+    「不许销一半」是这一条的另一半：第 5、6 步任何一项不过 ⇒ 整笔不动、一个字节都不落盘。
+    销一半的形态很具体：叶子销了、中间那一层因为还有别的活跃孙代被拒 ⇒ 名册上剩下一个
+    名字，而它名下的孩子已经不能寻址（父再也叫不醒它们）。写那一步自己炸了（磁盘坏了）时
+    已经没有"不动"这条路可走，那时只能如实报 `unknown` 并把"已经销掉的是哪几个"端出来 ——
+    那不是半笔销号，那是一笔事故。
+
+    ## 两个读数（子代理数 / 活跃子代理数）
+    报告里贴 `child_count`（名册里未销号的名册项数）与 `active_child_count`（其中工作没做完
+    还在做的，含靠等下级才活跃的），口径只有 `Secretary.child_counts` 一处；外加 `readings`
+    那一格（判据读数：`subtree_size` / `active_count` / `busy_task_ids` / 销号前后的两份名册
+    读数）。拒绝时那两个数是"为什么这一笔不许销"的证据；成功时它们是销完之后的名册读数。
+
+    ## 销号 ≠ 停止
+    `conductor.stop` / 叫停是"让它此刻停下来"，销号是"它交完了、名字永久不复用"。
+    两件事混起来的代价：把还在飞的子代理当成"已经结束"（活干到一半、名字已被销掉）。
+    所以子树里只要还有活跃节点这一档就拒绝，并把它的状态与最近报告端回去。
+    """
+    c = _conductor()
+    data: dict[str, Any] = {
+        "checked": False, "state": "unknown", "retired": False,
+        "task_id": str(task_id or ""), "name": str(name or child_name or ""),
+        "parent_task_id": "",
+        "branch": "", "open_items": [], "missing": [], "reason": "",
+        "note": str(reason or ""), "retired_path": "", "roster_retired": False,
+        "task_id_compat": False, "addressed_by": "",
+        # 级联销号与两个读数的落点（业主 2026-10-26）。这些键在 `returns=` 里都声明了，
+        # 所以每一条返回路径上都必须真的有它们 —— 声明 ⊆ 实跑是 `test_tools_returns_declaration`
+        # 钉着的门（"声明了却没给"在本仓是红）。
+        "subtree": [], "subtree_size": 0, "order": [], "cascade": [],
+        "retired_count": 0, "unrostered": [], "active_nodes": [],
+        "busy_task_ids": [], "readings": {},
+        "child_count": None, "active_child_count": None,
+    }
+
+    def _out(state: str, why: str, *, checked: bool = True,
+             missing: list[str] | None = None, **extra: Any) -> ToolResult:
+        """盖章并返回（`state` 只许 `RETIRE_CHILD_STATES` 里的取值）。"""
+        assert state in RETIRE_CHILD_STATES, state
+        data["state"] = state
+        data["checked"] = bool(checked)
+        data["reason"] = str(why or "")
+        if missing:
+            data["missing"] = list(missing) + list(data["missing"])
+        data.update(extra)
+        return ok(data, **data)
+
+    def _counts(sec: Any) -> dict[str, Any]:
+        """父这一份名册的两个读数（子代理数 / 活跃子代理数）。
+
+        读不成 ⇒ `checked=False` 且两个数都是 `None`（不折成 0：0 是"名册空了"这个
+        很强的结论）。口径只有 `Secretary.child_counts` 一处 —— 这里再算一遍就是
+        "同一读数两个主人"。
+        """
+        try:
+            got = sec.child_counts(owner=mine)
+        except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没读成"
+            return {"checked": False, "child_count": None, "active_child_count": None,
+                    "reason": f"{type(exc).__name__}: {exc}"}
+        if not isinstance(got, Mapping):
+            return {"checked": False, "child_count": None, "active_child_count": None,
+                    "reason": "名册读数不是对象"}
+        return got
+
+    mine = str(current_task_id() or "")
+    if not mine:
+        return _out("unknown", "这一趟没有台账号 ⇒ 不知道这份名册属于谁（不猜一个父号）",
+                    checked=False, missing=["没有台账号"])
+    data["parent_task_id"] = mine
+    if store is None:
+        return _out("unknown", "装配时没给 store ⇒ 读不到台账（没查成，不是'它不在飞'）",
+                    checked=False, missing=["store"])
+    try:
+        rows = list(store.rows("tasks"))
+    except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"没有这一行"
+        return _out("unknown", f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成",
+                    checked=False, missing=["tasks 台账"])
+    # 指称只有一条正路：名册名（`child_name`）。`task_id` 是旧的兼容写法 —— 它只收绝对编号，
+    # 按对照表换算成名册名，并在读数里标 `task_id_compat=true`（谁还在用旧写法，读得出）。
+    # `name` 是兼容别名：只在"按映射整体传入"的调用里走得到（模型的 JSON args 会被
+    # `agent_loop._do_tool` 摊成关键字 ⇒ 与 `ToolRegistry.call` 的首个形参撞名），
+    # 所以它不进 schema，只在读数 `addressed_by` 里留痕。
+    sec = _roster_secretary(c, store)
+    want = str(child_name or name or "").strip()
+    tid = str(task_id or "").strip()
+    data["addressed_by"] = ("child_name" if str(child_name or "").strip()
+                            else "name" if str(name or "").strip()
+                            else "task_id" if tid else "")
+    if want:
+        try:
+            index, bad = sec.roster_index(mine)
+        except Exception as exc:  # noqa: BLE001
+            return _out("unknown",
+                        f"名册对照表读不成（{type(exc).__name__}: {exc}）⇒ 名字换不成编号",
+                        checked=False, missing=["名册对照表"])
+        if bad:
+            return _out("unknown",
+                        (f"名册对照表有 {len(bad)} 行读不出来 ⇒ 名字换不成编号"
+                         "（没查成，不是『名册里没有它』）"),
+                        checked=False, missing=["名册对照表"])
+        hit_name = next((r for r in index if str(r.get("name") or "") == want), None)
+        if hit_name is None:
+            return _out("refused", f"名册里没有 {want} 这个名字（查过了、确实没有）",
+                        missing=[f"{want} 不在名册里"])
+        tid = str(hit_name.get("task_id") or "")
+        if not tid:
+            return _out("unknown",
+                        f"{want} 在名册上、但对照表里没有它的绝对编号（没查成）",
+                        checked=False, missing=["名册名对应的编号"])
+        data["task_id"] = tid
+    elif tid:
+        data["task_id_compat"] = True
+    else:
+        return _out("refused",
+                    "销号要点名：给 child_name（名册名，如 D1）；task_id 只是旧的兼容写法",
+                    missing=["没有给 child_name"])
+    row = next((r for r in rows if str(r.get("task_id") or "") == tid), None)
+    if row is None:
+        return _out("refused", f"台账里没有 {tid} 这一行（这是查过了、确实没有）",
+                    missing=[f"{tid} 不在 tasks 里"])
+    if str(row.get("kind") or ""):
+        return _out("refused", f"{tid} 是一条板项（kind={row.get('kind')}），不是代理 ⇒ 销号没有对象",
+                    missing=[f"{tid} 是板项不是代理"])
+    if str(row.get("parent_task_id") or "") != mine:
+        return _out("refused",
+                    (f"{tid} 不是你的子代理（它的父是 {row.get('parent_task_id') or '（顶层）'}）"
+                     "⇒ 只有它的父能发起销号"),
+                    missing=[f"{tid} 的父不是你"])
+    data["branch"] = ""
+    before = _counts(sec)
+    data["readings"] = {"child_counts_before": before}
+    data["child_count"] = before.get("child_count")
+    data["active_child_count"] = before.get("active_child_count")
+    # ---- 子树与次序（从最深到最浅 = 先叶子后父）。级联销号按这个次序落盘。
+    try:
+        sub = c.subtree_postorder(tid)
+    except Exception as exc:  # noqa: BLE001
+        return _out("unknown", f"子树读不成（{type(exc).__name__}: {exc}）⇒ 销号次序判不了",
+                    checked=False, missing=["subtree"])
+    if not sub.get("checked"):
+        return _out("unknown", f"子树读不成（{sub.get('reason')}）⇒ 销号次序判不了",
+                    checked=False, missing=["subtree"])
+    order = [str(x) for x in (sub.get("order") or [])]
+    parent_of = dict(sub.get("parent_of") or {})
+    depth_of = dict(sub.get("depth_of") or {})
+    data["order"] = order
+    data["subtree"] = order
+    data["subtree_size"] = len(order)
+    # ---- 活跃读数（含"在等"的向上继承）：子树里只要还有一个活跃节点就整笔拒绝
+    try:
+        act = c.active_in_subtree(tid)
+    except Exception as exc:  # noqa: BLE001
+        return _out("unknown", f"活跃读数没读成（{type(exc).__name__}: {exc}）⇒ 不敢销",
+                    checked=False, missing=["活跃读数"])
+    if not act.get("checked"):
+        return _out("unknown", f"活跃读数没读成（{act.get('reason')}）⇒ 不敢销",
+                    checked=False, missing=["活跃读数"])
+    active_count = int(act.get("active_count") or 0)
+    data["active_nodes"] = list(act.get("rows") or [])
+    data["busy_task_ids"] = list(act.get("busy_root_ids") or [])
+    data["readings"].update({"subtree_size": len(order), "active_count": active_count,
+                             "busy_task_ids": list(act.get("busy_root_ids") or []),
+                             "labels": dict(before.get("labels") or {})})
+    try:
+        ready = c.retire_ready(mine)
+    except Exception as exc:  # noqa: BLE001
+        return _out("unknown", f"就绪读数没读成（{type(exc).__name__}: {exc}）",
+                    checked=False, missing=["retire_ready"])
+    if not ready.get("checked"):
+        return _out("unknown", f"就绪读数没读成（{ready.get('reason')}）",
+                    checked=False, missing=["retire_ready"])
+    hit = next((r for r in ready.get("ready") or [] if str(r.get("task_id") or "") == tid), None)
+    if hit is None:
+        return _out("refused",
+                    (f"{tid} 不在可销清单里（已经销过号，或它不在你名下）⇒ 不重复销"),
+                    missing=[f"{tid} 不在可销清单里"])
+    branch = str(hit.get("branch") or "")
+    if active_count > 0 and branch != "active":
+        # 继承口径的补丁：`retire_ready` 只看直接子，看不见孙代 —— 一个自己已经收口、
+        # 但孙辈还在跑的节点，在它眼里是"可以销"的。业主的规则是"不得有活跃的下级"，
+        # 所以这一档按"名下还有活跃子代理"报，不按"可以销"报。
+        branch = "waiting_with_children"
+    data["branch"] = branch
+    if active_count > 0:
+        # 点名：谁还活跃、把它撑成活跃的那些"真在跑"的任务是哪几件。
+        named: list[str] = []
+        for a in data["active_nodes"]:
+            detail = []
+            for b in a.get("busy") or []:
+                tail = f"/{b['action']}" if str(b.get("action") or "") else ""
+                detail.append(f"{b.get('task_id')}（{b.get('role') or '?'}/"
+                              f"{b.get('status') or '?'}{tail}）")
+            one = (f"{a.get('role') or '?'}（{a.get('task_id')}）还在活跃：卡在 "
+                   + ("、".join(detail) or "（读不到它在跑哪一件）"))
+            if a.get("note"):
+                one += f"；{a['note']}"
+            named.append(one)
+        if branch == "active":
+            return _out("refused",
+                        (f"{tid} 还在飞（status={row.get('status') or 'unknown'}）⇒ 等它交差再销；"
+                         "销号 ≠ 停止：要它此刻停下来用停止/叫停，不是销号"),
+                        missing=[f"{tid} 还在跑"])
+        return _out("refused",
+                    (f"{tid} 这一支里还有 {active_count} 个节点在活跃"
+                     f"（子代理数={data['child_count']}，"
+                     f"活跃子代理数={data['active_child_count']}）⇒ 整笔不销、一处都不动："
+                     "先等那些节点交差再销。点名：" + "；".join(named)),
+                    missing=named)
+    if branch == "waiting_with_children":
+        # 读到这一步说明 `retire_ready` 与活跃读数不一致（前者说名下还有活跃子代理、
+        # 后者说一个都读不到活跃）。两边都是"查过了"的结论 ⇒ 按保守的那一侧拒绝。
+        return _out("refused",
+                    (f"{tid} 名下还有活跃子代理 ⇒ 它还在干活；先处置那些子代理再销它"),
+                    missing=[f"{tid} 名下还有活跃子代理"])
+    open_rows = [r for r in rows
+                 if str(r.get("parent_task_id") or "") == tid
+                 and str(r.get("kind") or "")
+                 and str(r.get("item_state") or "") != "done"]
+    items_open = int(((hit.get("reading") or {}).get("items_open")) or 0)
+    if items_open > 0 or open_rows:
+        listed = [{"task_id": str(r.get("task_id") or ""), "kind": str(r.get("kind") or ""),
+                   "item_state": str(r.get("item_state") or ""),
+                   "summary": str(r.get("detail") or "")[:80]} for r in open_rows[:8]]
+        return _out("refused",
+                    (f"{tid} 名下还有 {max(items_open, len(open_rows))} 条未消的板项 ⇒ "
+                     "task_board 没清，不许直接销号：先用 `conductor.ack` 把已办的那些确认掉、"
+                     "没办的先办，等它名下一条未消的项都不剩再来销 —— 否则不许销号"
+                     "（没读的东西不许跟着名字一起销掉）"),
+                    missing=[f"{r['task_id']}（{r['kind']}/{r['item_state']}）" for r in listed],
+                    open_items=listed)
+    try:
+        name, why = sec.name_of(owner=mine, task_id=tid)
+    except Exception as exc:  # noqa: BLE001
+        return _out("unknown", f"名册对照表读不成（{type(exc).__name__}: {exc}）",
+                    checked=False, missing=["名册对照表"])
+    if not name:
+        state = "unknown" if ("读不出" in str(why) or "读不成" in str(why)) else "refused"
+        return _out(state, f"{tid} 的名册名没读到（{why}）⇒ 不猜一个名字去销",
+                    checked=state == "refused", missing=["名册名"])
+    data["name"] = name
+    # ---- 子树逐项核（先读后写）：任何一项不过 ⇒ 整笔不动，一个字节都不落盘
+    ready_by_parent: dict[str, dict[str, Any]] = {}
+
+    def _ready_of(pid: str) -> dict[str, Any]:
+        """某父那一层的可销清单：`{"checked", "branch_of", "reason"}`（每个父只问一次）。"""
+        if pid in ready_by_parent:
+            return ready_by_parent[pid]
+        got_ready: dict[str, Any]
+        try:
+            got_ready = c.retire_ready(pid)
+        except Exception as exc:  # noqa: BLE001
+            got_ready = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+        found = ({str(r.get("task_id") or ""): str(r.get("branch") or "")
+                  for r in (got_ready.get("ready") or [])}
+                 if got_ready.get("checked") else {})
+        ready_by_parent[pid] = {"checked": bool(got_ready.get("checked")),
+                                "branch_of": found,
+                                "reason": str(got_ready.get("reason") or "")}
+        return ready_by_parent[pid]
+
+    plans: list[dict[str, Any]] = []
+    blocked: list[str] = []
+    for node in order:
+        pid = str(parent_of.get(node) or "")
+        plan: dict[str, Any] = {
+            "task_id": node, "parent": pid, "depth": int(depth_of.get(node) or 0),
+            "role": str(next((r.get("role") for r in rows
+                              if str(r.get("task_id") or "") == node), "") or ""),
+            "name": "", "branch": "", "state": "ready", "why": "",
+        }
+        plans.append(plan)
+        layer = _ready_of(pid)
+        if not layer["checked"]:
+            return _out("unknown",
+                        (f"{pid or '（顶层）'} 那一层的就绪读数没读成"
+                         f"（{layer['reason']}）⇒ 级联销号判不了"),
+                        checked=False, missing=[f"{pid} 的 retire_ready"])
+        if node == tid:
+            plan["branch"] = branch
+            plan["name"] = name
+            continue
+        if node not in layer["branch_of"]:
+            # 已经销过号的（或不在这个父名下）不在可销清单里 ⇒ 跳过，不算失败。
+            plan["state"] = "already"
+            plan["why"] = "不在它父那一层的可销清单里（已经销过号）"
+            continue
+        plan["branch"] = str(layer["branch_of"].get(node) or "")
+        kid_open = [r for r in rows
+                    if str(r.get("parent_task_id") or "") == node
+                    and str(r.get("kind") or "")
+                    and str(r.get("item_state") or "") != "done"]
+        if kid_open:
+            blocked.append(f"{node} 名下还有 {len(kid_open)} 条未消的板项"
+                           f"（{[str(r.get('task_id') or '') for r in kid_open[:8]]}）"
+                           "—— 先用 `conductor.ack` 把它们收口")
+            plan["state"] = "blocked"
+            plan["why"] = blocked[-1]
+            continue
+        try:
+            kid_name, why_kid = sec.name_of(owner=pid, task_id=node)
+        except Exception as exc:  # noqa: BLE001
+            return _out("unknown", f"名册对照表读不成（{type(exc).__name__}: {exc}）",
+                        checked=False, missing=["名册对照表"])
+        if not kid_name:
+            plan["state"] = "unrostered"
+            plan["why"] = f"名册里没有它（{why_kid}）⇒ 它不是名册项，没有名字可销"
+            data["unrostered"].append({"task_id": node, "parent": pid,
+                                       "why": plan["why"]})
+            continue
+        plan["name"] = kid_name
+    if blocked:
+        return _out("refused",
+                    (f"{tid} 这一支里还有 {len(blocked)} 项不让销 ⇒ 整笔不销、一处都不动："
+                     + "；".join(blocked)),
+                    missing=blocked)
+    # ---- 从最深的开始逐项交给秘书（次序 = `order`，一次也不许反序）
+    written: list[dict[str, Any]] = []
+    for plan in plans:
+        if plan["state"] != "ready":
+            data["cascade"].append(dict(plan))
+            continue
+        sub_reason = str(reason or "")
+        if plan["task_id"] != tid:
+            lead = f"{data['name'] or tid}（{tid}）"
+            sub_reason = ((sub_reason + "；") if sub_reason else "") + \
+                f"级联销号：随 {lead} 一起退场"
+        sub_reason = sub_reason[:300]
+        try:
+            got = sec.retire(owner=plan["parent"], name=plan["name"],
+                             by_task_id=plan["task_id"], reason=sub_reason)
+        except Exception as exc:  # noqa: BLE001 —— 抛了不代表没写：这一档只能记 unknown
+            data["cascade"].append(dict(plan, state="unknown",
+                                        why=f"秘书销号时抛了（{type(exc).__name__}: {exc}）"))
+            data["retired_count"] = len(written)
+            data["readings"]["written"] = [w["task_id"] for w in written]
+            return _out("unknown",
+                        (f"级联销号在第 {len(written) + 1} 项（{plan['name']}）上抛了 ⇒ "
+                         f"已经销掉的是 {[w['name'] for w in written]}，剩下没动；"
+                         "这不是'全销'也不是'没动'，重读一次再决定"),
+                        checked=False, missing=[f"{plan['name']} 落没落盘不知道"])
+        if not isinstance(got, Mapping):
+            data["cascade"].append(dict(plan, state="unknown", why="秘书的销号读数不是对象"))
+            data["retired_count"] = len(written)
+            data["readings"]["written"] = [w["task_id"] for w in written]
+            return _out("unknown",
+                        (f"级联销号在第 {len(written) + 1} 项（{plan['name']}）上没拿到可判读数 ⇒ "
+                         f"已经销掉的是 {[w['name'] for w in written]}，剩下没动"),
+                        checked=False, missing=["secretary.retire 读数"])
+        action = str(got.get("action") or "")
+        why_list = [str(x) for x in (got.get("why") or [])]
+        why = "；".join(why_list)
+        if action != "retired":
+            data["cascade"].append(dict(plan, state="refused", why=why))
+            data["retired_count"] = len(written)
+            data["readings"]["written"] = [w["task_id"] for w in written]
+            # 三态在这里再分一次：秘书给出 `reported` / `refused` 是"查过了、现在不许销"
+            # （它是确定结论 ⇒ `refused`）；其余（空 action / 没给可判读数）才是"落没落盘不知道"
+            # ⇒ `unknown`。把这两档折成一个会让父把"它还在跑、等它"读成"重读一次"。
+            if action in ("reported", "refused"):
+                return _out("refused",
+                            (f"级联销号在第 {len(written) + 1} 项（{plan['name']}）上被秘书拒了"
+                             f"（action={action}：{why}）⇒ 已经销掉的是 "
+                             f"{[w['name'] for w in written]}，剩下没动；"
+                             "先处置那一项再来销"),
+                            missing=[f"{plan['name']} action={action}"])
+            return _out("unknown",
+                        (f"级联销号在第 {len(written) + 1} 项（{plan['name']}）上没落成"
+                         f"（action={action or '（空）'}：{why}）⇒ 已经销掉的是 "
+                         f"{[w['name'] for w in written]}，剩下没动 —— 这不是'全销'，"
+                         "重读一次再决定"),
+                        checked=False,
+                        missing=[f"{plan['name']} action={action or '（空）'}"])
+        written.append(dict(plan))
+        data["cascade"].append(dict(plan, state="retired", why=why))
+        data["retired_count"] = len(written)
+    after = _counts(sec)
+    data["readings"]["child_counts_after"] = after
+    data["readings"]["written"] = [w["task_id"] for w in written]
+    data["child_count"] = after.get("child_count")
+    data["active_child_count"] = after.get("active_child_count")
+    from ..secretary import retired_path
+
+    roster_retired = False
+    try:
+        folded, _bad = sec.roster_rows(mine)
+        roster_retired = any(str(r.get("name") or "") == name and bool(r.get("retired"))
+                             for r in folded)
+    except Exception:  # noqa: BLE001 —— 复核读不成不改结论（落盘已经成功）
+        roster_retired = False
+    msg = why or f"{name}（{tid}）已销号"
+    if len(written) > 1:
+        msg += (f"；级联销号 {len(written)} 项（从最深到最浅）："
+                + "、".join(f"{w['name']}（{w['task_id']}）" for w in written))
+    if data["unrostered"]:
+        msg += (f"；另有 {len(data['unrostered'])} 行不是名册项"
+                "（它们没有名字可销，已在 unrostered 里点名）")
+    return _out("retired", msg, retired=True, roster_retired=roster_retired,
+                retired_path=str(retired_path(Path(str(sec.root)), mine)))
+
+
+# ---------------------------------------------------------------- 消项（收件人自己确认）
+
+#: `conductor.ack` 的几档结论（`state` 那一格），与 `Conductor.ack_items` 同一套取值。
+#:
+#: 为什么不是"成功/失败"两档：`partial`（一条成、一条不是你的）与 `refused`（一条都没成）
+#: 在下一步该做的事上完全不同 —— 前者要继续处理剩下的，后者要先弄清为什么一条都不成。
+ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknown")
+
+
+@tool(
+    "conductor.ack",
+    "把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，"
+    "落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项"
+    "（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。"
+    "这是销号之前必须先走的那一步：板没清干净时 `conductor.retire_child` 会拒，"
+    "而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。",
+    {"type": "object",
+     "properties": {
+         "item_ids": {"type": "array",
+                      "items": {"type": "string", "minLength": 4, "maxLength": 12},
+                      "minItems": 1, "maxItems": 50,
+                      "description": "要确认的板项编号（`tasks` 里的 task_id，可一次给多条）"},
+         "note": {"type": "string", "maxLength": 300,
+                  "description": "一句为什么（逐字落进那一条事件，可空）"},
+     },
+     "required": ["item_ids"],
+     "additionalProperties": False},
+    side_effect="write_local",
+    # 所有角色 + 主控：板项按 `parent_task_id` 投给任何一行，所以「会收到板项的」是全部角色
+    # （含只读角色 C/H/V —— 它们同样收交接通报、指导与停止通知）。它写的只有
+    # `tasks` 的 `item_state`/`item_close` 与一条事件，属簿记 ⇒ 登记在 `UNIVERSAL_TOOLS`
+    # 里由那条判据放行，而不是走只读例外表（那是"谁能用"的另一种说法）。
+    roles=tuple(S.ROLES) + (S.CONDUCTOR_ROLE,),
+    returns=("{'checked','ok','state','acked','already_done','refused','unknown',"
+             "'missing','not_yours','refusal_codes','results','count','requested',"
+             "'by_task_id','note','reason'}；state 是 acked / partial / refused / "
+             "nothing / unknown 之一；acked 是落成的编号，refused 每项给 "
+             "item_id / code / reason（code 是 not_yours / no_such_item / "
+             "not_board_item / ack_unbacked / state_error 之一），results 逐条给 "
+             "item_id / ok / code / state_before / state_after / step / seen_backfilled"),
+)
+def conductor_ack(_conductor: Any, item_ids: list, note: str = "") -> ToolResult:
+    """工具体：收件人自己把名下板项推到 done（判定与写盘都在 `Conductor.ack_items`）。
+
+    ## 为什么"我是谁"不在工具形状里
+    收件人 = 这一趟的台账号（`current_task_id()`，生产里由 `AgentLoop._do_tool` 用
+    `calling_as` 挂上）。把它做成一个参数等于让模型自己声明"这些项归我"——
+    那正是本工具唯一要挡住的那件事（替别人 ack）。
+
+    ## 三态都在 `ok(...)` 里（与同族的 `conductor.retire_child` 同一形状）
+    `state` 就是这次消项的结论，而 `acked` / `refused` / `results` 是模型下一步要看的东西；
+    `fail` 会把 `data` 整个丢掉（`ToolResult` 的错误那一档 `data=None`），
+    于是"哪一条没成、为什么"就没了 —— 而它正是受控拒绝里唯一有用的那一格。
+    """
+    ids = [str(x) for x in (item_ids or ())]
+    data: dict[str, Any] = {
+        "checked": False, "ok": False, "state": "unknown",
+        "acked": [], "already_done": [], "refused": [], "unknown": [],
+        "missing": [], "not_yours": [], "refusal_codes": [], "results": [],
+        "count": 0, "requested": len(ids), "by_task_id": "", "note": str(note or ""),
+        "reason": "",
+    }
+    mine = str(current_task_id() or "")
+    data["by_task_id"] = mine
+    if not mine:
+        data["reason"] = ("这一趟没有台账号 ⇒ 不知道这些项归谁（不猜一个收件人）；"
+                          "ack 只认收件人是自己的项，所以一行都不写")
+        return ok(data, **data)
+    if not ids:
+        data.update(checked=True, state="nothing", ok=True,
+                    reason="没给任何项 ⇒ 一个字节都不写（空调用不是一次消项）")
+        return ok(data, **data)
+    cond = _conductor()
+    try:
+        got = cond.ack_items(ids, by_task_id=mine, note=note)
+    except Exception as exc:  # noqa: BLE001 —— 抛了不代表没写：这一档只能如实说不知道
+        data["reason"] = f"ack 时抛了（{type(exc).__name__}: {exc}）⇒ 落没落盘不知道"
+        return ok(data, **data)
+    if not isinstance(got, Mapping):
+        data["reason"] = "ack 的读数不是对象 ⇒ 没查成"
+        return ok(data, **data)
+    for key in data:
+        if key in got:
+            data[key] = got[key]
+    state = str(data.get("state") or "unknown")
+    data["state"] = state if state in ACK_STATES else "unknown"
+    if not str(data.get("reason") or ""):
+        n = int(data.get("count") or 0)
+        data["reason"] = (f"确认了 {n} 条" if data["state"] == "acked"
+                          else f"{n} 条成、{len(data.get('refused') or [])} 条没成"
+                          if data["state"] == "partial"
+                          else "一条都没确认（逐条理由见 refused）")
+    return ok(data, **data)
+
+
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (conductor_summon, ('_conductor',)),
     (conductor_summon_many, ('_conductor',)),
@@ -1451,6 +2082,14 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # 上行（业主 2026-10-19「父子天然双向」）：孩子的需求写进父的收件箱，本趟以
     # `stop_reason="escalated"` 收工。收件人是运行期解析出的召唤者，「不」在 `edges` 里登记。
     (conductor_escalate, ('_conductor',)),
+    # 销号（D-59，业主 2026-10-26）：「销号的发起在父代理，销号的实际动作在秘书侧」。
+    # 改前这一条链只断在"发起"这一端：`Secretary.retire` 早就写好了，而父代理没有任何动作
+    # 去叫它（工具面上一个字都没有）⇒ 名册只增不减。本件是那一端的唯一入口。
+    (conductor_retire_child, ('_conductor', 'store')),
+    # 消项（D-68，业主 2026-10-26）：「就做手，不兜底。在销号时，如果 task_board 没清，
+    # 发提醒，不准直接销号」。改前模型只能在回复里说"已处理"，而盘上那条项永远停在
+    # `seen`（真机 sylow3：45 条 seen + 3 条 queued）—— 本件是那一端的唯一动作。
+    (conductor_ack, ('_conductor',)),
 )
 
 
@@ -1912,18 +2551,30 @@ def selftest() -> int:
             problems.append(f"{spec.name} 的 roles 里没有主控")
     for spec in reg.for_role("C"):
         # 2026-10-19（业主裁定「父子天然双向」）：`conductor.escalate` 不是主控工具，
-        # 它是「上行通道」（孩子跟召唤它的人说话），只读角色必须有 —— 见 `register`
-        # 那一行的 `roles=` 与 `side_effect="read"` 的理由。除了它，一件都不许漏过去。
-        if spec.name == "conductor.escalate":
+        # 它是「上行通道」（孩子跟召唤它的人说话），只读角色必须有。
+        #
+        # 2026-10-26（D-68 同一族，业主裁定「通用能力根本不该出现谁能用这个说法」）：
+        # 这一格的判据不许再是"除了点名的那一件，其余一律是主控工具"—— 那会把
+        # 通用能力一律判红，而 C/H/V 同样会收到板项（`conductor.ack` 是收件人的手）。
+        # 判据改成读那一张受控集合（`for_role` 用的同一张，不另写一份名单）。
+        if is_universal_tool(spec.name):
             continue
-        problems.append(f"只读角色 C 拿到了主控工具 {spec.name}")
-    if "conductor.escalate" not in {s.name for s in reg.for_role("C")}:
+        problems.append(f"只读角色 C 拿到了非通用的主控工具 {spec.name}")
+    face_c = {s.name for s in reg.for_role("C")}
+    if "conductor.escalate" not in face_c:
         problems.append("只读角色 C 没拿到 conductor.escalate（上行通道对所有角色都要开）")
+    # 反真空：登记成通用能力的那几件（本模块产出的）必须真的发到 C 的面上 ——
+    # 否则"通用能力对所有角色开放"这句话只是登记表上的一句话。
+    lacking = sorted(n for n in UNIVERSAL_TOOLS
+                     if n.startswith("conductor.") and n not in face_c)
+    if lacking:
+        problems.append(f"这些通用能力没发给只读角色 C：{lacking}")
     if problems:
         for p in problems:
             print(f"[conductor_tools] {p}")
         return 1
-    print(f"[conductor_tools] 自检通过：{len(names)} 件编排面工具，只有主控拿得到")
+    print(f"[conductor_tools] 自检通过：{len(names)} 件编排面工具；"
+          "只读角色的面上只有登记在案的通用能力")
     return 0
 
 

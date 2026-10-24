@@ -47,6 +47,22 @@ def _writers(reg, role: str) -> list[str]:
     return [s.name for s in reg.for_role(role) if s.side_effect in T.SIDE_EFFECTS_WRITE]
 
 
+def _universal_writers(role: str) -> set[str]:
+    """登记在案的通用能力（2026-10-24 业主裁定：通用能力对所有人开放）。
+
+    它们不是"只读角色的登记通道"，所以下面那些"各只一件"的断言要把它们剔掉 ——
+    但剔掉之后必须正向核一遍它们真的在面上（见 `test_the_two_readonly_roles_...`），
+    否则这条排除规则会把判据掏空。
+
+    返回的是全部通用能力的名字（不是"只写表的那些"）：`clock.timer_cancel` 也据实是
+    `write_local`，而它登记的写集是空集（只改 `out/clock` 的状态）——
+    "有没有写表"与"是不是通用能力"是两件事，不能拿写集空不空来筛这一档。
+    """
+    from agentflow.tools import UNIVERSAL_TOOLS
+
+    return set(UNIVERSAL_TOOLS)
+
+
 def _counts(store: Store) -> dict[str, int]:
     return {t: len(store.rows(t)) for t in sorted(S.TABLES)}
 
@@ -72,11 +88,24 @@ def _seed_document(store: Store) -> None:
 # ============================================================ 结构
 
 def test_the_two_readonly_roles_each_have_one_registration_channel(tmp_path: Path) -> None:
-    """正控：C 与 H 的工具面上各有一件自己的登记工具，且各只一件。"""
+    """正控：C 与 H 的工具面上各有一件自己的登记工具，且各只一件。
+
+    通用能力（`clock.timer_start` 等，据实是 `write_local`）也在它们面上，但那不是
+    "登记通道" —— 它们对所有人开放（2026-10-24 业主裁定），所以这里先剔掉再数。
+    """
     store = _store(tmp_path)
     reg = _registry(store)
-    assert _writers(reg, "C") == ["analysis.register_report"], _writers(reg, "C")
-    h = _writers(reg, "H")
+    universal = _universal_writers("C")
+    # 只对"据实是写"的那些做正向核对：`clock.now` 这类通用能力本来就不该出现在写工具列表里。
+    universal_write = {n for n in universal if reg.get(n).side_effect in T.SIDE_EFFECTS_WRITE}
+    assert universal_write, "通用能力里一件写工具都没有 ⇒ 下面的排除会把判据掏空"
+    assert universal_write <= set(_writers(reg, "C")), (
+        f"通用写工具没有出现在 C 的面上：{sorted(universal_write - set(_writers(reg, 'C')))}"
+    )
+    assert [n for n in _writers(reg, "C") if n not in universal] == ["analysis.register_report"], (
+        _writers(reg, "C")
+    )
+    h = [n for n in _writers(reg, "H") if n not in universal]
     assert "review.record_finding" in h, h
     # H 的另外三件是既有的落库代理（本修法不动它们）
     assert set(h) == {"review.review_document", "review.verify_fixes",
@@ -166,14 +195,20 @@ def test_removing_the_exception_entry_removes_the_channel(monkeypatch, tmp_path:
     """负控（核心）：把例外表里那一条删掉 ⇒ 工具立刻从角色面上消失。
 
     这就是修法前的形态：`READONLY_CALL_EXCEPTIONS` 里没有 C 的条目时，
-    `for_role("C")` 里 0 个写工具 —— C 的写集在工具层没有载体，图读数只能进回复。
+    `for_role("C")` 里 0 个「非通用」写工具 —— C 的写集在工具层没有载体，
+    图读数只能进回复。通用能力（`clock.timer_start` 等）不受这张表影响：
+    它们走 `UNIVERSAL_TOOLS`（2026-10-24 业主裁定），所以这里先剔掉再判空。
     """
     store = _store(tmp_path)
+    universal = _universal_writers("C")
     injected = dict(TB.READONLY_CALL_EXCEPTIONS)
     injected.pop("C")
     monkeypatch.setattr(TB, "READONLY_CALL_EXCEPTIONS", injected, raising=True)
     reg = _registry(store)
-    assert _writers(reg, "C") == [], _writers(reg, "C")
+    remaining = [n for n in _writers(reg, "C") if n not in universal]
+    assert remaining == [], _writers(reg, "C")
+    # 差分：通用能力仍然在面上（否则上面那条判空可能只是"整个面都空了"）。
+    assert universal & set(_writers(reg, "C")), _writers(reg, "C")
     res = reg.call("analysis.register_report", role="C", kind="paths",
                    summary="x", markdown="x")
     assert res.ok is False, res.data

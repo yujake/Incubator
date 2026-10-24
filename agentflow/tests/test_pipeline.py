@@ -84,14 +84,27 @@ def test_l03_the_role_c_surface_is_still_read_only():
     `analysis_reports` 的写权来自 `capabilities.WRITE_SETS["C"]`（声明面），
     而 C 的工具面是另一回事：它一律拿不到写工具（`for_role` 的结构性剥离），
     只读角色仍可调的落库代理只由 `READONLY_CALL_EXCEPTIONS` 一张表说了算。
+
+    2026-10-24（业主裁定「通用能力根本不该出现谁能用这个说法」）：第二根的例外
+    不是例外表，而是通用能力（`UNIVERSAL_TOOLS`）—— `clock.timer_start` 据实是
+    `write_local` 而它对所有人开放。所以下面两处都按"登记过的通用能力"放行，
+    且断言的强度不变：除这两档以外，C 的工具面上一个写工具都不许有。
     """
     from agentflow import capabilities as C
-    from agentflow.tools import READONLY_CALL_EXCEPTIONS, READ_ONLY_ROLES
+    from agentflow.tools import (
+        BOOKKEEPING_TABLES,
+        READONLY_CALL_EXCEPTIONS,
+        READ_ONLY_ROLES,
+        UNIVERSAL_TOOLS,
+    )
     from agentflow.tools import build_registry
+
+    C_WRITE_OK = set(BOOKKEEPING_TABLES)
 
     assert "C" in READ_ONLY_ROLES, "C 掉出只读角色名单了"
     allowed = {name for name, _why in READONLY_CALL_EXCEPTIONS.get("C", ())}
     reg = build_registry().registry
+    universal_seen: set[str] = set()
     for spec in reg.for_role("C"):
         if spec.name in allowed:
             # 2026-10-18（业主裁定）：C 拿到一件登记工具，用来把分析结果写进
@@ -100,9 +113,19 @@ def test_l03_the_role_c_surface_is_still_read_only():
             # 且登记的那件必须真是写工具（否则等于登记了一件没用的事）。
             assert spec.side_effect != "read", f"登记为例外的工具应当是写工具：{spec.name}"
             continue
+        if spec.name in UNIVERSAL_TOOLS:
+            # 通用能力：可达性看"它写不写知识表"（`UNIVERSAL_TOOLS[name].tables`），
+            # 不看"它写不写东西"。登记写集越界的那一档会被 `for_role` 拦掉，
+            # 判据在 `tests/test_universal_tools_are_for_everyone.py`。
+            assert not (set(UNIVERSAL_TOOLS[spec.name].tables) - C_WRITE_OK), (
+                f"通用能力 {spec.name} 的登记写集越界了：{sorted(UNIVERSAL_TOOLS[spec.name].tables)}"
+            )
+            universal_seen.add(spec.name)
+            continue
         assert spec.side_effect == "read", f"C 的工具面上出现了写工具：{spec.name}"
+    assert universal_seen, "C 的面上一件通用能力都没有 ⇒ 上面那条放行分支没有核到任何东西"
     for spec in reg.call_surface("C"):
-        if spec in allowed:
+        if spec in allowed or spec in UNIVERSAL_TOOLS:
             continue
         assert reg.get(spec).side_effect == "read", f"C 多拿到了写工具：{spec}"
     assert "analysis_reports" in C.WRITE_SETS["C"]   # 落盘权来自声明面，不是工具面

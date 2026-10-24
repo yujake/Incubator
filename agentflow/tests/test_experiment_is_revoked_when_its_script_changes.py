@@ -294,6 +294,10 @@ def test_5_the_code_consistency_reading_has_four_tiers(tmp_path: pathlib.Path) -
     assert S.active_experiment_rows([{"status": "voided"}, {"status": "active"},
                                      {"experiment_id": "000009"}]) == [
         {"status": "active"}, {"experiment_id": "000009"}]
+    # 四档的判据函数本身（不经 `evidence_chain` 也读得出同一句话）
+    assert R.code_consistency(revoked, new_hash) == R.CODE_CONSISTENCY_REVOKED
+    assert R.code_consistency(same, old_hash) == R.SHA_MATCH
+    assert R.code_consistency(gone, "") == R.SHA_UNKNOWN
 
     # 四档是四个互不相同的值（折平任意两档 ⇒ 下面这一条红）
     assert len({R.SHA_MATCH, R.SHA_MISMATCH, R.SHA_UNKNOWN,

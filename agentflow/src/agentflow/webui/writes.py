@@ -77,9 +77,10 @@ from . import audit
 from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
 
 __all__ = ["HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
-           "UNCHECKED_TYPES", "answer", "authorize", "handle_budget", "handle_settings",
+           "UNCHECKED_TYPES", "WRITES_OFF_REASON", "answer", "authorize",
+           "handle_budget", "handle_settings",
            "handle_stop",
-           "handle_submit", "type_decls"]
+           "handle_submit", "type_decls", "writes_allowed"]
 
 #: 处理器的落点（与 `readers.py`/`sse.py` 同一条约定）：键 = `ROUTES` 第三元素，
 #: 值 = `(handler, params, query)` 签名的函数、`handler` 是 `WebHandler` 实例。
@@ -119,13 +120,15 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
 MISSING_TYPES: tuple[tuple[str, str], ...] = ()
 
 #: 写面统一回执的字段表（`(TS 名字, 后端出处, ((字段, TS 类型), ...))`）。
-#: `id` / `extra` 是"有就带上"的两栏，所以写成可选。
+#: `id` / `extra` 是"有就带上"的两栏，所以写成可选。`state` 也是可选：
+#: 它只给"这件事有自己的一趟生命周期"的端点用（缓存预热：`plan` / `running`），
+#: 与 `tri` 分处两根轴 —— `tri` 说"这次请求成没成"，`state` 说"被起的那件事到哪一步了"。
 _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("WriteResult",
      "写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是"
      "「有就带上」的两栏，所以写成可选）",
      (("ok", "boolean"), ("tri", "Tri"), ("reason", "string"),
-      ("id?", "string"), ("extra?", "Record<string, unknown>"))),
+      ("id?", "string"), ("state?", "string"), ("extra?", "Record<string, unknown>"))),
 )
 
 
@@ -154,6 +157,22 @@ TRI_UNREADABLE = "unreadable"
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]", "0.0.0.0", "::"})
 
 _TRI_FOR_CODE = {403: TRI_NOT_APPLICABLE, 400: TRI_NOT_APPLICABLE, 500: TRI_UNREADABLE}
+
+#: 没开写权限时页面上那一行原因的唯一真身（逐字，D-60 ①）。
+#: 为什么它住在这里而不是前端：`--allow-writes` 是这一层开关的名字，理由与开关同处
+#: 一个文件，页面只画 `/api/cache` 带出来的 `writes_reason`（与 `active.text` 同一条
+#: 口径：两处各拼一份文案，两句话迟早会漂，而漂了没有地方会报错）。
+WRITES_OFF_REASON = "本服务未开 --allow-writes，写按钮不可用；重启时加该参数即可"
+
+
+def writes_allowed(handler: Any) -> bool:
+    """本服务是否开了写权限（授权矩阵第 3 层的唯一判定口径）。
+
+    单独抽一个函数是为了让读侧（`cacheface` 的 `writes_allowed` 读数）与判侧
+    （:func:`authorize`）取同一个事实：页面上说"不能写"、闸门说"放行"，那种自相
+    矛盾比没有读数更坏。缺省 False（fail-closed，与 `authorize` 的 docstring 一致）。
+    """
+    return bool(getattr(handler, "allow_writes", False))
 
 
 def _host_of(value: str) -> str:
@@ -212,7 +231,8 @@ def _csrf_ok(handler: Any) -> bool:
 
 
 def authorize(handler: Any, *, endpoint: str,
-              need_settings: bool = False) -> tuple[bool, int, str]:
+              need_settings: bool = False,
+              read_only: bool = False) -> tuple[bool, int, str]:
     """写面的授权矩阵（裁定 C2）：`(放行吗, 状态码, 理由)`。次序即 `draft/74` §4。
 
     1. 回环来源（跨站来源一律拒）；
@@ -223,14 +243,27 @@ def authorize(handler: Any, *, endpoint: str,
     为什么第 3 条要放在 CSRF 之后：`draft/74` §4 那一行逐字是"回环来源校验 →
     CSRF → `allow_writes` 开关"。次序不改变状态码（都是 403），改变的是理由，
     而理由要进审计台账 —— 审计读的是"为什么被拒"，写错一档就查不出来。
+
+    `read_only=True` 是 D-60 ② 那一档：请求自己声明"我不写盘、不花钱、不起进程"
+    （缓存预热的 `dry_run=1`）。这一档只保留第 1 层，理由如下：
+
+    - 第 2、3、4 层防的是"写"与"花钱"，而这一档两样都没有：它同步算一份计划就回；
+    - 第 1 层留着就够挡浏览器里的跨站请求（跨站 POST 必带 `Origin`，它在这一层被拒）；
+      没有浏览器的本地进程本来就与网页同权，给它加 CSRF 不增加任何防护，只会让
+      "先看计划再决定"这一步要人先去找那个每进程随机令牌 —— 实测撞到过（D-60 现场：
+      手工 POST 缺 `X-CSRF-Token`，回执是 403，而人以为是没开写权限）。
+
+    真跑那一档（`read_only=False`）一层都不许少：这是同一张矩阵的缺省形态。
     """
     _source, why = _source_of(handler)
     if why:
         return False, 403, f"{endpoint}：{why}"
+    if read_only:
+        return True, 200, ""
     if not _csrf_ok(handler):
         return False, 403, (f"{endpoint}：CSRF 令牌不对或没带"
                             "（写请求必须带 X-CSRF-Token）")
-    if not bool(getattr(handler, "allow_writes", False)):
+    if not writes_allowed(handler):
         return False, 403, (f"{endpoint}：写面没开 —— 要用 "
                             "`agentflow web --allow-writes` 才允许写")
     if need_settings and not bool(getattr(handler, "settings_write", True)):
@@ -252,7 +285,8 @@ def _flag(form: Mapping[str, Sequence[str]], name: str) -> bool:
 
 def _finish(handler: Any, *, endpoint: str, source: str, params: Mapping[str, Any],
             code: int, result: str, ok: bool, ident: str = "",
-            extra: Mapping[str, Any] | None = None, tri: str = "") -> dict[str, Any]:
+            extra: Mapping[str, Any] | None = None, tri: str = "",
+            state: str = "") -> dict[str, Any]:
     """记一行审计、回一支 `WriteResult`，并把这一支返回给调用方（判据要比对它）。
 
     审计与回执必须同时发生：写成功了却没审计上是一个必须说出口的状态，
@@ -262,6 +296,9 @@ def _finish(handler: Any, *, endpoint: str, source: str, params: Mapping[str, An
     `tri` 显式给了就用它（设置那一支的三态来自 `write_settings` 自己的词表，
     不能由状态码反推）；缺省按状态码推。返回值与发出去的正文是同一支：
     这里先定 `tri` 再 `_json`，不许"发一份、返回另一份"。
+
+    `state` 是"被起的这件事到哪一步了"（D-60 ③：缓存的 `plan` / `running`），
+    与 `tri` 分处两根轴；不给就不带这一格（其余写端点的回执一个字节都不变）。
     """
     tri = tri or (TRI_COMPUTED if ok else _TRI_FOR_CODE.get(code, TRI_NOT_APPLICABLE))
     row, problem = audit.record_action(handler.root, endpoint=endpoint, source=source,
@@ -269,6 +306,8 @@ def _finish(handler: Any, *, endpoint: str, source: str, params: Mapping[str, An
     body: dict[str, Any] = {"ok": ok, "tri": tri, "reason": result}
     if ident:
         body["id"] = ident
+    if state:
+        body["state"] = state
     out_extra: dict[str, Any] = dict(extra or {})
     out_extra["audit"] = {
         "tri": TRI_UNREADABLE if problem else TRI_COMPUTED,

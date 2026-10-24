@@ -575,8 +575,15 @@ def test_assembly_is_strict_about_skipped_modules(store, monkeypatch):
 
     monkeypatch.setattr(tools_pkg, "_MODULES", ("table_tools", "definitely_missing_module"))
     build = build_registry(store=store, workspace_root=store.root)
-    assert [s["module"] for s in build.skipped] == ["definitely_missing_module"]
+    # 这张 fixture 只装两个模块 ⇒ 除了那条"模块装不上"，装配期还会报一条通用能力的
+    # 孤儿（`<universal-tools>`：`UNIVERSAL_TOOLS` 里登记的名字必须真的在树上，
+    # 见 `tools.stale_universal_tools`）。两条都是真的，所以这里按"模块条目"判。
+    module_rows = [s["module"] for s in build.skipped if s["module"] != "<universal-tools>"]
+    assert module_rows == ["definitely_missing_module"]
     assert build.skipped[0]["stage"] == "import"
+    assert any(s["module"] == "<universal-tools>" for s in build.skipped), (
+        "通用能力的孤儿判据没有报 —— 只用两个模块装配时它本该点名那七件不在树上"
+    )
     assert build.ok is False
     with pytest.raises(ToolError, match="严格模式"):
         build_registry(store=store, workspace_root=store.root, strict=True)

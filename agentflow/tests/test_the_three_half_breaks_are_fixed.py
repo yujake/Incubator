@@ -461,7 +461,10 @@ def test_the_positive_readings_go_red_when_the_writer_only_writes_json(
     reg = _registry(st)
     rows = _mapping_rows()
 
-    def _json_only(root, items):
+    def _json_only(root, items, **kwargs):
+        # `**kwargs`：写口 D-69 起多一个 `workspace_root`（台账那两格要按台账现读现填，
+        # 而台账在工作区那一层）。这个桩把它丢掉 —— 这一条测的是"三份只写了一份"，
+        # 与那两格无关。
         json_path, md_path = PM.mapping_paths(root)
         payload = {"rows": [row.to_dict() for row in items]}
         json_path.parent.mkdir(parents=True, exist_ok=True)

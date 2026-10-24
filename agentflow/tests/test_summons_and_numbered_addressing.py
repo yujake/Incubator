@@ -154,6 +154,10 @@ def test_a_real_dispatch_is_counted_and_nothing_is_refused(tmp_path: pathlib.Pat
     scripts = {"M": [_say({"summon": {"role": "D", "task": "先要一个结论",
                                       "params": {"qid": "q-0001"},
                                       "why": "这一步真的派活"}}),
+                      # D-68（业主 2026-10-26）：「最终 final 时应该是 M 下整棵树
+                      # 都已销号，否则不记 final」⇒ 收工之前先把它销号（名册名 D1）。
+                      _say({"tool": "conductor.retire_child",
+                            "args": {"child_name": "D1", "reason": "收口前先销号"}}),
                       _say({"final": "派完了", "evidence": []})],
                "D": [_say({"final": "收到", "evidence": []})]}
     st, cond, reg, gw, ws = TAL._wired(tmp_path, scripts)

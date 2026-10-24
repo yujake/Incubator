@@ -194,13 +194,25 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
             # 2026-10-17（业主裁定「方案 1」）：不变量从「全只读」改成「写面钉死」——
             # 允许的写工具只有 READONLY_CALL_EXCEPTIONS[role] 里逐条登记的自己的落库代理
             # （H：review 的三件）。不许出现的是「未登记的写工具」——那才是放宽只读。
+            #
+            # 2026-10-26（业主裁定「通用能力根本不该出现谁能用这个说法」）：允许面多一档 ——
+            # `UNIVERSAL_TOOLS` 里那几件（`clock.timer_start` / `clock.timer_cancel` /
+            # `clock.alarm_start` / `conductor.ack`）按设计对十一个角色全体开放，它们写的是
+            # 通信与簿记类的东西。口径与 `test_tool_surface_snapshot.py` 那一处逐字同源：
+            # 两处都只认「登记过的落库代理 ∪ 通用能力」，别的写工具仍然一律不许出现。
+            from agentflow.tools import UNIVERSAL_TOOLS
             from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
 
-            _allowed = {n for n, _w in _EXC.get(role, ())}
+            _allowed = {n for n, _w in _EXC.get(role, ())} | set(UNIVERSAL_TOOLS)
             _stray = [n for n in got['write_tools'] if n not in _allowed]
             assert not _stray, (
                 f"只读角色 {role} 的工具面里出现了**未登记**的写工具：{_stray}"
-                f"（允许的落库代理：{sorted(_allowed)}）")
+                f"（允许的：落库代理 {sorted(n for n, _w in _EXC.get(role, ()))}；"
+                f"通用能力 {sorted(UNIVERSAL_TOOLS)} —— 后者里是写工具的只有 3 件 clock.* "
+                "与 conductor.ack）")
+            # 反真空：上面那一档今天非空（否则这条断言被一张空名单掏空了）。
+            assert set(got['write_tools']) & _allowed, (
+                f"{role} 的面上没有任何登记过的写工具 ⇒ 排除规则没在核东西")
 
         if role in C.CAPABILITIES:
             missing = [a for a, sig in got["handler_signatures"].items()

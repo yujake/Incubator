@@ -32,7 +32,7 @@
 - `readings` 为空且 `reason` 为空 = 查过了，没命中（这是"没有这种形态"，不是"没查成"）；
 - `readings` 为空且 `reason` 非空 = 没查成（可用命题少于 2 条，或全批都判不了）。
 
-判不了的那一档单独放在 `unknown` 里（文本太短 / 纯符号），**绝不折成"不同"**：
+判不了的那一档单独放在 `unknown` 里（文本太短 / 纯符号），绝不折成"不同"：
 折平等于把"判不了"读成"没有拆命题"，正是本项目三态纪律最忌的一折。
 
 ## 边界
@@ -174,11 +174,15 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
         return out
 
     parent = _union_find(len(usable))
+    #: 两两判定只跑一次并留在这里：第二次再判会造出"计数与读数各判一回"的两个口径
+    #: （同一个对子在两处给出不同的相似度时，没有任何东西会红）。
+    verdicts: dict[tuple[int, int], dict[str, Any]] = {}
     for i in range(len(usable)):
         for j in range(i + 1, len(usable)):
             left, right = usable[i], usable[j]
             verdict = PK.same_proposition(left["text"], right["text"],
                                           threshold=float(threshold))
+            verdicts[(i, j)] = verdict
             state = str(verdict.get("state") or "")
             if state == PK.STATE_SAME:
                 out["same_pairs"] += 1
@@ -197,7 +201,7 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
         clusters.setdefault(_find(parent, i), []).append(i)
 
     pairs_by_cluster: dict[int, list[dict[str, Any]]] = {}
-    # 成对读数的相似度重算一次：上面那一轮只记了三档计数，而读数要给人看"凭什么"。
+    # 读数要给人看"凭什么"：相似度取自上面那一轮的同一份判定，不重算。
     for root, members in clusters.items():
         if len(members) < 2:
             continue
@@ -205,12 +209,13 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
         for x in range(len(members)):
             for y in range(x + 1, len(members)):
                 left, right = usable[members[x]], usable[members[y]]
-                verdict = PK.same_proposition(left["text"], right["text"],
-                                              threshold=float(threshold))
+                verdict = verdicts.get((min(members[x], members[y]),
+                                        max(members[x], members[y])), {})
                 if str(verdict.get("state") or "") != PK.STATE_SAME:
                     continue
+                left_id, right_id = sorted((left["stmt_id"], right["stmt_id"]))
                 pairs.append({
-                    "a": left["stmt_id"], "b": right["stmt_id"],
+                    "a": left_id, "b": right_id,
                     "similarity": round(float(verdict.get("similarity") or 0.0), _DIGITS),
                     "basis": str(verdict.get("basis") or ""),
                 })
@@ -228,8 +233,8 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
             "stmt_ids": ids,
             "pairs": pairs_by_cluster.get(root, []),
             "max_proof_no": int(top),
-            "proof_nos": {sid: sorted({int(n) for n in nos} or {1})
-                          for sid, nos in proof_nos.items()},
+            "proof_nos": {sid: sorted({int(n) for n in proof_nos[sid]} or {1})
+                          for sid in sorted(proof_nos)},
         }
         if top > 1:
             entry.update(kind=KIND_ALREADY_MULTI,
@@ -278,7 +283,7 @@ def selftest() -> int:
          "proof_text": "证明：由群作用与轨道计数。"},
         {"stmt_id": "000003", "kind": "theorem", "status": "active",
          "statement_full": "设 H 是交换群；则 H 的每个子群都正规。",
-         "proof_text": "证明：交换群的共轭作用平凡。"},
+         "proof_text": "证明：交换群的共轭作用恒等。"},
     ]
     got = suspected_splits(rows, scope="selftest")
     hits = got.get("readings") or []

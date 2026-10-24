@@ -714,6 +714,157 @@ def list_verifications(root: str | Path, *, statement_id: str = "",
     return out[-max(0, int(limit)):] if int(limit) > 0 else [], problems
 
 
+def ledger_reading(root: str | Path, *, store: Any = None) -> dict[str, Any]:
+    """验证台账的"真身"读数：文件是正本，同名的数据表从来不存在（一处真身）。
+
+    ## 为什么需要这一格（真机 sylow3，2026-10-24 的缺口二）
+    V 的产物是工作区里 `verifications/<命题号>.jsonl` 的那些行（`schema.TABLES` 里
+    没有 `verifications` 这张表：`store.rows("verifications")` 直接抛「未知表」）。
+    于是一次运行结束时盘上有 `verifications/000000.jsonl` ... `000006.jsonl` 七份、
+    十四行签，而按"数据表"那一面看（`data/` 目录里没有 `verifications.json`）是 0 行。
+    两处口径从来没有被任何一格对起来过：文件面是 7 份、表面是 0 行，收工门、对应表、
+    证据面各读各的一边 ⇒ 读的人只会看到"没有签"。
+
+    这一格把这件事写成一次可机器读的读数，三态（不猜）：
+    - `source`：这一档的正本永远是 `verifications/*.jsonl`（文件）。同名数据表
+      `is_store_table=False`，`rows=None`（不是 0 —— "这张表不存在"与"表是空的"是两件事）。
+    - `mirror`：如果盘上真有 `data/verifications.json`（派生副本 / 别人拷进去的），
+      就逐条按 `verification_id` 对账；`agrees` 只有 `True` / `False` / `None` 三档，
+      `None` = 没有副本可对（"没查"不是"对上了"）。
+    - `problems` 非空 ⇒ 两面分家，`why` 说清差在哪几条。
+
+    返回（键集合固定，读的人不必猜）：
+    `checked` / `source` / `files` / `file_names` / `rows` / `signed` /
+    `signed_statements` / `table` / `mirror` / `agrees` / `problems` / `why` / `next_step`。
+    """
+    root_p = Path(str(root))
+    out: dict[str, Any] = {
+        "checked": False,
+        "source": f"{VERIFICATIONS_DIR}/*.jsonl",
+        "files": 0,
+        "file_names": [],
+        "rows": 0,
+        "signed": 0,
+        "signed_statements": [],
+        "table": {"name": VERIFICATIONS_DIR, "is_store_table": False, "rows": None,
+                  "why": ""},
+        "mirror": {"path": f"data/{VERIFICATIONS_DIR}.json", "present": False,
+                   "rows": None, "agrees": None},
+        "agrees": None,
+        "problems": [],
+        "why": "",
+        "next_step": "",
+    }
+    # ---- 文件面（正本）
+    base = verifications_dir(root_p)
+    if not base.is_dir():
+        out["why"] = (f"`{VERIFICATIONS_DIR}/` 不在盘上 ⇒ 这个工作区还没有一次签过"
+                      "（这是「零签」，不是「读不到」：目录在不在与行读不读得出来是两件事）")
+        out["next_step"] = "派 V 走 `verify.verify_proof`（产物就是那个目录下的一行）"
+        _ledger_table_state(out, store)
+        return out
+    rows, bad = list_verifications(root_p, limit=None)
+    out["checked"] = True
+    out["file_names"] = sorted(p.name for p in base.glob("*.jsonl"))
+    out["files"] = len(out["file_names"])
+    out["rows"] = len(rows)
+    signed = [r for r in rows if signs_bit3(r)]
+    out["signed"] = len(signed)
+    out["signed_statements"] = sorted({_statement_id_of(r) for r in signed if _statement_id_of(r)})
+    out["problems"] = list(bad)
+    # ---- 表面：同名 store 表存不存在（"不存在"不许折成"0 行"）
+    _ledger_table_state(out, store)
+    # ---- 派生副本（如果有）
+    mirror = dict(out["mirror"])
+    mirror["rows"], mirror["present"] = _ledger_mirror_rows(root_p)
+    if mirror["present"] and isinstance(mirror["rows"], list):
+        want = {str(r.get("verification_id") or "") for r in rows}
+        have = {str(r.get("verification_id") or "") for r in mirror["rows"]}
+        mirror["count"] = len(mirror["rows"])
+        if want == have:
+            mirror["agrees"] = True
+        else:
+            mirror["agrees"] = False
+            mirror["missing_ids"] = sorted(want - have)
+            mirror["extra_ids"] = sorted(have - want)
+            out["problems"].append(
+                f"`data/{VERIFICATIONS_DIR}.json` 与文件台账分家：文件 {len(want)} 条、"
+                f"表 {len(have)} 条（文件有表没有的是 {mirror['missing_ids'][:6]}、"
+                f"表有文件没有的是 {mirror['extra_ids'][:6]}）")
+        out["agrees"] = mirror["agrees"]
+    elif mirror["present"]:
+        mirror["agrees"] = None
+        out["problems"].append(
+            f"`data/{VERIFICATIONS_DIR}.json` 在盘上但读不出来 ⇒ 这一面没查成"
+            f"（{mirror.get('why') or '格式不认'}）")
+    out["mirror"] = mirror
+    if out["files"] and out["signed"] == 0:
+        out["problems"].append(
+            f"`{VERIFICATIONS_DIR}/` 有 {out['files']} 份台账、{out['rows']} 行，"
+            "而没有一行签「成立」⇒ 审过但一次都没签住（这是读数，不是读不到）")
+    if not out["problems"]:
+        out["why"] = (f"文件台账 {out['files']} 份、{out['rows']} 行，"
+                      f"其中签「成立」且无未解决 error 的 {out['signed']} 行"
+                      f"（覆盖 {len(out['signed_statements'])} 条命题）")
+        if not out["table"]["is_store_table"]:
+            # 表面那一格不是「0 行」，而是「这张表不存在」：读的人要能从这一格直接知道
+            # 该去读文件（改前这一步没有任何落点，于是「表 0 行」被当成了「没有签」）。
+            out["why"] += "；" + str(out["table"]["why"])
+    out["next_step"] = (
+        "读验证台账只走这一个口（`verifications.list_verifications` / 本函数）："
+        f"正本是 `{VERIFICATIONS_DIR}/<命题号>.jsonl`；要找「表」的那个人应当读"
+        "`rows` / `signed` 这两格，而不是去找一张不存在的 `verifications` 表")
+    return out
+
+
+def _statement_id_of(row: Mapping[str, Any]) -> str:
+    """一行签名属于哪条命题（正名 `stmt_id`，老行读 `statement_id`）。"""
+    return str(row.get("stmt_id") or row.get("statement_id") or "")
+
+
+def _ledger_table_state(out: dict[str, Any], store: Any) -> None:
+    """同名数据表那一面的三态：它不是 store 表（`rows=None`），不是「0 行」。"""
+    table = dict(out.get("table") or {})
+    in_schema = False
+    try:  # 只在拿得到 schema 时判；拿不到就如实说没查成
+        in_schema = VERIFICATIONS_DIR in S.TABLES
+    except Exception:  # noqa: BLE001 - 读不到 schema 时按"不在表里"继续，理由写在 why 里
+        in_schema = False
+    table["is_store_table"] = bool(in_schema)
+    if in_schema:
+        table["why"] = f"`{VERIFICATIONS_DIR}` 是 store 表 ⇒ 读表即可（与文件对账）"
+        if store is not None:
+            try:
+                table["rows"] = len(list(store.rows(VERIFICATIONS_DIR)))
+            except Exception as exc:  # noqa: BLE001 - 读不到表就是"没查成"
+                table["why"] += f"；但这一次没读出来（{type(exc).__name__}: {exc}）"
+        out["table"] = table
+        return
+    table["rows"] = None
+    table["why"] = (
+        f"`{VERIFICATIONS_DIR}` 不是一张 store 表（`schema.TABLES` 里没有它）⇒ "
+        f"`store.rows(\"{VERIFICATIONS_DIR}\")` 只会抛「未知表」，"
+        f"按表读的那一面永远读到 0 行；正本是工作区里的 `{VERIFICATIONS_DIR}/"
+        "<命题号>.jsonl`。这一格给的就是「表不存在」（`rows=None`），"
+        "而不是「表是空的」（那会是 0）")
+    out["table"] = table
+
+
+def _ledger_mirror_rows(root_p: Path) -> tuple[Any, bool]:
+    """盘上有没有 `data/verifications.json`（派生副本）；有就把它读成行列表。"""
+    path = root_p / "data" / f"{VERIFICATIONS_DIR}.json"
+    if not path.is_file():
+        return None, False
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - 读不出来如实交给调用方
+        return {"why": f"{type(exc).__name__}: {exc}"}, True
+    rows = doc.get("rows") if isinstance(doc, Mapping) else doc
+    if not isinstance(rows, list):
+        return {"why": "文件里没有 rows 数组"}, True
+    return [dict(r) for r in rows if isinstance(r, Mapping)], True
+
+
 def read_verification(root: str | Path, verification_id: str) -> dict[str, Any] | None:
     """按编号取一行（编号在同一命题的文件内唯一；跨文件重号 ⇒ 返回第一个并带 `ambiguous`）。"""
     want = str(verification_id or "").strip()
@@ -863,6 +1014,61 @@ def _reviewed_statement_row(found: Mapping[str, Any], verification_row: Mapping[
     return new
 
 
+def _kind_upgrade_from_signature(row: Mapping[str, Any], *, root: str | Path,
+                                 verifier: str) -> dict[str, Any]:
+    """V 判「成立」之后，按证据位把这一行的 `kind` 现算一遍（D-69）。
+
+    ## 为什么它在签名这一笔里（断链在哪）
+    D-37 已经有"kind 该不该跟着证据升"的唯一判据（`evidencebits.kind_following_grade`，
+    纯读），但它的两个写侧落点都不在"V 签字"这条路上：
+    `secretary._promote_governance` 只在"同一份内容再交一次"时才跑，
+    `agent_b.register_statement` 的那一格只在第 4 位（形式化）同步出变化时才跑。
+    于是真机 sylow3 那种形态 —— V 的台账里判「成立」、`bits.evidence.reviewed_by_proof`
+    是 `{"1": true}`，而 `statements` 那一行的 `kind` 仍是 `conjecture` —— 没有任何一步会
+    去改它：读的人（G 写稿 / H 审校 / 收工门）读 `kind`，于是"这是定理"这句话在盘上
+    不存在，论文却已经把它排成 lemma / theorem。
+
+    这一格就是那条断链的补口：台账那一行刚追加进 `verifications/<命题号>.jsonl`
+    （同一个事务里），`kind_following_grade` 现在读得到那一签，于是把它放在
+    `_reviewed_statement_row` 之后、`tx.upsert` 之前 —— 位与档位同一笔事务落盘。
+
+    ## 只抬 `kind`，不碰 `evidence_kind`
+    `evidence_kind` 的抬档已经有一条正路（秘书那一支，凭据是同一个
+    `verifications.proof_review_gap`），而 `kind` 那一格没有任何一条正路会在签字之后
+    到达。两件事各修一处，不再造第二份 `evidence_kind` 口径。
+
+    ## 三态（判不了就不抬）
+    只有 `kind_following_grade` 说 `state="upgraded"` 时才改那一格：`held`（凭据不够）
+    与 `unreadable`（五元位算不出来）都原样返回 —— "没判成"绝不折成"已经升了"。
+    这一笔也绝不降档：起点只认 `conjecture`（`KIND_UPGRADABLE_FROM`），别的 kind 一个字不动。
+
+    返回 `{"row", "kind_upgrade", "note"}`：`row` 是（可能）改过 `kind` 的那一行，
+    `kind_upgrade` 是与秘书那一支同形的留痕（`from` / `to` / `basis` / `grade` /
+    `by` / `at`），`note` 是给返回读数看的那一句「因 V 判成立而抬档：…（依据 …）」。
+    """
+    from . import evidencebits as _EB   # 惰性：与 `_reviewed_statement_row` 同一条纪律
+
+    out: dict[str, Any] = {"row": dict(row), "kind_upgrade": {}, "note": ""}
+    read = _EB.kind_following_grade(out["row"], root=root)
+    if str(read.get("state") or "") != "upgraded":
+        return out
+    target = str(read.get("kind") or "")
+    before = str(out["row"].get("kind") or "")
+    if target not in _EB.KIND_UPGRADE_TARGETS or target == before:
+        return out
+    basis = str(read.get("basis") or "")
+    out["row"]["kind"] = target
+    out["row"]["_kind_upgrade"] = {
+        "from": before, "to": target, "basis": basis,
+        "grade": str(read.get("grade") or ""),
+        "by": str(verifier or "verifier-V"), "at": S.now_iso(),
+    }
+    out["kind_upgrade"] = dict(out["row"]["_kind_upgrade"])
+    out["note"] = (f"因 V 判成立而抬档：{before or '（空）'}→{target}"
+                   f"（依据 {basis or '台账里那一签'}）")
+    return out
+
+
 def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                    path: Path | None = None, proof_no: Any = None) -> dict[str, Any]:
     """把一签写回 `statements` 那一行里那一条证明的第 3 位（与台账同一次写）。
@@ -900,9 +1106,15 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     理由串据此分三句；`re_sign_required` 说清调用方是不是必须重签（只有"没落地"才要）。
 
     返回键：`written` / `reason` / `rolled_back` / `grade` / `statement_id` / `proof_no` /
-    `proof_sha256` / `append_state` / `re_sign_required`。`written=False` 的四种来路各有
+    `proof_sha256` / `append_state` / `re_sign_required` / `kind_upgrade` / `upgrade_note`。
+    `written=False` 的四种来路各有
     理由串：签不住第 3 位（不改位）、命题不在册或那一份证明不在（没有可写的行）、
     追加失败（连台账那一行都没写）、事务失败（附回滚结果）。
+
+    ## D-69：同一笔事务里把 `kind` 跟着这一签抬上去
+    见 :func:`_kind_upgrade_from_signature`。它只改 `kind` 那一格（起点只认 `conjecture`），
+    判不了就一个字节都不动；抬了的时候 `kind_upgrade` / `upgrade_note` 两格把依据
+    （`verifications/<命题号>.jsonl#v-…`）写出来，读的人不用去翻台账才知道凭什么。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "")
     # 证明号：调用方给的那个（`proof_no`）；没给就按这一行自己记的那一格 —— 老行只有
@@ -917,6 +1129,12 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         "append_state": "not_attempted",
         #: 调用方是不是必须重签：只有"这一签没有落在台账上"（追加失败 / 已撤回）才为真。
         "re_sign_required": False,
+        #: D-69：这一签有没有把 `kind` 抬上去（形状与秘书那一支的 `_kind_upgrade` 相同）：
+        #: `{}` = 没抬（起点不是 conjecture / 凭据不够 / 位算不出来），那三档都不改盘。
+        "kind_upgrade": {},
+        #: 抬档的读数原话（「因 V 判成立而抬档：conjecture→theorem（依据 …）」）；
+        #: 没抬时是空串。它不写进 `reason`：`reason` 只留"这一签没落成"的那几档。
+        "upgrade_note": "",
     }
     try:
         no = proof_no_of(row) if proof_no is None else proof_no_strict(proof_no)
@@ -956,8 +1174,18 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                                  "⇒ 只落了台账那一行；第 3 位不翻（不许把这一签记到 #p1 头上）")
                 return out
             new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no)
+            # ---- D-69：V 判「成立」⇒ 同一笔事务里按证据位把 `kind` 现算一遍。
+            #
+            # 位置在"位已经翻上去"之后、`tx.upsert` 之前：台账那一行刚追加进
+            # `verifications/<号>.jsonl`，`kind_following_grade` 现在读得到那一签；
+            # 判不了（`held` / `unreadable`）就原样不动（三态：不抬，也不降）。
+            upgraded = _kind_upgrade_from_signature(
+                new, root=getattr(store, "root", ""), verifier=f"verifier-{no}")
+            new = upgraded["row"]
             tx.upsert("statements", new, note=f"verify.sign:{sid}#p{no}")
-            out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""))
+            out.update(written=True, grade=str((new.get("bits") or {}).get("grade") or ""),
+                       kind_upgrade=dict(upgraded["kind_upgrade"]),
+                       upgrade_note=str(upgraded["note"]))
     except Exception as exc:  # noqa: BLE001 - 写位失败要如实报（签名那一行可能已经在盘上了）
         rolled = (_rollback_append(ledger, before, row)
                   if append_state == "appended" and before >= 0 else False)

@@ -14,9 +14,11 @@
  * 4. 报告体例 `style.sections`；
  * 5. 六件产物 `products`（裁定 J2：真机无样本 ⇒ 夹具造，页面标明"夹具样本"）；
  * 6. 任务产物 `tasks`（`out/tasks/t-*.json` 与 `tasks` 台账行对应）；
- * 7. 文献库 `library` —— 如实标注的缺口：`draft/74` 说这一栏从产物面读
- *    `store.rows("literature")`，而 `ArtifactsView` 里没有这一栏，今天也没有别的
- *    端点给它 ⇒ 渲染 `not_applicable` 并写明，不编数；
+ * 7. 文献库 `library` —— 2026-10-24（D-57）起读 `GET /api/literature`
+ *    （`api.getLibrary()` → `LibraryView`）：只算「正式入库」的那一档，每条带
+ *    题名 / 作者 / DOI 或去重键 / 命中校验 / 认领与挖掘尝试 / 下载落地（与盘上的
+ *    文件核过：在 / 不在 / 读不到）/ 被哪条命题、第几份证明用过。三种空态分三档
+ *    显示：这条端点读不到、台账里 0 条、台账读不到 —— 它们不许被画成同一个样子；
  * 8. 台账对账 `ledger_verify`（台账钉住的那一份 vs 盘上现在这一份；2026-10-23 前
  *    它只在台账那一卡里并排显示）；
  * 9. 实验产物的落点 `experiment_spots` 与 `code_exp` —— 第九张是它（2026-10-23 补：
@@ -50,6 +52,7 @@ import { Consistency } from "../components/Consistency";
 import { Table, cell, plain } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
+import type { LibraryView, LibraryWork } from "../types";
 
 /** 长文截断（与后端 `webui/state.py` 的 `CLIP` 同一口径：两头留、中间省）。 */
 const CLIP = 400;
@@ -70,7 +73,7 @@ export const ARTIFACT_CARDS = {
   style: "报告体例兑现",
   products: "六件产物",
   tasks: "任务产物",
-  library: "文献库（缺口）",
+  library: "文献库（只算正式入库）",
   verify: "台账对账（台账钉住的那一份 vs 盘上现在这一份）",
   spots: "实验产物的落点",
 } as const;
@@ -105,8 +108,151 @@ function verifyBadge(status: string): ComponentChildren {
   return <Badge kind="badge-unknown" text={status === "" ? "unknown" : status} />;
 }
 
+/** 下载落地那一格的三档（后端 `download_state`：present / absent / unreadable）。
+ *
+ * 为什么不是一个勾：`download.status` 是写侧的自报（"那次下载当时成功了"），而文件
+ * 可以被删、被换、被挪。后端去盘上核过一次，这一格印的就是那次核对的结论 ——
+ * "读不到"与"不在"也要分得开（前者是没核成，后者是核过了、确实没有）。
+ */
+function downloadBadge(work: LibraryWork): ComponentChildren {
+  if (work.download_state === "present") {
+    return (
+      <Badge
+        kind="badge-pass"
+        text={work.download_bytes === null ? "在" : `在（${work.download_bytes} 字节）`}
+      />
+    );
+  }
+  if (work.download_state === "absent") {
+    return <Badge kind="badge-na" text="不在" />;
+  }
+  return <Badge kind="badge-unknown" text="读不到" />;
+}
+
+/** 「被谁用过」那一格：命题号 + 证明号（`stmt_id` 空的是非命题使用点，照原样印）。
+ *
+ * 用法那一路没查成时印 `unknown`，绝不印"没有" —— 那是把"没查"折成"没有"。
+ */
+function useText(work: LibraryWork, usesTri: string): string {
+  if (work.uses.length === 0) {
+    return usesTri === "computed" ? "没有（0 条命题或证明用它）" : "unknown（用法读数没查成）";
+  }
+  return work.uses
+    .map((use) => (use.stmt_id === "" ? use.used_by : `${use.stmt_id}#p${use.proof_no}`))
+    .join("、");
+}
+
+/**
+ * 文献库那一格：三种空态必须分三档（业主 2026-10-24 的 D-57）。
+ *
+ * 1. `view === null` ⇒ 这条端点根本没读到（没有 `/api/literature`、或请求失败）；
+ * 2. `state === "unknown"` ⇒ 端点在，但台账没读成（表不在盘上 / 坏 JSON）；
+ * 3. `rows_total === 0` ⇒ 台账读到了，里面 0 条（合法初态）。
+ *
+ * 三档画成同一个"什么都没有"，读的人就分不出"没接"与"没写"与"没有"了。
+ */
+function libraryBody(view: LibraryView | null, problem: string): ComponentChildren {
+  if (view === null) {
+    return (
+      <div class="empty">
+        {problem === ""
+          ? "正在读盘……"
+          : `这条端点读不到（/api/literature 不在，或请求失败）：${problem} —— 这是「没有这个端点」那一档，不是「台账里 0 条」`}
+      </div>
+    );
+  }
+  const data = view.data;
+  if (view.checked !== true || view.state === "unknown") {
+    return (
+      <div class="empty">
+        这一面读不到：{view.reason === "" ? "没给理由" : view.reason} ——
+        「读不到」不等于「一篇都没有」。
+      </div>
+    );
+  }
+  if ((data.rows_total ?? 0) === 0) {
+    return <div class="empty">台账里 0 条（已读出，合法初态：还没有一篇文献入库）。</div>;
+  }
+  if ((data.count ?? 0) === 0) {
+    return (
+      <div class="empty">
+        台账里 {data.rows_total} 条，但没有一条判得出「正式入库」（待入库与判不出的都不显示；
+        判不出的在下面留了痕）。
+      </div>
+    );
+  }
+  return (
+    <>
+      <Table
+        rows={data.works}
+        empty="没有入库文献。"
+        columns={[
+          { key: "lit_id", title: "编号" },
+          { key: "title", title: "题名", render: (w) => clip(w.title) },
+          {
+            key: "authors",
+            title: "作者",
+            render: (w) => (w.authors.length === 0 ? "unknown" : w.authors.join("、")),
+          },
+          {
+            key: "doi",
+            title: "DOI / 去重键",
+            render: (w) => {
+              const key =
+                w.doi !== "" ? w.doi : w.dedup_key !== "" ? `去重键 ${w.dedup_key}` : "unknown";
+              return w.pages === "" ? key : `${key} · pp. ${w.pages}`;
+            },
+          },
+          { key: "matched", title: "命中校验", render: (w) => cell(w.matched) },
+          {
+            key: "claimed_by",
+            title: "认领者",
+            render: (w) => (w.claimed_by === "" ? "未认领" : w.claimed_by),
+          },
+          {
+            key: "mine_attempts",
+            title: "挖掘尝试",
+            render: (w) =>
+              w.last_mine_error === ""
+                ? String(w.mine_attempts)
+                : `${w.mine_attempts} · 上次：${clip(w.last_mine_error)}`,
+          },
+          {
+            key: "download_state",
+            title: "下载落地",
+            render: (w) => (
+              <span>
+                {downloadBadge(w)}
+                {w.download_reason === "" ? null : (
+                  <div class="readings">{w.download_reason}</div>
+                )}
+              </span>
+            ),
+          },
+          { key: "uses", title: "被谁用过", render: (w) => useText(w, data.uses_tri) },
+        ]}
+      />
+      {data.uses_tri === "computed" ? null : (
+        <div class="readings">「被谁用过」那一栏没查成：{data.uses_reason}</div>
+      )}
+      {view.problems.length === 0 ? null : (
+        <div class="readings">
+          {view.problems.map((p) => (
+            <div key={p.code}>
+              <span class="mono">{p.code}</span>：{p.detail}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function Artifacts() {
   const face = useFace(() => api.getArtifacts());
+  // 文献库是第二条端点（D-57）：它与产物面是两份盘上的事实，各有各的三态 ——
+  // 把它塞进 `ArtifactsView` 会让"产物面读不成"连带把文献库也画成没查成。
+  const library = useFace(() => api.getLibrary());
   const live = useLive();
   const ledger = live.snapshot === null ? null : live.snapshot.ledger;
 
@@ -502,18 +648,23 @@ export function Artifacts() {
 
       <Card
         title={ARTIFACT_CARDS.library}
+        subtitle={
+          library.data === null
+            ? "这一面还没读到"
+            : `入库 ${library.data.data.count ?? "unknown"} 条 · 台账 ${library.data.data.rows_total ?? "unknown"} 行 · ${library.data.data.table}`
+        }
+        tone={library.data !== null && library.data.state === "unknown" ? "problem" : "plain"}
         right={
           <TriState
-            tri="not_applicable"
-            label="library"
-            reason="draft/74 说这一栏从产物面读 store.rows('literature')，而 ArtifactsView 里没有这一栏，今天也没有别的端点给它"
+            tri={
+              library.data === null || library.data.state === "unknown" ? "unknown" : "computed"
+            }
+            label="文献库"
+            reason={library.data === null ? library.problem : library.data.reason}
           />
         }
       >
-        <div class="readings">
-          processed 三态、download 的字节与一致性、matched 那几栏要新增一条
-          只读端点才能给读数 —— 页面不许自己编一个数。
-        </div>
+        {libraryBody(library.data, library.problem)}
       </Card>
     </>
   );

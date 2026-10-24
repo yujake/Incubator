@@ -28,6 +28,7 @@ from agentflow.llmseam import LlmSeam
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from _d68_board_fixture import children_clean_their_boards  # noqa: E402 - D-68 夹具助手（替身角色不会自己 ack，见该模块 docstring）
 
 SID = "s1g"
 
@@ -209,6 +210,7 @@ def test_without_a_secretary_the_payload_goes_out_untouched(tmp_path: pathlib.Pa
     st = Store(root)
     st.init()
     cond = Conductor(st, policy=None, backend=LocalBackend({}))
+    children_clean_their_boards(cond)
     reg = build_registry(store=st, conductor=cond).registry
     loop = AgentLoop(role="M", session_root=root, registry=reg, conductor=cond,
                      seam=LlmSeam(role="M", session_root=root, gateway=_Gate(["{}"]),
@@ -234,6 +236,7 @@ def _wired(tmp_path: pathlib.Path, scripts: dict[str, list[str]]):
     backend = LlmBackend(inner=inner, loops=LOOPS, session_root=tmp_path / "ws",
                          seam_factory=seam_factory, max_steps=4, store=st, sid=SID)
     cond = Conductor(st, policy=None, backend=backend)
+    children_clean_their_boards(cond)
     backend.conductor = cond
     built = build_registry(store=st, conductor=cond)
     backend.registry = built.registry
@@ -249,6 +252,11 @@ def test_the_loop_sends_the_washed_payload_and_the_ledger_keeps_both(tmp_path: p
                                      "claim": "n=3 的检查支持它", "claim_key": "k-0001",
                                      "scriptpath": "code/exp.py",
                                      "why": "要一条可复现的证据"}}, ensure_ascii=False),
+              # D-68（业主 2026-10-26）：「最终 final 时应该是 M 下整棵树都已销号，
+              # 否则不记 final」⇒ 收工之前先把它销号（名册名 E1）。
+              json.dumps({"tool": "conductor.retire_child",
+                          "args": {"child_name": "E1", "reason": "收口前先销号"}},
+                         ensure_ascii=False),
               json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)],
         "E": [json.dumps({"final": "跑过了", "evidence": []}, ensure_ascii=False)],
     }
@@ -279,8 +287,12 @@ def test_the_loop_sends_the_washed_payload_and_the_ledger_keeps_both(tmp_path: p
     delegates = [r for r in child if str(r.get("action") or "") != "message"]
     plates = [r for r in child if str(r.get("action") or "") == "message"]
     assert len(delegates) == 1, child
-    assert len(plates) == 1, child
-    assert str(plates[0].get("status") or "") == "pending", plates[0]
+    # D-68（业主 2026-10-26，2026-10-26 改动）：派活那条通知不再落成收件人名下的板项。
+    # 那一行是"父把活交出去了"的投递凭证，而收件人此刻已经跑完那一趟 ⇒ 它会变成一条
+    # 这辈子清不掉的 `queued` 待办，与销号门（「task_board 没清，不准直接销号」）合起来
+    # 把整棵树永久卡死。现在它落一条 `agent_message` 事件（投递照旧有痕），
+    # 见 `AgentLoop._do_handoff` 的 `board_item=False` 一节。
+    assert len(plates) == 0, plates
     assert str(delegates[0].get("action") or "") == "", delegates[0]   # 派活：不点动作
     assert str(delegates[0].get("outcome") or "") in ("ok", "refused", "failed"), delegates[0]
     # 台账（秘书的）：这一趟留下了记录（before/after 都在），只是 changes 为空

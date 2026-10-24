@@ -400,7 +400,7 @@ def _m_skills() -> tuple[Skill, ...]:
 
 ## 收尾还有一格：未闭环提醒是你秘书列的
 
-收工那一步（`conductor.closing`）与 `conductor.stats` 里的 `closure_reminders`
+收工那一步（`conductor.closing`）与 `conductor.ledger(view="stats")` 的 `stats.closure_reminders`
 不是统计，是**点名**：谁提交了没人接手（`unclaimed`）、谁接了手却没有终态
 （`pending` / `running`）。它由**你的**秘书在收尾扫描时列出来，每条另进它的决定台账
 （`out/secretary/M.jsonl` 里 `duty=3` 那几行）。
@@ -1192,7 +1192,7 @@ def _e_skills() -> tuple[Skill, ...]:
 ## 一条纪律
 
 数值"看起来对"不是证明：收敛慢、浮点误差、参数太特殊都会骗人。
-它只能当**证据的一档**（`numeric`），等级由五元位现算。
+它只能当**证据的一档**（落 `cross_check` / `heuristic` —— `numeric` 是实验方法、不是证据档），等级由五元位现算。
 """,
         ),
         Skill(
@@ -1333,7 +1333,7 @@ def _f_skills() -> tuple[Skill, ...]:
 
 ## 谁签那个字
 
-- **证明文本**落 `statements.proof_text`（由 B 登记）；
+- **证明文本**落 `statements.proof_text`（**你自己落那一行**；B 只登记文献侧的内容）；
 - **"审过"由 V 签**（`verifications`）：`F → V` 是直接边 —— 你产出的证明**由你派 V 签**；
   B 入库文献侧引入的定理/证明时也会派 V 审一次。**你签过的不要再要求别人替你签**。
 - **自报的 `proof` 一律降级成 `cross_check`**（结构强制）：别指望"我说我证了"能算数。
@@ -1350,7 +1350,7 @@ V 的结论只有三个：**成立 / 有毛病（指到那一步）/ 看不出�
 
 ## 形式化那一档（不是你的活，也不要主动去要）
 
-形式化由 **L** 承担：你**不**自己写 Lean 源码，也不把检查器的裁决当成你签的字。
+形式化**只能由用户指定**（指定之后由 B 逐条安排）。形式化由 **L** 承担：你**不**自己写 Lean 源码，也不把检查器的裁决当成你签的字。
 派 L 的入口只有两条：B 可以派 L（`B → L` 是唯一的入边），用户也可以用 `run-agent L`
 直接起一条（L 自己只派 C 梳理证明链）。
 **L 不是流水线上的一环** —— 它的成本极高，平时不启用、不主动召唤：只有研究与论文都落定
@@ -1412,8 +1412,8 @@ V 的结论只有三个：**成立 / 有毛病（指到那一步）/ 看不出�
 - [卡住] L5：…… ｜ 卡点：缺一个关于紧性的引理 ｜ 处置：回报 D
 ```
 
-状态只用三档：**已证 / 在推 / 卡住** —— 与 `attack_plans` 的子目标状态同口径，
-别自造第四档。
+状态只用六档：**待做 / 在推 / 有支持未证 / 已证 / 卡住 / 已放弃**（`SUBGOAL_STATUSES`）——
+与 `attack_plans` 的子目标状态同口径，别自造第七档。
 
 ## 引一个字段之前，先看那一行有哪些键
 
@@ -2103,7 +2103,7 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
         Skill(
             slug="手稿-研究记忆就这一份",
             title="研究手稿：跨趟的记忆就是这一份文件",
-            summary="reports/RESEARCH.md 六节；每轮收尾先读后改；别人送来的料由你写进去",
+            summary="reports/RESEARCH.md 七节；每轮收尾先读后改；别人送来的料由你写进去",
             when="一趟研究开始（先读它）或收尾（更新它）的时候；也是别人把料交给你的时候",
             actions=("D.write_report", "D.propose_question", "D.register_conjecture"),
             tools=("fs.read", "fs.write", "fs.edit", "table.get"),
@@ -2471,9 +2471,9 @@ def _g_skills() -> tuple[Skill, ...]:
 | 断言的 `evidence_kind` | `proof` / `proof_review` / `cross_check` / `heuristic`（**强度**） |
 | 依赖的 `kind` | `theorem` / `definition` / `lemma` / `proposition` / `dataset` / `experiment` / `prior_art`（**依赖是什么**） |
 
-⚠️ **同一个键在不同工具里形状可能不同**：`page_range` 在 `compose_claim` /
-`register_statement` 里是**对象**（`{"start": 1}`），而在 `register_dependency` 里是
-**数组**（`[1]`）—— 照另一个工具的形状写会被拒（`page_range. 必须是数组`）。
+⚠️ **同一个键在不同工具里形状可能不同**：`page_range` 在 `register_statement` 里是
+**对象**（`{"start": 1}`），而在 `register_dependency` 里是**数组**（`[1]`）—— 照另一个
+工具的形状写会被拒（`page_range. 必须是数组`）。
 
 ### 依赖闭合（FC-23）为什么要你亲自核
 
@@ -2896,7 +2896,8 @@ def index_block(role: str) -> str:
     # B 那一格不补这一句：它的收件通道写在 `specs/b.py` 的政策里（唯一该写全的地方）。
     from . import leanscope as _LEANSCOPE
 
-    if _LEANSCOPE.lean_on() and role not in _LEANSCOPE.LEAN_ONLY_ROLES and role != "B":
+    if (_LEANSCOPE.lean_on() and role not in _LEANSCOPE.LEAN_ONLY_ROLES
+            and role not in ("B", "E")):
         lines.append("**形式化以 V 的签与 B 的台账为准**：要不要做由**用户**指定；"
                      "指定之后每一条由 **B** 逐条安排（一条才做一条），回执"
                      "（`experiments` 的 proof 行 + 原始输出原文 + 三态结论）由 B 带回。")
@@ -2996,6 +2997,7 @@ def validate() -> list[str]:
                     if name not in surface.get(who, set()):
                         problems.append(f"{owner}/{s.slug}：工具 {name} 不在 {who} 的工具面上")
     problems.extend(_body_tool_problems(surface))
+    problems.extend(_unknown_tool_problems(surface))
     return problems
 
 
@@ -3046,8 +3048,45 @@ def _body_tool_problems(surface: dict[str, set[str]]) -> list[str]:
     return out
 
 
+def _unknown_tool_problems(surface: dict[str, set[str]]) -> list[str]:
+    """正文里点名的"组名对得上、名字却不存在"的那种工具 —— 补 `_body_tool_problems` 的漏。
+
+    ## 那一条漏在哪
+    它的判据是「这个名字存在，但不在你这个角色的面上」（`tok in known`）。一个根本
+    不存在的名字在那边静默放过：`conductor.stats` 的真身是
+    `conductor.ledger(view="stats")`，全仓没有前一件工具，于是模型照着它调只会拿到
+    `unknown_action`，而手册与 validate 都一声不吭（2026-10-26 实测）。
+
+    ## 为什么按「工具组」收窄
+    正文里还有 `data/statements.json`（路径）、`main.tex`（文件名）、
+    `documents.claims`（台账字段）、`experiments.search_bound`（台账字段）、
+    `policy.check`（模块函数）—— 它们的组名都不是工具组。组名取自当前工具面里真实
+    出现的那些前缀，所以这里零假阳性：报出来的每一条都是"该用哪一件记错了"。
+    """
+    from . import leanscope as _LEANSCOPE
+
+    known: set[str] = set()
+    for names in surface.values():
+        known |= names
+    if not known:
+        return []          # 工具面没读成 ⇒ 这一格跳过（validate 已经记过"没查成"）
+    groups = {name.split(".")[0] for name in known}
+    out: list[str] = []
+    for owner, rows in CATALOG.items():
+        if owner == SHARED or _LEANSCOPE.is_hidden(owner):
+            continue
+        for s in rows:
+            for tok in sorted(set(_BODY_TOOL_TOKEN.findall(s.body))):
+                if tok in known:
+                    continue    # 存在：属于别的角色由 `_body_tool_problems` 报
+                if tok.split(".")[0] in groups:
+                    out.append(
+                        f"{owner}/{s.slug}：正文里点名了工具 {tok}，而工具面上没有这个名字"
+                        "（像是把『该用哪一件』记错了：先查面再写）")
+    return out
+
+
 #: 正文里那种"点名一个动作"的写法：反引号包着的 `大写角色.动作`。
-#:
 #: 形状与工具名天然分得开（工具是全小写的 `组.名`），所以这个正则零假阳性：
 #: `data/statements.json`（路径）、`main.tex`（文件名）、`re.compile`（标准库）
 #: 都不会命中。零假阳性是这条判据能活下来的前提。

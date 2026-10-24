@@ -241,9 +241,14 @@ SPEC = AgentSpec(
         ),
         policy=(
             "形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。",
-            "先看 TOOLCHAIN_FACTS 的第一行（开关）。那一行说已关闭时，这条路整条不适用：不写源码、"
-            "不派检查，如实回 unknown 并给原因码（`lean_selfcheck_off`），改走自然语言逐行审阅"
-            "（proof_text + V 的 verify_proof）；说已开启时才走下面几条。",
+            # 2026-10-25（审计 G/H/V/L 第 10 条）：这一格原来从「先看 TOOLCHAIN_FACTS 的第一行
+            # （开关）。那一行说已关闭时，这条路整条不适用……」写起 —— 那一档不可达：关着时
+            # 本角色不存在（`leanscope.require_visible` 抛 RoleHidden），提示词根本渲染不出来，
+            # 于是"关掉时怎么办"这一段只对着一个永远读不到它的读者说话。整块退役：开关这一档
+            # 只剩"开着"这一种存在形态，下面每条都以它为前提。
+            "你只在开关开着时在场（关着时不是「跑不动」，是不存在）：下面每一条都以「这一趟 Lean "
+            "形式化是开着的」为前提；开关状态仍以 TOOLCHAIN_FACTS 的第一行为准（那是读数，不是你要"
+            "走的分支）。",
             "任何 Lean 调用之前先过自检（`leantoolchain` 的**五步**：解析 / 版本 / 正样例 / 反控 / Mathlib 与图论）。"
             "自检不是 usable 时，这一趟的全部形式化结论记 unknown 并把原因写清：不起检查器、"
             "不抛栈、不连撞同一条错误 —— 同一条失败只报一行，然后收手。"
@@ -349,119 +354,18 @@ SPEC = AgentSpec(
 )
 
 
-def _action_summary(action: str) -> str:
-    """本角色动作表里那个动作的摘要（`ACTIONS` 是它的唯一落点）。
-
-    与 `specs/e.py` 的同名函数同一个理由：开关关掉时那张改写表的左边不许手抄
-    （手抄漂过一次，后果是静默失效 ⇒ "关掉时没有形式化字样"成了假绿）。
-    """
-    for spec in ACTIONS:
-        if spec.action == action:
-            return spec.summary
-    raise LookupError(f"L 的动作表里没有 {action!r} ⇒ 改写表的左边没有出处")
-
-
-def _tool_summary(tool_name: str) -> str:
-    """工具面上那件工具的摘要（`ToolSpec.summary` 是它的唯一落点）。
-
-    依赖写成函数内 import：`specs` ← `capabilities` ← 装配面是既有方向，本模块
-    新增的这条边只往 `tools.formal_tools` 去（那个模块只依赖 `schema` / `store` /
-    `tools.base`，不回指 `specs`），沿着它走不回本模块 ⇒ 不成环。
-    """
-    from ..tools import formal_tools as _FT
-
-    for value in vars(_FT).values():
-        spec = getattr(value, "__tool_spec__", None)
-        if getattr(spec, "name", None) == tool_name:
-            return spec.summary
-    raise LookupError(f"工具面上没有 {tool_name!r} ⇒ 改写表的左边没有出处")
-
-
-#: 关掉 Lean 之后，L 的「面」的改写表（与 `specs/e.py::NO_LEAN_REPLACEMENTS` 同一机制）。
+#: 2026-10-25（审计 G/H/V/L 第 10 条）：这一段原先有 `_action_summary` / `_tool_summary`
+#: 两个取摘要的函数与 `NO_LEAN_REPLACEMENTS` / `NO_LEAN_DROP_LINE_MARKERS` /
+#: `NO_LEAN_DROP_BLOCKS` 三张改写表（"关掉 Lean 之后 L 的文本改成什么样"）。
 #:
-#: 为什么 L 自己也要有一份：E 的那张表是按 E 的文本写的（E 的职责句、E 的政策、
-#: E 的 `verify.check_formal` 那一行），而 L 的文本一个字都不同 —— 拿 E 的表去改
-#: L 的提示词，一条都匹配不上（而"匹配不上"是静默的）。
-#: 应用点仍是唯一的收口 `agent_prompts._apply_no_lean_variant`（它按模块逐个应用
-#: `NO_LEAN_REPLACEMENTS` / `NO_LEAN_DROP_LINE_MARKERS` / `NO_LEAN_DROP_BLOCKS`），
-#: 所以不会出现"某一条渲染路径没走改写"。
+#: 整块退役，理由是它「不可达」：`leanscope.LEAN_ONLY_ROLES` 只有 `L`，而关着时
+#: `require_visible` 抛 `RoleHidden` —— L 的提示词根本渲染不出来，那三张表因此没有任何
+#: 一行会被应用（`agent_prompts._apply_no_lean_variant` 拿到的是别人的文本，一条都匹配
+#: 不上）。留着它不是"多一层保险"，而是把一段读起来像现行政策的死字挂在声明旁边。
 #:
-#: 纪律（与 E 那张表逐条相同）：
-#: - 左边不许手抄：职责句取 `SPEC.brief.duty` 之外的字面量会漂，所以下面直接写
-#:   字面量并留一条判据（`tests/test_l_formalizes_what_b_says.py`）断言它在开着时的
-#:   提示词里逐字出现 —— 反真空；工具那一行的左边从 `_tool_summary()` 读真身；
-#: - 右边的每一段都不许再提 Lean（判据逐条核）；
-#: - 关掉时每个角色都必须读到「系统做不了」：L 的伙伴表里只有 C（`edges=('C',)`），
-#:   而 `B → L` 那条入边只印在 B 的提示词里，所以 E 的职责句不会出现在 L 的提示词里
-#:   ⇒ 这句话必须由 L 自己的改写提供。
-NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
-    # 职责句（L 自己的开头；也进全体角色的画像文件）
-    ("Lean 形式化：把 B 登记的那条命题与它的证明链路**忠实**搬进 Lean 源码，"
-     "交给检查器真跑，并如实报 verified / failed / unknown",
-     "证明审阅：把 B 登记的那条命题与它的证明链路逐行读一遍，把接不上的那一步写清"
-     "（本会话不做形式化验证：系统做不了）"),
-    # 政策第 1 条（检查器原话那一条）
-    ("形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。",
-     "证明的判读只认逐行审阅留下的读数与 V 的签字：本会话不做形式化验证（系统做不了），"
-     "不许把模型自己的话当成检查器的结论。"),
-    # 政策第 3 条（自检那一条）：左边是整条（不只是第一句）—— 只换第一句会留下
-    # 后半句"自检不是 usable 时……"挂在一个已经作废的前提上（实测：那一行读起来
-    # 自相矛盾）。整条换掉，右边给的是这一档该走的那条路。
-    ("任何 Lean 调用之前先过自检（`leantoolchain` 的四步：解析 / 版本 / 正样例 / 反控）。"
-     "自检不是 usable 时，这一趟的全部形式化结论记 unknown 并把原因写清：不起检查器、"
-     "不抛栈、不连撞同一条错误 —— 同一条失败只报一行，然后收手。",
-     "本会话不做形式化验证（系统做不了）：不跑自检、不起检查器；要审一份证明就走逐行审阅"
-     "（把证明逐字写进 proof_text，再请 V 逐行走查），并把结论如实记成 unknown。"),
-    # 动作那两行（L 自己的动作表在提示词里逐行印出来）
-    (f"formalize：{_action_summary('formalize')}",
-     "formalize：本会话形式化已关闭 —— 系统做不了形式化验证（调它只会拿到 reason=lean_selfcheck_off），"
-     "别派它。"),
-    (f"check_formal：{_action_summary('check_formal')}",
-     "check_formal：本会话形式化已关闭 —— 系统做不了形式化验证（reason=lean_selfcheck_off），"
-     "别派它。"),
-    (f"record：{_action_summary('record')}",
-     "record：本会话形式化已关闭 —— 系统做不了形式化验证（reason=lean_selfcheck_off）："
-     "也没有一次真的检查可登记，别派它。"),
-    # 工具面上那三件（左边从工具面真身读，同源）
-    (f"formal.formalize：{_tool_summary('formal.formalize')}",
-     "formal.formalize：本会话形式化已关闭 —— 系统做不了形式化验证"
-     "（调它只会拿到 reason=lean_selfcheck_off）："),
-    (f"formal.check_formal：{_tool_summary('formal.check_formal')}",
-     "formal.check_formal：本会话形式化已关闭 —— 系统做不了形式化验证"
-     "（调它只会拿到 reason=lean_selfcheck_off）："),
-    (f"formal.record：{_tool_summary('formal.record')}",
-     "formal.record：本会话形式化已关闭 —— 系统做不了形式化验证"
-     "（调它只会拿到 reason=lean_selfcheck_off）："),
-    # 官能注解那两行（`local_notes` 会进提示词的"十项官能"那一段，左边取本文件的
-    # `SPEC.local_notes` 那一格 —— 与 `specs/e.py` 改官能注解同一个理由）
-    ("把一条自然语言证明拆成 Lean 能接的几步：哪一步是引理、哪一步是策略、哪一步接不上。",
-     "把一条自然语言证明拆成可逐步检查的几步：哪一步是引理、哪一步是依据、哪一步接不上。"),
-    ("写的是 Lean 源码：落盘、跑检查器、把路径与哈希交出去；不替检查器下结论。",
-     "写的是逐行审阅留下的读数：哪一步有依据、哪一步接不上；不替审阅者下结论。"),
-)
-
-#: 关掉 Lean 时「整行删掉」的那些行（按"这一行里包含这个标记"定位）。
-#:
-#: L 的政策第 5 条整条在讲"import 怎么写 Lean 源码"，关掉之后那一段没有一句还成立。
-NO_LEAN_DROP_LINE_MARKERS: tuple[str, ...] = (
-    # 政策第 5 条：整条在讲"import 怎么写 Lean 源码"
-    "源码的 import 只写它自己用到的那几行",
-    # 政策第 4 条（忠实复述）：它要求"在 Lean 源码里一步一个落点"—— 关掉之后
-    # 那句要求没有对象，留着会让人以为"还是可以写源码、只是不跑"
-    "忠实复述 B 的证明链路：先把 B 的",
-    # 政策第 7 条（试错）：整条是"只改检查器原话指出的那一处"
-    "试错要有代价意识：只改检查器原话指出的那一处",
-    # 边界第 2 条：同样是"在 Lean 源码里找落点、不许用 sorry 堵"
-    "忠实复述是逐条义务：B 的 proof_text 里每一步",
-)
-
-#: 关掉 Lean 时「整块删掉」的那些块：`(起点标记, 保留下来的第一行标记)`。
-#:
-#: L 今天没有跨行的形式化块（每条政策都是单个字符串），所以这张表是空的。
-#: 留一个空元组而不是删掉这个属性：收口那边按 `getattr(..., ())` 读，
-#: 空元组与"属性不存在"在行为上相同，但"L 今天没有整块要删"这件事因此是可读的。
-NO_LEAN_DROP_BLOCKS: tuple[tuple[str, str], ...] = ()
-
+#: 关掉那一档该说的话仍在「能行动的那一档」说：B 的 `PROOF_CHANNEL_NO_LEAN`（它是唯一
+#: 能派 L 的人）与 G 的 `WRITING_SCOPE_NO_LEAN`（正文怎么写）。L 自己不需要"关掉时怎么办"
+#: 这一段 —— 关掉时没有 L。
 
 #: 那几条"评估过、最终没有开"的边。这里只登记结论与理由，它不是判据
 #: （不被任何代码读）：放在声明文件里，是为了让"为什么 L 的入边只有 B"在改权限面的

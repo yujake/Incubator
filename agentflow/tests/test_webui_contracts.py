@@ -621,6 +621,12 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     # 逐个登记在 `readers.UNCHECKED_TYPES` 里（理由与 BudgetView 那一批同族）。
     out["RosterView"] = set(RD.roster_face(root))
 
+    # 文献库那一面（2026-10-24 的 `GET /api/literature`，D-57）：同一个口径 —— 新面落地后
+    # 要让后端那一侧真的去读它，否则 `LibraryView` 会"既不在受核对名单、也没在欠账名单"。
+    # 夹具工作区里 `literature` 是 0 行 ⇒ 读数落在"读到了、里面 0 条"那一档，五键外壳
+    # 照样在；`data` 与三条行一级的类型逐个登记在 `readers.UNCHECKED_TYPES` 里。
+    out["LibraryView"] = set(RD.library_face(root))
+
     acc = RD.acceptance_face(root)
     out.setdefault("AcceptanceView", set(acc))
     return out

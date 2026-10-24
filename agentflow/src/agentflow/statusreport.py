@@ -155,6 +155,23 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
     except Exception:  # noqa: BLE001 —— 读不到待答问题 ⇒ 这一格判不了（下面 note 里说）
         pending_questions = -1
 
+    # ---- 名册的两个读数（业主 2026-10-26：子代理数 / 活跃子代理数，分开命名）
+    #
+    # 为什么并进这一屏：用户问"现在什么情况"时，"名册上还有几个名字在用、其中几个还在
+    # 干活"是编排面的第一读数。口径只有一处（`secretary.Secretary.child_counts`），
+    # 这里只转发 —— 在状态报告里再算一遍就是"同一读数两个主人"（本模块最常见的那种坏形态）。
+    # 三态照原样透传：名册 / 台账读不成 ⇒ 两个数都是 None（不是 0）。
+    try:
+        from . import schema as _S
+        from .secretary import Secretary as _Secretary
+
+        child_counts = _Secretary(_S.CONDUCTOR_ROLE, root=root,
+                                  store=store).child_counts()
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"名册空了"
+        child_counts = {"checked": False, "child_count": None,
+                        "active_child_count": None,
+                        "reason": f"{type(exc).__name__}: {exc}"}
+
     report: dict[str, Any] = {
         "generated_at": _now().replace(microsecond=0).isoformat(),
         "workspace": str(root), "since": str(since),
@@ -163,12 +180,27 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         "five_bit": {"grades": grades, "problems": problems},
         "in_flight": {
             "running_tasks": len(running_tasks), "running_task_ids": running_tasks[:RECENT_LIMIT],
+            # 两个读数各自一格（业主 2026-10-26）：子代理数 = 名册里未销号的名册项数；
+            # 活跃子代理数 = 其中"工作没做完还在做"的（含靠等下级才活跃的）。
+            # 不许相加、不许互相代替 —— 折成一个数之后，"名册只增不减"与"活都干完了"
+            # 会长得一模一样，而这两件事该做的下一步正好相反。
+            "child_count": child_counts.get("child_count"),
+            "active_child_count": child_counts.get("active_child_count"),
+            "child_counts": child_counts,
             # 口径（不可省）：这两个数一个是台账全量、一个是"用户发起的那一趟"。
             # 不写清就会变成"同一屏里两个读数各说一件事"（`conductor.stats()` 的同一条纪律）。
             "calibers": {
                 "running_tasks":
                     "tasks 里 status ∈ {pending, running} 的实例行（kind 为空；含顶趟行 "
                     "action=run，不含板项行 message/notice/report/delegation）",
+                "child_count":
+                    "名册里未销号的名册项（out/roster/<父>.jsonl 折叠后 retired 为假的那几项；"
+                    "口径只有 secretary.Secretary.child_counts 一处）",
+                "active_child_count":
+                    "上述名册项里 active 为真的数量，active(node) = 自身有未收口的任务"
+                    " （status ∈ {pending, running}） or 任一直接子 active"
+                    "（所以『自己收口了但在等活跃的下级』也算活跃 —— 业主逐字："
+                    "有『等』这个动作还是算活跃的）",
                 "top_level_runs":
                     "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；"
                     "召唤看 conductor.stats() 的 started_total）",

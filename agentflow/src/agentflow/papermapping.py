@@ -30,11 +30,16 @@
 | `page_or_section` | 否 | 给人看的定位（`3` / `p.7`） |
 | `citation_loc` | 视来源 | 引文的本地位置：`{"file": 包内相对路径, "page_range"|"line_range"|"char_range": [起点, 终点]}` |
 | `citation_loc_reason` | 视来源 | 不给 `citation_loc` 时那句理由 |
-| `lean_file` | 有 Lean 产出时 | Lean 程序的真实位置：论文包内相对路径（`formal/000004.lean`）。绝对路径与包外路径都红 |
+| `lean_file` | 有 Lean 产出时 | Lean 程序的真实位置：项目根相对路径（`code/formal/000004.lean` —— L 把源码落在这里）；论文包内那种写法（`formal/000004.lean`）也认。绝对路径与两个根之外的路径都红 |
 | `lean_target` | 有 Lean 产出时 | 它验的是哪一条：Lean 里那个声明的名字（`FreeGroupFactor.isII1`），必须真的出现在 `lean_file` 里 |
 
 `file` 与 `citation_loc.file` 都是包内相对路径：绝对路径在别人的机器上等于不存在，
 而指向包外的相对路径同样过不了"换一台机器也能复核"这一关（两者都判红）。
+
+`lean_file` 是唯一收「项目根相对路径」的那一格（2026-10-25，审计 G/H/V/L 第 4 条）：
+L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文包是 `out/paper/`，
+全仓没有任何一步把前者拷进后者 —— 只认包内相对路径时，那条真实存在的源码永远填不进
+这一格（三个落点各说各话）。所以这一格两个根都解析：先按包内找，找不到再按项目根找。
 
 ### `proof_no` 的口径
 
@@ -60,10 +65,10 @@
 
 - Lean 开关关（读 `settings.lean_enabled`，与 `closing` 那一处是同一个口径）=> 两格允许为空，
   读数里写「未开 Lean」；空绝不等于验过 —— 这一趟的证明走 `proof_text` 与 V 的逐行审校；
-- 开关开、且盘上有 Lean 产物（论文包内任意 `*.lean`，或 `<项目根>/out/formal/` 下的产物）
-  => 每条 theorem / lemma / proposition / corollary 行必须给这两格，缺就是
+- 开关开、且盘上有 Lean 产物（论文包内任意 `*.lean`，或 `<项目根>/out/formal/` / `<项目根>/code/formal/`
+  下的产物）=> 每条 theorem / lemma / proposition / corollary 行必须给这两格，缺就是
   `mapping_lean_missing`；
-- `lean_file` 不是 `.lean`、或不在论文包里 => `mapping_lean_file_missing`；
+- `lean_file` 不是 `.lean`、或在论文包与项目根两处都找不到 => `mapping_lean_file_missing`；
 - `lean_target` 在那一份 `.lean` 里找不到（做词边界匹配，`foo` 不算命中 `foobar`）
   => `mapping_lean_target_missing`；
 - 同一个 `lean_target` 出现在两行 => `mapping_lean_target_ambiguous`。一条命题有多条证明时，
@@ -120,6 +125,52 @@
 四格只进 `MAPPING.json`（机器读那一份）：md 与附录的列已经排满，加列会让旧附录整份对不上，
 而那两份的用途是给人看"哪一行对应哪一份文件"，不是给 B 取对象。
 
+### 台账那两格（D-69，2026-10-24：让「论文说定理 / 台账说猜想 / V 签没签」自己暴露）
+
+业主原话（D-69）：「论文对应表要能自己暴露『论文说定理 / 台账说猜想 / V 签没签』」。
+于是每一行多两格，与既有的九列同源渲染（json / md / 附录三份都由 `Row` 渲染，
+手写第二份照样过不了逐字比对）：
+
+| 格 | 键 | 口径 |
+|---|---|---|
+| 台账里这一行叫什么 | `ledger_kind` | 台账那一行自己的 `kind`（theorem / lemma / conjecture / concept …） |
+| V 签没签 | `reviewed` | 该证明号的 `bits.evidence.reviewed_by_proof` + `bits.evidence.reviewed_by.verdict` |
+
+这两格不是 G 写的，是「填」出来的（`fill_ledger_cells`）：`write_mapping` 落盘之前
+按 `ledger_id` 去台账里取那一行，现读现填，于是「表里说 theorem、台账说 conjecture」
+这件事在表上自己就是可见的 —— 不需要读者去翻两个文件对。G 手填的值会被这一次现读
+盖掉：填了就是声称，而这两格的声称必须来自台账。
+
+`reviewed` 的取值是三态，空着不许折成任何一边：
+
+- `已签（判决：成立）`：逐份那张表里这一份为真，且 `reviewed_by` 记着判决原话；
+- `没签`：逐份那张表里这一份为假（签过别的证明不算 —— 不许借光）；
+- `未读到`：台账里没有这一行 / 这一份在逐份表里没有键 / 判决原话那一格读不到。
+  三种都是「读不到」，不是「没签」。
+
+`ledger_kind` 同样是三态：台账行在就写它的 `kind`；台账行读不到（或那一行的 `kind`
+是空的）就写 `未读到`。渲染器最后这一道（`_ledger_cell` / `_reviewed_cell`）保证
+这三格永远不会印成空白 —— 空白会被读成"没问题"，而这三态里没有一档是"没问题"。
+
+### 落差读数（D-69 ②：先让它看得见，不拦门）
+
+`mapping_reading` 多两格读数，两格都只说、不判：
+
+- `kind_gap`：论文里以 theorem / lemma 环境出现、而台账 `kind` 仍是 `conjecture`
+  的行，逐条 `label → stmt:NNNNNN`（业主原话）；
+- `theorem_unsigned`：论文里排成定理而 V 没签的行；签没签读不到的那几行单列进
+  `unreadable`，不算进"没签"（三态：没查成不是结论）。
+
+两格都不进 `problems`、不进 `ALL_PROBLEM_KINDS`，所以它们不改 `state`、不改收工门的
+八格、不给 `Finding`；它们进 `reason`（成文与收工那句话读得到）与 `readings`
+（`closing.mapping_gaps` 转发）。为什么不拦：这一档量的是"论文与台账现在的关系"，
+而拦门的判据是"表与正文对不对得上" —— 把前者做成门，每一份"论文先写、账后改"的稿子
+都会红；但看不见更不行，sylow3 那三行正是这样一路静默到收工。
+
+加了两格之后，旧论文包（json 里没有这两键）必须重跑一次 `doc.write_mapping`：
+md 与附录都是按列逐字比对的，列变了就是 `md_drifted` / `mapping_paper_mismatch`。
+读侧把这件事写进 `reason`（"另有 N 行没有台账那两格（旧表）"），不静默。
+
 ## 双向都不许有孤儿
 
 正文是"`main.tex` ＋ 它递归 `\\input` / `\\include` 进来的那些文件"（相对路径按被包含
@@ -166,10 +217,11 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import evidencebits as EB
 from . import papercompile as PC
 from . import proofloc as PL
 from . import numericproof as NP
@@ -254,8 +306,13 @@ LEAN_ROW_FIELDS: tuple[str, ...] = ("lean_file", "lean_target")
 #: Lean 产物的后缀（`lean_file` 必须是它结尾）。
 LEAN_SUFFIX = ".lean"
 
-#: 除论文包之外，Lean 产物还落在哪（项目根相对；业主口径里有 `out/formal/` 这一处）。
-LEAN_ARTIFACT_DIRS: tuple[str, ...] = ("out/formal",)
+#: 除论文包之外，Lean 产物还落在哪（项目根相对）。
+#:
+#: 2026-10-25（审计 G/H/V/L 第 4 条）：`code/formal` 是 L 的真实落点
+#: （`agent_l._support.FORMAL_DIR`），而它此前不在扫描面上 —— 于是"盘上有 Lean 产出"
+#: 这个读数看不见 L 写下的任何一份源码，`lean_file` 也就没有一处能指的落点。
+#: `out/formal` 是业主 2026-10-22 口径里点名的另一处，两条并存。
+LEAN_ARTIFACT_DIRS: tuple[str, ...] = ("out/formal", "code/formal")
 
 #: 扫 Lean 产物时不进的目录（`.lake` 里是整份 Mathlib 的源码与编译产物）。
 LEAN_SKIP_DIRS: tuple[str, ...] = (".lake", ".git", ".hg", "node_modules", "__pycache__")
@@ -269,6 +326,42 @@ LEAN_UNFILLED_CELL = "（没填）"
 #: 与 Lean 那两格的区别：那两格分"未开 Lean"与"没填"两档，这两格没有开关可分 ——
 #: 空着就是"这一行不是数值实验定理，或者该填没填"，读者要能看见它。
 NUMERIC_EMPTY_CELL = "（非数值证明）"
+
+#: ---- 台账那两格（D-69）：这一行在台账里叫什么、V 签没签 ---------------------------
+#:
+#: 为什么这两格必须进表：业主 2026-10-24 的原话是"论文对应表要能自己暴露
+#: 『论文说定理 / 台账说猜想 / V 签没签』"。改前表里只有 `kind`（论文里排成什么环境），
+#: 于是真机 sylow3 那种"论文排成 lemma、台账 kind 还是 conjecture"的形态在表上
+#: 一个字符都看不到 —— 表没说谎，但落差不可见。
+LEDGER_KIND_FIELD = "ledger_kind"
+
+#: V 那一签那一格（逐份证明的读数 + 判决原话）。
+REVIEWED_FIELD = "reviewed"
+
+#: 这两格的键（写进 json、进 md、进附录，三处同源）。
+LEDGER_CELL_FIELDS: tuple[str, str] = (LEDGER_KIND_FIELD, REVIEWED_FIELD)
+
+#: 三态里"读不到"那一档的写法（台账行不在 / 逐份签名表没有这一份 / 判决原话空）。
+#:
+#: 它不许折成 `没签`，也不许折成"已签"：读不到是"这一格没查成"，而"没签"是一个
+#: 关于 V 做过什么的结论 —— 两者在报告里长得一样是本项目最忌的形态。
+LEDGER_CELL_UNREADABLE = "未读到"
+
+#: 逐份签名表里这一份为假时的写法（签过别的证明不算，不许借光）。
+REVIEWED_UNSIGNED_CELL = "没签"
+
+#: 签了之后的写法（`已签（判决：<判决原话>）`）。
+REVIEWED_SIGNED_TEMPLATE = "已签（判决：{verdict}）"
+
+#: 论文里"排成定理"的那几类环境（D-69 的落差读数按它判）。
+#:
+#: 只收 theorem / lemma：业主点名的是"论文里以 theorem/lemma 环境出现"。
+#: proposition / corollary 不在这一组里 —— 它们也是被证明的命题，但"说成定理"这句话
+#: 指的是这两个环境名，把四件套全收进来会让读数与业主那句话对不上。
+THEOREM_ENV_KINDS: tuple[str, ...] = ("theorem", "lemma")
+
+#: 台账里"还只是猜想"的那一档（落差读数的一半）。
+CONJECTURE_KIND = "conjecture"
 
 #: 每一行的必填字段（其余见 `OPTIONAL_ROW_FIELDS` 与 `CONDITIONAL_ROW_FIELDS`）。
 ROW_FIELDS: tuple[str, ...] = (
@@ -557,12 +650,22 @@ class Row:
     evidence_sha256: str = ""
     #: `{"verdict": "成立", "sha256": <被签那一份的 sha256>}`。
     v_signature: Mapping[str, Any] | None = None
+    #: ---- 台账那两格（D-69）：不手填，由 `fill_ledger_cells` 现读现填 ------------
+    #:
+    #: `ledger_kind` 是台账那一行自己的 `kind`；`reviewed` 是 V 签没签 + 判决原话。
+    #: 空串 = 这一格没填（旧表 / 还没填过）—— 渲染时印 `未读到`，不印空白。
+    ledger_kind: str = ""
+    reviewed: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """写回 json 的形状（字段顺序固定，diff 才读得懂）。"""
         out: dict[str, Any] = {"kind": self.kind, "label": self.label,
                                "env_no": int(self.env_no), "ledger_id": self.ledger_id,
-                               "proof_no": int(self.proof_no), "file": self.file}
+                               "proof_no": int(self.proof_no), "file": self.file,
+                               # 台账那两格（D-69）：三份同源的第一份。旧表没有这两键，
+                               # 那一档由读侧读成 `未读到`（不许读成"已签"或"没签"）。
+                               LEDGER_KIND_FIELD: self.ledger_kind,
+                               REVIEWED_FIELD: self.reviewed}
         if self.lean_file:
             out["lean_file"] = self.lean_file
         if self.lean_target:
@@ -1077,6 +1180,102 @@ def resolve_ledger_id(ledger_id: Any,
     return out
 
 
+def ledger_kind_cell(ledger_row: Mapping[str, Any] | None) -> str:
+    """这一行在台账里叫什么（`ledger_kind` 那一格）。
+
+    三态：台账行在、且它写着 `kind` ⇒ 写那个词；台账行不在、或者那一行的 `kind`
+    是空的 ⇒ `未读到`。空着的 `kind` 是"台账没回答"，不是"不是定理"。
+    """
+    if not isinstance(ledger_row, Mapping):
+        return LEDGER_CELL_UNREADABLE
+    kind = str(ledger_row.get("kind") or "").strip()
+    return kind or LEDGER_CELL_UNREADABLE
+
+
+def _reviewed_by_of(ledger_row: Mapping[str, Any] | None) -> dict[str, Any]:
+    """`bits.evidence.reviewed_by` 那一格（V 最近那一签的凭据：含判决原话）。
+
+    只认 `evidencebits` 与写侧共用的那一格口袋；读不到就返回空表（调用方据此写
+    `未读到`，不许折成"没签"）。
+    """
+    if not isinstance(ledger_row, Mapping):
+        return {}
+    bits = ledger_row.get("bits") if isinstance(ledger_row.get("bits"), Mapping) else ledger_row
+    ev = bits.get("evidence") if isinstance(bits.get("evidence"), Mapping) else {}
+    by = ev.get("reviewed_by")
+    return dict(by) if isinstance(by, Mapping) else {}
+
+
+def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> str:
+    """V 签没签 + 判决原话（`reviewed` 那一格）。
+
+    判据只有一处：逐份那张表走 `evidencebits.reviewed_by_proof`（写侧
+    `verifications._reviewed_statement_row` 落的同一张表）；判决原话走
+    `bits.evidence.reviewed_by.verdict`。
+
+    三态（业主 D-69 口径：读不到不许折成任何一边）：
+
+    - 台账行读不到 / 逐份表里没有这一份 ⇒ `未读到`（这一格没查成）；
+    - 这一份为假 ⇒ `没签`（签过别的证明不算 —— 不许借光）；
+    - 这一份为真 ⇒ `已签（判决：<原话>）`；原话那一格读不到、或者它记的是另一份
+      证明的签 ⇒ `已签（判决：未读到）`：签过这件事读得出来，判决对不对得上这一份
+      读不出来，两件事分开写。
+    """
+    if not isinstance(ledger_row, Mapping):
+        return LEDGER_CELL_UNREADABLE
+    no = _int_or_none(proof_no)
+    if no is None:
+        return LEDGER_CELL_UNREADABLE
+    per = EB.reviewed_by_proof(ledger_row)
+    if int(no) not in per:
+        return LEDGER_CELL_UNREADABLE
+    if not per[int(no)]:
+        return REVIEWED_UNSIGNED_CELL
+    by = _reviewed_by_of(ledger_row)
+    told = str(by.get("verdict") or "").strip()
+    # `reviewed_by` 只有一格（最近那一签）。它记的是哪一份，就只给那一份背书：
+    # 多证明时拿 #p1 的判决原话替 #p2 说话，等于让一份签替另一份签作证。
+    said = _int_or_none(by.get("proof_no"))
+    if said is not None and int(said) != int(no):
+        told = ""
+    return REVIEWED_SIGNED_TEMPLATE.format(verdict=told or LEDGER_CELL_UNREADABLE)
+
+
+def ledger_cells(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> dict[str, str]:
+    """一行的台账两格（`{ledger_kind, reviewed}`；三态口径见上面两个函数）。"""
+    return dict(zip(LEDGER_CELL_FIELDS,
+                    (ledger_kind_cell(ledger_row), reviewed_cell(ledger_row, proof_no))))
+
+
+def fill_ledger_cells(ledger_root: str | Path,
+                      rows: Iterable[Row], *,
+                      ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                      ) -> list[Row]:
+    """按台账把每一行的两格现读现填（D-69 的唯一填充口；纯读、不改盘）。
+
+    为什么要填而不是让 G 写：这两格说的是台账那一行的事实（`kind`）与 V 的读数，
+    G 只能抄。抄错一位就是"表与台账对不上"而没有东西会报错 —— 所以写侧现读现填，
+    G 手填的值会被这一次现读盖掉。
+
+    `ledger_root` 是"`data/` 那一层在谁下面"，也就是工作区根（与
+    `mapping_reading(workspace_root=…)` 同一处口径：台账在 `<工作区>/data/<表文件>`）。
+    论文包可能挂在项目子目录下，所以它不一定是项目根 —— 调用方给哪个就按哪个读。
+
+    三态：`ledger_id` 解析不到、或台账里没有那一行 ⇒ 两格都写 `未读到`（这一格
+    没查成，不是"没签"、也不是"不是定理"）。`ledger=None` 时按 `ledger_root` 读盘。
+    """
+    known = ledger if ledger is not None else read_ledger_tables(ledger_root)
+    out: list[Row] = []
+    for row in rows:
+        resolved = resolve_ledger_id(row.ledger_id, known)
+        target = (ledger_row(known, str(resolved["table"]), str(resolved["row_id"]))
+                  if resolved["ok"] else None)
+        cells = ledger_cells(target, row.proof_no)
+        out.append(replace(row, ledger_kind=cells[LEDGER_KIND_FIELD],
+                           reviewed=cells[REVIEWED_FIELD]))
+    return out
+
+
 def file_state(package_root: str | Path, rel: Any) -> dict[str, Any]:
     """`file` 那一栏在论文包里是什么状态。
 
@@ -1173,11 +1372,13 @@ def _lean_sources(base: Path) -> list[Path]:
 def lean_artifacts(project_root: str | Path) -> list[str]:
     """盘上已有的 Lean 产物（排序、去重；包内的记成包内相对路径）。
 
-    两处都扫：论文包内任意 `*.lean`（`lean_file` 只认包内相对路径，所以这是能填的那一处），
-    以及 `<项目根>/out/formal/` 下的产物（业主 2026-10-22 口径里点名的另一处）。
-    返回的是给人看的写法：包内的是 `formal/000004.lean`，`out/formal/` 的是
-    `out/formal/000004.lean` —— 后者填不进 `lean_file`（那会指到包外），
-    它的用处是"盘上到底有没有 Lean 产出"这个事实。
+    三处都扫：论文包内任意 `*.lean`（包内写法，`formal/000004.lean`）、
+    `<项目根>/out/formal/` 与 `<项目根>/code/formal/`（后两处记成项目根相对路径，
+    如 `code/formal/000004.lean`）。三处都是 `lean_file` 能填的写法
+    （2026-10-25：`code/formal` 是 L 的真实落点，见 `LEAN_ARTIFACT_DIRS`）。
+
+    返回值是"盘上到底有没有 Lean 产出、以及它在哪"这个事实的读数；它同时是
+    `mapping_reading` 里"两格必填"那一档的判据（有产物 ⇒ 定理类那四类行必须给两格）。
     """
     project = Path(project_root)
     package = package_dir(project)
@@ -1198,6 +1399,29 @@ def lean_artifacts(project_root: str | Path) -> list[str]:
         if rel not in out:
             out.append(rel)
     return out
+
+
+def _lean_source_state(package_root: Path, project_root: Path | None,
+                       rel: Any) -> dict[str, Any]:
+    """`lean_file` 那一格在盘上的状态：先按论文包内解析，找不到再按项目根解析。
+
+    为什么两个根都认（2026-10-25，审计 G/H/V/L 第 4 条）：三个落点此前各说各话 ——
+    G 的提示词说"论文包内相对路径"、L 把源码落在 `code/formal/`、扫描面是"包内 +
+    `out/formal`"，而全仓没有任何一步把 `code/formal` 拷进包 ⇒ 那条真实存在的源码
+    永远填不进这一格。现在 `lean_file` 收「项目根相对路径」，同时保留包内写法
+    （老项目与包内的 `formal/000004.lean` 逐字照旧）。
+
+    绝对路径与两个根之外的路径仍然是 `outside`（`file_state` 的原判据不动）：
+    换一台机器也要能复核。
+    """
+    raw = str(rel or "").strip()
+    state = file_state(package_root, raw)
+    if project_root is None or state["state"] != "missing":
+        return state
+    elsewhere = file_state(project_root, raw)
+    if elsewhere["state"] in ("present", "empty", "directory"):
+        return elsewhere
+    return state
 
 
 def _declaration_re(name: Any) -> re.Pattern[str]:
@@ -1298,18 +1522,22 @@ def _citation_problems(row: Row, package_root: Path,
 
 
 def _lean_problems(rows: Sequence[Row], package_root: Path, lean_on: bool,
-                   artifacts: Sequence[str]) -> list[dict[str, Any]]:
+                   artifacts: Sequence[str],
+                   project_root: Path | None = None) -> list[dict[str, Any]]:
     """Lean 那两格（业主 2026-10-22 追加）：什么时候必填、填了要真。
 
     三件事分开报，一条坏不遮蔽另一条：
     1. 必填而缺（或只填了一半）=> `mapping_lean_missing`；
-    2. `lean_file` 不是 `.lean` / 不在包里 => `mapping_lean_file_missing`；
+    2. `lean_file` 不是 `.lean` / 两个根里都找不到 => `mapping_lean_file_missing`；
     3. `lean_target` 在那一份 `.lean` 里找不到 => `mapping_lean_target_missing`；
     外加一条横向的：同一个 `lean_target` 被两行共用 => `mapping_lean_target_ambiguous`。
 
     "必填"的口径见模块 docstring：开关开、且盘上真有 Lean 产物，才要求定理类那四行给两格。
     这一条只在 `LEAN_KINDS` 非空时才被调用（见 `mapping_reading`）：清空那一组就是关掉这一档，
     反真空用例靠它证明"这些红真的靠那组 kind"。
+
+    `lean_file` 的解析走 :func:`_lean_source_state`（包内优先、项目根兜底）：
+    L 的源码在 `code/formal/`，它填不进"只认包内"的那一版（2026-10-25 第 4 条）。
     """
     problems: list[dict[str, Any]] = []
     required = bool(lean_on) and bool(artifacts)
@@ -1329,12 +1557,13 @@ def _lean_problems(rows: Sequence[Row], package_root: Path, lean_on: bool,
             problems.append(_problem(
                 "mapping_lean_missing",
                 f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）缺 {missing} —— "
-                f"{why}。`lean_file` 写论文包内的相对路径（如 formal/000004.lean），"
+                f"{why}。`lean_file` 写那份源码的真实位置（项目根相对路径，如 "
+                "code/formal/000004.lean；论文包内的写法 formal/000004.lean 也认），"
                 "`lean_target` 写 Lean 里那个声明的名字（如 FreeGroupFactor.isII1）",
                 label=row.label, where=MAPPING_JSON_NAME))
         file_ok = False
         if lean_file:
-            state = file_state(package_root, lean_file)
+            state = _lean_source_state(package_root, project_root, lean_file)
             if not lean_file.lower().endswith(LEAN_SUFFIX):
                 problems.append(_problem(
                     "mapping_lean_file_missing",
@@ -1345,13 +1574,13 @@ def _lean_problems(rows: Sequence[Row], package_root: Path, lean_on: bool,
                 problems.append(_problem(
                     "mapping_lean_file_missing",
                     f"表里 label={row.label!r} 的 `lean_file` 读不到：{state['reason']} —— "
-                    "它必须是论文包内的相对路径（绝对路径在别人的机器上等于不存在），"
-                    "`out/formal/` 下的产物要先放进包里（如 formal/000004.lean）",
+                    "它必须是项目根相对路径（如 code/formal/000004.lean，L 的落点）或论文包内"
+                    "相对路径（如 formal/000004.lean）；绝对路径在别人的机器上等于不存在",
                     label=row.label, where=MAPPING_JSON_NAME))
             else:
                 file_ok = True
         if lean_target and lean_file and file_ok:
-            absolute = Path(package_root) / lean_file
+            absolute = Path(state["abs"])
             try:
                 text = absolute.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
@@ -1490,7 +1719,11 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                         evidence_sha256=str(item.get(NP.INDEX_SHA_FIELD) or "").strip(),
                         v_signature=(dict(item.get(NP.INDEX_SIGN_FIELD))
                                      if isinstance(item.get(NP.INDEX_SIGN_FIELD), Mapping)
-                                     else None)))
+                                     else None),
+                        # 台账那两格（D-69）：旧表没有这两键 ⇒ 读成空串 ⇒ 渲染印
+                        # `未读到`（"这一格没填"不许印成空白，也不许折成"没签"）。
+                        ledger_kind=str(item.get(LEDGER_KIND_FIELD) or "").strip(),
+                        reviewed=str(item.get(REVIEWED_FIELD) or "").strip()))
     return rows, problems
 
 
@@ -1577,11 +1810,14 @@ _APPENDIX_TEXT: dict[str, Any] = {
             "The last two columns belong to theorems proved by numerical experiment: the reading of "
             "E's exhaustive run (\\texttt{" + NT.EVIDENCE_PREFIX + "NNNNNN}) and where E's two written "
             "blocks (design note and exhaustion argument) live; when absent they read "
-            "``(not a numeric proof)''. This paragraph itself is written by the renderer in the "
-            "language of the paper: do not hand-copy it and do not mix languages."
+            "``(not a numeric proof)''. The two columns after the ledger row are the ledger's own "
+            "kind for that row and what V signed; ``(unread)'' in either of them means the cell could "
+            "not be read at all, which is neither ``signed'' nor ``unsigned''. This paragraph "
+            "itself is written by the renderer in the language of the paper: do not hand-copy it "
+            "and do not mix languages."
         ),
         "columns": (
-            "Env", "Label", "Ledger row", "Proof", "File",
+            "Env", "Label", "Ledger row", "Ledger kind", "V sign-off", "Proof", "File",
             "Lean (file / declaration)", "Citation location", "E reading", "Exhaustion note",
         ),
         "lean_off": "(Lean off)",
@@ -1600,9 +1836,12 @@ _APPENDIX_TEXT: dict[str, Any] = {
             "最后两列是数值实验定理的：E 的那条穷举读数（\\texttt{" + NT.EVIDENCE_PREFIX
             + "NNNNNN}）与 E 写的那两块（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION
             + "）落在哪一份读数里；不填印「" + NUMERIC_EMPTY_CELL + "」。"
+            "台账序号后面那两列是「台账里这一行叫什么」（`" + LEDGER_KIND_FIELD + "`）与"
+            "「V 签没签、判决原话是什么」（`" + REVIEWED_FIELD + "`）：两格都由写侧按台账现读现填，"
+            "读不到就印「" + LEDGER_CELL_UNREADABLE + "」—— 那一档既不是「已签」也不是「没签」。"
         ),
         "columns": (
-            "环境", "label", "台账序号", "证明号", "真实文件",
+            "环境", "label", "台账序号", "台账 kind", "V 是否签过", "证明号", "真实文件",
             "Lean（文件 / 声明）", "引文位置", "E 读数", "两块读数",
         ),
         "lean_off": LEAN_OFF_CELL,
@@ -1611,13 +1850,17 @@ _APPENDIX_TEXT: dict[str, Any] = {
     },
 }
 
-#: 附录表的九列定宽（`\\textwidth` 的比例；九列合计 0.90，剩下的留给列间距与 `\\tabcolsep`）。
+#: 附录表的十一列定宽（`\\textwidth` 的比例；十一列合计 0.90，剩下的留给列间距与 `\\tabcolsep`）。
 #:
 #: 业主 2026-10-24（D-46）：原先是四列 `l`（自然宽）加六列定宽，引文位置那一格是一整句
-#: 英文，于是整张表宽出 `\\textwidth`、右侧被切到页外，Lean 那两列还互相压字。现在九列
-#: 全定宽、Lean 的文件与声明并成一列、整表 `\\small` 且 `\\tabcolsep` 收到 2pt。
+#: 英文，于是整张表宽出 `\\textwidth`、右侧被切到页外，Lean 那两列还互相压字。现在全列
+#: 定宽、Lean 的文件与声明并成一列、整表 `\\small` 且 `\\tabcolsep` 收到 2pt。
+#:
+#: D-69 加了台账那两格（`ledger_kind` / `reviewed`）之后是十一列：新增的两列各 0.07 / 0.09，
+#: 其余九列按同一比例压一点，合计仍然是 0.90 —— 列数变了而总宽不变，否则整张表又会宽出
+#: `\\textwidth`（D-46 的那条判据按"列格式与表头逐格对上"判，不看具体数值）。
 APPENDIX_COLUMN_WIDTHS: tuple[float, ...] = (
-    0.09, 0.11, 0.10, 0.06, 0.09, 0.12, 0.16, 0.07, 0.10,
+    0.07, 0.09, 0.09, 0.07, 0.09, 0.05, 0.08, 0.10, 0.11, 0.06, 0.09,
 )
 
 #: 定宽列里"字母数字连写的长串"隔几个字给一个可选断点（`_tex_breakable` 用它）。
@@ -1769,6 +2012,88 @@ def _numeric_cell(value: str, language: str = PAPER_LANGUAGE_ZH) -> str:
     return value or str(_APPENDIX_TEXT[language]["numeric_empty"])
 
 
+def _ledger_kind_cell(row: Row) -> str:
+    """`ledger_kind` 那一格在 md 里怎么印（空着就印 `未读到`，不印空白）。"""
+    return str(row.ledger_kind or "").strip() or LEDGER_CELL_UNREADABLE
+
+
+def _reviewed_print_cell(row: Row) -> str:
+    """`reviewed` 那一格在 md 里怎么印（空着就印 `未读到`，不印空白）。
+
+    与 `_ledger_kind_cell` 同一条纪律：这一格的三态里没有一档叫"空白"。
+    """
+    return str(row.reviewed or "").strip() or LEDGER_CELL_UNREADABLE
+
+
+#: 台账那两格在附录里按论文语言怎么说（D-45）。
+#:
+#: 为什么附录要翻一遍、而 json / md 只存中文那一版：json 与 md 是给人读的中文两份
+#: （`MAPPING.md` 恒中文），附录是论文的一部分 —— 英文论文里一个中文字都不许有。
+#: 三份仍然同源（同一批 `Row`、同一个渲染器），差别只是附录这一道按语言出词；
+#: 这与 Lean 那两格的"（未开 Lean）/ (Lean off)"是同一条既有口径。
+#:
+#: 判决原话那一格：中文版逐字用原话；英文版按 `schema.REVIEW_VERDICTS` 这张受控词表
+#: 翻成英文词。词表外的词（坏数据）英文附录印 `(unread)` 而不是把中文原话印进去：
+#: 印进去就破了 D-45 那条"英文论文的附录里没有 CJK"，而不印只是"这一格翻不出来"。
+_LEDGER_CELL_TEXT: dict[str, Any] = {
+    PAPER_LANGUAGE_EN: {
+        "unread": "(unread)",
+        "unsigned": "unsigned",
+        "signed": "signed (verdict: {verdict})",
+        "verdicts": {"成立": "holds", "有毛病": "defective", "看不出来": "inconclusive"},
+    },
+    PAPER_LANGUAGE_ZH: {
+        "unread": LEDGER_CELL_UNREADABLE,
+        "unsigned": REVIEWED_UNSIGNED_CELL,
+        "signed": REVIEWED_SIGNED_TEMPLATE,
+        "verdicts": {},
+    },
+}
+
+
+def _split_reviewed(cell: Any) -> tuple[str, str]:
+    """把 `reviewed` 那一格的规范写法拆成 `(状态, 判决原话)`。
+
+    状态只有三档：`signed` / `unsigned` / `unread`。拆不出来的写法一律落 `unread`：
+    这一格认不出时，它说的既不是"签了"也不是"没签"，那是"这一格没查成"。
+    """
+    text = str(cell or "").strip()
+    if not text or text == LEDGER_CELL_UNREADABLE:
+        return "unread", ""
+    if text == REVIEWED_UNSIGNED_CELL:
+        return "unsigned", ""
+    head, _, tail = REVIEWED_SIGNED_TEMPLATE.partition("{verdict}")
+    if (tail and text.startswith(head) and text.endswith(tail)
+            and len(text) > len(head) + len(tail)):
+        return "signed", text[len(head):len(text) - len(tail)]
+    return "unread", ""
+
+
+def _appendix_reviewed(cell: Any, language: str) -> str:
+    """附录里那一格（按论文语言出词；三态原样保留）。"""
+    text = _LEDGER_CELL_TEXT[language]
+    state, verdict = _split_reviewed(cell)
+    if state == "unsigned":
+        return str(text["unsigned"])
+    if state != "signed":
+        return str(text["unread"])
+    word = verdict if language == PAPER_LANGUAGE_ZH else str(
+        text["verdicts"].get(verdict) or "")
+    return str(text["signed"]).format(verdict=word or text["unread"])
+
+
+def _appendix_ledger_kind(cell: Any, language: str) -> str:
+    """附录里 `ledger_kind` 那一格（台账那个词原样印；读不到按语言印占位）。
+
+    台账的 `kind` 是台账自己的词（theorem / lemma / conjecture …），不翻 —— 翻一个
+    受控词表的取值等于造第二个词表。只有"读不到"那一档按语言出词。
+    """
+    raw = str(cell or "").strip()
+    if not raw or raw == LEDGER_CELL_UNREADABLE:
+        return str(_LEDGER_CELL_TEXT[language]["unread"])
+    return raw
+
+
 def _lean_pair(row: Row, lean_on: bool, language: str) -> str:
     """Lean 那一格（D-46 把文件与声明并成一列）：`文件 / 声明`。
 
@@ -1782,15 +2107,21 @@ def _lean_pair(row: Row, lean_on: bool, language: str) -> str:
     return f"{left} / {right}"
 
 
-def _row_key_text(row: Row) -> str:
+def _row_key_text(row: Row, language: str = PAPER_LANGUAGE_ZH) -> str:
     """附录里那条机器可读注释的内容（`|` 分隔，判据靠它数行与比 label）。
 
     末尾两格是数值实验定理的（E 的读数编号与两块读数的落点）：追加在末尾而不是插在中间，
     因为 `appendix_row_keys` 按位置读前几格 —— 插在中间会让旧附录整份对不上。
+
+    D-69 的两格（`ledger_kind` / `reviewed`）同样追加在末尾（排在数值实验那两格之后）：
+    理由与上面那一句相同 —— 位置一旦挪动，读侧按位置读的那几格会静默错位。它们按
+    `language` 出词（注释也是附录的一部分，英文论文里同样不许出现 CJK）。
     """
     return "|".join([row.kind, str(int(row.env_no)), row.label, row.ledger_id,
                      str(int(row.proof_no)), row.file, row.lean_file, row.lean_target,
-                     row.numeric_evidence, row.exhaustion_note])
+                     row.numeric_evidence, row.exhaustion_note,
+                     _appendix_ledger_kind(row.ledger_kind, language),
+                     _appendix_reviewed(row.reviewed, language)])
 
 
 def appendix_row_keys(block: str) -> list[tuple[str, str]]:
@@ -1847,11 +2178,13 @@ def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None,
         "\\hline",
     ]
     for row in items:
-        lines.append(APPENDIX_ROW_PREFIX + _row_key_text(row))
+        lines.append(APPENDIX_ROW_PREFIX + _row_key_text(row, lang))
         lines.append(" & ".join([
             _cell(f"{row.kind} {int(row.env_no)}"),
             _cell(row.label, mono=True),
             _cell(row.ledger_id, mono=True),
+            _cell(_appendix_ledger_kind(row.ledger_kind, lang), mono=True),
+            _cell(_appendix_reviewed(row.reviewed, lang)),
             str(int(row.proof_no)),
             _cell(row.file, mono=True),
             _cell(_lean_pair(row, lean_on, lang)),
@@ -1893,18 +2226,26 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
         "E 的那条穷举读数编号（`" + NT.EVIDENCE_PREFIX + "NNNNNN`）与 E 写的那两块"
         "（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION + "）落在哪一份读数里；"
         "那一行的 `file` 写的是那份程序的相对路径（相对仓库根），不是论文包内的 tex。",
+        "`" + LEDGER_KIND_FIELD + "` 与 `" + REVIEWED_FIELD + "`（D-69）：台账那一行自己的 "
+        "`kind`，以及 V 签没签 + 判决原话。两格由写侧按台账现读现填（`fill_ledger_cells`），"
+        "读不到就写 `" + LEDGER_CELL_UNREADABLE + "` —— 那一档既不是「已签」也不是「没签」。"
+        "它们让「论文里排成定理、台账里还是猜想」与「论文里排成定理、V 没签」这两件事在表上"
+        "自己可见。",
         "",
-        "| # | kind | label | env_no | ledger_id | proof_no | file | lean_file | lean_target "
+        "| # | kind | label | env_no | ledger_id | " + LEDGER_KIND_FIELD + " | " + REVIEWED_FIELD
+        + " | proof_no | file | lean_file | lean_target "
         "| citation_loc | citation_loc_reason | page_or_section | numeric_evidence "
         "| exhaustion_note |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for i, row in enumerate(items, start=1):
         lines.append(
-            "| {i} | {kind} | {label} | {no} | {ledger} | {proof} | {file} | {lean_file} "
+            "| {i} | {kind} | {label} | {no} | {ledger} | {lkind} | {reviewed} | {proof} "
+            "| {file} | {lean_file} "
             "| {lean_target} | {loc} | {reason} | {where} | {evidence} | {note} |".format(
                 i=i, kind=row.kind, label=row.label or "（没有 label）", no=int(row.env_no),
                 ledger=row.ledger_id, proof=int(row.proof_no),
+                lkind=_ledger_kind_cell(row), reviewed=_reviewed_print_cell(row),
                 file=row.file or "（空）",
                 lean_file=_lean_cell(row.lean_file, lean_on),
                 lean_target=_lean_cell(row.lean_target, lean_on),
@@ -1929,12 +2270,21 @@ def _norm_text(text: str) -> str:
     return "\n".join(line.rstrip() for line in body.split("\n")).strip("\n")
 
 
-def write_mapping(project_root: str | Path, rows: Iterable[Row]) -> tuple[Path, Path]:
+def write_mapping(project_root: str | Path, rows: Iterable[Row], *,
+                  workspace_root: str | Path | None = None) -> tuple[Path, Path]:
     """写 json 与 md 两份，返回它们的路径（都在论文包里）。
 
     只走这一个写口：两份由同一次 `rows` 生成，于是"手写第二份"在结构上不可能发生。
+
+    D-69：落盘之前先按台账把两格现读现填（`fill_ledger_cells`）。所以 G 手填的
+    `ledger_kind` / `reviewed` 会被这一次现读盖掉 —— 这两格是"台账说是什么"，
+    不是"提交方声称是什么"；填错了没有东西会报错，现读才有。
+
+    `workspace_root` 是台账（`data/`）所在的那一层；不给就按 `project_root` 读
+    （单项目工作区里两者是同一个目录）。
     """
-    items = list(rows)
+    items = fill_ledger_cells(workspace_root if workspace_root is not None else project_root,
+                              list(rows))
     json_path, md_path = mapping_paths(project_root)
     payload = {"rows": [row.to_dict() for row in items]}
     json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2003,10 +2353,15 @@ def write_appendix(project_root: str | Path) -> Path:
     return frag
 
 
-def write_package(project_root: str | Path, rows: Iterable[Row]) -> tuple[Path, Path, Path]:
-    """G 的唯一写口：json + md + 附录（三份都由同一批 `rows` 生成）。"""
+def write_package(project_root: str | Path, rows: Iterable[Row], *,
+                  workspace_root: str | Path | None = None) -> tuple[Path, Path, Path]:
+    """G 的唯一写口：json + md + 附录（三份都由同一批 `rows` 生成）。
+
+    `workspace_root` 只影响台账那两格的现读现填（台账在 `<工作区>/data/` 下）；
+    不给就按项目根读（单项目工作区里是同一个目录）。
+    """
     items = list(rows)
-    json_path, md_path = write_mapping(project_root, items)
+    json_path, md_path = write_mapping(project_root, items, workspace_root=workspace_root)
     frag = write_appendix(project_root)
     return json_path, md_path, frag
 
@@ -2485,6 +2840,102 @@ def _stray_mapping_copies(project: Path, workspace: Path) -> list[Path]:
     return found
 
 
+def ledger_cells_reading(rows: Iterable[Row],
+                         ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None) -> dict[str, Any]:
+    """盘上那张表的两格与台账现在的读数逐行比一遍（纯读，不写盘、也不拦门）。
+
+    三种结局分开记（三态纪律）：
+
+    - `filled`：这一行两格都填了；
+    - `missing`：这一行两格是空的（旧表：写侧还没填过这两格）—— 它不是"没签"，
+      是"这张表还没这两格"；
+    - `stale`：填了，但与台账现在的读数不一致（表写完之后台账又动过）。
+
+    它是读数不是判据：D-69 的边界是"先让它看得见" —— 表被手改过、或者台账在表写完之后
+    又签了一笔，这两件事都要在读数里点名，但不把论文卡在收工门上（`md_drifted` 与
+    `mapping_paper_mismatch` 已经在管"三份同源"那一档）。
+    """
+    items = list(rows)
+    out: dict[str, Any] = {"checked": True, "rows": len(items), "filled": 0,
+                           "missing": [], "stale": []}
+    for row in items:
+        resolved = resolve_ledger_id(row.ledger_id, ledger)
+        target = (ledger_row(ledger, str(resolved["table"]), str(resolved["row_id"]))
+                  if resolved["ok"] else None)
+        want = ledger_cells(target, row.proof_no)
+        got = {LEDGER_KIND_FIELD: str(row.ledger_kind or "").strip(),
+               REVIEWED_FIELD: str(row.reviewed or "").strip()}
+        if not got[LEDGER_KIND_FIELD] and not got[REVIEWED_FIELD]:
+            out["missing"].append({"label": row.label, "ledger_id": row.ledger_id,
+                                   "ledger": want})
+            continue
+        out["filled"] += 1
+        if got != want:
+            out["stale"].append({"label": row.label, "ledger_id": row.ledger_id,
+                                 "json": got, "ledger": want})
+    return out
+
+
+def kind_gap_reading(rows: Iterable[Row],
+                     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None
+                     ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """落差读数（D-69 ②）：论文说定理 / 台账说猜想，以及论文排成定理 / V 没签。
+
+    业主原话：「论文里以 theorem/lemma 环境出现、而台账 kind 仍是 conjecture 的行：
+    N 条（逐条 label → stmt）」；同理一条「论文里排成定理但 V 没签的行」。
+
+    两条都只看 `THEOREM_ENV_KINDS`（theorem / lemma）那几行，读数取自台账现读
+    （不读表上那两格：表可能还没填、也可能写完之后台账又动过 —— 落差说的是
+    "论文与台账现在的关系"）。
+
+    三态：`reviewed` 读不到的行单列进 `unreadable`，不算进 `count`（"没签"是一个
+    关于 V 做过什么的结论；"读不到"是没查成，两者折平就等于把没查成报成没签）。
+
+    返回 `(kind_gap, theorem_unsigned)` 两份读数，形状都是
+    `{"count", "items", "unreadable"?, "why"}`。这两条不拦门：业主的边界是
+    "先让它看得见"（拦不拦由 H 与收工门另外判）。
+    """
+    gap: list[dict[str, Any]] = []
+    unsigned: list[dict[str, Any]] = []
+    unreadable: list[dict[str, Any]] = []
+    for row in rows:
+        if row.kind not in THEOREM_ENV_KINDS:
+            continue
+        resolved = resolve_ledger_id(row.ledger_id, ledger)
+        target = (ledger_row(ledger, str(resolved["table"]), str(resolved["row_id"]))
+                  if resolved["ok"] else None)
+        cells = ledger_cells(target, row.proof_no)
+        item = {"label": row.label, "env_kind": row.kind, "ledger_id": row.ledger_id,
+                "proof_no": int(row.proof_no),
+                "ledger_kind": cells[LEDGER_KIND_FIELD], "reviewed": cells[REVIEWED_FIELD]}
+        if cells[LEDGER_KIND_FIELD] == CONJECTURE_KIND:
+            gap.append(item)
+        state, _verdict = _split_reviewed(cells[REVIEWED_FIELD])
+        if state == "unsigned":
+            unsigned.append(item)
+        elif state == "unread":
+            unreadable.append(item)
+    gap_why = ""
+    if gap:
+        gap_why = ("论文里以 theorem/lemma 环境出现、而台账 kind 仍是 conjecture 的行："
+                   + str(len(gap)) + " 条（"
+                   + "、".join(f"{it['label']} → {it['ledger_id']}" for it in gap)
+                   + "）")
+    unsigned_why = ""
+    if unsigned:
+        unsigned_why = ("论文里排成定理但 V 没签的行：" + str(len(unsigned)) + " 条（"
+                        + "、".join(f"{it['label']} → {it['ledger_id']}" for it in unsigned)
+                        + "）")
+    if unreadable:
+        head = ("论文里排成定理、而 V 签没签读不到的行：" if not unsigned
+                else "；论文里排成定理、而 V 签没签读不到的行：")
+        unsigned_why += head + str(len(unreadable)) + " 条（" + "、".join(
+            f"{it['label']} → {it['ledger_id']}" for it in unreadable) + "）"
+    return ({"count": len(gap), "items": gap, "why": gap_why},
+            {"count": len(unsigned), "items": unsigned,
+             "unreadable": unreadable, "why": unsigned_why})
+
+
 def mapping_reading(project_root: str | Path, *,
                     workspace_root: str | Path | None = None,
                     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
@@ -2557,6 +3008,12 @@ def mapping_reading(project_root: str | Path, *,
                  "artifacts": list(artifacts[:20]), "artifact_count": len(artifacts),
                  "target_kinds": list(LEAN_TARGETED_KINDS), "reason": lean_reason},
         "empty_files": [],
+        # ---- 台账那两格与两条落差读数（D-69）：先给空形状，填不到就是"没读到"。
+        # 它们都不进 `problems`：业主的边界是"先让它看得见"，不拦门。
+        "ledger_cells": {"checked": False, "rows": 0, "filled": 0,
+                         "missing": [], "stale": []},
+        "kind_gap": {"count": 0, "items": [], "why": ""},
+        "theorem_unsigned": {"count": 0, "items": [], "unreadable": [], "why": ""},
         "problems": [],
         "warnings": [],
         "reason": "",
@@ -2629,8 +3086,19 @@ def mapping_reading(project_root: str | Path, *,
     # Lean 那四类只在 `LEAN_KINDS` 非空时才判（见 `_lean_problems` 的 docstring：
     # 清空那一组就是关掉这一档，反真空用例靠它）。
     if LEAN_KINDS:
-        problems += _lean_problems(rows, package, lean_on, artifacts)
+        problems += _lean_problems(rows, package, lean_on, artifacts, project)
     known = ledger if ledger is not None else read_ledger_tables(workspace)
+    # ---- 台账那两格与两条落差读数（D-69）：都是纯读、都不拦门。
+    #
+    # 位置在 `known` 之后、逐行校验之前：这三项问的是"论文与台账现在的关系"，
+    # 与"表与正文对不对得上"是两件事 —— 混进 `problems` 就等于把它们当门，
+    # 而业主的口径是先让它看得见（`kind_gap` / `theorem_unsigned` 都不在
+    # `ALL_PROBLEM_KINDS` 里）。
+    reading["ledger_cells"] = ledger_cells_reading(rows, known)
+    reading["kind_gap"], reading["theorem_unsigned"] = kind_gap_reading(rows, known)
+    gap_notes = [str(reading["kind_gap"].get("why") or ""),
+                 str(reading["theorem_unsigned"].get("why") or "")]
+    gap_notes = [text for text in gap_notes if text]
     # 数值实验定理那一支要读"定理那一段"：真遇上这种行时才去扫（扫一遍要把 `\input`
     # 跟完，不该为一份全是自然语言证明的稿子付这份成本）。`None` = 还没扫过。
     segments: dict[str, str] | None = None
@@ -2700,4 +3168,17 @@ def mapping_reading(project_root: str | Path, *,
     if reading["warnings"]:
         reading["reason"] += "；另有警告 " + "、".join(
             sorted({str(w.get("kind") or "") for w in reading["warnings"]}))
+    # 落差读数（D-69 ②）：两条都在 `reason` 里点名，且都写明"读数，不拦门"——
+    # 它们是"看得见"的那一半，拦不拦由 H 与收工门另外判（都不进 `problems`）。
+    if gap_notes:
+        reading["reason"] += "；落差读数（不拦门）：" + "；".join(gap_notes)
+    cells = reading["ledger_cells"]
+    if cells.get("missing"):
+        reading["reason"] += (
+            "；另有 " + str(len(cells["missing"])) + " 行没有台账那两格"
+            "（旧表）—— 重跑一次 `doc.write_mapping` 就会按台账填上")
+    if cells.get("stale"):
+        reading["reason"] += (
+            "；另有 " + str(len(cells["stale"])) + " 行的台账那两格与台账现在的读数不一致"
+            "（表写完之后台账又动过，或者表被手改过）—— 重跑一次 `doc.write_mapping`")
     return reading

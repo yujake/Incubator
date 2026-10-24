@@ -475,6 +475,42 @@ class WebHandler(BaseHTTPRequestHandler):
 
         self._json(200, SS.run_index_report(self.root))
 
+    def handle_errors(self, params: Mapping[str, str],
+                      query: Mapping[str, Sequence[str]]) -> None:
+        """`GET /api/errors`：按角色 × 类目的错误动作计数（只读，零模型调用）。
+
+        形状是 `readouts.errors_readout(self.root)` 的返回值逐字（五个键：
+        `checked` / `state` / `reason` / `data` / `problems`）。为什么不在这里另算一遍：
+        计数口径（角色归属、主码规则、三态）全在 `errorstats` 里，"谁算这个数"只有一个
+        真身；这一层再拆一遍就是两份口径，而两份漂了不会有任何地方报错。
+
+        读不到时照样回 200：三态在正文里（`state="unknown"` + `reason`），因为
+        "没读到"是一条读数，不是一次请求失败（与 `handle_run_index` 同一档）。
+        它不需要写权限：这一格只读盘、不花一分钱。
+        """
+        del params, query
+        from .. import readouts as RD
+
+        self._json(200, RD.errors_readout(self.root))
+
+    def handle_errors_categories(self, params: Mapping[str, str],
+                                 query: Mapping[str, Sequence[str]]) -> None:
+        """`GET /api/errors/categories`：错误类目 → 那一句含义（只读，源自 errorstats）。
+
+        这一条只为一件小事存在：点开某一行时，每格旁边的"这个类目指什么"要是同一句话。
+        那句话的真身在 `errorstats.ERROR_CATEGORIES`，网页这一层不许自己再写一份
+        （写两份就迟早说两种话，而两种话没有任何机器读数看得见）。
+
+        它没有三态：`ERROR_CATEGORIES` 是模块里的常量表，读不出来时进程在导入期就起不来，
+        不存在"这一份没读到"的形态。`source` 那一格写清真身在哪，免得有人以为它是盘上的数据。
+        """
+        del params, query
+        from .. import errorstats as ES
+
+        self._json(200, {"categories": [{"name": name, "meaning": why}
+                                        for name, why in ES.ERROR_CATEGORIES],
+                         "source": "agentflow.errorstats.ERROR_CATEGORIES"})
+
     def handle_run(self, params: Mapping[str, str],
                    query: Mapping[str, Sequence[str]]) -> None:
         """`GET /run/<sid>`：SPA 外壳（裁定 P1 的最后一块迁移，W5）。

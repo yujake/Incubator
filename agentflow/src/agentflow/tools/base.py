@@ -909,6 +909,8 @@ class ToolRegistry:
         `roles` 是手工声明的，而"哪些角色是只读的"是一条设计约束。靠"每个工具作者都记得不把 H 写进 roles"来维持这条约束是不成立的 ——实测就发生过：`table.*` / `fs.*` 把所有角色都写进了 `roles`，于是按角
         色装配出来的"审校者 H 的工具面"里出现了 `table.update`、`fs.write`：H 手里有能改 `documents.claims` 的刀，而"H 只读"正是"发现问题"与"掩盖问题"能被区分开的前提。
         所以这里做一件工具作者无法绕过的事：对 :data:`READ_ONLY_ROLES`，无论 spec 怎么声明，一律过滤掉（1）有写副作用的工具与（2）`external == "exec"` 的工具。
+        唯一的例外不是例外表，而是"通用能力"这第二根轴（业主 2026-10-24：「通用能力根本不该出现谁能用这个说法」）：登记在 `tools.UNIVERSAL_TOOLS` 的工具对只读角色照样发，不论它的 `side_effect` 是 `read` 还是 `write_local` —— 因为 `clock.timer_start` 据实就是 `write_local`（它写 `tasks` 的 notice 行与 `out/clock` 的状态），
+        而它仍然必须是所有人都能拿的通用工具。硬约束：通用工具的登记写集只许落在通信/簿记类表上，越界的那些不发给只读角色（见 :meth:`_role_surface`）。
         被过滤掉的名字记在 :attr:`role_filter_notes` 里 —— 之所以要留痕，是因为"某个工具本该给 H 却是写工具"是一个声明错误，静默过滤会让它永远发现不了（而"静默"正是本项目最忌讳的失败形态）。
         它与"可调用面"的关系（`P-14` 之后必须说清）`call` 的判据用的是可调用面：它还多出 :data:`READONLY_CALL_EXCEPTIONS` 里逐条登记的落库代理（今天只有 `H` 的三个 `review.*`）。两个集合
         刻意分开命名、分开产生：把代理混进工具面会让 `docs/ROLE-SPECS.md` §H.4 的条数与清单漂移，而把工具面收窄成"可调用面"会把 H 的落库能力一起砍掉。本方法的行为不因 `P-14` 改变任何一个字节。
@@ -959,24 +961,49 @@ class ToolRegistry:
         `filter_readonly` 只用来让 `call` 的离线检查构造一个"不剥离"的临时表
         （见 `_callable_for` 的注释）；两条判据本身逐字相同，不分叉。
 
+        2026-10-24（业主裁定「通用能力根本不该出现谁能用这个说法」）：只读角色的剥离
+        只对"某个角色的活"成立。登记在 `UNIVERSAL_TOOLS` 的工具是通用能力，不会因为
+        `side_effect` 是 `read` 还是 `write_local` 被剥掉 —— 可达性轴的判据是
+        "它写不写知识表"，不是"它写不写东西"。硬约束的两半都在这里：
+        登记写集越出 `BOOKKEEPING_TABLES` 的通用工具不发给只读角色（fail-closed 并留痕），
+        而登记本身越界在导入期就已经炸（`tools._check_universal_tools_are_registered`）。
+        为什么同一件事有两处判据：导入期那条挡"登记错"，这里挡"到了这儿仍然不许发"。
+        通用工具不进 `READONLY_CALL_EXCEPTIONS` —— 例外表回答的是"谁能用"，
+        而通用能力没有这个问题（`_check_universal_tools_are_registered()`
+        把"两边同时登记"判红）。
+
         业主 2026-10-22（「在Lean开关没开时隔绝L」）：由 Lean 开关决定存在性的角色在
         开关关着时不存在 ⇒ 两个面都是空的（工具面与可调用面）。判据读
         `leanscope`（唯一入口），这里不做第二份判断。
         """
         from .. import leanscope as _LEANSCOPE
-        from . import READ_ONLY_ROLES, SIDE_EFFECTS_WRITE  # 局部导入避免模块级循环
+        from . import BOOKKEEPING_TABLES, READ_ONLY_ROLES, SIDE_EFFECTS_WRITE, UNIVERSAL_TOOLS
 
         if _LEANSCOPE.is_hidden(role):
             return [], {}
 
         out: list[ToolSpec] = []
         refused: list[str] = []
+        refused_universal: list[str] = []
         allowed_by_sandbox: list[str] = []
         allowed_by_exception: list[str] = []
+        allowed_by_universal: list[str] = []
         for s in self._specs.values():
             if role not in s.roles:
                 continue
             if filter_readonly and role in READ_ONLY_ROLES:
+                # 2026-10-24（业主裁定「通用能力根本不该出现谁能用这个说法」）：
+                # 可达性轴与副作用轴分开。登记在 `UNIVERSAL_TOOLS` 的工具对只读角色
+                # 照样发 —— 判据不是它的副作用等级，而是它写不写知识表。
+                # 硬约束在这里（不是只在测试里）：登记的写集越出通信/簿记类表
+                # ⇒ 这件工具不发给只读角色（fail-closed），并留痕。否则"通用集合"
+                # 就成了"只读角色能改知识表"的后门。
+                _universal = UNIVERSAL_TOOLS.get(s.name)
+                if _universal is not None:
+                    _outside = sorted(set(_universal.tables) - set(BOOKKEEPING_TABLES))
+                    if _outside:
+                        refused_universal.append(s.name)
+                        continue
                 # 2026-10-17（业主裁定「方案 1」）：「该角色自己的落库代理放行」。
                 # 写面钉死在 `READONLY_CALL_EXCEPTIONS[role]` 那张逐条登记的表里
                 # —— 它不是"放宽只读"，而是"只读角色的写只允许这几个落点"。
@@ -984,6 +1011,8 @@ class ToolRegistry:
                 if s.side_effect in SIDE_EFFECTS_WRITE:
                     if s.name in _exempt:
                         allowed_by_exception.append(s.name)
+                    elif _universal is not None:
+                        allowed_by_universal.append(s.name)
                     else:
                         refused.append(s.name)
                         continue
@@ -1003,6 +1032,12 @@ class ToolRegistry:
                 "（这些工具的 roles 声明里包含了只读角色，属于声明错误；"
                 "行为上已被拦下，但声明本身应改）"
             )
+        if refused_universal:
+            notes.setdefault(role, []).append(
+                f"通用工具 {sorted(refused_universal)} 没有发给只读角色：它们登记的写集越出了"
+                f"通信/簿记类表 {sorted(BOOKKEEPING_TABLES)}（硬约束，fail-closed）"
+                "—— 通用能力只许写通信与簿记，写别的表说明它该是某个角色的工具"
+            )
         if allowed_by_sandbox:
             notes.setdefault(role, []).append(
                 f"沙箱已声明可用（SANDBOX_AVAILABLE=True），因此放行了 {len(allowed_by_sandbox)} 个 "
@@ -1013,6 +1048,12 @@ class ToolRegistry:
             notes.setdefault(role, []).append(
                 f"按业主裁定「方案 1」放行了 {len(allowed_by_exception)} 个**该角色自己的落库代理**："
                 f"{sorted(allowed_by_exception)}（写面钉死在 READONLY_CALL_EXCEPTIONS[{role!r}] 里）"
+            )
+        if allowed_by_universal:
+            notes.setdefault(role, []).append(
+                f"按通用能力放行了 {len(allowed_by_universal)} 件写工具：{sorted(allowed_by_universal)}"
+                f"（UNIVERSAL_TOOLS：通用能力不按角色分配，它们的写只落在通信/簿记类表 "
+                f"{sorted(BOOKKEEPING_TABLES)} 上；不靠 READONLY_CALL_EXCEPTIONS）"
             )
         if call_surface:
             # `call` 的判据与 `for_role` 的唯一差别：可调用面还包含逐条登记的落库代理。

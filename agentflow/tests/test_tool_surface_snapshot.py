@@ -122,12 +122,25 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
                 assert spec.params and spec.summary and spec.returns, (
                     f"{role} / {spec.name} 的声明缺字段 ⇒ 快照钉不住东西")
         for role in READ_ONLY_ROLES:
-            leaks = [s.name for s in reg.for_role(role) if s.side_effect in SIDE_EFFECTS_WRITE]
-            # 2026-10-17（业主裁定「方案 1」）：只读角色自己的落库代理是允许的
+            from agentflow.tools import UNIVERSAL_TOOLS
             from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
-            _ex = {n for n, _w in _EXC.get(role, ())}
-            leaks = [n for n in leaks if n not in _ex]
+
+            face = reg.for_role(role)
+            face_names = {s.name for s in face}
+            declared = {s.name for s in face if s.side_effect in SIDE_EFFECTS_WRITE}
+            # 允许面有两档，且都必须显式登记：
+            # 1. 2026-10-17（业主裁定「方案 1」）：只读角色自己的落库代理；
+            # 2. 2026-10-24（业主裁定「通用能力根本不该出现谁能用这个说法」）：通用能力 ——
+            #    `clock.timer_start` 据实是 `write_local`，而它对所有角色都可用。
+            #    它的硬约束（只许写通信/簿记类表）在工具层与
+            #    `tests/test_universal_tools_are_for_everyone.py` 里判。
+            _ex = {n for n, _w in _EXC.get(role, ())} | {
+                n for n in UNIVERSAL_TOOLS if n in face_names
+            }
+            leaks = sorted(declared - _ex)
             assert not leaks, f"只读角色 {role} 拿到写工具：{leaks}"
+            # 反真空：排除的那一档今天非空（否则这条断言被一张空名单掏空了）。
+            assert declared & _ex, f"{role} 的面上没有任何登记过的写工具 ⇒ 排除规则没在核东西"
         # 注入式那一层还活着：`roles=TOOL_ROLES` 时主控多拿到的正是 `fs.*` / `table.*`
         # （`fs_tools._effective_roles` 把装配时的角色集合注进声明）。
         # 两边一旦相等，说明那条注入路径没了 —— 那种"面悄悄变窄"不该无声无息地过去。

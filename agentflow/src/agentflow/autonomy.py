@@ -68,6 +68,7 @@ from typing import Any, Mapping
 
 from . import sessions as SS
 from . import stopctl
+from . import agent_loop as AL
 from .agent_loop import PUBLIC, LoopRun, run_role, send_message
 from .llmseam import LlmSeam
 
@@ -620,6 +621,43 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                          "它是一次性信号，之后即使文件被别人撤走也照停")
         return latched_stop
 
+    last_clock_wakes: list[dict[str, Any]] = []
+    clock_pump_note = ""
+
+    def _pump_and_read_clock() -> list[dict[str, Any]]:
+        """轮边界上的时钟推进 + 唤醒读数（D-53 的生产端与读口）。
+
+        两件事在这里合起来做，因为它们必须同刻：先 `fire_due`（到点的计时器落成
+        板项 + 唤醒标记），再读唤醒（否则这一轮读到的是"到点之前"的那份盘）。
+
+        三态：`fire_due` 的 `checked=False` 与 `read_wakes` 的 `checked=False` 都
+        不许折成"没有唤醒" —— 但它们也不许在这里多开一轮（那会烧钱）：
+        读数进 `notes`，放行判据照旧按"读到的条数"走（读不成 ⇒ 0 条 ⇒ 不开轮）。
+        """
+        nonlocal clock_pump_note
+        from . import agent_loop as AL
+
+        try:
+            from . import clock as CLK
+        except Exception as exc:  # noqa: BLE001 —— 时钟这一层读不到是"没查成"
+            clock_pump_note = f"时钟读不到（{type(exc).__name__}: {exc}）⇒ 这一格是 unknown"
+            return []
+        try:
+            fired = CLK.fire_due(root)
+        except Exception as exc:  # noqa: BLE001
+            clock_pump_note = f"时钟推不动（{type(exc).__name__}: {exc}）⇒ 到点项这一轮可能漏"
+        else:
+            got = list(fired.get("fired") or ())
+            clock_pump_note = (
+                f"轮边界推时钟：推响 {len(got)} 条（checked={fired.get('checked')}）"
+                if got or not fired.get("checked") else "")
+        AL_clock = AL.pending_clock_wakes(root, role=role)
+        if not AL_clock.get("checked"):
+            clock_pump_note = (clock_pump_note + "；" if clock_pump_note else "") + \
+                f"唤醒标记没读成（{AL_clock.get('reason')}）⇒ unknown"
+            return []
+        return [dict(e) for e in (AL_clock.get("events") or ())]
+
     def _stop_reason_for(next_index: int, last_stop_reason: str = "",
                          woke: int = 0) -> tuple[str, list[str], str]:
         """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道（返回 `(原因, 说明, 回答)`）。
@@ -647,6 +685,19 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
 
         wake = AL.pending_wake(root, role, sid=sid)
         wake_pending = int(wake.get("count") or 0) if wake.get("checked") else 0
+        # ---- D-53（业主 2026-10-24）：时钟唤醒也折进同一个 `wake_pending`。
+        #
+        # 改前这里只认"收件箱里还有没投递的留言" ⇒ 计时器到点（`clock.py` 落的
+        # 那条唤醒标记）在这一层看不见，"到点后时钟自动给 M 发消息检查"的后半段
+        # （M 真的拿到一个回合）结构上不会发生。
+        # 为什么按角色读而不是按台账号：每一轮 `run_role` 都会新开一行台账号，
+        # 上一轮起表时写下的 `task_id` 已经不是这一轮的编号（见 `pending_clock_wakes`）。
+        clock_wakes = _pump_and_read_clock()
+        if clock_pump_note and clock_pump_note not in answer_notes:
+            answer_notes.append(clock_pump_note)
+        nonlocal last_clock_wakes
+        last_clock_wakes = list(clock_wakes)
+        wake_pending += len(clock_wakes)
         reason = _stop_before_round(next_index, rounds=total_rounds, spent_usd=_spent_usd(),
                                     usd_budget=_round_budget(session_root, usd_budget),
                                     stop_path=stop_path,
@@ -749,8 +800,39 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         # S-G（裁定 15）：这一轮是不是"被唤醒多开的"（超过轮次预算 ⇒ 它必须是被唤醒开起来的，
         # 因为唯一的例外就是那条）。落进事件与读数，"为什么多跑了一轮"事后答得出来。
         woke = index > total_rounds
+        # ---- D-53：这一轮如果是"被唤醒多开的"，它就是监控回合。
+        #
+        # 三件事在这一处落定，顺序不能换：
+        # ① 消费掉那些唤醒标记（`consume_clock_wakes`）—— 只在"这一轮真的开跑"时消费，
+        #    判停那一刻只读不消费（否则一轮被预算/叫停拦下时，唤醒就凭空消失了）；
+        # ② 把唤醒理由作为 `monitoring_of` 交给 `run_role` —— 那一轮的第一条增量消息
+        #    因此带树形读数与出口限定（`agent_loop._monitor_block`）；
+        # ③ 计数（`woke_rounds`）与事件里的 `woke` 照旧（判据读的是同两个读数）。
+        monitoring_of = ""
         if woke:
             woke_rounds += 1
+            if last_clock_wakes:
+                taken = AL.consume_clock_wakes(root, last_clock_wakes)
+                for line in taken.get("problems") or ():
+                    notes.append(line)
+                consumed = list(taken.get("consumed") or ())
+                if consumed:
+                    monitoring_of = "；".join(
+                        f"{e.get('reason')}（{e.get('wake_id')}）" for e in consumed)
+                    _p, wake_problem = SS.append(root, {
+                        "kind": "autonomy_wake", "role": role, "round": index,
+                        "wake_ids": [str(e.get("wake_id") or "") for e in consumed],
+                        "reasons": [str(e.get("reason") or "") for e in consumed],
+                        "timer_ids": [str(e.get("timer_id") or "") for e in consumed],
+                        "mailbox_item_ids": [str(e.get("mailbox_item_id") or "")
+                                             for e in consumed],
+                    }, sid=sid)
+                    if wake_problem:
+                        notes.append(f"第 {index} 轮的唤醒消费没落成：{wake_problem}")
+            if not monitoring_of:
+                # 收件箱里那一条唤醒（S-G）也开的是"监控回合"：两类唤醒的区别只在触发源。
+                monitoring_of = "收件箱里有没投递的留言（S-G 的唤醒）"
+            notes.append(f"第 {index} 轮是监控回合：{monitoring_of}")
         if index == 1:
             # 第一轮也要带上用户的最新回答（"先答后跑"与"跑到一半答了"是同一件事：
             # 问答频道是跨轮的，不该只在第 N>1 轮才被读到）
@@ -765,7 +847,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                                 # 每一轮现读一次（追加预算在下一轮生效）：
                                 usd_budget=_round_budget(root, usd_budget),
                                 workspace_root=str(root), sid=sid, from_env=from_env,
-                                user_timeout_sec=user_timeout_sec)
+                                user_timeout_sec=user_timeout_sec,
+                                monitoring_of=monitoring_of)
         delta = _spend_delta(before, _spend_of(run.spend))
         for key in _COUNTER_KEYS:
             total[key] += delta[key]

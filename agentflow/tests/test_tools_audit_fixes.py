@@ -536,18 +536,31 @@ def test_side_effect_check_formal_declares_exec_and_needs_approval(store: Store)
 
 
 def test_side_effect_declarations_do_not_leak_write_tools_to_read_only_roles(store: Store):
-    """防误伤：改成 network/write_local 之后，只读角色 C/H 的工具面仍然没有任何写工具。"""
-    from agentflow.tools import READ_ONLY_ROLES, build_registry
+    """防误伤：改成 network/write_local 之后，只读角色 C/H 的工具面仍然没有任何写工具。
+
+    两档登记在案的例外（都不是"漏"）：
+    1. `READONLY_CALL_EXCEPTIONS`：只读角色自己的落库代理（2026-10-17 业主裁定「方案 1」）；
+    2. `UNIVERSAL_TOOLS`：通用能力（2026-10-24 业主裁定「通用能力根本不该出现谁能用这个说法」）。
+       它们据实是 `write_local`，所以 `needs_approval` 为真 —— 那是副作用轴的读数，
+       不是"漏给只读角色的刀"；可达性那条硬约束（只许写通信/簿记类表）由
+       `tests/test_universal_tools_are_for_everyone.py` 判。
+    """
+    from agentflow.tools import READ_ONLY_ROLES, UNIVERSAL_TOOLS, build_registry
 
     build = build_registry(store=store, workspace_root=store.root)
     assert build.registry.role_filter_notes == {}, "声明错了才会留痕；这里应当为空"
+    # 2026-10-17（业主裁定「方案 1」）：例外表里登记的落库代理不算漏
+    from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
+
+    _ex = {n for _ns in _EXC.values() for n, _w in _ns}
     for role in READ_ONLY_ROLES:
-        leaks = [s.name for s in build.registry.for_role(role) if s.needs_approval]
-        # 2026-10-17（业主裁定「方案 1」）：例外表里登记的落库代理不算漏
-        from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as _EXC
-        _ex = {n for _ns in _EXC.values() for n, _w in _ns}
-        leaks = [n for n in leaks if n not in _ex]
+        face = build.registry.for_role(role)
+        needs = [s.name for s in face if s.needs_approval]
+        universal = [n for n in needs if n not in _ex and n in UNIVERSAL_TOOLS]
+        leaks = [n for n in needs if n not in _ex and n not in UNIVERSAL_TOOLS]
         assert leaks == [], f"{role} 拿到了需要审批的工具：{leaks}"
+        # 正向：被剔掉的通用能力那几件真的在面上（否则这条排除会把判据掏空）。
+        assert universal, f"{role} 的面上一件通用写工具都没有 ⇒ 通用集合空了或排除规则失效"
 
 
 # ============================================================ P1-5 r-NNNN 分配器

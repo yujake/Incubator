@@ -29,6 +29,7 @@ import type {
   RosterInbox,
   RosterInboxItem,
   RosterNode,
+  RosterTask,
   RosterView,
   Tri,
 } from "./types";
@@ -167,6 +168,34 @@ function asInboxItems(value: unknown): RosterInboxItem[] {
   return out;
 }
 
+/** 这个子代理接过的那些活（`nodes[].tasks[]`；读不到就是空数组，不是"没干过活"）。 */
+function asTasks(value: unknown): RosterTask[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: RosterTask[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    const taskId = asText(item["task_id"]);
+    if (taskId === "") {
+      continue;
+    }
+    out.push({
+      task_id: taskId,
+      role: asText(item["role"]),
+      status: asText(item["status"]),
+      started_at: asText(item["started_at"]),
+      ended_at: asText(item["ended_at"]),
+      task_found: item["task_found"] === true,
+      brief: asText(item["brief"]),
+      detail: asText(item["detail"]),
+    });
+  }
+  return out;
+}
+
 /** 收件箱那一格：读不到就是"未读到"（三格都是 null），不是 0 条。 */
 function asInbox(value: unknown): RosterInbox {
   if (!isRecord(value)) {
@@ -224,7 +253,23 @@ function asNode(value: unknown): RosterNode | null {
     task_found: value["task_found"] === true,
     in_flight: asNumber(value["in_flight"]),
     inbox: asInbox(value["inbox"]),
+    tasks: asTasks(value["tasks"]),
   };
+}
+
+/** 一件活那一行的文字（业主 2026-10-24：「一个子代理后面可展开它管的任务号」）。
+ *
+ * 读不到的格子写"未读到"，不折成 0 / 空串冒充"没有"：这一行的用途是让人认出
+ * "这个子代理管过哪几件活、各是什么时候跑的、什么结局"，缺一格就少一格的可判性。
+ */
+export function taskLine(task: RosterTask): string {
+  const started = task.started_at === "" ? "开始未读到" : task.started_at;
+  const ended = task.ended_at === "" ? "结束未读到" : task.ended_at;
+  const status = task.status === "" ? "状态未读到" : task.status;
+  const tail = task.brief !== "" ? task.brief : task.detail;
+  const raw = `${started} → ${ended} · ${status}${tail === "" ? "" : ` · ${tail}`}`;
+  // 台账里没有它那一行 ⇒ 把那件事说出来（编号来自名册的调用记录，时间是空的）。
+  return task.task_found ? raw : `${raw}（台账里没有它这一行）`;
 }
 
 /** 没有 `children_of` 时：按每个节点自己的 `children` 拼，再按别人的 `parent_task_id` 补。 */

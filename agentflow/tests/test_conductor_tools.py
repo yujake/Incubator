@@ -22,7 +22,7 @@ from agentflow import capabilities as C
 from agentflow import projects as P
 from agentflow.conductor import Conductor
 from agentflow.store import Store
-from agentflow.tools import build_registry
+from agentflow.tools import UNIVERSAL_TOOLS, build_registry
 from agentflow.tools import conductor_tools as CT
 
 #: M 的完整工具面（`draft/37` §38 的用户裁定 + §57 追加 `fs.edit`）：
@@ -52,6 +52,18 @@ M_TOOL_FACE = {
     # 追几层"的那一半，`conductor.guide` 是"看完之后把指导意见沿树传下来"的那一半。
     # 一层那一半在 `trace.children`（A–H 都有，M 不需要）。
     "conductor.watch", "conductor.guide",
+    # 销号（D-59，业主 2026-10-26：「销号的发起在父代理，销号的实际动作在秘书侧」）：
+    # 父代理侧唯一的发起入口。它落在编排面而不是文件面 —— 改的是名册/台账的编排状态。
+    "conductor.retire_child",
+    # 消项（D-68，业主 2026-10-26：「就做手，不兜底」）：收件人自己把名下板项确认掉。
+    # M 也是某一行的收件人（它的父是用户那一趟），所以它同样得拿到这只手。
+    "conductor.ack",
+    # 时钟五件（D-53，业主「把时钟做成系统原生工具」）：`clock_tools` 的 `roles` 是
+    # "全部角色 + 主控"，所以 M 的面里本来就有这五件 —— 这一格在 D-53 落地那一批里
+    # 漏登记了（盘上实测：M 的面有它们、这个集合里没有 ⇒ 相等断言当场红）。
+    # 这里补的是声明，不是行为：五件早就在 M 的面上了。
+    "clock.now", "clock.timer_start", "clock.alarm_start", "clock.timer_list",
+    "clock.timer_cancel",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 13 件）；留给"编排面本身"的判据用。
@@ -66,6 +78,14 @@ M_TOOL_FACE = {
 #: 仍然一件都不许出现在只读角色面上，另加一条正控钉住"只读角色必须拿到 escalate"。
 ORCHESTRATION_TOOLS = {n for n in M_TOOL_FACE if n.startswith("conductor.")} - {
     "conductor.escalate"}
+#: 2026-10-26（D-68）：通用能力不算编排权。
+#:
+#: 上面那张表守的是"谁能指挥谁、谁能停谁、谁能收工"。`conductor.ack` 是收件人自己
+#: 确认名下板项的那只手 —— 与 `escalate` 同一族（它不是编排权，是每一行都有的簿记），
+#: 已登记进 `tools.UNIVERSAL_TOOLS`（硬约束的判据在
+#: `tests/test_universal_tools_are_for_everyone.py`）。所以这里按同一份受控集合减掉，
+#: 而不是再手写一份名单 —— 手写的话，下一个通用工具落地时这条判据会假红一次。
+ORCHESTRATION_TOOLS -= set(UNIVERSAL_TOOLS)
 
 
 class _FakeE:
@@ -323,7 +343,10 @@ def test_the_closing_tool_advertises_every_gate_cell(tmp_path: Path):
 
 
 def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
-    """M 拿到的正好是 `M_TOOL_FACE`（编排面 12 + 文件面白名单 6）；只读角色拿不到编排面工具。
+    """M 拿到的正好是 `M_TOOL_FACE`（编排面 `conductor.*` + 文件面白名单 6）；只读角色拿不到编排面工具。
+
+    `M_TOOL_FACE` 是相等断言，所以它自己就是"编排面有几件"的权威读数（不在 docstring 里
+    再抄一个会过期的数字：这里原先写着"编排面 12"，而实际早就不是 12 了）。
 
     这条判据改过两次：2026-10-02 按用户裁定（`draft/37` §38）从"只有 `conductor.*`"
     变成"`conductor.*` + 文件面白名单五件"；2026-10-03 按 §57 的裁定再加一件 `fs.edit`
@@ -332,6 +355,8 @@ def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
     没有它们，而这里的断言是相等，所以多一件就会红）。
     2026-10-08 晚第三次：按业主裁 A1=甲/T16 加 `conductor.board`（板是编排面的读数；
     A–H 看板走 `manuscripts.items`，那一半不进 M 的面）。
+    2026-10-26（D-59）：加 `conductor.retire_child` —— 销号是编排动作（改名册与台账的
+    编排状态），不是文件面的写。
     """
     _store, _c, reg = _wired(tmp_path)
     assert {s.name for s in reg.for_role("M")} == M_TOOL_FACE
@@ -724,17 +749,33 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
     text = AP.faculties_text("M", reg)
     hand_line = next((ln for ln in text.splitlines() if "手＝" in ln), "")
     assert hand_line, f"次要官能那一行里没有'手'：{text[-300:]}"
-    for name in ("conductor.summon", "conductor.summon_many", "fs.write", "fs.edit"):
+    # 这一行点名的件数必须等于"真写工具"的件数。期望值从工具面现算
+    # （`faculties_text` 用的就是 `side_effect != "read"` 这条谓词），不写死数字：
+    # 写死的那一版在每次加/减一件写工具时都会红成"改测试"，而它真正要守的
+    # 是"计数与集合大小同源"。
+    writes = sorted(s.name for s in reg.for_role("M")
+                    if str(getattr(s, "side_effect", "read")) != "read")
+    for name in ("conductor.summon", "conductor.summon_many"):
         assert name in hand_line, (name, hand_line)
+    # `fs.write` / `fs.edit` 是这一档里排在 `fs.*` 的那几件：件数涨上来之后
+    # 它们会被 `_names` 的截断上限吃掉（2026-10-26 加 `conductor.ack` 之后
+    # `fs.edit` 就被省略号吃了 —— 那一行只是展示，不是判据）。所以"它在不在
+    # 写工具集合里"才是判据，见下面这两条。
+    assert "fs.write" in writes, writes
+    assert "fs.edit" in writes, writes
     for name in ("table.create", "table.update", "doc.build_document",
                  "fs.delete", "fs.move"):
         assert name not in hand_line, (name, hand_line)
-    # S6-b：广播是写工具（开板项）⇒ 它也进"手"那一档的清单 ⇒ 计数从 7 涨到 8。
+    assert name not in writes, (name, writes)
+    # S6-b：广播是写工具（开板项）⇒ 它也进"手"那一档的清单。
     assert "conductor.broadcast" in hand_line, hand_line
-    # 2026-10-24：`conductor.guide` 同样是写工具（给目标与各级父各开一条板项）
-    # ⇒ 计数 8 涨到 9。判据不变：这一行点名的件数必须等于真写工具的件数。
+    # 2026-10-24：`conductor.guide` 同样是写工具（给目标与各级父各开一条板项）。
     assert "conductor.guide" in hand_line, hand_line
-    assert "可改 9 件" in hand_line, hand_line
+    # 2026-10-26（D-59）：`conductor.retire_child` 也是写工具（落名册三份台账 + 一条消边）。
+    assert "conductor.retire_child" in hand_line, hand_line
+    # 2026-10-26（D-68）：`conductor.ack` 同样是写工具（改 `tasks` 的 item_state + 一条事件）。
+    assert "conductor.ack" in hand_line, hand_line
+    assert f"可改 {len(writes)} 件" in hand_line, hand_line
 
 
 def test_state_and_role_spec_are_read_only_views(tmp_path: Path):

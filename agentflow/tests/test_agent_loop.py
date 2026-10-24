@@ -32,6 +32,7 @@ from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from _d68_board_fixture import children_clean_their_boards  # noqa: E402 - D-68 夹具助手（替身角色不会自己 ack，见该模块 docstring）
 
 #: 由模型驱动的动作（其余动作仍走 Python 实现）。用真实的动作名，走真实的闸门。
 LOOPS: dict[tuple[str, str], dict[str, Any]] = {
@@ -90,6 +91,7 @@ def _wired(tmp_path: pathlib.Path, scripts: dict[str, list[str]], *,
     backend = LlmBackend(inner=inner, loops=LOOPS, session_root=tmp_path / "ws",
                          seam_factory=seam_factory, max_steps=max_steps, store=st, sid="test-run")
     cond = Conductor(st, policy=None, backend=backend)
+    children_clean_their_boards(cond)
     backend.conductor = cond
     built = build_registry(store=st, conductor=cond)
     backend.registry = built.registry
@@ -206,6 +208,11 @@ def test_a_flat_summon_written_as_text_still_runs(tmp_path: pathlib.Path):
                           "task": "列一遍实验台账",
                           "why": "扁平形态：直接写了 framework_summon 的实参"},
                          ensure_ascii=False),
+              # D-68（业主 2026-10-26）：「最终 final 时应该是 M 下整棵树都已销号，
+              # 否则不记 final」⇒ 收工之前先把这一支销掉（级联会带走它名下的子树）。
+              json.dumps({"tool": "conductor.retire_child",
+                          "args": {"child_name": "E1", "reason": "收口前先销号"}},
+                         ensure_ascii=False),
               json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)],
     }
     st, cond, registry, _gw, root = _wired(tmp_path, scripts, max_steps=4)
@@ -215,7 +222,7 @@ def test_a_flat_summon_written_as_text_still_runs(tmp_path: pathlib.Path):
                    from_env=False)
 
     assert run.stop_reason == "final", run.to_dict()
-    assert [s.shape for s in run.steps] == ["summon", "final"], run.to_dict()
+    assert [s.shape for s in run.steps] == ["summon", "tool", "final"], run.to_dict()
     assert run.steps[0].payload["shape_alias"] == "role", run.steps[0].payload
     # 旧期望把尝试当成功（2026-10-22 查实）：这一份剧本原来不带 `task`，而
     # 2026-10-16 起派活契约就是 `task` 必填 ⇒ `_do_summon` 当场拒绝（"派活必须写清
@@ -232,6 +239,10 @@ def test_model_decides_the_chain_and_the_ledger_records_each_hop(tmp_path: pathl
         "M": [json.dumps({"summon": {"role": "D", "task": "consider",
                                      "params": {"qid": "q-0001"},
                                      "why": "先要一个结论"}}, ensure_ascii=False),
+              # D-68（业主 2026-10-26）：收工前先把这一支销号（级联带走 D 名下的 E）。
+              json.dumps({"tool": "conductor.retire_child",
+                          "args": {"child_name": "D1", "reason": "收口前先销号"}},
+                         ensure_ascii=False),
               json.dumps({"final": "链已跑通", "evidence": []}, ensure_ascii=False)],
         "D": [json.dumps({"summon": {"role": "E", "task": "run_experiment",
                                      "params": {"claim": "n=3 的检查支持它",
@@ -852,8 +863,11 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
     # 替换顺序要紧：`{...}` 必须先变成 `{}`，否则 `...` → `x` 会把它改成 `{x}`（非法 JSON）。
     # 占位符表要与 `JSON_TAIL` 同源：骨架里每出现一个新的 `<...>`，这里要么补一条替换、
     # 要么那条骨架就解析不过（§195 的原意——文档不许比解析器松）。
+    #
+    # 2026-10-25（审计 G/H/V/L 第 9 条）：骨架里的 summon 改成「role=<伙伴表里的角色名> +
+    # task」之后，`<动作名>` / `A-H` 两条替换没有对象了，换掉它们的是 `role` / `task` 那两条。
     fixed = (JSON_TAIL.replace("{...}", "{}").replace("<工具名>", "table.list")
-             .replace("<动作名>", "review").replace("A-H", "H")
+             .replace("<伙伴表里的角色名>", "A").replace("<一件可判定的活>", "把这一条走一遍")
              .replace("<伙伴或 #public>", "#public").replace("<结论>", "做完了")
              .replace("<伙伴/M/ALL>", "A").replace("<markdown 正文>", "正文")
              .replace("<前面的编号>", "0000")

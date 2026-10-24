@@ -602,6 +602,29 @@ class _RegisterStatement:
             "proofs_refused": str(attach.get("refused") or ""),
         }
 
+    def _write_attached_proof_deps(self, sec: Any, stmt_id: str, entries: list[dict],
+                                   attach: Mapping) -> dict:
+        """把这一笔真挂上去的那几份证明的依赖落成 `used_by="stmt:#pN"`。
+
+        为什么落在这一格：`_attach_proofs` 只写 `statements`（B 的写集里没有
+        `dependencies`，那两张表由秘书代写）。第 2 份及以后的证明正文因此原先根本不进
+        引用扫描 —— 挂上去了，它们引用的东西一条都不在依赖图里，而返回值里也没有任何
+        一格说这件事。这里把"刚挂上的那几份"交给秘书的同一个写口
+        （`Secretary.record_proof_deps`）补写，读数原样回给调用方。
+
+        只补这一笔真挂上去的（`attach["attached"]`）：已经在册的那几份不重复扫，
+        否则同一条依赖会被写第二遍（`dependencies` 是追加式，一次调用一条）。
+        """
+        attached = {int(n) for n in (attach.get("attached") or [])}
+        want = [dict(e) for e in entries if int(e.get("proof_no") or 0) in attached]
+        if not want or sec is None or not str(stmt_id or "").strip():
+            return {}
+        try:
+            return dict(sec.record_proof_deps(str(stmt_id), want))
+        except Exception as exc:  # noqa: BLE001 —— 补写失败要说出来，不许当成写过了
+            return {"checked": False, "stmt_id": str(stmt_id),
+                    "reason": f"{type(exc).__name__}: {exc}"}
+
     # ------------------------------------------------------------ D1：写侧真比对
     def _quote_doc(self, lit_id: str) -> tuple[object | None, str]:
         """把 `source_lit_id` 那一篇重新打开当可比对的文档 ⇒ `(doc, 取不到的理由)`。
@@ -1118,6 +1141,8 @@ class _RegisterStatement:
                    "proof_no": proof_no,
                    "duplicate_reading": bool(written.get("duplicate")),
                    "row": dict(written.get("row") or {}),
+                   #: 秘书那一笔把依赖面建起来没有（三态；见 `_deps_missing_reading`）。
+                   "deps_missing": dict(written.get("deps_missing") or {}),
                    "note": str(written.get("reason") or "")}
             if proof_no >= 1:
                 out["proofs"] = [{"proof_no": proof_no}]
@@ -1172,6 +1197,8 @@ class _RegisterStatement:
                    "quote_mode": str(quote_mode or ""),
                    "evidence_kind": evidence_kind, "upgraded": True,
                    "row": dict(written.get("row") or {}),
+                   #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
+                   "deps_missing": dict(written.get("deps_missing") or {}),
                    "changes": list(written.get("changes") or []),
                    "note": ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
@@ -1179,6 +1206,9 @@ class _RegisterStatement:
                             "内容面一个字没动；要改内容请另起一条（force_new）并写清为什么。")}
             if proofs_listed:
                 out.update(self._proofs_reading(attach))
+                pd = self._write_attached_proof_deps(sec, stmt_now, proofs_listed, attach)
+                if pd:
+                    out["proof_deps"] = pd
             if attach.get("canonical_written"):
                 out["canonical_written"] = True
                 out["canonical_history"] = list(attach.get("canonical_history") or [])
@@ -1229,6 +1259,8 @@ class _RegisterStatement:
                        "quote_verified": quote_verified, "origin": origin,
                        "quote_mode": str(quote_mode or ""),
                        "evidence_kind": evidence_kind, "new_row": False,
+                       #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
+                       "deps_missing": dict(written.get("deps_missing") or {}),
                        "note": ("这一条没有新建行（同一条命题已在册）。")}
                 if attach.get("canonical_written"):
                     out["canonical_written"] = True
@@ -1260,6 +1292,13 @@ class _RegisterStatement:
                         f"`kind` 也跟着证据升了：{trace.get('from') or '（空）'} → "
                         f"{trace.get('to')}（依据：{trace.get('basis') or ''}）。")
                 out.update(self._proofs_reading(attach))
+                if proofs_listed:
+                    # 刚挂上去的那几份证明的依赖面：不补这一笔，它们引用的东西一条都
+                    # 不进依赖图（返回里也读不到），而"这条定理有几条不同的证明路径"
+                    # 在依赖面上就永远只有 #p1 一条。
+                    pd = self._write_attached_proof_deps(sec, stmt_dup, proofs_listed, attach)
+                    if pd:
+                        out["proof_deps"] = pd
                 return out
             if proofs_listed and not attach.get("already"):
                 return _refuse("proofs_not_attached",
@@ -1302,6 +1341,9 @@ class _RegisterStatement:
         if attach.get("written"):
             data = next((dict(r) for r in self.store.rows("statements")
                          if str(r.get("stmt_id") or "") == stmt_id), data)
+        #: 刚挂上去的那几份证明（#p2 及以后）的依赖面：秘书那一条正路只扫 `proof_text`
+        #: （#p1），这里把它补上 —— 一行都没有补的时候返回空字典（老返回值逐字不变）。
+        proof_deps = self._write_attached_proof_deps(sec, stmt_id, proofs_listed, attach)
         #: note 里报的那一档等级以盘上那一行为准：这一笔可能把第 4 位（形式化，二维）
         #: 同步进去了，而 `bits` 是同步之前算的。
         written_grade = str(bits.get("grade") or "")
@@ -1331,6 +1373,10 @@ class _RegisterStatement:
                 "deps_written": int(written.get("deps_written") or 0),
                 "deps_dangling": list(written.get("deps_dangling") or []),
                 "deps_unmappable": list(written.get("deps_unmappable") or []),
+                #: 依赖面建起来没有（三态）：带证明正文而一条依赖都没落 ⇒ `state=missing`
+                #: （改前这件事只活在 `deps_written=0` 里，没有任何一格会因此变红 ——
+                #: 真机 sylow3 七条命题、依赖全表 0 行，就是静默过去的）。
+                "deps_missing": dict(written.get("deps_missing") or {}),
                 "pending_definitions": pending_defs,
                 #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
                 #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为
@@ -1343,6 +1389,9 @@ class _RegisterStatement:
                 #: 的返回值因此与今天逐字相同。
                 **({"proofs": [{"proof_no": int(e["proof_no"])} for e in proofs_listed]}
                    if proofs_listed else {}),
+                #: 第 2 份及以后那几份证明的依赖面（刚挂上去的那几份才扫）：只在真写了
+                #: 这一格时出现 —— 老写法的返回值逐字不变。
+                **({"proof_deps": dict(proof_deps)} if proof_deps else {}),
                 #: canonical 正文在"新建行"这一支上被 `_attach_proofs` 覆盖时（少见：
                 #: 秘书落下的 `proof_text` 与这一笔交来的不同），旧正文的留痕也一并给出来。
                 **({"canonical_written": True,

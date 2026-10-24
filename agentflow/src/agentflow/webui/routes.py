@@ -107,6 +107,13 @@ _OWN: tuple[tuple[str, str, str], ...] = (
     # 的理由逐字写在它的 docstring 里）。它是一条自有端点，不是 B 线六个面里的一个：
     # 六个面读的是"盘上的事实"，这一条读的是"一条派生数据是否还与源一致"。
     ("GET", "/api/run-index", "handle_run_index"),
+    # 错误动作计数那一栏（业主 2026-10-24「ui侧加一个大栏专门显示各角色错误动作计数」）：
+    # 两条都只读。第一条回 `readouts.errors_readout(root)` 逐字（五个键，口径全在
+    # `errorstats`），第二条回类目含义那几句（真身是 `errorstats.ERROR_CATEGORIES`，
+    # 网页那一层不许自己再写一份释义）。两条的处理都在 `WebHandler` 上，与
+    # `handle_run_index` 同一档：只读盘、不花钱、不需要写权限。
+    ("GET", "/api/errors", "handle_errors"),
+    ("GET", "/api/errors/categories", "handle_errors_categories"),
     # --- 静态资源（前端构建产物：裁定 B1 的落点）
     ("GET", "/static/{file...}", "handle_static"),
 )

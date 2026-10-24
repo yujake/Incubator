@@ -70,12 +70,19 @@ COST_DATA_KEYS: tuple[str, ...] = ("by_role", "by_scope", "total")
 #: `gates_readout` 的 `data` 键集。
 GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "can_close", "verdict")
 
+#: `roster_readout` 的 `data` 键集。两个读数的键名与 `conductor` 的
+#: `CHILD_COUNT_KEY` / `ACTIVE_CHILD_COUNT_KEY` 逐字一致（同一份口径不许两套键名）。
+ROSTER_DATA_KEYS: tuple[str, ...] = (
+    "owner", "child_count", "active_child_count", "labels", "waiting_only",
+    "unjudged", "complete", "by_owner", "note")
+
 #: 读数名 → 它的 `data` 键集。判据从这一张表取期望值（不在测试里手抄第二份）。
 READOUT_DATA_KEYS: dict[str, tuple[str, ...]] = {
     "errors": ERRORS_DATA_KEYS,
     "flow": FLOW_DATA_KEYS,
     "cost": COST_DATA_KEYS,
     "gates": GATES_DATA_KEYS,
+    "roster": ROSTER_DATA_KEYS,
 }
 
 #: `stats all` 那一档的 `data` 键集（就是四条读数的名字，顺序即呈现顺序）。
@@ -482,9 +489,74 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     return _envelope(checked=True, reason="", data=data, problems=problems)
 
 
+# ---------------------------------------------------------------- 五、名册两个读数
+
+
+def roster_readout(target: Any) -> dict[str, Any]:
+    """名册的两个读数：子代理数 / 活跃子代理数（只读，零模型调用）。
+
+    ## 为什么必须分成两格（业主 2026-10-26 的原话）
+    「未销号的子代理数叫子代理数，工作未做完还在做的子代理数叫活跃子代理数」。
+    所以：
+    - `child_count`（子代理数）= 名册里未销号的名册项数；
+    - `active_child_count`（活跃子代理数）= 其中"工作没做完还在做"的数量，口径是
+      `active(node) = 自身有未收口的任务 or 任一直接子 active`（"在等"也算活跃）。
+    两个数不许相加、不许互相代替：前者说"还有几个名字在用"，后者说"其中几个还在干活"。
+    折成一个数之后，"名册只增不减"与"活都干完了"会长得一模一样 —— 而这两件事该做的
+    下一步正好相反（前者要销号，后者不用）。
+
+    ## 口径只有一处
+    计算全在 `secretary.Secretary.child_counts`（名册折叠 + `Conductor.activity_snapshot`），
+    本函数只做两件事：把工作区打开成 `Store`、把那份读数装进统一外层。这里再算一遍就是
+    "同一读数两个主人"（本模块开头第 1 条坏形态）。
+
+    ## 三态与"判不了"
+    名册目录 / 台账读不成 ⇒ `checked=False` 且两个数都是 `None`（不是 0：0 是"名册空了"
+    这个很强的结论）。名册里有一项读得出来、但台账里没有它那一行（活跃判不了）时
+    `checked` 仍为 True，而 `complete=False` 且 `unjudged` 逐条点名 —— 把"判不了"
+    与"判过了"折成一格就是本模块开头第 2 条坏形态。
+    """
+    from .conductor import CHILD_COUNT_LABELS
+    from .secretary import Secretary
+
+    root, store = ES._resolve_target(target)
+    blank: dict[str, Any] = {k: None for k in ROSTER_DATA_KEYS}
+    blank.update({"labels": dict(CHILD_COUNT_LABELS), "waiting_only": [],
+                  "unjudged": [], "complete": False, "by_owner": {}, "note": ""})
+    if store is None:
+        # 与 `_read_table` 同一条口径：给的是路径时自己打开工作区（不写、不 init）。
+        if not isinstance(root, Path) or not root.is_dir():
+            return _unknown(f"工作区不存在：{root}", blank)
+        if not (root / "data").is_dir():
+            return _unknown(f"没有 data/ 目录（这个目录不是工作区）：{root}", blank)
+        try:
+            from .store import Store
+
+            store = Store(root)
+        except Exception as e:  # noqa: BLE001 —— 打不开工作区 ⇒ 没查成
+            return _unknown(f"打开工作区失败（{type(e).__name__}: {e}）", blank)
+    try:
+        got = Secretary(S.CONDUCTOR_ROLE, root=root, store=store).child_counts()
+    except Exception as e:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
+        return _unknown(f"名册读数没跑成（{type(e).__name__}: {e}）", blank)
+    if not isinstance(got, Mapping):
+        return _unknown("名册读数不是对象 ⇒ 没查成", blank)
+    data: dict[str, Any] = {k: got.get(k) for k in ROSTER_DATA_KEYS}
+    data["labels"] = dict(got.get("labels") or CHILD_COUNT_LABELS)
+    problems = [_problem("unjudged", str(x.get("why") or "有一项判不了活跃"))
+                for x in (got.get("unjudged") or [])]
+    if not got.get("checked"):
+        return _unknown(str(got.get("reason") or "名册读数没查成"), data)
+    return _envelope(checked=True, reason="", data=data, problems=problems)
+
+
 #: 读数名 → 实现。`agentflow stats <名>` 与将来的网页都从这一张表取。
 READOUTS = {"errors": errors_readout, "flow": flow_readout,
-            "cost": cost_readout, "gates": gates_readout}
+            "cost": cost_readout, "gates": gates_readout,
+            # 名册两个读数（业主 2026-10-26）。它不在 `agentflow stats` 的四条里
+            # （那条 CLI 的读数清单在 `cli.STATS_KINDS`，本轮不动它），但它是同一层
+            # 同一形状的读数：`agentflow status-report` 与将来的网页从这里取。
+            "roster": roster_readout}
 
 
 # ---------------------------------------------------------------- 人读的呈现
@@ -621,6 +693,33 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
                              f"依据={verdict.get('basis') or '（没写）'}")
             else:
                 lines.append("M 的判据：没有人判过（这一格是 unknown，不是『通过』）")
+    elif kind == "roster":
+        labels = dict(data.get("labels") or {})
+        lines += ["",
+                  f"两个读数（分开命名，不许相加）："
+                  f"{labels.get('child_count') or '子代理数'}="
+                  f"{data.get('child_count')}，"
+                  f"{labels.get('active_child_count') or '活跃子代理数'}="
+                  f"{data.get('active_child_count')}"]
+        if data.get("note"):
+            lines.append(f"  {data['note']}")
+        owners = data.get("by_owner") or {}
+        if not owners:
+            lines += ["", "按父分栏：（没有名册）" if readout.get("checked")
+                      else "按父分栏：（没查成，无读数）"]
+        else:
+            head = ["父（绝对编号）", "子代理数", "活跃子代理数"]
+            rows = [[own, str(v.get("child_count", 0)),
+                     str(v.get("active_child_count", 0))]
+                    for own, v in owners.items()]
+            lines += ["", *_table(head, rows)]
+        waiting = data.get("waiting_only") or []
+        lines += ["", f"靠等下级才活跃的（病态形状，不是错）：{len(waiting)} 个"]
+        lines += [f"  {w.get('name')}（{w.get('task_id')}）：{w.get('note')}"
+                  for w in waiting]
+        if data.get("complete") is False:
+            lines.append("这一格不完整：有项判不了活跃（见下面 problems），"
+                         "活跃子代理数只数了判得了的那些。")
     else:  # pragma: no cover - 读数名只由 READOUTS 产生
         lines.append(f"（没有这个读数：{kind}）")
     lines += _problems_block(readout)

@@ -47,15 +47,42 @@
 - `sessions/*.jsonl`：
   - `llm_call` 的 `problem`（判据层的 `judge_bad_json` / `judge_bad_args` /
     `judge_no_reply:*` / `judge_failed:*`）；
-  - `agent_step` 的 `result.error` 与 `result.warn`（工具层与收工门的拒信原话；`warn` 里
-    那句"条调用，已按顺序逐条…"就是拆分口径的读数 —— 一个多调用步记 1，
-    判据 `tests/test_multi_call_is_split_and_executed.py`）；
-  - `agent_step_call` 的逐条记录（`stepdispatch` 拆分出来的每一条调用一条；真的执行了的那几条
-    记进 `multi_call_executed_calls` —— 它是"拆出来的调用条数"，不是"被丢弃的条数"）；
+  - `agent_step` 的 `result.error` 与 `result.warn`（工具层与收工门的拒信原话）；
+    多调用那一族不从这里数（理由见下面"拆分是能力"那一段）；
+  - `agent_step_call` 的逐条记录（`stepdispatch` 拆分出来的每一条调用一条）：执行了的
+    进过程读数 `multi_call_executed_calls`，没执行的按它自己的结局原话进三个真失败类目；
   - `agent_message` 的 `subject`（`请代唤` = 越权被拒之后的转投）。
   刻意不读 `payload`：那是模型自己写的原话，"提到一个码"不等于"撞上那个码"。
   也刻意不读 `runs/*.json`：它与 `agent_step` 是同一批步的两份落盘，两份都读会把同一步
   算两次（真机核查：`runs/B-*.json` 与 `sessions/*.jsonl` 的 `agent_step` 逐条对应）。
+
+## 拆分是能力，不是错（D-65，业主逐字「修，且不再认为 multi_call 有问题」）
+
+一步给多条调用是正常能力：`stepdispatch` 把它整包接住、按原顺序拆成条目、逐条执行与记账。
+所以"这一步被拆开逐条执行了"这件事不是错误动作，它是"系统在按设计工作"的证据 ——
+把它算进错误总数，等于把正常行为记成错误（真机 `projects/sylow3`：38 个这种步 + 84 条拆出来的
+调用，一度贡献了错误总数的八成）。
+
+因此类目分成两张表，`by_role` / `role_total` / `total` 只数错误那一张：
+
+- `ERROR_CATEGORIES`（错误，计入 `total`）：多调用这一族只留三档真失败——
+  `multi_call_discarded`（拆的时候这一条解码不出来 ⇒ 丢了，少做一条）/
+  `multi_call_unexecuted`（拆出来了、这一趟没执行成）/ `multi_call_out_of_limit`
+  （超上限：这一趟还剩的步数/花销不够，那几条没执行）。三档全 0 才是绿。
+- `PROCESS_CATEGORIES`（过程读数，单独一栏、不计错）：`steps_split`（被拆分的步数）与
+  `multi_call_executed_calls`（拆出来并真的执行了的调用条数）。
+
+两处读数各有唯一来源，都不读"步的那段文字"：`steps_split` 取 `result` 里的结构字段
+`multi_call`（取 `call_index == 0` 的那一条 ⇒ 一步正好一次），逐条结局取 `agent_step_call`
+记录。为什么不扫 `warn` 里那句"这一步给了 N 条调用，已按顺序逐条"：
+1. 那句话只挂在回合最后一条上，而最后一条解码不出时 `agent_loop._record_undecodable_item`
+   根本不挂汇总 ⇒ 按文案数会漏掉那些步；
+2. 那句话与"最后一条被拒"的错误原话同处一段文字，主码规则会让错误赢 ⇒ "被拆分的步数"少记；
+3. 汇总本身是拿每一条的 `line` 拼出来的（`stepdispatch.StepDispatch.summary`），
+   于是"因预算未执行"这类逐条结局原话又出现在步的 `warn` 里 —— 按文案再数一遍就是同一件事数两次。
+
+判据 `tests/test_multi_call_is_a_capability_not_an_error.py` 把上面每一条都钉住
+（含"改前红"与"把拆分打桩成没拆分 ⇒ 必红"的反真空）。
 
 ## 码 → 类目这张表从哪来
 
@@ -77,6 +104,11 @@ from . import schema as S
 UNKNOWN_ROLE = "（未记角色）"
 
 #: 类目表（顺序即优先级：主码同长时按它取）。每类一行含义，逐类来自仓库里真实存在的拒绝形态。
+#:
+#: 这一张表就是"错误动作"的全部类目：只有这张表里的类目会进 `by_role` / `role_total` /
+#: `total`。多调用那一族（拆分）不在这里 —— 拆分是正常能力，它的读数在
+#: `PROCESS_CATEGORIES` 里；它真正的三档失败才是下面那三行（口径见模块 docstring
+#: "拆分是能力，不是错"）。
 ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("forbidden_edge",
      "越权/禁边：这条召唤边不在 ALLOWED_EDGES 里（含 Lean 关着时的隐藏角色、不可召唤的主控）"),
@@ -111,10 +143,15 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
      "判据层：没拿到可用的回复（超时 / 输出预算被思考吃光 / judge_no_reply:<kind>）"),
     ("judge_failed",
      "判据层：判据本身失败（judge_failed:<kind>，如网络断；不是模型的错，但要看得见）"),
-    ("multi_call",
-     "多调用步：模型一步给了 2 条及以上工具调用、被接住层拆开逐条执行（记步数，不记被丢条数）"),
-    ("multi_call_executed_calls",
-     "拆分执行：多调用步里拆出来的、真的执行了的调用条数（一条一条记；未执行的不计）"),
+    ("multi_call_discarded",
+     "拆分丢弃：一步给的多条调用里、这一条在拆的时候就解码不出来 ⇒ 它被丢掉，"
+     "真的少做了一条（这是失败；步被拆开不是失败）"),
+    ("multi_call_unexecuted",
+     "拆分未执行：拆出来的这一条这一趟没执行成（本回合已收工）⇒ 真的少做了一条"
+     "（这是失败；步被拆开不是失败）"),
+    ("multi_call_out_of_limit",
+     "拆分超上限：拆出来的条目超过了这一趟还剩的步数/花销上限（stepdispatch 的 budget "
+     "那一档）⇒ 那几条没执行（这是失败；步被拆开不是失败）"),
     ("unreadable",
      "读不明白：台账/回执/上下文图读不出来或解析失败（不许读成 0 的那一档）"),
     ("closing_blocked",
@@ -124,6 +161,37 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("relay_after_refusal",
      "流程层：被禁边拒掉之后发起的代唤请示（转投，不是重试同一条边）"),
 )
+
+#: 过程读数类目：这些数说的是"系统在做什么"，不是"哪里做错了"，所以不进
+#: `total` / `role_total` / `by_role`（业主 D-65：「修，且不再认为 multi_call 有问题」）。
+#: 呈现时它们单独一栏、用中性/正向的说法（`render_text` 的"拆分读数"那一段）。
+PROCESS_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("steps_split",
+     "被拆分的步数：模型一步给了 2 条及以上调用、被接住层接住并拆开逐条执行"
+     "（过程读数，不计错；判据读 `result.multi_call.call_index == 0` 的那一条）"),
+    ("multi_call_executed_calls",
+     "拆分执行：多调用步里拆出来的、真的执行了的调用条数（过程读数，不计错；"
+     "判据读 `agent_step_call` 的逐条记录）"),
+)
+
+#: 全部类目（错误 ＋ 过程读数）。`primary_code` 的优先级按这一张表的顺序取：错误类目全排在
+#: 前面 —— 于是"同一段文字既像过程读数又像错误"时算错误那一档（宁严不宽）。
+ALL_CATEGORIES: tuple[tuple[str, str], ...] = ERROR_CATEGORIES + PROCESS_CATEGORIES
+
+#: 哪些类目算错误（计入 `total` / `role_total`）。分桶只认这一张表，不认调用点。
+ERROR_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in ERROR_CATEGORIES)
+
+#: 哪些类目是过程读数（不计错，单独一栏）。
+PROCESS_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in PROCESS_CATEGORIES)
+
+#: 多调用这一族的类目：它们的读数只从结构化字段与逐条记录取，不扫"步的那段文字"。
+#: 为什么必须显式排除文案：`stepdispatch.StepDispatch.summary` 是拿每一条的 `line` 拼出来的，
+#: 于是那句汇总里就带着逐条结局的原话（"因预算未执行"之类） —— 按汇总再数一遍就是同一件事
+#: 数两次。判据 `tests/test_multi_call_is_a_capability_not_an_error.py` 的 b 把两处一起钉住。
+MULTI_CALL_CATEGORIES: frozenset[str] = frozenset({
+    "steps_split", "multi_call_executed_calls",
+    "multi_call_discarded", "multi_call_unexecuted", "multi_call_out_of_limit",
+})
 
 #: 召唤期结构判据：这些码说的是"发起方把这次召唤派错了"，所以记 called_by 而不是被召唤的
 #: 那个角色。成员口径 = `policy.check` 在派出之前就下结论的那六条 + 角色/动作存在性
@@ -214,13 +282,27 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("judge_output_limit", "judge_no_reply", "src/agentflow/agent_loop.py:808,837"),
     ("judge_failed:", "judge_failed", "src/agentflow/agent_loop.py:1135（真机 judge_failed:ModelReplyNotOk）"),
     ("judge_not_wired", "not_wired", "src/agentflow/judge.py:14（没接线那一档）"),
-    # 拆分口径（2026-10-22，业主「multi_call 应该让系统自动整理拆分」）：
-    # `multi_call` 数的是多调用步（一步给了≥2 条调用、被拆开逐条执行），
-    # 不再是"被丢弃的并列调用数"；`agent_step_call` 数的是拆出来的调用条数
-    # （逐条记录里 `not_executed=false` 的那些）。两行都指 `stepdispatch` 那一处真身。
-    ("条调用，已按顺序逐条", "multi_call", "src/agentflow/stepdispatch.py:230（summary 的文案）"),
+    # 拆分口径（2026-10-24，业主 D-65「修，且不再认为 multi_call 有问题」）：
+    # 一步给多条调用是正常能力，所以这一步的读数进过程读数表：
+    #   `steps_split` 数被拆分的步数 —— 它从 `result` 里的结构字段取（键名就是
+    #   `multi_call`，`agent_loop` 写在回合的每一条上，取 `call_index == 0` 的那一条）；
+    #   注意 `multi_call` 在这里是结构字段名，不是类目名（类目名是 `steps_split`）。
+    #   `multi_call_executed_calls` 数真的执行了的条目（逐条记录 `agent_step_call`）。
+    # 真的做错了才进错误类目：丢了几条 / 没执行成 / 超上限（下面那五行）。
+    ("multi_call", "steps_split",
+     "src/agentflow/agent_loop.py:5657（`result` 里的结构字段名，一个回合一条）"),
     ("agent_step_call", "multi_call_executed_calls",
      "src/agentflow/stepdispatch.py:53（STEP_CALL_EVENT 的定义）"),
+    ("未执行（解码不出", "multi_call_discarded",
+     "src/agentflow/agent_loop.py:6620（_record_undecodable_item 的结局原话）"),
+    ("这一条解码不出来", "multi_call_discarded",
+     "src/agentflow/stepdispatch.py:223（mark_not_executed 对解码不出那一档的原话）"),
+    ("因本回合已收工未执行", "multi_call_unexecuted",
+     "src/agentflow/stepdispatch.py:219（mark_not_executed 的收工那一档）"),
+    ("因预算未执行", "multi_call_out_of_limit",
+     "src/agentflow/stepdispatch.py:218（mark_not_executed 的预算那一档）"),
+    ("not_executed", "multi_call_unexecuted",
+     "src/agentflow/stepdispatch.py:216（mark_not_executed 的定义；没写理由时的兜底码）"),
     ("run_evidence_unreadable", "unreadable", "src/agentflow/closing.py:1082（RUN_EVIDENCE_UNREADABLE_CODE）"),
     ("context_graph_unreadable", "unreadable", "src/agentflow/agent_b/register_statement.py:946"),
     # ---- 流程层
@@ -244,7 +326,7 @@ CODE_TO_CATEGORY: dict[str, str] = {code: cat for code, cat, _ in CODE_TABLE}
 #: 码 → 出处（file:line，人读用）。
 CODE_PROVENANCE: dict[str, str] = {code: where for code, _cat, where in CODE_TABLE}
 
-_CATEGORY_INDEX: dict[str, int] = {cat: i for i, (cat, _why) in enumerate(ERROR_CATEGORIES)}
+_CATEGORY_INDEX: dict[str, int] = {cat: i for i, (cat, _why) in enumerate(ALL_CATEGORIES)}
 _CODE_INDEX: dict[str, int] = {code: i for i, (code, _c, _w) in enumerate(CODE_TABLE)}
 
 #: 匹配顺序：类目表顺序优先，同类目里字数长的先试。这就是主码规则的唯一实现。
@@ -290,9 +372,27 @@ def primary_code(*texts: Any) -> tuple[str, str] | None:
 # ---------------------------------------------------------------- 结果形状
 
 
+def _error_category(category: str) -> str:
+    """确认这是一个错误类目，原样返回；传的是过程读数类目就抛 `ValueError`。
+
+    为什么抛而不是回 0：0 会把"这不是一个错误类目"读成"这一类没有"，而这两件事的处置
+    完全不同（前者是口径错用，后者是读数）。同一个理由见模块 docstring 的三态那一条。
+    """
+    if category in PROCESS_CATEGORY_NAMES:
+        raise ValueError(
+            f"{category} 是过程读数（拆分），不是错误类目 —— 请用 process_category_total / "
+            "process_count；它不进 total 是有意的（业主 D-65）")
+    return category
+
+
 @dataclass(frozen=True)
 class ErrorStats:
     """按角色的错误动作计数。`by_role[role][category]` 就是业主问的那张表。
+
+    `by_role` / `role_total` / `total` 只数错误类目（`ERROR_CATEGORIES`）；
+    过程读数（拆分）在 `process` 里，单独一栏、不进任何"错误动作"总数 ——
+    业主 D-65 的口径：「不再认为 multi_call 有问题」。两个桶分开是这份读数的
+    结构事实，不是每个调用点自己记得"这个不计错"。
 
     三态三件套（`checked` / `state` / `reason`）与计数并排返回，而不是藏在异常里：
     读不到事件流时 `total` 是 0 但 `checked=False`，于是"0 次错误"与"没读到"不会
@@ -302,19 +402,37 @@ class ErrorStats:
     by_role: dict[str, dict[str, int]] = field(default_factory=dict)
     role_total: dict[str, int] = field(default_factory=dict)
     total: int = 0
+    #: 角色 → 过程读数类目 → 条数（拆分生效的正读数；不计错，见 `PROCESS_CATEGORIES`）。
+    process: dict[str, dict[str, int]] = field(default_factory=dict)
     checked: bool = False
     state: str = "unknown"
     reason: str = ""
     sources: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def count(self, role: str, category: str) -> int:
+        """某角色在某错误类目上的条数。过程读数请用 `process_count`（传错类目会抛）。"""
+        _error_category(category)
         return int(self.by_role.get(role, {}).get(category, 0))
 
     def category_total(self, category: str) -> int:
+        """某错误类目的全角色合计。过程读数请用 `process_category_total`。"""
+        _error_category(category)
         return sum(int(c.get(category, 0)) for c in self.by_role.values())
 
+    def process_count(self, role: str, category: str) -> int:
+        """某角色在某过程读数类目上的条数（不计错的那些读数走这一格）。"""
+        return int(self.process.get(role, {}).get(category, 0))
+
+    def process_category_total(self, category: str) -> int:
+        """某过程读数类目的全角色合计。
+
+        刻意不给"过程读数总计"：两个读数的单位不同（步 / 条），加起来没有意义 ——
+        一个"38"既可能是 38 步也可能是 38 条，那种数字不该存在。
+        """
+        return sum(int(c.get(category, 0)) for c in self.process.values())
+
     def categories(self) -> dict[str, int]:
-        """类目 → 全角色合计（按 `ERROR_CATEGORIES` 的顺序，只留非 0 的）。"""
+        """错误类目 → 全角色合计（按 `ERROR_CATEGORIES` 的顺序，只留非 0 的）。"""
         out: dict[str, int] = {}
         for cat, _why in ERROR_CATEGORIES:
             n = self.category_total(cat)
@@ -322,12 +440,28 @@ class ErrorStats:
                 out[cat] = n
         return out
 
+    def process_categories(self) -> dict[str, int]:
+        """过程读数类目 → 全角色合计（按 `PROCESS_CATEGORIES` 的顺序，只留非 0 的）。"""
+        out: dict[str, int] = {}
+        for cat, _why in PROCESS_CATEGORIES:
+            n = self.process_category_total(cat)
+            if n:
+                out[cat] = n
+        return out
+
     def as_dict(self) -> dict[str, Any]:
-        """机器可读形态（CLI 的 `--json` 直接印它）。"""
+        """机器可读形态（CLI 的 `--json` 直接印它）。
+
+        `by_role` / `role_total` / `total` 只含错误类目；`process` 与 `process_by_role`
+        是过程读数（拆分）。两组键刻意不合并：合并之后 `total` 又不等于"错误动作总数"了。
+        """
         return {
             "by_role": {r: dict(sorted(c.items())) for r, c in sorted(self.by_role.items())},
             "role_total": dict(sorted(self.role_total.items())),
             "total": int(self.total),
+            "process_by_role": {r: dict(sorted(c.items()))
+                                for r, c in sorted(self.process.items())},
+            "process": dict(self.process_categories()),
             "checked": bool(self.checked),
             "state": self.state,
             "reason": self.reason,
@@ -493,6 +627,39 @@ def _step_text(record: Mapping[str, Any]) -> str:
 # ---------------------------------------------------------------- 核心函数
 
 
+def _call_text(record: Mapping[str, Any]) -> str:
+    """一条 `agent_step_call` 的可扫那段文字：只有它自己的结局原话（`outcome`）。
+
+    刻意不拼工具名、不拼 `reason`、不拼条号：这段文字只回答"这一条为什么没执行"，
+    拼进去的东西越多，撞上不相干的码的机会越大（"一条记录只算一次"那条纪律的前提）。
+    """
+    return str(record.get("outcome") or "")
+
+
+def _is_split_step(record: Mapping[str, Any]) -> bool:
+    """这一步是不是"被拆开的那一步"（结构判据，不读文案）。
+
+    判据是 `agent_loop` 写进 `result` 的那个结构字段：`multi_call` = 这一条属于哪个回合、
+    第几条、这一回合共几条（`stepdispatch.StepDispatch.provenance`）。取 `call_index == 0`
+    的那一条 ⇒ 一个被拆分的回合正好记一次。
+
+    为什么不按 `result.warn` 里那句"这一步给了 N 条调用，已按顺序逐条"数：三条理由逐条写在
+    模块 docstring 的"拆分是能力，不是错"那一段（漏记 / 被错误原话抢先 / 与逐条结局重复）。
+    判据 `tests/test_multi_call_is_a_capability_not_an_error.py` 的 d 把这一处打桩成
+    "没拆分" ⇒ a 必红（证明 a 数的就是这件事，不是别的什么）。
+    """
+    result = record.get("result")
+    if not isinstance(result, Mapping):
+        return False
+    batch = result.get("multi_call")
+    if not isinstance(batch, Mapping):
+        return False
+    try:
+        return int(batch.get("call_index", -1)) == 0
+    except (TypeError, ValueError):
+        return False
+
+
 def error_action_stats(target: Any) -> ErrorStats:
     """按角色统计错误动作计数。`target` 可以是工作区根路径，也可以是 `Store`。
 
@@ -505,13 +672,21 @@ def error_action_stats(target: Any) -> ErrorStats:
     records, ss_reading = _read_sessions(root)
 
     counts: dict[str, dict[str, int]] = {}
+    process: dict[str, dict[str, int]] = {}
     hits: dict[str, dict[str, int]] = {}
 
     def _bump(role: str, code: str, cat: str) -> None:
-        slot = counts.setdefault(role, {}).setdefault(cat, 0)
-        counts[role][cat] = slot + 1
-        hits.setdefault(role, {}).setdefault(code, 0)
-        hits[role][code] = hits[role][code] + 1
+        """记一条命中。落哪个桶由类目决定（`PROCESS_CATEGORY_NAMES`），不由调用点决定。
+
+        为什么把分桶放在这里：于是"过程读数"在结构上进不了 `total` / `role_total` ——
+        任何一条路径把拆分读数当错误记，它都会落进另一个桶。而不是靠每个调用点自己记得
+        "这个不计错"（那种纪律一定会漏，而漏了不会有任何地方报错）。
+        """
+        bucket = process if cat in PROCESS_CATEGORY_NAMES else counts
+        cells = bucket.setdefault(role, {})
+        cells[cat] = int(cells.get(cat, 0)) + 1
+        seen = hits.setdefault(role, {})
+        seen[code] = int(seen.get(code, 0)) + 1
 
     # ---- 事件流：tasks 行的拒绝与失败
     if ev_reading.get("checked"):
@@ -545,18 +720,30 @@ def error_action_stats(target: Any) -> ErrorStats:
                     _bump(role, *found)
                 continue
             if kind == "agent_step":
+                # 这一段文字只数错误类目：多调用那一族不从这里数（`MULTI_CALL_CATEGORIES`）。
+                # 理由：那句汇总（"这一步给了 N 条调用，已按顺序逐条…"）与"被拆分的步数"
+                # 是同一件事，且它本身是逐条结局原话的拼串 —— 扫它会把同一件事数两遍。
                 found = primary_code(_step_text(record))
-                if found is not None:
+                if found is not None and found[1] not in MULTI_CALL_CATEGORIES:
                     _bump(role, *found)
+                # 拆分这件事的读数从结构字段取：一个被拆分的回合正好记一次。
+                if _is_split_step(record):
+                    _bump(role, "multi_call", "steps_split")
                 continue
             if kind == "agent_step_call":
-                # 拆分口径的逐条记录：一条记一次（口径见 `ERROR_CATEGORIES`）。
-                # 两种记录各自只记一件事，所以"一条记录只算一次"那条规则在这里不被破坏：
-                # 多调用步由 `agent_step` 的 warn 记 1（`multi_call`），拆出来的每条调用
-                # 由本记录记 1（`multi_call_executed_calls`）。没执行的那几条不算"执行过的调用"，
-                # 但它们在事件流里逐条可查（`ok=False` / `not_executed=True` / `reason`）。
+                # 逐条记录：一条一个结局，三档互斥。
+                # 执行了 ⇒ 过程读数 `multi_call_executed_calls`（拆分生效的正读数）；
+                # 没执行 ⇒ 按它自己的结局原话进三个真失败类目之一（`_call_text`）。
+                # "一条记录只算一次"在这里成立：本记录只往一个桶里记一次。
                 if not bool(record.get("not_executed")):
                     _bump(role, "agent_step_call", "multi_call_executed_calls")
+                    continue
+                found = primary_code(_call_text(record))
+                if found is None or found[1] not in MULTI_CALL_CATEGORIES:
+                    # 结局原话不在码表里（老记录 / 新理由没登记）：不猜，记进兜底那一档
+                    # —— 它至少说明"这一条拆出来了但没执行成"，那是真的少做了一条。
+                    found = ("not_executed", "multi_call_unexecuted")
+                _bump(role, *found)
                 continue
             if kind == "agent_message":
                 subject = str(record.get("subject") or "")
@@ -583,6 +770,7 @@ def error_action_stats(target: Any) -> ErrorStats:
         by_role={r: dict(sorted(c.items())) for r, c in sorted(counts.items())},
         role_total=dict(sorted(role_total.items())),
         total=total,
+        process={r: dict(sorted(c.items())) for r, c in sorted(process.items())},
         checked=checked,
         state="checked" if checked else "unknown",
         reason="；".join(reasons),
@@ -606,8 +794,26 @@ def _pad(text: str, width: int) -> str:
     return text + " " * max(0, width - _shown_width(text))
 
 
+def _table_lines(head: list[str], rows: list[list[str]]) -> list[str]:
+    """一张按显示宽度对齐的小表（表头 + 分隔线 + 各行）。错误表与拆分读数表共用这一份。"""
+    widths = [max(_shown_width(head[i]), *(_shown_width(r[i]) for r in rows))
+              for i in range(len(head))]
+    widths = [max(w, 4) for w in widths]
+    out = ["  ".join(_pad(head[i], widths[i]) for i in range(len(head))).rstrip(),
+           "  ".join("-" * widths[i] for i in range(len(head)))]
+    for row in rows:
+        out.append("  ".join(_pad(row[i], widths[i]) for i in range(len(head))).rstrip())
+    return out
+
+
 def render_text(stats: ErrorStats) -> list[str]:
-    """渲染成"角色 × 类目"小表 ＋ 合计 ＋ 类目释义。CLI 与非 CLI 调用共用这一份。"""
+    """渲染成两张小表：错误动作（角色 × 类目）与拆分读数（过程读数，不计错）。
+
+    CLI 与非 CLI 调用共用这一份。两张表分开是有意的：把拆分那几格混进错误表，
+    读的人会把"系统拆了一步"看成"出错了" —— 而业主 D-65 的口径正好相反。
+    拆分那一栏的措辞也是中性的（"被拆分的步数" / "拆出来并执行了的调用条数"），
+    它旁边那句才点名三档真失败（discarded / unexecuted / out_of_limit）。
+    """
     lines: list[str] = []
     events = stats.sources.get("events") or {}
     sessions = stats.sources.get("sessions") or {}
@@ -630,36 +836,52 @@ def render_text(stats: ErrorStats) -> list[str]:
                      "要收进来就把它登记进 CODE_TABLE）")
 
     cats = list(stats.categories().items())
+    lines.append("")
+    lines.append("错误动作（角色 × 类目；只有这张表进 total）：")
     if not cats:
+        lines.append("  全 0（错误类目一条都没命中）" if stats.checked else "  无可报读数")
+    else:
+        head = ["角色"] + [cat for cat, _n in cats] + ["合计"]
+        rows: list[list[str]] = []
+        for role in sorted(stats.role_total):
+            rows.append([role] + [str(stats.count(role, cat)) for cat, _n in cats]
+                        + [str(stats.role_total.get(role, 0))])
+        rows.append(["合计"] + [str(n) for _cat, n in cats] + [str(stats.total)])
+        lines += _table_lines(head, rows)
         lines.append("")
-        lines.append("按角色 × 类目：全 0（三类判据一条都没命中）" if stats.checked
-                     else "按角色 × 类目：无可报读数")
-        return lines
+        lines.append("类目释义：")
+        meanings = dict(ERROR_CATEGORIES)
+        for cat, _n in cats:
+            lines.append(f"  {cat}: {meanings.get(cat, '')}")
 
-    head = ["角色"] + [cat for cat, _n in cats] + ["合计"]
-    rows: list[list[str]] = []
-    for role in sorted(stats.role_total):
-        rows.append([role] + [str(stats.count(role, cat)) for cat, _n in cats]
-                    + [str(stats.role_total.get(role, 0))])
-    rows.append(["合计"] + [str(n) for _cat, n in cats] + [str(stats.total)])
-
-    widths = [max(_shown_width(head[i]), *(_shown_width(r[i]) for r in rows))
-              for i in range(len(head))]
-    widths = [max(w, 4) for w in widths]
+    # ---- 过程读数：拆分（不是错误，单独一栏）
+    proc = list(stats.process_categories().items())
     lines.append("")
-    lines.append("  ".join(_pad(head[i], widths[i]) for i in range(len(head))).rstrip())
-    lines.append("  ".join("-" * widths[i] for i in range(len(head))))
-    for row in rows:
-        lines.append("  ".join(_pad(row[i], widths[i]) for i in range(len(head))).rstrip())
+    lines.append("拆分读数（过程读数，不是错误：一步给多条调用是正常能力，被拆开逐条执行）：")
+    if not proc:
+        lines.append("  这一步没有任何拆分（被拆分的步数 0 / 拆出来的调用 0）")
+    else:
+        phead = ["角色"] + [cat for cat, _n in proc]
+        prows: list[list[str]] = []
+        for role in sorted(stats.process):
+            prows.append([role] + [str(stats.process_count(role, cat)) for cat, _n in proc])
+        prows.append(["合计"] + [str(n) for _cat, n in proc])
+        lines += _table_lines(phead, prows)
+        lines.append("  （合计按类目给，不按角色求和：两个读数的单位不同 —— 步 / 条）")
+        pmeanings = dict(PROCESS_CATEGORIES)
+        for cat, _n in proc:
+            lines.append(f"  {cat}: {pmeanings.get(cat, '')}")
+    lines.append(
+        "  真失败长在错误表那三档上："
+        f"multi_call_discarded={stats.category_total('multi_call_discarded')} / "
+        f"multi_call_unexecuted={stats.category_total('multi_call_unexecuted')} / "
+        f"multi_call_out_of_limit={stats.category_total('multi_call_out_of_limit')}"
+        " —— 这三类全 0 才是绿；『步被拆分』本身不是失败。")
 
-    lines.append("")
-    lines.append("类目释义：")
-    meanings = dict(ERROR_CATEGORIES)
-    for cat, _n in cats:
-        lines.append(f"  {cat}: {meanings.get(cat, '')}")
     lines.append("")
     lines.append("口径：角色归属见 errorstats 模块 docstring（召唤期结构判据记 called_by）；"
-                 "一条记录只算一次，主码 = 类目表靠前的类目优先、同类目里长码优先。")
+                 "一条记录只算一次，主码 = 类目表靠前的类目优先、同类目里长码优先。"
+                 "拆分读数是过程读数（process），不进 total / role_total（业主 D-65）。")
     return lines
 
 

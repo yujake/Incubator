@@ -32,6 +32,7 @@ from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from _d68_board_fixture import children_clean_their_boards  # noqa: E402 - D-68 夹具助手（替身角色不会自己 ack，见该模块 docstring）
 
 SID = "esc1"
 NEED = "取回 lit:0007 的全文第 3 页（我这边只有摘要）"
@@ -331,6 +332,12 @@ def _chain(tmp_path: pathlib.Path) -> tuple[Store, pathlib.Path, dict]:
             # 不在 `params` 里 —— 放进 params 会被拒（"派活必须写清是什么活"）。
             '{"summon": {"role": "B", "action": "run_once", "task": "把这条链交给父"}}',
             '{"summon": {"role": "A", "action": "run_once", "task": "取回 lit:0007 全文"}}',
+            # D-68（业主 2026-10-26）：「最终 final 时应该是 M 下整棵树都已销号，
+            # 否则不记 final」⇒ 收工之前先把派出去这两支销掉（名册名按角色序号发）。
+            '{"tool": "conductor.retire_child",'
+            ' "args": {"child_name": "B1", "reason": "收口前先销号"}}',
+            '{"tool": "conductor.retire_child",'
+            ' "args": {"child_name": "A1", "reason": "收口前先销号"}}',
             '{"final": "B 上报的那件事已经派给 A 了"}',
         ]),
         "B": _Gateway([_escalate_reply()]),
@@ -346,6 +353,7 @@ def _chain(tmp_path: pathlib.Path) -> tuple[Store, pathlib.Path, dict]:
     backend = AL.LlmBackend(inner=inner, loops=loops, session_root=ws,
                             seam_factory=seam_factory, max_steps=3, store=st, sid=SID)
     cond = Conductor(st, backend=backend)
+    children_clean_their_boards(cond)
     backend.conductor = cond
     backend.registry = build_registry(store=st, conductor=cond).registry
     return st, ws, {"cond": cond, "gateways": gateways, "backend": backend}

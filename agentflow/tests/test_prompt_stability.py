@@ -520,6 +520,15 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p200", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p200（2026-10-24）：十一格全换（十个可召唤角色各加一条「能看直接下级一层、更深走 escalate 向 M 请求」的政策；M 那一格另把 policy[05] 从「写成一句话指导」改成点名 conductor.watch / conductor.guide 的实现口径，并补一句非 M 角色会通过 escalate 请求深看）。facts 键集仍 15 格"},
+        # p200 → p201（2026-10-25 收口批）：S1 把 system 的 TASK_FRAME 摘掉「你收到的留言」
+        # 与「挂在你名下的工作项」两格（六块变四块），S2 把 TOOLCHAIN_FACTS 里「这条路怎么走」
+        # 那一族按角色现算地摘掉。这两笔换的都是「同一格事实印在哪儿 / 印给谁」，键集一格没动的
+        # 反面 —— 键名与条数仍是那 15 格（inbox / board 仍是 volatile facts，只是落点从 system
+        # 挪进开场那条 user 消息，`prompt_facts` 的缺省句仍是它们的唯一来源）。
+        # `count` / `keys_sha256` 仍是 `PS.volatile_facts_digest()` 的现算值，不手抄。
+        {"version": "p201", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p201（2026-10-25 收口批）：十一格全换（M 的 27 条过时清理 / D·E·F 与 G·H·V·L 两批审计 / S1 摘掉 system 的 inbox·board 两格 / S2 的监控与工具面出口按角色现算 / 共用段那几处）。facts 键集仍 15 格：inbox 与 board 只是换了落点（system 段 → 开场 user 消息），键名与条数一格未动"},
 )
 
 

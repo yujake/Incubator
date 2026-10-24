@@ -147,10 +147,11 @@ const PAGES: PageRow[] = [
   },
   {
     page: "产物（/artifacts）",
-    reads: "GET /api/artifacts",
+    reads: "GET /api/artifacts · /api/literature",
     answers: "九张卡（数字与标题同数 ARTIFACT_CARDS；第九张是实验产物的落点）："
       + "台账上的产物与一致性对账（一致 / 不一致 / unknown，sha 原文不上屏）、"
       + "台账写入笔数与 commit 标记两格、交接手稿、验收表的机器可判行、体例、任务结果、"
+      + "文献库（只算正式入库的那一档，每条带下载落地与「被哪条命题、第几份证明用过」）、"
       + "实验产物落点（code/exp 与 out/experiments/<号>/{design,exhaustion}.md）",
   },
   {

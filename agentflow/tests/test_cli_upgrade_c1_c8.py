@@ -329,12 +329,58 @@ def test_c5_lean_auto_keeps_running_and_names_why_formal_is_unknown(
     assert seen.get("lean") is False, seen
 
 
+#: 「形式化那一档」那一行里认得出三态的写法（`Mathlib（第 ⑤ 步，图论）：unknown；…`）。
+_FORMAL_STATES: tuple[str, ...] = ("verified", "failed", "unknown")
+
+
+def _formal_reading_problem(line: str) -> str:
+    """「形式化那一档」那一行的读数合不合格（空串 = 合格，非空 = 问题描述）。
+
+    纯函数，这样正控（真输出）与反负控（喂三行改造过的文本）走同一份判据：
+    只有一条路能得出"合格"，避免"断言写得宽、看起来一直在跑"。
+
+    两档（`cli.py::_lean_first_screen` 的三态纪律：没查不许长得像查过了）：
+      ① 说了「未查（首屏不跑自检…」⇒ 必须写 `unknown`，且不许同时下 `verified` / `failed`；
+      ② 没说"未查" ⇒ 必须给出三态之一（不许空白，也不许写成一句模糊话）。
+    """
+    claims = [state for state in ("verified", "failed") if f"：{state}" in line]
+    if "未查（首屏不跑自检" in line:
+        if "unknown" not in line:
+            return f"这一格说没查、却不写 unknown ⇒ 读数与理由自相矛盾：{line!r}"
+        if claims:
+            return (f"这一格说「未查（首屏不跑自检…」却下了 {claims} ⇒ "
+                    f"在没查的前提下报形式化结论：{line!r}")
+        return ""
+    if not any(f"：{state}" in line for state in _FORMAL_STATES):
+        return (f"这一格既没说「未查（首屏不跑自检…」、也没给出三态之一 ⇒ "
+                f"它是空白或模糊话：{line!r}")
+    return ""
+
+
 def test_c5_lean_auto_turns_it_on_when_the_selfcheck_is_usable(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """C5 的反向：自检 usable ⇒ `--lean auto` 真的把它打开。
+    """C5 的反向：自检 usable ⇒ `--lean auto` 真的把它打开，且首屏不谎报形式化结论。
 
     没有这一条，`auto` 可以"永远关着"而 C5 的正控照样全绿 —— 那正是"关不掉的开关"
     换个方向回来的形态。
+
+    ## 为什么这一格只看「形式化那一行」（2026-10-25 收窄，不是放宽）
+
+    改前这里是 `assert "unknown" not in (out + err)`。那条断言收得比它的本意宽太多：
+    首屏还有别的格子会如实写 `unknown`（首屏自检那几行、依赖图读数、缓存新鲜度那行里
+    的"不确定"），于是判据红了、而红的不是它要找的那一件事 —— 实测那批之后它在
+    所有机器上恒红，红的理由恰恰是 Mathlib 那一格本来就该写"未查"。
+
+    它真正要守的是三态纪律在这一格上的落地（`cli.py::_lean_first_screen` 的 docstring
+    逐字写着"没查不许长得像查过了"），于是收窄成 `_formal_reading_problem` 里那两档：
+      ① 首屏不跑自检（今天的设计）⇒ Mathlib 那一格必须写 `unknown`，并且点名理由
+         （`未查（首屏不跑自检…`）—— 只写 unknown 不说为什么，与"查了、没过"同形；
+      ② 那一格若真给了读数（跑过自检的机器，或将来改成首屏也跑）⇒ 必须是三态之一，
+         且不许在同一格里既说"未查"又下 `verified` / `failed`。
+    收了之后判据没有变松：那一份纯函数的四个反负控在
+    `test_c5_the_formal_reading_check_itself_has_teeth` 里（喂改造过的行必红）。
+
+    定位不到那一行 ⇒ 判据失效（红），不是通过 —— 判据本身进空集与"没问题"必须分得开。
     """
     import agentflow.leantoolchain as LT
     import agentflow.projects as PJ
@@ -352,8 +398,37 @@ def test_c5_lean_auto_turns_it_on_when_the_selfcheck_is_usable(
     code, out, err = _run(["--root", str(tmp_path / "ws"), "project", "run",
                            "--topic", "t", "--lean", "auto"])
     assert code == 0, (code, out, err)
+    # C5 反向方向的硬读数：这一趟的 Lean 真的被打开了（不是"显示了什么字"）。
     assert seen.get("lean") is True, seen
-    assert "unknown" not in (out + err), "自检 usable 时不该再说形式化结论记 unknown"
+
+    text = out + err
+    # 「形式化那一档」= 首屏里 Mathlib（第 ⑤ 步）那一行。定位词带 `Mathlib`：
+    # `自检：未查（…第 ⑤ 步…）` 那一行也含"第 ⑤ 步"，只认步号会捞到两行。
+    rows = [ln for ln in text.splitlines() if "Mathlib（第 ⑤ 步" in ln]
+    assert len(rows) == 1, (
+        "首屏里定位不到唯一那一行「Mathlib（第 ⑤ 步…」⇒ 这条判据失效了"
+        "（没查成，不是通过）。含 Mathlib 的行："
+        + repr([ln for ln in text.splitlines() if "Mathlib" in ln]))
+    problem = _formal_reading_problem(rows[0])
+    assert problem == "", problem
+
+
+def test_c5_the_formal_reading_check_itself_has_teeth() -> None:
+    """反负控：收窄后的那份纯判据真的会红（证明"收窄"没把它变成永远绿的一行）。
+
+    四跳：今天那条真读数 ⇒ 过；三种改坏的形态 ⇒ 各红一次。
+    """
+    real = ("  · Mathlib（第 ⑤ 步，图论）：unknown；工程根=（空）；版本=（空）；"
+            "理由：未查（首屏不跑自检：第 ⑤ 步要真编译一次 Mathlib，本机实测 11.3 秒）")
+    assert _formal_reading_problem(real) == "", _formal_reading_problem(real)
+    # ① 说没查，却下了结论
+    assert _formal_reading_problem(real.replace("：unknown", "：verified")), "没查却报 verified 放过了"
+    # ② 说没查，但没写 unknown
+    assert _formal_reading_problem(real.replace("：unknown", "：")), "没查又没写 unknown 放过了"
+    # ③ 既没"未查"、也没有三态（空白 / 模糊话）
+    assert _formal_reading_problem("  · Mathlib（第 ⑤ 步，图论）：还没看"), "空白/模糊话放过了"
+    # ④ 反过来：有真读数（三态齐全）⇒ 过（证明它不只会红）
+    assert _formal_reading_problem("  · Mathlib（第 ⑤ 步，图论）：verified；工程根=Z:/m") == ""
 
 
 # ============================================================ C6 启动自检

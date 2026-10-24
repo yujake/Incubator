@@ -38,6 +38,8 @@ import json
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import schema as _S
+
 #: 一轮的四种产物（`draft/39` §3.16）：没有 `no_change` 这一档，它是被修掉的那个形态。
 PRODUCTS: tuple[str, ...] = ("reduction", "proof", "counterexample_request", "dead_end")
 #: 通用数学工具箱（方法名，不含任何本题的构造或结论）：每轮必填一个。
@@ -96,10 +98,18 @@ PRODUCT_MENU: str = " / ".join(f"`{name}`" for name in PRODUCT_SPECS)
 #: （`reports/…md` 是 F 自己写的产物文件，不是台账 id），判据当场拒收（R-03）。
 #: 拒收拦得住，但它为什么编没治：`_evidence_digest` 里那句"不在册"只是一条旁注，
 #: 而提示词从没把"能引的 id 就这些"摆到它眼前。所以纪律写在这里、id 列表紧挨着它。
+#:
+#: 前缀清单从 `schema.CITATION_PREFIXES` 现算（2026-10-25）：手抄的那一份里有
+#: `conj:` / `plan:` / `req:` 三个假前缀 —— 模型照着写会被写入期拒（`bad_citation_prefix`），
+#: 而"提示词教一个判据不认的前缀"不会有任何读数报出来。
+_CITATION_PREFIX_LINE: str = " / ".join(f"`{prefix}:`" for prefix in _S.CITATION_PREFIXES)
 CITE_DISCIPLINE = (
     "只许引用下面列出的 id（它们现算自台账）—— **没有可引的就不要引**；"
     "要声明前提，就把这一步写成 `assumption: true`。"
-    "带前缀的写法：`exp:` / `lit:` / `stmt:` / `rel:` / `doc:` / `conj:` / `plan:` / `req:`。"
+    # 2026-10-25（审计 G/H/V/L 其余条）：前缀清单此前手抄了一份
+    # （`conj:` / `plan:` / `req:` 三个都不在 `schema.CITATION_PREFIXES` 里）——
+    # 现在按真身现算，写死的那一份不再存在。
+    "带前缀的写法：" + _CITATION_PREFIX_LINE + "。"
     "**禁止**写 `reports/attack-<plan_id>.md §A5` 这类定位："
     "`reports/…md` 是产物文件，不是台账 id，不许当 id 引（引了就算伪造引用，这一轮当场拒收）"
 )

@@ -212,11 +212,15 @@ def test_the_opening_user_message_still_carries_every_moved_fact(tmp_path: pathl
     assert set(facts) == set(OPENING_FACT_KEYS), (sorted(facts), sorted(OPENING_FACT_KEYS))
 
     # 每一格：user 消息里有它（按它在对面那句话里的原话找），system 里没有。
+    #
+    # 2026-10-24（D-52）：`inbox` / `board` 两格不再在开场那一段里 —— 它们是流水，
+    # 归信箱投递点（`agent_loop.mailbox_digest` / `_deliver_mailbox`：每一次 `ask_step`
+    # 之前投一段增量）。判据因此只剩"system 里没有它"这一半（那一半仍然承重：它们
+    # 还在 `STEP_VOLATILE_FACTS` 里，塞回 system 会让前缀跨不过 run）；"user 消息里
+    # 还有它"那一半搬到 `tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py`
+    # 的 c 条（那里同时钉"开卷那段不再包含这两格"）。
     checks = {
         "task": (f"你的任务：{facts['task']}", f"这一次的任务：\n{facts['task']}"),
-        "inbox": (f"你的收件箱：{facts['inbox']}", f"你收到的留言（可能为空）：\n{facts['inbox']}"),
-        "board": (f"挂在你名下的工作项（板；可能为空）：{facts['board']}",
-                  f"挂在你名下的工作项（板；可能为空）：\n{facts['board']}"),
         "children": (f"这是这一趟开始那一刻的快照）：{facts['children']}",
                      f"要看活的用 `{{\"roster\": {{\"of\": \"self\"}}}}`）：{facts['children']}"),
         "user_replies": (f"用户回答过的问题（含迟到送达的回答）：{facts['user_replies']}",
@@ -230,7 +234,9 @@ def test_the_opening_user_message_still_carries_every_moved_fact(tmp_path: pathl
         "workspace_root": (f"工作区根目录：{facts['workspace_root']}",
                            f"- 工作区根目录：{facts['workspace_root']}"),
     }
-    assert set(checks) == set(_CROSS_RUN_KEYS), (sorted(checks), sorted(_CROSS_RUN_KEYS))
+    moved_to_mailbox = ("inbox", "board")
+    assert set(checks) | set(moved_to_mailbox) == set(_CROSS_RUN_KEYS), \
+        (sorted(checks), sorted(moved_to_mailbox), sorted(_CROSS_RUN_KEYS))
     missing: list[str] = []
     leaked: list[str] = []
     for key, (in_user, in_system) in checks.items():
@@ -240,6 +246,12 @@ def test_the_opening_user_message_still_carries_every_moved_fact(tmp_path: pathl
             leaked.append(f"{key}（还在 system 里：{in_system!r}）")
     assert not missing, "这些事实从 system 挪走之后**没有**出现在 user 消息里（信息被删）：" + "；".join(missing)
     assert not leaked, "这些事实**还在** system 里 ⇒ 前缀仍然跨不过 run：" + "；".join(leaked)
+    # 两格流水的落点变了（同一条纪律的另一半）：不在开场那条消息里，也不在 system 里。
+    for key in moved_to_mailbox:
+        assert f"{facts[key]}" not in prompt or not str(facts[key] or "").strip(), (
+            f"{key} 的值出现在开场那条消息里 ⇒ 流水又被塞回快照了（D-52 的形态）")
+    assert "你的收件箱：" not in prompt, prompt[:600]
+    assert "挂在你名下的工作项（板；可能为空）：" not in prompt, prompt[:600]
     # 反真空：system 里确实有替身指路语（不是"整段被删光了"）。
     assert "见本次对话第一条消息" in system, system[:400]
 
@@ -251,6 +263,11 @@ def test_deleting_one_fact_from_the_user_message_makes_the_criterion_red(
     怎么造"删掉"：把那一格喂成空串 —— `prompt_facts` 会把它换成缺省句，于是
     原值不再出现在 user 消息里（这正是"挪走之后又悄悄删掉"的形态）。
     这条负控必须比"信息还在"那条更强：它证明后者读的是原值，不是"有一句人话"。
+
+    2026-10-24（D-52）：负控的载体从 `board` 换成 `user_replies` —— `board` / `inbox`
+    两格已经不在开场那一段里了（它们归信箱投递点），拿它们做负控会变成"删一个本来
+    就不在那里的东西"。同一句话的另一半（开卷那段不再包含这两格）在新判据文件
+    `tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py` 的 c 条。
     """
     facts = {
         "task": "把这一件活做完", "inbox": "（没有收到留言）", "board": "- [i-1] 一条板项",
@@ -259,10 +276,13 @@ def test_deleting_one_fact_from_the_user_message_makes_the_criterion_red(
         "parent_task_id": "t-0008", "workspace_root": "D:/ws",
     }
     opening = _opening_transcript(**facts)
-    assert facts["board"] in opening      # 正控：先确认它在
-    poisoned = dict(facts, board="")      # 负控：整段删掉
-    assert facts["board"] not in _opening_transcript(**poisoned), (
-        "把 board 清空之后 user 消息里还读得到它 ⇒ 这条负控没删到东西")
+    assert facts["user_replies"] in opening      # 正控：先确认它在
+    poisoned = dict(facts, user_replies="")      # 负控：整段删掉
+    assert facts["user_replies"] not in _opening_transcript(**poisoned), (
+        "把 user_replies 清空之后 user 消息里还读得到它 ⇒ 这条负控没删到东西")
+    # 同一条负控的第二个方向（D-52）：流水两格即使在事实里给了值，也不进开场那一段。
+    assert "一条板项" not in opening, opening
+    assert "（没有收到留言）" not in opening, opening
 
 
 # --------------------------------------------- 4. 换伙伴配置（2026-10-21 第二批）

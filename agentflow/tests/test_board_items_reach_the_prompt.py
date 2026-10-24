@@ -93,9 +93,14 @@ def _row(st: Store, tid: str) -> dict[str, Any]:
 
 
 def test_a_board_item_reaches_the_prompt_and_is_marked_seen(tmp_path: pathlib.Path):
-    """正控：项进 `system`、且被标 seen（`seen_by` = 我、`seen_step` = 那一步）。
+    """正控：项进 user 增量、且被标 seen（`seen_by` = 我、`seen_step` = 那一步）。
 
     改前必红：提示词里没有 `{{board}}` 那一格，项也不会被标 seen（写入点零调用者）。
+
+    2026-10-25（S1）：system 段那两格（留言 / 板）已经摘掉 —— D-52 把它们改成
+    每一步的增量（`agent_loop._deliver_mailbox`）。于是这里两头都要钉：
+    项的内容在 user 消息里，而 system 里连那一格的标题都不许再出现
+    （否则模型开场读到"板上没事"，下一步又收到增量）。
     """
     st, cond, ws = _ws(tmp_path)
     me = _me(cond)
@@ -106,7 +111,10 @@ def test_a_board_item_reaches_the_prompt_and_is_marked_seen(tmp_path: pathlib.Pa
 
     system = gate.systems[-1]
     user = gate.prompts[-1]
-    assert "挂在你名下的工作项" in system, system[-600:]
+    assert "挂在你名下的工作项" not in system, (
+        "system 里又印出了「挂在你名下的工作项（板；可能为空）」那一格 —— "
+        "D-52 起板项只作为每一步的增量进 user 消息；两处并存会让开场读「空」、下一步又收到增量",
+        system[-600:])
     # 板项的内容在 user 消息里（2026-10-21 起它不再进 system：那一格是"这一趟的
     # 事实"，进了 system 就把整条前缀绑死在这一趟上）。
     assert item in user, ("板项没进提示词（编号都没出现）", user[-900:])

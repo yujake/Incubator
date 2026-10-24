@@ -1234,8 +1234,8 @@ EVIDENCE_KINDS = ("proof", "proof_review", "cross_check", "heuristic")
 #:
 #: 为什么实验表不许用它：`proof_review` 说的是"一份证明被逐行审阅过"，
 #: 而实验表登记的是一次实验（脚本 / 检查器）的结论。让一行实验去声称
-#: `proof_review`，等于把"审阅"这件事从 `verifications` 那张表搬到一个没有审阅信息
-#: 的字段里 —— 于是"谁审的、审的是哪一版"就再也读不出来了。
+#: `proof_review`，等于把"审阅"这件事从 `verifications/<命题号>.jsonl`（文件账本，不是表）
+#: 搬到一个没有审阅信息的字段里 —— 于是"谁审的、审的是哪一版"就再也读不出来了。
 EXPERIMENT_EVIDENCE_KINDS = ("proof", "cross_check", "heuristic")
 
 #: 一次实验对被检验命题的结论。
@@ -1602,7 +1602,8 @@ class Experiment:
             raise ValueError(
                 f"experiments 表的 evidence_kind 必须是 {EXPERIMENT_EVIDENCE_KINDS} 之一，"
                 f"收到 {self.evidence_kind!r}（`proof_review` 不在这一档：它是**审阅**的等级，"
-                "凭据在 `verifications` 表里，不属于任何一行实验）")
+                "凭据在 `verifications/<命题号>.jsonl`（文件账本，不是表）里，"
+                "不属于任何一行实验）")
         if self.result not in EXPERIMENT_RESULTS:
             raise ValueError(f"result 必须是 {EXPERIMENT_RESULTS} 之一，收到 {self.result!r}")
         if self.negation_kind is not None and self.negation_kind not in NEGATION_KINDS:

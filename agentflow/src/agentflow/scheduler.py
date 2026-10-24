@@ -31,7 +31,7 @@
 
 from __future__ import annotations
 
-import concurrent.futures as cf
+import contextvars
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
@@ -236,47 +236,412 @@ def run_waves(
     "某一项没有结果"这件事由那一项自己的 `SummonResult.status/outcome`
     表达（例如 `failed`），不由列表变短表达 —— 变短的列表会让调用方
     静默地把"第 3 个失败了"读成"只有 2 个任务"。
+
+    D-64：这是同一台引擎的阻塞式拼法（`start_waves(...).results()`）。
+    要"派完立刻返回句柄、父代理继续拿回合"就用 `start_waves`。
+    两条拼法共用一份分派代码，所以结果集/顺序/refusal 不可能漂移。
+    """
+    return start_waves(calls, conductor=conductor, policy=policy, token=token,
+                       probe=probe).results()
+
+
+#: 一批派活里"还没轮到的波"在协调线程里等上一波落定时的轮询上限（秒）。
+#: 它不是忙等的判据（`WaveHandle` 用条件变量等，见 `_wait_wave`），只是
+#: 取消/墙钟那种"没人来通知"的外部事件也要被看一眼的那个间隔。
+_WAVE_POLL_SEC = 0.2
+
+
+class CallTicket:
+    """一批里的一项：`TaskCall` 本身 + 它的句柄（`Conductor.SummonHandle`）。
+
+    `begin_done` 是"前半跑完了"的信号（派活方据此保证句柄返回时 `task_id`
+    已经成立），它与"这一项跑完了"（句柄落定）是两件事。
+    """
+
+    __slots__ = ("index", "call", "handle", "started_at", "begin_done")
+
+    def __init__(self, index: int, call: TaskCall) -> None:
+        self.index = index
+        self.call = call
+        self.handle: Any = None
+        self.started_at = _time()
+        self.begin_done = threading.Event()
+
+    @property
+    def task_id(self) -> str | None:
+        return getattr(self.handle, "task_id", None) if self.handle is not None else None
+
+    def describe(self) -> dict:
+        """已派出的那一项（句柄读数，不含结果）。"""
+        got = {}
+        if self.handle is not None and hasattr(self.handle, "describe"):
+            got = dict(self.handle.describe())
+        got.setdefault("role", self.call.role)
+        got.setdefault("action", self.call.action)
+        got.setdefault("instance", str(getattr(self.call, "instance", "") or ""))
+        got["index"] = self.index
+        return got
+
+
+class WaveHandle:
+    """一批派活的句柄：派完第一波就返回，不等到全部完成（D-64）。
+
+    ## 为什么是"第一波"而不是"全部"
+
+    分波是正确性判据（写集相交的两个 call 不许同时跑，见模块头第 1 条）。
+    第一批已经在跑的那些必须同步派出去（`summon_begin` 落 running 行 +
+    名册登记 + 发线程），否则"派没派出去"会变成一个稍后才成立的事实；
+    而后面几波必须等前一波落定才能派（那是分波的定义）。于是句柄返回那一刻
+    能诚实说出的是"已派出哪几个 + 还在跑哪几个"，后面的波会在协调线程里陆续
+    出现（`dispatched()` 会跟着变多）。
+
+    ## 与"忙等"的区别
+
+    `wait_any` 走条件变量（落定就 `notify_all`），不是空转轮询；
+    `_WAVE_POLL_SEC` 只用于"没有落定、但外部事件（取消/墙钟）该被看一眼"
+    的那个兜底间隔。
+
+    ## 列表兼容（为什么它像 list）
+
+    `run_waves` / `Conductor.run_plan` 的既有调用方（含禁改区的
+    `tools/conductor_tools.py`）都是"把返回值当列表用"（`len` / `zip` /
+    `[... for r in results]` / `== []`）。本类实现 `__len__` / `__iter__` /
+    `__getitem__` / `__eq__`，语义是"等全部落定再给你那一份" —— 于是
+    "阻塞式拼法"不需要第二个类型，那批调用方一个字节都不用改。
+    """
+
+    def __init__(self, calls: Sequence[TaskCall], *, conductor: Any, policy: P.Policy,
+                 token: CancelToken, probe: ConcurrencyProbe) -> None:
+        self.calls = list(calls)
+        self.conductor = conductor
+        self.policy = policy
+        self.token = token
+        self.probe = probe
+        self.waves: list[list[int]] = []
+        self._tickets: list[CallTicket] = [CallTicket(i, c) for i, c in enumerate(self.calls)]
+        self._cv = threading.Condition()
+        self._settled: list[bool] = [False] * len(self.calls)
+        self._new: list[int] = []
+        self._all_done = threading.Event()
+        self._coordinator: threading.Thread | None = None
+        self._sem = threading.Semaphore(max(1, int(policy.max_concurrency)))
+        self._started_at = _time()
+
+    # ---------------------------------------------------------- 只读读数
+    @property
+    def count(self) -> int:
+        return len(self.calls)
+
+    def dispatched(self) -> list[dict]:
+        """已经派出去的那些（按输入顺序）：每项带 role / action / instance / task_id。"""
+        with self._cv:
+            return [t.describe() for t in self._tickets if t.handle is not None]
+
+    def running(self) -> list[str]:
+        """还在跑的编号（按输入顺序）。已被拒/没派出去的不算在跑。"""
+        out: list[str] = []
+        with self._cv:
+            tickets = list(self._tickets)
+        for t in tickets:
+            h = t.handle
+            if h is not None and getattr(h, "running", None) and h.running():
+                tid = getattr(h, "task_id", None)
+                if tid:
+                    out.append(str(tid))
+        return out
+
+    def settled(self) -> list[Any]:
+        """已经落定的结果（按输入顺序，只含落定的那些）。"""
+        return [self.settled_by_index()[i] for i in sorted(self.settled_by_index())]
+
+    def settled_by_index(self) -> dict[int, Any]:
+        """已经落定的那些，按输入下标给（`_do_summon_many` 要按输入顺序拼 results）。"""
+        out: dict[int, Any] = {}
+        with self._cv:
+            ready = [i for i in range(len(self.calls)) if self._settled[i]]
+        for i in ready:
+            h = self._tickets[i].handle
+            got = h.poll() if h is not None else None
+            if got is not None:
+                out[i] = got
+        return out
+
+    def take_settled(self) -> list[Any]:
+        """把"上次取走之后新落定的"那几条结果取走（返场点用，每一条只投一次）。"""
+        with self._cv:
+            fresh = list(self._new)
+            self._new.clear()
+        out: list[Any] = []
+        for i in fresh:
+            h = self._tickets[i].handle
+            got = h.poll() if h is not None else None
+            if got is not None:
+                out.append(got)
+        return out
+
+    def done(self) -> bool:
+        """全部落定了没有（"没派出去的被拒项"也算落定）。"""
+        return self._all_done.is_set()
+
+    def poll(self) -> dict:
+        """不等的一份读数：已派几个 / 在跑哪几个 / 落定几个 / 全完了没有。"""
+        return {"dispatched": self.dispatched(), "running": self.running(),
+                "settled": len(self.settled()), "count": len(self.calls),
+                "done": self.done(), "waves": [list(w) for w in self.waves]}
+
+    def wait_any(self, timeout: float | None = None) -> bool:
+        """等到"又有东西落定"或到点。返回"到点时已经有东西落定"。
+
+        为什么不是 `wait_all`：可抢占的语义是"等到有动静就返场"，不是
+        "等到全部完成"。全部完成那一档是 `results()`（阻塞式拼法）。
+        """
+        deadline = None if timeout is None else _time() + max(0.0, float(timeout))
+        with self._cv:
+            if self._new:
+                return True
+            remain = None if deadline is None else max(0.0, deadline - _time())
+            self._cv.wait_for(lambda: bool(self._new) or self._all_done.is_set(), timeout=remain)
+            return bool(self._new)
+
+    def wait_all(self, timeout: float | None = None) -> bool:
+        """等到全部落定（或到点）。返回"落定了没有"。"""
+        return self._all_done.wait(None if timeout is None else max(0.0, float(timeout)))
+
+    def results(self) -> list[Any]:
+        """阻塞式拼法：等全部落定，按输入顺序给出每一项的结果（长度恒等于输入长度）。"""
+        self.wait_all()
+        out: list[Any] = []
+        for t in self._tickets:
+            h = t.handle
+            if h is None:  # pragma: no cover - 分派失败那条路会造一个已落定的句柄
+                out.append(None)
+            else:
+                out.append(h.result())
+        return out
+
+    def elapsed_sec(self) -> float:
+        return _time() - self._started_at
+
+    # ---------------------------------------------------------- 列表语义
+    def __len__(self) -> int:
+        return len(self.results())
+
+    def __iter__(self) -> Any:
+        return iter(self.results())
+
+    def __getitem__(self, index: Any) -> Any:
+        return self.results()[index]
+
+    def __eq__(self, other: Any) -> Any:
+        if isinstance(other, WaveHandle):
+            return self.results() == other.results()
+        if isinstance(other, list):
+            return self.results() == other
+        return NotImplemented
+
+    __hash__ = None            # 列表语义：不可哈希
+
+    def __repr__(self) -> str:  # pragma: no cover - 只为调试可读
+        return (f"WaveHandle(count={len(self.calls)}, dispatched={len(self.dispatched())},"
+                f" running={len(self.running())}, done={self.done()})")
+
+    # ---------------------------------------------------------- 分派与协调
+    def start(self) -> "WaveHandle":
+        """算出分波、把第一波同步派出去，然后把剩下的交给协调线程。"""
+        self.waves = P.waves_of(self.calls, limit=self.policy.max_concurrency)
+        if not self.calls:
+            self._all_done.set()
+            return self
+        self._dispatch(0)
+        ctx = contextvars.copy_context()
+        th = threading.Thread(target=self._coordinate, args=(ctx,),
+                              name="agentflow-waves", daemon=True)
+        self._coordinator = th
+        th.start()
+        return self
+
+    def _coordinate(self, ctx: Any) -> None:
+        """协调线程：等这一波落定 → 派下一波 → 全落定就收。
+
+        每一波的分派都用调用方的上下文（`ctx.copy().run`）：`consuming_as` /
+        `calling_as` 是 ContextVar，丢了它，第二波派出去的活就"不知道自己是谁"。
+        """
+        try:
+            for n in range(len(self.waves)):
+                self._wait_wave(n)
+                if n + 1 < len(self.waves):
+                    ctx.copy().run(self._dispatch, n + 1)
+        except BaseException as exc:  # noqa: BLE001 - 不许让协调线程静默死掉
+            self._fail_remaining(exc)
+        finally:
+            self._all_done.set()
+            with self._cv:
+                self._cv.notify_all()
+
+    def _wait_wave(self, n: int) -> None:
+        indexes = list(self.waves[n]) if n < len(self.waves) else []
+        with self._cv:
+            while not all(self._settled[i] for i in indexes):
+                self._cv.wait(timeout=_WAVE_POLL_SEC)
+
+    def _dispatch(self, n: int) -> None:
+        """把第 n 波派出去：每一项一条线程（前半 + 后半都在那条线程里）。
+
+        ## 为什么前半也在线程里（而不是在派活方这一侧顺序写台账）
+
+        两条理由，任一条都足够：
+
+        1. 探针的口径。`concurrent_peak` 回答的是"同一时刻在飞几个"，
+           而"在飞"从这一项被派出那一刻起算（与改前 `_guarded` 逐字同口径：
+           它也是先 `enter` 再调 `Conductor.summon`）。如果 begin 在派活方
+           顺序跑，秒级就能跑完的那几个会"一个接一个地开始并结束"
+           ——`concurrent_peak` 会读成 2 而不是 3（实测：三个实例同波）。
+        2. 真并发。begin 里有几笔台账写（落 running 行、名册登记），
+           顺序跑它们等于把"并发开 3 个 B"变成"串行写 3 行再并发跑"。
+
+        ## 但句柄必须"派完就有编号"
+
+        所以这一波的所有线程都起来之后，这里等每一张票的 `begin_done`
+        （不是等它跑完）。于是 `start_waves` 返回那一刻，`dispatched()`
+        里的 `task_id` 一个不少 —— 而孩子可能一个都没跑完。
+        """
+        if n >= len(self.waves):
+            return
+        ctx = contextvars.copy_context()
+        threads: list[threading.Thread] = []
+        for i in self.waves[n]:
+            th = threading.Thread(target=ctx.copy().run,
+                                  args=(self._item_thread, i),
+                                  name=f"agentflow-item-{i}", daemon=True)
+            threads.append(th)
+        for th in threads:
+            th.start()
+        for i in self.waves[n]:
+            self._tickets[i].begin_done.wait(timeout=600.0)
+
+    def _item_thread(self, i: int) -> None:
+        """一张票的一生：open 句柄 → 前半 → （派得出去就）后半 → 落定。"""
+        call = self.calls[i]
+        ticket = self._tickets[i]
+        label = _label(call)
+        began = _time()
+        peak = self.probe.enter(label)
+        try:
+            start = self.conductor.summon_begin(
+                call.role, call.action, dict(call.params or {}),
+                by=call.by, parent_task_id=call.parent_task_id,
+                input_key=call.input_key,
+                budget=dict(call.budget) if call.budget else None,
+                token=self.token,
+                lineage=call.lineage,
+                instance=str(getattr(call, "instance", "") or ""),
+                roster=dict(call.roster) if call.roster else None,
+            )
+        except BaseException as exc:  # noqa: BLE001 - 见 `_settle_failure`
+            self._close_window(label, began, peak)
+            self._settle_failure(i, exc)
+            return
+        handle = self.conductor.open_handle(
+            start, on_settle=lambda h, _i=i: self._on_settle(_i))
+        ticket.handle = handle
+        ticket.begin_done.set()
+        if getattr(start, "refusal", None) is not None:
+            # 没派出去：窗口立刻关（它没有执行窗口可言，与改前一致）。
+            self._close_window(label, began, peak)
+            handle.settle(start.refusal)
+            return
+        self._sem.acquire()
+        try:
+            res = self.conductor.summon_run(start)
+        except BaseException as exc:  # noqa: BLE001 - 后台没人接的异常会丢结果
+            handle.fail(exc)
+        else:
+            handle.settle(res)
+        finally:
+            self._close_window(label, began, peak)
+            self._sem.release()
+
+    def _close_window(self, label: str, began: float, peak: int) -> None:
+        self.probe.record(label, began, _time(), peak)
+        self.probe.leave()
+
+    def _run_one(self, start: Any, *, began: float, peak: int, label: str) -> Any:
+        """在一张票的后台线程里跑后半：信号量在这一层，探针窗口已由派活方打开。"""
+        self._sem.acquire()
+        try:
+            return self.conductor.summon_run(start)
+        finally:
+            self._close_window(label, began, peak)
+            self._sem.release()
+
+    def _on_settle(self, i: int) -> None:
+        with self._cv:
+            if not self._settled[i]:
+                self._settled[i] = True
+                self._new.append(i)
+            self._cv.notify_all()
+
+    def _settle_failure(self, i: int, exc: BaseException) -> None:
+        """前半就炸了（存储层）：如实落一张"失败"的票，不让这一批变短。
+
+        改前这条异常经线程池的 `fut.result()` 炸给 `run_waves` 的调用方 ⇒
+        整批丢结果。"列表长度恒等于输入长度"因此更强了，不是更弱。
+        """
+        from .conductor import SummonResult, SummonStart
+
+        call = self.calls[i]
+        detail = (f"派活前半炸了（{type(exc).__name__}: {exc}）；"
+                  "这一项没有台账行，但它在结果列表里的位置照旧保留")
+        failure = SummonResult(role=str(call.role), action=str(call.action),
+                               status="failed", outcome="failed",
+                               error=f"{type(exc).__name__}: {exc}", detail=detail)
+        start = SummonStart(role=str(call.role), action=str(call.action),
+                            params=dict(call.params or {}), by=str(call.by),
+                            parent_task_id=call.parent_task_id,
+                            input_key=str(call.input_key),
+                            instance=str(getattr(call, "instance", "") or ""),
+                            token=self.token, refusal=failure)
+        handle = self.conductor.start_summon(
+            start, on_settle=lambda _h, _i=i: self._on_settle(_i))
+        self._tickets[i].handle = handle
+
+    def _fail_remaining(self, exc: BaseException) -> None:
+        """协调线程炸了：还没派出去的那些如实标成 failed（不许静默消失）。"""
+        with self._cv:
+            left = [i for i in range(len(self.calls)) if not self._settled[i]]
+        for i in left:
+            if self._tickets[i].handle is None:
+                self._settle_failure(i, exc)
+
+
+def start_waves(
+    calls: Sequence[TaskCall],
+    *,
+    conductor: Any,
+    policy: P.Policy,
+    token: CancelToken | None = None,
+    probe: ConcurrencyProbe | None = None,
+) -> WaveHandle:
+    """按写集分波派出去，派完第一波就返回句柄（D-64 的可抢占拼法）。
+
+    与 `run_waves` 的唯一差别是"什么时候返回"：这一支不等结果，
+    父代理因此可以继续拿回合（watch / guide / 补派 / 收口），
+    孩子的结果在下一次返场时由 `agent_loop` 的投递点读走。
+
+    返回的 `WaveHandle` 同时是列表兼容的（`results()` 语义），所以
+    "要那一份完整列表"的调用方可以照旧 `list(handle)` / `handle.results()`。
     """
     calls = list(calls)
-    if not calls:
-        return []
     P.assert_policy_complete(policy)
     token = token or getattr(conductor, "token", None) or CancelToken()
-
-    out: list[Any] = [None] * len(calls)
-    # 信号量是第二道闸：划分已经保证单波 ≤ max_concurrency，
-    # 但如果有人绕过划分（直接调 `_guarded`）或将来改了划分，它兜底。
-    sem = threading.Semaphore(max(1, int(policy.max_concurrency)))
     probe = probe if probe is not None else ConcurrencyProbe()
     # 把探针挂回 conductor：`peak_running` 会低估真并发（落 running 行
     # 本身要花时间），而探针不会。验收时不希望调用方自己去建探针再传进来
     # （那会让"忘了传"变成"没观测到"）。见 `ConcurrencyProbe` 的对照表。
     conductor._last_probe = probe
+    return WaveHandle(calls, conductor=conductor, policy=policy, token=token,
+                      probe=probe).start()
 
-    for wave in P.waves_of(calls, limit=policy.max_concurrency):
-        if not wave:
-            continue
-        if len(wave) == 1:
-            # 单元素波不建线程池：线程池会让"串行的两个任务"也各自开一个
-            # 线程，而"波内并发"的判据本该是"同一个波里有几个元素"。
-            # 更重要的是：不起线程 ⇒ 主线程直接跑 ⇒ 台账里这一行的
-            # `started_at`/`ended_at` 与调用栈一致，调试时不会"跳线"。
-            i = wave[0]
-            out[i] = _guarded(calls[i], conductor=conductor, token=token, sem=sem, probe=probe)
-        else:
-            with cf.ThreadPoolExecutor(max_workers=min(len(wave), policy.max_concurrency)) as pool:
-                futures = {
-                    pool.submit(_guarded, calls[i], conductor=conductor, token=token, sem=sem, probe=probe): i
-                    for i in wave
-                }
-                for fut in cf.as_completed(futures):
-                    i = futures[fut]
-                    # `_guarded` 自己兜住所有异常并返回 SummonResult；
-                    # 走到这里还有异常说明是它自己坏了（例如返回类型不对）。
-                    # 那种情况下必须炸出来，而不是填一个 None ——
-                    # 见上面"列表长度恒等"的说明。
-                    out[i] = fut.result()
-    return out
 
 
 def _label(call: TaskCall) -> str:

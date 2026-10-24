@@ -22,8 +22,26 @@ experiments 000001: method="formal", evidence_kind="proof"（Lean 4.7.0 + Mathli
 | ② | 猜想 + V 签「成立」+ proof ⇒ `kind=theorem`（走真 register / 升档路径，不手搓行） | 签完之后再登记一次只把 `evidence_kind` 升上去，`kind` 一个字不动 |
 | ③ | 猜想 + 只有形式化 verified（无 V 签）⇒ 答案见下（按 `evidencebits.derive_grade` 的现算口径） | 同上：第 4 位同步进 `bits` 之后 `kind` 仍是 `conjecture` |
 | ③b | 反真空：L 的台账写着"检查器没通过" ⇒ ③ 那一格不许升（名字停在 `conjecture`） | 没有 ③，这条无从谈起；它挡的是"反正都会升"那种假绿 |
-| ④ | 反真空：把 ② 那一签从台账里删掉 ⇒ ② 必红（`kind` 回到 `conjecture`） | 没有 ②，这条无从谈起（改前 ② 本身红） |
+| ④ | 反真空：把 ② 那一签从台账里删掉 ⇒ ② 必红（读侧 `kind` 回到 `conjecture`） | 没有 ②，这条无从谈起（改前 ② 本身红） |
 | ⑤ | 历史不追溯：证据齐全而 `kind` 仍写"猜想"的老行，读一次不会被静默改写（读侧不变量） | 没有读侧口径；`kind` 只由写侧的动作改 |
+
+## D-69（2026-10-24，业主）：抬档的时刻提前到"V 那一签落盘时"
+
+D-37 定的是"改名由写侧那一支（同一份内容再交一次）来做"。真机 sylow3 证明那条路不够：
+V 的台账里判「成立」、`bits.evidence.reviewed_by_proof` 是 `{"1": true}`，而那一行的
+`kind` 仍是 `conjecture`，论文却已经把它排成 lemma / theorem —— 因为"再交一次"这件事
+没有人会回头做。D-69 于是把这一格提前：`verifications.sign_statement` 在同一个事务里
+调 `evidencebits.kind_following_grade`（判据一个字没变），判的是同一件事。
+
+于是本文件有三处随 D-69 改口径（改的都是"什么时候写"，不是"凭什么写"）：
+
+- ② 签完之后盘上已经是 `theorem`（并在同一笔里留下 `_kind_upgrade`）。改前那一句
+  "签完之后、再登记之前盘上还是猜想"作废 —— 它正是 D-69 要堵的那个窗口；
+- ④ 删掉台账那一签之后，读侧回到 `conjecture`（依据没了），但盘上的名字不撤销：
+  全仓没有降档路径（降档要写清为什么降，那是另一个决定）。这一条因此量的是
+  "下一次写不会再升"与"读侧的依据确实来自台账"，不是"名字自动回退"；
+- ⑤ 的历史行形态（证据齐、名字旧）只存在于「老工作区」里了，所以夹具改成把那一行
+  按历史形态写回盘上再读 —— 读侧不许改历史这一条不变。
 
 ## ③ 的取舍（写在这里备查，理由逐字进了 `evidencebits.kind_following_grade` 的 docstring）
 
@@ -217,22 +235,31 @@ def test_criterion2_a_signed_proof_lifts_the_kind_to_theorem(store: Store) -> No
     """② 猜想 + V 签「成立」+ proof ⇒ `kind=theorem`（真 register / 升档路径）。
 
     路径逐字是驳回信里那条正路：先按猜想落库（V 只审在册的命题）→ V 签 → 同一份内容
-    再交一次。这一条量的是"再交一次"那一步有没有把 `kind` 一起抬上去 —— 而它不该
+    再交一次。这一条量的是"V 签「成立」之后 `kind` 有没有跟着到 `theorem`" —— 而它不该
     要求提交方自己声明 `kind="theorem"`（证据在盘上，名字就该跟着证据走）。
+
+    D-69 之后，签那一刻就已经抬上去了（同一个事务里）；"再交一次"只补 `evidence_kind`
+    那一格。所以这里两段都量：签字那一笔留下了 `_kind_upgrade`，再交一次仍然只动
+    `evidence_kind`（不重复抬 kind）。
     """
     filed = _file(store)
     sid = str(filed["stmt_id"])
     signed = _sign(store, sid)
     assert signed.get("checked") is True and signed.get("verdict") == "成立", signed
 
-    # 签完之后、再登记之前：盘上还是"猜想"，而读侧按证据已经读出"定理"（D-37 的现场）。
+    # D-69：签完就在盘上了（不再有"签完之后、再登记之前还是猜想"那个窗口）。
     before = _row(store, sid)
-    assert before["kind"] == "conjecture", before
+    assert before["kind"] == "theorem", before
+    trace0 = dict(before.get("_kind_upgrade") or {})
+    assert trace0.get("from") == "conjecture" and trace0.get("to") == "theorem", trace0
+    assert "verifications/000000.jsonl#v-000001" in str(trace0.get("basis") or ""), trace0
+    # 同一笔事务的读数是签名入口给的（`record_verification` 把它挂在
+    # `statement_writeback` 上），不是"事后才补"的一句话。
+    writeback = dict(signed.get("statement_writeback") or {})
+    assert (writeback.get("kind_upgrade") or {}).get("to") == "theorem", writeback
+    assert "conjecture→theorem" in str(writeback.get("upgrade_note") or ""), writeback
     read = EB.kind_following_grade(before, root=store.root)
-    assert read["state"] == "upgraded", read
-    assert read["kind"] == "theorem", read
-    assert "verifications/000000.jsonl" in read["basis"], read
-    assert "v-000001" in read["basis"], read
+    assert read["state"] == "not_applicable" and read["kind"] == "theorem", read
 
     again = _resubmit(store, evidence_kind="proof_review")
     assert again.get("ok") is True, again
@@ -308,51 +335,70 @@ def test_criterion3b_a_failed_formal_does_not_lift_the_kind(store: Store) -> Non
 # ------------------------------------------------------------------ ④ 反真空：删掉那一签
 
 def test_criterion4_deleting_the_signature_returns_it_to_conjecture(store: Store) -> None:
-    """④ 反真空：把 ② 那一签从台账里删掉 ⇒ `kind` 回到 `conjecture`（② 必红）。
+    """④ 反真空：把 ② 那一签从台账里删掉 ⇒ 读侧退回 `conjecture`，下一次写也不再升。
 
     这一条同时钉住升档依据是"台账里那一行"，不是"`bits.reviewed` 这个布尔"：
     位还停在 `true`（V 签过），而台账里已经没有那一签 ⇒ 依据不成立、名字不许升。
     这正是 `verifications.proof_review_gap` 那句话（读侧按台账现算）在 D-37 上的用法。
+
+    D-69 之后盘上的名字不自动撤销（全仓没有降档路径：降档要写清为什么降，那是另一个
+    决定）。所以这一条量的是两件仍然成立的事：读侧的依据确实来自台账（`held` + "还差
+    V 那一签"），以及此后的写不会再往上走一步。
     """
     filed = _file(store)
     sid = str(filed["stmt_id"])
     assert _sign(store, sid).get("verdict") == "成立"
     ledger = VR.verification_ledger_path(store.root, sid)
     assert ledger.is_file() and ledger.read_text(encoding="utf-8").strip(), ledger
+    named = _row(store, sid)
+    assert named["kind"] == "theorem", named
 
     # 删掉那一签（只删台账那一行；`bits.reviewed` 不动 —— 它就是"位说签过"的现场）。
     ledger.write_text("", encoding="utf-8")
     row = _row(store, sid)
     assert bool((row.get("bits") or {}).get("reviewed")) is True, row
 
-    read = EB.kind_following_grade(row, root=store.root)
+    # 读侧的问法是"按盘上现有的证据，这一行现在该叫什么" —— 所以喂它历史形态
+    # （名字还是猜想、没有升档留痕），判据才落在"依据在不在"上，而不是"名字已经是什么"。
+    probe = dict(row)
+    probe["kind"] = "conjecture"
+    probe.pop("_kind_upgrade", None)
+    read = EB.kind_following_grade(probe, root=store.root)
     assert read["state"] == "held", read
     assert read["kind"] == "conjecture", read
     assert "V" in str(read["shortfall"]), read
 
     again = _resubmit(store, evidence_kind="proof_review")
     assert again.get("ok") is False, again
-    assert _row(store, sid)["kind"] == "conjecture", _row(store, sid)
+    # 名字不撤销（没有降档路径），但也不许再往上走一步：那一格逐字没变。
+    assert _row(store, sid)["kind"] == "theorem", _row(store, sid)
 
 
 # ------------------------------------------------------------------ ⑤ 历史不追溯
 
 def test_criterion5_a_historical_row_is_read_but_never_rewritten(store: Store) -> None:
-    """⑤ 历史不追溯：证据齐全而 `kind` 仍写着"猜想"的老行，读一次不被静默改写。
+    """⑤ 历史不追溯：证据齐全而 `kind` 仍写着"猜想"的老行，读一次不会被静默改写。
 
-    夹具是 D-37 的现场形状（改前写下的那一行：V 签完之后、B 还没再登记）：
+    夹具是「老工作区」里那种行的形状（D-69 之前写下的：V 签完之后、B 还没再登记）：
     `kind="conjecture"`、`bits.proof=true`、`bits.reviewed=true`、
-    `verifications/<号>.jsonl#v-000001` 判成立。cube 那条老行还会多一格
-    `formal_by_proof[*]=verified`（只读探针另行核过）。
+    `verifications/<号>.jsonl#v-000001` 判成立。D-69 之后签名那一笔自己就会抬档，
+    所以这种形态只能按历史形态写回盘上（真机上它是 sylow3 那三行）。
 
     判据两件：
     1. 读侧按新口径读出 `theorem`（并给出依据）—— 不然缺陷没修；
     2. 读完之后盘上那一行逐字节不变（`kind` 仍 `conjecture`，文件 sha256 相同）——
-       读不许改历史。改名要由写侧那一支（同一份内容再交一次）来做，不是读一次就改。
+       读不许改历史。
     """
     filed = _file(store)
     sid = str(filed["stmt_id"])
     assert _sign(store, sid).get("verdict") == "成立"
+
+    # 把那一行按"历史形态"写回盘上（只改这两处：名字回猜想、撤掉升档留痕）。
+    historical = _row(store, sid)
+    historical["kind"] = "conjecture"
+    historical.pop("_kind_upgrade", None)
+    with store.tx("statements", actor="test", note="probe:historical") as tx:
+        tx.upsert("statements", historical, note="probe:historical")
 
     path = _statements_file(store.root)
     before_bytes = path.read_bytes()

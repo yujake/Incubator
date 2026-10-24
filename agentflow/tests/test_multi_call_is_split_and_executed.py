@@ -21,7 +21,9 @@
 3. 一步 [合法, 越权] ⇒ 合法那条成功、越权那条如实被拒，两者 outcome 分开记；
 4. 预算只够第一条 ⇒ 第二条标"因预算未执行"，不假装执行（且仍计步）；
 5. 反真空：把拆分打桩回"只跑第一条" ⇒ 判据 1 必红；
-6. 统计：同一夹具下 `multi_call` 记 1（一个多调用步）、`multi_call_executed_calls` 记 2；
+6. 统计：同一夹具下 `steps_split` 记 1（一个被拆分的步）、`multi_call_executed_calls` 记 2，
+   而两者都不进错误总数（`total` 仍是 0）—— 过程读数与错误动作是两组数，见
+   `tests/test_multi_call_is_a_capability_not_an_error.py`；
 7. 接住层是唯一入口：把它打桩成"只返回第一条" ⇒ 判据 1 必红（证明循环真的走它）；
 8. 单条与多条走同一个函数：单条也经过 `catch_step_request`，且单条行为与改前逐字相同；
 9. 对十一个角色都成立（同一夹具逐角色跑一遍），且层里一个角色名都没有；
@@ -321,22 +323,27 @@ def test_the_split_is_not_vacuous(tmp_path: pathlib.Path, monkeypatch: pytest.Mo
 
 
 def test_the_two_counters_are_step_count_and_call_count(tmp_path: pathlib.Path):
-    """⑥ 统计：同一夹具下 `multi_call` 记 1（一个多调用步）、`multi_call_executed_calls` 记 2。
+    """⑥ 统计：同一夹具下 `steps_split` 记 1（一个被拆分的步）、`multi_call_executed_calls` 记 2。
 
-    改前红：`multi_call` 记的是"被丢弃的并列调用数"（这一套夹具下是 1），
-    而 `multi_call_executed_calls` 这个类目根本不存在。
+    两格都是过程读数（`PROCESS_CATEGORIES`），不是错误：拆开逐条执行是正常能力，
+    所以它们不进 `total` / `role_total`（业主 D-65，判据
+    `tests/test_multi_call_is_a_capability_not_an_error.py`）。改前红：这两格当时叫
+    `multi_call` / `multi_call_executed_calls`，都算在错误总数里（total 会是 3）。
     """
     _run(tmp_path, [_reads(), _final("读完了")])
     stats = ES.error_action_stats(tmp_path / "ws-M")
     assert stats.checked is True, stats.as_dict()
-    # 一个多调用步（不是"两步"、也不是"被丢的 1 条"）
-    assert stats.category_total("multi_call") == 1, stats.as_dict()
+    # 一个被拆分的步（不是"两步"、也不是"被丢的 1 条"）
+    assert stats.process_category_total("steps_split") == 1, stats.as_dict()
     # 拆出来的调用：两条都真的执行了
-    assert stats.category_total("multi_call_executed_calls") == 2, stats.as_dict()
-    assert stats.count("M", "multi_call") == 1, stats.as_dict()
-    assert stats.count("M", "multi_call_executed_calls") == 2, stats.as_dict()
+    assert stats.process_category_total("multi_call_executed_calls") == 2, stats.as_dict()
+    assert stats.process_count("M", "steps_split") == 1, stats.as_dict()
+    assert stats.process_count("M", "multi_call_executed_calls") == 2, stats.as_dict()
+    # 拆分不进错误总数（这是 D-65 的全部要点）
+    assert stats.total == 0, stats.as_dict()
     text = "\n".join(ES.render_text(stats))
     assert "multi_call_executed_calls" in text, text
+    assert "steps_split" in text, text
 
 
 # ---------------------------------------------------------------- ⑦ 接住层是唯一入口

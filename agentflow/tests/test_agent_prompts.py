@@ -756,6 +756,11 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "main.pdf": "文件名（编译产物），不是工具",
     "appendix.tex": "文件名（附录落点），不是工具 —— 它只用来把一件事说清：正文与附录都写在 `out/paper/main.tex` 这一份里",
     "documents.claims": "台账字段（documents 表的 claims 列），不是工具",
+    # 2026-10-26（M 侧过时清理 #6）：`closure_reminders` 的读数路径。它是
+    # `conductor.ledger(view="stats")` 返回的 `stats` 里那一格 —— 读数字段路径，
+    # 不是工具（旧写法点过 `conductor.stats`，那件工具不存在）。
+    "stats.closure_reminders": "读数字段路径（`conductor.ledger(view=\"stats\")` 的 `stats` "
+                               "里那一格），不是工具",
     "documents.status": "台账字段（documents 表的 status 列），不是工具 —— H 的裁决正落在它上面"
                         "（`accepted` / `in_review` / `unresolved_review`，见 `draft/103` §4.1b-25）",
     "experiments.search_bound": "台账字段（experiments 表的 search_bound 列），不是工具",
@@ -1894,7 +1899,7 @@ _BLOCK_C = '''\
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
-   每一项还能带与 2) 一样的**名册三格**（\brief\ / \name\ / \reuse\）—— 一批里派三件不同的活时，
+   每一项还能带与 2) 一样的**名册三格**（`brief` / `name` / `reuse`）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
    **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是
@@ -2144,19 +2149,28 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p200"
+_FROZEN_PROMPT_VERSION = "p201"
+# 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
+# （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
+# 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
+# D / M 两格，其余九格逐字未动。2026-10-25 抬到 p201 时已把这两格与版本一起确认。
+# 判据：`tests/test_roster_ownership_survives_the_reuse_path.py`。
+# 2026-10-25（p201 收口批）：十一格全换 —— 今晚十几条 lane 的段变更（M 的 27 条过时清理、
+# D/E/F 与 G/H/V/L 两批审计、S1 摘掉 system 的 inbox/board 两格、S2 的出口按角色现算、
+# 以及共用段那几处）改了既有角色段也改了共用段，逐组理由写在 `agent_prompts.PROMPT_VERSION`
+# 上方那一段。十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "d994d5cb89a09bd5482b53eff9cf03e670f2bcac8fc8995ced855436907cc96c",
-    "B": "704599fa1c7ebf32b29dfead63b2571e9b24a0c1efce2c5249444a6a452fc851",
-    "C": "6fa9a84f7373f5d2fa8930657191f24eefc4340883bbf1de2ad58823ab4728e7",
-    "D": "ac07a2afb60e6dd4dfcacde0511928af094d032e5e478dc7236cf624d504d550",
-    "E": "309fd96589b57f32ea4f39bc8b5a82c0cee24cf8bdfe4cac03f2b3428b864391",
-    "F": "0ea652e39660fd6cb5ed544332f91ac46139c918a63dfd7fb70fca07c4949970",
-    "G": "3dcf354e82d28c3cdc71d2879f5ad45d521ed06e7e31a477e7ea9b9d59c5887e",
-    "H": "523e4f1e72c7e456a704d9aaa51fe35d5791fd8ff05bd4516034e981d2a99487",
-    "L": "9ee9af5544633a62425b774efcc2662acb7550b497846098e68b048c3e8e4bdf",
-    "M": "5bbe23972f313b806a577f8b242e0d93220e0e0373e6a9a375d2a5acd384a7ab",
-    "V": "9478650b3feaff6795532862f01696d8dd80df9b005dd7439fb75d841cee3e9c",
+    "A": "1022e25dcff1970b87b4d352f9edf1d7e7adfe36f2a09a29afa69f3ee8ca768b",
+    "B": "f7d38a5c5a86c9ce0ce78971180d2c0567c0ef36faad105314c4a166115922ed",
+    "C": "630ad84f74ded1554f03fe66675e527d734a99504d1d1ad1e648cfeb061fd4bb",
+    "D": "07409c4a206f9a41e5adeefc37903d0ccdea6ddc98fac2ae8d27888cce193a27",
+    "E": "3121e244497043ac0d53e89d000a259181fd42c2442dcc51c0a69a5786c12ee9",
+    "F": "835fa4cab644fbd7c074701c807d1918c35fd4c95dbf3c0903bd7c0174b95117",
+    "G": "e59dbbf8cc2e2ef6a749d4baccb99d04f2a6c26793fa0264eef101e99cb12da7",
+    "H": "ad1e532a98dda266b7a50cfec08ff877a892b3c204887838e00cb2618826ded4",
+    "L": "dac10e41dca5711f0a2a299d64ce228e9f74154715789dd69db0b0a116a180c1",
+    "M": "38b381b99dcf3671381d31baca5d550bc43484342352683c6f5496f1ed971bef",
+    "V": "0afe494661344dc087ffda17b0859c5782dd1dced02761b3b8289ba023236396",
 }
 
 

@@ -7,15 +7,16 @@
 |---|---|---|---|
 | 1 | 数值验证 `numeric` | E | 四态：`verified` / `failed` / `na`（不适用，必须写理由）/ `pending`（还没做）；`verified`/`failed` 要记被哪个脚本测的（script + sha + 实验号） |
 | 2 | 有证明 `proof` | F | 证明过程（逐步论证，每步引到的 id 在册） |
-| 3 | 审过 `reviewed` | V（自己产出的命题）／引用（引用命题：凭据是文献代号） | 自己产出 ⇒ V 的三态结论；引用 ⇒ `lit:`/`known_lit_id` + 逐字核验 |
-| 4 | 形式化通过 `formal` | E | 二维 `{证明号: 四态}`（一份证明一行）；任一路径 `verified` 即算过，而"验的是哪一条路径"逐条可读 |
+| 3 | 审过 `reviewed` | V（自己产出的命题）／引用（引用命题：凭据是文献代号） | 自己产出 ⇒ V 按 `proof_no` 逐份签的三态结论（`bits.evidence.reviewed_by_proof[证明号]`，单份时 = 1）；引用 ⇒ `lit:`/`known_lit_id` + 逐字核验 |
+| 4 | 形式化通过 `formal` | L | 二维 `{证明号: 四态}`（一份证明一行，写侧只写四态）；读侧另有第五档 `stale`（验过、但现行那一份证明不是当时那一份）；任一路径 `verified` 即算过，而"验的是哪一条路径"逐条可读 |
 | 5 | 正式审查 `audited` | H（G 申请） | H 的审校轮次与结论（H 只看证据是否确凿 + 引用是否得当，不读证明判数学） |
 
 ## 位与台账的映射（业主 2026-10-09：五元状态是哪张表在维护，要做好映射）
 
 上面的表说的是"这一位属于谁"，`BIT_LEDGERS` 说的是"这一位去哪张表里查"：
 `proof` 去 `statements.proof_text`（B 维护的那张表）、`numeric`/`formal` 去
-`experiments`（`method` 要对得上）、`reviewed`/`audited` 去稿件上的 V/H 结论。
+`experiments`（`method` 要对得上）、`reviewed` 去 `bits.evidence.reviewed_by_proof[证明号]`
+（V 按 `proof_no` 逐份签，读数在 `verifications/<命题号>.jsonl`）、`audited` 去稿件上的 H 结论。
 判据（`bit_evidence_gaps`）只做一件业主点名的事：位上说有，表里要查得到。
 
 ## 第 4 位是二维的（业主 2026-10-22 的裁定，逐字）
@@ -1015,10 +1016,15 @@ BIT_LEDGERS: dict[str, dict[str, str]] = {
     },
     "reviewed": {
         "owner": "V",
-        "ledger": "documents（V 的审校结论，按稿件钉）",
-        "pointer": "doc_id",
-        "criteria": "位说 true ⇒ V 的结论挂在稿件上 ⇒ 命题级只查 doc_id 在不在册"
-                    "（由 dangling_doc_ref 守）；没有 doc_id ⇒ 判不了，不报",
+        # 2026-10-25（审计 G/H/V/L 第 5 条）：这一格原来写 `documents`（"V 的审校结论，按稿件钉"）
+        # —— 那是第 5 位（`audited`）与 H 的稿件级审查的落点。第 3 位是逐份证明签的：
+        # 写侧记在 `bits.evidence.reviewed_by_proof[证明号]`（单份时那个键 = 1），
+        # 读数在 `verifications/<命题号>.jsonl` 里那一份的签字。写成 `documents` 会让
+        # "这条命题的第 1 份证明签没签"变成一个按稿件回答的问题（`#p2` 借 `#p1` 的光）。
+        "ledger": "bits.evidence.reviewed_by_proof[证明号]（逐份；单份时 = 1）",
+        "pointer": "bits.evidence.reviewed_by_proof 里那个证明号的键（V 的签字按 `proof_no` 逐份记）",
+        "criteria": "位说 true ⇒ 被审的那一份（`proof_no`）在 `verifications/<命题号>.jsonl` 里"
+                    "有一条「成立」的签字；没有这一份的签字 ⇒ 不算审过，也绝不拿别的证明号那一签顶",
     },
     "formal": {
         # 2026-10-23：owner 与 `BIT_OWNERS` 那一格同步改成 L（两处必须逐位一致，
@@ -1034,7 +1040,9 @@ BIT_LEDGERS: dict[str, dict[str, str]] = {
         "criteria": "第 4 位是二维的（{证明号: 状态}）：某个证明号说 verified ⇒ "
                     "那一格凭据（experiment_id / checker）指的实验行必须在 experiments 表里，"
                     "且 method='formal'；汇总按任一路径通过就算通过（等级派生读汇总），"
-                    "逐条路径各自独立、不许互相借光",
+                    "逐条路径各自独立、不许互相借光。读侧还有第五档 `stale`（验过、但现行"
+                    "那一份证明已经不是当时那一份，见 `FORMAL_PATH_STATES`）—— 它不算 verified，"
+                    "也不等于 pending（「验过旧稿」与「没验过」必须分得开）",
     },
     "audited": {
         "owner": "H",

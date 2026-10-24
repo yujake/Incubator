@@ -867,7 +867,7 @@ export interface SearchRequestRow {
   timestamp: string;
 }
 
-/** 出处：roster_face() —— 当前工作区整棵名册树（`out/roster/<父编号>.jsonl` 折叠 + `data/tasks.json` 的 status/收件箱读数）。 */
+/** 出处：roster_face() —— 当前工作区整棵名册树（`out/roster/<父编号>.jsonl` 与 `<父编号>-index.jsonl` 折叠出不落盘的名册项 + `data/tasks.json` 的状态/收件箱读数）。 */
 export interface RosterView {
   answer: string;
   tri: Tri;
@@ -885,9 +885,10 @@ export interface RosterView {
   tasks_tri: Tri;
   tasks_reason: string;
   truncated: boolean;
+  unplaced: RosterUnplaced[];
 }
 
-/** 出处：roster_face() 的一个节点 —— 一个 agent（名册里它那一行 + 台账里它那一行；`depth` 是名册链上的相对深度，根 = 1）。 */
+/** 出处：roster_face() 的一个节点 —— 一个常驻子代理（名册里那一项；`depth` 是名册链上的相对深度，根 = 1）。`task_id` 只是页面用的节点键（建项那件活的编号），身份是`owner` + `name`；它接过哪些活见 `tasks`。 */
 export interface RosterNode {
   task_id: string;
   name: string;
@@ -905,6 +906,30 @@ export interface RosterNode {
   task_found: boolean;
   in_flight: number | null;
   inbox: RosterInbox;
+  tasks: RosterTask[];
+}
+
+/** 出处：roster_face() 的 nodes[].tasks[] 一项 —— 这个子代理接过的一件活：编号来自`<父>-index.jsonl` 的调用记录，状态与起止时间来自 `data/tasks.json`。 */
+export interface RosterTask {
+  task_id: string;
+  role: string;
+  status: string;
+  started_at: string;
+  ended_at: string;
+  task_found: boolean;
+  brief: string;
+  detail: string;
+}
+
+/** 出处：roster_face() 的 unplaced[] 一项 —— 台账里有父、却没有任何名册项接过的那一行（平铺并点名，不抬成树根）。 */
+export interface RosterUnplaced {
+  task_id: string;
+  parent_task_id: string;
+  role: string;
+  status: string;
+  started_at: string;
+  ended_at: string;
+  why: string;
 }
 
 /** 出处：roster_face() 的 nodes[].children[] 一项 —— 名册里的一个子（绝对编号 + 名册名）。 */
@@ -945,12 +970,74 @@ export interface RosterCoverage {
   unrostered: number | null;
 }
 
+/** 出处：library_face() —— 文献库那一面：只算「正式入库」的文献 + 每篇被哪些命题／哪一份证明用过（`state` 只有 computed / unknown 两档；`unknown` 有两支 ——台账没读成、以及「没有候选台账 ⇒ 入库判不出」，两支的 `data.count` 都是 null，不是 0）。 */
+export interface LibraryView {
+  checked: boolean;
+  state: string;
+  reason: string;
+  data: LibraryData;
+  problems: LibraryProblem[];
+}
+
+/** 出处：library_face() 的 data —— 入库文献那几栏与判据的来源（`rows_total` 是台账里一共几行，`count` 是显示几条；两者之和不必相等：待入库与判不出的都不显示。`admission_source` 只有一个取值：那一格是唯一判据）。 */
+export interface LibraryData {
+  works: LibraryWork[];
+  count: number | null;
+  table: string;
+  table_state: string;
+  rows_total: number | null;
+  admission_source: string;
+  admission_tri: Tri;
+  undecidable: number | null;
+  uses_tri: Tri;
+  uses_reason: string;
+}
+
+/** 出处：library_face() 的 data.works[] —— 一条「正式入库」的文献（`admitted` 恒为 true：判不出的不进这个数组，而判据只有 `lit_candidates.status=admitted` 那一格）。`download_state` 是 download 那一格与盘上文件核对的三态（present / absent / unreadable），`uses` 是反查出来的「被谁用过」。 */
+export interface LibraryWork {
+  lit_id: string;
+  title: string;
+  authors: string[];
+  doi: string;
+  dedup_key: string;
+  pages: string;
+  matched: string;
+  claimed_by: string;
+  mine_attempts: number;
+  last_mine_error: string;
+  download_status: string;
+  download_path: string;
+  download_state: string;
+  download_bytes: number | null;
+  download_reason: string;
+  admitted: boolean;
+  admission_basis: string;
+  uses: LibraryUse[];
+  uses_count: number;
+}
+
+/** 出处：library_face() 的 data.works[].uses[] —— 「这一篇被谁用过」的一条（`via` 只有 statement / dependency 两档：语句自己的 `source_lit_id`，与依赖的 `source_lit_id`；`proof_no` 是证明号，`#pN` 由 `proofloc` 拆）。 */
+export interface LibraryUse {
+  stmt_id: string;
+  proof_no: number;
+  label: string;
+  used_by: string;
+  via: string;
+}
+
+/** 出处：library_face() 的 problems[] —— 一条不拦门但要留痕的读数问题（`code` 是受控的几个码，`admission_undecidable` 就是「判不出入库/待入库」那一条：A 侧的实现问题，不显示但记一笔）。 */
+export interface LibraryProblem {
+  code: string;
+  detail: string;
+}
+
 /** 出处：写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */
 export interface WriteResult {
   ok: boolean;
   tri: Tri;
   reason: string;
   id?: string;
+  state?: string;
   extra?: Record<string, unknown>;
 }
 

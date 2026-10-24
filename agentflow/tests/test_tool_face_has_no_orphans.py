@@ -86,4 +86,4 @@ def test_no_face_is_empty_and_the_union_is_the_whole_library(
     assert not empty, f"这些角色的工具面是空的：{empty}"
     union = {n for names in faces.values() for n in names}
     # 全库工具数从模板快照读（`tests/golden/tool_surface_snapshot.json` 是那张的权威读数）
-    assert len(union) == 102, f"角色面并集是 {len(union)} 件（期望 102）—— 有人被摘掉了工具，或新工具没挂上"
+    assert len(union) == 104, f"角色面并集是 {len(union)} 件（期望 104）—— 有人被摘掉了工具，或新工具没挂上"

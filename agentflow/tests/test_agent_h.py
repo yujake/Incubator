@@ -423,16 +423,34 @@ def test_dependency_check_is_three_state(h: AgentH, h_store: Store):
 
 
 def test_h_tool_surface_is_read_only(h_store: Store):
-    """H 的工具面必须全部 `none`/`read`；写入口只能显式打开，且被拒的写工具要留痕。"""
+    """H 的自由工具箱必须全部 `none`/`read` 或通用能力；写入口只能显式打开，被拒的要留痕。
+
+    2026-10-24（业主裁定「通用能力根本不该出现谁能用这个说法」）：通用能力
+    （`tools.UNIVERSAL_TOOLS`，例如据实为 `write_local` 的 `clock.timer_start`）
+    不算"写入口"，它们对包括 H 在内的所有角色可用。判据本体在
+    `agent_h.h_free_toolbox_accepts`，这一条是它在真实装配面上的读数。
+    """
+    from agentflow.agent_h import h_free_toolbox_accepts
+    from agentflow.tools import UNIVERSAL_TOOLS
+
     reg = install_h_tools(h_store)
     surface = reg.describe()
     assert surface, "H 至少要有只读工具"
-    assert all(t["side_effect"] in ("none", "read") for t in surface)
-    assert all(t["needs_approval"] is False for t in surface)
+    assert all(h_free_toolbox_accepts(t["name"], t["side_effect"]) for t in surface)
+    # 非通用能力的那一档仍然必须全是 none/read（否则"能改稿"就混进来了）。
+    kept_as_read = [t for t in surface if t["name"] not in UNIVERSAL_TOOLS]
+    assert all(t["side_effect"] in ("none", "read") for t in kept_as_read), kept_as_read
     assert {"review.scan_document", "review.list_findings"} <= {t["name"] for t in surface}
+    # 通用能力那几件真的在面上（否则"所有人可拿"在 H 这里只是空话）；
+    # 它们据实是 write_local，所以审批标记为真是对的 —— 这里不把"需审批"当泄漏。
+    assert {"clock.timer_start", "clock.alarm_start", "clock.timer_cancel"} <= {t["name"] for t in surface}
+    assert all(t["needs_approval"] is False for t in kept_as_read)
 
     refused = reg.refused_write_tools
     assert all(r["side_effect"] not in ("none", "read") for r in refused)
+    assert not ({r["name"] for r in refused} & set(UNIVERSAL_TOOLS)), (
+        f"H 把通用能力当写工具拒了：{sorted({r['name'] for r in refused} & set(UNIVERSAL_TOOLS))}"
+    )
     assert len(surface) + len(refused) == reg.raw_surface_size, "被拒的工具必须有记录，不许静默丢弃"
     assert not ({t["name"] for t in surface} & {r["name"] for r in refused})
 
@@ -462,7 +480,7 @@ def test_h_tool_surface_is_read_only(h_store: Store):
     # ---- fail-closed：被塞进一个写工具的 H 注册表必须拒绝启动
     poisoned = ToolRegistry(name="poisoned")
     poisoned.register(write_spec)
-    with pytest.raises(ReviewError, match="非只读"):
+    with pytest.raises(ReviewError, match="既不是只读、也不是通用能力"):
         AgentH(h_store, tools=poisoned)
 
     # ---- review_tools 的默认注册面只读；写工具要显式 include_writers

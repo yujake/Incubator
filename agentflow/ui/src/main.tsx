@@ -16,6 +16,7 @@ import { useEffect, useState } from "preact/hooks";
 
 import { ConnectionBanner, LiveProvider, useLive } from "./live";
 import { CacheBanner } from "./components/PromptCache";
+import { ROLE_ERRORS_ID } from "./components/RoleErrors";
 import { Acceptance } from "./pages/Acceptance";
 import { Artifacts } from "./pages/Artifacts";
 import { Budget } from "./pages/Budget";
@@ -53,6 +54,13 @@ export function matchRoute(path: string): { route: Route; sid: string } {
 /** 顶部导航：每一条都是 C4 表里的一个客户端路由（`/run/:sid` 由会话行进入）。 */
 const NAV: ReadonlyArray<{ path: string; label: string }> = [
   { path: "/", label: "对话" },
+  /*
+   * 2026-10-24（业主：「ui侧加一个大栏专门显示各角色错误动作计数」）：这一格链到首页
+   * 那一栏的锚点（`ROLE_ERRORS_ID` 是它的唯一真身）。它刻意不新增客户端路由：
+   * C4 表（`draft/75 §1.4`）与 `ROUTES` 一个字都不用动，`matchRoute` 读到的仍是 `/`，
+   * 于是"加一格导航"没有变成"加一张契约表"。
+   */
+  { path: `/#${ROLE_ERRORS_ID}`, label: "错误动作" },
   { path: "/live", label: "在飞" },
   { path: "/budget", label: "预算" },
   { path: "/evidence", label: "证据链" },

@@ -246,7 +246,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: 字符：出边非空的八个（A/B/D/E/F/G/H/V）各少 319，出边为空的 C 少 539（见
+#: 字符：出边非空的九个（A/B/D/E/F/G/H/L/V）各少 319，出边为空的 C 少 539（见
 
 
 
@@ -399,6 +399,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 #: `p46`（2026-10-08 深夜，S1i）：`TASK_FRAME`（共享段）补一格 `{{board}}` ——
+#: （2026-10-25 S1：D-52 之后板与留言已从任务框摘掉，只作为每一步的增量投递；
+#: 这一行保留为变更史，不是现在的段结构。）
 
 
 
@@ -1566,7 +1568,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-#: V 加「启动即默认这份证明有问题」+ 五条审查角度；D 加研究手稿 `reports/RESEARCH.md`（六节、先读后改）
+#: V 加「启动即默认这份证明有问题」+ 五条审查角度；D 加研究手稿 `reports/RESEARCH.md`（七节、先读后改）
 
 
 
@@ -2260,7 +2262,54 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 批接线就落地的三件（97 → 100 件）⇒ 十一格的工具目录那一段在这一版之前就印着它们。
 #: 读数：十一格摘要全换（每格多了那一条政策，M 那一格还改了第 05 条）。
 #: 判据：tests/test_every_role_knows_it_can_watch_its_children.py（四条）。
-PROMPT_VERSION = "p200"
+#:
+#: p200 → p201（2026-10-25 收口批）：今晚十几条 lane 的段变更合成一版。逐组清单
+#: （每一组都带自己的判据文件，这里只记"改了哪一组"，逐条的旧写法/新写法在判据里）：
+#:   ① M 的 27 条过时清理（`specs/m.py`）：审查清单 27 条，逐条把"提示词说的"改成
+#:      "代码做的那一件"（销号入口点名 `conductor.retire_child`、公共频道写作 `to="ALL"`、
+#:      例数不再手抄……）。判据：tests/test_m_prompt_has_no_stale_design.py。
+#:   ② D / E / F 那一批（`specs/d.py` / `specs/e.py` / `specs/f.py`）：条目号 G1–G5 与
+#:      D4–F8 那一张清单（组数与条数以那个判据文件的表为准）。要点：E 不再被教
+#:      "写 statements 的 proof_text"（它的写集只有
+#:      experiments）、结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）；D 的
+#:      policy 不再点 `conductor.summon`（它没有那件工具）；F 不再点 `verify.read_proof`；
+#:      研究手稿改七节。判据：tests/test_d_e_f_specs_have_no_stale_design.py。
+#:   ③ G / H / V / L 与公共段那一批（`specs/g.py` / `h.py` / `v.py` / `l.py`）：销号两个
+#:      入口落到同一处（秘书）、只读角色只有 `retire` 形那一档、`lean_file` 三处落点同口径、
+#:      五元位与板状态机的写法。`specs/l.py` 的 NO_LEAN_* 三张改写表整块退役 —— 它不可达
+#:      （关档时 L 不在场，`require_visible` 抛 RoleHidden），本文件的 `_no_lean_tables`
+#:      循环里同步摘掉。判据：tests/test_g_h_v_l_prompt_has_no_stale_design.py。
+#:   ④ S1：system 的 TASK_FRAME 摘掉「你收到的留言」与「挂在你名下的工作项」两格
+#:      （六块变四块，正文收成 `_TASK_FRAME_TEXT`）。这两格已由 D-52 改成每一步的增量
+#:      投递，system 里那份恒为"没收到留言 / 板上没事"的缺省句只会让模型在开场读到一个
+#:      错的状态。判据：tests/test_system_frame_has_no_inbox_or_board.py。
+#:   ⑤ S2：监控与工具面的出口按角色现算 —— TOOLCHAIN_FACTS 里「这条路怎么走」那一族
+#:      只发给走得通的角色（`_reaches_proof_review` / `_filter_toolchain_facts`：E 的写集
+#:      与工具面都落不到那条路上，此前等于教它走一条它没有的路），`conductor.*` 的件数
+#:      改成现算（`conductor_tool_count`，原来手抄"十四件"）。判据：
+#:      tests/test_monitor_turn_exit_is_role_aware.py 与
+#:      tests/test_policy_never_names_a_tool_the_role_lacks.py。
+#:   ⑥ 共用段那几处（改一格就换全部十一格）：LOOP_PROTOCOL 与 HANDOFF_PROTOCOL 的 `to`
+#:      口径改指名册名 / 绝对编号；板状态机写明 `done` 与 `block` 是两个并列出口（`block`
+#:      不是 `done` 的下一档）；五元位写明第 4 位的读侧第五档 `stale`；PAPER_PACK 的正文
+#:      写作收归 G（M / H 只读）；`toolchain_facts_text` 里"verifications 表"改成文件账本。
+#:   ⑦ 收口当天补的那一句（两条 lane 的文案合并时丢的）：LOOP_PROTOCOL 的形状表第 10 条
+#:      重新写明 `{"retire": …}` 这一形是旧路（销号只走 `conductor.retire_child`，两个入口落到
+#:      同一处，只读角色只有这一形）。为什么算"丢"：G/H/V/L 那一单把"只读角色只有形那一档"写进
+#:      了正文、D/E/F 那一单把 `retire` 标成旧路（落在 `specs/d.py`），两边合并之后 M 的正文里
+#:      没有"旧路"这两个字，而 tests/test_m_prompt_has_no_stale_design.py 的第 26 条要它。
+#:      这一句同时满足两单的判据（旧路 + 同一落点 + 只读角色只有形）—— 逐字用的是业主口径，
+#:      只去掉「旧路」两侧的强调星号：`tests/test_g_h_v_l_prompt_has_no_stale_design.py` 第 ② 条
+#:      把「这一形是 + 强调星号包住的旧路」那一串列为只读角色（H / V）的 stale 文案
+#:      （对它们这一形是唯一那条路，
+#:      说成旧路会把"没有别的入口"读成"有别的入口只是旧的"）。去掉星号后这串不再命中，而
+#:      「旧路」二字仍在（M 那条判据要的就是这两个字），紧跟的「只读角色没有那一件工具」把
+#:      三档读者都交代清楚。
+#: 读数：十一格摘要全换（D / M 两格在 p200 那一格里已按 D-66 换过一次，本次随共用段再换）。
+#: facts 键集一格未动（15 格）：inbox / board 仍在 `STEP_VOLATILE_FACTS` 里，变的只是
+#: 它们的落点（system 的两段挪进开场那条 user 消息），那一侧记在
+#: tests/test_prompt_stability.py 的 `_VOLATILE_FACT_SETS`。
+PROMPT_VERSION = "p201"
 
 
 
@@ -2317,8 +2366,8 @@ LOOP_PROTOCOL = """\
 1) 调用你自己工具面上的一个数据工具：
    {"tool": "<工具名>", "args": {<按该工具的参数表>}, "why": "<一句话说明为什么>"}
 
-2) 唤起一个伙伴去做一件事：
-   {"summon": {"role": "<伙伴角色名>", "task": "<要它干什么：一件可判定的活；可捎上你的起手建议>",
+2) 唤起一个伙伴去做一件事（`role` 写**伙伴表里那个角色名**，不是角色级通配）：
+   {"summon": {"role": "<伙伴表里的角色名>", "task": "<要它干什么：一件可判定的活；可捎上你的起手建议>",
                "params": {<按该动作的参数表>}, "why": "<一句话说明为什么找他>",
                "brief": "<一句任务简介，单行、不超过 60 字>",
                "name": "<可选：给这个子代理起的名册名，如 D3>",
@@ -2347,7 +2396,7 @@ LOOP_PROTOCOL = """\
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
-   每一项还能带与 2) 一样的**名册三格**（\brief\ / \name\ / \reuse\）—— 一批里派三件不同的活时，
+   每一项还能带与 2) 一样的**名册三格**（`brief` / `name` / `reuse`）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
    **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是
@@ -2361,7 +2410,7 @@ LOOP_PROTOCOL = """\
    "到底并发了没有"的读数；一次一个地派会把本该并行的活排成串行。
 
 3) 说一句话（不要求对方立刻做事，只是把信息传过去）：
-   {"message": {"to": "<伙伴角色名>", "subject": "<短标题>", "body": "<正文>",
+   {"message": {"to": "<名册名或绝对编号（如 D1 / t-000003）>", "subject": "<短标题>", "body": "<正文>",
                 "reply_to": "<可选：你在回哪一条留言>"}}
    `reply_to` 写收件箱里那个编号（摘要每行开头 `[编号]` 那个）—— 它是"**回一条已经存在的
    对话**"：那条对话成立过，所以**不必再要求协作边**（这正是"旁的角色先开口、你再回"的落法）。
@@ -2373,7 +2422,7 @@ LOOP_PROTOCOL = """\
    没有台账号 ⇒ 公聊会被受控拒绝**（不是"发出去了但没人读"，也不是网络错误）——
    那一步改用私聊指名，或等落台账之后再发。想让整棵树都知道 ⇒
    你发给自己的子代理，由它们各自决定要不要再向下转（级联是收件人的动作，框架不代它转）。
-   要"发给某一个同伴看"就**私下指名**（`to` 写它的角色号），或者写一份交接手稿交给它
+   要"发给某一个同伴看"就**私下指名**（`to` 写它的名册名，如 `D1`；或它的绝对编号，如 `t-000003`），或者写一份交接手稿交给它
    —— 手稿是 `handoff` 形状，它**不是一件工具**。
    发出去之后框架会给你一条**回执**（三种，别把它读成一个布尔）：`queued` = 收件人有 LLM
    循环、下次进循环时会读到；`no_reader` = 没有任何进程会读它（收件人是确定性动作、
@@ -2391,7 +2440,7 @@ LOOP_PROTOCOL = """\
    它不会立刻唤醒对方，所以"要他现在做事"仍然用 summon。
 
 4) 写一份交接手稿（把一件事交给别人，并留下盘上可复核的那一份）：
-   {"handoff": {"to": "<伙伴 / M / ALL>", "summary": "<一句话：进留言的那句>",
+   {"handoff": {"to": "<名册名 / 绝对编号 / 角色名 / M / ALL>", "summary": "<一句话：进留言的那句>",
                 "body": "<markdown 正文>", "refs": ["<前序手稿编号>"],
                 "revises": "<可选：要订正的那一号手稿>", "why": "<可选：为什么写这一份>"}}
    必填 `to`/`summary`/`body`（空手稿是"我交接了"的假证据）；编号由框架分配，你不编。
@@ -2420,7 +2469,7 @@ LOOP_PROTOCOL = """\
 
 7) 收工（`notify` 是交接手稿那一栏：填了才有人收到手稿，不填就是这一趟不写手稿）：
    {"final": "<给调用方的结论>", "evidence": ["<你实际用到的 id>"],
-    "notify": {"to": "A–H 或 ALL", "summary": "<一句话：交给对方什么>",
+    "notify": {"to": "<名册名 / 绝对编号 / 角色名 / ALL>", "summary": "<一句话：交给对方什么>",
                "body": "<markdown：做了什么 / 依据（实验号、文献号、手稿号）/ 要对方做什么 / 我卡在哪>",
                "refs": ["<前序手稿编号，或 stmt:/exp:/lit:/rel: 这类台账引用>"]}}
    —— `notify` 的 `to`/`summary`/`body` 是这一栏自己的必填项。填了且形状对：由你这一趟的
@@ -2445,14 +2494,20 @@ LOOP_PROTOCOL = """\
 
 10) 让一个子代理退役（**父决定**：子代理自己不能退自己；活跃的会先把它的最近报告端给你）：
    {"retire": {"name": "<名册名，如 D1>"}}
-   —— 名册名来自 `{"roster": {"of": "self"}}`；退役后那个名字**永久不再复用**。
+   —— 销号是父的决定，两个入口落到**同一处**（秘书那一侧，还带「还在飞 / 名下还有未消的板项
+   ⇒ 受控拒绝」那两道判定）：能调工具的父用 `conductor.retire_child(child_name=<名册名>,
+   reason=<为什么销它>)`；面上没有那一件的角色（只读那一档：C / H / V）就用上面这一形 ——
+   `{"retire": …}` 对谁都成立，`retire_child` 只在拿得到写工具的那一档面上。
+   （这一形是旧路：销号只走 `conductor.retire_child(child_name=<名册名>, reason=<为什么销它>)`，
+    两个入口落到同一处（秘书那一侧）；只读角色没有那一件工具，只有这一形）
+   名册名来自 `{"roster": {"of": "self"}}`；退役后那个名字**永久不再复用**。
 
 规则：
 
 - 参数提示只列必填，它不是全部可用键：可用键是封闭集合（不许自己发明键），多传一个键就会被拒
   （invalid_params）—— 被拒时框架会把该工具/动作的完整参数表回给你，照它重写一次就好。
   派活前先看伙伴表里的参数要求与接线态：**没接线的伙伴派了也会被拒**，不如改派能做的。
-- 名字必须是真的：工具名取自上面列出的工具面，角色名与动作名取自律上面列出的伙伴表。
+- 名字必须是真的：工具名取自上面列出的工具面，角色名取自伙伴表；**动作名不要填、也不要猜**。
   写错的名字会被当场拒绝，并把拒绝理由原样回给你 —— 那不是失败，是一次纠正。
 - 唤起伙伴要过能力表与策略（允许的边 / 深度 / 扇出 / 并发 / 总量 / 预算）。
   被拒绝时框架会告诉你理由码；你可以改主意，但不许换个名字重试同一次越权。
@@ -2501,7 +2556,7 @@ LOOP_PROTOCOL = """\
   名字拼错就照它给的正确名字重写一次。
 - 派活先过秘书：`alarms` 预筛报警、`wash`/`changes` 洗过的格式、`assessment` 该不该派；`refused` 非空即被拒，`fail_open` 为真是没查成。
 - 收工那条 JSON 里的 `notify` 表是**交接留痕**（见上面的形状）：它同时决定"谁收到这份手稿"，
-  所以 `to` 必须是角色名或 `ALL` —— 写错或留空，这张表就不算数、这一趟没有手稿
+  所以 `to` 必须是名册名（如 `D1`）、绝对编号（如 `t-000003`）、角色名或 `ALL` —— 写错或留空，这张表就不算数、这一趟没有手稿
   （不会发给别人，但也没人收到）。拿不准就给 `ALL`（广播）。
 - 你永远不许把"没查到 / 没接线 / 被拒绝"写成"没有问题"或"不存在"（三态纪律），
   也不许编造一个没出现过的 id 当证据。"""
@@ -2650,7 +2705,8 @@ COLLAB_SHAPES_TEXT = """\
   盘上那份可复核的正文（别人之后要读、要引、要溯源的，用这个而不是 `message`）。
 - `ask_user`：要用户的取舍（只有主控能当面问；别人请主控代问）。
 - `final`：收工并给结论（带上 `notify` 就顺手写一份交接手稿）。
-- `roster`：看名册（只读）。`interrupt`：停某个子代理当前那一轮；`retire`：结束它。"""
+- `roster`：看名册（只读）。`interrupt`：停某个子代理当前那一轮；`retire`：结束它
+  （销号两个入口同一落点：形是这个、工具是 `conductor.retire_child`；只读角色只有形那一档）。"""
 
 
 
@@ -2738,7 +2794,9 @@ def collab_board_text() -> str:
 
 
 
-    states = " → ".join(f"`{s}`" for s in _S.ITEM_STATES)
+    order = [f"`{s}`" for s in _S.ITEM_STATES]
+    states = " → ".join(order[:-2])          # 前段：跑到「谁读过」为止
+    exits = " / ".join(order[-2:])            # 末两档是两个并列出口，不是一个接一个
 
 
 
@@ -2770,7 +2828,8 @@ def collab_board_text() -> str:
 
 
 
-        f"- 状态机 {states}：`done` 之前必须先 `seen`，而 `seen` 是「这一项被读进某一步」"
+        f"- 状态机 {states}，之后是**两个并列出口**：{exits} —— `done` 是「做完了」、"
+        "`block` 是「做不下去」；**`block` 不是 `done` 的下一档**。`done` 之前必须先 `seen`，而 `seen` 是「这一项被读进某一步」"
 
 
 
@@ -2878,7 +2937,7 @@ def collab_fivebits_text() -> str:
 
 
 
-    lines = ["一条命题的五个证据位（现算：位名 / 谁签的字 / 凭据去哪张表查）："]
+    lines = ["一条命题的**五个证据位**（谁签的字 / 凭据去哪张表查 —— 现算，不是记忆）："]
 
 
 
@@ -2906,7 +2965,7 @@ def collab_fivebits_text() -> str:
 
 
 
-        "四态（第 1/4 位 `numeric` / `formal`）："
+        "**这五位只回答「谁签过字」**；每一位自己的状态是这四档："
 
 
 
@@ -2918,7 +2977,18 @@ def collab_fivebits_text() -> str:
 
 
 
-        "等级（" + " / ".join(f"`{g}`" for g in EB.GRADES) + "）是从这些位**现算**的："
+        # 2026-10-25（审计 G/H/V/L 第 5 条）：第 4 位逐路径的读侧还有第五档 `stale`
+        # （`FORMAL_PATH_STATES` = 四态 + stale）。这一档此前只在 evidencebits 里，
+        # 提示词一个字都没有 ⇒ 模型看到 stale 会当成 pending（没验过），而它其实是
+        # "验过、但现行正文不是当时那一份"。
+        "第 4 位（`formal`）逐路径的读侧取值："
+        + " / ".join(f"`{s}`" for s in EB.FORMAL_PATH_STATES)
+        + " —— `stale` 是「验过、但那一份已经不是现行正文」，它**不算** `verified`，"
+          "也不折进 `pending`（写侧只写四态，这一档由读侧现算）。",
+
+
+
+        "**四档等级**（" + " / ".join(f"`{g}`" for g in EB.GRADES) + "）是从这五位**现算**的："
 
 
 
@@ -3101,7 +3171,7 @@ _LOOP_BLOCK_C = '''\
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
-   每一项还能带与 2) 一样的**名册三格**（\brief\ / \name\ / \reuse\）—— 一批里派三件不同的活时，
+   每一项还能带与 2) 一样的**名册三格**（`brief` / `name` / `reuse`）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
    **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是
@@ -4409,12 +4479,12 @@ PAPER_PACK = """\
 论文（你参与的那份交付物）—— 这一段的每一句都能在工作区里核对：
 
 一、交付物是什么：**由智能体自己写出来的论文正文**，不是核验结果
-- **正文由你写**（业主 2026-10-13 裁定，逐字：「……我们要智能体写文章」）
-- **正文与附录都写在 `out/paper/main.tex` 这一份里**（附录也写进去：`appendix.tex` 不是单独的落点）；**没有"建论文包"这个动作**，也不要派渲染/核锚 —— 正文由你写，PDF 由 `doc.paper_compile` 编。——**但只在成文阶段写**：题面没说「整理成论文 /
+- **正文由 G 写**（业主 2026-10-13 裁定，逐字：「……我们要智能体写文章」）
+- **正文与附录都写在 `out/paper/main.tex` 这一份里**（附录也写进去：`appendix.tex` 不是单独的落点）；**没有"建论文包"这个动作**，也不要派渲染/核锚 —— 正文由 G 写，PDF 由 G 调 `doc.paper_compile` 编（那一件只在他面上）。——**但只在成文阶段写**：题面没说「整理成论文 /
   交付论文 / 稿件」时这一节与你无关（研究阶段只积累研究手稿、命题与证明）。项目根 `projects/<项目名>/`，工作区里
-  `out/paper/main.tex` **就是论文本体** —— 从零研究那一类工作区里它由你用 `fs.write`
-  一段段写出来（散文体、章节自己排、`\\cite` 与定理环境随你）；审阅型工作区里它是
-  盘上已有的那份正文，**可改、该改**。落笔前后都用 `fs.read` 读回来核一遍。
+  `out/paper/main.tex` **就是论文本体** —— 从零研究那一类工作区里它由 G 用 `fs.write`
+  一段段写出来（散文体、章节自己排、`\\cite` 与定理环境随正文定）；审阅型工作区里它是
+  盘上已有的那份正文，**该改的是 G**。**你不写正文**：你读正文与回执 → 核对 → 把不对的地方落成 finding（H）或派回 G（M）；落笔只由 G 做。
 - `source/`（审阅型工作区里的基线稿）是**只读基线**：它是用来做前后对比的，
   一个字节都不许改；要改就改 `out/paper/main.tex`。
 - 交付物的定义只有一句话：**读者拿到的应当是一篇更好的论文**。核验、证据等级、台账表
@@ -4467,11 +4537,11 @@ PAPER_PACK = """\
 四、体例与工作循环
 - 主稿保持**论文自己的体例**：正文是给读者读的论文，改它的时候不要为了塞台账去换文档类、
   也不要把台账表塞进正文（台账归工具面与附录）。
-- **工作循环**（三步）：
-  ① `fs.read` 读盘上这一份正文与 `out/paper/COMPILE-RECEIPT.json`（上一轮的回执）；
-  ② `fs.write` 改正文（或第一次把正文写出来）；
-  ③ 调 `doc.paper_compile` —— 它**在框架内**编出 `out/paper/main.pdf` 并写一份框架自己产的
-  回执。回执没记上你刚写的那一份（`tex_sha256` 对不上）就说明 PDF 是旧正文编的，重编一次。
+- **工作循环**（G 三步；M / H 只走第 ① 步，把读到的东西拿去核对 —— 写与编都不是他们的动作）：
+  ① `fs.read` 读盘上这一份正文与 `out/paper/COMPILE-RECEIPT.json`（上一轮的回执）—— 这一步三个角色都走；
+  ② G 用 `fs.write` 改正文（或第一次把正文写出来）；
+  ③ G 调 `doc.paper_compile` —— 它**在框架内**编出 `out/paper/main.pdf` 并写一份框架自己产的
+  回执。回执没记上 G 刚写的那一份（`tex_sha256` 对不上）就说明 PDF 是旧正文编的，G 重编一次。
 - 页数与引擎退出码**分两栏读**：本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒
   判据是回执里的产物读数（`pages` / `pdf_bytes` / 回执与 tex 是否一致），不是退出码。
 - **`doc.paper_compile` 只有 G 拿得到**（它是写盘 + 起子进程那一档）：M 与 H 手上没有这一件
@@ -4481,15 +4551,17 @@ PAPER_PACK = """\
 - **H 审论文：审什么、在哪，靠派活告诉它**（业主 2026-10-13：「H 要能对论文进行只读审核，
   至于论文在哪可在派活时告诉它」）：M 派 H 审正文时要把落点写进派活（`out/paper/main.tex`
   与 `main.pdf`），H 用 `fs.read` 只读读它、一个字都不改；审校报告由 `review_report` 落到
-  **框架定的** `out/review/<doc_id>-review.md`（H 不挑路径），收工门那一档 `review_files`
-  数的就是它。**成文阶段所有角色都可能有任务**：正文里的瑕疵要回去补（补证据 D/F、
+  **框架定的** `out/review/<doc_id>-review.md`（H 不挑路径），**验收表**里 `kind=review_files`
+  那一行数的就是它（验收表没声明这一行 ⇒ 这一档没有读数）。**成文阶段所有角色都可能有任务**：正文里的瑕疵要回去补（补证据 D/F、
   核引文 A/B、重算关系读数 C、逐行审阅 V）—— 别把「写论文」读成只有 G/H 的事。
   而**审校这条链的中心是 B / H / V**（业主 2026-10-13：「review 不是一种模式，显然应该是以 B、
   H 和 V 为中心的智能体协作工程」）：B 给逐字出处与命题台账、V 给证明的逐行签名、H 拿这两样判稿
   —— 正文里每一条承重断言都要能顺着这条链找到「原文长什么样」与「谁签过字」。
 
-五、完成定义（收工门八格全过才算交付，任何一格没过就不许说"完成"；
-格数与逐格判据以 `conductor.closing` 的当次读数为准 —— 这里写的是真身条数，改前那句"五条"是手抄的陈旧计数）
+五、完成定义（收工门**八格**全过才算交付，任何一格没过就不许说"完成"）：八格是 `paper` / `contradictions` /
+`load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger`；逐格判据以
+`conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格它会在读数里逐格点名，这里不重抄，
+同样以它的当次读数为准。
 1. **正文与 PDF 对得上**（收工门那一格叫 `paper`，判据只有一条）：编译回执里的
    `tex_sha256` 等于盘上这一份 `out/paper/main.tex` 的摘要 —— 那才叫"这份 PDF 是从盘上
    这份正文编的"。四种读数各有各的名字，不许折平：盘上根本没有 `out/paper/main.tex`
@@ -4531,11 +4603,12 @@ PAPER_PACK = """\
 - **「形式化已关闭」那一档的替代路线**（第一行读数说「已关闭」时走这条）：
   这条路换成**自然语言逐行审阅**，交付形状是：
   1. 证明过程逐字进 `statements` 的 `proof_text`（含假设、每一步依据、你接不上的那一步）；
-  2. 派 V 的 `verify_proof`（命题号 + 证明全文）逐行走查，结论落 `verifications` 表 ——
+  2. 派 V 的 `verify_proof`（命题号 + 第几条证明 `proof_no`（缺省 1）+ 证明全文）逐行走查，
+     结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）——
      这是本会话**唯一**的"审过"凭据（收工门与 H 的采信都改看它）；
   3. 审阅报告里逐条写清：哪几步站得住、哪几步是缺口、缺口缺的是哪一类依据。
-  检查器那一步若仍被调用，它会如实回 `lean_disabled`（那是"用户关掉了这条路"，
-  不是"机器上没有 Lean"，也不是"证明没过"）—— 见到它**别再重试**，改走上面三步。
+  这一档下模型面上没有任何检查器入口（「形式化已关闭」时，形式化那一族只落在形式化那一岗的
+  面上，而那一岗在关着时不在场）⇒ 不必去找"再调一次检查器"那一步，上面三步就是全部。
 
 七、摄取与派活的三条纪律（2026-10-03 加，`draft/37` §48 的真机读数逼出来的）
 
@@ -5470,6 +5543,12 @@ def tools_lines(role: str, registry: Any) -> list[str]:
 
 
 
+def conductor_tool_count(role: str, registry: Any) -> int:
+    """该角色工具面上 conductor.* 有几件（现算：加了工具提示词自己会跟上，不写死数字）。"""
+    return sum(1 for spec in _specs_for(role, registry)
+               if str(getattr(spec, "name", "")).startswith("conductor."))
+
+
 def actions_lines(role: str) -> list[str]:
 
 
@@ -6080,7 +6159,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-                       "（业主 2026-10-10 裁定：主控不许直接控制 F；V 已于 2026-10-18 由业主加回 M 的出边）："
+                       "（业主 2026-10-10 裁定：主控不许直接控制 F）："
 
 
 
@@ -6160,7 +6239,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-                # 看得到但唤不起（主控那一档的 F；V 已于 2026-10-18 由业主加回 M 的出边）。
+                # 看得到但唤不起（主控那一档的 F；V 那条边 2026-10-20 已由业主撤掉）。
 
 
 
@@ -6844,7 +6923,7 @@ def _block_sections(text: str, names: Sequence[str]) -> list[Section]:
 
 
 
-#: `TASK_FRAME` 恒 6 块、`EVIDENCE_CONTRACT` 2 块、`HANDOFF` 2 块（末尾那个空块是
+#: `TASK_FRAME` 恒 4 块、`EVIDENCE_CONTRACT` 2 块、`HANDOFF` 2 块（末尾那个空块是
 
 
 
@@ -6868,11 +6947,22 @@ _PAPER_BLOCK_NAMES: tuple[str, ...] = (
 
 
 
+#: 任务框的正文（四块，块名见下面的表）。2026-10-25（S1）：此前它含「你收到的留言」
+#: 与「挂在你名下的工作项」两格 —— D-52 把这两格改成每一步的增量（`agent_loop._deliver_mailbox`），
+#: 而 system 段还在印它们、缺省句恒为「没收到留言 / 板上没事」⇒ 模型开场读「空」、下一步又收到增量。
+#: 现在这两格只出现在开场那条 user 消息里（`prompt_facts` 的缺省句仍是它们的唯一来源）。
+_TASK_FRAME_TEXT: str = (
+    "这一次的任务：\n{{task}}\n\n"
+    "用户回答过的问题（含迟到送达的回答）：\n{{user_replies}}\n\n"
+    "你的草稿本（最近几条，是你自己以前写的）：\n{{notebook}}\n\n"
+    "剩余预算：{{budget_left}}"
+)
+
 _TASK_FRAME_BLOCK_NAMES: tuple[str, ...] = (
 
 
 
-    "TASK_FRAME", "TASK_INBOX", "TASK_BOARD", "TASK_USER_REPLIES", "TASK_NOTEBOOK",
+    "TASK_FRAME", "TASK_USER_REPLIES", "TASK_NOTEBOOK",
 
 
 
@@ -7386,7 +7476,7 @@ def toolchain_facts_text() -> str:
 
 
 
-            "`verifications` 表；`evidence_kind=\"proof\"` 这一档本会话**产不出来**，"
+            "`verifications/<命题号>.jsonl`（文件账本，不是表）；`evidence_kind=\"proof\"` 这一档本会话**产不出来**，"
 
 
 
@@ -8092,7 +8182,7 @@ _COLLAB_NAMES_TEXT = (
 
 
 
-    "`retire` 之后**永久不再复用**。**要指称某个子代理就用它**："
+    "销号之后**永久不再复用**。**要指称某个子代理就用它**："
 
 
 
@@ -8100,7 +8190,8 @@ _COLLAB_NAMES_TEXT = (
 
 
 
-    "`{\"roster\": {\"of\": \"D1\"}}` 都只认名册名；写台账号会被受控拒绝"
+    "`{\"roster\": {\"of\": \"D1\"}}` / `conductor.retire_child(child_name=\"D1\")` 都只认名册名"
+    "（销号两个入口落到同一处：能调工具的父走 `retire_child`，只读那一档只有 `retire` 形）；写台账号会被受控拒绝"
 
 
 
@@ -8515,6 +8606,46 @@ def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
     }
 
 
+#: 这条「证明审阅」的路，谁真的走得通：写 statements 的写面、`verify.verify_proof`、
+#: 或 `formal.*` 入口，三样有一样即可。E8（2026-10-25）：E 三样都没有，而 TOOLCHAIN_FACTS
+#: 此前把「把证明写进 statements 的 proof_text，再请 V 用 verify_proof 走查」发给每一个角色
+#: —— 那是教它走一条它没有的路（E 的写集只有 experiments，工具面上 0 件 formal.* / detect_verifier）。
+def _reaches_proof_review(role: str, registry: Any) -> bool:
+    """这个角色能不能自己落到「写证明文本 / 送 V 审 / 走形式化」这条路上（现算，不抄名单）。"""
+    if "statements" in set(C.WRITE_SETS.get(str(role), ())):
+        return True
+    names = {str(getattr(spec, "name", "")) for spec in _specs_for(role, registry)}
+    if "verify.verify_proof" in names:
+        return True
+    return any(name in _FORMAL_ENTRY_TOOLS for name in names)
+
+
+#: TOOLCHAIN_FACTS 里「这条路怎么走」那一族的第一行标记（走不通的角色只读机器读数）。
+_TOOLCHAIN_PATH_PREFIXES: tuple[str, ...] = (
+    "- Lean 形式化：", "- 形式化开关", "- 这一趟走替代路线",
+)
+
+
+def _filter_toolchain_facts(role: str, registry: Any, text: str) -> str:
+    """E8：把「这条路怎么走」的指令从走不通的角色的 TOOLCHAIN_FACTS 里摘掉。
+
+    机器读数（检查器 / Mathlib）留着：那是「这台机器有没有」的事实，谁读都不冤；
+    「你可以走形式化 / 把证明写进 statements 再请 V 走查」是指令，只发给走得通的人。
+
+    2026-10-25（审计 G/H/V/L 那一批的连带修）：带「已关闭」的那一行留着。
+    它是一句状态读数（"这一档是关的"），不是"这条路怎么走"的指令 —— 而"本会话不做
+    形式化验证（系统做不了）"这句话唯一的出处就是那一行（`specs/e.py` 那张改写表只
+    对 E 自己的文本生效）。把它一起摘掉，十个角色的提示词里就一句都不剩"系统做不了"，
+    那正是业主 2026-10-12 那条口径要防的形态（所有人的第一反应应当是"系统做不了"）。
+    判据：`tests/test_lean_switch.py::test_the_no_lean_variant_rewrites_every_role_face`。
+    """
+    if _reaches_proof_review(role, registry):
+        return text
+    kept = [ln for ln in str(text).splitlines()
+            if "已关闭" in ln or not ln.startswith(_TOOLCHAIN_PATH_PREFIXES)]
+    return "\n".join(kept)
+
+
 def role_prompt_registry(role: str, *, registry: Any = None,
 
 
@@ -8849,7 +8980,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-                        "（编号用来对账与回报：派活仍按角色走 `summon`，父子关系由框架"
+                        "（编号用来对账与回报：造新子代理给它名册名（`name`），复用旧子代理写 `reuse`；父子关系由框架"
 
 
 
@@ -9013,7 +9144,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-                        "**对框架**的接口是 `conductor.*` 那十四件读数与操作。"
+                        f"**对框架**的接口是 `conductor.*` 那 {conductor_tool_count(role, registry)} 件读数与操作。"
 
 
 
@@ -9045,39 +9176,11 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
 
-    # 任务框按空行切成 6 栏（实测恒为 6）—— 每一栏一段，于是"哪一栏落后于代码"能点名。
+    # 任务框按空行切成 4 栏（实测恒为 4）—— 每一栏一段，于是"哪一栏落后于代码"能点名。
 
 
 
-    for section in _block_sections(
-
-
-
-            "这一次的任务：\n{{task}}\n\n"
-
-
-
-            "你收到的留言（可能为空）：\n{{inbox}}\n\n"
-
-
-
-            "挂在你名下的工作项（板；可能为空）：\n{{board}}\n\n"
-
-
-
-            "用户回答过的问题（含迟到送达的回答）：\n{{user_replies}}\n\n"
-
-
-
-            "你的草稿本（最近几条，是你自己以前写的）：\n{{notebook}}\n\n"
-
-
-
-            "剩余预算：{{budget_left}}",
-
-
-
-            _TASK_FRAME_BLOCK_NAMES):
+    for section in _block_sections(_TASK_FRAME_TEXT, _TASK_FRAME_BLOCK_NAMES):
 
 
 
@@ -9293,8 +9396,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     reg.section(Section("TOOLCHAIN_FACTS", SECTION_ORDERS["TOOLCHAIN_FACTS"],
 
 
-
-                        (toolchain_facts or "").strip() or _no_toolchain_text()))
+                        _filter_toolchain_facts(
+                            role, registry,
+                            (toolchain_facts or "").strip() or _no_toolchain_text())))
 
 
 
@@ -9398,7 +9502,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 HANDOFF_PROTOCOL = """\
 交接手稿（交接工作前的标准动作，也是"派活依据"与"溯源"落在盘上的那条通道）。
 
-- 写给谁：`to` 取 A–H 或 M；**给所有人写 `to="ALL"`**（走公共频道；写 `"#public"` 也收，
+- 写给谁：`to` 取名册名（如 `D1`）、绝对编号（如 `t-000003`）、角色名，或 `M`；**给所有人写 `to="ALL"`**（走公共频道；写 `"#public"` 也收，
   两个名字是同一个频道 —— `message` 那一形状习惯写 `#public`，这里写 `ALL`）。
 - 编号：**由脚本分配**（从 `0000` 起顺次，你不需要也不许自己编号）；一份交接就是
   工作区根 `manuscripts/handoffs.jsonl` 里的一行（追加式账本，一行一份，不覆盖）。
@@ -9450,14 +9554,20 @@ def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
 
     每一项是 `(模块名, 整块删的表, 整行删的标记, 逐条替换的表)`；模块缺某一张表时
     按空元组算（`getattr(..., ())`）—— 那张表不存在与它是空的，在应用上等价。
+
+    2026-10-25（审计 G/H/V/L 第 10 条）：`specs/l.py` 从这里「退场」。它原来也有一份表
+    （"关掉之后 L 的文本改成什么样"），而那一份不可达：`L` 在 `leanscope.LEAN_ONLY_ROLES`
+    里，关着时 `require_visible` 抛 `RoleHidden` ⇒ 收口拿到的文本里没有一句是 L 的，
+    那三张表一条都应用不上。整块退役而不是留着 —— 留一份永不生效的改写表，读的人会以为
+    关档有这一层保护。关掉那一档该说的话留在能行动的那两家：B 的 `PROOF_CHANNEL_NO_LEAN`
+    （唯一能派 L 的人）与 G 的 `WRITING_SCOPE_NO_LEAN`（正文怎么写）。
     """
     from .specs import b as _B_SPEC
     from .specs import e as _E_SPEC
     from .specs import g as _G_SPEC
-    from .specs import l as _L_SPEC
 
     out: list[tuple[str, tuple, tuple, tuple]] = []
-    for mod in (_B_SPEC, _E_SPEC, _G_SPEC, _L_SPEC):
+    for mod in (_B_SPEC, _E_SPEC, _G_SPEC):
         out.append((
             str(getattr(mod, "__name__", "")),
             tuple(getattr(mod, "NO_LEAN_DROP_BLOCKS", ())),
@@ -9472,12 +9582,13 @@ def _apply_no_lean_variant(text: str) -> str:
 
     业主 2026-10-12（逐字）：「负责 Lean 的智能体 E 在开关关掉时可不载入有关形式化验证的
     提示词，全体成员关于 E 的印象也可以没有『负责形式化验证』这个说法，一旦提到形式化验证
-    所有人的第一反应是系统做不了」。2026-10-22 新设 L 之后，这条口径同时管三个角色
-    （B / E / L 各有一份表，见 `_no_lean_tables`）。
+    所有人的第一反应是系统做不了」。2026-10-22 新设 L 之后，这条口径同时管两个角色
+    （B / E 各有一份表，见 `_no_lean_tables`）；L 自己那一份在 2026-10-25 退役（它不可达：
+    关着时 L 不存在，收口读不到它的一句话）。
 
     四处刻意的做法：
 
-    - 改写表住在 `specs/b.py` / `specs/e.py` / `specs/l.py`（各自声明旁边）：声明本身一个字不改
+    - 改写表住在 `specs/b.py` / `specs/e.py`（各自声明旁边）：声明本身一个字不改
       （它派生权限面的四张表、被冻结快照钉着），随开关变的只是"渲染给模型看的那份文本"；
     - 应用点是唯一的收口（`system_prompt` / `prompt_audit` 都经过它）—— 提示词有多条
       渲染路径（角色段 / 伙伴表 / 工具面 / 政策），逐条去改会漏掉某一条，

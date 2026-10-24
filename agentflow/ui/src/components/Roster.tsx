@@ -18,6 +18,13 @@
  * 从父开始，子缩进在父下面并用连接线连起来；同一父的多个子按落盘行序排（不是按
  * 名册名重排）。
  *
+ * ## 一个节点是一个子代理，它下面挂"管过的任务号"（业主 2026-10-24）
+ * 「一个子代理可接收多个任务」「一个子代理后面可展开它管的任务号」。所以树里两层：
+ * 1. 代理这一层（父子关系，`children_of`）—— 一个节点是一个常驻子代理（G1 / D1 / F1…）；
+ * 2. 任务这一层（`nodes[].tasks[]`）—— 点开节点行尾那个「活 N」才列，一行一件活
+ *    （编号 + 起止时间 + 状态 + 一句话）。任务号不是树的节点：把它们摆进树里会造出
+ *    d1 上多出来的根，那正是 D-66 那个故障的形态（`t-000039` / `t-000068` 被抬到 d1）。
+ *
  * ## 折叠（默认展开到第 2 层）
  * 树大起来一次铺开会把页面淹掉。所以默认只展开到第 2 层：第 1、2 层的节点展开，
  * 第 3 层的节点默认折叠（它们的子树要点一下才出来）。展开态在本次浏览内保持 ——
@@ -30,6 +37,17 @@
  * 做成单独一页等于让人在两个页面之间来回对号；而且新开一条客户端路由要动 C4 契约表
  * （`draft/75 §1.4`），而"监控面"本来就在「在飞」页。所以它落在这里，与那一页的
  * 「在飞」「停机」「用量」几张卡片并排 —— 同一份读数，一处实现。
+ *
+ * ## 已销号（退役）的节点怎么画（D-59，业主 2026-10-26 的两句口径）
+ * 「对已销号的，名册 ui 显示默认折叠，只有用户再点击展开再显示」「已销号子代理为画删除线的
+ * 格式并不再显示收件箱情况」。所以销号节点：
+ *   - **仍然在树上、仍然有自己的那一行**（不能消失：消失就看不出"曾经有过、后来销了"）；
+ *   - 名字画删除线（`.roster-retired`，token 走 `app.css`，不写字面色值）；
+ *   - 行尾挂一个「已销号」标识，并把 `retired_branch`（退役时读到的那一支）写进明细；
+ *   - **不显示收件箱那三格**（未读 / 已读未 ack / 未消）：销号即退场，收件箱读数对它没有
+ *     意义 —— 它还挂在板上只说明有人往一个已经退场的名字上投过东西；
+ *   - **默认折叠**（`isOpen`：已销号一律先折上，覆盖"默认展开到第 2 层"那条层数规则；
+ *     用户点过就照用户点的，展开态住在 `openOverride` 里，重取读数不会把它吃掉）。
  *
  * ## 三态纪律（这一块最要紧的一条）
  * `answer === "unknown"` 是「名册没读到」（目录不在 / 读不出来 / 有一条读不出来），
@@ -52,9 +70,9 @@ import { useState } from "preact/hooks";
 
 import { api } from "../api";
 import { useFace } from "../live";
-import { buildRosterTree } from "../rosterTree";
+import { buildRosterTree, taskLine } from "../rosterTree";
 import type { TreeRow } from "../rosterTree";
-import type { RosterChild, RosterInbox, RosterNode, RosterView } from "../types";
+import type { RosterChild, RosterInbox, RosterNode, RosterTask, RosterView } from "../types";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 import { TriState, isUnreadable } from "./TriState";
@@ -72,15 +90,39 @@ const DEFAULT_OPEN_DEPTH = 2;
  */
 const openOverride: Map<string, boolean> = new Map();
 
+/** "这个子代理管过哪些活"那一栏的开合态（业主 2026-10-24：「一个子代理后面可展开它管
+ * 的任务号」）。
+ *
+ * 与 `openOverride` 分开存：子树的展开（父子关系）与任务清单的展开是两件事，
+ * 一个默认按层数算、一个默认折上；混在一个键里会让点开任务清单顺手把子树也翻了。
+ * 同样住在模块级：这一页每次流里来事件就重取读数，挂在组件 state 上会被重置。
+ */
+const taskOpen: Map<string, boolean> = new Map();
+
+/** 任务清单默认折上（不看层数、不看 retired）：它是明细，不是树的一部分。 */
+function isTasksOpen(node: RosterNode): boolean {
+  return taskOpen.get(node.task_id) === true;
+}
+
+
 /** 一个节点此刻开不开：用户点过就照用户点的，没点过就按默认层数算。
  *
  * 层号读不出来（缺那一格）按第 1 层算：折叠守的是"别把页面淹掉"，它不该反过来
  * 把一整支藏起来 —— 看不见的节点等于没画。
+ *
+ * ## 已销号的节点一律先折上（D-59 业主口径：「已销号的，名册 ui 显示默认折叠」）
+ * 这一条**覆盖**层数规则：销号节点的子树代表"它退场之前那一支"，不是"现在还在跑的东西"，
+ * 默认铺开只会把当班的那几行挤下去。判定次序是刻意的：**先看用户点过的**
+ * （`openOverride`），再看是不是已销号，最后才是层数 —— 反过来写会让"默认折叠"
+ * 把用户刚点开的那个节点又折回去，而那正是这一条最容易被改坏的地方。
  */
 function isOpen(node: RosterNode): boolean {
   const asked = openOverride.get(node.task_id);
   if (asked !== undefined) {
     return asked;
+  }
+  if (node.retired) {
+    return false;
   }
   const depth = Number.isFinite(node.depth) ? node.depth : 1;
   return depth <= DEFAULT_OPEN_DEPTH;
@@ -206,6 +248,12 @@ function NodeDetail(props: { node: RosterNode }) {
         <span class="roster-children">{childText(n.children)}</span>
       </div>
       <div class="row">
+        它管过的活（{n.tasks.length}）：
+        <span class="roster-children">
+          {n.tasks.length === 0 ? "（名册里没有它接过的活的记录）" : n.tasks.map((t) => t.task_id).join("、")}
+        </span>
+      </div>
+      <div class="row">
         台账那一行：{n.task_found ? "在" : "不在（tasks 里没有它这一行）"} ·
         状态 <span class="mono">{n.status === "" ? "unknown" : n.status}</span> · 在飞{" "}
         <span class="mono">
@@ -213,7 +261,16 @@ function NodeDetail(props: { node: RosterNode }) {
         </span>{" "}
         · 槽位面 <span class="mono">{n.surface === "" ? "（没有分到槽位）" : n.surface}</span>
       </div>
-      <InboxBlock inbox={n.inbox} />
+      {n.retired ? (
+        <div class="row roster-retired-note">
+          已销号：这一支已退场（退役时读到的分支{" "}
+          <span class="mono">{n.retired_branch === "" ? "unknown" : n.retired_branch}</span>）。
+          名字永久不复用，所以这里不再显示收件箱那三格 —— 往一个已经退场的名字上投过的条目，
+          读数归这条名册文件本身（`{n.task_id}` 那一份）。
+        </div>
+      ) : (
+        <InboxBlock inbox={n.inbox} />
+      )}
     </div>
   );
 }
@@ -223,6 +280,7 @@ interface TreeCtx {
   /** 点开的那个节点的明细（一次只开一个，与改前一致）。 */
   picked: string;
   onToggle: (node: RosterNode) => void;
+  onToggleTasks: (node: RosterNode) => void;
   onPick: (tid: string) => void;
 }
 
@@ -249,6 +307,7 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
   }
   const kids = row.kids;
   const open = isOpen(node);
+  const tasksShown = isTasksOpen(node);
   return (
     <div class="roster-branch" key={row.task_id}>
       <div class="roster-node">
@@ -275,24 +334,60 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             onClick={() => ctx.onPick(node.task_id)}
           >
             <span class="mono">d{node.depth}</span>
-            <span class="roster-name">{nameText(node)}</span>
+            <span class={node.retired ? "roster-name roster-retired" : "roster-name"}>
+              {nameText(node)}
+            </span>
             <Badge kind="badge-unknown" text={node.role === "" ? "unknown" : node.role} />
             <span class="mono">{node.task_id === "" ? "unknown" : node.task_id}</span>
             <span class="readings">子 {node.children.length}</span>
-            {node.retired ? <Badge kind="badge-na" text="已退役" /> : null}
             {node.in_flight === null ? (
               <Badge kind="badge-unknown" text="在飞：未读到" />
             ) : node.in_flight > 0 ? (
               <Badge kind="badge-pending" text="在飞" />
             ) : null}
-            {inboxBadge(node.inbox)}
+            {node.retired ? null : inboxBadge(node.inbox)}
+            {node.retired ? <Badge kind="badge-na" text="已销号" /> : null}
           </button>
+          {node.tasks.length === 0 ? null : (
+            <button
+              type="button"
+              class="roster-twist roster-twist-tasks"
+              aria-expanded={tasksShown}
+              aria-label={`${tasksShown ? "收起" : "展开"} ${nameText(node)} 管过的 ${
+                node.tasks.length
+              } 件活`}
+              onClick={() => ctx.onToggleTasks(node)}
+            >
+              {`${tasksShown ? "▾" : "▸"} 活 ${node.tasks.length}`}
+            </button>
+          )}
         </div>
       </div>
+      {tasksShown ? <TaskList tasks={node.tasks} /> : null}
       {ctx.picked === node.task_id ? <NodeDetail node={node} /> : null}
       {open && kids.length > 0 ? (
         <div class="roster-kids">{kids.map((kid) => renderBranch(kid, ctx))}</div>
       ) : null}
+    </div>
+  );
+}
+
+/** 一个子代理管过的那些活（业主 2026-10-24：「一个子代理后面可展开它管的任务号」）。
+ *
+ * 一行一件活：编号 + 起止时间 + 状态 + 一句话（`taskLine` 在 `../rosterTree` 里，
+ * 纯函数、可被判据直接跑）。这一栏与父子那一层是两个层次：先画代理树，再在每个
+ * 代理下面挂它管过的任务号 —— 不把任务当节点摆进树里（那会造出 d1 上多出来的根，
+ * 正是 D-66 那个故障的形态）。
+ */
+function TaskList(props: { tasks: RosterTask[] }) {
+  return (
+    <div class="roster-tasks">
+      {props.tasks.map((task) => (
+        <div class="row roster-task" key={`task:${task.task_id}`}>
+          <span class="mono">{task.task_id}</span>
+          <span class="readings">{taskLine(task)}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -362,11 +457,16 @@ function RosterBody(props: {
       openOverride.set(node.task_id, !isOpen(node));
       props.repaint();
     },
+    onToggleTasks: (node: RosterNode) => {
+      taskOpen.set(node.task_id, !isTasksOpen(node));
+      props.repaint();
+    },
     onPick: (tid: string) => props.setPicked(props.picked === tid ? "" : tid),
   };
   const nodes = Array.isArray(data.nodes) ? data.nodes.length : 0;
   const coverage = data.coverage ?? ({ tasks_agents: null, roster_nodes: null, unrostered: null });
   const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
+  const unplaced = Array.isArray(data.unplaced) ? data.unplaced : [];
   return (
     <>
       <div class="readings">
@@ -401,6 +501,19 @@ function RosterBody(props: {
           这一份父子关系里有 {tree.missing.length} 个编号不在这次的节点读数里（可能被截断）
           ⇒ 逐个摆出说明行，不跳过：
           <span class="roster-diag">{tree.missing.join("、")}</span>
+        </div>
+      )}
+      {unplaced.length === 0 ? null : (
+        <div class="readings roster-note">
+          台账里有 {unplaced.length} 个「有父的代理行」没有任何名册项接过 ⇒ 平铺在这里并点名，
+          不把它们抬成树根（名册那一格缺了它们的归属）：
+          {unplaced.map((row) => (
+            <span class="roster-diag" key={`unplaced:${row.task_id}`}>
+              {" "}
+              {row.task_id}（父 {row.parent_task_id} · 角色 {row.role} · 状态{" "}
+              {row.status === "" ? "unknown" : row.status}）
+            </span>
+          ))}
         </div>
       )}
       {nodes === 0 ? null : (

@@ -108,6 +108,12 @@ DECLARATION_NAME_RX = re.compile(r"^[A-Za-z_][A-Za-z0-9_']{0,63}$")
 #: 落到工作区的哪一个目录（E 的 policy 写的是 `code/lean/`；L 用自己的目录，
 #: 理由是"谁的产物在哪儿"要一眼看得出来，而两个角色写同一个目录会让
 #: "这个 .lean 是谁写的"只能靠猜）。
+#:
+#: 2026-10-25（审计 G/H/V/L 第 4 条）：这一格是 `lean_file` 那一格三个落点里
+#: 「源码真实在哪」的唯一真身 —— `papermapping.LEAN_ARTIFACT_DIRS` 把 `code/formal`
+#: 加进扫描面，而 `lean_file` 收的就是这个前缀的项目根相对路径
+#: （`code/formal/<声明名>.lean`）。此前 G 的提示词说"论文包内相对路径"、扫描面只有
+#: 包内 + `out/formal`、而全仓没有一步把这里拷进包 ⇒ 这一份源码填不进对应表。
 FORMAL_DIR = "code/formal"
 
 #: 一条形式化实验行的机器可读键：`experiments.claim_key` 取这个形态。

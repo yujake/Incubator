@@ -81,11 +81,16 @@ from .. import sessions as SS
 from ..jsonlfile import read_jsonl_state
 
 __all__ = [
+    "ADMISSION_BASIS_CANDIDATE",
     "CHECKED_TYPES", "CODE_CONSISTENCY_REVOKED", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX",
     "HANDLERS",
     "LEDGER_EVENT_SCAN_BYTES", "LEDGER_EVENT_SCAN_KINDS", "LEDGER_EVENT_SCAN_SESSIONS",
     "LEDGER_ROLE_FIELDS", "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
-    "MISSING_TYPES", "NONTRIVIALITY_UNJUDGED_WORD", "PENDING_ENDPOINTS", "ROUTES",
+    "LIBRARY_NO_LEDGER_REASON", "LIBRARY_STATE_COMPUTED", "LIBRARY_STATE_UNKNOWN",
+    "MISSING_TYPES", "NONTRIVIALITY_UNJUDGED_WORD", "PENDING_ENDPOINTS",
+    "PROBLEM_ADMISSION_UNDECIDABLE", "PROBLEM_ADMITTED_WITHOUT_ROW",
+    "PROBLEM_DOWNLOAD_CLAIMED_ABSENT",
+    "PROBLEM_LITERATURE_UNREADABLE", "PROBLEM_USES_UNREADABLE", "ROUTES",
     "ROSTER_INBOX_ITEMS",
     "ROSTER_NODES_MAX",
     "RUN_ROW_KEYS", "SHA_MATCH", "SHA_MISMATCH", "SHA_UNKNOWN", "UNCHECKED_TYPES",
@@ -93,9 +98,9 @@ __all__ = [
     "chat_face", "code_consistency", "evidence_chain", "experiment_spots",
     "handle_acceptance", "handle_artifacts",
     "handle_chat", "handle_evidence",
-    "handle_machine", "handle_roster", "handle_run_events", "handle_run_view",
-    "handle_state",
-    "machine_face", "roster_face", "run_events", "run_products",
+    "handle_library", "handle_machine", "handle_roster", "handle_run_events",
+    "handle_run_view", "handle_state",
+    "library_face", "machine_face", "roster_face", "run_events", "run_products",
     "run_view", "sha_consistency",
     "state_face",
     "ts_fields", "type_decls",
@@ -147,6 +152,10 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/roster", "handle_roster"),
     # 真身在 `webui/sse.py`（`GET /api/stream` 的推送流）。
     ("GET", "/api/stream", "handle_stream"),
+    # 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）：文献库那一面。
+    # 只收「正式入库」的那一档，每条带「被哪些命题／哪一份证明用过」。只读一条：
+    # 这一条端点没有任何写面（表里没有配对的 POST，也不需要 --allow-writes）。
+    ("GET", "/api/literature", "handle_library"),
 )
 
 #: 处理器的落点（`draft/78 §3` 的接缝之一）：键 = `ROUTES` 第三元素，
@@ -183,6 +192,10 @@ CHECKED_TYPES: tuple[str, ...] = (
     # （名册目录不在 ⇒ `answer=unknown` 也是同一批键，见 `roster_face` 里那张表），
     # 所以它进受核对名单；行一级的五个类型见 `UNCHECKED_TYPES` 的理由。
     "RosterView",
+    # 2026-10-24（D-57 的文献库那一面）：五键外壳在每一档上都是同一批键
+    # （表不在盘上 / 坏 JSON / 空表都只是 `state` 的另一档，不是"读不出键"），
+    # 所以它进受核对名单；`data` 与三条行一级的类型见 `UNCHECKED_TYPES` 的理由。
+    "LibraryView",
 )
 
 #: 声明了、但夹具上还读不出键的接口（`{接口名: 理由}`）。判据不许它们同时出现在
@@ -219,6 +232,12 @@ UNCHECKED_TYPES: dict[str, str] = {
                        "⇒ 形状以 `_roster_inbox` 的 `items` 为准",
     "RosterCoverage": "同 `RosterNode`：夹具上没有名册文件，`coverage` 三个计数都是 null"
                       "⇒ 形状以 `roster_face` 的 `coverage` 为准",
+    # 2026-10-24（D-66：一个子代理可以接好几件活）：节点下面那一串活与"拼不上的那些
+    # 代理行"都是行一级的形状，夹具工作区里没有名册 ⇒ 两者恒为空数组。
+    "RosterTask": "同 `RosterNode`：夹具上没有名册节点，`nodes[].tasks[]` 是空数组"
+                  "⇒ 形状以 `roster_face` 的 `tasks` 为准",
+    "RosterUnplaced": "同 `RosterNode`：夹具上没有名册文件，`unplaced[]` 是空数组"
+                      "⇒ 形状以 `roster_face` 的 `unplaced` 为准",
     # 2026-10-21（台账行带"角色 + 绝对编号"）：验收面的 `rows[]` 在任何工作区上都有
     # 五行（判据是现算的、不依赖盘上数据），但它没有进契约判据 C 的读数清单
     # （`tests/test_webui_contracts.py::_backend_keys` 只取验收面的顶层键）⇒ 判据 C
@@ -241,6 +260,18 @@ UNCHECKED_TYPES: dict[str, str] = {
                       " 的读数为准（同上那份判据文件）",
     "CodeExpFile": "同 `ExperimentSpot`：夹具没有 `code/exp/` ⇒ `code_exp[]` 恒为空数组；"
                    "形状以 `experiment_spots()` 的 `code_exp` 为准（同上）",
+    # 2026-10-24（D-57 的文献库那一面）：`artifacts_ws` 夹具里 `literature` 是 0 行
+    # ⇒ `data.works[]` / `data.problems[]` 恒为空数组，三个行一级的形状以本模块
+    # 的读数为准（判据 `tests/test_library_face_only_counts_admitted_works.py`
+    # 自己造工作区，把 5 条入库文献与两种被引形态都造出来）。
+    "LibraryData": "契约判据 C 的 `_backend_keys` 只读这一面的五键外壳，没读 `data` "
+                   "（夹具工作区里 `literature` 是 0 行）⇒ 形状以 `library_face` 的 `data` 为准",
+    "LibraryWork": "夹具工作区里没有入库文献（`data/works[]` 是空数组）⇒ 一条行都读不出键；"
+                   "形状以 `_library_work` 的读数为准（逐键判据见上面那份判据文件）",
+    "LibraryUse": "同 `LibraryWork`：没有入库文献，也就没有「被谁用过」的行可读；"
+                  "形状以 `_library_uses` 的读数为准（同上）",
+    "LibraryProblem": "干净的工作区上 `problems[]` 是空数组（没有可留痕的问题）"
+                      "⇒ 形状以 `library_face` 里那几处 `add_problem(` 的读数为准（同上）",
 }
 
 #: 契约判据 D 的例外面：本模块声明、但后端还没落地的端点（`{端点: 理由}`）。
@@ -2321,7 +2352,17 @@ CHAT_LINES_MAX = 300
 #: 对话线的三种身份。业主 2026-10-13 要的是"用户 ↔ 主控"的对话框，所以前两档是主角；
 #: 其余角色在公共频道/私有频道说的话单列 `team` 一档（它们对看的人有用，但不是"对话"，
 #: 页面默认把它们折起来）。
+#:
+#: 2026-10-24（D-62）：`team` 这一档现在也收主控自己的公共频道广播 —— 分档判据是"这句话
+#: 说给谁听"，不是"发信人是不是主控"（见 :func:`_chat_message_who`）。
 CHAT_WHO = ("user", "conductor", "team")
+
+#: 公共频道的落库字面量（与 `agent_loop.PUBLIC` 同一个字符串；`send_message` 按它把
+#: `channel` 写成 `"public"`）。
+#:
+#: 为什么不 import 写侧那一格：`readers` 读的是盘上的字面量，不是写侧的常量；为了一个
+#: 字符串把整个 `agent_loop` 拉进只读层不值得（同 `_ROSTER_DIR` 的口径）。
+CHAT_PUBLIC = "#public"
 
 
 def _chat_clip(raw: Any, limit: int = CHAT_LINE_CLIP) -> tuple[str, bool]:
@@ -2414,6 +2455,53 @@ def _chat_role(event: Mapping[str, Any]) -> tuple[str, str]:
     return "", "missing"
 
 
+def _chat_message_who(event: Mapping[str, Any], conductor: str) -> tuple[str, str]:
+    """一条 `agent_message` 该进哪一档，以及它那一行的标题。返回 `(who, 标题)`。
+
+    判据是收信人，不是发信人（D-62，业主 2026-10-24：「看M对话public形式为什么也会直接
+    让用户可见」）：
+
+    - `to == #public`（或 `channel == "public"`）⇒ `team`：公共频道的语义是"发给树上的人"
+      （`agent_loop.public_visibility` 逐条写了可见面：框架通报全树可见，代理自己发的只对
+      直接父/直接子可见），它不是"对用户说的话"。发信人是主控也一样 —— 改前那一版只按
+      "发信人是不是 M"分档，于是主控的派活通告被印成主控对用户的回答，`channel` 只被拼进
+      标题当装饰；
+    - 主控发给用户的私聊（`to` 是 `userio.USER` 或另一个写法 `user`）⇒ `conductor`：
+      这才是"用户 ↔ 主控"那一档；
+    - 其余（别的角色发给主控的私聊、主控发给下级的私聊、别的角色之间的私聊）⇒ `team`：
+      它们不是对用户说的话，页面把这一档默认折起来（见 `CHAT_WHO`）。
+
+    标题要说清去向：广播那一行写成「主控广播 → 全树（public）」，不许写成
+    `M → #public（public）` 那种"看了也不知道这一条是发给谁的"形态。
+    """
+    from .. import userio as U
+
+    sender = str(event.get("from") or "")
+    to = str(event.get("to") or "")
+    channel = str(event.get("channel") or "")
+    if to == CHAT_PUBLIC or channel == "public":
+        head = "主控广播" if sender == conductor else f"{sender or '?'} 广播"
+        return "team", f"{head} → 全树（public）"
+    title = f"{sender or '?'} → {to or '?'}（{channel or '?'}）"
+    # `userio.USER` 是"用户"这个发件人的唯一写法；`user` 是 `_known_recipient` 认的另一个
+    # 收件人写法（`agent_loop` 那两处 `token in ("user", "用户")`），两个都收。
+    if sender == conductor and to in (U.USER, "user"):
+        return "conductor", title
+    return "team", title
+
+
+def _chat_delivery_who(role: str, conductor: str) -> tuple[str, str]:
+    """一条 `agent_run_end` 的收工交付该进哪一档，以及标题。
+
+    主控这一趟的 `final` 就是"主控交给用户的那段话"（业主 2026-10-13 的对话框要的正是
+    它），所以它留在 `conductor`；别的角色的交付进 `team`。这一档按 `role` 取，不看有没有
+    `to` / `channel`：收工事件本来就没有收件人那一栏。
+    """
+    if role == conductor:
+        return "conductor", "主控交付"
+    return "team", f"{role} 交付"
+
+
 def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     """一条会话事件 → 一条对话线；不是"对话"的事件回 `None`。
 
@@ -2425,10 +2513,16 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     | `user_answer` | `user` | 用户的回答 |
     | `agent_interjection`（`from` = 用户） | `user` | 插话正文 |
     | `user_question` | `conductor` | 主控问的话 + 选项 + qid |
-    | `agent_message`（`from`=M） | `conductor` | 主控发给谁/公共频道的那段话 |
-    | `agent_message`（别的角色） | `team` | 同上 |
+    | `agent_message`（主控 → 用户，私聊） | `conductor` | 主控对用户的回答 |
+    | `agent_message`（公共频道 `#public`，谁发的都一样） | `team` | 一段广播（标题写"主控广播 → 全树（public）"） |
+    | `agent_message`（其余私聊） | `team` | `谁 → 谁（频道）` |
     | `agent_run_end`（role=M，有 final） | `conductor` | 主控这一趟的交付 |
     | `agent_run_end`（别的角色，有 final） | `team` | 那个角色的交付 |
+
+    分档判据是"这句话说给谁听"，不是"发信人是不是主控"（D-62）：公共频道的广播
+    （`to=#public`）发给的是树上的人，它不进 `conductor` 那一档 —— 改前那一版只按发信人
+    分档，把主控的派活通告印成了"主控对你说的话"。逐档判据见 :func:`_chat_message_who`
+    与 :func:`_chat_delivery_who`。
 
     刻意不进对话的两类：`agent_note`（协议层的步级留痕，如"system 重发：第 1 步"）与
     `agent_step`/`llm_call`（工具与模型调用）—— 它们留在「一趟详情」的逐条事件里。
@@ -2470,16 +2564,13 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
             options.append({"label": str(view.get("label") or ""),
                             "description": str(view.get("description") or "")})
     elif kind == "agent_message":
-        who = "conductor" if str(event.get("from") or "") == M else "team"
-        title = (f"{event.get('from') or '?'} → {event.get('to') or '?'}"
-                 f"（{event.get('channel') or '?'}）")
+        who, title = _chat_message_who(event, M)
         text = str(event.get("body") or "")
     elif kind == "agent_run_end":
         text = str(event.get("final") or "")
         if text.strip() == "":
             return None          # 没有交付的那一趟不进对话（它没有"话"）
-        who = "conductor" if role == M else "team"
-        title = "主控交付" if who == "conductor" else f"{role} 交付"
+        who, title = _chat_delivery_who(role, M)
     else:
         return None
     body, clipped = _chat_clip(text)
@@ -2543,6 +2634,11 @@ def chat_face(root: str | Path, sid: str = "", *,
     `E → D（private）` 那条线"哪个角色"空着的缺口：那条记录只有 `from`，而 `from` 就是
     发信人的角色。为什么不交给前端去解析标题里的 `E → D` —— 标题是给人看的一句话，
     不是数据（改一次文案就会把它悄悄拆掉，而没有任何判据会红）。
+
+    分档那一格（D-62，业主 2026-10-24）：`who` 判的是"这句话说给谁听"，不是"发信人是
+    谁"。`conductor` 只收说给用户听的那几条（主控私聊回答 / `ask` 反问 / 收工交付）；
+    主控的公共频道广播（`to=#public`）归 `team` —— 它发给的是树上的人，把它摆在
+    "主控对你说的话"那一档等于对读者撒谎。`team` 那一档页面默认折叠。
     """
     root_p = Path(str(root))
     sessions = [{"sid": str(s.get("sid") or ""),
@@ -2650,11 +2746,11 @@ _ROSTER_DIR: tuple[str, ...] = ("out", "roster")
 #: 折叠这一棵树时不许把它们混进去 —— 混进去一个名字就会变成两个节点。
 #:
 #: 2026-10-22（D15）：对照表 `-index.jsonl` 从这张表里移出去了。它不是旁支，它是
-#: "这个父名下有哪些子"的第二份盘上事实：`secretary.roster_add` 的 reuse 支只往
-#: 对照表写一行 bind（不往 `<父>.jsonl` 写 add），所以把它当旁支读掉的后果是
-#: "复用过的那个名字的新实例在树里根本不存在"——而台账里有它那一行、还挂着父，
-#: 于是同一份读数里两栏互相打脸：`coverage.unrostered` 点名它，树又把它画成树根
-#: （它有自己的名册 ⇒ 出现在"有名人"那一侧，却不在任何人的子名单里）。
+#: "这件活是谁接的"的第二份盘上事实。D-66 更正：`secretary.roster_add` 的 reuse 支
+#: 只往对照表写一行调用记录（不往 `<父>.jsonl` 写新的名册项，因为复用不是新建一个
+#: 子代理），所以把它当旁支读掉的后果是"接过好几件活的那个子代理，它那些活根本不
+#: 在树上"——而台账里明明挂着父，于是同一份读数里两栏互相打脸：`coverage.unrostered`
+#: 点名它，树又把它画成树根。本层现在两份都读，且按名册名归组（见 `roster_face`）。
 _ROSTER_SIDE_SUFFIX: tuple[str, ...] = ("-surfaces.jsonl", "-retired.jsonl")
 
 #: 对照表的后缀：`<父>-index.jsonl`。每一行是"某个名字此刻的编号"（`kind="bind"`，
@@ -2666,7 +2762,7 @@ _ROSTER_INDEX_SUFFIX = "-index.jsonl"
 #: 对应）。为什么单列一份：`roster_face` 里两个"名册读不到"的分支搬的是同一批键，
 #: 抄两遍就会漏一处 —— 而漏的那一处表现为"某一档少一个键"，前端读它时才知道少了。
 _ROSTER_FALLBACK_KEYS: tuple[str, ...] = ("nodes", "roots", "children_of", "count",
-                                          "max_depth", "coverage")
+                                          "max_depth", "coverage", "unplaced")
 
 
 def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, Path]], str]:
@@ -2703,32 +2799,62 @@ def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, 
     return found, index_found, ""
 
 
-def _roster_landing_order(roster_rows: list[dict[str, Any]],
-                          index_rows: list[dict[str, Any]]) -> dict[str, int]:
-    """一个父名下"每个子是按第几行落的盘"：`task_id` → 行序（越小越先落）。
+def _roster_name_order(roster_rows: list[dict[str, Any]],
+                       index_rows: list[dict[str, Any]]) -> dict[str, int]:
+    """一个父名下"每个名册项是按第几行落的盘"：`name` → 行序（越小越先落）。
 
     为什么要有它（业主 2026-10-24：「名册按树展开」）：一个父的多个子在页面上必须
     按落盘行序排，而 `secretary._fold_roster` 交回来的是按名册名排序的一项一条
     （那是秘书视图要的顺序，不是树的顺序）。这里不重排折叠结果、也不重读文件 ——
-    只把上面刚读过的原始行按"这个 `task_id` 第一次出现"编个序，让并集按它稳定排序。
+    只把上面刚读过的原始行按"这个名册名第一次出现"编个序，让并集按它稳定排序。
 
-    行序口径：
-    - `<父>.jsonl` 的行序为主（一个子的编号第一次出现在第几行，它的序就是几）；
-    - 只出现在对照表 `<父>-index.jsonl` 里的子（`roster_add` 的 reuse 支只写那里）
-      排在名册各行之后，按它们自己在对照表里的行序；
-    - 两边都没出现过的编号（不该有）落在末尾，稳定排序保住了它们的原有相对顺序。
+    行序口径（键是名册名，不是任务号）：
+    - `<父>.jsonl` 的行序为主（一个名字第一次出现在第几行，它的序就是几）；
+    - 只在对照表 `<父>-index.jsonl` 里出现的名字排在名册各行之后，按它们在对照表里的行序；
+    - 两边都没出现过的名字（不该有）落在末尾，稳定排序保住了它们的原有相对顺序。
     """
     order: dict[str, int] = {}
     for i, row in enumerate(roster_rows):
-        tid = str(row.get("task_id") or "")
-        if tid and tid not in order:
-            order[tid] = i
+        name = str(row.get("name") or "")
+        if name and name not in order:
+            order[name] = i
     base = len(roster_rows)
     for j, row in enumerate(index_rows):
-        for tid in (str(row.get("first_task_id") or ""), str(row.get("task_id") or "")):
-            if tid and tid not in order:
-                order[tid] = base + j
+        name = str(row.get("name") or "")
+        if name and name not in order:
+            order[name] = base + j
     return order
+
+
+def _roster_work_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """对照表里的"这一件活是谁接的"：`[{name, role, task_id, brief, at}]`（按行序）。
+
+    ## 为什么这里会出现 `task_id`（而它仍然不是归属键）
+    名册项的身份是 `(owner, name)` —— 一个常驻子代理。`task_id` 在这里只是
+    "这一条记录的是哪一次调用"的流水读数，和 `at` 同级：它回答"哪一件活落到了
+    这个名字上"，不回答"这个名册项是谁"。所以：
+    - 本函数按 `name` 归组（调用方负责），绝不按 `task_id` 建项；
+    - 一行没有 `name`、只有 `task_id` 的记录会被丢掉并留一条诊断（见 `roster_face`）：
+      那是"按任务号记名册"的形态，本层不认。
+
+    为什么读原始行而不是 `_fold_index`：`_fold_index` 是电话簿视图（一个名字只留
+    第一次与当前那两次调用），中间的几次调用会被折叠掉 —— 而那几次正是"同一个子代理
+    接过好几件活"的证据（真机 `t-000002` 名下的 F1 接了 5 件，折叠后只剩 2 件）。
+    这里读每一行，于是"一个节点 + N 件活"里的 N 是真的。
+    """
+    out: list[dict[str, Any]] = []
+    for raw in rows:
+        row = dict(raw)
+        if str(row.get("kind") or "") == "retire":
+            continue
+        name = str(row.get("name") or "")
+        tid = str(row.get("task_id") or "")
+        if not name:
+            continue
+        out.append({"name": name, "role": str(row.get("role") or ""),
+                    "task_id": tid, "brief": str(row.get("brief") or ""),
+                    "at": str(row.get("at") or "")})
+    return out
 
 
 def _roster_children_of(kids_of: Mapping[str, list[dict[str, Any]]],
@@ -2834,49 +2960,59 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                 inbox_items: int = ROSTER_INBOX_ITEMS) -> dict[str, Any]:
     """`GET /api/roster` 的读模型：当前工作区整棵名册树（只读、三态）。
 
-    ## 一个节点是什么（业主 2026-10-19：「名册 = 父 + 子 + 绝对编号」）
-    一个 agent 一个节点，字段逐个来自盘上：
+    ## 一个节点是什么（D-66 更正：一个节点 = 一个常驻子代理，不是一件活）
+    业主 2026-10-24 的两句口径：「一个子代理可接收多个任务」「不可按照任务号记录名册」。
+    所以节点是名册项（`owner` + `name` 定的身份），它下面挂这个子代理接过的那些活：
 
     | 字段 | 盘上来源 |
     |---|---|
-    | `task_id`（绝对编号） | `out/roster/<父>.jsonl` 那一行的 `task_id`；根那一行 = 文件名本身 |
-    | `name`（名册名） | 同一行的 `name`（根不在任何人的名册里 ⇒ 空串） |
+    | `task_id`（节点键） | 这一项"建项那件活"的绝对编号（只在名册项一行都读不到活编号时降级成 `<父>/<名>`）；它只是页面用的键，身份是 `owner` + `name` |
+    | `name`（名册名） | `<父>.jsonl` 里这一项的 `name`（根不在任何人的名册里 ⇒ 空串） |
     | `role` | 同一行的 `role`（读不到 ⇒ 台账 `tasks` 的 `role`） |
-    | `parent_task_id` | 名册文件名（`secretary.roster_path` 的 `<owner>.jsonl`） |
-    | `parent_name` | 祖父那份名册里父那一行的 `name`（现算，不另存） |
-    | `children[]` | 它自己那份 `<task_id>.jsonl` 的每一行 + `-index.jsonl` 的 bind 行（各带 `task_id` + `name` + `role` + `retired`） |
+    | `parent_task_id` | 父节点键（父那一份名册里接走父的那个名册项的节点键） |
+    | `parent_name` | 父节点的 `name`（现算，不另存） |
+    | `children[]` | 这一项名下那些名册项（各带 `task_id` 节点键 + `name` + `role` + `retired`） |
+    | `tasks[]` | 这个子代理接过的每一件活：`task_id` / `role` / `status` / `started_at` / `ended_at` / `task_found` / `brief` / `detail`（调用流水来自 `<父>-index.jsonl`，状态与时间来自 `data/tasks.json`） |
     | `retired` / `retired_branch` | 折叠后的 `retired` / 那一行的 `branch` |
-    | `brief` / `brief_source` / `surface` | 同一行的 `brief` / `brief_source` / `surface` |
-    | `status` / `task_found` / `in_flight` | `data/tasks.json` 里它自己那一行（`status`；在飞 = `pending`/`running`） |
-    | `inbox` | `data/tasks.json` 的板项行（见 :func:`_roster_inbox`） |
+    | `brief` / `brief_source` / `surface` | 这一项的 `brief` / `brief_source` / `surface` |
+    | `status` / `task_found` / `in_flight` | 最近一件活的状态 / 它的活是否都在台账里 / 这一项名下有几件在飞（`pending`+`running`） |
+    | `inbox` | 这一项名下所有活收到的板项行（见 :func:`_roster_inbox`） |
     | `depth` | 名册链现算：根 = 1（口径写在下面） |
 
     ## 两份形状，同一份读（业主 2026-10-24）
     业主原话：「名册按树展开，不只是简单按层展开。」⇒ 这个读数里有两份形状，
-    都由上面那一次读盘折出来的 `kids_of` 派生，不重读文件、不重算折叠：
+    都由上面那一次读盘折出来的名册项派生，不重读文件、不重算折叠：
 
-    - `children_of`：`{父的绝对编号: [直接子的绝对编号...]}`，子按落盘行序
-      （`<父>.jsonl` 的行序；只在对照表里出现的子排在它后面，按对照表的行序）。
+    - `children_of`：`{父节点键: [直接子节点键...]}`，子按落盘行序
+      （`<父>.jsonl` 的行序；只在对照表里出现的名字排在它后面，按对照表的行序）。
       它是"谁是谁的直接子"的那一份，页面的树照它递归。
-    - `nodes`：按层排（BFS）的节点读数（`depth` / 角色 / 子数 / 状态 / 收件箱那一格）。
-      这一份只管"每个节点有什么读数"，不管"谁是谁的子"—— 改前页面拿它按 `depth`
-      缩进，于是画出来是 d1 / d2 d2 d2 / d3 ... 的按层平铺，同一个名册名在两层各出现
-      一次，读不出父子（缺陷 D-51，`draft/146`）。
+    - `nodes`：按层排（BFS）的节点读数（`depth` / 角色 / 子数 / 状态 / 收件箱那一格 /
+      `tasks`）。这一份只管"每个节点有什么读数"，不管"谁是谁的子"—— 改前页面拿它按
+      `depth` 缩进，于是画出来是 d1 / d2 d2 d2 / d3 ... 的按层平铺，同一个名册名在两层
+      各出现一次，读不出父子（缺陷 D-51，`draft/146`）。
 
     截断那一档（`truncated=true`）只截 `nodes`：`children_of` 仍是完整的父子关系，
     所以它可能点到不在 `nodes` 里的编号 —— 那是"这次没画它"，不是"它不存在"。
 
-    ## 什么算"这个父名下的一个子"（D15）
-    两份盘上事实的并集：`out/roster/<父>.jsonl` 的 `add` 行（名字、简介、槽位）与
-    `out/roster/<父>-index.jsonl` 的 `bind` 行（名字此刻的编号）。为什么必须并上后者：
-    `secretary.roster_add` 的 reuse 支只写对照表 —— 只读名册的话，"复用过的名字派出去
-    的那个新实例"在树里不存在，而它在台账里明明挂着这个父，于是同一份读数里
-    `coverage.unrostered` 点名它、`roots` 又把它当成树根（它自己的名册让它出现在
-    "有名人"那一侧）。修法只在读侧：`roots` 的规则一个字没动。
+    ## 归属：名册项接过的活，挂在"那件活的父"名下（D-66 的修法）
+    两份盘上事实各管一半：`<父>.jsonl` 的 `add` 行说"这个父名下有哪几个子代理
+    （名册项）"，`<父>-index.jsonl` 的每一条调用记录说"这一件活落到了哪个名字上"。
+    把调用记录按名册名归组，就得到"一个节点 + N 件活"。
 
-    同一名字的"老实例 + 新实例"会以两个子出现（`t-000002` 与 `t-000022` 都叫 `D1`）。
-    这是事实，不是重复：两只在台账里都是真行，老实例可能还有自己的名册与子树 ——
-    把它从父子索引里抹掉，它就会变成"父缺失 ⇒ 根"，同一个缺陷换一层再来。
+    改前错在两处，缺一不可：
+    1. 只把折叠后的对照表并进来（一个名字只剩第一次与当前两次调用）⇒ 中间那几件活
+       被扔掉，而它们自己的名册文件让它们看起来像根（真机 d1 上的 `t-000039` /
+       `t-000068` 就是这么来的）；
+    2. 把"同一名字的两次调用"当成两个子 ⇒ 同一个子代理在树上出现好几次（"重号"的
+       错觉）。
+
+    `task_id` 在任何一层都不是归属键：名册项的身份是 `owner` + `name`；`tasks[]` 里的
+    编号只是"这个子代理接过哪些活"的流水读数。
+
+    ## 拼不上的怎么办（平铺并点名，不抬成 d1 根）
+    台账里有父、可名册正文与对照表都没说"谁接过它"的那些代理行，摆进 `unplaced`
+    （带自己的父、角色、状态与时间），并在 `diagnostics` 里点名。它们不进 `nodes`、
+    也不进 `roots` —— 抬成树根等于替盘上事实改口径。
 
     ## 深度：`depth` 是"这一棵树里的距离"，不是 `tasks.depth`
     `tasks.depth` 是全局召唤深度（主控发起 = 1，`schema.Task.depth` 的 docstring
@@ -2884,8 +3020,8 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     时相等，而在"根是某一支子树的头"时差一个常数 —— 混用会让读的人以为看见了两个
     不同的深度。前端只显示这一个（树里的相对位置才是名册树要说的事）。
 
-    折叠口径与写侧同一处实现（`secretary._fold_roster`：`add` 建项、`bind` 推
-    当前调用、`retire` 标退役、`keep_alive` 只记那一格）。这里不另写一份折叠 ——
+    折叠口径与写侧同一处实现（`secretary._fold_roster`：`add` 建项、`bind` 只推
+    调用读数、`retire` 标退役、`keep_alive` 只记那一格）。这里不另写一份折叠 ——
     两份折叠意味着"名册在盘上是一回事、页面读出来是另一回事"，而那种错没有任何
     东西会报。
 
@@ -2908,7 +3044,6 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     按层排的（BFS：父一定在子前面），`children_of` 是父子关系那一份 —— 页面画树用
     后者，前者给每个节点的读数。
     """
-    from ..secretary import _fold_index     # noqa: PLC0415 - 折叠口径的唯一实现
     from ..secretary import _fold_roster    # noqa: PLC0415 - 折叠口径的唯一实现
     from ..store import Store               # noqa: PLC0415 - 台账那一栏
 
@@ -2922,7 +3057,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         "nodes": [], "roots": [], "children_of": {}, "count": None, "max_depth": None,
         "files": [], "diagnostics": [], "truncated": False,
         "coverage": {"tasks_agents": None, "roster_nodes": None, "unrostered": None},
-        "tasks_tri": TRI_NOT_APPLICABLE, "tasks_reason": "",
+        "tasks_tri": TRI_NOT_APPLICABLE, "tasks_reason": "", "unplaced": [],
     }
 
     if not dir_p.exists():
@@ -2944,7 +3079,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         out["tri"] = TRI_UNREADABLE
         out["reason"] = why
         return out
-    if not found:
+    if not found and not index_found:
         fb = _roster_from_tasks(root_p)
         out.update({k: fb[k] for k in _ROSTER_FALLBACK_KEYS})
         out["reason"] = (
@@ -2955,7 +3090,8 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
 
     diagnostics: list[str] = []
     problems: list[str] = []
-    children_by_owner: dict[str, list[dict[str, Any]]] = {}
+    #: 每份 `<父>.jsonl` 折叠出来的名册项（一项 = 一个常驻子代理：名字 / 角色 / 简介 / 面）。
+    items_by_owner: dict[str, list[dict[str, Any]]] = {}
     #: 每份 `<父>.jsonl` 的原始行（按文件里的行序）。它只在这里读一次，下面用它编
     #: "落盘行序"，于是"按父子"的那一份形状不必回头再扫一遍文件。
     rows_by_owner: dict[str, list[dict[str, Any]]] = {}
@@ -2964,111 +3100,209 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         if state == "unreadable":
             problems.append(f"{path.name} 读不出来：{bad[0] if bad else '未知原因'}")
             continue
-        folded = _fold_roster(rows)
         if bad:
             # 坏行一律算「没查成」（本模块 `_face` 的同一条口径：把"文件坏了"读成
             # "还没写过"是本项目最贵的一类缺陷）。好行照常渲染 —— 与 `artifacts_face`
             # 的"整面 unreadable 并点名，读得出来的栏照常给行"同一条做法。
             problems.append(f"{path.name} 有 {len(bad)} 行读不出来（{bad[0]}）")
-        if not folded:
-            diagnostics.append(f"{path.name} 里一条子代理记录都没有（文件在、读成了 0 行）")
-            continue
-        children_by_owner[owner] = folded
+        items_by_owner[owner] = _fold_roster(rows)
         rows_by_owner[owner] = [dict(r) for r in rows]
         out["files"].append(path.name)
+        if not items_by_owner[owner]:
+            diagnostics.append(f"{path.name} 里一条子代理记录都没有（文件在、读成了 0 行）")
+        # 只有任务号、没有名册名的行：本层不认（名册项的身份是 owner + name）。
+        nameless = [str(r.get("task_id") or "") for r in rows
+                    if str(r.get("name") or "") == "" and str(r.get("task_id") or "")]
+        if nameless:
+            diagnostics.append(
+                f"{path.name} 有 {len(nameless)} 行只写任务号、没写名册名（头几个："
+                + "、".join(nameless[:3])
+                + "）⇒ 不拿任务号当名册项的身份，那几行不建项、只在这里点名")
 
-    if not children_by_owner:
-        out["tri"] = TRI_UNREADABLE if problems else TRI_NOT_APPLICABLE
-        out["reason"] = ("；".join(problems) if problems else
-                         f"{dir_p} 下的名册文件里一条子代理记录都没有 ⇒ answer=unknown")
-        if index_found:
-            out["reason"] += ("（有对照表 `<父>-index.jsonl`，却没有 `<父>.jsonl` ⇒ 半份登记，"
-                              "不拿对照表冒充一棵树）")
-        out["diagnostics"] = diagnostics
-        return out
-
-    # ---- 对照表：`<父>-index.jsonl` 的 bind 行（D15 的修法）
+    # ---- 对照表：`<父>-index.jsonl` 的调用记录（每一条 = 某件活落到了哪个名册项上）
     #
-    # 为什么它必须折叠进来：`secretary.roster_add` 的 reuse 支只写这里（名册那一行是
-    # 首次登记时写的），所以"复用过的名字的新实例"只在这张表里有。折叠出来的每个
-    # `task_id`（第一次绑定的那个 + 此刻绑定的那个）都是这个父名下的子。
-    index_by_owner: dict[str, list[dict[str, Any]]] = {}
-    #: 每份对照表的原始行（同样只在这里读一次，给"落盘行序"补上只出现在对照表里的子）。
+    # 2026-10-24（D-66 更正）：这一层读的是"这件活是谁接的"，不是"这个父名下有哪些子"。
+    # 名册项（常驻子代理）由上面那份名册正文定义；对照表只是调用流水，于是同一个名字
+    # 接过 N 件活时 N 件都在这里、树里仍是那一个节点。改前只读折叠后的对照表
+    # （一个名字只留第一次与当前两次调用），中间的几次调用被折叠掉了 —— 真机
+    # `t-000002` 名下的 F1 接了 5 件，被扔掉的 3 件因此被当成了树根（d1 上那一级的
+    # `t-000039` / `t-000068`）。
+    work_by_owner: dict[str, list[dict[str, Any]]] = {}
     index_rows_by_owner: dict[str, list[dict[str, Any]]] = {}
     for owner, path in index_found:
         rows, bad, state = read_jsonl_state(path)
         if state == "unreadable":
             problems.append(f"{path.name} 读不出来：{bad[0] if bad else '未知原因'}")
             continue
-        folded_index = _fold_index(rows)
         if bad:
             problems.append(f"{path.name} 有 {len(bad)} 行读不出来（{bad[0]}）")
-        if not folded_index:
-            diagnostics.append(f"{path.name} 里一条对照表记录都没有（文件在、读成了 0 行）")
-            continue
-        index_by_owner[owner] = folded_index
+        calls = _roster_work_rows(rows)
+        if calls:
+            work_by_owner[owner] = calls
         index_rows_by_owner[owner] = [dict(r) for r in rows]
         out["files"].append(path.name)
-    half = sorted(set(index_by_owner) - set(children_by_owner))
+        if not calls:
+            diagnostics.append(f"{path.name} 里一条调用记录都没有（文件在、读成了 0 行）")
+        # 只有任务号、没有名册名的行：本层不认（名册项的身份是 owner + name）。
+        nameless = [str(r.get("task_id") or "") for r in rows
+                    if str(r.get("name") or "") == "" and str(r.get("task_id") or "")
+                    and str(r.get("kind") or "") != "retire"]
+        if nameless:
+            diagnostics.append(
+                f"{path.name} 有 {len(nameless)} 行只写任务号、没写名册名（头几个："
+                + "、".join(nameless[:3])
+                + "）⇒ 不拿任务号当名册项的身份，那几行只当坏行点名")
+    half = sorted(set(work_by_owner) - set(items_by_owner))
     if half:
         diagnostics.append("、".join(half)
                            + " 只有对照表 `<父>-index.jsonl`、没有名册 `<父>.jsonl`"
-                           "（半份登记：先写对照表再写名册，名册那一笔没落成）")
+                           "（半份登记：名册那一笔没落成 ⇒ 名册项只能从调用记录里认出来）")
 
-    # ---- 父 → 子 索引（两份盘上事实的并集：名册的 add 行 + 对照表的 bind 行）
+    # ---- 父 → 名册项 索引（一项 = 一个常驻子代理；它下面挂 N 件活）
     #
-    # 一个子只认先读到的那一份；同一编号挂两个父是坏链，如实报。
+    # 归属的方向是"这件活属于哪个名册项"，不是"名册项里列一串任务号"：这里按
+    # 名册名把调用记录归到项上，`tasks` 只是这一项的调用流水读数（每件活各带
+    # 自己的时间与状态）。于是"一个节点 + N 件活"是树的常态形状。
+    items_of_owner: dict[str, list[dict[str, Any]]] = {}
+    for owner in sorted(set(items_by_owner) | set(work_by_owner)):
+        by_name: dict[str, dict[str, Any]] = {}
+        order: dict[str, int] = _roster_name_order(rows_by_owner.get(owner) or [],
+                                                   index_rows_by_owner.get(owner) or [])
+        for item in items_by_owner.get(owner) or []:
+            name = str(item.get("name") or "")
+            if not name:
+                diagnostics.append(f"{owner} 的名册里有一项没有名字 ⇒ 那一项摆不出来")
+                continue
+            got = dict(item)
+            got["tasks"] = []
+            got["task_brief"] = {}
+            by_name[name] = got
+        # 正文里的创建那一次（`task_id` 是"它是为哪件活建的"的读数，不是身份）。
+        for name, item in by_name.items():
+            born = str(item.get("first_task_id") or item.get("task_id") or "")
+            if born:
+                item["tasks"].append(born)
+                item["task_brief"][born] = str(item.get("brief") or "")
+        for call in work_by_owner.get(owner) or []:
+            name = str(call.get("name") or "")
+            item = by_name.get(name)
+            if item is None:
+                item = {"name": name, "role": str(call.get("role") or ""), "brief": "",
+                        "brief_source": "", "surface": "", "retired": False,
+                        "tasks": [], "task_brief": {}}
+                by_name[name] = item
+                diagnostics.append(
+                    f"{owner} 的名册正文里没有 {name} 这一项，但对照表里有它接过的活 ⇒ "
+                    "按调用记录认它（半份登记：名册那一笔没落成）")
+            tid = str(call.get("task_id") or "")
+            if tid and tid not in item["tasks"]:
+                item["tasks"].append(tid)
+                item["task_brief"][tid] = str(call.get("brief") or "")
+        merged: list[dict[str, Any]] = list(by_name.values())
+        # 一项的节点编号 = 它是为哪件活建的（那个绝对编号）。它只是一个显示用的键：
+        # 身份是 owner + name，任务号永远不当归属键（见 `_roster_work_rows`）。
+        for item in merged:
+            tasks = item["tasks"]
+            item["task_id"] = str(tasks[0]) if tasks else f"{owner}/{item['name']}"
+            if not tasks:
+                diagnostics.append(
+                    f"{owner} 名下的 {item['name']} 没有任何一件活的编号 ⇒ 节点键降级为 "
+                    f"{item['task_id']!r}（它是什么就是什么，不猜一个编号）")
+        merged.sort(key=lambda it: order.get(str(it.get("name") or ""), len(order)))
+        items_of_owner[owner] = merged
+
+    if not items_of_owner:
+        out["tri"] = TRI_UNREADABLE if problems else TRI_NOT_APPLICABLE
+        out["reason"] = ("；".join(problems) if problems else
+                         f"{dir_p} 下的名册文件里一个名册项都没有 ⇒ answer=unknown")
+        out["diagnostics"] = diagnostics
+        return out
+
+    # ---- 谁是谁的子：一个名册项挂在"它接的那件活的父"名下
     #
-    # 同一名字的"老实例 + 新实例"两个子都留着（不合并）：两只在台账里都是真行，
-    # 老实例可能还有它自己的名册与子树 —— 把它从 `parent_of_child` 里抹掉，它就
-    # 会变成"父缺失 ⇒ 根"，那正是 D15 要修的那个缺陷换一层再来；而且
-    # `coverage.unrostered` 会立刻改口去点名它。所以这一层只做"补登记"，不做"改历史"。
-    parent_of_child: dict[str, str] = {}
-    row_of_child: dict[str, dict[str, Any]] = {}
-    kids_of: dict[str, list[dict[str, Any]]] = {}
-    for owner in sorted(set(children_by_owner) | set(index_by_owner)):
-        merged: list[dict[str, Any]] = []
-        taken: set[str] = set()
-        for row in children_by_owner.get(owner) or []:
-            tid = str(row.get("task_id") or "")
-            if not tid:
-                diagnostics.append(f"{owner} 的名册里有一行没有 task_id"
-                                   f"（名册名 {row.get('name')!r}）")
+    # 一件活被哪个名册项接走，那一项就挂在那件活的父名册里的对应项下面。所以先把
+    # 任务号 → 名册项节点 的映射建出来，再把每个 owner 的那些项挂到它的父节点上。
+    owner_of_task: dict[str, str] = {}
+    node_of_task: dict[str, str] = {}
+    node_row: dict[str, dict[str, Any]] = {}
+    for owner, items in items_of_owner.items():
+        for item in items:
+            node = str(item.get("task_id") or "")
+            if not node:
                 continue
-            taken.add(tid)
-            merged.append(row)
-        for item in index_by_owner.get(owner) or []:
-            for tid in (str(item.get("first_task_id") or ""), str(item.get("task_id") or "")):
-                if not tid or tid in taken:
-                    continue
-                taken.add(tid)
-                merged.append({"task_id": tid, "name": str(item.get("name") or ""),
-                               "role": str(item.get("role") or ""),
-                               "retired": bool(item.get("retired"))})
-        # 按落盘行序排（业主 2026-10-24：「同一父的多个子按落盘顺序排，不按角色名重排」）：
-        # `_fold_roster` 交回来的是按名册名排序的一项一条，那是秘书视图的顺序，不是树
-        # 的顺序。这里按"这个子的编号第一次出现在第几行"稳定排序 —— 上面那两份原始行
-        # 就是刚读过的同一批文件，一次都没重读。稳定排序让没有行序的编号（不该有）
-        # 保持原有相对顺序。
-        order = _roster_landing_order(rows_by_owner.get(owner) or [],
-                                      index_rows_by_owner.get(owner) or [])
-        merged.sort(key=lambda row: order.get(str(row.get("task_id") or ""), len(order)))
-        kids_of[owner] = merged
-        for row in merged:
-            tid = str(row.get("task_id") or "")
-            if tid in row_of_child:
-                diagnostics.append(f"{tid} 同时挂在 {parent_of_child[tid]} 与 {owner} "
-                                   "两份名册上（只认先读到的那一份）")
-                continue
-            parent_of_child[tid] = owner
-            row_of_child[tid] = row
-    #: 根 = 名册文件的主人里"没有出现在任何别人名册上"的那些（多根是合法的：一个工作区
-    #: 可以有好几趟顶趟；每一趟自己是一棵树）。
-    roots = [owner for owner in sorted(children_by_owner) if owner not in parent_of_child]
+            if node in node_row and node_row[node] is not item:
+                diagnostics.append(
+                    f"{node} 同时是两个名册项的节点键（只认先读到的那一项；"
+                    "名册项的身份是 owner + name）")
+            node_row.setdefault(node, item)
+            for tid in item["tasks"]:
+                owner_of_task.setdefault(tid, owner)
+                node_of_task.setdefault(tid, node)
+
+    def _parent_node(owner: str) -> str:
+        """这个 owner 的项该挂在哪：它自己是被哪一项接走的（单条执行那一档就是它自己）。"""
+        node = node_of_task.get(owner)
+        if node is None:
+            return owner
+        if owner_of_task.get(owner) == owner:
+            return owner
+        return node
+
+    def _is_root(owner: str) -> bool:
+        """它是不是一棵树的顶：没有谁接过它，或者接它的就是它自己名下的那一项。"""
+        if owner not in node_of_task:
+            return True
+        return owner_of_task.get(owner) == owner
+
+    #: 父节点键 → 它名下的名册项（一个项 = 一个子代理）。形状与旧的"父 → 子"同构，
+    #: 仍交给 `_roster_children_of` 做唯一一次"按落盘行序排 + 去掉空编号"的收口：
+    #: 那一处是"谁是谁的直接子"的唯一实现，判据的反真空也打在它上面。
+    kids_of_parent: dict[str, list[dict[str, Any]]] = {}
+    for owner in sorted(items_of_owner):
+        parent_node = _parent_node(owner)
+        kids = [item for item in items_of_owner[owner]
+                if str(item.get("task_id") or "") and str(item.get("task_id")) != parent_node]
+        if not kids:
+            continue
+        # 同一个名册项可能接过好几件活，而每件活自己名下都有一份名册 ⇒ 这几份名册的
+        # 子都属于那一个名册项（一个节点、它的子树是几件活各自的下级并起来）。
+        bucket = kids_of_parent.setdefault(parent_node, [])
+        for item in kids:
+            node = str(item.get("task_id") or "")
+            if node and all(str(k.get("task_id") or "") != node for k in bucket):
+                bucket.append(item)
+    #: 根 = 它不是任何名册项接走的活（顶趟；以及"父那一份名册读不到"的那些）。
+    #: 多根是合法的：一个工作区可以有好几趟顶趟，每一趟自己是一棵树。
+    roots = [owner for owner in sorted(items_of_owner) if _is_root(owner)]
     if not roots:
-        roots = [sorted(children_by_owner)[0]]
-        diagnostics.append("名册链成环（每一份名册的父都是别人的子）⇒ 从字典序最小的"
+        roots = [sorted(items_of_owner)[0]]
+        diagnostics.append("名册链成环（每一个项都是别人接走的活）⇒ 从字典序最小的"
                            "那一份起读，深度按链上第一次见到的位置算")
+    children_of = _roster_children_of(kids_of_parent, roots)
+
+    #: 节点 → 父节点（与 `children_of` 同一份 `_parent_node` 映射的另一种投影：
+    #: `children_of` 说"谁挂在谁下面"，这一份说"我的父是谁"。两份都由同一处算出，
+    #: 生产上不可能打架；而节点自己的 `parent_task_id` / `depth` 从这一份取，
+    #: 于是"把 children_of 打桩成平的一层"这件事会当场露馅（判据 ④）。
+    parent_of_node: dict[str, str] = {}
+    for owner in sorted(items_of_owner):
+        parent_node = _parent_node(owner)
+        for item in items_of_owner[owner]:
+            node = str(item.get("task_id") or "")
+            if node and node != parent_node:
+                parent_of_node.setdefault(node, parent_node)
+
+    def _depth_of(node: str) -> int:
+        """离根几层（根 = 1）；成环或超过 64 层 ⇒ 停在那里（坏链不许变成死循环）。"""
+        depth, cur, guard = 1, node, 0
+        while guard <= 64:
+            parent = parent_of_node.get(cur, "")
+            if not parent or parent == cur:
+                return depth
+            cur, depth, guard = parent, depth + 1, guard + 1
+        return depth
+
+
 
     # ---- 台账（`status` / `in_flight` / 收件箱那一栏的唯一来源）
     tasks_by_tid: dict[str, dict[str, Any]] = {}
@@ -3095,60 +3329,78 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         out["tasks_tri"] = TRI_UNREADABLE
         out["tasks_reason"] = f"tasks 台账读不出来：{type(exc).__name__}: {exc}"
 
-    # ---- 按父子的形状（业主 2026-10-24：「名册按树展开，不只是简单按层展开」）
-    #
-    # 与下面 `nodes` 同源：都是上面那份 `kids_of`（每份 `<父>.jsonl` 只读了一次）。
-    # 这就是"谁是谁的直接子"的唯一读数 —— 按层排的 `nodes` 画不出父子，这一份能。
-    children_of = _roster_children_of(kids_of, roots)
-
     # ---- 按层排的节点读数（BFS：父一定在子前面；深度上限 64 与
-    # `conductor.inside_subtree` 同一条纪律）。它是"每个节点有什么读数"的那一份，
-    # 不承担"谁是谁的子"（那一件由上面的 `children_of` 说）。
+    # `conductor.inside_subtree` 同一条纪律）。一个节点 = 一个名册项（常驻子代理），
+    # 它下面挂着"这个子代理接过的那些活"（`tasks`，每件各带自己的时间与状态）。
+    # 这一份不承担"谁是谁的子"（那一件由上面的 `children_of` 说）。
     nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
     max_depth = 0
     queue: list[tuple[str, str, int]] = [(owner, "", 1) for owner in roots]
     while queue and len(nodes) < max(1, int(limit)):
-        tid, parent_tid, depth = queue.pop(0)
+        tid = queue.pop(0)[0]
         if tid in seen:
             continue
         seen.add(tid)
-        row = row_of_child.get(tid) or {}
-        trow = tasks_by_tid.get(tid) or {}
-        parent_row = row_of_child.get(parent_tid) or {}
-        kids = [k for k in (kids_of.get(tid) or [])
-                if str(k.get("task_id") or "")]
+        row = node_row.get(tid) or {}
+        parent_tid = parent_of_node.get(tid, "")
+        depth = 1 if tid in roots else _depth_of(tid)
+        parent_row = node_row.get(parent_tid) or {}
+        task_ids = [str(t) for t in (row.get("tasks") or []) if str(t)]
+        task_readings: list[dict[str, Any]] = []
+        inbox_rows: list[dict[str, Any]] = []
+        for task_id in task_ids:
+            trow = tasks_by_tid.get(task_id) or {}
+            if task_id in board_by_recipient:
+                inbox_rows.extend(board_by_recipient[task_id] or [])
+            task_readings.append({
+                "task_id": task_id,
+                "role": str(trow.get("role") or row.get("role") or ""),
+                "status": str(trow.get("status") or ""),
+                "started_at": str(trow.get("started_at") or ""),
+                "ended_at": str(trow.get("ended_at") or ""),
+                "task_found": bool(trow),
+                "brief": str((row.get("task_brief") or {}).get(task_id)
+                             or (row.get("brief") if task_id == task_ids[0] else "") or ""),
+                "detail": _roster_clip(str(trow.get("detail") or ""), 80),
+            })
+        # 节点上的"当前状态"取最近一次接的活（`tasks` 按落盘行序，最后一条是最近的）；
+        # 在飞则是"这一项名下有几件还在飞"（一个子代理可以同时有好几件在飞）。
+        current = task_readings[-1] if task_readings else {}
+        live = sum(1 for tr in task_readings
+                   if str(tr.get("status") or "") in ("pending", "running"))
+        kids = [k for k in (children_of.get(tid) or []) if k]
         node: dict[str, Any] = {
             "task_id": tid,
             "name": str(row.get("name") or ""),
-            "role": str(row.get("role") or trow.get("role") or ""),
+            "role": str(row.get("role") or current.get("role") or ""),
             "depth": int(depth),
             "parent_task_id": str(parent_tid),
             "parent_name": str(parent_row.get("name") or ""),
-            "children": [{"task_id": str(k.get("task_id") or ""),
-                          "name": str(k.get("name") or ""),
-                          "role": str(k.get("role") or ""),
-                          "retired": bool(k.get("retired"))} for k in kids],
+            "children": [{"task_id": k,
+                          "name": str((node_row.get(k) or {}).get("name") or ""),
+                          "role": str((node_row.get(k) or {}).get("role") or ""),
+                          "retired": bool((node_row.get(k) or {}).get("retired"))}
+                         for k in kids],
             "retired": bool(row.get("retired")),
             "retired_branch": str(row.get("retired_branch") or ""),
             "brief": str(row.get("brief") or ""),
             "brief_source": str(row.get("brief_source") or ""),
             "surface": str(row.get("surface") or ""),
-            "status": str(trow.get("status") or ""),
-            "task_found": bool(trow),
-            "in_flight": (in_flight_by_tid.get(tid) if out["tasks_tri"] == TRI_COMPUTED
-                          else None),
-            "inbox": _roster_inbox(board_by_recipient.get(tid) or [],
-                                   tasks_tri=out["tasks_tri"], limit=inbox_items),
+            "status": str(current.get("status") or ""),
+            "task_found": bool(task_readings) and all(tr["task_found"] for tr in task_readings),
+            "in_flight": (live if out["tasks_tri"] == TRI_COMPUTED else None),
+            "inbox": _roster_inbox(inbox_rows, tasks_tri=out["tasks_tri"],
+                                   limit=inbox_items),
+            "tasks": task_readings,
         }
         nodes.append(node)
         max_depth = max(max_depth, int(depth))
         if depth >= 64:
             diagnostics.append(f"{tid} 已经到深度 {depth} ⇒ 不再往下展开（坏链不许变成死循环）")
             continue
-        for k in kids:
-            kid = str(k.get("task_id") or "")
-            if kid and kid not in seen:
+        for kid in kids:
+            if kid not in seen:
                 queue.append((kid, tid, depth + 1))
 
     truncated = bool(queue)
@@ -3177,18 +3429,34 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         out["reason"] = "；".join(x for x in (out["reason"], out["tasks_reason"]) if x)
 
     # ---- 对账读数（名册覆盖到台账的哪一步）：三个数都是"读到了才是数字"
+    #
+    # 平铺并点名（业主 2026-10-24「找不到名册项时才平铺并点名，不许抬成 d1 根」）：
+    # 台账里那些"有父、却不在任何名册项接过的活里"的代理行，摆进 `unplaced`（带
+    # 自己的父、角色、状态与时间），并在诊断里逐个点名。它们不进 `nodes`、也不进
+    # `roots` —— 把它们画成 d1 上的树根等于替盘上事实改口径（真机上那正是
+    # `t-000039` / `t-000068` 被抬到 d1 的形态）。
     if out["tasks_tri"] == TRI_COMPUTED:
         with_parent = {tid: r for tid, r in tasks_by_tid.items()
                        if str(r.get("parent_task_id") or "")}
-        unrostered = sorted(tid for tid in with_parent if tid not in row_of_child)
+        unrostered = sorted(tid for tid in with_parent if tid not in owner_of_task)
+        unplaced = [{"task_id": tid,
+                     "parent_task_id": str(with_parent[tid].get("parent_task_id") or ""),
+                     "role": str(with_parent[tid].get("role") or ""),
+                     "status": str(with_parent[tid].get("status") or ""),
+                     "started_at": str(with_parent[tid].get("started_at") or ""),
+                     "ended_at": str(with_parent[tid].get("ended_at") or ""),
+                     "why": "台账里有它这一行，名册正文与对照表里都没有任何名册项接过它"}
+                    for tid in unrostered]
+        out["unplaced"] = unplaced
         out["coverage"] = {"tasks_agents": len(tasks_by_tid),
                            "roster_nodes": len(nodes),
                            "unrostered": len(unrostered)}
         if unrostered:
             diagnostics.append(
-                f"台账里有 {len(unrostered)} 个「有父的代理行」不在任何名册里（头几个："
+                f"台账里有 {len(unrostered)} 个「有父的代理行」没有任何名册项接过（头几个："
                 + "、".join(unrostered[:5])
-                + "）—— 名册机制上线之前落的行；这不是「名册上少了几个人」")
+                + "）—— 它们平铺在 `unplaced` 里，不抬成树根（名册那一格缺了它们的归属，"
+                "这不是「名册上少了几个人」）")
     return out
 
 
@@ -3656,24 +3924,42 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     # 2026-10-21（业主的「名册监视」）：`out/roster/<父编号>.jsonl` 折出来的那棵树。
     # 逐字段的盘上出处写在 `roster_face` 的 docstring 里那张表上（这里不抄第二份）。
     ("RosterView",
-     "roster_face() —— 当前工作区整棵名册树（`out/roster/<父编号>.jsonl` 折叠 + "
-     "`data/tasks.json` 的 status/收件箱读数）",
+     "roster_face() —— 当前工作区整棵名册树（`out/roster/<父编号>.jsonl` 与 "
+     "`<父编号>-index.jsonl` 折叠出不落盘的名册项 + `data/tasks.json` 的状态/收件箱读数）",
      (("answer", "string"), ("tri", "Tri"), ("reason", "string"),
       ("root", "string"), ("dir", "string"), ("nodes", "RosterNode[]"),
       ("roots", "string[]"), ("children_of", "Record<string, string[]>"),
       ("count", "number | null"),
       ("max_depth", "number | null"), ("files", "string[]"),
       ("diagnostics", "string[]"), ("coverage", "RosterCoverage"),
-      ("tasks_tri", "Tri"), ("tasks_reason", "string"), ("truncated", "boolean"))),
+      ("tasks_tri", "Tri"), ("tasks_reason", "string"), ("truncated", "boolean"),
+      # 台账里有父、可名册正文与对照表都没说"谁接过它"的那些代理行：平铺并点名，
+      # 不抬成树根（D-66）。
+      ("unplaced", "RosterUnplaced[]"))),
     ("RosterNode",
-     "roster_face() 的一个节点 —— 一个 agent（名册里它那一行 + 台账里它那一行；"
-     "`depth` 是名册链上的相对深度，根 = 1）",
+     "roster_face() 的一个节点 —— 一个常驻子代理（名册里那一项；`depth` 是名册链上的"
+     "相对深度，根 = 1）。`task_id` 只是页面用的节点键（建项那件活的编号），身份是"
+     "`owner` + `name`；它接过哪些活见 `tasks`",
      (("task_id", "string"), ("name", "string"), ("role", "string"),
       ("depth", "number"), ("parent_task_id", "string"), ("parent_name", "string"),
       ("children", "RosterChild[]"), ("retired", "boolean"),
       ("retired_branch", "string"), ("brief", "string"), ("brief_source", "string"),
       ("surface", "string"), ("status", "string"), ("task_found", "boolean"),
-      ("in_flight", "number | null"), ("inbox", "RosterInbox"))),
+      ("in_flight", "number | null"), ("inbox", "RosterInbox"),
+      # 这个子代理接过的每一件活（业主 2026-10-24：「一个子代理可接收多个任务」）。
+      ("tasks", "RosterTask[]"))),
+    ("RosterTask",
+     "roster_face() 的 nodes[].tasks[] 一项 —— 这个子代理接过的一件活：编号来自"
+     "`<父>-index.jsonl` 的调用记录，状态与起止时间来自 `data/tasks.json`",
+     (("task_id", "string"), ("role", "string"), ("status", "string"),
+      ("started_at", "string"), ("ended_at", "string"), ("task_found", "boolean"),
+      ("brief", "string"), ("detail", "string"))),
+    ("RosterUnplaced",
+     "roster_face() 的 unplaced[] 一项 —— 台账里有父、却没有任何名册项接过的那一行"
+     "（平铺并点名，不抬成树根）",
+     (("task_id", "string"), ("parent_task_id", "string"), ("role", "string"),
+      ("status", "string"), ("started_at", "string"), ("ended_at", "string"),
+      ("why", "string"))),
     ("RosterChild",
      "roster_face() 的 nodes[].children[] 一项 —— 名册里的一个子（绝对编号 + 名册名）",
      (("task_id", "string"), ("name", "string"), ("role", "string"),
@@ -3697,6 +3983,49 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "roster_face() 的 coverage —— 台账里的代理行与名册节点的对账（读不到就是 null）",
      (("tasks_agents", "number | null"), ("roster_nodes", "number | null"),
       ("unrostered", "number | null"))),
+    # 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）：文献库那一面。
+    # 五键外壳里 `state` 只有两档（computed / unknown）：`unknown` 是"这一面没读成"
+    # （表不在盘上 / 坏 JSON），而 `count` 那一格在那一档是 null —— 不是 0。
+    ("LibraryView",
+     "library_face() —— 文献库那一面：只算「正式入库」的文献 + 每篇被哪些命题／"
+     "哪一份证明用过（`state` 只有 computed / unknown 两档；`unknown` 有两支 ——"
+     "台账没读成、以及「没有候选台账 ⇒ 入库判不出」，两支的 `data.count` 都是 null，不是 0）",
+     (("checked", "boolean"), ("state", "string"), ("reason", "string"),
+      ("data", "LibraryData"), ("problems", "LibraryProblem[]"))),
+    ("LibraryData",
+     "library_face() 的 data —— 入库文献那几栏与判据的来源"
+     "（`rows_total` 是台账里一共几行，`count` 是显示几条；两者之和不必相等："
+     "待入库与判不出的都不显示。`admission_source` 只有一个取值：那一格是唯一判据）",
+     (("works", "LibraryWork[]"), ("count", "number | null"), ("table", "string"),
+      ("table_state", "string"), ("rows_total", "number | null"),
+      ("admission_source", "string"), ("admission_tri", "Tri"),
+      ("undecidable", "number | null"),
+      ("uses_tri", "Tri"), ("uses_reason", "string"))),
+    ("LibraryWork",
+     "library_face() 的 data.works[] —— 一条「正式入库」的文献（`admitted` 恒为 true："
+     "判不出的不进这个数组，而判据只有 `lit_candidates.status=admitted` 那一格）。"
+     "`download_state` 是 download 那一格与盘上文件核对的三态"
+     "（present / absent / unreadable），`uses` 是反查出来的「被谁用过」",
+     (("lit_id", "string"), ("title", "string"), ("authors", "string[]"),
+      ("doi", "string"), ("dedup_key", "string"), ("pages", "string"),
+      ("matched", "string"), ("claimed_by", "string"), ("mine_attempts", "number"),
+      ("last_mine_error", "string"),
+      ("download_status", "string"), ("download_path", "string"),
+      ("download_state", "string"), ("download_bytes", "number | null"),
+      ("download_reason", "string"),
+      ("admitted", "boolean"), ("admission_basis", "string"),
+      ("uses", "LibraryUse[]"), ("uses_count", "number"))),
+    ("LibraryUse",
+     "library_face() 的 data.works[].uses[] —— 「这一篇被谁用过」的一条"
+     "（`via` 只有 statement / dependency 两档：语句自己的 `source_lit_id`，"
+     "与依赖的 `source_lit_id`；`proof_no` 是证明号，`#pN` 由 `proofloc` 拆）",
+     (("stmt_id", "string"), ("proof_no", "number"), ("label", "string"),
+      ("used_by", "string"), ("via", "string"))),
+    ("LibraryProblem",
+     "library_face() 的 problems[] —— 一条不拦门但要留痕的读数问题"
+     "（`code` 是受控的几个码，`admission_undecidable` 就是「判不出入库/待入库」"
+     "那一条：A 侧的实现问题，不显示但记一笔）",
+     (("code", "string"), ("detail", "string"))),
 )
 
 # （`MISSING_TYPES` 在文件头声明：那是"这一层有哪些约定"的那一处，本处不再重复一份 —
@@ -3779,6 +4108,7 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {"nodes": [], "roots": [], "children_of": {}, "count": None, "max_depth": None,
                 "coverage": {"tasks_agents": None, "roster_nodes": 0, "unrostered": None},
+                "unplaced": [],
                 "reason": f"{path} 读不出来 ⇒ 台账兜底也读不到"}
     agents = [r for r in rows if str(r.get("kind") or "") == "" and str(r.get("task_id") or "")]
     by_parent: dict[str, list[dict[str, Any]]] = {}
@@ -3839,6 +4169,412 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
             "coverage": {"tasks_agents": None if empty else len(agents),
                          "roster_nodes": None if empty else 0,
                          "unrostered": None if empty else len(agents)},
+            "unplaced": [],
             "reason": (f"名册那一格没读到，但台账里有 {len(agents)} 个带父的代理行"
                        f"（头几个：{sorted(ids)[:5]}）⇒ 下面这棵树来自 `data/tasks.json`，"
                        "它们**存在、但不在名册上**（名册登记没有发生）")}
+
+
+# ====================================================================== 11 文献库
+# 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）。
+#
+# 现场：`literature` 表在盘上、行也在盘上，而 `readers` 里没有任何文献读数函数 ——
+# 前端「文献库」那格挂着的 reason 是「今天也没有别的端点给它」。所以页面读不出不是
+# 坏了，是从来没接。这一节补的就是那条端点（只读，不需要 `--allow-writes`）。
+#
+# 业务口径（业主逐字）：「文献库按照正式入库的算，显示时可以显示被哪些定理证明使用，
+# 如果分不清哪些真入库、哪些待入库（这个没读的必要），这是A侧实现问题」。
+# 三句话落成三件事：只显示判得出「已正式入库」的那些；每条显示出来的都读出被谁用过；
+# 判不出的不显示，但在 `problems` 里留一条 `admission_undecidable`（A 侧的实现问题，
+# 留痕不拦门）。
+#
+# 2026-10-24 追裁（原话「老工作区就是读不出来」）：判据只认候选台账那一格，不退回
+# `literature.matched`；没有候选台账的工作区整面记「读不出来」（`count` 是 null，不是 0）。
+
+#: 这一面外壳里 `state` 的两档。为什么不是别处的 `tri` 三档：`state` 回答的是页面
+#: 那一句「这一面读到了没有」，而「没有这一档」不是第三种结论 —— 第三种情形（表在、
+#: 里面 0 条）是 `computed` + 计数 0。别处的 `tri` 词表仍然管六面，两套不互相顶替。
+LIBRARY_STATE_COMPUTED = "computed"
+LIBRARY_STATE_UNKNOWN = "unknown"
+
+#: 入库判据的唯一依据：`lit_candidates.status == "admitted"`。
+#: 业主 2026-10-24 的裁定（原话「老工作区就是读不出来」）：没有候选台账的工作区不许
+#: 退回 `literature.matched` 那一格 —— 那一格回答的是「这一篇是不是我要的那一篇」，
+#: 不是「它在不在库里」；拿一个近似的格子顶替唯一的那一格，入库与待入库就又混在一起了。
+ADMISSION_BASIS_CANDIDATE = "lit_candidates.status=admitted"
+
+#: 没有候选台账时这一面那句话（业主口径逐字；这一档 `count` 是 null，不是 0）。
+LIBRARY_NO_LEDGER_REASON = (
+    "这个工作区没有候选台账（lit_candidates）：正式入库的判据只有那一格，读不出不算 0 条")
+
+#: `problems[]` 的码（受控取值；页面按码分档显示，`detail` 说人话）。
+PROBLEM_ADMISSION_UNDECIDABLE = "admission_undecidable"
+PROBLEM_LITERATURE_UNREADABLE = "literature_unreadable"
+PROBLEM_USES_UNREADABLE = "uses_unreadable"
+PROBLEM_ADMITTED_WITHOUT_ROW = "admitted_without_row"
+PROBLEM_DOWNLOAD_CLAIMED_ABSENT = "download_claimed_but_absent"
+
+
+def _library_table(root_p: Path, table: str) -> tuple[list[dict], str, str]:
+    """读一张 store 表：返回 `(行, 四态, 说明)`。
+
+    四态是 `ok` / `empty` / `absent` / `unreadable`（与 `_read_state` 那一套同形，
+    但这里读的是 `data/<表名>.json`，不是 JSONL）。`absent` 与 `empty` 必须分开：
+    前者是「这份台账根本不在盘上」—— 这一面判成 unknown；后者是「读到了，里面 0 行」。
+    把两者折平，就等于把「这篇工作区还没建过文献库」读成「文献库里一篇都没有」。
+
+    坏 JSON / 非 UTF-8 / 表里混着不是对象的行，一律 `unreadable`（`Store.rows` 自己
+    就抛 `StoreError`，这一层不吞）：读不出来就是没查成。
+    """
+    from ..store import Store
+
+    rel = str(_table_files().get(table) or f"{table}.json")
+    path = root_p / "data" / rel
+    if not path.is_file():
+        return [], "absent", f"data/{rel} 不在盘上（这一面没得读，不是 0 条）"
+    try:
+        raw = Store(root_p).rows(table)
+    except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成，不折成空表
+        return [], "unreadable", f"data/{rel} 读不出来：{type(exc).__name__}: {exc}"
+    if not all(isinstance(row, dict) for row in raw):
+        return [], "unreadable", f"data/{rel} 里有不是对象的行（共 {len(raw)} 行）"
+    rows = [dict(row) for row in raw]
+    if not rows:
+        return [], "empty", ""
+    return rows, "ok", ""
+
+
+def _library_download(root_p: Path, row: Mapping[str, Any]) -> dict[str, Any]:
+    """`download` 那一格与盘上文件对一次账：在 / 不在 / 读不到 三态。
+
+    为什么必须去盘上核一次：`download.status` 是写侧的自报（`ok` 的意思只是「那次
+    下载当时成功了」），而文件可以被删、被换、被挪。只看那一格，「字节还在不在」
+    这个问题从来没有被问过 —— 而它恰恰是「这一篇现在还能不能读」的全部内容。
+
+    三态：`present`（普通文件在，`download_bytes` 是真字节数）/ `absent`（路径上什么都
+    没有，或者这一行根本没给 path）/ `unreadable`（有东西但读不到字节：是个目录、
+    没权限、或者 path 指到 `library/` 之外 —— 那一档不按「不在」读：没核过不等于没有）。
+    """
+    raw = row.get("download")
+    download = raw if isinstance(raw, Mapping) else {}
+    status = str(download.get("status") or "")
+    rel = str(row.get("path") or "").strip().replace("\\", "/")
+    out: dict[str, Any] = {
+        "download_status": status,
+        "download_path": rel,
+        "download_state": "absent",
+        "download_bytes": None,
+        "download_reason": "",
+    }
+    if not rel:
+        out["download_reason"] = (
+            f"这一行没有 path（download.status={status or '空'}）⇒ 盘上没有可核的文件")
+        return out
+    lib = (root_p / "library").resolve()
+    target = root_p / "library" / rel
+    try:
+        resolved = target.resolve()
+    except OSError as exc:
+        out["download_state"] = "unreadable"
+        out["download_reason"] = f"library/{rel} 的路径解析不出来：{type(exc).__name__}: {exc}"
+        return out
+    if not resolved.is_relative_to(lib):
+        out["download_state"] = "unreadable"
+        out["download_reason"] = (f"path={rel} 指到 library/ 之外 ⇒ 不核这一行"
+                                 "（「没核」不等于「不在」）")
+        return out
+    try:
+        st = resolved.stat()
+    except FileNotFoundError:
+        out["download_reason"] = (f"library/{rel} 不在盘上"
+                                  f"（download.status={status or '空'}）")
+        return out
+    except OSError as exc:
+        out["download_state"] = "unreadable"
+        out["download_reason"] = f"library/{rel} 读不到：{type(exc).__name__}: {exc}"
+        return out
+    if not resolved.is_file():
+        out["download_state"] = "unreadable"
+        out["download_reason"] = (f"library/{rel} 不是普通文件（大概是个目录）"
+                                 "⇒ 字节数没有意义")
+        return out
+    out["download_state"] = "present"
+    out["download_bytes"] = int(st.st_size)
+    return out
+
+
+def _library_admission(row: Mapping[str, Any], *,
+                       candidates: Mapping[str, Mapping[str, Any]]
+                       ) -> tuple[bool | None, str]:
+    """这一篇算不算「正式入库」：`(admitted, basis)`，`None` = 判不出。
+
+    唯一判据：候选台账（`lit_candidates`）里这一篇那一行的 `status == "admitted"`
+    （schema 原话：「admitted —— 已正式入库：`lit_id` 必须非空」）。同一张词表上的
+    另外四档 `pending` / `withdrawn` / `rejected` / `cleared` 一律按「没入库」处置 ——
+    它们与 `admitted` 分得开，正是这张表存在的理由。
+
+    没有候选行 ⇒ 判不出（返回 `None`）：调用方不显示它，并在 `problems` 里留一条
+    `admission_undecidable`。业主 2026-10-24 的裁定：不退回 `literature.matched`
+    —— 那一格回答「这一篇是不是我要的那一篇」，与「它在不在库里」是两个问题；
+    拿它顶替入库判据，等于用一个近似的格子冒充唯一的那一格。
+
+    注射点：本函数是这一面唯一的入库判断（判据 `test_f_...` 拿它做反真空：打桩成
+    「全收」时，那条「只算入库」的判据必须当场红）。
+    """
+    cand = candidates.get(str(row.get("lit_id") or ""))
+    if not isinstance(cand, Mapping):
+        return None, ""
+    return (str(cand.get("status") or "") == "admitted"), ADMISSION_BASIS_CANDIDATE
+
+
+def _library_uses(*, statements: Sequence[Any],
+                  dependencies: Sequence[Any]) -> dict[str, list[dict[str, Any]]]:
+    """反查「这一篇被哪些命题 / 哪一份证明用过」，键 = `lit_id`。
+
+    两条来源，各自只有一个真身：
+
+    - 语句自己的 `source_lit_id`（`origin="external_lit"` 的那一批）—— 证明号取
+      `verifications.proof_list(row)`：`#p1` 恒在，`#p2` 起来自行上的 `proofs` 清单。
+      一条证明一行，绝不把多证明压成一个数字；
+    - 依赖的 `source_lit_id`（G 登记的「某个使用点依赖了这一篇」）—— 证明号取
+      `used_by` 尾巴上的 `#pN`，拆法只用 `proofloc`（全仓唯一的解析点）：自己 split
+      就等于允许「台账上是第 2 条、读出来是第 1 条」这种错，而它不会有任何东西报。
+
+    `used_by` 不是 `stmt:` 前缀的（`doc:` / `relation:` / `experiment:` …）照原样留在
+    那一行上、`stmt_id` 是空串：那种使用点不是一条命题，硬编一个命题号等于编读数。
+
+    注射点：这一面唯一的一次反查（判据 `test_f_...` 把它打桩成空，那条「被引反查」
+    的判据必须当场红）。
+    """
+    from .. import proofloc as PL
+    from .. import verifications as VR
+
+    found: dict[str, dict[tuple[str, int, str], dict[str, Any]]] = {}
+
+    def add(lit_id: str, stmt_id: str, proof_no: int, label: str,
+            used_by: str, via: str) -> None:
+        if not lit_id:
+            return
+        slot = found.setdefault(lit_id, {})
+        key = (stmt_id, int(proof_no), via)
+        if key in slot:
+            return
+        slot[key] = {"stmt_id": stmt_id, "proof_no": int(proof_no), "label": label,
+                     "used_by": used_by, "via": via}
+
+    for row in statements:
+        if not isinstance(row, Mapping):
+            continue
+        lit_id = str(row.get("source_lit_id") or "")
+        if not lit_id:
+            continue
+        stmt_id = str(row.get("stmt_id") or "")
+        label = str(row.get("label") or "")
+        try:
+            numbers = [int(no) for no, _text in VR.proof_list(row)]
+        except Exception:  # noqa: BLE001 - 清单读不出来 ⇒ 按单证明（canonical）处置
+            numbers = [1]
+        for no in (numbers or [1]):
+            add(lit_id, stmt_id, no, label, f"stmt:{PL.used_by_of(stmt_id, no)}", "statement")
+
+    for row in dependencies:
+        if not isinstance(row, Mapping):
+            continue
+        lit_id = str(row.get("source_lit_id") or "")
+        if not lit_id:
+            continue
+        used_by = str(row.get("used_by") or "")
+        head, proof_no = PL.parse_used_by(used_by)
+        stmt_id = head[len("stmt:"):] if head.startswith("stmt:") else ""
+        add(lit_id, stmt_id, proof_no, str(row.get("label") or ""), used_by, "dependency")
+
+    return {lit_id: [slot[key] for key in sorted(slot)]
+            for lit_id, slot in found.items()}
+
+
+def _library_work(root_p: Path, row: Mapping[str, Any],
+                  uses: Sequence[Mapping[str, Any]], basis: str) -> dict[str, Any]:
+    """一条入库文献的显示行（键集合逐字等于 `LibraryWork` 的声明）。"""
+    download = _library_download(root_p, row)
+    authors = [str(a) for a in (row.get("authors") or []) if str(a).strip()]
+    try:
+        attempts = int(row.get("mine_attempts") or 0)
+    except (TypeError, ValueError):
+        attempts = 0
+    shown = [dict(use) for use in uses]
+    return {
+        "lit_id": str(row.get("lit_id") or ""),
+        "title": str(row.get("title") or ""),
+        "authors": authors,
+        "doi": str(row.get("doi") or ""),
+        "dedup_key": str(row.get("dedup_key") or ""),
+        "pages": str(row.get("pages") or ""),
+        "matched": str(row.get("matched") or ""),
+        "claimed_by": str(row.get("claimed_by") or ""),
+        "mine_attempts": attempts,
+        "last_mine_error": str(row.get("last_mine_error") or ""),
+        "download_status": download["download_status"],
+        "download_path": download["download_path"],
+        "download_state": download["download_state"],
+        "download_bytes": download["download_bytes"],
+        "download_reason": download["download_reason"],
+        "admitted": True,
+        "admission_basis": basis,
+        "uses": shown,
+        "uses_count": len(shown),
+    }
+
+
+def library_face(root: str | Path) -> dict[str, Any]:
+    """`GET /api/literature` 的读模型：只算正式入库的文献 + 每篇被谁用过。
+
+    ## 返回形状（五键外壳，逐键见 `LibraryView`）
+
+    `{checked, state, reason, data, problems}` —— 五键在每一档上都在（三态纪律：
+    同一面同一批键，页面不必先判有没有这一格才敢读）。
+
+    ## 三态（业主 2026-10-24 的口径）
+
+    - 文献表不在盘上 / 表是坏 JSON ⇒ `checked=False` + `state="unknown"` + `reason`
+      （不是 0 条：折成 0 会让页面说「库里一篇文献都没有」，而真相是这一面没读成）；
+    - 表读到了、入库判据也在用 ⇒ `checked=True` + `state="computed"`，`data.count`
+      是真数字（可以是 0：那是「读到了，这一档里 0 条入库」）；
+    - 表读到了、可是没有候选台账（`lit_candidates` 表不在、或表在但一行候选都没有）
+      ⇒ `checked=True` 但 `state="unknown"` + `reason`（业主原话「老工作区就是读不出来」：
+      正式入库的判据只有候选台账那一格，没有它就读不出来，`count` 是 null 不是 0）。
+
+    ## 只算正式入库的那一档
+
+    判据的真身是 :func:`_library_admission`：只认 `lit_candidates.status=admitted` 那一格。
+    显示出来的每一条 `admitted` 都是 `true`；没有候选行的那几篇不显示，但
+    `data.undecidable` 记个数、`problems` 里留一条 `admission_undecidable` 点名是哪几篇
+    （A 侧的实现问题，留痕不拦门）。`data.rows_total` 是台账里一共几行，它与
+    `data.count` 不必相等：待入库的、判不出的都不显示，而这两件事在读数上分得开。
+
+    ## 被谁用过
+
+    `data.works[].uses` 是 :func:`_library_uses` 的反查结果（语句的 `source_lit_id`
+    与依赖的 `source_lit_id`，每条给 `stmt_id` + `proof_no`）。反查那两张表读不到时，
+    `data.uses_tri` 记 `unreadable` / `not_applicable` 并在 `problems` 里留痕 ——
+    那一档绝不显示成「这一篇谁都没用过」。
+    """
+    root_p = Path(str(root))
+    problems: list[dict[str, str]] = []
+
+    def add_problem(code: str, detail: str) -> None:
+        problems.append({"code": code, "detail": detail})
+
+    lit_rows, lit_state, lit_why = _library_table(root_p, "literature")
+    lit_rel = str(_table_files().get("literature") or "literature.json")
+    data: dict[str, Any] = {
+        "works": [],
+        "count": None,
+        "table": f"data/{lit_rel}",
+        "table_state": lit_state,
+        "rows_total": None,
+        "admission_source": ADMISSION_BASIS_CANDIDATE,
+        "admission_tri": TRI_NOT_APPLICABLE,
+        "undecidable": None,
+        "uses_tri": TRI_NOT_APPLICABLE,
+        "uses_reason": "文献表没读到 ⇒ 反查无从做起",
+    }
+
+    if lit_state in ("absent", "unreadable"):
+        add_problem(PROBLEM_LITERATURE_UNREADABLE, lit_why)
+        return {"checked": False, "state": LIBRARY_STATE_UNKNOWN, "reason": lit_why,
+                "data": data, "problems": problems}
+
+    # ---- 入库判据的唯一来源（候选台账）：没有它，这一面就是读不出来
+    data["rows_total"] = len(lit_rows)
+    cand_rows, cand_state, cand_why = _library_table(root_p, "lit_candidates")
+    candidates = {str(row.get("lit_id")): row for row in cand_rows
+                  if str(row.get("lit_id") or "")}
+    if cand_state in ("absent", "unreadable") or not cand_rows:
+        # 业主 2026-10-24：「老工作区就是读不出来」。三档都落这里：表不在盘上 /
+        # 表读不出来 / 表在但一行候选都没有。它们都不许折成"0 条入库" ——
+        # 正式入库的判据只有候选台账那一格，没有它就没法判，`count` 只能是 null。
+        data["admission_tri"] = (TRI_UNREADABLE if cand_state == "unreadable"
+                                 else TRI_NOT_APPLICABLE)
+        data["uses_tri"] = TRI_NOT_APPLICABLE
+        data["uses_reason"] = "入库判据读不出来 ⇒ 这一面不显示任何一条（反查也就不做了）"
+        reason = LIBRARY_NO_LEDGER_REASON
+        if cand_why:
+            reason = f"{LIBRARY_NO_LEDGER_REASON}（{cand_why}）"
+        add_problem(PROBLEM_ADMISSION_UNDECIDABLE,
+                    f"{LIBRARY_NO_LEDGER_REASON}（{cand_why or '候选表里 0 行'}）")
+        return {"checked": True, "state": LIBRARY_STATE_UNKNOWN, "reason": reason,
+                "data": data, "problems": problems}
+    data["admission_source"] = ADMISSION_BASIS_CANDIDATE
+    data["admission_tri"] = TRI_COMPUTED
+
+    # ---- 被谁用过（反查那两张表）
+    stmt_rows, stmt_state, stmt_why = _library_table(root_p, "statements")
+    dep_rows, dep_state, dep_why = _library_table(root_p, "dependencies")
+    readable = ("ok", "empty")
+    if stmt_state in readable and dep_state in readable:
+        uses = _library_uses(statements=stmt_rows, dependencies=dep_rows)
+        data["uses_tri"] = TRI_COMPUTED
+        data["uses_reason"] = ""
+    else:
+        uses = {}
+        unreadable = "unreadable" in (stmt_state, dep_state)
+        data["uses_tri"] = TRI_UNREADABLE if unreadable else TRI_NOT_APPLICABLE
+        data["uses_reason"] = "；".join(w for w in (stmt_why, dep_why) if w) or (
+            "反查要读的 statements / dependencies 不在盘上")
+        add_problem(PROBLEM_USES_UNREADABLE, data["uses_reason"])
+
+    # ---- 逐行判入库、建显示行
+    works: list[dict[str, Any]] = []
+    undecidable: list[str] = []
+    for row in lit_rows:
+        admitted, basis = _library_admission(row, candidates=candidates)
+        if admitted is None:
+            undecidable.append(str(row.get("lit_id") or ""))
+            continue
+        if not admitted:
+            continue
+        lit_id = str(row.get("lit_id") or "")
+        work = _library_work(root_p, row, uses.get(lit_id, []), basis)
+        works.append(work)
+        if work["download_status"] == "ok" and work["download_state"] != "present":
+            add_problem(PROBLEM_DOWNLOAD_CLAIMED_ABSENT,
+                        f"{lit_id}：download.status=ok 而盘上这一份"
+                        f"{'读不到' if work['download_state'] == 'unreadable' else '不在'}"
+                        f"（{work['download_reason'] or '没有理由'}）")
+
+    if undecidable:
+        add_problem(PROBLEM_ADMISSION_UNDECIDABLE,
+                    "这几篇在候选台账里没有对应的行（也没有 admitted 的候选行）"
+                    "⇒ 判不出「正式入库 / 待入库」，本面不显示它们："
+                    + "、".join(undecidable))
+
+    lit_ids = {str(row.get("lit_id") or "") for row in lit_rows}
+    dangling = sorted({str(row.get("lit_id")) for row in cand_rows
+                       if str(row.get("status") or "") == "admitted"
+                       and str(row.get("lit_id") or "") not in lit_ids})
+    if dangling:
+        add_problem(PROBLEM_ADMITTED_WITHOUT_ROW,
+                    "候选台账说这几篇已入库，而 literature 表里没有它们的行："
+                    + "、".join(dangling))
+
+    data.update({"works": works, "count": len(works),
+                 "rows_total": len(lit_rows), "undecidable": len(undecidable)})
+    return {"checked": True, "state": LIBRARY_STATE_COMPUTED, "reason": "",
+            "data": data, "problems": problems}
+
+
+def handle_library(handler: Any, params: Mapping[str, str],
+                   query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/literature`：文献库那一面（只读，不需要 `--allow-writes`）。
+
+    消费者只有一个：产物页里的「文献库」那张卡。这一条端点在路由表里只有一条 GET
+    （没有任何配对的 POST，也没有写路径）—— 判据
+    `tests/test_library_face_only_counts_admitted_works.py` 的 a 条钉着这一点。
+    """
+    del params, query
+    _json_of(handler, library_face(handler.root))
+
+
+#: 接缝的第二个落点：这条端点的处理器定义在文件末尾（这一批只追加），所以登记也在这里。
+#: `routes.handler_for(name)` 会按 `ROUTES` 第三元素来这张字典里取。
+HANDLERS.update({"handle_library": handle_library})

@@ -171,7 +171,7 @@ def test_the_skills_index_says_whose_sign_counts_when_on(lean_on):
     """
     from agentflow import agent_skills as S
 
-    block = S.index_block("E")
+    block = S.index_block("M")
     assert "形式化以 V 的签与 B 的台账为准" in block, block[-400:]
     assert "指定之后每一条由 **B** 逐条安排" in block, block[-400:]
     assert "形式化见 L" not in block, "索引里又出现了「形式化见 L」（非 B 角色与它没有边）"
@@ -179,6 +179,9 @@ def test_the_skills_index_says_whose_sign_counts_when_on(lean_on):
     assert "形式化以 V 的签与 B 的台账为准" not in S.index_block("L")
     # B 那一格也不加：它的收件通道写在 `specs/b.py` 的政策里（唯一该写全的地方）
     assert "形式化以 V 的签与 B 的台账为准" not in S.index_block("B")
+    # E8 / E5（2026-10-25）：E 的 Lean 侧要清干净 —— 技能索引这一句也不再发给它
+    # （它的工具面上 0 件 formal.* / detect_verifier，写集只有 experiments）。
+    assert "形式化以 V 的签与 B 的台账为准" not in S.index_block("E")
 
 
 def test_the_skills_index_has_no_trace_of_l_when_off(lean_off):

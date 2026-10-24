@@ -432,6 +432,32 @@ h3 {
   border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
+/* 一个子代理管过的那些活（业主 2026-10-24：节点后面可展开任务号）。
+   它是明细，不是树的一部分：缩进比子树深一格，左侧那条线换成虚线，读的人一眼
+   分得出"这一块是任务清单，不是下级代理"。 */
+.roster-twist-tasks {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.roster-tasks {
+  margin-left: var(--sp-4);
+  padding-left: var(--sp-2);
+  border-left: 1px dashed var(--dsw-alias-border-l2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.roster-task {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: var(--fs-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
 .roster-missing {
   display: flex;
   flex-wrap: wrap;
@@ -470,6 +496,18 @@ h3 {
   font-weight: 600;
 }
 
+/* 已销号（退役）的名册节点：名字画删除线（D-59 业主口径「已销号子代理为画删除线的格式」）。 */
+.roster-retired {
+  text-decoration: line-through;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* 已销号节点的明细里那一句「收件箱不再显示」的说明（与读数同一档字号）。 */
+.roster-retired-note {
+  font-size: var(--fs-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
 .roster-detail {
   margin: var(--sp-1) 0 var(--sp-2) var(--sp-4);
   padding: var(--sp-2);
@@ -498,5 +536,90 @@ h3 {
 
 .roster-inbox-item {
   align-items: flex-start;
+}
+
+/* ---- 错误动作那一栏（2026-10-24，业主：「ui侧加一个大栏专门显示各角色错误动作计数」）----
+ *
+ * 三件事，各一条理由：
+ *
+ * 1. `.err-scroll`：类目可能十几个（真机 sylow3 实测 7 列就已经把 960px 撑满），
+ *    表要能横向滚 —— 不许把最右那几列裁掉，那等于"看不见的类目不算数"。
+ * 2. `.err-pick`：行首（角色）与列头（类目）都是可点的文字。为什么不用 `.btn`：
+ *    带内边距的按钮会把列头整体右移，数据在列里、表头在列外，读起来对不上行。
+ * 3. `.err-zero` / `.err-hot`：全 0 的格灰、非 0 的格加粗（业主口径：
+ *    "全 0 的格灰显、非 0 高亮"）。灰只降到次级色，不隐藏 —— 它仍是一条读数。
+ *
+ * 颜色一律走令牌（`test_webui_contracts.py::test_app_css_uses_only_tokens_in_the_theme`
+ * 会拦裸色值）；字号与间距只走那五档 / 四档。
+ */
+.err-scroll {
+  overflow-x: auto;
+  margin: var(--sp-2) 0;
+}
+
+/* 选择器一律带 `table.` 前缀：靠后的同分规则才压得住上面那条 `table.grid`（字号 13px、
+ * 左对齐、7px 内边距、width 100%）。不带前缀的话，`.err-matrix th`（0,1,1）输给
+ * `table.grid th`（0,1,2），于是数据右对齐、内边距、宽度全都不生效 —— 视觉上表头会
+ * 和数据错开一格。 */
+table.err-matrix {
+  width: auto;
+  border-collapse: collapse;
+}
+
+table.err-matrix th,
+table.err-matrix td {
+  text-align: right;
+  white-space: nowrap;
+  padding: 6px var(--sp-2);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+/* 列头不折行（`multi_call_executed_calls` 这种名字折了也读不清），宽了就横向滚；
+   两头各钉一列：左边是角色、右边是合计 —— 滚到中间也知道这一行是谁、一共多少。 */
+table.err-matrix th:first-child,
+table.err-matrix td:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+table.err-matrix th:last-child,
+table.err-matrix td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--dsw-alias-bg-layer-2);
+  border-left: 1px solid var(--dsw-alias-border-l1);
+}
+
+.err-pick {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.err-pick:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
+
+.err-zero {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.err-hot {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+/* 展开那段明细：与名册树里的 `.roster-detail` 同一个形状（左侧一条竖线）。 */
+.err-detail {
+  margin: var(--sp-1) 0 var(--sp-2) var(--sp-4);
+  padding: var(--sp-2);
+  border-left: 2px solid var(--dsw-alias-border-l2);
 }
 

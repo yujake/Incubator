@@ -2631,7 +2631,11 @@ def _doc_write_mapping(workspace: Path | None, project: str,
         return fail("对应表是空的 ⇒ 没有写盘（正文里每个定理类环境都该有一行）",
                     kind="mapping_empty", written=False)
     try:
-        json_path, md_path, frag = PM.write_package(root, parsed)
+        # `workspace_root=workspace`：台账（`data/`）在工作区那一层，而论文包挂在项目
+        # 子目录下 —— D-69 那两格（`ledger_kind` / `reviewed`）要按台账现读现填，
+        # 指错一层就会全表印成"未读到"。判据读数那一侧用的是同一个 `workspace`
+        # （见下面 `mapping_reading(workspace_root=workspace)`）。
+        json_path, md_path, frag = PM.write_package(root, parsed, workspace_root=workspace)
     except OSError as exc:
         return fail(f"写论文包失败：{type(exc).__name__}: {exc}",
                     kind="io_error", written=False)

@@ -17,6 +17,7 @@ import type {
   ArtifactsView,
   BudgetView,
   EvidenceView,
+  LibraryView,
   LiveView,
   MachineView,
   RosterView,
@@ -44,6 +45,10 @@ export const ENDPOINTS = {
   runEvents: "/api/run/{sid}/events",
   evidence: "/api/evidence",
   artifacts: "/api/artifacts",
+  // 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）：文献库那一面。
+  // 只读一条：只算「正式入库」的文献，每条带「被哪些命题／哪一份证明用过」，
+  // 且下载那一格要与盘上的文件核过（在 / 不在 / 读不到）。没有配对的 POST。
+  literature: "/api/literature",
   acceptance: "/api/acceptance",
   machine: "/api/machine",
   answer: "/answer",
@@ -65,6 +70,11 @@ export const ENDPOINTS = {
   // `webui/cacheface.py` 的两个处理器逐字对应。
   cache: "/api/cache",
   cacheWarm: "/api/cache/warm",
+  // 2026-10-24（业主：「ui侧加一个大栏专门显示各角色错误动作计数」）：
+  // 两条都只读。第一条是 `readouts.errors_readout(root)` 逐字（五个键），
+  // 第二条是类目 → 那一句含义（真身 `errorstats.ERROR_CATEGORIES`）。
+  errors: "/api/errors",
+  errorCategories: "/api/errors/categories",
   stream: "/api/stream",
 } as const;
 
@@ -331,6 +341,19 @@ export const api = {
   ): Promise<RunEventsView> => getJSON<RunEventsView>(runEventsPath(sid, opts)),
   getEvidence: (): Promise<EvidenceView> => getJSON<EvidenceView>(ENDPOINTS.evidence),
   getArtifacts: (): Promise<ArtifactsView> => getJSON<ArtifactsView>(ENDPOINTS.artifacts),
+  /**
+   * 文献库那一面（`GET /api/literature`，2026-10-24 的 D-57）。
+   *
+   * 只算「正式入库」的那一档：判据**只有** `lit_candidates.status=admitted` 那一格
+   * （业主 2026-10-24 追裁「老工作区就是读不出来」：不退回 `literature.matched`）。
+   * 判不出入库/待入库的不显示，但 `problems[]` 里会留一条 `admission_undecidable`。
+   * 每条带 `uses[]`：被哪条命题、第几份证明用过。
+   *
+   * 三态：`state === "unknown"` 有两支 —— 台账没读成（表不在盘上 / 坏 JSON），
+   * 以及「没有候选台账 ⇒ 入库判不出」；两支的 `data.count` 都是 `null`，不是 0。
+   * **只读**：没有写函数。
+   */
+  getLibrary: (): Promise<LibraryView> => getJSON<LibraryView>(ENDPOINTS.literature),
   getAcceptance: (opts: {
     projectDir?: string;
     reportPath?: string;
@@ -362,6 +385,22 @@ export const api = {
    * `tri !== "found"` 时那一档的四格全是 `unknown`（附 `reason`），**不是**"没预热"。
    */
   getCache: (): Promise<CacheView> => getJSON<CacheView>(ENDPOINTS.cache),
+  /**
+   * 按角色 × 类目的错误动作计数（`GET /api/errors`，2026-10-24）。
+   *
+   * 形状是后端 `readouts.errors_readout(root)` 的返回值逐字（五个键）。三态：
+   * `state === "checked"` 才谈得上"几个"；`state === "unknown"` 是"没读到"，
+   * `reason` 说明为什么 —— 那一档不许画成 0 行（两张表会是同一个样子）。
+   */
+  getErrors: (): Promise<RoleErrorsView> => getJSON<RoleErrorsView>(ENDPOINTS.errors),
+  /**
+   * 错误类目 → 那一句含义（`GET /api/errors/categories`，只读）。
+   *
+   * 为什么单开一条：那句话的真身在 `errorstats.ERROR_CATEGORIES`，网页不许自己再写
+   * 一份（写两份就迟早说两种话）。它没有三态：那是一张常量表。
+   */
+  getErrorCategories: (): Promise<ErrorCategoryGlossary> =>
+    getJSON<ErrorCategoryGlossary>(ENDPOINTS.errorCategories),
 };
 
 /**
@@ -541,6 +580,36 @@ export interface CacheReminder {
   dismiss_key: string;
 }
 
+/**
+ * 最近一趟网页预热的三态读数（`GET /api/cache` 的 `warm` 那一格，D-60 ③）。
+ *
+ * `state` 是后端现算的（记录 + 日志尾 + 探活）：`running` / `done` / `failed` /
+ * `unknown`。它**不是**页面自己的内存状态 —— 刷新页面、换个人打开读到的是同一趟。
+ * `unknown` 有三种由头，`reason` 会说清是哪一种（还没有起过 / 记录读不出来 /
+ * 日志里没有收尾标记），所以页面不许把它画成"失败了"。
+ *
+ * `last_line` 是日志的最后一行：失败那一档它就是给人看的那句错误。
+ */
+export interface CacheWarmJob {
+  /** 有没有起过（`false` ⇒ 页面不画这一块；`state` 这时恒为 `unknown`）。 */
+  recorded: boolean;
+  /** `running` / `done` / `failed` / `unknown`（词表真身在 `cacheface.WARM_JOB_STATES`）。 */
+  state: string;
+  /** 这一档的人话理由（后端拼，页面只画）。 */
+  reason: string;
+  /** 日志的工作区相对路径（空串 = 没记录）。 */
+  log: string;
+  /** 同一份日志的绝对路径（点开看全文用）。 */
+  log_path: string;
+  pid: number;
+  /** `on` / `off`。 */
+  tier: string;
+  at: string;
+  last_line: string;
+  /** 日志尾三行。 */
+  tail: string[];
+}
+
 /** `GET /api/cache` 的整份读数。 */
 export interface CacheView {
   schema: number;
@@ -562,6 +631,18 @@ export interface CacheView {
   /** 按三层来源，这一趟会用哪一档（顶部横幅与面板都先画这一行）。 */
   active: CacheActive;
   reminder: CacheReminder;
+  /**
+   * 本服务有没有开写权限（`agentflow web --allow-writes`，D-60 ①）。
+   *
+   * 它说的是启动参数，不是"你有没有权限"；`false` 时页面把真预热按钮禁用
+   * 并把 `writes_reason` 那一句逐字写出来 —— 不许让人按出 403 才知道。
+   * 试算（`dry_run=1`）不受它管：那一档不写盘、不花钱。
+   */
+  writes_allowed: boolean;
+  /** 没开写权限时那一句逐字的原因（真身在 `writes.WRITES_OFF_REASON`；开了是空串）。 */
+  writes_reason: string;
+  /** 最近一趟网页预热的三态（起过才有 `recorded`）。 */
+  warm: CacheWarmJob;
   verdict: {
     tri: string;
     unknown_tiers: string[];
@@ -588,4 +669,71 @@ export async function postCacheWarm(body: {
     dry_run: body.dryRun === true ? "1" : "",
     confirm: "1",
   });
+}
+
+
+/** 一条"读到了、但人该看见"的异常（后端 `readouts._problem` 的键逐字）。 */
+export interface ReadoutProblem {
+  code: string;
+  detail: string;
+}
+
+/**
+ * 一个来源的读数（后端 `errorstats` 的 `sources.events` / `sources.sessions` 逐字）。
+ *
+ * 为什么把它带上屏幕：这一栏最常见的误读是"0 次错误"，而排查那件事第一步就是看
+ * "到底读了几条事件、几行读不明白"。所以抬头第三行印它，而不是只印一个总数。
+ */
+export interface ErrorStatsSource {
+  checked?: boolean;
+  events?: number;
+  files?: number;
+  records?: number;
+  bad_lines?: number;
+  unreadable_files?: string[];
+  unclassified?: number;
+  table?: string;
+  reason?: string;
+}
+
+/** `GET /api/errors` 的 `data`（`readouts.ERRORS_DATA_KEYS` 那五个键的键集）。 */
+export interface ErrorStatsData {
+  /** 角色 → 类目 → 计数（只记出现过的格，缺格就是 0）。 */
+  by_role: Record<string, Record<string, number>>;
+  /** 角色 → 合计。 */
+  role_total: Record<string, number>;
+  total: number;
+  /** 类目 → 全角色合计（后端按 `ERROR_CATEGORIES` 的顺序给，只留非 0 的）。 */
+  categories: Record<string, number>;
+  /** 逐源读数（事件流 / 会话记录 / 码命中）。 */
+  sources: Record<string, ErrorStatsSource>;
+}
+
+/**
+ * `GET /api/errors` 的整份读数（`readouts.errors_readout(root)` 逐字）。
+ *
+ * 三态：`checked` / `state` / `reason` 与计数并排，而不是藏在异常里 ——
+ * 读不到时 `data.total` 仍是 0，但 `state` 是 `unknown`：同一个 0 配上不同的
+ * `state` 是两句不同的话。
+ */
+export interface RoleErrorsView {
+  checked: boolean;
+  /** `checked` / `unknown`（后端 `_envelope` 的两个取值）。 */
+  state: string;
+  reason: string;
+  data: ErrorStatsData;
+  problems: ReadoutProblem[];
+}
+
+/** 一个类目与它那一句含义（`GET /api/errors/categories` 的一行）。 */
+export interface ErrorCategoryMeaning {
+  name: string;
+  meaning: string;
+}
+
+/** `GET /api/errors/categories` 的整份读数（真身 `errorstats.ERROR_CATEGORIES`）。 */
+export interface ErrorCategoryGlossary {
+  categories: ErrorCategoryMeaning[];
+  /** 真身落在哪（后端写死这个字符串，免得有人以为它是盘上的数据）。 */
+  source: string;
 }

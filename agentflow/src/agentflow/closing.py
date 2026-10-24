@@ -3579,6 +3579,34 @@ class ClosingReport:
         """
         return dict(self.readings.get("summon_consumption") or {})
 
+    @property
+    def mapping_gaps(self) -> dict[str, Any]:
+        """论文对应表那两条落差读数（D-69 ②）：论文说定理 / 台账说猜想、论文排成定理 / V 没签。
+
+        读数只在这里转发，判据与文字都在 `papermapping.mapping_reading`（`kind_gap` /
+        `theorem_unsigned` 两格）：那两格说的是"论文与台账现在的关系"，不是"表与正文对不对
+        得上" —— 所以它们不进 `problems`、不改 `status`，也不动 `can_close`。业主的边界是
+        "先让它看得见"：收工那一句话里点名，逐条 label → stmt 在 `readings['mapping']` 里。
+
+        三态：这一格没有跑过（`readings['mapping']` 不存在 / 不是新形状）⇒ 两个空清单 +
+        `checked=False`，不许折成"没有落差"。
+        """
+        got = self.readings.get("mapping") or {}
+        if not isinstance(got, Mapping) or "kind_gap" not in got:
+            return {"checked": False, "kind_gap": [], "theorem_unsigned": [],
+                    "theorem_unsigned_unreadable": [],
+                    "why": "论文对应表那一格没有跑过（不是「没有落差」）"}
+        kind_gap = got.get("kind_gap") or {}
+        unsigned = got.get("theorem_unsigned") or {}
+        return {
+            "checked": True,
+            "kind_gap": list(kind_gap.get("items") or []),
+            "theorem_unsigned": list(unsigned.get("items") or []),
+            "theorem_unsigned_unreadable": list(unsigned.get("unreadable") or []),
+            "why": "；".join(text for text in (str(kind_gap.get("why") or ""),
+                                               str(unsigned.get("why") or "")) if text),
+        }
+
     def to_dict(self) -> dict[str, Any]:
         """整份读数的可读视图（CLI、工具与落档共用同一个形状）。"""
         return {
@@ -3617,9 +3645,51 @@ class ClosingReport:
         if isinstance(ros, Mapping) and ros.get("checked") and int(ros.get("with_problem") or 0):
             ros_note = (f"；**名册有 {int(ros['with_problem'])} 处没登记**"
                         f"（{ros['with_problem']} 条 `roster_problem`；读数，不拦门）")
+        # 名册的两个读数（业主 2026-10-26：子代理数 / 活跃子代理数，分开命名）。
+        # 这一句是这一屏里唯一同时说出两个数的地方 —— 把它们并成"名册有 N 个"就让
+        # "名册只增不减"与"活都干完了"长得一模一样。它同样是读数：不改 `can_close`、
+        # 不产生 `Finding`（三态原样在 `readings["child_counts"]` 里）。
+        cch = self.readings.get("child_counts") or {}
+        cc_note = ""
+        if isinstance(cch, Mapping):
+            if cch.get("checked"):
+                cc_note = (f"；名册 子代理数={cch.get('child_count')}，"
+                           f"活跃子代理数={cch.get('active_child_count')}")
+                waiting = cch.get("waiting_only") or []
+                if waiting:
+                    cc_note += f"（其中 {len(waiting)} 个自己不忙、靠等下级才活跃）"
+            else:
+                cc_note = f"；名册两个读数没查成（{cch.get('reason') or '没读成'}）"
+        # 论文对应表的两条落差读数（D-69 ②）：论文说定理 / 台账说猜想、论文排成定理 /
+        # V 没签。只在真的有落差时带半句话（寻常日子不加噪声），而且逐条点名
+        # label → stmt —— 只给一个计数等于让读者自己去翻。同样不拦门：`kind_gap` 与
+        # `theorem_unsigned` 都不在 `papermapping.ALL_PROBLEM_KINDS` 里。
+        # 名字带 `map_` 前缀：这一屏里 `gaps` / `gap_note` 已经是"没上报的项"那一格，
+        # 同名会把两条读数压成一条（先写的被后写的盖掉，而两条都不会报错）。
+        mapgaps = self.mapping_gaps
+        map_note = ""
+        if mapgaps.get("kind_gap"):
+            map_note += (f"；论文里排成定理/引理而台账仍是猜想 "
+                         f"{len(mapgaps['kind_gap'])} 条（"
+                         + "、".join(f"{x.get('label')} → {x.get('ledger_id')}"
+                                    for x in mapgaps["kind_gap"][:6])
+                         + ("等" if len(mapgaps["kind_gap"]) > 6 else "")
+                         + "；读数，不拦门）")
+        if mapgaps.get("theorem_unsigned") or mapgaps.get("theorem_unsigned_unreadable"):
+            names = [f"{x.get('label')} → {x.get('ledger_id')}"
+                     for x in (mapgaps.get("theorem_unsigned") or [])[:6]]
+            if mapgaps.get("theorem_unsigned"):
+                map_note += (f"；论文里排成定理而 V 没签 "
+                             f"{len(mapgaps['theorem_unsigned'])} 条（"
+                             + "、".join(names) + "；读数，不拦门）")
+            if mapgaps.get("theorem_unsigned_unreadable"):
+                map_note += (f"；论文里排成定理而 V 签没签读不到 "
+                             f"{len(mapgaps['theorem_unsigned_unreadable'])} 条"
+                             "（这一格没查成，不是没签）")
         if not self.m_verdict:
             return (f"收工门：{machine} —— M 没有提交自己的判据（它按自己列的任务列表判"
-                    f"『活做完了没有』）⇒ `can_close=false`{sum_note}{ros_note}")
+                    f"『活做完了没有』）⇒ `can_close=false`{sum_note}{ros_note}{cc_note}"
+                    f"{map_note}")
         tasks = [t for t in (self.m_verdict.get("tasks") or []) if isinstance(t, Mapping)]
         done = sum(1 for t in tasks if str(t.get("state") or "") == "done")
         list_note = f"；任务列表 {done}/{len(tasks)} done" if tasks else "；任务列表：没提交"
@@ -3629,7 +3699,8 @@ class ClosingReport:
         gaps = self.escalation_gaps
         gap_note = (f"；没上报的项：{[x.get('what') for x in gaps]}" if gaps else "")
         return (f"收工门：M 判「我这一趟的活{met}」⇒ can_close={self.can_close}"
-                f"（{machine}{list_note}{tail}{gap_note}{sum_note}{ros_note}）")
+                f"（{machine}{list_note}{tail}{gap_note}{sum_note}{ros_note}{cc_note}"
+                f"{map_note}）")
 
 
 # ------------------------------------------------------------------ 各条实现
@@ -5416,6 +5487,35 @@ def roster_registration_reading(session_root: Any, *, sid: str | None = None) ->
     return out
 
 
+def child_counts_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
+    """收工读数里的两个数：子代理数 / 活跃子代理数（只读，零模型调用）。
+
+    业主 2026-10-26 逐字：「未销号的子代理数叫子代理数，工作未做完还在做的子代理数叫
+    活跃子代理数」。两个数分开命名、各自一格，不许相加也不许互相代替 —— 折成一个数之后，
+    "名册只增不减"与"活都干完了"会长得一模一样，而这两件事该做的下一步正好相反。
+
+    ## 口径只有一处
+    计算全在 `secretary.Secretary.child_counts`（名册折叠 + `Conductor.activity_snapshot`），
+    这里只转发 —— 收工读数另算一遍就是"同一读数两个主人"，名册面与收工面会各说一件事。
+
+    ## 三态
+    名册 / 台账读不成 ⇒ `checked=False` 且两个数都是 `None`（不是 0）。它只落
+    `readings`、不进 `status`、不产生 `Finding` ⇒ 门的强度一格没改（与
+    `roster_registration` 那一格同一套纪律）：这两个数是"看"，不是"拦"。
+    """
+    from .secretary import Secretary
+
+    try:
+        got = Secretary(S.CONDUCTOR_ROLE, root=root, store=store).child_counts()
+    except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
+        return {"checked": False, "child_count": None, "active_child_count": None,
+                "reason": f"{type(exc).__name__}: {exc}"}
+    if not isinstance(got, Mapping):
+        return {"checked": False, "child_count": None, "active_child_count": None,
+                "reason": "名册读数不是对象 ⇒ 没查成"}
+    return dict(got)
+
+
 def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   session_root: Any = None, checks: tuple[str, ...] = DEFAULT_CHECKS,
                   sid: str | None = None,
@@ -5538,6 +5638,13 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # 落 `readings`、在 `summary()` 里加半句话；不进 `status`、不产生 `Finding`
     # ⇒ 它不改变门的强度，只让"名册 0 行"与"名册都写上了"在收工输出上分得开。
     rep.readings["roster_registration"] = roster_registration_reading(root, sid=sid)
+    # ---- 名册的两个读数（业主 2026-10-26：子代理数 / 活跃子代理数，分开命名）
+    #
+    # 为什么并进这一屏：收工那一刻父要回答的正是"我这一支还有几个名字在用、其中几个
+    # 还在干活/还在等" —— 而改前这一屏只有"名册登记了几条"，没有"还剩几个没销号"。
+    # 与上面那一格同一套纪律：只落 `readings`、在 `summary()` 里带一句、不进 `status`、
+    # 不产生 `Finding` ⇒ 门的强度一格没改。
+    rep.readings["child_counts"] = child_counts_reading(root, store=store)
     # ---- 非平凡性那一格（S3：只说、不拦）
     rep.readings["nontriviality"] = nontriviality_reading(root, sid=sid)
     # ---- 命题档位那一格（B-2 的读侧：只说、不拦）
@@ -5594,6 +5701,26 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
             f"（被点到的是 {_gids}）⇒ 同一份正文两个字段、一个空一个满："
             "读侧走 `statementbody.body_of` 的回退（读得出正文），但『哪个是真身』"
             "靠的不是这一行的数据。这一格不拦门，它是读数"))
+    # ---- 验证台账那一格（缺口二，2026-10-24）：文件是正本，同名的数据表从来不存在。
+    #
+    # 真机 sylow3：`verifications/` 七份台账、十四行签，而按"数据表"那一面看是 0 行
+    # （`data/verifications.json` 根本不存在，`store.rows("verifications")` 直接抛未知表）。
+    # 两处口径从来没有被任何一格对起来过 ⇒ 读的人只会看到"没有签"。这一格把正本
+    # （文件）与派生副本（如果盘上真有 `data/verifications.json`）对一次账，
+    # `signed` 就是"已签 N 份"那个数。它只落 `readings`、不改变八格的强度。
+    from . import verifications as _VR_LEDGER
+    rep.readings["verification_ledger"] = _VR_LEDGER.ledger_reading(
+        getattr(store, "root", root), store=store)
+    _vl = rep.readings["verification_ledger"]
+    if _vl.get("agrees") is False:
+        # 两面分家：文件里有、表里没有（或反过来）。这一档给 warning 而不拦门 ——
+        # 门的强度不属于本批，而"两边各读一边"这件事必须以一条可见的指认出现。
+        rep.findings.append(Finding(
+            "verification_ledger", "verification_ledger_split", "warning",
+            f"验证台账两面分家：文件 {_vl.get('rows')} 行、派生表 "
+            f"{_vl.get('mirror', {}).get('rows')} 行（详见 readings.verification_ledger."
+            "problems）⇒ 读的人会看到两份不一样的账。正本是文件；"
+            "派生副本要么重建、要么删掉，不许两边各读一边"))
     _nt = rep.readings["nontriviality"]
     if _nt.get("high_tier_total"):
         _ids = [f"{x['stmt_id']}(T{x['level']})" for x in _nt["high_tier"]][:6]

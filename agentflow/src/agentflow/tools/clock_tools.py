@@ -44,19 +44,33 @@ D-53 的核心修复是"到点后时钟自动给 M 发消息"。今天 D-52 的 
 `clock.pending_wakes(root, my_task_id)` 或调 `clock.consume_wakes(root, my_task_id)`，
 并把"有唤醒"折进它本来就有的唤醒判据。本模块只把落点做好、读口交出去。
 
-## 两根轴为什么这样声明
+## 两根轴为什么这样声明（2026-10-24 按业主裁定改为据实）
 
-`clock.now` / `clock.timer_list`：只读（`side_effect="read"`、`external="none"`）。
+业主新裁定（逐字，唯一权威）：「通用能力根本不该出现谁能用这个说法」。
+这条裁定把两根轴分开了：副作用轴说"它改不改我们拥有的东西"，可达性轴说
+"它是不是通用能力"。此前把两根轴压在一起，代价是这三件写表的工具被声明成
+`side_effect="read"` —— 只为让 `for_role` 不把只读角色剥掉。那是谎报：
+读到声明的人会以为它们不写表，而 `_deliver_due` 与 `C.start_timer` 都会落盘。
 
-`clock.timer_start` / `clock.alarm_start` / `clock.timer_cancel` 也声明
-`side_effect="read"`，与 `conductor.escalate` 同一口径：它们不写任何知识表、
-不改工作区里的产品，只追加两类"通信/簿记"记录（`tasks` 的一行 notice 板项 +
-`out/clock` 下的时钟状态与唤醒标记）。若声明 `write_local`，`for_role` 会把
-C/H/V 三个只读角色结构性剥掉这三件，与业主"所有角色都能用"直接冲突。这不是
-取巧：先例 `conductor.escalate` 写会话里的通信记录、`verify.verify_proof` 写
-`verifications/<命题号>.jsonl`，两者都声明 `read`，理由逐字是"不写数据表"。
-将来如果时钟改成写领域表（例如把计时器登记进某张知识表），必须改回
-`write_local` 并走 FC-27 人审。
+现在的声明据实：
+
+| 工具 | side_effect | 为什么 |
+|---|---|---|
+| `clock.now` / `clock.timer_list` | `read` | 只读 |
+| `clock.timer_start` / `clock.alarm_start` | `write_local` | 写 `out/clock` 的状态，到点后落一条 `tasks` notice 行与一条唤醒标记 |
+| `clock.timer_cancel` | `write_local` | 改 `out/clock` 的状态（取消之后不该再有 notice 行） |
+
+可达性不再靠声明绕过去：它们登记在 `tools.UNIVERSAL_TOOLS`（通用能力的受控集合），
+`ToolRegistry.for_role` 对通用工具不按副作用等级剥离，所以 C / H / V 三个只读角色
+照样拿得到这五件（判据 `tests/test_clock_is_a_native_tool.py` 的第 8 条与
+`tests/test_universal_tools_are_for_everyone.py`）。它们也不进
+`READONLY_CALL_EXCEPTIONS` —— 通用能力不是"例外"。
+
+硬约束（不许通用集合变成后门）：`UNIVERSAL_TOOLS` 里每件工具登记的写集只许落在
+通信/簿记类表上（今天只有 `tasks`；事件流与 `out/clock` 是文件，不在表里）。
+写 `statements` / `claims` / `literature` / `relations` / `documents` 这类知识表
+⇒ 判据直接红，且它不会被发给只读角色。将来如果时钟改成写领域表，
+那就不再是通用能力，必须撤出 `UNIVERSAL_TOOLS` 并走 FC-27 人审。
 """
 from __future__ import annotations
 
@@ -409,7 +423,7 @@ def clock_now(store: Any, root: Any, *, include_wakes: bool = True) -> ToolResul
                 "description": "收件人：self（缺省，叫我这一趟）或 tasks 表的台账号"},
      },
      "required": ["after_sec", "reason"], "additionalProperties": False},
-    side_effect="read",
+    side_effect="write_local",
     roles=_ROLES_ALL,
     returns=("{'timer_id','kind','state','to','task_id','role','reason','after_sec',"
              "'due_at','at','remaining_sec','created_at','clock_status'}"),
@@ -450,7 +464,7 @@ def clock_timer_start(store: Any, root: Any, conductor: Any, *, after_sec: float
                 "description": "收件人：self（缺省，叫我这一趟）或 tasks 表的台账号"},
      },
      "required": ["at", "reason"], "additionalProperties": False},
-    side_effect="read",
+    side_effect="write_local",
     roles=_ROLES_ALL,
     returns=("{'timer_id','kind','state','to','task_id','role','reason','after_sec',"
              "'due_at','at','remaining_sec','created_at','clock_status'}"),
@@ -538,7 +552,7 @@ def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> Too
                       "description": "clock.timer_start / alarm_start 返回的编号"},
      },
      "required": ["timer_id"], "additionalProperties": False},
-    side_effect="read",
+    side_effect="write_local",
     roles=_ROLES_ALL,
     returns=("{'checked','timer_id','cancelled','state','reason','timer',"
              "'pending_count','clock_status'}"),

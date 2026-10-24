@@ -36,6 +36,7 @@ from agentflow.secretary import (
 )
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from _d68_board_fixture import children_clean_their_boards  # noqa: E402 - D-68 夹具助手（替身角色不会自己 ack，见该模块 docstring）
 
 SID = "wash2"
 
@@ -143,8 +144,13 @@ def _run(tmp_path: pathlib.Path, *, key: str | None = None, body: Mapping[str, A
             return say(payload)
         return say({**payload, key: _proposal_id_in(root)})
 
+    # D-68（业主 2026-10-26）：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」
+    # ⇒ 收工之前先把派出去的每一支销号（名册名按角色序号发，每个角色第 1 个实例）。
+    retires = [json.dumps({"tool": "conductor.retire_child",
+                           "args": {"child_name": f"{role}1", "reason": "收口前先销号"}},
+                          ensure_ascii=False) for role in children]
     scripts: dict[str, list[Any]] = {
-        "M": [say(payload), second,
+        "M": [say(payload), second, *retires,
               json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)]}
     for role in children:
         scripts[role] = [json.dumps({"final": "干完了", "evidence": []}, ensure_ascii=False)]
@@ -158,6 +164,7 @@ def _run(tmp_path: pathlib.Path, *, key: str | None = None, body: Mapping[str, A
     backend = LlmBackend(inner=inner, loops=dict(loops or LOOPS), session_root=root,
                          seam_factory=seam_factory, max_steps=6, store=st, sid=SID)
     cond = Conductor(st, policy=None, backend=backend)
+    children_clean_their_boards(cond)
     backend.conductor = cond
     built = build_registry(store=st, conductor=cond)
     backend.registry = built.registry
