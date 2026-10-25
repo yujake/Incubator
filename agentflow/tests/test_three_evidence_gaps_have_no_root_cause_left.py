@@ -47,6 +47,29 @@ SYLOW3 = pathlib.Path(__file__).resolve().parents[1] / "projects" / "sylow3"
 _OK = {"verdict": "成立", "findings": []}
 
 
+def _proof_manuscript(rows) -> str:
+    """F 的证明手稿（`## 依赖` 四列表）：2026-10-26 起 B 登记引用在册命题的证明时要拿到它。
+
+    业主当天的口径（逐字）：「依赖面登记是否是F在其手稿中写好，D的研究手稿引用F的证明
+    手稿给B入库时，B侧读到F手稿处的依赖面，按此入库的？」→「是通过D传吗」。
+    于是"正文引了在册命题、却没有任何一份手稿"这一档改成整笔拒收
+    `dependency_section_missing`（不许静默地靠正文扫描落依赖）。下面两条用例原本正是
+    那一档写法，现在把 F 那份稿按同一格式递进来 —— 它们断言的东西（依赖落成 / 三份
+    证明三面）一个字都不改。
+
+    `rows` 是 `[(命题号, F 的原话, 路径号)]`。
+    """
+    lines = ["## 证明", ""]
+    for sid, _quote, _group in rows:
+        lines.append(f"1. 由 stmt:{sid} 直接推出。")
+    lines += ["", "## 依赖", "",
+              "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |",
+              "|---|---|---|---|"]
+    for sid, quote, group in rows:
+        lines.append(f"| {quote} | stmt:{sid} | 第 1 步 | {int(group)} |")
+    return "\n".join(lines) + "\n"
+
+
 # ---------------------------------------------------------------- 小工具
 
 def _ws(tmp_path: pathlib.Path, name: str = "ws") -> Store:
@@ -79,6 +102,24 @@ def own(full: str, **kw) -> dict:
 def _row(store: Store, stmt_id: str) -> dict:
     return next(dict(r) for r in store.rows("statements")
                 if str(r.get("stmt_id") or "") == str(stmt_id))
+
+
+def _promote_to_proof_review(store: Store, stmt_id: str, proof_text: str) -> None:
+    """把一条在册命题抬到 `proof_review`（先落 V 的签，再改档位 —— 顺序不许反）。
+
+    为什么这两条用例需要它：手稿的依赖段有一条引用门槛（业主 2026-10-24，逐字
+    「proof_review级及以上才可引用」）。改前这两条用例走的是"正文扫描"的老路，不经过
+    那道门；现在它们按新口径交稿，被引命题就必须真的够格 —— 否则红的是档位门，
+    而这两条用例要证明的不是档位门。
+    """
+    signed = VR.record_verification(
+        store.root, statement_id=stmt_id, proof_text=proof_text, verdict=_OK,
+        verifier="agent-V", store=store, proof_no=1)
+    assert signed.get("checked") is True, signed
+    row = _row(store, stmt_id)
+    row["evidence_kind"] = "proof_review"
+    with store.tx("statements", actor="test", note="fixture:evidence_kind") as tx:
+        tx.upsert("statements", row)
 
 
 def _deps_of(store: Store, stmt_id: str) -> list[dict]:
@@ -156,9 +197,13 @@ def test_a_a_proof_without_any_dependency_line_is_named_not_silent(tmp_path):
     assert "derived_from" in missed["why"], missed
 
     # 正控：真引用了在册的号 ⇒ 依赖落成，`state=present`（护栏不是"凡带证明就报缺"）
+    _promote_to_proof_review(st, cid, "证明：略。")
     cited = b.register_statement(
         **own("命题 E：证明里引用了上下文引理 C。"),
-        proof_text=f"证明：由 stmt:{cid} 直接推出。")
+        proof_text=f"证明：由 stmt:{cid} 直接推出。",
+        # 2026-10-26：引了在册命题的证明必须交稿（参数 / D 携带 / 盘上兜底三处之一），
+        # 否则整笔拒收 —— 这里按 F 的手稿格式把那一节递进来。
+        proof_manuscript=_proof_manuscript([(cid, "由上下文引理 C，结论直接得到", 1)]))
     assert cited.get("ok") is True, cited
     assert (cited["deps_missing"] or {}).get("state") == SEC.DEPS_MISSING_PRESENT, cited
     assert int(cited.get("deps_written") or 0) >= 1, cited
@@ -280,6 +325,9 @@ def test_c_one_proposition_three_proofs_lands_three_dependency_surfaces(tmp_path
                              proof_text="证明：由群作用公理得。")
     assert x.get("ok") and y.get("ok"), (x, y)
     xid, yid = str(x["stmt_id"]), str(y["stmt_id"])
+    # 手稿依赖段的引用门槛：被引的两条都要够 `proof_review`（业主 2026-10-24 加码裁定）
+    _promote_to_proof_review(st, xid, "证明：由轨道计数得。")
+    _promote_to_proof_review(st, yid, "证明：由群作用公理得。")
 
     p1 = f"路线一：由 stmt:{xid} 直接推出。"
     p2 = f"路线二：由 stmt:{yid} 与双陪集计数推出。"
@@ -287,7 +335,13 @@ def test_c_one_proposition_three_proofs_lands_three_dependency_surfaces(tmp_path
     out = b.register_statement(
         **own("主命题 P：同一条 Sylow 定理的三条独立证法。"),
         proofs=[{"proof_no": 1, "text": p1}, {"proof_no": 2, "text": p2},
-                {"proof_no": 3, "text": p3}])
+                {"proof_no": 3, "text": p3}],
+        # 2026-10-26：三份证明各引在册命题 ⇒ 必须交稿；三个路径号对应三份证明。
+        proof_manuscript=_proof_manuscript([
+            (xid, "路线一：由引理 X 的轨道计数", 1),
+            (yid, "路线二：由引理 Y 的轨道长是 p 的幂", 2),
+            (xid, "路线三甲：引理 X 的 Sylow 存在性", 3),
+            (yid, "路线三乙：引理 Y 的轨道长", 3)]))
     assert out.get("ok") is True, out
     pid = str(out["stmt_id"])
     # 号与正文：三个号、#p1 在 canonical 那一格、其余在清单里
@@ -319,7 +373,9 @@ def test_c_one_proposition_three_proofs_lands_three_dependency_surfaces(tmp_path
     p4 = f"路线四：由 stmt:{yid} 的反向计数推出。"
     more = b.register_statement(
         **own("主命题 P：同一条 Sylow 定理的三条独立证法。"),
-        proofs=[{"proof_no": 1, "text": p1}, {"proof_no": 4, "text": p4}])
+        proofs=[{"proof_no": 1, "text": p1}, {"proof_no": 4, "text": p4}],
+        # 同一份稿（第 1 份证明那一面）；第 4 份证明的依赖面由第 2 份及以后的补写口落。
+        proof_manuscript=_proof_manuscript([(xid, "路线一：由引理 X 的轨道计数", 1)]))
     assert more.get("ok") is True, more
     assert [int(no) for no, _t in VR.proof_list(_row(st, pid))] == [1, 2, 3, 4], more
     got = dict(more.get("proof_deps") or {})

@@ -416,8 +416,73 @@ class _WriteReport:
         lines.append("- 每条判据的中间值（命中数 / 度数 / 校验分布）见各问题的「触发判据」一节；")
         lines.append("  完整数值由 `AgentD.last_assessment` 保留在内存中，可另行落盘。")
         lines.append("")
+        # ---- 携带给 B 的证明手稿（业主 2026-10-26：「是通过D传吗」，逐字） ----------
+        #
+        # 业主原话链：「依赖面登记是否是F在其手稿中写好，D的研究手稿引用F的证明手稿给B
+        # 入库时，B侧读到F手稿处的依赖面，按此入库的？」→「是通过D传吗」。
+        # 所以传递路径是 D→B：D 交研究手稿给 B 入库时，把 F 的证明手稿一并带上。
+        # 这一节就是那份"携带单"（渲染在 `depsection.render_carried_section`，B 用
+        # `depsection.read_carried_manuscript` 读同一节）：写在 D 自己渲染出来的报告里
+        # 而不是靠模型记着去传 —— 模型忘一次，依赖面就静默地 0 行。
+        lines.extend(self._carried_manuscripts_section())
+        lines.append("")
 
         text = "\n".join(lines) + "\n"
         path.write_text(text, encoding="utf-8")
         self.last_report_path = path
         return str(path)
+
+    def _carried_manuscripts_section(self) -> list[str]:
+        """D 交研究手稿给 B 时"一并带上的 F 证明手稿"⇒ 携带单那几行（机读的三列表）。
+
+        ## 为什么由代码生成，而不是让模型在报告里写
+        模型写手稿（`reports/RESEARCH.md`）是自由的 markdown，它忘一次"把 F 的稿带上"，
+        收方 B 那一侧就只是"没收到稿" —— 而那个形态与"这条证明确实自足"长得一样。
+        这一节由 D 的事后渲染器算出来（命题行 + 盘上那份稿 + 文件字节的 sha256），
+        于是"带没带"在盘上是可判的，不靠记性。
+
+        ## 携带谁
+        `statements` 里 `origin=own_result` 且 `status=active`、并且盘上真有一份按它的命题号
+        命名的 `reports/f-proof-<命题号>.md` 的那些行。散文里的声称不算：手稿文件才是要带的
+        那一件东西。读不到台账 / 一份都没有时如实说（不是省略 —— 见渲染器的空表那一句）。
+        """
+        import hashlib
+
+        from .. import depsection as _DS
+
+        head = ["## 携带的证明手稿（D→B）", ""]
+        try:
+            statements = [dict(r) for r in self.store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有稿"
+            return head + [
+                f"（`statements` 这一趟读不出来：{type(exc).__name__}: {exc} ⇒ 这张携带单"
+                "**没有生成**：那是「读不到」，不是「没有可携带的稿」。B 读它之前先让 D 重跑"
+                "一次 `write_report`。）", ""]
+        rows: list[dict] = []
+        seen: set[str] = set()
+        for row in statements:
+            if str(row.get("origin") or "") != "own_result":
+                continue
+            if str(row.get("status") or "") != "active":
+                continue
+            sid = str(row.get("stmt_id") or "")
+            if not sid or sid in seen:
+                continue
+            got = _DS.read_manuscript(self.store.root, statement_ids=[sid])
+            if str(got.get("source") or "") != _DS.SOURCE_DISK:
+                continue
+            try:
+                blob = (Path(self.store.root) / str(got["path"])).read_bytes()
+            except OSError:
+                continue
+            seen.add(sid)
+            rows.append({"statement_id": sid, "path": str(got["path"]),
+                         "sha256": hashlib.sha256(blob).hexdigest()})
+        note = ""
+        if len(rows) > _DS.CARRIED_LIMIT:
+            note = (f"另有 {len(rows) - _DS.CARRIED_LIMIT} 条没列出来（这张单只列前 "
+                    f"{_DS.CARRIED_LIMIT} 条）—— 它们仍在盘上，B 可以按约定路径读"
+                    "（`depsection.read_manuscript`）。")
+            rows = rows[:_DS.CARRIED_LIMIT]
+        section = _DS.render_carried_section(rows, note=note)
+        return section.rstrip("\n").split("\n")

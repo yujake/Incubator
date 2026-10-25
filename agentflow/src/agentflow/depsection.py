@@ -38,6 +38,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import schema as S
@@ -45,6 +46,31 @@ from . import schema as S
 
 #: 依赖段的段标题（固定，逐字）。
 SECTION_HEADING = "## 依赖"
+
+#: F 的证明手稿落点（工作区相对目录，与 `agent_f/manuscript.py` 的 `MANUSCRIPT_DIR` 同一处）。
+MANUSCRIPT_DIR = "reports"
+#: 按命题号命名的那一种（登记取到号之后的名字）。
+MANUSCRIPT_STMT_PREFIX = "f-proof-"
+#: 按计划号命名的那一种（立项那一轮还没有命题号时用的是它，也是兜底读盘认的第二个名）。
+MANUSCRIPT_PLAN_PREFIX = "f-proof-plan-"
+
+#: 手稿从哪来（四态，进返回值与读数，不许折平）：
+#:
+#: - `param`：调用方把正文递进来了（这一笔不必读盘）；
+#: - `carried_by_D`：D 交研究手稿给 B 入库时把它一并带过来了（`## 携带的证明手稿` 那一节
+#:   点名的落点，见 :func:`read_carried_manuscript`）—— 业主 2026-10-26 的原话是
+#:   「是通过D传吗」，所以这条链上 D 是携带者、B 是收方，B 自己去盘上撞是兜底而不是主路；
+#: - `disk`：前两处都没有，按约定路径在盘上真读到了 F 的稿（历史调用 / 直调的那一档）；
+#: - `none`：三处都查过、一处都没有。
+SOURCE_PARAM = "param"
+SOURCE_CARRIED = "carried_by_D"
+SOURCE_DISK = "disk"
+SOURCE_NONE = "none"
+
+#: D 的研究报告里那一节的段标题（携带单；逐字固定，渲染与解析共用一个常量）。
+CARRIED_HEADING = "## 携带的证明手稿"
+#: 携带单的三列（命题号 / 手稿路径 / sha256）。
+CARRIED_COLUMNS: tuple[str, ...] = ("命题号（stmt:NNNNNN）", "手稿路径", "sha256")
 
 #: 证明正文那一节的段标题（预览时"引用了哪些 `stmt:`"只在这一节里数 —— 手稿开头的
 #: 元信息（"命题号：stmt:000002"）不是引用，把它数进来会让读数虚高）。
@@ -328,7 +354,322 @@ def stmt_refs(text: str) -> list[str]:
     return out
 
 
-# ------------------------------------------------------------------ 档位门
+# ------------------------------------------------------------------ 手稿的约定路径与兜底读盘
+
+#: 兜底读盘这一格为什么要存在（真机读数，写在这里而不是写在调用方）：
+#:
+#: `B.register_statement` 的 `proof_manuscript` 在真机上从来没有人传过值 —— 它是可选参数，
+#: 而 B 的提示词只印必填参数（实测 `proof_manuscript` 在 B 的段里出现 0 次），于是
+#: "B 读 F 的手稿登记依赖面"这条正路一次都没走过（sylow5/sylow6：`reports/f-proof-*.md`
+#: 0 份、会话里 `## 依赖` 0 次、依赖表 0 行）。只改装配（让调用方记得传）不够：那条装配
+#: 一旦漏一次，形态是"静默地没有依赖边"，而它长得和"这条证明确实自足"一模一样。
+#: 所以这里把"按约定路径去盘上找"做成唯一一个实现，参数空的时候必须走它。
+
+
+def manuscript_relpath(*, statement_id: str = "", plan_id: str = "") -> str:
+    """手稿的约定路径（工作区相对）—— 有命题号按命题号，只有计划号按计划号，都没有返回空串。
+
+    两种名是同一件事的两个时刻：立项那一轮还没有命题号（`f-proof-plan-<plan>.md`），
+    登记取到号之后叫 `f-proof-<号>.md`。兜底读盘两种都认（:func:`manuscript_relpaths`），
+    于是"登记之前写的稿"与"登记之后写的稿"都能被收方找到。
+    """
+    sid = str(statement_id or "").strip()
+    pid = str(plan_id or "").strip()
+    if sid:
+        return f"{MANUSCRIPT_DIR}/{MANUSCRIPT_STMT_PREFIX}{sid}.md"
+    if pid:
+        return f"{MANUSCRIPT_DIR}/{MANUSCRIPT_PLAN_PREFIX}{pid}.md"
+    return ""
+
+
+def manuscript_relpaths(*, statement_ids: Iterable[str] = (), plan_id: str = "") -> list[str]:
+    """兜底读盘的候选路径（按优先次序，去重后返回）。
+
+    优先次序就是这个函数存在的理由：按命题号命名的那些排在前（它精确指向"这一条命题的
+    证明手稿"），计划号那一个排在最后（它说的是"这个计划的稿"，比命题号宽）。
+    一条候选都没有时返回空列表 —— 调用方据此落 `none`，而不是拿空串去拼一个目录名。
+    """
+    out: list[str] = []
+    for sid in statement_ids or ():
+        rel = manuscript_relpath(statement_id=str(sid))
+        if rel and rel not in out:
+            out.append(rel)
+    rel = manuscript_relpath(plan_id=str(plan_id or ""))
+    if rel and rel not in out:
+        out.append(rel)
+    return out
+
+
+def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
+                    plan_id: str = "") -> dict[str, Any]:
+    """按约定路径在盘上找 F 的证明手稿 ⇒ `{checked, source, text, path, tried, why}`。
+
+    三态（与全仓同一条纪律，不许折平）：
+
+    - `checked=False`：压根没查成（没有工作区根）⇒ `source=none` 只是如实说"没读到"，
+      `why` 点名缺的是哪一个上下文；
+    - `checked=True` + `source=disk`：真读到了一处，`path` 是那一处、`text` 是全文；
+    - `checked=True` + `source=none`：约定路径逐条查过，一处都不在盘上，
+      `tried` 逐条列出查过哪些路径 —— 于是"我没找"与"找了没有"在读数上分得开。
+
+    读文件本身失败（权限 / 编码）不吞：那一条进 `tried` 的 `why`，继续找下一处；
+    全部失败时 `why` 会带上它们，调用方据此知道该修什么。
+    """
+    root_text = str(root or "").strip()
+    if not root_text:
+        return {"checked": False, "source": SOURCE_NONE, "text": "", "path": "",
+                "tried": [], "why": "没有工作区根（`root` 是空的）⇒ 按约定路径找手稿这一趟没查成"}
+    base = Path(root_text)
+    tried: list[dict[str, Any]] = []
+    for rel in manuscript_relpaths(statement_ids=statement_ids, plan_id=plan_id):
+        path = base / rel
+        try:
+            exists = path.is_file()
+        except OSError as exc:  # noqa: BLE001 - 探一次盘都会失败时要说出来，不许当成"不在"
+            tried.append({"path": rel, "exists": False,
+                          "why": f"探不到（{type(exc).__name__}: {exc}）"})
+            continue
+        if not exists:
+            tried.append({"path": rel, "exists": False, "why": ""})
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:  # noqa: BLE001 - 读失败与"不在盘上"是两件事
+            tried.append({"path": rel, "exists": True,
+                          "why": f"读不出来（{type(exc).__name__}: {exc}）"})
+            continue
+        if not text.strip():
+            tried.append({"path": rel, "exists": True, "why": "文件在，但正文是空的"})
+            continue
+        tried.append({"path": rel, "exists": True, "why": ""})
+        return {"checked": True, "source": SOURCE_DISK, "text": text, "path": rel,
+                "tried": tried, "why": ""}
+    checked_paths = [str(t.get("path") or "") for t in tried]
+    why = ("按约定路径找过 " + (f"{len(checked_paths)} 处：" + "、".join(checked_paths)
+                                if checked_paths else "0 处（没有命题号也没有计划号可定位）")
+           + " —— 这几种名一处都不在盘上（或者读不出来，原因逐条见 `tried`）")
+    return {"checked": True, "source": SOURCE_NONE, "text": "", "path": "",
+            "tried": tried, "why": why}
+
+
+# ------------------------------------------------------------------ D 携带（走的正是这条主路）
+
+#: D 的研究报告候选名：跨趟那一份手稿，以及 `write_report` 渲染的每问题工作稿。
+D_REPORT_NAMES: tuple[str, ...] = ("RESEARCH.md",)
+D_WORKING_SUFFIX = "-research.md"
+#: 携带单最多列几条（超出只报条数，不静默截断）。
+CARRIED_LIMIT = 50
+
+
+def d_report_paths(root: Any) -> list[str]:
+    """D 的研究报告相对路径（跨趟手稿排在前，其余按名字排序）。"""
+    base = Path(str(root or ""))
+    out: list[str] = []
+    d = base / MANUSCRIPT_DIR
+    for name in D_REPORT_NAMES:
+        if (d / name).is_file():
+            out.append(f"{MANUSCRIPT_DIR}/{name}")
+    if d.is_dir():
+        for p in sorted(d.glob(f"*{D_WORKING_SUFFIX}")):
+            rel = f"{MANUSCRIPT_DIR}/{p.name}"
+            if rel not in out:
+                out.append(rel)
+    return out
+
+
+def carried_manuscripts(report_text: Any) -> dict[str, Any]:
+    """读 D 研究报告里"携带给 B 的证明手稿"那一节 ⇒ 三态读数。
+
+    返回 `{checked, present, heading_line, rows, problems, refused, reason}`：
+    `rows` 是 `[{statement_id, path, sha256, line}]`（按文件顺序，同号先到先得）；
+    `problems` 逐行点名（缺列 / 命题号形状不对 / 路径为空），`refused` 非空时调用方
+    不许把这一节读成"携带单是空的"—— 读不懂与没有是两件事。
+    """
+    body, heading_line = section_lines(report_text, CARRIED_HEADING)
+    out: dict[str, Any] = {"checked": True, "present": bool(heading_line),
+                           "heading_line": heading_line, "rows": [], "problems": [],
+                           "refused": "", "reason": ""}
+    if not heading_line:
+        return out
+    table = [(ln, raw) for ln, raw in body if raw.strip().startswith("|")]
+    seen: set[str] = set()
+    for line_no, raw in table:
+        cells = _cells(raw)
+        if _is_separator(cells):
+            continue
+        if cells and cells[0].lower().startswith("---"):
+            continue
+        if len(cells) != len(CARRIED_COLUMNS):
+            # 表头那一行（三列的名字）在三列表里也是三格 ⇒ 用"第一格是不是命题号"区分
+            if all(not c.startswith("stmt:") and not S.is_valid_id(c) for c in cells):
+                continue
+            out["problems"].append({
+                "line": line_no,
+                "why": (f"这一行读出来 {len(cells)} 列，应有 {len(CARRIED_COLUMNS)} 列"
+                        f"（{' / '.join(CARRIED_COLUMNS)}）")})
+            continue
+        raw_id, raw_path, raw_sha = (c.strip().strip("`").strip() for c in cells)
+        if not raw_id.startswith("stmt:"):
+            # 表头那一行（"命题号（stmt:NNNNNN）"）不算坏行：它第一格不以上面的前缀开头
+            if raw_id.startswith("命题号") or not raw_id:
+                continue
+            out["problems"].append({"line": line_no,
+                                    "why": f"命题号那一格要是 `stmt:NNNNNN`（收到 {raw_id!r}）"})
+            continue
+        sid = raw_id[len("stmt:"):].strip()
+        if not S.is_valid_id(sid):
+            out["problems"].append({"line": line_no,
+                                    "why": f"命题号的号不是 {S.ID_DIGITS} 位十进制（收到 {sid!r}）"})
+            continue
+        if not raw_path:
+            out["problems"].append({"line": line_no, "why": "手稿路径那一格是空的"})
+            continue
+        if sid in seen:
+            continue
+        seen.add(sid)
+        out["rows"].append({"statement_id": sid, "path": raw_path,
+                            "sha256": raw_sha.lower(), "line": line_no})
+    if out["problems"]:
+        first = out["problems"][0]
+        out["refused"] = REFUSED_SECTION
+        out["reason"] = (f"D 报告的携带单读不懂（`{CARRIED_HEADING}`，第 {first['line']} 行起）："
+                         + "；".join(f"第 {p['line']} 行——{p['why']}" for p in out["problems"]))
+    return out
+
+
+def render_carried_section(rows: Iterable[Mapping[str, Any]],
+                           *, note: str = "") -> str:
+    """把携带行渲染成那一节（D 侧写、B 侧读；渲染与解析共用 `CARRIED_HEADING` 与列名）。"""
+    lines = [CARRIED_HEADING, "",
+             "D 交研究手稿给 B 入库时把 F 的证明手稿一并带过来（「是通过D传吗」）：",
+             "下表每一行是 `命题号 → 手稿路径 → 那份文件字节的 sha256`，B 读稿登记依赖面。",
+             ""]
+    lines.append("| " + " | ".join(CARRIED_COLUMNS) + " |")
+    lines.append("|" + "|".join("---" for _ in CARRIED_COLUMNS) + "|")
+    count = 0
+    for row in rows:
+        sid = str(row.get("statement_id") or "")
+        lines.append(f"| stmt:{sid} | {row.get('path')} | {row.get('sha256') or ''} |")
+        count += 1
+    if not count:
+        lines.append("")
+        lines.append("（这一趟没有可携带的 F 证明手稿：不是省略，是确实没有 —— 盘上没有"
+                     "任何一条按命号命名的 `reports/f-proof-<命题号>.md`。）")
+    if str(note or "").strip():
+        lines.append("")
+        lines.append(str(note).strip())
+    return "\n".join(lines) + "\n"
+
+
+def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = ()) -> dict[str, Any]:
+    """在 D 的报告里找"这一条命题的证明手稿"，找到就把正文读回来。
+
+    返回 `{checked, source, text, path, sha256, carried_by, tried, why}`：
+    `source=carried_by_D` 只在"携带单里有这个号、文件读得到、sha256 相符（给了就核）"时成立；
+    任何一处不成立都落到 `none` 并把原因写进 `tried` / `why` —— 静默用一份对不上的稿
+    比读不到更坏（依赖边会挂到别人的论证上）。
+
+    为什么这是主路而不是兜底：业主 2026-10-26 的原话是「是通过D传吗」——
+    携带者 D、收方 B；B 自己按约定路径撞见一份稿（`disk`）只算历史调用 / 直调那一档。
+    """
+    import hashlib
+
+    root_text = str(root or "").strip()
+    out: dict[str, Any] = {"checked": False, "source": SOURCE_NONE, "text": "", "path": "",
+                           "sha256": "", "carried_by": "", "tried": [], "why": ""}
+    if not root_text:
+        out["why"] = "没有工作区根（`root` 是空的）⇒ 读 D 报告里那张携带单这一趟没查成"
+        return out
+    base = Path(root_text)
+    tried: list[dict[str, Any]] = out["tried"]
+    index: dict[str, dict[str, Any]] = {}
+    for rel in d_report_paths(root_text):
+        try:
+            text = (base / rel).read_text(encoding="utf-8")
+        except OSError as exc:  # noqa: BLE001 - 读不出报告要说出来（它可能就是带稿的那一份）
+            tried.append({"report": rel, "why": f"读不出来（{type(exc).__name__}: {exc}）"})
+            continue
+        got = carried_manuscripts(text)
+        tried.append({"report": rel, "present": bool(got.get("present")),
+                      "rows": len(got.get("rows") or []),
+                      "problems": len(got.get("problems") or [])})
+        for row in got.get("rows") or []:
+            index.setdefault(str(row["statement_id"]), {**row, "report": rel})
+    out["checked"] = True
+    for raw in statement_ids or ():
+        sid = str(raw or "").strip().split("#", 1)[0].split(":", 1)[-1].strip()
+        if not sid:
+            continue
+        hit = index.get(sid)
+        if hit is None:
+            continue
+        rel = str(hit.get("path") or "")
+        raw_target = Path(rel)
+        if raw_target.is_absolute() or ".." in raw_target.parts:
+            tried.append({"statement_id": sid, "path": rel,
+                          "why": "携带单里的路径越出工作区（绝对路径或含 ..）⇒ 不读"})
+            continue
+        target = base / raw_target
+        if not target.is_file():
+            tried.append({"statement_id": sid, "path": rel, "why": "携带单点名的文件不在盘上"})
+            continue
+        try:
+            blob = target.read_bytes()
+        except OSError as exc:  # noqa: BLE001 - 读失败与"不在"分得开
+            tried.append({"statement_id": sid, "path": rel,
+                          "why": f"读不出来（{type(exc).__name__}: {exc}）"})
+            continue
+        sha = hashlib.sha256(blob).hexdigest()
+        want = str(hit.get("sha256") or "")
+        if want and want != sha:
+            tried.append({"statement_id": sid, "path": rel,
+                          "why": (f"sha256 对不上（携带单写 {want[:12]}…，盘上是 {sha[:12]}…）"
+                                  "⇒ 这份稿不是 D 交的那一版，不拿它登记")})
+            continue
+        text = blob.decode("utf-8", errors="replace")
+        if not text.strip():
+            tried.append({"statement_id": sid, "path": rel, "why": "文件在，但正文是空的"})
+            continue
+        return {"checked": True, "source": SOURCE_CARRIED, "text": text, "path": rel,
+                "sha256": sha, "carried_by": str(hit.get("report") or ""),
+                "tried": tried, "why": ""}
+    if not index:
+        out["why"] = ("D 的报告里没有「携带的证明手稿」那一节（或那一节是空的）"
+                      + ("；查过：" + "、".join(str(t.get("report") or "") for t in tried)
+                         if tried else "；工作区里连一份 D 报告都没有"))
+    else:
+        out["why"] = (f"D 的携带单里有 {len(index)} 条手稿，没有一条对得上这一笔的命题号"
+                      f"{[str(x) for x in statement_ids][:4]}")
+    return out
+
+
+def candidate_statement_ids(*, derived_from: Iterable[Any] = (), proof_text: Any = "",
+                            extra: Iterable[Any] = ()) -> list[str]:
+    """收方"这一份手稿可能挂在哪些命题号下"⇒ 候选号（裸号，按出现次序去重）。
+
+    - `derived_from`：B 交上来的承重链（自己的或外部的上下文命题）；
+    - 证明正文里的 `stmt:` 引用（`stmt_refs` 是全仓唯一那条扫描，这里不另写一份）；
+    - `extra`：调用方手上多出来的号（例如 D 的手稿点名了 F 的那一条）。
+
+    只要形状是合法号（`schema.is_valid_id`）就收：这一层判的是"去盘上找哪几个名字"，
+    "那个号在不在册"不是它的判据（盘上找得到稿、而号不在册，是另一件事，
+    由引用档位门与 `derived_from` 那几处各自点名）。
+    """
+    out: list[str] = []
+
+    def _take(raw: Any) -> None:
+        sid = str(raw or "").strip().split("#", 1)[0].split(":", 1)[-1].strip()
+        if sid and S.is_valid_id(sid) and sid not in out:
+            out.append(sid)
+
+    for raw in derived_from or ():
+        _take(raw)
+    for raw in stmt_refs(proof_text):
+        _take(raw)
+    for raw in extra or ():
+        _take(raw)
+    return out
+
 
 
 def gate_rows(rows: Iterable[Mapping[str, Any]],

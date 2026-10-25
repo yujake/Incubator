@@ -247,10 +247,16 @@ def test_a_proof_round_lands_a_statement_and_a_report_line(store: Store):
 
 
 def test_the_proof_outlet_is_what_writes_the_statement(store: Store, monkeypatch):
-    """负控：把出口按改前的形态注回去（不写 statements）⇒ 同一组断言必须红。"""
-    def gone(self, product, sg, *, plan):
+    """负控：把出口按改前的形态注回去（不写 statements）⇒ 同一组断言必须红。
+
+    桩的形参要带 `proof_manuscript`：2026-10-26 起登记那一笔同时收到手稿正文
+    （判据见 `tests/test_dependency_wiring_is_live.py` 的 a0）。不带就是 `TypeError`，
+    那红的是"桩没跟上形参"，不是这条负控要证明的事。
+    """
+    def gone(self, product, sg, *, plan, proof_manuscript=""):
         return {"ok": False, "statement_id": "", "reused": False,
-                "why": "（负控：出口被摘掉）", "cites": []}
+                "why": "（负控：出口被摘掉）", "cites": [],
+                "manuscript_received": {}}
 
     monkeypatch.setattr(AgentF, "_proof_outlet", gone)
     llm = FakeLLM(_proof_round())

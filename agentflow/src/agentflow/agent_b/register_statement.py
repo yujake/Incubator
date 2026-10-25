@@ -899,13 +899,49 @@ class _RegisterStatement:
         #   ③ 段里的来源不在册 / 不可用 / 档位低于 `proof_review` / 档位读不到 ⇒ 整笔受控拒绝
         #      （档位判据从等级序现算，见 `depsection.citation_levels`）。
         # 一条 `stmt:` 引用都没有（自足的证明）⇒ 不拒、也不记 missing：读数是 `not_applicable`。
+        #
+        # ---- 兜底读盘（2026-10-26，死结 2 的修法） ---------------------------------
+        #
+        # 真机读数（sylow5/sylow6）：`proof_manuscript` 这一格从来没有人传过值 —— 它是可选
+        # 参数，而 B 的提示词只印必填参数（实测这一格在 B 的段里出现 0 次）⇒ 就算 F 写了
+        # 手稿，也没有任何代码把它读出来递进这一笔登记，`dependencies` 于是恒 0 行。
+        #
+        # 业主 2026-10-26 把传递路径定成三段（原话「是通过D传吗」）：
+        #   ① `param`：调用方（D 派 B 那一笔的 args / 直调）把正文递进来了，最优先；
+        #   ② `carried_by_D`：D 交研究手稿给 B 入库时把它一并带上（D 的报告里有
+        #      「携带的证明手稿」那一节，`depsection.read_carried_manuscript` 读它）——
+        #      这是主路：携带者 D、收方 B；
+        #   ③ `disk`：前两处都没有（历史调用 / 直调），按约定路径去盘上找 F 的稿
+        #      （两种名都认：`reports/f-proof-<命题号>.md` 与 `reports/f-proof-plan-<plan>.md`）。
+        # 三处都没有时按下面那一条（有引用就整笔拒收）处置。
+        # 读数写清稿是从哪来的（`manuscript_source=param|carried_by_D|disk|none`）。
+        manuscript_source = _DS.SOURCE_NONE
+        manuscript_probe: dict = {}
+        manuscript_carried: dict = {}
+        manuscript_text = str(proof_manuscript or "")
+        if manuscript_text.strip():
+            manuscript_source = _DS.SOURCE_PARAM
+        else:
+            probe_ids = _DS.candidate_statement_ids(derived_from=derived_from,
+                                                    proof_text=proof_text)
+            manuscript_carried = _DS.read_carried_manuscript(
+                getattr(self.store, "root", ""), statement_ids=probe_ids)
+            if str(manuscript_carried.get("source") or "") == _DS.SOURCE_CARRIED:
+                manuscript_text = str(manuscript_carried.get("text") or "")
+                manuscript_source = _DS.SOURCE_CARRIED
+            else:
+                manuscript_probe = _DS.read_manuscript(
+                    getattr(self.store, "root", ""), statement_ids=probe_ids)
+                if str(manuscript_probe.get("source") or "") == _DS.SOURCE_DISK:
+                    manuscript_text = str(manuscript_probe.get("text") or "")
+                    manuscript_source = _DS.SOURCE_DISK
         manuscript: dict = {}
         deps_groups: list[list[dict]] = []
         manuscript_refs: list[str] = []
-        if str(proof_manuscript or "").strip():
-            manuscript = _DS.parse_dependency_section(proof_manuscript)
+        if manuscript_text.strip():
+            manuscript = _DS.parse_dependency_section(manuscript_text)
             # 引用只在"证明正文"那一节里数（手稿开头的元信息不是引用）。
-            manuscript_refs = _DS.stmt_refs(_DS.proof_body(proof_manuscript))
+            manuscript_refs = _DS.stmt_refs(_DS.proof_body(manuscript_text))
             if manuscript.get("refused"):
                 return _refuse(
                     str(_DS.REFUSED_SECTION), str(manuscript.get("reason") or ""),
@@ -918,7 +954,8 @@ class _RegisterStatement:
                     str(_DS.REFUSED_SECTION_MISSING),
                     f"这份证明手稿里没有 `## 依赖` 那一节，而正文引用了 {shown}{more} —— "
                     "依赖面必须写进手稿（四列表，列固定），B 按它入库；补上那一节再交",
-                    refs_in_proof=list(manuscript_refs))
+                    refs_in_proof=list(manuscript_refs),
+                    manuscript_source=manuscript_source)
             if manuscript.get("present"):
                 try:
                     stmt_rows = [dict(r) for r in self.store.rows("statements")]
@@ -937,17 +974,65 @@ class _RegisterStatement:
                 kinds = {str(r.get("stmt_id") or ""): _DS.dep_kind_of(str(r.get("kind") or ""))
                          for r in stmt_rows}
                 deps_groups = _DS.deps_groups(manuscript.get("rows") or (), kinds)
+        else:
+            # ---- 参数空、盘上也没有稿：不许静默跳过（2026-10-26，业主的裁定） ------
+            #
+            # 正文引用了在册命题 ⇒ 这份证明的依赖面必须写在手稿里，而这一笔交不出手稿
+            # （参数空、约定路径也找不到）⇒ 整笔受控拒绝 `dependency_section_missing`。
+            # 一条在册引用都没有 ⇒ `not_applicable`（自足的证明合法，不拒收），
+            # 依赖面仍由秘书那条正文扫描的既有口径给读数。
+            # 判"在册"要真读一次 `statements`：读不到就不许把"读不到"折成"没有引用"，
+            # 也不能凭引用形状就拒（一条指向不存在号的引用不是这一档的事）。
+            probe_refs = _DS.stmt_refs(proof_text)
+            if probe_refs:
+                try:
+                    known_ids = {str(r.get("stmt_id") or "") for r in self.store.rows("statements")}
+                except Exception:  # noqa: BLE001 - 读不到就只按形状判，理由里写清
+                    known_ids = set(probe_refs)
+                on_ledger = [rid for rid in probe_refs if rid in known_ids]
+                if on_ledger:
+                    shown = "、".join(f"stmt:{x}" for x in on_ledger[:3])
+                    more = f" 等 {len(on_ledger)} 条" if len(on_ledger) > 3 else ""
+                    return _refuse(
+                        str(_DS.REFUSED_SECTION_MISSING),
+                        (f"这一笔的证明正文引用了在册命题 {shown}{more}，而它没有交出手稿"
+                         "（`proof_manuscript` 是空的）。三处都找过了："
+                         "① 参数里没有；"
+                         "② D 的研究报告里没有携带它（" + str(manuscript_carried.get("why")
+                                                              or "（D 的报告里没有那一节）")
+                         + "）；"
+                         "③ 按约定路径去盘上找也没有（"
+                         + str(manuscript_probe.get("why") or "（没有可定位的命题号）")
+                         + "）—— 依赖面必须写进 F 的证明手稿（四列表，列固定），B 读稿登记；"
+                         "让 D 把 F 那份稿一并带过来（或把正文传进 `proof_manuscript`）再交"),
+                        refs_in_proof=list(on_ledger),
+                        manuscript_source=_DS.SOURCE_NONE,
+                        manuscript_probe=dict(manuscript_probe),
+                        manuscript_carried=dict(manuscript_carried))
 
         def _deps_reading(written_row: Mapping) -> dict:
-            """这一笔的依赖面三态读数（没有手稿 ⇒ 秘书那一份原样透出）。"""
-            if not manuscript:
-                return dict(written_row.get("deps_missing") or {})
-            return _DS.deps_missing_reading(
-                proof_text=proof_text,
-                deps_written=int(written_row.get("deps_written") or 0),
-                derived_from=manuscript_refs,
-                stmt_id=str(written_row.get("stmt_id") or ""),
-                refs=len(manuscript_refs), section=manuscript)
+            """这一笔的依赖面三态读数（没有手稿 ⇒ 秘书那一份原样透出）。
+
+            读数里多带几格（2026-10-26，死结 2 的读数面）：`manuscript_source` 说稿是从
+            参数来的、D 带过来的、从盘上读的、还是没有；`manuscript_probe` 是兜底读盘查过的
+            路径、`manuscript_carried` 是 D 那一侧查过的报告（三处逐条留痕，于是"没收到稿"
+            与"收到了但那份稿没有依赖段"在读数上分不开这件事被修掉了）。
+            """
+            base = (dict(written_row.get("deps_missing") or {}) if not manuscript
+                    else _DS.deps_missing_reading(
+                        proof_text=proof_text,
+                        deps_written=int(written_row.get("deps_written") or 0),
+                        derived_from=manuscript_refs,
+                        stmt_id=str(written_row.get("stmt_id") or ""),
+                        refs=len(manuscript_refs), section=manuscript))
+            base["manuscript_source"] = manuscript_source
+            if manuscript_probe:
+                base["manuscript_probe"] = dict(manuscript_probe)
+            if manuscript_carried:
+                # D 那一侧查过什么也留下来（携带单里有几条 / 为什么没对上），
+                # 否则"主路没走到"与"主路走了但没找到"在读数上分不开。
+                base["manuscript_carried"] = dict(manuscript_carried)
+            return base
 
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
         # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
@@ -1309,6 +1394,8 @@ class _RegisterStatement:
                    "row": dict(written.get("row") or {}),
                    #: 秘书那一笔把依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                    "deps_missing": _deps_reading(written),
+                   #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
+                   "manuscript_source": manuscript_source,
                    "note": str(written.get("reason") or "")}
             #: 判档位那一趟读不完这条正文时的那三格（空字典 = 读得完；见
             #: `_text_truncation_reading`）：三条"没有新建行"的出口都要带上它 ——
@@ -1369,6 +1456,8 @@ class _RegisterStatement:
                    "row": dict(written.get("row") or {}),
                    #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                    "deps_missing": _deps_reading(written),
+                   #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
+                   "manuscript_source": manuscript_source,
                    "changes": list(written.get("changes") or []),
                    "note": ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
@@ -1434,6 +1523,8 @@ class _RegisterStatement:
                        "evidence_kind": evidence_kind, "new_row": False,
                        #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                        "deps_missing": _deps_reading(written),
+                       #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
+                       "manuscript_source": manuscript_source,
                        "note": ("这一条没有新建行（同一条命题已在册）。")}
                 #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
                 out.update(trunc_reading)
@@ -1572,6 +1663,9 @@ class _RegisterStatement:
                 #: （改前这件事只活在 `deps_written=0` 里，没有任何一格会因此变红 ——
                 #: 真机 sylow3 七条命题、依赖全表 0 行，就是静默过去的）。
                 "deps_missing": _deps_reading(written),
+                #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）：
+                #: 这一格让"没人传参"与"B 按约定路径读到了"在读数上分得开。
+                "manuscript_source": manuscript_source,
                 "pending_definitions": pending_defs,
                 #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
                 #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为

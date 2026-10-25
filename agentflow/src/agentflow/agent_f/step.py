@@ -352,5 +352,10 @@ class _Step:
             out["manuscript_path"] = str(deploy["manuscript_path"])
         if deploy.get("deps_preview"):
             out["deps_preview"] = dict(deploy.get("deps_preview") or {})
+        # ---- 登记那一刻手上的稿是从哪来的（`param` / `none`）：这一格要能被机械读出来，
+        # 否则"F 这一轮根本没把稿递给登记"与"递了、只是收方没读"在读数上长得一样
+        # （2026-10-26，死结 1 的读数面）。
+        if deploy.get("manuscript_source"):
+            out["manuscript_source"] = str(deploy["manuscript_source"])
         self.last_step = out
         return out

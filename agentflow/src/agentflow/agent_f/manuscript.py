@@ -9,9 +9,10 @@
 ⇒ 作者只写内容，登记由收方读稿产生（与 V 读 F 的手稿再签字同一个逻辑）。所以本文件
 只做两件不写台账的事：
 
-1. `AgentF.proof_manuscript(...)`：把这一轮的论证写成一份手稿文件
-   （`reports/f-proof-<命题号>.md`），其中必须有那一节固定格式的 `## 依赖`
-   （四列表，见 `agentflow.depsection.COLUMN_KEYS`）；
+1. `AgentF.proof_manuscript(...)`：把这一轮的论证写成一份手稿文件。两段命名（原因见方法
+   docstring 的"死结 1"）：登记之前先按计划号写成 `reports/f-proof-plan-<plan_id>.md`，
+   登记拿到命题号之后由 `publish_manuscript` 改名为 `reports/f-proof-<命题号>.md`；
+   两份都含那一节固定格式的 `## 依赖`（四列表，见 `agentflow.depsection.COLUMN_KEYS`）。
 2. `AgentF.preview_dependencies(...)`：只读预览 —— 拿一份手稿正文，按 B 那条判据
    （`depsection` 的解析 ＋ 引用档位门 ＋ 三态读数）算出"如果现在入库会怎样"，
    F 据此在自己这一侧先看见问题。它一行都不写盘。
@@ -194,14 +195,25 @@ class _Manuscript:
         return "\n".join(lines) + "\n"
 
     def proof_manuscript(self, product: Mapping[str, Any], *, sg: Mapping[str, Any],
-                         statement_id: str, plan: Mapping[str, Any]) -> dict[str, Any]:
+                         statement_id: str = "", plan: Mapping[str, Any],
+                         ) -> dict[str, Any]:
         """把这一轮的论证写成手稿文件并返回读数（写盘失败不许静默）。
 
-        返回 `{"ok", "path", "text", "rows", "preview", "why"}`：`rows` 是依赖段里的数据行，
-        `preview` 是"这份手稿交给 B 会怎样"的只读预览（`preview_dependencies`），
+        返回 `{"ok", "path", "text", "rows", "preview", "why", "named_by"}`：`rows` 是依赖段里的
+        数据行，`preview` 是"这份手稿交给 B 会怎样"的只读预览（`preview_dependencies`），
         `text` 是整份手稿（调用方可以直接把它交给 B 入库，不必再读盘）。
+
+        ## 为什么 `statement_id` 现在可以不给（2026-10-26，死结 1 的修法）
+        改前这个方法必须在登记之后调用（它要拿命题号命名），而登记那一刻稿还不存在 ⇒
+        B 侧读稿登记这一格永远读不到东西。现在两段：
+        ① 登记之前先写一份，按计划号命名（`reports/f-proof-plan-<plan_id>.md`）——
+           此刻手上还没有命题号，但稿已经在盘上、正文也在手上；
+        ② 登记成功之后由 :meth:`publish_manuscript` 改名为 `reports/f-proof-<命题号>.md`，
+           于是按命号找稿的读方（B 的兜底读盘）也找得到。
+        `named_by` 如实说这一份是按什么命名的（`plan` / `stmt`），读的人不必猜。
         """
         sid = str(sg.get("sid") or "")
+        plan_id = str(plan.get("plan_id") or "")
         rows = self.dependency_rows(product)
         steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
         proof_lines = []
@@ -226,7 +238,7 @@ class _Manuscript:
             "",
             self.render_dependency_section(rows),
         ])
-        rel = f"{self.MANUSCRIPT_DIR}/f-proof-{statement_id or sid}.md"
+        rel = self.manuscript_path(statement_id, sid, plan_id=plan_id)
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
         preview = self.preview_dependencies(text)
         try:
@@ -235,11 +247,68 @@ class _Manuscript:
             path.write_text(text, encoding="utf-8")
         except OSError as exc:
             return {"ok": False, "path": rel, "text": text, "rows": rows,
-                    "preview": preview,
+                    "preview": preview, "named_by": "stmt" if statement_id else "plan",
                     "why": f"手稿没写成（{type(exc).__name__}: {exc}）⇒ 依赖面这一趟只能靠"
                            "B 读正文（而正文是散文的话，B 读不出依赖边）"}
         return {"ok": True, "path": rel, "text": text, "rows": rows,
-                "preview": preview, "why": ""}
+                "preview": preview, "named_by": "stmt" if statement_id else "plan",
+                "why": ""}
+
+    def publish_manuscript(self, manuscript: Mapping[str, Any], *,
+                           statement_id: str) -> dict[str, Any]:
+        """登记拿到命题号之后，把那一份手稿改名为 `reports/f-proof-<命题号>.md`。
+
+        为什么必须改名（而不是留在计划号那个名字上）：兜底读盘的第一个候选名就是
+        `f-proof-<命题号>.md`（`depsection.manuscript_relpaths`），而收方（B）手上最确切的号
+        正是它要登记的那条命题点名过的号。计划号那个名字太宽（一个计划会有好几轮），
+        只留着它，收方要么找不到、要么找到别人的稿。
+
+        三件纪律：
+        - 正文不再读盘：改名用的是手上这一份 `text`（登记那一刻的稿就是它）；
+        - 改名失败不许静默：返回里 `published=False` + `why`，`path` 仍是旧名（稿还在盘上，
+          只是叫旧名字）—— "稿丢了"与"稿没改名"是两件事；
+        - 旧名与命名来源都留在读数里（`renamed_from` / `named_by`），溯源要能看出改名发生过。
+        """
+        sid = str(statement_id or "").strip()
+        text = str(manuscript.get("text") or "")
+        old_rel = str(manuscript.get("path") or "")
+        out = dict(manuscript)
+        out["renamed_from"] = ""
+        out["published"] = False
+        if not sid:
+            out["why"] = "没有命题号 ⇒ 这一份手稿不改名（它仍按计划号命名）"
+            return out
+        if not text.strip():
+            # 手上没有正文时绝不写一个空文件：空稿会被兜底读盘跳过（"文件在、正文是空的"），
+            # 而在盘上留一个空文件只会让下一个读它的人以为"稿写过、只是空的"。
+            out["why"] = "手上没有正文 ⇒ 这一份手稿不按命号落盘（写一个空文件比没有更坏）"
+            return out
+        new_rel = self.manuscript_path(sid)
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        if old_rel == new_rel:
+            out.update(path=new_rel, published=True, why="")
+            return out
+        try:
+            target = Path(root) / new_rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
+            old_path = (Path(root) / old_rel) if old_rel else None
+            if old_path is not None and old_path.is_file():
+                try:
+                    old_path.unlink()
+                    out["renamed_from"] = old_rel
+                except OSError as exc:  # noqa: BLE001 - 旧名删不掉不影响新名可读
+                    out["renamed_from"] = old_rel
+                    out["why"] = (f"新名写成了，旧名 {old_rel} 没删掉（{type(exc).__name__}: "
+                                  f"{exc}）—— 盘上会有两份同一份稿")
+                    out.update(path=new_rel, published=True)
+                    return out
+        except OSError as exc:
+            out["why"] = (f"手稿没改名（{type(exc).__name__}: {exc}）⇒ 它还叫 {old_rel}；"
+                          "按命号找稿的读方会找不到它")
+            return out
+        out.update(path=new_rel, published=True, why="")
+        return out
 
     # -------------------------------------------------------------- 只读预览
 
@@ -304,9 +373,18 @@ class _Manuscript:
             refs=len(refs), section=section)
         return out
 
-    def manuscript_path(self, statement_id: str, sid: str = "") -> str:
-        """这一份手稿的落点（工作区相对）—— 与 `proof_manuscript` 写的是同一处。"""
-        return f"{self.MANUSCRIPT_DIR}/f-proof-{statement_id or sid}.md"
+    def manuscript_path(self, statement_id: str = "", sid: str = "",
+                        plan_id: str = "") -> str:
+        """这一份手稿的落点（工作区相对）—— 与 `proof_manuscript` 写的是同一处。
+
+        两种名由 `depsection.manuscript_relpath` 一处定义（兜底读盘读的是同一处口径）：
+        有命题号按命题号，只有计划号按计划号，都没有时退回子目标号（那一支只在调用方
+        既没给命题号、计划也没号时才会出现，绝不静默返回一个空路径）。
+        """
+        rel = _DS.manuscript_relpath(statement_id=statement_id, plan_id=plan_id)
+        if rel:
+            return rel
+        return f"{self.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}{sid}.md"
 
     @staticmethod
     def section_example() -> str:

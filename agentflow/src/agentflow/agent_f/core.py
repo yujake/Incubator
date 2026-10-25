@@ -135,6 +135,20 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         "只给 1 条（或 0 条）也不算推进；确实产不出这一批 ⇒ **落 `dead_end`**，"
         "并在受控理由里写清「卡在哪一步、缺什么才能产出这一批」。",
         "",
+        # ---- 第 2.1 段：proof 档的明确出口（2026-10-26，死结 3 的修法）
+        #
+        # 真机读数（sylow3–sylow6）：10 个计划各 1 轮、每轮都是 dead_end，
+        # `F.step` 的 action=proof 一次都没有。其中一层是提示词只列了四档、
+        # 没有一条话说清"论证到什么程度就该交 proof"，而第 2 段（每轮至少 3 条新事实）
+        # 在措辞上只点名 reduction 那一类动作 ⇒ 模型读到的是"交论证不算推进"。
+        # 判据的正文只写一份（`attackround.PROOF_EXIT_CRITERIA`），这里只负责摆出来。
+        "## 2.1 什么时候该交 `proof`（这一节的判据是可判定的，照着判就行）",
+        "论证已经写到能收尾时，这一轮就该交 `proof` —— 三条判据：",
+        *[f"{i}. {line}" for i, line in enumerate(AR.PROOF_EXIT_CRITERIA, 1)],
+        "反过来：还缺一条中间引理 / 需要一个新的反例族 / 需要一个新的数值界 ⇒ 交 "
+        "`reduction` 或 `counterexample_request` 或 `dead_end`，不要硬把半截论证写成 `proof`"
+        "（`steps` 里那一步会当场被 `assumption` / 缝的判据拦下）。",
+        "",
         # ---- 第 3 段：上下文（事实，不是形状 —— 所以排在词表之后）
         "## 3. 这一轮的上下文（已知事实，不是提示）",
         f"难题：{plan.get('problem')}",
@@ -440,6 +454,25 @@ class _Core:
                 + (f" **这一个子目标还缺**：{'、'.join(_missing)} —— 一次给齐就不用再来回问。"
                    if len(_missing) > 1 else "")
             )
+        # ---- 可检验形式这一格（2026-10-26，死结 3 的第二层） ------------------------
+        #
+        # 改前这里不认 `testable`：`create_plan` 的声明面写着子目标是 `{sid, text, owner}`，
+        # 于是模型照声明写、把"这一步凭什么算做完"塞在别的键上（真机 sylow6 用的是
+        # `check`），落库后子目标的 `testable` 是空的。而 `_reason_self` 花钱之前的那道
+        # 闸（`attackround.pre_spend_gate`）把"子目标没有可检验形式"判成不许花钱 ⇒
+        # 每一轮都落 `dead_end(缺定义)`，模型永远不会被问、也就永远不会交 `proof`。
+        # 现在按四种写法认（`testable` 优先，其余是模型真用过的同义键），规整后
+        # 落进子目标自己的 `testable` 那一格 —— 判据仍然只有一处（`pre_spend_gate`），
+        # 这里只保证它读得到那份判据该读的东西。
+        testable = ""
+        for key in ("testable", "check", "criterion", "acceptance"):
+            candidate = str(raw.get(key) or "").strip()
+            if candidate:
+                testable = candidate
+                break
+        # 这几个键只作为别名存在：留着它们会让下游两处读同一个意思却读两个键
+        # （"判据读不到"的形态），所以归一之后不再透传。
+        drop_keys = {"check", "criterion", "acceptance", "testable"}
         return _subgoal(
             sid,
             text,
@@ -459,13 +492,13 @@ class _Core:
             # 而且缺 `status` 的子目标会原样带着 `None` 落库。这类"参数被后写覆盖"
             # 是纯粹的静默错误：没有异常、没有告警，只有一条形状不对的子目标。
             extra={
-                k: v
-                for k, v in raw.items()
-                if k
-                not in {
-                    "sid", "text", "owner", "status", "evidence_ids", "experiment_ids",
-                    "proof_experiment_ids", "blocked_reason", "attempts", "negation_kind",
-                }
+                **{k: v for k, v in raw.items()
+                   if k not in {
+                       "sid", "text", "owner", "status", "evidence_ids", "experiment_ids",
+                       "proof_experiment_ids", "blocked_reason", "attempts", "negation_kind",
+                   } and k not in drop_keys},
+                # 四种写法归一成同一个键：下游（`pre_spend_gate` / 提示词 / 手稿）只读它。
+                **({"testable": testable} if testable else {}),
             },
         )
     def _unwired_partial(self, sg: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -528,7 +561,10 @@ class _Core:
             product = AR.dead_end_row(
                 strategy="套用已知定理",
                 reason="缺工具",
-                evidence=(f"子目标 {sid}（{text}）的 owner={owner} 侧没有可自动调用的推理入口；"
+                evidence=(f"子目标 {sid}（{text}）的 owner={owner} 侧没有可自动调用的推理入口"
+                          "（这一趟 `AgentF.llm` 是 None：工具路径 `attack.step` 的缝从 "
+                          "`agent_f.default_llm()` 取，而它只在装配期被登记 —— 装配方要开 "
+                          "`--attack-reasoning` 才登记）；"
                           "这一轮据此判定走不下去，而不是假装推进"),
                 best_partial=partial,
                 why_strategy="没有可调用的推理入口时，唯一诚实的产物是 dead_end（换子目标/等人接线）",
@@ -543,6 +579,7 @@ class _Core:
                     f"已按 §3.16 落成产物 `dead_end`（reason={product['reason']}，"
                     f"best_partial {len(product['best_partial'])} 条）。"
                     f"要把 owner={owner} 的子目标真正推起来，需要 {owner} 侧先接上可调用的推理入口；"
+                    "缺的就是装配开关：`--attack-reasoning`（F 的攻坚推理，默认关）。"
                     "在此之前 F 只如实记账，绝不用空证据冒充进展"
                 ),
                 "evidence": [],
@@ -1285,7 +1322,7 @@ class _Core:
                 "why": str(gap.get("why") or "凭据不足 ⇒ heuristic") + note}
 
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
-                      plan: Mapping[str, Any]) -> dict:
+                      plan: Mapping[str, Any], proof_manuscript: str = "") -> dict:
         """把这一轮的 `proof` 落成可复核的一行 `statements`（P3-6 的第一半）。
         `_apply_round` 的 proof 分支只写一段 `detail` 与 `history.product_detail`，而 `product_detail` 的唯一出现点是 `step.py` 的写入 —— 
         全仓没有任何读者。M 读不到、V 审不到、盘上也找不到（policy 第 2 条要求的 `reports/attack-<plan_id>.md` 同样没人写）。
@@ -1297,9 +1334,45 @@ class _Core:
         幂等（2026-10-19 晚补：复用那一支同时负责「升档」）同一条子目标交出逐字相同的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），不再登记第二行 —— 重复登记会把 
         `statement_rows` / `reviewed_proof_rows` 的读数虚高（与 `_deploy_e` 的"同一脚本不重跑"同一条理由）。
         所以复用那一支顺带核一次档位 —— 盘上那一行是弱档、而它现在已经够 `proof_review` ⇒ 就地升档（一行 update，走同一个写入闸；返回值里 `promoted=True` 让这件事在台账上看得见。
+
+        ## `proof_manuscript` 这一格（2026-10-26，死结 1 / 死结 2 的接线）
+
+        调用方（`_apply_round` 的 proof 分支）现在先把稿写成、再把正文递进来，于是
+        "登记那一刻手上就有稿"是结构上的事实，而不是一次抢时序的运气：
+        `manuscript_source=param` 说稿是参数来的（不是回头去盘上补读的），
+        `manuscript_section_rows` 是登记那一刻那节依赖段读出来的行数。
+        这一笔不写 `dependencies`：业主 2026-10-24 的最终形态是"作者只写内容，登记由
+        收方读稿产生"，F 是作者 —— 依赖边由收方（B 读这一份手稿）落，与 V 读稿签字同构。
+        这一步的用处是：稿在登记时已经在手上，登记拿到命题号之后由 `publish_manuscript`
+        把它改名为 `reports/f-proof-<命题号>.md`，于是收方按命号的兜底读盘找得到它。
         """
+        from .. import depsection as _DS
+
         steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
         sid = str(sg.get("sid") or "")
+        # ---- 登记那一刻手上的稿（三态：参数给了 / 参数空）—— 只读，不写盘、不写台账
+        manuscript_text = str(proof_manuscript or "")
+        manuscript_received: dict[str, Any] = {
+            "source": _DS.SOURCE_PARAM if manuscript_text.strip() else _DS.SOURCE_NONE,
+            "chars": len(manuscript_text.strip()),
+            "section_rows": 0,
+            "refs_in_proof": 0,
+            "preview_ok": False,
+            "refused": "",
+            "why": "",
+        }
+        if manuscript_text.strip():
+            section = _DS.parse_dependency_section(manuscript_text)
+            refs = _DS.stmt_refs(_DS.proof_body(manuscript_text))
+            manuscript_received.update(
+                section_rows=len(section.get("rows") or []),
+                refs_in_proof=len(refs),
+                preview_ok=not section.get("refused"),
+                refused=str(section.get("refused") or ""),
+                why=str(section.get("reason") or ""))
+        else:
+            manuscript_received["why"] = (
+                "调用方没有把手稿正文递进来 ⇒ 这一笔登记手上没有稿（收方仍可按约定路径去盘上找）")
         cites = [str(c) for s in steps for c in (s.get("cites") or [])]
         assumptions = [str(s.get("text") or "") for s in steps if s.get("assumption") is True]
         body = "\n".join(
@@ -1319,8 +1392,13 @@ class _Core:
             if (str(row.get("statement_full") or "").strip() == full.strip()
                     and str(row.get("proof_text") or "").strip() == body.strip()):
                 got_id = str(row.get("stmt_id") or "")
-                return self._promote_if_understated(row, plan=plan, sid=sid, cites=cites,
-                                                    got_id=got_id)
+                reused = self._promote_if_understated(row, plan=plan, sid=sid, cites=cites,
+                                                      got_id=got_id)
+                # 复用那一支也是一次"登记"：登记那一刻手上的稿同样要如实带出去
+                # （`manuscript_received.source`），否则读的人分不清"这一笔没收到稿"
+                # 与"收到了、只是复用了既有那一行"。
+                reused["manuscript_received"] = manuscript_received
+                return reused
         # `derived_from` 只认本表内的裸编号（`require_id` 不接 `stmt:` 前缀）：
         # 所以只有真的在册的 `stmt:` 引用才进这一格，其余（`exp:`/`lit:`）留在 `cites` 里。
         known = {str(r.get("stmt_id") or "") for r in existing}
@@ -1354,11 +1432,11 @@ class _Core:
                 tx.upsert("statements", row.to_dict(), note=f"f.step:proof:{sid}")
         except Exception as exc:  # noqa: BLE001 - 写不进 statements 要说出来，不许当成写过了
             return {"ok": False, "kind": "statement_write_failed", "statement_id": "",
-                    "reused": False, "promoted": False,
+                    "reused": False, "promoted": False, "manuscript_received": manuscript_received,
                     "why": f"{type(exc).__name__}: {exc}", "cites": cites}
         return {"ok": True, "statement_id": stmt_id, "reused": False, "promoted": False,
                 "evidence_kind": str(tier["kind"]), "tier_why": str(tier["why"]),
-                "why": "", "cites": cites}
+                "manuscript_received": manuscript_received, "why": "", "cites": cites}
 
     def _promote_if_understated(self, row: Mapping[str, Any], *, plan: Mapping[str, Any],
                                 sid: str, cites: list[str], got_id: str) -> dict:
@@ -1425,6 +1503,8 @@ class _Core:
         #: 这一轮的证明手稿（只有 `proof` 那一支有内容）：见 `_Manuscript.proof_manuscript`。
         #: 依赖台账不在这里写 —— 业主 2026-10-24 最终形态是"作者只写内容，B 读稿登记"。
         manuscript: dict[str, Any] = {}
+        #: 登记那一刻手上的稿（`_proof_outlet` 的读数；其它三档没有这一格）。
+        received: dict[str, Any] = {}
         if kind == "reduction":
             existing = list(plan.get("subgoals") or [])
             taken: list[str] = []
@@ -1440,11 +1520,28 @@ class _Core:
             status = "in_progress"
         elif kind == "proof":
             steps = product.get("steps") or []
-            # ---- P3-6：产物要有出口。改前这一支只写 `detail` + `history.product_detail`，
-            # 而 `product_detail` 全仓没有读者（`step.py` 里那一行是唯一出现点）——
-            # 论证交出来之后，M 看不到、V 审不到、盘上也没有。
-            outlet = self._proof_outlet(product, sg, plan=plan)
+            # ---- 死结 1 的修法（2026-10-26）：先写稿，后登记。
+            #
+            # 改前的次序是 `_proof_outlet` 在前、`proof_manuscript` 在后，而手稿按"已登记
+            # 的命题号"命名 ⇒ 登记那一刻稿还没写 ⇒ 收方（B 读稿登记依赖面）永远读不到东西，
+            # 那一份 `reports/f-proof-*.md` 在真机上 0 份。现在两段：
+            #   ① 先按计划号写一份（此刻还没有命题号）：稿在盘上、正文在手上；
+            #   ② 登记成功后再改名为 `f-proof-<命题号>.md`（`publish_manuscript`）。
+            # 登记那一笔（`_proof_outlet`）收到的 `proof_manuscript` 就是①的正文 —— 于是
+            # "登记那一刻手上有稿"是结构上的事实，不是时序上撞运气。
+            #
+            # 依赖台账仍不在这里写：业主 2026-10-24 最终形态是"作者只写内容，登记由收方
+            # 读稿产生"（F 是作者，B 是收方），写盘失败不许静默（FC-21）。
+            try:
+                manuscript = self.proof_manuscript(product, sg=sg, plan=plan)
+            except Exception as exc:  # noqa: BLE001 - 手稿没写成不该让这一轮崩掉
+                manuscript = {"ok": False, "path": "", "text": "", "rows": [],
+                              "preview": {}, "named_by": "plan",
+                              "why": f"手稿没写成（{type(exc).__name__}: {exc}）"}
+            outlet = self._proof_outlet(product, sg, plan=plan,
+                                        proof_manuscript=str(manuscript.get("text") or ""))
             statement_id = str(outlet.get("statement_id") or "")
+            received = dict(outlet.get("manuscript_received") or {})
             if outlet.get("ok") and statement_id:
                 # 档位与"为什么是这一档"都要落进台账：改前这里逐字写 heuristic，
                 # 于是"V 已经签过"这件事在读数上完全看不见（2026-10-19 晚）。
@@ -1453,33 +1550,33 @@ class _Core:
                     f"已落 `stmt:{statement_id}`（statements，evidence_kind=`{_kind}`"
                     " —— 档位按 `verifications/<命题号>.jsonl` 现算，不是自报）"
                     + ("（与既有那一行逐字相同 ⇒ 复用，不重复登记）" if outlet.get("reused") else "")
-                    + ("；**并已就地升档**（V 那一签在盘上，原来登记成弱档）"
+                    + ("；并已就地升档（V 那一签在盘上，原来登记成弱档）"
                        if outlet.get("promoted") else ""))
                 evidence = [f"stmt:{statement_id}"]
-                # ---- 业主 2026-10-24 最终形态（逐字）：「依赖面登记是否是F在其手稿中写好，
-                # D的研究手稿引用F的证明手稿给B入库时，B侧读到F手稿处的依赖面，按此入库的？
-                # （即和V签一个逻辑）」「改」 ⇒ 作者只写内容，登记由收方读稿产生。
-                # 所以这里只做"把这一份证明写成手稿（含固定格式的 `## 依赖` 一节）"，
-                # 一行台账都不写：依赖边由 B 读这份手稿登记（`B.register_statement` 的
-                # `proof_manuscript` 那一格）。写盘失败不许静默（FC-21）：只折进 detail 与返回值。
-                try:
-                    manuscript = self.proof_manuscript(
-                        product, sg=sg, statement_id=statement_id, plan=plan)
-                except Exception as exc:  # noqa: BLE001 - 手稿没写成不该让这一轮崩掉
-                    manuscript = {"ok": False, "path": "", "text": "", "rows": [],
-                                  "why": f"手稿没写成（{type(exc).__name__}: {exc}）"}
+                # 登记拿到号之后把稿改成按命号的名字（收方兜底读盘的第一个候选名）。
+                manuscript = self.publish_manuscript(manuscript, statement_id=statement_id)
                 if manuscript.get("ok"):
                     outlet_note += (
                         f"；证明手稿 `{manuscript['path']}`（依赖段 "
-                        f"{len(manuscript.get('rows') or [])} 行，交 B 读稿登记）")
+                        f"{len(manuscript.get('rows') or [])} 行，交 B 读稿登记）"
+                        + (f"；登记前它叫 `{manuscript['renamed_from']}`"
+                           if manuscript.get("renamed_from") else ""))
                 else:
-                    outlet_note += (f"；⚠️ 证明手稿没写成（{manuscript.get('why')}）"
+                    outlet_note += (f"；证明手稿没写成（{manuscript.get('why')}）"
                                     "—— 那 B 读不到依赖段，依赖面这一趟建不起来")
+                outlet_note += (
+                    f"；登记那一刻手上的稿：`manuscript_source={received.get('source')}`"
+                    + (f"、{int(received.get('chars') or 0)} 字、依赖段 "
+                       f"{int(received.get('section_rows') or 0)} 行"
+                       + (f"、正文引用 {int(received.get('refs_in_proof') or 0)} 条"
+                          if received.get("refs_in_proof") else "")
+                       if received.get("source") == "param" else
+                       "（参数是空的）"))
             else:
-                outlet_note = f"⚠️ 论证**没能**落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
+                outlet_note = f"论证没能落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
                 evidence = []
             detail = (f"论证（{product.get('strategy')}）：{len(steps)} 步；"
-                      f"这一轮是**论证**不是机器核验 ⇒ 子目标不关闭（FC-22）；{outlet_note}")
+                      f"这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；{outlet_note}")
             status = "in_progress"
         elif kind == "counterexample_request":
             spec = dict(product.get("script_spec") or {})
@@ -1543,12 +1640,17 @@ class _Core:
             "waiting_on": [str(g["sid"]) for g in new_goals],
             "new_subgoals": new_goals,
             # ---- 证明手稿（业主 2026-10-24 最终形态）：只有 `proof` 那一支有内容。
-            # `manuscript_path` 是落点，`manuscript` 是全文（D/B 可以直接把它交给
-            # `B.register_statement(proof_manuscript=...)`，不必再读盘）；
-            # `deps_preview` 是只读预览（依赖段解析、档位门与三态读数，一行都不写盘）。
+            # `manuscript_path` 是落点（登记成功后是按命号的那个名字），`manuscript` 是全文
+            # （D/B 可以直接把它交给 `B.register_statement(proof_manuscript=...)`，不必再读盘）；
+            # `deps_preview` 是只读预览（依赖段解析、档位门与三态读数，一行都不写盘）；
+            # `manuscript_source` 说登记那一刻手上的稿是从哪来的（param / none）。
             "manuscript_path": str(manuscript.get("path") or ""),
             "manuscript": str(manuscript.get("text") or ""),
             "deps_preview": dict(manuscript.get("preview") or {}),
+            "manuscript_source": str(received.get("source") or ""),
+            "manuscript_received": received,
+            "manuscript_published": bool(manuscript.get("published")),
+            "manuscript_renamed_from": str(manuscript.get("renamed_from") or ""),
         }
 
     def _spec_from_testable(self, sg: Mapping[str, Any], *,
