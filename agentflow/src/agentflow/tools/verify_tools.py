@@ -1038,10 +1038,21 @@ _ROLES_V = ("V",)
             "'unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits',"
             # 2026-10-23：穷举型证据会审那一档的三格读数 + 签名主体（V）/ 作者（E）
             "'exhaustion_review','checks','missing','signer','proof_authors','report_path',"
+            # 2026-10-26（业主两批裁定：V 要核 F 的引用、档位不够格的不许引）：
+            # 引用核实那三格 —— `citations` 是材料（依赖行 + 被引命题正文摘要），
+            # `citation_checks` 是逐条结论（`{stmt_id, verdict, quote_verbatim, note}`，
+            # verdict ∈ consistent / weaker / stronger / unrelated / inadmissible / unknown），
+            # `citation_gate` 是签字前置读数（`blocking` / `weaker` / `why`）。
+            # 声明必须跟上（判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare`：
+            # `returns` 会拼进 function-calling 的 description ⇒ 模型看得到，声明里没有的
+            # 字段它就不知道存在 —— 那会把"引用核实"这一档在模型那一侧折回看不见）。
+            "'citations','citation_checks','citation_gate',"
             "'ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成："
             "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / "
             "no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— "
-            "此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）"
+            "此时**不落台账行**，绝不拿「看不出来」冒充「审过了」；"
+            "引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地"
+            "（结论改判，`citation_gate.why` 与 findings 点名是哪一条））"
             ),
     tags=("verification", "proof"),
 )

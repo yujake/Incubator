@@ -30,6 +30,28 @@ H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五�
 V 只与 F 交互：F 提交、V 退回；不给 D、不给 E 当对话对象。
 （`draft/39 §3.21 五`那张草表里还写着 `V → D` / `V → E`，那是被后续裁定覆盖的旧稿；
 `draft/54 §1.1` 逐字记着"不要 `V→D`/`V→E`"。）
+
+## 引用核实（业主 2026-10-26 裁定，一句政策）
+
+「V侧审查也应对F报告的引用进行核实（F引用可能非逐字，需要V自行判断）」；
+配套两句：「正常写证明就是不会逐字的」（判据不是字面像不像）、
+「proof_review级及以上才可引用」（被引命题的档位门槛）。落法（实现只有一处）：
+
+- V 的审查材料里必须同时有 F 对每条被引命题的说法（`dependencies` 那一行）
+  与被引命题的正文摘要 —— 只给编号，V 核不出"F 是不是这么用的"；
+- 逐条一档结论 `consistent` / `weaker` / `stronger` / `unrelated` / `inadmissible` /
+  `unknown`，读数是台账里的 `citation_checks`（`{stmt_id, verdict, quote_verbatim, note}`，
+  `quote_verbatim` 只作信息、不参与判定）；
+- 有一条 `stronger` / `unrelated` / `inadmissible` / `unknown` ⇒ 不许签「成立」
+  （点名哪一条、差在哪）；`weaker` 可以签，但读数里点名"只用到了弱形式"；
+- 档位闸是事实、不是判断：被引命题低于 `proof_review`（含空档）一律 `inadmissible`，
+  允许集合从 `schema.EVIDENCE_KINDS` 现算（`verifications.evidence_kind_admissible`）。
+
+为什么这段写在模块 docstring 而不是 `policy` 元组里：`policy` 会渲染进 V 的提示词、
+挂进 `tests/test_agent_prompts.py` 的冻结摘要与 `PROMPT_VERSION` 那一轴；本轮业主边界
+是「不动 `PROMPT_VERSION`、不重冻 golden」，所以渲染面那一句落在 V 的真实入口
+`verifications.cold_start_prompt`（它才是 V 每次审校读到的提示词），这一格只留声明侧
+的同一条政策。抬版本那一轮把这一段并进 `policy` 即可，口径一个字不用改。
 """
 
 from __future__ import annotations

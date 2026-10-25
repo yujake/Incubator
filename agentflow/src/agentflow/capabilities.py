@@ -1435,7 +1435,7 @@ _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
             "statement_full", "source_lit_id", "proof_text", "proofs", "kind", "label",
             "statement_text", "origin", "page_range", "evidence_kind", "quote_verified",
             "quote_mode", "quote_reason", "quote_span", "quote_call_sha256", "doc_id",
-            "line_range", "derived_from",
+            "line_range", "derived_from", "proof_manuscript",
         }),
         "这条动作没有同名工具：`proofs`（以及其余十七格）由 `AgentB.register_statement(proofs=...)`"
         "直接收 —— 整条动作的 schema 就是动作声明本身（`table.create` 那条通用写口被"
@@ -1447,6 +1447,9 @@ _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "2026-10-22（D1）：`quote_span` / `quote_call_sha256` 两格同日加进动作面"
         "（引文回验的证据栏，此前 `additionalProperties=false` 让模型连参数名都传不进来），"
         "它们同样只活在动作面 ⇒ 一并登记（登记集合必须等于动作面集合，缺一个就红）。"
+        "2026-10-24（业主最终形态「作者写内容、收方读稿登记」）：`proof_manuscript` 一格"
+        "同日加进动作面 —— B 读 F 手稿里那一节 `## 依赖` 落依赖边，F 不再写 `dependencies`；"
+        "它同样只活在动作面（没有同名工具），一并登记。"
         "判据：登记集合必须等于动作面声明的集合（`unregistered_missing_in_tools` 第 ③ 条）。",
     ),
     # 2026-10-22 第二班曾在这里登记 `("L", "formalize"): {"statement_id"}`

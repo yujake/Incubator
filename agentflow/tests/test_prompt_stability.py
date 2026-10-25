@@ -538,6 +538,13 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p202", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p202（2026-10-26 收口批）：十一格摘要全换（唯一根因是 `judge_unknown_tool` 新码进了 `THREE_STATE` 那段）；另 `verify.verify_proof.required` 去掉 `proof_text`、F 的写集去 `statements`、D 的一处文案不再教 `force_new`。facts 键集仍 15 格（键名与条数一格未动）"},
+        # p202 → p203（2026-10-26 收口批）：段摘要只有 F 那一格换值（F 的 policy 多一条
+        # 「依赖面写在自己的证明手稿里、由 B 读稿登记」），声明面换了 B 的一格可选参数与
+        # V 三格 returns。两笔都只动文本与声明，一格事实的落点都没挪 ⇒ `count` /
+        # `keys_sha256` 与上一格同值，仍是 `PS.volatile_facts_digest()` 的现算值（不手抄）。
+        {"version": "p203", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p203（2026-10-26 收口批）：F 的 policy 多一条「依赖面写在证明手稿的 `## 依赖` 四列表里、由 B 读稿登记，缺段而有引用则整笔拒收 dependency_section_missing」（段摘要只有 F 那一格换值）；同批 B 的 register_statement 多一格可选参数 proof_manuscript、verify.verify_proof.returns 多三格（citations / citation_checks / citation_gate）。facts 键集仍 15 格（键名与条数一格未动）"},
 )
 
 

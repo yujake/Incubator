@@ -2149,7 +2149,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p202"
+_FROZEN_PROMPT_VERSION = "p203"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2169,13 +2169,22 @@ _FROZEN_PROMPT_VERSION = "p202"
 #   E 3121e244→f46e5f64 / F 835fa4ca→46bd35c5 / G e59dbbf8→a1d7077d / H ad1e532a→e9bdf211 /
 #   L dac10e41→b60b8d3f / M 38b381b9→16bf19ba / V 0afe4946→33b5d66b。
 # 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 2026-10-26（p203 收口批）：只有 F 那一格换值 —— 业主裁定「依赖面写在自己那份证明手稿里、
+# 由 B 读稿登记」⇒ `specs/f.py` 的 policy 多一条（`## 依赖` 四列表；缺段而正文有引用则整笔
+# 拒收 `dependency_section_missing`）。同批的另两笔（B 的 `register_statement` 多一格可选参数
+# `proof_manuscript`、`verify.verify_proof.returns` 多三格）都不进提示词正文 ⇒ 另十格逐字未动。
+# 逐格的旧值 → 新值：
+#   A d8819279→d8819279 / B 407bf1ee→407bf1ee / C 72ace081→72ace081 / D 110f7eb7→110f7eb7 /
+#   E f46e5f64→f46e5f64 / F 46bd35c5→91335ce5 / G a1d7077d→a1d7077d / H e9bdf211→e9bdf211 /
+#   L b60b8d3f→b60b8d3f / M 16bf19ba→16bf19ba / V 33b5d66b→33b5d66b。
+# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "d881927900395f0246a2ef10f7694c4f1581b513373b942fc5e49711bff50c15",
     "B": "407bf1eec36648a23c5774a45ad528c6b5d63fa0d588ad4f6e0b08f36afed2be",
     "C": "72ace081cb15f2991e77efd6e50c53380506e5e6e580c1aba179d1a7dbcf70e5",
     "D": "110f7eb7e3c29bb3a2323fd0da9c2215536dbd44a5ce63404ebe007932cc5daa",
     "E": "f46e5f64706a38ac5a29f7e6f6bb4c1255e1fe2c59b6d5ad7559d278c0eec3dd",
-    "F": "46bd35c549be0e731035859e4357c9592ec0492d41f0b3baa388d57102704feb",
+    "F": "91335ce54526fc593ddadc8c7368a826a9d9c6a0db1b43b03d87e4406442b2bd",
     "G": "a1d7077d2ad703b5587625eea2ef80d106c730286a82fe1186fc35d0e4b56631",
     "H": "e9bdf211fd39c3f3a31d298f9d100aef61a21cbcac2ffe8fc29ee200cc0efa96",
     "L": "b60b8d3ff8a4072a045de8daefd90a15b00410fa8961cca927ada12953da9bf5",

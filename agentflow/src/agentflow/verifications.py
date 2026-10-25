@@ -40,6 +40,18 @@ reviewed_sha_by_proof`（`{"1": "<sha256>", "2": ""}`，见 `evidencebits.REVIEW
 `stmt_id` 缺 ⇒ 读 `statement_id`；`proof_no` 缺 ⇒ 读 `rev`（见 :func:`proof_no_of`）；
 两个都没有 ⇒ `#p1`（缺省证明号，见 `proofloc`）。写侧只写正名 —— 迁移要重写历史台账，
 而兼容只需要一行读法，且不会把"谁在什么时候签的"改成"我们改写过它"。
+## 引用核实（业主 2026-10-26：V 要核 F 的引用，而 F 的引用不是逐字引文）
+F 在 `dependencies` 上登记"这一份证明用到哪条在册命题"（`used_by` / `path_group` /
+`source_stmt_id` / 那一行的人话）。那是自然语言描述（"由引理 2"、"由 Sylow I 可知"），
+不是逐字引文 ⇒ 只把编号交给 V 没有用，V 必须看到两样东西：F 是怎么说的、被引命题真正
+说的是什么（:func:`citation_material` 把两边一起取出来，正文摘要一起进提示词）。
+V 逐条给一档结论（:data:`CITATION_VERDICTS`：`consistent` / `weaker` / `stronger` /
+`unrelated` / `inadmissible` / `unknown`），读数是 `citation_checks` 那四格
+（:data:`CITATION_CHECK_KEYS`），随台账那一行落盘。签字前置（:func:`signs_bit3`）：
+只要有一条 `stronger` / `unrelated` / `inadmissible` / `unknown`，这一签就不许落地
+（:func:`citation_gate` 点名是哪一条、差在哪）；`weaker` 可以签，但读数里点名"只用到了
+弱形式"；档位不够格（低于 `proof_review`，业主逐字「proof_review级及以上才可引用」）
+是事实而不是判断，由 :func:`evidence_kind_admissible` 从 `schema.EVIDENCE_KINDS` 现算。
 """
 from __future__ import annotations
 
@@ -52,6 +64,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import jsonlfile as JF
 from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
+from . import statementbody as _SB  # 命题正文的唯一读口（被引命题的正文从这里取）
 from . import textutil as T  # 引用解析的唯一实现（`citation_ref_parts`，`P-5`）
 from .proofloc import DEFAULT_PROOF_NO  # canonical 证明号只有一个出处（`proofloc`）
 
@@ -68,6 +81,377 @@ HARD_BAN_MARKERS: tuple[str, ...] = (
 )
 #: 一次审校至少要交代的四件事（缺一就不是"审过了"）。
 REQUIRED_FIELDS: tuple[str, ...] = ("verdict", "statement_id", "proof_sha256")
+
+#: 引用核实的档位结论（业主 2026-10-26 裁定，两批）。
+#:
+#: 口径逐字：「正常写证明就是不会逐字的」、「proof_review级及以上才可引用」。所以判据不是
+#: "字面像不像"，而是"F 对这一条被引命题的用法成不成立、以及这一条够不够格被引" ——
+#: 改写、压缩、换符号都合法，只要条件与结论没被换掉：
+#:
+#: - `consistent`：F 的用法与这条命题真正说的条件/结论一致（措辞当然可以不同）；
+#: - `weaker`：F 只用到了它的弱形式（不等于错，是情报；可以签，但读数里点名）；
+#: - `stronger`：F 用到的结论比命题本身更强（引用被夸大，或悄悄去掉了它要的假设）；
+#: - `unrelated`：这条命题与这一步无关（引错了）；
+#: - `inadmissible`：被引命题的档位低于 `proof_review`（`cross_check` / `heuristic` / 空）
+#:   ⇒ 它不够格被当作依据引（不管用法一致不一致）；
+#: - `unknown`：V 判不了（材料不足 / 被引命题不在册）；它不是 `consistent`。
+CITATION_VERDICTS: tuple[str, ...] = (
+    "consistent", "weaker", "stronger", "unrelated", "inadmissible", "unknown",
+)
+#: 能签「成立」的两档：弱形式不是错。`weaker` 会被点名，但它不挡签字。
+CITATION_SIGNABLE: frozenset[str] = frozenset(("consistent", "weaker"))
+#: 挡住「成立」的四档（逐条点名是哪一条、差在哪）。`unknown` 也在里面：判不了不是一致；
+#: `inadmissible` 也在里面：档位不够不是"用法对不对"能救的。
+CITATION_BLOCKING: frozenset[str] = frozenset(
+    ("stronger", "unrelated", "inadmissible", "unknown"))
+#: 一条核实读数落盘时的四格。`quote_verbatim` 只是信息（F 那句话是不是逐字抄的），
+#: 它不参与判定 —— 业主裁定"逐字"不能当标准，写证明不会逐字引。
+CITATION_CHECK_KEYS: tuple[str, ...] = ("stmt_id", "verdict", "quote_verbatim", "note")
+#: 进 V 的审查材料的"被引命题正文摘要"长度上界（正文本身留在 `citations` 的全文格里）。
+CITATION_DIGEST_CHARS = 600
+#: 依赖行上"F 为什么这么引"那句话的候选键（按优先级取第一个非空；`note` 是正名，
+#: 老写法把话写在 `label` / `quote` / `status_reason` 里，所以那几个也认）。
+DEP_NOTE_KEYS: tuple[str, ...] = ("note", "label", "quote", "status_reason")
+
+#: 被引命题的档位下限（业主 2026-10-26 逐字：「proof_review级及以上才可引用」）。
+#:
+#: 为什么只写这一档的名字、不写允许清单：`schema.EVIDENCE_KINDS` 是"从强到弱"排的
+#: （`proof` / `proof_review` / `cross_check` / `heuristic`），所以允许集合是它的前缀
+#: （:func:`admissible_evidence_kinds` 现算）。在同一处再抄一份字面量清单，等于给这条
+#: 口径造第二个真身 —— 词表加一档（例如将来插一个"审过 + 机器部分核"）时，两边会分家，
+#: 而没有任何东西会报。
+CITATION_EVIDENCE_FLOOR = "proof_review"
+
+
+def admissible_evidence_kinds() -> tuple[str, ...]:
+    """够格被引的档位（按 `schema.EVIDENCE_KINDS` 的强弱顺序现算，不抄字面量）。
+
+    词表读不到 / 里面没有下限那一档 ⇒ 返回空元组（"判不了"）：空集会让每一条引用都判
+    `inadmissible`，那是可见的失败；反过来在词表坏掉时放行，就是"没查成"折成"通过"。
+    """
+    kinds = tuple(getattr(S, "EVIDENCE_KINDS", ()) or ())
+    if CITATION_EVIDENCE_FLOOR not in kinds:
+        return ()
+    return kinds[: kinds.index(CITATION_EVIDENCE_FLOOR) + 1]
+
+
+def evidence_kind_admissible(kind: Any) -> bool:
+    """这一档够不够格被引（空串 —— 没有档位 —— 不够格）。"""
+    return str(kind or "").strip() in admissible_evidence_kinds()
+
+
+def dep_note(row: Mapping[str, Any]) -> tuple[str, str]:
+    """依赖行上 F 写的那句话，返回 `(文本, 它出自哪个键)`（都空 ⇒ `("", "")`）。
+
+    为什么认几个键而不是一个：`dependencies` 行的正名里没有 `note`（`schema.Dependency`
+    是禁改区），F 侧的说明可能落在 `label`（人话标签）、`quote`（引文原话）或
+    `status_reason`（为什么是那个状态）里。三处都读、并把出处键一起交出去，
+    读的人才知道那句话是"标签"还是"引文原话"；只读一个键会让另一种写法静默丢掉。
+    """
+    for key in DEP_NOTE_KEYS:
+        text = str(row.get(key) or "").strip()
+        if text:
+            return text, key
+    return "", ""
+
+
+def _digest(text: str, limit: int = CITATION_DIGEST_CHARS) -> str:
+    """正文摘要（进提示词的那一份）：超长时截断并留一句"以下截断"。"""
+    body = str(text or "").strip()
+    if len(body) <= limit:
+        return body
+    return body[:limit].rstrip() + f"……（以下截断，全文共 {len(body)} 字）"
+
+
+def citation_material(*, statement_id: str, proof_no: Any = None,
+                      deps: Iterable[Mapping[str, Any]] = (),
+                      statements: Iterable[Mapping[str, Any]] = ()) -> list[dict[str, Any]]:
+    """V 的引用核实材料：这条命题第 `proof_no` 份证明登记的依赖行 + 每条被引命题的正文。
+
+    一条被引命题（`source_stmt_id`）一项，同一命题在不同 `path_group` 下登记两次也合成
+    一项（组号逐条列在 `path_groups` 里）：V 要对"这条被引命题"给一次结论，不是对
+    "这一次引用"给一次。
+
+    返回项（键集合固定，读的人不必猜）：
+    `stmt_id`（被引命题号）/ `paths`（每个 `path_group` 一条，含 `dep_id` / `used_by` /
+    `path_group` / `note` / `note_source` / `status` / `label` / `quote`）/
+    `path_groups` / `dep_ids` / `statement_full`（被引命题正文，不在册 ⇒ 空串）/
+    `statement_digest`（进提示词的摘要）/ `statement_missing` / `statement_label` /
+    `evidence_kind`（被引命题现在的档位；不在册 ⇒ 空串）/ `admissible`（这一档够不够格
+    被引，业主口径「proof_review级及以上才可引用」；判据 :func:`evidence_kind_admissible`）。
+
+    三态：`statement_missing=True` 说的是"册子里没有这条命题"，不是"它没有正文" ——
+    两者在读数上必须分得开（前者只判得了 `unknown`）。
+
+    只收 `used_by` 指向本条命题、且证明号等于 `proof_no` 的依赖行：`#p2` 的依赖不进
+    `#p1` 的审查材料（借光/串份是这一格要防的事）；`used_by` 的尾巴读不懂（`#pabc` 之类）
+    也不静默折成 canonical，直接不算这一份的依赖（原串仍留在依赖台账里，由 C 那条链点名）。
+    """
+    from . import proofloc as _PL   # 依赖尾巴的唯一解析点
+
+    sid = str(statement_id or "").strip()
+    want = _read_proof_no(proof_no) or DEFAULT_PROOF_NO
+    bodies = {str(r.get("stmt_id") or ""): r for r in statements}
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in deps:
+        head, no, problem = _PL.parse_used_by_checked(str(row.get("used_by") or ""))
+        if problem:
+            continue
+        if str(head).strip() not in (f"stmt:{sid}", sid):
+            continue
+        if no != want:
+            continue
+        cited = str(row.get("source_stmt_id") or "").strip()
+        if not cited:
+            continue
+        note, note_source = dep_note(row)
+        item = grouped.setdefault(cited, {
+            "stmt_id": cited, "paths": [], "path_groups": [], "dep_ids": [],
+            "statement_full": "", "statement_digest": "", "statement_missing": False,
+            "statement_label": "", "evidence_kind": "", "admissible": False,
+        })
+        group = int(row.get("path_group") or 1)
+        item["paths"].append({
+            "dep_id": str(row.get("dep_id") or ""),
+            "used_by": str(row.get("used_by") or ""),
+            "path_group": group,
+            "note": note, "note_source": note_source,
+            "status": str(row.get("status") or ""),
+            "label": str(row.get("label") or ""),
+            "quote": str(row.get("quote") or ""),
+        })
+        if group not in item["path_groups"]:
+            item["path_groups"].append(group)
+        if str(row.get("dep_id") or ""):
+            item["dep_ids"].append(str(row.get("dep_id") or ""))
+    out = list(grouped.values())
+    for item in out:
+        hit = bodies.get(item["stmt_id"])
+        body = _SB.body_of(hit) if hit is not None else ""
+        item["statement_full"] = body
+        item["statement_digest"] = _digest(body) if hit is not None else ""
+        item["statement_missing"] = hit is None
+        item["statement_label"] = str((hit or {}).get("label") or "")
+        item["evidence_kind"] = str((hit or {}).get("evidence_kind") or "")
+        # 档位判据的缺省答案在这里算一次（`agent_v` 会用自己的缝再盖一次：
+        # 那是可打桩的那一格，判据 b 的反真空就打在它上面）。
+        item["admissible"] = evidence_kind_admissible(item["evidence_kind"])
+        item["path_groups"] = sorted(item["path_groups"])
+    out.sort(key=lambda it: (it["stmt_id"], it["path_groups"]))
+    return out
+
+
+def _citation_checks_raw(raw: Any) -> list[dict[str, Any]]:
+    """把 V 输出里的 `citation_checks` 洗成规整的四格；形状不对 ⇒ 抛 `VerificationError`。
+
+    它是"没查成"那一档：`verdict` 不在词表里 / `stmt_id` 不是命题号形态，
+    都不是"这一条判成什么"，而是这一次输出不可解析 —— 不许折成 `unknown`
+    （`unknown` 是一条诚实的结论，而坏输出不是）。
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, (list, tuple)):
+        raise VerificationError("citation_checks 必须是数组（每条被引命题一项）")
+    out: list[dict[str, Any]] = []
+    for i, item in enumerate(raw, 1):
+        if not isinstance(item, Mapping):
+            raise VerificationError(f"citation_checks 第 {i} 项必须是对象")
+        sid = str(item.get("stmt_id") or "").strip()
+        if not S.is_valid_id(sid):
+            raise VerificationError(
+                f"citation_checks 第 {i} 项的 stmt_id 不是命题号形态（收到 {sid!r}）"
+                f"：它必须是被引命题的 {S.ID_DIGITS} 位号（旧四位号仍可读）")
+        verdict = str(item.get("verdict") or "").strip()
+        if verdict not in CITATION_VERDICTS:
+            raise VerificationError(
+                f"citation_checks 第 {i} 项的 verdict 必须是 {CITATION_VERDICTS} 之一，"
+                f"收到 {verdict!r}")
+        flagged = item.get("quote_verbatim")
+        if isinstance(flagged, str):
+            verbatim = flagged.strip().lower() in ("1", "true", "yes", "y", "是", "逐字")
+        else:
+            verbatim = bool(flagged)
+        out.append({
+            "stmt_id": sid, "verdict": verdict, "quote_verbatim": verbatim,
+            "note": str(item.get("note") or "").strip(),
+        })
+    return out
+
+
+def reconcile_citation_checks(checks: Sequence[Mapping[str, Any]],
+                             material: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """把 V 给的那几条结论与"材料里有哪几条被引命题"对齐（缺一条就按 `unknown` 算）。
+
+    四条规矩，都是三态纪律在这一格上的落法：
+    - 材料里每一条被引命题都必须有一条结论；V 没给 ⇒ 补一条 `unknown`
+      （note 写明"没有给出结论"）。判不了与没判是两件事，但两者都不能签「成立」；
+    - 被引命题的档位不够格（`evidence_kind` 低于 `proof_review`，含空串）⇒ 一律改判
+      `inadmissible`，不管 V 判的是"用法一致"还是别的。这一档是事实而不是判断：
+      业主口径逐字「proof_review级及以上才可引用」，所以它不交给模型自由裁量（模型说
+      `consistent` 也照样改判，原文附在 note 里）。判据本体是
+      :func:`evidence_kind_admissible`（禁止词表从 `schema.EVIDENCE_KINDS` 现算）；
+    - 被引命题不在册（`statement_missing`）⇒ 若 V 写了 `consistent` / `weaker`，
+      改判 `unknown`（它读不到的那条命题，判不了"一致"；这一格不许凭印象签字）；
+    - V 多给的（材料里没有那条被引命题）仍然交回去，但标 `in_material=False`：
+      它不是这一份证明登记的引用，不计入挡不挡签字（挡签字只认材料里的那几条）。
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for chk in checks:
+        row = {key: chk.get(key) for key in CITATION_CHECK_KEYS}
+        row["stmt_id"] = str(row.get("stmt_id") or "").strip()
+        row["verdict"] = str(row.get("verdict") or "unknown").strip()
+        row["quote_verbatim"] = bool(row.get("quote_verbatim"))
+        row["note"] = str(row.get("note") or "").strip()
+        by_id.setdefault(row["stmt_id"], row)
+    out: list[dict[str, Any]] = []
+    for item in material:
+        sid = str(item.get("stmt_id") or "")
+        got = by_id.pop(sid, None)
+        if got is None:
+            got = {"stmt_id": sid, "verdict": "unknown", "quote_verbatim": False,
+                   "note": "V 没有对这条被引命题给出结论（材料里有它）"}
+        kind = str(item.get("evidence_kind") or "")
+        # 先判"这一条在不在册"（它比档位更根本：不在册的命题连档位都没有），
+        # 再判档位 —— 两档都是挡签的，但点名要说清是哪一种。
+        if bool(item.get("statement_missing")) and got["verdict"] in CITATION_SIGNABLE:
+            got = dict(got, verdict="unknown",
+                       note=(f"被引命题 {sid} 不在册 ⇒ 判不了「一致」"
+                             f"（V 原文：{got['note'] or '（无）'}）"))
+        admitted = item.get("admissible")
+        if admitted is None:
+            admitted = evidence_kind_admissible(kind)
+        if not bool(item.get("statement_missing")) and not admitted:
+            tail = f"（V 原文：{got['note']}）" if got["note"] else ""
+            got = dict(got, verdict="inadmissible",
+                       note=(f"被引命题 {sid} 现在只是 {kind or '（空：没有档位）'}，"
+                             f"够不上 {CITATION_EVIDENCE_FLOOR} 级 ⇒ 不够格被引{tail}"))
+        out.append(dict(got, in_material=True))
+    for sid, got in by_id.items():
+        out.append(dict(got, in_material=False))
+    return out
+
+
+def citation_gate(checks: Sequence[Mapping[str, Any]], *, problem: str = "") -> dict[str, Any]:
+    """引用核实的签字前置读数（纯函数）：能不能签「成立」，被哪一条挡住。
+
+    返回 `ok` / `blocking` / `weaker` / `problem` / `why`。`blocking` 与 `weaker` 里每项
+    是 `{stmt_id, verdict, note}`（点名用）。`problem` 非空是"这一档没查成"（依赖台账
+    读不出来）—— 它与"核过、没有引用"必须分开，所以它也挡住签字。
+    """
+    blocking: list[dict[str, Any]] = []
+    weaker: list[dict[str, Any]] = []
+    for chk in checks:
+        # 材料之外的那几条（V 多给的）不计入签字前置：它们不是这一份证明登记的引用。
+        if chk.get("in_material") is False:
+            continue
+        verdict = str(chk.get("verdict") or "")
+        entry = {"stmt_id": str(chk.get("stmt_id") or ""), "verdict": verdict,
+                 "note": str(chk.get("note") or "")}
+        if verdict in CITATION_BLOCKING:
+            blocking.append(entry)
+        elif verdict in CITATION_SIGNABLE and verdict != "consistent":
+            weaker.append(entry)
+    why = ""
+    if problem:
+        why = (f"引用核实没查成（{problem}）⇒ 这一份不能判「成立」"
+               "（没查成不是「核过、一致」）")
+    elif blocking:
+        shown = "；".join(
+            f"{e['stmt_id'] or '（没有号）'} 判 {e['verdict']}"
+            + (f"（{e['note']}）" if e["note"] else "")
+            for e in blocking)
+        why = (f"引用核实挡下了「成立」：{shown} —— "
+               "stronger 是引用被夸大、unrelated 是引错了、"
+               f"inadmissible 是被引命题的档位低于 {CITATION_EVIDENCE_FLOOR}（不够格被引）、"
+               "unknown 是判不了，四档都不许签")
+    elif weaker:
+        shown = "；".join(
+            f"{e['stmt_id'] or '（没有号）'}" + (f"（{e['note']}）" if e["note"] else "")
+            for e in weaker)
+        why = (f"引用核实通过，但有 {len(weaker)} 条只用到了弱形式：{shown} —— "
+               "弱形式不是错，记下来给读的人一句情报")
+    return {"ok": not blocking and not problem, "blocking": blocking, "weaker": weaker,
+            "problem": str(problem or ""), "why": why}
+
+
+def citation_blocks(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """这一签里挡住「成立」的引用核实条目（空列表 = 没有被挡）。
+
+    `signs_bit3` 用它：台账那一行写着 `成立`、而引用核实里有一条 `stronger` /
+    `unrelated` / `unknown` ⇒ 这一签不许落地。硬闸放在这里（而不是只放在写路径上），
+    因为"手写一条成立行"与"V 自己判了成立"在读者眼里没有区别。
+    """
+    checks = row.get("citation_checks")
+    if not isinstance(checks, (list, tuple)):
+        return []
+    return [{"stmt_id": str(c.get("stmt_id") or ""), "verdict": str(c.get("verdict") or ""),
+             "note": str(c.get("note") or "")}
+            for c in checks if isinstance(c, Mapping)
+            and str(c.get("verdict") or "") in CITATION_BLOCKING]
+
+
+def apply_citation_gate(verdict: Mapping[str, Any],
+                        gate: Mapping[str, Any]) -> dict[str, Any]:
+    """把引用核实的结论并进 V 的结论（纯函数：`parse_verdict` 的形态进、同一形态出）。
+
+    三档处置（业主 2026-10-26 的签字前置）：
+    - 有 `stronger` / `unrelated` / `inadmissible` ⇒ 不许判「成立」：结论改判「有毛病」，
+      逐条 error 落进 findings（点明哪一条被引命题、差在哪）。这就是受控拒绝：这一签
+      签不成，而"为什么签不成"在台账里逐字可读；
+    - 只有 `unknown` ⇒ 改判「看不出来」（判不了不是一致，也不是"有毛病"：它是一条
+      诚实的未定）；
+    - 只有 `weaker` ⇒ 结论不动（可签），但加一条 info 把"这一步只用到弱形式"记下来。
+
+    改判时 `defect_step` 保留模型给的那一步（它可能仍是承重步）；模型没给就留 `None` ——
+    这一档的缺陷是按"被引命题"定位的，不是按步号定位的（`parse_verdict` 因此允许
+    "有毛病 + 有挡签的引用核实 + 没有步号"这一种组合）。
+    """
+    out = {
+        "verdict": str(verdict.get("verdict") or ""),
+        "defect_step": verdict.get("defect_step"),
+        "quote": str(verdict.get("quote") or ""),
+        "why": str(verdict.get("why") or ""),
+        "findings": [dict(f) for f in (verdict.get("findings") or [])],
+        "unresolved_errors": 0,
+        "citation_checks": [dict(c) for c in (verdict.get("citation_checks") or [])],
+    }
+    blocking = list(gate.get("blocking") or [])
+    defect = [e for e in blocking if str(e.get("verdict") or "") != "unknown"]
+    for entry in blocking:
+        kind = f"citation_{entry.get('verdict') or 'unknown'}"
+        tail = f"：{entry['note']}" if entry.get("note") else ""
+        sid = entry.get("stmt_id") or "（没有号）"
+        verdict_text = str(entry.get("verdict") or "")
+        if verdict_text == "unknown":
+            detail = (f"引用核实：被引命题 {sid} 判不了（unknown）{tail}"
+                      "；判不了不是一致 ⇒ 这一份不能判「成立」")
+        elif verdict_text == "inadmissible":
+            detail = (f"引用核实：被引命题 {sid} 的档位够不上 {CITATION_EVIDENCE_FLOOR}{tail}"
+                      "；档位不够格是事实，与原文一致不一致无关 ⇒ 这一份不能判「成立」")
+        else:
+            detail = (f"引用核实：被引命题 {sid} 判 {verdict_text}"
+                      f"{tail or '：V 没有写理由'}"
+                      "；这一条使这一份不能判「成立」")
+        out["findings"].append({"level": "error", "step": None, "kind": kind,
+                                "detail": detail})
+    for entry in (gate.get("weaker") or []):
+        tail = f"（{entry['note']}）" if entry.get("note") else ""
+        out["findings"].append({
+            "level": "info", "step": None, "kind": "citation_weaker",
+            "detail": (f"引用核实：这一步只用到了被引命题 "
+                       f"{entry.get('stmt_id') or '（没有号）'} 的弱形式{tail}"
+                       "；不等于错，但读的人要知道它没有被用满"),
+        })
+    if blocking and out["verdict"] == "成立":
+        out["verdict"] = "有毛病" if defect else "看不出来"
+        if out["verdict"] == "看不出来":
+            out["defect_step"] = None
+    if blocking or gate.get("problem"):
+        gate_why = str(gate.get("why") or "")
+        if gate_why:
+            out["why"] = (out["why"] + "；" + gate_why) if out["why"] else gate_why
+    out["unresolved_errors"] = sum(1 for f in out["findings"] if f.get("level") == "error")
+    return out
 
 
 class VerificationError(ValueError):
@@ -137,12 +521,14 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     认领时按哪一个都找得到（"顺序不再重要"）。
 
     结论一样要过 `parse_verdict`（`有毛病` 必须给 `defect_step`）：坏结论不许落盘。
+    引用核实那一格（`citation_checks`）随同一行落盘，形状与 `record_verification` 逐格相同。
     """
     checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
                                         "defect_step": verdict.get("defect_step"),
                                         "quote": verdict.get("quote", ""),
                                         "why": verdict.get("why", ""),
-                                        "findings": list(verdict.get("findings") or [])},
+                                        "findings": list(verdict.get("findings") or []),
+                                        "citation_checks": list(verdict.get("citation_checks") or [])},
                                        ensure_ascii=False, default=str))
     text = str(proof_text or "")
     sha = proof_sha(text)
@@ -163,6 +549,7 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
         "defect_step": checked["defect_step"], "quote": checked["quote"],
         "why": checked["why"], "findings": checked["findings"],
         "unresolved_errors": checked["unresolved_errors"],
+        "citation_checks": list(checked.get("citation_checks") or []),
         "proof_sha256": sha, "proof_chars": len(text),
         #: 对象（盘上那一份报告 / 证明文件）的字节 sha256 与相对路径：认领时按它。
         "object_sha256": obj, "object_path": str(object_path or "").strip().replace("\\", "/"),
@@ -231,8 +618,64 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
     return out
 
 
+def citations_block(citations: Sequence[Mapping[str, Any]],
+                    problem: str = "") -> str:
+    """引用核实那一节怎么印进提示词（纯字符串拼装，只有材料、没有句柄）。
+
+    业主 2026-10-26：F 的"引用"是自然语言描述，不是逐字引文 ⇒ 光给编号没有用，
+    V 要看到"F 是怎么说的"与"被引命题真正说的"两样东西才能判它成不成立。
+    所以每一条都印三样：F 那句话（含它出自依赖行哪个键）、被引命题正文摘要、
+    被引命题现在的档位（够不够格被引）。
+    """
+    lines: list[str] = ["## 引用核实（F 在依赖面登记的引用；逐条核 F 是不是这么用的）"]
+    if problem:
+        lines.append(f"- 依赖台账读不出来（{problem}）⇒ 这一档没查成：没有材料就不能判"
+                     "「一致」，判不了就写 unknown（它挡住「成立」）。")
+    if not citations:
+        lines.append("- 这一份证明没有登记任何被引命题（`dependencies` 里没有指向本条命题"
+                     "这一份证明的 `stmt:` 依赖）⇒ `citation_checks` 给空数组。")
+        return "\n".join(lines)
+    lines.append(f"- 登记了 {len(citations)} 条被引命题。每一条都要给一档结论："
+                 "少给一条就按 unknown 算，而 unknown 挡住「成立」。")
+    for i, item in enumerate(citations, 1):
+        sid = str(item.get("stmt_id") or "")
+        groups = "、".join(str(g) for g in (item.get("path_groups") or [])) or "1"
+        lines.append("")
+        lines.append(f"### {i}. {sid}（路径组 {groups}）")
+        if item.get("statement_missing"):
+            lines.append("- 册子里没有这条命题（不在册）⇒ 只能判 unknown，不许判一致。")
+        else:
+            kind = str(item.get("evidence_kind") or "")
+            if item.get("admissible"):
+                lines.append(f"- 它现在的档位：`{kind}`（够格被引）")
+            else:
+                lines.append(
+                    f"- 它现在的档位：`{kind or '（空：没有档位）'}`，"
+                    f"够不上 `{CITATION_EVIDENCE_FLOOR}` 级 ⇒ 不够格被引："
+                    "这一条要判 inadmissible（不管原文一致不一致）。")
+            lines.append(f"- 被引命题正文：{item.get('statement_digest') or '（正文为空）'}")
+        for path in (item.get("paths") or []):
+            note = str(path.get("note") or "")
+            where = str(path.get("note_source") or "")
+            lines.append(
+                f"- F 的说法（路径组 {path.get('path_group')}，依赖行 "
+                f"{path.get('dep_id') or '?'} 的 `{where or '（没有话）'}`）："
+                f"{note or '（F 没有写为什么引它）'}")
+            quote = str(path.get("quote") or "")
+            # 引文原话单独印一次，但若 F 那句话里已经含着它（写侧常把 quote 拼进 label，
+            # 例如"手稿依赖段（第 4 行）：由引理 2"）就不再重复一遍。
+            if quote and quote not in note:
+                lines.append(f"- 依赖行上的引文原话：{quote}")
+            status = str(path.get("status") or "")
+            if status:
+                lines.append(f"- 这条依赖的状态：{status}")
+    return "\n".join(lines)
+
+
 def cold_start_prompt(statement_full: str, proof_text: str,
-                      *, readonly_facts: str = "") -> str:
+                      *, readonly_facts: str = "",
+                      citations: Sequence[Mapping[str, Any]] = (),
+                      citations_problem: str = "") -> str:
     """V 的冷启动提示词（纯函数：只有对象 + 只读读数，没有 F 的叙述、没有 store 句柄）。
 
     为什么把"提示词怎么拼"做成纯函数而不是塞进角色循环里：I12 是一个结构性质 ——
@@ -242,6 +685,12 @@ def cold_start_prompt(statement_full: str, proof_text: str,
     `readonly_facts` 是已经渲染好的只读读数（命题/文献/实验台账的摘要，由调用方
     从只读查询面取好传进来）—— 传字符串而不是传 store，是为了让"它能碰什么"在接口上
     就固定下来。
+
+    `citations` 是引用核实的材料（`citation_material` 的返回）：F 对每条被引命题的说法
+    与被引命题的正文摘要一起进来。它仍然只是一串字符串（没有 store 句柄），
+    但它是 F 的叙述 —— 所以接口上多这一格是刻意的：V 要核 F 的引用，就必须看到 F 的
+    说法，这是 `draft/39` 里"不给作者叙述"那条纪律的一处有边界的例外（只给被引命题的
+    依赖行，不给整份证明的作者解释）。
     """
     # 开关读数（读不懂按"关"算：与 settings 的 fail-closed 同向）
     try:
@@ -265,14 +714,31 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         f"{str(statement_full or '').strip() or '（空）'}\n\n"
         "## 证明全文\n"
         f"{str(proof_text or '').strip() or '（空）'}\n\n"
+        f"{citations_block(citations, citations_problem)}\n\n"
         "## 只输出一个 JSON 对象（不要解释文字、不要代码围栏）\n"
         '{"verdict": "成立|有毛病|看不出来", "defect_step": <整数或 null>, '
         '"quote": "<命中的原话，逐字>", "why": "<一句话理由>", '
         '"findings": [{"level": "error|warning|info", "step": <整数或 null>, '
-        '"kind": "<短语>", "detail": "<指到那一步的说明>"}]}\n'
+        '"kind": "<短语>", "detail": "<指到那一步的说明>"}], '
+        '"citation_checks": [{"stmt_id": "<被引命题号>", '
+        '"verdict": "consistent|weaker|stronger|unrelated|inadmissible|unknown", '
+        '"quote_verbatim": <true 或 false>, "note": "<一句话依据：一致在哪 / 差在哪>"}]}\n'
         "- `defect_step`：有毛病时**必须**给出那一步的编号（从 1 起数，按证明里的步骤顺序）；\n"
         "- `看不出来`：信息不足、无法判断时的诚实结论 —— 它不是 `成立`；\n"
         "- 没有毛病才写 `成立`（空 findings 或只有 info/warning）。\n"
+        # ---- 引用核实那一档的口径（业主 2026-10-26 两批裁定，逐字见 CITATION_VERDICTS）
+        "\n## 引用核实怎么判（正常写证明就是不会逐字的；判据不是字面像不像）\n"
+        "- `consistent`：F 的用法与这条命题真正说的条件/结论一致（改写、压缩、换符号都行）；\n"
+        "- `weaker`：F 只用到了它的弱形式 —— 不等于错，是情报；这一档可以判成立，"
+        "但 note 要写清只用到哪一部分；\n"
+        "- `stronger`：F 用到的结论比命题本身更强（把结论说强了、或悄悄去掉了它要的假设）；\n"
+        "- `unrelated`：这条命题与这一步无关（引错了）；\n"
+        f"- `inadmissible`：被引命题的档位低于 `{CITATION_EVIDENCE_FLOOR}`（"
+        "`cross_check` / `heuristic` / 空）⇒ 不够格被当作依据引，不管用法一致不一致；\n"
+        "- `unknown`：材料不足判不了（不在册 / 正文读不到）—— 它不是 `consistent`。\n"
+        "- `quote_verbatim` 只当信息记（F 那句话是不是逐字抄的），它不影响结论、也不影响签字。\n"
+        "- 有一条 `stronger` / `unrelated` / `inadmissible` / `unknown` ⇒ 这一份不许判 `成立`"
+        "（你写成成立也会被改判）；只有全部 `consistent` / `weaker` 才签得成。\n"
         # 2026-10-17（Lean 审计 S3）：这是 V 的真实入口（`agent_v/core.py` 用它，
         # 而 `system_prompt("V")` 全仓没有生产路径渲染）⇒ 开关与"成立≠proof"必须写在这里，
         # 否则 V 在 Lean 开着/关着时行为完全一样，而 H 会把它签的第 3 位当凭据。
@@ -500,6 +966,15 @@ def parse_verdict(text: str) -> dict[str, Any]:
     "没查成"与"看不出来"必须分开：前者是检查器的问题（重试/修提示词），
     后者是对证明的结论（诚实地说判不了）。把两者折平，会让一次模型抽风
     在台账上留下"V 看过这份证明，结论是看不出来"——那是一条假证据。
+
+    ## 引用核实那一格（业主 2026-10-26 裁定）
+    输出里的 `citation_checks` 一并洗成 :data:`CITATION_CHECK_KEYS` 那四格并放进结论，
+    于是它随台账那一行落盘（"签字的读数"里有这一格）。形状不对（`verdict` 不在词表里 /
+    `stmt_id` 不是命题号形态）是"没查成"：抛错，不静默丢、也不折成 `unknown`。
+
+    `有毛病` 的步号要求在这里放宽一格（不是放宽成"可以不说"）：若结论里有一条挡住签字的
+    引用核实（`stronger` / `unrelated` / `unknown`），缺陷是按"被引命题"定位的，可以没有
+    步号 —— 那条 error 的 `detail` 里点了名，那才是这一档的落点。
     """
     raw = str(text or "").strip()
     if raw.startswith("```"):
@@ -528,14 +1003,17 @@ def parse_verdict(text: str) -> dict[str, Any]:
     defect_step = got.get("defect_step")
     if defect_step is not None and not isinstance(defect_step, int):
         raise VerificationError("defect_step 必须是整数或 null")
-    if verdict == "有毛病" and defect_step is None:
+    checks = _citation_checks_raw(got.get("citation_checks"))
+    blamed = [c for c in checks if c["verdict"] in CITATION_BLOCKING]
+    if verdict == "有毛病" and defect_step is None and not blamed:
         raise VerificationError(
             "verdict='有毛病' 必须给 defect_step（指到那一步）—— 只说'有毛病'"
-            "等于把改哪儿留给作者猜"
+            "等于把改哪儿留给作者猜（唯一例外：有一条挡住签字的引用核实，缺陷按被引命题定位）"
         )
     return {"verdict": verdict, "defect_step": defect_step,
             "quote": str(got.get("quote") or "").strip(),
             "why": str(got.get("why") or "").strip(), "findings": findings,
+            "citation_checks": checks,
             "unresolved_errors": sum(1 for f in findings if f["level"] == "error")}
 
 
@@ -596,7 +1074,11 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
                                         "defect_step": verdict.get("defect_step"),
                                         "quote": verdict.get("quote", ""),
                                         "why": verdict.get("why", ""),
-                                        "findings": list(verdict.get("findings") or [])},
+                                        "findings": list(verdict.get("findings") or []),
+                                        # 引用核实那一格也要过同一套校验：调用方绕开
+                                        # `parse_verdict` 直接构造 dict 时，坏档位同样被挡在
+                                        # 写入期（否则它会以"没有这一格"的样子落盘）。
+                                        "citation_checks": list(verdict.get("citation_checks") or [])},
                                        ensure_ascii=False, default=str))
     path = verification_ledger_path(root, statement_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -617,6 +1099,10 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "defect_step": checked["defect_step"], "quote": checked["quote"],
         "why": checked["why"], "findings": checked["findings"],
         "unresolved_errors": checked["unresolved_errors"],
+        #: 引用核实（业主 2026-10-26）：`[{stmt_id, verdict, quote_verbatim, note}]`。
+        #: 每一行都写这一个键（空列表 = "这一签核过、没有被引命题要核"，与历史行
+        #: "没有这一格"在读侧分得开：老行没有它，新行有它、可以是空的）。
+        "citation_checks": list(checked.get("citation_checks") or []),
         "proof_sha256": sha,
         "proof_chars": len(str(proof_text or "")),
         "round": int(round_no) if round_no is not None else len(rows) + 1,
@@ -880,9 +1366,18 @@ def read_verification(root: str | Path, verification_id: str) -> dict[str, Any] 
 
 
 def signs_bit3(row: Mapping[str, Any]) -> bool:
-    """这一行能不能签五元位第 3 位（§3.21 五：`成立` 且没有未解决的 error）。"""
-    return (str(row.get("verdict") or "") == "成立"
-            and int(row.get("unresolved_errors") or 0) == 0)
+    """这一行能不能签五元位第 3 位（§3.21 五：`成立` 且没有未解决的 error）。
+
+    再加一条（业主 2026-10-26）：引用核实里只要有一条挡住签字的档（`stronger` /
+    `unrelated` / `inadmissible` / `unknown`），这一签就不许落地。硬闸放在这里而不是只
+    放在写路径上，是因为"读者眼里的成立"由这一格读出来 —— 手写一条成立行与 V 自己判了
+    成立没有区别，两者都得过同一道闸。历史行没有 `citation_checks` 这一格 ⇒ 不受影响。
+    """
+    if str(row.get("verdict") or "") != "成立":
+        return False
+    if int(row.get("unresolved_errors") or 0) != 0:
+        return False
+    return not citation_blocks(row)
 
 
 def bit3_payload(row: Mapping[str, Any]) -> dict[str, Any]:

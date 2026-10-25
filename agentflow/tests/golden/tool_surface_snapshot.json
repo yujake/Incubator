@@ -5190,7 +5190,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
+   "returns": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id / bad_proof_no / no_such_proof / proof_text_mismatch / ledger_unwritable / ledger_row_lost —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条））",
    "roles": [
     "V"
    ],

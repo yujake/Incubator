@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, Path, PlanError, S, Sequence, Store, ToolRegistry, UNWIRED_OWNERS, _short, _subgoal, install_f_tools
 from .create_plan import _CreatePlan
+from .manuscript import _Manuscript
 from .step import _Step
 from .status import _Status
 from .list_plans import _ListPlans
@@ -64,7 +65,8 @@ def _clip(text: str, limit: int) -> str:
 def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
                    tried: Sequence[str], evidence: Sequence[str] = (),
                    history: Sequence[str] = (), retry_note: str = "",
-                   citable_ids: Sequence[str] = ()) -> str:
+                   citable_ids: Sequence[str] = (), statements: Sequence[str] = (),
+                   statements_note: str = "") -> str:
     """F 自己推理那一轮的提示词（D42）。
     受控值从 `attackround` 现取，不在这里手抄一遍：四种产物、九招工具箱、`dead_end` 的七个受控理由、`#5` 的禁用标记、引用纪律 —— 抄一遍就多一处会漂的地方，而这一处的漂移形态恰好是"模型按提示词写、判据按常量拒"。
     受控词表在最前面（2026-10-19，mp4-6 的真机读数）真机原文（`projects/mp4/data/attack_plans.json`，计划 `000002` / `000001` 第 1 轮）：重问 3 次仍然交 
@@ -82,7 +84,8 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
     机 mp3 `000001`：r1/r3/r4 逐字相同）。
     参数----evidence : 已经渲染好的证据正文行（`id（类型）：正文摘要`），由`_Core._evidence_digest` 现算 —— 这一层拿不到 store。 history : 已经渲染好的"上一轮/前几轮"行，由 
     `_Core._history_digest` 现算。 retry_note : 上一次交的产物为什么不成形（P3-5 的重问）； citable_ids : 这一轮可引用的 id（同样由 `_evidence_digest` 现算）—— 它是
-    "只许引下面列出的 id"那句纪律的落点，与拒收消息里的"合法 id 有：…"同源。
+    "只许引下面列出的 id"那句纪律的落点，与拒收消息里的"合法 id 有：…"同源。statements / statements_note : 本轮可读可引的在册命题（B 已收录）的行与一句说明，由 `_Dependency.citable_statements` 现算 ——
+    业主 2026-10-24「它写证明时允许读 B 侧已收录的定理，可引用，如此产生依赖面」：读得到的前提是提示词里有它们。
     """
     from .. import attackround as AR
 
@@ -148,7 +151,34 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         AR.CITE_DISCIPLINE,
         f"本轮**可引用的 id**（现算自台账，只许从这里挑）：{AR.citable_ids_line(citable_ids)}",
         "",
+        # ---- 第 4.1 段：写证明时可读可引的在册命题（业主 2026-10-24：「依赖由 F 写」）
+        #
+        # 为什么必须把命题清单摆进提示词：改前这一块只列子目标自己攒的那几条证据，
+        # 模型根本不知道台账里有哪些命题可引 ⇒ "引用在册定理"在真机里没有发生的机会，
+        # 依赖面于是恒 0 行。清单由 `_Dependency.citable_statements` 现算（不手工抄），
+        # 与本轮 citable id 同源。
+        "### 4.1 写证明时可以读、也可以引用的在册命题（B 已收录；依赖按下面那张表写）",
+        "业主 2026-10-24 的最终形态：作者只写内容，登记由收方读稿产生（与 V 读你的手稿再签字"
+        "同一个逻辑）。所以两件事分开：① 把 `stmt:<号>` 写进那一步的 `cites`（引用在产物里的"
+        "机器可读落点）；② 手稿里写一节固定格式的 `## 依赖`（四列表），**B 读这一节落依赖"
+        "台账** —— 你不写依赖表。",
+        "格式逐字：`| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条"
+        "证明） |`；一行一条引用，路径号写它是第几条证明（第 2 条证明的依赖落 "
+        "`stmt:<命题号>#p2` 那一组）。",
+        "**引用门槛是 proof_review 级及以上**（业主同一天加码裁定，逐字："
+        "「proof_review级及以上才可引用」）：下面列出来的都是够格的；档位更低的"
+        "（cross_check / heuristic）或档位读不到的，B 读稿时会整笔拒收并点名。",
+        "**引了却不写进 `cites`、也不写依赖段，B 会整笔拒收**：手稿没有 `## 依赖` 那一节而正文里"
+        "引用了在册命题时，B 的受控码是 `dependency_section_missing`（补上那一节再交）；"
+        "一条在册引用都没有的自足证明不适用这一条（`deps_missing` 读 `not_applicable`）。",
     ]
+    if statements:
+        lines += [f"- {line}" for line in statements]
+        if statements_note:
+            lines.append(statements_note)
+    elif statements_note:
+        lines.append(statements_note)
+    lines.append("")
     # ---- P2-3：证据正文（不只是 id）
     if evidence:
         lines += [
@@ -829,6 +859,11 @@ class _Core:
         # 改前这两样都不进提示词 ⇒ 模型每一轮都在同一个盲点上重说同一句话
         # （真机 mp3 `000001`：r1/r3/r4 逐字相同，因为它在提示词里看不到 r1/r3）。
         evidence_lines, citable_ids = self._evidence_digest(sg, plan)
+        # ---- 业主 2026-10-24（「依赖由 F 写。它写证明时允许读 B 侧已收录的定理，可引用」）：
+        # 台账里在册的命题要摆进提示词，而且它们必须同时进"本轮可引用的 id"那一份清单 ——
+        # 两处各编一份就会漂，漂的后果是提示词让人引、拒收消息说不在册（R-03 那一族）。
+        statement_lines, statement_ids, statement_note = self.citable_statements()
+        citable_ids = list(dict.fromkeys([*citable_ids, *statement_ids]))
         history_lines, switch_note = self._history_digest(plan, tried=tried)
         if switch_note:
             history_lines = [*history_lines, switch_note]
@@ -850,7 +885,9 @@ class _Core:
         for _attempt in range(1, persist + 1):
             prompt = _attack_prompt(plan=plan, sg=sg, owner=owner, tried=tried,
                                     evidence=evidence_lines, history=history_lines,
-                                    retry_note=retry_note, citable_ids=citable_ids)
+                                    retry_note=retry_note, citable_ids=citable_ids,
+                                    statements=statement_lines,
+                                    statements_note=statement_note)
             data, problem = J.judge_json(self.llm, prompt, point="F.step")
             if problem or not data:
                 # 缝没答上来不是"这一轮想错了"：重问一次还是同一句话（同一台网关），
@@ -1385,6 +1422,9 @@ class _Core:
         new_goals: list[dict[str, Any]] = []
         statement_id = ""
         outlet_note = ""
+        #: 这一轮的证明手稿（只有 `proof` 那一支有内容）：见 `_Manuscript.proof_manuscript`。
+        #: 依赖台账不在这里写 —— 业主 2026-10-24 最终形态是"作者只写内容，B 读稿登记"。
+        manuscript: dict[str, Any] = {}
         if kind == "reduction":
             existing = list(plan.get("subgoals") or [])
             taken: list[str] = []
@@ -1416,6 +1456,25 @@ class _Core:
                     + ("；**并已就地升档**（V 那一签在盘上，原来登记成弱档）"
                        if outlet.get("promoted") else ""))
                 evidence = [f"stmt:{statement_id}"]
+                # ---- 业主 2026-10-24 最终形态（逐字）：「依赖面登记是否是F在其手稿中写好，
+                # D的研究手稿引用F的证明手稿给B入库时，B侧读到F手稿处的依赖面，按此入库的？
+                # （即和V签一个逻辑）」「改」 ⇒ 作者只写内容，登记由收方读稿产生。
+                # 所以这里只做"把这一份证明写成手稿（含固定格式的 `## 依赖` 一节）"，
+                # 一行台账都不写：依赖边由 B 读这份手稿登记（`B.register_statement` 的
+                # `proof_manuscript` 那一格）。写盘失败不许静默（FC-21）：只折进 detail 与返回值。
+                try:
+                    manuscript = self.proof_manuscript(
+                        product, sg=sg, statement_id=statement_id, plan=plan)
+                except Exception as exc:  # noqa: BLE001 - 手稿没写成不该让这一轮崩掉
+                    manuscript = {"ok": False, "path": "", "text": "", "rows": [],
+                                  "why": f"手稿没写成（{type(exc).__name__}: {exc}）"}
+                if manuscript.get("ok"):
+                    outlet_note += (
+                        f"；证明手稿 `{manuscript['path']}`（依赖段 "
+                        f"{len(manuscript.get('rows') or [])} 行，交 B 读稿登记）")
+                else:
+                    outlet_note += (f"；⚠️ 证明手稿没写成（{manuscript.get('why')}）"
+                                    "—— 那 B 读不到依赖段，依赖面这一趟建不起来")
             else:
                 outlet_note = f"⚠️ 论证**没能**落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
                 evidence = []
@@ -1483,6 +1542,13 @@ class _Core:
             # （`attack_tools.pick_next_subgoal` 按它排次序，见那里的 docstring）。
             "waiting_on": [str(g["sid"]) for g in new_goals],
             "new_subgoals": new_goals,
+            # ---- 证明手稿（业主 2026-10-24 最终形态）：只有 `proof` 那一支有内容。
+            # `manuscript_path` 是落点，`manuscript` 是全文（D/B 可以直接把它交给
+            # `B.register_statement(proof_manuscript=...)`，不必再读盘）；
+            # `deps_preview` 是只读预览（依赖段解析、档位门与三态读数，一行都不写盘）。
+            "manuscript_path": str(manuscript.get("path") or ""),
+            "manuscript": str(manuscript.get("text") or ""),
+            "deps_preview": dict(manuscript.get("preview") or {}),
         }
 
     def _spec_from_testable(self, sg: Mapping[str, Any], *,
@@ -2000,14 +2066,17 @@ class _Core:
             tx.upsert("attack_plans", obj.to_dict(), note=note)
 
 
-class AgentF(_CreatePlan, _Step, _Status, _ListPlans, _Core):
+class AgentF(_CreatePlan, _Step, _Status, _ListPlans, _Manuscript, _Core):
     """多轮难题攻坚智能体。
 
     每个方法都可以被独立调用与单测：
 
     - :meth:`create_plan` —— 立项（预算不完整即拒绝，不写库）；
     - :meth:`step` —— 推进一轮（唯一会改计划的方法）；
-    - :meth:`status` / :meth:`list_plans` —— 只读视图。
+    - :meth:`status` / :meth:`list_plans` —— 只读视图；
+    - :meth:`proof_manuscript` / :meth:`preview_dependencies` —— 写自己的证明手稿（含那一节
+      固定格式的 `## 依赖`）与只读预览它交给 B 之后会怎样（业主 2026-10-24 最终形态：
+      作者只写内容，依赖台账由 B 读稿登记）。判据与理由见 `agent_f/manuscript.py`。
 
     构造签名刻意比 A–E 简单（没有 `workspace_root`）：F 自己不跑脚本，
     实验执行是 E 的职责；F 只持有 store 与配置。

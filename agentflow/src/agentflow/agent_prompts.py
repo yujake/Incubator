@@ -2330,7 +2330,24 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: False`）—— 改成"要另起一条就把差异写进正文重新交"。不动 D 的权限面，D 那一格换值。
 #: 读数：十一格摘要全换，逐格旧值 → 新值见 `tests/test_agent_prompts.py` 的冻结表上方；
 #: facts 键集一格未动（15 格），那一侧记在 `tests/test_prompt_stability.py`。
-PROMPT_VERSION = "p202"
+#:
+#: p202 → p203（2026-10-26 收口批）：本批两件，按业主施工单的措辞逐字列在这里：
+#:   ① F 的政策改写（依赖必须写进手稿的 `## 依赖` 四列表；缺段而有引用 ⇒ 整笔拒收
+#:      `dependency_section_missing`）⇒ 11 格摘要全变
+#:   ② B 的 `register_statement` 多一格 `proof_manuscript`（动作面）＋ `verify.verify_proof.returns`
+#:      多三格（`citations` / `citation_checks` / `citation_gate`）⇒ 两份 golden 都要重冻
+#: 读数（现算，`temp/recompute_prompt_digests.py` 与 `temp/golden_diff_p203.py`）：
+#:   - 段摘要那一侧只有 F 那一格换值（46bd35c5… → 91335ce5…），另十格逐字未动。
+#:     为什么不是十一格：② 的两笔都不进提示词正文 —— `proof_manuscript` 是可选的参数，
+#:     提示词那一行只印必填参数（`test_every_declared_action_is_listed_with_its_required_params`）；
+#:     `verify.verify_proof.returns` 只拼进 function-calling 的 description，不进任何角色的段。
+#:     所以这一版的段级变化面 = F 那一格，而声明级变化面 = 两份 golden。
+#:   - 抬版本仍然必要：段变了（F）而版本不动，`test_the_prompt_version_moves_with_the_sections`
+#:     会以"这一次改动在审计里查不到版本"报红；两份 golden 里的提示词那一格带着版本行，
+#:     十一格都会因此换值（只换那一行的数字）。
+#: facts 键集一格未动（15 格：`PS.volatile_facts_digest()` 现算仍是 21314a39…），
+#: 那一侧记在 `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` p203 那一格。
+PROMPT_VERSION = "p203"
 
 
 

@@ -102,6 +102,32 @@ def _read_only_facts(store: Any, statement_id: str) -> str:
     return "\n".join(lines)
 
 
+def _citation_material(store: Any, statement_id: str, proof_no: int
+                       ) -> tuple[list[dict[str, Any]], str]:
+    """这条命题第 `proof_no` 份证明登记的依赖行 + 每条被引命题的正文（V 的引用核实材料）。
+
+    为什么 V 要拿这一份东西（业主 2026-10-26）：F 的"引用"是自然语言描述（"由引理 2"
+    "由 Sylow I 可知"），不是逐字引文 ⇒ 只把编号交给 V，它核不出"F 是不是这么用的"。
+    所以两样一起给：F 在那条依赖行上写的话，与被引命题的正文摘要。
+
+    三态（不许折平）：读得出来 ⇒ `(材料, "")`；依赖台账或命题台账读不出来 ⇒
+    `([], 原因)` —— 后者不是"这一份证明没有引用"，而是这一档没查成（它挡住签字，
+    见 `verifications.citation_gate` 的 `problem`）。
+    """
+    if store is None:
+        return [], ""
+    try:
+        deps = list(store.rows("dependencies"))
+    except (StoreError, AttributeError, TypeError) as exc:
+        return [], f"dependencies 台账读不到（{type(exc).__name__}: {exc}）"
+    try:
+        stmts = list(store.rows("statements"))
+    except (StoreError, AttributeError, TypeError) as exc:
+        return [], f"statements 台账读不到（{type(exc).__name__}: {exc}）"
+    return VR.citation_material(statement_id=statement_id, proof_no=proof_no,
+                                deps=deps, statements=stmts), ""
+
+
 class AgentV:
     """验证者。三个 handler 与 `specs/v.py` 的 `handler_name` 逐字同名。
 
@@ -167,6 +193,27 @@ class AgentV:
             return "", f"{type(exc).__name__}: {exc}"
         return "", "judge_not_wired"
 
+    # ---------------------------------------------------- 引用核实（业主 2026-10-26）
+
+    def _citation_admissibility(self, kind: str) -> bool:
+        """被引命题的档位够不够格被引（逐字：「proof_review级及以上才可引用」）。
+
+        为什么单独一个具名方法：这一格是"档位判据"的唯一落点，而它必须能被打桩 ——
+        判据里的反真空就是把它打成恒放行 / 恒拒绝，看档位那两条是不是跟着红。
+        真身只有一处（`verifications.evidence_kind_admissible`，允许集合按
+        `schema.EVIDENCE_KINDS` 的强弱顺序现算），这里不抄第二份词表。
+        """
+        return VR.evidence_kind_admissible(kind)
+
+    def _citation_checks(self, checks: list[dict[str, Any]],
+                         material: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """引用核实的定稿：模型给的那几档只是原料（覆盖 / 档位 / 不在册在这里定）。
+
+        同样是可打桩的一格：把它打成恒 `consistent`，负控（引错、引强）必须跟着红 ——
+        否则那几条判据量的就不是"引用真的被核过"，而是"模型说了什么"。
+        """
+        return VR.reconcile_citation_checks(checks, material)
+
     # ------------------------------------------------------------------ 三个动作
 
     def verify_proof(self, statement_id: str, proof_text: str = "",
@@ -228,6 +275,11 @@ class AgentV:
             "report_path": "",
             "checks": [],
             "missing": [],
+            # 引用核实那一档（业主 2026-10-26）：材料（被引命题 + 正文摘要）/ 逐条结论 /
+            # 签字前置读数。三条返回路径键集合相同 ⇒ 它们必须在初值里就存在。
+            "citations": [],
+            "citation_checks": [],
+            "citation_gate": VR.citation_gate([]),
         }
         sid = out["statement_id"]
         if not S.is_valid_id(sid):
@@ -361,10 +413,22 @@ class AgentV:
                              "⇒ 这一格没查成")
             return out
 
+        # ---- 引用核实的材料（业主 2026-10-26：V 要核 F 的引用，而 F 的引用不是逐字引文）----
+        #
+        # 这一份材料 = 这条命题第 `no` 份证明登记的依赖行（`used_by` / `path_group` /
+        # `source_stmt_id` / F 写的那句话）+ 每条被引命题的正文摘要。不给编号了事：
+        # 只给编号，V 核不出"F 是不是这么用的、这条够不够格被引"。
+        # `citations_problem` 非空 = 台账读不出来（不是"没有引用"）：它挡住签字。
+        citations, citations_problem = _citation_material(self.store, sid, no)
+        for item in citations:
+            # 档位判据走可打桩的那一格（`_citation_admissibility`），材料里存的是它的答案。
+            item["admissible"] = bool(self._citation_admissibility(item.get("evidence_kind") or ""))
+        out["citations"] = citations
         facts = str(readonly_facts or "") or (
             _read_only_facts(self.store, sid) if self.store is not None else "")
         prompt = VR.cold_start_prompt(statement_full or f"（命题 {sid} 的正文没读到）",
-                                      text, readonly_facts=facts)
+                                      text, readonly_facts=facts, citations=citations,
+                                      citations_problem=citations_problem)
         reply, problem = self._ask(prompt)
         if problem:
             self._emit(f"verify_proof({sid})：没查成（{problem}）—— 不落台账行")
@@ -379,6 +443,25 @@ class AgentV:
             out["reason"] = "unparsable"
             out["detail"] = f"模型输出不是合法结论：{exc}"
             return out
+
+        # ---- 引用核实的定稿与签字前置（业主 2026-10-26 两批裁定）----
+        #
+        # 三条判据在这里合成一个结论：① 每一条被引命题都要有结论（缺的按 unknown 算）；
+        # ② 被引命题低于 `proof_review` ⇒ inadmissible（事实，不交给模型裁量）；
+        # ③ 有一条挡签的档 ⇒ 结论从「成立」改判（stronger/unrelated/inadmissible →
+        #    有毛病，只有 unknown → 看不出来）。改判的每一条都落进 findings 并点名，
+        #    于是"签不成"这件事在台账里逐字可读，而不是只在返回值里说一句。
+        checks = self._citation_checks(list(verdict.get("citation_checks") or []), citations)
+        gate = VR.citation_gate(checks, problem=citations_problem)
+        verdict = VR.apply_citation_gate(dict(verdict, citation_checks=checks), gate)
+        out["citation_checks"] = [{key: c.get(key) for key in VR.CITATION_CHECK_KEYS}
+                                  for c in checks]
+        out["citation_gate"] = gate
+        self._emit(f"verify_proof({sid})：引用核实 {len(checks)} 条，"
+                   f"挡签 {len(gate.get('blocking') or [])} 条"
+                   + (f"，弱形式 {len(gate.get('weaker') or [])} 条"
+                      if gate.get("weaker") else "")
+                   + ("；依赖台账读不到（这一档没查成）" if gate.get("problem") else ""))
 
         try:
             row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
@@ -442,8 +525,15 @@ class AgentV:
             "bits": bits,
             "review_write": writeback,
             "ledger": f"verifications/{sid}.jsonl#{row['verification_id']}",
+            # 台账那一行是这一档的正本：返回的 citation_checks 从盘上那一行读回来
+            # （它已经过 `parse_verdict` 的同一套校验、只剩那四格）。
+            "citation_checks": list(row.get("citation_checks") or []),
             "reason": f"{row['verification_id']}：{row['verdict']}"
-                      + ("（签第 3 位）" if payload else "（不签第 3 位）"),
+                      + ("（签第 3 位）" if payload else "（不签第 3 位）")
+                      + (f"；引用核实挡下 {len(gate.get('blocking') or [])} 条"
+                         if gate.get("blocking") else ""),
+            # 引用核实那一句原话（挡签时它点名哪一条、差在哪；只有弱形式时它点名那一条）。
+            "detail": str(gate.get("why") or ""),
         })
         return out
 

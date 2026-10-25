@@ -47,6 +47,11 @@ _ROLES = ("G", "H", "F", "D")
 #: 把写工具的角色收窄到 ("G",) 而不是沿用 _ROLES：一旦 H 手里有
 #: `doc.build_document`，"发现问题的人"与"改写稿件的人"就变成了同一个，
 #: 于是"发现问题"与"掩盖问题"在结构上无法区分。
+#:
+#: 2026-10-24（业主最终形态「作者只写内容、登记由收方读稿产生」，与 V 读 F 的手稿再签字
+#: 同一个逻辑）：`doc.register_dependency` 的写侧仍然只有 G —— 依赖边由 B 读 F 的证明手稿
+#: 登记（`B.register_statement(proof_manuscript=...)`，落库走秘书那一条正路），
+#: F 不直接写 `dependencies`。这里刻意不把 F 加进来：作者不写台账。
 _WRITER_ROLES = ("G",)
 
 #: `cross_check` 类断言必须自带的声明。写成常量而不是各处手打，

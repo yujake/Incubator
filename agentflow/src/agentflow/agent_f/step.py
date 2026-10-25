@@ -342,5 +342,15 @@ class _Step:
             out["statement_id"] = str(deploy["statement_id"])
         if deploy.get("report_path"):
             out["report_path"] = str(deploy["report_path"])
+        # ---- 证明手稿（业主 2026-10-24 最终形态：作者只写内容、B 读稿登记）：
+        # `proof` 那一档的读数随返回值出去。为什么必须进返回值而不是只写在 `detail` 那句
+        # 散文里：`deps_preview` 里带着依赖段解析结果与三态读数（present / missing /
+        # not_applicable），调用方要能机械地读"这份手稿交给 B 会不会落成依赖边"。
+        # 手稿全文不进返回值（它是盘上那一份，路径就是 `manuscript_path`）—— 模型的上下文
+        # 里塞一整篇手稿不划算，而 D/B 需要时按路径读。
+        if deploy.get("manuscript_path"):
+            out["manuscript_path"] = str(deploy["manuscript_path"])
+        if deploy.get("deps_preview"):
+            out["deps_preview"] = dict(deploy.get("deps_preview") or {})
         self.last_step = out
         return out

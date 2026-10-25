@@ -126,6 +126,38 @@ SPEC = AgentSpec(
             "同一条命题占多行、每行各带 `proof_no`。**反向判据：不要把同一条定理拆成多条命题**"
             "（表述不同不等于不同命题）；拆开后 `proof_no` 恒为 1、`path_group` 只剩一组，"
             "多证明机制一次都不会被触发。",
+            # 2026-10-24 业主最终形态（逐字）：「依赖面登记是否是F在其手稿中写好，D的研究手稿
+            # 引用F的证明手稿给B入库时，B侧读到F手稿处的依赖面，按此入库的？（即和V签一个逻辑）」
+            # 「改」 ⇒ 作者只写内容，登记由收方读稿产生；与 V 读你的手稿再签字同一个逻辑。
+            # 所以这一条政策的落点是"手稿里的那一节怎么写"，而不是"去调哪一件写库工具" ——
+            # F 没有写 `dependencies` 的工具，写集里也没有那张表（作者不写台账）。
+            # 格式的机器真身在 `agentflow.depsection`（解析 + 引用档位门），渲染在
+            # `agent_f/manuscript.py`；两边由 `tests/test_dependency_face_is_read_from_f_manuscript.py`
+            # 用同一个正例钉住（格式漂了，那一份判据会红）。
+            "**依赖面写在你自己的证明手稿里，由 B 读稿登记（业主 2026-10-24 最终形态：「作者只写"
+            "内容，登记由收方读稿产生」，与 V 读你的手稿再签字同一个逻辑）**：你每一份证明都写成一份"
+            "手稿（`reports/f-proof-<命题号>.md`，`F.step` 的返回里给 `manuscript_path` 与全文），"
+            "手稿里必须有一节标题逐字为 `## 依赖` 的四列表 —— 一行一条引用：\n"
+            "```\n"
+            "## 依赖\n\n"
+            "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+            "|---|---|---|---|\n"
+            "| 由定理甲，G 有 p 阶元 | stmt:000000 | 第 1 步 | 1 |\n"
+            "```\n"
+            "**列固定、顺序固定、一行一条**：写证明时你可以读 B 已收录的定理（在册 `statements` —— "
+            "提示词第 4.1 段那份现算的清单就是它们），引用一条就写进这一节；路径号写这是第几条证明"
+            "（第 2 条证明的依赖由 B 落成 `used_by=\"stmt:<命题号>#p2\"`、`path_group=2`）。"
+            "**引用门槛是 `proof_review` 级及以上**（业主同日加码裁定，逐字：「proof_review级及以上"
+            "才可引用」）：低于该档（cross_check / heuristic）或档位读不到的，B 会整笔受控拒绝"
+            "（`citation_below_proof_review` / `citation_level_unreadable`）并点名。"
+            "**缺列 / 列数不对 / 命题号或路径号形状不对** ⇒ B 整笔受控拒绝 "
+            "`dependency_section_unreadable` 并点明第几行、缺哪一列。"
+            "**手稿没有这一节而证明正文里引用了在册命题** ⇒ B **整笔受控拒绝** "
+            "`dependency_section_missing`（拒信逐字：「依赖面必须写进手稿（四列表，列固定），"
+            "B 按它入库；补上那一节再交」）—— 先把那一节补上再交，别指望「只报一句缺」就过关。"
+            "一条在册引用都没有的自足证明不适用这一条（B 不拒收，`deps_missing` 读成 "
+            "`not_applicable`）。你不写 `dependencies` 那张表："
+            "作者的活是把依赖写清楚，登记是收方的活。",
             "**V 签过之后这一行的档位就该是 `proof_review`，不许一直写 `heuristic`**（2026-10-19 晚，按 `projects/mp2` 的 "
             "`stmt:000003` 修）：交 B 登记 `statements` 那一行时，档位由 `verifications/<命题号>.jsonl` 里的签名**现算**"
             "（`_proof_outlet` 会自己看）—— `proof_text` 非空 ＋ 最近一签「成立」且 `proof_sha256` 与现行正文相符 ⇒ "
@@ -204,6 +236,11 @@ SPEC = AgentSpec(
                      'attack_plans',
                      'reprocess_requests',
                      'search_requests',
+                     # 2026-10-24（业主最终形态「作者只写内容、登记由收方读稿产生」）：
+                     # `dependencies` 不在 F 的写集里 —— 依赖边由 B 读 F 的证明手稿登记
+                     # （`B.register_statement(proof_manuscript=...)`，落库走秘书那一条正路）。
+                     # 作者的活是把手稿里的依赖段写清楚；写集里给它这张表等于让"作者自己
+                     # 登记"成为一条可选后门，而那正是这一批要收掉的东西。
                      # 2026-10-26（收口批）：`statements` 从 F 的写集里拿掉 —— 权限面以
                      # 秘书那一层为准（`secretary.STATEMENT_WRITER_ROLES = ("B",)`，业主口径
                      # "命题只经秘书 / B 登记"）。改前这里有过一格，policy 也写着"那一行由你

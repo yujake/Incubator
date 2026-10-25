@@ -181,6 +181,24 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                       "比对，没有模型调用（不是忘了记）；语义档缺它 ⇒ 写库前"
                                       "当场拒（说不出是哪一次判的，就不算语义通过）"},
                 "derived_from": _ARR_S,
+                # 2026-10-24（业主最终形态，逐字：「依赖面登记是否是F在其手稿中写好，D的研究
+                # 手稿引用F的证明手稿给B入库时，B侧读到F手稿处的依赖面，按此入库的？（即和V
+                # 签一个逻辑）」「改」）：作者只写内容，登记由收方读稿产生 —— B 读 F 手稿里那一节
+                # `## 依赖`（四列表），把每一行落成一条 `dependencies`（`used_by="stmt:<号>#pN"`
+                # ＋ `path_group` ＋ `source_stmt_id`）。F 自己不写依赖台账。
+                "proof_manuscript": {**_S, "description":
+                                     "F 的证明手稿正文：里面那一节 `## 依赖` 由 B 读出来落依赖边。"
+                                     "四列表，列固定："
+                                     "`| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | "
+                                     "路径号（第几条证明） |`。"
+                                     "被引命题必须在册、且站到 `proof_review` 级及以上"
+                                     "（不够 ⇒ 整笔受控拒绝 `citation_below_proof_review` 并点名；"
+                                     "档位读不到 ⇒ 也不放行）。缺列 / 列数不对 / 命题号或路径号"
+                                     "形状不对 ⇒ 整笔受控拒绝 `dependency_section_unreadable` 并"
+                                     "点明第几行。**手稿里没有这一节而证明正文引用了在册命题 ⇒ "
+                                     "整笔受控拒绝 `dependency_section_missing`**（依赖面必须写进"
+                                     "手稿，B 按它入库；补上那一节再交）—— 一条在册引用都没有的"
+                                     "自足证明不适用这一条（`deps_missing=not_applicable`，不拒收）"},
                 "doc_id": {**_S, "description":
                            "origin='own_result' 时与 line_range **二者必居其一**：我方稿件那一行的 id。"
                            f"**格式：{S.ID_DIGITS} 位十进制字符串（如 \"{S.format_id(0)}\"；旧数据里的 4 位号仍可读）** —— 写成 \"doc:0000\" 会被拒"},
