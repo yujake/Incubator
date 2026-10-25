@@ -77,7 +77,7 @@ docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
 """
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from ._support import S
 from .. import depsection as _DS
@@ -99,6 +99,20 @@ from ..refusals import refuse as _refuse
 #: （`schema.KINDS` 加一个取值就是加一种"强于猜想"的说法），黑名单会在那种时候
 #: 静默放行 —— 白名单不会。
 CONJECTURE_START_KINDS: tuple[str, ...] = ("conjecture", "concept")
+
+
+def _same_manuscript_text(left: Any, right: Any) -> bool:
+    """两份手稿正文是不是同一版（只把换行归一，别的一字不改）。
+
+    为什么要有它：`read_carried_manuscript` 读的是字节解码（保留 `\\r\\n`），
+    而调用方多半用 `Path.read_text` 读（通用换行已折成 `\\n`）—— 直接比字符串会
+    在 Windows 上永远不相等，而那种不相等恰好把"D 递的就是携带单上那一份"误判成
+    "别的调用方直递的"（读数从 `carried_by_D` 退成 `param`，没有任何东西会报）。
+    """
+    def _n(value: Any) -> str:
+        return str(value or "").replace("\r\n", "\n").strip()
+
+    return _n(left) == _n(right)
 
 #: B-2 的拒收码（写侧与读侧共用这一个字面量，免得两处措辞分家）。
 #:
@@ -919,11 +933,27 @@ class _RegisterStatement:
         manuscript_probe: dict = {}
         manuscript_carried: dict = {}
         manuscript_text = str(proof_manuscript or "")
+        probe_ids = _DS.candidate_statement_ids(
+            derived_from=derived_from, proof_text=proof_text,
+            # 手稿头那一行"命题号：stmt:<号>"：D 递过来的那一份稿用它自己的号
+            # 去对携带单（`derived_from` 是承重链，不是这份稿自己的号）。
+            extra=[_DS.manuscript_statement_id(manuscript_text)])
         if manuscript_text.strip():
-            manuscript_source = _DS.SOURCE_PARAM
+            # ---- D 的递交（2026-10-26 晚：「D 到 B 没有路吗？加」） -------------------
+            #
+            # 参数里给的这一份，如果正是 D 那份携带单里点了名、且 sha 与盘上那份相符
+            # 的那一版 ⇒ 读数是 `carried_by_D`（D 带来并亲手递上来的）。
+            # 这不是"猜谁调的"，判据是盘上那份报告里的三列表与这份正文逐字相符：
+            # 携带单没有它、或 sha 对不上 ⇒ 照旧记 `param`（那是别的调用方直递的）。
+            probe_carried = _DS.read_carried_manuscript(
+                getattr(self.store, "root", ""), statement_ids=probe_ids)
+            if (str(probe_carried.get("source") or "") == _DS.SOURCE_CARRIED
+                    and _same_manuscript_text(probe_carried.get("text"), manuscript_text)):
+                manuscript_source = _DS.SOURCE_CARRIED
+                manuscript_carried = probe_carried
+            else:
+                manuscript_source = _DS.SOURCE_PARAM
         else:
-            probe_ids = _DS.candidate_statement_ids(derived_from=derived_from,
-                                                    proof_text=proof_text)
             manuscript_carried = _DS.read_carried_manuscript(
                 getattr(self.store, "root", ""), statement_ids=probe_ids)
             if str(manuscript_carried.get("source") or "") == _DS.SOURCE_CARRIED:
@@ -938,6 +968,41 @@ class _RegisterStatement:
         manuscript: dict = {}
         deps_groups: list[list[dict]] = []
         manuscript_refs: list[str] = []
+        #: 这一份稿是不是 F 的秘书洗过的那一版（业主 2026-10-26 晚：B 读到的必须是
+        #: "秘书洗过"的版本，读数带 `manuscript_washed=true`）。那一行元信息由
+        #: `agent_f` 在洗完之后盖进正文（`depsection.mark_washed`），跟着文件走 ——
+        #: 于是"这份稿洗没洗过"在收方这里读得到，不靠调用方自述。
+        manuscript_wash: dict = _DS.manuscript_wash_reading(manuscript_text) if (
+            manuscript_text.strip()) else {"washed": False, "actor": "", "filled": "", "mark": ""}
+        manuscript_washed = bool(manuscript_wash.get("washed"))
+        # ---- 兜底审计（2026-10-27）：盘上那份稿不是框架渲染的 ---------------------
+        #
+        # 为什么这一条必须存在：上面那一整条链（F 的 proof 动作渲染 `## 依赖` → 秘书洗稿
+        # 并盖元信息 → D 携带 → B 读稿）的有效性，全部压在"这份稿是框架写出来的"上。
+        # 而改前的真机形态是模型直接 `fs.write` 写一份自由格式的 `reports/f-proof-*.md`
+        # —— 它有文件名、有正文，于是下游每一处都"读到了"，只是没有四列依赖表、
+        # 也没有洗稿元信息：`dependencies` 于是 0 行，而读数上一切正常。
+        # `fs.write`/`fs.edit` 那一侧已经受控拒绝（`reserved_framework_artifact`），
+        # 但"换个名字绕过"永远有路（手写、别的工具、人放一份到盘上）⇒ 收方这里再挡一次。
+        #
+        # 判据的形状（三态，不折平）：稿是从盘上（`disk`）或 D 携带（`carried_by_D`）来的、
+        # 路径是约定的 `reports/f-proof-*.md`、而正文里没有 `- 依赖面洗稿：` 那一行 ⇒
+        # 这一份不是框架渲染的，整笔受控拒绝并点名让 F 重写。
+        # 参数直递（`param`）那一档不在这里判：B 拿不到它的落点，"猜它是谁写的"不是判据。
+        if manuscript_text.strip() and not manuscript_washed:
+            if manuscript_source == _DS.SOURCE_CARRIED:
+                wash_rel = str(manuscript_carried.get("path") or "")
+            elif manuscript_source == _DS.SOURCE_DISK:
+                wash_rel = str(manuscript_probe.get("path") or "")
+            else:
+                wash_rel = ""
+            if _DS.is_framework_manuscript(wash_rel):
+                return _refuse(
+                    str(_DS.REFUSED_NOT_WASHED),
+                    "这份手稿不是框架渲染的（缺洗稿元信息），请让 F 用 proof 动作重写",
+                    manuscript_source=manuscript_source,
+                    manuscript_path=wash_rel,
+                    missing_mark=_DS.WASH_MARK.rstrip())
         if manuscript_text.strip():
             manuscript = _DS.parse_dependency_section(manuscript_text)
             # 引用只在"证明正文"那一节里数（手稿开头的元信息不是引用）。
@@ -1026,6 +1091,8 @@ class _RegisterStatement:
                         stmt_id=str(written_row.get("stmt_id") or ""),
                         refs=len(manuscript_refs), section=manuscript))
             base["manuscript_source"] = manuscript_source
+            #: 这一份稿是不是 F 的秘书洗过的那一版（跟着文件走的读数，见上面）。
+            base["manuscript_washed"] = manuscript_washed
             if manuscript_probe:
                 base["manuscript_probe"] = dict(manuscript_probe)
             if manuscript_carried:
@@ -1033,6 +1100,26 @@ class _RegisterStatement:
                 # 否则"主路没走到"与"主路走了但没找到"在读数上分不开。
                 base["manuscript_carried"] = dict(manuscript_carried)
             return base
+
+        # ---- 收方读稿登记（业主 2026-10-26 晚：「D 到 B 没有路吗？加」） --------------
+        #
+        # 这一笔可能是"同一条命题再交一次"：F 已经把它落成 `statements` 一行，而这一趟
+        # D 把 F 的证明手稿一并递过来了。收方要做的是读稿落依赖面，不是再新建一行、
+        # 也不是再判一次那条命题的档位 —— 所以这一支在 B-2/B-3 之前提前返回：
+        # 命题行一个字不动，只走秘书那一笔 `dependencies`（B 仍是写者，秘书仍是执行者）。
+        #
+        # 判据没有绕过：手稿的依赖段已经由上面那一块解析并逐条核过（缺节、读不懂、
+        # 来源不在册、档位不够 `proof_review` 各有一档受控拒绝），本支只负责
+        # "把核过的段落成边"。没有这一支时，同一条命题的第二次递交走 `duplicate` 早退
+        # ⇒ `dependencies` 一行都不落，而这正是"F 写了稿、D 带了稿、依赖面还是 0 行"的成因。
+        if manuscript_text.strip():
+            redelivery = self._existing_statement_for(full)
+            if redelivery is not None:
+                return self._receive_carried_manuscript(
+                    redelivery, deps_groups=deps_groups, manuscript=manuscript,
+                    manuscript_refs=manuscript_refs, manuscript_source=manuscript_source,
+                    manuscript_washed=manuscript_washed, manuscript_wash=manuscript_wash,
+                    proofs=proofs_listed, proof_text=proof_text, deps_reading=_deps_reading)
 
         # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
         # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
@@ -1396,6 +1483,8 @@ class _RegisterStatement:
                    "deps_missing": _deps_reading(written),
                    #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                    "manuscript_source": manuscript_source,
+                   "manuscript_washed": manuscript_washed,
+                   "manuscript_wash": dict(manuscript_wash),
                    "note": str(written.get("reason") or "")}
             #: 判档位那一趟读不完这条正文时的那三格（空字典 = 读得完；见
             #: `_text_truncation_reading`）：三条"没有新建行"的出口都要带上它 ——
@@ -1458,6 +1547,8 @@ class _RegisterStatement:
                    "deps_missing": _deps_reading(written),
                    #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                    "manuscript_source": manuscript_source,
+                   "manuscript_washed": manuscript_washed,
+                   "manuscript_wash": dict(manuscript_wash),
                    "changes": list(written.get("changes") or []),
                    "note": ("这一条没有新建行：同一条 statement_full 已在册，而这一笔"
                             "带来的证据档更强（且有凭据）⇒ 秘书把那一条的档位改上去了"
@@ -1525,6 +1616,8 @@ class _RegisterStatement:
                        "deps_missing": _deps_reading(written),
                        #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
                        "manuscript_source": manuscript_source,
+                       "manuscript_washed": manuscript_washed,
+                       "manuscript_wash": dict(manuscript_wash),
                        "note": ("这一条没有新建行（同一条命题已在册）。")}
                 #: 正文超了判档位的读取上限 ⇒ 带上截断读数（见 `_text_truncation_reading`）。
                 out.update(trunc_reading)
@@ -1666,6 +1759,8 @@ class _RegisterStatement:
                 #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）：
                 #: 这一格让"没人传参"与"B 按约定路径读到了"在读数上分得开。
                 "manuscript_source": manuscript_source,
+                "manuscript_washed": manuscript_washed,
+                "manuscript_wash": dict(manuscript_wash),
                 "pending_definitions": pending_defs,
                 #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
                 #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为
@@ -1722,6 +1817,80 @@ class _RegisterStatement:
                             f"逐条证明的状态 {attach.get('formal_paths')}"
                             "（键是证明号；汇总按任一路径通过就算通过）。"
                             if attach.get("formal_synced") else ""))}
+
+    # ------------------------------------------------- 收方读稿登记（D 携带来的那一份）
+    #
+    # 业主 2026-10-26 晚的原话：「D 到 B 没有路吗？加」+「把稿交给 B」。
+    # 这一支是那条路在 B 侧的落点：D 的代码直接调 `B.register_statement(...)`，
+    # 命题已经在册（F 落的行）⇒ 不新建、不重判档位，只把这一份手稿的依赖段落成边。
+
+    def _existing_statement_for(self, full: str) -> dict | None:
+        """按 `statement_full` 的规范化值找在册那一行（"是不是同一条"的唯一判据在
+        `textutil.normalize` —— 与秘书查重同一处口径，这里不另写一份比法）。
+
+        读不到 `statements` 时返回 None（走正常那一支）：那是"没查成"，而这一支
+        只在"确认已经在册"时才提前返回 —— 查不成时不许假装它在册。
+        """
+        from .. import textutil as T
+
+        key = T.normalize(str(full or ""))
+        if not key:
+            return None
+        try:
+            rows = [dict(r) for r in self.store.rows("statements")]
+        except Exception:  # noqa: BLE001 —— 读不到 ⇒ 走正常那一支（不猜它在册）
+            return None
+        for row in rows:
+            if T.normalize(str(row.get("statement_full") or "")) == key:
+                return row
+        return None
+
+    def _receive_carried_manuscript(self, row: Mapping[str, Any], *, deps_groups: Any,
+                                    manuscript: Mapping[str, Any],
+                                    manuscript_refs: Sequence[str],
+                                    manuscript_source: str, manuscript_washed: bool,
+                                    manuscript_wash: Mapping[str, Any],
+                                    proofs: Sequence[Mapping[str, Any]],
+                                    proof_text: str,
+                                    deps_reading: Any) -> dict:
+        """收下 D 递来的那一份稿：命题行不动，只把依赖面写进 `dependencies`。
+
+        `deps_groups` 是上面那块已经解析并逐条核过档位的步骤（外层 = 路径组）；
+        写盘走秘书（`record_manuscript_dependency_face`，B 是写者、秘书是执行者），
+        幂等（同一路径组、同一来源已经在表里就不再落）。
+        """
+        stmt_id = str(row.get("stmt_id") or "")
+        sec = self._statement_secretary()
+        if sec is None:
+            return _refuse("secretary_unavailable",
+                           "这一趟没有秘书 ⇒ 收下的稿写不进依赖面（不许退回'B 自己写'）："
+                           + (f"{self.secretary_problem}" if self.secretary_problem else ""))
+        written = dict(sec.record_manuscript_dependency_face(
+            stmt_id, deps_groups, note="b.receive_carried_manuscript") or {})
+        if not written.get("checked"):
+            return _refuse(str(written.get("refused") or "dependency_face_not_written"),
+                           str(written.get("reason") or ""))
+        reading = deps_reading({"stmt_id": stmt_id,
+                                "deps_written": int(written.get("deps_written") or 0)})
+        received_proofs = [{"proof_no": int(e.get("proof_no") or 0)}
+                           for e in (proofs or []) if isinstance(e, Mapping)]
+        note = ("收方读稿登记：命题行不动（这条命题已经在册），只把这份手稿的依赖段落成 "
+                "`dependencies`（收方 = B，执行者 = 秘书）")
+        if written.get("duplicates"):
+            note += (f"；这一遍有 {len(written['duplicates'])} 条已经在表里（幂等，没有重复落）")
+        if written.get("deps_written"):
+            note += f"；这一遍新落 {int(written['deps_written'])} 条依赖边"
+        return {"ok": True, "stmt_id": stmt_id, "new_row": False, "received_manuscript": True,
+                "manuscript_source": manuscript_source,
+                "manuscript_washed": bool(manuscript_washed),
+                "manuscript_wash": dict(manuscript_wash),
+                "deps_written": int(written.get("deps_written") or 0),
+                "deps_duplicates": [dict(x) for x in (written.get("duplicates") or [])],
+                #: 依赖面建起来没有（三态；与新建那一支同一份读数实现）。
+                "deps_missing": reading,
+                "proofs_received": received_proofs,
+                "refs_in_proof": list(manuscript_refs),
+                "row": dict(row), "note": note}
 
     # ---------------------------------------------------------------- 规矩 B
     #

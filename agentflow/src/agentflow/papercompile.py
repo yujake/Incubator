@@ -228,25 +228,35 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
         problems.append(note)
     else:
         env = _engine_env(root)
+        from . import clock as _CLK
+
         for _ in range(max(1, int(runs))):
-            try:
-                got = subprocess.run([chosen, "-interaction=nonstopmode",
-                                      "-halt-on-error", tex.name],
-                                     cwd=str(out), capture_output=True, timeout=timeout_sec,
-                                     env=env)
-                codes.append(int(got.returncode))
-                stderr_tail = _tail(got.stderr)
-                stdout_tail = _tail(got.stdout)
-            except subprocess.TimeoutExpired as exc:
-                codes.append(-1)
-                stderr_tail = _tail(getattr(exc, "stderr", None)) or stderr_tail
-                stdout_tail = _tail(getattr(exc, "stdout", None)) or stdout_tail
-                note = f"引擎超过 {timeout_sec}s 没返回（这一步没编完）"
-                break
-            except (OSError, subprocess.SubprocessError) as exc:
-                codes.append(-1)
-                note = f"{type(exc).__name__}: {exc}"
-                break
+            argv = [chosen, "-interaction=nonstopmode", "-halt-on-error", tex.name]
+            # 业主 2026-10-27 第一条裁定：起程序就登记一条程序计时器，程序结束它返回。
+            with _CLK.program_span(program=chosen, argv=argv, workspace=root,
+                                   where="papercompile.compile_paper",
+                                   purpose=f"编 LaTeX 正文（{tex.name}）") as prog:
+                try:
+                    got = subprocess.run(argv,
+                                         cwd=str(out), capture_output=True,
+                                         timeout=timeout_sec,
+                                         env=env)
+                    codes.append(int(got.returncode))
+                    stderr_tail = _tail(got.stderr)
+                    stdout_tail = _tail(got.stdout)
+                    prog.finish(outcome="exited", exit_code=int(got.returncode))
+                except subprocess.TimeoutExpired as exc:
+                    codes.append(-1)
+                    stderr_tail = _tail(getattr(exc, "stderr", None)) or stderr_tail
+                    stdout_tail = _tail(getattr(exc, "stdout", None)) or stdout_tail
+                    note = f"引擎超过 {timeout_sec}s 没返回（这一步没编完）"
+                    prog.finish(outcome="timed_out", note=note)
+                    break
+                except (OSError, subprocess.SubprocessError) as exc:
+                    codes.append(-1)
+                    note = f"{type(exc).__name__}: {exc}"
+                    prog.finish(outcome="failed", note=note)
+                    break
         if not note and codes and codes[-1] != 0:
             note = (f"引擎退出码 {codes[-1]} —— "
                     + ("PDF 仍然写出来了（本机 MiKTeX 收尾失败的已知形态），"

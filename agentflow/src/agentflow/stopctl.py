@@ -605,7 +605,16 @@ def kill_tree(pid: int, *, timeout: float = 60) -> dict[str, Any]:
     else:
         cmd = ["kill", "-9", str(pid)]
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True, timeout=max(1.0, float(timeout)))
+        from . import clock as _CLK
+
+        # 业主 2026-10-27 第一条裁定：起程序（这一处是 taskkill）就登记一条程序计时器。
+        with _CLK.program_span(program=cmd[0], argv=cmd,
+                               workspace=(_CLK.current_workspace() or None),
+                               where="stopctl.kill_tree",
+                               purpose=f"杀掉进程树 {pid}（等它回话）") as prog:
+            done = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=max(1.0, float(timeout)))
+            prog.finish(outcome="exited", exit_code=int(getattr(done, "returncode", 0) or 0))
     except (OSError, subprocess.SubprocessError) as exc:
         return {"pid": pid, "killed": False, "via": cmd[0],
                 "detail": f"{type(exc).__name__}: {exc}"}

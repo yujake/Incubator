@@ -1241,6 +1241,16 @@ class LoopRun:
     #: 推了几次时钟 / 推响了几条计时器（D-53 的生产端读数）。
     clock_pumps: int = 0
     clock_fired: int = 0
+    #: ---- 挂机（2026-10-27，业主口径「挂机是将进程挂在时钟上」）
+    #:
+    #: 这一格回答三个问题：这一趟真的挂过机吗（`parked_turns` / `asked_sec`）、
+    #: 被叫醒的那几拍省下了几次模型调用（`woke_turns` / `skip_calls` /
+    #: `woke_reasons`）、最后一次读到的是谁在等（`waiters`）。
+    #:
+    #: 为什么它是一等字段：改前"挂机"只存在于 `clock.waiters()` 这个读数面上，而循环
+    #: 的控制流里一处 `park` 都没有（真机探针：父代理起了 `wait_for` 之后又走了 3 个
+    #: 回合，`parked_steps=3 / parked_calls=3`）。这一格是"循环真的不调模型了"的机器读数。
+    park: dict[str, Any] = field(default_factory=dict)
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
     #: 「收工那一步」的原始载荷（模型给的 `final` / `evidence` / `notify` 逐字一份）。
@@ -1269,6 +1279,17 @@ class LoopRun:
     #: 这一趟按 notify 表真的落成的手稿编号（按发生顺序）。空列表 + `stop_reason="final"`
     #: 只对主控成立（M 向用户回复不做这套）。
     handoffs: list[str] = field(default_factory=list)
+    #: ---- 交差（2026-10-27，业主第四条裁定）
+    #:
+    #: 「如果已无事可做且无计时器，这意味着它交差了，需要向父代理报告，父代理把它记为
+    #: 静默子代理」。两格分开：
+    #:
+    #: - `handed_off`：这一趟自己交差时落的那条读数（`{at, reason, timers, children,
+    #:   handoff_id, reported}`；没交差就是 `{}`）；
+    #: - `silent_children`：这一趟作为父代理"收到"了哪几个子代理的交差（按收到顺序）——
+    #:   它就是父的读数里"+1"的那一格，与 `activity_snapshot` 的 `handoffs` 同源。
+    handed_off: dict[str, Any] = field(default_factory=dict)
+    silent_children: list[str] = field(default_factory=list)
     #: 这一趟每次派活产生了哪些子产出（`_call_productions` 的条目，按发生顺序）：
     #: `{kind, counted, task_id, role, step, status, outcome, handoff_id, outputs,
     #:   disposition, evidence?, recon_only?, waiver?}`。
@@ -1430,7 +1451,7 @@ class LoopRun:
         `stalled_max` / `dead_loop_nudges` / `stalled_nudges` / `dead_loop_stopped` /
         `counters_reset_at` / `compactions` / `mailbox_items` / `mailbox_msgs` /
         `mailbox_delivered` / `monitor_turns` / `wakes` / `wake_ids` / `wake_events` /
-        `clock_pumps` / `clock_fired` / `waiting_for` / `resumed_from` /
+        `clock_pumps` / `clock_fired` / `park` / `waiting_for` / `resumed_from` /
         `notify_rejections` / `handoffs` / `summons` / `summons_refused` /
         `messages_sent` / `messages_refused` / `productions` / `summons_total` /
         `summons_consumed` / `summons_continued` / `summons_waived` /
@@ -1481,6 +1502,11 @@ class LoopRun:
             "wake_events": [dict(e) for e in self.wake_events],
             "clock_pumps": self.clock_pumps,
             "clock_fired": self.clock_fired,
+            # 挂机那一支的收口读数（`LoopRun.park` 的说明）：挂了多久、叫醒过几次、
+            # 省下了几次模型调用。与 `agent_run_end` 的那一格同源。
+            "park": dict(self.park),
+            "handed_off": dict(self.handed_off),
+            "silent_children": list(self.silent_children),
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons,
@@ -1957,6 +1983,19 @@ def monitor_exit_text(role: str) -> str:
 
 #: 出口限定连拒几次之后放开（安全阀；理由见 `AgentLoop._monitor_refusal`）。
 MONITOR_REFUSAL_LIMIT: int = 3
+
+#: 挂机那一支的会话事件 `kind`（append-only；续跑重建不读它 —— `resume_messages` 只认
+#: `agent_step` 与 `MAILBOX_EVENT`，于是这条事件不改变"重建 == 当时那一份"）。
+PARK_EVENT: str = "agent_park"
+
+#: 挂机的一拍最多睡多久（秒）。第一拍取 `PARK_SLICE_MIN_SEC`，之后翻倍到本上界。
+#:
+#: 为什么要有上下界：下界 0.5 秒让"事件唤醒"（子代理发来一条留言）不会因为父代理正
+#: 睡在一个长拍里而晚到整整一拍；上界 300 秒与 `CHILD_RETURN_WAIT_SEC` 同一档
+#:（停机开关也是这样被看到的：循环头每一拍读一次开关，最迟一拍之后收工）。
+#: 这不是轮询：每一拍都记进主时钟的等待账（`kind="park"`），期间不调模型、不落回合。
+PARK_SLICE_MIN_SEC: float = 0.5
+PARK_SLICE_MAX_SEC: float = 300.0
 
 #: 可抢占派活（D-64）：派完在"这一步"里最多等多久（秒）。
 #:
@@ -4279,6 +4318,14 @@ class AgentLoop:
             run.wakes += len(events)
             run.wake_ids.extend(str(e.get("wake_id") or "") for e in events)
             run.wake_events.extend(dict(e) for e in events)
+            # ---- 父代理把交差的子代理记为静默（业主 2026-10-27 第四条，父侧那一半）
+            #
+            # 一条唤醒里带着 `wait_for=task:<子>` ⇒ 那条计时器等的是某个子代理；它这次
+            # 回来是因为"孩子收口/说话了"。若孩子是交差走的，交差账上已经有它那一行
+            # （子代理自己落的，`clock.record_handoff`），这里补"谁接收了它"并把编号
+            # 记进这一趟的读数（`run.silent_children`，父自己的读数 +1）。
+            for event in events:
+                self._note_child_handoff(event, run=run)
             SS.append(self.session_root, {
                 "kind": "agent_wake", "role": self.role, "task_id": str(self.my_task_id or ""),
                 "step": int(step), "wake_ids": [str(e.get("wake_id") or "") for e in events],
@@ -4288,6 +4335,45 @@ class AgentLoop:
             }, sid=self.sid)
         return {"checked": bool(consumed.get("checked")), "consumed": events,
                 "count": len(events), "reason": str(consumed.get("reason") or "")}
+
+    def _note_child_handoff(self, event: Mapping[str, Any],
+                            *, run: "AgentLoop.LoopRun") -> str:
+        """父侧：这条唤醒是不是"某个子代理交差了"？是就记下来并返回那个编号。
+
+        判据只有一条（`wait_for` 解析成 `task:<子>`）：那正是 `conductor.arm_child_waiter`
+        派活时自动起的那条计时器的写法 —— 于是"收到子代理交差"这件事在盘上有唯一的
+        入口，不靠解消息文本猜。返回空串 = 这条唤醒不关交差的事。
+        """
+        wait_for = str(event.get("wait_for") or "")
+        if not wait_for:
+            return ""
+        try:
+            kind, ref = CLK.parse_wait_for(wait_for)
+        except CLK.ClockError:
+            return ""
+        if kind != "task":
+            return ""
+        root = self._clock_root()
+        if not root:
+            return ""
+        try:
+            got = CLK.mark_handoff_seen(root, task_id=ref,
+                                        by_task_id=str(self.my_task_id or ""))
+        except Exception as exc:  # noqa: BLE001 - 读数坏了不许拦住唤醒消费
+            run.notes.append(f"交差记账没成（{type(exc).__name__}: {exc}）")
+            return ""
+        if not got.get("checked"):
+            run.notes.append(f"交差账读不成：{got.get('reason') or '没查成'}")
+            return ""
+        if not got.get("found"):
+            return ""
+        if ref not in run.silent_children:
+            run.silent_children.append(ref)
+        run.notes.append(
+            f"子代理 {ref} 交差了 ⇒ 记为静默（交差编号 "
+            f"{str((got.get('row') or {}).get('handoff_id') or '（没记）')}；"
+            f"本趟收到 {len(run.silent_children)} 个子代理的交差）")
+        return ref
 
     def _tree_reading(self) -> str:
         """这一支的最新树形读数（谁在飞 / 谁排队 / 谁交差 / 谁失败）—— 现读，三态。
@@ -4650,6 +4736,430 @@ class AgentLoop:
                 "wake_ids": wake_ids, "monitor": bool(monitor),
                 "checked": bool(got.get("checked")), "children": children,
                 "problems": list(got.get("problems") or ())}
+
+    # ---------------------------------------------------------- 挂机（回合调度的那一支）
+
+    def _park_reading(self) -> dict[str, Any]:
+        """本趟还挂在时钟上的 waiter（`clock.waiters` 的读侧，按台账号认）。
+
+        三态：读不成 ⇒ `checked=False`（"没查成"不是"没有挂机"）。
+        归属的判据与 `clock.observe_work` 同一处：等的是"本 task 那一条"（`task_id`
+        相等）；拿不到台账号时退到角色（与 `pending_clock_wakes` 的两档过滤同源）。
+
+        `waiters()` 的行是给读数用的（它不带 `task_id`），所以归属那一半读
+        `TimerBook.get(timer_id)` 的原对象 —— 同一份簿记，不另算一份。
+        """
+        root = self._clock_root()
+        if not root:
+            return {"checked": False, "count": 0, "waiters": [], "timers": [],
+                    "reason": "没有工作区根 ⇒ 挂机读数读不到（不是「没有挂机」）"}
+        try:
+            got = CLK.waiters(root)
+            bucket = CLK.book(root)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有挂机"
+            return {"checked": False, "count": 0, "waiters": [], "timers": [],
+                    "reason": f"挂机读数读不成：{type(exc).__name__}: {exc}"}
+        reading = CLK.now()
+        rows: list[dict[str, Any]] = []
+        timers: list[Any] = []
+        for row in got.get("waiters") or ():
+            if str(row.get("park_state") or "") != "parked":
+                continue
+            timer = bucket.get(str(row.get("timer_id") or ""))
+            if timer is None or not self._is_my_waiter(timer):
+                continue
+            rows.append(timer.row(reading))
+            timers.append(timer)
+        return {"checked": bool(got.get("checked", True)), "count": len(rows),
+                "waiters": rows, "timers": timers,
+                "reason": str(got.get("reason") or "")}
+
+    def _is_my_waiter(self, timer: Any) -> bool:
+        """这一条计时器等的是不是我。
+
+        `Timer.is_park` 先过一遍：等时间的那一条不是挂机（`timer_start(after_sec=…)`
+        只是"有目的的睡"，它的到点该开一个监控回合，不该把这一趟停住）。
+        """
+        if not bool(getattr(timer, "is_park", False)):
+            return False
+        mine = str(self.my_task_id or "")
+        if mine:
+            return str(getattr(timer, "task_id", "") or "") == mine
+        role = str(self.role or "")
+        return bool(role) and str(getattr(timer, "role", "") or "") == role
+
+    def _wake_readings(self, wake_ids: Sequence[str]) -> dict[str, Any]:
+        """这一拍消费到的唤醒各是哪一类：`park`（等谁）与 `timed`（等时间）。
+
+        为什么必须分开：等时间的唤醒是监控回合的触发（D-53：到点看一眼全树），它本来
+        就该开一个回合；而"等谁"的唤醒只是"挂机结束了"这一个事实 —— 它带来的那段话
+        已经进了这一步的 `messages`，下一拍照常问就够，不必现在多花一次模型调用。
+
+        分不出来的那几条一律按 `timed` 算（宁可多问一次，不许把该处理的事静默压掉）。
+        """
+        wanted = [str(w) for w in (wake_ids or ()) if w]
+        out: dict[str, Any] = {"checked": True, "count": len(wanted),
+                               "park": [], "timed": [], "reason": ""}
+        if not wanted:
+            return out
+        root = self._clock_root()
+        if not root:
+            out.update(checked=False, timed=[{"wake_id": w, "wait_for": "", "woke_reason": ""}
+                                             for w in wanted],
+                       reason="没有工作区根 ⇒ 分不出唤醒是哪一类（按等时间处理）")
+            return out
+        try:
+            known = {str(t.wake_id): t for t in CLK.book(root).all() if str(t.wake_id or "")}
+        except Exception as exc:  # noqa: BLE001 —— 读不成按"等时间"处理（见 docstring）
+            out.update(checked=False, timed=[{"wake_id": w, "wait_for": "",
+                                              "woke_reason": ""} for w in wanted],
+                       reason=f"计时器簿记读不成（{type(exc).__name__}: {exc}）⇒ 按等时间处理")
+            return out
+        for wake_id in wanted:
+            timer = known.get(wake_id)
+            rec = {"wake_id": wake_id,
+                   "wait_for": str(getattr(timer, "wait_for", "") or ""),
+                   "woke_reason": str(getattr(timer, "woke_reason", "") or ""),
+                   "purpose": str(getattr(timer, "purpose", "") or "")}
+            (out["park"] if rec["wait_for"] else out["timed"]).append(rec)
+        return out
+
+    def _park_purpose(self, rows: Sequence[Mapping[str, Any]]) -> str:
+        """这一拍等待的目的（进主时钟的等待账；`note_wait` 要求非空）。"""
+        bits: list[str] = []
+        for row in rows[:3]:
+            who = str(row.get("wait_for") or "")
+            why = str(row.get("purpose") or "")
+            bits.append(f"{who}（{why}）" if why else who)
+        tail = "、".join(b for b in bits if b) or "（没有可读的等谁）"
+        return f"挂机等 {tail}：睡到下一个到点或唤醒（不调模型、不落回合）"
+
+    def _park_sleep_once(self, *, run: "AgentLoop.LoopRun",
+                         parked: Mapping[str, Any]) -> dict[str, Any]:
+        """挂机的一拍：睡到"下一个到点/唤醒"，返回这一拍的读数。
+
+        睡多久：`PARK_SLICE_MIN_SEC` 起步、每拍翻倍到 `PARK_SLICE_MAX_SEC`；若这一批
+        waiter 里有"它会自己响"的时刻（闹钟的 `due_at`、`max_wait_sec` 的上限），
+        再按那个时刻封顶 —— 于是"到点"不会被一个长拍压过去，而"事件唤醒"最迟一拍
+        就能被读到。每一拍都记进主时钟的等待账（`kind="park"`），不是空转。
+
+        睡完不在这里判断"醒了没有"：下一拍照旧从 `_deliver_mailbox` 开始（推时钟、
+        消费唤醒、读信箱），判定只在一处（`_park_gate`）。
+        """
+        rows = list(parked.get("waiters") or ())
+        asked = float(run.park.get("asked_sec") or 0.0)
+        backoff = float(run.park.get("slice_sec") or PARK_SLICE_MIN_SEC)
+        seconds = max(PARK_SLICE_MIN_SEC, backoff)
+        horizon: list[float] = []
+        for row in rows:
+            remain = row.get("remaining_sec")
+            if remain is not None:
+                horizon.append(max(0.0, float(remain)))
+            cap = row.get("max_wait_sec")
+            if cap is not None:
+                horizon.append(max(0.0, float(cap) - float(row.get("waited_sec") or 0.0)))
+        if horizon:
+            seconds = min(seconds, max(0.05, min(horizon)))
+        seconds = max(0.05, min(seconds, PARK_SLICE_MAX_SEC))
+        problem = ""
+        try:
+            self._park_slice(seconds=seconds, purpose=self._park_purpose(rows))
+        except Exception as exc:  # noqa: BLE001 —— 睡不下去要如实说，不许静默空转
+            problem = f"{type(exc).__name__}: {exc}"
+        run.park["asked_sec"] = round(asked + (0.0 if problem else seconds), 6)
+        run.park["slice_sec"] = min(PARK_SLICE_MAX_SEC, max(seconds, seconds * 2.0))
+        run.park["parked_turns"] = int(run.park.get("parked_turns") or 0) + 1
+        return {"waited_sec": 0.0 if problem else seconds, "asked_sec": run.park["asked_sec"],
+                "reason": problem}
+
+    def _park_slice(self, *, seconds: float, purpose: str) -> dict[str, Any]:
+        """挂机的一拍真睡（唯一落点，进主时钟的等待账）。
+
+        为什么单独一个方法：判据要把它换成"替身缝"（推进假时钟、半路投一条留言），
+        于是挂机这条控制流可以零真时间、零模型钱地跑完 —— 与 `fetch._default_sleep`
+        同一档的缝。假时钟在装的时候它按 `clock.await_io` 的既有口径不真睡（账照记、
+        `skipped` 计数 +1）。
+        """
+        return CLK.await_io(seconds, purpose, kind="park", where="agent_loop.park")
+
+    def _wait_any_reading(self) -> dict[str, Any]:
+        """本趟"等待任意计时器返回"的读数（业主 2026-10-27 第三条裁定）。
+
+        「可启动计时器"等待任意计时器返回"」—— 这是一个显式的意图（`clock.request_wait_any`
+        记的那一条），不是"有计时器"本身。三态：读不成 ⇒ `checked=False`
+        （"没查成"不是"它没要求等"）。
+        """
+        root = self._clock_root()
+        if not root or not str(self.my_task_id or ""):
+            return {"checked": False, "waiting": False, "pending": [], "woke": [],
+                    "purpose": "", "wait_id": "",
+                    "reason": "没有工作区根或台账号 ⇒ 这一格读不到（不是「没要求等」）"}
+        try:
+            return dict(CLK.wait_any_reading(root, str(self.my_task_id)))
+        except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
+            return {"checked": False, "waiting": False, "pending": [], "woke": [],
+                    "purpose": "", "wait_id": "",
+                    "reason": f"等待意图读不成：{type(exc).__name__}: {exc}"}
+
+    def _pending_work(self, mailbox: Mapping[str, Any]) -> dict[str, Any]:
+        """本趟"手上有活吗"的读数（`_park_gate` 第三个判据的输入）。
+
+        口径（业主 2026-10-27：「计时器不阻塞智能体动作，智能体可在多计时器同时存在时
+        继续手上工作」）—— 有活 = 下列任一条为真：
+
+        1. 这一拍有新投递（板项 / 留言 / 唤醒被消费）：那几段话就在这一步的上下文里，
+           模型得读它；
+        2. 我名下有未消的板项（`conductor.open_items_of`）：那是等着我处置的事；
+        3. 有子代理刚刚落定、它的产出一句都没被消费（`mailbox["children"]["settled"]`）。
+
+        三条都不成立才叫"本趟确实无事可做"。刻意不把"有计时器"算成"有活"
+        （那正是改前的错），也不把"名下有在飞的子代理"算成"有活"（子代理都在等 ⇒
+        无事可做，见 ③ 的第二条）。
+        """
+        out: dict[str, Any] = {"checked": True, "busy": False, "why": [],
+                               "items": [], "delivered": 0}
+        delivered = len(mailbox.get("item_ids") or ()) + len(mailbox.get("msg_ids") or ())
+        delivered += len(mailbox.get("wake_ids") or ())
+        out["delivered"] = delivered
+        if delivered:
+            out["busy"] = True
+            out["why"].append(f"这一拍新投递了 {delivered} 条（板项/留言/唤醒）")
+        items: list[str] = []
+        if self.conductor is not None and str(self.my_task_id or ""):
+            try:
+                open_items = self.conductor.open_items_of(str(self.my_task_id))
+                items = [str(r.get("task_id") or "") for r in open_items if r.get("task_id")]
+            except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"，按有活处置
+                out["checked"] = False
+                out["busy"] = True
+                out["why"].append(f"未消项读不成（{type(exc).__name__}: {exc}）")
+            else:
+                out["items"] = items
+                if items:
+                    out["busy"] = True
+                    out["why"].append(f"名下还有 {len(items)} 条未消的板项")
+        settled = list((mailbox.get("children") or {}).get("settled") or ())
+        if settled:
+            out["busy"] = True
+            out["why"].append(f"有 {len(settled)} 条子产出刚落定、还没被用")
+        out["why_text"] = "；".join(out["why"]) or "这一拍没有新投递、没有未消项、没有待消费的子产出"
+        return out
+
+    def _park_gate(self, *, step: int, run: "AgentLoop.LoopRun",
+                   mailbox: Mapping[str, Any]) -> dict[str, Any]:
+        """这一拍调不调模型 —— 挂机/交差那一支的唯一判据（`_deliver_mailbox` 之后调）。
+
+        ## 业主 2026-10-27 的新口径（改掉了 2026-10-27 早些时候刚落地的挂机判定）
+
+            「注意：计时器不阻塞智能体动作，智能体可在多计时器同时存在时继续手上工作，
+              直到它认为无事可做时，可启动计时器"等待任意计时器返回"。如果已无事可做且
+              无计时器，这意味着它交差了，需要向父代理报告，父代理把它记为静默子代理。」
+
+        于是判据从"有 waiter ⇒ 挂机"改成下面四条（有计时器不等于要停）：
+
+        1. 本趟显式要求过"等待任意计时器返回"（`clock.request_wait_any`）且确实还有计时器
+           没回来 ⇒ 挂机（不调模型），到任一计时器返回/事件到达再醒；
+        2. 同样显式要求过等，而一条计时器都没有 ⇒ 交差：向父代理报告
+           （`_hand_off`），由父代理把它记为静默；
+        3. 这一拍消费到的是"等谁"的唤醒（`_take_wakes` 已经消费过）⇒ 这一拍不调模型：
+           唤醒带来的那段话已经在 `messages` 里，下一拍问它就行；
+        4. 没有显式要求等、但有计时器没回来、且本趟确实无事可做
+           （`_pending_work` 三条都不成立）⇒ 挂机；
+        5. 其余（手上有活 / 读数读不成）⇒ 照常 `ask_step`。计时器在后台继续走，到点只落
+           唤醒标记 —— 这一条就是"计时器不阻塞动作"。
+
+        改前（2026-10-27 早些时候）：只要本趟有 parked waiter 就不调模型（真桩读数
+        `parked_steps=0` 是这么来的）；它的后果是"父代理一边等子、一边手上有活也停住"，
+        与业主这一句正好相反。判据 ③a 钉的就是这一条（起表 + 有活 ⇒ 仍要调模型）。
+
+        返回 `{skip_model, decision, woke_reason, waited_sec, reason, ...}`；`decision` 是
+        `park` / `woke` / `handoff` / `run` 四档（进 `agent_park` 事件与 `run.park` 的读数）。
+        """
+        wakes = self._wake_readings(mailbox.get("wake_ids") or ())
+        parked = self._park_reading()
+        want = self._wait_any_reading()
+        work = self._pending_work(mailbox)
+        pending_timers = list(want.get("pending") or ())
+        out: dict[str, Any] = {"skip_model": False, "decision": "run", "woke_reason": "",
+                               "waited_sec": 0.0, "reason": "",
+                               "parked": int(parked["count"]),
+                               "wait_any": bool(want.get("requested")),
+                               "timers": pending_timers,
+                               "pending_work": bool(work.get("busy")),
+                               "work_reason": str(work.get("why_text") or ""),
+                               "waiters": [str(w.get("timer_id") or "")
+                                           for w in parked["waiters"]],
+                               "checked": bool(wakes["checked"] and parked["checked"]
+                                               and want["checked"] and work["checked"])}
+        if not out["checked"]:
+            why = (parked.get("reason") or want.get("reason")
+                   or wakes.get("reason") or work.get("why_text") or "没查成")
+            reason = (f"挂机/等待意图读数没查成（{why}）⇒ 照常问模型，"
+                      "不把「没查成」当成「没在等」")
+            out["reason"] = reason
+            run.notes.append(f"挂机读数：{reason}")
+        elif want.get("waiting") and pending_timers:
+            # ① 显式要求等 + 还有计时器 ⇒ 挂机
+            slept = self._park_sleep_once(run=run, parked=parked)
+            out.update(skip_model=True, decision="park",
+                       waited_sec=float(slept.get("waited_sec") or 0.0),
+                       reason=(str(slept.get("reason") or "") or
+                               f"它要求等任意计时器返回：还有 {len(pending_timers)} 条没回来"
+                               "（这一拍不调模型）"))
+            run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
+            run.park["wait_any"] = True
+        elif want.get("requested") and not pending_timers:
+            # ② 显式要求等 + 一条计时器都没有 ⇒ 无事可做 ⇒ 交差
+            out.update(skip_model=True, decision="handoff",
+                       reason=("它要求等任意计时器返回，而一条计时器都没有 ⇒ "
+                               "无事可做且无计时器 ⇒ 交差（向父代理报告）"))
+            run.park["handoff_turns"] = int(run.park.get("handoff_turns") or 0) + 1
+        elif wakes["park"] and not wakes["timed"]:
+            # ③ 这一拍消费到的是"等谁"的唤醒：内容已进上下文，下一拍再问
+            reason = str(wakes["park"][-1].get("woke_reason") or "")
+            out.update(skip_model=True, decision="woke", woke_reason=reason,
+                       reason="这一拍消费到的是等谁的唤醒：内容已进上下文，下一拍再问")
+            run.park["woke_turns"] = int(run.park.get("woke_turns") or 0) + 1
+            run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
+            run.park["woke_reasons"] = list(run.park.get("woke_reasons") or []) + [reason]
+        elif parked["count"] and not work.get("busy"):
+            # ④ 有计时器在等 + 本趟确实无事可做 ⇒ 挂机
+            slept = self._park_sleep_once(run=run, parked=parked)
+            out.update(skip_model=True, decision="park",
+                       waited_sec=float(slept.get("waited_sec") or 0.0),
+                       reason=(str(slept.get("reason") or "") or
+                               "挂着等谁且本趟无事可做：这一拍不调模型，睡了就再看"))
+            run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
+        elif parked["count"]:
+            # ⑤ 有计时器在等，但手上有活 ⇒ 照常调模型（"计时器不阻塞动作"）
+            out["reason"] = (f"有 {int(parked['count'])} 条计时器在后台走，但手上有活"
+                             f"（{work.get('why_text')}）⇒ 照常问模型")
+        # ---- 回模型那一拍：把"等待任意计时器返回"那条意图撤掉（业主 2026-10-27 第三条）
+        #
+        # 那个意图是一个显式动作（「直到它认为无事可做时，可启动计时器等待任意计时器返回」），
+        # 不是一个持续状态：只要这一拍要回模型，它就已经消费完了 —— 要等就再要一次。
+        # 不撤的后果是实测过的形态：起意 → 被子代理一句话叫醒 → 循环回模型干活 →
+        # 那条意图还挂在账上，于是下一拍"我改主意了、手上有活"仍会被旧意图按回挂机档，
+        # 而 `wait_any_reading` 的 `requested` 永远是假（`woke` 非空）⇒ 连交差都判不出来。
+        # 撤的动作只在"这一拍真的要调模型"时做：挂机与交差那两档的意图本身就是这次要用的东西。
+        if not out["skip_model"] and str(want.get("wait_id") or ""):
+            root = self._clock_root()
+            me = str(self.my_task_id or "")
+            if root and me:
+                try:
+                    dropped = CLK.cancel_wait_any(root, me)
+                except Exception as exc:  # noqa: BLE001 - 撤不掉不许拦住这一拍
+                    run.notes.append(f"等待意图没撤成（{type(exc).__name__}: {exc}）")
+                else:
+                    out["wait_cancelled"] = int(dropped.get("cancelled") or 0)
+                    run.park["wait_cancelled"] = int(
+                        run.park.get("wait_cancelled") or 0) + out["wait_cancelled"]
+                    if not dropped.get("checked"):
+                        run.notes.append(
+                            f"等待意图没撤成：{dropped.get('reason') or '没查成'}")
+        run.park["decision"] = str(out["decision"])
+        run.park["waiters"] = [
+            {"timer_id": str(w.get("timer_id") or ""), "wait_for": str(w.get("wait_for") or ""),
+             "purpose": str(w.get("purpose") or ""), "parked_sec": w.get("parked_sec"),
+             "parked_steps": w.get("parked_steps"), "parked_calls": w.get("parked_calls")}
+            for w in parked["waiters"]]
+        run.park["checked"] = bool(out["checked"])
+        run.park["timers"] = pending_timers
+        if out["skip_model"]:
+            SS.append(self.session_root, {
+                "kind": PARK_EVENT, "role": self.role,
+                "task_id": str(self.my_task_id or ""), "step": int(step),
+                "decision": str(out["decision"]), "woke_reason": str(out["woke_reason"]),
+                "waited_sec": round(float(out["waited_sec"] or 0.0), 3),
+                "parked": int(out["parked"]), "waiters": list(out["waiters"]),
+                "wait_any": bool(out["wait_any"]), "timers": list(pending_timers),
+                "pending_work": bool(out["pending_work"]),
+                "checked": bool(out["checked"]), "reason": str(out["reason"]),
+            }, sid=self.sid)
+        return out
+
+    def _hand_off(self, *, step: int, run: "AgentLoop.LoopRun") -> dict[str, Any]:
+        """交差：无事可做且没有计时器 ⇒ 向父代理报告，父代理把它记为静默。
+
+        业主 2026-10-27 第四条裁定逐字：
+
+            「如果已无事可做且无计时器，这意味着它交差了，需要向父代理报告，父代理把它
+              记为静默子代理。」
+
+        三件事，缺一件都不算交差（与 D-52 那两条投递同一族纪律）：
+
+        1. 落一条交差账（`clock.record_handoff`）：`<工作区>/out/clock/handoffs.json` 一行，
+           带父的编号 —— 父侧读数（`conductor.handoffs_reading`）就从这个文件来；
+        2. 走既有的消息通道报告（`send_message`，subject 是 `clock.HANDOFF_SUBJECT`）：
+           父代理的收件箱里那一行就是"孩子交差了"；通道不新造；
+        3. 这一趟的收尾读数：`run.handed_off` + `stop_reason="handoff"` + 一句 `final`。
+
+        失败姿态：三件各自记问题、都不抛 —— "报告没送到"与"没交差"必须分得开，
+        所以问题写进 `run.notes` 与 `run.handed_off["problems"]`。
+        """
+        out: dict[str, Any] = {"at": "", "reason": "", "timers": [], "children": [],
+                               "handoff_id": "", "reported": False, "problems": []}
+        root = self._clock_root()
+        me = str(self.my_task_id or "")
+        handoff_reason = ("无事可做且没有任何计时器 ⇒ 交差"
+                          "（业主 2026-10-27：这正是「交差」的定义）")
+        try:
+            running = self._children_running()
+        except Exception:  # noqa: BLE001 - 读数坏了不许拦住交差
+            running = []
+        out["children"] = [str(x) for x in running]
+        if root and me:
+            try:
+                waited = CLK.wait_any_reading(root, me)
+                out["timers"] = list(waited.get("pending") or ())
+            except Exception:  # noqa: BLE001
+                out["timers"] = []
+            try:
+                got = CLK.record_handoff(root, task_id=me,
+                                         parent_task_id=str(self.parent_task_id or ""),
+                                         role=str(self.role or ""), reason=handoff_reason,
+                                         timers=out["timers"], children=out["children"])
+                out["handoff_id"] = str(got.get("handoff_id") or "")
+                out["at"] = str(got.get("at") or "")
+                if got.get("duplicate"):
+                    out["problems"].append("这一趟之前已经交过差了（账上是同一条）")
+            except Exception as exc:  # noqa: BLE001 - 交差账写不成要如实说
+                out["problems"].append(f"交差账没写成：{type(exc).__name__}: {exc}")
+            if self.parent_role:
+                try:
+                    msg_id, problem = send_message(
+                        self.session_root, sender=self.role, to=self.parent_role,
+                        subject=CLK.HANDOFF_SUBJECT,
+                        body=(f"{handoff_reason}。这一趟没有任何未了的计时器，"
+                              f"台账号 {me}；账上编号 {out['handoff_id'] or '（没落成）'}"),
+                        sid=self.sid, from_task_id=me)
+                    out["reported"] = bool(msg_id) and not problem
+                    if problem:
+                        out["problems"].append(f"交差报告没送到：{problem}")
+                except Exception as exc:  # noqa: BLE001
+                    out["problems"].append(f"交差报告抛了：{type(exc).__name__}: {exc}")
+            else:
+                out["problems"].append("没有父的角色 ⇒ 交差报告没送出去（账还是落了一条）")
+        else:
+            out["problems"].append("没有工作区根或台账号 ⇒ 交差账没落成")
+        out["reason"] = handoff_reason
+        run.handed_off = dict(out)
+        # 交差这一档刻意不新起一个 `stop_reason`：退出码表在 `cli.py`（本轮禁改），
+        # 而"新档不登记"会让它静默落进兜底异常档（1）—— 那会把"交差"读成"出错了"。
+        # 它是正常收工的一种（`LoopRun.stop_reason` 的缺省值就是 `final`），
+        # 区分它的读数是 `run.handed_off` 与 `agent_handoff` 事件。
+        run.final = (f"交差：{handoff_reason}。已向父代理报告"
+                     f"（交差编号 {out['handoff_id'] or '（没落成）'}；"
+                     f"报告{'已送出' if out['reported'] else '没送出'}）。"
+                     + ("；".join(out["problems"]) if out["problems"] else ""))
+        SS.append(self.session_root, {
+            "kind": "agent_handoff", "role": self.role, "task_id": me,
+            "step": int(step), "handoff_id": out["handoff_id"],
+            "reported": bool(out["reported"]), "parent_task_id": str(self.parent_task_id or ""),
+            "timers": list(out["timers"]), "children": list(out["children"]),
+            "problems": list(out["problems"]), "reason": handoff_reason,
+        }, sid=self.sid)
+        return out
 
     def _monitor_refusal(self, shape: str, payload: Mapping[str, Any], *, step: int) -> str:
         """监控回合的出口限定：这一句该不该被拒（空串 = 放行）。
@@ -5628,6 +6138,23 @@ class AgentLoop:
                     run.mailbox_items.extend(str(x) for x in mailbox["item_ids"])
                 if mailbox.get("msg_ids"):
                     run.mailbox_msgs.extend(str(x) for x in mailbox["msg_ids"])
+                # ---- 挂机（2026-10-27）：这一拍调不调模型。
+                #
+                # 位置是结构性的：投递之后（唤醒已经被消费、信箱已经投完）、`ask_step`
+                # 之前。业主口径是「挂机是将进程挂在时钟上」，而改前这里没有这一支 ——
+                # 父代理起了 `wait_for` 之后循环照旧每拍问模型（真机读数
+                # `parked_steps=3 / parked_calls=3`，见 `docs/WIRING-AUDIT-2026-10-27.md`）。
+                # 判定只在 `_park_gate` 一处，这里只消费它的结论。
+                park = self._park_gate(step=step, run=run, mailbox=mailbox)
+                if str(park.get("decision") or "") == "handoff":
+                    # ---- 交差（业主 2026-10-27 第四条）：无事可做且无计时器 ⇒
+                    # 向父代理报告，父代理把它记为静默。位置必须在 `ask_step` 之前：
+                    # 这一档的定义就是"手上没有可问模型的事"，问一次就多花一次调用，
+                    # 而业主点名的正是"这时候它交差了"。
+                    self._hand_off(step=step, run=run)
+                    break
+                if park["skip_model"]:
+                    continue
                 # 静态/动态分离之后 system 本该一个字节都不变；这里每步确认一次
                 # （变了就如实发新的并落一条红灯读数，见 `_system_at_step`）。
                 system = self._system_at_step(system_facts, system, step=step)
@@ -6509,6 +7036,16 @@ class AgentLoop:
             "wake_events": [dict(e) for e in run.wake_events],
             "clock_pumps": run.clock_pumps,
             "clock_fired": run.clock_fired,
+            # ---- 挂机那一支的收口读数（`LoopRun.park`）：这一趟睡了几拍、被叫醒的
+            # 那几拍省下了几次模型调用、最后一次读到的是谁在等。与 `agent_park` 事件同源。
+            "park": dict(run.park),
+            # ---- 交差读数（业主 2026-10-27 第四条）：这一趟自己交差的那一条
+            # （`handed_off`）与它作为父代理收到的子代理交差（`silent_children`）。
+            # 两格分开：前者是"我走了"，后者是"我记下了谁走了" —— 折成一格会让
+            # "我交了差"与"我的孩子交了差"在收工那一行上长得一样。
+            "handed_off": dict(run.handed_off),
+            "silent_children": list(run.silent_children),
+            "silent_children_count": len(run.silent_children),
             # 提示词缓存的收工读数（`LoopRun.prompt_cache`）：与 `spend` 并列 ——
             # "花了多少"与"靠前缀缓存省了多少"是同一笔钱的两面，分开落才核得动。
             "prompt_cache": dict(run.prompt_cache),

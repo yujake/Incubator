@@ -89,8 +89,7 @@ def _run(tmp_path: pathlib.Path, monkeypatch: Any, *, press_stop: bool,
                      role="D", task="把这件活做完", drive=[], max_steps=4,
                      rounds=rounds, report_every=1, resume=False, stop_file=None,
                      provider="fixture", config=None, wall_clock_sec=0, no_ask=True,
-                     semantic_review=False, attack_reasoning=False,
-                     experiment_reasoning=False, subagents=False,
+                     semantic_review=False, experiment_reasoning=False, subagents=False,
                      allow_foreign_entries=False, user_wait_sec=None)
     rc = cli.cmd_run_agent(args)
     events, problems = SS.read_session(root, sid="t")

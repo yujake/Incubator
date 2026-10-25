@@ -31,10 +31,11 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 from . import capabilities as C
 from . import cancellation as CX
+from . import clock as CLK
 from . import policy as P
 from . import schema as S
 from .cancellation import CANCEL_CODES, CancelRequested, CancelToken, detail_of
@@ -71,6 +72,480 @@ CHILD_COUNT_KEY = "child_count"
 ACTIVE_CHILD_COUNT_KEY = "active_child_count"
 CHILD_COUNT_LABELS: dict[str, str] = {CHILD_COUNT_KEY: "子代理数",
                                       ACTIVE_CHILD_COUNT_KEY: "活跃子代理数"}
+
+# ---------------------------------------------------------------- 三态（在飞 / 待机 / 静默）
+#
+# 业主逐字（2026-10-26 同一批裁定的第二句，`tests/test_three_states_flying_standby_silent.py`
+# 的模块头逐字抄着它）：
+#
+#   「关于『在飞』的读数要随着时钟式待机进行适配，分三种：1.在工作叫『在飞』，
+#    2.在等待（计时器）为『待机』，3.已收工，无任务，无计时器，叫『静默』。
+#    更新『活跃子代理』的定义为非静默子代理。」
+#
+# 加上第四档 `unknown`（读不到台账 / 名册 / 时钟 ⇒ 判不了，不许折成静默）：
+# "没查成"与"查过了、它是静默的"是本项目最贵的一类折叠 —— 折成静默会让一个还挂在
+# 时钟上的代理被判成收工了，而"能不能销号"正好读这一格。
+
+#: 在工作（自己在跑一个回合）。
+AGENT_STATE_FLYING = "flying"
+#: 在等待：没在工作，但时钟上挂着等待（timer / alarm / periodic），或在等名下的活。
+AGENT_STATE_STANDBY = "standby"
+#: 已收工、无任务、无计时器（以及已销号 —— 销号即退场）。
+AGENT_STATE_SILENT = "silent"
+#: 判不了（台账 / 名册 / 时钟有一处读不成）。第四档，不是静默的别名。
+AGENT_STATE_UNKNOWN = "unknown"
+
+#: 销号拒信的机器码：目标不是静默（在飞 / 待机 / 未读到）。
+#:
+#: 业主 2026-10-26 同一批裁定逐字：「销号可以也只可针对静默子代理」。这一条闸的
+#: 拒绝不是"工具坏了"也不是"它不在你名下"，而是"它现在不能销"——父下一步该做的是
+#: 让它收工 / 等那些计时器 / 显式让它停，所以拒信必须带这个码，让调用方按码分流。
+RETIRE_REFUSAL_TARGET_NOT_SILENT = "target_not_silent"
+
+#: 三态词表。顺序就是业主那句"前面的优先"：在飞 → 待机 → 静默；`unknown` 是三态之外的一档。
+AGENT_STATES: tuple[str, ...] = (AGENT_STATE_FLYING, AGENT_STATE_STANDBY,
+                                 AGENT_STATE_SILENT, AGENT_STATE_UNKNOWN)
+
+#: 「活跃」= 非静默 = 在飞 + 待机（业主同一句：「更新『活跃子代理』的定义为非静默子代理」）。
+#:
+#: `unknown` 刻意不在这里：判不了不等于活跃，也不等于静默 —— 它自己的计数格单独给
+#: （`unknown` 那一格非 0 时，`complete` 一律是 False，读数里逐条点名）。
+ACTIVE_AGENT_STATES: tuple[str, ...] = (AGENT_STATE_FLYING, AGENT_STATE_STANDBY)
+
+#: 三态的中文名（唯一一份：名册面、网页、读数都从这里取措辞，不许各写一份）。
+AGENT_STATE_LABELS: dict[str, str] = {AGENT_STATE_FLYING: "在飞",
+                                      AGENT_STATE_STANDBY: "待机",
+                                      AGENT_STATE_SILENT: "静默",
+                                      AGENT_STATE_UNKNOWN: "未读到"}
+
+#: 三态的强弱次序（只用于"一个代理接过好几件活 / 一整支子树"这类聚合读数）。
+#:
+#: `unknown` 排在 `silent` 之上：聚合时"有一格判不了"不许被"有一格是静默的"吃掉 ——
+#: 那是 fail-open 在同一份读数里的另一种形态（把没查成折成静默）。
+AGENT_STATE_RANK: dict[str, int] = {AGENT_STATE_FLYING: 3, AGENT_STATE_STANDBY: 2,
+                                    AGENT_STATE_UNKNOWN: 1, AGENT_STATE_SILENT: 0}
+
+
+def state_counts(states: Iterable[str]) -> dict[str, int]:
+    """四档各几个 + `active`（= 在飞 + 待机）+ `total`。词表外的取值一律记进 `unknown`。
+
+    为什么不把词表外的取值丢掉：丢掉会让 `total` 比实际少，而"少了几个"在读数上
+    看不出来（`active` 也不会因此变错，于是没有任何一处会报）。
+    """
+    counts: dict[str, int] = {name: 0 for name in AGENT_STATES}
+    for raw in states:
+        got = str(raw or "")
+        counts[got if got in counts else AGENT_STATE_UNKNOWN] += 1
+    counts["active"] = counts[AGENT_STATE_FLYING] + counts[AGENT_STATE_STANDBY]
+    counts["total"] = sum(counts[name] for name in AGENT_STATES)
+    return counts
+
+
+def most_active_state(states: Iterable[str]) -> str:
+    """几个三态合成一个（在飞 > 待机 > unknown > 静默；一个都没有 ⇒ unknown）。
+
+    用在"一个代理接过好几件活"的聚合上：它现在是哪一态，由它那几行里最活跃的那一行说。
+    """
+    best = ""
+    for raw in states:
+        got = str(raw or "")
+        if got not in AGENT_STATE_RANK:
+            got = AGENT_STATE_UNKNOWN
+        if best == "" or AGENT_STATE_RANK[got] > AGENT_STATE_RANK[best]:
+            best = got
+    return best or AGENT_STATE_UNKNOWN
+
+
+def clock_waiters(workspace: str | Path) -> dict[str, Any]:
+    """这个工作区的时钟上还挂着的等待，按代理编号归组（唯一实现，只读）。
+
+    `{"checked", "by_task", "rows", "count", "reason"}`：`by_task` 是
+    `{代理编号: [一条等待...]}`，每一条带 `id` / `kind` / `park_state` / `at` /
+    `purpose` / `to`。
+
+    ## 哪些算"挂着"
+    - 一次性计时器 / 闹钟（`kind ∈ {timer, alarm}`）：`state == "pending"`。
+      等时间的那一条（`after_sec`，`park_state` 是空串）也算挂着 —— 业主说的是
+      「在等待（计时器）」，不是"只有 park 才算"；`park_state == "parked"` 是其中
+      "等谁"的那一小类（挂机）。
+    - 周期性巡查（`kind == "periodic"`）：`state == "running"`（还在跳）。
+      到点不消耗，所以"还有下一拍"就是"还挂着"。
+
+    ## 三态
+    时钟簿记读不成（`out/clock/state.json` 坏了、权限不对）⇒ `checked=False` + `reason`，
+    `by_task` 是空表。它不等于"没有等待"：调用方据此把三态判成 `unknown`，
+    而不是"静默"（`Conductor.agent_state` 的判定次序第 ④ 步就是这一条）。
+    """
+    out: dict[str, Any] = {"checked": False, "by_task": {}, "rows": [],
+                           "count": 0, "reason": ""}
+    try:
+        bucket = CLK.book(workspace)
+        timers = list(bucket.all())
+        periodics = list(bucket.all_periodics())
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        out["reason"] = f"时钟读不成（{type(exc).__name__}: {exc}）"
+        return out
+    rows: list[dict[str, Any]] = []
+    for timer in timers:
+        if str(getattr(timer, "state", "")) != "pending":
+            continue
+        rows.append({"id": str(getattr(timer, "timer_id", "") or ""),
+                     "kind": str(getattr(timer, "kind", "") or ""),
+                     "park_state": str(getattr(timer, "park_state", "") or ""),
+                     "at": str(getattr(timer, "due_at", "") or ""),
+                     "purpose": str(getattr(timer, "purpose", "") or ""),
+                     "to": str(getattr(timer, "to", "") or ""),
+                     "task_id": str(getattr(timer, "task_id", "") or "")})
+    for periodic in periodics:
+        if str(getattr(periodic, "state", "")) != "running":
+            continue
+        rows.append({"id": str(getattr(periodic, "periodic_id", "") or ""),
+                     "kind": "periodic",
+                     # 周期性巡查的"等谁"也是挂机（`wait_for` 非空），与 timer 同一口径。
+                     "park_state": "parked" if str(getattr(periodic, "wait_for", "") or "")
+                     else "",
+                     "at": str(getattr(periodic, "next_at", "") or ""),
+                     "purpose": str(getattr(periodic, "purpose", "") or ""),
+                     "to": str(getattr(periodic, "to", "") or ""),
+                     "task_id": str(getattr(periodic, "task_id", "") or "")})
+    by_task: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        tid = str(row.get("task_id") or "")
+        if not tid:
+            continue
+        by_task.setdefault(tid, []).append(row)
+    out.update({"checked": True, "by_task": by_task, "rows": rows,
+                "count": len(rows), "reason": ""})
+    return out
+
+
+def waiters_of(clock: Mapping[str, Any], task_ids: Iterable[str]) -> dict[str, Any]:
+    """时钟读数里属于某个代理的那几条等待（`agent_state` 的第三个输入）。
+
+    `task_ids` 是这个代理可能用过的每一个编号（它那一行 + 名册对照表里它接过的活）——
+    同一个常驻子代理接过 N 件活就有 N 个编号，只认"当前那一件"会漏掉它在上一件活上
+    挂的钟，而漏掉的表现正好是"待机"被判成"静默"。
+    """
+    want = [str(t or "") for t in task_ids]
+    if not clock.get("checked"):
+        return {"checked": False, "rows": [], "reason": str(clock.get("reason") or "")}
+    by_task = dict(clock.get("by_task") or {})
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for tid in want:
+        for row in by_task.get(tid) or ():
+            key = f"{row.get('kind') or ''}:{row.get('id') or ''}"
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(dict(row))
+    return {"checked": True, "rows": rows, "reason": ""}
+
+
+def agent_state(*, row: Mapping[str, Any] | None,
+                item: Mapping[str, Any] | None = None,
+                wait: Mapping[str, Any] | None = None,
+                waiting_for: Sequence[str] = (),
+                ledger_checked: bool = True,
+                roster_checked: bool = True) -> dict[str, Any]:
+    """一个代理的三态 —— 全仓唯一实现（纯函数：不读盘、不取时钟、不判命题）。
+
+    输入就是盘上的两份事实：`row` = 台账里它那一行（`None` = 台账里没有它），
+    `item` = 名册里那一项（`None` = 不在任何名册里 / 这一层不读名册）；
+    外加两条派生的读数：`wait` = 它挂在时钟上的等待（:func:`waiters_of`），
+    `waiting_for` = 它名下还在活跃的直接子（"在等下级"）。
+
+    ## 判定次序（逐字，前面的优先）
+    ```
+    ① 台账读不成                      ⇒ unknown
+    ② 名册读不成                      ⇒ unknown
+    ③ 台账里没有它那一行               ⇒ unknown
+    ④ 时钟读不成                      ⇒ unknown（在飞 / 待机 / 静默三档都定不了）
+    ⑤ 自己在跑（status ∈ UNFINISHED_STATUSES）且没挂在时钟上 ⇒ 在飞
+    ⑥ 已销号（名册项 retired）         ⇒ 静默（销号即退场，不在活跃集合里）
+    ⑦ 挂在时钟上 / 时钟上有到点的等待 / 名下有在飞的直接子 ⇒ 待机
+    ⑧ 其余                            ⇒ 静默
+    ```
+    "三态之间"的次序就是业主那句"在飞 → 待机 → 静默（前面的优先）"（⑤ ⑦ ⑧）；
+    ①②③④ 是"判不了"的闸，⑥ 是"已退场"的闸，两者都排在它该压住的那一档之前。
+
+    ## 为什么 ⑤ 要减掉"挂在时钟上"
+    这一条是业主那句「『在飞』的读数要"随着时钟式待机"进行适配」的落点：挂机的
+    那一趟循环还活着，台账行也还是 `running`（`agent_loop._park_gate` 只是让这一拍
+    不调模型、睡一拍），所以"有 running 的任务"本身分不开"在跑回合"与"挂在钟上等"。
+    不减掉它，"待机"就只会在"已收工但留了个钟"那一小撮上出现，而真机上的挂机
+    一个都读不出来 —— 那正是这一批要修的那个读数。
+
+    ## 为什么"名下有在飞的直接子"也算待机
+    业主既有裁定逐字：「若一子代理自身不活跃，但有活跃的子代理甚至孙代理，它还是叫
+    活跃的……有『等』这个动作还是算活跃的」。挂机是"等"的机制（`wait_for` 那一条钟），
+    而这一格是同一个"等"在台账侧的读数：机制那一面读不到时（夹具没排钟、或它用别的
+    方式在等），这一面仍然认得出来。两面都不许折成"静默"。
+
+    ## 返回
+    `{"state", "state_label", "reason", "task_id", "status", "self_busy", "parked",
+    "retired", "waiting_only", "waiters", "waiting_for"}`。
+    `reason` 是"为什么判成这一格"的人话（`unknown` 时必有，其余可空）。
+    """
+    status = str((row or {}).get("status") or "")
+    tid = str((row or {}).get("task_id") or "")
+    retired = bool((item or {}).get("retired"))
+    clock = dict(wait or {"checked": False, "rows": [],
+                          "reason": "没读时钟 ⇒ 在飞与待机分不开"})
+    rows = [dict(x) for x in (clock.get("rows") or ())]
+    parked = any(str(x.get("park_state") or "") == "parked" for x in rows)
+    self_busy = status in UNFINISHED_STATUSES
+    out: dict[str, Any] = {"state": AGENT_STATE_UNKNOWN, "state_label": "",
+                          "reason": "", "task_id": tid, "status": status,
+                          "self_busy": bool(self_busy), "parked": bool(parked),
+                          "retired": retired, "waiting_only": False,
+                          "waiters": rows, "waiting_for": [str(x) for x in waiting_for]}
+
+    def settle(state: str, reason: str = "") -> dict[str, Any]:
+        out["state"] = state
+        out["state_label"] = AGENT_STATE_LABELS.get(state, "")
+        out["reason"] = reason
+        out["waiting_only"] = bool(state == AGENT_STATE_STANDBY and not self_busy)
+        return out
+
+    if not ledger_checked:
+        return settle(AGENT_STATE_UNKNOWN, "台账读不成 ⇒ 它是哪一态判不了")
+    if not roster_checked:
+        return settle(AGENT_STATE_UNKNOWN,
+                      "名册读不成 ⇒ 它有没有销号判不了（销号即退场，静默与退场分不开）")
+    if row is None:
+        return settle(AGENT_STATE_UNKNOWN,
+                      "台账里没有它那一行 ⇒ 它有没有在跑 / 收工 判不了")
+    if not clock.get("checked"):
+        return settle(AGENT_STATE_UNKNOWN,
+                      f"时钟读不成（{clock.get('reason') or '没查成'}）⇒ "
+                      "它是在飞、待机还是静默分不开")
+    if self_busy and not parked:
+        return settle(AGENT_STATE_FLYING, f"它自己在跑（status={status}）")
+    if retired:
+        return settle(AGENT_STATE_SILENT,
+                      "已销号 ⇒ 退场（销号即退场，不在活跃集合里）")
+    if parked:
+        marks = "、".join(sorted({str(x.get("id") or "") for x in rows
+                                  if str(x.get("park_state") or "") == "parked"}))
+        return settle(AGENT_STATE_STANDBY, f"它挂在时钟上等（{marks or 'parked'}）")
+    if rows:
+        marks = "、".join(sorted({str(x.get("id") or "") for x in rows}))
+        return settle(AGENT_STATE_STANDBY, f"时钟上还有等待没到点（{marks}）")
+    if out["waiting_for"]:
+        return settle(AGENT_STATE_STANDBY,
+                      "它自己没在跑，是在等 " + "、".join(out["waiting_for"]) + "（活跃）")
+    return settle(AGENT_STATE_SILENT, "它已收工：没有任务、也没有任何计时器")
+
+
+def agent_states(rows: Sequence[Mapping[str, Any]], *,
+                 clock: Mapping[str, Any] | None = None,
+                 retired: Mapping[str, bool] | None = None,
+                 roster_checked: bool = True,
+                 ledger_checked: bool = True) -> dict[str, dict[str, Any]]:
+    """一组代理行的三态（按 `parent_task_id` 成树，自底向上算，含"在等下级"）。
+
+    这就是 :func:`agent_state` 的唯一调用点（`Conductor.activity_snapshot`、
+    `Secretary.child_counts` / `roster_view`、`webui.readers.roster_face` 都从这里拿）——
+    判定逻辑只有上面那一份，这里只负责"谁是谁的子"与先后次序。
+
+    `retired` 是 `{代理编号: 是否已销号}`（名册那一侧的事实；不给 ⇒ 一律 False）；
+    `roster_checked=False` ⇒ 每一格都是 `unknown`（销号没销号判不了）。
+    """
+    clock = dict(clock or {"checked": False, "rows": [],
+                           "reason": "没读时钟 ⇒ 在飞与待机分不开"})
+    retired_of = dict(retired or {})
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    kids: dict[str, list[str]] = {}
+    for raw in rows:
+        row = dict(raw)
+        tid = str(row.get("task_id") or "")
+        if not tid:
+            continue
+        rows_by_id[tid] = row
+    for tid, row in rows_by_id.items():
+        pid = str(row.get("parent_task_id") or "")
+        if pid:
+            kids.setdefault(pid, []).append(tid)
+    order: list[str] = []
+    seen: set[str] = set()
+    for start in sorted(rows_by_id):
+        if start in seen:
+            continue
+        stack: list[tuple[str, bool]] = [(start, False)]
+        onstack: set[str] = {start}
+        while stack:
+            tid, done = stack.pop()
+            if done:
+                onstack.discard(tid)
+                order.append(tid)
+                continue
+            if tid in seen:
+                onstack.discard(tid)
+                continue
+            seen.add(tid)
+            stack.append((tid, True))
+            for kid in kids.get(tid, ()):
+                if kid in seen or kid in onstack:
+                    continue
+                stack.append((kid, False))
+                onstack.add(kid)
+    out: dict[str, dict[str, Any]] = {}
+    for tid in order:
+        row = rows_by_id[tid]
+        item = ({"retired": bool(retired_of.get(tid))} if tid in retired_of else None)
+        wait = waiters_of(clock, [tid])
+        waiting_for = [k for k in kids.get(tid, ())
+                       if str((out.get(k) or {}).get("state") or "") in ACTIVE_AGENT_STATES]
+        out[tid] = agent_state(row=row, item=item, wait=wait,
+                               waiting_for=waiting_for,
+                               ledger_checked=ledger_checked,
+                               roster_checked=roster_checked)
+    return out
+
+
+def _agent_label(tid: str, names: Mapping[str, str] | None = None) -> str:
+    """一个人话标签：有名字就写「名字（编号）」，没有就写编号（都空 ⇒ 明确的"没有编号"）。
+
+    为什么名字与编号都写：名字是父与子之间的指称（`D1`），编号是台账里能直接查的那一格。
+    只写名字会让"点名"在台账侧核不起来，只写编号会让父对不上名册。
+    """
+    got = str((names or {}).get(tid) or "")
+    if got and got != tid:
+        return f"{got}（{tid}）"
+    return tid or "（没有编号）"
+
+
+def retire_blocking(reading: Mapping[str, Any], *,
+                    names: Mapping[str, str] | None = None) -> list[dict[str, str]]:
+    """把一份三态读数翻成"为什么还不能销号"的逐条清单（全仓唯一实现）。
+
+    ## 为什么销号要读三态，而不是只读"它在不在跑"
+    业主 2026-10-26 裁定逐字：「销号可以也只可针对静默子代理」。静默 = 无工作 ∧
+    无任何计时器 ∧ 无活跃子代理。只读 `status` 会漏掉整整一档：一个已经 `done`、
+    时钟上却还挂着计时器的子代理会在那一条读数里与"收工了"长得一模一样，而它
+    还会醒过来 —— 销掉它等于把一个即将发生的动作从名册上摘掉（销号不可逆，名字
+    永久不复用）。
+
+    ## 返回
+    `[{"kind", "detail"}]`，`kind` 只有三档：
+    - `working`：它还在干活（自己在跑，或是这一支里真正在跑的节点）⇒ 先让它收工；
+    - `waiting`：它还会醒过来（挂着计时器 / 在等活跃子代理）⇒ 让那件事先发生，或显式让它停；
+    - `unknown`：读不到它是不是静默 ⇒ fail-closed，重读一次再决定。
+    静默 ⇒ 空表。`detail` 是逐条点名的人话（计时器的编号 / 目的 / 到点时刻、
+    它在等的子代理是哪一个），`names` 是"编号 → 名册名"的对照（不给就用编号）。
+
+    ## 为什么这里不判"能不能销"
+    这里只给理由清单；"拒了"这件事由调用方按三态决定 —— 待机里"真正在跑的在下级"
+    那一小档交给子树活跃闸去说（那份拒信会逐个点名整支的活跃节点），而 `unknown`
+    一律拒绝。把工作流塞进这个函数，会让同一份读数在两个调用点说出两句不同的话。
+    """
+    def label_of(tid: str) -> str:
+        return _agent_label(tid, names)
+
+    state = str(reading.get("state") or AGENT_STATE_UNKNOWN)
+    out: list[dict[str, str]] = []
+    if state == AGENT_STATE_FLYING:
+        status = str(reading.get("status") or "unknown")
+        out.append({"kind": "working",
+                    "detail": (f"它还在干活（status={status}），"
+                               "销号等于把它手上的活扔掉 —— 先让它收工")})
+        return out
+    if state == AGENT_STATE_STANDBY:
+        for waiter in reading.get("waiters") or ():
+            w = dict(waiter)
+            purpose = str(w.get("purpose") or "").strip() or "（没写目的）"
+            at = str(w.get("at") or "").strip() or "（没读到到点时刻）"
+            out.append({"kind": "waiting",
+                        "detail": (f"{w.get('id') or '（没有编号）'}"
+                                   f"（{w.get('kind') or '未知种类'}）：{purpose}，到点 {at}")})
+        waiting_for = [str(x) for x in (reading.get("waiting_for") or ())]
+        for kid in waiting_for:
+            out.append({"kind": "waiting",
+                        "detail": f"它在等子代理 {label_of(kid)}（那个子还活跃），它还会醒过来"})
+        for busy in [str(x) for x in (reading.get("busy_roots") or ())]:
+            if busy in waiting_for:
+                continue
+            out.append({"kind": "working",
+                        "detail": f"这一支里 {label_of(busy)} 还在干活"})
+        return out
+    if state == AGENT_STATE_SILENT:
+        return out
+    why = (str(reading.get("state_reason") or "").strip()
+           or str(reading.get("reason") or "").strip() or "读数里没给理由")
+    out.append({"kind": "unknown", "detail": f"读不到它是不是静默（{why}）"})
+    return out
+
+
+def retire_refusal(reading: Mapping[str, Any], *, tid: str = "", name: str = "",
+                   names: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """一条"目标不是静默"的拒信（`retire_blocking` 的唯一消费者：工具与秘书共用）。
+
+    返回 `{"code","state","state_label","blocking","why","missing"}`。调用方只在
+    `silent` 为假时用它；`code` 恒是 `RETIRE_REFUSAL_TARGET_NOT_SILENT`（不是空串：
+    这条函数的存在前提就是"这一格不能销"）。
+
+    ## 三档拒信各自必须说清的那一件事
+    - 在飞：它还在干活（status=…），销号等于把它手上的活扔掉 —— 先让它收工；
+      外加"销号 ≠ 停止"，因为父最容易把这两件事当成一件事；
+    - 待机：挂着几条计时器（逐条：编号 / 种类 / 目的 / 到点时刻），它还会醒过来 ——
+      要么让那些计时器等的事先发生，要么显式让它停（停止 ≠ 销号）；
+    - 未读到：读不到它是不是静默 ⇒ 不许销（fail-closed）。
+    待机还有一小档是"它在等活跃子代理"：那一条拒信点名是哪个子让它非静默，
+    并把"级联永远是先子后父"写出来（业主同一批裁定给的不变量：有活跃子代理 ⇒
+    必存在一条等待该子代理的计时器 ⇒ 父非静默 ⇒ 父不许销）。
+    """
+    lead = (f"{name}（{tid}）" if name and tid else (name or tid or "这个子代理"))
+    label = str(reading.get("state_label") or "")
+    if not label:
+        label = AGENT_STATE_LABELS.get(str(reading.get("state") or ""), "") or "判不了"
+    blocking = retire_blocking(reading, names=names)
+    state = str(reading.get("state") or AGENT_STATE_UNKNOWN)
+    waiters = [dict(x) for x in (reading.get("waiters") or ())]
+    waiting_for = [str(x) for x in (reading.get("waiting_for") or ())]
+    busy = [str(x) for x in (reading.get("busy_roots") or ())]
+    missing: list[str] = []
+    if state == AGENT_STATE_FLYING:
+        why = (f"{lead}现在是{label}：{blocking[0]['detail']}；销号只针对静默子代理。"
+               "销号 ≠ 停止：要它此刻停下来用停止/叫停，不是销号")
+        missing = [f"{tid or lead} 还在跑"]
+    elif state == AGENT_STATE_UNKNOWN:
+        detail = next((b["detail"] for b in blocking if b.get("kind") == "unknown"),
+                      "读不到它是不是静默")
+        why = (f"{lead}现在是{label}：{detail} —— 读不到就不许销（fail-closed）；"
+               "销号只针对静默子代理")
+        missing = [f"读不到 {tid or lead} 是不是静默"]
+    elif state == AGENT_STATE_STANDBY:
+        parts: list[str] = []
+        if waiters:
+            listed = "；".join(f"{w.get('id') or '（没有编号）'}（{w.get('kind') or '未知种类'}）："
+                               f"{str(w.get('purpose') or '').strip() or '（没写目的）'}，"
+                               f"到点 {str(w.get('at') or '').strip() or '（没读到到点时刻）'}"
+                               for w in waiters)
+            parts.append(f"它挂着 {len(waiters)} 条计时器（{listed}），它还会醒过来 —— "
+                         "要么让那些计时器等的事先发生，要么显式让它停（停止≠销号）")
+            missing.extend(f"计时器 {w.get('id') or '（没有编号）'} 到点 "
+                           f"{str(w.get('at') or '').strip() or '（没读到）'}" for w in waiters)
+        if waiting_for:
+            named = "、".join(_agent_label(k, names) for k in waiting_for)
+            parts.append(f"它名下有 {len(waiting_for)} 个还活跃的子代理（{named}），"
+                         "它在等它们 —— 先让那些子代理收工、或者先销它们"
+                         "（级联永远是先子后父）")
+            missing.extend(f"{_agent_label(k, names)} 还活跃" for k in waiting_for)
+        for one in busy:
+            if one in waiting_for:
+                continue
+            parts.append(f"这一支里 {_agent_label(one, names)} 还在干活")
+            missing.append(f"{_agent_label(one, names)} 还在干活")
+        body = "；".join(parts) or "它在待机（还在等）"
+        why = f"{lead}现在是{label}：{body}；销号只针对静默子代理"
+    else:
+        why = (f"{lead}现在是{label}：{'; '.join(b['detail'] for b in blocking)}；"
+               "销号只针对静默子代理")
+    return {"code": RETIRE_REFUSAL_TARGET_NOT_SILENT, "state": state,
+            "state_label": label, "blocking": blocking, "why": why,
+            "missing": missing}
+
 
 #: 检查器那一族动作写在 `status` 里的结论三态（与 `agent_l._support.THREE_STATES` 同一组词）。
 #:
@@ -360,7 +835,34 @@ class SummonHandle:
         self._result = result
         self._settled_at = time.monotonic()
         self._done.set()
+        self._observe_submit(result)
         self._notify()
+
+    def _observe_submit(self, result: SummonResult) -> None:
+        """把"这件活收工提交了"交给时钟（业主 2026-10-25：收工提交必须被时钟观测到）。
+
+        为什么放在这里而不是放在台账写完之后：时钟要的是"这一趟结束了"这个事实，
+        它拿它去唤醒挂着等这件活的父代理（`wait_for=task:<号>` / 子代理名册名）。
+        内容取结果的 `detail`（收工产出的摘要）——父代理被唤醒时那句话里要带上它。
+
+        失败姿态：观测是旁路，它炸了不许把落定带下水（与 `_notify` 同一条纪律）。
+        """
+        try:
+            from . import clock as _CLK
+
+            body = str(getattr(result, "detail", "") or "")
+            outcome = str(getattr(result, "outcome", "") or "")
+            content = f"{outcome}：{body}" if outcome else body
+            _CLK.observe_event(
+                "submit",
+                task_id=str(self.task_id or ""),
+                from_task_id=str(self.task_id or ""),
+                to_task_id=str(self.parent_task_id or ""),
+                role=self.role,
+                content=content,
+            )
+        except Exception:  # noqa: BLE001 - 旁路：见 docstring
+            pass
 
     def fail(self, error: BaseException) -> None:
         """后半炸了（存储/记账那一层）。如实记下来，`result()` 时落成 failed 行。
@@ -398,8 +900,25 @@ class SummonHandle:
         return self._settled_at
 
     def wait(self, timeout: float | None = None) -> bool:
-        """等到落定（或到点）。返回"落定了没有"。"""
-        return self._done.wait(None if timeout is None else max(0.0, float(timeout)))
+        """等到落定（或到点）。返回"落定了没有"。
+
+        阻塞由 `Event.wait` 完成（等的是"这一件落定"这个事件），账照样记进主时钟
+        （`note_wait`）：业主 2026-10-25 要的是"所有计时类工作进同一本账"，而记一条
+        "等了多久、等的是谁"不需要把 `Event.wait` 换成 `sleep`（换了会丢掉"一落定就
+        返回"的语义）。实测读数在 `clock.now` 的 `waits_recorded` 里。
+        """
+        budget = None if timeout is None else max(0.0, float(timeout))
+        started = time.monotonic()
+        got = self._done.wait(budget)
+        waited = time.monotonic() - started
+        try:
+            CLK.note_wait(budget if budget is not None else waited,
+                          "等这一件活落定（SummonHandle.wait）",
+                          kind="summon_wait", where="conductor.SummonHandle.wait",
+                          waited_for=str(self.task_id or ""), slept=waited)
+        except Exception:  # noqa: BLE001 - 记账是旁路，不许把等待本身带坏
+            pass
+        return got
 
     def poll(self) -> SummonResult | None:
         """不等：落定了就给结果，没有就 `None`。"""
@@ -700,6 +1219,96 @@ def _closure_suffix(reading: Mapping[str, Any]) -> str:
         return "；闭环提醒：0 条未闭环"
     parts = "、".join(f"{k} {v} 条" for k, v in sorted((reading.get("by_state") or {}).items()))
     return f"；闭环提醒 {count} 条（{parts}；unclaimed=没人接手，pending/running=没有终态）"
+
+
+# ---------------------------------------------------------------- 链式寻址（业主 2026-10-26 裁定）
+#
+# 业主原话（唯一权威）：
+#   「M给绝对编码链例如000001->000005->000012->000024之类，M的秘书发给000005的秘书
+#     消息有链000005->000012->000024，然后000005的秘书继续发给下级秘书，直到000024
+#     的秘书收到后才具体读消息内容。M的轮查工具务必能反馈绝对编码链。」
+#
+# 这一节只做两件只读的事：把写法拆成逐跳 token（`parse_chain_address`），以及把
+# 台账里的父子链算出来（`Conductor.chain_of`）。逐跳校验与拒信在
+# `Conductor.resolve_chain`；真正逐级转发在 `secretary.Secretary.relay_out` /
+# `relay_in`（一个秘书一处，不在这里替它们转）。
+
+#: 链式寻址的分隔符。业主写的就是这两个字符；只认这一种写法（多认几种等于把
+#: "这一串到底是一条链还是三个收件人"变成猜谜，`to` 那一格没有第二个分隔符）。
+CHAIN_SEPARATOR = "->"
+
+#: 链式投递的三态（业主裁定逐字：`delivered` / `refused` / `unknown`）。
+#: 与既有的三态纪律同一条：`unknown` 是"读不到名册 / 链没校验"，不是"送不到"。
+CHAIN_DELIVERY_STATES: tuple[str, ...] = ("delivered", "refused", "unknown")
+
+#: 链校验的受控拒绝码（工具读数里的取值，不是 `tasks.refusal_reason` 的词表 ——
+#: 链校验不落任务行，它是一句话的下发路径）。逐个都由某一行真的产出：
+#: `broken_chain`（某跳不是上一跳的直接下级 / 链尾是自己 / 目标不在这一支下面）、
+#: `retired_target`（链上某跳已销号）、`not_in_roster`（某一跳不在册 / 不是代理行）、
+#: `no_identity`（这一趟没有台账号）、`store_unreadable`（台账读不成）、
+#: `roster_unreadable`（名册读不成）、`relay_unwritten`（转发台账写不成）。
+CHAIN_REFUSAL_REASONS: tuple[str, ...] = (
+    "broken_chain", "retired_target", "not_in_roster", "no_identity",
+    "store_unreadable", "roster_unreadable", "relay_unwritten",
+)
+
+#: 链式寻址的写法里"这一跳在不在册"的四档（不折平：名册没写过不等于不在册）。
+#: 取值与产出它的那一行一一对应，见 `Conductor.resolve_chain` 的 `hops[].roster`：
+#: `self`（链头就是发送方自己，它不在任何人的名册里）、`registered`（在册且没销号）、
+#: `not_registered`（名册有行、但没有它 ⇒ 受控拒绝）、`unwritten`（这一支从没登记过
+#: ⇒ 记下来并放行：台账才是父子关系的权威）。
+CHAIN_HOP_ROSTER: tuple[str, ...] = ("self", "registered", "not_registered", "unwritten")
+
+#: 一跳的绝对编号最多 64 层（与 `_ancestry` / `inside_subtree` 的上行链同一个上限：
+#: 数据被手工改坏时不许把一条链算成死循环）。
+CHAIN_MAX_HOPS = 64
+
+
+def parse_chain_address(written: Any) -> tuple[list[str], str]:
+    """把收件人写法拆成逐跳 token（`000001->000005->000012`）。返回 `(tokens, 问题)`。
+
+    分隔符是 :data:`CHAIN_SEPARATOR`（业主的写法逐字）。两侧空白去掉；任一跳为空
+    （`a->` / `->b` / `a->->b`）⇒ 返回已拆出的 token 与一句问题，调用方按受控拒绝
+    `broken_chain` 报出来，不替它猜"空的那一跳是谁"。
+    只有一个 token 时不等于"没有链"：那是"直接寻址那一个"，链条由台账的父子关系
+    现算（见 :meth:`Conductor.resolve_chain`）—— 业主的原话是"M给绝对编码链"，
+    而模型只写链尾时，拼链这件事该由掌握台账的这一层做，不该退回给它自己拼。
+    """
+    raw = str(written or "").strip()
+    if not raw:
+        return [], "收件人写法是空的（要写绝对编号链，例如 000001->000005->000012）"
+    parts = [str(p).strip() for p in raw.split(CHAIN_SEPARATOR)]
+    bad = [i for i, p in enumerate(parts, start=1) if not p]
+    if bad:
+        return parts, (f"{raw!r} 的第 {bad[0]} 跳是空的（分隔符 {CHAIN_SEPARATOR!r} "
+                       "两边都要有编号或名册名）⇒ 链不成立")
+    return parts, ""
+
+
+def absolute_chain(rows: Sequence[Mapping[str, Any]], task_id: Any) -> list[str]:
+    """从顶趟那一行到 `task_id` 的绝对编号链（链头是顶趟，链尾是它自己）。
+
+    纯函数（不读盘、不碰实例）：调用方给哪一批代理行，就只在那批行里追父链。
+    口径只有一条：沿 `parent_task_id` 上行，只走代理行；遇到环或断掉的父（这批行里
+    没有那一行）就停在能到的最上面那一格 —— 于是"链不完整"读得出来（链头不是顶趟），
+    而不是被悄悄补成一条看起来完整的链。空列表 = 这一行不在这批行里。
+    """
+    by_id = {str(r.get("task_id") or ""): r for r in rows
+             if not str(r.get("kind") or "")}
+    out: list[str] = []
+    seen: set[str] = set()
+    cur = str(task_id or "")
+    while cur and cur not in seen and len(out) < CHAIN_MAX_HOPS:
+        row = by_id.get(cur)
+        if row is None:
+            break
+        seen.add(cur)
+        out.append(cur)
+        parent = str(row.get("parent_task_id") or "")
+        if parent == cur:
+            break
+        cur = parent
+    return list(reversed(out))
 
 
 #: "当前召唤号"（`R1-A1-a`）：与取消令牌（`cancellation._CURRENT_TOKEN`）同构 ——
@@ -1127,7 +1736,11 @@ class Conductor:
                 out.update({"waited_sec": time.monotonic() - t0, "in_flight_after": now,
                             "reason": "wait_timeout"})
                 return out
-            time.sleep(min(_FANOUT_WAIT_POLL_SEC, max(0.0, budget - (time.monotonic() - t0))))
+            CLK.await_io(
+                min(_FANOUT_WAIT_POLL_SEC,
+                    max(0.0, budget - (time.monotonic() - t0))),
+                "等在飞的子代理让出一个名额（业主 2026-10-08：只可等待）",
+                kind="fanout_slot", where="conductor._await_fanout_slot")
 
     def _ancestry(self, task_id: str | None) -> tuple[tuple[str, str, str], ...]:
         """重建 `(role, action, input_key)` 的祖先链（含起点自身）。
@@ -1758,8 +2371,163 @@ class Conductor:
         out.sort(key=lambda x: x["task_id"])
         return {"checked": True, "rows": out, "reason": ""}
 
+    # -------------------------------------------------- 不变量：活跃子代理 ⇒ 有一条等它的计时器
+    def arm_child_waiter(self, child_task_id: str, *, parent_task_id: str = "",
+                         role: str = "", task_text: str = "",
+                         where: str = "conductor.summon") -> dict[str, Any]:
+        """派活成功那一刻给父代理起一条 `wait_for=<子>` 的计时器（业主 2026-10-27 第五条）。
+
+        业主原话（唯一权威）：
+
+            「如果一个子代理还有活跃子代理，必存在一个等待该子代理的计时器，
+              所以"静默"定义良好」
+
+        这条不变量必须在写侧保证，不能只在读侧判：所以 `_summon_preflight` 在建好子行、
+        登记完名册之后立刻起表。读侧判据是 :meth:`child_wait_invariant`。
+
+        目的按业主第二条裁定自动填：这里刻意不给 `reason`，让 `clock` 的"等谁"
+        读口把名册里那一行 task 原文填进去（`purpose_source="target_task"`）。
+        读口拿不到原文时才用 `task_text`（派活载荷里的那一句）兜底并标 `given`——
+        兜底这一支只在"名册还没写成"时发生，读数里分得开。
+
+        失败姿态：起表炸了不许带走这次派活（子行已经在盘上、活已经派出去了），
+        但必须把理由交回调用方记进日志 —— "不变量没成立"不许静默。
+        """
+        tid = str(child_task_id or "")
+        pid = str(parent_task_id or "")
+        if not tid or not pid:
+            return {"armed": False, "timer_id": "",
+                    "reason": (f"派活时缺编号（子={tid or '空'}，父={pid or '空'}）"
+                               "⇒ 这条不变量没有被建立")}
+        from . import clock as _CLK
+
+        root = str(getattr(self.store, "root", "") or "")
+        if not root:
+            return {"armed": False, "timer_id": "",
+                    "reason": "没有工作区根 ⇒ 计时器登记不了（不变量没成立）"}
+        # 让"等谁"的读口能读到台账/名册（它按工作区取绑定；没绑上就查不成）。
+        try:
+            from .tools.clock_tools import bind_workspace
+
+            bind_workspace(root, self.store, self)
+        except Exception:  # noqa: BLE001 - 绑不上只影响目的自动填，不影响起表
+            pass
+        try:
+            timer = _CLK.start_timer(root, wait_for=f"task:{tid}", to=pid,
+                                     task_id=pid, role=str(role or ""))
+        except Exception as exc:  # noqa: BLE001 - 见 docstring 的失败姿态
+            return {"armed": False, "timer_id": "",
+                    "reason": (f"给 {tid} 起等待计时器没成：{type(exc).__name__}: {exc}"
+                               "（派活照常：子行已在台账上）")}
+        if timer.purpose_missing and str(task_text or "").strip():
+            # 兜底：名册那一行的原文还没落盘（名册没写成 / 读口查不成）时，用派活载荷里的
+            # 那一句补上同一个编号（`set_purpose` 补的是同一条，不是新建一条）。
+            try:
+                entry, _state = _CLK.set_purpose(root, timer.timer_id,
+                                                 str(task_text).strip()[:200])
+                if isinstance(entry, _CLK.Timer):
+                    timer = entry
+            except Exception:  # noqa: BLE001 - 补不上就留着 purpose_missing（追问照旧）
+                pass
+        return {"armed": True, "timer_id": timer.timer_id,
+                "wait_for": timer.wait_for, "purpose": timer.purpose,
+                "purpose_source": timer.purpose_source,
+                "purpose_missing": timer.purpose_missing, "where": str(where)}
+
+    def child_wait_invariant(self, parent_task_id: str = "") -> dict[str, Any]:
+        """判据：父的每一个"非静默直接子"都有一条 `wait_for` 等它的计时器。
+
+        口径由业主 2026-10-27 那一句定死（"活跃子代理 ⇒ 必存在一个等待该子代理的计时器"）。
+        两处都是现读的盘上事实：
+
+        - 活跃子代理：`agent_states` 里 `state ∈ {flying, standby}` 的直接子（业主
+          2026-10-26：「更新"活跃子代理"的定义为非静默子代理」，待机也算活跃）；
+        - 等它的计时器：这个父名下 `state="pending"`、`wait_for` 解析成 `task:<子>` 的
+          那几条（程序的计时器不算：它等的是程序，不是子代理）。
+
+        返回 `{"checked", "parent", "active_children", "waited", "unwaited", "problems",
+        "reason"}`。`unwaited` 逐字点名"哪个子代理没人等" —— 这条判据的价值就在这一格：
+        一个笼统的"不变量不成立"没法让人去修。
+
+        三态：台账/时钟读不成 => `checked=False`（不是"不变量成立"）。
+        """
+        pid = str(parent_task_id or "")
+        out: dict[str, Any] = {"checked": False, "parent": pid, "active_children": [],
+                               "waited": {}, "unwaited": [], "problems": [],
+                               "reason": ""}
+        try:
+            rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）"
+            return out
+        if not pid:
+            out["reason"] = "没给父的编号 ⇒ 判不了（不是「不变量成立」）"
+            return out
+        snap = self.activity_snapshot()
+        if not snap.get("checked"):
+            out["reason"] = (f"活跃读数没读成（{snap.get('reason') or '没查成'}）⇒ "
+                             "不变量判不了")
+            return out
+        by_task = dict(snap.get("by_task") or {})
+        active: list[str] = []
+        for row in rows:
+            if str(row.get("parent_task_id") or "") != pid:
+                continue
+            tid = str(row.get("task_id") or "")
+            cell = dict(by_task.get(tid) or {})
+            if str(cell.get("state") or "") in ACTIVE_AGENT_STATES:
+                active.append(tid)
+        root = str(getattr(self.store, "root", "") or "")
+        try:
+            bucket = CLK.book(root) if root else None
+            timers = list(bucket.all()) if bucket is not None else []
+        except Exception as exc:  # noqa: BLE001
+            out["reason"] = f"时钟簿记读不成（{type(exc).__name__}: {exc}）"
+            return out
+        waited: dict[str, list[str]] = {}
+        for timer in timers:
+            if str(timer.state or "") != "pending" or not str(timer.wait_for or ""):
+                continue
+            if str(timer.task_id or "") != pid:
+                continue
+            try:
+                kind, ref = CLK.parse_wait_for(timer.wait_for_resolved or timer.wait_for)
+            except CLK.ClockError:
+                continue
+            if kind != "task":
+                continue
+            waited.setdefault(ref, []).append(timer.timer_id)
+        out.update(checked=True, active_children=sorted(active),
+                   waited={k: sorted(v) for k, v in sorted(waited.items())})
+        unwaited = [t for t in sorted(active) if t not in waited]
+        out["unwaited"] = unwaited
+        out["problems"] = [f"活跃子代理 {t} 名下没有任何一条等它的计时器"
+                           "（业主 2026-10-27：活跃子代理 ⇒ 必存在一个等待该子代理的计时器）"
+                           for t in unwaited]
+        return out
+
+    def handoffs_reading(self, parent_task_id: str = "") -> dict[str, Any]:
+        """父代理侧的交差读数：谁向我交了差、我把谁记成了静默（业主 2026-10-27 第四条）。
+
+        业主原话：「如果已无事可做且无计时器，这意味着它交差了，需要向父代理报告，
+        父代理把它记为静默子代理」。
+
+        数据在 `clock.read_handoffs` 那一份账上（子代理交差时落的行，`parent_task_id`
+        就是这里要的归属键）。这里把它折成父代理读得懂的三格：`count`（交了几个）、
+        `silent`（因此被记为静默的那些编号）、`rows`（原样）。三态：读不成 =>
+        `checked=False`（不是"没人交差"）。
+        """
+        got = CLK.read_handoffs(str(getattr(self.store, "root", "") or ""),
+                                parent_task_id=str(parent_task_id or ""))
+        rows = [dict(r) for r in (got.get("rows") or ())]
+        return {"checked": bool(got.get("checked")), "parent": str(parent_task_id or ""),
+                "count": len(rows), "rows": rows,
+                "silent": [str(r.get("task_id") or "") for r in rows],
+                "reason": str(got.get("reason") or "")}
+
     # -------------------------------------------------- 活跃判定（向上继承）与树遍历
-    def activity_snapshot(self) -> dict[str, Any]:
+    def activity_snapshot(self, *,
+                          retired: Mapping[str, bool] | None = None) -> dict[str, Any]:
         """全树每一个代理行的活跃读数（一次台账快照算完，含"在等"的向上继承）。
 
         ## 口径（业主 2026-10-26 原话，逐字见模块头那一节）
@@ -1777,13 +2545,28 @@ class Conductor:
         真在干活的是那些下级，标出来是为了让父看见"我这一支的活积在下面"。
 
         ## 返回
-        `{"checked", "by_task", "waiting_only", "reason"}`，`by_task` 每一格：
+        `{"checked", "by_task", "waiting_only", "states", "clock", "reason"}`，
+        `by_task` 每一格：
         - `self_busy`：它自己有没有未收口的任务；
         - `active`：按上面的继承口径算出来的那一位；
         - `waiting_only`：`active and not self_busy`（病态形状的布尔）；
         - `waiting_for`：直接子里活跃的那几个（`waiting_only` 时非空）；
         - `busy_roots`：把它撑成活跃的那些"真在跑"的节点的编号（自己忙 ⇒ 就是它自己）；
-        - `status` / `role`：台账原值（读数要能对着台账核）。
+        - `status` / `role`：台账原值（读数要能对着台账核）；
+        - `state` / `state_label` / `state_reason` / `parked` / `waiters`：三态读数
+          （判定只有 `agent_state` 一处；`state` 的取值域见 `AGENT_STATES`）。
+        `states` 是四档各几个（外加 `active` = 在飞 + 待机 与 `total`）；
+        `clock` 是这一次读时钟簿记的三态（`checked` / `count` / `reason`）——
+        时钟读不成时每一格 `state` 都是 `unknown`，而那一句理由就在这里。
+
+        `active` 与 `state` 是两条轴，刻意不折成一格：前者是销号门读的"这一支的活
+        算不算没做完"（业主 2026-10-26 的继承口径），后者是"它此刻是哪一态"。
+        折起来会让'销号要不要拒'跟着一个新读数走 —— 而销号是不可逆的那一类动作。
+
+        `retired` 是名册那一层的事实（`{代理编号: 是否已销号}`）：本类只认台账，
+        名字与退役都在秘书那一侧，所以默认 `None`（= 这一层不知道）。知道的那一层
+        （`Secretary.roster_view`）把它传进来，于是"已销号 ⇒ 静默"仍然只由
+        `agent_state` 那一处判，不在调用方再写一遍。
 
         读不成 ⇒ `checked=False` + `reason`：把它折成"都不活跃"会让一整棵子树被误销，
         而销号是不可逆的那一类动作（这正是"没查成"与"查过了没问题"被折平的代价）。
@@ -1792,7 +2575,12 @@ class Conductor:
             rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
             return {"checked": False, "by_task": {}, "waiting_only": [],
+                    "states": None, "clock": {"checked": False, "count": 0,
+                                              "reason": f"{type(exc).__name__}: {exc}"},
                     "reason": f"{type(exc).__name__}: {exc}"}
+        # 时钟簿记只读一次：三态里的"待机"问的就是它（`clock_waiters` 是那一处的唯一实现）。
+        clock = clock_waiters(self.store.root)
+        three = agent_states(rows, clock=clock, retired=retired)
         role_of: dict[str, str] = {}
         status_of: dict[str, str] = {}
         kids: dict[str, list[str]] = {}
@@ -1844,17 +2632,41 @@ class Conductor:
         for tid in sorted(status_of):
             waiting_for = sorted(k for k in kids.get(tid, ()) if active.get(k))
             wo = bool(active.get(tid)) and not self_busy.get(tid)
+            cell = dict(three.get(tid) or {})
             by_task[tid] = {"task_id": tid, "role": role_of.get(tid, ""),
                             "status": status_of.get(tid, ""),
                             "self_busy": bool(self_busy.get(tid)),
                             "active": bool(active.get(tid)),
                             "waiting_only": wo,
                             "waiting_for": waiting_for,
-                            "busy_roots": list(busy_roots.get(tid) or [])}
+                            "busy_roots": list(busy_roots.get(tid) or []),
+                            # 三态（`agent_state` 是唯一实现）：`state` 的取值域是
+                            # `AGENT_STATES`，与上面那一格 `active` 是两条轴。
+                            "state": str(cell.get("state") or AGENT_STATE_UNKNOWN),
+                            "state_label": str(cell.get("state_label") or ""),
+                            "state_reason": str(cell.get("reason") or ""),
+                            "parked": bool(cell.get("parked")),
+                            "waiters": list(cell.get("waiters") or [])}
             if wo:
                 waiting_only.append(tid)
         return {"checked": True, "by_task": by_task, "waiting_only": waiting_only,
+                "states": state_counts(str(v.get("state") or "") for v in by_task.values()),
+                "clock": {"checked": bool(clock.get("checked")),
+                          "count": int(clock.get("count") or 0),
+                          "reason": str(clock.get("reason") or "")},
+                # 交差读数（业主 2026-10-27 第四条）：这一支里有几个子代理向我交了差
+                # （= 因此被记为静默的那几个）。它是"父代理把它记为静默"在父自己读数里的那一格。
+                "handoffs": self._handoffs_summary(),
                 "reason": ""}
+
+    def _handoffs_summary(self) -> dict[str, Any]:
+        """交差账的汇总（`activity_snapshot` 与父的读共用这一份）。"""
+        root = str(getattr(self.store, "root", "") or "")
+        got = CLK.read_handoffs(root)
+        rows = [dict(r) for r in (got.get("rows") or ())]
+        return {"checked": bool(got.get("checked")), "count": len(rows),
+                "silent": [str(r.get("task_id") or "") for r in rows],
+                "reason": str(got.get("reason") or "")}
 
     def active_reading(self, task_id: str, *, names: Mapping[str, str] | None = None,
                        snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -1865,15 +2677,20 @@ class Conductor:
         逐个判，重算 N 遍等于把同一张表读 N 遍。
 
         返回 `{"checked","task_id","active","self_busy","waiting_only","waiting_for",
-        "busy_roots","status","role","note","reason"}`。`note` 是给人读的那一句：
+        "busy_roots","status","role","state","state_label","state_reason","parked",
+        "waiters","note","reason"}`。`note` 是给人读的那一句：
         靠等 ⇒ 「它自己不忙，是在等 D2（active）」；自己在跑 ⇒ 「它自己在跑（status=running）」；
         两样都没有 ⇒ 「它自己不忙，名下也没有活跃的下级」。
+        三态那几格（`state` ∈ `AGENT_STATES`）直接来自 `activity_snapshot` 的同名格 ——
+        本方法不另判一遍（同一判据两处实现，迟早会一处改了另一处没改）。
         """
         tid = str(task_id or "")
         snap = dict(snapshot) if snapshot is not None else self.activity_snapshot()
         blank = {"checked": False, "task_id": tid, "active": False, "self_busy": False,
                  "waiting_only": False, "waiting_for": [], "busy_roots": [],
-                 "status": "", "role": "", "note": ""}
+                 "status": "", "role": "", "state": AGENT_STATE_UNKNOWN,
+                 "state_label": "", "state_reason": "", "parked": False,
+                 "note": ""}
         if not snap.get("checked"):
             blank["reason"] = str(snap.get("reason") or "台账读不成")
             return blank
@@ -1904,7 +2721,55 @@ class Conductor:
                 "waiting_for": list(cell.get("waiting_for") or []),
                 "busy_roots": list(cell.get("busy_roots") or []),
                 "status": str(cell.get("status") or ""),
-                "role": str(cell.get("role") or ""), "note": note, "reason": ""}
+                "role": str(cell.get("role") or ""),
+                "state": str(cell.get("state") or AGENT_STATE_UNKNOWN),
+                "state_label": str(cell.get("state_label") or ""),
+                "state_reason": str(cell.get("state_reason") or ""),
+                "parked": bool(cell.get("parked")),
+                "waiters": list(cell.get("waiters") or []),
+                "note": note, "reason": ""}
+
+    def retire_state_of(self, task_id: str, *, names: Mapping[str, str] | None = None,
+                        snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """目标此刻是不是静默 —— 销号前置那一格的唯一读数。
+
+        业主 2026-10-26 同一批裁定逐字：「销号可以也只可针对静默子代理」。销号的
+        两个落点（`conductor.retire_child` 与 `Secretary.retire`）都只读这一格，
+        判定本身只有 `agent_state` 一处 —— 这里只把它的读数与 `retire_blocking`
+        拼成销号门要的那一份。
+
+        返回 `{"checked","task_id","state","state_label","state_reason","status","role",
+        "silent","blocking","waiters","waiting_for","busy_roots","deferred","reason"}`：
+        - `silent`：`state == silent` 且这一格真的读成了（`unknown` 一律 False，
+          所以"读不到"在销号门上就是"不许销"，fail-closed）；
+        - `blocking`：`retire_blocking` 的逐条清单（静默时是空表）；
+        - `state_reason`：为什么判成这一格（`unknown` 时就是"读不到什么"的那一句，
+          拒信里"读不到它是不是静默（…）"用到的就是它）；
+        - `deferred`：待机、但真正在跑的是下级的下级（不是它的直接子）—— 这一档
+          仍由子树活跃闸拒绝（那份拒信逐个点名整支的活跃节点），本格只是把
+          "这一笔该由哪一句话去说"写成读数；
+        - `reason`：读不成时的那一句（读成了就是空串）。
+        """
+        tid = str(task_id or "")
+        got = self.active_reading(tid, names=names, snapshot=snapshot)
+        blocking = retire_blocking(got, names=names)
+        state = str(got.get("state") or AGENT_STATE_UNKNOWN)
+        waiters = [dict(w) for w in (got.get("waiters") or ())]
+        waiting_for = [str(x) for x in (got.get("waiting_for") or ())]
+        busy = [str(x) for x in (got.get("busy_roots") or ())]
+        checked = bool(got.get("checked"))
+        deferred = bool(state == AGENT_STATE_STANDBY and not waiters and busy
+                        and (set(busy) - set(waiting_for)))
+        return {"checked": checked, "task_id": tid, "state": state,
+                "state_label": str(got.get("state_label") or ""),
+                "state_reason": str(got.get("state_reason") or got.get("reason") or ""),
+                "status": str(got.get("status") or ""),
+                "role": str(got.get("role") or ""),
+                "silent": bool(checked and state == AGENT_STATE_SILENT),
+                "blocking": blocking, "waiters": waiters,
+                "waiting_for": waiting_for, "busy_roots": busy,
+                "deferred": deferred,
+                "reason": "" if checked else str(got.get("reason") or "")}
 
     def subtree_postorder(self, root_task_id: str) -> dict[str, Any]:
         """子树的销号次序：从最深到最浅（先叶子后父）。
@@ -2003,6 +2868,8 @@ class Conductor:
                         "status": str(cell.get("status") or ""),
                         "self_busy": bool(cell.get("self_busy")),
                         "waiting_only": bool(cell.get("waiting_only")),
+                        "state": str(cell.get("state") or AGENT_STATE_UNKNOWN),
+                        "state_label": str(cell.get("state_label") or ""),
                         "note": str(got.get("note") or ""),
                         "busy": busy})
         return {"checked": True, "rows": out, "active_count": len(out),
@@ -2544,16 +3411,26 @@ class Conductor:
         （真机 `projects/sylow3`：50 个实例行、48 条板项，一条销号落痕都没有）。
 
         返回 `{"checked","complete","root","nodes","dirty","count","total",
-        "root_open_items","reason"}`：
+        "root_open_items","states","clock","reason"}`：
 
         - `checked`：台账读到没有（读不成 ⇒ `False` + `reason`，绝不折成"干净"）；
         - `complete`：这一支是否全部销号（`nodes` 与 `dirty` 都空才算）；
         - `nodes`：还在册的节点，逐条给 `task_id` / `role` / `status` / `retired` /
-          `open_items` / `open_item_ids`（前 8 条）—— 这就是拒信里那份清单；
+          `open_items` / `open_item_ids`（前 8 条）/ `state` / `state_label` /
+          `blocking`（后三格是本批新增的读数，见下）—— 这就是拒信里那份清单；
         - `dirty`：已经销号、可名下还有未消项的节点（结构矛盾那一档，同样算不干净）；
         - `count` / `total`：还在册几个 / 这一支一共有几个节点（不含根自己）；
         - `root_open_items`：根自己名下的未消项条数（读数，不参与判定 —— 根没有父，
-          销号对它没有对象，而业主那句判据说的是"它下面那棵树"）。
+          销号对它没有对象，而业主那句判据说的是"它下面那棵树"）；
+        - `states`：这一支每个非根节点的三态合计（`state_counts`：四档 + `active` +
+          `total`），`clock`：这一次读时钟簿记的三态。两者都是读数，不参与判定 ——
+          `complete` 的定义一个字没动（业主那句"整棵树都已销号"就是它）。
+
+        ## 销号为什么更难的今天，final 的门没有变
+        本批（业主 2026-10-26：「销号可以也只可针对静默子代理」）让销号变难了：一个
+        挂着计时器的子代理不再能被销掉。所以这一份读数现在的用途多了一层 —— 谁在
+        等、等的是哪一条钟，`nodes[].state` / `nodes[].blocking` 逐条给出来。但
+        "整棵树已销号"这个判据仍然只是"还在册的都是 0"，不因为读数变多而变宽或变窄。
 
         ## 销号的判据取哪一处
         取父行 `inputs` 里的 `edge-released:` 落痕（`Secretary.retire` 每次销号都会先写它，
@@ -2567,7 +3444,8 @@ class Conductor:
         out: dict[str, Any] = {
             "checked": True, "complete": False, "root": str(root_task_id or ""),
             "nodes": [], "dirty": [], "count": 0, "total": 0,
-            "root_open_items": 0, "reason": "",
+            "root_open_items": 0, "states": None,
+            "clock": {"checked": False, "count": 0, "reason": ""}, "reason": "",
         }
         root = str(root_task_id or "")
         if not root:
@@ -2611,15 +3489,31 @@ class Conductor:
                 continue
             open_items.setdefault(str(row.get("parent_task_id") or ""), []).append(
                 str(row.get("task_id") or ""))
+        # 三态：整棵树一次算完（`agent_states` 是唯一实现；名册那一侧的事实只用到
+        # "已销号"这一格 —— 收工闸说的"整棵树都已销号"就是 `_released_pairs` 那一条）。
+        clock = clock_waiters(self.store.root)
+        retired_of: dict[str, bool] = {}
+        released_by_parent: dict[str, set[str]] = {}
+        for tid, row in agents.items():
+            pid = str(row.get("parent_task_id") or "")
+            if pid not in released_by_parent:
+                released_by_parent[pid] = {p["child_task_id"]
+                                           for p in self._released_pairs(agents.get(pid, {}))}
+            retired_of[tid] = tid in released_by_parent[pid]
+        three = agent_states([agents[t] for t in sorted(agents)], clock=clock,
+                             retired=retired_of)
         for tid in order:
             row = agents[tid]
             pid = str(row.get("parent_task_id") or "")
-            released = {p["child_task_id"] for p in self._released_pairs(agents.get(pid, {}))}
+            released = released_by_parent.get(pid) or set()
             retired = tid in released
             mine = sorted(open_items.get(tid, ()))
             cell = {"task_id": tid, "role": str(row.get("role") or ""),
                     "status": str(row.get("status") or ""), "retired": bool(retired),
-                    "open_items": len(mine), "open_item_ids": mine[:8]}
+                    "open_items": len(mine), "open_item_ids": mine[:8],
+                    "state": str((three.get(tid) or {}).get("state") or AGENT_STATE_UNKNOWN),
+                    "state_label": str((three.get(tid) or {}).get("state_label") or ""),
+                    "blocking": retire_blocking(three.get(tid) or {})}
             if retired and mine:
                 cell["why"] = "已经销号，可名下还有没消的项（结构矛盾那一档）"
                 out["dirty"].append(cell)
@@ -2630,6 +3524,11 @@ class Conductor:
         out["total"] = len(order)
         out["count"] = len(out["nodes"])
         out["root_open_items"] = len(open_items.get(root, ()))
+        out["states"] = state_counts(str((three.get(tid) or {}).get("state") or "")
+                                     for tid in order)
+        out["clock"] = {"checked": bool(clock.get("checked")),
+                        "count": int(clock.get("count") or 0),
+                        "reason": str(clock.get("reason") or "")}
         out["complete"] = not out["nodes"] and not out["dirty"]
         return out
 
@@ -4248,6 +5147,22 @@ class Conductor:
             self._log(f"名册没写成：{roster_rec['problem']}", task_id=tid)
         elif roster_rec.get("note"):
             self._log(f"名册写成（{roster_rec['note']}）", task_id=tid)
+        # ---- [5c] 等这条子代理的计时器（业主 2026-10-27 第五条不变量）
+        #
+        # 「如果一个子代理还有活跃子代理，必存在一个等待该子代理的计时器，所以"静默"
+        # 定义良好」。位置是判据本身：
+        # ① 在 `_write_new_row` 与 `_register_roster` 之后 —— 子行与名册行都已在盘上，
+        #    "等谁"的读口（台账/名册）此刻读得到它，目的才填得出原文；
+        # ② 在 `backend.call` 之前 —— 子代理可能跑很久，甚至一跑完就交差；起表晚一步
+        #    就正好漏掉那一档（与名册登记同一条理由，见 [5b]）；
+        # ③ 只在这里 —— 调用点一个都不许自己起这条表，否则同一个子代理会被等两次。
+        parent_row = self._task(str(parent_task_id or "")) or {}
+        waiter_rec = self.arm_child_waiter(
+            tid, parent_task_id=str(parent_task_id or ""),
+            role=str(parent_row.get("role") or ""),
+            task_text=str((roster or {}).get("task") or ""))
+        if not waiter_rec.get("armed"):
+            self._log(f"等子代理的计时器没起成：{waiter_rec.get('reason')}", task_id=tid)
         return SummonStart(
             role=str(role), action=str(action), params=params, by=str(by),
             parent_task_id=parent_task_id, input_key=str(input_key),
@@ -4966,6 +5881,305 @@ class Conductor:
         return {"disposed_was_first": first, "closed": closed,
                 "board_items_left": len(board_left), "still_running": still}
 
+    # ---------------------------------------------------------------- 链式寻址（裁定 2026-10-26）
+    def agent_rows(self) -> list[dict]:
+        """只数代理行的台账视图（`kind` 非空的是板项，`parent_task_id` 是收件人）。
+
+        父子关系只认代理行：板项行的 `parent_task_id` 口径是"收件人的编号"
+        （`draft/84` §T21 附二 / D89），把它算进链里会让一条指导的链条突然经过
+        某个收件人 —— 那正是本仓反复治的那类两轴混算。读不成 ⇒ 抛（调用方折三态）。
+        """
+        return [r for r in self._tasks() if not str(r.get("kind") or "")]
+
+    def chain_of(self, task_id: Any, *, rows: Sequence[Mapping[str, Any]] | None = None
+                 ) -> list[str]:
+        """从顶趟那一行到 `task_id` 的绝对编号链（链头是顶趟，链尾是它自己）。
+
+        口径在 :func:`absolute_chain` 一处（纯函数）：本方法只负责把"要读哪些行"定下来
+        —— 给了 `rows` 就用它，否则现读代理行。`agenttrace` 那边要按同一口径给每个
+        节点带链，读的是同一个函数（不另写第二份追父链的代码）。
+        """
+        pool = list(rows) if rows is not None else self.agent_rows()
+        return absolute_chain(pool, task_id)
+
+    @staticmethod
+    def chain_text(chain: Sequence[str]) -> str:
+        """绝对编号链的可读写法（`000001->000005->000012`，与写法的分隔符同一处）。"""
+        return CHAIN_SEPARATOR.join(str(x) for x in chain)
+
+    def direct_children_text(self, task_id: Any) -> str:
+        """某个代理的直接下级（`名册名（编号）` 逐项；没有就一句明确的"没有"）。
+
+        为什么要有这一句：链断了的拒信必须回答"那它的下级到底是谁"（业主逐字：
+        「它的直接下级是 …」）—— 只报"这一跳不对"会让读的人还得自己去查一遍。
+        """
+        rows = list(self.agent_rows())
+        index_names: dict[str, str] = {}
+        reader = self._roster_reader()
+        if reader is not None:
+            try:
+                index, _bad = reader.roster_index(str(task_id or ""))
+            except Exception:  # noqa: BLE001 —— 名册读不成时拒信退回纯编号（不静默丢下级）
+                index = []
+            index_names = {str(r.get("task_id") or ""): str(r.get("name") or "")
+                           for r in index}
+        kids = [r for r in rows if str(r.get("parent_task_id") or "") == str(task_id or "")]
+        if not kids:
+            return "（没有直接下级）"
+        parts: list[str] = []
+        for r in sorted(kids, key=lambda x: str(x.get("task_id") or "")):
+            tid = str(r.get("task_id") or "")
+            name = index_names.get(tid, "")
+            parts.append(f"{name}（{tid}）" if name else tid)
+        return "、".join(parts)
+
+    def _roster_reader(self) -> Any:
+        """读名册的那一个句柄（秘书；没有 store / root 就造不出 ⇒ `None`）。
+
+        为什么不把名册读法抄进本模块：名册的三份文件与折叠规则只在 `secretary` 一处
+        （`roster_path` / `_fold_roster` / `_fold_index`）；在这里另写一份"读名册"
+        迟早与它漂成两套，而两套读法对"谁在册"给出不同答案时没有任何地方会报错。
+        """
+        if self.store is None:
+            return None
+        root = str(getattr(self.store, "root", "") or "")
+        if not root:
+            return None
+        from . import secretary as SEC
+
+        try:
+            # 带缝的那一支（`for_role_wired`）：裸 `Secretary(...)` 不传 `seam=`，于是
+            # 这一位秘书的 `judge()` 永远返回"没有判断面"——名册今天只读，但那是
+            # `_secretary` 的三处构造点之一，漏一次缝就是 sylow5 的复发形态。
+            return SEC.for_role_wired(S.CONDUCTOR_ROLE, root=root, store=self.store)
+        except Exception:  # noqa: BLE001 —— 造不出读侧句柄 ⇒ 调用方按"名册读不成"报未知
+            return None
+
+    def resolve_chain(self, written: Any, *, sender_task_id: str = "",
+                      sender_role: str = "") -> dict[str, Any]:
+        """把收件人写法解析成绝对编号链，并逐跳校验（业主 2026-10-26 裁定）。
+
+        ## 三种写法（都先解析成绝对编号链，读数里一律给 `chain`）
+
+        | 写法 | 例子 | 链怎么来 |
+        |---|---|---|
+        | 绝对编号链 | `t-000001->t-000005->t-000012` | 逐跳解析，第一跳必须是发送方自己 |
+        | 名册名混写 | `M->D1->F2->V1` | 第一跳是发送方；其余按"上一跳的名册"逐跳译码 |
+        | 只写链尾 | `t-000012` / `D1` | 由台账的父子关系现算"从发送方到它"那一条链 |
+
+        ## 校验（每一跳都要过，不过就受控拒绝，逐跳点名）
+
+        1. 每一跳必须是上一跳的直接下级（`parent_task_id` 逐跳相等），否则
+           `broken_chain`，拒信写「X 不是 Y 的直接下级（它的直接下级是：…）」；
+        2. 每一跳都要在册：名册里读得到那一项、且没销号（销号 ⇒ `retired_target`）。
+           名册文件根本没写过（这一支从没登记过）记 `unwritten` 并放行 —— 台账才是
+           父子关系的权威，"名册没写"不是"不在册"的证据（三态不许折平）；
+        3. 链上最多 :data:`CHAIN_MAX_HOPS` 跳（防坏数据把这里变成死循环）。
+
+        ## 返回值（所有分支同一套键，`status` 三档见 `CHAIN_DELIVERY_STATES`）
+        `checked` / `status`（`resolved` / `refused` / `unknown`）/ `written` / `tokens` /
+        `chain` / `chain_text` / `names` / `roles` / `hops` / `skipped` / `refused` /
+        `error` / `callable` / `note`。`hops` 每项：`hop` / `task_id` / `name` / `role` /
+        `parent` / `depth` / `roster` / `retired` / `children`（它自己的直接下级，
+        拒信要用的就是这一格）。
+        """
+        out: dict[str, Any] = {
+            "checked": False, "status": "unknown", "written": str(written or ""),
+            "tokens": [], "chain": [], "chain_text": "", "names": [], "roles": [],
+            "hops": [], "skipped": [], "refused": "", "error": "", "callable": "",
+            "note": "",
+        }
+
+        def _stop(code: str, why: str, *, status: str = "refused") -> dict[str, Any]:
+            out.update(status=status, refused=code, error=why)
+            return out
+
+        sender = str(sender_task_id or "")
+        if not sender:
+            return _stop("no_identity",
+                         "这一趟没有台账号（`calling_as` 没挂上）⇒ 不知道是谁在发，"
+                         "也就拼不出从它到目标的那条链（没查成，不是「链不存在」）",
+                         status="unknown")
+        try:
+            rows = self.agent_rows()
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return _stop("store_unreadable",
+                         f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 链没校验",
+                         status="unknown")
+        by_id = {str(r.get("task_id") or ""): r for r in rows}
+        sender_row = by_id.get(sender)
+        if sender_row is None:
+            return _stop("no_identity",
+                         f"台账里没有发送方 {sender} 那一行（代理行）⇒ 拼不出链："
+                         "没有自己那一行就说不清「从谁出发」", status="unknown")
+        role = str(sender_role or sender_row.get("role") or "")
+        tokens, problem = parse_chain_address(written)
+        out["tokens"] = tokens
+        if problem:
+            return _stop("broken_chain", problem)
+
+        reader = self._roster_reader()
+
+        def _index_names(owner: str) -> tuple[dict[str, str], str]:
+            """`{名册名: 编号}` 与一句问题（名册读不成时那一句非空）。"""
+            if reader is None:
+                return {}, "名册读侧造不出来（没有 store 或 root）"
+            try:
+                index, bad = reader.roster_index(str(owner or ""))
+            except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                return {}, f"{owner} 的名册读不成（{type(exc).__name__}: {exc}）"
+            if bad:
+                return {}, f"{owner} 的名册有 {len(bad)} 行读不出来（{bad[0]}）"
+            return ({str(r.get("name") or ""): str(r.get("task_id") or "")
+                     for r in index if str(r.get("name") or "")}, "")
+
+        def _as_id(token: str) -> str:
+            """这一跳写的是绝对编号吗（编号原样，或裸六位数 `000012` ⇒ `t-000012`）。"""
+            tok = str(token or "").strip()
+            if tok in by_id:
+                return tok
+            if tok.isdigit():
+                cand = f"t-{S.format_id(int(tok))}"
+                if cand in by_id:
+                    return cand
+            return ""
+
+        # ---- 第一跳：发送方自己，或直接寻址的那个实例
+        first = str(tokens[0])
+        head = ""
+        if _as_id(first):
+            head = _as_id(first)
+        elif role and first.upper() == role.upper():
+            head = sender
+        else:
+            names, why = _index_names(sender)
+            if why:
+                return _stop("roster_unreadable", why, status="unknown")
+            if first in names and names[first] in by_id:
+                head = names[first]
+            else:
+                out["callable"] = self.direct_children_text(sender)
+        if not head:
+            return _stop(
+                "not_in_roster",
+                f"{first or '（空）'} 既不是绝对编号、也不是发送方 {sender}（{role}）"
+                f"名册上的名字 ⇒ 受控拒绝：链的第一跳必须是发送方自己（写它的编号或角色），"
+                f"或直接写你要发给的那一个实例。发送方的名册上是：{out['callable']}")
+        if len(tokens) > 1 and head != sender:
+            # 链写了好几个但第一跳不是发送方：补上发送方，让"某一跳不是它的直接下级"
+            # 那一档如实报出来（而不是替模型猜它想把谁当链头）。
+            out["note"] = (f"链的第一跳是 {head}，不是发送方 {sender} ⇒ 已把 {sender} "
+                           "补成链头，再逐跳校验")
+            out["callable"] = self.direct_children_text(sender)
+        if len(tokens) == 1:
+            chain = self.chain_of(head, rows=rows)
+            if sender not in chain:
+                return _stop(
+                    "broken_chain",
+                    f"{head} 不在发送方 {sender} 这一支下面（从它往上追不到 {sender}）"
+                    f"⇒ 受控拒绝：M 只能沿自己这一棵树往下发。{sender} 的直接下级是："
+                    f"{self.direct_children_text(sender)}")
+            chain = chain[chain.index(sender):]
+            skipped: list[str] = []
+        else:
+            chain = [sender] if head == sender else [sender, head]
+            skipped = []
+            owner = chain[-1]
+            for pos, token in enumerate(tokens[1:], start=2):
+                got = _as_id(token)
+                if not got:
+                    names, why = _index_names(owner)
+                    if why:
+                        return _stop("roster_unreadable", why, status="unknown")
+                    got = names.get(str(token), "")
+                if not got or got not in by_id:
+                    skipped = tokens[pos - 1:]
+                    return _stop(
+                        "not_in_roster",
+                        f"链的第 {pos} 跳 {token!r} 在 {owner} 的名册/台账里找不到 ⇒ "
+                        f"受控拒绝：{owner} 的直接下级是："
+                        f"{self.direct_children_text(owner)}")
+                chain.append(got)
+                owner = got
+        if len(chain) > CHAIN_MAX_HOPS:
+            return _stop("broken_chain",
+                         f"链有 {len(chain)} 跳（上限 {CHAIN_MAX_HOPS}）⇒ 受控拒绝")
+        out["chain"] = chain
+        out["chain_text"] = self.chain_text(chain)
+
+        # ---- 逐跳校验（父子关系必须在册；销号与名册状态逐跳点名）
+        names: list[str] = []
+        roles: list[str] = []
+        hops: list[dict[str, Any]] = []
+        for i, tid in enumerate(chain):
+            row = by_id.get(tid) or {}
+            parent = str(row.get("parent_task_id") or "")
+            name = ""
+            if i > 0:
+                prev = chain[i - 1]
+                names_prev, why = _index_names(prev)
+                if why:
+                    return _stop("roster_unreadable", why, status="unknown")
+                if parent != prev:
+                    out["skipped"] = chain[i:]
+                    return _stop(
+                        "broken_chain",
+                        f"{tid} 不是 {prev} 的直接下级（它的直接下级是："
+                        f"{self.direct_children_text(prev)}）")
+                name = next((n for n, t in names_prev.items() if t == tid), "")
+                roster_rows, bad = ([], [])
+                if reader is not None:
+                    try:
+                        roster_rows, bad = reader.roster_rows(prev)
+                    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                        return _stop("roster_unreadable",
+                                     f"{prev} 的名册读不成（{type(exc).__name__}: {exc}）",
+                                     status="unknown")
+                if bad:
+                    return _stop("roster_unreadable",
+                                 f"{prev} 的名册有 {len(bad)} 行读不出来（{bad[0]}）",
+                                 status="unknown")
+                mine = next((r for r in roster_rows
+                             if str(r.get("task_id") or "") == tid), None)
+                if mine is None:
+                    roster_state = "unwritten" if not roster_rows else "not_registered"
+                else:
+                    roster_state = "registered"
+                    retired = bool(mine.get("retired"))
+                    if retired:
+                        out["skipped"] = chain[i:]
+                        tail = i == len(chain) - 1
+                        return _stop(
+                            "retired_target",
+                            (f"{tid}（{name or '无名册名'}）已销号 ⇒ 链尾不能再收消息"
+                             "（业主 B1：名字永久不复用）") if tail else
+                            (f"{tid}（{name or '无名册名'}）已销号 ⇒ 这一跳已经退场、"
+                             "没有秘书能继续转发，链断了"))
+                if roster_state == "not_registered":
+                    out["skipped"] = chain[i:]
+                    label = f"{name}（{tid}）" if name else tid
+                    return _stop(
+                        "not_in_roster",
+                        f"{label} 不在 {prev} 的名册里（{prev} 名册上在册的是："
+                        f"{self.direct_children_text(prev)}）")
+            else:
+                roster_state = "self"
+                if row.get("parent_task_id"):
+                    names_up, _why_up = _index_names(parent)
+                    name = next((n for n, t in names_up.items() if t == tid), "")
+            names.append(name)
+            roles.append(str(row.get("role") or ""))
+            hops.append({"hop": i + 1, "task_id": tid, "name": name,
+                         "role": str(row.get("role") or ""), "parent": parent,
+                         "depth": int(row.get("depth") or 0),
+                         "roster": roster_state, "retired": False,
+                         "children": self.direct_children_text(tid) if row else ""})
+        out.update(checked=True, status="resolved", names=names, roles=roles, hops=hops,
+                   error="")
+        out["note"] = out["note"] or (f"{len(chain)} 跳，链尾是 "
+                                      f"{names[-1] + '（' + chain[-1] + '）' if names[-1] else chain[-1]}")
+        return out
+
     # ---------------------------------------------------------------- 可读视图
     def tree(self, root_task_id: str | None = None) -> list[dict]:
         """父子链视图（从 `tasks` 表读出来，不碰内存状态）。
@@ -4987,6 +6201,11 @@ class Conductor:
         判据与 `open_items_of` 同一处（`open_items_by_parent`）。为什么不把它折进
         `children`：那是两轴（实例轴 + 工作项轴），`draft/84` §T2 的消边谓词要两者
         一起看，合成一格就再也分不开"没子代理"与"有 20 条没消的通报"。
+
+        ## 每一行都带绝对编号链（业主 2026-10-26）
+        两格 `chain`（从顶趟那一行到这个节点自己的绝对编号列表）与 `chain_text`
+        （`000001->000005->000012`）。链由 `chain_of` 现算，不读缓存：深层节点
+        不许只给"父是谁"让调用方自己拼 —— 拼错一个号，消息就会投到另一支。
         """
         # 只拿实例行建树：板项行的 `parent_task_id` 是收件人，不是父代理（D9）。
         rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
@@ -4994,6 +6213,17 @@ class Conductor:
         by_parent: dict[str | None, list[dict]] = {}
         for r in rows:
             by_parent.setdefault(r.get("parent_task_id"), []).append(r)
+        # 每一行的绝对编号链只算一次（业主 2026-10-26：轮查读数必须给链，深层节点
+        # 不许只给"父是谁"让调用方自己拼）。
+        chains = {str(r.get("task_id") or ""): self.chain_of(str(r.get("task_id") or ""),
+                                                             rows=rows)
+                  for r in rows}
+
+        def chain_cell(tid: Any) -> dict[str, Any]:
+            """这一行的 `chain` 与 `chain_text`（从顶趟到它自己的绝对编号链）。"""
+            got = list(chains.get(str(tid or ""), ()))
+            return {"chain": got, "chain_text": self.chain_text(got)}
+
         out: list[dict] = []
 
         def items_cell(tid: Any) -> dict[str, Any]:
@@ -5011,6 +6241,7 @@ class Conductor:
                     "called_by": r.get("called_by"), "parent_task_id": r.get("parent_task_id"),
                     "children": [k.get("task_id") for k in kids],
                     **items_cell(r.get("task_id")),
+                    **chain_cell(r.get("task_id")),
                     "detail": r.get("detail"),
                 })
                 walk(r.get("task_id"), level + 1)
@@ -5027,6 +6258,7 @@ class Conductor:
                 "parent_task_id": root.get("parent_task_id"),
                 "children": [k.get("task_id") for k in by_parent.get(root_task_id, [])],
                 **items_cell(root_task_id),
+                **chain_cell(root_task_id),
                 "detail": root.get("detail"),
             })
             walk(root_task_id, 1)

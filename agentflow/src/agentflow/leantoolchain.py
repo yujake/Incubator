@@ -480,23 +480,38 @@ def _run(cmd: Sequence[str], *, cwd: str, timeout_sec: float,
     if env_overlay:
         child_env = dict(os.environ)
         child_env.update({str(k): str(v) for k, v in env_overlay.items() if str(k)})
-    try:
-        proc = subprocess.run(
-            [str(c) for c in cmd], cwd=cwd, capture_output=True, env=child_env,
-            text=True, encoding="utf-8", errors="replace", timeout=timeout_sec,
-        )
-    except subprocess.TimeoutExpired:
-        return {"started": True, "exit_code": None, "timed_out": True,
-                "output_head": "", "elapsed_ms": _ms(started), "error": ""}
-    except OSError as exc:
-        return {"started": False, "exit_code": None, "timed_out": False,
-                "output_head": "", "elapsed_ms": _ms(started),
-                "error": f"{type(exc).__name__}: {exc}"}
-    out = (proc.stdout or "")
-    err = (proc.stderr or "")
-    text = out if not err.strip() else (out + "\n" + err)
-    return {"started": True, "exit_code": int(proc.returncode), "timed_out": False,
-            "output_head": _head(text), "elapsed_ms": _ms(started), "error": ""}
+    # 业主 2026-10-27 第一条裁定：起程序就登记一条程序计时器，程序结束它返回
+    # 并带上结局。这里是本模块唯一的 spawn 点，所以记账也只在这一处。
+    from . import clock as _CLK
+
+    argv = [str(c) for c in cmd]
+    with _CLK.program_span(program=(argv[0] if argv else ""), argv=argv,
+                           workspace=(_CLK.current_workspace() or None),
+                           where="leantoolchain._run",
+                           purpose="探测 Lean 工具链（等它回话）") as prog:
+        try:
+            proc = subprocess.run(
+                argv, cwd=cwd, capture_output=True, env=child_env,
+                text=True, encoding="utf-8", errors="replace", timeout=timeout_sec,
+            )
+        except subprocess.TimeoutExpired:
+            prog.finish(outcome="timed_out")
+            return {"started": True, "exit_code": None, "timed_out": True,
+                    "output_head": "", "elapsed_ms": _ms(started), "error": "",
+                    "program_timer": prog.reading()}
+        except OSError as exc:
+            prog.finish(outcome="failed", note=f"{type(exc).__name__}: {exc}")
+            return {"started": False, "exit_code": None, "timed_out": False,
+                    "output_head": "", "elapsed_ms": _ms(started),
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "program_timer": prog.reading()}
+        out = (proc.stdout or "")
+        err = (proc.stderr or "")
+        text = out if not err.strip() else (out + "\n" + err)
+        prog.finish(outcome="exited", exit_code=int(proc.returncode))
+        return {"started": True, "exit_code": int(proc.returncode), "timed_out": False,
+                "output_head": _head(text), "elapsed_ms": _ms(started), "error": "",
+                "program_timer": prog.reading()}
 
 
 # ============================================================ ② 版本

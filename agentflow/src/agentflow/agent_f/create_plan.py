@@ -48,6 +48,12 @@ class _CreatePlan:
                 reason=(f"拒绝创建：{chk['reason']}。"
                         "（预算不完整时不立项，而不是先用默认值把洞补上再跑）"),
                 created=False, plan_id=None, duplicate=False,
+                # 四条分支（成功 / 判重命中 / 预算被拒 / 缺 testable）的键集合逐字相同
+                # （2026-10-27）：`returns=` 只有一套键，而两套键之间必然有一格是"声明了
+                # 却永远不出现"或"出现了却没声明"。没有计划可读数的那几格给空读数
+                # （`""` / `0` / `[]`），而不是缺键 —— 「这一格没有读数」与「这一格是空」
+                # 由键的存在区分开（与 `verify.verify_proof` 三条返回路径同一条纪律）。
+                status="", subgoals=0, subgoal_id="",
                 missing=chk["missing"], budget=dict(budget or {}),
             )
 
@@ -72,6 +78,14 @@ class _CreatePlan:
                 "plan_id": str(existing.get("plan_id")),
                 "duplicate": True,
                 "status": existing.get("status"),
+                # 判重命中也把"那个已有计划长什么样"一并给读数（键集合与成功支逐字相同）。
+                "budget": dict(existing.get("budget") or {}),
+                "subgoals": len(list(existing.get("subgoals") or [])),
+                "subgoal_id": "",
+                "missing": [],
+                "kind": "",
+                "error": "",
+                "refusal_reason": "",
                 "reason": (
                     f"problem_key={problem_key!r} 已有未终结的计划 {existing.get('plan_id')}"
                     f"（status={existing.get('status')}）⇒ 不新建。"
@@ -80,6 +94,39 @@ class _CreatePlan:
             }
 
         goal_rows = [self._normalize_subgoal(s, i) for i, s in enumerate(subgoals or [])]
+        # ---- 可检验形式是立项的硬条件（2026-10-27，真机 `PLAN 000000 round1 action=dead_end`） --
+        #
+        # 改前的形态：子目标没有 `testable` 也照样落库，于是"这一笔立不成立"要到
+        # `step` 里 `attackround.pre_spend_gate` 那一道才被挡 —— 真机读数逐字是
+        # `round1 action=dead_end product=dead_end detail="子目标 a（owner=F）：花钱之前的
+        # 闸门没过：子目标没有可检验形式（testable 空）"`：计划建成了、F 一次推理都没发、
+        # 预算烧在"每条子目标各死一轮"上，而模型从头到尾没被问过一句"怎么算做成了"。
+        #
+        # 所以判据前移到写侧：立项那一次就把"没有可检验形式"这件事拒掉，整笔不写库
+        # （`refuse` 的受控码 `subgoal_without_testable` ⇒ 终态落 `refused/invalid_params`，
+        # 不是"执行完成"）。这里读的是 `_normalize_subgoal` 归一之后的那一格 ——
+        # `testable` / `check` / `criterion` / `acceptance` 四种写法都算写了
+        # （模型真用过 `check`），所以这不是"要求模型猜键名"，而是"要求它真的写过一次"。
+        #
+        # 不许在这里替研究定标准（凭空造一个 `testable`）：那会把"不知道该判什么"
+        # 伪装成"已经能判" —— 与 `_spec_from_testable` 那段拒绝凭空造 `params` 同一条理由。
+        for row in goal_rows:
+            sid = str(row.get("sid") or "")
+            if str(row.get("testable") or "").strip():
+                continue
+            msg = (
+                f"子目标 {sid} 没有可检验形式（testable）—— 计划里每一条都要写"
+                "\"怎么算做成了\"，否则花钱闸会在推理之前把它挡掉，F 一次都跑不起来"
+            )
+            return refuse(
+                "subgoal_without_testable", msg,
+                # `reason` 这一键既有调用方与既有判据在读：统一形态不许把它们的读数弄丢。
+                reason=msg,
+                created=False, plan_id=None, duplicate=False,
+                status="", subgoal_id=sid, subgoals=len(goal_rows),
+                missing=[], budget=dict(budget or {}),
+            )
+
         with self.store.tx("attack_plans", actor=self.actor, note="f.create_plan") as tx:
             pid = tx.alloc_id("plan")
             try:
@@ -122,6 +169,12 @@ class _CreatePlan:
             "status": row.status,
             "budget": dict(row.budget),
             "subgoals": len(row.subgoals),
+            # 四条分支键集合逐字相同（见预算被拒那一支的注释）：没有拒绝的那几格给空读数。
+            "subgoal_id": "",
+            "missing": [],
+            "kind": "",
+            "error": "",
+            "refusal_reason": "",
             "reason": f"已立项 {pid}（深度 {depth}，子目标 {len(row.subgoals)} 个，预算 {row.budget}）",
         }
         self._log(f"plan {pid} created", problem_key=problem_key)

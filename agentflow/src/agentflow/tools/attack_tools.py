@@ -258,11 +258,14 @@ def _agent_for(store: Any):
     ## 两条装配期登记（`draft/44` J-07：工具路径拿不到 host 的装配上下文）
     
     1. 缝从 `agent_f.default_llm()` 取（`draft/39` §6.33 的 D42c）：真机里 M 派`F.step` 走的就是这一条工具路径，而
-    host 那一侧接好的缝到不了这里 —— 于是 T2 第 14 趟（`--attack-reasoning` 开着）`F.step` 仍然连续 5 次 
+    host 那一侧接好的缝到不了这里 —— 于是 T2 第 14 趟（当时那个装配开关开着，它已于
+    2026-10-26 删除）`F.step` 仍然连续 5 次
     `no_change`。 2. 配置从 `llmseam.role_config("F", <工作区根>)` 取（按 root 键，见那张表的 docstring）：不取的
     话 F 的预算四键在工具路径上永远是空 dict （`J-07` 实测：那四个键全仓无赋值点）。
-    
-    两条都没登记时与不传逐字同形（`llm=None` / `config=None ⇒ {}`）——默认确定性不变，落 `dead_end(缺工具)` 并如实说未接线。
+
+    两条都没登记时与不传逐字同形（`llm=None` / `config=None ⇒ {}`）—— 那时 `attack.step`
+    落 `dead_end(缺工具)` 并如实说缺缝（运行形态里 host 会无条件登记，所以这一档只出现在
+    负控测试的打桩里）。
     """
     from ..agent_f import AgentF, default_llm  # 惰性：避免 tools ↔ agent 的循环导入
     from ..llmseam import role_config
@@ -408,7 +411,9 @@ def _attack_pick_next_subgoal(subgoals):
 @tool(
     "attack.create_plan",
     (
-            "为一个难题立项（预算四类键缺一不可，不完整就拒绝）。同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id。"
+            "为一个难题立项（预算四类键缺一不可，不完整就拒绝；每条子目标必须给 "
+            "testable（怎么算做成了）—— 没写就整笔拒 subgoal_without_testable，"
+            "计划一行都不落）。同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id。"
             ),
     {
            "type": "object",
@@ -427,13 +432,18 @@ def _attack_pick_next_subgoal(subgoals):
            },
     side_effect="write_local",
     roles=_WRITE_ROLES,
-    # 键名逐个从实现读出（`agent_f.AgentF.create_plan`）：成功分支给
-    # `subgoals`（个数，不是清单）。另有可选键 `missing` ——
-    # 它只在"预算不完整 ⇒ 拒绝创建"那一支出现（三条分支各自的完整键集
-    # 见 `tests/test_tools_returns_declaration.py` 的分支留痕）。
-    # `ok` 三支都有（`draft/37` §127）：`False` = 预算不完整被拒（调用方据它落
+    # 键名逐个从实现读出（`agent_f.AgentF.create_plan`）：四条分支（成功 / 判重命中 /
+    # 预算被拒 / 缺 testable）的键集合逐字相同（2026-10-27 统一）—— 声明只有一套键，
+    # 两套键之间必然有一格"声明了却永远不出现"或"出现了却没声明"。
+    # 拒绝那两支配 `missing`（缺哪几类预算键）/ `kind` / `error` / `refusal_reason` /
+    # `subgoal_id`；没有拒绝的那两支这几格是空串 / 空表。没有计划可读数的那几格同理
+    # （`status=''`、`subgoals=0`）。
+    # `ok` 三态都有（`draft/37` §127）：`False` = 这一笔被拒（调用方据它落
     # `outcome=refused`，而不是"执行完成"），`True` = 立项成功或"已经立过项了"。
-    returns="{'ok','created','plan_id','duplicate','status','budget','subgoals','reason'}",
+    returns=("{'ok','created','plan_id','duplicate','status','budget','subgoals','reason',"
+             "'missing','kind','error','refusal_reason','subgoal_id'}"
+             "（四条分支键集合相同；被拒那一支配 missing / kind / error / refusal_reason，"
+             "而 status / subgoals 是空读数）"),
     tags=("attack", "plan"),
 )
 def _attack_create_plan(_need_store, store, problem, problem_key, for_question_id=None, subgoals=None, budget=None, depth=0, parent_plan_id=None):

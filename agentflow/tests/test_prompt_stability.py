@@ -545,6 +545,28 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
         {"version": "p203", "count": 15,
          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
          "note": "抬版本 p203（2026-10-26 收口批）：F 的 policy 多一条「依赖面写在证明手稿的 `## 依赖` 四列表里、由 B 读稿登记，缺段而有引用则整笔拒收 dependency_section_missing」（段摘要只有 F 那一格换值）；同批 B 的 register_statement 多一格可选参数 proof_manuscript、verify.verify_proof.returns 多三格（citations / citation_checks / citation_gate）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p203 → p204（2026-10-27 收口批）：五件一起抬版本（时钟八件的形进各角色政策 /
+    # 「只到链尾」改口 / `_names` 的手那一档全列 / E 的预算读数那句补回 / M 的链式寻址）。
+    # 五件都只动段文本与工具声明，一格事实的落点都没挪 ⇒ `count` / `keys_sha256` 与上一格
+    # 同值，仍是 `PS.volatile_facts_digest()` 的现算值（不手抄）。
+    {"version": "p204", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p204（2026-10-27 收口批）：① 时钟八件的形写进各角色政策（申请形状二选一 + 目的、目的漏填不报错走 clock.timer_purpose 补同一编号、挂机、周期性巡查的唯一写法、到点消息的例子、wait_for 三种指称、旧计时工具退役）⇒ 十格 policy 各加一条；② 「各级父也会收到通知」改成「按绝对编号链逐级由秘书转发，内容只有链尾看得到，中间各跳不读内容」⇒ 十一份 specs 都动了这一句；③ agent_prompts._names 的手那一档改成全列（M 的写工具不再被省略号吃掉 conductor.summon）⇒ 十一格的次要官能那一行都变；④ attackround.BUDGET_UNREADABLE_NOTE 那句补回 E 的 policy；⑤ M 补一句链式寻址 + 轮查带 chain_text。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p204 → p205（2026-10-27 第二批收口）：两件一起抬版本（新工具 `clock.wait_any`
+    # 进 tools_lines 那一行 ⇒ 十一格全换；`conductor.retire_child` 的 summary 文案换 ⇒ M
+    # 再换一次）。两件都只动段文本与工具声明，一格事实的落点都没挪 ⇒ `count` 与
+    # `keys_sha256` 与上一格同值，仍是 `PS.volatile_facts_digest()` 的现算值（不手抄）。
+    {"version": "p205", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p205（2026-10-27 第二批收口）：① 新工具 clock.wait_any（业主第三条裁定的后半个动作「直到它认为无事可做时，可启动计时器等待任意计时器返回」）进 tools_lines 那一行（名 + 摘要 + 必填参数 + 副作用），tools_lines 对每个角色都渲染 ⇒ 十一格全换；工具数 110 → 111，登记在 tools/UNIVERSAL_TOOLS（写集空：只写 out/clock/wait_any.json 这份意图账），只读角色 C/H/V 的 clock 件数 8 → 9；② conductor.retire_child 的 summary 文案换了（补「待机」那一档与 refusal_code 走 Conductor.retire_state_of 的三态读数）⇒ M 那一格再换一次；它的 returns= 不进段（只进 function-calling 的 description，动的是工具面 golden 的 declarations 那一格）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p205 → p206（2026-10-27 第三批收口）：工具面 returns / summary 十一处进 tools_lines、
+    # 十一份 specs 的时钟段补 clock.wait_any 的行为口径、specs/m.py 的 delivered_to 改成列表、
+    # conductor.retire_child 的 returns/docstring 补早拒支口径、attackround.BUDGET_GUARD_NOTE
+    # 去行号并接上读者。五笔都只动段文本与工具声明，一格事实的落点都没挪 ⇒ `count` 与
+    # `keys_sha256` 与上一格同值，仍是 `PS.volatile_facts_digest()` 的现算值（不手抄）。
+    {"version": "p206", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p206（2026-10-27 第三批收口）：① 工具面 returns / summary 十一处进 tools_lines 那一行（attack.create_plan / clock.alarm_start / clock.timer_cancel / clock.timer_list / clock.wait_any / conductor.guide / fs.edit / fs.write / table.get / table.list / verify.verify_proof —— 实现早就在，这一批才与声明对齐）⇒ 十一格全换；② 十一份 specs 的时钟段补 clock.wait_any 的行为口径（要求过等、且没有可等的东西 ⇒ requested=true / waiting=false，它不是「没在等」；这一档无计时而手头也没活就按交差处理）；③ specs/m.py 的 delivered_to 从「链尾那个绝对编号」改成「列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它先取 [0]）」⇒ M 那一格再换一次；④ conductor.retire_child 的 returns 与 docstring 补早拒支那两格（target_state 空串 = 三态还没读；refusal_code 的充要条件是静默闸说话了）；⑤ attackround.BUDGET_GUARD_NOTE 去掉两个已漂的 file:line、改成符号名并接上读者（test_p09_the_guard_note_names_live_symbols）。facts 键集仍 15 格（键名与条数一格未动）"},
 )
 
 

@@ -98,6 +98,7 @@ function asTri(value: unknown): Tri {
     : "unreadable";
 }
 
+
 /** 计数字典那一格（`{queued: 2}`）：非数字的取值丢掉，不猜。 */
 function asDict(value: unknown): Record<string, number> {
   const out: Record<string, number> = {};
@@ -286,6 +287,10 @@ function asNode(value: unknown): RosterNode | null {
     brief_source: asText(value["brief_source"]),
     surface: asText(value["surface"]),
     status: asText(value["status"]),
+    // 三态：词表外 / 缺那一格 ⇒ `unknown`（旧后端不给这一格时，页面说的是"未读到"，
+    // 而不是把它当成"静默" —— 那正是这一批要修的那个读数的反面）。
+    state: asAgentState(value["state"]),
+    state_reason: asText(value["state_reason"]),
     task_found: value["task_found"] === true,
     in_flight: asNumber(value["in_flight"]),
     inbox: asInbox(value["inbox"]),
@@ -510,4 +515,142 @@ export function buildRosterTree(view: RosterView | null | undefined): RosterTree
     );
     return { rows: flatRows(face), notes, missing: [], unreached: [] };
   }
+}
+
+// ====================================================================== 三态（在飞 / 待机 / 静默）
+//
+// 业主 2026-10-26：「『在飞』的读数要随着时钟式待机进行适配，分三种……更新『活跃子代理』
+// 的定义为非静默子代理。」判定只有后端一处（conductor.agent_state）；这一层只做
+// 三件纯事：把那一格读成四档之一、数成合计、拼成页面上那一行字。
+
+/** 一个代理的三态（业主 2026-10-26：「『在飞』的读数要随着时钟式待机进行适配」）。
+ *
+ * 判定只有后端一处（`conductor.agent_state`）；这一层只负责"把那一格读出来、
+ * 读不出来就说读不出来"。四档与业主的原话一一对应：
+ * - `flying` 在飞：正在工作；
+ * - `standby` 待机：没在工作，但时钟上挂着等待（或在等名下的活）；
+ * - `silent` 静默：已收工、无任务、无计时器；
+ * - `unknown` 未读到：判不了（台账 / 名册 / 时钟有一处读不成）—— **不是静默的别名**。
+ */
+export type AgentState = "flying" | "standby" | "silent" | "unknown";
+
+/** 四档的次序（与后端 `AGENT_STATES` 同一份；`unknown` 在三态之外）。 */
+export const AGENT_STATES: AgentState[] = ["flying", "standby", "silent", "unknown"];
+
+/** 三档文案（业主的原话）＋"没读到"。页面上每一处都从这里取，不许各写一份。 */
+export const STATE_TEXT: Record<AgentState, string> = {
+  flying: "在飞",
+  standby: "待机",
+  silent: "静默",
+  unknown: "未读到",
+};
+
+/** 词表外的一律当 `unknown`（旧后端不给这一格 ⇒ 未读到，不是静默）。 */
+export function asAgentState(value: unknown): AgentState {
+  return value === "flying" || value === "standby" || value === "silent" || value === "unknown"
+    ? value
+    : "unknown";
+}
+
+/** 活跃 = 非静默 = 在飞 + 待机（业主：「更新『活跃子代理』的定义为非静默子代理」）。
+ *
+ * `unknown` 刻意不算活跃：判不了不等于活跃。它也不算静默 —— 它自己那一格单独数。
+ */
+export function isActiveState(state: AgentState): boolean {
+  return state === "flying" || state === "standby";
+}
+
+/** 四档各几个 + `active`（= 在飞 + 待机）+ `total`。 */
+export interface StateTally {
+  flying: number;
+  standby: number;
+  silent: number;
+  unknown: number;
+  active: number;
+  total: number;
+}
+
+/** 数一串三态（`unknown` 单独一格，不并进静默）。 */
+export function tallyStates(states: AgentState[]): StateTally {
+  const out: StateTally = { flying: 0, standby: 0, silent: 0, unknown: 0, active: 0, total: 0 };
+  for (const state of states) {
+    out[state] += 1;
+    out.total += 1;
+  }
+  out.active = out.flying + out.standby;
+  return out;
+}
+
+/** 一个节点名下那些子的三态合计；缺号那一行（`kind === "missing"`）算 `unknown`。 */
+export function tallyKids(kids: TreeRow[]): StateTally {
+  return tallyStates(kids.map((kid) => (kid.node === null ? "unknown" : asAgentState(kid.node.state))));
+}
+
+/** 行尾那一格「活 N（飞 a · 待 b）」：N = 非静默 = 在飞 + 待机。
+ *
+ * 业主 2026-10-26：「『▸ 活 N』改成 ▸ 活 N（飞 a · 待 b），N = 非静默」。
+ * 为什么不用 `children.length`：那个数把已收工（静默）的子也算进来，于是"名下 5 个、
+ * 其中 4 个早在昨天就收工了"与"名下 5 个都在干活"长得一模一样 —— 这正是这一批要修的
+ * 那个读数。`unknown` 不进 N（判不了不等于活跃），但它一定单独显示出来，不许被吃掉。
+ */
+export function kidsStateText(kids: TreeRow[]): string {
+  const tally = tallyKids(kids);
+  const unknown = tally.unknown > 0 ? ` · 未读到 ${tally.unknown}` : "";
+  return `活 ${tally.active}（飞 ${tally.flying} · 待 ${tally.standby}${unknown}）`;
+}
+
+/** 顶部合计那一行：`在飞 a · 待机 b · 静默 c`（读不到就说读不到 + 一句原因，不显示 0）。 */
+export interface StateSummary {
+  /** 那一行文字。 */
+  text: string;
+  /** 未读到几个（`-1` = 合计整格没读到，页面不该显示任何数字）。 */
+  unknown: number;
+  /** 为什么没读到（空串 = 读到了）。 */
+  reason: string;
+}
+
+/** 顶部合计：优先用后端那一格（`view.states`），没有就按树上的节点现算并标明。
+ *
+ * 三档文案与"不显示 0"都在这里收口：读不到合计时给的是"未读到 + 原因"，
+ * 而不是 0 / 0 / 0 —— 后者会被读成"全都收工了"，而它恰恰可能是"没查成"。
+ */
+export function stateSummary(view: RosterView, rows: TreeRow[], unreached: RosterNode[]): StateSummary {
+  const raw: unknown = view.states;
+  if (isRecord(raw)) {
+    const reason = asText(raw["reason"]);
+    if (raw["checked"] === true) {
+      const flying = asNumber(raw["flying"]) ?? 0;
+      const standby = asNumber(raw["standby"]) ?? 0;
+      const silent = asNumber(raw["silent"]) ?? 0;
+      const unknown = asNumber(raw["unknown"]) ?? 0;
+      let text = `在飞 ${flying} · 待机 ${standby} · 静默 ${silent}`;
+      if (unknown > 0) {
+        text += ` · 未读到 ${unknown}`;
+      }
+      return { text, unknown, reason };
+    }
+    return {
+      text: "在飞 / 待机 / 静默：未读到（这一份读数没给出合计，不显示 0）",
+      unknown: -1,
+      reason: reason === "" ? "这一份读数里 states 那一格说它没查成，但没写原因" : reason,
+    };
+  }
+  // 旧后端没有 `states` 这一格 ⇒ 按树上的节点现算，并在文字里说清是现算的。
+  const states: AgentState[] = [];
+  for (const row of flattenRows(rows)) {
+    states.push(row.node === null ? "unknown" : asAgentState(row.node.state));
+  }
+  for (const node of unreached) {
+    states.push(asAgentState(node.state));
+  }
+  const tally = tallyStates(states);
+  let text = `在飞 ${tally.flying} · 待机 ${tally.standby} · 静默 ${tally.silent}`;
+  if (tally.unknown > 0) {
+    text += ` · 未读到 ${tally.unknown}`;
+  }
+  return {
+    text,
+    unknown: tally.unknown,
+    reason: "后端没给三态合计 ⇒ 这一行按树上的节点现算（节点自己的 state 那一格说它没读到）",
+  };
 }

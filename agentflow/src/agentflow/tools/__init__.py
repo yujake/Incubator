@@ -361,6 +361,37 @@ UNIVERSAL_TOOLS: dict[str, UniversalTool] = {
         "（取消之后就不该再有 notice 行）",
         frozenset(),
     ),
+    # 2026-10-25 业主裁定（「M 的巡视叫等待20分钟+周期性巡查」＋「忘填目的不报错，
+    # 只是让它追加目的」＋「挂机是将进程挂在时钟上」）：时钟从五件长到八件。
+    # 这三件的可达性判据与那五件逐字同一条（"它写不写知识表"），所以一起登记在
+    # 通用集合里 —— 不登记的话只读角色 C/H/V 的工具面上会少这三件，而"通用能力
+    # 不该出现谁能用这个说法"那条裁定就被这三件悄悄破了。写集仍只落在
+    # `BOOKKEEPING_TABLES`（今天只有 `tasks`）之内，导入期判据照旧核这一点。
+    "clock.periodic_start": UniversalTool(
+        "起周期性巡查（M 的巡视就是这一类：`every_sec=1200` + `purpose=周期性巡查`）："
+        "写 `out/clock` 的状态，每一拍到点落一条 `tasks` notice 行（簿记板项）",
+        frozenset({"tasks"}),
+    ),
+    "clock.periodic_stop": UniversalTool(
+        "停一条周期性巡查：只改 `out/clock` 的状态（停之后就不该再有这条巡查的 notice 行）",
+        frozenset(),
+    ),
+    "clock.timer_purpose": UniversalTool(
+        "给一条已受理的等待补上目的（同一个编号，不是新建一条）：只改 `out/clock` 的状态",
+        frozenset(),
+    ),
+    # 2026-10-27 业主第三条裁定（「直到它认为无事可做时，可启动计时器等待任意计时器返回」）：
+    # 时钟从八件长到九件。这一件的可达性判据与前八件逐字同一条（"它写不写知识表"）：
+    # 它只写 `out/clock/wait_any.json`（一份意图账，是文件不是表）⇒ 登记写集是空集。
+    # 为什么必须进这一张表：它是"通用能力"，不是"谁能用"—— 只读角色 C/H/V 也会有无事可做
+    # 的时候，把它们排除在外等于让那三个角色只能空转或提前收工。
+    "clock.wait_any": UniversalTool(
+        "手上没事了：记一条「等待任意计时器返回」的意图（同一个台账号只留最新一条），"
+        "并把这一格的读数交回去。只写 `out/clock/wait_any.json` 这份意图账，不写任何表；"
+        "挂机与否的判定在 `agent_loop._park_gate`，工具本身不做控制流。"
+        "业主 2026-10-27 原话：「可启动计时器等待任意计时器返回」",
+        frozenset(),
+    ),
     "trace.children": UniversalTool(
         "读任务树里我这一层的直接下级：只读 `tasks` 的可见行，不写任何东西。"
         "父子追踪对所有角色开放 —— 否则只读角色连自己在等谁都不知道",

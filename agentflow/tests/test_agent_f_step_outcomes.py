@@ -93,7 +93,7 @@ def test_the_collection_is_actually_consumed_by_the_write_path():
     f = AF.AgentF(st)
     plan = f.create_plan(
         "难题", "k-outcome",
-        subgoals=[{"sid": "s1", "text": "子目标", "owner": "E", "script_path": "probes/x.py"}],
+        subgoals=[{"sid": "s1", "text": "子目标", "owner": "E", "script_path": "probes/x.py", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}],
         # 三维预算缺一不可（FC-18）：少一个键时 `create_plan` 会拒绝立项，
         # 而"夹具没立项"会让下面的负控在真空里变绿。
         budget={"max_rounds": 3, "max_concurrency": 1, "max_depth": 1,

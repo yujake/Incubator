@@ -444,7 +444,6 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                         workspace_root: str | Path | None = None,
                         seam_factory: Any = None,
                         semantic_review: bool = False,
-                        attack_reasoning: bool = False,
                         experiment_reasoning: bool = False,
                         stop_file: str | Path | None = None) -> dict[str, Any]:
     """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
@@ -452,16 +451,23 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     | 开关 | 给谁接缝 | 不打开时那一侧怎么如实报 |
     |---|---|---|
     | `semantic_review` | H（`claims_semantically_judged`） | 那一格记"没查" |
-    | `attack_reasoning` | F（`attack.step` 真推一轮） | 落 `dead_end(缺工具)` |
     | `experiment_reasoning` | E（`author_script` 按判据写脚本） | 落 `no_seam` |
+    | （无） | F（`attack.step` 真推一轮） | 不适用：F 的推理不是开关，见下 |
 
     三条同一条纪律：环境里有 key 也不改变行为（`DEFAULT_LLM_LOOPS` 的注释逐字写着）。
-    ## 为什么 `attack_reasoning` 不连带打开 `experiment_reasoning`
-    两个开关各自可解释：F 是"想这一步怎么打"，E 是"把判据写成一份能跑的脚本"，两笔钱可分别买账。
-    代价（`projects/mp4` 真机，`attack_plans.json` 计划 000003 的 r1/r2）：只开 F 的缝、E 没缝 ⇒
-    F 需要脚本时写不出来，那一轮落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）——
-    改前它是静默的 `no_change`，看上去像"跑了但没结果"。整条链要通，必须同时有 `attack_reasoning`
-    （F 造判据）与 `experiment_reasoning`（E 写脚本、跑玩具例子）。
+    ## F 没有开关（业主 2026-10-26 晚的裁定，原话）
+    「没有默认开，这个就是F的工作方式，没有开关的说法」。改前 `--attack-reasoning`
+    是 F 有没有推理的那道闸：默认关 ⇒ `agent_f.default_llm()` 返回 None ⇒ 真机 10 个
+    计划全是 `rounds=1`、`dead_end(缺工具)`、detail 逐字"本框架尚未接线自动推理"，
+    F 一次推理都没做过、一份 proof 都没交过。现在那个开关已退役（形参保留只为兼容
+    仍在传它的调用方，例如 `cli.py`），F 的缝在这里无条件装配。
+    ## 为什么 F 的缝不连带打开 `experiment_reasoning`
+    两件事各自可解释：F 是"想这一步怎么打"（它的工作方式），E 是"把判据写成一份能跑的
+    脚本"（另一笔钱、另一个开关）。代价（`projects/mp4` 真机，`attack_plans.json` 计划
+    000003 的 r1/r2）：只开 F 的缝、E 没缝 ⇒ F 需要脚本时写不出来，那一轮落
+    `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）—— 改前它是静默的
+    `no_change`，看上去像"跑了但没结果"。整条链要通，还需要 `experiment_reasoning`
+    （E 写脚本、跑玩具例子）。
     ## 语义（与 `LlmBackend` 的 docstring 逐字一致）：登记在 `loops` 里的 `(角色, 动作)` 由 LLM
     循环执行，其余动作仍走 Python 实现；默认 `loops` 为空 ⇒ 与 `wired_conductor` 完全一致。
     `conductor_for` 这条缓存：`tools.conductor_tools.conductor_for` 按 `store.root` 缓存而忽略后传的 `backend`：先建确定性主控、再要模型主控会
@@ -508,31 +514,26 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     h_llm = None
     if semantic_review:
         h_llm = _seam("H")
-    # F 的攻坚推理（`draft/39` §6.32 的 D42b）：与 H 的语义判据同一条纪律 ——
-    # 默认关，环境里有 key 也不改变确定性行为；打开时 F 才拿得到一个按角色造的缝。
+    # F 的攻坚推理（`draft/39` §6.32 的 D42b）：业主 2026-10-26 晚的裁定 ——
+    # 「没有默认开，这个就是F的工作方式，没有开关的说法」。
     #
-    # 为什么必须显式打开：真机读数（T2 第 12 趟 `p6n`）里 `attack_plans.history` 那一条
-    # 逐字写着"本框架尚未接线自动推理" —— 因为这条真机路径上 `llm_by_role` 只登记了 H，
-    # F 的 `llm` 是 None（`specs/f.py::_build` 把 `d.llm` 原样传下去，而 d.llm 就是 None）。
-    # D42 把"有缝就推理"那一支修好了，但缝从来没到过 F 手上；这一处才是真机那一句的根因。
-    f_llm = None
-    if attack_reasoning:
-        f_llm = _seam("F")
-        # 工具层也要拿到它（`draft/39` §6.33 的 D42c）：真机里 M 派 `F.step` 走的是
-        # `attack.step` 那条工具路径（`attack_tools._agent_for` → `AgentF(store)`），
-        # 那条路径拿不到 host 的装配上下文 —— 只接角色工厂，`F.step` 仍然 `no_change`
-        # （T2 第 14 趟 `p6p` 实测：`--attack-reasoning` 开着，`F.step` 连续 5 次 no_change）。
-        from . import agent_f as _AF
+    # 所以这里无条件装配：`_seam("F")` 拿到的对象就是 F 的推理面（没有配 key 时缝自己
+    # 会如实落 `not_wired` —— 那是"钱没花成"，不是"没接线"）。
+    # 2026-10-26 之前这里是一道装配开关（默认关 ⇒ `f_llm is None`）
+    # ⇒ 真机读数（T2 第 12 趟 `p6n`）里 `attack_plans.history` 那一条逐字写着
+    # "本框架尚未接线自动推理"，F 从来没被问过一次。那道开关（形参与
+    # 命令行 flag）已在本批删除。
+    #
+    # 工具层那条路也要拿到它（`draft/39` §6.33 的 D42c）：真机里 M 派 `F.step` 走的是
+    # `attack.step` 那条工具路径（`attack_tools._agent_for` → `AgentF(store)`），
+    # 那条路径拿不到 host 的装配上下文 —— 只接角色工厂，`F.step` 仍然 `no_change`
+    # （T2 第 14 趟 `p6p` 实测）。两条路共用同一个缝对象。
+    f_llm = _seam("F")
+    from . import agent_f as _AF
 
-        _AF.set_default_llm(f_llm)
-        notes_attack = "F 的攻坚推理：接线（`--attack-reasoning`，角色工厂与工具层两条路都接）"
-    else:
-        notes_attack = ("F 的攻坚推理：未接线（默认确定性）⇒ `attack.step` 只会落 "
-                        "`dead_end(缺工具)`；要真推一轮就加 `--attack-reasoning`")
-        # 同一进程里跑第二趟时不许继承上一趟登记的缝（`--no-ask` 那条纪律的同族问题）。
-        from . import agent_f as _AF
-
-        _AF.set_default_llm(None)
+    _AF.set_default_llm(f_llm)
+    notes_attack = ("F 的攻坚推理：接线（这是 F 的工作方式，不是可选项 —— 业主 2026-10-26 裁定）"
+                    "；角色工厂与工具层两条路共用同一个缝")
     # ---- E 的写脚本推理（`--experiment-reasoning`，业主裁定：「把 F 与 E 的接缝做好」）
     # 缝在哪被 gate（这一处就是根因，2026-10 的真机读数）：E 的缝一直只有"插座"没有"线" ——
     # `agent_e/author_script.py` 在 `self.llm is None` 时受控拒绝 `no_seam`，而 `self.llm` 的来源只有两个
@@ -556,9 +557,9 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         notes_experiment = (
             "E 的写脚本推理：未接线（默认确定性）⇒ 有判据的子目标会落 `no_seam`，"
             "F 那一轮如实落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是缝）；"
-            "要真写脚本就加 `--experiment-reasoning` —— 只开 `--attack-reasoning` 不连带打开它")
+            "要真写脚本就加 `--experiment-reasoning`（F 那一侧没有开关：它出场就有缝）")
     # ---- D 的模型精修（`R1-B-x` 裁定 3）：缝不由角色开关决定，由"这次运行有没有模型"决定。
-    # 裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 那样等一个 `--attack-reasoning`。
+    # 裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 当年那样等一个开关。
     # 三条硬要求（裁定 3 逐字）：① 有模型就接上（`_model_key_present()`：环境里配了 key）；② 三态读数：
     # 接上之后 `_llm_refine` 的 `reading.state` 会落 `used`/`failed`/`not_wired`/`unknown_object`
     # （`agent_d/_support.model_json_call`），于是"这次到底问没问模型、问成没问成"是读得出来的；

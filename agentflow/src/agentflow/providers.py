@@ -992,7 +992,12 @@ class RateLimiter:
             if last is not None:
                 wait = self.min_interval - (now - last)
                 if wait > 0:
-                    time.sleep(wait)
+                    from . import clock as CLK
+
+                    CLK.await_io(wait, "等同一主机的最小请求间隔（礼貌限速）",
+                                 kind="rate_limit",
+                                 where="providers.RateLimiter.acquire",
+                                 waited_for=str(bucket))
                     now = time.monotonic()
             self._last[bucket] = now
 
@@ -1087,14 +1092,22 @@ def http_get_json(
                     "（让检索层换源）", delay, status, RATE_LIMIT_MAX_WAIT_SEC)
                 raise last_error from exc
             logger.warning("检索受限/失败（HTTP %s），%.1fs 后重试第 %d 次", status, delay, attempt + 1)
-            time.sleep(delay)
+            from . import clock as CLK
+
+            CLK.await_io(delay, "检索被限流/失败后按退避重试（同一个 provider）",
+                         kind="retry", where="providers.http_get_json",
+                         waited_for=str(bucket))
         except urllib.error.URLError as exc:
             last_error = HttpError(f"network error for {full}: {exc.reason}", None)
             if attempt >= retries:
                 raise last_error from exc
             delay = min(2.0**attempt, 20.0) * (0.8 + 0.4 * random.random())
             logger.warning("网络异常（%s），%.1fs 后重试第 %d 次", exc.reason, delay, attempt + 1)
-            time.sleep(delay)
+            from . import clock as CLK
+
+            CLK.await_io(delay, "检索网络异常后按退避重试（同一个 provider）",
+                         kind="retry", where="providers.http_get_json",
+                         waited_for=str(bucket))
         except (TimeoutError, json.JSONDecodeError, ValueError) as exc:
             last_error = HttpError(f"bad response for {full}: {exc}", None)
             # JSON 解析失败通常不是瞬时故障 —— 更可能是被限流页/网关错误页顶替了
@@ -1103,7 +1116,11 @@ def http_get_json(
             if attempt >= retries or (isinstance(exc, json.JSONDecodeError) and attempt >= 1):
                 raise last_error from exc
             delay = min(2.0**attempt, 20.0) * (0.8 + 0.4 * random.random())
-            time.sleep(delay)
+            from . import clock as CLK
+
+            CLK.await_io(delay, "检索响应坏了（多半被限流页顶替）后重试一次",
+                         kind="retry", where="providers.http_get_json",
+                         waited_for=str(bucket))
 
     raise last_error or HttpError(f"failed to fetch {full}", None)
 

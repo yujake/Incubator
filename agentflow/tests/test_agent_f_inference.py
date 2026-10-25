@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from agentflow import attackround as AR
 from agentflow.agent_f import AgentF
@@ -57,9 +58,28 @@ def _f(store: Store, llm=None, *, budget_reading=None, **cfg) -> AgentF:
 
 def _new_plan(f: AgentF, *, owner: str = "F", testable: str = "存在反例或有限界",
               key: str = "PK-INF") -> str:
-    return f.create_plan("难题：证明或否证某个族的存在性", key, subgoals=[
-        {"sid": "s1", "text": "判定这条难题", "owner": owner, "testable": testable},
+    """造一行攻坚计划；返回 `plan_id`。
+
+    `testable=""` 那一档造的是"改前那种行"（台账里躺着一条没有可检验形式的子目标，
+    于是 I9 闸门在花钱之前把它挡下来）。2026-10-27 起 `create_plan` 会拒收这种子目标
+    （写侧硬拦，见 `tests/test_f_create_plan_requires_testable.py`）—— 所以这一档
+    先按规矩立项、再把那一格清空写回台账：判据要核的是"闸门仍然在"，不是"立项入口
+    还留着一个口子"。
+    """
+    pid = f.create_plan("难题：证明或否证某个族的存在性", key, subgoals=[
+        {"sid": "s1", "text": "判定这条难题", "owner": owner,
+         "testable": testable or "占位：随后清空（模拟改前那种行）"},
     ])["plan_id"]
+    if not testable:
+        row = next(dict(r) for r in f.store.rows("attack_plans")
+                   if str(r.get("plan_id")) == str(pid))
+        sgs = [dict(s) for s in row.get("subgoals") or []]
+        for sg in sgs:
+            sg.pop("testable", None)
+        row["subgoals"] = sgs
+        with f.store.tx("attack_plans", actor="test") as tx:
+            tx.upsert("attack_plans", row)
+    return str(pid)
 
 
 def _round(**fields) -> str:
@@ -262,7 +282,7 @@ def test_s10_the_counterexample_request_carries_its_spec_into_the_e_subgoal(stor
     assert "n_max=18" in out["reason"], out
     # 反负控：没有判据的那种 E 子目标 ⇒ 文案里不该多出判据那半句（判据是读数，不是模板）
     pid3 = f.create_plan("难题三", "PK-S10B", subgoals=[
-        {"sid": "s1", "text": "做个实验", "owner": "E"}])["plan_id"]
+        {"sid": "s1", "text": "做个实验", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     plain = f.step(pid3)
     assert "script_path" in plain["reason"] and "criterion=" not in plain["reason"], plain
 
@@ -292,15 +312,23 @@ def test_a_dead_end_round_is_blocked_with_a_controlled_reason(store: Store):
 
 
 def test_an_unwired_f_still_says_it_is_not_wired(store: Store):
-    """负控（D42 的反面）：没接缝时仍是 `dead_end(缺工具)`，不许假装推了一轮。"""
-    f = _f(store)                      # llm=None
+    """负控（只允许出现在测试打桩里）：缝被置 None ⇒ 明确报"缺缝"，不是静默 `no_change`。
+
+    运行形态里 F 出场就有缝（业主 2026-10-26 晚：「这个就是F的工作方式，没有开关的
+    说法」；装配层 `host.wired_llm_conductor` 无条件接）。这一条钉的是另一件事：
+    把缝打桩成 None 时，`_deploy` 必须说清缺的是缝（`missing_seam=True` +
+    detail 第一句"缺缝"），而不是退化成一句没有产物的 `no_change`。
+    """
+    f = _f(store)                      # llm=None（负控打桩：不是运行形态）
     pid = _new_plan(f)
-    f.step(pid)
+    out = f.step(pid)
 
     rec = store.rows("attack_plans")[0]["history"][-1]
     assert rec["product"] == "dead_end", rec
     assert rec["dead_end_reason"] == "缺工具", rec
-    assert "尚未接线自动推理" in rec["detail"], rec["detail"]
+    assert "缺缝" in rec["detail"], rec["detail"]
+    assert out.get("missing_seam") is True, out
+    assert out["outcome"] == "no_change", out
 
 
 def test_a_broken_seam_is_recorded_as_not_checked_not_as_a_dead_end(store: Store):
@@ -400,7 +428,7 @@ def test_a_step_on_an_empty_ledger_says_to_create_a_plan_first(store: Store):
 def test_the_tool_layer_path_gets_the_registered_seam(store: Store):
     """判据（`draft/39` §6.33 的 D42c）：工具层那条路也要拿得到缝。
 
-    真机读数（T2 第 14 趟 `projects/p6p-research-from-zero`，`--attack-reasoning` 开着）：
+    真机读数（T2 第 14 趟 `projects/p6p-research-from-zero`，当时那个装配开关开着）：
     `F.step` 连续 5 次 `no_change` —— 因为 M 派 `F.step` 走的是 `attack.step`
     这条工具路径（`attack_tools._agent_for` → `AgentF(store)`），而顺手接好的那条
     角色工厂路它不走。判据钉两半：登记了缝 ⇒ 工具层的 `attack.step` 真推一轮；
@@ -570,6 +598,33 @@ def test_p09_the_missing_reading_names_the_gap_and_who_still_guards_the_money(st
     # 反负控：读得到的时候不许还挂着"读不到"的说法
     ok = _f(store, budget_reading=_reading()).budget_of_round()
     assert ok["status"] == "known" and not ok["why"], ok
+
+
+def test_p09_the_guard_note_names_live_symbols(store: Store) -> None:
+    """`BUDGET_GUARD_NOTE` 的读者：它点名的符号必须真的在，且行号不许回来。
+
+    为什么单列：这张注记原先写着两个「文件:行号」，而 2026-10-27 实测那两处已经漂
+    成了别的东西（`store: Any = None` 与 `Refusal.__post_init__`）—— 唯一的读法是
+    `why` 字符串里那几条文件名断言，行号漂了它照样绿。改用符号名之后由这条判据接手：
+    逐符号证明它们还在、并且在 `policy.check` 里仍判那一档，同时禁止行号写法回来。
+    """
+    import inspect
+
+    from agentflow import conductor as CD
+    from agentflow import policy as PL
+
+    note = AR.BUDGET_GUARD_NOTE
+    assert not re.search(r"\.py:\d", note), f"注记里又写行号了（那会漂）：{note}"
+    for needle in ("Conductor._meter_guard", "[4a]", "policy.check", "usd_budget"):
+        assert needle in note, (needle, note)
+    assert callable(getattr(CD.Conductor, "_meter_guard", None)), \
+        "注记点名的 `Conductor._meter_guard` 不见了（那这句就是死证据）"
+    assert callable(getattr(PL, "check", None)), "注记点名的 `policy.check` 不见了"
+    body = inspect.getsource(PL.check)
+    assert "budget_exceeded" in body and "usd_budget" in body, body[:400]
+    # 承重：它真的进了读数（不是一段没人读的散文 —— F 读不到预算时把它写进 why）。
+    why = _f(store).budget_of_round()["why"]
+    assert note in why, why
 
 
 def test_p09_the_framework_written_why_strategy_carries_the_same_sentence(store: Store):

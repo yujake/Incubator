@@ -1105,9 +1105,43 @@ def _route_to_lit_backstop(ctx: TableContext, *, entry: str, intent: str,
 # ---------------------------------------------------------------- 工具实现
 
 
+def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
+    """`statements` 行的读侧派生格：这一份证明走的是哪条路（读侧接线点）。
+
+    为什么必须有这一格：路子住在 `_proof_routes` 里（由 `Secretary.record_statement`
+    写进那一行，键名带下划线），而它在任何工具读数上都没有被翻出来过 ——
+    `secretary.proof_routes_of` / `proof_route_of` 这两只读侧唯一口径全仓 0 个非测试
+    调用点（`docs/WIRING-AUDIT-2026-10-27.md` 第四节第一行）。后果不是"少一格"：
+    "这份证明走的是哪条路"在写侧存在、在读侧不存在，模型读得到行、读不到那句话。
+
+    这一处就是那条线的落点（`table.get` 与 `table.list` 共用同一只函数）：
+    `route` 是第 1 份证明的那一句（模型最常问的就是它），`proof_routes` 是
+    `{证明号: 一句话}` 的全量（JSON 键必须是字符串）。下划线那个内部键原样留着
+    （它是写侧的形态，读的人有权看见原样）；两只派生格由同一处算，不各写一份。
+
+    三态：算不出来也如实落一格（`proof_routes_problem`），不折成"没有路线"。
+    """
+    out = dict(row)
+    if str(table or "") != "statements":
+        return out
+    try:
+        from ..secretary import proof_route_of, proof_routes_of
+
+        routes = proof_routes_of(row)
+        out["proof_routes"] = {str(no): text for no, text in sorted(routes.items())}
+        out["route"] = proof_route_of(row, 1)
+    except Exception as exc:  # noqa: BLE001 —— 派生格读不成不许把整行读数带走
+        out["proof_routes"] = {}
+        out["route"] = ""
+        out["proof_routes_problem"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
 @tool(
     "table.list",
-    "列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。",
+    "列出某张表的行（支持等值过滤与分页），并给出过滤后的总数。读 `statements` 行时"
+    "另带 route（第 1 份证明走的那条路）与 proof_routes（{证明号: 路线}）；"
+    "算不出来时是空表 + proof_routes_problem 说为什么。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -1146,7 +1180,7 @@ def table_list(
     return ok(
         {
             "table": table,
-            "rows": page,
+            "rows": [_with_proof_routes(table, row) for row in page],
             "total": len(matched),
             "returned": len(page),
             "limit": limit,
@@ -1162,8 +1196,14 @@ def table_list(
 
 @tool(
     "table.get",
-    "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。",
-    _obj({"table": _TABLE_PROP, "id": {"type": "string", "description": "主键值（4 位字符串，或 r-NNNN）"}}, required=("table", "id")),
+    "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行时"
+    "另带 route（第 1 份证明走的那条路）与 proof_routes（{证明号: 路线}）；"
+    "算不出来时是空表 + proof_routes_problem 说为什么。",
+    _obj({"table": _TABLE_PROP, "id": {
+        "type": "string",
+        "description": (f"主键值（{S.ID_DIGITS} 位十进制字符串如 `000000`，"
+                        "或 `r-000001`；旧数据里的 4 位号仍可读）")}},
+         required=("table", "id")),
     side_effect="read",
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是行对象或 None —— 行对象的字段由那张表的 schema
@@ -1184,7 +1224,8 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
         return fail(str(e), table=table, kind="unknown_table")
     for row in _rows(ctx, table):
         if row.get(idf) == id:
-            return ok(dict(row), table=table, id=id, id_field=idf, found=True)
+            return ok(_with_proof_routes(table, row), table=table, id=id, id_field=idf,
+                      found=True)
     return ok(None, table=table, id=id, id_field=idf, found=False)
 
 

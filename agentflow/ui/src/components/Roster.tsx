@@ -57,6 +57,17 @@
  *   - 节点列表为空时也只能说"没读到"，不许说"没有"。
  * 反过来，`answer === "ok"` 而 `nodes` 是空数组才算"读到了、里面是 0 个"（合法空态）。
  *
+ * ## 每个代理那一格三态（在飞 / 待机 / 静默 / 未读到）
+ * 业主 2026-10-26：「『在飞』的读数要随着时钟式待机进行适配，分三种：1.在工作叫
+ * 『在飞』，2.在等待（计时器）为『待机』，3.已收工，无任务，无计时器，叫『静默』。
+ * 更新『活跃子代理』的定义为非静默子代理。」所以这一页有三处跟着变：
+ *   - 每一行一个三态徽标（`stateBadge`，文案取 `rosterTree.STATE_TEXT`）；
+ *   - 行尾「▸ 活 N（飞 a · 待 b）」：N = 名下**非静默**的直接子数，不是
+ *     `children.length`（那个数把早就收工的也算进来）；
+ *   - 顶部合计「在飞 a · 待机 b · 静默 c」，读不到时显示"未读到 + 一句原因"，
+ *     不显示 0（0 会被读成"全都收工了"）。
+ * 三态的判定只有后端一处（`conductor.agent_state`）；这一层只负责把它画出来。
+ *
  * ## 取数不许挨着渲染（2026-10-24 真机故障之后的划线）
  * 改前父子关系与"缺号怎么办"都长在这个组件里：`data.roots.map(renderBranch)`，而
  * `renderBranch` 第一句就是 `ctx.childrenOf[tid] ?? []`。真机上跑着的是旧后端
@@ -70,7 +81,7 @@ import { useState } from "preact/hooks";
 
 import { api } from "../api";
 import { useFace } from "../live";
-import { buildRosterTree, taskLine } from "../rosterTree";
+import { STATE_TEXT, asAgentState, buildRosterTree, kidsStateText, stateSummary, taskLine } from "../rosterTree";
 import type { TreeRow } from "../rosterTree";
 import type { RosterChild, RosterInbox, RosterNode, RosterTask, RosterUnrostered, RosterView } from "../types";
 import { Badge } from "./Badge";
@@ -131,6 +142,18 @@ function isOpen(node: RosterNode): boolean {
 /** 名册名那几档的空值（根不在任何人的名册里；名字一经退役永久不复用）。 */
 function nameText(node: RosterNode): string {
   return node.name === "" ? "（顶层·无名册名）" : node.name;
+}
+
+/** 三态徽标（在飞 / 待机 / 静默 / 未读到）：文案与词表来自 `rosterTree.STATE_TEXT`，
+ * 颜色三档由 CSS 那三个类给（`roster-state-*`，走 token，不写字面色值）：
+ * 在飞 = 强调色、待机 = 中性偏冷（次要标签色 + 层底色）、静默 = 灰（三级标签色）。
+ * `kind` 里带 `roster-state-` 前缀，于是 `Badge` 的 class 是 `badge roster-state-flying`。
+ *
+ * `unknown` 那一档刻意也画出来（不是不画）：不画会让"没读到"与"静默"在页面上
+ * 长得一模一样 —— 而这一批要修的正是这个折叠。
+ */
+function stateBadge(node: RosterNode) {
+  return <Badge kind={`roster-state-${asAgentState(node.state)}`} text={STATE_TEXT[asAgentState(node.state)]} />;
 }
 
 /** 子那几格：绝对编号 + 名册名（读不到名册名就只给编号）。 */
@@ -299,11 +322,18 @@ function NodeDetail(props: { node: RosterNode }) {
       </div>
       <div class="row">
         台账那一行：{n.task_found ? "在" : "不在（tasks 里没有它这一行）"} ·
-        状态 <span class="mono">{n.status === "" ? "unknown" : n.status}</span> · 在飞{" "}
+        状态 <span class="mono">{n.status === "" ? "unknown" : n.status}</span> ·
+        名下在跑的活{" "}
         <span class="mono">
-          {n.in_flight === null ? "未读到" : n.in_flight > 0 ? "是" : "否"}
+          {n.in_flight === null ? "未读到" : n.in_flight}
         </span>{" "}
         · 槽位面 <span class="mono">{n.surface === "" ? "（没有分到槽位）" : n.surface}</span>
+      </div>
+      <div class="row">
+        三态：{stateBadge(n)}
+        <span class="readings">
+          {n.state_reason === "" ? "" : `原因：${n.state_reason}`}
+        </span>
       </div>
       {n.retired ? (
         <div class="row roster-retired-note">
@@ -384,10 +414,18 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             <Badge kind="badge-unknown" text={node.role === "" ? "unknown" : node.role} />
             <span class="mono">{node.task_id === "" ? "unknown" : node.task_id}</span>
             <span class="readings">{childCountText(node)}</span>
+            {/* 「▸ 活 N（飞 a · 待 b）」：N = 非静默（在飞 + 待机），不是 children.length
+                （业主 2026-10-26：「『▸ 活 N』改成 ▸ 活 N（飞 a · 待 b），N = 非静默」）。
+                这一格数的是本节点的直接子；`unknown` 单独列，不混进活跃。 */}
+            {kids.length === 0 ? null : (
+              <span class="readings">{`▸ ${kidsStateText(kids)}`}</span>
+            )}
+            {/* 三态徽标：在飞 / 待机 / 静默 / 未读到（文案与颜色都跟着这一档走）。 */}
+            {stateBadge(node)}
             {node.in_flight === null ? (
-              <Badge kind="badge-unknown" text="在飞：未读到" />
+              <Badge kind="badge-unknown" text="活：未读到" />
             ) : node.in_flight > 0 ? (
-              <Badge kind="badge-pending" text="在飞" />
+              <Badge kind="badge-pending" text={`活 ${node.in_flight} 件在跑`} />
             ) : null}
             {node.retired ? null : inboxBadge(node.inbox)}
             {node.retired ? <Badge kind="badge-na" text="已销号" /> : null}
@@ -511,6 +549,7 @@ function RosterBody(props: {
     onPick: (tid: string) => props.setPicked(props.picked === tid ? "" : tid),
   };
   const nodes = Array.isArray(data.nodes) ? data.nodes.length : 0;
+  const summary = stateSummary(data, tree.rows, tree.unreached);
   const coverage = data.coverage ?? ({ tasks_agents: null, roster_nodes: null, unrostered: null });
   const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
   const unplaced = Array.isArray(data.unplaced) ? data.unplaced : [];
@@ -521,6 +560,16 @@ function RosterBody(props: {
         名下的子；折叠口径与秘书那一侧同一处实现）。树按父子展开：子挂在父下面，
         同一父的多个子按落盘行序排。默认展开到第 {DEFAULT_OPEN_DEPTH} 层，
         其余折叠（点行首的三角）；展开态在本次浏览内保持。
+      </div>
+      {/* 顶部合计（业主 2026-10-26：「顶部合计：在飞 a · 待机 b · 静默 c」）。
+          读不到就显示「未读到」+ 一句原因，绝不显示 0 / 0 / 0 ——
+          那一行 0 会被读成"全都收工了"，而它可能是"这一格没查成"。
+          活跃 = 非静默 = 在飞 + 待机；`未读到` 单独列，不混进活跃也不混进静默。 */}
+      <div class="readings roster-states">
+        三态合计：<b>{summary.text}</b>
+        {summary.reason === "" ? null : (
+          <span class="tri-reason">（{summary.reason}）</span>
+        )}
       </div>
       {data.answer !== "ok" ? (
         <div class="readings roster-unread">

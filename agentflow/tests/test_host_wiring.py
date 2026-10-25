@@ -204,9 +204,9 @@ def test_d_gets_a_seam_by_availability_not_by_a_role_switch(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """`R1-B-x`（裁定 3）：D 的缝由"这次运行有没有模型"决定，不由角色开关决定。
 
-    裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 那样等一个
-    `--attack-reasoning` 才拿得到缝。三态与 fail-open 由 `model_json_call` 的
-    `reading.state`（`used`/`failed`/`not_wired`/`unknown_object`）负责。
+    裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 当年那样等一个
+    角色开关才拿得到缝（F 的那个开关已于 2026-10-26 删除）。三态与 fail-open 由
+    `model_json_call` 的 `reading.state`（`used`/`failed`/`not_wired`/`unknown_object`）负责。
 
     两半都要钉：
     - 有模型 ⇒ 建缝（否则 D 的精修永远 `not_wired`，"有模型却不接线"读不出来）；
@@ -241,35 +241,30 @@ def test_d_gets_a_seam_by_availability_not_by_a_role_switch(
     assert "D" not in seen, f"没有模型却造了 D 的缝：{seen}"
 
 
-def test_attack_reasoning_is_opt_in_and_the_default_stays_deterministic(tmp_path: Path):
-    """判据（`draft/39` §6.32 的 D42b）：F 的攻坚推理是显式接线，默认仍确定性。
+def test_f_gets_a_seam_because_that_is_its_working_mode(tmp_path: Path):
+    """判据（业主 2026-10-26 晚）：「没有默认开，这个就是F的工作方式，没有开关的说法」。
 
-    真机读数（T2 第 12 趟 `projects/p6n-research-from-zero`）：D42 把"有缝就推理"那一支
-    修好了，可 `attack_plans.history` 那一条依旧逐字写着"本框架尚未接线自动推理" ——
-    因为这条路径上 `llm_by_role` 只登记了 H，`specs/f.py::_build` 拿到的 `d.llm` 是 None。
-    缝从来没到过 F 手上，那才是真机那一句的根因。
+    改前 F 的攻坚推理是一道可选开关（默认关）：不传它 ⇒ `agent_f.default_llm()` 返回
+    None ⇒ 真机 10 个计划全是 `rounds=1`、`product="dead_end"`、detail 逐字
+    "本框架尚未接线自动推理"，F 一次推理都没做过。那个开关（形参与命令行 flag）
+    已于 2026-10-26 删除。
 
-    两半都要钉：打开时 F 拿得到缝（否则能力还是够不着）；关着时 F 仍是 None 且装配读数
-    如实说"未接线"（不能为了让它能跑，就把"默认确定性"这条纪律悄悄改掉）。
+    现在那一支的判据反过来：不传任何开关 ⇒ F 真的拿到缝（`default_llm()` 非 None），
+    而且装配读数如实说"接线"。
     """
     st = _store(tmp_path)
     seam = _FakeLLM()
+    from agentflow import agent_f as AF
 
-    off = host.wired_llm_conductor(st, session_root=tmp_path, sid="t-off", max_steps=1,
-                                   workspace_root=tmp_path, attack_reasoning=False)
-    notes_off = " ".join(str(x) for x in off["notes"])
-    assert "F 的攻坚推理：未接线" in notes_off, notes_off
-    reg_off = host.build_role_registry(st, providers=[object()])
-    assert reg_off["F"][1](store=st).llm is None, "默认档下 F 不该拿到缝"
-
-    on = host.wired_llm_conductor(st, session_root=tmp_path, sid="t-on", max_steps=1,
-                                  workspace_root=tmp_path, attack_reasoning=True,
-                                  seam_factory=lambda role: seam)
-    notes_on = " ".join(str(x) for x in on["notes"])
-    assert "F 的攻坚推理：接线" in notes_on, notes_on
-    reg_on = host.build_role_registry(st, providers=[object()], llm_by_role={"F": seam})
-    f = reg_on["F"][1](store=st)
-    assert f.llm is seam, "打开 --attack-reasoning 之后 F 必须真的拿到那个缝"
+    AF.set_default_llm(None)
+    wiring = host.wired_llm_conductor(
+        st, session_root=tmp_path, sid="t-f-working", max_steps=1,
+        workspace_root=tmp_path, seam_factory=lambda role: seam)
+    notes = " ".join(str(x) for x in wiring["notes"])
+    assert "F 的攻坚推理：接线" in notes, notes
+    assert AF.default_llm() is seam, "F 的推理缝没有被无条件装配"
+    reg = host.build_role_registry(st, providers=[object()], llm_by_role={"F": seam})
+    assert reg["F"][1](store=st).llm is seam, "F 没拿到缝"
 
 
 def test_factory_uses_the_store_it_is_given(tmp_path: Path):
@@ -429,7 +424,7 @@ def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
 
 
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
-    """接了线的工具层：M 的面 = 编排面 11 件 + 文件面白名单 6 件，一件领域工具都没有。
+    """接了线的工具层：M 的面 = 通用时钟件 + 编排面 + 文件面白名单六件，一件领域工具都没有。
 
     判据改过两次，都是真机读数逼出来的。2026-10-02（`draft/37` §38）：给 M 只读四件 + `fs.write` ——
     §37 那趟 23 步里 15 步在猜"盘上有没有论文"，最后交不出报告：M 缺的不是判断力，是眼睛与笔（它
@@ -441,34 +436,74 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     红线口径：从"M 不碰盘"→「M 有眼睛和笔」→「有眼睛、有笔、能改该改的那一处，但不碰知识表、不做
     检索、不删东西、不挪东西」。守三件事：1. 白名单六件必须在（`fs.list` / `fs.read` / `fs.search` /
     `fs.stat` / `fs.write` / `fs.edit`）；2. `fs.delete` / `fs.move` 不许有（真删 / 换位置，不可逆）；3. `table.*` / `prov.*`
-    / `search.*` 一件都不许有（知识表与检索仍是 M 的禁区）。"""
+    / `search.*` 一件都不许有（知识表与检索仍是 M 的禁区）。
+
+    ## 这条判据量的是什么（2026-10-27 改口径，读数是 33）
+
+    它量的是「M 的面由哪三组构成」，不是"总数是多少"：全部 `clock.*`（通用能力，
+    见 `tools.UNIVERSAL_TOOLS` —— 对全部角色都发，M 也在里面）、全部 `conductor.*`
+    （编排面：只有主控有）、文件面白名单六件。这三组的并集必须逐名等于 M 的
+    工具面 —— 于是任何一件领域工具（`doc.*` / `table.*` / `search.*` / `trace.*` …）
+    多出来都当红，而"编排面又加了一件正经工具"不再需要回来改这一格。
+
+    改前这里写死 `len(m_tools) == 21`，并单独钉 `conductor.* == 15`。那个 21
+    = 15 件 `conductor.*` + 6 件 `fs.*`，来由是 2026-10-20 之前的口径（`board` /
+    `broadcast` / `escalate` 三件一路加上来的，逐条留痕在被删掉的那段注释里）。
+    2026-10-27 实测 33 = 8 件 `clock.*`（D-53 的时钟八件对全部角色发）+ 19 件
+    `conductor.*`（`ack` / `guide` / `retire_child` / `watch` 四件是之后加的）+ 6 件
+    `fs.*`。写死的数字连着红过三次（18→19→20→21），而"回来改这一格"与"放过一件
+    不该给 M 的工具"在 diff 里长得一模一样 —— 所以改成现算，只钉构成。
+    """
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    # 计数随工具面一起动：18 → 19 是 `conductor.board`（工作项板，业主 A1=甲 之后 S1b 加的；
-    # 它的 `roles=("M",)` 落在 M 的编排面上）。这一条当时漏改 —— 2026-10-08 深夜 S1d 审计时
-    # 实测 HEAD 上就有一条红（`assert 19 == 18`），补在这里并把出处写清楚。
-    # 19 → 20 是 `conductor.broadcast`（S6-b，业主 T20/T21：一件能力、所有角色同一做法，
-    # M 也在里面；只读角色 C/H/V 不在它的 `roles` 声明里）。
-    # 2026-10-20 计数口径：M 的编排面新增 `conductor.escalate`（`conductor.acceptance` 已在 HEAD），
-    # 故 20 -> 21；这条只钉计数，不钉名单（名单在 ROLE-SPECS §R0 与角色面判据里）。
-    assert len(m_tools) == 21, m_tools
+    # ---- 三组的读数（现算，不写死总数）
+    clock_surface = {n for n in m_tools if n.startswith("clock.")}
+    conductor_surface = {n for n in m_tools if n.startswith("conductor.")}
+    fs_whitelist = {"fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit"}
+    # ① 构成：M 的面逐名等于"全部时钟件 + 全部编排件 + 文件面白名单六件"。
+    #    多出第四组东西（领域工具）⇒ 红；少一件白名单 ⇒ 红。
+    assert set(m_tools) == clock_surface | conductor_surface | fs_whitelist, (
+        f"M 的工具面里出现了不属于这三组的东西："
+        f"多出 {sorted(set(m_tools) - (clock_surface | conductor_surface | fs_whitelist))}；"
+        f"缺 {sorted((clock_surface | conductor_surface | fs_whitelist) - set(m_tools))}；"
+        f"实测面 = {m_tools}")
+    # ② 时钟那一组：这一档注册表里每一件 `clock.*` 都必须在 M 面上，且它必须登记在
+    #    `tools.UNIVERSAL_TOOLS` 里（"通用能力"是它落在 M 面上的理由，不是顺带漏过来的）。
+    #    为什么单独断言：八件时钟里那三件（`periodic_start` / `periodic_stop` /
+    #    `timer_purpose`）一度没进 `UNIVERSAL_TOOLS`，于是只读角色看不到它们 ——
+    #    同一类缺口在 M 这一侧的表现正是"少几件"，而总数断言只会说"数目不对"。
+    from agentflow import tools as TOOLS
+
+    universal_here = set(TOOLS.UNIVERSAL_TOOLS) & set(reg.names())
+    assert clock_surface == {n for n in universal_here if n.startswith("clock.")}, (
+        f"M 面上的时钟件与通用能力集合对不上：面 {sorted(clock_surface)}，"
+        f"通用集合里的时钟件 {sorted(n for n in universal_here if n.startswith('clock.'))}")
+    # ③ 编排那一组：它必须等于"声明里给了 M 的那些 `conductor.*`" —— 拿声明对一遍
+    #    调用期过滤，而不是拿调用期过滤自证（那是同义反复）。
+    declared_for_m = {n for n in reg.names()
+                      if n.startswith("conductor.") and "M" in tuple(reg.get(n).roles or ())}
+    assert conductor_surface == declared_for_m, (
+        f"M 面上的编排件与声明对不上：面 {sorted(conductor_surface)}，"
+        f"声明 {sorted(declared_for_m)}")
+    # 编排面那几件必须点得出名字（历史上每一件都对应一次业主裁定）
     assert "conductor.board" in m_tools, m_tools
     assert "conductor.broadcast" in m_tools, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
     assert "conductor.closing" in m_tools, m_tools
-    # ① 文件面白名单六件（§38 + §57 两次裁定）
-    for name in ("fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit"):
+    # ④ 文件面白名单六件（§38 + §57 两次裁定）
+    for name in fs_whitelist:
         assert name in m_tools, (name, m_tools)
-    # ② 不可逆的两件一件都不许有
+    # ⑤ 不可逆的两件一件都不许有
     for name in ("fs.delete", "fs.move"):
         assert name not in m_tools, (name, m_tools)
-    # ③ 知识表与检索仍是禁区
+    # ⑥ 知识表与检索仍是禁区
     assert not [n for n in m_tools if n.startswith(("table.", "prov.", "search."))], m_tools
-    # 编排面那 12 件 + `conductor.board`（S1b）+ `conductor.broadcast`（S6-b）⇒ 14；
-    # 2026-10-20 再加 `conductor.escalate`（父子上行，十角色都有）⇒ 15
-    assert len([n for n in m_tools if n.startswith("conductor.")]) == 15, m_tools
+    # ⑦ 反真空：三组各自的量都得真的读到（"什么都没读到"不许冒充"构成正确"）。
+    assert len(clock_surface) >= 8, clock_surface
+    assert len(conductor_surface) >= 15, conductor_surface
+    assert len(fs_whitelist) == 6
 
 
 # ---------------------------------------------------------------- ⑥ A 的文献检索真的通

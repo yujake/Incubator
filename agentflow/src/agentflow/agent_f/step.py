@@ -314,6 +314,15 @@ class _Step:
             history_row["statement_id"] = str(deploy["statement_id"])
         if deploy.get("report_path"):
             history_row["report_path"] = str(deploy["report_path"])
+        # 打回重写那一档的逐条说明要进 history：下一轮提示词的"前几轮发生过什么"
+        # 读的就是 history（`_history_digest`）—— 只写进日志等于没告诉 F 怎么改。
+        if deploy.get("deps_refused_findings"):
+            history_row["deps_refused_findings"] = [
+                dict(x) for x in (deploy["deps_refused_findings"] or [])]
+        if deploy.get("deps_refused"):
+            history_row["deps_refused"] = str(deploy["deps_refused"])
+        if deploy.get("deps_washing"):
+            history_row["deps_washing"] = [dict(x) for x in (deploy["deps_washing"] or [])]
         history.append(history_row)
         row["subgoals"] = subgoals
         row["history"] = history
@@ -357,5 +366,13 @@ class _Step:
         # （2026-10-26，死结 1 的读数面）。
         if deploy.get("manuscript_source"):
             out["manuscript_source"] = str(deploy["manuscript_source"])
+        # ---- 秘书洗稿的读数（业主 2026-10-26 晚：「洗稿结果进 F.step 的返回值与 detail」）。
+        # 打回那一档走的是同一条路（`outcome=no_change` + `deps_refused*`），于是
+        # "打回重写"与"已提交"在返回值上分得开 —— 而不是都叫"这一轮没推进"。
+        for key in ("manuscript_washed", "deps_section_filled", "deps_washing",
+                    "deps_refused", "deps_refused_findings", "wash_checked",
+                    "wash_reason", "wash_actor", "missing_seam"):
+            if key in deploy:
+                out[key] = deploy[key]
         self.last_step = out
         return out

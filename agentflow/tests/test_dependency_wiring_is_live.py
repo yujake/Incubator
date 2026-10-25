@@ -84,13 +84,18 @@ _DEP_TABLE = (
 #: 一条在册引用的最小手稿（B 的兜底读盘要能读的正是它）。
 #: 证明正文里也点名那条引用（真机 F 的手稿正是这样：`（依据：stmt:…）`）：
 #: 三态读数按"证明正文里引了几条"定，正文里一条都不写会被读成 `not_applicable`。
-_MANUSCRIPT_FOR_A = (
+#: 2026-10-27 起还要盖那一行洗稿元信息（`DS.mark_washed`）：这份夹具代表"F 的 proof
+#: 动作渲染、秘书洗过的那一版"，而 B 现在会拒收 `reports/f-proof-*.md` 里缺这一行的
+#: 手写稿（`manuscript_not_washed`，见 `test_b_manuscript_must_be_framework_rendered.py`）。
+_MANUSCRIPT_FOR_A = DS.mark_washed(
     "## 证明\n\n1. 由定理甲直接得到（依据：stmt:%s）。\n\n" % THEOREM_A
-    + _DEP_TABLE.format(quote="由定理甲，G 有 p 阶元", sid=THEOREM_A))
+    + _DEP_TABLE.format(quote="由定理甲，G 有 p 阶元", sid=THEOREM_A),
+    actor="secretary-F")
 #: 另一份（只引定理乙）：用于证明"参数给了稿就不去读盘"。
-_MANUSCRIPT_FOR_B = (
+_MANUSCRIPT_FOR_B = DS.mark_washed(
     "## 证明\n\n1. 由定理乙直接得到（依据：stmt:%s）。\n\n" % THEOREM_B
-    + _DEP_TABLE.format(quote="由定理乙，阶数被 p 整除", sid=THEOREM_B))
+    + _DEP_TABLE.format(quote="由定理乙，阶数被 p 整除", sid=THEOREM_B),
+    actor="secretary-F")
 
 
 # ------------------------------------------------------------------ 夹具
@@ -250,13 +255,27 @@ class _RegistrationSpy:
         return self.real(agent, product, sg, plan=plan, proof_manuscript=proof_manuscript)
 
 
+def _without_proposition_line(text: str) -> str:
+    """去掉开头那行"命题号"之后的正文（改名那一刻它从"还没落号"换成真号）。
+
+    为什么允许这一行不同：登记拿到命题号之后 `publish_manuscript` 会按号改名，
+    并把开头那一行"命题号"写成真的号（否则盘上会出现"文件叫 f-proof-000001.md、
+    正文说还没落号"的双读数，按号核对携带单的那一侧就找不到它）。
+    除了这一行，手稿正文一个字都不许变 —— 那才是 a0 要钉的"登记手上的稿 == 盘上那份"。
+    """
+    return "\n".join(
+        line for line in str(text or "").replace("\r\n", "\n").split("\n")
+        if not line.strip().startswith("- 命题号"))
+
+
 def _a0_holds(store: Store, out: dict, spy: _RegistrationSpy) -> bool:
     """判据 a0（判据本体，正控与反真空共用同一个谓词）。
 
     三件事同时成立才算绿：
     1. 登记那一笔真的收到了一份非空的手稿正文，且它里面有 `## 依赖` 那一节；
     2. 登记那一刻盘上已经有一份 `f-proof-*.md`，内容与收到的那份逐字相同；
-    3. 那一轮结束时手稿在按命题号的名字下（`reports/f-proof-<命题号>.md`），内容不变。
+    3. 那一轮结束时手稿在按命题号的名字下，正文与收到的那份相同（只有开头
+       "命题号"那一行换成了真号 —— 见 `_without_proposition_line`）。
     """
     if len(spy.calls) != 1:
         return False
@@ -271,7 +290,12 @@ def _a0_holds(store: Store, out: dict, spy: _RegistrationSpy) -> bool:
     if not sid or rel != f"{MANUSCRIPT_DIR}/f-proof-{sid}.md":
         return False
     path = pathlib.Path(store.root) / rel
-    return path.is_file() and path.read_text(encoding="utf-8") == received
+    if not path.is_file():
+        return False
+    final = path.read_text(encoding="utf-8")
+    if _without_proposition_line(final) != _without_proposition_line(received):
+        return False
+    return f"- 命题号：stmt:{sid}" in final
 
 
 def _carried_holds(got: dict, store: Store, *, cited: str) -> bool:
@@ -342,11 +366,18 @@ def test_the_manuscript_is_on_disk_before_the_registration(store: Store, monkeyp
 
 # ------------------------------------------------------------------ a D 携带
 
-def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path) -> None:
+def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
+                                                   monkeypatch) -> None:
     """a D 交研究手稿给 B 时带上 F 的稿 ⇒ B 读那份稿落依赖、来源读 `carried_by_D`。
 
     改前红：D 没有任何携带动作（`write_report` 里没有那一节），B 也没有读它的一行 ⇒
     `manuscript_source` 这一格根本不存在，依赖只能靠"正文散文扫描"（真机上扫出 0 条）。
+
+    审计 M8 补的一格（2026-10-27）：报告里那张携带单是渲染出来的，而"把稿递给 B"
+    是 `write_report` 里的一笔代码调用（`self._deliver_carried_to_b(...)`）。只断报告
+    里的段落时，把那一笔掏空判据仍然全绿 —— 所以这里同时数它的调用次数：
+    观察者不掏空实现（真调用照跑，`b=None` 那一趟如实记"没递"），只记"叫过没有、
+    收到的行是不是携带单上那一行"。
     """
     store = _ws(tmp_path)
     _library(store)
@@ -354,6 +385,16 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path) -> No
     f_stmt = str(out["statement_id"])
     manuscript_rel = str(out["manuscript_path"])
     assert manuscript_rel == f"{MANUSCRIPT_DIR}/f-proof-{f_stmt}.md", out
+
+    # 交付动作的观察者（数次数 + 记收到的行；实现照跑）
+    handed: list[list[dict]] = []
+    real_hand = AgentD._deliver_carried_to_b
+
+    def counting_hand(self, rows):
+        handed.append([dict(r) for r in rows])
+        return real_hand(self, rows)
+
+    monkeypatch.setattr(AgentD, "_deliver_carried_to_b", counting_hand)
 
     # D 交研究手稿：携带单由 D 的渲染器算出来（不靠模型记着去传）
     report = _d_report(store)
@@ -363,6 +404,10 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path) -> No
     assert [r["statement_id"] for r in carried["rows"]] == [f_stmt], carried
     assert carried["rows"][0]["path"] == manuscript_rel, carried
     assert len(str(carried["rows"][0]["sha256"])) == 64, carried
+    # 交付动作真被调用（审计 M8）：报告里那一节是渲染出来的，而"递给 B"是代码行为。
+    assert handed, ("D 的交付动作一次都没被调用：携带单只是渲染进了报告，"
+                    "`write_report` 里那一笔 `_deliver_carried_to_b` 没有接上")
+    assert [r["statement_id"] for r in handed[0]] == [f_stmt], handed[0]
 
     got = _register(store, statement_full="定理：D 的研究手稿引用了 F 的证明手稿。",
                     proof_text=f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。",
@@ -379,6 +424,40 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path) -> No
         f"{MANUSCRIPT_DIR}/{pathlib.Path(_d_report_path(store)).name}"), reading
     # 走的是主路：兜底读盘那一支根本没被调用（读了就说明主路没成）
     assert (reading.get("manuscript_probe") or {}) == {}, reading
+
+
+def test_the_delivery_really_hands_the_manuscript_to_b(tmp_path: pathlib.Path) -> None:
+    """a 的第二格（审计 M8）：D 的交付动作真把稿递给 B，读数里 `delivered >= 1`。
+
+    为什么单独一条：`test_d_carries_the_f_manuscript_and_b_reads_it` 那一趟的 D 没有
+    B 的入口（`b=None`，那条判据读的是报告里的携带单），所以它读不到"递没递"。
+    把 `write_report` 里那一笔 `delivery = self._deliver_carried_to_b(carried_rows)`
+    掏空，那条判据仍然全绿 —— 审计 M8 就是这个存活的变异。这一条按真机装配的形状
+    给 D 一个 B（`specs/d.py` 在构造期绑同一个实例），于是那一笔接没接上立刻分成
+    两种读数：
+
+    - 接着：`last_delivery.checked=True`、`delivered>=1`、B 收下的来源是
+      `carried_by_D`、`dependencies` 落行；
+    - 被掏空：`last_delivery` 是空的（或 `delivered=0`），`dependencies` 一行不落。
+    """
+    store = _ws(tmp_path)
+    _library(store)
+    out = _run_proof_round(store, [f"stmt:{THEOREM_A}"])
+    f_stmt = str(out["statement_id"])
+    b = AgentB(store, extractor=None, extract_text=None, config={})
+    d = AgentD(store, config={"workspace_root": store.root}, b=b)
+    d.write_report()
+    delivery = dict(getattr(d, "last_delivery", {}) or {})
+    assert delivery.get("checked") is True, delivery
+    assert int(delivery.get("delivered") or 0) >= 1, (
+        "D 的交付动作没有把任何一条稿递给 B（把那一笔掏空之后就是这个读数）", delivery)
+    rec = next((dict(r) for r in delivery.get("results") or [] if r.get("ok")), None)
+    assert rec is not None, delivery
+    assert str(rec.get("stmt_id")) == f_stmt, rec
+    assert str(rec.get("manuscript_source")) == SRC_CARRIED, rec
+    rows = _deps(store)
+    assert rows, "B 收下了稿却没有落依赖边"
+    assert {str(r.get("used_by")) for r in rows} == {f"stmt:{f_stmt}"}, rows
 
 
 def _d_report_path(store: Store) -> str:

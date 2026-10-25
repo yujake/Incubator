@@ -2081,8 +2081,9 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:      `experiments` 行就是这几个字段）
 #:   ⑥ F 并进「每一轮先挑一个可判定的子目标」—— 每轮留下一批新事实（有推理缝时 ≥3 条：
 #:      `reduction` / `proof` / `counterexample_request` 可组合）；缝没接时 `step` 只会落
-#:      `dead_end(缺工具)`，如实报、不硬凑。（锚点：`F.step` 的四种产物；缝的开关是
-#:      `--attack-reasoning`，未接时的读数逐字见 `host.py` 的 `notes_attack`）
+#:      `dead_end(缺工具)`，如实报、不硬凑。（锚点：`F.step` 的四种产物；F 出场就有推理缝
+#:      —— 2026-10-26 业主裁定「这个就是F的工作方式，没有开关的说法」，未接缝时的读数
+#:      逐字见 `host.py` 的 `notes_attack`）
 #:   ⑦ G 并进「论文体例」—— 没有新增结论的稿子不许投：要么不写，要么用 `build_document`
 #:      如实写成综述（`kind="survey"`）并在摘要首句标明。（锚点：`G.build_document` 的
 #:      `kind` 枚举里有 `survey`）
@@ -2258,6 +2259,10 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:      看得见一层、会通过 `conductor.escalate` 向你请求深看」。原来那两句
 #:      「沿树传到对应智能体」/「各级父也知道」逐字保留（`test_m_plans_before_it_proves`
 #:      按它们认那一步）。
+#: p204 改口：上面 ① 的「连同各级父的通知一起发下来」与 ② 的「各级父也知道」都不再成立
+#: （业主 2026-10-26 逐字：「我取消我之前说的要让各级父代理知道该消息的说法」）。现在的
+#: 口径是「按绝对编号链逐级由秘书转发，内容只有链尾看得到，中间各跳不读内容」，
+#: 那两张层表的短语已随之换过（逐字见 p204 那一段）。
 #: 工具面这一批一件没动：`trace.children` / `conductor.watch` / `conductor.guide` 是上一
 #: 批接线就落地的三件（97 → 100 件）⇒ 十一格的工具目录那一段在这一版之前就印着它们。
 #: 读数：十一格摘要全换（每格多了那一条政策，M 那一格还改了第 05 条）。
@@ -2347,7 +2352,99 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:     十一格都会因此换值（只换那一行的数字）。
 #: facts 键集一格未动（15 格：`PS.volatile_facts_digest()` 现算仍是 21314a39…），
 #: 那一侧记在 `tests/test_prompt_stability.py` 的 `_VOLATILE_FACT_SETS` p203 那一格。
-PROMPT_VERSION = "p203"
+#:
+#: p203 → p204（2026-10-27 收口批）：本批五件，按业主施工单的措辞逐字列在这里：
+#:   ① 时钟八件的形写进各角色的政策（不只是 M）：申请形状 =「等待时间 after_sec 或等待谁
+#:      wait_for 二选一 + 目的 reason/purpose」；目的漏填不报错（先受理、读数带
+#:      purpose_missing 追问，补一句走 clock.timer_purpose 补同一个编号）；挂机（等的时候
+#:      把这一趟挂在时钟上，不轮询、不空转；到点/事件到达时时钟把「目的 + 现场等了多久 +
+#:      时间到 + 对方说的话/交的东西」发给你）；周期性（M 的巡视 = clock.periodic_start
+#:      every_sec=1200 + purpose="周期性巡查"，唯一写法）；到点消息长什么样（给一个例子）；
+#:      wait_for 支持 名册名 / 绝对编号 / task:<号>；旧的计时工具已退役、只有 clock 这一处。
+#:      A B C D E F G H L V 十格 policy 各加一条；M 那一格把上面几样并进它已有的挂机那一条。
+#:   ② 「只到链尾」改口：11 份 specs 里「各级父也会收到通知」那一类句子 + specs/m.py 的
+#:      guide 那一条 + agent_skills.py 的 M 手册 + 本文件 p199/p200 两段历史注释 ⇒
+#:      一律改成「按绝对编号链逐级由秘书转发，内容只有链尾看得到，中间各跳不读内容」
+#:      （业主 2026-10-26 逐字：「我取消我之前说的要让各级父代理知道该消息的说法」）。
+#:      判据：tests/test_every_role_knows_it_can_watch_its_children.py 的 _M_NEEDLES/_NEEDLES
+#:      与 tests/test_m_plans_before_it_proves.py 的两张层表。
+#:   ③ agent_prompts._names(limit=12) 的截断问题：「手」那一档只印前 12 件，M 的写工具 22 件
+#:      ⇒ conductor.summon 不再被点名。修法是把这一档改成全列（limit=None），并写清取舍：
+#:      眼睛/脑子那两档答的是"有多少可读的东西"（截断 + 件数就够），手答的是"我能不能改这个
+#:      东西"（被省略号吃掉的工具等于对模型不存在）；代价是每角色那一行多 200 到 400 字。
+#:   ④ attackround.BUDGET_UNREADABLE_NOTE 那句补回 E 的 policy（test_p09 那一对逐字对拍）。
+#:   ⑤ M 补一句「链式寻址 + 轮查带链」：guide 的 to 三种写法（绝对编号链 / 名册名混写 /
+#:      只写链尾）、每一跳校验、回执里的 chain_text 要抄进下一轮消息。
+#: 读数（现算，本批两处脚本见 `temp/p204_*`）：
+#:   - 段摘要那一侧十一格全换：① 是十格 policy 各加一条、M 那格也动；③ 改的是每一格都渲染的
+#:     「次要官能：手」那一行 ⇒ 十一格无一幸免。逐格旧值到新值见
+#:     `tests/test_agent_prompts.py` 冻结表上方那一段。
+#:   - 声明级：`clock.*` 八件的 returns= 补齐（工具面 golden 的 summary.count 与 declarations）、
+#:     `conductor.guide` 的声明没变。
+#: facts 键集一格未动（15 格），那一侧记在 `tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` p204 那一格。
+#:
+#: p204 → p205（2026-10-27 第二批收口）：本批两件，按业主施工单的措辞逐字列在这里：
+#:   ① 新工具 `clock.wait_any`（业主第三条裁定的后半个动作：「直到它认为无事可做时，
+#:      可启动计时器等待任意计时器返回」）。工具数 110 → 111；它在 `tools/UNIVERSAL_TOOLS`
+#:      里登记一条（写集空：只写 `out/clock/wait_any.json` 这份意图账，不写任何表），
+#:      所以只读角色 C/H/V 也拿得到 —— 通用轴不靠例外表（判据
+#:      `tests/test_clock_governs_all_timed_work.py` 第 17 条：C/H/V 的 clock 件数 8 → 9）。
+#:      它进提示词的方式是 `tools_lines` 那一行（名 + 摘要 + 必填参数 + 副作用），
+#:      而 `tools_lines` 对每个角色都渲染 ⇒ 十一格全部换值。
+#:   ② `conductor.retire_child` 的 `summary` 与 `returns=` 文案（上一批改的代码，这一批
+#:      才进提示词）：`summary` 从「三态：可销 ⇒ state=retired；不可销（还在飞 / 名下还有
+#:      未消的板项 / …）」改成带「待机」那一档，并写明 `refusal_code` 走
+#:      `Conductor.retire_state_of` 的三态读数。它进的是 M 那一格的 `tools_lines` 行，
+#:      所以 M 那一格额外换一次。`returns=` 不进任何角色的段（它只拼进 function-calling 的
+#:      description，见 `tools/base.py:721` 那一处），它动的是 `tests/golden/
+#:      tool_surface_snapshot.json` 的 `declarations` 那一格。
+#: 读数（现算，`temp/recompute_prompt_digests.py` 与 `temp/golden_diff_p205.py`）：
+#:   - 段摘要那一侧十一格全换（① 改的是每一格都渲染的 `tools_lines` 行；② 再换 M 那一格）。
+#:     逐格旧值到新值见 `tests/test_agent_prompts.py` 冻结表上方那一段。
+#:   - 声明级：工具面 golden 的 `summary.count` 110 → 111、多一格 `clock.wait_any`、
+#:     `conductor.retire_child` 的 `returns` 跟上实现。
+#: facts 键集一格未动（15 格），那一侧记在 `tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` p205 那一格。
+#:
+#: p205 → p206（2026-10-27 第三批收口）：本批只做一件事 —— 把「实现早已落地、文案/口径
+#: 还差一格」的那几处补齐，然后重冻读数。逐笔按业主施工单的措辞列在这里：
+#:   ① 工具面 returns / summary 十一处进提示词与声明读数（工具数不变，仍是 111 件；
+#:      它们进段的方式是 `tools_lines` 那一行 —— 名 + 摘要 + 必填参数 + 副作用，
+#:      而 `tools_lines` 对每个角色都渲染）：attack.create_plan（returns 补
+#:      missing / kind / error / refusal_reason / subgoal_id；summary 补
+#:      subgoal_without_testable）、clock.alarm_start（summary 补「定一个具体时刻叫醒自己
+#:      就用这一件（不是睡一轮）」）、clock.timer_cancel（summary 补编号是 tm- 那一种、
+#:      周期性巡查归 periodic_stop）、clock.timer_list（summary 补 periodics / waiters /
+#:      waiters_parked 三个读数）、clock.wait_any（summary 补 requested=true /
+#:      waiting=false 那一档「它不是没在等」）、conductor.guide（summary 里
+#:      「也不再通知各级父」改成正面写法：正文只到链尾，中间那几跳的秘书只转发、不读内容）、
+#:      fs.edit 与 fs.write（summary 补保留产物闸 reserved_framework_artifact）、
+#:      table.get（params.id 改成 6 位十进制；summary 补 route / proof_routes）、
+#:      table.list（summary 补 route / proof_routes）、verify.verify_proof（returns 补
+#:      review_write 与 citation_gate.problem 那一档）。
+#:   ② 十一份 specs 的时钟段补 `clock.wait_any` 的行为口径（要求过等、且没有可等的东西
+#:      ⇒ requested=true / waiting=false，它不是「没在等」；这一档若无计时而手头也没活，
+#:      就按交差处理）。十个可召唤角色那一格逐字相同（判据
+#:      `test_every_role_carries_the_same_clock_paragraph` 钉着），M 并进它已有的挂机那一条。
+#:   ③ `specs/m.py` 的 `delivered_to` 从「链尾那个绝对编号」改成「列表，只有一个元素 =
+#:      链尾那一个的绝对编号（不是标量；读它先取 [0]）」—— 与 `conductor.guide` 的实跑一致
+#:      （那条判据断言 delivered_to == [chain[-1]]）。
+#:   ④ `conductor.retire_child` 的 returns 与 docstring 补早拒支那两格的口径：
+#:      `target_state` 空串只有一个意思（三态还没读，不是「它是静默的」）；`refusal_code`
+#:      的充要条件是「静默闸说话了」——在飞 / 待机 / 三态读不到 / 名下还有活跃子代理 /
+#:      子树里还有活跃节点必带 target_not_silent，早拒支与板项闸都不带。
+#:   ⑤ `attackround.BUDGET_GUARD_NOTE` 去掉两个已漂的 file:line、改成符号名，并接一个读者
+#:      （`tests/test_agent_f_inference.py::test_p09_the_guard_note_names_live_symbols`
+#:      逐符号证明 `Conductor._meter_guard` 与 `policy.check` 还在，且行号不许回来）。
+#: 读数（现算，`temp/recompute_prompt_digests.py` 与 `temp/golden_diff_p205.py`）：
+#:   - 段摘要那一侧十一格全换（② 改的是每一格都渲染的时钟段；① 的 tools_lines 也逐格渲染；
+#:     ③ 只换 M 那一格）。逐格旧值到新值见 `tests/test_agent_prompts.py` 冻结表上方那一段。
+#:   - 声明级：工具面 golden 的 declarations 与 cli 两格（十一件 returns/summary 与
+#:     table.get 的参数说明）；`summary.count` 不变（111）。
+#: facts 键集一格未动（15 格），那一侧记在 `tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` p206 那一格。
+PROMPT_VERSION = "p206"
 
 
 
@@ -5647,11 +5744,11 @@ def _duty_of(role: str) -> str:
 
 
 
-def _names(items: Sequence[str], limit: int = 12) -> str:
+def _names(items: Sequence[str], limit: int | None = 12) -> str:
 
 
 
-    """列名字（超过 limit 就截断并写明还有几个）。"""
+    """列名字（超过 limit 就截断并写明还有几个；limit=None 表示全列）。"""
 
 
 
@@ -5663,11 +5760,23 @@ def _names(items: Sequence[str], limit: int = 12) -> str:
 
 
 
-    shown = "、".join(items[:limit])
+    shown_items = list(items) if limit is None else list(items[:limit])
 
 
 
-    return shown if len(items) <= limit else f"{shown} …（共 {len(items)} 件）"
+    shown = "、".join(shown_items)
+
+
+
+    if len(items) <= len(shown_items):
+
+
+
+        return shown
+
+
+
+    return f"{shown} …（共 {len(items)} 件）"
 
 
 
@@ -5759,7 +5868,14 @@ def faculties_text(role: str, registry: Any) -> str:
 
 
 
-        "手": (f"可改 {len(writes)} 件：{_names(writes)}" if writes else "数据面上没有写工具"),
+        # p204（2026-10-27）：手这一档必须全列，理由与上面两档相反。
+        # 眼睛/脑子那两档答的是"有多少可读的东西"（截断 + 件数就够）；
+        # 手答的是"我能不能改这个东西"——被省略号吃掉的工具等于对模型不存在。
+        # 实测：M 有 22 件写工具，limit=12 只印前 12 件，`conductor.summon` 不在那一行里，
+        # 模型据此以为派不了活（`test_the_conductor_hand_is_minor_not_a_forbidden_line` 因此红过）。
+        # 代价：每角色这一行多 200 到 400 字；换来的是写面看得全。
+        "手": (f"可改 {len(writes)} 件：{_names(writes, limit=None)}" if writes
+               else "数据面上没有写工具"),
 
 
 

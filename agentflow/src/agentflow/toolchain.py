@@ -186,11 +186,22 @@ def resolve_checker(name: str, env: Mapping[str, str] | None = None) -> dict[str
 
 
 def _version_of(exe: str, name: str) -> tuple[str, str]:
-    """跑那个检查器的报版本命令。返回 `(版本行, 问题)` —— 起不来就算问题（三态里的没查成）。"""
+    """跑那个检查器的报版本命令。返回 `(版本行, 问题)` —— 起不来就算问题（三态里的没查成）。
+
+    业主 2026-10-27 第一条裁定：起程序就登记一条程序计时器，程序结束它返回。
+    """
     cmd = VERSION_COMMANDS.get(name, f"{name} --version").split()
+    argv = [exe, *cmd[1:]]
     try:
-        r = subprocess.run([exe, *cmd[1:]], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=10)
+        from . import clock as _CLK
+
+        with _CLK.program_span(program=exe, argv=argv,
+                               workspace=(_CLK.current_workspace() or None),
+                               where="toolchain._version_of",
+                               purpose=f"问 {name} 的版本（等它回话）") as prog:
+            r = subprocess.run(argv, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=10)
+            prog.finish(outcome="exited", exit_code=int(getattr(r, "returncode", 0) or 0))
     except Exception as exc:  # noqa: BLE001
         return "", f"{name}：版本探测失败（{type(exc).__name__}: {exc}）"
     text = (r.stdout or r.stderr or "").strip()

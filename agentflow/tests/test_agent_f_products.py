@@ -33,7 +33,7 @@ def test_every_round_carries_a_valid_product(store: Store):
     """正控：未接线 owner 的那一轮 ⇒ history 里有 `product="dead_end"`，且能过判据。"""
     f = _f(store)
     pid = f.create_plan("难题", "PK-PRODUCT",
-                        subgoals=[{"sid": "s1", "text": "让 C 分析结构", "owner": "C"}])["plan_id"]
+                        subgoals=[{"sid": "s1", "text": "让 C 分析结构", "owner": "C", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     out = f.step(pid)
     rec = store.rows("attack_plans")[0]["history"][-1]
     assert rec.get("product") == "dead_end", rec
@@ -56,9 +56,9 @@ def test_no_history_round_is_left_without_a_product(store: Store):
     """反真空（真机卡点③ 的判据形态）：跑几轮之后，没有一轮是"有 outcome 没 product"。"""
     f = _f(store)
     pid = f.create_plan("难题", "PK-SCAN", subgoals=[
-        {"sid": "s1", "text": "让 C 分析", "owner": "C"},
-        {"sid": "s2", "text": "让 D 综合", "owner": "D"},
-        {"sid": "s3", "text": "让 F 自己推", "owner": "F"},
+        {"sid": "s1", "text": "让 C 分析", "owner": "C", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+        {"sid": "s2", "text": "让 D 综合", "owner": "D", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+        {"sid": "s3", "text": "让 F 自己推", "owner": "F", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
     ])["plan_id"]
     for _ in range(3):
         f.step(pid)
@@ -73,7 +73,7 @@ def test_the_product_vocabulary_has_no_no_change(store: Store):
     assert "no_change" not in AR.PRODUCTS, AR.PRODUCTS
     f = _f(store)
     pid = f.create_plan("难题", "PK-VOCAB",
-                        subgoals=[{"sid": "s1", "text": "让 C 分析", "owner": "C"}])["plan_id"]
+                        subgoals=[{"sid": "s1", "text": "让 C 分析", "owner": "C", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     f.step(pid)
     products = {str(h.get("product") or "") for h in store.rows("attack_plans")[0]["history"]}
     assert products <= set(AR.PRODUCTS), products
@@ -85,7 +85,7 @@ def test_best_partial_carries_ids_when_the_subgoal_has_evidence(store: Store):
     f = _f(store)
     pid = f.create_plan("难题", "PK-PARTIAL", subgoals=[
         {"sid": "s1", "text": "让 C 分析", "owner": "C",
-         "evidence_ids": ["exp:0001", "stmt:0007"]},
+         "evidence_ids": ["exp:0001", "stmt:0007"], "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
     ])["plan_id"]
     f.step(pid)
     rec = store.rows("attack_plans")[0]["history"][-1]

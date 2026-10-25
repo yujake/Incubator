@@ -429,7 +429,7 @@ accepted_entries=用户投料.txt
 
 ```powershell
 python -m agentflow --root projects\my-topic run-agent M --task "<题目>" `
-  --attack-reasoning --semantic-review --provider crossref,doaj,europepmc,openalex `
+  --semantic-review --provider crossref,doaj,europepmc,openalex `
   --budget-usd 5 --sid my-1 --stop-file projects\my-topic\runs\.agentflow-stop
 ```
 
@@ -444,8 +444,8 @@ python -m agentflow --root projects\my-topic run-agent M --task "<题目>" `
 | `--wall-clock-sec N` | 墙钟上限（秒）；不给 = 不设上限 |
 | `--rounds N` / `--report-every N` | 跑几轮 / 每几轮汇报一次 |
 | `--stop-file <路径>` | 优雅停的开关文件：它一出现就停（步与步之间查） |
-| `--attack-reasoning` | 给 F 接上攻坚推理 |
 | `--semantic-review` | 给 H 接上语义判据 |
+| （无） | F 的攻坚推理不是开关：它出场就有推理缝（2026-10-26 业主裁定，原来的那个 flag 已删除） |
 | `--experiment-reasoning` | 给 E 接上写脚本的推理 |
 | `--provider a,b,c` | A 的检索后端（`openalex` / `crossref` / `doaj` / `europepmc` / `fixture`） |
 
@@ -504,3 +504,4 @@ python -m agentflow --root projects\<ws> closing
 ## 13. 一句话
 
 **一个入口 `start` 讲清四件事；网页用来看、命令行用来跑；钱按累计算、显式给了就落盘；退出码 1 不是正常结束。**
+

@@ -5,8 +5,9 @@ F 的核心是"把难题变成多轮、可终止、可交接的过程"。这里�
 
 - 终止性：轮数用尽必须停，且停在 `stalled` + 非空 `best_partial`
   （不是失败，也不是成功）；
-- 三态纪律：C/D/F 的子目标本框架尚未接线 ⇒ 如实记 `no_change`，
-  绝不允许把"没做"写成"做了但没结果"；
+- 三态纪律：C/D 的子目标本框架尚未接线 ⇒ 如实记 `no_change`，
+  绝不允许把"没做"写成"做了但没结果"（F 不在这一档：它出场就有推理缝；
+  缝被打桩成 None 时单列一支报"缺缝"）；
 - FC-22：只有数值证据的子目标不得被标 `closed`；全部只有数值支持时
   计划只能是 `supported_not_proved`；
 - 预算完整性：四类键缺一即拒绝建项，且一行都不写；
@@ -94,8 +95,8 @@ def three_goal_plan(store: Store, **cfg) -> tuple[AgentF, str]:
                 "script_path": rel,
                 "claim": "Spec K(m)=[-m,m]",
                 "claim_key": "PK-1#s1",
-            },
-            {"sid": "s2", "text": "需要 C 做结构分析", "owner": "C"},
+             "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+            {"sid": "s2", "text": "需要 C 做结构分析", "owner": "C", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
         ],
     )
     assert out["created"] is True
@@ -112,7 +113,7 @@ def test_create_plan_with_complete_budget(store):
         "难题甲",
         "PK-A",
         for_question_id="0001",
-        subgoals=[{"sid": "s1", "text": "先做数值实验", "owner": "E"}],
+        subgoals=[{"sid": "s1", "text": "先做数值实验", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}],
     )
     assert out["created"] is True
     assert out["plan_id"] == S.format_id(0)
@@ -213,11 +214,11 @@ def test_create_plan_requires_owner_and_text(store):
     """子目标缺 `owner` / `text` ⇒ 当场抛（owner 是权限面的一部分，不能默认）。"""
     f = make_f(store)
     with pytest.raises(PlanError):
-        f.create_plan("难题", "PK-D", subgoals=[{"sid": "s1", "text": "t"}])
+        f.create_plan("难题", "PK-D", subgoals=[{"sid": "s1", "text": "t", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])
     with pytest.raises(PlanError):
-        f.create_plan("难题", "PK-D", subgoals=[{"sid": "s1", "owner": "E"}])
+        f.create_plan("难题", "PK-D", subgoals=[{"sid": "s1", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])
     with pytest.raises(PlanError):
-        f.create_plan("难题", "PK-D", subgoals=[{"owner": "E", "text": "t"}])
+        f.create_plan("难题", "PK-D", subgoals=[{"owner": "E", "text": "t", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])
     assert store.rows("attack_plans") == []
 
 
@@ -256,8 +257,8 @@ def test_normalization_beats_raw_extra_fields(store):
         "难题",
         "PK-NORM",
         subgoals=[
-            {"sid": "s1", "text": "t", "owner": "C"},  # 完全没有 status / attempts
-            {"sid": "s2", "text": "t", "owner": "C", "status": None, "attempts": None},
+            {"sid": "s1", "text": "t", "owner": "C", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},  # 完全没有 status / attempts
+            {"sid": "s2", "text": "t", "owner": "C", "status": None, "attempts": None, "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
         ],
     )
     assert out["created"] is True
@@ -275,10 +276,12 @@ def test_step_is_deterministic_about_which_subgoal_it_picks(store):
     这里给定一组"谁都没动过"的子目标，把 F 的选择与工具层独立算出的选择对照。
     """
     f = make_f(store)
+    # 2026-10-27 起 `create_plan` 拒收没有可检验形式的子目标（写侧硬拦），
+    # 所以这组"谁都没动过"的子目标也要各带一句 testable。
     subgoals = [
-        {"sid": "s3", "text": "第三条", "owner": "C"},
-        {"sid": "s1", "text": "第一条", "owner": "C"},
-        {"sid": "s2", "text": "第二条", "owner": "C"},
+        {"sid": "s3", "text": "第三条", "owner": "C", "testable": "枚举小情形后能一句话判它成立或不成立"},
+        {"sid": "s1", "text": "第一条", "owner": "C", "testable": "枚举小情形后能一句话判它成立或不成立"},
+        {"sid": "s2", "text": "第二条", "owner": "C", "testable": "枚举小情形后能一句话判它成立或不成立"},
     ]
     pid = f.create_plan("难题", "PK-PICK", subgoals=subgoals)["plan_id"]
     # 参照答案取落库后的那份子目标（`create_plan` 会给它们补齐 `status="todo"`
@@ -341,7 +344,7 @@ def test_owner_e_formal_subgoal_reaches_proof_and_closes_only_with_proof(store, 
     f = make_f(store)
     pid = f.create_plan("难题", "PK-FORMAL", subgoals=[
         {"sid": "s1", "text": "把这条命题形式化", "owner": "E", "method": "formal",
-         "script_path": rel, "name": "f_probe", "imports": []},
+         "script_path": rel, "name": "f_probe", "imports": [], "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
     ])["plan_id"]
     out = f.step(pid)
 
@@ -359,7 +362,7 @@ def test_owner_e_formal_subgoal_reaches_proof_and_closes_only_with_proof(store, 
 def test_owner_e_without_script_path_is_recorded_as_not_advanced(store):
     """E 的子目标没给 `script_path` ⇒ `no_change` + "未推进"，不是"跑了但没结果"。"""
     f = make_f(store)
-    pid = f.create_plan("难题", "PK-E", subgoals=[{"sid": "s1", "text": "做个实验", "owner": "E"}])["plan_id"]
+    pid = f.create_plan("难题", "PK-E", subgoals=[{"sid": "s1", "text": "做个实验", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     out = f.step(pid)
     assert out["action"] == "run_experiment" or out["action"] == "no_change"
     assert out["outcome"] == "no_change"
@@ -374,11 +377,11 @@ def test_owner_e_without_script_path_is_recorded_as_not_advanced(store):
 def test_owner_c_is_recorded_as_no_change_with_honest_detail(store):
     """三态负控（重要）：`owner="C"` ⇒ `outcome == "no_change"` 且 detail 明说"未推进/未接线"。
 
-    本框架没有可自动调用的 C/D/F 推理入口。这里锁住的是"不许把没做写成做了"：
+    本框架没有可自动调用的 C/D 推理入口（F 不再属于这一档：它出场就有推理缝）。这里锁住的是"不许把没做写成做了"：
     出现任何伪造的 evidence、或 detail 里出现"已推进"这类说法，都是静默失败。
     """
     f = make_f(store)
-    pid = f.create_plan("难题", "PK-F", subgoals=[{"sid": "s1", "text": "让 C 分析结构", "owner": "C"}])["plan_id"]
+    pid = f.create_plan("难题", "PK-F", subgoals=[{"sid": "s1", "text": "让 C 分析结构", "owner": "C", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     out = f.step(pid)
 
     assert out["action"] == "no_change"
@@ -405,7 +408,7 @@ def test_owner_d_and_f_are_also_recorded_as_not_advanced(store):
     pid = f.create_plan(
         "难题",
         "PK-G",
-        subgoals=[{"sid": "sd", "text": "让 D 研究", "owner": "D"}, {"sid": "sf", "text": "让 F 自己推理", "owner": "F"}],
+        subgoals=[{"sid": "sd", "text": "让 D 研究", "owner": "D", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}, {"sid": "sf", "text": "让 F 自己推理", "owner": "F", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}],
     )["plan_id"]
     f.step(pid)
     f.step(pid)
@@ -422,7 +425,7 @@ def test_owner_a_submits_a_search_request_through_the_gate(store):
     pid = f.create_plan(
         "难题",
         "PK-H",
-        subgoals=[{"sid": "s1", "text": "检索 K(m) 的谱刻画", "owner": "A", "topic": "spectrum of K(m)"}],
+        subgoals=[{"sid": "s1", "text": "检索 K(m) 的谱刻画", "owner": "A", "topic": "spectrum of K(m)", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}],
     )["plan_id"]
     out = f.step(pid)
     assert out["action"] == "submit_search_request"
@@ -451,7 +454,7 @@ def test_owner_a_respects_an_explicit_priority_from_config(store):
     这条同时锁住"配置不许被静默忽略"：`search_priority` 给了就必须生效。
     """
     f = make_f(store, search_priority="high")
-    pid = f.create_plan("难题", "PK-H2", subgoals=[{"sid": "s1", "text": "检索", "owner": "A"}])["plan_id"]
+    pid = f.create_plan("难题", "PK-H2", subgoals=[{"sid": "s1", "text": "检索", "owner": "A", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     out = f.step(pid)
     assert out["action"] == "submit_search_request"
     assert store.rows("search_requests")[0]["priority"] == "high"
@@ -460,7 +463,7 @@ def test_owner_a_respects_an_explicit_priority_from_config(store):
 def test_owner_b_requires_targets_and_goes_through_the_gate(store):
     """`owner="B"` ⇒ 有目标才提交；没有 `relation_ids` 一律不提交（I4 的幂等陷阱）。"""
     f = make_f(store)
-    pid = f.create_plan("难题", "PK-I", subgoals=[{"sid": "s1", "text": "回原文补语境", "owner": "B"}])["plan_id"]
+    pid = f.create_plan("难题", "PK-I", subgoals=[{"sid": "s1", "text": "回原文补语境", "owner": "B", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     out = f.step(pid)
     assert out["action"] == "submit_reprocess_request"
     assert out["outcome"] == "no_change"
@@ -506,7 +509,7 @@ def test_stalled_without_any_progress_still_writes_an_honest_best_partial(store)
     "尚未取得任何部分结果"，而不是写一句听起来像成果的话。
     """
     f = make_f(store)
-    pid = f.create_plan("难题", "PK-J", budget=budget(max_rounds=0), subgoals=[{"sid": "s1", "text": "t", "owner": "E"}])[
+    pid = f.create_plan("难题", "PK-J", budget=budget(max_rounds=0), subgoals=[{"sid": "s1", "text": "t", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])[
         "plan_id"
     ]
     out = f.step(pid)
@@ -523,7 +526,7 @@ def test_stalled_without_any_progress_still_writes_an_honest_best_partial(store)
 def test_plan_closes_when_the_only_subgoal_is_closed_by_proof(store):
     """全部子目标 `closed` ⇒ `status="resolved"`（只有 proof 级证据才允许走到这里）。"""
     f = make_f(store)
-    pid = f.create_plan("难题", "PK-K", subgoals=[{"sid": "s1", "text": "已有形式化证明", "owner": "E"}])["plan_id"]
+    pid = f.create_plan("难题", "PK-K", subgoals=[{"sid": "s1", "text": "已有形式化证明", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     # 直接给出 proof 级证据（模拟 E 走了 formal 路径），验证 F 的状态机
     with store.tx("attack_plans", actor="test") as tx:
         row = tx.find("attack_plans", plan_id=pid)
@@ -539,7 +542,7 @@ def test_plan_closes_when_the_only_subgoal_is_closed_by_proof(store):
 def test_plan_with_only_numeric_support_is_supported_not_proved(store):
     """FC-22：全部子目标都有数值支持但没有任何 proof ⇒ `supported_not_proved`。"""
     f = make_f(store)
-    pid = f.create_plan("难题", "PK-L", subgoals=[{"sid": "s1", "text": "已有数值支持", "owner": "E"}])["plan_id"]
+    pid = f.create_plan("难题", "PK-L", subgoals=[{"sid": "s1", "text": "已有数值支持", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     with store.tx("attack_plans", actor="test") as tx:
         row = tx.find("attack_plans", plan_id=pid)
         row["subgoals"][0]["status"] = "supported_not_proved"
@@ -660,7 +663,7 @@ def test_can_round_is_not_confused_with_can_derive(store):
     """
     f = make_f(store)
     pid = f.create_plan("深度到顶的难题", "PK-M", budget=budget(max_depth=1), depth=1,
-                        subgoals=[{"sid": "s1", "text": "t", "owner": "C"}])["plan_id"]
+                        subgoals=[{"sid": "s1", "text": "t", "owner": "C", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     out = f.step(pid)
     assert out["status"] != "stalled", "深度到顶不该让计划直接停摆"
     assert store.rows("attack_plans")[0]["rounds"] == 1
@@ -747,7 +750,8 @@ def test_attack_tools_go_through_the_same_implementation(store):
         "attack.create_plan",
         problem="经工具立项目",
         problem_key="PK-T",
-        subgoals=[{"sid": "s1", "text": "数值验证", "owner": "E", "script_path": rel}],
+        subgoals=[{"sid": "s1", "text": "数值验证", "owner": "E", "script_path": rel,
+                   "testable": "脚本跑完后读数与预期界一致"}],
     )
     assert created.ok and created.data["created"] is True
     pid = created.data["plan_id"]
@@ -842,7 +846,7 @@ def test_f_stops_early_when_rounds_make_no_progress(store):
     """
     f = make_f(store, stall_after_no_progress_rounds=2)
     pid = f.create_plan("卡住的难题", "stall:k", subgoals=[
-        {"sid": "s1", "text": "需要 D 推理", "owner": "D", "status": "todo"},
+        {"sid": "s1", "text": "需要 D 推理", "owner": "D", "status": "todo", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
     ])["plan_id"]
     trace = []
     for _ in range(10):
@@ -864,7 +868,7 @@ def test_f_burns_full_budget_when_early_stall_is_disabled(store):
     """
     f = make_f(store, stall_after_no_progress_rounds=0)
     pid = f.create_plan("永远卡住的难题", "stall:k2", subgoals=[
-        {"sid": "s1", "text": "需要 D 推理", "owner": "D", "status": "todo"},
+        {"sid": "s1", "text": "需要 D 推理", "owner": "D", "status": "todo", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
     ])["plan_id"]
     for _ in range(10):
         if f.step(pid)["status"] == "stalled":
@@ -881,9 +885,10 @@ def test_f_does_not_stop_early_when_rounds_make_progress(store):
     f = make_f(store, stall_after_no_progress_rounds=2)
     rel = write_script(store, "probes/ok.py", SUPPORT_PROBE)
     pid = f.create_plan("有进展的难题", "progress:k", subgoals=[
-        {"sid": "s1", "text": "跑实验", "owner": "E", "status": "todo", "script_path": rel},
-        {"sid": "s2", "text": "再检索", "owner": "A", "status": "todo"},
+        {"sid": "s1", "text": "跑实验", "owner": "E", "status": "todo", "script_path": rel, "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+        {"sid": "s2", "text": "再检索", "owner": "A", "status": "todo", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
     ])["plan_id"]
     assert f.step(pid)["outcome"] == "progress"
     assert f.step(pid)["outcome"] == "progress"
     assert f.status(pid)["status"] != "stalled", "有进展时不该停"
+

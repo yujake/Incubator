@@ -102,7 +102,14 @@ def test_brief_is_mandatory_and_single_line(tmp_path: pathlib.Path):
 
 
 def test_retire_branches_active_and_with_children_report_instead(tmp_path: pathlib.Path):
-    """正控（三分支前两支）：活跃 ⇒ 报最近报告；名下还有活跃子 ⇒ 报那些活的简介。都不退役。"""
+    """正控（静默闸挡下的两支）：活跃 / 名下还有活跃子 ⇒ 受控拒绝，但报告照样端给父。
+
+    业主 2026-10-26 同一批裁定逐字：「销号可以也只可针对静默子代理」。于是这两支的
+    结论从 `reported` 改成 `refused`（并带 `refusal_code=target_not_silent`）——
+    这不是收紧读数，而是收紧动作：`reported` 那一档当年只是"不退役"，今天要连
+    "为什么不许销、下一步做什么"一起说清。``report`` 一格照旧，父仍然看得到
+    "它最近报了什么"与"它名下那些子代理在干什么"。
+    """
     _st, cond, sec = _env(tmp_path)
     owner = cond.open_top_level_run("M", "父那一趟")
     busy = _child(cond, owner, status="running", key="s1k@busy")
@@ -112,14 +119,20 @@ def test_retire_branches_active_and_with_children_report_instead(tmp_path: pathl
     sec.roster_add(owner=owner, role="D", task_id=parentish, brief="带子的那件")
 
     hot = sec.retire(owner=owner, name="D1", by_task_id=owner)
-    assert hot["action"] == "reported" and hot["ok"] is False, hot
-    assert "还在跑" in "".join(hot["why"]), hot
+    assert hot["action"] == "refused" and hot["ok"] is False, hot
+    assert hot.get("refusal_code") == "target_not_silent", hot
+    assert hot.get("target_state") == "flying", hot
+    assert "它还在干活" in "".join(hot["why"]), hot
+    assert "销号只针对静默子代理" in "".join(hot["why"]), hot
     assert "checked" in hot["report"], hot["report"]        # 最近报告那一格（可以是"没有报告行"）
 
     withkids = sec.retire(owner=owner, name="D2", by_task_id=owner)
-    assert withkids["action"] == "reported" and withkids["ok"] is False, withkids
+    assert withkids["action"] == "refused" and withkids["ok"] is False, withkids
+    assert withkids.get("refusal_code") == "target_not_silent", withkids
+    assert withkids.get("target_state") == "standby", withkids
     kids = withkids["report"]["children"]
     assert len(kids) == 1 and kids[0]["state"] == "活跃", kids
+    assert "它在等" in "".join(withkids["why"]), withkids
     assert not retired_path(tmp_path / "ws", owner).is_file(), "不退役就不许写销号名单"
 
 

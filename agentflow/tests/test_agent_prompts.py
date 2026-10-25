@@ -2149,7 +2149,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p203"
+_FROZEN_PROMPT_VERSION = "p206"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2178,18 +2178,56 @@ _FROZEN_PROMPT_VERSION = "p203"
 #   E f46e5f64→f46e5f64 / F 46bd35c5→91335ce5 / G a1d7077d→a1d7077d / H e9bdf211→e9bdf211 /
 #   L b60b8d3f→b60b8d3f / M 16bf19ba→16bf19ba / V 33b5d66b→33b5d66b。
 # 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 2026-10-27（p204 收口批）：十一格全换，两笔一起动。
+# ① 时钟八件的形写进各角色的政策（十格各加一条；M 那一格把申请形状、wait_for 三种指称、
+#    补目的、到点消息的例子、旧计时工具退役并进它已有的挂机那一条）；
+# ② 把「各级父也会收到通知」改成「按绝对编号链逐级由秘书转发，内容只有链尾看得到、
+#    中间各跳不读内容」—— 十一份 specs 都动了这一句；
+# ③（同批进段的那一笔）`_names` 的手那一档改成全列 ⇒ 每一格的「次要官能：手」那一行
+#    都变长，所以十一格无一幸免，不是只换改了 policy 的那十格。
+# 逐格的旧值 → 新值：
+#   A 1022e25d→d8819279→0ff3434f / B 407bf1ee→61153920 / C 72ace081→ed603919 /
+#   D 110f7eb7→7126df90 / E f46e5f64→e44a6a90 / F 91335ce5→7cd0c83a /
+#   G a1d7077d→689286fc / H e9bdf211→f8bf823d / L b60b8d3f→75204093 /
+#   M 16bf19ba→08567b14 / V 33b5d66b→19ba4aa7。
+# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 2026-10-27（p205 收口批）：十一格全换，两笔一起动。
+# ① 新工具 `clock.wait_any` 进 `tools_lines` 那一行（名 + 摘要 + 必填参数 + 副作用），
+#    而 `tools_lines` 对每个角色都渲染 ⇒ 十一格无一幸免；
+# ② `conductor.retire_child` 的 summary 文案换了（补「待机」那一档与 refusal_code 的三态
+#    读数）⇒ M 那一格再换一次。`returns=` 不进段（只进 function-calling 的 description）。
+# 逐格的旧值 → 新值：
+#   A 0ff3434f→a5e29d79 / B 61153920→8cc47b71 / C ed603919→fc1387da /
+#   D 7126df90→446f2a2d / E e44a6a90→1ea126e2 / F 7cd0c83a→7005c3d7 /
+#   G 689286fc→b7255c30 / H f8bf823d→c82d132c / L 75204093→1f73dd53 /
+#   M 08567b14→96bc2568 / V 19ba4aa7→01ef0b27。
+# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 2026-10-27（p206 收口批）：十一格全换，三笔一起动。
+# ① 工具面 returns / summary 十一处进 `tools_lines` 那一行（attack.create_plan /
+#    clock.alarm_start / clock.timer_cancel / clock.timer_list / clock.wait_any /
+#    conductor.guide / fs.edit / fs.write / table.get / table.list / verify.verify_proof），
+#    而 `tools_lines` 对每个角色都渲染 ⇒ 十一格无一幸免；
+# ② 十一份 specs 的时钟段补 `clock.wait_any` 的行为口径（requested=true / waiting=false
+#    那一档不是「没在等」；无计时而手头也没活就按交差处理）⇒ 同样十一格；
+# ③ `specs/m.py` 的 `delivered_to` 改成「列表，只有一个元素」⇒ M 那一格再换一次。
+# 逐格的旧值 → 新值：
+#   A a5e29d79→5e51994a / B 8cc47b71→baeae677 / C fc1387da→61bd5d08 /
+#   D 446f2a2d→8885d099 / E 1ea126e2→ee9f1962 / F 7005c3d7→8303429f /
+#   G b7255c30→71b47d56 / H c82d132c→2db09be8 / L 1f73dd53→1e3825c7 /
+#   M 96bc2568→03495fae / V 01ef0b27→6ec461ac。
+# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "d881927900395f0246a2ef10f7694c4f1581b513373b942fc5e49711bff50c15",
-    "B": "407bf1eec36648a23c5774a45ad528c6b5d63fa0d588ad4f6e0b08f36afed2be",
-    "C": "72ace081cb15f2991e77efd6e50c53380506e5e6e580c1aba179d1a7dbcf70e5",
-    "D": "110f7eb7e3c29bb3a2323fd0da9c2215536dbd44a5ce63404ebe007932cc5daa",
-    "E": "f46e5f64706a38ac5a29f7e6f6bb4c1255e1fe2c59b6d5ad7559d278c0eec3dd",
-    "F": "91335ce54526fc593ddadc8c7368a826a9d9c6a0db1b43b03d87e4406442b2bd",
-    "G": "a1d7077d2ad703b5587625eea2ef80d106c730286a82fe1186fc35d0e4b56631",
-    "H": "e9bdf211fd39c3f3a31d298f9d100aef61a21cbcac2ffe8fc29ee200cc0efa96",
-    "L": "b60b8d3ff8a4072a045de8daefd90a15b00410fa8961cca927ada12953da9bf5",
-    "M": "16bf19ba8b46f0d1ea6ba1a7725eba344e345823ac74a702bb8d3bfae42bfe09",
-    "V": "33b5d66bc8b8a7226236869f4f42de7ed59ee6d6d9a8a4ebc4e42d78bc89e67f",
+    "A": "5e51994a762aa9ebb45760e4981c638410c5bec3f19ad36d5c89cf01475dcfde",
+    "B": "baeae6778bc34e00a7e8155a860f25ff994cb2732f8980aac0e2d09e3b0592f3",
+    "C": "61bd5d085dba8115514e572aa6a94157c541adda266bbbc1c748fe14a041a64f",
+    "D": "8885d099f35834753ec93bfd109379d93984b467f9f828426dc0e9fdc4f934f3",
+    "E": "ee9f1962b163d1a8d1aeaf591b43b094896c8b84f6693815800ad9f6138bd300",
+    "F": "8303429f6de70950ca2dd1bfbd340f4041024a1912a373d4ce4f055fea8b4e98",
+    "G": "71b47d5635368e698e4cabf32812c96cb931e147c87250cfffc576bce9f8ba99",
+    "H": "2db09be8636f182f26df5c3eab57f797abbf2fe108108232680a2c6fa4e4841c",
+    "L": "1e3825c7120efa7f7eb050cae3cd011b7541578fbc38ac7ae722081511ea4945",
+    "M": "03495fae40fb0b19df0f62099c46f53b340234db2c253804bee12aaa4fa61036",
+    "V": "6ec461ac80bb96096d6a3e13bf8b62c56996657115c386a396ae0118e67dccde",
 }
 
 

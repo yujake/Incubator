@@ -78,6 +78,8 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .. import sessions as SS
+from ..conductor import (AGENT_STATE_LABELS, AGENT_STATE_UNKNOWN, AGENT_STATES,
+                         agent_states, clock_waiters, most_active_state, state_counts)
 from ..jsonlfile import read_jsonl_state
 
 __all__ = [
@@ -2766,7 +2768,7 @@ _ROSTER_INDEX_SUFFIX = "-index.jsonl"
 #: 对应）。为什么单列一份：`roster_face` 里两个"名册读不到"的分支搬的是同一批键，
 #: 抄两遍就会漏一处 —— 而漏的那一处表现为"某一档少一个键"，前端读它时才知道少了。
 _ROSTER_FALLBACK_KEYS: tuple[str, ...] = ("nodes", "roots", "children_of", "count",
-                                          "max_depth", "coverage", "unplaced")
+                                          "max_depth", "coverage", "unplaced", "states")
 
 
 def _roster_files(dir_p: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, Path]], str]:
@@ -2989,6 +2991,27 @@ def _roster_inbox(rows: list[dict[str, Any]], *, tasks_tri: str,
             "reason": ""}
 
 
+def _roster_states_blank(reason: str) -> dict[str, Any]:
+    """三态合计"没读到"那一档：每一格是 `None`（不是 0 —— 0 是"读到了、里面是 0 个"）。
+
+    为什么合计也要三态：网页顶部那一行「在飞 a · 待机 b · 静默 c」如果读不到时钟却显示
+    0 / 0 / 0，读的人会把它当成"全都收工了" —— 那是这一批要修的那个错的反面。
+    """
+    return {"checked": False, "reason": str(reason or ""),
+            **{name: None for name in AGENT_STATES},
+            "active": None, "total": None, "labels": dict(AGENT_STATE_LABELS)}
+
+
+def _roster_states_of(nodes: Sequence[Mapping[str, Any]], *,
+                      reason: str = "") -> dict[str, Any]:
+    """按节点的 `state` 合计四档（`conductor.state_counts` 是那四个数唯一的算法）。"""
+    counts = state_counts(str(n.get("state") or "") for n in nodes)
+    return {"checked": True, "reason": str(reason or ""),
+            **{name: int(counts[name]) for name in AGENT_STATES},
+            "active": int(counts["active"]), "total": int(counts["total"]),
+            "labels": dict(AGENT_STATE_LABELS)}
+
+
 def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                 inbox_items: int = ROSTER_INBOX_ITEMS) -> dict[str, Any]:
     """`GET /api/roster` 的读模型：当前工作区整棵名册树（只读、三态）。
@@ -3009,6 +3032,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     | `retired` / `retired_branch` | 折叠后的 `retired` / 那一行的 `branch` |
     | `brief` / `brief_source` / `surface` | 这一项的 `brief` / `brief_source` / `surface` |
     | `status` / `task_found` / `in_flight` | 最近一件活的状态 / 它的活是否都在台账里 / 这一项名下有几件在飞（`pending`+`running`） |
+    | `state` / `state_reason` | 三态（在飞 / 待机 / 静默 / 未读到），判定只有 `conductor.agent_state` 一处；`state_reason` 是"为什么判成这一格"的那句人话（`unknown` 时必有） |
     | `inbox` | 这一项名下所有活收到的板项行（见 :func:`_roster_inbox`） |
     | `depth` | 名册链现算：根 = 1（口径写在下面） |
 
@@ -3070,6 +3094,13 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
       时它是真数字，而 `answer` 照旧是 `"unknown"` 并说明哪一份没读成。
     - `tasks_tri` / `tasks_reason`：台账那一栏自己的三态（树照样给，`inbox` 与
       `status` 逐节点标 `unreadable`）。
+    - `states`：三态合计（`flying` / `standby` / `silent` / `unknown` 各几个，
+      外加 `active` = 在飞 + 待机 与 `total`）。四格是 `number | null`：
+      `null` 是"没读到"（名册没读到 / 台账没读到 / 时钟读不成），不是 0。
+      逐节点那一格 `state` 同样是三态，`state_reason` 说清"为什么是这一档"。
+      判定（含"待机 = 时钟上挂着等待或名下有在飞的直接子"）只有
+      `conductor.agent_state` 一处；本函数只做"一个节点接过好几件活 ⇒ 取最活跃的那一格"
+      这一层聚合（`conductor.most_active_state`）。
 
     ## 规模
     节点上限 `limit`（默认 :data:`ROSTER_NODES_MAX`），超了截断并置 `truncated`；
@@ -3091,6 +3122,9 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         "files": [], "diagnostics": [], "truncated": False,
         "coverage": {"tasks_agents": None, "roster_nodes": None, "unrostered": None},
         "tasks_tri": TRI_NOT_APPLICABLE, "tasks_reason": "", "unplaced": [],
+        #: 三态合计（`conductor.state_counts`）：四档各几个 + `active`（在飞 + 待机）。
+        #: 计数格是 `number | null` —— `null` 是"没读到"，`0` 是"读到了、里面是 0 个"。
+        "states": _roster_states_blank("名册没读到 ⇒ 三态合计不给 0（0 是很强的结论）"),
     }
 
     if not dir_p.exists():
@@ -3128,16 +3162,21 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     #: 每份 `<父>.jsonl` 的原始行（按文件里的行序）。它只在这里读一次，下面用它编
     #: "落盘行序"，于是"按父子"的那一份形状不必回头再扫一遍文件。
     rows_by_owner: dict[str, list[dict[str, Any]]] = {}
+    #: 名册正文有坏行 / 读不出来的那几份（owner）。那几份的"已销号"那一格判不了 ——
+    #: 坏掉的那一行可能正是一条 `retire` 记录 ⇒ 三态只能是 `unknown`（不是静默）。
+    roster_bad_owners: set[str] = set()
     for owner, path in found:
         rows, bad, state = read_jsonl_state(path)
         if state == "unreadable":
             problems.append(f"{path.name} 读不出来：{bad[0] if bad else '未知原因'}")
+            roster_bad_owners.add(owner)
             continue
         if bad:
             # 坏行一律算「没查成」（本模块 `_face` 的同一条口径：把"文件坏了"读成
             # "还没写过"是本项目最贵的一类缺陷）。好行照常渲染 —— 与 `artifacts_face`
             # 的"整面 unreadable 并点名，读得出来的栏照常给行"同一条做法。
             problems.append(f"{path.name} 有 {len(bad)} 行读不出来（{bad[0]}）")
+            roster_bad_owners.add(owner)
         items_by_owner[owner] = _fold_roster(rows)
         rows_by_owner[owner] = [dict(r) for r in rows]
         out["files"].append(path.name)
@@ -3258,6 +3297,8 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     owner_of_task: dict[str, str] = {}
     node_of_task: dict[str, str] = {}
     node_row: dict[str, dict[str, Any]] = {}
+    #: 节点键 → 它是哪一份名册里的项（三态要问"这一份名册的正文读成了没有"）。
+    owner_of_node: dict[str, str] = {}
     for owner, items in items_of_owner.items():
         for item in items:
             node = str(item.get("task_id") or "")
@@ -3268,6 +3309,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                     f"{node} 同时是两个名册项的节点键（只认先读到的那一项；"
                     "名册项的身份是 owner + name）")
             node_row.setdefault(node, item)
+            owner_of_node.setdefault(node, owner)
             for tid in item["tasks"]:
                 owner_of_task.setdefault(tid, owner)
                 node_of_task.setdefault(tid, node)
@@ -3381,6 +3423,32 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             ledger_kids.setdefault(pid, []).append(tid)
     #: 台账那一栏读成没有：读不到就一律 None / 空数组（"没查成"不是"没有子"）。
     tasks_read = out["tasks_tri"] == TRI_COMPUTED
+    # ---- 三态（在飞 / 待机 / 静默 / 未读到）：判定在 `conductor.agent_state`，
+    # 本层只做三件事 —— 读一次时钟簿记（`conductor.clock_waiters`）、把"这一项是
+    # 哪几件活的代理"那份事实交给它（含 `retired`：已销号 ⇒ 静默在那里面判）、
+    # 再把"一个节点接过好几件活"聚合成一格（`conductor.most_active_state`）。
+    roster_clock = clock_waiters(root_p)
+    #: 已销号的名册项用了哪些编号（名册那一层的事实，交给判定本体，这里不另判一遍）。
+    retired_ids: dict[str, bool] = {}
+    for _owner, _items in items_of_owner.items():
+        for _item in _items:
+            if not _item.get("retired"):
+                continue
+            for _tid in list(_item.get("tasks") or []) + [str(_item.get("task_id") or "")]:
+                if _tid and _tid in tasks_by_tid:
+                    retired_ids[_tid] = True
+    three: dict[str, dict[str, Any]] = {}
+    if tasks_read:
+        three = agent_states(list(tasks_by_tid.values()), clock=roster_clock,
+                             retired=retired_ids)
+    #: 三态合计读不成的那一句理由（空串 = 读成了）。
+    states_problem = ""
+    if not tasks_read:
+        states_problem = (f"台账读不成（{out['tasks_reason'] or '没查成'}）⇒ "
+                          "在飞 / 待机 / 静默判不了")
+    if not roster_clock.get("checked"):
+        states_problem = (f"时钟读不成（{roster_clock.get('reason') or '没查成'}）⇒ "
+                          "在飞 / 待机 / 静默判不了")
     nodes: list[dict[str, Any]] = []
     seen: set[str] = set()
     max_depth = 0
@@ -3430,6 +3498,34 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
         unrostered_kids = (_roster_unrostered_children(
             ledger_child_ids, tasks_by_tid=tasks_by_tid, registered=owner_of_task)
             if tasks_read else [])
+        # 这一项的三态：它接过好几件活 ⇒ 取最活跃的那一格（`most_active_state`）。
+        # 已销号 ⇒ 静默（销号即退场，不在活跃集合里）；名册正文有坏行 ⇒ 那一格判不了。
+        # 节点键本身也算一件活的编号（树根不是任何人的名册项，它的 `tasks` 是空的，
+        # 而它自己那一行台账明明在 —— 不看它会把根读成"判不了"）。
+        node_owner = owner_of_node.get(tid, "")
+        state_ids = list(task_ids)
+        if tid in tasks_by_tid and tid not in state_ids:
+            state_ids.insert(0, tid)
+        states_here = [str((three.get(one) or {}).get("state") or AGENT_STATE_UNKNOWN)
+                       for one in state_ids]
+        state = most_active_state(states_here)
+        state_reason = ""
+        if states_problem:
+            state = AGENT_STATE_UNKNOWN
+            state_reason = states_problem
+        elif not state_ids or not any(one in three for one in state_ids):
+            state = AGENT_STATE_UNKNOWN
+            state_reason = "台账里没有这一项接过的活的任何一行 ⇒ 它有没有在跑判不了"
+        elif node_owner in roster_bad_owners:
+            state = AGENT_STATE_UNKNOWN
+            state_reason = (f"{node_owner} 那一份名册有坏行 ⇒ 它有没有销号判不了"
+                            "（坏掉的那一行可能正是一条 retire）")
+        else:
+            for one in state_ids:
+                cell = three.get(one) or {}
+                if str(cell.get("state") or "") == state and str(cell.get("reason") or ""):
+                    state_reason = str(cell.get("reason") or "")
+                    break
         node: dict[str, Any] = {
             "task_id": tid,
             "name": str(row.get("name") or ""),
@@ -3452,6 +3548,9 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             "brief_source": str(row.get("brief_source") or ""),
             "surface": str(row.get("surface") or ""),
             "status": str(current.get("status") or ""),
+            # 三态（`conductor.agent_state` 是唯一实现）+ 那一句"为什么是这一档"。
+            "state": state,
+            "state_reason": state_reason,
             "task_found": bool(task_readings) and all(tr["task_found"] for tr in task_readings),
             "in_flight": (live if out["tasks_tri"] == TRI_COMPUTED else None),
             "inbox": _roster_inbox(inbox_rows, tasks_tri=out["tasks_tri"],
@@ -3476,6 +3575,9 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
 
     out["nodes"] = nodes
     out["roots"] = roots
+    # 三态合计：读不成 ⇒ 每一格是 null（不是 0）+ 一句理由；读成了 ⇒ 四个真数字。
+    out["states"] = (_roster_states_blank(states_problem) if states_problem
+                     else _roster_states_of(nodes))
     out["children_of"] = children_of
     out["count"] = len(nodes)
     out["max_depth"] = max_depth
@@ -3838,6 +3940,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("proof_sha_consistency", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
+      # 2026-10-27（引用核实那一批落地后的补登记）：台账那一行多了 `citation_checks`
+      # 四格（`verifications.CITATION_CHECK_KEYS`：stmt_id / verdict / quote_verbatim /
+      # note）。后端真的读得出它（C 条拿夹具那一行逐键比）⇒ 这里必须声明，
+      # 否则类型面读不出"这条证明里的引用被逐条核成了什么"。
+      ("citation_checks",
+       "{ stmt_id: string; verdict: string; quote_verbatim: boolean; note: string }[]"),
       ("by_task_id_tri", "string"))),
     ("ArtifactRow",
      "artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）",
@@ -3997,6 +4105,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("max_depth", "number | null"), ("files", "string[]"),
       ("diagnostics", "string[]"), ("coverage", "RosterCoverage"),
       ("tasks_tri", "Tri"), ("tasks_reason", "string"), ("truncated", "boolean"),
+      # 三态合计（2026-10-26 业主：「『在飞』的读数要随着时钟式待机进行适配」）：
+      # 四档各几个 + `active`（= 在飞 + 待机）。计数格是 `number | null`
+      # （`null` = 没读到，不是 0）。刻意写成行内对象而不是另立一个接口：
+      # 它是 RosterView 的一格、不是一张独立的表（前端用 `RosterView["states"]` 取）。
+      ("states",
+       "{ checked: boolean; reason: string; flying: number | null;"
+       " standby: number | null; silent: number | null; unknown: number | null;"
+       " active: number | null; total: number | null; labels: Record<string, string> }"),
       # 台账里有父、可名册正文与对照表都没说"谁接过它"的那些代理行：平铺并点名，
       # 不抬成树根（D-66）。
       ("unplaced", "RosterUnplaced[]"))),
@@ -4009,6 +4125,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("children", "RosterChild[]"), ("retired", "boolean"),
       ("retired_branch", "string"), ("brief", "string"), ("brief_source", "string"),
       ("surface", "string"), ("status", "string"), ("task_found", "boolean"),
+      # 三态（在飞 / 待机 / 静默 / 未读到）与"为什么是这一档"的那一句人话。
+      # 判定只有 `conductor.agent_state` 一处；`state_reason` 在 `unknown` 时必有。
+      ("state", "string"), ("state_reason", "string"),
       ("in_flight", "number | null"), ("inbox", "RosterInbox"),
       # 这个子代理接过的每一件活（业主 2026-10-24：「一个子代理可接收多个任务」）。
       ("tasks", "RosterTask[]"),
@@ -4185,8 +4304,13 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
         return {"nodes": [], "roots": [], "children_of": {}, "count": None, "max_depth": None,
                 "coverage": {"tasks_agents": None, "roster_nodes": 0, "unrostered": None},
                 "unplaced": [],
+                "states": _roster_states_blank(f"{path} 读不出来 ⇒ 三态也判不了"),
                 "reason": f"{path} 读不出来 ⇒ 台账兜底也读不到"}
     agents = [r for r in rows if str(r.get("kind") or "") == "" and str(r.get("task_id") or "")]
+    # 三态：这一档的节点一个都不在任何名册里 ⇒ 没有人能给它销号（销号只发生在名册项上），
+    # 所以 `retired` 一律 False 是一个成立的结论，不是猜的（`roster_checked=True`）。
+    fallback_clock = clock_waiters(root_p)
+    three = agent_states(agents, clock=fallback_clock)
     by_parent: dict[str, list[dict[str, Any]]] = {}
     for r in agents:
         by_parent.setdefault(str(r.get("parent_task_id") or ""), []).append(r)
@@ -4233,6 +4357,9 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
             "brief": "", "brief_source": "", "surface": "",
             "status": status, "task_found": True,
             "in_flight": 1 if status in ("pending", "running") else 0,
+            # 三态（判定在 `conductor.agent_state`）：这一档每个节点就是台账那一行。
+            "state": str((three.get(tid) or {}).get("state") or AGENT_STATE_UNKNOWN),
+            "state_reason": str((three.get(tid) or {}).get("reason") or ""),
             "inbox": {"tri": "not_applicable", "unread": None, "seen_not_acked": None,
                       "open_total": None, "other": None, "by_state": {}, "by_kind": {},
                       "items": [], "more": 0,
@@ -4258,6 +4385,10 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
                          "roster_nodes": None if empty else 0,
                          "unrostered": None if empty else len(agents)},
             "unplaced": [],
+            "states": (_roster_states_blank("这一档一条代理行都没有 ⇒ 三态没有落脚点")
+                       if empty else
+                       _roster_states_of(
+                           nodes, reason="名册没读到 ⇒ 这一档的三态来自台账兜底（树也是）")),
             "reason": (f"名册那一格没读到，但台账里有 {len(agents)} 个带父的代理行"
                        f"（头几个：{sorted(ids)[:5]}）⇒ 下面这棵树来自 `data/tasks.json`，"
                        "它们**存在、但不在名册上**（名册登记没有发生）")}

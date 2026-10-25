@@ -2717,6 +2717,13 @@ EXIT_CODE_BY_STOP: dict[str, int] = {
     # `escalated`：交给召唤者、本趟自行收工（语义由另一条线落地；这里先登记，
     #   因为它属于"它自己决定停"这一族 —— 与 `no_progress_limit` 同档，不是异常）。
     "escalated": 5,
+    # `final_refused`（D-68，业主 2026-10-26「最终 final 时应该是 M 下整棵树都已销号，
+    #   否则不记 final」）：收工门判整棵树没销干净 ⇒ `run.final` 留空、一个字节都不写、
+    #   循环自己 break（`agent_loop.py` 里 `run.stop_reason = "final_refused"`）。
+    #   归 5 而不是 1：门按设计挡住了，没有任何东西坏掉 —— 它属于"这一趟自己判定收工、
+    #   但没有 final"那一族（与 `no_progress_limit` 同档）。归 1 会让读的人去查
+    #   "模型/接线出了什么故障"，而实际下一步是"先销号，再 `--resume` 重发 final"。
+    "final_refused": 5,
     # ---- 1 行为异常（只留给"真出事"）
     "not_wired": 1,                # 没接线（没有 key / 没进登记表）
     "model_auth_failed": 1,        # 模型没认这把 key
@@ -2850,12 +2857,16 @@ def cmd_run_agent(args) -> int:
     - `5` 系统行为正常且自行停止，但没有 final（原地打转 / `escalated` 交给召唤者）。
     `--rounds N` 那条多轮路径查的是同一张表（`_autonomy_exit_code`），只多两档多轮特有形态：轮数
     用完且最后那轮给了 final ⇒ 0、没给 final ⇒ 5；续跑发现这一程已跑完（`resumed_done`）⇒ 0。
-    ## 三个"花钱的判断类能力"开关：默认全关，互不连带 —— `--semantic-review`（H 的语义判据）/ `--attack-reasoning`（F 的攻坚推理）/ `--experiment-reasoning`（E 的写脚本推理，S-10(a) 的 `author_script`）。三条同一条纪律：环境里有 key 也不改变行为。
-    `--attack-reasoning` 不连带打开 E 的缝（两个开关各自可解释：F 想这一步怎么打、E 把判据写成
-    一份能跑的脚本）。代价必须知道：只开 F 的缝时，F 需要脚本的那一轮写不出来 ⇒ 落
-    `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）。改前它是静默的 `no_change`（真机
-    `projects/mp4` 计划 000003 的 r1/r2 逐字："子目标 sg1 有判据但没有脚本，而 E 没能把它写出来
-    （no_seam）⇒ 未推进"）——"有判据没脚本"与"跑了但没结果"在读数上从此分得开。
+    ## 花钱的判断类能力开关：`--semantic-review`（H 的语义判据）/ `--experiment-reasoning`
+    （E 的写脚本推理，S-10(a) 的 `author_script`）。两条同一条纪律：环境里有 key 也不改变行为。
+    F 的攻坚推理不在这一列（2026-10-26 业主裁定：「没有默认开，这个就是F的工作方式，没有
+    开关的说法」）：`--attack-reasoning` 已删除，F 出场就有缝（`host.wired_llm_conductor`
+    无条件装配）。`--semantic-review` 不连带打开 E 的缝（两件事各自可解释：H 判"结论是否
+    强于引文"、E 把判据写成一份能跑的脚本）。代价必须知道：E 没缝时，F 需要脚本的那一轮
+    写不出来 ⇒ 落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）。改前它是静默的
+    `no_change`（真机 `projects/mp4` 计划 000003 的 r1/r2 逐字："子目标 sg1 有判据但没有
+    脚本，而 E 没能把它写出来（no_seam）⇒ 未推进"）——"有判据没脚本"与"跑了但没结果"
+    在读数上从此分得开。
 
     这一层与 `run` / `project run` / `web` 一样只剩"翻成 `RunSpec` 再交给 `_run_spec`"
     （`draft/145` §3.2 的别名形态）；真正的执行体是 :func:`_exec_role`。
@@ -3049,7 +3060,6 @@ def _exec_role(spec: RunSpec, args) -> int:
                                    workspace_root=str(root), seam_factory=seam_for,
                                    providers=providers, config=cfg, policy=pol,
                                    semantic_review=bool(getattr(args, "semantic_review", False)),
-                                   attack_reasoning=bool(getattr(args, "attack_reasoning", False)),
                                    experiment_reasoning=bool(
                                        getattr(args, "experiment_reasoning", False)),
                                    stop_file=(None if multi_round
@@ -4530,7 +4540,6 @@ def build_parser() -> argparse.ArgumentParser:
     _more.add_argument("--subagents", action="store_true",
                        help="把所有已声明的角色动作都交给模型驱动（research 缺省就是它）")
     _more.add_argument("--semantic-review", action="store_true", help="给 H 接上语义判据")
-    _more.add_argument("--attack-reasoning", action="store_true", help="给 F 接上攻坚推理")
     _more.add_argument("--experiment-reasoning", action="store_true", help="给 E 接上写脚本的推理")
     _more.add_argument(ALLOW_FOREIGN_FLAG, action="store_true",
                        help="这个目录里已经有用户的投料也照样按工作区初始化")
@@ -4701,24 +4710,15 @@ def build_parser() -> argparse.ArgumentParser:
                          "改用「确定性动作 + 同角色多实例并发」（`conductor.summon_many`）")
     sp.add_argument("--semantic-review", action="store_true",
                     help="给 H 接上语义判据（「结论是否强于引文」）；不写则那一格如实报「没查」")
-    sp.add_argument("--attack-reasoning", action="store_true",
-                    help="给 F 接上攻坚推理（`attack.step` 真的推一轮：归约/论证/实验请求/死路）；"
-                         "不写则 F 的 step 只会落 `dead_end(缺工具)` 并如实说「未接线」"
-                         "（与 `--semantic-review` 同一条纪律：默认确定性，环境里有 key 也不改行为）。"
-                         "**它不连带打开 E 的缝**：只开这一条时，F 需要脚本的那一轮必然因 "
-                         "E 没有缝（`no_seam`）而卡住 —— 要整条通就同时给 "
-                         "`--experiment-reasoning`")
     sp.add_argument("--experiment-reasoning", action="store_true",
                     help="给 E 接上写脚本的推理（`author_script`：按子目标带来的判据写一份核验"
                          "脚本，例如一个能在 N<=8 上手算核对的玩具例子，然后照常真跑一次）；"
                          "不写则 E 只回 `no_seam`（没接线），"
                          "F 那一轮落 `dead_end(缺工具)` 并向召唤者上报 `missing_input`"
                          "（缺的是 E 的缝，不是脚本）。"
-                         "**它不被 `--attack-reasoning` 连带打开**：两个开关各自可解释"
-                         "（F 想这一步怎么打 / E 把判据写成能跑的脚本）—— 而只开 F 的话，"
-                         "F 需要脚本时必然因 E 无缝而卡住（真机读数：`projects/mp4` 计划 "
-                         "000003 的 r1/r2 全是 `no_change`，原因逐字是 `no_seam`）。"
-                         "默认关（与 `--semantic-review` / `--attack-reasoning` 同一条纪律）")
+                         "F 的攻坚推理不是开关（2026-10-26 业主裁定：那本来就是 F 的工作方式），"
+                         "所以这里没有给 F 的那一条：F 出场就有缝，而 E 这一条默认关"
+                         "（与 `--semantic-review` 同一条纪律）")
     sp.add_argument(ALLOW_FOREIGN_FLAG, action="store_true",
                     help="这个目录里已经有用户的投料（例如一篇 PDF），仍然按工作区初始化："
                          f"先落 {WORKSPACE_MARKER} 再 init（与 `init` 的开关逐字同一个）；"

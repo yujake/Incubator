@@ -283,6 +283,26 @@ class CallTicket:
         return got
 
 
+def _note(kind: str, purpose: str, budget: float | None, started: float,
+          *, waited_for: str = "") -> None:
+    """把一次"阻塞型等待"记进主时钟的账（旁路：记账炸了不许把等待带坏）。
+
+    为什么这些点不换成 `clock.await_io`：它们等的是条件变量/事件的信号，
+    "一有信号就返回"是语义的一部分；换成一个 sleep 会把返场延迟到睡满。
+    账要的是"等了多久、等的是什么"，那不需要改阻塞方式（业主 2026-10-25 的口径是
+    "所有计时类工作进同一本账"，不是"所有等待都必须睡"）。
+    """
+    waited = max(0.0, _time() - started)
+    try:
+        from . import clock as CLK
+
+        CLK.note_wait(budget if budget is not None else waited, purpose,
+                      kind=kind, where="scheduler.WaveHandle", waited_for=waited_for,
+                      slept=waited)
+    except Exception:  # noqa: BLE001 - 旁路
+        pass
+
+
 class WaveHandle:
     """一批派活的句柄：派完第一波就返回，不等到全部完成（D-64）。
 
@@ -394,18 +414,30 @@ class WaveHandle:
 
         为什么不是 `wait_all`：可抢占的语义是"等到有动静就返场"，不是
         "等到全部完成"。全部完成那一档是 `results()`（阻塞式拼法）。
+
+        账照样记（`note_wait`）：等的是"又落定了一项"这个事件，阻塞由条件变量完成，
+        所以不换成 sleep，只把"等了多久、等的是什么"记进主时钟的账。
         """
         deadline = None if timeout is None else _time() + max(0.0, float(timeout))
+        started = _time()
         with self._cv:
             if self._new:
                 return True
             remain = None if deadline is None else max(0.0, deadline - _time())
-            self._cv.wait_for(lambda: bool(self._new) or self._all_done.is_set(), timeout=remain)
-            return bool(self._new)
+            self._cv.wait_for(lambda: bool(self._new) or self._all_done.is_set(),
+                              timeout=remain)
+            got = bool(self._new)
+        _note("wave_wait_any", "等这一批里再落定一项（可抢占派活的返场点）",
+              timeout, started)
+        return got
 
     def wait_all(self, timeout: float | None = None) -> bool:
         """等到全部落定（或到点）。返回"落定了没有"。"""
-        return self._all_done.wait(None if timeout is None else max(0.0, float(timeout)))
+        budget = None if timeout is None else max(0.0, float(timeout))
+        started = _time()
+        got = self._all_done.wait(budget)
+        _note("wave_wait_all", "等这一批全部落定", budget, started)
+        return got
 
     def results(self) -> list[Any]:
         """阻塞式拼法：等全部落定，按输入顺序给出每一项的结果（长度恒等于输入长度）。"""
@@ -480,9 +512,12 @@ class WaveHandle:
 
     def _wait_wave(self, n: int) -> None:
         indexes = list(self.waves[n]) if n < len(self.waves) else []
+        started = _time()
         with self._cv:
             while not all(self._settled[i] for i in indexes):
                 self._cv.wait(timeout=_WAVE_POLL_SEC)
+        _note("wave_poll", "等这一波落定（每 _WAVE_POLL_SEC 看一眼取消/墙钟）",
+              _WAVE_POLL_SEC, started)
 
     def _dispatch(self, n: int) -> None:
         """把第 n 波派出去：每一项一条线程（前半 + 后半都在那条线程里）。
@@ -517,7 +552,10 @@ class WaveHandle:
         for th in threads:
             th.start()
         for i in self.waves[n]:
+            began = _time()
             self._tickets[i].begin_done.wait(timeout=600.0)
+            _note("wave_begin", "等这一项的派出手续办完（拿到编号就返回）",
+                  600.0, began, waited_for=str(self._tickets[i].task_id or ""))
 
     def _item_thread(self, i: int) -> None:
         """一张票的一生：open 句柄 → 前半 → （派得出去就）后半 → 落定。"""

@@ -964,7 +964,20 @@ class Store:
                         # `R3-10`：最后一次失败之后不 sleep（下面紧接着就抛）。
                         # 旧版无条件 sleep，于是注释里的 0.62 秒在实测里是 1.27 秒，
                         # 而这段在写者锁内 —— 那 0.64 秒是纯粹的持锁等待。
-                        time.sleep(_REPLACE_BACKOFF_S * (2 ** attempt))
+                        #
+                        # 2026-10-25 业主裁定「主时钟要控制所有计时类工作」：这一次退避
+                        # 仍然真睡同样的秒数（语义一字不改：退避重试直到成功或耗尽），
+                        # 只是它现在记进主时钟那本账（`out/clock/waits.json` 的
+                        # `kind="atomic_retry"`）—— 于是"框架里还有没人管的 sleep"
+                        # 这句话在这处不再成立。为什么用 `await_io` 而不是 `note_wait`：
+                        # 这里真的要让出 CPU 等另一个进程松手，不是同步原语阻塞。
+                        from . import clock as CLK
+
+                        CLK.await_io(_REPLACE_BACKOFF_S * (2 ** attempt),
+                                     "原子替换失败后的退避重试（目标文件被别的进程短暂占用）",
+                                     kind="atomic_retry",
+                                     where="store._atomic_write",
+                                     waited_for=str(path.name))
             raise StoreError(
                 f"原子替换失败（重试 {_REPLACE_ATTEMPTS} 次后仍失败）：{tmp} -> {path}；"
                 f"最后一次错误：{type(last).__name__}: {last}"

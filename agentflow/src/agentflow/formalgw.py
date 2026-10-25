@@ -614,36 +614,50 @@ def _run_import_probe(cmd: Sequence[str], *, cwd: str, timeout_sec: float) -> di
     """起一次 `lake env lean <探针>` 并把它的输出归一。
 
     单独一个函数是为了让"起进程"这件事只有一处（`mathlib_imports` 只负责
-    判据与返回形状）。
+    判据与返回形状）。业主 2026-10-27 第一条裁定：起程序就登记一条程序计时器，
+    程序结束它返回并带上结局（`clock.programs(…)` 读得到那条读数）。
     """
     import subprocess
 
+    from . import clock as _CLK
+
     shown = " ".join(cmd)
-    try:
-        proc = subprocess.run(list(cmd), cwd=cwd, stdin=subprocess.DEVNULL,
-                              capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", timeout=timeout_sec)
-    except subprocess.TimeoutExpired:
-        return {"checked": False, "imports": False, "exit_code": None, "command": shown,
-                "output": "", "reason": f"超过 {timeout_sec} 秒没查完 ⇒ 没查成"}
-    except OSError as exc:
-        return {"checked": False, "imports": False, "exit_code": None, "command": shown,
-                "output": "", "reason": f"起不了进程（{type(exc).__name__}: {exc}）"}
-    blob = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-    ok_import = proc.returncode == 0 and "Nat.add_comm" in blob
-    return {
-        "checked": True,
-        "imports": bool(ok_import),
-        "exit_code": int(proc.returncode),
-        "command": shown,
-        "output": blob[:800],
-        "reason": (
-            "`import Mathlib` 真跑通了（工程声明的 lake 环境）"
-            if ok_import else
-            f"`import Mathlib` 没跑通（退出码 {proc.returncode}）："
-            f"{blob.splitlines()[0] if blob else '(没有输出)'}"
-        ),
-    }
+    argv = list(cmd)
+    with _CLK.program_span(program=(argv[0] if argv else ""), argv=argv,
+                           workspace=(_CLK.current_workspace() or None),
+                           where="formalgw._run_import_probe",
+                           purpose="试跑 import Mathlib（等检查器回话）") as prog:
+        try:
+            proc = subprocess.run(argv, cwd=cwd, stdin=subprocess.DEVNULL,
+                                  capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace", timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            prog.finish(outcome="timed_out")
+            return {"checked": False, "imports": False, "exit_code": None, "command": shown,
+                    "output": "", "reason": f"超过 {timeout_sec} 秒没查完 ⇒ 没查成",
+                    "program_timer": prog.reading()}
+        except OSError as exc:
+            prog.finish(outcome="failed", note=f"{type(exc).__name__}: {exc}")
+            return {"checked": False, "imports": False, "exit_code": None, "command": shown,
+                    "output": "", "reason": f"起不了进程（{type(exc).__name__}: {exc}）",
+                    "program_timer": prog.reading()}
+        blob = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        ok_import = proc.returncode == 0 and "Nat.add_comm" in blob
+        prog.finish(outcome="exited", exit_code=int(proc.returncode))
+        return {
+            "checked": True,
+            "imports": bool(ok_import),
+            "exit_code": int(proc.returncode),
+            "command": shown,
+            "output": blob[:800],
+            "reason": (
+                "`import Mathlib` 真跑通了（工程声明的 lake 环境）"
+                if ok_import else
+                f"`import Mathlib` 没跑通（退出码 {proc.returncode}）："
+                f"{blob.splitlines()[0] if blob else '(没有输出)'}"
+            ),
+            "program_timer": prog.reading(),
+        }
 
 
 @dataclass
@@ -715,10 +729,18 @@ def _check_lean_axis(which: Callable[[str], str | None] | None,
         else:
             import subprocess
 
-            proc = subprocess.run([exe, "--version"], capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", timeout=60)
-            text = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-            code = int(proc.returncode)
+            from . import clock as _CLK
+
+            # 业主 2026-10-27：起程序就登记一条程序计时器（这一处是 `lean --version`）。
+            with _CLK.program_span(program=exe, argv=[exe, "--version"],
+                                   workspace=(_CLK.current_workspace() or None),
+                                   where="formalgw._check_lean_axis",
+                                   purpose="问 Lean 的版本（等它回话）") as prog:
+                proc = subprocess.run([exe, "--version"], capture_output=True, text=True,
+                                      encoding="utf-8", errors="replace", timeout=60)
+                text = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+                code = int(proc.returncode)
+                prog.finish(outcome="exited", exit_code=code)
     except Exception as exc:  # noqa: BLE001 - 探测失败是"没查成"，不是任何三态
         return (VERSION_UNKNOWN, exe, "", "",
                 f"`lean --version` 没跑成（{type(exc).__name__}: {exc}）⇒ 没查成，"

@@ -254,6 +254,25 @@ class _Manuscript:
                 "preview": preview, "named_by": "stmt" if statement_id else "plan",
                 "why": ""}
 
+    @staticmethod
+    def _retitle(text: str, statement_id: str) -> str:
+        """把开头那行"命题号"改成真的号（登记之前写的是"还没落号"）。
+
+        为什么必须改：按命号改名之后，读者（B 的携带核对、D 的递交、人）
+        都会读这一行来认"这份稿是哪条命题的"。只改文件名、不改它，盘上就出现
+        "文件叫 `f-proof-000001.md`、正文说'还没落号'"的双读数 —— 而按号去对
+        携带单的那一侧会找不到它（`depsection.manuscript_statement_id`）。
+        """
+        sid = str(statement_id or "").strip()
+        if not sid:
+            return str(text or "")
+        lines = str(text or "").replace("\r\n", "\n").split("\n")
+        for i, line in enumerate(lines[:12]):
+            if line.strip().startswith("- 命题号"):
+                lines[i] = f"- 命题号：stmt:{sid}"
+                return "\n".join(lines)
+        return "\n".join(lines)
+
     def publish_manuscript(self, manuscript: Mapping[str, Any], *,
                            statement_id: str) -> dict[str, Any]:
         """登记拿到命题号之后，把那一份手稿改名为 `reports/f-proof-<命题号>.md`。
@@ -285,13 +304,17 @@ class _Manuscript:
             return out
         new_rel = self.manuscript_path(sid)
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        # 按号改名时把开头那一行"命题号"也改成真的号：只改文件名会让盘上出现
+        # "文件叫 f-proof-000001.md、正文说还没落号"的双读数（见 `_retitle`）。
+        titled = self._retitle(text, sid)
+        out["text"] = titled
         if old_rel == new_rel:
             out.update(path=new_rel, published=True, why="")
             return out
         try:
             target = Path(root) / new_rel
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
+            target.write_text(titled, encoding="utf-8")
             old_path = (Path(root) / old_rel) if old_rel else None
             if old_path is not None and old_path.is_file():
                 try:

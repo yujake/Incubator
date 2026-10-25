@@ -270,6 +270,14 @@ def assign_tree(job: Job, pid: int) -> dict[str, Any]:
     return {"assigned": assigned, "failed": failed}
 
 
+def _grace_wait(poll_sec: float) -> None:
+    """宽限期里的一个轮询间隔：真睡，并记进主时钟那本账（`clock.await_io`）。"""
+    from . import clock as CLK
+
+    CLK.await_io(max(0.05, float(poll_sec)), "宽限期里等被停的子进程自己收尾",
+                 kind="grace", where="jobobject.grace_then_kill")
+
+
 def grace_then_kill(job: Job, *, grace_sec: float = 5.0, poll_sec: float = 0.3,
                     exit_code: int = 1) -> dict[str, Any]:
     """先宽限（让循环自己收尾），到点再 `TerminateJobObject`；返回过程读数。
@@ -284,7 +292,7 @@ def grace_then_kill(job: Job, *, grace_sec: float = 5.0, poll_sec: float = 0.3,
         if got.get("checked") and not got.get("pids"):
             return {"killed": False, "elapsed_sec": round(time.monotonic() - t0, 3),
                     "stragglers": [], "note": "宽限期内它们自己走完了（没有强杀）"}
-        time.sleep(max(0.05, float(poll_sec)))
+        _grace_wait(poll_sec)
     before = assigned_pids(job)
     ok = terminate(job, exit_code=exit_code)
     after = assigned_pids(job)
@@ -331,7 +339,10 @@ def selftest() -> int:
     got = assigned_pids(job)
     checks.append(("作业里读得到那个 pid", child.pid in (got.get("pids") or [])))
     close(job)
-    time.sleep(0.5)
+    from . import clock as CLK
+
+    CLK.await_io(0.5, "自检：等 OS 把子进程树收掉再看一眼",
+                 kind="selftest", where="jobobject.selftest")
     dead = child.poll() is not None or not _alive(child.pid)
     checks.append(("关句柄之后子进程被 OS 收掉", dead))
     if not dead:  # pragma: no cover - 极端环境

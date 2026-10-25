@@ -99,6 +99,24 @@ REFUSED_UNKNOWN_SOURCE = "dependency_source_not_registered"
 REFUSED_SOURCE_STATUS = "dependency_source_not_usable"
 REFUSED_LEVEL_UNREADABLE = "citation_level_unreadable"
 REFUSED_LEVEL_TOO_LOW = "citation_below_proof_review"
+#: 兜底审计（2026-10-27）：盘上那份 `reports/f-proof-*.md` 缺洗稿元信息 ⇒
+#: 它不是框架渲染的产物（手写 / 换名绕过），整笔拒绝，请 F 用 `proof` 动作重写。
+REFUSED_NOT_WASHED = "manuscript_not_washed"
+
+
+def is_framework_manuscript(rel: Any) -> bool:
+    """`rel` 是不是 `depsection` 这套约定下的 F 证明手稿路径（`reports/f-proof-*.md`）。
+
+    判据只用一处定义（前缀与目录名都从本模块的常量读）：调用方拿它区分
+    "这是我约定的那份稿"与"别的文件" —— 兜底审计只在它是的那一档上生效。
+    空串 / 非 `.md` / 不在 `reports/` 下 / 名字不带前缀 ⇒ False（宁可不动手）。
+    """
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    if len(parts) < 2 or parts[0].casefold() != MANUSCRIPT_DIR.casefold():
+        return False
+    name = parts[-1]
+    return (name.casefold().endswith(".md")
+            and name.casefold().startswith(MANUSCRIPT_STMT_PREFIX.casefold()))
 
 
 def citation_levels() -> frozenset[str]:
@@ -643,6 +661,26 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = ()) -> 
     return out
 
 
+def manuscript_statement_id(text: str) -> str:
+    """手稿开头元信息里那个"命题号：stmt:<号>"⇒ 裸号（没有 ⇒ 空串）。
+
+    为什么需要它：D 把一份稿递给 B 时，B 要判"这份稿是不是 D 携带单里点名的那一条"。
+    携带单是按命题号索引的，而调用方递进来的 `derived_from` 是那条命题的承重链
+    （被它引用的别的东西）—— 两处都不是"这份稿自己的号"。手稿头那一行就是它。
+    """
+    head = str(text or "").replace("\r\n", "\n").split("\n")[:12]
+    import re as _re
+
+    for raw in head:
+        line = raw.strip()
+        if not line.startswith("- 命题号"):
+            continue
+        hit = _re.search(r"stmt:\s*([0-9]{4,})", line)
+        if hit and S.is_valid_id(hit.group(1)):
+            return hit.group(1)
+    return ""
+
+
 def candidate_statement_ids(*, derived_from: Iterable[Any] = (), proof_text: Any = "",
                             extra: Iterable[Any] = ()) -> list[str]:
     """收方"这一份手稿可能挂在哪些命题号下"⇒ 候选号（裸号，按出现次序去重）。
@@ -742,7 +780,336 @@ def deps_groups(rows: Iterable[Mapping[str, Any]],
     return [groups[no] for no in sorted(groups)]
 
 
-# ------------------------------------------------------------------ 三态读数
+# ------------------------------------------------------------------ 渲染（唯一实现）
+
+def render_dependency_section(rows: Iterable[Mapping[str, Any]]) -> str:
+    """把依赖行渲染成那一节固定格式的表格（表头四列，逐字与解析器对齐）。
+
+    唯一实现放在这里（解析与渲染必须同一个人写，否则"渲染出来的格式解析器读不懂"
+    这种形态没有任何地方会报）：F 的手稿渲染与秘书洗稿后的重渲染都读它。
+    一条引用都没有时也把表头留着，并写一行"空表就是声明" —— 于是"这份证明是自足的"
+    与"作者忘写了这一节"在收方那侧读得不一样（三态不是靠猜的）。
+    """
+    head = "| " + " | ".join(name for _f, _k, name in COLUMN_KEYS) + " |"
+    rule = "|" + "|".join("---" for _ in COLUMN_KEYS) + "|"
+    lines = [SECTION_HEADING, "", head, rule]
+    count = 0
+    for row in rows:
+        lines.append("| {quote} | stmt:{sid} | {step} | {group} |".format(
+            quote=str(row.get("quote") or "").replace("|", "／"),
+            sid=str(row.get("stmt_id") or ""),
+            step=str(row.get("step") or ""),
+            group=int(row.get("path_group") or 1)))
+        count += 1
+    if not count:
+        lines.append("")
+        lines.append("（这一份证明没有引用任何在册命题 —— 空表就是声明。）")
+    return "\n".join(lines) + "\n"
+
+
+# ------------------------------------------------------------------ 作者侧洗稿（F 的秘书）
+#
+# 业主 2026-10-26 晚的原话（逐字）：「F写证明时务必加依赖面命题号，且由F的秘书对无引用
+# 证明忘加空依赖面的补空，对有引用证明的命题号核实（即秘书帮它洗一遍）」
+# 「F的秘书工作的时候是F写好了，提交证明给V前」。
+#
+# 所以这一段是"提交给 V 之前"的那一遍：它只动依赖面（命题号 / 那一段的格式），
+# 绝不改证明正文（正文是 F 的署名作品）。洗出来的那一份才是交给 V、交给 D 携带的稿。
+
+#: 无引用而缺节 ⇒ 秘书补一个空节的读数。
+WASH_FILLED_EMPTY = "empty_by_secretary"
+#: 有引用而缺节 / 那一段读不懂 ⇒ 秘书按证明正文的 `cites` 重渲染那一节的读数
+#: （依赖面永远由代码生成，不由模型自由发挥）。
+WASH_RENDERED = "rendered_from_proof"
+#: 洗不动而退回 F 的受控码（"这一份先别交给 V"）。
+WASH_REFUSED_ROW = "dependency_row_unverified"
+#: 依赖段里的号不在册（退回 F）—— 与 B 那一侧同一个受控码。
+WASH_REFUSED_UNKNOWN = REFUSED_UNKNOWN_SOURCE
+
+
+def proof_steps(text: str) -> dict[int, dict[str, Any]]:
+    """`## 证明` 那一节里"第几步说了什么、引了哪些 `stmt:`"⇒ `{步号: {text, cites}}`。
+
+    步号取行首的 `N.`（F 的渲染器与真机手稿都是这个形状）。认不出步号的行不进
+    这张表：它是"没有编号的散文"，不是第几步。
+    """
+    import re as _re
+
+    body, _start = section_lines(text, SECTION_PROOF)
+    if not body:
+        return {}
+    out: dict[int, dict[str, Any]] = {}
+    for _ln, raw in body:
+        line = str(raw or "").strip()
+        if not line:
+            continue
+        hit = _re.match(r"^(\d+)\s*[.、)]\s*(.*)$", line)
+        if not hit:
+            continue
+        no = int(hit.group(1))
+        out[no] = {"text": hit.group(2).strip(), "cites": stmt_refs(hit.group(2))}
+    return out
+
+
+def _step_numbers(step_text: Any) -> list[int]:
+    """依赖段那一格"第 1、3 步"⇒ `[1, 3]`（认不出就是个空列表，不猜）。"""
+    import re as _re
+
+    return [int(x) for x in _re.findall(r"\d+", str(step_text or ""))]
+
+
+def _rows_from_proof(text: str) -> list[dict[str, Any]]:
+    """按证明正文的 `cites` 现渲染依赖行（洗稿重建那一节的唯一口径）。
+
+    与 `agent_f/manuscript.py::dependency_rows` 同一件事（一处渲染、一处解析；
+    这里用的是同一份 `proof_steps`），所以"F 渲染出来的"与"秘书重建出来的"同形。
+    """
+    steps = proof_steps(text)
+    rows: list[dict[str, Any]] = []
+    index: dict[str, int] = {}
+    for no in sorted(steps):
+        for cite in steps[no]["cites"]:
+            if cite in index:
+                rows[index[cite]]["steps"].append(no)
+                continue
+            index[cite] = len(rows)
+            rows.append({"stmt_id": cite, "quote": str(steps[no]["text"])[:80],
+                         "steps": [no], "path_group": 1})
+    for row in rows:
+        row["step"] = "第 " + "、".join(str(n) for n in row.pop("steps")) + " 步"
+    return rows
+
+
+def _replace_section(text: str, section_text: str) -> str:
+    """把 `## 依赖` 那一节整段换成 `section_text`（没有那一节就接在文末）。"""
+    raw = str(text or "").replace("\r\n", "\n")
+    lines = raw.split("\n")
+    _body, start = section_lines(raw)
+    if not start:
+        return raw.rstrip("\n") + "\n\n" + section_text
+    end = len(lines)
+    for i in range(start, len(lines)):
+        if lines[i].strip().startswith("#"):
+            end = i
+            break
+    head = lines[: start - 1]
+    tail = lines[end:]
+    while head and not head[-1].strip():
+        head.pop()
+    out = "\n".join(head + [""] + section_text.rstrip("\n").split("\n"))
+    rest = "\n".join(tail).strip("\n")
+    return out + ("\n\n" + rest if rest else "") + "\n"
+
+
+#: 洗过的那一份手稿里那一行元信息的固定前缀（B 侧据此读 `manuscript_washed=true`）。
+WASH_MARK = "- 依赖面洗稿："
+#: 洗稿元信息的行内键（渲染与解析共用，避免两处各写一个拼法）。
+WASH_MARK_ACTOR = "执行者"
+WASH_MARK_FILLED = "补节"
+WASH_MARK_TAG = "已洗"
+
+
+def mark_washed(text: str, *, actor: str = "", filled: str = "") -> str:
+    """在洗过的手稿里盖一行元信息（幂等：先删旧的同一行，再插到 `- 计划：` 之后）。
+
+    为什么要把"这一份被秘书洗过"写进正文而不是只存在调用方内存里：D 携带、B 读的
+    都是盘上那一份文件；读数必须跟着文件走，否则"B 读到的是不是洗过的那一版"
+    在收方那侧无从判断（而那正是这条链要回答的问题）。
+    """
+    raw = str(text or "").replace("\r\n", "\n")
+    lines = [ln for ln in raw.split("\n") if not ln.strip().startswith(WASH_MARK)]
+    parts = [f"{WASH_MARK_TAG}=true"]
+    if str(actor or "").strip():
+        parts.append(f"{WASH_MARK_ACTOR}={str(actor).strip()}")
+    if str(filled or "").strip():
+        parts.append(f"{WASH_MARK_FILLED}={str(filled).strip()}")
+    # 形如：`- 依赖面洗稿：已洗=true；执行者=secretary-F；补节=empty_by_secretary`
+    mark = WASH_MARK + "；".join(parts)
+    at = 0
+    for i, ln in enumerate(lines):
+        if ln.strip().startswith("- 计划："):
+            at = i + 1
+            break
+    else:
+        at = min(2, len(lines))
+    lines.insert(at, mark)
+    return "\n".join(lines)
+
+
+def manuscript_wash_reading(text: str) -> dict[str, Any]:
+    """读手稿里那一行洗稿元信息 ⇒ `{washed, actor, filled, mark}`（没有就 `washed=False`）。
+
+    三态纪律：没有那一行 = "这一份没被洗过"（`washed=False`），不是"洗过、没变化"。
+    """
+    for raw in str(text or "").replace("\r\n", "\n").split("\n"):
+        line = raw.strip()
+        if not line.startswith(WASH_MARK):
+            continue
+        body = line[len(WASH_MARK):]
+        cells = dict(
+            tuple(cell.split("=", 1)) for cell in body.split("；") if "=" in cell)
+        return {"washed": str(cells.get(WASH_MARK_TAG) or "").lower() == "true",
+                "actor": str(cells.get(WASH_MARK_ACTOR) or ""),
+                "filled": str(cells.get(WASH_MARK_FILLED) or ""),
+                "mark": line}
+    return {"washed": False, "actor": "", "filled": "", "mark": ""}
+
+
+def wash_dependency_section(text: str, *,
+                            statement_rows: Iterable[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    """秘书那一遍洗稿：只洗依赖面，不改证明正文（业主 2026-10-26 晚的裁定）。
+
+    三件事，按顺序：
+
+    1. `## 依赖` 那一节缺了、或者读不懂 ⇒ 由代码重渲染（有 `cites` 就按正文现算行，
+       一条都没有就落一个空节 + 一行"空表就是声明"）。读数 `deps_section_filled`：
+       `empty_by_secretary`（无引用补空）/ `rendered_from_proof`（按正文重渲染）；
+    2. 每一条依赖行的命题号逐条核：
+       - 不在册 ⇒ 洗不动，整份退回 F（`deps_refused=dependency_source_not_registered`，
+         点名第几行、哪个号）—— 这一份不许交给 V；
+       - 在册、而且它说"用在哪一步"与那一步 `cites` 对不上 ⇒ 能确定正确号时洗成那个号
+         （`deps_washing=[{line, from, to, why}]`），不能确定（那一步引了不止一条，
+         或一条都没引）⇒ 退回；
+       - 对得上 ⇒ 原样留下。
+    3. 洗过才重渲染那一节（没动过就逐字原样返回，`washed=False` —— 这一步是幂等的）。
+
+    ## 为什么用"那一步的 cites"当核实依据，而不是拿 label 与 F 的原话比
+    `quote` 那一格是 F 说"我在这一步怎么用它"，不是那条命题的正文 —— 拿它去和
+    label 比相似度，得到的是措辞的巧合，而不是判断（本仓最忌的"看起来像判据"）。
+    真正可判的是同一份手稿里两处对同一个号的说法：正文那一步引了谁、依赖表说引了谁。
+    它们对不上时，错的只能是依赖表那一格（正文是 F 的署名作品，秘书不改它）。
+
+    返回 `{checked, washed, text, deps_section_filled, deps_washing, deps_refused,
+    reason, section, rows, columns_ok}`：`text` 是洗过的那一份（退回时是原文）。
+    """
+    raw = str(text or "")
+    index = {str(r.get("stmt_id") or ""): dict(r) for r in statement_rows}
+    section = parse_dependency_section(raw)
+    out: dict[str, Any] = {
+        "checked": True, "washed": False, "text": raw,
+        "deps_section_filled": "", "deps_washing": [], "deps_refused": "",
+        "reason": "", "section": section, "rows": [],
+        # 认不出的行 / 列问题由 `section` 自己带（`problems`），这里只回放它的结论。
+        "columns_ok": not bool(section.get("problems")),
+    }
+    refs = stmt_refs(proof_body(raw))
+    filled = ""
+    rows: list[dict[str, Any]]
+    if not section.get("present"):
+        rows = _rows_from_proof(raw)
+        filled = WASH_RENDERED if rows else WASH_FILLED_EMPTY
+    elif section.get("problems"):
+        rows = _rows_from_proof(raw)
+        filled = WASH_RENDERED
+    else:
+        rows = [dict(r) for r in section.get("rows") or []]
+        # 那一节读得懂但是空的、而正文里确实有 `stmt:` 引用 ⇒ 表是漏写的：
+        # 按正文的 `cites` 重建（这是"能确定"的那一档，不猜）。
+        if not rows and refs:
+            rows = _rows_from_proof(raw)
+            if rows:
+                filled = WASH_RENDERED
+    steps = proof_steps(raw)
+    kept: list[dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
+
+    def _finding(*, line: int, quote: str, got: str, expected: str, why: str,
+                 how_to_fix: str) -> dict[str, Any]:
+        """一条"打回"的逐条说明（业主：哪一行 / 写的什么 / 该是什么 / 为什么 / 怎么改）。"""
+        return {"line": int(line), "quote": str(quote or ""), "got": str(got or ""),
+                "expected": str(expected or ""), "why": str(why or ""),
+                "how_to_fix": str(how_to_fix or "")}
+
+    # 结构都读不懂、而正文里又没有 `cites` 可以据以重建 ⇒ 打回（不许猜一行出来）。
+    # 注意"缺节 + 一条引用都没有"不是这一档：那是自足证明，秘书补一个空节即可。
+    if not rows and (refs or section.get("problems")):
+        reason = str(section.get("reason") or "").strip()
+        findings.append(_finding(
+            line=int(section.get("heading_line") or 0),
+            quote="（依赖段缺失或读不懂）",
+            got=f"present={bool(section.get('present'))}，problems={len(section.get('problems') or [])}",
+            expected="一张四列的表（引用 / 命题号 / 用在哪一步 / 路径号）",
+            why=(reason or f"手稿里没有 `{SECTION_HEADING}` 这一节，而证明正文里也没有可据以重建的 `stmt:` 引用"),
+            how_to_fix=(f"在证明手稿里补一节 `{SECTION_HEADING}`（四列表，列固定），"
+                        "或者在证明正文的每一步写明依据（`stmt:NNNNNN`）—— 依赖面由代码按它渲染")))
+    for row in rows:
+        sid = str(row.get("stmt_id") or "")
+        line = int(row.get("line") or 0)
+        quote = str(row.get("quote") or "")
+        anchor = index.get(sid)
+        if anchor is None:
+            findings.append(_finding(
+                line=line, quote=quote, got=f"stmt:{sid}",
+                expected="（无法确定 —— 请自己指认台账里真实的那一条）",
+                why=(f"第 {line} 行点名的 `stmt:{sid}` 不在册"
+                     f"（台账里现有 {len(index)} 条命题）"),
+                how_to_fix=(f"把 `stmt:{sid}` 改成台账里真实的一条在册命题号"
+                            "（`attack.step` 的返回值里有本轮可引 id 清单），并让正文那一步写明依据")))
+            continue
+        level = str(anchor.get("evidence_kind") or "").strip()
+        if not level or level not in S.EVIDENCE_KINDS:
+            findings.append(_finding(
+                line=line, quote=quote, got=f"stmt:{sid}（evidence_kind={level!r}）",
+                expected=f"{CITATION_MIN_LEVEL} 级及以上",
+                why=(f"第 {line} 行点名的 `stmt:{sid}` 档位读不到"
+                     f"（不在词表 {S.EVIDENCE_KINDS} 里）⇒ 读不到就不许引"),
+                how_to_fix=("先让 V 走查签「成立」（或形式化 / 穷举核过）把它升到 "
+                            f"{CITATION_MIN_LEVEL} 级，再引它")))
+            continue
+        if not citation_level_allowed(level):
+            findings.append(_finding(
+                line=line, quote=quote, got=f"stmt:{sid}（{level}）",
+                expected=f"{CITATION_MIN_LEVEL} 级及以上",
+                why=(f"第 {line} 行点名的 `stmt:{sid}` 现在是 {level}，"
+                     f"引用要求 {CITATION_MIN_LEVEL} 级及以上"),
+                how_to_fix=(f"先让它过 V 的逐行走审站到 {CITATION_MIN_LEVEL} 级"
+                            "（或换一条已经够格的命题），再来引它")))
+            continue
+        cited: list[str] = []
+        for no in _step_numbers(row.get("step")):
+            cited.extend((steps.get(no) or {}).get("cites") or [])
+        cited = list(dict.fromkeys(cited))
+        if not cited:
+            # 那一步没有 `cites`（前提步 / 没有编号）⇒ 这一层核不了号，
+            # 在读数的 `rows` 里如实标 unverified，不把它说成"核过了"。
+            kept.append({**row, "verified": "unverified"})
+            continue
+        if sid in cited:
+            kept.append({**row, "verified": "cited"})
+            continue
+        fixable = [x for x in cited if x in index]
+        if len(fixable) == 1:
+            # 能确定（那一步只点名了一条在册命题）⇒ 直接洗成它，留逐行记录。
+            out["deps_washing"].append({
+                "line": line, "from": sid, "to": fixable[0],
+                "why": (f"第 {row.get('step')} 的 `cites` 只点名了 `stmt:{fixable[0]}`，"
+                        f"而依赖表写的是 `stmt:{sid}` ⇒ 按正文洗成 `stmt:{fixable[0]}`")})
+            kept.append({**row, "stmt_id": fixable[0], "verified": "washed"})
+            continue
+        findings.append(_finding(
+            line=line, quote=quote, got=f"stmt:{sid}",
+            expected="（无法唯一确定 —— 请自己指认）",
+            why=(f"第 {line} 行写的是 `stmt:{sid}`，而第 {row.get('step')} 的 `cites` 是 "
+                 f"{['stmt:' + x for x in cited]} ⇒ 号与正文对不上"),
+            how_to_fix=("在依赖表里写清真正的那一条在册命题号，并让正文那一步的 `cites` 同步它")))
+    if findings:
+        out.update(
+            deps_refused=WASH_REFUSED_ROW,
+            deps_refused_findings=findings,
+            reason=("依赖面的命题号核实不过（这一份不许提交给 V，退回 F 重写）："
+                    + "；".join(str(f["why"]) for f in findings)),
+            rows=[dict(r) for r in rows])
+        return out
+    out["rows"] = kept
+    changed = bool(filled) or bool(out["deps_washing"])
+    if not changed:
+        # 已经洗过（幂等）：逐字返回，`washed=False` —— 读的人据此知道"这一遍没动它"。
+        return out
+    out.update(washed=True, deps_section_filled=filled,
+               text=_replace_section(raw, render_dependency_section(kept)))
+    out["section"] = parse_dependency_section(str(out["text"]))
+    return out
+
 
 
 def deps_missing_reading(*, proof_text: Any, deps_written: int,

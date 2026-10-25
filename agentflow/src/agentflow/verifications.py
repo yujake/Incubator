@@ -400,7 +400,11 @@ def apply_citation_gate(verdict: Mapping[str, Any],
       签不成，而"为什么签不成"在台账里逐字可读；
     - 只有 `unknown` ⇒ 改判「看不出来」（判不了不是一致，也不是"有毛病"：它是一条
       诚实的未定）；
-    - 只有 `weaker` ⇒ 结论不动（可签），但加一条 info 把"这一步只用到弱形式"记下来。
+    - 只有 `weaker` ⇒ 结论不动（可签），但加一条 info 把"这一步只用到弱形式"记下来；
+    - `gate["problem"]` 非空（依赖台账读不出来 ⇒ 这一档没查成）⇒ 与挡签同档：结论
+      从「成立」改判「看不出来」（`blocking` 里有实档才改「有毛病」）。它是"没查成"，
+      不是"没有引用"：改前只看 `blocking`，于是 `problem` 非空 + `citation_checks`
+      空时这一签照样判「成立」—— 那正是把"没查成"折成"没有引用"。
 
     改判时 `defect_step` 保留模型给的那一步（它可能仍是承重步）；模型没给就留 `None` ——
     这一档的缺陷是按"被引命题"定位的，不是按步号定位的（`parse_verdict` 因此允许
@@ -442,7 +446,7 @@ def apply_citation_gate(verdict: Mapping[str, Any],
                        f"{entry.get('stmt_id') or '（没有号）'} 的弱形式{tail}"
                        "；不等于错，但读的人要知道它没有被用满"),
         })
-    if blocking and out["verdict"] == "成立":
+    if (blocking or gate.get("problem")) and out["verdict"] == "成立":
         out["verdict"] = "有毛病" if defect else "看不出来"
         if out["verdict"] == "看不出来":
             out["defect_step"] = None
@@ -632,8 +636,12 @@ def citations_block(citations: Sequence[Mapping[str, Any]],
         lines.append(f"- 依赖台账读不出来（{problem}）⇒ 这一档没查成：没有材料就不能判"
                      "「一致」，判不了就写 unknown（它挡住「成立」）。")
     if not citations:
-        lines.append("- 这一份证明没有登记任何被引命题（`dependencies` 里没有指向本条命题"
-                     "这一份证明的 `stmt:` 依赖）⇒ `citation_checks` 给空数组。")
+        if not problem:
+            lines.append("- 这一份证明没有登记任何被引命题（`dependencies` 里没有指向本条命题"
+                         "这一份证明的 `stmt:` 依赖）⇒ `citation_checks` 给空数组。")
+        else:
+            lines.append("- 材料读不到时不许说「这一份证明没有引用」：那是把「没查成」说成"
+                         "「核过、没有引用」。")
         return "\n".join(lines)
     lines.append(f"- 登记了 {len(citations)} 条被引命题。每一条都要给一档结论："
                  "少给一条就按 unknown 算，而 unknown 挡住「成立」。")
@@ -1033,7 +1041,8 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
            verifier: str = "V", round_no: int | None = None,
            used_faces: Iterable[str] = (), submission_id: str = "",
            store: Any = None, proof_no: Any = None,
-           object_sha256: Any = "", object_path: Any = "") -> dict[str, Any]:
+           object_sha256: Any = "", object_path: Any = "",
+           citation_gate: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """把一次审校写进这个命题的台账（追加一行），返回那一行。
 
     编号 `v-NNNN` 由脚本按文件内顺序发（`draft/39` §3.21 五：与手稿编号、台账 id 同一套）。
@@ -1067,6 +1076,12 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     `verdict=成立` 的记录 ⇒ V 的 `verify_proof` 照报"签住了第 3 位"，而台账是 0 字节。
     现在撤回或追加失败 ⇒ `checked=False`、`re_sign_required=True`、`reason` 逐字写明
     "台账那一行被撤回 / 没写成"。
+
+    ## `citation_gate`：只在"这一档没查成"时写（2026-10-27）
+    `problem` 非空（依赖台账读不出来）⇒ 行上多一格 `citation_gate`
+    （`ok` / `problem` / `why` 三个读数）。为什么必须落盘：那时 `citation_checks` 常常
+    是空数组，而空数组什么都不挡 —— 读侧的硬闸（:func:`signs_bit3`）要能分开
+    "没查成"与"核过、没有引用"。查成了的行不写这一格（老行因此逐字节不变）。
     """
     # 证明号先判：坏号在写任何东西之前就拒（不落台账、不改位）。
     no = proof_no_strict(proof_no)
@@ -1116,6 +1131,16 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     if str(object_sha256 or "").strip():
         row["object_sha256"] = str(object_sha256).strip().lower()
         row["object_path"] = str(object_path or "").strip().replace("\\", "/")
+    #: 引用核实那一档的判据本行（`citation_gate` 的五格）。只在"这一档没查成"
+    #: （`problem` 非空）时写：那时 `citation_checks` 往往是空数组（没有条目可核），
+    #: 而空数组什么都不挡 —— 没有这一格，读侧（`signs_bit3`）就分不开"没查成"与
+    #: "核过、没有引用"。查成了的行一个字都不多写（老行因此逐字节不变）。
+    gate_problem = ""
+    if isinstance(citation_gate, Mapping):
+        gate_problem = str(citation_gate.get("problem") or "").strip()
+    if gate_problem:
+        row["citation_gate"] = {"ok": False, "problem": gate_problem,
+                                "why": str(citation_gate.get("why") or "")}
     if store is None:
         _append_verification(path, row)
         return row
@@ -1365,6 +1390,20 @@ def read_verification(root: str | Path, verification_id: str) -> dict[str, Any] 
     return hit[0]
 
 
+def signing_gate_problem(row: Mapping[str, Any]) -> str:
+    """台账那一行记下的"引用核实没查成"那一档（空串 = 没记，或记的是查成了）。
+
+    为什么单独一格：`problem`（依赖台账读不出来）不是 `citation_checks` 里的任何一档
+    —— 它是"这一档没查成"，而空数组只说明"没有条目可核"。两者折平之后，"没查成"就
+    长成了"没有引用"（那一版 `signs_bit3` 只读 `citation_checks`，于是这种行照样签）。
+    历史行没有 `citation_gate` 这一格 ⇒ 空串，读数逐字不变。
+    """
+    gate = row.get("citation_gate")
+    if not isinstance(gate, Mapping):
+        return ""
+    return str(gate.get("problem") or "").strip()
+
+
 def signs_bit3(row: Mapping[str, Any]) -> bool:
     """这一行能不能签五元位第 3 位（§3.21 五：`成立` 且没有未解决的 error）。
 
@@ -1372,10 +1411,16 @@ def signs_bit3(row: Mapping[str, Any]) -> bool:
     `unrelated` / `inadmissible` / `unknown`），这一签就不许落地。硬闸放在这里而不是只
     放在写路径上，是因为"读者眼里的成立"由这一格读出来 —— 手写一条成立行与 V 自己判了
     成立没有区别，两者都得过同一道闸。历史行没有 `citation_checks` 这一格 ⇒ 不受影响。
+
+    同一道闸也认 `citation_gate.problem`（`:func:`signing_gate_problem`）：台账里记着
+    "依赖台账读不出来"的行，哪怕 `citation_checks` 是空数组（空数组什么都不挡），也不许
+    签 —— "没查成"与"核过、没有引用"必须分开。
     """
     if str(row.get("verdict") or "") != "成立":
         return False
     if int(row.get("unresolved_errors") or 0) != 0:
+        return False
+    if signing_gate_problem(row):
         return False
     return not citation_blocks(row)
 

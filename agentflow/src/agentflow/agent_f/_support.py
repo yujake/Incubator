@@ -43,7 +43,13 @@ class PlanError(ToolError):
     永远不再命中、退化成一条泛泛的错误。两者的处置不同是有意的。）
     """
 TERMINAL_STATUSES = AT.TERMINAL_STATUSES
-UNWIRED_OWNERS = ("C", "D", "F")
+#: 子目标的 owner 里"框架没有可自动调用的推理入口"的那几个（`_deploy` 据它落
+#: `dead_end(缺工具)`）。F 不在这里（业主 2026-10-26 晚的裁定：「没有默认开，
+#: 这个就是F的工作方式，没有开关的说法」）—— F 出场就有推理缝，所以"F 可能未接线"
+#: 这条路从词表上就不存在；它的 `owner="F"` 分支在 `_deploy` 里单独一条。
+#: 缝被打桩成 None 时（只允许出现在负控测试里）F 走 `_seam_missing_round`，
+#: 那一支明确报"缺缝"，不会退化成静默的 `no_change`。
+UNWIRED_OWNERS = ("C", "D")
 ACTIONS = (
     "run_experiment",
     "submit_search_request",

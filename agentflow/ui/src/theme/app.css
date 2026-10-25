@@ -523,6 +523,38 @@ h3 {
   color: var(--dsw-alias-label-secondary);
 }
 
+/* 三态徽标（业主 2026-10-26：在飞 / 待机 / 静默，外加"没读到"那一档）。
+   颜色三档分开，但不靠色相单独承载语义 —— 每一档的文字本身就是读数：
+   - 在飞 = 强调色（正在工作，唯一值得先看的那一排）；
+   - 待机 = 中性偏冷（次要标签色 + 一层底色：它不闲着，但也不在跑）；
+   - 静默 = 灰（三级标签色：读到了、它确实收工了）；
+   - 未读到 = 警示色（判不了不等于静默，这一档必须刺眼）。 */
+.roster-state-flying {
+  color: var(--dsw-alias-brand-primary);
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.roster-state-standby {
+  color: var(--dsw-alias-label-secondary);
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.roster-state-silent {
+  color: var(--dsw-alias-label-tertiary);
+  border-color: var(--dsw-alias-border-l2);
+}
+
+.roster-state-unknown {
+  color: var(--dsw-alias-state-warn-primary);
+  border-color: var(--dsw-alias-state-warn-primary);
+}
+
+/* 顶部那一行三态合计。 */
+.roster-states {
+  margin: var(--sp-1) 0;
+}
+
 /* 已销号节点的明细里那一句「收件箱不再显示」的说明（与读数同一档字号）。 */
 .roster-retired-note {
   font-size: var(--fs-1);

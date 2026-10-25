@@ -484,6 +484,8 @@ def run_cancellable(
     timeout_sec: float,
     token: "CancelToken | None" = None,
     stdin_devnull: bool = True,
+    workspace: str | None = None,
+    purpose: str = "",
 ) -> dict:
     """起一个可被取消的子进程，返回与 `formalgw._default_run` 同形的 dict。
 
@@ -496,63 +498,93 @@ def run_cancellable(
     token 的出生表摘掉。取消不靠轮询：`CancelToken.cancel()` 会主动 kill
     已注册的进程（见 `_kill_spawned`），所以这个函数等到的是"进程被杀"，
     而不是"下一次轮询发现取消了"。
+
+    ## 程序计时器（业主 2026-10-27 第一条裁定）
+
+    「运行一个程序时会自动启动一个计时器，程序运行完成时计时器会返回」。所以起进程
+    之前先 `clock.program_span(...)` 登记一条 `kind="program"` 的计时器，进程结束时
+    它收口并带上结局（`exited` / `timed_out` / `killed`）、耗时与退出码。读数在
+    `clock.programs(workspace)`：`program` / `argv_digest` / `pid` / `state` /
+    `elapsed_sec` / `exit_code`。
+
+    `workspace` 不给时用 `clock.current_workspace()`（循环/装配期挂上的那个）；
+    两者都没有时程序照跑，但会留一条"没登记"的读数（`programs()["unbooked"]`）。
     """
     tok = token if token is not None else _CURRENT_TOKEN.get()
     if tok is not None:
         tok.raise_if_cancelled()  # 已经取消了就别起了
-    kwargs: dict[str, Any] = {}
-    if stdin_devnull:
-        kwargs["stdin"] = subprocess.DEVNULL
-    proc = subprocess.Popen(
-        list(cmd), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, encoding="utf-8", errors="replace", **kwargs,
-    )
-    if tok is not None:
-        tok._register_spawned(proc)
-    try:
-        # `R5-F2`：等待必须是分段的，且每一段之后都看一次"这次取消了吗"。
-        # 旧版只有一次 `communicate(timeout=timeout_sec)`，它有两个后果：
-        #   ① `deadline` 到点与预算耗尽这两条惰性取消路径下，新起的子进程
-        #      没有人会 kill，于是这个函数一直等到子进程自己结束
-        #      （实测 `deadline=0.20s` + `sleep(30)` ⇒ 阻塞 30.06 秒）；
-        #   ② 显式取消时，返回时刻取决于 kill 何时让 `communicate` 解开 ——
-        #      而它的超时上限是整个 `timeout_sec`。
-        # 现在：每段最多等 `_CANCEL_POLL_SEC`，段后先看取消、再看是不是到点了。
-        waited = 0.0
-        out = err = ""
-        timed_out = False
-        while True:
-            slice_sec = _CANCEL_POLL_SEC
-            if timeout_sec is not None:
-                slice_sec = min(_CANCEL_POLL_SEC, max(0.001, timeout_sec - waited))
-            try:
-                out, err = proc.communicate(timeout=slice_sec)
-                break
-            except subprocess.TimeoutExpired:
-                waited += slice_sec
-                if tok is not None and tok.cancelled:
-                    _kill(proc)
-                    out, err = proc.communicate()
-                    return {"exit_code": None, "stdout": out or "", "stderr": err or "",
-                            "timed_out": False, "cancelled": True}
-                if timeout_sec is not None and waited >= timeout_sec:
-                    timed_out = True
-                    _kill(proc)
-                    out, err = proc.communicate()
-                    break
-        if timed_out:
-            return {"exit_code": None, "stdout": out or "", "stderr": err or "",
-                    "timed_out": True, "cancelled": False}
-        if tok is not None and tok.cancelled:
-            # 取消是在 `communicate` 返回前发生的（kill 由 `cancel()` 发出）⇒
-            # 退出码是 -15/-9 那一类，不是检查器对这份输入给出的结论。
-            return {"exit_code": None, "stdout": out or "", "stderr": err or "",
-                    "timed_out": False, "cancelled": True}
-        return {"exit_code": int(proc.returncode), "stdout": out or "",
-                "stderr": err or "", "timed_out": False, "cancelled": False}
-    finally:
+    from . import clock as CLK
+
+    program = str(cmd[0]) if cmd else ""
+    with CLK.program_span(program=program, argv=list(cmd),
+                          workspace=(workspace or CLK.current_workspace() or None),
+                          where="cancellation.run_cancellable",
+                          purpose=(purpose or "等外部程序退出（可取消的子进程）")) as prog:
+        kwargs: dict[str, Any] = {}
+        if stdin_devnull:
+            kwargs["stdin"] = subprocess.DEVNULL
+        proc = subprocess.Popen(
+            list(cmd), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace", **kwargs,
+        )
+        prog.attach_pid(int(getattr(proc, "pid", 0) or 0) or None)
         if tok is not None:
-            tok._unregister_spawned(proc)
+            tok._register_spawned(proc)
+        try:
+            # `R5-F2`：等待必须是分段的，且每一段之后都看一次"这次取消了吗"。
+            # 旧版只有一次 `communicate(timeout=timeout_sec)`，它有两个后果：
+            #   ① `deadline` 到点与预算耗尽这两条惰性取消路径下，新起的子进程
+            #      没有人会 kill，于是这个函数一直等到子进程自己结束
+            #      （实测 `deadline=0.20s` + `sleep(30)` ⇒ 阻塞 30.06 秒）；
+            #   ② 显式取消时，返回时刻取决于 kill 何时让 `communicate` 解开 ——
+            #      而它的超时上限是整个 `timeout_sec`。
+            # 现在：每段最多等 `_CANCEL_POLL_SEC`，段后先看取消、再看是不是到点了。
+            waited = 0.0
+            out = err = ""
+            timed_out = False
+            while True:
+                slice_sec = _CANCEL_POLL_SEC
+                if timeout_sec is not None:
+                    slice_sec = min(_CANCEL_POLL_SEC, max(0.001, timeout_sec - waited))
+                t_call = time.monotonic()
+                try:
+                    out, err = proc.communicate(timeout=slice_sec)
+                    _note_process_wait(time.monotonic() - t_call)
+                    break
+                except subprocess.TimeoutExpired:
+                    _note_process_wait(time.monotonic() - t_call)
+                    waited += slice_sec
+                    if tok is not None and tok.cancelled:
+                        _kill(proc)
+                        out, err = proc.communicate()
+                        prog.finish(outcome="killed")
+                        return {"exit_code": None, "stdout": out or "", "stderr": err or "",
+                                "timed_out": False, "cancelled": True,
+                                "program_timer": prog.reading()}
+                    if timeout_sec is not None and waited >= timeout_sec:
+                        timed_out = True
+                        _kill(proc)
+                        out, err = proc.communicate()
+                        break
+            if timed_out:
+                prog.finish(outcome="timed_out")
+                return {"exit_code": None, "stdout": out or "", "stderr": err or "",
+                        "timed_out": True, "cancelled": False,
+                        "program_timer": prog.reading()}
+            if tok is not None and tok.cancelled:
+                # 取消是在 `communicate` 返回前发生的（kill 由 `cancel()` 发出）⇒
+                # 退出码是 -15/-9 那一类，不是检查器对这份输入给出的结论。
+                prog.finish(outcome="killed")
+                return {"exit_code": None, "stdout": out or "", "stderr": err or "",
+                        "timed_out": False, "cancelled": True,
+                        "program_timer": prog.reading()}
+            prog.finish(outcome="exited", exit_code=int(proc.returncode))
+            return {"exit_code": int(proc.returncode), "stdout": out or "",
+                    "stderr": err or "", "timed_out": False, "cancelled": False,
+                    "program_timer": prog.reading()}
+        finally:
+            if tok is not None:
+                tok._unregister_spawned(proc)
 
 
 def _kill(proc: "subprocess.Popen") -> None:
@@ -560,4 +592,20 @@ def _kill(proc: "subprocess.Popen") -> None:
     try:
         proc.kill()
     except Exception:  # noqa: BLE001 - 已经退出 / 句柄关了，都无所谓
+        pass
+
+
+def _note_process_wait(elapsed_sec: float) -> None:
+    """把"这一次等子进程等了多久"记进主时钟那本账（旁路：记账炸了不许带坏等待）。
+
+    阻塞方式刻意不动：`communicate(timeout=…)` 是"进程一退就返回"，换成 sleep 会把
+    取消语义（段间看 token）一起毁掉。记的是实测耗时，不是 `slice_sec` 那个上限 ——
+    两者相等只是巧合，进程早退时前者远小于后者。
+    """
+    try:
+        from . import clock as CLK
+
+        CLK.note_process_wait(elapsed_sec, where="cancellation.run_cancellable",
+                              waited_for="communicate(timeout=slice_sec)")
+    except Exception:  # noqa: BLE001 - 旁路
         pass

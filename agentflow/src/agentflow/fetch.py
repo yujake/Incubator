@@ -364,7 +364,12 @@ class _RateLimiter:
             if last is not None:
                 wait = self.min_interval - (now - last)
                 if wait > 0:
-                    time.sleep(wait)
+                    from . import clock as CLK
+
+                    CLK.await_io(wait, "等同一主机的最小请求间隔（礼貌限速）",
+                                 kind="rate_limit",
+                                 where="fetch._RateLimiter.acquire",
+                                 waited_for=str(bucket))
                     now = time.monotonic()
             self._last[bucket] = now
 
@@ -390,6 +395,14 @@ def _retry_after_seconds(headers: Any) -> float | None:
 def _backoff_delay(attempt: int) -> float:
     """指数退避 + 抖动。抖动是为了让并发下载在限流恢复后不要同时猛冲。"""
     return min(2.0 ** attempt, 30.0) * (0.8 + 0.4 * random.random())
+
+
+def _default_sleep(seconds: float) -> None:
+    """退避重试的默认等待：真睡，并记进主时钟那本账（`clock.await_io`）。"""
+    from . import clock as CLK
+
+    CLK.await_io(seconds, "下载失败后按退避重试（同一个源再试一次）",
+                 kind="retry", where="fetch._download_via")
 
 
 class _ConnectThenReadHTTPConnection(http.client.HTTPConnection):
@@ -581,7 +594,7 @@ class HttpDownloader:
         extra_headers: Mapping[str, str] | None = None,
         allow_private_hosts: bool = False,
         opener: Callable[..., Any] | None = None,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self.mirrors = _normalize_mirrors(mirrors)
         self.min_interval = max(0.0, float(min_interval))
@@ -594,7 +607,7 @@ class HttpDownloader:
         self.extra_headers = dict(extra_headers or {})
         self.allow_private_hosts = bool(allow_private_hosts)
         self._opener = opener or _split_timeout_opener(self.connect_timeout, self.read_timeout)
-        self._sleep = sleep
+        self._sleep = sleep if sleep is not None else _default_sleep
         self._limiter = _RateLimiter(self.min_interval)
         #: 观测计数，自检与排障用。
         self.stats: dict[str, int] = {"attempts": 0, "mirror_used": 0, "failures": 0}

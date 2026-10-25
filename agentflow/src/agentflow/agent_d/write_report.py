@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from ._support import CONFIDENCE_LABELS, C_NO_EVIDENCE, Mapping, Path, S, _conf_label, _digest, json
+from ._support import Any, CONFIDENCE_LABELS, C_NO_EVIDENCE, Mapping, Path, S, _conf_label, _digest, json
 
 class _WriteReport:
     def write_report(self, out_path: str | Path | None = None) -> str:
@@ -424,7 +424,38 @@ class _WriteReport:
         # 这一节就是那份"携带单"（渲染在 `depsection.render_carried_section`，B 用
         # `depsection.read_carried_manuscript` 读同一节）：写在 D 自己渲染出来的报告里
         # 而不是靠模型记着去传 —— 模型忘一次，依赖面就静默地 0 行。
-        lines.extend(self._carried_manuscripts_section())
+        carried_rows, carried_note = self._carried_manuscripts()
+        carried_missing = self._carried_missing_reading(carried_rows)
+        from .. import depsection as _DS
+
+        lines.extend(_DS.render_carried_section(carried_rows, note=carried_note)
+                     .rstrip("\n").split("\n"))
+        lines.append("")
+        # ---- 携带单缺口的读数（2026-10-27）：不许静默 -------------------------------
+        #
+        # 改前真机形态：D 手写 `reports/RESEARCH.md`（自由格式，没有携带单）⇒ B 那一侧
+        # 读到的是"没有可携带的稿"，而那与"这条证明确实自足"在盘上长得一样，
+        # `dependencies` 于是 0 行而没有任何一处报出这件事。现在它是一行写在报告里
+        # 的读数（`carried_missing`），并且进 `last_delivery`。
+        if carried_missing.get("carried_missing"):
+            lines.append(f"- 携带单缺口（`carried_missing`）：{carried_missing.get('reason')}")
+            lines.append("")
+
+        text = "\n".join(lines) + "\n"
+        path.write_text(text, encoding="utf-8")
+        self.last_report_path = path
+        # ---- D 直接把稿交给 B（业主 2026-10-26 晚：「D 到 B 没有路吗？加」） --------
+        #
+        # 位置在报告落盘之后：B 那一侧要按携带单（这份报告里的三列表）核对"这份稿是
+        # D 带来的"，而核对读的是盘上的文件。这一笔是 D 的代码行为，不是模型的 args ——
+        # 于是"携带"在真机路径上是必走的（判据见 tests/test_d_to_b_carried_road.py）。
+        # 携带单缺口的读数挂在这一笔调用旁边（刻意不改 `_deliver_carried_to_b` 的签名：
+        # 那条方法有既有判据按 `(self, rows)` 打桩，加形参会把"递没递"的判据变成
+        # `TypeError` —— 那是判据坏了，不是实现坏了）。
+        self.last_carried_missing = dict(carried_missing)
+        delivery = self._deliver_carried_to_b(carried_rows)
+        self.last_delivery = delivery
+        lines.extend(self._delivery_section(delivery))
         lines.append("")
 
         text = "\n".join(lines) + "\n"
@@ -432,8 +463,8 @@ class _WriteReport:
         self.last_report_path = path
         return str(path)
 
-    def _carried_manuscripts_section(self) -> list[str]:
-        """D 交研究手稿给 B 时"一并带上的 F 证明手稿"⇒ 携带单那几行（机读的三列表）。
+    def _carried_manuscripts(self) -> tuple[list[dict], str]:
+        """D 交研究手稿给 B 时"一并带上的 F 证明手稿" ⇒ `(携带行, 附注)`。
 
         ## 为什么由代码生成，而不是让模型在报告里写
         模型写手稿（`reports/RESEARCH.md`）是自由的 markdown，它忘一次"把 F 的稿带上"，
@@ -450,14 +481,12 @@ class _WriteReport:
 
         from .. import depsection as _DS
 
-        head = ["## 携带的证明手稿（D→B）", ""]
         try:
             statements = [dict(r) for r in self.store.rows("statements")]
         except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有稿"
-            return head + [
-                f"（`statements` 这一趟读不出来：{type(exc).__name__}: {exc} ⇒ 这张携带单"
-                "**没有生成**：那是「读不到」，不是「没有可携带的稿」。B 读它之前先让 D 重跑"
-                "一次 `write_report`。）", ""]
+            return [], (f"（`statements` 这一趟读不出来：{type(exc).__name__}: {exc} ⇒ 这张携带单"
+                        "没有生成：那是「读不到」，不是「没有可携带的稿」。B 读它之前先让 D 重跑"
+                        "一次 `write_report`。）")
         rows: list[dict] = []
         seen: set[str] = set()
         for row in statements:
@@ -484,5 +513,170 @@ class _WriteReport:
                     f"{_DS.CARRIED_LIMIT} 条）—— 它们仍在盘上，B 可以按约定路径读"
                     "（`depsection.read_manuscript`）。")
             rows = rows[:_DS.CARRIED_LIMIT]
-        section = _DS.render_carried_section(rows, note=note)
-        return section.rstrip("\n").split("\n")
+        return rows, note
+
+    def _carried_missing_reading(self, carried_rows: list[dict]) -> dict:
+        """携带单缺口的读数（`carried_missing`）：这张单是空的而账上明明有依赖。
+
+        ## 为什么要有这一格（2026-10-27，三件里的第三件：兜底审计）
+        改前真机（sylow 那一趟）：D 用 `fs.write` 手写了 `reports/RESEARCH.md` ——
+        自由格式、没有 `## 携带的证明手稿` 那一节 ⇒ B 读到"没有可携带的稿"，而
+        那个形态与"这条证明确实自足"在盘上一模一样：`dependencies` 0 行、
+        `manuscript_source=none`，没有任何一处把"这单是空的"报出来。
+
+        判据（与业主口径逐字对齐："研究报告里缺携带单且 statement 引用了在册命题"）：
+        携带单 0 行、而 `statements` 里存在引用了在册命题的行（`derived_from`，
+        或证明正文里的 `stmt:` 引用）⇒ `carried_missing=True` 并逐条点名那几个命题号。
+        携带单非空 ⇒ 它是 `False`（这一趟不缺）；读不到台账 ⇒ `checked=False` 且
+        明确写"读不到"，绝不折成"不缺"。
+
+        返回 `{carried_missing, checked, statement_ids, reason}`。
+        """
+        rows = [dict(r) for r in (carried_rows or [])]
+        if rows:
+            return {"carried_missing": False, "checked": True, "statement_ids": [],
+                    "reason": f"携带单上有 {len(rows)} 条（这一趟不缺）"}
+        from .. import depsection as _DS
+
+        try:
+            statements = [dict(r) for r in self.store.rows("statements")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有依赖"
+            return {"carried_missing": False, "checked": False, "statement_ids": [],
+                    "reason": (f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                               "这一趟判不出携带单缺不缺（那是「读不到」，不是「不缺」）")}
+        on_ledger = {str(r.get("stmt_id") or "") for r in statements if str(r.get("stmt_id") or "")}
+        refs: list[str] = []
+        for row in statements:
+            sid = str(row.get("stmt_id") or "")
+            used = [str(x) for x in (row.get("derived_from") or [])]
+            used += _DS.stmt_refs(str(row.get("proof_text") or ""))
+            hit = [x for x in used if x in on_ledger and x != sid]
+            if hit:
+                refs.append(f"{sid}→{'、'.join(sorted(set(hit)))}")
+        if not refs:
+            return {"carried_missing": False, "checked": True, "statement_ids": [],
+                    "reason": "携带单是空的，而账上没有任何一条在册命题被引用（自足 ⇒ 不缺）"}
+        return {
+            "carried_missing": True, "checked": True,
+            "statement_ids": sorted({x for item in refs for x in item.split("→")[1].split("、")}),
+            "reason": ("携带单是空的，而账上这几条命题引用了在册命题："
+                       + "、".join(refs)
+                       + " ⇒ 这份研究手稿缺携带单（缺的不是『没有可携带的稿』，是那几份稿"
+                       "没有随报告交给 B）"),
+        }
+
+    def _deliver_carried_to_b(self, rows: list[dict]) -> dict:
+        """把携带单上每一条 F 证明手稿递给 B 登记（收方读稿落依赖面）。
+
+        ## 为什么这条调用必须写在 D 的代码里（业主 2026-10-26 晚）
+        「D 到 B 没有路吗？加」「让携带是代码行为、不是模型记性」。改前 D 只能 `summon`
+        派 B、args 由模型产出 ⇒ 携带这条链只能退化成"报告里由代码生成一张携带单，
+        B 自己去读"，而 B 从来没有被 D 这样调用过（`dependencies` 真机 0 行）。
+
+        这一笔交过去的东西（逐字就是 `AgentB.register_statement` 的入参）：
+        `statement_full`（在册那一行的完整命题）、`proofs`（那一行的证明清单）、
+        `proof_text`（canonical 正文）、`derived_from`（承重链）、
+        `proof_manuscript`（盘上那份手稿的正文）—— B 的读数里会写
+        `manuscript_source=carried_by_D`（它按这份报告里的携带单核 sha 之后才认）。
+
+        三态：没有 B（直调 `AgentD(store)`）⇒ `checked=False` + why；B 收下 / 拒收
+        逐条记（拒信原文进 `error`），绝不把"没递"写成"递了"。
+        """
+        out: dict[str, Any] = {"checked": False, "rows": 0, "delivered": 0,
+                               "results": [], "why": "", "report": "",
+                               # 携带单缺口的读数（2026-10-27）：这一趟不管递没递出去，
+                               # "这张单是空的而账上有依赖"这件事都跟着读数走，不许静默。
+                               "carried_missing": bool(
+                                   (getattr(self, "last_carried_missing", {}) or {}).get("carried_missing")),
+                               "carried_missing_reason": str(
+                                   (getattr(self, "last_carried_missing", {}) or {}).get("reason") or "")}
+        if self.b is None:
+            out["why"] = ("这一趟手上没有 B 的入口（直调 `AgentD(store)` 时没有 `b=`）⇒ "
+                          "携带单生成了，但没有递出去；真机路径由 `specs/d.py::_build` 在"
+                          "构造期绑进同一个 B 实例")
+            return out
+        out["checked"] = True
+        out["rows"] = len(rows)
+        for row in rows:
+            sid = str(row.get("statement_id") or "")
+            rec: dict[str, Any] = {"statement_id": sid, "ok": False, "stmt_id": "",
+                                   "deps_written": 0, "manuscript_source": "",
+                                   "manuscript_washed": False, "kind": "", "error": ""}
+            stmt_row = None
+            try:
+                stmt_row = next((dict(r) for r in self.store.rows("statements")
+                                 if str(r.get("stmt_id") or "") == sid), None)
+            except Exception as exc:  # noqa: BLE001 —— 读不到要说出来
+                rec["error"] = f"读不到 statements：{type(exc).__name__}: {exc}"
+            text = ""
+            try:
+                text = (Path(self.store.root) / str(row.get("path") or "")).read_text(
+                    encoding="utf-8")
+            except OSError as exc:
+                rec["error"] = (f"读不到手稿 {row.get('path')}（{type(exc).__name__}: {exc}）"
+                                " ⇒ 这一条递不出去")
+            if stmt_row is not None and text.strip() and not rec["error"]:
+                proofs = [{"proof_no": int(e.get("proof_no") or 0),
+                           "text": str(e.get("text") or "")}
+                          for e in (stmt_row.get("proofs") or []) if isinstance(e, Mapping)]
+                try:
+                    got = dict(self.b.register_statement(
+                        statement_full=str(stmt_row.get("statement_full") or ""),
+                        statement_text=str(stmt_row.get("statement_text") or ""),
+                        proof_text=str(stmt_row.get("proof_text") or ""),
+                        proofs=proofs or None,
+                        derived_from=[str(x) for x in (stmt_row.get("derived_from") or [])],
+                        origin=str(stmt_row.get("origin") or "own_result"),
+                        kind=str(stmt_row.get("kind") or "lemma"),
+                        evidence_kind=str(stmt_row.get("evidence_kind") or "heuristic"),
+                        quote_reason=str(stmt_row.get("quote_reason") or ""),
+                        # 手稿正文随这一笔递过去（B 会按携带单核 `carried_by_D`）。
+                        proof_manuscript=text,
+                    ) or {})
+                except Exception as exc:  # noqa: BLE001 —— B 炸了也要如实记
+                    rec["error"] = f"B 的登记入口抛了：{type(exc).__name__}: {exc}"
+                else:
+                    rec.update(ok=bool(got.get("ok")),
+                               stmt_id=str(got.get("stmt_id") or ""),
+                               deps_written=int(got.get("deps_written") or 0),
+                               manuscript_source=str(got.get("manuscript_source") or ""),
+                               manuscript_washed=bool(got.get("manuscript_washed")),
+                               kind=str(got.get("kind") or ""),
+                               error=str(got.get("error") or ""))
+                    if rec["ok"]:
+                        out["delivered"] = int(out["delivered"]) + 1
+            out["results"].append(rec)
+        if not rows:
+            out["why"] = "携带单是空的（盘上没有任何一条按命号命名的 F 证明手稿）"
+        return out
+
+    def _delivery_section(self, delivery: Mapping[str, Any]) -> list[str]:
+        """这一趟"把稿交给 B"的回执（写进报告：递了没递、B 落了几条依赖边）。
+
+        为什么写进报告而不是只留在内存：D 的报告是这一趟交接的唯一书面痕迹；
+        "D 递了、B 收下了几条边"必须能被下一个人从盘上读到，而不是去翻会话记录。
+        """
+        lines = ["## D 交给 B 的登记回执（D→B）", ""]
+        if delivery.get("carried_missing"):
+            lines.append(f"- 携带单缺口（`carried_missing`）："
+                         f"{delivery.get('carried_missing_reason') or '（原因缺失）'}")
+            lines.append("")
+        if not delivery.get("checked"):
+            lines.append(f"（这一趟没有递交：{delivery.get('why') or '（原因缺失）'}）")
+            return lines
+        results = [dict(x) for x in (delivery.get("results") or [])]
+        lines.append(f"D 的这一笔代码调用（`AgentB.register_statement`）覆盖 "
+                     f"{int(delivery.get('rows') or 0)} 条携带行，B 收下 "
+                     f"{int(delivery.get('delivered') or 0)} 条。")
+        lines.append("")
+        lines.append("| 命题号 | B 的结果 | 依赖边 | 稿的来源 | 秘书洗过 | 拒因 |")
+        lines.append("|---|---|---|---|---|---|")
+        for r in results:
+            lines.append(
+                f"| stmt:{r.get('statement_id')} | {'收下' if r.get('ok') else '拒收'} | "
+                f"{int(r.get('deps_written') or 0)} | {r.get('manuscript_source') or '-'} | "
+                f"{'是' if r.get('manuscript_washed') else '否'} | "
+                f"{_digest(r.get('kind') or r.get('error'), 120) or '-'} |")
+        if not results:
+            lines.append("| （空） | - | 0 | - | - | - |")
+        return lines

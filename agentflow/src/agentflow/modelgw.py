@@ -719,6 +719,14 @@ def urllib_get(url: str, headers: Mapping[str, str],
         raise ConnectionError(f"{type(exc.reason).__name__}: {exc.reason}") from exc
 
 
+def _default_sleep(seconds: float) -> None:
+    """模型调用失败后按退避重试的默认等待：真睡，并记进主时钟那本账。"""
+    from . import clock as CLK
+
+    CLK.await_io(seconds, "模型调用失败后按退避重试（同一个网关）",
+                 kind="retry", where="modelgw.ModelGateway")
+
+
 class ModelGateway:
     """一次调用的执行者：组请求 → 过传输 → 解析 → 三态结局。
 
@@ -731,7 +739,7 @@ class ModelGateway:
                  clock: Callable[[], float] | None = None) -> None:
         self.spec = spec
         self._transport = transport or urllib_transport
-        self._sleep = sleep or time.sleep
+        self._sleep = sleep if sleep is not None else _default_sleep
         self._clock = clock or time.monotonic
 
     # ---------------------------------------------------------------- 请求组装

@@ -500,7 +500,7 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
             continue
         item = items.setdefault(name, {"name": name, "role": str(r.get("role") or ""),
                                        "brief": "", "brief_source": "", "task_id": "",
-                                       "retired": False})
+                                       "task_text": "", "retired": False})
         kind = str(r.get("kind") or "")
         if str(r.get("role") or ""):
             item["role"] = str(r.get("role") or "")
@@ -520,6 +520,12 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
             item["retired_branch"] = str(r.get("branch") or "")
         elif kind == "keep_alive":
             item["keep_alive"] = bool(r.get("value"))
+        # 任务原文（业主 2026-10-27：「自动以 task 填充目的」）：它是父派下来的那件事
+        # 本身，`add` 与 `bind` 两行都可能带着它（复用支只写 bind）。改前落的行没有
+        # 这一格 => 空格（不许拿 brief 冒充：brief 是 60 字摘要，不是原文）。
+        text = str(r.get("task_text") or "")
+        if text:
+            item["task_text"] = text
     return [items[k] for k in sorted(items)]
 
 
@@ -556,6 +562,21 @@ BRIEF_MAX = 60
 #: 句末标点（取"第一句"时截到它为止，含它）。刻意不收 `.`：小数（`1.5`）、
 #: 文献号、相对路径（`../x`）里的点会把一句话切碎，而任务原文的句末几乎总是这几个。
 _SENTENCE_END: tuple[str, ...] = ("。", "！", "？", "!", "?", "；", ";")
+
+
+#: 名册里保存的任务原文上限（业主 2026-10-27：「自动以 task 填充目的」+「截断到 200 字」）。
+TASK_TEXT_MAX: int = 200
+
+
+def _task_text(task: Any) -> str:
+    """任务原文的落盘形态：折平空白 + 截断到 `TASK_TEXT_MAX`。
+
+    与 `brief_from_task` 的差别是口径本身：那一格是"给退役时认人的一句摘要"（60 字、
+    取第一句），这一格是"父派下来的那件事"（原文，200 字）。两件不许互相顶替 ——
+    把摘要当原文会让"等它的目的"读起来像另一件事。
+    """
+    flat = " ".join(str(task or "").split())
+    return flat[:TASK_TEXT_MAX]
 
 
 def brief_from_task(task: str, *, limit: int = BRIEF_MAX) -> str:
@@ -854,6 +875,26 @@ def _dep_label(step: Mapping[str, Any]) -> str:
     return "依赖"
 
 
+def _dep_step_key(row: Mapping[str, Any]) -> tuple:
+    """一条依赖边的身份（幂等判据：同一使用点 + 路径组 + 来源 + 标签 ⇒ 同一条边）。
+
+    为什么需要它：`dependencies` 没有"唯一键"这回事（一张账本表，允许同一对
+    (使用点, 来源) 出现在不同路径组里 —— 多证明模型）。而"同一份手稿再携带一次"
+    必须不重复落边，所以身份要按"这条边说的是什么"来算，不能按 `dep_id`（每次
+    分配都会变）。
+    """
+    return (
+        str(row.get("used_by") or ""),
+        int(row.get("path_group") or 1),
+        str(row.get("kind") or ""),
+        str(row.get("source_stmt_id") or ""),
+        str(row.get("source_lit_id") or ""),
+        str(row.get("source_experiment_id") or ""),
+        str(row.get("source_doc_id") or ""),
+        str(row.get("label") or ""),
+    )
+
+
 def _deps_missing_reading(*, proof_text: Any, deps_written: int,
                           derived_from: Any = (), stmt_id: str = "",
                           proof_no: int = 0, scan: Mapping[str, Any] | None = None) -> dict:
@@ -993,6 +1034,24 @@ def _concept_statement(c: Mapping[str, Any], *, stmt_id: str, doc_id: str,
                                 source_lit_id=str(c.get("source_lit_id") or ""),
                                 proof_text=str(c.get("proof_text") or ""),
                                 doc_id=doc_id, actor=actor)
+
+
+#: 转发台账（append-only，一行 = 一次秘书转发或一次链尾交付）。
+#:
+#: 为什么不写进各自的 `decisions` 台账：链式转发是"一条消息走过几个秘书"这一件事，
+#: 摊进 N 份按角色/实例分片的决定台账之后，读的人要 glob 整个目录再按时间拼起来
+#: —— 而"每一位秘书都真的收到过一次转发"必须能一次读出来（业主的判据 a 就是它）。
+#: 落点与决定台账同一个目录：`out/secretary/relay.jsonl`（`webui` 的目录 glob 认
+#: `*.jsonl`，同目录会让它进"秘书台账"那一面 —— 转发记录本来就是秘书留痕）。
+RELAY_LEDGER = "relay.jsonl"
+#: 转发编号前缀（由 `append_jsonl_stamped` 在锁内发号；同一条消息的每一跳共用一个号，
+#: 回执沿链回传时靠它把 N 跳认成同一次转发）。
+RELAY_ID_PREFIX = "R-"
+
+
+def relay_path(root: str | Path) -> Path:
+    """转发台账的落点：`out/secretary/relay.jsonl`。"""
+    return Path(root).joinpath(*SECRETARY_DIR, RELAY_LEDGER)
 
 
 class Secretary:
@@ -3161,6 +3220,9 @@ class Secretary:
                         "problem": refusal}
             bind: dict[str, Any] = {"kind": "bind", "owner": owner, "name": name,
                                     "role": str(role), "task_id": str(task_id), "at": at}
+            if str(task or "").strip():
+                # 任务原文跟着这一件活落盘（业主 2026-10-27：等子代理的目的自动用它填）。
+                bind["task_text"] = _task_text(task)
             if source == "secretary":
                 # 复用支不写名册项 ⇒ 这一次代写的那句话也得留痕（否则"谁写的"就丢了）。
                 # 只在代写时补这两格：父给的那一支落盘逐字不变。
@@ -3192,20 +3254,26 @@ class Secretary:
         if got_surface.get("problem"):
             return {"name": name, "role": str(role), "task_id": str(task_id),
                     "problem": f"读写面没定下来：{got_surface['problem']}"}
-        ok, why = append_jsonl(roster_index_path(self.root, owner),
-                               {"kind": "bind", "owner": owner, "name": name,
-                                "role": str(role), "task_id": str(task_id), "at": at,
-                                "first": True})
+        bind_add: dict[str, Any] = {"kind": "bind", "owner": owner, "name": name,
+                                    "role": str(role), "task_id": str(task_id), "at": at,
+                                    "first": True}
+        add_row: dict[str, Any] = {"kind": "add", "owner": owner, "name": name,
+                                   "role": str(role), "task_id": str(task_id),
+                                   "first_task_id": str(task_id_first or task_id),
+                                   "brief": text, "brief_source": source,
+                                   "surface": str(got_surface.get("slot") or ""),
+                                   "at": at}
+        if str(task or "").strip():
+            # 任务原文（≤200 字，单行）：`clock` 的"目的自动填"读它（业主 2026-10-27）。
+            # 落两份：名册项那一行（`add`）与对照表那一行（`bind`）—— 前者是这一项
+            # 为哪件活建的，后者是这件活归了谁；读侧两条都能找到同一句原文。
+            bind_add["task_text"] = _task_text(task)
+            add_row["task_text"] = _task_text(task)
+        ok, why = append_jsonl(roster_index_path(self.root, owner), bind_add)
         if not ok:
             return {"name": name, "role": str(role), "task_id": str(task_id),
                     "problem": f"对照表没写成：{why}"}
-        ok2, why2 = append_jsonl(roster_path(self.root, owner),
-                                 {"kind": "add", "owner": owner, "name": name,
-                                  "role": str(role), "task_id": str(task_id),
-                                  "first_task_id": str(task_id_first or task_id),
-                                  "brief": text, "brief_source": source,
-                                  "surface": str(got_surface.get("slot") or ""),
-                                  "at": at})
+        ok2, why2 = append_jsonl(roster_path(self.root, owner), add_row)
         if not ok2:
             return {"name": name, "role": str(role), "task_id": str(task_id),
                     "problem": f"名册没写成（对照表那一行已经落了 ⇒ 读侧会报'半份登记'）：{why2}"}
@@ -3713,6 +3781,133 @@ class Secretary:
                 "reused": bool(adj.get("reused")),
                 "at": S.now_iso(),
             }
+        return out
+
+    def wash_dependency_face(self, manuscript: Any, *,
+                             statement_rows: Any = None) -> dict[str, Any]:
+        """F 的秘书那一遍洗稿：只洗依赖面（命题号 / 那一节的格式），不改证明正文。
+
+        业主 2026-10-26 晚的原话（逐字）：「F写证明时务必加依赖面命题号，且由F的秘书对
+        无引用证明忘加空依赖面的补空，对有引用证明的命题号核实（即秘书帮它洗一遍）」
+        「F的秘书工作的时候是F写好了，提交证明给V前」「秘书若核出问题，要提前打回并说明」。
+
+        所以这一笔的位置是"F 写完、提交给 V 之前"（`agent_f/core.py` 的 proof 分支在
+        `_proof_outlet` 之前调它）：洗过的那一份才是提交给 V、被 D 携带、被 B 读的稿。
+        打回时这一轮不提交（不花 V 的那一次调用），`deps_refused_findings` 逐条给
+        F 看：哪一行、引用原话、写的是哪个号、应该是什么、为什么、怎么改。
+
+        实现全在 `depsection.wash_dependency_section`（解析与渲染的唯一实现也在那里）；
+        本方法只负责两件事：读 `statements`（核实命题号要它），以及把"没 store / 读不到"
+        如实折成 `checked=False` —— 不许把"没核成"当成"核过了"。
+        """
+        from . import depsection as _DS
+
+        out: dict[str, Any] = {
+            "checked": False, "washed": False, "text": str(manuscript or ""),
+            "deps_section_filled": "", "deps_washing": [], "deps_refused": "",
+            "deps_refused_findings": [], "reason": "",
+            "actor": f"secretary-{self.role}", "rows": [], "section": {},
+        }
+        if self.store is None:
+            out["reason"] = ("这一名秘书没有 store ⇒ 读不到 `statements`，命题号核不了"
+                             "（不洗、也不假装洗过）：这一份先别提交给 V")
+            return out
+        rows = statement_rows
+        if rows is None:
+            try:
+                rows = [dict(r) for r in self.store.rows("statements")]
+            except Exception as exc:  # noqa: BLE001 —— 读不到就不许放行
+                out["reason"] = (f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                                 "这一遍没核成（没核成不等于没问题）：这一份先别提交给 V")
+                return out
+        got = _DS.wash_dependency_section(str(manuscript or ""), statement_rows=rows)
+        out.update(dict(got or {}))
+        out["checked"] = True
+        out["actor"] = f"secretary-{self.role}"
+        return out
+
+    def record_manuscript_dependency_face(self, stmt_id: str, groups: Any, *,
+                                          proof_no: int = 1,
+                                          note: str = "") -> dict[str, Any]:
+        """收方读稿登记：把一份手稿的依赖段落成那条在册命题的 `dependencies` 行。
+
+        ## 为什么需要这一格（业主 2026-10-26 晚：「D 到 B 没有路吗？加」）
+
+        F 交稿时那一行是 F 自己落的（`_proof_outlet`），于是"这条命题的依赖面"
+        从来没有第二个写者：D 只能派 B，不能把稿递给 B；B 那一笔登记也只会发生在
+        "新建一条命题"的时候 —— 同一条命题再交一次就走 `duplicate` 早退，
+        `dependencies` 一行都不落。这条通道补的正是那一格：命题行不动，只把
+        手稿里那一节 `## 依赖` 的四列表落成依赖边（B 是收方、秘书是写者）。
+
+        ## 两件事一起保证
+        - 幂等：同一 `used_by` + 路径组 + 来源已经有一条依赖 ⇒ 不重复落（D 每趟都
+          会携带一遍，重复落会让依赖表虚高）；读数里 `duplicates` 逐条说"哪几条已经在了"；
+        - 判据不另写：解析在 `depsection`、来源在册/档位在 `B.register_statement`
+          那一侧（它先把 `manuscript` 与 `gate_rows` 跑完才到这里），本方法只负责
+          "把已经核过的步骤写进表"（`_resolve_write_steps` + `_write_dep_steps`）。
+        """
+        out: dict[str, Any] = {"checked": False, "stmt_id": str(stmt_id or ""),
+                               "deps_written": 0, "path_groups": 0, "duplicates": [],
+                               "refused": "", "reason": "", "tables": [],
+                               "deps_dangling": [], "deps_unmappable": []}
+        if self.store is None:
+            out.update(refused="secretary_unavailable",
+                       reason="这一名秘书没有 store ⇒ 依赖面写不了")
+            return out
+        sid = str(stmt_id or "").strip()
+        if not sid:
+            out.update(refused="bad_statement_id", reason="没有命题号 ⇒ 依赖面挂不到任何一行")
+            return out
+        groups = [list(g) for g in (groups or []) if isinstance(g, (list, tuple))]
+        if not groups:
+            out.update(checked=True, reason="这一份手稿的依赖段是空的（自足证明合法，不写边）")
+            return out
+        try:
+            with self.store.tx("statements", "dependencies",
+                               actor=f"secretary-{self.role}",
+                               note=note or "record_manuscript_dependency_face") as tx:
+                if tx.find("statements", stmt_id=sid) is None:
+                    out.update(refused="statement_missing",
+                               reason=(f"台账里没有 stmt:{sid} ⇒ 依赖面挂不到任何一行"
+                                       "（收方读稿登记的是在册命题的依赖面）"))
+                    return out
+                body = {"deps": groups, "proof_no": int(proof_no or 1)}
+                steps = self._resolve_write_steps(tx, body, out, groups)
+                if steps is None:
+                    return out
+                existing = set()
+                for row in tx.rows("dependencies"):
+                    existing.add(_dep_step_key(dict(row)))
+                keep: list[dict[str, Any]] = []
+                for step in steps:
+                    key = _dep_step_key({
+                        "used_by": _PL.used_by_of(
+                            f"stmt:{sid}", int(step.get("proof_no") or body.get("proof_no") or 1)),
+                        "path_group": int(step.get("path_group") or 1),
+                        "kind": str(step.get("kind") or "theorem"),
+                        "source_stmt_id": step.get("source_stmt_id"),
+                        "source_lit_id": step.get("source_lit_id"),
+                        "source_experiment_id": step.get("source_experiment_id"),
+                        "source_doc_id": step.get("source_doc_id"),
+                        "label": str(step.get("label") or ""),
+                    })
+                    if key in existing:
+                        out["duplicates"].append({
+                            "path_group": int(step.get("path_group") or 1),
+                            "label": str(step.get("label") or ""),
+                            "why": "这一条依赖已经在表里（同一路径组、同一来源）⇒ 不重复落"})
+                        continue
+                    keep.append(step)
+                if not keep:
+                    out.update(checked=True, path_groups=len(groups),
+                               reason="这一份手稿的依赖边都已经在表里（幂等：一条都没重复落）")
+                    return out
+                written = self._write_dep_steps(tx, keep, stmt_id=sid, body=body)
+                out.update(checked=True, deps_written=int(written),
+                           path_groups=len(groups), tables=["dependencies"])
+        except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
+            out.update(checked=False, refused="write_failed",
+                       reason=f"依赖面落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
         return out
 
     def record_statement(self, payload: Mapping[str, Any], *, role: str = "B",
@@ -5483,15 +5678,27 @@ class Secretary:
                      snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """两个读数：子代理数 / 活跃子代理数（本方法是它们唯一的实现）。
 
-        ## 两个数各自的定义（业主 2026-10-26 裁定，逐字见 `conductor` 那两个常量）
+        ## 两个数各自的定义（业主 2026-10-26 裁定，逐字见 `conductor` 那几个常量）
         - 子代理数 = 名册里还没销号的名册项数（在册、未退役）；
-        - 活跃子代理数 = 其中"工作没做完还在做"的数量，口径只有一条：
-          `active(node) = 自身有未收口的任务 or 任一直接子 active`（`conductor.activity_snapshot`
-          是那一处的实现），所以"在等下级"也算活跃。
+        - 活跃子代理数 = 其中非静默的数量（业主后一句：「更新『活跃子代理』的定义为
+          非静默子代理」）：非静默 = 在飞 + 待机，三态判定只有 `conductor.agent_state`
+          一处；`unknown`（判不了）既不算活跃也不算静默，它进 `states["unknown"]`
+          并让 `complete=False`。
 
         两个数必须各自出现、不许相加也不许互相代替：前者回答"这一支还有几个名字在用"，
         后者回答"其中几个还在干活或还在等"。折成一个数之后，"名册只增不减"与
         "活都干完了"会长得一模一样。
+
+        ## 三态的读法（业主原话：「『在飞』的读数要随着时钟式待机进行适配」）
+        `states` 是四档各几个（`flying` / `standby` / `silent` / `unknown`）＋
+        `active`（= 在飞 + 待机）＋ `total`；`by_owner` 每一项同样带这四格。
+        已销号的名册项不进 `items`（子代理数只数未销号的那些），所以"已销号 ⇒ 静默"
+        在这一份读数里表现为"它根本不在分母里"——与 `roster_view` / 网页名册面
+        逐行给 `state` 的那一处是同一条口径的两个落点。
+        口径取"名册项当前那一件活那一行"（`item.task_id`）：一个常驻子代理接过 N 件活时，
+        那 N 行的三态在 `activity_snapshot` 里各自可得，而"它现在在哪一态"问的是现在。
+        网页名册面（`readers.roster_face`）对同一项按 `tasks[]` 里全部活取最活跃的一格
+        —— 两处都是"这一层知道多少就判多少"，谁也没有把不知道的当成静默。
 
         ## 范围
         `owner` 给了 ⇒ 只看那一个父的名册；不给 ⇒ 全工作区（`roster_owners` 扫
@@ -5500,22 +5707,25 @@ class Secretary:
         ## 三态与"判不了"（不许折平）
         名册读不成 / 台账读不成 ⇒ `checked=False` + `reason`，两个数都是 `None`
         （`0` 是"名册空了"这个很强的结论，而"没读成"什么都不说）。
-        某一项的名册行读得出来、但台账里没有它那一行 ⇒ 它的活跃判不了 ⇒ 进 `unjudged`
+        某一项的名册行读得出来、但台账里没有它那一行 ⇒ 它的三态判不了 ⇒ 进 `unjudged`
         且 `complete=False`，同时 `active_child_count` 只数判得了的那些（读数里
         `complete` 那一格就是这件事的显式声明，不许靠"大概都判得了"糊过去）。
 
         ## `waiting_only`（病态形状）
-        每一项 `active and not self_busy` 的节点都进 `waiting_only`，带一句人话
+        每一项 `standby and not self_busy` 的节点都进 `waiting_only`，带一句人话
         「它自己不忙，是在等 D2（active）」。那不是错，但父必须看得见 ——
         这一支的活积在下级身上，而中间那几层只是挂着名字在等。
         """
         from .conductor import (ACTIVE_CHILD_COUNT_KEY, CHILD_COUNT_KEY,
-                                CHILD_COUNT_LABELS)
+                                CHILD_COUNT_LABELS, AGENT_STATE_LABELS,
+                                AGENT_STATE_UNKNOWN, ACTIVE_AGENT_STATES,
+                                state_counts)
 
         labels = dict(CHILD_COUNT_LABELS)
         out: dict[str, Any] = {"checked": False, "reason": "", "owner": str(owner or ""),
                                CHILD_COUNT_KEY: None, ACTIVE_CHILD_COUNT_KEY: None,
                                "labels": labels, "waiting_only": [], "unjudged": [],
+                               "states": None, "state_labels": dict(AGENT_STATE_LABELS),
                                "complete": False, "by_owner": {}, "bad_roster_lines": [],
                                "note": ""}
         want = str(owner or "")
@@ -5552,23 +5762,32 @@ class Secretary:
             return out
         by_task = dict(snap.get("by_task") or {})
         per_owner: dict[str, dict[str, int]] = {}
-        active_count = 0
+        state_of: dict[str, str] = {}
         waiting: list[dict[str, Any]] = []
         unjudged: list[dict[str, Any]] = []
         for it in items:
             slot = per_owner.setdefault(it["owner"], {CHILD_COUNT_KEY: 0,
-                                                      ACTIVE_CHILD_COUNT_KEY: 0})
+                                                      ACTIVE_CHILD_COUNT_KEY: 0,
+                                                      "flying": 0, "standby": 0,
+                                                      "silent": 0, "unknown": 0})
             slot[CHILD_COUNT_KEY] = int(slot[CHILD_COUNT_KEY]) + 1
             tid = it["task_id"]
             cell = by_task.get(tid)
             if cell is None:
+                # 台账里没有它那一行 ⇒ 三态判不了（`unknown`），而 `unknown` 不是静默：
+                # 把它折成静默会让"判不了"与"它就是收工了"长得一模一样。
+                state_of[tid] = AGENT_STATE_UNKNOWN
+                slot["unknown"] = int(slot["unknown"]) + 1
                 unjudged.append({"owner": it["owner"], "name": it["name"],
-                                 "task_id": tid,
+                                 "task_id": tid, "state": AGENT_STATE_UNKNOWN,
                                  "why": "台账里没有它那一行 ⇒ 它有没有未收口的活判不了"})
                 continue
-            if not cell.get("active"):
+            state = str(cell.get("state") or AGENT_STATE_UNKNOWN)
+            state_of[tid] = state
+            slot[state if state in slot else AGENT_STATE_UNKNOWN] = int(
+                slot.get(state) or 0) + 1
+            if state not in ACTIVE_AGENT_STATES:
                 continue
-            active_count += 1
             slot[ACTIVE_CHILD_COUNT_KEY] = int(slot[ACTIVE_CHILD_COUNT_KEY]) + 1
             if not cell.get("waiting_only"):
                 continue
@@ -5582,12 +5801,19 @@ class Secretary:
                     krow = by_task.get(k) or {}
                     wait_names.append(f"{krow.get('role') or '?'}（{k}）")
             waiting.append({"owner": it["owner"], "name": it["name"],
-                            "role": it["role"], "task_id": tid,
+                            "role": it["role"], "task_id": tid, "state": state,
                             "waiting_for": kids, "for_names": wait_names,
                             "note": ("它自己不忙，是在等 " + "、".join(wait_names)
                                      + "（active）")})
+        counts = state_counts(state_of.get(it["task_id"], AGENT_STATE_UNKNOWN)
+                              for it in items)
+        active_count = counts["active"]
         note = (f"{labels[CHILD_COUNT_KEY]}={len(items)}，"
-                f"{labels[ACTIVE_CHILD_COUNT_KEY]}={active_count}")
+                f"{labels[ACTIVE_CHILD_COUNT_KEY]}={active_count}"
+                f"（在飞 {counts['flying']} · 待机 {counts['standby']} · "
+                f"静默 {counts['silent']}）")
+        if counts["unknown"]:
+            note += f"；另有 {counts['unknown']} 项判不了（{AGENT_STATE_LABELS['unknown']}）"
         if waiting:
             note += f"（其中 {len(waiting)} 个靠等下级才活跃）"
         if unjudged:
@@ -5596,8 +5822,11 @@ class Secretary:
         out.update({"checked": True, "reason": "",
                     CHILD_COUNT_KEY: len(items),
                     ACTIVE_CHILD_COUNT_KEY: active_count,
+                    "states": counts,
                     "waiting_only": waiting, "unjudged": unjudged,
-                    "complete": not unjudged,
+                    # `unknown` 非 0 就不算完整：那一档既不是活跃也不是静默，
+                    # 只是"这一项没判成"，而"完整性"这一格正是这件事的显式声明。
+                    "complete": (not unjudged) and counts["unknown"] == 0,
                     "by_owner": {k: dict(v) for k, v in sorted(per_owner.items())},
                     "note": note})
         return out
@@ -5623,15 +5852,18 @@ class Secretary:
         渲染，坏行逐条落进 `diagnostics`（带行号与类别）。只有一种情形仍然整体拒：一条好行都没有而坏行有（三态纪律挡的正是"名册是空的"与"名册读不成"被折成同一句话）。
         ## 两个读数各占一格（业主 2026-10-26）
         这一份视图顶上带 `child_count`（子代理数 = 名下未销号的名册项数）与
-        `active_child_count`（活跃子代理数 = 其中"工作没做完还在做"的数量，含靠等下级才
-        活跃的那些），另有一格 `counts`（`Secretary.child_counts` 的整份读数：`owner` /
-        `waiting_only` / `unjudged` / `note`）。两个数不许相加、不许互相代替 ——
-        口径与三态都在 :meth:`child_counts` 里，这里只转发。每一行另带 `active` /
+        `active_child_count`（活跃子代理数 = 其中非静默的数量 = 在飞 + 待机），
+        另有一格 `counts`（`Secretary.child_counts` 的整份读数：`owner` / `states` /
+        `waiting_only` / `unjudged` / `note`）与一格 `states`（四档各几个）。
+        两个数不许相加、不许互相代替 —— 口径与三态都在 :meth:`child_counts` 里，
+        这里只转发。每一行另带 `agent_state`（三态：在飞 / 待机 / 静默 / 未读到 ——
+        名字不叫 `state`，因为那一格已经是给人读的五档中文）、`active` /
         `waiting_only` / `waiting_note`：`active` 是"按继承口径算，它算不算活跃"，
         与 `state`（它自己此刻在不在跑）是两件事（"在等"也算活跃）。
-        读不成 ⇒ 两个数都是 `None`（不是 0）。
+        读不成 ⇒ 两个数与 `states` 都是 `None`（不是 0）。
         """
-        from .conductor import ACTIVE_CHILD_COUNT_KEY, CHILD_COUNT_KEY
+        from .conductor import (ACTIVE_CHILD_COUNT_KEY, AGENT_STATE_UNKNOWN,
+                                CHILD_COUNT_KEY)
 
         cond = self._conductor()
         rows, bad = self.roster_rows(owner)
@@ -5645,7 +5877,7 @@ class Secretary:
             """这一份视图"没查成"的统一形状（两个读数都是 None，不是 0）。"""
             return {"checked": False, "rows": [], "more": 0, "scope": scope,
                     "diagnostics": diagnostics, "parent": parent, "reason": reason,
-                    "counts": None, CHILD_COUNT_KEY: None,
+                    "counts": None, "states": None, CHILD_COUNT_KEY: None,
                     ACTIVE_CHILD_COUNT_KEY: None}
 
         if not rows and bad:
@@ -5660,7 +5892,11 @@ class Secretary:
             return _fail(f"就绪读数没读成（{ready.get('reason')}）")
         # 活跃读数只取一次（逐行调 `active_reading` 会把同一张台账读 N 遍）：
         # `counts` 与逐行那三格共用这一份快照。
-        snap = cond.activity_snapshot()
+        # `retired` 是本层的事实（名册项上那一格）：传给三态判定，让"已销号 ⇒ 静默"
+        # 仍然只由 `conductor.agent_state` 那一处判（这里不再写第二遍）。
+        retired_map = {str(r.get("task_id") or ""): True for r in rows
+                       if r.get("retired") and str(r.get("task_id") or "")}
+        snap = cond.activity_snapshot(retired=retired_map)
         counts = self.child_counts(owner=owner, snapshot=snap)
         activity = dict(snap.get("by_task") or {}) if snap.get("checked") else {}
         name_of_tid = {str(r.get("task_id") or ""): str(r.get("name") or "") for r in rows}
@@ -5703,6 +5939,13 @@ class Secretary:
                 "waiting_note": str((cond.active_reading(
                     tid, names=name_of_tid, snapshot=snap).get("note") or "")
                     if snap.get("checked") else ""),
+                # 三态（`conductor.agent_state` 是唯一实现）。名字刻意不叫 `state`：
+                # 上面那一格 `state` 已经是给人读的五档中文（活跃 / 待命 / 已停 /
+                # 已退役 / 未登记），两个取值域共用一个键会让"活跃"与"在飞"混成一件事。
+                # "已销号 ⇒ 静默"不在这一行判：`retired_map` 已经随快照传进
+                # `agent_state`（那一处才是判定本体）。
+                "agent_state": str((activity.get(tid) or {}).get("state")
+                                   or AGENT_STATE_UNKNOWN),
             }
             if scope == "descendants":
                 row["parent"] = parent_name
@@ -5714,7 +5957,8 @@ class Secretary:
         more = max(0, len(out) - int(limit))
         return {"checked": True, "rows": out[:int(limit)], "more": more, "scope": scope,
                 "diagnostics": diagnostics, "parent": parent, "reason": "",
-                "counts": counts, CHILD_COUNT_KEY: counts.get(CHILD_COUNT_KEY),
+                "counts": counts, "states": counts.get("states"),
+                CHILD_COUNT_KEY: counts.get(CHILD_COUNT_KEY),
                 ACTIVE_CHILD_COUNT_KEY: counts.get(ACTIVE_CHILD_COUNT_KEY)}
 
     def _roster_targets(self, *, owner: str, rows: list[dict[str, Any]], scope: str,
@@ -5838,11 +6082,22 @@ class Secretary:
 
         `{"ok","action":"retired"|"reported"|"refused","report":{…},"why":[…], "reading":{…}}`
 
-        - `active` ⇒ `reported`：把最近的工作报告端给父，不退役；
+        - 目标不是静默（在飞 / 待机 / 读不到）⇒ `refused`：这是本批（业主 2026-10-26
+          「销号可以也只可针对静默子代理」）新加的第一道闸，带 `refusal_code`
+          （`target_not_silent`）、`target_state` 与逐条 `blocking`；`report` 仍把
+          "它最近报了什么 / 它名下的子代理在干什么"端给父（拒了不等于什么都不给）；
+        - `active` ⇒ `reported`：把最近的工作报告端给父，不退役（静默闸之外的
+          第二道保险：两次读数之间它又开始跑了）；
         - `waiting_with_children` ⇒ `reported`：把那些子代理在它名册里的任务简介端给父；
         - `waiting_no_children` ⇒ `retired`：写退役事件 + 销号名单 + 对照表标退役 +
           `conductor.note_edge_release`（父侧那一笔幂等落痕）；
         - 未登记 / 读不成 / 已销号 ⇒ `refused`（没读成 ≠ 可以退役）。
+
+        ## 静默是什么意思（与 `conductor.agent_state` 同一份定义）
+        无工作 ∧ 无任何计时器 ∧ 无活跃子代理。销号是不可逆的（名字永久不复用，业主 B1），
+        所以这一格一律 fail-closed：读不到它是不是静默就不销，而不是"大概没事"。
+        三档拒信各说各的下一步 —— 在飞就让它收工；待机就让那些计时器的事先发生、或者
+        显式让它停（停止 ≠ 销号）；读不到就重读一次。
 
         ## `reason`（D-59）：父发起销号时那一句理由，逐字落进三份台账
         销号是父的决定，而"为什么"只有父知道。改前这一句没有落点：`retired` 三行
@@ -5863,6 +6118,53 @@ class Secretary:
         if self._is_retired(owner, str(name)):
             return {"ok": False, "action": "refused", "report": {},
                     "why": [f"{name} 已经销号过（业主 B1）"]}
+        # ---- 静默闸（业主 2026-10-26：「销号可以也只可针对静默子代理」）
+        #
+        # 落点与理由：销号是不可逆的那一类动作（名字永久不复用，业主 B1），而"它还会不会
+        # 醒过来"只有时钟读得出来。不静默的三档各自给人一条不同的下一步，所以拒信要分开说。
+        from .conductor import (AGENT_STATE_FLYING, AGENT_STATE_STANDBY,
+                                AGENT_STATE_UNKNOWN, RETIRE_REFUSAL_TARGET_NOT_SILENT,
+                                retire_refusal)
+
+        def _refused_not_silent(got: Mapping[str, Any]) -> dict[str, Any]:
+            """目标不静默的拒信：措辞只有 `conductor.retire_refusal` 一处。"""
+            ref = retire_refusal(got, tid=tid, name=str(name))
+            report: dict[str, Any] = {}
+            state = str(got.get("state") or "")
+            if state == AGENT_STATE_FLYING:
+                report = self.latest_report_of(task_id=tid, role=str(got.get("role") or ""))
+            elif state == AGENT_STATE_STANDBY and not got.get("waiters"):
+                kids = self.active_children_of(task_id=tid)
+                briefs: list[dict[str, Any]] = []
+                if kids.get("checked"):
+                    child_rows, _bad = self.roster_rows(tid)
+                    for k in kids.get("rows", []):
+                        kid_name, _why = self.name_of(owner=tid,
+                                                      task_id=str(k.get("task_id") or ""))
+                        brief = next((str(x.get("brief") or "") for x in child_rows
+                                      if str(x.get("name") or "") == kid_name), "")
+                        briefs.append({"name": kid_name or "（未登记）",
+                                       "role": str(k.get("role") or ""),
+                                       "brief": brief, "state": str(k.get("state") or "")})
+                if briefs:
+                    report = {"children": briefs}
+            return {"ok": False, "action": "refused", "report": report,
+                    "why": [ref["why"]], "reading": dict(got),
+                    "refusal_code": ref["code"],
+                    "target_state": state,
+                    "target_state_label": str(got.get("state_label") or ""),
+                    "blocking": list(ref["blocking"])}
+
+        try:
+            gate = cond.retire_state_of(tid)
+        except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没读成"
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [f"三态读数没读成（{type(exc).__name__}: {exc}）⇒ "
+                            "读不到它是不是静默，不许销（fail-closed）"],
+                    "refusal_code": RETIRE_REFUSAL_TARGET_NOT_SILENT,
+                    "target_state": AGENT_STATE_UNKNOWN, "blocking": []}
+        if not gate.get("silent"):
+            return _refused_not_silent(gate)
         try:
             ready = cond.retire_ready(owner)
         except Exception as exc:  # noqa: BLE001
@@ -5935,6 +6237,263 @@ class Secretary:
                 "why": [f"{name} 退役：{branch}（子已停 + 它名下无活跃子代理）"]
                        + ([surface_note] if surface_note else []),
                 "surface": slot, "reading": reading}
+
+    # ------------------------------------------------------------ 链式转发（业主 2026-10-26 裁定）
+    #
+    # 业主原话（唯一权威）：「M的秘书发给000005的秘书消息有链000005->000012->000024，
+    # 然后000005的秘书继续发给下级秘书，直到000024的秘书收到后才具体读消息内容」。
+    #
+    # 三个角色分工（每一跳都由某一个 Secretary 实例做，日志在 `relay.jsonl`）：
+    #   - `relay_out`：发送方的秘书 —— 把正文交给链上第一跳的秘书，载荷带"剩余链"；
+    #   - `relay_in`：每一跳的秘书 —— 只看剩余链的头，继续交给下一跳的秘书；
+    #     `content_read=False`：正文对被转发的那一位代理本人一个字都不露；
+    #   - 链尾那一跳的 `relay_in`：`deliver_local` 把正文交给它服务的那一个代理。
+    # 回执沿调用栈回传（同一个 relay_id），发送方拿到 `delivered_to` 与每跳的时间。
+
+    def relay_out(self, *, chain: Sequence[str], body: str, subject: str = "",
+                  sender_role: str = "") -> dict[str, Any]:
+        """发送方的秘书：把正文交给链上第一跳的秘书（载荷里的 `remaining_chain`）。
+
+        返回三态回执（键集在所有分支上相同）：
+        `checked` / `status`（`delivered` / `refused` / `unknown`）/ `relay_id` /
+        `delivered_to`（链尾那一个的绝对编号；只有 `delivered` 非空）/ `hops`
+        （每跳：`hop` / `of` / `at` / `elapsed_us` / `delta_us` / `secretary_task_id` /
+        `secretary_role` / `mode`（`forward` / `deliver`）/ `from` / `to` /
+        `remaining_chain` / `content_read` / `item_id` / `relay_id`）/ `problems` /
+        `refused` / `error` / `item_id`。每跳另带两格时间：`elapsed_us`（从发送方
+        秘书起手那一刻算起的累计微秒数）与 `delta_us`（这一跳自己花掉的微秒数）——
+        为什么两格都给：只给累计值时"哪一跳慢"要靠相邻相减，而相减在只有这一份
+        读数的人手里做不了。
+
+        ## 为什么"转发台账写不成就不发"
+        这一条链的全部可审计性就在那份台账上（谁在哪一跳收到过、正文有没有给代理本人
+        看）。台账写不成而正文照样往下走，回执会说 `delivered` 而盘上一条记录都没有
+        —— 那正是本仓最忌的"回执说谎"。所以第一跳的台账写不成 ⇒ `unknown` + 拒信，
+        正文一步都不动（fail-closed 只落在"盘上能不能留下这件事"这一格）。
+        """
+        out: dict[str, Any] = {
+            "checked": False, "status": "unknown", "relay_id": "", "delivered_to": [],
+            "hops": [], "problems": [], "refused": "", "error": "", "item_id": "",
+        }
+
+        def _stop(code: str, why: str, *, status: str = "refused") -> dict[str, Any]:
+            out.update(status=status, refused=code, error=why)
+            return out
+
+        hops = [str(x) for x in (chain or ())]
+        mine = str(self.task_id or "")
+        if len(hops) < 2:
+            return _stop("broken_chain",
+                         f"链只有 {len(hops)} 跳 ⇒ 没有可发给的下一跳（链至少要有一级下级）")
+        if hops[0] != mine:
+            return _stop("broken_chain",
+                         f"链头是 {hops[0]}，而这一位秘书服务的是 {mine or '（没绑实例）'}"
+                         " ⇒ 这条链不是从它出发的，不转")
+        t0 = time.perf_counter()
+        t_hop = t0
+        rest = hops[1:]
+        peer, why = self._peer_secretary(rest[0])
+        if peer is None:
+            return _stop("not_in_roster", f"第一跳 {rest[0]} 的秘书拿不到：{why}",
+                         status="unknown")
+        rec = self._relay_rec(hop=1, of=len(hops), mode="forward", chain=hops,
+                              remaining_chain=rest[1:], content_read=False,
+                              item_id="", t0=t0, t_hop=t_hop, subject=subject,
+                              sender_role=sender_role, to=rest[0])
+        ok, problem, rid = append_jsonl_stamped(relay_path(self.root), rec,
+                                                field="relay_id", prefix=RELAY_ID_PREFIX)
+        if not ok or not rid:
+            return _stop("relay_unwritten",
+                         f"转发台账没写成（{problem or '没有发到号'}）⇒ 正文一步都没动"
+                         "（这一条链的每一跳都要在盘上留得下，回执才不是一句空话）",
+                         status="unknown")
+        rec["relay_id"] = rid
+        out.update(checked=True, relay_id=rid)
+        down = peer.relay_in(relay_id=rid, chain=rest, remaining_chain=rest[1:], body=body,
+                             subject=subject, sender_role=sender_role, hops_total=len(hops),
+                             t0=t0, full_chain=hops)
+        out["hops"] = [dict(rec)] + list(down.get("hops") or [])
+        out["problems"].extend(str(p) for p in (down.get("problems") or ()))
+        out["delivered_to"] = list(down.get("delivered_to") or ())
+        out["item_id"] = str(down.get("item_id") or "")
+        out["status"] = str(down.get("status") or "unknown")
+        out["refused"] = str(down.get("refused") or "")
+        out["error"] = str(down.get("error") or "")
+        return out
+
+    def relay_in(self, *, relay_id: str, chain: Sequence[str],
+                 remaining_chain: Sequence[str], body: str, subject: str = "",
+                 sender_role: str = "", hops_total: int = 0,
+                 t0: float = 0.0, full_chain: Sequence[str] = ()) -> dict[str, Any]:
+        """某一跳的秘书收到一次转发：只看剩余链的头，链尾才把正文交给代理本人。
+
+        `chain` 的头必须就是这一位秘书服务的那个代理（对不上 ⇒ 受控拒绝，不猜谁该读）。
+        `remaining_chain` 是"还要往下走的那几跳"：本方法只读它的第一个元素，再把
+        `remaining_chain[1:]` 交给下一跳的秘书 —— 这就是"只看链头"的机器形态。
+        `content_read` 在除链尾以外的每一跳都是 `False`：正文只随载荷往下走，
+        不进任何一位被转发的代理的板项。
+        `full_chain` 是发送方写的那条完整链（只用于链尾那一句正文的抬头：读到正文的
+        代理要看得见"它从哪来"，而不是只看见自己那一段）。转发逻辑不读它。
+        """
+        out: dict[str, Any] = {
+            "checked": False, "status": "unknown", "relay_id": str(relay_id or ""),
+            "delivered_to": [], "hops": [], "problems": [], "refused": "", "error": "",
+            "item_id": "",
+        }
+        hops = [str(x) for x in (chain or ())]
+        left = [str(x) for x in (remaining_chain or ())]
+        mine = str(self.task_id or "")
+        if not hops or hops[0] != mine:
+            out.update(status="refused", refused="broken_chain",
+                       error=(f"载荷的链头是 {hops[0] if hops else '（空）'}，而这一位秘书"
+                              f"服务的是 {mine or '（没绑实例）'} ⇒ 不猜谁该读，退回"))
+            return out
+        total = int(hops_total or len(hops))
+        hop_no = total - len(hops) + 1
+        t0 = t0 or time.perf_counter()
+        t_hop = time.perf_counter()
+        if not str(relay_id or ""):
+            out.update(status="unknown", refused="relay_unwritten",
+                       error="载荷没有转发编号 ⇒ 这一跳落不了台账（没查成）")
+            return out
+        if left:
+            nxt = left[0]
+            peer, why = self._peer_secretary(nxt)
+            rec = self._relay_rec(hop=hop_no, of=total, mode="forward", chain=hops,
+                                  remaining_chain=left[1:], content_read=False,
+                                  item_id="", t0=t0, t_hop=t_hop, subject=subject,
+                                  sender_role=sender_role, to=nxt)
+            rec["relay_id"] = str(relay_id)
+            if peer is None:
+                rec.update(status="unknown", refused="not_in_roster",
+                           note=f"{nxt} 的秘书拿不到：{why}")
+                ok, problem = append_jsonl(relay_path(self.root), rec)
+                out.update(checked=ok, status="unknown", refused="not_in_roster",
+                           error=(f"下一跳 {nxt} 的秘书拿不到：{why} ⇒ 链停在第 {hop_no} 跳"
+                                  + ("" if ok else f"（这一跳的台账也没写成：{problem}）")))
+                out["hops"] = [dict(rec)]
+                return out
+            ok, problem = append_jsonl(relay_path(self.root), rec)
+            if not ok:
+                out.update(status="unknown", refused="relay_unwritten",
+                           error=(f"第 {hop_no} 跳的转发台账没写成（{problem}）⇒ 正文"
+                                  "不再往下走（这一跳不可审计，就不能说它发生过）"))
+                return out
+            out["checked"] = True
+            down = peer.relay_in(relay_id=str(relay_id), chain=left, remaining_chain=left[1:],
+                                 body=body, subject=subject, sender_role=sender_role,
+                                 hops_total=total, t0=t0, full_chain=list(full_chain) or hops)
+            out["hops"] = [dict(rec)] + list(down.get("hops") or [])
+            out["problems"].extend(str(p) for p in (down.get("problems") or ()))
+            out["delivered_to"] = list(down.get("delivered_to") or ())
+            out["item_id"] = str(down.get("item_id") or "")
+            out["status"] = str(down.get("status") or "unknown")
+            out["refused"] = str(down.get("refused") or "")
+            out["error"] = str(down.get("error") or "")
+            return out
+        # ---- 链尾：只有这一跳把正文交给它管的那一个代理
+        item_id, problem = self.deliver_local(
+            body=body, chain_text="->".join(str(x) for x in (full_chain or hops)),
+            origin=str(sender_role or S.CONDUCTOR_ROLE),
+            subject=subject, relay_id=str(relay_id))
+        rec = self._relay_rec(hop=hop_no, of=total, mode="deliver", chain=hops,
+                              remaining_chain=[], content_read=True, item_id=item_id,
+                              t0=t0, t_hop=t_hop, subject=subject,
+                              sender_role=sender_role, to=mine)
+        rec["relay_id"] = str(relay_id)
+        ok, why = append_jsonl(relay_path(self.root), rec)
+        if not ok:
+            out["problems"].append(f"链尾那一跳的台账没写成：{why}（正文已经交给了 {mine}）")
+        if item_id:
+            out.update(checked=True, status="delivered", delivered_to=[mine],
+                       item_id=item_id, hops=[dict(rec)])
+        else:
+            out.update(checked=True, status="unknown", error=problem,
+                       problems=out["problems"] + [problem], hops=[dict(rec)])
+        return out
+
+    def deliver_local(self, *, body: str, chain_text: str, origin: str = "",
+                      subject: str = "", relay_id: str = "") -> tuple[str, str]:
+        """链尾：把正文交给这一位秘书服务的那一个代理（整条链上唯一"读内容"的一跳）。
+
+        手法沿用既有的板项通道（`conductor.open_item` + `set_item_detail`）：收件人
+        写这一个代理的台账号，于是它下一次进循环就在信箱里读到这一条；中途各跳
+        一条板项都不开 —— 这是"不把内容给被转发的代理本人看"的全部实现。
+        返回 `(板项编号, 问题)`；编号空 = 正文没有交给任何人（不许当"送到了"）。
+        """
+        cond = self._conductor()
+        if cond is None:
+            return "", "没有 store ⇒ 打不开板项（正文没有交给任何人）"
+        mine = str(self.task_id or "")
+        try:
+            row = cond._task(mine) or {}
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return "", f"台账读不成（{type(exc).__name__}: {exc}）⇒ 不知道该开给谁"
+        if not row:
+            return "", f"台账里没有 {mine} 那一行 ⇒ 没有收件人，正文没有交给任何人"
+        role = str(row.get("role") or self.role)
+        head = f"沿链 {chain_text} 传来的指导" if chain_text else "沿链传来的指导"
+        who = f"（{origin} 发出）" if origin else ""
+        detail = f"{head}{who}：{body}" + (f"（主题：{subject}）" if subject else "")
+        try:
+            item_id = cond.open_item(
+                kind="notice", role=role, expects="ack", action="notice",
+                summary=str(body or "")[:200], called_by=str(origin or S.CONDUCTOR_ROLE),
+                parent_task_id=mine, depth=int(row.get("depth") or 1) + 1,
+                input_key=f"relay@{relay_id or mine}")
+        except Exception as exc:  # noqa: BLE001 —— 开不成要如实说
+            return "", f"板项没开成（{type(exc).__name__}: {exc}）⇒ 正文没有交给 {mine}"
+        got, problem = cond.set_item_detail(item_id, detail)
+        if problem:
+            return item_id, f"板项 {item_id} 的正文没写进去（{problem}）"
+        return item_id, "" if got else f"板项 {item_id} 的正文是空的"
+
+    def _relay_rec(self, *, hop: int, of: int, mode: str, chain: Sequence[str],
+                   remaining_chain: Sequence[str], content_read: bool, item_id: str,
+                   t0: float, t_hop: float, subject: str, sender_role: str,
+                   to: str) -> dict[str, Any]:
+        """一条转发记录的公共字段（`relay_out` 与 `relay_in` 共用同一张表）。
+
+        两格时间用 `time.perf_counter`（高分辨率）：`time.monotonic` 在本机实测
+        只有毫秒级粒度，一跳几十微秒的转发会被一律读成 0 —— 那等于没有"每跳时间"。
+        """
+        now = time.perf_counter()
+        return {"kind": "relay_hop", "hop": int(hop), "of": int(of), "mode": str(mode),
+                "secretary_role": self.role, "secretary_task_id": str(self.task_id or ""),
+                "from": str(self.task_id or ""), "to": str(to or ""),
+                "chain": [str(x) for x in chain],
+                "remaining_chain": [str(x) for x in remaining_chain],
+                "content_read": bool(content_read), "item_id": str(item_id or ""),
+                "subject": str(subject or ""), "sender_role": str(sender_role or ""),
+                "elapsed_us": int(max(0.0, now - float(t0 or now)) * 1_000_000),
+                "delta_us": int(max(0.0, now - float(t_hop or now)) * 1_000_000),
+                "at": _now_iso()}
+
+    def _peer_secretary(self, task_id: str) -> tuple[Any, str]:
+        """链上下一跳那一位秘书（角色从台账读；只设 `task_id`，不写存活标记）。
+
+        为什么不调 `bind_task`：那一步会写 `<role>-<task>.alive`，把它读成"有一个
+        进程正在跑"—— 而转发是一次请求，不是一次接管。存活标记只该由真正跑起来的
+        循环写（`agent_loop` 那一路），秘书替它写等于伪造"它活着"。
+        """
+        cond = self._conductor()
+        if cond is None:
+            return None, "没有 store ⇒ 读不到台账号对应的角色"
+        try:
+            row = cond._task(str(task_id or "")) or {}
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return None, f"台账读不成（{type(exc).__name__}: {exc}）"
+        if not row:
+            return None, f"台账里没有 {task_id} 这一行"
+        role = str(row.get("role") or "")
+        if not role:
+            return None, f"{task_id} 那一行没有角色 ⇒ 不知道交给哪个秘书"
+        try:
+            peer = Secretary(role, root=self.root, store=self.store, sid=self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 造不出秘书要如实说
+            return None, f"造不出 {task_id} 的秘书（{type(exc).__name__}: {exc}）"
+        peer.task_id = str(task_id)
+        return peer, ""
 
     # ---- 名册的内部小工具
 
@@ -6825,3 +7384,5 @@ def reach_fit(role: str, action: str) -> dict[str, Any]:
 
 if __name__ == "__main__":  # pragma: no cover - 自检入口
     raise SystemExit(selftest())
+
+

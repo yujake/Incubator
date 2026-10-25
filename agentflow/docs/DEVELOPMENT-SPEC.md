@@ -54,7 +54,7 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 24 / info 49`（观测 2026-10-24 16:01 +0800，
+**linter 的当次三栏（日常档）**：`error 0 / warning 28 / info 49`（观测 2026-10-27，
 复跑 `python -B scripts/lint_rules.py`；`warning` / `info` 是当次读数，判据逐行拿它们对账。
 `error` 那一格写的是发布门第 5 项的**要求值**、不是读数 —— 它按"必须为 0"强制，而并行施工期间
 同一棵树上的实测在 0–4 之间跳（那一刻是 4，全部落在 `readouts.py` / `cli.py` 与它们的判据文件的
@@ -69,37 +69,37 @@ $env:PYTHONPATH='src'   # 只有跑 `python -m agentflow.*` / `python -c "...imp
 
 ```text
 LIVE-READINGS:BEGIN
-# 本块按判据口径量（`tests/conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）；CLI 缺省 shell 是 94/15
+# 本块按判据口径量（`tests/conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`）；CLI 缺省 shell（Lean 关）是 108/16
 # 名字 = 数字        # 含义 + 复跑命令 + 观测时刻
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 24   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
+lint_rules_warning      = 28   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 49   # 同一档的 info 栏
-lint_rules_strict_warning = 86 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 91 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
-noai_paths_glob         = 45   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
-noai_paths_unique       = 42   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
+noai_paths_glob         = 46   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
+noai_paths_unique       = 43   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
-tools_star_tools_py     = 18   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
+tools_star_tools_py     = 19   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total         = 97   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径；Lean 开 = 97，Lean 关 = 94 —— 三件 `formal.*` 不装配。判据在 Lean 开的档里跑）
-cli_tools_modules       = 16   # 同一行"已装模块 N"
-cli_tools_role_a        = 37   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
-cli_tools_role_b        = 23
-cli_tools_role_c        = 23
-cli_tools_role_d        = 42
-cli_tools_role_e        = 24
-cli_tools_role_f        = 36
-cli_tools_role_g        = 38
-cli_tools_role_h        = 31
-cli_tools_role_v        = 15
-cli_tools_role_l        = 23
-cli_tools_role_m        = 21
+cli_tools_total         = 111  # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径；Lean 开 = 111，Lean 关 = 108 —— 三件 `formal.*` 不装配。判据在 Lean 开的档里跑）
+cli_tools_modules       = 17   # 同一行"已装模块 N"
+cli_tools_role_a        = 49   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
+cli_tools_role_b        = 35
+cli_tools_role_c        = 34
+cli_tools_role_d        = 54
+cli_tools_role_e        = 36
+cli_tools_role_f        = 48
+cli_tools_role_g        = 50
+cli_tools_role_h        = 42
+cli_tools_role_v        = 26
+cli_tools_role_l        = 35
+cli_tools_role_m        = 34
 webui_modules           = 10   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
-webui_routes            = 28   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
-webui_routes_get        = 20   # 同上，按 `x[0] == 'GET'` 计数
+webui_routes            = 31   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
+webui_routes_get        = 23   # 同上，按 `x[0] == 'GET'` 计数
 webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
 webui_test_files        = 15    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`

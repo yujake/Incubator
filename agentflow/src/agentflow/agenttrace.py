@@ -484,10 +484,25 @@ def _request_text(task_id: str, depth: Any) -> dict[str, str]:
             f"你传的 depth={requested} 已被按 {DESCEND_LIMIT_FOR_NON_M} 处理。"
             "要看更深的分支请向 M 请求：用已有的上行工具 conductor.escalate"
             "（它把请求写进召唤者的收件箱并沿链上行到 M，不新造一条边）；"
-            "M 用 conductor.watch 看全树，再用 conductor.guide 把指导意见沿树传下来，"
-            "每一级父代理都会收到一条板项。"
+            "M 用 conductor.watch 看全树（每行都带 chain / chain_text：从顶趟到这个节点的"
+            "绝对编号链），再用 conductor.guide 把指导意见沿秘书链逐级传到那一个代理手上"
+            "（`to` 直接贴那一行的 chain 即可；中间各级代理本人看不到内容）。"
         ),
     }
+
+
+def _chain_cells(rows: Sequence[Mapping[str, Any]], task_id: str) -> dict[str, Any]:
+    """这个节点的绝对编号链两格（业主 2026-10-26：轮查读数必须反馈绝对编码链）。
+
+    口径在 `conductor.absolute_chain` 一处（从顶趟那一行沿 `parent_task_id` 追到
+    这个节点）。为什么每一行都要给：只给"父是谁"的话，调用方还得自己一层层拼 ——
+    拼错一个号，消息就发到另一支去了；而链是拿去做链式寻址的（`conductor.guide`
+    的 `to` 原样能贴）。
+    """
+    from .conductor import CHAIN_SEPARATOR, absolute_chain
+
+    got = absolute_chain(rows, task_id)
+    return {"chain": got, "chain_text": CHAIN_SEPARATOR.join(got)}
 
 
 def children_with_facts(
@@ -511,8 +526,10 @@ def children_with_facts(
     nodes = subtree_rows(rows, me, depth=granted + 1) if me else []
     children = [r for r in nodes if int(r.get("level") or 0) > 0]
     facts = [
-        node_facts(store, root, r, window=window, records=records,
-                   session_reading=session_reading, handoffs=handoffs)
+        {**node_facts(store, root, r, window=window, records=records,
+                      session_reading=session_reading, handoffs=handoffs),
+         "level": int(r.get("level") or 0),
+         **_chain_cells(rows, _task_id_of(r))}
         for r in children
     ]
     return {
@@ -549,7 +566,8 @@ def watch_rows(
     facts = [
         {**node_facts(store, root, r, window=window, records=records,
                       session_reading=session_reading, handoffs=handoffs),
-         "level": int(r.get("level") or 0)}
+         "level": int(r.get("level") or 0),
+         **_chain_cells(rows, _task_id_of(r))}
         for r in nodes
     ]
     max_level = max((f["level"] for f in facts), default=0)

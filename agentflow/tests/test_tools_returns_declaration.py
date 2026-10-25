@@ -94,13 +94,21 @@ TS = "2026-01-01T00:00:00+00:00"
 #: `python -m agentflow.cli tools` 的实测总数）。98 与 97 并存的含糊正是这次订正的理由。
 #:
 #: 两个口径（同一个包的两次装配，差的是 Lean 开关，不许互换）：
-#:   · Lean 开：100 件 —— 判据进程里 `tests/conftest.py` 把 `AGENTFLOW_LEAN_ENABLED`
+#:   · Lean 开：110 件 —— 判据进程里 `tests/conftest.py` 把 `AGENTFLOW_LEAN_ENABLED`
 #:     钉成 "1"，`formal_tools` 装在册；本常量与下面的 `registry` 都在这一档里跑。
-#:   · Lean 关：97 件 —— shell 缺省时 `formal_tools` 整个模块不装（那三件 `formal.*`
+#:   · Lean 关：107 件 —— shell 缺省时 `formal_tools` 整个模块不装（那三件 `formal.*`
 #:     一件都没有），所以少 3。
 #: 两个数都写在这里，是因为它们都真的存在：把第二个数搬进这一格会少算三件，
 #: 而少算三件时这条判据"照样绿"—— 那正是最坏的一种绿。
-TOOL_COUNT = 107
+#:
+#: 2026-10-27：107 → 110（D-53 晚班时钟八件的收口）。`clock.periodic_start` /
+#: `clock.periodic_stop` / `clock.timer_purpose` 三件进册，八件对全部角色都发。
+#: 它们连同旧的五件一起改了 `returns=`（读数的格变多了：挂机 park_* / 等待账 /
+#: 周期性巡查那几格），所以本文件的探针参数、键名来源表与破坏序也跟着补齐。
+#: 2026-10-27 第二批：110 → 111（`clock.wait_any` —— 业主第三条裁定的后半个动作
+#: 「可启动计时器等待任意计时器返回」）。它只写 `out/clock/wait_any.json` 这份意图账，
+#: 登记在 `tools.UNIVERSAL_TOOLS`（写集空），所以只读角色也拿得到。
+TOOL_COUNT = 111
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -279,6 +287,24 @@ def tool_params() -> dict[str, dict]:
                               "reason": "探针：只验键集，不真的等到点"},
         "clock.timer_list": {},
         "clock.timer_cancel": {"timer_id": "tm-000000"},
+        # ---- 时钟另外三件（2026-10-27 收口）：周期性巡查起/停 + 补目的 ----
+        # 三件都走"受理了、还没到点"那一支：巡查给 1 小时一拍、等到被停，
+        # 补目的给一个不存在的编号（`filled=false`，`state=not_found`）——
+        # 都是成功读数（三态：查过了、没有这一条），不是工具失败。
+        "clock.periodic_start": {"every_sec": 3600, "purpose": "探针：周期性巡查",
+                                 "until_sec": 3600},
+        # 停一条不存在的巡查：与 `clock.timer_cancel` 同一条三态纪律 —— 返回
+        # "查过了、没有这一条"（ok=True，state=not_found），不是工具失败。
+        "clock.periodic_stop": {"periodic_id": "pd-000000",
+                                "reason": "探针：只验键集，不真的停巡查"},
+        "clock.timer_purpose": {"entry_id": "tm-000000",
+                                "purpose": "探针：只验键集，补一句目的"},
+        # ---- 时钟第九件（2026-10-27 第二批）：等待任意计时器返回 ----
+        # 探针走到 ok 分支：`observations` 的 `calling_as("t-probe", …)` 给了台账号，
+        # 于是意图写得成；该台账号名下一条计时器都没有 ⇒ 读数是 `requested=true /
+        # waiting=false / pending=[]`（三态里的"要求过等、而没有可等的东西"那一档，
+        # 也正是"无事可做 ⇒ 交差"的判据输入）。键名读自实跑观测。
+        "clock.wait_any": {"purpose": "探针：只验键集，等任意计时器返回"},
         # ---- 主控的编排面工具（T0-9）：探针参数一律用"不会真的派活出去"的形态 ——
         # 主控的 Conductor 默认没有角色接线，派活会以 refused/not_wired 如实落台账，
         # 而 `ok(...)` 照样返回（拒绝 ≠ 工具失败）。`ensure_project` 的落点由夹具注入临时目录。
@@ -325,8 +351,13 @@ def tool_params() -> dict[str, dict]:
         # 全树追踪（2026-10-24 业主裁定）：探针读 `_seed` 铺的那棵两节点树。
         # `calling_as` 给的是 M 的身份 ⇒ 层数不截断、也能读任意一支。
         "conductor.watch": {"task_id": probe_root, "window": 3},
-        # 沿树指导：收件人是根名下那个子代理；它给目标与各级父各开一条板项 ⇒ 写工具。
-        "conductor.guide": {"to": probe_child, "text": "探针：沿树指导一条"},
+        # 沿秘书链指导（2026-10-26 业主裁定「只走秘书链，逐级转发」）：探针身份
+        # `t-probe` 不在 `tasks` 台账里 ⇒ 第一跳就拼不出链（受控拒绝 `no_identity`，
+        # `status="unknown"`）。三档（delivered / refused / unknown）共用同一份
+        # `data` 字面量 ⇒ 键集合在受控拒绝支上照样验得全；真跑到 delivered 与
+        # `broken_chain` / `retired_target` 三支的判据在新文件
+        # `tests/test_guide_goes_down_the_secretary_chain.py`。
+        "conductor.guide": {"to": probe_child, "text": "探针：沿秘书链指导一条"},
         # 销号（D-59，2026-10-26）：探针「落在受控拒绝那一支」 —— 探针的身份是
         # `t-probe`（`observations` 的 `calling_as`），而 `probe_child` 的父是
         # `probe_task_root` ⇒ 工具回 `state=refused`（"不是你的子代理"）。这一支与
@@ -568,8 +599,10 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 上行（2026-10-19「父子天然双向」）：探针走成功支（`state="escalated"`，
         # 父与会话身份由 `observations` 的 `calling_as` 挂上），键名读自实跑观测。
         "conductor.escalate",
-        # 父子链三件（2026-10-24）：探针都走到了返回数据的成功支（`_seed` 铺了两节点树）。
-        # `conductor.guide` 的键集合在目标与各级父两条落点上都同一份，观测一次即可。
+        # 父子链三件（2026-10-24）：`trace.children` / `conductor.watch` 的探针都走到了
+        # 返回数据的成功支（`_seed` 铺了两节点树，两个节点的 `chain` / `chain_text`
+        # 都是现算的）。`conductor.guide` 的探针走的是受控拒绝那一支（见 `tool_params`
+        # 里的注释）；它三档共用一份 `data` 字面量，所以观测一次即可。
         "trace.children", "conductor.watch", "conductor.guide",
         # 文字层抽取：探针真跑（`tool_params()` 给了 `SOURCE_REL`）⇒ 键名读自实现。
         # 待新增文献列表的七件（2026-10-20）：探针都真跑到了 ok 分支（`_seed` 铺了 4 个槽）
@@ -582,10 +615,15 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 判据的读数：`returns=` 少了实跑给的格），那是 `tools/formal_tools.py`
         # 里那两条 `returns=` 的缺口，不在本文件的射程内。
         "formal.check_formal", "formal.formalize",
-        # D-53 的时钟五件（2026-10-24 晚）：探针都真跑到了 ok 分支（起表/列表/
-        # 取消未命中都是成功读数），键名读自实跑观测。
+        # D-53 的时钟八件（2026-10-24 晚起，2026-10-27 补齐后三件）：探针都真跑到了
+        # ok 分支（起表/起巡查/列表/取消未命中/停未命中/补目的未命中的都是成功读数），
+        # 键名读自实跑观测。
         "clock.now", "clock.timer_start", "clock.alarm_start",
         "clock.timer_list", "clock.timer_cancel",
+        "clock.periodic_start", "clock.periodic_stop", "clock.timer_purpose",
+        # 2026-10-27 第二批的第九件：探针走到"受理了、没有可等的东西"那一支
+        # （`requested=true / waiting=false`），键名读自实跑观测。
+        "clock.wait_any",
     }
 )
 
@@ -647,8 +685,9 @@ MUTATING_LAST: frozenset[str] = frozenset(
         # 上行（2026-10-19）：它往会话里追加一条留言 + 一条 `agent_escalation` ⇒
         # 与别的破坏前置数据的工具同档，排在后面跑（它读的是"我是谁/父是谁"那套上下文）。
         "conductor.escalate",
-        # 沿树指导（2026-10-24）：它给目标与各级父各开一条板项（写 `tasks`）⇒ 排在后面，
-        # 免得 `conductor.board` / `conductor.ledger` 的探针读到它多出来的行。
+        # 沿秘书链指导（2026-10-26）：链尾那一跳会开一条板项、每一跳都写一行转发台账
+        # （写 `tasks` 与 `out/secretary/relay.jsonl`）⇒ 排在后面，免得 `conductor.board` /
+        # `conductor.ledger` 的探针读到它多出来的行。探针本身落在受控拒绝那一支（不写）。
         "conductor.guide",
         # 销号（D-59）：成功那一支会写名册三份台账与一条消边；探针落在受控拒绝那一支
         # （一行都不写），但它与"能销"只差一步上下文 ⇒ 排在后面，免得挡住别人的读数。
@@ -656,6 +695,13 @@ MUTATING_LAST: frozenset[str] = frozenset(
         # 消项（D-68）：成功那一支会改 `tasks` 的 item_state 并追加一条事件；探针落在
         # `no_such_item` 那一支（一行都不写），同样排在后面。
         "conductor.ack",
+        # 时钟里会改 `out/clock` 状态的那几件（2026-10-27）：起周期性巡查会让
+        # `clock.timer_list` 的 `periodics` 读数多一条（别的探针读同一份簿记），
+        # 所以它与停巡查、补目的一起排到后面。三件的探针本身都只落在"受理/未命中"
+        # 那一支（不报醒、不删别人的条目），排在后面只是为了读数的先后稳定。
+        "clock.periodic_start",
+        "clock.periodic_stop",
+        "clock.timer_purpose",
         "fs.move",
         "fs.delete",
         "fs.write",

@@ -73,7 +73,10 @@ _NEEDLES: tuple[tuple[str, str], ...] = (
     ("向 M 请求", "更深的分支要向 M 请求（不是自己想办法绕）"),
     ("只看得见一层", "只看一层这条约束写明"),
     ("下级的下级的下级", "「更深」举的例子（说明它看的是第 2 层以下）"),
-    ("各级父的通知", "M 传下来的东西包含各级父的通知"),
+    # p204 改口：业主 2026-10-26 取消了"让各级父代理知道该消息"，
+    # 现在是「按绝对编号链逐级由秘书转发，内容只有链尾看得到，中间各跳不读内容」。
+    ("只有链尾", "M 传下来的东西只到链尾（中间各跳不读内容）"),
+    ("中间各跳", "中间各跳只转发、不读内容这句写明"),
     ("不是原始全树数据", "你拿到的是指导，不是全树原始数据"),
 )
 
@@ -81,10 +84,11 @@ _NEEDLES: tuple[tuple[str, str], ...] = (
 _M_NEEDLES: tuple[tuple[str, str], ...] = (
     (WATCH, "看全树用哪件工具，点名"),
     (GUIDE, "下发指导用哪件工具，点名"),
-    ("自动各开一条板项", "guide 会通知每一级父（自动，不是手工补）"),
-    ("不必再另发 message", "父级通知是附带的，不用另发一条消息"),
+    ("只有链尾", "guide 的正文只到链尾（各级父通知已取消）"),
+    ("中间各跳", "中间各跳只转发、不读内容这句写明"),
+    ("不必再另发 message", "转发是附带的，不用另发一条消息"),
     (ESCALATE, "非 M 角色深看请求走哪件既有通道"),
-    ("各级父", "各级父都知道这件事写在政策里"),
+    ("chain_text", "回执里那条链的写法（下一轮复述用）"),
 )
 
 #: 渲染下限（反真空：空串或占位文本不许通过）。
@@ -179,9 +183,9 @@ def test_02_m_has_the_tree_tools_and_not_the_one_layer_tool(registry: ToolRegist
 
 
 # ============================================================ 03 M 按实现点名工具
-def test_03_m_policy_names_watch_and_guide_and_says_parents_are_notified(
+def test_03_m_policy_names_watch_and_guide_and_says_content_stops_at_the_tail(
         registry: ToolRegistry) -> None:
-    """03：M 的政策里读到 watch / guide 与「自动通知各级父、不必另发 message」。"""
+    """03：M 的政策里读到 watch / guide 与「内容只到链尾、中间各跳不读、不必另发 message」。"""
     policy = _policy_text(S.CONDUCTOR_ROLE)
     problems = _missing(policy, _M_NEEDLES)
     assert problems == [], "specs/m.py 的 policy 里：\n  - " + "\n  - ".join(problems)

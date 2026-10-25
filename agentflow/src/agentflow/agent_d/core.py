@@ -37,11 +37,20 @@ class _Core:
         *,
         trace_tools: Any | None = None,
         c: Any = _C_AUTO,
+        b: Any = None,
     ) -> None:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
         self.actor = actor
         self.llm = llm
+        #: D 递给 B 的那条路（业主 2026-10-26 晚：「D 到 B 没有路吗？加」）。
+        #:
+        #: 装配层在构造期把它绑进来（`specs/d.py::_build` 的 `peers["B"]`，接线层按
+        #: `(角色, 库)` 单例保证就是 M 召唤的那个 B）。直调 `AgentD(store)` 时它是
+        #: `None` —— 那时交付路径会如实写"没有 B 的入口"，绝不假装递过去了。
+        self.b = b
+        #: 最近一次"把稿递给 B"的读数（`_deliver_carried_to_b` 写；没有 B 时也留痕）。
+        self.last_delivery: dict[str, Any] = {}
         #: 这一趟召唤的 `task_id`（`R1-A1` 的 P-09 口径：模型花销要挂到当次召唤上）。
         #:
         #: 默认空串 = 没有挂点：装配层（`host._Builder._build` → `specs/d.py::_build`）

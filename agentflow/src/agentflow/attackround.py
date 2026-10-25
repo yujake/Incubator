@@ -126,7 +126,7 @@ RETRY_QUOTE_CHARS = 400
 #:
 #: ① 工具路径上 F 的推理缝是 `None`（那 10 条 `dead_end` 的 detail 逐字就是
 #:    `core.py` 里"本框架尚未接线自动推理"那一支的文案），模型根本没被问过 ——
-#:    这一层是装配开关（`--attack-reasoning`），不是判据；
+#:    这一层是装配（F 现在无条件有缝；当年的那个开关已于 2026-10-26 删除），不是判据；
 #: ② 即使缝接上了，提示词里也只有"四种产物之一"的清单，没有一条话说清
 #:    "论证到什么程度就该交 `proof`"。而第 2 段（每轮至少 3 条新事实）在措辞上只
 #:    点名了 reduction 那一类动作，`proof` 又不关闭子目标（FC-22）—— 模型读到的是
@@ -212,7 +212,7 @@ def retry_note(previous: str, error: str, *, illegal: str = "",
 
     ## 为什么要三件事一起给（缺一件都还是"重问三次仍交 `no_change`"）
 
-    真机读数（`projects/mp4` 的 `mp4-6` 那趟，`--attack-reasoning` 开着）：
+    真机读数（`projects/mp4` 的 `mp4-6` 那趟，F 的推理缝当时是开着的）：
     `attack_plans` 计划 `000002` 第 1 轮重问了 3 次，模型每次都交
     `{"outcome": "no_change"}`。这不是"它没读到那句话"—— 判据原话确实在重问提示词里
     （`retry_note = str(exc)`）。缺的是三件别的事：
@@ -410,14 +410,18 @@ BUDGET_UNREADABLE_NOTE = (
     "也不因此把所有的路都堵死"
 )
 
-#: 读数读不到时，钱由谁管（file:line 证据写成常量，好让"证据"本身可被引用与断言）。
+#: 读数读不到时，钱由谁管（写成常量，好让"证据"本身可被引用与断言）。
 #:
-#: - `conductor.py:1063-1077`：`[4a]` FC-19 预算守卫 —— `self._meter_guard(role, budget)`
-#:   在写 `running` 行之前跑（顺序是判据的一部分：干完再拒不是同一个功能）；
-#: - `policy.py:338-343`：`Refusal("budget_exceeded", …, "usd_budget")` 那一档。
+#: 只点符号名、不点行号：这张注记原先写着 `conductor.py:1063-1077` 与
+#: `policy.py:338-343`，而 2026-10-27 实测那两处已经是 `store: Any = None` 与
+#: `Refusal.__post_init__` —— 行号在这棵树里几十分钟就漂，且没有任何判据在读它们
+#: （唯一的读者是 `why` 字符串里那几条文件名断言，行号漂了它照样绿）。
+#: 现在由 `tests/test_agent_f_inference.py::test_p09_the_guard_note_names_live_symbols`
+#: 逐符号证明：`Conductor._meter_guard` 与 `policy.check` 都还在，且行号不许回来。
 BUDGET_GUARD_NOTE = (
-    "钱仍由全局预算守卫管：conductor.py:1063-1077 的 [4a] 开工前守卫"
-    "（guard() 在写 running 行之前跑）与 policy.py:338-343 的 usd_budget 判据"
+    "钱仍由全局预算守卫管：conductor.py 的 `Conductor._meter_guard`（`[4a]` 开工前守卫，"
+    "`guard()` 在写 running 行之前跑）与 policy.py 的 `policy.check` 判出的 "
+    "budget_exceeded / usd_budget 那一档"
 )
 
 #: 预算读数的真源为什么还没接上（缺口登记：不许"永远 unknown 但没人说"）。

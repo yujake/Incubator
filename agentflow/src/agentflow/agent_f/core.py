@@ -17,7 +17,7 @@ from .list_plans import _ListPlans
 #:
 #: 为什么需要它：真机里 M 派 `F.step` 走的是工具层（`attack.step` →
 #: `attack_tools._agent_for(store)` → `AgentF(store)`），而不是 host 那条角色工厂 ——
-#: 于是 host 那一侧接好的缝到不了这个对象上（T2 第 14 趟 `p6p`：`--attack-reasoning` 开着，
+#: 于是 host 那一侧接好的缝到不了这个对象上（T2 第 14 趟 `p6p`：当时那个装配开关开着，
 #: `F.step` 仍然连续 5 次 `no_change`）。工具层拿不到 host 的装配上下文，
 #: 所以由装配方在装配期登记一次；默认 None（与"默认确定性"同一条纪律：
 #: 不登记就没有缝，`attack.step` 照旧落 `dead_end(缺工具)` 并如实说未接线）。
@@ -52,6 +52,9 @@ _EVIDENCE_BLOCK_CHARS = 2000
 _HISTORY_ROUNDS = 3
 #: 一轮 history 里 `detail` 摘要的字数上限。
 _HISTORY_DETAIL_CHARS = 160
+#: 回灌提示词时最多列几条"秘书打回 / 已洗"的逐条说明（超出只列前几条 —— 那一块
+#: 不是证据正文，列全了会把这一轮真正要看的东西挤掉）。
+_HISTORY_FINDINGS = 5
 
 
 def _clip(text: str, limit: int) -> str:
@@ -542,6 +545,15 @@ class _Core:
             return self._deploy_a(sg, plan=plan)
         if owner == "B":
             return self._deploy_b(sg, plan=plan)
+        if owner == "F":
+            # F 的推理是它的工作方式（业主 2026-10-26 晚：「没有默认开，这个就是F的
+            # 工作方式，没有开关的说法」）⇒ 装配层无条件给它缝，这一支在运行形态里
+            # 恒走"真推一轮"。`self.llm is None` 只可能出现在负控测试的打桩里 ——
+            # 那时必须明确报"缺缝"（`_seam_missing_round`），不许退化成静默的
+            # `no_change`：那正是改前真机 10 个计划共有的形态。
+            if self.llm is None:
+                return self._seam_missing_round(sg, plan=plan)
+            return self._reason_self(sg, plan=plan, owner=owner)
         if owner in UNWIRED_OWNERS and self.llm is not None:
             # 插座接上了（`draft/39` §6.31 的 D42）：这一支此前无论有没有模型都落
             # `dead_end(缺工具)` —— 于是真机里 `F.step` 永远回 `no_change`（T2 第 11 趟：
@@ -555,6 +567,9 @@ class _Core:
             # `outcome="no_change"`（"没有新事实"是步级读数，不是产物）。
             # 产物由 `attackround.dead_end_row` 造（同一套判据，不手搓 dict）：
             # 于是 `attack_plans.history` 里每一轮都能回答"它到底交了什么"。
+            #
+            # 这一档从 2026-10-26 晚起只覆盖 C/D（`UNWIRED_OWNERS` 的注释）：
+            # 它们没有可自动调用的推理入口是结构事实，与任何开关无关。
             from .. import attackround as AR
 
             partial = self._unwired_partial(sg)
@@ -562,10 +577,8 @@ class _Core:
                 strategy="套用已知定理",
                 reason="缺工具",
                 evidence=(f"子目标 {sid}（{text}）的 owner={owner} 侧没有可自动调用的推理入口"
-                          "（这一趟 `AgentF.llm` 是 None：工具路径 `attack.step` 的缝从 "
-                          "`agent_f.default_llm()` 取，而它只在装配期被登记 —— 装配方要开 "
-                          "`--attack-reasoning` 才登记）；"
-                          "这一轮据此判定走不下去，而不是假装推进"),
+                          f"（本框架里 {list(UNWIRED_OWNERS)} 没有推理动作，这是结构事实，"
+                          "不是某个开关没打开）；这一轮据此判定走不下去，而不是假装推进"),
                 best_partial=partial,
                 why_strategy="没有可调用的推理入口时，唯一诚实的产物是 dead_end（换子目标/等人接线）",
             )
@@ -574,12 +587,12 @@ class _Core:
                 "outcome": "no_change",
                 "product": product,
                 "detail": (
-                    f"子目标 {sid}（{text}）需要 {owner} 的推理，但**本框架尚未接线自动推理** "
-                    f"⇒ **未推进**（这一轮什么都没做，不是'做了但没结果'）；"
+                    f"子目标 {sid}（{text}）需要 {owner} 的推理，而本框架里 {owner} 侧"
+                    f"没有可自动调用的推理入口（未接线）⇒ 未推进（这一轮什么都没做，"
+                    f"不是'做了但没结果'）；"
                     f"已按 §3.16 落成产物 `dead_end`（reason={product['reason']}，"
                     f"best_partial {len(product['best_partial'])} 条）。"
-                    f"要把 owner={owner} 的子目标真正推起来，需要 {owner} 侧先接上可调用的推理入口；"
-                    "缺的就是装配开关：`--attack-reasoning`（F 的攻坚推理，默认关）。"
+                    f"要把 owner={owner} 的子目标真正推起来，需要 {owner} 侧先接上可调用的推理入口。"
                     "在此之前 F 只如实记账，绝不用空证据冒充进展"
                 ),
                 "evidence": [],
@@ -588,7 +601,7 @@ class _Core:
                 # 每一轮都记一次"未推进"，把 history 灌满。`blocked` 排在最后，
                 # 且必须给出 blocked_reason —— 这正是"不许静默卡住"要求的形态。
                 "status": "blocked",
-                "blocked_reason": f"未接线：本框架尚无可自动调用的 {owner} 侧推理入口",
+                "blocked_reason": f"没有推理入口：本框架里 {owner} 侧没有可自动调用的推理动作",
                 # `in_flight` = "这一轮之后没有新事情可做，别再自动重试它"。
                 # 它与 `status="blocked"` 是两件事：schema 的 blocked 说的是
                 # "卡住了，必须有人来解"（必须留在表里、必须能被人看见），
@@ -817,6 +830,22 @@ class _Core:
                 lines.append("  · best_partial：" + _clip("／".join(what), _HISTORY_DETAIL_CHARS))
             if str(h.get("dead_end_reason") or "").strip():
                 lines.append(f"  · 这一轮被判死路的受控理由：{h.get('dead_end_reason')}")
+            # 秘书打回重写那一档：逐条给 F 看（哪一行 / 写的是哪个号 / 怎么改）。
+            # 只把 detail 摘要回灌是不够的 —— 摘要会截断，而"怎么改"正是下一轮要照着做的。
+            for f in (h.get("deps_refused_findings") or [])[:_HISTORY_FINDINGS]:
+                if not isinstance(f, Mapping):
+                    continue
+                lines.append(
+                    f"  · 秘书打回（第 {f.get('line')} 行）：{_clip(str(f.get('got') or ''), 60)}"
+                    f" → {_clip(str(f.get('expected') or '（无法确定）'), 60)}；"
+                    f"理由 {_clip(str(f.get('why') or ''), 100)}；"
+                    f"怎么改 {_clip(str(f.get('how_to_fix') or ''), 140)}")
+            for w in (h.get("deps_washing") or [])[:_HISTORY_FINDINGS]:
+                if not isinstance(w, Mapping):
+                    continue
+                lines.append(
+                    f"  · 秘书已洗（第 {w.get('line')} 行）：{w.get('from')} → {w.get('to')}"
+                    f"；{_clip(str(w.get('why') or ''), 100)}")
 
         switch = ""
         if strategies:
@@ -1074,6 +1103,49 @@ class _Core:
             "count_attempt": True,
         }
 
+    def _seam_missing_round(self, sg: Mapping[str, Any], *,
+                            plan: Mapping[str, Any]) -> dict:
+        """F 的推理缝被打桩成 None（只允许出现在负控测试里）⇒ 明确报"缺缝"。
+
+        为什么单列一支（而不是沿用 `UNWIRED_OWNERS` 那一支）：F 的推理是它的工作方式，
+        装配层无条件给它缝（`host.wired_llm_conductor`），`UNWIRED_OWNERS` 里也没有 F。
+        所以"F 没有缝"在运行形态里不可达；它只可能是负控把缝打桩成 None。那种情形
+        必须说清缺的是缝（`missing_seam=True` + detail 第一句就是"缺缝"），
+        不许退化成静默的 `no_change` —— 那正是改前真机 10 个计划共有的形态。
+        """
+        from .. import attackround as AR
+
+        sid = str(sg.get("sid") or "")
+        text = str(sg.get("text") or "")
+        product = AR.dead_end_row(
+            strategy="套用已知定理",
+            reason=self.SEAM_MISSING_REASON,
+            evidence=(f"缺缝：子目标 {sid}（{text}）的 owner=F，而这一趟 `AgentF.llm` 是 None"
+                      "（`agent_f.default_llm()` 没有登记缝）。运行形态里 F 出场就有缝"
+                      "（装配层无条件接），所以这一档只可能是负控把缝打桩成 None ⇒ "
+                      "这一轮据此判定走不下去，而不是假装推了一轮"),
+            best_partial=self._unwired_partial(sg),
+            why_strategy="缺缝时唯一诚实的产物是 dead_end（补齐缝再来，而不是假装推进）",
+        )
+        return {
+            "action": "no_change",
+            "outcome": "no_change",
+            "product": product,
+            "detail": (f"缺缝：子目标 {sid}（owner=F）需要 F 的推理，而这一趟没有登记推理缝"
+                       f"（`AgentF.llm` 是 None）⇒ 未推进；已落产物 `dead_end`"
+                       f"（reason={product['reason']}，best_partial "
+                       f"{len(product['best_partial'])} 条）。运行形态里 F 出场就有缝"
+                       "（业主 2026-10-26：「这个就是F的工作方式，没有开关的说法」），"
+                       "所以这一档只可能出现在负控测试里"),
+            "evidence": [],
+            "status": "blocked",
+            "blocked_reason": "缺缝：这一趟 F 没有推理缝（AgentF.llm 是 None）",
+            "in_flight": True,
+            "count_attempt": False,
+            #: 负控专用读数：让"缺缝"这件事在返回值里可机械判读。
+            "missing_seam": True,
+        }
+
     # ------------------------------------------------- E 没有缝（`no_seam`）那一档
 
     #: `dead_end` 里"缺的是缝"这一档用的受控理由（`attackround.DEAD_END_REASONS` 之一）。
@@ -1321,6 +1393,110 @@ class _Core:
         return {"kind": "heuristic", "checked": bool(gap.get("checked")), "gap": gap,
                 "why": str(gap.get("why") or "凭据不足 ⇒ heuristic") + note}
 
+    def _secretary(self) -> Any:
+        """F 自己的秘书（洗稿那一步的执行者）；拿不到就 `None`（调用方必须 fail-closed）。
+
+        为什么在 F 这一层派生：`_apply_round` 的 proof 分支要调"秘书洗一遍"，
+        而这条路在工具层（`attack.step`）与角色工厂两条路上都会走到。派生失败不抛
+        （环境问题），但"没有秘书"会让这一轮不提交给 V，并如实写进读数 ——
+        "没核成"绝不许写成"核过了"。
+        """
+        if getattr(self, "f_secretary", None) is None:
+            try:
+                from ..secretary import for_role_wired
+
+                root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+                # 带缝的那一支：`for_role` 不传 `seam=`，于是这一位秘书的 `judge()` 永远
+                # 走"没有判断面"那一支（真机 sylow5 的死链形态）。洗稿今天不判命题，
+                # 但"这一位秘书将来要判东西"时结构上必须先有缝。
+                self.f_secretary = for_role_wired("F", root=root, store=self.store)
+            except Exception as exc:  # noqa: BLE001 —— 派生失败 ⇒ 洗稿这一格关闭，但不许静默
+                self.f_secretary_problem = f"{type(exc).__name__}: {exc}"
+                self.f_secretary = None
+        return self.f_secretary
+
+    def _wash_manuscript(self, manuscript: Mapping[str, Any]) -> dict[str, Any]:
+        """F 的秘书在"提交给 V 之前"洗一遍依赖面（业主 2026-10-26 晚的裁定）。
+
+        位置是结构性的：本方法由 `_apply_round` 的 proof 分支在 `_proof_outlet` 之前调，
+        于是"打回"的那一份不会进 V 的审查队列、不花 V 那一次调用。
+        三态：
+        - `submittable=True`：洗过了（或本来就合规）；`text` 是要交出去的那一份；
+        - `submittable=False` + `deps_refused`：核出问题 ⇒ 打回重写（`deps_refused_findings`
+          逐条：哪一行、原话、写的是哪个号、应该是什么、为什么、怎么改）；
+        - `submittable=False` + 其它：没核成（没有秘书 / `statements` 读不到 / 稿没写成）
+          —— 同样是"不许提交"，但读数与"核出问题"分开（`wash_reason` 说清是哪一种）。
+        """
+        from .. import depsection as _DS
+
+        text = str(manuscript.get("text") or "")
+        out: dict[str, Any] = {
+            "checked": False, "washed": False, "submittable": False, "text": text,
+            "deps_section_filled": "", "deps_washing": [], "deps_refused": "",
+            "deps_refused_findings": [], "reason": "", "actor": "",
+        }
+        if not text.strip():
+            out["reason"] = ("手上没有手稿正文 ⇒ 秘书没有可洗的依赖面（这一轮不提交给 V："
+                             "没有稿就没有依赖面可登记）")
+            return out
+        sec = self._secretary()
+        if sec is None:
+            out["reason"] = ("F 的秘书派生不出来"
+                             f"（{getattr(self, 'f_secretary_problem', '未知原因')}）⇒ "
+                             "这一遍没核成（没核成不等于没问题）：这一份先别提交给 V")
+            return out
+        got = dict(sec.wash_dependency_face(text) or {})
+        out.update(actor=str(got.get("actor") or ""), checked=bool(got.get("checked")))
+        if not got.get("checked"):
+            out["reason"] = str(got.get("reason") or "秘书没核成（详细原因缺失）")
+            return out
+        if str(got.get("deps_refused") or ""):
+            out.update(deps_refused=str(got.get("deps_refused") or ""),
+                       deps_refused_findings=[dict(x) for x in
+                                              (got.get("deps_refused_findings") or [])],
+                       reason=str(got.get("reason") or ""))
+            return out
+        new_text = str(got.get("text") or text)
+        # 洗过的那一份要落回盘上：D 携带、B 读的都是那份文件，读数必须跟着文件走。
+        # 注意"没改动"也要盖那一行：业主的口径是"提交给 V 的必须是秘书洗过的那一版"，
+        # 而 `manuscript_washed` 说的是"它过了秘书这一道"，不是"它被改过几个字"。
+        new_text = _DS.mark_washed(
+            new_text, actor=str(got.get("actor") or ""),
+            filled=str(got.get("deps_section_filled") or ""))
+        rel = str(manuscript.get("path") or "")
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        if not rel:
+            out["reason"] = ("秘书核过了，而这一份手稿没有落点（`path` 是空的）⇒ "
+                             "洗过的那一份没写回盘，不许提交给 V")
+            return out
+        # 只把"原本写成功了"的那一份写回盘：原写失败时盘上没有稿，
+        # 这里凭空造一个文件会把"手稿没写成"这条读数抹掉（而它是要如实报出去的）。
+        if not manuscript.get("ok"):
+            out.update(checked=True, submittable=True, text=new_text,
+                       washed=True, changed=bool(got.get("washed")),
+                       deps_section_filled=str(got.get("deps_section_filled") or ""),
+                       deps_washing=[dict(x) for x in (got.get("deps_washing") or [])],
+                       reason=("这一份手稿原本没写成功 ⇒ 秘书这一遍没有写回盘"
+                               "（盘上没有稿这件事仍然如实留在读数里）"))
+            return out
+        try:
+            path = Path(root) / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(new_text, encoding="utf-8")
+        except OSError as exc:
+            out["reason"] = (f"洗过的那一份没写回盘（{type(exc).__name__}: {exc}）⇒ "
+                             "不许提交给 V（盘上那一份不是洗过的版本）")
+            return out
+        out.update(checked=True, submittable=True, text=new_text,
+                   # `washed=True` 说的是"提交出去的这一份过了秘书那一遍"（所以它带着
+                   # 洗稿元信息）；改动过几个字另有一格 `changed`（三态不折平）。
+                   washed=True,
+                   changed=bool(got.get("washed")),
+                   deps_section_filled=str(got.get("deps_section_filled") or ""),
+                   deps_washing=[dict(x) for x in (got.get("deps_washing") or [])],
+                   reason=str(got.get("reason") or ""))
+        return out
+
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
                       plan: Mapping[str, Any], proof_manuscript: str = "") -> dict:
         """把这一轮的 `proof` 落成可复核的一行 `statements`（P3-6 的第一半）。
@@ -1505,6 +1681,8 @@ class _Core:
         manuscript: dict[str, Any] = {}
         #: 登记那一刻手上的稿（`_proof_outlet` 的读数；其它三档没有这一格）。
         received: dict[str, Any] = {}
+        #: 秘书洗稿那一遍的读数（只有 `proof` 那一支有内容；打回那一档提前 return）。
+        wash: dict[str, Any] = {}
         if kind == "reduction":
             existing = list(plan.get("subgoals") or [])
             taken: list[str] = []
@@ -1538,6 +1716,50 @@ class _Core:
                 manuscript = {"ok": False, "path": "", "text": "", "rows": [],
                               "preview": {}, "named_by": "plan",
                               "why": f"手稿没写成（{type(exc).__name__}: {exc}）"}
+            # ---- F 的秘书在"提交给 V 之前"洗一遍依赖面（业主 2026-10-26 晚） -----------
+            #
+            # 业主原话：「F的秘书工作的时候是F写好了，提交证明给V前」「秘书若核出问题，
+            # 要提前打回并说明」。所以这一步的位置是结构性的：它必须在 `_proof_outlet`
+            # （提交给 V / 登记）之前 —— 打回的那一份不进 V 的审查队列、不花 V 那次调用。
+            # 洗过的那一份才写回盘、才递给 `_proof_outlet`（于是 D 携带、B 读的都是它）。
+            wash = self._wash_manuscript(manuscript)
+            if not wash.get("submittable"):
+                # 打回重写：这一轮不提交、不登记、不交给 V。读数逐条进 detail，
+                # 于是 F 的下一步材料（下一轮提示词里的 history）看得到"哪一行怎么改"。
+                findings = [dict(x) for x in (wash.get("deps_refused_findings") or [])]
+                detail = (f"打回重写：依赖面这一遍核不过（{wash.get('deps_refused')}）⇒ "
+                          f"这一份**没有提交给 V**、也没有登记；共 {len(findings)} 条："
+                          + ("；".join(
+                              f"第 {f.get('line')} 行「{_clip(str(f.get('quote') or ''), 40)}」"
+                              f"写的是 {f.get('got')}，{f.get('why')} ⇒ 怎么改：{f.get('how_to_fix')}"
+                              for f in findings) or str(wash.get("reason") or "")))
+                return {
+                    "action": "no_change",
+                    "outcome": "no_change",
+                    "detail": detail,
+                    "evidence": [],
+                    "status": "in_progress",
+                    "blocked_reason": "",
+                    "in_flight": False,
+                    # 它确实是一次尝试（F 交了稿），只是被秘书打回 ⇒ 计数不隐瞒。
+                    "count_attempt": True,
+                    "statement_id": "",
+                    "report_path": "",
+                    "manuscript_path": str(manuscript.get("path") or ""),
+                    "manuscript": str(wash.get("text") or manuscript.get("text") or ""),
+                    "manuscript_washed": False,
+                    "deps_section_filled": "",
+                    "deps_washing": [],
+                    "deps_refused": str(wash.get("deps_refused") or ""),
+                    "deps_refused_findings": findings,
+                    "wash_checked": bool(wash.get("checked")),
+                    "wash_reason": str(wash.get("reason") or ""),
+                    "wash_actor": str(wash.get("actor") or ""),
+                }
+            # 洗过的那一份才是"提交给 V 的证明"：把它换回手上这一份字典，后面
+            # `publish_manuscript` 按命题号改名时写的也是它（否则盘上按号命名的那份
+            # 会是没盖洗稿元信息的旧正文）。
+            manuscript = {**dict(manuscript), "text": str(wash.get("text") or "")}
             outlet = self._proof_outlet(product, sg, plan=plan,
                                         proof_manuscript=str(manuscript.get("text") or ""))
             statement_id = str(outlet.get("statement_id") or "")
@@ -1577,6 +1799,14 @@ class _Core:
                 evidence = []
             detail = (f"论证（{product.get('strategy')}）：{len(steps)} 步；"
                       f"这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；{outlet_note}")
+            if wash.get("changed"):
+                detail += (f"；秘书洗稿（{wash.get('actor')}）：依赖面被改过"
+                           f"（补节={wash.get('deps_section_filled') or '无'}"
+                           f"，洗了 {len(wash.get('deps_washing') or [])} 条命题号）"
+                           " —— 交出去的是洗过的那一份")
+            else:
+                detail += (f"；秘书洗稿（{wash.get('actor')}）：依赖面本来就合规（未改动）"
+                           " —— 交出去的是这一份")
             status = "in_progress"
         elif kind == "counterexample_request":
             spec = dict(product.get("script_spec") or {})
@@ -1651,6 +1881,17 @@ class _Core:
             "manuscript_received": received,
             "manuscript_published": bool(manuscript.get("published")),
             "manuscript_renamed_from": str(manuscript.get("renamed_from") or ""),
+            # ---- 秘书那一遍洗稿的读数（业主 2026-10-26 晚）：这一份交出去之前被
+            # 改过没有、补了什么、洗了哪几条命题号。打回那一档走上面那条提前 return
+            # （同样的键，`manuscript_washed=False` + `deps_refused*`）。
+            "manuscript_washed": bool(wash.get("washed")),
+            "deps_section_filled": str(wash.get("deps_section_filled") or ""),
+            "deps_washing": [dict(x) for x in (wash.get("deps_washing") or [])],
+            "deps_refused": "",
+            "deps_refused_findings": [],
+            "wash_checked": bool(wash.get("checked")),
+            "wash_reason": str(wash.get("reason") or ""),
+            "wash_actor": str(wash.get("actor") or ""),
         }
 
     def _spec_from_testable(self, sg: Mapping[str, Any], *,
@@ -2244,9 +2485,9 @@ def selftest() -> int:
         "P-1",
         subgoals=[
             {"sid": "s1", "text": "数值验证 m<=32", "owner": "E", "script_path": "probe.py",
-             "claim": "SpecK(m)=[-m,m]", "claim_key": "P-1#s1"},
-            {"sid": "s2", "text": "查文献中的谱刻画", "owner": "A", "topic": "spectrum of K(m)"},
-            {"sid": "s3", "text": "需要 D 做结构化推理", "owner": "D"},
+             "claim": "SpecK(m)=[-m,m]", "claim_key": "P-1#s1", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+            {"sid": "s2", "text": "查文献中的谱刻画", "owner": "A", "topic": "spectrum of K(m)", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+            {"sid": "s3", "text": "需要 D 做结构化推理", "owner": "D", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
         ],
     )
     print(f"[3] 立项 ⇒ {r1}")
@@ -2318,7 +2559,7 @@ def selftest() -> int:
     # ---- 4b. 另一条终止路径：把"连续无进展提前停止"关掉，验证轮数用尽那一支
     killed = AgentF(st, config={"stall_after_no_progress_rounds": 0})
     pid2 = killed.create_plan("预算烧干路径", "selftest:burn", subgoals=[
-        {"sid": "t1", "text": "未接线的子目标", "owner": "D", "status": "todo"},
+        {"sid": "t1", "text": "未接线的子目标", "owner": "D", "status": "todo", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
     ])["plan_id"]
     for _ in range(max_rounds + 3):
         if killed.step(pid2)["status"] == "stalled":
@@ -2359,3 +2600,4 @@ def selftest() -> int:
     print("=" * 72)
     print(f"SELF-CHECK {'DONE' if failures == 0 else 'FAILED'}（agent_f）：失败 {failures} 项")
     return failures
+

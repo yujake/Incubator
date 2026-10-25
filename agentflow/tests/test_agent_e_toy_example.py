@@ -6,9 +6,9 @@
 
 根因（真机读数，`projects/mp4/data/attack_plans.json` 计划 000003 的 r1/r2）：每轮逐字都是
 `no_change` —— sg1 有判据但没有脚本，E 写不出来（`no_seam`）⇒ 未推进；而 E 的缝从没接过：
-`--attack-reasoning` 只给 F 接、`--semantic-review` 只给 H 接，两个入口（`host.wired_llm_conductor`
-的 `role_llm` 与 `llmseam` 的按角色表）都没登记 `"E"` ⇒ `AgentE.llm is None` ⇒ `author_script`
-受控拒绝 `no_seam` ⇒ F 永远卡在"有判据没脚本"。
+`--semantic-review` 只给 H 接（F 那一侧当年那个开关已于 2026-10-26 删除，F 现在出场就有缝），
+两个入口（`host.wired_llm_conductor` 的 `role_llm` 与 `llmseam` 的按角色表）都没登记 `"E"`
+⇒ `AgentE.llm is None` ⇒ `author_script` 受控拒绝 `no_seam` ⇒ F 永远卡在"有判据没脚本"。
 
 判据四条（含两处负控）：① 正控 `test_positive_control_*`：缝接上 ⇒ F 建计划 → 子目标带
 `testable` → E 用缝写脚本 → 脚本真跑 → `experiments` 落一行，`method`/`exit_code`/`result`/
@@ -135,7 +135,7 @@ def _store(tmp_path: Path, name: str = "ws") -> Store:
     return st
 
 
-def _wiring(st: Store, *, experiment_reasoning: bool, attack_reasoning: bool = True,
+def _wiring(st: Store, *, experiment_reasoning: bool,
             e_stub=None, f_stub=None, sid: str = "toy"):
     """装配一个接了线的会话（`run-agent` 那条路的最小形状）。"""
     seams = {"F": f_stub, "E": e_stub}
@@ -147,7 +147,7 @@ def _wiring(st: Store, *, experiment_reasoning: bool, attack_reasoning: bool = T
     return host.wired_llm_conductor(
         st, session_root=st.root, sid=sid, max_steps=3,
         workspace_root=str(st.root), seam_factory=factory, providers=None,
-        attack_reasoning=attack_reasoning, experiment_reasoning=experiment_reasoning)
+        experiment_reasoning=experiment_reasoning)
 
 
 def _f_of(wiring) -> AgentF:
@@ -314,7 +314,7 @@ def test_negative_control_without_the_seam_f_lays_a_dead_end_and_escalates(tmp_p
     """② 负控：同样的输入、缝关着 ⇒ `no_seam` ＋ 落 `dead_end` ＋ 上报 `missing_input`。
 
     两个方向都钉：
-    - 只开 `--attack-reasoning` 时 E 仍然没有缝（F 的开关不连带打开 E 的缝）；
+    - E 的缝关着不影响 F（F 出场就有缝：2026-10-26 起这件事不再有开关）；
     - 那一轮不是静默 `no_change`，而是 `dead_end(缺工具)` 且把"缺 E 的缝"上报给召唤者
       （收件箱里那条 `agent_message` 的 `escalation.kind == "missing_input"`，`evidence`
       带子目标名）。
@@ -449,13 +449,14 @@ def test_second_negative_control_an_empty_script_is_not_a_success(tmp_path: Path
 
 # ---------------------------------------------------------------- 开关本身的形态
 
-def test_the_switch_is_opt_in_and_does_not_ride_on_attack_reasoning(tmp_path: Path):
-    """`--experiment-reasoning` 的形态：可解析、默认关、且不被 `--attack-reasoning` 连带。
+def test_the_switch_is_opt_in_and_is_not_tied_to_f(tmp_path: Path):
+    """`--experiment-reasoning` 的形态：可解析、默认关、与 F 那件事互不连带。
 
     三条各自钉一件事：
     ① argparse 认得这个开关，且默认是 False（与 `--semantic-review` 同一条纪律）；
-    ② 只开 `attack_reasoning` ⇒ 装配出来的 E 仍然 `llm is None`，notes 如实说"未接线"；
-    ③ 开 `experiment_reasoning` ⇒ E 拿到那个缝，notes 说"接线"。
+    ② 不开它 ⇒ 装配出来的 E 仍然 `llm is None`，notes 如实说"未接线"；
+    ③ 开它 ⇒ E 拿到那个缝，notes 说"接线"；而 F 在两种情况下都有缝
+       （2026-10-26 业主裁定：F 的推理不是开关，那个开关已删除）。
     """
     from agentflow.cli import build_parser
 
@@ -464,10 +465,6 @@ def test_the_switch_is_opt_in_and_does_not_ride_on_attack_reasoning(tmp_path: Pa
     on_args = build_parser().parse_args(
         ["run-agent", "M", "--task", "x", "--experiment-reasoning"])
     assert on_args.experiment_reasoning is True
-    # 与 `--attack-reasoning` 是两个独立开关（同时给、单独给都要能解析）
-    both = build_parser().parse_args(
-        ["run-agent", "M", "--task", "x", "--attack-reasoning", "--experiment-reasoning"])
-    assert both.attack_reasoning is True and both.experiment_reasoning is True
 
     seam = _StubSeam()
 
@@ -478,23 +475,24 @@ def test_the_switch_is_opt_in_and_does_not_ride_on_attack_reasoning(tmp_path: Pa
     w_off = host.wired_llm_conductor(
         st_off, session_root=st_off.root, sid="off", max_steps=1,
         workspace_root=str(st_off.root), seam_factory=factory, providers=None,
-        attack_reasoning=True, experiment_reasoning=False)
+        experiment_reasoning=False)
     notes_off = " ".join(str(n) for n in w_off["notes"])
     assert "E 的写脚本推理：未接线" in notes_off, notes_off
     assert w_off["conductor"].backend.resolve("E").llm is None, (
-        "只开 --attack-reasoning 时 E 不许拿到缝")
+        "没开 --experiment-reasoning 时 E 不许拿到缝")
+    assert w_off["conductor"].backend.resolve("F").llm is seam, (
+        "F 的缝不该由 E 那个开关决定（它出场就有缝）")
 
     st_on = _store(tmp_path, "on")
     w_on = host.wired_llm_conductor(
         st_on, session_root=st_on.root, sid="on", max_steps=1,
         workspace_root=str(st_on.root), seam_factory=factory, providers=None,
-        attack_reasoning=False, experiment_reasoning=True)
+        experiment_reasoning=True)
     notes_on = " ".join(str(n) for n in w_on["notes"])
     assert "E 的写脚本推理：接线" in notes_on, notes_on
     assert w_on["conductor"].backend.resolve("E").llm is seam, (
         "打开 --experiment-reasoning 之后 E 必须真的拿到那个缝")
-    # 没开 `--attack-reasoning` ⇒ F 仍然没有缝（两个方向都不连带）
-    assert w_on["conductor"].backend.resolve("F").llm is None
+    assert w_on["conductor"].backend.resolve("F").llm is seam
     # 工具路径那一份登记同样要在位（`attack.step` 走的是 `role_seam("E")`）
     assert llmseam.role_seam("E") is seam
 

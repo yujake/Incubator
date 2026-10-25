@@ -722,7 +722,10 @@ def ask_user(session_root: Path | str, *, role: str, question: str,
                 break
             if deadline is not None and time.monotonic() >= deadline:
                 break
-            time.sleep(interval)
+            from . import clock as CLK
+
+            CLK.await_io(interval, "等用户回答（轮询磁盘上的回答事件）",
+                         kind="user", where="userio.ask")
     waited = time.monotonic() - t0
     if cancelled:
         return AskOutcome(qid=my_qid, state=STATE_CANCELLED, problem=ASK_CANCELLED,

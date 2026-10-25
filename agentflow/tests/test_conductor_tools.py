@@ -64,6 +64,15 @@ M_TOOL_FACE = {
     # 这里补的是声明，不是行为：五件早就在 M 的面上了。
     "clock.now", "clock.timer_start", "clock.alarm_start", "clock.timer_list",
     "clock.timer_cancel",
+    # 时钟三件（2026-10-25 业主裁定「M 的巡视叫等待20分钟+周期性巡查」＋「忘填目的不报错，
+    # 只是让它追加目的」＋「挂机是将进程挂在时钟上」）：周期性巡查与"补一句目的"是新形，
+    # 所以 M 的面多了三件。周期性那一件的口径写死成 `every_sec=1200` + `purpose="周期性巡查"`
+    # （判据 `tests/test_clock_governs_all_timed_work.py` 第 5 / 7 条）。
+    "clock.periodic_start", "clock.periodic_stop", "clock.timer_purpose",
+    # 时钟第九件（2026-10-27 第二批，业主第三条裁定的后半个动作「可启动计时器等待任意
+    # 计时器返回」）：`clock_tools` 的 `roles` 是"全部角色 + 主控"，所以 M 的面里本来
+    # 就有它 —— 这里补的是声明（相等断言要它）。
+    "clock.wait_any",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 13 件）；留给"编排面本身"的判据用。
@@ -755,8 +764,13 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
     # 是"计数与集合大小同源"。
     writes = sorted(s.name for s in reg.for_role("M")
                     if str(getattr(s, "side_effect", "read")) != "read")
+    # `conductor.summon` / `summon_many` 这两件是"手"那一档的骨架，但它们不一定
+    # 出现在那一行的字面清单里：2026-10-25 加进三件 `clock.*` 写工具之后，这一档
+    # 的件数从 14 涨到 17，`_names` 的展示截断把排在后面的 `conductor.summon`
+    # 吃进了省略号（同 `fs.edit` 那一档的形态，见下面三条的注释）。所以判据落在
+    # "它们在写工具集合里"，而不是"它们在那一行被印出来" —— 那一行只是展示。
     for name in ("conductor.summon", "conductor.summon_many"):
-        assert name in hand_line, (name, hand_line)
+        assert name in writes, (name, writes, hand_line)
     # `fs.write` / `fs.edit` 是这一档里排在 `fs.*` 的那几件：件数涨上来之后
     # 它们会被 `_names` 的截断上限吃掉（2026-10-26 加 `conductor.ack` 之后
     # `fs.edit` 就被省略号吃了 —— 那一行只是展示，不是判据）。所以"它在不在
@@ -769,7 +783,8 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
     assert name not in writes, (name, writes)
     # S6-b：广播是写工具（开板项）⇒ 它也进"手"那一档的清单。
     assert "conductor.broadcast" in hand_line, hand_line
-    # 2026-10-24：`conductor.guide` 同样是写工具（给目标与各级父各开一条板项）。
+    # 2026-10-26：`conductor.guide` 同样是写工具（链尾一条板项 + 每一跳一行转发台账；
+    # 业主取消的那条"各级父各一条"已删，它仍是写工具）。
     assert "conductor.guide" in hand_line, hand_line
     # 2026-10-26（D-59）：`conductor.retire_child` 也是写工具（落名册三份台账 + 一条消边）。
     assert "conductor.retire_child" in hand_line, hand_line

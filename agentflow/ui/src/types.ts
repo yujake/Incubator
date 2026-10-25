@@ -632,6 +632,7 @@ export interface VerificationRow {
   by_role: string;
   by_role_source: string;
   by_task_id: string;
+  citation_checks: { stmt_id: string; verdict: string; quote_verbatim: boolean; note: string }[];
   by_task_id_tri: string;
 }
 
@@ -885,6 +886,7 @@ export interface RosterView {
   tasks_tri: Tri;
   tasks_reason: string;
   truncated: boolean;
+  states: { checked: boolean; reason: string; flying: number | null; standby: number | null; silent: number | null; unknown: number | null; active: number | null; total: number | null; labels: Record<string, string> };
   unplaced: RosterUnplaced[];
 }
 
@@ -904,6 +906,8 @@ export interface RosterNode {
   surface: string;
   status: string;
   task_found: boolean;
+  state: string;
+  state_reason: string;
   in_flight: number | null;
   inbox: RosterInbox;
   tasks: RosterTask[];

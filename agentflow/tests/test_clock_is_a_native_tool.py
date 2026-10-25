@@ -64,7 +64,8 @@ CLOCK_TOOLS: frozenset[str] = frozenset({
 })
 
 #: 到点动作落进 `tasks.detail` 的逐字前缀（判据按它认出"这是一条到点项"）。
-DUE_PREFIX = "计时器到点："
+#: 2026-10-25 业主把到点消息的格式定死成"时间到：…"，前缀随之改名（旧的是"计时器到点："）。
+DUE_PREFIX = "时间到："
 
 
 def _mods():

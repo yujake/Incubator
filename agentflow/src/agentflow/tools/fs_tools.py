@@ -223,6 +223,126 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
     return candidate
 
 
+# ---------------------------------------------------------------- 保留路径（框架渲染的产物）
+#
+# 真机读数（2026-10-26，sylow 那一趟）：F 用 `fs.write` 直接写了
+# `reports/f-proof-sylow1.md`（自由格式、没有四列依赖表、没有洗稿元信息），D 手写了
+# `reports/RESEARCH.md`（没有携带单）⇒ 「F 的 proof 动作渲染 `## 依赖` / 秘书洗稿 /
+# D 的携带单」整条链没有入口：B 只登记了 1 条 conjecture，`dependencies` 0 行。
+#
+# 所以这两类文件是「框架渲染的产物」，不是自由手稿：写它必须走 F 的 `proof` 动作
+# （渲染 `## 依赖` 节 + 秘书盖洗稿元信息）或 D 的交付动作（渲染携带单）。
+#
+# ---- 为什么保留表上是这三个角色（业主 2026-10-27 裁定「把 M 也纳入」）--------------
+#
+#   F  —— 写内容的那个人：证明手稿（`reports/f-proof-*.md`）由它的 `proof` 动作渲染，
+#          `## 依赖` 四列表与洗稿元信息都是框架产物的一部分，手写就等于把这条链跳过；
+#   D  —— 交研究稿的那个人：研究手稿（`reports/RESEARCH.md` / `reports/<qid>-research.md`）
+#          由 `write_report` 渲染，携带单是它的一部分，手写就等于"没有携带单"；
+#   M  —— 主控：它既不是内容的作者也不是收方，更不该绕过框架。实测（2026-10-27
+#          `start --mode research` 那一趟）M→F 不是允许边，于是 M 自己用 `fs.write`
+#          把 `reports/f-proof-cli.md` 写进了盘 —— 那正是"换个角色绕过"的同一条路。
+#          裁定逐字：「把 M 也纳入保留表 …… 它是主控，更不该绕过框架」。
+#
+# 三类之外一个字都不动：G/L 的排版产物、M 的其它产出（`reports/m-review.md` 这一类）
+# 都不在表上。判据的形状因此是"按角色分行的一张数据表"，不是"谁都不许写 reports/"。
+
+#: 手稿 / 报告所在的目录名（D 的 `reports_subdir` 缺省就是它，`depsection.MANUSCRIPT_DIR`）。
+_RESERVED_DIR = "reports"
+
+#: 保留路径表：`(角色, 规则)` 逐行。规则三档（都只作用在文件名上）：
+#:
+#: - `prefix:f-proof-`   F 的证明手稿（`depsection.MANUSCRIPT_STMT_PREFIX` 与
+#:                       `MANUSCRIPT_PLAN_PREFIX` 都以此开头，两个时刻一起拦）；
+#: - `contains:RESEARCH` D 的跨趟研究手稿（`depsection.D_REPORT_NAMES`）；
+#: - `suffix:-research.md` D 的每问题工作稿（`depsection.D_WORKING_SUFFIX`）。
+#:
+#: 三行角色各自的理由见上面那段（F 写内容 / D 交研究稿 / M 是主控）。
+#: 这张表是判据的唯一落点：清空它（判据的反真空那一条就是这么打桩的）⇒
+#: 下面那条闸对任何路径都不再生效，于是"保留路径被拒绝"这件事必须由一条会红
+#: 的判据证明，而不是靠这段注释自证。
+RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
+    ("F", "prefix:f-proof-"),
+    ("D", "contains:RESEARCH"),
+    ("D", "suffix:-research.md"),
+    ("M", "prefix:f-proof-"),
+    ("M", "contains:RESEARCH"),
+    ("M", "suffix:-research.md"),
+)
+
+#: 受控码：这一笔写的是框架渲染的产物（不是自由手稿）。
+RESERVED_ARTIFACT_KIND = "reserved_framework_artifact"
+
+#: 拒信（逐字）：说清"这是什么"与"该走哪个动作"，而不是只说"不许"。
+RESERVED_ARTIFACT_MESSAGE = (
+    "这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写 —— "
+    "用 F 的 proof 动作（它会渲染 `## 依赖` 节）/D 的交付动作（它会渲染携带单）"
+)
+
+
+def _caller_role() -> str:
+    """这一笔工具调用是哪个角色发起的（不在角色调用里 ⇒ 空串）。
+
+    为什么从 `conductor.current_caller_role()` 现读：工具的形状里没有"我是谁"这一格
+    （与 `tools/table_tools._caller_role`、`tools/trace_tools` 同一处挂点）。
+    空串 = 没挂点（脚本 / 判据直调）⇒ 保留表不生效，与"我是某个表外角色"分开。
+    """
+    try:
+        from ..conductor import current_caller_role
+    except Exception:  # noqa: BLE001 —— 拿不到挂点就是"不知道我是谁"，按表外处理
+        return ""
+    try:
+        return str(current_caller_role() or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _rule_matches(rule: str, name: str) -> bool:
+    """`RESERVED_ARTIFACT_TABLE` 的一行是否命中文件名 `name`（大小写不敏感）。"""
+    text = str(rule or "")
+    lower = str(name or "").casefold()
+    kind, _sep, needle = text.partition(":")
+    if not needle:
+        return False
+    if kind == "prefix":
+        return lower.startswith(needle.casefold())
+    if kind == "suffix":
+        return lower.endswith(needle.casefold())
+    if kind == "contains":
+        return needle.casefold() in lower
+    return False
+
+
+def _reserved_artifact(rel: str, role: str) -> bool:
+    """`rel`（工作区内相对路径）是不是 `role` 那份被保留的框架产物。
+
+    两层判据，缺一不命中：① 路径在 `reports/` 下且是 `.md`；② `(角色, 规则)` 那一行
+    命中文件名。表外角色（G/L 的排版产物、M 的其它报告）连第二层都不进 ——
+    保留表只对表上那三行角色（F / D / M）负责。
+    """
+    owner = str(role or "")
+    rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
+    if not rules:
+        return False
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    if len(parts) < 2 or parts[0].casefold() != _RESERVED_DIR:
+        return False
+    name = parts[-1]
+    if not name.casefold().endswith(".md"):
+        return False
+    return any(_rule_matches(rule, name) for rule in rules)
+
+
+def _reserved_refusal(rel: str, role: str) -> ToolResult | None:
+    """保留路径的受控拒绝（不在表内 ⇒ None，调用方照旧往下走）。"""
+    if not _reserved_artifact(rel, role):
+        return None
+    return fail(
+        RESERVED_ARTIFACT_MESSAGE,
+        path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
+    )
+
+
 def _rel(ctx: FsContext, path: Path) -> str:
     """工作区内的相对路径（一律 `/` 分隔）。返回给调用方的路径都长这样 ——
     绝对路径会泄露机器布局，且让"同样的调用在不同机器上结果不同"。"""
@@ -630,7 +750,10 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
 
 @tool(
     "fs.write",
-    "写文本文件（原子落盘；默认不覆盖已有文件）。",
+    "写文本文件（原子落盘；默认不覆盖已有文件）。保留产物闸：reports/ 下的框架产物"
+    "（F 的 `f-proof-*`、D 的 `RESEARCH.md` / `*-research.md`）对 F / D / M 一律拒写"
+    "（受控码 reserved_framework_artifact）—— 那几份只有 F 的 proof 动作、D 的交付动作"
+    "能渲染，请走各自的渲染动作。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -655,6 +778,11 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     `os.replace` 之后只有"旧内容"或"新内容"两种可能，判断因此是确定的。
     """
     target = _resolve(ctx, path)
+    # 保留路径闸在最前面（`保持零写入`：连"已存在"那条分支都不该先给它）：
+    # F 的证明手稿 / D 的研究手稿由框架渲染，手写会把依赖面与携带单整条链跳过。
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+    if denied is not None:
+        return denied
     if target.exists() and target.is_dir():
         raise ToolError(f"{_rel(ctx, target)} 是目录，不能当文件写")
 
@@ -718,7 +846,9 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次，可选要求 sha256 与读到的那一版一致。",
+    "定点替换文件里的一段文本（old_string → new_string）：默认要求 old_string 恰好出现一次，可选要求 sha256 与读到的那一版一致。"
+    "保留产物闸同样管这一件：reports/ 下 F 的 `f-proof-*`、D 的 `RESEARCH.md` / `*-research.md` "
+    "对 F / D / M 一律拒写（reserved_framework_artifact），请走各自的渲染动作。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -752,6 +882,11 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     `MAX_EDIT_BYTES` 就拒 —— 那说明这次改动不是"定点"。
     """
     target = _resolve(ctx, path)
+    # 保留路径闸同样在最前面（`fs.edit` 能改正文，等于绕过同一条保留表）：
+    # 与 `fs.write` 共用一个判据（`_reserved_artifact`），不是两份表。
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+    if denied is not None:
+        return denied
     # 读后写那一闸在最前面（policy 层先于 provider 层，逐字照 DSH `POL:64-70` → `FSL:840`）：
     # DSH 的编辑闸跑在逐字匹配之前，为的是"陈旧的编辑绝不报成误导性的「找不到」"。
     rel = _rel(ctx, target)

@@ -264,6 +264,11 @@ class AgentV:
             "signed_bit3": False,
             "reviewed_by": {},
             "bits": {},
+            # 写回读数（`statement_writeback`）：成功支与"台账那行没落地"那一支都会给，
+            # 而"没查成"那几条路径改前没有这一格 ⇒ 三条返回路径的键集合不同，
+            # 声明只能二选一（要么模型看不见这一格，要么声明里多一格永远不出现的）。
+            # 三态纪律取法：键在这里就存在，`{}` = 这一趟没有写回可报。
+            "review_write": {},
             "ledger": "",
             "reason": "",
             "detail": "",
@@ -467,7 +472,11 @@ class AgentV:
             row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
                                          verdict=verdict, verifier=self.actor,
                                          submission_id=str(self.cfg.get("submission_id") or ""),
-                                         store=self.store, proof_no=no)
+                                         store=self.store, proof_no=no,
+                                         # `problem` 非空（依赖台账读不出来）要随行落盘：
+                                         # 否则读侧只看到空的 `citation_checks`，分不开
+                                         # "没查成"与"核过、没有引用"。
+                                         citation_gate=gate)
         except (VR.VerificationError, OSError) as exc:
             # 台账写不进去（坏行 / 权限 / 磁盘 / 目录）⇒ 这是"没查成"，不是"签住了"。
             # 不接住它会让异常穿透到工具层，而那一层读不到"这一签没落地"这句话。

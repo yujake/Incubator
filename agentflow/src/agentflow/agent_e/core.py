@@ -13,6 +13,25 @@ from .evidence_for import _EvidenceFor
 from .list_experiments import _ListExperiments
 from .run_script_experiment import _RunScriptExperiment
 
+
+def _note_process_wait(elapsed_sec: float, site: str) -> None:
+    """把"这一次等外部检查器/实验子进程等了多久"记进主时钟那本账。
+
+    旁路：记账炸了不许把"跑实验"这一趟带坏（与 `_kill_child` 同一族的失败姿态）。
+    记的是实测耗时，不是 `communicate` 那个 timeout 上限 —— 后者是预算，前者是读数。
+
+    `site` 用来分开同一个函数里的两处等待：`poll`（0.2 s 的轮询片）与 `final`
+    （看到停机开关之后最多 15 s 的收尾等待）。两处 timeout 差 75 倍，合成一行就没法
+    读"到底哪一处把时间吃掉了"。
+    """
+    try:
+        from .. import clock as CLK
+
+        CLK.note_process_wait(elapsed_sec, where=f"agent_e._run_script/{site}",
+                              waited_for=f"communicate(timeout={'0.2' if site == 'poll' else '15'})")
+    except Exception:  # noqa: BLE001 - 旁路
+        pass
+
 class _Core:
     def __init__(
         self,
@@ -126,116 +145,147 @@ class _Core:
         放在子进程里，最坏情况是这一轮实验失败，而不是整个框架被带走。
         超时同理：`subprocess.run(timeout=...)` 之后进程会被杀掉，
         而进程内的 `signal.alarm` 在 Windows 上根本不存在。
+
+        ## 程序计时器（业主 2026-10-27 第一条裁定）
+
+        「运行一个程序时会自动启动一个计时器，程序运行完成时计时器会返回」。
+        这一段是 `verify.run_experiment` 的真身，所以起进程之前先登记一条
+        `kind="program"` 的计时器（`clock.program_span`），四条出口各自给它收口：
+        起不来 ⇒ `failed`、超时 ⇒ `timed_out`、用户叫停 ⇒ `killed`、
+        跑完 ⇒ `exited` + 退出码。读数在 `clock.programs(workspace)`。
         """
         cmd = self._command_for(path)
         env = dict(os.environ)
         env.setdefault("PYTHONIOENCODING", "utf-8")
         env.setdefault("PYTHONUTF8", "1")
         t0 = time.monotonic()
-        try:
-            # 用 `Popen` + 轮询而不是 `subprocess.run(timeout=…)`（`draft/37` §128）：
-            # 停机开关（`.agentflow-stop`）一出现就把这条子进程杀掉，并如实记成
-            # "用户叫停"而不是"超时"。理由是真机读数：一次 600 s 的枚举实验会把
-            # 600 s 跑满 —— 用户叫停之后它照样跑完，那 10 分钟白烧。
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(self.workspace_root),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=env,
-            )
-        except OSError as e:
-            # 解释器不存在 / 权限不足等：这是没跑起来，不是"跑失败"。
-            return {
-                "exit_code": None,
-                "stdout": "",
-                "stderr": f"[无法启动] {type(e).__name__}: {e}",
-                "runtime_sec": round(time.monotonic() - t0, 4),
-                "timed_out": False,
-                "launch_error": f"{type(e).__name__}: {e}",
-            }
-        # ---- 进程树治理（`draft/39` §3.21 五 I13）：把这条实验子进程装进作业对象。
-        #
-        # 为什么在这里（真机读数）：实验脚本自己会起子进程（并行枚举、调用外部求解器），
-        # 而 `_kill_child(proc)` 只杀直接子进程 —— 用户叫停之后那些孙子照旧跑
-        # （历史读数：包装进程被杀之后 python 子进程又跑了 12 分钟）。
-        # 作业对象把"终止"变成"关句柄"：根与它之后生的后代一起被 OS 收掉，
-        # 且不依赖 `taskkill` 能不能成功（受限环境里实测被拒）。
-        # 拿不到作业对象（非 Windows / API 缺失）就照旧走 `_kill_child`：
-        # 这条改动只增不减，读数里记着走的是哪一路。
-        job = None
-        try:
-            from .. import jobobject as _JO
+        from .. import clock as _CLK
 
-            if _JO.available():
-                job = _JO.create_job(f"agentflow-e-{proc.pid}")
-                _JO.assign_tree(job, proc.pid)
-        except Exception:  # noqa: BLE001 —— 装不进作业不改变这一趟的结论，照旧走 kill_child
-            job = None
-        limit = max(1, int(timeout))
-        stopped = False
-        stopped_note = ""
-        while True:
+        with _CLK.program_span(program=(cmd[0] if cmd else ""), argv=cmd,
+                               workspace=str(self.workspace_root),
+                               where="agent_e._run_script",
+                               purpose=f"跑实验脚本 {path.name}（等它退出）") as prog:
             try:
-                out, err = proc.communicate(timeout=0.2)
-                break
-            except subprocess.TimeoutExpired:
-                pass          # 0.2 s 到点而已：等的是「子进程结束」或「停机开关落盘」
-            if _stop_requested(self.workspace_root):
-                stopped = True
-                if job is not None:
-                    _JO.grace_then_kill(job, grace_sec=1.0, poll_sec=0.2)
-                else:
-                    _kill_child(proc)
+                # 用 `Popen` + 轮询而不是 `subprocess.run(timeout=…)`（`draft/37` §128）：
+                # 停机开关（`.agentflow-stop`）一出现就把这条子进程杀掉，并如实记成
+                # "用户叫停"而不是"超时"。理由是真机读数：一次 600 s 的枚举实验会把
+                # 600 s 跑满 —— 用户叫停之后它照样跑完，那 10 分钟白烧。
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=str(self.workspace_root),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    env=env,
+                )
+            except OSError as e:
+                # 解释器不存在 / 权限不足等：这是没跑起来，不是"跑失败"。
+                prog.finish(outcome="failed", note="进程没起来（OSError）")
+                return {
+                    "exit_code": None,
+                    "stdout": "",
+                    "stderr": f"[无法启动] {type(e).__name__}: {e}",
+                    "runtime_sec": round(time.monotonic() - t0, 4),
+                    "timed_out": False,
+                    "launch_error": f"{type(e).__name__}: {e}",
+                    "program_timer": prog.reading(),
+                }
+            prog.attach_pid(int(getattr(proc, "pid", 0) or 0) or None)
+            # ---- 进程树治理（`draft/39` §3.21 五 I13）：把这条实验子进程装进作业对象。
+            #
+            # 为什么在这里（真机读数）：实验脚本自己会起子进程（并行枚举、调用外部求解器），
+            # 而 `_kill_child(proc)` 只杀直接子进程 —— 用户叫停之后那些孙子照旧跑
+            # （历史读数：包装进程被杀之后 python 子进程又跑了 12 分钟）。
+            # 作业对象把"终止"变成"关句柄"：根与它之后生的后代一起被 OS 收掉，
+            # 且不依赖 `taskkill` 能不能成功（受限环境里实测被拒）。
+            # 拿不到作业对象（非 Windows / API 缺失）就照旧走 `_kill_child`：
+            # 这条改动只增不减，读数里记着走的是哪一路。
+            job = None
+            try:
+                from .. import jobobject as _JO
+
+                if _JO.available():
+                    job = _JO.create_job(f"agentflow-e-{proc.pid}")
+                    _JO.assign_tree(job, proc.pid)
+            except Exception:  # noqa: BLE001 —— 装不进作业不改变这一趟的结论，照旧走 kill_child
+                job = None
+            limit = max(1, int(timeout))
+            stopped = False
+            stopped_note = ""
+            while True:
+                t_call = time.monotonic()
                 try:
-                    out, err = proc.communicate(timeout=15)
+                    out, err = proc.communicate(timeout=0.2)
+                    _note_process_wait(time.monotonic() - t_call, "poll")
+                    break
                 except subprocess.TimeoutExpired:
-                    # 杀不掉（极少数：受限环境拒绝终止）也不许把整趟挂在这里 ——
-                    # 如实落"用户叫停 + 子进程没能终止"，剩下的事交给人。
-                    out, err = "", ""
-                    stopped_note = "（子进程在 15 s 内没能终止）"
-                break
-            if time.monotonic() - t0 > limit:
-                if job is not None:
-                    _JO.grace_then_kill(job, grace_sec=0.5, poll_sec=0.2)
-                else:
-                    _kill_child(proc)
-                out, err = proc.communicate()
+                    _note_process_wait(time.monotonic() - t_call, "poll")
+                    pass          # 0.2 s 到点而已：等的是「子进程结束」或「停机开关落盘」
+                if _stop_requested(self.workspace_root):
+                    stopped = True
+                    if job is not None:
+                        _JO.grace_then_kill(job, grace_sec=1.0, poll_sec=0.2)
+                    else:
+                        _kill_child(proc)
+                    t_call = time.monotonic()
+                    try:
+                        out, err = proc.communicate(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        _note_process_wait(time.monotonic() - t_call, "final")
+                        # 杀不掉（极少数：受限环境拒绝终止）也不许把整趟挂在这里 ——
+                        # 如实落"用户叫停 + 子进程没能终止"，剩下的事交给人。
+                        out, err = "", ""
+                        stopped_note = "（子进程在 15 s 内没能终止）"
+                    else:
+                        _note_process_wait(time.monotonic() - t_call, "final")
+                    break
+                if time.monotonic() - t0 > limit:
+                    if job is not None:
+                        _JO.grace_then_kill(job, grace_sec=0.5, poll_sec=0.2)
+                    else:
+                        _kill_child(proc)
+                    out, err = proc.communicate()
+                    prog.finish(outcome="timed_out",
+                                note=f"超过 timeout={timeout}s，进程被杀了")
+                    return {
+                        "exit_code": None,
+                        "stdout": _decode(out),
+                        "stderr": _decode(err) + f"\n[超时] 超过 timeout={timeout}s，进程已被杀掉",
+                        "runtime_sec": round(time.monotonic() - t0, 4),
+                        "timed_out": True,
+                        "launch_error": None,
+                        "program_timer": prog.reading(),
+                    }
+            if job is not None:
+                # 关句柄 = OS 收掉整棵传递树（包括实验脚本自己起的那些子进程）。
+                _JO.close(job)
+            if stopped:
+                prog.finish(outcome="killed", note="停机开关落盘 ⇒ 进程被终止")
                 return {
                     "exit_code": None,
                     "stdout": _decode(out),
-                    "stderr": _decode(err) + f"\n[超时] 超过 timeout={timeout}s，进程已被杀掉",
+                    "stderr": _decode(err) + "\n[用户叫停] 停机开关已落盘 ⇒ 这条子进程被终止"
+                                             f"（这不是超时，也不是跑失败）{stopped_note}",
                     "runtime_sec": round(time.monotonic() - t0, 4),
-                    "timed_out": True,
+                    "timed_out": False,
+                    "stopped_by_user": True,
                     "launch_error": None,
+                    "process_tree": "job" if job is not None else "kill_child",
+                    "program_timer": prog.reading(),
                 }
-        if job is not None:
-            # 关句柄 = OS 收掉整棵传递树（包括实验脚本自己起的那些子进程）。
-            _JO.close(job)
-        if stopped:
+            prog.finish(outcome="exited", exit_code=proc.returncode)
             return {
-                "exit_code": None,
+                "exit_code": proc.returncode,
                 "stdout": _decode(out),
-                "stderr": _decode(err) + "\n[用户叫停] 停机开关已落盘 ⇒ 这条子进程被终止"
-                                         f"（这不是超时，也不是跑失败）{stopped_note}",
+                "stderr": _decode(err),
                 "runtime_sec": round(time.monotonic() - t0, 4),
                 "timed_out": False,
-                "stopped_by_user": True,
                 "launch_error": None,
                 "process_tree": "job" if job is not None else "kill_child",
+                "program_timer": prog.reading(),
             }
-        return {
-            "exit_code": proc.returncode,
-            "stdout": _decode(out),
-            "stderr": _decode(err),
-            "runtime_sec": round(time.monotonic() - t0, 4),
-            "timed_out": False,
-            "launch_error": None,
-            "process_tree": "job" if job is not None else "kill_child",
-        }
 
 class AgentE(_RunExperiment, _AuthorScript, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _Core):
     """数值实验与反例智能体。

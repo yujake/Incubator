@@ -64,9 +64,14 @@ def test_a_single_missing_field_keeps_the_original_wording(tmp_path: pathlib.Pat
 
 
 def test_a_complete_subgoal_lands_a_plan(tmp_path: pathlib.Path) -> None:
-    """正控：给齐了要真的落一行（别为了改拒信把正常路径弄坏）。"""
+    """正控：给齐了要真的落一行（别为了改拒信把正常路径弄坏）。
+
+    2026-10-27 起"给齐"还多一格 `testable`（写侧硬拦：没有可检验形式的子目标
+    不许立项，否则花钱闸会在推理之前把它挡掉，F 一次都跑不起来）。
+    """
     store, reg = _reg(tmp_path)
-    res, err = _create(reg, [{"sid": "s1", "text": "把命题约化到局部情形", "owner": "E"}])
+    res, err = _create(reg, [{"sid": "s1", "text": "把命题约化到局部情形", "owner": "E",
+                              "testable": "枚举小情形后能一句话判它成立或不成立"}])
     assert res is not None and res.ok, (err, getattr(res, "error", ""))
     rows = store.rows("attack_plans")
     assert len(rows) == 1, rows
