@@ -314,26 +314,40 @@ def test_owner_e_subgoal_really_produces_an_experiment(store):
     assert sg["negation_kind"] == "not_proved"
 
 
-def test_owner_e_formal_subgoal_reaches_proof_and_closes_only_with_proof(store, monkeypatch):
-    """`P-8` 的 F 侧接线：形式化子目标要把 `name` / `imports` 传给 E。
+def test_a_formal_subgoal_is_refused_at_create_plan_and_says_why(
+        store: Store, monkeypatch: pytest.MonkeyPatch):
+    """形式化子目标在立项那一刻就受控拒绝，且拒信点名"只有 B 能派 L、这不是 F 的活"。
 
-    不传的话 E 只能用文件名词干 + 检查器默认库：裸 `lean` 解析不到 Mathlib
-    （`import_unavailable`）⇒ 那次检查根本没发生 ⇒ F 永远拿不到 proof 级证据、
-    子目标永远关不掉。这里用桩检查器证明"参数真的到了检查器"，
-    并断言只有 `verified` 才把子目标标 `closed`。
+    ## 口径（业主 2026-10-27 逐字：「我们现在不准边研究边 lean，我在 L 侧已经描述很清楚了
+    ## 什么时候能派 L」）
+
+    理由登记在 `specs/l.py`：只有 B 可以派 L（B 是 `statements` 的唯一登记方，形式化的
+    成本由那个登记证明的人判断），而「F → L」那条边「本批曾开又撤回：F 的攻坚是流水线的
+    一环，挂在它下面就是把形式化变成流水线的一步」。
+
+    所以 F 这一侧的正确行为不是在派活时落死路，而是在立项那一刻就说"这个形状不该在 F
+    这里"：整笔不写库、受控码 `formal_is_not_f_todo`，并把那条裁定逐字带回去。
+
+    ## 改前是什么形态（这条判据改前是"能立出来、到派活才 dead_end"）
+
+    改前 formal 子目标照建不误，直到 `step` 派活那一步才落 `dead_end(formal_edge_missing)`：
+    预算照花、history 里堆一串同一个死路，而"别立它"这句话从来没在立项时说过。
+
+    这一条同时守"不许悄悄降级成 E 的数值检查"：桩检查器一次都不许被调到。
     """
     from agentflow import formalgw as FG
     from agentflow.tools import verify_tools as VT
 
+    # 桩：检查器"能跑通"。它现在是反读数 —— 形式化真的没走到"起检查器"那一步。
     monkeypatch.setattr(VT, "detect_verifier", lambda: {
         "checked": True,
         "available": [{"name": "lean", "path": "lean", "version": "(桩)"}],
         "available_names": ["lean"], "probe_errors": [], "reason": "（桩）探测到 lean",
     })
-    seen: dict = {}
+    checked: list[dict] = []
 
     def _fake(source, *, name, imports, timeout_sec, run_fn=None, workdir=None, source_path=None):
-        seen.update({"name": name, "imports": tuple(imports), "source_path": source_path})
+        checked.append({"name": name, "imports": tuple(imports)})
         raw = {"status": "verified", "reason": "（桩）通过", "stdout": "（桩）no axioms",
                "stderr": "", "axioms": [], "sorry_count": 0, "decl_matches": True,
                "declared_in_source": True, "ran": True, "backend": {"status": "ok"}}
@@ -342,21 +356,77 @@ def test_owner_e_formal_subgoal_reaches_proof_and_closes_only_with_proof(store, 
     monkeypatch.setattr(FG, "check_lean", _fake)
     rel = write_script(store, "proofs/f_probe.lean", "theorem f_probe : 1 + 1 = 2 := rfl\n")
     f = make_f(store)
-    pid = f.create_plan("难题", "PK-FORMAL", subgoals=[
+    out = f.create_plan("难题", "PK-FORMAL", subgoals=[
         {"sid": "s1", "text": "把这条命题形式化", "owner": "E", "method": "formal",
-         "script_path": rel, "name": "f_probe", "imports": [], "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
-    ])["plan_id"]
-    out = f.step(pid)
+         "script_path": rel, "name": "f_probe", "imports": [],
+         "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+    ])
 
-    assert seen["name"] == "f_probe", "声明名没有传到检查器"
-    assert seen["imports"] == (), "imports 没有传到检查器（空列表 ⇒ 纯内核检查）"
-    assert out["outcome"] == "progress"
-    row = store.rows("experiments")[0]
-    assert row["evidence_kind"] == "proof"
-    assert row["verifier_subject_key"] == row["claim_key"], "检查器输出必须绑定到这条命题"
-    sg = store.rows("attack_plans")[0]["subgoals"][0]
-    assert sg["proof_experiment_ids"] == [row["experiment_id"]]
-    assert sg["status"] == "closed", "只有 proof 级证据才允许关闭子目标（FC-22）"
+    _assert_formal_is_refused_at_create_plan(out, store)
+    assert checked == [], (
+        "形式化子目标被送进了检查器（或它的数值替身）⇒ 形式化被当成验证糊过去了")
+
+
+def _assert_formal_is_refused_at_create_plan(out: dict, store: Store) -> None:
+    """立项那一层的尺子（正控与负控共用同一份 —— 负控要证明的正是"它在这种形态下必红"）。
+
+    四件：① 受控拒绝（`ok=False` + 受控码）；② 一行都不写库；③ 拒信带回那条裁定；
+    ④ 一条实验行都没有（形式化没被降级成一次数值检查）。
+    """
+    assert out.get("ok") is False, (
+        f"形式化子目标没有被受控拒绝：ok={out.get('ok')!r} kind={out.get('kind')!r}")
+    assert out.get("kind") == "formal_is_not_f_todo", (
+        f"受控码不对（{out.get('kind')!r}）⇒ 调用方读不到'这个形状不该在 F 这里'")
+    assert out.get("created") is False and not out.get("plan_id"), (
+        f"被拒的那一笔仍然报建成了：created={out.get('created')!r} "
+        f"plan_id={out.get('plan_id')!r}")
+    assert store.rows("attack_plans") == [], (
+        "被拒的计划落了库 ⇒ 之后每一轮 step 都会在同一个坏行上再死一次")
+    assert store.rows("experiments") == [], (
+        "形式化子目标在 E 那里落了实验行 ⇒ 它被派给 E 了（改前那一路的形态）")
+    text = f"{out.get('error') or ''} {out.get('reason') or ''}"
+    for want in ("只有 B 能派 L", "不是 F 的活", "specs/l.py"):
+        assert want in text, (
+            f"拒信里没有 {want!r}（对着改的人不知道该往哪走）：{text}")
+
+
+def test_stubbing_the_formal_judgement_turns_that_criterion_red(
+        store: Store, monkeypatch: pytest.MonkeyPatch):
+    """负控 + 反真空：把 F 的 formal 判定打桩成恒 False ⇒ 上面那条尺子必红。
+
+    为什么必须有这一条：正控在改后的代码上绿，本身证明不了它守住"formal 不许立项" ——
+    若实现只是多加了一句文案，它照样会绿。所以这里把判定入口打桩成"永远不是形式化"，
+    行为于是退回改前那一路（计划立得成、formal 被派给 E、E 受控拒绝、F 记成实验失败），
+    再断言那把尺子在这种形态下确实拒绝。
+
+    反真空的前半句也在这里：先证明这个判定对真子目标判得出来（否则"打桩成 False"什么都
+    证明不了 —— 一个恒 False 的判据被打桩成 False 是 no-op）。
+    """
+    from agentflow.agent_f import core as FC
+
+    assert FC._is_formal_subgoal({"method": "formal", "owner": "E"}) is True, (
+        "判定本身是空的（真子目标都判不出来）⇒ 下面那次打桩不构成负控")
+
+    monkeypatch.setattr(FC, "_is_formal_subgoal", lambda sg: False)
+    rel = write_script(store, "proofs/f_probe.lean", "theorem f_probe : 1 + 1 = 2 := rfl\n")
+    f = make_f(store)
+    out = f.create_plan("难题", "PK-FORMAL-NEG", subgoals=[
+        {"sid": "s1", "text": "把这条命题形式化", "owner": "E", "method": "formal",
+         "script_path": rel, "name": "f_probe", "imports": [],
+         "testable": "判据夹具：这一步做完能一句话判它成立或不成立"},
+    ])
+    assert out.get("created") is True and out.get("plan_id"), (
+        "打桩之后计划仍然立不起来 ⇒ 这条负控没有造出'立得成'的那种形态",
+        out)
+
+    step_out = f.step(str(out["plan_id"]))
+    assert step_out["action"] == "experiment_failed", (
+        "打桩之后没有退回改前那一路（formal 被派给 E、E 受控拒绝、F 记成实验执行失败）"
+        f"⇒ 这条负控没有真的制造出'仍派给 E'的形态：action={step_out['action']!r}")
+    with pytest.raises(AssertionError) as ei:
+        _assert_formal_is_refused_at_create_plan(out, store)
+    assert "ok" in str(ei.value) or "受控拒绝" in str(ei.value), (
+        f"那把尺子在这种形态下没有红在'受控拒绝'这一件上：{ei.value}")
 
 
 def test_owner_e_without_script_path_is_recorded_as_not_advanced(store):

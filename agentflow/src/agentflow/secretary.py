@@ -1018,24 +1018,6 @@ def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
     return steps, missing
 
 
-def _concept_statement(c: Mapping[str, Any], *, stmt_id: str, doc_id: str,
-                       actor: str) -> Any:
-    """一个概念 ⇒ 一条 `statements` 行 —— 转发到唯一构造口 `conceptrows`。
-
-    这一格此前是本文件里的第二份实现（与并表过渡层那份同口径）：留着两份，
-    "定义待补落哪一档"就会有两处可改，而它们漂了不会有任何地方红。
-    现在只有 `conceptrows.concept_statement` 一处（本函数是薄转发，保住既有调用点）。
-    """
-    from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
-
-    return CR.concept_statement(stmt_id=stmt_id, label=str(c.get("name") or ""),
-                                definition=str(c.get("definition") or ""),
-                                aliases=c.get("aliases") or (),
-                                source_lit_id=str(c.get("source_lit_id") or ""),
-                                proof_text=str(c.get("proof_text") or ""),
-                                doc_id=doc_id, actor=actor)
-
-
 #: 转发台账（append-only，一行 = 一次秘书转发或一次链尾交付）。
 #:
 #: 为什么不写进各自的 `decisions` 台账：链式转发是"一条消息走过几个秘书"这一件事，
@@ -2666,13 +2648,6 @@ class Secretary:
                 "surface": surface,
                 "judge": judged, "engaged": bool(engaged), "seq": rec.get("seq")}
 
-    def _can_take(self, role: str, action: str) -> bool:
-        """`role` 的动作表里有没有 `action`（读不到声明 ⇒ 判"能"：不冤枉）。"""
-        table = self._action_table()
-        if not table or str(role) not in table:
-            return True
-        return str(action) in table[str(role)]
-
     # ------------------------------------------------------------ 职责 4 / 3（收件侧）
 
     def rework_inbound(self, item: Mapping[str, Any]) -> dict[str, Any]:
@@ -3537,10 +3512,13 @@ class Secretary:
         跳过 `schema.STATEMENT_UNUSABLE_STATUSES` 的行（被否证/被取代的行不能当并入口）、
         跳过没号或正文空的行。排序与截断交给 `propositionkey.candidates_for`（唯一一处）。
         """
-        pool = rows if rows is not None else None
+        pool = rows
         if pool is None:
+            # 没把候选递进来 ⇒ 这一步只能现读台账；它不是"读了没有"，
+            # 真读坏的那一档走下面 `except`（并留 `_log` 一行）。
             store = getattr(self, "store", None)
             if store is None:
+                # 连 store 都没有 ⇒ 候选真的不存在（调用方据 basis 说清这一格，三态）。
                 return []
             try:
                 pool = store.rows("statements")

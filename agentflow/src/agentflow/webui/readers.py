@@ -81,6 +81,7 @@ from .. import sessions as SS
 from ..conductor import (AGENT_STATE_LABELS, AGENT_STATE_UNKNOWN, AGENT_STATES,
                          agent_states, clock_waiters, most_active_state, state_counts)
 from ..jsonlfile import read_jsonl_state
+from . import state as _state
 
 __all__ = [
     "ADMISSION_BASIS_CANDIDATE",
@@ -375,17 +376,6 @@ def _face(records: list[dict], state: str, why: str, *, what: str) -> dict[str, 
     if state == "empty":
         return {"tri": TRI_NOT_APPLICABLE,
                 "reason": f"{what} 是空文件（还没写过；合法初态，不是没查成）"}
-    return {"tri": TRI_COMPUTED, "reason": ""}
-
-
-def _all_computed(*faces: Mapping[str, Any]) -> dict[str, Any]:
-    """把若干面的三态头合成一个（任一 `unreadable` ⇒ 整面 `unreadable`；其余取最弱）。"""
-    reasons = [str(f.get("reason") or "") for f in faces if f.get("tri") == TRI_UNREADABLE]
-    if reasons:
-        return {"tri": TRI_UNREADABLE, "reason": "；".join(r for r in reasons if r)}
-    if all(f.get("tri") == TRI_NOT_APPLICABLE for f in faces):
-        return {"tri": TRI_NOT_APPLICABLE,
-                "reason": "；".join(str(f.get("reason") or "") for f in faces)}
     return {"tri": TRI_COMPUTED, "reason": ""}
 
 
@@ -4252,16 +4242,14 @@ RUN_ROW_KEYS: tuple[str, ...] = (
 def type_decls() -> str:
     """本模块（六个只读面）那一段 TS 声明文本。
 
+    渲染不在本文件：唯一实现在 `webui/state.type_decls`（2026-10-26 清洁去重时，
+    本文件里那第二份抄写被删掉，只留这一行转发 —— 排版改一处，三面同时跟上）。
+
     形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
     各自的 `type_decls()` 拼成 `ui/src/types.ts`。于是加接口这件事永远发生在
     自己那一行里。
     """
-    parts: list[str] = []
-    for name, source, fields in _TS_TYPES:
-        lines = [f"/** 出处：{source}。 */", f"export interface {name} {{"]
-        lines += [f"  {field}: {ts};" for field, ts in fields]
-        parts.append("\n".join(lines + ["}"]) + "\n")
-    return "\n".join(parts)
+    return _state.type_decls(_TS_TYPES, ())
 
 
 # ====================================================================== 接缝的落点

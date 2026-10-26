@@ -4482,6 +4482,8 @@ class AgentLoop:
         """取走这一笔"新回来的"结果（每一条只投一次）。"""
         handle = rec.get("handle")
         if handle is None:
+            # 这一笔本来就没有句柄（不是在"取"这一刻丢了）：没有东西可投，空是准数，
+            # 不是把"没取"折叠成"没有结果"。真取坏的那一档在下面 `taken` 那两支里。
             return []
         if rec["kind"] == "summon_many":
             take = getattr(handle, "take_settled", None)

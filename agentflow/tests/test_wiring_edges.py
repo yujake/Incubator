@@ -39,9 +39,10 @@ AST 就能算出来的可达集 + 一个反向核对（发现的空集必须等�
 
 ## 误差方向（这一条必须写清，否则判据会骗人）
 
-- 本判据只做名字解析，不做类型解析 ⇒ 同名函数会互相"借"可达性。它的误差方向是
-  "把不可达读成可达"（宁可漏报），不会因为同名而把可达读成不可达；
-- 反过来，经 `getattr(名字)` / 字符串表 / 反射得到的边看不见 ⇒ 会误报 ORPHAN。所以
+- 边按 (文件, 限定名) 收，不再只按名字（2026-10-27 晚第二处修，理由见下面"图的边"那一节）；
+  一个调用点上的名字解析不出唯一一份文件时会退回按名字，并记一条 problem
+  （`resolution_problems`），台账里每一个名字都不许走到那一档；
+- 经 `getattr(名字)` / 字符串表 / 反射得到的边看不见 ⇒ 会误报 ORPHAN。所以
   每条 `KNOWN_ORPHANS` 都带一句理由，且台账必须与实测集合相等：有人真把它接上，
   这一条会红（接线事件要人看见），有人新造一条孤儿，这一条也会红。
 """
@@ -54,20 +55,57 @@ import pathlib
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
 
 
-# ============================================================ 图
+# ============================================================ 图的边
+#
+# 2026-10-27 晚的第二处修：这张图原来按名字建边，于是同名的另一条活函数会把可达性
+# 借给孤儿（漏报方向）—— 一条死函数只要与某条活函数同名，`is_live` 就替它说"活"，
+# 而"孤儿"与"活着的那条同名函数"在读数上一模一样。这正是本文件最贵的那种坏法：
+# 判据绿着、缺陷静默地留在树里。
+#
+# 修法：一个调用点上的名字按下面四档解析成 (文件, 限定名)：
+#   1. 本文件里的同名定义（方法也算，`self.x()` 落在同一个文件里）；
+#   2. 本文件 `from .mod import name` 指到的那份文件里的同名定义；
+#   3. 全树唯一的那一条（没有歧义，按名字认是可以的）；
+#   4. 同名多定义、前两档也指不到唯一一份 ⇒ 退回按名字，并记一条 problem。
+# 第 4 档是"留痕"那一格：静默借可达性就是漏报的入口，所以它必须被台账看见
+# （`test_every_ledger_name_is_resolved_by_file_not_by_name`）。
+#
+# 不建的边：`import a.b` 形态（本仓的工具/角色模块一律走 `from .x import y`），
+# 以及任何经反射/字符串表拿到的调用 —— 方向都是漏报（会把可达读成不可达），
+# 兜底是 `KNOWN_ORPHANS` 那本台账必须逐条写清差哪一根线。
 
 def _parse(path: pathlib.Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
+def _import_base(rel: str, level: int) -> pathlib.PurePosixPath:
+    """`from ..tools import x` 这样的相对层级 -> 被导入模块所在的目录。"""
+    base = pathlib.PurePosixPath(rel).parent
+    for _ in range(max(level - 1, 0)):
+        base = base.parent
+    return base
+
+
+def _module_files(base: pathlib.PurePosixPath, module: str) -> list[str]:
+    """模块名 -> 图里的候选相对路径（`a/b.py` 与 `a/b/__init__.py` 两种形态）。"""
+    target = base if not module else base / module.replace(".", "/")
+    text = target.as_posix()
+    while text.startswith("./"):
+        text = text[2:]
+    if text in ("", "."):
+        return ["__init__.py"]
+    return [f"{text}.py", f"{text}/__init__.py"]
+
+
 class _Collect(ast.NodeVisitor):
-    """一遍 AST 收三样：定义点、调用边、裸引用边（都带所在函数）。"""
+    """一遍 AST 收四样：定义点、调用边、裸引用边、`from ... import` 的落点表。"""
 
     def __init__(self, rel: str) -> None:
         self.rel = rel
         self.stack: list[str] = []
         self.defs: list[dict] = []
-        self.edges: list[tuple[str, str, int, str]] = []   # (caller, callee, line, kind)
+        self.edges: list[tuple[str, str, int, str]] = []   # (caller_qual, callee, line, kind)
+        self.imports: dict[str, list[str]] = {}            # 本地名 -> 候选文件
 
     def _qual(self) -> str:
         return ".".join(self.stack) or "<module>"
@@ -89,6 +127,12 @@ class _Collect(ast.NodeVisitor):
         self._enter(node.name)
         self.generic_visit(node)
         self.stack.pop()
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        base = _import_base(self.rel, node.level or 0)
+        for alias in node.names:
+            self.imports[alias.asname or alias.name] = _module_files(base, node.module or "")
+        self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         name = None
@@ -121,17 +165,19 @@ def _graph_of(pairs: list[tuple[str, ast.Module]]) -> dict:
     那几步（收边、种入口、闭包）真的跑一遍，而不是用例自己手搭一份图再自证。
     """
     defs: dict[str, list[dict]] = {}
-    out_edges: dict[str, set[str]] = {}
-    in_edges: dict[str, list[tuple[str, int, str]]] = {}
+    out_edges: dict[tuple[str, str], set[str]] = {}
+    in_edges: dict[str, list[tuple[str, str, int, str]]] = {}
+    imports: dict[str, dict[str, list[str]]] = {}
     for rel, tree in pairs:
         got = _Collect(rel)
         got.visit(tree)
         for d in got.defs:
             defs.setdefault(d["name"], []).append(d)
         for caller, callee, line, kind in got.edges:
-            out_edges.setdefault(caller, set()).add(callee)
-            in_edges.setdefault(callee, []).append((caller, line, kind))
-    return {"defs": defs, "out": out_edges, "in": in_edges}
+            out_edges.setdefault((rel, caller), set()).add(callee)
+            in_edges.setdefault(callee, []).append((rel, caller, line, kind))
+        imports[rel] = dict(got.imports)
+    return {"defs": defs, "out": out_edges, "in": in_edges, "imports": imports}
 
 
 @functools.lru_cache(maxsize=1)
@@ -141,49 +187,91 @@ def graph() -> dict:
                       for path in sorted(SRC.rglob("*.py"))])
 
 
-def entries(g: dict) -> set[str]:
-    """真机入口集（见模块 docstring 那三条）。"""
-    seeds: set[str] = set()
+def _resolve(g: dict, caller_rel: str, name: str) -> tuple[set[tuple[str, str]], str]:
+    """把一个调用点上的名字解析成 `(文件, 限定名)` 定义点；退回按名字时返回一句 problem。"""
+    rows = g["defs"].get(name, [])
+    here = {(d["rel"], d["qual"]) for d in rows if d["rel"] == caller_rel}
+    if here:
+        return here, ""
+    for candidate in g["imports"].get(caller_rel, {}).get(name, ()):
+        there = {(d["rel"], d["qual"]) for d in rows if d["rel"] == candidate}
+        if there:
+            return there, ""
+    everywhere = {(d["rel"], d["qual"]) for d in rows}
+    if len(everywhere) == 1:
+        return everywhere, ""
+    if not everywhere:
+        return set(), ""
+    return everywhere, (
+        f"{caller_rel} 里的调用点 {name!r} 有 {len(everywhere)} 个同名定义点，"
+        f"按文件指不到唯一一份，退回按名字：{sorted(everywhere)}"
+    )
+
+
+def entries(g: dict) -> set[tuple[str, str]]:
+    """真机入口集（见模块 docstring 那三条），元素是 `(文件, 限定名)`。"""
+    seeds: set[tuple[str, str]] = set()
     for name, rows in g["defs"].items():
         for d in rows:
             if d["rel"] == "cli.py" and name.startswith("cmd_"):
-                seeds.add(d["qual"])
+                seeds.add((d["rel"], d["qual"]))
             elif d["rel"] == "host.py":
-                seeds.add(d["qual"])
+                seeds.add((d["rel"], d["qual"]))
             elif any("tool" in deco for deco in d["decos"]):
-                seeds.add(d["qual"])
+                seeds.add((d["rel"], d["qual"]))
     return seeds
 
 
-def reachable(g: dict) -> set[str]:
-    """从入口集顺着边闭包（同名定义一起点亮）。"""
-    by_qual: dict[str, list[str]] = {}
-    for name, rows in g["defs"].items():
-        for d in rows:
-            by_qual.setdefault(d["qual"], []).append(name)
-    seen: set[str] = set()
+def _walk(g: dict) -> tuple[set[tuple[str, str]], list[tuple[str, str, str, str]]]:
+    """从入口集顺边闭包；顺手把"退回按名字"的解析 problem 收下来（每个图只算一遍）。"""
+    cached = g.get("_walk")
+    if cached is not None:
+        return cached
+    seen: set[tuple[str, str]] = set()
+    problems: list[tuple[str, str, str, str]] = []
     todo = list(entries(g))
     while todo:
-        qual = todo.pop()
-        if qual in seen:
+        rel, qual = todo.pop()
+        if (rel, qual) in seen:
             continue
-        seen.add(qual)
-        for callee in g["out"].get(qual, ()):
-            for d in g["defs"].get(callee, ()):
-                if d["qual"] not in seen:
-                    todo.append(d["qual"])
-    return seen
+        seen.add((rel, qual))
+        for callee in sorted(g["out"].get((rel, qual), ())):
+            targets, problem = _resolve(g, rel, callee)
+            if problem:
+                problems.append((rel, qual, callee, problem))
+            for target in targets:
+                if target not in seen:
+                    todo.append(target)
+    g["_walk"] = (seen, problems)
+    return seen, problems
 
 
-def callers(g: dict, name: str) -> list[tuple[str, int, str]]:
+def reachable(g: dict) -> set[tuple[str, str]]:
+    """可达的定义点集合（`(文件, 限定名)`；同名不再互相借可达性）。"""
+    return _walk(g)[0]
+
+
+def resolution_problems(g: dict) -> list[tuple[str, str, str, str]]:
+    """退回按名字解析的那些调用点：`(调用者文件, 调用者限定名, 名字, 一句说明)`。"""
+    return list(_walk(g)[1])
+
+
+def callers(g: dict, name: str) -> list[tuple[str, str, int, str]]:
     """非测试调用/引用点（本图只收 src，所以全是非测试）。"""
     return list(g["in"].get(name, ()))
 
 
-def is_live(g: dict, name: str) -> bool:
-    """这个名字有没有至少一个"本身可达"的调用/引用点。"""
+def is_live(g: dict, name: str, *, rel: str | None = None) -> bool:
+    """这个名字有没有至少一个"本身可达"的调用/引用点。
+
+    `rel=None`：名字级读数（台账 `KNOWN_ORPHANS` 的记账单位）；
+    `rel="x.py"`：只问那份文件里的那一个定义 —— 同名的两份定义必须能分开量。
+    """
+    rows = [d for d in g["defs"].get(name, []) if rel is None or d["rel"] == rel]
+    if not rows:
+        return False
     live = reachable(g)
-    return any(qual in live for qual, _line, _kind in callers(g, name))
+    return any((d["rel"], d["qual"]) in live for d in rows)
 
 
 # ============================================================ 表
@@ -327,6 +415,21 @@ KNOWN_ORPHANS: dict[str, str] = {}
 #: 免得下一次有人把它们从读数面删掉却没有人发现。
 READOUT_ONLY: tuple[str, ...] = ("park_state", "is_park")
 
+#: 台账里同名多定义的那些：名字 -> 为什么仍按名字记账（今天为空）。
+#:
+#: 为什么需要这一栏：`WIRED` / `KNOWN_ORPHANS` 是按名字记账的，而名字级读数只能问
+#: "这个名字有没有一份活定义"。一个名字一旦在树上有两份定义，死的那一份就会被活的那
+#: 一份遮住（正是本文件 2026-10-27 晚第二处修的那个漏报方向）。今天 56 个台账名字
+#: 每个都只有一处定义，于是名字级读数等于定义级读数；谁破了这条，就得在这里写清
+#: 为什么，或者把台账改成按文件记账。
+MULTI_DEF_LEDGER_NAMES: dict[str, str] = {}
+
+#: 台账里"按文件解析不出唯一一份、只能退回按名字"的那些：名字 -> 为什么可以接受（今天为空）。
+#:
+#: 退回那一档会记一条 problem（`resolution_problems`）。台账名字出现这种 problem，
+#: 说明这条判据对它又是名字级的了 —— 那等于把刚刚修掉的漏报方向又装回去。
+NAME_FALLBACK_OK: dict[str, str] = {}
+
 
 # ============================================================ 判据
 
@@ -342,10 +445,38 @@ def test_every_monitored_feature_has_a_live_edge() -> None:
             dead.append(f"{name}（表里写的是：{why}）：0 个非测试调用点")
             continue
         if not is_live(g, name):
-            where = "、".join(f"{q}:{line}" for q, line, _k in got[:4])
+            where = "、".join(f"{rel}:{q}:{line}" for rel, q, line, _k in got[:4])
             dead.append(f"{name}（表里写的是：{why}）：有调用点但调用者不可达 {where}")
     assert not dead, (
         "这些功能没有活在真机调用图上（实现好了、没人调）：\n" + "\n".join(dead))
+
+
+def test_every_ledger_name_is_resolved_by_file_not_by_name() -> None:
+    """① 的另一半：台账里每个名字都必须是"按文件解析得出"的，不许靠同名借可达性。
+
+    两个条件一起才够，两条都不许空转：
+
+    - 名字在树上的定义点必须恰好一处：两份定义时名字级读数分不开死的那一份，
+      死人会被活人遮住（`is_live` 按 `rel=` 能分开，但台账是按名字记账的）；
+    - 这个名字在整张图里不许走到"退回按名字"那一档（`resolution_problems`）。
+
+    两条都按台账两向相等：多一处就红，台账里留一条已经不需要的也红。
+    """
+    g = graph()
+    ledger = list(WIRED) + list(KNOWN_ORPHANS)
+    multi = {n: sorted(f"{d['rel']}:{d['qual']}" for d in g["defs"].get(n, ()))
+             for n in ledger if len(g["defs"].get(n, ())) > 1}
+    assert multi == MULTI_DEF_LEDGER_NAMES, (
+        "台账里有名字在树上有不止一处定义 ⇒ 名字级读数会把可达性借给死的那一份。\n"
+        f"  实测多定义、台账没写：{sorted(set(multi) - set(MULTI_DEF_LEDGER_NAMES))}\n"
+        f"  台账写了、实测只有一处：{sorted(set(MULTI_DEF_LEDGER_NAMES) - set(multi))}\n"
+        f"  多定义清单：{multi}")
+    borrowed = {p[2]: p[3] for p in resolution_problems(g) if p[2] in set(ledger)}
+    assert borrowed == NAME_FALLBACK_OK, (
+        "台账里有名字是按名字借出来的（按文件指不到唯一一份）⇒ 漏报方向又回来了。\n"
+        f"  实测退回按名字、台账没写：{sorted(set(borrowed) - set(NAME_FALLBACK_OK))}\n"
+        f"  台账写了、实测已经按文件解析：{sorted(set(NAME_FALLBACK_OK) - set(borrowed))}\n"
+        f"  逐条：{borrowed}")
 
 
 def test_the_orphan_ledger_equals_what_the_graph_finds() -> None:
@@ -418,13 +549,72 @@ def test_the_liveness_predicate_is_not_vacuous() -> None:
     # 入口集与闭包各自也要承重（否则形态乙可能因为别的原因绿）：
     # `cmd_*` 在 `cli.py` 里才是入口，测试文件里的调用点一律不是。
     live_graph = _called_from_a_real_entry()
-    assert "cmd_probe" in entries(live_graph), entries(live_graph)
-    assert "cmd_probe" in reachable(live_graph), sorted(reachable(live_graph))
-    assert "real_fn" in reachable(live_graph), sorted(reachable(live_graph))
+    assert ("cli.py", "cmd_probe") in entries(live_graph), entries(live_graph)
+    assert ("cli.py", "cmd_probe") in reachable(live_graph), sorted(reachable(live_graph))
+    assert ("probe_real_entry_calls.py", "real_fn") in reachable(live_graph), \
+        sorted(reachable(live_graph))
     dead_graph = _called_only_from_a_test()
-    assert "test_thing" not in entries(dead_graph), ("测试文件里的调用点被当成真机入口"
-                                                    " ⇒ 形态甲那一半恒死不了")
+    assert ("tests/test_probe.py", "test_thing") not in entries(dead_graph), (
+        "测试文件里的调用点被当成真机入口 ⇒ 形态甲那一半恒死不了")
     assert reachable(dead_graph) == set(), sorted(reachable(dead_graph))
+
+
+def _twins_in_two_files() -> dict:
+    """同名但不同文件的一对：`cli.py` 里那一份被入口调着，`probe_twin.py` 里那一份没人调。"""
+    return _graph_of([
+        ("probe_twin.py", ast.parse(
+            "def twin_fn():\n    return 'dead'\n")),
+        ("cli.py", ast.parse(
+            "def twin_fn():\n    return 'live'\n\n"
+            "def cmd_probe(args):\n    return twin_fn()\n")),
+    ])
+
+
+def test_a_same_named_function_in_another_file_cannot_borrow_liveness() -> None:
+    """反真空（名字解析那一档）：同名不同文件的一对必须读出一死一活。
+
+    改前 `is_live` 只按名字解析：`twin_fn` 这个名字有活调用点 ⇒ 两份定义一起被读成
+    活的，于是"孤儿"与"活着的那条同名函数"在读数上一模一样（漏报方向）。
+    改后边按 (文件, 限定名) 收，`is_live(g, name, rel=...)` 把两份定义分开量。
+
+    为什么这是反真空：读者最容易的写法是"两条同名函数都算活"或者"都算死"，
+    两种写法都会让下面这一对读成同一个值，第一条断言当场红。
+    """
+    g = _twins_in_two_files()
+    assert {d["rel"] for d in g["defs"]["twin_fn"]} == {"probe_twin.py", "cli.py"}, (
+        "夹具没造出「同名但不同文件」的一对")
+    assert is_live(g, "twin_fn", rel="cli.py") is True, "活着的那一份被读成了死"
+    assert is_live(g, "twin_fn", rel="probe_twin.py") is False, (
+        "同名但不同文件的那一份死函数借到了可达性 —— is_live 又退回按名字解析了"
+    )
+    # 名字级读数（台账的记账单位）为真：活的那一份在。这一条与上面两条一起承重 ——
+    # 只断"死的读成死"是不够的，一个恒假的谓词也满足它。
+    assert is_live(g, "twin_fn") is True, "名字级读数把活的也读死了"
+
+
+def test_a_name_that_resolves_to_two_files_is_recorded_as_a_problem() -> None:
+    """退回按名字时必须留一条 problem：静默借可达性就是漏报的入口。
+
+    这一条与上一条互为反面：上一条问"分开量得出来吗"，这一条问"分开量不出来的时候
+    有没有留痕"。两种形态都不许悄悄过去。
+    """
+    ambiguous = _graph_of([
+        ("probe_a.py", ast.parse("def shared_fn():\n    return 1\n")),
+        ("probe_b.py", ast.parse("def shared_fn():\n    return 2\n")),
+        ("cli.py", ast.parse("def cmd_probe(args):\n    return shared_fn()\n")),
+    ])
+    notes = resolution_problems(ambiguous)
+    assert any("shared_fn" in note[3] for note in notes), (
+        f"同名多定义、按文件指不到唯一一份，却没记 problem：{notes}")
+    assert {note[2] for note in notes} == {"shared_fn"}, notes
+
+    # 反真空的另一半：全树唯一的名字不许留 problem，否则台账迟早被噪音淹掉。
+    unique = _graph_of([
+        ("probe_unique.py", ast.parse("def solo_fn():\n    return 1\n")),
+        ("cli.py", ast.parse("def cmd_probe(args):\n    return solo_fn()\n")),
+    ])
+    assert resolution_problems(unique) == [], resolution_problems(unique)
+    assert is_live(unique, "solo_fn", rel="probe_unique.py") is True
 
 
 def test_the_clock_module_is_on_the_assembly_list() -> None:

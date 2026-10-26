@@ -74,6 +74,7 @@ from .. import stopctl as SC
 from .. import userio as U
 from ..store import Store
 from . import audit
+from . import state as _state
 from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
 
 __all__ = ["HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
@@ -135,15 +136,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
 def type_decls() -> str:
     """本模块（写面）那一段 TS 声明文本。
 
+    渲染代码只有一份，在 `webui/state.type_decls`（2026-10-26 清洁去重：本文件里
+    原先是同一段排版代码的第二份抄写，现在只剩这一行转发）。
+
     形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
-    各自的 `type_decls()` 拼成 `ui/src/types.ts`。C 线加写端点时，回执接口加在这里。
+    各自的 `type_decls()` 拼成 `ui/src/types.ts`。C 线加写端点时，回执接口加在
+    `_TS_TYPES` 里。
     """
-    parts: list[str] = []
-    for name, source, fields in _TS_TYPES:
-        lines = [f"/** 出处：{source}。 */", f"export interface {name} {{"]
-        lines += [f"  {field}: {ts};" for field, ts in fields]
-        parts.append("\n".join(lines + ["}"]) + "\n")
-    return "\n".join(parts)
+    return _state.type_decls(_TS_TYPES, ())
 
 
 # ====================================================================== 授权（裁定 C2）

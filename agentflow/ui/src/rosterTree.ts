@@ -599,13 +599,31 @@ export function kidsStateText(kids: TreeRow[]): string {
   return `活 ${tally.active}（飞 ${tally.flying} · 待 ${tally.standby}${unknown}）`;
 }
 
+/** 「活跃」的唯一措辞（业主：「更新『活跃子代理』的定义为非静默子代理」）。
+ *
+ * 页面每一处说"活跃"都从这里取：活跃 = 非静默 = 在飞 + 待机，`未读到` 不在里面。
+ * 为什么不写成"活跃"两个字：那个词在本项目里被用过好几套口径（在跑 / 非静默 /
+ * 名下有未收口的活），只写两个字读的人分不出是哪一套 —— 括注等于把口径钉在字面上。
+ */
+export const ACTIVE_TEXT = "活跃（非静默）";
+
+/** 合计读不到时那一行文字。刻意**一个数字都没有**：`0` 会被读成"全都收工了"，
+ * 而这一档说的是"没查成"。判据逐字断言这一行里没有数字（`states.checked=false`）。
+ */
+export const STATES_UNREADABLE_TEXT =
+  "在飞 / 待机 / 静默：未读到（这一份读数没给出合计，因此不显示任何数字）";
+
 /** 顶部合计那一行：`在飞 a · 待机 b · 静默 c`（读不到就说读不到 + 一句原因，不显示 0）。 */
 export interface StateSummary {
   /** 那一行文字。 */
   text: string;
   /** 未读到几个（`-1` = 合计整格没读到，页面不该显示任何数字）。 */
   unknown: number;
-  /** 为什么没读到（空串 = 读到了）。 */
+  /** 活跃（非静默）= 在飞 + 待机；`null` = 没读到（不许折成 0）。 */
+  active: number | null;
+  /** 四档之和；`null` = 没读到。 */
+  total: number | null;
+  /** 为什么没读到 / 哪两格对不上（空串 = 读到了、也对得上）。 */
   reason: string;
 }
 
@@ -613,25 +631,61 @@ export interface StateSummary {
  *
  * 三档文案与"不显示 0"都在这里收口：读不到合计时给的是"未读到 + 原因"，
  * 而不是 0 / 0 / 0 —— 后者会被读成"全都收工了"，而它恰恰可能是"没查成"。
+ *
+ * ## 为什么四档必须都是数字才算读到了
+ * 后端把四格声明成 `number | null`，`null` 是"没读到"（不是 0）。所以这里**不许**
+ * 用 `?? 0` 把缺格补齐：那一句会把"没读到"当场折成"读到了、它是 0"，而这一批要修的
+ * 正是这个折叠。缺一格 ⇒ 整行走"未读到 + 原因"那一档。
+ *
+ * ## 活跃与合计：以定义为准，不以某一格为准
+ * `active` = 在飞 + 待机、`total` = 四档之和都是**定义**；后端那两格只是同一件事的
+ * 另一份读数。两者对不上时按定义显示，并把"对不上"写进 `reason`（读数互相矛盾也是
+ * 读数的一部分，静默地挑一个用等于把矛盾藏起来）。
  */
 export function stateSummary(view: RosterView, rows: TreeRow[], unreached: RosterNode[]): StateSummary {
   const raw: unknown = view.states;
   if (isRecord(raw)) {
     const reason = asText(raw["reason"]);
     if (raw["checked"] === true) {
-      const flying = asNumber(raw["flying"]) ?? 0;
-      const standby = asNumber(raw["standby"]) ?? 0;
-      const silent = asNumber(raw["silent"]) ?? 0;
-      const unknown = asNumber(raw["unknown"]) ?? 0;
+      const flying = asNumber(raw["flying"]);
+      const standby = asNumber(raw["standby"]);
+      const silent = asNumber(raw["silent"]);
+      const unknown = asNumber(raw["unknown"]);
+      if (flying === null || standby === null || silent === null || unknown === null) {
+        const hole = reason === ""
+          ? "合计那一格说它读到了，但四档里有不是数字的格（null = 没读到，不是 0）"
+          : reason;
+        return { text: STATES_UNREADABLE_TEXT, unknown: -1, active: null, total: null, reason: hole };
+      }
+      const notes: string[] = [];
+      const active = flying + standby;
+      const activeRaw = asNumber(raw["active"]);
+      if (activeRaw !== null && activeRaw !== active) {
+        notes.push(`合计里的 active（${activeRaw}）不等于在飞 + 待机（${active}）`
+          + "⇒ 这一行按定义显示");
+      }
+      const total = flying + standby + silent + unknown;
+      const totalRaw = asNumber(raw["total"]);
+      if (totalRaw !== null && totalRaw !== total) {
+        notes.push(`合计里的 total（${totalRaw}）不等于四档之和（${total}）⇒ 这一行按四档之和显示`);
+      }
       let text = `在飞 ${flying} · 待机 ${standby} · 静默 ${silent}`;
       if (unknown > 0) {
         text += ` · 未读到 ${unknown}`;
       }
-      return { text, unknown, reason };
+      return {
+        text,
+        unknown,
+        active,
+        total,
+        reason: [reason, ...notes].filter((one) => one !== "").join("；"),
+      };
     }
     return {
-      text: "在飞 / 待机 / 静默：未读到（这一份读数没给出合计，不显示 0）",
+      text: STATES_UNREADABLE_TEXT,
       unknown: -1,
+      active: null,
+      total: null,
       reason: reason === "" ? "这一份读数里 states 那一格说它没查成，但没写原因" : reason,
     };
   }
@@ -651,6 +705,8 @@ export function stateSummary(view: RosterView, rows: TreeRow[], unreached: Roste
   return {
     text,
     unknown: tally.unknown,
+    active: tally.active,
+    total: tally.total,
     reason: "后端没给三态合计 ⇒ 这一行按树上的节点现算（节点自己的 state 那一格说它没读到）",
   };
 }

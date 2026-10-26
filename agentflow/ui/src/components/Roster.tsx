@@ -61,12 +61,19 @@
  * 业主 2026-10-26：「『在飞』的读数要随着时钟式待机进行适配，分三种：1.在工作叫
  * 『在飞』，2.在等待（计时器）为『待机』，3.已收工，无任务，无计时器，叫『静默』。
  * 更新『活跃子代理』的定义为非静默子代理。」所以这一页有三处跟着变：
- *   - 每一行一个三态徽标（`stateBadge`，文案取 `rosterTree.STATE_TEXT`）；
+ *   - 每一行一个三态徽标（`stateBadge`，文案取 `rosterTree.STATE_TEXT`，悬停给
+ *     `state_reason` —— 待机与静默的差别就在那句理由里）；
  *   - 行尾「▸ 活 N（飞 a · 待 b）」：N = 名下**非静默**的直接子数，不是
  *     `children.length`（那个数把早就收工的也算进来）；
  *   - 顶部合计「在飞 a · 待机 b · 静默 c」，读不到时显示"未读到 + 一句原因"，
- *     不显示 0（0 会被读成"全都收工了"）。
+ *     不显示 0（0 会被读成"全都收工了"），并把「活跃（非静默）」单列一格。
  * 三态的判定只有后端一处（`conductor.agent_state`）；这一层只负责把它画出来。
+ *
+ * ## 另一格容易读混的读数：`in_flight` 是**任务面**的
+ * `nodes[].in_flight` 数的是台账里 `status ∈ pending/running` 的活（一件活一行），
+ * 不是代理三态：一个挂机（待机）的代理名下那件活仍然是 `running`，所以它既不能读成
+ * 「在飞 N 个」，也不能并进「活跃（非静默）」。页面把它逐字写成「未收口的活 N 件」，
+ * 与三态徽标分开摆。
  *
  * ## 取数不许挨着渲染（2026-10-24 真机故障之后的划线）
  * 改前父子关系与"缺号怎么办"都长在这个组件里：`data.roots.map(renderBranch)`，而
@@ -81,7 +88,7 @@ import { useState } from "preact/hooks";
 
 import { api } from "../api";
 import { useFace } from "../live";
-import { STATE_TEXT, asAgentState, buildRosterTree, kidsStateText, stateSummary, taskLine } from "../rosterTree";
+import { ACTIVE_TEXT, STATE_TEXT, asAgentState, buildRosterTree, kidsStateText, stateSummary, taskLine } from "../rosterTree";
 import type { TreeRow } from "../rosterTree";
 import type { RosterChild, RosterInbox, RosterNode, RosterTask, RosterUnrostered, RosterView } from "../types";
 import { Badge } from "./Badge";
@@ -146,14 +153,25 @@ function nameText(node: RosterNode): string {
 
 /** 三态徽标（在飞 / 待机 / 静默 / 未读到）：文案与词表来自 `rosterTree.STATE_TEXT`，
  * 颜色三档由 CSS 那三个类给（`roster-state-*`，走 token，不写字面色值）：
- * 在飞 = 强调色、待机 = 中性偏冷（次要标签色 + 层底色）、静默 = 灰（三级标签色）。
+ * 在飞 = 强调色、待机 = 中性偏冷（次要标签色 + 层底色）、静默 = 灰（三级标签色）、
+ * 未读到 = 警示色。
  * `kind` 里带 `roster-state-` 前缀，于是 `Badge` 的 class 是 `badge roster-state-flying`。
  *
  * `unknown` 那一档刻意也画出来（不是不画）：不画会让"没读到"与"静默"在页面上
  * 长得一模一样 —— 而这一批要修的正是这个折叠。
+ *
+ * 悬停给 `state_reason`（后端那句"为什么判成这一格"）：三档文字只说得清"是哪一档"，
+ * 说不清"凭什么" —— 而待机与静默的差别恰恰在理由里（挂着哪一条计时器 / 在等哪个子）。
  */
+function stateTitle(node: RosterNode): string {
+  const state = asAgentState(node.state);
+  const why = node.state_reason === "" ? "（后端没给原因）" : node.state_reason;
+  return `${STATE_TEXT[state]}：${why}`;
+}
+
 function stateBadge(node: RosterNode) {
-  return <Badge kind={`roster-state-${asAgentState(node.state)}`} text={STATE_TEXT[asAgentState(node.state)]} />;
+  const state = asAgentState(node.state);
+  return <Badge kind={`roster-state-${state}`} text={STATE_TEXT[state]} title={stateTitle(node)} />;
 }
 
 /** 子那几格：绝对编号 + 名册名（读不到名册名就只给编号）。 */
@@ -323,8 +341,8 @@ function NodeDetail(props: { node: RosterNode }) {
       <div class="row">
         台账那一行：{n.task_found ? "在" : "不在（tasks 里没有它这一行）"} ·
         状态 <span class="mono">{n.status === "" ? "unknown" : n.status}</span> ·
-        名下在跑的活{" "}
-        <span class="mono">
+        名下未收口的活（台账 pending/running）{" "}
+        <span class="mono" title="任务面读数：不是代理三态，也不是「活跃（非静默）」">
           {n.in_flight === null ? "未读到" : n.in_flight}
         </span>{" "}
         · 槽位面 <span class="mono">{n.surface === "" ? "（没有分到槽位）" : n.surface}</span>
@@ -416,16 +434,29 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             <span class="readings">{childCountText(node)}</span>
             {/* 「▸ 活 N（飞 a · 待 b）」：N = 非静默（在飞 + 待机），不是 children.length
                 （业主 2026-10-26：「『▸ 活 N』改成 ▸ 活 N（飞 a · 待 b），N = 非静默」）。
-                这一格数的是本节点的直接子；`unknown` 单独列，不混进活跃。 */}
+                这一格数的是本节点的直接子；`unknown` 单独列，不混进活跃。
+                悬停把口径钉在字面上：静默的子不在 N 里，而未读到的子另列一格 ——
+                "名下 5 个、其中 4 个昨天就收工了"与"5 个都在干活"从此长得不一样。 */}
             {kids.length === 0 ? null : (
-              <span class="readings">{`▸ ${kidsStateText(kids)}`}</span>
+              <span
+                class="readings"
+                title={`「活 N」的 N = ${ACTIVE_TEXT} = 在飞 + 待机，不是名下子节点的个数`
+                  + "（静默的不算，未读到的单独列）"}
+              >
+                {`▸ ${kidsStateText(kids)}`}
+              </span>
             )}
-            {/* 三态徽标：在飞 / 待机 / 静默 / 未读到（文案与颜色都跟着这一档走）。 */}
+            {/* 三态徽标：在飞 / 待机 / 静默 / 未读到（文案与颜色都跟着这一档走，悬停给原因）。 */}
             {stateBadge(node)}
+            {/* 这一格是**任务面**读数：台账里 `status ∈ pending/running` 的活有几件。
+                它不是代理三态 —— 挂机（待机）的代理名下那件活仍然是 running，所以
+                它既不是「在飞 N 个」，也不能并进「活跃（非静默）」。 */}
             {node.in_flight === null ? (
-              <Badge kind="badge-unknown" text="活：未读到" />
+              <Badge kind="badge-unknown" text="未收口的活：未读到"
+                title="台账读不到 ⇒ 这一格不是 0 件" />
             ) : node.in_flight > 0 ? (
-              <Badge kind="badge-pending" text={`活 ${node.in_flight} 件在跑`} />
+              <Badge kind="badge-pending" text={`未收口的活 ${node.in_flight} 件`}
+                title="任务面读数：台账里 status ∈ pending/running 的活有几件（不含代理三态）" />
             ) : null}
             {node.retired ? null : inboxBadge(node.inbox)}
             {node.retired ? <Badge kind="badge-na" text="已销号" /> : null}
@@ -564,9 +595,16 @@ function RosterBody(props: {
       {/* 顶部合计（业主 2026-10-26：「顶部合计：在飞 a · 待机 b · 静默 c」）。
           读不到就显示「未读到」+ 一句原因，绝不显示 0 / 0 / 0 ——
           那一行 0 会被读成"全都收工了"，而它可能是"这一格没查成"。
-          活跃 = 非静默 = 在飞 + 待机；`未读到` 单独列，不混进活跃也不混进静默。 */}
+          活跃 = 非静默 = 在飞 + 待机；`未读到` 单独列，不混进活跃也不混进静默。
+          「活跃（非静默）」单列一格，是因为页面别处还有几处"在跑几个"的读数
+          （任务面 / 循环面）—— 口径必须钉在字面上，读的人才不会拿两个数互相当证据。 */}
       <div class="readings roster-states">
         三态合计：<b>{summary.text}</b>
+        {" · "}
+        {summary.active === null
+          ? `${ACTIVE_TEXT} 未读到`
+          : `${ACTIVE_TEXT} ${summary.active}${
+            summary.total === null ? "" : ` · 共 ${summary.total}`}`}
         {summary.reason === "" ? null : (
           <span class="tri-reason">（{summary.reason}）</span>
         )}

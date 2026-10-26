@@ -73,7 +73,8 @@ def cached_conductor(store: Any) -> Conductor | None:
     `wired_llm_conductor` 就会按缓存静默复用到那个空壳 —— 于是"我要的是接了线的主控"与"实际跑的是空壳"在读数上长得一模一样（这条缓存纪律写在 
     `host.wired_llm_conductor` 的 docstring 里，`conductor_for` 自己也写着）。
     
-    所以"只想借用一下这一趟的主控身份说句话"的调用方（今天只有一个：F 上报缺缝，见 `agent_f/core.py::_escalate_missing_seam`）只能
+    所以"只想借用一下这一趟的主控身份说句话"的调用方（今天有两个调用点，都在 F 里：上报
+    "E 缺模型缝"与"形式化子目标派不出去"，见 `agent_f/core.py::_escalate_missing_input`）只能
     借用「已经存在」的那一个；不存在时它必须如实说"这一层没接到主控"，而不是为了发一条消息把会话的主控建歪。
     """
     return _CONDUCTORS.get(str(Path(getattr(store, "root", ".")).resolve()))

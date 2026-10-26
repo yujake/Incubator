@@ -12,8 +12,8 @@ best_partial（`stalled`）或如实收口（`resolved`）
 `C`/`D`/`F` 那一行是刻意的：本框架尚未接线自动推理，所以 F 只能如实写"该子目标需要 C/D/F 的推理，本框架尚未接线 ⇒ 未推进"。
 为什么这一条必须写死：把它写成"做了但没结果"（例如`outcome="progress"` + 空证据）是静默失败的典型形态 —— 计划看起来在推进、 history 里每一轮都有记
 录、`rounds` 在增长，而实际上什么也没发生。本项目最痛的教训（`11-...md` §10.4 #7：D 没接工具却把"查不到"写成一条听起来很合理的研究发现）就是这种形态。
-3. 数值支持不能关闭子目标（FC-22）E 返回 `evidence_kind="cross_check"` 时子目标最多标 `supported_not_proved`；只有 
-`proof` 级实验（`method="formal"` + 非空 `verifier_output`）才进`proof_experiment_ids`、才允许 `closed`。
+3. 数值支持不能关闭子目标（FC-22）E 返回 `evidence_kind="cross_check"` 时子目标最多标 `supported_not_proved`；`closed` 只认一种凭据：由 V 会审成立的穷举证明（`proof_reason=exhaustion`，
+签名 `signed_by=V`）—— 形式化不在 E 身上（`method="formal"` 以受控码 `formal_not_in_e` 拒绝），F 也不把 `method="formal"` 传下去（`core.py` 的 `E_METHODS`）。
 与 `attack_tools` 的分工- `check_budget` / `can_round` / `pick_next_subgoal` / `can_derive` 唯一实现
 在`tools/attack_tools.py`，本模块只转发。- `attack.create_plan` / `attack.step` / `attack.status` / 
 `attack.list_plans`四个工具转发到本模块（见 attack_tools 的 docstring）：写入逻辑只有一份。

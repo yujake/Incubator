@@ -65,6 +65,138 @@ def _clip(text: str, limit: int) -> str:
     return s[: limit - 1] + f"…（已截断，原长 {len(s)} 字）"
 
 
+# ---------------------------------------------------------------- 形式化那一档的落点
+#
+# 这一节的三个名字是同一件事的三块：判定（`_is_formal_subgoal`）、落点读数
+# （`_formal_dispatch_facts`）、受控码（`FORMAL_EDGE_MISSING_REASON`）。
+# 它们解决的是"实现与裁定打架"：形式化已经划归 L（业主 2026-10-23 晚：「E 侧与 Lean
+# 相关的工具和动作都该清干净」），E 的入口 `run_experiment` 对 `method="formal"` 以受控
+# 理由码 `formal_not_in_e` 拒绝；而 F 这一侧改前根本没有 formal 判定，仍按 owner=E 把
+# formal 子目标派给 E ⇒ 真机上那条子目标必被拒，而读数长得像"实验执行失败"。
+
+#: 形式化那一岗（Lean 形式化者）。形式化的子目标归它 —— 不归 E（2026-10-23 晚的裁定），
+#: 也不归 F（F 手里没有通往它的边，见 :func:`_formal_dispatch_facts`）。
+FORMAL_OWNER = "L"
+
+#: 形式化子目标派不出去时给的那一个受控理由码。
+#:
+#: 为什么不沿用 E 的 `formal_not_in_e`：那一句话说的是"这件事不在 E 身上"，而 F 这一侧
+#: 要说的是另一件事 —— "F 手里没有通往 L 的边，所以这条子目标派不出去"。两条混用，
+#: 读数就会退化成"E 又不做形式化"，于是没有人去找那条缺的边。
+FORMAL_EDGE_MISSING_REASON = "formal_edge_missing"
+
+#: 能交给 E 的实验方法：`schema.EXPERIMENT_METHODS` 的四档去掉 `formal`。
+#:
+#: 为什么要有这一格：`_deploy_e` 改前把子目标的 `method` 原样往下传
+#: （`method=str(sg.get("method") or "numeric")`），于是"F 把 method=formal 交给 E"
+#: 在代码上一直是通的 —— 它没出事只因为 `_deploy` 先一步把形式化子目标摘走了。
+#: 用一处上游判据兜住一处下游透传，是"换一个派活入口就漏"的形状；这一格把那条路变成
+#: 结构上的不可能：不在这几档里的取值（含 formal）一律不传，E 用她自己的缺省。
+#: 判据：`tests/test_f_has_no_formal_entry.py`。
+E_METHODS = tuple(str(m) for m in S.EXPERIMENT_METHODS if str(m) != "formal")
+
+
+def _is_formal_subgoal(sg: Mapping[str, Any]) -> bool:
+    """这条子目标是不是形式化那一档（判据只有这一处）。
+
+    ## 哪两种写法算形式化
+
+    ① `method="formal"` —— `schema.EXPERIMENT_METHODS` 的四档之一（另外三档是
+       numeric / symbolic / exhaustive_search）。它不在 `schema.SUBGOAL_OWNERS` 的检查面里，
+       所以 `create_plan` 会把它原样落库：手写的计划与 F 自己的模型都写得进来。
+    ② `owner="L"` —— 形式化那一岗本人。`schema.SUBGOAL_OWNERS` 今天还没有 L，于是这一格
+       经 `create_plan` 写不进来；留着它是因为 `_deploy` 读的是台账里的行，一行被别的路径
+       （人手改盘、或将来 schema 放宽）写成 owner=L 的子目标必须同样落"F 派不出去"，
+       而不是掉进 `_deploy` 末尾那句"owner 不在 SUBGOAL_OWNERS 里"的 PlanError。
+
+    ## 为什么 `name` / `imports` 不算（这一格是刻意收窄的）
+
+    它们是 E 的 formal 路径才有的参数，"给了它们却没写 `method`"是一种形状错误，
+    该由 E 那一侧用她自己的理由码原话拒绝（`run_experiment` 对 `name is not None`
+    无条件拒绝）。在这里把它判成"形式化"，等于把一条形状错误改写成一条口径结论。
+
+    ## 为什么判据落在派活入口（`_deploy`）而不是 `_deploy_e` 里
+
+    `_deploy` 是按 owner 分派的唯一入口，"这条子目标该派给谁"正是在那里决定的 ——
+    而改前那里只有 `owner == "E"` 一条判据，`method` 那一格从头到尾没有被读过。
+    判据放在分派之前，于是"formal 子目标不进 E"（本节）与"E 收到 formal 会受控拒绝"
+    （`agent_e/run_experiment.py` 的第一句）是两处各自成立的守卫，而不是"靠下游兜"。
+    """
+    if str(sg.get("method") or "").strip().lower() == "formal":
+        return True
+    return str(sg.get("owner") or "").strip().upper() == FORMAL_OWNER
+
+
+def _formal_dispatch_facts() -> dict[str, Any]:
+    """F 这一侧"形式化该派给谁、那条边在不在"的现算读数。
+
+    ## 为什么现算而不是在文案里写死一句话
+
+    权限面的真身是 `capabilities.ALLOWED_EDGES`（`specs/<角色>.py` 的 `edges` 派生出来
+    的那张表）。如果哪天 F->L 被裁定开出来，这条读数会自己翻成 `edge_exists=True`、
+    `dispatchable_by` 会把 F 算进去 —— 于是"派不出去"这句话不会僵在那里说着旧话。
+    写死一句"F 没有到 L 的边"在改裁定那天就成了一句静默的假话。
+
+    ## 为什么 `dispatchable_by` 读的是入边
+
+    只报"派不出去"是半个读数：调用方（D / M / 人）接下来要知道该找谁。L 的入边就是
+    "今天谁真的能派 L" —— 本函数把那一列一起给出来，于是"这条边不存在，需要谁派"
+    与"这条边存在"在同一格里分得开。
+
+    ## 为什么这里还要报 owner 词表（`owner_vocab` / `owner_writable`）
+
+    形式化那一档在台账里有两个写法：`method="formal"` 与 `owner="L"`（`_is_formal_subgoal`
+    的 ①②）。前者今天写得进去，后者写不进去 —— 因为 `schema.SUBGOAL_OWNERS` 里还没有 L。
+    这件事此前只活在那段 docstring 里：读数说"该派 L"，而读的人不知道"想写 owner=L
+    也写不出来"。现在它与 `edge_exists` 同一口径现算（真身是 `schema.SUBGOAL_OWNERS`），
+    于是那条词表哪天被裁定放宽，这一格会自己翻面，不用回来改一句文案。
+
+    实测（2026-10-27）：人手改盘能造出 owner="L" 的那一行，`F.status` 也读得到它，
+    但 `F.step` 会在回写那一步被 schema 硬拒（`PlanError`，一行都不写）—— 因为回写
+    校验的是整行，包括那一格没被这一轮碰过的 owner。所以"把 L 加进词表"不是文案活，
+    它是让 owner="L" 这一整条路可用的前置条件。
+
+    返回 `{"role", "edge_from_f", "edge_exists", "dispatchable_by", "inbound_edges",
+    "owner_vocab", "owner_writable", "note", "code"}`。
+    """
+    from .. import capabilities as CAP  # 惰性：capabilities 在 import 期会拉起本模块
+
+    edges = {str(role): {str(x) for x in (out or ())} for role, out in CAP.ALLOWED_EDGES.items()}
+    inbound = sorted(role for role, out in edges.items() if FORMAL_OWNER in out)
+    exists = FORMAL_OWNER in edges.get("F", set())
+    if exists:
+        note = f"F->{FORMAL_OWNER} 这条边在册"
+    elif inbound:
+        note = (f"F->{FORMAL_OWNER} 这条边不存在（F 的出边里没有 {FORMAL_OWNER}）⇒ "
+                f"需要 {' / '.join(inbound)} 派 {FORMAL_OWNER}"
+                f"（今天入 {FORMAL_OWNER} 的边只有 {' / '.join(f'{r}->{FORMAL_OWNER}' for r in inbound)}）")
+    else:
+        note = (f"F->{FORMAL_OWNER} 这条边不存在，而且今天没有任何角色有入 {FORMAL_OWNER} 的边 "
+                f"⇒ 这条子目标谁都派不出去")
+    owner_vocab = [str(x) for x in (getattr(S, "SUBGOAL_OWNERS", ()) or ())]
+    writable = FORMAL_OWNER in owner_vocab
+    if writable:
+        owner_note = (f"`{FORMAL_OWNER}` 在 `schema.SUBGOAL_OWNERS` 里 ⇒ "
+                      f"`owner=\"{FORMAL_OWNER}\"` 的子目标经 `create_plan` 写得进来")
+    else:
+        owner_note = (f"`{FORMAL_OWNER}` 不在 `schema.SUBGOAL_OWNERS`（{owner_vocab}）里 ⇒ "
+                      f"`owner=\"{FORMAL_OWNER}\"` 的子目标经 `create_plan` 写不进来"
+                      f"（人手改盘造出的那一行读得到，但每轮回写都会在同一格上被 schema 拒；"
+                      f"要让它整条路可用，得由人改那个词表）")
+    note = f"{note}；{owner_note}"
+    return {
+        "role": FORMAL_OWNER,
+        "edge_from_f": f"F->{FORMAL_OWNER}",
+        "edge_exists": exists,
+        "dispatchable_by": inbound,
+        "inbound_edges": [f"{r}->{FORMAL_OWNER}" for r in inbound],
+        "owner_vocab": owner_vocab,
+        "owner_writable": writable,
+        "note": note,
+        "code": FORMAL_EDGE_MISSING_REASON,
+    }
+
+
 def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
                    tried: Sequence[str], evidence: Sequence[str] = (),
                    history: Sequence[str] = (), retry_note: str = "",
@@ -538,6 +670,20 @@ class _Core:
         owner = str(sg.get("owner") or "")
         sid = str(sg.get("sid") or "")
         text = str(sg.get("text") or "")
+
+        # ---- 形式化那一档先摘出来，再按 owner 派（2026-10-26 的账：实现与裁定冲突）
+        #
+        # 改前的形态：这里只认 owner。于是 `owner="E"` + `method="formal"` 的子目标一路走到
+        # `AgentE.run_experiment`，而 E 已经在第一句以受控理由码 `formal_not_in_e` 拒绝形式化
+        # ⇒ 真机上那条子目标必被拒，且读数落成 `experiment_failed`（看上去像"实验跑失败了"，
+        # 其实是"这条路根本不在 E 身上"）。更要紧的是另一条：同一条子目标若没给脚本，
+        # 改前会让 F 问 E 的缝去"照判据写个脚本" —— 那正是把形式化悄悄降级成数值检查，
+        # 而形式化一旦被当验证糊过去，报告上的强度声明就假了。
+        #
+        # 现在：判据只一处（`_is_formal_subgoal`），命中就落 `_formal_not_in_f_round`
+        # （受控码 `formal_edge_missing` + 点名"需要谁派"），绝不退回 E 做数值检查。
+        if _is_formal_subgoal(sg):
+            return self._formal_not_in_f_round(sg, plan=plan)
 
         if owner == "E":
             return self._deploy_e(sg, plan=plan)
@@ -1156,6 +1302,15 @@ class _Core:
     #: （受控词表是 `attackround` 的声明面，加一个取值是另一条裁定）。
     SEAM_MISSING_REASON = "缺工具"
 
+    #: 形式化子目标那一档的 `dead_end` 受控理由 —— 同样落在 `attackround.DEAD_END_REASONS`
+    #: 的 `缺工具` 这一格（七格里没有"缺一条边"这一档，而加一个取值是另一条裁定，
+    #: 见 `SEAM_MISSING_REASON` 的注释）。
+    #:
+    #: 为什么不直接复用 `SEAM_MISSING_REASON`：两件事不同 —— 一个缺的是 E 的模型缝，
+    #: 一个缺的是 F 到 L 的那条边。共用同一个常量，将来"缝"那一档若换值，形式化这一档
+    #: 会跟着静默改口，而它的判据本该只由 `_formal_not_in_f_round` 决定。
+    FORMAL_MISSING_REASON = "缺工具"
+
     def _missing_seam_round(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
                             note: str, spec_line: str) -> dict:
         """E 没有模型缝 ⇒ 这一轮落 `dead_end(缺工具)` 并「向召唤者上报」（不再静默 `no_change`）。
@@ -1173,7 +1328,12 @@ class _Core:
         from .. import attackround as AR
 
         sid = str(sg.get("sid") or "")
-        esc = self._escalate_missing_seam(sg, plan=plan)
+        # 这一档缺的是 E 的模型缝 ⇒ 理由串由这里写（`_escalate_missing_input` 只管送到）。
+        esc = self._escalate_missing_input(
+            sg, plan=plan,
+            need=(f"E 没有接模型缝（llm=None）⇒ 写不出子目标 {sid} 的核验脚本。"
+                  "请给 E 接上缝：run-agent --experiment-reasoning"
+                  "（或装配期 llmseam.set_role_seam(\"E\", …)）—— 这里缺的是缝，不是脚本"))
         if esc["state"] == "escalated":
             esc_line = (f"；已用 `conductor.escalate(kind=\"missing_input\")` 向召唤者上报"
                         f"（留言 {esc['msg_id']} ⇒ {esc['to']}，会话根 {esc['session_root']}）")
@@ -1218,9 +1378,13 @@ class _Core:
             "escalation": esc,
         }
 
-    def _escalate_missing_seam(self, sg: Mapping[str, Any], *,
-                               plan: Mapping[str, Any]) -> dict[str, Any]:
-        """用既有 `Conductor.escalate` 把"缺 E 的缝"写进父的收件箱（`kind="missing_input"`）。
+    def _escalate_missing_input(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
+                               need: str) -> dict[str, Any]:
+        """用既有 `Conductor.escalate` 把"缺的是一件外部输入"写进父的收件箱（`kind="missing_input"`）。
+        今天有两个调用点，`need` 由调用方逐字给（这一格不许由本函数猜）：① E 没有模型缝
+        （`_missing_seam_round`：写不出核验脚本）；② 形式化子目标派不出去（`_formal_not_in_f_round`：
+        F 手里没有通往 L 的边，得由 B 派 L）。两件事都"缺一件不在本轮手上的东西"，而收件人
+        与后续动作不同 —— 所以理由串必须由知道那件事的那一侧写，本函数只负责把它送到。
         业主 2026-10-19 裁定"父子天然双向"：孩子跟召唤它的人说话「不是」一条权限边、不需要在 `edges` 里登记。`conductor.escalate` 就是那个入口，它已经把「谁是我的召唤者」「留言落进哪个会话」「收件箱怎么登记已
         读」三件事做完了（`conductor.py` 的 docstring 逐字写着）。| 需要什么 | 优先取 | 退路（并留痕） ||---|---|---|| 我的召唤号 | `conductor.current_task_id()` | 空
         ⇒ 照旧传空（`escalate` 会拒 `not_caller`） || 我的父| `conductor.current_parent()`（工具路径由 `calling_as` 挂上） | 空而我有召唤号 ⇒ 读 `tasks` 那一行的 
@@ -1235,9 +1399,6 @@ class _Core:
         from .. import conductor as CX
 
         sid = str(sg.get("sid") or "")
-        need = (f"E 没有接模型缝（llm=None）⇒ 写不出子目标 {sid} 的核验脚本。"
-                "请给 E 接上缝：run-agent --experiment-reasoning"
-                "（或装配期 llmseam.set_role_seam(\"E\", …)）—— 这里缺的是缝，不是脚本")
         mine = str(CX.current_task_id() or "")
         pid, prole = CX.current_parent()
         why_parent = "运行期上下文（`calling_as`）里挂着的"
@@ -1955,6 +2116,114 @@ class _Core:
             f"判据「{spec.get('criterion')}」/ 参数 {spec.get('params')} / "
             f"期望界 {spec.get('expected_bound')}）—— 已写回子目标，下一轮直接用")}
 
+    # ------------------------------------ 形式化那一档：F 派不出去（受控拒绝，不降级）
+
+    def _formal_not_in_f_round(self, sg: Mapping[str, Any], *,
+                               plan: Mapping[str, Any]) -> dict:
+        """形式化子目标 ⇒ 受控拒绝：不派 E，也不把形式化降级成数值检查。
+
+        ## 这条账改前长什么样（"实现与裁定冲突"的现场）
+
+        裁定（业主 2026-10-23 晚，逐字）：「E 侧与 Lean 相关的工具和动作都该清干净」。
+        实现那一侧已经执行了：`agent_e/run_experiment.py` 的第一句就按 `method == "formal"`
+        以受控理由码 `formal_not_in_e` 拒绝，E 也不再起检查器。
+        而 F 这一侧没有跟着改：`_deploy` 只看 owner，于是 `owner="E"` + `method="formal"`
+        的子目标照样派给 E。真机后果不是"被拒了、很吵"，而是两层静默：
+          ① E 抛的 `ExperimentError` 被 `_deploy_e` 的"任何 E 侧失败都降级为 blocked"接住
+             ⇒ 落 `action="experiment_failed"`，读数长得像"实验跑失败了"，而真正发生的是
+             "这条路根本不在 E 身上"；
+          ② 同一条子目标若没给 `script_path`，改前会更早拐弯：`_spec_from_testable` 让 E 的缝
+             照 `testable` 写一份脚本 —— 那就是把形式化悄悄降级成数值检查。形式化一旦被
+             当验证糊过去，论文里的强度声明与台账上的 `proof_experiment_ids` 就都虚了。
+
+        ## 改成什么
+
+        形式化归 L（业主同日裁定的另一句：形式化那一支由 L 承担）。但 F 派不出去：F 的出边里
+        没有 L（`specs/f.py::SPEC.edges` 逐字写着「F 依然不派 L。别在这里加 'L'」——
+        2026-10-22 开过一条又撤回，业主 B-5 的口径是「要一条才做一条」；L 的唯一入边给了 B）。
+        所以 F 这一侧能做的诚实动作只有一件：把"我手上没有这条边"变成一条受控产物 + 一句
+        点名"需要谁派"的上行，而不是派 E 去糊一个数值结果。
+
+        落点三件（缺一件这条账就又糊了）：
+          ① 产物：`attackround.dead_end_row`（受控理由 `缺工具`），于是 history 上读得出
+             "这一轮交的是死路"，`dead_end_reason` 也在；
+          ② 读数：返回值里带 `formal_dispatch`（`_formal_dispatch_facts` 现算的落点账：
+             该派谁、那条边在不在、今天谁能派），与那句散文分开可查；
+          ③ 上行：`_escalate_missing_input` 把"请 B 派 L"送进召唤者的收件箱（三态：
+             `escalated` / `refused` / `no_conductor`，绝不把"没上报成"写成"上报了"）。
+
+        状态取 `blocked` + `in_flight=True`：卡点必须留在表里被人看见（`blocked_reason` 非空
+        是 schema 的硬条件），而 `in_flight` 让它别每轮重选一次、把 history 灌满。
+        `count_attempt=False`：这是环境事实（那条边不存在），不是"对这条子目标的一次尝试"——
+        与 `no_seam` 那一档同一条口径。
+        """
+        from .. import attackround as AR
+
+        sid = str(sg.get("sid") or "")
+        text = str(sg.get("text") or "")
+        facts = _formal_dispatch_facts()
+        dispatch = str(facts.get("note") or "")
+        esc = self._escalate_missing_input(
+            sg, plan=plan,
+            need=(f"子目标 {sid} 是形式化那一档（method={sg.get('method')!r}）：形式化归 "
+                  f"{FORMAL_OWNER}，而 F 没有到 {FORMAL_OWNER} 的边 —— {dispatch}。"
+                  f"请让 {' / '.join(facts.get('dispatchable_by') or ['（没有谁能派）'])} 派 "
+                  f"{FORMAL_OWNER} 做这条子目标的形式化。不要退回 E 做数值检查："
+                  "那会把形式化当成验证糊过去"))
+        if esc["state"] == "escalated":
+            esc_line = (f"；已用 `conductor.escalate(kind=\"missing_input\")` 向召唤者上报"
+                        f"（留言 {esc['msg_id']} ⇒ {esc['to']}，会话根 {esc['session_root']}）")
+            esc_short = f"已上报 missing_input（{esc['msg_id']} ⇒ {esc['to']}）"
+        elif esc["attempted"]:
+            esc_line = (f"；已尝试 `conductor.escalate(kind=\"missing_input\")`，被受控拒绝 "
+                        f"`{esc['reason']}`（{esc['why']}）—— 这条上报没有送出去，"
+                        "别把这一行读成「召唤者已经收到」")
+            esc_short = f"上报被拒（{esc['reason']}）"
+        else:
+            esc_line = (f"；这一层没有可用的主控（{esc['why']}）⇒ 上报没发出去，"
+                        "这条缺边的读数只落在本行")
+            esc_short = "没有可用的主控，未上报"
+        detail = (
+            f"子目标 {sid}（{text}）是形式化那一档（method={sg.get('method')!r}）⇒ "
+            f"形式化归 {FORMAL_OWNER}，F 不派 E 做形式化（E 的实验入口对 method='formal' 以"
+            "受控理由码 formal_not_in_e 拒绝，本框架也不许把形式化降级成数值检查）。"
+            f"而 F 派不出去：{dispatch}。"
+            f"⇒ 这一轮据此落 dead_end（受控码 {FORMAL_EDGE_MISSING_REASON}），"
+            f"没有派 E、没有写实验行。要真正推进它，得由 "
+            f"{' / '.join(facts.get('dispatchable_by') or ['（今天没有谁能派）'])} 派 {FORMAL_OWNER}"
+            f"（形式化不挂在流水线上：业主 B-5「要一条才做一条」，用户指定才开）{esc_line}")
+        product = AR.dead_end_row(
+            strategy="套用已知定理",
+            reason=self.FORMAL_MISSING_REASON,
+            evidence=(f"子目标 {sid}（{text}）的 method={sg.get('method')!r} 是形式化那一档；"
+                      f"形式化归 {FORMAL_OWNER}，而 {dispatch}。缺的不是 Lean（检查器在 "
+                      f"{FORMAL_OWNER} 手里），缺的是 F 到 {FORMAL_OWNER} 的这条边 ⇒ "
+                      f"这一轮唯一的诚实产物是 dead_end(缺工具)，受控码 "
+                      f"{FORMAL_EDGE_MISSING_REASON}"),
+            best_partial=self._unwired_partial(sg),
+            why_strategy=("形式化子目标在 F 这一侧没有可派的人（F 的出边里没有 L）："
+                          "派 E 会被受控拒绝，退回数值检查等于把形式化当验证糊过去 ⇒ "
+                          "受控产物只有 dead_end，并把它上报给召唤者"),
+        )
+        return {
+            "action": "dead_end",
+            "outcome": "no_change",
+            "product": product,
+            "detail": detail,
+            "evidence": [],
+            "status": "blocked",
+            "blocked_reason": (
+                f"形式化子目标派不出去：受控码 {FORMAL_EDGE_MISSING_REASON}｜{dispatch}｜"
+                f"需要 {' / '.join(facts.get('dispatchable_by') or ['（没有谁能派）'])} 派 "
+                f"{FORMAL_OWNER}；不退回 E 做数值检查｜{esc_short}"),
+            "in_flight": True,
+            "count_attempt": False,
+            # 机器可读的那一份（`step` 会把它放进返回值）：落点账与那句散文分得开。
+            "formal_dispatch": facts,
+            # 上报成功与否必须与那句散文分开可查（与 `_missing_seam_round` 同一条纪律）。
+            "escalation": esc,
+        }
+
     def _deploy_e(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any]) -> dict:
         """E 的子目标：跑实验并登记。
 
@@ -1962,7 +2231,24 @@ class _Core:
         为什么必须幂等：每一轮重跑同一个脚本会让 experiments 表堆满重复记录、
         `attempts` 虚高，而"这条子目标到底试过几次"就再也答不上来了。
         要重跑必须由人显式清空 `experiment_ids`（那是一个有意的动作）。
+
+        ## 形式化子目标在这一层也派不出去（2026-10-27）
+
+        `_deploy` 已经在按 owner 分派之前把形式化子目标摘走了，所以这一支在运行形态里收不到
+        它。留着开头那一句判据，是因为"靠一处上游判据兜住一处下游透传"正是改前的形状：
+        谁绕过 `_deploy` 直接调这一层（打桩、新派活入口、将来别的调用方），形式化就会从这里
+        流向 E。受控产物与 `_formal_not_in_f_round` 是同一份，不另造一套说法。
+
+        ## 方法那一格：formal 从不经过这里
+
+        改前这一支把子目标的 `method` 原样传给 E（`method=str(sg.get("method") or "numeric")`），
+        于是"F 把 method=formal 交给 E"在代码上一直是通的。现在只传 `E_METHODS`
+        （`schema.EXPERIMENT_METHODS` 去掉 formal）里的取值，其余不传 —— E 用她自己的缺省，
+        formal 连"被传下去"这个动作都不会发生。判据：`tests/test_f_has_no_formal_entry.py`。
         """
+        # 形式化子目标：与 `_deploy` 同一处判据、同一份受控产物（不派 E、不落实验行）。
+        if _is_formal_subgoal(sg):
+            return self._formal_not_in_f_round(sg, plan=plan)
         sid = str(sg.get("sid") or "")
         claimed = sorted(set(list(sg.get("experiment_ids") or []) + list(sg.get("proof_experiment_ids") or [])))
         if claimed:
@@ -2089,6 +2375,14 @@ class _Core:
                 }
             script_path = str(authored.get("script_path") or "")
 
+        # ---- 方法那一格：只传 E 能做的（`E_METHODS`），formal 一行都不许从这里下去
+        #
+        # 改前这里是 `method=str(sg.get("method") or "numeric")`：子目标写什么就往下传什么。
+        # 于是"F 把 method=formal 交给 E"在代码上一直是通的 —— 上游判据一被绕过，形式化就
+        # 会以"一次数值检查"的形状落进 experiments。现在只有 `E_METHODS` 里的取值会被传，
+        # 其余一律不传（E 用她自己的缺省）。这是"不传"那一半；"拒"那一半在方法开头那一句。
+        method = str(sg.get("method") or "").strip().lower()
+        e_kwargs: dict[str, Any] = {"method": method} if method in E_METHODS else {}
         # E 执行失败必须被降级成"这一轮卡住了"，而不是让整个攻坚炸掉。
         #
         # 实测过这个缺口：子目标引用的脚本不存在时，`run_experiment` 抛
@@ -2106,15 +2400,18 @@ class _Core:
                 str(sg.get("claim_key") or f"{plan.get('problem_key')}#{sid}"),
                 script_path,
                 params=dict(sg.get("params") or {}) or None,
-                method=str(sg.get("method") or "numeric"),
                 for_question_id=plan.get("for_question_id"),
                 timeout=int(sg.get("timeout") or self.cfg.get("timeout", 600)),
-                # `P-8`：形式化子目标要把"核哪个声明、加载哪些库"传下去 ——
-                # 不传的话 E 只能用文件名词干 + 检查器默认库，而"库不可得"
-                # （`import_unavailable`）会让这次检查根本没发生 ⇒ 永远拿不到 proof。
-                # 两个键对计算类子目标不存在（取到 None），E 那一侧因此不会拒绝。
+                # `P-8`（历史口径，2026-10-26 起这一支到不了形式化子目标）：那两个键原先
+                # 是为了让形式化子目标把"核哪个声明、加载哪些库"传给检查器。裁定之后形式化
+                # 子目标在 `_deploy` 就被摘走了（`_is_formal_subgoal`），于是这里只可能收到
+                # 一条"没写 method、却写了 name / imports"的形状错误 —— 继续透传是刻意的：
+                # 让 E 用她自己的理由码原话拒绝（`name is not None` 那一句），而不是由 F
+                # 把这两个键悄悄吞掉（"我传了但它没看"正是本仓反复拒收的静默成功）。
                 name=sg.get("name"),
                 imports=sg.get("imports"),
+                # 方法那一格：只有 `E_METHODS` 里的取值在这里（见上面那一段）。
+                **e_kwargs,
             )
         except Exception as ex:  # noqa: BLE001 - 任何 E 侧失败都降级为 blocked，不中止攻坚
             return {
@@ -2137,8 +2434,16 @@ class _Core:
         kind = str(res.get("evidence_kind"))
         result = str(res.get("result"))
         if kind == "proof":
-            # 只有 proof 级证据才允许关闭子目标（FC-22）。E 只有在
-            # method="formal" 且拿到检查器输出时才会给出这个等级。
+            # 这一档的判据是"什么才算证明"（FC-22：只有 proof 级证据才允许关闭子目标），
+            # 它读的是 E 回执里的等级，不看是哪条路挣来的。
+            #
+            # 2026-10-26 记一笔（改前这里写的是"E 只有在 method=formal 且拿到检查器输出时
+            # 才会给出这个等级"，那句话在裁定之后已经不对了）：形式化不在 E 身上
+            # （`agent_e/run_experiment.py` 对 method='formal' 以受控码 `formal_not_in_e`
+            # 拒绝，`_derive` 也不给 formal 推等级），所以运行形态里 E 不会回 proof ——
+            # 这一支靠的是①穷举证明经 V 会审那一档（`proof_experiment_ids` 由那条路进），
+            # ②替身 E（测试夹具）。它留着不是死代码：它是"什么才算证明"的判据本身，
+            # 删掉它等于让"E 回了一个 proof 级读数"变成静默的 supported_not_proved。
             return {
                 "action": "run_experiment",
                 "outcome": "progress",

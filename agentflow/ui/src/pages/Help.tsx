@@ -356,11 +356,26 @@ export function Help() {
           剩下几条写在 <span class="mono">inbox.more</span> 里。
         </div>
         <div class="readings">
-          节点的状态与"在飞"来自 <span class="mono">data/tasks.json</span> 的实例行
-          （<span class="mono">pending</span> / <span class="mono">running</span> 算在飞）；
-          节点上限 500（<span class="mono">ROSTER_NODES_MAX</span>），超了置
-          <span class="mono">truncated=true</span>。面板底下那一行「对账」把台账里的代理行、名册上的节点、
-          以及"有父但不在任何名册里"的行（名册机制上线之前落的）三个数摆在一起。
+          <b>每一行是一个代理的三态</b>（在飞 / 待机 / 静默 / 未读到）：
+          <span class="mono">state</span> 的取值就是这几档，
+          <span class="mono">state_reason</span> 是"为什么判成这一格"的那句人话
+          （鼠标停在徽标上就能看到）。判定只有后端一处：在工作叫在飞；时钟上还挂着等待
+          （计时器 / 周期性巡查 / 在等活跃的下级）叫待机；已收工、无任务、无计时器叫静默；
+          台账 / 名册 / 时钟有一处读不成叫未读到 —— 它不是静默的别名。
+          顶上那行「三态合计：在飞 a · 待机 b · 静默 c · 未读到 d」就是这几档各几个，
+          读不到时显"未读到 + 原因"，不显示 0（0 会被读成"全都收工了"）。
+          「活跃（非静默）」= 在飞 + 待机，行尾那格「活 N（飞 a · 待 b）」的 N 就是它
+          （数的是名下直接子，不是 <span class="mono">children.length</span>）。
+        </div>
+        <div class="readings">
+          <b>另有一格是任务面的</b>：<span class="mono">in_flight</span> 数的是台账里
+          <span class="mono">status ∈ &#123;pending, running&#125;</span> 的活有几件（一件活一行），
+          页面逐字写「未收口的活 N 件」。它不是代理三态 —— 挂机（待机）的代理名下那件活
+          仍然是 <span class="mono">running</span>，所以它不能读成"在飞几个"，也不能并进
+          「活跃（非静默）」。节点上限 500（<span class="mono">ROSTER_NODES_MAX</span>），
+          超了置 <span class="mono">truncated=true</span>。面板底下那一行「对账」把台账里的代理行、
+          名册上的节点、以及"有父但不在任何名册里"的行（名册机制上线之前落的）
+          三个数摆在一起。
         </div>
       </Card>
 
@@ -376,9 +391,12 @@ export function Help() {
         <div class="readings">
           <b>板项与在飞不能混算</b>：板项行是 <span class="mono">kind</span> 非空、
           <span class="mono">item_state</span> 不是 <span class="mono">done</span> 的那些行；
-          「在飞」看的是实例行（<span class="mono">kind</span> 为空、<span class="mono">status</span>
+          「在飞的活」看的是实例行（<span class="mono">kind</span> 为空、<span class="mono">status</span>
           是 <span class="mono">pending</span> / <span class="mono">running</span>）。
           状态报告那一栏的「在飞」只数实例行：不分开数会把「板上有十几条要消的项」写成「在飞十几」。
+          这是「任务面」的「在飞」（一件活一行），不是名册卡那一格代理三态
+          （在飞 / 待机 / 静默）—— 两者同名不同口径，别拿一个去核另一个：
+          挂机（待机）的代理名下那件活仍然是 <span class="mono">running</span>。
         </div>
         <div class="readings">
           <b>待答两处同一个数</b>：首页会话概览那一列与「说一句」那张卡的副标题都写

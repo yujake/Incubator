@@ -101,8 +101,12 @@ ALL_STUB_FILES: dict[str, str] = {
 #: 都没被调用）已经改成"拿两棵语义相反的 AST 真喂 `is_live` / `reachable`，断言一死
 #: 一活"，并把谓词打桩成恒 True / 恒 False 各验一遍。修好之后这一行必须删掉，否则
 #: 本判据会以"台账写了、实测已经碰到"红。
-#: 另一条真实缺口（不在本台账里、但同一次审计量到）：`is_live` 只做名字解析，
-#: 同名的另一条活函数会把可达性"借"给这一条 —— 方向是漏报，写在这里供读数的人知道。
+#: 另一条真实缺口（不在本台账里、但同一次审计量到）：`is_live` 原来只做名字解析，
+#: 同名的另一条活函数会把可达性"借"给这一条 —— 方向是漏报。已在 2026-10-27 晚修掉：
+#: 边改按 (文件, 限定名) 收，同名不同文件的一对由
+#: `test_wiring_edges.py::test_a_same_named_function_in_another_file_cannot_borrow_liveness`
+#: 量住。留这一段是为了说明这一条为什么不属于本文件的普查范围：它问的是"解析对不对"，
+#: 而本文件第 4 条问的是"用例有没有碰到被测对象"，两者不是同一件事。
 KNOWN_ANTI_VACUUM_WITHOUT_SUBJECT: dict[tuple[str, str], str] = {}
 
 _TESTS = pathlib.Path(__file__).resolve().parent

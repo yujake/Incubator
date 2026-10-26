@@ -40,7 +40,7 @@ export function StopButtons(props: { onDone?: () => void }) {
           onConfirm={() => {
             fire(false);
           }}
-          note="优雅停：在飞的活收尾、没做完的标成「停在这里」；写面没开时后端回 403"
+          note="优雅停：正在跑的活收尾、没做完的标成「停在这里」；写面没开时后端回 403"
         />
       </div>
       <div class="readings">

@@ -662,17 +662,32 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
 )
 
 
-def type_decls() -> str:
-    """本模块（快照 / 场次 / 趟次）那一段 TS 声明文本。
+def type_decls(
+    types: Sequence[tuple[str, str, Sequence[tuple[str, str]]]] | None = None,
+    aliases: Sequence[tuple[str, str, str]] | None = None,
+) -> str:
+    """一段 TS 声明文本 —— 本仓 `type_decls` 的唯一实现（三条零交线共用它）。
 
     形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
     各自的 `type_decls()` 拼成 `ui/src/types.ts`。于是加接口这件事永远发生在
     自己那一行里 —— 本批之后生成器不必再被碰。
+
+    为什么它在这里、且带两个入参（2026-10-26 清洁，去重）：
+    `readers.py` / `writes.py` 里那两份 `type_decls()` 与这里这一份是同一段渲染代码
+    抄了三遍（只差喂进去的表），改一处的排版不会让另外两处跟着变 —— 那正是
+    "同名多实现"最贵的形态。现在渲染只有这一份；另外两处是薄转发
+    （`state.type_decls(<自己的表>, ())`），`scripts/lint_rules.py` 的 R003 因此把它们
+    认成转发而不是独立实现。
+
+    `types` / `aliases` 给了才覆盖本模块那两张表：默认值让 `emit_types` 的
+    `state.type_decls()` 与改前逐字节相同。
     """
+    use_types = _TS_TYPES if types is None else types
+    use_aliases = _TS_ALIASES if aliases is None else aliases
     parts: list[str] = []
-    for name, ts, note in _TS_ALIASES:
+    for name, ts, note in use_aliases:
         parts.append(f"/** {note}。 */\nexport type {name} = {ts};\n")
-    for name, source, fields in _TS_TYPES:
+    for name, source, fields in use_types:
         lines = [f"/** 出处：{source}。 */", f"export interface {name} {{"]
         lines += [f"  {field}: {ts};" for field, ts in fields]
         parts.append("\n".join(lines + ["}"]) + "\n")

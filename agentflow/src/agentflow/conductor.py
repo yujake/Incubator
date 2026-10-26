@@ -1780,18 +1780,6 @@ class Conductor:
         return int(row.get("depth") or 0) + 1, str(row.get("role") or "unknown")
 
     # ---------------------------------------------------------------- 写台账
-    def _write_row(self, row: dict, *, note: str) -> None:
-        """写一行 tasks。先构造 `Task` 并 validate，再落库。
-
-        为什么显式 `validate()`：`store.tx` 提交时也会 `validate_table`，
-        但那时的错误信息是 `tasks.rows[7] 校验失败：…`，读的人得自己数第 7 行
-        是哪一条。这里先校验，错误信息里能带上 role/action/task_id。
-        不 try/except 吞掉它 —— 缺陷掩盖比崩溃更危险。
-        """
-        S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__}).validate()
-        with self.store.tx("tasks", actor="conductor", note=note) as tx:
-            tx.upsert("tasks", row, note=note)
-
     def _write_new_row(self, row: dict, *, note: str) -> str:
         """取号 + 建行在同一个临界区内完成，返回 `task_id`。
 

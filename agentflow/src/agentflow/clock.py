@@ -2806,18 +2806,6 @@ def _probe_targets(timers: Iterable[Timer]) -> dict[str, tuple[str, str, str]]:
     return out
 
 
-def _same_wall(a: Any, b: Any) -> bool:
-    """两个时刻读数是同一个钟点吗（墙钟比较；解析不了 => 假）。"""
-    if a is None or b is None:
-        return False
-    try:
-        left = a if isinstance(a, datetime) else _parse_iso(a)
-        right = b if isinstance(b, datetime) else _parse_iso(b)
-    except ClockError:
-        return False
-    return left == right
-
-
 def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
     """把到点的计时器与周期性巡查交给注册的到点动作；计时器成功的落成 fired。
 

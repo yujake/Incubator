@@ -8,9 +8,13 @@
  * | 当刻状态 | 这一句话会走到哪 |
  * |---|---|
  * | 有提问在等回答 | `POST /answer`（qid + 这一句当自由回答） |
- * | 这一段的 M 在飞 | `POST /api/task` 插话（下一步开头读到，不打断当前步） |
- * | M 闲着、这一段有原来的任务 | 先 `POST /api/task` 记进收件箱，再 `POST /api/run` 带 `sid` + `resume` 唤醒它 |
+ * | 这一段会话的循环还在盘上跑 | `POST /api/task` 插话（下一步开头读到，不打断当前步） |
+ * | 循环不在了、这一段有原来的任务 | 先 `POST /api/task` 记进收件箱，再 `POST /api/run` 带 `sid` + `resume` 唤醒它 |
  * | 还没有会话（或选了"新的一段"） | `POST /api/run` 起一趟 |
+ *
+ * 「循环还在跑」读的是 `GET /api/live` 的 `running`（`stopctl.running_loops` 的会话面），
+ * 它是**进程/会话面**的读数，不是名册卡那一格代理三态：挂机（待机）的那一趟循环仍然
+ * 活着（进程在、只是这一拍不调模型），所以这一页不说「主控在飞」—— 那句话该由三态说。
  *
  * 来回那一段由后端 `GET /api/chat` 逐条给（投影口径见 `readers.chat_face` 的 docstring）：
  * 用户的线与主控的线分列，团队动态（别的角色在频道里说的话）默认折起来、可展开。
@@ -204,7 +208,10 @@ export function Home() {
   // 而且 qid 只在会话内唯一 —— 所以每一条各自带着自己的 sid 提交（判据同族）。
   const pending = snapshot.pending_questions;
   const firstQ = pending[0];
-  const running = (liveFace.data === null ? [] : liveFace.data.running).some(
+  // 这一段会话的循环还在不在盘上跑（`live_face.running` 的会话面）。
+  // 刻意不叫 `running` 也不叫 `flying`：它读的既不是"代理三态"，也不是"名下有几件活"；
+  // 它唯一决定的是这一句话走"插话"还是"续跑"（见上面那张表）。
+  const loopRunning = (liveFace.data === null ? [] : liveFace.data.running).some(
     (r) => r.sid === sid,
   );
   // 续跑要用**这一段原来那句话**（见文件头那张表下面那段）：先看台账那一栏，
@@ -218,7 +225,7 @@ export function Home() {
   const mode =
     pending.length > 0 ? "answer"
       : newSession || sid === "" ? "start"
-        : running ? "interject"
+        : loopRunning ? "interject"
           : originalTask === "" ? "start" : "wake";
 
   const MODE_WORDS: Record<string, string> = {
@@ -328,7 +335,7 @@ export function Home() {
           chatData === null
             ? ""
             : `${sid === "" ? "还没有会话" : sid} · 共 ${chatData.total} 条来回` +
-              (running ? " · 主控在飞" : "")
+              (loopRunning ? " · 这一段的循环在跑" : "")
         }
         tone={chatData !== null && isUnreadable(chatData.tri) ? "problem" : "plain"}
         right={
@@ -386,7 +393,7 @@ export function Home() {
 
       <Card
         title="说一句"
-        subtitle={`M ${running ? "在飞" : "闲着"} · ${pending.length} 条待回答（全局待答清单）`}
+        subtitle={`M 这一段的循环${loopRunning ? "在跑" : "不在盘上"} · ${pending.length} 条待回答（全局待答清单）`}
       >
         {pending.length === 0 ? (
           <span class="empty">暂无待回答的问题（合法初态）。</span>
@@ -411,7 +418,7 @@ export function Home() {
                 : mode === "interject"
                   ? "插一句话给正在跑的那一趟"
                   : mode === "wake"
-                    ? "接着说（会把这句话交给闲着的主控，让它接着干）"
+                    ? "接着说（会把这句话交给主控，让它接着干）"
                     : "例如：帮我把工作区里那篇论文从头到尾审核一遍，修改掉里面的错误和不恰当表述。"
             }
             value={text}

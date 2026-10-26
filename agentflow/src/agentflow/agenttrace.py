@@ -131,6 +131,8 @@ def subtree_rows(
     by_id = {_task_id_of(r): r for r in everything}
     root = by_id.get(str(root_task_id or ""))
     if root is None:
+        # 台账里没有这个号 ⇒ 这棵树本来就不存在（不是"台账读不出来"，那一档在别处报）。
+        # 空列表是准数，不是把"没查成"折叠成"没有结果"。
         return []
     limit = None if depth is None else max(1, int(depth))
     out: list[dict[str, Any]] = []

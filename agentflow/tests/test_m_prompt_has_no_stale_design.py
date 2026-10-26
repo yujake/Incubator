@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """M 侧提示词与工具说明里的过时设计残留（业主裁定：「M 侧过时全清」）。
 
-审查清单 27 条，逐条一个断言；每条的失败信息都点名条目号与文件:行。文件后半段是五条护栏：
+审查清单 27 条，逐条一个断言；每条的失败信息都点名条目号与文件:行。文件后半段是这批护栏：
 
 | 判据 | 守的是 | 反真空 |
 |---|---|---|
@@ -10,6 +10,11 @@
 | c) 收件人指称 | 拿角色代号当收件人（名册上有几个同角色实例时指不清） | 负控：把两条指称说明删掉 ⇒ 必红 |
 | d) 渲染无损坏 | 源码里用反斜杠当强调符 ⇒ 渲染后是控制字符 + 半截单词 | 负控：把旧写法喂进同一个读法 ⇒ 必红 |
 | e) 写死数字 / 转义 | 口径必须现算，不许手抄 | 把件数写回、把反斜杠写法写回 ⇒ 必红 |
+| f) proof 那一栏的两个来源（#28） | 只认 Lean 就把 E 的穷举 proof 从 proof 栏里删掉了 | 把 E 那一半摘掉 / 塞一句「M 派 L」⇒ 必红 |
+
+#28 是 2026-10-25 的更正（业主：「E 有穷举式的数值支撑，它可以签数值论证型定理的 proof，
+只是签在『形式化』一个栏」）：M 的验收口径从「形式化 = `method=formal` 的 proof 行」改成
+「proof 那一栏有两个来源」，权威出处逐条写在 f) 那一节的注释里。
 
 为什么这些值得一条专门的判据：这 27 条全都是"提示词说的与代码做的不是一件事"，
 而这类分家在真机上不会亮任何红灯 —— 模型照着旧口径写，拿到的是
@@ -34,8 +39,10 @@ import pytest
 
 from agentflow import agent_prompts as AP
 from agentflow import agent_skills as AS
+from agentflow import capabilities as C
 from agentflow import promptstability as PS
 from agentflow import schema as S
+from agentflow import settings as SET
 from agentflow.tools import build_registry
 
 #: 交付包根（`agentflow/`）。
@@ -124,7 +131,18 @@ _STALE_IN_PROMPT: tuple[tuple[int, str, pathlib.Path, str], ...] = (
     (24, "派活仍按角色走 `summon`", PROMPTS, "造新子代理给它名册名；复用写 `reuse`"),
     (26, "`conductor.retire_child(task_id=…, reason=…)`", M_SPEC,
      "销号只有一条正路：`conductor.retire_child(child_name=…)`"),
+    (26, "这一形是**旧路**", PROMPTS,
+     "共用段是十一个角色共用的：对只读角色（C / H / V）`{\"retire\": …}` 就是唯一那条路，"
+     "说成旧路会把'没有别的入口'读成'有别的入口，只是旧的'（同一口径见"
+     " test_g_h_v_l_prompt_has_no_stale_design.py 的 ②）"),
+    (26, "销号只有一个入口", PROMPTS, "销号是两个入口落到同一处（形与工具同一落点）"),
     (27, "给所有人写 `to=#public`", M_SPEC, '手稿的公共频道写法是 `to="ALL"`'),
+    (28, "验收表那一档用 `proof_experiment_rows`", M_SPEC,
+     "proof 那一栏不绑 method：E 的穷举与形式化那一岗都算 proof 级"),
+    (28, "形式化要用 `proof_experiment_rows`", M_SPEC,
+     "`proof_experiment_rows` 只数 method=formal 那一支，它不是 proof 栏的全部"),
+    (28, "`method=formal` **且**", M_SPEC,
+     "读数绑 method 就把 E 的穷举 proof 挡在 proof 栏外面（只认 Lean 的同一种病）"),
 )
 
 #: 渲染后的 M 提示词里必须出现的写法：`(条目号, 该出现的一串, 出处文件, 为什么)`。
@@ -150,6 +168,10 @@ _REQUIRED_IN_PROMPT: tuple[tuple[int, str, pathlib.Path, str], ...] = (
     (24, "造新子代理给它名册名", PROMPTS, "派活口径换成名册名"),
     (26, "conductor.retire_child(child_name=", M_SPEC, "政策里明写走这一件、且收 child_name"),
     (27, '`to="ALL"`', M_SPEC, "公共频道写法统一到 ALL"),
+    (28, "proof 那一栏有两个来源", M_SPEC,
+     "两个来源要并列写出来（E 的穷举 ＋ 形式化那一岗），这一层在提示词里必须读得到"),
+    (28, "E 的穷举", M_SPEC, "漏了 E 那一半就是只认 Lean（业主 2026-10-25 的更正）"),
+    (28, "形式化那一岗", M_SPEC, "那一岗只有用户指定过才有，指定之后由 B 逐条安排"),
 )
 
 
@@ -283,12 +305,26 @@ def test_item_25_the_board_and_inbox_point_at_the_step_message() -> None:
 
 def test_item_26_retiring_has_exactly_one_entry_and_it_takes_a_roster_name(
         registry, m_prompt: str) -> None:
-    """#26：销号只有一个入口 `conductor.retire_child(child_name=…)`；`task_id` 只是兼容并留读数。
+    """#26：销号只有一条正路 `conductor.retire_child(child_name=…)`；`task_id` 只是兼容并留读数。
 
     为什么正路那一格叫 `child_name` 而不是 `name`：`ToolRegistry.call(name, ...)` 的首个形参
     就叫 `name`，而 `agent_loop._do_tool` 把模型给的 args 摊成关键字传进去 ⇒ 形参叫 `name`
     时，「名字写对了、工具本身没问题」却会拿到 `TypeError`（2026-10-26 实测）。所以这条
     还钉两件事：schema 里不许出现 `name`；按名册名调用的那条路真的走得通（见下一条）。
+
+    ## 措辞那一格为什么改判"落点"，不再判「旧路」这两个字
+
+    这条判据改前最后一句是 `assert "旧路" in m_prompt`。它守的其实不是"旧路"两个字，而是
+    "M 知道销号要落到 `conductor.retire_child`、形只是另一条路"。而 2026-10-26/27 的销号
+    收口批把共用段（`agent_prompts.COLLAB_SHAPES_TEXT` / `LOOP_PROTOCOL`）改成逐字：
+
+        销号两个入口同一落点：形是这个、工具是 `conductor.retire_child`；只读角色只有形那一档
+
+    —— 共用段是十一个角色共用的，而 `{"retire": …}` 对只读角色（C / H / V）就是唯一那条路：
+    说成"旧路"会把"没有别的入口"读成"有别的入口，只是旧的"。同一条口径在
+    `tests/test_g_h_v_l_prompt_has_no_stale_design.py` 的 `check_2` 里，把「这一形是旧路」
+    与「销号只有一个入口」两句都列为 stale ⇒ 两处判据此前正互相矛盾，而只有 M 这一条红。
+    改判之后这格钉三件：工具名在、落点说清（同一落点 / 同一处）、只认名册名。
     """
     spec = registry.get("conductor.retire_child")
     props = spec.params["properties"]
@@ -311,9 +347,30 @@ def test_item_26_retiring_has_exactly_one_entry_and_it_takes_a_roster_name(
     assert "名册名" in props["child_name"]["description"], _fmt(
         26, [f"child_name 的说明没写名册名：{props['child_name']['description']!r}"],
         _cite(CTOOLS, '"child_name": {'))
-    assert "旧路" in m_prompt, _fmt(
-        26, ["M 提示词里没有把 /shape 的 `retire` 标成旧路"], _cite(PROMPTS, "这一形是"))
+    # 措辞那一格：落点在、工具名在、只认名册名 —— 三个都判，不判"旧路"两个字（理由见 docstring）
+    assert "conductor.retire_child" in m_prompt, _fmt(
+        26, ["M 提示词里找不到 `conductor.retire_child` ⇒ 销号那一格被删光了，不是修好了"],
+        _cite(PROMPTS, "conductor.retire_child"))
+    assert ("同一落点" in m_prompt or "同一处" in m_prompt), _fmt(
+        26, ["M 提示词里没说清销号的两个入口落到同一处（形与工具同一落点）"],
+        _cite(PROMPTS, "同一落点"))
+    assert "名册名" in m_prompt, _fmt(
+        26, ["M 提示词里没写销号只认名册名"], _cite(PROMPTS, "名册名"))
     _assert_items([26], m_prompt)
+
+
+def test_item_26_putting_the_old_path_wording_back_goes_red(m_prompt: str) -> None:
+    """#26 负控：把「这一形是旧路」/「销号只有一个入口」塞回去 ⇒ 同一个读法点出 #26。
+
+    改判之后最怕的一种绿：新断言换成"落点还在"，而"旧路"那两句又悄悄回到正文里 ——
+    那时 M 与 H / V 两处读者读到相反的意思，却没有任何判据红。所以两句各来一次负控。
+    """
+    assert 26 not in _item_problems(m_prompt), _fmt(
+        26, _item_problems(m_prompt)[26], "M 提示词")
+    for old in ("（这一形是**旧路**：销号只有一个入口）", "销号只有一个入口，其余都是历史写法"):
+        broken = m_prompt + "\n" + old + "\n"
+        assert _item_problems(broken).get(26), (
+            f"把 {old!r} 塞回 M 的提示词，判据却一声不吭 ⇒ 这一条是橡皮图章")
 
 
 def test_item_26_a_roster_name_can_reach_the_tool_through_the_loop_path(registry) -> None:
@@ -492,6 +549,268 @@ def test_e_item_11_the_conductor_count_is_computed_not_written(
     assert f"{live} 件读数与操作" not in shifted
 
 
+# ====================================================================== f) proof 那一栏的两个来源（#28）
+#:
+#: 业主 2026-10-25 的更正（逐字要点）：「E 有穷举式的数值支撑，它可以签数值论证型定理的 proof，
+#: 只是签在『形式化』一个栏」。于是 M 的验收口径从「形式化 = method=formal 的 proof 行」改成
+#: 「proof 那一栏有两个来源」：
+#:
+#: - (a) E 的穷举 / 数值论证：`method="exhaustive_search"` 且整个论域被穷尽验证过 ⇒
+#:   `evidence_kind="proof"`；
+#: - (b) 形式化那一岗：只有用户指定过才有，指定之后 M 把这条要求交给 B（`M → B`），B 逐条安排。
+#:
+#: 权威出处（判据引的是这两处的原文，不是本文件的措辞）：
+#: - `schema.EXPERIMENT_METHODS` 含 `exhaustive_search`，而计算类方法只有在「整个论域」那几件
+#:   可核条件满足时才允许 `evidence_kind="proof"` —— 判据本体 `numericproof.exhaustion_problems`
+#:   （搜索空间 ＋ 布尔 true 的 exhaustive ＋ 程序设计 ＋ 穷举论证 ＋ 程序相对路径）；
+#: - `numericproof` 的模块 docstring：穷举证明（`proof_reason="exhaustion"`）与「有数值实验支持」
+#:   （`cross_check`）的分界；判据 ⑧ `formal_slot`：「形式化」那一格有两类填法 —— 数值实验定理
+#:   填数值实验程序、理论定理填 Lean 程序，同一格、不许互相冒充；
+#: - `closing.LEG_CHECK_KINDS["proof_experiment_rows"]` 只数 `method=formal` —— 它不是 proof 栏
+#:   的全部，把它当全部就是把 E 的穷举 proof 漏在外面。
+#:
+#: 一半是文字（提示词与手册读得到什么），一半是结构（`B → L` 是唯一入边、M 没有到 L 的边）。
+
+#: 判「读出来的意思」：去掉空白与强调符号（`*` / 反引号）再比 —— 与
+#: `test_m_plans_before_it_proves.py` 同一个读法。
+_SQUASH = re.compile(r"[\s*`]+")
+
+
+def _squash(text: str) -> str:
+    return _SQUASH.sub("", text)
+
+
+def _render_m(registry) -> str:
+    """按夹具同一套事实渲染一次 M 的提示词（纯函数，零模型调用）。"""
+    return AP.system_prompt(S.CONDUCTOR_ROLE, registry=registry, task=TASK,
+                            workspace_root=ROOT)
+
+
+#: M 的提示词里必须读到的几层：`(这一层叫什么, 必须出现的几串)`。
+_PROOF_LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("两个来源并列", ("proof 那一栏有两个来源", "两个都算 proof 级")),
+    ("(a) 那一半：E 的穷举 / 数值论证",
+     ("E 的穷举", "exhaustive_search", 'evidence_kind="proof"',
+      "exhaustion_problems")),
+    ("(b) 那一半：形式化那一岗（用户指定后交 B）", ("形式化那一岗", "用户指定", "交给 B")),
+    ("读法：看 evidence_kind，不看 method",
+     ("不是看 method 是不是 formal", "counterexample_or_proof_rows")),
+    ("不许只认 Lean", ("不许只认 Lean", "cross_check")),
+    ("两者都没有才写 na", ("两者都没有时", "用户未指定形式化", "不要写 0")),
+)
+
+
+def _proof_layer_problems(text: str) -> list[str]:
+    """这段文字里 proof 两来源的哪几层读不到（空列表 = 都读得到）。"""
+    flat = _squash(text)
+    out: list[str] = []
+    for name, needles in _PROOF_LAYERS:
+        missing = [n for n in needles if _squash(n) not in flat]
+        if missing:
+            out.append(f"读不到「{name}」这一层（缺 {missing}）")
+    return out
+
+
+def _without_the_e_half(policy: tuple[str, ...]) -> tuple[str, ...]:
+    """把 (a) 那一半从句子里剪掉，(b) 留着 —— 模拟「有人只删了 E 那半边」。
+
+    负控要证的是「(a) 那一半被删 ⇒ 判据红」，不是「整条政策被删 ⇒ 判据红」：后者连
+    (b) 一起没了，读的人分不清红的是哪一半。
+    """
+    out: list[str] = []
+    for item in policy:
+        text = str(item)
+        start, end = text.find("(a)"), text.find("(b)")
+        if 0 <= start < end and "E 的穷举" in text[start:end]:
+            out.append(text[:start] + text[end:])
+            continue
+        out.append(text)
+    return tuple(out)
+
+
+def test_item_28_the_proof_column_has_two_sources(m_prompt: str) -> None:
+    """#28 正控：M 的提示词里 proof 那一栏写清两个来源（E 的穷举 ＋ 形式化那一岗）。"""
+    problems = _proof_layer_problems(m_prompt)
+    assert problems == [], _fmt(28, problems,
+                                _cite(M_SPEC, "proof 那一栏有两个来源"))
+    _assert_items([28], m_prompt)
+
+
+def test_item_28_dropping_the_e_half_goes_red(
+        registry, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#28 负控：把 (a) E 的穷举那一半从 M 的 policy 里删掉 ⇒ 必红（且 (b) 那一半还在）。"""
+    brief = AP.ROLE_BRIEFS[S.CONDUCTOR_ROLE]
+    assert _proof_layer_problems(_render_m(registry)) == [], \
+        "夹具前提：真身上两个来源都读得到"
+    pruned = _without_the_e_half(brief.policy)
+    before = "\n".join(str(x) for x in brief.policy)
+    after = "\n".join(str(x) for x in pruned)
+    assert before.count("(a)") > after.count("(a)"), \
+        "夹具没摘掉 (a) 那一半（锚变了？先看 _PROOF_LAYERS 的措辞）"
+    assert "形式化那一岗" in after, \
+        "夹具把 (b) 那一半也摘掉了 ⇒ 这条证不了「红的是 E 那一半」"
+    monkeypatch.setitem(AP.ROLE_BRIEFS, S.CONDUCTOR_ROLE,
+                        dataclasses.replace(brief, policy=pruned))
+    got = _proof_layer_problems(_render_m(registry))
+    assert got and any("E 的穷举" in one for one in got), (
+        f"把 (a) E 的穷举那一半摘掉之后判据仍然绿（业主：漏了它 M 就只认 Lean）：{got}")
+
+
+def test_item_28_the_e_half_survives_the_lean_switch(
+        registry, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#28 反真空之二：关档也读得到 (a) 那一半。
+
+    为什么必须单独判：`specs/e.py` 的 `NO_LEAN_DROP_LINE_MARKERS` 里有一条按
+    `用户要形式化时，你的动作是派 B` 这个句首（标记原文带强调记号）整行删掉 ——
+    关档下那条政策整个不见（那个标记
+    改句首会让 `test_lean_switch.py` 的反真空当场红，而 e.py 不在本批可改范围）。
+    所以两个来源的口径必须同时留在没被摘掉的那一条（「挑哪一档」）上；这一条把
+    「开档关档两遍都读得到 (a)」钉住。
+    """
+    try:
+        for want in ("1", "0"):
+            monkeypatch.setenv(SET.ENV_LEAN_ENABLED, want)
+            AP.reset_toolchain_readings()
+            problems = _proof_layer_problems(_render_m(registry))
+            assert problems == [], _fmt(
+                28, problems, f"lean_enabled={want} 的 M 提示词（两档都要读到 (a)）")
+    finally:
+        monkeypatch.undo()
+        AP.reset_toolchain_readings()
+
+
+#: M 面（提示词 ＋ 手册）里不许出现的「M 自己派 L」正向句。
+#:
+#: 为什么把 `派 L` 这种宽写法也算进来：M 面里每一处「派 L」都该是 B 那一侧的转述或
+#: 负向句；放它过去，下一句"M 也可以派 L"就会和今天那句负向句长得一模一样。
+_M_DISPATCHES_L: tuple[re.Pattern[str], ...] = (
+    re.compile(r"M\s*(?:→|->|—>)\s*L"),
+    re.compile(r"(?:^|[\s（(【《])派\s*L"),
+    re.compile(r"(?:你|主控)[^\n。；]{0,12}(?:派|让|要|叫|喊|通知|命令)\s*L"),
+    re.compile(r"(?:派|让|要求|叫|喊|通知|命令)\s*L\s*(?:做|去|来|出|干)"),
+)
+
+#: 白名单：M 面里允许带着「派 L」的那几句（逐字；每句都写清为什么）。
+_M_DISPATCHES_L_ALLOWED: tuple[tuple[str, str], ...] = (
+    ("B 可以派 L",
+     "收工手册那一句说的是 B 那一侧的许可（`B → L` 是唯一入边），不是 M 的动作"),
+    ("派 L 的唯一入口是 B",
+     "指派手册的负向句：M 没有到 L 的边 —— 删掉它，那一格只剩「谁都能派」这一种读法"),
+)
+
+
+def _m_handbook_text() -> str:
+    """M 名下那十本手册的正文（模型 `fs.read` 读到的就是这一份）。"""
+    return "\n".join(f"{s.slug}\n{s.summary}\n{s.when}\n{s.body}"
+                     for s in AS.CATALOG[S.CONDUCTOR_ROLE])
+
+
+def _m_facing_texts(m_prompt: str) -> dict[str, str]:
+    """M 读得到的两处文字（提示词与手册）。"""
+    return {"M 的提示词": m_prompt,
+            "M 的手册（fs.read 那一份）": _m_handbook_text()}
+
+
+def _dispatch_l_problems(text: str,
+                         allowed: tuple[tuple[str, str], ...] = _M_DISPATCHES_L_ALLOWED
+                         ) -> list[str]:
+    """这段文字里教「M 自己派 L」的正向句（白名单里的那几句先摘掉再扫）。"""
+    stripped = text
+    for frag, _why in allowed:
+        stripped = stripped.replace(frag, "")
+    out: list[str] = []
+    for pat in _M_DISPATCHES_L:
+        for hit in pat.finditer(stripped):
+            out.append(f"这条正向句在教 M 自己派 L：{hit.group(0)!r}")
+    return out
+
+
+def test_item_28_dropping_the_handoff_to_b_goes_red(
+        registry, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#28（口径 b）负控：把「用户指定 ⇒ 交给 B」这半句删掉 ⇒ 必红。
+
+    业主的口径是 M 的动作只有一件：把用户的指定交给 B。少了这半句，M 会读成
+    「用户指定之后我自己安排」（而它没有到那一岗的边），或者读成「等用户决定就好」。
+    """
+    brief = AP.ROLE_BRIEFS[S.CONDUCTOR_ROLE]
+    assert _proof_layer_problems(_render_m(registry)) == [], "夹具前提：交 B 那半句读得到"
+    pruned = tuple(str(x).replace("交给 B", "转达下去") for x in brief.policy)
+    assert "交给 B" not in "\n".join(pruned), "夹具没把「交给 B」摘掉（锚变了？）"
+    monkeypatch.setitem(AP.ROLE_BRIEFS, S.CONDUCTOR_ROLE,
+                        dataclasses.replace(brief, policy=pruned))
+    got = _proof_layer_problems(_render_m(registry))
+    assert got and any("交给 B" in one for one in got), (
+        f"把「交给 B」摘掉之后判据仍然绿 ⇒ M 的动作那一条是橡皮图章：{got}")
+
+
+def _table_recipient(row: str) -> str:
+    """markdown 表格行最后一格（`派给谁` 那一列）。"""
+    cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
+    return cells[-1] if len(cells) >= 2 else ""
+
+
+def test_item_28_the_formalisation_row_is_addressed_to_b() -> None:
+    """#28（口径 b）第三半：指派表里「用户指定要验某一条」那一行的收件人是 B，不是那一岗。
+
+    改前那一行把收件人写成 L（后面跟着一句「派 L 的唯一入口是 B」的括注）—— 括注说得对，
+    但写在「派给谁」那一格里的名字会被读成收件人。判据读那一格，并把改前那一行喂回同一个
+    读法当负控。
+    """
+    rows = [line for line in _m_handbook_text().splitlines()
+            if "用户**指定**要验某一条" in line]
+    assert len(rows) == 1, f"指派表里那一行找到了 {len(rows)} 条：{rows}"
+    recipient = _table_recipient(rows[0])
+    assert recipient.startswith("**B**"), (
+        f"那一行的收件人是 {recipient!r} —— 它必须是 B：要不要做由用户指定，指定之后由 B 逐条安排")
+    old_row = ("| 用户**指定**要验某一条（研究与论文都落定之后） | L（形式化那一岗；成本极高、"
+               "不主动召唤，不指定就不派。派 L 的唯一入口是 B（`B → L`），L 只派 C；"
+               "用户也可以 `run-agent L` 直接起一条） |")
+    assert not _table_recipient(old_row).startswith("**B**"), (
+        "改前那一行喂进同一个读法竟然是绿的 ⇒ 这条判据分不出收件人是谁")
+
+
+def test_item_28_no_sentence_teaches_m_to_dispatch_l(m_prompt: str) -> None:
+    """#28（口径 b）：M 的提示词与手册里没有「M 派 L / M→L / 你要 L 做形式化」这类正向句。
+
+    扫描面为什么包含手册：M 的提示词里今天一处 `L` 记号都没有（开档关档都不提，判据见
+    `test_l_is_isolated_when_lean_is_off.py`），真正会藏「M 可以派 L」的地方是 `fs.read`
+    读的那份手册 —— 指派表那一行原本就把收件人写成 L，本次改判才把它改成 B。
+    """
+    for name, text in _m_facing_texts(m_prompt).items():
+        problems = _dispatch_l_problems(text)
+        assert problems == [], _fmt(28, problems, name)
+    # 白名单不许腐烂：那几句负向 / 转述句必须还在盘上（否则豁免从此永不生效）
+    handbook = _m_handbook_text()
+    for frag, why in _M_DISPATCHES_L_ALLOWED:
+        assert frag in handbook, (
+            f"白名单里的句子不在手册里了（这条豁免从此永不生效）：{frag!r} —— {why}")
+
+
+def test_item_28_planting_a_dispatch_sentence_goes_red(m_prompt: str) -> None:
+    """#28 负控：塞一句「M 派 L」⇒ 必红；把白名单清空 ⇒ 现盘也必红（判据真的在扫）。"""
+    handbook = _m_handbook_text()
+    assert _dispatch_l_problems(handbook) == [], "夹具前提：带着白名单时手册是干净的"
+    for planted in ("M 派 L 做形式化验证", "你要 L 做形式化，走 M→L 这条捷径"):
+        broken = handbook + "\n" + planted
+        assert _dispatch_l_problems(broken), (
+            f"塞进 {planted!r} 之后判据仍然绿 ⇒ 这一条是橡皮图章")
+    # 反真空：白名单清空 ⇒ 现盘必须红（说明那几句真的是被扫到、再被豁免掉的）
+    bare = _dispatch_l_problems(handbook, allowed=())
+    assert bare, ("把白名单清空之后判据仍然绿 ⇒ 它读的不是这张表："
+                  "「没有 M 派 L」可能只是「什么都没被扫到」")
+
+
+def test_item_28_the_edge_table_says_the_same_thing() -> None:
+    """#28 结构那一半：`B → L` 是唯一入边，M 没有到 L 的边（文字承诺与边表同时成立）。"""
+    edges = C.ALLOWED_EDGES
+    assert "L" in edges["B"], "B 的出边里没有 L ⇒ 那条唯一的入边断了，文字承诺落空"
+    assert "L" not in edges[S.CONDUCTOR_ROLE], (
+        "M 的出边里有 L ⇒ 提示词里写「不派 L」也拦不住一次真的召唤")
+    senders = sorted(role for role, targets in edges.items()
+                     if "L" in targets and role != "L")
+    assert senders == ["B"], f"到 L 的入边不止 B：{senders}"
+
+
 # ====================================================================== 改前红（负控总表）
 #: 改前那几句逐字（不从当前文本拼：拼出来的"旧版"会随修好一起变好）。
 _OLD_SNIPPETS: tuple[tuple[int, str], ...] = (
@@ -517,6 +836,8 @@ _OLD_SNIPPETS: tuple[tuple[int, str], ...] = (
     (24, "派活仍按角色走 `summon`"),
     (26, "`conductor.retire_child(task_id=…, reason=…)`"),
     (27, "给所有人写 `to=#public`"),
+    (28, "验收表那一档用 `proof_experiment_rows`（`method=formal` **且** `evidence_kind=proof`）"),
+    (28, "形式化要用 `proof_experiment_rows`（`method=formal` **且** `evidence_kind=proof`）"),
 )
 
 

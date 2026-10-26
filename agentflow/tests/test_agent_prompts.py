@@ -1902,12 +1902,14 @@ _BLOCK_C = '''\
    每一项还能带与 2) 一样的**名册三格**（`brief` / `name` / `reuse`）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
-   **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是
-   "跑完了、确实没有产出"**（例如派人去消化文献，而那一批全都没有本地全文 —— 它会
-   如实报"真消化 0 篇"）；`refused` 是框架说不（照 `detail` 改参数）；`failed` 才是执行
-   没成功。**见到 `no_result` 不许原样再派一遍**：要么换做法（换动作 / 换目标 / 换参数），
-   要么如实记下"这一条路这一趟没有产出"。**把 `no_result` 当 `ok` 读，正是"以为干了、
-   其实没干"的根源。**
+   **先读 `outcome` 再决定下一步**（它是六档词表，别当成布尔）：`ok` 才是"这一趟真做出了
+   东西"；**`no_result` 是"跑完了、确实没有产出"**（例如派人去消化文献，而那一批全都没有
+   本地全文 —— 它会如实报"真消化 0 篇"）；`refused` 是框架说不（照 `detail` 改参数）；
+   `failed` 才是执行没成功；`cancelled` 是这一条被叫停、没轮到跑（**不是它做不成** ——
+   原样再派之前先问清是谁停的）；`not_applicable` 是"这件活对那个目标不适用"（换目标，别
+   重试同一个）。**见到 `no_result` 不许原样再派一遍**：要么换做法（换动作 / 换目标 /
+   换参数），要么如实记下"这一条路这一趟没有产出"。**把 `no_result` 当 `ok` 读，正是
+   "以为干了、其实没干"的根源。**
    同一角色在一批里出现多次、又没给 `instance` 时，框架会自动补 `<角色>#N` ——
    所以"并发三个 B"这件事可以就这么写。返回里的 `waves` 与 `concurrent_peak` 是
    "到底并发了没有"的读数；一次一个地派会把本该并行的活排成串行。'''
@@ -2149,7 +2151,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p206"
+_FROZEN_PROMPT_VERSION = "p208"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2216,18 +2218,60 @@ _FROZEN_PROMPT_VERSION = "p206"
 #   G b7255c30→71b47d56 / H c82d132c→2db09be8 / L 1f73dd53→1e3825c7 /
 #   M 96bc2568→03495fae / V 01ef0b27→6ec461ac。
 # 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 2026-10-27（p207 收口批）：十一格全换，十四段一起动（逐段理由写在
+# `agent_prompts.PROMPT_VERSION` 上方 p207 那一格）：
+# ① 形状 2 的 `params` 改成"结构化数据、不是动作参数表"，并写明这一形没有 `action`（S2）；
+# ② 形状 2B 的 `outcome` 补成六档受控词表（`cancelled` / `not_applicable` 各有读法），
+#    `_LOOP_BLOCK_C` 同步；③ 形状 3 补公聊硬拒 `public_is_not_a_conversation`；
+# ④ 形状 8 的名册三格与 `agent_state` / `active` / `waiting_only` 等读数分写；
+# ⑤/⑥ 形状 9 / 10 删掉「静默 no-op / 旧路 / 未消板项」旧口径，改成 `not_mine` /
+#    `no_op` 两档与静默闸（`target_not_silent` ＋ `target_state` / `blocking`）；
+# ⑦ 规则那一条从"每一步只能做一件事"改成"每一步只发一条调用"；
+# ⑧ PARENT_STOP 的原地打转两档措辞与 `blocked` 的形（`final` 里带一格）；
+# ⑨ PARENT_ROSTER 补名册读数与退役前置；⑩ COLLAB_SHAPES 补两形只认名册名与静默闸；
+# ⑪ COLLAB_NAMES 把台账号拒收收窄成四个入口、`message` / `handoff` 两种写法都收；
+# ⑫ EVIDENCE_RULES 的引文归一补全五类（标点不归一）；⑬ PAPER_07_BODY 的 `.tex` 读数改
+#    成 `unreadable` ＋ `UnsupportedFormat`（`unsupported_format` 从未产生过）；
+# ⑭ FACULTIES 头的"层"从两档改成三档。另新增只读判据 `prompt_text_problems()`。
+# 十一格全换的原因：上面这些段里 LOOP_PROTOCOL / COLLAB_SHAPES / EVIDENCE_RULES /
+# FACULTIES 头是十一格共用，PARENT_STOP 十一格都渲染；PAPER_07_BODY 只进 G / H / M。
+# 逐格的旧值 → 新值：
+#   A 5e51994a→2b104beb / B baeae677→97ea29af / C 61bd5d08→81215a32 /
+#   D 8885d099→c5788d65 / E ee9f1962→87f0a6ca / F 8303429f→70d94543 /
+#   G 71b47d56→6d9c53cf / H 2db09be8→304b9028 / L 1e3825c7→30ba4ea1 /
+#   M 03495fae→8dbe22d6 / V 6ec461ac→ef388571。
+# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
+# 2026-10-27（p208 收口批）：只有五格换值（D / F / G / M / V），另六格逐字未动
+# （逐格理由写在 `agent_prompts.PROMPT_VERSION` 上方 p208 那一格）：
+# ① F：`specs/f.py` 的 `boundary` 新增第 8 条（形式化不是 F 的活、不许由 F 发起，
+#    不排流水线、不立形式化子目标、不传 `method="formal"`）⇒ F 那一格换值；
+# ② 伙伴表连带：D / G / V 自己的段一个字没改，但它们伙伴表里 F 那一行印着
+#    「（它的边界共 N 条）」，N 从 7 变成 8 ⇒ 这三格各换一次。A / B / C / E / H / L
+#    的伙伴表里没有 F，所以那六格逐字未动；
+# ③ M：伙伴表那一行同上（7 → 8），另加 `specs/m.py` 的 policy 四段改写
+#    （回执三样 / proof 双来源 (a) E 的穷举 (b) 形式化那一岗 / 「形式化关闭」那一档
+#    只说明 (b) 不适用 / 「挑哪一档」按两来源写且不许只认 Lean）与审校链那一句
+#    （「与 Lean 开没开无关」）。
+# 同批不进提示词的几笔：`agent_skills.py` 的手册正文（指派表收件人 L → B 等）只落盘、
+# 提示词里只有索引行，索引行没动；`agent_f/*` 的形式化判定也不进段。
+# 逐格的旧值 → 新值：
+#   A 2b104beb→2b104beb / B 97ea29af→97ea29af / C 81215a32→81215a32 /
+#   D c5788d65→71c77599 / E 87f0a6ca→87f0a6ca / F 70d94543→ce2a0e5a /
+#   G 6d9c53cf→def9b6b2 / H 304b9028→304b9028 / L 30ba4ea1→30ba4ea1 /
+#   M 8dbe22d6→7b886073 / V ef388571→eec84b9d。
+# 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "5e51994a762aa9ebb45760e4981c638410c5bec3f19ad36d5c89cf01475dcfde",
-    "B": "baeae6778bc34e00a7e8155a860f25ff994cb2732f8980aac0e2d09e3b0592f3",
-    "C": "61bd5d085dba8115514e572aa6a94157c541adda266bbbc1c748fe14a041a64f",
-    "D": "8885d099f35834753ec93bfd109379d93984b467f9f828426dc0e9fdc4f934f3",
-    "E": "ee9f1962b163d1a8d1aeaf591b43b094896c8b84f6693815800ad9f6138bd300",
-    "F": "8303429f6de70950ca2dd1bfbd340f4041024a1912a373d4ce4f055fea8b4e98",
-    "G": "71b47d5635368e698e4cabf32812c96cb931e147c87250cfffc576bce9f8ba99",
-    "H": "2db09be8636f182f26df5c3eab57f797abbf2fe108108232680a2c6fa4e4841c",
-    "L": "1e3825c7120efa7f7eb050cae3cd011b7541578fbc38ac7ae722081511ea4945",
-    "M": "03495fae40fb0b19df0f62099c46f53b340234db2c253804bee12aaa4fa61036",
-    "V": "6ec461ac80bb96096d6a3e13bf8b62c56996657115c386a396ae0118e67dccde",
+    "A": "2b104beb7c7e425205ef69fb774d30d22d821d74bcd326d861190915ce5e93fd",
+    "B": "97ea29af211c45f85e489e0c0bc39d64c619cd105ad628a26ba792364b995c7d",
+    "C": "81215a320cfa3cec177956b8819fc73742739906ac86240299c94c517e3c1a4d",
+    "D": "71c77599ecda371baa2dd9fc039240f29a5316fc802e522beb95167088f8117f",
+    "E": "87f0a6ca7568500d7ec2b35bf8dd73fcbeb8aa22769c3d997204e2d12aa7072f",
+    "F": "ce2a0e5a145c1a18bbb45941eb1af8b8abffd388c8f16c2f5d30aab502f07f54",
+    "G": "def9b6b2b621ae4b400a0be7284ce1c8ff2d6eefdfb9335818f343de498ced78",
+    "H": "304b9028ac74245eebdce4236832ddc6e90eb1e5d93f7de2ad37fe1dc4659314",
+    "L": "30ba4ea19714b5a3aab56adaaf249cef05359b26507412b16cf291e68a1cffb2",
+    "M": "7b8860739fb75fb66f317c3c9917815638510dba47622400d2440a4215abe900",
+    "V": "eec84b9d297772fd92dd2f19d82d8a859176bcbafa784ee8c46b2038d40395bd",
 }
 
 

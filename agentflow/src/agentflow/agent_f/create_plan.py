@@ -7,6 +7,17 @@ from __future__ import annotations
 from ._support import AT, Any, Mapping, PlanError, S, Sequence, TERMINAL_STATUSES
 from ..refusals import refuse
 
+#: 形式化那一档在 F 这一侧不许立项的受控码（`refuse` 的 `kind`）。
+#:
+#: 为什么单独一个码、而不是沿用 `subgoal_without_testable` 那一个：两条拒信要调用方做的
+#: 事相反 —— 那一条是"把怎么算做成补上再来"，这一条是"别在 F 这里立它，把命题交 B"。
+#: 折成一个码，模型只会去补 `testable`，然后照样立一条不该存在的子目标。
+#:
+#: 与 `agent_f/core.py::FORMAL_EDGE_MISSING_REASON`（`formal_edge_missing`）的分工：
+#: 那一个是"台账里已经有一行形式化子目标，而 F 派不出去"（人手改盘 / 旧计划）；
+#: 这一个是在立项那一刻就说"别写它"。两个码说的是两件事，都不许折进对方。
+FORMAL_IS_NOT_F_TODO = "formal_is_not_f_todo"
+
 class _CreatePlan:
     def create_plan(
         self,
@@ -48,8 +59,8 @@ class _CreatePlan:
                 reason=(f"拒绝创建：{chk['reason']}。"
                         "（预算不完整时不立项，而不是先用默认值把洞补上再跑）"),
                 created=False, plan_id=None, duplicate=False,
-                # 四条分支（成功 / 判重命中 / 预算被拒 / 缺 testable）的键集合逐字相同
-                # （2026-10-27）：`returns=` 只有一套键，而两套键之间必然有一格是"声明了
+                # 五条分支（成功 / 判重命中 / 预算被拒 / 缺 testable / 立了形式化子目标）
+                # 的键集合逐字相同（2026-10-27）：`returns=` 只有一套键，而两套键之间必然有一格是"声明了
                 # 却永远不出现"或"出现了却没声明"。没有计划可读数的那几格给空读数
                 # （`""` / `0` / `[]`），而不是缺键 —— 「这一格没有读数」与「这一格是空」
                 # 由键的存在区分开（与 `verify.verify_proof` 三条返回路径同一条纪律）。
@@ -94,6 +105,51 @@ class _CreatePlan:
             }
 
         goal_rows = [self._normalize_subgoal(s, i) for i, s in enumerate(subgoals or [])]
+        # ---- 形式化那一档在 F 这里不许立项（业主 2026-10-27：「我们现在不准边研究边 lean，
+        #      我在 L 侧已经描述很清楚了什么时候能派 L」） ----
+        #
+        # 为什么判据要前移到写侧：改前的形态是"立得出来、然后每一轮死一次" ——
+        # formal 子目标照建不误，直到 `step` 派活那一步才落 `dead_end(formal_edge_missing)`。
+        # 那等于把"这个形状根本不该在 F 这里"这句话推到花钱之后才说：预算照花、history
+        # 堆一串同一个死路，而模型从来没被告知"别立它"。
+        #
+        # 判据只有一处：`core._is_formal_subgoal`（`method="formal"` 或 `owner="L"`）——
+        # 这里不另写一份"算不算形式化"。惰性 import：`core` 在 import 期会拉起本模块
+        # （它要把动作 mixin 装起来），模块级 import 会成环。
+        #
+        # 为什么走 `refuse` 而不是 `PlanError`：这一档不是"参数写错了、改改再来"，
+        # 而是"这个形状不属于这里" —— 前者要模型改参数重试，后者要它换一条路（把命题交 B）。
+        # 处置方向相反，所以给受控码（终态落 `refused / invalid_params`，与
+        # `subgoal_without_testable` 同族），而不是抛异常。
+        from .core import FORMAL_OWNER, _is_formal_subgoal  # 惰性：见上
+
+        for row in goal_rows:
+            if not _is_formal_subgoal(row):
+                continue
+            sid = str(row.get("sid") or "")
+            seen = "、".join(f"{key}={row.get(key)!r}" for key in ("method", "owner")
+                            if str(row.get(key) or "").strip())
+            msg = (
+                f"子目标 {sid} 是形式化那一档（它写着 {seen}）—— 形式化不是流水线的一步，"
+                "也不是 F 的活：只有 B 能派 L，而派不派由登记那条证明的人判断"
+                "（`specs/l.py` 的裁定逐字：「只有 B 可以派 L」—— 理由「B 是 statements 的"
+                "唯一登记方，所以『只让 B 派 L』结构上等于『L 形式化的东西一定出自 B 的库』，"
+                "而形式化的成本由那个登记证明的人来判断」；「F → L」那条边「本批曾开又撤回："
+                "F 的攻坚是流水线的一环，挂在它下面就是把形式化变成流水线的一步，"
+                "而业主的裁定把这件事留给 B」）。"
+                "⇒ 这一笔不立（一条都不写库）：把这条命题交给 B"
+                "（`B.register_statement` 登记，之后要不要、什么时候形式化由 B 判断），"
+                "F 的攻坚走它自己那一格。"
+            )
+            return refuse(
+                FORMAL_IS_NOT_F_TODO, msg,
+                # `reason` 这一键既有调用方与既有判据在读：统一形态不许把它们的读数弄丢。
+                reason=msg,
+                created=False, plan_id=None, duplicate=False,
+                status="", subgoal_id=sid, subgoals=len(goal_rows),
+                missing=[], budget=dict(budget or {}),
+            )
+
         # ---- 可检验形式是立项的硬条件（2026-10-27，真机 `PLAN 000000 round1 action=dead_end`） --
         #
         # 改前的形态：子目标没有 `testable` 也照样落库，于是"这一笔立不成立"要到

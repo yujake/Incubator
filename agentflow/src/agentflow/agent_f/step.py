@@ -374,5 +374,11 @@ class _Step:
                     "wash_reason", "wash_actor", "missing_seam"):
             if key in deploy:
                 out[key] = deploy[key]
+        # ---- 形式化子目标派不出去那一档的读数（受控码 `formal_edge_missing`）。
+        # 为什么必须进返回值：那一档的结论是"这条子目标该由谁派"，而"该由谁派"是一个
+        # 机械可读的事实（`dispatchable_by` / `edge_exists`），不该只活在这轮的 detail 散文里
+        # —— 调用方（D / M / 人）要能直接读到"这条边不存在，需要 B 派 L"。
+        if deploy.get("formal_dispatch"):
+            out["formal_dispatch"] = dict(deploy["formal_dispatch"])
         self.last_step = out
         return out

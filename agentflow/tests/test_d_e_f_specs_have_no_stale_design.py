@@ -21,7 +21,7 @@
 | E5 | 技能书索引末尾那句形式化口径不再发给 E |
 | E6 | `exhaustive` 是顶格参数，不在 `observations` 里 |
 | E8 | E 的工具面 0 件 `formal.*` / `detect_verifier`；它的提示词里也没有 `formal.` 记号 |
-| D6 / F3 / F5 | F 自己落 `statements` 一行（B 只收文献侧；不再两套口径说「交 B 登记」） |
+| D6 / F3 / F5 | F 只写证明手稿与那一节 `## 依赖`；`statements` 那一行交给 B 登记（2026-10-26 裁定：作者只写内容，登记由收方读稿产生） |
 | F6 | 形式化那一档只能由用户指定 |
 | F7 | 「收件板」→「工作项板」 |
 | F8 | E 的职责句不再带「攻坚」 |
@@ -239,20 +239,101 @@ def test_e8_e_has_no_formal_tool_and_no_formal_token(prompts, registry) -> None:
 
 
 # ============================================================ D6 / F3 / F5
-def test_d6_f3_f5_f_writes_the_statements_row_itself(prompts) -> None:
-    """D6/F3/F5：F 自己落 `statements` 一行（B 只收文献侧；不再两套口径）。"""
-    policy = _policy("F")
-    assert _has(policy, "你自己落成 `statements` 一行"), (
-        "[F3/F5] F 的 policy 里没有「你自己落成 statements 一行」")
-    assert not _has(policy, "交 **B** 登记成 `statements`"), (
-        "[F3/F5] F 的 policy 里还有「交 B 登记成 statements」那套旧口径")
-    assert "由 B 登记" not in prompts["F"], (
-        "[F3/F5] F 的渲染提示词（技能书）里仍说证明文本「由 B 登记」")
-    d_policy = _policy("D")
-    assert _has(d_policy, "**文献侧**定理与证明由 **B** 收进"), (
-        "[D6] D 的 policy 没有把 B 的 statements 登记限定在文献侧")
-    assert _has(d_policy, "F 自己产出的证明由 F 自己落那一行"), (
-        "[D6] D 的 policy 没有写清「F 自己产出的证明由 F 自己落那一行」")
+#: 被 2026-10-26 裁定推翻的那几句原话（逐字，不从当前文本拼 —— 拼出来的"旧版"会随修好一起变好）。
+#: 它们一个都不许再出现在 F 的 policy 与渲染提示词里。
+_F_STALE_STATEMENTS: tuple[str, ...] = (
+    "那一行由你写",
+    "你自己落成 `statements`",
+    "你落 `statements` 那一行",
+)
+
+#: D 那一侧被推翻的那一句（同一批裁定：F 自产的证明也由 B 登记）。
+_D_STALE_STATEMENT = "F 自己产出的证明由 F 自己落那一行"
+
+
+def _f_statement_problems(policy: str, prompt: str, d_policy: str) -> list[str]:
+    """D6 / F3 / F5 的尺子（正控与负控共用同一份 —— 负控要证明的正是"它在这种形态下必红"）。"""
+    problems: list[str] = []
+    if not _has(policy, "交给 **B 登记**"):
+        problems.append("[F3/F5] F 的 policy 里读不到「交给 B 登记」"
+                        "（2026-10-26：作者只写内容，登记由收方读稿产生）")
+    if not _has(policy, "你不写那张表"):
+        problems.append("[F3/F5] F 的 policy 里读不到「你不写那张表」"
+                        "⇒ 读的人还会以为 `statements` 在它的写集里")
+    for line in _F_STALE_STATEMENTS:
+        if _has(policy, line):
+            problems.append(f"[F3/F5] F 的 policy 里还有旧口径原话 {line!r}")
+        if _has(prompt, line):
+            problems.append(f"[F3/F5] F 的渲染提示词里还印着旧口径 {line!r}")
+    if not _has(d_policy, "**文献侧**定理与证明由 **B** 收进"):
+        problems.append("[D6] D 的 policy 没有把 B 的 statements 登记限定在文献侧")
+    if not _has(d_policy, "F 自己产出的证明也由 B 登记"):
+        problems.append("[D6] D 的 policy 没跟上 2026-10-26 的裁定："
+                        "F 自产的证明也由 B 登记")
+    if _has(d_policy, _D_STALE_STATEMENT):
+        problems.append(f"[D6] D 的 policy 里还有被推翻的那句 {_D_STALE_STATEMENT!r}")
+    return problems
+
+
+def test_d6_f3_f5_f_hands_the_statements_row_to_b(prompts) -> None:
+    """D6/F3/F5：F 不自己落 `statements` 那一行 —— 它交给 B 登记。
+
+    ## 改前那一条守着什么，它为什么过期了
+
+    本条改前叫 `test_d6_f3_f5_f_writes_the_statements_row_itself`：它断言 F 的 policy 里有
+    「你自己落成 `statements` 一行」，并且断言提示词里不许出现「由 B 登记」。那是 2026-10-25
+    的口径（B 只收文献侧，F 自产的证明由 F 自己落那一行）。
+
+    2026-10-26 的裁定把它整个翻了过来：作者只写内容，登记由收方读稿产生 —— 与「V 读你的
+    手稿再签字」同一个逻辑。于是 `specs/f.py` 的三处 policy 改成「交给 B 登记」，
+    `WRITE_SETS["F"]` 也拿掉了 `statements` 那一格（秘书那一层只认
+    `secretary.STATEMENT_WRITER_ROLES = ("B",)`）。
+
+    代码没有回退：policy 与写集两处都按新口径改了，而且
+    `tests/test_f_hands_propositions_to_b.py` 在正面钉着它。红的是本判据 —— 它断的是被推翻
+    的旧口径的原话，于是 HEAD 上它一直红着、而没有人回来管。那正是这类判据最贵的死法：
+    红着的判据与坏掉的代码在报告里长得一样。所以这一格改成钉新口径。
+
+    ## 新口径钉三件
+
+    ① F 的 policy 里读得到「交给 B 登记」与「你不写那张表」；
+    ② 那三句旧原话一句都不许留（policy 与渲染提示词两个面都判）；
+    ③ D 那一侧同一口径：文献侧由 B 收进、F 自产的证明也由 B 登记。
+
+    负控：把旧原话塞进这份文本的副本 ⇒ 同一个尺子必须点红
+    （`test_d6_putting_the_old_wording_back_goes_red`）。
+    """
+    problems = _f_statement_problems(_policy("F"), prompts["F"], _policy("D"))
+    assert not problems, "\n".join(problems)
+
+
+def test_d6_putting_the_old_wording_back_goes_red(prompts) -> None:
+    """负控：把旧口径的原话塞回去 ⇒ 上面那个尺子必须点红（三类各一次）。
+
+    只断言"今天的文本里没有某个串"无法区分"改好了"与"这句话本来就不在这份文本里" ——
+    改前那条判据正是后者：它要的串在改后的 policy 里永远不会有，所以它只会一直红。
+    """
+    clean = _f_statement_problems(_policy("F"), prompts["F"], _policy("D"))
+    assert clean == [], f"干净的那一份就有问题，下面的负控证明不了什么：{clean}"
+
+    # ① 把 F 那三句旧原话塞回 policy 的副本
+    dirty_f = _policy("F") + "\n" + "\n".join(_F_STALE_STATEMENTS)
+    problems = _f_statement_problems(dirty_f, prompts["F"], _policy("D"))
+    stale_hits = [p for p in problems if "旧口径原话" in p]
+    assert len(stale_hits) == len(_F_STALE_STATEMENTS), (
+        f"塞回 {len(_F_STALE_STATEMENTS)} 句旧原话，尺子只点出 {len(stale_hits)} 句：{problems}")
+
+    # ② 把 D 那句「F 自己落那一行」塞回 D 的 policy 副本
+    dirty_d = _policy("D") + "\n" + _D_STALE_STATEMENT
+    problems = _f_statement_problems(_policy("F"), prompts["F"], dirty_d)
+    assert any(_D_STALE_STATEMENT in p for p in problems), (
+        f"D 的 policy 里塞回了那句被推翻的话，尺子却没点出来：{problems}")
+
+    # ③ 把「交给 B 登记」从副本里抠掉 ⇒ "缺新口径"这一半也要点红（不是只判旧串）
+    cut = _policy("F").replace("交给 **B 登记**", "自己处理")
+    problems = _f_statement_problems(cut, prompts["F"], _policy("D"))
+    assert any("交给 B 登记" in p for p in problems), (
+        f"把新口径那句抠掉之后尺子没点红，说明它只在判旧串：{problems}")
 
 
 # ============================================================ F6

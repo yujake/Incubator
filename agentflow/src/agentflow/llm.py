@@ -53,28 +53,8 @@ __all__ = [
 
 
 # --------------------------------------------------------------------------- #
-# 运行时依赖：schema.PageRange 与 extract.DocumentText
+# 运行时依赖：schema.PageRange
 # --------------------------------------------------------------------------- #
-
-
-def _load_document_text_cls() -> Any:
-    """惰性拿到 ``DocumentText`` 类对象。
-
-    只在需要运行时构造它的场合使用（目前是自检脚本）。正常流程里
-    ``DocumentText`` 由调用方（agent_b）传进来，本模块只做属性访问，
-    因此不依赖 extract 模块的真实存在，两者可以各自单测。
-    """
-    try:
-        from .extract import DocumentText as _DT
-
-        return _DT
-    except Exception:  # pragma: no cover - 包外直接跑脚本时的兜底路径
-        try:
-            from agentflow.extract import DocumentText as _DT  # type: ignore[no-redef]
-
-            return _DT
-        except Exception:
-            return None
 
 
 @dataclass(frozen=True)

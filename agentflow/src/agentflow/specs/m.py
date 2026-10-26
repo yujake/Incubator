@@ -217,16 +217,35 @@ SPEC = AgentSpec(
             "**用户问「现在什么情况」时用 `conductor.status_report`**（`draft/39` §4 的入口②）：它只读收集当前情况（产出 / 交接 / "
             "在飞卡点 / 被拒与插话），把报告落到 `out/review/STATUS-<时刻>.{md,json}`，四类读数原样回给你；它**不发 ask_user、"
             "不停任何人的循环** —— 别拿反复侦察代替它。**收工前也落一份**（不必等用户问）。",
+            # 2026-10-25 业主更正（逐字要点）：「E 有穷举式的数值支撑，它可以签数值论证型定理的
+            # proof，只是签在『形式化』一个栏」。这一条此前把验收读数写死成 proof_experiment_rows
+            # （method=formal 且 evidence_kind=proof），而那一档只数 Lean 那一支
+            # （closing.LEG_CHECK_KINDS 的原文），于是 E 的穷举 proof 被漏在 proof 栏外面。
+            # 真身有两处，都不是本文件的措辞：
+            # ① schema.EXPERIMENT_METHODS 含 exhaustive_search，而计算类方法（numeric / symbolic /
+            #    exhaustive_search）只有在「整个论域」那几件可核条件满足时才允许 evidence_kind=proof
+            #    （判据本体 numericproof.exhaustion_problems，签名由 V 落，E 是 proof_authors）；
+            # ② numericproof 的模块 docstring ＋ 判据 ⑧（formal_slot）：「形式化」那一格有两类填法
+            #    —— 数值实验定理填数值实验程序、理论定理填 Lean 程序，同一格、不许互相冒充。
+            # 这一条与下面「挑哪一档」那一条是同一口径的两处，理由只有一个：关档时 specs/e.py 的
+            # NO_LEAN_DROP_LINE_MARKERS 里有一条按本条的句首整行删掉（那个标记改句首会让
+            # test_lean_switch 的反真空当场红，而 e.py 不在本批可改范围），于是 M 在关档下读到的
+            # 「两个来源」只能落在没被摘掉的那一条上。那个标记被许可删掉之后，这里的重复可以收回。
             "**用户要形式化时，你的动作是派 B（`M→B`）**：要不要做由**用户指定**；指定之后由 B 逐条安排"
-            "（一条才做一条），B 把这一条交下去、再把回执带回来。回执是三样：三态结论、原始输出原文、"
-            "`experiments` 里那一行 proof 记录的编号 —— 验收表那一档用 `proof_experiment_rows`"
-            "（`method=formal` **且** `evidence_kind=proof`）。**只做数值实验不算完成那一条** —— 任务说「能机器验证的定理做形式化"
-            "验证」时，只做纯数值就是把这条要求降级了。**在用户指定之前，这一格按「未核到」记，不排进流水线**："
-            "研究与论文落定之后、用户明确指定要验哪一条时，你在派活里写清是哪一条。",
+            "（一条才做一条），B 安排下去、再把回执带回来。回执是三样：三态结论、检查器原话（穷举那一支是"
+            "程序设计 + 穷举论证 + 程序路径的原文）、以及台账里那一行 proof 记录的编号。"
+            "proof 那一栏有两个来源，两个都算 proof 级（逐条口径在下面「挑哪一档」那一条里，这里只留回执这一面）："
+            "(a) E 的穷举 / 数值论证；(b) 形式化那一岗（只有用户指定过才有）。"
+            "只做了 evidence_kind 不是 proof 的数值实验不算完成那一条 —— 任务说「能机器验证的定理做形式化验证」时，"
+            "只给支持性数值就是把这条要求降级了。用户没指定形式化只是 (b) 不适用，E 的穷举那一支（(a)）照旧算。"
+            "在用户指定之前，形式化那一件不排进流水线：研究与论文落定之后、用户明确指定要验哪一条时，"
+            "你把这条要求交给 B，并在派活里写清是哪一条。",
             "**回执怎么读**：三态是 `verified` / `failed` / `unknown`；`unknown` 是**没查成**（缺材料 / 超时 / 自检不过），"
             "B 会补齐材料再派一次 —— 这一档在验收表里如实记，`na` 既不等于通过，也不等于失败。"
-            "**第一行读数说形式化已关闭时**，`proof_experiment_rows` 必然为 0 ⇒ 验收档换成 "
-            "`reviewed_proof_rows`（自己命题的证明过程 + V 逐行走查过），并在交付说明里写清「本会话形式化已关闭」这一读数。",
+            "**第一行读数说形式化已关闭时**，(b) 那一支结构上做不出来（`proof_experiment_rows` 于是必然为 0）——"
+            "那只说明 (b) 不适用，**不说明 proof 那一栏没有读数**：E 的穷举论证（(a)）照旧撑得起这一栏。"
+            "两样都没有时才把「造」这一腿换到 `reviewed_proof_rows`（自己命题的证明过程 + V 逐行走查过），"
+            "并在交付说明里写清「本会话形式化已关闭」这一读数。",
             "**长文本不要内联进步子里的 JSON**：整段脚本 / Lean 源码 / 命题原文塞进 `params`，最常见的坏法是**字符串里的双引号或"
             "换行没转义** ⇒ 回复只有几百 token 也解析不出来，连着三次就 `bad_json_limit` 整趟作废。处置：先 `fs.write` 落盘，"
             "召唤时用 `script_path` / `path` 引用它。",
@@ -337,11 +356,18 @@ SPEC = AgentSpec(
             "**不是整张表没查成**（CC-05 的口径）。",
             "**挑哪一档要看你实际做的是什么**（D54）—— 「算或造」那一环不是只有 `numeric_experiment_rows`：它**只数 "
             "`method=numeric` 的行**；穷举/枚举类（`method=exhaustive_search`）**带 `search_bound` 的**要用 `search_frontier_rows`；"
-            "优化类用 `enumeration_optimization_rows`；形式化要用 `proof_experiment_rows`（`method=formal` **且** "
-            "`evidence_kind=proof`）—— 形式化没跑成（`compile_error`/`uses_sorry`）时这一档**没有读数**，如实写 0 或 `na`。"
-            "**形式化被用户关掉时**（TOOLCHAIN_FACTS 第一行说「已关闭」）那一行**不要写 0**：写 `na` + 理由（「本会话 "
-            "`lean_enabled=false`（`toolchain` 段），proof 级证据结构上产不出来」），并把「造」这一腿换到 `reviewed_proof_rows`"
-            "（自己命题的证明过程 + V 逐行走查）—— `na` ≠ 通过 ≠ 失败。",
+            "优化类用 `enumeration_optimization_rows`。**proof 那一栏有两个来源，两个都算 proof 级**："
+            "(a) **E 的穷举 / 数值论证** —— `method=\"exhaustive_search\"` 且整个论域被穷尽验证过 ⇒ `evidence_kind=\"proof\"`"
+            "（要的是可核的几件：搜索空间、布尔 true 的 `exhaustive`、程序设计、穷举论证、程序相对路径；"
+            "判据本体是 `numericproof` 模块的 `exhaustion_problems`）；(b) **形式化那一岗** —— 只有**用户指定**过才有："
+            "指定之后你把这条要求交给 B（`M→B`），由 B 逐条安排（本会话形式化关着时这一支产不出来，"
+            "`TOOLCHAIN_FACTS` 第一行会说「已关闭」）。读数看 `evidence_kind=\"proof\"` 与那几件可核条件，"
+            "**不是**看 `method` 是不是 `formal`；`counterexample_or_proof_rows` 数得到这两个来源的行"
+            "（它还数带反例的 `refutes`，读的时候分开看），`proof_experiment_rows` 只数 `method=formal` 那一支"
+            "—— 别把它当成 proof 栏的全部，那等于把 E 的穷举 proof 漏在外面。**不许只认 Lean**"
+            "（把 E 的穷举 proof 读成 `cross_check` 是同一类错的反面），也**不许要求 E 拿 `formal` 那一支来凑**。"
+            "**两者都没有时**这一行才写 `na` + 理由（「E 的穷举那一支没做 / 论域没穷到」或「用户未指定形式化」）"
+            "—— **不要写 0，也不许自己补做**：`na` ≠ 通过 ≠ 失败。",
             "**某一档对这个项目天然不适用时，写 `\"na\": true` 并在 `note` 里写明理由**（`na` ≠ 通过 ≠ 失败）：例如**调查型任务**"
             "（「调查…有哪些值得做的开放问题，交付一份清单」）天然没有「算或造」那一步 —— 那一行写 `na` + 理由，而不是写 0。"
             "两条守卫：`na` 不写理由 ⇒ 整张表判没查成；**整张表全是 `na`** ⇒ 判 fail。",
@@ -370,8 +396,8 @@ SPEC = AgentSpec(
             "论文正文、也**不要**派 H 审论文（G 交 `documents` 手稿，H 审那些手稿）；**成文阶段**才写论文，而那时**所有角色都可能"
             "有任务**（补证据 D/F、核引文 A/B、重算关系读数 C、逐行审阅 V、把命题与出处对齐 B）—— 别把「写论文」读成只有 G 与 H 的事。",
             "**审校是一条以 B / H / V 为中心的协作链**：**B** 管命题台账与逐字出处（`statements` 的 `proof_text` 与 "
-            "`quote_verified`：原文长什么样的唯一可比对文本）、**V** 逐行走查证明并签「审过」（`verifications`；Lean 关掉时这是本会话"
-            "唯一的「审过」凭据）、**H** 拿着 B 的台账与 V 的签名判稿件（它的采信规则只有两条：正文与台账逐字一致 + "
+            "`quote_verified`：原文长什么样的唯一可比对文本）、**V** 逐行走查证明并签「审过」（`verifications`；"
+            "证明这一档的凭据就是 B 的台账那一行 + V 的签 —— 与 Lean 开没开无关）、**H** 拿着 B 的台账与 V 的签名判稿件（它的采信规则只有两条：正文与台账逐字一致 + "
             "`evidence_kind=proof` 那一行或 V 的签名）。三环各有各的欠账读数（`quote_verified_rows` / `reviewed_proof_rows` / `reviewed_documents` / "
             "`reviewed_current_rows`）—— **每一份手稿与正文都要走过这条链**；被审对象的落点由你在派活里给，H 的 `review_report` "
             "把报告落到**框架定的** `out/review/<doc_id>-review.md`，验收表里那一行 `review_files` 数的就是它。",

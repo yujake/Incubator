@@ -32,8 +32,14 @@ from agentflow.store import Store
 PROOF = "Proof. n^2+n=n(n+1)，相邻两数必有一偶。"
 BUDGET = {"max_rounds": 3, "max_parallel_subgoals": 2,
           "max_persist_attempts": 2, "max_depth": 2}
-SUBGOALS = [{"sid": "s1", "text": "把命题约化到 n=3", "status": "todo", "owner": "E"},
-            {"sid": "s2", "text": "在 n=3 上构造证明", "status": "todo", "owner": "E"}]
+#: 两条子目标都带 `testable`：2026-10-27 起"可检验形式"是立项的硬条件
+#: （`agent_f/create_plan.py` 的受控码 `subgoal_without_testable`，整笔不写库）。
+#: 这份夹具写在那条口径之前，于是它一直红着（`attack_plans` 一行都没有 ⇒ 下面那句
+#: `[0]` 直接 IndexError）—— 补的是"这一步凭什么算做完"，不是放宽那条口径。
+SUBGOALS = [{"sid": "s1", "text": "把命题约化到 n=3", "status": "todo", "owner": "E",
+             "testable": "约化完之后 n=3 那一支能单独写成一个可判的命题"},
+            {"sid": "s2", "text": "在 n=3 上构造证明", "status": "todo", "owner": "E",
+             "testable": "n=3 那一支证明写完之后，它能被一句话判成立或不成立"}]
 
 
 class _DeadProvider:

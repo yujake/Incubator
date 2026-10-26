@@ -567,6 +567,19 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p206", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p206（2026-10-27 第三批收口）：① 工具面 returns / summary 十一处进 tools_lines 那一行（attack.create_plan / clock.alarm_start / clock.timer_cancel / clock.timer_list / clock.wait_any / conductor.guide / fs.edit / fs.write / table.get / table.list / verify.verify_proof —— 实现早就在，这一批才与声明对齐）⇒ 十一格全换；② 十一份 specs 的时钟段补 clock.wait_any 的行为口径（要求过等、且没有可等的东西 ⇒ requested=true / waiting=false，它不是「没在等」；这一档无计时而手头也没活就按交差处理）；③ specs/m.py 的 delivered_to 从「链尾那个绝对编号」改成「列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它先取 [0]）」⇒ M 那一格再换一次；④ conductor.retire_child 的 returns 与 docstring 补早拒支那两格（target_state 空串 = 三态还没读；refusal_code 的充要条件是静默闸说话了）；⑤ attackround.BUDGET_GUARD_NOTE 去掉两个已漂的 file:line、改成符号名并接上读者（test_p09_the_guard_note_names_live_symbols）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p206 → p207（2026-10-27 第四批收口）：十四段提示词正文 ＋ 一条只读判据
+    # （prompt_text_problems），一格事实的落点都没挪 ⇒ count / keys_sha256 与上一格同值。
+    # 它们仍是 PS.volatile_facts_digest() 的现算值，不手抄。
+    {"version": "p207", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p207（2026-10-27 第四批收口）：十四段提示词正文一起换（① 形状 2 的 params 改成结构化数据并写明这一形没有 action；② 形状 2B 的 outcome 补成六档受控词表，_LOOP_BLOCK_C 同步；③ 形状 3 补公聊硬拒 public_is_not_a_conversation；④ 形状 8 的名册读数分写 agent_state / active / waiting_only 与 child_count / active_child_count；⑤ 形状 9 的 interrupt 分写 not_mine 与 no_op 两档结局；⑥ 形状 10 的 retire 改成静默闸 target_not_silent，删掉旧路与未消板项两句；⑦ 规则那一条改成每一步只发一条调用；⑧ PARENT_STOP 的原地打转两档措辞与 blocked 的形；⑨ PARENT_ROSTER 补名册读数与退役前置；⑩ COLLAB_SHAPES 补两形只认名册名与静默闸；⑪ COLLAB_NAMES 的台账号拒收收窄成四个入口、message 与 handoff 两种写法都收；⑫ EVIDENCE_RULES 的引文归一补全五类；⑬ PAPER_07_BODY 的 .tex 读数改成 unreadable 加 UnsupportedFormat；⑭ FACULTIES 头的层从两档改成三档），并新增只读判据 prompt_text_problems()（钉原地打转阈值 / 静默闸 / 公聊硬拒 / 六档 outcome / 形状条数 / .tex 读数）。facts 键集仍 15 格（键名与条数一格未动）"},
+    # p207 → p208（2026-10-27 第五批收口）：F 的 boundary 新增第 8 条（形式化不是它的活、
+    # 不许由它发起）、M 的 policy 改成 proof 双来源（(a) E 的穷举 / 数值论证、(b) 形式化那
+    # 一岗），D / G / V 只是伙伴表里 F 那一行的边界条数跟着变。一格事实的落点都没挪 ⇒
+    # count / keys_sha256 与上一格同值，仍是 PS.volatile_facts_digest() 的现算值（不手抄）。
+    {"version": "p208", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p208（2026-10-27 第五批收口）：本批只换五格摘要（D / F / G / M / V）。① specs/f.py 的 boundary 新增第 8 条「形式化不是你的活，也不许由你发起」—— 形式化只能由用户指定，指定之后由 M 转交 B、由 B 判断成本后逐条派（那条链的唯一真身是 B 的 PROOF_CHANNEL 六步）；F 不发起、不排这条流水线、不立形式化子目标、不把 method=formal 传给任何人 ⇒ F 那一格换值；② 伙伴表连带读数：D / G / V 自己的段一个字没改，但它们伙伴表里 F 那一行印着「（它的边界共 N 条）」，N 从 7 变成 8 ⇒ D / G / V 各换一次（A / B / C / E / H / L 的伙伴表里没有 F，那六格逐字未动）；③ specs/m.py 的 policy 四段改写（回执三样改成三态 + 检查器原话 + 台账里那一行 proof 记录的编号；proof 那一栏写明两个来源、两个都算 proof 级 —— (a) E 的穷举 / 数值论证、(b) 形式化那一岗且只有用户指定过才有；「形式化关闭 ⇒ proof_experiment_rows 必然为 0 ⇒ 换 reviewed_proof_rows」改成那只是 (b) 不适用、不说明 proof 栏没有读数；「挑哪一档」按两来源写，点名 numericproof.exhaustion_problems 与 counterexample_or_proof_rows，并写明不许只认 Lean、不许要求 E 拿 formal 那一支来凑，两样都没有时才写 na）＋ 审校链那一句补「证明这一档的凭据就是 B 的台账那一行 + V 的签 —— 与 Lean 开没开无关」⇒ M 那一格再换一次。同批的 agent_skills.py 手册正文（M 的指派表收件人 L → B、F 的手册第 7 条、V 的引用核实六档、B 的依赖面四列）只落盘、提示词里只有索引行且索引行没动；agent_f/* 的形式化判定（FORMAL_OWNER / FORMAL_EDGE_MISSING_REASON / E_METHODS）也不进段 ⇒ 它们不改任何一格摘要。facts 键集仍 15 格（键名与条数一格未动）"},
 )
 
 

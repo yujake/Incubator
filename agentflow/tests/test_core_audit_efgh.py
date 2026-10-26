@@ -622,19 +622,27 @@ def test_agent_h_source_never_assigns_documents_claims():
     assert hits == [], f"agent_h 里这些地方改动了 documents.claims（那是 G 的活）：{hits}"
 
 def test_agent_h_writers_registry_exposes_exactly_the_declared_write_tools(tmp_path):
-    """职责边界（H）的运行期形式：H 的落库代理里能写的只有这四个工具。
+    """职责边界（H）的运行期形式：H 的落库代理正好是这四件，写面另外那八件是通用能力。
 
-    本轮从 2 个变成 3 个：新增 `review.report`（G1–G15 审校报告，markdown 落盘）。它不是对"H 只读"的
-    放宽 —— 落点仍被钉死在一个报告文件上，不碰任何数据表、不碰 `claims`（`tests/test_gates.py` 有一条
-    逐字节断言）。判据因此从"数量"改成"逐个点名"：数量会随正当的新增漂移，"落点清单"必须人逐条写下。
+    这一条经过三次事实变化，判据的形状也随之变了两次，每次都是人逐条写下新事实：
 
-    事实变了（业主 2026-10-18 裁定）：3 件 → 4 件。多出来的是 `review.record_finding`（H 自己读出来的
-    那一条发现的登记通道 —— `review_document` 只落机械扫描算得出来的那批）。不是写面放宽：只写
-    `review_findings`，不改 `documents.status`、不碰任何知识表；登记处是 `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]`（同一笔裁定，
-    逐字理由在那）、
-    `capabilities.TOOL_WRITE_SETS["review.record_finding"] == {"review_findings"}`（逐工具写集，与实现 AST
-    逐格比对）与 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["H"]`（表级例外，`{review_findings, documents}`
-    那一条 —— 它没变）。所以这里把期望集合更新到新事实，判据本身（"逐个点名、多一件就红"）一字没改。"""
+    1. 2 件变 3 件（新增 `review.report`）：落点仍钉在一个报告文件上，不碰任何数据表；
+    2. 3 件变 4 件（业主 2026-10-18 裁定，多出 `review.record_finding`）：只写
+       `review_findings`，登记处是 `tools/base.py::READONLY_CALL_EXCEPTIONS["H"]`；
+    3. 2026-10-27：`clock.*` 七件加 `conductor.ack` 升进 `UNIVERSAL_TOOLS`（写集只落在
+       `tasks` 这一张簿记表上）⇒ H 的写面从 4 件变 12 件。判据此前写的是"H 的自由工具箱
+       里不许出现写工具"，那一条把"通用能力"与"H 自己的落点"压成了一件事，于是这一次
+       正当扩容会把它判红 —— 红的是判据，不是代码。
+
+    所以现在分两处读，且两处都不许空转：
+      本用例：落库代理（`self.writers`）逐一等于那四件；自由工具箱里的写工具必须全部
+      是通用能力，且与落库代理合起来的写面按 tests/test_tools_readonly_roles.py 里
+      那份判据（C / H / V 同一份）减掉通用轴之后仍逐一等于声明写工具。
+      那份判据的负控：往 H 的声明里塞一件 `table.create` ⇒ 必红。
+    """
+    from test_tools_readonly_roles import (DECLARED_READONLY_WRITE_TOOLS,
+                                           assert_declared_write_tools)
+
     st = Store(tmp_path / "ws")
     st.init()
     h = AgentH(st)
@@ -645,8 +653,19 @@ def test_agent_h_writers_registry_exposes_exactly_the_declared_write_tools(tmp_p
         "review.review_document",
         "review.verify_fixes",
     ], writers
-    free = {t["side_effect"] for t in h.tools.describe()}
-    assert free <= {"none", "read"}, f"H 的自由工具箱出现了写工具：{free}"
+    free_write = {t["name"] for t in h.tools.describe() if t["side_effect"] == "write_local"}
+    assert free_write, (
+        "H 的自由工具箱里一件写工具都没有 —— 通用轴（clock 七件加 conductor.ack）"
+        "被剥掉了，下面那条「减掉通用轴」的断言会因此变成空转"
+    )
+    # 写面的两档合起来核一遍：落库代理 + 自由工具箱里的通用写工具。
+    allowed_universal = assert_declared_write_tools(
+        "H", set(writers) | free_write, declared=DECLARED_READONLY_WRITE_TOOLS
+    )
+    assert allowed_universal == free_write, (
+        "自由工具箱里的写工具不全是通用能力："
+        f"{sorted(free_write - allowed_universal)} 没有登记成通用能力"
+    )
 
 
 def test_agent_h_refuses_a_writers_registry_carrying_another_write_tool(tmp_path):

@@ -803,18 +803,6 @@ def citation_coverage(
     }
 
 
-def _check_citations_needs_kind() -> str:
-    """`check_citations` 与 `build_document` 之间那一格的口径说明（只读，给读的人）。"""
-    return (
-        "`citing_kind` 是**发起引用的那一份文档**的类型（`build_document` 的 `kind`、"
-        "`revise` 从被修订的那一行读）。业主 2026-10-09 的两阶段口径靠它落地："
-        "研究手稿阶段（`note` / `survey` / `reproduction_report` 等）可以互相引用我方手稿"
-        "（`doc:<稿件>`）；**正式论文**（`kind=\"paper\"`）只许引真实论文（`lit:`），"
-        "手稿里的内容要进论文必须在正文里**重建**（重建出来的东西再以 `stmt:` / `exp:` / "
-        "`rel:` 落台账、被论文引用）。没给 `citing_kind` ⇒ 只判形状与存在性（老行为）。"
-    )
-
-
 def classify_proof_location(loc: object, known_ids: Iterable[Any]) -> tuple[str, str]:
     """`proof_location` 的形态分类：整个仓库只有这一份实现（`R2R2-R1`/`R2R2-R2`）。
     为什么必须只有一份：写入期（本模块的 :func:`check_proofs`）与事后门（`gates.gate_g3`）对同一个字符串必须给出同一个分类。旧版各写一套正则、

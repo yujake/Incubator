@@ -20,7 +20,14 @@
 
 from __future__ import annotations
 
-from agentflow.tools import READ_ONLY_ROLES, ROLES, SIDE_EFFECTS_WRITE, build_registry
+from typing import Iterable, Mapping
+
+import pytest
+
+from agentflow.tools import (BOOKKEEPING_TABLES, READ_ONLY_ROLES, ROLES,
+                             SIDE_EFFECTS_WRITE, UNIVERSAL_TOOLS, UniversalTool,
+                             build_registry, is_universal_tool,
+                             universal_tool_is_bookkeeping_only, universal_tool_tables)
 from agentflow.tools.base import SIDE_EFFECTS, ToolRegistry, ToolSpec, ok
 
 
@@ -299,3 +306,196 @@ def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(s
     # 原断言（`role_filter_notes == {}`）在「方案 1」之后不再成立：H 的三个落库代理是
     # 登记过的放行，会在留痕里各留一条。上面那条已把这一条剔掉再判空 ——
     # 保留的语义不变：未登记的写工具声明仍然一个都不许有。
+
+
+# ============================================================ 第三道：写面分解（通用轴 / 声明写工具）
+#
+# 2026-10-27 的读数：`clock.*` 七件加 `conductor.ack` 升进 `UNIVERSAL_TOOLS`（写集只落在
+# `tasks` 这一张簿记表上），于是只读角色的写工具从 C 的 1 件、H 的 4 件、V 的 0 件
+# 长成 9 / 12 / 8 件。判据如果只数数量，这一次正当的扩容会把它判红；如果只拿
+# `READONLY_CALL_EXCEPTIONS` 当期望值，同一个名字既可以是"通用能力"又可以是
+# "越权写知识表的落库代理"，两侧一起变而没有人看得见。
+#
+# 所以下面把两档在读数上分开，三段各自承重：
+#   ① 减掉通用轴之后，剩下的写工具必须逐一等于本文件里人写下（并逐条审过）的那张台账；
+#   ② 通用轴那几件必须都登记在案、都发到该角色面上，且登记写集只落在通信/簿记类表上；
+#   ③ 负控：往该角色的声明里塞一件写知识表的工具（`table.create`）⇒ ① 必红。
+
+#: 只读角色「声明写工具」的台账。人逐条写下，不由实现反推。
+#:
+#: 为什么不直接读 `READONLY_CALL_EXCEPTIONS` 当期望值：那张表是「实现允许谁调什么」。
+#: 拿它当期望值时，往它里面塞一件 `table.create` 会让比较的两侧一起变、判据照旧绿
+#: （`test_injecting_a_knowledge_table_writer_into_the_declaration_goes_red` 量的就是这件事）。
+#: 所以这里写的是审过的落点清单：改它必须是人逐条看过的一改。
+DECLARED_READONLY_WRITE_TOOLS: dict[str, frozenset[str]] = {
+    "C": frozenset({"analysis.register_report"}),
+    "H": frozenset({
+        "review.record_finding",
+        "review.report",
+        "review.review_document",
+        "review.verify_fixes",
+    }),
+    "V": frozenset(),
+}
+
+
+def role_write_tools(registry, role: str) -> set[str]:
+    """该角色从 `for_role` 真正拿到的写工具（副作用据实是写，不是"名字像写"）。"""
+    return {s.name for s in registry.for_role(role) if s.side_effect in SIDE_EFFECTS_WRITE}
+
+
+def universal_write_tools(registry) -> set[str]:
+    """树上登记在案、且据实会写东西的通用能力（今天八件：clock 七件加 `conductor.ack`）。"""
+    names = set(registry.names())
+    return {n for n in UNIVERSAL_TOOLS
+            if n in names and registry.get(n).side_effect in SIDE_EFFECTS_WRITE}
+
+
+def assert_declared_write_tools(
+    role: str,
+    surface: Iterable[str],
+    *,
+    tree=None,
+    declared: Mapping[str, frozenset[str]] | None = None,
+) -> set[str]:
+    """判据本体（① + ②）：把一个只读角色的写面拆成「通用轴」与「声明写工具」两档。
+
+    `surface` 是该角色的写工具名集合（`role_write_tools` 的结果，或它的并集）；
+    `tree` 是整棵工具层（给了才核"通用轴一件都不许漏发"这一半）；
+    `declared` 只为让负控能喂一张改造过的台账，真正跑的那一次读的是本文件的常量。
+
+    返回值是被放行的通用写工具集合，调用方可以接着做差分（三个角色应当拿到同一批）。
+    """
+    table = DECLARED_READONLY_WRITE_TOOLS if declared is None else declared
+    got = set(surface)
+    universal = {n for n in got if is_universal_tool(n)}
+    rest = got - universal
+    # ① 逐一点名：减掉通用轴之后剩下的必须与审过的台账相等（多一件、少一件都红）。
+    assert rest == set(table[role]), (
+        f"{role} 的写面分解对不上。\n"
+        f"  减掉通用轴之后剩下的：{sorted(rest)}\n"
+        f"  逐条审过的声明写工具：{sorted(table[role])}\n"
+        f"  多出来的（越权写，例如一件写知识表的工具）：{sorted(rest - set(table[role]))}\n"
+        f"  少掉的（声明了却没拿到）：{sorted(set(table[role]) - rest)}"
+    )
+    # ② 通用轴这一档：登记在案、只写簿记表、而且真的发到了这个角色面上。
+    assert universal, (
+        f"{role} 的写面上一件通用能力都没有 —— 那不是「这个角色不需要」，"
+        "而是通用轴被结构性剥掉了（业主裁定：通用能力不该出现谁能用这个说法）"
+    )
+    for name in sorted(universal):
+        assert universal_tool_is_bookkeeping_only(name), (
+            f"通用能力 {name} 的登记写集 {sorted(universal_tool_tables(name) or ())} 越出了"
+            f"通信/簿记类表 {sorted(BOOKKEEPING_TABLES)} —— 通用能力写知识表，"
+            "就是把「谁都能用」变成「谁都能改知识表」的后门"
+        )
+    writing = {n for n in universal if universal_tool_tables(n)}
+    assert writing, (
+        "通用轴上没有一件登记的写集非空 —— ② 的「只许写簿记表」今天没有可核的写集"
+    )
+    for name in sorted(writing):
+        assert set(universal_tool_tables(name) or ()) <= set(BOOKKEEPING_TABLES), name
+    if tree is not None:
+        expected = universal_write_tools(tree)
+        assert expected <= got, (
+            f"通用轴上据实会写东西的这几件没有全部发给 {role}：{sorted(expected - got)}"
+            "（通用能力漏发就是「谁都能用」这句话在实现上不成立）"
+        )
+    return universal
+
+
+def test_declared_write_tools_are_exactly_the_non_universal_write_tools(store):
+    """① + ②：C / H / V 三个只读角色逐个把写面拆成通用轴与声明写工具。
+
+    三个角色必须给出三份不同的声明读数（C 一件、H 四件、V 零件），否则"逐个核"
+    只是把同一条断言跑三遍；而通用轴那一档三个角色必须完全一样（八件），
+    否则"通用能力谁都能拿"就有角色被漏掉。
+    """
+    build = build_registry(store=store, workspace_root=store.root)
+    assert build.skipped == [], build.skipped
+    reg = build.registry
+
+    assert set(DECLARED_READONLY_WRITE_TOOLS) == set(READ_ONLY_ROLES), (
+        f"台账的角色 {sorted(DECLARED_READONLY_WRITE_TOOLS)} 与只读角色名单 "
+        f"{sorted(READ_ONLY_ROLES)} 不一致"
+    )
+    assert any(DECLARED_READONLY_WRITE_TOOLS.values()), (
+        "三个角色的声明写工具全是空集 —— ① 今天没有可核的东西"
+    )
+
+    universal_by_role: dict[str, set[str]] = {}
+    for role in READ_ONLY_ROLES:
+        universal_by_role[role] = assert_declared_write_tools(
+            role, role_write_tools(reg, role), tree=reg
+        )
+
+    # 差分一：声明那一档三个角色互不相同（H 四件 / C 一件 / V 零件），
+    # 所以"逐个核"真的核了三份不同的东西。
+    declared_reading = {r: sorted(DECLARED_READONLY_WRITE_TOOLS[r]) for r in READ_ONLY_ROLES}
+    assert declared_reading == {
+        "C": ["analysis.register_report"],
+        "H": ["review.record_finding", "review.report", "review.review_document",
+              "review.verify_fixes"],
+        "V": [],
+    }, declared_reading
+    # 差分二：通用轴那一档三个角色完全一样 —— 同一个集合，不按角色分配。
+    expected_universal = universal_write_tools(reg)
+    assert expected_universal, "树上没有一件据实会写东西的通用能力 ⇒ ② 没有可核的对象"
+    for role, got in universal_by_role.items():
+        assert got == expected_universal, (
+            f"{role} 拿到的通用写工具与通用的定义不一致：{sorted(got)} ≠ "
+            f"{sorted(expected_universal)}（通用能力按判据分配，不按角色分配）"
+        )
+
+
+def test_the_universal_axis_may_not_write_a_knowledge_table():
+    """② 的负控那一半：登记写集碰知识表 ⇒ `universal_tool_is_bookkeeping_only` 必假。
+
+    正控是 `assert_declared_write_tools` 里那句逐件断言；这里造一件形状正确、
+    只是"写的是 `statements`"的通用登记，证明那句断言真的会咬。
+    """
+    probe = {"probe.knowledge": UniversalTool("判据探针：写 statements", frozenset({"statements"}))}
+    assert not universal_tool_is_bookkeeping_only("probe.knowledge", universal=probe), (
+        "一件登记自己会写 statements 的通用能力被读成了「只写簿记表」⇒ ② 是空转"
+    )
+    # 同一件探针把登记写集换成 `tasks` 就必须过 —— 否则上一条只是"恒假"。
+    assert universal_tool_is_bookkeeping_only(
+        "probe.knowledge",
+        universal={"probe.knowledge": UniversalTool("判据探针：只写 tasks", frozenset({"tasks"}))},
+    ), "只写 tasks 的通用登记被读成了越界 ⇒ 这条判据的方向反了"
+
+
+def test_injecting_a_knowledge_table_writer_into_the_declaration_goes_red(store, monkeypatch):
+    """③ 负控：往 H 的声明里塞一件写知识表的工具（`table.create`）⇒ ① 必红。
+
+    "声明"在这条负控里是实打实的两处声明，缺一处都塞不进去：工具的 `roles`（谁拿得到）
+    与 `READONLY_CALL_EXCEPTIONS["H"]`（只读角色的写落点）。两处都改完，`for_role("H")`
+    就会真的把 `table.create` 发出去 —— 那是一把能改知识表的刀。判据必须当场红，
+    而不是跟着声明一起变绿：这就是 ① 拿本文件那张人审过的台账当期望值的理由。
+    """
+    import dataclasses
+
+    from agentflow.tools.base import READONLY_CALL_EXCEPTIONS as EXC
+
+    build = build_registry(store=store, workspace_root=store.root)
+    assert build.skipped == [], build.skipped
+    reg = build.registry
+    assert "table.create" in reg.names(), "夹具前提崩了：树上没有 table.create"
+    assert "table.create" not in role_write_tools(reg, "H"), (
+        "夹具前提崩了：H 本来就不该拿到 table.create"
+    )
+    spec = reg._specs["table.create"]
+    assert "H" not in spec.roles, f"夹具前提崩了：table.create 已经声明给 H 了：{spec.roles}"
+    monkeypatch.setitem(
+        reg._specs, "table.create", dataclasses.replace(spec, roles=(*spec.roles, "H")),
+    )
+    monkeypatch.setitem(
+        EXC, "H", (*EXC["H"], ("table.create", "判据负控：往声明里塞一件写知识表的工具")),
+    )
+    poisoned = role_write_tools(reg, "H")
+    assert "table.create" in poisoned, "注入没生效：H 的写面上没多出 table.create"
+    with pytest.raises(AssertionError, match="table.create"):
+        assert_declared_write_tools("H", poisoned, tree=reg)
+    # 负控的负控：把注入撤掉，同一份判据必须照旧绿（红不是从别处来的）。
+    monkeypatch.undo()
+    assert_declared_write_tools("H", role_write_tools(reg, "H"), tree=reg)

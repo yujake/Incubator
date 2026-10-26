@@ -603,15 +603,6 @@ class WaveHandle:
         self.probe.record(label, began, _time(), peak)
         self.probe.leave()
 
-    def _run_one(self, start: Any, *, began: float, peak: int, label: str) -> Any:
-        """在一张票的后台线程里跑后半：信号量在这一层，探针窗口已由派活方打开。"""
-        self._sem.acquire()
-        try:
-            return self.conductor.summon_run(start)
-        finally:
-            self._close_window(label, began, peak)
-            self._sem.release()
-
     def _on_settle(self, i: int) -> None:
         with self._cv:
             if not self._settled[i]:
