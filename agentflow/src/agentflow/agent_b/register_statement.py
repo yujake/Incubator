@@ -210,7 +210,8 @@ def _normalize_proofs(raw: object, *, proof_text: str) -> tuple[list[dict], str,
                 "proof_text_conflict",
                 "清单里 #p1 的正文与 proof_text 不是同一份 —— #p1 是行上 proof_text 的"
                 "唯一权威，同一格两个权威写谁都是静默丢掉另一个。二选一：只给 proof_text，"
-                "或者只给 proofs 里的 #p1")
+                "或者只给 proofs 里的 #p1（改在册命题的正文时只给 proof_text：`proofs` "
+                "那一栏是给第 2 份及以后的证明用的，它不参与 canonical 覆盖）")
         seen[no] = i
         if no == 1:
             canon = text
@@ -968,6 +969,46 @@ class _RegisterStatement:
         manuscript: dict = {}
         deps_groups: list[list[dict]] = []
         manuscript_refs: list[str] = []
+        # ---- 这份稿是这条命题的稿吗（D7 的另一半，业主 2026-10-27） -----------------
+        #
+        # 真机读数（`projects/mp3-r2`，B 那一趟）：B 交的是 stmt:000008 的完整证明，而
+        # 兜底读盘 / D 的携带单按证明正文里的 `stmt:` 引用找到的是别条命题的稿
+        # （`reports/f-proof-000000.md`，头一行写着 `- 命题号：stmt:000000`）。改前那一支
+        # 只管"同一条 statement_full 已在册"，不管"这份稿是谁的" ⇒ 它拿 000000 的稿给
+        # 000008 做读稿登记，还把那份稿的依赖面记到 000008 头上（源与收方错配，而读数上
+        # 一切正常：`manuscript_source` 只说是 carried_by_D / disk）。
+        #
+        # 判据用稿自己声明的那一行（`depsection.manuscript_statement_id`），不靠猜：
+        #  - 声明了号、而号不是这一条 ⇒ 这份稿是别人的；
+        #  - 没声明号（手写稿 / 框架渲染前的那一版）⇒ 不判所有权（`param` 直递是调用方
+        #    明确递上来的，既有语义就是"这一笔用它"）。
+        redelivery = self._existing_statement_for(full)
+        stmt_id_now = str((redelivery or {}).get("stmt_id") or "")
+        declared_owner = (_DS.manuscript_statement_id(manuscript_text)
+                          if manuscript_text.strip() else "")
+        manuscript_foreign = bool(declared_owner and stmt_id_now
+                                  and declared_owner != stmt_id_now)
+        #: 这一笔有没有"与在册那一行不一样"的东西要写（正文或证明清单）。有就绝不走
+        #: "收方读稿登记：命题行不动"那条早退支路 —— 那条支路只负责"命题已经在册、
+        #: 这一笔只是把 F 的稿交过来"，它一个字都不写正文；用它去接"改在册正文"这一笔，
+        #: 形态就是真机那次"四个入口都不收"。
+        carries_write = self._carries_canonical_write(
+            proof_text=proof_text, proofs_listed=proofs_listed, row=redelivery)
+        if manuscript_foreign and not carries_write:
+            foreign_path = (str(manuscript_carried.get("path") or "")
+                            or str(manuscript_probe.get("path") or ""))
+            return _refuse(
+                "manuscript_owner_mismatch",
+                (f"这份稿属于 stmt:{declared_owner}，不是 stmt:{stmt_id_now} —— "
+                 "它是按证明正文里的引用 / 携带单找到的，不是这条命题的稿。"
+                 "拿它给这一条登记依赖面等于把别条命题的依赖记到这条头上，整笔不写。"
+                 "要登记这一条的依赖面，请交这条命题自己的稿（或用 `proof_manuscript` "
+                 "把这条命题的手稿直接递进来）；要改这一条的正文，请把 `proof_text` "
+                 "一起交上来（那一笔走 canonical 覆盖，旧正文进 `proof_history`）。"),
+                manuscript_source=manuscript_source,
+                manuscript_path=foreign_path,
+                manuscript_owner=declared_owner,
+                stmt_id=stmt_id_now)
         #: 这一份稿是不是 F 的秘书洗过的那一版（业主 2026-10-26 晚：B 读到的必须是
         #: "秘书洗过"的版本，读数带 `manuscript_washed=true`）。那一行元信息由
         #: `agent_f` 在洗完之后盖进正文（`depsection.mark_washed`），跟着文件走 ——
@@ -989,7 +1030,7 @@ class _RegisterStatement:
         # 路径是约定的 `reports/f-proof-*.md`、而正文里没有 `- 依赖面洗稿：` 那一行 ⇒
         # 这一份不是框架渲染的，整笔受控拒绝并点名让 F 重写。
         # 参数直递（`param`）那一档不在这里判：B 拿不到它的落点，"猜它是谁写的"不是判据。
-        if manuscript_text.strip() and not manuscript_washed:
+        if manuscript_text.strip() and not manuscript_washed and not manuscript_foreign:
             if manuscript_source == _DS.SOURCE_CARRIED:
                 wash_rel = str(manuscript_carried.get("path") or "")
             elif manuscript_source == _DS.SOURCE_DISK:
@@ -1003,7 +1044,13 @@ class _RegisterStatement:
                     manuscript_source=manuscript_source,
                     manuscript_path=wash_rel,
                     missing_mark=_DS.WASH_MARK.rstrip())
-        if manuscript_text.strip():
+        #: 别条命题的稿（`manuscript_foreign`）在这里被整份跳过：不解析依赖段、不核档位、
+        #: 不落边 —— 它的"依赖面"是别人的，落过来就是把别人的依据记到这条命题头上。
+        #: 跳过之后也不进下面那条"交不出手稿"的拒绝：那一档拒的是"这一笔没有任何稿"，
+        #: 而这里是"有一份稿、但不是这条命题的" —— 后者已经在上面的
+        #: `manuscript_owner_mismatch` 那一支里分过档（带了正文 ⇒ 正文照写、这份稿不用；
+        #: 没带正文 ⇒ 整笔拒并点名稿的主家）。
+        if manuscript_text.strip() and not manuscript_foreign:
             manuscript = _DS.parse_dependency_section(manuscript_text)
             # 引用只在"证明正文"那一节里数（手稿开头的元信息不是引用）。
             manuscript_refs = _DS.stmt_refs(_DS.proof_body(manuscript_text))
@@ -1039,7 +1086,7 @@ class _RegisterStatement:
                 kinds = {str(r.get("stmt_id") or ""): _DS.dep_kind_of(str(r.get("kind") or ""))
                          for r in stmt_rows}
                 deps_groups = _DS.deps_groups(manuscript.get("rows") or (), kinds)
-        else:
+        elif not manuscript_text.strip():
             # ---- 参数空、盘上也没有稿：不许静默跳过（2026-10-26，业主的裁定） ------
             #
             # 正文引用了在册命题 ⇒ 这份证明的依赖面必须写在手稿里，而这一笔交不出手稿
@@ -1093,6 +1140,11 @@ class _RegisterStatement:
             base["manuscript_source"] = manuscript_source
             #: 这一份稿是不是 F 的秘书洗过的那一版（跟着文件走的读数，见上面）。
             base["manuscript_washed"] = manuscript_washed
+            #: 这份稿声明自己属于哪一条命题（稿头那一行 `- 命题号：stmt:NNNNNN`），
+            #: 以及它是不是这一笔要写的那一条。两格都在，于是"稿是别人的"这件事在
+            #: 读数里不可能被漏看（改前它根本不进读数，`manuscript_source` 只说来源）。
+            base["manuscript_owner"] = declared_owner
+            base["manuscript_owner_ok"] = not manuscript_foreign
             if manuscript_probe:
                 base["manuscript_probe"] = dict(manuscript_probe)
             if manuscript_carried:
@@ -1112,8 +1164,19 @@ class _RegisterStatement:
         # 来源不在册、档位不够 `proof_review` 各有一档受控拒绝），本支只负责
         # "把核过的段落成边"。没有这一支时，同一条命题的第二次递交走 `duplicate` 早退
         # ⇒ `dependencies` 一行都不落，而这正是"F 写了稿、D 带了稿、依赖面还是 0 行"的成因。
-        if manuscript_text.strip():
-            redelivery = self._existing_statement_for(full)
+        #
+        # ---- 为什么它不能接"改在册正文"这一笔（D7，业主 2026-10-27） ----------------
+        #
+        # 真机读数（`projects/mp3-r2`，13:17）：B 拿到 stmt:000008 的完整证明，要把截断的
+        # 登记换掉。四个入口全部撞在这条支路上 —— 它返回 `ok:true / new_row:false /
+        # note:「命题行不动」`，交来的 `proof_text` 与 `proofs` 一个字都没写，返回值里
+        # 也没有任何一格说"正文没写"。于是 `proof_no` 恒 0、`proofs` 恒空。
+        #
+        # 所以这条支路只在"这一笔没有正文/清单要写"时接管（`carries_write`）：它本来就是
+        # "D 递稿、B 读稿登记依赖面"的通道，不是"改正文"的通道。带了正文的那一笔交给下面的
+        # `duplicate` 那一支（它已经会覆盖 canonical、旧正文进 `proof_history`、读侧转 stale），
+        # 并且把这份稿的依赖面在那一笔之后补落（`_manuscript_deps_after_write`）。
+        if manuscript_text.strip() and not manuscript_foreign and not carries_write:
             if redelivery is not None:
                 return self._receive_carried_manuscript(
                     redelivery, deps_groups=deps_groups, manuscript=manuscript,
@@ -1577,6 +1640,10 @@ class _RegisterStatement:
                 out["note"] += ("这一笔带来的证明清单没有写进库："
                                 + str(attach.get("reason") or "")
                                 + "（档位那一笔已经落盘，这一格不回滚）")
+            # 这一笔带了这条命题自己的手稿 ⇒ 它的依赖面在正文写完之后补落（D7 的 A）。
+            md = self._manuscript_deps_after_write(sec, stmt_now, deps_groups)
+            if md:
+                out["manuscript_deps"] = md
             return out
         if written.get("duplicate") and not written.get("created"):
             # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
@@ -1658,6 +1725,10 @@ class _RegisterStatement:
                     pd = self._write_attached_proof_deps(sec, stmt_dup, proofs_listed, attach)
                     if pd:
                         out["proof_deps"] = pd
+                # 这一笔带了这条命题自己的手稿 ⇒ 它的依赖面在正文写完之后补落（D7 的 A）。
+                md = self._manuscript_deps_after_write(sec, stmt_dup, deps_groups)
+                if md:
+                    out["manuscript_deps"] = md
                 return out
             if proofs_listed and not attach.get("already"):
                 return _refuse("proofs_not_attached",
@@ -1823,6 +1894,76 @@ class _RegisterStatement:
     # 业主 2026-10-26 晚的原话：「D 到 B 没有路吗？加」+「把稿交给 B」。
     # 这一支是那条路在 B 侧的落点：D 的代码直接调 `B.register_statement(...)`，
     # 命题已经在册（F 落的行）⇒ 不新建、不重判档位，只把这一份手稿的依赖段落成边。
+
+    def _manuscript_deps_after_write(self, sec: Any, stmt_id: str,
+                                     deps_groups: list[list[dict]]) -> dict:
+        """正文写进在册那一行之后，把这份稿的依赖面也落下去（D7 的 A 那一半）。
+
+        为什么需要它：上面那条"收方读稿登记"早退支路在"这一笔带了正文/清单"时让路
+        （正文优先），而它原本承担的"把 F 手稿的 `## 依赖` 段落成边"不能因此丢掉 ——
+        否则 B 一次把"正文 + 手稿"交齐时，正文进去了、依赖面反而没了（改前是依赖面进去
+        了、正文没了；两种都是一半）。
+
+        只在"这一笔真的带了已核过的依赖组"时动手（`deps_groups` 空 ⇒ 返回空字典，
+        调用方原样不动）。别条命题的稿在调用处就被挡掉了，这里不会再判一次所有权。
+        """
+        if not deps_groups:
+            return {}
+        written = dict(sec.record_manuscript_dependency_face(
+            stmt_id, deps_groups, note="b.register_statement:canonical") or {})
+        return {"deps_written": int(written.get("deps_written") or 0),
+                "deps_duplicates": [dict(x) for x in (written.get("duplicates") or [])],
+                "checked": bool(written.get("checked")),
+                "refused": str(written.get("refused") or ""),
+                "reason": str(written.get("reason") or "")}
+
+    @staticmethod
+    def _carries_canonical_write(*, proof_text: Any, proofs_listed: Any,
+                                 row: Mapping | None = None) -> bool:
+        """这一笔要写进盘的东西，与在册那一行不一样吗（正文或证明清单）。
+
+        它只有一个用途：决定要不要走"收方读稿登记：命题行不动"那条早退支路。判据是
+        "有没有新的东西要写"，不是"有没有传这个字段"—— 两个理由：
+
+        1. 传了也一样的时候必须走老路。D 的交付动作（`agent_d.write_report`）会把在册
+           那一行的 `proof_text` / `proofs` 原样再交一遍（它交的是"这一份稿"），那一笔
+           要干的是"读稿登记依赖面"，不是改正文。改前若按"传了字段"判，D 的每一次交付
+           都会被带进 B 的完整闸门链（出处 / 自产要签 / 猜想起步），于是真机上活着的
+           那条 D → B 通道被这一改堵死（`test_the_delivery_really_hands_the_manuscript_to_b`
+           当场变红）。
+        2. 变了的时候绝不能被吞掉。这正是真机 D7 的形态：截断登记 + 完整证明。
+
+        所以逐字比：`proof_text` 与在册那一行的 `proof_text` 不同 ⇒ 有活要干；证明清单
+        里任何一份的正文与在册那一份不同（或还没在册）⇒ 有活要干。两样都没有 ⇒ 这一笔
+        只是"把稿交过来"，交给早退支路。
+
+        为什么独立成一个方法：判据要能被打桩。反真空那条判据把它打成恒 False ⇒
+        "改在册命题正文"这一笔又会被早退支路吞掉（于是判据 a 的绿来自这条判据，而不是
+        某个顺手写的分支）。
+        """
+        now = dict(row or {})
+        want = str(proof_text or "")
+        have = str(now.get("proof_text") or "")
+        if want.strip() and want != have:
+            return True
+        listed = {}
+        for item in (now.get(_VR.PROOFS_KEY) or []):
+            if isinstance(item, Mapping):
+                try:
+                    listed[int(item.get("proof_no") or 0)] = str(item.get("text") or "")
+                except (TypeError, ValueError):
+                    continue
+        for entry in (proofs_listed or []):
+            if not isinstance(entry, Mapping):
+                continue
+            try:
+                no = int(entry.get("proof_no") or 0)
+            except (TypeError, ValueError):
+                continue
+            known = have if no == 1 else listed.get(no)
+            if known is None or str(known) != str(entry.get("text") or ""):
+                return True
+        return False
 
     def _existing_statement_for(self, full: str) -> dict | None:
         """按 `statement_full` 的规范化值找在册那一行（"是不是同一条"的唯一判据在

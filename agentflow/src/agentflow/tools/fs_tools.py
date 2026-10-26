@@ -246,8 +246,21 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
 #
 # 三类之外一个字都不动：G/L 的排版产物、M 的其它产出（`reports/m-review.md` 这一类）
 # 都不在表上。判据的形状因此是"按角色分行的一张数据表"，不是"谁都不许写 reports/"。
+#
+# ---- 目录不是判据（2026-10-27，D6）-------------------------------------------------
+#
+# 真机读数（`projects/mp3-r2/notes/f-proof-S1-stmt000008.md`，7595 B / 54 行）：F 把证明
+# 手稿写进了 `notes/` —— 文件名一个字没改，只是换了个目录，于是改前那条闸（要求路径在
+# `reports/` 下）整条失效："框架渲染 → 秘书洗稿 → D 携带 → B 读稿登记"这一条链一次都
+# 没走过，而盘上那份文件看起来就是 F 的手稿。
+#
+# 所以判据里不再有"目录"这一层：同一个文件名在哪个目录下都是同一份框架产物。`reports/`
+# 仍然是最推荐的落点（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir` 缺省都是它，
+# 兜底读盘也只按它找），但它已经不再是豁免条件 —— 换个目录不该换来一条绕过口。
 
-#: 手稿 / 报告所在的目录名（D 的 `reports_subdir` 缺省就是它，`depsection.MANUSCRIPT_DIR`）。
+#: 手稿 / 报告的推荐落点目录名（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir`
+#: 缺省都是它）。它只出现在拒信里当指路，不参与判据：判据只看文件名（见
+#: :func:`_reserved_artifact` 与 D6 那段注释）。
 _RESERVED_DIR = "reports"
 
 #: 保留路径表：`(角色, 规则)` 逐行。规则三档（都只作用在文件名上）：
@@ -274,9 +287,11 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
 RESERVED_ARTIFACT_KIND = "reserved_framework_artifact"
 
 #: 拒信（逐字）：说清"这是什么"与"该走哪个动作"，而不是只说"不许"。
+#: 末尾那句指路是 `_RESERVED_DIR` 唯一的用途（推荐落点），它不构成豁免条件。
 RESERVED_ARTIFACT_MESSAGE = (
     "这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写 —— "
     "用 F 的 proof 动作（它会渲染 `## 依赖` 节）/D 的交付动作（它会渲染携带单）"
+    f"；推荐落点是 {_RESERVED_DIR}/，但换到别的目录同样受这一道闸管"
 )
 
 
@@ -316,16 +331,21 @@ def _rule_matches(rule: str, name: str) -> bool:
 def _reserved_artifact(rel: str, role: str) -> bool:
     """`rel`（工作区内相对路径）是不是 `role` 那份被保留的框架产物。
 
-    两层判据，缺一不命中：① 路径在 `reports/` 下且是 `.md`；② `(角色, 规则)` 那一行
-    命中文件名。表外角色（G/L 的排版产物、M 的其它报告）连第二层都不进 ——
-    保留表只对表上那三行角色（F / D / M）负责。
+    两层判据，缺一不命中：① 文件名以 `.md` 结尾（手稿是 markdown：`depsection` 读的
+    就是它）；② `(角色, 规则)` 那一行命中文件名。表外角色（G/L 的排版产物、M 的
+    其它报告）连第二层都不进 —— 保留表只对表上那三行角色（F / D / M）负责。
+
+    目录不在判据里（2026-10-27，D6）：改前这里是"路径在 `reports/` 下 且 规则
+    命中"，于是 `notes/f-proof-x.md` 换个目录就绕过去了（真机 7595 B 的手稿就是这么进
+    的盘）。判据改成只看文件名之后，同一个名字在哪个目录下都是同一份框架产物；`reports/`
+    只是推荐落点（见 `_RESERVED_DIR`），不是豁免条件。
     """
     owner = str(role or "")
     rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
     if not rules:
         return False
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
-    if len(parts) < 2 or parts[0].casefold() != _RESERVED_DIR:
+    if not parts:
         return False
     name = parts[-1]
     if not name.casefold().endswith(".md"):

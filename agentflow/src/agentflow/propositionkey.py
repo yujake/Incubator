@@ -14,6 +14,7 @@ unknown，按正文 sha256 缓存）。本模块在那一层的上游只做两�
 |---|---|---|---|
 | 粗筛 | 本模块 `candidates_for` | 按词面相似度排出一小批候选（"交给秘书看哪几条"） | 不许替秘书下结论 |
 | 终判 | `secretary.adjudicate_proposition` | 读条件与结论，判同一 / 不同 / 判不了，并洗出定理名 | 不许拿字符串相同当"同一" |
+| 概念档 | 本模块 `same_concept` | 定义项（标签，或正文里的「概念（X）」/「定义（X）」）相同 ⇒ 同一个概念 | 不发模型调用（概念没有"条件 ⇒ 结论"） |
 | 兜底 | 本模块 `proposition_key` / `same_proposition` | 只在秘书这一格没判成（没缝 / 开关关着 / 超时）时兜住旧口径 | 不许覆盖秘书给过的结论 |
 
 第三行是历史口径（2026-10-24 上午的裁定 + 判据
@@ -78,6 +79,26 @@ unknown，按正文 sha256 缓存）。本模块在那一层的上游只做两�
   之后不是静默丢，而是受控拒绝（拒信点名与第几份同种）或由调用方选择 `merge=true`
   合成一份并重拿 V 签 —— 两种处置都可逆。
 
+## 概念同一性（`same_concept`）
+
+一条 `kind="concept"` 的行没有"条件 ⇒ 结论"：它是一句定义。上面那一整套判据在它上面
+等于失效（键比的是条件与结论的记号集合，两条把同一个术语定义了两遍的行会因此退化成
+"不同"—— 真机 mp3-r2 就是这么落下 `000003` / `000004` 两行同一个
+`finite-dimensional Lie algebra` 的）。所以概念这一档另有一条判据，同样是纯函数：
+
+| 依据 | 判什么 | `basis` |
+|---|---|---|
+| 定义项（标签） | 两侧的标签规范化后相同 | `concept_label` |
+| 定义项（正文里的术语） | 正文开头「概念（X）」/「定义（X）」抽出的 X 相同 | `concept_defined_term` |
+
+三态照旧：两侧至少有一侧抽得出定义项、而两侧不相等 ⇒ `different`；两侧都抽不出
+（空标签、正文不是一句定义）⇒ `unknown`。`unknown` 不许折成 `different`：折平会让
+"没人判过"变成"判过了、不同"，于是同一个概念还是会被登记两行。
+
+抽出来的定义项先去标点与空白再比：`有限维 Lie 代数` 与 `有限维Lie代数` 是同一个键，
+`finite-dimensional Lie algebra` 与 `finite dimensional lie algebra` 也是。通用的那几个
+词（`CONCEPT_GENERIC_TERMS`）不算定义项 —— 拿"概念"当键会把所有没命名的概念并成一条。
+
 ## 边界
 
 - 纯函数：不读盘、不读 store、不写任何文件、不调模型；同样的入参永远同样的出参。
@@ -87,8 +108,9 @@ unknown，按正文 sha256 缓存）。本模块在那一层的上游只做两�
 
 ## 判据
 
-`tests/test_secretary_recognizes_the_same_proposition.py` 钉的是这一份的六条行为
-（键命中 / 相似度兜底 / 三态 / 同种证明 / 以及"把判据打桩之后调用方必须变红"的反真空）。
+`tests/test_secretary_recognizes_the_same_proposition.py` 钉的是命题那一份的六条行为
+（键命中 / 相似度兜底 / 三态 / 同种证明 / 以及"把判据打桩之后调用方必须变红"的反真空）；
+概念那一份（`same_concept`）钉在 `tests/test_one_concept_is_one_row.py`。
 """
 from __future__ import annotations
 
@@ -554,6 +576,144 @@ def same_kind_proof(a: str, b: str, *,
     return _judge(a, b, threshold=threshold, basis=BASIS_PROOF_SIMILARITY, what="证明")
 
 
+# ------------------------------------------------------------------ 概念同一性
+
+
+#: 概念那一档的两条依据（进返回值；读的人要能分辨"凭标签还是凭术语判的"）。
+BASIS_CONCEPT_LABEL = "concept_label"
+BASIS_CONCEPT_TERM = "concept_defined_term"
+
+#: 不算定义项的通用词（规范化之后逐字比）。
+#:
+#: 为什么要有这一格：概念行的标签在真机里有一大片只写着"概念"/"定义"（名字在正文里），
+#: 拿它当键会把所有这些没命名的行并成一条 —— 那是比"重复登记"更坏的一种错
+#: （一条真概念在台账上消失，而盘上看起来完全合法）。
+CONCEPT_GENERIC_TERMS: tuple[str, ...] = (
+    "概念", "定义", "命题", "定理", "引理", "推论", "猜想", "注", "例", "反例",
+    "concept", "definition", "proposition", "theorem", "lemma", "remark", "example",
+)
+
+#: 从 `statement_full` 里抽"被定义的那个术语"只认开头这两种显式形态。
+#:
+#: 为什么只认开头、只认这两种：`概念（X）` / `定义（X）` 是登记时写定义句的固定形态
+#: （真机 mp3-r2 的六条概念行逐条都是），而"正文里某个括号里的东西"不是一个可复算的
+#: 定义项 —— 猜它会把两条不相关的定义并成一条。
+_DEFINED_TERM_HEAD = re.compile(
+    r"^[\s#>*_\-|]*"
+    r"(?:概念|定义|definition|concept)"
+    r"\s*[（(]\s*([^（()）\n]{1,80}?)\s*[）)]",
+    re.IGNORECASE)
+_DEFINED_TERM_HEAD2 = re.compile(
+    r"^[\s#>*_\-|]*(?:概念|定义)\s*[:：]\s*([^：:，,。；;\n]{1,60})")
+
+#: 定义项里不参与比较的记号（标点、空白、连字符）：`有限维 Lie 代数` 与
+#: `有限维Lie代数` 是同一个术语的两种排版，`finite-dimensional` 与 `finite dimensional`
+#: 也是。与 `proposition_key` 那条"记号排版不算差别"同一个口径。
+_CONCEPT_KEY_DROP = re.compile(r"[\s\-_·/\\|,，、;；:：.。'\"“”‘’()（）\[\]【】]+")
+
+
+def defined_term(statement_full: str) -> str:
+    """从一条定义的正文里抽"被定义的那个术语"；抽不出 ⇒ 空串（不猜）。
+
+    只认开头：「概念（X）」「定义（X）」「概念：X」「定义：X」（英文 Definition (X) 同）。
+    返回的是原样的一截术语，规范化交给 :func:`concept_keys`（比键的时候才规范化，
+    读数里留原文，读的人能核对抽错没抽错）。
+    """
+    text = str(statement_full or "")
+    if not text.strip():
+        return ""
+    for pattern in (_DEFINED_TERM_HEAD, _DEFINED_TERM_HEAD2):
+        found = pattern.match(text)
+        if found:
+            return str(found.group(1) or "").strip()
+    return ""
+
+
+def _concept_key_text(text: str) -> str:
+    """一段术语 → 可比的定义项键（空串 = 这一侧抽不出可比的东西）。
+
+    两道门槛都是刻意的：通用词（`CONCEPT_GENERIC_TERMS`）不算定义项；规范化之后不足
+    两个字符的也不算。一个字符的名字（`环` / `群`）太弱 —— 它能与同一个字在别的语境里
+    撞上，而并错的代价是一条真概念在台账上消失（与 `SAME_PROPOSITION_JACCARD` 那条
+    "宁可漏并"同一个取舍）。这一档的读数落 `unknown`（不并、照旧新建），不是 `different`。
+    """
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    canonical = _canonical(raw, strip_glue=False)
+    key = _CONCEPT_KEY_DROP.sub("", canonical)
+    if len(key) < 2:
+        return ""
+    if key in CONCEPT_GENERIC_TERMS:
+        return ""
+    return key
+
+
+def concept_keys(label: str, statement_full: str = "") -> dict[str, str]:
+    """一条概念行的两个定义项键（`label` 那一格与正文里抽出的术语那一格）。
+
+    两个都空 ⇒ 这一行判不了（不是"不同"）。为什么要两个而不是一个：真机里标签与
+    定义句各有可能缺席（标签是英文而定义句是中文、或者标签只写"概念"），只留一个键
+    会把"这一侧读不出"错当成"两侧不一样"。
+    """
+    return {"label": _concept_key_text(label),
+            "term": _concept_key_text(defined_term(statement_full))}
+
+
+def same_concept(a_label: str, a_full: str = "", b_label: str = "",
+                 b_full: str = "") -> dict[str, Any]:
+    """同一概念的两条行是不是同一个概念（定义项相同；三态，确定性，零模型调用）。
+
+    返回值（调用方与读数都读这一份）：
+    `state` / `basis` / `key_a` / `key_b` / `label_key_a` / `label_key_b` /
+    `term_key_a` / `term_key_b` / `reason`。
+    判据顺序固定：标签相同优先（它就是"定义项"的规范落点），其次正文里的术语。
+    标签不同而术语相同 ⇒ 仍判 `same`（真机 mp3-r2 的两行标签相同，但"标签改过一次、
+    正文里的术语还是那个"的形态同样不该新建第二行）。
+    """
+    left = concept_keys(a_label, a_full)
+    right = concept_keys(b_label, b_full)
+    out: dict[str, Any] = {
+        "state": STATE_UNKNOWN, "basis": "", "key_a": "", "key_b": "",
+        "label_key_a": left["label"], "label_key_b": right["label"],
+        "term_key_a": left["term"], "term_key_b": right["term"],
+        "reason": "",
+    }
+    if left["label"] and left["label"] == right["label"]:
+        out.update(state=STATE_SAME, basis=BASIS_CONCEPT_LABEL,
+                   key_a=left["label"], key_b=right["label"],
+                   reason=(f"定义项（标签）规范化后相同：{left['label']!r}"
+                           " ⇒ 同一个概念，不许新建第二行"))
+        return out
+    if left["term"] and left["term"] == right["term"]:
+        out.update(state=STATE_SAME, basis=BASIS_CONCEPT_TERM,
+                   key_a=left["term"], key_b=right["term"],
+                   reason=(f"正文里被定义的术语相同：{left['term']!r}"
+                           "（标签不同，但定义项是同一个）⇒ 同一个概念，不许新建第二行"))
+        return out
+    if (left["label"] or left["term"]) and (right["label"] or right["term"]):
+        out.update(state=STATE_DIFFERENT,
+                   reason=(f"定义项不同（这一条 {left['label'] or left['term']!r} / "
+                           f"在册那一条 {right['label'] or right['term']!r}）⇒ 两条概念"))
+        return out
+    missing = [name for name, side in (("这一条", left), ("在册那一条", right))
+               if not (side["label"] or side["term"])]
+    out["reason"] = (f"判不了：{'、'.join(missing)}抽不出定义项（标签是空的，正文也不是"
+                     "一句「概念（X）」/「定义（X）」形态）⇒ 不并、也不记成不同（三态纪律）")
+    return out
+
+
+def concept_similarity(a_label: str, a_full: str = "", b_label: str = "",
+                       b_full: str = "") -> float:
+    """概念这一档的读数：判成同一个概念是 1.0，其余（different / unknown）是 0.0。
+
+    只给"排个序、读个数"用，不参与判据 —— 判据只有 `same_concept` 一处，这里是它的
+    读数投影（两处各算一遍判据是同一件事两个实现的老毛病）。
+    """
+    got = same_concept(a_label, a_full, b_label, b_full)
+    return 1.0 if str(got.get("state") or "") == STATE_SAME else 0.0
+
+
 # ------------------------------------------------------------------ 粗筛候选
 
 
@@ -604,6 +764,12 @@ def selftest() -> int:
     proof_cross = same_kind_proof("1. 由定义直接得到。\n2. 由 1 得结论。",
                                  "另一条路线：先证引理，再由引理得结论。")
     tiny = same_proposition("x = 1", "y = 1")
+    same_concept_hit = same_concept("finite-dimensional Lie algebra",
+                                   "概念（有限维 Lie 代数）：设 K 为特征 0 的域。",
+                                   "finite-dimensional Lie algebra",
+                                   "概念（有限维 Lie 代数）：设 K 为域。")
+    two_concepts = same_concept("有限维李代数", "概念（有限维李代数）：dim < ∞。",
+                                "幂零李代数", "概念（幂零李代数）：降中心列终止。")
     checks = [
         (proposition_key(a) == proposition_key(b), "同一命题的两种写法键相同", proposition_key(a)),
         (same["state"] == STATE_SAME, "同一命题判成 same", same),
@@ -611,6 +777,8 @@ def selftest() -> int:
         (proof_same["state"] == STATE_SAME, "同种证明判成 same", proof_same),
         (proof_cross["state"] == STATE_DIFFERENT, "不同证明判成 different", proof_cross),
         (tiny["state"] == STATE_UNKNOWN, "太短的文本判成 unknown", tiny),
+        (same_concept_hit["state"] == STATE_SAME, "同一概念判成 same", same_concept_hit),
+        (two_concepts["state"] == STATE_DIFFERENT, "两个概念判成 different", two_concepts),
     ]
     bad = [(ok, why, got) for ok, why, got in checks if not ok]
     for ok, why, got in bad:

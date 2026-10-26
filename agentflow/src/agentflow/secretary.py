@@ -788,6 +788,210 @@ PROPOSITION_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "coroll
 def _is_proposition_kind(kind: Any) -> bool:
     """这个 kind 算不算"命题性的"（决定它参不参与同一命题判定）。"""
     return str(kind or "").strip().lower() in PROPOSITION_KINDS
+
+
+#: 同一性按"定义项相同"判的那几档 kind（概念行没有条件 → 结论，命题那一套判据对它失效）。
+#:
+#: 为什么只有 `concept` 一档、不顺手带上 `definition`：这一档的判据是"标签（或正文里
+#: 被定义的那个术语）规范化后相同"，而 `definition` 行在真机台账里常常把标签留着空
+#: （命题本体写在 `statement_full` 里），拿它当键会把一堆不相关的定义并到同一行 ——
+#: 并错一条的代价比漏并大（与 `PROPOSITION_KINDS` 的取舍同一条理由）。
+CONCEPT_IDENTITY_KINDS: tuple[str, ...] = ("concept",)
+
+
+def _is_concept_kind(kind: Any) -> bool:
+    """这个 kind 算不算"概念行"（决定它走定义项那一档同一性判据）。"""
+    return str(kind or "").strip().lower() in CONCEPT_IDENTITY_KINDS
+
+
+#: 洗名洗掉的那两类（`label_washed["class"]` 的取值）—— 读的人要能分辨"哪一类触发了"。
+LABEL_WASH_ROUTE = "路线/自证草稿/待审签"
+LABEL_WASH_WORKING = "内部工作名"
+
+#: 从正文里抽标签时最多留多少字（超出就截断：名字是用来念的，不是第二份正文）。
+LABEL_FROM_STATEMENT_CHARS = 60
+
+#: 内部工作名词表：`(这一类的名字, 正则)`。命中的那一段从标签里删掉，并在
+#: `label_washed["class"]` 里点名这一类的名字。
+#:
+#: 真机读数（`projects/mp3-r2/data/statements.json` 的 000000 / 000001）：两行的 label
+#: 逐字都是「F 攻坚 000000 子目标 S2」—— 派活台账里的内部工作名成了定理名，于是
+#: 同一条定理的两份证明看起来是两条不同的定理。改前的洗名只洗"路线 / 自证草稿 /
+#: 要 V 审签"那一类（见 `_judge_system("proposition_identity")` 里 canonical_name 那
+#: 一句），工作名不在那一类里，原样落了盘。
+#:
+#: 为什么是一张可清空的表而不是几条 if：判据要能被反真空验证（把这张表清空 ⇒
+#: 真机那两个 label 必须原样保留），而 if 链清不空，那条反真空用例就会打空炮。
+LABEL_WORKING_NAME_RULES: tuple[tuple[str, str], ...] = (
+    # 「<角色> 攻坚 <编号>」：角色是一两个字母（F / B2），编号可能省略。
+    # 末尾那个否定前瞻是"词尾"判据：`攻坚计划` 里的"攻坚"不是工作名（后面还接着汉字）。
+    ("攻坚子目标", r"[A-Za-zＡ-Ｚａ-ｚ]{1,2}\s*攻坚\s*[0-9０-９]*"
+                  r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
+    # 「子目标 S<n>」（编号可能省略）
+    ("子目标编号", r"子目标\s*[SＳs]?\s*[0-9０-９]*"
+                  r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
+    # 「第 n 步」/「第 n 轮」：派活台账里的步号
+    ("第几步", r"第\s*[0-9０-９一二三四五六七八九十百]+\s*(?:步|轮)"
+              r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
+    # 「待推进」这一档状态词（贴在首尾时算修饰；整条都是它 ⇒ 那不是名字）
+    ("待推进", r"(?:待推进|待办|待下一步)\s*[:：,，·—\-]?"
+              r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
+    # 「草稿」这一档（「自证草稿」「待 V 审签」是它的两种写法）
+    ("草稿/待审签", r"(?:自证草稿|草稿|待\s*V\s*审签|待审签)\s*[:：,，·—\-]?"
+                  r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
+)
+
+
+def _tidy_label(text: Any) -> str:
+    """把删掉工作名之后剩下的那一截收拾成能当名字的样子。
+
+    四件事：去掉空括号、折叠空白、削掉首尾的分隔符与句读、去掉落单的开/闭括号。
+    为什么要有这一格：删掉「草稿」之后留下的 `（ ）` 与 `：` 都不是名字的一部分，
+    而一个以冒号开头的标签看起来仍然像没洗过。
+    """
+    out = str(text or "")
+    out = re.sub(r"[（(【\[]\s*[）)】\]]", " ", out)
+    out = re.sub(r"\s+", " ", out).strip()
+    out = out.strip(" ·—-,，;；:：、。.()（）[]【】")
+    out = re.sub(r"^[（(【\[]\s*", "", out)
+    out = re.sub(r"\s*[）)】\]]$", "", out)
+    return out.strip()
+
+
+def _readable_label(text: Any) -> bool:
+    """这一截还剩不剩"能当名字念"的东西（至少两个字母或汉字，且不是一串编号）。
+
+    为什么门槛是两个字而不是"非空"：删完之后常剩下 `S2` / `000000` 这种编号，
+    它们不是名字；而把编号当名字落盘，下一次读的人只会以为这条定理就叫这个。
+    """
+    letters = re.findall(r"[A-Za-z\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", str(text or ""))
+    return len(letters) >= 2
+
+
+def _brackets_balanced(text: Any) -> bool:
+    """这一串里的括号配对了吗（圆 / 方 / 六角 / 中文括号各算各自的）。
+
+    为什么洗名要看它：命中的那段若在括号里（真机 sylow4 的
+    `Sylow 三定理（路线一：…，自证草稿，待 V 审签）`），删掉之后会剩下半只括号 ——
+    那说明这一处是"路线 / 草稿状态"那一类的落点，归模型洗名（`canonical_name`），
+    不是本函数的活。括号不配对就整条不动，两种洗名各管各的。
+    """
+    pairs = (("(", ")"), ("【", "】"), ("[", "]"), ("（", "）"))
+    body = str(text or "")
+    for left, right in pairs:
+        if body.count(left) != body.count(right):
+            return False
+    return True
+
+
+def _strip_working_names(text: str) -> tuple[str, list[str]]:
+    """把贴在首/尾的内部工作名那几段删掉，返回 `(剩下的, 命中的类名)`。
+
+    只删首/尾（判定：那一段前面的部分、或后面的部分已经念不出名字）：中间的命中
+    不动它 —— `草稿本上的定理` 这种名字里，"草稿"是名字的一部分，不是派活台账的残留。
+    """
+    out = str(text or "")
+    hits: list[str] = []
+    changed = True
+    while changed:
+        changed = False
+        for cls, pattern in LABEL_WORKING_NAME_RULES:
+            for found in re.finditer(pattern, out, flags=re.IGNORECASE):
+                before, after = out[:found.start()], out[found.end():]
+                if _readable_label(_tidy_label(before)) and _readable_label(_tidy_label(after)):
+                    continue
+                hits.append(cls)
+                out = before + " " + after
+                changed = True
+                break
+            if changed:
+                break
+    return out, hits
+
+
+def _first_readable_claim(statement_full: Any, *, kind: str = "") -> str:
+    """从正文里抽一句能当标签念的东西（抽不出 ⇒ 空串）。
+
+    概念行优先用「概念（X）」里那个 X（那本来就是它的名字）；其余取第一句可读的命题
+    陈述，按句读切（`。` `；` `;` `!` `?` 与换行），跳过太短的、抽不出字面的、以及
+    换一行还是工作名的那些。markdown 记号在这里先摘掉：名字里不该出现星号与反引号。
+    """
+    text = str(statement_full or "")
+    if not text.strip():
+        return ""
+    if _is_concept_kind(kind):
+        term = _PK.defined_term(text)
+        if term and _readable_label(term):
+            return _clip_label(_tidy_label(term))
+    plain = re.sub(r"[*`#>|]+", " ", text)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    for chunk in re.split(r"[。；;！!？?\n]+", plain):
+        piece = _tidy_label(chunk)
+        if len(piece) < 4 or not _readable_label(piece):
+            continue
+        _rest, hits = _strip_working_names(piece)
+        if hits and not _readable_label(_tidy_label(_rest)):
+            continue
+        return _clip_label(piece)
+    return ""
+
+
+def _clip_label(text: str) -> str:
+    """标签截断（超过 `LABEL_FROM_STATEMENT_CHARS` 就切，不补省略号）。"""
+    out = str(text or "").strip()
+    limit = int(LABEL_FROM_STATEMENT_CHARS)
+    if len(out) <= limit:
+        return out
+    return out[:limit].strip()
+
+
+def wash_working_name(label: Any, *, statement_full: Any = "", kind: str = "",
+                      stmt_id: str = "") -> dict[str, Any] | None:
+    """把标签里的内部工作名洗掉；没命中 ⇒ `None`（原标签一个字节都不动）。
+
+    ## 洗成什么（"不许洗成空"的三级）
+    1. 删掉工作名那几段之后还剩能念的东西（`待推进：Noether 环` 这种"状态 + 名字"）⇒
+       剩下的那一截就是名字；
+    2. 整条标签都是工作名 ⇒ 从 `statement_full` 里抽：概念行先取「概念（X）」的 X，
+       否则取第一句可读的命题陈述（截断到 `LABEL_FROM_STATEMENT_CHARS`）；
+    3. 正文本身也抽不出（空正文，或者第一句还是工作名）⇒ 落成
+       「<kind> 待命名（stmt:NNNNNN）」，并在读数里点名"原名不可用"。
+
+    ## 返回
+    `{"from", "to", "class", "why"}`：`from` 是交上来的原标签，`to` 是洗过的名字，
+    `class` 点名触发的那一类（内部工作名 + 命中的类名；见 `LABEL_WORKING_NAME_RULES`），
+    `why` 是一句人话 —— 静默改名是不许的，读的人要能看出"凭什么改"与"改成了什么"。
+    """
+    original = str(label or "")
+    if not original.strip():
+        return None
+    rest, hits = _strip_working_names(original)
+    if not hits:
+        return None
+    kept = _tidy_label(rest)
+    if _brackets_balanced(original) and not _brackets_balanced(kept):
+        # 命中的那段在括号里（路线 / 草稿状态那一类的落点）⇒ 交给模型洗名，这里不动它。
+        return None
+    classes = "、".join(dict.fromkeys(hits))
+    if _readable_label(kept):
+        to = _clip_label(kept)
+        why = (f"标签里的内部工作名（{classes}）删掉之后还剩 {to!r} ⇒ 它就是名字"
+               + ("（截断过）" if len(kept) > len(to) else ""))
+    else:
+        from_body = _first_readable_claim(statement_full, kind=kind)
+        if from_body:
+            to = from_body
+            why = (f"整条标签都是内部工作名（{classes}），原名不可用 ⇒ "
+                   f"从 statement_full 抽第一句可读的命题陈述当名字：{to!r}")
+        else:
+            tag = str(kind or "命题").strip() or "命题"
+            to = f"{tag} 待命名（stmt:{str(stmt_id or '').strip() or '未发号'}）"
+            why = (f"整条标签都是内部工作名（{classes}），而 statement_full 也抽不出可读的"
+                   f"一句 ⇒ 原名不可用，名字待定：{to!r}")
+    return {"from": original, "to": to,
+            "class": f"{LABEL_WASH_WORKING}（{classes}）", "why": why}
+
+
 #: 一步依赖认得的来源键 ⇒ `(来源字段, 表, 表的 id 字段, 该给的 `kind` 缺省)`。
 #: 顺序就是"先认哪一个"：一步最多给一个来源（`Dependency.validate` 的"四选一"）。
 STEP_SOURCE_KEYS: tuple[tuple[str, str, str, str, str], ...] = (
@@ -3914,6 +4118,17 @@ class Secretary:
         `proof_same_jaccard`）⇒ 不新增证明号，受控拒绝并点名第几份；调用方给 `merge=True`
         并交合并稿时，合并稿成为那一份证明的新版本、旧正文进 `proof_history`，且要求 V 重签
         （`resign_required=True`，未重签前读侧现算为未成立）。
+        ## 概念行那一档（D2）：同一个概念不许落成第二行
+        `kind="concept"` 的行没有"条件 ⇒ 结论"，上面那一套判据在它上面等于失效（两条把
+        同一个术语定义了两遍的行会被判成"不同"）。所以概念行另有一条确定性判据：定义项
+        相同（标签规范化后相同，或正文里「概念（X）」/「定义（X）」抽出的术语相同）⇒
+        不新建行、返回既有 `stmt_id`（`duplicate=True` + `matched_by`）。这一档不发模型
+        调用 —— 判词表里没有概念那一格，而确定性判得出的不交给模型。
+        ## 定理名里的内部工作名（D1）
+        `F 攻坚 000000 子目标 S2` 这类派活台账里的工作名不许当定理名（真机 mp3-r2 的
+        `000000` / `000001` 逐字都是它）：命中 `LABEL_WORKING_NAME_RULES` 就洗掉，洗成
+        什么由 `wash_working_name` 的三级兜底决定（剩下一截 / 正文里的第一句 / 待命名），
+        读数在 `label_washed` 里逐条给「原标签 → 洗过的名字 + 触发了哪一类」。
         ## 为什么"洗不动"在这里是硬拒（而在派活那条路上不是）：派活洗不动可以原样发出去，让下游闸门去拒
         （`refused` 行本身就是证据）；写入这条路上没有下游闸门：`Statement.validate` 只查形状，而"键名是别名"这种错会让内容静默落成空字段。
         写是不可逆的，所以这里选"不写"（与 `draft/90` §1.2 对"硬拒"的取舍同一条理由：拒绝是受控的，静默写坏不是）。
@@ -4230,6 +4445,14 @@ class Secretary:
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else S.TABLES["statements"]["id_kind"])
             cid = tx.alloc_id(concept_kind)
+            # 内部工作名不许当概念名（D1 的同一条判据，落点在这条"定义待补"的支路上）：
+            # 这一支没有 `statement_full` 可抽，所以洗出来只可能是"删掉首尾的工作名之后
+            # 剩下的那一截"，或者第四级那一个待命名标签（那两级的读数在 `why` 里）。
+            working = wash_working_name(name, kind="concept", stmt_id=cid)
+            if working:
+                name = str(working["to"])
+                out["canonical_name"] = name
+                out["label_washed"] = dict(working, stmt_id=cid)
             # `origin` 按来源分档（本批缺陷一的第二处）：交来的概念有出处 ⇒ external_lit；
             # 没有出处 ⇒ 我们自己定义的新概念（own_result，推断，不要求调用方另声明）。
             src_lit = str(body.get("source_lit_id") or "")
@@ -4415,7 +4638,10 @@ class Secretary:
                 body = dict(body)
                 body["label"] = now
                 out["canonical_name"] = now
-                out["label_washed"] = {"from": was, "to": now}
+                out["label_washed"] = {
+                    "from": was, "to": now, "class": LABEL_WASH_ROUTE,
+                    "why": ("标签里的路线 / 自证草稿 / 待 V 审签那一类修饰被洗掉了"
+                            "（秘书判同一性那趟给的名字）；被洗掉的路线落进证明那一层，不丢")}
         route = str(adj.get("route") or "").strip() if adj.get("checked") else ""
         out["proof_route"] = route
 
@@ -4520,6 +4746,20 @@ class Secretary:
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else stmt_kind)
             stmt_id = tx.alloc_id(stmt_kind)
+            # ---- 内部工作名不许当定理名（D1；真机 mp3-r2 的 000000 / 000001）---------
+            # 那两行的 label 逐字都是「F 攻坚 000000 子目标 S2」：派活台账里的工作名进了
+            # 定理名，于是同一条定理的两份证明在台账上看起来是两条不同的定理。判据与词表
+            # 在 `wash_working_name`（确定性、零模型调用），位置在这里而不是上面那一格，
+            # 是因为兜底那两级要用到刚发下来的 `stmt_id`（第四级名字里有它）。
+            # 与模型洗名不冲突：括号里那一类（路线 / 草稿状态）由上一格洗，这一格见括号
+            # 不配对就整条不动（见 `_brackets_balanced`）。
+            working = wash_working_name(body.get("label"), statement_full=full,
+                                        kind=kind, stmt_id=stmt_id)
+            if working:
+                body = dict(body)
+                body["label"] = str(working["to"])
+                out["canonical_name"] = str(working["to"])
+                out["label_washed"] = dict(working, stmt_id=stmt_id)
             row = self._statement_from(body, full=full, kind=kind, stmt_id=stmt_id)
             row.validate()
             if (row.origin == "own_result" and not str(body.get("quote_reason") or "").strip()
@@ -4847,6 +5087,108 @@ class Secretary:
         hits.sort(key=lambda h: (-h["similarity"], int(h["proof_no"])))
         return hits
 
+    def _same_concept_candidate(self, tx: Any, *, label: str,
+                                full: str) -> dict[str, Any]:
+        """在册的概念行里找"同一个概念"：定义项相同就命中（确定性、零模型调用）。
+
+        判据只有一处（`propositionkey.same_concept`：标签相同，或正文里被定义的那个
+        术语相同）。本函数只做"在哪儿找、怎么选"这两件本层的事：
+
+        - 只在概念行之间判（`CONCEPT_IDENTITY_KINDS`；命题那一套键与相似度对定义无效，
+          反过来"标签相同"对命题也不是同一性判据）；
+        - 跳过 `schema.STATEMENT_UNUSABLE_STATUSES` 里的行（被否证 / 被取代的概念不是
+          合并的落点）；
+        - 两侧都抽不出定义项的跳过（`unknown` 不是命中，也不是"不同"）；
+        - 多条命中时取"标签那一档优先、同档取号最小"（确定性：同一次登记不能因为行的
+          物理顺序不同而并进不同的一条）。
+
+        返回 `{"hit": <命中|None>, "state", "basis", "reason", "candidates"}`：
+        `hit` 是 `{"stmt_id", "row", "verdict"}`；没命中时 `state` 是 `different`
+        或 `unknown`（两者的处置相同 —— 照旧新建 —— 但读数必须分得开）。
+        """
+        hits: list[dict[str, Any]] = []
+        saw_different = False
+        unknown_why: list[str] = []
+        for r in tx.rows("statements"):
+            sid = str(r.get("stmt_id") or "")
+            if not sid or not _is_concept_kind(r.get("kind")):
+                continue
+            if str(r.get("status") or "") in S.STATEMENT_UNUSABLE_STATUSES:
+                continue
+            other_label = str(r.get("label") or "")
+            other_full = str(r.get("statement_full") or "")
+            if not other_label.strip() and not other_full.strip():
+                continue
+            got = _PK.same_concept(label, full, other_label, other_full)
+            state = str(got.get("state") or "")
+            if state == _PK.STATE_SAME:
+                hits.append({"stmt_id": sid, "row": dict(r), "verdict": got})
+            elif state == _PK.STATE_DIFFERENT:
+                saw_different = True
+            else:
+                unknown_why.append(sid)
+        if hits:
+            hits.sort(key=lambda h: (0 if str(h["verdict"].get("basis") or "")
+                                     == _PK.BASIS_CONCEPT_LABEL else 1,
+                                     str(h["stmt_id"])))
+            top = hits[0]
+            return {"hit": top, "state": _PK.STATE_SAME,
+                    "basis": str(top["verdict"].get("basis") or ""),
+                    "reason": str(top["verdict"].get("reason") or ""),
+                    "candidates": [str(h["stmt_id"]) for h in hits]}
+        if saw_different:
+            return {"hit": None, "state": _PK.STATE_DIFFERENT, "basis": "",
+                    "reason": ("在册的概念行里定义项都不一样 ⇒ 这是另一个概念，应当各建一行"
+                               "（判据是定义项相同，不是词面相似）"),
+                    "candidates": []}
+        keep = ("；在册那几条抽不出定义项：" + "、".join(f"stmt:{sid}" for sid in unknown_why[:4])
+                if unknown_why else "")
+        return {"hit": None, "state": _PK.STATE_UNKNOWN, "basis": "",
+                "reason": ("判不了：这一条抽不出定义项（标签是空的，正文也不是一句"
+                           "「概念（X）」/「定义（X）」形态）⇒ 不并、也不记成不同"
+                           "（照旧新建；这一档不发模型调用 —— 概念没有"
+                           "「条件 ⇒ 结论」，判词表里没有它那一格）" + keep),
+                "candidates": []}
+
+    def _merge_into_concept(self, tx: Any, *, body: Mapping[str, Any], full: str,
+                            kind: str, out: dict[str, Any]) -> dict[str, Any] | None:
+        """概念行那一档：同一个概念不许落成第二行（D2；真机 mp3-r2 的 000003 / 000004）。
+
+        ## 为什么概念要有自己的一档
+        命题那一档的判据是"条件 ⇒ 结论 一致"，而一条概念行只有一句定义 —— 它没有条件
+        与结论，命题键与相似度在它上面等于失效（两条把同一个术语定义了两遍的行因此被判
+        成"不同"）。真机读数：`000003` 与 `000004` 的 label 都是
+        `finite-dimensional Lie algebra`，正文只差一句措辞。
+
+        ## 判据与处置（确定性优先，模型不在这一档）
+        判据是 `propositionkey.same_concept`（纯函数、零调用）：定义项相同 ⇒ 同一个概念。
+        命中 ⇒ 不新建行，返回既有 `stmt_id`，读数里 `duplicate=True` +
+        `matched_by="concept_label"/"concept_defined_term"`，并把依据那句原话写进
+        `reason`（升档 / 补别名留给那一行，不在这一笔里静默改它的内容）。没命中 ⇒
+        `None`（调用方照常新建），读数说清是"判过了、不同"还是"判不了"。
+
+        ## 为什么这一档不发模型调用
+        `adjudicate_proposition` 的判词表是"条件 ⇒ 结论"（`_judge_system` 的
+        `proposition_identity` 那一格），概念没有这一组；把它交给模型既判不出什么，
+        又会给真机上千条概念行各买一次调用（mp3 一个工作区就 1143 条）。确定性判得出的
+        事不交给模型 —— 判不出的那一档如实报 `unknown` 并照旧新建。
+        """
+        got = self._same_concept_candidate(tx, label=str(body.get("label") or ""), full=full)
+        out["proposition_state"] = str(got.get("state") or _PK.STATE_UNKNOWN)
+        out["proposition_reason"] = str(got.get("reason") or "")
+        hit = got.get("hit")
+        if not hit:
+            return None
+        sid = str(hit.get("stmt_id") or "")
+        out.update(checked=True, created=False, duplicate=True, stmt_id=sid,
+                   matched_by=str(got.get("basis") or ""),
+                   concept_candidates=list(got.get("candidates") or []),
+                   reason=(f"同一个概念已在册（stmt:{sid}；依据："
+                           f"{self._basis_text(str(got.get('basis') or ''), 0.0)}） ⇒ "
+                           "不新建第二行，这一条就并到那一行上（同一概念升档 / 合并只落在"
+                           "既有那一行，标签与定义都不在这一笔里静默改写）"))
+        return out
+
     def _merge_into_proposition(self, tx: Any, body: Mapping[str, Any], *, full: str,
                                 groups: list[list[dict[str, Any]]], kind: str = "",
                                 force_new: bool, out: dict[str, Any],
@@ -4862,7 +5204,11 @@ class Secretary:
         | 并成第 N 份证明 | `merged=True` + `merged_into` + `proof_no=N` + `matched_by` |
         | 同种证明、且没给 merge | `checked=False` + `refused="proof_same_kind"` + 点名第几份 |
         | merge=True 且命中同种 | `merged=True` + `merged_same_kind=True` + `resign_required=True` |
+        | 同一个概念（概念行） | `checked=True` + `created=False` + `duplicate=True` + `stmt_id=<既有>` + `matched_by="concept_label"` 或 `"concept_defined_term"` |
         | 没命中 | `None`（调用方照常新建；这一支一个字节都不写） |
+
+        概念行那一档（D2）走 :meth:`_merge_into_concept`：它没有"条件 ⇒ 结论"，判据是
+        "定义项相同"（`propositionkey.same_concept`，确定性、零模型调用）。
 
         ## 为什么"并进一条命题"要落在秘书这一层
         业主 2026-10-09 的裁定是"B 交内容、秘书实际操作增改查"。判"这两条是不是同一条
@@ -4903,6 +5249,12 @@ class Secretary:
             # 调用方明确要"另起一条" ⇒ 不并（`force_new` 的含义就是不许替它合并）。
             out["proposition_reason"] = "force_new：调用方明确要另起一条，跳过同一性合并"
             return None
+        if _is_concept_kind(kind):
+            # ---- 概念行那一档（D2）：判据是"定义项相同"，与命题那一套不是同一件事。
+            # 位置必须在这里：下面那条"没有证明正文就不并"会把概念行直接放过
+            # （概念不参与等级链、本来就没有证明），而"同一概念登记两行"正是从那个
+            # 缺口漏出来的（真机 mp3-r2 的 000003 / 000004）。
+            return self._merge_into_concept(tx, body=body, full=full, kind=kind, out=out)
         if not _is_proposition_kind(kind):
             # 一条定义/概念不是命题："表述几乎相同的两条命题是同一个"这句话对它不成立。
             out["proposition_reason"] = (
@@ -5037,8 +5389,23 @@ class Secretary:
             # 同一性判定（业主：「不看名称」），先落盘的那个名字赢 —— 否则每并一份证明就改名
             # 一次，而"这一条现在叫什么"会跟着最后一次提交漂。
             if canonical in old_label:
-                out["label_washed"] = {"from": old_label, "to": canonical, "stmt_id": sid}
+                out["label_washed"] = {"from": old_label, "to": canonical,
+                                       "class": LABEL_WASH_ROUTE, "stmt_id": sid,
+                                       "why": ("在册那一行标签里的路线 / 自证草稿 / 待 V 审签"
+                                               "那一类修饰被洗掉了；被洗掉的路线落进这一份"
+                                               "证明的路线说明里，不丢")}
                 row["label"] = canonical
+        # ---- 在册那一行的名字如果是内部工作名，并这一笔时顺手洗掉（D1 的修名那一半）。
+        # 为什么修名放在这一支：真机 mp3-r2 的 000000 / 000001 已经带着工作名落了盘，
+        # 而它与"这一笔的 label"无关 —— 要修的正是在册那一行。判据与新建那一支同一处
+        # （`wash_working_name`），所以两处不会给出两个洗法；这一支只动 label，不动内容。
+        working = wash_working_name(row.get("label"), kind=str(row.get("kind") or ""),
+                                    stmt_id=sid,
+                                    statement_full=str(row.get("statement_full") or ""))
+        if working:
+            out["label_washed"] = dict(working, stmt_id=sid)
+            row["label"] = str(working["to"])
+            out["canonical_name"] = str(working["to"])
         if route:
             out["proof_route"] = route
             routes = dict(row.get(PROOF_ROUTES_KEY) or {})
@@ -5092,10 +5459,15 @@ class Secretary:
     @staticmethod
     def _basis_text(basis: str, similarity: float) -> str:
         """把"凭什么判成同一条"翻成一句人话（返回值与拒信共用一份措辞）。"""
-        if str(basis) == _PK.BASIS_KEY:
+        word = str(basis)
+        if word == _PK.BASIS_KEY:
             return "proposition_key 相同"
-        if str(basis) == MERGED_BY_ADJUDICATION:
+        if word == MERGED_BY_ADJUDICATION:
             return "秘书判的（条件与结论一致）"
+        if word == _PK.BASIS_CONCEPT_LABEL:
+            return "定义项（标签）规范化后相同"
+        if word == _PK.BASIS_CONCEPT_TERM:
+            return "正文里被定义的术语相同"
         return f"prose_similarity {float(similarity):.4f}"
 
     def _merge_target(self, row: Mapping[str, Any], proof: str,

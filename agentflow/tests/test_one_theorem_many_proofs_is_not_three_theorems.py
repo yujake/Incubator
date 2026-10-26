@@ -335,7 +335,14 @@ def test_a_the_route_leaves_the_label_and_lands_on_the_proof(tmp_path: pathlib.P
     assert got.get("merged") is not True, got
     assert got.get("stmt_id") == SID, got
     assert got.get("canonical_name") == CLEAN_NAME, got.get("canonical_name")
-    assert got.get("label_washed") == {"from": LABEL_1, "to": CLEAN_NAME}, got.get("label_washed")
+    # 三格都要钉：原标签、洗过的名字、触发的那一类。2026-10-26 之后 `label_washed`
+    # 多了 `class` / `why` 两格（D1 的内部工作名是第二类洗名）—— 只钉"改过名"分不出
+    # 是哪一类规则改的，而"改错了哪一类"正是下一批要防的形态。
+    washed = dict(got.get("label_washed") or {})
+    assert washed.get("from") == LABEL_1, washed
+    assert washed.get("to") == CLEAN_NAME, washed
+    assert washed.get("class") == SEC.LABEL_WASH_ROUTE, washed
+    assert str(washed.get("why") or "").strip(), washed
     assert "类方程" in str(got.get("proof_route") or ""), got.get("proof_route")
     # 判定读数：三态、判词、是否花钱，三样都在返回值里。
     adj = dict(got.get("adjudication") or {})

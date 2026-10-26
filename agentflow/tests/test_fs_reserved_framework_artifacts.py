@@ -23,10 +23,19 @@ D 手写 reports/RESEARCH.md（没有携带单）
 | m-b M 写 `reports/RESEARCH.md` | 拒（同上） | 改前写得进去 |
 | m-c M 写 `notes/m-plan.md` / `reports/m-review.md`（正控） | 放行 —— 别把主控的正常产出也堵了 | —— |
 | m-d 反真空 | 把表里 M 那三行摘掉 ⇒ m-a/m-b 必红 | —— |
+| n-a F 写 `notes/f-proof-x.md`（任何目录） | 拒 `reserved_framework_artifact`、零写入 | 改前写得进去：真机 `projects/mp3-r2/notes/f-proof-S1-stmt000008.md` 7595 B / 54 行就是这么进盘的 |
+| n-b `reports/` 那一档不回退 | 拒（与 a/b 同一个受控码）；D 的 `notes/RESEARCH.md` / `notes/0001-research.md` 也在同一道闸下 | —— |
+| n-c `notes/x.md`（正控） | 放行 —— "任何目录"不等于"任何文件名" | —— |
+| n-d 反真空 | 把文件名规则打桩成"一条都不命中" ⇒ n-a/n-b 必红（于是它们的绿来自文件名规则，不是别的路径判据） | —— |
 
 表上三个角色各有各的理由（F 写内容 / D 交研究稿 / M 是主控，三类都不许手写框架产物）；
 G/L 的排版产物与 M 的其它报告不在表上（c、m-c 与"G 写 reports/ 下的 `f-proof-*.md`
 放行"一起钉住"别扩大"）。
+
+## 2026-10-27（D6）：目录不再是豁免条件
+改前那条闸要求"路径在 `reports/` 下 且 规则命中文件名"。真机发现只要换个目录（`notes/`）
+文件名一个字不改就整条绕过 —— n-a 钉的就是这一格；n-b 钉"既有那一路没有回退"，n-c 钉
+"别把 `notes/` 整个封掉"，n-d 钉"n-a/n-b 的绿来自文件名规则本身"。
 """
 from __future__ import annotations
 
@@ -221,3 +230,90 @@ def test_the_table_names_match_the_one_definition(tmp_path: pathlib.Path) -> Non
     assert DS.MANUSCRIPT_DIR == FT._RESERVED_DIR, (DS.MANUSCRIPT_DIR, FT._RESERVED_DIR)
     assert DS.D_REPORT_NAMES[0].casefold() in rules.casefold(), rules
     assert DS.D_WORKING_SUFFIX in rules, rules
+
+
+# ============================================================ n：目录不再是豁免条件（D6）
+
+
+#: n-a 那一组路径：换目录（含子目录、含工作区根）之后同一个文件名。
+#: 工作区根也一起列 —— "任何目录"里最容易被漏掉的就是根，而它恰好是"少写一个 `../`"
+#: 时最可能出现的落点。
+OUTSIDE_REPORTS = (
+    "notes/f-proof-x.md",
+    "notes/deep/dir/f-proof-plan-000000.md",
+    "f-proof-x.md",
+)
+
+
+def test_n_a_the_proof_manuscript_is_refused_outside_reports(tmp_path: pathlib.Path) -> None:
+    """n-a 判据：F 用 `fs.write` 写 `notes/f-proof-*.md` ⇒ 拒、零写入。
+
+    改前红（真机，`projects/mp3-r2`）：F 把 7595 B / 54 行的证明手稿写进了
+    `notes/f-proof-S1-stmt000008.md` —— 文件名一个字没改，只是不在 `reports/` 下，
+    于是改前那条闸（路径必须在 `reports/` 下）整条没生效，手写稿在盘上看起来就是
+    F 的手稿，而"框架渲染 → 秘书洗稿 → D 携带 → B 读稿"一次都没走过。
+    """
+    root, reg = _ws(tmp_path)
+    for rel in OUTSIDE_REPORTS:
+        res = _call(reg, "F", "fs.write", path=rel, content="换个目录手写的证明稿")
+        assert res.ok is False, (rel, res)
+        assert res.meta.get("kind") == KIND, (rel, res.meta)
+        assert MESSAGE in str(res.error or ""), (rel, res.error)
+        assert not (root / rel).exists(), f"{rel} 被拒了却仍落盘"
+
+
+def test_n_b_the_reports_directory_still_refuses(tmp_path: pathlib.Path) -> None:
+    """n-b 判据：`reports/` 那一路一个字都没放宽（既有行为不回退）。
+
+    两件事一起钉：① F 写 `reports/f-proof-x.md` 仍拒、D 写 `reports/RESEARCH.md` 仍拒
+    （与 a/b 同一个受控码）；② D 的两种命名换到 `notes/` 也照样拒 —— 目录不再是豁免
+    条件这条规则对三行角色一视同仁，不是只给 F 开了一格。
+    """
+    root, reg = _ws(tmp_path)
+    for role, rel in (("F", "reports/f-proof-x.md"),
+                      ("D", "reports/RESEARCH.md"),
+                      ("D", "reports/000001-research.md"),
+                      ("D", "notes/RESEARCH.md"),
+                      ("D", "notes/000001-research.md"),
+                      ("M", "notes/f-proof-cli.md")):
+        res = _call(reg, role, "fs.write", path=rel, content="手写的框架产物")
+        assert res.ok is False, (role, rel, res)
+        assert res.meta.get("kind") == KIND, (role, rel, res.meta)
+        assert not (root / rel).exists(), f"{role} 写 {rel} 被拒了却仍落盘"
+
+
+def test_n_c_notes_are_still_writable_for_other_names(tmp_path: pathlib.Path) -> None:
+    """n-c 判据（正控）：`notes/` 不是禁区，"任何目录"不等于"任何文件名"。
+
+    F 的自由笔记（`notes/x.md` / `notes/f-notes.md`）与 D 的草稿必须写得进去 ——
+    这条闸只认"证明手稿 / 研究手稿"两类文件名，把整个 `notes/` 封掉是另一种坏
+    （它会逼模型把手稿换个更像笔记的名字，绕过口反而更难查）。
+    """
+    root, reg = _ws(tmp_path)
+    for role, rel in (("F", "notes/x.md"),
+                      ("F", "notes/f-notes.md"),
+                      ("F", "notes/attack-scratch.md"),
+                      ("D", "notes/d-scratch.md"),
+                      ("M", "notes/m-plan.md")):
+        res = _call(reg, role, "fs.write", path=rel, content="自由笔记")
+        assert res.ok is True, (role, rel, res)
+        assert (root / rel).is_file(), (role, rel)
+
+
+def test_n_d_stubbing_the_filename_rule_out_turns_a_and_b_red(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """n-d 判据（反真空）：把文件名规则打桩成"一条都不命中" ⇒ n-a/n-b 必红。
+
+    打桩点是 `_rule_matches`（文件名规则的唯一实现）：它恒 False 之后，同一批路径
+    必须写得进去 —— 于是 "`notes/f-proof-x.md` 被拒" 这件事的来源是文件名规则本身，
+    而不是某个顺手的目录判断、也不是保留表之外的另一处。
+    """
+    monkeypatch.setattr(FT, "_rule_matches", lambda rule, name: False)
+    root, reg = _ws(tmp_path)
+    for role, rel in (("F", "notes/f-proof-x.md"),
+                      ("F", "reports/f-proof-x.md"),
+                      ("D", "notes/RESEARCH.md")):
+        res = _call(reg, role, "fs.write", path=rel, content="规则被打桩成空之后")
+        assert res.ok is True, (
+            f"文件名规则被打桩成空了却还是拒绝（{role} / {rel}）⇒ n-a/n-b 的绿不来自它", res)
+        assert (root / rel).is_file(), (role, rel)

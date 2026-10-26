@@ -303,6 +303,63 @@ def _allocate_id(tx: Tx, table: str) -> str:
                             prefix=S.PROCESS_ID_PREFIXES[kind], table=table)
 
 
+# ---------------------------------------------------------------- 手填主键的受控拒绝（D4）
+def _hand_typed_id_refusal(table: str, payload: Mapping[str, Any],
+                           idf: str) -> ToolResult | None:
+    """这一笔把"本该由台账分配的号"按前缀手填了吗？手填了 ⇒ 受控拒绝（`None` = 照常写）。
+
+    ## 真机形态（`draft/156` 的 D4，已核）
+    B 按 `rel-` 前缀的直觉给 `relations` 填了 `relation_id="rel-000001"`，拿到的拒信是
+    "`relation_id` 必须是 6 位十进制字符串（如 000000…）"—— 那句话只说"位数不对"，
+    模型据此只能猜"那我该填几位"，猜不到"这一格根本不该我填"。同族还有 `stmt-1` /
+    `p-1`（按表名缩写手填）、`p-000001` 填进 `request_id`（前缀认错表）。
+
+    ⇒ 拒信要说清三件事，一句话说完（模型读的是这一句，不是我们的注释）：
+      ① 这一格由台账分配；② 不要手填，去掉它即可；③ 前缀号只有过程记录那种人工号才用
+      （并且点名这一张表的人工号长什么样 —— 如果它允许手填）。
+
+    ## 判据为什么是"带前缀"而不是"给了主键就拒"
+    `000123` 这种当前宽度的裸号是合法的手工号（`Relation.validate` 认它，`create`
+    也照收），所以不能一刀切 —— 那会误伤合法的显式建行（正控见
+    `tests/test_hand_filled_ids_are_refused.py` 的 (c) 两档）。真正要堵的是"按前缀直觉
+    编一个号"，而它有一个可判定的形态：`schema.looks_like_prefixed_id`。那一条是这条
+    拒绝的检测谓词，单独成函数就是为了让"打桩成永假 ⇒ 本拒绝失效"这条负控可写。
+
+    ## 为什么它先于兜底路由（`_direct_write_disposal`）
+    手填的号是"这一笔输入本身错了"，与"该由谁执行"无关：`statements` 的 `stmt-1` 若先
+    被路由给秘书，秘书会照它自己的判据发一个新号并把行落下 —— 于是模型的输入被静默
+    改掉（正是本批 D5 要防的同一种形态）。先拒，模型读到的才是"这一格不该你填"。
+    """
+    if not idf or not payload or idf not in payload:
+        return None
+    value = payload.get(idf)
+    if not isinstance(value, str) or not value.strip():
+        # 空串 = "我不填，让台账发号"（`tests/test_direct_write_is_routed_to_the_secretary.py`
+        # 就有一档显式传 `stmt_id=""`），不是手填。
+        return None
+    if not S.looks_like_prefixed_id(value):
+        return None
+    spec = S.TABLES.get(str(table or ""))
+    if spec is None:
+        return None
+    manual_prefix = S.PROCESS_ID_PREFIXES.get(str(spec["id_kind"]))
+    got = value.strip()
+    if manual_prefix is not None and got.split("-", 1)[0] == manual_prefix:
+        # 正控：这一张表的人工号就是这种前缀（`search_requests` 的 `r-000001`）⇒ 照常写。
+        return None
+    if manual_prefix is None:
+        shape = (f"`{table}` 吃的是 {S.ID_DIGITS} 位十进制编号（如 {S.format_id(0)}，"
+                 "也就是整格不写、让台账发）")
+    else:
+        shape = (f"`{table}` 的人工号前缀是 `{manual_prefix}`"
+                 f"（如 {manual_prefix}-{S.format_id(1)}）")
+    return fail(
+        f"{idf} 由台账分配，这一格不要手填（去掉它即可）；前缀号只有 `r-` 那种"
+        f"人工号才用 —— {shape}，收到 {got!r}。",
+        table=table, kind="hand_filled_id", field=idf, got=got,
+    )
+
+
 # ---------------------------------------------------------------- 外键检查
 #: 删除某张表的行之前，必须查清"谁在引用它"。
 #: 格式：被删表 -> ((引用表, 引用字段, 引用表的主键字段), ...)
@@ -538,8 +595,10 @@ def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
 #   1. 载荷带 `_NOT_ROUTABLE_KEYS` 里任何一格（`bits` / `verification_id` / `reviewed_by` /
 #      `created_by`）—— 那是写入期现算的派生面与别人的签名面，接管它等于把"绕开推导"
 #      洗成"系统代劳"；
-#   2. `table.update` 只改 `proof_text` 而不改 `statement_full` —— 证明正文变了就是另一条
-#      命题，不能就地替换已登记的那一份；
+#   2. `table.update` 只改 `proof_text` 而不改 `statement_full` —— 这一格的正路是 B 的
+#      `own.register_statement`（同一条 `statement_full` + 新正文 ⇒ canonical 覆盖、
+#      旧正文进 `proof_history`、旧签转 stale），通用写口不接管它（它同时能改
+#      `bits` / `quote_verified`，而没有任何东西核过那些字段）；
 #   3. 迁移 / 账本类表（`counters` / `tasks` / `usage_ledger` / `eval_results`）与
 #      "意图读不出来"的 `lit_candidates` 更新；
 #   4. 依赖边的"就地改"（没有这条正路：改来源就是另一条边）；
@@ -840,9 +899,21 @@ def _direct_write_disposal(ctx: TableContext, *, table: str, op: str,
             table=name, kind=_store_mod.DIRECT_WRITE_REFUSED, wild_keys=wild,
         )
     if (str(op or "") == "update" and "proof_text" in keys and "statement_full" not in keys):
+        # 这一格的拒信改过一次（2026-10-27，业主裁定 D7）：改前写着"证明正文变了就是
+        # 另一条命题，不能就地替换已登记的那一份"—— 那句话与框架的实际能力相反。
+        # `statements.proof_text` 是可以就地被覆盖的（正路是 B 的
+        # `own.register_statement`：同一条 `statement_full` + 新的 `proof_text`，
+        # 旧正文进 `proof_history`、旧签转 stale、需 V 重签）。真机上模型读到这句
+        # "不能就地替换"，就在 handoff 里写"本面内无改行写口"、把整条链停在墙前。
+        # 拒信要指回真有的做法，不能把模型劝到墙角。
         return fail(
-            f"{_store_mod.DIRECT_WRITE_REFUSED}：这一笔只改 `proof_text` 而没改 `statement_full` —— "
-            "证明正文变了就是另一条命题，不能就地替换已登记的那一份。整笔不写。",
+            f"{_store_mod.DIRECT_WRITE_REFUSED}：`table.update` 改不了 `proof_text` —— "
+            "这一格只有一条正路，不是这里的通用写口：再交一次 "
+            "`own.register_statement`（`statement_full` 与在册那一行相同 + 新的 "
+            "`proof_text`）。秘书判它同一条命题 ⇒ 就地覆盖 canonical 正文，旧正文整段"
+            "进那一行的 `proof_history`（每条带 `sha`/`at`/`replaced_by`），盖在旧正文上的"
+            "那一签读侧转 stale（台账里那一签不删，需要 V 重签）。整笔不写："
+            "盘上一个字节都没变。",
             table=name, kind=_store_mod.DIRECT_WRITE_REFUSED, wild_keys=["proof_text"],
         )
     intent = _direct_write_intent(name, op, payload)
@@ -1231,18 +1302,21 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
 
 @tool(
     "table.create",
-    "新建一行：自动分配主键（search_requests 用 r-NNNN），校验通过才落盘。",
+    "新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。",
     _obj(
         {
             "table": _TABLE_PROP,
-            "row": {"type": "object", "description": "行内容；主键可省略（省略则自动分配）"},
+            "row": {"type": "object", "description":
+                    "行内容；主键整格别写（由台账分配：知识实体是六位十进制如 000000，"
+                    "过程记录是 r-/p-/t- 前缀号）"},
         },
         required=("table", "row"),
     ),
     side_effect="write_local",
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是新主键字符串（标量），声明不出键集合。
-    returns=("data=新主键字符串（标量）；meta.row 是实际落盘的整行。"
+    returns=("data=新主键字符串（标量）；meta.row 是实际落盘的整行；meta.normalized "
+             "列出这一笔被排序去重过的集合字段（空列表 = 一个字节都没动）。"
              "被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, "
              "what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}"),
     tags=("table", "crud", "write"),
@@ -1252,12 +1326,22 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 
     校验刻意放在进入事务之前先做一遍（用占位 ID），理由见 `_probe_id`：
     先发号再发现字段非法，会白白烧掉一个 4 位编号并留下 `id_gap`。
+
+    本批（`draft/156`）在这一格上加了两条写侧行为，各自的判据只有一处：
+      1. 手填主键 ⇒ 受控拒绝（`_hand_typed_id_refusal`，D4）；
+      2. 集合字段 ⇒ 排序去重后照收（`schema.normalize_set_fields`，D5），
+         改动过的字段名回在 `meta.normalized` 上。
     """
     try:
         spec = _spec_of(table)
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
     idf: str = spec["id_field"]
+    # ---- 手填主键的受控拒绝（D4，2026-10-28）：按前缀直觉编一个号 ⇒ 先说清"这一格不该你填"。
+    # 位置刻意在兜底路由之前，理由见 `_hand_typed_id_refusal`：先路由会把模型的输入静默改掉。
+    hand_filled = _hand_typed_id_refusal(table, dict(row or {}), idf)
+    if hand_filled is not None:
+        return hand_filled
     # ---- 直写兜底（2026-10-24 业主裁定）：这两张表不由通用写口直写 —— 请求转交正路执行。
     # 判据只有一处（见 `_direct_write_disposal`）：能兜底的由兜底方办、兜不了的才拒。
     refused = _direct_write_disposal(ctx, table=table, op="create",
@@ -1266,6 +1350,11 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
         return refused
 
     data: dict[str, Any] = dict(row or {})
+    # ---- 集合字段写入前归一（D5，2026-10-28）：把 [`000004`,`000002`] 排成落盘形态而不是拒收。
+    # 归一化必须发生在 `_fill_derived` 之前 ⇒ `concept_group_key` / `dedup_key` 看的是
+    # 真正落盘的次序；也必须在预演校验之前 ⇒ 预演不会被"未升序"这一档挡下来。
+    # 判据只有一处（`schema.normalize_set_fields`），"哪些字段是集合"由 `ARRAY_FIELD_KINDS` 声明。
+    normalized = S.normalize_set_fields(table, data)
     explicit_id = data.get(idf)
     probe = str(explicit_id) if explicit_id not in (None, "") else _probe_id(table)
     try:
@@ -1297,7 +1386,8 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
             tx.upsert(table, merged, note="tool:table.create")
     except (IdExhausted, StoreError) as e:
         return fail(f"{table} 建行失败：{e}", table=table, kind="store_error")
-    return ok(new_id, table=table, id=new_id, id_field=idf, row=merged)
+    return ok(new_id, table=table, id=new_id, id_field=idf, row=merged,
+              normalized=normalized)
 
 
 @tool(
@@ -1314,7 +1404,8 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     side_effect="write_local",
     roles=TOOL_ROLES,
     # 豁免清单成员：data 是主键字符串（标量），声明不出键集合。
-    returns=("data=主键（标量）；meta.row 是合并后实际落盘的整行。"
+    returns=("data=主键（标量）；meta.row 是合并后实际落盘的整行；meta.normalized 列出这一笔"
+             "被排序去重过的集合字段（空列表 = 一个字节都没动）。"
              "被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / "
              "refused_by_backstop …）。"),
     tags=("table", "crud", "write"),
@@ -1324,7 +1415,9 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
 
     实现上是"读整行 → 覆盖 patch → 整行校验 → 整行写回"，而不是"只写 patch 的字段"：
     后者要先做字段级校验，等于把 `validate()` 的逻辑拆开重写一遍，两套规则迟早会漂移。
-    整行验证则天然保证"改完之后这一行仍然是合法的"（比如 `concept_ids` 改完必须仍升序去重）。
+    整行验证则天然保证"改完之后这一行仍然是合法的"（比如 `concept_ids` 改完必须仍是
+    升序去重的形态 —— 那一档现在由 `schema.normalize_set_fields` 在写前排好序，
+    读数落在 `meta.normalized` 上，见 `_hand_typed_id_refusal` 同批的 D5）。
     """
     try:
         idf = _spec_of(table)["id_field"]
@@ -1340,6 +1433,7 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     if refused is not None:
         return refused
 
+    normalized: list[str] = []
     try:
         with ctx.store.tx(table, "counters", actor=ctx.actor, note=f"tool:table.update:{table}") as tx:
             current = tx.find(table, **{idf: id})
@@ -1358,6 +1452,9 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                 )
             merged_raw = dict(current)  # 整行起步 = 未在 patch 里出现的字段自动保留
             merged_raw.update(patch)
+            # ---- 集合字段写入前归一（D5）：与 `table.create` 同一处判据、同一份读数。
+            # 位置同样在 `_fill_derived` 之前（派生字段要看落盘的那一份次序）。
+            normalized = S.normalize_set_fields(table, merged_raw)
             _touch_timestamps(table, merged_raw, create=False, patch=patch)
             _fill_derived(table, merged_raw, create=False, patch=patch)
             try:
@@ -1367,7 +1464,7 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
             tx.upsert(table, merged, note="tool:table.update")
     except (IdExhausted, StoreError) as e:
         return fail(f"{table} 更新失败：{e}", table=table, id=id, kind="store_error")
-    return ok(id, table=table, id=id, id_field=idf, row=merged)
+    return ok(id, table=table, id=id, id_field=idf, row=merged, normalized=normalized)
 
 
 @tool(
@@ -1929,7 +2026,11 @@ def _selftest() -> int:
               f"ok={bad.ok} kind={bad.meta.get('kind')}")
         check("野路被拒之后一行都没多", reg.call("table.count", table="statements").data == 3,
               "(statements 仍为 3 行)")
-        bad = reg.call(
+        # ---- D5（2026-10-28，`draft/156`）：集合字段写侧排序去重，不再拒收。
+        # 这一条原先断言的是"未升序 → fail"—— 那是改前的行为，而真机上模型因此同一个坑
+        # 连踩 3 次（把次序写错 → 读拒信 → 再猜）。现在的判据是"照收 + 读数点名归一化过"，
+        # 正反两档都在这里：非法元素照旧拒（归一化不是放宽）。
+        ok_set = reg.call(
             "table.create",
             table="relations",
             row={
@@ -1939,7 +2040,29 @@ def _selftest() -> int:
                 "page_range": {"start": 1, "end": 1, "label": "p.1"},
             },
         )
-        check("concept_ids 未升序 → fail", not bad.ok and "升序去重" in (bad.error or ""), f"error={bad.error}")
+        check("concept_ids 未升序 → 排序去重后照收（不再拒收）",
+              ok_set.ok and ok_set.meta.get("normalized") == ["concept_ids"],
+              f"ok={ok_set.ok} normalized={ok_set.meta.get('normalized')} err={ok_set.error}")
+        check("落盘的是升序去重形态",
+              list((ok_set.meta.get("row") or {}).get("concept_ids") or [])
+              == sorted(set(concept_ids[:2])),
+              repr((ok_set.meta.get("row") or {}).get("concept_ids")))
+        bad_set = reg.call(
+            "table.create",
+            table="relations",
+            row={
+                "concept_ids": ["abc", concept_ids[0]],
+                "description": "坏号",
+                "lit_id": lit_id,
+                "page_range": {"start": 1, "end": 1, "label": "p.1"},
+            },
+        )
+        check("非法的概念号仍被拒（归一化不放宽元素校验）",
+              not bad_set.ok and "concept_ids[]" in (bad_set.error or ""),
+              f"error={bad_set.error}")
+        # 这一行只为核读数而造：删掉它，后面几节的行数假设与改前逐字一致。
+        if ok_set.ok:
+            reg.call("table.delete", table="relations", id=str(ok_set.data))
         bad = reg.call("table.list", table="nope")
         check("未知表名 → fail", not bad.ok, f"error={bad.error}")
 

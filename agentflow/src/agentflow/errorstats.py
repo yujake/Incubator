@@ -269,6 +269,12 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("缺少必填参数", "param_invalid", "src/agentflow/tools/base.py:395（ParamError 原文）"),
     ("参数错误：", "param_invalid", "src/agentflow/tools/base.py:1214（ToolResult.fail 原文）"),
     ("param_error", "param_invalid", "src/agentflow/tools/base.py:1187,1233（kind）"),
+    # 2026-10-28（`draft/156` 的 D4）：模型按前缀直觉手填了本该由台账分配的主键
+    # （`rel-000001` / `stmt-1` / `p-000001`）。归 `param_invalid`：这次调用不成立的原因是
+    # "多给了一格本不该给的参数"，不是行内容不合法。单独成码是为了让"同一个坑连踩几次"
+    # 在读数上数得出来 —— 折进 `param_error` 就数不出来了。
+    ("hand_filled_id", "param_invalid",
+     "src/agentflow/tools/table_tools.py:359（kind；判据 `_hand_typed_id_refusal`）"),
     ("missing_source", "param_invalid", "src/agentflow/agent_b/register_statement.py:821"),
     ("missing_own_source", "param_invalid", "src/agentflow/agent_b/register_statement.py:870"),
     ("missing_quote_reason", "param_invalid", "src/agentflow/agent_b/register_statement.py:830"),

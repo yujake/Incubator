@@ -2151,7 +2151,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
 #: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
-_FROZEN_PROMPT_VERSION = "p208"
+_FROZEN_PROMPT_VERSION = "p209"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2261,15 +2261,15 @@ _FROZEN_PROMPT_VERSION = "p208"
 #   M 8dbe22d6→7b886073 / V ef388571→eec84b9d。
 # 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "2b104beb7c7e425205ef69fb774d30d22d821d74bcd326d861190915ce5e93fd",
-    "B": "97ea29af211c45f85e489e0c0bc39d64c619cd105ad628a26ba792364b995c7d",
+    "A": "7a8ddf0d7b1e7bc02e849c1233fcac9078d22395f7a70c626a317daca6946bb4",
+    "B": "4fd7572d300ba5117b4119553e1f43f527962e2e23d423f191e1a24ac34f08e2",
     "C": "81215a320cfa3cec177956b8819fc73742739906ac86240299c94c517e3c1a4d",
-    "D": "71c77599ecda371baa2dd9fc039240f29a5316fc802e522beb95167088f8117f",
-    "E": "87f0a6ca7568500d7ec2b35bf8dd73fcbeb8aa22769c3d997204e2d12aa7072f",
-    "F": "ce2a0e5a145c1a18bbb45941eb1af8b8abffd388c8f16c2f5d30aab502f07f54",
-    "G": "def9b6b2b621ae4b400a0be7284ce1c8ff2d6eefdfb9335818f343de498ced78",
+    "D": "d46dcc3a07240b66692ac3461cbfd898017be8f193405c7b793907e86a1b5889",
+    "E": "f103618848e1d6c58f46d9134094b5e0a4c0b6f233cb1a09ea9027c022d2843c",
+    "F": "9684cb8193146e2efe477c428edd52aac4ce76c3a5b9ba066a765854cb10927e",
+    "G": "96e718db106ea8597a97901755fbcc18251779adacb6b4dcbfd393b377955d0c",
     "H": "304b9028ac74245eebdce4236832ddc6e90eb1e5d93f7de2ad37fe1dc4659314",
-    "L": "30ba4ea19714b5a3aab56adaaf249cef05359b26507412b16cf291e68a1cffb2",
+    "L": "03858b464c9144c4f7ac686c83f3f02be79aeac9a0220f85eb4639a971d07195",
     "M": "7b8860739fb75fb66f317c3c9917815638510dba47622400d2440a4215abe900",
     "V": "eec84b9d297772fd92dd2f19d82d8a859176bcbafa784ee8c46b2038d40395bd",
 }

@@ -2568,7 +2568,18 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   G 6d9c53cf→def9b6b2 / H 304b9028→304b9028 / L 30ba4ea1→30ba4ea1 /
 #:   M 8dbe22d6→7b886073 / V ef388571→eec84b9d。
 #: 十一格是 `temp/recompute_prompt_digests.py` 的现算值，不是手抄。
-PROMPT_VERSION = "p208"
+#: # p209（2026-10-26 第六批）：D4/D5 那一批改了 table.create 的声明面。
+#:
+#: 真机读数（draft/156 的 D4）：模型按前缀直觉手填了本该由台账分配的主键
+#: （rel-000001），而工具描述原来只写「自动分配主键（search_requests 用 r-NNNN）」——
+#: 读的人容易理解成「有的自动、有的要手填」，于是自己去造号。现在这句改成
+#: 「主键由台账分配（这一格整格别写）」并配受控码 hand_filled_id（拒信点明去掉它即可）。
+#:
+#: 影响面：table.create 只在 A/B/D/E/F/G/L 七个角色的工具面上（C/H/V 只读、M 没有这件），
+#: 所以这一版只有那七格提示词变；errorstats 新增的错误类目不进提示词
+#: （agent_prompts 不 import errorstats，盘上也没有「错误类目表」这个渲染点）。
+#:
+PROMPT_VERSION = "p209"
 
 
 

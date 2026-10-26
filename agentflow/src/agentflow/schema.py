@@ -6,6 +6,9 @@
   旧数据里的四位号按读侧兼容照样读得进来），不用 int，避免前导零在序列化时丢失。
 - 数组字段（related_concepts / concept_ids / source_request_ids）在写入前统一走
   `sorted_unique()`，把"保持升序、去重"从"调用方记得做"变成"结构上不可能做错"。
+  "写入前"那一步的落点是 `normalize_set_fields()`（写侧归一，2026-10-28）：它按
+  `ARRAY_FIELD_KINDS` 里声明为 `set` 的那些字段就地排序去重，并把改动过的字段名
+  回给调用方；`check_array_invariants()` 仍是落盘那一侧的判据（归一化不是放宽它）。
 - 时间戳统一 ISO-8601 带时区，由 `now_iso()` 产生，保证同库内可比。
 """
 
@@ -3216,11 +3219,65 @@ def _set_problems(field: str, val: Any) -> list[str]:
     return []
 
 
+def normalize_set_fields(table: str, raw: Any) -> list[str]:
+    """把「声明为集合」的数组字段在写入前排序去重（就地改 `raw`，返回被改动的字段名）。
+
+    ## 写侧为什么是归一化而不是拒收（2026-10-28 真机 `draft/156` 的 D5，同一条拒信连挡 3 次）
+    模型的输入 `concept_ids=["000004","000002"]` 与 `["000002","000002"]` 表达得完全
+    清楚 —— "这几个概念之间有关系"。"集合的规范形态是升序去重"是我们自己的存储
+    契约，不是它对这件事的表态。此前写侧只有拒收（`_set_problems` 的"未升序去重"），
+    于是同一个坑连踩 3 次：模型写错次序一次、读一次拒信、再猜一次。
+    ⇒ 写侧改成"排序去重后照收"，并把改动过的字段名回给调用方（`tools/table_tools.py`
+    把这份读数落在返回值的 `normalized` 格上）。"我改过你的输入"因此可查，不是静默改。
+
+    ## 判据只有一张表：集合字段的唯一声明面是 `ARRAY_FIELD_KINDS`（`kind == "set"`）
+    这里遍历的字段与 :func:`check_array_invariants` 是同一张表、同一个 `kind`；两处各写
+    一份名单必然漂，而漂的形态是"归一化了一格、检查着另一格"（本仓反复踩过的形态）。
+
+    ## 只归一"形态已经合法"的值（不许放宽真正的类型/形态校验）
+    不是数组 / 元素不是字符串 ⇒ 原样留着，让 `_set_problems` 照旧拒它。归一化只回答
+    "这几个元素的次序与重复要不要动"，不回答"这个值能不能收"：`"abc"` 这种不成立的号
+    在排序之后仍然要过 `require_id`（`Relation.validate` 等），于是它照旧被拒（拒信从
+    "未升序去重"变成"concept_ids[] 必须是…"——后者才是真问题）。"号存不存在"更不在这一
+    格的职权内：那是审计期 `verify` 的 `dangling_*`。
+
+    ## 返回值的用法（三态纪律）
+    空列表 = 这一笔一个集合字段都没动（不是"没查"：本函数每次都会遍历全部已声明的集合字段）。
+    """
+    changed: list[str] = []
+    if not isinstance(raw, dict):
+        # 载荷不是对象 ⇒ 这里没有可归一的东西；"这一行不合法"由 `row_from_dict` / `validate` 报。
+        return changed
+    for fname, kind in array_kinds(table).items():
+        if kind != "set" or fname not in raw:
+            continue
+        val = raw[fname]
+        if not isinstance(val, (list, tuple)):
+            continue            # 交给 `_set_problems` 的"值不是数组"那一档
+        if any(not isinstance(v, str) for v in val):
+            continue            # 交给 `_set_problems` 的"元素不是字符串"那一档（混类型不许在这里比）
+        want = sorted_unique(val)
+        if isinstance(val, list) and val == want:
+            continue
+        # tuple 也收（Python 调用方），落盘形态统一成 list；这也算"改动过"，如实记一笔。
+        raw[fname] = want
+        changed.append(fname)
+    return changed
+
+
 def check_array_invariants(table: str, obj: Any) -> list[str]:
     """集中检查某行的所有已声明为集合的数组字段是否升序去重。
 
     返回违规描述列表（空 = 通过）。由 :func:`validate_table` 调用 ——
     这就是"集合字段的升序去重"这件事的唯一权威检查点。
+
+    ## 它与写侧归一是两件事，别把这一条删掉
+    `tools/table_tools.py` 的两个写口在进校验之前先调 :func:`normalize_set_fields`
+    （模型给的 `["000004","000002"]` 被排好序再收），所以从那条路写进来的行不会
+    撞到这里。这一条仍然必须留着：它是落盘契约（`store.tx` 的提交块与 `rebuild` 都走
+    `validate_table`），管的是"绕过写口直接拼一行"的那些写者 —— 归一是"替模型改输入"，
+    不是"放宽盘上的形态"。正控见 `tests/test_store_concurrency.py` 与
+    `tests/test_coverage_schema.py`（它们直接写坏行，必须照旧被拒）。
 
     为什么集中在表级而不是每行的 `validate()` 里：
     - 每行手写一遍是"同一判据多处实现"，漏写一处就静默失效（新增 `supporting_lit_ids`
@@ -3334,6 +3391,54 @@ PROCESS_ID_PREFIXES: dict[str, str] = {
     "reprocess": "p",   # reprocess_requests.reprocess_id = "p-NNNN"
     "task": "t",        # tasks.task_id = "t-NNNN"（见 Task.task_id 的说明）
 }
+
+
+# ---------------------------------------------------------------- 主键由谁分配（`draft/156` D4）
+
+#: 带前缀的号：`rel-000001` / `stmt-1` / `p-1` 这一族（"模型按直觉手填"的形态）。
+#:
+#: 与 `_PROCESS_ID_RE` 刻意不同：那条要求"前缀 + 连接号 + 当前宽度（或旧四位）的数字"，
+#: 于是 `stmt-1` / `rel-1` 会从它下面溜过去 —— 而它们正是真机上模型写出来的形态
+#: （`draft/156` D4：B 按 `rel-` 前缀的直觉填了 `relation_id`）。这里问的只是形态
+#: "这是不是一个带前缀的号"，不问它合不合法、位数够不够。
+_PREFIXED_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-")
+
+
+def looks_like_prefixed_id(value: Any) -> bool:
+    """这个值是不是"带前缀的号"（`rel-000001` / `stmt-1` / `p-1`）。
+
+    唯一用途：`tools/table_tools.py` 判"模型把一个本该由台账分配的号手填了"（D4）。
+    它是那条受控拒绝的检测谓词，所以单独成一条函数：负控（"把它打桩成永假 ⇒
+    那条拒绝必须变红"）才有对象可打。
+
+    放在 `schema` 的理由：`ID_COUNTERS` / `PROCESS_ID_PREFIXES` 是"哪个前缀是人工号"
+    的唯一声明面，工具层只该拿这条谓词，不另写一份正则。
+    """
+    return isinstance(value, str) and bool(_PREFIXED_ID_RE.match(value.strip()))
+
+
+def id_allocator_kind(table: str) -> str:
+    """这张表的主键由谁发号：`"counter"`（编号空间）或 `"prefix"`（过程记录）。
+
+    空串 = 未知表。返回值是"这一格该不该手填"的唯一机器可读依据 ——
+    两种都由台账分配（发号点只有 `tools/table_tools.py::_allocate_id` 一处，它再分派到
+    `store.Tx.alloc_id` 或 `interactions.next_prefixed_id`），区别只在形态：
+      - `"counter"`：`ID_COUNTERS` 覆盖的那几类 ⇒ 当前宽度（六位）十进制，如 `000000`；
+        模型不该手填它，`rel-000001` / `stmt-1` 这种前缀号一律不认。
+      - `"prefix"`：`PROCESS_ID_PREFIXES` 覆盖的那几类 ⇒ `<前缀>-号码`，如 `r-000001`；
+        这一格允许手填人工号，但前缀必须是那张表自己的（`search_requests` 只认 `r`）。
+
+    ## 为什么这条要显式写成一个函数而不是留在注释里
+    "哪些编号自动分配、哪些要手填"此前只散落在各表的 `id_field` 与几个 `validate()` 里，
+    模型读不到 ⇒ 它按 `rel-` 前缀编了一个号（真机 `draft/156`）。判据一旦可执行，
+    就能被对账：`tests/test_hand_filled_ids_are_refused.py` 遍历 `TABLES` 断言
+    "没有任何一张表的主键是外部给的"（返回值不为空串），于是将来新增一张"主键由
+    调用方给"的表时，那句"所有主键都由台账分配"的文案会当场变红。
+    """
+    spec = TABLES.get(str(table or ""))
+    if spec is None:
+        return ""
+    return "counter" if spec["id_kind"] in ID_COUNTERS else "prefix"
 
 
 # ---------------------------------------------------------------- 引用前缀（`draft/68` 题 1）

@@ -580,6 +580,9 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p208", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p208（2026-10-27 第五批收口）：本批只换五格摘要（D / F / G / M / V）。① specs/f.py 的 boundary 新增第 8 条「形式化不是你的活，也不许由你发起」—— 形式化只能由用户指定，指定之后由 M 转交 B、由 B 判断成本后逐条派（那条链的唯一真身是 B 的 PROOF_CHANNEL 六步）；F 不发起、不排这条流水线、不立形式化子目标、不把 method=formal 传给任何人 ⇒ F 那一格换值；② 伙伴表连带读数：D / G / V 自己的段一个字没改，但它们伙伴表里 F 那一行印着「（它的边界共 N 条）」，N 从 7 变成 8 ⇒ D / G / V 各换一次（A / B / C / E / H / L 的伙伴表里没有 F，那六格逐字未动）；③ specs/m.py 的 policy 四段改写（回执三样改成三态 + 检查器原话 + 台账里那一行 proof 记录的编号；proof 那一栏写明两个来源、两个都算 proof 级 —— (a) E 的穷举 / 数值论证、(b) 形式化那一岗且只有用户指定过才有；「形式化关闭 ⇒ proof_experiment_rows 必然为 0 ⇒ 换 reviewed_proof_rows」改成那只是 (b) 不适用、不说明 proof 栏没有读数；「挑哪一档」按两来源写，点名 numericproof.exhaustion_problems 与 counterexample_or_proof_rows，并写明不许只认 Lean、不许要求 E 拿 formal 那一支来凑，两样都没有时才写 na）＋ 审校链那一句补「证明这一档的凭据就是 B 的台账那一行 + V 的签 —— 与 Lean 开没开无关」⇒ M 那一格再换一次。同批的 agent_skills.py 手册正文（M 的指派表收件人 L → B、F 的手册第 7 条、V 的引用核实六档、B 的依赖面四列）只落盘、提示词里只有索引行且索引行没动；agent_f/* 的形式化判定（FORMAL_OWNER / FORMAL_EDGE_MISSING_REASON / E_METHODS）也不进段 ⇒ 它们不改任何一格摘要。facts 键集仍 15 格（键名与条数一格未动）"},
+    {"version": "p209", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p209（2026-10-26 第六批）：table.create 的 summary 由「自动分配主键（search_requests 用 r-NNNN）」改成「主键由台账分配（这一格整格别写）」（D4 的 hand_filled_id 那一批），该工具只在 A/B/D/E/F/G/L 七格面上 ⇒ 七格提示词变；键集与 p208 相同（15 键）。"},
 )
 
 
