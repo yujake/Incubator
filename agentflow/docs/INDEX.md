@@ -21,6 +21,8 @@
 | 文件 | 管什么 |
 |---|---|
 | [`ROLE-SPECS.md`](ROLE-SPECS.md) | 十个角色的职责面 / 动作表 / 边 / 写集 —— **只放规格（判据）** |
+| [`ROLE-GUIDE.md`](ROLE-GUIDE.md) | **角色指南（生成物）**：十个角色 + 主控逐一介绍 —— 角色设定 / 具体职责 / 协作面 / 工具面 / 主要读写（由 `tools/write_system_docs.py` 现算，判据 `tests/test_system_docs_are_generated.py`） |
+| [`SYSTEM-COMPONENTS.md`](SYSTEM-COMPONENTS.md) | **组件总览（生成物）**：协作系统各主要组件逐一介绍 —— 功能 / 实现细节 / 落点 / 守着它的判据 |
 | [`ROLE-SPECS-APPENDIX.md`](ROLE-SPECS-APPENDIX.md) | `ROLE-SPECS.md` 的**实测附录**：工具面明细 / 自检实测 / R0.1–R0.3 / M.4.2–M.4.3 / S1–S3（**读数带日期、不构成判据**） |
 | [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md) | 各角色自检的**失败项台账**（待修缺陷证据，不是文档问题） |
 | [`LEAN-MODES.md`](LEAN-MODES.md) | 有 Lean / 无 Lean 两模式的完整矩阵：开关、动作可用面、证据上限、收工门各格 |
