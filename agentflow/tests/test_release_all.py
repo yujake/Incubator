@@ -473,7 +473,7 @@ def test_main_records_one_result_per_step_so_the_empty_table_is_unreachable(tmp_
 
     monkeypatch.setattr(R, "run_step", fake_run_step)
     out = tmp_path / "stubbed.json"
-    code = R.main(["--json", str(out)])
+    code = R.main(["--json-out", str(out)])
     data = json.loads(out.read_text(encoding="utf-8"))
     assert code == 0, code
     assert [s["key"] for s in data["steps"]] == [s.key for s in steps]
@@ -494,7 +494,7 @@ def test_negative_control_an_empty_step_table_is_read_as_unknown(tmp_path, monke
     """
     monkeypatch.setattr(R, "build_steps", lambda *a, **k: [])
     out = tmp_path / "empty.json"
-    code = R.main(["--json", str(out)])
+    code = R.main(["--json-out", str(out)])
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["steps"] == []
     assert data["verdict"] == "unknown", (
@@ -625,7 +625,7 @@ def test_cli_skip_is_recorded_as_unknown_and_exit_code_is_two(tmp_path):
     p = subprocess.run(
         [sys.executable, str(SCRIPT),
          "--skip", "acceptance,repro,release-check,coverage,per-file",
-         "--json", str(out)],
+         "--json-out", str(out)],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=300,
     )
@@ -659,7 +659,7 @@ def test_cli_only_role_specs_passes_and_leaves_the_rest_unknown(tmp_path):
     """
     out = tmp_path / "r.json"
     p = subprocess.run(
-        [sys.executable, str(SCRIPT), "--only", "role-specs", "--json", str(out)],
+        [sys.executable, str(SCRIPT), "--only", "role-specs", "--json-out", str(out)],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=300,
     )
@@ -1069,7 +1069,7 @@ def test_main_records_keyboard_interrupt_with_a_tri_state_exit_code(tmp_path, mo
 
         monkeypatch.setattr(R, "run_step", boom)
         out = tmp_path / f"interrupted-{label[:4]}.json"
-        code = R.main(["--json", str(out), "-q"])
+        code = R.main(["--json-out", str(out), "-q"])
         captured = capsys.readouterr()
         assert code == 2, f"[{label}] 中断必须落回 unknown(2)，实测 {code}"
         data = json.loads(out.read_text(encoding="utf-8"))
@@ -2307,9 +2307,11 @@ def test_the_newline_claims_criterion_is_not_vacuous():
 
     name = "scripts/lint_rules.py"
     src = sources[name]
+    # 注入点跟着 2026-10-27 的 `--json` → `--json-out` 改名一起改：这里的 `args.json_out`
+    # 就是那三处 `open(..., newline="")` 出口之一，注入的是"换成 write_text"这个形态。
     injected = src.replace(
-        'with open(args.json, "w", encoding="utf-8", newline="") as fh:',
-        'with Path(args.json).write_text("") as fh:')
+        'with open(args.json_out, "w", encoding="utf-8", newline="") as fh:',
+        'with Path(args.json_out).write_text("") as fh:')
     assert injected != src, "夹具前提：注入点那一行必须在（不许注入到会被下一行覆盖的位置）"
     assert _write_text_call_lines(injected), "注入点的指纹：副本里必须真的出现一个 write_text 调用"
     bad_sources = dict(sources, **{name: injected})

@@ -18,7 +18,9 @@
    —— 不是只给编号；
 2. V 逐条给一档结论（`consistent` / `weaker` / `stronger` / `unrelated` /
    `inadmissible` / `unknown`），读数落进台账那一行的 `citation_checks`
-   （`{stmt_id, verdict, quote_verbatim, note}`；`quote_verbatim` 只作信息、不参与判定）；
+   （`{stmt_id, verdict, quote_verbatim, note, in_material}`；`quote_verbatim` 只作信息、
+   不参与判定；`in_material` 说明这一条是不是这一份证明登记的引用 —— 见文件末尾那两条
+   "两个判定口必须同结论"的判据）；
 3. 签字前置：有一条 `stronger` / `unrelated` / `inadmissible` / `unknown` ⇒ 不许签
    「成立」（结论改判 + 逐条点名）；`weaker` 可以签，但读数里点名"只用到了弱形式"；
 4. 档位闸是事实不是判断：被引命题低于 `proof_review`（含空档）一律 `inadmissible`，
@@ -242,11 +244,11 @@ def test_a_consistent_use_signs_even_though_the_words_differ(tmp_path: pathlib.P
     assert F_NOTE in prompt, "F 的说法没进审查材料（那是要核的那一半）"
     assert "proof_review" in prompt and "够格被引" in prompt, prompt[-2000:]
 
-    # 台账那一行落了 `citation_checks` 那四格（形状逐字判）。
+    # 台账那一行落了 `citation_checks` 那五格（形状逐字判）。
     disk = _ledger_row(store, main)
     assert disk["citation_checks"] == [{
         "stmt_id": lemma, "verdict": "consistent", "quote_verbatim": False,
-        "note": "F 只用它的'中心非平凡'那一句，与原命题一致"}]
+        "note": "F 只用它的'中心非平凡'那一句，与原命题一致", "in_material": True}]
     assert set(disk["citation_checks"][0]) == set(VR.CITATION_CHECK_KEYS)
     assert VR.signs_bit3(disk) is True and VR.bit3_payload(disk).get("reviewed") is True
 
@@ -578,3 +580,92 @@ def test_signs_bit3_refuses_a_row_whose_citation_check_blocks() -> None:
         assert VR.signs_bit3(row) is True, verdict
     # 历史行（没有这一格）照旧：老台账的读数逐字不变。
     assert VR.signs_bit3(dict(base)) is True
+
+
+# ============================================================ 两个判定口必须同结论（2026-10-27）
+#
+# 改前的形态：`citation_gate` 明确不拿"材料之外的那几条"挡签（它们不是这一份证明
+# 登记的引用），而 `signs_bit3` 读的是同一个 `citation_checks` 却没有这一句；
+# 更要命的是 `in_material` 只是内存里的临时格，落盘时被洗掉 ⇒ 落盘再读回来，
+# `signs_bit3` 把材料外的那条也算成挡签。后果实测：V 判「成立」、闸也说 ok 的一签，
+# 读回来是 `rejected`，理由是"verdict='成立' ⇒ 结论不是成立"（自相矛盾，且写的人无从修）。
+
+def _two_gates_fixture() -> tuple[list[dict], list[dict]]:
+    """(V 给的原始 checks, 依赖台账材料)：材料内一条 `consistent`，材料外一条 `stronger`。"""
+    inside = "000001"
+    outside = "000777"
+    raw = [{"stmt_id": inside, "verdict": "consistent", "quote_verbatim": False, "note": ""},
+           {"stmt_id": outside, "verdict": "stronger", "quote_verbatim": False,
+            "note": "这条引用被夸大"}]
+    material = [{"stmt_id": inside, "evidence_kind": "proof", "admissible": True}]
+    return raw, material
+
+
+def test_the_citation_gate_and_signs_bit3_reach_the_same_verdict_after_disk(
+        tmp_path: pathlib.Path) -> None:
+    """正控：同一份行内容，`citation_gate` 与 `signs_bit3` 逐格同结论（含落盘往返）。
+
+    判据是三件事一起判：
+    ① `citation_gate(reconciled).ok` 为真（材料外那条不挡签）；
+    ② 落盘那一行仍然带着 `in_material`（材料外那条是 `False`）—— 它是判据的承重格；
+    ③ `signs_bit3(落盘那一行)` 与 ① 同结论，且 `review_standing` 读回 `signed`。
+
+    改前红：③ 为假（`signs_bit3` 把材料外那条算成挡签），`review_standing` 读回
+    `rejected`，`why` 里写着"verdict='成立' ⇒ 结论不是成立"。
+    """
+    raw, material = _two_gates_fixture()
+    checks = VR.reconcile_citation_checks(raw, material)
+    gate = VR.citation_gate(checks)
+    assert gate["ok"] is True, gate
+    merged = VR.apply_citation_gate(
+        {"verdict": "成立", "findings": [], "citation_checks": checks}, gate)
+    assert merged["verdict"] == "成立", merged
+
+    text = "证明：由命题 000001 立得。"
+    VR.record_verification(tmp_path, statement_id="000009", proof_text=text,
+                           verdict=merged, citation_gate=gate)
+    rows, problems = VR.list_verifications(tmp_path, statement_id="000009", limit=None)
+    assert problems == [], problems
+    disk = dict(rows[-1])
+    # ② 承重格落盘了：材料内 True、材料外 False。
+    assert [c["in_material"] for c in disk["citation_checks"]] == [True, False], disk
+    assert set(disk["citation_checks"][0]) == set(VR.CITATION_CHECK_KEYS)
+    # ③ 两个口同结论。
+    assert VR.citation_blocks(disk) == [], VR.citation_blocks(disk)
+    assert VR.signs_bit3(disk) is gate["ok"] is True
+    assert VR.review_standing(tmp_path, statement_id="000009",
+                              proof_text=text)["state"] == "signed"
+
+
+def test_dropping_in_material_from_the_ledger_row_makes_that_agreement_red() -> None:
+    """反真空：把 `in_material` 从落盘键里去掉 ⇒ 两个判定口分家（判据必红）。
+
+    这一条证明"这一格是承重的"，不是装饰：同一行、同一批 `citation_checks`，
+    只是少了 `in_material`，闸（在 reconciled 那批条目上算出 `ok=True`）与读侧
+    （`signs_bit3` 看落盘那一行）就给出相反结论 —— 那正是改前的现场。
+
+    同时钉住"老行缺键按材料内读"：没有这一格的材料内阻挡条目照样挡签
+    （`in_material` 的缺省不许往放行的方向走）。
+    """
+    raw, material = _two_gates_fixture()
+    checks = VR.reconcile_citation_checks(raw, material)
+    gate = VR.citation_gate(checks)
+    assert gate["ok"] is True, gate
+
+    row = {"stmt_id": "000009", "verdict": "成立", "unresolved_errors": 0,
+           "citation_checks": [dict(c) for c in checks]}
+    assert VR.signs_bit3(row) is True
+
+    stripped = dict(row, citation_checks=[
+        {k: v for k, v in c.items() if k != "in_material"} for c in row["citation_checks"]])
+    # 分家的形态：闸说可以签（它在 reconciled 那批条目上算的），读侧说签不住。
+    assert VR.signs_bit3(stripped) is False, "去掉 in_material 之后判据没红 ⇒ 这一格不是承重的"
+    # 同一批条目若从一开始就没有这一格，两个口都会判挡（fail-closed）——
+    # 分家只发生在"闸按 reconciled 算、读侧按落盘算"这一种形态上。
+    assert VR.citation_gate(stripped["citation_checks"])["ok"] is False
+    # 老行缺键按"材料内"读 ⇒ 阻挡条目照旧挡签。
+    old = {"stmt_id": "000009", "verdict": "成立", "unresolved_errors": 0,
+           "citation_checks": [{"stmt_id": "000002", "verdict": "stronger",
+                                "quote_verbatim": False, "note": "x"}]}
+    assert VR.citation_blocks(old) != []
+    assert VR.signs_bit3(old) is False

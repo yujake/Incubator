@@ -138,8 +138,7 @@ PROOF_PARTS: tuple[tuple[str, str], ...] = (
     ("程序设计", "design"),
     ("穷举论证", "enumeration"),
 )
-#: 标签 → 段名、段名 → 标签（同一份表派生，不写第二份）。
-PART_LABELS: dict[str, str] = {label: name for label, name in PROOF_PARTS}
+#: 段名 → 标签（同一份表派生，不写第二份）。
 PART_NAMES: dict[str, str] = {name: label for label, name in PROOF_PARTS}
 
 #: 程序脚本的常见后缀（证明栏写的是脚本时用它判"这是不是一段代码而不是一段散文"）。
@@ -460,9 +459,108 @@ def proof_column_script(text: Any) -> str:
     return raw if is_script_path(raw) else ""
 
 
-def is_exhaustion_proof_column(text: Any) -> bool:
-    """这一份证明栏是不是"三段齐全、第 ① 段是程序"（形态判据，不判归属）。"""
-    return not parse_proof_column(text)["problems"]
+# ---------------------------------------------------------------- 穷举上界 vs 枚举量（只报不判）
+
+#: "枚举了多少例"的候选键（按优先级；脚本自报时常见的那几种写法）。
+CASE_COUNT_KEYS: tuple[str, ...] = ("n_cases", "cases", "enumerated_total", "n_enumerated")
+
+#: 上界与枚举量比对的三档读数。它不是判据：`mismatch` 只让读数可见，不改任何档。
+BOUND_CHECK_VERDICTS: tuple[str, ...] = ("consistent", "mismatch", "no_bound")
+
+
+def _case_count_of(*maps: Mapping[str, Any]) -> int | None:
+    """从三处读"枚举了多少例"（读到第一个正整数就停；没读到 ⇒ `None`）。"""
+    for mapping in maps:
+        for key in CASE_COUNT_KEYS:
+            value = mapping.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int) and value > 0:
+                return value
+            if isinstance(value, str) and value.strip().isdigit():
+                got = int(value.strip())
+                if got > 0:
+                    return got
+    return None
+
+
+def _bound_dimensions(space: Mapping[str, Any]) -> tuple[int | None, list[str]]:
+    """搜索空间的"各维乘积"：只认 `[lo, hi]` 形态的整数区间。
+
+    为什么只认区间、不认裸整数：真机行（`projects/mp3-r4` 的 `000000`）里
+    `search_bound` 长这样 —— `{"N_range": [2, 8], "D_range": [2, 10], "cells": 63,
+    "max_dim_A": 43758, "per_cell_exhaustive": "…"}`。两个区间的长度乘积 7 × 9 = 63
+    正好等于它自报的 `cells`，而 `max_dim_A` 是某一格里的派生量，把它乘进去
+    会把界放大 43758 倍。所以裸整数一律不参与乘积（它们多半已经是算过的计数），
+    认不出任何一个区间 ⇒ `(None, [])`。
+    """
+    dims: dict[str, int] = {}
+    for key, value in space.items():
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            lo, hi = value
+            if isinstance(lo, bool) or isinstance(hi, bool):
+                continue
+            if isinstance(lo, int) and isinstance(hi, int) and hi >= lo >= 0:
+                dims[str(key)] = hi - lo + 1
+    if not dims:
+        return None, []
+    total = 1
+    for size in dims.values():
+        total *= size
+    return total, sorted(dims)
+
+
+def bound_check(*, observations: Mapping[str, Any] | None = None,
+                certificate: Mapping[str, Any] | None = None,
+                search_bound: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """穷举上界与枚举量的比对读数 —— 三档 `consistent` / `mismatch` / `no_bound`。
+
+    只报不判（2026-10-27 业主裁定）：`mismatch` 不进 `problems`、不改 `evidence_kind`、
+    不挡任何签字。理由：这一族从来没有任何判据把"界"与"跑了多少例"对起来过
+    （`exhaustion_problems` 只问界"有没有"、`landing_problems` 只核报告字节与三块字数），
+    先把它变成可见的读数，观察一批之后再决定要不要升级成判据。
+
+    三档的语义：
+    - `consistent`：枚举量 ≥ 各维乘积（"在 B 内没有反例"至少覆盖了声称的 B）；
+    - `mismatch`：枚举量 < 各维乘积（声称穷尽了 B，实际只跑了一部分）；
+    - `no_bound`：至少一端算不出来 —— `missing` 说清是哪一端（没有区间形态的界 /
+      没有 `n_cases`）。这一档不是"一致"，也不是"不一致"。
+    """
+    obs = _as_mapping(observations)
+    cert = _as_mapping(certificate)
+    bound = _as_mapping(search_bound)
+    detail = _as_mapping(cert.get("detail"))
+    out: dict[str, Any] = {
+        "verdict": "no_bound", "cases": None, "bound_cases": None,
+        "dimensions": [], "missing": [], "why": "",
+    }
+    cases = _case_count_of(obs, detail, bound)
+    space, _where = _space_reading(obs, cert, bound)
+    bound_cases, dims = _bound_dimensions(_as_mapping(space))
+    out.update(cases=cases, bound_cases=bound_cases, dimensions=dims)
+    missing: list[str] = []
+    if cases is None:
+        missing.append("n_cases")
+    if bound_cases is None:
+        missing.append("search_bound")
+    out["missing"] = missing
+    if missing:
+        out["why"] = ("无从比对（缺 " + "、".join(missing) + "）："
+                      + ("没有 `" + "/".join(CASE_COUNT_KEYS) + "` 这一格" if cases is None else "")
+                      + ("；" if cases is None and bound_cases is None else "")
+                      + ("界里没有 `[lo, hi]` 形态的整数区间" if bound_cases is None else "")
+                      + "。这一档是'判不了'，不是'一致'，也不是'不一致'")
+        return out
+    if cases >= bound_cases:
+        out["verdict"] = "consistent"
+        out["why"] = (f"枚举 {cases} 例 ≥ 界 {bound_cases} 例"
+                      f"（各维 {'×'.join(str(k) for k in dims)}）⇒ 至少覆盖了声称的 B")
+    else:
+        out["verdict"] = "mismatch"
+        out["why"] = (f"枚举 {cases} 例 < 界 {bound_cases} 例"
+                      f"（各维 {'×'.join(str(k) for k in dims)}）⇒ 声称穷尽了 B，"
+                      "实际只跑了一部分（只报不判）")
+    return out
 
 
 def exhaustion_verdict(*, method: Any,
@@ -510,6 +608,10 @@ def exhaustion_verdict(*, method: Any,
         "design_where": design_where,
         "search_space": space,
         "search_space_where": space_where,
+        #: 穷举上界与枚举量的比对读数（2026-10-27，`bound_check`）：只报不判 ——
+        #: 它不出现在 `problems` 里，也不改 `evidence_kind`。这一族此前没有任何判据
+        #: 把"界"与"跑了多少例"对起来过，先让它可见。
+        "bound_check": bound_check(observations=obs, certificate=cert, search_bound=bound),
         "problems": problems,
     }
 
@@ -571,6 +673,10 @@ def sign_experiment(*, method: Any,
         "enumeration": verdict["enumeration"],
         "proof_text": composed,
         "search_space": verdict["search_space"],
+        #: 上界 ↔ 枚举量的比对读数（2026-10-27）：随签名落在行上，只报不判。
+        #: 为什么放进签名而不是新加一列：`observations` 是"这一次到底算了什么"的
+        #: 机器可读格（同 `SIGNATURE_KEY` 的理由），加列要走人裁（`schema` 是禁改区）。
+        "bound_check": dict(verdict.get("bound_check") or {}),
         "problems": problems,
     }
     out_obs = dict(obs)
@@ -625,6 +731,63 @@ def proof_column(experiment: Mapping[str, Any]) -> str:
 def signed_exhaustion_experiments(experiments: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """台账里所有"E 按穷举签下的 proof"行（审计与入库闸共用这一份筛选）。"""
     return [dict(r) for r in (experiments or ()) if isinstance(r, Mapping) and is_signed_exhaustion(r)]
+
+
+#: "可疑的自签背书"这一档的读数码（2026-10-27，业主裁定：先报不拦）。
+SUSPECT_SELF_SIGNED = "suspect_self_signed"
+
+
+def suspect_self_signed(experiments: Sequence[Mapping[str, Any]], *, root: Any,
+                        statements: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    """声称 V 签下了穷举证明、而 `verifications/` 里拿不出那一签的实验行 —— 只报不拦。
+
+    ## 治哪一处（R-EVID ① 的 D4，业主 2026-10-27 裁定"先报不拦"）
+
+    `is_signed_exhaustion` 读的 `signed_by="V"` 是 E 在 `sign_experiment` 里写进去的
+    一格自述 —— V 从来没有在这条路径上盖过章。真正的第三方签字在
+    `verifications/<命题号>.jsonl`（判据本体 `third_party_problems`）。而
+    `closing._has_t3` 直接拿 `is_signed_exhaustion` 当"承重结论有 T3 背书"，
+    不调 `third_party_problems` ⇒ 一条 E 自签的穷举行能给承重结论背书。
+
+    为什么不直接加闸：改一次会把存量穷举定理整批掉档（业主明确"先量涉案条数"）。
+    所以这一格只产出读数：`suspects` 逐条点名 `experiment_id` / `statement_id` / `why`，
+    由收工报告印一句话，不改任何 status、不进 blockers。
+
+    返回 `{"checked", "suspects", "total", "why"}`：`checked=False` 是"没查成"
+    （没给工作区根 ⇒ 查不到 `verifications/`），不是"没有可疑行"。
+    """
+    rows = [dict(r) for r in (experiments or ()) if isinstance(r, Mapping)]
+    out: dict[str, Any] = {"checked": False, "suspects": [], "total": 0, "why": ""}
+    if not str(root or "").strip():
+        out["why"] = ("没给工作区根 ⇒ 查不到 `verifications/`（这一格没查成，"
+                      "不是「没有可疑行」）")
+        return out
+    out["checked"] = True
+    suspects: list[dict[str, Any]] = []
+    for row in rows:
+        # 只看"声称自己够 proof 的那一档"：`sign_experiment` 给每一条计算类实验都写
+        # `signed_by="V"`（那是签字岗位的名字，不是"V 盖过章"），拿它当射程会把
+        # 每一条普通数值实验都点成可疑 —— 那是噪音，不是读数。
+        if not is_signed_exhaustion(row):
+            continue
+        column = proof_column(row)
+        sid = statement_id_for_body(statements, column) if statements else ""
+        problems = third_party_problems(column, root=root, statement_id=sid)
+        if not problems:
+            continue
+        suspects.append({
+            "experiment_id": str(row.get("experiment_id") or row.get("id") or ""),
+            "code": SUSPECT_SELF_SIGNED,
+            "statement_id": sid,
+            "method": str(row.get("method") or ""),
+            "signed_by": str(signature_of(row).get("signed_by") or ""),
+            "why": problems[0],
+        })
+    out["suspects"] = suspects
+    out["total"] = len(suspects)
+    out["why"] = (f"台账 {len(rows)} 条实验行里有 {len(suspects)} 条声称穷举证明已由 V 签下，"
+                  "而 `verifications/` 里拿不出对应的第三方签字行（只报不拦）")
+    return out
 
 
 def norm_rel(path: Any) -> str:
@@ -708,15 +871,6 @@ def report_problems(experiment_row: Mapping[str, Any] | None) -> list[str]:
         return [f"②③ 的落盘核查没查成（exhaustionreport 抛了 {type(exc).__name__}: {exc}）"]
 
 
-def report_check_available() -> bool:
-    """`exhaustionreport` 那一侧在不在（"这一格查得了吗"，与"查过了没问题"分开）。"""
-    try:
-        from . import exhaustionreport as _ER  # noqa: F401
-    except Exception:  # noqa: BLE001
-        return False
-    return True
-
-
 def find_exhaustion_record(experiments: Sequence[Mapping[str, Any]],
                            proof_text: Any) -> dict[str, Any] | None:
     """按证明栏找那条"穷举 proof"记录 —— 不管它签名对不对（为了给出准确的拒信）。
@@ -762,8 +916,6 @@ INDEX_KIND_FIELD = "evidence_kind"
 INDEX_PATH_FIELD = "evidence_path"
 INDEX_SHA_FIELD = "evidence_sha256"
 INDEX_SIGN_FIELD = "v_signature"
-INDEX_FIELDS: tuple[str, ...] = (INDEX_KIND_FIELD, INDEX_PATH_FIELD, INDEX_SHA_FIELD,
-                                 INDEX_SIGN_FIELD)
 #: 索引指的那份对象是"谁的正文"：F 侧的证明 / E 侧的报告（业主那两句话的落点）。
 INDEX_KIND_PROOF = "proof"
 INDEX_KIND_REPORT = "report"
@@ -1112,6 +1264,22 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
                       f"（{type(exc).__name__}: {exc}）⇒ 这一格没查成")
         return out
     if pending.get("found"):
+        # 判据与命题台账那一路同一条（`signs_bit3`，2026-10-27 收口）：pending 那一行
+        # 写着「成立」不等于签住了 —— 未解决的 error、引用核实挡住、引用核实没查成
+        # 三条里任一条成立都不算。改前这里只看 `verdict` 那个词，于是同一行内容
+        # 放进 `verifications/<号>.jsonl` 会被拒、放进 pending 就被当成签过。
+        pending_row = dict(pending.get("row") or {})
+        pending_row.setdefault("verdict", str(pending.get("verdict") or ""))
+        if not _VR.signs_bit3(pending_row):
+            out["found"] = False
+            out["verdict"] = str(pending.get("verdict") or "")
+            out["ledger"] = str(pending.get("ledger") or "")
+            out["why"] = (f"{out['ledger']} 是 pending 那一路的最近一签，"
+                          f"verdict={out['verdict']!r}，但它签不住："
+                          # 复用 `verifications` 的私有措辞：拒信里"为什么签不住"只许
+                          # 有一份说法（同一句话在两个出口上各写一遍必然漂移）。
+                          + _VR._bit3_blockers(pending_row))
+            return out
         out.update(found=True, verdict=str(pending.get("verdict") or ""),
                    proof_sha256=str(pending.get("proof_sha256") or ""),
                    ledger=str(pending.get("ledger") or ""), route="pending")
@@ -1479,9 +1647,3 @@ def formal_slot(statement: Mapping[str, Any],
                 "两类定理的填法不许互相冒充：理论定理那一格只认 `.lean` 路径"
                 "（数值实验程序填进这一格等于拿数值证据冒充形式化核验）")
     return {"channel": channel, "kind": kind, "path": path, "problems": problems}
-
-
-def formal_slot_kind(statement: Mapping[str, Any],
-                     experiments: Sequence[Mapping[str, Any]] = ()) -> str:
-    """这一格的应当填法（`numeric_program` / `lean_program` / 空串）—— 读侧一句调用。"""
-    return str(formal_slot(statement, experiments).get("kind") or "")

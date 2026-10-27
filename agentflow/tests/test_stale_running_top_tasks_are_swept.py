@@ -35,12 +35,16 @@ def st(tmp_path):
 
 
 class _Stub:
-    """只借 `_sweep_stale_top_running` 需要的两个属性（store / _log）。"""
+    """只借 `_sweep_stale_top_running` 需要的三个属性（store / _log / 快照守卫）。"""
 
     def __init__(self, store: Store) -> None:
         self.store = store
 
     def _log(self, *_a, **_k) -> None:  # noqa: D401 - 桩
+        return None
+
+    def _refuse_write_in_snapshot(self, *_a, **_k) -> None:
+        """只读快照作用域的写拒绝（2026-10-27 加）：桩不开作用域 ⇒ 一律放行。"""
         return None
 
 

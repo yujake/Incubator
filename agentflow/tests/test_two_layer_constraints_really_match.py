@@ -388,9 +388,10 @@ def test_the_tools_read_reading_explains_the_gap_to_the_tool_count() -> None:
     """读数必须自己算得出 `tools_read` 与工具总数的关系（审计 D-6 的治本）。
 
     等式：`tools_in_registry_modules - tools_unread + tools_read_but_not_registered
-    = tools_read`。今天它是 `95 - 16 + 1 = 80`：
+    = tools_read`。今天是 `118 - 16 + 0 = 102`：
     16 件读不出是因为 `table_tools` / `fs_tools` 的 `params` 是 `_obj(...)` 调用
-    （不是字典字面量），1 件是 `conjecture.register_conjecture`（读到、但不注册）。
+    （不是字典字面量）。"读到但不注册"那一格现在是 0：2026-10-27 把
+    `conjecture_tools` 加进 `tools._MODULES` 之后，它不再属于"读到、但装配不到"那一族。
     """
     coverage = C.param_type_coverage()
     assert coverage["modules_missing"] == [], coverage["modules_missing"]
@@ -398,7 +399,11 @@ def test_the_tools_read_reading_explains_the_gap_to_the_tool_count() -> None:
     assert coverage["tools_unread"], (
         "一件读不出的都没有 ⇒ 这个读数没有解释力（它今天必须解释那 16 件）"
     )
-    assert coverage["tools_read_but_not_registered"] == ["conjecture.register_conjecture"], coverage
+    assert coverage["tools_read_but_not_registered"] == [], (
+        "读到但不注册的清单必须为空：`conjecture_tools` 曾在里面挂了两天，"
+        "2026-10-27 已进 `tools._MODULES`。再有新条目就说明又有一个模块被写了却没人装配："
+        f"{coverage}"
+    )
     assert (
         coverage["tools_in_registry_modules"]
         - len(coverage["tools_unread"])

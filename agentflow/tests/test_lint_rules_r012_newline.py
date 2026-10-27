@@ -234,7 +234,7 @@ def test_the_json_artifacts_of_the_orchestrator_layer_are_pure_lf(tmp_path: Path
     out = tmp_path / "lint.json"
     p = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "lint_rules.py"), "--root", str(tree),
-         "--json", str(out)],
+         "--json-out", str(out)],
         cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=120,
     )

@@ -70,19 +70,12 @@ COST_DATA_KEYS: tuple[str, ...] = ("by_role", "by_scope", "total")
 #: `gates_readout` 的 `data` 键集。
 GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "can_close", "verdict")
 
-#: `roster_readout` 的 `data` 键集。两个读数的键名与 `conductor` 的
-#: `CHILD_COUNT_KEY` / `ACTIVE_CHILD_COUNT_KEY` 逐字一致（同一份口径不许两套键名）。
-ROSTER_DATA_KEYS: tuple[str, ...] = (
-    "owner", "child_count", "active_child_count", "labels", "waiting_only",
-    "unjudged", "complete", "by_owner", "note")
-
 #: 读数名 → 它的 `data` 键集。判据从这一张表取期望值（不在测试里手抄第二份）。
 READOUT_DATA_KEYS: dict[str, tuple[str, ...]] = {
     "errors": ERRORS_DATA_KEYS,
     "flow": FLOW_DATA_KEYS,
     "cost": COST_DATA_KEYS,
     "gates": GATES_DATA_KEYS,
-    "roster": ROSTER_DATA_KEYS,
 }
 
 #: `stats all` 那一档的 `data` 键集（就是四条读数的名字，顺序即呈现顺序）。
@@ -108,11 +101,6 @@ def _envelope(*, checked: bool, reason: str, data: dict[str, Any],
             "reason": "" if checked else str(reason or "没查成"),
             "data": data,
             "problems": items}
-
-
-def _unknown(reason: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
-    """没查成的那一份（`data` 缺省给空表：形状仍在，值一个都不许编）。"""
-    return _envelope(checked=False, reason=reason, data=data if data is not None else {})
 
 
 def _problem(code: str, detail: str) -> dict[str, str]:
@@ -148,10 +136,13 @@ def scan(target: Any, *, tables: Iterable[str] = ()) -> dict[str, Any]:
     `target` 既可以是工作区根路径，也可以是 `Store`（口径与 `errorstats` 一致：
     有 `read_events` 与 `root` 的对象就当 `Store` 用）。
 
-    读盘的实现不在这里：`errorstats._read_events` / `_read_sessions` 是这套框架里
-    "事件流与会话记录怎么读、读不成算哪一档"的唯一真身，本函数只是把它们的读数拼起来。
-    刻意不复制一份读取逻辑——复制出来的第二份迟早会与第一份对三态的判断不一样，
-    而那正是这个模块存在的理由（口径只能有一个主人）。
+    读盘的实现不在这里，而真身按来源分两处（2026-10-27，R-BE1 的 ②-1 更正）：
+    事件流是 `errorstats._read_events`，会话记录是 `sessions.read_all_sessions`
+    （`errorstats._read_sessions` 已改成对它的转发）。改前这句把两者都写成
+    `errorstats` 的"唯一真身"，而 `sessions.read_session` 才是按 sid 的那条主线 ——
+    两套实现对"读不明白"各有一套判定，同一份坏目录会给出两个数。
+    本函数只把两处读数拼起来，不复制读取逻辑（复制出来的第二份迟早会与第一份对三态
+    的判断不一样，而那正是这个模块存在的理由：口径只能有一个主人）。
 
     返回值里 `checked` 是"两个来源都读到了"（与 `error_action_stats` 的合取口径一致）；
     `store` 一格给 `gates_readout` 复用，不参与呈现。
@@ -231,7 +222,8 @@ def _scan_problem(scan_result: Mapping[str, Any], *, need: tuple[str, ...] = ())
 # ---------------------------------------------------------------- 一、错误动作
 
 
-def errors_readout(target: Any) -> dict[str, Any]:
+def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
+                   ) -> dict[str, Any]:
     """按角色 × 类目的错误动作计数（口径全在 `errorstats`）。
 
     `data` 的五个键与 `errorstats.ErrorStats.as_dict()` 同名同义：`by_role` / `role_total` /
@@ -239,11 +231,22 @@ def errors_readout(target: Any) -> dict[str, Any]:
     为什么把 `sources` 放进 `data`：这一层最常见的误读是"0 次错误"，而排查那件事第一步就是
     看"到底读了几条事件、几行读不明白"——它必须和计数在同一个对象里，才不会有人另算一份。
 
-    这里刻意不再调一次 `scan()`：`error_action_stats` 自己就会读那两处，读第二遍只会让
-    一个读数花两份磁盘时间（大工作区上是几十秒），而且两份读数还多了一次"漂"的机会。
-    它的 `sources` 就是这次扫描的读数，三态照它取。
+    `scanned`（2026-10-27，R-BE1 的 ⑥-5）：调用方已经读过一份扫描（`scan()`）时传进来，
+    于是这一条不再自己读一遍盘。改前 `stats all` 一次跑四条，`events.jsonl` 与
+    `sessions/*.jsonl` 因此各被读 4 遍。计数仍然走 `errorstats.error_action_stats_from`
+    那一处（只有一份分类口径），本函数不复制它。
     """
-    stats = ES.error_action_stats(target)
+    #: `errorstats` 那一支"从已读记录算"的接缝。用 `getattr` 而不是直接名字：
+    #: 那个文件此刻正被另一条 lane 重写，函数可能一时不在 —— 不在就退回"自己读一遍"，
+    #: 两条路给出同一份 `ErrorStats`（差别只有谁去读盘），所以退回不改任何读数。
+    from_records = getattr(ES, "error_action_stats_from", None)
+    if scanned is not None and from_records is not None:
+        sources = scanned.get("sources") or {}
+        stats = from_records(scanned.get("events"), sources.get("events"),
+                             scanned.get("sessions"), sources.get("sessions"))
+    else:
+        # 单跑这一条时照旧：`error_action_stats` 自己就会读那两处（不重复读盘）。
+        stats = ES.error_action_stats(target)
     data: dict[str, Any] = {"by_role": {r: dict(c) for r, c in stats.by_role.items()},
                             "role_total": dict(stats.role_total),
                             "total": int(stats.total),
@@ -294,7 +297,8 @@ def _step_blocked(record: Mapping[str, Any]) -> bool:
 RELAY_SUBJECT = "代唤"
 
 
-def flow_readout(target: Any) -> dict[str, Any]:
+def flow_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
+                 ) -> dict[str, Any]:
     """按角色的动作分布：做了多少步、各是什么形状、被拦下多少、转投多少。
 
     `data.roles[role]` 的四格：
@@ -307,8 +311,10 @@ def flow_readout(target: Any) -> dict[str, Any]:
 
     `data.totals` 是四个数的全角色合计。为什么不做"成功率"这类派生比率：口径一改就会
     悄悄改掉历史可比性（`EVAL_REQUIRED_FIELDS` 那一族的教训），比率留给读的人自己算。
+
+    `scanned`：与 `errors_readout` 同一格（`stats all` 共读一份扫描，2026-10-27 ⑥-5）。
     """
-    scanned = scan(target)
+    scanned = scan(target) if scanned is None else scanned
     why = _scan_problem(scanned, need=("events", "sessions"))
     roles: dict[str, dict[str, Any]] = {}
     problems: list[dict[str, str]] = []
@@ -363,7 +369,8 @@ def _money(value: float) -> float:
     return round(float(value or 0.0), 6)
 
 
-def cost_readout(target: Any) -> dict[str, Any]:
+def cost_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
+                 ) -> dict[str, Any]:
     """`usage_ledger` 按角色、按阶段的花费与 token。
 
     `data.by_role[role]` 与 `data.by_scope[scope]` 是同一批行的两个切面，各含
@@ -373,10 +380,17 @@ def cost_readout(target: Any) -> dict[str, Any]:
     为什么两个切面都要：`role` 回答"谁花的"，`scope`（`schema.USAGE_SCOPES`：summon /
     experiment / search / extract / review / reason）回答"花在哪件事上"。只给一个切面时，
     另一件事就得有人另算一份——而那正是本模块要收掉的形态。
+
+    `scanned`：`stats all` 共读一份扫描（2026-10-27 ⑥-5）。那份扫描没带
+    `usage_ledger` 时这里自己读这一张表（单跑 `stats cost` 走的就是这条路）。
     """
-    scanned = scan(target, tables=("usage_ledger",))
+    scanned = scan(target, tables=("usage_ledger",)) if scanned is None else scanned
     why = _scan_problem(scanned, need=("events", "sessions"))
-    table = ((scanned.get("tables") or {}).get("usage_ledger")) or {}
+    table = ((scanned.get("tables") or {}).get("usage_ledger"))
+    if table is None:
+        table = _read_table(Path(str(scanned.get("root") or ".")),
+                            scanned.get("store"), "usage_ledger")
+    table = table or {}
     if not why and not table.get("checked"):
         why = str(table.get("reason") or "usage_ledger 读不到")
 
@@ -426,7 +440,8 @@ def cost_readout(target: Any) -> dict[str, Any]:
 
 
 def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
-                  sid: str | None = None) -> dict[str, Any]:
+                  sid: str | None = None,
+                  scanned: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """收工门八格的三态一张表（现算，不读任何人缓存过的结论）。
 
     `data.cells` 每格 `{"name", "status", "detail"}`：`status` 取 `pass` / `fail` / `unknown`
@@ -440,8 +455,12 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     现算的代价是几次磁盘读，零模型调用。
 
     `project_dir` / `report_path` 不给 ⇒ 依赖它们的那几格如实记 `unknown`（不是 pass）。
+
+    `scanned`：`stats all` 共读一份扫描（2026-10-27，R-BE1 的 ⑥-5）。门的"现算"不受影响 ——
+    八格仍然在这次调用里现跑，这里复用的只是事件流/会话记录那份扫描（门本身不读它们，
+    只用它的 `store`）。
     """
-    scanned = scan(target)
+    scanned = scan(target) if scanned is None else scanned
     why = _scan_problem(scanned, need=("events", "sessions"))
     empty = {"cells": [], "counts": {s: 0 for s in CELL_STATES},
              "machine_pass": False, "can_close": False, "verdict": None}
@@ -489,74 +508,9 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     return _envelope(checked=True, reason="", data=data, problems=problems)
 
 
-# ---------------------------------------------------------------- 五、名册两个读数
-
-
-def roster_readout(target: Any) -> dict[str, Any]:
-    """名册的两个读数：子代理数 / 活跃子代理数（只读，零模型调用）。
-
-    ## 为什么必须分成两格（业主 2026-10-26 的原话）
-    「未销号的子代理数叫子代理数，工作未做完还在做的子代理数叫活跃子代理数」。
-    所以：
-    - `child_count`（子代理数）= 名册里未销号的名册项数；
-    - `active_child_count`（活跃子代理数）= 其中"工作没做完还在做"的数量，口径是
-      `active(node) = 自身有未收口的任务 or 任一直接子 active`（"在等"也算活跃）。
-    两个数不许相加、不许互相代替：前者说"还有几个名字在用"，后者说"其中几个还在干活"。
-    折成一个数之后，"名册只增不减"与"活都干完了"会长得一模一样 —— 而这两件事该做的
-    下一步正好相反（前者要销号，后者不用）。
-
-    ## 口径只有一处
-    计算全在 `secretary.Secretary.child_counts`（名册折叠 + `Conductor.activity_snapshot`），
-    本函数只做两件事：把工作区打开成 `Store`、把那份读数装进统一外层。这里再算一遍就是
-    "同一读数两个主人"（本模块开头第 1 条坏形态）。
-
-    ## 三态与"判不了"
-    名册目录 / 台账读不成 ⇒ `checked=False` 且两个数都是 `None`（不是 0：0 是"名册空了"
-    这个很强的结论）。名册里有一项读得出来、但台账里没有它那一行（活跃判不了）时
-    `checked` 仍为 True，而 `complete=False` 且 `unjudged` 逐条点名 —— 把"判不了"
-    与"判过了"折成一格就是本模块开头第 2 条坏形态。
-    """
-    from .conductor import CHILD_COUNT_LABELS
-    from .secretary import Secretary
-
-    root, store = ES._resolve_target(target)
-    blank: dict[str, Any] = {k: None for k in ROSTER_DATA_KEYS}
-    blank.update({"labels": dict(CHILD_COUNT_LABELS), "waiting_only": [],
-                  "unjudged": [], "complete": False, "by_owner": {}, "note": ""})
-    if store is None:
-        # 与 `_read_table` 同一条口径：给的是路径时自己打开工作区（不写、不 init）。
-        if not isinstance(root, Path) or not root.is_dir():
-            return _unknown(f"工作区不存在：{root}", blank)
-        if not (root / "data").is_dir():
-            return _unknown(f"没有 data/ 目录（这个目录不是工作区）：{root}", blank)
-        try:
-            from .store import Store
-
-            store = Store(root)
-        except Exception as e:  # noqa: BLE001 —— 打不开工作区 ⇒ 没查成
-            return _unknown(f"打开工作区失败（{type(e).__name__}: {e}）", blank)
-    try:
-        got = Secretary(S.CONDUCTOR_ROLE, root=root, store=store).child_counts()
-    except Exception as e:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
-        return _unknown(f"名册读数没跑成（{type(e).__name__}: {e}）", blank)
-    if not isinstance(got, Mapping):
-        return _unknown("名册读数不是对象 ⇒ 没查成", blank)
-    data: dict[str, Any] = {k: got.get(k) for k in ROSTER_DATA_KEYS}
-    data["labels"] = dict(got.get("labels") or CHILD_COUNT_LABELS)
-    problems = [_problem("unjudged", str(x.get("why") or "有一项判不了活跃"))
-                for x in (got.get("unjudged") or [])]
-    if not got.get("checked"):
-        return _unknown(str(got.get("reason") or "名册读数没查成"), data)
-    return _envelope(checked=True, reason="", data=data, problems=problems)
-
-
 #: 读数名 → 实现。`agentflow stats <名>` 与将来的网页都从这一张表取。
 READOUTS = {"errors": errors_readout, "flow": flow_readout,
-            "cost": cost_readout, "gates": gates_readout,
-            # 名册两个读数（业主 2026-10-26）。它不在 `agentflow stats` 的四条里
-            # （那条 CLI 的读数清单在 `cli.STATS_KINDS`，本轮不动它），但它是同一层
-            # 同一形状的读数：`agentflow status-report` 与将来的网页从这里取。
-            "roster": roster_readout}
+            "cost": cost_readout, "gates": gates_readout}
 
 
 # ---------------------------------------------------------------- 人读的呈现
@@ -693,33 +647,6 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
                              f"依据={verdict.get('basis') or '（没写）'}")
             else:
                 lines.append("M 的判据：没有人判过（这一格是 unknown，不是『通过』）")
-    elif kind == "roster":
-        labels = dict(data.get("labels") or {})
-        lines += ["",
-                  f"两个读数（分开命名，不许相加）："
-                  f"{labels.get('child_count') or '子代理数'}="
-                  f"{data.get('child_count')}，"
-                  f"{labels.get('active_child_count') or '活跃子代理数'}="
-                  f"{data.get('active_child_count')}"]
-        if data.get("note"):
-            lines.append(f"  {data['note']}")
-        owners = data.get("by_owner") or {}
-        if not owners:
-            lines += ["", "按父分栏：（没有名册）" if readout.get("checked")
-                      else "按父分栏：（没查成，无读数）"]
-        else:
-            head = ["父（绝对编号）", "子代理数", "活跃子代理数"]
-            rows = [[own, str(v.get("child_count", 0)),
-                     str(v.get("active_child_count", 0))]
-                    for own, v in owners.items()]
-            lines += ["", *_table(head, rows)]
-        waiting = data.get("waiting_only") or []
-        lines += ["", f"靠等下级才活跃的（病态形状，不是错）：{len(waiting)} 个"]
-        lines += [f"  {w.get('name')}（{w.get('task_id')}）：{w.get('note')}"
-                  for w in waiting]
-        if data.get("complete") is False:
-            lines.append("这一格不完整：有项判不了活跃（见下面 problems），"
-                         "活跃子代理数只数了判得了的那些。")
     else:  # pragma: no cover - 读数名只由 READOUTS 产生
         lines.append(f"（没有这个读数：{kind}）")
     lines += _problems_block(readout)

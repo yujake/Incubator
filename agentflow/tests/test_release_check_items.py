@@ -127,7 +127,7 @@ def test_cli_skip_all_eight_items_reports_unknown(tmp_path):
     argv = [sys.executable, str(SCRIPT)]
     for key in ALL_ITEMS:
         argv += ["--skip", key]
-    argv += ["--json", str(out)]
+    argv += ["--json-out", str(out)]
     p = subprocess.run(argv, cwd=str(REPO), capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=300)
     assert p.returncode == 2, p.stdout[-600:] + p.stderr[-600:]
@@ -247,7 +247,7 @@ def test_linter_json_artifact_is_pure_lf(tmp_path):
     out = tmp_path / "lint.json"
     p = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "lint_rules.py"), "--root", str(tree),
-         "--json", str(out)],
+         "--json-out", str(out)],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=120,
     )
@@ -263,7 +263,7 @@ def test_release_check_json_artifact_is_pure_lf_when_every_item_is_skipped(tmp_p
     然后断言写出来的文件里没有 CR。这同时覆盖了 `c-10` 的记账口径。
     """
     out = tmp_path / "release.json"
-    argv = [sys.executable, str(SCRIPT), "--json", str(out)]
+    argv = [sys.executable, str(SCRIPT), "--json-out", str(out)]
     for key in ALL_ITEMS:
         argv += ["--skip", key]
     p = subprocess.run(argv, cwd=str(REPO), capture_output=True, text=True,
@@ -408,7 +408,7 @@ def test_lint_rules_prints_error_warning_info_counts_on_a_stub_tree(tmp_path):
     out = tmp_path / "lint.json"
     p = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "lint_rules.py"), "--root", str(tree),
-         "--strict", "--json", str(out)],
+         "--strict", "--json-out", str(out)],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=120,
     )
@@ -527,7 +527,7 @@ def test_negative_control_a_failing_run_never_claims_all_eight_passed(tmp_path, 
         out = tmp_path / f"{label}.json"
         # `release_check.main` 没有 `-q`（那是编排层 `release_all` 的开关），
         # 所以这里只给 `--json`：反正输出被 capsys 收走，不会淹掉测试输出。
-        rc = RC.main(["--json", str(out)])
+        rc = RC.main(["--json-out", str(out)])
         captured = capsys.readouterr()
         blob = captured.out + captured.err
         seen[label] = "".join(ln for ln in blob.splitlines() if "总判定" in ln)

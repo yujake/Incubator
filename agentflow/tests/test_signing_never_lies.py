@@ -449,3 +449,92 @@ def test_a_failed_append_says_so_and_never_claims_the_signature_happened(
     assert ok_row["statement_writeback"]["append_state"] == "appended", ok_row
     assert ok_row["statement_writeback"]["written"] is True, ok_row
     assert ok_row["checked"] is True, ok_row
+
+
+# ============================================================ 判据 ⑦：pending 那一路同一条闸
+#
+# 2026-10-27 收口。改前 `_gap_from_pending` 的判据是 `verdict == "成立"` 这一个词，
+# 而它自己的 docstring 写着"判据与台账那一路同一条（`signs_bit3`）"。`pending_sign`
+# 当时只回四格，`unresolved_errors` / `citation_checks` / `citation_gate` 全被丢掉 ⇒
+# 同一行内容：放进 `verifications/<命题号>.jsonl` 被拒（`rejected`），
+# 放进 `verifications/pending/<sha>.jsonl` 就签住了（`signed`）。
+
+def _gap_for(root: pathlib.Path) -> dict:
+    """按 `proof_review_gap` 读这一条命题的凭据（命题台账不在盘上 ⇒ 走 pending 那一路）。"""
+    return VR.proof_review_gap(root, {"stmt_id": SID, "kind": "theorem",
+                                      "evidence_kind": "proof_review",
+                                      "proof_text": P1})
+
+
+def test_a_pending_sign_that_cannot_sign_bit3_is_not_a_signature(
+        tmp_path: pathlib.Path) -> None:
+    """判据 ⑦：`pending` 那一签也必须过 `signs_bit3`（同一份证据、两个落点、同一套判定）。
+
+    四档一起判（改前全部读成 `signed`）：
+
+    | 那一行的内容 | 改前 | 改后 |
+    |---|---|---|
+    | 成立 + 零 error | signed | signed（正控，防真空） |
+    | 成立 + 2 条未解决 error | signed | rejected，第 3 条点名"未解决的 error 2 条" |
+    | 成立 + 引用核实 `unknown` | signed | rejected，点名被引命题与那一档 |
+    | 成立 + `citation_gate.problem` | signed | rejected，点名"引用核实没查成" |
+    """
+    root = tmp_path
+    clean = VR.record_pending_sign(root, proof_text=P1, verdict=dict(_OK))
+    assert VR.signs_bit3(dict(clean, verdict="成立")) is True
+    gap = _gap_for(root)
+    assert gap["ok"] is True and gap["state"] == "signed", gap
+
+    errs = {"verdict": "成立",
+            "findings": [{"level": "error", "step": 2, "kind": "无依据的步骤",
+                          "detail": "第 2 步直接用了结论"}]}
+    VR.record_pending_sign(root, proof_text=P1, verdict=errs)
+    gap = _gap_for(root)
+    assert gap["ok"] is False and gap["state"] == "rejected", gap
+    assert "未解决的 error 1 条" in gap["why"], gap["why"]
+    assert "结论写了「成立」但签不住" in gap["why"], gap["why"]
+
+    # 引用核实判不了（`unknown` 在 `CITATION_BLOCKING` 里）——同一行内容放进命题台账
+    # 会被 `signs_bit3` 拒，pending 这边必须同样拒。
+    cite = {"verdict": "成立", "findings": [],
+            "citation_checks": [{"stmt_id": S.format_id(1), "verdict": "unknown",
+                                 "quote_verbatim": False, "note": "判不了"}]}
+    VR.record_pending_sign(root, proof_text=P1, verdict=cite)
+    gap = _gap_for(root)
+    assert gap["ok"] is False and gap["state"] == "rejected", gap
+    assert "引用核实挡住" in gap["why"], gap["why"]
+
+    # 引用核实没查成（依赖台账读不出来）：改前这一格也读成签住了。
+    gate_problem = VR.record_pending_sign(root, proof_text=P1, verdict=dict(_OK))
+    assert gate_problem.get("verdict") == "成立"
+    path = VR.pending_ledger_path(root, VR.proof_sha(P1))
+    rows, problems = VR.JF.read_jsonl(path)
+    assert problems == [], problems
+    rows[-1]["citation_gate"] = {"ok": False, "problem": "依赖台账读不出来", "why": "读不出来"}
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                    encoding="utf-8")
+    gap = _gap_for(root)
+    assert gap["ok"] is False and gap["state"] == "rejected", gap
+    assert "引用核实没查成" in gap["why"], gap["why"]
+
+
+def test_the_third_party_gate_reads_the_pending_route_with_the_same_bar(
+        tmp_path: pathlib.Path) -> None:
+    """判据 ⑦ 的另一半：B 的入库闸（`third_party_problems`）走 pending 那一路时同一条闸。
+
+    改前 `latest_third_party_sign` 的 pending 分支只看 `verdict` 那个词 ⇒ 一条
+    "成立 + 未解决 error" 的 pending 签能给 `proof` 盖章。正控（干净那一签）必须通过，
+    否则这条判据只是恒红。
+    """
+    from agentflow import numericproof as NP
+
+    root = tmp_path
+    VR.record_pending_sign(root, proof_text=P1, verdict=dict(_OK))
+    assert NP.third_party_problems(P1, root=root) == []
+
+    VR.record_pending_sign(root, proof_text=P1, verdict={
+        "verdict": "成立",
+        "findings": [{"level": "error", "step": 1, "kind": "缝", "detail": "这一步没有依据"}]})
+    problems = NP.third_party_problems(P1, root=root)
+    assert problems, "一条成立 + 未解决 error 的 pending 签被当成第三方签字了"
+    assert "签不住" in problems[0] or "未解决的 error" in problems[0], problems[0]

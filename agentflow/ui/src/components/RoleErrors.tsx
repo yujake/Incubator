@@ -30,7 +30,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { api, whyOf } from "../api";
-import type { ErrorCategoryGlossary, RoleErrorsView } from "../api";
+import type { ErrorCategoryGlossary, RoleErrorsView } from "../types";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 
@@ -207,13 +207,25 @@ export function RoleErrors() {
    *
    * 为什么要量而不是按类目数估：列宽由类目名的长度决定（`multi_call_executed_calls`
    * 一格顶三格），同一个类目数在不同屏宽下结论不同。不量的话，最右那几列看起来像
-   * "没有这一类"——那是这一栏最不该犯的错。这个 effect 不带依赖，每次渲染后量一次；
-   * 值没变时 `setState` 不会引起重渲染（Preact 同值 bail out）。
+   * "没有这一类"——那是这一栏最不该犯的错。
+   *
+   * 2026-10-27（业主裁定 D10）：改前这个 effect 不带依赖，于是每次渲染后在 effect
+   * 里读一次 `scrollWidth` —— 那是同步回流（读一次量一次布局），而这一栏的表在
+   * 事件密集时每个事件都会重渲染一次。现在只在"影响溢出的那几件事"变了才量：
+   * 显示了哪几列（`measureKey`）与窗口尺寸（同一条 effect 里挂 `resize`）。
    */
+  const measureKey = `${onlyCategory}|${view === null ? "" : Object.keys(view.data.categories).length}`;
   useEffect(() => {
-    const box = scrollRef.current;
-    setOverflowing(box !== null && box.scrollWidth > box.clientWidth + 1);
-  });
+    const measure = (): void => {
+      const box = scrollRef.current;
+      setOverflowing(box !== null && box.scrollWidth > box.clientWidth + 1);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+    };
+  }, [measureKey]);
 
   if (problem !== "") {
     return <UnreadableBand reason={`读这一栏的端点没成（${problem}）`} />;

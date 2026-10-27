@@ -1,6 +1,21 @@
 # -*- coding: utf-8 -*-
 """验证者（V）的证明级审校台账（`draft/39` §3.21 五，用户 2026-10-05 定案）。
 
+## 先分清三个"档"（2026-10-27，R-EVID 审查的 ③；零行为改动，只是点明词）
+
+同一个"档"字在这一族里指三根不同的轴，谁都不许拿一根去顶另一根：
+
+* `evidence_kind`（本模块最常说的"档位"）—— 真身 `schema.EVIDENCE_KINDS`
+  （`proof` / `proof_review` / `cross_check` / `heuristic`，从强到弱）。它回答
+  "这条断言的证据是哪一类"。本模块只用它判一件事：够不够格被引
+  （`CITATION_EVIDENCE_FLOOR`，现算前缀，不抄字面量）。
+* `GRADES`（本模块说的"定理档"）—— 真身 `evidencebits.GRADES`
+  （`conjecture` / `strong_conjecture` / `pre_theorem` / `theorem`）。它由五元位
+  派生（`evidencebits.derive_grade`），本模块的 `statement_grade` /
+  `_highest_grade` 只是在多证明模型里"取最高"。
+* `T0`–`T4`（非平凡性档）—— 不归本模块：真身在 `secretary.py`
+  （`nontriviality_label` 与它那张 band 表）。本模块一个字都不定义它。
+
 五元证据位（§3.14）的第 3 位（"审过"）的 owner 是 V：一个 F 配一个验证者，它把 F 交回来的
 证明按写成后的样子整体重读，做三件事（用户点名的 I12/I10/I17）：① I12 冷启动 —— 每次审校开
 新会话，只给对象（证明全文）+ 只读查询面的读数，不给 F 的叙述、不给 store 句柄 ⇒ "独立性"
@@ -46,8 +61,9 @@ F 在 `dependencies` 上登记"这一份证明用到哪条在册命题"（`used_
 不是逐字引文 ⇒ 只把编号交给 V 没有用，V 必须看到两样东西：F 是怎么说的、被引命题真正
 说的是什么（:func:`citation_material` 把两边一起取出来，正文摘要一起进提示词）。
 V 逐条给一档结论（:data:`CITATION_VERDICTS`：`consistent` / `weaker` / `stronger` /
-`unrelated` / `inadmissible` / `unknown`），读数是 `citation_checks` 那四格
-（:data:`CITATION_CHECK_KEYS`），随台账那一行落盘。签字前置（:func:`signs_bit3`）：
+`unrelated` / `inadmissible` / `unknown`），读数是 `citation_checks` 那五格
+（:data:`CITATION_CHECK_KEYS`；第 5 格 `in_material` 说明这一条是不是这一份证明登记的引用），
+随台账那一行落盘。签字前置（:func:`signs_bit3`）：
 只要有一条 `stronger` / `unrelated` / `inadmissible` / `unknown`，这一签就不许落地
 （:func:`citation_gate` 点名是哪一条、差在哪）；`weaker` 可以签，但读数里点名"只用到了
 弱形式"；档位不够格（低于 `proof_review`，业主逐字「proof_review级及以上才可引用」）
@@ -72,8 +88,10 @@ from .proofloc import DEFAULT_PROOF_NO  # canonical 证明号只有一个出处�
 VERIFICATIONS_DIR = "verifications"
 #: 三态结论（顺序就是从"站不住"到"站得住"；`看不出来` 不是 `成立`）。
 VERDICTS: tuple[str, ...] = ("有毛病", "看不出来", "成立")
-#: findings 的级别（与 `schema.FINDING_LEVELS` 同词表）。
-FINDING_LEVELS: tuple[str, ...] = ("error", "warning", "info")
+#: findings 的级别 —— 别名，不抄第二份：词表真身是 `schema.FINDING_LEVELS`
+#: （`parse_verdict` 与 `schema.ReviewFinding` 判的是同一件事，两处各写一份字面量
+#: 就会在加一档时一处认、一处拒）。
+FINDING_LEVELS: tuple[str, ...] = S.FINDING_LEVELS
 #: 硬禁令的清单（I10 的最小形态）：命中这些短语的步骤必须被指出来。
 #: 用户 2026-10-05 口径："F 禁止写'易证/显然/trivial/clearly/it is easy to see'"。
 HARD_BAN_MARKERS: tuple[str, ...] = (
@@ -104,9 +122,18 @@ CITATION_SIGNABLE: frozenset[str] = frozenset(("consistent", "weaker"))
 #: `inadmissible` 也在里面：档位不够不是"用法对不对"能救的。
 CITATION_BLOCKING: frozenset[str] = frozenset(
     ("stronger", "unrelated", "inadmissible", "unknown"))
-#: 一条核实读数落盘时的四格。`quote_verbatim` 只是信息（F 那句话是不是逐字抄的），
+#: 一条核实读数落盘时的五格。`quote_verbatim` 只是信息（F 那句话是不是逐字抄的），
 #: 它不参与判定 —— 业主裁定"逐字"不能当标准，写证明不会逐字引。
-CITATION_CHECK_KEYS: tuple[str, ...] = ("stmt_id", "verdict", "quote_verbatim", "note")
+#:
+#: `in_material`（2026-10-27 补）是这一格为什么挡住签字的语境，必须随读数落盘：
+#: `reconcile_citation_checks` 会给"V 多给的、材料里没有的那几条"标 `False`，
+#: 而签字前置（`citation_gate`）明确不拿它们挡签（它们不是这一份证明登记的引用）。
+#: 改前这一格只在内存里：落盘时被洗掉 ⇒ `signs_bit3` 读 `citation_blocks` 时
+#: 把材料外的那条也算成挡签，于是"V 判成立、闸也说 ok"的一签落盘后读回
+#: `rejected`，理由是"verdict='成立' ⇒ 结论不是成立"（自相矛盾，且写的人无从修）。
+#: 老行没有这一格 ⇒ 按"材料内"读（它们本来就是按材料内判定写下的）。
+CITATION_CHECK_KEYS: tuple[str, ...] = (
+    "stmt_id", "verdict", "quote_verbatim", "note", "in_material")
 #: 进 V 的审查材料的"被引命题正文摘要"长度上界（正文本身留在 `citations` 的全文格里）。
 CITATION_DIGEST_CHARS = 600
 #: 依赖行上"F 为什么这么引"那句话的候选键（按优先级取第一个非空；`note` 是正名，
@@ -242,11 +269,15 @@ def citation_material(*, statement_id: str, proof_no: Any = None,
 
 
 def _citation_checks_raw(raw: Any) -> list[dict[str, Any]]:
-    """把 V 输出里的 `citation_checks` 洗成规整的四格；形状不对 ⇒ 抛 `VerificationError`。
+    """把 V 输出里的 `citation_checks` 洗成规整的五格；形状不对 ⇒ 抛 `VerificationError`。
 
     它是"没查成"那一档：`verdict` 不在词表里 / `stmt_id` 不是命题号形态，
     都不是"这一条判成什么"，而是这一次输出不可解析 —— 不许折成 `unknown`
     （`unknown` 是一条诚实的结论，而坏输出不是）。
+
+    `in_material` 的缺省是 `True`（不是 `False`）：V 自己给的那几条默认就是"这一份
+    证明登记过的引用"；只有 `reconcile_citation_checks` 会显式标 `False`（V 多给的）。
+    缺键读成 `False` 会把"V 说的"当成"材料外的"，那是往放行的方向走。
     """
     if raw is None:
         return []
@@ -271,9 +302,11 @@ def _citation_checks_raw(raw: Any) -> list[dict[str, Any]]:
             verbatim = flagged.strip().lower() in ("1", "true", "yes", "y", "是", "逐字")
         else:
             verbatim = bool(flagged)
+        in_material = item.get("in_material")
         out.append({
             "stmt_id": sid, "verdict": verdict, "quote_verbatim": verbatim,
             "note": str(item.get("note") or "").strip(),
+            "in_material": True if in_material is None else bool(in_material),
         })
     return out
 
@@ -302,6 +335,9 @@ def reconcile_citation_checks(checks: Sequence[Mapping[str, Any]],
         row["verdict"] = str(row.get("verdict") or "unknown").strip()
         row["quote_verbatim"] = bool(row.get("quote_verbatim"))
         row["note"] = str(row.get("note") or "").strip()
+        # 缺键 ⇒ 材料内（`in_material` 的缺省不许往放行方向走，见
+        # `_citation_checks_raw` 的同一条说明）。
+        row["in_material"] = row.get("in_material") is not False
         by_id.setdefault(row["stmt_id"], row)
     out: list[dict[str, Any]] = []
     for item in material:
@@ -309,7 +345,8 @@ def reconcile_citation_checks(checks: Sequence[Mapping[str, Any]],
         got = by_id.pop(sid, None)
         if got is None:
             got = {"stmt_id": sid, "verdict": "unknown", "quote_verbatim": False,
-                   "note": "V 没有对这条被引命题给出结论（材料里有它）"}
+                   "note": "V 没有对这条被引命题给出结论（材料里有它）",
+                   "in_material": True}
         kind = str(item.get("evidence_kind") or "")
         # 先判"这一条在不在册"（它比档位更根本：不在册的命题连档位都没有），
         # 再判档位 —— 两档都是挡签的，但点名要说清是哪一种。
@@ -380,6 +417,12 @@ def citation_blocks(row: Mapping[str, Any]) -> list[dict[str, Any]]:
     `signs_bit3` 用它：台账那一行写着 `成立`、而引用核实里有一条 `stronger` /
     `unrelated` / `unknown` ⇒ 这一签不许落地。硬闸放在这里（而不是只放在写路径上），
     因为"手写一条成立行"与"V 自己判了成立"在读者眼里没有区别。
+
+    材料之外的那几条（`in_material=False`，V 多给的）不算挡签 —— 与
+    :func:`citation_gate` 逐字同一条规则（2026-10-27 收口）：它们不是这一份证明
+    登记的引用，挡不挡只看材料里的那几条。改前这里没有这一句，而
+    `in_material` 又不落盘 ⇒ 落盘再读回来时两个判定口给出相反结论。
+    老行没有这一格 ⇒ 按材料内读（`!= False`，不是 `is True`）。
     """
     checks = row.get("citation_checks")
     if not isinstance(checks, (list, tuple)):
@@ -387,6 +430,7 @@ def citation_blocks(row: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [{"stmt_id": str(c.get("stmt_id") or ""), "verdict": str(c.get("verdict") or ""),
              "note": str(c.get("note") or "")}
             for c in checks if isinstance(c, Mapping)
+            and c.get("in_material") is not False
             and str(c.get("verdict") or "") in CITATION_BLOCKING]
 
 
@@ -560,6 +604,10 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
         "round": len(rows) + 1, "used_faces": [], "submission_id": "",
         "landed": "pending", "at": _now_iso(),
     }
+    #: 同 `record_verification`：I10 硬禁令的机械命中只作读数（条件写入、不参与判定）。
+    _pending_banned = banned_markers_in(text)
+    if _pending_banned:
+        row["hard_ban_markers"] = list(_pending_banned)
     _append_verification(path, row)
     return row
 
@@ -582,12 +630,16 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
                  proof_shas: Sequence[str] = ()) -> dict[str, Any]:
     """按对象内容的 sha 认领 pending 台账里的那一签（最近一次审校说了算）。
 
-    返回 `{"found","verdict","proof_sha256","object_sha256","ledger","why"}`。
+    返回 `{"found","verdict","proof_sha256","object_sha256","ledger","row","why"}`。
     `found=False` 只表示"pending 里没有盖住这一份的签"，不是"没查成"；
     读不出来时才抛 `VerificationError`（三态：没查成不许折成没有签）。
+
+    `row` 是认到的那一整行（`found=True` 时非空）：判据在调用方那一侧，而它们要的
+    `unresolved_errors` / `citation_checks` / `citation_gate` 三格只在行上 ——
+    交半行出去等于逼调用方退回"只看 verdict 那个词"。
     """
     out: dict[str, Any] = {"found": False, "verdict": "", "proof_sha256": "",
-                           "object_sha256": "", "ledger": "", "why": ""}
+                           "object_sha256": "", "ledger": "", "row": {}, "why": ""}
     obj = str(object_sha256 or "").strip().lower()
     wants = {str(s or "").strip().lower() for s in (proof_shas or ()) if str(s or "").strip()}
     rows, problems = pending_rows(root)
@@ -614,6 +666,11 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
     out.update(found=True, verdict=str(hit.get("verdict") or ""),
                proof_sha256=str(hit.get("proof_sha256") or ""),
                object_sha256=str(hit.get("object_sha256") or ""),
+               #: 认到的那一整行（2026-10-27 补）。为什么要交出去：`signs_bit3` 要读
+               #: `unresolved_errors` / `citation_checks` / `citation_gate` 三格，而它们
+               #: 改前在这一格里被丢掉了 ⇒ 调用方只能退回"看 verdict 那个词"，
+               #: 于是同一行内容在 pending 与命题台账两处被两套判据读。
+               row=dict(hit),
                ledger=(f"{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/"
                        f"{str(hit.get('object_sha256') or hit.get('proof_sha256') or '')[:64]}"
                        f".jsonl#{hit.get('verification_id') or '?'}"))
@@ -976,7 +1033,7 @@ def parse_verdict(text: str) -> dict[str, Any]:
     在台账上留下"V 看过这份证明，结论是看不出来"——那是一条假证据。
 
     ## 引用核实那一格（业主 2026-10-26 裁定）
-    输出里的 `citation_checks` 一并洗成 :data:`CITATION_CHECK_KEYS` 那四格并放进结论，
+    输出里的 `citation_checks` 一并洗成 :data:`CITATION_CHECK_KEYS` 那五格并放进结论，
     于是它随台账那一行落盘（"签字的读数"里有这一格）。形状不对（`verdict` 不在词表里 /
     `stmt_id` 不是命题号形态）是"没查成"：抛错，不静默丢、也不折成 `unknown`。
 
@@ -1125,6 +1182,14 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "submission_id": str(submission_id or ""),
         "at": _now_iso(),
     }
+    #: I10 硬禁令的机械命中（2026-10-27，业主裁定：先接成读数、不许直接挡签）。
+    #: 命中就写一格 `hard_ban_markers`（"易证/显然/trivial/…"逐条），落盘可见；
+    #: 只在命中时写（条件写入，老行与"没命中"的行逐字节不变）。它不参与任何判定：
+    #: `signs_bit3` 不读它、`parse_verdict` 不因它改结论 —— 理由是"存量里有多少条
+    #: 会被挡"还没量过，一次接上挡签会把一批历史证明打掉（业主 2026-10-27 的裁定）。
+    _banned = banned_markers_in(proof_text)
+    if _banned:
+        row["hard_ban_markers"] = list(_banned)
     #: D-34：这一签审的对象（盘上那份报告 / 证明文件）的字节 sha256 与相对路径。
     #: 只在调用方真的知道时写（条件写入，老行因此逐字节不变），读侧按它认领
     #: "命题登记之前审的那一签"（`numericproof.latest_third_party_sign` 的第二路）。
@@ -1374,20 +1439,6 @@ def _ledger_mirror_rows(root_p: Path) -> tuple[Any, bool]:
     if not isinstance(rows, list):
         return {"why": "文件里没有 rows 数组"}, True
     return [dict(r) for r in rows if isinstance(r, Mapping)], True
-
-
-def read_verification(root: str | Path, verification_id: str) -> dict[str, Any] | None:
-    """按编号取一行（编号在同一命题的文件内唯一；跨文件重号 ⇒ 返回第一个并带 `ambiguous`）。"""
-    want = str(verification_id or "").strip()
-    rows, _problems = list_verifications(root, limit=None)
-    hit = [r for r in rows if str(r.get("verification_id")) == want]
-    if not hit:
-        return None
-    if len(hit) > 1:
-        got = dict(hit[0])
-        got["ambiguous"] = len(hit)
-        return got
-    return hit[0]
 
 
 def signing_gate_problem(row: Mapping[str, Any]) -> str:
@@ -1877,6 +1928,10 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         #: 那一签盖住的 sha。它是"旧签降为历史"的唯一读数格。
         "superseded": [_superseded_reading(r) for r in superseded],
         "superseded_total": len(superseded),
+        #: I10 硬禁令在这一签上的机械命中（2026-10-27，只报不判）：这一格不参与
+        #: `state` / `ok` / `in_sync` 中的任何一个 —— 它只是让"这一签盖过的正文里有
+        #: 「易证/显然」"这件事可见。老行没有这一格 ⇒ 空列表。
+        "hard_ban_markers": [str(m) for m in (chosen.get("hard_ban_markers") or [])],
     })
     if covering and signs_bit3(chosen):
         out.update(state="signed", ok=True, in_sync=True,
@@ -2145,25 +2200,41 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
                       got: Mapping[str, Any], *, statement_id: str) -> dict[str, Any]:
     """:func:`_pending_signed` 认到那一签之后，把 `proof_review_gap` 的读数摊开。
 
-    判据与"台账那一路"同一条（`signs_bit3`）：`成立` 且没有未解决 error 才算签住。
+    判据与"台账那一路"同一条（`signs_bit3`）：`成立` 且没有未解决 error、且引用核实
+    没有挡住的那一条，才算签住（2026-10-27 收口）。
+
+    改前这一行是 `row_ok = (verdict == "成立")` —— 与它上面这句话相反：`pending_sign`
+    只回四格，`unresolved_errors` / `citation_checks` / `citation_gate` 全被丢掉，
+    于是"成立 + 有未解决 error"与"成立 + 引用核实判不了"在这一路上都读成签住了，
+    而同一行内容放进 `verifications/<命题号>.jsonl` 会被 `signs_bit3` 拒。同一份证据、
+    两个落点、两套判定 —— 这就是要收掉的那条缝。
     """
-    row_ok = (str(got.get("verdict") or "") == "成立")
+    row = dict(got.get("row") or {})
+    row.setdefault("verdict", str(got.get("verdict") or ""))
+    row_ok = signs_bit3(row)
+    verdict_word = str(got.get("verdict") or "")
     out["ledger"] = str(got.get("ledger") or "")
     out["verification_id"] = str(out["ledger"]).split("#")[-1]
-    out["verdict"] = str(got.get("verdict") or "")
+    out["verdict"] = verdict_word
     out["rows"] = 1
     out["sha_matches"] = True
     out["checked"] = True
+    # 签不住有两种来路，拒信必须分开说：结论压根不是「成立」，还是判了「成立」却
+    # 被 `signs_bit3` 的三条（未解决 error / 引用核实 / 没查成）之一挡住。
+    if verdict_word != "成立":
+        blocked = f"结论是 {verdict_word!r}（要「成立」）"
+    else:
+        blocked = ("结论写了「成立」但签不住（" + _bit3_blockers(row) + "）")
     checks[1].update(ok=bool(row_ok),
                      detail=(f"{out['ledger']}（命题还没在册时审的那一签）"
-                             if row_ok else f"{out['ledger']}：结论不是「成立」"))
+                             if row_ok else f"{out['ledger']}：{blocked}"))
     checks[2].update(ok=bool(row_ok),
                      detail=("按这一份正文的 sha 认领到（待登记的那一签）"
                              if row_ok else "签的不是这一份"))
     if not row_ok:
         out["state"] = "rejected"
-        out["why"] = (f"命题 {statement_id} 的证明在 pending 台账里那一签是 "
-                      f"{out['verdict']!r}（要「成立」）⇒ 复核过、结论不是成立")
+        out["why"] = (f"命题 {statement_id} 的证明在 pending 台账里那一签：{blocked}"
+                      "⇒ 复核过、签不住")
         return out
     out["state"] = "signed"
     out["ok"] = True
@@ -2171,6 +2242,21 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
                   "审过这一份并判「成立」，按这一份正文的 sha 认领到"
                   "（「先签后登记」与「先登记后签」是同一件事）")
     return out
+
+
+def _bit3_blockers(row: Mapping[str, Any]) -> str:
+    """`signs_bit3` 为假时，逐条说清是哪一条挡住（拒信与读数的唯一措辞处）。"""
+    why: list[str] = []
+    if int(row.get("unresolved_errors") or 0) != 0:
+        why.append(f"未解决的 error {int(row.get('unresolved_errors') or 0)} 条")
+    problem = signing_gate_problem(row)
+    if problem:
+        why.append(f"引用核实没查成（{problem}）")
+    blocked = citation_blocks(row)
+    if blocked:
+        why.append("引用核实挡住：" + "、".join(
+            f"{e['stmt_id'] or '（没有号）'} 判 {e['verdict']}" for e in blocked))
+    return "；".join(why) or "判据判不了（读数不全）"
 
 
 def proof_review_gap(root: str | Path, row: Mapping[str, Any],
@@ -2357,6 +2443,8 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         # 给拒收消息用（"这一签是 verdict=X、unresolved_errors=N"）：读数，
         # 不参与判据 —— 判据只看 `signs_bit3`（一处口径）。
         "unresolved_errors": int(span.get("unresolved_errors") or 0),
+        # I10 硬禁令的机械命中（只报不判，见 `review_standing` 的同一格）。
+        "hard_ban_markers": [str(m) for m in (span.get("hard_ban_markers") or [])],
     })
     if state == "signed" and checked:
         checks[1].update(ok=True, detail=f"{out['verification_id']}：{out['verdict'] or '成立'}")

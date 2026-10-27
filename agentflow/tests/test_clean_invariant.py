@@ -69,11 +69,11 @@ DEAD_PRIVATE_LEDGER: dict[str, str] = {
         "交差/手稿面同族 —— 可能是接线缺口（实现好了没接上去），而删它会连那半截设计"
         "一起丢。需人裁：接上它，或由人删。`docs/WIRING-AUDIT-2026-10-27.md` 的台账"
         "只收今晚点过名的那些，没有它。"),
-    "tools/base.py::_schema_allows_null": (
-        "`validate_params` 的 null 放行判据。零调用点、零提及，但 `tools/base.py` 是"
-        "FC-27 禁改区（`[category: auth-audit]`：只读角色的权限面由它三处共同决定）"
-        "⇒ 清洁这一轮不许动它。需人裁：或并进 `validate_params`（那儿有同一段理由），"
-        "或由人删除。"),
+    # 2026-10-27（`R-BE4` 的②-2，业主批准 = 删）：`tools/base.py::_schema_allows_null`
+    # 已由人裁掉 —— 零调用点，而"显式 null 一律放行"是 `validate_params` 与
+    # `ToolRegistry.call` 刻意的口径（把 null 崩翻成可行动的 `param_error`，见
+    # `base.py` 里 `except (TypeError, AttributeError)` 那一支）。函数描述的是一个
+    # 不打算落地的判据，留着只会让读的人以为"null 有闸"。
 }
 
 #: 结构上不算"孤儿"的（按形态排除，不按名字登记 —— 名单越短越不会被借用）：
@@ -263,6 +263,123 @@ def test_a_nested_function_is_not_a_module_level_definition() -> None:
     got = _Defs("probe.py")
     got.visit(ast.parse("def outer():\n    def _inner():\n        return 1\n    return _inner()\n"))
     assert {d["name"] for d in got.defs} == {"outer"}, got.defs
+
+
+# ============================================================ 第 4 条：判据面
+
+#: 第 4 条的台账：`"<rel>::<qual>"` -> "归哪条判据用、为什么不删它"。
+#:
+#: 这一栏收的是"公开"函数：生产侧没有任何读者（`src` / `scripts` / `tools` 里除了
+#: 定义那一处再无提及），但它们是某条判据的靶子。第 1 条收不了这一档 ——
+#: 它刻意只量私有名（公开名可能是工具 / argparse 挂点 / 别人 `import` 的 API，
+#: 静态看不见那些边）。所以"公开、零生产读者、但有判据读它"必须单列一栏，
+#: 否则它要么被当成漏网死代码删掉（判据随即失去对象），要么没人知道它为什么还在。
+#:
+#: 为什么不删：删掉靶子之后，那条判据只剩两条路 —— 失去对象（不再判任何东西），
+#: 或者自己在测试里把那套读账重新算一遍（判据自己证明自己）。后者是本项目点名的
+#: 最坏的绿：测试与实现一起漂，而读数照样通过。
+DIAGNOSTIC_FACE: dict[str, str] = {
+    "conceptrows.py::definition_supply": (
+        "定义供给的六桶读数（`concepts` 那套镜像的供给面）。零生产读者，唯一的读者是"
+        "`tests/test_the_definition_supply_is_counted.py`（六桶逐格、含一个读不成表的负控）。"
+        "为什么不删：它是那条判据的靶子 —— 删了之后测试只能自己再数一遍六桶，于是"
+        "'读数错了'与'测试漏了'再也分不开。要是将来接进收工门或 webui 的读数面，"
+        "这一条就该从本栏删掉（那时它有生产读者了）。"),
+    "conceptrows.py::mirror_gaps": (
+        "概念镜像的缺口读数（`statements_only` / `concepts_only` + `transition_over`）。"
+        "零生产读者，读者是 `tests/test_the_mirror_is_complete.py` 与"
+        "`tests/test_the_concept_view_during_the_merge.py`。为什么不删：同上 —— 它是"
+        "'镜像缺哪几条'那条判据的靶子，而且它自己带三态（`transition_over=True` 说的是"
+        "'这一格不再适用'，不是'缺口没有了'）；删了这份区分就只剩测试里的复刻。"),
+}
+
+
+def production_word_counts(skip: tuple[pathlib.Path, ...] = ()) -> Counter[str]:
+    """生产侧（`src` / `scripts` / `tools`）每个标识符形态的词出现几次。
+
+    与 `word_counts` 的差别只有扫描根：这一栏问的是"生产侧有没有读者"，
+    所以测试与文档不算（测试里出现是这条登记的前提，不是反例）。
+    """
+    skip_set = {p.resolve() for p in skip}
+    counts: Counter[str] = Counter()
+    for root in (SRC, SCRIPTS, TOOLS):
+        for path in _py_files(root):
+            if path.resolve() in skip_set:
+                continue
+            counts.update(_WORD.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return counts
+
+
+def diagnostic_face_problems(defs: list[dict], prod: Counter[str] | dict[str, int],
+                             test: Counter[str] | dict[str, int]) -> dict[str, list[str]]:
+    """按台账逐条核"它还是不是判据面"，返回 `{键: [问题…]}`（空 dict = 全对）。"""
+    by_key = {f"{d['rel']}::{d['qual']}": d for d in defs}
+    out: dict[str, list[str]] = {}
+    for key in DIAGNOSTIC_FACE:
+        d = by_key.get(key)
+        if d is None:
+            out[key] = [f"定义不见了（{key}）⇒ 登记过期，删掉台账里那一行"]
+            continue
+        name = d["name"]
+        issues: list[str] = []
+        if int(prod.get(name, 0)) > 1:
+            issues.append(
+                f"生产侧现在有读者（{int(prod.get(name, 0)) - 1} 处提及）⇒ 它不再是判据面，"
+                "把台账里那一行删掉")
+        if int(test.get(name, 0)) < 1:
+            issues.append("测试侧一次都不提它 ⇒ 靶子没了，这个函数该删（不许为绿留死代码）")
+        if issues:
+            out[key] = issues
+    return out
+
+
+def test_every_diagnostic_face_entry_is_still_a_criterion_target() -> None:
+    """第 4 条：登记为"判据面"的公开函数，必须仍然只被测试读、且仍有测试读它。
+
+    三向都红（三种"登记过期"）：
+    - 那个定义不见了 ⇒ 登记过期（改名 / 删掉了）；
+    - 生产侧出现第二处提及 ⇒ 它有读者了，这条登记必须删掉（它不再是判据面）；
+    - 测试侧一次都不提 ⇒ 靶子没了，函数该删。
+
+    为什么台账里只有两条：这一栏刻意只收"点过名"的（与第 2 条 `ONE_IMPLEMENTATION`
+    同一个取舍）。全仓"公开但只有测试读"的函数远不止两个，逐个登记会烂成噪音；第 1 条
+    与 lint R003 已经分担了各自的普查面。这条判据守的是"登记过的每一条都还成立"。
+    """
+    me = pathlib.Path(__file__)
+    defs = collect_defs(SRC)
+    measured = diagnostic_face_problems(
+        defs, production_word_counts(skip=(me,)), word_counts(skip=(me,)))
+    assert not measured, (
+        "判据面台账与实测不符：\n  "
+        + "\n  ".join(f"{k}：{'；'.join(v)}" for k, v in sorted(measured.items()))
+    )
+
+
+def test_the_diagnostic_face_check_is_two_way() -> None:
+    """第 4 条的反真空：三种过期形态各喂一次，必须都报出来。
+
+    "往生产侧接一个读者 ⇒ 登记该删"与"测试不再提它 ⇒ 函数该删"这两条要求，
+    本体就是 `diagnostic_face_problems`；下面用合成输入逐条验它。
+    """
+    defs = [
+        {"rel": "probe.py", "line": 1, "name": "supply", "qual": "supply", "decos": []},
+        {"rel": "probe.py", "line": 1, "name": "gone_target", "qual": "gone_target", "decos": []},
+    ]
+    saved = dict(DIAGNOSTIC_FACE)
+    DIAGNOSTIC_FACE.clear()
+    DIAGNOSTIC_FACE.update({
+        "probe.py::supply": "样例：判据靶子",
+        "probe.py::gone_target": "样例：判据靶子",
+        "probe.py::vanished": "样例：已删",
+    })
+    try:
+        got = diagnostic_face_problems(defs, {"supply": 3}, {"gone_target": 0})
+    finally:
+        DIAGNOSTIC_FACE.clear()
+        DIAGNOSTIC_FACE.update(saved)
+    assert "probe.py::vanished" in got, got                  # 定义不见了
+    assert any("生产侧现在有读者" in x for x in got.get("probe.py::supply", [])), got
+    assert any("靶子没了" in x for x in got.get("probe.py::gone_target", [])), got
 
 
 # ============================================================ 第 2 条：重复实现

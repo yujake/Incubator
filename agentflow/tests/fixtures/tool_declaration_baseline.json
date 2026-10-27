@@ -1,7 +1,7 @@
 {
  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。",
  "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
- "n_tools": 117,
+ "n_tools": 118,
  "n_cohort": 85,
  "baseline_summary_chars": 8631,
  "max_ratio": 0.75,
@@ -93,7 +93,7 @@
   "verify.verify_proof"
  ],
  "added_after_compression": {
-  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。",
+  "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（R-BE4 D1 Phase A）：再起 1 件（conjecture.register_conjecture —— D 的主力动作此前只被 capabilities 读到、build_registry 从不装配，业主批准后进 tools._MODULES），同一口径：说明没被压过，不进比例。",
   "tools": [
    "clock.alarm_start",
    "clock.now",
@@ -126,7 +126,8 @@
    "trace.children",
    "conductor.patrol",
    "conductor.review_child",
-   "conductor.patrol_verdict"
+   "conductor.patrol_verdict",
+   "conjecture.register_conjecture"
   ]
  },
  "declarations": {
@@ -5308,6 +5309,99 @@
     "M"
    ],
    "tags": [],
+   "handler_name": "functools.partial",
+   "added_after_compression": true
+  },
+  "conjecture.register_conjecture": {
+   "summary": "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。单行内判据只有一份（schema.Conjecture.validate）；被引用的实验/文献必须在库里",
+   "params": {
+    "type": "object",
+    "properties": {
+     "statement": {
+      "type": "string"
+     },
+     "origin": {
+      "type": "string"
+     },
+     "conjecture_id": {
+      "type": "string"
+     },
+     "testable": {
+      "type": "object",
+      "description": "可检验形式（三个键都要给）：{parameters, criterion, falsified_by}"
+     },
+     "form": {
+      "type": "string",
+      "enum": [
+       "universal",
+       "existential",
+       "identity",
+       "bound",
+       "structural"
+      ]
+     },
+     "negation_statement": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "proposed",
+       "needs_evidence",
+       "testing",
+       "supported_not_proved",
+       "refuted",
+       "proved",
+       "promoted",
+       "known_in_literature",
+       "withdrawn"
+      ]
+     },
+     "experiment_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "proof_experiment_id": {
+      "type": "string"
+     },
+     "counterexample_experiment_id": {
+      "type": "string"
+     },
+     "promoted_to": {
+      "type": "object"
+     },
+     "known_lit_id": {
+      "type": "string"
+     },
+     "withdraw_reason": {
+      "type": "string"
+     },
+     "notes": {
+      "type": "string"
+     },
+     "force_new": {
+      "type": "boolean",
+      "description": "就算库里已有同一句话也新建一行（缺省 false ⇒ 命中既有行）"
+     }
+    },
+    "required": [
+     "statement",
+     "origin"
+    ],
+    "additionalProperties": false
+   },
+   "returns": "{'conjecture_id','statement','negation_statement','form','testable','origin','status','experiment_ids','proof_experiment_id','counterexample_experiment_id','promoted_to','known_lit_id','withdraw_reason','notes','created_at','updated_at','created_by','duplicate','duplicate_of'}（落库后的 conjectures 行 + D13 的判重读数）",
+   "side_effect": "write_local",
+   "external": "none",
+   "roles": [
+    "D"
+   ],
+   "tags": [
+    "conjecture",
+    "write"
+   ],
    "handler_name": "functools.partial",
    "added_after_compression": true
   }

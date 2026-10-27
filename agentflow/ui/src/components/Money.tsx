@@ -20,8 +20,19 @@ function num(value: number | null | undefined): string {
   return value === null || value === undefined ? "unknown" : String(value);
 }
 
+/**
+ * 一笔金额的写法（`Money` 自己也用它）。
+ *
+ * 2026-10-27（业主裁定 W7）：此前四个文件各写一份 `$x.toFixed(6)` / `x.toFixed(6) + " USD"`，
+ * 同一个读数在「预算」页是 `$0.000000`、在「一趟详情」是 `0.000000 USD`。金额的写法
+ * 只留这一处，页面要"只有字符串"的场合（`impact` 提示、表格里的一格）也走它。
+ */
+export function formatUsd(value: number | null | undefined): string {
+  return value === null || value === undefined ? "unknown" : `${value.toFixed(6)} USD`;
+}
+
 export function Money(props: MoneyProps) {
-  const amount = props.usd === null ? "unknown" : `${props.usd.toFixed(6)} USD`;
+  const amount = formatUsd(props.usd);
   return (
     <span class="mono">
       {props.label === undefined ? null : `${props.label} `}

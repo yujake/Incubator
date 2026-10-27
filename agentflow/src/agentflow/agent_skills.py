@@ -447,8 +447,12 @@ def _m_skills() -> tuple[Skill, ...]:
             when="拿到一件活、要决定「这该派给谁」的时候（尤其是想派 F 或 V 的时候）",
             actions=("A.search_literature", "B.run_once", "C.neighbors", "D.propose_question",
                      "E.run_experiment", "G.build_document", "H.review",
-                     # 2026-10-20 业主裁定：撤掉 `M→V`；派 V 只有 F 与 B 两个入口
-                     # ⇒ V 不在 M 的出边里 ⇒ V 的动作也不许出现在这一条的可派清单里
+                     # 2026-10-20 业主裁定：撤掉 `M→V`。派 V 的入口按
+                     # `capabilities.ALLOWED_EDGES` 是三个：B（入库文献侧内容时请 V 签）、
+                     # F（交出证明时一并办）、E（2026-10-23 加的，穷举证据要 V 会审）。
+                     # 这里原来写"只有 F 与 B 两个入口"—— E→V 那条边加上之后它就过期了，
+                     # 而这句话讲的是权限面，过期版本会让人按旧矩阵办事。
+                     # ⇒ V 仍然不在 M 的出边里 ⇒ V 的动作不许出现在这一条的可派清单里
                      # （写进去就是一句做不到的指令，`validate()` 会照判——见本文件 `validate()`）。
                      ),
             tools=("conductor.role_spec", "conductor.summon_many"),

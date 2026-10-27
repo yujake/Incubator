@@ -463,12 +463,22 @@ def test_negative_control_a_hand_edited_dist_file_is_reported(tmp_path: pathlib.
     assert _tree_problems(_tree_hashes(good), _tree_hashes(same)), "少掉的文件没被看见"
 
 
-def _fresh_build() -> tuple[int, str]:
-    """跑一次真实构建，返回 `(退出码, 输出尾巴)`。
+def _fresh_build(out_dir: pathlib.Path) -> tuple[int, str]:
+    """跑一次真实构建到 `out_dir`（临时目录，不是入库的 `web/static`），返回 `(退出码, 输出尾巴)`。
+
+    为什么构建到临时目录（2026-10-27 改）：改前的写法是 `cwd=UI` + 缺省 outDir，
+    而缺省 outDir 正是入库的 `web/static` —— 于是这条"判据"每跑一次就把盘上产物换一次，
+    然后拿换前/换后的哈希去比。实测后果（跑一次之后的 `git status`）：
+    `D assets/index.<旧哈希>.js` / `M index.html` / `?? assets/index.<新哈希>.js`。
+    判据不许改写它判的东西（它一红，红的原因与被它改坏的东西还混在一起）。
+
+    `--emptyOutDir` 必须一起给：vite 只在 outDir 位于工程根之内时才自动清空，
+    指到 root 之外它只警告不清（那正是上面那次实测里新旧哈希文件并存的原因）。
 
     为什么直接起 `node node_modules/vite/bin/vite.js build` 而不走 `pnpm -C ui build`：
     pnpm 在 Windows 上是 `.CMD`（`subprocess` 不套 shell 起不动），而且 pnpm 11 会在跑
     脚本前先跑一次 `install`（那是另一件事）。两者真正执行的都是这一条命令。
+    `--outDir` 是 CLI 参数，优先级高于 `vite.config.ts` 里那一格。
 
     为什么 `encoding="utf-8"` 不是装饰：内容比对走 `_tree_hashes`（文件哈希），与 stdout
     无关，所以缺了它比对照样成立 —— 坏掉的是这一格的诊断。node / vite 按 UTF-8 往
@@ -481,13 +491,16 @@ def _fresh_build() -> tuple[int, str]:
     """
     node = shutil.which("node")
     vite = UI / "node_modules" / "vite" / "bin" / "vite.js"
-    proc = subprocess.run([str(node), str(vite), "build"], cwd=str(UI),
-                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+    proc = subprocess.run([str(node), str(vite), "build",
+                           "--outDir", str(out_dir), "--emptyOutDir"],
+                          cwd=str(UI),
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          timeout=900)
     tail = ((proc.stderr or "") + (proc.stdout or "")).strip().splitlines()
     return proc.returncode, " / ".join(tail[-4:])
 
 
-def test_the_committed_dist_is_what_a_fresh_build_produces() -> None:
+def test_the_committed_dist_is_what_a_fresh_build_produces(tmp_path: pathlib.Path) -> None:
     """正控（产物新鲜度）：盘上那份 `web/static/**` 与"重新构建一次"逐文件一致。
 
     三档口径（不许把"没查成"折成"查过了没问题"）：
@@ -497,6 +510,7 @@ def test_the_committed_dist_is_what_a_fresh_build_produces() -> None:
         ⇒ skip，理由里带上真实的退出码与错误尾巴。
 
     真的跑起来时它比"内容"：手改了产物一个字节 ⇒ 与重新构建的结果对不上 ⇒ 红。
+    构建落在 `tmp_path` 里（见 `_fresh_build`），盘上那份产物全程一个字节都不动。
     """
     index = STATIC / "index.html"
     if not index.is_file():
@@ -507,16 +521,15 @@ def test_the_committed_dist_is_what_a_fresh_build_produces() -> None:
         pytest.skip("没装 node ⇒ dist 新鲜度记 unknown（不记 pass）")
     if not (UI / "node_modules" / "vite" / "bin" / "vite.js").is_file():
         pytest.skip("前端依赖没装（ui/node_modules/vite 不在）⇒ dist 新鲜度记 unknown（不记 pass）")
-    before = _tree_hashes(STATIC)
+    fresh = tmp_path / "fresh-dist"
     try:
-        code, tail = _fresh_build()
+        code, tail = _fresh_build(fresh)
     except (OSError, subprocess.SubprocessError) as exc:
         pytest.skip(f"构建这一步没查成（{type(exc).__name__}: {exc}）"
                     "⇒ dist 新鲜度记 unknown（不记 pass）")
     if code != 0:
         pytest.skip(f"构建这一步没查成（exit {code}）⇒ dist 新鲜度记 unknown（不记 pass）：{tail}")
-    after = _tree_hashes(STATIC)
-    problems = _tree_problems(before, after)
+    problems = _tree_problems(_tree_hashes(STATIC), _tree_hashes(fresh))
     assert not problems, (
         "盘上的产物与重新构建的结果不一致（手改过、或者改了前端没重建）："
         + "；".join(problems[:6]) + "。重建之后连同产物一起提交（裁定 B1）")

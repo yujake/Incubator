@@ -159,6 +159,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import contextvars
+import heapq
 import json
 import os
 import signal
@@ -240,6 +241,46 @@ WOKE_REASONS: tuple[str, ...] = ("event", "closed", "timeout", "retired", "progr
 
 #: 等谁的三态读数（与 `Reading` 同一族纪律：不许把"没查成"折成"没到"）。
 TARGET_STATES: tuple[str, ...] = ("open", "closed", "unjudgeable")
+
+#: 补偿对账的间隔（秒）。为什么是 30 秒，三个理由缺一不可：
+#:
+#: 1. 它是"事件漏发"的唯一兜底（见下面的 `EVENT_CLOSE_HOOKS`）。比它更短的间隔换不到
+#:    正确性，只换来更勤的全表扫；更长则一条漏发事件的等待最多挂 30 秒才被救回来，
+#:    而业主给的最短的一档等待是 M 的巡视 20 分钟（`PATROL_INTERVAL_SEC`）——
+#:    30 秒是它的 1/40，读的人分不出"漏发被救回"与"事件当场到"。
+#: 2. 一次对账的成本是 O(全表行数) + O(不同等待对象个数)（实测 N=3000 时 ~9ms）。
+#:    30 秒做一次 ≈ 0.03% 的占空比；若改成每拍都对账（改前的行为），几千条计时器时
+#:    每一步要付两次 9ms。
+#: 3. 它同时是 `next_wake_in_sec` 的一个上界：挂机的一拍最多睡到下一次对账，
+#:    于是"漏发事件"最迟在对账那一刻被救回来，而挂机不许用一个长拍把这一格压过去。
+#:
+#: 它与 `PARK_SLICE_MAX_SEC`（300 秒）的先后：300 秒是"没有更早的事情时最多睡多久"，
+#: 30 秒是本模块自己的安全阀 —— 两者取较早者，所以对账永远先到。
+RECONCILE_EVERY_SEC: float = 30.0
+
+#: "该查一次反查索引了"的登记表（消账的唯一登记处）。
+#:
+#: 键是产生点（`clock` 模块里的函数名），值是这个产生点凭什么对象键去查索引。
+#: 为什么是一张表而不是散落的 if：将来再加一个收工路径时，"漏登记"要能被机器扫出来。
+#: 强制点在 `_close_waiters_for_event`：`source` 不在这张表里 => 当场 `ClockParamError`
+#: （不是"静默不消账"）。判据 `test_event_hooks_are_all_registered` 逐行断言这张表
+#: 的每一行都真的被走到过。
+#:
+#: 覆盖关系（谁把谁的路径带进来）：
+#:
+#: - `observe_event`：事件流的唯一漏斗。子代理收工（`conductor.SummonHandle.settle`
+#:   的 `_observe_submit`）、消息/答复到达（`observe_message`，会话写路径的旁路钩子）、
+#:   交差（`record_handoff`）都汇到它这一处 ⇒ 它们不必各自再登记一行；
+#: - `finish_program`：程序收口（`ProgramSpan.finish` / `stop_program` / 超时杀）
+#:   都走它，于是等 `program:<号>` 的表在这里消账；
+#: - `stop_program`：停机开关让"等这条程序"的表立刻收口（它内部也会调
+#:   `finish_program`，单列一行是为了让读数分得清是谁触发的）。
+EVENT_CLOSE_HOOKS: dict[str, str] = {
+    "observe_event": "事件流：message / submit / reply / handoff / delivery 五类各按对象键撞一次索引",
+    "record_handoff": "交差：父侧等 task:<子> 的那几条当场判掉（它自己也发 handoff 事件）",
+    "finish_program": "程序收口：等 program:<号> 的那几条当场判掉",
+    "stop_program": "停机：被停的程序按 killed 收口之后，等它的表立刻收口",
+}
 
 #: 挂机状态（业主 2026-10-25：「挂机是将进程挂在时钟上」）。
 #:
@@ -1319,6 +1360,47 @@ def set_target_probe(probe: Callable[[str, str, str], Mapping[str, Any]] | None)
     return previous
 
 
+#: 进程内的工作区解析缓存：`Path(workspace).resolve()` -> 绝对路径。
+#:
+#: 为什么要缓存（2026-10-27 的实测）：Windows 上 `resolve()` 要调
+#: `nt._getfinalpathname` 再 `stat`，一次 ~350 微秒；而 `target_state` 每问一次"被等的
+#: 东西收口了没有"都要把工作区解析一遍。真机上 26 个不同的等待对象 = 26 次解析
+#: = 9 毫秒，比它要做的判定本身贵两个数量级（`temp/_clock_bench.py` 的 before 读数：
+#: N=53 时 fire_due 一拍的 13.6ms 里 9ms 是这一处）。解析结果是纯函数（同一个字符串
+#: 永远解析成同一个绝对路径），所以缓存它不改变任何读数。
+_RESOLVED_ROOTS: dict[str, str] = {}
+_RESOLVED_ROOTS_LOCK = threading.Lock()
+
+#: 解析缓存的上界。它不是性能参数，是"不泄漏"的上界：一个进程里工作区数远小于它。
+RESOLVED_ROOTS_MAX: int = 4096
+
+
+def _resolve_root(workspace: str | Path) -> str:
+    """把工作区解析成绝对路径（进程内缓存一次）。读不成 => 原样返回（不抛）。"""
+    raw = str(workspace)
+    got = _RESOLVED_ROOTS.get(raw)
+    if got is not None:
+        return got
+    try:
+        got = str(Path(raw).resolve())
+    except OSError:
+        return raw
+    with _RESOLVED_ROOTS_LOCK:
+        if len(_RESOLVED_ROOTS) >= RESOLVED_ROOTS_MAX:
+            _RESOLVED_ROOTS.clear()
+        _RESOLVED_ROOTS[raw] = got
+    return got
+
+
+#: 本进程问了几次"被等对象收口了没有"（`target_state` 的进入次数）。
+#:
+#: 它是成本读数 `cost_reading()["target_probe_count"]` 的真身：改前一次 `fire_due`
+#: 要为每个不同的等待对象各问一次，于是这一格等于"不同等待对象数"；改后在没有事件的
+#: 安静拍上它必须等于 0（早退之后一次都不问）。计数是进程级的累加；`fire_due` 用
+#: 前后差值把它折成"这一拍问了几次"。
+_PROBE_CALLS: list[int] = [0]
+
+
 def _probe_read(workspace: str | Path, kind: str, ref: str) -> dict[str, Any]:
     """问一次"等谁"的读口，把结果规整成五格（三态都在里面）。"""
     probe = _TARGET_PROBE
@@ -1327,7 +1409,7 @@ def _probe_read(workspace: str | Path, kind: str, ref: str) -> dict[str, Any]:
                 "resolved": f"{kind}:{ref}",
                 "why": "没有接上'等谁'的读口（set_target_probe 还没接）=> 判不了它收口了没有"}
     try:
-        got = dict(probe(str(Path(workspace).resolve()), str(kind), str(ref)) or {})
+        got = dict(probe(_resolve_root(workspace), str(kind), str(ref)) or {})
     except Exception as exc:  # noqa: BLE001 - 读口炸了是"没查成"，不是"没到"
         return {"checked": False, "found": False, "closed": False,
                 "resolved": f"{kind}:{ref}",
@@ -1371,6 +1453,7 @@ def target_state(workspace: str | Path, kind: str, ref: str) -> tuple[str, str, 
     """
     if kind not in WAIT_FOR_KINDS:
         raise ClockParamError(f"wait_for 的指称只认 {WAIT_FOR_KINDS}，收到 {kind!r}")
+    _PROBE_CALLS[0] += 1
     if kind == "program":
         # 程序那一条不需要探针：它就在本模块的簿记里（`state` 变了就是"程序结束了"）。
         # 三态同族：簿记读不成 => `unjudgeable`（不是"程序还在跑"）。
@@ -1971,17 +2054,376 @@ class TimerBook:
     """
 
     def __init__(self, workspace: str | Path) -> None:
-        self.workspace = Path(workspace).resolve()
+        self.workspace = Path(_resolve_root(workspace))
         self._timers: dict[str, Timer] = {}
         self._periodics: dict[str, Periodic] = {}
         self._next_seq = 1
         self._loaded = False
         #: 读盘失败的理由。非空 = 这一份簿记没查成，不许读成"没有计时器"。
         self.load_error = ""
+        # ---- 内存派生索引（盘上的格式一个字节都不改，`load` 时重建）----
+        #
+        #: `target_key -> 等它的计时器编号集合`（`_target_key` 的键空间）。
+        #: 它替掉的是"按 `wait_for` 过滤全表"那一次 O(全表) 扫（改前的 `_probe_targets`
+        #: 与 `_wake_waiters` 都各自扫过一遍）。
+        self._waiters: dict[str, set[str]] = {}
+        #: `(到点时刻的墙钟纪元, 台账序号, 计时器编号)` 的最小堆。到点时刻取"钟点"与
+        #: "等谁的上限"两者较早的那一个（见 `_heap_due`）。纯等待（既没有钟点也没有上限）
+        #: 不进堆 —— 它只由事件消账与补偿对账判。
+        self._heap: list[tuple[float, int, str]] = []
+        #: 编号 -> 它在台账里的序号。序号的赋值顺序就是 `state.json` 的行序
+        #: （`(due_at, timer_id)`），于是堆的次序与今天线性扫的次序逐条相同。
+        self._seq_of: dict[str, int] = {}
+        self._order_seq = 0
+        #: 还在堆里的编号（惰性删除：取消/到点之后堆里那一条留着，弹出时按 state 判掉）。
+        self._in_heap: set[str] = set()
+        #: 还 pending 的编号（`pending_count` 因此是 O(1)，不必数全表）。
+        self._pending: set[str] = set()
+        self._index_ready = False
+        #: 最近一次对账的墙钟纪元与当时的单调计数（早退的判据要它们）。
+        self._last_reconcile_at: float | None = None
+        self._last_scan_mono: float | None = None
+        self._reconcile_count = 0
 
     @property
     def state_path(self) -> Path:
         return Path(self.workspace) / STATE_REL
+
+    # ---------------------------------------------------------- 派生索引
+    #
+    # 这一节的四个入口（`add` / `cancel` / `到点` / `load`）是索引唯一的同步点。
+    # 任何一处漏掉都会让"堆 == 线性扫"与"索引 == 全表扫"这两条差分判据当场红。
+
+    @staticmethod
+    def _heap_due(timer: Timer) -> float | None:
+        """这一条计时器"下一次该被叫醒"的墙钟纪元；`None` = 它不进堆。
+
+        两半取较早者：
+
+        1. 钟点那一半：`due_epoch`（起表时就落盘的那一格）；老行没有它就按 `due_at`
+           现解析。两条都读不出来 => 这一条不进堆（三态：判不了就交给补偿对账，
+           不许折成"没有到点"）。
+        2. 等谁的上限那一半：`created_at + max_wait_sec`（`cap_passed` 判的就是这一格）。
+           纯等待（没有上限）两半都没有 => 不进堆。
+        """
+        if timer.state != "pending":
+            return None
+        stamps: list[float] = []
+        if timer.due_epoch is not None:
+            try:
+                stamps.append(float(timer.due_epoch))
+            except (TypeError, ValueError):
+                # 盘上这一格坏掉（手改过 / 老写入方写了字符串）：不当成"没有到点"，
+                # 退到下面按 `due_at` 现解析；两条都读不出来才不进堆（交给补偿对账判）。
+                pass
+        else:
+            due = timer.due_datetime()
+            if due is not None:
+                stamps.append(due.timestamp())
+        if timer.max_wait_sec is not None:
+            try:
+                created = _parse_iso(timer.created_at).timestamp()
+            except ClockError:
+                created = None
+            if created is not None:
+                stamps.append(created + max(0.0, float(timer.max_wait_sec)))
+        return min(stamps) if stamps else None
+
+    def _rebuild_index(self) -> None:
+        """按 `state.json` 的行序重建派生索引（`load` 时一次；判据可随时重放）。"""
+        self._waiters = {}
+        self._heap = []
+        self._seq_of = {}
+        self._in_heap = set()
+        self._pending = set()
+        self._hot = set()
+        self._order_seq = 0
+        order = sorted(self._timers.values(), key=lambda t: (t.due_at, t.timer_id))
+        for timer in order:
+            self._order_seq += 1
+            self._seq_of[timer.timer_id] = self._order_seq
+            if timer.state == "pending":
+                self._index_one(timer)
+        self._index_ready = True
+
+    def _ensure_index(self) -> None:
+        if not self._index_ready:
+            self._rebuild_index()
+
+    def _index_one(self, timer: Timer) -> None:
+        """把一条 pending 计时器登记进反查索引与堆（重复调用不会重复入堆）。"""
+        if timer.state != "pending":
+            return
+        self._pending.add(timer.timer_id)
+        key = _target_key(timer)
+        if key:
+            self._waiters.setdefault(key, set()).add(timer.timer_id)
+        due = self._heap_due(timer)
+        if due is not None and timer.timer_id not in self._in_heap:
+            heapq.heappush(self._heap,
+                           (due, self._seq_of.get(timer.timer_id, 0), timer.timer_id))
+            self._in_heap.add(timer.timer_id)
+
+    def _unindex_one(self, timer: Timer) -> None:
+        """把它从反查索引里摘掉；堆里那一条留给惰性删除（到点时刻不会变）。"""
+        self._pending.discard(timer.timer_id)
+        self._hot.discard(timer.timer_id)
+        key = _target_key(timer)
+        if key:
+            peers = self._waiters.get(key)
+            if peers is not None:
+                peers.discard(timer.timer_id)
+                if not peers:
+                    self._waiters.pop(key, None)
+        self._in_heap.discard(timer.timer_id)
+
+    def sync_index(self, timer: Timer) -> None:
+        """一条计时器的状态可能变了 —— 把派生索引与它对上（幂等，O(log N)）。
+
+        调用点只有四个：`add`（新起一条）、`cancel`（转取消态）、到点动作成功之后
+        （转 fired）、`load`（重建）。漏掉任何一处，`waiters_by_target` 或堆就会与
+        台账分家 —— 两条差分判据（堆 == 线性扫 / 索引 == 全表扫）就是钉子。
+        """
+        self._ensure_index()
+        if timer.timer_id not in self._seq_of:
+            self._order_seq += 1
+            self._seq_of[timer.timer_id] = self._order_seq
+        self._unindex_one(timer)
+        self._index_one(timer)
+
+    def waiters_of(self, target_key: str) -> list[Timer]:
+        """等这个对象的那几条（O(1) 反查；返回的是快照，调用方可以边遍历边改状态）。"""
+        self._ensure_index()
+        ids = self._waiters.get(str(target_key or ""))
+        if not ids:
+            return []
+        out: list[Timer] = []
+        for tid in ids:
+            timer = self._timers.get(tid)
+            if timer is not None and timer.state == "pending":
+                out.append(timer)
+        out.sort(key=lambda t: self._seq_of.get(t.timer_id, 0))
+        return out
+
+    def waiters_count(self) -> int:
+        """被索引的"等谁"关系有多少条（读数用，不是判据）。"""
+        self._ensure_index()
+        return sum(len(ids) for ids in self._waiters.values())
+
+    def pending_count(self) -> int:
+        """还 pending 的条数（O(1)）。"""
+        self._ensure_index()
+        return len(self._pending)
+
+    def total_count(self) -> int:
+        """台账里的总行数（O(1)；改前的 `pending()` 会把它们全部排序一遍）。"""
+        return len(self._timers)
+
+    def heap_size(self) -> int:
+        self._ensure_index()
+        return len(self._in_heap)
+
+    def mark_hot(self, timer: Timer) -> None:
+        """记下"已经判成到点、只等下一次投递"的那一条（事件消账的产物）。
+
+        为什么不在此刻直接投递：投递要写 mailbox 行与唤醒标记，而事件常常发生在另一
+        步的中间（子代理落定、程序收口）。当场写会让"本步刚派出去的子代理已经回来了"
+        变成一次抢占 —— `agent_loop._wait_for_children` 读到时钟唤醒就提前返场，于是
+        每一次扇出都多花一个模型回合。那是拿钱换来的"零时延"，方向反了（实测：
+        `tests/test_agent_loop.py::test_a_role_can_fan_out_a_batch_in_one_step` 在
+        当场投递的版本下 ok_count 从 2 掉到 1，第二次派的活没在这一步回来）。
+
+        判据要的是"不用等下一拍扫表"：这一格就是那个落点 —— 下一拍只按热表投那几条，
+        O(k)，不扫全表。
+        """
+        self._hot.add(timer.timer_id)
+
+    def hot_count(self) -> int:
+        return len(self._hot)
+
+    def pop_hot(self) -> list[Timer]:
+        """取出热表里的那几条（按台账序；不在这里判到点 —— 判据仍然只有 `due_reason`）。"""
+        self._ensure_index()
+        ids = sorted(self._hot, key=lambda t: self._seq_of.get(t, 0))
+        self._hot.clear()
+        out: list[Timer] = []
+        for tid in ids:
+            timer = self._timers.get(tid)
+            if timer is not None and timer.state == "pending":
+                out.append(timer)
+        return out
+
+    def clear_hot(self) -> None:
+        """全表对账之后热表就空了（对账已经把每一条都判过一遍）。"""
+        self._hot.clear()
+
+    def next_due_epoch(self) -> float | None:
+        """堆顶那一条的到点时刻（O(1) peek；惰性删掉已经不作数的堆顶）。
+
+        `None` 有两种情形（都不许折成"到点是 0"）：堆里一条都没有（全部是纯等待或
+        已经空了），或者读不成 —— 后者由 `load_error` 与 `can_early_exit` 分开报。
+        """
+        self._ensure_index()
+        while self._heap:
+            due, _seq, tid = self._heap[0]
+            timer = self._timers.get(tid)
+            if timer is None or timer.state != "pending" or tid not in self._in_heap:
+                heapq.heappop(self._heap)
+                self._in_heap.discard(tid)
+                continue
+            return due
+        return None
+
+    def next_reconcile_epoch(self) -> float | None:
+        """下一次补偿对账应当发生的时刻；还没对账过 => `None`（第一拍必全扫）。"""
+        if self._last_reconcile_at is None:
+            return None
+        return self._last_reconcile_at + RECONCILE_EVERY_SEC
+
+    def next_wake_epoch(self) -> float | None:
+        """下一次"必须醒过来看一眼"的时刻：堆顶 / 下次对账 / 周期性巡查的下一拍。
+
+        口径写死在这里（`next_wake_in_sec` 与挂机片长的封顶都读它）：取三者的较早者。
+        为什么把对账也放进来：对账是漏发事件的唯一兜底（见 `EVENT_CLOSE_HOOKS`），
+        挂机的人若用一个长拍把对账时刻压过去，那条兜底就要再等一拍才跑。
+        为什么把周期性巡查也放进来：它不在计时器的堆里（`Periodic` 是另一本账），
+        漏了它就会出现"挂机把一个 20 分钟的巡查睡过去"。
+        """
+        self._ensure_index()
+        cands: list[float] = []
+        due = self.next_due_epoch()
+        if due is not None:
+            cands.append(due)
+        rec = self.next_reconcile_epoch()
+        if rec is not None:
+            cands.append(rec)
+        for periodic in self.running_periodics():
+            nxt = periodic.next_datetime()
+            if nxt is not None:
+                cands.append(nxt.timestamp())
+            if periodic.until_sec is not None:
+                try:
+                    created = _parse_iso(periodic.created_at).timestamp()
+                except ClockError:
+                    created = None
+                if created is not None:
+                    cands.append(created + max(0.0, float(periodic.until_sec)))
+        return min(cands) if cands else None
+
+    def mark_reconciled(self, reading: Reading) -> None:
+        """记下"这一拍做了一次全表对账"（早退与 `next_wake_in_sec` 都读它）。"""
+        if reading.wall is not None:
+            self._last_reconcile_at = reading.wall.timestamp()
+        if reading.monotonic is not None:
+            self._last_scan_mono = reading.monotonic
+        self._reconcile_count += 1
+
+    def reconcile_count(self) -> int:
+        """这个簿记一共对账过几次（读数用）。"""
+        return self._reconcile_count
+
+    def _periodics_quiet(self, now_epoch: float) -> bool:
+        """周期性巡查这一半能不能被早退跳过（能跳 = 这一拍它一定什么都不做）。"""
+        for periodic in self.running_periodics():
+            if periodic.wait_for:
+                # 它等谁 => 那一半要问 target_state，早退会把它压过去。
+                return False
+            nxt = periodic.next_datetime()
+            if nxt is not None and now_epoch >= nxt.timestamp():
+                return False
+            if periodic.until_sec is not None:
+                try:
+                    created = _parse_iso(periodic.created_at).timestamp()
+                except ClockError:
+                    continue
+                if now_epoch - created >= max(0.0, float(periodic.until_sec)):
+                    return False
+        return True
+
+    def needs_full_scan(self, reading: Reading) -> tuple[bool, str]:
+        """这一拍要不要"全表对账"（补偿扫描）。返回 `(要不要, 为什么要)`。
+
+        三条要（一条都不许折成"不要"）：
+
+        1. 簿记/时钟读不全：读不成 => 没查成，不许早退；
+        2. 还没对过账（第一拍）：改前的行为就是第一拍全扫，这一档照旧；
+        3. 到了 `RECONCILE_EVERY_SEC`（补偿对账：漏发事件的兜底），或者这一拍与
+           上一次判定之间单调计数没走动。后半条是保守方向：时钟停住（或两拍落在同一刻）
+           时"时间没动"意味着这一拍的输入只变了台账那一半，而台账可能被事件漏发、
+           被别的进程改过 ⇒ 这一拍照旧全扫。真机上两个来源都按真实时间前进，这一条
+           从不触发；它换来的是"时钟停住时最多退化成改前的全扫"，而不是"永久挂起"。
+        """
+        self._ensure_index()
+        if self.load_error:
+            return True, self.load_error
+        if reading.status != "ok":
+            return True, (f"时钟只有 {reading.status} 读数"
+                          f"（{reading.reason or '两个来源没有都读到'}）=> 判不了，照旧全扫")
+        if reading.wall is None or reading.monotonic is None:
+            return True, "墙钟或单调计数读不到 => 判不了，照旧全扫"
+        if self._last_reconcile_at is None or self._last_scan_mono is None:
+            return True, "这一份簿记还没对过账 => 第一拍照旧全扫"
+        if reading.monotonic <= self._last_scan_mono:
+            return True, ("这一拍与上一次判定之间单调计数没有走动 => 台账那一半可能变了，"
+                          "照旧对账（时钟停住时不许早退）")
+        if reading.wall.timestamp() >= self._last_reconcile_at + RECONCILE_EVERY_SEC:
+            return True, f"补偿对账到点（每 {RECONCILE_EVERY_SEC:g} 秒一次）"
+        return False, ""
+
+    def can_early_exit(self, reading: Reading) -> tuple[bool, str]:
+        """这一拍能不能"查过了、没有到点的"就收工（不扫表、不问 target_state）。
+
+        前提是 `needs_full_scan` 已经说"不用对账"；这里只再问一句"现在还没到任何一件
+        该醒的事"：`min(堆顶, 下次对账, 下一次周期性巡查)` 还没到，并且周期性巡查
+        那一半确实无事可做（`_periodics_quiet`）。
+
+        三态一条不少：这一档下不许有任何"没查成折成没有"的折叠 —— 读不成的情形全部在
+        `needs_full_scan` 里被拦成"要全扫"了。
+        """
+        self._ensure_index()
+        if self.load_error or reading.status != "ok" or reading.wall is None:
+            return False, "读不全 => 不许早退（交给 needs_full_scan 判）"
+        now_epoch = reading.wall.timestamp()
+        nxt = self.next_wake_epoch()
+        if nxt is None:
+            return False, "簿记里既没有到点也没有对账时刻 => 判不了，照旧全扫"
+        if now_epoch >= nxt:
+            return False, f"下一个到点/对账时刻（{_iso(datetime.fromtimestamp(nxt, UTC))}）已经到了"
+        if not self._periodics_quiet(now_epoch):
+            return False, "有周期性巡查这一拍就该动了（或它等谁）=> 不能早退"
+        return True, ""
+
+    def pop_due(self, reading: Reading) -> list[Timer]:
+        """堆里到点时刻已经过了的那些（按台账序；不真的弹出，投递之后由 `sync_index` 摘掉）。
+
+        它是"到点判定"的候选集：调用方仍要逐条过 `due_reason`（那是唯一判据），
+        于是"堆给的候选"与"线性扫"在判据上完全同源 —— 堆只决定"谁值得看一眼"。
+
+        为什么不在这里就 `heappop`：候选未必真到点（`due_reason` 空），把没到点的那一条
+        从堆里扔掉会让它到点之后再也冒不出来。留在堆里则最坏是"每拍多看它一眼"，
+        代价 O(log N)，而丢掉的代价是永久挂起。
+        """
+        self._ensure_index()
+        now_epoch = reading.wall.timestamp() if reading.wall is not None else None
+        if now_epoch is None:
+            # 空表在这里不是"没有到点"，是"判不了"：墙钟读不到就没法比"现在几点"。
+            # 不抛也不编一个 0 —— 调用方（`fire_due`）在进这一支之前已经要求读过 `ok`，
+            # 所以这一支只会出现在直接调它的读数路径上，空表就是"这一格没查成"。
+            return []
+        out: list[Timer] = []
+        seen: set[str] = set()
+        for due, _seq, tid in sorted(self._heap):
+            if due > now_epoch:
+                break
+            if tid in seen:
+                continue
+            timer = self._timers.get(tid)
+            if timer is None or timer.state != "pending" or tid not in self._in_heap:
+                continue
+            seen.add(tid)
+            out.append(timer)
+        out.sort(key=lambda t: self._seq_of.get(t.timer_id, 0))
+        return out
 
     def load(self) -> "TimerBook":
         if self._loaded:
@@ -1989,14 +2431,17 @@ class TimerBook:
         self._loaded = True
         path = self.state_path
         if not path.is_file():
+            self._rebuild_index()
             return self
         try:
             doc = json.loads(path.read_text(encoding="utf-8"))
         except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
             self.load_error = f"计时器状态读不成：{type(exc).__name__}: {exc}"
+            self._rebuild_index()
             return self
         if not isinstance(doc, dict):
             self.load_error = "计时器状态不是对象"
+            self._rebuild_index()
             return self
         try:
             self._next_seq = max(1, int(doc.get("next_seq") or 1))
@@ -2023,6 +2468,9 @@ class TimerBook:
             tail = tid.rsplit("-", 1)[-1]
             if tail.isdigit():
                 self._next_seq = max(self._next_seq, int(tail) + 1)
+        # 派生索引的第四个同步点（也是唯一的重建点）：盘上的格式一个字节都不改，
+        # 堆与反查索引全部从这一份全列表里现算出来。
+        self._rebuild_index()
         return self
 
     def save(self) -> None:
@@ -2061,6 +2509,8 @@ class TimerBook:
     def add(self, timer: Timer) -> None:
         self.require_loaded()
         self._timers[timer.timer_id] = timer
+        # 索引的第一个同步点（另三处：`cancel` / 到点动作成功后 / `load`）。
+        self.sync_index(timer)
         self.save()
 
     def get(self, timer_id: str) -> Timer | None:
@@ -2072,6 +2522,7 @@ class TimerBook:
         return sorted(self._timers.values(), key=lambda t: (t.due_at, t.timer_id))
 
     def pending(self) -> list[Timer]:
+        """还 pending 的那些（按台账序）。到点判定的全扫路径读它；早退路径不读。"""
         return [t for t in self.all() if t.state == "pending"]
 
     def cancel(self, timer_id: str) -> tuple[Timer | None, str]:
@@ -2090,6 +2541,8 @@ class TimerBook:
             return timer, timer.state
         timer.state = "cancelled"
         _unregister_parked(timer.timer_id)
+        # 索引的第二个同步点：取消之后它既不在反查索引里、也不该再从堆顶冒出来。
+        self.sync_index(timer)
         self.save()
         return timer, "cancelled"
 
@@ -2176,7 +2629,7 @@ class TimerBook:
 
 def book(workspace: str | Path) -> TimerBook:
     """取（或建）这个工作区的计时器簿记；第一次取会读盘。"""
-    root = str(Path(workspace).resolve())
+    root = _resolve_root(workspace)
     if root not in _BOOKS:
         _BOOKS[root] = TimerBook(root)
     return _BOOKS[root].require_loaded()
@@ -2723,6 +3176,10 @@ def finish_program(workspace: str | Path, timer_id: str, *, outcome: str = "exit
                                    elapsed_sec=timer.elapsed_sec,
                                    purpose=purpose_of(timer))
     bucket.save()
+    # 程序收口就是"等它的那几条"的事件产生点（业主 2026-10-27 第二条）：
+    # 按 `program:<号>` 查一次反查索引，把它们就地判掉，不必等下一拍扫表。
+    # 三态/推迟/异常都在 `_close_waiters_for_event` 里各自记读数，这里不另写一个 if。
+    _close_waiters_for_event("finish_program", [f"program:{timer.timer_id}"], reading=reading)
     return timer, "fired"
 
 
@@ -3033,6 +3490,13 @@ def _wake_waiters(workspace: str | Path, timer_id: str) -> dict[str, Any]:
         out["reason"] = f"等它的那几条表读不成（{exc}）"
         return out
     out["watching"] = len(watching)
+    # 程序收口是事件产生点（`EVENT_CLOSE_HOOKS["stop_program"]` 那一行）：按 `program:<号>`
+    # 撞一次反查索引，把等它的那几条判进热表 —— 于是下面这一次 `fire_due` 只会投它们，
+    # 不必扫全表（也因此在"什么都没到点"的拍上不会退化成 O(全表)）。
+    try:
+        _close_waiters_for_event("stop_program", [wanted])
+    except Exception as exc:  # noqa: BLE001 - 消账炸了不带走下面这一次推进
+        out["reason"] = f"消账没跑成（{type(exc).__name__}: {exc}）"
     try:
         report = fire_due(workspace)
     except Exception as exc:  # noqa: BLE001 - 推不成是"没查成"，不许折成"没人等它"
@@ -3405,14 +3869,19 @@ PROGRAM_OS_SPAWNS: tuple[str, ...] = ("spawnv", "spawnl", "spawnve", "spawnle",
 #: 每条必须写 `why`（为什么它不该进账）与 `blocked_by`（谁挡着没改）。
 #: 空 `blocked_by` = 这一处本来就不该进账（"它起的东西不是我们在等的那个程序"）。
 PROGRAM_ALLOWED_RAW: tuple[dict[str, str], ...] = (
-    {"path": "agentflow/webui/cacheface.py", "func": "_spawn_warm",
-     "why": ("网页端「预热提示词缓存」那一下是脱手进程：起完立刻返回 pid 与日志路径，"
-             "没有人等它 —— 它不属于「起一个程序并等它」；真正在等的那一趟循环自己记时钟"),
-     "blocked_by": "webui/* 本轮禁改（边界：不许碰 webui/*）"},
-    {"path": "agentflow/webui/writes.py", "func": "_spawn_run",
-     "why": ("网页端「用一句话起一趟工作流」同样是脱手进程：返回 pid 就结束，等待发生在"
-             "被起的那一趟循环里（它自己推时钟）"),
-     "blocked_by": "webui/* 本轮禁改（边界：不许碰 webui/*）"},
+    # 2026-10-27：这一条此前是两条（`webui/cacheface.py::_spawn_warm` 与
+    # `webui/writes.py::_spawn_run`），两条的 `blocked_by` 都写着"webui/* 本轮禁改"。
+    # 那一刻的边界已经撤了，而两个起进程点也按裁定 W3 收成了一个 `_spawn_detached`
+    # —— 于是登记点跟着走：一处函数、一条登记（留着旧的两条会变成"永不生效的豁免"，
+    # 那种表会腐烂成"看起来还在挡着什么"）。为什么仍然不进程序计时器：脱手进程
+    # 起完立刻返回 pid 与日志路径，没有人等它；`with program_span(...)` 会在出作用域
+    # 时收口成"程序已结束"——那是一条假读数（它还在跑）。真正在等的那一趟循环
+    # 自己在时钟账上推时间。
+    {"path": "agentflow/webui/writes.py", "func": "_spawn_detached",
+     "why": ("网页端的两个脱手起进程点（「用一句话起一趟工作流」与「预热提示词缓存」）"
+             "收在这一处：起完立刻返回 pid 与日志路径，没有人等它 —— 它不属于"
+             "「起一个程序并等它」；真正在等的那一趟循环自己记时钟"),
+     "blocked_by": ""},
     {"path": "agentflow/jobobject.py", "func": "selftest",
      "why": "作业对象那条路的自检（起一个睡的进程验证 job 句柄能把树收掉），不是生产路径",
      "blocked_by": ""},
@@ -3860,6 +4329,15 @@ def record_handoff(workspace: str | Path, *, task_id: str, parent_task_id: str =
     except ClockError:
         # 观测窗记不下不该让"交差"这件事本身失败（交差已经落盘了）。
         pass
+    # 消账的登记行（`EVENT_CLOSE_HOOKS["record_handoff"]`）：上面那一条 `handoff` 事件
+    # 已经把 `task:<tid>` 撞过一遍，这里再按同一个键撞一次是幂等的 —— 它存在的意义是
+    # "交差这条路登记过"，于是把观测窗打桩掉（漏发事件）时这一处仍然能消账。
+    try:
+        _close_waiters_for_event("record_handoff", [f"task:{tid}"], reading=reading)
+    except Exception as exc:  # noqa: BLE001 - 消账是旁路，不许把交差带下水
+        with _CLOSE_LOCK:
+            _CLOSE["problems"] = (list(_CLOSE.get("problems") or ())
+                                  + [f"record_handoff 消账失败：{type(exc).__name__}: {exc}"])[-20:]
     return {**row, "duplicate": False, "checked": True, "reason": ""}
 
 
@@ -4076,12 +4554,22 @@ def observe_event(kind: str, *, task_id: str = "", from_task_id: str = "",
                   message_id: str = "") -> ObservedEvent:
     """记一条"被时钟观测到的事件"（发消息 / 收工提交 / 答复）。
 
-    它做两件事：把事件记进观测窗（`observed_events` 读），并让等这个对象的那几条
-    `wait_for` 立刻可判 due（`due_reason` 会在下一个 `fire_due` 里认领它）。
+    它做三件事：
+
+    1. 把事件记进观测窗（`observed_events` 读）；
+    2. 事件消账（业主 2026-10-27 第二条）：用这条事件带的对象键哈希查一次反查索引
+       （`TimerBook.waiters_of`），把等它的那几条就地判成到点并交给 `_DUE_HANDLER`
+       —— 不用等下一拍扫表。时延读数在 `event_close_reading()` 里（改前是一个 pump
+       的间隔，改后是本进程量到的几毫秒）；
+    3. 事件的摘要在到点那一刻被抄进那句话里（`_deliver_one` 的 `feedback`）。
 
     为什么在这里而不在会话/台账那一侧：时钟负责的是"挂机 — 唤醒 — 现场读数"，
     内容投递仍归 mailbox（业主 2026-10-25：「两条不许互相替代」）。这里只留"发生过
     一条什么事件、谁产生的、摘要是什么"，唤醒时把它抄进那句话里。
+
+    消账的判据与全扫逐条相同（`_close_waiters_for_event` 里调的是同一个 `due_reason`），
+    所以"事件先到"与"下一拍才扫到"给出来的 `triggered_by` / `woke_reason` /
+    `due_message` 逐字一样 —— 这一处只改"什么时候判"，不改"判成什么"。
     """
     if kind not in EVENT_KINDS:
         raise ClockParamError(f"事件种类只认 {EVENT_KINDS}，收到 {kind!r}")
@@ -4106,7 +4594,17 @@ def observe_event(kind: str, *, task_id: str = "", from_task_id: str = "",
         _EVENTS.append(event)
         if len(_EVENTS) > EVENT_BUFFER:
             del _EVENTS[: len(_EVENTS) - EVENT_BUFFER]
-        return event
+    # 事件先落进观测窗、再消账：消账调的是 `due_reason`，而它的 `_event_hits`
+    # 要看得见这一条，否则判成 `target_closed` 而不是 `target_event` —— 那一格变了，
+    # 到点消息里的 "它交的是…" 就没了（而那正是判据要比的正文）。
+    # 消账放在锁外：`_event_hits` 自己也要拿这把锁。
+    try:
+        _close_waiters_for_event("observe_event", _event_target_keys(event), reading=reading)
+    except Exception as exc:  # noqa: BLE001 - 消账是旁路，炸了不许把写路径带坏
+        with _CLOSE_LOCK:
+            _CLOSE["problems"] = (list(_CLOSE.get("problems") or ())
+                                  + [f"observe_event 消账失败：{type(exc).__name__}: {exc}"])[-20:]
+    return event
 
 
 def observe_message(rec: Mapping[str, Any]) -> ObservedEvent | None:
@@ -4311,15 +4809,53 @@ def _parse_target_loose(value: Any) -> tuple[str, str] | None:
 
 
 def due_timers(workspace: str | Path, *, reading: Reading | None = None) -> list[Timer]:
-    """到期且还没被投递的计时器。读不到时钟 => 空表（不是"全部到点"）。"""
+    """到期且还没被投递的计时器。读不到时钟 => 空表（不是"全部到点"）。
+
+    它与 `fire_due` 走同一套判定（堆给出候选 + `due_reason` 判），但不投递、不落盘：
+    它是"现在谁到点了"这一份事实的只读口。次序与改前的线性扫逐条相同
+    （`(due_at, timer_id)`，见 `TimerBook._heap_due` 与 `_seq_of` 的赋值顺序）。
+    """
     got = reading if reading is not None else now()
+    root = _resolve_root(workspace)
     if got.status == "unknown":
+        _cost_note(root, source="due_timers", checked=False,
+                   reason=f"时钟读不到（{got.reason or '两个来源都不可用'}）=> 判不了 due",
+                   scan_ms=None, probes=None, bucket=None, reading=got,
+                   reconcile=None, early_exit=False)
         return []
-    pending = book(workspace).pending()
+    probes_before = _PROBE_CALLS[0]
+    started = time.perf_counter()
+    try:
+        bucket = book(root)
+        out = _select_due(bucket, got)
+    except ClockStateError as exc:
+        _cost_note(root, source="due_timers", checked=False, reason=str(exc),
+                   scan_ms=None, probes=None, bucket=None, reading=got,
+                   reconcile=None, early_exit=False)
+        raise
+    _cost_note(root, source="due_timers", checked=True, reason="",
+               scan_ms=(time.perf_counter() - started) * 1000.0,
+               probes=_PROBE_CALLS[0] - probes_before, bucket=bucket, reading=got,
+               reconcile=0, early_exit=False)
+    return out
+
+
+def _select_due(bucket: TimerBook, reading: Reading) -> list[Timer]:
+    """把这一拍到点的计时器按台账序取出来（只读的全扫口：`due_timers` 用它）。
+
+    它不投递、不落盘、不记读数 —— 是"现在谁到点了"这一份事实的唯一只读实现。
+    `fire_due` 的补偿对账那一支走同一个判据（`pending()` + `_probe_targets` +
+    逐条 `due_reason`），差别只有"非到点的那几条顺手把 `wait_state` 记进盘"
+    与"到点的交给 `_deliver_one`"这两件事 —— 那两件是投递侧的事，不属于这个只读口。
+
+    `due_reason` 仍然是唯一判据：候选进了未必真到点（例如同一刻但被等对象说还在跑），
+    这一点与改前一样。返回值按台账序排好（不是堆序），于是"谁先被投递"与改前逐条相同。
+    """
+    pending = bucket.pending()
     targets = _probe_targets(pending)
     out: list[Timer] = []
     for timer in pending:
-        reason, _why = timer.due_reason(got, targets.get(_target_key(timer)))
+        reason, _why = timer.due_reason(reading, targets.get(_target_key(timer)))
         if reason:
             out.append(timer)
     return out
@@ -4328,6 +4864,217 @@ def due_timers(workspace: str | Path, *, reading: Reading | None = None) -> list
 def _target_key(timer: Timer) -> str:
     """"等谁"的读口键：解析后的对象优先（起表时查过一次，不必每次重解析）。"""
     return timer.wait_for_resolved or timer.wait_for
+
+
+def _event_target_keys(event: "ObservedEvent") -> list[str]:
+    """一条事件该去撞哪些"等待对象键"（写法与 `_target_key` 同一套，复用 `parse_wait_for`）。
+
+    键集与 `_event_hits` 的认法逐条对齐，不多不少：
+
+    - `task:<号>`：`task_id` / `from_task_id`（事件是谁产生的 —— 这两个就是
+      `_event_hits` 拿来比的那两格）、以及 `target`（= 前者之一，留它是为了老行）；
+    - `agent:<名>`：`role`（`_event_hits` 对 `agent` 那一档就是比 `role`）。
+
+    刻意不放 `to_task_id`：那是收件人，不是产生者。把收件人也算进来会让"父给子发了
+    一条话"去判"等父"的那条表 —— 与 `_event_hits` 的认法分家，那正是这一批不许发生的
+    语义漂移。
+    """
+    keys: list[str] = []
+    for tid in (event.task_id, event.from_task_id, event.target):
+        text = str(tid or "")
+        if not text:
+            continue
+        key = f"task:{text}"
+        if key not in keys:
+            keys.append(key)
+    role = str(event.role or "")
+    if role:
+        key = f"agent:{role}"
+        if key not in keys:
+            keys.append(key)
+    return keys
+
+
+# ---------------------------------------------------------------- 成本读数
+#
+# 业主 2026-10-27 的施工单第 ① 条：「最近一次 fire_due / due_timers 的 pending_count /
+# scan_ms / target_probe_count / reconcile_count，以及下一拍应当在多少秒后醒」。
+#
+# 它必须是读数，不是"本次调用的入参与返回值"：
+#   · 三态：没跑过 / 跑不成 / 跑成了，三档分开，`checked=False` 加 `reason`；
+#   · 读不成的格子是 `None`，不是 0 —— 把"没量到"折成 0 会把一次成功但零成本的判定
+#     和一次根本没量的判定读成同一件事；
+#   · 不许改任何既有字段的含义：这一格里一个既有的键都不出现（它是新增的一份旁路账）。
+
+#: 每个工作区根最近一次的到点判定成本读数。
+_COST: dict[str, dict[str, Any]] = {}
+
+#: 最近一次写进 `_COST` 的那个根（不带工作区调 `cost_reading()` 时读它）。
+_COST_LAST: list[str] = [""]
+
+#: 这一份读数的受控键集（判据按它断言"一格不少、一格不多"）。
+COST_FIELDS: tuple[str, ...] = (
+    "checked", "reason", "source", "workspace", "at",
+    "pending_count", "total_count", "scan_ms", "target_probe_count",
+    "reconcile_count", "reconcile_total", "early_exit",
+    "heap_size", "waiters_indexed", "hot_count", "next_wake_in_sec", "next_due_in_sec",
+)
+
+
+def _cost_blank(reason: str, *, workspace: str = "") -> dict[str, Any]:
+    """一份"没查成"的成本读数：每一格都是 `None`，不是 0。"""
+    row: dict[str, Any] = {k: None for k in COST_FIELDS}
+    row.update({"checked": False, "reason": str(reason or ""),
+                "workspace": str(workspace or "")})
+    return row
+
+
+def _cost_note(root: str, *, source: str, checked: bool, reason: str,
+               scan_ms: float | None, probes: int | None,
+               bucket: "TimerBook | None", reading: Reading | None,
+               reconcile: int | None, early_exit: bool,
+               hot: int | None = None) -> None:
+    """把一次到点判定的成本落进读数（`fire_due` / `due_timers` 各调一次）。"""
+    now_epoch = (reading.wall.timestamp()
+                 if reading is not None and reading.wall is not None else None)
+    row = _cost_blank(reason if not checked else "", workspace=root)
+    row.update({
+        "checked": bool(checked),
+        "source": str(source),
+        "at": (_iso(reading.wall)
+               if reading is not None and reading.wall is not None else ""),
+        "scan_ms": None if scan_ms is None else round(float(scan_ms), 4),
+        "target_probe_count": probes,
+        "reconcile_count": reconcile,
+        "early_exit": bool(early_exit),
+    })
+    if bucket is not None:
+        row["pending_count"] = bucket.pending_count()
+        row["total_count"] = bucket.total_count()
+        row["heap_size"] = bucket.heap_size()
+        row["waiters_indexed"] = bucket.waiters_count()
+        row["reconcile_total"] = bucket.reconcile_count()
+        row["hot_count"] = bucket.hot_count() if hot is None else int(hot)
+        if now_epoch is not None:
+            wake = bucket.next_wake_epoch()
+            due = bucket.next_due_epoch()
+            row["next_wake_in_sec"] = (None if wake is None
+                                       else round(max(0.0, wake - now_epoch), 6))
+            row["next_due_in_sec"] = (None if due is None
+                                      else round(max(0.0, due - now_epoch), 6))
+    _COST[str(root)] = row
+    _COST_LAST[0] = str(root)
+
+
+def cost_reading(workspace: str | Path | None = None) -> dict[str, Any]:
+    """最近一次 `fire_due` / `due_timers` 的成本读数（三态；读不成不折 0）。
+
+    键集就是 `COST_FIELDS`，逐格的含义：
+
+    | 键 | 是什么 | 读不成时 |
+    |---|---|---|
+    | `checked` | 这一次到点判定本身查成了没有 | —— |
+    | `reason` | 没查成的理由（时钟读不到 / 簿记读不成 / 还没跑过） | —— |
+    | `source` | 这份读数来自 `fire_due` 还是 `due_timers` | `None` |
+    | `pending_count` | 那一拍 pending 的条数（早退路径也是真数，O(1)） | `None` |
+    | `total_count` | 台账总行数（改前 `pending()` 会把它整表排序） | `None` |
+    | `scan_ms` | 那一次判定花了几毫秒（早退路径 ≈ 0，但不是 0 假数） | `None` |
+    | `target_probe_count` | 那一拍问了几次"被等对象收口了没有" | `None` |
+    | `reconcile_count` | 那一拍做了几次补偿对账（0 或 1） | `None` |
+    | `reconcile_total` | 这一份簿记累计对账过几次 | `None` |
+    | `early_exit` | 那一拍是不是走了早退（没扫表、没问 target_state） | `False` |
+    | `heap_size` | 堆里还有几条（早退之后它才是"下一次要判的东西"） | `None` |
+    | `waiters_indexed` | 反查索引里的"等谁"关系条数 | `None` |
+    | `next_wake_in_sec` | 下一拍应当在多少秒后醒 = `min(堆顶, 下次对账, 下一次周期性巡查) - 现在`，负数按 0 读 | `None` |
+    | `next_due_in_sec` | 只取堆顶那一条（不含对账与周期性巡查），负数按 0 读 | `None` |
+
+    `next_wake_in_sec` 的口径写死成"三者取较早者"，理由见 `TimerBook.next_wake_epoch`；
+    挂机那一侧的片长封顶读的就是这一格（`agent_loop._park_sleep_once`）。
+
+    两个 `None` 的除法：`next_wake_in_sec` 为 `None` 有两种情形 —— 这一格没查成，
+    或者簿记里既没有到点、也没有对账时刻、也没有周期性巡查。后者是"没有任何事会把它叫醒"，
+    与"马上要醒"是两件事，所以不折成 0。
+
+    ## 它是读数，不是门；今天只有判据读它
+
+    这一格今天没有"生产者以外的读者"：只有 `tests/test_the_clock_scales_with_the_book.py`
+    与 `temp/_clock_bench.py` 读它。谁都不许拿它做闸 —— 时钟不许因为 `scan_ms` 超过某个数
+    就拒绝起表、不许因为 `target_probe_count` 大就跳过判定、不许因为 `next_wake_in_sec`
+    小就把一次 `fire_due` 报成没查成。把它接成闸的那一刻，"这几毫秒"就变成了"可能不做"，
+    而本模块的全部三态纪律都是为了"不做"必须显式报出来。
+
+    待办（下一批，不在这一批的范围内）：M 的巡查（`conductor.patrol`）可以把它作为一个格
+    读出来（例如 `cost_reading()["scan_ms"]` 与 `["next_wake_in_sec"]` 并进那一拍的四格），
+    但接线时只许"读出来给 M 看"，不许在这里加闸。这一句写在这里而不是只写在交接单里：
+    将来读代码的人要能看见"谁该来读、以及读它时不许做什么"。
+    """
+    if workspace is not None:
+        root = _resolve_root(workspace)
+        row = _COST.get(root)
+        if row is None:
+            return _cost_blank(
+                f"{root} 还没跑过到点判定（fire_due / due_timers 各一次都没跑）=> 这一格没查成",
+                workspace=root)
+        return dict(row)
+    root = _COST_LAST[0]
+    if not root or root not in _COST:
+        return _cost_blank("本进程还没跑过任何到点判定 => 这一格没查成")
+    return dict(_COST[root])
+
+
+def reset_costs() -> None:
+    """清空成本读数（判据之间的隔离点）。"""
+    _COST.clear()
+    _COST_LAST[0] = ""
+
+
+def next_due(workspace: str | Path) -> dict[str, Any]:
+    """堆顶那一条的到点时刻 —— O(1) peek，不扫表、不问 target_state。
+
+    返回 `{"checked", "due_epoch", "due_in_sec", "next_wake_sec", "timer_id",
+    "pending_count", "reason"}`：
+
+    - `due_epoch` 是墙钟纪元（`None` = 堆里没有到点）；
+    - `due_in_sec` 是"还有多少秒"（已经过了按 0 读）；
+    - `next_wake_sec` 是 `TimerBook.next_wake_epoch` 的口径（堆顶 / 对账 / 周期性巡查取早）；
+    - `checked=False` 加 `reason` = 没查成（簿记读不成 / 时钟读不到）—— 这一档下
+      `due_epoch` 与 `due_in_sec` 都是 `None`，不许读成"没有到点"。
+    """
+    out: dict[str, Any] = {"checked": False, "reason": "", "due_epoch": None,
+                           "due_in_sec": None, "next_wake_sec": None,
+                           "timer_id": "", "pending_count": None}
+    root = _resolve_root(workspace)
+    try:
+        bucket = book(root)
+    except ClockStateError as exc:
+        out["reason"] = str(exc)
+        return out
+    bucket._ensure_index()
+    if bucket.load_error:
+        out["reason"] = bucket.load_error
+        return out
+    reading = now()
+    now_epoch = reading.wall.timestamp() if reading.wall is not None else None
+    if now_epoch is None:
+        out["reason"] = (f"墙钟读不到（{reading.reason or '只知道单调计数'}）=> "
+                         "判不了还有多少秒")
+        return out
+    due = bucket.next_due_epoch()
+    wake = bucket.next_wake_epoch()
+    out["checked"] = True
+    out["pending_count"] = bucket.pending_count()
+    out["due_epoch"] = due
+    out["due_in_sec"] = None if due is None else round(max(0.0, due - now_epoch), 6)
+    out["next_wake_sec"] = None if wake is None else round(max(0.0, wake - now_epoch), 6)
+    # 堆顶那一条是谁（读数用；惰性删除已经把它判过一遍，这里只补编号）
+    for _due, _seq, tid in list(bucket._heap):
+        timer = bucket._timers.get(tid)
+        if timer is not None and timer.state == "pending" and tid in bucket._in_heap:
+            if due is not None and abs(_due - due) < 1e-9:
+                out["timer_id"] = tid
+                break
+    return out
+
 
 
 def _probe_targets(timers: Iterable[Timer]) -> dict[str, tuple[str, str, str]]:
@@ -4346,6 +5093,300 @@ def _probe_targets(timers: Iterable[Timer]) -> dict[str, tuple[str, str, str]]:
     return out
 
 
+def _deliver_one(bucket: TimerBook, timer: Timer, reason: str, why: str,
+                 reading: Reading, report: dict[str, Any]) -> bool:
+    """把一条到点的计时器交给到点动作（投递的唯一实现）。
+
+    `fire_due` 的全扫路径与事件消账（`_close_waiters_for_event`）都调它，于是"到点那一下做什么"
+    只有一份代码：拼 `due_message`、调 `_DUE_HANDLER`、落 fired、清 `waiting_on`、
+    写 `report["fired"]` 那一格。两处各写一份的话，事件那一侧一定会先漂。
+
+    返回 True = 这一次真的落成 fired；False = 没投递（没有到点动作 / 被推迟 / 抛了），
+    计时器保持 pending 由下一次判定再试（三态与改前逐字相同）。
+
+    `why` 是 `due_reason` 的第二格（"为什么还没到"或"它收口了"）；投递这一段不读它，
+    收着是为了让签名与 `due_reason` 的返回形状对得上，读的人不必回去猜。
+    """
+    if _DUE_HANDLER is None:
+        report["deferred"].append({
+            "timer_id": timer.timer_id,
+            "reason": "没有注册到点动作（set_due_handler 还没接上）",
+        })
+        return False
+    timer.triggered_by = reason
+    timer.woke_reason = timer.woke_reason_of(reason)
+    events = _event_hits(timer) if timer.wait_for else []
+    feedback = events[-1].content if events else ""
+    label = ""
+    if events:
+        label = "它交的是" if events[-1].kind == "submit" else "它说的是"
+    timer.feedback = feedback
+    # 轮查那一档（业主 2026-10-27 傍晚）：到点那一下的正文是 SOP 四步，不是
+    # "时间到了"。`patrol_sop_text` 与 `patrol_section` 都按名字调（模块级），
+    # 于是反真空判据能把其中任何一个换成空串、当场看正文少掉哪一半。
+    patrol = is_patrol_timer(timer)
+    timer.message = due_message(
+        # 到点这句念的目的走 `purpose_of`（唯一取值口）—— 与盘上那一行
+        # `purpose` 是同一个来源，于是"内存里念的"与"从 state.json 读回来的"
+        # 结构上不会分家（真机那次的错位就是两处各取一套）。
+        purpose=purpose_of(timer), waited_sec=timer.waited_seconds(reading),
+        created_at=timer.created_at,
+        fired_at=_iso(reading.wall) if reading.wall is not None else "",
+        feedback=feedback, feedback_label=label,
+        waited_target=timer.wait_for, woke_reason=timer.woke_reason,
+        patrol_sop=(patrol_sop_text() if patrol else ""),
+        # 异常清单不另写第二份：轮查与周期性巡查读同一个 `patrol_section`。
+        patrol_section=(patrol_section(timer.workspace, task_id=timer.task_id)
+                        if patrol else ""))
+    try:
+        receipt = _DUE_HANDLER(timer)
+    except DueDeferred as exc:
+        # 到点了，但今天做不了：保持 pending，下一次再试。
+        timer.triggered_by = ""
+        timer.woke_reason = ""
+        timer.message = ""
+        timer.feedback = ""
+        report["deferred"].append({"timer_id": timer.timer_id,
+                                   "reason": str(exc)})
+        return False
+    except Exception as exc:  # noqa: BLE001 - 一条坏掉不带走别的计时器
+        timer.triggered_by = ""
+        timer.woke_reason = ""
+        timer.message = ""
+        timer.feedback = ""
+        report["errors"].append({"timer_id": timer.timer_id,
+                                 "error": f"{type(exc).__name__}: {exc}"})
+        return False
+    got = dict(receipt or {})
+    timer.state = "fired"
+    timer.fired_at = _iso(reading.wall) if reading.wall is not None else ""
+    timer.woke_at = timer.fired_at
+    _unregister_parked(timer.timer_id)
+    # 醒了就不再"在等谁"：`waiting_on` 清空（业主 2026-10-26 第 ②/③ 条）。
+    # 为什么要清而不是留着："还在等 A1"与"等 A1 等到了"必须分得开 —— 留着它，
+    # 一条已经醒了三条的表在读数上仍然挂着，父代理那边的销号闸也永远有话拦；
+    # 而"等过谁"这件事已经由 `wait_for` / `wait_for_resolved` / `message` 三格留档。
+    woke_from = dict(timer.waiting_on or {})
+    timer.waiting_on = {}
+    timer.mailbox_item_id = str(got.get("mailbox_item_id") or "")
+    timer.wake_id = str(got.get("wake_id") or "")
+    timer.note = str(got.get("note") or "")
+    # 索引的第三个同步点：它转 fired 了，不该再出现在反查索引与堆顶里。
+    bucket.sync_index(timer)
+    try:
+        bucket.save()
+    except ClockStateError as exc:
+        report["errors"].append({"timer_id": timer.timer_id, "error": str(exc)})
+        return False
+    report["fired"].append({
+        "timer_id": timer.timer_id,
+        "kind": timer.kind,
+        "task_id": timer.task_id,
+        "triggered_by": timer.triggered_by,
+        "woke_reason": timer.woke_reason,
+        "wait_for": timer.wait_for,
+        # 醒的那一句里带上"刚被清掉的那一格"：读的人看得出它等的是谁，
+        # 而盘上 `waiting_on` 已经是空表（"还在等"与"等到了"分得开）。
+        "waiting_on": dict(timer.waiting_on or {}),
+        "woke_from": woke_from,
+        "woke_from_text": waiting_on_text(woke_from),
+        "purpose": timer.purpose,
+        "purpose_missing": timer.purpose_missing,
+        "waited_sec": timer.waited_seconds(reading),
+        "feedback": timer.feedback,
+        "message": timer.message,
+        "mailbox_item_id": timer.mailbox_item_id,
+        "wake_id": timer.wake_id,
+    })
+    return True
+
+
+# ---------------------------------------------------------------- 事件消账
+#
+# 业主 2026-10-27 第二条：「等谁」的那一半不许等下一拍扫表 —— 事件一到，等它的那条表
+# 当场判掉。三层缺一不可：
+#
+# 1. 反查索引 `TimerBook._waiters`：`target_key -> 等它的计时器集合`，O(1) 查到人；
+# 2. 事件消账（本节）：事件产生点到达时，用它带的对象键哈希查一次索引，
+#    把等它的那几条就地判成到点并交给 `_DUE_HANDLER`（不扫表）；
+# 3. 补偿对账（`RECONCILE_EVERY_SEC`）：任何漏发事件的等待，下一次对账时照样判掉。
+#    没有它，事件驱动就是"漏一个事件 => 那条表永久挂起"。
+#
+# 判据（`tests/test_the_clock_scales_with_the_book.py`）：
+#   · 事件到达 => 那条表在下一次 pump 之前就 fired，时延读数 ≈ 0（c）；
+#   · 故意把某个产生点打桩掉 => 对账之后仍然 fired（d，安全阀）；
+#   · 未登记的 source => `ClockParamError`（表是强制的，不是注释）。
+
+#: 每个产生点被叫到几次、其中消掉几条表（判据按它断言"表里每一行都真的走到过"）。
+_CLOSE_STATS: dict[str, dict[str, int]] = {}
+
+#: 最近一次消账的读数（时延、键、命中几条、消掉几条）。
+_CLOSE: dict[str, Any] = {"count": 0, "latency_ms": None, "last": {},
+                          "problems": []}
+
+_CLOSE_LOCK = threading.Lock()
+
+#: 递归保护：`_DUE_HANDLER` 自己可能又发出一个事件（它写 mailbox 行），那一层只记账。
+_CLOSE_DEPTH: list[int] = [0]
+
+
+def event_close_reading() -> dict[str, Any]:
+    """消账的读数：改前"事件到达 -> 一条等它的表被判到点"是一个 pump 的间隔，
+    改后是这一格里量到的几毫秒（本进程最近一次消账的时延）。
+
+    返回 `{"checked", "count", "latency_ms", "last", "stats", "problems", "reason"}`。
+    三态：一次都还没消过账 => `checked=False`（不是"时延 0"）。
+
+    ## 它是读数，不是门；今天只有判据读它
+
+    这一格的读者今天只有 `tests/test_the_clock_scales_with_the_book.py`（与
+    `temp/_clock_digest.py` 的取证）。谁都不许拿它做闸 —— 不许因为 `latency_ms` 超过
+    某个数就让 `observe_event` 抛、不许因为 `problems` 非空就停掉消账。消账炸了已经按
+    旁路处理（`observe_event` 记 `problems` 并继续），这一格只是把"炸过"如实留着。
+
+    待办（下一批，不在这一批的范围内）：M 的巡查（`conductor.patrol`）可以把它作为一格
+    读出来（例如 `last["judged"]` 与 `latency_ms` 并进那一拍的四格，回答"上一次子代理
+    交差之后，等它的那条表多久被判到"），但接线时只许读、不许加闸。
+    """
+    with _CLOSE_LOCK:
+        stats = {k: dict(v) for k, v in _CLOSE_STATS.items()}
+        count = int(_CLOSE.get("count") or 0)
+        latency = _CLOSE.get("latency_ms")
+        last = dict(_CLOSE.get("last") or {})
+        problems = list(_CLOSE.get("problems") or ())
+    return {"checked": latency is not None or count > 0,
+            "count": count,
+            "latency_ms": latency,
+            "last": last,
+            "stats": stats,
+            "problems": problems,
+            "reason": "" if (latency is not None or count > 0) else "本进程还没消过账"}
+
+
+def reset_event_close() -> None:
+    """清空消账读数（判据之间的隔离点）。"""
+    with _CLOSE_LOCK:
+        _CLOSE_STATS.clear()
+        _CLOSE["count"] = 0
+        _CLOSE["latency_ms"] = None
+        _CLOSE["last"] = {}
+        _CLOSE["problems"] = []
+    _CLOSE_DEPTH[0] = 0
+
+
+def _close_waiters_for_event(source: str, keys: Iterable[str], *,
+                             reading: Reading | None = None) -> dict[str, Any]:
+    """按"等待对象键"反查索引，把等它的那几条就地判到点（消账的唯一实现）。
+
+    `source` 必须已经登记在 `EVENT_CLOSE_HOOKS` 里（未登记 => `ClockParamError`）：
+    这条纪律是为了让"将来加一个收工路径"没法悄悄退回"等下一拍扫表"。
+
+    ## 它做什么、不做什么
+
+    做：对反查出来的每一条调 `timer.due_reason(reading, None)`（唯一判据），判到点就
+    `bucket.mark_hot(...)`。于是"扫表"这件事消失了：下一次 `fire_due` 只按热表投那几条，
+    成本 O(候选数)，与台账行数无关。
+
+    不做：不在这里调 `_DUE_HANDLER`。
+
+    ### 为什么不做当场投递（业主 2026-10-27 的裁定，逐字留档）
+
+    当场投递会写 mailbox 行 + 唤醒标记，而 `agent_loop._wait_for_children` 的既有判据是
+    "读到时钟唤醒就提前返场" ⇒ 每一次扇出都被第一件回来的子代理抢占，父代理多花一个
+    模型回合。业主的口径是"以后开深度/扇出全力跑大课题"，所以"不抢占"必须保住。
+
+    实测证据（这不是推测，是同一份夹具里当场跑出来的两档）：
+    `tests/test_agent_loop.py::test_a_role_can_fan_out_a_batch_in_one_step` 在"当场投递"
+    的版本下从 `{'count': 2, 'ok_count': 2}` 变成
+    `{'count': 2, 'ok_count': 1, 'preempted': True}` —— 第二件活没在这一步里回来。
+
+    这不是没做，是不做：扇出抢占的代价 > 下一拍投递的收益。 将来有人读到这里时，
+    要看见的是"为什么不做"，而不是以为我们漏了；要改成当场投递，先让
+    `_wait_for_children` 不再把"子代理落定写的时钟唤醒"当成本步的抢占信号。
+
+    所以消账的收益落在两处，两处都是读数：
+    1. 判的时延 ≈ 0（`event_close_reading()["latency_ms"]`，改前是一个 pump 的间隔）；
+    2. 投递那一拍是 O(候选数)，不是 O(全表)（`cost_reading()["hot_count"]`）。
+
+    判据与全扫逐条相同：`due_reason` 自己判事件那一档（`target_event`）与收口那一档
+    （`target_closed`），于是"事件消账"与"下一拍扫表"给出的 `triggered_by` /
+    `woke_reason` / `due_message` 逐字相同 —— 消账只改"什么时候判"，不改"判成什么"。
+
+    返回 `{"checked", "source", "keys", "waiters", "judged", "latency_ms", "reason"}`；
+    `judged` 是"判成到点、已进热表"的那几格（`timer_id` / `triggered_by` / `why`）。
+    """
+    if source not in EVENT_CLOSE_HOOKS:
+        raise ClockParamError(
+            f"消账的产生点 {source!r} 没有登记在 EVENT_CLOSE_HOOKS 里"
+            f"（已登记：{tuple(EVENT_CLOSE_HOOKS)}）—— 加一个收工路径必须同时登记一行，"
+            "否则那条路径会退回'等下一拍扫表'，而这件事在读数上是看不出来的")
+    key_list: list[str] = []
+    for key in keys:
+        text = str(key or "")
+        if text and text not in key_list:
+            key_list.append(text)
+    out: dict[str, Any] = {"checked": False, "source": source, "keys": list(key_list),
+                           "waiters": 0, "judged": [], "latency_ms": None, "reason": ""}
+    with _CLOSE_LOCK:
+        stats = _CLOSE_STATS.setdefault(source, {"attempts": 0, "judged": 0})
+        stats["attempts"] = int(stats.get("attempts") or 0) + 1
+    if not key_list:
+        out["checked"] = True
+        out["reason"] = "这一条事件没有可查的对象键（没有 task/agent 归属）=> 不消账"
+        return out
+    if _CLOSE_DEPTH[0] > 0:
+        out["checked"] = True
+        out["reason"] = "已经在一趟消账里（递归保护）=> 这一条不再重复判"
+        return out
+    got = reading if reading is not None else now()
+    if got.status == "unknown":
+        out["reason"] = (f"时钟读不到（{got.reason or '两个来源都不可用'}）=> "
+                         "判不了到点（那条表保持 pending，等下一次对账）")
+        return out
+    started = time.perf_counter()
+    _CLOSE_DEPTH[0] += 1
+    try:
+        for root in list(_BOOKS):
+            bucket = _BOOKS.get(root)
+            if bucket is None or not bucket._index_ready:
+                continue
+            seen: set[str] = set()
+            for key in key_list:
+                for timer in bucket.waiters_of(key):
+                    if timer.timer_id in seen:
+                        continue
+                    seen.add(timer.timer_id)
+                    out["waiters"] += 1
+                    verdict, why = timer.due_reason(got, None)
+                    if not verdict:
+                        continue
+                    bucket.mark_hot(timer)
+                    out["judged"].append({"timer_id": timer.timer_id,
+                                          "triggered_by": verdict,
+                                          "why": why})
+    finally:
+        _CLOSE_DEPTH[0] -= 1
+    out["checked"] = True
+    out["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 4)
+    if not out["judged"]:
+        out["reason"] = "查过了：这几个对象上没有到点的等待"
+    with _CLOSE_LOCK:
+        _CLOSE["count"] = int(_CLOSE.get("count") or 0) + len(out["judged"])
+        _CLOSE["latency_ms"] = out["latency_ms"]
+        _CLOSE["last"] = {
+            "source": source,
+            "keys": list(key_list),
+            "waiters": int(out["waiters"]),
+            "judged": [str(r.get("timer_id") or "") for r in out["judged"]],
+            "triggered_by": [str(r.get("triggered_by") or "") for r in out["judged"]],
+            "at": _iso(got.wall) if got.wall is not None else "",
+            "latency_ms": out["latency_ms"],
+        }
+        st = _CLOSE_STATS.setdefault(source, {"attempts": 0, "judged": 0})
+        st["judged"] = int(st.get("judged") or 0) + len(out["judged"])
+    return out
+
+
 def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
     """把到点的计时器与周期性巡查交给注册的到点动作；计时器成功的落成 fired。
 
@@ -4355,6 +5396,26 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
     周期性巡查不在这个函数里"到点即消耗"：它每响一次就把 `next_at` 前移一拍，
     同一拍里最多补 `MAX_CATCHUP_FIRES` 次（假时钟一次前进一小时而周期是 20 分钟时，
     三次报醒都要发出去，但不许因为时钟被拨得很远就无限补）。
+
+    ## 每一拍走哪条路（业主 2026-10-27 的施工单第 ④ 条：每拍早退）
+
+    - 早退（`TimerBook.can_early_exit`）：`now < min(堆顶, 下次对账, 下一次周期性巡查)`
+      且时钟/簿记都读得成、单调计数走动过 ⇒ 立刻返回"查过了、没有到点的"：
+      不扫表（`pending()` 那一次整表排序）、不问 `target_state`（一次台账读）、
+      不重建任何东西。真机上绝大多数拍就是这一档（一局几千条计时器、几十个子代理，
+      而绝大多数拍什么都没到点）。早退与"真扫一遍"给出的到点集合逐条相同的钉子：
+      `tests/test_the_clock_scales_with_the_book.py` 的
+      `test_a_the_heap_order_matches_the_linear_scan`（堆 == 线性扫）与
+      `test_f_the_quiet_pump_costs_a_constant`（安静拍不扫表、不问 target_state）；
+    - 热表（事件消账的产物）：`_close_waiters_for_event` 已经判成到点的那几条，
+      这一拍只投它们（O(候选数)）；
+    - 堆路径：堆顶有到点，只判堆给的候选（O(候选数 log N)）；
+    - 全扫（对账）：`pending()` + `_probe_targets` + 逐条 `due_reason`，
+      与改前逐字相同。它在三个时刻发生：第一拍 / `RECONCILE_EVERY_SEC` 到点 /
+      时钟没走动（`needs_full_scan`）。
+
+    三态一条不少：时钟读不到 / 簿记读不成 => `checked=False` 加理由；
+    早退只在两个来源都读到、而且这一拍确实"什么都没到"时才成立。
     """
     reading = now()
     report: dict[str, Any] = {"checked": True, "fired": [], "deferred": [],
@@ -4362,114 +5423,83 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
     if reading.status == "unknown":
         report["checked"] = False
         report["reason"] = f"时钟读不到（{reading.reason or '两个来源都不可用'}）=> 判不了 due"
+        if workspace is not None:
+            _cost_note(_resolve_root(workspace), source="fire_due", checked=False,
+                       reason=report["reason"], scan_ms=None, probes=None,
+                       bucket=None, reading=reading, reconcile=None, early_exit=False)
         return report
-    roots = [str(Path(workspace).resolve())] if workspace is not None else list(_BOOKS)
+    roots = [_resolve_root(workspace)] if workspace is not None else list(_BOOKS)
     for root in roots:
+        started = time.perf_counter()
+        probes_before = _PROBE_CALLS[0]
         try:
             bucket = book(root)
         except ClockStateError as exc:
             report["checked"] = False
             report["reason"] = (report["reason"] + "；" if report["reason"] else "") + str(exc)
+            _cost_note(root, source="fire_due", checked=False, reason=str(exc),
+                       scan_ms=None, probes=None, bucket=None, reading=reading,
+                       reconcile=None, early_exit=False)
             continue
+        full, why_full = bucket.needs_full_scan(reading)
+        if not full:
+            # 热表：事件消账已经判成到点的那几条 —— 只投它们，O(候选数)，不扫全表。
+            hot = bucket.pop_hot()
+            if hot:
+                for timer in hot:
+                    reason, detail = timer.due_reason(reading, None)
+                    if not reason:
+                        continue
+                    if not _deliver_one(bucket, timer, reason, detail, reading, report):
+                        # 投递被推迟/抛了：它还是到点的，下一拍再投（不许静默丢掉）。
+                        bucket.mark_hot(timer)
+                report["periodic_fired"].extend(
+                    _fire_periodics(bucket, reading, report))
+                _cost_note(root, source="fire_due", checked=True, reason="",
+                           scan_ms=(time.perf_counter() - started) * 1000.0,
+                           probes=_PROBE_CALLS[0] - probes_before, bucket=bucket,
+                           reading=reading, reconcile=0, early_exit=False,
+                           hot=len(hot))
+                continue
+            early, why = bucket.can_early_exit(reading)
+            if early:
+                _cost_note(root, source="fire_due", checked=True, reason="",
+                           scan_ms=(time.perf_counter() - started) * 1000.0,
+                           probes=_PROBE_CALLS[0] - probes_before, bucket=bucket,
+                           reading=reading, reconcile=0, early_exit=True)
+                continue
+            # 堆顶有到点：只判堆给的候选（O(k log N)），不扫全表。
+            for timer in bucket.pop_due(reading):
+                reason, detail = timer.due_reason(reading, None)
+                if not reason:
+                    continue
+                _deliver_one(bucket, timer, reason, detail, reading, report)
+            report["periodic_fired"].extend(
+                _fire_periodics(bucket, reading, report))
+            _cost_note(root, source="fire_due", checked=True, reason="",
+                       scan_ms=(time.perf_counter() - started) * 1000.0,
+                       probes=_PROBE_CALLS[0] - probes_before, bucket=bucket,
+                       reading=reading, reconcile=0, early_exit=False)
+            continue
+        # 全表对账（第一拍 / 对账到点 / 时钟没走动 / 读不全）：与改前逐字相同。
         pending = bucket.pending()
         targets = _probe_targets(pending)
         for timer in pending:
             key = _target_key(timer)
-            reason, why = timer.due_reason(reading, targets.get(key))
+            reason, detail = timer.due_reason(reading, targets.get(key))
             if not reason:
-                _remember_wait_state(bucket, timer, targets.get(key), why)
+                _remember_wait_state(bucket, timer, targets.get(key), detail)
                 continue
-            if _DUE_HANDLER is None:
-                report["deferred"].append({
-                    "timer_id": timer.timer_id,
-                    "reason": "没有注册到点动作（set_due_handler 还没接上）",
-                })
-                continue
-            timer.triggered_by = reason
-            timer.woke_reason = timer.woke_reason_of(reason)
-            events = _event_hits(timer) if timer.wait_for else []
-            feedback = events[-1].content if events else ""
-            label = ""
-            if events:
-                label = "它交的是" if events[-1].kind == "submit" else "它说的是"
-            timer.feedback = feedback
-            # 轮查那一档（业主 2026-10-27 傍晚）：到点那一下的正文是 SOP 四步，不是
-            # "时间到了"。`patrol_sop_text` 与 `patrol_section` 都按名字调（模块级），
-            # 于是反真空判据能把其中任何一个换成空串、当场看正文少掉哪一半。
-            patrol = is_patrol_timer(timer)
-            timer.message = due_message(
-                # 到点这句念的目的走 `purpose_of`（唯一取值口）—— 与盘上那一行
-                # `purpose` 是同一个来源，于是"内存里念的"与"从 state.json 读回来的"
-                # 结构上不会分家（真机那次的错位就是两处各取一套）。
-                purpose=purpose_of(timer), waited_sec=timer.waited_seconds(reading),
-                created_at=timer.created_at,
-                fired_at=_iso(reading.wall) if reading.wall is not None else "",
-                feedback=feedback, feedback_label=label,
-                waited_target=timer.wait_for, woke_reason=timer.woke_reason,
-                patrol_sop=(patrol_sop_text() if patrol else ""),
-                # 异常清单不另写第二份：轮查与周期性巡查读同一个 `patrol_section`。
-                patrol_section=(patrol_section(timer.workspace, task_id=timer.task_id)
-                                if patrol else ""))
-            try:
-                receipt = _DUE_HANDLER(timer)
-            except DueDeferred as exc:
-                # 到点了，但今天做不了：保持 pending，下一次再试。
-                timer.triggered_by = ""
-                timer.woke_reason = ""
-                timer.message = ""
-                timer.feedback = ""
-                report["deferred"].append({"timer_id": timer.timer_id,
-                                           "reason": str(exc)})
-                continue
-            except Exception as exc:  # noqa: BLE001 - 一条坏掉不带走别的计时器
-                timer.triggered_by = ""
-                timer.woke_reason = ""
-                timer.message = ""
-                timer.feedback = ""
-                report["errors"].append({"timer_id": timer.timer_id,
-                                         "error": f"{type(exc).__name__}: {exc}"})
-                continue
-            got = dict(receipt or {})
-            timer.state = "fired"
-            timer.fired_at = _iso(reading.wall) if reading.wall is not None else ""
-            timer.woke_at = timer.fired_at
-            _unregister_parked(timer.timer_id)
-            # 醒了就不再"在等谁"：`waiting_on` 清空（业主 2026-10-26 第 ②/③ 条）。
-            # 为什么要清而不是留着："还在等 A1"与"等 A1 等到了"必须分得开 —— 留着它，
-            # 一条已经醒了三条的表在读数上仍然挂着，父代理那边的销号闸也永远有话拦；
-            # 而"等过谁"这件事已经由 `wait_for` / `wait_for_resolved` / `message` 三格留档。
-            woke_from = dict(timer.waiting_on or {})
-            timer.waiting_on = {}
-            timer.mailbox_item_id = str(got.get("mailbox_item_id") or "")
-            timer.wake_id = str(got.get("wake_id") or "")
-            timer.note = str(got.get("note") or "")
-            try:
-                bucket.save()
-            except ClockStateError as exc:
-                report["errors"].append({"timer_id": timer.timer_id, "error": str(exc)})
-                continue
-            report["fired"].append({
-                "timer_id": timer.timer_id,
-                "kind": timer.kind,
-                "task_id": timer.task_id,
-                "triggered_by": timer.triggered_by,
-                "woke_reason": timer.woke_reason,
-                "wait_for": timer.wait_for,
-                # 醒的那一句里带上"刚被清掉的那一格"：读的人看得出它等的是谁，
-                # 而盘上 `waiting_on` 已经是空表（"还在等"与"等到了"分得开）。
-                "waiting_on": dict(timer.waiting_on or {}),
-                "woke_from": woke_from,
-                "woke_from_text": waiting_on_text(woke_from),
-                "purpose": timer.purpose,
-                "purpose_missing": timer.purpose_missing,
-                "waited_sec": timer.waited_seconds(reading),
-                "feedback": timer.feedback,
-                "message": timer.message,
-                "mailbox_item_id": timer.mailbox_item_id,
-                "wake_id": timer.wake_id,
-            })
+            _deliver_one(bucket, timer, reason, detail, reading, report)
         report["periodic_fired"].extend(
             _fire_periodics(bucket, reading, report))
+        # 对账已经把每一条都判过一遍 => 热表清空（它的意义是"判过、还没投"）。
+        bucket.clear_hot()
+        bucket.mark_reconciled(reading)
+        _cost_note(root, source="fire_due", checked=True, reason="",
+                   scan_ms=(time.perf_counter() - started) * 1000.0,
+                   probes=_PROBE_CALLS[0] - probes_before, bucket=bucket,
+                   reading=reading, reconcile=1, early_exit=False)
     return report
 
 
@@ -4816,6 +5846,12 @@ GOVERNED_PRIMITIVE_WAITS: tuple[tuple[str, str], ...] = (
     # `note_wait(elapsed, kind="external_process")` 记账 —— 阻塞方式不变（换了会毁
     # 取消语义），账上记的是实测耗时。
     ("agentflow/cancellation.py", "run_cancellable"),
+    # 2026-10-27（R-BE3）：`run_cancellable` 杀完子进程之后那两段等待搬进了独立函数
+    # `_drain_after_kill`（`communicate(timeout=_KILL_GRACE_SEC)` 与 `wait(timeout=1.0)`），
+    # 而这张表是按名字对齐的 ⇒ 需要单独登记这一条。
+    # 这是"登记"不是"豁免"：那两段各自记一条 `kind="external_process"` 的等待
+    # （`waited_for` 分得清是哪一处）；账上没有它们的话，它们就是缺口。
+    ("agentflow/cancellation.py", "_drain_after_kill"),
     ("agentflow/agent_e/core.py", "_run_script"),
 )
 

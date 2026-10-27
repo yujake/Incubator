@@ -202,6 +202,11 @@ CHECKED_TYPES: tuple[str, ...] = (
     # （表不在盘上 / 坏 JSON / 空表都只是 `state` 的另一档，不是"读不出键"），
     # 所以它进受核对名单；`data` 与三条行一级的类型见 `UNCHECKED_TYPES` 的理由。
     "LibraryView",
+    # 2026-10-27（业主裁定 ⑥-5 / W4）：错误动作那一面的两面顶层键在任何工作区上都在
+    # （`state="unknown"` 也是同一批键：`checked` / `state` / `reason` / `data` /
+    # `problems`），所以它们进受核对名单 —— 这是搬进生成物之后真正想要的收益：
+    # C 条从现在起核对那批键名。缓存那一族留在 `UNCHECKED_TYPES`（理由见那一处）。
+    "RoleErrorsView", "ErrorStatsData",
 )
 
 #: 声明了、但夹具上还读不出键的接口（`{接口名: 理由}`）。判据不许它们同时出现在
@@ -282,6 +287,38 @@ UNCHECKED_TYPES: dict[str, str] = {
                   "形状以 `_library_uses` 的读数为准（同上）",
     "LibraryProblem": "干净的工作区上 `problems[]` 是空数组（没有可留痕的问题）"
                       "⇒ 形状以 `library_face` 里那几处 `add_problem(` 的读数为准（同上）",
+    # 2026-10-27（业主裁定 ⑥-5 / W4）：两档提示词缓存那一族搬进生成物之后仍留在
+    # 本名单里 —— 不是因为它读不出来，而是因为 C 条的读盘步骤够不到它：
+    # `cachectl.status()` 要现渲染两档提示词（切 `AGENTFLOW_LEAN_ENABLED`、
+    # 重置工具链读数、跑一遍 `render_prompts`），那是一条有副作用的慢路径（本机
+    # 实测首次约 1.1 秒），把判据的读盘步骤变成"顺手改了进程的环境变量"不值得。
+    # 顶层那两面（`RoleErrorsView` / `ErrorStatsData`）没有这个问题，已进受核对名单。
+    # 这一族的形状仍只有一个来源（`types.ts` 的生成物），只是核对深度浅一档。
+    "CacheView": "C 条的读盘步骤不跑 `cachectl.status()`（它要现渲染两档提示词）"
+                 "⇒ 形状以 `cachectl.status()` / `cacheface.warm_job()` 的返回为准",
+    "CacheTier": "同 `CacheView`：`tiers[档]` 的一格由 `cachectl.tier_reading()` 给",
+    "CacheKeyCell": "同 `CacheView`：`tiers[档].key` 由 `cachectl.tier_reading()` 给",
+    "CacheKeyReading": "同 `CacheView`：`key` 由 `cachectl.key_reading()` 给",
+    "CacheTargetCell": "同 `CacheView`：`tiers[档].per_target[目标]` 由 `tier_reading` 给",
+    "CacheActive": "同 `CacheView`：`active` 由 `cachectl.active_reading()` 给",
+    "CacheReminder": "同 `CacheView`：`reminder` 由 `cachectl.status()` 给",
+    "CacheWarmJob": "同 `CacheView`：`warm` 由 `cacheface.warm_job()` 给",
+    "ErrorStatsSource": "逐源读数的键随源不同（事件流 / 会话记录 / 码命中），"
+                        "所以每一格都可选；C 条只核对 `ErrorStatsData` 的五个顶层键",
+    "ReadoutProblem": "夹具上 `problems[]` 是空数组（没有可留痕的问题）"
+                      "⇒ 形状与 `LibraryProblem` 同形（`code` + `detail`）",
+    "ErrorCategoryGlossary": "真身是一张常量表（`errorstats.ERROR_CATEGORIES`），"
+                             "不在盘上、也不经读模型 ⇒ C 条的读盘步骤取不到它",
+    "ErrorCategoryMeaning": "同 `ErrorCategoryGlossary`：一行两格（`name` + `meaning`）",
+    # 2026-10-27（业主裁定 W5）：在飞面那两格有了具名行类型，但 C 条核不了它们 ——
+    # 夹具工作区里没有在跑的循环、也没有登记过的活进程 ⇒ 两格恒为空数组，
+    # 对着空数组核等于没核。登记在这里，"造一套 live 夹具"是另一件事（见报告）。
+    "LiveLoopRow": "夹具工作区里没有在跑的循环（`running[]` 是空数组）"
+                   "⇒ 形状以 `stopctl.running_loops()` 的返回为准；"
+                   "要核对它得先造一套 live 夹具（在跑的会话 + 活着的进程登记）",
+    "LivePidRow": "夹具工作区里没有进程登记（`live[]` 是空数组）"
+                  "⇒ 形状以 `stopctl.live_pids()` 的 `pid/role/sid/started_at/path` 为准；"
+                  "同上，要核对它得先造 live 夹具",
 }
 
 #: 契约判据 D 的例外面：本模块声明、但后端还没落地的端点（`{端点: 理由}`）。
@@ -438,6 +475,32 @@ def _checkpoint_of(root: Path, sid: str) -> dict[str, Any]:
             "checkpoint": data}
 
 
+def _checkpoint_spend(checkpoint: Any) -> dict[str, Any] | None:
+    """检查点里那一棵花销子树（读不到 / 形状不对 ⇒ `None`，不是空 dict）。
+
+    口径与页面的 `spendOf` 同一处判定（`usd` 与 `calls` 两个键都在才算读到）：
+    检查点里的 `spend` 可能是空对象（老检查点、或还没花过钱），那时"没有这一栏"
+    与"这一栏是 0"必须分得开。
+
+    为什么判断权放在这里（2026-10-27 业主裁定 ⑥-4）：页面要比"同一趟"的两个数，
+    而"检查点有没有花销读数"这件事此前在 TS 里判一次、在 Python 里没人判 ——
+    两个数一个来自这里、一个来自 `runs[]`，谁都不许自己再猜一遍形状。
+    """
+    if not isinstance(checkpoint, Mapping):
+        return None
+    spend = checkpoint.get("spend")
+    if isinstance(spend, Mapping) and "usd" in spend and "calls" in spend:
+        return dict(spend)
+    return None
+
+
+def _usd_of(value: Any) -> float | None:
+    """一格金额收成 `float | None`（布尔与字符串不算金额，读不到就是 `None`）。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 def run_view(root: str | Path, sid: str) -> dict[str, Any]:
     """`GET /api/run/{sid}` 的读模型：`RunView` = `Run` + `report` + `checkpoint`。
 
@@ -446,6 +509,18 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
     - `report`：`out/review/REPORT.md` 的读数，两栏 `{status, text}`，`status` 是
       `ok`/`missing`/`unknown`（另一套词表，见裁定 N1）；
     - `checkpoint`：`runs/agent-<角色>-<sid>.json` 的内容（读不到就是 `None`）。
+
+    花销那四格（2026-10-27 业主裁定 ⑥-4）回答的是"同一趟花了两遍算的两处是不是同一个数"：
+
+    - `checkpoint_role`：被选中的那一份检查点属于哪个角色（`""` = 没有检查点）；
+    - `checkpoint_spend_usd`：那一份检查点自己的累计（`spend.usd`，读不到 `null`）；
+    - `same_run_spend_usd`：这一段会话里同角色的最后一趟的事件求和（找不到 `null`）；
+    - `same_run_unknown_usd` / `same_run_start_index`：同一趟里算不出价钱的那部分、
+      以及那一趟的起始下标（页面用它说清"比的是哪一趟"）。
+
+    为什么要有这两格（此前页面拿"整段会话每一趟之和"去比"一份检查点"）：会话跑过
+    两趟、或跑过子代理时两者结构上必然不等，于是页面恒挂一条红徽标"两处不一致"，
+    而那两个数根本不是同一件事。跨趟的合计另有其数（`runs[]` 逐趟给），不许拿来比。
 
     三态：会话文件不在盘上 ⇒ `unreadable`（`sid` 是调用方给的，找不到就是"没查成"，
     不是"这一趟没有事件"）；会话在但有坏行 ⇒ `unreadable` + `reason` 里带坏行数。
@@ -459,11 +534,25 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
         return {"tri": TRI_UNREADABLE,
                 "reason": f"会话文件不在盘上：{path}",
                 "sid": sid, "runs": [], "report": {"status": "missing", "text": ""},
-                "checkpoint": None, "checkpoint_reason": "", "path": str(path)}
+                "checkpoint": None, "checkpoint_reason": "", "path": str(path),
+                "checkpoint_role": "", "checkpoint_spend_usd": None,
+                "same_run_spend_usd": None, "same_run_unknown_usd": 0,
+                "same_run_start_index": None}
     events, bad = SS.read_session(root_p, sid=sid)
     runs = SS.runs_in_session(events, sid=sid)
     rstatus, rtext = _read_report(root_p)
     ckpt = _checkpoint_of(root_p, sid)
+    spend_tree = _checkpoint_spend(ckpt["checkpoint"])
+    ckpt_role = ""
+    if isinstance(ckpt["checkpoint"], Mapping):
+        ckpt_role = str(ckpt["checkpoint"].get("role") or "")
+    # 同一趟 = 这一段会话里 role 与检查点相同的那一趟（取最后一趟：`runs` 已按
+    # `start_index` 排过序，同一个角色可能跑过不止一次，检查点是最后写的那一份）。
+    same_run: dict[str, Any] | None = None
+    if ckpt_role:
+        for one in runs:
+            if str(one.get("role") or "") == ckpt_role:
+                same_run = one
     if bad:
         problems.append(f"会话有 {len(bad)} 条坏行：" + "；".join(bad[:3]))
     if ckpt["tri"] == TRI_UNREADABLE:
@@ -477,6 +566,13 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
         "checkpoint": ckpt["checkpoint"],
         "checkpoint_reason": str(ckpt["reason"]),
         "path": str(path),
+        "checkpoint_role": ckpt_role,
+        "checkpoint_spend_usd": _usd_of(None if spend_tree is None else spend_tree.get("usd")),
+        "same_run_spend_usd": _usd_of(None if same_run is None else same_run.get("usd")),
+        "same_run_unknown_usd": (0 if same_run is None
+                                 else int(same_run.get("unknown_usd") or 0)),
+        "same_run_start_index": (None if same_run is None
+                                 else int(same_run.get("start_index") or 0)),
     }
 
 
@@ -3873,7 +3969,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "run_view() —— 一趟详情（`Run` + `report` + `checkpoint`）",
      (("tri", "Tri"), ("reason", "string"), ("sid", "string"), ("runs", "RunRow[]"),
       ("report", "ReportReadingView"), ("checkpoint", "CheckpointView | null"),
-      ("checkpoint_reason", "string"), ("path", "string"))),
+      ("checkpoint_reason", "string"), ("path", "string"),
+      # 2026-10-27（业主裁定 ⑥-4）：花销"两处一致"必须同范围比。下面四格给出
+      # "同一趟"的两个数：检查点那一趟（同一 role）的累计，与这一段会话里
+      # 同一 role 那一趟的事件求和。跨趟的合计另有其数（`runs`），不许拿来比。
+      ("checkpoint_role", "string"),
+      ("checkpoint_spend_usd", "number | null"),
+      ("same_run_spend_usd", "number | null"),
+      ("same_run_unknown_usd", "number"),
+      ("same_run_start_index", "number | null"))),
     ("EventRow",
      "run_events() 的一行 —— 会话里的一条事件（`index` 与 `RunRow.start_index`/"
      "`end_index` 同一套编号：解析成功后的事件列表下标，0 起）",
@@ -3991,12 +4095,23 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("LiveView",
      "live_face() —— 在飞的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）",
      (("tri", "Tri"), ("reason", "string"), ("root", "string"), ("answer", "string"),
-      ("running", "Array<Record<string, unknown>>"),
-      ("live", "Array<Record<string, unknown>>"),
+      ("running", "LiveLoopRow[]"),
+      ("live", "LivePidRow[]"),
       ("unreadable_sessions", "string[]"),
       ("switch", "Record<string, unknown>"), ("switch_present", "boolean"),
+      # 这两格没有具名行类型（2026-10-27）：它们是 `stop-history.jsonl` /
+      # `interrupts.jsonl` 里自由形状的 JSONL 行（`consume_stop` 的 payload
+      # 与中断记录各写各的键），声明成具名接口就是替生产者编形状。
       ("history", "Array<Record<string, unknown>>"),
       ("interrupts", "Array<Record<string, unknown>>"))),
+    ("LiveLoopRow",
+     "stopctl.running_loops() 的 running[] —— 还在盘上跑的一趟循环（会话面）",
+     (("role", "string"), ("sid", "string"), ("since", "string"))),
+    ("LivePidRow",
+     "stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程"
+     "（`path` 是那一份登记文件的落点，`live_pids` 会给）",
+     (("pid", "number"), ("role", "string"), ("sid", "string"),
+      ("started_at", "string"), ("path", "string"))),
     ("UsageView",
      "usage_face() —— usage_ledger 的汇总（总计 + 两个归口 + 重试开销 + 最近几笔）",
      (("tri", "Tri"), ("reason", "string"), ("path", "string"),
@@ -4140,11 +4255,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       # 2026-10-27（引用核实那一批落地后的补登记）：台账那一行多了 `citation_checks`
-      # 四格（`verifications.CITATION_CHECK_KEYS`：stmt_id / verdict / quote_verbatim /
-      # note）。后端真的读得出它（C 条拿夹具那一行逐键比）⇒ 这里必须声明，
+      # 五格（`verifications.CITATION_CHECK_KEYS`：stmt_id / verdict / quote_verbatim /
+      # note / in_material）。后端真的读得出它（C 条拿夹具那一行逐键比）⇒ 这里必须声明，
       # 否则类型面读不出"这条证明里的引用被逐条核成了什么"。
+      # `in_material` 是 2026-10-27 补的第 5 格：材料之外的那条（V 多给的）不算挡签，
+      # 而这一格必须落盘 —— 否则落盘再读回来时两个判定口给出相反结论。
       ("citation_checks",
-       "{ stmt_id: string; verdict: string; quote_verbatim: boolean; note: string }[]"),
+       "{ stmt_id: string; verdict: string; quote_verbatim: boolean; note: string; "
+       "in_material: boolean }[]"),
       ("by_task_id_tri", "string"))),
     ("ArtifactRow",
      "artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）",
@@ -4435,6 +4553,101 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "（`code` 是受控的几个码，`admission_undecidable` 就是「判不出入库/待入库」"
      "那一条：A 侧的实现问题，不显示但记一笔）",
      (("code", "string"), ("detail", "string"))),
+
+    # ---------------------------------------------------------------- 13 两档提示词缓存
+    # 2026-10-27（业主裁定 ⑥-5 / W4）：这一族此前手写在前端 `ui/src/api.ts` 里
+    # （真身是 `cachectl.status()` 与 `cacheface.warm_job()`）。手写的类型就是第二份
+    # 口径：后端加一格、`tsc` 只会觉得"少了一个可选字段"，一声不吭。搬进来之后
+    # `types.ts` 仍是唯一来源。
+    ("CacheTargetCell",
+     "cachectl.tier_reading() 的 per_target[目标] —— 一个预热目标落地/新鲜的四格",
+     (("state", "string"), ("fresh", "boolean | null"),
+      ("recorded_sha256", "string"), ("now_sha256", "string"),
+      ("absent_reason", "string"))),
+    ("CacheKeyCell",
+     "cachectl.tier_reading() 的 key —— 这一档的 key 换没换（`same` / `stale` / `unknown`）",
+     (("tri", "string"), ("reason", "string"), ("changed", "string[]"),
+      ("affected", "string[]"), ("affected_why", "string"), ("text", "string"),
+      ("recorded", "{ fingerprint: string; model: string; base_url: string }"))),
+    ("CacheTier",
+     "cachectl.tier_reading() —— 一档的四格读数（落地 / 新鲜 / 覆盖几个 / 缺谁）",
+     (("tier", "string"), ("label", "string"), ("lean_enabled", "boolean"),
+      ("tri", "string"), ("reason", "string"), ("warmed", "boolean"),
+      ("fresh", "boolean | null"), ("fresh_reason", "string"),
+      ("not_fresh", "string[]"), ("version_mismatch", "boolean"),
+      ("covered", "number"), ("covered_fresh", "number"), ("total", "number"),
+      ("missing", "string[]"), ("absent", "string[]"),
+      ("absent_reason", "Record<string, string>"), ("at", "string"),
+      ("prompt_version", "string"), ("readings_prompt_version", "string"),
+      ("spent_usd", "number | null"), ("model", "string"),
+      ("per_target", "Record<string, CacheTargetCell>"), ("key", "CacheKeyCell"))),
+    ("CacheKeyReading",
+     "cachectl.key_reading() —— 当前这把 key 的读数（值永不上屏：只有指纹与长度）",
+     (("configured", "boolean"), ("source", "string"), ("model", "string"),
+      ("base_url", "string"), ("key_chars", "number"), ("fingerprint", "string"))),
+    ("CacheActive",
+     "cachectl.active_reading() —— 当前这一趟会用哪一档（三层来源各自自报）",
+     (("tier", "string"), ("label", "string"), ("lean", "boolean | null"),
+      ("source", "string"), ("source_text", "string"), ("source_note", "string"),
+      ("record_sid", "string"), ("record_at", "string"), ("record_state", "string"),
+      ("strategy", "string"), ("run_at", "string"), ("prompt_version", "string"),
+      ("readings_prompt_version", "string"), ("covered", "string"),
+      ("covered_count", "number"), ("total", "number"), ("missing", "string[]"),
+      ("absent", "string[]"), ("fresh", "boolean"), ("tri", "string"),
+      ("why", "string"), ("text", "string"))),
+    ("CacheReminder",
+     "cachectl.status() 的 reminder —— 换 key 那条提醒（网页顶部横幅与命令行同一句）",
+     (("active", "boolean"), ("tri", "string"), ("tiers", "string[]"),
+      ("text", "string"), ("affected", "string[]"), ("dismiss_key", "string"))),
+    ("CacheWarmJob",
+     "cacheface.warm_job() —— 最近一趟网页预热的三态"
+     "（`running` / `done` / `failed` / `unknown`）",
+     (("recorded", "boolean"), ("state", "string"), ("reason", "string"),
+      ("log", "string"), ("log_path", "string"), ("pid", "number"),
+      ("tier", "string"), ("at", "string"), ("last_line", "string"),
+      ("tail", "string[]"))),
+    ("CacheView",
+     "GET /api/cache 的整份读数（`cachectl.status()` + 写权限读数 + 预热三态）",
+     (("schema", "number"), ("at", "string"), ("readings", "string"),
+      ("lean_now", "boolean"), ("prompt_version", "string"),
+      ("key", "CacheKeyReading"), ("tiers", "Record<string, CacheTier>"),
+      ("workspace", "string"), ("active", "CacheActive"),
+      ("reminder", "CacheReminder"), ("writes_allowed", "boolean"),
+      ("writes_reason", "string"), ("warm", "CacheWarmJob"),
+      ("verdict",
+       "{ tri: string; unknown_tiers: string[]; stale_tiers: string[];"
+       " key_unknown_tiers: string[] }"))),
+
+    # ---------------------------------------------------------------- 14 错误动作计数
+    # 2026-10-27（同 W4）：这一族此前也手写在 `ui/src/api.ts` 里。真身是
+    # `readouts.errors_readout()`（口径在 `errorstats`）与 `errorstats.ERROR_CATEGORIES`。
+    ("ReadoutProblem",
+     "errors_readout() 的 problems[] —— 一条「读到了、但人该看见」的异常"
+     "（与 `LibraryProblem` 同形：两族各是各的读数，合并不省事）",
+     (("code", "string"), ("detail", "string"))),
+    ("ErrorStatsSource",
+     "errors_readout() 的 data.sources[源] —— 逐源读数（三种源的键不完全相同，"
+     "所以每一格都是可选的：缺格 = 这一源没有这一栏，不是 0）",
+     (("checked?", "boolean"), ("events?", "number"), ("files?", "number"),
+      ("records?", "number"), ("bad_lines?", "number"),
+      ("unreadable_files?", "string[]"), ("unclassified?", "number"),
+      ("table?", "string"), ("reason?", "string"))),
+    ("ErrorStatsData",
+     "errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）",
+     (("by_role", "Record<string, Record<string, number>>"),
+      ("role_total", "Record<string, number>"), ("total", "number"),
+      ("categories", "Record<string, number>"),
+      ("sources", "Record<string, ErrorStatsSource>"))),
+    ("RoleErrorsView",
+     "GET /api/errors 的整份读数（`readouts.errors_readout()` 逐字）",
+     (("checked", "boolean"), ("state", "string"), ("reason", "string"),
+      ("data", "ErrorStatsData"), ("problems", "ReadoutProblem[]"))),
+    ("ErrorCategoryMeaning",
+     "errorstats.ERROR_CATEGORIES 的一行 —— 类目与它那一句含义",
+     (("name", "string"), ("meaning", "string"))),
+    ("ErrorCategoryGlossary",
+     "GET /api/errors/categories 的整份读数（一张常量表，无三态）",
+     (("categories", "ErrorCategoryMeaning[]"), ("source", "string"))),
 )
 
 # （`MISSING_TYPES` 在文件头声明：那是"这一层有哪些约定"的那一处，本处不再重复一份 —

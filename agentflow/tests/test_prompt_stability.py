@@ -601,6 +601,13 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
     {"version": "p213", "count": 15,
      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
      "note": "抬版本 p213（2026-10-27 收尾 / L1 巡查）：两笔都落在 M 自己的段上 —— ① specs/m.py 的 policy 多一条轮查规范动作（99 字：到点跑 conductor.patrol 拿全 → 逐个给 conductor.patrol_verdict（过/指导）→ 结完再干别的 → 挂机等时才挂下一个 20 分钟轮查计时器），同处再一条点名 conductor.review_child（要细看某一个时给它绝对编码）；② M 的工具面多三件（conductor.patrol / conductor.review_child / conductor.patrol_verdict，roles 都是 M）⇒ 十一格摘要只有 M 那一格换值。facts 键集仍 15 格、键名一格未动，count / keys_sha256 与上一格同值。计时器与「到点返回 SOP」那一半归 L2，本批不动 clock.py / clock_tools.py / agent_loop.py 的挂机侧。另记一笔已知待办：tests/fixtures/prompt_cache_warm.json 没有重落（重落要花模型钱、业主没批）⇒ 缓存因此 stale。"},
+    # p213 → p214（2026-10-27，`R-BE4` 的 D1 Phase A）：只动 D 的工具面（多一件
+    # `conjecture.register_conjecture`），`STEP_VOLATILE_FACTS` 那 15 格一格没挪、
+    # 键名一个没换 ⇒ `count` / `keys_sha256` 与上一格同值，仍是
+    # `PS.volatile_facts_digest()` 的现算值（不手抄）。
+    {"version": "p214", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p214（2026-10-27，R-BE4 的 D1 Phase A，业主批准）：把 D 的主力动作接进唯一的注册表 —— tools/__init__.py 的 _MODULES 加 conjecture_tools ⇒ conjecture.register_conjecture 由 build_registry 装配（它的 roles=(D,) ⇒ 十一格里只有 D 的 tools_lines 多一行，其余十格逐字未动，读数见 temp/rbe4_prompt_digests.py）。连带三处登记退场（capabilities 的 _TOOL_MODULE_EXTRAS / _KNOWN_UNMATCHED_ACTIONS / ACTION_ONLY_PARAMS），tool_surface_snapshot.json 的 summary.count 117 → 118（人重冻）。facts 键集仍 15 格、键名一格未动，count / keys_sha256 与上一格同值。已知待办同上一格：prompt_cache_warm.json 没重落 ⇒ 缓存 stale。"},
 )
 
 

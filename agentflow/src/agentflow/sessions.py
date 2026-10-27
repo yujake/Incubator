@@ -1,4 +1,4 @@
-# -- coding: utf-8 --
+# -*- coding: utf-8 -*-
 """按项目存放的会话记录（学 harness 的"按工作区存放"）。
 
 ## 为什么要这一层
@@ -35,7 +35,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from filelock import FileLock
 
-from .jsonlfile import read_jsonl
+from .jsonlfile import read_jsonl, read_jsonl_state
 
 SESSIONS_DIR_NAME = "sessions"
 #: 趟次索引的落点目录名（工作区根下）。
@@ -194,23 +194,96 @@ def read_session(root: Any, sid: str | None = None) -> tuple[list[dict], list[st
     return read_jsonl(session_path(root, sid))
 
 
-def list_sessions(root: Any) -> list[dict]:
-    """列出这个项目的所有会话（按文件名排序）。目录不存在 ⇒ 空列表（合法初态）。"""
+def _iter_sessions(root: Any) -> list[tuple[pathlib.Path, list[dict], list[str]]]:
+    """这个项目的每一场会话：`(路径, 事件, 坏行问题)`，按文件名排序、每个文件只读一遍。
+
+    为什么把「读一遍」收成一处：`list_sessions` / `session_ids_with_questions` /
+    `compute_run_index` 原先各读一遍盘，于是 `compute_run_index` 一次调用就把整份
+    会话语料读了 4 遍（2026-10-27 实测，探针 `temp/rbe4_sessions_reads.py`：6.6MB 的
+    `sessions/` 被读成 26.3MB / 404ms；合并后 1.0 遍 / 110ms）。
+    三处读的是同一批文件、同一个口径（`jsonlfile.read_jsonl`），合起来只该读一遍。
+    目录不存在 ⇒ 空列表（合法初态，不是错误）。
+    """
     d = sessions_dir(root)
     if not d.is_dir():
         return []
-    out: list[dict] = []
-    for p in sorted(d.glob("*.jsonl")):
-        events, problems = read_session(root, p.stem)
-        out.append({
+    return [(p, *read_session(root, p.stem)) for p in sorted(d.glob("*.jsonl"))]
+
+
+def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
+    """读这个工作区的全部会话记录（不按 sid 分）：返回 `(记录, 读数)`。
+
+    ## 与 `read_session` 的分工（2026-10-27，R-BE1 的 ②-1）
+
+    两件事问的不是一个问题，但"怎么读一个 JSONL"只有一份实现（`jsonlfile.read_jsonl_state`）：
+
+    - `read_session(root, sid)`：读一段会话，`problems` 是逐行/逐文件的问题清单
+      （`stopctl` / `closing` / `statusreport` / `webui` 按 sid 问）；
+    - `read_all_sessions(root)`：读这台机器上跑过的全部记录，把它折成一份"读了多少、
+      坏了几行、哪几个文件读不出来"的读数（`errorstats` 与 `readouts` 的
+      errors/flow/cost 问的是这个）。
+
+    ## 读数那五格（键名与顺序都是既有输出面的一部分）
+
+    `checked` / `files` / `records` / `bad_lines` / `unreadable_files` / `reason`：
+    改前这一份读数是 `errorstats._read_sessions` 自己算的（第二份实现），而它与
+    `read_session` 对"读不明白"的判定各说一套。现在两者同源于 `read_jsonl_state`：
+
+    - `unreadable_files`：`state == "unreadable"` 的文件名（读不出来：权限 / 非 UTF-8 /
+      读之前被删掉）；
+    - `bad_lines`：坏行条数（不是合法 JSON，或合法 JSON 但不是对象 —— 与
+      `read_jsonl_state` 的 `problems` 逐条对应）；
+    - `files`：读得出来的文件数；`checked`：至少一个文件读得出来
+      （"一个都读不出来"是没查成，不是 0 条记录）。
+
+    `reason` 的三句与改前逐字相同（它们是 `sources["sessions"]` 的一部分，换了字就是换了读数）。
+    """
+    reading: dict[str, Any] = {"checked": False, "files": 0, "records": 0,
+                               "bad_lines": 0, "unreadable_files": [], "reason": ""}
+    root_path = pathlib.Path(str(root))
+    if not root_path.exists() or not root_path.is_dir():
+        reading["reason"] = f"工作区不存在：{root}"
+        return ([], reading)
+    folder = sessions_dir(root_path)
+    if not folder.is_dir():
+        reading.update(checked=True, reason="没有 sessions 目录（按 0 条读）")
+        return ([], reading)
+    paths = sorted(p for p in folder.glob("*.jsonl") if p.is_file())
+    if not paths:
+        reading.update(checked=True, reason="sessions 目录里没有 .jsonl")
+        return ([], reading)
+    records: list[dict] = []
+    bad = 0
+    broken: list[str] = []
+    for path in paths:
+        got, problems, state = read_jsonl_state(path)
+        if state in ("unreadable", "absent"):
+            # `absent` 只能是"glob 之后被删掉"：按读不出来记，不静默当空文件。
+            broken.append(path.name)
+            continue
+        records.extend(got)
+        bad += len(problems)
+    readable = len(paths) - len(broken)
+    reading.update(files=readable, records=len(records), bad_lines=bad,
+                   unreadable_files=broken,
+                   checked=readable > 0,
+                   reason="" if readable else "sessions 目录里每个文件都读不明白")
+    return (records, reading)
+
+
+def list_sessions(root: Any) -> list[dict]:
+    """列出这个项目的所有会话（按文件名排序）。目录不存在 ⇒ 空列表（合法初态）。"""
+    return [
+        {
             "sid": p.stem,
             "path": str(p),
             "events": len(events),
             "bad_lines": len(problems),
             "first_ts": str(events[0].get("ts") or "") if events else "",
             "last_ts": str(events[-1].get("ts") or "") if events else "",
-        })
-    return out
+        }
+        for p, events, problems in _iter_sessions(root)
+    ]
 
 
 # ====================================================================== 趟次索引（裁定 O2）
@@ -317,11 +390,13 @@ def compute_run_index(root: Any) -> dict:
     """
     root_p = pathlib.Path(str(root))
     sessions: dict[str, dict] = {}
-    for item in list_sessions(root_p):
-        sid = str(item.get("sid") or "")
+    asked: list[str] = []
+    # 一趟读完：`list_sessions` + `read_session` + `session_ids_with_questions` 原先
+    # 各读一遍（放大到 4.0×），现在同一个文件只读一次（口径见 `_iter_sessions`）。
+    for path, events, _problems in _iter_sessions(root_p):
+        sid = path.stem
         if not sid:
             continue
-        events, _problems = read_session(root_p, sid=sid)
         runs = runs_in_session(events, sid=sid)
         enders = [int(r["end_index"]) for r in runs if isinstance(r.get("end_index"), int)]
         sessions[sid] = {
@@ -329,7 +404,9 @@ def compute_run_index(root: Any) -> dict:
             "last_end_index": max(enders) if enders else None,
             "digest": digest_runs(runs),
         }
-    for sid in session_ids_with_questions(root_p):
+        if any(e.get("kind") == QUESTION_EVENT_KIND for e in events):
+            asked.append(sid)
+    for sid in asked:
         # 提问但一趟都没跑起来的会话也要在表里（否则"待答问题的归属会话"在索引里不存在，
         # 读者会以为那场会话没被扫过）。
         sessions.setdefault(sid, {"runs": [], "last_end_index": None,
@@ -345,17 +422,13 @@ def session_ids_with_questions(root: Any) -> list[str]:
     为什么不调 `userio.session_ids_with_questions`：`sessions.py` 是 `userio` 的下游
     （`userio` 导入本模块），反向导入会成环。判据 `tests/test_run_index.py` 有一条
     断言这两处读出的会话号集合相同 —— 于是"两份实现"这件事有机器读数守着。
+    读盘走 `_iter_sessions`（每个文件一遍），本函数不再自己扫第二遍。
     """
-    root_p = pathlib.Path(str(root))
-    out: list[str] = []
-    for item in list_sessions(root_p):
-        sid = str(item.get("sid") or "")
-        if not sid:
-            continue
-        events, _problems = read_session(root_p, sid=sid)
-        if any(e.get("kind") == QUESTION_EVENT_KIND for e in events):
-            out.append(sid)
-    return out
+    return [
+        p.stem
+        for p, events, _problems in _iter_sessions(root)
+        if p.stem and any(e.get("kind") == QUESTION_EVENT_KIND for e in events)
+    ]
 
 
 def digest_runs(runs: Iterable[Mapping[str, Any]]) -> str:

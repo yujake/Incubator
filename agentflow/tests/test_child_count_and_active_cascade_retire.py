@@ -39,7 +39,6 @@ import pathlib
 
 import pytest
 
-from agentflow import readouts as RO
 from agentflow.conductor import Conductor, LocalBackend, calling_as
 from agentflow.secretary import Secretary, retired_path
 from agentflow.store import Store
@@ -188,15 +187,17 @@ def test_a_two_counts_are_named_and_counted_separately(tmp_path: pathlib.Path) -
     assert view["active_child_count"] == 2, view
     assert view["counts"]["child_count"] == 3, view["counts"]
 
-    # 读数面（`readouts.READOUTS["roster"]`，`agentflow status-report` 与将来的网页从这里取）
-    face = RO.READOUTS["roster"](env["root"])
+    # 读数面：两个数各自一格、各有名字。口径只有 `Secretary.child_counts` 一处 ——
+    # 改前这里经由 `readouts.READOUTS["roster"]`，而那个读数生产 0 读者（2026-10-27 删掉），
+    # 于是这一条直接钉口径真身（不是放宽断言：同样的数、同样的标签、同样"各占一格"）。
+    face = env["sec"].child_counts(owner=owner)
     assert face["checked"] is True, face
-    assert face["data"]["child_count"] == 3, face["data"]
-    assert face["data"]["active_child_count"] == 2, face["data"]
-    assert face["data"]["labels"]["child_count"] == "子代理数", face["data"]
-    assert face["data"]["labels"]["active_child_count"] == "活跃子代理数", face["data"]
+    assert face["child_count"] == 3, face
+    assert face["active_child_count"] == 2, face
+    assert face["labels"]["child_count"] == "子代理数", face
+    assert face["labels"]["active_child_count"] == "活跃子代理数", face
     # 两个数在同一份读数里各自占一格（不是拼在一个字符串里）
-    assert "child_count" in face["data"] and "active_child_count" in face["data"], face["data"]
+    assert "child_count" in face and "active_child_count" in face, face
 
     # 负控：把 3 个都收口之后活跃数必须归 0（否则那 2 是编出来的）
     for tid in [str(r.get("task_id") or "") for r in

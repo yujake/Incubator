@@ -31,6 +31,8 @@
 | [`FORMAL-TOOLCHAIN.md`](FORMAL-TOOLCHAIN.md) | 证明检查器桥接层的接法与失败分类 |
 | [`FC27-PENDING-LEAN.md`](FC27-PENDING-LEAN.md) | 本批 Lean 改动的待批清单（**需要人审**，不由 AI 代签） |
 | [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md) | 禁改区治理流程：谁能批、批几个、台账怎么写 |
+| [`KNOWN-UNWIRED.md`](KNOWN-UNWIRED.md) | 已知未接线：`src/agentflow/tools/` 下哪个 `*_tools.py` 没被 `tools/__init__.py` 的 `_MODULES` 装配（现读清单——改了装配就要回来改它） |
+| [`WIRING-AUDIT-2026-10-27.md`](WIRING-AUDIT-2026-10-27.md) | 2026-10-27 夜的**接线审计**：逐条「实现了但没接上」的落点与复跑命令（当次读数、带日期；判据本体在 `tests/test_wiring_edges.py`） |
 
 ## 3. 历史证据（**不构成判据**，但被代码注释与其它文档大量引用，故保留）
 
@@ -47,6 +49,21 @@
   `SCHEMA-MIGRATION-PROPOSAL-review-axis.md`
 - `TOOLBOX-DRAFT-roles.md`、`ROLE-SPECS-DRAFT-N-O-Q.md`、`ROLE-SPECS-DRAFT-V.md`
 - `USER-END-DSH-STYLE.md`
+
+### 3.1 历史送审页 / 停摆记录 / 复算证据：谁被谁取代
+
+**只在本索引里标注，不改那些文档的正文**（改它们等于改历史）。判据：`tests/test_docs_index_covers_every_doc.py`
+要求盘上每一份 `docs/*.md` 都在本索引里出现一次，或登记进 §6「不入册」。
+
+| 文件 | 日期 | 已被谁取代 / 备注 |
+|---|---|---|
+| `FC27-PENDING-LEAN.md` | 2026-10-17 | 已被 2026-10-19 与 2026-10-21 那两批送审页取代 |
+| `FC27-REVIEW-2026-10-19.md` | 2026-10-19 | 已被 `FC27-PENDING-2026-10-21.md` 取代 |
+| `FC27-PENDING-2026-10-21.md` | 2026-10-21 | 与 `FC27-PENDING-CLEANING-2026-10-21.md` 同日**并列**（前者功能改动、后者只碰注释与 docstring，它自己在开头点名"上一批见…"）；这两批之后没有更晚的送审页 |
+| `FC27-PENDING-CLEANING-2026-10-21.md` | 2026-10-21 | 同上（清洁批次，机器证据见它自己的 §3） |
+| `NOAI-SUSPENSION-2026-09-25.md` | 2026-09-25 | 已被 `NOAI-SUSPENSION-2026-09-28.md` 取代（更晚的一次临时开放记录） |
+| `NOAI-SUSPENSION-2026-09-28.md` | 2026-09-28 | 目前最晚的一次开放记录，无后续 |
+| `REPRO-eval-results-no-producer.md` | 2026-10-21 | 复算证据：`test_eval_results_has_no_producer.py` 那三条读数的原文（从判据 docstring 搬出来是为了保住转义序列）；它随那条判据活着，不是过时文档 |
 
 ## 4. 设计理由（与代码冲突时以代码为准）
 
@@ -84,3 +101,13 @@ python scripts/noai_gate.py --git
 
 > 本目录的其余说明（历史沿革、发布检查入口 `tools/release_all.py` 与
 > `scripts/release_check.py` 的关系）见 `PROPOSALS.md` P-11；那份是历史依据。
+
+## 6. 不入册（**显式登记 + 理由**，不是"漏了"）
+
+新增一份 `docs/*.md` 而不在 §1–§3 里登记，判据 `tests/test_docs_index_covers_every_doc.py`
+会红。确实不该入册的（草稿、一次性复算输出、给外部看的临时纸），登记到这张表里并写清为什么 ——
+"没登记"与"登记了不打算登记"必须在机器读数上分得开。
+
+| 文件 | 为什么不入册 |
+|---|---|
+| （今天没有这一档） | 33 份 `docs/*.md` 全部在 §1–§3 里出现过；将来真有临时件再往这里加一行 |

@@ -82,3 +82,35 @@ export function Table<T>(props: TableProps<T>) {
     </table>
   );
 }
+
+/** 一格"按 X 拆解"的桶（`tokenmeter.by_role` / `by_scope` 的一格，四格读数都收成串）。 */
+export interface BucketRow {
+  name: string;
+  usd: string;
+  tokens: string;
+  entries: string;
+  attempts: string;
+}
+
+/**
+ * 把 `{名字: {tokens, usd, entries, attempts}}` 摊成表格行。
+ *
+ * 为什么抽到这里（2026-10-27 业主裁定 W6）：`pages/Live.tsx` 与 `pages/Budget.tsx`
+ * 此前各写了一份 `buckets()`，而 Live 那份少了 `attempts` 一格 —— 同一件事两份实现，
+ * 漂了没有任何地方会报错（两页各印一张看起来都正常的表）。四格都从 `cell()` 走，
+ * 于是"读不到"仍是 `unknown`，不会被折成 0。
+ */
+export function buckets(rec: Record<string, unknown>): BucketRow[] {
+  return Object.keys(rec)
+    .sort()
+    .map((name) => {
+      const one = (rec[name] ?? {}) as Record<string, unknown>;
+      return {
+        name,
+        usd: cell(one.usd),
+        tokens: cell(one.tokens),
+        entries: cell(one.entries),
+        attempts: cell(one.attempts),
+      };
+    });
+}

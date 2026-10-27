@@ -132,12 +132,19 @@ export function LiveProvider(props: LiveProviderProps) {
   useEffect(() => {
     alive.current = true;
     pull();
-    const stop = subscribe(null, {
+    const stop = subscribe({
       state: (data) => {
-        const payload = data as { snapshot?: StateSnapshot };
+        const payload = data as { snapshot?: StateSnapshot; reason?: string };
         if (payload && payload.snapshot) {
           setSnapshot(payload.snapshot);
-          setProblem("");
+          // 后端在"补发补不齐"时会同时给 `snapshot` 与 `reason`（`sse.handle_stream`
+          // 的那一条分支）：快照照收，但那一句必须说出来 —— 不看 `reason` 就等于把
+          // "中间少了几条事件、这一份可能是旧的"静默折成"这一份是新的"。
+          setProblem(
+            payload.reason === undefined || payload.reason === ""
+              ? ""
+              : `补发补不齐（这一份快照可能少了几条事件的后果）：${payload.reason}`,
+          );
         } else {
           // 后端补发时若补不齐会带 `reason`（见 `sse.handle_stream`）：
           // 那是"这一帧的读数没查成"，不是"工作区空了"。

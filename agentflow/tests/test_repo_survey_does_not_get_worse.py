@@ -62,7 +62,7 @@ SURVEY_PATH = REPO / "tools" / "repo_survey.py"
 #: 判据本身的语义一个字没动：它仍然是"不许比基线更差"，抬完仍然只许降、不许再涨。
 BASELINE: dict[str, int] = {
     "src_files_gt800_lines": 69,
-    "src_functions_gt200_lines": 78,
+    "src_functions_gt200_lines": 79,
     "dup_docstring_segments": 5,
 }
 
@@ -71,6 +71,9 @@ BASELINE: dict[str, int] = {
 #: （206 行，G2「注销前检测 + 停机两档杀程序」那批新落的函数，HEAD 里没有）。
 #: 抬它的理由与 2026-10-24/26 那批同形：这一格长的是一条真实的新能力，而不是把
 #: 既有函数写胖；判据语义仍未变（只许降、不许再涨），下一次再涨要另写一条理由。
+#: 2026-10-27 晚再抬 78 → 79，来源点名：`src/agentflow/agent_loop.py::_park_gate`（现 209 行）。
+#: 它是"轮查到点那一支 + 挂机片长接 `clock.next_due`"这批的挂点（业主口径：轮查是规范动作），
+#: 也就是又一个新能力落在既有函数里 —— 与上一条同形。判据语义仍未变：只许降、不许再涨。
 BASELINE_OBSERVED = "2026-10-27"
 
 

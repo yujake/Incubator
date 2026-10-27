@@ -50,6 +50,7 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Consistency } from "../components/Consistency";
 import { Table, cell, plain } from "../components/Table";
+import { formatUsd } from "../components/Money";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
 import type { LibraryView, LibraryWork } from "../types";
@@ -642,7 +643,7 @@ export function Artifacts() {
               {
                 key: "usd",
                 title: "花销",
-                render: (r) => (r.usd === null ? "unknown" : `${r.usd.toFixed(6)} USD`),
+                render: (r) => formatUsd(r.usd),
               },
               { key: "detail", title: "说明", render: (r) => clip(r.detail) },
             ]}

@@ -397,8 +397,10 @@ _READ_ONLY_CALLS: tuple[str, ...] = ("child_counts(", "surface_of(")
 _ALLOWED_READ_ONLY: frozenset[tuple[str, str]] = frozenset({
     # `agent_loop.py` 本轮在"不许碰"的清单里：它只读这一趟的读写面（`surface_of`）。
     ("agent_loop.py", "surface_of"),
-    # `readouts.py` 本轮同样在"不许碰"的清单里。
-    ("readouts.py", "child_counts"),
+    # `readouts.py` 那一处随 `roster_readout` 一起删了（2026-10-27，R-BE1 的 ⑥-6）：
+    # 那个读数是生产 0 读者的第五份外壳，删掉之后"名册两个读数"只剩
+    # `secretary.Secretary.child_counts` 一处。登记也跟着撤 —— 这张表是逐条对实际的，
+    # 留着一条不再生效的豁免正是它自己说的"腐烂"。
     ("statusreport.py", "child_counts"),
 })
 

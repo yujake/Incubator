@@ -293,8 +293,15 @@ def test_registry_tool_decorator_roundtrip_and_duplicate_name():
         reg.get("demo.nope")
 
 
-def test_registry_text_catalog_and_function_schemas_are_scoped_by_role():
-    """目录/function schema 必须按角色过滤，且列出全部工具时不漏。"""
+def test_registry_text_catalog_is_scoped_by_role():
+    """目录必须按角色过滤，且列出全部工具时不漏。
+
+    `R-BE4`（2026-10-27，业主批准）：这条用例原来还断言 `reg.function_schemas("B")`
+    的 name 归一化（`beta.two` → `beta__two`）。那个方法连同
+    `ToolSpec.to_function_schema` 一起删了 —— 它们生产零调用，而模型真正看到的函数面
+    由 `llmseam.ToolFace` 一处产生（名字归一化也在那里）。所以这一段改成断言
+    "本层不再有第二份 builder"：属性没了，就是唯一的读数。
+    """
     reg = ToolRegistry(name="t")
     reg.register(
         ToolSpec(name="alpha.one", summary="一", params={"type": "object", "properties": {}},
@@ -306,9 +313,10 @@ def test_registry_text_catalog_and_function_schemas_are_scoped_by_role():
     )
     assert reg.names() == ["alpha.one", "beta.two"]
     assert [s.name for s in reg.for_role("A")] == ["alpha.one"]
-    assert [s["function"]["name"] for s in reg.function_schemas("B")] == ["beta__two"]
     assert "alpha.one" not in reg.text_catalog("B")
     assert "beta.two" in reg.text_catalog()
+    assert not hasattr(reg, "function_schemas"), (
+        "`function_schemas` 又长回来了 —— 模型看到的函数面只该有 `llmseam.ToolFace` 一处")
 
 
 # ============================================================ ToolSpec
@@ -532,11 +540,13 @@ def test_six_piece_validation_really_runs_in_post_init():
         handler=lambda: None,
         returns="新主键",
     )
-    fs = spec.to_function_schema()
-    assert fs["type"] == "function"
-    assert fs["function"]["name"] == "table__create"
-    assert "." not in fs["function"]["name"]
-    assert "新主键" in fs["function"]["description"]
+    # `R-BE4`（2026-10-27，业主批准）：这里原来调 `spec.to_function_schema()` 断言
+    # name 归一化（`table.create` → `table__create`）与 description 里带 `返回：新主键`。
+    # 那个方法删了（生产零调用；模型看到的那份在 `llmseam.ToolFace`）⇒ 这里改成
+    # 断言"本层不再有第二份 builder"，并把 `returns` 的落点留在 `to_dict()` 上。
+    assert not hasattr(spec, "to_function_schema"), (
+        "`to_function_schema` 又长回来了 —— 函数面的 builder 只该有 `llmseam.ToolFace` 一处")
+    assert spec.to_dict()["returns"] == "新主键"
     assert spec.to_dict()["needs_approval"] is False
 
 

@@ -43,7 +43,12 @@ function verdictBadge(value: string): ComponentChildren {
 export function Acceptance() {
   const [capText, setCapText] = useState("");
   const cap = capText.trim() === "" ? null : Number(capText);
-  const face = useFace(() => api.getAcceptance({ capUsd: cap }));
+  // 只有"读成一个有限数字"才算给了上限（2026-10-27）：`Number("abc")` 是 NaN，
+  // 而后端的 `float("NaN")` 不会抛 —— 它照样把 NaN 当上限算，于是「在成本上限内」
+  // 那一格从"没查成"变成一条假的"没过"。这一格自己的说明写的就是"没给 ⇒ 没查成"，
+  // 所以拼请求时按同一口径：不是有限数就当没给。
+  const usableCap = cap !== null && Number.isFinite(cap) ? cap : null;
+  const face = useFace(() => api.getAcceptance({ capUsd: usableCap }));
 
   if (face.data === null) {
     return (
@@ -60,7 +65,6 @@ export function Acceptance() {
   const acc = face.data;
   const criteria = Object.keys(acc.criteria).sort();
   const auxiliary = Object.keys(acc.auxiliary).sort();
-  const unknownCells = criteria.filter((k) => acc.criteria[k] === "unknown");
 
   return (
     <>
@@ -76,12 +80,8 @@ export function Acceptance() {
         {acc.failed.length === 0 ? null : (
           <div class="readings">
             不是 pass 的格子 <span class="mono">{acc.failed.join("、")}</span>
- （后端把 fail 与 unknown 都放进 failed；逐条看「结论」列）
-          </div>
-        )}
-        {unknownCells.length === 0 ? null : (
-          <div class="readings">
-            没查成的格子（不是通过）<span class="mono">{unknownCells.join("、")}</span>
+ （后端把 fail 与 unknown 都放进 failed；逐条看「结论」列 —— 那一列把两档分开画，
+ 而这里不再自己从 criteria 里筛一遍 unknown：同一件事算两遍，迟早两处说两种话）
           </div>
         )}
         <div class="card-head">

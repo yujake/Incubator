@@ -198,7 +198,7 @@ python scripts/release_check.py --changed <文件…>      # 同时判禁改区�
 **重测（观测 2026-09-26T04:54:45→04:59:39，无并发）**：
 
 ```powershell
-python tools/release_all.py --since 4293989 --only release-check --json D:\Incubator\temp\b6-release-check.json
+python tools/release_all.py --since 4293989 --only release-check --json-out D:\Incubator\temp\b6-release-check.json
 ```
 
 ```text

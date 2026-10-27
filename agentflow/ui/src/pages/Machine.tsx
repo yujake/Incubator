@@ -84,6 +84,12 @@ function roleCell(settings: SettingsReading, role: string): Record<string, unkno
 
 /** 按角色那一档现读的值（`settings.models.<角色>.<键>`）。 */
 function roleValue(settings: SettingsReading, role: string, key: string): string {
+  if (key === "api_key") {
+    // key 那一格不回填（2026-10-27）：读数里它是掩码（后端 MASKED_KEY），
+    // 回填等于让人在输入框里看到一个假 key —— 动一下它就把掩码当 key 写回去。
+    // 这一条与 `presetOf` 对 `model.api_key` 的例外是同一条纪律（key 只写不读）。
+    return "";
+  }
   const raw = roleCell(settings, role)[key];
   if (raw === undefined || raw === null) {
     return "";
@@ -164,9 +170,12 @@ const SWITCH_SOURCES: Record<string, string> = {
   "": "缺省（设置文件里没写这一格）",
 };
 
-/** 初值：设置文件里的现值；`model.api_key` 例外（读数是 `***`，回填等于写回它）。 */
+/** 初值：设置文件里的现值；`api_key` 那几格例外（读数是掩码，回填等于写回它）。 */
 function presetOf(settings: SettingsReading, key: string): string {
-  if (key === "model.api_key") {
+  if (key === "model.api_key" || key.endsWith(".api_key")) {
+    // 2026-10-27：`model.api_key` 之外，`secretary.api_key` 与每个角色那一档的
+    // `api_key` 也是掩码（后端 MASKED_KEY）—— 三处都是同一份读数里的掩码，
+    // 所以按后缀一律不回填。
     return "";
   }
   return currentOf(settings, key);
@@ -437,9 +446,12 @@ export function Machine() {
           // `settings.models.<角色>.configured` / `.source`）。为什么要显出来：
           // 不显的话，只有点开每一格才知道哪个角色真的配了自己的 key ——
           // 而"哪个角色在用哪一把"正是这一页要回答的问题。
-          const cell = roleCell(settings, role);
-          const configured = cell["configured"] === true;
-          const src = typeof cell["source"] === "string" ? (cell["source"] as string) : "";
+          // 名字叫 `slot` 而不是 `cell`（2026-10-27 业主裁定 W9）：`cell` 是从
+          // `components/Table` 导进来的那个读数渲染函数，这里一个局部变量把同名
+          // 函数遮住 —— 今天没错用（对象不可调用，`tsc` 会红），但它是定时炸弹。
+          const slot = roleCell(settings, role);
+          const configured = slot["configured"] === true;
+          const src = typeof slot["source"] === "string" ? (slot["source"] as string) : "";
           return (
             <div class="readings" key={role}>
               <span class="mono">models.{role}</span>

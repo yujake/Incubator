@@ -117,7 +117,11 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 信息对逐个活跃子代理给出"过"、指导意见」）。三件都在编排面（`roles=("M",)`），
 #: 声明与实跑键集的判据见本文件那几条；行为判据在
 #: `tests/test_m_patrol_reads_every_active_child.py`。
-TOOL_COUNT = 117
+#: 2026-10-27（R-BE4 D1 Phase A）：117 → 118（`conjecture.register_conjecture` —— D 的
+#: 主力动作此前只被 `capabilities` 读到、`build_registry` 从不装配，业主批准后进
+#: `tools._MODULES`）。它的探针在 `_PREREQS` 里先落一条同样的 statement，于是自己这一趟
+#: 走"命中既有行"那一支（`duplicate` / `duplicate_of` 两格都在）。
+TOOL_COUNT = 118
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -256,8 +260,25 @@ def _doc_row() -> dict:
 
 #: 有些工具的判据要求先跑另一个工具（`fs.edit` 的"读后写"闸：业主 2026-10-10 裁定 9甲，
 #: DSH `dsh-fs-observation-policy` 的搬运）。探针照真实循环同一条纪律：先读、再改。
+#:
+#: `conjecture.register_conjecture`（2026-10-27，「D 的主力动作」进装配面那一批）也要一格前置：
+#: 它的 `returns=` 声明的 `duplicate_of` 只在判重支出现（D13：没给 `conjecture_id` 时先按
+#: 规范化 `statement` 判重，命中才写这一格）⇒ 探针必须先落一条同样的 statement，自己这一趟才是
+#: "命中既有行"那一支。前置就是同一件工具的同一条参数（与 `fs.edit` 同一条纪律：真实循环里
+#: 「重试即命中」本来就长这样）。
+_CONJECTURE_PROBE: dict = {
+    "statement": "探针：有限群的阶数等于各素因子幂的乘积",
+    "origin": "doc:0000#probe",
+    # `status` 缺省是 proposed，而 `schema.Conjecture.validate` 逐字要求"proposed 必须给
+    # testable（给不出就落 needs_evidence）"⇒ 三个键都给（形状见工具的参数说明）。
+    "testable": {"parameters": "有限群的阶 n 与它的素因子分解",
+                 "criterion": "阶等于各素因子幂的乘积（Sylow 计数可判）",
+                 "falsified_by": "找到一个阶不等于各素因子幂乘积的有限群"},
+}
 _PREREQS: dict[str, tuple[str, dict]] = {
     "fs.edit": ("fs.read", {"path": "out/edit-target.txt"}),
+    "conjecture.register_conjecture": ("conjecture.register_conjecture",
+                                       dict(_CONJECTURE_PROBE)),
 }
 
 
@@ -405,6 +426,10 @@ def tool_params() -> dict[str, dict]:
         "conductor.review_child": {"code": probe_child},
         # `pass` 那一支不投递任何东西（只落一条痕），所以它是最省的一次探针。
         "conductor.patrol_verdict": {"code": probe_child, "verdict": "pass"},
+        # D 的主力动作进装配面（2026-10-27，R-BE4 D1 Phase A）：探针走"命中既有行"那一支
+        # （前置在 `_PREREQS` 里先落一条同样的 statement）⇒ `duplicate` / `duplicate_of`
+        # 两格都在，声明的 19 个键一次拿全。
+        "conjecture.register_conjecture": dict(_CONJECTURE_PROBE),
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -680,6 +705,9 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # `conductor.review_child` 拿到那一项、`conductor.patrol_verdict(pass)` 落了
         # 一条痕；键名读自实跑观测，三态在格子里不在键上。
         "conductor.patrol", "conductor.review_child", "conductor.patrol_verdict",
+        # D 的主力动作（2026-10-27，R-BE4 D1 Phase A 把它装进工具面）：探针真跑到了
+        # "命中既有行"那一支（前置先落一条同样的 statement）⇒ 声明的 19 个键读自实跑观测。
+        "conjecture.register_conjecture",
     }
 )
 

@@ -165,7 +165,13 @@ def _is_bare_number(raw: object) -> bool:
 
 #: `evidence_kind` 的受控词表另一处在 `schema.EVIDENCE_KINDS`。
 #: 这里不复制一份字面量 —— 见 `_evidence_kinds()`（惰性转发，理由是 FC-03）。
-_EVIDENCE_KIND_FALLBACK = ("proof", "cross_check", "heuristic")
+#:
+#: 兜底值必须与 `schema.EVIDENCE_KINDS` 逐字相同（四档，含 `proof_review`）：
+#: 它同时就是 `CLAIM_FIELDS["evidence_kind"].domain` 的取值（见下）⇒ 少一档
+#: 等于给这份字段规格表写了第二份词表，而 `proof_review` 正是本族最要紧的那一档
+#: （`tests/test_claimanatomy.py::test_evidence_kinds_are_not_a_second_copy` 钉的是
+#: `_evidence_kinds()` 那一路，钉不到这个字面量）。
+_EVIDENCE_KIND_FALLBACK = ("proof", "proof_review", "cross_check", "heuristic")
 
 
 def _evidence_kinds() -> tuple[str, ...]:
@@ -755,10 +761,6 @@ def family_note(code: str, *, with_example: bool = True) -> str:
     if with_example:
         text += f"；正例：{info['example']}"
     return text
-
-
-#: 判定"这条断言的三态轴判不判得了"时用的键。
-_AXIS_KEYS = ("status", "evidence_kind")
 
 
 @dataclass

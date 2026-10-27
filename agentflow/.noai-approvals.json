@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-23T12:05:22+08:00",
+  "generated_at": "2026-10-27T22:44:11+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -19,31 +19,12 @@
       "path": ".noai-paths",
       "glob": ".noai-paths",
       "category": "auth-audit",
-      "sha256": "814a8712a414f7cb2763d6d21a200f414cc614ae1a7ce82b275264d1dccf53dd",
+      "sha256": "b2e3a745cf67811279febe061aaa9789e9c68c44457c25a57434e77f9501c826",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 13305143f46c 变为 814a8712a414，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 814a8712a414 变为 b2e3a745cf67，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -51,31 +32,12 @@
       "path": "AGENTS.md",
       "glob": "AGENTS.md",
       "category": "auth-audit",
-      "sha256": "c5e3f9f87b65061dbeb3866dd4171901b3488c795498d5daa0d4e87302c6b902",
+      "sha256": "3a9b4d369d8a1ff09c493ca9f5a190609ccb388600adb80f18989b907d515588",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 94bb515293eb 变为 c5e3f9f87b65，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 c5e3f9f87b65 变为 3a9b4d369d8a，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -83,31 +45,12 @@
       "path": "pyproject.toml",
       "glob": "pyproject.toml",
       "category": "release-deploy",
-      "sha256": "a6b300f392cba8b8b2bd3656e1ba4f2504e08cc4f74b934ab6be788469ef4269",
+      "sha256": "87b2d9be0f896f13a9ba0a25095a557f4cc8ac0225d26f43473c9c5116458b63",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "（未提供变更说明：内容 hash 从 7d5a36879959 变为 87b2d9be0f89，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-12T12:20:28+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-12T12:20:28+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -115,31 +58,12 @@
       "path": "scripts/lint_rules.py",
       "glob": "scripts/lint_rules.py",
       "category": "auth-audit",
-      "sha256": "d30856ca8a9698e9e871b82ad07228d3f84af16d6e4abd3f016ed92c2d41b043",
+      "sha256": "31d1d5bbd8e09beaab535b2757461747c5fbf86b4db84ca27081962e4b19a734",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "（未提供变更说明：内容 hash 从 d30856ca8a96 变为 31d1d5bbd8e0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-06T22:02:37+08:00",
-          "scope": "rule_R002_*：补\"注释出口\"分支（复用 R001 的 _explained，>=4 字）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-06T22:02:37+08:00",
-          "scope": "rule_R002_*：补\"注释出口\"分支（复用 R001 的 _explained，>=4 字）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -147,31 +71,12 @@
       "path": "scripts/noai_gate.py",
       "glob": "scripts/noai_gate.py",
       "category": "auth-audit",
-      "sha256": "9b548baa91826919c59c82856b938907d34479a1a6e411d1c13d076b3c034f09",
+      "sha256": "1da6aca04eb6f469750427f4ad020056097c4d00d38bb7bb89d926f2da02c8e2",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "（未提供变更说明：内容 hash 从 9b548baa9182 变为 1da6aca04eb6，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-12T12:20:28+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-12T12:20:28+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -179,31 +84,12 @@
       "path": "scripts/release_check.py",
       "glob": "scripts/release_check.py",
       "category": "release-deploy",
-      "sha256": "caecfd51cfacc0003801aac3389889d59ac141029e1ffc223887407210caead7",
+      "sha256": "3bdb75df9542d84e34f424f2882cc72a838262f99a4ef27b646c5f8d10ccd21f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "（未提供变更说明：内容 hash 从 caecfd51cfac 变为 3bdb75df9542，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-12T12:20:29+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-12T12:20:29+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -243,31 +129,12 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "8fb52d5efee327f1877ceeb1783df8f8c0139fc97d2bb3634c09224969024cb7",
+      "sha256": "6977e8cf016d21a4c32b4db71cb529ed14b781b01c7fd202dc95f7028bd6af11",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 b3801ce9b7b9 变为 8fb52d5efee3，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 bcaeec984c07 变为 6977e8cf016d，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -275,31 +142,12 @@
       "path": "src/agentflow/dedup.py",
       "glob": "src/agentflow/dedup.py",
       "category": "solver-core",
-      "sha256": "7a406dfd31b4b9da094dbe44382079f6ce103cf9caf874ff413ce55dbee31205",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "3aeab8c7665ca21ec409d27aa527596987d66eb03aed25a2cb95cf1e5ed45f23",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "（未提供变更说明：内容 hash 从 7a406dfd31b4 变为 3aeab8c7665c，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-2",
-          "at": "2026-09-27T08:58:25+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-27T08:58:40+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": [
         {
@@ -313,31 +161,12 @@
       "path": "src/agentflow/extract.py",
       "glob": "src/agentflow/extract.py",
       "category": "solver-core",
-      "sha256": "45778b0e3ff0bcdfab1c2400212d7dd44a2c9c2bab4dbfcd1836a46da47f9229",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "f9032bdcf0a00d1c331ee937197be3e286644eb1ce64ff0a9a1d52d773ba36f6",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "（未提供变更说明：内容 hash 从 45778b0e3ff0 变为 f9032bdcf0a0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-2",
-          "at": "2026-09-27T08:58:26+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-27T08:58:40+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -345,31 +174,12 @@
       "path": "src/agentflow/interactions.py",
       "glob": "src/agentflow/interactions.py",
       "category": "auth-audit",
-      "sha256": "614e365deed690883b995c583795174b63a90e46ce99e4757cdcbc0d12cd5574",
+      "sha256": "f1afcb5f39e2e178f7c8b534d114777b696d2d88f477c423dc4b6f9e45906df7",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
+      "change_note": "（未提供变更说明：内容 hash 从 614e365deed6 变为 f1afcb5f39e2，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-14T18:14:31+08:00",
-          "scope": "编号宽度四位改六位：schema.ID_DIGITS 一处定义 + store.alloc_id/MAX_ID + interactions 取号 + verify 连续号判据 + capabilities 实测注释 + specs/b 与 verify_tools 的说明与长度限制 + 四份冻结快照重冻",
-          "note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-14T18:14:31+08:00",
-          "scope": "编号宽度四位改六位：schema.ID_DIGITS 一处定义 + store.alloc_id/MAX_ID + interactions 取号 + verify 连续号判据 + capabilities 实测注释 + specs/b 与 verify_tools 的说明与长度限制 + 四份冻结快照重冻",
-          "note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -377,31 +187,12 @@
       "path": "src/agentflow/providers.py",
       "glob": "src/agentflow/providers.py",
       "category": "solver-core",
-      "sha256": "501de420c69b5aa89ac65f624c83f04b01b740eff4bdeeeb3d1c945c063fcf5f",
+      "sha256": "d5a596a2fde31d6c128a1cab88464632ad7c3d65a46532be7c883ed185ab936c",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "（未提供变更说明：内容 hash 从 501de420c69b 变为 d5a596a2fde3，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-12T12:20:32+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-12T12:20:32+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": [
         {
@@ -415,31 +206,12 @@
       "path": "src/agentflow/quoteverify.py",
       "glob": "src/agentflow/quoteverify.py",
       "category": "prover-bridge",
-      "sha256": "55ddb9eaf86c99a928147c68794a946d2fc74fd12d29e4141de61da31ed307eb",
+      "sha256": "9cbca3dc9e965b104dbca88cd0090e9605491b1cf5a9ccd883c5b6deeeb3cdb1",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "（未提供变更说明：内容 hash 从 55ddb9eaf86c 变为 9cbca3dc9e96，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-06T22:02:43+08:00",
-          "scope": "check_quote：空窗口（pr.known and start>end）=> None/empty_page_range + widened:empty 标签；不折成\"引文为假\"",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-06T22:02:44+08:00",
-          "scope": "check_quote：空窗口（pr.known and start>end）=> None/empty_page_range + widened:empty 标签；不折成\"引文为假\"",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -447,31 +219,12 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "b32f42378bff167564bcac0a7ff1aaeddf7c570c9d3006b8833ef9e5aa4be1bf",
+      "sha256": "0cae0a34e559a74800af740346c943e9a87ccfa4d240ecd072bafd123c219d36",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 82a52874d4f9 变为 b32f42378bff，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 b32f42378bff 变为 0cae0a34e559，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": [
         {
@@ -517,31 +270,12 @@
       "path": "src/agentflow/specs/a.py",
       "glob": "src/agentflow/specs/a.py",
       "category": "auth-audit",
-      "sha256": "773d6dee214c04020e2439d057031626bcc32ea58fef93b9217adac8c4c31fb8",
+      "sha256": "b20c13e1235d727582ccbc603adaa569f2acdba6bba7ab4c4843cbf36aef845d",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 c0dfd48be2d2 变为 773d6dee214c，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 773d6dee214c 变为 b20c13e1235d，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -549,31 +283,12 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "e0ca7d645a3de7cdfe4c980d88b7a12784d6264c4e5d6e723a260d11d229cecb",
+      "sha256": "a7b5acfd09f0d080af55a52ddf8edefccecf7d33a619cd21173b9945c77ac2ff",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 d9bc6aa2da43 变为 e0ca7d645a3d，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 e0ca7d645a3d 变为 a7b5acfd09f0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -581,31 +296,12 @@
       "path": "src/agentflow/specs/c.py",
       "glob": "src/agentflow/specs/c.py",
       "category": "auth-audit",
-      "sha256": "18512c6a132bd9ad5c8f910a112508c642fbdca2e500eff1a95a4a6aabd01a5e",
+      "sha256": "80c3d5f52f44e0488806bc16a3b50dddfbf84e75b4150db205a75ac6ebe0aed8",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "（未提供变更说明：内容 hash 从 18512c6a132b 变为 80c3d5f52f44，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-12T12:20:35+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-12T12:20:35+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -613,31 +309,12 @@
       "path": "src/agentflow/specs/d.py",
       "glob": "src/agentflow/specs/d.py",
       "category": "auth-audit",
-      "sha256": "835e37958df2b1b99e7b9348fb7099b0db60a7f448b3269a1fed51313ba81141",
+      "sha256": "96e30ce5115e38ccc4a954497e4197e81ecc286d45fb6121d119470ba3a0fc08",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 6be8e6a7c52b 变为 835e37958df2，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 835e37958df2 变为 96e30ce5115e，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -645,31 +322,12 @@
       "path": "src/agentflow/specs/e.py",
       "glob": "src/agentflow/specs/e.py",
       "category": "auth-audit",
-      "sha256": "1847d7d04c1f3cc477e02ebc04b459ef8b3c9e6ef5130098536c2e7792dd31e6",
+      "sha256": "fd31f711998a6e5d25df5c17c9e3d9bc210da0e6759cc9be0de489934fafcbb7",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 9bf8a6354018 变为 1847d7d04c1f，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 1847d7d04c1f 变为 fd31f711998a，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -677,31 +335,12 @@
       "path": "src/agentflow/specs/f.py",
       "glob": "src/agentflow/specs/f.py",
       "category": "auth-audit",
-      "sha256": "c777d784a219d1c7e430e800b71ba978252a021fa7a6b46f977640bc2a561925",
+      "sha256": "961df4d23071aa675b36e407e93f2adccf68021a384d7a802e6f1b332830a5de",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 f4a63c390634 变为 c777d784a219，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 c777d784a219 变为 961df4d23071，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -709,31 +348,12 @@
       "path": "src/agentflow/specs/g.py",
       "glob": "src/agentflow/specs/g.py",
       "category": "auth-audit",
-      "sha256": "9efd050c4071120106108db1949100a5ee5c63b19ec7e19cc6b5b4c19f716847",
+      "sha256": "9d8f9f79b3e02f0ed2f0a493ddcb715b22d4e6b6162ed6486344857eb173a6b1",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 6c5afd8ee262 变为 9efd050c4071，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 9efd050c4071 变为 9d8f9f79b3e0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -741,31 +361,12 @@
       "path": "src/agentflow/specs/h.py",
       "glob": "src/agentflow/specs/h.py",
       "category": "auth-audit",
-      "sha256": "ff32fb1643d6c10ed0131f82ab9362a0625dd0ff40eedb90a3a915812b6e1193",
+      "sha256": "ab8ea278dc4bc7680567bbfee287318357a50396f2f9b29cac7fce78481ed540",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 9a96d72a7674 变为 ff32fb1643d6，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 ff32fb1643d6 变为 ab8ea278dc4b，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:21+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -773,31 +374,12 @@
       "path": "src/agentflow/specs/l.py",
       "glob": "src/agentflow/specs/l.py",
       "category": "auth-audit",
-      "sha256": "73fbb966715e2d20cc3063ac5a05397bbf198ecee3081c71cb78ed5833d4d52b",
+      "sha256": "bfd02f4c45a77a7e99e615cc2d56e5703d6e052949f3a5f5b72dec2601bb3096",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明）",
+      "change_note": "（未提供变更说明：内容 hash 从 73fbb966715e 变为 bfd02f4c45a7，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -805,31 +387,12 @@
       "path": "src/agentflow/specs/m.py",
       "glob": "src/agentflow/specs/m.py",
       "category": "auth-audit",
-      "sha256": "bdd62135fbf183b73aca8091dcf3d828151f42b77f89f05235cc861009cc4a8d",
+      "sha256": "97e883300b0fc50646b0f98092dbdb3c0e5c005af396c4c0643a49974ec001be",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 251b97018ef5 变为 bdd62135fbf1，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 bdd62135fbf1 变为 97e883300b0f，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -837,31 +400,12 @@
       "path": "src/agentflow/specs/v.py",
       "glob": "src/agentflow/specs/v.py",
       "category": "auth-audit",
-      "sha256": "38e630034b4987e5b1b1f9a47e2db343410d53215171a4983282c886b7b61f83",
+      "sha256": "f6bf57c479e4719e277acb7bfc33e978ec5759b4496f95c016756645fad71872",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 授权动禁改区（「有道理就允许改、事后签字即可」）。本轮是**第二轮真机跑**（第四趟 `run-agent M --subagents`：26 次调用 / $0.181785 / 649 s），**业主点名的整条链在真机上走通了**：`statements` 落了一行 `stmt:000000`（kind=theorem）、`verifications/000000.jsonl` 里 **V 签了「成立」**（findings=[]、why 逐字）、`reports/RESEARCH.md` 6189 字节并带着落点。顺带证实「参数被拒 ⇒ 声明表原样回给模型 ⇒ 照表重写」这一闭环是通的（F 第一次把 `line_range` 写成字符串被拒，第二次改成对象）。**由真机读数驱动修掉三处只有真跑才看得见的缺陷**：① 秘书判断的**提示词抬头**仍按 `DECISIONS`（派活那一轴）取词表，而 `judge()` 的校验已改成按类别取 ⇒ 真机上 B 的秘书被问「这条太平凡吗」时照提示词答了 `建议不派`，被校验层判「不在 statement_aesthetic 的词表里 ⇒ 不采信」（台账 `reason` 逐字留着）——两处各写一份词表就会这样，现在两处都从 `JUDGE_VERDICTS` 取；② `V.verify_proof` / `V.read_proof` 的 `statement_id` 上界**硬编码着 4**（业主 2026-10-14 已改六位）⇒ 真机上 `V.verify_proof 的参数不合法：statement_id. 长度最多 4`，一条正当的复核白等一轮；现在上界取 `schema.ID_DIGITS`（下界 4 保留：旧数据是四位、盘上仍可读），`specs/v.py` 补上 `from .. import schema as S`（其余九岗早就这么写）；③ D 的手稿分节**有两处互相不一致的枚举**（正文写「六个分节」不含成果概述，而「开头要有成果概述」另起一句）⇒ 两趟真跑一趟有一趟没有；现在合成**一处**（七节），变更沿革挪进 Python 注释（提示词不该带我们的版本史）。判据各加一条：`test_secretary.py` 54 条（提示词必须是这一类自己的词表，两个方向 + 逐类别反真空）、`test_capabilities_two_layer.py` +1（任何 `*_id` 声明的 `maxLength` ≥ 当前宽度 + 扫描面反真空）、`test_agent_skills.py` 26 条（那七个节名在声明与 skill 两处一字不差）。提示词版本 p112 → p113；**逐格走查**：只有 D 一格换内容（528 → 528 行，只有那段文字变），**V 的前置提示词逐字未动**（提示词只印必填键、不印长度约束 ⇒ 第 ② 处改的是门、不是话）。linter 读数不变（error 6 / warning 15 / info 49）。",
+      "change_note": "（未提供变更说明：内容 hash 从 38e630034b49 变为 f6bf57c479e4，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-15T04:34:28+08:00",
-          "scope": "真机读数驱动的三处修复：秘书判断词表按类别取 / V 的 statement_id 长度上界取自 schema.ID_DIGITS / D 的手稿七节只留一处枚举；判据 54 + 26 条；冻结快照 agent_surface_snapshot.json 重冻（p112 → p113）",
-          "note": "业主 2026-10-14 授权动禁改区（「有道理就允许改、事后签字即可」）。本轮是**第二轮真机跑**（第四趟 `run-agent M --subagents`：26 次调用 / $0.181785 / 649 s），**业主点名的整条链在真机上走通了**：`statements` 落了一行 `stmt:000000`（kind=theorem）、`verifications/000000.jsonl` 里 **V 签了「成立」**（findings=[]、why 逐字）、`reports/RESEARCH.md` 6189 字节并带着落点。顺带证实「参数被拒 ⇒ 声明表原样回给模型 ⇒ 照表重写」这一闭环是通的（F 第一次把 `line_range` 写成字符串被拒，第二次改成对象）。**由真机读数驱动修掉三处只有真跑才看得见的缺陷**：① 秘书判断的**提示词抬头**仍按 `DECISIONS`（派活那一轴）取词表，而 `judge()` 的校验已改成按类别取 ⇒ 真机上 B 的秘书被问「这条太平凡吗」时照提示词答了 `建议不派`，被校验层判「不在 statement_aesthetic 的词表里 ⇒ 不采信」（台账 `reason` 逐字留着）——两处各写一份词表就会这样，现在两处都从 `JUDGE_VERDICTS` 取；② `V.verify_proof` / `V.read_proof` 的 `statement_id` 上界**硬编码着 4**（业主 2026-10-14 已改六位）⇒ 真机上 `V.verify_proof 的参数不合法：statement_id. 长度最多 4`，一条正当的复核白等一轮；现在上界取 `schema.ID_DIGITS`（下界 4 保留：旧数据是四位、盘上仍可读），`specs/v.py` 补上 `from .. import schema as S`（其余九岗早就这么写）；③ D 的手稿分节**有两处互相不一致的枚举**（正文写「六个分节」不含成果概述，而「开头要有成果概述」另起一句）⇒ 两趟真跑一趟有一趟没有；现在合成**一处**（七节），变更沿革挪进 Python 注释（提示词不该带我们的版本史）。判据各加一条：`test_secretary.py` 54 条（提示词必须是这一类自己的词表，两个方向 + 逐类别反真空）、`test_capabilities_two_layer.py` +1（任何 `*_id` 声明的 `maxLength` ≥ 当前宽度 + 扫描面反真空）、`test_agent_skills.py` 26 条（那七个节名在声明与 skill 两处一字不差）。提示词版本 p112 → p113；**逐格走查**：只有 D 一格换内容（528 → 528 行，只有那段文字变），**V 的前置提示词逐字未动**（提示词只印必填键、不印长度约束 ⇒ 第 ② 处改的是门、不是话）。linter 读数不变（error 6 / warning 15 / info 49）。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-15T04:34:28+08:00",
-          "scope": "真机读数驱动的三处修复：秘书判断词表按类别取 / V 的 statement_id 长度上界取自 schema.ID_DIGITS / D 的手稿七节只留一处枚举；判据 54 + 26 条；冻结快照 agent_surface_snapshot.json 重冻（p112 → p113）",
-          "note": "业主 2026-10-14 授权动禁改区（「有道理就允许改、事后签字即可」）。本轮是**第二轮真机跑**（第四趟 `run-agent M --subagents`：26 次调用 / $0.181785 / 649 s），**业主点名的整条链在真机上走通了**：`statements` 落了一行 `stmt:000000`（kind=theorem）、`verifications/000000.jsonl` 里 **V 签了「成立」**（findings=[]、why 逐字）、`reports/RESEARCH.md` 6189 字节并带着落点。顺带证实「参数被拒 ⇒ 声明表原样回给模型 ⇒ 照表重写」这一闭环是通的（F 第一次把 `line_range` 写成字符串被拒，第二次改成对象）。**由真机读数驱动修掉三处只有真跑才看得见的缺陷**：① 秘书判断的**提示词抬头**仍按 `DECISIONS`（派活那一轴）取词表，而 `judge()` 的校验已改成按类别取 ⇒ 真机上 B 的秘书被问「这条太平凡吗」时照提示词答了 `建议不派`，被校验层判「不在 statement_aesthetic 的词表里 ⇒ 不采信」（台账 `reason` 逐字留着）——两处各写一份词表就会这样，现在两处都从 `JUDGE_VERDICTS` 取；② `V.verify_proof` / `V.read_proof` 的 `statement_id` 上界**硬编码着 4**（业主 2026-10-14 已改六位）⇒ 真机上 `V.verify_proof 的参数不合法：statement_id. 长度最多 4`，一条正当的复核白等一轮；现在上界取 `schema.ID_DIGITS`（下界 4 保留：旧数据是四位、盘上仍可读），`specs/v.py` 补上 `from .. import schema as S`（其余九岗早就这么写）；③ D 的手稿分节**有两处互相不一致的枚举**（正文写「六个分节」不含成果概述，而「开头要有成果概述」另起一句）⇒ 两趟真跑一趟有一趟没有；现在合成**一处**（七节），变更沿革挪进 Python 注释（提示词不该带我们的版本史）。判据各加一条：`test_secretary.py` 54 条（提示词必须是这一类自己的词表，两个方向 + 逐类别反真空）、`test_capabilities_two_layer.py` +1（任何 `*_id` 声明的 `maxLength` ≥ 当前宽度 + 扫描面反真空）、`test_agent_skills.py` 26 条（那七个节名在声明与 skill 两处一字不差）。提示词版本 p112 → p113；**逐格走查**：只有 D 一格换内容（528 → 528 行，只有那段文字变），**V 的前置提示词逐字未动**（提示词只印必填键、不印长度约束 ⇒ 第 ② 处改的是门、不是话）。linter 读数不变（error 6 / warning 15 / info 49）。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -869,31 +413,12 @@
       "path": "src/agentflow/store.py",
       "glob": "src/agentflow/store.py",
       "category": "schema-migration",
-      "sha256": "c83c1c515f0443274d7421fbf2f287787818362a2c25191c08699c464e2ef71c",
+      "sha256": "ab5d600f9aa8e91b2f28f948a9cb3fadf6009813371518ebfb9fff0704ea3599",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
+      "change_note": "（未提供变更说明：内容 hash 从 9e63fc4f165c 变为 ab5d600f9aa8，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-14T18:14:33+08:00",
-          "scope": "编号宽度四位改六位：schema.ID_DIGITS 一处定义 + store.alloc_id/MAX_ID + interactions 取号 + verify 连续号判据 + capabilities 实测注释 + specs/b 与 verify_tools 的说明与长度限制 + 四份冻结快照重冻",
-          "note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-14T18:14:33+08:00",
-          "scope": "编号宽度四位改六位：schema.ID_DIGITS 一处定义 + store.alloc_id/MAX_ID + interactions 取号 + verify 连续号判据 + capabilities 实测注释 + specs/b 与 verify_tools 的说明与长度限制 + 四份冻结快照重冻",
-          "note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -901,31 +426,12 @@
       "path": "src/agentflow/tools/__init__.py",
       "glob": "src/agentflow/tools/__init__.py",
       "category": "auth-audit",
-      "sha256": "45d7d8efa8d640ad040a0229d5eea89f95015550b2f38e8d50a78b57385f8aa2",
+      "sha256": "3c2607bea9d02903679070f29e95bb69950572e203eea321568fb21c9ae7081e",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 2fcc7cd03beb 变为 45d7d8efa8d6，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 45d7d8efa8d6 变为 3c2607bea9d0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -933,31 +439,12 @@
       "path": "src/agentflow/tools/base.py",
       "glob": "src/agentflow/tools/base.py",
       "category": "auth-audit",
-      "sha256": "06d303fd05381d3098883ebf35fbb6509aa661c1db66b3138937a5f29fbae77b",
+      "sha256": "ed155efc6bbfd14544c98c049c2f7d27112383dd7660c66e659ce16d2c09cf53",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 4a7316a800e2 变为 06d303fd0538，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 06d303fd0538 变为 ed155efc6bbf，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -965,31 +452,25 @@
       "path": "src/agentflow/tools/formal_tools.py",
       "glob": "src/agentflow/tools/formal_tools.py",
       "category": "auth-audit",
-      "sha256": "89aa2157ff277b1989c818469467f61b96fad1d9dd0437b2d729059aad544088",
+      "sha256": "a336b269307e7ef719b5649bdf226283701a0b7854d5301b379285493bb9d563",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "（未提供变更说明：内容 hash 从 89aa2157ff27 变为 a336b269307e，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "changed_this_session": null,
+      "reviewers": [],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/tools/table_tools.py",
+      "glob": "src/agentflow/tools/table_tools.py",
+      "category": "auth-audit",
+      "sha256": "3349979db748e9d8d558b1c8404df575b3a789981e44eea95e89fd6e953e7bcc",
       "authored": "unknown",
       "authored_basis": "inferred",
       "change_note": "（未提供变更说明）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -997,31 +478,12 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "8e57e3e3c0ee6c6747211b9a9ef8765c7219eb3051af001c9ca6ec72400e9492",
+      "sha256": "acde5a25e8c425f9e9ea1528f17a040449fda38b2cc9db33877536ae5c8b2346",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 1e83f66a9117 变为 8e57e3e3c0ee，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 8e57e3e3c0ee 变为 acde5a25e8c4，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1029,31 +491,12 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "890f72519a3706563859024ecaf6709f8720fe6f6934c4bb4daba3d10445c246",
+      "sha256": "448e96760a5eb92968f51966b79277ea15a1a4b5632aff3bed9857343841abfd",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 899eb679ec3f 变为 890f72519a37，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 890f72519a37 变为 448e96760a5e，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1061,31 +504,12 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "2ce0cd404ccbecb4979818963fedc5bc59dc371a519792de4dbdc8dc94816130",
+      "sha256": "edfc446356a79332ea671fea2e5a5bd478258715ba87a7d02ccd8ee6792ba3ca",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 c2ee8e4f68f2 变为 2ce0cd404ccb，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 2ce0cd404ccb 变为 edfc446356a7，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1093,31 +517,12 @@
       "path": "tests/golden/run_topic_snapshot.json",
       "glob": "tests/golden/run_topic_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "38289b5571f9cc5887413781c5819bb4d8a1ee00aeee62ce0901efe3c3713921",
+      "sha256": "9ce096aceec30d1d168f52dd22689933b79081b906561fbae740190688853bb4",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 授权动禁改区。本轮补 ① 的**面板回显**那一半：「更新设置面板……允许不同角色智能体用不同模型厂商的不同 api key」。面板输入框的初值取自 `GET /api/machine` 的 `settings`，所以**读侧少一格**的表现是「盘上写了、面板上永远空的」，而 placeholder 还说「盘上没设过」—— 不会让任何旧判据变红。本轮抓到三处，全在业主点名的那一格（`vendor`）上：① `SettingsReading.model.vendor` 在 `type_decls()` 里一直**声明着**、读侧却从没给过（顶层那格的读数取自一个现搭的 `ModelSpec`，搭的时候漏传 `vendor`）；② `models.<槽>` 与 `secretary` 两处连声明都没有 `vendor`；③ `models.<槽>.key_source` 取的是**全局** `key_source()`（它只读 `model` 段）⇒ 每一档都报同一个来源：`models.A` 明明是从设置文件取的，读数却说「哪儿都没找到」。改法只动「读出来」这一半：`ModelSpec.redacted()` 加 `vendor`（它不是密钥，与 `base_url` / `model` 同级）；三处读侧都带 `vendor`；每档的 `key_source` 取**这一档自己的** `spec_for(...)` 结果；`type_decls()` 补两处声明并按后端声明重新生成 `ui/src/types.ts`；面板补两处显示（顶层加 `vendor` 一行；每个角色加一枚「配了（来源 models.A）/ 沿用下一档」徽章）。判据 `tests/test_role_models.py` 9 → 12 条，**三条新的都在旧代码下逐条验证过会红**（stash 掉 modelgw.py + readers.py 之后 `3 failed, 9 passed`）：三处 vendor 回显、每档自己的 key_source（同一份读数里两档结论必须不同）、读侧覆盖写侧词表 `settings.MODEL_KEYS`（按词表判而不是抄第二份名单，且含反真空）。端到端在真起的本地服务上核过：`GET /` 引用的是新 bundle `index.DpOVMT89.js`；`GET /api/machine` 回 `model.vendor=deepseek`、`models.A.vendor=deepseek`（`source=models.A`、`configured=true`）、`models.default.vendor=acme`、`secretary.vendor=acme`（`source=secretary`）；响应里逐字搜过三把夹具 key，**不含**。**这一格对快照的读数**：`ModelSpec.redacted()` 多一格 ⇒ `run-manifest.json` 的 `spec` 里多一个 vendor 键、值是空串（两条路径各一处 —— 夹具的 spec 没配厂商）。重冻 `run_topic_snapshot.json` 并**逐格走查**：差异**只有 2 格**，两格都是「新增一个键、值为空串」，其余各格（六件产物 × 两条路径、落库的行、公开签名）逐字未动。`agent_surface_snapshot.json` 本轮**未动**（没改提示词），沿用上一轮的批准。",
+      "change_note": "（未提供变更说明：内容 hash 从 38289b5571f9 变为 9ce096aceec3，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-14T22:30:39+08:00",
-          "scope": "设置面板回显补齐（三处读侧带 vendor、每档取自己的 key_source、面板加配了/沿用徽章、types.ts 再生成）与冻结快照 tests/golden/run_topic_snapshot.json 重冻（spec 多一格 vendor）",
-          "note": "业主 2026-10-14 授权动禁改区。本轮补 ① 的**面板回显**那一半：「更新设置面板……允许不同角色智能体用不同模型厂商的不同 api key」。面板输入框的初值取自 `GET /api/machine` 的 `settings`，所以**读侧少一格**的表现是「盘上写了、面板上永远空的」，而 placeholder 还说「盘上没设过」—— 不会让任何旧判据变红。本轮抓到三处，全在业主点名的那一格（`vendor`）上：① `SettingsReading.model.vendor` 在 `type_decls()` 里一直**声明着**、读侧却从没给过（顶层那格的读数取自一个现搭的 `ModelSpec`，搭的时候漏传 `vendor`）；② `models.<槽>` 与 `secretary` 两处连声明都没有 `vendor`；③ `models.<槽>.key_source` 取的是**全局** `key_source()`（它只读 `model` 段）⇒ 每一档都报同一个来源：`models.A` 明明是从设置文件取的，读数却说「哪儿都没找到」。改法只动「读出来」这一半：`ModelSpec.redacted()` 加 `vendor`（它不是密钥，与 `base_url` / `model` 同级）；三处读侧都带 `vendor`；每档的 `key_source` 取**这一档自己的** `spec_for(...)` 结果；`type_decls()` 补两处声明并按后端声明重新生成 `ui/src/types.ts`；面板补两处显示（顶层加 `vendor` 一行；每个角色加一枚「配了（来源 models.A）/ 沿用下一档」徽章）。判据 `tests/test_role_models.py` 9 → 12 条，**三条新的都在旧代码下逐条验证过会红**（stash 掉 modelgw.py + readers.py 之后 `3 failed, 9 passed`）：三处 vendor 回显、每档自己的 key_source（同一份读数里两档结论必须不同）、读侧覆盖写侧词表 `settings.MODEL_KEYS`（按词表判而不是抄第二份名单，且含反真空）。端到端在真起的本地服务上核过：`GET /` 引用的是新 bundle `index.DpOVMT89.js`；`GET /api/machine` 回 `model.vendor=deepseek`、`models.A.vendor=deepseek`（`source=models.A`、`configured=true`）、`models.default.vendor=acme`、`secretary.vendor=acme`（`source=secretary`）；响应里逐字搜过三把夹具 key，**不含**。**这一格对快照的读数**：`ModelSpec.redacted()` 多一格 ⇒ `run-manifest.json` 的 `spec` 里多一个 vendor 键、值是空串（两条路径各一处 —— 夹具的 spec 没配厂商）。重冻 `run_topic_snapshot.json` 并**逐格走查**：差异**只有 2 格**，两格都是「新增一个键、值为空串」，其余各格（六件产物 × 两条路径、落库的行、公开签名）逐字未动。`agent_surface_snapshot.json` 本轮**未动**（没改提示词），沿用上一轮的批准。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-14T22:30:39+08:00",
-          "scope": "设置面板回显补齐（三处读侧带 vendor、每档取自己的 key_source、面板加配了/沿用徽章、types.ts 再生成）与冻结快照 tests/golden/run_topic_snapshot.json 重冻（spec 多一格 vendor）",
-          "note": "业主 2026-10-14 授权动禁改区。本轮补 ① 的**面板回显**那一半：「更新设置面板……允许不同角色智能体用不同模型厂商的不同 api key」。面板输入框的初值取自 `GET /api/machine` 的 `settings`，所以**读侧少一格**的表现是「盘上写了、面板上永远空的」，而 placeholder 还说「盘上没设过」—— 不会让任何旧判据变红。本轮抓到三处，全在业主点名的那一格（`vendor`）上：① `SettingsReading.model.vendor` 在 `type_decls()` 里一直**声明着**、读侧却从没给过（顶层那格的读数取自一个现搭的 `ModelSpec`，搭的时候漏传 `vendor`）；② `models.<槽>` 与 `secretary` 两处连声明都没有 `vendor`；③ `models.<槽>.key_source` 取的是**全局** `key_source()`（它只读 `model` 段）⇒ 每一档都报同一个来源：`models.A` 明明是从设置文件取的，读数却说「哪儿都没找到」。改法只动「读出来」这一半：`ModelSpec.redacted()` 加 `vendor`（它不是密钥，与 `base_url` / `model` 同级）；三处读侧都带 `vendor`；每档的 `key_source` 取**这一档自己的** `spec_for(...)` 结果；`type_decls()` 补两处声明并按后端声明重新生成 `ui/src/types.ts`；面板补两处显示（顶层加 `vendor` 一行；每个角色加一枚「配了（来源 models.A）/ 沿用下一档」徽章）。判据 `tests/test_role_models.py` 9 → 12 条，**三条新的都在旧代码下逐条验证过会红**（stash 掉 modelgw.py + readers.py 之后 `3 failed, 9 passed`）：三处 vendor 回显、每档自己的 key_source（同一份读数里两档结论必须不同）、读侧覆盖写侧词表 `settings.MODEL_KEYS`（按词表判而不是抄第二份名单，且含反真空）。端到端在真起的本地服务上核过：`GET /` 引用的是新 bundle `index.DpOVMT89.js`；`GET /api/machine` 回 `model.vendor=deepseek`、`models.A.vendor=deepseek`（`source=models.A`、`configured=true`）、`models.default.vendor=acme`、`secretary.vendor=acme`（`source=secretary`）；响应里逐字搜过三把夹具 key，**不含**。**这一格对快照的读数**：`ModelSpec.redacted()` 多一格 ⇒ `run-manifest.json` 的 `spec` 里多一个 vendor 键、值是空串（两条路径各一处 —— 夹具的 spec 没配厂商）。重冻 `run_topic_snapshot.json` 并**逐格走查**：差异**只有 2 格**，两格都是「新增一个键、值为空串」，其余各格（六件产物 × 两条路径、落库的行、公开签名）逐字未动。`agent_surface_snapshot.json` 本轮**未动**（没改提示词），沿用上一轮的批准。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1125,31 +530,12 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "e138eefe322ca3fffd98e757378c36f86705a85c9ad94c9630c1967e064ef569",
+      "sha256": "383b324f68c8f18c56c05d88215f9da70cd7dff38283a3632edba0f55136817d",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 00630c964f1f 变为 e138eefe322c，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 e138eefe322c 变为 383b324f68c8，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-23T12:04:54+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-23T12:05:22+08:00",
-          "scope": "逐行走查：权限面 / 桥接层 / 冻结读数",
-          "note": "2026-10-23 第一批",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1157,31 +543,12 @@
       "path": "tests/golden/verify_all_snapshot.json",
       "glob": "tests/golden/verify_all_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "d78c964deed848dbf51b4f816919b9535a200c8c7da645b8a7d704e3260804ea",
+      "sha256": "6cbb7cc598e0eeb7bf49bde3174e8fdc57df08f5b4061a5828efec586bc06882",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
+      "change_note": "（未提供变更说明：内容 hash 从 d78c964deed8 变为 6cbb7cc598e0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-14T18:14:37+08:00",
-          "scope": "编号宽度四位改六位：schema.ID_DIGITS 一处定义 + store.alloc_id/MAX_ID + interactions 取号 + verify 连续号判据 + capabilities 实测注释 + specs/b 与 verify_tools 的说明与长度限制 + 四份冻结快照重冻",
-          "note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-14T18:14:38+08:00",
-          "scope": "编号宽度四位改六位：schema.ID_DIGITS 一处定义 + store.alloc_id/MAX_ID + interactions 取号 + verify 连续号判据 + capabilities 实测注释 + specs/b 与 verify_tools 的说明与长度限制 + 四份冻结快照重冻",
-          "note": "业主 2026-10-14 授权动禁改区，并裁定「所有四位编号改成六位（0000→000000，防溢出）……schema.require_id 与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据 + 旧数据（四位）的读侧兼容处置」。逐行走查的十一处：① schema.py：新增 ID_DIGITS=6 作为宽度唯一定义处，派生 ID_PATTERN / LEGACY_ID_PATTERN / ID_OR_LEGACY_PATTERN / format_id()；is_valid_id 两宽度都认（读侧兼容），新增 is_legacy_id / id_width；_PROCESS_ID_RE 号身两宽度都认；require_id / require_process_id 报错改成现算宽度；assert_process_id_contract 的互斥样本改对两宽度都成立；four_digit_id_kinds 更名 id_space_kinds（旧名在改宽度之后是假话）；assert_id_space_contract 继续把上限与形态两处对账，未放松。② store.py：MAX_ID 由 10 ** S.ID_DIGITS - 1 派生（999999），alloc_id / raise_counter_to 的号身与事件读数一律走 S.format_id()（写死的 :04d 已删）。③ interactions.py：next_prefixed_id 的号身走 S.format_id()，越界报错改成现算宽度；上限判据仍是 store.MAX_ID 一处，未放宽。④ verify.py：_id_contiguity 从「按 f\"{i:04d}\" 字面比」改成按**数值**比（混宽度时字面比会误报缺号）。⑤ capabilities.py：只改一处实测注释（59 → 现算 60 个动作 = 21 compared + 39 unmatched + 0 ambiguous，R97 加了 H.judge_quote_semantics）；ALLOWED_EDGES / CAPABILITIES / WRITE_SETS / NON_SUMMONABLE 四张表一个字节未动。⑥ specs/b.py：register_statement 的 doc_id 说明改成现算宽度。⑦ tools/verify_tools.py：两个 statement_id 参数说明与长度限制改成现算（minLength=4 兼容旧数据，maxLength=S.ID_DIGITS 收新号；只放宽了解析，没有放宽 detect_verifier / check_formal 的判据）。⑧⑨⑩⑪ tests/golden 四份冻结快照重冻并逐格走查（temp/_r104_golden_walk.py）：agent_surface 12 条（10 格 prompt 的编号写法与措辞）、tool_surface（两个参数说明 + 六处 id 参数的长度限制）、run_topic 11 条（task_id / usage_id 宽度）、verify_all 1 条（issue 的 row_id）——没有一条与本次改动无关的漂移。判据读数：tests/test_id_width.py 6 条（每个发号点真发一次 +源码级反真空 + 旧四位端到端读回）、test_interactions 53 条、test_manuscript_handoff 11 条（并发撞号负控当场抓出真缺陷）、四份快照 + test_agent_prompts + test_verifier_role + test_webui* + test_tools_* 全绿；全套 tests 见 temp/_r104_full3.txt。",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1189,31 +556,12 @@
       "path": "tools/coverage_zero_test.py",
       "glob": "tools/coverage_zero_test.py",
       "category": "release-deploy",
-      "sha256": "96d28fdf21670a7a7ef2d20fe09a3ce33771430800b52b590f432cda60d8f40c",
+      "sha256": "e9da10ecf60571ca9547fab2ad8c670aec10e16316882b83345e821829f0b6a2",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "（未提供变更说明：内容 hash 从 96d28fdf2167 变为 e9da10ecf605，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-12T12:20:46+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-12T12:20:46+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1221,31 +569,12 @@
       "path": "tools/release_all.py",
       "glob": "tools/release_all.py",
       "category": "release-deploy",
-      "sha256": "6007fb4bf5153b95278aaf8a059a5a07d8264a2d2637d5d8e7017a3ef1ae3770",
+      "sha256": "2320cf2d705a6539ed32a6ecf9b6b35b67efcd5ae9e3339d82c4b6d09fba7700",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "Web 批 W2：第 7 步 frontend（exit_map=TRI_STATE_EXIT）；既有 6 步与 overall() 语义未动",
+      "change_note": "（未提供变更说明：内容 hash 从 e7e80970c12b 变为 2320cf2d705a，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-08T12:24:57+08:00",
-          "scope": "build_steps() 第 7 个 Step 与它的 exit_map；overall() 未改",
-          "note": "逐行走查：新步的 2 必须记 unknown 而不是 fail（漏了 exit_map 就会把没查成读成发现问题）",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-08T12:24:57+08:00",
-          "scope": "build_steps() 第 7 个 Step 与它的 exit_map；overall() 未改",
-          "note": "独立复核：跳过的步骤仍记 unknown；既有 6 步一个字没动",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1253,31 +582,12 @@
       "path": "tools/run_each_test_file.py",
       "glob": "tools/run_each_test_file.py",
       "category": "release-deploy",
-      "sha256": "329ea51b83bb3991c628e5a15051023f41ec64cb2a3b009afc429fc03f611e66",
+      "sha256": "5799f96742619b93a8512347f80dd34faa4b7aa2691f97c8abdf58852ae1add2",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "Web 批 W3：EXEMPT_ALL_SKIPPED 加 tests/test_webui_browser.py + 上限 1->2（同构于 test_providers_online.py）",
+      "change_note": "（未提供变更说明：内容 hash 从 329ea51b83bb 变为 5799f9674261，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-08T12:24:57+08:00",
-          "scope": "EXEMPT_ALL_SKIPPED 的新增条目、MAX_EXEMPT_ALL_SKIPPED、audit_exemptions() 的实现",
-          "note": "逐行走查：与 test_providers_online.py 同构（整文件被默认筛掉 + 未装依赖即 skip），audit_exemptions() 三道机器判据仍过",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-08T12:24:57+08:00",
-          "scope": "EXEMPT_ALL_SKIPPED 的新增条目、MAX_EXEMPT_ALL_SKIPPED、audit_exemptions() 的实现",
-          "note": "独立复核：抬上限不放松判定语义 —— 名单外一律 unknown，3 条仍然红",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -1285,31 +595,12 @@
       "path": "tools/vocab_census.py",
       "glob": "tools/vocab_census.py",
       "category": "auth-audit",
-      "sha256": "dff4d8e647414668bb7ac35e9fba2e6dc006a5b62abe4d830254f587dedab329",
+      "sha256": "f29202297d4ef69819753325b3343a4297ad39ea0ed8dcff5672edcbea6a300c",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "（未提供变更说明：内容 hash 从 dff4d8e64741 变为 f29202297d4e，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "Yu",
-          "at": "2026-10-06T22:02:37+08:00",
-          "scope": "RESERVED_VALUES 与 reason 面登记：empty_page_range + acceptance_row_unreadable/acceptance_rows_unreadable",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "Jiaqi",
-          "at": "2026-10-06T22:02:37+08:00",
-          "scope": "RESERVED_VALUES 与 reason 面登记：empty_page_range + acceptance_row_unreadable/acceptance_rows_unreadable",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     }

@@ -15,7 +15,7 @@
 负控：① 名字用过就拒（含已销号 ⇒ "已销号"，不许静默改名）② 简介为空 / 超长、多行 ⇒ 拒
 （内容面：秘书不许替它编、也不许替它删）③ 查只报不修（`roster_view` 不许写盘）。
 反真空：① 未登记的名字退役 ⇒ `refused` ② 台账读不成 ⇒ 三态（`checked=False`）。
-口径：四态折叠（活跃 / 待命 / 已停 / 已退役）只在一处做（`_state_from`）。
+口径：四态折叠（活跃 / 待命 / 已停 / 已退役）只在一处做（`_state_reading`）。
 """
 from __future__ import annotations
 
@@ -189,6 +189,11 @@ def test_roster_view_reports_and_never_writes(tmp_path: pathlib.Path):
     # 注意：秘书的 `_conductor()` 每次现造一个只读句柄，所以这里要换掉它，
     # 而不是换测试里那个 `cond`（换了也影响不到秘书 —— 这一条本身就值得记下来）。
     class _Broken:
+        # 2026-10-27：`roster_view` 现在先开一个只读作用域（`reading_snapshot()`），
+        # 所以替身也要有那一格 —— 缺了它红的是 `AttributeError`，不是被测的那条三态。
+        def reading_snapshot(self, *_a: Any, **_kw: Any) -> Any:
+            raise RuntimeError("注入的台账故障")
+
         def retire_ready(self, *_a: Any, **_kw: Any) -> Any:
             raise RuntimeError("注入的台账故障")
 

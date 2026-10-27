@@ -27,53 +27,11 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Money } from "../components/Money";
 import { RosterPanel } from "../components/Roster";
-import { Table, cell } from "../components/Table";
+import { Table, buckets, cell } from "../components/Table";
 import { StopButtons } from "../components/Stop";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
-
-/** `running_loops()` 的一行（逐字透传 stopctl 的字典）。 */
-interface LoopRow extends Record<string, unknown> {
-  role: string;
-  sid: string;
-  since: string;
-}
-
-/** `live_pids()` 的一行。 */
-interface PidRow extends Record<string, unknown> {
-  pid: number;
-  role: string;
-  sid: string;
-  started_at: string;
-}
-
-interface ReportRow extends Record<string, unknown> {
-  name: string;
-  json_path: string;
-  bytes: number | null;
-  ts: string;
-}
-
-interface BucketRow {
-  name: string;
-  usd: string;
-  tokens: string;
-  entries: string;
-}
-
-function buckets(rec: Record<string, unknown>): BucketRow[] {
-  return Object.keys(rec)
-    .sort()
-    .map((name) => {
-      const one = (rec[name] ?? {}) as Record<string, unknown>;
-      return {
-        name,
-        usd: cell(one.usd),
-        tokens: cell(one.tokens),
-        entries: cell(one.entries),
-      };
-    });
-}
+import type { LiveLoopRow, LivePidRow } from "../types";
 
 export function Live() {
   const liveFace = useFace(() => api.getLive());
@@ -81,11 +39,14 @@ export function Live() {
   const usage = useFace(() => api.getUsage());
 
   const l = liveFace.data;
-  const running = (l?.running ?? []) as unknown as LoopRow[];
-  const pids = (l?.live ?? []) as unknown as PidRow[];
-  const history = (l?.history ?? []) as unknown as Array<Record<string, unknown>>;
-  const interrupts = (l?.interrupts ?? []) as unknown as Array<Record<string, unknown>>;
-  const switchState = (l?.switch ?? {}) as Record<string, unknown>;
+  // 三格的行类型来自生成物（2026-10-27 业主裁定 W5）：此前本文件自己声明了
+  // `LoopRow` / `PidRow` / `ReportRow` 三份同形接口，再用 `as unknown as` 把
+  // `Record<string, unknown>[]` 打穿 —— "生成物是唯一类型来源"这条纪律就被绕开了。
+  const running: LiveLoopRow[] = l?.running ?? [];
+  const pids: LivePidRow[] = l?.live ?? [];
+  const history = l?.history ?? [];
+  const interrupts = l?.interrupts ?? [];
+  const switchState = l?.switch ?? {};
 
   return (
     <>
@@ -240,7 +201,7 @@ export function Live() {
  落点 <span class="mono">{reports.data.dir}</span>（STATUS-&lt;时间&gt;.md/.json）。
             </div>
             <Table
-              rows={(reports.data.reports ?? []) as unknown as ReportRow[]}
+              rows={reports.data.reports ?? []}
               empty="暂无状态报告。"
               columns={[
                 { key: "ts", title: "时间戳", render: (r) => <span class="mono">{r.ts}</span> },

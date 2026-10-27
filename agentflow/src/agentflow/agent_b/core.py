@@ -1127,10 +1127,10 @@ def _selftest() -> int:
                     r["lease_until"] = None
                     tx.upsert("literature", r, note="selftest_drain")
 
-    def _mk(root: Path, *, extractor=None, config=None) -> AgentB:
-        cfg = {"lease_seconds": 900, "max_attempts": 3}
-        cfg.update(config or {})
-        return AgentB(Store(root), extractor=extractor or _Extractor(), extract_text=_extract, config=cfg)
+    # 这里原来有一个 `_mk(...)` 工厂（`AgentB(Store(root), extractor=…, config=…)`）。
+    # 2026-10-27 删：全仓 0 个调用者 —— 自检每一段都自己 `Store(root)` 再造，那个工厂
+    # 一次都没被用过。删掉而不是留着，是因为"看起来像装配入口、实际没人走"的代码
+    # 下一个人会照着它改配置，然后发现改不动任何东西。
 
     try:
         root = Path(tempfile.mkdtemp(prefix="agentflow_agent_b_selftest_"))

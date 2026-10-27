@@ -629,6 +629,17 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
 
     acc = RD.acceptance_face(root)
     out.setdefault("AcceptanceView", set(acc))
+
+    # 错误动作那一面（2026-10-27 业主裁定 ⑥-5 / W4）：这两族的形状从 `ui/src/api.ts`
+    # 搬进了生成物，于是 C 条从现在起核对它们的键名 —— 这正是那次搬迁想要的收益。
+    # `readouts.errors_readout()` 在任何工作区上都给同一批顶层键（`state="unknown"`
+    # 也是那五个），所以它够得着；`data` 的五格同样恒定。
+    from agentflow import readouts as RD_ERR
+
+    errors = RD_ERR.errors_readout(root)
+    out["RoleErrorsView"] = set(errors)
+    if isinstance(errors.get("data"), dict):
+        out["ErrorStatsData"] = set(errors["data"])
     return out
 
 

@@ -1,20 +1,39 @@
 """工具层基座：ToolSpec / ToolResult / ToolRegistry / 参数校验。
+
 ## 为什么要有一层"工具"
-原来 A/B 直接调 `store`、`providers` 的函数。一旦智能体由 LLM 驱动，这就不够了：- LLM 需要"手写 JSON 去改表" → 一次转义错误就
-写坏数据，而且每改一行都占一轮思维链；- 没有统一输入校验 → 参数错了要到深处才炸；- 没有统一的副作用声明 → 无法判断某个动作要不要审批；- 同一套能力在"脚本模式"
-和"LLM 模式"下要写两遍。
-工具层把"标准操作"固化成有名字、有 schema、有校验、有结构化返回、声明副作用的原子动作。智能体的思维链只花在"判断该调哪个工具"，不花在"怎么把参数拼对"。
+
+原来 A/B 直接调 `store`、`providers` 的函数。一旦智能体由 LLM 驱动，这就不够了：
+
+- LLM 需要"手写 JSON 去改表" → 一次转义错误就写坏数据，而且每改一行都占一轮思维链；
+- 没有统一输入校验 → 参数错了要到深处才炸；
+- 没有统一的副作用声明 → 无法判断某个动作要不要审批；
+- 同一套能力在"脚本模式"和"LLM 模式"下要写两遍。
+
+工具层把"标准操作"固化成有名字、有 schema、有校验、有结构化返回、声明副作用的原子动作。
+智能体的思维链只花在"判断该调哪个工具"，不花在"怎么把参数拼对"。
+
 ## 两个刻意的设计
-1. 两根轴都是一等公民。`none` / `read` 的工具可以任意调用、不需要审批；`write_local` 的需要。把审批判断建立在声明上，而不是靠人记。这也是为
-什么 C 的图分析全部是 `read` —— 它应当能被任意组合地反复查询。
-本层还声明第二根正交轴 `external`（见 `EXTERNAL`）：`side_effect` 把"能不能改我们拥有的东西"与"能不能触到我们不拥有的东西"压进了同一
-个取值，于是 `verify.run_experiment`（既写实验记录、又执行调用方给的脚本）在一根轴上必须二选一，另一个事实被丢掉。两根轴的取值互相独立，审批（`needs_approval`）
-与沙箱（`sandbox_required`）由它们推导，不落成逐工具的布尔字段（`DEVELOPMENT.md` §3 纪律 6：派生态不许当输入）。`network` 
-这个把两根轴压成一档的遗留取值已在 B3 收官时从词表里删掉，连同两张翻译表；装配期再写它就是一个非法取值（`ValueError`），于是"出网"与"起进程"在树上各说各
-的话，不需要任何翻译层。
-2. 参数校验自己实现，不引第三方依赖。只需要 object/array/string/integer/number/boolean 与
-required/enum/items/bounds 这几样；为此引入 `jsonschema` 会让"工具层能不能用"依赖于环境里有没有装它。工具层是所有智能体的公共底盘，
-它的依赖越少越好。
+
+1. 两根轴都是一等公民。`none` / `read` 的工具可以任意调用、不需要审批；`write_local`
+   的需要。把审批判断建立在声明上，而不是靠人记。这也是为什么 C 的图分析全部是
+   `read` —— 它应当能被任意组合地反复查询。
+
+   本层还声明第二根正交轴 `external`（见 `EXTERNAL`）：`side_effect` 把"能不能改我们
+   拥有的东西"与"能不能触到我们不拥有的东西"压进了同一个取值，于是
+   `verify.run_experiment`（既写实验记录、又执行调用方给的脚本）在一根轴上必须二选一，
+   另一个事实被丢掉。两根轴的取值互相独立，审批（`needs_approval`）与沙箱
+   （`sandbox_required`）由它们推导，不落成逐工具的布尔字段（`DEVELOPMENT.md` §3
+   纪律 6：派生态不许当输入）。`network` 这个把两根轴压成一档的遗留取值已在 B3 收官时
+   从词表里删掉，连同两张翻译表；装配期再写它就是一个非法取值（`ValueError`），于是
+   "出网"与"起进程"在树上各说各的话，不需要任何翻译层。
+
+2. 参数校验自己实现，不引第三方依赖。只需要 object/array/string/integer/number/boolean
+   与 required/enum/items/bounds 这几样；为此引入 `jsonschema` 会让"工具层能不能用"
+   依赖于环境里有没有装它。工具层是所有智能体的公共底盘，它的依赖越少越好。
+
+（`R-BE4`，2026-10-27：这一段此前换行丢了 —— `- LLM 需要…` 那个列表与
+`## 两个刻意的设计` 的分段全糊进了上一句，读的人得自己在长句里找停顿。只恢复换行与
+分段，一个字没改。）
 """
 
 from __future__ import annotations
@@ -356,18 +375,11 @@ def _type_name(v: Any) -> str:
     )
 
 
-def _schema_allows_null(sub: Any) -> bool:
-    """这个参数「显式传 null」 是否合法（2026-10-17）。
-
-    两档放行：子 schema 自己写了 `"nullable": True`；或 `type` 是列表且含 `"null"`。
-    其余一律不放行 —— `null` 不是"没提供"，见 `validate_params` 里那段理由。
-    """
-    if not isinstance(sub, Mapping):
-        return False
-    if sub.get("nullable") is True:
-        return True
-    t = sub.get("type")
-    return isinstance(t, (list, tuple)) and "null" in t
+# `_schema_allows_null` 在 2026-10-27 删掉（`R-BE4` 的②-2，业主裁定：删）。
+# 它零调用点，而它描述的那个判据（"只在 schema 说 nullable 时才放行显式 null"）
+# 与现行的口径相反：显式 null 一律放行，崩了再翻成可行动的 `param_error`
+# （见 `ToolRegistry.call` 里 `except (TypeError, AttributeError)` 那一支 —— 那里的
+# 注释写着为什么"不改校验语义"）。留一个不打算落地的判据，只会让读的人以为 null 有闸。
 
 
 def validate_params(schema: Mapping[str, Any], params: Any, *, path: str = "") -> None:
@@ -596,16 +608,12 @@ class ToolSpec:
             "tags": list(self.tags),
         }
 
-    def to_function_schema(self) -> dict:
-        """OpenAI/DeepSeek 风格 function-calling 描述。"""
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name.replace(".", "__"),  # 部分供应商不接受点号
-                "description": self.summary + (f"\n返回：{self.returns}" if self.returns else ""),
-                "parameters": dict(self.params),
-            },
-        }
+    # `to_function_schema` 在 2026-10-27 删掉（`R-BE4` 的②-1，业主批准）：
+    # 它生产零调用（只有两条测试断言），而模型真正看到的那份是 `llmseam.ToolFace`
+    # 里手搓的另一份（多注一个 `why` 属性、description 不带 `returns`）。两份 builder
+    # 并存的结果是"改这一份只让测试变绿，模型看到的字节不变" —— 那正是本仓最忌的
+    # 假判据形态。提示词那一侧要不要把 `returns` 拼进 description，单列成"提示词升级"
+    # 一件事（要抬版本 + 重冻 golden），不在这一批。
 
 
 def tool(
@@ -1120,9 +1128,10 @@ class ToolRegistry:
     def describe(self) -> list[dict]:
         return [self._specs[n].to_dict() for n in self.names()]
 
-    def function_schemas(self, role: str | None = None) -> list[dict]:
-        specs = self.for_role(role) if role else list(self._specs.values())
-        return [s.to_function_schema() for s in sorted(specs, key=lambda x: x.name)]
+    # `function_schemas` 在 2026-10-27 删掉（`R-BE4` 的②-1，业主批准）：它只调
+    # `ToolSpec.to_function_schema`（同批删），生产零调用。模型看到的函数面由
+    # `llmseam.ToolFace` 一处产生 —— 名字归一化（`.` → `__`）、`why` 属性、description
+    # 的拼法都在那里；本层不再有第二份 builder。
 
     def text_catalog(self, role: str | None = None) -> str:
         """给 LLM 看的纯文本清单（比 JSON 省 token，也更容易被读进去）。"""

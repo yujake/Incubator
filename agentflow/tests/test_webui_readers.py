@@ -763,6 +763,16 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
         if line.get("options"):
             got["ChatOption"] = set(line["options"][0])
             break
+    # 2026-10-27（业主裁定 ⑥-5 / W4）：错误动作那一面搬进生成物之后进受核对名单。
+    # 它的读侧真身是 `readouts.errors_readout`（不是本模块的函数），但"这一面在任何
+    # 工作区上都给同一批顶层键"这条性质与上面六面一致 —— 于是它在这里也要有落脚点。
+    # `state="unknown"` 那一档（夹具上就是它）同样给全五个键，这正是它能进名单的理由。
+    from agentflow import readouts as RD_ERR
+
+    errors = RD_ERR.errors_readout(artifacts_ws)
+    got["RoleErrorsView"] = set(errors)
+    assert isinstance(errors.get("data"), dict), errors
+    got["ErrorStatsData"] = set(errors["data"])
     missing = [n for n in R.CHECKED_TYPES if n not in got]
     assert not missing, f"受核对名单里这些接口在夹具上没有读数：{missing}（登记该改）"
 

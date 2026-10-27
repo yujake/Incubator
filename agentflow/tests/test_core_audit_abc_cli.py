@@ -454,18 +454,24 @@ def test_cli_analyze_negative_control_success_registers_a_report(tmp_path: Path,
 # =========================================================================== cli：load_config
 
 
-def test_cli_load_config_reports_the_real_yaml_error(tmp_path: Path) -> None:
+def test_cli_load_config_reports_the_real_yaml_error(tmp_path: Path, capsys) -> None:
     """解析失败必须报真正的那个错误（YAML 语法），不许伪装成 JSON 错误。
 
     旧写法把 `import yaml` 与 `safe_load` 放在同一个 `try` 里：yaml 装上了，
     但这个文件语法不对，于是掉进 `except` 去试 JSON，最后报的是 JSON 的
     `Expecting value: line 1 column 1` —— 一次 YAML 缩进错误被说成"文件格式完全不对"，
     排查方向被彻底带偏。
+
+    2026-10-27：退出码从"字符串形态的 `SystemExit`（解释器按 1 收尾）"改成显式的
+    `SystemExit(2)` —— 配置读不进来是"没查成"，不是"查过了、有问题"（1）。所以这里
+    钉两件事：码是 2、话仍在 stderr 上（消息不再随 `SystemExit` 的参数走，改成先 print
+    再 raise，否则解释器会把那行话当成退出码的注解而没有第二处来源）。
     """
     (tmp_path / "config.yaml").write_text("agent_a:\n  providers: [a\n", encoding="utf-8")
     with pytest.raises(SystemExit) as ei:
         cli.load_config(tmp_path)
-    msg = str(ei.value)
+    assert ei.value.code == 2, f"配置读不成是没查成 ⇒ 2（收到 {ei.value.code!r}）"
+    msg = capsys.readouterr().err
     assert "YAML" in msg, msg
     assert "JSON" not in msg, f"不许把 YAML 错误报成 JSON 错误：{msg}"
 

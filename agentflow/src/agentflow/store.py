@@ -130,6 +130,21 @@ def _now() -> str:
     return S.now_iso()
 
 
+def _stat_key(path: Path) -> tuple[int, int] | None:
+    """一份表文件的盘上读数 `(st_mtime_ns, st_size)`；不在盘上 ⇒ `None`。
+
+    读路径缓存（`Store._load`，`R-BE4`）的键就是它：`mtime_ns` 让"别的进程写过"立刻可见，
+    `size` 是同一时间粒度内的第二道分辨（`os.replace` 换的是 inode，Windows 上 mtime 来自
+    临时文件那一次写入）。`None` 不是"空文件"，而是"没有这份文件"——两者在 `_load` 里
+    落到不同分支（空表 vs 默认 counters 文档）。
+    """
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (int(st.st_mtime_ns), int(st.st_size))
+
+
 def _parse_iso(ts: str | None) -> datetime | None:
     if not ts:
         return None
@@ -583,7 +598,9 @@ class Tx:
         # —— 表现为"多行拿到同一个 lit_id"，而按主键 upsert 会静默互相覆盖。
         c = self._store._dirty_counters
         if c is None:
-            c = self._store._load("counters")
+            # `_load_for_write`：这份 doc 会被就地推进号码，所以它必须是本事务私有的
+            # 副本，不能是读路径缓存里的那一份（`R-BE4` 的负控实测见 `_load` 的 docstring）。
+            c = self._store._load_for_write("counters")
             self._store._dirty_counters = c
         counters = c.setdefault("counters", {})
         # 2026-10-17（store #4）：counters 是可被手改的 JSON；`"lit": "abc"` 会让裸
@@ -669,7 +686,8 @@ class Tx:
             raise StoreError("抬计数器的事务必须声明 counters 表")
         c = self._store._dirty_counters
         if c is None:
-            c = self._store._load("counters")
+            # 同 `alloc_id`：这份 doc 会被就地改（`counters[kind] = target`）⇒ 要私有副本。
+            c = self._store._load_for_write("counters")
             self._store._dirty_counters = c
         counters = c.setdefault("counters", {})
         text = str(used_id or "")
@@ -725,6 +743,19 @@ class Store:
         #: `read_events()` 的尾巴，见 `_next_seq`。声明在这里是为了让
         #: "这个属性一定存在"成为类的事实，而不是某一次调用的副作用。
         self._seq = 0
+        #: 读路径的进程内缓存：表名 -> (路径, `st_mtime_ns`, `st_size`, 解析好的 doc)。
+        #:
+        #: 为什么需要它（`R-BE4`，2026-10-27 业主批准）：`_load` 原来是"每次调用都
+        #: 读盘 + `json.loads` 整份表"，而 `rows()` / `read()` / `tx.rows()` /
+        #: 提交块的 `before_rows` 全部走它。实测（`temp/rbe4_rows_cost.py`）：
+        #: 1.0MB / 1000 行 8.2ms、3.2MB / 3000 行 31.9ms、6.3MB / 6000 行 68.3ms；
+        #: 真实工作区上一次 `table.list(literature)` = 36ms，`verify.verify_all`
+        #: = 73 次读 / 22.4MB / 433ms。
+        #:
+        #: 键是盘上读数（路径 + mtime_ns + size），每次命中前现 `stat()` 一次：
+        #: 别的进程一写，mtime/size 就变 ⇒ 立刻重读。`tx` 提交块里那次 `before_rows`
+        #: 因此仍然读到新鲜盘（判据 `tests/test_store_load_cache.py` 钉着这一条）。
+        self._load_cache: dict[str, tuple[str, int, int, dict]] = {}
 
     # ---------------------------------------------------------------- 初始化
     def _writer_lock(self, *, timeout: float = 60.0) -> FileLock:
@@ -965,6 +996,11 @@ class Store:
             for attempt in range(_REPLACE_ATTEMPTS):
                 try:
                     os.replace(tmp, path)
+                    # `R-BE4`（2026-10-27）：本进程刚写完 ⇒ 读路径缓存整份作废。
+                    # 为什么不在键里加 inode：清空是显然正确的，而写远比读少
+                    # （一次提交最多几张表），清空的代价就是下一次读重解析一遍。
+                    # 这一句同时关掉"同尺寸且同 mtime_ns 的两次写"这一档理论盲区。
+                    self._load_cache.clear()
                     return
                 except OSError as exc:  # WinError 32 / Errno 13 都在这一支
                     last = exc
@@ -1032,21 +1068,46 @@ class Store:
             "任何情况下都不许把这一条读成'没有版本问题'。"
         )
 
-    def _load(self, table: str) -> dict:
+    def _read_doc(self, table: str, *, cache: bool) -> dict:
+        """读一份表文档；`cache=True` 时按盘上读数命中进程内缓存（`R-BE4`）。
+
+        缓存键是 `(路径, st_mtime_ns, st_size)`：命中前现 `stat()` 一次，所以别的进程
+        一写就失效、立刻重读 —— 读侧不拿锁这件事（`R3-1` 的既有裁定）不变，变的只是
+        "同一份没变过的盘片不必重解析一遍"。本进程自己写完则整份缓存清掉（见
+        `_atomic_write` 末尾），于是连"同尺寸同 mtime"这一档理论盲区也不存在。
+
+        已知边界（深一层共享）：交回的是缓存里那一份 doc。`read()` 与 `rows()` 都会在
+        出口处把顶层做成副本（`rows` 逐行新建 dict），所以"改顶层字段"污染不到缓存；
+        但行里嵌套的 list/dict（`page_range` / `aliases` / `bits` 这类）仍与缓存共享 ——
+        对它们就地 `append` 会污染缓存。今天全仓没有这样的调用点（排查探针
+        `temp/rbe4_nested_mutation_scan2.py`：从 `rows()` 出发的就地改只有 3 处，全部是
+        "往交回的列表里 append/pop"，只动副本自己的列表）。要改嵌套值请整格赋一个新
+        对象（`row["aliases"] = [...]`），别就地改。
+
+        并发：本缓存没有锁。多线程下最坏的结果是同一份文件被并发解析两次（`dict` 的
+        get/set 在 GIL 下是原子的），不会读到半份文档 —— 写入方是 `_atomic_write` 的
+        `os.replace`，读到的永远是某个完整版本。
+        """
         if table == "counters":
             p = self.data / "counters.json"
-            if not p.exists():
+            key = _stat_key(p)
+            if key is None:
                 return {"schema_version": S.SCHEMA_VERSION, "counters": {}}
+            hit = self._load_cache.get(table) if cache else None
+            if hit is not None and hit[0] == str(p) and hit[1] == key:
+                return hit[2]
             try:
                 doc = json.loads(p.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 # 2026-10-17（store #1/#5）：counters 分支此前没有 try —— 而表分支有。
                 # 坏 JSON / 非 UTF-8 都按"这份文件坏了"报 StoreError，不冒系统异常。
                 raise StoreError(
-                    f"counters.json 读不出来（{type(e).__name__}: {e}）⇒ **拒读**；"
+                    f"counters.json 读不出来（{type(e).__name__}: {e}）⇒ 拒读；"
                     "处置：修好它，或跑 `agentflow rebuild` 从 events.jsonl 重建计数"
                 ) from e
             self._check_version(doc, "counters.json")
+            if cache:
+                self._load_cache[table] = (str(p), key, doc)
             return doc
         spec = S.TABLES.get(table)
         if spec is None:
@@ -1063,8 +1124,12 @@ class Store:
                 )
             raise StoreError(f"未知表：{table}")
         p = self.data / spec["file"]
-        if not p.exists():
+        key = _stat_key(p)
+        if key is None:
             return S.empty_table()
+        hit = self._load_cache.get(table) if cache else None
+        if hit is not None and hit[0] == str(p) and hit[1] == key:
+            return hit[2]
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
@@ -1073,20 +1138,59 @@ class Store:
                 f"{spec['file']} 不是合法 JSON（{e}）。可用 `agentflow rebuild` 从 events.jsonl 重建。"
             ) from e
         self._check_version(doc, spec["file"])
+        if cache:
+            self._load_cache[table] = (str(p), key, doc)
         return doc
 
+    def _load(self, table: str) -> dict:
+        """读一份表文档（只在只读路径上用它；要就地改它请用 `_load_for_write`）。
+
+        两个名字分开是为了让"谁在改它"在调用点就看得见：缓存里的 doc 是所有读者共享的
+        那一份，就地改它就是改所有人的视图（`R-BE4` 的负控实测：`Tx.alloc_id` 原来
+        直接改 `_load("counters")` 的返回值，一笔失败的事务把 `{'lit': 1}` 留在了缓存里，
+        盘上什么都没有 —— 判据 `tests/test_store_concurrency.py` 当场红）。
+        """
+        return self._read_doc(table, cache=True)
+
+    def _load_for_write(self, table: str) -> dict:
+        """读一份表文档、不进缓存：给"要在这份 doc 上就地改"的调用点用。
+
+        今天只有一个用户：`Tx.alloc_id` / `raise_counter_to` 把 counters 文档存进
+        `_dirty_counters` 再就地推进号码。它们要的是一份"本事务私有的副本"，所以绕开
+        缓存；代价是每次事务取号时读一次盘（与加缓存之前逐字相同）。
+        """
+        return self._read_doc(table, cache=False)
+
     def read(self, table: str) -> dict:
-        """无锁快照读。仅用于展示/统计；要改数据必须走 `tx`。"""
-        return self._load(table)
+        """无锁快照读。仅用于展示/统计；要改数据必须走 `tx`。
+
+        出口把顶层做成副本（`rows` 逐行新建 dict、`counters` 新建映射），于是"就地改
+        交回的东西"污染不到 `_load` 的缓存；深一层的共享见 `_load` 的"已知边界"。
+        """
+        doc = self._load(table)
+        if not isinstance(doc, dict):
+            # 2026-10-17（store #2）：表文件被写成顶层数组时 `doc.get` 会抛 AttributeError。
+            # 这一档与 `_check_version` 的"顶层不是对象"同一处置（拒读，不冒系统异常）。
+            raise StoreError(
+                f"{table} 的表文件顶层不是对象（收到 {type(doc).__name__}）⇒ 拒读；"
+                "这一份文件坏了，处置见 `agentflow verify` 的同一张表")
+        rows = doc.get("rows")
+        if isinstance(rows, list):
+            return {**doc, "rows": [dict(r) for r in rows]}
+        counters = doc.get("counters")
+        if isinstance(counters, dict):
+            return {**doc, "counters": dict(counters)}
+        return dict(doc)
 
     def rows(self, table: str) -> list[dict]:
+        """读一张表的行（顶层副本：改行里的字段不会污染缓存，见 `_load` 的已知边界）。"""
         doc = self.read(table)
         rows = doc.get("rows") if isinstance(doc, dict) else None
         if not isinstance(rows, list):
             # 2026-10-17（store #3）：表文件可能只剩 `{"schema_version": …}`（半途写坏/手改）
             # ⇒ 原来 `["rows"]` 直接 KeyError，读账的人看到的是 traceback 而不是"这表坏了"。
             raise StoreError(
-                f"{table} 的表文件没有 rows 数组（收到 {type(rows).__name__}）⇒ **拒读**；"
+                f"{table} 的表文件没有 rows 数组（收到 {type(rows).__name__}）⇒ 拒读；"
                 "处置：跑 `agentflow verify` 定位，必要时 `agentflow rebuild` 重建")
         return rows
 
@@ -1249,16 +1353,29 @@ class Store:
         """
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
         batch = f"{_now()}-{os.getpid()}-{next(self._batch_seq)}"
+        # `R-BE4`（2026-10-27，业主批准）：批内只读一次日志尾巴。
+        #
+        # 改前每条事件各调一次 `_next_seq()`，而它每次都 `_seq_high_water()` →
+        # `read_events()` ⇒ 整份 events.jsonl 重解析一遍：一笔 N 条事件的提交把
+        # 整份日志解析 N+1 遍，而且全在写者锁内。实测（6.9MB / 20001 行）：
+        # 提交 1 条 = 2 遍 / 311ms，提交 5 条 = 6 遍 / 845ms；改后各 1 遍 / 155ms、160ms。
+        # 为什么"取一次然后本地 +1"在语义上等价：本方法的调用点约束（见 docstring 的
+        # `c-6` 那一段）要求整段在写者锁内 ⇒ 批内没有第二个写者能推进 seq，唯一会
+        # 变化的只有本方法自己写下的那些行。`self._seq` 在批末同步成最后一个用掉的号，
+        # 于是下一次 `_next_seq()` 的 `max(self._seq, high_water)` 仍然只往后走。
+        seq = self._next_seq()
         with open(self.events_path, "a", encoding="utf-8", newline="\n") as f:
             for e in events:
-                e = {"seq": self._next_seq(), "ts": _now(), "batch": batch, **e}
+                e = {"seq": seq, "ts": _now(), "batch": batch, **e}
+                seq += 1
                 f.write(json.dumps(e, ensure_ascii=False, default=str) + "\n")
             f.write(json.dumps(
-                {"seq": self._next_seq(), "ts": _now(), "op": "commit",
+                {"seq": seq, "ts": _now(), "op": "commit",
                  "batch": batch, "rows": len(events)},
                 ensure_ascii=False, default=str) + "\n")
             f.flush()
             os.fsync(f.fileno())
+        self._seq = seq
 
     def _next_seq(self) -> int:
         """取下一个事件序号 —— 来源是日志里已有的最大 seq，不是"数行数"（`c-6`）。
@@ -1275,7 +1392,12 @@ class Store:
         由此带来一条对调用方的约束：`_append_events` / `_next_seq` 只能在写者锁内调用。`init` / `rebuild` 走
         `_writer_lock`，`tx` 在提交块里拿同一把锁 ⇒ 三者互斥，没有"两个写者同时读尾巴"。这一条不是靠自觉：
         `tests/test_store_r3_commit_order.py` 钉住提交顺序，而这里每次调用都重新读一遍日志尾巴（不再缓存一个可能
-        与盘上分家的行数），代价是每次追加多读一遍 `events.jsonl` —— 相对"重复 seq 的时间线"，这个代价是划算的。
+        与盘上分家的行数），代价是每次调用多解析一遍 `events.jsonl` —— 相对"重复 seq 的时间线"，这个代价是划算的。
+        3. `R-BE4`（2026-10-27，业主批准）更正了上一句的调用口径：旧文本写的是"每次追加多读一遍"，实测是
+        "每条事件读一遍" —— 一笔 N 条事件的提交会把整份日志解析 N+1 遍（6.9MB / 20001 行实测：提交 5 条 =
+        6 遍 / 845ms，全在写者锁内）。现在 `_append_events` 在批开头调一次本函数，批内本地 +1；本函数仍然
+        "每次调用都重新读一遍日志尾巴"，只是变成"每次提交"而不是"每条事件"。口径没变，放大消除：同一基准
+        提交 5 条 = 1 遍 / 160ms（探针 `temp/rbe4_append_amp.py`）。
         """
         self._seq = max(self._seq, self._seq_high_water()) + 1
         return self._seq

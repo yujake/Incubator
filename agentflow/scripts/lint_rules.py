@@ -1555,9 +1555,14 @@ def _pin_utf8() -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     _pin_utf8()
-    ap = argparse.ArgumentParser(description="agentflow 机械可查规则（linter）")
+    # `allow_abbrev=False`：`--json` 是 `--json-out` 的**前缀**，argparse 默认会把
+    # 前者当后者的缩写接住 —— 于是"旧名已经删掉"这句话是假的，`--json <path>` 照样能跑
+    # （2026-10-27 实测）。关掉缩写才是真的一个字面量一个名字：旧写法现在以
+    # "unrecognized arguments: --json" + 退出码 2 失败，而不是继续按"要一个路径"生效。
+    ap = argparse.ArgumentParser(description="agentflow 机械可查规则（linter）",
+                                 allow_abbrev=False)
     ap.add_argument("--root", default=".", help="仓库根（默认当前目录）")
-    ap.add_argument("--json", default="", help="把结果写到该 JSON 路径")
+    ap.add_argument("--json-out", default="", help="把结果写到该 JSON 路径")
     ap.add_argument("--strict", action="store_true", help="把 warning 也算失败")
     args = ap.parse_args(argv)
 
@@ -1569,14 +1574,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     rep = run_all(root, strict=args.strict)
     d = rep.to_dict()
-    if args.json:
+    if args.json_out:
         # `G-42`（`c-12`）的落地形态：产物必须是纯 LF，与平台无关。
         # `Path.write_text` 在 Windows 上会把每个 `\n` 刷成 `\r\n` ⇒ 产物的 `sha256`
         # 与"盘上那一版"对不上（`draft/22` §12.15.2 记过那次事故），
         # 而禁改区批准台账钉住的正是 `sha256`。`newline=""` 关掉平台的换行转换。
         # 这条纪律本身也有机器判据：本文件的 `rule_R012_write_text_newline`。
-        Path(args.json).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.json, "w", encoding="utf-8", newline="") as fh:
+        Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.json_out, "w", encoding="utf-8", newline="") as fh:
             fh.write(json.dumps(d, ensure_ascii=False, indent=2))
 
     mode = "严格（发布级）" if args.strict else "日常"

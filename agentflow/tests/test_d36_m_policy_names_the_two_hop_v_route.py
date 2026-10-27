@@ -10,7 +10,7 @@ M→B→V」，没有写「直呼 V 会发生什么」。后果是可预期的�
 下一次仍会去试那条直连边 —— 因为它不知道代价是一次白丢。
 
 所以这一条判的是说明，不是能力：`M→V` 那条边本来就不在 `ALLOWED_EDGES` 里
-（那一半由 `tests/test_v_signing_belongs_to_f_and_b.py` 与 `tests/test_policy.py` 守），
+（那一半由 `tests/test_v_signing_belongs_to_b_e_f.py` 与 `tests/test_policy.py` 守），
 而"模型知不知道撞上去会白丢一次"没有任何一条判据看得见 —— 它此前只活在代码里。
 
 ## 判据

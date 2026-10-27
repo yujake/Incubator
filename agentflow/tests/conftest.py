@@ -621,6 +621,34 @@ def _reset_provider_cooldowns():
     _P.clear_provider_cooldowns()
 
 
+@pytest.fixture(autouse=True)
+def _restore_role_seams():
+    """每条判据前后都把「逐角色默认模型缝」恢复原样（进程级状态的副作用隔离）。
+
+    与上面那条同一个理由，只是另一张进程级的表：`llmseam._ROLE_SEAMS` 是
+    F / V 在工具层那条路上取缝的唯一来源（`attack_tools._agent_for` →
+    `agent_f.default_llm()`）。有两条判据会把它设成真的缝（`test_host_wiring`
+    的「F 无条件装配缝」、`test_f_reasoning_is_its_working_mode` 同族）——
+    那是它们该测的东西；但它们跑完之后那个缝留在表里，而下一条依赖
+    "没登记缝 ⇒ `dead_end(缺工具)`"的负控（`test_agent_f_inference` 的
+    `test_the_tool_layer_path_gets_the_registered_seam`）就换了前提：
+    实测跑成 `action='proof'`、history 上没有 `product` 键，报 `KeyError: 'product'`
+    —— 失败信息完全指不到"前提被上一条判据改掉了"（2026-10-27 复现：单独跑绿、
+    与那两个文件一起跑红）。
+
+    为什么修在这里而不是逐个改那三条判据：污染源是进程级状态这一类问题，
+    以后还会有第五、第六条判据去登记缝；在夹具这一层统一还原，才不必每加一条
+    判据就记得"我也要收尾"（`test_verify_proof_takes_text_from_the_shelf` 此前
+    就是手写 save/restore 的，那是同一个需求的第三份实现）。
+    """
+    from agentflow import llmseam as _LS
+
+    saved = dict(_LS._ROLE_SEAMS)
+    yield
+    _LS._ROLE_SEAMS.clear()
+    _LS._ROLE_SEAMS.update(saved)
+
+
 @pytest.fixture
 def artifacts_ws(tmp_path: Path) -> Path:
     """六面只读模型的夹具工作区（裁定 J2/K2；见 :func:`make_artifacts_sample`）。"""

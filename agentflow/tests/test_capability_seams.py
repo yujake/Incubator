@@ -5,9 +5,12 @@
 与 `ToolSpec.handler` 的真形参也是两件事。声明里多一个实现收不下的 property，后果是一段静默的错位：① 参数门放行（它读的正是那份声明）⇒ 写一行 `running`；②
 执行到handler 时才报"不认这些参数" ⇒ 台账里那一行看起来像"跑失败了"，而这次调用其实从来没被执行过（工具层那半还会被兜成 `kind='unexpected'`，一个"库内部出错"的假 bug 分类）。
 所以每层各有一条机器判据：每一层都必须做到"声明的每个 property，要么被实现接受，要么逐条登记进这一层的接缝表并写明理由"——不许留下第三态。
-## 落点为什么是"导入期 / 注册期"而不是"跑一次测试"
-判据的价值取决于它会不会被忘记跑。能力层挂在 `import agentflow.capabilities`（`assert_capabilities` 第 [8] 条）；
-工具层挂在 `ToolRegistry.register`（`tools/base.py`，与既有的 `roles ⊆ schema.ROLES` 判据同一个入口与同一个理由）。本文件的用例是这两条判据的读数与自校，
+## 落点为什么是"显式审计 / 注册期"而不是"跑一次测试"
+判据的价值取决于它会不会被忘记跑。工具层挂在 `ToolRegistry.register`（`tools/base.py`，与既有的 `roles ⊆ schema.ROLES` 判据同一个入口与同一个理由）；
+能力层原先挂在导入期，2026-10-27 业主批改成显式（`capabilities.run_capability_audit()`）——
+导入期那趟实测给每条 CLI 命令加 1.2 秒，且任何一格登记过期都会让所有命令 exit 1。
+摘出来之后，"不会忘记跑"由两处承担：`scripts/release_check.py` 的 imports 项与
+`tests/test_capabilities_audit_is_explicit.py`。本文件的用例是这两条判据的读数与自校，
 不是它们的存在形式。
 ## 三条自校（守判据自己，不是守被测对象）
 - `test_injected_property_is_reported_and_removing_the_seam_reports_sleep`：在内存里（不动盘上一个字节）注入一个假 property、
@@ -45,12 +48,16 @@ def _properties(spec) -> set[str]:
 
 # ============================================================ 能力层：正控
 
-def test_import_time_assertion_covers_every_declared_property():
-    """正控：导入期那条断言真的走遍了能力表的全部 property，且零违反。
+def test_capability_audit_covers_every_declared_property():
+    """正控：显式跑一趟审计，它真的走遍了能力表的全部 property，且零违反。
 
     "零违反"必须与"走遍了"一起报：判据解析出空集时无条件通过，是本项目
     P16 的通用形态（空集永远是子集）。
+
+    2026-10-27：审计不再挂在导入期（`run_capability_audit` 是唯一入口），所以这里
+    第一件事就是显式跑一趟 —— 判据要守的东西一个字没变，变的是"谁触发它"。
     """
+    C.run_capability_audit(print_readings=False)
     cov = C.param_assert_coverage()
     assert cov["declared"] >= 100, f"能力表里只数出 {cov['declared']} 个 property ⇒ 扫描器没接上"
     assert cov["checked"] == cov["declared"], (
@@ -58,9 +65,9 @@ def test_import_time_assertion_covers_every_declared_property():
         "判据漏看了声明，'零违反'此时不构成证据"
     )
     assert cov["actions"] == sum(len(v) for v in C.CAPABILITIES.values())
-    # 模块级读数与就地算出来的必须一致（`assert_capabilities` 导入期写过一次）
+    # 模块级读数与就地算出来的必须一致（上一趟审计写过一次）
     assert C.PARAM_ASSERT_COVERAGE == cov, (
-        "模块级 PARAM_ASSERT_COVERAGE 与就地复算不一致 ⇒ 导入期那次断言的读数不是这份表"
+        "模块级 PARAM_ASSERT_COVERAGE 与就地复算不一致 ⇒ 上一趟审计写的读数不是这份表"
     )
     assert C.param_seam_violations() == []
     assert C.stale_param_seams() == []

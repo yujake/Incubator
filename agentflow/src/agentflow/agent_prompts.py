@@ -2743,7 +2743,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 十一格是同一支重算探针（`tests/test_agent_prompts.py::_surface_digest`，口径只那一处）
 #: 的现算值，不是手抄。
 #:
-PROMPT_VERSION = "p213"
+#: `p214`（2026-10-27，`R-BE4` 的 D1 Phase A，业主批准）：把 D 的主力动作接进唯一的注册表。
+#:
+#: ① `tools/__init__.py` 的 `_MODULES` 加 `conjecture_tools`：`conjecture.register_conjecture`
+#:    从此由 `build_registry` 装配（改前只有 `capabilities` 的读数"读到"它，
+#:    `agent_d/_support.py::install_d_tools` 那张自建表里才有它）。它的 `roles=("D",)`
+#:    ⇒ 十一个角色里只有 D 的工具面多这一行，其余十格逐字节不变。
+#: ② 连带的两处：`tests/golden/tool_surface_snapshot.json` 的 `summary.count` 117 → 118
+#:    （人工重冻，见该文件的 diff）；`capabilities.ACTION_ONLY_PARAMS` 里
+#:    `("D", "register_conjecture")` 那条"这条动作没有工具层"的登记删除（登记过期）。
+#: ③ 不进段的一笔：`tests/fixtures/prompt_cache_warm.json` 没有重落（重落要花模型钱，
+#:    业主没批）⇒ 缓存因此 stale，与 p213 那一笔同一条已知待办。
+#:
+#: 逐格：只有 D 动（多一行 `conjecture.register_conjecture(<13 个参数名>)`）；
+#: A..H / L / V 与 p213 同值。十一格是同一支重算探针的现算值，不是手抄。
+#:
+PROMPT_VERSION = "p214"
 
 
 

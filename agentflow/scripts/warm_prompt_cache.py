@@ -37,6 +37,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import agent_prompts as AP  # noqa: E402
+from agentflow import cachectl as CACHECTL  # noqa: E402  - key 指纹的唯一实现（见 key_fingerprint）
 from agentflow import leanscope as LEANSCOPE  # noqa: E402
 from agentflow import modelgw as MG  # noqa: E402
 from agentflow import promptstability as PSTAB  # noqa: E402
@@ -144,6 +145,18 @@ OTHER_RUN_FACTS: Mapping[str, Any] = {
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+#: 预热读数里那一格 key 指纹 —— 直接取 `cachectl` 的实现（不是转发、更不是第二份）。
+#:
+#: 为什么不再内联一份（`R-BE4`，2026-10-27 业主批准）：这里原先写的是
+#: `hashlib.sha256(key.encode()).hexdigest()[:16]`，与 `cachectl.fingerprint` 只差
+#: 一个边界 —— 空 key。那份返回空串（"没有 key"），这份返回 `sha256("")[:16]`
+#: = `e3b0c44298fc1c14`，于是"没有 key 时落过读数"这一档会被 `cachectl._key_matches`
+#: 读成"换过 key 了"（`key.tri="stale"`），而事实是这一档根本没有 key。
+#: 判据 `tests/test_cache_key_fingerprint_is_one_implementation.py` 钉住"对象同一"
+#: 与"每个 key 上结论逐字相同"。
+key_fingerprint = CACHECTL.fingerprint
 
 
 def lean_reading() -> tuple[bool, str]:
@@ -751,8 +764,9 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             # （`sha256(key)[:16]` + 模型 + base_url，key 本身不落盘）。直跑本脚本
             # 与走 `cachectl.warm` 写的是同一份读数 —— 少这三格，那一路会落成
             # `key_fingerprint_missing`（"换没换过不可判定"），而两份读数看起来一样。
-            "key_fingerprint": hashlib.sha256(
-                str(getattr(spec, "api_key", "") or "").encode("utf-8")).hexdigest()[:16],
+            # 指纹只许一处实现：`key_fingerprint()` 转发 `cachectl.fingerprint`
+            # （`R-BE4`：内联那份在空 key 上与它结论相反，见该函数的 docstring）。
+            "key_fingerprint": key_fingerprint(str(getattr(spec, "api_key", "") or "")),
             "key_model": str(getattr(spec, "model", "") or ""),
             "key_base_url": str(getattr(spec, "base_url", "") or ""),
             "reasoning_effort": str(getattr(spec, "reasoning_effort", "") or ""),

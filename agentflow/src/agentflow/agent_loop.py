@@ -5418,6 +5418,34 @@ class AgentLoop:
                          "（这一拍没有正文可念：唤醒里的 message 是空的 ⇒ 本拍按没查成记）")
         return "\n".join(lines)
 
+    def _clock_next_wake(self) -> float | None:
+        """主时钟给的"下一拍应当在多少秒后醒"（读不成 => `None`，不折成 0）。
+
+        口径写死在 `clock.TimerBook.next_wake_epoch`：堆顶 / 下次补偿对账 /
+        下一次周期性巡查取较早者。挂机的片长封顶读的就是这一格
+        （`_park_sleep_once`），于是"到点"不会被一个长拍压过去。
+
+        三态：没有工作区根 / 读数 `checked=False` / 没有这一格 => `None`。
+        这一档下片长按既有退避照旧封顶 —— 不许把"没查成"折成"马上要醒"：
+        那会把挂机变成 0.05 秒一轮的忙等，而忙等在读数上与挂机长得不一样。
+        """
+        root = self._clock_root()
+        if not root:
+            return None
+        try:
+            got = CLK.next_due(root)
+        except Exception:  # noqa: BLE001 - 读不成是"没查成"
+            return None
+        if not isinstance(got, dict) or not got.get("checked"):
+            return None
+        value = got.get("next_wake_sec")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
     def _park_sleep_once(self, *, run: "AgentLoop.LoopRun",
                          parked: Mapping[str, Any]) -> dict[str, Any]:
         """挂机的一拍：睡到"下一个到点/唤醒"，返回这一拍的读数。
@@ -5426,6 +5454,12 @@ class AgentLoop:
         waiter 里有"它会自己响"的时刻（闹钟的 `due_at`、`max_wait_sec` 的上限），
         再按那个时刻封顶 —— 于是"到点"不会被一个长拍压过去，而"事件唤醒"最迟一拍
         就能被读到。每一拍都记进主时钟的等待账（`kind="park"`），不是空转。
+
+        片长的封顶还接上了主时钟的 `next_wake_in_sec`（`_clock_next_wake`）：
+        那是 `min(堆顶, 下次补偿对账, 下一次周期性巡查)` 的口径，于是这一拍精确睡到
+        下一个到点，而不是今天这样一刀切到 `PARK_SLICE_MAX_SEC`（300 秒）。
+        它只在为正数时参与封顶：已经过点（<= 0）那一档由下一次 pump 自己投递，
+        在这里空转只会把挂机变成 0.05 秒一轮的忙等。
 
         这一拍睡到一半被叫停时（Q21）：`_park_slice` 的每一片之后都读过停机开关，
         命中就带着 `stopped=True` 提前返回。这里只把这件事变成读数
@@ -5454,6 +5488,11 @@ class AgentLoop:
         patrol_left = self._patrol_left()
         if patrol_left is not None:
             horizon.append(max(0.0, float(patrol_left)))
+        # 主时钟的"下一拍到点"（施工单第 ③ 条的最后半句）：堆顶 / 下次对账 /
+        # 下一次周期性巡查取较早者，于是片长精确睡到下一个到点。
+        clock_left = self._clock_next_wake()
+        if clock_left is not None and clock_left > 0.0:
+            horizon.append(float(clock_left))
         if horizon:
             seconds = min(seconds, max(0.05, min(horizon)))
         seconds = max(0.05, min(seconds, PARK_SLICE_MAX_SEC))
@@ -9429,7 +9468,10 @@ class AgentLoop:
                 continue
             items.append({"role": call.role, "action": call.action, "instance": call.instance,
                           "task_id": r.task_id, "status": r.status, "outcome": r.outcome,
-                          "refusal_reason": r.refusal_reason, "detail": _clip(r.detail, 200)})
+                          # 批量那一路的窗口：常量真身在 `policy.SUMMON_MANY_DETAIL_CHARS`
+                          # （与单条拒信的 `REFUSAL_HEAD_CHARS` 刻意分开，`R-BE4`）。
+                          "refusal_reason": r.refusal_reason,
+                          "detail": _clip(r.detail, P.SUMMON_MANY_DETAIL_CHARS)})
         out: dict[str, Any] = {
             "summoned": [f"{i['role']}.{i['action']}" for i in items],
             "count": len(items),
@@ -10095,7 +10137,7 @@ class AgentLoop:
         path = str(payload.get("llm_run_path") or "") if isinstance(payload, Mapping) else ""
         out.update(
             ok=bool(res.ok), task_id=res.task_id, status=res.status, outcome=res.outcome,
-            refusal_reason=res.refusal_reason, detail=_clip(res.detail, 400),
+            refusal_reason=res.refusal_reason, detail=_clip(res.detail, P.REFUSAL_HEAD_CHARS),
             children=list(res.children or []),
         )
         if not res.ok and self._needs_relay(role, str(res.refusal_reason or "")):

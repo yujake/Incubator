@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -85,21 +86,56 @@ def _zone_item(changed: list[str], *, ledger: str | None = None) -> RC.Item:
     return RC.item_noai(RC.Report(), changed, ledger=ledger)
 
 
-def _ledger_copy_with(tmp_path: Path, path: str, mutate) -> tuple[Path, dict, dict]:
-    """把真实台账复制到 `tmp_path`，只改 `path` 那一条；返回 (副本, 改前, 改后)。
+def _ledger_copy_with(tmp_path: Path, path: str, mutate,
+                      *, source: Path | None = None) -> tuple[Path, dict, dict]:
+    """把 `source`（默认真实台账）复制到 `tmp_path`，只改 `path` 那一条；返回 (副本, 改前, 改后)。
 
     `before` 是 `mutate` 之前的深拷贝：负控要先证明"注入真的生效"，
     否则那条用例的读数可能是假绿（改没改成都得到同一个结论）。
+
+    `source` 用来从一份已签字的副本上再打负控：真实台账在 2026-10-27 重新登记之后
+    `reviewers` 全空（旧签字审的是旧字节），所以"有签字"这个前提只能由夹具造出来。
     """
-    payload = json.loads(_REAL_LEDGER.read_text(encoding="utf-8"))
+    src = source if source is not None else _REAL_LEDGER
+    payload = json.loads(src.read_text(encoding="utf-8"))
     entry = next((e for e in payload["entries"] if e.get("path") == path), None)
-    assert entry is not None, f"真实台账里没有 {path} 这一条（负控的注入对象不存在）"
+    assert entry is not None, f"{src} 里没有 {path} 这一条（负控的注入对象不存在）"
     before = json.loads(json.dumps(entry, ensure_ascii=False))
     mutate(entry)
     after = json.loads(json.dumps(entry, ensure_ascii=False))
-    copy = tmp_path / G.LEDGER_NAME
+    copy = tmp_path / f"mutated-{src.name}"
     copy.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return copy, before, after
+
+
+def _signed_ledger_copy(tmp_path: Path, path: str = _APPROVED_ZONE_PATH) -> Path:
+    """造一份"已签字"的台账副本（不动真实台账）。
+
+    为什么必须自己造：2026-10-27 按业主要求把受保护路径重新登记到当前字节
+    （`noai_gate.py --baseline`，登记 ≠ 批准），于是真实台账里"这一版有 2 名 reviewer"
+    的行一条都不剩了 —— 旧的 6 名 reviewer 审的是旧字节，把他们的名字留在新
+    `sha256` 上就是假批准，所以 `--baseline` 会（也应该）把 `reviewers` 清空。
+
+    判据不能依赖"真实台账恰好还留着一行已批准"：那一行是世界状态，不是代码性质；
+    世界一变（这次就是这么变的），判据就红得莫名其妙。所以这里把"已批准"这个前提
+    造出来：副本里把该行的 `sha256` 钉成盘上这一版、塞两名不同的 reviewer，
+    再用 `ledger=` 旁路喂给 `item_noai`。真实台账一个字节不动。
+    """
+    payload = json.loads(_REAL_LEDGER.read_text(encoding="utf-8"))
+    entry = next((e for e in payload["entries"] if e.get("path") == path), None)
+    assert entry is not None, f"真实台账里没有 {path} 这一条（副本的注入对象不存在）"
+    entry["sha256"] = G.sha256_file(_REAL_ROOT / path)
+    entry["reviewers"] = [
+        {"name": "fixture-reviewer-a", "at": "2026-10-27T00:00:00+08:00",
+         "scope": "夹具：本用例自造的两名 reviewer 之一", "verdict": "逐行走查通过",
+         "evidence_path": "", "evidence_sha256": ""},
+        {"name": "fixture-reviewer-b", "at": "2026-10-27T00:00:01+08:00",
+         "scope": "夹具：本用例自造的两名 reviewer 之二", "verdict": "逐行走查通过",
+         "evidence_path": "", "evidence_sha256": ""},
+    ]
+    copy = tmp_path / f"signed-{G.LEDGER_NAME}"
+    copy.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return copy
 
 
 def _approval_of(it: RC.Item, path: str) -> dict:
@@ -109,14 +145,19 @@ def _approval_of(it: RC.Item, path: str) -> dict:
     return got[0]
 
 
-def test_a_zone_change_with_two_reviewers_is_a_human_pass() -> None:
-    """正控（签字后的契约）：当前字节 + 真实台账 ⇒ `pass`，通路必须写明是人审。
+def test_a_zone_change_with_two_reviewers_is_a_human_pass(tmp_path: Path) -> None:
+    """正控（签字后的契约）：当前字节 + 已签字的台账副本 ⇒ `pass`，通路必须写明是人审。
 
     改前这一条叫 `test_a_zone_change_is_fail`，断言 `== "fail"`。签字的落点就是这条
     路径（2 名不同 reviewer + hash 与盘上一致），所以它现在必是 `pass`。
     下面两条负控证明它不是"命中禁改区就放行"：同一段判据对未批准的改动仍然是红的。
+
+    为什么喂副本而不是真实台账：见 :func:`_signed_ledger_copy` —— 2026-10-27 的重新登记
+    把真实台账的 `reviewers` 清空了（旧签字审的是旧字节），而这条判据要钉的是判据本身
+    在"有 2 名 reviewer 且 hash 一致"时给出什么结论。
     """
-    it = _zone_item([_APPROVED_ZONE_PATH])
+    signed = _signed_ledger_copy(tmp_path)
+    it = _zone_item([_APPROVED_ZONE_PATH], ledger=str(signed))
     assert it.verdict == "pass", f"{it.verdict}：{it.notes}"
     assert it.detail.get("pass_path") == "human", (
         f"签字通路必须被读成**人审**（实测 detail={it.detail}）—— "
@@ -135,16 +176,20 @@ def test_negative_control_a_zone_change_without_signatures_is_fail(tmp_path: Pat
     """负控①：把该条目的 `reviewers` 清空 ⇒ 判据必须红（`fail` / 退出码 1）。
 
     这就是"未批准的禁改区改动"的真实形态：登记过、hash 也对，只是没人签字。
-    注入只打在台账副本上。副本路径与两份 sha256 都随断言信息带出来，便于人复核。
+    前提自己造（见 :func:`_signed_ledger_copy`）：先造一份已签字的副本，再把它清空 ——
+    这样"注入真的生效"可证，而这条判据不再依赖真实台账里恰好留着一行已批准。
     """
+    signed = _signed_ledger_copy(tmp_path)
+
     def drop_signatures(entry: dict) -> None:
         entry["reviewers"] = []
 
-    copy, before, after = _ledger_copy_with(tmp_path, _APPROVED_ZONE_PATH, drop_signatures)
-    assert before["reviewers"], "注入前提失败：真实台账那一条本来就没有 reviewer 可清"
+    copy, before, after = _ledger_copy_with(tmp_path, _APPROVED_ZONE_PATH, drop_signatures,
+                                            source=signed)
+    assert before["reviewers"], "注入前提失败：造出来的副本那一条没有 reviewer 可清"
     assert after["reviewers"] == [], after
-    assert G.sha256_file(copy) != G.sha256_file(_REAL_LEDGER), (
-        f"注入没有生效：副本 {copy} 与真实台账的字节完全相同"
+    assert G.sha256_file(copy) != G.sha256_file(signed), (
+        f"注入没有生效：副本 {copy} 与已签字副本的字节完全相同"
     )
     it = _zone_item([_APPROVED_ZONE_PATH], ledger=str(copy))
     assert it.verdict == "fail", (
@@ -168,7 +213,9 @@ def test_negative_control_a_zone_change_whose_hash_drifted_is_fail(tmp_path: Pat
         h = str(entry["sha256"])
         entry["sha256"] = ("0" if h[0] != "0" else "1") + h[1:]
 
-    copy, before, after = _ledger_copy_with(tmp_path, _APPROVED_ZONE_PATH, flip_one_hex_digit)
+    signed = _signed_ledger_copy(tmp_path)
+    copy, before, after = _ledger_copy_with(tmp_path, _APPROVED_ZONE_PATH, flip_one_hex_digit,
+                                            source=signed)
     assert after["sha256"] != before["sha256"], before
     assert len(after["sha256"]) == 64 and after["sha256"] == after["sha256"].lower()
     assert after["sha256"] != G.sha256_file(_REAL_ROOT / _APPROVED_ZONE_PATH), (
@@ -205,7 +252,7 @@ def test_cli_distinguishes_no_change_set_from_an_empty_one(tmp_path: Path) -> No
     empty = tmp_path / "empty.txt"
     empty.write_text("", encoding="utf-8")
     j1 = tmp_path / "a.json"
-    assert RC.main([*_ONLY_NOAI, "--changed-file", str(empty), "--json", str(j1)]) == 2
+    assert RC.main([*_ONLY_NOAI, "--changed-file", str(empty), "--json-out", str(j1)]) == 2
     d1 = json.loads(j1.read_text(encoding="utf-8"))
     assert d1["counts"]["skipped"] == 7, d1["counts"]
     assert d1["skipped"] == ["tests", "selftests", "tools", "verify", "lint", "contract", "imports"]
@@ -214,7 +261,7 @@ def test_cli_distinguishes_no_change_set_from_an_empty_one(tmp_path: Path) -> No
     assert d1["items"][0]["verdict"] == "pass", "空改动集在这一项上仍是 pass"
 
     j2 = tmp_path / "b.json"
-    assert RC.main([*_ONLY_NOAI, "--json", str(j2)]) == 2
+    assert RC.main([*_ONLY_NOAI, "--json-out", str(j2)]) == 2
     d2 = json.loads(j2.read_text(encoding="utf-8"))
     assert d2["items"][0]["verdict"] == "unknown", "没给改动集 ⇒ 这一项没查成"
 
@@ -225,17 +272,26 @@ def test_cli_changed_file_with_an_approved_zone_path_is_a_human_pass(tmp_path: P
     改前这一条叫 `test_cli_changed_file_with_a_zone_path_is_fail`、断言退出码 1（实测
     拿到 2，因为签字之后这一项判 `pass`）。现在同一条命令的读数是：noai 项 `pass`
     且通路写明人审，而总判定仍因 `--skip` 关掉的七项记 `unknown` ⇒ 退出码 2。
+
+    为什么要分两层断言：`release_check.__main__` 没有 `--ledger` 旁路（生产路径
+    恒用仓库默认台账），而默认台账在 2026-10-27 重新登记之后没有任何一行有 2 名
+    reviewer（旧签字审的是旧字节）。所以这一条钉两层：
+      ① `item_noai(..., ledger=<已签字副本>)` ⇒ `pass`/`human`（release_check 这一层）；
+      ② `noai_gate.py --paths <该路径> --ledger <同一份副本>` ⇒ 退出码 0（门本体那一层）。
+    这样它仍然是"CLI 面的签字后契约"，但不再把"真实台账恰好留着一行已批准"当前提。
     """
-    ch = tmp_path / "ch.txt"
-    ch.write_text("docs/INDEX.md\nsrc/agentflow/dedup.py\n", encoding="utf-8")
-    out = tmp_path / "j.json"
-    assert RC.main([*_ONLY_NOAI, "--changed-file", str(ch), "--json", str(out)]) == 2
-    d = json.loads(out.read_text(encoding="utf-8"))
-    assert d["counts"]["skipped"] == 7, d["counts"]
-    assert d["overall"] == "unknown", d["overall"]
-    item = d["items"][0]
-    assert item["verdict"] == "pass", item
-    assert item["detail"].get("pass_path") == "human", item["detail"]
+    signed = _signed_ledger_copy(tmp_path)
+    it = _zone_item(["docs/INDEX.md", _APPROVED_ZONE_PATH], ledger=str(signed))
+    assert it.verdict == "pass", it
+    assert it.detail.get("pass_path") == "human", it.detail
+    assert it.detail.get("ledger_override") == str(signed), it.detail
+
+    gate = subprocess.run(
+        [sys.executable, str(_REAL_ROOT / "scripts" / "noai_gate.py"),
+         "--check-approvals", "--paths", _APPROVED_ZONE_PATH,
+         "--ledger", str(signed), "--quiet"],
+        cwd=str(_REAL_ROOT), capture_output=True, text=True, encoding="utf-8")
+    assert gate.returncode == 0, (gate.returncode, gate.stdout[-400:], gate.stderr[-400:])
 
 
 def test_negative_control_cli_unapprovable_zone_path_is_still_fail(tmp_path: Path) -> None:
@@ -268,7 +324,7 @@ def test_both_ways_of_declaring_a_change_set_can_pass(tmp_path: Path, flag: str)
         ch = tmp_path / "ch.txt"
         ch.write_text("docs/INDEX.md\n", encoding="utf-8")
         assert RC.item_noai(rep, ["docs/INDEX.md"]).verdict == "pass"
-        assert RC.main([*_ONLY_NOAI, "--changed-file", str(ch), "--json",
+        assert RC.main([*_ONLY_NOAI, "--changed-file", str(ch), "--json-out",
                         str(tmp_path / "j.json")]) == 2
         d = json.loads((tmp_path / "j.json").read_text(encoding="utf-8"))
         assert d["items"][0]["verdict"] == "pass"

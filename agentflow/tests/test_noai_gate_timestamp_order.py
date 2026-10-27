@@ -22,8 +22,10 @@ from __future__ import annotations
 import hashlib
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -216,9 +218,23 @@ def test_injection_negative_control_severing_the_wiring_turns_this_file_red(
 
     形态照本仓惯例：盘外整树副本 + 打印副本 sha256 + 断言"注入点恰好命中 1 次"。
     子进程跑的是本文件，所以"接线被撤掉"这件事的结果就是"本文件里那两条断言红"。
+
+    副本根为什么不用 `tmp_path`：Windows 的路径上限是 260 字符，而 pytest 给
+    本用例的 `tmp_path` 里带着完整的用例名（这个名字本身就 70 个字符），
+    再拼上 `tree/` 与树里的深路径（`tests/golden/...`）就超限 ⇒ `write_bytes` 抛
+    `FileNotFoundError`（2026-10-27 实测，报的是"父目录不存在"，不是权限问题）。
+    所以副本根改成 `tempfile.mkdtemp()` 给的短目录，用完自己清掉；
+    它仍然不是仓库里的受跟踪路径（`temp/` 等价位置），"盘外副本"这条性质不变。
     """
     src_root = _ROOT
-    dst_root = tmp_path / "tree"
+    dst_root = pathlib.Path(tempfile.mkdtemp(prefix="noai-tree-"))
+    try:
+        _run_injection_negative_control(src_root, dst_root)
+    finally:
+        shutil.rmtree(dst_root, ignore_errors=True)
+
+
+def _run_injection_negative_control(src_root: pathlib.Path, dst_root: pathlib.Path) -> None:
     files = _source_files(src_root)
     assert "scripts/noai_gate.py" in files and _NODE.split("::")[0] in files, files[:5]
     for rel in files:

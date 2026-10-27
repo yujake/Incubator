@@ -1156,6 +1156,8 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_action" + "_summary",        # 已删的只读小函数（按段拼写：字面量本身不许出现在树里，否则会被 deprecated-forms 判据当成"已删符号还有落点"）：`docs/FC27-PENDING-2026-10-21.md` 那一段保留说明自己写着"不删也不改指路"（FC-27 走查记录要逐字可查 reviewer 当时批准的是哪几个函数），`specs/l.py` 那一处是墓碑句、属 FC-27 禁改区 ⇒ 两处都不能换成正名
     "_tool" + "_summary",          # 同上（与上面那一条成对出现、同两处）
     "_import_mathlib_probe",       # 2026-10-25 合并时删掉的 umbrella 探针：`toolchain.py` 的注释在讲"改前那两处探测"，`tests/test_mathlib_reading_has_one_source.py` 的判据 ② 就是断言它不存在 —— 留痕必须点名被删的东西，否则"删了什么、凭什么删"不可查
+    "_MATCH",                      # 2026-10-27 删除说明里点名的旧名（`capabilities.py` 原处那段"为什么删掉那个匹配函数"的墓碑句）：留痕必须写出被删的东西叫什么，否则读的人不知道删的是哪一件。登记而不改那段说明，按本表纪律
+    "_schema_allows_null",         # 同型：2026-10-27 删掉的那条"null 闸"（`tools/base.py` 原处留的删除说明点了它）。它描述的是一个不打算落地的判据，留名是为了让下一个人明白"这里曾经有过、我们决定不要"
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

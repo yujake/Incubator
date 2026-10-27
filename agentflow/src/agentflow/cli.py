@@ -32,6 +32,7 @@ from pathlib import Path
 from . import schema as S
 from . import conceptrows as CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 from . import tty
+from . import __version__ as _PKG_VERSION
 from .canonical import json_default
 from .stop_reasons import STOP_REASONS
 from .console import pin_utf8
@@ -93,12 +94,24 @@ def load_config(root: Path, path: str | None = None) -> dict:
         try:
             return json.loads(text)
         except Exception as e:
-            raise SystemExit(f"配置解析失败（{p}；本机无 yaml 依赖，按 JSON 解析）：{e}") from e
+            _config_error(f"配置解析失败（{p}；本机无 yaml 依赖，按 JSON 解析）：{e}", e)
     try:
         # YAML 是 JSON 的超集 ⇒ 这里对 .json 配置同样成立，不需要再回退。
         return yaml.safe_load(text) or {}
     except Exception as e:
-        raise SystemExit(f"配置解析失败（{p}）：YAML 语法错误：{e}") from e
+        _config_error(f"配置解析失败（{p}）：YAML 语法错误：{e}", e)
+
+
+def _config_error(message: str, cause: BaseException) -> None:
+    """配置读不成 ⇒ 一行人话 + 退出码 2（没查成），不是 1（查过了有问题）。
+
+    为什么要单独这一支：`SystemExit("字符串")` 会被解释器按 1 收尾，而 1 在本仓的
+    三态里逐字等于"查过了、有问题" —— 一次 YAML 缩进错误会被 CI 读成"检查跑过并且
+    发现了问题"。配置读不进来意味着这一次什么都没查（各命令连默认值都还没装配），
+    所以是 2。消息仍然逐字给到 stderr：报错的准确性不因为换了退出码而让步。
+    """
+    print(message, file=sys.stderr)
+    raise SystemExit(2) from cause
 
 
 def make_store(root: Path | None = None) -> Store:
@@ -234,6 +247,12 @@ def _lean_first_screen(root: Path, *, stream=None) -> dict:
         sc["problems"].append(f"解释器那一档：{found['problem']}")
 
     def emit(line: str) -> None:
+        """把一行打到 `out`（不是 `print` 直连 stdout）。
+
+        为什么留这一层：首屏读数要能被判据整段收走（`out` 可注入），
+        而"哪几台机器该看到哪一行"这件事只在这一处决定；散着写 `print`，
+        判据就只能去截 stdout，收不到的子进程输出会把读数弄脏。
+        """
         print(line, file=out)
 
     emit(tty.paint("[开机自检] Lean 工具链", "bold"))
@@ -1120,7 +1139,10 @@ def command_paths() -> tuple[tuple[str, str], ...]:
     return tuple(pairs.items())
 
 
-#: 旧名清单（28 个，`build_parser()` 的 choices 必须逐字等于它）。
+#: 旧名清单（28 个）。`build_parser()` 的 choices 必须与它同集：判据是集合相等
+#: （`tests/test_cli_grouped_entry_points.py`），表序由 `build_parser` 的登记顺序
+#: 决定，不是抄这一份的序。原先这里写"必须逐字等于它"—— 两个 28 元组顺序不同，
+#: 逐字相等当场为 False，而判据从来只比 set。
 LEGACY_COMMANDS: tuple[str, ...] = tuple(old for old, _path in command_paths())
 
 #: 顶层里"带值"的那两个开关 —— 找命令位置时必须跳过它们的值，否则
@@ -1647,7 +1669,13 @@ def _session_id() -> str:
 
 
 def _dispatch(spec: RunSpec, args) -> int:
-    """把归一后的 `RunSpec` 交给对应那条路的执行体。"""
+    """把归一后的 `RunSpec` 交给对应那条路的执行体。
+
+    认不出的模式 ⇒ 一行人话 + 退出码 2。原文是 `raise SystemExit("<话>")`，而
+    字符串形态会被解释器按 1 收尾 —— 消息里写着"没查成"、码却是"查过了有问题"，
+    两者在同一句话里互相打架；今天 `START_MODES` 之外没有可达路径，但口径不许
+    靠"不可达"来成立。
+    """
     if spec.mode == MODE_WEB:
         return _exec_web(spec, args)
     if spec.mode == MODE_TOPIC:
@@ -1656,8 +1684,9 @@ def _dispatch(spec: RunSpec, args) -> int:
         return _exec_role(spec, args)
     if spec.mode == MODE_PROJECT:
         return _exec_project(spec, args)
-    raise SystemExit(f"[start] 没查成：认不出的模式 {spec.mode!r}（"
-                     f"{'/'.join(START_MODES)}）")
+    print(f"[start] 没查成：认不出的模式 {spec.mode!r}（{'/'.join(START_MODES)}）",
+          file=sys.stderr)
+    raise SystemExit(2)
 
 
 def _announce_cache_line(spec: RunSpec) -> None:
@@ -2688,6 +2717,10 @@ def _parse_drive(items) -> tuple[dict, str]:
 #: 单趟 `run-agent` 的退出码分类表（业主 2026-10-19 重排；`--help`、`cmd_run_agent` 的
 #: docstring、`_run_agent_exit_code` 的 docstring 三处同口径，逐档都对得上这里）。
 #:
+#: 域 × 码对照见 `agentflow.stop_reasons.EXIT_CODE_DOMAINS["loop"]`，全仓统一的三条口径见
+#: `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6，2026-10-27）：同一个 `1` 在四条命令里
+#: 含义不同，那句话只登记在那张表里，不在这里复述。
+#:
 #: 表体不在这里写：它与界面徽标同源于 :data:`agentflow.stop_reasons.STOP_REASONS`
 #: （Q23，2026-10-26）。改前它与 `webui.server._STOP_BADGES` 各写一份，`final_refused`
 #: 只进了这一边，界面于是显示一个空徽标；反方向还多一格 `max_steps`。现在这里只投影
@@ -2964,6 +2997,12 @@ def _exec_role(spec: RunSpec, args) -> int:
         args.sid = SS.session_id()
 
     def seam_for(role_name: str):
+        """按角色名造一条接模型的缝（复用本次的 root / sid / 预算 / store）。
+
+        为什么要闭包而不是每处各传一遍：这几个参数在一条命令里是常量，
+        而参数一多，某一条召唤路径漏传一个就会静默换掉账本落点（`store`）
+        或会话号 —— 症状是"跑起来了但账落在别处"，没有任何地方会报错。
+        """
         return _agent_seam_factory(role_name, root=root, sid=args.sid,
                                    usd_budget=args.budget_usd, store=st)
 
@@ -3908,20 +3947,23 @@ STATS_KINDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _stats_readout(kind: str, root: Path, args):
+def _stats_readout(kind: str, root: Path, args, *, scanned=None):
     """按名字取一条读数（`gates` 多两个入参：项目根与报告路径）。
 
     唯一的分支在这里：`gates` 的读数需要"这是哪个项目"才知道论文/验收那几格查什么，
     其余三条只吃一个工作区根。把它做成一个函数而不是散在 `cmd_stats` 里，是为了让
     "哪个读数要哪些入参"只有一处说法。
+
+    `scanned`（2026-10-27，R-BE1 的 ⑥-5）：`stats all` 读一次盘，四条读数共用 ——
+    改前每条各读一遍（实测 `events.jsonl` 与 `sessions/*.jsonl` 各 4 遍）。
     """
     from . import readouts as RO
 
     fn = RO.READOUTS[kind]
     if kind == "gates":
         return fn(root, project_dir=str(getattr(args, "project_dir", "") or ""),
-                  report_path=str(getattr(args, "report", "") or ""))
-    return fn(root)
+                  report_path=str(getattr(args, "report", "") or ""), scanned=scanned)
+    return fn(root, scanned=scanned)
 
 
 def cmd_stats(args) -> int:
@@ -3940,6 +3982,7 @@ def cmd_stats(args) -> int:
 
     退出码：`0` 查过了（含"全 0"）/ `2` 没查成（JSON 里 `state="unknown"`）。
     没有 1：这一层不是判据，它不判"错误太多"。
+    域 × 码对照见 `stop_reasons.EXIT_CODE_DOMAINS["readout"]`（`R-BE1` 的 ③-6，2026-10-27）。
 
     `errors` 那一档有一个刻意的例外：不给 `--readout` 时它按老形态打
     （`errorstats.stats_json`）。理由：那份输出的形状已经有消费者（`total` / `state`
@@ -3970,7 +4013,11 @@ def cmd_stats(args) -> int:
         return 0
 
     if kind == "all":
-        parts = {name: _stats_readout(name, root, args)
+        # 四条读数共用一次扫描（2026-10-27，R-BE1 的 ⑥-5）：改前每条各读一遍盘
+        # （实测 `events.jsonl` ×4、`sessions/*.jsonl` ×4）。`usage_ledger` 一并带上，
+        # 于是 `cost` 也不用再读第二遍。
+        scanned = RO.scan(root, tables=("usage_ledger",))
+        parts = {name: _stats_readout(name, root, args, scanned=scanned)
                  for name, _help in STATS_KINDS if name != "all"}
         readout = RO.merge_readouts(parts)
         if as_json:
@@ -4338,6 +4385,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--plain", action="store_true",
                    help="纯 ASCII 输出（制表符/勾号都不画；老终端或想粘到邮件里时用）")
     p.add_argument("--compact", action="store_true", help="少画框、少空行")
+    # 版本号出口。为什么要这一格：`agentflow/__init__.py` 的 `__version__` 与
+    # `pyproject.toml` 的 `version` 是两个各自写死的字面量，而在此之前 CLI 里
+    # 一条命令都读不到它们 —— "发出去的东西有版本号、用的人只能在 `pip show` 里查"
+    # 是一种把版本号交给别人保管的形态（装成脚本、或从源码树跑时连 `pip show` 都没有）。
+    # 只读常量，不 import 任何子模块（`agentflow/__init__` 本来就只放版本号）。
+    p.add_argument("--version", action="version",
+                   version=f"agentflow {_PKG_VERSION}",
+                   help="印版本号并以 0 结束")
     # 旧名 → 新路径的全文对照表（28 行）。单独一页而不是塞进 `--help`：首屏要能一眼读完，
     # 而这张表与 `command_paths()` 同源，改分层只改那一处。
     p.add_argument("--help-legacy", action="store_true",

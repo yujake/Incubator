@@ -275,6 +275,12 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
             "why": (f"`{SECTION_HEADING}` 下面没有表格：要给一张四列的表"
                     f"（{' / '.join(name for _f, _k, name in COLUMN_KEYS)}）")})
     header_cells: list[str] = []
+    #: 逐行解析用的列序。表头认得全就照表头取列（上面 `COLUMN_KEYS` 说的
+    #: 「顺序不限」只有在这里真的按表头解析时才是事实；此前 `found` 只进了
+    #: 出参 `column_index`，正文一律按位置读 —— 表头换个顺序，`step` 与
+    #: `path_group` 就静默互换，`problems` 一条都不报，读出两个依赖面）。
+    #: 表头认不全时退回位置序：缺列/列数不对已经在上面报过，那一档照旧整笔拒。
+    parse_order: list[int] = list(range(len(COLUMN_KEYS)))
     if table:
         header_line, header_raw = table[0]
         header_cells = _cells(header_raw)
@@ -300,6 +306,8 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
                         f"（{' / '.join(name for _f, _k, name in COLUMN_KEYS)}）")})
         out["columns"] = [field for field, _k, _n in COLUMN_KEYS if field in found]
         out["column_index"] = dict(found)
+        if len(found) == len(COLUMN_KEYS):
+            parse_order = [found[field] for field, _k, _n in COLUMN_KEYS]
     # ---- 逐行读表格（表头之后：分隔行跳过，其余每一行都要是完整的一条）
     for line_no, raw in table[1:]:
         cells = _cells(raw)
@@ -314,7 +322,8 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
         row: dict[str, Any] = {"line": line_no}
         bad: list[str] = []
         for idx, (field, _keys, name) in enumerate(COLUMN_KEYS):
-            value = cells[idx].strip().strip("`").strip()
+            src = parse_order[idx]
+            value = (cells[src] if src < len(cells) else "").strip().strip("`").strip()
             if not value:
                 bad.append(f"缺 `{name}`")
                 continue

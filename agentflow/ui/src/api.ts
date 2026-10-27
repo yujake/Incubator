@@ -13,6 +13,9 @@
  * 3. 写请求带 X-CSRF-Token（从 `<meta name="csrf-token">` 读；服务端每进程换一个）。
  */
 import type {
+  CacheView,
+  RoleErrorsView,
+  ErrorCategoryGlossary,
   AcceptanceView,
   ArtifactsView,
   BudgetView,
@@ -471,187 +474,6 @@ export async function postInterject(body: {
 
 
 /**
- * 两档提示词缓存的状态读数（`GET /api/cache` 的返回形状）。
- *
- * 为什么这几个接口写在这里而不是 `types.ts`：`types.ts` 是生成物（`agentflow/web/emit_types.py`
- * 拼三条零交线各自的 `type_decls()`，判据逐字节比对），本轮的判据只核对生成物里那些接口，
- * 所以它们不进生成物；而这一面的唯一消费者就是 `components/PromptCache.tsx`。形状与
- * `agentflow/cachectl.py::status()` 的键逐字相同（改名会让页面画出 `undefined`）。
- */
-export interface CacheTargetCell {
-  state: string;
-  fresh: boolean | null;
-  recorded_sha256: string;
-  now_sha256: string;
-  absent_reason: string;
-}
-
-/** 一档里 key 那一格：`same` / `stale` / `unknown`（旧读数没记指纹）。 */
-export interface CacheKeyCell {
-  tri: string;
-  reason: string;
-  changed: string[];
-  affected: string[];
-  affected_why: string;
-  text: string;
-  recorded: { fingerprint: string; model: string; base_url: string };
-}
-
-/** 一档的四格读数（`cachectl.tier_reading()` 的键逐字）。 */
-export interface CacheTier {
-  tier: string;
-  label: string;
-  lean_enabled: boolean;
-  tri: string;
-  reason: string;
-  warmed: boolean;
-  fresh: boolean | null;
-  fresh_reason: string;
-  not_fresh: string[];
-  version_mismatch: boolean;
-  covered: number;
-  covered_fresh: number;
-  total: number;
-  missing: string[];
-  absent: string[];
-  absent_reason: Record<string, string>;
-  at: string;
-  prompt_version: string;
-  readings_prompt_version: string;
-  spent_usd: number | null;
-  model: string;
-  per_target: Record<string, CacheTargetCell>;
-  key: CacheKeyCell;
-}
-
-/**
- * 当前这一趟会用哪一档（`cachectl.active_reading()` 的键逐字）。
- *
- * 为什么单独一格：`tiers` 回答"两档各自落没落地"，回答不了"我现在打开的这一档用的是
- * 哪一份缓存"。`tri` 是三态（`found` / `unknown`）：读不出来时 `why` 说理由、`text`
- * 是"当前没有可用缓存"那一句；这时 `fresh` 是 `false`，但它的意思是"这一趟不能当
- * 新鲜用"，不是"量过了发现变了" —— 先看 `tri`，再看 `fresh`。
- *
- * `source` 是这一档从哪来的（`run` = 这个工作区正在跑或最近一趟的运行记录、
- * `process` = 本进程开关、`unknown` = 运行记录读不出来）。多进程时页面此前说的是
- * 网页自己的开关，而用户要看的是正在跑的那一趟的开关 —— 这一格就是那条界线。
- *
- * `text` 是给人看的那一行，命令行 `cache status` 印的是同一个字符串（同一个函数出）；
- * 页面只把里面的加粗标记画成粗体，不另拼文案。
- */
-export interface CacheActive {
-  tier: string;
-  label: string;
-  /** `source === "unknown"` 时是 `null`（这一趟用哪一档根本不知道，不许折成 `false`）。 */
-  lean: boolean | null;
-  /** `run` / `process` / `unknown`（每一层都自报来源）。 */
-  source: string;
-  /** 来源那一格的人话（正文里"来源=…"用的就是它）。 */
-  source_text: string;
-  /** 来源的补充说明（为什么没读运行记录）；没有要补的就是空串。 */
-  source_note: string;
-  /** 运行记录那一格：哪一趟 / 什么时候 / 还活着没有（`source !== "run"` 时为空串）。 */
-  record_sid: string;
-  record_at: string;
-  record_state: string;
-  strategy: string;
-  run_at: string;
-  prompt_version: string;
-  readings_prompt_version: string;
-  covered: string;
-  covered_count: number;
-  total: number;
-  missing: string[];
-  absent: string[];
-  fresh: boolean;
-  tri: string;
-  why: string;
-  text: string;
-}
-
-/** 网页顶部那条提醒（`cachectl.status()["reminder"]`）。 */
-export interface CacheReminder {
-  active: boolean;
-  tri: string;
-  tiers: string[];
-  text: string;
-  affected: string[];
-  /** 这个提醒属于哪一片缓存（指纹 + 模型）：换 key 之后它变了，被关掉的横幅会再现。 */
-  dismiss_key: string;
-}
-
-/**
- * 最近一趟网页预热的三态读数（`GET /api/cache` 的 `warm` 那一格，D-60 ③）。
- *
- * `state` 是后端现算的（记录 + 日志尾 + 探活）：`running` / `done` / `failed` /
- * `unknown`。它**不是**页面自己的内存状态 —— 刷新页面、换个人打开读到的是同一趟。
- * `unknown` 有三种由头，`reason` 会说清是哪一种（还没有起过 / 记录读不出来 /
- * 日志里没有收尾标记），所以页面不许把它画成"失败了"。
- *
- * `last_line` 是日志的最后一行：失败那一档它就是给人看的那句错误。
- */
-export interface CacheWarmJob {
-  /** 有没有起过（`false` ⇒ 页面不画这一块；`state` 这时恒为 `unknown`）。 */
-  recorded: boolean;
-  /** `running` / `done` / `failed` / `unknown`（词表真身在 `cacheface.WARM_JOB_STATES`）。 */
-  state: string;
-  /** 这一档的人话理由（后端拼，页面只画）。 */
-  reason: string;
-  /** 日志的工作区相对路径（空串 = 没记录）。 */
-  log: string;
-  /** 同一份日志的绝对路径（点开看全文用）。 */
-  log_path: string;
-  pid: number;
-  /** `on` / `off`。 */
-  tier: string;
-  at: string;
-  last_line: string;
-  /** 日志尾三行。 */
-  tail: string[];
-}
-
-/** `GET /api/cache` 的整份读数。 */
-export interface CacheView {
-  schema: number;
-  at: string;
-  readings: string;
-  lean_now: boolean;
-  prompt_version: string;
-  key: {
-    configured: boolean;
-    source: string;
-    model: string;
-    base_url: string;
-    key_chars: number;
-    fingerprint: string;
-  };
-  tiers: Record<string, CacheTier>;
-  /** 这一格读的是哪个工作区（空串 = 不可判定；`active.source` 据此说清来源）。 */
-  workspace: string;
-  /** 按三层来源，这一趟会用哪一档（顶部横幅与面板都先画这一行）。 */
-  active: CacheActive;
-  reminder: CacheReminder;
-  /**
-   * 本服务有没有开写权限（`agentflow web --allow-writes`，D-60 ①）。
-   *
-   * 它说的是启动参数，不是"你有没有权限"；`false` 时页面把真预热按钮禁用
-   * 并把 `writes_reason` 那一句逐字写出来 —— 不许让人按出 403 才知道。
-   * 试算（`dry_run=1`）不受它管：那一档不写盘、不花钱。
-   */
-  writes_allowed: boolean;
-  /** 没开写权限时那一句逐字的原因（真身在 `writes.WRITES_OFF_REASON`；开了是空串）。 */
-  writes_reason: string;
-  /** 最近一趟网页预热的三态（起过才有 `recorded`）。 */
-  warm: CacheWarmJob;
-  verdict: {
-    tri: string;
-    unknown_tiers: string[];
-    stale_tiers: string[];
-    key_unknown_tiers: string[];
-  };
-}
-
-/**
  * 预热一档（`POST /api/cache/warm`）：真发请求、真的花钱。
  *
  * `confirm: "1"` 由后端当硬要求（缺它一律 400，盘上零改动），前端不许替用户默认填上 ——
@@ -672,68 +494,12 @@ export async function postCacheWarm(body: {
 }
 
 
-/** 一条"读到了、但人该看见"的异常（后端 `readouts._problem` 的键逐字）。 */
-export interface ReadoutProblem {
-  code: string;
-  detail: string;
-}
-
-/**
- * 一个来源的读数（后端 `errorstats` 的 `sources.events` / `sources.sessions` 逐字）。
+/*
+ * 两档提示词缓存（`GET /api/cache`）与错误动作计数（`GET /api/errors`、
+ * `/api/errors/categories`）那两族的类型住在 `types.ts`（生成物）。
  *
- * 为什么把它带上屏幕：这一栏最常见的误读是"0 次错误"，而排查那件事第一步就是看
- * "到底读了几条事件、几行读不明白"。所以抬头第三行印它，而不是只印一个总数。
+ * 2026-10-27（业主裁定 ⑥-5 / W4）：它们此前手写在这里 —— 同一件事两份口径，
+ * 后端加一格 `tsc` 只会觉得"少了一个可选字段"，一声不吭。现在形状的唯一来源是
+ * `webui/readers.py` 的 `_TS_TYPES`（真身仍是 `cachectl.status()` /
+ * `readouts.errors_readout()`），本文件只 import 它自己点名用到的那三个。
  */
-export interface ErrorStatsSource {
-  checked?: boolean;
-  events?: number;
-  files?: number;
-  records?: number;
-  bad_lines?: number;
-  unreadable_files?: string[];
-  unclassified?: number;
-  table?: string;
-  reason?: string;
-}
-
-/** `GET /api/errors` 的 `data`（`readouts.ERRORS_DATA_KEYS` 那五个键的键集）。 */
-export interface ErrorStatsData {
-  /** 角色 → 类目 → 计数（只记出现过的格，缺格就是 0）。 */
-  by_role: Record<string, Record<string, number>>;
-  /** 角色 → 合计。 */
-  role_total: Record<string, number>;
-  total: number;
-  /** 类目 → 全角色合计（后端按 `ERROR_CATEGORIES` 的顺序给，只留非 0 的）。 */
-  categories: Record<string, number>;
-  /** 逐源读数（事件流 / 会话记录 / 码命中）。 */
-  sources: Record<string, ErrorStatsSource>;
-}
-
-/**
- * `GET /api/errors` 的整份读数（`readouts.errors_readout(root)` 逐字）。
- *
- * 三态：`checked` / `state` / `reason` 与计数并排，而不是藏在异常里 ——
- * 读不到时 `data.total` 仍是 0，但 `state` 是 `unknown`：同一个 0 配上不同的
- * `state` 是两句不同的话。
- */
-export interface RoleErrorsView {
-  checked: boolean;
-  /** `checked` / `unknown`（后端 `_envelope` 的两个取值）。 */
-  state: string;
-  reason: string;
-  data: ErrorStatsData;
-  problems: ReadoutProblem[];
-}
-
-/** 一个类目与它那一句含义（`GET /api/errors/categories` 的一行）。 */
-export interface ErrorCategoryMeaning {
-  name: string;
-  meaning: string;
-}
-
-/** `GET /api/errors/categories` 的整份读数（真身 `errorstats.ERROR_CATEGORIES`）。 */
-export interface ErrorCategoryGlossary {
-  categories: ErrorCategoryMeaning[];
-  /** 真身落在哪（后端写死这个字符串，免得有人以为它是盘上的数据）。 */
-  source: string;
-}

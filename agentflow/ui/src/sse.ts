@@ -48,9 +48,15 @@ export interface SubscribeOptions {
   onStatus?: (state: Connection) => void;
 }
 
-/** 订阅一条流，返回退订函数（页面卸载时必须调它，否则连接会一直挂着）。 */
+/** 订阅一条流，返回退订函数（页面卸载时必须调它，否则连接会一直挂着）。
+ *
+ * 2026-10-27 删掉了这一格上的 `sid` 参数：它此前被拼成 `?sid=`，说"只订这一段
+ * 会话的事件"，而后端的广播器从来没读过它（`sse.py` 的 `Broadcaster.publish`
+ * 对每个订阅者无条件投递）—— 那是一条假承诺，两边一起删。要真的按会话分片，
+ * 得先在后端定义"哪些 kind 是会话级"（`state` / `stop` / `heartbeat` 是广播），
+ * 否则一刀切会把页面刷新与心跳一起吞掉。
+ */
 export function subscribe(
-  sid: string | null,
   h: Handlers,
   opts: SubscribeOptions = {},
 ): () => void {
@@ -91,9 +97,6 @@ export function subscribe(
       return;
     }
     const url = new URL(STREAM_PATH, window.location.href);
-    if (sid) {
-      url.searchParams.set("sid", sid);
-    }
     if (lastId > 0) {
       url.searchParams.set("since", String(lastId));
     }

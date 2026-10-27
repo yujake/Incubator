@@ -89,12 +89,12 @@ noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组�
 tools_star_tools_py     = 19   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total        = 117  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
-cli_tools_modules      = 17  # 同一行"已装模块 N"
+cli_tools_total        = 118  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
+cli_tools_modules      = 18  # 同一行"已装模块 N"
 cli_tools_role_a       = 52  # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
 cli_tools_role_b       = 38
 cli_tools_role_c       = 36
-cli_tools_role_d       = 57
+cli_tools_role_d       = 58
 cli_tools_role_e       = 39
 cli_tools_role_f       = 51
 cli_tools_role_g       = 53
@@ -107,7 +107,7 @@ webui_routes            = 31   # `python -c "import sys;sys.path.insert(0,'src')
 webui_routes_get        = 23   # 同上，按 `x[0] == 'GET'` 计数
 webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 16   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
+webui_test_files        = 19   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
 LIVE-READINGS:END
 ```
 
@@ -1189,7 +1189,7 @@ C 预算）都踩到同一坑。"
 cd D:\Incubator\agentflow
 $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 python tools\release_all.py                # 七步：见 §10.1；三档结论，退出码 0/1/2
-python tools\release_all.py --json dist\release.json
+python tools\release_all.py --json-out dist\release.json
 ```
 
 **分步跑**（调试时用；⚠️ 分步跑**不构成**发布检查的绿色结论 ——
@@ -1257,7 +1257,7 @@ required_approvals: 2（尚未取得）
 
 ```powershell
 python tools\release_all.py                       # 全跑
-python tools\release_all.py --json r.json
+python tools\release_all.py --json-out r.json
 python tools\release_all.py --only role-specs      # 调试时只跑一项
 python -c "import sys,pathlib;sys.path.insert(0,'.');from tools.release_all import build_steps;print([s.key for s in build_steps(pathlib.Path('.').resolve())])"
 ```
@@ -1709,7 +1709,7 @@ P-读数-4 不许用"最小改法"改语义：OR/AND、门锁/凭证、所有权
 
 **规则**：一个子代理只有四个状态词 —— `flying`（在飞）/ `standby`（待机：有活没在跑，名下有计时器）/ `silent`（静默：无工作 ∧ 无计时器）/ `unknown`（未读到，**不许折成静默**），`active` 只等于"非静默"、`active_child_count` 就是非静默数；销号只可针对**静默**，在飞 / 待机 / 读不到一律 `target_not_silent` 并给逐条 `blocking`（"待机"要列出那几个计时器），而"有活跃子代理 ⇒ 必有一个等它的计时器"是让 `silent` 定义良好的那条不变量（由父派活时自动起表保证、由 `conductor.child_wait_invariant` 判定）。
 
-- **落点**：`src/agentflow/conductor.py::AGENT_STATES`、`src/agentflow/conductor.py::ACTIVE_AGENT_STATES`、`src/agentflow/conductor.py::agent_state`、`src/agentflow/conductor.py::agent_states`、`src/agentflow/conductor.py::retire_state_of`、`src/agentflow/conductor.py::retire_blocking`、`src/agentflow/conductor.py::retire_refusal`、`src/agentflow/conductor.py::retire_integrity`、`src/agentflow/conductor.py::retire_ready`、`src/agentflow/conductor.py::child_wait_invariant`、`src/agentflow/conductor.py::arm_child_waiter`、`src/agentflow/conductor.py::RETIRE_REFUSAL_TARGET_NOT_SILENT`、`src/agentflow/conductor.py::clock_waiters`、`src/agentflow/tools/conductor_tools.py::conductor_retire_child`、`src/agentflow/tools/conductor_tools.py::RETIRE_CHILD_STATES`、`src/agentflow/secretary.py::retire`、`src/agentflow/readouts.py::roster_readout`
+- **落点**：`src/agentflow/conductor.py::AGENT_STATES`、`src/agentflow/conductor.py::ACTIVE_AGENT_STATES`、`src/agentflow/conductor.py::agent_state`、`src/agentflow/conductor.py::agent_states`、`src/agentflow/conductor.py::retire_state_of`、`src/agentflow/conductor.py::retire_blocking`、`src/agentflow/conductor.py::retire_refusal`、`src/agentflow/conductor.py::retire_integrity`、`src/agentflow/conductor.py::retire_ready`、`src/agentflow/conductor.py::child_wait_invariant`、`src/agentflow/conductor.py::arm_child_waiter`、`src/agentflow/conductor.py::RETIRE_REFUSAL_TARGET_NOT_SILENT`、`src/agentflow/conductor.py::clock_waiters`、`src/agentflow/tools/conductor_tools.py::conductor_retire_child`、`src/agentflow/tools/conductor_tools.py::RETIRE_CHILD_STATES`、`src/agentflow/secretary.py::retire`、`src/agentflow/webui/readers.py::roster_face`
 - **判据**：`tests/test_three_states_flying_standby_silent.py::test_d_a_finished_agent_without_timers_reads_silent`、`tests/test_three_states_flying_standby_silent.py::test_g_an_unreadable_clock_is_unknown_not_silent`、`tests/test_three_states_flying_standby_silent.py::test_the_four_state_words_are_one_vocabulary`、`tests/test_retire_only_for_the_silent.py::test_b_a_flying_child_is_refused_by_the_silent_gate`、`tests/test_retire_only_for_the_silent.py::test_d_an_unreadable_clock_is_refused_fail_closed`、`tests/test_retire_only_for_the_silent.py::test_f_stubbing_the_state_judgement_makes_b_c_d_red`、`tests/test_child_count_and_active_cascade_retire.py::test_a_two_counts_are_named_and_counted_separately`、`tests/test_information_items_are_acked_when_read.py::test_c_a_child_with_only_wake_notices_can_be_retired`、`tests/test_information_items_are_acked_when_read.py::test_c2_a_child_with_an_unacked_verdict_is_still_refused`、`tests/test_timers_and_handoff_semantics.py::test_e_every_active_child_has_a_waiter`；现算：`conductor.AGENT_STATES` = 4、`conductor.ACTIVE_AGENT_STATES` = 2、`conductor.RETIRE_REFUSAL_TARGET_NOT_SILENT` = target_not_silent
 
 ### [规范] §16.3 C3 会话循环族：等谁、唤醒、收工门
@@ -1752,7 +1752,7 @@ P-读数-4 不许用"最小改法"改语义：OR/AND、门锁/凭证、所有权
 - 补充：六档是**证据面的判据**，不是措辞判据：行里还留着摘要（`CITATION_DIGEST_CHARS`）与证据地板（`CITATION_EVIDENCE_FLOOR`），挡签的理由必须能指到档位。
 - 补充：`quote_verified` 的逐字回验仍然存在，但它是 B 那一侧的第一道自动幻觉防线；"逐字不中"不等于"引用不成立"，语义那一档由六档判。
 - **落点**：`src/agentflow/verifications.py::CITATION_VERDICTS`、`src/agentflow/verifications.py::CITATION_SIGNABLE`、`src/agentflow/verifications.py::CITATION_BLOCKING`、`src/agentflow/verifications.py::CITATION_CHECK_KEYS`、`src/agentflow/verifications.py::CITATION_EVIDENCE_FLOOR`、`src/agentflow/verifications.py::CITATION_DIGEST_CHARS`、`src/agentflow/verifications.py::citation_gate`、`src/agentflow/verifications.py::apply_citation_gate`、`src/agentflow/verifications.py::citation_blocks`、`src/agentflow/verifications.py::signing_gate_problem`、`src/agentflow/verifications.py::admissible_evidence_kinds`、`src/agentflow/verifications.py::evidence_kind_admissible`、`src/agentflow/verifications.py::dep_note`、`src/agentflow/verifications.py::DEP_NOTE_KEYS`、`src/agentflow/agent_v/core.py::_citation_admissibility`、`src/agentflow/agent_v/core.py::_citation_checks`、`src/agentflow/agent_v/core.py::_citation_material`、`src/agentflow/agent_h/_support.py::h_free_toolbox_accepts`
-- **判据**：`tests/test_v_checks_fs_citations.py::test_a_consistent_use_signs_even_though_the_words_differ`、`tests/test_v_checks_fs_citations.py::test_a_verbatim_quote_used_more_strongly_cannot_sign`、`tests/test_v_checks_fs_citations.py::test_a_cross_check_citation_is_inadmissible_and_cannot_sign`、`tests/test_v_checks_fs_citations.py::test_an_unknown_citation_lands_as_undetermined_and_does_not_sign`、`tests/test_v_checks_fs_citations.py::test_signs_bit3_refuses_a_row_whose_citation_check_blocks`、`tests/test_v_checks_fs_citations.py::test_the_allowed_level_set_is_computed_from_the_shared_evidence_order`、`tests/test_signing_never_lies.py::test_unsigned_is_a_checked_conclusion_not_an_unchecked_ledger`、`tests/test_quote_verification_leaves_evidence.py::test_a_quote_that_is_not_on_that_page_is_false_with_a_named_reason`；现算：`verifications.CITATION_VERDICTS` = 6、`verifications.CITATION_SIGNABLE` = 2、`verifications.CITATION_BLOCKING` = 4、`verifications.CITATION_CHECK_KEYS` = 4
+- **判据**：`tests/test_v_checks_fs_citations.py::test_a_consistent_use_signs_even_though_the_words_differ`、`tests/test_v_checks_fs_citations.py::test_a_verbatim_quote_used_more_strongly_cannot_sign`、`tests/test_v_checks_fs_citations.py::test_a_cross_check_citation_is_inadmissible_and_cannot_sign`、`tests/test_v_checks_fs_citations.py::test_an_unknown_citation_lands_as_undetermined_and_does_not_sign`、`tests/test_v_checks_fs_citations.py::test_signs_bit3_refuses_a_row_whose_citation_check_blocks`、`tests/test_v_checks_fs_citations.py::test_the_allowed_level_set_is_computed_from_the_shared_evidence_order`、`tests/test_signing_never_lies.py::test_unsigned_is_a_checked_conclusion_not_an_unchecked_ledger`、`tests/test_v_checks_fs_citations.py::test_the_citation_gate_and_signs_bit3_reach_the_same_verdict_after_disk`、`tests/test_v_checks_fs_citations.py::test_dropping_in_material_from_the_ledger_row_makes_that_agreement_red`、`tests/test_quote_verification_leaves_evidence.py::test_a_quote_that_is_not_on_that_page_is_false_with_a_named_reason`；现算：`verifications.CITATION_VERDICTS` = 6、`verifications.CITATION_SIGNABLE` = 2、`verifications.CITATION_BLOCKING` = 4、`verifications.CITATION_CHECK_KEYS` = 5
 
 ### [规范] §16.8 C8 命题同一性族：条件→结论一致、洗定理名、概念按定义项
 
@@ -1793,8 +1793,8 @@ P-读数-4 不许用"最小改法"改语义：OR/AND、门锁/凭证、所有权
 **规则**：用户端只许**读**，且每一块读数都是三态 —— 名册面的"在飞 / 待机 / 静默 / 未读到"由后端算完再下发（前端不许自己拿一个旧布尔冒充），书目面**只数已准入的**（没有台账是 `unknown` 不是 0），每条聊天行都带**绝对编号与它的来源**（行里没有就写"没有"，不许留空猜），预热按钮的三态（计划 / 运行 / 完成或失败）与写权限开关分开报（关着就说关着），而错误统计是**两根轴**：真错误（`ERROR_CATEGORY_NAMES`）与过程读数（`PROCESS_CATEGORIES`）不许合并成一个总数。
 
 - 补充：`webui/writes.py` 是"这个服务此刻许不许写"的唯一判据，页面上的禁用态与后端的拒绝必须同源。
-- **落点**：`src/agentflow/readouts.py::roster_readout`、`src/agentflow/readouts.py::ROSTER_DATA_KEYS`、`src/agentflow/webui/readers.py::CHAT_PUBLIC`、`src/agentflow/webui/readers.py::library_face`、`src/agentflow/webui/readers.py::handle_library`、`src/agentflow/webui/readers.py::ADMISSION_BASIS_CANDIDATE`、`src/agentflow/webui/readers.py::PROBLEM_ADMISSION_UNDECIDABLE`、`src/agentflow/webui/cacheface.py::warm_job`、`src/agentflow/webui/cacheface.py::WARM_JOB_STATES`、`src/agentflow/webui/cacheface.py::handle_cache_status`、`src/agentflow/webui/writes.py::writes_allowed`、`src/agentflow/webui/writes.py::WRITES_OFF_REASON`、`src/agentflow/webui/server.py::handle_errors`、`src/agentflow/webui/server.py::handle_errors_categories`、`src/agentflow/webui/state.py::type_decls`、`src/agentflow/errorstats.py::ALL_CATEGORIES`、`src/agentflow/errorstats.py::ERROR_CATEGORY_NAMES`、`src/agentflow/errorstats.py::PROCESS_CATEGORIES`、`src/agentflow/errorstats.py::process_categories`
-- **判据**：`tests/test_webui_three_state_reading.py::test_active_is_computed_from_the_definition_not_copied_from_a_lying_cell`、`tests/test_webui_three_state_reading.py::test_an_unread_tally_says_unreadable_with_the_reason_and_never_a_zero`、`tests/test_webui_readers.py::test_every_face_carries_tri_and_reason`、`tests/test_library_face_only_counts_admitted_works.py::test_c_a_missing_or_broken_table_is_unknown_and_never_zero`、`tests/test_chat_lines_carry_the_absolute_id.py::test_every_line_carries_the_absolute_id_keys`、`tests/test_chat_lines_carry_the_absolute_id.py::test_a_line_without_an_id_says_so_instead_of_pretending`、`tests/test_chat_page_shows_who_and_which_id.py::test_the_chat_page_really_reads_the_id_and_its_source`、`tests/test_cache_warm_button_is_honest.py::test_a_a_service_without_the_write_switch_says_so_and_the_page_disables`、`tests/test_the_root_is_named_m.py::test_the_root_state_is_the_same_three_state_as_every_other_node`、`tests/test_the_root_is_named_m.py::test_the_real_workspace_root_is_m`；现算：`readouts.ROSTER_DATA_KEYS` = 9、`errorstats.ALL_CATEGORIES` = 26、`errorstats.PROCESS_CATEGORIES` = 3
+- **落点**：`src/agentflow/webui/readers.py::roster_face`、`src/agentflow/webui/readers.py::CHAT_PUBLIC`、`src/agentflow/webui/readers.py::library_face`、`src/agentflow/webui/readers.py::handle_library`、`src/agentflow/webui/readers.py::ADMISSION_BASIS_CANDIDATE`、`src/agentflow/webui/readers.py::PROBLEM_ADMISSION_UNDECIDABLE`、`src/agentflow/webui/cacheface.py::warm_job`、`src/agentflow/webui/cacheface.py::WARM_JOB_STATES`、`src/agentflow/webui/cacheface.py::handle_cache_status`、`src/agentflow/webui/writes.py::writes_allowed`、`src/agentflow/webui/writes.py::WRITES_OFF_REASON`、`src/agentflow/webui/server.py::handle_errors`、`src/agentflow/webui/server.py::handle_errors_categories`、`src/agentflow/webui/state.py::type_decls`、`src/agentflow/errorstats.py::ALL_CATEGORIES`、`src/agentflow/errorstats.py::ERROR_CATEGORY_NAMES`、`src/agentflow/errorstats.py::PROCESS_CATEGORIES`、`src/agentflow/errorstats.py::process_categories`
+- **判据**：`tests/test_webui_three_state_reading.py::test_active_is_computed_from_the_definition_not_copied_from_a_lying_cell`、`tests/test_webui_three_state_reading.py::test_an_unread_tally_says_unreadable_with_the_reason_and_never_a_zero`、`tests/test_webui_readers.py::test_every_face_carries_tri_and_reason`、`tests/test_library_face_only_counts_admitted_works.py::test_c_a_missing_or_broken_table_is_unknown_and_never_zero`、`tests/test_chat_lines_carry_the_absolute_id.py::test_every_line_carries_the_absolute_id_keys`、`tests/test_chat_lines_carry_the_absolute_id.py::test_a_line_without_an_id_says_so_instead_of_pretending`、`tests/test_chat_page_shows_who_and_which_id.py::test_the_chat_page_really_reads_the_id_and_its_source`、`tests/test_cache_warm_button_is_honest.py::test_a_a_service_without_the_write_switch_says_so_and_the_page_disables`、`tests/test_the_root_is_named_m.py::test_the_root_state_is_the_same_three_state_as_every_other_node`、`tests/test_the_root_is_named_m.py::test_the_real_workspace_root_is_m`；现算：`readers._ROSTER_FALLBACK_KEYS` = 8、`errorstats.ALL_CATEGORIES` = 26、`errorstats.PROCESS_CATEGORIES` = 3 另：2026-10-27 更正一处旧口径 —— 这里此前写的是 `readouts.ROSTER_DATA_KEYS`（值 9），而那个常量与 `readouts.roster_readout` 一起只存在于旧口径里，全树已经没有了。今天名册面的读侧在 `webui/readers.py::roster_face`，它给 18 个顶层键；`_ROSTER_FALLBACK_KEYS` 是"老后端缺哪几格时按它兜底"的那 8 个键，不是名册读数的全部键数。
 
 ### [规范] §16.13 C13 清洁与判据基础设施族：死函数台账、绿灯不造假、仓库不更脏
 

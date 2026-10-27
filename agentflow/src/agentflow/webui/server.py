@@ -237,7 +237,11 @@ class WebHandler(BaseHTTPRequestHandler):
             auth = self.headers.get("Authorization", "")
             if auth.lower().startswith("bearer "):
                 got = auth[7:].strip()
-        return got == want
+        # 与写面的 CSRF 那一格同一条口径（`writes._csrf_ok`）：口令比对走
+        # `secrets.compare_digest`，不用 `==`。比的是令牌，逐字符提前返回的
+        # 相等比较会把"对了几个字符"泄给对端；本服务默认只听回环，所以这
+        # 一格不是主防线，但同一个仓库里两处口令用两种比法是没必要的分叉。
+        return secrets.compare_digest(got.encode("utf-8"), want.encode("utf-8"))
 
     # ------------------------------------------------------------ 输出
     def _send(self, code: int, body: bytes, ctype: str,

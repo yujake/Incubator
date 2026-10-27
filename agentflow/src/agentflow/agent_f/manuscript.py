@@ -177,7 +177,13 @@ class _Manuscript:
 
     @staticmethod
     def render_dependency_section(rows: Sequence[Mapping[str, Any]]) -> str:
-        """把数据行渲染成那一节固定格式的表格（表头四列，逐字与解析器对齐）。"""
+        """把数据行渲染成那一节固定格式的表格（表头四列，逐字与解析器对齐）。
+
+        「渲染出来的这一份，解析器必须读得回同一批行」由
+        `tests/test_dependency_face_is_read_from_f_manuscript.py::test_the_policy_example_is_the_format_the_parser_accepts`
+        钉住（它把渲染 → 解析走一遍并逐格比）；原来这里另有一个 `section_example`
+        供那条判据用，但它全仓 0 个调用者、判据实际走的是上面那条 —— 已删。
+        """
         head = "| " + " | ".join(name for _f, _k, name in _DS.COLUMN_KEYS) + " |"
         rule = "|" + "|".join("---" for _ in _DS.COLUMN_KEYS) + "|"
         lines = [_DS.SECTION_HEADING, "", head, rule]
@@ -408,11 +414,3 @@ class _Manuscript:
         if rel:
             return rel
         return f"{self.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}{sid}.md"
-
-    @staticmethod
-    def section_example() -> str:
-        """政策里那个正例（逐字与渲染器同形；判据拿它核渲染与解析不漂）。"""
-        return _Manuscript.render_dependency_section([
-            {"stmt_id": S.format_id(0), "quote": "由定理甲，G 有 p 阶元",
-             "step": "第 1 步", "path_group": 1},
-        ])

@@ -262,6 +262,7 @@ def _measures() -> dict[str, object]:
     from agentflow.tools import conductor_tools  # noqa: PLC0415
     from agentflow.agent_f import core as fcore  # noqa: PLC0415
     from agentflow.agent_f import create_plan as fplan  # noqa: PLC0415
+    from agentflow.webui import readers  # noqa: PLC0415 - 名册面那 8 个兜底键在这里
 
     return {
         "clock.TIMER_KINDS": lambda: len(clock.TIMER_KINDS),
@@ -305,7 +306,12 @@ def _measures() -> dict[str, object]:
         "tools.UNIVERSAL_TOOLS": lambda: len(tools.UNIVERSAL_TOOLS),
         "tools.BOOKKEEPING_TABLES": lambda: len(tools.BOOKKEEPING_TABLES),
         "tools.KNOWLEDGE_TABLES": lambda: len(tools.KNOWLEDGE_TABLES),
-        "readouts.ROSTER_DATA_KEYS": lambda: len(readouts.ROSTER_DATA_KEYS),
+        # 2026-10-27：这一格此前量的是名册面那个旧常量（值 9，已不在树里）。它已经不在
+        # 树里了（名册面的读侧搬到了 `webui/readers.roster_face`），于是"量什么"跟着改成
+        # 真实存在的 `readers._ROSTER_FALLBACK_KEYS`（8 个键：老后端缺格时的兜底表）。
+        # 为什么不改成量 `roster_face` 的顶层键数（18）：那要一个工作区参数，而这张表的口径是
+        # "不碰盘、纯常量"；名册面的键数由契约 C 条与 `tests/test_webui_readers.py` 真读核对。
+        "readers._ROSTER_FALLBACK_KEYS": lambda: len(readers._ROSTER_FALLBACK_KEYS),
         "errorstats.ALL_CATEGORIES": lambda: len(errorstats.ALL_CATEGORIES),
         "errorstats.PROCESS_CATEGORIES": lambda: len(errorstats.PROCESS_CATEGORIES),
     }

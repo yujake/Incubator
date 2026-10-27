@@ -152,9 +152,17 @@ TRI_COMPUTED = "computed"
 TRI_NOT_APPLICABLE = "not_applicable"
 TRI_UNREADABLE = "unreadable"
 
-#: 认作"本机"的主机名（来源校验用）。`0.0.0.0` / `::` 是绑定地址，也放进来：
-#: 服务确实可能绑在它们上面，而来源地址那一道仍然会拦掉真正的外来连接。
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]", "0.0.0.0", "::"})
+#: 真正算"本机"的主机名（来源校验用）。2026-10-27 起只留真回环：
+#: `0.0.0.0` / `::` 是绑定地址、不是来源地址，见 :data:`_BIND_HOSTS`。
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
+#: 通配绑定地址。它回答的是"这个服务绑在哪"，不是"这条请求从哪来" ——
+#: 所以它只参与"要不要拒"这一档（在这一层不当外来证据），不参与"是不是本机"：
+#: 绑 0.0.0.0 的服务用 `http://0.0.0.0:8788` 打开时 `Host` 正是它，按外来地址
+#: 拒会把正当用法一起拒掉；而真正的外来连接由第三层（socket 对端地址）拦，
+#: 那一层看的是内核给的事实、不看头。此前这一格与回环混在同一张表里，
+#: 于是"Host 是回环"这句话在绑 0.0.0.0 时不再成立（D9）。
+_BIND_HOSTS = frozenset({"0.0.0.0", "::"})
 
 _TRI_FOR_CODE = {403: TRI_NOT_APPLICABLE, 400: TRI_NOT_APPLICABLE, 500: TRI_UNREADABLE}
 
@@ -205,6 +213,9 @@ def _source_of(handler: Any) -> tuple[str, str]:
 
     返回 `(来源, 问题)`：问题非空 = 拒。三处都看：`Origin`（跨站 POST 会带）、
     `Host`、以及 socket 对端地址 —— 只看一处会漏掉另一处能伪造的那一格。
+
+    头里那一格分三档（2026-10-27 的 D9）：真回环 ⇒ 过；通配绑定地址
+    （`_BIND_HOSTS`）⇒ 这一格不当证据、也不算"本机"，由第三层定；其余 ⇒ 拒。
     """
     client = ""
     addr = getattr(handler, "client_address", None)
@@ -214,7 +225,9 @@ def _source_of(handler: Any) -> tuple[str, str]:
     for label, raw in (("Origin", headers.get("Origin", "")),
                        ("Host", headers.get("Host", ""))):
         host = _host_of(raw)
-        if host and host not in _LOOPBACK_HOSTS:
+        if host in _LOOPBACK_HOSTS or host in _BIND_HOSTS:
+            continue
+        if host:
             return client or host, f"{label} 不是回环地址（{host}）—— 写面只对本机开"
     if client and client not in _LOOPBACK_HOSTS:
         return client, f"对端地址不是回环（{client}）—— 写面只对本机开"
@@ -579,6 +592,41 @@ def _run_argv(root: Path, task: str, *, sid: str = "",
     return argv
 
 
+def _spawn_detached(root: Path, argv: Sequence[str], prefix: str) -> tuple[int, str]:
+    """起一个 detached 子进程，stdout/stderr 追加进 `runs/<prefix>-<时间>.log`。
+
+    为什么抽成一处（2026-10-27，业主裁定 W3）：`/api/run` 的"起一趟"与
+    `/api/cache/warm` 的"起一趟预热"此前各写了一遍这套五件事 —— 建 `runs/`、
+    按时间戳命名日志、两个编码环境变量、Windows 的 detached 旗标、Popen 的形状。
+    两份同时改才不出事，而"文件句柄没 close"那个缺陷（D7）就是两份都没写对。
+
+    两处各自保留的东西：日志前缀（`web-run` / `web-cache-warm`，判据按它们 glob）
+    与 `runs/` 这个落点（"在飞"页与 `cwd` 都按它认）。
+
+    返回 `(pid, 工作区相对日志路径)`；相对路径用 `/` 分隔（记录与页面都按它认）。
+    """
+    import os
+    import subprocess
+    from datetime import datetime
+
+    runs = Path(root) / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    log = runs / f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+    env = dict(os.environ)
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
+    with open(log, "ab") as handle:
+        flags = 0
+        if os.name == "nt":
+            flags = getattr(subprocess, "DETACHED_PROCESS", 0) | \
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        proc = subprocess.Popen(list(argv), cwd=str(root), env=env,
+                                stdout=handle, stderr=subprocess.STDOUT,
+                                stdin=subprocess.DEVNULL, creationflags=flags,
+                                close_fds=True)
+    return int(proc.pid), str(log.relative_to(Path(root))).replace("\\", "/")
+
+
 def _spawn_run(root: Path, task: str, *, sid: str = "",
                resume: bool = False) -> tuple[int, str]:
     """真起一趟：detached 子进程，stdout/stderr 追加进 `runs/web-run-*.log`。
@@ -586,28 +634,11 @@ def _spawn_run(root: Path, task: str, *, sid: str = "",
     为什么 detached 而不是在服务进程里跑：一趟是几十分钟的模型循环，跟着网页进程生灭
     会把"用户关掉标签页"变成"任务被杀"。日志落到项目自己的 `runs/` 下，网页的"在飞"页
     与 `sessions/` 照样读得到它。
-    """
-    import os
-    import subprocess
-    from datetime import datetime
 
-    runs = root / "runs"
-    runs.mkdir(parents=True, exist_ok=True)
-    log = runs / f"web-run-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
-    env = dict(os.environ)
-    env.setdefault("PYTHONIOENCODING", "utf-8")
-    env.setdefault("PYTHONUTF8", "1")
-    handle = open(log, "ab")
-    flags = 0
-    if os.name == "nt":
-        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | \
-            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    proc = subprocess.Popen(_run_argv(root, task, sid=sid, resume=resume), cwd=str(root),
-                            env=env,
-                            stdout=handle, stderr=subprocess.STDOUT,
-                            stdin=subprocess.DEVNULL, creationflags=flags,
-                            close_fds=True)
-    return int(proc.pid), str(log.relative_to(root)).replace("\\", "/")
+    起进程那五件事（建目录 / 命名日志 / 编码环境 / Windows 旗标 / Popen）住在
+    :func:`_spawn_detached` 里，与预热的 `_spawn_warm` 共用同一份。
+    """
+    return _spawn_detached(root, _run_argv(root, task, sid=sid, resume=resume), "web-run")
 
 
 def handle_start_run(handler: Any, params: Mapping[str, str],

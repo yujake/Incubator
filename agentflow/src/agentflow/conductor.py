@@ -53,6 +53,11 @@ from .modelcost import settle_key
 from .tokenmeter import Charge, TokenMeter
 from .tools.base import ParamError
 from .agentspec import AgentBrief, AgentSpec
+# 顶层 import（2026-10-27，业主批准）：本文件要从秘书那一侧转发两个常量
+# （活档状态表、收工那句话的点名上限），转发比分头写一个字面量安全。
+# 方向只能是这样：`secretary` 顶层不 import `conductor`（秘书那一侧是懒 import），
+# 所以本行无环 —— 两种导入顺序都实测过（`temp/r_be2_cycle_test.py`）。
+from . import secretary as SEC
 
 #: 一次召唤的终局状态（`status`），与 `schema.TASK_STATUSES` 一致。
 TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled", "failed")
@@ -62,7 +67,12 @@ TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled", "failed")
 #: `block` 刻意不在里面：它是"停了、但这件活没做完"（`schema.TASK_STATUSES` 那一行的注释逐字）。
 #: 停了就不是"还在做"，而「活跃」问的是"还在做 / 在等"，不是"欠着多少活"—— 后者由
 #: `open_items_of` 与 `retire_ready` 的 `items_open` 各自回答，两轴不许折成一格。
-UNFINISHED_STATUSES: tuple[str, ...] = ("pending", "running")
+#: 真身在 `secretary.LIVE_TASK_STATUSES`（2026-10-27 从两份字面量收成一处转发）：
+#: 同一个"还没终态"的判据此前在 conductor 与 secretary 各写一份 `("pending", "running")`，
+#: 两处相等纯属巧合、没有任何判据钉住。转发之后"改一处忘另一处"在结构上不可能，
+#: 而判据 `tests/test_live_statuses_single_source.py` 钉住"两处名字取到的必须是同一个元组"
+#: 与"这两个文件里不再有第二处字面量"。
+UNFINISHED_STATUSES: tuple[str, ...] = tuple(SEC.LIVE_TASK_STATUSES)
 
 #: 两个读数各自的机器键（业主 2026-10-26 裁定：两个数分开命名，不许混成一个数）。
 #:
@@ -1981,9 +1991,14 @@ def _structured_payload(payload: Any) -> Any:
 
 
 #: 收工那一句里单栏点名几个编号（超出部分写"还有 N 条没点名"，不静默截断）。
-#: 5 与 `secretary.MAX_REMINDERS` 对齐：待办项本来最多点名 5 条，在跑的子代理同一屏里
-#: 也按同一档显示；两栏的完整编号都在 `stats.closure_reminders` 里（那一格不截）。
-_CLOSURE_IDS_IN_LINE = 5
+#:
+#: 这个上限不是一个独立的数：它就是 `secretary.MAX_REMINDERS`（同一屏的那一档）。
+#: 2026-10-27 之前这里写死 `5` 并附一句"与 `secretary.MAX_REMINDERS` 对齐" —— 一句注释
+#: 挡不住漂移（同一个文件里 `_roster_brief_fits` 走的就是转发 `SEC.BRIEF_MAX` 那条正路，
+#: 两种写法并存迟早分家，而分家之后"收工那句话点名 5 条、待办栏点名 6 条"不会有任何
+#: 判据报）。现在直接转发：`_CLOSURE_IDS_IN_LINE` 是同一个数，`secretary.MAX_REMINDERS`
+#: 一改这边立刻跟着变。判据：`tests/test_the_closure_line_follows_the_secretary.py`。
+_CLOSURE_IDS_IN_LINE: int = int(SEC.MAX_REMINDERS)
 
 
 def _closure_ids(column: Mapping[str, Any], *, limit: int) -> str:
@@ -2108,7 +2123,7 @@ def absolute_chain(rows: Sequence[Mapping[str, Any]], task_id: Any) -> list[str]
     而不是被悄悄补成一条看起来完整的链。空列表 = 这一行不在这批行里。
     """
     by_id = {str(r.get("task_id") or ""): r for r in rows
-             if not str(r.get("kind") or "")}
+             if Conductor._is_instance_row(r)}
     out: list[str] = []
     seen: set[str] = set()
     cur = str(task_id or "")
@@ -2426,6 +2441,11 @@ class Conductor:
         #: 也不算数）。它与 `_started_total` 分开记，因为
         #: `stats()["started_total"]` 说的是"真的跑过几个"，两件事不能混。
         self._cancelled_total = 0
+        #: 一拍一份台账快照的线程本地状态（2026-10-27，见 :meth:`reading_snapshot`）。
+        #: `rows` 非空 = 本线程正在作用域里（`_tasks()` 命中它）；`depth` 是可重入计数。
+        #: 为什么不是实例级的一份缓存：`Conductor` 是并发对象（每个召唤一条线程），
+        #: 实例级缓存会让一个线程的快照变成另一个线程的旧视图。
+        self._snapshot = threading.local()
 
     # ---------------------------------------------------------------- 路径
     @property
@@ -2449,10 +2469,115 @@ class Conductor:
 
     # ---------------------------------------------------------------- 台账读写
     def _tasks(self) -> list[dict]:
+        """台账的实例行 + 板项行（整表）。
+
+        ## 一拍一份快照（2026-10-27）
+        在 :meth:`reading_snapshot` 作用域内，本方法返回作用域开头那一次读到的同一份
+        列表（不再是每次现读）。这正是"同一拍里把同一张表读 N 遍"的收口点：
+        `store.rows()` 每次都给一份逐行新建的副本（内存缓存的那一版是 `_load` 的文档，
+        出口要逐行 `dict(r)` 拷一遍），而一拍里读 60 次与读 1 次在读数上一模一样。
+        作用域外逐字回到"现读现算"（下一次调用就是一次新的读）。
+        """
+        snap = getattr(getattr(self, "_snapshot", None), "rows", None)
+        if snap is not None:
+            return snap
         return self.store.rows("tasks")
+
+    def _snapshot_rows(self) -> list[dict] | None:
+        """当前线程在不在快照作用域里、那一份快照是哪一份（判据读它，生产代码不读）。"""
+        return getattr(getattr(self, "_snapshot", None), "rows", None)
+
+    def _refuse_write_in_snapshot(self, what: str) -> None:
+        """只读作用域的纪律：这一拍读的是同一份台账快照，写进去的行在作用域内看不见。
+
+        为什么是抛而不是记一条读数：半个视图的后果不是"读到旧值"那么轻 ——
+        `_set_item` / `_write_new_row` 写完再读会读不到自己刚写的那一行，于是
+        "写成功了"与"没写成"在同一段代码里长得一模一样（本仓反复踩的就是这一档）。
+        所以纪律做成硬的：作用域内调写入口 ⇒ 当场抛。
+
+        `note_edge_release` 没有被本守卫覆盖（它属 O1 那一批的"事件消账"改动面，
+        本轮按纪律不动它）—— 这一条写在 :meth:`reading_snapshot` 的 docstring 里，
+        并由判据 `tests/test_conductor_read_snapshot.py` 的"已知未覆盖"一节点名。
+        """
+        if self._snapshot_rows() is not None:
+            raise RuntimeError(
+                f"只读快照作用域（`reading_snapshot`）内不许{what}："
+                "这一拍读的是同一份台账快照，写进去的行在本作用域内读不到 —— "
+                "要写就别在作用域里写，或者退出作用域再写")
+
+    @contextlib.contextmanager
+    def reading_snapshot(self) -> Iterator[None]:
+        """只读快照作用域：本线程内 :meth:`_tasks` 命中作用域开头那一份台账。
+
+        ## 三条性质（判据 `tests/test_conductor_read_snapshot.py` 逐条钉住）
+        1. 作用域内只读：写入口（`_write_new_row` / `_set_item` / `set_item_detail` /
+           `note_blocked` / `_mark_stop_notified_many` / `note_stop_ack` / `_set_usage` /
+           `finish` / `_sweep_stale_top_running`）在作用域里调用会抛 `RuntimeError`；
+        2. 可重入：嵌套进入不换快照（外层那一份一直用到最外层退出）；
+        3. 出了作用域立刻回到现读现算：不在作用域里时下一个 `_tasks()` 就是一次新读
+           —— 所以"作用域外写一行、紧接着读"必须看得到它。
+        ## 为什么是 thread-local
+        `Conductor` 是并发对象（`SummonHandle` 每个召唤一条线程，`scheduler` 还并发派活）。
+        进程级缓存会让 A 线程的快照变成 B 线程的旧视图 —— 那正是"看不见刚写的行"那一档
+        事故，只不过换成了跨线程版本。`threading.local()` 让每个线程各有一份，作用域只
+        覆盖"本线程这一拍"。
+        ## 已知未覆盖的一个写入口
+        `note_edge_release` 不在守卫名单里（它属 O1 那一批"事件消账"的改动面，本轮按纪律
+        不动它）。所以别在作用域里调它：它写进父行 `inputs` 的落痕在本作用域内读不到。
+        哪一轮动它，就顺手在它开头加一行
+        `self._refuse_write_in_snapshot("记消边（note_edge_release）")`。
+        """
+        depth = int(getattr(self._snapshot, "depth", 0) or 0)
+        if depth == 0:
+            # 先在作用域外读一次（这一句必须走现读那一支，不能命中自己）
+            self._snapshot.rows = self.store.rows("tasks")
+        self._snapshot.depth = depth + 1
+        try:
+            yield
+        finally:
+            self._snapshot.depth = depth
+            if depth == 0:
+                self._snapshot.rows = None
 
     def _task(self, task_id: str) -> dict | None:
         return next((r for r in self._tasks() if r.get("task_id") == task_id), None)
+
+    def _tasks_by_id(self) -> dict[str, dict]:
+        """本拍台账的"编号 → 行"索引（一次读 + 一次建表）。
+
+        为什么要有它（2026-10-27）：`_task(tid)` 每调一次就是一次整表
+        `store.rows("tasks")`（`store` 那一层没有缓存，`_load` 每次都整文件
+        `json.loads`）⇒ 在"逐个子代理"的循环里调它，一拍就是 N 次全表反序列化。
+        实测（`temp/r_be2_reads_per_beat2.py`）：`broadcast` / `notify_children_of_stop`
+        逐子调用 `_task()` 是 N 次；换成这份索引是 1 次。
+        逐条调用点的正确形状：先取一次索引，再在索引里查。
+        """
+        return {str(r.get("task_id") or ""): r for r in self._tasks()}
+
+    @staticmethod
+    def _is_board_item(row: Mapping[str, Any]) -> bool:
+        """这一行是不是板项（工作项）—— 判据在 `secretary.row_axis` 的两个 item 档上。
+
+        ## 为什么收在这里（2026-10-27，`secretary.row_axis` 的 Q18 那条口径）
+        "这一行是代理还是工作项"此前在 conductor 里内联了二十来处
+        `str(r.get("kind") or "")`，而秘书那一侧早在 Q18 就把这条判据收成了
+        `secretary.row_axis`（五档：agent / item_open / item_closed / root / other），
+        并在自己的注释里写着"conductor 那几处的内联判法留给下一批收"。
+        本方法与 :meth:`_is_instance_row` 就是"下一批"：两处都不再自己读 `kind`，
+        只取 `row_axis` 的结论 —— 于是"板项算不算在跑 / 算不算子代理"这件事在全仓
+        只剩一处判据（判据：`tests/test_the_axis_is_asked_in_one_place.py`）。
+        """
+        return SEC.row_axis(row) in (SEC.ROW_AXIS_ITEM_OPEN, SEC.ROW_AXIS_ITEM_CLOSED)
+
+    @classmethod
+    def _is_instance_row(cls, row: Mapping[str, Any]) -> bool:
+        """"实例行"（代理行 / 顶趟行 / 历史终态行）—— 即"不是板项"。
+
+        为什么不直接叫 `is_agent`：这一类含已收工的与顶趟那一行（展示面与审计面要
+        回答的是"谁试过什么"），而"还算不算在跑"是另一问（`secretary.is_live_agent`，
+        Q27 把这两问拆开了）。轴仍然只有 `secretary.row_axis` 一处判。
+        """
+        return not cls._is_board_item(row)
 
     def _children_of(self, task_id: str) -> list[str]:
         """`task_id` 名下子代理的编号（展示面 / 审计面：谁试过什么都要看得见）。
@@ -2467,7 +2592,7 @@ class Conductor:
         （"某条边名下未消的项"）。两者一起才是 `draft/84` §T2 的消边谓词（实例轴 + 工作项轴），不是互相代替。
         """
         return [str(r["task_id"]) for r in self._tasks()
-                if r.get("parent_task_id") == task_id and not str(r.get("kind") or "")]
+                if r.get("parent_task_id") == task_id and self._is_instance_row(r)]
 
     def _admitted_children_of(self, task_id: str) -> list[str]:
         """`task_id` 受理过的子召唤（累计读数；审计面用，不再是扇出判据）。
@@ -2487,7 +2612,7 @@ class Conductor:
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id
-                and not str(r.get("kind") or "")
+                and self._is_instance_row(r)
                 and _occupies_fanout_slot(r)]
 
     def _in_flight_children_of(self, task_id: str) -> list[str]:
@@ -2557,7 +2682,7 @@ class Conductor:
         try:
             occupying = self._in_flight_children_of(tid)
             rows = {str(r.get("task_id") or ""): r for r in self._tasks()
-                    if not str(r.get("kind") or "")}
+                    if self._is_instance_row(r)}
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
             out["reason"] = f"{type(exc).__name__}: {exc}"
             return out
@@ -2694,27 +2819,38 @@ class Conductor:
         顺序，`task_id` 在最前）重建行。如果第一次落盘时 `task_id` 被排在最后，`rebuild()` 之后键顺序会变，于是
         `tasks.json` 逐字节不一致（I-9 直接失败）—— 数据没错，但"可重建"这条承诺破了。
         """
+        self._refuse_write_in_snapshot("建行（_write_new_row）")
         with self._id_lock:
             with self.store.tx("tasks", actor="conductor", note=note) as tx:
-                from .interactions import next_prefixed_id
+                return self._row_with_id(tx, row, note=note)
 
-                row["task_id"] = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
-                ordered = {"task_id": row["task_id"]}
-                ordered.update({k: v for k, v in row.items() if k != "task_id"})
-                task = S.Task(
-                    **{k: v for k, v in ordered.items() if k in S.Task.__dataclass_fields__}
-                )
-                task.validate()
-                # 落盘的行一律补齐到全字段（`Task.to_dict()` = dataclass 字段顺序）。
-                #
-                # 为什么不是"调用方给什么就写什么"（2026-10-08 加"工作项板"那七格时实测）：
-                # 调用方的行 dict 是手写的字面量，加列之后它们不会自动多出那七格，
-                # 而 `rebuild()` 用 `Task.to_dict()` 重建 —— 于是"第一次落盘 19 键、
-                # 重建后 26 键"，`tasks.json` 逐字节不一致，I-9 当场红
-                # （`tests/test_conductor.py::test_i9_tasks_snapshot_rebuilds_byte_identical`
-                # 与 `tests/test_task_instance.py` 就是抓住它的那两条）。
-                # 键集与键序只留一处口径：这里，用 dataclass 自己吐出来的那一份。
-                tx.upsert("tasks", task.to_dict(), note=note)
+    def _row_with_id(self, tx: Any, row: dict, *, note: str) -> str:
+        """在一笔事务里取号 + 建行（`_write_new_row` 与批量建行共用的唯一一处）。
+
+        为什么抽出来而不是让批量那一路自己写一遍（2026-10-27）：落盘的键集与键序
+        （`task_id` 必须第一）与"取号在临界区内"这两条都是逐字节级别的判据
+        （I-9 的 `tasks.json` 重建一致），两处各写一遍的代价不是"重复代码"，而是
+        "一条路径的 `task_id` 排到了最后 ⇒ `rebuild()` 之后快照变了"。
+        """
+        from .interactions import next_prefixed_id
+
+        row["task_id"] = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
+        ordered = {"task_id": row["task_id"]}
+        ordered.update({k: v for k, v in row.items() if k != "task_id"})
+        task = S.Task(
+            **{k: v for k, v in ordered.items() if k in S.Task.__dataclass_fields__}
+        )
+        task.validate()
+        # 落盘的行一律补齐到全字段（`Task.to_dict()` = dataclass 字段顺序）。
+        #
+        # 为什么不是"调用方给什么就写什么"（2026-10-08 加"工作项板"那七格时实测）：
+        # 调用方的行 dict 是手写的字面量，加列之后它们不会自动多出那七格，
+        # 而 `rebuild()` 用 `Task.to_dict()` 重建 —— 于是"第一次落盘 19 键、
+        # 重建后 26 键"，`tasks.json` 逐字节不一致，I-9 当场红
+        # （`tests/test_conductor.py::test_i9_tasks_snapshot_rebuilds_byte_identical`
+        # 与 `tests/test_task_instance.py` 就是抓住它的那两条）。
+        # 键集与键序只留一处口径：这里，用 dataclass 自己吐出来的那一份。
+        tx.upsert("tasks", task.to_dict(), note=note)
         return str(row["task_id"])
 
     # ---------------------------------------------------------------- 名册登记（唯一漏斗）
@@ -2917,6 +3053,9 @@ class Conductor:
     def _roster_row_is_this_child(row: Mapping[str, Any], *, key: str, name: str,
                                   task_id: str, surface: str = "") -> bool:
         """这一行是不是"这个子代理的那一行"（三份的键不同：正文看 `add`、对照表看 `bind`）。"""
+        # 这一处问的不是"轴"（是不是板项），而是"这是名册三份里哪一份的那一行"：
+        # 名册正文只认 `add`、对照表只认 `bind`、面池按名字/槽位认。所以它就地读 `kind`，
+        # 不走 `row_axis` —— 那一格回答的是任务台账的轴，不是名册事件的种类。
         kind = str(row.get("kind") or "")
         who = str(row.get("name") or "")
         if key == "surfaces":
@@ -2962,7 +3101,7 @@ class Conductor:
 
     def _board_rows(self) -> list[dict]:
         """板项（`kind` 非空的行）。读不成 ⇒ 抛（调用方折成三态，不许折成"板上没事"）。"""
-        return [r for r in self._tasks() if str(r.get("kind") or "")]
+        return [r for r in self._tasks() if self._is_board_item(r)]
 
     def open_item(self, *, kind: str, role: str, expects: str, action: str = "",
                   summary: str = "", called_by: str = "", parent_task_id: str | None = None,
@@ -2977,7 +3116,25 @@ class Conductor:
         （message / report / notice）没有"动作"这回事 ⇒ 用 kind 本身当哨兵值
         （`Task.validate` 要求 `action` 非空，而空串会让这一行读起来像"一次没有动作的召唤"）。
         """
-        row = {
+        row = self._item_row(kind=kind, role=role, expects=expects, action=action,
+                             summary=summary, called_by=called_by,
+                             parent_task_id=parent_task_id, depth=depth,
+                             keep_alive=keep_alive, input_key=input_key)
+        return self._write_new_row(row, note=f"item:{kind}")
+
+    @staticmethod
+    def _item_row(*, kind: str, role: str, expects: str, action: str = "",
+                  summary: str = "", called_by: str = "",
+                  parent_task_id: str | None = None, depth: int = 1,
+                  keep_alive: bool = False, input_key: str = "") -> dict:
+        """一条板项行的形状（`open_item` 与 `open_items_many` 共用的唯一一处）。
+
+        为什么共用：`open_item` 的手写行 dict 是"甲形态那七格"的唯一落点，而批量建行
+        必须写出逐字节相同的行（判据 `tests/test_board_batch_write.py` 比
+        `tasks.json` 的 sha256）。两处各写一份的代价不是重复代码，而是"批量那一路
+        少了 `item_close` 一格"——那种偏差不会让任何判据从绿变红。
+        """
+        return {
             "role": role, "action": action or kind, "called_by": called_by or S.CONDUCTOR_ROLE,
             "parent_task_id": parent_task_id, "depth": max(1, int(depth)),
             "input_key": input_key, "status": "pending", "outcome": None,
@@ -2988,7 +3145,57 @@ class Conductor:
             "kind": kind, "expects": expects, "item_state": "queued", "item_close": "",
             "seen_by": "", "seen_step": None, "keep_alive": bool(keep_alive),
         }
-        return self._write_new_row(row, note=f"item:{kind}")
+
+    def open_items_many(self, items: Sequence[Mapping[str, Any]], *,
+                        details: Sequence[str] | None = None) -> list[str]:
+        """一笔事务开 N 条工作项（广播 / 停止通知那一族）。返回的编号顺序与 `items` 一致。
+
+        `items` 的每一格与 :meth:`open_item` 的关键字参数同名；`details` 给了就逐条
+        把那一句写进 `detail`（与逐条调 :meth:`set_item_detail` 的落盘结果相同）。
+
+        ## 为什么要有它（2026-10-27 实测）
+        改前"给 N 个人各开一条 ack 板项"= 每人两笔事务（`open_item` + `set_item_detail`），
+        每笔都是一次取锁 + 一次整表读 + 一次整表写 + 一次事件追加。实测
+        （`temp/r_be2_board_write_cost.py`）：42 ms/条（50 行台账）→ 93 ms/条（500 行），
+        于是 `broadcast` 给 12 个人要 0.5–1.1 s，而这 12 条写的是同一张表、同一个时刻。
+
+        ## 与逐条路径的关系（判据：落盘逐字节一致）
+        表内容与"逐条 `open_item` + 逐条 `set_item_detail`"逐字节相同；事件流也逐条
+        相同（每条两项：`item:<kind>` 与 `item:detail`）。差别只有提交标记：一笔事务
+        一条 `commit` 行，逐条路径是 2N 条 —— 而 `commit` 行带 `ts` / `batch`（pid + 进程内
+        序号），任何两次运行都不相同，所以判据按"归一化之后的事件序列"比
+        （`tests/test_board_batch_write.py`）。
+        ## 全成或全不成
+        一笔事务 ⇒ 批内任何一条抛（`schema.Task.validate` 不过、取号失败）⇒ 整批不落盘：
+        `store.tx` 的提交块在异常时不写任何表、不追加任何事件。逐条路径没有这个性质 ——
+        它写到一半失败会在盘上留下前几条，而调用方只看到一次异常。
+        """
+        specs = [dict(x) for x in items]
+        if not specs:
+            return []
+        texts: list[str] = ["" for _ in specs]
+        if details is not None:
+            if len(details) != len(specs):
+                raise ValueError(
+                    f"details 与 items 必须一一对应（收到 {len(details)} / {len(specs)}）")
+            # 与 `set_item_detail` 同一条口径：空说明等于"没有说明"，不写第二笔。
+            texts = [str(t or "").strip() for t in details]
+        self._refuse_write_in_snapshot("批量建行（open_items_many）")
+        out: list[str] = []
+        with self._id_lock:
+            with self.store.tx("tasks", actor="conductor", note="items:batch") as tx:
+                for spec, text in zip(specs, texts):
+                    row = self._item_row(**spec)
+                    note = f"item:{row.get('kind')}"
+                    tid = self._row_with_id(tx, row, note=note)
+                    if text:
+                        row["detail"] = text
+                        task = S.Task(**{k: v for k, v in row.items()
+                                         if k in S.Task.__dataclass_fields__})
+                        task.validate()
+                        tx.upsert("tasks", task.to_dict(), note="item:detail")
+                    out.append(tid)
+        return out
 
     def open_retire_question(self, *, parent_task_id: str, child_task_id: str,
                              parent_role: str = "", child_role: str = "",
@@ -3205,12 +3412,13 @@ class Conductor:
         —— 那一格装不进 `tasks`（列里没有"确认步号"这一格），所以它落在事件 note 上。
         缺省空串 ⇒ 沿用从前的 `item:<state>`，既有调用方的事件逐字不变。
         """
+        self._refuse_write_in_snapshot("改板项状态（_set_item）")
         with self.store.tx("tasks", actor="conductor") as tx:
             row = next((r for r in tx.rows("tasks")
                         if str(r.get("task_id")) == str(task_id)), None)
             if row is None:
                 return "", f"没有这一项（task_id={task_id!r}）—— 不是'已经做完'", False
-            if not str(row.get("kind") or ""):
+            if not self._is_board_item(row):
                 return "", f"{task_id} 不是板项（kind 为空）⇒ 它的状态不由状态机管", False
             cur = str(row.get("item_state") or "queued")
             move = self.item_move(cur, state)
@@ -3272,6 +3480,8 @@ class Conductor:
             row = self._task(str(task_id)) or {}
         except Exception as exc:  # noqa: BLE001 —— 读不成不猜，留在 seen
             return "seen", f"{task_id} 收口前读不成（{type(exc).__name__}: {exc}）"
+        # 问的是"哪一类板项"（信息型的那几类在渲染那一拍就收口），不是"是不是板项" ——
+        # 轴由 `_is_board_item` 判，这里只按 kind 取值分流，所以就地读 `kind` 是对的。
         if str(row.get("kind") or "") not in INFORMATIONAL_ITEM_KINDS:
             return "seen", ""
         key = str(row.get("input_key") or "")
@@ -3302,6 +3512,7 @@ class Conductor:
         text = str(detail or "").strip()
         if not text:
             return "", "说明是空的 ⇒ 什么都不写（空说明与没有说明是两件事）"
+        self._refuse_write_in_snapshot("改板项说明（set_item_detail）")
         with self.store.tx("tasks", actor="conductor") as tx:
             row = next((r for r in tx.rows("tasks")
                         if str(r.get("task_id")) == str(task_id)), None)
@@ -3398,7 +3609,7 @@ class Conductor:
                 out["refused"].append({"item_id": tid, "code": "no_such_item",
                                        "reason": f"台账里没有 {tid} 这一项"})
                 continue
-            if not str(row.get("kind") or ""):
+            if not self._is_board_item(row):
                 out["refused"].append({"item_id": tid, "code": "not_board_item",
                                        "reason": (f"{tid} 不是板项（kind 为空）⇒ "
                                                   "它的状态不由状态机管")})
@@ -3479,16 +3690,26 @@ class Conductor:
         """
         return list(self.open_items_by_parent().get(str(task_id or ""), ()))
 
-    def open_items_by_parent(self) -> dict[str, list[dict]]:
+    def open_items_by_parent(self,
+                             rows: Sequence[Mapping[str, Any]] | None = None
+                             ) -> dict[str, list[dict]]:
         """「父 → 名下未消的板项」一次算完（`open_items_of` 与 `tree()` 共用这一份判据）。
 
         为什么要有这个方法：`tree()` 要给每一行带一格"我名下还有几条没消"，
         逐行调 `open_items_of` 会把同一张表扫 N 遍；而两处各写一遍过滤条件，
         迟早一处改了另一处没改。判据本身只有这里一处：`kind` 非空、`item_state != "done"`、
         按 `parent_task_id` 归到收件人。
+
+        `rows` 给了就在那一份快照上算（`tree()` 用：它已经读了整表，再读一次是
+        同一拍对同一张表的第二次整文件反序列化）；不给就照旧现读。
+        注意：传进来的必须是含板项行的整表快照（`_tasks()`），不是"只留实例行"
+        的那一份 —— 板项行的 `kind` 非空，被过滤掉的快照会让这份读数恒为空。
         """
         out: dict[str, list[dict]] = {}
-        for row in self._board_rows():
+        src = self._tasks() if rows is None else rows
+        for row in src:
+            if not self._is_board_item(row):
+                continue
             if str(row.get("item_state") or "") == "done":
                 continue
             out.setdefault(str(row.get("parent_task_id") or ""), []).append(row)
@@ -3525,10 +3746,10 @@ class Conductor:
         by_task = dict(snap.get("by_task") or {}) if snap.get("checked") else {}
         out: list[dict[str, Any]] = []
         for r in rows:
-            if r.get("parent_task_id") != task_id or str(r.get("kind") or ""):
+            if r.get("parent_task_id") != task_id or self._is_board_item(r):
                 continue
             tid = str(r.get("task_id") or "")
-            state = ("活跃" if str(r.get("status") or "") in ("pending", "running")
+            state = ("活跃" if str(r.get("status") or "") in UNFINISHED_STATUSES
                      else "在等待")
             cell = by_task.get(tid) or {}
             got = self.active_reading(tid, snapshot=snap) if by_task else {}
@@ -3630,7 +3851,7 @@ class Conductor:
                                "waited": {}, "unwaited": [], "problems": [],
                                "reason": ""}
         try:
-            rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+            rows = [r for r in self._tasks() if self._is_instance_row(r)]
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
             out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）"
             return out
@@ -3749,7 +3970,7 @@ class Conductor:
         而销号是不可逆的那一类动作（这正是"没查成"与"查过了没问题"被折平的代价）。
         """
         try:
-            rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+            rows = [r for r in self._tasks() if self._is_instance_row(r)]
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
             return {"checked": False, "by_task": {}, "waiting_only": [],
                     "stalled": [],
@@ -4022,7 +4243,7 @@ class Conductor:
         """
         root = str(root_task_id or "")
         try:
-            rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+            rows = [r for r in self._tasks() if self._is_instance_row(r)]
         except Exception as exc:  # noqa: BLE001
             return {"checked": False, "order": [], "depth_of": {}, "parent_of": {},
                     "rows": [], "reason": f"{type(exc).__name__}: {exc}"}
@@ -4174,7 +4395,7 @@ class Conductor:
             tid = str(r.get("task_id") or "")
             if not tid:
                 continue
-            if str(r.get("kind") or ""):
+            if self._is_board_item(r):
                 # 板项行（`kind` 非空）：它的 `parent_task_id` 是收件人的编号，
                 # 与"谁派出去的"是两轴 —— 只把未消的项计到收件人名下。
                 if str(r.get("item_state") or "") != "done":
@@ -4186,7 +4407,7 @@ class Conductor:
                                             "status": "", "role": ""})
             cur["status"] = str(r.get("status") or "")
             cur["role"] = str(r.get("role") or "")
-            if cur["status"] in ("pending", "running"):
+            if cur["status"] in UNFINISHED_STATUSES:
                 cur["in_flight"] = int(cur.get("in_flight") or 0) + 1
         return {"checked": True, "by_child": by_child, "reason": ""}
 
@@ -4205,7 +4426,7 @@ class Conductor:
             return ""
         ends = [str(r.get("ended_at") or "") for r in rows]
         running = sum(1 for r in rows
-                      if str(r.get("status") or "") in ("pending", "running"))
+                      if str(r.get("status") or "") in UNFINISHED_STATUSES)
         return f"{len(rows)}:{running}:{max(ends) if ends else ''}"
 
     def settlement_reading(self, parent_task_id: str) -> dict[str, Any]:
@@ -4301,7 +4522,7 @@ class Conductor:
                                  "静默 no-op（DSH 逐字：已经结束的中断是 accepted no-op）"]})
             return base
         status = str(row.get("status") or "")
-        if status not in ("pending", "running"):
+        if status not in UNFINISHED_STATUSES:
             base.update({"ok": True, "accepted": True, "code": "no_op", "no_op": True,
                          "why": [f"{child} 此刻 status={status!r}（不是 pending/running）"
                                  "⇒ 已经结束了，静默 no-op"]})
@@ -4337,6 +4558,7 @@ class Conductor:
         """
         mark = f"{self._BLOCKED_PREFIX}{child_task_id}@{S.now_iso()}|{str(why or '')[:120]}"
         try:
+            self._refuse_write_in_snapshot("记阻塞（note_blocked）")
             with self.store.tx("tasks", actor="conductor", note="edge:blocked") as tx:
                 parent = tx.find("tasks", task_id=parent_task_id)
                 if parent is None:
@@ -4414,34 +4636,54 @@ class Conductor:
         except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 没有在飞的子
             return {"checked": False, "notified": [], "skipped": [],
                     "reason": f"台账读不成（{type(exc).__name__}: {exc}）"}
-        parent = self._task(mine) or {}
+        # 父那一行与每个子那一行都从同一份索引里取（2026-10-27）：改前是 1 + N 次
+        # `_task()` = 1 + N 次整表读。循环里只新增板项行、只改父行的 `inputs`，
+        # 而父行已在循环之前读进 `parent`，所以这份索引不陈旧。
+        by_id = self._tasks_by_id()
+        parent = by_id.get(mine) or {}
         marks = [str(x) for x in (parent.get("inputs") or [])]
         already = {m[len(self._STOP_NOTIFIED_PREFIX):].split("@", 1)[0]
                    for m in marks if m.startswith(self._STOP_NOTIFIED_PREFIX)}
         notified: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
+        todo: list[dict[str, Any]] = []
         for tid in kids:
             if tid in already:
                 skipped.append({"child_task_id": tid, "why": "这条边已经通知过（幂等）"})
                 continue
-            row = self._task(tid) or {}
-            at = S.now_iso()
+            row = by_id.get(str(tid)) or {}
+            todo.append({"tid": tid, "at": S.now_iso(),
+                         "role": str(row.get("role") or ""),
+                         "depth": int(row.get("depth") or 1) + 1})
+        # 一笔事务开完 N 条通知项 + 一笔事务记完 N 条落痕（2026-10-27）：改前是每条边
+        # 三笔事务（开项 + 写说明 + 记落痕）。落盘结果与逐条路径逐字节一致，理由与
+        # 判据见 `open_items_many` 的 docstring 与 `tests/test_board_batch_write.py`。
+        # 代价换成一条新纪律：整批同成同败（一条边开不成 ⇒ 这一批一条都不开）。
+        if todo:
+            detail = (f"停止通知（{reason or 'stop'}）沿边下发；"
+                      f"收到即 ack（ack 才算传达到，`draft/84` §2.2）")
             try:
-                item = self.open_item(
-                    kind="notice", role=str(row.get("role") or ""), expects="ack",
-                    action="notice",
-                    summary=f"停止通知（{reason or 'stop'}）：请收工并停掉你起的子进程",
-                    called_by=str(by or S.CONDUCTOR_ROLE), parent_task_id=tid,
-                    depth=int(row.get("depth") or 1) + 1,
-                    input_key=f"stop-notice@{mine}->{tid}")
-                self.set_item_detail(item, f"停止通知（{reason or 'stop'}）沿边下发；"
-                                           f"收到即 ack（ack 才算传达到，`draft/84` §2.2）")
-            except Exception as exc:  # noqa: BLE001 —— 一条边开不成不许带走其它边
-                skipped.append({"child_task_id": tid,
-                                "why": f"通知项没开成：{type(exc).__name__}: {exc}"})
-                continue
-            self._mark_stop_notified(mine, tid, at, item)
-            notified.append({"child_task_id": tid, "item_id": item, "at": at})
+                item_ids = self.open_items_many(
+                    [{"kind": "notice", "role": t["role"], "expects": "ack",
+                      "action": "notice",
+                      "summary": f"停止通知（{reason or 'stop'}）：请收工并停掉你起的子进程",
+                      "called_by": str(by or S.CONDUCTOR_ROLE),
+                      "parent_task_id": t["tid"], "depth": t["depth"],
+                      "input_key": f"stop-notice@{mine}->{t['tid']}"} for t in todo],
+                    details=[detail for _ in todo])
+            except Exception as exc:  # noqa: BLE001 —— 整批不落盘，逐条如实报"没开成"
+                for t in todo:
+                    skipped.append({"child_task_id": t["tid"],
+                                    "why": f"通知项没开成（整批回滚）："
+                                           f"{type(exc).__name__}: {exc}"})
+                item_ids = []
+            if item_ids:
+                pairs = [(t["tid"], t["at"], item_id)
+                         for t, item_id in zip(todo, item_ids)]
+                self._mark_stop_notified_many(mine, pairs)
+                for t, item_id in zip(todo, item_ids):
+                    notified.append({"child_task_id": t["tid"], "item_id": item_id,
+                                     "at": t["at"]})
         out: dict[str, Any] = {"checked": True, "notified": notified, "skipped": skipped,
                                "reason": ""}
         if not kids:
@@ -4449,27 +4691,43 @@ class Conductor:
                            "（不是『通知过了』）")
         return out
 
-    def _mark_stop_notified(self, parent_task_id: str, child_task_id: str, at: str,
-                            item_id: str) -> tuple[str, str]:
-        """把"这条边通知过了"写进父那一行的 `inputs`（幂等；失败不许带走调用方）。"""
-        mark = f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@{at}|{item_id}"
+    def _mark_stop_notified_many(self, parent_task_id: str,
+                                 pairs: Sequence[tuple[str, str, str]]) -> list[tuple[str, str]]:
+        """批量记"这几条边通知过了"（一笔事务；返回逐条 `(mark, 问题)`）。
+
+        `pairs` 是 `(子代号, 时刻, 通知项号)`。为什么一笔事务能写出与逐条同样的事件：
+        `Tx.upsert` 每次调用记一条事件，所以本方法逐条 `upsert` 父那一行的推进中的
+        `inputs` —— 事件条数、`op`、`note`（`edge:stop-notified`）与逐条路径逐条相同，
+        差的只有提交标记（一笔一条）。幂等与"父行没有 ⇒ 报问题"逐字照旧。
+        为什么要批量（2026-10-27）：改前每条边一笔事务，而它们改的是同一行、
+        同一拍 —— 12 条边 = 12 次整表读 + 12 次整表写。
+        """
+        out: list[tuple[str, str]] = []
+        self._refuse_write_in_snapshot("批量记停止通知（_mark_stop_notified_many）")
         try:
             with self.store.tx("tasks", actor="conductor", note="edge:stop-notified") as tx:
                 parent = tx.find("tasks", task_id=parent_task_id)
                 if parent is None:
-                    return "", f"没有这一行（parent_task_id={parent_task_id!r}）"
+                    why = f"没有这一行（parent_task_id={parent_task_id!r}）"
+                    return [("", why) for _ in pairs]
                 marks = [str(x) for x in (parent.get("inputs") or [])]
-                if any(m.startswith(f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@")
-                       for m in marks):
-                    return "", "已经记过（幂等：不写第二份）"
-                parent["inputs"] = sorted(set(marks) | {mark})
-                task = S.Task(**{k: v for k, v in parent.items()
-                                 if k in S.Task.__dataclass_fields__})
-                task.validate()
-                tx.upsert("tasks", task.to_dict(), note="edge:stop-notified")
+                for child_task_id, at, item_id in pairs:
+                    mark = f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@{at}|{item_id}"
+                    if any(m.startswith(f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@")
+                           for m in marks):
+                        out.append(("", "已经记过（幂等：不写第二份）"))
+                        continue
+                    marks = sorted(set(marks) | {mark})
+                    parent["inputs"] = marks
+                    task = S.Task(**{k: v for k, v in parent.items()
+                                     if k in S.Task.__dataclass_fields__})
+                    task.validate()
+                    tx.upsert("tasks", task.to_dict(), note="edge:stop-notified")
+                    out.append((mark, ""))
         except Exception as exc:  # noqa: BLE001 —— 落痕失败不该让"通知"这件事失效
-            return "", f"{type(exc).__name__}: {exc}"
-        return mark, ""
+            return [(("" if i >= len(out) else out[i][0]), f"{type(exc).__name__}: {exc}")
+                    for i in range(len(pairs))]
+        return out
 
     def note_stop_ack(self, parent_task_id: str, child_task_id: str, *,
                       at: str = "") -> tuple[str, str]:
@@ -4482,6 +4740,7 @@ class Conductor:
         """
         mark = f"{self._STOP_ACKED_PREFIX}{child_task_id}@{str(at or S.now_iso())}"
         try:
+            self._refuse_write_in_snapshot("记停止确认（note_stop_ack）")
             with self.store.tx("tasks", actor="conductor", note="edge:stop-acked") as tx:
                 parent = tx.find("tasks", task_id=parent_task_id)
                 if parent is None:
@@ -4574,7 +4833,7 @@ class Conductor:
                             f"（它的父是 {child.get('parent_task_id')!r}）")
             if str(child.get("kind") or ""):
                 return "", f"{child_task_id} 是工作项（kind={child.get('kind')!r}），不是代理"
-            if str(child.get("status") or "") in ("pending", "running"):
+            if str(child.get("status") or "") in UNFINISHED_STATUSES:
                 return "", (f"{child_task_id} 还在跑（status={child.get('status')!r}）"
                             "⇒ 不许记消边（先把它的最近报告端给父）")
             # S4-b（`draft/84` §2.2）：停止通知要 ack 才算传达到 —— 这条边如果被
@@ -4713,7 +4972,7 @@ class Conductor:
             out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成"
             return out
         agents = {str(r.get("task_id") or ""): r for r in rows
-                  if not str(r.get("kind") or "")}
+                  if self._is_instance_row(r)}
         if root not in agents:
             out["checked"] = False
             out["reason"] = f"台账里没有 {root!r} 这一行代理 ⇒ 判不了它名下那棵树"
@@ -4737,7 +4996,7 @@ class Conductor:
                 stack.append(kid)
         open_items: dict[str, list[str]] = {}
         for row in rows:
-            if not str(row.get("kind") or ""):
+            if not self._is_board_item(row):
                 continue
             if str(row.get("item_state") or "") == "done":
                 continue
@@ -4820,24 +5079,32 @@ class Conductor:
         业主 §1.9 的三分支里"在等待"正是可以退役的那一支，只要它自己名下没有活跃子代理。所以这一格只回答"它是不是
         声明过待命"，不参与"能不能退役"的判定（那一条由秘书的三分支说，S1k；"活跃 / 在等待"由 `active_children`
         说）。三态：没有那一行 / 读不成 ⇒ `checked=False`（不许折成"没声明过"）。
+
+        ## 一拍只读一次台账（2026-10-27）
+        改前这一格对同一张 `tasks` 表读了两遍：先 `_task(task_id)`（整表 `rows()` + 线性扫），
+        再为"它名下最新的那条派活项"扫第二遍 `_tasks()`。而 `store.rows()` 没有缓存
+        （`store._load` 每次都整文件 `json.loads`），所以单价 = 一次全表反序列化。
+        调用它的秘书名册那一层是逐名册项跑的 ⇒ 名册 N 项就有 2N 次全表读。
+        实测（`temp/r_be2_reads_per_beat2.py`，12 项名册 / 13 行台账）：`roster_view` 一拍
+        `store.rows("tasks")` 31 次 = 2N+7；这一格收成一次读之后是 N+7。
+        判据一字不动（三态、`kind == "delegation"` 的早退、取"最新那条"的排序键都没改）。
         """
         try:
-            row = self._task(task_id)
+            rows = self._tasks()
         except Exception as exc:  # noqa: BLE001
             return {"checked": False, "keep_alive": False,
                     "reason": f"{type(exc).__name__}: {exc}"}
+        row = next((r for r in rows if r.get("task_id") == task_id), None)
         if row is None:
             return {"checked": False, "keep_alive": False,
                     "reason": f"台账里没有 {task_id!r}"}
+        # 问的是"这一行是不是一条派活项"（待命声明只落在 `kind="delegation"` 的行上，
+        # `schema.Task.validate` 的受控条件），不是"它是不是板项" —— 轴不走 row_axis。
         if str(row.get("kind") or "") == "delegation":
             return {"checked": True, "keep_alive": bool(row.get("keep_alive")), "reason": ""}
-        try:
-            items = [r for r in self._tasks()
-                     if r.get("parent_task_id") == task_id
-                     and str(r.get("kind") or "") == "delegation"]
-        except Exception as exc:  # noqa: BLE001
-            return {"checked": False, "keep_alive": False,
-                    "reason": f"{type(exc).__name__}: {exc}"}
+        items = [r for r in rows
+                 if r.get("parent_task_id") == task_id
+                 and str(r.get("kind") or "") == "delegation"]
         if not items:
             return {"checked": True, "keep_alive": False, "reason": ""}
         items.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
@@ -4863,13 +5130,13 @@ class Conductor:
             return {"checked": False, "rows": [], "reason": f"{type(exc).__name__}: {exc}"}
         out: list[dict[str, str]] = []
         for r in rows:
-            if r.get("parent_task_id") != parent_task_id or str(r.get("kind") or ""):
+            if r.get("parent_task_id") != parent_task_id or self._is_board_item(r):
                 continue
             tid = str(r.get("task_id") or "")
             row_role = str(r.get("role") or "")
             if role and row_role != role:
                 continue
-            if str(r.get("status") or "") in ("pending", "running"):
+            if str(r.get("status") or "") in UNFINISHED_STATUSES:
                 out.append({"task_id": tid, "role": row_role, "state": "活跃"})
                 continue
             try:
@@ -4913,8 +5180,18 @@ class Conductor:
             rows = self._tasks()
         except Exception as exc:  # noqa: BLE001
             return {"checked": False, "ready": [], "reason": f"{type(exc).__name__}: {exc}"}
-        done = {(e["child_task_id"], e["attempt"]) for e in
-                self.released_edges(parent_task_id).get("edges", [])}
+        # 销过的边就在上面这一份快照里读（2026-10-27）：改前这里调
+        # `released_edges(parent_task_id)`，而它内部是 `_task()` ⇒ 同一拍对 `tasks`
+        # 表再读一次（`store.rows` 无缓存，单价 = 一次全表 `json.loads`）。
+        # 解析仍然只走 `_released_pairs` 那一处（落痕格式的唯一读法），
+        # 三态也一字不动：父那一行不在 ⇒ 与 `released_edges` 的 `checked=False` 同一条
+        # 结果（下面 `done` 为空集 ⇒ 没有哪条边算销过）。
+        parent_row = next((r for r in rows if r.get("task_id") == parent_task_id), None)
+        # 只需"这个名字销过没有"：改前先把边收成 `(子, 第几次)` 的集合、再逐行
+        # `any(c == tid for c, _a in done)`（O(行数 × 销过的边数)），而它问的正是
+        # 下面这个集合 —— 落痕格式仍然只走 `_released_pairs` 那一处解析。
+        done_children = {e["child_task_id"]
+                         for e in (self._released_pairs(parent_row) if parent_row else [])}
         # 交差账（唯一读口）：账上有它 ⇒ 不算"还在跑"（业主 2026-10-27 第四条把它记为
         # 静默；与 `agent_state` 第 ⑥ 步同一份事实）。读不成 ⇒ 空集：维持既有判法
         # （"在飞"是保守方向 = 不退役）。
@@ -4926,21 +5203,21 @@ class Conductor:
             pid = str(r.get("parent_task_id") or "")
             if not pid:
                 continue
-            if str(r.get("kind") or ""):
+            if self._is_board_item(r):
                 if str(r.get("item_state") or "") != "done":
                     items_by_parent[pid] = items_by_parent.get(pid, 0) + 1
                 continue
-            if (str(r.get("status") or "") in ("pending", "running")
+            if (str(r.get("status") or "") in UNFINISHED_STATUSES
                     and str(r.get("task_id") or "") not in handed):
                 active_by_parent[pid] = active_by_parent.get(pid, 0) + 1
         ready: list[dict[str, Any]] = []
         for r in rows:
-            if r.get("parent_task_id") != parent_task_id or str(r.get("kind") or ""):
+            if r.get("parent_task_id") != parent_task_id or self._is_board_item(r):
                 continue
             tid = str(r.get("task_id") or "")
-            if (tid, 1) in done or any(c == tid for c, _a in done):
+            if tid in done_children:
                 continue
-            if (str(r.get("status") or "") in ("pending", "running")
+            if (str(r.get("status") or "") in UNFINISHED_STATUSES
                     and tid not in handed):
                 branch = "active"
             elif active_by_parent.get(tid, 0) > 0:
@@ -5124,16 +5401,21 @@ class Conductor:
                              "要覆盖全树得逐层向下转发")}
         who = str(by or "") or current_caller_role() or S.CONDUCTOR_ROLE
         stamp = hashlib.sha1(str(subject or "").encode("utf-8")).hexdigest()[:8]
-        items: list[str] = []
-        for tid in kids:
-            row = self._task(tid) or {}
-            item = self.open_item(
-                kind="message", role=str(row.get("role") or ""), expects="ack",
-                action="message", summary=str(subject or "")[:200], called_by=who,
-                parent_task_id=tid, depth=int(row.get("depth") or 1) + 1,
-                input_key=f"broadcast@{who}:{tid}:{stamp}")
-            self.set_item_detail(item, (str(subject or "") + "\n" + str(body or "")).strip()[:400])
-            items.append(item)
+        # 收件人那一行的 `role` / `depth` 只读一次索引（2026-10-27）：改前是逐子
+        # `self._task(tid)` = 逐子一次整表读。
+        by_id = self._tasks_by_id()
+        # 一笔事务开完 N 条（2026-10-27）：改前每人两笔事务（开项 + 写说明），
+        # 实测 42–93 ms/条 ⇒ 12 个人 0.5–1.1 s。落盘结果与逐条路径逐字节一致
+        # （判据 `tests/test_board_batch_write.py`），而"全成或全不成"也一并有了。
+        detail = (str(subject or "") + "\n" + str(body or "")).strip()[:400]
+        items = self.open_items_many(
+            [{"kind": "message", "role": str((by_id.get(str(tid)) or {}).get("role") or ""),
+              "expects": "ack", "action": "message",
+              "summary": str(subject or "")[:200], "called_by": who,
+              "parent_task_id": tid,
+              "depth": int((by_id.get(str(tid)) or {}).get("depth") or 1) + 1,
+              "input_key": f"broadcast@{who}:{tid}:{stamp}"} for tid in kids],
+            details=[detail for _ in kids])
         return {"checked": True, "ok": True, "broadcast": "已投递到名下子代理",
                 "recipients": kids, "items": items, "cascade": "children_decide",
                 "readings": self.item_readings(items),
@@ -5389,6 +5671,7 @@ class Conductor:
         它们自己的收尾逻辑负责，这里不动，免得把"同时在跑的子任务"误判成僵尸。
         """
         n = 0
+        self._refuse_write_in_snapshot("清扫遗留顶趟（_sweep_stale_top_running）")
         with self.store.tx("tasks", actor=S.CONDUCTOR_ROLE, note="sweep-stale-top-running") as tx:
             for r in tx.rows("tasks"):
                 # 2026-10-18（⑫ 的补丁，真机 `projects/t3a` 抓到）：顶趟行的 `called_by`
@@ -6038,6 +6321,7 @@ class Conductor:
         用 `inputs` 而不是新开字段：它是审计用的"这次召唤读过什么"，
         加一个 `tokenmeter:settled` 元素不改变语义，也不需要动 schema（禁改区）。
         """
+        self._refuse_write_in_snapshot("记花销（_set_usage）")
         with self.store.tx("tasks", actor="conductor", note="charge") as tx:
             row = tx.find("tasks", task_id=task_id)
             if row is None:  # pragma: no cover - finish 刚写过，走到这里说明表被清了
@@ -7004,6 +7288,7 @@ class Conductor:
                 "中间态由 summon 在开始时写（那时才有 started_at）"
             )
         ended = S.now_iso()
+        self._refuse_write_in_snapshot("写终态（finish）")
         with self.store.tx("tasks", actor="conductor", note=f"finish:{status}") as tx:
             row = tx.find("tasks", task_id=task_id)
             if row is None:
@@ -7242,10 +7527,10 @@ class Conductor:
         closed: list[str] = []
         board_left: list[str] = []
         for row in self._tasks():
-            if row.get("status") not in ("pending", "running"):
+            if row.get("status") not in UNFINISHED_STATUSES:
                 continue
             tid = str(row["task_id"])
-            if str(row.get("kind") or ""):
+            if self._is_board_item(row):
                 # 工作项：不是僵尸（它没有"一次调用"要收口），留给父决定退役那一路
                 board_left.append(tid)
                 continue
@@ -7275,7 +7560,7 @@ class Conductor:
         （`draft/84` §T21 附二 / D89），把它算进链里会让一条指导的链条突然经过
         某个收件人 —— 那正是本仓反复治的那类两轴混算。读不成 ⇒ 抛（调用方折三态）。
         """
-        return [r for r in self._tasks() if not str(r.get("kind") or "")]
+        return [r for r in self._tasks() if self._is_instance_row(r)]
 
     def chain_of(self, task_id: Any, *, rows: Sequence[Mapping[str, Any]] | None = None
                  ) -> list[str]:
@@ -7594,8 +7879,11 @@ class Conductor:
         不许只给"父是谁"让调用方自己拼 —— 拼错一个号，消息就会投到另一支。
         """
         # 只拿实例行建树：板项行的 `parent_task_id` 是收件人，不是父代理（D9）。
-        rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
-        open_by_parent = self.open_items_by_parent()
+        # 整表只读一次（2026-10-27）：改前这里读一次、`open_items_by_parent()` 再读一次、
+        # 有 `root_task_id` 时 `_task(root)` 又读一次 = 一拍最多 3 次整表反序列化。
+        all_rows = self._tasks()
+        rows = [r for r in all_rows if self._is_instance_row(r)]
+        open_by_parent = self.open_items_by_parent(all_rows)
         by_parent: dict[str | None, list[dict]] = {}
         for r in rows:
             by_parent.setdefault(r.get("parent_task_id"), []).append(r)
@@ -7633,7 +7921,8 @@ class Conductor:
                 walk(r.get("task_id"), level + 1)
 
         if root_task_id is not None:
-            root = self._task(root_task_id)
+            # 在同一份快照里找根（2026-10-27；改前是 `self._task(...)` = 第三次整表读）。
+            root = next((r for r in all_rows if r.get("task_id") == root_task_id), None)
             if root is None:
                 raise ValueError(f"tree(root_task_id={root_task_id!r})：台账里没有这个任务")
             # 从 root 自己开始（而不是它的子树）—— "这棵树的根"包含根。
@@ -7665,7 +7954,7 @@ class Conductor:
         混进来会让"顶趟恰好一行 M"这类读数凭空多一条（实测：加板之后
         `tests/test_agent_loop.py` 的 F1 判据当场红过）。板自己的读数在 `board` 那一格里。
         """
-        rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
+        rows = [r for r in self._tasks() if self._is_instance_row(r)]
         # 视图与权威账对账（以账为准）：`stats()` 是唯一读这个视图的地方，
         # 每次问都先对齐 —— 这样"本次 run 花了多少"不会因为某条路径漏推视图
         # 而与台账给出不同的数字。
@@ -7732,6 +8021,13 @@ class Conductor:
             "board": self.board_readings(),
             # S-03：两处消费点各消费了几条（"派活时 N / 收尾时 M"）——让"即"的折扣可度量。
             "consume_counts": dict(getattr(self, "_consume_counts", {}) or {}),
+            # 队列认领那一路名册登记的失败清单（2026-10-27 接线）：改前它只写进日志，
+            # 而日志没人逐行读 —— `_consume_counts` 有读数格、它的兄弟格却没有，是漏，不是取舍。
+            "consume_roster_problems": list(getattr(self, "_consume_roster_problems", []) or []),
+            # 最近一次派活前摆出来的"同 key 既有终态行"（2026-10-27 接线）：它的 docstring
+            # 一直写着"读数的第二个落点：日志之外"，但改前全仓没有一个读者 —— 于是
+            # "派活时看见了几条同 key 的终态行"这件事只在日志里有，读数里没有。
+            "last_duplicates": [dict(x) for x in (getattr(self, "_last_duplicates", []) or [])],
             # 职责 3（闭环提醒）：最近一次顶趟收尾时的读数（谁没接手 / 谁没反馈 / 各几条）。
             # 它是一格读数，不是门（`draft/55` §4：秘书不新增机器判据）。
             "closure_reminders": dict(getattr(self, "_closure_reading", {}) or {}),

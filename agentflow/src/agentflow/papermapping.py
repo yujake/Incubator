@@ -1069,30 +1069,59 @@ def theorem_segments(project_root: str | Path, *,
     return out
 
 
+#: 台账文件解析缓存：`路径 -> ((mtime_ns, size), 行)`。
+#:
+#: 为什么要有这一格：`read_ledger_tables` 一次解析三张台账文件，而它在一趟收工门里
+#: 会被调两次以上（`fill_ledger_cells` 一次、`mapping_reading` 一次；两者都接受
+#: 调用方传 `ledger=` 来省掉第二遍，但那条路要调用方记得传）。键是
+#: `(mtime_ns, size)`：别的进程（`store` 的 `os.replace`）一写就变 ⇒ 下一次重解析。
+#: 交回的每一行都是新 dict，所以"调用方改顶层字段"污染不到缓存；行里嵌套的
+#: list/dict 仍与缓存共享（要改请整格赋新对象）。
+_LEDGER_CACHE: dict[str, tuple[tuple[int, int], list[Mapping[str, Any]]]] = {}
+#: 缓存最多留几份文件（多工作区并行时无上限就是无界增长）。
+_LEDGER_CACHE_MAX: int = 64
+
+
+def _ledger_file_rows(path: Path) -> list[Mapping[str, Any]]:
+    """一份台账文件的行（按 `(mtime_ns, size)` 缓存；不在盘上 / 坏 JSON ⇒ 空表）。"""
+    try:
+        st = path.stat()
+    except OSError:
+        _LEDGER_CACHE.pop(str(path), None)
+        return []
+    stamp = (int(st.st_mtime_ns), int(st.st_size))
+    hit = _LEDGER_CACHE.get(str(path))
+    if hit is not None and hit[0] == stamp:
+        return [dict(r) for r in hit[1]]
+    rows: list[Any] = []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, Mapping):
+        rows = list(payload.get("rows") or [])
+    elif isinstance(payload, list):
+        rows = list(payload)
+    kept = [r for r in rows if isinstance(r, Mapping)]
+    if len(_LEDGER_CACHE) >= _LEDGER_CACHE_MAX:
+        _LEDGER_CACHE.clear()
+    _LEDGER_CACHE[str(path)] = (stamp, kept)
+    return [dict(r) for r in kept]
+
+
 def read_ledger_tables(workspace_root: str | Path) -> dict[str, list[Mapping[str, Any]]]:
     """从盘上读三张台账表（`<工作区>/data/<表文件>`）。
 
     为什么读盘而不是读 store：这一格要在收工门里跑，而收工门有"运行外"的出口
     （`agentflow closing`）—— 那里没有 store，只有工作区目录。
     读不出来（不在盘上 / 坏 JSON）就返回空表，由"代号在表里找不到"报出来。
+    同一趟里被调多次时，文件没变就不重解析（见 `_LEDGER_CACHE`）。
     """
     root = Path(workspace_root)
     out: dict[str, list[Mapping[str, Any]]] = {}
     for table in LEDGER_TABLES:
         name = str((S.TABLES.get(table) or {}).get("file") or "")
-        rows: list[Any] = []
-        if name:
-            path = root / "data" / name
-            if path.is_file():
-                try:
-                    payload = json.loads(path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
-                    payload = None
-                if isinstance(payload, Mapping):
-                    rows = list(payload.get("rows") or [])
-                elif isinstance(payload, list):
-                    rows = list(payload)
-        out[table] = [r for r in rows if isinstance(r, Mapping)]
+        out[table] = _ledger_file_rows(root / "data" / name) if name else []
     return out
 
 

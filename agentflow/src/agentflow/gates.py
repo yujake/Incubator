@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -252,7 +252,10 @@ class GateContext:
     输入                          缺了会怎样
     ==========================  ==============================================
     `doc`                        门判 `unknown`（没有可审的对象）
-    `dependencies=None`          依赖相关门判 `unknown`（没查，不是"都闭合"）
+    `dependencies=None`          不判"依赖闭不闭合"；它只作 `_iter_doc_files` 的路径来源
+                                 （2026-10-27 更正：改前这张表写着"依赖相关门判 unknown"，
+                                 而 15 道门里没有任何一道读它判闭合 —— 那句承诺是空话。
+                                 依赖闭合的判据不在本模块，见 `schema.Dependency` 与 `verify`）
     `files`                      自含性/虚证/可复跑门判 `unknown`
     `workspace_root`             文件存在性判 `unknown`（读不到 ≠ 不存在）
     `run_evidence`               可复跑门（G8）判 `unknown`
@@ -274,7 +277,6 @@ class GateContext:
     findings: Sequence[Mapping[str, Any]] | None = None
     claim_counts: Mapping[str, Any] | None = None
     banned_words: Sequence[str] | None = None
-    literals: Mapping[str, Any] | None = None
     #: 上一轮审校时钉住的 hash（G11：比对"审校期间文件有没有被改"）。
     observed_hash: str | None = None
     #: 版本是否真的冻结（G11 通过 = `observed_hash` 与 :attr:`revision_hash` 逐字相等）。
@@ -302,8 +304,6 @@ class GateContext:
     own_errors: Sequence[str] | None = None
     #: 被审对象的内容 hash（G11 的输出，建上下文时算一次）。
     revision_hash: str = ""
-    #: 依赖闭合是否真的查过（`dependencies=None` 时 False）。
-    deps_checked: bool = False
 
     @classmethod
     def build(
@@ -328,12 +328,10 @@ class GateContext:
         不折叠成一档（"没冻"与"判不了"必须分得开）。
         """
         deps: Sequence[Mapping[str, Any]] | None = dependencies
-        checked = deps is not None
         revision_hash = CA.revision_hash(doc) if isinstance(doc, Mapping) else ""
         ctx = cls(
             doc=doc,
             dependencies=deps,
-            deps_checked=checked,
             revision_hash=revision_hash,
             **kw,
         )
@@ -2669,19 +2667,31 @@ def gate_verdict(results: Mapping[str, "GateResult"]) -> dict:
     |---|---|
     | 任一 `fail` | `rejected` |
     | 任一 `unknown`（且有 fail 之外的未知） | `unverified` |
+    | 门不齐（`GATE_IDS` 里有门没跑） | `unverified` |
     | 全是 `pass` / `not_applicable`，且有 `not_applicable` | `accepted_with_gaps` |
-    | 全是 `pass` | `accepted` |
+    | 15 门齐全且全是 `pass` | `accepted` |
 
     为什么 `unknown` 单占一档：把它并进 `accepted` 会让"我们从未检查"伪装成
     "检查通过"；并进 `rejected` 又会把"没做"说成"做失败了"（FC-01）。
+
+    为什么"门不齐"也单占一档（2026-10-27，`docs/PROPOSALS.md` G-5 的收口）：
+    本函数只数交进来的那几个 `GateResult`，于是"空集合"与"只跑了一门"在记账上
+    与"15 门全绿"逐字相同 —— 实测改前 `gate_verdict({})` 给 `verdict="accepted"`、
+    `reason="…15 道门全部通过"`（零门在场地宣称全绿）。现在"齐全"是一等条件：
+    `GATE_IDS` 里有、这次没交进来的门逐条列进 `missing_gates`，结论落
+    `unverified`（没查成），不是 `accepted`。`run_all_gates` 恒给 15 门，所以这一档
+    只在"按子集出报告"的调用上生效 —— 而那正是它要挡的形态。
     """
     fails = sorted(g for g, r in results.items() if r.verdict == "fail")
     unknowns = sorted(g for g, r in results.items() if r.verdict == "unknown")
     nas = sorted(g for g, r in results.items() if r.verdict == "not_applicable")
     passes = sorted(g for g, r in results.items() if r.verdict == "pass")
+    missing = [g for g in GATE_IDS if g not in results]
     if fails:
         verdict = "rejected"
     elif unknowns:
+        verdict = "unverified"
+    elif missing:
         verdict = "unverified"
     elif nas:
         verdict = "accepted_with_gaps"
@@ -2696,14 +2706,20 @@ def gate_verdict(results: Mapping[str, "GateResult"]) -> dict:
         "failed_gates": fails,
         "unknown_gates": unknowns,
         "not_applicable_gates": nas,
+        #: `GATE_IDS` 里有、而这次没交进来的门（空集合 ⇒ 15 个全在这里）。
+        "missing_gates": missing,
         "reason": (
             f"pass={len(passes)} fail={len(fails)} unknown={len(unknowns)} "
-            f"not_applicable={len(nas)}；"
+            f"not_applicable={len(nas)} missing={len(missing)}；"
             + (
                 f"失败门={fails}" if fails
                 else (
-                    f"**没查成的门={unknowns}**（不许读成『没问题』）" if unknowns
-                    else (f"无对象可判的门={nas}" if nas else "15 道门全部通过")
+                    f"没查成的门={unknowns}（不许读成『没问题』）" if unknowns
+                    else (
+                        f"没跑的门={missing}（不是 15 道门齐全 ⇒ 不许读成『全绿』）"
+                        if missing
+                        else (f"无对象可判的门={nas}" if nas else "15 道门全部通过")
+                    )
                 )
             )
         ),
@@ -2922,7 +2938,3 @@ if set(GATES) != set(GATE_IDS):  # pragma: no cover - 导入期自检，写错�
         f"G1–G15 必须齐全：声明表 {sorted(GATES)} vs 规格 {list(GATE_IDS)}。"
         "删门会让『15 道门都在跑』变成假话"
     )
-
-
-#: `Callable` 的用途标注（类型别名），供 `checker` 字段的读者参考。
-GateChecker = Callable[[GateContext], GateResult]

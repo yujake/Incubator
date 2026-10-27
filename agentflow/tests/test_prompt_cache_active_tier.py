@@ -57,6 +57,8 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 #: 前端那两个文件（这一行到底有没有上页面、有没有第二份文案）。
 PANEL_TSX = REPO / "ui" / "src" / "components" / "PromptCache.tsx"
 API_TS = REPO / "ui" / "src" / "api.ts"
+#: 生成物的落点（2026-10-27 业主裁定 ⑥-5 / W4：缓存那一族的形状搬到这里了）。
+TYPES_TS = REPO / "ui" / "src" / "types.ts"
 
 #: 开关的环境变量（`settings.lean_enabled` 的第一档，`leanscope` 现读它）。
 SWITCH_ENV = "AGENTFLOW_LEAN_ENABLED"
@@ -202,8 +204,11 @@ def _panel_and_banner_show_that_line(active: dict[str, Any]) -> None:
     assert "版缓存" not in tsx, "前端自己拼了一份档名文案（这一行只该由 active.text 出）"
     assert "CacheBanner" in tsx and "CachePanel" in tsx, "两个面孔不在这一个文件里"
     api_ts = API_TS.read_text(encoding="utf-8")
-    assert "active: CacheActive" in api_ts, "api.ts 的 CacheView 少了 active 那一格"
-    assert "interface CacheActive" in api_ts, "api.ts 少了 CacheActive 的声明"
+    types_ts = TYPES_TS.read_text(encoding="utf-8")
+    assert "active: CacheActive" in types_ts, "types.ts 的 CacheView 少了 active 那一格"
+    assert "interface CacheActive" in types_ts, "types.ts 少了 CacheActive 的声明"
+    # 反向（2026-10-27）：这一族只许有一份声明 —— api.ts 里手写的那一份已删。
+    assert "interface CacheActive" not in api_ts, "api.ts 又手写了一份 CacheActive（两份口径）"
     assert isinstance(active["text"], str) and active["text"] != ""
 
 
@@ -526,11 +531,11 @@ def test_9_without_a_run_record_the_process_switch_is_the_source(
     assert active["tier"] == "off", active
     assert active["covered"] == "11/12", active
     assert "来源=正在跑的那一趟" not in active["text"], active["text"]
-    # 前端类型里补上了来源那一格（页面不另拼文案，但契约要跟着长）
-    api_ts = API_TS.read_text(encoding="utf-8")
-    assert "export interface CacheActive {" in api_ts, "api.ts 少了 CacheActive 的声明"
-    block = api_ts.split("export interface CacheActive {", 1)[1].split("}", 1)[0]
-    assert "source: string" in block, "api.ts 的 CacheActive 少了 source 这一格"
+    # 前端类型里补上了来源那一格（页面不另拼文案，但契约要跟着长）：形状住在生成物里
+    types_ts = TYPES_TS.read_text(encoding="utf-8")
+    assert "export interface CacheActive {" in types_ts, "types.ts 少了 CacheActive 的声明"
+    block = types_ts.split("export interface CacheActive {", 1)[1].split("}", 1)[0]
+    assert "source: string" in block, "CacheActive 少了 source 这一格"
 
 
 def test_10_an_unreadable_run_record_is_unknown_and_never_impersonates(

@@ -1,36 +1,38 @@
 # -*- coding: utf-8 -*-
 """判据 ④：模型驱动模式下 D 够得着 `register_conjecture`（工具面里真有它）。
 
-## 改前是什么形态（"已映射"这句话是假的）
+## 这一格的历史（两次走法，读数都留着）
 
-`capabilities.unmapped_actions()` 判一个动作"已对上"时读的是声明那一侧：`_TOOL_MODULES`
-里除了 `tools._MODULES` 还多读了 `_TOOL_MODULE_EXTRAS`（今天只有 `conjecture_tools`）。
-于是 `D.register_conjecture` 被算成"已对上"：名字对上了
-`conjecture.register_conjecture` 的声明，而 `build_registry` 根本装配不到那个模块
-⇒ 工具面上没有它 ⇒ `agent_loop._own_actions_to_expose` 也不注入
-`own.register_conjecture` ⇒ 模型按手册喊短名 `register_conjecture`，拿到的拒信是
-"并列候选（0 个）"。
+改前（"已映射"这句话是假的）：`capabilities.unmapped_actions()` 判一个动作"已对上"时
+读的是声明那一侧 —— `_TOOL_MODULES` 除了 `tools._MODULES` 还多读 `_TOOL_MODULE_EXTRAS`
+（当年只有 `conjecture_tools`）。于是 `D.register_conjecture` 被算成"已对上"：名字对上了
+`conjecture.register_conjecture` 的声明，而 `build_registry` 根本装配不到那个模块 ⇒ 工具面
+上没有它 ⇒ `agent_loop._own_actions_to_expose` 也不注入 `own.register_conjecture` ⇒
+模型按手册喊短名 `register_conjecture`，拿到的是"并列候选（0 个）"。
 
-## 走的是哪一条（二选一里的 (b)）
-
-(b) 让"已映射"只认 `tools._MODULES` 里真装配过的组，于是这条动作诚实地落进
+上一版走 (b)：让"已映射"只认 `tools._MODULES` 里真装配过的组，于是这条动作诚实落进
 `_KNOWN_UNMATCHED_ACTIONS`，由循环把它包成 `own.register_conjecture` 注入这一趟。
-选它而不是 (a)（把 `conjecture_tools` 加进 `tools._MODULES`）的理由有两条，都是结构性的：
+当年不选 (a) 的理由是"不重冻 golden"这个硬边界。
 
-1. (a) 会改变广告出去的整份工具面（`tests/golden/tool_surface_snapshot.json` 里
-   每个角色的工具清单都会多一件），而"不重冻 golden"是本批的硬边界；
-2. (a) 还要把那个模块的装配依赖（`roles` / store / 注册入口）一起接进 `build_registry`，
-   改动的面比这条判据大得多 —— 而这一格要的只是"D 够得着自己那个动作"。
+现在走 (a)（2026-10-27，`R-BE4` 的 D1 Phase A，业主批准）：`conjecture_tools` 进了
+`tools._MODULES` ⇒ `conjecture.register_conjecture` 就在工具面上，D 直接调它，不再需要
+`own.*` 那一层包装。连带的三处登记一起退场（`_TOOL_MODULE_EXTRAS` /
+`_KNOWN_UNMATCHED_ACTIONS` / `ACTION_ONLY_PARAMS` 里那三条），`tool_surface_snapshot.json`
+的 `summary.count` 由 117 重冻成 118。
 
-## 判据
+## 判据（口径随走法换，但问的问题没换：D 够不够得着）
 
-1. `("D", "register_conjecture")` 在 `unmapped_actions()` 里（判据说的那一格）；
-2. 模型驱动那一趟的注册表里真有 `own.register_conjecture`，且广告名那一侧也有它
-   （`build_tool_face` 是本仓广告工具面的唯一入口 —— 只进注册表没进广告面等于没有）；
-3. 反真空：共享工具面（`build_registry`）里没有 `conjecture.register_conjecture`
-   （这就是走 (b) 的代价与读数的分界：它诚实地是"没装配"，而不是"装配了但没广告"），
-   而一个真的已对上的 D 动作不会被重复注入（注入清单由 `_KNOWN_UNMATCHED_ACTIONS` 驱动，
-   不是"每个动作都塞一件"）。
+1. `("D", "register_conjecture")` 不在 `unmapped_actions()` 里 —— 它现在"对得上"，
+   而"对得上"必须是装配面上的对得上（走 (a) 时这一条与第 2 条互为反真空：
+   把 `conjecture_tools` 从 `_MODULES` 撤掉，第 2 条红；把它留在 `_KNOWN_UNMATCHED_ACTIONS`
+   里，第 1 条红）。
+2. `build_registry` 的共享工具面上真有 `conjecture.register_conjecture`，且
+   只有 D 的角色面里有它（`roles=("D",)`：其余十格一个字节都不该动）。
+3. 广告面（`build_tool_face`，本仓广告工具面的唯一入口）里也真有它：只进注册表、不进
+   广告面等于"模型看不见"。
+4. 真调一次走得通（内层确定性实现被调到）。
+5. 反真空：D 这一趟不再注入 `own.register_conjecture`（已对上的动作不重复包一层，
+   否则同一件事有两个入口）；而另一个真已对上的动作同样不被注入。
 """
 from __future__ import annotations
 
@@ -43,6 +45,9 @@ from agentflow.conductor import LocalBackend
 from agentflow.llmseam import build_tool_face
 from agentflow.store import Store
 from agentflow.tools import build_registry
+
+_TOOL = "conjecture.register_conjecture"
+_OWN = "own.register_conjecture"
 
 
 class _StubD:
@@ -76,57 +81,74 @@ def _world(tmp_path: pathlib.Path):
     return st, stub, backend
 
 
-def test_d_can_reach_register_conjecture_in_model_driven_mode(tmp_path: pathlib.Path) -> None:
-    """④ 模型驱动模式下 D 调 `register_conjecture` ⇒ `own.register_conjecture` 真在广告面上。
+def test_d_can_reach_register_conjecture_in_model_driven_mode(
+    tmp_path: pathlib.Path,
+) -> None:
+    """④ 模型驱动模式下 D 能直接调到 `conjecture.register_conjecture`。
 
-    改前红：`("D", "register_conjecture")` 不在 `unmapped_actions()` 里
-    （它被算成"已对上"），于是注入清单里没有它，`own.register_conjecture`
-    既不进注册表、也不进广告面 —— 模型喊这个短名只拿到"并列候选（0 个）"。
+    改前红（两次都红，红的理由不同）：
+    - 最初：`("D","register_conjecture")` 被算成"已对上"，而工具面上没有它 ⇒ 两端都没有；
+    - 走 (a) 之前：共享工具面上没有这件工具，只靠 `own.register_conjecture` 注入。
     """
     st, stub, backend = _world(tmp_path)
 
-    assert ("D", "register_conjecture") in C.unmapped_actions(), (
-        "`D.register_conjecture` 又被算成'已对上'了：它对应的工具不在 `tools._MODULES` 里，"
-        "工具面上没有它 ⇒ 模型驱动模式下 D 会再拿到'并列候选 0 个'")
+    assert ("D", "register_conjecture") not in C.unmapped_actions(), (
+        "`D.register_conjecture` 又被算成『没有工具层』了：它对应的 "
+        f"`{_TOOL}` 已经进了 `tools._MODULES` ⇒ 装配面上有它，"
+        "这一格不该再落进 `_KNOWN_UNMATCHED_ACTIONS`")
 
     base = build_registry(store=st, workspace_root=str(st.root)).registry
-    scoped = backend._registry_with_own_action(base, role="D", action="")
-    names = set(scoped.names())
-    assert "own.register_conjecture" in names, (
-        f"这一趟的注册表里没有 `own.register_conjecture`：{sorted(names)[:8]}…")
-    # 广告面（原生工具调用的唯一入口）里也必须有它：只进注册表、不进广告面等于"模型看不见"
-    face = build_tool_face("D", scoped)
+    assert _TOOL in set(base.names()), (
+        f"共享工具面上没有 `{_TOOL}` ⇒ `conjecture_tools` 没被装配（`_MODULES` 又少了它）")
+
+    # 只有 D 的角色面里有它：`roles=("D",)` ⇒ 其余十格一件不多（权限面不许被顺手放宽）
+    others = [role for role in tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
+              if role != "D" and _TOOL in {s.name for s in base.for_role(role)}]
+    assert not others, f"这些角色的面里也出现了 `{_TOOL}`（它的 roles 只该有 D）：{others}"
+
+    # 广告面：本仓广告工具面的唯一入口
+    face = build_tool_face("D", base)
     advertised = {value.split(":", 1)[1] if value.startswith("tool:") else value
                   for value in face.names.values()}
-    assert "own.register_conjecture" in advertised, sorted(advertised)[:8]
+    assert _TOOL in advertised, (
+        f"广告面上没有 `{_TOOL}` ⇒ 模型看不见它：{sorted(advertised)[:8]}…")
 
     # 真调一次（参数取自这条动作的声明面）：走的是内层确定性实现
-    res = scoped.call("own.register_conjecture", role="D",
-                      statement="谱落在 [-m, m] 内。", origin="own_result")
+    # `status="needs_evidence"` + `notes` 是刻意的：`proposed` 必须带 `testable`（可检验形式），
+    # 而这一条判的是"这条路通不通"，不是"猜想的九条单行判据对不对"。
+    res = base.call(_TOOL, role="D", statement="谱落在 [-m, m] 内。", origin="own_result",
+                    status="needs_evidence", notes="判据只验接线：这一条还没有可检验形式")
     assert res.ok is True, (res.error, res.meta)
-    assert stub.calls and stub.calls[0].get("statement") == "谱落在 [-m, m] 内。", stub.calls
+    # 走的已经是真 handler（不再是 `own.*` 包的那层替身）：一行猜想真的落库了。
+    # 这正是走 (a) 与走 (b) 的读数差别 —— (b) 那条路只调用内层替身，碰不到 `conjectures` 表。
+    assert isinstance(res.data, dict) and res.data.get("conjecture_id"), res.data
+    assert len(st.rows("conjectures")) == 1, st.rows("conjectures")
+    assert stub.calls == [], (
+        "内层替身被调到了 —— 说明这次走的仍是 `own.*` 那条注入路，而不是装配面上的真工具")
+
+    # 反真空：已对上的动作不再被包成 own.*（同一件事不许有两个入口）
+    assert _OWN not in backend._own_actions_to_expose("D", action=""), (
+        f"`{_OWN}` 仍被注入 —— 那说明 `D.register_conjecture` 又被算成『没有工具层』了")
 
 
-def test_the_injection_list_is_driven_by_the_unmatched_registry(tmp_path: pathlib.Path) -> None:
-    """④ 反真空：共享工具面里没有 `conjecture.register_conjecture`；已对上的动作不重复注入。
+def test_the_injection_list_still_drives_the_remaining_unmatched_actions(
+    tmp_path: pathlib.Path,
+) -> None:
+    """④ 反真空的另一半：注入清单仍由 `_KNOWN_UNMATCHED_ACTIONS` 驱动，不是"每件都塞"。
 
-    前半句是"走 (b) 而没走 (a)"的读数（选了另一条路这里会红）；
-    后半句防的是"为了让这条绿，把每个动作都包一件 own.*"—— 那会让工具面凭空长大，
-    而"已对上"的动作本来就有自己的工具。
+    两问：
+    1. D 的注入清单里确实还有别的动作（否则"注入清单还在工作"这句话没有对象）；
+    2. 一个真已对上的动作不被重复注入（换一个真有工具层的角色来证）。
     """
     st, _stub, backend = _world(tmp_path)
-    base = build_registry(store=st, workspace_root=str(st.root)).registry
-    assert "conjecture.register_conjecture" not in set(base.names()), (
-        "共享工具面里出现了 `conjecture.register_conjecture` ⇒ 那个模块被 `tools._MODULES`"
-        "装配进来了（那是另一条路：它会改变整份广告面与 golden 快照）")
 
-    # D 这一趟的注入清单必须与"没有工具层的那些动作"逐条相同（不多不少）
     exposed = sorted(backend._own_actions_to_expose("D", action=""))
     expected = sorted(a for r, a in C.unmapped_actions() if r == "D")
     assert exposed == expected, (exposed, expected)
+    assert expected, (
+        "D 名下一条『没有工具层』的动作都没有了 ⇒ 这一条反真空没有对象"
+        "（真要变成这样，说明整张 `_KNOWN_UNMATCHED_ACTIONS` 都被清空了）")
 
-    # 已对上的动作不许被重复注入（换一个真有工具层的角色来证：注入清单由登记表驱动，
-    # 不是"每个动作都塞一件 own.*"）
     compared = [where for where, _tool in C.two_layer_reconciliation()["compared"]]
     assert compared, "对账面上一条已对上的动作都没有 ⇒ 这条反真空没有对象"
     role, action = compared[0].split(".", 1)

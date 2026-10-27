@@ -73,12 +73,19 @@ def _build(role: str, st: Store, *, llm):
 
 
 def _cheap_call(role: str, agent):
-    """每个角色最便宜的离线调用（实测：全都不会碰 llm）。"""
+    """每个角色最便宜的离线调用（实测：全都不会碰 llm）。
+
+    G 这一格原来用 `agent.check_claims([])`，那个方法 2026-10-27 删了（全仓 0 个生产
+    读者，生产侧三处都直接调 `claimanatomy`）。现在用 `compose_claim`：它是 G 的纯函数
+    构造器（不走 `self._call`、不碰注册表、也不碰 store），配一个合法的 `section` 即可。
+    """
     return {
         "A": lambda: agent.run_once(),
         "E": lambda: agent.list_experiments(),
         "F": lambda: agent.list_plans(),
-        "G": lambda: agent.check_claims([]),
+        "G": lambda: agent.compose_claim(
+            "判据：这条断言只用来验证插座，不落库。",
+            citations=["lit:0000"], evidence_kind="heuristic", section="结果"),
         "H": lambda: agent.list_findings(),
     }[role]()
 

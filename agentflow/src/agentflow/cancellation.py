@@ -337,10 +337,12 @@ class CancelToken:
                 )
                 self._cancelled_flag = True
             reason_obj = self._reason
-            procs = list(self._spawned)
-            self._spawned.clear()
-        for p in procs:
-            _kill(p)
+        # 杀子进程这一步走 `_kill_spawned`（"持锁取表 → 清表 → 锁外逐个杀"的唯一实现）。
+        # 原来这里是同一段逻辑的第二份内联副本，而 `_kill_spawned` 的唯一调用者是一个
+        # 全仓 0 调用的公开方法 `cancel_children()`（它的 docstring 还写着"`cancel()`
+        # 已经会自动调它"——假话）。2026-10-27：删掉那个公开方法，内联副本收回来。
+        # 注意顺序：`_kill_spawned` 自己会抢同一把非重入锁，所以必须等上面那个 `with` 退出。
+        self._kill_spawned()
         return reason_obj
 
     def consume_tokens(self, n: int) -> int:
@@ -376,14 +378,6 @@ class CancelToken:
         if self.cancelled:
             r = self.reason
             raise CancelRequested(detail_of(r) if r else "cancelled")
-
-    def cancel_children(self) -> int:
-        """杀掉本 token 名下的全部子进程（`G-1`）。返回杀掉的个数。
-
-        `cancel()` 已经会自动调它；这个公开方法给"只想停子进程、不想置取消位"
-        的场合（例如 `dispose()` 里先收尾再决定要不要标取消）。
-        """
-        return self._kill_spawned()
 
     def to_dict(self) -> dict:
         """台账/日志形态。`reason` 为 None 时原样是 None（不折叠成默认理由）。
@@ -446,6 +440,14 @@ _CURRENT_TOKEN: contextvars.ContextVar["CancelToken | None"] = contextvars.Conte
 #: （实测：`timeout_sec=10`、0.15 秒时取消 ⇒ 旧版要等到 kill 生效才返回，
 #: 而分段等待让它在该段结束时就返回）。这个值越小，取消越灵敏、轮询越密。
 _CANCEL_POLL_SEC: float = 0.05
+
+#: 杀掉子进程之后，把管道抽干净最多再等多久（秒）。见 `_drain_after_kill`。
+#:
+#: 为什么要一个值而不是"等到 EOF"：被杀之后输出通常几十毫秒就抽完了，而这个上限
+#: 只在"管道写端被孙子进程握着"那种病态形态下才真的花掉。2 秒足够抽干，又不至于
+#: 让每一次超时的 Lean 检查白白多等（实测同一形态：不限 = 20.19s、5s = 5.69s、
+#: 2s = 2.69s；见 `temp/rbe3_repro_wait.py`）。
+_KILL_GRACE_SEC: float = 2.0
 
 
 def current_token() -> "CancelToken | None":
@@ -556,7 +558,7 @@ def run_cancellable(
                     waited += slice_sec
                     if tok is not None and tok.cancelled:
                         _kill(proc)
-                        out, err = proc.communicate()
+                        out, err = _drain_after_kill(proc)
                         prog.finish(outcome="killed")
                         return {"exit_code": None, "stdout": out or "", "stderr": err or "",
                                 "timed_out": False, "cancelled": True,
@@ -564,7 +566,7 @@ def run_cancellable(
                     if timeout_sec is not None and waited >= timeout_sec:
                         timed_out = True
                         _kill(proc)
-                        out, err = proc.communicate()
+                        out, err = _drain_after_kill(proc)
                         break
             if timed_out:
                 prog.finish(outcome="timed_out")
@@ -595,17 +597,69 @@ def _kill(proc: "subprocess.Popen") -> None:
         pass
 
 
-def _note_process_wait(elapsed_sec: float) -> None:
+def _drain_after_kill(proc: "subprocess.Popen", grace: float | None = None) -> tuple[str, str]:
+    """杀完之后把管道抽干净 —— 这一等必须带上限（改前它没有），而且必须进等待账。
+
+    为什么必须带上限：`communicate()` 等的是管道 EOF，不是"这个 pid 死了"。
+    外部检查器自己会起子进程（Lean 那一族都会），而管道写端被孙子继承 ⇒
+    杀掉父进程之后 EOF 仍然等不到，`communicate()` 就一直挂着。
+    实测（`temp/rbe3_repro_wait.py`，2026-10-27）：`timeout_sec=0.5` 的调用
+    要 20.19 秒才返回 —— 超时判据形同虚设，而调用方读到的仍是 `timed_out=True`，
+    看不出"它其实没停下来"。
+
+    加档之后：杀完最多再等 `grace` 秒，超过就按"抽不到"给空串，并把进程句柄收掉
+    （结局仍由 `prog.finish(outcome=...)` 如实写下 —— 不冒充成功，也不改返回值
+    的任何键，`formalgw._normalize_run` 的契约不动）。
+
+    为什么这里的等待要记账（业主 2026-10-25 那条纪律：计时类工作一律进主时钟的账）：
+    这两处等的都是"子进程 / 管道的 EOF"，不是钟点，所以它们不会被 `Deadline` 掐掉 ——
+    "不在任何人的账上、又能挂住 20 秒"正是普查要抓的形态。它们各自记一条
+    `kind="external_process"` 的等待（`where` 同一个落点，`waited_for` 分得清是哪一处）：
+    量的是实测耗时，不是上限。`GOVERNED_PRIMITIVE_WAITS` 里有本函数的登记，
+    于是普查把这两处算"已记账"而不是缺口。
+    """
+    limit = _KILL_GRACE_SEC if grace is None else float(grace)
+    t_call = time.monotonic()
+    try:
+        out, err = proc.communicate(timeout=limit)
+        _note_process_wait(time.monotonic() - t_call,
+                           waited_for="_drain_after_kill:communicate(timeout=_KILL_GRACE_SEC)")
+        return out or "", err or ""
+    except subprocess.TimeoutExpired:
+        _note_process_wait(time.monotonic() - t_call,
+                           waited_for="_drain_after_kill:communicate(timeout=_KILL_GRACE_SEC)")
+        # 管子还被别人握着（孙子进程）。这里刻意不关管道：关它反而更慢 ——
+        # Windows 上 `close()` 要等读线程放掉缓冲锁，而读线程正卡在 `read()` 里
+        # 等 EOF（实测：关它要 14.5 秒）。读线程是 daemon，随管道 EOF 自行结束。
+        # 所以只把进程句柄收掉，输出按"抽不到"给空串。
+        t_reap = time.monotonic()
+        try:
+            proc.wait(timeout=1.0)
+        except (subprocess.TimeoutExpired, OSError):  # noqa: BLE001 - 收尸失败无所谓：
+            # 上面已经把进程杀了，这里等不到只是句柄晚一点被回收；不能因此把一次
+            # 已经成立的"取消/超时"改写成异常（那会让调用方读成"没查成"之外的第三态）。
+            pass
+        _note_process_wait(time.monotonic() - t_reap,
+                           waited_for="_drain_after_kill:wait(timeout=1.0)")
+        return "", ""
+
+
+def _note_process_wait(elapsed_sec: float, *,
+                       waited_for: str = "communicate(timeout=slice_sec)") -> None:
     """把"这一次等子进程等了多久"记进主时钟那本账（旁路：记账炸了不许带坏等待）。
 
     阻塞方式刻意不动：`communicate(timeout=…)` 是"进程一退就返回"，换成 sleep 会把
     取消语义（段间看 token）一起毁掉。记的是实测耗时，不是 `slice_sec` 那个上限 ——
     两者相等只是巧合，进程早退时前者远小于后者。
+
+    `waited_for` 说清"是哪一处"在等（轮询那一段 / 杀完之后抽管道那两段）：
+    同一本账上三处都用 `where="cancellation.run_cancellable"`（同一个落点），
+    靠这一格分开 —— 少了它，"这一笔 2.7 秒是杀之前还是杀之后"就读不出来。
     """
     try:
         from . import clock as CLK
 
         CLK.note_process_wait(elapsed_sec, where="cancellation.run_cancellable",
-                              waited_for="communicate(timeout=slice_sec)")
+                              waited_for=waited_for)
     except Exception:  # noqa: BLE001 - 旁路
         pass

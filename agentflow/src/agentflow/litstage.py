@@ -42,6 +42,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import re
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -304,8 +305,72 @@ def title_jaccard(a: str | None, b: str | None) -> float:
     return round(len(ta & tb) / len(ta | tb), 4)
 
 
+def _jaccard_of(ta: set[str], tb: set[str]) -> float:
+    """两个已词法化的标题词集的 Jaccard（`title_jaccard` 的免重复词法化版）。"""
+    if not ta or not tb:
+        return 0.0
+    return round(len(ta & tb) / len(ta | tb), 4)
+
+
+def literature_index(store: Store) -> list[dict]:
+    """把 `literature` 表读一次、每行的标题词集算一次（重叠比对的索引）。
+
+    为什么要有这一格：`overlap_check` 原来是"一条候选读一遍全表 + 逐行重算词集"，
+    而 `admission_plan` 是逐槽调它的 ⇒ 10 个槽 × 300 行文献 = 表读 10 次、
+    `title_terms` 调 6000 次（实测 `temp/rbe3_measure.py`，2026-10-27）。
+    表读一次、词集算一次之后，同一次判断的读数一模一样（它只读、不动任何行）。
+
+    `checked` 的语义不变：表读不出来时 `store.rows` 照旧抛 `StoreError`，
+    由调用方折成 `table_unreadable` —— 这一层不吞异常。
+    """
+    out: list[dict] = []
+    for row in store.rows("literature"):
+        out.append({
+            "lit_id": str(row.get("lit_id") or ""),
+            "doi": D.normalize_doi(row.get("doi")),
+            "title": str(row.get("title") or ""),
+            "terms": title_terms(row.get("title")),
+        })
+    return out
+
+
+#: 一次 `admission_plan` 里共享的重叠索引（见 :func:`overlap_check` 的同名参数）。
+#:
+#: ## 为什么是 ContextVar 而不是给 `overlap_check` 加一个必给的参数
+#:
+#: `overlap_check` 是判据用的接缝：`tests/test_search_tools_stage_admit.py` 的负控把一个
+#: 三参数 lambda 换上去（`lambda store, title, doi=None: {…}`），用它证明"关掉重叠检查 ⇒
+#: 高重叠那篇会被收进来"。第一版我给 `admission_plan` 加了 `index=` 关键字实参 ——
+#: 那个负控当场 `TypeError: got an unexpected keyword argument 'index'`，而它本来是绿的。
+#: 判据说的是"接缝的形状不许改"，所以改成按执行上下文传：收益（表读一次、词集算一次）
+#: 保住，接缝的调用形状一个字没动。用 ContextVar 而不是模块级变量：`scheduler` 的工作
+#: 线程会并发跑到这里，模块级变量会让两条链路互相串味（与 `cancellation._CURRENT_TOKEN`
+#: 同一个理由、同一个做法）。
+_ACTIVE_LIT_INDEX: contextvars.ContextVar = contextvars.ContextVar(
+    "agentflow_lit_overlap_index", default=None)
+
+
+def _overlap_with_index(store: Store, title: Any, doi: Any,
+                        index: Sequence[Mapping[str, Any]]) -> dict:
+    """在"已经建好索引"的上下文里跑一次 `overlap_check`（调用形状仍是三个参数）。
+
+    为什么要这一层薄封装：索引要按执行上下文传给 `overlap_check`（见
+    `_ACTIVE_LIT_INDEX` 那段说明 —— 给它加参数会改掉判据用的接缝形状），
+    所以"挂上 → 调 → 复位"必须收在一处，且复位要在 `finally` 里
+    （中途抛异常留下一个挂着的索引，下一次调用就会读到一个过期的全表）。
+    """
+    token = _ACTIVE_LIT_INDEX.set(tuple(index))
+    try:
+        return overlap_check(store, title, doi)
+    finally:
+        _ACTIVE_LIT_INDEX.reset(token)
+
+
 def overlap_check(store: Store | None, title: str, doi: str | None = None) -> dict:
     """与本地库（`literature` 表）比对：DOI 完全相同 ⇒ 重复；否则按标题词集 Jaccard。
+
+    索引的来源三选一，读数逐字相同：当前执行上下文里挂着的（`admission_plan` 逐槽
+    调它一次判断只读一遍全表、每个标题只算一次词集）、否则现建一份。
 
     返回的字典逐键：
 
@@ -331,28 +396,34 @@ def overlap_check(store: Store | None, title: str, doi: str | None = None) -> di
             "reason": "未配置 store：读不到本地库 ⇒ 重叠**没查**（不是「没有重叠」）",
         }
     want_doi = D.normalize_doi(doi)
+    want_terms = title_terms(title)
+    cands = _ACTIVE_LIT_INDEX.get()
+    if cands is None:
+        cands = literature_index(store)
     best_score = 0.0
     best_lit: str | None = None
     best_title = ""
-    for row in store.rows("literature"):
-        row_doi = D.normalize_doi(row.get("doi"))
+    for item in cands:
+        row_doi = str(item.get("doi") or "")
         if want_doi and row_doi and want_doi == row_doi:
             return {
                 "checked": True,
                 "duplicate": True,
                 "overlap_score": 1.0,
                 "overlap_kind": "doi_exact",
-                "overlap_with": str(row.get("lit_id") or ""),
+                "overlap_with": str(item.get("lit_id") or ""),
                 "requires_new_content": True,
                 "reason": (
-                    f"DOI 与本地 literature 的 lit_id={row.get('lit_id')} 完全相同"
+                    f"DOI 与本地 literature 的 lit_id={item.get('lit_id')} 完全相同"
                     f"（{want_doi}）⇒ 视为重复，不入库"
                 ),
             }
-        score = title_jaccard(title, row.get("title"))
+        terms = item.get("terms")
+        score = _jaccard_of(want_terms, terms) if isinstance(terms, set) else title_jaccard(
+            title, item.get("title"))
         if score > best_score:
-            best_score, best_lit = score, str(row.get("lit_id") or "")
-            best_title = str(row.get("title") or "")
+            best_score, best_lit = score, str(item.get("lit_id") or "")
+            best_title = str(item.get("title") or "")
     requires = best_score >= OVERLAP_HIGH_JACCARD
     if requires:
         reason = (
@@ -402,6 +473,20 @@ def _check_code(code: str) -> str:
     return c
 
 
+def current_request_id_of(rows: Sequence[Mapping[str, Any]]) -> str:
+    """当前委托的"已经拿到行"版：同一个判据，不再把表读一遍（见 `current_request_id`）。
+
+    为什么要这一格：`list_candidates` 一拍里要用它两次（解析默认视图 + 回填
+    `current_request_id` 那一格），而 `current_request_id(store)` 每次都
+    `store.rows("lit_candidates")` 重读一遍全表 ⇒ 一拍读 2~3 次同一张表。
+    判据只有一份：`current_request_id` 现在也走这里。
+    """
+    if not rows:
+        return ""
+    newest = max(rows, key=lambda r: str(r.get("slot") or ""))
+    return str(newest.get("request_id") or "")
+
+
 def current_request_id(store: Store | None) -> str:
     """当前委托 = 槽位号最大那一行所属的 `request_id`（没有行 ⇒ 空串）。
 
@@ -411,11 +496,7 @@ def current_request_id(store: Store | None) -> str:
     """
     if store is None:
         return ""
-    rows = _rows(store)
-    if not rows:
-        return ""
-    newest = max(rows, key=lambda r: str(r.get("slot") or ""))
-    return str(newest.get("request_id") or "")
+    return current_request_id_of(_rows(store))
 
 
 def _resolve_request(store: Store | None, request_id: str | None) -> str:
@@ -644,9 +725,10 @@ def list_candidates(
             kind="bad_status",
         )
     all_rows = _rows(store)
-    rid = str(request_id or "").strip()
-    if not rid:
-        rid = current_request_id(store)
+    # 「当前委托」算一次、两处用（默认视图与回填那一格）：它原来是两/三次
+    # `current_request_id(store)`，每次都把同一张表重读一遍。
+    current = current_request_id_of(all_rows)
+    rid = str(request_id or "").strip() or current
     scoped = _scoped_rows(all_rows, rid)
     if batch is not None:
         scoped = [r for r in scoped if int(r.get("batch") or 0) == int(batch)]
@@ -684,7 +766,7 @@ def list_candidates(
         "request_id": rid,
         "duplicate_rows": sum(len(g["slots"]) for g in dup_groups),
         "duplicate_groups": dup_groups,
-        "current_request_id": current_request_id(store),
+        "current_request_id": current,
         "batch": batch,
         "status": status,
         "count": len(rows),
@@ -910,6 +992,8 @@ def admission_plan(
     items: list[dict] = []
     refused: list[dict] = []
     over_cap: list[dict] = []
+    # 索引建一次、逐槽复用：`overlap_check` 自己也会建，但那是"每条候选一遍全表"。
+    lit_index = literature_index(store)
     for slot in wanted:
         row = by_slot[slot]
         state = judged_state(row)
@@ -933,7 +1017,8 @@ def admission_plan(
                 "另一个槽位，报告上同一批题名会同时出现在「已入库」与「未入库」两块。"
             ), "missing_relevance"))
             continue
-        ov = overlap_check(store, str(row.get("title") or ""), row.get("doi"))
+        ov = _overlap_with_index(store, str(row.get("title") or ""), row.get("doi"),
+                                 lit_index)
         nc = str(row.get("new_content") or "").strip() or str(new_content or "").strip()
         if ov.get("duplicate"):
             if duplicate_branch_ok:
@@ -1009,6 +1094,104 @@ def admission_plan(
             "cleared": over_cap, "quota": quota}
 
 
+#: 结算核对的读数（进程内账，与 `clock.waits()` 同形：一条一条攒，判据自己 reset）。
+#:
+#: ## 为什么要有这一格（2026-10-27，R-BE3 的 ①-3）
+#:
+#: `apply_settlement` 里有两个 `continue`：决定指向的槽位在表里读不到、或状态码不在三态里，
+#: 那一笔决定就被"静默丢掉" —— 写侧什么都不说。而调用方的 `admitted[]` 取自登记路径回来的
+#: `lit_ids`，并不取自结算结果 ⇒ 并发窗口里可以出现"报告说已入库、候选行还是 pending"。
+#:
+#: 这一格把那两种形态变成看得见的事实（读数，不改行为）：
+#: - `apply_settlement` 丢掉一笔决定 ⇒ 立刻记一条 `kind="dropped_slot" / "dropped_status"`；
+#: - 结算之后由 :func:`settlement_mismatch` 回读一次候选行 ⇒ "报的说入库了、行上不是"记
+#:   `kind="status_not_written" / "lit_id_not_written" / "missing_row"`。
+#:
+#: 修不修行为要等这条读数先跑出一批真机数据（业主口径：先要读数）。
+_SETTLEMENT_READINGS: list[dict] = []
+#: 读数最多留几条（进程内账，无上限就是无界增长）。
+_SETTLEMENT_READINGS_MAX: int = 64
+#: 这一族读数的受控码（`settlement_readings()` 的 `rows[].code` 恒为它）。
+SETTLEMENT_MISMATCH: str = "settlement_mismatch"
+
+
+def _note_settlement_mismatch(**fields: Any) -> None:
+    """记一条结算核对读数（纯旁路：记账炸了不许带坏结算）。"""
+    try:
+        _SETTLEMENT_READINGS.append({"code": SETTLEMENT_MISMATCH, **fields})
+        del _SETTLEMENT_READINGS[:-_SETTLEMENT_READINGS_MAX]
+    except Exception:  # noqa: BLE001 - 旁路
+        pass
+
+
+def settlement_readings(*, reset: bool = False) -> dict:
+    """读出结算核对的账；`reset=True` 顺手清空（判据之间的隔离点）。
+
+    空清单是有内容的读数（"结算与报告一致"），不是"这一格没查"——
+    没查成由各条读数自己的 `checked` 说。
+    """
+    rows = list(_SETTLEMENT_READINGS)
+    if reset:
+        _SETTLEMENT_READINGS.clear()
+    return {"checked": True, "count": len(rows), "rows": rows,
+            "reason": "" if not rows else (
+                f"{len(rows)} 条结算核对不一致（报告与候选行对不上，或决定被丢掉）")}
+
+
+def settlement_mismatch(store: Store | None, decisions: Iterable[Mapping[str, Any]], *,
+                        request_id: str = "") -> dict:
+    """结算之后回读一次候选行，核对"报告说入库"与"行上真是那样"（只读）。
+
+    为什么必须在这里回读、而不是在 `apply_settlement` 里顺手看一眼：那一步在事务内，
+    `tx.rows` 交回的就是刚被 `upsert` 改过的那一份 —— 在里面比等于自己跟自己比。
+    真正要核的是"这一笔提交之后盘上是什么"，所以调用点必须在 `with store.tx(...)` 之后。
+
+    三态：`store is None` ⇒ `checked=False`（没查成，不是"一致"）；否则逐条比，比出来的
+    每一处差异都记进 :data:`_SETTLEMENT_READINGS`，并由这里返回同一批。
+    """
+    if store is None:
+        return {"checked": False, "count": 0, "rows": [],
+                "reason": "没有 store：结算核对没查成（不是「一致」）"}
+    want = [dict(d) for d in decisions
+            if str(d.get("status") or "") in CANDIDATE_DECISIONS
+            or str(d.get("status") or "") in _LEGACY_CANDIDATE]
+    live = {str(r.get("slot") or ""): r for r in _rows(store)}
+    bad: list[dict] = []
+    for d in want:
+        slot = str(d.get("slot") or "")
+        row = live.get(slot)
+        if row is None:
+            bad.append({"kind": "missing_row", "slot": slot,
+                        "request_id": str(request_id or ""),
+                        "expected": str(d.get("status") or ""), "got": "",
+                        "why": "结算决定指向的槽位在盘上读不到 ⇒ 那一笔决定没有落点"})
+            continue
+        # 状态轴用折算后的 `status`，不用 `judged_state`：后者把"入库了却没写 relevance"
+        # 也算 pending，那是"判过没有"那条判据的轴，不是"这一笔结算写没写进去"。
+        got = str(fold_legacy(row).get("status") or "")
+        exp = str(fold_legacy(dict(d)).get("status") or "")
+        if got != exp:
+            bad.append({"kind": "status_not_written", "slot": slot,
+                        "request_id": str(request_id or ""),
+                        "expected": exp, "got": got,
+                        "why": ("报告说这一条已经是 " + exp + "，而候选行上读到 " + (got or "（空）")
+                                + " ⇒ 那一笔结算没有落到盘上")})
+            continue
+        if exp == "admitted":
+            want_lit = str(d.get("lit_id") or "")
+            got_lit = str(row.get("lit_id") or "")
+            if want_lit and got_lit != want_lit:
+                bad.append({"kind": "lit_id_not_written", "slot": slot,
+                            "request_id": str(request_id or ""),
+                            "expected": want_lit, "got": got_lit,
+                            "why": ("报告说这一条入库成 lit:" + want_lit
+                                    + "，而候选行上是 " + (got_lit or "（空）"))})
+    for item in bad:
+        _note_settlement_mismatch(**item)
+    return {"checked": True, "count": len(bad), "rows": bad,
+            "reason": "" if not bad else f"{len(bad)} 条结算决定与盘上的行对不上"}
+
+
 def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[dict]:
     """把一批终态决定写回候选行（`tx` 由调用方给 —— 让它能与登记同处一个事务）。
 
@@ -1024,6 +1207,10 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
     "literature 有了、候选还 pending"的一对，下一次迁移会把它当新的再登记一次。
     工具面那一路（`lit.admit` / `lit.admit_all`）的登记路径自带事务，于是它自己开
     一个只写 `lit_candidates` 的事务调这里（同样是一个原子步）。
+
+    两个 `continue` 分支（槽位读不到 / 状态码不认）行为不变、仍然丢掉那一笔，
+    但现在会各记一条读数（`dropped_slot` / `dropped_status`）：这一笔决定没落盘
+    这件事从此有据可查（见 :func:`settlement_readings`）。
     """
     rows = {str(r.get("slot") or ""): r for r in tx.rows("lit_candidates")}
     written: list[dict] = []
@@ -1031,6 +1218,9 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
         slot = str(d.get("slot") or "")
         row = dict(rows.get(slot) or {})
         if not row:
+            _note_settlement_mismatch(kind="dropped_slot", slot=slot,
+                                      expected=str(d.get("status") or ""), got="",
+                                      why="结算决定指向的槽位在表里读不到 ⇒ 这一笔被丢掉")
             continue
         status = str(d.get("status") or "")
         legacy = _LEGACY_CANDIDATE.get(status)
@@ -1040,6 +1230,9 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
             if not str(d.get("reason_code") or "").strip():
                 d = {**d, "reason_code": legacy[1]}
         if status not in CANDIDATE_DECISIONS:
+            _note_settlement_mismatch(kind="dropped_status", slot=slot,
+                                      expected=str(d.get("status") or ""), got="",
+                                      why="结算决定的状态码不认 ⇒ 这一笔被丢掉")
             continue
         row["status"] = status
         code = str(d.get("reason_code") or "")
@@ -1174,6 +1367,9 @@ def admit(
     if decisions:
         with store.tx("lit_candidates", actor=actor, note="lit.admit") as tx:
             apply_settlement(tx, decisions)
+        # 结算"之后"回读一次（必须在事务外：事务内比等于自己跟自己比），
+        # 对不上的记进 `settlement_readings()`。行为不变，只多一条读数。
+        settlement_mismatch(store, decisions, request_id=plan["request_id"])
     done = []
     for item in plan.get("admitted") or []:
         slot = str(item["slot"])
@@ -1286,6 +1482,10 @@ def admit_all(
             ])
         settled = [dict(r) for r in tx.rows("lit_candidates")
                    if str(r.get("request_id") or "") == rid]
+    # 结算之后回读一次（事务外）：对不上的记进 `settlement_readings()`。
+    # 只核对第一次结算那一批（`decisions`）—— 收尾那一批（`leftover` ⇒ rejected）
+    # 本来就是"扫到哪算哪"，核它没有信息量。
+    settlement_mismatch(store, decisions, request_id=rid)
     settled.sort(key=lambda r: str(r.get("slot") or ""))
     rep = write_report(store, rid, rows=settled) if write_report_file else None
     done = []

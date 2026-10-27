@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from ._support import Any, CA, Callable, DT, DocumentError, Mapping, Path, S, Sequence, Store, ToolRegistry, install_g_tools
+from ._support import Any, Callable, DT, DocumentError, Mapping, Path, S, Store, ToolRegistry, install_g_tools
 from .compose_claim import _ComposeClaim
 from .register_dependency import _RegisterDependency
 from .build_document import _BuildDocument
@@ -77,28 +77,13 @@ class _Core:
                 raise DocumentError(f"{name} 调用失败：{res.error}")
             return None
         return res.data
-    def check_claims(self, claims: Sequence[Mapping[str, Any]], *, strict: bool = False) -> dict:
-        """用 `claimanatomy` 的判据逐条解剖一批断言（只读，不落库）。
 
-        为什么 G 需要它：`build_document` 是"要么全过、要么全不写"的闸门，
-        而在组装阶段（手里还在改稿）往往只想问"现在这版有几条不合格"。
-        它返回的 `undecidable_count` 就是三态纪律第三态的落点
-        （同一个返回里的 `decided` 是由它推出的布尔结论，不是第三个计数）：
-        "字段缺失"与"字段非法"与"检查器没跑成"必须能分开处置 ——
-        后者单独占 `undecidable_count` 一档，不许并进任何别的档。
+    # 这里原来有一个 `check_claims(...)`：`claimanatomy.validate_document_claims` 的薄汇总
+    # （拼一个 `{checked, claim_count, …agg, summary, issues}` 出来）。2026-10-27 删：
+    # 全仓 0 个生产读者 —— 生产侧三处（`tools/doc_tools.py`、`tools/review_tools.py`、
+    # `faculty_checks.py`）都直接调 `claimanatomy`，而它自己一个判据都不新增。
+    # 留着它的代价是"看起来是 G 的判据面、实际没人走"，下一个人会照着它改汇总口径。
 
-        判据来自 `claimanatomy.CLAIM_FIELDS`（唯一来源），本方法只是汇总。
-        """
-        claims = [CA.migrate_claim(c) if isinstance(c, Mapping) else c for c in claims]
-        issues = CA.validate_document_claims({"doc_id": "", "claims": list(claims)}, strict=strict)
-        agg = CA.consolidate_issues(issues)
-        return {
-            "checked": True,
-            "claim_count": len(claims),
-            **agg,
-            "summary": CA.summary_counts(issues)["message"],
-            "issues": [i.to_dict() for i in issues],
-        }
     def _resolve_inside(self, rel: str) -> Path:
         """把库里的相对路径解析成工作区内的绝对路径，越界即拒绝。
 

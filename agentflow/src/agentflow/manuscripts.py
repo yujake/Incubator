@@ -119,9 +119,57 @@ def parse_name(path: str | Path) -> dict[str, str] | None:
     return {"id": m.group(1), "sender": m.group(2), "recipient": m.group(3)}
 
 
+#: `handoffs.jsonl` 的解析缓存：`路径 -> ((mtime_ns, size), 行, 坏行说明)`。
+#:
+#: 为什么要缓存：这个账本在一次动作里会被读很多次 —— `write` 每核一条引用就
+#: `row_of` 一次（全表读），`next_id` 再读一次（`_scan_ids`）；
+#: 实测 3 条引用的 `write` 在 300 行账本上解析 4 次、15 ms（`temp/rbe3_measure.py`，
+#: 2026-10-27）。键里带 `(mtime_ns, size)`，所以别的进程追加之后下一次读就会重解析；
+#: 本进程的 `write` 追加完还会显式清一次这一格，于是"自己刚写的那一行读不到"在
+#: 结构上不可能（不靠时间戳精度）。
+_ROWS_CACHE: dict[str, tuple[tuple[int, int], list[dict[str, Any]], list[str]]] = {}
+#: 缓存最多留几个工作区（跑测试时会有很多临时工作区，无上限就是无界增长）。
+_ROWS_CACHE_MAX: int = 64
+
+#: 旧格式（`*.md`）文件清单的缓存：`目录 -> ((mtime_ns, size), [(id, 路径, 字段)])`。
+#:
+#: 它与上面那格是两件事：账本行变了不一定多出/少掉一个旧文件（追加一行不动目录），
+#: 目录变了也不一定动了账本。所以键是"目录自己的"盘上读数，而且与解析缓存
+#: 走同一条失效路径（`_forget_cache`）—— 本进程一写就两格一起清。
+#: 实测（`temp/rbe3_measure_legacy.py`，2026-10-27）：一次 `_legacy_files` 在有 50 个
+#: 旧格式文件时 1.25 ms、0 个时 0.39 ms，而 `write` 全程 5.5–6.3 ms ⇒ 这一格占
+#: 一次写的一成上下；缓存之后 `next_id` 从 1.33 ms 降到 stat 一次的量级。
+_LEGACY_CACHE: dict[str, tuple[tuple[int, int], list[tuple[str, Path, dict[str, str]]]]] = {}
+
+
+def _forget_cache(root: str | Path) -> None:
+    """把这个工作区的两格缓存一起清掉（账本解析 + 旧文件清单，只清这一个工作区）。"""
+    _ROWS_CACHE.pop(str(handoffs_path(root)), None)
+    _LEGACY_CACHE.pop(str(dir_of(root)), None)
+
+
 def read_rows(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
-    """读账本的所有行；返回 `(行, 坏行说明)`（坏行逐条报出，不静默跳过）。"""
-    return JF.read_jsonl(handoffs_path(root))
+    """读账本的所有行；返回 `(行, 坏行说明)`（坏行逐条报出，不静默跳过）。
+
+    行是副本：调用方改它不会改到下一次读的读数（缓存里存的是上一次解析的结果）。
+    读不出来（文件不存在 / 读失败）不缓存，照旧交给 `jsonlfile` 判四态。
+    """
+    path = handoffs_path(root)
+    try:
+        st = path.stat()
+    except OSError:
+        _forget_cache(root)
+        return JF.read_jsonl(path)
+    stamp = (int(st.st_mtime_ns), int(st.st_size))
+    key = str(path)
+    hit = _ROWS_CACHE.get(key)
+    if hit is not None and hit[0] == stamp:
+        return [dict(r) for r in hit[1]], list(hit[2])
+    got, problems = JF.read_jsonl(path)
+    if len(_ROWS_CACHE) >= _ROWS_CACHE_MAX:
+        _ROWS_CACHE.clear()
+    _ROWS_CACHE[key] = (stamp, got, problems)
+    return [dict(r) for r in got], list(problems)
 
 
 def rows(root: str | Path) -> list[dict[str, Any]]:
@@ -129,22 +177,31 @@ def rows(root: str | Path) -> list[dict[str, Any]]:
     return read_rows(root)[0]
 
 
-#: `read_index` 是旧名字（旧格式里它是"索引"；新格式里账本就是唯一真相）。
-def read_index(root: str | Path) -> list[dict[str, Any]]:
-    return rows(root)
-
-
 def _legacy_files(root: str | Path) -> list[tuple[str, Path, dict[str, str]]]:
-    """旧格式文件（`<编号>-<From>to<To>.md`）⇒ `(id, 路径, 解析出的字段)`，按编号排序。"""
+    """旧格式文件（`<编号>-<From>to<To>.md`）⇒ `(id, 路径, 解析出的字段)`，按编号排序。
+
+    清单按目录自己的 `(mtime_ns, size)` 缓存（见 `_LEGACY_CACHE`）：目录里多一个/
+    少一个 `.md`，mtime 就变 ⇒ 下一次重扫。交回的列表是副本。
+    """
     d = dir_of(root)
+    try:
+        st = d.stat()
+    except OSError:
+        _LEGACY_CACHE.pop(str(d), None)
+        return []
+    stamp = (int(st.st_mtime_ns), int(st.st_size))
+    hit = _LEGACY_CACHE.get(str(d))
+    if hit is not None and hit[0] == stamp:
+        return list(hit[1])
     out: list[tuple[str, Path, dict[str, str]]] = []
-    if not d.is_dir():
-        return out
     for p in sorted(d.glob("*.md")):
         got = parse_name(p)
         if got:
             out.append((got["id"], p, got))
-    return out
+    if len(_LEGACY_CACHE) >= _ROWS_CACHE_MAX:
+        _LEGACY_CACHE.clear()
+    _LEGACY_CACHE[str(d)] = (stamp, out)
+    return list(out)
 
 
 def _legacy_row(root: str | Path, mid: str, path: Path, got: Mapping[str, str]) -> dict[str, Any]:
@@ -222,20 +279,6 @@ def row_of(root: str | Path, mid: str) -> dict[str, Any] | None:
                 got = parse_name(p)
                 if got:
                     return _legacy_row(root, want, p, got)
-    return None
-
-
-def path_of(root: str | Path, mid: str) -> Path | None:
-    """按编号找旧格式文件（新格式没有一文件一手稿这回事 ⇒ 找不到返回 `None`）。"""
-    wants = [w for w in _mid_forms(mid) if w]
-    if not wants:
-        return None
-    d = dir_of(root)
-    if not d.is_dir():
-        return None
-    for want in wants:
-        for p in sorted(d.glob(f"{want}-*.md")):
-            return p
     return None
 
 
@@ -453,6 +496,8 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
             line = json.dumps(rec, ensure_ascii=False, sort_keys=True, default=str)
             with handoffs_path(root).open("a", encoding="utf-8", newline="\n") as fh:
                 fh.write(line + "\n")
+            # 刚追加的那一行必须马上读得到：显式清掉这一格的解析缓存，不靠时间戳精度。
+            _forget_cache(root)
             return rec
     except Timeout as exc:  # pragma: no cover - 只有并发极端场景才会撞上
         raise ValueError(f"取手稿编号锁超时（{timeout}s）：有另一个写者卡住了，稍后重试") from exc

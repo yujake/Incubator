@@ -6,7 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "agentflow"
 version = "1.0.0"
 description = "面向数学研究的多智能体协同框架（A–H 八角色，共享存储 + 冻结契约 + 写入期硬约束）"
-readme = "README.md"
+readme = "PACKAGING-README.md"
+# 注（2026-10-27，业主批）：权威 README 在**仓库根**（`D:\Incubator\README.md`，
+# 业主 2026-10-18 挪过去的），但 setuptools 不接受指到项目根之外的 `readme`：
+# 实测 `readme = "../README.md"` 直接抛
+#   `DistutilsOptionError: Cannot access '<dir>/../README.md' (or anything outside '<dir>')`。
+# 所以本目录保留一份**包级** README（内容是一页导读 + 指回仓库根那一份），
+# 换来的收益是 `long_description` 不再是空的（改前实测：文件不存在 ⇒ setuptools 只发
+# 一条 `SetuptoolsWarning: File '…\agentflow\README.md' cannot be found`，
+# wheel 的 `long_description` 静默为空）。判据见
+# `tests/test_packaging_includes_static.py::test_readme_is_not_empty_in_metadata`。
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
 
@@ -65,6 +74,20 @@ browser = [
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+
+# 非 .py 的随包资产。为什么必须有这一段（2026-10-27，业主批）：
+# `packages.find` 只收**包**，`.js` / `.css` / `.html` 一个都不进 wheel。而
+# `src/agentflow/web/static/` 是**入库**的前端产物（裁定 B1），运行期由
+# `webui/server.py::default_static_root()` 定位并服务 `GET /static/<file>` ——
+# 装好的包里缺了它，`agentflow serve` 是白页/404，而源码树里跑一切正常。
+# 判据：`tests/test_packaging_includes_static.py`（用与 `build_py.find_data_files`
+# 同一个 `glob` 函数按同一组 patterns 复算，逐条断言盘上每个文件都能被匹配到）。
+#
+# 为什么是两条而不是一条 `web/static/**`：setuptools 的 `find_data_files` 走的是
+# `glob.glob`，而 `glob` 里的 `*` **不跨目录**（`**` 不带 `recursive=True` 时等同 `*`）。
+# 写成两条就是"它能匹配到的正好是这两层"，与盘上的布局一一对应。
+[tool.setuptools.package-data]
+agentflow = ["web/static/*", "web/static/assets/*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

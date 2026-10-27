@@ -32,6 +32,19 @@
 
 `EVENT_KINDS` 是常量，不存在"读不出来"。这里的三态落在补发上：`since` 给了
 但缓冲里已经补不齐 ⇒ 事件里带 `reason` 说清（而不是静默少发几条）。
+
+## 未来口径：多会话分片（2026-10-27 留）
+
+订阅侧今天只有一档：收全部会话的事件（`?sid=` 那一格已删 —— 它此前是假承诺，
+`Broadcaster.publish` 从来不看订阅者属于哪段会话）。要真的按会话分片，必须
+先定义一张"哪些 kind 是会话级"的表，再改过滤：
+
+    `state` / `stop` / `heartbeat` 是广播（它们的 payload 里没有顶层 `sid`：
+    一条 `state` 带的是整份快照，`stop` 带的是开关与全局进程面，心跳只有时间）
+
+只有 `question` / `answered` / `checkpoint` 带 `sid`。一刀切按 `sid` 过滤会把
+前三者全部吞掉 —— 那不是"少推几条"，那是页面从此不刷新、心跳也不发（连接会被
+中间层掐掉）。这张表今天不存在，所以过滤也不存在。
 """
 
 from __future__ import annotations
@@ -133,10 +146,15 @@ def heartbeat_event(*, at: str = "") -> dict[str, Any]:
 
 
 class Subscription:
-    """一个订阅者：一个有界队列 + 它订阅的 sid（`None` = 全部会话）。"""
+    """一个订阅者：一个有界队列。
 
-    def __init__(self, sid: str | None = None, *, limit: int = QUEUE_LIMIT) -> None:
-        self.sid = sid
+    2026-10-27 删掉了这一格上的 `sid`：它此前存着"只订这一段会话"，而
+    :meth:`Broadcaster.publish` 从来没读过它 —— 那是一句假承诺（前端恒传
+    `null`，所以线上没人被它误导，但任何按文档传 `?sid=` 的客户端都会收到全部
+    会话的事件）。要真的分片，先看模块 docstring 末尾那条未来口径。
+    """
+
+    def __init__(self, *, limit: int = QUEUE_LIMIT) -> None:
         self.queue: queue.Queue[tuple[int, bytes]] = queue.Queue(maxsize=limit)
         self.dropped = 0
         self.closed = False
@@ -265,9 +283,9 @@ class Broadcaster:
             sub.put(event_id, frame)
         return event_id
 
-    def subscribe(self, sid: str | None = None) -> Subscription:
-        """登记一个订阅者（`sid=None` = 收全部会话的事件）。"""
-        sub = Subscription(sid)
+    def subscribe(self) -> Subscription:
+        """登记一个订阅者（收全部会话的事件 —— 今天只有这一档）。"""
+        sub = Subscription()
         with self._lock:
             self._subs.append(sub)
         return sub
@@ -337,9 +355,9 @@ def publish(kind: str, data: Mapping[str, Any]) -> int:
     return default_broadcaster().publish(kind, data)
 
 
-def subscribe(sid: str | None = None) -> Subscription:
+def subscribe() -> Subscription:
     """订阅默认广播器（`/api/stream` 用这个）。"""
-    return default_broadcaster().subscribe(sid)
+    return default_broadcaster().subscribe()
 
 
 # ====================================================================== 写路径上的装配（裁定 1a）
@@ -498,11 +516,13 @@ def handle_stream(handler: Any, params: Mapping[str, str],
     按 `?since=` 补发缓冲里能补的那些（补不齐就先发一条全量 `state`）⇒
     进入循环：有新事件就发，闲着就按 `heartbeat_sec` 发心跳，客户端断开就退出。
 
-    `sid`（可选）只订这一段会话的事件；心跳周期取默认广播器上那个可注入的值。
+    心跳周期取默认广播器上那个可注入的值。
+
+    这个端点只有 `?since=` 一格（2026-10-27 起）：此前还有一格 `?sid=`，说"只订
+    这一段会话的事件"，而广播器从来没读过它 —— 那是假承诺，已删。分片要做的话，
+    先按模块 docstring 末尾那条口径定义"哪些 kind 是会话级"。
     """
     del params
-    sid_vals = query.get("sid") or []
-    sid = str(sid_vals[0]) if sid_vals else None
     since_raw = (query.get("since") or [""])[0]
     try:
         since = int(str(since_raw)) if str(since_raw).strip() else 0
@@ -511,7 +531,7 @@ def handle_stream(handler: Any, params: Mapping[str, str],
         # 后者会让页面停在旧状态而看不出为什么）。
         since = 0
     bc = default_broadcaster()
-    sub = bc.subscribe(sid)
+    sub = bc.subscribe()
     try:
         handler.send_response(200)
         handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -556,22 +576,11 @@ def handle_stream(handler: Any, params: Mapping[str, str],
         bc.unsubscribe(sub)
 
 
-def handlers() -> dict[str, Any]:
-    """`{名字: 处理器}`（本模块自己那一份的实名表）—— 与 `readers.HANDLERS` 同一族。"""
-    return {name: fn for name, fn in HANDLERS.items() if fn is not None}
-
-
-def bind_handlers(cls: Any) -> tuple[str, ...]:
-    """把本模块的处理器绑到一个类上；返回绑上去的名字（排序）。
-
-    这条不是接缝的正路（A 线已经改用 `routes.handler_for` 按子表取处理器了），
-    留着它是给判据与 `WebHandler` 一起做实验用的：绑上之后同一个端点在"类方法"那条
-    查找路径上也找得到。生产路径不依赖它。
-    """
-    for name, func in handlers().items():
-        setattr(cls, name, func)
-    return tuple(sorted(handlers()))
-
+# 2026-10-27 删掉了这里的 `handlers()` 与 `bind_handlers(cls)` 一对：docstring 自己写着
+# "这条不是接缝的正路……生产路径不依赖它"，而删之前的 grep 读数是没有一行代码调用它
+# （唯一提到它的是 `tests/test_webui_sse.py` 开头那段历史说明，已成过去时）。
+# 端点 -> 处理器的唯一查找路径是 `routes.handler_for`（子表模块的 `HANDLERS`），
+# 留一条平行的"把处理器挂到类上"的路只会让"谁实现了哪个端点"多一种答案。
 
 #: 表项的登记（函数得先存在，所以放在文件末）。
 HANDLERS["handle_stream"] = handle_stream

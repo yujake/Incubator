@@ -543,6 +543,16 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
             item["retired"] = True
             item["retired_branch"] = str(r.get("branch") or "")
         elif kind == "keep_alive":
+            # 读侧先落地的那一格：今天没有任何生产者（全仓没有一处往名册写
+            # `kind="keep_alive"` 的行，`projects/**` 现存的 roster jsonl 里也是 0 行）。
+            # 「做完还待命」这条事实的唯一来源是台账那一侧的派活项（
+            # `conductor.keep_alive_of` 读 `kind="delegation"` 行的 `keep_alive`），
+            # `_state_reading` 走的正是那一条路。
+            # 为什么留着而不是删（2026-10-27 裁定）：它是名册事件的合法一格，删掉之后
+            # 将来真要写它的人会在别处再写一份 fold —— 而"同一份事件流的两种折法"正是
+            # 本仓栽过的那一类。读数侧的代价为零（这一行永远不会命中）。
+            # 反过来说：如果哪天有人开始写它，`keep_alive_of` 与这一格就是两份口径，
+            # 那时必须合并成一处 —— 所以这一行在此点名，免得它继续静默。
             item["keep_alive"] = bool(r.get("value"))
         # 任务原文（业主 2026-10-27：「自动以 task 填充目的」）：它是父派下来的那件事
         # 本身，`add` 与 `bind` 两行都可能带着它（复用支只写 bind）。改前落的行没有
@@ -626,26 +636,56 @@ def brief_from_task(task: str, *, limit: int = BRIEF_MAX) -> str:
     return flat[:min(cut, int(limit))].strip()
 
 
-def _state_from(branch: str, retired: bool, cond: Any, task_id: str) -> str:
-    """四态折叠（`draft/92` §2）：活跃 / 待命 / 已停 / 已退役。
+#: `state` 的五档（不许增删：`roster_view` 的对外取值域，前端与读侧都按它显示）。
+#: "判不了"不是第六档 —— 它是旁边那一格 `state_checked=False`（2026-10-27）。
+STATE_LABELS: tuple[str, ...] = ("活跃", "待命", "已停", "已退役", "未登记")
+
+
+def _state_reading(branch: str, retired: bool, cond: Any, task_id: str, *,
+                   branch_checked: bool = True) -> dict[str, Any]:
+    """四态折叠（`draft/92` §2）＋ 三态位：`{"state", "state_checked", "state_reason"}`。
 
     `branch` 来自 `conductor.retire_ready`（`active` / `waiting_with_children` /
     `waiting_no_children`）；"待命"再看 `keep_alive_of`（那一格只回答"声明过待命没有"）。
     两个读侧正交，折叠只在这一处做（不许让它们互相猜）。
+
+    ## 为什么多了 `state_checked`（2026-10-27）
+    改前"待命声明读不成"折成 `state="已停"` —— 那是把"没查成"写成一条结论，而这一格
+    会被父代理读成"它停了、可以销号"。五档取值域不改（前端与读侧都按它显示），
+    改成另一格回答可不可信：
+    - `state_checked=True`：`state` 是查过的结论；
+    - `state_checked=False`：`state` 只是五档里的占位（落"未登记"，五档里唯一不声称
+      任何结论的那一档），真读数在 `state_reason` 里（谁没读成、为什么）。
+    读侧不许在 `state_checked=False` 时把 `state` 当"它停了"用（判据
+    `tests/test_roster_state_is_checkable.py`）。
+
+    ## 三态位怎么定
+    - 已退役 / 活跃 / 未登记（branch 为空）：`state_checked=True` —— 这三档都是"读到了
+      台账、读到了就绪读数"之后的结论；
+    - `branch_checked=False`（那一层的 `retire_ready` 没读成）：`state_checked=False`；
+    - 待命声明读不成（`keep_alive_of` 的 `checked=False`）：`state_checked=False`，
+      且 `state` 落"未登记"（不落"已停"）。
     """
     if retired:
-        return "已退役"
+        return {"state": "已退役", "state_checked": True, "state_reason": ""}
     if branch == "active":
-        return "活跃"
+        return {"state": "活跃", "state_checked": True, "state_reason": ""}
     if not branch:
-        return "未登记"
+        if not branch_checked:
+            return {"state": "未登记", "state_checked": False,
+                    "state_reason": "这一层的就绪读数（`retire_ready`）没读成 ⇒ 它属哪一档判不了"}
+        return {"state": "未登记", "state_checked": True, "state_reason": ""}
     try:
         ka = cond.keep_alive_of(task_id)
-    except Exception:  # noqa: BLE001
-        ka = {"checked": False}
-    if ka.get("checked") and ka.get("keep_alive"):
-        return "待命"
-    return "已停"
+    except Exception as exc:  # noqa: BLE001
+        ka = {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+    if not ka.get("checked"):
+        return {"state": "未登记", "state_checked": False,
+                "state_reason": (f"待命声明没读成（{ka.get('reason') or '未给理由'}）"
+                                 "⇒ '待命'与'已停'分不开")}
+    if ka.get("keep_alive"):
+        return {"state": "待命", "state_checked": True, "state_reason": ""}
+    return {"state": "已停", "state_checked": True, "state_reason": ""}
 
 
 def _status_enum(facts: Mapping[str, Any], *, retired: bool) -> str:
@@ -666,7 +706,7 @@ def _status_enum(facts: Mapping[str, Any], *, retired: bool) -> str:
         # 台账里没有它这一行（未登记 / 已被清）⇒ `ready`：那一档的语义正是
         # "不在活的登记表里"，而"能不能续"由旁边那格 `state` 回答。
         return "ready"
-    if str(facts.get("status") or "") in ("pending", "running"):
+    if str(facts.get("status") or "") in LIVE_TASK_STATUSES:
         return "running"
     return "idle"
 
@@ -701,6 +741,13 @@ ROW_AXIS_OTHER = "other"
 #: 顶趟行的动作哨兵（`conductor.open_top_level_run` 与 `_open_consume_root` 写的）。
 TOP_LEVEL_ACTION = "run"
 #: "还没终态"的两档（`schema.TASK_STATUSES` 里的活档；与 conductor 的扇出判据同一批）。
+#:
+#: 这一行是全仓唯一的真身（2026-10-27）：conductor 的 `UNFINISHED_STATUSES` 是它对
+#: 这一行的转发（`tuple(SEC.LIVE_TASK_STATUSES)`），不再是第二份字面量。方向是这样选的，
+#: 不是反过来：`conductor` 顶层 import `secretary`（那一行要读 `MAX_REMINDERS`），
+#: 而 `secretary` 顶层不 import `conductor` —— 这样两种导入顺序都无环。
+#: 判据：`tests/test_live_statuses_single_source.py`（两个名字取到的必须是同一个元组，
+#: 且这两个文件里除本行之外不再有 `("pending", "running")` 字面量）。
 LIVE_TASK_STATUSES = ("pending", "running")
 
 
@@ -1556,10 +1603,13 @@ class Secretary:
         #: 绑上之后台账分片到 `out/secretary/<role>-<task_id>.jsonl`，于是同角色的并发实例
         #: 各写各的片（今天只有角色维度 ⇒ 两个 D 实例会把记录写进同一个文件，读的人分不出是谁）。
         self.task_id: str = ""
-        #: 最近一次判断的墙钟（秒）与最近一次闭环该不该介入的读数 —— 都是读数，
-        #: 不是判据（fail-open 的代价要看得见，但不许拿它去卡任何一条委托）。
+        #: 最近一次判断的墙钟（秒）—— 读数，不是判据（fail-open 的代价要看得见，
+        #: 但不许拿它去卡任何一条委托）。
+        #:
+        #: 2026-10-27 删掉了另一个兄弟字段（存"闭环该不该介入"那一位的）：它写两次、
+        #: 全仓 0 个读者，而 `should_engage()` 是纯谓词、返回值本来就带走这一位。
+        #: 留着它只会让下一个人以为"有一个地方在读它"。
         self._last_judge_elapsed = 0.0
-        self._last_closure_engage = False
         #: 入库审美的同题不重判表（2026-10-14 第五趟真机读数）。
         #:
         #: 真机上同一份 `statement_full`（21 字）被提交了 6 次：每一次都真的发了一次
@@ -1580,6 +1630,13 @@ class Secretary:
         #: 跨进程/跨趟的缓存 —— 没有盘上那一份，"同一条正文第二次进来不再花钱"这句话只在
         #: 同一个秘书实例活着的时候成立。
         self._proposition_verdicts: dict[str, dict[str, Any]] = {}
+        #: 工具面真名表的缓存（2026-10-27）。`registry=None` 那一档的兜底是
+        #: `build_registry(store=...)` —— 装配一整套工具要 12 ms（实测
+        #: `temp/r_be2_static_cache.py`），而 `prescreen` 每次委派都问一遍。
+        #: 工具面是静态的（`tools/_MODULES` 那张表在进程内不变），所以这份名单
+        #: 只缓存"读成功了"的那一次；空表（读不成）不缓存 —— 那会把"这一次没读成"
+        #: 变成"以后都没有真名"，而三态纪律不许这么折。
+        self._tool_names_cache: list[str] | None = None
 
     # ------------------------------------------------------------ 台账（E 类：记录）
 
@@ -1925,12 +1982,21 @@ class Secretary:
             # 调用方 `prescreen` 只在真名表非空时才判错名 ⇒ 空表绝不会被读成
             # "这些名字都不存在"，所以这不是把"没做"折叠成"没有"。
             return []
+        # 2026-10-27：兜底那一支要现造一整套工具（实测 12 ms/次），而工具面是静态的
+        # （`tools/_MODULES` 在进程内不变）⇒ 读成功那次的名字表留在本实例上。
+        # 只缓存非空结果：空表 = "这一格没读成"，缓存它会把一次失败变成永久没有真名。
+        cached = self._tool_names_cache
+        if cached is not None:
+            return list(cached)
         try:
             from .tools import build_registry
 
-            return sorted(str(x) for x in build_registry(store=self.store).registry.names())
+            names = sorted(str(x) for x in build_registry(store=self.store).registry.names())
         except Exception:  # noqa: BLE001 - 造不出来 ⇒ 空表（"没读到"不许读成"没有真名"）
             return []
+        if names:
+            self._tool_names_cache = list(names)
+        return names
 
     # ------------------------------------------------------------ 机器预筛（§6）
 
@@ -3754,10 +3820,14 @@ class Secretary:
                             "kind": one["kind"], "to": one["to"],
                             "axis": one["axis"]},
                     fail_open=False)
-            # 闭环提醒是异步的（`draft/55` §5.2）：不阻塞本体，所以这一格只记
-            # "该不该叫秘书"的读数（要不要真叫由调用方按 `should_engage` 走）。
-        self._last_closure_engage = self.should_engage(alarms=[], duplicates=0,
-                                                      overdue=len(out), novel=False)
+            # 闭环提醒是异步的（`draft/55` §5.2）：不阻塞本体。
+            # 2026-10-27 删掉了这里原本那一句
+            # `self._last_closure_engage = self.should_engage(overdue=len(out), …)`：
+            # 那个字段全仓 0 个读者（写两次、读零次），而 `should_engage` 是纯谓词
+            # （`bool(alarms) or duplicates or overdue or novel`，无副作用）⇒ 这一句
+            # 除了给一个没人读的字段赋值之外什么都没做。真要问"该不该叫秘书"，
+            # 上面 `note_decision(duty=3, …)` 已经把那批未闭环逐条落了盘，
+            # 而"要不要真叫"由调用方按 `should_engage` 自己算（三个真调用点见它的 docstring）。
 
     def negotiate(self, *, with_role: str, point: str,
                   rounds: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
@@ -3871,15 +3941,30 @@ class Secretary:
         为什么不要求调用方传：秘书的读面本来就是"`store` + 手稿 + registry"
         （`draft/91` §2），名册要读台账里的代理行 ⇒ 用同一把 `store` 现造一个即可。
         造不出来 ⇒ 返回 `None`，调用方按三态如实报（不许当"名下没有子代理"）。
+
+        ## 为什么是同一个实例（2026-10-27）
+        改前每调一次都现造一个：造一个 `Conductor` 要连 `TokenMeter` / `LocalBackend` /
+        `MemoryBudgetTracker` 一起建，而秘书一拍里要问它十来次。更要紧的是读数身份：
+        `roster_view` 把整段包进 `Conductor.reading_snapshot()`（一拍一份台账快照），
+        而作用域挂在实例上 —— 若每次调用换一个新实例，作用域就只罩住了"造它的那一行"，
+        拍内其余读照样各读一遍（实测：作用域因此从 1 次退化成 18 次）。
+        缓存只保存这一个只读句柄；它的 `store` 在 `Secretary` 生命周期内不变，
+        所以"哪个工作区"这件事不会变。写入口一个都不在这里走（秘书的写集是
+        `STATEMENT_WRITE_TABLES`，见 `self.writes`）。
         """
         if self.store is None:
             return None
+        cached = getattr(self, "_cond_cache", None)
+        if cached is not None and getattr(cached, "store", None) is self.store:
+            return cached
         from .conductor import Conductor, LocalBackend
 
         try:
-            return Conductor(self.store, policy=None, backend=LocalBackend({}))
+            made = Conductor(self.store, policy=None, backend=LocalBackend({}))
         except Exception:  # noqa: BLE001
             return None
+        self._cond_cache = made
+        return made
 
     def roster_rows(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
         """名册的折叠后状态（`(项列表, 坏行)`）：一项 = 名字 / 角色 / 简介 / 状态。
@@ -6961,8 +7046,13 @@ class Secretary:
                 continue
             state = str(cell.get("state") or AGENT_STATE_UNKNOWN)
             state_of[tid] = state
-            slot[state if state in slot else AGENT_STATE_UNKNOWN] = int(
-                slot.get(state) or 0) + 1
+            # 词表外的取值记进 `unknown`（`conductor.state_counts` 的同一条口径）：
+            # 先算出要落的键再累加 —— 直接 `slot[key] = int(slot.get(state)) + 1`
+            # 会读到"另一格"的旧值，于是 `unknown` 每遇到一个词表外取值就被
+            # 覆盖成 1（实测：两项判不了 + 一项词表外 ⇒ `by_owner` 说 1、`states` 说 3，
+            # 而 `note` 里那句"另有 3 项判不了"用的是后者）。
+            bucket = state if state in slot else AGENT_STATE_UNKNOWN
+            slot[bucket] = int(slot.get(bucket) or 0) + 1
             if state not in ACTIVE_AGENT_STATES:
                 continue
             slot[ACTIVE_CHILD_COUNT_KEY] = int(slot[ACTIVE_CHILD_COUNT_KEY]) + 1
@@ -7010,7 +7100,58 @@ class Secretary:
 
     def roster_view(self, *, owner: str, scope: str = "self",
                     limit: int = 20) -> dict[str, Any]:
-        """名册视图（只读，不许修补 —— I-15）：`{"checked","rows","more","reason","diagnostics"}`。
+        """名册视图（只读，不许修补 —— I-15）。
+
+        真身在 :meth:`_roster_view_body`：本方法只负责把它包进"一拍一份台账快照"那一个
+        只读作用域（2026-10-27）。为什么包在这里而不是让每一处读侧自己缓存：这一份视图
+        一拍里要问台账 15 次以上（逐名册项问一次"它名下最新的派活项声明过待命吗"、
+        逐层问一次"这一层哪几项可退役"、还有三态快照与 `children_facts`），而它们读的是
+        同一份台账的同一个时刻 —— 一拍一份快照是这条口径的唯一落点。
+        `roster_view` 从 I-15 起就是"只读、不许修补"，所以作用域内不会有写（真写了会抛）。
+        """
+        cond = self._conductor()
+        if cond is None:
+            return self._roster_view_body(owner=owner, scope=scope, limit=limit)
+        # 作用域开不起来也是"没读成"，不是让异常穿出去（2026-10-27）：
+        # `roster_view` 的三态契约说"读不成 ⇒ checked=False + reason"，
+        # 而 `reading_snapshot()` 自己要读一次台账 —— 它抛的话，穿出去就成了崩溃而不是读数
+        # （判据 `test_roster_view_reports_and_never_writes` 的 `_Broken` 替身钉的正是这一档）。
+        try:
+            snapshot = cond.reading_snapshot()
+        except Exception as exc:  # noqa: BLE001 - 读不成要有读数
+            return self._roster_view_unreadable(f"名册没读成（{type(exc).__name__}: {exc}）", owner, scope, limit)
+        try:
+            with snapshot:
+                return self._roster_view_body(owner=owner, scope=scope, limit=limit)
+        except RuntimeError as exc:
+            # 作用域内写台账会被 `_refuse_write_in_snapshot` 拒（程序错，不是读不成）⇒ 照旧抛；
+            # 其余 RuntimeError（台账读不成）按三态降级。判据两支都要能区分，所以按拒信原话认。
+            if "只读快照作用域" in str(exc):
+                raise
+            return self._roster_view_unreadable(f"名册没读成（{type(exc).__name__}: {exc}）", owner, scope, limit)
+        except Exception as exc:  # noqa: BLE001 - 同上，读不成要有读数
+            return self._roster_view_unreadable(f"名册没读成（{type(exc).__name__}: {exc}）", owner, scope, limit)
+
+    def _roster_view_unreadable(self, reason: str, owner: str, scope: str,
+                                limit: int) -> dict[str, Any]:
+        """名册视图"没读成"的那一份读数（三态里的第三态，形状与真身那个分支逐键相同）。
+
+        为什么单列一个方法而不是在 `roster_view` 里内联：那个 `checked=False` 的行有 11 个键
+        （含 S-H 补的两格），内联一份就多一处会漂的形状；这里与 `_roster_view_body` 里的
+        同形返回逐键相同，靠 `test_roster_view_reports_and_never_writes` 与
+        `test_roster_state_is_checkable` 一起钉住（它们会读 `checked` / `reason` 与每格的存在性）。
+        """
+        from .conductor import (ACTIVE_CHILD_COUNT_KEY, CHILD_COUNT_KEY)  # 与真身同一来源
+        diagnostics: dict[str, Any] = {
+            "owner": owner, "scope": scope, "limit": int(limit), "unreadable": reason}
+        return {"checked": False, "rows": [], "more": 0, "scope": scope,
+                "diagnostics": diagnostics, "parent": owner, "reason": reason,
+                "counts": None, "states": None, CHILD_COUNT_KEY: None,
+                ACTIVE_CHILD_COUNT_KEY: None}
+
+    def _roster_view_body(self, *, owner: str, scope: str = "self",
+                          limit: int = 20) -> dict[str, Any]:
+        """`roster_view` 的真身（口径与返回值见上一份 docstring）。：`{"checked","rows","more","reason","diagnostics"}`。
 
         每一行：`name` / `role` / `brief` / `brief_source`（`parent` 父给的原话 / `secretary` 秘书从任务原文代写 /
         `""` 改前落的行）/ `state`（活跃 / 待命 / 已停 / 已退役 / 未登记）/ `retirable`（按 `conductor.retire_ready`
@@ -7096,10 +7237,16 @@ class Secretary:
             tid = str(r.get("task_id") or "")
             branch = str(t.get("branch") or "")
             facts = t["facts"]
-            state = _state_from(branch, bool(r.get("retired")), cond, tid)
+            # 三态位与 `state` 同出（2026-10-27）：`state` 五档不变，另给 `state_checked`
+            # 与 `state_reason` —— "它停了"与"它判不了"因此在同一份读数里分得开。
+            reading = _state_reading(branch, bool(r.get("retired")), cond, tid,
+                                     branch_checked=bool(t.get("branch_checked", True)))
+            state = str(reading["state"])
             row: dict[str, Any] = {
                 "name": str(r.get("name") or ""), "role": str(r.get("role") or ""),
                 "brief": str(r.get("brief") or ""), "state": state,
+                "state_checked": bool(reading["state_checked"]),
+                "state_reason": str(reading["state_reason"]),
                 # 简介是谁写的（`parent` 父给的原话 / `secretary` 秘书代写 / `""` 改前的行）
                 "brief_source": str(r.get("brief_source") or ""),
                 "retirable": branch == "waiting_no_children",
@@ -7154,17 +7301,22 @@ class Secretary:
 
         out: list[dict[str, Any]] = []
         root_by = dict((parent_facts(owner).get("by_child") or {}))
-        # 每一层的"可退役分支"（`branch` 是 `_state_from` 折四态的那一格）。
+        # 每一层的"可退役分支"（`branch` 是 `_state_reading` 折四态的那一格）。
         #
         # 2026-10-20（真机读数驱动，`projects/tree-check`）：改前 `by_child`（在 `roster_view`
         # 里由 owner 那一层的 `retire_ready` 构造）只覆盖直接子，于是全树视图里
-        # 孙代及以下的 `branch` 恒为空 ⇒ `_state_from` 落到「未登记」，而它们明明在名册上。
+        # 孙代及以下的 `branch` 恒为空 ⇒ `_state_reading` 落到「未登记」，而它们明明在名册上。
         # 实测那一份工作区：7 行里有 5 行（C1/F1/B1/B2/E1 --- 深度 2/3）被读成「未登记」，
         # 只有直接子 D1 读对（已停）。这与 `draft/90` §1.4「必须看到名册名 + 一句简介 +
         # 工作状态」直接冲突，也是机制②（M 看整棵树）唯一的真缺口。
         # 修法：逐层问它父那一层的 `retire_ready`（同一处实现，不另写一份分支判据），
         # 每个父只问一次（`branch_by_parent` 缓存）。
         branch_by_parent: dict[str, dict[str, str]] = {}
+
+        #: 每一层的就绪读数"读成了没有"（2026-10-27）：`branch` 为空有两种原因 ——
+        #: 那一层真没有可退役的项，或者那一层的读数根本没读成。两者不许折成同一句话，
+        #: 所以这里把三态位带出去，`roster_view` 落进 `state_checked`。
+        branch_checked_by_parent: dict[str, bool] = {}
 
         def branches_of(parent_id: str) -> dict[str, str]:
             if parent_id in branch_by_parent:
@@ -7177,11 +7329,14 @@ class Secretary:
             found = ({str(r.get("task_id") or ""): str(r.get("branch") or "")
                       for r in (got.get("ready") or [])} if got.get("checked") else {})
             branch_by_parent[parent_id] = found
+            branch_checked_by_parent[parent_id] = bool(got.get("checked"))
             return found
         if scope != "descendants":
             top = branches_of(str(owner or ""))
+            top_checked = bool(branch_checked_by_parent.get(str(owner or ""), False))
             return [{"row": r, "parent": "", "parent_tid": "", "depth": 1,
                      "branch": top.get(str(r.get("task_id") or ""), ""),
+                     "branch_checked": top_checked,
                      "facts": dict(root_by.get(str(r.get("task_id") or "")) or {})}
                     for r in rows]
         # 全树：逐层往下，每一层的 facts 从它的父那一格里取。
@@ -7189,16 +7344,19 @@ class Secretary:
         # 而某一行要的是"它父名下的它自己"那一格 —— 拿 X 去查 X 只会得到空表，
         # 于是全树的每一行都会读成 `ready`（一个安静的错误：没有任何地方会报错）。
         top_branches = branches_of(str(owner or ""))
-        queue: list[tuple[dict[str, Any], str, str, int, dict[str, Any], str]] = [
+        top_checked = bool(branch_checked_by_parent.get(str(owner or ""), False))
+        queue: list[tuple[dict[str, Any], str, str, int, dict[str, Any], str, bool]] = [
             (r, "", str(owner or ""), 1,
              dict(root_by.get(str(r.get("task_id") or "")) or {}),
-             top_branches.get(str(r.get("task_id") or ""), "")) for r in rows]
+             top_branches.get(str(r.get("task_id") or ""), ""), top_checked)
+            for r in rows]
         seen = 0
         while queue and seen < 512:
-            r, parent_name, parent_tid, depth, facts, branch = queue.pop(0)
+            r, parent_name, parent_tid, depth, facts, branch, checked = queue.pop(0)
             seen += 1
             out.append({"row": r, "parent": parent_name, "parent_tid": parent_tid,
-                        "depth": depth, "branch": branch, "facts": facts})
+                        "depth": depth, "branch": branch, "branch_checked": checked,
+                        "facts": facts})
             if depth >= 64:
                 continue
             tid = str(r.get("task_id") or "")
@@ -7207,10 +7365,11 @@ class Secretary:
                 continue
             by = dict((parent_facts(tid).get("by_child") or {}))
             their = branches_of(tid)
+            their_checked = bool(branch_checked_by_parent.get(tid, False))
             for k in kids:
                 kt = str(k.get("task_id") or "")
                 queue.append((k, str(r.get("name") or ""), tid, depth + 1,
-                              dict(by.get(kt) or {}), their.get(kt, "")))
+                              dict(by.get(kt) or {}), their.get(kt, ""), their_checked))
         return out
 
     def latest_report_of(self, *, task_id: str, role: str = "") -> dict[str, Any]:
@@ -7302,7 +7461,7 @@ class Secretary:
         if not row:
             out["reason"] = f"台账里没有 {tid} 这一行（查过了、确实没有）"
             return out
-        if status not in ("pending", "running"):
+        if status not in LIVE_TASK_STATUSES:
             # 已经收口：不占名额，也不许改写历史。
             out.update({"checked": True, "status_after": status})
             return out
@@ -8080,6 +8239,66 @@ def _row_matches_stmt_id(row: Mapping[str, Any], stmt_id: str) -> bool:
     return str(row.get("stmt_id") or "").strip() == want
 
 
+#: 档位台账的进程内索引：`路径 -> (键, (按号, 按 sha))`，键 = `(st_mtime_ns, st_size)`。
+#:
+#: 为什么要有它（2026-10-27，R-BE1 的 ⑥-3）：`nontriviality_of` 是逐条命题调的（收工读数与
+#: 网页那一栏都是逐条问），而它每次都把整份 `out/secretary/nontriviality.jsonl` 读一遍、
+#: 逐行 `json.loads` —— 400 条命题 × 400 行台账 = 每条命题 400 次解析。
+#:
+#: 键取 `(st_mtime_ns, st_size)`：`append_nontriviality` 是追加写 ⇒ 台账一变键就变，下一次
+#: 调用立刻读到新值（判据 `tests/test_nontriviality_ledger_is_read_once.py` 两个方向都钉着）。
+#: 每个路径只留最新一版（不按"每一版"累积），所以长跑里它不会无限长大。
+#:
+#: 已知边界（刻意的）：缓存里放的是解析后的行。`nontriviality_of` 只读它，返回的 dict
+#: 是新造的（`effort` 那一格也复制了），所以调用方就地改返回值不会污染缓存；但谁要是绕过
+#: 本函数直接拿缓存里的行去改（本模块不导出它），改的就是"这个进程眼里的台账"。
+_NT_INDEX_CACHE: dict[str, tuple[tuple[int, int], tuple[dict[str, Any], dict[str, Any]]]] = {}
+
+
+def _nontriviality_index(path: Path) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """把台账读成 `(按号, 按 sha, 读不成原因)` —— 同一份文件只解析一次（`mtime_ns+size` 键）。
+
+    两个索引都是"最后一行胜"，与原实现逐行覆盖同义。`by_sha` 建的是全局索引（原实现里它
+    在 `elif` 分支上：按号命中过的行不再记 sha）—— 两者同值，因为 `by_sha` 只在"按号一条
+    都没命中"时才被用到，而那时每一行都走过 `elif`，全局最后一条就是逐行最后一条。
+
+    坏行（不是 JSON / 不是对象）跳过，与原来一致；"文件读不出来"如实返回原因，由调用方
+    落成"没有这条命题的读数"（不是"这条命题是 T1"）。
+    """
+    try:
+        st = path.stat()
+        key = (int(st.st_mtime_ns), int(st.st_size))
+    except OSError as exc:
+        return {}, {}, f"{path} 读不到（{type(exc).__name__}: {exc}）"
+    hit = _NT_INDEX_CACHE.get(str(path))
+    if hit is not None and hit[0] == key:
+        return hit[1][0], hit[1][1], ""
+    by_id: dict[str, Any] = {}
+    by_sha: dict[str, Any] = {}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return {}, {}, f"{path} 读不到（{type(exc).__name__}: {exc}）"
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, Mapping):
+            continue
+        sid = str(row.get("stmt_id") or "").strip()
+        if sid:
+            by_id[sid] = row
+        sha = str(row.get("statement_sha256") or "")
+        if sha:
+            by_sha[sha] = row
+    _NT_INDEX_CACHE[str(path)] = (key, (by_id, by_sha))
+    return by_id, by_sha, ""
+
+
 def nontriviality_of(root: str | Path, statement_full: str, *,
                      stmt_id: str = "") -> dict[str, Any]:
     """这条命题当前的非平凡性档位（折叠旁支台账里同一号 / 同一 sha 的最后一行）。
@@ -8107,6 +8326,14 @@ def nontriviality_of(root: str | Path, statement_full: str, *,
     `tri="unknown"` 与 `tri="not_applicable"` 在 `level` / `label` 上长得一样，区别只在
     `applicable` 这一格：前者要人再去判一次，后者再判也不会有别的结论（2026-10-26）。
     读侧（页面）据此印两个不同的词（`不适用` / `未判`）。
+
+    ## 台账只解析一次（2026-10-27，R-BE1 的 ⑥-3）
+
+    读盘与逐行解析在 `_nontriviality_index` 一处，索引按 `(st_mtime_ns, st_size)` 缓存：
+    收工读数与网页那一栏都是逐条命题问一次的，改前每条命题都把整份台账读一遍。
+    三个边界写在那儿：台账一变（追加 / 就地改 + 改 mtime）立刻读到新值；缓存里是解析后的
+    行、本函数返回的是新造的 dict（就地改返回值不污染缓存）；绕开本函数去改缓存行
+    则会污染"这个进程眼里的台账"（本模块不导出那个索引）。
     """
     path = nontriviality_path(root)
     sha = _statement_sha(statement_full)
@@ -8114,23 +8341,20 @@ def nontriviality_of(root: str | Path, statement_full: str, *,
         return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
                 "applicable": True, "matched_by": "", "stmt_id": "",
                 "at": "", "reason": f"{path} 不在盘上 ⇒ 这条命题还没有档位读数"}
-    by_id: dict[str, Any] = {}
-    by_sha: dict[str, Any] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if _row_matches_stmt_id(row, stmt_id):
-            by_id = row
-        elif str(row.get("statement_sha256") or "") == sha:
-            # 只为读旧行：新行都有号，走上面那一支；这里命中时 matched_by 会说清。
-            by_sha = row
-    last = by_id or by_sha
-    matched_by = "stmt_id" if by_id else ("sha256" if by_sha else "")
+    by_id, by_sha, why = _nontriviality_index(path)
+    if why:
+        return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
+                "applicable": True, "matched_by": "", "stmt_id": "",
+                "at": "", "reason": why, "effort": {}, "text_truncated": False}
+    want = str(stmt_id or "").strip()
+    hit = by_id.get(want) if want else None
+    # 按号那一支仍过 `_row_matches_stmt_id`：它是"按号关联"的唯一判据，也是反真空判据
+    # （`tests/test_nontriviality_is_joined_by_stmt_id.py` 的 e 条）打桩的那一格。索引只是
+    # "读盘/解析一次"的缓存，不许把这条判据绕过去。
+    if hit is not None and not _row_matches_stmt_id(hit, stmt_id):
+        hit = None
+    last = hit or by_sha.get(sha)
+    matched_by = "stmt_id" if hit else ("sha256" if last else "")
     if not last:
         return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
                 "applicable": True, "matched_by": "", "stmt_id": "",

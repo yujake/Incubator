@@ -29,7 +29,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any, Callable, Mapping, NamedTuple, Sequence
 
@@ -313,10 +312,18 @@ def evidence_dir(root: str | Path) -> Path:
 
 
 def line_hash(record: Mapping[str, Any]) -> str:
-    """一行的规范哈希（不含 `prev_hash` 自己）—— 链式台账的链节。"""
+    """一行的规范哈希（不含 `prev_hash` 自己）—— 链式台账的链节。
+
+    序列化走 `canonical.canonical_sha256`（唯一实现）：`R-BE4`（2026-10-27，业主批准）
+    之前这里内联了一份 `json.dumps(..., separators=(",", ":"), default=str)`，于是
+    `canonical.py` 的 docstring（"包里这一份是唯一的实现，`signatures` 用它"）与事实
+    不符。两份的字节今天逐字相同（`canonical_json_text` 的 `default` 也是 `str`），
+    读数见 `temp/rbe4_canonical_equivalence.py`：6 条纯 JSON 夹具 + 4 条非原生值夹具
+    （Path / datetime / set / dataclass）全部同字节同 sha256 ⇒ 链上哈希一个都没变。
+    收敛的理由是"同一口径只许一处"（R-33），不是"现在两份算得不一样"。
+    """
     payload = {k: v for k, v in record.items() if k != "prev_hash"}
-    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return CANONICAL.canonical_sha256(payload)
 
 
 def read_ledger(path: str | Path) -> tuple[list[dict], list[str]]:
@@ -509,14 +516,15 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
                 "at": str(record.get("at") or ""), "verdict": str(record.get("verdict") or ""),
                 "findings": [dict(f) for f in findings]}
     snap_path = snap_dir / name
-    snap_path.write_text(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
-                                    separators=(",", ":"), default=str) + "\n", encoding="utf-8")
+    # 规范字节串只有一处实现（`canonical`）：`R-BE4` 之前这里与下面那一行各内联了一份，
+    # 与 `canonical.py` docstring 的"唯一实现"那句不符（理由与读数见 `line_hash`）。
+    snap_path.write_text(CANONICAL.canonical_json_text(snapshot) + "\n", encoding="utf-8")
 
     row = dict(record)
     row["evidence_path"] = rel
     row["evidence_sha256"] = hashlib.sha256(snap_path.read_bytes()).hexdigest()
     row["prev_hash"] = line_hash(records[-1]) if records else ""
-    line = json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+    line = CANONICAL.canonical_json_text(row)
     with ledger_path(base).open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(line + "\n")
     return row

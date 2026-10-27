@@ -309,8 +309,13 @@ def test_every_category_has_a_code_that_really_exists_in_the_source() -> None:
         for code in codes:
             where = ES.CODE_PROVENANCE[code]
             paths = re.findall(r"src/agentflow/[\w/]+\.py", where)
-            assert paths, f"{code} 的出处没写 file:line：{where!r}"
-            assert re.search(r"\.py:\d+", where), f"{code} 的出处没给行号：{where!r}"
+            assert paths, f"{code} 的出处没写文件名：{where!r}"
+            # `R-BE4`（2026-10-27 业主批准）：出处的口径从 `file:行号` 换成 `file::符号名`
+            # —— 行号在并行开发下几十分钟就漂，而这条判据只看"有没有行号"，于是 80 行里
+            # 64 行指着无关代码它也照样绿。符号名那一半由
+            # `tests/test_errorstats_provenance_symbols_exist.py` 逐条核（文件里真有那个符号）。
+            assert re.search(r"\.py::[A-Za-z_]", where), (
+                f"{code} 的出处没给符号名（口径是 `file::symbol`）：{where!r}")
             for rel in paths:
                 path = SRC.parents[1] / rel
                 assert path.is_file(), f"{code} 的出处指向一个不存在的文件：{rel}"

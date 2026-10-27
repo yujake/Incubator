@@ -25,7 +25,7 @@ argparse 的 `set_defaults(func=…)` 挂点、后一个是注册表按名字取
 
 | # | 项 | 定义点 | 谁在活着的那条路上调它 | 结论 |
 |---|---|---|---|---|
-| 1 | 时钟八件 | `tools/clock_tools.py:624/740/797/850/891/940/994/1060` | `clock_tools.register`（`tools/__init__.py:188` 的 `_MODULES` 收它）⇒ 十个角色 + M 的工具面 | WIRED |
+| 1 | 时钟九件 | `clock_tools.register` 登记的那一批工具名：`clock.now` / `clock.timer_start` / `clock.alarm_start` / `clock.periodic_start` / `clock.periodic_stop` / `clock.timer_purpose` / `clock.timer_list` / `clock.timer_cancel` / `clock.wait_any` | `clock_tools.register`（`tools/__init__.py` 的 `_MODULES` 收它）⇒ 十个角色 + M 的工具面 | WIRED |
 | 2 | 挂机（waiter/park/唤醒） | `clock.py:1704 _register_parked`、`:783 park_state`、`:1666 observe_work`、`:2664 consume_wakes` | 登记：`start_timer/start_alarm`；观测：`clock_tools.py:1109` 的会话写路径旁路钩子；消费：`agent_loop.py:4255 _take_wakes` | 登记/观测/消费 WIRED；**控制流层没有挂机支（见第三节 a）** |
 | 3 | 秘书链转发 | `secretary.py:6116 relay_out`、`:6187 relay_in`、`:6278 deliver_local`、`:1031 relay_path` | `conductor_tools.py:2311`（`conductor.guide` 的唯一收件人）；`relay_in` 逐跳递归 | WIRED |
 | 4 | 链式寻址 | `conductor.py:793 parse_chain_address`、`:5179 resolve_chain`、`:5118 chain_of`、`:5130 chain_text` | `conductor_tools.py:2268`；`chain_of/chain_text` 另由 `Conductor.tree` 消费 | WIRED |
@@ -91,7 +91,7 @@ attack_plans.history 里带走 deps_refused 与那条 finding（下一轮提示�
 | 转发链的发送方秘书没带缝（新） | `tools/conductor_tools.py:2309` | 同上。转发本身不需要模型，但"这一位秘书将来要判东西"时它结构上判不了 |
 | 主控读名册的秘书是裸构造（新） | `conductor.py:5175` | 同上（只读名册，但它是 `_secretary` 的三处构造点之一） |
 | M 的工具面并集字面量过期 | `tests/test_tool_face_has_no_orphans.py:89` | 今晚新增 3 件 `clock.*`（`periodic_start/periodic_stop/timer_purpose`）：104 → 107。HEAD 上这条是绿的，今晚变红 |
-| M 面计数过期（旧） | `tests/test_host_wiring.py:451` | 期望 21，实测 33（HEAD 上就已经是 30）—— 这条判据已经长期没在量东西 |
+| M 面计数过期（旧）—— 已修（2026-10-27） | `tests/test_host_wiring.py` 里那条判据（不再写死总数） | 当次读数：期望 21、实测 33。**2026-10-27 当晚已改口径**：判据不再量"M 的工具面一共几件"，改成量"四组构成"（全部 `clock.*` + 全部 `conductor.*` + 文件面白名单六件 + 进程面两件，并集逐名等于 M 的工具面）。那条判据自己的 docstring 记着改口径之后的读数：**35**（`tests/test_host_wiring.py` 那段"这条判据量的是什么"）。⇒ 这一条不必再修，别再按 21/33 引用 |
 
 ## 五、这条判据会不会误报
 

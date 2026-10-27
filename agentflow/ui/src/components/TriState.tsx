@@ -14,9 +14,16 @@
  * 那正是本项目三态纪律要分开的那条线。
  */
 import { Badge } from "./Badge";
+import type { ReportTri as GenReportTri, Tri as GenTri } from "../types";
 
-export type Tri = "computed" | "unreadable" | "not_applicable";
-export type ReportTri = "ok" | "missing" | "unknown";
+/*
+ * 两套词表的**声明**只许有一份：真身在 `types.ts`（生成物，字段名与取值逐字来自
+ * 后端）。这里此前各写了一份同形的字面量联合 —— 两处同形时 `tsc` 一声不吭，
+ * 后端把三态词表改掉之后，生成物会跟着变，而这一份不会，页面就会画出不存在的档。
+ * 所以这里改成从生成物导入再转发：多出来的一处定义没了，`tsc` 也就恢复了判据作用。
+ */
+export type Tri = GenTri;
+export type ReportTri = GenReportTri;
 
 /** 视觉档（只有三种；两套词表都往这里投影）。 */
 export type Visual = "ok" | "unknown" | "na";

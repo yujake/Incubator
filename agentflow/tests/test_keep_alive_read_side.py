@@ -123,7 +123,9 @@ def test_keep_alive_of_is_three_state(tmp_path: pathlib.Path, monkeypatch):
     def boom(*_a: Any, **_kw: Any) -> Any:
         raise RuntimeError("注入的台账故障")
 
-    monkeypatch.setattr(cond, "_task", boom)
+    # 注入点跟着实现走：2026-10-27 起 `keep_alive_of` 一拍只读一次台账（`_tasks()`），
+    # 不再是 `_task(task_id)` 再扫第二遍 —— 打在旧口上等于没打（判据会假绿）。
+    monkeypatch.setattr(cond, "_tasks", boom)
     bad = cond.keep_alive_of(parent)
     assert bad["checked"] is False and "RuntimeError" in bad["reason"], bad
 

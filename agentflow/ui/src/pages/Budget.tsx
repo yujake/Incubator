@@ -21,15 +21,10 @@ import { api, postBudget, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
-import { Money } from "../components/Money";
-import { Table, cell } from "../components/Table";
+import { Money, formatUsd } from "../components/Money";
+import { Table, buckets, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
-
-/** 一格金额：`null` 显 `unknown`（不是 0）。 */
-function usd(value: number | null): string {
-  return value === null || value === undefined ? "unknown" : `$${value.toFixed(6)}`;
-}
 
 /** 追加历史一行（`budget.reading()` 的 `added[]`）。 */
 interface EntryRow extends Record<string, unknown> {
@@ -38,30 +33,6 @@ interface EntryRow extends Record<string, unknown> {
   by: string;
   at: string;
   note: string;
-}
-
-/** 归口表的一行（`tokenmeter.by_role` / `by_scope` 的一格）。 */
-interface BucketRow {
-  name: string;
-  tokens: string;
-  usd: string;
-  entries: string;
-  attempts: string;
-}
-
-function buckets(rec: Record<string, unknown>): BucketRow[] {
-  return Object.keys(rec)
-    .sort()
-    .map((name) => {
-      const one = (rec[name] ?? {}) as Record<string, unknown>;
-      return {
-        name,
-        tokens: cell(one.tokens),
-        usd: cell(one.usd),
-        entries: cell(one.entries),
-        attempts: cell(one.attempts),
-      };
-    });
 }
 
 export function Budget() {
@@ -114,14 +85,14 @@ export function Budget() {
         right={<TriState tri={b.tri} label="预算面" reason={b.reason} />}
       >
         <div class="readings">
-          总预算 <span class="mono">{usd(b.total_usd)}</span> · 已花{" "}
+          总预算 <span class="mono">{formatUsd(b.total_usd)}</span> · 已花{" "}
           <Money usd={b.spent_usd} unknownCalls={0} />
           {isUnreadable(b.spent_tri) ? (
             <span class="tri-reason">{b.spent_reason}</span>
           ) : null}
         </div>
         <div class="readings">
-          剩余 <span class="mono">{usd(b.remaining_usd)}</span> ·{" "}
+          剩余 <span class="mono">{formatUsd(b.remaining_usd)}</span> ·{" "}
           {b.exceeded ? (
             <Badge kind="badge-unknown" text="已越上限" />
           ) : (
@@ -178,8 +149,8 @@ export function Budget() {
         <div class="readings">
           <ConfirmButton
             action="追加额度"
-            impact={`会把总额改成 ${usd(b.total_usd)} + $${
-              Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
+            impact={`会把总额改成 ${formatUsd(b.total_usd)} + ${
+              Number.isFinite(parsed) ? formatUsd(parsed) : "（读不成数字）"
             }`}
             onConfirm={() => {
               submit("add");
@@ -197,8 +168,8 @@ export function Budget() {
         <div class="readings">
           <ConfirmButton
             action="重设总额"
-            impact={`会把总额覆盖成 $${
-              Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
+            impact={`会把总额覆盖成 ${
+              Number.isFinite(parsed) ? formatUsd(parsed) : "（读不成数字）"
             }（旧总额也记进追加历史）`}
             onConfirm={() => {
               submit("set");

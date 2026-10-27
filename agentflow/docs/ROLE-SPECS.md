@@ -327,7 +327,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 ---
 
-## R0. 全局工具总表（117 个，逐条；Lean 关着时 114 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（118 个，逐条；Lean 关着时 115 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
@@ -354,6 +354,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 4 | `attack.pick_next_subgoal` | 按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后） | `none` | 否 | F D G H | **subgoals** | `{picked,subgoal,reason}` | `test_agent_f.py` | INVENTORY 4.3(b)：`subgoals=null` 过校验 → `TypeError` |
 | 5 | `attack.status` | 读一个攻坚计划的完整可读视图（子目标状态计数、预算余量、history 尾部） | `read` | 否 | F D G H | **plan_id** | `{checked,plan_id,status,rounds,subgoal_counts,history_tail,…,stale_blocked}` | `test_agent_f.py` | INVENTORY 4.3(c)：计划不存在时 `ok=True` + `checked=False`（**必须看 `checked` 而不是 `ok`**） |
 | 6 | `attack.step` | 推进攻坚计划一轮：按 owner 分派（E 做实验/A 提检索/B 提重抽取）；C/D/F 的推理未接线则如实记 `no_change` | `write_local` | **是** | F | **plan_id** | `{plan_id,round,sid,action,outcome,status,budget_left,reason,budget_known,budget_reading}` | `test_agent_f.py` | INVENTORY 4.4：经 `_deploy_e` 跑 E 的脚本子进程（**声明里没有"执行进程"这一档**）；`budget_known`/`budget_reading` 是 P-09 的预算读数（读不到时 `status="unknown"` + `why`，**不据此否决**花钱） |
+| 122 | `conjecture.register_conjecture` | 登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。单行内判据只有一份（schema.Conjecture.validate）；被引用的实验/文献必须在库里 | `write_local` | **是** | D | **statement**,**origin**；conjecture_id, testable, form, negation_statement, status, experiment_ids, proof_experiment_id, counterexample_experiment_id, promoted_to, known_lit_id, withdraw_reason, notes, force_new | {'conjecture_id','statement','negation_statement','form','testable','origin','status','experiment_ids','proof_experiment_id','counterexample_experiment_id','promoted_to','known_lit_id','withdraw_reason','notes','created_at','updated_at','created_by','duplicate','duplicate_of'}（落库后的 conjectures 行 + D13 的判重读数） | `tests/test_d_can_reach_register_conjecture.py` | D 的主力动作（`roles=("D",)`，其余十个角色拿不到它）。D13：没给 `conjecture_id` 时先按规范化 `statement` 判重，命中 ⇒ 返回既有行并把本次给的状态/证据合并进去（读数带 `duplicate=true` 与 `duplicate_of`），真要新建必须显式 `force_new=true`；引用不存在的实验/文献在**写入期**就受控拒绝（`dangling_experiment` / `dangling_lit`）（真身 `tools/conjecture_tools.py::register_conjecture`） |
 | 7 | `doc.build_document` | 写一行 documents 并渲染 markdown 到工作区内（逐条机械检查后再落库；`out_path` 越界即拒绝） | `write_local` | **是** | G | **kind**,**title**,**claims**；open_problems, out_path, sections | 落库后的 documents 行（12 个字段，含 `doc_id`/`markdown_path`/`content_sha256`/`revision`） | `test_agent_g.py` | INVENTORY 4.3(a)②：`citations:["lit:9999"]` 可通过全部闸门并落库（**引用存在性不核**）；4.3(b) `StoreError` 逃逸 |
 | 8 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补"不构成证明"；无引用/否定未分类/过度声称在构造时就抛错 | `none` | 否 | G H F D | **text**,**citations**,**evidence_kind**,**section**；claim_id, is_negative, negation_kind | 合规的 claim dict（含 `claim_id`/`disclaimer`/`revision_hash`/`scope_caveat`） | `test_agent_g.py` | INVENTORY 总表：三态位 **无**（据 INVENTORY，未在代码中核实） |
 | 10 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数与 markdown 路径） | `read` | 否 | G H F D | kind, status | `{count,documents:[{doc_id,kind,title,status,review_rounds,claim_count,markdown_path}]}` | `test_agent_g.py` | INVENTORY 4.3(b)：`StoreError` 逃逸 |
@@ -462,6 +463,9 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | 116 | `conductor.post_task` | 给自己落一条「要办的活」板项（`kind="delegation"` + `expects="work"`）：把"这条消息要求做事"变成板上一条可追踪的 work 项，办完用 `conductor.ack`（`close="completed"`）收口，没办完它一直在板上、销号门也看得见它 | `write_local` | **是** | A B C D E F G H V L M | **summary**；detail, key | `{checked,ok,state,item_id,task_id,role,depth,kind,expects,called_by,input_key,existing,summary,reason}`；`state` 是 `posted` / `existing` / `refused` / `unknown` 之一，`existing` 非空 = 这个 `key` 已经落过项 | `tests/test_a_message_that_asks_for_work_becomes_a_work_item.py` | 2026-10-26 新增（业主 2026-10-27 逐字：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」）：**"我是谁"不在工具形状里** —— 收件人只能是调用者自己（要让别人办一件事走 `conductor.summon`），`key` 是幂等键（同一件事给同一个 key ⇒ 不再开第二条）；Q15 的裁定（2026-10-26，取 (a)）：`roles` 声明是十一个角色全体，而它只写 `tasks` 的一行板项（簿记表）⇒ 登记进 `tools/__init__.py` 的 `UNIVERSAL_TOOLS`，对十一个角色都发（含只读角色 C/H/V —— 它们同样会收到"要求做事"的消息，而"给自己落一条 work 项"是那条口径下唯一合法的落项手）。改前只发给 A B D E F G M：C/H/V 被只读约束剥掉、L 被 Lean 开关藏起来，而注释声称"由 `UNIVERSAL_TOOLS` 放行"是一句事实错误。逐角色条数因此 +1（C 36 / H 44 / V 28；L 在 Lean 开时不变）；判据 `tests/test_universal_tools_are_for_everyone.py::test_f_post_task_is_a_universal_tool_so_the_declaration_matches_the_surface` |
 | 117 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：`program` / `pid` / `argv` 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 `alive`（pid 现在还在不在）。空归属的旧账单列在 `unowned` 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：`retire_ready=false` 就说明我还有程序在跑，先 `program.stop` | `read` | 否 | A B C D E F G H V L M | 无必填；`include_done` | `{checked,task_id,role,programs,count,running,unowned,unowned_count,unowned_shown,unowned_running,others,others_running,include_done,retire_ready,note,reason}` | `tests/test_a_program_i_started_is_a_program_i_can_stop.py` | 2026-10-26 新增（G1，业主 2026-10-26 逐字：「重点完善子代理杀自己发出去的程序进程的工具（由于计时器监控着那些程序，我想实现起来不会太难），以及注销前检测的能力」）：两件的分工就是这句话的两半 —— 这一件是「注销前检测」；**不叫 `clock.program_list`**：`clock.*` 恰好九件那条判据（`CLOCK_NINE`）原样成立，程序两件的轴是「我起的进程」而不是「计时」；空归属那一桶只点名 —— 它既不算我的，也不会被 `program.stop` 停掉（三态：簿记读不成 ⇒ `checked=false`，不是「没有程序在跑」） |
 | 118 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 `outcome="killed"` 收口，并唤醒正在等它的人。只许碰自己起的（别人的与账上没有归属的旧行 ⇒ `not_mine`，一个进程都不碰）；已经结束的 ⇒ `already_exited`（幂等）；杀不动的 ⇒ `timeout` 并点名还在跑的 pid（账上那条保持 `pending`）；编号不存在 ⇒ `not_found`。给 `timer_id` 停一条，给 `all_programs=true` 停我名下全部 | `write_local` | **是** | A B D E F G L M | 无必填；`timer_id`, `all_programs`, `reason` | `{checked,task_id,role,mode,requested,stopped,killed,already_exited,timeout,not_mine,not_found,count,items,still_alive,woken,note,session_event,reason,clock_status}`；`mode` 是 `one`（停一条）/ `all`（停全部），逐条结果在 `items[].result` 里（受控词表 `clock.PROGRAM_STOP_RESULTS`） | `tests/test_a_program_i_started_is_a_program_i_can_stop.py`、`tests/test_a_running_program_is_not_left_behind.py`、`tests/test_stop_switch_kills_programs.py` | 2026-10-26 新增（G1 的另一半：「杀自己发出去的那个进程」）：**都不抛异常**，五档读数逐条给；`roles` 声明是十一个角色，而只读角色按副作用被剥掉 ⇒ 面上是 A/B/D/E/F/G/L/M（`conductor.post_task` 改前同形，Q15 之后它走 (a) 进了 `UNIVERSAL_TOOLS`；本件仍是声明面十一个、实际面八个）；`program.stop` 只管「我起的」，停机（`conductor.stop` / 强停）是另一个授权面（G4），两者刻意不合并 |
+| 119 | `conductor.patrol` | 一次拿全每个活跃子代理（在飞 / 待机 / 未读到）的状态，按名册深度优先排好：绝对编码、按名册的绝对编码链、在执行的任务、任务看板（未做完的逐条 + 现在在做哪一项）、计时器（目的 / 等谁 / 已等多久 / 还剩多久）、最近一次指导，外加异常清单。看完对每一个只说「过」或给指导意见（`conductor.patrol_verdict`）；要盯某一个用 `conductor.review_child`。读不成时 `checked=false`（不会折成『没有活跃子代理』）。 | `read` | 否 | M | （无） | {'checked','root','count','order','by_state','items','anomalies','clock','reason'}；items 里每一项是 {code, chain, chain_text, name, role, state, state_label, state_reason, status, doing, board, timers, last_guidance, notes}；doing 是 {task, action, step, step_at, stalled_sec, source}；board 是 {checked, in_progress_id, in_progress_reason, open_count, items}；timers 是 {checked, count, rows, reason}，rows 每项 {timer_id, kind, purpose, purpose_missing, waiting_on_text, wait_for, waited_sec, due_in_sec, state, park_state, to}；last_guidance 是 {checked, relay_id, at, text, hops, delivered_to, item_id, reason} | `tests/test_m_patrol_reads_every_active_child.py` | 业主口径 ①：轮查是**规范动作**（`draft/168` §六：20 分钟轮查计时 → 到点立刻 `conductor.patrol` → 逐个给 `pass`/`guide` → 结完再自由行动 → 要挂机等时才挂下一个轮查计时），本工具是那四步的**第一步**（到点唤醒正文由 L2 那条 lane 落成 SOP，不是一句提醒）；② 三态：台账读不成 ⇒ `checked=false` + 原因（不折成「没有活跃子代理」），时钟读不成 ⇒ 该列的一条不少、每条 `state=unknown`；③ 板项行没有创建时刻列 ⇒ `age_sec=null` 并写明为什么 |
+| 120 | `conductor.review_child` | 细看一个活跃子代理：给它的绝对编码，返回 `conductor.patrol` 里那一项的全部信息（同一份实现），外加整棵名册树（带绝对编码，从里面挑号）。号不合法时受控拒绝并点名哪些号合法（`legal_codes` 上限 20 条 + `legal_total` 总数）：台账里没有 ⇒ `not_in_roster`；有但不活跃（已收工 / 已销号）⇒ `not_active` 并点明它在哪一档。 | `read` | 否 | M | **code** | {'checked','ok','legal','code','item','tree','refused','reason','legal_codes','legal_total','target_state','target_state_label'}；item 的形状与 `conductor.patrol` 的 items 里那一项逐键相同（不合法时是空表） | `tests/test_m_patrol_reads_every_active_child.py` | 与 `conductor.patrol` **同一份实现**（`_patrol_reading`）：`item` 与 patrol 的那一项逐键相同；非法号受控拒绝（`not_in_roster` / `not_active`）并点名 `legal_codes`（上限 `LEGAL_CODES_LIMIT=20`）与 `legal_total` |
+| 121 | `conductor.patrol_verdict` | 对一个活跃子代理下结论：`verdict="pass"`（过）或 `verdict="guide"`（指导意见，`text` 必填）。`guide` 走的就是 `conductor.guide` 那条沿秘书链逐级转发的路（正文只到链尾），回执原样带出（`relay_id` / `delivered_to` / `hops`）；`pass` 在转发台账所在的那同一本账里落一条痕。号不合法或它此刻不活跃 ⇒ 受控拒绝并点名合法号与它在哪一档；被拒的结论不落成「巡过了」。 | `write_local` | **是** | M | **code**,**verdict**；text | {'checked','ok','status','verdict','code','state','target_state','target_state_label','refused','reason','error','chain','chain_text','delivered_to','hops','item_id','relay_id','trace','trace_problem','legal_codes','legal_total','text'}；status 是 passed / delivered / refused / unknown 之一；guide 的回执（relay_id / delivered_to / hops / item_id）原样带出 | `tests/test_m_patrol_reads_every_active_child.py` | 业主口径 ①：`guide` 走的就是 `conductor.guide` 那条**既有秘书链**（同一个 handler `conductor_guide`：`Conductor.resolve_chain` 逐跳校验 + 逐级转发 + 只有链尾开板项，回执原样带出 `relay_id`/`delivered_to`/`hops`），**不是第二份投递路**；② 轮查是规范动作（见上一条），本工具是那四步里的「逐个给 `pass`/`guide`」；③ `pass` 在 `out/secretary/relay.jsonl` 落痕（`kind=patrol_verdict`，与转发同一本账）；对不活跃的号受控拒绝并点名它在哪一档 |
 
 ### R0.1 工具面的公共事实（逐格现读见附录 §R0.1）
 
@@ -887,7 +891,7 @@ C 的产出有两类，状态语义完全不同。
 > 本批核实的结果是它**什么都不改**。这一处与 `draft/108` §四 CS-14 同族：
 > 文档里的旧结论比代码慢了一步，而没有任何判据看着它。
 
-### D.4 工具面（57 个，实测）
+### D.4 工具面（58 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role D`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §D.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1197,7 +1201,7 @@ C 的产出有两类，状态语义完全不同。
 
 - **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9，I10 升级）、`G`（§G.9）。
 - **F 能召唤谁**：`A B C D E V`（`capabilities.ALLOWED_EDGES`）—— "攻坚需要一切"；`V` 那一格是
-  **F 交出证明时由 V 签字**（2026-10-06 加的 `F→V`，2026-10-20 裁定后 V 只有 F 与 B 两个入口）。
+  **F 交出证明时由 V 签字**（2026-10-06 加的 `F→V`；2026-10-20 裁定撤 `M→V` 之后 V 是 F 与 B 两个入口，2026-10-23 又加了 `E→V` ⇒ 今天三个入口：`F` / `B` / `E`）。
   **不能召唤 G/H。**
 - **入参从哪来**：`attack_plans` 行（F 自己写）+ `capabilities.CAPABILITIES` 的 4 个动作 schema。
 - **产出被谁消费**：
@@ -1551,11 +1555,12 @@ C 的产出有两类，状态语义完全不同。
 
 ### V.9 接口
 
-- **能被谁召唤**：`B` / `F`（`capabilities.ALLOWED_EDGES`；V 的入口只有这两个，`M` 不在里面）；`D` / `E` / `G` / `H` / `M` 都不能直接召唤 V。
+- **能被谁召唤**：`B` / `E` / `F`（`capabilities.ALLOWED_EDGES`；`E→V` 是 2026-10-23 加的，`M` 不在里面）；`D` / `G` / `H` / `M` 都不能直接召唤 V。
   V 的对话对象仍是 F（"提交/退回"那条边是 `F ↔ V`），而 `B→V` 是 2026-10-13 加的那条
   （业主逐字：「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」）；`M→V` 曾是 2026-10-18
   加的那条，**2026-10-20 已被业主撤掉**（逐字「派 V 只有 F（自产证明）与 B（文献侧内容）
-  两个入口；M 不再直连 V」）⇒ 今天 V 的入口只有 F 与 B。
+  两个入口；M 不再直连 V」）。那一句是 2026-10-20 当次裁定的口径；**2026-10-23 又加了 `E→V`**
+  ⇒ 今天 V 的入口是三个：`F` / `B` / `E`（矩阵实测，见本节表格）。
   复跑：`python -c "from agentflow import capabilities as C;print(sorted(C.ALLOWED_EDGES['M']))"` ⇒ 不含 `V`。
 - **V 能召唤谁**：**只有 `F`**（`capabilities.ALLOWED_EDGES["V"] == {"F"}`）。
 - **入参从哪来**：`statements` 行（命题全文与完整假设）+ `proof_text`（不给时从 `statements` 取）
@@ -1958,7 +1963,8 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 - **能被谁召唤**：**没人**（`NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`；
   `policy.check` 在 `d.to in NON_SUMMONABLE` 时返回 `forbidden_edge`，`policy.check`）。
 - **M 能召唤谁**：`A B C D E G H`（**7 个**；`capabilities.ALLOWED_EDGES` 的 `M` 那一行**不含 `F` 与 `V`** ——
-  F 走 `M→D→F`；V 按 2026-10-20 的裁定只有 F 与 B 两个入口，M 不再直连）。
+  F 走 `M→D→F`；V 按 2026-10-20 的裁定 M 不再直连，而 V 的入口是 `F` / `B` / `E` 三个
+  （`E→V` 2026-10-23 加））。
 - **入参从哪来**：
   - `plan: Sequence[TaskCall]`（`scheduler.TaskCall`，`scheduler.py:46`）—— **由调用方给**；
   - `Policy`（人 + 调用方配）；

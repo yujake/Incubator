@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: agentflow
+Version: 1.0.0
+Summary: 面向数学研究的多智能体协同框架（A–H 八角色，共享存储 + 冻结契约 + 写入期硬约束）
+License: Proprietary
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: filelock>=3.12
+Requires-Dist: PyYAML>=6.0
+Provides-Extra: pdf
+Requires-Dist: PyMuPDF>=1.24; extra == "pdf"
+Requires-Dist: pdfminer.six>=20231228; extra == "pdf"
+Requires-Dist: PyPDF2>=3.0; extra == "pdf"
+Provides-Extra: ocr
+Requires-Dist: easyocr; extra == "ocr"
+Provides-Extra: browser
+Requires-Dist: playwright>=1.44; extra == "browser"

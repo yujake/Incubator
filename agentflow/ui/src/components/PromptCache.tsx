@@ -28,11 +28,12 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { api, postCacheWarm, whyOf } from "../api";
-import type { CacheActive, CacheTier, CacheView, CacheWarmJob } from "../api";
+import type { CacheActive, CacheTier, CacheView, CacheWarmJob } from "../types";
 import { useFace } from "../live";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 import { ConfirmButton } from "./ConfirmButton";
+import { formatUsd } from "./Money";
 
 /** 关掉横幅的落点。键里带 `dismiss_key`（指纹 + 模型）⇒ 换 key 之后横幅会再出现一次。 */
 const DISMISS_STORE = "agentflow.cache.reminder.dismissed";
@@ -77,11 +78,7 @@ function rememberDismissed(key: string): void {
   }
 }
 
-/** 美元那一格：`null` 读成 `unknown`（不是 0）。 */
-function usd(value: number | null): string {
-  return value === null ? "unknown" : `$${value.toFixed(6)}`;
-}
-
+/** 美元那一格走 `Money` 的写法（`null` 读成 `unknown`，不是 0）。 */
 function listOf(items: string[]): string {
   return items.length === 0 ? "无" : items.join("、");
 }
@@ -295,7 +292,7 @@ function TierBlock(props: {
         <div class="readings">
           最后一趟 <span class="mono">{t.at || "（没有时间）"}</span> · prompt_version{" "}
           <span class="mono">{t.readings_prompt_version || "（空）"}</span> · 花费{" "}
-          <span class="mono">{usd(t.spent_usd)}</span>
+          <span class="mono">{formatUsd(t.spent_usd)}</span>
           {t.fresh_reason === "" ? null : <span class="tri-reason"> · {t.fresh_reason}</span>}
         </div>
       )}
@@ -310,7 +307,7 @@ function TierBlock(props: {
           action={`真预热 ${t.label}`}
           impact={
             `这一下会真的向上游发请求、花真钱：这一档 ${present} 个目标各发一次` +
-            `（另有命中样本两次）；上一趟花了 ${usd(t.spent_usd)}，本趟上限 0.10 美元。` +
+            `（另有命中样本两次）；上一趟花了 ${formatUsd(t.spent_usd)}，本趟上限 0.100000 USD。` +
             "页面会跟到跑完，跑完自动刷新读数。"
           }
           disabled={disabled || props.busy || blocked}

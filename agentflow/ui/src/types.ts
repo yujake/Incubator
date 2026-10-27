@@ -225,6 +225,11 @@ export interface RunView {
   checkpoint: CheckpointView | null;
   checkpoint_reason: string;
   path: string;
+  checkpoint_role: string;
+  checkpoint_spend_usd: number | null;
+  same_run_spend_usd: number | null;
+  same_run_unknown_usd: number;
+  same_run_start_index: number | null;
 }
 
 /** 出处：run_events() 的一行 —— 会话里的一条事件（`index` 与 `RunRow.start_index`/`end_index` 同一套编号：解析成功后的事件列表下标，0 起）。 */
@@ -423,13 +428,29 @@ export interface LiveView {
   reason: string;
   root: string;
   answer: string;
-  running: Array<Record<string, unknown>>;
-  live: Array<Record<string, unknown>>;
+  running: LiveLoopRow[];
+  live: LivePidRow[];
   unreadable_sessions: string[];
   switch: Record<string, unknown>;
   switch_present: boolean;
   history: Array<Record<string, unknown>>;
   interrupts: Array<Record<string, unknown>>;
+}
+
+/** 出处：stopctl.running_loops() 的 running[] —— 还在盘上跑的一趟循环（会话面）。 */
+export interface LiveLoopRow {
+  role: string;
+  sid: string;
+  since: string;
+}
+
+/** 出处：stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程（`path` 是那一份登记文件的落点，`live_pids` 会给）。 */
+export interface LivePidRow {
+  pid: number;
+  role: string;
+  sid: string;
+  started_at: string;
+  path: string;
 }
 
 /** 出处：usage_face() —— usage_ledger 的汇总（总计 + 两个归口 + 重试开销 + 最近几笔）。 */
@@ -634,7 +655,7 @@ export interface VerificationRow {
   by_role: string;
   by_role_source: string;
   by_task_id: string;
-  citation_checks: { stmt_id: string; verdict: string; quote_verbatim: boolean; note: string }[];
+  citation_checks: { stmt_id: string; verdict: string; quote_verbatim: boolean; note: string; in_material: boolean }[];
   by_task_id_tri: string;
 }
 
@@ -1056,6 +1077,180 @@ export interface LibraryUse {
 export interface LibraryProblem {
   code: string;
   detail: string;
+}
+
+/** 出处：cachectl.tier_reading() 的 per_target[目标] —— 一个预热目标落地/新鲜的四格。 */
+export interface CacheTargetCell {
+  state: string;
+  fresh: boolean | null;
+  recorded_sha256: string;
+  now_sha256: string;
+  absent_reason: string;
+}
+
+/** 出处：cachectl.tier_reading() 的 key —— 这一档的 key 换没换（`same` / `stale` / `unknown`）。 */
+export interface CacheKeyCell {
+  tri: string;
+  reason: string;
+  changed: string[];
+  affected: string[];
+  affected_why: string;
+  text: string;
+  recorded: { fingerprint: string; model: string; base_url: string };
+}
+
+/** 出处：cachectl.tier_reading() —— 一档的四格读数（落地 / 新鲜 / 覆盖几个 / 缺谁）。 */
+export interface CacheTier {
+  tier: string;
+  label: string;
+  lean_enabled: boolean;
+  tri: string;
+  reason: string;
+  warmed: boolean;
+  fresh: boolean | null;
+  fresh_reason: string;
+  not_fresh: string[];
+  version_mismatch: boolean;
+  covered: number;
+  covered_fresh: number;
+  total: number;
+  missing: string[];
+  absent: string[];
+  absent_reason: Record<string, string>;
+  at: string;
+  prompt_version: string;
+  readings_prompt_version: string;
+  spent_usd: number | null;
+  model: string;
+  per_target: Record<string, CacheTargetCell>;
+  key: CacheKeyCell;
+}
+
+/** 出处：cachectl.key_reading() —— 当前这把 key 的读数（值永不上屏：只有指纹与长度）。 */
+export interface CacheKeyReading {
+  configured: boolean;
+  source: string;
+  model: string;
+  base_url: string;
+  key_chars: number;
+  fingerprint: string;
+}
+
+/** 出处：cachectl.active_reading() —— 当前这一趟会用哪一档（三层来源各自自报）。 */
+export interface CacheActive {
+  tier: string;
+  label: string;
+  lean: boolean | null;
+  source: string;
+  source_text: string;
+  source_note: string;
+  record_sid: string;
+  record_at: string;
+  record_state: string;
+  strategy: string;
+  run_at: string;
+  prompt_version: string;
+  readings_prompt_version: string;
+  covered: string;
+  covered_count: number;
+  total: number;
+  missing: string[];
+  absent: string[];
+  fresh: boolean;
+  tri: string;
+  why: string;
+  text: string;
+}
+
+/** 出处：cachectl.status() 的 reminder —— 换 key 那条提醒（网页顶部横幅与命令行同一句）。 */
+export interface CacheReminder {
+  active: boolean;
+  tri: string;
+  tiers: string[];
+  text: string;
+  affected: string[];
+  dismiss_key: string;
+}
+
+/** 出处：cacheface.warm_job() —— 最近一趟网页预热的三态（`running` / `done` / `failed` / `unknown`）。 */
+export interface CacheWarmJob {
+  recorded: boolean;
+  state: string;
+  reason: string;
+  log: string;
+  log_path: string;
+  pid: number;
+  tier: string;
+  at: string;
+  last_line: string;
+  tail: string[];
+}
+
+/** 出处：GET /api/cache 的整份读数（`cachectl.status()` + 写权限读数 + 预热三态）。 */
+export interface CacheView {
+  schema: number;
+  at: string;
+  readings: string;
+  lean_now: boolean;
+  prompt_version: string;
+  key: CacheKeyReading;
+  tiers: Record<string, CacheTier>;
+  workspace: string;
+  active: CacheActive;
+  reminder: CacheReminder;
+  writes_allowed: boolean;
+  writes_reason: string;
+  warm: CacheWarmJob;
+  verdict: { tri: string; unknown_tiers: string[]; stale_tiers: string[]; key_unknown_tiers: string[] };
+}
+
+/** 出处：errors_readout() 的 problems[] —— 一条「读到了、但人该看见」的异常（与 `LibraryProblem` 同形：两族各是各的读数，合并不省事）。 */
+export interface ReadoutProblem {
+  code: string;
+  detail: string;
+}
+
+/** 出处：errors_readout() 的 data.sources[源] —— 逐源读数（三种源的键不完全相同，所以每一格都是可选的：缺格 = 这一源没有这一栏，不是 0）。 */
+export interface ErrorStatsSource {
+  checked?: boolean;
+  events?: number;
+  files?: number;
+  records?: number;
+  bad_lines?: number;
+  unreadable_files?: string[];
+  unclassified?: number;
+  table?: string;
+  reason?: string;
+}
+
+/** 出处：errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。 */
+export interface ErrorStatsData {
+  by_role: Record<string, Record<string, number>>;
+  role_total: Record<string, number>;
+  total: number;
+  categories: Record<string, number>;
+  sources: Record<string, ErrorStatsSource>;
+}
+
+/** 出处：GET /api/errors 的整份读数（`readouts.errors_readout()` 逐字）。 */
+export interface RoleErrorsView {
+  checked: boolean;
+  state: string;
+  reason: string;
+  data: ErrorStatsData;
+  problems: ReadoutProblem[];
+}
+
+/** 出处：errorstats.ERROR_CATEGORIES 的一行 —— 类目与它那一句含义。 */
+export interface ErrorCategoryMeaning {
+  name: string;
+  meaning: string;
+}
+
+/** 出处：GET /api/errors/categories 的整份读数（一张常量表，无三态）。 */
+export interface ErrorCategoryGlossary {
+  categories: ErrorCategoryMeaning[];
+  source: string;
 }
 
 /** 出处：写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */

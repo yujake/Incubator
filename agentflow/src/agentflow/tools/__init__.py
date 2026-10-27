@@ -207,6 +207,15 @@ _MODULES: tuple[str, ...] = (
     # （`formal.formalize` / `formal.check_formal`）。组前缀 `formal` 由模块名
     # 机械派生；工具只挂给 L（`roles=("L",)`），所以 E 的工具面一个字都没变。
     "formal_tools",
+    # 2026-10-27（`R-BE4` 的 D1 Phase A，业主批准）：D 的主力动作
+    # `register_conjecture` 的落地工具（`conjecture.register_conjecture`）。
+    # 在此之前它只被 `capabilities` 的读数"读到"、`build_registry` 从不装配
+    # ⇒ 模型驱动那一面根本拿不到它（D 只靠自己那张自建表）。
+    # 它的 `roles=("D",)`（`tools/conjecture_tools.py`）⇒ 其余十个角色一件不多。
+    # Phase B（不在本批）：让 `install_d_tools` 退场、只留这一张表 —— 现在 D 仍有一张
+    # 自建表（`agent_d/_support.py::install_d_tools`），两张表内容不同（自建那张没有
+    # clock / conductor 那批通用件），所以"注册表只许一张"这件事还没做到。
+    "conjecture_tools",
 )
 
 #: `_MODULES` 里每个模块产出的工具名组前缀（`verify_tools` ⇒ `verify`）。
@@ -730,16 +739,25 @@ def build_registry(
     sid: str | None = None,
 ) -> RegistryBuild:
     """组装工具层。
-    
-    参数----store : Store | None 数据表工具必需；为 None 时相关模块会被跳过（并记录原因）。
-    workspace_root : Path | None 文件工具的工作区根（沙箱边界）。为 None 时用 `<store.root>`。
-    graph : RelationGraph | None C 的图对象；为 None 时 `graph_tools` 的只读查询类工具仍可注册（它们可自行构建）。
-    strict : bool 为 True 时，任何模块跳过都抛异常 —— 供验收脚本使用，防止"少了一半工具还以为装好了"。 session_root, sid : 会话身
-    份（`draft/37` §63，修法 B）这一趟运行「是谁」：会话记录的根与这一趟的会话号。装配期注入，工具层不替它猜。为什么必须是装配期输入：真机实测第 11 趟（`sessions/real11.jsonl`）
-    主控在运行内调 `conductor.closing` 得到 `can_close: true`，而同一次运行外部带 `sid=real11`的读数报 
-    `failed: ['user_pending']` —— 工具体当时按 `sid=None` 读到了缺省会话`sessions/<今天>.jsonl`，于是"问了还没答"
-    被读成"没问过"。「假绿」，且它只在运行内出现，外面怎么看都是对的。`sid` 不给 ⇒ 传下去的是 `closing.NO_SESSION` ⇒ 那一格记 
-    `unknown`（不是 pass，也不回落成"读今天那份"：三态纪律）。
+
+    参数
+    ----
+    store : Store | None
+        数据表工具必需；为 None 时相关模块会被跳过（并记录原因）。
+    workspace_root : Path | None
+        文件工具的工作区根（沙箱边界）。为 None 时用 `<store.root>`。
+    graph : RelationGraph | None
+        C 的图对象；为 None 时 `graph_tools` 的只读查询类工具仍可注册（它们可自行构建）。
+    strict : bool
+        为 True 时，任何模块跳过都抛异常 —— 供验收脚本使用，防止"少了一半工具还以为装好了"。
+    session_root, sid : 会话身份（`draft/37` §63，修法 B）
+        这一趟运行「是谁」：会话记录的根与这一趟的会话号。装配期注入，工具层不替它猜。
+        为什么必须是装配期输入：真机实测第 11 趟（`sessions/real11.jsonl`）主控在运行内调
+        `conductor.closing` 得到 `can_close: true`，而同一次运行外部带 `sid=real11` 的读数报
+        `failed: ['user_pending']` —— 工具体当时按 `sid=None` 读到了缺省会话
+        `sessions/<今天>.jsonl`，于是"问了还没答"被读成"没问过"。「假绿」，且它只在运行内
+        出现，外面怎么看都是对的。`sid` 不给 ⇒ 传下去的是 `closing.NO_SESSION` ⇒ 那一格记
+        `unknown`（不是 pass，也不回落成"读今天那份"：三态纪律）。
     """
     reg = ToolRegistry(name=name)
 

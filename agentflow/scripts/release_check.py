@@ -31,7 +31,7 @@
 `--skip` 关掉的项也记 `unknown`（`I-3`），不是"不参与判定"。
 理由：`--skip` 是调试开关，而"调试时跳过七项"与"八项都通过"在旧输出里长得一模一样
 （旧版逐字打印 `发布检查总判定：PASS    pass=1 fail=0 unknown=0` 且全文不出现"跳过"）。
-被跳过的项以名字进 `skipped` 列表与 `--json`，总判定按 `unknown` 记 ⇒ 退出码 2。
+被跳过的项以名字进 `skipped` 列表与 `--json-out` 产出的报告，总判定按 `unknown` 记 ⇒ 退出码 2。
 这与编排层 `tools/release_all.py` 的口径逐字一致（那条有测试钉死）。
 
 ## 八项
@@ -281,7 +281,7 @@ class Report:
             "authored_by": "AI agent（尚未经人逐行走查；本文件在禁 AI 区内）",
         }
         # 被跳过的项要以名字进报告：只报一个计数，读的人不知道少的是哪一项
-        # （`I-3` 的另一半：`--json` 里此前连跳过这件事都没有）。
+        # （`I-3` 的另一半：`--json-out` 产物里此前连跳过这件事都没有）。
         if self.skipped:
             d["skipped"] = list(self.skipped)
         d["note"] = self._note()
@@ -631,7 +631,7 @@ def item_linter(rep: Report) -> Item:
 
     ## 为什么必须带 `--strict`（`H-6`）
 
-    旧命令是 `[lint_rules.py, --json, <artifact>]`，没有 `--strict` ——
+    旧命令是 `[lint_rules.py, --json-out, <artifact>]`，没有 `--strict` ——
     于是 `warning` 全被丢掉，而文档（`DEVELOPMENT.md` §2.4 / §8.4）声称发布级用严格档。
     实测：日常 `error 0 / warning 0 / info 21` 退出码 0；`--strict`
     `error 0 / warning 39 / info 20` 退出码 1。也就是说 R007 那类"成文规则配不上一条门"
@@ -674,7 +674,7 @@ def item_linter(rep: Report) -> Item:
     if why:
         it.notes.append(why)
     r = _run([sys.executable, str(REPO_ROOT / "scripts" / "lint_rules.py"), "--strict",
-              "--json", str(artifact)], cwd=REPO_ROOT, timeout=600.0)
+              "--json-out", str(artifact)], cwd=REPO_ROOT, timeout=600.0)
     it.detail["artifact"] = str(artifact)
     it.detail["strict"] = True
     it.detail["strict_command_has_flag"] = "--strict" in r["cmd"].split()
@@ -1068,22 +1068,24 @@ def item_contract(rep: Report) -> Item:
 
 
 def item_imports(rep: Report) -> Item:
-    """源码树可导入 + 能力表自检被显式触发（`P-2`）。
+    """源码树可导入 + 能力表自检被显式触发（`P-2`，2026-10-27 改成显式）。
 
-    ## 为什么"导入普查"之外还要单独跑一次 `import agentflow.capabilities`
+    ## 为什么"导入普查"之外还要单独跑一次能力表审计
 
-    `capabilities.assert_capabilities()` 挂在导入期（那是它唯一"不可能忘记跑"的
-    位置），而 `agentflow/__init__.py` 刻意不 import 子模块 —— 于是这件事的真实触发者
-    是"碰巧 import 到它的人"。旧版的 `pkgutil.walk_packages` 普查确实会走到它
-    （实测：把一个 capability 的 `side_effect` 改成另一个合法值，这一项今天就会 fail），
-    但那是普查的副作用，不是一条判据：普查某天改了实现（例如跳过 `capabilities`
-    这种重型模块、或换成分模块子进程），这条自检就会静默停止运行，而这一项照样绿。
+    2026-10-27 之前 `capabilities.assert_capabilities()` 挂在导入期（"不可能忘记跑"是
+    当时的理由）。代价是两条实测：① 它给**每一次** CLI 启动加 1.2 秒；② 任何一格的
+    登记过期都会让所有命令 exit 1（当天真实发生过：一条并行 lane 收尾没做完就让
+    `agentflow --help` 也炸）。业主当批把它摘出导入期。
 
-    所以这里显式跑一次并断言退出码 0，且把子结论写进 `detail`（机器可读）：
+    摘出来之后，"不可能忘记跑"这句话就落在**本项**与
+    `tests/test_capabilities_audit_is_explicit.py` 上 —— 所以这里的调用是硬的：
+    `import agentflow.capabilities` 本身**不再**跑审计，本项必须显式调
+    `run_capability_audit()`，否则这一项会绿着、而审计一次都没跑（那正是三态纪律
+    要挡的"没查 ≠ 查过了没问题"）。
+
     子项自己的成败与普查的成败分开报 —— 两个都在，才是"我知道哪一条查了"。
-
-    代价（照实写）：`import agentflow.capabilities` 会拉起全部 `agent_*` 与它们的
-    import 图（`agentflow/capabilities.py` 末尾实测约 167 ms / 约 159 个模块）。
+    代价（照实写）：显式跑一趟实测约 1.4 秒（三个源码读取器在进程内有缓存，
+    `tests/test_capabilities_readers_parse_once.py` 钉着这一点）。
     """
     it = rep.add(Item("imports", "源码树可导入（无循环依赖）+ 能力表自检"))
     code = (
@@ -1104,14 +1106,16 @@ def item_imports(rep: Report) -> Item:
         return it
     d = json.loads(r["stdout"].strip().splitlines()[-1])
     it.detail = d
-    # ---- 子检查①：能力表自检（`P-2`）
-    r2 = _run([sys.executable, "-c", "import agentflow.capabilities"], cwd=SRC, timeout=120.0)
+    # ---- 子检查①：能力表自检（`P-2`）—— 显式调用，不依赖"导入期"或"普查碰巧走到它"
+    r2 = _run([sys.executable, "-c",
+               "import agentflow.capabilities as C; C.run_capability_audit()"],
+              cwd=SRC, timeout=300.0)
     if not r2["started"] or r2["timed_out"]:
         it.detail["capability_selfcheck"] = {"verdict": "unknown", "exit_code": None}
         it.verdict = "unknown"
         it.notes.append(
-            "能力表自检（`import agentflow.capabilities`）**没跑成**（起不来或超时）⇒ "
-            "这一项不能判 pass：那次导入期断言本次没有运行"
+            "能力表自检（`capabilities.run_capability_audit()`）**没跑成**（起不来或超时）⇒ "
+            "这一项不能判 pass：那次审计本次没有运行"
         )
         return it
     it.detail["capability_selfcheck"] = {
@@ -1122,8 +1126,8 @@ def item_imports(rep: Report) -> Item:
     if r2["exit_code"] != 0:
         it.verdict = "fail"
         it.notes.append(
-            "能力表自检**失败**（`import agentflow.capabilities` 退出码 "
-            f"{r2['exit_code']}）—— 那是导入期的 `assert_capabilities()` 在说"
+            "能力表自检**失败**（`C.run_capability_audit()` 退出码 "
+            f"{r2['exit_code']}）—— 那是 `assert_capabilities()` 在说"
             "『能力表与实现已经漂移』（写集 ↔ 效果轴、两层声明对账、handler 存在性、"
             "词表单一来源等）。这不是「没查成」，是一件真实的违约。"
         )
@@ -1134,8 +1138,9 @@ def item_imports(rep: Report) -> Item:
     if d["bad"]:
         it.notes.append(f"这些模块导入失败（**循环依赖会在这里炸**）：{sorted(d['bad'])}")
     it.notes.append(
-        "能力表自检已由本项显式触发（`capabilities.assert_capabilities()` 挂在导入期；"
-        "本项不再依赖「普查时碰巧 import 到它」）"
+        "能力表自检已由本项显式触发（2026-10-27 起 `assert_capabilities()` 不再挂在"
+        "导入期：本项是它在发布门上的唯一触发器，日常判据侧由 "
+        "`tests/test_capabilities_audit_is_explicit.py` 承担）"
     )
     return it
 
@@ -1165,7 +1170,10 @@ def _main(argv: Sequence[str] | None = None) -> int:
     # 先把输出编码钉在 UTF-8 上再做任何事：总判定的那几行是本脚本的最终产物，
     # 而它们在 cp936 控制台上会抛 UnicodeEncodeError（见 `_ensure_utf8_console`）。
     _ensure_utf8_console()
-    ap = argparse.ArgumentParser(description="agentflow 发布前检查（八项，三档判定）")
+    # `allow_abbrev=False`：理由同 `lint_rules.py` —— `--json` 是 `--json-out` 的前缀，
+    # 不关掉缩写，旧写法会被 argparse 静默当成新名字（那等于同一个名字还是两套语义）。
+    ap = argparse.ArgumentParser(description="agentflow 发布前检查（八项，三档判定）",
+                                 allow_abbrev=False)
     ap.add_argument(
         "--changed",
         nargs="*",
@@ -1177,7 +1185,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
         default="",
         help="改动集文件（每行一条路径，空行忽略）。空文件 = 已声明且为空；读不到 ⇒ 保留 unknown",
     )
-    ap.add_argument("--json", default="", help="把结果写到该 JSON 路径（产物恒为纯 LF，见 `c-12`）")
+    ap.add_argument("--json-out", default="", help="把结果写到该 JSON 路径（产物恒为纯 LF，见 `c-12`）")
     # `c-10`：三种写法必须等价 —— `--skip a,b` / `--skip a --skip b` / `--skip a b`。
     # `action="append"` 保证重复 flag 不被覆盖；`nargs="+"` 保住旧写法的兼容
     # （只给 `append` 会让 `--skip a b` 里的 `b` 变成非法位置参数 ⇒ 一次可见的用法错误）。
@@ -1246,13 +1254,13 @@ def _main(argv: Sequence[str] | None = None) -> int:
             print(f"        · {n}")
 
     d = rep.to_dict()
-    if args.json:
+    if args.json_out:
         # `c-12`（`G-42` 的换行纪律）：产物必须是纯 LF。`Path.write_text` 在 Windows 上
         # 会把每个 `\n` 刷成 `\r\n` ⇒ 产物的 `sha256` 与"盘上那一版"对不上，
         # 而禁改区批准台账钉住的正是 `sha256`（`draft/22` §12.15.2 记过那次事故）。
         # 这条纪律本身有机器判据：`scripts/lint_rules.py::rule_R012_write_text_newline`。
-        Path(args.json).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.json, "w", encoding="utf-8", newline="") as fh:
+        Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.json_out, "w", encoding="utf-8", newline="") as fh:
             fh.write(json.dumps(d, ensure_ascii=False, indent=2))
 
     c = rep.counts()
@@ -1273,8 +1281,8 @@ def _main(argv: Sequence[str] | None = None) -> int:
     else:
         print(f"⚠️ overall=pass 只说明本次跑到的那 {c['pass']} 项都通过了，**不构成发布许可**：")
     print("   本脚本自身在禁 AI 区（`.noai-paths` 的 release-deploy 类），按 FC-27 仍需人逐行走查 + 2 名 reviewer 批准。")
-    if args.json:
-        print(f"结果 JSON: {args.json}")
+    if args.json_out:
+        print(f"结果 JSON: {args.json_out}")
 
     if overall == "fail":
         return 1

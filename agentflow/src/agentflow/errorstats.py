@@ -110,6 +110,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from . import schema as S
+from . import sessions as SS
 from .canonical import json_default
 
 #: 没有记下角色时用的名字。空串不许静默并进某个角色（那会把一个未知算到已知头上）。
@@ -219,22 +220,29 @@ CALLER_ATTRIBUTED_CODES: frozenset[str] = frozenset({
     "budget_exceeded", "deadline_exceeded", "cycle_detected",
 })
 
-#: 码 → 类目 → 出处（file:line）。出处是"这个码在哪定义 / 在哪产出"，逐条 grep 出来的。
+#: 码 → 类目 → 出处。出处写的是符号名（`src/agentflow/x.py::函数或常量`），不是行号。
+#:
+#: 为什么不再写行号（`R-BE4`，2026-10-27 业主批准）：行号在并行开发下几十分钟就漂。
+#: 改前这张表 80 行里只有 16 行的行号还指在码上（探针 `temp/rbe4_codetable_provenance.py`
+#: 逐条核过），而没有任何判据会红 —— "出处"于是变成一句没人验的空话。口径改成
+#: 符号名之后，判据 `tests/test_errorstats_provenance_symbols_exist.py` 可以逐条断言
+#: "那个符号真的在那个文件里"（与 `.noai-paths` / `AGENTS.md` 的同一条纪律：
+#: 理由里写符号名，行号易失）。
 CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # ---- 结构性拒绝
     ("forbidden_edge", "forbidden_edge",
-     "src/agentflow/schema.py:2497（词表）/ src/agentflow/policy.py:408,421,430,455（产出）"),
+     "src/agentflow/schema.py::REFUSAL_REASONS（词表）/ src/agentflow/policy.py::check（产出）"),
     ("not_in_roster", "not_in_roster",
-     "src/agentflow/agent_loop.py:2754（roster_probe 的受控拒绝码）"),
+     "src/agentflow/agent_loop.py::_refusal_key（roster_probe 的受控拒绝码）"),
     ("不在你的名册里", "not_in_roster",
-     "src/agentflow/agent_loop.py:2755（roster_probe 的拒信原文）"),
-    ("unknown_tool", "unknown_tool", "src/agentflow/tools/base.py:1132（kind）"),
-    ("没有名为", "unknown_tool", "src/agentflow/tools/base.py:802（ToolError 原文）"),
+     "src/agentflow/agent_loop.py::roster_addresses（roster_probe 的拒信原文）"),
+    ("unknown_tool", "unknown_tool", "src/agentflow/tools/base.py::ToolRegistry.get（kind）"),
+    ("没有名为", "unknown_tool", "src/agentflow/tools/base.py::ToolRegistry.get（ToolError 原文）"),
     ("unknown_action", "unknown_tool",
-     "src/agentflow/schema.py:2496（词表）/ src/agentflow/policy.py:306,313（产出）"),
+     "src/agentflow/schema.py::REFUSAL_REASONS（词表）/ src/agentflow/policy.py::check_action（产出）"),
     ("unknown_role", "unknown_tool",
-     "src/agentflow/schema.py:2495（词表）/ src/agentflow/policy.py:302,433（产出）"),
-    ("direct_write_refused", "direct_write", "src/agentflow/store.py:248（DIRECT_WRITE_REFUSED）"),
+     "src/agentflow/schema.py::REFUSAL_REASONS（词表）/ src/agentflow/policy.py::check_action（产出）"),
+    ("direct_write_refused", "direct_write", "src/agentflow/store.py::DIRECT_WRITE_REFUSED（常量定义点；拒信由 `direct_write_refusal()` 拼）"),
     # ---- 时钟的两条"前置条件不成立"（p210，业主 2026-10-26）
     #
     # 归 `not_in_roster`：`waiter_not_resolvable` 的语义就是"这一句 wait_for 在名册
@@ -242,13 +250,13 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # 只是被拒的是"等"而不是"说"。单独成码是为了让"散文式 wait_for 又出现了"
     # 在读数上数得出来。
     ("waiter_not_resolvable", "not_in_roster",
-     "src/agentflow/clock.py:310（WAITER_NOT_RESOLVABLE / `_new_timer` 的等谁核对；"
+     "src/agentflow/clock.py::WAITER_NOT_RESOLVABLE（WAITER_NOT_RESOLVABLE / `_new_timer` 的等谁核对；"
      "拒信由 `waiter_refusal()` 拼）"),
     # 归 `controlled_refusal`：它不是"没查成"也不是"查无此人"，是"现在没有可等的东西"
     # （业主：「这个需要存在的计时器数大于等于1」）。与 `invalid_params` 同族：这次调用
     # 不成立，重写一次就能过（先起一条表，或按交差收工）。
     ("no_timers_to_wait", "controlled_refusal",
-     "src/agentflow/clock.py:330（NO_TIMERS_TO_WAIT / `request_wait_any` 的前置判据；"
+     "src/agentflow/clock.py::no_timers_refusal（NO_TIMERS_TO_WAIT / `request_wait_any` 的前置判据；"
      "拒信由 `no_timers_refusal()` 拼）"),
     # ---- 直写兜底（业主 2026-10-24：「不应该是提醒智能体要走秘书，而是自动将直写请求
     # 路由到秘书接管」）。路由不再计入 `direct_write`：那一档只留"兜底方也接不住"的野路。
@@ -256,74 +264,76 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # 2026-10-26 拆开（与 multi_call 同一手法）：办成的两档进过程读数 `direct_write_routed`
     # —— "系统替模型办成了"不是错误动作；只有拒的 / 不可达的留在错误表上。
     ("routed_to_backstop.secretary", "direct_write_routed",
-     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；产出见 :584 `_route_code`）"),
+     "src/agentflow/tools/table_tools.py::ROUTED_CODES（登记表；拼装见 `_route_code`）"),
     ("routed_to_backstop.literal", "direct_write_routed",
-     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；产出见 :584 `_route_code`）"),
+     "src/agentflow/tools/table_tools.py::ROUTED_CODES（登记表；拼装见 `_route_code`）"),
     ("routed_to_backstop.secretary_refused", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
+     "src/agentflow/tools/table_tools.py::ROUTED_CODES（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
     ("routed_to_backstop.literal_refused", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
+     "src/agentflow/tools/table_tools.py::ROUTED_CODES（ROUTED_CODES；兜底方拒，原话见 refused_by_backstop）"),
     ("routed_to_backstop.secretary_unavailable", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；兜底方不可达 ⇒ unknown，不折成成功）"),
+     "src/agentflow/tools/table_tools.py::ROUTED_CODES（ROUTED_CODES；兜底方不可达 ⇒ unknown，不折成成功）"),
     ("routed_to_backstop.literal_unavailable", "routed_to_backstop",
-     "src/agentflow/tools/table_tools.py:558（ROUTED_CODES；同上）"),
+     "src/agentflow/tools/table_tools.py::ROUTED_CODES（ROUTED_CODES；同上）"),
     ("role_denied", "readonly_role_write",
-     "src/agentflow/tools/base.py:1173,1178（call 的调用期角色判据）"),
+     "src/agentflow/tools/base.py::ToolRegistry.call（call 的调用期角色判据）"),
     ("not_wired", "not_wired",
-     "src/agentflow/schema.py:2505（词表）/ src/agentflow/conductor.py:3185（产出）"),
-    ("depth_exceeded", "capacity_refused", "src/agentflow/schema.py:2499 / src/agentflow/policy.py:463"),
-    ("fanout_exceeded", "capacity_refused", "src/agentflow/schema.py:2500 / src/agentflow/policy.py:502"),
+     "src/agentflow/schema.py::REFUSAL_REASONS（词表）/ src/agentflow/conductor.py::LocalBackend（产出）"),
+    ("depth_exceeded", "capacity_refused", "src/agentflow/schema.py::REFUSAL_REASONS / src/agentflow/policy.py::check"),
+    ("fanout_exceeded", "capacity_refused", "src/agentflow/schema.py::REFUSAL_REASONS / src/agentflow/policy.py::check"),
     ("concurrency_exceeded", "capacity_refused",
-     "src/agentflow/schema.py:2501 / src/agentflow/policy.py:513"),
+     "src/agentflow/schema.py::REFUSAL_REASONS / src/agentflow/policy.py::check"),
     ("budget_exceeded", "capacity_refused",
-     "src/agentflow/schema.py:2502 / src/agentflow/policy.py:521,537,540"),
+     "src/agentflow/schema.py::REFUSAL_REASONS / src/agentflow/policy.py::check"),
     ("deadline_exceeded", "capacity_refused",
-     "src/agentflow/schema.py:2503 / src/agentflow/policy.py:548"),
-    ("cycle_detected", "capacity_refused", "src/agentflow/schema.py:2504 / src/agentflow/policy.py:474"),
+     "src/agentflow/schema.py::REFUSAL_REASONS / src/agentflow/policy.py::check"),
+    ("cycle_detected", "capacity_refused", "src/agentflow/schema.py::REFUSAL_REASONS / src/agentflow/policy.py::check"),
     # ---- 写入期判据
-    ("行校验失败", "schema_invalid", "src/agentflow/tools/table_tools.py:116,120（ToolError 原文）"),
-    ("缺少必填参数", "param_invalid", "src/agentflow/tools/base.py:395（ParamError 原文）"),
-    ("参数错误：", "param_invalid", "src/agentflow/tools/base.py:1214（ToolResult.fail 原文）"),
-    ("param_error", "param_invalid", "src/agentflow/tools/base.py:1187,1233（kind）"),
+    ("行校验失败", "schema_invalid", "src/agentflow/tools/table_tools.py::_build_row（ToolError 原文）"),
+    ("缺少必填参数", "param_invalid", "src/agentflow/tools/base.py::validate_params（ParamError 原文）"),
+    ("参数错误：", "param_invalid", "src/agentflow/tools/base.py::ToolRegistry.call（ToolResult.fail 原文）"),
+    ("param_error", "param_invalid", "src/agentflow/tools/base.py::ToolRegistry.call（kind）"),
     # 2026-10-28（`draft/156` 的 D4）：模型按前缀直觉手填了本该由台账分配的主键
     # （`rel-000001` / `stmt-1` / `p-000001`）。归 `param_invalid`：这次调用不成立的原因是
     # "多给了一格本不该给的参数"，不是行内容不合法。单独成码是为了让"同一个坑连踩几次"
     # 在读数上数得出来 —— 折进 `param_error` 就数不出来了。
     ("hand_filled_id", "param_invalid",
-     "src/agentflow/tools/table_tools.py:359（kind；判据 `_hand_typed_id_refusal`）"),
-    ("missing_source", "param_invalid", "src/agentflow/agent_b/register_statement.py:821"),
-    ("missing_own_source", "param_invalid", "src/agentflow/agent_b/register_statement.py:870"),
-    ("missing_quote_reason", "param_invalid", "src/agentflow/agent_b/register_statement.py:830"),
-    ("missing_page_range", "param_invalid", "src/agentflow/agent_b/register_statement.py:845,860"),
+     "src/agentflow/tools/table_tools.py::_hand_typed_id_refusal（kind；判据 `_hand_typed_id_refusal`）"),
+    ("missing_source", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("missing_own_source", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("missing_quote_reason", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("missing_page_range", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     ("duplicate_doi", "duplicate_conflict",
-     "src/agentflow/schema.py:128,144（词表）/ src/agentflow/litstage.py:637（产出）"),
-    ("duplicate_statement", "duplicate_conflict", "src/agentflow/agent_b/register_statement.py:1181"),
-    ("duplicate_paper_number", "duplicate_conflict", "src/agentflow/paperledger.py:205"),
-    ("duplicate_claim_id", "duplicate_conflict", "src/agentflow/claimanatomy.py:1717,1728"),
-    ("duplicate_id", "duplicate_conflict", "src/agentflow/verify.py:219"),
-    ("invalid_params", "controlled_refusal", "src/agentflow/schema.py:2498（词表）/ src/agentflow/refusals.py:38"),
+     "src/agentflow/schema.py::CANDIDATE_REASON_CODES（词表）/ src/agentflow/litstage.py::admission_plan（产出）"),
+    ("duplicate_statement", "duplicate_conflict", "src/agentflow/agent_b/register_statement.py::_RegisterStatement._attach_proofs"),
+    ("duplicate_paper_number", "duplicate_conflict", "src/agentflow/paperledger.py::check_paper_ledger"),
+    ("duplicate_claim_id", "duplicate_conflict", "src/agentflow/claimanatomy.py::validate_document_claims"),
+    ("duplicate_id", "duplicate_conflict", "src/agentflow/verify.py::_check_1"),
+    ("invalid_params", "controlled_refusal", "src/agentflow/schema.py::REFUSAL_REASONS（词表）/ src/agentflow/refusals.py::PRECONDITION_REASON"),
     # ---- 空正文的两档（业主 2026-10-24 裁定 B2 的第 1 条）：写侧与判档位那一侧共用一个字面量
     # （真身在 `refusals.py`）。`bad_statement` 是它们的前身：改前"0 字"与"只有短版"混在
     # 那一个码里，于是同一种输入在写侧与判档位侧拿到两个名字。
     ("empty_statement_text", "controlled_refusal",
-     "src/agentflow/refusals.py:52（真身）/ src/agentflow/agent_b/register_statement.py:829（写侧产出）"
-     " / src/agentflow/secretary.py:1706（判档位那一侧的受控拒绝）"),
+     "src/agentflow/refusals.py::EMPTY_STATEMENT_TEXT（真身）/ src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement（写侧产出）"
+     " / src/agentflow/secretary.py::Secretary.judge_statement（判档位那一侧的受控拒绝）"),
     ("empty_proof_text", "controlled_refusal",
-     "src/agentflow/refusals.py:53（真身）/ src/agentflow/agent_b/register_statement.py:190,548（两个写入口）"),
-    ("bad_statement", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:704"),
-    ("bad_origin", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:710"),
-    ("bad_evidence_kind", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:762"),
-    ("bad_id", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:929"),
-    ("bad_line_range", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:759"),
-    ("bad_page_range", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:756"),
+     "src/agentflow/refusals.py::EMPTY_PROOF_TEXT（真身）/ "
+     "src/agentflow/agent_b/register_statement.py::_RegisterStatement._attach_proofs"
+     "（两个写入口；那里引用的是常量 `_R.EMPTY_PROOF_TEXT`，不是码的字面量）"),
+    ("bad_statement", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("bad_origin", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("bad_evidence_kind", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("bad_id", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("bad_line_range", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("bad_page_range", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     ("proofs_not_attached", "controlled_refusal",
-     "src/agentflow/agent_b/register_statement.py:1176,1208"),
+     "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     ("proof_needs_third_party_signature", "controlled_refusal",
-     "src/agentflow/agent_b/register_statement.py:798"),
-    ("canonical_not_written", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:1130"),
-    ("secretary_unavailable", "controlled_refusal", "src/agentflow/agent_b/register_statement.py:1052"),
+     "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
+    ("canonical_not_written", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement._attach_proofs"),
+    ("secretary_unavailable", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     # ---- 判据层
-    ("judge_bad_json", "judge_bad_json", "src/agentflow/judge.py:67,206,208（problem 码）"),
+    ("judge_bad_json", "judge_bad_json", "src/agentflow/judge.py::JUDGE_PROBLEMS（problem 码）"),
     # 2026-10-26：原生工具调用面里"点了一个没广告过的函数名"此前折成 `judge_bad_json`
     # （`llmseam.ToolFace.to_shape`），而文本协议下同一个动作记的是 `unknown_tool` ——
     # 同一件事两个类目，于是"名字不存在"这一类在两种协议下各数一半。现在它归到一个类目
@@ -331,13 +341,13 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # 归 `not_wired` 是同一手法：码说"哪一层看出来的"，类目说"这是个什么错"。
     # `judge_bad_json` 从此只留给"真的不是 JSON"。
     ("judge_unknown_tool", "unknown_tool",
-     "src/agentflow/judge.py:76（词表）/ src/agentflow/llmseam.py:1079（产出：没广告过的函数名）"),
-    ("judge_bad_args", "judge_bad_args", "src/agentflow/agent_loop.py:4455,8142"),
-    ("judge_no_reply:", "judge_no_reply", "src/agentflow/agent_loop.py:15,805（带后缀那一族）"),
-    ("judge_timeout", "judge_no_reply", "src/agentflow/agent_loop.py:808（_NO_REPLY_NAMED）"),
-    ("judge_output_limit", "judge_no_reply", "src/agentflow/agent_loop.py:808,837"),
-    ("judge_failed:", "judge_failed", "src/agentflow/agent_loop.py:1135（真机 judge_failed:ModelReplyNotOk）"),
-    ("judge_not_wired", "not_wired", "src/agentflow/judge.py:14（没接线那一档）"),
+     "src/agentflow/judge.py::JUDGE_PROBLEMS（词表）/ src/agentflow/llmseam.py::ToolFace.to_shape（产出：没广告过的函数名）"),
+    ("judge_bad_args", "judge_bad_args", "src/agentflow/agent_loop.py::_invalid_correction"),
+    ("judge_no_reply:", "judge_no_reply", "src/agentflow/agent_loop.py::_is_no_reply（带后缀那一族）"),
+    ("judge_timeout", "judge_no_reply", "src/agentflow/agent_loop.py::_NO_REPLY_NAMED（_NO_REPLY_NAMED）"),
+    ("judge_output_limit", "judge_no_reply", "src/agentflow/agent_loop.py::_NO_REPLY_NAMED"),
+    ("judge_failed:", "judge_failed", "src/agentflow/agent_loop.py::LoopRun（真机 judge_failed:ModelReplyNotOk）"),
+    ("judge_not_wired", "not_wired", "src/agentflow/judge.py::JUDGE_PROBLEMS（没接线那一档）"),
     # 拆分口径（2026-10-24，业主 D-65「修，且不再认为 multi_call 有问题」）：
     # 一步给多条调用是正常能力，所以这一步的读数进过程读数表：
     #   `steps_split` 数被拆分的步数 —— 它从 `result` 里的结构字段取（键名就是
@@ -346,34 +356,34 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     #   `multi_call_executed_calls` 数真的执行了的条目（逐条记录 `agent_step_call`）。
     # 真的做错了才进错误类目：丢了几条 / 没执行成 / 超上限（下面那五行）。
     ("multi_call", "steps_split",
-     "src/agentflow/agent_loop.py:5657（`result` 里的结构字段名，一个回合一条）"),
+     "src/agentflow/agent_loop.py::AgentLoop.run（`result` 里的结构字段名，一个回合一条）"),
     ("agent_step_call", "multi_call_executed_calls",
-     "src/agentflow/stepdispatch.py:53（STEP_CALL_EVENT 的定义）"),
+     "src/agentflow/stepdispatch.py::STEP_CALL_EVENT（STEP_CALL_EVENT 的定义）"),
     ("未执行（解码不出", "multi_call_discarded",
-     "src/agentflow/agent_loop.py:6620（_record_undecodable_item 的结局原话）"),
+     "src/agentflow/agent_loop.py::AgentLoop._record_undecodable_item（_record_undecodable_item 的结局原话）"),
     ("这一条解码不出来", "multi_call_discarded",
-     "src/agentflow/stepdispatch.py:223（mark_not_executed 对解码不出那一档的原话）"),
+     "src/agentflow/stepdispatch.py::StepDispatch.mark_not_executed（mark_not_executed 对解码不出那一档的原话）"),
     ("因本回合已收工未执行", "multi_call_unexecuted",
-     "src/agentflow/stepdispatch.py:219（mark_not_executed 的收工那一档）"),
+     "src/agentflow/stepdispatch.py::StepDispatch.mark_not_executed（mark_not_executed 的收工那一档）"),
     ("因预算未执行", "multi_call_out_of_limit",
-     "src/agentflow/stepdispatch.py:218（mark_not_executed 的预算那一档）"),
+     "src/agentflow/stepdispatch.py::StepDispatch.mark_not_executed（mark_not_executed 的预算那一档）"),
     ("not_executed", "multi_call_unexecuted",
-     "src/agentflow/stepdispatch.py:216（mark_not_executed 的定义；没写理由时的兜底码）"),
-    ("run_evidence_unreadable", "unreadable", "src/agentflow/closing.py:1082（RUN_EVIDENCE_UNREADABLE_CODE）"),
-    ("context_graph_unreadable", "unreadable", "src/agentflow/agent_b/register_statement.py:946"),
+     "src/agentflow/stepdispatch.py::StepDispatch.mark_not_executed（mark_not_executed 的定义；没写理由时的兜底码）"),
+    ("run_evidence_unreadable", "unreadable", "src/agentflow/closing.py::RUN_EVIDENCE_UNREADABLE_CODE（RUN_EVIDENCE_UNREADABLE_CODE）"),
+    ("context_graph_unreadable", "unreadable", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     # ---- 流程层
-    ("mapping_not_written", "closing_blocked", "src/agentflow/closing.py:3738（MAPPING_NOT_WRITTEN_CODE）"),
-    ("run_evidence_unbacked", "closing_blocked", "src/agentflow/closing.py:1079（RUN_EVIDENCE_UNBACKED_CODE）"),
-    ("quote_verified_without_span", "closing_blocked", "src/agentflow/closing.py:5560（收工门 quote_evidence 格）"),
-    ("mapping_orphan", "paper_mapping_gap", "src/agentflow/papermapping.py:303"),
-    ("mapping_file_missing", "paper_mapping_gap", "src/agentflow/papermapping.py:303"),
-    ("mapping_unresolvable", "paper_mapping_gap", "src/agentflow/papermapping.py:303,839"),
-    ("mapping_citation_loc_missing", "paper_mapping_gap", "src/agentflow/papermapping.py:308,1245"),
-    ("mapping_citation_file_missing", "paper_mapping_gap", "src/agentflow/papermapping.py:308,1286"),
-    ("mapping_proof_program_missing", "paper_mapping_gap", "src/agentflow/papermapping.py:324"),
-    ("mapping_package_missing", "paper_mapping_gap", "src/agentflow/papermapping.py:324"),
-    ("mapping_lean_missing", "paper_mapping_gap", "src/agentflow/papermapping.py:335,1330"),
-    ("请代唤", "relay_after_refusal", "src/agentflow/agent_loop.py:81（RELAY_SUBJECT）"),
+    ("mapping_not_written", "closing_blocked", "src/agentflow/closing.py::_check_acceptance（MAPPING_NOT_WRITTEN_CODE）"),
+    ("run_evidence_unbacked", "closing_blocked", "src/agentflow/closing.py::RUN_EVIDENCE_UNBACKED_CODE（RUN_EVIDENCE_UNBACKED_CODE）"),
+    ("quote_verified_without_span", "closing_blocked", "src/agentflow/closing.py::check_closing（收工门 quote_evidence 格）"),
+    ("mapping_orphan", "paper_mapping_gap", "src/agentflow/papermapping.py::MAPPING_KINDS"),
+    ("mapping_file_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::MAPPING_KINDS"),
+    ("mapping_unresolvable", "paper_mapping_gap", "src/agentflow/papermapping.py::MAPPING_KINDS"),
+    ("mapping_citation_loc_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::CITATION_KINDS"),
+    ("mapping_citation_file_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::CITATION_KINDS"),
+    ("mapping_proof_program_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::_numeric_problems"),
+    ("mapping_package_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::PAPER_KINDS"),
+    ("mapping_lean_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::LEAN_KINDS"),
+    ("请代唤", "relay_after_refusal", "src/agentflow/agent_loop.py::RELAY_SUBJECT（RELAY_SUBJECT）"),
 )
 
 #: 码 → 类目（由 `CODE_TABLE` 派生，只有这一处真身）。
@@ -584,48 +594,15 @@ def _read_events(root: Path, store: Any) -> tuple[list[dict[str, Any]], dict[str
 
 
 def _read_sessions(root: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """读会话记录。目录不在 ⇒ 按"这个工作区没有会话记录"读（0 条，checked）。"""
-    reading: dict[str, Any] = {"checked": False, "files": 0, "records": 0,
-                               "bad_lines": 0, "unreadable_files": [], "reason": ""}
-    if not root.exists() or not root.is_dir():
-        reading["reason"] = f"工作区不存在：{root}"
-        return ([], reading)
-    folder = root / "sessions"
-    if not folder.is_dir():
-        reading.update(checked=True, reason="没有 sessions 目录（按 0 条读）")
-        return ([], reading)
-    paths = sorted(p for p in folder.glob("*.jsonl") if p.is_file())
-    if not paths:
-        reading.update(checked=True, reason="sessions 目录里没有 .jsonl")
-        return ([], reading)
-    records: list[dict[str, Any]] = []
-    bad = 0
-    broken: list[str] = []
-    for path in paths:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            broken.append(path.name)
-            continue
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                bad += 1
-                continue
-            if isinstance(obj, dict):
-                records.append(obj)
-            else:
-                bad += 1
-    readable = len(paths) - len(broken)
-    reading.update(files=readable, records=len(records), bad_lines=bad,
-                   unreadable_files=broken,
-                   checked=readable > 0,
-                   reason="" if readable else "sessions 目录里每个文件都读不明白")
-    return (records, reading)
+    """读会话记录 —— 转发 `sessions.read_all_sessions`（真身在那里）。
+
+    2026-10-27（R-BE1 的 ②-1，业主批准）：这一支此前是本文件里的第二份实现（自己
+    glob + splitlines + json.loads），与 `sessions.read_session` 对"读不明白"各有一套
+    判定 —— 同一份坏目录，一处说"坏行 3 条"、另一处说"文件读不出来"。现在只有
+    `sessions` 一处实现；本函数保留名字与返回形状，因为 `sources["sessions"]` 的那几个键
+    是既有输出面的一部分（`readouts.errors_readout` 的 `data.sources` 逐字带着它们）。
+    """
+    return SS.read_all_sessions(root)
 
 
 def _latest_task_rows(events: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -726,6 +703,31 @@ def error_action_stats(target: Any) -> ErrorStats:
     root, store = _resolve_target(target)
     events, ev_reading = _read_events(root, store)
     records, ss_reading = _read_sessions(root)
+    return error_action_stats_from(events, ev_reading, records, ss_reading)
+
+
+def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
+                            ev_reading: Mapping[str, Any] | None,
+                            records: Iterable[Mapping[str, Any]] | None,
+                            ss_reading: Mapping[str, Any] | None) -> ErrorStats:
+    """同一份计数，但输入是已经读好的记录（不再读盘）。
+
+    为什么要这一支（2026-10-27，R-BE1 的 ⑥-5）：`stats all` 那四条读数各读一遍盘
+    （实测 `events.jsonl` 读 4 次、`sessions/*.jsonl` 读 4 次；同一份 2.9 MB 的会话
+    被解析四遍）。`readouts` 把它自己那份扫描交给这里，计数口径仍然只有这一处 ——
+    在这里复制一份分类逻辑就是第二套口径，而那正是 `readouts` 这一层存在的理由。
+
+    读数与 `error_action_stats` 逐字相同（两条路的差别只有"谁去读盘"，
+    判据 `tests/test_stats_all_reads_disk_once.py` 拿同一夹具对拍两份 `as_dict()`）。
+
+    三态：两个 `*_reading` 原样带出去（`checked` / `reason` / `unreadable_files`），
+    本函数不重判"读没读到"。两个 reading 会先复制成本地 dict，于是 `unclassified`
+    那一格的累加不会写回调用方手里的那份扫描读数。
+    """
+    events = list(events or ())
+    records = list(records or ())
+    ev_reading: dict[str, Any] = dict(ev_reading or {})
+    ss_reading: dict[str, Any] = dict(ss_reading or {})
 
     counts: dict[str, dict[str, int]] = {}
     process: dict[str, dict[str, int]] = {}

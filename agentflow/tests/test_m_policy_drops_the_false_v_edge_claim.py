@@ -5,7 +5,7 @@
 2026-10-20 业主裁定撤掉 `M→V`（现 `M.edges = ('A','B','C','D','E','G','H')`，边总数 32），而 policy 第 2 条里逐字留着改前的措辞：
 > `M→V` 那条边也在你的出边里（`ALLOWED_EDGES['M']` 里已有 V，`M→B→V` 仍可走）
 这句今天是假话：`"V" not in ALLOWED_EDGES["M"]`，端到端派 V 判 `forbidden_edge`（边表那一侧由
-`tests/test_v_signing_belongs_to_f_and_b.py` 与 `tests/test_policy.py` 守）。它比"少写一句"更坏：假陈述让主控反复去撞一条不存在的边，撞完还不知道该换哪条路
+`tests/test_v_signing_belongs_to_b_e_f.py` 与 `tests/test_policy.py` 守）。它比"少写一句"更坏：假陈述让主控反复去撞一条不存在的边，撞完还不知道该换哪条路
 ——而 `forbidden_edge` 的正确读法是"换链"，前提是提示词里那条真的存在的链还在。
 ## 四条，缺一条就会被"改一半"混过去
 - ① 删干净：policy 里不再出现那三种写法（`M→V` / `ALLOWED_EDGES['M']` / `出边里已有`），也不再出现"B 与 V 你可以直接派"这个权限断言 —— B 那一半是真的，V 那一半是假的（M
@@ -14,7 +14,7 @@
 V"。- ④ 负控：① 的三种写法各自加回 ⇒ 红；整段删掉 ⇒ 红；把 `M→B→V` 说成直连 ⇒ 红；把 `B→V` 从边表里摘掉（那句话就成了假话）⇒ 红。
 ## 为什么不扫文件文本
 `specs/m.py` 里那两段 2026-10-18 / 2026-10-20 的裁定注释必须可以写 `M→V`（它们是历史读数与撤边记录，注释不进提示词）。
-所以和`test_v_signing_belongs_to_f_and_b.py::_prove_walk_obligations` 同一条纪律：这里只看声明（`brief.policy`），不看源码文本 ——
+所以和`test_v_signing_belongs_to_b_e_f.py::_prove_walk_obligations` 同一条纪律：这里只看声明（`brief.policy`），不看源码文本 ——
 否则一句正确修复会被历史注释钉红。
 """
 from __future__ import annotations

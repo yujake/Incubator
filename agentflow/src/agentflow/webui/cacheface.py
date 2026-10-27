@@ -166,26 +166,15 @@ def _warm_argv(root: Path, lean: str) -> list[str]:
 
 
 def _spawn_warm(root: Path, lean: str) -> tuple[int, str]:
-    """detached 起一趟预热，stdout/stderr 追加进 `runs/web-cache-warm-*.log`。"""
-    import subprocess
-    from datetime import datetime
+    """detached 起一趟预热，stdout/stderr 追加进 `runs/web-cache-warm-*.log`。
 
-    runs = root / "runs"
-    runs.mkdir(parents=True, exist_ok=True)
-    log = runs / f"web-cache-warm-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
-    env = dict(os.environ)
-    env.setdefault("PYTHONIOENCODING", "utf-8")
-    env.setdefault("PYTHONUTF8", "1")
-    handle = open(log, "ab")
-    flags = 0
-    if os.name == "nt":
-        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | \
-            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    proc = subprocess.Popen(_warm_argv(root, lean), cwd=str(root), env=env,
-                            stdout=handle, stderr=subprocess.STDOUT,
-                            stdin=subprocess.DEVNULL, creationflags=flags,
-                            close_fds=True)
-    return int(proc.pid), str(log.relative_to(root)).replace("\\", "/")
+    起进程那五件事住在 `writes._spawn_detached` 里（2026-10-27 业主裁定 W3：
+    "起一趟"与"起一趟预热"此前各写了一遍同一套），这里只保留这一面自己的两格：
+    日志前缀 `web-cache-warm`（预热记录的 `log` 与读侧都按它认）与要跑的那条命令。
+    """
+    from . import writes as WR
+
+    return WR._spawn_detached(root, _warm_argv(root, lean), "web-cache-warm")
 
 
 # ====================================================================== 写权限读数
@@ -297,7 +286,11 @@ def _decide_warm_state(record: Mapping[str, Any],
     pid = int(record.get("pid") or 0)
     if tail is None:
         return {"state": "unknown", "reason": problem, "last_line": "", "tail": []}
-    last_line = tail[-1]
+    # 日志在盘上、但一行非空内容都还没有：刚起的那一趟就是这样（父进程先 open 出文件，
+    # 子进程还没写第一行）。这不是"读不出来"，所以不许走下面的收尾标记比对，
+    # 更不许取 `tail[-1]`（空表上取下标会抛 IndexError，被 warm_job 接住后
+    # 这一格会从"跑中"变成"不知道"，与实际状态正好相反）。
+    last_line = tail[-1] if tail else ""
     for line in reversed(tail):
         if _is_failure_line(line):
             return {"state": "failed", "reason": f"这一趟没成：{line}",

@@ -45,11 +45,23 @@ def _now() -> _dt.datetime:
 
 
 def _rows(store: Any, table: str) -> list[dict[str, Any]]:
-    """读一张表的行（读不到 ⇒ 空列表 + 在报告里记一条 `unreadable`，不假装是 0）。"""
+    """读一张表的行（读不到 ⇒ 空列表；原因见 `_rows_or_why`）。"""
+    return _rows_or_why(store, table)[0]
+
+
+def _rows_or_why(store: Any, table: str) -> tuple[list[dict[str, Any]], str]:
+    """读一张表的行：`(rows, 没读成的原因)`；读成时原因是空串。
+
+    "读不到"与"是 0 行"必须分得开（本模块 docstring 的第一条纪律）：读不成 ⇒ 空列表 +
+    原因，`collect` 把它写进那张表的 `unreadable` 一格；表在、是 0 行 ⇒ 空列表 + 空原因。
+    改前 `_rows` 把两者都折成空列表，于是"这张表读不出来"在报告里读成"这张表 0 行"，
+    而 `_rows` 的 docstring 当时还写着"在报告里记一条 unreadable"—— 那句承诺没有落点
+    （2026-10-27，R-BE1）。
+    """
     try:
-        return [dict(r) for r in store.rows(table)]
-    except Exception:  # noqa: BLE001 —— 读不到与"是 0 行"必须分得开
-        return []
+        return [dict(r) for r in store.rows(table)], ""
+    except Exception as exc:  # noqa: BLE001 —— 读不到与"是 0 行"必须分得开
+        return [], f"{type(exc).__name__}: {exc}"
 
 
 def _id_of(table: str, row: Mapping[str, Any]) -> str:
@@ -75,12 +87,16 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
     root = Path(root)
     tables: dict[str, Any] = {}
     for table in REPORT_TABLES:
-        rows = _rows(store, table)
+        rows, why = _rows_or_why(store, table)
         if since:
             rows = [r for r in rows if _row_time(r) >= str(since)]
         recent = [{"id": _id_of(table, r), "at": _row_time(r),
                    "hint": _hint_of(table, r)} for r in rows[-RECENT_LIMIT:]]
-        tables[table] = {"count": len(rows), "recent": recent}
+        got: dict[str, Any] = {"count": len(rows), "recent": recent}
+        if why:
+            # 三态（2026-10-27，R-BE1）：读不成不许长得像 0 行。
+            got["unreadable"] = why
+        tables[table] = got
 
     # ---- 交接链（手稿账本：谁→谁、一行一份、谁填的）
     ms_rows, ms_bad = MS.read_rows(root)
@@ -104,11 +120,16 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
 
     grades: dict[str, int] = {}
     problems = 0
-    for r in _rows(store, "statements"):
+    statement_rows, statement_why = _rows_or_why(store, "statements")
+    for r in statement_rows:
         bits = EB.bits_from_row(r)
         grades[str(bits.get("grade"))] = grades.get(str(bits.get("grade")), 0) + 1
         if EB.bit_problems(bits):
             problems += 1
+    five_bit: dict[str, Any] = {"grades": grades, "problems": problems}
+    if statement_why:
+        # 读不成时 `grades` / `problems` 都是空的 —— 不许读成"没有命题"（同 `tables` 那一格）。
+        five_bit["unreadable"] = statement_why
 
     # ---- 在飞与卡点
     live = SC.live_pids(root)
@@ -188,7 +209,7 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         "workspace": str(root), "since": str(since),
         "tables": tables,
         "manuscripts": manuscripts,
-        "five_bit": {"grades": grades, "problems": problems},
+        "five_bit": five_bit,
         "in_flight": {
             "running_tasks": len(running_tasks), "running_task_ids": running_tasks[:RECENT_LIMIT],
             # 两个读数各自一格（业主 2026-10-26）：子代理数 = 名册里未销号的名册项数；
@@ -210,10 +231,12 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
                     "名册里未销号的名册项（out/roster/<父>.jsonl 折叠后 retired 为假的那几项；"
                     "口径只有 secretary.Secretary.child_counts 一处）",
                 "active_child_count":
-                    "上述名册项里 active 为真的数量，active(node) = 自身有未收口的任务"
-                    " （status ∈ {pending, running}） or 任一直接子 active"
-                    "（所以『自己收口了但在等活跃的下级』也算活跃 —— 业主逐字："
-                    "有『等』这个动作还是算活跃的）",
+                    "上述名册项里『非静默』的数量（业主 2026-10-26 后一句："
+                    "活跃子代理数 = 非静默子代理数）：非静默 = 在飞 + 待机，"
+                    "三态判定只有 conductor.agent_state 一处；unknown（判不了）"
+                    "既不算活跃也不算静默，它进 states['unknown'] 并让 complete=false。"
+                    "所以『自己收口了但在等活跃的下级』仍算活跃（它在待机），"
+                    "而『名册还挂着、活干完了且没有下级』是静默、不算活跃",
                 "top_level_runs":
                     "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；"
                     "召唤看 conductor.stats() 的 started_total）",
@@ -223,8 +246,12 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
             },
             "top_level_runs": len(top_runs),
             "live_pids": [{"role": str(p.get("role") or ""), "pid": p.get("pid")} for p in live],
-            "running_loops": loops["running"], "readable_sessions": len(loops.get("running") or [])
-            + 0,
+            # 三态（2026-10-27，R-BE1 的 ③-3）：`stopctl.running_loops` 的 `answer` 是
+            # "会话面 or 进程面"的合取，而 `running` 只是会话面。改前报告只印会话面
+            # ⇒ 同一屏上会同时出现"活进程登记：1 个 / 在跑的循环：没有"。
+            # 现在两者都给出，`.md` 那一行按 `answer` 说结论、按两面对照说原因。
+            "running_loops": loops["running"],
+            "running_loops_answer": str(loops.get("answer") or ""),
             "unreadable_sessions": loops.get("unreadable_sessions") or [],
             "stop_switch": SC.read_stop(root) is not None,
             "last_stop_history": history,
@@ -417,10 +444,43 @@ def _hint_of(table: str, row: Mapping[str, Any]) -> str:
     return ""
 
 
+def _loop_answer(in_flight: Mapping[str, Any]) -> bool:
+    """"现在有没有人在跑"的唯一答案：`stopctl.running_loops.answer`（会话面 or 进程面）。
+
+    报告里有两处读者（`.md` 那一行与将来可能的 JSON 消费者），所以结论在这里取一次。
+    `answer` 缺失（老报告 / 读不成）时退回会话面 —— 但那是"没读到那一格"的兜底，
+    不是第二个口径。
+    """
+    answer = str(in_flight.get("running_loops_answer") or "").strip()
+    if answer:
+        return answer == "有"
+    return bool(in_flight.get("running_loops"))
+
+
+def _loop_detail(in_flight: Mapping[str, Any]) -> str:
+    """那一行后面的细节：会话面（哪几段）与进程面（几个）分开说，两边不一致时点名。"""
+    running = list(in_flight.get("running_loops") or [])
+    live = list(in_flight.get("live_pids") or [])
+    parts: list[str] = []
+    if running:
+        parts.append("会话面：" + "、".join(f"{r['role']}（sid={r['sid']}）" for r in running))
+    if live and not running:
+        parts.append(f"会话面没有开着的循环，进程面有 {len(live)} 个活进程登记"
+                     "（两边不一致时以进程面为准：强杀不留 agent_run_end）")
+    if in_flight.get("unreadable_sessions"):
+        parts.append(f"有 {len(in_flight['unreadable_sessions'])} 段会话读不出来"
+                     "（这一路没查成，别读成「没在跑」）")
+    return "：" + "；".join(parts) if parts else ""
+
+
 def _next_steps(report: Mapping[str, Any]) -> list[str]:
     """从读数派生"下一步"（不是模型写的）：每一句都指着一个具体的空格。"""
     out: list[str] = []
     tables = report.get("tables") or {}
+    bad_tables = sorted(k for k, v in tables.items() if (v or {}).get("unreadable"))
+    if bad_tables:
+        out.append("有这几张表读不出来：" + "、".join(bad_tables)
+                   + " ⇒ 报告里它们的 0 是「没查成」，不是「没有」")
     if not (tables.get("conjectures") or {}).get("count"):
         out.append("还没有可检验的猜想（`conjectures` 0 行）⇒ 先把模式写成带 `testable` 的猜想")
     if not (tables.get("documents") or {}).get("count"):
@@ -510,6 +570,10 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
     ]
     for name in REPORT_TABLES:
         got = tables.get(name) or {}
+        if got.get("unreadable"):
+            # 三态：读不成的那一张在 .md 里也不许印成 0（人读的是这一份）。
+            lines.append(f"| `{name}` | **没查成** | {got['unreadable']} |")
+            continue
         recent = "；".join(f"{r.get('id')} {r.get('hint')}" for r in (got.get("recent") or [])[-3:])
         lines.append(f"| `{name}` | {got.get('count', 0)} | {recent or '（无）'} |")
     # ---- S-07：D 的报告"有调用、无落点"（诊断读数，只在这里看得见）
@@ -566,9 +630,10 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
         f"- 活进程登记：**{len(infl.get('live_pids') or [])}** 个"
         + ("：" + "、".join(f"{p['role']}#{p['pid']}" for p in infl["live_pids"])
            if infl.get("live_pids") else ""),
-        f"- 在跑的循环：**{'有' if infl.get('running_loops') else '没有'}**"
-        + ("：" + "、".join(f"{r['role']}（sid={r['sid']}）" for r in infl["running_loops"])
-           if infl.get("running_loops") else ""),
+        # 这一行说"有没有人在跑"，口径只取 `stopctl.running_loops.answer`（会话面 or 进程面）。
+        # 改前只按会话面判 ⇒ 同一屏会写"活进程登记：1 个 / 在跑的循环：没有"。
+        f"- 在跑的循环：**{'有' if _loop_answer(infl) else '没有'}**"
+        + _loop_detail(infl),
         f"- 停机开关：{'在' if infl.get('stop_switch') else '不在'}"
         + (f"；最近一次叫停：{infl['last_stop_history'][-1].get('reason')}"
            if infl.get("last_stop_history") else ""),

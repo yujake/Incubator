@@ -242,7 +242,11 @@ def _is_exhausted(budget_usd: float, spent_usd: float) -> bool:
 
 
 def _exit_code_for(reason: str, *, successes: int) -> int:
-    """把"为什么停下"映射成退出码（三态的唯一映射点）。
+    """把"为什么停下"映射成退出码（管线域的唯一映射点）。
+
+    域 × 码对照见 `agentflow.stop_reasons.EXIT_CODE_DOMAINS["pipeline"]`，全仓统一的三条
+    口径见 `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6，2026-10-27）。这一域没有
+    `3/4/5`：`agentflow run` 一次跑完就结束，没有"等用户 / 加钱续跑"那一说。
 
     - `budget_exhausted` ⇒ 1（钱是硬约束，停在这里必须能从退出码看见，
       哪怕前面已经有几次成功了 —— 否则"跑飞被熔断"在脚本里看起来与成功一样）；

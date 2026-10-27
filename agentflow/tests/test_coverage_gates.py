@@ -118,7 +118,6 @@ def _ctx(ws: Path, proof_location: str = "code/p1.py:12", **over: object) -> G.G
         "claim_counts": {"declared_claim_count": 1, "declared_counterexample_count": 0,
                          "declared_script_count": 1},
         "banned_words": [],
-        "literals": {},
         "observed_hash": None,
         "own_errors": [],
     }
@@ -1279,16 +1278,35 @@ def test_run_all_gates_is_unknown_not_accepted_when_inputs_are_missing(ws: Path)
 
 
 def test_gate_verdict_rejects_an_empty_result_set_is_not_accepted():
-    """负控（边界）：空结果集 ⇒ `accepted`，但这不是一个"没查"的合法输入。
+    """边界（`docs/PROPOSALS.md` G-5 已收口，2026-10-27）：空结果集 ⇒ `unverified`。
 
-    这条断言的是实测到的实现行为，而且我认为它是一个可疑的设计
-    （零门在场 ⇒ "全 pass" ⇒ `accepted`）。它被登记进 `docs/PROPOSALS.md` 的
-    G-5 条，而不是在这里被改成"我觉得应该的样子" —— 我的任务是暴露缺陷，
-    不是改 `src`。
+    改前这条断言的是实测到的实现行为 —— 空集合给 `accepted`、理由写"15 道门全部通过"
+    （零门在场地宣称全绿）。当时它被写成哨兵：一旦有人修它这条会红，提醒同时更新
+    G-5 的登记。现在判据改成"齐全是一等条件"，三档边界都不许 `accepted`：
 
-    所以这条测试的作用是把这个可疑行为钉在纸上：一旦有人修它，
-    这条会红，提醒他同时更新 G-5 的登记。
+    * 空集合（零门在场）；
+    * 只跑一门（其余 14 门没跑）；
+    * 从齐全的全 pass 里滤掉一道门（"少一门"与"全绿"必须读得出来）。
     """
     agg = G.gate_verdict({})
-    assert agg["verdict"] == "accepted", agg
+    assert agg["verdict"] == "unverified", agg
     assert agg["pass"] == 0 and agg["fail"] == 0 and agg["unknown"] == 0, agg
+    assert agg["missing_gates"] == list(G.GATE_IDS), agg
+    assert "没跑的门" in agg["reason"], agg
+
+    def mk(gid: str) -> "G.GateResult":
+        return G.GateResult(
+            gate_id=gid, name="n", axis="工程", criterion="c", verdict="pass",
+            reason="r", findings=(), self_attestation="扫了 1 个对象", counts={"n": 1},
+        )
+
+    one = G.gate_verdict({g: mk(g) for g in ("G1",)})
+    assert one["verdict"] == "unverified", one
+    assert one["missing_gates"] == [g for g in G.GATE_IDS if g != "G1"], one
+
+    full = {g: mk(g) for g in G.GATE_IDS}
+    assert G.gate_verdict(full)["verdict"] == "accepted"
+    filtered = {g: r for g, r in full.items() if g != "G3"}
+    agg2 = G.gate_verdict(filtered)
+    assert agg2["verdict"] == "unverified", agg2
+    assert agg2["missing_gates"] == ["G3"], agg2

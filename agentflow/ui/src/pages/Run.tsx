@@ -40,7 +40,7 @@ import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
 import { useEffect, useState } from "preact/hooks";
-import type { CheckpointSpendView, CheckpointView, EventRow, RunRow } from "../types";
+import type { CheckpointSpendView, CheckpointView, EventRow } from "../types";
 
 export interface RunProps {
   sid: string;
@@ -49,7 +49,12 @@ export interface RunProps {
 /** 一页多少条逐条事件（与后端 `EVENTS_LIMIT_DEFAULT` 一致；上限是 500）。 */
 const EVENTS_PAGE = 50;
 
-/** 检查点的花销子树（类型上是联合：读不到时后端给的是空对象）。 */
+/** 检查点的花销子树（类型上是联合：读不到时后端给的是空对象）。
+ *
+ * 2026-10-27 起它只供 `calls` / `tokens_in` / `tokens_out` 三格用（后端没把这三格
+ * 单列）；金额那一格统一走 `RunView.checkpoint_spend_usd` —— 同一件事只许有一条
+ * 读数路径，否则"两处一致"这条判据自己就站在一个可能漂的数上。
+ */
 function spendOf(ck: CheckpointView | null): CheckpointSpendView | null {
   if (ck === null) {
     return null;
@@ -59,16 +64,6 @@ function spendOf(ck: CheckpointView | null): CheckpointSpendView | null {
     return s as CheckpointSpendView;
   }
   return null;
-}
-
-/** 事件求和（第二读数）：一次都没读到 `usd` ⇒ `null`（不是 0）。 */
-function eventSum(runs: RunRow[]): { usd: number | null; unknown: number } {
-  const known = runs.filter((r) => r.usd !== null);
-  const unknown = runs.reduce((acc, r) => acc + r.unknown_usd, 0);
-  if (known.length === 0) {
-    return { usd: null, unknown };
-  }
-  return { usd: known.reduce((acc, r) => acc + (r.usd ?? 0), 0), unknown };
 }
 
 function text(value: string): string {
@@ -274,11 +269,20 @@ export function Run(props: RunProps) {
   const runs = v.runs;
   const ckpt = v.checkpoint;
   const spend = spendOf(ckpt);
-  const second = eventSum(runs);
+  // 两个数必须同范围（2026-10-27 业主裁定 ⑥-4）：左边是"这一趟（同一 role）的检查点
+  // 累计"，右边是"这一段会话里同一 role 那一趟的事件求和"—— 两格都由后端给，
+  // 页面不再自己对 `runs` 求和（改前那句 `eventSum(v.runs)` 求的是整段会话每一趟
+  // 之和，跟一份检查点比，多趟/多代理时必然不等，于是恒挂一条假红）。
+  const ckAmount = v.checkpoint_spend_usd;
+  const runAmount = v.same_run_spend_usd;
+  // 两边都读到才算得出"一致 / 不一致"：任一为 `null` 是"没查成"，不是"对不上"。
   const sameAmount =
-    spend !== null && second.usd !== null
-      ? Math.abs((spend.usd ?? 0) - second.usd) < 1e-9
+    ckAmount !== null && runAmount !== null
+      ? Math.abs(ckAmount - runAmount) < 1e-9
       : null;
+  // 本段会话每一趟的合计：只作参考读数摆出来，不参与上面那个判据（跨趟不同范围）。
+  const sessionTotal = runs.reduce((acc, r) => acc + (r.usd ?? 0), 0);
+  const sessionUnknown = runs.reduce((acc, r) => acc + r.unknown_usd, 0);
   const ledger = live.snapshot === null ? null : live.snapshot.ledger;
   const orphans = live.snapshot === null ? null : live.snapshot.orphans;
   const orphanSummary = live.snapshot === null ? null : live.snapshot.orphan_summary;
@@ -379,14 +383,19 @@ export function Run(props: RunProps) {
       <EventTimeline sid={props.sid} />
 
       <Card
-        title="花销（两个来源并排）"
+        title="花销（同一趟的两个来源并排）"
+        subtitle={
+          v.same_run_start_index === null
+            ? "这一段会话里没有与检查点同角色的那一趟 ⇒ 第二个读数读不到"
+            : `比的是同一趟：${v.checkpoint_role} 那一趟（第 ${v.same_run_start_index} 条事件起）`
+        }
         tone={sameAmount === false ? "problem" : "plain"}
         right={
           sameAmount === null ? (
             <TriState
               tri="unreadable"
               label="两处是否一致"
-              reason="有一个来源没读到（检查点或事件求和）⇒ 这一格没查成，不是「一致」"
+              reason="有一个来源没读到（检查点的累计、或同一趟的事件求和）⇒ 这一格没查成，不是「一致」"
             />
           ) : (
             <Badge
@@ -397,22 +406,18 @@ export function Run(props: RunProps) {
         }
       >
         <div class="row">
-          <span class="caption">首选：检查点</span>
-          {spend === null ? (
-            <span class="mono">unknown</span>
-          ) : (
-            <Money
-              usd={spend.usd}
-              unknownCalls={spend.unknown_usd_calls}
-              calls={spend.calls}
-              tokensIn={spend.tokens_in}
-              tokensOut={spend.tokens_out}
-            />
-          )}
+          <span class="caption">首选：检查点（这一趟的累计）</span>
+          <Money
+            usd={ckAmount}
+            unknownCalls={spend === null ? 0 : spend.unknown_usd_calls}
+            calls={spend === null ? undefined : spend.calls}
+            tokensIn={spend === null ? undefined : spend.tokens_in}
+            tokensOut={spend === null ? undefined : spend.tokens_out}
+          />
         </div>
         <div class="row">
-          <span class="caption">第二读数：事件求和</span>
-          <Money usd={second.usd} unknownCalls={second.unknown} />
+          <span class="caption">第二读数：同一趟的事件求和</span>
+          <Money usd={runAmount} unknownCalls={v.same_run_unknown_usd} />
         </div>
         <div class="readings">
           检查点{" "}
@@ -421,6 +426,10 @@ export function Run(props: RunProps) {
               ? `unknown（${v.checkpoint_reason === "" ? "没读到" : v.checkpoint_reason}）`
               : `${ckpt.role} / step ${ckpt.step} / ${ckpt.at}`}
           </span>
+        </div>
+        <div class="readings tri-reason">
+          本段会话每一趟的合计（参考读数，不与上面那个数比 —— 跨趟是不同范围）：
+          <Money usd={sessionTotal} unknownCalls={sessionUnknown} />
         </div>
       </Card>
 

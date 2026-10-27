@@ -24,6 +24,7 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -94,9 +95,12 @@ def effect_axis_of(spec: ActionSpec) -> str:
     return action_axes(spec)[1]
 
 
-def external_axis_of(spec: ActionSpec) -> str:
-    """一个动作在"能不能触到我们不拥有的事"这根轴上的取值。"""
-    return action_axes(spec)[0]
+# 2026-10-27：删掉了 `external_axis_of(spec)`（`return action_axes(spec)[0]`）。
+# 它全仓引用数 = 1（只有 def 自己），而同族的 `effect_axis_of` 有真读者
+# （`param_action_only` 那一族读数）。一个"看起来有读者"的权限轴访问器比没有更坏：
+# 读到这里的人会以为"外部轴有人在读"，于是不敢动 `action_axes` 的返回值形状 ——
+# 而外部轴的唯一读点是 :func:`action_axes` 的元组解包（`cap_ext, cap_eff = action_axes(spec)`）。
+# 要恢复它就顺手给它一个真读者，别只把函数放回来。
 
 
 def unmapped_actions() -> list[tuple[str, str]]:
@@ -194,6 +198,22 @@ def _matching_tool_name(spec: ActionSpec, tools: Mapping[str, Any]) -> str | Non
     return hits[0] if len(hits) == 1 else None
 
 
+#: `_tool_side_effects()` 的进程内缓存（2026-10-27）。
+#:
+#: 为什么要有它：`assert_capabilities()` 一趟要问它 32 次（实测
+#: `temp/r_be2_cap_profile.py`），而它每次都把 `tools/` 下那 24 个模块重新 `ast.parse`
+#: 一遍 —— 一次导入期的剖面是 `ast.walk` 走 5,050,209 个节点、`_declared_side_effects`
+#: 累计 17.6 s、`_tool_side_effects` 累计 26.4 s。净效果是 `import agentflow.capabilities`
+#: 16.9 s/进程（实测 `temp/r_be2_import_cost.py`），而每一个 CLI / 网页进程 / 每条
+#: 子进程判据都要付一次。
+#:
+#: 缓存是安全的：本函数读的是源码里的字面量（`tools/_MODULES` 与
+#: `tools/_TOOL_MODULE_EXTRAS` 都是模块级常量），进程内不会变；判据本身一个字符都没改
+#: （缓存的是"读出来的那两张表"，不是"比出来的结论"）。
+#: 返回的是副本：调用方就算就地改那份 dict，也污染不到下一次核对。
+_TOOL_SIDE_EFFECTS_CACHE: dict[str, tuple[str, str, bool]] | None = None
+
+
 def _tool_side_effects() -> dict[str, tuple[str, str, bool]]:
     """全仓工具名 -> `(side_effect, external, 是否显式写了 external 声明)`。
 
@@ -210,14 +230,60 @@ def _tool_side_effects() -> dict[str, tuple[str, str, bool]]:
     推断副作用 —— 那正是 N-4 否决的做法（P-13 §9①：22/55 取不到 handler 源码、9 个转发型假阳性）。
     读不到源码文件（例如装了 wheel）返回空表，于是 :func:`declaration_divergences` 把每条动作报成
     "没有比对"（unknown），不会折叠成"没问题"。
+    ## 为什么结果留在进程里（`_TOOL_SIDE_EFFECTS_CACHE`）
+    见那张表的说明：这一趟导入期问 32 次，而每次都是一轮全模块 AST 解析。
     """
+    global _TOOL_SIDE_EFFECTS_CACHE
+    if _TOOL_SIDE_EFFECTS_CACHE is None:
+        _TOOL_SIDE_EFFECTS_CACHE = _read_tool_side_effects()
+    return dict(_TOOL_SIDE_EFFECTS_CACHE)
+
+
+#: 工具模块的 AST 进程内缓存（2026-10-27）。
+#:
+#: 本模块有三处读工具源码的读者（`_read_tool_side_effects` / `_tool_declared_names` /
+#: `_tool_param_faces`），每处都自己 `ast.parse` 一遍 24 个模块；导入期一趟下来
+#: `ast.walk` 要走 51 万个节点（实测 `temp/r_be2_cap_profile.py`）。同一份源码在一个进程里
+#: 解析一次就够：读的人只 `ast.walk`（只读），不会改这棵树。
+_TOOL_AST_CACHE: dict[Path, ast.AST | None] = {}
+
+#: 读取器的哨兵读数（2026-10-27，业主口径："缓存一被谁顺手去掉，性能会静默回到 16.9 s，
+#: 而没有任何判据会红"）。这里是那个"会让它红"的入口：真解析一次加一，命中缓存也加一。
+#:
+#: 为什么是读数而不是门：进程内解析次数不改变任何判据结论（缓存是纯派生的，见上面那两段
+#: 说明），把它做成导入期断言等于用性能指标拦启动。它打在 `_PRINT_TYPE_COVERAGE` 那三行
+#: 读数旁边（`ast_parses=… / ast_hits=…`），判据本体在
+#: `tests/test_capabilities_readers_parse_once.py`（含打桩负控）。
+_READER_TALLY: dict[str, int] = {"ast_parses": 0, "ast_hits": 0}
+
+
+def _tool_module_ast(path: Path) -> ast.AST | None:
+    """一个工具模块的 AST（进程内只解析一次）；读不成 ⇒ `None`（不是"这个模块没有声明"）。
+
+    缓存 `None` 也是对的：同一个进程里那份文件不会在两次读之间从"读不成"变成"读得成"，
+    而把它当"读得到的空模块"才是把 unknown 折成"没问题"。
+    """
+    if path in _TOOL_AST_CACHE:
+        _READER_TALLY["ast_hits"] = int(_READER_TALLY.get("ast_hits") or 0) + 1
+        return _TOOL_AST_CACHE[path]
+    tree: ast.AST | None
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError):
+        tree = None
+    _READER_TALLY["ast_parses"] = int(_READER_TALLY.get("ast_parses") or 0) + 1
+    _TOOL_AST_CACHE[path] = tree
+    return tree
+
+
+def _read_tool_side_effects() -> dict[str, tuple[str, str, bool]]:
+    """:func:`_tool_side_effects` 的真身（读一次源码；结果由上一层缓存）。"""
     out: dict[str, tuple[str, str, bool]] = {}
     base = Path(__file__).resolve().parent / "tools"
     for mod_name in _TOOL_MODULES:
         path = base / f"{mod_name}.py"
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError, ValueError):
+        tree = _tool_module_ast(path)
+        if tree is None:
             continue
         for name, side, declared, explicit in _declared_side_effects(tree):
             out[name] = (side, declared, explicit)
@@ -281,15 +347,12 @@ def _declared_side_effects(tree: ast.AST) -> list[tuple[str, str, str, bool]]:
 #: `param_type_coverage()['tools_read']` 只肯说「读到 77 个工具的 schema」，而工具层有 95 件，
 #: 读数说不出这 18 件的差从哪来。同一件事（工具模块有哪些）只允许有一个真身：
 #: `tools._MODULES`（装配期真正注册工具的那张表）。这里只登记「为什么还要多读一个模块」。
-_TOOL_MODULE_EXTRAS: dict[str, str] = {
-    "conjecture_tools": (
-        "`D.register_conjecture` 的落地工具（`conjecture.register_conjecture`）住在这个文件里，"
-        "而它不在 `tools._MODULES` 里 —— `build_registry` 不装配它（D 走 `agent_d._support` "
-        "里的直接 import）。两层参数对账要看得见这条工具，所以显式多读一个模块；"
-        "但「读进来」不等于「它是工具面的一件」，所以读数把它单列成 "
-        "`tools_read_but_not_registered`（读到了、不注册 ≠ 注册了）"
-    ),
-}
+#:
+#: 2026-10-27（`R-BE4` 的 D1 Phase A，业主批准）：`conjecture_tools` 从这张表里退场 ——
+#: 它已经进了 `tools._MODULES`（真身），再登记一次就是重复项，而上面那条 assert 当场会红
+#: （实测：`('...conjecture_tools', 'conjecture_tools')`）。于是这张表今天是空的，
+#: 而空表是有内容的读数：'没有任何模块需要多读' —— 不是'这条机制还没接上'。
+_TOOL_MODULE_EXTRAS: dict[str, str] = {}
 
 
 def _tool_modules() -> tuple[str, ...]:
@@ -370,7 +433,9 @@ def two_layer_reconciliation() -> dict:
     ## 为什么这个函数必须存在（它补的是一条真的缝）：`declaration_divergences` 答"两层在哪里不一致"，
     而"对账面有没有真的在做"有三个不同答案，必须分开数：`compared`（动作与工具唯一对上了）、
     `unmatched`（`handler_name` 在角色工具组里对应 0 个 ⇒ 没比成，unknown）、`ambiguous`（对应 ≥2 个 ⇒ 按唯一性约定拒绝猜，unknown）。
-    实测（2026-10-26 现算）：64 个动作 = 24 compared + 40 unmatched + 0 ambiguous
+    实测（2026-10-27 现算）：64 个动作 = 25 compared + 39 unmatched + 0 ambiguous
+    （2026-10-26 是 64 = 24 + 40 + 0；当晚把 `conjecture_tools` 接进 `tools._MODULES` 之后，
+    `D.register_conjecture` 又有了唯一对应的工具 ⇒ 从 unmatched 走回 compared，两边各 ±1）。
     （2026-10-15 是 62 个动作 = 23 compared + 39 unmatched + 0 ambiguous；`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 工具名最后一段正是 `walk_citations`，与 `handler_name` 逐字相同；对照 `search_literature` 落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，所以"两层形状一致"对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
     2026-10-26：`D.register_conjecture` 从 compared 挪进 unmatched —— 它对应的
     `conjecture.register_conjecture` 只被"读到"、没有被 `build_registry` 装配（见 `_ASSEMBLED_GROUPS`），
@@ -773,12 +838,22 @@ def _tool_declared_names(modules: tuple[str, ...] | None = None) -> list[str]:
     names: list[str] = []
     for mod_name in (_TOOL_MODULES if modules is None else modules):
         path = base / f"{mod_name}.py"
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError, ValueError):
+        tree = _tool_module_ast(path)
+        if tree is None:
             continue
         names.extend(name for name, _face in _declared_param_faces(tree))
     return names
+
+
+#: `_tool_param_faces()` 的进程内缓存（2026-10-27，与 `_TOOL_SIDE_EFFECTS_CACHE` 同一族）。
+#:
+#: 为什么：导入期 `assert_capabilities()` 一趟要问它 8 次（`None` 档 7 次 +
+#: `REGISTRY_MODULES` 档 1 次，实测 `temp/r_be2_cap_profile.py`），而它每次都把同样的
+#: 24 个工具模块重新 `ast.parse` 一遍；`_declared_param_faces` 累计 160 次调用、
+#: `ast.walk` 走 1,252,771 个节点。缓存住"读出来的那两张表"之后，
+#: `import agentflow.capabilities` 从 16.9 s 降到 1.36 s（实测见 `temp/r_be2_import_cost.py`）。
+#: 判据本身一个字符都没改；键是模块名单（`None` = 全量），所以按名单分开缓存。
+_TOOL_PARAM_FACES_CACHE: dict[tuple[str, ...] | None, dict[str, dict[str, Any]]] = {}
 
 
 def _tool_param_faces(
@@ -788,19 +863,26 @@ def _tool_param_faces(
 
     `params` 读不出来的工具不写进表：调用方按"这条工具没有比对"处理（unknown），
     而不是给它一条空 schema —— 后者的症状是"零分歧"，与真相无关。
+
+    结果按模块名单缓存（见 `_TOOL_PARAM_FACES_CACHE`），返回副本：调用方就地改
+    那份 dict 也不会污染下一次核对。
     """
-    base = Path(__file__).resolve().parent / "tools"
-    out: dict[str, dict[str, Any]] = {}
-    for mod_name in (_TOOL_MODULES if modules is None else modules):
-        path = base / f"{mod_name}.py"
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError, ValueError):
-            continue
-        for name, face in _declared_param_faces(tree):
-            if face is not None:
-                out[name] = face
-    return out
+    key = None if modules is None else tuple(modules)
+    hit = _TOOL_PARAM_FACES_CACHE.get(key)
+    if hit is None:
+        base = Path(__file__).resolve().parent / "tools"
+        out: dict[str, dict[str, Any]] = {}
+        for mod_name in (_TOOL_MODULES if key is None else key):
+            path = base / f"{mod_name}.py"
+            tree = _tool_module_ast(path)
+            if tree is None:
+                continue
+            for name, face in _declared_param_faces(tree):
+                if face is not None:
+                    out[name] = face
+        hit = out
+        _TOOL_PARAM_FACES_CACHE[key] = hit
+    return {name: dict(face) for name, face in hit.items()}
 
 
 def _face_text(face: Mapping[str, Any]) -> str:
@@ -1238,14 +1320,23 @@ _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "`graph.neighbors` 有可选上限 `max_neighbors`，动作面只声明了必填。"
         "C 的图上动作今天只走 `neighbors`/`paths` 两个入口，上限是否要暴露给编排层未见裁定。",
     ),
-    # 2026-10-26：`("D", "register_conjecture")` 那一对已删（登记过期）。它登记的是
-    # "`conjecture.register_conjecture` 有 `force_new`，动作面没声明"；而那条工具不在
-    # `tools._MODULES` 里（`build_registry` 不装配它）⇒ 这一对现在落进"没有工具层"那一格
-    # （见 `_KNOWN_UNMATCHED_ACTIONS` 与 `_KNOWN_ACTION_ONLY_PARAMS` 的同名条目）。
-    # 反向缺口只对"唯一匹配到工具"的对算，所以这条登记留着就会变成噪音；
-    # "那条工具上有 force_new" 这个事实仍在它自己的 schema 里，工具的注册状态由
-    # `param_type_coverage()['tools_read_but_not_registered']` 报。
-    #
+    # 2026-10-26：`("D", "register_conjecture")` 那一对曾经删过（登记过期）。当时的
+    # 理由是"那条工具不在 `tools._MODULES` 里 ⇒ 反向缺口只对'唯一匹配到工具'的对算，
+    # 留着就是噪音"。2026-10-27 它又回来了（`R-BE4` 的 D1 Phase A，业主批准）：
+    # `conjecture_tools` 进了 `_MODULES` ⇒ 这一对"唯一匹配到工具"了 ⇒
+    # 「`conjecture.register_conjecture` 有 `force_new`，而 `D.register_conjecture`
+    # 的动作面不声明它」这条不对称第一次真的进入反向缺口的射程。
+    # 为什么不补进动作面：`force_new` 是"D13 判重之后仍要新建"这一个调用方的决定，
+    # 动作面（`specs/d.py`）是编排层看得见的那一层 —— 它该不该暴露这个开关是设计判断，
+    # 而 `specs/*` 也是禁改区。按上一条同款处置：先让它可见，再做判断。
+    ("D", "register_conjecture"): (
+        frozenset({"force_new"}),
+        "`conjecture.register_conjecture` 多一格可选的 `force_new`（D13：没给 "
+        "`conjecture_id` 时先按规范化 statement 判重，真要新建才显式给这一格）。"
+        "动作面（`specs/d.py`）不声明它 ⇒ 编排层看不见这个入口。改它要动 `specs/*`"
+        "（禁改区），而「动作面该不该暴露 force_new」是设计判断 —— 先登记让它可见。"
+        "**这一条落在禁改区（本文件），已登记待 2 名 reviewer 批准**。",
+    ),
     # 2026-10-23 晚：`("E", "run_experiment")` 的 `run_name` 与
     # `("E", "check_formal")` 的 `checker_name` 两对已删 —— 前者随工具 schema 一起
     # 退场（那两个参数只服务 formal，而 E 不做形式化），后者随动作整条摘掉。
@@ -1412,19 +1503,10 @@ _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "（它只服务 formal，而 E 不做形式化，工具 schema 的 `run_name` 也一起删了）。",
     ),
     # 2026-10-23 晚：`("E", "check_formal")` 那一对已删（动作整条摘掉）。
-    ("D", "register_conjecture"): (
-        frozenset({
-            "conjecture_id", "counterexample_experiment_id", "experiment_ids", "form",
-            "known_lit_id", "negation_statement", "notes", "origin", "promoted_to",
-            "proof_experiment_id", "statement", "status", "testable", "withdraw_reason",
-        }),
-        "这条动作没有工具层（2026-10-26 起）：落地工具 `conjecture.register_conjecture` "
-        "住在 `tools/conjecture_tools.py`，而那个模块不在 `tools._MODULES` 里 ⇒ "
-        "`build_registry` 不装配它。「读到、但不注册」这件事仍由 "
-        "`param_type_coverage()['tools_read_but_not_registered']` 如实报出（那条工具上有 "
-        "`force_new`，本动作面不声明它 —— 同一条事实的另一半）。这里的 14 格是动作面"
-        "声明的全部 property：没有工具面时它们只活在动作面，不登记就等于在读数里不存在。",
-    ),
+    # 2026-10-27（`R-BE4` 的 D1 Phase A，业主批准）：`("D", "register_conjecture")`
+    # 那一对已删 —— 它的理由串写的是"这条动作没有工具层（落地工具不在 `tools._MODULES`
+    # 里）"，而 `conjecture_tools` 从这一批起已经进 `_MODULES` ⇒ 工具面有了，
+    # "动作面独有"这件事不再成立，留着就是一条过期登记（`_MATCH` 的读数会跟着错）。
     ("H", "list_findings"): (
         frozenset({"kind"}),
         "`review.list_findings` 按 `level` / `status` 过滤，而动作面按 `kind` 过滤 ⇒"
@@ -2481,6 +2563,13 @@ def _agent_class(role: str) -> type:
     return cls
 
 
+#: 审计被显式跑过几次（判据读它：导入期必须是 0，显式调用之后必须 > 0）。
+#: 为什么用它当判据而不是给某个内部读取器加计数器：`assert_capabilities()` 是审计的
+#: 唯一入口，数它就等于数"审计跑没跑"；数 `_tool_side_effects` 之类的内部函数会把
+#: "别人也调了它"算成"审计跑了"（那是两件事）。
+AUDIT_RUNS: int = 0
+
+
 def assert_capabilities(
     *,
     write_sets: Mapping[str, frozenset[str]] | None = None,
@@ -2495,12 +2584,14 @@ def assert_capabilities(
     4. 只读角色的写集例外必须显式登记，见 `READ_ONLY_WRITE_EXCEPTIONS`。
     5. 副作用词表只有一份（`set(SIDE_EFFECTS) == set(tools.base.SIDE_EFFECTS)`），外加两根轴各自的同一形态断言；两处字面量分叉会让"有副作用"在两套口径下不同，而它不会报错。
     6. 写集非空 ⇒ 该角色的效果轴里必须有 `_WRITE_LIKE` 的动作（P-13 §3.4 断言一）。
-    7. 两层声明的不一致可判定（见 `declaration_divergences`）：error 级任何时候都在导入期断言，warning 级只在 `STRICT_DECLARATIONS=True` 时升级；外加第 [7b] 条 —— 对账面必须是一个分区（`compared` / `unmatched` / `ambiguous` 三格互斥且穷尽，`compared` 非空、`ambiguous` 为空）。
+    7. 两层声明的不一致可判定（见 `declaration_divergences`）：error 级任何时候都断言，warning 级只在 `STRICT_DECLARATIONS=True` 时升级；外加第 [7b] 条 —— 对账面必须是一个分区（`compared` / `unmatched` / `ambiguous` 三格互斥且穷尽，`compared` 非空、`ambiguous` 为空）。
     8. 参数门是"声明 ∩ 实现签名"：每个 property 要么被对应 handler 的签名接受（具名形参，或收 `inspect.Parameter.VAR_KEYWORD`），要么逐条登记在 `PARAM_SEAMS` 里 —— `Conductor._check_params` 那处放行、执行期才炸（`E.run_experiment` 的 `sleep` 就是这一格），与 `tools` 侧注册期的同族断言（`tools.base` 的接缝表 + `ToolRegistry.register`）是同一机制在两层的落点。
     第 [7] 条只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`），`ambiguous` 那一格今天恰好是 0 却不在任何登记表 ⇒ 可以静默长大（`G-19` 的同族形态）。
     三态纪律（`R4-4` 实测的修法）：`write_sets` 形参曾空转 —— `_ws = dict(write_sets) …` 之后从未被读，第 [1]/[4]/[6] 条仍读模块全局 `WRITE_SETS`，于是 `assert_capabilities(write_sets={…})` 看起来在拿替身跑判据、实际什么都没换（把 `C.WRITE_SETS` 整个清空后断言照样通过）；现在 `_ws` / `_rowe` 在函数最前解析一次，第 [1]/[4]/[6] 与 `[5c]` 全读它们 —— 要么形参真的生效，要么它不存在，不许"看起来生效"。
-    两个注入形参让调用方（只有测试）换掉那两张表；生产路径不传 ⇒ 与加形参之前逐字相同。默认值 `None` 意味着"用模块里那一份"（模块那份仍是导入期被核过的），形态照抄 `_matching_tool_name(spec, tools)`。
+    两个注入形参让调用方（只有测试）换掉那两张表；生产路径不传 ⇒ 与加形参之前逐字相同。默认值 `None` 意味着"用模块里那一份"（模块那份仍由 `run_capability_audit` 用真实表跑过一次）。
     """
+    global AUDIT_RUNS
+    AUDIT_RUNS += 1
     # ---- [1] 角色名单只有一份
     #
     # `R4-4`：两张可注入的表在这里就解析出来，之后每一条断言都读 `_ws` / `_rowe`。
@@ -3060,7 +3151,15 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # 广告出去的整份工具面（`tests/golden/tool_surface_snapshot.json` 里每个角色的
     # 工具清单都会多一件），而"不重冻 golden"是本批的硬边界；而且那件工具的
     # `roles` / 依赖装配也都要一起接进来，改动的面比这条判据大。
-    "D.register_conjecture",
+    # 2026-10-27（`R-BE4` 的 D1 Phase A，业主批准）：这里原来登记着
+    # `"D.register_conjecture"`，理由串是"对应的 `conjecture.register_conjecture` 不在
+    # `tools._MODULES` 里 ⇒ 工具面上没有它"。那件工具现在已经进了 `_MODULES`
+    # （装配面有了它）⇒ 这一对"两层对上了"，按第 [7] 条的口径必须从这张登记表里删掉
+    # （留着它这张表就烂成噪音，而上一条 assert 会当场红：实测 `['D.register_conjecture']`）。
+    # 连带删掉的还有 `_TOOL_MODULE_EXTRAS["conjecture_tools"]`（它现在是重复项）
+    # 与 `ACTION_ONLY_PARAMS[("D","register_conjecture")]`（"动作面独有"不再成立）。
+    # 当年不选这条路的理由（"不重冻 golden"）这一批由业主批了重冻：
+    # `tests/golden/tool_surface_snapshot.json` 的 `summary.count` 117 → 118。
     "E.run_script_experiment",
     "G.render", "G.refresh_markdown", "G.revise",
     "H.review",
@@ -3123,63 +3222,113 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
 STRICT_DECLARATIONS: bool = False
 
 
-#: 导入期自检。为什么放在导入期：能力表是策略判据的输入（写集相交 ⇒ 串行、边表 ⇒ 越权拒绝），
-#: 它一旦与实现漂移，症状不是崩溃而是静默的越权/并发损坏 ⇒ 让它 import 时就炸，是唯一"不可能
-#: 忘记跑"的校验点。
-#: 代价（主控裁决 2）：`import agentflow.capabilities` 会拉起全部 `agent_*` 与它们的 import 图
-#: （约 167ms、约 159 个模块），与 `agentflow/__init__.py` 刻意不 import 子模块的取向有张力 ——
-#: 保留的理由是"一个没人运行的校验"与"没有校验"在结果上不可区分，167ms 换"不可能忘记跑"划算。
-#: 但不许只靠导入期：`__init__.py` 不 import 子模块 ⇒ 只有真的 import 到本模块的人才触发它。
-#: 待办（给主控）：`scripts/release_check.py` 应显式跑一次 `import agentflow.capabilities` 并断言退出码 0。
-assert_capabilities()
+#: 审计开关的环境变量。默认**关**：审计不再挂在导入期（2026-10-27，业主批）。
+#:
+#: 为什么改（两条收益 / 一条代价，都是实测的）：
+#:
+#: - 代价（改前）：导入期跑这一趟要 1.2 秒，而 `cli.py` 的 `build_parser()` 里那条
+#:   `from .cachectl import add_subcommands` 会把本模块拉进**每一次** CLI 启动
+#:   —— 实测 `python -m agentflow --help` 2036ms 里有 1.2 秒是它。
+#: - 代价（改前，更贵的那一条）：任何一格的登记过期都会让**所有**命令 exit 1。
+#:   2026-10-27 真实发生过：一条并行 lane 把 `D.register_conjecture` 的工具匹配跑通了、
+#:   却没把它从 `_KNOWN_UNMATCHED_ACTIONS` 里删掉 ⇒ `agentflow --help` 也炸。
+#:   审计失败应该让发布门与判据红，不应该让"看一眼帮助"红。
+#: - 收益那一侧没有丢：显式调用点有两处，都在判据面上
+#:   —— `scripts/release_check.py::item_imports`（发布门的 imports 项）与
+#:   `tests/test_capabilities_audit_is_explicit.py`（日常套件 + 一条"导入期不许跑"的反控）。
+#:
+#: 想恢复旧行为（导入期就炸）：`AGENTFLOW_CAPABILITY_AUDIT=1 python -m agentflow …`。
+CAPABILITY_AUDIT_ENV = "AGENTFLOW_CAPABILITY_AUDIT"
 
-#: 导入期的覆盖读数。为什么要有这一行：第 [8] 条那种"零违反"的断言，
-#: 在成功路径上必须留下"判据真的走遍了全部声明"的可见证据 ——
+
+def capability_audit_enabled() -> bool:
+    """`AGENTFLOW_CAPABILITY_AUDIT` 是否显式打开（空串 / `0` / `false` 一律算关）。"""
+    return str(os.environ.get(CAPABILITY_AUDIT_ENV, "")).strip().lower() not in ("", "0", "false")
+
+
+def run_capability_audit(*, print_readings: bool = True) -> None:
+    """显式跑一次装配期自检；`print_readings` 为真时照旧把两行覆盖读数打到 stderr。
+
+    这是"审计跑过"的唯一入口。两行读数是业主看的（覆盖 233/233、107 对/155 三元组），
+    所以只要真的跑了就照旧打出来 —— 只是不再由 import 触发。
+    """
+    global _PRINT_COVERAGE, _PRINT_TYPE_COVERAGE
+    assert_capabilities()
+    # 现算一次再打：两个常量在导入时求值过（那时审计还没跑，全是 0），不刷新就是假读数。
+    _PRINT_COVERAGE, _PRINT_TYPE_COVERAGE = _coverage_lines()
+    if print_readings:
+        print(_PRINT_COVERAGE, file=sys.stderr)
+        print(_PRINT_TYPE_COVERAGE, file=sys.stderr)
+
+
+#: 覆盖读数（`run_capability_audit` 打；不再由导入期打）。为什么要有这两行：第 [8] 条
+#: 那种"零违反"的断言，在成功路径上必须留下"判据真的走遍了全部声明"的可见证据 ——
 #: 一条只在失败时才说话的断言，与"根本没跑"在成功输出里长得一模一样（P16）。
 #:
 #: 为什么打在 stderr 而不是 stdout：stdout 是本仓若干脚本的机器可读出口
-#: （`tests/test_noai_gate.py` 里有把整段 stdout 当 JSON 解析的用例），
-#: 导入期的诊断行不许污染它。读数所以这样取：
-#: `python -c "import agentflow.capabilities"`（exit 0，计数在 stderr）
-#: 或 `python -c "import agentflow.capabilities as c; print(c.PARAM_ASSERT_COVERAGE)"`。
-_PRINT_COVERAGE = (
-    f"[capabilities] 导入期参数交叉断言：覆盖 "
-    f"{PARAM_ASSERT_COVERAGE.get('checked', 0)} / 声明 "
-    f"{PARAM_ASSERT_COVERAGE.get('declared', 0)} 个 property，"
-    f"{PARAM_ASSERT_COVERAGE.get('actions', 0)} 个动作，接缝 {len(PARAM_SEAMS)} 条"
-)
-print(_PRINT_COVERAGE, file=sys.stderr)
-
-#: `R-36` 的覆盖读数（与上行同一个理由：只在失败时说话的断言，成功时与"没跑"同形）。
-#: 读它：`python -c "import agentflow.capabilities as c; print(c.PARAM_TYPE_COVERAGE)"`。
+#: （`tests/test_noai_gate.py` 里有把整段 stdout 当 JSON 解析的用例），诊断行不许污染它。
+#: 读数这样取（2026-10-27 起要显式跑）：
+#: `python -c "import agentflow.capabilities as c; c.run_capability_audit()"`（exit 0，计数在 stderr）
+#: 或 `python -c "import agentflow.capabilities as c; c.run_capability_audit(); print(c.PARAM_ASSERT_COVERAGE)"`。
 #:
-#: 为什么这一行要写出 `80 + 16 − 1 = 95` 这条等式（审计 D-6）：只报一个 `tools_read` 时，
-#: "77" 与工具层的 "95" 之间的 18 件没有出处，读的人只能猜。三个数一起写，等式自己会说话：
-#: - `tools_in_registry_modules` = `tools._MODULES`（工具面真身）里声明的工具数；
-#: - `tools_unread` = 那些工具里 `params` 不是字典字面量的（`table_tools` / `fs_tools` 用
-#:   `_obj(...)` 调用装配 schema ⇒ 读不出，unknown）；
-#: - `tools_read_but_not_registered` = 读得到、但不在 `tools._MODULES` 里的（今天只有
-#:   `conjecture.register_conjecture`，理由见 `_TOOL_MODULE_EXTRAS`）。
-_PRINT_TYPE_COVERAGE = (
-    f"[capabilities] 两层参数对账：比较 {PARAM_TYPE_COVERAGE.get('compared', 0)} 对"
-    f"（动作, property）/ {PARAM_TYPE_COVERAGE.get('keys_compared', 0)} 个约束键三元组；"
-    "工具面读数 "
-    f"{PARAM_TYPE_COVERAGE.get('tools_read', 0)} 个工具的约束面 = "
-    f"{PARAM_TYPE_COVERAGE.get('tools_in_registry_modules', 0)} 件（`tools._MODULES`）"
-    f" − {len(PARAM_TYPE_COVERAGE.get('tools_unread', []))} 件读不出"
-    "（`params` 是 `_obj(...)` 调用而不是字典字面量："
-    f"{PARAM_TYPE_COVERAGE.get('tools_unread', [])}）"
-    f" + {len(PARAM_TYPE_COVERAGE.get('tools_read_but_not_registered', []))} 件读到但不注册"
-    f"（{PARAM_TYPE_COVERAGE.get('tools_read_but_not_registered', [])}）；"
-    f"没比对 {len(PARAM_TYPE_COVERAGE.get('unread', []))} 个动作；"
-    f"工具面独有约束 {PARAM_TYPE_COVERAGE.get('tool_only_constraints', 0)} 对"
-    f"（已登记 {PARAM_TYPE_COVERAGE.get('registered_tool_only_constraints', 0)} 对）；"
-    f"反向（工具面有/动作面没有）：比过 {PARAM_MISSING_IN_ACTION_COVERAGE.get('pairs', 0)} 个动作，"
-    f"缺口 {PARAM_MISSING_IN_ACTION_COVERAGE.get('gaps', 0)} 处"
-    f"（已登记 {len(_KNOWN_TOOL_ONLY_PARAMS)} 个动作）；"
-    f"动作面独有参数：逐 property 比过 {PARAM_ACTION_ONLY_COVERAGE.get('pairs_with_tool', 0)} 个动作，"
-    f"缺口 {PARAM_ACTION_ONLY_COVERAGE.get('gaps', 0)} 处"
-    f"（已登记 {PARAM_ACTION_ONLY_COVERAGE.get('registered', 0)} 个动作），"
-    f"没有工具层的动作 {len(PARAM_ACTION_ONLY_COVERAGE.get('unmatched', []))} 个"
-)
-print(_PRINT_TYPE_COVERAGE, file=sys.stderr)
+#: 为什么是函数而不是两个只算一次的常量：常量在导入时求值，而审计在之后才跑 —— 那样打出来的
+#: 是"审计之前"的读数（实测全是 0，只有接缝那格对）。常量形态仍然留着给读属性的人
+#: （`C._PRINT_COVERAGE`），但 `run_capability_audit` 每次现算，才打得出真读数。
+def _coverage_lines() -> tuple[str, str]:
+    """按当前模块级读数渲染那两行（审计跑完之后调，才是审计的读数）。"""
+    assert_line = (
+        f"[capabilities] 导入期参数交叉断言：覆盖 "
+        f"{PARAM_ASSERT_COVERAGE.get('checked', 0)} / 声明 "
+        f"{PARAM_ASSERT_COVERAGE.get('declared', 0)} 个 property，"
+        f"{PARAM_ASSERT_COVERAGE.get('actions', 0)} 个动作，接缝 {len(PARAM_SEAMS)} 条"
+    )
+    #: `R-36` 的覆盖读数（与上行同一个理由：只在失败时说话的断言，成功时与"没跑"同形）。
+    #:
+    #: 为什么这一行要写出 `80 + 16 − 1 = 95` 这条等式（审计 D-6）：只报一个 `tools_read` 时，
+    #: "77" 与工具层的 "95" 之间的 18 件没有出处，读的人只能猜。三个数一起写，等式自己会说话：
+    #: - `tools_in_registry_modules` = `tools._MODULES`（工具面真身）里声明的工具数；
+    #: - `tools_unread` = 那些工具里 `params` 不是字典字面量的（`table_tools` / `fs_tools` 用
+    #:   `_obj(...)` 调用装配 schema ⇒ 读不出，unknown）；
+    #: - `tools_read_but_not_registered` = 读得到、但不在 `tools._MODULES` 里的（今天的读数见
+    #:   这一行本身；登记理由在 `_TOOL_MODULE_EXTRAS`）。
+    type_line = (
+        f"[capabilities] 两层参数对账：比较 {PARAM_TYPE_COVERAGE.get('compared', 0)} 对"
+        f"（动作, property）/ {PARAM_TYPE_COVERAGE.get('keys_compared', 0)} 个约束键三元组；"
+        "工具面读数 "
+        f"{PARAM_TYPE_COVERAGE.get('tools_read', 0)} 个工具的约束面 = "
+        f"{PARAM_TYPE_COVERAGE.get('tools_in_registry_modules', 0)} 件（`tools._MODULES`）"
+        f" − {len(PARAM_TYPE_COVERAGE.get('tools_unread', []))} 件读不出"
+        "（`params` 是 `_obj(...)` 调用而不是字典字面量："
+        f"{PARAM_TYPE_COVERAGE.get('tools_unread', [])}）"
+        f" + {len(PARAM_TYPE_COVERAGE.get('tools_read_but_not_registered', []))} 件读到但不注册"
+        f"（{PARAM_TYPE_COVERAGE.get('tools_read_but_not_registered', [])}）；"
+        f"没比对 {len(PARAM_TYPE_COVERAGE.get('unread', []))} 个动作；"
+        f"工具面独有约束 {PARAM_TYPE_COVERAGE.get('tool_only_constraints', 0)} 对"
+        f"（已登记 {PARAM_TYPE_COVERAGE.get('registered_tool_only_constraints', 0)} 对）；"
+        f"反向（工具面有/动作面没有）：比过 {PARAM_MISSING_IN_ACTION_COVERAGE.get('pairs', 0)} 个动作，"
+        f"缺口 {PARAM_MISSING_IN_ACTION_COVERAGE.get('gaps', 0)} 处"
+        f"（已登记 {len(_KNOWN_TOOL_ONLY_PARAMS)} 个动作）；"
+        f"动作面独有参数：逐 property 比过 {PARAM_ACTION_ONLY_COVERAGE.get('pairs_with_tool', 0)} 个动作，"
+        f"缺口 {PARAM_ACTION_ONLY_COVERAGE.get('gaps', 0)} 处"
+        f"（已登记 {PARAM_ACTION_ONLY_COVERAGE.get('registered', 0)} 个动作），"
+        f"没有工具层的动作 {len(PARAM_ACTION_ONLY_COVERAGE.get('unmatched', []))} 个"
+        # 哨兵读数（2026-10-27）：这一趟真的解析了几个工具模块、命中了几次缓存。
+        # 判据在 `tests/test_capabilities_readers_parse_once.py`；这一格只是让它可见
+        # （不新增门）。为什么要有它：解析次数翻几十倍时没有任何判据会红，
+        # 表现为"每个 CLI 进程多等 15 秒"。
+        f"；AST 解析 {int(_READER_TALLY.get('ast_parses') or 0)} 次"
+        f" / 缓存命中 {int(_READER_TALLY.get('ast_hits') or 0)} 次"
+    )
+    return assert_line, type_line
+
+
+#: 两行读数的当前值（导入时是"审计之前"的快照，`run_capability_audit` 跑完会刷新）。
+#: 判据读它：`tests/test_capabilities_readers_parse_once.py` 断言这一格里带着解析/命中那一格。
+_PRINT_COVERAGE, _PRINT_TYPE_COVERAGE = _coverage_lines()
+
+
+#: 开关还开着 ⇒ 导入期照样跑一次（旧行为，给"我要它在导入时就炸"的人）。
+#: 默认关：理由见 `CAPABILITY_AUDIT_ENV` 上方那段（1.2 秒 + 一格登记过期就把所有
+#: CLI 命令一起弄红，这两条都是实测量出来的）。
+if capability_audit_enabled():
+    run_capability_audit()

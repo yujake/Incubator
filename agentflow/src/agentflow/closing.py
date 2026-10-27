@@ -15,7 +15,13 @@
 | `report_shape` | 报告形状：附件三件套判实（来源 / 依据 / 版本 sha）+ M 声明的体例有没有兑现 |
 | `user_pending` | 没有还在等用户回答的问题（有 ⇒ 必须停在"等待用户"，不许续跑） |
 | `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算） |
+| `acceptance` | 验收表的机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）：逐行现算，任一不满足 ⇒ `fail`；行读不懂 ⇒ 那一行 `unreadable`、整格 `unknown`（绝不 `pass`） |
 | `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`，只有 `changed` ⇒ `unknown`（登记后被正常改写是常态） |
+
+维护规则（2026-10-27，R-BE1 的 ③-8）：上面这张表必须与 :data:`DEFAULT_CHECKS` 逐条对应
+（一格一行、顺序相同）。改前它少了一行（`acceptance`）而没有任何判据会红 —— 门的实现
+与门的说明书各说八格里的七格。判据 `tests/test_the_gate_table_lists_every_cell.py` 从本
+docstring 里现扫表行、与 `DEFAULT_CHECKS` 对拍：加/删一格而不改这张表，那条会红。
 """
 from __future__ import annotations
 
@@ -4161,6 +4167,43 @@ def _pollution_closure(rows: Mapping[str, Any], stmt_id: str) -> list[str]:
     return sorted(seen)
 
 
+def _reverse_edges(rows: Mapping[str, Any]) -> dict[str, set[str]]:
+    """`父命题 -> 直接引它的子命题`（`_pollution_closure` 的倒排索引，纯函数、不读盘）。
+
+    为什么要倒排：`proposition_level_pollution` 要对每一条命题求一次闭包，而逐条
+    闭包在大表上是 O(命题数²) —— 1147 条命题的夹具上实测 606 ms，占整扇门的一半。
+    倒排之后同一次遍历只建立在"谁引了谁"的边上，闭包本身仍按同一口径走（见
+    `_closure_size` 与 `_pollution_closure` 的对照注释）。
+    """
+    rev: dict[str, set[str]] = {}
+    for sid, row in rows.items():
+        for parent in (row.get("derived_from") or []):
+            rev.setdefault(str(parent), set()).add(str(sid))
+    return rev
+
+
+def _closure_size(rev: Mapping[str, set[str]], stmt_id: str) -> int:
+    """`_pollution_closure(rows, stmt_id)` 的长度，但走倒排（O(边数) 而不是 O(命题数²)）。
+
+    语义逐字对齐那份逐行实现：闭包不含自身，且不从自身往外走（原实现里
+    `sid == stmt_id ⇒ continue` 把根整条跳过，于是"根在环里"时环上的其它点仍会进来、
+    根自己不进来）。两个入口在环图上的结果一致 —— 判据见
+    `temp/_rbe1_same_closure.py` 的对照（真工作区 + 环图各一份）。
+    """
+    seen: set[str] = set()
+    frontier = [stmt_id]
+    while frontier:
+        nxt: list[str] = []
+        for node in frontier:
+            for child in rev.get(str(node), ()):
+                if child in seen or child == stmt_id:
+                    continue
+                seen.add(child)
+                nxt.append(child)
+        frontier = nxt
+    return len(seen)
+
+
 def _statement_rows(store: Any) -> tuple[dict[str, Any] | None, str]:
     """读命题台账：返回 (rows, 失败原因)；读不到时 rows 是 `None`（不是空字典）。
 
@@ -4369,7 +4412,8 @@ def proposition_level_pollution(store: Any) -> dict[str, Any]:
         out["reason"] = (f"命题数 {len(rows)} 超过 {POLLUTION_CLOSURE_MAX_NODES} ⇒ "
                          "闭包分布没算（不是「没有下游」；有/没有下游那一格仍然算得出来）")
         return out
-    sizes = [len(_pollution_closure(rows, sid)) for sid in rows]
+    rev = _reverse_edges(rows)
+    sizes = [_closure_size(rev, sid) for sid in rows]
     hist: dict[str, int] = {}
     for n in sizes:
         hist[str(n)] = hist.get(str(n), 0) + 1
@@ -4610,21 +4654,25 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
                                f"（{str(row.get('title') or '')[:40]}）")
 
     # ---- ② 来源本身有争议 / 被证否：依赖与命题两处
-    stmt_status = {str(s.get("stmt_id")): str(s.get("status") or "")
-                   for s in store.rows("statements")}
+    #
+    # 命题表只读一次（`R-BE1`，2026-10-27）：改前这里先为 `stmt_status` 读一遍（那个字典
+    # 一个字都没被读过：死读数），下面每个 refuted/disputed 行的内层再各读一遍整表
+    # （`store.rows` 每次调用都重新解析 JSON）—— 300 条命题 / 30 条 refuted 的夹具上
+    # 实测 31 次全表解析。现在一份快照喂两层，读数逐字不变。
+    stmt_rows = list(store.rows("statements"))
     for row in store.rows("dependencies"):
         st = str(row.get("status") or "")
         if st in ("disputed", "refuted"):
             disputed_source.append(f"依赖 {row.get('dep_id')} status={st}"
                                    f"（{str(row.get('label') or '')[:40]}）")
-    for row in store.rows("statements"):
+    for row in stmt_rows:
         st = str(row.get("status") or "")
         if st == "disputed":
             disputed_source.append(f"命题 {row.get('stmt_id')} status=disputed"
                                    f"（{str(row.get('label') or '')[:40]}）")
         if st in ("refuted", "disputed"):
             # ③ 我们自己的证明压在一条不可用的命题上 ⇒ 洞在我们这边
-            for other in store.rows("statements"):
+            for other in stmt_rows:
                 if str(other.get("status") or "") != "active":
                     continue
                 if str(other.get("evidence_kind") or "") != "proof":
@@ -4760,6 +4808,47 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         rep.findings.append(Finding("load_bearing", "no_store", "warning",
                                     "没有 store ⇒ 承重结论没查成"))
         return
+    # ---- 可疑的自签背书（2026-10-27，R-EVID 的 D4；业主裁定「先报不拦」）----------
+    #
+    # 为什么放在这个位置（在 Lean 开关那一支之前）：`_has_t3` 认的是
+    # `is_signed_exhaustion(exp)`，而那一格读的 `signed_by="V"` 是 E 在
+    # `numericproof.sign_experiment` 里写进去的自述（V 没有在这条路径上盖过章）；
+    # 真正的第三方签字在 `verifications/` 里。而"这一格要不要判"与"Lean 开没开"
+    # 无关：E 的穷举自签在 lean 关掉的那些趟里一样存在。所以这条读数必须两条支路
+    # 都跑到（放函数末尾会让 lean 关掉的绝大多数趟直接漏掉它）。
+    #
+    # 只报不拦：`warning` 不进 `blockers`，也不改 `status` —— 业主的口径是先量
+    # 涉案条数，下一轮再决定拦不拦（一次加闸会把存量穷举证明整批掉档）。
+    try:
+        from . import numericproof as _NP
+
+        suspect = _NP.suspect_self_signed(store.rows("experiments"), root=store.root,
+                                          statements=store.rows("statements"))
+    except Exception as exc:  # noqa: BLE001 —— 这一格坏了不许拖垮承重门
+        suspect = {"checked": False, "suspects": [], "total": 0,
+                   "why": f"没查成（{type(exc).__name__}: {exc}）"}
+    rep.readings["suspect_self_signed"] = {
+        "checked": bool(suspect.get("checked")),
+        "total": int(suspect.get("total") or 0),
+        "ids": [str(s.get("experiment_id") or "") for s in (suspect.get("suspects") or [])][:20],
+        "why": str(suspect.get("why") or ""),
+    }
+    if not suspect.get("checked"):
+        rep.findings.append(Finding(
+            "load_bearing", "suspect_self_signed_unchecked", "warning",
+            f"可疑自签背书这一格没查成：{suspect.get('why')}（不是「没有可疑行」）"))
+    elif suspect.get("total"):
+        _ids = "、".join(f"{s.get('experiment_id') or '?'}"
+                         f"（{s.get('statement_id') or '命题未在册'}）"
+                         for s in (suspect.get("suspects") or [])[:5])
+        rep.findings.append(Finding(
+            "load_bearing", "suspect_self_signed", "warning",
+            f"有 {suspect['total']} 条实验行声称穷举证明已由 V 签下"
+            '（`observations.e_signature.signed_by="V"`），而 `verifications/` 里'
+            f"拿不出对应的第三方签字行：{_ids}。"
+            "这一格只是读数，不拦收工（业主 2026-10-27 裁定：先报不拦）；"
+            "要消掉它：让 V 会审那一份证明栏（`verify.verify_proof`），"
+            "或把那一行的档如实降成 cross_check/heuristic"))
     # ---- 开关（业主 2026-10-12）：这一格的判据整条建立在
     # 「`method="formal"` 能产出 `evidence_kind="proof"`」之上。用户把形式化关掉时，
     # 那条路结构上产不出 proof 行，于是这一格的红不再是"承重结论没背书"，
@@ -5521,6 +5610,56 @@ def child_counts_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
     return dict(got)
 
 
+def _run_check(rep: ClosingReport, name: str, fn: Any, *args: Any, **kwargs: Any) -> None:
+    """跑一格；格自己抛了 ⇒ 那一格 `unknown` + 逐字原因（整份门不许因此塌）。
+
+    三态纪律（2026-10-27，R-BE1 的 ⑥-1）：「门抛异常」与「门判不过」是两件事。
+    改前任何一格里的 `store.rows` 抛 StoreError（半截表 / 非 UTF-8 / schema 版本不符）
+    都会冒泡出 `check_closing`：`agentflow closing` 于是落到 CLI 的兜底
+    （`cli.py:5159` 打一行 `[store 错误] …` 并退 2），一格读数都没有；
+    `conductor.closing` 工具则直接拿到异常。而文档承诺的是"没查成落成 `unknown`"。
+
+    `except Exception` 而不是只捕 StoreError：这一层要挡的是"任何一格自己炸掉"，
+    而 StoreError 只是今天最常见的那一种。记录里带类型名，读的人仍然能分辨。
+
+    反真空（判据 `tests/test_a_crashed_cell_is_unknown_not_a_traceback.py`）：
+    只把"抛了的那一格"记成 unknown，其余格照常算 —— 若有人把这里改成"一格抛了
+    就全格 unknown"，那一条判据会红。
+    """
+    try:
+        fn(rep, *args, **kwargs)
+    except Exception as exc:  # noqa: BLE001 —— 见 docstring：任何一格炸掉都只塌这一格
+        rep.status[name] = "unknown"
+        rep.findings.append(Finding(
+            name, "check_crashed", "warning",
+            f"【{name}】这一格没查成（它自己抛了）：{type(exc).__name__}: {exc}"
+            " ⇒ 记 unknown，不折成通过、也不折成被拦住；其余格照常算"))
+
+
+def _run_reading(rep: ClosingReport, key: str, fn: Any, *args: Any, **kwargs: Any,
+                 ) -> dict[str, Any]:
+    """跑一格读数；读数自己抛了 ⇒ 返回 `{"checked": False, "reason": …}` 并留一条 warning。
+
+    与 `_run_check` 的分工：读数不进 `status`、不产生 blocker，所以这里也不许往
+    `status` 里塞键（那会改 `machine_pass` 的形状）。改前 `nontriviality_reading`
+    在坏表上抛 AttributeError 会把整份门一起打掉（见 `_paper_statement_rows` 那条注释）。
+    """
+    try:
+        got = fn(*args, **kwargs)
+    except Exception as exc:  # noqa: BLE001 —— 见 docstring：读数炸掉只塌这一格
+        reason = f"{type(exc).__name__}: {exc}"
+        rep.findings.append(Finding(
+            key, "reading_crashed", "warning",
+            f"【{key}】这一格读数没查成（它自己抛了）：{reason} ⇒ checked=false，"
+            "不折成「没有」，也不折成「通过」"))
+        return {"checked": False, "reason": reason}
+    if not isinstance(got, Mapping):
+        # 那几格"只加 finding、不返回读数"的（`_check_run_evidence` / `_check_mapping`）
+        # 走这一支：它们成不成事看 `rep.findings`，返回值是空的。
+        return {}
+    return dict(got)
+
+
 def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   session_root: Any = None, checks: tuple[str, ...] = DEFAULT_CHECKS,
                   sid: str | None = None,
@@ -5528,6 +5667,11 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   task_list: Iterable[Mapping[str, Any]] = (),
                   ) -> ClosingReport:
     """跑收工门，返回读数（不抛业务异常 —— 没查成落成 `unknown`）。
+
+「不抛」今天是结构性的，不是纪律（2026-10-27，R-BE1 的 ⑥-1）：每一格经 :func:`_run_check`、
+每一格读数经 :func:`_run_reading` 调，它们自己抛了就把异常收成"这一格 `unknown` + 逐字原因"。
+改前这句话是假的：`store.rows` 抛的 StoreError（半截表 / 非 UTF-8 / schema 版本不符）会从
+某一格里冒出来，`agentflow closing` 打一份 traceback，而不是给一个"没查成"。
 
 `session_root` 不给时取 `store.root`（会话记录与工作区本来就是同一个根，两处分开写迟早出"审计记录落在别
 处"的静默错位）。`project_dir` / `report_path` 不给 ⇒ 对应的那一两格是 `unknown`（不是 `pass`）—— 门宁可
@@ -5577,21 +5721,21 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                 rep.m_verdict = dict(got["verdict"])
     for name in checks:
         if name == "paper":
-            _check_paper(rep, project_dir, store)
+            _run_check(rep, name, _check_paper, project_dir, store)
         elif name == "contradictions":
-            _check_contradictions(rep, store)
+            _run_check(rep, name, _check_contradictions, store)
         elif name == "load_bearing":
-            _check_load_bearing(rep, store)
+            _run_check(rep, name, _check_load_bearing, store)
         elif name == "report_shape":
-            _check_report_shape(rep, report_path, store)
+            _run_check(rep, name, _check_report_shape, report_path, store)
         elif name == "user_pending":
-            _check_user_pending(rep, root, sid=sid)
+            _run_check(rep, name, _check_user_pending, root, sid=sid)
         elif name == "substance":
-            _check_substance(rep, store)
+            _run_check(rep, name, _check_substance, store)
         elif name == "acceptance":
-            _check_acceptance(rep, store, project_dir)
+            _run_check(rep, name, _check_acceptance, store, project_dir)
         elif name == "artifact_ledger":
-            _check_artifact_ledger(rep, store, project_dir)
+            _run_check(rep, name, _check_artifact_ledger, store, project_dir)
         else:
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",
@@ -5602,18 +5746,19 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # 跟 `acceptance` 那一格同进退（G8 是 M 的那张验收表里的一行）：调用方把这一格
     # 缩掉时，不该多出这一面的读数与 Finding。
     if "acceptance" in checks:
-        _check_run_evidence(rep, store, project_dir)
+        _run_reading(rep, "run_evidence", _check_run_evidence, rep, store, project_dir)
     # 上报那一格（业主 2026-10-09 第三句）：它不属于八格，是 M 的判据的伴生读数 ——
     # "干不了/没做完的项有没有说出来"。放这里是因为它要读会话，而会话根只在这个入口有。
     if rep.m_verdict:
-        rep.readings["verdict_escalation"] = _escalation_reading(
+        rep.readings["verdict_escalation"] = _run_reading(
+            rep, "verdict_escalation", _escalation_reading,
             root, sid, list(rep.m_verdict.get("tasks") or []))
     # ---- 论文对应表那一格（业主 2026-10-22）：G 写正文之前先有它，H 依据它逐行核。
     # 它跟着 `paper` 那一格走：点名的 `checks` 里没有 `paper` 就不算（调用方把这一格
     # 缩小到别的格子时，不该多出这一面的读数与 Finding）。它不是第九格 ——
     # 八格的语义（`status` / `machine_pass` / 退出码）一个都不动。
     if "paper" in checks:
-        _check_mapping(rep, project_dir, store)
+        _run_reading(rep, "mapping", _check_mapping, rep, project_dir, store)
     # ---- 子产出处理那一格（业主裁定：父代理必须处理子代理的产出）
     #
     # 为什么不进 `DEFAULT_CHECKS`（十八格之一）、也不进退出码：业主逐字
@@ -5625,7 +5770,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # `checked=False`（没查成 / 老会话）不升成一条 finding：那会给今天所有
     # 老工作区的收工输出加一行噪声。三态仍然保留在 `readings` 里 ——
     # "没查成"与"查过了是 0"分得开，只是不刷屏。
-    rep.readings["summon_consumption"] = summon_consumption_reading(root, sid=sid)
+    rep.readings["summon_consumption"] = _run_reading(
+        rep, "summon_consumption", summon_consumption_reading, root, sid=sid)
     _sum = rep.readings["summon_consumption"]
     if _sum.get("checked") and int(_sum.get("summons_unconsumed") or 0) > 0:
         _ids = [str(x.get("task_id") or "") for x in (_sum.get("unconsumed") or [])][:6]
@@ -5642,16 +5788,19 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # 口径与理由见 `roster_registration_reading`：它只数"`roster_problem` 非空的次数"，
     # 落 `readings`、在 `summary()` 里加半句话；不进 `status`、不产生 `Finding`
     # ⇒ 它不改变门的强度，只让"名册 0 行"与"名册都写上了"在收工输出上分得开。
-    rep.readings["roster_registration"] = roster_registration_reading(root, sid=sid)
+    rep.readings["roster_registration"] = _run_reading(
+        rep, "roster_registration", roster_registration_reading, root, sid=sid)
     # ---- 名册的两个读数（业主 2026-10-26：子代理数 / 活跃子代理数，分开命名）
     #
     # 为什么并进这一屏：收工那一刻父要回答的正是"我这一支还有几个名字在用、其中几个
     # 还在干活/还在等" —— 而改前这一屏只有"名册登记了几条"，没有"还剩几个没销号"。
     # 与上面那一格同一套纪律：只落 `readings`、在 `summary()` 里带一句、不进 `status`、
     # 不产生 `Finding` ⇒ 门的强度一格没改。
-    rep.readings["child_counts"] = child_counts_reading(root, store=store)
+    rep.readings["child_counts"] = _run_reading(
+        rep, "child_counts", child_counts_reading, root, store=store)
     # ---- 非平凡性那一格（S3：只说、不拦）
-    rep.readings["nontriviality"] = nontriviality_reading(root, sid=sid)
+    rep.readings["nontriviality"] = _run_reading(
+        rep, "nontriviality", nontriviality_reading, root, sid=sid)
     # ---- 命题档位那一格（B-2 的读侧：只说、不拦）
     #
     # 与上面两格（`summon_consumption` / `nontriviality`）同一套纪律：只落 `readings`
@@ -5659,7 +5808,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # ⇒ 门的强度一格没改，而"声明成定理、现算只是猜想"的那些行在收工输出上现形。
     # 逐条点名在 `type_ahead_of_grade_rows` 的 `rows` 里（每条带 `stmt_id` / `kind` /
     # `grade` / `class=TYPE_AHEAD_OF_GRADE_CODE`）。
-    rep.readings["statement_grade"] = type_ahead_of_grade_rows(store)
+    rep.readings["statement_grade"] = _run_reading(
+        rep, "statement_grade", type_ahead_of_grade_rows, store)
     # ---- 引文证据那一格（D1，2026-10-22 第二版）：说"通过"就必须拿得出区间。
     #
     # 这一格拦门（`blocker`），与上面那几格"只说、不拦"的读数不同。理由：
@@ -5669,7 +5819,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # 所以这一格的存在意义与 `contradictions` / `load_bearing` 同族：它证明不了的东西
     # 不许被当成证明过。判据本体在 `quoteevidence.scan_quote_evidence`（唯一实现），
     # 这里只读表、点名、给一句可操作的话。
-    rep.readings["quote_evidence"] = quote_evidence_reading(store)
+    rep.readings["quote_evidence"] = _run_reading(
+        rep, "quote_evidence", quote_evidence_reading, store)
     _qe = rep.readings["quote_evidence"]
     if not _qe.get("checked"):
         # 没查成不是通过，也不是"一条都没有"：warning 级（不冤枉这个工作区），
@@ -5696,7 +5847,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # 为什么不拦门：读侧有唯一回退（`statementbody.body_of` 先读真身 `statement_full`），
     # 正文不会丢；这一格要的是"同一份正文两个字段、一个空一个满"这件事可见。
     # 写入侧已经派生短版（`statementbody.derive_text`），盘上剩下的只可能是历史行。
-    rep.readings["statement_body"] = statement_body_reading(store)
+    rep.readings["statement_body"] = _run_reading(
+        rep, "statement_body", statement_body_reading, store)
     _sb = rep.readings["statement_body"]
     if _sb.get("checked") and _sb.get("gaps"):
         _gids = [str(x.get("id") or "") for x in (_sb.get("gaps") or [])][:13]
@@ -5714,7 +5866,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     # （文件）与派生副本（如果盘上真有 `data/verifications.json`）对一次账，
     # `signed` 就是"已签 N 份"那个数。它只落 `readings`、不改变八格的强度。
     from . import verifications as _VR_LEDGER
-    rep.readings["verification_ledger"] = _VR_LEDGER.ledger_reading(
+    rep.readings["verification_ledger"] = _run_reading(
+        rep, "verification_ledger", _VR_LEDGER.ledger_reading,
         getattr(store, "root", root), store=store)
     _vl = rep.readings["verification_ledger"]
     if _vl.get("agrees") is False:
@@ -5836,6 +5989,9 @@ def read_m_verdict(root: str | Path) -> dict[str, Any]:
 
 def tri_state_exit_code(rep: ClosingReport) -> int:
     """CLI 的三态退出码：0 可交付 / 1 被拦住 / 2 没查成。
+
+    域 × 码对照见 `agentflow.stop_reasons.EXIT_CODE_DOMAINS["gate"]`，全仓统一的三条口径见
+    `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6，2026-10-27）。这一域没有 `3/4/5`。
 
     口径按业主 2026-10-09 的裁定改：0 只在 M 判了"达成"时给（`can_close`）；
     M 没判 ⇒ 2（"没人判过" = 没查成，不是"被拦住"也不是"可交付"）；
@@ -6002,6 +6158,11 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     rows = _paper_statement_rows(root)
     high: list[dict[str, Any]] = []
     t0_ids: list[str] = []
+    #: 逐条的 `(stmt_id, 正文, 档位)`：`t4_ladder_problems` 与本函数用的是同一批行、同一份
+    #: 档位判定，改前它自己又跑了一遍（每条命题再读一次整份 `nontriviality.jsonl`）——
+    #: 400 条命题的夹具上实测 `nontriviality_of` 被调 800 次 / 2035 ms。读数逐字不变
+    #: （同一批行、同一个纯读函数），只是不再算第二遍。
+    levels: list[dict[str, Any]] = []
     for row in rows:
         # D2：正文只有一个读口（`statementbody.body_of`：真身 `statement_full` 优先，
         # 空则退回历史行的 `statement_text`）。
@@ -6013,6 +6174,8 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         # 2026-10-23：`level` 是 `None` = 判不了、`0` = T0（真的档位）。
         # 改前这两件事折叠在 0 上，于是"没人判过"与"基础定理"在读数里同形。
         level = got.get("level")
+        levels.append({"stmt_id": str(row.get("stmt_id") or ""), "text": text,
+                       "level": level})
         counts["unjudged" if level is None else f"T{level}"] += 1
         if level == 0:
             t0_ids.append(str(row.get("stmt_id") or ""))
@@ -6037,7 +6200,7 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         "high_tier": high,
         "high_tier_total": len(high),
         "paper_scaffolding_problems": paper_proof_scaffolding_problems(root),
-        "t4_ladder_problems": t4_ladder_problems(root),
+        "t4_ladder_problems": t4_ladder_problems(root, levels=levels),
         "sid": str(sid or ""),
         "reason": "" if rows else "`statements` 一行都没有 ⇒ 这一格没读到（不是\"全是 T1\"）",
     }
@@ -6052,7 +6215,8 @@ def _ledger_rows(root: str | Path, table: str) -> list[dict[str, Any]]:
         return []
 
 
-def t4_ladder_problems(root: str | Path) -> list[str]:
+def t4_ladder_problems(root: str | Path, *,
+                       levels: Iterable[Mapping[str, Any]] | None = None) -> list[str]:
     """T4 的"造梯子"记录：每条 T4 的命题都要能指到一次尝试（成了或没成都算）。空清单 = 合格。
 
     业主 2026-10-21 的口径：「出现 T4 主要是要激励研究侧造梯子把非平凡性降下来」。
@@ -6062,26 +6226,37 @@ def t4_ladder_problems(root: str | Path) -> list[str]:
 
     记录在哪：`research_questions` 或 `attack_plans` 里的任意一行，文本里点名这条命题
     （`stmt_id` 或命题正文的前 40 字）。
+
+    `levels` 给的是"已经判过档的那些行"（`[{"stmt_id","text","level"}]`，
+    `nontriviality_reading` 传它）—— 于是这条判据不再自己读一遍命题表、也不再对每条
+    命题重读一次 `nontriviality.jsonl`（改前两处各跑一遍 = 每条命题两份全文件解析）。
+    不给 ⇒ 自己现判（`agentflow closing --t4` 那条 CLI 入口就是这么调的），读数同值。
     """
-    rows = _paper_statement_rows(root)
-    from . import secretary as _SEC
+    items: list[Mapping[str, Any]]
+    if levels is None:
+        from . import secretary as _SEC
+
+        items = []
+        for row in _paper_statement_rows(root):
+            text = _SB.body_of(row)
+            items.append({"stmt_id": str(row.get("stmt_id") or ""), "text": text,
+                          "level": _SEC.nontriviality_of(
+                              root, text, stmt_id=str(row.get("stmt_id") or "")).get("level")})
+    else:
+        items = [dict(x) for x in levels]
     questions = _ledger_rows(root, "research_questions")
     plans = _ledger_rows(root, "attack_plans")
     haystack = " ".join(json.dumps(r, ensure_ascii=False, default=str) for r in questions + plans)
     problems: list[str] = []
-    for row in rows:
-        text = _SB.body_of(row)
+    for item in items:
+        text = str(item.get("text") or "")
         if not text.strip():
             continue
-        # 2026-10-26（Q20）：按号读。改前只传正文，正文改一个字这一格就把这条命题当成
-        # "不是 T4"静默放过 —— 退化成未判在这里是整条判据失效，不是少一条提示。
-        level = _SEC.nontriviality_of(
-            root, text, stmt_id=str(row.get("stmt_id") or "")).get("level")
         # 2026-10-23：判不了是 `None`（改前是 0）；T0 是 0 但它是真的档位，
         # 与 T4 无关 —— 所以这里判的是"是不是第 4 档"，不是"有没有读数"。
-        if level != 4:
+        if item.get("level") != 4:
             continue
-        sid = str(row.get("stmt_id") or "")
+        sid = str(item.get("stmt_id") or "")
         needle = text.strip()[:40]
         if (sid and sid in haystack) or (needle and needle in haystack):
             continue

@@ -37,7 +37,7 @@
 ## 用法
 
     python tools/release_all.py                 # 全跑（约 10~15 分钟）
-    python tools/release_all.py --json r.json
+    python tools/release_all.py --json-out r.json
     python tools/release_all.py --skip acceptance        # 只跑不用联网/不耗时的部分
     python tools/release_all.py --only role-specs,coverage   # 只跑指定步骤（调试用）
 
@@ -300,8 +300,9 @@ def _resolve_changed(since: str | None, changed_file: str, root: Path) -> Path |
 
 def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file: Path | None = None,
                 sub_json_dir: Path | None = None) -> list[Step]:
-    """步骤表：2 个承接用户点名清单的步骤 + 1 个论文复现步骤 + 3 个结构性门 = 7
-    （其中第七个是前端步 `frontend`，裁定 G2；逐条理由见下）。
+    """步骤表：2 个承接用户点名清单的步骤 + 1 个论文复现步骤 + 1 个前端步
+    + 3 个结构性门 = 7（`frontend` 是裁定 G2 之后加的那一步，排在 `per-file` 之后；
+    逐条理由见下）。
 
     `D4` 的实测（改前）：这里原写"用户点名的六项 + 三个结构性门（角色规格、
     coverage 分档、逐文件单跑）"，按它自己的分解 —— 六项落在 2 个步骤里
@@ -342,7 +343,7 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             "release-check", "全量测试 + 全部自检 + verify + 工具普查 + linter + 禁 AI 区 + 契约 + 导入",
             [sys.executable, str(root / "scripts" / "release_check.py")]
             + (["--changed-file", str(changed_file)] if changed_file is not None else [])
-            + ["--json", str(release_check_json)],
+            + ["--json-out", str(release_check_json)],
             cwd=root, env=_env(), expect_seconds=300,
             #  `release_check.py` 自带三态：`0=pass / 1=fail / 2=unknown`。
             # 第一版漏了这一行，于是它返回 2 时编排层报的是 `fail` ——
@@ -378,7 +379,7 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
                         "注意：传递判据 `--propagate` 本步**不开**，见 `FINAL-R7-05`）",
             [sys.executable, str(root / "tools" / "coverage_zero_test.py")],
             # `REL-01`（`draft/52` F11）：耗时声明必须与实测对得上。
-            # 旧值 60 而实测 928.6 s（`draft/43-D` §0.3：本机后台真跑完一次 `--json`），
+            # 旧值 60 而实测 928.6 s（`draft/43-D` §0.3：本机后台真跑完一次 `--json-out`），
             # 差 15 倍 ⇒ 那是一句假声明（读发布报告的人会以为这一步几秒钟就能跑完）。
             # 取 1000（保守取实测值的上界附近）：`--timeout` 默认 1800 仍留 1.8 倍余量，
             # 所以不动 `--timeout`（调小会把"慢"变成"超时 ⇒ unknown"）。
@@ -393,7 +394,7 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             # 不会把这一步的绿读成"编排函数都被覆盖了"。
             notes=("传递判据（1e/2c）本次关闭 ⇒ 本步的『等级 1/2 = 0』不含"
                    "『只经由 callee 写盘』的编排函数（`FINAL-R7-05`）。"
-                   "F7 的补读数：`--json` 的 `totals.production_callers` 会把"
+                   "F7 的补读数：`--json-out` 的 `totals.production_callers` 会把"
                    "『最严（忽略工具名串）/ 本工具 / 别处登记的更宽读数』三个口径并列出来",),
         ),
         Step(
@@ -556,10 +557,13 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="release_all",
         description="一键发布检查：跑全部门并做三态汇总（退出码 0=pass / 1=fail / 2=unknown）",
+        # `allow_abbrev=False`：理由同 `scripts/lint_rules.py` —— `--json` 是
+        # `--json-out` 的前缀，不关掉缩写，旧写法会被 argparse 静默当成新名字。
+        allow_abbrev=False,
     )
     ap.add_argument("--root", default=None, help="正式版仓库根（默认本文件的上两级）")
     ap.add_argument("--acceptance-root", default=None, help="验收程序所在目录（默认 <root>/../test/test2）")
-    ap.add_argument("--json", default="", help="把结果写到该 JSON 路径")
+    ap.add_argument("--json-out", default="", help="把结果写到该 JSON 路径")
     ap.add_argument("--skip", default="", help="跳过的步骤 key，逗号分隔（**跳过的会记成 unknown，不是 pass**）")
     ap.add_argument("--only", default="", help="只跑这些步骤 key，逗号分隔")
     ap.add_argument("--timeout", type=float, default=1800.0, help="单步超时（秒，默认 1800）")
@@ -664,7 +668,7 @@ def main(argv: list[str] | None = None) -> int:
     print("⚠️ 本脚本与 scripts/release_check.py 自身都在 FC-27 禁改区，"
           "仍需人逐行走查 + 2 名 reviewer 批准 —— 它全绿**不构成发布许可**。")
 
-    if args.json:
+    if args.json_out:
         # 写文件用 `open(..., newline="")`：这是 G-42 的换行纪律（禁 `Path.write_text()`）在本文件里的落地形态 ——
         # `write_text` 在 Windows 上会把 LF 刷成 CRLF，而产物的 sha256 与"盘上那一版"必须对得上
         # （draft/22 §12.15.2 记过那次事故）。这条纪律不再只是一段散文（`c-12`）：它现在是
@@ -672,9 +676,9 @@ def main(argv: list[str] | None = None) -> int:
         # 每个 `.py`，AST 里出现 `X.write_text(...)` 而没有 `newline=` ⇒ 一条 `warning`，并在
         # `python scripts/lint_rules.py --strict` 的报告里逐条点名。引用这条纪律时请引 `R012`，不要引 `G-42`
         # （`G-42` 只是 `docs/PROPOSALS.md` 里的一条教训，不是任何一条能跑的判据）。同族的另外两处本轮已按同一
-        # 口径改掉（`c-12`）：`scripts/release_check.py` 与 `scripts/lint_rules.py` 的 `--json` 出口。
-        Path(args.json).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.json, "w", encoding="utf-8", newline="") as fh:
+        # 口径改掉（`c-12`）：`scripts/release_check.py` 与 `scripts/lint_rules.py` 的 `--json-out` 出口。
+        Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.json_out, "w", encoding="utf-8", newline="") as fh:
             fh.write(json.dumps(
                 {"verdict": verdict, "exit_code": VERDICT_EXIT[verdict],
                  "counts": counts,

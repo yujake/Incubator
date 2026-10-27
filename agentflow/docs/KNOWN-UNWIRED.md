@@ -24,8 +24,13 @@
 
 <!-- KNOWN-UNWIRED:BEGIN -->
 cache_tools
-conjecture_tools
 <!-- KNOWN-UNWIRED:END -->
+
+> **2026-10-27 移出：`conjecture_tools`。** 它此前是本清单第二条，理由是"`build_registry`
+> 装配不到那个模块 ⇒ D 的主力动作在模型驱动模式下喊不到"。当晚按业主批准（`draft/170`）
+> 把它加进了 `tools._MODULES`（它的 `roles` 本来就只有 `('D',)`）⇒ 工具面 117 → 118、
+> D 的面 +1 件，于是它不再属于"写了没装配"这一族。**清单只能记真缺口**：过期条目会让
+> 真缺口被噪音埋掉（这条判据自己就有一条负控专门钉这件事）。
 
 ## 逐条
 
@@ -43,15 +48,15 @@ conjecture_tools
   （M 会多拿到两件工具，其中一件能花钱），所以按 FC-27 走人审。
 - 读数口径：清单只声明"没装配"，不声明"坏了"。`cache.status` 在命令行与网页面上照旧可用。
 
-### `conjecture_tools` —— `conjecture.register_conjecture`
+### `conjecture_tools` —— **2026-10-27 已移出本清单（历史留痕）**
 
-- 它是什么：`D.register_conjecture` 的落地工具（`conjecture.register_conjecture`）。
-- 为什么没挂：它由 D 这一侧**直接 import**（`agent_d/_support.py` 里 `from ..tools import
-  conjecture_tools as CT`），不经过装配表。这条路径在 `capabilities._TOOL_MODULE_EXTRAS`
-  里逐条登记过（连同"读进来"与"它是工具面的一件"必须分开算的理由），所以它早就是
-  一个被写下来的决定；这份清单只是把它点名到同一处。
-- 若要挂上：同上（`_MODULES` 加一行、重冻两份快照、按 FC-27 走人审）。注意它与
-  `cache_tools` 不是一回事：前者的工具是"被直接 import 的执行路径"，后者是"面上一件都没有"。
+- 它原来在这里的理由：`conjecture.register_conjecture` 由 D 这一侧**直接 import**
+  （`agent_d/_support.py`），不经过装配表 ⇒ "写了的工具"与"面上一件"分家。
+- 现在的状态：已按业主批准把它加进 `tools._MODULES`（`roles=("D",)` 本来就是它自己声明的），
+  工具面 117 → 118、D 的面 +1 件。**所以它不再是"没装配"**。
+- 留在文档里的理由：这份清单的其他位置引用过它（"`conjecture_tools` 与 `cache_tools` 不是一回事"
+  这句判断至今有效）；而清单本身只能记**真缺口** —— 三段说明留着，是因为它是
+  "一个模块从'没挂'走到'挂上'需要做什么"的完整例子（`_MODULES` 加一行 + 重冻两份快照 + FC-27 人审）。
 
 ## 不在这份清单里的东西
 

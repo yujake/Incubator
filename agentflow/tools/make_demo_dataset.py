@@ -242,7 +242,7 @@ def main() -> int:
     for t in ("statements", "literature", "relations"):
         print(f"  {t:12} {s[t]['count']} 行")
     # 快速体检：孤立的 degree=0 概念数、以及 a→b 的原始路径数
-    print("  （用 `agentflow.cli --root <dest> verify` 做不变量体检）")
+    print("  （用 `python -m agentflow --root <dest> verify` 做不变量体检）")
     return 0
 
 

@@ -683,7 +683,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[unknown] {why}", file=sys.stderr)
             return 2
         for rel, hits in write_readings(root=root, face=face):
-            print(f"[write] {rel}: {hits} 处")
+            # 走 stderr：`--write` 与 `--json` 同时给时，stdout 只许留那份 JSON
+            # （外壳四格 / 下游 `json.loads` 都不接受前面多一行人话）。
+            print(f"[write] {rel}: {hits} 处", file=sys.stderr)
     live: dict[str, int] | None = None
     live_reason = ""
     live_role_list: tuple[str, ...] | None = None

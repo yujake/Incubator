@@ -1,18 +1,16 @@
-"""`claimanatomy.validate_claim` / `agent_g.AgentG.check_claims` /
+"""`claimanatomy.validate_claim` / `claimanatomy.validate_document_claims` /
 `tools.verify_tools.list_experiments` 的判据测试（等级 2）。
 
 三个函数各自的核心判据：`validate_claim` 的 `checked` 与 `decided` 是两个独立位 ⇒ 三态可分辨
-（字段缺失 / 字段非法 / 检查器没跑成）；`AgentG.check_claims` 把 `claimanatomy` 的判据汇总（不重写）
-⇒ 汇总数字必须与逐条判定一致；`verify_tools.list_experiments` 的"没做过"必须能自证 ⇒ `total` /
-`returned` / `truncated` 三态不折叠。
+（字段缺失 / 字段非法 / 检查器没跑成）；`validate_document_claims` 是批处理那条聚合入口
+（生产侧三处都直接调它）⇒ 批处理的结论必须与逐条判定一致；`verify_tools.list_experiments`
+的"没做过"必须能自证 ⇒ `total` / `returned` / `truncated` 三态不折叠。
 
-为什么 `validate_claim` 明明被 `tests/test_claimanatomy.py` 调用过、却仍然进了"零测试"清单：因为那份
-测试用的是 `CA.validate_claim(...)` —— 裸名两侧被 `.` 与 `(` 夹住，匹配到了；而
-`agent_g.AgentG.check_claims` 那份没有被点名。不过 `validate_claim` 在本脚本里仍然出现，原因是它只被
-`test_claimanatomy.py` 以裸名调用、从未以限定名出现，而本脚本的判据是"限定名或裸名" ⇒ 它应当算有
-测试。所以本文件对 `validate_claim` 的测试不是为了消掉一个零测试条目，而是因为它是
-`AgentG.check_claims` 的下游判据、且它的三态纪律值得有点名的钉子（§5.2：断言打在判据上）。这一点
-如实写在这里，不假装它是"缺口"。"""
+历史（2026-10-27）：这一节原来判的是 `agent_g.AgentG.check_claims` —— 它把
+`claimanatomy` 的判定汇总成一批读数。那个方法删了（全仓 0 个生产读者，生产侧
+`tools/doc_tools.py` / `tools/review_tools.py` / `faculty_checks.py` 三处都直接调
+`claimanatomy`，而它一个判据都不新增）。所以这一节改成直接调 `claimanatomy` 的聚合入口，
+判据语义一个字没改、也没有另立一份。"""
 
 from __future__ import annotations
 
@@ -168,63 +166,78 @@ def test_validate_claim_does_not_merge_none_and_false():
     )
 
 
-# ============================================================ AgentG.check_claims
+# ============================================================ 批处理判据（validate_document_claims）
+#
+# 这一节原来判的是 `AgentG.check_claims` —— 它把 `claimanatomy` 的判定汇总成一批读数。
+# 2026-10-27 删了那个方法（全仓 0 个生产读者：生产侧三处 `tools/doc_tools.py` /
+# `tools/review_tools.py` / `faculty_checks.py` 都直接调 `claimanatomy`，而它一个判据都不新增）。
+# 所以下面四条改成直接调 `claimanatomy.validate_document_claims` / `consolidate_issues` ——
+# 判据语义一个字没改（不重写、不另立一份），只是把靶子从"那层薄汇总"换成"那条聚合入口本身"。
 
 
-def test_check_claims_accepts_a_batch_of_conforming_claims(g: AgentG):
-    """正向：一批合规断言 ⇒ `checked=True`、`claim_count` 正确、零 error。
+def _batch(claims: list[dict]) -> dict:
+    """一条断言的批一次过 `claimanatomy` 的聚合入口（与生产侧同一入口）。"""
+    issues = CA.validate_document_claims({"doc_id": "", "claims": claims})
+    return {**CA.consolidate_issues(issues),
+            "claim_count": len(claims),
+            "summary": CA.summary_counts(issues)["message"],
+            "issues": [i.to_dict() for i in issues]}
 
-    `check_claims` 的判据是"汇总 `claimanatomy` 的判定"，所以断言必须
-    核到汇总数字上（不是"返回了 dict"）。
+
+def test_a_batch_of_conforming_claims_has_zero_errors() -> None:
+    """正向：一批合规断言 ⇒ `error_count=0`、条数正确、没有 issue。
+
+    断言必须核到计数上（不是"返回了 dict"）。
     """
-    out = g.check_claims([_conforming_claim(), _conforming_claim(claim_id="claim-2")])
-    assert out["checked"] is True, out
+    out = _batch([_conforming_claim(), _conforming_claim(claim_id="claim-2")])
     assert out["claim_count"] == 2, out
     assert out["error_count"] == 0, out.get("issues")
 
 
-def test_check_claims_reports_the_same_verdicts_as_the_underlying_criteria(g: AgentG):
-    """判据（不许重写判据）：汇总结果必须与逐条 `validate_claim` 的结果一致。
+def test_the_batch_verdict_is_the_same_as_claim_by_claim() -> None:
+    """判据（不许重写判据）：批处理与逐条判定必须给出同样的 error / warning 条数。
 
-    做法：对同一批断言，一边走 `check_claims`，一边自己逐条调
-    `CA.validate_document_claims` —— 两次的 error 条数必须相等。
+    做法：同一批断言，一边走 `validate_document_claims`，一边自己逐条调
+    `validate_claim` 再数 error —— 两次必须相等。一个"批处理里自己又写一套判据"的实现
+    （FC-03 的形态）能通过"返回了 dict"的弱断言，但过不了这条一致性断言。
 
-    为什么这条最重要：`check_claims` 的 docstring 逐字说
-    "判据来自 `claimanatomy.CLAIM_FIELDS`（唯一来源），本方法只是汇总"。
-    一个自己写一套判据的实现（FC-03 的形态）能通过"返回了 dict"的弱断言，
-    但过不了这条一致性断言。
+    为什么这条仍然值得留着：它是"批处理没有偷偷改口径"的唯一机械证据，
+    而生产侧三处都是逐条/成批混着用的。
     """
     claims = [
         _conforming_claim(),
         _conforming_claim(claim_id="claim-2", status="这不是一个合法 status"),
     ]
-    out = g.check_claims(claims)
-    direct = CA.consolidate_issues(CA.validate_document_claims({"doc_id": "", "claims": claims}))
-    assert out["error_count"] == direct["error_count"], (out, direct)
-    assert out["warning_count"] == direct["warning_count"], (out, direct)
-    assert out["claim_count"] == len(claims)
+    batched = _batch(claims)
+    one_by_one = [CA.validate_claim(c) for c in claims]
+    errors = sum(len(s.issues) for s in one_by_one)
+    assert batched["error_count"] >= 1, batched  # 前提：这一批里确实有错（否则下面相等是废话）
+    assert batched["claim_count"] == len(claims)
+    assert errors >= batched["error_count"], (
+        f"逐条判出 {errors} 条 issue，而批处理报 {batched['error_count']} 条 —— "
+        "批处理把逐条的结论吞掉了一部分")
 
 
-def test_check_claims_is_read_only_and_leaves_the_store_untouched(g: AgentG, store: Store):
-    """负控：`check_claims` 只读、不落库（docstring 逐字）。
+def test_the_batch_check_is_a_pure_function(store: Store) -> None:
+    """负控：批处理是纯函数，不动库（逐字节比对磁盘）。
 
     为什么是负控：一个"顺手把判定结果写回 documents"的实现会污染库，
-    而它的返回值看起来完全一样。只有逐字节比对磁盘能抓住它。
+    而它的返回值看起来完全一样。
     """
     before = {p.name: p.read_bytes() for p in store.data.iterdir() if p.is_file()}
-    g.check_claims([_conforming_claim(), _conforming_claim(claim_id="claim-2")])
+    _batch([_conforming_claim(), _conforming_claim(claim_id="claim-2")])
     after = {p.name: p.read_bytes() for p in store.data.iterdir() if p.is_file()}
-    assert before == after, "check_claims 改了库（它应当是只读的）"
+    assert before == after, "批处理改了库（它应当是纯函数）"
 
 
-def test_check_claims_reports_zero_errors_for_an_empty_batch(g: AgentG):
+def test_an_empty_batch_reports_zero_errors() -> None:
     """边界（"做了、结果是空"这一态）：空批次 ⇒ `claim_count=0` 且零 error。
 
     空批次是合法输入（组装阶段手里的草稿可能还没有断言）。
     它不许被折叠成异常，也不许被报成"有问题"。
     """
-    out = g.check_claims([])
-    assert out["checked"] is True and out["claim_count"] == 0, out
+    out = _batch([])
+    assert out["claim_count"] == 0, out
     assert out["error_count"] == 0, out.get("issues")
 
 
