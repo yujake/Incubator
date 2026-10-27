@@ -540,7 +540,9 @@ def test_c8_the_first_screen_is_grouped_and_lists_every_subcommand() -> None:
     # 2026-10-24 第二轮：28 个旧名一个都没删、一个都没加 —— 这一轮只加了四个入口组
     # （incubate / inspect / run / serve），它们不走 `choices`（见 `canonical_argv`），
     # 所以这个数字仍然是 28，而它现在同时是"旧名一个都没丢"的读数。
-    assert len(names) == 28, sorted(names)
+    # 2026-10-27：28 -> 29（新增 `interject`：给主控 M 插一句话 —— 这条通道此前只有
+    # `agent_loop.send_interjection` 这个 Python API，使用侧等于没有入口）。
+    assert len(names) == 29, sorted(names)
     for name in names:
         assert name in out, f"help 里没有 {name}"
 

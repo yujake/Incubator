@@ -44,6 +44,36 @@ from .verify import verify_all
 #: `test/test1/src/agentflow/` 时的解析结果，搬到正式版之后注释没跟着改。）
 DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 
+#: 工作区缺省 = 当前目录（2026-10-27 修）。
+#:
+#: 改前的缺省是 `DEFAULT_ROOT`（= 代码检出目录 `agentflow/`），而 `DEFAULT_ROOT` 是从
+#: `__file__` 算出来的 —— 于是"我在某个工作区里启动"这件事在结构上做不到：
+#: `cd projects/xxx` 之后 `run-agent M ...` 仍然把仓库根当成工作区，
+#: 实测两次把受版本控制的 `data/tasks.json` / `data/events.jsonl` / `data/counters.json` /
+#: `data/usage_ledger.json` 写脏，还落下 `runs/` `sessions/` `skills/` `.agentflow-workspace`。
+#: CLI 的常理是"不给 --root 就用当前目录"；`--root` 仍可显式覆盖。
+def _root_of(args) -> Path:
+    """这一条命令的工作区根：`--root` 优先，否则当前目录。"""
+    given = getattr(args, "root", None)
+    return Path(given).resolve() if given else Path.cwd().resolve()
+
+
+def _warn_if_code_checkout(root: Path) -> None:
+    """工作区指向代码检出目录时提醒一句（不拦：有人确实要在仓库上做维护命令）。
+
+    为什么只提醒不拒：`agentflow` 在仓库根跑 `init` / `repair` 是合法的维护动作；
+    但真机（`run-agent`）跑在仓库上会把 `data/` 写脏 —— 那是实测过的两次事故。
+    """
+    try:
+        same = root.resolve() == DEFAULT_ROOT.resolve()
+    except OSError:
+        return
+    if same:
+        print(tty.paint(
+            "⚠️ 工作区 = 代码检出目录（" + str(root) + "）—— 真机会往 data/ 里写。"
+            "在别的工作区跑请 `cd` 过去或用 `--root <工作区>`。", "yellow"))
+
+
 
 def _non_negative_int(raw: str) -> int:
     """argparse 的 `type=`：负数在用法错阶段就被拒（退出码 2 = "没查成"）。
@@ -440,7 +470,8 @@ def cmd_init(args) -> int:
     与建表全在 :func:`init_workspace`（外来条目那一档在那里 fail-closed）。
     退出码：`0` 建成 / `2` 没查成（目录里有外来条目而没给开关、或 `data/` 已在盘上）。
     """
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
+    _warn_if_code_checkout(root)
     st = make_store(root)
     code = init_workspace(st, root,
                           allow_foreign_entries=bool(getattr(args, "allow_foreign_entries", False)),
@@ -448,6 +479,43 @@ def cmd_init(args) -> int:
     if code != 0:
         return code
     print(f"[init] 已初始化：{st.data}")
+    return 0
+
+
+def cmd_interject(args: argparse.Namespace) -> int:
+    """给主控 M 插一句话（2026-10-27 新增：这条通道此前只有 Python API）。
+
+    业主口径：插话只有用户能发、只有 M 会收到（2026-10-08 裁定）。交付方式不变：
+    M 在下一步开头看到一段【插话】，不打断当前步。编号由框架按会话内顺序发（`i-0001`…）。
+
+    读写：只写 `<工作区>/sessions/<sid>.jsonl` 一条 `agent_interjection` 事件（追加，不改已有行）；
+    不碰 `data/` 下任何表，不读任务行 —— 读交付归 M 自己（它在下一步取）。
+
+    实现：校验根目录像工作区（有 `sessions/` 或 `data/`）→ 调 `agent_loop.send_interjection`
+    （唯一实现；它自己会拒 `sessions/` 这种传错的根）→ 打印编号与台账路径。
+    没写成就返回 1、位置不对返回 2，两种都不留半条记录。
+
+    退出码：0 = 已写入；1 = 写失败（给原因：工作区没初始化 / 会话台账读不到）；
+            2 = 参数或位置不对（`--root` 指到了 `sessions/` 这类地方）。
+    """
+    from . import agent_loop as AL
+    from . import userio as U
+
+    root = _root_of(args)
+    sessions = root / "sessions"
+    if not sessions.is_dir() and not (root / "data").is_dir():
+        print(tty.paint(
+            f"[interject] 这里不像工作区：{root} 既没有 sessions/ 也没有 data/。"
+            "先 `agentflow init`，或 `--root` 指到真工作区。", "red"))
+        return 2
+    iid, problem = AL.send_interjection(
+        root, sender=U.USER, subject=str(args.subject or "用户插话"),
+        body=str(args.text or ""), to=S.CONDUCTOR_ROLE, sid=getattr(args, "sid", None))
+    if problem:
+        print(tty.paint(f"[interject] 没写进去：{problem}", "red"))
+        return 1
+    print(f"[interject] 已写入 {iid}（收件人 {S.CONDUCTOR_ROLE}）；"
+          f"M 在下一步开头会看到它 · 台账 {sessions}")
     return 0
 
 
@@ -550,7 +618,7 @@ def cmd_run_a(args) -> int:
     from .agent_a import AgentA
     from . import fetch as F
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     st = make_store(root)
     st.init()
     cfg = load_config(root, args.config)
@@ -603,7 +671,7 @@ def cmd_run_b(args) -> int:
     from .agent_b import AgentB
     from .extract import extract_text
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     st = make_store(root)
     st.init()
     cfg = load_config(root, args.config)
@@ -674,7 +742,7 @@ def cmd_verify(args) -> int:
     退出码：`0` 没有 error / `1` 查过了、有 error（`--strict` 时 warning 也算）/
     `2` 没查成（`StoreError`，由 `main` 统一接）。
     """
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     st = make_store(root)
     st.init()
     cfg = load_config(root, args.config)
@@ -810,9 +878,14 @@ def cmd_tools(args) -> int:
     """
     from agentflow.tools import ROLES, TOOL_ROLES, build_registry
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     st = make_store(root)
-    st.init()
+    # 只读普查不建工作区（2026-10-27 修）：改前这一行是无条件的 `st.init()`，于是
+    # `cd src && python -m agentflow.cli tools` 会去 `src/` 里建 data/ 并被"外来条目"拒掉
+    # （实测：`test_role_specs_complete` 那条对账当场红）。工具面是声明，不需要磁盘。
+    # 目录已经是工作区时才 init（那一步是幂等的），否则裸注册表照常能列出全部工具。
+    if (root / "data").is_dir():
+        st.init()
     # 角色清单必须来自 `TOOL_ROLES`（= 可被召唤的 A–H + 主控 M），不许在这里写死。
     # 这里原先写死 `("A","B","C","D")`，于是 E/F/G/H 落地之后，本命令会
     # 一边报告"工具总数 55"，一边只列 4 个角色的工具数 —— 而"角色即权限面"
@@ -886,7 +959,7 @@ def cmd_analyze(args) -> int:
     实现方式一句话：`agent_c.handle` 分派到四个分析入口（hottest / cold / gaps / paths）。
     """
     """运行 C 的关系分析（四类需求之一）。"""
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     cfg = load_config(root, args.config)
     st, c = _build_agent_c(root, cfg)
 
@@ -978,7 +1051,7 @@ def cmd_pipeline(args) -> int:
     from agentflow.pipeline import run_pipeline
     from agentflow import fetch as F
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     cfg = load_config(root, args.config)
     st = make_store(root)
     st.init()
@@ -1090,7 +1163,8 @@ START_PLAN_KEYS: tuple[str, ...] = ("mode", "task", "workspace", "project", "mod
 #: 机器行不行"显然都是查看类。要改回去就删这三行，判据会跟着红并点名。
 COMMAND_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("incubate", "孵化：把一趟研究开起来、管起来", (
-        "init", "start", "stop", "status", "answer", "inbox", "submit")),
+        "init", "start", "stop", "status", "answer", "inbox", "submit",
+        "interject")),
     ("inspect", "查看：只读的读数与检查", (
         "status-report", "stats", "evidence", "artifacts", "analyze", "tools", "cache",
         "budget", "doctor", "verify")),
@@ -1241,6 +1315,16 @@ class _BudgetUsdAction(argparse.Action):
     """
 
     def __call__(self, parser, namespace, values, option_string=None) -> None:
+        # `0` = 不设上限（2026-10-27 修）。改前给 0 等于"上限 0"：真机第一拍就
+        # "预算已耗尽"停机、0 次模型调用（实测）。而同一批旗标里 `--wall-clock-sec 0`
+        # 的 help 自己写着「<=0 视为不设上限」—— 两个 0 语义相反，是纯口径坑。
+        # 记账层的 `0 = 预算为零`（`tokenmeter` 的三态判据）没动：那是内部语义，
+        # 这里只把"命令行上的 0"读成"不限"。
+        if values is not None and float(values) == 0.0:
+            setattr(namespace, self.dest, None)
+            setattr(namespace, "budget_usd_given", False)
+            setattr(namespace, "budget_usd_zero_means_unlimited", True)
+            return
         setattr(namespace, self.dest, values)
         setattr(namespace, "budget_usd_given", True)
 
@@ -2932,7 +3016,8 @@ def _exec_role(spec: RunSpec, args) -> int:
                 table.setdefault((_role, _spec.action), {"max_steps": args.max_steps})
         print(tty.paint(f"[run-agent] --subagents：已把 {len(table)} 个 (角色,动作) 交给模型驱动"
                         "（含确定性动作 —— 那会被 LLM 循环替换，见 --help 的说明）", "bold"))
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
+    _warn_if_code_checkout(root)
     st = make_store(root)
     # `D5`：这条命令也会 init，所以它带的开关与 `init` 逐字相同（同一个助手、同一个名字）。
     if init_workspace(st, root,
@@ -3265,7 +3350,7 @@ def cmd_inbox(args) -> int:
     """
     from . import userio as U
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     sid = getattr(args, "sid", None)
     sids = [sid] if sid else U.session_ids_with_questions(root)
     rows = [(s, q) for s in sids for q in U.pending_questions(root, sid=s)]
@@ -3305,7 +3390,7 @@ def cmd_answer(args) -> int:
     """
     from . import userio as U
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     sid = getattr(args, "sid", None)
     pend = {q.qid: q for q in U.pending_questions(root, sid=sid)}
     if args.qid not in pend:
@@ -3740,7 +3825,7 @@ def _exec_web(spec: RunSpec, args) -> int:
     """原 `cmd_web` 的执行体（逐字转发）。"""
     from . import webui
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     argv = ["--root", str(root), "--host", str(args.host), "--port", str(int(args.port))]
     if args.open:
         argv.append("--open")
@@ -3773,7 +3858,7 @@ def cmd_budget(args) -> int:
     from . import budget as B
     from .tokenmeter import TokenMeter
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     st = make_store(root)
     try:
         meter = TokenMeter(st)
@@ -3839,7 +3924,7 @@ def cmd_stop(args) -> int:
     """
     from . import stopctl
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     if getattr(args, "status", False):
         state = stopctl.read_stop(root)
         live = stopctl.live_pids(root)
@@ -4123,7 +4208,7 @@ def cmd_closing(args) -> int:
     from . import leantoolchain as LT
     from .store import Store
 
-    root = Path(args.root or DEFAULT_ROOT).resolve()
+    root = _root_of(args)
     st = Store(root)
     project = args.project_dir or ""
     report = args.report or (str(Path(project) / "out" / "review" / "REPORT.md")
@@ -4416,6 +4501,14 @@ def build_parser() -> argparse.ArgumentParser:
                          f"先落 {WORKSPACE_MARKER}（`store` 的白名单出口）再 init；"
                          "用户的文件不删不改。不给这个开关时，'有外来条目'那一档照旧拒绝")
     sp.set_defaults(func=cmd_init)
+
+    sp = sub.add_parser(
+        "interject",
+        help="给主控 M 插一句话（用户在跑动中的唯一直连通道）",
+    )
+    sp.add_argument("--text", required=True, help="要说的话（一句话或一小段）")
+    sp.add_argument("--subject", default="用户插话", help="抬头（默认「用户插话」）")
+    sp.set_defaults(func=cmd_interject)
 
     sp = sub.add_parser("submit", help="提交搜索请求")
     sp.add_argument("--topic", required=False)
@@ -5147,6 +5240,15 @@ def main(argv: list[str] | None = None) -> int:
     于是 28 个旧命令的 `args`、旗标、输出与退出码全部保持原样。
     退出码：handler 返回什么就是什么（0 / 1 / 2 的三态口径在各命令自己的 docstring 里）。
     """
+    # 真机日志要能边跑边看（2026-10-27）：stdout 重定向到文件时 Python 默认块缓冲，
+    # 于是 `run-agent ... > log` 几分钟只有一行甚至零行，而进程在正常干活（实测：CPU 50s+、
+    # 会话文件在长、日志只有一行"缓存…"）。行缓冲让"观测真机"这件事回到 stdout 上。
+    try:
+        sys.stdout.reconfigure(line_buffering=True)      # type: ignore[attr-defined]
+        sys.stderr.reconfigure(line_buffering=True)      # type: ignore[attr-defined]
+    except (AttributeError, ValueError):
+        pass                                            # 被判据换成了非 TextIOWrapper：不影响功能
+
     # 先把输出编码钉住再做任何事：GBK 控制台编不出摘要里的 `⇒` ⇒ print 抛异常 ⇒ 进程以 1
     # 结束，而 1 是"查过了、发现问题"。那会把 `run` 无 key 的受控码 2（没跑成）反转成 1。
     pin_utf8()

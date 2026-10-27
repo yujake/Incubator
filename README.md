@@ -447,9 +447,9 @@ The distinction that matters in practice:
 
 ## Command Line
 
-The parser currently exposes 28 subcommands: `build_parser()` is the source of truth. The top-level
+The parser currently exposes 29 subcommands: `build_parser()` is the source of truth. The top-level
 `--help` now prints four verb groups (`incubate` / `inspect` / `run` / `serve`, table:
-`cli.COMMAND_GROUPS`) plus a short "the old names still work" note; the full 28-row mapping is
+`cli.COMMAND_GROUPS`) plus a short "the old names still work" note; the full 29-row mapping is
 `agentflow --help-legacy` (and `docs/USER-GUIDE.md` §7.2).
 
 ```text
@@ -461,7 +461,7 @@ serve      web demo
 
 The group names are not subcommands: `cli.canonical_argv` folds `agentflow inspect stats` back to
 `agentflow stats` before parsing, so every old name keeps its flags, defaults, output, and exit
-codes byte for byte (the count stays 28). `agentflow run` (no member) is still the old topic run;
+codes byte for byte (the count stays 29 as of 2026-10-27, when `interject` was added). `agentflow run` (no member) is still the old topic run;
 its group page is `agentflow run --help`.
 
 The legacy names, grouped the way they were before this change (kept here as an index:

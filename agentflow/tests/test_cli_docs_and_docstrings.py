@@ -143,7 +143,7 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 def test_every_row_of_the_mapping_table_is_executable() -> None:
     """③ 对照表每一行的新路径都能 `--help` 通过，且旧名与新路径折回同一个 argv。"""
     rows = _table_rows()
-    assert len(rows) == len(cli.command_paths()) == 28, (len(rows), len(cli.command_paths()))
+    assert len(rows) == len(cli.command_paths()) == 29, (len(rows), len(cli.command_paths()))
     for old, new in rows:
         path = new.split()[1:]  # 去掉开头的 `agentflow`
         code, out, err = _run([*path, "--help"])

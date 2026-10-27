@@ -155,6 +155,9 @@ python -m agentflow --root projects\my-topic start --watch --port 52060 --open
 
   原来没有寄存器时打的是 `预算：10 美元（已落盘 <路径>）`；与寄存器一致时打
   `预算：10 美元（与寄存器一致）`。旧的那一笔按 `kind="set"` 留在 `added[]` 里，不删。
+- **`--budget-usd 0` = 不设上限**（2026-10-27 修；与 `--wall-clock-sec 0` 同口径）。
+  改前给 0 等于「上限 0」：真机第一拍就落「预算已耗尽」、**0 次模型调用**（实测）。
+  记账层内部的 `0 = 预算为零`（`tokenmeter` 的三态）没动 —— 那是库的口径，这是命令行的口径。
 - **不给就按各模式的缺省**，且**一个字节都不写**：topic 1.0 / project 0.5 / role 不限
   （主题那一趟的缺省 1.0、项目那一趟 0.5，角色循环没有缺省上限 —— 由墙钟与步数管）。
 - 写不成（只读盘、坏寄存器被拒）时**这一趟不跑**：拿旧额度接着跑等于让寄存器静默压过
@@ -255,16 +258,16 @@ python -m agentflow --root <ws> budget --add 5 --note "让它跑完"
 
 ---
 
-## 7. 命令行：四个入口 + 28 个旧名（一个都没删）
+## 7. 命令行：四个入口 + 29 个旧名（一个都没删）
 
-`agentflow --help` 的首屏现在只印四行入口 + 一段"旧名仍可用"。`agentflow --help-legacy`
-印出完整的 28 行对照表（旧名 → 新路径），那张表在下面 7.2 也抄了一份。
+`agentflow --help` 的首屏只印四行入口 + 一段「旧名仍可用」。`agentflow --help-legacy`
+印出完整的 29 行对照表（旧名 → 新路径），那张表在下面 7.2 也抄了一份。
 
 ### 7.1 四个入口各管什么
 
 | 入口 | 一句话用途 | 成员 |
 |---|---|---|
-| `incubate` | 孵化：把一趟研究开起来、管起来 | `init`、`start`、`stop`、`status`、`answer`、`inbox`、`submit` |
+| `incubate` | 孵化：把一趟研究开起来、管起来 | `init`、`start`、`stop`、`status`、`answer`、`inbox`、`submit`、`interject` |
 | `inspect` | 查看：只读的读数与检查 | `status-report`、`stats`、`evidence`、`artifacts`、`analyze`、`tools`、`cache`、`budget`、`doctor`、`verify` |
 | `run` | 跑：流水线与角色循环，以及它们的维护 | `topic`（= 旧 `run`）、`pipeline`、`run-a`、`run-b`、`run-agent`、`repair`、`rebuild`、`project`、`closing` |
 | `serve` | 服务：网页与离线演示 | `web`、`demo` |
@@ -281,7 +284,7 @@ agentflow run topic --topic "Saxl 猜想"      # 与 agentflow run --topic … �
 
 1. 新路径与旧名是**同一条命令**（不是别名层）：`agentflow inspect stats` 在解析之前就折回
    `agentflow stats`，所以旗标、缺省、输出、退出码一个字都不差。
-2. 组名本身只出现在首屏，不在 `--help` 的子命令清单里 —— 子命令数仍然是 28。
+2. 组名本身只出现在首屏，不在 `--help` 的子命令清单里 —— 子命令数现在是 29。
 3. `run` 这个组的组名同时是旧命令名：`agentflow run`（不带成员）仍然是"端到端跑一个主题"，
    组页走 `agentflow run --help`（那一页会把旧命令的全部旗标接在后面）。
 
@@ -302,7 +305,7 @@ agentflow run topic --topic "Saxl 猜想"      # 与 agentflow run --topic … �
 | `artifacts` | `agentflow inspect artifacts` | `closing` | `agentflow run closing` |
 | `analyze` | `agentflow inspect analyze` | `web` | `agentflow serve web` |
 | `tools` | `agentflow inspect tools` | `demo` | `agentflow serve demo` |
-| `cache` | `agentflow inspect cache` | | |
+| `cache` | `agentflow inspect cache` | `interject` | `agentflow incubate interject` |
 | `budget` | `agentflow inspect budget` | | |
 
 旧名**这一版全部保留**（业主口径：新指令接管且行为确认正常之后再清理；清理不是这一版的事）。
@@ -381,6 +384,77 @@ agentflow inspect doctor --json | ConvertFrom-Json | ForEach-Object { $_.data.ch
 `cache warm --lean on|off|both` 是**真预热**（会花钱；先看 `--dry-run` 那一档，它花 0）。
 两档读的是 `cachectl` 里同一份实现（命令行与网页按钮同源）。
 
+### 7.7 使用侧四个坑（2026-10-27 真机启动时实测踩到，都已修）
+
+这一节写的是"命令本身没错、但用法会把人带沟里"的四处。每一条都来自一次真实的启动事故
+（逐条复现在 `draft/172`），修完的口径与判据一起列在这里。
+
+**① `--budget-usd 0` 现在的意思是"不设上限"**
+
+```powershell
+python -m agentflow --root <ws> run run-agent M --task "…"                # 不限（role 模式的缺省）
+python -m agentflow --root <ws> run run-agent M --task "…" --budget-usd 0 # 也是不限（2026-10-27 修）
+python -m agentflow --root <ws> run run-agent M --task "…" --budget-usd 3 # 上限 3 美元，并落盘 budget.json
+```
+
+改前 `0` 是"上限零"：第一拍就落「预算已耗尽，停止（已用 0.000000 / 上限 0.000000）」、
+**0 次模型调用**就退出 4。同一个 `0` 在 `--wall-clock-sec 0` 上却是"不设上限"，
+两个旗标的 0 语义相反 —— 这是纯口径坑。记账层内部仍是三态（`0` = 预算为零、`None` = 不限），
+命令行这一层把 0 读成"不限"，判据 `tests/test_cli_usage_side_fixes.py` 两头都钉着。
+
+**② 不给 `--root` 时，工作区 = **当前目录**（不再是代码检出目录）**
+
+```powershell
+cd D:\work\my-project
+python -m agentflow run run-agent M --task "…"       # 工作区 = D:\work\my-project（改后）
+```
+
+改前的缺省是 `DEFAULT_ROOT`（= 你 clone 下来的那份代码里的 `agentflow/`）。于是
+`cd` 到项目目录再跑，系统仍然把**仓库根**当工作区：落下 `runs/` `sessions/` `skills/`
+`.agentflow-workspace`，并把**受版本控制**的 `data/tasks.json`、`data/events.jsonl`、
+`data/counters.json`、`data/usage_ledger.json` 写脏（实测两次）。现在缺省就是当前目录，
+并且当工作区正好是代码检出目录时会打一行提醒（不拦：在仓库上做 `init`/`repair` 是合法的）：
+
+```
+⚠️ 工作区 = 代码检出目录（…\agentflow）—— 真机会往 data/ 里写。在别的工作区跑请 cd 过去或用 --root <工作区>。
+```
+
+`--root` 仍然可以显式指定，而且它是**顶层**旗标 —— 要写在子命令之前：
+`agentflow --root X run run-agent …`。写在子命令后面只有 `start` 认（它自己也有 `--root`）。
+
+**③ 给主控 M 插一句话：`agentflow incubate interject`（新）**
+
+```powershell
+python -m agentflow --root <ws> interject --text "可以并行派几个研究子代理" --subject "并行"
+# [interject] 已写入 i-000001（收件人 M）；M 在下一步开头会看到它 · 台账 <ws>/sessions
+```
+
+这是**用户在跑动中的唯一直连通道**（业主 2026-10-08 裁定：只有用户能发、只有 M 会收到）。
+交付方式：M 在**下一步开头**看到一段【插话】，不打断当前步 —— 所以它可能等几分钟才被读到
+（M 正在等子代理时尤其如此）。改前这条通道只有 Python API（`agent_loop.send_interjection`），
+而且把 `sessions/` 当会话根传进去不会报错 —— 它会写出 `<ws>/sessions/sessions/<sid>.jsonl`，
+一条插话落了盘却永远不会被读到。现在 CLI 与 API 两层都会拒这种传法。
+
+退出码：`0` 已写入｜`1` 写失败（工作区没初始化 / 台账读不到，会给原因）｜`2` 位置不对
+（`--root` 指到了 `sessions/` 这类地方）。两种失败都**不留半条记录**。
+
+**④ 真机日志现在能边跑边看（行缓冲）**
+
+```powershell
+python -m agentflow --root <ws> run run-agent M --task "…" *> run.log    # 改后：日志随步增长
+```
+
+改前 Python 在重定向下是**块缓冲**：`> log` 之后几分钟只有一行（甚至零行），而进程在正常干活
+（实测 CPU 50s+、会话文件一直在长）。现在 `main()` 一进来就把 stdout/stderr 调成行缓冲。
+不过**观测真机仍然应该看这两处**，它们比日志更权威：
+
+```powershell
+Get-Content <ws>\sessions\<sid>.jsonl -Tail 20      # 每一步：llm_call / agent_step / agent_park / agent_interjection_seen
+python -m agentflow --root <ws> stats all           # 任务行 / 用量 / 门 / 流程四张读数
+```
+
+---
+
 ---
 
 ## 8. 用户投料目录第一次进来：`--allow-foreign-entries`
@@ -427,6 +501,8 @@ accepted_entries=用户投料.txt
 
 ## 9. 让它跑活：老命令 `run-agent` 的常用旗标
 
+`--root` 不给就用**当前目录**（2026-10-27 起；改前是代码检出目录，于是 `cd` 到工作区再跑会写脏仓库的 `data/`）。
+
 ```powershell
 python -m agentflow --root projects\my-topic run-agent M --task "<题目>" `
   --semantic-review --provider crossref,doaj,europepmc,openalex `
@@ -437,7 +513,7 @@ python -m agentflow --root projects\my-topic run-agent M --task "<题目>" `
 |---|---|
 | `--task "<文本>"` | 题目（必填）；也可以是"继续上一趟"的话 |
 | 角色（位置参数） | `run-agent M` 里的 `M`：`A`–`H` 与 `V`/`L`/`M` |
-| `--budget-usd N` | 累计上限；显式给了就落盘（见 §3） |
+| `--budget-usd N` | 累计上限；显式给了就落盘（见 §3）。**`0` = 不设上限**（2026-10-27 起；改前 0 = 上限零，第一拍就停） |
 | `--sid` | 会话号（台账按它分片；`--resume` 也认它） |
 | `--resume` | 从检查点续跑（没有检查点时按会话记录重建那一步） |
 | `--max-steps N` | 步数**报告**阈值（每满几步向父代理报一次账；不设步数闸） |

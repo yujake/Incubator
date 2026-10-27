@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""判据：四个入口组把 28 个旧名收进分层，而旧名一个都没坏（业主批的 CLI 更新方案 A）。
+"""判据：四个入口组把 29 个旧名收进分层，而旧名一个都没坏（业主批的 CLI 更新方案 A）。
 
 ## 形状
 
@@ -14,7 +14,7 @@ serve    {web demo}
 
 | 判据 | 它钉的是 | 改坏之后的样子 |
 |---|---|---|
-| ① | 28 个旧名逐个 `--help` 都退出 0 | 有人为了让新路径好看，动了某条老命令的 parser |
+| ① | 29 个旧名逐个 `--help` 都退出 0 | 有人为了让新路径好看，动了某条老命令的 parser |
 | ② | 新路径与旧名落到同一个函数对象（同一个 `func`） | 新路径自带一份实现，两份漂了没人看得见 |
 | ③ | 首屏只露四个组名 + 一段"旧名仍可用"的说明，且旧名逐个都在那一屏上 | 首屏退回 28 行（分组白做），或者有名字静默消失 |
 | ④ | 组名不在 `choices` 里（`canonical_argv` 在解析之前折回旧名） | 28 变 32，`README`/`DEVELOPMENT-SPEC` 的子命令数当场漂掉 |
@@ -61,7 +61,7 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 
 @pytest.mark.parametrize("name", cli.LEGACY_COMMANDS)
 def test_every_legacy_command_still_answers_help(name: str) -> None:
-    """① 28 个旧名逐个 `--help`：退出码 0，且它自己的 usage 行里有自己。"""
+    """① 29 个旧名逐个 `--help`：退出码 0，且它自己的 usage 行里有自己。"""
     code, out, err = _run([name, "--help"])
     assert code == 0, (name, code, err)
     assert f"agentflow {name}" in out, (name, out[:200])
@@ -139,7 +139,7 @@ def test_every_new_path_folds_back_to_its_legacy_command() -> None:
 
 
 def test_the_first_screen_shows_only_the_groups_and_a_legacy_note() -> None:
-    """③ 首屏只露四个组名 + 一段说明；28 个旧名逐个都在那一屏上。"""
+    """③ 首屏只露四个组名 + 一段说明；29 个旧名逐个都在那一屏上。"""
     code, out, err = _run(["--help"])
     assert code == 0, (code, err)
     for group in GROUPS:
@@ -147,8 +147,8 @@ def test_the_first_screen_shows_only_the_groups_and_a_legacy_note() -> None:
     assert "旧名仍可用" in out, out
     for name in cli.LEGACY_COMMANDS:
         assert name in out, f"首屏上没有 {name}（它只能出现在『旧名仍可用』那一段里）"
-    # 反真空：28 个旧名不是一个空表（否则上面那个循环恒绿）
-    assert len(cli.LEGACY_COMMANDS) == 28, sorted(cli.LEGACY_COMMANDS)
+    # 反真空：29 个旧名不是一个空表（否则上面那个循环恒绿）
+    assert len(cli.LEGACY_COMMANDS) == 29, sorted(cli.LEGACY_COMMANDS)
 
 
 # ---------------------------------------------------------------- ④ 组名不进 choices
@@ -226,4 +226,4 @@ def test_every_row_of_the_legacy_table_is_executable() -> None:
         assert code == 0, (path, code, sub_err)
         assert old_name in sub_out or path.split()[-1] in sub_out, (path, sub_out[:200])
     # 与首屏那句说明同源：两处点名的是同一批旧名
-    assert len(cli.command_paths()) == len(cli.LEGACY_COMMANDS) == 28
+    assert len(cli.command_paths()) == len(cli.LEGACY_COMMANDS) == 29

@@ -285,7 +285,7 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
     (
         "命令行入口",
         "src/agentflow/cli.py",
-        "四组入口（incubate / inspect / run / serve）加 28 个子命令的薄壳。",
+        "四组入口（incubate / inspect / run / serve）加 29 个子命令的薄壳（含 2026-10-27 新增的 interject）。",
         "build_parser（热调 5 到 7 毫秒）、main（把异常翻成退出码）、_envelope_state（读数外壳的三态）；"
         "命令实现都在别的模块，CLI 只做转发与打印。",
         "读所有模块；不写领域数据",

@@ -1703,6 +1703,14 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
     送达方式（下一步开头单列一段【插话】、不打断当前步）一个字没改。编号由脚本按会话内顺序发（`i-0001`…），
     模型不许自己编号。
     """
+    # 传进来的必须是工作区根：`sessions/` 由本函数自己拼（`sessions.append` 里那段）。
+    # 传 `sessions/` 不会报错 —— 它会安安静静写出 `<工作区>/sessions/sessions/<sid>.jsonl`，
+    # 于是一条插话落了盘却永远不会被 M 读到（2026-10-27 实测踩过一次）。所以这里直接拒。
+    _root = Path(session_root)
+    if _root.name == "sessions":
+        return "", (f"`session_root` 要的是**工作区根**，收到的是 sessions 目录（{_root}）—— "
+                    "那样会写出 `<工作区>/sessions/sessions/<sid>.jsonl`，插话永远不会被读到。"
+                    "传 `<工作区>` 即可。")
     who = str(sender or "").strip()
     if who != U.USER:
         return "", (f"插话只有用户能发（所有者 2026-10-08：「插话只有 M 可能受到用户的插话」），"
